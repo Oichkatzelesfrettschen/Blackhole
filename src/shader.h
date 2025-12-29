@@ -12,8 +12,9 @@
 #ifndef SHADER_H
 #define SHADER_H
 
-#include <GL/glew.h>
 #include <string>
+
+#include <GL/glew.h>
 
 GLuint createShaderProgram(const std::string &vertexShaderFile,
                            const std::string &fragmentShaderFile);

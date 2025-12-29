@@ -1,6 +1,10 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.21)
 
-project(Blackhole)
+project(Blackhole
+  VERSION 1.0.0
+  DESCRIPTION "Black hole visualization with physically accurate ray tracing"
+  LANGUAGES CXX
+)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
@@ -31,13 +35,236 @@ find_package(GLEW REQUIRED)
 find_package(glm REQUIRED)
 find_package(stb REQUIRED)
 
-file(GLOB SRC_FILES
-  "${PROJECT_SOURCE_DIR}/src/*.h"
-  "${PROJECT_SOURCE_DIR}/src/*.cpp"
-  "${PROJECT_SOURCE_DIR}/src/*.c"
-  "${PROJECT_SOURCE_DIR}/src/*.cc")
+# ============================================================================
+# SIMD and Optimization Configuration
+# ============================================================================
 
-add_executable(${CMAKE_PROJECT_NAME} ${SRC_FILES})
+# GLM SIMD intrinsics - enable SSE2 for portable SIMD
+add_compile_definitions(GLM_FORCE_INTRINSICS)
+add_compile_definitions(GLM_FORCE_SSE2)
+add_compile_definitions(GLM_FORCE_ALIGNED_GENTYPES)
+
+# Detect if AVX2 is available on build machine (optional)
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+if(COMPILER_SUPPORTS_AVX2)
+  option(ENABLE_AVX2 "Enable AVX2 optimizations" OFF)
+  if(ENABLE_AVX2)
+    add_compile_definitions(GLM_FORCE_AVX2)
+    add_compile_options(-mavx2 -mfma)
+    message(STATUS "AVX2 SIMD optimizations enabled")
+  endif()
+endif()
+
+# Fast math for non-critical paths (can be disabled for precision)
+option(ENABLE_FAST_MATH "Enable fast math optimizations" ON)
+if(ENABLE_FAST_MATH)
+  add_compile_options(-ffast-math)
+  message(STATUS "Fast math optimizations enabled")
+endif()
+
+# ============================================================================
+# Tiered Warning Flag System (OpenSSF Recommended + C++ Specific)
+# ============================================================================
+# Set WARNING_LEVEL 1-5 to progressively increase strictness
+# Level 1: Core warnings (OpenSSF baseline)
+# Level 2: Format string & type safety
+# Level 3: C++ specific warnings
+# Level 4: Extra strictness (GCC specific)
+# Level 5: Maximum (all above + additional)
+# ============================================================================
+
+set(WARNING_LEVEL "5" CACHE STRING "Warning strictness level 1-5")
+set_property(CACHE WARNING_LEVEL PROPERTY STRINGS "1" "2" "3" "4" "5")
+
+# Level 1: Core warnings (OpenSSF recommended baseline)
+set(WARN_LEVEL1
+  -Wall
+  -Wextra
+  -Wpedantic
+  -Werror
+)
+
+# Level 2: Format string security & type safety
+set(WARN_LEVEL2
+  ${WARN_LEVEL1}
+  -Wformat=2
+  -Wformat-overflow=2
+  -Wformat-truncation=2
+  -Wformat-security
+  -Wformat-signedness
+  -Wshadow
+  -Wconversion
+  -Wsign-conversion
+  -Wfloat-conversion
+  -Wnarrowing
+  -Wstrict-overflow=2
+)
+
+# Level 3: C++ specific warnings
+set(WARN_LEVEL3
+  ${WARN_LEVEL2}
+  -Wnon-virtual-dtor
+  -Woverloaded-virtual
+  -Wold-style-cast
+  -Wcast-align
+  -Wcast-qual
+  -Wuseless-cast
+  -Wzero-as-null-pointer-constant
+  -Wextra-semi
+  -Wmissing-declarations
+)
+
+# Level 4: Extra strictness (GCC-specific, may not work on Clang)
+set(WARN_LEVEL4
+  ${WARN_LEVEL3}
+  -Wdouble-promotion
+  -Wnull-dereference
+  -Wimplicit-fallthrough=5
+  -Wduplicated-cond
+  -Wduplicated-branches
+  -Wlogical-op
+  -Wundef
+  -Wunused-macros
+  -Wstack-usage=8192
+)
+
+# Level 5: Maximum strictness
+set(WARN_LEVEL5
+  ${WARN_LEVEL4}
+  -Warray-bounds=2
+  -Wattribute-alias=2
+  -Wstringop-overflow=4
+  -Walloca
+  -Wvla
+  -Wtrampolines
+  -Wshift-overflow=2
+  -Wredundant-decls
+  # Note: -Winline omitted as it triggers on implicit destructors
+)
+
+# Select warning level
+if(WARNING_LEVEL STREQUAL "1")
+  set(PROJECT_WARNINGS ${WARN_LEVEL1})
+elseif(WARNING_LEVEL STREQUAL "2")
+  set(PROJECT_WARNINGS ${WARN_LEVEL2})
+elseif(WARNING_LEVEL STREQUAL "3")
+  set(PROJECT_WARNINGS ${WARN_LEVEL3})
+elseif(WARNING_LEVEL STREQUAL "4")
+  set(PROJECT_WARNINGS ${WARN_LEVEL4})
+else()
+  set(PROJECT_WARNINGS ${WARN_LEVEL5})
+endif()
+
+message(STATUS "Using warning level ${WARNING_LEVEL}")
+
+# ============================================================================
+# Runtime Hardening Flags
+# ============================================================================
+
+option(ENABLE_HARDENING "Enable runtime hardening flags" ON)
+if(ENABLE_HARDENING)
+  add_compile_definitions(_FORTIFY_SOURCE=3)
+  add_compile_options(-fstack-protector-strong)
+  add_compile_options(-fstack-clash-protection)
+  add_compile_options(-fcf-protection)
+  message(STATUS "Runtime hardening enabled")
+endif()
+
+# ============================================================================
+# Sanitizer Support (Debug builds)
+# ============================================================================
+
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+
+if(ENABLE_ASAN)
+  add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address)
+  message(STATUS "AddressSanitizer enabled")
+endif()
+
+if(ENABLE_UBSAN)
+  add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=undefined)
+  message(STATUS "UndefinedBehaviorSanitizer enabled")
+endif()
+
+if(ENABLE_TSAN)
+  add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=thread)
+  message(STATUS "ThreadSanitizer enabled")
+endif()
+
+# ============================================================================
+# Linker Hardening
+# ============================================================================
+
+option(ENABLE_LINKER_HARDENING "Enable linker hardening" ON)
+if(ENABLE_LINKER_HARDENING)
+  add_link_options(-Wl,-z,relro,-z,now)
+  add_link_options(-Wl,-z,noexecstack)
+  if(NOT APPLE)
+    add_compile_options(-fPIE)
+    add_link_options(-pie)
+  endif()
+  message(STATUS "Linker hardening enabled (RELRO, PIE)")
+endif()
+
+# ============================================================================
+# OpenGL Debug Context (Debug builds)
+# ============================================================================
+
+option(ENABLE_GL_DEBUG "Enable OpenGL debug context" ON)
+if(ENABLE_GL_DEBUG)
+  add_compile_definitions(ENABLE_GL_DEBUG_CONTEXT)
+  message(STATUS "OpenGL debug context enabled")
+endif()
+
+# ============================================================================
+# Source Files
+# ============================================================================
+
+# Physics library source files
+set(PHYSICS_SRC_FILES
+  "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
+  "${PROJECT_SOURCE_DIR}/src/physics/geodesics.cpp"
+  "${PROJECT_SOURCE_DIR}/src/physics/cosmology.cpp"
+)
+
+# Separate project source files from third-party imgui implementation
+set(PROJECT_SRC_FILES
+  "${PROJECT_SOURCE_DIR}/src/main.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render.cpp"
+  "${PROJECT_SOURCE_DIR}/src/shader.cpp"
+  "${PROJECT_SOURCE_DIR}/src/shader_manager.cpp"
+  "${PROJECT_SOURCE_DIR}/src/texture.cpp"
+  "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
+  "${PROJECT_SOURCE_DIR}/src/input.cpp"
+  "${PROJECT_SOURCE_DIR}/src/settings.cpp"
+  "${PROJECT_SOURCE_DIR}/src/GLDebugMessageCallback.cc"
+  ${PHYSICS_SRC_FILES}
+)
+
+set(THIRDPARTY_SRC_FILES
+  "${PROJECT_SOURCE_DIR}/src/imgui_impl_glfw.cpp"
+  "${PROJECT_SOURCE_DIR}/src/imgui_impl_opengl3.cpp"
+)
+
+file(GLOB HEADER_FILES "${PROJECT_SOURCE_DIR}/src/*.h")
+
+add_executable(${CMAKE_PROJECT_NAME} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
+
+# Apply tiered warning flags only to project source files
+set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES
+  COMPILE_OPTIONS "${PROJECT_WARNINGS}"
+)
+
+# Third-party files get relaxed warnings
+set_source_files_properties(${THIRDPARTY_SRC_FILES} PROPERTIES
+  COMPILE_OPTIONS "-w"
+)
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imgui::imgui)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glfw)
@@ -45,7 +272,79 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE GLEW::GLEW)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glm::glm)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE stb::stb)
 
-target_compile_features(${CMAKE_PROJECT_NAME} PRIVATE cxx_std_17)
+# Include directories for physics library
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/src/physics"
+)
+
+# ============================================================================
+# C++ Standard Detection with Fallback Chain (C++23 → C++20 → C++17)
+# ============================================================================
+
+# Try C++23 first, then fall back to C++20, then C++17
+set(CXX_STANDARD_CANDIDATES 23 20 17)
+set(CXX_STANDARD_FOUND FALSE)
+
+foreach(std_version IN LISTS CXX_STANDARD_CANDIDATES)
+  if(NOT CXX_STANDARD_FOUND)
+    # Check if compiler supports this standard
+    set(CMAKE_CXX_STANDARD ${std_version})
+    set(CMAKE_CXX_STANDARD_REQUIRED OFF)
+
+    include(CheckCXXCompilerFlag)
+    if(std_version EQUAL 23)
+      check_cxx_compiler_flag("-std=c++23" COMPILER_SUPPORTS_CXX23)
+      if(NOT COMPILER_SUPPORTS_CXX23)
+        check_cxx_compiler_flag("-std=c++2b" COMPILER_SUPPORTS_CXX2B)
+        if(COMPILER_SUPPORTS_CXX2B)
+          set(COMPILER_SUPPORTS_CXX23 TRUE)
+        endif()
+      endif()
+      if(COMPILER_SUPPORTS_CXX23)
+        set(CXX_STANDARD_FOUND TRUE)
+        set(DETECTED_CXX_STANDARD 23)
+        add_compile_definitions(BLACKHOLE_CXX23=1)
+        add_compile_definitions(BLACKHOLE_CXX20=1)
+        add_compile_definitions(BLACKHOLE_CXX17=1)
+        message(STATUS "C++23 support detected - using latest features")
+      endif()
+    elseif(std_version EQUAL 20)
+      check_cxx_compiler_flag("-std=c++20" COMPILER_SUPPORTS_CXX20)
+      if(COMPILER_SUPPORTS_CXX20)
+        set(CXX_STANDARD_FOUND TRUE)
+        set(DETECTED_CXX_STANDARD 20)
+        add_compile_definitions(BLACKHOLE_CXX20=1)
+        add_compile_definitions(BLACKHOLE_CXX17=1)
+        message(STATUS "C++20 support detected - using C++20 features")
+      endif()
+    elseif(std_version EQUAL 17)
+      check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
+      if(COMPILER_SUPPORTS_CXX17)
+        set(CXX_STANDARD_FOUND TRUE)
+        set(DETECTED_CXX_STANDARD 17)
+        add_compile_definitions(BLACKHOLE_CXX17=1)
+        message(STATUS "C++17 support detected - using baseline features")
+      endif()
+    endif()
+  endif()
+endforeach()
+
+if(NOT CXX_STANDARD_FOUND)
+  message(FATAL_ERROR "No suitable C++ standard found. Requires at least C++17.")
+endif()
+
+# Set the detected standard
+set(CMAKE_CXX_STANDARD ${DETECTED_CXX_STANDARD})
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Export the detected standard for headers
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+  BLACKHOLE_CXX_STANDARD=${DETECTED_CXX_STANDARD}
+)
+
+message(STATUS "Using C++ standard: C++${DETECTED_CXX_STANDARD}")
 
 # Copy assets files after build.
 add_custom_command(
@@ -59,3 +358,351 @@ add_custom_command(
   POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/shader/"
           "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/shader")
+
+# ============================================================================
+# Static Analysis Tools Integration
+# ============================================================================
+
+option(ENABLE_CLANG_TIDY "Enable clang-tidy static analysis" OFF)
+option(ENABLE_CPPCHECK "Enable cppcheck static analysis" OFF)
+option(ENABLE_IWYU "Enable include-what-you-use" OFF)
+option(ENABLE_GCC_ANALYZER "Enable GCC -fanalyzer" OFF)
+
+# --------------------------------------------------------------------------
+# clang-tidy Integration
+# --------------------------------------------------------------------------
+if(ENABLE_CLANG_TIDY)
+  find_program(CLANG_TIDY_EXE NAMES "clang-tidy" "clang-tidy-17" "clang-tidy-16" "clang-tidy-15")
+  if(CLANG_TIDY_EXE)
+    message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
+    # Use .clang-tidy config file if present, otherwise use inline checks
+    if(EXISTS "${PROJECT_SOURCE_DIR}/.clang-tidy")
+      set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+    else()
+      set(CMAKE_CXX_CLANG_TIDY
+        "${CLANG_TIDY_EXE}"
+        "-checks=bugprone-*,\
+cert-*,\
+clang-analyzer-*,\
+cppcoreguidelines-*,\
+misc-*,\
+modernize-*,\
+performance-*,\
+portability-*,\
+readability-*,\
+-modernize-use-trailing-return-type,\
+-readability-magic-numbers,\
+-cppcoreguidelines-avoid-magic-numbers"
+        "-header-filter=${PROJECT_SOURCE_DIR}/src/.*"
+        "-warnings-as-errors=bugprone-*,cert-*"
+      )
+    endif()
+  else()
+    message(WARNING "clang-tidy requested but not found")
+  endif()
+endif()
+
+# --------------------------------------------------------------------------
+# cppcheck Integration
+# --------------------------------------------------------------------------
+if(ENABLE_CPPCHECK)
+  find_program(CPPCHECK_EXE NAMES "cppcheck")
+  if(CPPCHECK_EXE)
+    message(STATUS "cppcheck found: ${CPPCHECK_EXE}")
+    set(CMAKE_CXX_CPPCHECK
+      "${CPPCHECK_EXE}"
+      "--enable=warning,style,performance,portability"
+      "--std=c++${DETECTED_CXX_STANDARD}"
+      "--suppress=missingInclude"
+      "--suppress=unmatchedSuppression"
+      "--suppress=unusedFunction"
+      "--inline-suppr"
+      "--quiet"
+      "-I${PROJECT_SOURCE_DIR}/src"
+      "-I${PROJECT_SOURCE_DIR}/src/physics"
+    )
+  else()
+    message(WARNING "cppcheck requested but not found")
+  endif()
+endif()
+
+# --------------------------------------------------------------------------
+# include-what-you-use Integration
+# --------------------------------------------------------------------------
+if(ENABLE_IWYU)
+  find_program(IWYU_EXE NAMES "include-what-you-use" "iwyu")
+  if(IWYU_EXE)
+    message(STATUS "include-what-you-use found: ${IWYU_EXE}")
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE
+      "${IWYU_EXE}"
+      "-Xiwyu" "--transitive_includes_only"
+      "-Xiwyu" "--no_fwd_decls"
+    )
+  else()
+    message(WARNING "include-what-you-use requested but not found")
+  endif()
+endif()
+
+# --------------------------------------------------------------------------
+# GCC -fanalyzer Integration
+# --------------------------------------------------------------------------
+if(ENABLE_GCC_ANALYZER)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "10")
+    message(STATUS "GCC analyzer enabled")
+    add_compile_options(
+      -fanalyzer
+      -Wanalyzer-double-free
+      -Wanalyzer-null-dereference
+      -Wanalyzer-use-after-free
+      -Wanalyzer-malloc-leak
+    )
+  else()
+    message(WARNING "GCC analyzer requires GCC 10+")
+  endif()
+endif()
+
+# ============================================================================
+# GLSL Shader Validation Target
+# ============================================================================
+
+option(ENABLE_SHADER_VALIDATION "Enable GLSL shader validation" ON)
+
+if(ENABLE_SHADER_VALIDATION)
+  find_program(GLSLANG_VALIDATOR NAMES "glslangValidator" "glslang")
+  find_program(SPIRV_VAL NAMES "spirv-val")
+  find_program(GLSLC NAMES "glslc")
+
+  if(GLSLANG_VALIDATOR)
+    message(STATUS "glslangValidator found: ${GLSLANG_VALIDATOR}")
+
+    # Collect all shader files
+    file(GLOB_RECURSE FRAG_SHADERS "${PROJECT_SOURCE_DIR}/shader/*.frag")
+    file(GLOB_RECURSE VERT_SHADERS "${PROJECT_SOURCE_DIR}/shader/*.vert")
+    file(GLOB_RECURSE COMP_SHADERS "${PROJECT_SOURCE_DIR}/shader/*.comp")
+
+    set(ALL_SHADERS ${FRAG_SHADERS} ${VERT_SHADERS} ${COMP_SHADERS})
+
+    # Create validation commands for each shader
+    # Use OpenGL mode (-G) instead of Vulkan (-V) since our shaders are OpenGL
+    set(SHADER_VALIDATION_COMMANDS)
+    foreach(shader ${ALL_SHADERS})
+      get_filename_component(shader_name ${shader} NAME)
+      get_filename_component(shader_ext ${shader} LAST_EXT)
+
+      # Determine shader stage from extension
+      if(shader_ext STREQUAL ".vert")
+        set(SHADER_STAGE "vert")
+      elseif(shader_ext STREQUAL ".frag")
+        set(SHADER_STAGE "frag")
+      elseif(shader_ext STREQUAL ".comp")
+        set(SHADER_STAGE "comp")
+      else()
+        continue()
+      endif()
+
+      list(APPEND SHADER_VALIDATION_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E echo "Validating ${shader_name}..."
+        COMMAND ${GLSLANG_VALIDATOR}
+          -S ${SHADER_STAGE}
+          -l
+          --glsl-version 460
+          -I${PROJECT_SOURCE_DIR}/shader/include
+          "-P#extension GL_GOOGLE_include_directive : enable"
+          ${shader}
+        || ${CMAKE_COMMAND} -E echo "Warning: ${shader_name} has issues"
+      )
+    endforeach()
+
+    # Custom target to validate all shaders
+    add_custom_target(validate-shaders
+      ${SHADER_VALIDATION_COMMANDS}
+      COMMENT "Validating GLSL shaders with glslangValidator"
+      VERBATIM
+    )
+
+    # SPIR-V compilation target (optional)
+    if(GLSLC)
+      message(STATUS "glslc found: ${GLSLC}")
+
+      set(SPIRV_OUTPUT_DIR "${CMAKE_BINARY_DIR}/spirv")
+      file(MAKE_DIRECTORY ${SPIRV_OUTPUT_DIR})
+
+      set(SPIRV_COMPILE_COMMANDS)
+      foreach(shader ${ALL_SHADERS})
+        get_filename_component(shader_name ${shader} NAME)
+        set(spirv_output "${SPIRV_OUTPUT_DIR}/${shader_name}.spv")
+        list(APPEND SPIRV_COMPILE_COMMANDS
+          COMMAND ${GLSLC}
+            -c
+            -O
+            -I${PROJECT_SOURCE_DIR}/shader/include
+            ${shader}
+            -o ${spirv_output}
+        )
+      endforeach()
+
+      add_custom_target(compile-spirv
+        ${SPIRV_COMPILE_COMMANDS}
+        COMMENT "Compiling shaders to SPIR-V"
+        VERBATIM
+      )
+    endif()
+  else()
+    message(STATUS "glslangValidator not found - shader validation disabled")
+  endif()
+endif()
+
+# ============================================================================
+# Static Analysis Aggregate Target
+# ============================================================================
+
+# Create a target that runs all enabled analysis tools
+add_custom_target(analyze
+  COMMENT "Running static analysis tools"
+)
+
+# cppcheck standalone target
+if(CPPCHECK_EXE)
+  add_custom_target(cppcheck
+    COMMAND ${CPPCHECK_EXE}
+      --enable=all
+      --std=c++${DETECTED_CXX_STANDARD}
+      --suppress=missingInclude
+      --suppress=unmatchedSuppression
+      --error-exitcode=1
+      -I${PROJECT_SOURCE_DIR}/src
+      -I${PROJECT_SOURCE_DIR}/src/physics
+      ${PROJECT_SOURCE_DIR}/src
+    COMMENT "Running cppcheck analysis"
+    VERBATIM
+  )
+  add_dependencies(analyze cppcheck)
+endif()
+
+# clang-tidy standalone target (for full project scan)
+if(CLANG_TIDY_EXE)
+  add_custom_target(clang-tidy-check
+    COMMAND ${CLANG_TIDY_EXE}
+      -p ${CMAKE_BINARY_DIR}
+      ${PROJECT_SRC_FILES}
+    COMMENT "Running clang-tidy analysis"
+    VERBATIM
+  )
+endif()
+
+# ============================================================================
+# Fuzzing Support (libFuzzer)
+# ============================================================================
+
+option(ENABLE_FUZZING "Enable fuzzing targets" OFF)
+
+if(ENABLE_FUZZING)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(STATUS "Fuzzing support enabled (libFuzzer)")
+
+    # Fuzzing compile flags
+    set(FUZZ_FLAGS
+      -fsanitize=fuzzer,address,undefined
+      -fno-omit-frame-pointer
+      -g
+    )
+
+    # Physics library fuzz target
+    if(EXISTS "${PROJECT_SOURCE_DIR}/fuzz/fuzz_physics.cpp")
+      add_executable(fuzz_physics
+        "${PROJECT_SOURCE_DIR}/fuzz/fuzz_physics.cpp"
+        ${PHYSICS_SRC_FILES}
+      )
+      target_compile_options(fuzz_physics PRIVATE ${FUZZ_FLAGS})
+      target_link_options(fuzz_physics PRIVATE -fsanitize=fuzzer,address,undefined)
+      target_include_directories(fuzz_physics PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/physics"
+      )
+      set_target_properties(fuzz_physics PROPERTIES
+        CXX_STANDARD ${DETECTED_CXX_STANDARD}
+        CXX_STANDARD_REQUIRED ON
+      )
+    endif()
+
+    # Shader preprocessor fuzz target
+    if(EXISTS "${PROJECT_SOURCE_DIR}/fuzz/fuzz_shader.cpp")
+      add_executable(fuzz_shader
+        "${PROJECT_SOURCE_DIR}/fuzz/fuzz_shader.cpp"
+      )
+      target_compile_options(fuzz_shader PRIVATE ${FUZZ_FLAGS})
+      target_link_options(fuzz_shader PRIVATE -fsanitize=fuzzer,address,undefined)
+      target_include_directories(fuzz_shader PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+      )
+      set_target_properties(fuzz_shader PROPERTIES
+        CXX_STANDARD ${DETECTED_CXX_STANDARD}
+        CXX_STANDARD_REQUIRED ON
+      )
+    endif()
+
+    # Header-only physics library fuzz target
+    if(EXISTS "${PROJECT_SOURCE_DIR}/fuzz/fuzz_headers.cpp")
+      add_executable(fuzz_headers
+        "${PROJECT_SOURCE_DIR}/fuzz/fuzz_headers.cpp"
+        ${PHYSICS_SRC_FILES}
+      )
+      target_compile_options(fuzz_headers PRIVATE ${FUZZ_FLAGS})
+      target_link_options(fuzz_headers PRIVATE -fsanitize=fuzzer,address,undefined)
+      target_include_directories(fuzz_headers PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/physics"
+      )
+      set_target_properties(fuzz_headers PROPERTIES
+        CXX_STANDARD ${DETECTED_CXX_STANDARD}
+        CXX_STANDARD_REQUIRED ON
+      )
+    endif()
+  else()
+    message(WARNING "Fuzzing requires Clang compiler")
+  endif()
+endif()
+
+# ============================================================================
+# Code Formatting Target
+# ============================================================================
+
+find_program(CLANG_FORMAT_EXE NAMES "clang-format" "clang-format-17" "clang-format-16")
+if(CLANG_FORMAT_EXE)
+  message(STATUS "clang-format found: ${CLANG_FORMAT_EXE}")
+
+  add_custom_target(format
+    COMMAND ${CLANG_FORMAT_EXE}
+      -i
+      -style=file
+      ${PROJECT_SRC_FILES}
+      ${HEADER_FILES}
+    COMMENT "Formatting source code with clang-format"
+    VERBATIM
+  )
+
+  add_custom_target(format-check
+    COMMAND ${CLANG_FORMAT_EXE}
+      --dry-run
+      --Werror
+      -style=file
+      ${PROJECT_SRC_FILES}
+      ${HEADER_FILES}
+    COMMENT "Checking code formatting"
+    VERBATIM
+  )
+endif()
+
+# ============================================================================
+# Summary of Analysis Options
+# ============================================================================
+
+message(STATUS "")
+message(STATUS "=== Static Analysis Configuration ===")
+message(STATUS "  ENABLE_CLANG_TIDY:        ${ENABLE_CLANG_TIDY}")
+message(STATUS "  ENABLE_CPPCHECK:          ${ENABLE_CPPCHECK}")
+message(STATUS "  ENABLE_IWYU:              ${ENABLE_IWYU}")
+message(STATUS "  ENABLE_GCC_ANALYZER:      ${ENABLE_GCC_ANALYZER}")
+message(STATUS "  ENABLE_SHADER_VALIDATION: ${ENABLE_SHADER_VALIDATION}")
+message(STATUS "  ENABLE_FUZZING:           ${ENABLE_FUZZING}")
+message(STATUS "")

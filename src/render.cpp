@@ -1,18 +1,29 @@
 #include "render.h"
-#include "shader.h"
 
+// C++ system headers
 #include <iostream>
 
+// Third-party library headers
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+
+// Local headers
+#include "shader.h"
+
+// Out-of-line destructor definition to prevent -Winline warnings.
+// When the compiler tries to inline the implicit destructor, it must expand
+// all std::string and std::map destructor calls, which exceeds the
+// --param large-function-growth limit. Defining it here forces the compiler
+// to emit a single non-inlined destructor call site.
+RenderToTextureInfo::~RenderToTextureInfo() = default;
 
 GLuint createColorTexture(int width, int height, bool hdr) {
   GLuint colorTexture;
   glGenTextures(1, &colorTexture);
 
   glBindTexture(GL_TEXTURE_2D, colorTexture);
-  glTexImage2D(GL_TEXTURE_2D, 0, hdr ? GL_RGB16F : GL_RGB, width, height, 0,
-               GL_RGB, hdr ? GL_FLOAT : GL_UNSIGNED_BYTE, NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, hdr ? GL_RGB16F : GL_RGB, width, height, 0, GL_RGB,
+               hdr ? GL_FLOAT : GL_UNSIGNED_BYTE, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -29,18 +40,15 @@ GLuint createFramebuffer(const FramebufferCreateInfo &info) {
   glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
   // Bind color attachement.
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                         info.colorTexture, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, info.colorTexture, 0);
 
   if (info.createDepthBuffer) {
     // Single renderbuffer object for both depth and stencil.
     GLuint rbo;
     glGenRenderbuffers(1, &rbo);
     glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, info.width,
-                          info.height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                              GL_RENDERBUFFER, rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, info.width, info.height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
   }
 
   // Check the completeness of the framebuffer.
@@ -74,7 +82,8 @@ GLuint createQuadVAO() {
   GLuint vbo;
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3),
+  glBufferData(GL_ARRAY_BUFFER,
+               static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
                &vertices[0], GL_STATIC_DRAW);
 
   // 1st attribute buffer: positions
@@ -85,7 +94,7 @@ GLuint createQuadVAO() {
                         GL_FLOAT, // type
                         GL_FALSE, // normalized?
                         0,        // stride
-                        (void *)0 // array buffer offset
+                        nullptr // array buffer offset
   );
 
   glBindVertexArray(0);
@@ -93,20 +102,18 @@ GLuint createQuadVAO() {
   return vao;
 }
 
-static bool bindToTextureUnit(GLuint program, const std::string &name,
-                              GLenum textureType, GLuint texture,
-                              int textureUnitIndex) {
+static bool bindToTextureUnit(GLuint program, const std::string &name, GLenum textureType,
+                              GLuint texture, int textureUnitIndex) {
   GLint loc = glGetUniformLocation(program, name.c_str());
   if (loc != -1) {
     glUniform1i(loc, textureUnitIndex);
 
     // Set up the texture units.
-    glActiveTexture(GL_TEXTURE0 + textureUnitIndex);
+    glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(textureUnitIndex));
     glBindTexture(textureType, texture);
     return true;
   } else {
-    std::cout << "WARNING: uniform " << name << " is not found in shader"
-              << std::endl;
+    std::cout << "WARNING: uniform " << name << " is not found in shader" << std::endl;
     return false;
   }
 }
@@ -151,9 +158,11 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
     // Set up the uniforms.
     {
       glUniform2f(glGetUniformLocation(program, "resolution"),
-                  (float)rtti.width, (float)rtti.height);
+                  static_cast<float>(rtti.width),
+                  static_cast<float>(rtti.height));
 
-      glUniform1f(glGetUniformLocation(program, "time"), (float)glfwGetTime());
+      glUniform1f(glGetUniformLocation(program, "time"),
+                  static_cast<float>(glfwGetTime()));
 
       // Update float uniforms
       for (auto const &[name, val] : rtti.floatUniforms) {
@@ -161,8 +170,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
         if (loc != -1) {
           glUniform1f(loc, val);
         } else {
-          std::cout << "WARNING: uniform " << name << " is not found"
-                    << std::endl;
+          std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
         }
       }
 
@@ -172,8 +180,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
         bindToTextureUnit(program, name, GL_TEXTURE_2D, texture, textureUnit++);
       }
       for (auto const &[name, texture] : rtti.cubemapUniforms) {
-        bindToTextureUnit(program, name, GL_TEXTURE_CUBE_MAP, texture,
-                          textureUnit++);
+        bindToTextureUnit(program, name, GL_TEXTURE_CUBE_MAP, texture, textureUnit++);
       }
     }
 

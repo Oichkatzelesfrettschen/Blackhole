@@ -1,0 +1,351 @@
+/**
+ * @file doppler.h
+ * @brief Relativistic Doppler effect and beaming calculations.
+ *
+ * Implements special and general relativistic Doppler effects for:
+ * - Moving sources (jets, orbiting matter)
+ * - Cosmological redshift
+ * - Relativistic beaming/boosting
+ * - Aberration
+ *
+ * Key formulas:
+ *   Lorentz factor: γ = 1/√(1 - β²)
+ *   Doppler factor: δ = 1/(γ(1 - β cos θ))
+ *   Observed flux: F_obs = δ^(3+α) F_emit for power-law spectrum F ∝ ν^α
+ *
+ * References:
+ *   - Rybicki & Lightman (1979) "Radiative Processes in Astrophysics"
+ *   - Begelman, Blandford, Rees (1984) Rev. Mod. Phys. 56, 255
+ *
+ * Cleanroom implementation based on standard SR/GR formulas.
+ */
+
+#ifndef PHYSICS_DOPPLER_H
+#define PHYSICS_DOPPLER_H
+
+#include "constants.h"
+#include <cmath>
+#include <limits>
+
+namespace physics {
+
+// ============================================================================
+// Lorentz Factor
+// ============================================================================
+
+/**
+ * @brief Compute Lorentz factor γ from velocity.
+ *
+ * γ = 1/√(1 - v²/c²) = 1/√(1 - β²)
+ *
+ * @param beta Velocity as fraction of c (v/c), must be in [0, 1)
+ * @return Lorentz factor γ ≥ 1
+ */
+inline double lorentz_factor(double beta) {
+  if (beta < 0) beta = -beta;
+  if (beta >= 1.0) {
+    return std::numeric_limits<double>::infinity();
+  }
+  return 1.0 / std::sqrt(1.0 - beta * beta);
+}
+
+/**
+ * @brief Compute velocity β from Lorentz factor.
+ *
+ * β = √(1 - 1/γ²)
+ *
+ * @param gamma Lorentz factor γ ≥ 1
+ * @return Velocity as fraction of c
+ */
+inline double beta_from_gamma(double gamma) {
+  if (gamma < 1.0) gamma = 1.0;
+  return std::sqrt(1.0 - 1.0 / (gamma * gamma));
+}
+
+// ============================================================================
+// Doppler Factor
+// ============================================================================
+
+/**
+ * @brief Compute relativistic Doppler factor.
+ *
+ * δ = 1/(γ(1 - β cos θ))
+ *
+ * where θ is the angle between velocity and line of sight.
+ * θ = 0 means approaching (blueshift), θ = π means receding (redshift).
+ *
+ * @param beta Velocity as fraction of c
+ * @param theta Angle between velocity and line of sight [rad]
+ * @return Doppler factor δ
+ */
+inline double doppler_factor(double beta, double theta) {
+  double gamma = lorentz_factor(beta);
+  double cos_theta = std::cos(theta);
+  double denominator = gamma * (1.0 - beta * cos_theta);
+
+  if (std::abs(denominator) < 1e-30) {
+    return std::numeric_limits<double>::infinity();
+  }
+
+  return 1.0 / denominator;
+}
+
+/**
+ * @brief Compute Doppler factor for head-on approach (θ = 0).
+ *
+ * δ_max = √((1 + β)/(1 - β)) = γ(1 + β)
+ *
+ * @param beta Velocity as fraction of c
+ * @return Maximum Doppler factor (approaching)
+ */
+inline double doppler_factor_approaching(double beta) {
+  if (beta >= 1.0) {
+    return std::numeric_limits<double>::infinity();
+  }
+  return std::sqrt((1.0 + beta) / (1.0 - beta));
+}
+
+/**
+ * @brief Compute Doppler factor for direct recession (θ = π).
+ *
+ * δ_min = √((1 - β)/(1 + β)) = 1/(γ(1 + β))
+ *
+ * @param beta Velocity as fraction of c
+ * @return Minimum Doppler factor (receding)
+ */
+inline double doppler_factor_receding(double beta) {
+  if (beta >= 1.0) {
+    return 0.0;
+  }
+  return std::sqrt((1.0 - beta) / (1.0 + beta));
+}
+
+// ============================================================================
+// Frequency Shifts
+// ============================================================================
+
+/**
+ * @brief Compute observed frequency with relativistic Doppler shift.
+ *
+ * ν_obs = δ × ν_emit
+ *
+ * @param nu_emit Emitted frequency [Hz]
+ * @param beta Velocity as fraction of c
+ * @param theta Angle between velocity and line of sight [rad]
+ * @return Observed frequency [Hz]
+ */
+inline double doppler_shift_relativistic(double nu_emit, double beta, double theta) {
+  return doppler_factor(beta, theta) * nu_emit;
+}
+
+/**
+ * @brief Compute transverse Doppler shift (θ = π/2).
+ *
+ * ν_obs = ν_emit / γ (always redshift due to time dilation)
+ *
+ * @param nu_emit Emitted frequency [Hz]
+ * @param beta Velocity as fraction of c
+ * @return Observed frequency [Hz]
+ */
+inline double doppler_shift_transverse(double nu_emit, double beta) {
+  return nu_emit / lorentz_factor(beta);
+}
+
+/**
+ * @brief Compute observed frequency from cosmological redshift.
+ *
+ * ν_obs = ν_emit / (1 + z)
+ *
+ * @param nu_emit Rest-frame frequency [Hz]
+ * @param z Cosmological redshift
+ * @return Observed frequency [Hz]
+ */
+inline double observed_frequency(double nu_emit, double z) {
+  return nu_emit / (1.0 + z);
+}
+
+/**
+ * @brief Compute rest-frame frequency from observed frequency.
+ *
+ * ν_emit = ν_obs × (1 + z)
+ *
+ * @param nu_obs Observed frequency [Hz]
+ * @param z Cosmological redshift
+ * @return Rest-frame frequency [Hz]
+ */
+inline double rest_frame_frequency(double nu_obs, double z) {
+  return nu_obs * (1.0 + z);
+}
+
+// ============================================================================
+// Relativistic Beaming
+// ============================================================================
+
+/**
+ * @brief Compute intensity boost from relativistic beaming.
+ *
+ * For a power-law spectrum F_ν ∝ ν^α:
+ *   I_obs = δ^(3+α) × I_emit (optically thin)
+ *   I_obs = δ^3 × I_emit (optically thick/blackbody)
+ *
+ * The δ³ factor comes from:
+ *   - δ² from solid angle transformation (aberration)
+ *   - δ from time dilation (photon arrival rate)
+ *
+ * @param I_emit Emitted intensity
+ * @param beta Velocity as fraction of c
+ * @param theta Angle between velocity and line of sight [rad]
+ * @param alpha Spectral index (F_ν ∝ ν^α), use 0 for blackbody
+ * @return Observed intensity
+ */
+inline double relativistic_beaming_intensity(double I_emit, double beta,
+                                              double theta, double alpha) {
+  double delta = doppler_factor(beta, theta);
+  return I_emit * std::pow(delta, 3.0 + alpha);
+}
+
+/**
+ * @brief Compute flux density boost from relativistic beaming.
+ *
+ * F_obs = δ^(3+α) × F_emit for isotropic emitter
+ *
+ * @param F_emit Emitted flux density
+ * @param beta Velocity as fraction of c
+ * @param theta Angle between velocity and line of sight [rad]
+ * @param alpha Spectral index
+ * @return Observed flux density
+ */
+inline double relativistic_beaming_flux(double F_emit, double beta,
+                                         double theta, double alpha) {
+  double delta = doppler_factor(beta, theta);
+  return F_emit * std::pow(delta, 3.0 + alpha);
+}
+
+/**
+ * @brief Compute apparent superluminal velocity.
+ *
+ * For an object moving at angle θ to line of sight:
+ *   β_app = (β sin θ) / (1 - β cos θ)
+ *
+ * Maximum apparent velocity β_app,max = γβ at θ = arccos(β).
+ *
+ * @param beta True velocity as fraction of c
+ * @param theta Angle between velocity and line of sight [rad]
+ * @return Apparent transverse velocity as fraction of c
+ */
+inline double apparent_superluminal_velocity(double beta, double theta) {
+  double sin_theta = std::sin(theta);
+  double cos_theta = std::cos(theta);
+  double denominator = 1.0 - beta * cos_theta;
+
+  if (std::abs(denominator) < 1e-30) {
+    return std::numeric_limits<double>::infinity();
+  }
+
+  return (beta * sin_theta) / denominator;
+}
+
+/**
+ * @brief Compute angle for maximum superluminal velocity.
+ *
+ * θ_max = arccos(β)
+ *
+ * At this angle, β_app = γβ.
+ *
+ * @param beta True velocity as fraction of c
+ * @return Optimal viewing angle [rad]
+ */
+inline double superluminal_optimal_angle(double beta) {
+  return std::acos(beta);
+}
+
+/**
+ * @brief Compute maximum apparent superluminal velocity.
+ *
+ * β_app,max = γβ = β/√(1 - β²)
+ *
+ * @param beta True velocity as fraction of c
+ * @return Maximum apparent velocity as fraction of c
+ */
+inline double superluminal_velocity_max(double beta) {
+  return lorentz_factor(beta) * beta;
+}
+
+// ============================================================================
+// Aberration
+// ============================================================================
+
+/**
+ * @brief Compute relativistic aberration of angle.
+ *
+ * cos θ' = (cos θ - β) / (1 - β cos θ)
+ *
+ * Light emitted at angle θ in rest frame appears at θ' in moving frame.
+ *
+ * @param theta Angle in source rest frame [rad]
+ * @param beta Observer velocity as fraction of c
+ * @return Angle in observer frame [rad]
+ */
+inline double relativistic_aberration(double theta, double beta) {
+  double cos_theta = std::cos(theta);
+  double cos_theta_prime = (cos_theta - beta) / (1.0 - beta * cos_theta);
+
+  // Clamp to valid range for acos
+  cos_theta_prime = std::clamp(cos_theta_prime, -1.0, 1.0);
+
+  return std::acos(cos_theta_prime);
+}
+
+/**
+ * @brief Compute beaming half-angle (headlight effect).
+ *
+ * θ_beam ≈ 1/γ
+ *
+ * For highly relativistic motion, most radiation is concentrated
+ * within a cone of half-angle ~1/γ.
+ *
+ * @param gamma Lorentz factor
+ * @return Beaming half-angle [rad]
+ */
+inline double beaming_half_angle(double gamma) {
+  if (gamma < 1.0) gamma = 1.0;
+  return 1.0 / gamma;
+}
+
+// ============================================================================
+// K-Corrections
+// ============================================================================
+
+/**
+ * @brief Compute K-correction for power-law spectrum.
+ *
+ * For F_ν ∝ ν^α, the K-correction converts observed flux to
+ * rest-frame flux at a different frequency:
+ *
+ *   F_rest = F_obs × (1 + z)^(1 + α)
+ *
+ * @param F_obs Observed flux density
+ * @param z Redshift
+ * @param alpha Spectral index
+ * @return Rest-frame flux density at corresponding rest frequency
+ */
+inline double k_correction_power_law(double F_obs, double z, double alpha) {
+  return F_obs * std::pow(1.0 + z, 1.0 + alpha);
+}
+
+/**
+ * @brief Compute K-correction factor.
+ *
+ * K(z, α) = (1 + z)^(1 + α)
+ *
+ * @param z Redshift
+ * @param alpha Spectral index
+ * @return K-correction factor
+ */
+inline double k_correction_factor(double z, double alpha) {
+  return std::pow(1.0 + z, 1.0 + alpha);
+}
+
+} // namespace physics
+
+#endif // PHYSICS_DOPPLER_H

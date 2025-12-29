@@ -1,0 +1,449 @@
+/**
+ * geodesic_trace.comp
+ * Compute shader for parallel geodesic ray tracing.
+ *
+ * Uses RK4 integration for accurate null geodesic propagation
+ * in curved spacetime (Schwarzschild or Kerr).
+ *
+ * GLSL 4.30+ required for compute shaders.
+ */
+
+#version 430 core
+
+// ============================================================================
+// Work Group Configuration
+// ============================================================================
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// ============================================================================
+// Output Image
+// ============================================================================
+
+layout(rgba32f, binding = 0) writeonly uniform image2D outputImage;
+
+// ============================================================================
+// Uniforms
+// ============================================================================
+
+uniform vec2 resolution;
+uniform mat4 viewMatrix;
+uniform mat4 projectionMatrix;
+uniform vec3 cameraPosition;
+
+// Black hole parameters
+uniform float schwarzschildRadius;
+uniform float spinParameter;      // a for Kerr (0 for Schwarzschild)
+uniform float iscoRadius;
+uniform float photonSphereRadius;
+
+// Integration parameters
+uniform int maxSteps;
+uniform float stepSize;
+uniform float maxDistance;
+
+// Feature toggles
+uniform bool enableKerr;
+uniform bool enableDisk;
+uniform bool enableRedshift;
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const float PI = 3.14159265358979323846;
+const float EPSILON = 1e-6;
+const float C_LIGHT = 1.0; // Geometric units
+
+// ============================================================================
+// Structures
+// ============================================================================
+
+struct Ray {
+    vec3 position;
+    vec3 velocity;
+    float affineParameter;
+};
+
+struct HitResult {
+    bool hitDisk;
+    bool hitHorizon;
+    bool escaped;
+    vec3 hitPoint;
+    float phi;           // Azimuthal angle at hit
+    float redshiftFactor;
+};
+
+// ============================================================================
+// Schwarzschild Geodesic Acceleration
+// ============================================================================
+
+/**
+ * Compute geodesic acceleration in Schwarzschild spacetime.
+ *
+ * The null geodesic equation reduces to:
+ * d²r/dλ² = -(r_s h²)/(2r⁴) + (3 r_s h²)/(2r⁵)
+ *
+ * In 3D Cartesian, using h² = |r × v|²:
+ * a = -1.5 * r_s * h² * r / r⁵
+ */
+vec3 schwarzschildAccel(vec3 pos, vec3 vel, float r_s) {
+    float r = length(pos);
+    if (r < EPSILON) return vec3(0.0);
+
+    vec3 h = cross(pos, vel);
+    float h2 = dot(h, h);
+
+    float r5 = r * r * r * r * r;
+
+    return -1.5 * r_s * h2 * pos / r5;
+}
+
+// ============================================================================
+// Kerr Geodesic Acceleration (Approximate)
+// ============================================================================
+
+/**
+ * Compute geodesic acceleration in Kerr spacetime.
+ *
+ * Full Kerr geodesics require Carter constant integration.
+ * This is a simplified model capturing main effects:
+ * - Frame-dragging contribution
+ * - Modified effective potential
+ */
+vec3 kerrAccel(vec3 pos, vec3 vel, float r_s, float a) {
+    float r = length(pos);
+    if (r < EPSILON) return vec3(0.0);
+
+    float r2 = r * r;
+    float cos_theta = pos.z / r;
+    float sin2_theta = 1.0 - cos_theta * cos_theta;
+
+    // Kerr metric functions
+    float sigma = r2 + a * a * cos_theta * cos_theta;
+    float delta = r2 - r_s * r + a * a;
+
+    // Angular momentum
+    vec3 h = cross(pos, vel);
+    float h2 = dot(h, h);
+
+    // Base Schwarzschild-like term
+    float r5 = r2 * r2 * r;
+    vec3 radial_accel = -1.5 * r_s * h2 * pos / r5;
+
+    // Frame-dragging contribution
+    float M = r_s * 0.5;
+    float omega_fd = (2.0 * M * a * r) / (sigma * (r2 + a * a) + 2.0 * M * a * a * r * sin2_theta);
+
+    vec3 phi_dir = normalize(vec3(-pos.y, pos.x, 0.0) + vec3(0.001));
+    float fd_strength = omega_fd * r_s / max(r, r_s);
+    vec3 frame_drag = fd_strength * phi_dir;
+
+    // Kerr correction factor
+    float kerr_factor = 1.0 + 0.5 * a * a * sin2_theta / sigma;
+
+    return radial_accel * kerr_factor + frame_drag;
+}
+
+// ============================================================================
+// RK4 Integration Step
+// ============================================================================
+
+/**
+ * Perform one RK4 integration step.
+ */
+void stepRK4(inout Ray ray, float r_s, float a, float dt) {
+    vec3 x0 = ray.position;
+    vec3 v0 = ray.velocity;
+
+    vec3 accel;
+    if (enableKerr && abs(a) > EPSILON) {
+        accel = kerrAccel(x0, v0, r_s, a);
+    } else {
+        accel = schwarzschildAccel(x0, v0, r_s);
+    }
+
+    // k1
+    vec3 k1_x = v0;
+    vec3 k1_v = accel;
+
+    // k2
+    vec3 x1 = x0 + 0.5 * dt * k1_x;
+    vec3 v1 = v0 + 0.5 * dt * k1_v;
+    if (enableKerr && abs(a) > EPSILON) {
+        accel = kerrAccel(x1, v1, r_s, a);
+    } else {
+        accel = schwarzschildAccel(x1, v1, r_s);
+    }
+    vec3 k2_x = v1;
+    vec3 k2_v = accel;
+
+    // k3
+    vec3 x2 = x0 + 0.5 * dt * k2_x;
+    vec3 v2 = v0 + 0.5 * dt * k2_v;
+    if (enableKerr && abs(a) > EPSILON) {
+        accel = kerrAccel(x2, v2, r_s, a);
+    } else {
+        accel = schwarzschildAccel(x2, v2, r_s);
+    }
+    vec3 k3_x = v2;
+    vec3 k3_v = accel;
+
+    // k4
+    vec3 x3 = x0 + dt * k3_x;
+    vec3 v3 = v0 + dt * k3_v;
+    if (enableKerr && abs(a) > EPSILON) {
+        accel = kerrAccel(x3, v3, r_s, a);
+    } else {
+        accel = schwarzschildAccel(x3, v3, r_s);
+    }
+    vec3 k4_x = v3;
+    vec3 k4_v = accel;
+
+    // Combine
+    ray.position = x0 + (dt / 6.0) * (k1_x + 2.0 * k2_x + 2.0 * k3_x + k4_x);
+    ray.velocity = v0 + (dt / 6.0) * (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v);
+    ray.affineParameter += dt;
+}
+
+// ============================================================================
+// Disk Intersection
+// ============================================================================
+
+/**
+ * Check for intersection with accretion disk (z = 0 plane).
+ */
+bool checkDiskIntersection(vec3 oldPos, vec3 newPos, float r_in, float r_out,
+                           out vec3 hitPoint) {
+    // Check if ray crossed z = 0
+    if (oldPos.z * newPos.z > 0.0) {
+        return false;
+    }
+
+    // Linear interpolation to find crossing point
+    float t = -oldPos.z / (newPos.z - oldPos.z);
+    hitPoint = mix(oldPos, newPos, t);
+
+    float r = length(hitPoint.xy);
+    return r >= r_in && r <= r_out;
+}
+
+// ============================================================================
+// Gravitational Redshift
+// ============================================================================
+
+/**
+ * Compute gravitational redshift factor.
+ *
+ * g = √(1 - r_s/r) for Schwarzschild
+ */
+float computeRedshiftFactor(vec3 pos, float r_s, float a) {
+    float r = length(pos);
+    if (r <= r_s) return 0.0;
+
+    if (enableKerr && abs(a) > EPSILON) {
+        float cos_theta = pos.z / r;
+        float sigma = r * r + a * a * cos_theta * cos_theta;
+        float factor = 1.0 - r_s * r / sigma;
+        if (factor <= 0.0) return 0.0;
+        return sqrt(factor);
+    } else {
+        float factor = 1.0 - r_s / r;
+        if (factor <= 0.0) return 0.0;
+        return sqrt(factor);
+    }
+}
+
+// ============================================================================
+// Main Ray Tracing
+// ============================================================================
+
+/**
+ * Trace a single geodesic ray.
+ */
+HitResult traceGeodesic(Ray ray, float r_s, float a) {
+    HitResult result;
+    result.hitDisk = false;
+    result.hitHorizon = false;
+    result.escaped = false;
+    result.hitPoint = vec3(0.0);
+    result.phi = 0.0;
+    result.redshiftFactor = 1.0;
+
+    // Horizon radius
+    float r_horizon;
+    if (enableKerr && abs(a) > EPSILON) {
+        float M = r_s * 0.5;
+        float discriminant = M * M - a * a;
+        r_horizon = (discriminant >= 0.0) ? M + sqrt(discriminant) : r_s;
+    } else {
+        r_horizon = r_s;
+    }
+
+    // Disk parameters
+    float r_disk_in = iscoRadius;
+    float r_disk_out = 100.0 * r_s;
+
+    vec3 oldPos;
+    float dt = stepSize;
+
+    for (int step = 0; step < maxSteps; ++step) {
+        oldPos = ray.position;
+
+        // Adaptive step size near horizon
+        float r = length(ray.position);
+        float adaptive_dt = dt * clamp(r / r_s - 1.0, 0.1, 1.0);
+
+        stepRK4(ray, r_s, a, adaptive_dt);
+
+        r = length(ray.position);
+
+        // Check horizon
+        if (r < r_horizon * 1.01) {
+            result.hitHorizon = true;
+            result.hitPoint = ray.position;
+            return result;
+        }
+
+        // Check disk intersection
+        if (enableDisk) {
+            vec3 diskHit;
+            if (checkDiskIntersection(oldPos, ray.position, r_disk_in, r_disk_out, diskHit)) {
+                result.hitDisk = true;
+                result.hitPoint = diskHit;
+                result.phi = atan(diskHit.y, diskHit.x);
+                result.redshiftFactor = computeRedshiftFactor(diskHit, r_s, a);
+                return result;
+            }
+        }
+
+        // Check escape
+        if (r > maxDistance) {
+            result.escaped = true;
+            result.hitPoint = ray.position;
+            return result;
+        }
+    }
+
+    // Max steps reached
+    result.escaped = true;
+    result.hitPoint = ray.position;
+    return result;
+}
+
+// ============================================================================
+// Color Computation
+// ============================================================================
+
+/**
+ * Compute color for horizon hit.
+ */
+vec4 horizonColor() {
+    return vec4(0.0, 0.0, 0.0, 1.0);
+}
+
+/**
+ * Compute color for disk hit.
+ */
+vec4 diskColorFromHit(HitResult hit, float r_s) {
+    float r = length(hit.hitPoint.xy);
+
+    // Temperature profile (simplified)
+    float r_in = iscoRadius;
+    float x = r_in / r;
+    float flux = pow(x, 3.0) * (1.0 - sqrt(x));
+    flux = max(0.0, flux);
+
+    // Temperature to color
+    float T_norm = pow(flux, 0.25);
+
+    // Blackbody color approximation
+    vec3 color;
+    if (T_norm > 0.6) {
+        color = vec3(1.0, 0.9, 0.8); // Hot: white-yellow
+    } else if (T_norm > 0.3) {
+        color = vec3(1.0, 0.6, 0.2); // Warm: orange
+    } else {
+        color = vec3(0.8, 0.2, 0.1); // Cool: red
+    }
+
+    // Apply intensity
+    float intensity = flux * 2.0;
+
+    // Doppler beaming
+    float v = sqrt(0.5 * r_s / r);
+    float cos_phi = cos(hit.phi);
+    float doppler = 1.0 + 0.3 * v * cos_phi;
+    intensity *= doppler * doppler * doppler;
+
+    // Gravitational redshift
+    if (enableRedshift) {
+        float g = hit.redshiftFactor;
+        float g3 = g * g * g;
+        intensity *= g3;
+        color = mix(color, vec3(1.0, 0.3, 0.1), 1.0 - g); // Shift to red
+    }
+
+    return vec4(color * intensity, 1.0);
+}
+
+/**
+ * Compute color for escaped ray (background).
+ */
+vec4 backgroundColorFromDir(vec3 dir) {
+    // Star field
+    vec3 n = normalize(dir);
+    float stars = pow(max(0.0, sin(n.x * 100.0) * sin(n.y * 100.0) * sin(n.z * 100.0)), 20.0);
+    stars *= step(0.997, fract(sin(dot(n, vec3(12.9898, 78.233, 45.543))) * 43758.5453));
+
+    vec3 color = vec3(0.01, 0.01, 0.02); // Dark background
+    color += vec3(stars);
+
+    return vec4(color, 1.0);
+}
+
+// ============================================================================
+// Main Entry Point
+// ============================================================================
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+
+    if (pixelCoord.x >= int(resolution.x) || pixelCoord.y >= int(resolution.y)) {
+        return;
+    }
+
+    // Compute normalized device coordinates
+    vec2 uv = (vec2(pixelCoord) + 0.5) / resolution;
+    vec2 ndc = uv * 2.0 - 1.0;
+    ndc.x *= resolution.x / resolution.y;
+
+    // Ray direction in camera space
+    vec3 rayDirCamera = normalize(vec3(ndc, -1.0));
+
+    // Transform to world space
+    mat3 viewRot = mat3(viewMatrix);
+    vec3 rayDir = viewRot * rayDirCamera;
+
+    // Initialize ray
+    Ray ray;
+    ray.position = cameraPosition;
+    ray.velocity = rayDir;
+    ray.affineParameter = 0.0;
+
+    // Trace geodesic
+    HitResult hit = traceGeodesic(ray, schwarzschildRadius, spinParameter);
+
+    // Compute final color
+    vec4 color;
+    if (hit.hitHorizon) {
+        color = horizonColor();
+    } else if (hit.hitDisk) {
+        color = diskColorFromHit(hit, schwarzschildRadius);
+    } else {
+        color = backgroundColorFromDir(normalize(hit.hitPoint - cameraPosition));
+    }
+
+    // Write to output image
+    imageStore(outputImage, pixelCoord, color);
+}

@@ -1,6 +1,11 @@
 #version 330 core
 
-const float PI = 3.14159265359;
+// Physics library includes
+#include "include/physics_constants.glsl"
+#include "include/schwarzschild.glsl"
+#include "include/geodesics.glsl"
+#include "include/redshift.glsl"
+
 const float EPSILON = 0.0001;
 const float INFINITY = 1000000.0;
 
@@ -32,6 +37,14 @@ uniform float adiskDensityH = 1.0;
 uniform float adiskNoiseScale = 1.0;
 uniform float adiskNoiseLOD = 5.0;
 uniform float adiskSpeed = 0.5;
+
+// Physics parameters
+uniform float blackHoleMass = 1.0;      // Mass in geometric units (G=c=1)
+uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geometric units)
+uniform float photonSphereRadius = 3.0;  // r_ph = 1.5 * r_s
+uniform float iscoRadius = 6.0;          // r_ISCO = 3 * r_s (Schwarzschild)
+uniform float enableRedshift = 0.0;      // Toggle gravitational redshift
+uniform float enablePhotonSphere = 0.0;  // Toggle photon sphere glow
 
 struct Ring {
   vec3 center;
@@ -142,13 +155,30 @@ float ringDistance(vec3 rayOrigin, vec3 rayDir, Ring ring) {
 
 vec3 panoramaColor(sampler2D tex, vec3 dir) {
   vec2 uv = vec2(0.5 - atan(dir.z, dir.x) / PI * 0.5, 0.5 - asin(dir.y) / PI);
-  return texture2D(tex, uv).rgb;
+  return texture(tex, uv).rgb;
 }
 
+/**
+ * Compute geodesic acceleration for null rays (photons).
+ *
+ * Derived from the Schwarzschild effective potential for photons:
+ * V_eff(r) = h²/r² * (1 - r_s/r)
+ *
+ * The radial acceleration in coordinate time is:
+ * d²r/dt² = -∂V_eff/∂r = -h²(r_s - 2r)/r⁴
+ *
+ * For the full 3D vector equation in Cartesian coordinates:
+ * a = -1.5 * r_s * h² * r̂ / r⁴
+ *
+ * This is equivalent to: a = -(3/2) * r_s * h² * pos / r⁵
+ */
 vec3 accel(float h2, vec3 pos) {
   float r2 = dot(pos, pos);
-  float r5 = pow(r2, 2.5);
-  vec3 acc = -1.5 * h2 * pos / r5 * 1.0;
+  // More numerically stable than pow(r2, 2.5)
+  float r = sqrt(r2);
+  float r5 = r2 * r2 * r;
+  // Geodesic equation: a = -1.5 * r_s * h² / r⁵ * r̂
+  vec3 acc = -1.5 * schwarzschildRadius * h2 * pos / r5;
   return acc;
 }
 
@@ -258,8 +288,11 @@ mat3 lookAt(vec3 origin, vec3 target, float roll) {
 float sqrLength(vec3 a) { return dot(a, a); }
 
 void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
-  float innerRadius = 2.6;
-  float outerRadius = 12.0;
+  // Inner radius at ISCO (innermost stable circular orbit)
+  // For Schwarzschild: r_ISCO = 3 * r_s where r_s = 2GM/c²
+  // iscoRadius is already in the same coordinate units as positions
+  float innerRadius = iscoRadius;
+  float outerRadius = iscoRadius * 4.0; // Outer edge at ~12 r_s for typical thin disk
 
   // Density linearly decreases as the distance to the blackhole center
   // increases.
@@ -271,8 +304,8 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
 
   density *= pow(1.0 - abs(pos.y) / adiskHeight, adiskDensityV);
 
-  // Set particale density to 0 when radius is below the inner most stable
-  // circular orbit.
+  // Set particle density to 0 when radius is below the innermost stable
+  // circular orbit (ISCO). Matter spirals in rapidly below this radius.
   density *= smoothstep(innerRadius, innerRadius * 1.1, length(pos));
 
   // Avoid the shader computation when density is very small.
@@ -308,6 +341,14 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   vec3 dustColor =
       texture(colorMap, vec2(sphericalCoord.x / outerRadius, 0.5)).rgb;
 
+  // Apply gravitational redshift to disk emission
+  if (enableRedshift > 0.5) {
+    float r = length(pos);
+    float z = gravitationalRedshift(r, schwarzschildRadius);
+    // Apply full wavelength shift for physically accurate color
+    dustColor = applyGravitationalRedshift(dustColor, z);
+  }
+
   color += density * adiskLit * dustColor * alpha * abs(noise);
 }
 
@@ -318,21 +359,49 @@ vec3 traceColor(vec3 pos, vec3 dir) {
   float STEP_SIZE = 0.1;
   dir *= STEP_SIZE;
 
-  // Initial values
+  // Initial values for geodesic integration
   vec3 h = cross(pos, dir);
   float h2 = dot(h, h);
 
+  // Compute impact parameter: b = |r × v| / |v|
+  float impactParameter = length(cross(pos, normalize(dir)));
+
+  // Critical impact parameter for photon capture: b_crit ≈ sqrt(27) * r_s/2
+  float criticalImpact = sqrt(27.0) * schwarzschildRadius / 2.0;
+
+  // Track closest approach to photon sphere
+  float minRadiusReached = length(pos);
+  float r_ph = photonSphereRadius; // 1.5 * r_s
+
   for (int i = 0; i < 300; i++) {
+    float r = length(pos);
+    minRadiusReached = min(minRadiusReached, r);
+
     if (renderBlackHole > 0.5) {
-      // If gravatational lensing is applied
+      // Apply gravitational lensing (geodesic bending)
       if (gravatationalLensing > 0.5) {
         vec3 acc = accel(h2, pos);
         dir += acc;
       }
 
-      // Reach event horizon
-      if (dot(pos, pos) < 1.0) {
+      // Event horizon detection: r < r_s (Schwarzschild radius IS the event horizon)
+      // Note: r_s = 2GM/c² is the coordinate radius where g_tt = 0
+      // The factor of 2 was already included in the definition of schwarzschildRadius
+      if (r < schwarzschildRadius) {
+        // Ray captured by black hole - return accumulated color (mostly black)
         return color;
+      }
+
+      // Photon sphere glow effect (rays grazing r_ph = 1.5 * r_s)
+      if (enablePhotonSphere > 0.5) {
+        float photonSphereDistance = abs(r - r_ph);
+        if (photonSphereDistance < 0.5) {
+          // Glow intensity peaks at photon sphere
+          float glowIntensity = exp(-photonSphereDistance * 4.0) * 0.3;
+          // Orange-yellow glow color for photon ring
+          vec3 glowColor = vec3(1.0, 0.7, 0.3) * glowIntensity;
+          color += glowColor * alpha;
+        }
       }
 
       float minDistance = INFINITY;
@@ -355,9 +424,17 @@ vec3 traceColor(vec3 pos, vec3 dir) {
     pos += dir;
   }
 
-  // Sample skybox color
+  // Sample skybox color with optional gravitational redshift
   dir = rotateVector(dir, vec3(0.0, 1.0, 0.0), time);
-  color += texture(galaxy, dir).rgb * alpha;
+  vec3 skyColor = texture(galaxy, dir).rgb;
+
+  // Apply gravitational redshift to background light
+  if (enableRedshift > 0.5 && minRadiusReached < schwarzschildRadius * 10.0) {
+    float z = gravitationalRedshift(minRadiusReached, schwarzschildRadius);
+    skyColor = applySimpleRedshift(skyColor, z);
+  }
+
+  color += skyColor * alpha;
   return color;
 }
 

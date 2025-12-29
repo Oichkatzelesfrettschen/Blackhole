@@ -12,8 +12,9 @@
 #ifndef TEXTURE_H
 #define TEXTURE_H
 
-#include <GL/glew.h>
 #include <string>
+
+#include <GL/glew.h>
 
 GLuint loadTexture2D(const std::string &file, bool repeat = true);
 

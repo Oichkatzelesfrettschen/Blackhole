@@ -41,6 +41,11 @@ struct RenderToTextureInfo {
   GLuint targetTexture;
   int width;
   int height;
+
+  // Explicitly declare destructor (defined out-of-line in render.cpp)
+  // This prevents -Winline warnings from implicit inline expansion of
+  // std::string and std::map destructor chains
+  ~RenderToTextureInfo();
 };
 
 void renderToTexture(const RenderToTextureInfo &rtti);
