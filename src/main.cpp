@@ -15,6 +15,7 @@
 
 // C++ system headers
 #include <map>
+#include <string>
 #include <vector>
 
 // Third-party library headers
@@ -23,7 +24,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/euler_angles.hpp>
 #include <imgui.h>
 
 // Local headers
@@ -49,6 +49,40 @@ static const int SCR_HEIGHT = 1080;
   static float NAME = DEFAULT;                                                                     \
   ImGui::SliderFloat(#NAME, &NAME, MIN, MAX);                                                      \
   rtti.floatUniforms[#NAME] = NAME;
+
+enum class CameraMode { Input = 0, Front, Top, Orbit };
+
+static glm::vec3 cameraPositionFromYawPitch(float yawDeg, float pitchDeg, float radius) {
+  float yawRad = glm::radians(yawDeg);
+  float pitchRad = glm::radians(pitchDeg);
+  return glm::vec3(radius * std::cos(pitchRad) * std::sin(yawRad),
+                   radius * std::sin(pitchRad),
+                   radius * std::cos(pitchRad) * std::cos(yawRad));
+}
+
+static glm::mat3 buildCameraBasis(const glm::vec3 &cameraPos, const glm::vec3 &target,
+                                  float rollDeg) {
+  glm::vec3 forward = glm::normalize(target - cameraPos);
+  glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
+  if (std::abs(glm::dot(forward, worldUp)) > 0.99f) {
+    worldUp = glm::vec3(0.0f, 0.0f, 1.0f);
+  }
+
+  glm::vec3 right = glm::normalize(glm::cross(forward, worldUp));
+  glm::vec3 up = glm::normalize(glm::cross(right, forward));
+
+  if (std::abs(rollDeg) > 0.001f) {
+    float rollRad = glm::radians(rollDeg);
+    float cosRoll = std::cos(rollRad);
+    float sinRoll = std::sin(rollRad);
+    glm::vec3 rolledRight = right * cosRoll + up * sinRoll;
+    glm::vec3 rolledUp = -right * sinRoll + up * cosRoll;
+    right = rolledRight;
+    up = rolledUp;
+  }
+
+  return glm::mat3(right, up, forward);
+}
 
 static void glfwErrorCallback(int error, const char *description) {
   fprintf(stderr, "Glfw Error %d: %s\n", error, description);
@@ -110,6 +144,10 @@ static GLFWwindow *initializeWindow() {
   }
 
   glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
 #ifdef ENABLE_GL_DEBUG_CONTEXT
   // Request debug context for OpenGL error reporting
@@ -132,8 +170,19 @@ static GLFWwindow *initializeWindow() {
 
   glfwSetWindowPos(window, 0, 0);
 
+  glewExperimental = GL_TRUE;
   if (glewInit() != GLEW_OK) {
     std::fprintf(stderr, "Failed to initialize OpenGL loader!\n");
+    glfwDestroyWindow(window);
+    return nullptr;
+  }
+
+  GLint glMajor = 0;
+  GLint glMinor = 0;
+  glGetIntegerv(GL_MAJOR_VERSION, &glMajor);
+  glGetIntegerv(GL_MINOR_VERSION, &glMinor);
+  if (glMajor < 4 || (glMajor == 4 && glMinor < 6)) {
+    std::fprintf(stderr, "OpenGL 4.6 required, found %d.%d\n", glMajor, glMinor);
     glfwDestroyWindow(window);
     return nullptr;
   }
@@ -146,17 +195,7 @@ static GLFWwindow *initializeWindow() {
 
 // Initialize ImGui context and backends
 static void initializeImGui(GLFWwindow *window) {
-#if defined(__APPLE__)
-  const char *glsl_version = "#version 150";
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#else
-  const char *glsl_version = "#version 130";
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-#endif
+  const char *glsl_version = "#version 460";
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -170,31 +209,41 @@ static void initializeImGui(GLFWwindow *window) {
 }
 
 // Render controls help panel
-static void renderControlsPanel() {
+static void renderControlsHelpPanel() {
   ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(280, 320), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(300, 280), ImGuiCond_FirstUseEver);
 
-  if (ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoCollapse)) {
+  if (ImGui::Begin("Controls Help", nullptr, ImGuiWindowFlags_NoCollapse)) {
     auto &input = InputManager::instance();
+
+    auto keyLabel = [&](KeyAction action) {
+      return input.getKeyName(input.getKeyForAction(action));
+    };
 
     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Keyboard Shortcuts");
     ImGui::Separator();
 
-    ImGui::Text("ESC        - Quit");
-    ImGui::Text("H          - Toggle UI");
-    ImGui::Text("F11        - Toggle Fullscreen");
-    ImGui::Text("R          - Reset Camera");
-    ImGui::Text("Backspace  - Reset Settings");
+    ImGui::Text("%s - Quit", keyLabel(KeyAction::Quit).c_str());
+    ImGui::Text("%s - Toggle UI", keyLabel(KeyAction::ToggleUI).c_str());
+    ImGui::Text("%s - Toggle Fullscreen", keyLabel(KeyAction::ToggleFullscreen).c_str());
+    ImGui::Text("%s - Reset Camera", keyLabel(KeyAction::ResetCamera).c_str());
+    ImGui::Text("%s - Pause", keyLabel(KeyAction::Pause).c_str());
+    ImGui::Text("%s - Reset Settings", keyLabel(KeyAction::ResetSettings).c_str());
 
     ImGui::Spacing();
     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Camera Controls");
     ImGui::Separator();
 
-    ImGui::Text("W/S        - Pitch Up/Down");
-    ImGui::Text("A/D        - Yaw Left/Right");
-    ImGui::Text("Q/E        - Zoom In/Out");
-    ImGui::Text("Z/C        - Roll Left/Right");
-    ImGui::Text("+/-        - Zoom In/Out");
+    ImGui::Text("%s/%s - Pitch Up/Down", keyLabel(KeyAction::CameraMoveForward).c_str(),
+                keyLabel(KeyAction::CameraMoveBackward).c_str());
+    ImGui::Text("%s/%s - Yaw Left/Right", keyLabel(KeyAction::CameraMoveLeft).c_str(),
+                keyLabel(KeyAction::CameraMoveRight).c_str());
+    ImGui::Text("%s/%s - Zoom In/Out", keyLabel(KeyAction::CameraMoveUp).c_str(),
+                keyLabel(KeyAction::CameraMoveDown).c_str());
+    ImGui::Text("%s/%s - Roll Left/Right", keyLabel(KeyAction::CameraRollLeft).c_str(),
+                keyLabel(KeyAction::CameraRollRight).c_str());
+    ImGui::Text("%s/%s - Zoom In/Out", keyLabel(KeyAction::ZoomIn).c_str(),
+                keyLabel(KeyAction::ZoomOut).c_str());
 
     ImGui::Spacing();
     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Mouse Controls");
@@ -203,15 +252,6 @@ static void renderControlsPanel() {
     ImGui::Text("Right-drag - Orbit Camera");
     ImGui::Text("Mid-drag   - Roll Camera");
     ImGui::Text("Scroll     - Zoom");
-
-    ImGui::Spacing();
-    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Accessibility");
-    ImGui::Separator();
-
-    ImGui::Text("F1         - Toggle A11y Mode");
-    ImGui::Text("F2         - High Contrast");
-    ImGui::Text("F3         - Reduced Motion");
-    ImGui::Text("F4/F5      - Font Size +/-");
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -225,255 +265,198 @@ static void renderControlsPanel() {
   ImGui::End();
 }
 
-// Render photosensitivity warning modal (shown once on first launch)
-static bool showPhotosensitivityWarning = false;
+static void renderControlsSettingsPanel(int &cameraModeIndex) {
+  auto &input = InputManager::instance();
 
-static void checkPhotosensitivityWarning() {
-  auto &settings = SettingsManager::instance().get();
-  if (!settings.photosensitivityWarningShown) {
-    showPhotosensitivityWarning = true;
-  }
-}
+  ImGui::SetNextWindowPos(ImVec2(320, 10), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(360, 520), ImGuiCond_FirstUseEver);
 
-static void renderPhotosensitivityWarning() {
-  if (!showPhotosensitivityWarning)
-    return;
-
-  auto &settings = SettingsManager::instance().get();
-
-  ImGui::OpenPopup("Photosensitivity Warning");
-
-  ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-  ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-  ImGui::SetNextWindowSize(ImVec2(500, 350), ImGuiCond_Appearing);
-
-  if (ImGui::BeginPopupModal("Photosensitivity Warning", nullptr,
-                              ImGuiWindowFlags_AlwaysAutoResize)) {
-    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "PHOTOSENSITIVITY WARNING");
+  if (ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Sensitivity");
     ImGui::Separator();
-    ImGui::Spacing();
 
-    ImGui::TextWrapped(
-        "This application contains flashing lights, rapid brightness changes, "
-        "and high-contrast visual effects that may trigger seizures in people "
-        "with photosensitive epilepsy.");
+    float mouseSensitivity = input.getMouseSensitivity();
+    if (ImGui::SliderFloat("Mouse Sensitivity", &mouseSensitivity, 0.1f, 3.0f)) {
+      input.setMouseSensitivity(mouseSensitivity);
+    }
+
+    float keyboardSensitivity = input.getKeyboardSensitivity();
+    if (ImGui::SliderFloat("Keyboard Sensitivity", &keyboardSensitivity, 0.1f, 3.0f)) {
+      input.setKeyboardSensitivity(keyboardSensitivity);
+    }
+
+    float scrollSensitivity = input.getScrollSensitivity();
+    if (ImGui::SliderFloat("Scroll Sensitivity", &scrollSensitivity, 0.1f, 3.0f)) {
+      input.setScrollSensitivity(scrollSensitivity);
+    }
 
     ImGui::Spacing();
-    ImGui::TextWrapped(
-        "A small percentage of people may experience seizures when exposed to "
-        "certain light patterns or flashing lights, even if they have no prior "
-        "history of epilepsy or seizures.");
-
-    ImGui::Spacing();
+    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Inversion");
     ImGui::Separator();
+
+    bool invertMouseX = input.isMouseXInverted();
+    if (ImGui::Checkbox("Invert Mouse X", &invertMouseX)) {
+      input.setMouseXInverted(invertMouseX);
+    }
+    bool invertMouseY = input.isMouseYInverted();
+    if (ImGui::Checkbox("Invert Mouse Y", &invertMouseY)) {
+      input.setMouseYInverted(invertMouseY);
+    }
+    bool invertKeyboardX = input.isKeyboardXInverted();
+    if (ImGui::Checkbox("Invert Keyboard X", &invertKeyboardX)) {
+      input.setKeyboardXInverted(invertKeyboardX);
+    }
+    bool invertKeyboardY = input.isKeyboardYInverted();
+    if (ImGui::Checkbox("Invert Keyboard Y", &invertKeyboardY)) {
+      input.setKeyboardYInverted(invertKeyboardY);
+    }
+
     ImGui::Spacing();
+    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Camera Control");
+    ImGui::Separator();
 
-    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Protection Level:");
+    const char *cameraModeLabels[] = {"Input", "Front", "Top", "Orbit"};
+    ImGui::Combo("Camera Mode", &cameraModeIndex, cameraModeLabels,
+                 IM_ARRAYSIZE(cameraModeLabels));
+
+    bool holdToToggle = input.isHoldToToggleCamera();
+    if (ImGui::Checkbox("Hold-to-Toggle Camera", &holdToToggle)) {
+      input.setHoldToToggleCamera(holdToToggle);
+    }
+
+    float timeScale = input.getTimeScale();
+    if (ImGui::SliderFloat("Time Scale", &timeScale, 0.0f, 4.0f)) {
+      input.setTimeScale(timeScale);
+    }
+
     ImGui::Spacing();
+    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Gamepad");
+    ImGui::Separator();
 
-    const char *levels[] = {"None (I accept the risk)", "Low (50% bloom reduction)",
-                            "Medium (75% reduction + flash limiting)",
-                            "High (Minimal effects)", "Maximum (All effects disabled)"};
+    ImGui::Text("Status: %s", input.isGamepadConnected() ? "Connected" : "Not detected");
 
-    int currentLevel = static_cast<int>(settings.photosensitivityLevel);
-    for (int i = 0; i < 5; i++) {
-      if (ImGui::RadioButton(levels[i], currentLevel == i)) {
-        settings.photosensitivityLevel = static_cast<PhotosensitivityLevel>(i);
+    bool gamepadEnabled = input.isGamepadEnabled();
+    if (ImGui::Checkbox("Enable Gamepad", &gamepadEnabled)) {
+      input.setGamepadEnabled(gamepadEnabled);
+    }
+
+    float gamepadDeadzone = input.getGamepadDeadzone();
+    if (ImGui::SliderFloat("Deadzone", &gamepadDeadzone, 0.0f, 0.5f)) {
+      input.setGamepadDeadzone(gamepadDeadzone);
+    }
+
+    float gamepadLookSensitivity = input.getGamepadLookSensitivity();
+    if (ImGui::SliderFloat("Look Sensitivity", &gamepadLookSensitivity, 10.0f, 180.0f)) {
+      input.setGamepadLookSensitivity(gamepadLookSensitivity);
+    }
+
+    float gamepadRollSensitivity = input.getGamepadRollSensitivity();
+    if (ImGui::SliderFloat("Roll Sensitivity", &gamepadRollSensitivity, 10.0f, 180.0f)) {
+      input.setGamepadRollSensitivity(gamepadRollSensitivity);
+    }
+
+    float gamepadZoomSensitivity = input.getGamepadZoomSensitivity();
+    if (ImGui::SliderFloat("Zoom Sensitivity", &gamepadZoomSensitivity, 1.0f, 20.0f)) {
+      input.setGamepadZoomSensitivity(gamepadZoomSensitivity);
+    }
+
+    float gamepadTriggerZoomSensitivity = input.getGamepadTriggerZoomSensitivity();
+    if (ImGui::SliderFloat("Trigger Zoom Sensitivity", &gamepadTriggerZoomSensitivity, 1.0f,
+                           20.0f)) {
+      input.setGamepadTriggerZoomSensitivity(gamepadTriggerZoomSensitivity);
+    }
+
+    bool gamepadInvertX = input.isGamepadXInverted();
+    if (ImGui::Checkbox("Invert Gamepad X", &gamepadInvertX)) {
+      input.setGamepadXInverted(gamepadInvertX);
+    }
+    bool gamepadInvertY = input.isGamepadYInverted();
+    if (ImGui::Checkbox("Invert Gamepad Y", &gamepadInvertY)) {
+      input.setGamepadYInverted(gamepadInvertY);
+    }
+    bool gamepadInvertRoll = input.isGamepadRollInverted();
+    if (ImGui::Checkbox("Invert Gamepad Roll", &gamepadInvertRoll)) {
+      input.setGamepadRollInverted(gamepadInvertRoll);
+    }
+    bool gamepadInvertZoom = input.isGamepadZoomInverted();
+    if (ImGui::Checkbox("Invert Gamepad Zoom", &gamepadInvertZoom)) {
+      input.setGamepadZoomInverted(gamepadInvertZoom);
+    }
+
+    if (ImGui::CollapsingHeader("Gamepad Axis Mapping")) {
+      int yawAxis = input.getGamepadYawAxis();
+      if (ImGui::SliderInt("Yaw Axis", &yawAxis, 0, GLFW_GAMEPAD_AXIS_LAST)) {
+        input.setGamepadYawAxis(yawAxis);
+      }
+      int pitchAxis = input.getGamepadPitchAxis();
+      if (ImGui::SliderInt("Pitch Axis", &pitchAxis, 0, GLFW_GAMEPAD_AXIS_LAST)) {
+        input.setGamepadPitchAxis(pitchAxis);
+      }
+      int rollAxis = input.getGamepadRollAxis();
+      if (ImGui::SliderInt("Roll Axis", &rollAxis, 0, GLFW_GAMEPAD_AXIS_LAST)) {
+        input.setGamepadRollAxis(rollAxis);
+      }
+      int zoomAxis = input.getGamepadZoomAxis();
+      if (ImGui::SliderInt("Zoom Axis", &zoomAxis, 0, GLFW_GAMEPAD_AXIS_LAST)) {
+        input.setGamepadZoomAxis(zoomAxis);
+      }
+      int zoomInAxis = input.getGamepadZoomInAxis();
+      if (ImGui::SliderInt("Zoom In Trigger", &zoomInAxis, 0, GLFW_GAMEPAD_AXIS_LAST)) {
+        input.setGamepadZoomInAxis(zoomInAxis);
+      }
+      int zoomOutAxis = input.getGamepadZoomOutAxis();
+      if (ImGui::SliderInt("Zoom Out Trigger", &zoomOutAxis, 0, GLFW_GAMEPAD_AXIS_LAST)) {
+        input.setGamepadZoomOutAxis(zoomOutAxis);
+      }
+    }
+
+    if (ImGui::CollapsingHeader("Key Bindings", ImGuiTreeNodeFlags_DefaultOpen)) {
+      if (input.isRemappingKey()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
+                           "Press a key to bind to: %s",
+                           input.getActionName(input.getRemappingAction()));
+        if (ImGui::Button("Cancel")) {
+          input.cancelKeyRemapping();
+        }
+      } else {
+        if (ImGui::BeginTable("KeyBindings", 2, ImGuiTableFlags_SizingStretchProp)) {
+          for (int i = 0; i < static_cast<int>(KeyAction::COUNT); i++) {
+            KeyAction action = static_cast<KeyAction>(i);
+            const char *actionName = input.getActionName(action);
+            int currentKey = input.getKeyForAction(action);
+            std::string keyName = input.getKeyName(currentKey);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", actionName);
+            ImGui::TableNextColumn();
+
+            ImGui::PushID(i);
+            char buttonLabel[64];
+            std::snprintf(buttonLabel, sizeof(buttonLabel), "[%s]##%d", keyName.c_str(), i);
+            if (ImGui::Button(buttonLabel)) {
+              input.startKeyRemapping(action);
+            }
+            ImGui::PopID();
+          }
+          ImGui::EndTable();
+        }
       }
     }
 
     ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    if (ImGui::Button("I Understand - Continue", ImVec2(220, 30))) {
-      settings.photosensitivityWarningShown = true;
-      showPhotosensitivityWarning = false;
-      SettingsManager::instance().save();
-      ImGui::CloseCurrentPopup();
-    }
-
-    ImGui::EndPopup();
-  }
-}
-
-// Render accessibility settings panel
-static void renderAccessibilityPanel() {
-  auto &settings = SettingsManager::instance().get();
-
-  ImGui::SetNextWindowPos(ImVec2(10, 340), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(320, 400), ImGuiCond_FirstUseEver);
-
-  if (ImGui::Begin("Accessibility", nullptr, ImGuiWindowFlags_NoCollapse)) {
-    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Vision");
-    ImGui::Separator();
-
-    ImGui::Checkbox("High Contrast UI", &settings.highContrastUI);
-    ImGui::Checkbox("Invert Colors", &settings.invertColors);
-
-    // Colorblind mode selector
-    const char *cbModes[] = {"None", "Protanopia", "Deuteranopia", "Tritanopia", "Achromatopsia"};
-    int cbMode = static_cast<int>(settings.colorblindMode);
-    if (ImGui::Combo("Colorblind Filter", &cbMode, cbModes, 5)) {
-      settings.colorblindMode = static_cast<ColorblindMode>(cbMode);
-    }
-
-    if (settings.colorblindMode != ColorblindMode::None) {
-      ImGui::SliderFloat("Filter Strength", &settings.colorblindStrength, 0.0f, 1.0f);
-    }
-
-    ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Photosensitivity");
-    ImGui::Separator();
-
-    const char *psLevels[] = {"None", "Low", "Medium", "High", "Maximum"};
-    int psLevel = static_cast<int>(settings.photosensitivityLevel);
-    if (ImGui::Combo("Protection Level", &psLevel, psLevels, 5)) {
-      settings.photosensitivityLevel = static_cast<PhotosensitivityLevel>(psLevel);
-    }
-
-    ImGui::Checkbox("Reduce Motion", &settings.reduceMotion);
-
-    ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Stereoblindness (Depth Cues)");
-    ImGui::Separator();
-
-    ImGui::Checkbox("Enable Depth Cue Enhancements", &settings.stereoblindModeEnabled);
-
-    if (settings.stereoblindModeEnabled) {
-      ImGui::Indent();
-
-      ImGui::Checkbox("Distance Fog", &settings.depthFogEnabled);
-      if (settings.depthFogEnabled) {
-        ImGui::SliderFloat("Fog Density", &settings.depthFogDensity, 0.0f, 1.0f);
-      }
-
-      ImGui::Checkbox("Edge Outlines", &settings.depthEdgeOutlines);
-      if (settings.depthEdgeOutlines) {
-        ImGui::SliderFloat("Edge Threshold", &settings.depthEdgeThreshold, 0.0f, 1.0f);
-      }
-
-      ImGui::Checkbox("Depth Desaturation", &settings.depthDesaturation);
-      if (settings.depthDesaturation) {
-        ImGui::SliderFloat("Desaturation", &settings.depthDesatStrength, 0.0f, 1.0f);
-      }
-
-      ImGui::Checkbox("Chromatic Depth (Warm/Cool)", &settings.chromaDepthEnabled);
-
-      ImGui::Unindent();
-    }
-
-    ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Motor");
-    ImGui::Separator();
-
-    ImGui::Checkbox("Hold-to-Toggle Camera", &settings.holdToToggleCamera);
-    ImGui::SliderFloat("Mouse Sensitivity", &settings.mouseSensitivity, 0.1f, 3.0f);
-    ImGui::SliderFloat("Keyboard Sensitivity", &settings.keyboardSensitivity, 0.1f, 3.0f);
-    ImGui::Checkbox("Invert Mouse X", &settings.invertMouseX);
-    ImGui::Checkbox("Invert Mouse Y", &settings.invertMouseY);
-
-    ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Cognitive");
-    ImGui::Separator();
-
-    ImGui::SliderFloat("UI Font Scale", &settings.uiFontScale, 0.75f, 2.0f, "%.2f");
-    if (ImGui::Button("Apply Font Scale")) {
-      ImGui::GetIO().FontGlobalScale = settings.uiFontScale;
-    }
-
-    ImGui::Checkbox("Show Control Hints", &settings.showControlHints);
-    ImGui::SliderFloat("Time Scale", &settings.timeScale, 0.0f, 2.0f, "%.2f");
-
-    ImGui::Spacing();
-    ImGui::Separator();
-
     if (ImGui::Button("Save Settings")) {
+      input.syncToSettings();
       SettingsManager::instance().save();
     }
     ImGui::SameLine();
     if (ImGui::Button("Reset Defaults")) {
       SettingsManager::instance().resetToDefaults();
-    }
-  }
-  ImGui::End();
-}
-
-// Render key remapping panel
-static void renderKeyRemappingPanel() {
-  auto &input = InputManager::instance();
-
-  ImGui::SetNextWindowPos(ImVec2(340, 340), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
-
-  if (ImGui::Begin("Key Bindings", nullptr, ImGuiWindowFlags_NoCollapse)) {
-    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Key Remapping");
-    ImGui::Separator();
-
-    if (input.isRemappingKey()) {
-      ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f),
-                          "Press a key to bind to: %s",
-                          input.getActionName(input.getRemappingAction()));
-      if (ImGui::Button("Cancel")) {
-        input.cancelKeyRemapping();
-      }
-    } else {
-      ImGui::Text("Click a button to remap that action");
-      ImGui::Spacing();
-
-      // List all remappable actions
-      for (int i = 0; i < static_cast<int>(KeyAction::COUNT); i++) {
-        KeyAction action = static_cast<KeyAction>(i);
-        const char *actionName = input.getActionName(action);
-        int currentKey = input.getKeyForAction(action);
-        std::string keyName = input.getKeyName(currentKey);
-
-        ImGui::PushID(i);
-
-        // Show action name and current binding
-        ImGui::Text("%-20s", actionName);
-        ImGui::SameLine();
-
-        char buttonLabel[64];
-        snprintf(buttonLabel, sizeof(buttonLabel), "[%s]##%d", keyName.c_str(), i);
-
-        if (ImGui::Button(buttonLabel, ImVec2(100, 0))) {
-          input.startKeyRemapping(action);
-        }
-
-        ImGui::PopID();
-      }
-    }
-
-    ImGui::Spacing();
-    ImGui::Separator();
-
-    if (ImGui::Button("Reset to Defaults")) {
-      // Reset key bindings to defaults
-      SettingsManager::instance().resetToDefaults();
       input.syncFromSettings();
+      SettingsManager::instance().save();
     }
   }
   ImGui::End();
-}
-
-// Apply accessibility styles
-static void applyAccessibilityStyles() {
-  auto &settings = SettingsManager::instance().get();
-
-  if (settings.highContrastUI) {
-    ImGuiStyle &style = ImGui::GetStyle();
-    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);
-    style.Colors[ImGuiCol_Text] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-    style.Colors[ImGuiCol_Border] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-    style.Colors[ImGuiCol_FrameBg] = ImVec4(0.2f, 0.2f, 0.2f, 1.0f);
-    style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
-    style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-    style.Colors[ImGuiCol_Button] = ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
-    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
-    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
-    style.FrameBorderSize = 1.0f;
-  }
 }
 
 // Cleanup resources
@@ -547,9 +530,6 @@ int main(int, char **) {
   // Initialize ImGui
   initializeImGui(window);
 
-  // Check if photosensitivity warning needs to be shown
-  checkPhotosensitivityWarning();
-
   // Create fullscreen quad for rendering
   GLuint quadVAO = createQuadVAO();
   glBindVertexArray(quadVAO);
@@ -575,27 +555,47 @@ int main(int, char **) {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // Apply accessibility styles if needed
-    auto &settings = SettingsManager::instance().get();
-    static bool lastHighContrast = false;
-    if (settings.highContrastUI != lastHighContrast) {
-      if (settings.highContrastUI) {
-        applyAccessibilityStyles();
-      } else {
-        ImGui::StyleColorsDark(); // Reset to default
-      }
-      lastHighContrast = settings.highContrastUI;
-    }
-
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     glViewport(0, 0, width, height);
 
     static GLuint galaxy = loadCubemap("assets/skybox_nebula_dark");
     static GLuint colorMap = loadTexture2D("assets/color_map.png");
+    static float depthFar = 50.0f;
+    static int cameraModeIndex = static_cast<int>(CameraMode::Input);
+    static float orbitTime = 0.0f;
 
     // Get camera state for shader
     const auto &cam = input.camera();
+    if (cameraModeIndex < 0 || cameraModeIndex > 3) {
+      cameraModeIndex = static_cast<int>(CameraMode::Input);
+    }
+
+    orbitTime += input.getEffectiveDeltaTime(deltaTime);
+    glm::vec3 cameraPos;
+    CameraMode cameraMode = static_cast<CameraMode>(cameraModeIndex);
+    switch (cameraMode) {
+    case CameraMode::Front:
+      cameraPos = glm::vec3(10.0f, 1.0f, 10.0f);
+      break;
+    case CameraMode::Top:
+      cameraPos = glm::vec3(15.0f, 15.0f, 0.0f);
+      break;
+    case CameraMode::Orbit: {
+      float angle = orbitTime * 0.1f;
+      float radius = cam.distance > 0.0f ? cam.distance : 15.0f;
+      cameraPos = glm::vec3(-std::cos(angle) * radius,
+                            std::sin(angle) * radius,
+                            std::sin(angle) * radius);
+      break;
+    }
+    case CameraMode::Input:
+    default:
+      cameraPos = cameraPositionFromYawPitch(cam.yaw, cam.pitch, cam.distance);
+      break;
+    }
+
+    glm::mat3 cameraBasis = buildCameraBasis(cameraPos, glm::vec3(0.0f), cam.roll);
 
     static GLuint texBlackhole = createColorTexture(SCR_WIDTH, SCR_HEIGHT);
     {
@@ -603,15 +603,12 @@ int main(int, char **) {
       rtti.fragShader = "shader/blackhole_main.frag";
       rtti.cubemapUniforms["galaxy"] = galaxy;
       rtti.textureUniforms["colorMap"] = colorMap;
-
-      // Use InputManager for mouse position
-      rtti.floatUniforms["mouseX"] = input.getShaderMouseX();
-      rtti.floatUniforms["mouseY"] = input.getShaderMouseY();
+      rtti.textureUniforms["uSynchLUT"] = colorMap;
 
       // Pass camera state to shader
-      rtti.floatUniforms["cameraYaw"] = cam.yaw;
-      rtti.floatUniforms["cameraPitch"] = cam.pitch;
-      rtti.floatUniforms["cameraDistance"] = cam.distance;
+      rtti.vec3Uniforms["cameraPos"] = cameraPos;
+      rtti.mat3Uniforms["cameraBasis"] = cameraBasis;
+      rtti.floatUniforms["depthFar"] = depthFar;
 
       rtti.targetTexture = texBlackhole;
       rtti.width = SCR_WIDTH;
@@ -619,18 +616,9 @@ int main(int, char **) {
 
       // Render UI controls only if visible
       if (input.isUIVisible()) {
+        ImGui::Begin("Black Hole Parameters", nullptr, ImGuiWindowFlags_NoCollapse);
         IMGUI_TOGGLE(gravatationalLensing, true);
         IMGUI_TOGGLE(renderBlackHole, true);
-        IMGUI_TOGGLE(mouseControl, true);
-
-        // Use camera roll from InputManager
-        static float cameraRoll = 0.0f;
-        cameraRoll = cam.roll;
-        ImGui::SliderFloat("cameraRoll", &cameraRoll, -180.0f, 180.0f);
-        rtti.floatUniforms["cameraRoll"] = cameraRoll;
-
-        IMGUI_TOGGLE(frontView, false);
-        IMGUI_TOGGLE(topView, false);
         IMGUI_TOGGLE(adiskEnabled, true);
         IMGUI_TOGGLE(adiskParticle, true);
         IMGUI_SLIDER(adiskDensityV, 2.0f, 0.0f, 10.0f);
@@ -640,11 +628,9 @@ int main(int, char **) {
         IMGUI_SLIDER(adiskNoiseLOD, 5.0f, 1.0f, 12.0f);
         IMGUI_SLIDER(adiskNoiseScale, 0.8f, 0.0f, 10.0f);
 
-        // Reduce animation speed if reduced motion is enabled
         static float adiskSpeed = 0.5f;
-        float speedMult = settings.reduceMotion ? 0.1f : 1.0f;
         ImGui::SliderFloat("adiskSpeed", &adiskSpeed, 0.0f, 1.0f);
-        rtti.floatUniforms["adiskSpeed"] = adiskSpeed * speedMult;
+        rtti.floatUniforms["adiskSpeed"] = adiskSpeed;
 
         ImGui::Separator();
         ImGui::Text("Physics Parameters");
@@ -652,7 +638,10 @@ int main(int, char **) {
         // Black hole mass in solar masses (scaled for visualization)
         static float blackHoleMass = 1.0f;
         ImGui::SliderFloat("blackHoleMass", &blackHoleMass, 0.1f, 10.0f);
-        rtti.floatUniforms["blackHoleMass"] = blackHoleMass;
+        // Kerr spin parameter a (|a|<M)
+        static float kerrSpin = 0.0f;
+        ImGui::SliderFloat("kerrSpin(a/M)", &kerrSpin, -0.99f, 0.99f);
+        rtti.floatUniforms["kerrSpin"] = kerrSpin;
 
         // Schwarzschild radius: r_s = 2GM/c² (in geometric units where M=1 gives r_s=2)
         float schwarzschildRadius = 2.0f * blackHoleMass;
@@ -676,14 +665,11 @@ int main(int, char **) {
                     static_cast<double>(photonSphereRadius),
                     static_cast<double>(iscoRadius));
 
+        ImGui::End();
       } else {
         // When UI is hidden, still need to set uniforms
         rtti.floatUniforms["gravatationalLensing"] = 1.0f;
         rtti.floatUniforms["renderBlackHole"] = 1.0f;
-        rtti.floatUniforms["mouseControl"] = 1.0f;
-        rtti.floatUniforms["cameraRoll"] = cam.roll;
-        rtti.floatUniforms["frontView"] = 0.0f;
-        rtti.floatUniforms["topView"] = 0.0f;
         rtti.floatUniforms["adiskEnabled"] = 1.0f;
         rtti.floatUniforms["adiskParticle"] = 1.0f;
         rtti.floatUniforms["adiskDensityV"] = 2.0f;
@@ -692,16 +678,15 @@ int main(int, char **) {
         rtti.floatUniforms["adiskLit"] = 0.25f;
         rtti.floatUniforms["adiskNoiseLOD"] = 5.0f;
         rtti.floatUniforms["adiskNoiseScale"] = 0.8f;
-        float speedMult = settings.reduceMotion ? 0.1f : 1.0f;
-        rtti.floatUniforms["adiskSpeed"] = 0.5f * speedMult;
+        rtti.floatUniforms["adiskSpeed"] = 0.5f;
 
         // Default physics parameters
-        rtti.floatUniforms["blackHoleMass"] = 1.0f;
         rtti.floatUniforms["schwarzschildRadius"] = 2.0f;
         rtti.floatUniforms["photonSphereRadius"] = 3.0f;
         rtti.floatUniforms["iscoRadius"] = 6.0f;
         rtti.floatUniforms["enablePhotonSphere"] = 0.0f;
         rtti.floatUniforms["enableRedshift"] = 0.0f;
+        rtti.floatUniforms["kerrSpin"] = 0.0f;
       }
 
       renderToTexture(rtti);
@@ -730,7 +715,9 @@ int main(int, char **) {
 
     static int bloomIterations = MAX_BLOOM_ITER;
     if (input.isUIVisible()) {
+      ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
       ImGui::SliderInt("bloomIterations", &bloomIterations, 1, 8);
+      ImGui::End();
     }
 
     for (int level = 0; level < bloomIterations; level++) {
@@ -766,7 +753,9 @@ int main(int, char **) {
       rtti.height = SCR_HEIGHT;
 
       if (input.isUIVisible()) {
+        ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
         IMGUI_SLIDER(bloomStrength, 0.1f, 0.0f, 1.0f);
+        ImGui::End();
       } else {
         rtti.floatUniforms["bloomStrength"] = 0.1f;
       }
@@ -784,8 +773,10 @@ int main(int, char **) {
       rtti.height = SCR_HEIGHT;
 
       if (input.isUIVisible()) {
+        ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
         IMGUI_TOGGLE(tonemappingEnabled, true);
         IMGUI_SLIDER(gamma, 2.5f, 1.0f, 4.0f);
+        ImGui::End();
       } else {
         rtti.floatUniforms["tonemappingEnabled"] = 1.0f;
         rtti.floatUniforms["gamma"] = 2.5f;
@@ -794,54 +785,106 @@ int main(int, char **) {
       renderToTexture(rtti);
     }
 
-    // Accessibility post-processing pass
-    static GLuint texAccessibility = createColorTexture(SCR_WIDTH, SCR_HEIGHT);
-    static GLuint texPreviousFrame = createColorTexture(SCR_WIDTH, SCR_HEIGHT);
-    {
-      RenderToTextureInfo rtti;
-      rtti.fragShader = "shader/accessibility.frag";
-      rtti.textureUniforms["texture0"] = texTonemapped;
-      rtti.textureUniforms["previousFrame"] = texPreviousFrame;
-      rtti.targetTexture = texAccessibility;
-      rtti.width = SCR_WIDTH;
-      rtti.height = SCR_HEIGHT;
+    static GLuint texDepthEffects = createColorTexture(SCR_WIDTH, SCR_HEIGHT);
+    static bool depthEffectsEnabled = false;
+    static bool fogEnabled = true;
+    static float fogDensity = 0.35f;
+    static float fogStart = 0.2f;
+    static float fogEnd = 0.9f;
+    static float fogColor[3] = {0.08f, 0.08f, 0.12f};
+    static bool edgeOutlinesEnabled = false;
+    static float edgeThreshold = 0.5f;
+    static float edgeWidth = 1.0f;
+    static float edgeColor[3] = {1.0f, 1.0f, 1.0f};
+    static bool depthDesatEnabled = false;
+    static float desatStrength = 0.5f;
+    static bool chromaDepthEnabled = false;
+    static bool motionParallaxHint = false;
+    static bool dofEnabled = false;
+    static float dofFocusNear = 0.2f;
+    static float dofFocusFar = 0.9f;
+    static float dofMaxRadius = 6.0f;
 
-      // Pass accessibility settings as floats (shader casts to int)
-      rtti.floatUniforms["colorblindMode"] =
-          static_cast<float>(settings.colorblindMode);
-      rtti.floatUniforms["colorblindStrength"] = settings.colorblindStrength;
-      rtti.floatUniforms["photosensitivityLevel"] =
-          static_cast<float>(settings.photosensitivityLevel);
-      rtti.floatUniforms["maxBloomIntensity"] =
-          SettingsManager::instance().getEffectiveBloomStrength();
-      rtti.floatUniforms["maxFlashFrequency"] = settings.maxFlashFrequency;
-      rtti.floatUniforms["invertColors"] = settings.invertColors ? 1.0f : 0.0f;
-      rtti.floatUniforms["highContrast"] = settings.highContrastUI ? 1.0f : 0.0f;
-
-      renderToTexture(rtti);
-    }
-
-    // Copy current frame to previous frame for next iteration's flash detection
-    {
-      RenderToTextureInfo rtti;
-      rtti.fragShader = "shader/passthrough.frag";
-      rtti.textureUniforms["texture0"] = texAccessibility;
-      rtti.targetTexture = texPreviousFrame;
-      rtti.width = SCR_WIDTH;
-      rtti.height = SCR_HEIGHT;
-      renderToTexture(rtti);
-    }
-
-    passthrough.render(texAccessibility);
-
-    // Render photosensitivity warning modal (takes priority)
-    renderPhotosensitivityWarning();
-
-    // Render UI panels
     if (input.isUIVisible()) {
-      renderControlsPanel();
-      renderAccessibilityPanel();
-      renderKeyRemappingPanel();
+      ImGui::Begin("Depth Effects", nullptr, ImGuiWindowFlags_NoCollapse);
+      ImGui::Checkbox("Enable Depth Effects", &depthEffectsEnabled);
+      ImGui::SliderFloat("Depth Far", &depthFar, 10.0f, 200.0f);
+      ImGui::Separator();
+
+      ImGui::Checkbox("Fog", &fogEnabled);
+      ImGui::SliderFloat("Fog Density", &fogDensity, 0.0f, 1.0f);
+      ImGui::SliderFloat("Fog Start", &fogStart, 0.0f, 1.0f);
+      ImGui::SliderFloat("Fog End", &fogEnd, 0.0f, 1.0f);
+      if (fogStart > fogEnd) {
+        fogStart = fogEnd;
+      }
+      ImGui::ColorEdit3("Fog Color", fogColor);
+
+      ImGui::Separator();
+      ImGui::Checkbox("Edge Outlines", &edgeOutlinesEnabled);
+      ImGui::SliderFloat("Edge Threshold", &edgeThreshold, 0.0f, 1.0f);
+      ImGui::SliderFloat("Edge Width", &edgeWidth, 0.5f, 3.0f);
+      ImGui::ColorEdit3("Edge Color", edgeColor);
+
+      ImGui::Separator();
+      ImGui::Checkbox("Depth Desaturation", &depthDesatEnabled);
+      ImGui::SliderFloat("Desaturation", &desatStrength, 0.0f, 1.0f);
+      ImGui::Checkbox("Chroma Depth", &chromaDepthEnabled);
+      ImGui::Checkbox("Motion Parallax Hint", &motionParallaxHint);
+
+      ImGui::Separator();
+      ImGui::Checkbox("Depth of Field", &dofEnabled);
+      ImGui::SliderFloat("DoF Focus Near", &dofFocusNear, 0.0f, 1.0f);
+      ImGui::SliderFloat("DoF Focus Far", &dofFocusFar, 0.0f, 1.0f);
+      if (dofFocusNear > dofFocusFar) {
+        dofFocusNear = dofFocusFar;
+      }
+      ImGui::SliderFloat("DoF Max Radius", &dofMaxRadius, 0.0f, 12.0f);
+      ImGui::End();
+    }
+
+    GLuint finalTexture = texTonemapped;
+    if (depthEffectsEnabled) {
+      RenderToTextureInfo rtti;
+      rtti.fragShader = "shader/depth_cues.frag";
+      rtti.textureUniforms["texture0"] = texTonemapped;
+      rtti.textureUniforms["depthTexture"] = texBlackhole;
+      rtti.targetTexture = texDepthEffects;
+      rtti.width = SCR_WIDTH;
+      rtti.height = SCR_HEIGHT;
+      rtti.floatUniforms["depthEffectsEnabled"] = 1.0f;
+      rtti.floatUniforms["fogEnabled"] = fogEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["fogDensity"] = fogDensity;
+      rtti.floatUniforms["fogStart"] = fogStart;
+      rtti.floatUniforms["fogEnd"] = fogEnd;
+      rtti.floatUniforms["fogColorR"] = fogColor[0];
+      rtti.floatUniforms["fogColorG"] = fogColor[1];
+      rtti.floatUniforms["fogColorB"] = fogColor[2];
+      rtti.floatUniforms["edgeOutlinesEnabled"] = edgeOutlinesEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["edgeThreshold"] = edgeThreshold;
+      rtti.floatUniforms["edgeWidth"] = edgeWidth;
+      rtti.floatUniforms["edgeColorR"] = edgeColor[0];
+      rtti.floatUniforms["edgeColorG"] = edgeColor[1];
+      rtti.floatUniforms["edgeColorB"] = edgeColor[2];
+      rtti.floatUniforms["depthDesatEnabled"] = depthDesatEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["desatStrength"] = desatStrength;
+      rtti.floatUniforms["chromaDepthEnabled"] = chromaDepthEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["motionParallaxHint"] = motionParallaxHint ? 1.0f : 0.0f;
+      rtti.floatUniforms["dofEnabled"] = dofEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["dofFocusNear"] = dofFocusNear;
+      rtti.floatUniforms["dofFocusFar"] = dofFocusFar;
+      rtti.floatUniforms["dofMaxRadius"] = dofMaxRadius;
+      renderToTexture(rtti);
+      finalTexture = texDepthEffects;
+    }
+
+    // Final passthrough to screen
+    passthrough.render(finalTexture);
+
+    // Render UI panels (before popup modal for proper window ordering)
+    if (input.isUIVisible()) {
+      renderControlsHelpPanel();
+      renderControlsSettingsPanel(cameraModeIndex);
     }
 
     ImGui::Render();
