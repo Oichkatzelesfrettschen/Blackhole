@@ -26,15 +26,17 @@ float metricFactor(float r, float r_s) {
 
 /**
  * Photon sphere radius: r_ph = 1.5 r_s
+ * Named with sch_ prefix to avoid collision with uniform variables
  */
-float photonSphereRadius(float r_s) {
+float sch_photonSphereRadius(float r_s) {
     return 1.5 * r_s;
 }
 
 /**
  * ISCO radius: r_ISCO = 3 r_s
+ * Named with sch_ prefix to avoid collision with uniform variables
  */
-float iscoRadius(float r_s) {
+float sch_iscoRadius(float r_s) {
     return 3.0 * r_s;
 }
 
@@ -157,7 +159,7 @@ float bendingAngle(float r, float r_s, float stepSize) {
  * Keplerian angular velocity: Ω = √(GM/r³) = √(r_s/(2r³)) (in c=G=1 units)
  */
 float keplerianAngularVelocity(float r, float r_s) {
-    if (r <= iscoRadius(r_s)) {
+    if (r <= sch_iscoRadius(r_s)) {
         return 0.0; // Inside ISCO, no stable orbit
     }
     return sqrt(r_s / (2.0 * r * r * r));
