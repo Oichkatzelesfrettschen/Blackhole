@@ -1,3 +1,4 @@
+#extension GL_GOOGLE_include_directive : enable
 #version 460 core
 
 // Physics library includes
