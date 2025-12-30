@@ -6,28 +6,67 @@ project(Blackhole
   LANGUAGES CXX
 )
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
-list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
+# ============================================================================
+# Conan 2.x Integration
+# ============================================================================
+# Usage:
+#   conan install . --output-folder=<cmake-build-dir> --build=missing
+#   cmake --preset release (or: cmake -B <cmake-build-dir> -DCMAKE_BUILD_TYPE=Release)
+#   cmake --build build
+# ============================================================================
 
-if(NOT EXISTS "${CMAKE_BINARY_DIR}/conan.cmake")
-  message(STATUS "Downloading conan.cmake from https://github.com/conan-io/cmake-conan")
-  file(DOWNLOAD "https://raw.githubusercontent.com/conan-io/cmake-conan/v0.16.1/conan.cmake"
-                "${CMAKE_BINARY_DIR}/conan.cmake"
-                EXPECTED_HASH SHA256=396e16d0f5eabdc6a14afddbcfff62a54a7ee75c6da23f32f7a31bc85db23484
-                TLS_VERIFY ON)
+# Look for Conan-generated toolchain and dependencies
+set(CONAN_TOOLCHAIN_PATH "")
+if(CMAKE_TOOLCHAIN_FILE)
+  if(NOT CMAKE_TOOLCHAIN_FILE MATCHES "conan_toolchain.cmake$")
+    message(FATAL_ERROR "This project requires Conan's toolchain. Set CMAKE_TOOLCHAIN_FILE to conan_toolchain.cmake.")
+  endif()
+  set(CONAN_TOOLCHAIN_PATH "${CMAKE_TOOLCHAIN_FILE}")
+elseif(EXISTS "${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
+  set(CONAN_TOOLCHAIN_PATH "${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/conan_toolchain.cmake")
+  set(CONAN_TOOLCHAIN_PATH "${CMAKE_SOURCE_DIR}/build/conan_toolchain.cmake")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/Release/generators/conan_toolchain.cmake")
+  set(CONAN_TOOLCHAIN_PATH "${CMAKE_SOURCE_DIR}/build/Release/generators/conan_toolchain.cmake")
 endif()
 
-include(${CMAKE_BINARY_DIR}/conan.cmake)
+if(CONAN_TOOLCHAIN_PATH)
+  if(NOT CMAKE_TOOLCHAIN_FILE)
+    include("${CONAN_TOOLCHAIN_PATH}")
+  endif()
+else()
+  message(FATAL_ERROR "Conan toolchain not found. Run: conan install . --output-folder=<cmake-build-dir> --build=missing")
+endif()
 
-conan_cmake_configure(REQUIRES imgui/1.86 glfw/3.3.6 glew/2.2.0 glm/0.9.9.8 stb/cci.20210713
-                      GENERATORS cmake_find_package)
+# ============================================================================
+# C++ Standard (C++23 only)
+# ============================================================================
 
-conan_cmake_autodetect(settings)
+set(BLACKHOLE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD ${BLACKHOLE_CXX_STANDARD})
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-conan_cmake_install(PATH_OR_REFERENCE .
-                    BUILD missing
-                    REMOTE conancenter
-                    SETTINGS ${settings})
+add_compile_definitions(
+  BLACKHOLE_CXX_STANDARD=${BLACKHOLE_CXX_STANDARD}
+  BLACKHOLE_CXX23=1
+  BLACKHOLE_CXX20=1
+  BLACKHOLE_CXX17=1
+)
+
+message(STATUS "Using C++ standard: C++${BLACKHOLE_CXX_STANDARD}")
+
+# Add Conan generators directory to module path
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}")
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}")
+
+# Also check cmake_layout default locations
+if(EXISTS "${CMAKE_SOURCE_DIR}/build/Release/generators")
+  list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/Release/generators")
+endif()
+if(EXISTS "${CMAKE_SOURCE_DIR}/build/Debug/generators")
+  list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/Debug/generators")
+endif()
 
 find_package(imgui REQUIRED)
 find_package(glfw3 REQUIRED)
@@ -231,6 +270,7 @@ set(PHYSICS_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
   "${PROJECT_SOURCE_DIR}/src/physics/geodesics.cpp"
   "${PROJECT_SOURCE_DIR}/src/physics/cosmology.cpp"
+  "${PROJECT_SOURCE_DIR}/src/kerr.cpp"
 )
 
 # Separate project source files from third-party imgui implementation
@@ -252,9 +292,18 @@ set(THIRDPARTY_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/imgui_impl_opengl3.cpp"
 )
 
-file(GLOB HEADER_FILES "${PROJECT_SOURCE_DIR}/src/*.h")
+# Collect all header files including physics subdirectory
+file(GLOB HEADER_FILES "${PROJECT_SOURCE_DIR}/src/*.h" "${PROJECT_SOURCE_DIR}/src/*.hpp")
+file(GLOB PHYSICS_HEADER_FILES "${PROJECT_SOURCE_DIR}/src/physics/*.h")
+list(APPEND HEADER_FILES ${PHYSICS_HEADER_FILES})
 
 add_executable(${CMAKE_PROJECT_NAME} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
+
+set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
+  CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
 
 # Apply tiered warning flags only to project source files
 set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES
@@ -277,74 +326,6 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
   "${PROJECT_SOURCE_DIR}/src"
   "${PROJECT_SOURCE_DIR}/src/physics"
 )
-
-# ============================================================================
-# C++ Standard Detection with Fallback Chain (C++23 → C++20 → C++17)
-# ============================================================================
-
-# Try C++23 first, then fall back to C++20, then C++17
-set(CXX_STANDARD_CANDIDATES 23 20 17)
-set(CXX_STANDARD_FOUND FALSE)
-
-foreach(std_version IN LISTS CXX_STANDARD_CANDIDATES)
-  if(NOT CXX_STANDARD_FOUND)
-    # Check if compiler supports this standard
-    set(CMAKE_CXX_STANDARD ${std_version})
-    set(CMAKE_CXX_STANDARD_REQUIRED OFF)
-
-    include(CheckCXXCompilerFlag)
-    if(std_version EQUAL 23)
-      check_cxx_compiler_flag("-std=c++23" COMPILER_SUPPORTS_CXX23)
-      if(NOT COMPILER_SUPPORTS_CXX23)
-        check_cxx_compiler_flag("-std=c++2b" COMPILER_SUPPORTS_CXX2B)
-        if(COMPILER_SUPPORTS_CXX2B)
-          set(COMPILER_SUPPORTS_CXX23 TRUE)
-        endif()
-      endif()
-      if(COMPILER_SUPPORTS_CXX23)
-        set(CXX_STANDARD_FOUND TRUE)
-        set(DETECTED_CXX_STANDARD 23)
-        add_compile_definitions(BLACKHOLE_CXX23=1)
-        add_compile_definitions(BLACKHOLE_CXX20=1)
-        add_compile_definitions(BLACKHOLE_CXX17=1)
-        message(STATUS "C++23 support detected - using latest features")
-      endif()
-    elseif(std_version EQUAL 20)
-      check_cxx_compiler_flag("-std=c++20" COMPILER_SUPPORTS_CXX20)
-      if(COMPILER_SUPPORTS_CXX20)
-        set(CXX_STANDARD_FOUND TRUE)
-        set(DETECTED_CXX_STANDARD 20)
-        add_compile_definitions(BLACKHOLE_CXX20=1)
-        add_compile_definitions(BLACKHOLE_CXX17=1)
-        message(STATUS "C++20 support detected - using C++20 features")
-      endif()
-    elseif(std_version EQUAL 17)
-      check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
-      if(COMPILER_SUPPORTS_CXX17)
-        set(CXX_STANDARD_FOUND TRUE)
-        set(DETECTED_CXX_STANDARD 17)
-        add_compile_definitions(BLACKHOLE_CXX17=1)
-        message(STATUS "C++17 support detected - using baseline features")
-      endif()
-    endif()
-  endif()
-endforeach()
-
-if(NOT CXX_STANDARD_FOUND)
-  message(FATAL_ERROR "No suitable C++ standard found. Requires at least C++17.")
-endif()
-
-# Set the detected standard
-set(CMAKE_CXX_STANDARD ${DETECTED_CXX_STANDARD})
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-# Export the detected standard for headers
-target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-  BLACKHOLE_CXX_STANDARD=${DETECTED_CXX_STANDARD}
-)
-
-message(STATUS "Using C++ standard: C++${DETECTED_CXX_STANDARD}")
 
 # Copy assets files after build.
 add_custom_command(
@@ -412,7 +393,7 @@ if(ENABLE_CPPCHECK)
     set(CMAKE_CXX_CPPCHECK
       "${CPPCHECK_EXE}"
       "--enable=warning,style,performance,portability"
-      "--std=c++${DETECTED_CXX_STANDARD}"
+      "--std=c++${BLACKHOLE_CXX_STANDARD}"
       "--suppress=missingInclude"
       "--suppress=unmatchedSuppression"
       "--suppress=unusedFunction"
@@ -566,7 +547,7 @@ if(CPPCHECK_EXE)
   add_custom_target(cppcheck
     COMMAND ${CPPCHECK_EXE}
       --enable=all
-      --std=c++${DETECTED_CXX_STANDARD}
+      --std=c++${BLACKHOLE_CXX_STANDARD}
       --suppress=missingInclude
       --suppress=unmatchedSuppression
       --error-exitcode=1
@@ -588,6 +569,42 @@ if(CLANG_TIDY_EXE)
     COMMENT "Running clang-tidy analysis"
     VERBATIM
   )
+endif()
+
+# ============================================================================
+# Testing Support (CTest)
+# ============================================================================
+
+option(BUILD_TESTING "Build test targets" ON)
+
+if(BUILD_TESTING)
+  enable_testing()
+
+  # Physics library validation tests
+  if(EXISTS "${PROJECT_SOURCE_DIR}/src/physics/physics_test.cpp")
+    add_executable(physics_test
+      "${PROJECT_SOURCE_DIR}/src/physics/physics_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(physics_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    set_target_properties(physics_test PROPERTIES
+      CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
+      CXX_STANDARD_REQUIRED ON
+      CXX_EXTENSIONS OFF
+    )
+    # Apply project warnings to test sources
+    target_compile_options(physics_test PRIVATE ${PROJECT_WARNINGS})
+
+    # Register with CTest
+    add_test(NAME physics_validation COMMAND physics_test)
+    set_tests_properties(physics_validation PROPERTIES
+      LABELS "physics;unit"
+      TIMEOUT 60
+    )
+  endif()
 endif()
 
 # ============================================================================
@@ -620,7 +637,7 @@ if(ENABLE_FUZZING)
         "${PROJECT_SOURCE_DIR}/src/physics"
       )
       set_target_properties(fuzz_physics PROPERTIES
-        CXX_STANDARD ${DETECTED_CXX_STANDARD}
+        CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
         CXX_STANDARD_REQUIRED ON
       )
     endif()
@@ -636,7 +653,7 @@ if(ENABLE_FUZZING)
         "${PROJECT_SOURCE_DIR}/src"
       )
       set_target_properties(fuzz_shader PROPERTIES
-        CXX_STANDARD ${DETECTED_CXX_STANDARD}
+        CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
         CXX_STANDARD_REQUIRED ON
       )
     endif()
@@ -654,7 +671,7 @@ if(ENABLE_FUZZING)
         "${PROJECT_SOURCE_DIR}/src/physics"
       )
       set_target_properties(fuzz_headers PROPERTIES
-        CXX_STANDARD ${DETECTED_CXX_STANDARD}
+        CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
         CXX_STANDARD_REQUIRED ON
       )
     endif()
