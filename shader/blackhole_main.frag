@@ -1,5 +1,5 @@
-#extension GL_GOOGLE_include_directive : enable
 #version 460 core
+#extension GL_GOOGLE_include_directive : enable
 
 // Physics library includes
 #include "include/physics_constants.glsl"
