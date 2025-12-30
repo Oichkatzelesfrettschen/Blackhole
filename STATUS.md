@@ -49,6 +49,8 @@ The simulation is fully operational with the core rendering pipeline:
 - Expanded `docs/CLEANROOM_PORT_MAP.md` with openuniverse-common validation/types adapter notes.
 - Added optional Tracy hooks (`ENABLE_TRACY=ON`) with frame-level plots for CPU/GPU timings.
 - Shader validation (`validate-shaders`) passes cleanly (no warnings).
+- Added `nubhlight_inspect` tool to emit HDF5 dataset metadata for GRMHD ingestion.
+- Added packed texture schema proposal to `docs/GRMHD_INGESTION_PLAN.md`.
 - Conan install completed with CMake 3.31; Release build + physics_test succeeded.
 - Upgraded Conan pins to latest center2 versions (core + UI), with Eigen deferred.
 

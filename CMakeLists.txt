@@ -87,6 +87,8 @@ find_package(glfw3 REQUIRED)
 find_package(glbinding REQUIRED)
 find_package(glm REQUIRED)
 find_package(stb REQUIRED)
+find_package(HighFive REQUIRED)
+find_package(CLI11 REQUIRED)
 
 # ============================================================================
 # Optional UI Layers
@@ -434,6 +436,23 @@ add_custom_command(
   POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/shader/"
           "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/shader")
+
+# ============================================================================
+# Tools
+# ============================================================================
+
+add_executable(nubhlight_inspect
+  "${PROJECT_SOURCE_DIR}/tools/nubhlight_inspect.cpp"
+)
+
+set_target_properties(nubhlight_inspect PROPERTIES
+  CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(nubhlight_inspect PRIVATE HighFive::HighFive CLI11::CLI11)
+target_compile_options(nubhlight_inspect PRIVATE ${PROJECT_WARNINGS})
 
 # ============================================================================
 # Static Analysis Tools Integration

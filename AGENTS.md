@@ -26,6 +26,7 @@ Input -> Camera/Basis -> Raytrace (frag/comp) -> Bloom -> Tonemap -> Depth Cues 
 - Optional Tracy profiling: `cmake --preset release -DENABLE_TRACY=ON`
 - `cmake --build --preset release --target validate-shaders`
 - `./build/build/Release/Blackhole`, `./build/build/Release/physics_test`, `./build/build/Release/physics_bench`
+- `./build/build/Release/nubhlight_inspect -i dump_00000000.h5 -o logs/perf/nubhlight_meta.json`
 - Static analysis: `cmake --preset analyze` and `cmake --build --preset analyze`
 
 ## Coding Style & Naming Conventions

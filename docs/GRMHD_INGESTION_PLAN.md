@@ -3,6 +3,10 @@
 This plan scopes offline ingestion of nubhlight HDF5 outputs into
 compact textures for use in Blackhole. Runtime coupling is optional.
 
+## Tooling
+- `nubhlight_inspect` (`tools/nubhlight_inspect.cpp`) emits dataset/dimension metadata:
+  `./build/build/Release/nubhlight_inspect -i dump_00000000.h5 -o logs/perf/nubhlight_meta.json`
+
 ## Reference Schema (nubhlight)
 - HDF5 opacity/emissivity tables in `core/opac_emis_hdf.c`:
   - Datasets: `lrho`, `lT`, `Ye`, `lnu`, `emis`, `opac`.
@@ -33,6 +37,37 @@ compact textures for use in Blackhole. Runtime coupling is optional.
 - Parse metadata JSON and enforce schema version.
 - Load textures (3D) and set shader uniforms.
 - Provide a debug overlay to visualize density/temperature slices.
+
+## Metadata JSON (nubhlight_inspect)
+```json
+{
+  "input": "dump_00000000.h5",
+  "datasets": [
+    { "path": "/dump/P", "dims": [256, 128, 128, 8], "vnams": ["RHO", "UU", "U1"] }
+  ]
+}
+```
+
+## Packed Texture Schema (proposal)
+```json
+{
+  "schema_version": 1,
+  "source": "nubhlight",
+  "grid": { "dims": [256, 128, 128], "spacing": [1.0, 1.0, 1.0] },
+  "textures": [
+    {
+      "path": "density_temp_vel_RGBA16F.bin",
+      "format": "RGBA16F",
+      "channels": ["rho", "temp", "u1", "u2"],
+      "units": ["g/cm^3", "K", "c", "c"],
+      "scale": [1.0, 1.0, 1.0, 1.0],
+      "offset": [0.0, 0.0, 0.0, 0.0],
+      "min": [0.0, 0.0, -1.0, -1.0],
+      "max": [1.0, 1.0, 1.0, 1.0]
+    }
+  ]
+}
+```
 
 ## Validation
 - Min/max sanity checks against source HDF5.
