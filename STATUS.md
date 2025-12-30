@@ -17,7 +17,7 @@ The black hole simulation renders correctly with:
 - Runtime shader compile/link logs are emitted (warnings non-fatal)
 - OpenGL-native controls overlay (stb_easy_font) renders when UI is hidden (env: `BLACKHOLE_OPENGL_CONTROLS=0`)
 - Conan update candidates documented in `requirements.md` (Dec 30 2025 review)
-- Latest dependency bump validated: `physics_test` passed 33/33; `physics_bench` baseline recorded (Schwarzschild 254.123 ms, Kerr Mino 0.116 ms, LUT 0.003 ms; no visual pass yet)
+- Latest dependency bump validated: `ctest` (physics_validation + grmhd_pack_fixture) passed; Release build + validate-shaders succeeded; z3 built with GCC 15 warnings (kept non-fatal)
 
 **Current Focus:** See **Active Plans** below for prioritized execution.
 
@@ -50,9 +50,26 @@ The simulation is fully operational with the core rendering pipeline:
 - Added optional Tracy hooks (`ENABLE_TRACY=ON`) with frame-level plots for CPU/GPU timings.
 - Shader validation (`validate-shaders`) passes cleanly (no warnings).
 - Added `nubhlight_inspect` tool to emit HDF5 dataset metadata for GRMHD ingestion.
-- Added packed texture schema proposal to `docs/GRMHD_INGESTION_PLAN.md`.
-- Conan install completed with CMake 3.31; Release build + physics_test succeeded.
-- Upgraded Conan pins to latest center2 versions (core + UI), with Eigen deferred.
+- Added `nubhlight_pack` tool to pack GRMHD channels into RGBA texture blobs + metadata JSON.
+- Added packed texture schema proposal and `nubhlight_pack` metadata example to `docs/GRMHD_INGESTION_PLAN.md`.
+- Added `src/grmhd_packed_loader.*` to parse packed metadata and upload RGBA 3D textures.
+- Added GRMHD packed texture uniforms + sampler path in `shader/blackhole_main.frag` and ImGui
+  controls/bindings in `src/main.cpp`.
+- Added GRMHD slice preview shader (`shader/grmhd_slice.frag`) and ImGui debug view for
+  3D texture inspection.
+- Added checksum + min/max validation in `src/grmhd_packed_loader.*` and checksum emission in
+  `tools/nubhlight_pack.cpp`.
+- Added `tests/grmhd_pack_test.cpp` fixture test that generates a tiny HDF5 dump, packs it, and
+  validates loader metadata via CTest.
+- Added `scripts/generate_tardis_lut_stub.py` to emit mock spectral LUTs and metadata.
+- Added spectral LUT loader + shader hook (`spectralLUT` uniforms) with ImGui controls.
+- Extended `bench/physics_bench.cpp` with optional GPU compute timing and CSV/JSON fields.
+- Added Tracy zones for major passes (fragment, compute, bloom, tonemap, depth, GRMHD slice).
+- Added tiled compute dispatch support for the geodesic compute path (`tileOffset` uniform).
+- Expanded LUT pipeline scripts with compact-common metadata and optional spin radii LUT output.
+- Conan install completed with CMake 3.31; Release build + validate-shaders + ctest (physics_validation, grmhd_pack_fixture) succeeded.
+- Upgraded Conan pins to latest center2 versions (core + UI), with Eigen deferred; GLM now tracks cci.20230113.
+- Added optional Z3 integration (`ENABLE_Z3=ON`) and `z3_sanity` tool target; Z3 builds with GCC 15 warnings (non-fatal).
 
 ## Recent Changes (2025-12-29)
 

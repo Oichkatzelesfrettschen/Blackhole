@@ -15,6 +15,7 @@ import json
 import math
 import os
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 
 # Physical constants (cgs)
 G = 6.67430e-8
@@ -59,12 +60,28 @@ def kerr_redshift_equatorial(r: float, mass: float, spin_param: float) -> float:
 
 def maybe_compact_common() -> dict[str, object] | None:
     try:
-        from compact_common.spacetime import kerr_isco, photon_sphere_radius  # type: ignore
+        from compact_common.spacetime import (  # type: ignore
+            gravitational_redshift,
+            kerr_isco,
+            kerr_photon_orbit,
+            photon_sphere_radius,
+        )
+
+        try:
+            cc_version = version("compact-common")
+        except PackageNotFoundError:
+            try:
+                cc_version = version("compact_common")
+            except PackageNotFoundError:
+                cc_version = "unknown"
 
         return {
             "kerr_isco": kerr_isco,
             "photon_sphere_radius": photon_sphere_radius,
+            "kerr_photon_orbit": kerr_photon_orbit,
+            "gravitational_redshift": gravitational_redshift,
             "source": "compact-common",
+            "version": cc_version,
         }
     except Exception:
         return None
@@ -99,7 +116,7 @@ def main() -> int:
     else:
         r_isco = kerr_isco_cleanroom(mass, a, prograde)
         r_ph = kerr_photon_orbit(mass, a, prograde)
-        source = "fallback"
+        source = "cleanroom"
 
     r_min_over_rs = args.r_min_over_rs
     if r_min_over_rs <= 0.0:
@@ -115,11 +132,18 @@ def main() -> int:
     os.makedirs(lut_dir, exist_ok=True)
 
     rows: list[list[float]] = []
+    if ref and abs(spin) < 1e-8:
+        redshift_source = "compact-common"
+    else:
+        redshift_source = "cleanroom"
     for i in range(points):
         u = i / (points - 1)
         r_over_rs = r_min_over_rs + u * (r_max_over_rs - r_min_over_rs)
         r = r_over_rs * r_s
-        z = kerr_redshift_equatorial(r, mass, a)
+        if redshift_source == "compact-common":
+            z = float(ref["gravitational_redshift"](r, mass))
+        else:
+            z = kerr_redshift_equatorial(r, mass, a)
         rows.append([r_over_rs, z])
 
     with open(os.path.join(lut_dir, "redshift_curve.csv"), "w", newline="") as handle:
@@ -133,8 +157,12 @@ def main() -> int:
         spin_val = spin_min + u * (spin_max - spin_min)
         a_val = spin_val * r_g
         prograde_spin = spin_val >= 0.0
-        r_isco_spin = kerr_isco_cleanroom(mass, a_val, prograde_spin)
-        r_ph_spin = kerr_photon_orbit(mass, a_val, prograde_spin)
+        if ref:
+            r_isco_spin = float(ref["kerr_isco"](mass, a_val, prograde_spin))
+            r_ph_spin = float(ref["kerr_photon_orbit"](mass, a_val, prograde_spin))
+        else:
+            r_isco_spin = kerr_isco_cleanroom(mass, a_val, prograde_spin)
+            r_ph_spin = kerr_photon_orbit(mass, a_val, prograde_spin)
         spin_rows.append([spin_val, r_isco_spin / r_s, r_ph_spin / r_s])
 
     with open(os.path.join(lut_dir, "spin_radii_curve.csv"), "w", newline="") as handle:
@@ -145,6 +173,9 @@ def main() -> int:
     meta = {
         "version": 1,
         "source": source,
+        "isco_source": source,
+        "photon_source": "compact-common" if ref else "cleanroom",
+        "redshift_source": redshift_source,
         "points": points,
         "spin": spin,
         "mass_solar": mass_solar,
@@ -158,6 +189,8 @@ def main() -> int:
         "spin_curve_max": spin_max,
         "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    if ref:
+        meta["compact_common_version"] = ref["version"]
     with open(os.path.join(lut_dir, "metrics.json"), "w", encoding="utf-8") as handle:
         json.dump(meta, handle, indent=2, sort_keys=True)
         handle.write("\n")

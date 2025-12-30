@@ -30,6 +30,7 @@ uniform vec2 resolution;
 uniform mat4 viewMatrix;
 uniform mat4 projectionMatrix;
 uniform vec3 cameraPosition;
+uniform ivec2 tileOffset = ivec2(0);
 
 // Black hole parameters
 uniform float schwarzschildRadius;
@@ -468,7 +469,7 @@ vec4 backgroundColorFromDir(vec3 dir) {
 // ============================================================================
 
 void main() {
-    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy) + tileOffset;
 
     if (pixelCoord.x >= int(resolution.x) || pixelCoord.y >= int(resolution.y)) {
         return;

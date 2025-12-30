@@ -20,7 +20,13 @@ using TARDIS as the cleanroom reference source.
 4. Emit LUTs + metadata (bin edges, units, source model).
 5. Validate against CPU reference curves (CSV diffs).
 
+## Stub generator (offline)
+- `python3 scripts/generate_tardis_lut_stub.py --output-dir assets/luts`
+- Produces `assets/luts/rt_spectrum_lut.csv` + `assets/luts/rt_spectrum_meta.json`.
+- Replace mock spectra with real TARDIS output when available.
+
 ## Runtime Integration
 - Load LUT textures in C++ and bind to shader.
 - Use spectral weighting in disk emission or post-process.
 - Provide a debug overlay to visualize LUT samples.
+- `shader/blackhole_main.frag` samples `spectralLUT` with radius mapping as a placeholder hook.

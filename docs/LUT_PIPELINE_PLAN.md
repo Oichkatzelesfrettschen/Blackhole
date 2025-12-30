@@ -26,7 +26,10 @@ reference source (no code reuse).
 ## File formats (current)
 - CSV header: `u,value` where `u` is normalized [0..1] over r_in..r_out.
 - lut_meta.json keys: `version`, `size`, `spin`, `mass_solar`, `mdot`, `prograde`,
-  `r_in_over_rs`, `r_out_over_rs`, `r_in_cm`, `r_out_cm`, `timestamp_utc`.
+  `r_in_over_rs`, `r_out_over_rs`, `r_in_cm`, `r_out_cm`, `isco_source`,
+  `emissivity_model`, `redshift_model`, `compact_common_version`, `timestamp_utc`.
+- spin_radii_lut header: `spin,r_isco_over_rs,r_ph_over_rs`.
+  - Optional meta: `spin_curve_points`, `spin_curve_min`, `spin_curve_max`, `spin_curve_source`.
 
 ## Cleanroom Policy
 - Use formulas and unit conventions only; no code reuse.

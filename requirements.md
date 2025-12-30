@@ -68,7 +68,7 @@ sudo pacman -S --needed \
 ## Conan packages
 - glfw/3.4
 - glbinding/3.5.0
-- glm/1.0.1
+- glm/cci.20230113
 - xsimd/13.2.0
 - entt/3.15.0
 - pcg-cpp/cci.20220409
@@ -83,6 +83,7 @@ sudo pacman -S --needed \
 - fmt/12.1.0
 - tracy/0.12.2
 - cli11/2.6.0
+- z3/4.14.1 (optional; enable with `-DENABLE_Z3=ON`)
 - boost/1.90.0
 - stb/cci.20240531
 
@@ -100,7 +101,7 @@ Latest recipes on conancenter (current pins in parentheses):
 - implot: 0.16 (Conan recipe; project vendors master until 1.92+ support lands)
 - glfw: 3.4 (current 3.4)
 - glbinding: 3.5.0 (current 3.5.0)
-- glm: 1.0.1 (current 1.0.1; cci.20230113 also available)
+- glm: cci.20230113 (current cci.20230113; 1.0.1 also available)
 - xsimd: 13.2.0 (current 13.2.0)
 - entt: 3.15.0 (current 3.15.0)
 - taskflow: 3.10.0 (current 3.10.0)
@@ -112,6 +113,7 @@ Latest recipes on conancenter (current pins in parentheses):
 - cli11: 2.6.0 (current 2.6.0)
 - boost: 1.90.0 (current 1.90.0)
 - hdf5: 1.14.6 (current 1.14.6)
+- z3: 4.14.1 (current 4.14.1)
 - eigen: 5.0.1 (optional/deferred; current 3.4.0)
 - pcg-cpp: cci.20220409 (current cci.20220409)
 - stb: cci.20240531 (current cci.20240531)
@@ -149,6 +151,7 @@ conan install . --output-folder=build --build=missing -s build_type=Release -s c
 #   -c tools.cmake:cmake_program=/path/to/cmake-3.31
 
 cmake --preset release
+cmake --preset release -DENABLE_Z3=ON  # enable z3_sanity tool
 cmake --build --preset release
 
 # Or explicit configure/build
@@ -164,6 +167,19 @@ python3 scripts/generate_validation_tables.py
 - Outputs `assets/validation/metrics.json`, `assets/validation/redshift_curve.csv`,
   and `assets/validation/spin_radii_curve.csv`.
 - Uses `compact-common` if available; otherwise falls back to internal CGS formulas.
+
+## LUT generation (offline)
+```bash
+python3 scripts/generate_luts.py --size 256 --spin 0.0 --mass-solar 4.0e6 --mdot 0.1 --spin-points 64
+```
+- Outputs emissivity/redshift LUTs and optional `spin_radii_lut.csv`.
+- Embeds `isco_source` and `compact_common_version` in `assets/luts/lut_meta.json` when available.
+
+## Radiative transfer LUTs (stub)
+```bash
+python3 scripts/generate_tardis_lut_stub.py --output-dir assets/luts
+```
+- Emits `rt_spectrum_lut.csv` + `rt_spectrum_meta.json` as placeholders.
 
 ## Optional tools
 - glslangValidator (validate-shaders target)

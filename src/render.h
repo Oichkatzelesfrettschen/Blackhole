@@ -24,6 +24,7 @@ GLuint createColorTexture(int width, int height, bool hdr = true);
 GLuint createColorTexture32f(int width, int height);
 GLuint createFloatTexture2D(int width, int height, const std::vector<float> &data);
 GLuint createFloatTexture3D(int width, int height, int depth, const std::vector<float> &data);
+GLuint createRGBA32FTexture3D(int width, int height, int depth, const std::vector<float> &data);
 
 struct FramebufferCreateInfo {
   GLuint colorTexture = 0;

@@ -17,7 +17,7 @@ class BlackholeConan(ConanFile):
     def requirements(self):
         self.requires("glfw/3.4")
         self.requires("glbinding/3.5.0")
-        self.requires("glm/1.0.1")
+        self.requires("glm/cci.20230113")
         self.requires("xsimd/13.2.0", override=True)
         self.requires("entt/3.15.0")
         self.requires("pcg-cpp/cci.20220409")
@@ -34,6 +34,7 @@ class BlackholeConan(ConanFile):
         self.requires("cli11/2.6.0")
         self.requires("boost/1.90.0")
         self.requires("stb/cci.20240531")
+        self.requires("z3/4.14.1")
 
     def layout(self):
         cmake_layout(self)

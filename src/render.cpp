@@ -86,6 +86,27 @@ GLuint createFloatTexture3D(int width, int height, int depth, const std::vector<
   return texture;
 }
 
+GLuint createRGBA32FTexture3D(int width, int height, int depth, const std::vector<float> &data) {
+  GLuint texture;
+  glGenTextures(1, &texture);
+
+  glBindTexture(GL_TEXTURE_3D, texture);
+
+  const std::size_t expected = static_cast<std::size_t>(width) *
+                               static_cast<std::size_t>(height) *
+                               static_cast<std::size_t>(depth) * 4;
+  const float *pixels = data.size() >= expected ? data.data() : nullptr;
+
+  glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA32F, width, height, depth, 0, GL_RGBA, GL_FLOAT, pixels);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+  return texture;
+}
+
 GLuint createFramebuffer(const FramebufferCreateInfo &info) {
   GLuint framebuffer;
 

@@ -6,6 +6,8 @@ compact textures for use in Blackhole. Runtime coupling is optional.
 ## Tooling
 - `nubhlight_inspect` (`tools/nubhlight_inspect.cpp`) emits dataset/dimension metadata:
   `./build/build/Release/nubhlight_inspect -i dump_00000000.h5 -o logs/perf/nubhlight_meta.json`
+- `nubhlight_pack` (`tools/nubhlight_pack.cpp`) packs selected channels into RGBA blobs:
+  `./build/build/Release/nubhlight_pack -i dump_00000000.h5 -d /dump/P --fields RHO,UU,U1,U2 -o logs/perf/nubhlight_pack.json`
 
 ## Reference Schema (nubhlight)
 - HDF5 opacity/emissivity tables in `core/opac_emis_hdf.c`:
@@ -37,6 +39,9 @@ compact textures for use in Blackhole. Runtime coupling is optional.
 - Parse metadata JSON and enforce schema version.
 - Load textures (3D) and set shader uniforms.
 - Provide a debug overlay to visualize density/temperature slices.
+- `src/grmhd_packed_loader.*` loads RGBA32F blobs + metadata into 3D textures.
+- `shader/blackhole_main.frag` samples `grmhdTexture` when `useGrmhd` is enabled.
+- `shader/grmhd_slice.frag` renders slice previews for ImGui inspection.
 
 ## Metadata JSON (nubhlight_inspect)
 ```json
@@ -69,7 +74,32 @@ compact textures for use in Blackhole. Runtime coupling is optional.
 }
 ```
 
+## Packed Texture Metadata (nubhlight_pack)
+```json
+{
+  "schema_version": 1,
+  "source": "nubhlight",
+  "input": "dump_00000000.h5",
+  "dataset": "/dump/P",
+  "layout": "channels-last",
+  "format": "RGBA32F",
+  "bin": "logs/perf/nubhlight_pack.bin",
+  "checksum_fnv1a64": "c83f57a8d1e22ef0",
+  "dataset_dims": [256, 128, 128, 8],
+  "grid_dims": [256, 128, 128],
+  "channel_dim_index": 3,
+  "channels": ["RHO", "UU", "U1", "U2"],
+  "source_indices": [0, 1, 2, 3],
+  "fill": [0.0, 0.0, 0.0, 1.0],
+  "min": [0.0, 0.0, -1.0, -1.0],
+  "max": [1.0, 1.0, 1.0, 1.0],
+  "vnams": ["RHO", "UU", "U1", "U2", "U3", "B1", "B2", "B3"]
+}
+```
+
 ## Validation
 - Min/max sanity checks against source HDF5.
 - Compare integrated profiles vs CPU reference curves.
 - Optional histogram export for tuning LUT ranges.
+- Packed blob checksum (FNV-1a 64-bit) validation in loader.
+- CTest fixture: `grmhd_pack_fixture` generates a tiny HDF5 dump and validates pack/loader.

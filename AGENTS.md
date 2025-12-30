@@ -22,11 +22,16 @@ Input -> Camera/Basis -> Raytrace (frag/comp) -> Bloom -> Tonemap -> Depth Cues 
 - `conan remote update conancenter --url="https://center2.conan.io"`
 - `conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23`
 - `cmake --preset release` then `cmake --build --preset release`
+- Optional Z3 tooling: `cmake --preset release -DENABLE_Z3=ON` then `cmake --build --preset release --target z3_sanity`
 - Optional RmlUi overlay: `cmake --preset release -DENABLE_RMLUI=ON`
 - Optional Tracy profiling: `cmake --preset release -DENABLE_TRACY=ON`
 - `cmake --build --preset release --target validate-shaders`
 - `./build/build/Release/Blackhole`, `./build/build/Release/physics_test`, `./build/build/Release/physics_bench`
+- GPU bench: `./build/build/Release/physics_bench --gpu --gpu-width 256 --gpu-height 256 --gpu-iterations 20`
 - `./build/build/Release/nubhlight_inspect -i dump_00000000.h5 -o logs/perf/nubhlight_meta.json`
+- `./build/build/Release/nubhlight_pack -i dump_00000000.h5 -d /dump/P --fields RHO,UU,U1,U2 -o logs/perf/nubhlight_pack.json`
+- `ctest --test-dir build/build/Release -R grmhd_pack_fixture --output-on-failure`
+- `python3 scripts/generate_tardis_lut_stub.py --output-dir assets/luts`
 - Static analysis: `cmake --preset analyze` and `cmake --build --preset analyze`
 
 ## Coding Style & Naming Conventions
@@ -40,7 +45,7 @@ Input -> Camera/Basis -> Raytrace (frag/comp) -> Bloom -> Tonemap -> Depth Cues 
 - Controls: RMB orbit, MMB roll, scroll zoom; WASD/QE + Z/C + +/-; gamepad sticks/triggers; tweak in ImGui.
 
 ## Dependencies, CI, and Progress Tracking
-- Conan deps: `imgui/1.92.5-docking`, `imguizmo/cci.20231114`, `rmlui/4.4`, `glfw/3.4`, `glbinding/3.5.0`, `glm/1.0.1`, `xsimd/13.2.0`, `entt/3.15.0`, `pcg-cpp/cci.20220409`, `taskflow/3.10.0`, `flatbuffers/25.9.23`, `hdf5/1.14.6`, `highfive/3.1.1`, `spdlog/1.16.0`, `fmt/12.1.0`, `tracy/0.12.2`, `cli11/2.6.0`, `boost/1.90.0`, `stb/cci.20240531`.
+- Conan deps: `imgui/1.92.5-docking`, `imguizmo/cci.20231114`, `rmlui/4.4`, `glfw/3.4`, `glbinding/3.5.0`, `glm/cci.20230113`, `xsimd/13.2.0`, `entt/3.15.0`, `pcg-cpp/cci.20220409`, `taskflow/3.10.0`, `flatbuffers/25.9.23`, `hdf5/1.14.6`, `highfive/3.1.1`, `spdlog/1.16.0`, `fmt/12.1.0`, `tracy/0.12.2`, `cli11/2.6.0`, `boost/1.90.0`, `stb/cci.20240531`, `z3/4.14.1` (optional).
 - ImPlot is vendored from upstream (`external/implot`); fetch/update with `scripts/fetch_implot.sh` (Conan 0.16 incompatible with ImGui 1.92+).
 - RmlUi is optional; `ENABLE_RMLUI` toggles a stub overlay for the MangoHUD port.
 - GitHub Actions builds Release on push/PR (Conan + OpenGL dev libs).

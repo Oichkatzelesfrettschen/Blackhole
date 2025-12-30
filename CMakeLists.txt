@@ -89,6 +89,7 @@ find_package(glm REQUIRED)
 find_package(stb REQUIRED)
 find_package(HighFive REQUIRED)
 find_package(CLI11 REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 # ============================================================================
 # Optional UI Layers
@@ -102,6 +103,20 @@ endif()
 option(ENABLE_TRACY "Enable Tracy profiling" OFF)
 if(ENABLE_TRACY)
   find_package(Tracy REQUIRED)
+endif()
+
+option(ENABLE_Z3 "Enable Z3 constraint solver tooling" OFF)
+if(ENABLE_Z3)
+  find_package(Z3 CONFIG REQUIRED)
+  if(TARGET z3::libz3)
+    set(Z3_TARGET z3::libz3)
+  elseif(TARGET z3::z3)
+    set(Z3_TARGET z3::z3)
+  elseif(TARGET Z3::Z3)
+    set(Z3_TARGET Z3::Z3)
+  else()
+    message(FATAL_ERROR "Z3 target not found after find_package(Z3).")
+  endif()
 endif()
 
 # ============================================================================
@@ -337,6 +352,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader_manager.cpp"
   "${PROJECT_SOURCE_DIR}/src/texture.cpp"
+  "${PROJECT_SOURCE_DIR}/src/grmhd_packed_loader.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
   "${PROJECT_SOURCE_DIR}/src/input.cpp"
   "${PROJECT_SOURCE_DIR}/src/settings.cpp"
@@ -378,6 +394,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE implot::implot)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glfw)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glbinding::glbinding)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glm::glm)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE stb::stb)
 if(ENABLE_RMLUI)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE rmlui::rmlui)
@@ -407,6 +424,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 add_executable(physics_bench
   "${PROJECT_SOURCE_DIR}/bench/physics_bench.cpp"
+  "${PROJECT_SOURCE_DIR}/src/shader.cpp"
   "${PROJECT_SOURCE_DIR}/src/physics/kerr.cpp"
   "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
 )
@@ -423,6 +441,11 @@ target_include_directories(physics_bench PRIVATE
 )
 
 target_compile_options(physics_bench PRIVATE ${PROJECT_WARNINGS})
+target_compile_definitions(physics_bench PRIVATE
+  GLFW_INCLUDE_NONE
+  IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+)
+target_link_libraries(physics_bench PRIVATE glfw glbinding::glbinding glm::glm)
 
 # Copy assets files after build.
 add_custom_command(
@@ -453,6 +476,34 @@ set_target_properties(nubhlight_inspect PROPERTIES
 
 target_link_libraries(nubhlight_inspect PRIVATE HighFive::HighFive CLI11::CLI11)
 target_compile_options(nubhlight_inspect PRIVATE ${PROJECT_WARNINGS})
+
+add_executable(nubhlight_pack
+  "${PROJECT_SOURCE_DIR}/tools/nubhlight_pack.cpp"
+)
+
+set_target_properties(nubhlight_pack PROPERTIES
+  CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(nubhlight_pack PRIVATE HighFive::HighFive CLI11::CLI11)
+target_compile_options(nubhlight_pack PRIVATE ${PROJECT_WARNINGS})
+
+if(ENABLE_Z3)
+  add_executable(z3_sanity
+    "${PROJECT_SOURCE_DIR}/tools/z3_sanity.cpp"
+  )
+
+  set_target_properties(z3_sanity PROPERTIES
+    CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+  )
+
+  target_link_libraries(z3_sanity PRIVATE ${Z3_TARGET})
+  target_compile_options(z3_sanity PRIVATE ${PROJECT_WARNINGS})
+endif()
 
 # ============================================================================
 # Static Analysis Tools Integration
@@ -718,6 +769,38 @@ if(BUILD_TESTING)
     add_test(NAME physics_validation COMMAND physics_test)
     set_tests_properties(physics_validation PROPERTIES
       LABELS "physics;unit"
+      TIMEOUT 60
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_pack_test.cpp")
+    add_executable(grmhd_pack_test
+      "${PROJECT_SOURCE_DIR}/tests/grmhd_pack_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/grmhd_packed_loader.cpp"
+      "${PROJECT_SOURCE_DIR}/src/render.cpp"
+      "${PROJECT_SOURCE_DIR}/src/shader.cpp"
+    )
+    add_dependencies(grmhd_pack_test nubhlight_pack)
+    target_include_directories(grmhd_pack_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(grmhd_pack_test PRIVATE ${PROJECT_WARNINGS})
+    target_compile_definitions(grmhd_pack_test PRIVATE
+      GLFW_INCLUDE_NONE
+      IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+    )
+    target_link_libraries(grmhd_pack_test PRIVATE
+      HighFive::HighFive
+      nlohmann_json::nlohmann_json
+      glfw
+      glbinding::glbinding
+      glm::glm
+    )
+
+    add_test(NAME grmhd_pack_fixture COMMAND grmhd_pack_test)
+    set_tests_properties(grmhd_pack_fixture PROPERTIES
+      LABELS "grmhd;io"
       TIMEOUT 60
     )
   endif()

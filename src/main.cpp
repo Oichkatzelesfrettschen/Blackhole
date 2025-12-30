@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -38,6 +39,7 @@
 
 // Local headers
 #include "GLDebugMessageCallback.h"
+#include "grmhd_packed_loader.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "hud_overlay.h"
@@ -383,6 +385,29 @@ static bool loadLutAssets(physics::Lut1D &emissivity, physics::Lut1D &redshift,
   redshift.r_min = static_cast<float>(rInOverRs);
   redshift.r_max = static_cast<float>(rOutOverRs);
   spinOut = static_cast<float>(spin);
+  return true;
+}
+
+static bool loadSpectralLutAssets(std::vector<float> &values, float &wavelengthMin,
+                                  float &wavelengthMax) {
+  values.clear();
+  if (!loadLutCsv("assets/luts/rt_spectrum_lut.csv", values)) {
+    return false;
+  }
+  std::string metaText;
+  if (!readTextFile("assets/luts/rt_spectrum_meta.json", metaText)) {
+    return false;
+  }
+  double waveMin = 0.0;
+  double waveMax = 0.0;
+  if (!parseJsonNumber(metaText, "wavelength_min_angstrom", waveMin)) {
+    return false;
+  }
+  if (!parseJsonNumber(metaText, "wavelength_max_angstrom", waveMax)) {
+    return false;
+  }
+  wavelengthMin = static_cast<float>(waveMin);
+  wavelengthMax = static_cast<float>(waveMax);
   return true;
 }
 
@@ -1331,6 +1356,24 @@ int main(int, char **) {
   static float noiseTextureScale = 0.25f;
   static int noiseTextureSize = 32;
   static float adiskSpeed = 0.5f;
+  static bool useGrmhd = false;
+  static bool grmhdLoaded = false;
+  static GrmhdPackedTexture grmhdTexture;
+  static std::string grmhdLoadError;
+  static std::array<char, 256> grmhdPathBuffer{};
+  static bool grmhdPathInit = false;
+  static glm::vec3 grmhdBoundsMin(-10.0f, -2.0f, -10.0f);
+  static glm::vec3 grmhdBoundsMax(10.0f, 2.0f, 10.0f);
+  static bool grmhdSliceEnabled = false;
+  static int grmhdSliceAxis = 2;
+  static int grmhdSliceChannel = 0;
+  static float grmhdSliceCoord = 0.5f;
+  static bool grmhdSliceUseColorMap = true;
+  static bool grmhdSliceAutoRange = true;
+  static float grmhdSliceMin = 0.0f;
+  static float grmhdSliceMax = 1.0f;
+  static int grmhdSliceSize = 256;
+  static int grmhdSliceSizeCached = 0;
   static float blackHoleMass = 1.0f;
   static float kerrSpin = 0.0f;
   static bool enablePhotonSphere = false;
@@ -1388,12 +1431,22 @@ int main(int, char **) {
   static int rmluiHeight = 0;
   static int computeMaxSteps = 300;
   static float computeStepSize = 0.1f;
+  static bool computeTiled = false;
+  static int computeTileSize = 256;
   static bool lutAssetsTried = false;
   static bool lutAssetsLoaded = false;
   static bool lutFromAssets = false;
   static float lutAssetSpin = 0.0f;
   static physics::Lut1D lutAssetEmissivity;
   static physics::Lut1D lutAssetRedshift;
+  static bool spectralLutTried = false;
+  static bool spectralLutLoaded = false;
+  static bool useSpectralLut = false;
+  static float spectralWavelengthMin = 0.0f;
+  static float spectralWavelengthMax = 0.0f;
+  static float spectralRadiusMin = 0.0f;
+  static float spectralRadiusMax = 0.0f;
+  static std::vector<float> spectralLutValues;
   static bool lutInitialized = false;
   static float lutSpin = 0.0f;
   static float lutRadiusMin = 0.0f;
@@ -1402,7 +1455,9 @@ int main(int, char **) {
   static float redshiftRadiusMax = 0.0f;
   static GLuint texEmissivityLUT = 0;
   static GLuint texRedshiftLUT = 0;
+  static GLuint texSpectralLUT = 0;
   static GLuint texNoiseVolume = 0;
+  static GLuint texGrmhdSlice = 0;
   static GLuint texBlackhole = 0;
   static GLuint texBlackholeCompare = 0;
   static GLuint texBrightness = 0;
@@ -1568,6 +1623,24 @@ int main(int, char **) {
       lutInitialized = true;
     }
   };
+
+  auto loadGrmhdPacked = [&](const std::string &path) {
+    std::string error;
+    if (!loadGrmhdPackedTexture(path, grmhdTexture, error)) {
+      grmhdLoadError = error;
+      grmhdLoaded = false;
+      return false;
+    }
+    grmhdLoadError.clear();
+    grmhdLoaded = true;
+    return true;
+  };
+
+  if (!grmhdPathInit) {
+    std::snprintf(grmhdPathBuffer.data(), grmhdPathBuffer.size(),
+                  "assets/grmhd/grmhd_pack.json");
+    grmhdPathInit = true;
+  }
 
   while (!glfwWindowShouldClose(window)) {
     ZoneScopedN("Frame");
@@ -1769,6 +1842,12 @@ int main(int, char **) {
                                                   0.1f, depthFar);
     glm::mat4 gizmoViewMatrix = glm::lookAt(cameraPos, focusTarget, cameraBasis[1]);
     bool computeActiveForLog = false;
+    bool grmhdReady = grmhdLoaded && grmhdTexture.texture != 0;
+    bool grmhdEnabled = useGrmhd && grmhdReady;
+    bool spectralReady = spectralLutLoaded && texSpectralLUT != 0;
+    bool spectralEnabled = useSpectralLut && spectralReady;
+    spectralRadiusMin = std::max(0.0f, spectralRadiusMin);
+    spectralRadiusMax = std::max(spectralRadiusMax, spectralRadiusMin + 0.001f);
 
     if (gpuTimers.initialized) {
       gpuTimers.tonemap.begin();
@@ -1783,10 +1862,16 @@ int main(int, char **) {
         rtti.textureUniforms["emissivityLUT"] = texEmissivityLUT;
         rtti.textureUniforms["redshiftLUT"] = texRedshiftLUT;
       }
+      if (spectralEnabled) {
+        rtti.textureUniforms["spectralLUT"] = texSpectralLUT;
+      }
       noiseTextureScale = std::max(noiseTextureScale, 0.01f);
       bool noiseReady = useNoiseTexture && texNoiseVolume != 0;
       if (noiseReady) {
         rtti.texture3DUniforms["noiseTexture"] = texNoiseVolume;
+      }
+      if (grmhdEnabled) {
+        rtti.texture3DUniforms["grmhdTexture"] = grmhdTexture.texture;
       }
 
       // Pass camera state to shader
@@ -1795,11 +1880,17 @@ int main(int, char **) {
       rtti.floatUniforms["depthFar"] = depthFar;
       rtti.floatUniforms["useLUTs"] = lutReady ? 1.0f : 0.0f;
       rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
+      rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["useSpectralLUT"] = spectralEnabled ? 1.0f : 0.0f;
       rtti.floatUniforms["noiseTextureScale"] = noiseTextureScale;
       rtti.floatUniforms["lutRadiusMin"] = lutRadiusMin;
       rtti.floatUniforms["lutRadiusMax"] = lutRadiusMax;
       rtti.floatUniforms["redshiftRadiusMin"] = redshiftRadiusMin;
       rtti.floatUniforms["redshiftRadiusMax"] = redshiftRadiusMax;
+      rtti.floatUniforms["spectralRadiusMin"] = spectralRadiusMin;
+      rtti.floatUniforms["spectralRadiusMax"] = spectralRadiusMax;
+      rtti.vec3Uniforms["grmhdBoundsMin"] = grmhdBoundsMin;
+      rtti.vec3Uniforms["grmhdBoundsMax"] = grmhdBoundsMax;
 
       rtti.targetTexture = texBlackhole;
       rtti.width = renderWidth;
@@ -1823,6 +1914,54 @@ int main(int, char **) {
         ImGui::SliderFloat("adiskSpeed", &adiskSpeed, 0.0f, 1.0f);
 
         ImGui::Separator();
+        ImGui::Text("GRMHD Packed");
+        ImGui::Checkbox("Use GRMHD Field", &useGrmhd);
+        ImGui::InputText("GRMHD Meta", grmhdPathBuffer.data(), grmhdPathBuffer.size());
+        if (ImGui::Button("Load GRMHD")) {
+          loadGrmhdPacked(grmhdPathBuffer.data());
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Unload GRMHD")) {
+          destroyGrmhdPackedTexture(grmhdTexture);
+          grmhdLoaded = false;
+          grmhdLoadError.clear();
+        }
+        if (!grmhdLoadError.empty()) {
+          ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s",
+                             grmhdLoadError.c_str());
+        }
+        if (grmhdLoaded) {
+          ImGui::Text("GRMHD grid: %d x %d x %d", grmhdTexture.width, grmhdTexture.height,
+                      grmhdTexture.depth);
+        }
+        ImGui::SliderFloat3("GRMHD Bounds Min", &grmhdBoundsMin.x, -50.0f, 50.0f);
+        ImGui::SliderFloat3("GRMHD Bounds Max", &grmhdBoundsMax.x, -50.0f, 50.0f);
+        ImGui::BeginDisabled(!grmhdLoaded);
+        ImGui::Checkbox("Show GRMHD Slice", &grmhdSliceEnabled);
+        const char *axisLabels[] = {"X", "Y", "Z"};
+        ImGui::Combo("Slice Axis", &grmhdSliceAxis, axisLabels, 3);
+        ImGui::SliderFloat("Slice Coord", &grmhdSliceCoord, 0.0f, 1.0f);
+        ImGui::SliderInt("Slice Channel", &grmhdSliceChannel, 0, 3);
+        if (grmhdLoaded && grmhdSliceChannel >= 0 &&
+            static_cast<std::size_t>(grmhdSliceChannel) < grmhdTexture.channels.size()) {
+          std::size_t channelIndex = static_cast<std::size_t>(grmhdSliceChannel);
+          ImGui::Text("Channel: %s", grmhdTexture.channels[channelIndex].c_str());
+        }
+        ImGui::Checkbox("Slice Auto Range", &grmhdSliceAutoRange);
+        if (!grmhdSliceAutoRange) {
+          ImGui::InputFloat("Slice Min", &grmhdSliceMin);
+          ImGui::InputFloat("Slice Max", &grmhdSliceMax);
+        }
+        ImGui::Checkbox("Slice Color Map", &grmhdSliceUseColorMap);
+        ImGui::SliderInt("Slice Size", &grmhdSliceSize, 64, 1024);
+        if (texGrmhdSlice != 0) {
+          ImTextureID sliceId =
+              static_cast<ImTextureID>(static_cast<uintptr_t>(texGrmhdSlice));
+          ImGui::Image(sliceId, ImVec2(192.0f, 192.0f));
+        }
+        ImGui::EndDisabled();
+
+        ImGui::Separator();
         ImGui::Text("Physics Parameters");
 
         // Black hole mass in solar masses (scaled for visualization)
@@ -1833,6 +1972,27 @@ int main(int, char **) {
         // Physics visualization toggles
         ImGui::Checkbox("enablePhotonSphere", &enablePhotonSphere);
         ImGui::Checkbox("enableRedshift", &enableRedshift);
+
+        ImGui::Separator();
+        ImGui::Text("Spectral LUT");
+        ImGui::Checkbox("Use Spectral LUT", &useSpectralLut);
+        if (spectralLutLoaded) {
+          ImGui::Text("Wavelength: %.0f - %.0f A", static_cast<double>(spectralWavelengthMin),
+                      static_cast<double>(spectralWavelengthMax));
+        } else {
+          ImGui::TextDisabled("rt_spectrum_lut.csv not loaded");
+        }
+        if (ImGui::Button("Reload Spectral LUT")) {
+          spectralLutTried = false;
+          spectralLutLoaded = false;
+          spectralLutValues.clear();
+          if (texSpectralLUT != 0) {
+            glDeleteTextures(1, &texSpectralLUT);
+            texSpectralLUT = 0;
+          }
+        }
+        ImGui::SliderFloat("Spectral Radius Min", &spectralRadiusMin, 0.0f, 50.0f);
+        ImGui::SliderFloat("Spectral Radius Max", &spectralRadiusMax, 0.0f, 50.0f);
 
         const double referenceMass = physics::M_SUN;
         const double referenceRs = physics::schwarzschild_radius(referenceMass);
@@ -1866,6 +2026,10 @@ int main(int, char **) {
         if (useComputeRaytracer) {
           ImGui::SliderInt("Compute Steps", &computeMaxSteps, 50, 600);
           ImGui::SliderFloat("Compute Step Size", &computeStepSize, 0.01f, 1.0f);
+          ImGui::Checkbox("Compute Tiled", &computeTiled);
+          if (computeTiled) {
+            ImGui::SliderInt("Compute Tile Size", &computeTileSize, 64, 1024);
+          }
         }
         ImGui::Checkbox("Compare Compute vs Fragment", &compareComputeFragment);
         if (compareComputeFragment) {
@@ -1928,6 +2092,25 @@ int main(int, char **) {
       }
 
       updateLuts(kerrSpin);
+      if (!spectralLutTried) {
+        spectralLutTried = true;
+        spectralLutLoaded =
+            loadSpectralLutAssets(spectralLutValues, spectralWavelengthMin, spectralWavelengthMax);
+        if (spectralLutLoaded && !spectralLutValues.empty()) {
+          if (texSpectralLUT != 0) {
+            glDeleteTextures(1, &texSpectralLUT);
+            texSpectralLUT = 0;
+          }
+          int lutSize = static_cast<int>(spectralLutValues.size());
+          texSpectralLUT = createFloatTexture2D(lutSize, 1, spectralLutValues);
+          spectralRadiusMin = lutRadiusMin;
+          spectralRadiusMax = lutRadiusMax;
+          if (spectralRadiusMax <= spectralRadiusMin) {
+            spectralRadiusMin = 0.0f;
+            spectralRadiusMax = 1.0f;
+          }
+        }
+      }
 
       const double referenceMass = physics::M_SUN;
       const double referenceRs = physics::schwarzschild_radius(referenceMass);
@@ -1983,6 +2166,7 @@ int main(int, char **) {
         gpuTimers.blackholeFragment.begin();
       }
       if (fragmentTarget != 0) {
+        ZoneScopedN("Blackhole Fragment");
         rtti.targetTexture = fragmentTarget;
         renderToTexture(rtti);
       }
@@ -1994,6 +2178,7 @@ int main(int, char **) {
         gpuTimers.blackholeCompute.begin();
       }
       if (computeTarget != 0) {
+        ZoneScopedN("Blackhole Compute");
         static GLuint computeProgram = 0;
         if (computeProgram == 0) {
           computeProgram = createComputeProgram("shader/geodesic_trace.comp");
@@ -2026,10 +2211,32 @@ int main(int, char **) {
                     enableRedshift ? 1 : 0);
 
         glBindImageTexture(0, computeTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-        GLuint groupsX = static_cast<GLuint>((renderWidth + 15) / 16);
-        GLuint groupsY = static_cast<GLuint>((renderHeight + 15) / 16);
-        glDispatchCompute(groupsX, groupsY, 1);
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        GLint tileOffsetLoc = glGetUniformLocation(computeProgram, "tileOffset");
+        constexpr int kGroupSize = 16;
+        if (computeTiled) {
+          computeTileSize = std::clamp(computeTileSize, kGroupSize, 2048);
+          for (int y = 0; y < renderHeight; y += computeTileSize) {
+            for (int x = 0; x < renderWidth; x += computeTileSize) {
+              int tileWidth = std::min(computeTileSize, renderWidth - x);
+              int tileHeight = std::min(computeTileSize, renderHeight - y);
+              if (tileOffsetLoc != -1) {
+                glUniform2i(tileOffsetLoc, x, y);
+              }
+              GLuint groupsX = static_cast<GLuint>((tileWidth + kGroupSize - 1) / kGroupSize);
+              GLuint groupsY = static_cast<GLuint>((tileHeight + kGroupSize - 1) / kGroupSize);
+              glDispatchCompute(groupsX, groupsY, 1);
+              glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+            }
+          }
+        } else {
+          if (tileOffsetLoc != -1) {
+            glUniform2i(tileOffsetLoc, 0, 0);
+          }
+          GLuint groupsX = static_cast<GLuint>((renderWidth + kGroupSize - 1) / kGroupSize);
+          GLuint groupsY = static_cast<GLuint>((renderHeight + kGroupSize - 1) / kGroupSize);
+          glDispatchCompute(groupsX, groupsY, 1);
+          glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        }
         glUseProgram(0);
       }
       if (gpuTimers.initialized && computeTarget != 0) {
@@ -2107,6 +2314,7 @@ int main(int, char **) {
       gpuTimers.bloom.begin();
     }
     {
+      ZoneScopedN("Bloom Brightness");
       RenderToTextureInfo rtti;
       rtti.fragShader = "shader/bloom_brightness_pass.frag";
       rtti.textureUniforms["texture0"] = texBlackhole;
@@ -2126,38 +2334,45 @@ int main(int, char **) {
       ImGui::End();
     }
 
-    for (int level = 0; level < bloomIterations; level++) {
-      std::size_t levelIndex = static_cast<std::size_t>(level);
-      RenderToTextureInfo rtti;
-      rtti.fragShader = "shader/bloom_downsample.frag";
-      rtti.textureUniforms["texture0"] =
-          level == 0 ? texBrightness : texDownsampled[static_cast<std::size_t>(level - 1)];
-      rtti.targetTexture = texDownsampled[levelIndex];
-      int downWidth = std::max(1, renderWidth >> (level + 1));
-      int downHeight = std::max(1, renderHeight >> (level + 1));
-      rtti.width = downWidth;
-      rtti.height = downHeight;
-      renderToTexture(rtti);
-    }
-
-    for (int level = bloomIterations - 1; level >= 0; level--) {
-      std::size_t levelIndex = static_cast<std::size_t>(level);
-      RenderToTextureInfo rtti;
-      rtti.fragShader = "shader/bloom_upsample.frag";
-      rtti.textureUniforms["texture0"] =
-          level == bloomIterations - 1 ? texDownsampled[levelIndex]
-                                       : texUpsampled[static_cast<std::size_t>(level + 1)];
-      rtti.textureUniforms["texture1"] =
-          level == 0 ? texBrightness : texDownsampled[static_cast<std::size_t>(level - 1)];
-      rtti.targetTexture = texUpsampled[levelIndex];
-      int upWidth = std::max(1, renderWidth >> level);
-      int upHeight = std::max(1, renderHeight >> level);
-      rtti.width = upWidth;
-      rtti.height = upHeight;
-      renderToTexture(rtti);
+    {
+      ZoneScopedN("Bloom Downsample");
+      for (int level = 0; level < bloomIterations; level++) {
+        std::size_t levelIndex = static_cast<std::size_t>(level);
+        RenderToTextureInfo rtti;
+        rtti.fragShader = "shader/bloom_downsample.frag";
+        rtti.textureUniforms["texture0"] =
+            level == 0 ? texBrightness : texDownsampled[static_cast<std::size_t>(level - 1)];
+        rtti.targetTexture = texDownsampled[levelIndex];
+        int downWidth = std::max(1, renderWidth >> (level + 1));
+        int downHeight = std::max(1, renderHeight >> (level + 1));
+        rtti.width = downWidth;
+        rtti.height = downHeight;
+        renderToTexture(rtti);
+      }
     }
 
     {
+      ZoneScopedN("Bloom Upsample");
+      for (int level = bloomIterations - 1; level >= 0; level--) {
+        std::size_t levelIndex = static_cast<std::size_t>(level);
+        RenderToTextureInfo rtti;
+        rtti.fragShader = "shader/bloom_upsample.frag";
+        rtti.textureUniforms["texture0"] =
+            level == bloomIterations - 1 ? texDownsampled[levelIndex]
+                                         : texUpsampled[static_cast<std::size_t>(level + 1)];
+        rtti.textureUniforms["texture1"] =
+            level == 0 ? texBrightness : texDownsampled[static_cast<std::size_t>(level - 1)];
+        rtti.targetTexture = texUpsampled[levelIndex];
+        int upWidth = std::max(1, renderWidth >> level);
+        int upHeight = std::max(1, renderHeight >> level);
+        rtti.width = upWidth;
+        rtti.height = upHeight;
+        renderToTexture(rtti);
+      }
+    }
+
+    {
+      ZoneScopedN("Bloom Composite");
       RenderToTextureInfo rtti;
       rtti.fragShader = "shader/bloom_composite.frag";
       rtti.textureUniforms["texture0"] = texBlackhole;
@@ -2181,6 +2396,7 @@ int main(int, char **) {
     }
 
     {
+      ZoneScopedN("Tonemap");
       RenderToTextureInfo rtti;
       rtti.fragShader = "shader/tonemapping.frag";
       rtti.textureUniforms["texture0"] = texBloomFinal;
@@ -2334,6 +2550,7 @@ int main(int, char **) {
 
     GLuint finalTexture = texTonemapped;
     if (depthEffectsEnabled) {
+      ZoneScopedN("Depth Cues");
       if (gpuTimers.initialized) {
         gpuTimers.depth.begin();
       }
@@ -2376,6 +2593,48 @@ int main(int, char **) {
 
     // Final passthrough to screen
     passthrough.render(finalTexture, windowWidth, windowHeight);
+
+    if (grmhdSliceEnabled && grmhdReady) {
+      ZoneScopedN("GRMHD Slice");
+      grmhdSliceAxis = std::clamp(grmhdSliceAxis, 0, 2);
+      grmhdSliceChannel = std::clamp(grmhdSliceChannel, 0, 3);
+      grmhdSliceCoord = std::clamp(grmhdSliceCoord, 0.0f, 1.0f);
+      grmhdSliceSize = std::clamp(grmhdSliceSize, 64, 1024);
+
+      const std::size_t channelIndex = static_cast<std::size_t>(grmhdSliceChannel);
+      if (grmhdSliceAutoRange && channelIndex < grmhdTexture.minValues.size() &&
+          channelIndex < grmhdTexture.maxValues.size()) {
+        grmhdSliceMin = grmhdTexture.minValues[channelIndex];
+        grmhdSliceMax = grmhdTexture.maxValues[channelIndex];
+      }
+      if (grmhdSliceMax <= grmhdSliceMin) {
+        grmhdSliceMax = grmhdSliceMin + 1.0f;
+      }
+
+      if (texGrmhdSlice == 0 || grmhdSliceSizeCached != grmhdSliceSize) {
+        if (texGrmhdSlice != 0) {
+          glDeleteTextures(1, &texGrmhdSlice);
+          texGrmhdSlice = 0;
+        }
+        texGrmhdSlice = createColorTexture32f(grmhdSliceSize, grmhdSliceSize);
+        grmhdSliceSizeCached = grmhdSliceSize;
+      }
+
+      RenderToTextureInfo sliceRtti;
+      sliceRtti.fragShader = "shader/grmhd_slice.frag";
+      sliceRtti.texture3DUniforms["grmhdTexture"] = grmhdTexture.texture;
+      sliceRtti.textureUniforms["colorMap"] = colorMap;
+      sliceRtti.floatUniforms["sliceAxis"] = static_cast<float>(grmhdSliceAxis);
+      sliceRtti.floatUniforms["sliceCoord"] = grmhdSliceCoord;
+      sliceRtti.floatUniforms["sliceChannel"] = static_cast<float>(grmhdSliceChannel);
+      sliceRtti.floatUniforms["sliceMin"] = grmhdSliceMin;
+      sliceRtti.floatUniforms["sliceMax"] = grmhdSliceMax;
+      sliceRtti.floatUniforms["useColorMap"] = grmhdSliceUseColorMap ? 1.0f : 0.0f;
+      sliceRtti.targetTexture = texGrmhdSlice;
+      sliceRtti.width = grmhdSliceSize;
+      sliceRtti.height = grmhdSliceSize;
+      renderToTexture(sliceRtti);
+    }
 
     if (rmluiReady) {
       rmluiOverlay.render();

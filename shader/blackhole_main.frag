@@ -18,16 +18,24 @@ uniform sampler2D uSynchLUT;
 uniform sampler2D colorMap;
 uniform sampler2D emissivityLUT;
 uniform sampler2D redshiftLUT;
+uniform sampler2D spectralLUT;
 uniform sampler3D noiseTexture;
+uniform sampler3D grmhdTexture;
 uniform samplerCube galaxy;
 uniform float kerrSpin = 0.0;
 uniform float useLUTs = 0.0;
 uniform float useNoiseTexture = 0.0;
+uniform float useGrmhd = 0.0;
+uniform float useSpectralLUT = 0.0;
 uniform float noiseTextureScale = 0.25;
 uniform float lutRadiusMin = 0.0;
 uniform float lutRadiusMax = 1.0;
 uniform float redshiftRadiusMin = 0.0;
 uniform float redshiftRadiusMax = 1.0;
+uniform float spectralRadiusMin = 0.0;
+uniform float spectralRadiusMax = 1.0;
+uniform vec3 grmhdBoundsMin = vec3(-10.0);
+uniform vec3 grmhdBoundsMax = vec3(10.0);
 
 uniform vec3 cameraPos;
 uniform mat3 cameraBasis;
@@ -256,6 +264,13 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   density *= 1.0 / pow(sphericalCoord.x, adiskDensityH);
   density *= 16000.0;
 
+  if (useGrmhd > 0.5) {
+    vec3 boundsSize = max(grmhdBoundsMax - grmhdBoundsMin, vec3(EPSILON));
+    vec3 grmhdCoord = clamp((pos - grmhdBoundsMin) / boundsSize, 0.0, 1.0);
+    vec4 grmhdSample = texture(grmhdTexture, grmhdCoord);
+    density *= max(grmhdSample.r, 0.0);
+  }
+
   if (adiskParticle < 0.5) {
     color += vec3(0.0, 1.0, 0.0) * density * 0.02;
     return true;
@@ -288,6 +303,14 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     emissivity = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
   }
   density *= emissivity;
+
+  if (useSpectralLUT > 0.5) {
+    float rNorm = length(pos) / max(schwarzschildRadius, EPSILON);
+    float denom = max(spectralRadiusMax - spectralRadiusMin, 0.0001);
+    float u = clamp((rNorm - spectralRadiusMin) / denom, 0.0, 1.0);
+    float spectral = texture(spectralLUT, vec2(u, 0.5)).r;
+    density *= max(spectral, 0.0);
+  }
 
   // Apply gravitational redshift to disk emission
   if (enableRedshift > 0.5) {
