@@ -1,4 +1,4 @@
-#version 330 core
+#version 460 core
 
 // Physics library includes
 #include "include/physics_constants.glsl"
@@ -12,20 +12,16 @@ const float INFINITY = 1000000.0;
 out vec4 fragColor;
 
 uniform vec2 resolution; // viewport resolution in pixels
-uniform float mouseX;
-uniform float mouseY;
-
 uniform float time; // time elapsed in seconds
-uniform samplerCube galaxy;
-uniform sampler2D colorMap;
+uniform sampler2D uSynchLUT;
+uniform float kerrSpin = 0.0;
 
-uniform float frontView = 0.0;
-uniform float topView = 0.0;
-uniform float cameraRoll = 0.0;
+uniform vec3 cameraPos;
+uniform mat3 cameraBasis;
+uniform float depthFar = 50.0;
 
 uniform float gravatationalLensing = 1.0;
 uniform float renderBlackHole = 1.0;
-uniform float mouseControl = 0.0;
 uniform float fovScale = 1.0;
 
 uniform float adiskEnabled = 1.0;
@@ -39,7 +35,6 @@ uniform float adiskNoiseLOD = 5.0;
 uniform float adiskSpeed = 0.5;
 
 // Physics parameters
-uniform float blackHoleMass = 1.0;      // Mass in geometric units (G=c=1)
 uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geometric units)
 uniform float photonSphereRadius = 3.0;  // r_ph = 1.5 * r_s
 uniform float iscoRadius = 6.0;          // r_ISCO = 3 * r_s (Schwarzschild)
@@ -276,18 +271,9 @@ void ringColor(vec3 rayOrigin, vec3 rayDir, Ring ring, inout float minDistance,
   }
 }
 
-mat3 lookAt(vec3 origin, vec3 target, float roll) {
-  vec3 rr = vec3(sin(roll), cos(roll), 0.0);
-  vec3 ww = normalize(target - origin);
-  vec3 uu = normalize(cross(ww, rr));
-  vec3 vv = normalize(cross(uu, ww));
-
-  return mat3(uu, vv, ww);
-}
-
 float sqrLength(vec3 a) { return dot(a, a); }
 
-void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
+bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   // Inner radius at ISCO (innermost stable circular orbit)
   // For Schwarzschild: r_ISCO = 3 * r_s where r_s = 2GM/c²
   // iscoRadius is already in the same coordinate units as positions
@@ -299,7 +285,7 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   float density = max(
       0.0, 1.0 - length(pos.xyz / vec3(outerRadius, adiskHeight, outerRadius)));
   if (density < 0.001) {
-    return;
+    return false;
   }
 
   density *= pow(1.0 - abs(pos.y) / adiskHeight, adiskDensityV);
@@ -310,7 +296,7 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
 
   // Avoid the shader computation when density is very small.
   if (density < 0.001) {
-    return;
+    return false;
   }
 
   vec3 sphericalCoord = toSpherical(pos);
@@ -325,7 +311,7 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
 
   if (adiskParticle < 0.5) {
     color += vec3(0.0, 1.0, 0.0) * density * 0.02;
-    return;
+    return true;
   }
 
   float noise = 1.0;
@@ -350,11 +336,15 @@ void adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   }
 
   color += density * adiskLit * dustColor * alpha * abs(noise);
+  return true;
 }
 
-vec3 traceColor(vec3 pos, vec3 dir) {
+vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
   vec3 color = vec3(0.0);
   float alpha = 1.0;
+  vec3 origin = pos;
+
+  depthDistance = depthFar;
 
   float STEP_SIZE = 0.1;
   dir *= STEP_SIZE;
@@ -389,6 +379,7 @@ vec3 traceColor(vec3 pos, vec3 dir) {
       // The factor of 2 was already included in the definition of schwarzschildRadius
       if (r < schwarzschildRadius) {
         // Ray captured by black hole - return accumulated color (mostly black)
+        depthDistance = min(depthDistance, length(pos - origin));
         return color;
       }
 
@@ -401,6 +392,7 @@ vec3 traceColor(vec3 pos, vec3 dir) {
           // Orange-yellow glow color for photon ring
           vec3 glowColor = vec3(1.0, 0.7, 0.3) * glowIntensity;
           color += glowColor * alpha;
+          depthDistance = min(depthDistance, length(pos - origin));
         }
       }
 
@@ -416,7 +408,9 @@ vec3 traceColor(vec3 pos, vec3 dir) {
         ringColor(pos, dir, ring, minDistance, color);
       } else {
         if (adiskEnabled > 0.5) {
-          adiskColor(pos, color, alpha);
+          if (adiskColor(pos, color, alpha)) {
+            depthDistance = min(depthDistance, length(pos - origin));
+          }
         }
       }
     }
@@ -439,32 +433,15 @@ vec3 traceColor(vec3 pos, vec3 dir) {
 }
 
 void main() {
-  mat3 view;
-
-  vec3 cameraPos;
-  if (mouseControl > 0.5) {
-    vec2 mouse = clamp(vec2(mouseX, mouseY) / resolution.xy, 0.0, 1.0) - 0.5;
-    cameraPos = vec3(-cos(mouse.x * 10.0) * 15.0, mouse.y * 30.0,
-                     sin(mouse.x * 10.0) * 15.0);
-
-  } else if (frontView > 0.5) {
-    cameraPos = vec3(10.0, 1.0, 10.0);
-  } else if (topView > 0.5) {
-    cameraPos = vec3(15.0, 15.0, 0.0);
-  } else {
-    cameraPos = vec3(-cos(time * 0.1) * 15.0, sin(time * 0.1) * 15.0,
-                     sin(time * 0.1) * 15.0);
-  }
-
-  vec3 target = vec3(0.0, 0.0, 0.0);
-  view = lookAt(cameraPos, target, radians(cameraRoll));
-
   vec2 uv = gl_FragCoord.xy / resolution.xy - vec2(0.5);
   uv.x *= resolution.x / resolution.y;
 
   vec3 dir = normalize(vec3(-uv.x * fovScale, uv.y * fovScale, 1.0));
   vec3 pos = cameraPos;
-  dir = view * dir;
+  dir = cameraBasis * dir;
 
-  fragColor.rgb = traceColor(pos, dir);
+  float depthDistance = depthFar;
+  vec3 color = traceColor(pos, dir, depthDistance);
+  float depthNormalized = clamp(depthDistance / depthFar, 0.0, 1.0);
+  fragColor = vec4(color, depthNormalized);
 }
