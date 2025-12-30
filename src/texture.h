@@ -14,7 +14,7 @@
 
 #include <string>
 
-#include <GL/glew.h>
+#include "gl_loader.h"
 
 GLuint loadTexture2D(const std::string &file, bool repeat = true);
 

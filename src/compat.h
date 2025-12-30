@@ -2,10 +2,10 @@
  * @file compat.h
  * @brief C++ version compatibility layer with fallbacks.
  *
- * Provides unified interface for C++23/20/17 features with graceful degradation.
+ * Provides unified interface for C++23 features with fallback shims where needed.
  * Include this header instead of directly using version-specific features.
  *
- * Detected at compile time via BLACKHOLE_CXX23, BLACKHOLE_CXX20, BLACKHOLE_CXX17
+ * Detected at compile time via BLACKHOLE_CXX23
  */
 
 #ifndef BLACKHOLE_COMPAT_H
@@ -17,20 +17,17 @@
 
 // Fallback detection if CMake didn't set macros
 #ifndef BLACKHOLE_CXX_STANDARD
-#if __cplusplus >= 202302L
+#if defined(_MSVC_LANG)
+#define BLACKHOLE_CXX_LANG _MSVC_LANG
+#else
+#define BLACKHOLE_CXX_LANG __cplusplus
+#endif
+
+#if BLACKHOLE_CXX_LANG >= 202302L
 #define BLACKHOLE_CXX_STANDARD 23
 #define BLACKHOLE_CXX23 1
-#define BLACKHOLE_CXX20 1
-#define BLACKHOLE_CXX17 1
-#elif __cplusplus >= 202002L
-#define BLACKHOLE_CXX_STANDARD 20
-#define BLACKHOLE_CXX20 1
-#define BLACKHOLE_CXX17 1
-#elif __cplusplus >= 201703L
-#define BLACKHOLE_CXX_STANDARD 17
-#define BLACKHOLE_CXX17 1
 #else
-#error "Blackhole requires at least C++17"
+#error "Blackhole requires C++23"
 #endif
 #endif
 
@@ -310,19 +307,25 @@ inline constexpr double RAD_TO_DEG = 180.0 / PI;
 // Attribute Macros
 // ============================================================================
 
-// [[nodiscard]] with message (C++20)
-#if defined(BLACKHOLE_CXX20)
+// [[nodiscard]] with message (C++20+)
+#if defined(__cpp_nodiscard) && __cpp_nodiscard >= 201907L
 #define BLACKHOLE_NODISCARD(msg) [[nodiscard(msg)]]
-#else
+#elif defined(__has_cpp_attribute) && __has_cpp_attribute(nodiscard)
 #define BLACKHOLE_NODISCARD(msg) [[nodiscard]]
+#else
+#define BLACKHOLE_NODISCARD(msg)
 #endif
 
-// [[likely]] and [[unlikely]] (C++20)
-#if defined(BLACKHOLE_CXX20)
+// [[likely]] and [[unlikely]] (C++20+)
+#if defined(__has_cpp_attribute) && __has_cpp_attribute(likely)
 #define BLACKHOLE_LIKELY [[likely]]
-#define BLACKHOLE_UNLIKELY [[unlikely]]
 #else
 #define BLACKHOLE_LIKELY
+#endif
+
+#if defined(__has_cpp_attribute) && __has_cpp_attribute(unlikely)
+#define BLACKHOLE_UNLIKELY [[unlikely]]
+#else
 #define BLACKHOLE_UNLIKELY
 #endif
 

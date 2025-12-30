@@ -37,6 +37,7 @@
 #include "constants.h"
 #include "kerr.h"
 #include "schwarzschild.h"
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <vector>
@@ -213,17 +214,8 @@ inline double novikov_thorne_factor_schwarzschild(double r, double r_in, double 
   double x = std::sqrt(r / r_g);
   double x_in = std::sqrt(r_in / r_g);
 
-  // Auxiliary quantities
-  double x0 = std::sqrt(3.0);
-  double x1 = 2.0 * std::cos((std::acos(0.0) - std::atan(1.0 / std::sqrt(2.0))) / 3.0);
-  double x2 = 2.0 * std::cos((std::acos(0.0) + std::atan(1.0 / std::sqrt(2.0))) / 3.0);
-  double x3 = -2.0 * std::cos(std::acos(0.0) / 3.0);
-
   // Page & Thorne (1974) formula
   // Simplified version for computational stability:
-  double y = x_in / x;
-  double y3 = y * y * y;
-
   // Leading term: 1 - √(r_in/r)
   double term1 = 1.0 - std::sqrt(r_in / r);
 
@@ -340,7 +332,7 @@ inline double planck_function(double nu, double T) {
   if (T <= 0 || nu <= 0) return 0.0;
 
   double h = 6.62607015e-27;  // Planck constant [erg s]
-  double k_B = K_BOLTZMANN;
+  double k_B = K_B;
 
   double x = h * nu / (k_B * T);
 
@@ -395,12 +387,10 @@ inline double disk_spectrum(double nu, const DiskParams &disk,
  * @return Luminosity [erg/s]
  */
 inline double disk_luminosity(const DiskParams &disk) {
-  double r_g = G * disk.M / C2;
   double r_isco = disk.r_in;
 
   // Efficiency from ISCO binding energy
   // E_ISCO/c² for Schwarzschild: 1 - √(8/9) ≈ 0.0572
-  double x_isco = r_isco / r_g;
   double E_isco = specific_energy_schwarzschild(r_isco, disk.M);
 
   double eta = 1.0 - E_isco;
@@ -507,7 +497,10 @@ struct DiskProfilePoint {
 inline std::vector<DiskProfilePoint> disk_profile(const DiskParams &disk,
                                                   int n_points = 100) {
   std::vector<DiskProfilePoint> profile;
-  profile.reserve(n_points);
+  if (n_points <= 0) {
+    return profile;
+  }
+  profile.reserve(static_cast<size_t>(n_points));
 
   double r_g = G * disk.M / C2;
   double log_r_in = std::log(disk.r_in);

@@ -15,7 +15,19 @@ out vec4 fragColor;
 uniform vec2 resolution; // viewport resolution in pixels
 uniform float time; // time elapsed in seconds
 uniform sampler2D uSynchLUT;
+uniform sampler2D colorMap;
+uniform sampler2D emissivityLUT;
+uniform sampler2D redshiftLUT;
+uniform sampler3D noiseTexture;
+uniform samplerCube galaxy;
 uniform float kerrSpin = 0.0;
+uniform float useLUTs = 0.0;
+uniform float useNoiseTexture = 0.0;
+uniform float noiseTextureScale = 0.25;
+uniform float lutRadiusMin = 0.0;
+uniform float lutRadiusMax = 1.0;
+uniform float redshiftRadiusMin = 0.0;
+uniform float redshiftRadiusMax = 1.0;
 
 uniform vec3 cameraPos;
 uniform mat3 cameraBasis;
@@ -41,14 +53,6 @@ uniform float photonSphereRadius = 3.0;  // r_ph = 1.5 * r_s
 uniform float iscoRadius = 6.0;          // r_ISCO = 3 * r_s (Schwarzschild)
 uniform float enableRedshift = 0.0;      // Toggle gravitational redshift
 uniform float enablePhotonSphere = 0.0;  // Toggle photon sphere glow
-
-struct Ring {
-  vec3 center;
-  vec3 normal;
-  float innerRadius;
-  float outerRadius;
-  float rotateSpeed;
-};
 
 ///----
 /// Simplex 3D Noise
@@ -126,28 +130,6 @@ float snoise(vec3 v) {
          dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 ///----
-
-float ringDistance(vec3 rayOrigin, vec3 rayDir, Ring ring) {
-  float denominator = dot(rayDir, ring.normal);
-  float constant = -dot(ring.center, ring.normal);
-  if (abs(denominator) < EPSILON) {
-    return -1.0;
-  } else {
-    float t = -(dot(rayOrigin, ring.normal) + constant) / denominator;
-    if (t < 0.0) {
-      return -1.0;
-    }
-
-    vec3 intersection = rayOrigin + t * rayDir;
-
-    // Compute distance to ring center
-    float d = length(intersection - ring.center);
-    if (d >= ring.innerRadius && d <= ring.outerRadius) {
-      return t;
-    }
-    return -1.0;
-  }
-}
 
 vec3 panoramaColor(sampler2D tex, vec3 dir) {
   vec2 uv = vec2(0.5 - atan(dir.z, dir.x) / PI * 0.5, 0.5 - asin(dir.y) / PI);
@@ -236,42 +218,6 @@ vec3 toSpherical2(vec3 pos) {
   return radialCoords;
 }
 
-void ringColor(vec3 rayOrigin, vec3 rayDir, Ring ring, inout float minDistance,
-               inout vec3 color) {
-  float distance = ringDistance(rayOrigin, normalize(rayDir), ring);
-  if (distance >= EPSILON && distance < minDistance &&
-      distance <= length(rayDir) + EPSILON) {
-    minDistance = distance;
-
-    vec3 intersection = rayOrigin + normalize(rayDir) * minDistance;
-    vec3 ringColor;
-
-    {
-      float dist = length(intersection);
-
-      float v = clamp((dist - ring.innerRadius) /
-                          (ring.outerRadius - ring.innerRadius),
-                      0.0, 1.0);
-
-      vec3 base = cross(ring.normal, vec3(0.0, 0.0, 1.0));
-      float angle = acos(dot(normalize(base), normalize(intersection)));
-      if (dot(cross(base, intersection), ring.normal) < 0.0)
-        angle = -angle;
-
-      float u = 0.5 - 0.5 * angle / PI;
-      // HACK
-      u += time * ring.rotateSpeed;
-
-      vec3 color = vec3(0.0, 0.5, 0.0);
-      // HACK
-      float alpha = 0.5;
-      ringColor = vec3(color);
-    }
-
-    color += ringColor;
-  }
-}
-
 float sqrLength(vec3 a) { return dot(a, a); }
 
 bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
@@ -316,8 +262,14 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   }
 
   float noise = 1.0;
+  bool useNoiseTex = useNoiseTexture > 0.5;
   for (int i = 0; i < int(adiskNoiseLOD); i++) {
-    noise *= 0.5 * snoise(sphericalCoord * pow(i, 2) * adiskNoiseScale) + 0.5;
+    float noiseSample = 0.5 * snoise(sphericalCoord * pow(i, 2) * adiskNoiseScale) + 0.5;
+    if (useNoiseTex) {
+      vec3 noiseCoord = fract(sphericalCoord * noiseTextureScale);
+      noiseSample = texture(noiseTexture, noiseCoord).r;
+    }
+    noise *= noiseSample;
     if (i % 2 == 0) {
       sphericalCoord.y += time * adiskSpeed;
     } else {
@@ -328,10 +280,25 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   vec3 dustColor =
       texture(colorMap, vec2(sphericalCoord.x / outerRadius, 0.5)).rgb;
 
+  float emissivity = 1.0;
+  if (useLUTs > 0.5) {
+    float rNorm = length(pos) / max(schwarzschildRadius, EPSILON);
+    float denom = max(lutRadiusMax - lutRadiusMin, 0.0001);
+    float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
+    emissivity = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
+  }
+  density *= emissivity;
+
   // Apply gravitational redshift to disk emission
   if (enableRedshift > 0.5) {
     float r = length(pos);
     float z = gravitationalRedshift(r, schwarzschildRadius);
+    if (useLUTs > 0.5) {
+      float rNorm = r / max(schwarzschildRadius, EPSILON);
+      float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
+      float u = clamp((rNorm - redshiftRadiusMin) / denom, 0.0, 1.0);
+      z = texture(redshiftLUT, vec2(u, 0.5)).r;
+    }
     // Apply full wavelength shift for physically accurate color
     dustColor = applyGravitationalRedshift(dustColor, z);
   }
@@ -397,21 +364,9 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
         }
       }
 
-      float minDistance = INFINITY;
-
-      if (false) {
-        Ring ring;
-        ring.center = vec3(0.0, 0.05, 0.0);
-        ring.normal = vec3(0.0, 1.0, 0.0);
-        ring.innerRadius = 2.0;
-        ring.outerRadius = 6.0;
-        ring.rotateSpeed = 0.08;
-        ringColor(pos, dir, ring, minDistance, color);
-      } else {
-        if (adiskEnabled > 0.5) {
-          if (adiskColor(pos, color, alpha)) {
-            depthDistance = min(depthDistance, length(pos - origin));
-          }
+      if (adiskEnabled > 0.5) {
+        if (adiskColor(pos, color, alpha)) {
+          depthDistance = min(depthDistance, length(pos - origin));
         }
       }
     }
@@ -426,6 +381,12 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
   // Apply gravitational redshift to background light
   if (enableRedshift > 0.5 && minRadiusReached < schwarzschildRadius * 10.0) {
     float z = gravitationalRedshift(minRadiusReached, schwarzschildRadius);
+    if (useLUTs > 0.5) {
+      float rNorm = minRadiusReached / max(schwarzschildRadius, EPSILON);
+      float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
+      float u = clamp((rNorm - redshiftRadiusMin) / denom, 0.0, 1.0);
+      z = texture(redshiftLUT, vec2(u, 0.5)).r;
+    }
     skyColor = applySimpleRedshift(skyColor, z);
   }
 

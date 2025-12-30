@@ -23,8 +23,11 @@
 
 #include "constants.h"
 #include "schwarzschild.h"
+#include "geodesics.h"
 #include "kerr.h"
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -181,7 +184,7 @@ public:
       auto k4 = derivatives(state_k4);
 
       // Update state
-      for (int i = 0; i < 6; ++i) {
+      for (std::size_t i = 0; i < state.size(); ++i) {
         state[i] += step_size_ * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]) / 6.0;
       }
 
@@ -250,8 +253,6 @@ private:
   double compute_impact_parameter(const PhotonRay &ray) const {
     // Impact parameter from perpendicular distance to origin
     double r = ray.position[0];
-    double theta = ray.position[1];
-
     // Direction perpendicular component
     double sin_angle = std::sqrt(1.0 - ray.direction[0] * ray.direction[0]);
     return r * sin_angle;
@@ -316,11 +317,118 @@ private:
                                     const std::array<double, 6> &b,
                                     double scale) const {
     std::array<double, 6> result;
-    for (int i = 0; i < 6; ++i) {
+    for (std::size_t i = 0; i < result.size(); ++i) {
       result[i] = a[i] + scale * b[i];
     }
     return result;
   }
+};
+
+// ============================================================================
+// Kerr Raytracer (Mino-time stepping)
+// ============================================================================
+
+/**
+ * @brief Raytracer for Kerr spacetime using conserved quantities.
+ *
+ * This integrates the Kerr geodesic equations in Mino time using
+ * the potentials from physics::kerr_potentials(). Callers provide the
+ * conserved quantities (E, Lz, Q) and initial signs for r/theta.
+ */
+class KerrRaytracer {
+public:
+  KerrRaytracer(double mass, double spin_param)
+      : mass_(mass),
+        a_(spin_param),
+        r_s_(schwarzschild_radius(mass)),
+        r_horizon_(kerr_outer_horizon(mass, spin_param)),
+        r_escape_(1000.0 * r_s_),
+        step_size_(0.02 * r_s_),
+        max_steps_(10000),
+        record_path_(false) {
+    if (!std::isfinite(r_horizon_) || r_horizon_ <= 0.0) {
+      r_horizon_ = r_s_;
+    }
+  }
+
+  void set_step_size(double h) { step_size_ = h; }
+  void set_max_steps(int n) { max_steps_ = n; }
+  void set_escape_radius(double r) { r_escape_ = r; }
+  void set_record_path(bool record) { record_path_ = record; }
+
+  RayTraceResult trace(const KerrGeodesicState &initial,
+                       const KerrGeodesicConsts &c) const {
+    RayTraceResult result;
+    result.steps_taken = 0;
+    result.total_distance = 0.0;
+    result.redshift = 1.0;
+    result.status = RayStatus::PROPAGATING;
+
+    KerrGeodesicState state = initial;
+
+    if (record_path_) {
+      result.path.push_back({state.r, state.theta, state.phi});
+    }
+
+    for (int step = 0; step < max_steps_; ++step) {
+      if (state.r <= r_horizon_ * 1.001) {
+        result.status = RayStatus::CAPTURED;
+        break;
+      }
+      if (state.r >= r_escape_) {
+        result.status = RayStatus::ESCAPED;
+        break;
+      }
+
+      KerrPotentials p = kerr_potentials(state.r, state.theta, mass_, a_, c);
+      KerrGeodesicState next = state;
+      if (p.R < 0.0) {
+        next.sign_r = -next.sign_r;
+      }
+      if (p.Theta < 0.0) {
+        next.sign_theta = -next.sign_theta;
+      }
+
+      next = kerr_step_mino(next, mass_, a_, c, step_size_);
+      state = next;
+
+      result.total_distance += step_size_;
+      ++result.steps_taken;
+
+      if (record_path_) {
+        result.path.push_back({state.r, state.theta, state.phi});
+      }
+    }
+
+    if (result.status == RayStatus::PROPAGATING) {
+      result.status = (result.steps_taken >= max_steps_) ? RayStatus::MAX_STEPS
+                                                         : RayStatus::ESCAPED;
+    }
+
+    result.final_position = {state.r, state.theta, state.phi};
+    if (state.r > r_horizon_ * 1.001) {
+      result.redshift = 1.0 + kerr_redshift(state.r, state.theta, mass_, a_);
+    }
+
+    return result;
+  }
+
+  RayTraceResult trace_equatorial(double r, double phi, double impact_param,
+                                  double sign_r, double energy = 1.0) const {
+    KerrGeodesicConsts c = kerr_equatorial_consts(impact_param, energy);
+    KerrGeodesicState state = kerr_equatorial_state(r, phi, sign_r);
+    return trace(state, c);
+  }
+
+private:
+  double mass_;
+  double a_;
+  double r_s_;
+  double r_horizon_;
+  double r_escape_;
+  double step_size_;
+  int max_steps_;
+  bool record_path_;
 };
 
 // ============================================================================

@@ -56,13 +56,9 @@ void InputManager::initDefaultBindings() {
   keyBindings_[KeyAction::ZoomIn] = GLFW_KEY_EQUAL;  // +/=
   keyBindings_[KeyAction::ZoomOut] = GLFW_KEY_MINUS; // -
 
-  // Accessibility
-  keyBindings_[KeyAction::ToggleAccessibility] = GLFW_KEY_F1;
-  keyBindings_[KeyAction::ToggleHighContrast] = GLFW_KEY_F2;
-  keyBindings_[KeyAction::ToggleReducedMotion] = GLFW_KEY_F3;
+  // Font size
   keyBindings_[KeyAction::IncreaseFontSize] = GLFW_KEY_F4;
   keyBindings_[KeyAction::DecreaseFontSize] = GLFW_KEY_F5;
-  keyBindings_[KeyAction::CycleColorblindMode] = GLFW_KEY_F6;
 
   // Time control
   keyBindings_[KeyAction::IncreaseTimeScale] = GLFW_KEY_RIGHT_BRACKET;
@@ -77,6 +73,7 @@ void InputManager::syncFromSettings() {
   keyBindings_[KeyAction::ToggleUI] = settings.keyToggleUI;
   keyBindings_[KeyAction::ToggleFullscreen] = settings.keyToggleFullscreen;
   keyBindings_[KeyAction::ResetCamera] = settings.keyResetCamera;
+  keyBindings_[KeyAction::ResetSettings] = settings.keyResetSettings;
   keyBindings_[KeyAction::Pause] = settings.keyPause;
   keyBindings_[KeyAction::CameraMoveForward] = settings.keyCameraForward;
   keyBindings_[KeyAction::CameraMoveBackward] = settings.keyCameraBackward;
@@ -88,10 +85,12 @@ void InputManager::syncFromSettings() {
   keyBindings_[KeyAction::CameraRollRight] = settings.keyCameraRollRight;
   keyBindings_[KeyAction::ZoomIn] = settings.keyZoomIn;
   keyBindings_[KeyAction::ZoomOut] = settings.keyZoomOut;
-  keyBindings_[KeyAction::ToggleAccessibility] = settings.keyAccessibilityMenu;
+  keyBindings_[KeyAction::IncreaseFontSize] = settings.keyIncreaseFontSize;
+  keyBindings_[KeyAction::DecreaseFontSize] = settings.keyDecreaseFontSize;
+  keyBindings_[KeyAction::IncreaseTimeScale] = settings.keyIncreaseTimeScale;
+  keyBindings_[KeyAction::DecreaseTimeScale] = settings.keyDecreaseTimeScale;
 
-  // Motor accessibility
-  holdToToggleCamera_ = settings.holdToToggleCamera;
+  // Sensitivity
   mouseSensitivity_ = settings.mouseSensitivity;
   keyboardSensitivity_ = settings.keyboardSensitivity;
   scrollSensitivity_ = settings.scrollSensitivity;
@@ -99,9 +98,29 @@ void InputManager::syncFromSettings() {
   invertMouseY_ = settings.invertMouseY;
   invertKeyboardX_ = settings.invertKeyboardX;
   invertKeyboardY_ = settings.invertKeyboardY;
-
-  // Time
+  holdToToggleCamera_ = settings.holdToToggleCamera;
   timeScale_ = settings.timeScale;
+
+  // Gamepad
+  gamepadEnabled_ = settings.gamepadEnabled;
+  gamepadDeadzone_ = settings.gamepadDeadzone;
+  gamepadLookSensitivity_ = settings.gamepadLookSensitivity;
+  gamepadRollSensitivity_ = settings.gamepadRollSensitivity;
+  gamepadZoomSensitivity_ = settings.gamepadZoomSensitivity;
+  gamepadTriggerZoomSensitivity_ = settings.gamepadTriggerZoomSensitivity;
+  gamepadInvertX_ = settings.gamepadInvertX;
+  gamepadInvertY_ = settings.gamepadInvertY;
+  gamepadInvertRoll_ = settings.gamepadInvertRoll;
+  gamepadInvertZoom_ = settings.gamepadInvertZoom;
+  gamepadYawAxis_ = settings.gamepadYawAxis;
+  gamepadPitchAxis_ = settings.gamepadPitchAxis;
+  gamepadRollAxis_ = settings.gamepadRollAxis;
+  gamepadZoomAxis_ = settings.gamepadZoomAxis;
+  gamepadZoomInAxis_ = settings.gamepadZoomInAxis;
+  gamepadZoomOutAxis_ = settings.gamepadZoomOutAxis;
+  gamepadResetButton_ = settings.gamepadResetButton;
+  gamepadPauseButton_ = settings.gamepadPauseButton;
+  gamepadToggleUIButton_ = settings.gamepadToggleUIButton;
 
   // Camera state
   camera_.yaw = settings.cameraYaw;
@@ -118,6 +137,7 @@ void InputManager::syncToSettings() {
   settings.keyToggleUI = keyBindings_[KeyAction::ToggleUI];
   settings.keyToggleFullscreen = keyBindings_[KeyAction::ToggleFullscreen];
   settings.keyResetCamera = keyBindings_[KeyAction::ResetCamera];
+  settings.keyResetSettings = keyBindings_[KeyAction::ResetSettings];
   settings.keyPause = keyBindings_[KeyAction::Pause];
   settings.keyCameraForward = keyBindings_[KeyAction::CameraMoveForward];
   settings.keyCameraBackward = keyBindings_[KeyAction::CameraMoveBackward];
@@ -129,10 +149,12 @@ void InputManager::syncToSettings() {
   settings.keyCameraRollRight = keyBindings_[KeyAction::CameraRollRight];
   settings.keyZoomIn = keyBindings_[KeyAction::ZoomIn];
   settings.keyZoomOut = keyBindings_[KeyAction::ZoomOut];
-  settings.keyAccessibilityMenu = keyBindings_[KeyAction::ToggleAccessibility];
+  settings.keyIncreaseFontSize = keyBindings_[KeyAction::IncreaseFontSize];
+  settings.keyDecreaseFontSize = keyBindings_[KeyAction::DecreaseFontSize];
+  settings.keyIncreaseTimeScale = keyBindings_[KeyAction::IncreaseTimeScale];
+  settings.keyDecreaseTimeScale = keyBindings_[KeyAction::DecreaseTimeScale];
 
-  // Motor accessibility
-  settings.holdToToggleCamera = holdToToggleCamera_;
+  // Sensitivity
   settings.mouseSensitivity = mouseSensitivity_;
   settings.keyboardSensitivity = keyboardSensitivity_;
   settings.scrollSensitivity = scrollSensitivity_;
@@ -140,9 +162,29 @@ void InputManager::syncToSettings() {
   settings.invertMouseY = invertMouseY_;
   settings.invertKeyboardX = invertKeyboardX_;
   settings.invertKeyboardY = invertKeyboardY_;
-
-  // Time
+  settings.holdToToggleCamera = holdToToggleCamera_;
   settings.timeScale = timeScale_;
+
+  // Gamepad
+  settings.gamepadEnabled = gamepadEnabled_;
+  settings.gamepadDeadzone = gamepadDeadzone_;
+  settings.gamepadLookSensitivity = gamepadLookSensitivity_;
+  settings.gamepadRollSensitivity = gamepadRollSensitivity_;
+  settings.gamepadZoomSensitivity = gamepadZoomSensitivity_;
+  settings.gamepadTriggerZoomSensitivity = gamepadTriggerZoomSensitivity_;
+  settings.gamepadInvertX = gamepadInvertX_;
+  settings.gamepadInvertY = gamepadInvertY_;
+  settings.gamepadInvertRoll = gamepadInvertRoll_;
+  settings.gamepadInvertZoom = gamepadInvertZoom_;
+  settings.gamepadYawAxis = gamepadYawAxis_;
+  settings.gamepadPitchAxis = gamepadPitchAxis_;
+  settings.gamepadRollAxis = gamepadRollAxis_;
+  settings.gamepadZoomAxis = gamepadZoomAxis_;
+  settings.gamepadZoomInAxis = gamepadZoomInAxis_;
+  settings.gamepadZoomOutAxis = gamepadZoomOutAxis_;
+  settings.gamepadResetButton = gamepadResetButton_;
+  settings.gamepadPauseButton = gamepadPauseButton_;
+  settings.gamepadToggleUIButton = gamepadToggleUIButton_;
 
   // Camera state
   settings.cameraYaw = camera_.yaw;
@@ -185,6 +227,12 @@ void InputManager::update(float deltaTime) {
     holdToggleState_.reset();
   }
 
+  if (isActionJustPressed(KeyAction::ResetSettings)) {
+    SettingsManager::instance().resetToDefaults();
+    syncFromSettings();
+    SettingsManager::instance().save();
+  }
+
   if (isActionJustPressed(KeyAction::Pause)) {
     togglePause();
   }
@@ -197,12 +245,12 @@ void InputManager::update(float deltaTime) {
     timeScale_ = std::max(timeScale_ - 0.25f, 0.0f);
   }
 
-  // Colorblind mode cycling
-  if (isActionJustPressed(KeyAction::CycleColorblindMode)) {
-    auto &settings = SettingsManager::instance().get();
-    int mode = static_cast<int>(settings.colorblindMode);
-    mode = (mode + 1) % static_cast<int>(ColorblindMode::COUNT);
-    settings.colorblindMode = static_cast<ColorblindMode>(mode);
+  // Font size adjustment
+  if (isActionJustPressed(KeyAction::IncreaseFontSize)) {
+    ImGui::GetIO().FontGlobalScale = std::min(ImGui::GetIO().FontGlobalScale + 0.1f, 2.0f);
+  }
+  if (isActionJustPressed(KeyAction::DecreaseFontSize)) {
+    ImGui::GetIO().FontGlobalScale = std::max(ImGui::GetIO().FontGlobalScale - 0.1f, 0.5f);
   }
 
   // Hold-to-toggle handling for camera actions
@@ -360,22 +408,29 @@ void InputManager::updateCamera(float deltaTime) {
     }
   }
 
+  float timeScale = timeScale_;
+
   // Mouse orbit (right-click drag)
   if (!ImGui::GetIO().WantCaptureMouse) {
     if (isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
-      camera_.yaw += mouseDeltaX_ * 0.3f;
-      camera_.pitch -= mouseDeltaY_ * 0.3f;
+      camera_.yaw += mouseDeltaX_ * 0.3f * timeScale;
+      camera_.pitch -= mouseDeltaY_ * 0.3f * timeScale;
     }
 
     // Middle mouse button for roll
     if (isMouseButtonPressed(GLFW_MOUSE_BUTTON_MIDDLE)) {
-      camera_.roll += mouseDeltaX_ * 0.3f;
+      camera_.roll += mouseDeltaX_ * 0.3f * timeScale;
     }
 
     // Scroll wheel zoom with sensitivity
     if (std::abs(scrollDelta_) > 0.0f) {
-      camera_.distance -= scrollDelta_ * scrollSensitivity_ * 0.5f;
+      camera_.distance -= scrollDelta_ * scrollSensitivity_ * 0.5f * timeScale;
     }
+  }
+
+  // Gamepad controls (sticks + triggers)
+  if (!ImGui::GetIO().WantCaptureKeyboard) {
+    updateGamepad(deltaTime);
   }
 
   // Clamp values
@@ -391,6 +446,121 @@ void InputManager::updateCamera(float deltaTime) {
     camera_.roll -= 360.0f;
   while (camera_.roll < -180.0f)
     camera_.roll += 360.0f;
+}
+
+static float applyDeadzone(float value, float deadzone) {
+  if (std::abs(value) < deadzone) {
+    return 0.0f;
+  }
+  float sign = value < 0.0f ? -1.0f : 1.0f;
+  float scaled = (std::abs(value) - deadzone) / (1.0f - deadzone);
+  return scaled * sign;
+}
+
+static float normalizeTrigger(float value) {
+  if (value >= 0.0f && value <= 1.0f) {
+    return value;
+  }
+  return std::clamp((value + 1.0f) * 0.5f, 0.0f, 1.0f);
+}
+
+float InputManager::getGamepadAxisRaw(int axis) const {
+  if (axis < 0 || axis >= GLFW_GAMEPAD_AXIS_LAST + 1) {
+    return 0.0f;
+  }
+  return gamepadAxisRaw_[axis];
+}
+
+float InputManager::getGamepadAxisFiltered(int axis) const {
+  if (axis < 0 || axis >= GLFW_GAMEPAD_AXIS_LAST + 1) {
+    return 0.0f;
+  }
+  return gamepadAxisFiltered_[axis];
+}
+
+bool InputManager::isGamepadConnected() const {
+  return glfwJoystickIsGamepad(GLFW_JOYSTICK_1) == GLFW_TRUE;
+}
+
+bool InputManager::isGamepadButtonJustPressed(int button) const {
+  if (button < 0 || button >= GLFW_GAMEPAD_BUTTON_LAST + 1) {
+    return false;
+  }
+  return gamepadButtonState_[button] && !prevGamepadButtonState_[button];
+}
+
+void InputManager::updateGamepad(float deltaTime) {
+  if (!gamepadEnabled_ || !isGamepadConnected()) {
+    return;
+  }
+
+  GLFWgamepadstate state;
+  if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state) == GLFW_FALSE) {
+    return;
+  }
+
+  std::copy(std::begin(gamepadButtonState_), std::end(gamepadButtonState_),
+            std::begin(prevGamepadButtonState_));
+  for (int i = 0; i < GLFW_GAMEPAD_BUTTON_LAST + 1; ++i) {
+    gamepadButtonState_[i] = state.buttons[i] == GLFW_PRESS;
+  }
+
+  auto updateAxis = [&](int axis) {
+    if (axis < 0 || axis >= GLFW_GAMEPAD_AXIS_LAST + 1) {
+      return;
+    }
+    gamepadAxisRaw_[axis] = state.axes[axis];
+    gamepadAxisFiltered_[axis] = applyDeadzone(state.axes[axis], gamepadDeadzone_);
+  };
+
+  auto axisValue = [&](int axis) {
+    if (axis < 0 || axis >= GLFW_GAMEPAD_AXIS_LAST + 1) {
+      return 0.0f;
+    }
+    updateAxis(axis);
+    return gamepadAxisFiltered_[axis];
+  };
+
+  float yawAxis = axisValue(gamepadYawAxis_);
+  float pitchAxis = axisValue(gamepadPitchAxis_);
+  float rollAxis = axisValue(gamepadRollAxis_);
+  float zoomAxis = axisValue(gamepadZoomAxis_);
+
+  if (gamepadInvertX_) {
+    yawAxis = -yawAxis;
+  }
+  if (gamepadInvertY_) {
+    pitchAxis = -pitchAxis;
+  }
+  if (gamepadInvertRoll_) {
+    rollAxis = -rollAxis;
+  }
+  if (gamepadInvertZoom_) {
+    zoomAxis = -zoomAxis;
+  }
+
+  camera_.yaw += yawAxis * gamepadLookSensitivity_ * deltaTime;
+  camera_.pitch -= pitchAxis * gamepadLookSensitivity_ * deltaTime;
+  camera_.roll += rollAxis * gamepadRollSensitivity_ * deltaTime;
+  camera_.distance += zoomAxis * gamepadZoomSensitivity_ * deltaTime;
+
+  updateAxis(gamepadZoomInAxis_);
+  updateAxis(gamepadZoomOutAxis_);
+  float zoomIn = normalizeTrigger(gamepadAxisRaw_[gamepadZoomInAxis_]);
+  float zoomOut = normalizeTrigger(gamepadAxisRaw_[gamepadZoomOutAxis_]);
+  float triggerZoom = (zoomOut - zoomIn) * gamepadTriggerZoomSensitivity_ * deltaTime;
+  camera_.distance += triggerZoom;
+
+  if (isGamepadButtonJustPressed(gamepadResetButton_)) {
+    camera_.reset();
+    holdToggleState_.reset();
+  }
+  if (isGamepadButtonJustPressed(gamepadPauseButton_)) {
+    togglePause();
+  }
+  if (isGamepadButtonJustPressed(gamepadToggleUIButton_)) {
+    toggleUI();
+  }
 }
 
 void InputManager::shutdown() { window_ = nullptr; }
@@ -530,18 +700,10 @@ const char *InputManager::getActionName(KeyAction action) const {
     return "Zoom In";
   case KeyAction::ZoomOut:
     return "Zoom Out";
-  case KeyAction::ToggleAccessibility:
-    return "Accessibility Menu";
-  case KeyAction::ToggleHighContrast:
-    return "High Contrast";
-  case KeyAction::ToggleReducedMotion:
-    return "Reduced Motion";
   case KeyAction::IncreaseFontSize:
     return "Increase Font";
   case KeyAction::DecreaseFontSize:
     return "Decrease Font";
-  case KeyAction::CycleColorblindMode:
-    return "Cycle Colorblind";
   case KeyAction::IncreaseTimeScale:
     return "Speed Up";
   case KeyAction::DecreaseTimeScale:
@@ -605,10 +767,6 @@ void InputManager::onMouseMove(double x, double y) {
 void InputManager::onScroll(double /*xoffset*/, double yoffset) {
   scrollDelta_ = static_cast<float>(yoffset);
 }
-
-float InputManager::getShaderMouseX() const { return mouseX_; }
-
-float InputManager::getShaderMouseY() const { return mouseY_; }
 
 float InputManager::getEffectiveDeltaTime(float rawDeltaTime) const {
   if (paused_) {

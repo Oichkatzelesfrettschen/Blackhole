@@ -4,7 +4,7 @@
 
 #include <iostream>
 
-#include <GL/glew.h>
+#include "gl_loader.h"
 #include <GLFW/glfw3.h>
 
 void APIENTRY GLDebugMessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity,

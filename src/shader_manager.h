@@ -1,7 +1,7 @@
 #ifndef SHADER_MANAGER_H
 #define SHADER_MANAGER_H
 
-#include <GL/glew.h>
+#include "gl_loader.h"
 #include <map>
 #include <string>
 #include <vector>

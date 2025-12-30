@@ -27,12 +27,8 @@ enum class KeyAction {
   CameraRollRight,
   ZoomIn,
   ZoomOut,
-  ToggleAccessibility,
-  ToggleHighContrast,
-  ToggleReducedMotion,
   IncreaseFontSize,
   DecreaseFontSize,
-  CycleColorblindMode,
   IncreaseTimeScale,
   DecreaseTimeScale,
   COUNT
@@ -42,14 +38,14 @@ struct CameraState {
   float yaw = 0.0f;
   float pitch = 0.0f;
   float roll = 0.0f;
-  float distance = 5.0f;
+  float distance = 15.0f;
   float fov = 45.0f;
 
   void reset() {
     yaw = 0.0f;
     pitch = 0.0f;
     roll = 0.0f;
-    distance = 5.0f;
+    distance = 15.0f;
     fov = 45.0f;
   }
 };
@@ -153,6 +149,49 @@ public:
   void setHoldToToggleCamera(bool enabled) { holdToToggleCamera_ = enabled; }
   HoldToggleState &holdToggleState() { return holdToggleState_; }
 
+  // Gamepad settings
+  bool isGamepadEnabled() const { return gamepadEnabled_; }
+  void setGamepadEnabled(bool enabled) { gamepadEnabled_ = enabled; }
+  float getGamepadDeadzone() const { return gamepadDeadzone_; }
+  void setGamepadDeadzone(float deadzone) { gamepadDeadzone_ = deadzone; }
+  float getGamepadLookSensitivity() const { return gamepadLookSensitivity_; }
+  void setGamepadLookSensitivity(float sens) { gamepadLookSensitivity_ = sens; }
+  float getGamepadRollSensitivity() const { return gamepadRollSensitivity_; }
+  void setGamepadRollSensitivity(float sens) { gamepadRollSensitivity_ = sens; }
+  float getGamepadZoomSensitivity() const { return gamepadZoomSensitivity_; }
+  void setGamepadZoomSensitivity(float sens) { gamepadZoomSensitivity_ = sens; }
+  float getGamepadTriggerZoomSensitivity() const { return gamepadTriggerZoomSensitivity_; }
+  void setGamepadTriggerZoomSensitivity(float sens) { gamepadTriggerZoomSensitivity_ = sens; }
+  bool isGamepadXInverted() const { return gamepadInvertX_; }
+  void setGamepadXInverted(bool inv) { gamepadInvertX_ = inv; }
+  bool isGamepadYInverted() const { return gamepadInvertY_; }
+  void setGamepadYInverted(bool inv) { gamepadInvertY_ = inv; }
+  bool isGamepadRollInverted() const { return gamepadInvertRoll_; }
+  void setGamepadRollInverted(bool inv) { gamepadInvertRoll_ = inv; }
+  bool isGamepadZoomInverted() const { return gamepadInvertZoom_; }
+  void setGamepadZoomInverted(bool inv) { gamepadInvertZoom_ = inv; }
+  int getGamepadYawAxis() const { return gamepadYawAxis_; }
+  void setGamepadYawAxis(int axis) { gamepadYawAxis_ = axis; }
+  int getGamepadPitchAxis() const { return gamepadPitchAxis_; }
+  void setGamepadPitchAxis(int axis) { gamepadPitchAxis_ = axis; }
+  int getGamepadRollAxis() const { return gamepadRollAxis_; }
+  void setGamepadRollAxis(int axis) { gamepadRollAxis_ = axis; }
+  int getGamepadZoomAxis() const { return gamepadZoomAxis_; }
+  void setGamepadZoomAxis(int axis) { gamepadZoomAxis_ = axis; }
+  int getGamepadZoomInAxis() const { return gamepadZoomInAxis_; }
+  void setGamepadZoomInAxis(int axis) { gamepadZoomInAxis_ = axis; }
+  int getGamepadZoomOutAxis() const { return gamepadZoomOutAxis_; }
+  void setGamepadZoomOutAxis(int axis) { gamepadZoomOutAxis_ = axis; }
+  int getGamepadResetButton() const { return gamepadResetButton_; }
+  void setGamepadResetButton(int button) { gamepadResetButton_ = button; }
+  int getGamepadPauseButton() const { return gamepadPauseButton_; }
+  void setGamepadPauseButton(int button) { gamepadPauseButton_ = button; }
+  int getGamepadToggleUIButton() const { return gamepadToggleUIButton_; }
+  void setGamepadToggleUIButton(int button) { gamepadToggleUIButton_ = button; }
+  float getGamepadAxisRaw(int axis) const;
+  float getGamepadAxisFiltered(int axis) const;
+  bool isGamepadConnected() const;
+
   // Key remapping mode
   bool isRemappingKey() const { return remappingAction_ != KeyAction::COUNT; }
   KeyAction getRemappingAction() const { return remappingAction_; }
@@ -164,10 +203,6 @@ public:
   void onMouseButton(int button, int action, int mods);
   void onMouseMove(double x, double y);
   void onScroll(double xoffset, double yoffset);
-
-  // For shader uniforms
-  float getShaderMouseX() const;
-  float getShaderMouseY() const;
 
   // Effective delta time (accounts for pause and time scale)
   float getEffectiveDeltaTime(float rawDeltaTime) const;
@@ -181,6 +216,8 @@ private:
   void initDefaultBindings();
   void updateCamera(float deltaTime);
   void handleHoldToToggle(KeyAction action, bool justPressed, bool justReleased);
+  void updateGamepad(float deltaTime);
+  bool isGamepadButtonJustPressed(int button) const;
 
   GLFWwindow *window_ = nullptr;
 
@@ -235,6 +272,31 @@ private:
   // Hold-to-toggle
   bool holdToToggleCamera_ = false;
   HoldToggleState holdToggleState_;
+
+  // Gamepad config
+  bool gamepadEnabled_ = true;
+  float gamepadDeadzone_ = 0.15f;
+  float gamepadLookSensitivity_ = 90.0f;
+  float gamepadRollSensitivity_ = 90.0f;
+  float gamepadZoomSensitivity_ = 6.0f;
+  float gamepadTriggerZoomSensitivity_ = 8.0f;
+  bool gamepadInvertX_ = false;
+  bool gamepadInvertY_ = false;
+  bool gamepadInvertRoll_ = false;
+  bool gamepadInvertZoom_ = false;
+  int gamepadYawAxis_ = 2;     // GLFW_GAMEPAD_AXIS_RIGHT_X
+  int gamepadPitchAxis_ = 3;   // GLFW_GAMEPAD_AXIS_RIGHT_Y
+  int gamepadRollAxis_ = 0;    // GLFW_GAMEPAD_AXIS_LEFT_X
+  int gamepadZoomAxis_ = 1;    // GLFW_GAMEPAD_AXIS_LEFT_Y
+  int gamepadZoomInAxis_ = 5;  // GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER
+  int gamepadZoomOutAxis_ = 4; // GLFW_GAMEPAD_AXIS_LEFT_TRIGGER
+  int gamepadResetButton_ = 3;   // GLFW_GAMEPAD_BUTTON_Y
+  int gamepadPauseButton_ = 7;   // GLFW_GAMEPAD_BUTTON_START
+  int gamepadToggleUIButton_ = 6; // GLFW_GAMEPAD_BUTTON_BACK
+  float gamepadAxisRaw_[GLFW_GAMEPAD_AXIS_LAST + 1] = {};
+  float gamepadAxisFiltered_[GLFW_GAMEPAD_AXIS_LAST + 1] = {};
+  bool gamepadButtonState_[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+  bool prevGamepadButtonState_[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
 };
 
 #endif // INPUT_H

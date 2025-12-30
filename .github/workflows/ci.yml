@@ -15,7 +15,12 @@ jobs:
         pip install conan
         sudo apt-get update
         sudo apt-get install -y libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+    - name: Conan install
+      run: |
+        conan profile detect --force
+        conan remote update conancenter --url="https://center2.conan.io"
+        conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23
     - name: Configure CMake
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -S . -B build/build/Release -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=build/build/Release/generators/conan_toolchain.cmake
     - name: Build
-      run: cmake --build build
+      run: cmake --build build/build/Release

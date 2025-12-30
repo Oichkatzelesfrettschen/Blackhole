@@ -9,8 +9,6 @@
     {
       "name": "base",
       "hidden": true,
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "installDir": "${sourceDir}/install/${presetName}",
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
@@ -20,8 +18,11 @@
       "displayName": "Release",
       "description": "Optimized release build",
       "inherits": "base",
+      "binaryDir": "${sourceDir}/build/build/Release",
+      "installDir": "${sourceDir}/install/Release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/build/Release/generators/conan_toolchain.cmake",
         "ENABLE_HARDENING": "ON",
         "ENABLE_LINKER_HARDENING": "ON",
         "WARNING_LEVEL": "5"
@@ -32,8 +33,11 @@
       "displayName": "Debug",
       "description": "Debug build with symbols",
       "inherits": "base",
+      "binaryDir": "${sourceDir}/build/build/Debug",
+      "installDir": "${sourceDir}/install/Debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/build/Debug/generators/conan_toolchain.cmake",
         "ENABLE_GL_DEBUG": "ON",
         "WARNING_LEVEL": "5"
       }

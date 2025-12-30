@@ -17,9 +17,13 @@
 #include <string>
 #include <vector>
 
-#include <GL/glew.h>
+#include "gl_loader.h"
+#include <glm/glm.hpp>
 
 GLuint createColorTexture(int width, int height, bool hdr = true);
+GLuint createColorTexture32f(int width, int height);
+GLuint createFloatTexture2D(int width, int height, const std::vector<float> &data);
+GLuint createFloatTexture3D(int width, int height, int depth, const std::vector<float> &data);
 
 struct FramebufferCreateInfo {
   GLuint colorTexture = 0;
@@ -36,7 +40,10 @@ struct RenderToTextureInfo {
   std::string vertexShader = "shader/simple.vert";
   std::string fragShader;
   std::map<std::string, float> floatUniforms;
+  std::map<std::string, glm::vec3> vec3Uniforms;
+  std::map<std::string, glm::mat3> mat3Uniforms;
   std::map<std::string, GLuint> textureUniforms;
+  std::map<std::string, GLuint> texture3DUniforms;
   std::map<std::string, GLuint> cubemapUniforms;
   GLuint targetTexture;
   int width;
@@ -49,5 +56,6 @@ struct RenderToTextureInfo {
 };
 
 void renderToTexture(const RenderToTextureInfo &rtti);
+void clearRenderToTextureCache();
 
 #endif /* RENDER_H */

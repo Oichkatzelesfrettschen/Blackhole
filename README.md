@@ -2,23 +2,58 @@
 
 ![Screenshot](docs/blackhole-screenrecord.gif)
 
+## Highlights
+- Schwarzschild/Kerr geodesic tracing (fragment + compute paths).
+- LUT-driven emissivity/redshift and validation assets in `assets/`.
+- C++23 + OpenGL 4.6 with tunable post-processing and controls.
+
 ## Prerequisite
 
 - [cmake](https://cmake.org/)
-- [conan](https://conan.io/) package manager [^1][^2]
+- [conan](https://conan.io/) package manager [^1]
+- C++23-capable compiler
+- OpenGL 4.6-capable GPU/driver
 
 [^1]: You might need to configure [$HOME/.conan/conan.conf](https://docs.conan.io/en/latest/reference/config_files/conan.conf.html) and Conan [profiles](https://docs.conan.io/en/latest/reference/profiles.html) if the `default profile` is not generated due to different build environments on your distribution.
-[^2]: Conan 1.xx instead of conan 2.xx or higher is suggested in order to avoid unnecessary problems.
 
 ## Build the code
 
 ```bash
+# Install dependencies with Conan (output folder must match your CMake build dir).
+conan profile detect --force
+conan remote update conancenter --url="https://center2.conan.io"
+conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23
+./scripts/fetch_implot.sh
+
 # Configure the project and generate a native build system.
-cmake -DCMAKE_BUILD_TYPE=Release -S . -B build
+cmake --preset release
+cmake --build --preset release
+
+# Optional RmlUi overlay (MangoHUD port groundwork).
+cmake --preset release -DENABLE_RMLUI=ON
+
+# Optional Tracy profiling.
+cmake --preset release -DENABLE_TRACY=ON
+
+# Or explicit configure/build.
+cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/build/Release \
+  -DCMAKE_TOOLCHAIN_FILE=build/build/Release/generators/conan_toolchain.cmake
 
 # Compile / build the project.
-cmake --build build
+cmake --build build/build/Release
 ```
+
+## OpenGL 4.6 scope
+
+See `docs/opengl-4-6-scope.md` for validation and platform notes.
+
+## Status and validation
+
+- Roadmap + issue tracking: `STATUS.md` and `TODO_FIXES.md`.
+- GLSL validation (warnings treated as errors only when `ENABLE_WERROR=ON`):
+  `cmake --build --preset release --target validate-shaders`
+- Physics validation tables:
+  `python3 scripts/generate_validation_tables.py`
 
 ## Acknowledgements
 

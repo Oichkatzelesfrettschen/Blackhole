@@ -6,6 +6,7 @@
 // Third-party library headers
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 // Local headers
 #include "shader.h"
@@ -22,7 +23,7 @@ GLuint createColorTexture(int width, int height, bool hdr) {
   glGenTextures(1, &colorTexture);
 
   glBindTexture(GL_TEXTURE_2D, colorTexture);
-  glTexImage2D(GL_TEXTURE_2D, 0, hdr ? GL_RGB16F : GL_RGB, width, height, 0, GL_RGB,
+  glTexImage2D(GL_TEXTURE_2D, 0, hdr ? GL_RGBA16F : GL_RGBA, width, height, 0, GL_RGBA,
                hdr ? GL_FLOAT : GL_UNSIGNED_BYTE, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -30,6 +31,59 @@ GLuint createColorTexture(int width, int height, bool hdr) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
   return colorTexture;
+}
+
+GLuint createColorTexture32f(int width, int height) {
+  GLuint colorTexture;
+  glGenTextures(1, &colorTexture);
+
+  glBindTexture(GL_TEXTURE_2D, colorTexture);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  return colorTexture;
+}
+
+GLuint createFloatTexture2D(int width, int height, const std::vector<float> &data) {
+  GLuint texture;
+  glGenTextures(1, &texture);
+
+  glBindTexture(GL_TEXTURE_2D, texture);
+
+  const std::size_t expected = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+  const float *pixels = data.size() >= expected ? data.data() : nullptr;
+
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, pixels);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  return texture;
+}
+
+GLuint createFloatTexture3D(int width, int height, int depth, const std::vector<float> &data) {
+  GLuint texture;
+  glGenTextures(1, &texture);
+
+  glBindTexture(GL_TEXTURE_3D, texture);
+
+  const std::size_t expected = static_cast<std::size_t>(width) *
+                               static_cast<std::size_t>(height) *
+                               static_cast<std::size_t>(depth);
+  const float *pixels = data.size() >= expected ? data.data() : nullptr;
+
+  glTexImage3D(GL_TEXTURE_3D, 0, GL_R32F, width, height, depth, 0, GL_RED, GL_FLOAT, pixels);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+
+  return texture;
 }
 
 GLuint createFramebuffer(const FramebufferCreateInfo &info) {
@@ -109,7 +163,7 @@ static bool bindToTextureUnit(GLuint program, const std::string &name, GLenum te
     glUniform1i(loc, textureUnitIndex);
 
     // Set up the texture units.
-    glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(textureUnitIndex));
+    glActiveTexture(GL_TEXTURE0 + static_cast<GLuint>(textureUnitIndex));
     glBindTexture(textureType, texture);
     return true;
   } else {
@@ -118,10 +172,19 @@ static bool bindToTextureUnit(GLuint program, const std::string &name, GLenum te
   }
 }
 
+static std::map<GLuint, GLuint> textureFramebufferMap;
+static std::map<std::string, GLuint> shaderProgramMap;
+
+void clearRenderToTextureCache() {
+  for (auto const &[texture, framebuffer] : textureFramebufferMap) {
+    glDeleteFramebuffers(1, &framebuffer);
+  }
+  textureFramebufferMap.clear();
+}
+
 void renderToTexture(const RenderToTextureInfo &rtti) {
   // Lazy creation of a framebuffer as the render target and attach the texture
   // as the color attachment.
-  static std::map<GLuint, GLuint> textureFramebufferMap;
   GLuint targetFramebuffer;
   if (!textureFramebufferMap.count(rtti.targetTexture)) {
     FramebufferCreateInfo createInfo;
@@ -133,7 +196,6 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
   }
 
   // Lazy-load the shader program.
-  static std::map<std::string, GLuint> shaderProgramMap;
   GLuint program;
   if (!shaderProgramMap.count(rtti.fragShader)) {
     program = createShaderProgram(rtti.vertexShader, rtti.fragShader);
@@ -174,10 +236,33 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
         }
       }
 
+      // Update vec3 uniforms
+      for (auto const &[name, val] : rtti.vec3Uniforms) {
+        GLint loc = glGetUniformLocation(program, name.c_str());
+        if (loc != -1) {
+          glUniform3f(loc, val.x, val.y, val.z);
+        } else {
+          std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+        }
+      }
+
+      // Update mat3 uniforms
+      for (auto const &[name, val] : rtti.mat3Uniforms) {
+        GLint loc = glGetUniformLocation(program, name.c_str());
+        if (loc != -1) {
+          glUniformMatrix3fv(loc, 1, GL_FALSE, glm::value_ptr(val));
+        } else {
+          std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+        }
+      }
+
       // Update texture uniforms
       int textureUnit = 0;
       for (auto const &[name, texture] : rtti.textureUniforms) {
         bindToTextureUnit(program, name, GL_TEXTURE_2D, texture, textureUnit++);
+      }
+      for (auto const &[name, texture] : rtti.texture3DUniforms) {
+        bindToTextureUnit(program, name, GL_TEXTURE_3D, texture, textureUnit++);
       }
       for (auto const &[name, texture] : rtti.cubemapUniforms) {
         bindToTextureUnit(program, name, GL_TEXTURE_CUBE_MAP, texture, textureUnit++);

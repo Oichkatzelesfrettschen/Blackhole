@@ -3,100 +3,69 @@
 
 #include <string>
 
-// Colorblind filter types based on research from:
-// https://www.inf.ufrgs.br/~oliveira/pubs_files/CVD_Simulation/CVD_Simulation.html
-enum class ColorblindMode {
-  None = 0,
-  Protanopia,    // Red-blind (~1% of males)
-  Deuteranopia,  // Green-blind (~1% of males)
-  Tritanopia,    // Blue-blind (~0.003% of population)
-  Achromatopsia, // Complete color blindness (monochromacy)
-  COUNT
-};
-
-// Photosensitivity protection levels per WCAG 2.3.1
-// https://www.w3.org/TR/WCAG22/#seizures-and-physical-reactions
-enum class PhotosensitivityLevel {
-  None = 0,        // No protection (user acknowledged warning)
-  Low,             // Reduce bloom intensity by 50%
-  Medium,          // Reduce bloom intensity by 75%, limit flash frequency
-  High,            // Minimal bloom, aggressive flash limiting
-  Maximum          // Disable all flashing effects entirely
-};
-
-// All user-configurable settings
+// User-configurable settings (core simulation only)
 struct Settings {
   // === DISPLAY ===
   int windowWidth = 1920;
   int windowHeight = 1080;
   bool fullscreen = false;
-  bool vsync = true;
+  int swapInterval = 1;         // 0=off, 1=vsync, 2=triple (driver dependent)
+  float renderScale = 1.0f;
   float gamma = 2.5f;
 
-  // === ACCESSIBILITY - VISION ===
-  ColorblindMode colorblindMode = ColorblindMode::None;
-  float colorblindStrength = 1.0f;  // 0.0 = off, 1.0 = full simulation/correction
-  bool highContrastUI = false;
-  bool invertColors = false;
-  float uiFontScale = 1.0f;         // 0.75 - 2.0
-
-  // === ACCESSIBILITY - PHOTOSENSITIVITY ===
-  PhotosensitivityLevel photosensitivityLevel = PhotosensitivityLevel::Medium;
-  bool photosensitivityWarningShown = false;
-  float maxBloomIntensity = 0.5f;   // 0.0 - 1.0, clamped in shader
-  float maxFlashFrequency = 2.0f;   // Max flashes per second (WCAG says <3)
-  bool reduceMotion = false;        // Slows/disables animations
-
-  // === ACCESSIBILITY - STEREOBLINDNESS (Depth Perception) ===
-  // For users who cannot perceive stereoscopic depth (~4-7% of population)
-  bool stereoblindModeEnabled = false;  // Master toggle for depth cue enhancements
-  bool depthFogEnabled = false;         // Atmospheric perspective fog
-  float depthFogDensity = 0.3f;         // 0.0 - 1.0
-  float depthFogR = 0.1f;               // Fog color RGB
-  float depthFogG = 0.1f;
-  float depthFogB = 0.15f;
-  bool depthEdgeOutlines = false;       // Edge detection outlines
-  float depthEdgeThreshold = 0.5f;      // 0.0 - 1.0
-  float depthEdgeR = 1.0f;              // Edge color RGB
-  float depthEdgeG = 1.0f;
-  float depthEdgeB = 1.0f;
-  bool depthDesaturation = false;       // Distant objects desaturate
-  float depthDesatStrength = 0.5f;      // 0.0 - 1.0
-  bool chromaDepthEnabled = false;      // Warm near, cool far color shift
-
-  // === ACCESSIBILITY - MOTOR ===
-  bool holdToToggleCamera = false;  // Toggle instead of hold for camera controls
-  bool holdToToggleUI = false;      // Toggle instead of hold for UI interactions
-  float mouseSensitivity = 1.0f;    // 0.1 - 3.0
-  float keyboardSensitivity = 1.0f; // 0.1 - 3.0
-  float scrollSensitivity = 1.0f;   // 0.1 - 3.0
+  // === CONTROLS ===
+  float mouseSensitivity = 1.0f;
+  float keyboardSensitivity = 1.0f;
+  float scrollSensitivity = 1.0f;
   bool invertMouseX = false;
   bool invertMouseY = false;
   bool invertKeyboardX = false;
   bool invertKeyboardY = false;
+  bool holdToToggleCamera = false;
+  float timeScale = 1.0f;
 
-  // === ACCESSIBILITY - COGNITIVE ===
-  bool showControlHints = true;     // Show keyboard shortcuts on screen
-  float animationSpeed = 1.0f;      // Global animation speed multiplier
-  float timeScale = 1.0f;           // Simulation time scale (for pause: 0.0)
+  // === KEY BINDINGS ===
+  int keyQuit = 256;             // GLFW_KEY_ESCAPE
+  int keyToggleUI = 72;          // GLFW_KEY_H
+  int keyToggleFullscreen = 300; // GLFW_KEY_F11
+  int keyResetCamera = 82;       // GLFW_KEY_R
+  int keyResetSettings = 259;    // GLFW_KEY_BACKSPACE
+  int keyPause = 80;             // GLFW_KEY_P
+  int keyCameraForward = 87;     // GLFW_KEY_W
+  int keyCameraBackward = 83;    // GLFW_KEY_S
+  int keyCameraLeft = 65;        // GLFW_KEY_A
+  int keyCameraRight = 68;       // GLFW_KEY_D
+  int keyCameraUp = 69;          // GLFW_KEY_E
+  int keyCameraDown = 81;        // GLFW_KEY_Q
+  int keyCameraRollLeft = 90;    // GLFW_KEY_Z
+  int keyCameraRollRight = 67;   // GLFW_KEY_C
+  int keyZoomIn = 61;            // GLFW_KEY_EQUAL (+)
+  int keyZoomOut = 45;           // GLFW_KEY_MINUS (-)
+  int keyIncreaseFontSize = 293; // GLFW_KEY_F4
+  int keyDecreaseFontSize = 294; // GLFW_KEY_F5
+  int keyIncreaseTimeScale = 93; // GLFW_KEY_RIGHT_BRACKET
+  int keyDecreaseTimeScale = 91; // GLFW_KEY_LEFT_BRACKET
 
-  // === CONTROLS - KEY BINDINGS ===
-  int keyQuit = 256;                // GLFW_KEY_ESCAPE
-  int keyToggleUI = 72;             // GLFW_KEY_H
-  int keyToggleFullscreen = 300;    // GLFW_KEY_F11
-  int keyResetCamera = 82;          // GLFW_KEY_R
-  int keyPause = 80;                // GLFW_KEY_P
-  int keyCameraForward = 87;        // GLFW_KEY_W
-  int keyCameraBackward = 83;       // GLFW_KEY_S
-  int keyCameraLeft = 65;           // GLFW_KEY_A
-  int keyCameraRight = 68;          // GLFW_KEY_D
-  int keyCameraUp = 69;             // GLFW_KEY_E
-  int keyCameraDown = 81;           // GLFW_KEY_Q
-  int keyCameraRollLeft = 90;       // GLFW_KEY_Z
-  int keyCameraRollRight = 67;      // GLFW_KEY_C
-  int keyZoomIn = 61;               // GLFW_KEY_EQUAL (+)
-  int keyZoomOut = 45;              // GLFW_KEY_MINUS (-)
-  int keyAccessibilityMenu = 290;   // GLFW_KEY_F1
+  // === GAMEPAD CONTROLS ===
+  bool gamepadEnabled = true;
+  float gamepadDeadzone = 0.15f;
+  float gamepadLookSensitivity = 90.0f;
+  float gamepadRollSensitivity = 90.0f;
+  float gamepadZoomSensitivity = 6.0f;
+  float gamepadTriggerZoomSensitivity = 8.0f;
+  bool gamepadInvertX = false;
+  bool gamepadInvertY = false;
+  bool gamepadInvertRoll = false;
+  bool gamepadInvertZoom = false;
+  int gamepadYawAxis = 2;         // GLFW_GAMEPAD_AXIS_RIGHT_X
+  int gamepadPitchAxis = 3;       // GLFW_GAMEPAD_AXIS_RIGHT_Y
+  int gamepadRollAxis = 0;        // GLFW_GAMEPAD_AXIS_LEFT_X
+  int gamepadZoomAxis = 1;        // GLFW_GAMEPAD_AXIS_LEFT_Y
+  int gamepadZoomInAxis = 5;      // GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER
+  int gamepadZoomOutAxis = 4;     // GLFW_GAMEPAD_AXIS_LEFT_TRIGGER
+  int gamepadResetButton = 3;     // GLFW_GAMEPAD_BUTTON_Y
+  int gamepadPauseButton = 7;     // GLFW_GAMEPAD_BUTTON_START
+  int gamepadToggleUIButton = 6;  // GLFW_GAMEPAD_BUTTON_BACK
 
   // === RENDERING ===
   bool tonemappingEnabled = true;
@@ -107,12 +76,14 @@ struct Settings {
   float cameraYaw = 0.0f;
   float cameraPitch = 0.0f;
   float cameraRoll = 0.0f;
-  float cameraDistance = 5.0f;
+  float cameraDistance = 15.0f;
+  int cameraMode = 0;          // 0=Input, 1=Front, 2=Top, 3=Orbit
+  float orbitRadius = 15.0f;
+  float orbitSpeed = 6.0f;     // Degrees per second
 
   // === BLACK HOLE PARAMETERS ===
   bool gravitationalLensing = true;
   bool renderBlackHole = true;
-  bool mouseControl = true;
   bool adiskEnabled = true;
   bool adiskParticle = true;
   float adiskDensityV = 2.0f;
@@ -141,18 +112,6 @@ public:
   Settings &get() { return settings_; }
   const Settings &get() const { return settings_; }
 
-  // Convenience accessors
-  bool isPhotosensitivityProtectionEnabled() const {
-    return settings_.photosensitivityLevel != PhotosensitivityLevel::None;
-  }
-
-  bool isColorblindFilterEnabled() const {
-    return settings_.colorblindMode != ColorblindMode::None;
-  }
-
-  float getEffectiveBloomStrength() const;
-  float getEffectiveAnimationSpeed() const;
-
 private:
   SettingsManager() = default;
   ~SettingsManager() = default;
@@ -162,11 +121,5 @@ private:
   Settings settings_;
   std::string lastFilepath_;
 };
-
-// String conversion utilities for enums
-const char *colorblindModeToString(ColorblindMode mode);
-ColorblindMode stringToColorblindMode(const std::string &str);
-const char *photosensitivityLevelToString(PhotosensitivityLevel level);
-PhotosensitivityLevel stringToPhotosensitivityLevel(const std::string &str);
 
 #endif // SETTINGS_H

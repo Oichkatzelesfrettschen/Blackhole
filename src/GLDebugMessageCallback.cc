@@ -40,7 +40,7 @@
 // glDebugMessageCallback(GLDebugMessageCallback, nullptr);
 
 // REQUIREMENTS: OpenGL version with the KHR_debug extension available.
-// modified for C++ by Plasmoxy [7. 5. 2020], I'm using: GLEW and GLFW3, OpenGL 4.6
+// modified for C++ by Plasmoxy [7. 5. 2020], loader swapped to glbinding + GLFW3, OpenGL 4.6
 // original gist: https://gist.github.com/liam-middlebrook/c52b069e4be2d87a6d2f
 
 #include "GLDebugMessageCallback.h"

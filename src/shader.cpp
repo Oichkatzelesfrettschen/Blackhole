@@ -10,7 +10,7 @@
 #include <vector>
 
 // Third-party library headers
-#include <GL/glew.h>
+#include "gl_loader.h"
 
 // Base directory for shader files (set during loading)
 static std::string shaderBaseDir = "shader/";
@@ -108,17 +108,16 @@ static GLuint compileShader(const std::string &shaderSource, GLenum shaderType) 
   glShaderSource(shader, 1, &pShaderSource, nullptr);
   glCompileShader(shader);
 
-  GLint success = GL_FALSE;
+  GLint success = 0;
   glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-  if (success == GL_FALSE) {
-
-    GLint maxLength = 0;
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &maxLength);
-
-    // The maxLength includes the NULL character
+  GLint maxLength = 0;
+  glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &maxLength);
+  if (maxLength > 1) {
     std::vector<GLchar> infoLog(static_cast<size_t>(maxLength));
-    glGetShaderInfoLog(shader, maxLength, &maxLength, &infoLog[0]);
-    std::cout << infoLog[0] << std::endl;
+    glGetShaderInfoLog(shader, maxLength, nullptr, infoLog.data());
+    std::cerr << infoLog.data() << std::endl;
+  }
+  if (success == 0) {
     glDeleteShader(shader);
     throw "Failed to compile the shader.";
   }
@@ -145,17 +144,17 @@ GLuint createShaderProgram(const std::string &vertexShaderFile,
 
   // Link the program.
   glLinkProgram(program);
-  GLint isLinked = GL_FALSE;
+  GLint isLinked = 0;
   glGetProgramiv(program, GL_LINK_STATUS, &isLinked);
-  if (isLinked == GL_FALSE) {
-    int maxLength;
-    glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
-    if (maxLength > 0) {
-      std::vector<GLchar> infoLog(static_cast<size_t>(maxLength));
-      glGetProgramInfoLog(program, maxLength, NULL, &infoLog[0]);
-      std::cout << infoLog[0] << std::endl;
-      throw "Failed to link the shader.";
-    }
+  int maxLength = 0;
+  glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
+  if (maxLength > 1) {
+    std::vector<GLchar> infoLog(static_cast<size_t>(maxLength));
+    glGetProgramInfoLog(program, maxLength, nullptr, infoLog.data());
+    std::cerr << infoLog.data() << std::endl;
+  }
+  if (isLinked == 0) {
+    throw "Failed to link the shader.";
   }
 
   // Detach shaders after a successful link.
@@ -164,6 +163,34 @@ GLuint createShaderProgram(const std::string &vertexShaderFile,
 
   glDeleteShader(vertexShader);
   glDeleteShader(fragmentShader);
+
+  return program;
+}
+
+GLuint createComputeProgram(const std::string &computeShaderFile) {
+  std::cout << "Compiling compute shader: " << computeShaderFile << std::endl;
+  GLuint computeShader =
+      compileShader(readShaderWithIncludes(computeShaderFile), GL_COMPUTE_SHADER);
+
+  GLuint program = glCreateProgram();
+  glAttachShader(program, computeShader);
+  glLinkProgram(program);
+
+  GLint isLinked = 0;
+  glGetProgramiv(program, GL_LINK_STATUS, &isLinked);
+  int maxLength = 0;
+  glGetProgramiv(program, GL_INFO_LOG_LENGTH, &maxLength);
+  if (maxLength > 1) {
+    std::vector<GLchar> infoLog(static_cast<size_t>(maxLength));
+    glGetProgramInfoLog(program, maxLength, nullptr, infoLog.data());
+    std::cerr << infoLog.data() << std::endl;
+  }
+  if (isLinked == 0) {
+    throw "Failed to link the compute shader.";
+  }
+
+  glDetachShader(program, computeShader);
+  glDeleteShader(computeShader);
 
   return program;
 }

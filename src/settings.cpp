@@ -5,9 +5,6 @@
 #include <fstream>
 #include <sstream>
 
-// Simple JSON parsing without external dependencies
-// For production, consider nlohmann/json: https://github.com/nlohmann/json
-
 static std::string trim(const std::string &s) {
   size_t start = s.find_first_not_of(" \t\n\r");
   if (start == std::string::npos)
@@ -22,10 +19,8 @@ static std::string extractValue(const std::string &line) {
     return "";
   std::string value = line.substr(colonPos + 1);
   value = trim(value);
-  // Remove trailing comma if present
   if (!value.empty() && value.back() == ',')
     value.pop_back();
-  // Remove quotes for strings
   if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
     value = value.substr(1, value.size() - 2);
   }
@@ -36,13 +31,9 @@ static bool parseBool(const std::string &value) {
   return value == "true" || value == "1";
 }
 
-static int parseInt(const std::string &value) {
-  return std::stoi(value);
-}
+static int parseInt(const std::string &value) { return std::stoi(value); }
 
-static float parseFloat(const std::string &value) {
-  return std::stof(value);
-}
+static float parseFloat(const std::string &value) { return std::stof(value); }
 
 SettingsManager &SettingsManager::instance() {
   static SettingsManager instance;
@@ -58,6 +49,7 @@ bool SettingsManager::load(const std::string &filepath) {
   }
 
   std::string line;
+  bool swapIntervalParsed = false;
   while (std::getline(file, line)) {
     line = trim(line);
     if (line.empty() || line[0] == '{' || line[0] == '}')
@@ -74,40 +66,18 @@ bool SettingsManager::load(const std::string &filepath) {
       settings_.windowHeight = parseInt(value);
     else if (line.find("\"fullscreen\"") != std::string::npos)
       settings_.fullscreen = parseBool(value);
-    else if (line.find("\"vsync\"") != std::string::npos)
-      settings_.vsync = parseBool(value);
+    else if (line.find("\"swapInterval\"") != std::string::npos) {
+      settings_.swapInterval = parseInt(value);
+      swapIntervalParsed = true;
+    } else if (line.find("\"vsync\"") != std::string::npos && !swapIntervalParsed) {
+      settings_.swapInterval = parseBool(value) ? 1 : 0;
+    }
+    else if (line.find("\"renderScale\"") != std::string::npos)
+      settings_.renderScale = parseFloat(value);
     else if (line.find("\"gamma\"") != std::string::npos)
       settings_.gamma = parseFloat(value);
 
-    // Vision accessibility
-    else if (line.find("\"colorblindMode\"") != std::string::npos)
-      settings_.colorblindMode = stringToColorblindMode(value);
-    else if (line.find("\"colorblindStrength\"") != std::string::npos)
-      settings_.colorblindStrength = parseFloat(value);
-    else if (line.find("\"highContrastUI\"") != std::string::npos)
-      settings_.highContrastUI = parseBool(value);
-    else if (line.find("\"invertColors\"") != std::string::npos)
-      settings_.invertColors = parseBool(value);
-    else if (line.find("\"uiFontScale\"") != std::string::npos)
-      settings_.uiFontScale = parseFloat(value);
-
-    // Photosensitivity
-    else if (line.find("\"photosensitivityLevel\"") != std::string::npos)
-      settings_.photosensitivityLevel = stringToPhotosensitivityLevel(value);
-    else if (line.find("\"photosensitivityWarningShown\"") != std::string::npos)
-      settings_.photosensitivityWarningShown = parseBool(value);
-    else if (line.find("\"maxBloomIntensity\"") != std::string::npos)
-      settings_.maxBloomIntensity = parseFloat(value);
-    else if (line.find("\"maxFlashFrequency\"") != std::string::npos)
-      settings_.maxFlashFrequency = parseFloat(value);
-    else if (line.find("\"reduceMotion\"") != std::string::npos)
-      settings_.reduceMotion = parseBool(value);
-
-    // Motor accessibility
-    else if (line.find("\"holdToToggleCamera\"") != std::string::npos)
-      settings_.holdToToggleCamera = parseBool(value);
-    else if (line.find("\"holdToToggleUI\"") != std::string::npos)
-      settings_.holdToToggleUI = parseBool(value);
+    // Controls
     else if (line.find("\"mouseSensitivity\"") != std::string::npos)
       settings_.mouseSensitivity = parseFloat(value);
     else if (line.find("\"keyboardSensitivity\"") != std::string::npos)
@@ -122,12 +92,8 @@ bool SettingsManager::load(const std::string &filepath) {
       settings_.invertKeyboardX = parseBool(value);
     else if (line.find("\"invertKeyboardY\"") != std::string::npos)
       settings_.invertKeyboardY = parseBool(value);
-
-    // Cognitive accessibility
-    else if (line.find("\"showControlHints\"") != std::string::npos)
-      settings_.showControlHints = parseBool(value);
-    else if (line.find("\"animationSpeed\"") != std::string::npos)
-      settings_.animationSpeed = parseFloat(value);
+    else if (line.find("\"holdToToggleCamera\"") != std::string::npos)
+      settings_.holdToToggleCamera = parseBool(value);
     else if (line.find("\"timeScale\"") != std::string::npos)
       settings_.timeScale = parseFloat(value);
 
@@ -140,6 +106,8 @@ bool SettingsManager::load(const std::string &filepath) {
       settings_.keyToggleFullscreen = parseInt(value);
     else if (line.find("\"keyResetCamera\"") != std::string::npos)
       settings_.keyResetCamera = parseInt(value);
+    else if (line.find("\"keyResetSettings\"") != std::string::npos)
+      settings_.keyResetSettings = parseInt(value);
     else if (line.find("\"keyPause\"") != std::string::npos)
       settings_.keyPause = parseInt(value);
     else if (line.find("\"keyCameraForward\"") != std::string::npos)
@@ -162,8 +130,54 @@ bool SettingsManager::load(const std::string &filepath) {
       settings_.keyZoomIn = parseInt(value);
     else if (line.find("\"keyZoomOut\"") != std::string::npos)
       settings_.keyZoomOut = parseInt(value);
-    else if (line.find("\"keyAccessibilityMenu\"") != std::string::npos)
-      settings_.keyAccessibilityMenu = parseInt(value);
+    else if (line.find("\"keyIncreaseFontSize\"") != std::string::npos)
+      settings_.keyIncreaseFontSize = parseInt(value);
+    else if (line.find("\"keyDecreaseFontSize\"") != std::string::npos)
+      settings_.keyDecreaseFontSize = parseInt(value);
+    else if (line.find("\"keyIncreaseTimeScale\"") != std::string::npos)
+      settings_.keyIncreaseTimeScale = parseInt(value);
+    else if (line.find("\"keyDecreaseTimeScale\"") != std::string::npos)
+      settings_.keyDecreaseTimeScale = parseInt(value);
+
+    // Gamepad
+    else if (line.find("\"gamepadEnabled\"") != std::string::npos)
+      settings_.gamepadEnabled = parseBool(value);
+    else if (line.find("\"gamepadDeadzone\"") != std::string::npos)
+      settings_.gamepadDeadzone = parseFloat(value);
+    else if (line.find("\"gamepadLookSensitivity\"") != std::string::npos)
+      settings_.gamepadLookSensitivity = parseFloat(value);
+    else if (line.find("\"gamepadRollSensitivity\"") != std::string::npos)
+      settings_.gamepadRollSensitivity = parseFloat(value);
+    else if (line.find("\"gamepadZoomSensitivity\"") != std::string::npos)
+      settings_.gamepadZoomSensitivity = parseFloat(value);
+    else if (line.find("\"gamepadTriggerZoomSensitivity\"") != std::string::npos)
+      settings_.gamepadTriggerZoomSensitivity = parseFloat(value);
+    else if (line.find("\"gamepadInvertX\"") != std::string::npos)
+      settings_.gamepadInvertX = parseBool(value);
+    else if (line.find("\"gamepadInvertY\"") != std::string::npos)
+      settings_.gamepadInvertY = parseBool(value);
+    else if (line.find("\"gamepadInvertRoll\"") != std::string::npos)
+      settings_.gamepadInvertRoll = parseBool(value);
+    else if (line.find("\"gamepadInvertZoom\"") != std::string::npos)
+      settings_.gamepadInvertZoom = parseBool(value);
+    else if (line.find("\"gamepadYawAxis\"") != std::string::npos)
+      settings_.gamepadYawAxis = parseInt(value);
+    else if (line.find("\"gamepadPitchAxis\"") != std::string::npos)
+      settings_.gamepadPitchAxis = parseInt(value);
+    else if (line.find("\"gamepadRollAxis\"") != std::string::npos)
+      settings_.gamepadRollAxis = parseInt(value);
+    else if (line.find("\"gamepadZoomAxis\"") != std::string::npos)
+      settings_.gamepadZoomAxis = parseInt(value);
+    else if (line.find("\"gamepadZoomInAxis\"") != std::string::npos)
+      settings_.gamepadZoomInAxis = parseInt(value);
+    else if (line.find("\"gamepadZoomOutAxis\"") != std::string::npos)
+      settings_.gamepadZoomOutAxis = parseInt(value);
+    else if (line.find("\"gamepadResetButton\"") != std::string::npos)
+      settings_.gamepadResetButton = parseInt(value);
+    else if (line.find("\"gamepadPauseButton\"") != std::string::npos)
+      settings_.gamepadPauseButton = parseInt(value);
+    else if (line.find("\"gamepadToggleUIButton\"") != std::string::npos)
+      settings_.gamepadToggleUIButton = parseInt(value);
 
     // Rendering
     else if (line.find("\"tonemappingEnabled\"") != std::string::npos)
@@ -182,14 +196,18 @@ bool SettingsManager::load(const std::string &filepath) {
       settings_.cameraRoll = parseFloat(value);
     else if (line.find("\"cameraDistance\"") != std::string::npos)
       settings_.cameraDistance = parseFloat(value);
+    else if (line.find("\"cameraMode\"") != std::string::npos)
+      settings_.cameraMode = parseInt(value);
+    else if (line.find("\"orbitRadius\"") != std::string::npos)
+      settings_.orbitRadius = parseFloat(value);
+    else if (line.find("\"orbitSpeed\"") != std::string::npos)
+      settings_.orbitSpeed = parseFloat(value);
 
     // Black hole parameters
     else if (line.find("\"gravitationalLensing\"") != std::string::npos)
       settings_.gravitationalLensing = parseBool(value);
     else if (line.find("\"renderBlackHole\"") != std::string::npos)
       settings_.renderBlackHole = parseBool(value);
-    else if (line.find("\"mouseControl\"") != std::string::npos)
-      settings_.mouseControl = parseBool(value);
     else if (line.find("\"adiskEnabled\"") != std::string::npos)
       settings_.adiskEnabled = parseBool(value);
     else if (line.find("\"adiskParticle\"") != std::string::npos)
@@ -229,28 +247,11 @@ bool SettingsManager::save(const std::string &filepath) {
   file << "  \"windowWidth\": " << settings_.windowWidth << ",\n";
   file << "  \"windowHeight\": " << settings_.windowHeight << ",\n";
   file << "  \"fullscreen\": " << writeBool(settings_.fullscreen) << ",\n";
-  file << "  \"vsync\": " << writeBool(settings_.vsync) << ",\n";
+  file << "  \"swapInterval\": " << settings_.swapInterval << ",\n";
+  file << "  \"renderScale\": " << settings_.renderScale << ",\n";
   file << "  \"gamma\": " << settings_.gamma << ",\n";
 
-  // Vision accessibility
-  file << "  \"colorblindMode\": \"" << colorblindModeToString(settings_.colorblindMode) << "\",\n";
-  file << "  \"colorblindStrength\": " << settings_.colorblindStrength << ",\n";
-  file << "  \"highContrastUI\": " << writeBool(settings_.highContrastUI) << ",\n";
-  file << "  \"invertColors\": " << writeBool(settings_.invertColors) << ",\n";
-  file << "  \"uiFontScale\": " << settings_.uiFontScale << ",\n";
-
-  // Photosensitivity
-  file << "  \"photosensitivityLevel\": \""
-       << photosensitivityLevelToString(settings_.photosensitivityLevel) << "\",\n";
-  file << "  \"photosensitivityWarningShown\": "
-       << writeBool(settings_.photosensitivityWarningShown) << ",\n";
-  file << "  \"maxBloomIntensity\": " << settings_.maxBloomIntensity << ",\n";
-  file << "  \"maxFlashFrequency\": " << settings_.maxFlashFrequency << ",\n";
-  file << "  \"reduceMotion\": " << writeBool(settings_.reduceMotion) << ",\n";
-
-  // Motor accessibility
-  file << "  \"holdToToggleCamera\": " << writeBool(settings_.holdToToggleCamera) << ",\n";
-  file << "  \"holdToToggleUI\": " << writeBool(settings_.holdToToggleUI) << ",\n";
+  // Controls
   file << "  \"mouseSensitivity\": " << settings_.mouseSensitivity << ",\n";
   file << "  \"keyboardSensitivity\": " << settings_.keyboardSensitivity << ",\n";
   file << "  \"scrollSensitivity\": " << settings_.scrollSensitivity << ",\n";
@@ -258,10 +259,7 @@ bool SettingsManager::save(const std::string &filepath) {
   file << "  \"invertMouseY\": " << writeBool(settings_.invertMouseY) << ",\n";
   file << "  \"invertKeyboardX\": " << writeBool(settings_.invertKeyboardX) << ",\n";
   file << "  \"invertKeyboardY\": " << writeBool(settings_.invertKeyboardY) << ",\n";
-
-  // Cognitive accessibility
-  file << "  \"showControlHints\": " << writeBool(settings_.showControlHints) << ",\n";
-  file << "  \"animationSpeed\": " << settings_.animationSpeed << ",\n";
+  file << "  \"holdToToggleCamera\": " << writeBool(settings_.holdToToggleCamera) << ",\n";
   file << "  \"timeScale\": " << settings_.timeScale << ",\n";
 
   // Key bindings
@@ -269,6 +267,7 @@ bool SettingsManager::save(const std::string &filepath) {
   file << "  \"keyToggleUI\": " << settings_.keyToggleUI << ",\n";
   file << "  \"keyToggleFullscreen\": " << settings_.keyToggleFullscreen << ",\n";
   file << "  \"keyResetCamera\": " << settings_.keyResetCamera << ",\n";
+  file << "  \"keyResetSettings\": " << settings_.keyResetSettings << ",\n";
   file << "  \"keyPause\": " << settings_.keyPause << ",\n";
   file << "  \"keyCameraForward\": " << settings_.keyCameraForward << ",\n";
   file << "  \"keyCameraBackward\": " << settings_.keyCameraBackward << ",\n";
@@ -280,7 +279,32 @@ bool SettingsManager::save(const std::string &filepath) {
   file << "  \"keyCameraRollRight\": " << settings_.keyCameraRollRight << ",\n";
   file << "  \"keyZoomIn\": " << settings_.keyZoomIn << ",\n";
   file << "  \"keyZoomOut\": " << settings_.keyZoomOut << ",\n";
-  file << "  \"keyAccessibilityMenu\": " << settings_.keyAccessibilityMenu << ",\n";
+  file << "  \"keyIncreaseFontSize\": " << settings_.keyIncreaseFontSize << ",\n";
+  file << "  \"keyDecreaseFontSize\": " << settings_.keyDecreaseFontSize << ",\n";
+  file << "  \"keyIncreaseTimeScale\": " << settings_.keyIncreaseTimeScale << ",\n";
+  file << "  \"keyDecreaseTimeScale\": " << settings_.keyDecreaseTimeScale << ",\n";
+
+  // Gamepad
+  file << "  \"gamepadEnabled\": " << writeBool(settings_.gamepadEnabled) << ",\n";
+  file << "  \"gamepadDeadzone\": " << settings_.gamepadDeadzone << ",\n";
+  file << "  \"gamepadLookSensitivity\": " << settings_.gamepadLookSensitivity << ",\n";
+  file << "  \"gamepadRollSensitivity\": " << settings_.gamepadRollSensitivity << ",\n";
+  file << "  \"gamepadZoomSensitivity\": " << settings_.gamepadZoomSensitivity << ",\n";
+  file << "  \"gamepadTriggerZoomSensitivity\": " << settings_.gamepadTriggerZoomSensitivity
+       << ",\n";
+  file << "  \"gamepadInvertX\": " << writeBool(settings_.gamepadInvertX) << ",\n";
+  file << "  \"gamepadInvertY\": " << writeBool(settings_.gamepadInvertY) << ",\n";
+  file << "  \"gamepadInvertRoll\": " << writeBool(settings_.gamepadInvertRoll) << ",\n";
+  file << "  \"gamepadInvertZoom\": " << writeBool(settings_.gamepadInvertZoom) << ",\n";
+  file << "  \"gamepadYawAxis\": " << settings_.gamepadYawAxis << ",\n";
+  file << "  \"gamepadPitchAxis\": " << settings_.gamepadPitchAxis << ",\n";
+  file << "  \"gamepadRollAxis\": " << settings_.gamepadRollAxis << ",\n";
+  file << "  \"gamepadZoomAxis\": " << settings_.gamepadZoomAxis << ",\n";
+  file << "  \"gamepadZoomInAxis\": " << settings_.gamepadZoomInAxis << ",\n";
+  file << "  \"gamepadZoomOutAxis\": " << settings_.gamepadZoomOutAxis << ",\n";
+  file << "  \"gamepadResetButton\": " << settings_.gamepadResetButton << ",\n";
+  file << "  \"gamepadPauseButton\": " << settings_.gamepadPauseButton << ",\n";
+  file << "  \"gamepadToggleUIButton\": " << settings_.gamepadToggleUIButton << ",\n";
 
   // Rendering
   file << "  \"tonemappingEnabled\": " << writeBool(settings_.tonemappingEnabled) << ",\n";
@@ -292,11 +316,13 @@ bool SettingsManager::save(const std::string &filepath) {
   file << "  \"cameraPitch\": " << settings_.cameraPitch << ",\n";
   file << "  \"cameraRoll\": " << settings_.cameraRoll << ",\n";
   file << "  \"cameraDistance\": " << settings_.cameraDistance << ",\n";
+  file << "  \"cameraMode\": " << settings_.cameraMode << ",\n";
+  file << "  \"orbitRadius\": " << settings_.orbitRadius << ",\n";
+  file << "  \"orbitSpeed\": " << settings_.orbitSpeed << ",\n";
 
   // Black hole parameters
   file << "  \"gravitationalLensing\": " << writeBool(settings_.gravitationalLensing) << ",\n";
   file << "  \"renderBlackHole\": " << writeBool(settings_.renderBlackHole) << ",\n";
-  file << "  \"mouseControl\": " << writeBool(settings_.mouseControl) << ",\n";
   file << "  \"adiskEnabled\": " << writeBool(settings_.adiskEnabled) << ",\n";
   file << "  \"adiskParticle\": " << writeBool(settings_.adiskParticle) << ",\n";
   file << "  \"adiskDensityV\": " << settings_.adiskDensityV << ",\n";
@@ -313,88 +339,3 @@ bool SettingsManager::save(const std::string &filepath) {
 }
 
 void SettingsManager::resetToDefaults() { settings_ = Settings(); }
-
-float SettingsManager::getEffectiveBloomStrength() const {
-  float base = settings_.bloomStrength;
-
-  switch (settings_.photosensitivityLevel) {
-  case PhotosensitivityLevel::None:
-    return base;
-  case PhotosensitivityLevel::Low:
-    return base * settings_.maxBloomIntensity;
-  case PhotosensitivityLevel::Medium:
-    return base * settings_.maxBloomIntensity * 0.5f;
-  case PhotosensitivityLevel::High:
-    return base * settings_.maxBloomIntensity * 0.25f;
-  case PhotosensitivityLevel::Maximum:
-    return 0.0f;
-  }
-  return base;
-}
-
-float SettingsManager::getEffectiveAnimationSpeed() const {
-  if (settings_.reduceMotion) {
-    return settings_.animationSpeed * 0.1f;
-  }
-  return settings_.animationSpeed;
-}
-
-const char *colorblindModeToString(ColorblindMode mode) {
-  switch (mode) {
-  case ColorblindMode::None:
-    return "none";
-  case ColorblindMode::Protanopia:
-    return "protanopia";
-  case ColorblindMode::Deuteranopia:
-    return "deuteranopia";
-  case ColorblindMode::Tritanopia:
-    return "tritanopia";
-  case ColorblindMode::Achromatopsia:
-    return "achromatopsia";
-  default:
-    return "none";
-  }
-}
-
-ColorblindMode stringToColorblindMode(const std::string &str) {
-  if (str == "protanopia")
-    return ColorblindMode::Protanopia;
-  if (str == "deuteranopia")
-    return ColorblindMode::Deuteranopia;
-  if (str == "tritanopia")
-    return ColorblindMode::Tritanopia;
-  if (str == "achromatopsia")
-    return ColorblindMode::Achromatopsia;
-  return ColorblindMode::None;
-}
-
-const char *photosensitivityLevelToString(PhotosensitivityLevel level) {
-  switch (level) {
-  case PhotosensitivityLevel::None:
-    return "none";
-  case PhotosensitivityLevel::Low:
-    return "low";
-  case PhotosensitivityLevel::Medium:
-    return "medium";
-  case PhotosensitivityLevel::High:
-    return "high";
-  case PhotosensitivityLevel::Maximum:
-    return "maximum";
-  default:
-    return "medium";
-  }
-}
-
-PhotosensitivityLevel stringToPhotosensitivityLevel(const std::string &str) {
-  if (str == "none")
-    return PhotosensitivityLevel::None;
-  if (str == "low")
-    return PhotosensitivityLevel::Low;
-  if (str == "medium")
-    return PhotosensitivityLevel::Medium;
-  if (str == "high")
-    return PhotosensitivityLevel::High;
-  if (str == "maximum")
-    return PhotosensitivityLevel::Maximum;
-  return PhotosensitivityLevel::Medium;
-}

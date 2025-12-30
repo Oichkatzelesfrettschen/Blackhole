@@ -45,6 +45,7 @@ cmake_install.cmake
 compile_commands.json
 Makefile
 *.cmake
+!cmake/ValidateShader.cmake
 
 # ------------------------------------------------------------------------------
 # macOS
@@ -71,3 +72,9 @@ Makefile
 *.temp
 *.bak
 *.log
+*.db
+settings.json
+logs/
+CMakeUserPresets.json
+imgui.ini
+.conan/

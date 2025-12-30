@@ -5,10 +5,10 @@
  * Uses RK4 integration for accurate null geodesic propagation
  * in curved spacetime (Schwarzschild or Kerr).
  *
- * GLSL 4.30+ required for compute shaders.
+ * GLSL 4.60 required for compute shaders.
  */
 
-#version 430 core
+#version 460 core
 
 // ============================================================================
 // Work Group Configuration
@@ -33,9 +33,9 @@ uniform vec3 cameraPosition;
 
 // Black hole parameters
 uniform float schwarzschildRadius;
-uniform float spinParameter;      // a for Kerr (0 for Schwarzschild)
 uniform float iscoRadius;
 uniform float photonSphereRadius;
+uniform float kerrSpin = 0.0;
 
 // Integration parameters
 uniform int maxSteps;
@@ -43,7 +43,6 @@ uniform float stepSize;
 uniform float maxDistance;
 
 // Feature toggles
-uniform bool enableKerr;
 uniform bool enableDisk;
 uniform bool enableRedshift;
 
@@ -74,6 +73,119 @@ struct HitResult {
     float redshiftFactor;
 };
 
+struct KerrConsts {
+    float E;
+    float Lz;
+    float Q;
+};
+
+struct KerrRay {
+    float r;
+    float theta;
+    float phi;
+    float t;
+    float sign_r;
+    float sign_theta;
+};
+
+// ============================================================================
+// Kerr Helpers (Mino-time integration)
+// ============================================================================
+
+float kerrSigma(float r, float a, float cosTheta) {
+    return r * r + a * a * cosTheta * cosTheta;
+}
+
+float kerrDelta(float r, float a, float r_s) {
+    return r * r - r_s * r + a * a;
+}
+
+float kerrOuterHorizon(float r_s, float a) {
+    float M = 0.5 * r_s;
+    float disc = M * M - a * a;
+    if (disc < 0.0) {
+        return r_s;
+    }
+    return M + sqrt(disc);
+}
+
+vec3 kerrToCartesian(float r, float theta, float phi) {
+    float sinTheta = sin(theta);
+    return vec3(r * sinTheta * cos(phi),
+                r * sinTheta * sin(phi),
+                r * cos(theta));
+}
+
+KerrConsts kerrInitConsts(vec3 pos, vec3 dir) {
+    KerrConsts c;
+    c.E = 1.0;
+    vec3 L = cross(pos, dir);
+    c.Lz = L.z;
+    float L2 = dot(L, L);
+    c.Q = max(0.0, L2 - c.Lz * c.Lz);
+    return c;
+}
+
+KerrRay kerrInitRay(vec3 pos, vec3 dir) {
+    KerrRay ray;
+    ray.r = length(pos);
+    float invR = ray.r > EPSILON ? 1.0 / ray.r : 0.0;
+    float cosTheta = clamp(pos.z * invR, -1.0, 1.0);
+    ray.theta = acos(cosTheta);
+    ray.phi = atan(pos.y, pos.x);
+    ray.t = 0.0;
+
+    vec3 e_r = normalize(pos);
+    vec3 e_theta = normalize(vec3(cos(ray.theta) * cos(ray.phi),
+                                  cos(ray.theta) * sin(ray.phi),
+                                  -sin(ray.theta)));
+    float dr = dot(dir, e_r);
+    float dtheta = dot(dir, e_theta);
+    ray.sign_r = dr >= 0.0 ? 1.0 : -1.0;
+    ray.sign_theta = dtheta >= 0.0 ? 1.0 : -1.0;
+    return ray;
+}
+
+void kerrStep(inout KerrRay ray, float r_s, float a, KerrConsts c, float dlam) {
+    float r = ray.r;
+    float theta = ray.theta;
+    float sinTheta = sin(theta);
+    float cosTheta = cos(theta);
+    float sin2 = max(sinTheta * sinTheta, 1e-6);
+
+    float Delta = kerrDelta(r, a, r_s);
+    float A = (r * r + a * a) * c.E - a * c.Lz;
+    float Lz_minus_aE = c.Lz - a * c.E;
+
+    float R = A * A - Delta * (c.Q + Lz_minus_aE * Lz_minus_aE);
+    float Theta = c.Q + (a * a * c.E * c.E * cosTheta * cosTheta) -
+                  (c.Lz * c.Lz / sin2);
+
+    if (R < 0.0) {
+        ray.sign_r *= -1.0;
+    }
+    if (Theta < 0.0) {
+        ray.sign_theta *= -1.0;
+    }
+
+    float sqrtR = sqrt(max(R, 0.0));
+    float sqrtTheta = sqrt(max(Theta, 0.0));
+    float deltaSafe = max(Delta, 1e-6);
+
+    float dr_dlam = ray.sign_r * sqrtR;
+    float dtheta_dlam = ray.sign_theta * sqrtTheta;
+    float dphi_dlam = (c.Lz / sin2) - a * c.E + (a * A / deltaSafe);
+    float dt_dlam = ((r * r + a * a) * A / deltaSafe) +
+                    a * (c.Lz - a * c.E * sin2);
+
+    ray.r += dlam * dr_dlam;
+    ray.theta += dlam * dtheta_dlam;
+    ray.phi += dlam * dphi_dlam;
+    ray.t += dlam * dt_dlam;
+
+    ray.theta = clamp(ray.theta, 1e-6, PI - 1e-6);
+}
+
 // ============================================================================
 // Schwarzschild Geodesic Acceleration
 // ============================================================================
@@ -100,68 +212,17 @@ vec3 schwarzschildAccel(vec3 pos, vec3 vel, float r_s) {
 }
 
 // ============================================================================
-// Kerr Geodesic Acceleration (Approximate)
-// ============================================================================
-
-/**
- * Compute geodesic acceleration in Kerr spacetime.
- *
- * Full Kerr geodesics require Carter constant integration.
- * This is a simplified model capturing main effects:
- * - Frame-dragging contribution
- * - Modified effective potential
- */
-vec3 kerrAccel(vec3 pos, vec3 vel, float r_s, float a) {
-    float r = length(pos);
-    if (r < EPSILON) return vec3(0.0);
-
-    float r2 = r * r;
-    float cos_theta = pos.z / r;
-    float sin2_theta = 1.0 - cos_theta * cos_theta;
-
-    // Kerr metric functions
-    float sigma = r2 + a * a * cos_theta * cos_theta;
-    float delta = r2 - r_s * r + a * a;
-
-    // Angular momentum
-    vec3 h = cross(pos, vel);
-    float h2 = dot(h, h);
-
-    // Base Schwarzschild-like term
-    float r5 = r2 * r2 * r;
-    vec3 radial_accel = -1.5 * r_s * h2 * pos / r5;
-
-    // Frame-dragging contribution
-    float M = r_s * 0.5;
-    float omega_fd = (2.0 * M * a * r) / (sigma * (r2 + a * a) + 2.0 * M * a * a * r * sin2_theta);
-
-    vec3 phi_dir = normalize(vec3(-pos.y, pos.x, 0.0) + vec3(0.001));
-    float fd_strength = omega_fd * r_s / max(r, r_s);
-    vec3 frame_drag = fd_strength * phi_dir;
-
-    // Kerr correction factor
-    float kerr_factor = 1.0 + 0.5 * a * a * sin2_theta / sigma;
-
-    return radial_accel * kerr_factor + frame_drag;
-}
-
-// ============================================================================
 // RK4 Integration Step
 // ============================================================================
 
 /**
  * Perform one RK4 integration step.
  */
-void stepRK4(inout Ray ray, float r_s, float a, float dt) {
+void stepRK4(inout Ray ray, float r_s, float dt) {
     vec3 x0 = ray.position;
     vec3 v0 = ray.velocity;
 
-    vec3 accel;
-    if (enableKerr && abs(a) > EPSILON) {
-        accel = kerrAccel(x0, v0, r_s, a);
-    } else {
-        accel = schwarzschildAccel(x0, v0, r_s);
-    }
+    vec3 accel = schwarzschildAccel(x0, v0, r_s);
 
     // k1
     vec3 k1_x = v0;
@@ -170,33 +231,21 @@ void stepRK4(inout Ray ray, float r_s, float a, float dt) {
     // k2
     vec3 x1 = x0 + 0.5 * dt * k1_x;
     vec3 v1 = v0 + 0.5 * dt * k1_v;
-    if (enableKerr && abs(a) > EPSILON) {
-        accel = kerrAccel(x1, v1, r_s, a);
-    } else {
-        accel = schwarzschildAccel(x1, v1, r_s);
-    }
+    accel = schwarzschildAccel(x1, v1, r_s);
     vec3 k2_x = v1;
     vec3 k2_v = accel;
 
     // k3
     vec3 x2 = x0 + 0.5 * dt * k2_x;
     vec3 v2 = v0 + 0.5 * dt * k2_v;
-    if (enableKerr && abs(a) > EPSILON) {
-        accel = kerrAccel(x2, v2, r_s, a);
-    } else {
-        accel = schwarzschildAccel(x2, v2, r_s);
-    }
+    accel = schwarzschildAccel(x2, v2, r_s);
     vec3 k3_x = v2;
     vec3 k3_v = accel;
 
     // k4
     vec3 x3 = x0 + dt * k3_x;
     vec3 v3 = v0 + dt * k3_v;
-    if (enableKerr && abs(a) > EPSILON) {
-        accel = kerrAccel(x3, v3, r_s, a);
-    } else {
-        accel = schwarzschildAccel(x3, v3, r_s);
-    }
+    accel = schwarzschildAccel(x3, v3, r_s);
     vec3 k4_x = v3;
     vec3 k4_v = accel;
 
@@ -237,21 +286,22 @@ bool checkDiskIntersection(vec3 oldPos, vec3 newPos, float r_in, float r_out,
  *
  * g = √(1 - r_s/r) for Schwarzschild
  */
-float computeRedshiftFactor(vec3 pos, float r_s, float a) {
+float computeRedshiftFactor(vec3 pos, float r_s) {
     float r = length(pos);
     if (r <= r_s) return 0.0;
 
-    if (enableKerr && abs(a) > EPSILON) {
-        float cos_theta = pos.z / r;
-        float sigma = r * r + a * a * cos_theta * cos_theta;
-        float factor = 1.0 - r_s * r / sigma;
-        if (factor <= 0.0) return 0.0;
-        return sqrt(factor);
-    } else {
-        float factor = 1.0 - r_s / r;
+    if (abs(kerrSpin) > 1e-4) {
+        float a = kerrSpin * 0.5 * r_s;
+        float cosTheta = pos.z / max(r, EPSILON);
+        float sigma = kerrSigma(r, a, cosTheta);
+        float factor = 1.0 - (r_s * r) / sigma;
         if (factor <= 0.0) return 0.0;
         return sqrt(factor);
     }
+
+    float factor = 1.0 - r_s / r;
+    if (factor <= 0.0) return 0.0;
+    return sqrt(factor);
 }
 
 // ============================================================================
@@ -261,7 +311,7 @@ float computeRedshiftFactor(vec3 pos, float r_s, float a) {
 /**
  * Trace a single geodesic ray.
  */
-HitResult traceGeodesic(Ray ray, float r_s, float a) {
+HitResult traceGeodesic(Ray ray, float r_s) {
     HitResult result;
     result.hitDisk = false;
     result.hitHorizon = false;
@@ -270,15 +320,8 @@ HitResult traceGeodesic(Ray ray, float r_s, float a) {
     result.phi = 0.0;
     result.redshiftFactor = 1.0;
 
-    // Horizon radius
-    float r_horizon;
-    if (enableKerr && abs(a) > EPSILON) {
-        float M = r_s * 0.5;
-        float discriminant = M * M - a * a;
-        r_horizon = (discriminant >= 0.0) ? M + sqrt(discriminant) : r_s;
-    } else {
-        r_horizon = r_s;
-    }
+    float a = kerrSpin * 0.5 * r_s;
+    float r_horizon = abs(kerrSpin) > 1e-4 ? kerrOuterHorizon(r_s, a) : r_s;
 
     // Disk parameters
     float r_disk_in = iscoRadius;
@@ -287,32 +330,48 @@ HitResult traceGeodesic(Ray ray, float r_s, float a) {
     vec3 oldPos;
     float dt = stepSize;
 
+    bool useKerr = abs(kerrSpin) > 1e-4;
+    KerrConsts kerrC;
+    KerrRay kerrRay;
+    if (useKerr) {
+        kerrC = kerrInitConsts(ray.position, ray.velocity);
+        kerrRay = kerrInitRay(ray.position, ray.velocity);
+    }
+
     for (int step = 0; step < maxSteps; ++step) {
-        oldPos = ray.position;
+        oldPos = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
+                         : ray.position;
 
         // Adaptive step size near horizon
-        float r = length(ray.position);
+        float r = useKerr ? kerrRay.r : length(ray.position);
         float adaptive_dt = dt * clamp(r / r_s - 1.0, 0.1, 1.0);
 
-        stepRK4(ray, r_s, a, adaptive_dt);
-
-        r = length(ray.position);
+        if (useKerr) {
+            kerrStep(kerrRay, r_s, a, kerrC, adaptive_dt);
+            r = kerrRay.r;
+        } else {
+            stepRK4(ray, r_s, adaptive_dt);
+            r = length(ray.position);
+        }
 
         // Check horizon
         if (r < r_horizon * 1.01) {
             result.hitHorizon = true;
-            result.hitPoint = ray.position;
+            result.hitPoint = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
+                                      : ray.position;
             return result;
         }
 
         // Check disk intersection
         if (enableDisk) {
             vec3 diskHit;
-            if (checkDiskIntersection(oldPos, ray.position, r_disk_in, r_disk_out, diskHit)) {
+            vec3 newPos = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
+                                  : ray.position;
+            if (checkDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
                 result.hitDisk = true;
                 result.hitPoint = diskHit;
                 result.phi = atan(diskHit.y, diskHit.x);
-                result.redshiftFactor = computeRedshiftFactor(diskHit, r_s, a);
+                result.redshiftFactor = computeRedshiftFactor(diskHit, r_s);
                 return result;
             }
         }
@@ -320,14 +379,16 @@ HitResult traceGeodesic(Ray ray, float r_s, float a) {
         // Check escape
         if (r > maxDistance) {
             result.escaped = true;
-            result.hitPoint = ray.position;
+            result.hitPoint = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
+                                      : ray.position;
             return result;
         }
     }
 
     // Max steps reached
     result.escaped = true;
-    result.hitPoint = ray.position;
+    result.hitPoint = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
+                              : ray.position;
     return result;
 }
 
@@ -432,7 +493,7 @@ void main() {
     ray.affineParameter = 0.0;
 
     // Trace geodesic
-    HitResult hit = traceGeodesic(ray, schwarzschildRadius, spinParameter);
+    HitResult hit = traceGeodesic(ray, schwarzschildRadius);
 
     // Compute final color
     vec4 color;
@@ -443,6 +504,10 @@ void main() {
     } else {
         color = backgroundColorFromDir(normalize(hit.hitPoint - cameraPosition));
     }
+
+    float depthDistance = length(hit.hitPoint - cameraPosition);
+    float depthNormalized = clamp(depthDistance / maxDistance, 0.0, 1.0);
+    color.a = depthNormalized;
 
     // Write to output image
     imageStore(outputImage, pixelCoord, color);

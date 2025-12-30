@@ -1,0 +1,13 @@
+{
+  "mass_solar": 4000000.0,
+  "mdot": 0.1,
+  "prograde": true,
+  "r_in_cm": 3543900321772.379,
+  "r_in_over_rs": 3.0,
+  "r_out_cm": 14175601287089.516,
+  "r_out_over_rs": 12.0,
+  "size": 256,
+  "spin": 0.0,
+  "timestamp_utc": "2025-12-30T07:19:35Z",
+  "version": 1
+}

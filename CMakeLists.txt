@@ -10,6 +10,7 @@ project(Blackhole
 # Conan 2.x Integration
 # ============================================================================
 # Usage:
+#   conan remote update conancenter --url="https://center2.conan.io"
 #   conan install . --output-folder=<cmake-build-dir> --build=missing
 #   cmake --preset release (or: cmake -B <cmake-build-dir> -DCMAKE_BUILD_TYPE=Release)
 #   cmake --build build
@@ -26,6 +27,14 @@ elseif(EXISTS "${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
   set(CONAN_TOOLCHAIN_PATH "${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/conan_toolchain.cmake")
   set(CONAN_TOOLCHAIN_PATH "${CMAKE_SOURCE_DIR}/build/conan_toolchain.cmake")
+elseif(EXISTS "${CMAKE_BINARY_DIR}/generators/conan_toolchain.cmake")
+  set(CONAN_TOOLCHAIN_PATH "${CMAKE_BINARY_DIR}/generators/conan_toolchain.cmake")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/build/Release/generators/conan_toolchain.cmake")
+  set(CONAN_TOOLCHAIN_PATH
+      "${CMAKE_SOURCE_DIR}/build/build/Release/generators/conan_toolchain.cmake")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/build/Debug/generators/conan_toolchain.cmake")
+  set(CONAN_TOOLCHAIN_PATH
+      "${CMAKE_SOURCE_DIR}/build/build/Debug/generators/conan_toolchain.cmake")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/Release/generators/conan_toolchain.cmake")
   set(CONAN_TOOLCHAIN_PATH "${CMAKE_SOURCE_DIR}/build/Release/generators/conan_toolchain.cmake")
 endif()
@@ -35,7 +44,7 @@ if(CONAN_TOOLCHAIN_PATH)
     include("${CONAN_TOOLCHAIN_PATH}")
   endif()
 else()
-  message(FATAL_ERROR "Conan toolchain not found. Run: conan install . --output-folder=<cmake-build-dir> --build=missing")
+  message(FATAL_ERROR "Conan toolchain not found. Run: conan remote update conancenter --url=\"https://center2.conan.io\" && conan install . --output-folder=<cmake-build-dir> --build=missing")
 endif()
 
 # ============================================================================
@@ -50,8 +59,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_definitions(
   BLACKHOLE_CXX_STANDARD=${BLACKHOLE_CXX_STANDARD}
   BLACKHOLE_CXX23=1
-  BLACKHOLE_CXX20=1
-  BLACKHOLE_CXX17=1
 )
 
 message(STATUS "Using C++ standard: C++${BLACKHOLE_CXX_STANDARD}")
@@ -67,12 +74,51 @@ endif()
 if(EXISTS "${CMAKE_SOURCE_DIR}/build/Debug/generators")
   list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/Debug/generators")
 endif()
+if(EXISTS "${CMAKE_SOURCE_DIR}/build/build/Release/generators")
+  list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/build/Release/generators")
+endif()
+if(EXISTS "${CMAKE_SOURCE_DIR}/build/build/Debug/generators")
+  list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/build/Debug/generators")
+endif()
 
 find_package(imgui REQUIRED)
+find_package(imguizmo REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(GLEW REQUIRED)
+find_package(glbinding REQUIRED)
 find_package(glm REQUIRED)
 find_package(stb REQUIRED)
+
+# ============================================================================
+# Optional UI Layers
+# ============================================================================
+
+option(ENABLE_RMLUI "Enable RmlUi overlay" OFF)
+if(ENABLE_RMLUI)
+  find_package(rmlui REQUIRED)
+endif()
+
+option(ENABLE_TRACY "Enable Tracy profiling" OFF)
+if(ENABLE_TRACY)
+  find_package(Tracy REQUIRED)
+endif()
+
+# ============================================================================
+# ImPlot (vendored until Conan packages support ImGui 1.92+)
+# ============================================================================
+
+set(IMPLOT_SOURCE_DIR "${PROJECT_SOURCE_DIR}/external/implot")
+if(NOT EXISTS "${IMPLOT_SOURCE_DIR}/implot.cpp")
+  message(FATAL_ERROR "ImPlot sources not found in ${IMPLOT_SOURCE_DIR}. Run scripts/fetch_implot.sh.")
+endif()
+
+add_library(implot STATIC
+  "${IMPLOT_SOURCE_DIR}/implot.cpp"
+  "${IMPLOT_SOURCE_DIR}/implot_items.cpp"
+)
+target_include_directories(implot SYSTEM PUBLIC "${IMPLOT_SOURCE_DIR}")
+target_link_libraries(implot PUBLIC imgui::imgui)
+target_compile_options(implot PRIVATE -w)
+add_library(implot::implot ALIAS implot)
 
 # ============================================================================
 # SIMD and Optimization Configuration
@@ -115,13 +161,13 @@ endif()
 
 set(WARNING_LEVEL "5" CACHE STRING "Warning strictness level 1-5")
 set_property(CACHE WARNING_LEVEL PROPERTY STRINGS "1" "2" "3" "4" "5")
+option(ENABLE_WERROR "Treat compiler warnings as errors" OFF)
 
 # Level 1: Core warnings (OpenSSF recommended baseline)
 set(WARN_LEVEL1
   -Wall
   -Wextra
   -Wpedantic
-  -Werror
 )
 
 # Level 2: Format string security & type safety
@@ -196,6 +242,12 @@ else()
 endif()
 
 message(STATUS "Using warning level ${WARNING_LEVEL}")
+if(ENABLE_WERROR)
+  list(APPEND PROJECT_WARNINGS -Werror)
+  message(STATUS "Warnings are treated as errors")
+else()
+  message(STATUS "Warnings are not treated as errors")
+endif()
 
 # ============================================================================
 # Runtime Hardening Flags
@@ -270,12 +322,15 @@ set(PHYSICS_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
   "${PROJECT_SOURCE_DIR}/src/physics/geodesics.cpp"
   "${PROJECT_SOURCE_DIR}/src/physics/cosmology.cpp"
-  "${PROJECT_SOURCE_DIR}/src/kerr.cpp"
+  "${PROJECT_SOURCE_DIR}/src/physics/kerr.cpp"
+  "${PROJECT_SOURCE_DIR}/src/physics/noise.cpp"
 )
 
 # Separate project source files from third-party imgui implementation
 set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/main.cpp"
+  "${PROJECT_SOURCE_DIR}/src/hud_overlay.cpp"
+  "${PROJECT_SOURCE_DIR}/src/rmlui_overlay.cpp"
   "${PROJECT_SOURCE_DIR}/src/render.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader_manager.cpp"
@@ -316,16 +371,56 @@ set_source_files_properties(${THIRDPARTY_SRC_FILES} PROPERTIES
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imgui::imgui)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imguizmo::imguizmo)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE implot::implot)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glfw)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE GLEW::GLEW)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glbinding::glbinding)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glm::glm)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE stb::stb)
+if(ENABLE_RMLUI)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE rmlui::rmlui)
+endif()
+if(ENABLE_TRACY)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Tracy::TracyClient)
+endif()
+
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+  GLFW_INCLUDE_NONE
+  IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+  BLACKHOLE_ENABLE_RMLUI=$<BOOL:${ENABLE_RMLUI}>
+)
+if(ENABLE_TRACY)
+  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE TRACY_ENABLE)
+endif()
 
 # Include directories for physics library
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
   "${PROJECT_SOURCE_DIR}/src"
   "${PROJECT_SOURCE_DIR}/src/physics"
 )
+
+# ============================================================================
+# Benchmarks
+# ============================================================================
+
+add_executable(physics_bench
+  "${PROJECT_SOURCE_DIR}/bench/physics_bench.cpp"
+  "${PROJECT_SOURCE_DIR}/src/physics/kerr.cpp"
+  "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
+)
+
+set_target_properties(physics_bench PROPERTIES
+  CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+
+target_include_directories(physics_bench PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/src/physics"
+)
+
+target_compile_options(physics_bench PRIVATE ${PROJECT_WARNINGS})
 
 # Copy assets files after build.
 add_custom_command(
@@ -482,15 +577,14 @@ if(ENABLE_SHADER_VALIDATION)
       endif()
 
       list(APPEND SHADER_VALIDATION_COMMANDS
-        COMMAND ${CMAKE_COMMAND} -E echo "Validating ${shader_name}..."
-        COMMAND ${GLSLANG_VALIDATOR}
-          -S ${SHADER_STAGE}
-          -l
-          --glsl-version 460
-          -I${PROJECT_SOURCE_DIR}/shader/include
-          "-P#extension GL_GOOGLE_include_directive : enable"
-          ${shader}
-        || ${CMAKE_COMMAND} -E echo "Warning: ${shader_name} has issues"
+        COMMAND ${CMAKE_COMMAND}
+          -DGLSLANG_VALIDATOR:FILEPATH=${GLSLANG_VALIDATOR}
+          -DSHADER:FILEPATH=${shader}
+          -DSTAGE=${SHADER_STAGE}
+          -DGLSL_VERSION=460
+          -DWARN_AS_ERROR:BOOL=${ENABLE_WERROR}
+          -DINCLUDE_DIR:PATH=${PROJECT_SOURCE_DIR}/shader/include
+          -P ${PROJECT_SOURCE_DIR}/cmake/ValidateShader.cmake
       )
     endforeach()
 
@@ -597,6 +691,9 @@ if(BUILD_TESTING)
     )
     # Apply project warnings to test sources
     target_compile_options(physics_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(physics_test PRIVATE -fno-fast-math)
+    endif()
 
     # Register with CTest
     add_test(NAME physics_validation COMMAND physics_test)

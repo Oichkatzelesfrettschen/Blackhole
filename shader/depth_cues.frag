@@ -1,26 +1,31 @@
-#version 330 core
+#version 460 core
 
-// Stereoblindness Accessibility Shader
-// Implements monocular depth cues for users who cannot perceive stereoscopic depth
-// Based on research from: https://en.wikipedia.org/wiki/Depth_perception
+// Depth effects post-process
+// Adds atmospheric depth cues and optional depth-of-field blur.
+// Based on monocular depth perception cues: https://en.wikipedia.org/wiki/Depth_perception
 
 out vec4 fragColor;
 
 uniform sampler2D texture0;       // Main scene color
-uniform sampler2D depthTexture;   // Depth buffer (if available)
+uniform sampler2D depthTexture;   // Packed depth (alpha channel)
 uniform vec2 resolution;
 uniform float time;
 
-// Depth cue settings (controlled from accessibility menu)
+// Depth effect settings
+uniform float depthEffectsEnabled;
 uniform float fogEnabled;         // 0.0 or 1.0
 uniform float fogDensity;         // 0.0 - 1.0
-uniform vec3 fogColor;            // Usually sky color or gray
-uniform float fogStart;           // Distance where fog begins
-uniform float fogEnd;             // Distance where fog is complete
+uniform float fogColorR;
+uniform float fogColorG;
+uniform float fogColorB;
+uniform float fogStart;           // Normalized depth where fog begins
+uniform float fogEnd;             // Normalized depth where fog is complete
 
 uniform float edgeOutlinesEnabled;  // 0.0 or 1.0
 uniform float edgeThreshold;        // 0.0 - 1.0
-uniform vec3 edgeColor;             // Outline color
+uniform float edgeColorR;
+uniform float edgeColorG;
+uniform float edgeColorB;
 uniform float edgeWidth;            // 1.0 - 3.0
 
 uniform float depthDesatEnabled;    // 0.0 or 1.0
@@ -29,25 +34,21 @@ uniform float desatStrength;        // 0.0 - 1.0
 uniform float chromaDepthEnabled;   // 0.0 or 1.0 - warm near, cool far
 uniform float motionParallaxHint;   // 0.0 or 1.0 - subtle motion indicator
 
-// Near/far planes for depth linearization
-uniform float nearPlane;
-uniform float farPlane;
+uniform float dofEnabled;           // 0.0 or 1.0
+uniform float dofFocusNear;         // 0.0 - 1.0
+uniform float dofFocusFar;          // 0.0 - 1.0
+uniform float dofMaxRadius;         // Pixel radius
+uniform float depthCurve;           // > 0.0, remaps depth distribution
 
 // ============================================================================
 // Depth utilities
 // ============================================================================
 
-// Linearize depth from depth buffer (0-1 range to linear distance)
-float linearizeDepth(float depth) {
-    float z = depth * 2.0 - 1.0; // Back to NDC
-    return (2.0 * nearPlane * farPlane) / (farPlane + nearPlane - z * (farPlane - nearPlane));
-}
-
-// Get normalized depth (0 = near, 1 = far)
 float getNormalizedDepth(vec2 uv) {
-    float depth = texture(depthTexture, uv).r;
-    float linearDepth = linearizeDepth(depth);
-    return clamp((linearDepth - nearPlane) / (farPlane - nearPlane), 0.0, 1.0);
+    float depth = texture(depthTexture, uv).a;
+    depth = clamp(depth, 0.0, 1.0);
+    float curve = max(depthCurve, 0.01);
+    return pow(depth, curve);
 }
 
 // ============================================================================
@@ -65,6 +66,7 @@ vec3 applyFog(vec3 color, float depth) {
     float rangedDepth = smoothstep(fogStart, fogEnd, depth);
     fogFactor *= rangedDepth;
 
+    vec3 fogColor = vec3(fogColorR, fogColorG, fogColorB);
     return mix(color, fogColor, fogFactor);
 }
 
@@ -103,6 +105,7 @@ vec3 applyEdgeOutlines(vec3 color, vec2 uv, float depth) {
     // Make edges more visible at distance (helps depth perception)
     edge *= 1.0 + depth * 0.5;
 
+    vec3 edgeColor = vec3(edgeColorR, edgeColorG, edgeColorB);
     return mix(color, edgeColor, edge * edgeWidth * 0.3);
 }
 
@@ -161,6 +164,28 @@ vec3 applyMotionParallaxHint(vec3 color, float depth, vec2 uv) {
 }
 
 // ============================================================================
+// Depth of Field (simple 5-tap blur)
+// ============================================================================
+
+vec3 applyDepthOfField(vec2 uv, vec3 color, float depth) {
+    if (dofEnabled < 0.5) return color;
+
+    float blurFactor = smoothstep(dofFocusNear, dofFocusFar, depth);
+    float radius = dofMaxRadius * blurFactor;
+    if (radius < 0.01) return color;
+
+    vec2 texel = radius / resolution;
+    vec3 sum = color;
+    sum += texture(texture0, uv + vec2(texel.x, 0.0)).rgb;
+    sum += texture(texture0, uv - vec2(texel.x, 0.0)).rgb;
+    sum += texture(texture0, uv + vec2(0.0, texel.y)).rgb;
+    sum += texture(texture0, uv - vec2(0.0, texel.y)).rgb;
+    vec3 blurred = sum / 5.0;
+
+    return mix(color, blurred, blurFactor);
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -169,6 +194,11 @@ void main() {
 
     vec3 color = texture(texture0, uv).rgb;
     float depth = getNormalizedDepth(uv);
+
+    if (depthEffectsEnabled < 0.5) {
+        fragColor = vec4(color, 1.0);
+        return;
+    }
 
     // Apply depth cues in order of visual importance
 
@@ -186,6 +216,9 @@ void main() {
 
     // 5. Motion parallax hint - very subtle
     color = applyMotionParallaxHint(color, depth, uv);
+
+    // 6. Depth of field - optional subtle blur
+    color = applyDepthOfField(uv, color, depth);
 
     fragColor = vec4(color, 1.0);
 }

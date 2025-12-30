@@ -308,7 +308,7 @@ namespace openuniverse::grmhd {
 
 **Current Toolchain:**
 - CMake 3.21+, Conan 1.x/2.x (package manager)
-- Dependencies: imgui, glfw, glew, glm, stb (all via Conan)
+- Dependencies: imgui-docking, implot, glfw, glbinding, glm, xsimd, entt, pcg-cpp, taskflow, flatbuffers, highfive, spdlog, tracy, cli11, boost, stb (autodiff manual; others via Conan)
 - Compiler: GCC/Clang with C++23 (std::forward_like, deduction guides, etc.)
 
 **Recommended Additions (Conan Packages):**
@@ -566,4 +566,3 @@ T_P = √(ℏc⁵/Gk_B²) ≈ 1.417e32 K
 ---
 
 **Document Status:** Complete | **Token Budget Used:** ~45k / 200k | **Recommendation:** Deploy incrementally via git branches; prioritize GPU Kerr + EOS integration first
-

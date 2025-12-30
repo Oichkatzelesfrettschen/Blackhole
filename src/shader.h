@@ -14,9 +14,10 @@
 
 #include <string>
 
-#include <GL/glew.h>
+#include "gl_loader.h"
 
 GLuint createShaderProgram(const std::string &vertexShaderFile,
                            const std::string &fragmentShaderFile);
+GLuint createComputeProgram(const std::string &computeShaderFile);
 
 #endif /* SHADER_H */
