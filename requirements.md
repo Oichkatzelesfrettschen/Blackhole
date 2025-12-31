@@ -99,7 +99,7 @@ Note: `conanfile.py` sets shared builds for hdf5/spdlog/fmt and disables
 
 ## Conan update candidates (center2, 2025-12-30)
 Latest recipes on conancenter (current pins in parentheses):
-- imgui: 1.92.5-docking (current 1.92.5-docking)
+- imgui: cci.20230105+1.89.2.docking (current 1.92.5-docking; local-cache recipe)
 - implot: 0.16 (Conan recipe; project vendors master until 1.92+ support lands)
 - glfw: 3.4 (current 3.4)
 - glbinding: 3.5.0 (current 3.5.0)
@@ -111,7 +111,7 @@ Latest recipes on conancenter (current pins in parentheses):
 - flatbuffers: 25.9.23 (current 25.9.23)
 - spdlog: 1.16.0 (current 1.16.0)
 - fmt: 12.1.0 (current 12.1.0)
-- tracy: 0.12.2 (current 0.12.2; cci.20220130 also available)
+- tracy: cci.20220130 (current 0.12.2; local-cache recipe)
 - cli11: 2.6.0 (current 2.6.0)
 - boost: 1.90.0 (current 1.90.0)
 - hdf5: 1.14.6 (current 1.14.6)
