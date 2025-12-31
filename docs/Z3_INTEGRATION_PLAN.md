@@ -22,6 +22,16 @@ constraint checks and invariant validation in the Blackhole pipeline.
 - Bind to Z3 via the C++ API (`z3++.h`).
 - Use solver results only for validation/diagnostics, not runtime rendering.
 
+## Precision baselines (MPFR/GMP)
+- Optional multiprecision checks use Boost.Multiprecision with MPFR/GMP backends.
+- Enable with `-DENABLE_PRECISION_TESTS=ON` to build `precision_regression_test`.
+- Compare double/xsimd kernels vs 256-bit reference for drift detection.
+
+## Optional correctness tooling (future)
+- Halide: scheduling/tiling correctness for CPU kernels (not on conancenter).
+- TLA+/Coq: protocol-level invariants (documented in `docs/REVERSE_ENGINEERING_PLAN.md`).
+- Treat these as offline validation only, never runtime dependencies.
+
 ## Next Steps
 1. Add Conan requirement and `ENABLE_Z3` CMake option.
 2. Add a minimal `tools/z3_sanity.cpp` example.
