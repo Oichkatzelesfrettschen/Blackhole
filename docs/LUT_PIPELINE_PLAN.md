@@ -23,6 +23,11 @@ reference source (no code reuse).
 4. Emit metadata with units + r_in/r_out over r_s.
 5. Validate via `physics_test` and CSV curve diffs.
 
+## compact-common touchpoints
+- `compact_common.spacetime`: `isco_radius`, `photon_sphere_radius`, `kerr_isco`.
+- `compact_common.constants`: `M_SUN`, `G`, `C`.
+- Fallback: if compact-common is missing, use C++ formulas and set `compact_common_version=null`.
+
 ## File formats (current)
 - CSV header: `u,value` where `u` is normalized [0..1] over r_in..r_out.
 - lut_meta.json keys: `version`, `size`, `spin`, `mass_solar`, `mdot`, `prograde`,
