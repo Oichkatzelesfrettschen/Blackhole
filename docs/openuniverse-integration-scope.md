@@ -115,6 +115,19 @@ xcosm | pyproject.toml, Makefile | redshift tools
   `openuniverse/tardis`.
 - Separate clones outside monorepo also exist for `openuniverse-common`.
 
+## Audit pass (2025-12-30, README scan)
+- `openuniverse` root README enumerates domain clusters; priority modules for Blackhole are
+  `compact-common`, `nubhlight`, `tardis`, and the GRB stack (`grb-common`, `ASGARD_GRBAfterglow`,
+  `boxfit`, `JetFit`, `PyGRB`).
+- `compact-common` confirms EOS/TOV/spacetime (Schwarzschild + Kerr) utilities; use as LUT/validation
+  baseline for ISCO/photon/redshift curves.
+- `nubhlight` README confirms C99 + MPI + parallel HDF5 + GSL; outputs HDF5 dumps to `dumps/` and
+  `restarts/`, built per-problem via `python build.py`.
+- `grb-common` README confirms CGS constants, cosmology distances, extinction, and HDF5/CSV schema
+  utilities; use for offline LUT generation + validation.
+- `tardis` README confirms supernova spectral synthesis; use offline only for spectral LUT calibration
+  (heavy Python stack, forked submodule).
+
 ## Separate clones outside monorepo (~/Github)
 - openuniverse-common: pyproject.toml (Python >=3.10, minimal deps)
 - cern-analysis-common: pyproject.toml (not yet audited)
