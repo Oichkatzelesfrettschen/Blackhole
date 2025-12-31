@@ -18,6 +18,20 @@ fi
 
 STACKCOLLAPSE=""
 FLAMEGRAPH=""
+FLAMEGRAPH_BIN="$(command -v flamegraph || true)"
+
+if [ -n "$FLAMEGRAPH_BIN" ]; then
+  mkdir -p "$OUT_DIR"
+  COMMAND=("$@")
+  if [ ${#COMMAND[@]} -eq 0 ]; then
+    COMMAND=("${PROJECT_ROOT}/build/Profile/RelWithDebInfo/physics_bench")
+  fi
+
+  echo "Recording perf data and generating flamegraph..."
+  "$FLAMEGRAPH_BIN" -F "$PERF_FREQ" -o "$OUT_DIR/flamegraph.svg" -- "${COMMAND[@]}"
+  echo "Flamegraph: $OUT_DIR/flamegraph.svg"
+  exit 0
+fi
 
 if [ -n "${FLAMEGRAPH_DIR:-}" ]; then
   STACKCOLLAPSE="${FLAMEGRAPH_DIR}/stackcollapse-perf.pl"

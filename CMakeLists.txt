@@ -1016,6 +1016,29 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Math types parity test (round-trip Eigen <-> GLM)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/math_types_parity_test.cpp")
+    add_executable(math_types_parity_test
+      "${PROJECT_SOURCE_DIR}/tests/math_types_parity_test.cpp"
+    )
+    target_include_directories(math_types_parity_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(math_types_parity_test PRIVATE ${PROJECT_WARNINGS})
+    target_compile_definitions(math_types_parity_test PRIVATE GLM_FORCE_PURE)
+    add_test(NAME math_types_parity COMMAND math_types_parity_test)
+    set_tests_properties(math_types_parity PROPERTIES
+      LABELS "math;parity"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(math_types_parity PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(ENABLE_PRECISION_TESTS AND EXISTS "${PROJECT_SOURCE_DIR}/tests/precision_regression_test.cpp")
     find_package(gmp CONFIG REQUIRED)
     find_package(mpfr CONFIG REQUIRED)

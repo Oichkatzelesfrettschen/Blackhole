@@ -18,6 +18,22 @@
 
 ```bash
 # Install dependencies with repo-local Conan (output folder must match your CMake build dir).
+
+Preferred invocation (Conan 2.x):
+
+```bash
+# repo-local cache
+./scripts/conan_install.sh Release build
+# then configure
+cmake --preset profile
+```
+
+If you must use raw conan commands, prefer the 2.x syntax:
+
+```bash
+conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23
+```
+
 ./scripts/conan_install.sh Release build
 ./scripts/fetch_implot.sh
 
