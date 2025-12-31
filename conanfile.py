@@ -33,6 +33,8 @@ class BlackholeConan(ConanFile):
         self.requires("tracy/0.12.2")
         self.requires("cli11/2.6.0")
         self.requires("boost/1.90.0")
+        self.requires("gmp/6.3.0")
+        self.requires("mpfr/4.2.2")
         self.requires("stb/cci.20240531")
         self.requires("z3/4.14.1")
 

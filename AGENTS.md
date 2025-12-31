@@ -45,7 +45,7 @@ Input -> Camera/Basis -> Raytrace (frag/comp) -> Bloom -> Tonemap -> Depth Cues 
 - Controls: RMB orbit, MMB roll, scroll zoom; WASD/QE + Z/C + +/-; gamepad sticks/triggers; tweak in ImGui.
 
 ## Dependencies, CI, and Progress Tracking
-- Conan deps: `imgui/1.92.5-docking`, `imguizmo/cci.20231114`, `rmlui/4.4`, `glfw/3.4`, `glbinding/3.5.0`, `glm/cci.20230113`, `xsimd/13.2.0`, `entt/3.15.0`, `pcg-cpp/cci.20220409`, `taskflow/3.10.0`, `flatbuffers/25.9.23`, `hdf5/1.14.6`, `highfive/3.1.1`, `spdlog/1.16.0`, `fmt/12.1.0`, `tracy/0.12.2`, `cli11/2.6.0`, `boost/1.90.0`, `stb/cci.20240531`, `z3/4.14.1` (optional).
+- Conan deps: `imgui/1.92.5-docking`, `imguizmo/cci.20231114`, `rmlui/4.4`, `glfw/3.4`, `glbinding/3.5.0`, `glm/cci.20230113`, `xsimd/13.2.0`, `entt/3.15.0`, `pcg-cpp/cci.20220409`, `taskflow/3.10.0`, `flatbuffers/25.9.23`, `hdf5/1.14.6`, `highfive/3.1.1`, `spdlog/1.16.0`, `fmt/12.1.0`, `tracy/0.12.2`, `cli11/2.6.0`, `boost/1.90.0`, `stb/cci.20240531`, `gmp/6.3.0` (optional), `mpfr/4.2.2` (optional), `z3/4.14.1` (optional).
 - ImPlot is vendored from upstream (`external/implot`); fetch/update with `scripts/fetch_implot.sh` (Conan 0.16 incompatible with ImGui 1.92+).
 - RmlUi is optional; `ENABLE_RMLUI` toggles a stub overlay for the MangoHUD port.
 - GitHub Actions builds Release on push/PR (Conan + OpenGL dev libs).

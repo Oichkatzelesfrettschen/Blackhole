@@ -70,6 +70,7 @@ The simulation is fully operational with the core rendering pipeline:
 - Conan install completed with CMake 3.31; Release build + validate-shaders + ctest (physics_validation, grmhd_pack_fixture) succeeded.
 - Upgraded Conan pins to latest center2 versions (core + UI), with Eigen deferred; GLM now tracks cci.20230113.
 - Added optional Z3 integration (`ENABLE_Z3=ON`) and `z3_sanity` tool target; Z3 builds with GCC 15 warnings (non-fatal).
+- Added optional GMP/MPFR dependencies (ground-truth precision baselines for multiprecision tests).
 
 ## Recent Changes (2025-12-29)
 
@@ -126,7 +127,7 @@ The simulation is fully operational with the core rendering pipeline:
 - **GRMHD ingestion:** document nubhlight HDF5 schema, build offline converter, add dataset loader + checksum validation.
 - **Radiative transfer + GRB modulation:** define LUT specs from tardis/GRB datasets and add time-domain modulation hooks.
 - **HUD port:** MangoHud-style overlay for FPS/frametime + GPU timings with optional CSV export.
-- **Dependency review:** scan for updated Conan packages and set Eigen/xsimd/TBB/OpenMP baseline; evaluate autodiff/Enzyme/AMReX adoption.
+- **Dependency review:** scan for updated Conan packages and set Eigen/xsimd/TBB/OpenMP baseline; evaluate autodiff/Enzyme/AMReX adoption; track MPFR/GMP for precision baselines and Halide (non-Conan) for scheduling experiments.
 
 ## Issue Tracker
 

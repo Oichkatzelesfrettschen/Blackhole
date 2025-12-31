@@ -84,6 +84,8 @@ sudo pacman -S --needed \
 - tracy/0.12.2
 - cli11/2.6.0
 - z3/4.14.1 (optional; enable with `-DENABLE_Z3=ON`)
+- gmp/6.3.0 (optional; precision ground-truth via Boost.Multiprecision MPFR backend)
+- mpfr/4.2.2 (optional; precision ground-truth via Boost.Multiprecision MPFR backend)
 - boost/1.90.0
 - stb/cci.20240531
 
@@ -114,6 +116,8 @@ Latest recipes on conancenter (current pins in parentheses):
 - boost: 1.90.0 (current 1.90.0)
 - hdf5: 1.14.6 (current 1.14.6)
 - z3: 4.14.1 (current 4.14.1)
+- gmp: 6.3.0 (current 6.3.0)
+- mpfr: 4.2.2 (current 4.2.2)
 - eigen: 5.0.1 (optional/deferred; current 3.4.0)
 - pcg-cpp: cci.20220409 (current cci.20220409)
 - stb: cci.20240531 (current cci.20240531)
@@ -128,6 +132,7 @@ Missing on conancenter (needs custom Conan recipe or vendoring):
 - amrex (AMR grid solver)
 - autodiff (automatic differentiation)
 - enzyme (LLVM plugin autodiff)
+- halide (scheduling DSL)
 - tbb (task scheduler)
 - magnum (graphics toolkit)
 - imnodes (node editor for ImGui)
