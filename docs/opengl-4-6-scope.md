@@ -26,6 +26,12 @@ validation needed, and known platform implications.
 - Add a startup log banner with GL_VENDOR/GL_RENDERER/GL_VERSION for debugging.
 - Gate optional features behind extensions if some drivers report 4.6 but miss behavior.
 
+## Compute geodesic path plan
+- Keep fragment and compute paths feature-parity (camera basis, step size, disk params).
+- Dispatch in tiles (`tileOffset`, `tileSize`) for deterministic perf sweeps.
+- Add compare mode: render fragment + compute, diff in CPU/SSBO, and emit CSV metrics.
+- Capture PPMs for threshold sweeps; fail on error budget regressions.
+
 ## References inside repo
 - Context setup: `src/main.cpp`
 - Shader versions: `shader/*.frag`, `shader/*.vert`, `shader/*.comp`
