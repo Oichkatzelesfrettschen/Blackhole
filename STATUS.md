@@ -1,6 +1,6 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2025-12-30
+**Last Updated:** 2025-12-31
 **Status:** Core simulation operational, controls + depth effects integrated, camera unified
 
 ---
@@ -34,6 +34,35 @@ The simulation is fully operational with the core rendering pipeline:
 - Optional LUT-backed emissivity/redshift shading (runtime or assets/luts)
 - Compute raytracer path (experimental toggle)
 - TODO/FIXME scan: ImGui backend TODO/FIXME notes + a new stub TODO in `src/rmlui_overlay.cpp` (RmlUi integration)
+
+## Recent Changes (2025-12-31)
+
+- Updated `AGENTS.md` to emphasize repo-local Conan usage.
+- Centralized Conan env setup by sourcing `scripts/conan_env.sh` in Conan helper scripts (repo-local `.conan` enforced).
+- Refreshed Conan center2 config, reran `conan install`, and rebuilt Release.
+- `validate-shaders` and `ctest` (physics_validation, grmhd_pack_fixture, precision_regression)
+  pass cleanly.
+- Conan reported deprecated 1.x metadata fields in several upstream recipes (non-fatal; monitor for Conan 2 cleanup).
+- Resolved `glActiveTexture` texture-unit warnings in `src/main.cpp`.
+- Unified input time-scale handling (keyboard/mouse/gamepad) in `src/input.cpp`.
+- Added a gamepad mapping reset button and deadzone monitor tied to current mappings.
+- Added control presets (Balanced/Precision/Fast) for sensitivity + time scale tuning.
+- Kerr raytracer now routes through the `Kerr` helper for potentials/stepping.
+- Kerr Mino-time step now uses RK4 integration for improved stability (CPU path).
+- Compute shader now uses emissivity LUT as the primary flux source when enabled.
+- Added `ENABLE_ENZYME` CMake flag + toolchain path hints for optional Enzyme integration.
+- Added GRB modulation LUT loading and shader bindings (fragment + compute).
+- Compare summary CSV now records GRB modulation state and time.
+- Radiative transfer LUT plan updated with runtime metadata contract.
+- OpenUniverse scope note updated for Kerr RK4 step (no longer placeholder).
+- GRMHD ingestion plan now includes nubhlight header + full-dump dataset key list.
+- Fixed unused LUT helper to pass compact-common refs into ISCO resolution (`scripts/generate_luts.py`).
+- Generated GRB modulation LUT assets (`assets/luts/grb_modulation_lut.csv`, `assets/luts/grb_modulation_meta.json`).
+- Depth cues defaults tuned for brighter baseline (fog/dof/desat/curve adjustments).
+- Perf HUD now includes window/render resolution + vsync status lines.
+- Added Halide feasibility note for optional CPU-kernel scheduling (`docs/HALIDE_FEASIBILITY.md`).
+- Added `src/physics/math_types.h` to start Eigen/GLM type boundary.
+- Added riced/coverage/profile CMake presets plus profiling/coverage flags and a gcovr coverage-report target for instrumented builds.
 
 ## Recent Changes (2025-12-30)
 
@@ -72,8 +101,22 @@ The simulation is fully operational with the core rendering pipeline:
 - Aligned Conan output layout to `build/Release` and removed duplicate `conan-release` preset collisions.
 - Upgraded Conan pins to latest center2 versions (core + UI), with Eigen deferred; GLM now tracks cci.20230113.
 - Verified latest conancenter versions via `conan list`; reran `conan install` + Release build + ctest with repo-local `.conan` config.
+- Bumped local recipes to Tracy 0.13.1 and RmlUi 6.1 (latest upstream tags); updated Conan export script and requirements.
+- Added FetchContent options for ImNodes, autodiff, and AMReX (`ENABLE_IMNODES`, `ENABLE_AUTODIFF`, `ENABLE_AMREX`).
+- Extended `bench/physics_bench.cpp` CSV/JSON output with warmup + GPU elapsed ns fields.
+- Added GRMHD slice GPU timer and expanded perf CSV/plot outputs for depth + GRMHD.
+- Verified MPFR/GMP precision regression test builds and passes with `-DENABLE_PRECISION_TESTS=ON`.
+- Expanded `tools/z3_sanity.cpp` with a redshift constraint check; builds and runs under `-DENABLE_Z3=ON`.
+- Reviewed `~/Documents/Formal_Methods_Documentation/theorem_solvers_inventory.md`: z3-git 4.15.4 installed, Rocq 9.1 + Agda present; several formal tools missing or blocked by package constraints.
+- Added unit-system metadata (CGS) to validation/LUT generators for reproducible assets.
 - Added optional Z3 integration (`ENABLE_Z3=ON`) and `z3_sanity` tool target; Z3 builds with GCC 15 warnings (non-fatal).
 - Added optional GMP/MPFR dependencies (ground-truth precision baselines for multiprecision tests).
+- Added `scripts/generate_grb_luts.py` (JetFit table export) + `scripts/generate_grb_modulation_lut.py` (Gaussian/FRED envelopes).
+- Compute shader now samples emissivity/redshift/spectral LUTs and supports a Kerr path (Mino stepping) when `kerrSpin != 0`.
+- Fragment shader noise is texture-only; `useNoiseTexture` defaults on (procedural noise removed).
+- Added performance HUD overlay (FPS + GPU timings) with env toggles `BLACKHOLE_PERF_HUD` and `BLACKHOLE_PERF_HUD_SCALE`.
+- Depth effects default to the Subtle baseline (enabled by default).
+- Updated LUT/GRB/Z3/UnitSystem/MangoHUD docs and OpenUniverse scope notes.
 
 ## Recent Changes (2025-12-29)
 
@@ -189,6 +232,20 @@ these are heuristic changes pending visual validation.
 
 #### Follow-up (Optional)
 1. Add camera presets (cinematic/diagnostic).
+
+---
+
+### ISSUE-008: Compute Raytracer Path
+**Priority:** MEDIUM
+**Status:** Implemented (experimental)
+
+#### Current State
+- Compute path now supports LUT sampling and Kerr stepping (Mino time) when spin is non-zero.
+- Fragment vs compute diff tooling remains available for parity checks.
+
+#### Next Steps
+1. Validate compute vs fragment parity on a preset sweep.
+2. Tune step size limits for Kerr paths.
 
 ---
 

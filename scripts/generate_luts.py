@@ -116,11 +116,12 @@ def write_spin_csv(path: str, rows: list[list[float]]) -> None:
 
 
 def generate_lut(size: int, mass_solar: float, spin: float, mdot: float,
-                 func: Callable[[float, float, float], float]) -> tuple[list[float], float, float]:
+                 func: Callable[[float, float, float], float],
+                 refs: dict[str, object] | None = None) -> tuple[list[float], float, float]:
     mass = mass_solar * M_SUN
     r_g = G * mass / C2
     a = spin * r_g
-    r_in = resolve_isco(mass, a, True)
+    r_in, _ = resolve_isco(mass, a, True, refs)
     r_out = r_in * 4.0
     values = []
     for i in range(size):
@@ -191,6 +192,12 @@ def main() -> int:
         "isco_source": isco_source,
         "emissivity_model": "novikov-thorne",
         "redshift_model": "equatorial",
+        "units": {
+            "system": "cgs",
+            "length": "cm",
+            "mass": "g",
+            "time": "s",
+        },
         "r_in_over_rs": r_in / r_s,
         "r_out_over_rs": r_out / r_s,
         "r_in_cm": r_in,

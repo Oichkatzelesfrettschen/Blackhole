@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "shader.h"
+#include "tracy_support.h"
 
 #include <stb_easy_font.h>
 
@@ -62,8 +63,10 @@ void append_text(std::vector<float> &out, std::vector<unsigned char> &scratch, f
 } // namespace
 
 void HudOverlay::init() {
+  BH_ZONE();
   if (program_ == 0) {
-    program_ = createShaderProgram("shader/overlay_text.vert", "shader/overlay_text.frag");
+    program_ = createShaderProgram(std::string("shader/overlay_text.vert"),
+                                   std::string("shader/overlay_text.frag"));
   }
   if (vao_ == 0) {
     glGenVertexArrays(1, &vao_);
@@ -88,6 +91,7 @@ void HudOverlay::init() {
 }
 
 void HudOverlay::shutdown() {
+  BH_ZONE();
   if (vbo_ != 0) {
     glDeleteBuffers(1, &vbo_);
     vbo_ = 0;
@@ -103,12 +107,177 @@ void HudOverlay::shutdown() {
   vertices_.clear();
 }
 
+HudOverlay::~HudOverlay() {
+  shutdown();
+}
+
+bool HudOverlay::isInitialized() const { return program_ != 0 && vao_ != 0 && vbo_ != 0; }
+
+void HudOverlay::setOptions(const HudOverlayOptions &opts) {
+  options_ = opts;
+}
+
+const HudOverlayOptions &HudOverlay::options() const { return options_; }
+
+void HudOverlay::setLines(const std::vector<HudOverlayLine> &lines) {
+  lines_ = lines;
+}
+
+void HudOverlay::addLine(const HudOverlayLine &line) { lines_.push_back(line); }
+
+void HudOverlay::clearLines() { lines_.clear(); }
+
+// Measure text by invoking stb_easy_font and scanning vertex extents.
+glm::vec2 HudOverlay::measureText(const std::string &text, float scale) const {
+  if (text.empty()) {
+    return glm::vec2(0.0f);
+  }
+
+  int estimated = static_cast<int>(text.size() * 270 + 16);
+  std::vector<unsigned char> scratch(static_cast<std::size_t>(estimated));
+
+  unsigned char rgba[4] = {255, 255, 255, 255};
+  int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
+                                  scratch.data(), estimated);
+  if (quads <= 0) {
+    return glm::vec2(0.0f);
+  }
+
+  const EasyFontVertex *verts = reinterpret_cast<const EasyFontVertex *>(scratch.data());
+  float minx = std::numeric_limits<float>::infinity();
+  float miny = std::numeric_limits<float>::infinity();
+  float maxx = -std::numeric_limits<float>::infinity();
+  float maxy = -std::numeric_limits<float>::infinity();
+
+  for (int q = 0; q < quads; ++q) {
+    const EasyFontVertex *v = verts + q * 4;
+    for (int i = 0; i < 4; ++i) {
+      minx = std::min(minx, v[i].x);
+      miny = std::min(miny, v[i].y);
+      maxx = std::max(maxx, v[i].x);
+      maxy = std::max(maxy, v[i].y);
+    }
+  }
+
+  float width = (maxx - minx) * scale;
+  float height = (maxy - miny) * scale;
+  return glm::vec2(width, height);
+}
+
+void HudOverlay::rebuildVertices(int width, int height) {
+  BH_ZONE();
+  vertices_.clear();
+  if (lines_.empty() || width <= 0 || height <= 0) {
+    return;
+  }
+
+  float scale = std::max(options_.scale, 0.25f);
+  const float baseLine = line_height(scale);
+  const float lineStep = baseLine * options_.lineSpacing;
+
+  // Precompute the starting Y depending on origin.
+  float cursorY = 0.0f;
+  if (options_.origin == HudOverlayOptions::Origin::TopLeft) {
+    cursorY = options_.margin;
+  } else {
+    // Bottom-left origin: start such that last line sits at margin from bottom.
+    cursorY = static_cast<float>(height) - options_.margin -
+              baseLine * (static_cast<float>(lines_.size()) - 1) * options_.lineSpacing;
+  }
+
+  std::vector<unsigned char> scratch;
+  for (const auto &line : lines_) {
+    // Determine text extents to support alignment and background.
+    glm::vec2 extents = measureText(line.text, scale);
+    float x = 0.0f;
+    if (options_.align == HudOverlayOptions::Align::Left) {
+      x = options_.margin;
+    } else if (options_.align == HudOverlayOptions::Align::Center) {
+      x = static_cast<float>(width) * 0.5f - extents.x * 0.5f;
+    } else { // Right
+      x = static_cast<float>(width) - options_.margin - extents.x;
+    }
+
+    // Optional background box
+    if (options_.drawBackground && line.background.a > 0.0f) {
+      const float pad = 2.0f * scale;
+      float bx0 = x - pad;
+      float by0 = cursorY - pad;
+      float bx1 = x + extents.x + pad;
+      float by1 = cursorY + baseLine + pad;
+
+      // Two triangles (6 vertices)
+      glm::vec4 bg = line.background;
+      auto pushVertex = [&](float px, float py) {
+        vertices_.push_back(px);
+        vertices_.push_back(py);
+        vertices_.push_back(bg.r);
+        vertices_.push_back(bg.g);
+        vertices_.push_back(bg.b);
+        vertices_.push_back(bg.a);
+      };
+
+      // Triangle 1
+      pushVertex(bx0, by0);
+      pushVertex(bx1, by0);
+      pushVertex(bx1, by1);
+      // Triangle 2
+      pushVertex(bx0, by0);
+      pushVertex(bx1, by1);
+      pushVertex(bx0, by1);
+    }
+
+    // Append the text glyph quads
+    append_text(vertices_, scratch, x, cursorY, scale, line.text, line.color);
+
+    cursorY += lineStep;
+  }
+}
+
+void HudOverlay::render(int width, int height) {
+  BH_ZONE();
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+  if (!isInitialized()) {
+    init();
+  }
+
+  rebuildVertices(width, height);
+
+  if (vertices_.empty()) {
+    return;
+  }
+
+  glUseProgram(program_);
+  glUniform2f(glGetUniformLocation(program_, "uScreenSize"), static_cast<float>(width),
+              static_cast<float>(height));
+
+  glBindVertexArray(vao_);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+  glBufferData(GL_ARRAY_BUFFER,
+               static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
+               vertices_.data(), GL_DYNAMIC_DRAW);
+
+  glDisable(GL_DEPTH_TEST);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  const GLsizei vertexCount = static_cast<GLsizei>(vertices_.size() / 6);
+  glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+
+  glBindVertexArray(0);
+  glUseProgram(0);
+}
+
+// Backwards-compatible immediate-mode render (keeps original behavior).
 void HudOverlay::render(int width, int height, float scale, float margin,
                         const std::vector<HudOverlayLine> &lines) {
+  BH_ZONE();
   if (lines.empty() || width <= 0 || height <= 0) {
     return;
   }
-  if (program_ == 0 || vao_ == 0 || vbo_ == 0) {
+  if (!isInitialized()) {
     init();
   }
 

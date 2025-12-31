@@ -121,6 +121,8 @@ xcosm | pyproject.toml, Makefile | redshift tools
   `boxfit`, `JetFit`, `PyGRB`).
 - `compact-common` confirms EOS/TOV/spacetime (Schwarzschild + Kerr) utilities; use as LUT/validation
   baseline for ISCO/photon/redshift curves.
+- `compact-common` geodesics module uses simplified/damped Schwarzschild ODEs via SciPy; treat as
+  coarse validation only (not a precision reference for Kerr integration).
 - `compact-common` spacetime module exposes `isco_radius`, `photon_sphere_radius`, `kerr_isco`,
   and `integrate_geodesic`; EOS module includes polytrope, Fermi gas, sigma-omega, and tabulated
   EOS references (cleanroom targets only).
@@ -134,6 +136,33 @@ xcosm | pyproject.toml, Makefile | redshift tools
   (heavy Python stack, forked submodule).
 - `openuniverse-common` README: typed spine/adapters with minimal dependencies; use for schema
   definitions and offline pipeline contracts (no runtime coupling).
+- `ASGARD_GRBAfterglow` README confirms Fortran PDE solver for electron evolution + synchrotron/SSC;
+  use for spectral/temporal shape references only (cleanroom).
+- `boxfit` README confirms precomputed RHD box datasets + HDF5/MPI path; use as LUT schema reference.
+- `JetFit` README confirms structured jet tables (`Table.h5`) + interpolation; use for spectral LUT
+  inputs and parameter priors.
+- `PyGRB` README confirms pulse-model fitting + nested sampling; use for time-domain modulation
+  curves only (no runtime coupling).
+- `CompactStar` README confirms C++17 TOV + Hartle solvers, EOS pipelines, and diagnostics schema;
+  use for architectural reference and validation targets.
+- `rns` README confirms rotating neutron star solver + EOS tables; use for frame-dragging baselines.
+- `spandrel-core` README confirms SN Ia cosmology likelihoods + CGS constants; reference-only.
+- `cern-analysis-common` README confirms ROOT/HDF5 I/O + Lorentz vector helpers; patterns only.
+- `PsrSigSim` README confirms pulsar signal simulator; use for periodic emission references.
+- `pantheon` README (Spandrel project) confirms SN Ia synthesis + Pantheon+SH0ES dataset
+  workflows; use for cosmology validation curves only.
+- `xcosm` README confirms cosmology + algebra research stack; reference-only for redshift/data
+  loaders and falsification methodology notes.
+- `desibao` README confirms DESI Y3 BAO analysis scripts; validation inputs only.
+- `qgp-light-ion` README confirms LaTeX+Python data pipeline; reference-only build patterns.
+- `Adaptive-ParticlePhysics-Triggers` README confirms HDF5 datasets + control loop scaffolding;
+  use for frame-budget/control heuristics (offline).
+- `MathScienceCompendium` README confirms equation validation tooling + references; use as
+  offline math validation source only.
+- `PhysicsForge` README confirms LaTeX-based physics papers; reference-only.
+- `openuniverse-knowledge` README confirms LFS binary store for papers/figures; reference-only.
+- `openuniverse/Colorblindness` has no README; contains docs/examples/templates for palettes;
+  only use if accessibility work is explicitly requested.
 
 ## Separate clones outside monorepo (~/Github)
 - openuniverse-common: pyproject.toml (Python >=3.10, minimal deps)
@@ -141,7 +170,7 @@ xcosm | pyproject.toml, Makefile | redshift tools
 - openuniverse: pyproject.toml + Makefile (root)
 
 ## Blackhole internal unused assets (wire-in plan)
-- src/physics/kerr.cpp: placeholder derivatives -> implement Kerr geodesic equations.
+- src/physics/kerr.cpp: Mino-time RK4 step in place; consider adaptive step/turning-point refinements.
 - shader/geodesic_trace.comp: wired compute path for tiled ray integration; validate vs fragment.
 - src/physics/thin_disk.h: add disk emissivity LUT or CPU reference.
 - src/physics/synchrotron.h: use for spectral weighting LUTs.

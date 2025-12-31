@@ -13,6 +13,8 @@ code paths and the validation assets used to keep them consistent.
 - Mass inputs: grams (e.g., `M_SUN`).
 - Distances: cm (`r_s = 2GM/c^2`, `r_g = GM/c^2`).
 - Frequencies: Hz.
+- Validation constants cross-checked against `openuniverse-common` and `grb-common`
+  (CODATA/astropy-based CGS values).
 
 ## GPU (GLSL) Units
 - Shader math uses normalized radii in units of `r_s`.
@@ -35,6 +37,7 @@ code paths and the validation assets used to keep them consistent.
 - `assets/validation/metrics.json` stores `r_s`, `r_isco`, `r_ph` in CGS.
 - `assets/validation/redshift_curve.csv` stores `r_over_rs` vs redshift.
 - `assets/validation/spin_radii_curve.csv` stores spin vs `r_isco/r_s` and `r_ph/r_s`.
+- All generated LUT/validation files must include a `units` metadata block.
 
 ## Reference Curve Generation
 - `scripts/generate_validation_tables.py` prefers `compact-common` when available to emit

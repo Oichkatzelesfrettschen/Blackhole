@@ -16,14 +16,21 @@ No source code is copied; only equations, data formats, and behaviors.
 
 ## Accretion / Emission
 - nubhlight -> HDF5 density/temp/velocity/B ingestion -> 3D textures
+  (dump keys: `P` with `vnams`, `t`, `dump_cnt`, `jcon`, optional `Rmunu`, `Jrad`,
+  `Nem`, `Nabs`, `Nsc`)
 - tardis -> spectral response LUTs for emission weighting
 
 ## GRB / Afterglow
 - grb-common -> constants, cosmology, I/O schema for LUTs
 - grb-common/cosmology -> distance/redshift/time relations for flux scaling
+- grb-common/io/schemas.py -> LightCurve/Spectrum units: time (s), flux (erg/cm^2/s or /Hz),
+  frequency (Hz), wavelength (Angstrom), energy (keV)
 - ASGARD_GRBAfterglow -> afterglow spectrum model (synchrotron + SSC + SSA; implicit PDE for electron spectra)
-- JetFit -> lightcurve LUTs + parameter grids; `Table.h5` spectral functions for synthetic flux
-- boxfit -> HDF5 RHD tables + interpolation (afterglowlibrary box data)
+- JetFit -> lightcurve LUTs + parameter grids; `Table.h5` keys: `Axis` (tau/Eta0/GammaB/theta_obs),
+  `f_peak`, `f_nu_c`, `f_nu_m`, optional `LogAxis`/`LogTable` for scaling
+- boxfit -> HDF5 RHD tables + interpolation (afterglowlibrary box data); EDS datasets:
+  `F`, `t_obs`, `z`, `dL`, `ur_min/max`, `uphi_min/max`, `R_50/75/95/99/100`, `ur_rays`, `uphi_rays`,
+  `I`, `ur`, `uphi`
 - PyGRB -> pulse envelopes for time modulation (FRED + nested sampling for pulse fitting)
 - VAE-Jet -> anomaly tagging concepts (ML-only; use as validation reference, not runtime)
 
@@ -75,3 +82,11 @@ No source code is copied; only equations, data formats, and behaviors.
 4) nubhlight: GRMHD HDF5 ingestion + texture packing.
 5) tardis: spectral calibration LUTs (offline only).
 6) spandrel/xcosm/pantheon: cosmology validation curves (offline only).
+
+## Attribution / citation notes (cleanroom references)
+- ASGARD_GRBAfterglow: README requires explicit attribution; cite Ren et al. 2024 ApJ 962:115.
+- boxfit: cite Van Eerten et al. 2012 ApJ 749:44 for afterglow fits.
+- nubhlight: cite Miller et al. 2019 ApJS 241:2 and Ryan et al. 2015 ApJ 807:31.
+- tardis: cite Kerzendorf & Sim 2014 MNRAS 440:387; add Vogl et al. 2019 A&A 621:A29 if using Type II.
+- grb-common: cite project if using its schemas/constants as validation baselines.
+- compact-common/CompactStar/rns: cite original solver references if metrics/EOS curves are published.

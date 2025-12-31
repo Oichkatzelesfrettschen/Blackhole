@@ -5,6 +5,42 @@
 
 namespace physics {
 
+namespace {
+struct KerrMinoDerivs {
+  double dr;
+  double dtheta;
+  double dphi;
+  double dt;
+};
+
+KerrMinoDerivs kerr_mino_derivatives(const KerrGeodesicState &state, double mass, double a,
+                                     const KerrGeodesicConsts &c) {
+  const double M = G * mass / C2;
+  const double r = state.r;
+  const double theta = state.theta;
+  const KerrPotentials p = kerr_potentials(r, theta, mass, a, c);
+
+  const double R = std::max(p.R, 0.0);
+  const double Theta = std::max(p.Theta, 0.0);
+
+  const double dr_dlam = state.sign_r * std::sqrt(R);
+  const double dtheta_dlam = state.sign_theta * std::sqrt(Theta);
+
+  const double sin_theta = std::sin(theta);
+  const double sin2 = std::max(sin_theta * sin_theta, 1e-12);
+  const double Delta = r * r - 2.0 * M * r + a * a;
+  const double A = (r * r + a * a) * c.E - a * c.Lz;
+  const double delta_safe = std::max(Delta, 1e-12);
+
+  KerrMinoDerivs derivs{};
+  derivs.dr = dr_dlam;
+  derivs.dtheta = dtheta_dlam;
+  derivs.dphi = (c.Lz / sin2) - a * c.E + (a * A / delta_safe);
+  derivs.dt = ((r * r + a * a) * A / delta_safe) + a * (c.Lz - a * c.E * sin2);
+  return derivs;
+}
+} // namespace
+
 KerrPotentials kerr_potentials(double r, double theta, double mass, double a,
                                const KerrGeodesicConsts &c) {
   const double M = G * mass / C2; // Geometric mass [cm]
@@ -38,31 +74,33 @@ KerrGeodesicState kerr_step_mino(const KerrGeodesicState &state, double mass, do
                                  const KerrGeodesicConsts &c, double dlam) {
   KerrGeodesicState next = state;
 
-  const double M = G * mass / C2;
-  const double r = state.r;
-  const double theta = state.theta;
-  const KerrPotentials p = kerr_potentials(r, theta, mass, a, c);
+  const KerrMinoDerivs k1 = kerr_mino_derivatives(state, mass, a, c);
 
-  const double R = std::max(p.R, 0.0);
-  const double Theta = std::max(p.Theta, 0.0);
+  KerrGeodesicState s2 = state;
+  s2.r += 0.5 * dlam * k1.dr;
+  s2.theta += 0.5 * dlam * k1.dtheta;
+  s2.phi += 0.5 * dlam * k1.dphi;
+  s2.t += 0.5 * dlam * k1.dt;
+  const KerrMinoDerivs k2 = kerr_mino_derivatives(s2, mass, a, c);
 
-  const double dr_dlam = state.sign_r * std::sqrt(R);
-  const double dtheta_dlam = state.sign_theta * std::sqrt(Theta);
+  KerrGeodesicState s3 = state;
+  s3.r += 0.5 * dlam * k2.dr;
+  s3.theta += 0.5 * dlam * k2.dtheta;
+  s3.phi += 0.5 * dlam * k2.dphi;
+  s3.t += 0.5 * dlam * k2.dt;
+  const KerrMinoDerivs k3 = kerr_mino_derivatives(s3, mass, a, c);
 
-  const double sin_theta = std::sin(theta);
-  const double sin2 = std::max(sin_theta * sin_theta, 1e-12);
-  const double Delta = r * r - 2.0 * M * r + a * a;
-  const double A = (r * r + a * a) * c.E - a * c.Lz;
-  const double delta_safe = std::max(Delta, 1e-12);
+  KerrGeodesicState s4 = state;
+  s4.r += dlam * k3.dr;
+  s4.theta += dlam * k3.dtheta;
+  s4.phi += dlam * k3.dphi;
+  s4.t += dlam * k3.dt;
+  const KerrMinoDerivs k4 = kerr_mino_derivatives(s4, mass, a, c);
 
-  const double dphi_dlam = (c.Lz / sin2) - a * c.E + (a * A / delta_safe);
-  const double dt_dlam =
-      ((r * r + a * a) * A / delta_safe) + a * (c.Lz - a * c.E * sin2);
-
-  next.r += dlam * dr_dlam;
-  next.theta += dlam * dtheta_dlam;
-  next.phi += dlam * dphi_dlam;
-  next.t += dlam * dt_dlam;
+  next.r += dlam * (k1.dr + 2.0 * k2.dr + 2.0 * k3.dr + k4.dr) / 6.0;
+  next.theta += dlam * (k1.dtheta + 2.0 * k2.dtheta + 2.0 * k3.dtheta + k4.dtheta) / 6.0;
+  next.phi += dlam * (k1.dphi + 2.0 * k2.dphi + 2.0 * k3.dphi + k4.dphi) / 6.0;
+  next.t += dlam * (k1.dt + 2.0 * k2.dt + 2.0 * k3.dt + k4.dt) / 6.0;
 
   next.theta = std::clamp(next.theta, 1e-6, PI - 1e-6);
 

@@ -11,7 +11,10 @@
 
 // C system headers
 #include <cassert>
+#include <csignal>
 #include <cstdio>
+#include <cstring>
+#include <unistd.h>
 
 // C++ system headers
 #include <algorithm>
@@ -29,6 +32,16 @@
 
 // Third-party library headers
 #include "gl_loader.h"
+#ifndef BLACKHOLE_HAS_CPPTRACE
+#if __has_include(<cpptrace/cpptrace.hpp>)
+#define BLACKHOLE_HAS_CPPTRACE 1
+#else
+#define BLACKHOLE_HAS_CPPTRACE 0
+#endif
+#endif
+#if BLACKHOLE_HAS_CPPTRACE
+#include <cpptrace/cpptrace.hpp>
+#endif
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -55,6 +68,138 @@
 #include "tracy_support.h"
 
 enum class CameraMode { Input = 0, Front, Top, Orbit };
+
+#if BLACKHOLE_HAS_CPPTRACE
+namespace {
+constexpr std::size_t kTraceMaxFrames = 64;
+volatile sig_atomic_t gHandlingSignal = 0;
+bool gCanSignalSafeUnwind = false;
+bool gCanSafeObjectInfo = false;
+
+static std::size_t cstrLength(const char *str) {
+  std::size_t length = 0;
+  while (str[length] != '\0') {
+    ++length;
+  }
+  return length;
+}
+
+static void writeStderr(const char *str) {
+  ssize_t rc = write(STDERR_FILENO, str, cstrLength(str));
+  (void)rc;
+}
+
+static void writeDec(std::size_t value) {
+  char buf[32];
+  std::size_t i = 0;
+  do {
+    buf[i++] = static_cast<char>('0' + (value % 10));
+    value /= 10;
+  } while (value != 0 && i < sizeof(buf));
+  for (std::size_t j = 0; j < i / 2; ++j) {
+    char tmp = buf[j];
+    buf[j] = buf[i - 1 - j];
+    buf[i - 1 - j] = tmp;
+  }
+  ssize_t rc = write(STDERR_FILENO, buf, i);
+  (void)rc;
+}
+
+static void writeHex(uintptr_t value) {
+  static constexpr char kHex[] = "0123456789abcdef";
+  char buf[2 + sizeof(uintptr_t) * 2];
+  buf[0] = '0';
+  buf[1] = 'x';
+  for (std::size_t i = 0; i < sizeof(uintptr_t) * 2; ++i) {
+    buf[2 + sizeof(uintptr_t) * 2 - 1 - i] = kHex[value & 0xF];
+    value >>= 4;
+  }
+  ssize_t rc = write(STDERR_FILENO, buf, sizeof(buf));
+  (void)rc;
+}
+
+static const char *signalName(int sig) {
+  switch (sig) {
+    case SIGSEGV:
+      return "SIGSEGV";
+    case SIGABRT:
+      return "SIGABRT";
+    case SIGFPE:
+      return "SIGFPE";
+    case SIGILL:
+      return "SIGILL";
+    case SIGBUS:
+      return "SIGBUS";
+    case SIGTERM:
+      return "SIGTERM";
+    default:
+      return "SIGNAL";
+  }
+}
+
+static void crashSignalHandler(int sig) {
+  if (gHandlingSignal != 0) {
+    _Exit(128 + sig);
+  }
+  gHandlingSignal = 1;
+
+  writeStderr("\n==== Blackhole crash signal: ");
+  writeStderr(signalName(sig));
+  writeStderr(" ====\n");
+
+  if (!gCanSignalSafeUnwind) {
+    writeStderr("cpptrace: signal-safe unwind unavailable\n");
+    std::signal(sig, SIG_DFL);
+    std::raise(sig);
+    _Exit(128 + sig);
+  }
+
+  cpptrace::frame_ptr frames[kTraceMaxFrames];
+  std::size_t count = cpptrace::safe_generate_raw_trace(frames, kTraceMaxFrames, 1);
+  for (std::size_t i = 0; i < count; ++i) {
+    writeStderr("#");
+    writeDec(i);
+    writeStderr(" ");
+    writeHex(reinterpret_cast<uintptr_t>(frames[i]));
+    if (gCanSafeObjectInfo) {
+      cpptrace::safe_object_frame object_frame{};
+      cpptrace::get_safe_object_frame(frames[i], &object_frame);
+      if (object_frame.object_path[0] != '\0') {
+        writeStderr(" ");
+        writeStderr(object_frame.object_path);
+        writeStderr(" +");
+        writeHex(reinterpret_cast<uintptr_t>(object_frame.address_relative_to_object_start));
+      }
+    }
+    writeStderr("\n");
+  }
+
+  std::signal(sig, SIG_DFL);
+  std::raise(sig);
+  _Exit(128 + sig);
+}
+
+static void installCrashHandlers() {
+  cpptrace::use_default_stderr_logger();
+  cpptrace::register_terminate_handler();
+  gCanSignalSafeUnwind = cpptrace::can_signal_safe_unwind();
+  gCanSafeObjectInfo = cpptrace::can_get_safe_object_frame();
+  if (!gCanSignalSafeUnwind) {
+    std::fprintf(stderr,
+                 "cpptrace: signal-safe unwinding unavailable; signal crashes will be limited\n");
+  }
+
+  std::signal(SIGSEGV, crashSignalHandler);
+  std::signal(SIGABRT, crashSignalHandler);
+  std::signal(SIGFPE, crashSignalHandler);
+  std::signal(SIGILL, crashSignalHandler);
+  std::signal(SIGBUS, crashSignalHandler);
+  std::signal(SIGTERM, crashSignalHandler);
+}
+}  // namespace
+#else
+static void installCrashHandlers() {}
+#endif
 
 static glm::vec3 cameraPositionFromYawPitch(float yawDeg, float pitchDeg, float radius) {
   float yawRad = glm::radians(yawDeg);
@@ -274,7 +419,8 @@ static void appendCompareSummary(const std::string &path, int index,
                                  const std::string &secondaryTag, int width, int height,
                                  const DiffStats &stats, float diffScale, bool wroteOutputs,
                                  bool wroteDiff, float threshold, bool exceeded,
-                                 double timeSec, float kerrSpin) {
+                                 double timeSec, float kerrSpin, bool grbEnabled,
+                                 float grbTime) {
   if (!stats.valid) {
     return;
   }
@@ -285,13 +431,14 @@ static void appendCompareSummary(const std::string &path, int index,
   }
   if (!exists) {
     out << "index,primary,secondary,width,height,mean_abs,rms,max_abs,diff_scale,threshold,exceeded,"
-           "write_outputs,write_diff,time_sec,kerr_spin\n";
+           "write_outputs,write_diff,time_sec,kerr_spin,grb_enabled,grb_time\n";
   }
   out << std::fixed << std::setprecision(6);
   out << index << "," << primaryTag << "," << secondaryTag << "," << width << "," << height << ","
       << stats.meanAbs << "," << stats.rms << "," << stats.maxAbs << "," << diffScale << ","
       << threshold << "," << (exceeded ? 1 : 0) << "," << (wroteOutputs ? 1 : 0) << ","
-      << (wroteDiff ? 1 : 0) << "," << timeSec << "," << kerrSpin << "\n";
+      << (wroteDiff ? 1 : 0) << "," << timeSec << "," << kerrSpin << ","
+      << (grbEnabled ? 1 : 0) << "," << grbTime << "\n";
 }
 
 struct ComparePreset {
@@ -408,6 +555,29 @@ static bool loadSpectralLutAssets(std::vector<float> &values, float &wavelengthM
   }
   wavelengthMin = static_cast<float>(waveMin);
   wavelengthMax = static_cast<float>(waveMax);
+  return true;
+}
+
+static bool loadGrbModulationLutAssets(std::vector<float> &values, float &timeMin,
+                                       float &timeMax) {
+  values.clear();
+  if (!loadLutCsv("assets/luts/grb_modulation_lut.csv", values)) {
+    return false;
+  }
+  std::string metaText;
+  if (!readTextFile("assets/luts/grb_modulation_meta.json", metaText)) {
+    return false;
+  }
+  double tMin = 0.0;
+  double tMax = 0.0;
+  if (!parseJsonNumber(metaText, "t_min", tMin)) {
+    return false;
+  }
+  if (!parseJsonNumber(metaText, "t_max", tMax)) {
+    return false;
+  }
+  timeMin = static_cast<float>(tMin);
+  timeMax = static_cast<float>(tMax);
   return true;
 }
 
@@ -652,6 +822,39 @@ static void renderControlsSettingsPanel(int &cameraModeIndex, float &orbitRadius
         return "Unknown";
       }
     };
+    auto applyControlPreset = [&](float mouseSens, float keySens, float scrollSens,
+                                  float timeScale, float padDeadzone, float padLook,
+                                  float padRoll, float padZoom, float padTrigger) {
+      input.setMouseSensitivity(mouseSens);
+      input.setKeyboardSensitivity(keySens);
+      input.setScrollSensitivity(scrollSens);
+      input.setTimeScale(timeScale);
+      input.setGamepadDeadzone(padDeadzone);
+      input.setGamepadLookSensitivity(padLook);
+      input.setGamepadRollSensitivity(padRoll);
+      input.setGamepadZoomSensitivity(padZoom);
+      input.setGamepadTriggerZoomSensitivity(padTrigger);
+    };
+    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Presets");
+    ImGui::Separator();
+
+    if (ImGui::Button("Balanced")) {
+      Settings defaults;
+      applyControlPreset(defaults.mouseSensitivity, defaults.keyboardSensitivity,
+                         defaults.scrollSensitivity, defaults.timeScale,
+                         defaults.gamepadDeadzone, defaults.gamepadLookSensitivity,
+                         defaults.gamepadRollSensitivity, defaults.gamepadZoomSensitivity,
+                         defaults.gamepadTriggerZoomSensitivity);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Precision")) {
+      applyControlPreset(0.6f, 0.6f, 0.7f, 0.75f, 0.10f, 70.0f, 70.0f, 5.0f, 7.0f);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Fast")) {
+      applyControlPreset(1.4f, 1.4f, 1.2f, 1.25f, 0.20f, 120.0f, 120.0f, 8.0f, 12.0f);
+    }
+
     ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Sensitivity");
     ImGui::Separator();
 
@@ -768,6 +971,19 @@ static void renderControlsSettingsPanel(int &cameraModeIndex, float &orbitRadius
       input.setGamepadZoomInverted(gamepadInvertZoom);
     }
 
+    if (ImGui::Button("Reset Gamepad Mapping to Defaults")) {
+      Settings defaults;
+      input.setGamepadYawAxis(defaults.gamepadYawAxis);
+      input.setGamepadPitchAxis(defaults.gamepadPitchAxis);
+      input.setGamepadRollAxis(defaults.gamepadRollAxis);
+      input.setGamepadZoomAxis(defaults.gamepadZoomAxis);
+      input.setGamepadZoomInAxis(defaults.gamepadZoomInAxis);
+      input.setGamepadZoomOutAxis(defaults.gamepadZoomOutAxis);
+      input.setGamepadResetButton(defaults.gamepadResetButton);
+      input.setGamepadPauseButton(defaults.gamepadPauseButton);
+      input.setGamepadToggleUIButton(defaults.gamepadToggleUIButton);
+    }
+
     if (ImGui::CollapsingHeader("Gamepad Axis Mapping")) {
       int yawAxis = input.getGamepadYawAxis();
       if (ImGui::SliderInt("Yaw Axis", &yawAxis, 0, GLFW_GAMEPAD_AXIS_LAST)) {
@@ -822,18 +1038,41 @@ static void renderControlsSettingsPanel(int &cameraModeIndex, float &orbitRadius
     }
 
     if (ImGui::CollapsingHeader("Gamepad Deadzone Monitor")) {
-      auto axisBar = [&](const char *label, float value) {
-        float normalized = (value + 1.0f) * 0.5f;
-        ImGui::Text("%s: %.2f", label, static_cast<double>(value));
+      auto axisBar = [&](const char *label, float value, float rawValue, float minValue,
+                         float maxValue) {
+        float normalized = (value - minValue) / (maxValue - minValue);
+        normalized = std::clamp(normalized, 0.0f, 1.0f);
+        ImGui::Text("%s: %.2f (raw %.2f)", label, static_cast<double>(value),
+                    static_cast<double>(rawValue));
         ImGui::ProgressBar(normalized, ImVec2(0.0f, 0.0f));
       };
 
-      axisBar("Left X", input.getGamepadAxisFiltered(GLFW_GAMEPAD_AXIS_LEFT_X));
-      axisBar("Left Y", input.getGamepadAxisFiltered(GLFW_GAMEPAD_AXIS_LEFT_Y));
-      axisBar("Right X", input.getGamepadAxisFiltered(GLFW_GAMEPAD_AXIS_RIGHT_X));
-      axisBar("Right Y", input.getGamepadAxisFiltered(GLFW_GAMEPAD_AXIS_RIGHT_Y));
-      axisBar("Left Trigger", input.getGamepadAxisRaw(GLFW_GAMEPAD_AXIS_LEFT_TRIGGER));
-      axisBar("Right Trigger", input.getGamepadAxisRaw(GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER));
+      int yawAxis = input.getGamepadYawAxis();
+      int pitchAxis = input.getGamepadPitchAxis();
+      int rollAxis = input.getGamepadRollAxis();
+      int zoomAxis = input.getGamepadZoomAxis();
+      int zoomInAxis = input.getGamepadZoomInAxis();
+      int zoomOutAxis = input.getGamepadZoomOutAxis();
+
+      std::string yawLabel = std::string("Yaw (") + gamepadAxisHint(yawAxis) + ")";
+      std::string pitchLabel = std::string("Pitch (") + gamepadAxisHint(pitchAxis) + ")";
+      std::string rollLabel = std::string("Roll (") + gamepadAxisHint(rollAxis) + ")";
+      std::string zoomLabel = std::string("Zoom (") + gamepadAxisHint(zoomAxis) + ")";
+      std::string zoomInLabel = std::string("Zoom In (") + gamepadAxisHint(zoomInAxis) + ")";
+      std::string zoomOutLabel = std::string("Zoom Out (") + gamepadAxisHint(zoomOutAxis) + ")";
+
+      axisBar(yawLabel.c_str(), input.getGamepadAxisFiltered(yawAxis),
+              input.getGamepadAxisRaw(yawAxis), -1.0f, 1.0f);
+      axisBar(pitchLabel.c_str(), input.getGamepadAxisFiltered(pitchAxis),
+              input.getGamepadAxisRaw(pitchAxis), -1.0f, 1.0f);
+      axisBar(rollLabel.c_str(), input.getGamepadAxisFiltered(rollAxis),
+              input.getGamepadAxisRaw(rollAxis), -1.0f, 1.0f);
+      axisBar(zoomLabel.c_str(), input.getGamepadAxisFiltered(zoomAxis),
+              input.getGamepadAxisRaw(zoomAxis), -1.0f, 1.0f);
+      axisBar(zoomInLabel.c_str(), input.getGamepadAxisRaw(zoomInAxis),
+              input.getGamepadAxisRaw(zoomInAxis), 0.0f, 1.0f);
+      axisBar(zoomOutLabel.c_str(), input.getGamepadAxisRaw(zoomOutAxis),
+              input.getGamepadAxisRaw(zoomOutAxis), 0.0f, 1.0f);
     }
 
     if (ImGui::CollapsingHeader("Key Bindings", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1063,7 +1302,7 @@ private:
 
 public:
   explicit PostProcessPass(const std::string &fragShader) {
-    this->program = createShaderProgram("shader/simple.vert", fragShader);
+    this->program = createShaderProgram(std::string("shader/simple.vert"), fragShader);
 
     glUseProgram(this->program);
     glUniform1i(glGetUniformLocation(program, "texture0"), 0);
@@ -1071,6 +1310,11 @@ public:
   }
 
   void render(GLuint inputColorTexture, int width, int height, GLuint destFramebuffer = 0) {
+    static GLuint quadVao = 0;
+    if (quadVao == 0) {
+      quadVao = createQuadVAO();
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, destFramebuffer);
 
     glDisable(GL_DEPTH_TEST);
@@ -1079,6 +1323,7 @@ public:
     glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(this->program);
+    glBindVertexArray(quadVao);
 
     glUniform2f(glGetUniformLocation(this->program, "resolution"), static_cast<float>(width),
                 static_cast<float>(height));
@@ -1127,6 +1372,7 @@ struct GpuTimerSet {
   GpuTimer bloom;
   GpuTimer tonemap;
   GpuTimer depth;
+  GpuTimer grmhdSlice;
 
   void init() {
     blackholeFragment.init();
@@ -1134,6 +1380,7 @@ struct GpuTimerSet {
     bloom.init();
     tonemap.init();
     depth.init();
+    grmhdSlice.init();
     initialized = true;
   }
 
@@ -1143,6 +1390,7 @@ struct GpuTimerSet {
     bloom.shutdown();
     tonemap.shutdown();
     depth.shutdown();
+    grmhdSlice.shutdown();
     initialized = false;
   }
 
@@ -1152,6 +1400,7 @@ struct GpuTimerSet {
     bloom.resolve();
     tonemap.resolve();
     depth.resolve();
+    grmhdSlice.resolve();
   }
 
   void swap() {
@@ -1160,6 +1409,7 @@ struct GpuTimerSet {
     bloom.swap();
     tonemap.swap();
     depth.swap();
+    grmhdSlice.swap();
   }
 };
 
@@ -1171,6 +1421,7 @@ struct TimingHistory {
   std::array<float, kCapacity> gpuBloomMs{};
   std::array<float, kCapacity> gpuTonemapMs{};
   std::array<float, kCapacity> gpuDepthMs{};
+  std::array<float, kCapacity> gpuGrmhdSliceMs{};
   int offset = 0;
   int count = 0;
 
@@ -1183,6 +1434,7 @@ struct TimingHistory {
       gpuBloomMs[index] = static_cast<float>(timers.bloom.lastMs);
       gpuTonemapMs[index] = static_cast<float>(timers.tonemap.lastMs);
       gpuDepthMs[index] = static_cast<float>(timers.depth.lastMs);
+      gpuGrmhdSliceMs[index] = static_cast<float>(timers.grmhdSlice.lastMs);
     } else {
       const float nan = std::numeric_limits<float>::quiet_NaN();
       gpuFragmentMs[index] = nan;
@@ -1190,6 +1442,7 @@ struct TimingHistory {
       gpuBloomMs[index] = nan;
       gpuTonemapMs[index] = nan;
       gpuDepthMs[index] = nan;
+      gpuGrmhdSliceMs[index] = nan;
     }
     offset = (offset + 1) % kCapacity;
     if (count < kCapacity) {
@@ -1213,13 +1466,13 @@ static void appendGpuTimingSample(const std::string &path, int index, int width,
   }
   if (!exists) {
     out << "index,time_sec,width,height,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,"
-           "gpu_tonemap_ms,gpu_depth_ms,compute_active,kerr_spin\n";
+           "gpu_tonemap_ms,gpu_depth_ms,gpu_grmhd_slice_ms,compute_active,kerr_spin\n";
   }
   out << std::fixed << std::setprecision(6);
   out << index << "," << timeSec << "," << width << "," << height << "," << cpuFrameMs << ","
       << timers.blackholeFragment.lastMs << "," << timers.blackholeCompute.lastMs << ","
       << timers.bloom.lastMs << "," << timers.tonemap.lastMs << "," << timers.depth.lastMs << ","
-      << (computeActive ? 1 : 0) << "," << kerrSpin << "\n";
+      << timers.grmhdSlice.lastMs << "," << (computeActive ? 1 : 0) << "," << kerrSpin << "\n";
 }
 
 static void writeTimingHistoryCsv(const TimingHistory &history, const std::string &path) {
@@ -1228,7 +1481,8 @@ static void writeTimingHistoryCsv(const TimingHistory &history, const std::strin
   if (!out) {
     return;
   }
-  out << "index,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,gpu_tonemap_ms,gpu_depth_ms\n";
+  out << "index,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,gpu_tonemap_ms,gpu_depth_ms,"
+         "gpu_grmhd_slice_ms\n";
   out << std::fixed << std::setprecision(6);
 
   int count = history.count;
@@ -1241,17 +1495,21 @@ static void writeTimingHistoryCsv(const TimingHistory &history, const std::strin
     std::size_t idx = static_cast<std::size_t>(rawIndex);
     out << i << "," << history.cpuMs[idx] << "," << history.gpuFragmentMs[idx] << ","
         << history.gpuComputeMs[idx] << "," << history.gpuBloomMs[idx] << ","
-        << history.gpuTonemapMs[idx] << "," << history.gpuDepthMs[idx] << "\n";
+        << history.gpuTonemapMs[idx] << "," << history.gpuDepthMs[idx] << ","
+        << history.gpuGrmhdSliceMs[idx] << "\n";
   }
 }
 
 static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &timers,
-                                   const TimingHistory &history, float cpuFrameMs) {
+                                   const TimingHistory &history, float cpuFrameMs,
+                                   bool &perfOverlayEnabled, float &perfOverlayScale) {
   ImGui::SetNextWindowPos(ImVec2(1020, 10), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Performance", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::Checkbox("GPU Timing", &gpuTimingEnabled);
+    ImGui::Checkbox("HUD Overlay", &perfOverlayEnabled);
+    ImGui::SliderFloat("HUD Scale", &perfOverlayScale, 0.5f, 2.0f);
     double cpuFrameMsD = static_cast<double>(cpuFrameMs);
     double fps = cpuFrameMs > 0.0f ? 1000.0 / cpuFrameMsD : 0.0;
     ImGui::Text("CPU frame: %.2f ms (%.1f FPS)", cpuFrameMsD, fps);
@@ -1263,6 +1521,7 @@ static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &ti
       ImGui::Text("GPU Bloom:     %.2f ms", timers.bloom.lastMs);
       ImGui::Text("GPU Tonemap:   %.2f ms", timers.tonemap.lastMs);
       ImGui::Text("GPU Depth:     %.2f ms", timers.depth.lastMs);
+      ImGui::Text("GPU GRMHD:     %.2f ms", timers.grmhdSlice.lastMs);
     } else {
       ImGui::TextDisabled("GPU timings inactive");
     }
@@ -1274,6 +1533,10 @@ static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &ti
       ImPlot::PlotLine("GPU Frag", history.gpuFragmentMs.data(), history.count, 1.0, 0.0,
                        ImPlotLineFlags_SkipNaN, history.offset);
       ImPlot::PlotLine("GPU Comp", history.gpuComputeMs.data(), history.count, 1.0, 0.0,
+                       ImPlotLineFlags_SkipNaN, history.offset);
+      ImPlot::PlotLine("GPU Depth", history.gpuDepthMs.data(), history.count, 1.0, 0.0,
+                       ImPlotLineFlags_SkipNaN, history.offset);
+      ImPlot::PlotLine("GPU GRMHD", history.gpuGrmhdSliceMs.data(), history.count, 1.0, 0.0,
                        ImPlotLineFlags_SkipNaN, history.offset);
       ImPlot::EndPlot();
     }
@@ -1288,9 +1551,11 @@ static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &ti
 }
 
 int main(int, char **) {
-  // Load settings first
-  SettingsManager::instance().load();
-  auto &settings = SettingsManager::instance().get();
+  installCrashHandlers();
+  try {
+    // Load settings first
+    SettingsManager::instance().load();
+    auto &settings = SettingsManager::instance().get();
 
   // Initialize window and OpenGL context
   GLFWwindow *window = initializeWindow(settings.windowWidth, settings.windowHeight);
@@ -1342,7 +1607,7 @@ int main(int, char **) {
   static float bloomStrength = 0.1f;
   static bool tonemappingEnabled = true;
   static float gamma = 2.5f;
-  static bool gravatationalLensing = true;
+  static bool gravitationalLensing = true;
   static bool renderBlackHole = true;
   static bool adiskEnabled = true;
   static bool adiskParticle = true;
@@ -1352,7 +1617,7 @@ int main(int, char **) {
   static float adiskLit = 0.25f;
   static float adiskNoiseLOD = 5.0f;
   static float adiskNoiseScale = 0.8f;
-  static bool useNoiseTexture = false;
+  static bool useNoiseTexture = true;
   static float noiseTextureScale = 0.25f;
   static int noiseTextureSize = 32;
   static float adiskSpeed = 0.5f;
@@ -1424,6 +1689,11 @@ int main(int, char **) {
   static bool controlsOverlayConfigInit = false;
   static bool controlsOverlayEnabled = true;
   static float controlsOverlayScale = 1.1f;
+  static HudOverlay perfOverlay;
+  static bool perfOverlayReady = false;
+  static bool perfOverlayConfigInit = false;
+  static bool perfOverlayEnabled = true;
+  static float perfOverlayScale = 1.0f;
   static ui::RmlUiOverlay rmluiOverlay;
   static bool rmluiEnabled = false;
   static bool rmluiReady = false;
@@ -1446,6 +1716,15 @@ int main(int, char **) {
   static float spectralWavelengthMax = 0.0f;
   static float spectralRadiusMin = 0.0f;
   static float spectralRadiusMax = 0.0f;
+  static bool grbModulationTried = false;
+  static bool grbModulationLoaded = false;
+  static bool useGrbModulation = false;
+  static bool grbTimeManual = false;
+  static float grbTimeManualValue = 0.0f;
+  static float grbTimeMin = 0.0f;
+  static float grbTimeMax = 1.0f;
+  static std::vector<float> grbModulationValues;
+  static GLuint texGrbModulationLUT = 0;
   static std::vector<float> spectralLutValues;
   static bool lutInitialized = false;
   static float lutSpin = 0.0f;
@@ -1512,6 +1791,19 @@ int main(int, char **) {
       controlsOverlayScale = std::max(scale, 0.5f);
     }
     controlsOverlayConfigInit = true;
+  }
+
+  if (!perfOverlayConfigInit) {
+    const char *overlayEnv = std::getenv("BLACKHOLE_PERF_HUD");
+    if (overlayEnv != nullptr && std::string(overlayEnv) == "0") {
+      perfOverlayEnabled = false;
+    }
+    const char *scaleEnv = std::getenv("BLACKHOLE_PERF_HUD_SCALE");
+    if (scaleEnv != nullptr) {
+      float scale = static_cast<float>(std::atof(scaleEnv));
+      perfOverlayScale = std::max(scale, 0.5f);
+    }
+    perfOverlayConfigInit = true;
   }
 
   auto recreateRenderTargets = [&](int newWidth, int newHeight) {
@@ -1672,6 +1964,7 @@ int main(int, char **) {
       TracyPlot("gpu_bloom_ms", gpuTimers.bloom.lastMs);
       TracyPlot("gpu_tonemap_ms", gpuTimers.tonemap.lastMs);
       TracyPlot("gpu_depth_ms", gpuTimers.depth.lastMs);
+      TracyPlot("gpu_grmhd_slice_ms", gpuTimers.grmhdSlice.lastMs);
     }
 
     ImGui_ImplOpenGL3_NewFrame();
@@ -1701,8 +1994,20 @@ int main(int, char **) {
       rmluiReady = false;
     }
 
-    static GLuint galaxy = loadCubemap("assets/skybox_nebula_dark");
-    static GLuint colorMap = loadTexture2D("assets/color_map.png");
+    static GLuint galaxy = loadCubemap(std::string("assets/skybox_nebula_dark"));
+    static GLuint colorMap = loadTexture2D(std::string("assets/color_map.png"));
+    static GLuint fallback2D = 0;
+    static GLuint fallback3D = 0;
+    static GLuint fallbackCubemap = 0;
+    if (fallback2D == 0) {
+      fallback2D = createColorTexture(1, 1, false);
+    }
+    if (fallback3D == 0) {
+      fallback3D = createFloatTexture3D(1, 1, 1, std::vector<float>{0.0f});
+    }
+    if (fallbackCubemap == 0) {
+      fallbackCubemap = createSolidCubemap1x1(0, 0, 0);
+    }
     if (!noiseTextureReady) {
       auto volume = physics::generate_noise_volume(noiseTextureSize, 1337u);
       texNoiseVolume = createFloatTexture3D(volume.size, volume.size, volume.size, volume.values);
@@ -1849,30 +2154,52 @@ int main(int, char **) {
     spectralRadiusMin = std::max(0.0f, spectralRadiusMin);
     spectralRadiusMax = std::max(spectralRadiusMax, spectralRadiusMin + 0.001f);
 
+    if (!grbModulationTried) {
+      grbModulationTried = true;
+      grbModulationLoaded =
+          loadGrbModulationLutAssets(grbModulationValues, grbTimeMin, grbTimeMax);
+      if (grbModulationLoaded) {
+        if (texGrbModulationLUT != 0) {
+          glDeleteTextures(1, &texGrbModulationLUT);
+          texGrbModulationLUT = 0;
+        }
+        int lutSize = static_cast<int>(grbModulationValues.size());
+        texGrbModulationLUT = createFloatTexture2D(lutSize, 1, grbModulationValues);
+        grbTimeManualValue = grbTimeMin;
+      }
+    }
+    bool grbModulationReady = grbModulationLoaded && texGrbModulationLUT != 0;
+    bool grbModulationEnabled = useGrbModulation && grbModulationReady;
+    float grbSpan = std::max(grbTimeMax - grbTimeMin, 0.001f);
+    float grbTimeSeconds = 0.0f;
+    if (grbModulationReady) {
+      if (grbTimeManual) {
+        grbTimeSeconds = std::clamp(grbTimeManualValue, grbTimeMin, grbTimeMax);
+      } else {
+        grbTimeSeconds = grbTimeMin +
+                         std::fmod(static_cast<float>(currentTime), grbSpan);
+      }
+    }
+
+    bool lutReady = texEmissivityLUT != 0 && texRedshiftLUT != 0;
+
     if (gpuTimers.initialized) {
       gpuTimers.tonemap.begin();
     }
     {
       RenderToTextureInfo rtti;
       rtti.fragShader = "shader/blackhole_main.frag";
-      rtti.cubemapUniforms["galaxy"] = galaxy;
-      rtti.textureUniforms["colorMap"] = colorMap;
-      bool lutReady = texEmissivityLUT != 0 && texRedshiftLUT != 0;
-      if (lutReady) {
-        rtti.textureUniforms["emissivityLUT"] = texEmissivityLUT;
-        rtti.textureUniforms["redshiftLUT"] = texRedshiftLUT;
-      }
-      if (spectralEnabled) {
-        rtti.textureUniforms["spectralLUT"] = texSpectralLUT;
-      }
+      rtti.cubemapUniforms["galaxy"] = galaxy != 0 ? galaxy : fallbackCubemap;
+      rtti.textureUniforms["colorMap"] = colorMap != 0 ? colorMap : fallback2D;
+      rtti.textureUniforms["uSynchLUT"] = fallback2D;
+      rtti.textureUniforms["emissivityLUT"] = lutReady ? texEmissivityLUT : fallback2D;
+      rtti.textureUniforms["redshiftLUT"] = lutReady ? texRedshiftLUT : fallback2D;
+      rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
+      rtti.textureUniforms["grbModulationLUT"] = grbModulationReady ? texGrbModulationLUT : fallback2D;
       noiseTextureScale = std::max(noiseTextureScale, 0.01f);
       bool noiseReady = useNoiseTexture && texNoiseVolume != 0;
-      if (noiseReady) {
-        rtti.texture3DUniforms["noiseTexture"] = texNoiseVolume;
-      }
-      if (grmhdEnabled) {
-        rtti.texture3DUniforms["grmhdTexture"] = grmhdTexture.texture;
-      }
+      rtti.texture3DUniforms["noiseTexture"] = noiseReady ? texNoiseVolume : fallback3D;
+      rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexture.texture : fallback3D;
 
       // Pass camera state to shader
       rtti.vec3Uniforms["cameraPos"] = cameraPos;
@@ -1882,6 +2209,7 @@ int main(int, char **) {
       rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
       rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
       rtti.floatUniforms["useSpectralLUT"] = spectralEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["useGrbModulation"] = grbModulationEnabled ? 1.0f : 0.0f;
       rtti.floatUniforms["noiseTextureScale"] = noiseTextureScale;
       rtti.floatUniforms["lutRadiusMin"] = lutRadiusMin;
       rtti.floatUniforms["lutRadiusMax"] = lutRadiusMax;
@@ -1889,6 +2217,9 @@ int main(int, char **) {
       rtti.floatUniforms["redshiftRadiusMax"] = redshiftRadiusMax;
       rtti.floatUniforms["spectralRadiusMin"] = spectralRadiusMin;
       rtti.floatUniforms["spectralRadiusMax"] = spectralRadiusMax;
+      rtti.floatUniforms["grbTime"] = grbTimeSeconds;
+      rtti.floatUniforms["grbTimeMin"] = grbTimeMin;
+      rtti.floatUniforms["grbTimeMax"] = grbTimeMax;
       rtti.vec3Uniforms["grmhdBoundsMin"] = grmhdBoundsMin;
       rtti.vec3Uniforms["grmhdBoundsMax"] = grmhdBoundsMax;
 
@@ -1899,7 +2230,7 @@ int main(int, char **) {
       // Render UI controls only if visible
       if (input.isUIVisible()) {
         ImGui::Begin("Black Hole Parameters", nullptr, ImGuiWindowFlags_NoCollapse);
-        ImGui::Checkbox("gravatationalLensing", &gravatationalLensing);
+        ImGui::Checkbox("gravitationalLensing", &gravitationalLensing);
         ImGui::Checkbox("renderBlackHole", &renderBlackHole);
         ImGui::Checkbox("adiskEnabled", &adiskEnabled);
         ImGui::Checkbox("adiskParticle", &adiskParticle);
@@ -1989,6 +2320,31 @@ int main(int, char **) {
           if (texSpectralLUT != 0) {
             glDeleteTextures(1, &texSpectralLUT);
             texSpectralLUT = 0;
+          }
+        }
+
+        ImGui::Separator();
+        ImGui::Text("GRB Modulation");
+        ImGui::Checkbox("Use GRB Modulation", &useGrbModulation);
+        if (grbModulationLoaded) {
+          ImGui::Text("Time: %.2f - %.2f s", static_cast<double>(grbTimeMin),
+                      static_cast<double>(grbTimeMax));
+        } else {
+          ImGui::TextDisabled("grb_modulation_lut.csv not loaded");
+        }
+        ImGui::BeginDisabled(!grbModulationLoaded);
+        ImGui::Checkbox("Manual GRB Time", &grbTimeManual);
+        if (grbTimeManual) {
+          ImGui::SliderFloat("GRB Time", &grbTimeManualValue, grbTimeMin, grbTimeMax);
+        }
+        ImGui::EndDisabled();
+        if (ImGui::Button("Reload GRB LUT")) {
+          grbModulationTried = false;
+          grbModulationLoaded = false;
+          grbModulationValues.clear();
+          if (texGrbModulationLUT != 0) {
+            glDeleteTextures(1, &texGrbModulationLUT);
+            texGrbModulationLUT = 0;
           }
         }
         ImGui::SliderFloat("Spectral Radius Min", &spectralRadiusMin, 0.0f, 50.0f);
@@ -2127,7 +2483,7 @@ int main(int, char **) {
       float schwarzschildRadius = 2.0f * blackHoleMass;
       float photonSphereRadius = static_cast<float>(photonRatio) * schwarzschildRadius;
       float iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;
-      rtti.floatUniforms["gravatationalLensing"] = gravatationalLensing ? 1.0f : 0.0f;
+      rtti.floatUniforms["gravitationalLensing"] = gravitationalLensing ? 1.0f : 0.0f;
       rtti.floatUniforms["renderBlackHole"] = renderBlackHole ? 1.0f : 0.0f;
       rtti.floatUniforms["adiskEnabled"] = adiskEnabled ? 1.0f : 0.0f;
       rtti.floatUniforms["adiskParticle"] = adiskParticle ? 1.0f : 0.0f;
@@ -2181,7 +2537,7 @@ int main(int, char **) {
         ZoneScopedN("Blackhole Compute");
         static GLuint computeProgram = 0;
         if (computeProgram == 0) {
-          computeProgram = createComputeProgram("shader/geodesic_trace.comp");
+          computeProgram = createComputeProgram(std::string("shader/geodesic_trace.comp"));
         }
 
         computeMaxSteps = std::clamp(computeMaxSteps, 10, 1000);
@@ -2209,6 +2565,37 @@ int main(int, char **) {
                     adiskEnabled ? 1 : 0);
         glUniform1i(glGetUniformLocation(computeProgram, "enableRedshift"),
                     enableRedshift ? 1 : 0);
+        glUniform1f(glGetUniformLocation(computeProgram, "useLUTs"), lutReady ? 1.0f : 0.0f);
+        glUniform1f(glGetUniformLocation(computeProgram, "useSpectralLUT"),
+                    spectralEnabled ? 1.0f : 0.0f);
+        glUniform1f(glGetUniformLocation(computeProgram, "useGrbModulation"),
+                    grbModulationEnabled ? 1.0f : 0.0f);
+        glUniform1f(glGetUniformLocation(computeProgram, "lutRadiusMin"), lutRadiusMin);
+        glUniform1f(glGetUniformLocation(computeProgram, "lutRadiusMax"), lutRadiusMax);
+        glUniform1f(glGetUniformLocation(computeProgram, "redshiftRadiusMin"), redshiftRadiusMin);
+        glUniform1f(glGetUniformLocation(computeProgram, "redshiftRadiusMax"), redshiftRadiusMax);
+        glUniform1f(glGetUniformLocation(computeProgram, "spectralRadiusMin"), spectralRadiusMin);
+        glUniform1f(glGetUniformLocation(computeProgram, "spectralRadiusMax"), spectralRadiusMax);
+        glUniform1f(glGetUniformLocation(computeProgram, "grbTime"), grbTimeSeconds);
+        glUniform1f(glGetUniformLocation(computeProgram, "grbTimeMin"), grbTimeMin);
+        glUniform1f(glGetUniformLocation(computeProgram, "grbTimeMax"), grbTimeMax);
+
+        GLint texUnit = 0;
+        glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+        glBindTexture(GL_TEXTURE_2D, lutReady ? texEmissivityLUT : 0);
+        glUniform1i(glGetUniformLocation(computeProgram, "emissivityLUT"), texUnit);
+        texUnit++;
+        glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+        glBindTexture(GL_TEXTURE_2D, lutReady ? texRedshiftLUT : 0);
+        glUniform1i(glGetUniformLocation(computeProgram, "redshiftLUT"), texUnit);
+        texUnit++;
+        glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+        glBindTexture(GL_TEXTURE_2D, spectralEnabled ? texSpectralLUT : 0);
+        glUniform1i(glGetUniformLocation(computeProgram, "spectralLUT"), texUnit);
+        texUnit++;
+        glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+        glBindTexture(GL_TEXTURE_2D, grbModulationEnabled ? texGrbModulationLUT : 0);
+        glUniform1i(glGetUniformLocation(computeProgram, "grbModulationLUT"), texUnit);
 
         glBindImageTexture(0, computeTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
         GLint tileOffsetLoc = glGetUniformLocation(computeProgram, "tileOffset");
@@ -2293,7 +2680,8 @@ int main(int, char **) {
               appendCompareSummary(compareSummaryPath(), compareSnapshotIndex, primaryTag,
                                    secondaryTag, renderWidth, renderHeight, compareFullStats,
                                    compareDiffScale, compareWriteOutputs, compareWriteDiff,
-                                   compareThreshold, compareLastExceeded, glfwGetTime(), kerrSpin);
+                                   compareThreshold, compareLastExceeded, glfwGetTime(), kerrSpin,
+                                   grbModulationEnabled, grbTimeSeconds);
             }
             compareSnapshotIndex++;
           } else {
@@ -2418,25 +2806,25 @@ int main(int, char **) {
       renderToTexture(rtti);
     }
 
-    static bool depthEffectsEnabled = false;
+    static bool depthEffectsEnabled = true;
     static bool fogEnabled = true;
-  static float fogDensity = 0.12f;
-  static float fogStart = 0.5f;
-  static float fogEnd = 0.95f;
-  static float fogColor[3] = {0.05f, 0.05f, 0.08f};
+  static float fogDensity = 0.08f;
+  static float fogStart = 0.6f;
+  static float fogEnd = 0.98f;
+  static float fogColor[3] = {0.06f, 0.06f, 0.10f};
     static bool edgeOutlinesEnabled = false;
     static float edgeThreshold = 0.5f;
     static float edgeWidth = 1.0f;
     static float edgeColor[3] = {1.0f, 1.0f, 1.0f};
     static bool depthDesatEnabled = true;
-  static float desatStrength = 0.15f;
+  static float desatStrength = 0.10f;
     static bool chromaDepthEnabled = false;
     static bool motionParallaxHint = false;
     static bool dofEnabled = false;
     static float dofFocusNear = 0.3f;
     static float dofFocusFar = 0.9f;
-  static float dofMaxRadius = 2.5f;
-  static float depthCurve = 1.1f;
+  static float dofMaxRadius = 2.0f;
+  static float depthCurve = 1.0f;
 
     if (input.isUIVisible()) {
       ImGui::Begin("Depth Effects", nullptr, ImGuiWindowFlags_NoCollapse);
@@ -2445,24 +2833,24 @@ int main(int, char **) {
       if (ImGui::Button("Preset: Subtle")) {
         depthEffectsEnabled = true;
         fogEnabled = true;
-        fogDensity = 0.12f;
-        fogStart = 0.5f;
-        fogEnd = 0.95f;
-        fogColor[0] = 0.05f;
-        fogColor[1] = 0.05f;
-        fogColor[2] = 0.08f;
+        fogDensity = 0.08f;
+        fogStart = 0.6f;
+        fogEnd = 0.98f;
+        fogColor[0] = 0.06f;
+        fogColor[1] = 0.06f;
+        fogColor[2] = 0.10f;
         edgeOutlinesEnabled = false;
         edgeThreshold = 0.5f;
         edgeWidth = 1.0f;
         depthDesatEnabled = true;
-        desatStrength = 0.15f;
+        desatStrength = 0.10f;
         chromaDepthEnabled = false;
         motionParallaxHint = false;
         dofEnabled = false;
         dofFocusNear = 0.3f;
         dofFocusFar = 0.9f;
-        dofMaxRadius = 2.5f;
-        depthCurve = 1.1f;
+        dofMaxRadius = 2.0f;
+        depthCurve = 1.0f;
         depthFar = 100.0f;
       }
       ImGui::SameLine();
@@ -2633,7 +3021,13 @@ int main(int, char **) {
       sliceRtti.targetTexture = texGrmhdSlice;
       sliceRtti.width = grmhdSliceSize;
       sliceRtti.height = grmhdSliceSize;
+      if (gpuTimers.initialized) {
+        gpuTimers.grmhdSlice.begin();
+      }
       renderToTexture(sliceRtti);
+      if (gpuTimers.initialized) {
+        gpuTimers.grmhdSlice.end();
+      }
     }
 
     if (rmluiReady) {
@@ -2641,10 +3035,6 @@ int main(int, char **) {
     }
 
     if (controlsOverlayEnabled && !input.isUIVisible()) {
-      if (!controlsOverlayReady) {
-        controlsOverlay.init();
-        controlsOverlayReady = true;
-      }
       auto keyName = [&](KeyAction action) {
         return input.getKeyName(input.getKeyForAction(action));
       };
@@ -2676,7 +3066,97 @@ int main(int, char **) {
       lines.push_back({"Time: " + keyName(KeyAction::IncreaseTimeScale) + " / " +
                            keyName(KeyAction::DecreaseTimeScale),
                        textColor});
-      controlsOverlay.render(windowWidth, windowHeight, controlsOverlayScale, 16.0f, lines);
+
+      if (!controlsOverlayReady) {
+        HudOverlayOptions opts;
+        opts.scale = controlsOverlayScale;
+        opts.margin = 16.0f;
+        opts.align = HudOverlayOptions::Align::Left;
+        controlsOverlay.setOptions(opts);
+        controlsOverlayReady = true;
+      }
+
+      controlsOverlay.setLines(lines);
+      controlsOverlay.render(windowWidth, windowHeight);
+    }
+
+    if (perfOverlayEnabled && !input.isUIVisible()) {
+      const glm::vec4 headerColor(0.2f, 0.9f, 0.5f, 1.0f);
+      const glm::vec4 textColor(0.9f, 0.9f, 0.9f, 1.0f);
+      std::vector<HudOverlayLine> lines;
+      lines.push_back({"Performance", headerColor});
+
+      std::ostringstream line;
+      double fps = cpuFrameMs > 0.0f ? 1000.0 / static_cast<double>(cpuFrameMs) : 0.0;
+      line << std::fixed << std::setprecision(1) << "FPS: " << fps;
+      lines.push_back({line.str(), textColor});
+      line.str("");
+      line.clear();
+      line << std::fixed << std::setprecision(2) << "CPU: " << cpuFrameMs << " ms";
+      lines.push_back({line.str(), textColor});
+      line.str("");
+      line.clear();
+      line << "Window: " << windowWidth << "x" << windowHeight;
+      lines.push_back({line.str(), textColor});
+      line.str("");
+      line.clear();
+      line << std::fixed << std::setprecision(2) << "Render: " << renderWidth << "x"
+           << renderHeight << " (" << renderScale << "x)";
+      lines.push_back({line.str(), textColor});
+      line.str("");
+      line.clear();
+      const char *vsyncLabel = swapInterval == 0   ? "Off"
+                              : swapInterval == 1 ? "On"
+                                                   : "Triple";
+      line << "VSync: " << vsyncLabel << " (" << swapInterval << ")";
+      lines.push_back({line.str(), textColor});
+
+      if (gpuTimingEnabled && gpuTimers.initialized) {
+        line.str("");
+        line.clear();
+        line << std::fixed << std::setprecision(2) << "GPU Frag: "
+             << gpuTimers.blackholeFragment.lastMs << " ms";
+        lines.push_back({line.str(), textColor});
+        line.str("");
+        line.clear();
+        line << std::fixed << std::setprecision(2) << "GPU Comp: "
+             << gpuTimers.blackholeCompute.lastMs << " ms";
+        lines.push_back({line.str(), textColor});
+        line.str("");
+        line.clear();
+        line << std::fixed << std::setprecision(2) << "GPU Bloom: "
+             << gpuTimers.bloom.lastMs << " ms";
+        lines.push_back({line.str(), textColor});
+        line.str("");
+        line.clear();
+        line << std::fixed << std::setprecision(2) << "GPU Tonemap: "
+             << gpuTimers.tonemap.lastMs << " ms";
+        lines.push_back({line.str(), textColor});
+        line.str("");
+        line.clear();
+        line << std::fixed << std::setprecision(2) << "GPU Depth: "
+             << gpuTimers.depth.lastMs << " ms";
+        lines.push_back({line.str(), textColor});
+        line.str("");
+        line.clear();
+        line << std::fixed << std::setprecision(2) << "GPU GRMHD: "
+             << gpuTimers.grmhdSlice.lastMs << " ms";
+        lines.push_back({line.str(), textColor});
+      } else {
+        lines.push_back({"GPU timings: off", textColor});
+      }
+
+      if (!perfOverlayReady) {
+        HudOverlayOptions opts;
+        opts.scale = perfOverlayScale;
+        opts.margin = 8.0f;
+        opts.align = HudOverlayOptions::Align::Left;
+        perfOverlay.setOptions(opts);
+        perfOverlayReady = true;
+      }
+
+      perfOverlay.setLines(lines);
+      perfOverlay.render(windowWidth, windowHeight);
     }
 
     // Render UI panels (before popup modal for proper window ordering)
@@ -2686,7 +3166,8 @@ int main(int, char **) {
       renderDisplaySettingsPanel(window, swapInterval, renderScale, windowWidth, windowHeight);
       renderRmlUiPanel(rmluiEnabled);
       renderGizmoPanel(gizmoEnabled, gizmoOperation, gizmoMode, gizmoTransform);
-      renderPerformancePanel(gpuTimingEnabled, gpuTimers, timingHistory, cpuFrameMs);
+      renderPerformancePanel(gpuTimingEnabled, gpuTimers, timingHistory, cpuFrameMs,
+                             perfOverlayEnabled, perfOverlayScale);
     }
 
     if (input.isUIVisible() && gizmoEnabled) {
@@ -2740,6 +3221,29 @@ int main(int, char **) {
     rmluiOverlay.shutdown();
   }
 
-  cleanup(window);
-  return 0;
+    cleanup(window);
+    return 0;
+#if BLACKHOLE_HAS_CPPTRACE
+  } catch (const cpptrace::exception &err) {
+    std::fprintf(stderr, "Unhandled cpptrace exception: %s\n", err.what());
+    err.trace().print();
+    return 1;
+  } catch (const std::exception &err) {
+    std::fprintf(stderr, "Unhandled std::exception: %s\n", err.what());
+    cpptrace::generate_trace(1).print();
+    return 1;
+  } catch (...) {
+    std::fprintf(stderr, "Unhandled non-standard exception\n");
+    cpptrace::generate_trace(1).print();
+    return 1;
+  }
+#else
+  } catch (const std::exception &err) {
+    std::fprintf(stderr, "Unhandled std::exception: %s\n", err.what());
+    return 1;
+  } catch (...) {
+    std::fprintf(stderr, "Unhandled non-standard exception\n");
+    return 1;
+  }
+#endif
 }

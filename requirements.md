@@ -68,20 +68,20 @@ sudo pacman -S --needed \
 ## Conan packages
 - glfw/3.4
 - glbinding/3.5.0
-- glm/cci.20230113
+- glm/1.0.1
 - xsimd/13.2.0
 - entt/3.15.0
 - pcg-cpp/cci.20220409
 - taskflow/3.10.0
 - imgui/1.92.5-docking
 - imguizmo/cci.20231114
-- rmlui/4.4 (optional; enable with `-DENABLE_RMLUI=ON`)
+- rmlui/6.1 (optional; enable with `-DENABLE_RMLUI=ON`)
 - flatbuffers/25.9.23
 - hdf5/1.14.6
 - highfive/3.1.1
 - spdlog/1.16.0
 - fmt/12.1.0
-- tracy/0.12.2
+- tracy/0.13.1
 - cli11/2.6.0
 - z3/4.14.1 (optional; enable with `-DENABLE_Z3=ON`)
 - gmp/6.3.0 (optional; precision ground-truth via Boost.Multiprecision MPFR backend)
@@ -99,11 +99,11 @@ Note: `conanfile.py` sets shared builds for hdf5/spdlog/fmt and disables
 
 ## Conan update candidates (center2, 2025-12-30)
 Latest recipes on conancenter (current pins in parentheses):
-- imgui: cci.20230105+1.89.2.docking (current 1.92.5-docking; local recipe in `conan/recipes`)
+- imgui: 1.92.5-docking (current 1.92.5-docking; also available on conancenter)
 - implot: 0.16 (Conan recipe; project vendors master until 1.92+ support lands)
 - glfw: 3.4 (current 3.4)
 - glbinding: 3.5.0 (current 3.5.0)
-- glm: cci.20230113 (current cci.20230113; 1.0.1 also available)
+- glm: 1.0.1 (current 1.0.1)
 - xsimd: 13.2.0 (current 13.2.0)
 - entt: 3.15.0 (current 3.15.0)
 - taskflow: 3.10.0 (current 3.10.0)
@@ -111,7 +111,8 @@ Latest recipes on conancenter (current pins in parentheses):
 - flatbuffers: 25.9.23 (current 25.9.23)
 - spdlog: 1.16.0 (current 1.16.0)
 - fmt: 12.1.0 (current 12.1.0)
-- tracy: cci.20220130 (current 0.12.2; local recipe in `conan/recipes`)
+- tracy: 0.12.2 (current 0.13.1; local recipe in `conan/recipes`)
+- rmlui: 4.4 (current 6.1; local recipe in `conan/recipes`)
 - cli11: 2.6.0 (current 2.6.0)
 - boost: 1.90.0 (current 1.90.0)
 - hdf5: 1.14.6 (current 1.14.6)
@@ -128,14 +129,14 @@ Optional additions for the cleanroom pipeline (on conancenter):
 - glad/2.0.8 (fallback OpenGL loader)
 - bgfx/1.129.8930-495 or cci.20230216 (renderer reference; optional)
 
-Missing on conancenter (needs custom Conan recipe or vendoring):
-- amrex (AMR grid solver)
-- autodiff (automatic differentiation)
-- enzyme (LLVM plugin autodiff)
+Missing on conancenter (uses FetchContent if enabled in CMake):
+- amrex (AMR grid solver; `-DENABLE_AMREX=ON`)
+- autodiff (automatic differentiation; `-DENABLE_AUTODIFF=ON`)
+- enzyme (LLVM plugin autodiff; `-DENABLE_ENZYME=ON`, set `ENZYME_CLANG` and `ENZYME_PLUGIN`)
 - halide (scheduling DSL)
 - tbb (task scheduler)
 - magnum (graphics toolkit)
-- imnodes (node editor for ImGui)
+- imnodes (node editor for ImGui; `-DENABLE_IMNODES=ON`)
 - imgui-color-text-edit (code editor widget)
 - imgui-markdown (Markdown renderer)
 
@@ -174,9 +175,13 @@ python3 scripts/generate_validation_tables.py
 ## LUT generation (offline)
 ```bash
 python3 scripts/generate_luts.py --size 256 --spin 0.0 --mass-solar 4.0e6 --mdot 0.1 --spin-points 64
+python3 scripts/generate_grb_luts.py --jetfit-table /path/to/JetFit/Table.h5
+python3 scripts/generate_grb_modulation_lut.py --model fred --t0 10 --tau-rise 0.5 --tau-decay 8.0
 ```
 - Outputs emissivity/redshift LUTs and optional `spin_radii_lut.csv`.
 - Embeds `isco_source` and `compact_common_version` in `assets/luts/lut_meta.json` when available.
+- GRB script emits `assets/luts/grb_spectral_table.h5` (JetFit table re-emission).
+- Modulation script emits `assets/luts/grb_modulation_lut.csv` + metadata JSON.
 
 ## Radiative transfer LUTs (stub)
 ```bash

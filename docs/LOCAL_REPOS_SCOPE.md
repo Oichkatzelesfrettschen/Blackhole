@@ -29,7 +29,19 @@ audits will be added per project priority.
 
 ## Expanded notes (audit pass 2)
 - openuniverse: monorepo hub with submodules; relevant physics sources are compact-common,
-  nubhlight (GRMHD), tardis (radiative transfer), grb-common/ASGARD/boxfit/JetFit (GRB fits).
+  CompactStar (C++ compact-object framework), rns (rotating NS models), nubhlight (GRMHD),
+  tardis (radiative transfer), grb-common/ASGARD/boxfit/JetFit/PyGRB (GRB fits + spectra),
+  spandrel-core (cosmology likelihoods), cern-analysis-common (I/O + kinematics patterns).
+- compact-common: EOS + TOV solvers + spacetime helpers (ISCO, photon sphere, geodesics) in CGS.
+- grb-common: CGS constants, cosmology distances, extinction laws, HDF5 schemas, sampler interfaces.
+- ASGARD_GRBAfterglow: Fortran PDE solver for afterglow electrons + synchrotron/SSC radiation.
+- boxfit: RHD box datasets + interpolation for GRB afterglow light curves (HDF5, MPI).
+- JetFit: structured jet fit with HDF5 spectral tables and interpolators (Python).
+- PyGRB: GRB pulse fitting with nested sampling (Bilby/dynesty/nestle).
+- CompactStar: C++17 modular compact-star solver (TOV + Hartle, EOS tables, diagnostics schemas).
+- rns: legacy rotating neutron star solver (Fortran/C, EOS tables).
+- spandrel-core: SN Ia cosmology likelihoods + CGS constants.
+- cern-analysis-common: ROOT/HDF5 I/O + physics helper patterns (vector math, selections).
 - MangoHud: OpenGL/Vulkan overlay; reference for HUD layout, frametime aggregation, vsync notes,
   and configuration surface (env/preset files).
 - graphics-programming: includes portable-gl, tinygl, SGI renderer, and OpenGL samples; use as
@@ -42,9 +54,11 @@ audits will be added per project priority.
   may supply validation or I/O patterns later.
 
 ## Domain tags (coarse)
-- Physics: openuniverse, compact-common, nubhlight, tardis, grb-common/ASGARD/boxfit/JetFit.
+- Physics: openuniverse, compact-common, CompactStar, rns, nubhlight, tardis,
+  grb-common/ASGARD/boxfit/JetFit/PyGRB.
 - Rendering/HUD: MangoHud, graphics-programming, Xinim (text renderer), microwindows64.
-- Data/Analysis: cern-analysis-common, openperception, MathScienceCompendium, PhysicsForge.
+- Data/Analysis: cern-analysis-common, spandrel-core, openperception,
+  MathScienceCompendium, PhysicsForge.
 - System/tooling: classic71, posix-compliance, ryzen-boost-service, system-rice-audit.
 
 ## Inventory snapshot (file-type signal)

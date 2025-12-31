@@ -12,10 +12,17 @@ constraint checks and invariant validation in the Blackhole pipeline.
 ## Conan + CMake
 - Conan: `z3/4.14.1` from conancenter (center2).
 - CMake: `-DENABLE_Z3=ON` to enable optional tooling.
+ - System inventory (CachyOS): z3-git 4.15.4 installed; keep Conan pin for reproducible builds.
 
 ## Proposed Targets
 1. `z3_sanity` tool (CLI): solves a small constraint system to verify linkage.
 2. `physics_z3_checks` (future): validates invariants using numeric samples.
+
+## Near-term Z3 checks (candidate assertions)
+- Kerr potentials: enforce `R >= 0` and `Theta >= 0` for sampled equatorial rays.
+- ISCO bounds: verify `r_isco >= r_ph` for |a*| <= 1 and r > r_horizon.
+- Redshift monotonicity: assert `z(r)` decreases with increasing r (outside horizon).
+- LUT guards: ensure `lut_radius_min < lut_radius_max` and `0 <= u <= 1` for lookup inputs.
 
 ## Integration Notes
 - Keep Z3 optional to avoid increasing baseline build times.

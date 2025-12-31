@@ -15,6 +15,8 @@ All processing is offline; runtime uses sampled LUTs only.
   frequency Hz, wavelength Angstroms, energy keV); supports observer vs source frame.
 - JetFit FluxGeneratorClass: scale relations for F_peak, nu_c, nu_m using {z, dL, E, n, p, epse,
   epsb, xiN, Eta0, GammaB, theta_obs}; spectral branches follow Sari+1998 slow/fast cooling.
+- JetFit `Table.h5` datasets: `Axis`, `tau`, `Eta0`, `GammaB`, `theta_obs`, `nu_range`,
+  `f_peak`, `f_nu_m`, `f_nu_c`; use these as the spectral grid sources.
 - PyGRB backend rate functions: Gaussian, FRED, and FREDx pulse shapes with parameters
   (start, scale, tau, xi, gamma, nu); use as envelope options for LUT generation.
 
@@ -25,7 +27,9 @@ All processing is offline; runtime uses sampled LUTs only.
 4. Overlay afterglow spectral shapes from ASGARD/JetFit references (slow/fast cooling cases).
 5. Emit LUTs + metadata (units, time frame, redshift).
 
+## Scripts
+- `scripts/generate_grb_modulation_lut.py`: analytic Gaussian/FRED/FREDx envelopes.
+
 ## Runtime Integration
-- Add modulation multiplier in shader (optional toggle).
-- Provide C++ loader for LUT textures.
-- Expose parameters in Controls/Performance UI.
+- Modulation multiplier is wired in fragment + compute shaders (optional toggle).
+- C++ loader binds `grb_modulation_lut.csv` + metadata and exposes UI controls.

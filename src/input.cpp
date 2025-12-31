@@ -279,7 +279,7 @@ void InputManager::update(float deltaTime) {
 
   // Update camera (only if not paused)
   if (!paused_) {
-    updateCamera(deltaTime * timeScale_);
+    updateCamera(deltaTime);
   }
 
   // Reset scroll delta after processing
@@ -328,8 +328,10 @@ void InputManager::handleHoldToToggle(KeyAction action, bool justPressed, bool /
 }
 
 void InputManager::updateCamera(float deltaTime) {
-  float moveSpeed = cameraMoveSpeed_ * deltaTime * keyboardSensitivity_;
-  float rotateSpeed = cameraRotateSpeed_ * deltaTime * keyboardSensitivity_;
+  const float inputScale = timeScale_;
+  const float scaledDelta = deltaTime * inputScale;
+  float moveSpeed = cameraMoveSpeed_ * scaledDelta * keyboardSensitivity_;
+  float rotateSpeed = cameraRotateSpeed_ * scaledDelta * keyboardSensitivity_;
 
   // Apply keyboard axis inversion
   float keyXMult = invertKeyboardX_ ? -1.0f : 1.0f;
@@ -408,29 +410,27 @@ void InputManager::updateCamera(float deltaTime) {
     }
   }
 
-  float timeScale = timeScale_;
-
   // Mouse orbit (right-click drag)
   if (!ImGui::GetIO().WantCaptureMouse) {
     if (isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
-      camera_.yaw += mouseDeltaX_ * 0.3f * timeScale;
-      camera_.pitch -= mouseDeltaY_ * 0.3f * timeScale;
+      camera_.yaw += mouseDeltaX_ * 0.3f * inputScale;
+      camera_.pitch -= mouseDeltaY_ * 0.3f * inputScale;
     }
 
     // Middle mouse button for roll
     if (isMouseButtonPressed(GLFW_MOUSE_BUTTON_MIDDLE)) {
-      camera_.roll += mouseDeltaX_ * 0.3f * timeScale;
+      camera_.roll += mouseDeltaX_ * 0.3f * inputScale;
     }
 
     // Scroll wheel zoom with sensitivity
     if (std::abs(scrollDelta_) > 0.0f) {
-      camera_.distance -= scrollDelta_ * scrollSensitivity_ * 0.5f * timeScale;
+      camera_.distance -= scrollDelta_ * scrollSensitivity_ * 0.5f * inputScale;
     }
   }
 
   // Gamepad controls (sticks + triggers)
   if (!ImGui::GetIO().WantCaptureKeyboard) {
-    updateGamepad(deltaTime);
+    updateGamepad(scaledDelta);
   }
 
   // Clamp values

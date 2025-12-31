@@ -3,7 +3,6 @@
 // C++ system headers
 #include <fstream>
 #include <iostream>
-#include <regex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -14,6 +13,17 @@
 
 // Base directory for shader files (set during loading)
 static std::string shaderBaseDir = "shader/";
+
+// Allow external code to override the base directory used when resolving
+// relative includes (#include "...") and when loading shader files. This is
+// useful for tests or custom project layouts.
+void setShaderBaseDir(const std::string &baseDir) {
+  shaderBaseDir = baseDir;
+}
+
+const std::string &getShaderBaseDir() {
+  return shaderBaseDir;
+}
 
 static std::string readFile(const std::string &file) {
   std::ifstream ifs(file, std::ios::in);
@@ -44,13 +54,48 @@ static std::string processIncludes(const std::string &source,
   std::istringstream stream(source);
   std::string line;
 
-  // Regex to match #include "filename"
-  std::regex includeRegex(R"(^\s*#\s*include\s*[\"<]([^\"<>]+)[\">]\s*$)");
+  auto parseInclude = [](const std::string &input, std::string &includeFile) -> bool {
+    std::size_t pos = input.find_first_not_of(" \t");
+    if (pos == std::string::npos || input[pos] != '#') {
+      return false;
+    }
+
+    pos = input.find_first_not_of(" \t", pos + 1);
+    if (pos == std::string::npos) {
+      return false;
+    }
+
+    static constexpr std::string_view kIncludeToken = "include";
+    if (input.compare(pos, kIncludeToken.size(), kIncludeToken) != 0) {
+      return false;
+    }
+    pos += kIncludeToken.size();
+
+    pos = input.find_first_not_of(" \t", pos);
+    if (pos == std::string::npos) {
+      return false;
+    }
+
+    const char open = input[pos];
+    const char close = (open == '"') ? '"' : ((open == '<') ? '>' : '\0');
+    if (close == '\0') {
+      return false;
+    }
+
+    const std::size_t start = pos + 1;
+    const std::size_t end = input.find(close, start);
+    if (end == std::string::npos) {
+      return false;
+    }
+
+    includeFile = input.substr(start, end - start);
+    const std::size_t trailing = input.find_first_not_of(" \t", end + 1);
+    return trailing == std::string::npos;
+  };
 
   while (std::getline(stream, line)) {
-    std::smatch match;
-    if (std::regex_match(line, match, includeRegex)) {
-      std::string includeFile = match[1].str();
+    std::string includeFile;
+    if (parseInclude(line, includeFile)) {
 
       // Construct full path
       std::string fullPath = basePath + includeFile;
@@ -102,6 +147,10 @@ static std::string readShaderWithIncludes(const std::string &file) {
 static GLuint compileShader(const std::string &shaderSource, GLenum shaderType) {
   // Create shader
   GLuint shader = glCreateShader(shaderType);
+  if (shader == 0) {
+    std::cerr << "Failed to create shader object." << std::endl;
+    throw "Failed to create the shader object.";
+  }
 
   // Compile shader
   char const *pShaderSource = shaderSource.c_str();
@@ -125,6 +174,22 @@ static GLuint compileShader(const std::string &shaderSource, GLenum shaderType) 
   return shader;
 }
 
+/**
+ * @brief Creates and links an OpenGL shader program from vertex and fragment shader files.
+ *
+ * This function reads the specified shader source files, processes any includes within them,
+ * compiles the vertex and fragment shaders, creates a shader program, attaches the compiled
+ * shaders to it, and links the program. If linking fails, it outputs the error log and throws
+ * an exception. After successful linking, it detaches and deletes the shaders to clean up resources.
+ *
+ * @param vertexShaderFile The file path to the vertex shader source code.
+ * @param fragmentShaderFile The file path to the fragment shader source code.
+ * @return The OpenGL shader program ID (GLuint) if linking succeeds.
+ * @throws const char* If the shader program fails to link.
+ *
+ * @note This function assumes an active OpenGL context and relies on helper functions
+ *       readShaderWithIncludes() and compileShader() for file reading and shader compilation.
+ */
 GLuint createShaderProgram(const std::string &vertexShaderFile,
                            const std::string &fragmentShaderFile) {
 

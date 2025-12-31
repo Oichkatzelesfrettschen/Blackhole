@@ -176,6 +176,12 @@ def main() -> int:
         "isco_source": source,
         "photon_source": "compact-common" if ref else "cleanroom",
         "redshift_source": redshift_source,
+        "units": {
+            "system": "cgs",
+            "length": "cm",
+            "mass": "g",
+            "time": "s",
+        },
         "points": points,
         "spin": spin,
         "mass_solar": mass_solar,

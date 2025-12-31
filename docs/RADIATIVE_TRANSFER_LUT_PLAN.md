@@ -35,6 +35,15 @@ using TARDIS as the cleanroom reference source.
 - Produces `assets/luts/rt_spectrum_lut.csv` + `assets/luts/rt_spectrum_meta.json`.
 - Replace mock spectra with real TARDIS output when available.
 
+## Runtime contract (current)
+- Loader expects `rt_spectrum_lut.csv` with `u,value` columns (1D LUT).
+- Metadata must include:
+  - `wavelength_min_angstrom`
+  - `wavelength_max_angstrom`
+  - `units` block (wavelength, flux)
+- Shader uses radius-mapped sampling; spectral LUT should be normalized for
+  multiplicative weighting (0..1 recommended).
+
 ## Runtime Integration
 - Load LUT textures in C++ and bind to shader.
 - Use spectral weighting in disk emission or post-process.

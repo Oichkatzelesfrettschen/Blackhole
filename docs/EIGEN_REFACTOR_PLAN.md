@@ -12,8 +12,9 @@
 
 ## Phases
 1. Boundary types
-   - Add math types header (`math::Vec3/Mat3/Mat4`) with GLM default.
-   - Introduce conversion helpers for GLM <-> Eigen.
+   - Add math types header (`math::Vec2/Vec3/Vec4/Mat2/Mat3/Mat4/Quat`) with GLM default and convenience helpers such as `dataPtr()` for raw access.
+   - Add a small `math_interop.h` containing explicit GLM <-> Eigen conversion helpers for Vec2/Vec3/Vec4/Mat3/Mat4/Quat.
+   - Opt-in to Eigen by defining `BLACKHOLE_USE_EIGEN` at build time (Eigen headers must be present via Conan).
 2. Physics migration
    - Move geodesics/Kerr/Schwarzschild kernels to Eigen types.
    - Keep shader-facing data in GLM; convert at upload boundaries.
@@ -33,8 +34,13 @@
 - Convert to GLM right before uniform upload.
 
 ## Risks / Constraints
-- Eigen 5 API changes remain deferred; stick to 3.4.0 until stable.
+- Eigen 5 API changes remain deferred; 5.0.1 exists on conancenter but needs
+  an API audit before adoption (matrix/tensor changes).
 - Keep shader data in GLM to avoid layout mismatches.
+
+## Version alignment (2025-12-30)
+- GLM: 1.0.1 (shader parity; keep for render path).
+- Eigen: evaluate 5.0.1 vs 3.4.0 stability before migration.
 
 ## Deliverables
 - `src/physics/math_types.h`

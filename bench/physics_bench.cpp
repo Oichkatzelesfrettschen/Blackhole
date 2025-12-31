@@ -185,7 +185,7 @@ static bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::strin
   glfwMakeContextCurrent(ctx.window);
   glbinding::initialize(glfwGetProcAddress);
 
-  ctx.program = createComputeProgram("shader/geodesic_trace.comp");
+  ctx.program = createComputeProgram(std::string("shader/geodesic_trace.comp"));
   if (ctx.program == 0) {
     error = "Failed to compile compute shader";
     shutdownGpuBench(ctx);
@@ -205,7 +205,7 @@ static bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::strin
   return true;
 }
 
-static BenchResult runGpuBench(const BenchConfig &cfg, double &accum, std::string &error) {
+static BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::string &error) {
   GpuBenchContext ctx;
   if (!initGpuBench(ctx, cfg.gpuWidth, cfg.gpuHeight, error)) {
     return {"GPU geodesic compute", 0.0, 0.0, 0.0, 0.0, 0.0, 0};
@@ -229,6 +229,14 @@ static BenchResult runGpuBench(const BenchConfig &cfg, double &accum, std::strin
   glUniform1f(glGetUniformLocation(ctx.program, "maxDistance"), cfg.gpuMaxDistance);
   glUniform1i(glGetUniformLocation(ctx.program, "enableDisk"), 0);
   glUniform1i(glGetUniformLocation(ctx.program, "enableRedshift"), 0);
+  glUniform1f(glGetUniformLocation(ctx.program, "useLUTs"), 0.0f);
+  glUniform1f(glGetUniformLocation(ctx.program, "useSpectralLUT"), 0.0f);
+  glUniform1f(glGetUniformLocation(ctx.program, "lutRadiusMin"), 0.0f);
+  glUniform1f(glGetUniformLocation(ctx.program, "lutRadiusMax"), 1.0f);
+  glUniform1f(glGetUniformLocation(ctx.program, "redshiftRadiusMin"), 0.0f);
+  glUniform1f(glGetUniformLocation(ctx.program, "redshiftRadiusMax"), 1.0f);
+  glUniform1f(glGetUniformLocation(ctx.program, "spectralRadiusMin"), 0.0f);
+  glUniform1f(glGetUniformLocation(ctx.program, "spectralRadiusMax"), 1.0f);
 
   const GLuint groupsX = static_cast<GLuint>((ctx.width + 15) / 16);
   const GLuint groupsY = static_cast<GLuint>((ctx.height + 15) / 16);
@@ -257,7 +265,7 @@ static BenchResult runGpuBench(const BenchConfig &cfg, double &accum, std::strin
     minMs = std::min(minMs, ms);
     maxMs = std::max(maxMs, ms);
     totalMs += ms;
-    accum += static_cast<double>(elapsedNs);
+    gpuElapsedNs += static_cast<double>(elapsedNs);
   }
 
   double avgMs = totalMs / static_cast<double>(cfg.gpuIterations);
@@ -278,28 +286,32 @@ static BenchResult runGpuBench(const BenchConfig &cfg, double &accum, std::strin
 }
 
 static void writeCsv(const std::string &path, const BenchConfig &cfg,
-                     const std::vector<BenchResult> &results, double accum) {
+                     const std::vector<BenchResult> &results, double cpuAccum,
+                     double gpuElapsedNs) {
   std::ofstream out(path);
   if (!out) {
     std::cerr << "Failed to write CSV: " << path << "\n";
     return;
   }
-  out << "name,avg_ms,min_ms,max_ms,work_units,units_per_sec,iterations,rays,steps,lut_size,spin,"
+  out << "name,avg_ms,min_ms,max_ms,work_units,units_per_sec,iterations,warmup,rays,steps,lut_size,spin,"
          "mass_solar,mdot,gpu_enabled,gpu_width,gpu_height,gpu_iterations,gpu_step,gpu_max_distance,"
-         "accum\n";
+         "cpu_accum,gpu_elapsed_ns,accum\n";
   out << std::fixed << std::setprecision(6);
   for (const auto &result : results) {
+    double totalAccum = cpuAccum + gpuElapsedNs;
     out << result.name << "," << result.avgMs << "," << result.minMs << "," << result.maxMs << ","
         << result.workUnits << "," << result.unitsPerSec << "," << result.iterations << ","
-        << cfg.rays << "," << cfg.steps << "," << cfg.lutSize << "," << cfg.spin << ","
-        << cfg.massSolar << "," << cfg.mdotEdd << "," << (cfg.gpuEnabled ? 1 : 0) << ","
-        << cfg.gpuWidth << "," << cfg.gpuHeight << "," << cfg.gpuIterations << ","
-        << cfg.gpuStepSize << "," << cfg.gpuMaxDistance << "," << accum << "\n";
+        << cfg.warmup << "," << cfg.rays << "," << cfg.steps << "," << cfg.lutSize << ","
+        << cfg.spin << "," << cfg.massSolar << "," << cfg.mdotEdd << ","
+        << (cfg.gpuEnabled ? 1 : 0) << "," << cfg.gpuWidth << "," << cfg.gpuHeight << ","
+        << cfg.gpuIterations << "," << cfg.gpuStepSize << "," << cfg.gpuMaxDistance << ","
+        << cpuAccum << "," << gpuElapsedNs << "," << totalAccum << "\n";
   }
 }
 
 static void writeJson(const std::string &path, const BenchConfig &cfg,
-                      const std::vector<BenchResult> &results, double accum) {
+                      const std::vector<BenchResult> &results, double cpuAccum,
+                      double gpuElapsedNs) {
   std::ofstream out(path);
   if (!out) {
     std::cerr << "Failed to write JSON: " << path << "\n";
@@ -337,7 +349,9 @@ static void writeJson(const std::string &path, const BenchConfig &cfg,
   out << "    }" << (i + 1 < results.size() ? "," : "") << "\n";
   }
   out << "  ],\n";
-  out << "  \"accumulator\": " << accum << "\n";
+  out << "  \"cpu_accum\": " << cpuAccum << ",\n";
+  out << "  \"gpu_elapsed_ns\": " << gpuElapsedNs << ",\n";
+  out << "  \"accumulator\": " << (cpuAccum + gpuElapsedNs) << "\n";
   out << "}\n";
 }
 
@@ -356,7 +370,8 @@ int main(int argc, char **argv) {
   }
   std::cout << "\n\n";
 
-  double accum = 0.0;
+  double cpuAccum = 0.0;
+  double gpuElapsedNs = 0.0;
   std::vector<BenchResult> results;
 
   results.push_back(runBench("Schwarzschild raytracer", cfg.iterations, cfg.warmup,
@@ -379,7 +394,7 @@ int main(int argc, char **argv) {
       ray.carter_constant = 0.0;
 
       auto result = tracer.trace(ray);
-      accum += result.total_distance + result.redshift + result.steps_taken;
+      cpuAccum += result.total_distance + result.redshift + result.steps_taken;
     }
   }));
 
@@ -395,7 +410,7 @@ int main(int argc, char **argv) {
       double r = (6.0 + 20.0 * u) * r_g;
       double theta = physics::PI * (0.25 + 0.5 * u);
       auto p = physics::kerr_potentials(r, theta, mass, a, c);
-      accum += p.R + p.Theta + p.dRdr + p.dThetadtheta;
+      cpuAccum += p.R + p.Theta + p.dRdr + p.dThetadtheta;
     }
   }));
 
@@ -417,7 +432,7 @@ int main(int argc, char **argv) {
       double phi = (static_cast<double>(i) / cfg.rays) * physics::TWO_PI;
       auto state = physics::kerr_equatorial_state(12.0 * r_s, phi, -1.0);
       auto result = tracer.trace(state, c);
-      accum += result.total_distance + result.redshift + result.steps_taken;
+      cpuAccum += result.total_distance + result.redshift + result.steps_taken;
     }
   }));
 
@@ -427,16 +442,16 @@ int main(int argc, char **argv) {
                                                        cfg.mdotEdd, true);
     auto redshift = physics::generate_redshift_lut(cfg.lutSize, cfg.massSolar, cfg.spin);
     for (float v : emissivity.values) {
-      accum += static_cast<double>(v);
+      cpuAccum += static_cast<double>(v);
     }
     for (float v : redshift.values) {
-      accum += static_cast<double>(v);
+      cpuAccum += static_cast<double>(v);
     }
   }));
 
   if (cfg.gpuEnabled) {
     std::string gpuError;
-    BenchResult gpuResult = runGpuBench(cfg, accum, gpuError);
+    BenchResult gpuResult = runGpuBench(cfg, gpuElapsedNs, gpuError);
     if (!gpuError.empty()) {
       std::cerr << "[GPU] " << gpuError << "\n";
     } else {
@@ -448,13 +463,14 @@ int main(int argc, char **argv) {
     results.push_back(gpuResult);
   }
 
-  std::cout << "\nAccumulator: " << std::setprecision(6) << accum << "\n";
+  double totalAccum = cpuAccum + gpuElapsedNs;
+  std::cout << "\nAccumulator: " << std::setprecision(6) << totalAccum << "\n";
 
   if (!cfg.csvPath.empty()) {
-    writeCsv(cfg.csvPath, cfg, results, accum);
+    writeCsv(cfg.csvPath, cfg, results, cpuAccum, gpuElapsedNs);
   }
   if (!cfg.jsonPath.empty()) {
-    writeJson(cfg.jsonPath, cfg, results, accum);
+    writeJson(cfg.jsonPath, cfg, results, cpuAccum, gpuElapsedNs);
   }
   return 0;
 }

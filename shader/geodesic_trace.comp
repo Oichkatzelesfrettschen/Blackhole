@@ -12,6 +12,8 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "include/physics_constants.glsl"
+#include "include/redshift.glsl"
+#include "include/kerr.glsl"
 
 // ============================================================================
 // Work Group Configuration
@@ -39,6 +41,7 @@ uniform ivec2 tileOffset = ivec2(0);
 uniform float schwarzschildRadius;
 uniform float iscoRadius;
 uniform float photonSphereRadius;
+uniform float kerrSpin;
 
 // Integration parameters
 uniform int maxSteps;
@@ -48,6 +51,22 @@ uniform float maxDistance;
 // Feature toggles
 uniform bool enableDisk;
 uniform bool enableRedshift;
+uniform float useLUTs;
+uniform float useSpectralLUT;
+uniform float useGrbModulation;
+uniform sampler2D emissivityLUT;
+uniform sampler2D redshiftLUT;
+uniform sampler2D spectralLUT;
+uniform sampler2D grbModulationLUT;
+uniform float lutRadiusMin;
+uniform float lutRadiusMax;
+uniform float redshiftRadiusMin;
+uniform float redshiftRadiusMax;
+uniform float spectralRadiusMin;
+uniform float spectralRadiusMax;
+uniform float grbTime;
+uniform float grbTimeMin;
+uniform float grbTimeMax;
 
 // ============================================================================
 // Constants
@@ -192,6 +211,68 @@ float computeRedshiftFactor(vec3 pos, float r_s) {
  * Trace a single geodesic ray.
  */
 HitResult traceGeodesic(Ray ray, float r_s) {
+    float a = 0.5 * kerrSpin * r_s;
+    if (abs(a) > EPSILON) {
+        HitResult result;
+        result.hitDisk = false;
+        result.hitHorizon = false;
+        result.escaped = false;
+        result.hitPoint = vec3(0.0);
+        result.phi = 0.0;
+        result.redshiftFactor = 1.0;
+
+        float r_horizon = kerrOuterHorizon(r_s, a);
+        if (r_horizon <= EPSILON) {
+            r_horizon = r_s;
+        }
+
+        float r_disk_in = iscoRadius;
+        float r_disk_out = 100.0 * r_s;
+
+        KerrConsts c = kerrInitConsts(ray.position, ray.velocity);
+        KerrRay kerrRay = kerrInitRay(ray.position, ray.velocity);
+
+        vec3 oldPos;
+        float dt = stepSize;
+
+        for (int step = 0; step < maxSteps; ++step) {
+            oldPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+
+            float r = kerrRay.r;
+            float adaptive_dt = dt * clamp(r / r_s - 1.0, 0.1, 1.0);
+            kerrStep(kerrRay, r_s, a, c, adaptive_dt);
+            r = kerrRay.r;
+
+            if (r < r_horizon * 1.01) {
+                result.hitHorizon = true;
+                result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+                return result;
+            }
+
+            if (enableDisk) {
+                vec3 diskHit;
+                vec3 newPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+                if (checkDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
+                    result.hitDisk = true;
+                    result.hitPoint = diskHit;
+                    result.phi = atan(diskHit.y, diskHit.x);
+                    result.redshiftFactor = computeRedshiftFactor(diskHit, r_s);
+                    return result;
+                }
+            }
+
+            if (r > maxDistance) {
+                result.escaped = true;
+                result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+                return result;
+            }
+        }
+
+        result.escaped = true;
+        result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+        return result;
+    }
+
     HitResult result;
     result.hitDisk = false;
     result.hitHorizon = false;
@@ -270,11 +351,19 @@ vec4 horizonColor() {
 vec4 diskColorFromHit(HitResult hit, float r_s) {
     float r = length(hit.hitPoint.xy);
 
-    // Temperature profile (simplified)
-    float r_in = iscoRadius;
-    float x = r_in / r;
-    float flux = pow(x, 3.0) * (1.0 - sqrt(x));
-    flux = max(0.0, flux);
+    float flux = 0.0;
+    if (useLUTs > 0.5) {
+        float rNorm = r / max(r_s, EPSILON);
+        float denom = max(lutRadiusMax - lutRadiusMin, 0.0001);
+        float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
+        flux = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
+    } else {
+        // Temperature profile (simplified)
+        float r_in = iscoRadius;
+        float x = r_in / r;
+        flux = pow(x, 3.0) * (1.0 - sqrt(x));
+        flux = max(0.0, flux);
+    }
 
     // Temperature to color
     float T_norm = pow(flux, 0.25);
@@ -289,8 +378,16 @@ vec4 diskColorFromHit(HitResult hit, float r_s) {
         color = vec3(0.8, 0.2, 0.1); // Cool: red
     }
 
+    float spectral = 1.0;
+    if (useSpectralLUT > 0.5) {
+        float rNorm = r / max(r_s, EPSILON);
+        float denom = max(spectralRadiusMax - spectralRadiusMin, 0.0001);
+        float u = clamp((rNorm - spectralRadiusMin) / denom, 0.0, 1.0);
+        spectral = max(0.0, texture(spectralLUT, vec2(u, 0.5)).r);
+    }
+
     // Apply intensity
-    float intensity = flux * 2.0;
+    float intensity = flux * 2.0 * spectral;
 
     // Doppler beaming
     float v = sqrt(0.5 * r_s / r);
@@ -298,12 +395,23 @@ vec4 diskColorFromHit(HitResult hit, float r_s) {
     float doppler = 1.0 + 0.3 * v * cos_phi;
     intensity *= doppler * doppler * doppler;
 
+    if (useGrbModulation > 0.5) {
+        float denom = max(grbTimeMax - grbTimeMin, 0.0001);
+        float u = clamp((grbTime - grbTimeMin) / denom, 0.0, 1.0);
+        float modulation = texture(grbModulationLUT, vec2(u, 0.5)).r;
+        intensity *= max(modulation, 0.0);
+    }
+
     // Gravitational redshift
     if (enableRedshift) {
-        float g = hit.redshiftFactor;
-        float g3 = g * g * g;
-        intensity *= g3;
-        color = mix(color, vec3(1.0, 0.3, 0.1), 1.0 - g); // Shift to red
+        float z = 1.0 / max(hit.redshiftFactor, EPSILON) - 1.0;
+        if (useLUTs > 0.5) {
+            float rNorm = r / max(r_s, EPSILON);
+            float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
+            float u = clamp((rNorm - redshiftRadiusMin) / denom, 0.0, 1.0);
+            z = texture(redshiftLUT, vec2(u, 0.5)).r;
+        }
+        color = applyGravitationalRedshift(color, z);
     }
 
     return vec4(color * intensity, 1.0);

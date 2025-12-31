@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export CONAN_HOME="${ROOT}/.conan"
-export CONAN_USER_HOME="${ROOT}/.conan"
+# shellcheck disable=SC1091
+source "${ROOT}/scripts/conan_env.sh"
 
 conan export "${ROOT}/conan/recipes/imgui/1.92.5-docking"
-conan export "${ROOT}/conan/recipes/tracy/0.12.2"
-conan export "${ROOT}/conan/recipes/rmlui/4.4"
+conan export "${ROOT}/conan/recipes/tracy/0.13.1"
+conan export "${ROOT}/conan/recipes/rmlui/6.1"

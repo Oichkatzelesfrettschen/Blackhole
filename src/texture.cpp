@@ -41,6 +41,8 @@ GLuint loadTexture2D(const std::string &file, bool repeat) {
   } else {
     std::cout << "ERROR: Failed to load texture at: " << file << std::endl;
     stbi_image_free(data);
+    glDeleteTextures(1, &textureID);
+    textureID = 0;
   }
 
   return textureID;
@@ -53,6 +55,7 @@ GLuint loadCubemap(const std::string &cubemapDir) {
   glGenTextures(1, &textureID);
   glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 
+  bool ok = true;
   int width, height, comp;
   for (GLuint i = 0; i < faces.size(); i++) {
     unsigned char *data =
@@ -65,8 +68,34 @@ GLuint loadCubemap(const std::string &cubemapDir) {
       std::cout << "Cubemap texture failed to load at path: "
                 << (cubemapDir + "/" + faces[i] + ".png").c_str() << std::endl;
       stbi_image_free(data);
+      ok = false;
     }
   }
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+  if (!ok) {
+    glDeleteTextures(1, &textureID);
+    textureID = 0;
+  }
+
+  return textureID;
+}
+
+GLuint createSolidCubemap1x1(unsigned char r, unsigned char g, unsigned char b) {
+  GLuint textureID = 0;
+  glGenTextures(1, &textureID);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+  unsigned char pixel[3] = {r, g, b};
+  for (GLuint i = 0; i < 6; ++i) {
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_SRGB, 1, 1, 0, GL_RGB,
+                 GL_UNSIGNED_BYTE, pixel);
+  }
+
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

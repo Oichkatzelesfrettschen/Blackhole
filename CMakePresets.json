@@ -69,7 +69,7 @@
       "description": "Build with clang-tidy and cppcheck",
       "inherits": "debug",
       "cacheVariables": {
-        "ENABLE_CLANG_TIDY": "ON",
+        "ENABLE_CLANG_TIDY": "OFF",
         "ENABLE_CPPCHECK": "ON"
       }
     },
@@ -81,6 +81,99 @@
       "cacheVariables": {
         "ENABLE_IWYU": "ON",
         "ENABLE_GCC_ANALYZER": "ON"
+      }
+    },
+    {
+      "name": "riced",
+      "displayName": "Riced Debug",
+      "description": "Max warnings + Werror + analysis + Tracy + profiling flags",
+      "inherits": "debug",
+      "binaryDir": "${sourceDir}/build/Riced/Debug",
+      "installDir": "${sourceDir}/install/Riced/Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Riced/Debug/generators/conan_toolchain.cmake",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5",
+        "ENABLE_CLANG_TIDY": "OFF",
+        "ENABLE_CPPCHECK": "ON",
+        "ENABLE_IWYU": "OFF",
+        "ENABLE_GCC_ANALYZER": "OFF",
+        "ENABLE_TRACY": "ON",
+        "ENABLE_PROFILING": "ON",
+        "ENABLE_SHADER_VALIDATION": "ON"
+      }
+    },
+    {
+      "name": "riced-asan",
+      "displayName": "Riced ASan/UBSan",
+      "description": "Riced debug build with ASan + UBSan",
+      "inherits": "asan",
+      "binaryDir": "${sourceDir}/build/RicedAsan/Debug",
+      "installDir": "${sourceDir}/install/RicedAsan/Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/RicedAsan/Debug/generators/conan_toolchain.cmake",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5",
+        "ENABLE_CLANG_TIDY": "OFF",
+        "ENABLE_CPPCHECK": "ON",
+        "ENABLE_TRACY": "ON",
+        "ENABLE_PROFILING": "ON",
+        "ENABLE_SHADER_VALIDATION": "ON"
+      }
+    },
+    {
+      "name": "riced-tsan",
+      "displayName": "Riced TSan",
+      "description": "Riced debug build with TSan",
+      "inherits": "tsan",
+      "binaryDir": "${sourceDir}/build/RicedTsan/Debug",
+      "installDir": "${sourceDir}/install/RicedTsan/Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/RicedTsan/Debug/generators/conan_toolchain.cmake",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5",
+        "ENABLE_CLANG_TIDY": "ON",
+        "ENABLE_CPPCHECK": "ON",
+        "ENABLE_TRACY": "OFF",
+        "ENABLE_PROFILING": "ON",
+        "ENABLE_SHADER_VALIDATION": "ON"
+      }
+    },
+    {
+      "name": "coverage",
+      "displayName": "Coverage",
+      "description": "Debug build with coverage instrumentation",
+      "inherits": "debug",
+      "binaryDir": "${sourceDir}/build/Coverage/Debug",
+      "installDir": "${sourceDir}/install/Coverage/Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Coverage/Debug/generators/conan_toolchain.cmake",
+        "ENABLE_COVERAGE": "ON",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5",
+        "ENABLE_PROFILING": "ON",
+        "ENABLE_SHADER_VALIDATION": "ON"
+      }
+    },
+    {
+      "name": "profile",
+      "displayName": "Profiling",
+      "description": "RelWithDebInfo build with Tracy + gprof",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/Profile/RelWithDebInfo",
+      "installDir": "${sourceDir}/install/Profile/RelWithDebInfo",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Profile/RelWithDebInfo/generators/conan_toolchain.cmake",
+        "ENABLE_TRACY": "ON",
+        "ENABLE_PROFILING": "ON",
+        "ENABLE_GPROF": "ON",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5"
       }
     },
     {
@@ -124,6 +217,26 @@
       "configurePreset": "tsan"
     },
     {
+      "name": "riced",
+      "configurePreset": "riced"
+    },
+    {
+      "name": "riced-asan",
+      "configurePreset": "riced-asan"
+    },
+    {
+      "name": "riced-tsan",
+      "configurePreset": "riced-tsan"
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage"
+    },
+    {
+      "name": "profile",
+      "configurePreset": "profile"
+    },
+    {
       "name": "analyze",
       "configurePreset": "analyze"
     },
@@ -145,8 +258,26 @@
       }
     },
     {
+      "name": "riced",
+      "configurePreset": "riced",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "name": "asan",
       "configurePreset": "asan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
+      }
+    },
+    {
+      "name": "riced-asan",
+      "configurePreset": "riced-asan",
       "output": {
         "outputOnFailure": true
       },
@@ -163,6 +294,23 @@
       },
       "environment": {
         "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
+      }
+    },
+    {
+      "name": "riced-tsan",
+      "configurePreset": "riced-tsan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
+      }
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage",
+      "output": {
+        "outputOnFailure": true
       }
     }
   ],

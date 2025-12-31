@@ -25,10 +25,13 @@ compact textures for use in Blackhole. Runtime coupling is optional.
     - Primitive ordering from `core/decs.h`: `RHO, UU, U1, U2, U3, B1, B2, B3`,
       plus optional `KEL, KTOT` (if electrons enabled) and passive vars.
     - Header metadata (see `script/analysis/hdf5_to_dict.py`): `N1tot/N2tot/N3tot`,
-      `metric`, `nvar`, `startx[i]`, `dx[i]`, unit fields, and `P.attrs['vnams']`
-      (variable name list used to map channels).
-  - Derived datasets (full dump): `divb`, `jcon`, `PRESS`, `ENT`, `TEMP`, `CS2`,
-    `Qvisc`, `Qcoul`, `nph`, `Jrad`, `Rmunu`.
+      `metric`, `nvar`, `startx[i]`, `dx[i]`, `FULL_DUMP`, `ELECTRONS`, `RADIATION`,
+      `OUTPUT_EOSVARS`, unit fields, and `P.attrs['vnams']` (variable name list).
+    - Scalar datasets: `t`, optional `dump_cnt`.
+  - Derived datasets (full dump): `divb`, `fail_save`, `jcon`,
+    `PRESS`, `ENT`, `TEMP`, `Theta`, `Thetae`, `KEL`/`KTOT` (electrons),
+    `Rmunu`, `Jrad`, `Nem`, `Nabs`, `Nsc`, `nph`, `Nsph`,
+    optional `radG_int`, `dtau_avg`, `dtau_scatt`, `dtau_tot`, `tau_cool`.
   - XDMF metadata emitted as `dump_########.xmf`.
 - Output layout: `dumps/` + `restarts/` folders under the run output directory
   (set with `-o /path/to/output/`).

@@ -188,7 +188,12 @@ static bool bindToTextureUnit(GLuint program, const std::string &name, GLenum te
     glBindTexture(textureType, texture);
     return true;
   } else {
-    std::cout << "WARNING: uniform " << name << " is not found in shader" << std::endl;
+    static std::set<std::string> warnedMissing;
+    const std::string key = std::to_string(program) + ":" + name;
+    if (!warnedMissing.contains(key)) {
+      std::cout << "WARNING: uniform " << name << " is not found in shader" << std::endl;
+      warnedMissing.insert(key);
+    }
     return false;
   }
 }
@@ -204,6 +209,11 @@ void clearRenderToTextureCache() {
 }
 
 void renderToTexture(const RenderToTextureInfo &rtti) {
+  static GLuint quadVao = 0;
+  if (quadVao == 0) {
+    quadVao = createQuadVAO();
+  }
+
   // Lazy creation of a framebuffer as the render target and attach the texture
   // as the color attachment.
   GLuint targetFramebuffer;
@@ -237,6 +247,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
     glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(program);
+    glBindVertexArray(quadVao);
 
     // Set up the uniforms.
     {
@@ -253,7 +264,12 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
         if (loc != -1) {
           glUniform1f(loc, val);
         } else {
-          std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+          static std::set<std::string> warnedMissing;
+          const std::string key = std::to_string(program) + ":" + name;
+          if (!warnedMissing.contains(key)) {
+            std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+            warnedMissing.insert(key);
+          }
         }
       }
 
@@ -263,7 +279,12 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
         if (loc != -1) {
           glUniform3f(loc, val.x, val.y, val.z);
         } else {
-          std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+          static std::set<std::string> warnedMissing;
+          const std::string key = std::to_string(program) + ":" + name;
+          if (!warnedMissing.contains(key)) {
+            std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+            warnedMissing.insert(key);
+          }
         }
       }
 
@@ -273,7 +294,12 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
         if (loc != -1) {
           glUniformMatrix3fv(loc, 1, GL_FALSE, glm::value_ptr(val));
         } else {
-          std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+          static std::set<std::string> warnedMissing;
+          const std::string key = std::to_string(program) + ":" + name;
+          if (!warnedMissing.contains(key)) {
+            std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+            warnedMissing.insert(key);
+          }
         }
       }
 

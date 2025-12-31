@@ -47,6 +47,11 @@ No code reuse; only public behavior and metric definitions are referenced.
 4. Add an ImGui overlay panel that can be toggled and repositioned.
 5. Export optional CSV logs for tuning and regression checks.
 
+## Current status (Blackhole)
+- Added a minimal performance HUD overlay (FPS + CPU/GPU timings) using `HudOverlay`.
+- Runtime toggles: ImGui Performance panel; env vars `BLACKHOLE_PERF_HUD` and
+  `BLACKHOLE_PERF_HUD_SCALE`.
+
 ## Metric sources (planned)
 - CPU usage: /proc/stat deltas (Linux) with fallback to std::thread count only.
 - RAM: /proc/meminfo; VRAM: vendor-specific (NVML/AMDGPU sysfs) when available.

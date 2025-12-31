@@ -332,16 +332,15 @@ private:
  * @brief Raytracer for Kerr spacetime using conserved quantities.
  *
  * This integrates the Kerr geodesic equations in Mino time using
- * the potentials from physics::kerr_potentials(). Callers provide the
+ * the potentials from physics::Kerr. Callers provide the
  * conserved quantities (E, Lz, Q) and initial signs for r/theta.
  */
 class KerrRaytracer {
 public:
   KerrRaytracer(double mass, double spin_param)
-      : mass_(mass),
-        a_(spin_param),
+      : kerr_(mass, spin_param),
         r_s_(schwarzschild_radius(mass)),
-        r_horizon_(kerr_outer_horizon(mass, spin_param)),
+        r_horizon_(kerr_.outer_horizon()),
         r_escape_(1000.0 * r_s_),
         step_size_(0.02 * r_s_),
         max_steps_(10000),
@@ -380,7 +379,7 @@ public:
         break;
       }
 
-      KerrPotentials p = kerr_potentials(state.r, state.theta, mass_, a_, c);
+      KerrPotentials p = kerr_.potentials(state.r, state.theta, c);
       KerrGeodesicState next = state;
       if (p.R < 0.0) {
         next.sign_r = -next.sign_r;
@@ -389,7 +388,7 @@ public:
         next.sign_theta = -next.sign_theta;
       }
 
-      next = kerr_step_mino(next, mass_, a_, c, step_size_);
+      next = kerr_.step_mino(next, c, step_size_);
       state = next;
 
       result.total_distance += step_size_;
@@ -407,7 +406,7 @@ public:
 
     result.final_position = {state.r, state.theta, state.phi};
     if (state.r > r_horizon_ * 1.001) {
-      result.redshift = 1.0 + kerr_redshift(state.r, state.theta, mass_, a_);
+      result.redshift = 1.0 + kerr_.redshift(state.r, state.theta);
     }
 
     return result;
@@ -421,8 +420,7 @@ public:
   }
 
 private:
-  double mass_;
-  double a_;
+  Kerr kerr_;
   double r_s_;
   double r_horizon_;
   double r_escape_;
@@ -457,6 +455,9 @@ struct Camera {
     ray.position = position;
     ray.status = RayStatus::PROPAGATING;
     ray.frequency = 1e15; // Visible light
+    ray.energy = 1.0;
+    ray.angular_momentum = 0.0;
+    ray.carter_constant = 0.0;
 
     // Convert pixel to normalized device coordinates
     double ndc_x = (2.0 * px / width - 1.0) * std::tan(fov / 2.0);
