@@ -120,7 +120,7 @@ The simulation is fully operational with the core rendering pipeline:
 
 ## Active Plans (Merged + Refactored)
 
-- **Performance + math migration:** extend `physics_bench` for new modules; enforce LUT-only emissivity/redshift; optional CPU noise tiles; keep compute-vs-fragment A/B; evaluate Eigen/xsimd for SIMD and parallel LUT generation (see `docs/EIGEN_REFACTOR_PLAN.md`).
+- **Performance + math migration:** extend `physics_bench` for new modules; enforce LUT-only emissivity/redshift (move disk noise + emissivity out of shaders into LUTs with a debug fallback); keep compute-vs-fragment A/B; evaluate Eigen/xsimd for SIMD and parallel LUT generation (see `docs/EIGEN_REFACTOR_PLAN.md`).
 - **Rendering scaling:** validate window resize in fragment + compute paths; add 720p–4K ultrawide presets; persist fullscreen/vsync/renderScale and gamma/tonemap/bloom.
 - **Controls & input ergonomics:** validate keyboard/mouse vs time scale; refine gamepad bindings + deadzone tools; add remap presets; persist inversion/sensitivity/hold-to-toggle.
 - **Cleanroom audit:** deep scan OpenUniverse + local repos; map reusable physics/math/data schemas; define pure C++23/GLSL460 ports.
