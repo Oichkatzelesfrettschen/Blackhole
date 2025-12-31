@@ -740,6 +740,7 @@ endif()
 # ============================================================================
 
 option(BUILD_TESTING "Build test targets" ON)
+option(ENABLE_PRECISION_TESTS "Enable multiprecision regression tests" OFF)
 
 if(BUILD_TESTING)
   enable_testing()
@@ -802,6 +803,33 @@ if(BUILD_TESTING)
     set_tests_properties(grmhd_pack_fixture PROPERTIES
       LABELS "grmhd;io"
       TIMEOUT 60
+    )
+  endif()
+
+  if(ENABLE_PRECISION_TESTS AND EXISTS "${PROJECT_SOURCE_DIR}/tests/precision_regression_test.cpp")
+    find_package(gmp CONFIG REQUIRED)
+    find_package(mpfr CONFIG REQUIRED)
+    add_executable(precision_regression_test
+      "${PROJECT_SOURCE_DIR}/tests/precision_regression_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(precision_regression_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(precision_regression_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(precision_regression_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(precision_regression_test PRIVATE
+      gmp::gmp
+      mpfr::mpfr
+    )
+
+    add_test(NAME precision_regression COMMAND precision_regression_test)
+    set_tests_properties(precision_regression PROPERTIES
+      LABELS "precision;unit"
+      TIMEOUT 120
     )
   endif()
 endif()
