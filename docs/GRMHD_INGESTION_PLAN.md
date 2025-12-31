@@ -9,6 +9,11 @@ compact textures for use in Blackhole. Runtime coupling is optional.
 - `nubhlight_pack` (`tools/nubhlight_pack.cpp`) packs selected channels into RGBA blobs:
   `./build/build/Release/nubhlight_pack -i dump_00000000.h5 -d /dump/P --fields RHO,UU,U1,U2 -o logs/perf/nubhlight_pack.json`
 
+## Nubhlight build snapshot (reference)
+- C99 + MPI + parallel HDF5 + GSL; optional gfortran if Burrows opacities are enabled.
+- Outputs to `dumps/` and `restarts/` under the run output directory (`-o /path/to/output/`).
+- Each problem uses a `python build.py` script to generate a problem-specific Makefile.
+
 ## Reference Schema (nubhlight)
 - HDF5 opacity/emissivity tables in `core/opac_emis_hdf.c`:
   - Datasets: `lrho`, `lT`, `Ye`, `lnu`, `emis`, `opac`.
