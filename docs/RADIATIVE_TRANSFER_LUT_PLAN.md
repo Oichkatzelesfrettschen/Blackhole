@@ -13,6 +13,16 @@ using TARDIS as the cleanroom reference source.
 - Flux conversion: `F = L / (4 * pi * d^2)` with distance in cm.
 - ASCII export uses wavelength (Angstrom) vs L_lambda by default.
 
+## Environment snapshot
+- TARDIS is Python-based and heavy; run offline only.
+- Use a dedicated virtualenv/conda env; cache outputs into `assets/luts/`.
+- Record TARDIS version and input model hash in metadata.
+
+## GRB cross-calibration (optional)
+- Use `grb-common` constants/cosmology for observer-frame flux scaling.
+- JetFit `Table.h5` and boxfit/ASGARD curves can be normalized into the same
+  LUT schema for time-dependent modulation.
+
 ## Steps
 1. Use TARDIS to generate spectral response curves.
 2. Sample intensity vs wavelength and compress to LUTs.
