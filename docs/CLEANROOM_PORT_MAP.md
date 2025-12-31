@@ -67,3 +67,11 @@ No source code is copied; only equations, data formats, and behaviors.
 - openuniverse-common/types.py -> DatasetRef/RunResult schemas for offline pipeline metadata
 - openuniverse-common/adapters/* -> schema hints for tardis/xcosm/torax/pantheon integration
 - cern-analysis-common -> I/O/validation patterns (offline only)
+
+## Port Sequencing (priority order)
+1) compact-common (spacetime + EOS): ISCO/photon/redshift curves, validation LUTs.
+2) openuniverse-common: schema contracts + validation guards for offline pipelines.
+3) grb-common/JetFit/boxfit: GRB light-curve + spectral LUT inputs.
+4) nubhlight: GRMHD HDF5 ingestion + texture packing.
+5) tardis: spectral calibration LUTs (offline only).
+6) spandrel/xcosm/pantheon: cosmology validation curves (offline only).
