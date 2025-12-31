@@ -121,12 +121,19 @@ xcosm | pyproject.toml, Makefile | redshift tools
   `boxfit`, `JetFit`, `PyGRB`).
 - `compact-common` confirms EOS/TOV/spacetime (Schwarzschild + Kerr) utilities; use as LUT/validation
   baseline for ISCO/photon/redshift curves.
+- `compact-common` spacetime module exposes `isco_radius`, `photon_sphere_radius`, `kerr_isco`,
+  and `integrate_geodesic`; EOS module includes polytrope, Fermi gas, sigma-omega, and tabulated
+  EOS references (cleanroom targets only).
 - `nubhlight` README confirms C99 + MPI + parallel HDF5 + GSL; outputs HDF5 dumps to `dumps/` and
   `restarts/`, built per-problem via `python build.py`.
 - `grb-common` README confirms CGS constants, cosmology distances, extinction, and HDF5/CSV schema
   utilities; use for offline LUT generation + validation.
+- `grb-common` provides standardized IO schemas (`LightCurve`, `Spectrum`) with CGS units; use as
+  the validation baseline for GRB modulation and spectral LUTs.
 - `tardis` README confirms supernova spectral synthesis; use offline only for spectral LUT calibration
   (heavy Python stack, forked submodule).
+- `openuniverse-common` README: typed spine/adapters with minimal dependencies; use for schema
+  definitions and offline pipeline contracts (no runtime coupling).
 
 ## Separate clones outside monorepo (~/Github)
 - openuniverse-common: pyproject.toml (Python >=3.10, minimal deps)
