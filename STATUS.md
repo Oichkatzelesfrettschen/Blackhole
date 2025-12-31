@@ -100,7 +100,7 @@ The simulation is fully operational with the core rendering pipeline:
 - Compare toggle renders fragment + compute outputs and reports sampled diff metrics
 - Snapshot capture dumps PPMs and full-frame diff stats; auto-capture appends `logs/compare/compare_summary.csv`
 - GPU timers report fragment vs compute time; preset sweep captures snapshots
-- Compute shader includes a Kerr Mino-time integrator with approximate constants-of-motion
+- Compute shader uses Schwarzschild RK4 only; Kerr compute path disabled pending cleanroom constants
 
 **Kerr Cleanroom Scaffolding**
 - Added C++ Kerr raytracer (Mino-time stepping) and helper constructors
@@ -291,7 +291,7 @@ Option 1 (do nothing) - the current load/save cycle naturally cleans up old fiel
 - Preset sweep includes Kerr/Schwarzschild pairs for A/B capture.
 - Max-diff threshold tracking is exposed in UI and logged per snapshot.
 - CPU-side Kerr raytracer scaffold exists for cleanroom parity checks.
-- Compute path now includes a Kerr Mino-time integrator with approximate constants-of-motion.
+- Compute path uses Schwarzschild RK4 only; Kerr compute path disabled pending cleanroom constants.
 - Optional GPU timing CSV logging via `BLACKHOLE_GPU_TIMING_LOG`.
 
 #### Gaps

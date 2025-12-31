@@ -12,7 +12,6 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "include/physics_constants.glsl"
-#include "include/kerr.glsl"
 
 // ============================================================================
 // Work Group Configuration
@@ -40,7 +39,6 @@ uniform ivec2 tileOffset = ivec2(0);
 uniform float schwarzschildRadius;
 uniform float iscoRadius;
 uniform float photonSphereRadius;
-uniform float kerrSpin = 0.0;
 
 // Integration parameters
 uniform int maxSteps;
@@ -181,15 +179,6 @@ float computeRedshiftFactor(vec3 pos, float r_s) {
     float r = length(pos);
     if (r <= r_s) return 0.0;
 
-    if (abs(kerrSpin) > 1e-4) {
-        float a = kerrSpin * 0.5 * r_s;
-        float cosTheta = pos.z / max(r, EPSILON);
-        float sigma = kerrSigma(r, a, cosTheta);
-        float factor = 1.0 - (r_s * r) / sigma;
-        if (factor <= 0.0) return 0.0;
-        return sqrt(factor);
-    }
-
     float factor = 1.0 - r_s / r;
     if (factor <= 0.0) return 0.0;
     return sqrt(factor);
@@ -211,8 +200,7 @@ HitResult traceGeodesic(Ray ray, float r_s) {
     result.phi = 0.0;
     result.redshiftFactor = 1.0;
 
-    float a = kerrSpin * 0.5 * r_s;
-    float r_horizon = abs(kerrSpin) > 1e-4 ? kerrOuterHorizon(r_s, a) : r_s;
+    float r_horizon = r_s;
 
     // Disk parameters
     float r_disk_in = iscoRadius;
@@ -221,43 +209,27 @@ HitResult traceGeodesic(Ray ray, float r_s) {
     vec3 oldPos;
     float dt = stepSize;
 
-    bool useKerr = abs(kerrSpin) > 1e-4;
-    KerrConsts kerrC;
-    KerrRay kerrRay;
-    if (useKerr) {
-        kerrC = kerrInitConsts(ray.position, ray.velocity);
-        kerrRay = kerrInitRay(ray.position, ray.velocity);
-    }
-
     for (int step = 0; step < maxSteps; ++step) {
-        oldPos = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
-                         : ray.position;
+        oldPos = ray.position;
 
         // Adaptive step size near horizon
-        float r = useKerr ? kerrRay.r : length(ray.position);
+        float r = length(ray.position);
         float adaptive_dt = dt * clamp(r / r_s - 1.0, 0.1, 1.0);
 
-        if (useKerr) {
-            kerrStep(kerrRay, r_s, a, kerrC, adaptive_dt);
-            r = kerrRay.r;
-        } else {
-            stepRK4(ray, r_s, adaptive_dt);
-            r = length(ray.position);
-        }
+        stepRK4(ray, r_s, adaptive_dt);
+        r = length(ray.position);
 
         // Check horizon
         if (r < r_horizon * 1.01) {
             result.hitHorizon = true;
-            result.hitPoint = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
-                                      : ray.position;
+            result.hitPoint = ray.position;
             return result;
         }
 
         // Check disk intersection
         if (enableDisk) {
             vec3 diskHit;
-            vec3 newPos = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
-                                  : ray.position;
+            vec3 newPos = ray.position;
             if (checkDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
                 result.hitDisk = true;
                 result.hitPoint = diskHit;
@@ -270,16 +242,14 @@ HitResult traceGeodesic(Ray ray, float r_s) {
         // Check escape
         if (r > maxDistance) {
             result.escaped = true;
-            result.hitPoint = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
-                                      : ray.position;
+            result.hitPoint = ray.position;
             return result;
         }
     }
 
     // Max steps reached
     result.escaped = true;
-    result.hitPoint = useKerr ? kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi)
-                              : ray.position;
+    result.hitPoint = ray.position;
     return result;
 }
 
