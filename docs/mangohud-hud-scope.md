@@ -28,13 +28,17 @@ No code reuse; only public behavior and metric definitions are referenced.
 - Optional: battery status and network throughput.
 
 ## Config + vsync notes (from README)
-- MANGOHUD_CONFIG supports comma-delimited options; `read_cfg` uses config files
-  in addition to env options.
+- MANGOHUD_CONFIG supports comma-delimited options; config files can be set via
+  `MANGOHUD_CONFIGFILE` and presets via `MANGOHUD_PRESETSFILE`.
 - OpenGL vsync values: `-1` adaptive, `0` off, `1` on, `n` sync to refresh/n.
 - Present mode is shown as vsync status for OpenGL.
 - Default-enabled metrics include `fps`, `frame_timing`, `cpu_stats`, `gpu_stats`.
 - Logging controls include `output_folder`, `output_file`, `log_interval`, `log_duration`,
   `benchmark_percentiles`, and toggle hotkeys (`toggle_hud`, `toggle_logging`).
+
+## Build dependency notes (reference only)
+- Built with Meson/Ninja; requires glslang, libGL/libEGL, X11/Wayland, and xkbcommon.
+- Optional: NVML/XNVCtrl (NVIDIA), DBus, 32-bit builds via multilib.
 
 ## Cleanroom integration plan
 1. Define a lightweight HUD settings struct in Blackhole settings.
