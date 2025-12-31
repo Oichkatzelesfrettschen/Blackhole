@@ -39,4 +39,4 @@ class BlackholeConan(ConanFile):
         self.requires("z3/4.14.1")
 
     def layout(self):
-        cmake_layout(self)
+        cmake_layout(self, build_folder=".")

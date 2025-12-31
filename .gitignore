@@ -78,3 +78,7 @@ logs/
 CMakeUserPresets.json
 imgui.ini
 .conan/
+!.conan/
+.conan/*
+!.conan/global.conf
+!.conan/remotes.json

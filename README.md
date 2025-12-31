@@ -10,19 +10,15 @@
 ## Prerequisite
 
 - [cmake](https://cmake.org/)
-- [conan](https://conan.io/) package manager [^1]
+- [conan](https://conan.io/) package manager (repo-local home; see `scripts/conan_env.sh`)
 - C++23-capable compiler
 - OpenGL 4.6-capable GPU/driver
-
-[^1]: You might need to configure [$HOME/.conan/conan.conf](https://docs.conan.io/en/latest/reference/config_files/conan.conf.html) and Conan [profiles](https://docs.conan.io/en/latest/reference/profiles.html) if the `default profile` is not generated due to different build environments on your distribution.
 
 ## Build the code
 
 ```bash
-# Install dependencies with Conan (output folder must match your CMake build dir).
-conan profile detect --force
-conan remote update conancenter --url="https://center2.conan.io"
-conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23
+# Install dependencies with repo-local Conan (output folder must match your CMake build dir).
+./scripts/conan_install.sh Release build
 ./scripts/fetch_implot.sh
 
 # Configure the project and generate a native build system.
@@ -36,11 +32,11 @@ cmake --preset release -DENABLE_RMLUI=ON
 cmake --preset release -DENABLE_TRACY=ON
 
 # Or explicit configure/build.
-cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/build/Release \
-  -DCMAKE_TOOLCHAIN_FILE=build/build/Release/generators/conan_toolchain.cmake
+cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/Release \
+  -DCMAKE_TOOLCHAIN_FILE=build/Release/generators/conan_toolchain.cmake
 
 # Compile / build the project.
-cmake --build build/build/Release
+cmake --build build/Release
 ```
 
 ## OpenGL 4.6 scope

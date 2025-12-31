@@ -5,9 +5,9 @@ compact textures for use in Blackhole. Runtime coupling is optional.
 
 ## Tooling
 - `nubhlight_inspect` (`tools/nubhlight_inspect.cpp`) emits dataset/dimension metadata:
-  `./build/build/Release/nubhlight_inspect -i dump_00000000.h5 -o logs/perf/nubhlight_meta.json`
+  `./build/Release/nubhlight_inspect -i dump_00000000.h5 -o logs/perf/nubhlight_meta.json`
 - `nubhlight_pack` (`tools/nubhlight_pack.cpp`) packs selected channels into RGBA blobs:
-  `./build/build/Release/nubhlight_pack -i dump_00000000.h5 -d /dump/P --fields RHO,UU,U1,U2 -o logs/perf/nubhlight_pack.json`
+  `./build/Release/nubhlight_pack -i dump_00000000.h5 -d /dump/P --fields RHO,UU,U1,U2 -o logs/perf/nubhlight_pack.json`
 
 ## Nubhlight build snapshot (reference)
 - C99 + MPI + parallel HDF5 + GSL; optional gfortran if Burrows opacities are enabled.

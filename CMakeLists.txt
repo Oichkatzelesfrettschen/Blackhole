@@ -10,8 +10,7 @@ project(Blackhole
 # Conan 2.x Integration
 # ============================================================================
 # Usage:
-#   conan remote update conancenter --url="https://center2.conan.io"
-#   conan install . --output-folder=<cmake-build-dir> --build=missing
+#   ./scripts/conan_install.sh Release <cmake-build-dir>
 #   cmake --preset release (or: cmake -B <cmake-build-dir> -DCMAKE_BUILD_TYPE=Release)
 #   cmake --build build
 # ============================================================================
@@ -29,12 +28,6 @@ elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/conan_toolchain.cmake")
   set(CONAN_TOOLCHAIN_PATH "${CMAKE_SOURCE_DIR}/build/conan_toolchain.cmake")
 elseif(EXISTS "${CMAKE_BINARY_DIR}/generators/conan_toolchain.cmake")
   set(CONAN_TOOLCHAIN_PATH "${CMAKE_BINARY_DIR}/generators/conan_toolchain.cmake")
-elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/build/Release/generators/conan_toolchain.cmake")
-  set(CONAN_TOOLCHAIN_PATH
-      "${CMAKE_SOURCE_DIR}/build/build/Release/generators/conan_toolchain.cmake")
-elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/build/Debug/generators/conan_toolchain.cmake")
-  set(CONAN_TOOLCHAIN_PATH
-      "${CMAKE_SOURCE_DIR}/build/build/Debug/generators/conan_toolchain.cmake")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/build/Release/generators/conan_toolchain.cmake")
   set(CONAN_TOOLCHAIN_PATH "${CMAKE_SOURCE_DIR}/build/Release/generators/conan_toolchain.cmake")
 endif()
@@ -44,7 +37,7 @@ if(CONAN_TOOLCHAIN_PATH)
     include("${CONAN_TOOLCHAIN_PATH}")
   endif()
 else()
-  message(FATAL_ERROR "Conan toolchain not found. Run: conan remote update conancenter --url=\"https://center2.conan.io\" && conan install . --output-folder=<cmake-build-dir> --build=missing")
+  message(FATAL_ERROR "Conan toolchain not found. Run: ./scripts/conan_install.sh Release <cmake-build-dir>")
 endif()
 
 # ============================================================================
@@ -73,12 +66,6 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/build/Release/generators")
 endif()
 if(EXISTS "${CMAKE_SOURCE_DIR}/build/Debug/generators")
   list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/Debug/generators")
-endif()
-if(EXISTS "${CMAKE_SOURCE_DIR}/build/build/Release/generators")
-  list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/build/Release/generators")
-endif()
-if(EXISTS "${CMAKE_SOURCE_DIR}/build/build/Debug/generators")
-  list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/build/Debug/generators")
 endif()
 
 find_package(imgui REQUIRED)

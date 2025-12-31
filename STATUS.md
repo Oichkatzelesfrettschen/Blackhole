@@ -68,7 +68,10 @@ The simulation is fully operational with the core rendering pipeline:
 - Added tiled compute dispatch support for the geodesic compute path (`tileOffset` uniform).
 - Expanded LUT pipeline scripts with compact-common metadata and optional spin radii LUT output.
 - Conan install completed with CMake 3.31; Release build + validate-shaders + ctest (physics_validation, grmhd_pack_fixture) succeeded.
+- Added a local `rmlui/4.4` Conan recipe with `CMAKE_POLICY_VERSION_MINIMUM` fix for modern CMake.
+- Aligned Conan output layout to `build/Release` and removed duplicate `conan-release` preset collisions.
 - Upgraded Conan pins to latest center2 versions (core + UI), with Eigen deferred; GLM now tracks cci.20230113.
+- Verified latest conancenter versions via `conan list`; reran `conan install` + Release build + ctest with repo-local `.conan` config.
 - Added optional Z3 integration (`ENABLE_Z3=ON`) and `z3_sanity` tool target; Z3 builds with GCC 15 warnings (non-fatal).
 - Added optional GMP/MPFR dependencies (ground-truth precision baselines for multiprecision tests).
 
@@ -392,19 +395,17 @@ After fixes, verify:
 ## Build Commands
 
 ```bash
-# Install dependencies
-conan profile detect --force
-conan remote update conancenter --url="https://center2.conan.io"
-conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23
+# Install dependencies (repo-local Conan home)
+./scripts/conan_install.sh Release build
 
 # Build
-cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/build/Release \
-  -DCMAKE_TOOLCHAIN_FILE=build/build/Release/generators/conan_toolchain.cmake
-cmake --build build/build/Release
+cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/Release \
+  -DCMAKE_TOOLCHAIN_FILE=build/Release/generators/conan_toolchain.cmake
+cmake --build build/Release
 
 # Run
-./build/build/Release/Blackhole
+./build/Release/Blackhole
 
 # Validate shaders
-cmake --build build/build/Release --target validate-shaders
+cmake --build build/Release --target validate-shaders
 ```

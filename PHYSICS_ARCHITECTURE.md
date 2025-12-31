@@ -307,7 +307,7 @@ namespace openuniverse::grmhd {
 ### C. C++23 & Conan Integration Opportunities
 
 **Current Toolchain:**
-- CMake 3.21+, Conan 1.x/2.x (package manager)
+- CMake 3.21+, Conan 2.x (package manager)
 - Dependencies: imgui-docking, implot, glfw, glbinding, glm, xsimd, entt, pcg-cpp, taskflow, flatbuffers, highfive, spdlog, tracy, cli11, boost, stb (autodiff manual; others via Conan)
 - Compiler: GCC/Clang with C++23 (std::forward_like, deduction guides, etc.)
 

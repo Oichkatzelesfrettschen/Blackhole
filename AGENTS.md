@@ -17,13 +17,12 @@ post-processing, and optional LUT-backed physics validation.
 - `bench/`, `docs/`, `scripts/`: perf harness, research plans, and generators.
 
 ## Build, Test, and Development Commands
-- `conan remote update conancenter --url="https://center2.conan.io"`
-- `conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23`
+- `./scripts/conan_install.sh Release build` (uses repo-local `.conan/`)
 - `cmake --preset release` then `cmake --build --preset release`
-- `ctest --test-dir build/build/Release --output-on-failure`
+- `ctest --test-dir build/Release --output-on-failure`
 - Shader checks: `cmake --build --preset release --target validate-shaders`
 - Optional toggles: `-DENABLE_TRACY=ON`, `-DENABLE_RMLUI=ON`, `-DENABLE_Z3=ON`, `-DENABLE_PRECISION_TESTS=ON`
-- Run: `./build/build/Release/Blackhole`, `./build/build/Release/physics_bench`
+- Run: `./build/Release/Blackhole`, `./build/Release/physics_bench`
 
 ## Coding Style & Naming Conventions
 - C++23, 2-space indent, braces on same line, CamelCase types, lowerCamelCase vars.
@@ -35,7 +34,7 @@ post-processing, and optional LUT-backed physics validation.
 
 ## Dependencies & Configuration Notes
 - Conan pins are the source of truth; see `requirements.md` for versions and notes.
-- ImGui 1.92.5-docking and Tracy 0.12.2 are currently local-cache recipes; conancenter has older tags.
+- ImGui 1.92.5-docking and Tracy 0.12.2 ship as local recipes under `conan/recipes/`.
 - `settings.json` is runtime-generated; maintain backward compatibility when adding fields.
 
 ## Commit & Pull Request Guidelines

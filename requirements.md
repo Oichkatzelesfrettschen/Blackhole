@@ -2,7 +2,7 @@
 
 ## Build prerequisites
 - CMake 3.21+
-- Conan 2.x
+- Conan 2.x (repo-local home at `.conan/` via `scripts/conan_env.sh`)
 - C++23-capable compiler (GCC 13+/Clang 16+)
 - OpenGL 4.6-capable GPU + driver
 - Python 3 (for LUT generation scripts)
@@ -99,7 +99,7 @@ Note: `conanfile.py` sets shared builds for hdf5/spdlog/fmt and disables
 
 ## Conan update candidates (center2, 2025-12-30)
 Latest recipes on conancenter (current pins in parentheses):
-- imgui: cci.20230105+1.89.2.docking (current 1.92.5-docking; local-cache recipe)
+- imgui: cci.20230105+1.89.2.docking (current 1.92.5-docking; local recipe in `conan/recipes`)
 - implot: 0.16 (Conan recipe; project vendors master until 1.92+ support lands)
 - glfw: 3.4 (current 3.4)
 - glbinding: 3.5.0 (current 3.5.0)
@@ -111,7 +111,7 @@ Latest recipes on conancenter (current pins in parentheses):
 - flatbuffers: 25.9.23 (current 25.9.23)
 - spdlog: 1.16.0 (current 1.16.0)
 - fmt: 12.1.0 (current 12.1.0)
-- tracy: cci.20220130 (current 0.12.2; local-cache recipe)
+- tracy: cci.20220130 (current 0.12.2; local recipe in `conan/recipes`)
 - cli11: 2.6.0 (current 2.6.0)
 - boost: 1.90.0 (current 1.90.0)
 - hdf5: 1.14.6 (current 1.14.6)
@@ -146,13 +146,11 @@ Missing on conancenter (needs custom Conan recipe or vendoring):
 
 ## Build (Release)
 ```bash
-conan profile detect --force
-conan remote update conancenter --url="https://center2.conan.io"
-conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23
+./scripts/conan_install.sh Release build
 ./scripts/fetch_implot.sh
 
 # If system CMake >=4.x breaks glbinding's configure step, rerun with CMake 3.x:
-# conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23 \
+# ./scripts/conan_install.sh Release build \
 #   -c tools.cmake:cmake_program=/path/to/cmake-3.31
 
 cmake --preset release
@@ -160,9 +158,9 @@ cmake --preset release -DENABLE_Z3=ON  # enable z3_sanity tool
 cmake --build --preset release
 
 # Or explicit configure/build
-cmake -S . -B build/build/Release -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE=build/build/Release/generators/conan_toolchain.cmake
-cmake --build build/build/Release
+cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE=build/Release/generators/conan_toolchain.cmake
+cmake --build build/Release
 ```
 
 ## Validation assets (offline)
