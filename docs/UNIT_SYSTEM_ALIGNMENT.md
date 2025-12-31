@@ -36,6 +36,10 @@ code paths and the validation assets used to keep them consistent.
 - `assets/validation/redshift_curve.csv` stores `r_over_rs` vs redshift.
 - `assets/validation/spin_radii_curve.csv` stores spin vs `r_isco/r_s` and `r_ph/r_s`.
 
+## Reference Curve Generation
+- `scripts/generate_validation_tables.py` prefers `compact-common` when available to emit
+  ISCO/photon/redshift curves; it records a metadata flag when falling back to C++ formulas.
+
 ## Runtime Checks (Future)
 - Optional guardrails: clamp NaN/inf in shader parameters.
 - CPU asserts for negative radii or non-finite constants.
