@@ -1,5 +1,7 @@
 #include "hud_overlay.h"
 
+#include <vector>
+
 int main() {
   // Validate that the header compiles and that basic non-GL operations work.
   HudOverlay overlay;
@@ -13,7 +15,7 @@ int main() {
   overlay.setLines(lines);
 
   // measureText should work without GL context.
-  auto size = overlay.measureText("Hello", 1.0f);
+  auto size = HudOverlay::measureText("Hello", 1.0f);
   (void)size;
   return 0;
 }

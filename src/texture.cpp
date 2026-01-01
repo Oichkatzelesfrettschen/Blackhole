@@ -1,11 +1,55 @@
 #include "texture.h"
 
 // C++ system headers
+#include <algorithm>
 #include <iostream>
 #include <vector>
 
 // Third-party library headers
 #include <stb_image.h>
+
+static bool supportsAnisotropy() {
+  static bool checked = false;
+  static bool supported = false;
+  if (checked) {
+    return supported;
+  }
+  checked = true;
+  GLint major = 0;
+  GLint minor = 0;
+  glGetIntegerv(GL_MAJOR_VERSION, &major);
+  glGetIntegerv(GL_MINOR_VERSION, &minor);
+  bool versionIs46 = (major > 4) || (major == 4 && minor >= 6);
+  bool hasExt = false;
+  GLint count = 0;
+  glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+  for (GLint i = 0; i < count; ++i) {
+    const char *ext =
+        reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(i)));
+    if (ext != nullptr &&
+        (std::string(ext) == "GL_EXT_texture_filter_anisotropic" ||
+         std::string(ext) == "GL_ARB_texture_filter_anisotropic")) {
+      hasExt = true;
+      break;
+    }
+  }
+  supported = versionIs46 || hasExt;
+  return supported;
+}
+
+static void applyAnisotropy(GLenum target) {
+  if (!supportsAnisotropy()) {
+    return;
+  }
+  GLfloat maxAniso = 0.0f;
+  glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAniso);
+  if (maxAniso <= 0.0f) {
+    return;
+  }
+  constexpr GLfloat kDefaultAniso = 8.0f;
+  GLfloat aniso = std::min(maxAniso, kDefaultAniso);
+  glTexParameterf(target, GL_TEXTURE_MAX_ANISOTROPY, aniso);
+}
 
 GLuint loadTexture2D(const std::string &file, bool repeat) {
   GLuint textureID;
@@ -36,6 +80,7 @@ GLuint loadTexture2D(const std::string &file, bool repeat) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    applyAnisotropy(GL_TEXTURE_2D);
 
     stbi_image_free(data);
   } else {
@@ -76,6 +121,7 @@ GLuint loadCubemap(const std::string &cubemapDir) {
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+  applyAnisotropy(GL_TEXTURE_CUBE_MAP);
 
   if (!ok) {
     glDeleteTextures(1, &textureID);

@@ -5,7 +5,7 @@ layout(location = 1) in vec4 inColor;
 
 uniform vec2 uScreenSize;
 
-out vec4 vColor;
+layout(location = 0) out vec4 vColor;
 
 void main() {
   vec2 ndc;

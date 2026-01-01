@@ -8,6 +8,8 @@ source "${ROOT}/scripts/conan_env.sh"
 BUILD_TYPE="${1:-Release}"
 OUTPUT_DIR_REL="${2:-build}"
 OUTPUT_DIR="${ROOT}/${OUTPUT_DIR_REL}"
+shift $(( $# > 1 ? 2 : $# )) || true
+EXTRA_ARGS=("$@")
 
 # Ensure output folder is inside the repo so cache/config stays repo-local
 case "$OUTPUT_DIR" in
@@ -43,12 +45,18 @@ if (( CONAN_MAJOR >= 2 )); then
     --output-folder="${OUTPUT_DIR}" \
     --build=missing \
     -s build_type="${BUILD_TYPE}" \
-    -s compiler.cppstd=23
+    -s compiler.cppstd=23 \
+    -s:b build_type="${BUILD_TYPE}" \
+    -s:b compiler.cppstd=23 \
+    "${EXTRA_ARGS[@]}"
 else
   echo "WARNING: Detected Conan ${CONAN_VER_STR} (1.x). Consider upgrading to Conan 2.x -- continuing using compatibility options."
   conan install "${ROOT}" \
     --output-folder="${OUTPUT_DIR}" \
     --build=missing \
     -s build_type="${BUILD_TYPE}" \
-    -s compiler.cppstd=23
+    -s compiler.cppstd=23 \
+    -s:b build_type="${BUILD_TYPE}" \
+    -s:b compiler.cppstd=23 \
+    "${EXTRA_ARGS[@]}"
 fi

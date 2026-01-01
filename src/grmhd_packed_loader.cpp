@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <limits>
 #include <sstream>
+#include <iterator>
 
 #include <nlohmann/json.hpp>
 
@@ -18,16 +19,14 @@
 namespace {
 
 std::string toUpper(std::string value) {
-  for (char &c : value) {
-    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-  }
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
   return value;
 }
 
 std::string toLower(std::string value) {
-  for (char &c : value) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
 }
 
@@ -179,14 +178,14 @@ bool loadGrmhdPackedTexture(const std::string &metadataPath, GrmhdPackedTexture 
   std::vector<float> metaMin;
   std::vector<float> metaMax;
   if (json.contains("min") && json["min"].is_array()) {
-    for (const auto &item : json["min"]) {
-      metaMin.push_back(item.get<float>());
-    }
+    metaMin.reserve(json["min"].size());
+    std::transform(json["min"].begin(), json["min"].end(), std::back_inserter(metaMin),
+                   [](const nlohmann::json &item) { return item.get<float>(); });
   }
   if (json.contains("max") && json["max"].is_array()) {
-    for (const auto &item : json["max"]) {
-      metaMax.push_back(item.get<float>());
-    }
+    metaMax.reserve(json["max"].size());
+    std::transform(json["max"].begin(), json["max"].end(), std::back_inserter(metaMax),
+                   [](const nlohmann::json &item) { return item.get<float>(); });
   }
   if (validate && metaMin.size() >= 4 && metaMax.size() >= 4) {
     for (std::size_t c = 0; c < 4; ++c) {

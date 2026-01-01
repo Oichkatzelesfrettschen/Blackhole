@@ -1,6 +1,6 @@
 # Roadmap (Active Plans)
 
-The next-phase roadmap has been consolidated into `STATUS.md` under
-**Active Plans (Merged + Refactored)**.
+The consolidated, hypergranular roadmap now lives in:
+- `docs/ROADMAP.md`
 
-Please refer to `STATUS.md` for the current, authoritative plan.
+`STATUS.md` remains the source of truth for current status and recent changes.

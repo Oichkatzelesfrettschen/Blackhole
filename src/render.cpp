@@ -5,10 +5,10 @@
 
 // Third-party library headers
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 // Local headers
+#include "gl_loader.h"
 #include "shader.h"
 
 // Out-of-line destructor definition to prevent -Winline warnings.
@@ -278,6 +278,21 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
         GLint loc = glGetUniformLocation(program, name.c_str());
         if (loc != -1) {
           glUniform3f(loc, val.x, val.y, val.z);
+        } else {
+          static std::set<std::string> warnedMissing;
+          const std::string key = std::to_string(program) + ":" + name;
+          if (!warnedMissing.contains(key)) {
+            std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+            warnedMissing.insert(key);
+          }
+        }
+      }
+
+      // Update vec4 uniforms
+      for (auto const &[name, val] : rtti.vec4Uniforms) {
+        GLint loc = glGetUniformLocation(program, name.c_str());
+        if (loc != -1) {
+          glUniform4f(loc, val.x, val.y, val.z, val.w);
         } else {
           static std::set<std::string> warnedMissing;
           const std::string key = std::to_string(program) + ":" + name;

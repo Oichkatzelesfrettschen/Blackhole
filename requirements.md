@@ -27,7 +27,8 @@ sudo apt-get install -y \
 sudo apt-get install -y \
   glslang-tools \
   shaderc \
-  spirv-tools
+  spirv-tools \
+  spirv-cross
 ```
 
 ## Optional system packages (GRMHD ingestion tooling)
@@ -56,7 +57,8 @@ sudo pacman -S --needed \
 sudo pacman -S --needed \
   glslang \
   shaderc \
-  spirv-tools
+  spirv-tools \
+  spirv-cross
 ```
 
 ## Optional system packages (GRMHD ingestion tooling) (Arch/CachyOS)
@@ -83,14 +85,24 @@ sudo pacman -S --needed \
 - fmt/12.1.0
 - tracy/0.13.1
 - cli11/2.6.0
+- shaderc/2025.3 (optional; `enable_spirv_tooling=True`)
+- spirv-tools/1.4.313.0 (optional; `enable_spirv_tooling=True`)
+- spirv-cross/1.4.321.0 (optional; `enable_spirv_tooling=True`)
+- spirv-headers/1.4.313.0 (optional; `enable_spirv_tooling=True`)
 - z3/4.14.1 (optional; enable with `-DENABLE_Z3=ON`)
 - gmp/6.3.0 (optional; precision ground-truth via Boost.Multiprecision MPFR backend)
 - mpfr/4.2.2 (optional; precision ground-truth via Boost.Multiprecision MPFR backend)
 - boost/1.90.0
 - stb/cci.20240531
+- meshoptimizer/0.25 (default on; `enable_meshoptimizer=True`)
+- fastnoise2/0.10.0-alpha (default on; `enable_fastnoise2=True`)
+- watcher/0.14.1 (optional; `enable_shader_watcher=True`)
 
 Note: `conanfile.py` sets shared builds for hdf5/spdlog/fmt and disables
 `boost` cobalt to keep the dependency graph stable.
+
+Version check (conancenter, 2025-12-31): all pinned versions in this list
+were verified with `conan list <pkg/version> -r=conancenter`.
 
 ## Vendored sources
 - ImPlot (upstream master, 0.18 WIP): `external/implot` (fetch with
@@ -114,6 +126,8 @@ Latest recipes on conancenter (current pins in parentheses):
 - tracy: 0.12.2 (current 0.13.1; local recipe in `conan/recipes`)
 - rmlui: 4.4 (current 6.1; local recipe in `conan/recipes`)
 - cli11: 2.6.0 (current 2.6.0)
+- spirv-cross: 1.4.321.0 (current 1.4.321.0)
+- spirv-headers: 1.5.4 (current 1.4.313.0; pinned for shaderc/spirv-tools compatibility)
 - boost: 1.90.0 (current 1.90.0)
 - hdf5: 1.14.6 (current 1.14.6)
 - z3: 4.14.1 (current 4.14.1)
@@ -122,12 +136,23 @@ Latest recipes on conancenter (current pins in parentheses):
 - eigen: 5.0.1 (optional/deferred; current 3.4.0)
 - pcg-cpp: cci.20220409 (current cci.20220409)
 - stb: cci.20240531 (current cci.20240531)
+- meshoptimizer: 0.25 (current 0.25)
+- fastnoise2: 0.10.0-alpha (current 0.10.0-alpha)
+- watcher: 0.14.1 (current 0.14.1)
 
 Optional additions for the cleanroom pipeline (on conancenter):
 - benchmark/1.9.4 (microbench harness)
 - mimalloc/2.2.4 (allocator experiments)
 - glad/2.0.8 (fallback OpenGL loader)
 - bgfx/1.129.8930-495 or cci.20230216 (renderer reference; optional)
+
+Optional asset pipeline packages (on conancenter):
+- ktx/4.3.2 (KTX/KTX2 texture container support)
+- openimageio/3.1.8.0 (heavyweight image IO for EXR/PNG/JPG)
+- tinyexr/1.0.7 (lightweight EXR loader)
+- libpng/1.6.53 (PNG IO)
+- libjpeg-turbo/3.1.3 (JPEG IO)
+- assimp/6.0.2 (mesh import pipeline if needed)
 
 Missing on conancenter (uses FetchContent if enabled in CMake):
 - amrex (AMR grid solver; `-DENABLE_AMREX=ON`)

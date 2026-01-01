@@ -72,6 +72,13 @@ struct Settings {
   float bloomStrength = 0.1f;
   int bloomIterations = 8;
 
+  // === BACKGROUND ===
+  bool backgroundEnabled = true;
+  std::string backgroundId = "nasa_pia22085";
+  float backgroundIntensity = 1.0f;
+  float backgroundParallaxStrength = 0.0006f;
+  float backgroundDriftStrength = 0.01f;
+
   // === CAMERA ===
   float cameraYaw = 0.0f;
   float cameraPitch = 0.0f;

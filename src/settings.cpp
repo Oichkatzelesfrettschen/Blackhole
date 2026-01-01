@@ -186,6 +186,16 @@ bool SettingsManager::load(const std::string &filepath) {
       settings_.bloomStrength = parseFloat(value);
     else if (line.find("\"bloomIterations\"") != std::string::npos)
       settings_.bloomIterations = parseInt(value);
+    else if (line.find("\"backgroundEnabled\"") != std::string::npos)
+      settings_.backgroundEnabled = parseBool(value);
+    else if (line.find("\"backgroundId\"") != std::string::npos)
+      settings_.backgroundId = value;
+    else if (line.find("\"backgroundIntensity\"") != std::string::npos)
+      settings_.backgroundIntensity = parseFloat(value);
+    else if (line.find("\"backgroundParallaxStrength\"") != std::string::npos)
+      settings_.backgroundParallaxStrength = parseFloat(value);
+    else if (line.find("\"backgroundDriftStrength\"") != std::string::npos)
+      settings_.backgroundDriftStrength = parseFloat(value);
 
     // Camera
     else if (line.find("\"cameraYaw\"") != std::string::npos)
@@ -310,6 +320,12 @@ bool SettingsManager::save(const std::string &filepath) {
   file << "  \"tonemappingEnabled\": " << writeBool(settings_.tonemappingEnabled) << ",\n";
   file << "  \"bloomStrength\": " << settings_.bloomStrength << ",\n";
   file << "  \"bloomIterations\": " << settings_.bloomIterations << ",\n";
+  file << "  \"backgroundEnabled\": " << writeBool(settings_.backgroundEnabled) << ",\n";
+  file << "  \"backgroundId\": \"" << settings_.backgroundId << "\",\n";
+  file << "  \"backgroundIntensity\": " << settings_.backgroundIntensity << ",\n";
+  file << "  \"backgroundParallaxStrength\": " << settings_.backgroundParallaxStrength
+       << ",\n";
+  file << "  \"backgroundDriftStrength\": " << settings_.backgroundDriftStrength << ",\n";
 
   // Camera
   file << "  \"cameraYaw\": " << settings_.cameraYaw << ",\n";

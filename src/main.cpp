@@ -29,6 +29,7 @@
 #include <string>
 #include <vector>
 #include <limits>
+#include <thread>
 
 // Third-party library headers
 #include "gl_loader.h"
@@ -49,6 +50,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <implot.h>
+#include <nlohmann/json.hpp>
 
 // Local headers
 #include "GLDebugMessageCallback.h"
@@ -68,6 +70,8 @@
 #include "tracy_support.h"
 
 enum class CameraMode { Input = 0, Front, Top, Orbit };
+
+static constexpr int kBackgroundLayers = 3;
 
 #if BLACKHOLE_HAS_CPPTRACE
 namespace {
@@ -244,6 +248,170 @@ static bool readTextFile(const std::string &path, std::string &out) {
   return !out.empty();
 }
 
+static bool hasExtension(const char *name) {
+  GLint count = 0;
+  glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+  for (GLint i = 0; i < count; ++i) {
+    const char *ext =
+        reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(i)));
+    if (ext != nullptr && std::string(ext) == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool supportsDrawId() {
+  GLint major = 0;
+  GLint minor = 0;
+  glGetIntegerv(GL_MAJOR_VERSION, &major);
+  glGetIntegerv(GL_MINOR_VERSION, &minor);
+  bool versionIs46 = (major > 4) || (major == 4 && minor >= 6);
+  return versionIs46 || hasExtension("GL_ARB_shader_draw_parameters");
+}
+
+static bool supportsMultiDrawIndirect() {
+  GLint major = 0;
+  GLint minor = 0;
+  glGetIntegerv(GL_MAJOR_VERSION, &major);
+  glGetIntegerv(GL_MINOR_VERSION, &minor);
+  bool versionIs43 = (major > 4) || (major == 4 && minor >= 3);
+  return versionIs43 || hasExtension("GL_ARB_multi_draw_indirect");
+}
+
+static bool supportsIndirectCount() {
+  GLint major = 0;
+  GLint minor = 0;
+  glGetIntegerv(GL_MAJOR_VERSION, &major);
+  glGetIntegerv(GL_MINOR_VERSION, &minor);
+  bool versionIs46 = (major > 4) || (major == 4 && minor >= 6);
+  return versionIs46 || hasExtension("GL_ARB_indirect_parameters");
+}
+
+struct BackgroundAsset {
+  std::string id;
+  std::string title;
+  std::string path;
+};
+
+struct DrawArraysIndirectCommand {
+  GLuint count = 0;
+  GLuint primCount = 0;
+  GLuint first = 0;
+  GLuint baseInstance = 0;
+};
+
+struct DrawInstanceGpu {
+  glm::vec4 offsetScale;
+  glm::vec4 tint;
+  glm::vec4 flags;
+};
+
+struct WiregridMesh {
+  GLuint vao = 0;
+  GLuint vbo = 0;
+  GLsizei vertexCount = 0;
+};
+
+struct WiregridParams {
+  int ringCount = 16;
+  int ringSegments = 128;
+  int spokeCount = 32;
+  float radiusMin = 2.0f;
+  float radiusMax = 50.0f;
+};
+
+static bool wiregridParamsEqual(const WiregridParams &a, const WiregridParams &b) {
+  return a.ringCount == b.ringCount && a.ringSegments == b.ringSegments &&
+         a.spokeCount == b.spokeCount && a.radiusMin == b.radiusMin &&
+         a.radiusMax == b.radiusMax;
+}
+
+static void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params) {
+  std::vector<glm::vec3> vertices;
+  if (params.ringCount < 2 || params.ringSegments < 3 || params.spokeCount < 1 ||
+      params.radiusMax <= params.radiusMin) {
+    mesh.vertexCount = 0;
+    return;
+  }
+
+  const float twoPi = 6.283185307179586f;
+  for (int ring = 0; ring < params.ringCount; ++ring) {
+    float t = static_cast<float>(ring) / static_cast<float>(params.ringCount - 1);
+    float r = params.radiusMin + t * (params.radiusMax - params.radiusMin);
+    for (int seg = 0; seg < params.ringSegments; ++seg) {
+      float a0 = twoPi * static_cast<float>(seg) / params.ringSegments;
+      float a1 = twoPi * static_cast<float>(seg + 1) / params.ringSegments;
+      glm::vec3 p0(r * std::cos(a0), 0.0f, r * std::sin(a0));
+      glm::vec3 p1(r * std::cos(a1), 0.0f, r * std::sin(a1));
+      vertices.push_back(p0);
+      vertices.push_back(p1);
+    }
+  }
+
+  for (int spoke = 0; spoke < params.spokeCount; ++spoke) {
+    float a = twoPi * static_cast<float>(spoke) / params.spokeCount;
+    glm::vec3 p0(params.radiusMin * std::cos(a), 0.0f, params.radiusMin * std::sin(a));
+    glm::vec3 p1(params.radiusMax * std::cos(a), 0.0f, params.radiusMax * std::sin(a));
+    vertices.push_back(p0);
+    vertices.push_back(p1);
+  }
+
+  if (mesh.vao == 0) {
+    glGenVertexArrays(1, &mesh.vao);
+  }
+  if (mesh.vbo == 0) {
+    glGenBuffers(1, &mesh.vbo);
+  }
+
+  glBindVertexArray(mesh.vao);
+  glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+  glBufferData(GL_ARRAY_BUFFER,
+               static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
+               vertices.data(), GL_STATIC_DRAW);
+
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3),
+                        reinterpret_cast<void *>(0));
+
+  glBindVertexArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+  mesh.vertexCount = static_cast<GLsizei>(vertices.size());
+}
+
+static std::vector<BackgroundAsset> loadBackgroundAssets() {
+  std::vector<BackgroundAsset> assets;
+  std::string text;
+  if (!readTextFile("assets/backgrounds/manifest.json", text)) {
+    return assets;
+  }
+  auto json = nlohmann::json::parse(text, nullptr, false);
+  if (json.is_discarded() || !json.contains("assets") || !json["assets"].is_array()) {
+    return assets;
+  }
+  for (const auto &entry : json["assets"]) {
+    BackgroundAsset asset;
+    asset.id = entry.value("id", "");
+    asset.title = entry.value("title", asset.id);
+    asset.path = entry.value("path", "");
+    if (!asset.id.empty() && !asset.path.empty()) {
+      assets.push_back(std::move(asset));
+    }
+  }
+  return assets;
+}
+
+static int findBackgroundIndex(const std::vector<BackgroundAsset> &assets,
+                               const std::string &id) {
+  for (std::size_t i = 0; i < assets.size(); ++i) {
+    if (assets[i].id == id) {
+      return static_cast<int>(i);
+    }
+  }
+  return 0;
+}
+
 static bool parseJsonNumber(const std::string &text, const std::string &key, double &out) {
   std::string needle = "\"" + key + "\"";
   std::size_t pos = text.find(needle);
@@ -358,6 +526,23 @@ static DiffStats computeDiffStats(const std::vector<float> &a, const std::vector
   return stats;
 }
 
+static std::size_t countDiffOutliers(const std::vector<float> &a, const std::vector<float> &b,
+                                     float threshold) {
+  if (a.size() != b.size() || a.empty() || threshold <= 0.0f) {
+    return 0;
+  }
+  std::size_t count = 0;
+  for (std::size_t i = 0; i + 3 < a.size(); i += 4) {
+    double dr = std::abs(static_cast<double>(a[i]) - static_cast<double>(b[i]));
+    double dg = std::abs(static_cast<double>(a[i + 1]) - static_cast<double>(b[i + 1]));
+    double db = std::abs(static_cast<double>(a[i + 2]) - static_cast<double>(b[i + 2]));
+    if (std::max({dr, dg, db}) > threshold) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 static bool writePpm(const std::string &path, const std::vector<float> &rgba, int width,
                      int height, float scale) {
   if (rgba.empty() || width <= 0 || height <= 0) {
@@ -414,13 +599,19 @@ static std::string compareSummaryPath() {
   return "logs/compare/compare_summary.csv";
 }
 
+static std::string compareUniformsPath() {
+  std::filesystem::create_directories("logs/compare");
+  return "logs/compare/compare_uniforms.csv";
+}
+
 static void appendCompareSummary(const std::string &path, int index,
                                  const std::string &primaryTag,
                                  const std::string &secondaryTag, int width, int height,
                                  const DiffStats &stats, float diffScale, bool wroteOutputs,
                                  bool wroteDiff, float threshold, bool exceeded,
                                  double timeSec, float kerrSpin, bool grbEnabled,
-                                 float grbTime) {
+                                 float grbTime, int outlierCount, int outlierLimit,
+                                 float outlierFrac) {
   if (!stats.valid) {
     return;
   }
@@ -431,14 +622,16 @@ static void appendCompareSummary(const std::string &path, int index,
   }
   if (!exists) {
     out << "index,primary,secondary,width,height,mean_abs,rms,max_abs,diff_scale,threshold,exceeded,"
-           "write_outputs,write_diff,time_sec,kerr_spin,grb_enabled,grb_time\n";
+           "write_outputs,write_diff,time_sec,kerr_spin,grb_enabled,grb_time,outlier_count,"
+           "outlier_limit,outlier_frac\n";
   }
   out << std::fixed << std::setprecision(6);
   out << index << "," << primaryTag << "," << secondaryTag << "," << width << "," << height << ","
       << stats.meanAbs << "," << stats.rms << "," << stats.maxAbs << "," << diffScale << ","
       << threshold << "," << (exceeded ? 1 : 0) << "," << (wroteOutputs ? 1 : 0) << ","
       << (wroteDiff ? 1 : 0) << "," << timeSec << "," << kerrSpin << ","
-      << (grbEnabled ? 1 : 0) << "," << grbTime << "\n";
+      << (grbEnabled ? 1 : 0) << "," << grbTime << "," << outlierCount << ","
+      << outlierLimit << "," << outlierFrac << "\n";
 }
 
 struct ComparePreset {
@@ -451,6 +644,8 @@ struct ComparePreset {
 };
 
 static constexpr float kCompareKerrSpin = 0.8f;
+static constexpr int kIntegratorDebugNanFlag = 1;
+static constexpr int kIntegratorDebugRangeFlag = 2;
 static constexpr std::array<ComparePreset, 12> kComparePresets = {{
     {"Input Near (Schw)", CameraMode::Input, CameraState{30.0f, -10.0f, 0.0f, 8.0f, 45.0f},
      15.0f, 0.0f, 0.0f},
@@ -469,6 +664,127 @@ static constexpr std::array<ComparePreset, 12> kComparePresets = {{
     {"Orbit Far (Schw)", CameraMode::Orbit, CameraState{}, 20.0f, 0.0f, 0.0f},
     {"Orbit Far (Kerr)", CameraMode::Orbit, CameraState{}, 20.0f, 0.0f, kCompareKerrSpin},
 }};
+
+struct InteropUniforms {
+  glm::vec3 cameraPos{};
+  glm::mat3 cameraBasis{1.0f};
+  float fovScale = 1.0f;
+  float timeSec = 0.0f;
+  float schwarzschildRadius = 0.0f;
+  float iscoRadius = 0.0f;
+  float kerrSpin = 0.0f;
+  float depthFar = 0.0f;
+  int maxSteps = 0;
+  float stepSize = 0.0f;
+  float adiskEnabled = 0.0f;
+  float enableRedshift = 0.0f;
+  float useLUTs = 0.0f;
+  float useSpectralLUT = 0.0f;
+  float useGrbModulation = 0.0f;
+  float lutRadiusMin = 0.0f;
+  float lutRadiusMax = 1.0f;
+  float redshiftRadiusMin = 0.0f;
+  float redshiftRadiusMax = 1.0f;
+  float spectralRadiusMin = 0.0f;
+  float spectralRadiusMax = 1.0f;
+  float grbTime = 0.0f;
+  float grbTimeMin = 0.0f;
+  float grbTimeMax = 1.0f;
+};
+
+static void appendCompareUniforms(const std::string &path, int index, const std::string &label,
+                                  const InteropUniforms &interop, bool compareBaseline,
+                                  bool compareOverrides, bool backgroundEnabled,
+                                  bool noiseEnabled, bool grmhdEnabled,
+                                  bool spectralEnabled, bool grbEnabled,
+                                  bool photonSphereEnabled) {
+  const bool exists = std::filesystem::exists(path);
+  std::ofstream out(path, std::ios::app);
+  if (!out) {
+    return;
+  }
+  if (!exists) {
+    out << "index,label,camera_x,camera_y,camera_z,fov_scale,time_sec,depth_far,"
+           "schwarzschild_radius,isco_radius,kerr_spin,max_steps,step_size,adisk_enabled,"
+           "enable_redshift,use_luts,use_spectral_lut,use_grb_modulation,background_enabled,"
+           "noise_enabled,grmhd_enabled,spectral_enabled,grb_enabled,photon_sphere_enabled,"
+           "compare_baseline,compare_overrides\n";
+  }
+  out << std::fixed << std::setprecision(6);
+  out << index << "," << label << "," << interop.cameraPos.x << "," << interop.cameraPos.y
+      << "," << interop.cameraPos.z << "," << interop.fovScale << "," << interop.timeSec
+      << "," << interop.depthFar << "," << interop.schwarzschildRadius << ","
+      << interop.iscoRadius << "," << interop.kerrSpin << "," << interop.maxSteps << ","
+      << interop.stepSize << "," << interop.adiskEnabled << "," << interop.enableRedshift
+      << "," << interop.useLUTs << "," << interop.useSpectralLUT << ","
+      << interop.useGrbModulation << "," << (backgroundEnabled ? 1 : 0) << ","
+      << (noiseEnabled ? 1 : 0) << "," << (grmhdEnabled ? 1 : 0) << ","
+      << (spectralEnabled ? 1 : 0) << "," << (grbEnabled ? 1 : 0) << ","
+      << (photonSphereEnabled ? 1 : 0) << "," << (compareBaseline ? 1 : 0) << ","
+      << (compareOverrides ? 1 : 0) << "\n";
+}
+
+static void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &interop,
+                                 bool parityMode) {
+  rtti.vec3Uniforms["cameraPos"] = interop.cameraPos;
+  rtti.mat3Uniforms["cameraBasis"] = interop.cameraBasis;
+  rtti.floatUniforms["fovScale"] = interop.fovScale;
+  rtti.floatUniforms["time"] = interop.timeSec;
+  rtti.floatUniforms["depthFar"] = interop.depthFar;
+  rtti.floatUniforms["schwarzschildRadius"] = interop.schwarzschildRadius;
+  rtti.floatUniforms["iscoRadius"] = interop.iscoRadius;
+  rtti.floatUniforms["kerrSpin"] = interop.kerrSpin;
+  rtti.floatUniforms["adiskEnabled"] = interop.adiskEnabled;
+  rtti.floatUniforms["enableRedshift"] = interop.enableRedshift;
+  rtti.floatUniforms["useLUTs"] = interop.useLUTs;
+  rtti.floatUniforms["useSpectralLUT"] = interop.useSpectralLUT;
+  rtti.floatUniforms["useGrbModulation"] = interop.useGrbModulation;
+  rtti.floatUniforms["lutRadiusMin"] = interop.lutRadiusMin;
+  rtti.floatUniforms["lutRadiusMax"] = interop.lutRadiusMax;
+  rtti.floatUniforms["redshiftRadiusMin"] = interop.redshiftRadiusMin;
+  rtti.floatUniforms["redshiftRadiusMax"] = interop.redshiftRadiusMax;
+  rtti.floatUniforms["spectralRadiusMin"] = interop.spectralRadiusMin;
+  rtti.floatUniforms["spectralRadiusMax"] = interop.spectralRadiusMax;
+  rtti.floatUniforms["grbTime"] = interop.grbTime;
+  rtti.floatUniforms["grbTimeMin"] = interop.grbTimeMin;
+  rtti.floatUniforms["grbTimeMax"] = interop.grbTimeMax;
+  rtti.floatUniforms["interopParityMode"] = parityMode ? 1.0f : 0.0f;
+  rtti.floatUniforms["interopMaxSteps"] = static_cast<float>(interop.maxSteps);
+  rtti.floatUniforms["interopStepSize"] = interop.stepSize;
+}
+
+static void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
+                                        int width, int height) {
+  glUniform2f(glGetUniformLocation(program, "resolution"), static_cast<float>(width),
+              static_cast<float>(height));
+  glUniformMatrix3fv(glGetUniformLocation(program, "cameraBasis"), 1, GL_FALSE,
+                     glm::value_ptr(interop.cameraBasis));
+  glUniform1f(glGetUniformLocation(program, "fovScale"), interop.fovScale);
+  glUniform1f(glGetUniformLocation(program, "time"), interop.timeSec);
+  glUniform3f(glGetUniformLocation(program, "cameraPos"), interop.cameraPos.x,
+              interop.cameraPos.y, interop.cameraPos.z);
+  glUniform1f(glGetUniformLocation(program, "schwarzschildRadius"),
+              interop.schwarzschildRadius);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), interop.kerrSpin);
+  glUniform1f(glGetUniformLocation(program, "iscoRadius"), interop.iscoRadius);
+  glUniform1i(glGetUniformLocation(program, "interopMaxSteps"), interop.maxSteps);
+  glUniform1f(glGetUniformLocation(program, "interopStepSize"), interop.stepSize);
+  glUniform1f(glGetUniformLocation(program, "depthFar"), interop.depthFar);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), interop.adiskEnabled);
+  glUniform1f(glGetUniformLocation(program, "enableRedshift"), interop.enableRedshift);
+  glUniform1f(glGetUniformLocation(program, "useLUTs"), interop.useLUTs);
+  glUniform1f(glGetUniformLocation(program, "useSpectralLUT"), interop.useSpectralLUT);
+  glUniform1f(glGetUniformLocation(program, "useGrbModulation"), interop.useGrbModulation);
+  glUniform1f(glGetUniformLocation(program, "lutRadiusMin"), interop.lutRadiusMin);
+  glUniform1f(glGetUniformLocation(program, "lutRadiusMax"), interop.lutRadiusMax);
+  glUniform1f(glGetUniformLocation(program, "redshiftRadiusMin"), interop.redshiftRadiusMin);
+  glUniform1f(glGetUniformLocation(program, "redshiftRadiusMax"), interop.redshiftRadiusMax);
+  glUniform1f(glGetUniformLocation(program, "spectralRadiusMin"), interop.spectralRadiusMin);
+  glUniform1f(glGetUniformLocation(program, "spectralRadiusMax"), interop.spectralRadiusMax);
+  glUniform1f(glGetUniformLocation(program, "grbTime"), interop.grbTime);
+  glUniform1f(glGetUniformLocation(program, "grbTimeMin"), interop.grbTimeMin);
+  glUniform1f(glGetUniformLocation(program, "grbTimeMax"), interop.grbTimeMax);
+}
 
 static bool loadLutCsv(const std::string &path, std::vector<float> &values) {
   std::ifstream file(path);
@@ -634,6 +950,27 @@ static void initializeGLDebugContext() {
 #endif
 }
 
+static void configureParallelShaderCompile() {
+  const char *env = std::getenv("BLACKHOLE_PARALLEL_SHADER_COMPILE");
+  if (env == nullptr || std::string(env) != "1") {
+    return;
+  }
+  if (!hasExtension("GL_KHR_parallel_shader_compile")) {
+    std::cout << "Parallel shader compile requested but not supported.\n";
+    return;
+  }
+  unsigned int threads = std::thread::hardware_concurrency();
+  if (threads == 0) {
+    threads = 1;
+  }
+  const char *threadEnv = std::getenv("BLACKHOLE_SHADER_COMPILE_THREADS");
+  if (threadEnv != nullptr) {
+    threads = std::max(1, std::atoi(threadEnv));
+  }
+  glMaxShaderCompilerThreadsKHR(static_cast<GLuint>(threads));
+  std::cout << "Parallel shader compile enabled (" << threads << " threads).\n";
+}
+
 // Initialize GLFW and create window
 static GLFWwindow *initializeWindow(int width, int height) {
   glfwSetErrorCallback(glfwErrorCallback);
@@ -646,6 +983,10 @@ static GLFWwindow *initializeWindow(int width, int height) {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+  const char *noErrorEnv = std::getenv("BLACKHOLE_NO_ERROR_CONTEXT");
+  if (noErrorEnv != nullptr && std::string(noErrorEnv) == "1") {
+    glfwWindowHint(GLFW_CONTEXT_NO_ERROR, GLFW_TRUE);
+  }
 
 #ifdef ENABLE_GL_DEBUG_CONTEXT
   // Request debug context for OpenGL error reporting
@@ -681,6 +1022,7 @@ static GLFWwindow *initializeWindow(int width, int height) {
 
   // Initialize GL debug context after loader init
   initializeGLDebugContext();
+  configureParallelShaderCompile();
 
   return window;
 }
@@ -1270,6 +1612,82 @@ static void renderDisplaySettingsPanel(GLFWwindow *window, int &swapInterval, fl
   ImGui::End();
 }
 
+static void renderBackgroundPanel(const std::vector<BackgroundAsset> &assets,
+                                  int &backgroundIndex,
+                                  float &parallaxStrength,
+                                  float &driftStrength,
+                                  std::array<float, kBackgroundLayers> &layerDepth,
+                                  std::array<float, kBackgroundLayers> &layerScale,
+                                  std::array<float, kBackgroundLayers> &layerIntensity,
+                                  std::array<float, kBackgroundLayers> &layerLodBias) {
+  auto &settings = SettingsManager::instance().get();
+
+  ImGui::SetNextWindowPos(ImVec2(1020, 10), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(300, 260), ImGuiCond_FirstUseEver);
+
+  if (ImGui::Begin("Background", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    ImGui::Checkbox("Enable Background", &settings.backgroundEnabled);
+    ImGui::SliderFloat("Intensity", &settings.backgroundIntensity, 0.0f, 2.0f);
+
+    if (assets.empty()) {
+      ImGui::TextDisabled("No manifest assets loaded.");
+    } else {
+      backgroundIndex = std::clamp(backgroundIndex, 0, static_cast<int>(assets.size() - 1));
+      const char *preview = assets[static_cast<std::size_t>(backgroundIndex)].title.c_str();
+      if (ImGui::BeginCombo("Background Asset", preview)) {
+        for (int i = 0; i < static_cast<int>(assets.size()); ++i) {
+          bool selected = (i == backgroundIndex);
+          if (ImGui::Selectable(assets[static_cast<std::size_t>(i)].title.c_str(),
+                                selected)) {
+            backgroundIndex = i;
+            settings.backgroundId = assets[static_cast<std::size_t>(i)].id;
+          }
+          if (selected) {
+            ImGui::SetItemDefaultFocus();
+          }
+        }
+        ImGui::EndCombo();
+      }
+    }
+
+    ImGui::Separator();
+    ImGui::SliderFloat("Parallax Strength", &parallaxStrength, 0.0f, 0.01f, "%.6f");
+    ImGui::SliderFloat("Drift Strength", &driftStrength, 0.0f, 0.05f, "%.4f");
+
+    if (ImGui::TreeNode("Layers")) {
+      for (int i = 0; i < kBackgroundLayers; ++i) {
+        ImGui::PushID(i);
+        ImGui::SliderFloat("Depth", &layerDepth[static_cast<std::size_t>(i)], 0.0f, 2.0f);
+        ImGui::SliderFloat("Scale", &layerScale[static_cast<std::size_t>(i)], 0.5f, 2.0f);
+        ImGui::SliderFloat("Weight", &layerIntensity[static_cast<std::size_t>(i)], 0.0f, 2.0f);
+        ImGui::SliderFloat("LOD Bias", &layerLodBias[static_cast<std::size_t>(i)], 0.0f, 6.0f,
+                           "%.2f");
+        ImGui::Separator();
+        ImGui::PopID();
+      }
+      ImGui::TreePop();
+    }
+  }
+  ImGui::End();
+}
+
+static void renderWiregridPanel(bool &wiregridEnabled, WiregridParams &params,
+                                glm::vec4 &color) {
+  ImGui::SetNextWindowPos(ImVec2(1020, 280), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(300, 220), ImGuiCond_FirstUseEver);
+
+  if (ImGui::Begin("Wiregrid", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    ImGui::Checkbox("Enable Wiregrid", &wiregridEnabled);
+    ImGui::SliderInt("Rings", &params.ringCount, 4, 64);
+    ImGui::SliderInt("Ring Segments", &params.ringSegments, 16, 256);
+    ImGui::SliderInt("Spokes", &params.spokeCount, 4, 64);
+    ImGui::SliderFloat("Radius Min", &params.radiusMin, 0.5f, 10.0f);
+    ImGui::SliderFloat("Radius Max", &params.radiusMax, 10.0f, 200.0f);
+    ImGui::ColorEdit4("Color", reinterpret_cast<float *>(&color));
+  }
+  ImGui::End();
+}
+
 static void renderRmlUiPanel(bool &rmluiEnabled) {
   ImGui::SetNextWindowPos(ImVec2(1020, 450), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 140), ImGuiCond_FirstUseEver);
@@ -1341,28 +1759,88 @@ public:
 
 struct GpuTimer {
   GLuint queries[2] = {0, 0};
+  bool issued[2] = {false, false};
   int index = 0;
   double lastMs = 0.0;
+  bool active = false;
 
-  void init() { glGenQueries(2, queries); }
+  bool ensureQueries() {
+    if (queries[0] != 0 && queries[1] != 0) {
+      return true;
+    }
+    if (queries[0] != 0 || queries[1] != 0) {
+      glDeleteQueries(2, queries);
+    }
+    glGenQueries(2, queries);
+    issued[0] = false;
+    issued[1] = false;
+    active = false;
+    return (queries[0] != 0 && queries[1] != 0);
+  }
+
+  bool init() {
+    glGenQueries(2, queries);
+    if (queries[0] == 0 || queries[1] == 0) {
+      queries[0] = 0;
+      queries[1] = 0;
+      issued[0] = false;
+      issued[1] = false;
+      active = false;
+      return false;
+    }
+    issued[0] = false;
+    issued[1] = false;
+    return true;
+  }
   void shutdown() {
-    glDeleteQueries(2, queries);
+    if (queries[0] != 0 || queries[1] != 0) {
+      glDeleteQueries(2, queries);
+    }
     queries[0] = 0;
     queries[1] = 0;
+    issued[0] = false;
+    issued[1] = false;
+    active = false;
   }
-  void begin() { glBeginQuery(GL_TIME_ELAPSED, queries[index]); }
-  void end() { glEndQuery(GL_TIME_ELAPSED); }
+  void begin() {
+    if (active) {
+      return;
+    }
+    if (!ensureQueries()) {
+      return;
+    }
+    glBeginQuery(GL_TIME_ELAPSED, queries[index]);
+    issued[index] = true;
+    active = true;
+  }
+  void end() {
+    if (!active) {
+      return;
+    }
+    glEndQuery(GL_TIME_ELAPSED);
+    active = false;
+  }
   void resolve() {
+    if (!ensureQueries()) {
+      return;
+    }
     int prev = 1 - index;
+    if (queries[prev] == 0 || !issued[prev]) {
+      return;
+    }
     GLuint available = 0;
     glGetQueryObjectuiv(queries[prev], GL_QUERY_RESULT_AVAILABLE, &available);
     if (available != 0u) {
       GLuint64 timeNs = 0;
       glGetQueryObjectui64v(queries[prev], GL_QUERY_RESULT, &timeNs);
       lastMs = static_cast<double>(timeNs) / 1.0e6;
+      issued[prev] = false;
     }
   }
-  void swap() { index = 1 - index; }
+  void swap() {
+    index = 1 - index;
+    active = false;
+  }
 };
 
 struct GpuTimerSet {
@@ -1375,13 +1853,17 @@ struct GpuTimerSet {
   GpuTimer grmhdSlice;
 
   void init() {
-    blackholeFragment.init();
-    blackholeCompute.init();
-    bloom.init();
-    tonemap.init();
-    depth.init();
-    grmhdSlice.init();
-    initialized = true;
+    bool ok = true;
+    ok &= blackholeFragment.init();
+    ok &= blackholeCompute.init();
+    ok &= bloom.init();
+    ok &= tonemap.init();
+    ok &= depth.init();
+    ok &= grmhdSlice.init();
+    initialized = ok;
+    if (!ok) {
+      shutdown();
+    }
   }
 
   void shutdown() {
@@ -1654,8 +2136,18 @@ int main(int, char **) {
   static bool compareWriteSummary = true;
   static float compareDiffScale = 8.0f;
   static float compareThreshold = 0.02f;
+  static int compareMaxOutliers = 0;
+  static float compareMaxOutlierFrac = 0.0f;
+  static bool compareOverridesEnabled = false;
+  static int compareMaxStepsOverride = 0;
+  static float compareStepSizeOverride = 0.0f;
+  static bool compareBaselineEnabled = false;
+  static int integratorDebugFlags = 0;
+  static bool integratorDebugConfigInit = false;
   static int compareFailureCount = 0;
   static bool compareLastExceeded = false;
+  static int compareLastOutliers = 0;
+  static int compareLastOutlierLimit = 0;
   static int compareSnapshotIndex = 0;
   static bool compareAutoCapture = false;
   static int compareAutoCount = static_cast<int>(kComparePresets.size());
@@ -1664,6 +2156,7 @@ int main(int, char **) {
   static int compareAutoStrideCounter = 0;
   static bool comparePresetSweep = false;
   static bool comparePresetSaved = false;
+  static bool compareRestorePending = false;
   static int comparePresetIndex = 0;
   static int comparePresetFrameCounter = 0;
   static int comparePresetSettleFrames = 2;
@@ -1676,6 +2169,21 @@ int main(int, char **) {
   static bool captureCompareSnapshot = false;
   static int compareFrameCounter = 0;
   static bool compareAutoInit = false;
+  static bool drawIdProbeEnabled = false;
+  static bool drawIdProbeConfigInit = false;
+  static bool drawIdProbeSupported = false;
+  static bool multiDrawMainEnabled = false;
+  static bool multiDrawMainConfigInit = false;
+  static bool multiDrawIndirectCount = false;
+  static bool multiDrawSupported = false;
+  static bool multiDrawCountSupported = false;
+  static bool multiDrawOverlayEnabled = true;
+  static int multiDrawInstanceCount = 2;
+  static GLuint multiDrawProgram = 0;
+  static GLuint multiDrawInstanceBuffer = 0;
+  static GLuint multiDrawCommandBuffer = 0;
+  static GLuint multiDrawCountBuffer = 0;
+  static GLuint multiDrawComputeProgram = 0;
   static bool gpuTimingEnabled = false;
   static bool gpuTimingLogInit = false;
   static bool gpuTimingLogEnabled = false;
@@ -1706,6 +2214,9 @@ int main(int, char **) {
   static bool lutAssetsTried = false;
   static bool lutAssetsLoaded = false;
   static bool lutFromAssets = false;
+  static bool lutAssetOnly = false;
+  static bool lutAssetOnlyWarned = false;
+  static bool lutAssetConfigInit = false;
   static float lutAssetSpin = 0.0f;
   static physics::Lut1D lutAssetEmissivity;
   static physics::Lut1D lutAssetRedshift;
@@ -1763,6 +2274,46 @@ int main(int, char **) {
       compareAutoRemaining = compareAutoCount;
       compareAutoStrideCounter = 0;
       compareAutoStride = comparePresetSettleFrames;
+      compareRestorePending = false;
+      const char *writeDiffEnv = std::getenv("BLACKHOLE_COMPARE_WRITE_DIFF");
+      if (writeDiffEnv != nullptr && std::string(writeDiffEnv) == "1") {
+        compareWriteDiff = true;
+      }
+      const char *writeOutputsEnv = std::getenv("BLACKHOLE_COMPARE_WRITE_OUTPUTS");
+      if (writeOutputsEnv != nullptr && std::string(writeOutputsEnv) == "1") {
+        compareWriteOutputs = true;
+      }
+      const char *writeSummaryEnv = std::getenv("BLACKHOLE_COMPARE_WRITE_SUMMARY");
+      if (writeSummaryEnv != nullptr && std::string(writeSummaryEnv) == "0") {
+        compareWriteSummary = false;
+      }
+      const char *outlierCountEnv = std::getenv("BLACKHOLE_COMPARE_OUTLIER_COUNT");
+      if (outlierCountEnv != nullptr) {
+        compareMaxOutliers = std::max(0, std::atoi(outlierCountEnv));
+      }
+      const char *outlierFracEnv = std::getenv("BLACKHOLE_COMPARE_OUTLIER_FRAC");
+      if (outlierFracEnv != nullptr) {
+        compareMaxOutlierFrac =
+            std::max(0.0f, static_cast<float>(std::atof(outlierFracEnv)));
+      }
+      const char *maxStepsEnv = std::getenv("BLACKHOLE_COMPARE_MAX_STEPS");
+      if (maxStepsEnv != nullptr) {
+        compareMaxStepsOverride = std::max(0, std::atoi(maxStepsEnv));
+        if (compareMaxStepsOverride > 0) {
+          compareOverridesEnabled = true;
+        }
+      }
+      const char *stepSizeEnv = std::getenv("BLACKHOLE_COMPARE_STEP_SIZE");
+      if (stepSizeEnv != nullptr) {
+        compareStepSizeOverride = static_cast<float>(std::atof(stepSizeEnv));
+        if (compareStepSizeOverride > 0.0f) {
+          compareOverridesEnabled = true;
+        }
+      }
+      const char *baselineEnv = std::getenv("BLACKHOLE_COMPARE_BASELINE");
+      if (baselineEnv != nullptr && std::string(baselineEnv) == "1") {
+        compareBaselineEnabled = true;
+      }
     }
     compareAutoInit = true;
   }
@@ -1771,6 +2322,7 @@ int main(int, char **) {
     const char *logEnv = std::getenv("BLACKHOLE_GPU_TIMING_LOG");
     if (logEnv != nullptr && std::string(logEnv) == "1") {
       gpuTimingLogEnabled = true;
+      gpuTimingEnabled = true;
       const char *strideEnv = std::getenv("BLACKHOLE_GPU_TIMING_LOG_STRIDE");
       if (strideEnv != nullptr) {
         int stride = std::atoi(strideEnv);
@@ -1778,6 +2330,53 @@ int main(int, char **) {
       }
     }
     gpuTimingLogInit = true;
+  }
+
+  if (!drawIdProbeConfigInit) {
+    const char *probeEnv = std::getenv("BLACKHOLE_DRAWID_PROBE");
+    if (probeEnv != nullptr && std::string(probeEnv) == "1") {
+      drawIdProbeEnabled = true;
+    }
+    drawIdProbeSupported = supportsDrawId() && supportsMultiDrawIndirect();
+    if (drawIdProbeEnabled && !drawIdProbeSupported) {
+      std::cout << "DrawID probe requested but not supported by the driver.\n";
+      drawIdProbeEnabled = false;
+    }
+    drawIdProbeConfigInit = true;
+  }
+
+  if (!multiDrawMainConfigInit) {
+    const char *multiDrawEnv = std::getenv("BLACKHOLE_MULTIDRAW_MAIN");
+    if (multiDrawEnv != nullptr && std::string(multiDrawEnv) == "1") {
+      multiDrawMainEnabled = true;
+    }
+    const char *overlayEnv = std::getenv("BLACKHOLE_MULTIDRAW_OVERLAY");
+    if (overlayEnv != nullptr && std::string(overlayEnv) == "0") {
+      multiDrawOverlayEnabled = false;
+    }
+    const char *countEnv = std::getenv("BLACKHOLE_MULTIDRAW_INDIRECT_COUNT");
+    if (countEnv != nullptr && std::string(countEnv) == "1") {
+      multiDrawIndirectCount = true;
+    }
+    multiDrawSupported = supportsDrawId() && supportsMultiDrawIndirect();
+    multiDrawCountSupported = supportsIndirectCount();
+    if (multiDrawMainEnabled && !multiDrawSupported) {
+      std::cout << "Multi-draw main path requested but not supported.\n";
+      multiDrawMainEnabled = false;
+    }
+    if (multiDrawIndirectCount && !multiDrawCountSupported) {
+      std::cout << "Indirect count requested but not supported.\n";
+      multiDrawIndirectCount = false;
+    }
+    multiDrawMainConfigInit = true;
+  }
+
+  if (!lutAssetConfigInit) {
+    const char *assetOnlyEnv = std::getenv("BLACKHOLE_LUT_ASSET_ONLY");
+    if (assetOnlyEnv != nullptr && std::string(assetOnlyEnv) == "1") {
+      lutAssetOnly = true;
+    }
+    lutAssetConfigInit = true;
   }
 
   if (!controlsOverlayConfigInit) {
@@ -1804,6 +2403,14 @@ int main(int, char **) {
       perfOverlayScale = std::max(scale, 0.5f);
     }
     perfOverlayConfigInit = true;
+  }
+
+  if (!integratorDebugConfigInit) {
+    const char *debugEnv = std::getenv("BLACKHOLE_INTEGRATOR_DEBUG_FLAGS");
+    if (debugEnv != nullptr) {
+      integratorDebugFlags = std::max(0, std::atoi(debugEnv));
+    }
+    integratorDebugConfigInit = true;
   }
 
   auto recreateRenderTargets = [&](int newWidth, int newHeight) {
@@ -1885,6 +2492,24 @@ int main(int, char **) {
       return;
     }
 
+    if (lutAssetOnly) {
+      if (!lutAssetOnlyWarned) {
+        std::cout << "LUT asset-only mode active; skipping generated LUT fallback.\n";
+        lutAssetOnlyWarned = true;
+      }
+      if (texEmissivityLUT != 0) {
+        glDeleteTextures(1, &texEmissivityLUT);
+        texEmissivityLUT = 0;
+      }
+      if (texRedshiftLUT != 0) {
+        glDeleteTextures(1, &texRedshiftLUT);
+        texRedshiftLUT = 0;
+      }
+      lutInitialized = false;
+      lutFromAssets = false;
+      return;
+    }
+
     if (!lutInitialized || std::abs(spin - lutSpin) > 1e-3f || lutFromAssets) {
       if (texEmissivityLUT != 0) {
         glDeleteTextures(1, &texEmissivityLUT);
@@ -1938,6 +2563,7 @@ int main(int, char **) {
     ZoneScopedN("Frame");
     // Calculate delta time
     double currentTime = glfwGetTime();
+    float frameTime = static_cast<float>(currentTime);
     float deltaTime = static_cast<float>(currentTime - lastTime);
     lastTime = currentTime;
     const float cpuFrameMs = deltaTime * 1000.0f;
@@ -1996,6 +2622,21 @@ int main(int, char **) {
 
     static GLuint galaxy = loadCubemap(std::string("assets/skybox_nebula_dark"));
     static GLuint colorMap = loadTexture2D(std::string("assets/color_map.png"));
+    static std::vector<BackgroundAsset> backgroundAssets;
+    static int backgroundIndex = 0;
+    static std::string backgroundLoadedId;
+    static GLuint backgroundBase = 0;
+    static std::array<GLuint, kBackgroundLayers> backgroundTextures = {};
+    static std::array<glm::vec4, kBackgroundLayers> backgroundLayerParams = {};
+    static std::array<float, kBackgroundLayers> backgroundLayerDepth = {0.2f, 0.5f, 0.9f};
+    static std::array<float, kBackgroundLayers> backgroundLayerScale = {1.0f, 1.08f, 1.16f};
+    static std::array<float, kBackgroundLayers> backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
+    static std::array<float, kBackgroundLayers> backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
+    static bool wiregridEnabled = false;
+    static WiregridParams wiregridParams;
+    static WiregridParams wiregridParamsCached;
+    static WiregridMesh wiregridMesh;
+    static glm::vec4 wiregridColor = glm::vec4(0.2f, 0.6f, 1.0f, 0.4f);
     static GLuint fallback2D = 0;
     static GLuint fallback3D = 0;
     static GLuint fallbackCubemap = 0;
@@ -2008,6 +2649,29 @@ int main(int, char **) {
     if (fallbackCubemap == 0) {
       fallbackCubemap = createSolidCubemap1x1(0, 0, 0);
     }
+    if (backgroundAssets.empty()) {
+      backgroundAssets = loadBackgroundAssets();
+    }
+    if (!backgroundAssets.empty()) {
+      backgroundIndex = findBackgroundIndex(backgroundAssets, settings.backgroundId);
+      if (backgroundIndex < 0 ||
+          backgroundIndex >= static_cast<int>(backgroundAssets.size())) {
+        backgroundIndex = 0;
+      }
+      const auto &asset = backgroundAssets[static_cast<std::size_t>(backgroundIndex)];
+      if (backgroundLoadedId != asset.id) {
+        GLuint nextTexture = loadTexture2D(asset.path, true);
+        if (nextTexture != 0) {
+          if (backgroundBase != 0) {
+            glDeleteTextures(1, &backgroundBase);
+          }
+          backgroundBase = nextTexture;
+          backgroundLoadedId = asset.id;
+        }
+      }
+    }
+    GLuint backgroundFallback = backgroundBase != 0 ? backgroundBase : fallback2D;
+    backgroundTextures.fill(backgroundFallback);
     if (!noiseTextureReady) {
       auto volume = physics::generate_noise_volume(noiseTextureSize, 1337u);
       texNoiseVolume = createFloatTexture3D(volume.size, volume.size, volume.size, volume.values);
@@ -2058,6 +2722,9 @@ int main(int, char **) {
         compareComputeFragment && ShaderManager::instance().canUseComputeShaders();
     if (comparePresetSweep && !compareSweepAllowed) {
       comparePresetSweep = false;
+      if (comparePresetSaved) {
+        compareRestorePending = true;
+      }
     }
     if (comparePresetSweep) {
       if (!comparePresetSaved) {
@@ -2073,6 +2740,7 @@ int main(int, char **) {
       comparePresetIndex = std::clamp(comparePresetIndex, 0, presetCount);
       if (comparePresetIndex >= presetCount) {
         comparePresetSweep = false;
+        compareRestorePending = true;
       } else {
         const auto &preset = kComparePresets[static_cast<std::size_t>(comparePresetIndex)];
         CameraState &camMutable = input.camera();
@@ -2089,19 +2757,10 @@ int main(int, char **) {
           comparePresetIndex++;
           if (comparePresetIndex >= presetCount) {
             comparePresetSweep = false;
+            compareRestorePending = true;
           }
         }
       }
-    }
-    if (!comparePresetSweep && comparePresetSaved) {
-      CameraState &camMutable = input.camera();
-      camMutable = comparePresetSavedCamera;
-      cameraModeIndex = comparePresetSavedMode;
-      orbitRadius = comparePresetSavedOrbitRadius;
-      orbitSpeed = comparePresetSavedOrbitSpeed;
-      orbitTime = comparePresetSavedOrbitTime;
-      kerrSpin = comparePresetSavedKerrSpin;
-      comparePresetSaved = false;
     }
 
     // Get camera state for shader
@@ -2136,10 +2795,30 @@ int main(int, char **) {
     }
 
     glm::mat3 cameraBasis = buildCameraBasis(cameraPos, focusTarget, cam.roll);
+    float fovScale = 1.0f;
     glm::mat4 viewRotation(1.0f);
     viewRotation[0] = glm::vec4(cameraBasis[0], 0.0f);
     viewRotation[1] = glm::vec4(cameraBasis[1], 0.0f);
     viewRotation[2] = glm::vec4(cameraBasis[2], 0.0f);
+
+    glm::vec2 parallaxBase =
+        glm::vec2(cameraPos.x, cameraPos.y) * settings.backgroundParallaxStrength;
+    glm::vec2 drift = glm::vec2(std::cos(static_cast<float>(currentTime) * 0.02f),
+                                std::sin(static_cast<float>(currentTime) * 0.02f)) *
+                      settings.backgroundDriftStrength;
+    for (int i = 0; i < kBackgroundLayers; ++i) {
+      glm::vec2 offset = drift + parallaxBase * backgroundLayerDepth[i];
+      backgroundLayerParams[static_cast<std::size_t>(i)] =
+          glm::vec4(offset, backgroundLayerScale[i], backgroundLayerIntensity[i]);
+    }
+    wiregridParams.radiusMax =
+        std::max(wiregridParams.radiusMax, wiregridParams.radiusMin + 0.1f);
+    if (wiregridEnabled &&
+        (wiregridMesh.vao == 0 ||
+         !wiregridParamsEqual(wiregridParams, wiregridParamsCached))) {
+      updateWiregridMesh(wiregridMesh, wiregridParams);
+      wiregridParamsCached = wiregridParams;
+    }
 
     glm::mat4 projectionMatrix = glm::perspective(glm::radians(cam.fov),
                                                   static_cast<float>(renderWidth) /
@@ -2183,45 +2862,43 @@ int main(int, char **) {
 
     bool lutReady = texEmissivityLUT != 0 && texRedshiftLUT != 0;
 
-    if (gpuTimers.initialized) {
-      gpuTimers.tonemap.begin();
-    }
     {
       RenderToTextureInfo rtti;
       rtti.fragShader = "shader/blackhole_main.frag";
       rtti.cubemapUniforms["galaxy"] = galaxy != 0 ? galaxy : fallbackCubemap;
       rtti.textureUniforms["colorMap"] = colorMap != 0 ? colorMap : fallback2D;
-      rtti.textureUniforms["uSynchLUT"] = fallback2D;
       rtti.textureUniforms["emissivityLUT"] = lutReady ? texEmissivityLUT : fallback2D;
       rtti.textureUniforms["redshiftLUT"] = lutReady ? texRedshiftLUT : fallback2D;
       rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
       rtti.textureUniforms["grbModulationLUT"] = grbModulationReady ? texGrbModulationLUT : fallback2D;
+      for (int i = 0; i < kBackgroundLayers; ++i) {
+        const std::string name = "backgroundLayers[" + std::to_string(i) + "]";
+        rtti.textureUniforms[name] =
+            backgroundTextures[static_cast<std::size_t>(i)];
+      }
       noiseTextureScale = std::max(noiseTextureScale, 0.01f);
       bool noiseReady = useNoiseTexture && texNoiseVolume != 0;
       rtti.texture3DUniforms["noiseTexture"] = noiseReady ? texNoiseVolume : fallback3D;
       rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexture.texture : fallback3D;
 
-      // Pass camera state to shader
-      rtti.vec3Uniforms["cameraPos"] = cameraPos;
-      rtti.mat3Uniforms["cameraBasis"] = cameraBasis;
-      rtti.floatUniforms["depthFar"] = depthFar;
-      rtti.floatUniforms["useLUTs"] = lutReady ? 1.0f : 0.0f;
       rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
       rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
-      rtti.floatUniforms["useSpectralLUT"] = spectralEnabled ? 1.0f : 0.0f;
-      rtti.floatUniforms["useGrbModulation"] = grbModulationEnabled ? 1.0f : 0.0f;
       rtti.floatUniforms["noiseTextureScale"] = noiseTextureScale;
-      rtti.floatUniforms["lutRadiusMin"] = lutRadiusMin;
-      rtti.floatUniforms["lutRadiusMax"] = lutRadiusMax;
-      rtti.floatUniforms["redshiftRadiusMin"] = redshiftRadiusMin;
-      rtti.floatUniforms["redshiftRadiusMax"] = redshiftRadiusMax;
-      rtti.floatUniforms["spectralRadiusMin"] = spectralRadiusMin;
-      rtti.floatUniforms["spectralRadiusMax"] = spectralRadiusMax;
-      rtti.floatUniforms["grbTime"] = grbTimeSeconds;
-      rtti.floatUniforms["grbTimeMin"] = grbTimeMin;
-      rtti.floatUniforms["grbTimeMax"] = grbTimeMax;
+      rtti.floatUniforms["backgroundEnabled"] = settings.backgroundEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["backgroundIntensity"] = settings.backgroundIntensity;
+      rtti.floatUniforms["time"] = frameTime;
       rtti.vec3Uniforms["grmhdBoundsMin"] = grmhdBoundsMin;
       rtti.vec3Uniforms["grmhdBoundsMax"] = grmhdBoundsMax;
+      for (int i = 0; i < kBackgroundLayers; ++i) {
+        const std::string name = "backgroundLayerParams[" + std::to_string(i) + "]";
+        rtti.vec4Uniforms[name] =
+            backgroundLayerParams[static_cast<std::size_t>(i)];
+      }
+      for (int i = 0; i < kBackgroundLayers; ++i) {
+        const std::string name = "backgroundLayerLodBias[" + std::to_string(i) + "]";
+        rtti.floatUniforms[name] =
+            std::max(backgroundLayerLodBias[static_cast<std::size_t>(i)], 0.0f);
+      }
 
       rtti.targetTexture = texBlackhole;
       rtti.width = renderWidth;
@@ -2409,9 +3086,39 @@ int main(int, char **) {
           ImGui::SliderFloat("Diff Scale", &compareDiffScale, 0.1f, 32.0f);
           ImGui::SliderFloat("Max Diff Threshold", &compareThreshold, 0.0f, 0.5f);
           compareThreshold = std::max(compareThreshold, 0.0f);
+          ImGui::SliderInt("Allowed Outliers", &compareMaxOutliers, 0, 5000);
+          ImGui::SliderFloat("Allowed Outlier Frac", &compareMaxOutlierFrac, 0.0f, 0.001f,
+                             "%.6f");
+          compareMaxOutlierFrac = std::max(compareMaxOutlierFrac, 0.0f);
+          ImGui::Checkbox("Compare Baseline (disable extras)", &compareBaselineEnabled);
+          if (ImGui::Checkbox("Compare Overrides", &compareOverridesEnabled)) {
+            if (compareOverridesEnabled) {
+              if (compareMaxStepsOverride <= 0) {
+                compareMaxStepsOverride = computeMaxSteps;
+              }
+              if (compareStepSizeOverride <= 0.0f) {
+                compareStepSizeOverride = computeStepSize;
+              }
+            }
+          }
+          ImGui::BeginDisabled(!compareOverridesEnabled);
+          ImGui::SliderInt("Compare Max Steps Override", &compareMaxStepsOverride, 0, 1000);
+          ImGui::SliderFloat("Compare Step Size Override", &compareStepSizeOverride, 0.0f, 2.0f);
+          ImGui::EndDisabled();
+          ImGui::Separator();
+          ImGui::Text("Integrator Debug");
+          bool debugNan = (integratorDebugFlags & kIntegratorDebugNanFlag) != 0;
+          bool debugRange = (integratorDebugFlags & kIntegratorDebugRangeFlag) != 0;
+          ImGui::Checkbox("Flag NaN/Inf", &debugNan);
+          ImGui::SameLine();
+          ImGui::Checkbox("Flag Out-of-Range", &debugRange);
+          integratorDebugFlags = (debugNan ? kIntegratorDebugNanFlag : 0) |
+                                 (debugRange ? kIntegratorDebugRangeFlag : 0);
           ImGui::Text("Threshold failures: %d", compareFailureCount);
           if (compareFullStats.valid) {
             ImGui::Text("Last capture: %s", compareLastExceeded ? "FAIL" : "PASS");
+            ImGui::Text("Outliers: %d (limit %d)", compareLastOutliers,
+                        compareLastOutlierLimit);
           }
           if (ImGui::Checkbox("Auto Capture", &compareAutoCapture)) {
             compareAutoRemaining = compareAutoCapture ? std::max(compareAutoCount, 1) : 0;
@@ -2428,6 +3135,7 @@ int main(int, char **) {
             comparePresetFrameCounter = 0;
             compareAutoCapture = false;
             compareAutoRemaining = 0;
+            compareRestorePending = false;
           }
           ImGui::SliderInt("Preset Settle Frames", &comparePresetSettleFrames, 1, 10);
           if (comparePresetSweep) {
@@ -2483,26 +3191,20 @@ int main(int, char **) {
       float schwarzschildRadius = 2.0f * blackHoleMass;
       float photonSphereRadius = static_cast<float>(photonRatio) * schwarzschildRadius;
       float iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;
-      rtti.floatUniforms["gravitationalLensing"] = gravitationalLensing ? 1.0f : 0.0f;
-      rtti.floatUniforms["renderBlackHole"] = renderBlackHole ? 1.0f : 0.0f;
-      rtti.floatUniforms["adiskEnabled"] = adiskEnabled ? 1.0f : 0.0f;
-      rtti.floatUniforms["adiskParticle"] = adiskParticle ? 1.0f : 0.0f;
-      rtti.floatUniforms["adiskDensityV"] = adiskDensityV;
-      rtti.floatUniforms["adiskDensityH"] = adiskDensityH;
-      rtti.floatUniforms["adiskHeight"] = adiskHeight;
-      rtti.floatUniforms["adiskLit"] = adiskLit;
-      rtti.floatUniforms["adiskNoiseLOD"] = adiskNoiseLOD;
-      rtti.floatUniforms["adiskNoiseScale"] = adiskNoiseScale;
-      rtti.floatUniforms["adiskSpeed"] = adiskSpeed;
-      rtti.floatUniforms["schwarzschildRadius"] = schwarzschildRadius;
-      rtti.floatUniforms["photonSphereRadius"] = photonSphereRadius;
-      rtti.floatUniforms["iscoRadius"] = iscoRadius;
-      rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphere ? 1.0f : 0.0f;
-      rtti.floatUniforms["enableRedshift"] = enableRedshift ? 1.0f : 0.0f;
-
       bool computeSupported = ShaderManager::instance().canUseComputeShaders();
       bool computeActive = useComputeRaytracer && computeSupported;
       bool compareActive = compareComputeFragment && computeSupported;
+      bool compareBaselineActive = compareBaselineEnabled && compareActive;
+      bool adiskEnabledEffective = adiskEnabled && !compareBaselineActive;
+      bool adiskParticleEffective = adiskParticle && !compareBaselineActive;
+      bool enableRedshiftEffective = enableRedshift && !compareBaselineActive;
+      bool useNoiseTextureEffective = useNoiseTexture && !compareBaselineActive;
+      bool useGrmhdEffective = useGrmhd && !compareBaselineActive;
+      bool useSpectralLutEffective = useSpectralLut && !compareBaselineActive;
+      bool useGrbModulationEffective = useGrbModulation && !compareBaselineActive;
+      bool enablePhotonSphereEffective = enablePhotonSphere && !compareBaselineActive;
+      bool backgroundEnabledEffective =
+          settings.backgroundEnabled && !compareBaselineActive;
       computeActiveForLog = computeActive;
       compareSampleSize = std::clamp(compareSampleSize, 4, 64);
       compareFrameStride = std::max(compareFrameStride, 1);
@@ -2513,6 +3215,79 @@ int main(int, char **) {
         compareAutoRemaining = 0;
         compareAutoStrideCounter = 0;
       }
+      computeMaxSteps = std::clamp(computeMaxSteps, 10, 1000);
+      computeStepSize = std::clamp(computeStepSize, 0.001f, 2.0f);
+      int compareSteps = computeMaxSteps;
+      float compareStepSize = computeStepSize;
+      if (compareOverridesEnabled) {
+        if (compareMaxStepsOverride > 0) {
+          compareSteps = compareMaxStepsOverride;
+        }
+        if (compareStepSizeOverride > 0.0f) {
+          compareStepSize = compareStepSizeOverride;
+        }
+      }
+
+      grmhdEnabled = useGrmhdEffective && grmhdReady;
+      spectralEnabled = useSpectralLutEffective && spectralReady;
+      grbModulationEnabled = useGrbModulationEffective && grbModulationReady;
+      noiseReady = useNoiseTextureEffective && texNoiseVolume != 0;
+      rtti.texture3DUniforms["noiseTexture"] = noiseReady ? texNoiseVolume : fallback3D;
+      rtti.texture3DUniforms["grmhdTexture"] =
+          grmhdEnabled ? grmhdTexture.texture : fallback3D;
+      rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
+      rtti.textureUniforms["grbModulationLUT"] =
+          grbModulationEnabled ? texGrbModulationLUT : fallback2D;
+      rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
+      rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
+      rtti.floatUniforms["backgroundEnabled"] =
+          backgroundEnabledEffective ? 1.0f : 0.0f;
+      rtti.floatUniforms["bhDebugFlags"] = static_cast<float>(integratorDebugFlags);
+
+      InteropUniforms interop;
+      interop.cameraPos = cameraPos;
+      interop.cameraBasis = cameraBasis;
+      interop.fovScale = fovScale;
+      interop.timeSec = frameTime;
+      interop.schwarzschildRadius = schwarzschildRadius;
+      interop.iscoRadius = iscoRadius;
+      interop.kerrSpin = kerrSpin;
+      interop.depthFar = depthFar;
+      if (compareActive) {
+        interop.maxSteps = compareSteps;
+        interop.stepSize = compareStepSize;
+      } else {
+        interop.maxSteps = computeMaxSteps;
+        interop.stepSize = computeStepSize;
+      }
+      interop.adiskEnabled = adiskEnabledEffective ? 1.0f : 0.0f;
+      interop.enableRedshift = enableRedshiftEffective ? 1.0f : 0.0f;
+      interop.useLUTs = lutReady ? 1.0f : 0.0f;
+      interop.useSpectralLUT = spectralEnabled ? 1.0f : 0.0f;
+      interop.useGrbModulation = grbModulationEnabled ? 1.0f : 0.0f;
+      interop.lutRadiusMin = lutRadiusMin;
+      interop.lutRadiusMax = lutRadiusMax;
+      interop.redshiftRadiusMin = redshiftRadiusMin;
+      interop.redshiftRadiusMax = redshiftRadiusMax;
+      interop.spectralRadiusMin = spectralRadiusMin;
+      interop.spectralRadiusMax = spectralRadiusMax;
+      interop.grbTime = grbTimeSeconds;
+      interop.grbTimeMin = grbTimeMin;
+      interop.grbTimeMax = grbTimeMax;
+      applyInteropUniforms(rtti, interop, compareActive);
+
+      rtti.floatUniforms["gravitationalLensing"] = gravitationalLensing ? 1.0f : 0.0f;
+      rtti.floatUniforms["renderBlackHole"] = renderBlackHole ? 1.0f : 0.0f;
+      rtti.floatUniforms["adiskParticle"] = adiskParticleEffective ? 1.0f : 0.0f;
+      rtti.floatUniforms["adiskDensityV"] = adiskDensityV;
+      rtti.floatUniforms["adiskDensityH"] = adiskDensityH;
+      rtti.floatUniforms["adiskHeight"] = adiskHeight;
+      rtti.floatUniforms["adiskLit"] = adiskLit;
+      rtti.floatUniforms["adiskNoiseLOD"] = adiskNoiseLOD;
+      rtti.floatUniforms["adiskNoiseScale"] = adiskNoiseScale;
+      rtti.floatUniforms["adiskSpeed"] = adiskSpeed;
+      rtti.floatUniforms["photonSphereRadius"] = photonSphereRadius;
+      rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphereEffective ? 1.0f : 0.0f;
 
       GLuint fragmentTarget = computeActive ? (compareActive ? texBlackholeCompare : 0)
                                             : texBlackhole;
@@ -2540,62 +3315,55 @@ int main(int, char **) {
           computeProgram = createComputeProgram(std::string("shader/geodesic_trace.comp"));
         }
 
-        computeMaxSteps = std::clamp(computeMaxSteps, 10, 1000);
-        computeStepSize = std::clamp(computeStepSize, 0.001f, 2.0f);
-
         glUseProgram(computeProgram);
-        glUniform2f(glGetUniformLocation(computeProgram, "resolution"),
-                    static_cast<float>(renderWidth), static_cast<float>(renderHeight));
-        glUniformMatrix4fv(glGetUniformLocation(computeProgram, "viewMatrix"), 1, GL_FALSE,
-                           glm::value_ptr(viewRotation));
-        glUniformMatrix4fv(glGetUniformLocation(computeProgram, "projectionMatrix"), 1, GL_FALSE,
-                           glm::value_ptr(projectionMatrix));
-        glUniform3f(glGetUniformLocation(computeProgram, "cameraPosition"), cameraPos.x, cameraPos.y,
-                    cameraPos.z);
-        glUniform1f(glGetUniformLocation(computeProgram, "schwarzschildRadius"),
-                    schwarzschildRadius);
-        glUniform1f(glGetUniformLocation(computeProgram, "kerrSpin"), kerrSpin);
-        glUniform1f(glGetUniformLocation(computeProgram, "iscoRadius"), iscoRadius);
-        glUniform1f(glGetUniformLocation(computeProgram, "photonSphereRadius"),
-                    photonSphereRadius);
-        glUniform1i(glGetUniformLocation(computeProgram, "maxSteps"), computeMaxSteps);
-        glUniform1f(glGetUniformLocation(computeProgram, "stepSize"), computeStepSize);
-        glUniform1f(glGetUniformLocation(computeProgram, "maxDistance"), depthFar);
-        glUniform1i(glGetUniformLocation(computeProgram, "enableDisk"),
-                    adiskEnabled ? 1 : 0);
-        glUniform1i(glGetUniformLocation(computeProgram, "enableRedshift"),
-                    enableRedshift ? 1 : 0);
-        glUniform1f(glGetUniformLocation(computeProgram, "useLUTs"), lutReady ? 1.0f : 0.0f);
-        glUniform1f(glGetUniformLocation(computeProgram, "useSpectralLUT"),
-                    spectralEnabled ? 1.0f : 0.0f);
-        glUniform1f(glGetUniformLocation(computeProgram, "useGrbModulation"),
-                    grbModulationEnabled ? 1.0f : 0.0f);
-        glUniform1f(glGetUniformLocation(computeProgram, "lutRadiusMin"), lutRadiusMin);
-        glUniform1f(glGetUniformLocation(computeProgram, "lutRadiusMax"), lutRadiusMax);
-        glUniform1f(glGetUniformLocation(computeProgram, "redshiftRadiusMin"), redshiftRadiusMin);
-        glUniform1f(glGetUniformLocation(computeProgram, "redshiftRadiusMax"), redshiftRadiusMax);
-        glUniform1f(glGetUniformLocation(computeProgram, "spectralRadiusMin"), spectralRadiusMin);
-        glUniform1f(glGetUniformLocation(computeProgram, "spectralRadiusMax"), spectralRadiusMax);
-        glUniform1f(glGetUniformLocation(computeProgram, "grbTime"), grbTimeSeconds);
-        glUniform1f(glGetUniformLocation(computeProgram, "grbTimeMin"), grbTimeMin);
-        glUniform1f(glGetUniformLocation(computeProgram, "grbTimeMax"), grbTimeMax);
+        applyInteropComputeUniforms(computeProgram, interop, renderWidth, renderHeight);
 
         GLint texUnit = 0;
         glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-        glBindTexture(GL_TEXTURE_2D, lutReady ? texEmissivityLUT : 0);
+        glBindTexture(GL_TEXTURE_2D, lutReady ? texEmissivityLUT : fallback2D);
         glUniform1i(glGetUniformLocation(computeProgram, "emissivityLUT"), texUnit);
         texUnit++;
         glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-        glBindTexture(GL_TEXTURE_2D, lutReady ? texRedshiftLUT : 0);
+        glBindTexture(GL_TEXTURE_2D, lutReady ? texRedshiftLUT : fallback2D);
         glUniform1i(glGetUniformLocation(computeProgram, "redshiftLUT"), texUnit);
         texUnit++;
         glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-        glBindTexture(GL_TEXTURE_2D, spectralEnabled ? texSpectralLUT : 0);
+        glBindTexture(GL_TEXTURE_2D, spectralEnabled ? texSpectralLUT : fallback2D);
         glUniform1i(glGetUniformLocation(computeProgram, "spectralLUT"), texUnit);
         texUnit++;
         glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-        glBindTexture(GL_TEXTURE_2D, grbModulationEnabled ? texGrbModulationLUT : 0);
+        glBindTexture(GL_TEXTURE_2D, grbModulationEnabled ? texGrbModulationLUT : fallback2D);
         glUniform1i(glGetUniformLocation(computeProgram, "grbModulationLUT"), texUnit);
+        texUnit++;
+        glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+        glBindTexture(GL_TEXTURE_CUBE_MAP, galaxy != 0 ? galaxy : fallbackCubemap);
+        glUniform1i(glGetUniformLocation(computeProgram, "galaxy"), texUnit);
+        texUnit++;
+        for (int i = 0; i < kBackgroundLayers; ++i) {
+          glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+          glBindTexture(GL_TEXTURE_2D,
+                        backgroundTextures[static_cast<std::size_t>(i)]);
+          std::string name = "backgroundLayers[" + std::to_string(i) + "]";
+          glUniform1i(glGetUniformLocation(computeProgram, name.c_str()), texUnit);
+          texUnit++;
+        }
+        glUniform1f(glGetUniformLocation(computeProgram, "backgroundEnabled"),
+                    backgroundEnabledEffective ? 1.0f : 0.0f);
+        glUniform1f(glGetUniformLocation(computeProgram, "bhDebugFlags"),
+                    static_cast<float>(integratorDebugFlags));
+        glUniform1f(glGetUniformLocation(computeProgram, "backgroundIntensity"),
+                    settings.backgroundIntensity);
+        for (int i = 0; i < kBackgroundLayers; ++i) {
+          std::string name = "backgroundLayerParams[" + std::to_string(i) + "]";
+          const auto &params = backgroundLayerParams[static_cast<std::size_t>(i)];
+          glUniform4f(glGetUniformLocation(computeProgram, name.c_str()),
+                      params.x, params.y, params.z, params.w);
+        }
+        for (int i = 0; i < kBackgroundLayers; ++i) {
+          std::string name = "backgroundLayerLodBias[" + std::to_string(i) + "]";
+          float bias = std::max(backgroundLayerLodBias[static_cast<std::size_t>(i)], 0.0f);
+          glUniform1f(glGetUniformLocation(computeProgram, name.c_str()), bias);
+        }
 
         glBindImageTexture(0, computeTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
         GLint tileOffsetLoc = glGetUniformLocation(computeProgram, "tileOffset");
@@ -2656,8 +3424,28 @@ int main(int, char **) {
           if (readTextureRGBA(texBlackhole, renderWidth, renderHeight, primary) &&
               readTextureRGBA(texBlackholeCompare, renderWidth, renderHeight, secondary)) {
             compareFullStats = computeDiffStats(primary, secondary);
+            std::size_t outlierCount =
+                countDiffOutliers(primary, secondary, compareThreshold);
+            std::size_t totalPixels = primary.size() / 4;
+            std::size_t limitFromFrac = 0;
+            if (compareMaxOutlierFrac > 0.0f && totalPixels > 0) {
+              limitFromFrac = static_cast<std::size_t>(
+                  compareMaxOutlierFrac * static_cast<double>(totalPixels));
+            }
+            std::size_t limitFromCount =
+                static_cast<std::size_t>(std::max(compareMaxOutliers, 0));
+            std::size_t outlierLimit = std::max(limitFromCount, limitFromFrac);
+            compareLastOutliers = static_cast<int>(outlierCount);
+            compareLastOutlierLimit = static_cast<int>(outlierLimit);
+            float outlierFrac = totalPixels > 0
+                                    ? static_cast<float>(outlierCount) /
+                                          static_cast<float>(totalPixels)
+                                    : 0.0f;
+            bool outlierGateEnabled = (compareMaxOutliers > 0) ||
+                                      (compareMaxOutlierFrac > 0.0f);
             compareLastExceeded =
-                compareFullStats.valid && compareFullStats.maxAbs > compareThreshold;
+                compareFullStats.valid && compareFullStats.maxAbs > compareThreshold &&
+                (!outlierGateEnabled || outlierCount > outlierLimit);
             if (compareLastExceeded) {
               ++compareFailureCount;
             }
@@ -2665,6 +3453,12 @@ int main(int, char **) {
             const bool computeIsPrimary = (computeTarget == texBlackhole);
             const std::string primaryTag = computeIsPrimary ? "compute" : "fragment";
             const std::string secondaryTag = computeIsPrimary ? "fragment" : "compute";
+            std::string presetLabel = "custom";
+            if (compareSnapshotIndex >= 0 &&
+                compareSnapshotIndex < static_cast<int>(kComparePresets.size())) {
+              presetLabel =
+                  kComparePresets[static_cast<std::size_t>(compareSnapshotIndex)].label;
+            }
 
             if (compareWriteOutputs) {
               writePpm(compareSnapshotPath(compareSnapshotIndex, primaryTag), primary, renderWidth,
@@ -2681,7 +3475,13 @@ int main(int, char **) {
                                    secondaryTag, renderWidth, renderHeight, compareFullStats,
                                    compareDiffScale, compareWriteOutputs, compareWriteDiff,
                                    compareThreshold, compareLastExceeded, glfwGetTime(), kerrSpin,
-                                   grbModulationEnabled, grbTimeSeconds);
+                                   grbModulationEnabled, grbTimeSeconds, compareLastOutliers,
+                                   compareLastOutlierLimit, outlierFrac);
+              appendCompareUniforms(compareUniformsPath(), compareSnapshotIndex, presetLabel,
+                                    interop, compareBaselineActive, compareOverridesEnabled,
+                                    backgroundEnabledEffective, noiseReady, grmhdEnabled,
+                                    spectralEnabled, grbModulationEnabled,
+                                    enablePhotonSphereEffective);
             }
             compareSnapshotIndex++;
           } else {
@@ -2695,7 +3495,21 @@ int main(int, char **) {
         compareFullStats.valid = false;
         captureCompareSnapshot = false;
         compareLastExceeded = false;
+        compareLastOutliers = 0;
+        compareLastOutlierLimit = 0;
       }
+    }
+    if (compareRestorePending && !comparePresetSweep && comparePresetSaved &&
+        !captureCompareSnapshot) {
+      CameraState &camMutable = input.camera();
+      camMutable = comparePresetSavedCamera;
+      cameraModeIndex = comparePresetSavedMode;
+      orbitRadius = comparePresetSavedOrbitRadius;
+      orbitSpeed = comparePresetSavedOrbitSpeed;
+      orbitTime = comparePresetSavedOrbitTime;
+      kerrSpin = comparePresetSavedKerrSpin;
+      comparePresetSaved = false;
+      compareRestorePending = false;
     }
 
     if (gpuTimers.initialized) {
@@ -2710,9 +3524,6 @@ int main(int, char **) {
       rtti.width = renderWidth;
       rtti.height = renderHeight;
       renderToTexture(rtti);
-    }
-    if (gpuTimers.initialized) {
-      gpuTimers.tonemap.end();
     }
 
     if (input.isUIVisible()) {
@@ -2783,6 +3594,9 @@ int main(int, char **) {
       gpuTimers.bloom.end();
     }
 
+    if (gpuTimers.initialized) {
+      gpuTimers.tonemap.begin();
+    }
     {
       ZoneScopedN("Tonemap");
       RenderToTextureInfo rtti;
@@ -2804,6 +3618,9 @@ int main(int, char **) {
       rtti.floatUniforms["gamma"] = gamma;
 
       renderToTexture(rtti);
+    }
+    if (gpuTimers.initialized) {
+      gpuTimers.tonemap.end();
     }
 
     static bool depthEffectsEnabled = true;
@@ -2980,7 +3797,194 @@ int main(int, char **) {
     }
 
     // Final passthrough to screen
-    passthrough.render(finalTexture, windowWidth, windowHeight);
+    if (multiDrawMainEnabled) {
+      constexpr GLuint kMultiDrawMax = 4;
+      if (multiDrawProgram == 0) {
+        multiDrawProgram = createShaderProgram(std::string("shader/passthrough_drawid.vert"),
+                                               std::string("shader/passthrough_drawid.frag"));
+        glUseProgram(multiDrawProgram);
+        glUniform1i(glGetUniformLocation(multiDrawProgram, "texture0"), 0);
+        glUseProgram(0);
+      }
+      if (multiDrawInstanceBuffer == 0) {
+        glGenBuffers(1, &multiDrawInstanceBuffer);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, multiDrawInstanceBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(DrawInstanceGpu) * kMultiDrawMax, nullptr,
+                     GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+      }
+      if (multiDrawCommandBuffer == 0) {
+        glGenBuffers(1, &multiDrawCommandBuffer);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, multiDrawCommandBuffer);
+        glBufferData(GL_DRAW_INDIRECT_BUFFER,
+                     sizeof(DrawArraysIndirectCommand) * kMultiDrawMax, nullptr,
+                     GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+      }
+      if (multiDrawIndirectCount && multiDrawCountBuffer == 0) {
+        glGenBuffers(1, &multiDrawCountBuffer);
+        glBindBuffer(GL_PARAMETER_BUFFER, multiDrawCountBuffer);
+        GLuint zero = 0;
+        glBufferData(GL_PARAMETER_BUFFER, sizeof(GLuint), &zero, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_PARAMETER_BUFFER, 0);
+      }
+      if (multiDrawIndirectCount && multiDrawComputeProgram == 0) {
+        multiDrawComputeProgram =
+            createComputeProgram(std::string("shader/drawid_cull.comp"));
+      }
+
+      std::array<DrawInstanceGpu, kMultiDrawMax> instances{};
+      instances[0].offsetScale = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+      instances[0].tint = glm::vec4(1.0f);
+      instances[0].flags = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+      instances[1].offsetScale = glm::vec4(0.6f, -0.6f, 0.35f, 0.35f);
+      instances[1].tint = glm::vec4(1.0f, 0.7f, 0.2f, 0.85f);
+      instances[1].flags = glm::vec4(multiDrawOverlayEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+      multiDrawInstanceCount = 2;
+
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, multiDrawInstanceBuffer);
+      glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
+                      static_cast<GLsizeiptr>(sizeof(DrawInstanceGpu) *
+                                              static_cast<std::size_t>(multiDrawInstanceCount)),
+                      instances.data());
+      glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+      if (multiDrawIndirectCount) {
+        GLuint zero = 0;
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, multiDrawCountBuffer);
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(GLuint), &zero);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+        glUseProgram(multiDrawComputeProgram);
+        glUniform1ui(glGetUniformLocation(multiDrawComputeProgram, "instanceCount"),
+                     static_cast<GLuint>(multiDrawInstanceCount));
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, multiDrawInstanceBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, multiDrawCommandBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, multiDrawCountBuffer);
+        GLuint groups = static_cast<GLuint>((multiDrawInstanceCount + 63) / 64);
+        glDispatchCompute(groups, 1, 1);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+      } else {
+        std::array<DrawArraysIndirectCommand, kMultiDrawMax> commands{};
+        for (int i = 0; i < multiDrawInstanceCount; ++i) {
+          commands[static_cast<std::size_t>(i)].count = 6;
+          commands[static_cast<std::size_t>(i)].primCount = 1;
+          commands[static_cast<std::size_t>(i)].first = 0;
+          commands[static_cast<std::size_t>(i)].baseInstance = static_cast<GLuint>(i);
+        }
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, multiDrawCommandBuffer);
+        glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0,
+                        static_cast<GLsizeiptr>(sizeof(DrawArraysIndirectCommand) *
+                                                static_cast<std::size_t>(multiDrawInstanceCount)),
+                        commands.data());
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+      }
+
+      const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+      const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+      if (depthWasEnabled) {
+        glDisable(GL_DEPTH_TEST);
+      }
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glUseProgram(multiDrawProgram);
+      glBindVertexArray(quadVAO);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, finalTexture);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, multiDrawInstanceBuffer);
+      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, multiDrawCommandBuffer);
+      if (multiDrawIndirectCount) {
+        glBindBuffer(GL_PARAMETER_BUFFER, multiDrawCountBuffer);
+        glMultiDrawArraysIndirectCount(GL_TRIANGLES, nullptr, 0, kMultiDrawMax, 0);
+        glBindBuffer(GL_PARAMETER_BUFFER, 0);
+      } else {
+        glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, multiDrawInstanceCount, 0);
+      }
+      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+      glBindVertexArray(0);
+      glUseProgram(0);
+      if (!blendWasEnabled) {
+        glDisable(GL_BLEND);
+      }
+      if (depthWasEnabled) {
+        glEnable(GL_DEPTH_TEST);
+      }
+    } else {
+      passthrough.render(finalTexture, windowWidth, windowHeight);
+    }
+
+    if (drawIdProbeEnabled) {
+      static GLuint drawIdProbeProgram = 0;
+      static GLuint drawIdProbeVao = 0;
+      static GLuint drawIdIndirectBuffer = 0;
+      if (drawIdProbeProgram == 0) {
+        drawIdProbeProgram =
+            createShaderProgram(std::string("shader/drawid_probe.vert"),
+                                std::string("shader/drawid_probe.frag"));
+      }
+      if (drawIdProbeVao == 0) {
+        drawIdProbeVao = createQuadVAO();
+      }
+      if (drawIdIndirectBuffer == 0) {
+        DrawArraysIndirectCommand commands[2] = {};
+        for (int i = 0; i < 2; ++i) {
+          commands[i].count = 6;
+          commands[i].primCount = 1;
+          commands[i].first = 0;
+          commands[i].baseInstance = 0;
+        }
+        glGenBuffers(1, &drawIdIndirectBuffer);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, drawIdIndirectBuffer);
+        glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(commands), commands, GL_STATIC_DRAW);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+      }
+      const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+      const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+      if (depthWasEnabled) {
+        glDisable(GL_DEPTH_TEST);
+      }
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glUseProgram(drawIdProbeProgram);
+      glBindVertexArray(drawIdProbeVao);
+      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, drawIdIndirectBuffer);
+      glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, 2, 0);
+      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+      glBindVertexArray(0);
+      glUseProgram(0);
+      if (!blendWasEnabled) {
+        glDisable(GL_BLEND);
+      }
+      if (depthWasEnabled) {
+        glEnable(GL_DEPTH_TEST);
+      }
+    }
+
+    if (wiregridEnabled && wiregridMesh.vertexCount > 0) {
+      static GLuint wiregridProgram = 0;
+      if (wiregridProgram == 0) {
+        wiregridProgram = createShaderProgram(std::string("shader/wiregrid.vert"),
+                                              std::string("shader/wiregrid.frag"));
+      }
+      glm::mat4 viewProj = projectionMatrix * gizmoViewMatrix;
+      glUseProgram(wiregridProgram);
+      GLint viewProjLoc = glGetUniformLocation(wiregridProgram, "viewProj");
+      if (viewProjLoc != -1) {
+        glUniformMatrix4fv(viewProjLoc, 1, GL_FALSE, glm::value_ptr(viewProj));
+      }
+      GLint colorLoc = glGetUniformLocation(wiregridProgram, "color");
+      if (colorLoc != -1) {
+        glUniform4f(colorLoc, wiregridColor.r, wiregridColor.g, wiregridColor.b,
+                    wiregridColor.a);
+      }
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+      glBindVertexArray(wiregridMesh.vao);
+      glDrawArrays(GL_LINES, 0, wiregridMesh.vertexCount);
+      glBindVertexArray(0);
+      glDisable(GL_BLEND);
+      glUseProgram(0);
+    }
 
     if (grmhdSliceEnabled && grmhdReady) {
       ZoneScopedN("GRMHD Slice");
@@ -3164,6 +4168,12 @@ int main(int, char **) {
       renderControlsHelpPanel();
       renderControlsSettingsPanel(cameraModeIndex, orbitRadius, orbitSpeed);
       renderDisplaySettingsPanel(window, swapInterval, renderScale, windowWidth, windowHeight);
+      renderBackgroundPanel(backgroundAssets, backgroundIndex,
+                            settings.backgroundParallaxStrength,
+                            settings.backgroundDriftStrength, backgroundLayerDepth,
+                            backgroundLayerScale, backgroundLayerIntensity,
+                            backgroundLayerLodBias);
+      renderWiregridPanel(wiregridEnabled, wiregridParams, wiregridColor);
       renderRmlUiPanel(rmluiEnabled);
       renderGizmoPanel(gizmoEnabled, gizmoOperation, gizmoMode, gizmoTransform);
       renderPerformancePanel(gpuTimingEnabled, gpuTimers, timingHistory, cpuFrameMs,

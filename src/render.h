@@ -42,6 +42,7 @@ struct RenderToTextureInfo {
   std::string fragShader;
   std::map<std::string, float> floatUniforms;
   std::map<std::string, glm::vec3> vec3Uniforms;
+  std::map<std::string, glm::vec4> vec4Uniforms;
   std::map<std::string, glm::mat3> mat3Uniforms;
   std::map<std::string, GLuint> textureUniforms;
   std::map<std::string, GLuint> texture3DUniforms;

@@ -79,6 +79,56 @@ find_package(CLI11 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 # ============================================================================
+# SPIR-V Tooling (shaderc + spirv-tools + spirv-cross)
+# ============================================================================
+
+option(ENABLE_SPIRV_TOOLING "Enable SPIR-V build/reflect tooling" ON)
+if(ENABLE_SPIRV_TOOLING)
+  find_package(shaderc REQUIRED)
+  find_package(SPIRV-Tools REQUIRED)
+  find_package(spirv-cross REQUIRED)
+  find_package(SPIRV-Headers REQUIRED)
+
+  function(resolve_imported_target OUT_VAR)
+    foreach(CANDIDATE IN LISTS ARGN)
+      if(TARGET ${CANDIDATE})
+        set(${OUT_VAR} ${CANDIDATE} PARENT_SCOPE)
+        return()
+      endif()
+    endforeach()
+    message(FATAL_ERROR "Required target not found: ${ARGN}")
+  endfunction()
+
+  resolve_imported_target(SHADERC_TARGET
+    shaderc::shaderc
+    shaderc::shaderc_shared
+    shaderc
+  )
+  resolve_imported_target(SPIRV_TOOLS_TARGET
+    SPIRV-Tools::SPIRV-Tools
+    spirv-tools::spirv-tools
+    SPIRV-Tools
+  )
+  resolve_imported_target(SPIRV_CROSS_TARGET
+    spirv-cross::spirv-cross
+    spirv-cross
+  )
+  resolve_imported_target(SPIRV_HEADERS_TARGET
+    spirv-headers::spirv-headers
+    SPIRV-Headers::SPIRV-Headers
+    spirv-headers
+  )
+
+  add_library(spirv_tooling INTERFACE)
+  target_link_libraries(spirv_tooling INTERFACE
+    ${SHADERC_TARGET}
+    ${SPIRV_TOOLS_TARGET}
+    ${SPIRV_CROSS_TARGET}
+    ${SPIRV_HEADERS_TARGET}
+  )
+endif()
+
+# ============================================================================
 # Optional UI Layers
 # ============================================================================
 
@@ -106,10 +156,19 @@ if(ENABLE_Z3)
   endif()
 endif()
 
+option(ENABLE_KTX "Enable KTX texture IO (optional)" OFF)
+if(ENABLE_KTX)
+  add_compile_definitions(BLACKHOLE_ENABLE_KTX=1)
+endif()
+
+option(ENABLE_OPENIMAGEIO "Enable OpenImageIO ingestion (optional)" OFF)
+if(ENABLE_OPENIMAGEIO)
+  add_compile_definitions(BLACKHOLE_ENABLE_OPENIMAGEIO=1)
+endif()
+
 # Optional: allow project to opt-in to using Eigen for physics math types.
 # This requires Eigen to be present in the Conan toolchain/configuration.
-option(ENABLE_EIGEN "Enable Eigen-backed physics math types (adds -DBLACKHOLE_USE_EIGEN)
-  OFF)
+option(ENABLE_EIGEN "Enable Eigen-backed physics math types (adds -DBLACKHOLE_USE_EIGEN)" OFF)
 if(ENABLE_EIGEN)
   add_compile_definitions(BLACKHOLE_USE_EIGEN=1)
   message(STATUS "Eigen backend enabled: BLACKHOLE_USE_EIGEN will be defined for targets")
@@ -501,6 +560,7 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
   GLFW_INCLUDE_NONE
   IMGUI_IMPL_OPENGL_LOADER_CUSTOM
   BLACKHOLE_ENABLE_RMLUI=$<BOOL:${ENABLE_RMLUI}>
+  BLACKHOLE_ENABLE_SPIRV_TOOLING=$<BOOL:${ENABLE_SPIRV_TOOLING}>
 )
 if(ENABLE_TRACY)
   target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE TRACY_ENABLE)
@@ -586,6 +646,22 @@ target_link_libraries(nubhlight_pack PRIVATE HighFive::HighFive CLI11::CLI11)
 target_compile_options(nubhlight_pack PRIVATE ${PROJECT_WARNINGS})
 target_compile_options(nubhlight_pack PRIVATE -Wno-stack-usage)
 
+if(ENABLE_SPIRV_TOOLING)
+  add_executable(spirv_bake
+    "${PROJECT_SOURCE_DIR}/tools/spirv_bake.cpp"
+  )
+
+  set_target_properties(spirv_bake PROPERTIES
+    CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+  )
+
+  target_link_libraries(spirv_bake PRIVATE CLI11::CLI11 spirv_tooling)
+  target_compile_options(spirv_bake PRIVATE ${PROJECT_WARNINGS})
+  target_compile_definitions(spirv_bake PRIVATE BLACKHOLE_ENABLE_SPIRV_TOOLING=1)
+endif()
+
 if(ENABLE_Z3)
   add_executable(z3_sanity
     "${PROJECT_SOURCE_DIR}/tools/z3_sanity.cpp"
@@ -630,18 +706,7 @@ if(ENABLE_CLANG_TIDY)
       set(CMAKE_CXX_CLANG_TIDY
         "${CLANG_TIDY_EXE}"
         ${CLANG_TIDY_EXTRA_ARGS}
-        "-checks=bugprone-*,\
-cert-*,\
-clang-analyzer-*,\
-cppcoreguidelines-*,\
-misc-*,\
-modernize-*,\
-performance-*,\
-portability-*,\
-readability-*,\
--modernize-use-trailing-return-type,\
--readability-magic-numbers,\
--cppcoreguidelines-avoid-magic-numbers"
+        "-checks=bugprone-*,cert-*,clang-analyzer-*,cppcoreguidelines-*,misc-*,modernize-*,performance-*,portability-*,readability-*,-modernize-use-trailing-return-type,-readability-magic-numbers,-cppcoreguidelines-avoid-magic-numbers"
         "-header-filter=${PROJECT_SOURCE_DIR}/src/.*"
         "-warnings-as-errors=bugprone-*,cert-*"
       )
@@ -1190,4 +1255,6 @@ message(STATUS "  ENABLE_FUZZING:           ${ENABLE_FUZZING}")
 message(STATUS "  ENABLE_PROFILING:         ${ENABLE_PROFILING}")
 message(STATUS "  ENABLE_GPROF:             ${ENABLE_GPROF}")
 message(STATUS "  ENABLE_COVERAGE:          ${ENABLE_COVERAGE}")
+message(STATUS "  ENABLE_KTX:               ${ENABLE_KTX}")
+message(STATUS "  ENABLE_OPENIMAGEIO:       ${ENABLE_OPENIMAGEIO}")
 message(STATUS "")

@@ -13,8 +13,8 @@ namespace {
 struct EasyFontVertex {
   float x;
   float y;
-  float z;
-  unsigned char color[4];
+  [[maybe_unused]] float z;
+  [[maybe_unused]] unsigned char color[4];
 };
 
 float line_height(float scale) {
@@ -128,7 +128,7 @@ void HudOverlay::addLine(const HudOverlayLine &line) { lines_.push_back(line); }
 void HudOverlay::clearLines() { lines_.clear(); }
 
 // Measure text by invoking stb_easy_font and scanning vertex extents.
-glm::vec2 HudOverlay::measureText(const std::string &text, float scale) const {
+glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
   if (text.empty()) {
     return glm::vec2(0.0f);
   }

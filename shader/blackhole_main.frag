@@ -6,6 +6,8 @@
 #include "include/schwarzschild.glsl"
 #include "include/geodesics.glsl"
 #include "include/redshift.glsl"
+#include "include/kerr.glsl"
+#include "include/interop_raygen.glsl"
 
 const float EPSILON = 0.0001;
 const float INFINITY = 1000000.0;
@@ -23,6 +25,11 @@ uniform sampler2D grbModulationLUT;
 uniform sampler3D noiseTexture;
 uniform sampler3D grmhdTexture;
 uniform samplerCube galaxy;
+uniform sampler2D backgroundLayers[3];
+uniform vec4 backgroundLayerParams[3];
+uniform float backgroundLayerLodBias[3];
+uniform float backgroundEnabled = 0.0;
+uniform float backgroundIntensity = 1.0;
 uniform float kerrSpin = 0.0;
 uniform float useLUTs = 0.0;
 uniform float useNoiseTexture = 0.0;
@@ -46,9 +53,12 @@ uniform vec3 cameraPos;
 uniform mat3 cameraBasis;
 uniform float depthFar = 50.0;
 
-uniform float gravatationalLensing = 1.0;
+uniform float gravitationalLensing = 1.0;
 uniform float renderBlackHole = 1.0;
 uniform float fovScale = 1.0;
+uniform float interopParityMode = 0.0;
+uniform float interopMaxSteps = 300.0;
+uniform float interopStepSize = 0.1;
 
 uniform float adiskEnabled = 1.0;
 uniform float adiskParticle = 1.0;
@@ -66,6 +76,8 @@ uniform float photonSphereRadius = 3.0;  // r_ph = 1.5 * r_s
 uniform float iscoRadius = 6.0;          // r_ISCO = 3 * r_s (Schwarzschild)
 uniform float enableRedshift = 0.0;      // Toggle gravitational redshift
 uniform float enablePhotonSphere = 0.0;  // Toggle photon sphere glow
+
+#include "include/interop_trace.glsl"
 
 ///----
 /// Noise is sampled from a 3D texture (offline/precomputed).
@@ -213,7 +225,7 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   for (int i = 0; i < int(adiskNoiseLOD); i++) {
     float noiseSample = 1.0;
     if (useNoiseTex) {
-      vec3 noiseCoord = fract(sphericalCoord * noiseTextureScale);
+      vec3 noiseCoord = fract(sphericalCoord * noiseTextureScale * adiskNoiseScale);
       noiseSample = texture(noiseTexture, noiseCoord).r;
     }
     noise *= noiseSample;
@@ -299,7 +311,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
 
     if (renderBlackHole > 0.5) {
       // Apply gravitational lensing (geodesic bending)
-      if (gravatationalLensing > 0.5) {
+      if (gravitationalLensing > 0.5) {
         vec3 acc = accel(h2, pos);
         dir += acc;
       }
@@ -357,12 +369,24 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
 }
 
 void main() {
-  vec2 uv = gl_FragCoord.xy / resolution.xy - vec2(0.5);
-  uv.x *= resolution.x / resolution.y;
-
-  vec3 dir = normalize(vec3(-uv.x * fovScale, uv.y * fovScale, 1.0));
+  vec3 dir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
   vec3 pos = cameraPos;
-  dir = cameraBasis * dir;
+
+  if (interopParityMode > 0.5) {
+    Ray ray;
+    ray.position = pos;
+    ray.velocity = dir;
+    ray.affineParameter = 0.0;
+
+    int steps = int(max(1.0, interopMaxSteps + 0.5));
+    HitResult hit =
+        bhTraceGeodesic(ray, schwarzschildRadius, depthFar, steps, interopStepSize);
+    vec4 shaded = bhShadeHit(hit, cameraPos, schwarzschildRadius);
+    float depthNormalized =
+        clamp(length(hit.hitPoint - cameraPos) / max(depthFar, 0.0001), 0.0, 1.0);
+    fragColor = vec4(shaded.rgb, depthNormalized);
+    return;
+  }
 
   float depthDistance = depthFar;
   vec3 color = traceColor(pos, dir, depthDistance);

@@ -32,25 +32,25 @@ layout(rgba32f, binding = 0) writeonly uniform image2D outputImage;
 // ============================================================================
 
 uniform vec2 resolution;
-uniform mat4 viewMatrix;
-uniform mat4 projectionMatrix;
-uniform vec3 cameraPosition;
+uniform vec3 cameraPos;
+uniform mat3 cameraBasis;
+uniform float fovScale;
+uniform float time;
 uniform ivec2 tileOffset = ivec2(0);
 
 // Black hole parameters
 uniform float schwarzschildRadius;
 uniform float iscoRadius;
-uniform float photonSphereRadius;
 uniform float kerrSpin;
 
 // Integration parameters
-uniform int maxSteps;
-uniform float stepSize;
-uniform float maxDistance;
+uniform int interopMaxSteps;
+uniform float interopStepSize;
+uniform float depthFar;
 
 // Feature toggles
-uniform bool enableDisk;
-uniform bool enableRedshift;
+uniform float adiskEnabled;
+uniform float enableRedshift;
 uniform float useLUTs;
 uniform float useSpectralLUT;
 uniform float useGrbModulation;
@@ -58,6 +58,12 @@ uniform sampler2D emissivityLUT;
 uniform sampler2D redshiftLUT;
 uniform sampler2D spectralLUT;
 uniform sampler2D grbModulationLUT;
+uniform samplerCube galaxy;
+uniform sampler2D backgroundLayers[3];
+uniform vec4 backgroundLayerParams[3];
+uniform float backgroundLayerLodBias[3];
+uniform float backgroundEnabled = 0.0;
+uniform float backgroundIntensity = 1.0;
 uniform float lutRadiusMin;
 uniform float lutRadiusMax;
 uniform float redshiftRadiusMin;
@@ -68,369 +74,8 @@ uniform float grbTime;
 uniform float grbTimeMin;
 uniform float grbTimeMax;
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-const float EPSILON = 1e-6;
-const float C_LIGHT = 1.0; // Geometric units
-
-// ============================================================================
-// Structures
-// ============================================================================
-
-struct Ray {
-    vec3 position;
-    vec3 velocity;
-    float affineParameter;
-};
-
-struct HitResult {
-    bool hitDisk;
-    bool hitHorizon;
-    bool escaped;
-    vec3 hitPoint;
-    float phi;           // Azimuthal angle at hit
-    float redshiftFactor;
-};
-
-// ============================================================================
-// Schwarzschild Geodesic Acceleration
-// ============================================================================
-
-/**
- * Compute geodesic acceleration in Schwarzschild spacetime.
- *
- * The null geodesic equation reduces to:
- * d²r/dλ² = -(r_s h²)/(2r⁴) + (3 r_s h²)/(2r⁵)
- *
- * In 3D Cartesian, using h² = |r × v|²:
- * a = -1.5 * r_s * h² * r / r⁵
- */
-vec3 schwarzschildAccel(vec3 pos, vec3 vel, float r_s) {
-    float r = length(pos);
-    if (r < EPSILON) return vec3(0.0);
-
-    vec3 h = cross(pos, vel);
-    float h2 = dot(h, h);
-
-    float r5 = r * r * r * r * r;
-
-    return -1.5 * r_s * h2 * pos / r5;
-}
-
-// ============================================================================
-// RK4 Integration Step
-// ============================================================================
-
-/**
- * Perform one RK4 integration step.
- */
-void stepRK4(inout Ray ray, float r_s, float dt) {
-    vec3 x0 = ray.position;
-    vec3 v0 = ray.velocity;
-
-    vec3 accel = schwarzschildAccel(x0, v0, r_s);
-
-    // k1
-    vec3 k1_x = v0;
-    vec3 k1_v = accel;
-
-    // k2
-    vec3 x1 = x0 + 0.5 * dt * k1_x;
-    vec3 v1 = v0 + 0.5 * dt * k1_v;
-    accel = schwarzschildAccel(x1, v1, r_s);
-    vec3 k2_x = v1;
-    vec3 k2_v = accel;
-
-    // k3
-    vec3 x2 = x0 + 0.5 * dt * k2_x;
-    vec3 v2 = v0 + 0.5 * dt * k2_v;
-    accel = schwarzschildAccel(x2, v2, r_s);
-    vec3 k3_x = v2;
-    vec3 k3_v = accel;
-
-    // k4
-    vec3 x3 = x0 + dt * k3_x;
-    vec3 v3 = v0 + dt * k3_v;
-    accel = schwarzschildAccel(x3, v3, r_s);
-    vec3 k4_x = v3;
-    vec3 k4_v = accel;
-
-    // Combine
-    ray.position = x0 + (dt / 6.0) * (k1_x + 2.0 * k2_x + 2.0 * k3_x + k4_x);
-    ray.velocity = v0 + (dt / 6.0) * (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v);
-    ray.affineParameter += dt;
-}
-
-// ============================================================================
-// Disk Intersection
-// ============================================================================
-
-/**
- * Check for intersection with accretion disk (z = 0 plane).
- */
-bool checkDiskIntersection(vec3 oldPos, vec3 newPos, float r_in, float r_out,
-                           out vec3 hitPoint) {
-    // Check if ray crossed z = 0
-    if (oldPos.z * newPos.z > 0.0) {
-        return false;
-    }
-
-    // Linear interpolation to find crossing point
-    float t = -oldPos.z / (newPos.z - oldPos.z);
-    hitPoint = mix(oldPos, newPos, t);
-
-    float r = length(hitPoint.xy);
-    return r >= r_in && r <= r_out;
-}
-
-// ============================================================================
-// Gravitational Redshift
-// ============================================================================
-
-/**
- * Compute gravitational redshift factor.
- *
- * g = √(1 - r_s/r) for Schwarzschild
- */
-float computeRedshiftFactor(vec3 pos, float r_s) {
-    float r = length(pos);
-    if (r <= r_s) return 0.0;
-
-    float factor = 1.0 - r_s / r;
-    if (factor <= 0.0) return 0.0;
-    return sqrt(factor);
-}
-
-// ============================================================================
-// Main Ray Tracing
-// ============================================================================
-
-/**
- * Trace a single geodesic ray.
- */
-HitResult traceGeodesic(Ray ray, float r_s) {
-    float a = 0.5 * kerrSpin * r_s;
-    if (abs(a) > EPSILON) {
-        HitResult result;
-        result.hitDisk = false;
-        result.hitHorizon = false;
-        result.escaped = false;
-        result.hitPoint = vec3(0.0);
-        result.phi = 0.0;
-        result.redshiftFactor = 1.0;
-
-        float r_horizon = kerrOuterHorizon(r_s, a);
-        if (r_horizon <= EPSILON) {
-            r_horizon = r_s;
-        }
-
-        float r_disk_in = iscoRadius;
-        float r_disk_out = 100.0 * r_s;
-
-        KerrConsts c = kerrInitConsts(ray.position, ray.velocity);
-        KerrRay kerrRay = kerrInitRay(ray.position, ray.velocity);
-
-        vec3 oldPos;
-        float dt = stepSize;
-
-        for (int step = 0; step < maxSteps; ++step) {
-            oldPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-
-            float r = kerrRay.r;
-            float adaptive_dt = dt * clamp(r / r_s - 1.0, 0.1, 1.0);
-            kerrStep(kerrRay, r_s, a, c, adaptive_dt);
-            r = kerrRay.r;
-
-            if (r < r_horizon * 1.01) {
-                result.hitHorizon = true;
-                result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-                return result;
-            }
-
-            if (enableDisk) {
-                vec3 diskHit;
-                vec3 newPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-                if (checkDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
-                    result.hitDisk = true;
-                    result.hitPoint = diskHit;
-                    result.phi = atan(diskHit.y, diskHit.x);
-                    result.redshiftFactor = computeRedshiftFactor(diskHit, r_s);
-                    return result;
-                }
-            }
-
-            if (r > maxDistance) {
-                result.escaped = true;
-                result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-                return result;
-            }
-        }
-
-        result.escaped = true;
-        result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-        return result;
-    }
-
-    HitResult result;
-    result.hitDisk = false;
-    result.hitHorizon = false;
-    result.escaped = false;
-    result.hitPoint = vec3(0.0);
-    result.phi = 0.0;
-    result.redshiftFactor = 1.0;
-
-    float r_horizon = r_s;
-
-    // Disk parameters
-    float r_disk_in = iscoRadius;
-    float r_disk_out = 100.0 * r_s;
-
-    vec3 oldPos;
-    float dt = stepSize;
-
-    for (int step = 0; step < maxSteps; ++step) {
-        oldPos = ray.position;
-
-        // Adaptive step size near horizon
-        float r = length(ray.position);
-        float adaptive_dt = dt * clamp(r / r_s - 1.0, 0.1, 1.0);
-
-        stepRK4(ray, r_s, adaptive_dt);
-        r = length(ray.position);
-
-        // Check horizon
-        if (r < r_horizon * 1.01) {
-            result.hitHorizon = true;
-            result.hitPoint = ray.position;
-            return result;
-        }
-
-        // Check disk intersection
-        if (enableDisk) {
-            vec3 diskHit;
-            vec3 newPos = ray.position;
-            if (checkDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
-                result.hitDisk = true;
-                result.hitPoint = diskHit;
-                result.phi = atan(diskHit.y, diskHit.x);
-                result.redshiftFactor = computeRedshiftFactor(diskHit, r_s);
-                return result;
-            }
-        }
-
-        // Check escape
-        if (r > maxDistance) {
-            result.escaped = true;
-            result.hitPoint = ray.position;
-            return result;
-        }
-    }
-
-    // Max steps reached
-    result.escaped = true;
-    result.hitPoint = ray.position;
-    return result;
-}
-
-// ============================================================================
-// Color Computation
-// ============================================================================
-
-/**
- * Compute color for horizon hit.
- */
-vec4 horizonColor() {
-    return vec4(0.0, 0.0, 0.0, 1.0);
-}
-
-/**
- * Compute color for disk hit.
- */
-vec4 diskColorFromHit(HitResult hit, float r_s) {
-    float r = length(hit.hitPoint.xy);
-
-    float flux = 0.0;
-    if (useLUTs > 0.5) {
-        float rNorm = r / max(r_s, EPSILON);
-        float denom = max(lutRadiusMax - lutRadiusMin, 0.0001);
-        float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
-        flux = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
-    } else {
-        // Temperature profile (simplified)
-        float r_in = iscoRadius;
-        float x = r_in / r;
-        flux = pow(x, 3.0) * (1.0 - sqrt(x));
-        flux = max(0.0, flux);
-    }
-
-    // Temperature to color
-    float T_norm = pow(flux, 0.25);
-
-    // Blackbody color approximation
-    vec3 color;
-    if (T_norm > 0.6) {
-        color = vec3(1.0, 0.9, 0.8); // Hot: white-yellow
-    } else if (T_norm > 0.3) {
-        color = vec3(1.0, 0.6, 0.2); // Warm: orange
-    } else {
-        color = vec3(0.8, 0.2, 0.1); // Cool: red
-    }
-
-    float spectral = 1.0;
-    if (useSpectralLUT > 0.5) {
-        float rNorm = r / max(r_s, EPSILON);
-        float denom = max(spectralRadiusMax - spectralRadiusMin, 0.0001);
-        float u = clamp((rNorm - spectralRadiusMin) / denom, 0.0, 1.0);
-        spectral = max(0.0, texture(spectralLUT, vec2(u, 0.5)).r);
-    }
-
-    // Apply intensity
-    float intensity = flux * 2.0 * spectral;
-
-    // Doppler beaming
-    float v = sqrt(0.5 * r_s / r);
-    float cos_phi = cos(hit.phi);
-    float doppler = 1.0 + 0.3 * v * cos_phi;
-    intensity *= doppler * doppler * doppler;
-
-    if (useGrbModulation > 0.5) {
-        float denom = max(grbTimeMax - grbTimeMin, 0.0001);
-        float u = clamp((grbTime - grbTimeMin) / denom, 0.0, 1.0);
-        float modulation = texture(grbModulationLUT, vec2(u, 0.5)).r;
-        intensity *= max(modulation, 0.0);
-    }
-
-    // Gravitational redshift
-    if (enableRedshift) {
-        float z = 1.0 / max(hit.redshiftFactor, EPSILON) - 1.0;
-        if (useLUTs > 0.5) {
-            float rNorm = r / max(r_s, EPSILON);
-            float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
-            float u = clamp((rNorm - redshiftRadiusMin) / denom, 0.0, 1.0);
-            z = texture(redshiftLUT, vec2(u, 0.5)).r;
-        }
-        color = applyGravitationalRedshift(color, z);
-    }
-
-    return vec4(color * intensity, 1.0);
-}
-
-/**
- * Compute color for escaped ray (background).
- */
-vec4 backgroundColorFromDir(vec3 dir) {
-    // Star field
-    vec3 n = normalize(dir);
-    float stars = pow(max(0.0, sin(n.x * 100.0) * sin(n.y * 100.0) * sin(n.z * 100.0)), 20.0);
-    stars *= step(0.997, fract(sin(dot(n, vec3(12.9898, 78.233, 45.543))) * 43758.5453));
-
-    vec3 color = vec3(0.01, 0.01, 0.02); // Dark background
-    color += vec3(stars);
-
-    return vec4(color, 1.0);
-}
+#include "include/interop_raygen.glsl"
+#include "include/interop_trace.glsl"
 
 // ============================================================================
 // Main Entry Point
@@ -443,39 +88,24 @@ void main() {
         return;
     }
 
-    // Compute normalized device coordinates
-    vec2 uv = (vec2(pixelCoord) + 0.5) / resolution;
-    vec2 ndc = uv * 2.0 - 1.0;
-    ndc.x *= resolution.x / resolution.y;
-
-    // Ray direction in camera space
-    vec3 rayDirCamera = normalize(vec3(ndc, -1.0));
-
-    // Transform to world space
-    mat3 viewRot = mat3(viewMatrix);
-    vec3 rayDir = viewRot * rayDirCamera;
+    vec3 rayDir =
+        bhRayDir(vec2(pixelCoord) + vec2(0.5), resolution, fovScale, cameraBasis);
 
     // Initialize ray
     Ray ray;
-    ray.position = cameraPosition;
+    ray.position = cameraPos;
     ray.velocity = rayDir;
     ray.affineParameter = 0.0;
 
     // Trace geodesic
-    HitResult hit = traceGeodesic(ray, schwarzschildRadius);
+    HitResult hit =
+        bhTraceGeodesic(ray, schwarzschildRadius, depthFar, interopMaxSteps,
+                        interopStepSize);
 
-    // Compute final color
-    vec4 color;
-    if (hit.hitHorizon) {
-        color = horizonColor();
-    } else if (hit.hitDisk) {
-        color = diskColorFromHit(hit, schwarzschildRadius);
-    } else {
-        color = backgroundColorFromDir(normalize(hit.hitPoint - cameraPosition));
-    }
+    vec4 color = bhShadeHit(hit, cameraPos, schwarzschildRadius);
 
-    float depthDistance = length(hit.hitPoint - cameraPosition);
-    float depthNormalized = clamp(depthDistance / maxDistance, 0.0, 1.0);
+    float depthDistance = length(hit.hitPoint - cameraPos);
+    float depthNormalized = clamp(depthDistance / max(depthFar, BH_EPSILON), 0.0, 1.0);
     color.a = depthNormalized;
 
     // Write to output image

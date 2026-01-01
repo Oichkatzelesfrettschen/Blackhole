@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "nasa_pia22085",
+      "title": "Black Hole With Jet (Artist's Concept)",
+      "source": "NASA/JPL-Caltech",
+      "sourceUrl": "http://images-assets.nasa.gov/image/PIA22085/PIA22085~orig.jpg",
+      "license": "NASA Images and Media Usage Guidelines",
+      "licenseUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "credit": "NASA/JPL-Caltech",
+      "resolution": { "width": 5120, "height": 2880 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/PIA22085_5120x2880.jpg",
+      "tags": ["nasa", "jpl", "artist-concept", "black-hole"]
+    },
+    {
+      "id": "nasa_pia15415",
+      "title": "Cygnus Loop Nebula",
+      "source": "NASA/JPL-Caltech",
+      "sourceUrl": "http://images-assets.nasa.gov/image/PIA15415/PIA15415~orig.jpg",
+      "license": "NASA Images and Media Usage Guidelines",
+      "licenseUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "credit": "NASA/JPL-Caltech",
+      "resolution": { "width": 6000, "height": 6000 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/PIA15415_6000x6000.jpg",
+      "tags": ["nasa", "jpl", "nebula"]
+    },
+    {
+      "id": "esa_heic1509a_4k",
+      "title": "Westerlund 2 — Hubble’s 25th anniversary image",
+      "source": "ESA/Hubble",
+      "sourceUrl": "https://cdn.esahubble.org/archives/images/publicationjpg/heic1509a.jpg",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://esahubble.org/copyright/",
+      "credit": "NASA, ESA, the Hubble Heritage Team (STScI/AURA), A. Nota (ESA/STScI), and the Westerlund 2 Science Team",
+      "resolution": { "width": 4000, "height": 2997 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/heic1509a_publication_4k.jpg",
+      "tags": ["esa", "hubble", "cluster"]
+    },
+    {
+      "id": "esa_heic1402a_4k",
+      "title": "Horsehead Nebula",
+      "source": "ESA/Hubble",
+      "sourceUrl": "https://cdn.esahubble.org/archives/images/publicationjpg/heic1402a.jpg",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://esahubble.org/copyright/",
+      "credit": "NASA, ESA, E. Sabbi (STScI)",
+      "resolution": { "width": 4000, "height": 3596 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/heic1402a_publication_4k.jpg",
+      "tags": ["esa", "hubble", "nebula"]
+    },
+    {
+      "id": "nasa_pia15416",
+      "title": "NASA/JPL Image PIA15416",
+      "source": "NASA/JPL-Caltech",
+      "sourceUrl": "http://images-assets.nasa.gov/image/PIA15416/PIA15416~orig.jpg",
+      "license": "NASA Images and Media Usage Guidelines",
+      "licenseUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "credit": "NASA/JPL-Caltech",
+      "resolution": { "width": 9400, "height": 7000 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/PIA15416_9400x7000.jpg",
+      "tags": ["nasa", "jpl"]
+    },
+    {
+      "id": "nasa_pia08506",
+      "title": "NASA/JPL Image PIA08506",
+      "source": "NASA/JPL-Caltech",
+      "sourceUrl": "http://images-assets.nasa.gov/image/PIA08506/PIA08506~orig.jpg",
+      "license": "NASA Images and Media Usage Guidelines",
+      "licenseUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "credit": "NASA/JPL-Caltech",
+      "resolution": { "width": 14772, "height": 4953 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/PIA08506_14772x4953.jpg",
+      "tags": ["nasa", "jpl", "panorama"]
+    },
+    {
+      "id": "esa_heic1509a_large",
+      "title": "Westerlund 2 — Hubble (large)",
+      "source": "ESA/Hubble",
+      "sourceUrl": "https://cdn.esahubble.org/archives/images/large/heic1509a.jpg",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://esahubble.org/copyright/",
+      "credit": "NASA, ESA, the Hubble Heritage Team (STScI/AURA), A. Nota (ESA/STScI), and the Westerlund 2 Science Team",
+      "resolution": { "width": 8919, "height": 6683 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/heic1509a_large.jpg",
+      "tags": ["esa", "hubble", "cluster", "large"]
+    },
+    {
+      "id": "esa_heic1402a_large",
+      "title": "Horsehead Nebula (large)",
+      "source": "ESA/Hubble",
+      "sourceUrl": "https://cdn.esahubble.org/archives/images/large/heic1402a.jpg",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://esahubble.org/copyright/",
+      "credit": "NASA, ESA, E. Sabbi (STScI)",
+      "resolution": { "width": 16617, "height": 14939 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/heic1402a_large.jpg",
+      "tags": ["esa", "hubble", "nebula", "large"]
+    },
+    {
+      "id": "jaxa_hayabusa2_main_001",
+      "title": "Hayabusa2 Mission (JAXA)",
+      "source": "JAXA",
+      "sourceUrl": "https://global.jaxa.jp/projects/sas/hayabusa2/images/hayabusa2_main_001.jpg",
+      "license": "JAXA Website Terms",
+      "licenseUrl": "https://global.jaxa.jp/",
+      "credit": "JAXA",
+      "resolution": { "width": 480, "height": 320 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/jaxa_hayabusa2_main_001.jpg",
+      "tags": ["jaxa", "hayabusa2", "asteroid"]
+    }
+  ]
+}

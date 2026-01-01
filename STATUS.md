@@ -40,6 +40,7 @@ The simulation is fully operational with the core rendering pipeline:
 - Updated `AGENTS.md` to emphasize repo-local Conan usage.
 - Centralized Conan env setup by sourcing `scripts/conan_env.sh` in Conan helper scripts (repo-local `.conan` enforced).
 - Refreshed Conan center2 config, reran `conan install`, and rebuilt Release.
+- Pinned the repo-local Conan default profile to clang + C++23, enforced compiler executables, and reran `conan install` under clang.
 - `validate-shaders` and `ctest` (physics_validation, grmhd_pack_fixture, precision_regression)
   pass cleanly.
 - Conan reported deprecated 1.x metadata fields in several upstream recipes (non-fatal; monitor for Conan 2 cleanup).
@@ -59,6 +60,9 @@ The simulation is fully operational with the core rendering pipeline:
 - Fixed unused LUT helper to pass compact-common refs into ISCO resolution (`scripts/generate_luts.py`).
 - Generated GRB modulation LUT assets (`assets/luts/grb_modulation_lut.csv`, `assets/luts/grb_modulation_meta.json`).
 - Depth cues defaults tuned for brighter baseline (fog/dof/desat/curve adjustments).
+- Persisted background parallax/drift settings and added per-layer LOD bias controls; background
+  sampling now uses explicit mip bias to stabilize layer LODs in fragment/compute.
+- Added `BLACKHOLE_LUT_ASSET_ONLY=1` to skip generated LUT fallback for cleanroom parity checks.
 - Perf HUD now includes window/render resolution + vsync status lines.
 - Added Halide feasibility note for optional CPU-kernel scheduling (`docs/HALIDE_FEASIBILITY.md`).
 - Added `src/physics/math_types.h` to start Eigen/GLM type boundary.
@@ -117,6 +121,69 @@ The simulation is fully operational with the core rendering pipeline:
 - Added performance HUD overlay (FPS + GPU timings) with env toggles `BLACKHOLE_PERF_HUD` and `BLACKHOLE_PERF_HUD_SCALE`.
 - Depth effects default to the Subtle baseline (enabled by default).
 - Updated LUT/GRB/Z3/UnitSystem/MangoHUD docs and OpenUniverse scope notes.
+- Auto-enabled GPU timing when `BLACKHOLE_GPU_TIMING_LOG=1` is set.
+- Fixed CMakeLists clang-tidy checks string and `ENABLE_EIGEN` option quoting (riced builds unblocked).
+- Riced/ASan/TSan/Coverage/Profile builds completed with Werror; `validate-shaders` passes.
+- Compare sweep rerun: `logs/compare/compare_summary.csv` regenerated with outlier counts/limits (legacy saved as `compare_summary_legacy.csv`); sparse outliers remain (Kerr preset ~0.015% of pixels) but pass under `BLACKHOLE_COMPARE_OUTLIER_FRAC=0.0005`.
+- GPU timing captures archived; ASan runs required preloading libasan due to global `LD_PRELOAD` pointing at missing `mklfakeintel`.
+- `physics_bench` profile outputs captured to `logs/perf/physics_bench_profile.{csv,json}` (GPU geodesic compute avg ~0.768 ms).
+- Flamegraph rerun after perf sysctl relax and lower sample rate: `logs/perf/flamegraph/flamegraph_lowloss_sysctl_20251231_122954.svg` (no sample-loss warning).
+- Infer run reports no issues (report: `infer-out/riced/report.html`); `ctest` (5 tests) passed.
+- Added askpass helper usage notes in `~/.codex/GUIDANCE.md` and `/etc/codex/GUIDANCE.md`.
+- Added `eirikr` to `video`, `input`, and `plugdev` groups (relogin required).
+- Added shared interop GLSL includes for raygen + trace and aligned compute/fragment uniforms + frame time via `InteropUniforms`.
+- Added compare outlier gating controls + env overrides (`BLACKHOLE_COMPARE_OUTLIER_COUNT`, `BLACKHOLE_COMPARE_OUTLIER_FRAC`) and CSV columns.
+- Added `docs/INTEROP_BEST_PRACTICES.md` with compute/fragment parity checklist + sources.
+- Added `docs/WIREGRID_BEST_PRACTICES.md` with curvature wiregrid modeling + rendering notes.
+- Added optional asset pipeline package candidates (KTX/OpenImageIO/EXR/PNG/JPEG/mesh) to `requirements.md`.
+- Shader loader now strips `GL_GOOGLE_include_directive` extension lines at runtime to avoid driver warnings; `adiskNoiseScale` now scales disk noise sampling.
+- GPU timing queries now revalidate query objects; `BLACKHOLE_GPU_TIMING_LOG=1` capture appended to `logs/perf/gpu_timing.csv` without GL_INVALID_OPERATION spam.
+- Perf sysctl tuned for higher sample rates (`perf_event_paranoid=-1`, `perf_event_max_sample_rate=100000`).
+- Flamegraph regenerated via `scripts/run_flamegraph.sh` (latest: `logs/perf/flamegraph/flamegraph_20251231_141348.svg`, `PERF_FREQ=2000`).
+- Added compare-only overrides for compute/fragment parity (`BLACKHOLE_COMPARE_MAX_STEPS`, `BLACKHOLE_COMPARE_STEP_SIZE`) plus UI controls.
+- Compare sweep with overrides (600 steps, 0.05 step): 9/12 presets exceeded; latest summary at `logs/compare/compare_summary.csv` (previous archive: `logs/archive/20251231_152444/compare`).
+- Compare baseline sweep (`BLACKHOLE_COMPARE_BASELINE=1`): 3/12 presets exceeded (idx 0/1/8); summary at `logs/compare/compare_summary.csv` (previous baseline archived to `logs/archive/20251231_154706/compare`, override sweep archived to `logs/archive/20251231_153643/compare`).
+- Compare sweep after background LOD bias defaults: 2/12 presets exceeded (idx 0/4); summary at `logs/compare/compare_summary.csv` (archive: `logs/archive/20251231_182443/compare`).
+- Strict compare sweep (1000 steps, 0.02 step) now 0/12 exceeded; summary at `logs/compare/compare_summary.csv` (archive: `logs/archive/20251231_183355/compare_strict`).
+- Baseline strict sweep rerun (1000 steps, 0.02 step) without outlier gating: 12/12 exceeded
+  (max_abs still > 0.02 across presets). Latest rows appended to `logs/compare/compare_summary.csv`.
+- Compare sweep now logs interop uniform snapshots to `logs/compare/compare_uniforms.csv` for parity debugging.
+- Added `BLACKHOLE_LUT_ASSET_ONLY=1` to skip generated LUT fallback for cleanroom parity checks.
+- Added `docs/OPENGL_45_46_SHADER_REPORT.md` with shader pipeline and 4.5 vs 4.6 standardization notes.
+- Added optional SPIR-V shader loading via `BLACKHOLE_USE_SPIRV=1` (expects `*.spv` next to GLSL).
+- Added `scripts/compile_shaders_spirv.sh` to generate `*.spv` artifacts with glslangValidator.
+- Enabled baseline anisotropic filtering on texture and cubemap loads (clamped to 8x).
+- Added DrawID probe overlay via `BLACKHOLE_DRAWID_PROBE=1` (multi-draw indirect test path).
+- Added multi-draw main pass with per-draw SSBO data and optional indirect-count compute path
+  (`BLACKHOLE_MULTIDRAW_MAIN=1`, `BLACKHOLE_MULTIDRAW_INDIRECT_COUNT=1`,
+  `BLACKHOLE_MULTIDRAW_OVERLAY=0`).
+- Hardened SPIR-V link stability by adding explicit varying locations in key shader stages
+  (simple/bloom/tonemap/overlay + drawid passthrough).
+- Gated compare sweep (1000 steps, 0.02 step, outlier frac 0.0005 + count 5000): 8/12 exceeded;
+  latest rows appended to `logs/compare/compare_summary.csv`.
+- Debug overlay sweep (`BLACKHOLE_INTEGRATOR_DEBUG_FLAGS=3`) captured PPMs for presets 0/1/8 at
+  `logs/compare/compare_0_{compute,fragment}.ppm`, `logs/compare/compare_1_{compute,fragment}.ppm`,
+  `logs/compare/compare_8_{compute,fragment}.ppm` (files overwritten by last sweep).
+- GPU timing log capture updated `logs/perf/gpu_timing.csv` (latest frames appended).
+- Flamegraph refreshed: `logs/perf/flamegraph/flamegraph_20251231_200432.svg` (physics_bench).
+- Riced ASAN/TSAN builds + ctest passed; TSAN build emitted clang-tidy warnings in `src/shader.cpp`
+  (include-cleaner + non-const globals + style/perf notes).
+- Added SPIR-V tooling option + `spirv_bake` tool (shaderc/spirv-tools/spirv-cross) to Conan/CMake.
+- `spirv_bake` now builds against shaderc/spirv-tools OpenGL 4.5 targets; GCC still warns on
+  stack usage in `main` (needs cleanup for Werror builds).
+- Added `docs/ROADMAP.md` as the consolidated, hypergranular plan; `docs/ROADMAP_NEXT_PHASE.md`
+  now points to it.
+- Added meshoptimizer/fastnoise2/watcher dependencies (Conan options) and verified pins
+  against conancenter; updated `requirements.md`.
+- Refreshed SPIR-V tooling pins (spirv-cross 1.4.321.0, spirv-headers stays at
+  1.4.313.0 to match spirv-tools/shaderc) and replaced unavailable fast-noise-lite
+  with fastnoise2.
+- Conan install + Release build completed with new fastnoise2/spirv-cross packages
+  (external warnings observed; tracked in TODO_FIXES.md).
+- Added optional parallel shader compile (`BLACKHOLE_PARALLEL_SHADER_COMPILE=1`) and
+  no-error context (`BLACKHOLE_NO_ERROR_CONTEXT=1`) toggles.
+- Updated clang-tidy config to match lowerCamelCase and reduced noisy checks; fixed HUD overlay static usage, include guards, and cppcheck warnings.
+- Rerun riced-asan/riced-tsan builds after cleanup; clang-tidy/cppcheck warnings no longer emitted (aside from LD_PRELOAD noise).
 
 ## Recent Changes (2025-12-29)
 

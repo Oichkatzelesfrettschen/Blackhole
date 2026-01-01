@@ -1,4 +1,5 @@
-#pragma once
+#ifndef HUD_OVERLAY_H
+#define HUD_OVERLAY_H
 
 /**
  * @file hud_overlay.h
@@ -67,11 +68,11 @@ public:
   void shutdown();
 
   // Convenience RAII-style helpers.
-  bool isInitialized() const;
+  [[nodiscard]] bool isInitialized() const;
 
   // Set/get options (layout + backend hints). Changes take effect on next render.
   void setOptions(const HudOverlayOptions &opts);
-  const HudOverlayOptions &options() const;
+  [[nodiscard]] const HudOverlayOptions &options() const;
 
   // Manage the lines owned by the overlay. The overlay stores the given
   // set and will use them for subsequent `render(width,height)` calls.
@@ -89,12 +90,12 @@ public:
 
   // Measure the approximate pixel size of a text string at given scale.
   // This is cheap for the easy-font backend and approximate for other backends.
-  glm::vec2 measureText(const std::string &text, float scale = 1.0f) const;
+  static glm::vec2 measureText(const std::string &text, float scale = 1.0f);
 
   // Low-level accessors (useful for tests or custom rendering paths).
-  GLuint program() const { return program_; }
-  GLuint vao() const { return vao_; }
-  GLuint vbo() const { return vbo_; }
+  [[nodiscard]] GLuint program() const { return program_; }
+  [[nodiscard]] GLuint vao() const { return vao_; }
+  [[nodiscard]] GLuint vbo() const { return vbo_; }
 
 private:
   HudOverlayOptions options_;
@@ -111,3 +112,5 @@ private:
   // Helper: rebuild vertices_ from lines_ and options_.
   void rebuildVertices(int width, int height);
 };
+
+#endif // HUD_OVERLAY_H

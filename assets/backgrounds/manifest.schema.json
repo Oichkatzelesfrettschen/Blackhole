@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Blackhole background asset manifest",
+  "type": "object",
+  "required": ["version", "assets"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "source",
+          "sourceUrl",
+          "license",
+          "licenseUrl",
+          "credit",
+          "resolution",
+          "format",
+          "path"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "source": { "type": "string" },
+          "sourceUrl": { "type": "string" },
+          "license": { "type": "string" },
+          "licenseUrl": { "type": "string" },
+          "credit": { "type": "string" },
+          "resolution": {
+            "type": "object",
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "format": { "type": "string" },
+          "path": { "type": "string" },
+          "notes": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

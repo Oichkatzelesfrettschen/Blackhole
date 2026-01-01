@@ -7,11 +7,25 @@ class BlackholeConan(ConanFile):
     version = "0.1"
     settings = "os", "arch", "compiler", "build_type"
     generators = ("CMakeDeps", "CMakeToolchain")
+    options = {
+        "enable_ktx": [True, False],
+        "enable_openimageio": [True, False],
+        "enable_spirv_tooling": [True, False],
+        "enable_meshoptimizer": [True, False],
+        "enable_shader_watcher": [True, False],
+        "enable_fastnoise2": [True, False],
+    }
     default_options = {
         "hdf5/*:shared": True,
         "spdlog/*:shared": True,
         "fmt/*:shared": True,
         "boost/*:without_cobalt": True,
+        "enable_ktx": False,
+        "enable_openimageio": False,
+        "enable_spirv_tooling": True,
+        "enable_meshoptimizer": True,
+        "enable_shader_watcher": False,
+        "enable_fastnoise2": True,
     }
 
     def requirements(self):
@@ -37,6 +51,21 @@ class BlackholeConan(ConanFile):
         self.requires("mpfr/4.2.2")
         self.requires("stb/cci.20240531")
         self.requires("z3/4.14.1")
+        if self.options.enable_spirv_tooling:
+            self.requires("shaderc/2025.3")
+            self.requires("spirv-tools/1.4.313.0")
+            self.requires("spirv-cross/1.4.321.0")
+            self.requires("spirv-headers/1.4.313.0")
+        if self.options.enable_meshoptimizer:
+            self.requires("meshoptimizer/0.25")
+        if self.options.enable_shader_watcher:
+            self.requires("watcher/0.14.1")
+        if self.options.enable_fastnoise2:
+            self.requires("fastnoise2/0.10.0-alpha")
+        if self.options.enable_ktx:
+            self.requires("ktx/4.3.2")
+        if self.options.enable_openimageio:
+            self.requires("openimageio/3.1.8.0")
 
     def layout(self):
         cmake_layout(self, build_folder=".")

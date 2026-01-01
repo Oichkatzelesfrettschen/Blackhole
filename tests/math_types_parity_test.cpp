@@ -8,7 +8,7 @@
 #include <cmath>
 #include <limits>
 
-static bool approx_eq(float a, float b, float tol = 1e-5f) {
+[[maybe_unused]] static bool approx_eq(float a, float b, float tol = 1e-5f) {
   if (std::isnan(a) && std::isnan(b)) return true;
   if (std::isinf(a) && std::isinf(b) && (std::signbit(a) == std::signbit(b))) return true;
   return std::abs(a - b) <= tol * std::max(1.0f, std::abs(b));

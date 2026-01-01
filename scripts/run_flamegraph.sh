@@ -10,6 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 OUT_DIR="${PROJECT_ROOT}/logs/perf/flamegraph"
 PERF_FREQ="${PERF_FREQ:-999}"
+TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+OUT_SVG="${OUT_DIR}/flamegraph_${TIMESTAMP}.svg"
+LATEST_SVG="${OUT_DIR}/flamegraph_latest.svg"
 
 if ! command -v perf >/dev/null 2>&1; then
   echo "Error: perf not found in PATH"
@@ -28,8 +31,9 @@ if [ -n "$FLAMEGRAPH_BIN" ]; then
   fi
 
   echo "Recording perf data and generating flamegraph..."
-  "$FLAMEGRAPH_BIN" -F "$PERF_FREQ" -o "$OUT_DIR/flamegraph.svg" -- "${COMMAND[@]}"
-  echo "Flamegraph: $OUT_DIR/flamegraph.svg"
+  "$FLAMEGRAPH_BIN" -F "$PERF_FREQ" -o "$OUT_SVG" -- "${COMMAND[@]}"
+  ln -sfn "$OUT_SVG" "$LATEST_SVG"
+  echo "Flamegraph: $OUT_SVG"
   exit 0
 fi
 
@@ -48,6 +52,7 @@ if [ ! -x "$STACKCOLLAPSE" ] || [ ! -x "$FLAMEGRAPH" ]; then
 fi
 
 mkdir -p "$OUT_DIR"
+PERF_DATA="${OUT_DIR}/perf_${TIMESTAMP}.data"
 
 COMMAND=("$@")
 if [ ${#COMMAND[@]} -eq 0 ]; then
@@ -55,9 +60,10 @@ if [ ${#COMMAND[@]} -eq 0 ]; then
 fi
 
 echo "Recording perf data..."
-perf record -F "$PERF_FREQ" -g --output "$OUT_DIR/perf.data" -- "${COMMAND[@]}"
+perf record -F "$PERF_FREQ" -g --output "$PERF_DATA" -- "${COMMAND[@]}"
 
 echo "Generating flamegraph..."
-perf script -i "$OUT_DIR/perf.data" | "$STACKCOLLAPSE" | "$FLAMEGRAPH" > "$OUT_DIR/flamegraph.svg"
+perf script -i "$PERF_DATA" | "$STACKCOLLAPSE" | "$FLAMEGRAPH" > "$OUT_SVG"
+ln -sfn "$OUT_SVG" "$LATEST_SVG"
 
-echo "Flamegraph: $OUT_DIR/flamegraph.svg"
+echo "Flamegraph: $OUT_SVG"
