@@ -1084,7 +1084,6 @@ option(ENABLE_SHADER_VALIDATION "Enable GLSL shader validation" ON)
 
 if(ENABLE_SHADER_VALIDATION)
   find_program(GLSLANG_VALIDATOR NAMES "glslangValidator" "glslang")
-  find_program(SPIRV_VAL NAMES "spirv-val")
   find_program(GLSLC NAMES "glslc")
 
   if(GLSLANG_VALIDATOR)

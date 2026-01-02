@@ -1,12 +1,8 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : enable
 
-// Physics library includes - Phase 3: Verified from Rocq formalization
-#include "include/verified/schwarzschild.glsl"
-#include "include/verified/kerr.glsl"
-#include "include/verified/geodesic.glsl"
-#include "include/verified/eos.glsl"
-#include "include/verified/cosmology.glsl"
+// Physics library includes - Phase 7: Verified from Rocq formalization
+#include "include/verified/physics.glsl"
 
 // Legacy includes (maintained for compatibility)
 #include "include/redshift.glsl"

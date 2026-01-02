@@ -306,7 +306,7 @@ inline BenchResult benchSchwarzschild_f(std::size_t count, int iterations) {
 
     const double r_s = 2.0;
     for (std::size_t i = 0; i < count; ++i) {
-        radii[i] = 3.0 * r_s + (97.0 * r_s * static_cast<double>(i) / count);
+        radii[i] = 3.0 * r_s + (97.0 * r_s * static_cast<double>(i) / static_cast<double>(count));
     }
 
     // Warmup
@@ -344,7 +344,7 @@ inline BenchResult benchRedshift(std::size_t count, int iterations) {
 
     const double r_s = 2.0;
     for (std::size_t i = 0; i < count; ++i) {
-        radii[i] = 3.0 * r_s + (97.0 * r_s * static_cast<double>(i) / count);
+        radii[i] = 3.0 * r_s + (97.0 * r_s * static_cast<double>(i) / static_cast<double>(count));
     }
 
     // Warmup
@@ -379,7 +379,7 @@ inline BenchResult benchChristoffelAccel(std::size_t count, int iterations) {
 
     const double r_s = 2.0;
     for (std::size_t i = 0; i < count; ++i) {
-        double u = static_cast<double>(i) / count;
+        double u = static_cast<double>(i) / static_cast<double>(count);
         r[i] = 6.0 * r_s + 50.0 * u * r_s;
         dr[i] = -0.5 + u;
         dtheta[i] = 0.1 * u;
