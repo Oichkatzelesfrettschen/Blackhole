@@ -131,6 +131,31 @@ inline SpinRadiiLut generate_spin_radii_lut(int size, double mass_solar,
   return lut;
 }
 
+/**
+ * Generate photon sphere glow LUT (Phase 8.2 optimization).
+ * Precomputes exp(-distance * 4.0) for distance in [0, 0.5].
+ * Used to replace transcendental exp() computation in shader.
+ */
+inline Lut1D generate_photon_glow_lut(int size = 256) {
+  Lut1D lut;
+  if (size <= 1) {
+    return lut;
+  }
+
+  lut.r_min = 0.0f;
+  lut.r_max = 0.5f;
+  lut.values.resize(static_cast<std::size_t>(size));
+
+  for (int i = 0; i < size; ++i) {
+    double u = static_cast<double>(i) / (size - 1);
+    double distance = u * 0.5;  // distance in [0, 0.5]
+    double glow_intensity = std::exp(-distance * 4.0);
+    lut.values[static_cast<std::size_t>(i)] = static_cast<float>(glow_intensity);
+  }
+
+  return lut;
+}
+
 } // namespace physics
 
 #endif // PHYSICS_LUT_H

@@ -21,6 +21,7 @@ uniform sampler2D emissivityLUT;
 uniform sampler2D redshiftLUT;
 uniform sampler2D spectralLUT;
 uniform sampler2D grbModulationLUT;
+uniform sampler2D photonGlowLUT; // Phase 8.2: LUT for exp(-distance*4.0)
 uniform sampler3D noiseTexture;
 uniform sampler3D grmhdTexture;
 uniform samplerCube galaxy;
@@ -87,29 +88,8 @@ vec3 panoramaColor(sampler2D tex, vec3 dir) {
   return texture(tex, uv).rgb;
 }
 
-/**
- * Compute geodesic acceleration for null rays (photons).
- *
- * Derived from the Schwarzschild effective potential for photons:
- * V_eff(r) = h²/r² * (1 - r_s/r)
- *
- * The radial acceleration in coordinate time is:
- * d²r/dt² = -∂V_eff/∂r = -h²(r_s - 2r)/r⁴
- *
- * For the full 3D vector equation in Cartesian coordinates:
- * a = -1.5 * r_s * h² * r̂ / r⁴
- *
- * This is equivalent to: a = -(3/2) * r_s * h² * pos / r⁵
- */
-vec3 accel(float h2, vec3 pos) {
-  float r2 = dot(pos, pos);
-  // More numerically stable than pow(r2, 2.5)
-  float r = sqrt(r2);
-  float r5 = r2 * r2 * r;
-  // Geodesic equation: a = -1.5 * r_s * h² / r⁵ * r̂
-  vec3 acc = -1.5 * schwarzschildRadius * h2 * pos / r5;
-  return acc;
-}
+// Inlined accel() computation (Phase 8.2 optimization: eliminates function call overhead)
+// a = -1.5 * r_s * h² * pos / r⁵ where r = |pos|
 
 vec4 quadFromAxisAngle(vec3 axis, float angle) {
   vec4 qr;
@@ -294,12 +274,6 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
   vec3 h = cross(pos, dir);
   float h2 = dot(h, h);
 
-  // Compute impact parameter: b = |r × v| / |v|
-  float impactParameter = length(cross(pos, normalize(dir)));
-
-  // Critical impact parameter for photon capture: b_crit ≈ sqrt(27) * r_s/2
-  float criticalImpact = sqrt(27.0) * schwarzschildRadius / 2.0;
-
   // Track closest approach to photon sphere
   float minRadiusReached = length(pos);
   float r_ph = photonSphereRadius; // 1.5 * r_s
@@ -311,7 +285,10 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
     if (renderBlackHole > 0.5) {
       // Apply gravitational lensing (geodesic bending)
       if (gravitationalLensing > 0.5) {
-        vec3 acc = accel(h2, pos);
+        // Inlined accel: a = -1.5 * r_s * h² * pos / r⁵
+        float r2 = dot(pos, pos);
+        float r5 = r2 * r2 * r;
+        vec3 acc = -1.5 * schwarzschildRadius * h2 * pos / r5;
         dir += acc;
       }
 
@@ -328,11 +305,12 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
       if (enablePhotonSphere > 0.5) {
         float photonSphereDistance = abs(r - r_ph);
         if (photonSphereDistance < 0.5) {
-          // Glow intensity peaks at photon sphere
-          float glowIntensity = exp(-photonSphereDistance * 4.0) * 0.3;
+          // Phase 8.2 optimization: LUT for exp(-distance*4.0) avoids transcendental
+          float u = photonSphereDistance / 0.5;  // Normalize to [0,1]
+          float glowIntensity = texture(photonGlowLUT, vec2(u, 0.5)).r * 0.3;
           // Orange-yellow glow color for photon ring
-          vec3 glowColor = vec3(1.0, 0.7, 0.3) * glowIntensity;
-          color += glowColor * alpha;
+          const vec3 GLOW_COLOR = vec3(1.0, 0.7, 0.3);
+          color += GLOW_COLOR * glowIntensity * alpha;
           depthDistance = min(depthDistance, length(pos - origin));
         }
       }

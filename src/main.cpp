@@ -2264,6 +2264,7 @@ int main(int, char **) {
   static float redshiftRadiusMax = 0.0f;
   static GLuint texEmissivityLUT = 0;
   static GLuint texRedshiftLUT = 0;
+  static GLuint texPhotonGlowLUT = 0;  // Phase 8.2: Photon sphere glow effect LUT
   static GLuint texSpectralLUT = 0;
   static GLuint texNoiseVolume = 0;
   static GLuint texGrmhdSlice = 0;
@@ -2495,6 +2496,10 @@ int main(int, char **) {
           glDeleteTextures(1, &texRedshiftLUT);
           texRedshiftLUT = 0;
         }
+        if (texPhotonGlowLUT != 0) {
+          glDeleteTextures(1, &texPhotonGlowLUT);
+          texPhotonGlowLUT = 0;
+        }
 
         int lutSize = static_cast<int>(lutAssetEmissivity.values.size());
         texEmissivityLUT = createFloatTexture2D(lutSize, 1, lutAssetEmissivity.values);
@@ -2524,6 +2529,10 @@ int main(int, char **) {
         glDeleteTextures(1, &texRedshiftLUT);
         texRedshiftLUT = 0;
       }
+      if (texPhotonGlowLUT != 0) {
+        glDeleteTextures(1, &texPhotonGlowLUT);
+        texPhotonGlowLUT = 0;
+      }
       lutInitialized = false;
       lutFromAssets = false;
       return;
@@ -2538,6 +2547,10 @@ int main(int, char **) {
         glDeleteTextures(1, &texRedshiftLUT);
         texRedshiftLUT = 0;
       }
+      if (texPhotonGlowLUT != 0) {
+        glDeleteTextures(1, &texPhotonGlowLUT);
+        texPhotonGlowLUT = 0;
+      }
 
       constexpr int kLutSize = 256;
       constexpr double kMassSolar = 4.0e6;
@@ -2549,6 +2562,13 @@ int main(int, char **) {
 
       texEmissivityLUT = createFloatTexture2D(kLutSize, 1, emissivityLut.values);
       texRedshiftLUT = createFloatTexture2D(kLutSize, 1, redshiftLut.values);
+
+      // Phase 8.2: Generate photon glow LUT (256 entries for exp(-distance*4.0))
+      auto photonGlowLut = physics::generate_photon_glow_lut(256);
+      if (texPhotonGlowLUT != 0) {
+        glDeleteTextures(1, &texPhotonGlowLUT);
+      }
+      texPhotonGlowLUT = createFloatTexture2D(256, 1, photonGlowLut.values);
 
       lutRadiusMin = emissivityLut.r_min;
       lutRadiusMax = emissivityLut.r_max;
@@ -2901,6 +2921,7 @@ int main(int, char **) {
       rtti.textureUniforms["colorMap"] = colorMap != 0 ? colorMap : fallback2D;
       rtti.textureUniforms["emissivityLUT"] = lutReady ? texEmissivityLUT : fallback2D;
       rtti.textureUniforms["redshiftLUT"] = lutReady ? texRedshiftLUT : fallback2D;
+      rtti.textureUniforms["photonGlowLUT"] = texPhotonGlowLUT != 0 ? texPhotonGlowLUT : fallback2D;  // Phase 8.2
       rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
       rtti.textureUniforms["grbModulationLUT"] = grbModulationReady ? texGrbModulationLUT : fallback2D;
       for (int i = 0; i < kBackgroundLayers; ++i) {
