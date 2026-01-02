@@ -167,7 +167,11 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
     return false;
   }
 
-  density *= pow(1.0 - abs(pos.y) / adiskHeight, adiskDensityV);
+  // Phase 8.2 Priority 2: Use precomputed disk density LUT instead of pow()
+  // Map vertical coordinate to [0, 1] and lookup density profile
+  float normalizedV = abs(pos.y) / adiskHeight;
+  float verticalDensity = texture(diskDensityLUT, vec2(clamp(normalizedV, 0.0, 1.0), 0.5)).r;
+  density *= verticalDensity;
 
   // Set particle density to 0 when radius is below the innermost stable
   // circular orbit (ISCO). Matter spirals in rapidly below this radius.

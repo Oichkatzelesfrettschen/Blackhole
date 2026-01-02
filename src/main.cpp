@@ -2264,7 +2264,8 @@ int main(int, char **) {
   static float redshiftRadiusMax = 0.0f;
   static GLuint texEmissivityLUT = 0;
   static GLuint texRedshiftLUT = 0;
-  static GLuint texPhotonGlowLUT = 0;  // Phase 8.2: Photon sphere glow effect LUT
+  static GLuint texPhotonGlowLUT = 0;    // Phase 8.2: Photon sphere glow effect LUT
+  static GLuint texDiskDensityLUT = 0;   // Phase 8.2: Accretion disk density profile LUT
   static GLuint texSpectralLUT = 0;
   static GLuint texNoiseVolume = 0;
   static GLuint texGrmhdSlice = 0;
@@ -2500,6 +2501,10 @@ int main(int, char **) {
           glDeleteTextures(1, &texPhotonGlowLUT);
           texPhotonGlowLUT = 0;
         }
+        if (texDiskDensityLUT != 0) {
+          glDeleteTextures(1, &texDiskDensityLUT);
+          texDiskDensityLUT = 0;
+        }
 
         int lutSize = static_cast<int>(lutAssetEmissivity.values.size());
         texEmissivityLUT = createFloatTexture2D(lutSize, 1, lutAssetEmissivity.values);
@@ -2569,6 +2574,13 @@ int main(int, char **) {
         glDeleteTextures(1, &texPhotonGlowLUT);
       }
       texPhotonGlowLUT = createFloatTexture2D(256, 1, photonGlowLut.values);
+
+      // Phase 8.2 Priority 2: Generate disk density profile LUT (density vs radius)
+      auto diskDensityLut = physics::generate_disk_density_lut(256, 1.5);
+      if (texDiskDensityLUT != 0) {
+        glDeleteTextures(1, &texDiskDensityLUT);
+      }
+      texDiskDensityLUT = createFloatTexture2D(256, 1, diskDensityLut.values);
 
       lutRadiusMin = emissivityLut.r_min;
       lutRadiusMax = emissivityLut.r_max;
@@ -2922,6 +2934,7 @@ int main(int, char **) {
       rtti.textureUniforms["emissivityLUT"] = lutReady ? texEmissivityLUT : fallback2D;
       rtti.textureUniforms["redshiftLUT"] = lutReady ? texRedshiftLUT : fallback2D;
       rtti.textureUniforms["photonGlowLUT"] = texPhotonGlowLUT != 0 ? texPhotonGlowLUT : fallback2D;  // Phase 8.2
+      rtti.textureUniforms["diskDensityLUT"] = texDiskDensityLUT != 0 ? texDiskDensityLUT : fallback2D;  // Phase 8.2 P2
       rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
       rtti.textureUniforms["grbModulationLUT"] = grbModulationReady ? texGrbModulationLUT : fallback2D;
       for (int i = 0; i < kBackgroundLayers; ++i) {
