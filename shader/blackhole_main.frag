@@ -159,6 +159,9 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   float innerRadius = iscoRadius;
   float outerRadius = iscoRadius * 4.0; // Outer edge at ~12 r_s for typical thin disk
 
+  // Phase 8.2 Priority 3: Cache Cartesian radius to avoid recomputation
+  float r = length(pos);
+
   // Density linearly decreases as the distance to the blackhole center
   // increases.
   float density = max(
@@ -175,7 +178,7 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
 
   // Set particle density to 0 when radius is below the innermost stable
   // circular orbit (ISCO). Matter spirals in rapidly below this radius.
-  density *= smoothstep(innerRadius, innerRadius * 1.1, length(pos));
+  density *= smoothstep(innerRadius, innerRadius * 1.1, r);  // Use cached radius
 
   // Avoid the shader computation when density is very small.
   if (density < 0.001) {
@@ -225,7 +228,7 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
 
   float emissivity = 1.0;
   if (useLUTs > 0.5) {
-    float rNorm = length(pos) / max(schwarzschildRadius, EPSILON);
+    float rNorm = r / max(schwarzschildRadius, EPSILON);  // Use cached radius
     float denom = max(lutRadiusMax - lutRadiusMin, 0.0001);
     float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
     emissivity = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
@@ -233,7 +236,7 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   density *= emissivity;
 
   if (useSpectralLUT > 0.5) {
-    float rNorm = length(pos) / max(schwarzschildRadius, EPSILON);
+    float rNorm = r / max(schwarzschildRadius, EPSILON);  // Use cached radius
     float denom = max(spectralRadiusMax - spectralRadiusMin, 0.0001);
     float u = clamp((rNorm - spectralRadiusMin) / denom, 0.0, 1.0);
     float spectral = texture(spectralLUT, vec2(u, 0.5)).r;
@@ -249,8 +252,7 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
 
   // Apply gravitational redshift to disk emission
   if (enableRedshift > 0.5) {
-    float r = length(pos);
-    float z = gravitationalRedshift(r, schwarzschildRadius);
+    float z = gravitationalRedshift(r, schwarzschildRadius);  // Use cached radius r
     if (useLUTs > 0.5) {
       float rNorm = r / max(schwarzschildRadius, EPSILON);
       float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
