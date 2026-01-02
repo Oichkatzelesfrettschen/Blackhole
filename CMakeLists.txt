@@ -189,6 +189,11 @@ if(ENABLE_SLEEF)
   endif()
 endif()
 
+# Global compile definitions for SIMD flags
+add_compile_definitions(BLACKHOLE_ENABLE_XSIMD=$<IF:$<BOOL:${ENABLE_XSIMD}>,1,0>)
+add_compile_definitions(BLACKHOLE_ENABLE_SLEEF=$<IF:$<BOOL:${ENABLE_SLEEF}>,1,0>)
+add_compile_definitions(BLACKHOLE_ENABLE_HIGHWAY=$<IF:$<BOOL:${ENABLE_HIGHWAY}>,1,0>)
+
 option(ENABLE_OPENIMAGEIO "Enable OpenImageIO ingestion (optional)" OFF)
 if(ENABLE_OPENIMAGEIO)
   add_compile_definitions(BLACKHOLE_ENABLE_OPENIMAGEIO=1)
@@ -547,7 +552,7 @@ endif()
 
 set(WARNING_LEVEL "5" CACHE STRING "Warning strictness level 1-5")
 set_property(CACHE WARNING_LEVEL PROPERTY STRINGS "1" "2" "3" "4" "5")
-option(ENABLE_WERROR "Treat compiler warnings as errors" OFF)
+option(ENABLE_WERROR "Treat compiler warnings as errors" ON)
 
 # Level 1: Core warnings (OpenSSF recommended baseline)
 set(WARN_LEVEL1
@@ -1264,6 +1269,17 @@ if(BUILD_TESTING)
 	      target_compile_options(physics_test PRIVATE -fno-fast-math)
 	    endif()
 
+	    # Link SIMD libraries to physics_test
+	    if(ENABLE_XSIMD)
+	      target_link_libraries(physics_test PRIVATE xsimd)
+	    endif()
+	    if(ENABLE_SLEEF)
+	      target_link_libraries(physics_test PRIVATE sleef::sleef)
+	    endif()
+	    if(ENABLE_HIGHWAY)
+	      target_link_libraries(physics_test PRIVATE hwy::hwy)
+	    endif()
+
     # Register with CTest
     add_test(NAME physics_validation COMMAND physics_test)
     set_tests_properties(physics_validation PROPERTIES
@@ -1449,6 +1465,22 @@ if(BUILD_TESTING)
     # Find Z3 library (optional for build, required for runtime)
     find_package(Z3 CONFIG QUIET)
 
+    # Establish Z3 target if found
+    if(Z3_FOUND)
+      if(TARGET z3::libz3)
+        set(Z3_VERIFICATION_TARGET z3::libz3)
+      elseif(TARGET z3::z3)
+        set(Z3_VERIFICATION_TARGET z3::z3)
+      elseif(TARGET Z3::Z3)
+        set(Z3_VERIFICATION_TARGET Z3::Z3)
+      elseif(TARGET Z3::libz3)
+        set(Z3_VERIFICATION_TARGET Z3::libz3)
+      else()
+        message(WARNING "Z3 found but target not identified. Z3 features will be disabled.")
+        set(Z3_FOUND FALSE)
+      endif()
+    endif()
+
     add_executable(z3_verification_test
       "${PROJECT_SOURCE_DIR}/tests/z3_verification_test.cpp"
       ${PHYSICS_SRC_FILES}
@@ -1479,7 +1511,7 @@ if(BUILD_TESTING)
 
     # Optional Z3 linking if available
     if(Z3_FOUND)
-      target_link_libraries(z3_verification_test PRIVATE Z3::z3)
+      target_link_libraries(z3_verification_test PRIVATE ${Z3_VERIFICATION_TARGET})
       target_compile_definitions(z3_verification_test PRIVATE BLACKHOLE_Z3_AVAILABLE=1)
       message(STATUS "Z3 library found: Z3 constraint proofs enabled")
     else()

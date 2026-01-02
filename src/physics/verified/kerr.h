@@ -143,11 +143,10 @@ template<KerrScalar Real>
 template<KerrScalar Real>
 [[nodiscard]] inline Real bpt_Z2(Real a) noexcept {
     const Real a2 = a * a;
-    // Z2 = sqrt(Z1^2 - 8*a^2)
+    // Z2 = sqrt(3*a^2 + Z1^2) - Bardeen-Press-Teukolsky 1972
     const Real Z1 = bpt_Z1(a);
-    const Real term = Z1 * Z1 - 8.0 * a2;
-    if (term < 0.0) return 0.0;  // Safety check
-    return std::sqrt(term);
+    const Real term = 3.0 * a2 + Z1 * Z1;
+    return std::sqrt(term);  // Always positive for 0 <= a <= 1
 }
 
 // ISCO radius (prograde orbits)

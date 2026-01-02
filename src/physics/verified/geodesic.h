@@ -17,18 +17,20 @@ concept GeodesicScalar = std::floating_point<Real>;
 // For photons (null geodesics) in Schwarzschild spacetime
 template<GeodesicScalar Real>
 [[nodiscard]] inline StateVector<Real> schwarzschild_geodesic_rhs(
-    const StateVector<Real>& state, Real lambda, Real M, Real a) noexcept
+    const StateVector<Real>& state, [[maybe_unused]] Real lambda,
+    Real M, [[maybe_unused]] Real a) noexcept
 {
-    (void)a;  // Not used for Schwarzschild
-
-    const Real t = state.x0, r = state.x1, theta = state.x2, phi = state.x3;
+    [[maybe_unused]] const Real t = state.x0;
+    const Real r = state.x1;
+    const Real theta = state.x2;
+    [[maybe_unused]] const Real phi = state.x3;
     const Real dt_dl = state.v0, dr_dl = state.v1, dtheta_dl = state.v2, dphi_dl = state.v3;
 
     const Real sin_theta = std::sin(theta);
     const Real cos_theta = std::cos(theta);
     const Real cot_theta = cos_theta / sin_theta;
 
-    const Real f = 1.0 - 2.0 * M / r;
+    [[maybe_unused]] const Real f = 1.0 - 2.0 * M / r;
     const Real sin2_theta = sin_theta * sin_theta;
 
     // Acceleration components
@@ -52,7 +54,8 @@ template<GeodesicScalar Real>
 // For photons in Kerr spacetime (non-trivial)
 template<GeodesicScalar Real>
 [[nodiscard]] inline StateVector<Real> kerr_geodesic_rhs(
-    const StateVector<Real>& state, Real lambda, Real M, Real a) noexcept
+    const StateVector<Real>& state, [[maybe_unused]] Real lambda,
+    Real M, Real a) noexcept
 {
     const Real t = state.x0, r = state.x1, theta = state.x2, phi = state.x3;
     const Real dt_dl = state.v0, dr_dl = state.v1, dtheta_dl = state.v2, dphi_dl = state.v3;

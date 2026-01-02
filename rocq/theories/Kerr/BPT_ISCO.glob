@@ -1,4 +1,4 @@
-DIGEST 64f81d0ac5ca553a67e8c10b55002a7e
+DIGEST 6bd1a30238d00c1e489e352befb4c40a
 FBlackhole.Kerr.BPT_ISCO
 R923:938 Blackhole.Prelim <> <> lib
 R956:986 Blackhole.Metrics.Schwarzschild <> <> lib
@@ -38,370 +38,363 @@ R1419:1419 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
 binder 1415:1415 <> a:2
 R1424:1424 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
 R1431:1434 Stdlib.Reals.R_sqrt <> sqrt def
-R1444:1447 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1482:1482 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1436:1441 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
-R1443:1443 Blackhole.Kerr.BPT_ISCO <> a:2 var
-R1456:1458 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R1448:1453 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
-R1455:1455 Blackhole.Kerr.BPT_ISCO <> a:2 var
-R1462:1464 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1465:1465 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R1475:1477 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R1481:1481 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R1469:1471 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R1473:1473 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R1472:1472 Blackhole.Kerr.BPT_ISCO <> a:2 var
-R1479:1479 Stdlib.Arith.PeanoNat <> ::nat_scope:x_'/'_x not
-def 1568:1587 <> isco_radius_prograde
-R1596:1596 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 1590:1590 <> M:3
-binder 1592:1592 <> a:4
-R1601:1601 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R1609:1612 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1688:1688 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1608:1608 Blackhole.Kerr.BPT_ISCO <> M:3 var
-R1627:1629 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R1616:1618 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R1619:1624 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
+R1445:1447 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1439:1441 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1443:1443 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1442:1442 Blackhole.Kerr.BPT_ISCO <> a:2 var
+R1448:1448 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1457:1458 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1449:1454 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
+R1456:1456 Blackhole.Kerr.BPT_ISCO <> a:2 var
+def 1545:1564 <> isco_radius_prograde
+R1573:1573 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1567:1567 <> M:3
+binder 1569:1569 <> a:4
+R1578:1578 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1586:1589 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1665:1665 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1585:1585 Blackhole.Kerr.BPT_ISCO <> M:3 var
+R1604:1606 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1593:1595 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1596:1601 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
+R1603:1603 Blackhole.Kerr.BPT_ISCO <> a:4 var
+R1607:1610 Stdlib.Reals.R_sqrt <> sqrt def
+R1612:1612 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1627:1631 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1663:1663 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1616:1618 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1619:1624 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
 R1626:1626 Blackhole.Kerr.BPT_ISCO <> a:4 var
-R1630:1633 Stdlib.Reals.R_sqrt <> sqrt def
-R1635:1635 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1650:1654 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1686:1686 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1639:1641 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R1642:1647 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
-R1649:1649 Blackhole.Kerr.BPT_ISCO <> a:4 var
-R1669:1671 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R1658:1660 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R1661:1666 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
-R1668:1668 Blackhole.Kerr.BPT_ISCO <> a:4 var
-R1675:1677 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1678:1683 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
-R1685:1685 Blackhole.Kerr.BPT_ISCO <> a:4 var
-def 1764:1785 <> isco_radius_retrograde
-R1794:1794 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 1788:1788 <> M:5
-binder 1790:1790 <> a:6
-R1799:1799 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R1807:1810 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1898:1898 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1806:1806 Blackhole.Kerr.BPT_ISCO <> M:5 var
-R1828:1830 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R1814:1816 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R1817:1822 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
-R1825:1825 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
-R1826:1826 Blackhole.Kerr.BPT_ISCO <> a:6 var
-R1831:1834 Stdlib.Reals.R_sqrt <> sqrt def
-R1836:1836 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1854:1858 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1896:1896 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1840:1842 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R1843:1848 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
-R1851:1851 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
-R1852:1852 Blackhole.Kerr.BPT_ISCO <> a:6 var
-R1876:1878 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R1862:1864 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R1865:1870 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
-R1873:1873 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
-R1874:1874 Blackhole.Kerr.BPT_ISCO <> a:6 var
-R1882:1884 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R1885:1890 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
-R1893:1893 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
-R1894:1894 Blackhole.Kerr.BPT_ISCO <> a:6 var
-def 1971:1991 <> circular_orbit_radius
-R2004:2004 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 1994:1994 <> M:7
-binder 1996:1996 <> a:8
-binder 1998:1998 <> E:9
-binder 2000:2000 <> L:10
-R2009:2009 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R2030:2042 Blackhole.Kerr.Horizons <> outer_horizon def
-R2044:2044 Blackhole.Kerr.BPT_ISCO <> M:7 var
-R2046:2046 Blackhole.Kerr.BPT_ISCO <> a:8 var
-binder 2020:2025 <> r_plus:11
-R2099:2104 Blackhole.Kerr.BPT_ISCO <> r_plus:11 var
-prf 2251:2274 <> isco_schwarzschild_limit
-R2289:2289 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 2285:2285 <> M:12
-R2299:2304 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R2295:2297 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
-R2294:2294 Blackhole.Kerr.BPT_ISCO <> M:12 var
-R2329:2331 Corelib.Init.Logic <> ::type_scope:x_'='_x not
-R2305:2324 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R2326:2326 Blackhole.Kerr.BPT_ISCO <> M:12 var
-R2335:2337 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R2338:2338 Blackhole.Kerr.BPT_ISCO <> M:12 var
-R2372:2391 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R2394:2399 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
-R2402:2407 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
-prf 2722:2741 <> isco_outside_horizon
-R2758:2758 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 2752:2752 <> M:13
-binder 2754:2754 <> a:14
-R2768:2773 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R2764:2766 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
-R2763:2763 Blackhole.Kerr.BPT_ISCO <> M:13 var
-R2784:2789 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R2775:2778 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x_'<'_x not
-R2780:2782 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x_'<'_x not
-R2779:2779 Blackhole.Kerr.BPT_ISCO <> a:14 var
-R2779:2779 Blackhole.Kerr.BPT_ISCO <> a:14 var
-R2783:2783 Blackhole.Kerr.BPT_ISCO <> M:13 var
-R2814:2816 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
-R2790:2809 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R2811:2811 Blackhole.Kerr.BPT_ISCO <> M:13 var
-R2813:2813 Blackhole.Kerr.BPT_ISCO <> a:14 var
-R2817:2829 Blackhole.Kerr.Horizons <> outer_horizon def
-R2831:2831 Blackhole.Kerr.BPT_ISCO <> M:13 var
-R2833:2833 Blackhole.Kerr.BPT_ISCO <> a:14 var
-R2872:2891 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R2894:2906 Blackhole.Kerr.Horizons <> outer_horizon def
-prf 3146:3169 <> isco_increases_with_spin
-R3190:3190 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 3180:3180 <> M:15
-binder 3182:3183 <> a1:16
-binder 3185:3186 <> a2:17
-R3200:3205 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R3196:3198 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
-R3195:3195 Blackhole.Kerr.BPT_ISCO <> M:15 var
-R3213:3218 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R3207:3210 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x not
-R3211:3212 Blackhole.Kerr.BPT_ISCO <> a1:16 var
-R3226:3231 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R3221:3223 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
-R3219:3220 Blackhole.Kerr.BPT_ISCO <> a1:16 var
-R3224:3225 Blackhole.Kerr.BPT_ISCO <> a2:17 var
-R3238:3243 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R3234:3236 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
-R3232:3233 Blackhole.Kerr.BPT_ISCO <> a2:17 var
-R3237:3237 Blackhole.Kerr.BPT_ISCO <> M:15 var
-R3269:3271 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
-R3244:3263 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R3265:3265 Blackhole.Kerr.BPT_ISCO <> M:15 var
-R3267:3268 Blackhole.Kerr.BPT_ISCO <> a1:16 var
-R3272:3291 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R3293:3293 Blackhole.Kerr.BPT_ISCO <> M:15 var
-R3295:3296 Blackhole.Kerr.BPT_ISCO <> a2:17 var
-R3350:3369 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-prf 3574:3592 <> isco_extremal_limit
-R3607:3607 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 3603:3603 <> M:18
-R3617:3622 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R3613:3615 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
-R3612:3612 Blackhole.Kerr.BPT_ISCO <> M:18 var
-R3647:3649 Corelib.Init.Logic <> ::type_scope:x_'='_x not
-R3623:3642 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R3644:3644 Blackhole.Kerr.BPT_ISCO <> M:18 var
-R3646:3646 Blackhole.Kerr.BPT_ISCO <> M:18 var
-R3650:3650 Blackhole.Kerr.BPT_ISCO <> M:18 var
-R3684:3703 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R3706:3711 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
-R3714:3719 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
-prf 3941:3963 <> isco_retrograde_farther
-R3980:3980 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 3974:3974 <> M:19
-binder 3976:3976 <> a:20
-R3990:3995 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R3986:3988 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
-R3985:3985 Blackhole.Kerr.BPT_ISCO <> M:19 var
-R4005:4010 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
-R3997:3999 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x_'<'_x not
-R4001:4003 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x_'<'_x not
-R4000:4000 Blackhole.Kerr.BPT_ISCO <> a:20 var
-R4000:4000 Blackhole.Kerr.BPT_ISCO <> a:20 var
-R4004:4004 Blackhole.Kerr.BPT_ISCO <> M:19 var
-R4037:4039 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
-R4011:4032 Blackhole.Kerr.BPT_ISCO <> isco_radius_retrograde def
-R4034:4034 Blackhole.Kerr.BPT_ISCO <> M:19 var
-R4036:4036 Blackhole.Kerr.BPT_ISCO <> a:20 var
-R4040:4059 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R4061:4061 Blackhole.Kerr.BPT_ISCO <> M:19 var
-R4063:4063 Blackhole.Kerr.BPT_ISCO <> a:20 var
-R4102:4121 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R4124:4145 Blackhole.Kerr.BPT_ISCO <> isco_radius_retrograde def
-def 4391:4414 <> kerr_effective_potential
-R4429:4429 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 4417:4417 <> r:21
-binder 4419:4419 <> M:22
-binder 4421:4421 <> a:23
-binder 4423:4423 <> E:24
-binder 4425:4425 <> L:25
-R4434:4434 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R4441:4441 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4483:4486 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4477:4479 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R4442:4442 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4456:4460 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4476:4476 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4446:4448 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R4454:4454 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R4452:4452 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4453:4453 Blackhole.Kerr.BPT_ISCO <> M:22 var
-R4455:4455 Blackhole.Kerr.BPT_ISCO <> r:21 var
-R4464:4466 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R4470:4471 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R4475:4475 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R4468:4468 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R4467:4467 Blackhole.Kerr.BPT_ISCO <> L:25 var
-R4473:4473 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R4472:4472 Blackhole.Kerr.BPT_ISCO <> r:21 var
-R4481:4481 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R4480:4480 Blackhole.Kerr.BPT_ISCO <> E:24 var
-R4488:4488 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R4487:4487 Blackhole.Kerr.BPT_ISCO <> r:21 var
-def 4552:4575 <> circular_orbit_condition
-R4588:4588 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 4578:4578 <> r:26
-binder 4580:4580 <> M:27
-binder 4582:4582 <> a:28
-binder 4584:4584 <> L:29
-R4620:4622 Corelib.Init.Logic <> ::type_scope:x_'='_x not
-R4606:4609 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4619:4619 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4604:4604 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R4603:4603 Blackhole.Kerr.BPT_ISCO <> L:29 var
-R4611:4613 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R4610:4610 Blackhole.Kerr.BPT_ISCO <> r:26 var
-R4617:4617 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4618:4618 Blackhole.Kerr.BPT_ISCO <> M:27 var
-R4624:4626 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R4623:4623 Blackhole.Kerr.BPT_ISCO <> M:27 var
-R4628:4628 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R4627:4627 Blackhole.Kerr.BPT_ISCO <> r:26 var
-def 4707:4720 <> isco_condition
-R4733:4733 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 4723:4723 <> r:30
-binder 4725:4725 <> M:31
-binder 4727:4727 <> a:32
-binder 4729:4729 <> L:33
-R4913:4918 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
-R4881:4904 Blackhole.Kerr.BPT_ISCO <> circular_orbit_condition def
-R4906:4906 Blackhole.Kerr.BPT_ISCO <> r:30 var
-R4908:4908 Blackhole.Kerr.BPT_ISCO <> M:31 var
-R4910:4910 Blackhole.Kerr.BPT_ISCO <> a:32 var
-R4912:4912 Blackhole.Kerr.BPT_ISCO <> L:33 var
-R4920:4922 Corelib.Init.Logic <> ::type_scope:x_'='_x not
-R4919:4919 Blackhole.Kerr.BPT_ISCO <> r:30 var
-R4923:4942 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R4944:4944 Blackhole.Kerr.BPT_ISCO <> M:31 var
-R4946:4946 Blackhole.Kerr.BPT_ISCO <> a:32 var
-def 4996:5006 <> isco_energy
-R5015:5015 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 5009:5009 <> M:34
-binder 5011:5011 <> a:35
-R5020:5020 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R5041:5060 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R5062:5062 Blackhole.Kerr.BPT_ISCO <> M:34 var
-R5064:5064 Blackhole.Kerr.BPT_ISCO <> a:35 var
-binder 5031:5036 <> r_isco:36
-R5084:5093 Blackhole.Kerr.Metric <> kerr_Delta def
-R5095:5100 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
-R5102:5102 Blackhole.Kerr.BPT_ISCO <> M:34 var
-R5104:5104 Blackhole.Kerr.BPT_ISCO <> a:35 var
-binder 5075:5079 <> Delta:37
-R5124:5133 Blackhole.Kerr.Metric <> kerr_Sigma def
-R5135:5140 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
-R5145:5145 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R5143:5144 Stdlib.Reals.Rtrigo1 <> PI def
-R5149:5149 Blackhole.Kerr.BPT_ISCO <> a:35 var
-binder 5115:5119 <> Sigma:38
-R5156:5159 Stdlib.Reals.R_sqrt <> sqrt def
-R5161:5161 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R5191:5195 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R5221:5221 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R5185:5187 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R5170:5172 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R5168:5168 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R5162:5167 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
-R5178:5178 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R5176:5176 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R5177:5177 Blackhole.Kerr.BPT_ISCO <> M:34 var
-R5179:5184 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
+R1646:1648 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1635:1637 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1638:1643 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
+R1645:1645 Blackhole.Kerr.BPT_ISCO <> a:4 var
+R1652:1654 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1655:1660 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
+R1662:1662 Blackhole.Kerr.BPT_ISCO <> a:4 var
+def 1741:1762 <> isco_radius_retrograde
+R1771:1771 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1765:1765 <> M:5
+binder 1767:1767 <> a:6
+R1776:1776 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1784:1787 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1875:1875 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1783:1783 Blackhole.Kerr.BPT_ISCO <> M:5 var
+R1805:1807 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1791:1793 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1794:1799 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
+R1802:1802 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R1803:1803 Blackhole.Kerr.BPT_ISCO <> a:6 var
+R1808:1811 Stdlib.Reals.R_sqrt <> sqrt def
+R1813:1813 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1831:1835 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1873:1873 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1817:1819 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1820:1825 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
+R1828:1828 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R1829:1829 Blackhole.Kerr.BPT_ISCO <> a:6 var
+R1853:1855 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1839:1841 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1842:1847 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
+R1850:1850 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R1851:1851 Blackhole.Kerr.BPT_ISCO <> a:6 var
+R1859:1861 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1862:1867 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
+R1870:1870 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R1871:1871 Blackhole.Kerr.BPT_ISCO <> a:6 var
+def 1948:1968 <> circular_orbit_radius
+R1981:1981 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1971:1971 <> M:7
+binder 1973:1973 <> a:8
+binder 1975:1975 <> E:9
+binder 1977:1977 <> L:10
+R1986:1986 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2007:2019 Blackhole.Kerr.Horizons <> outer_horizon def
+R2021:2021 Blackhole.Kerr.BPT_ISCO <> M:7 var
+R2023:2023 Blackhole.Kerr.BPT_ISCO <> a:8 var
+binder 1997:2002 <> r_plus:11
+R2076:2081 Blackhole.Kerr.BPT_ISCO <> r_plus:11 var
+prf 2228:2251 <> isco_schwarzschild_limit
+R2266:2266 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2262:2262 <> M:12
+R2276:2281 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2272:2274 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2271:2271 Blackhole.Kerr.BPT_ISCO <> M:12 var
+R2306:2308 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2282:2301 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R2303:2303 Blackhole.Kerr.BPT_ISCO <> M:12 var
+R2312:2314 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2315:2315 Blackhole.Kerr.BPT_ISCO <> M:12 var
+R2349:2368 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R2371:2376 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
+R2379:2384 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
+prf 2699:2718 <> isco_outside_horizon
+R2735:2735 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2729:2729 <> M:13
+binder 2731:2731 <> a:14
+R2745:2750 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2741:2743 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2740:2740 Blackhole.Kerr.BPT_ISCO <> M:13 var
+R2761:2766 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2752:2755 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x_'<'_x not
+R2757:2759 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x_'<'_x not
+R2756:2756 Blackhole.Kerr.BPT_ISCO <> a:14 var
+R2756:2756 Blackhole.Kerr.BPT_ISCO <> a:14 var
+R2760:2760 Blackhole.Kerr.BPT_ISCO <> M:13 var
+R2791:2793 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2767:2786 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R2788:2788 Blackhole.Kerr.BPT_ISCO <> M:13 var
+R2790:2790 Blackhole.Kerr.BPT_ISCO <> a:14 var
+R2794:2806 Blackhole.Kerr.Horizons <> outer_horizon def
+R2808:2808 Blackhole.Kerr.BPT_ISCO <> M:13 var
+R2810:2810 Blackhole.Kerr.BPT_ISCO <> a:14 var
+R2849:2868 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R2871:2883 Blackhole.Kerr.Horizons <> outer_horizon def
+prf 3123:3146 <> isco_increases_with_spin
+R3167:3167 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3157:3157 <> M:15
+binder 3159:3160 <> a1:16
+binder 3162:3163 <> a2:17
+R3177:3182 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3173:3175 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3172:3172 Blackhole.Kerr.BPT_ISCO <> M:15 var
+R3190:3195 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3184:3187 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x not
+R3188:3189 Blackhole.Kerr.BPT_ISCO <> a1:16 var
+R3203:3208 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3198:3200 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R3196:3197 Blackhole.Kerr.BPT_ISCO <> a1:16 var
+R3201:3202 Blackhole.Kerr.BPT_ISCO <> a2:17 var
+R3215:3220 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3211:3213 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R3209:3210 Blackhole.Kerr.BPT_ISCO <> a2:17 var
+R3214:3214 Blackhole.Kerr.BPT_ISCO <> M:15 var
+R3246:3248 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3221:3240 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R3242:3242 Blackhole.Kerr.BPT_ISCO <> M:15 var
+R3244:3245 Blackhole.Kerr.BPT_ISCO <> a1:16 var
+R3249:3268 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R3270:3270 Blackhole.Kerr.BPT_ISCO <> M:15 var
+R3272:3273 Blackhole.Kerr.BPT_ISCO <> a2:17 var
+R3327:3346 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+prf 3551:3569 <> isco_extremal_limit
+R3584:3584 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3580:3580 <> M:18
+R3594:3599 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3590:3592 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3589:3589 Blackhole.Kerr.BPT_ISCO <> M:18 var
+R3624:3626 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R3600:3619 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R3621:3621 Blackhole.Kerr.BPT_ISCO <> M:18 var
+R3623:3623 Blackhole.Kerr.BPT_ISCO <> M:18 var
+R3627:3627 Blackhole.Kerr.BPT_ISCO <> M:18 var
+R3661:3680 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R3683:3688 Blackhole.Kerr.BPT_ISCO <> bpt_Z1 def
+R3691:3696 Blackhole.Kerr.BPT_ISCO <> bpt_Z2 def
+prf 3918:3940 <> isco_retrograde_farther
+R3957:3957 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3951:3951 <> M:19
+binder 3953:3953 <> a:20
+R3967:3972 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3963:3965 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3962:3962 Blackhole.Kerr.BPT_ISCO <> M:19 var
+R3982:3987 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3974:3976 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x_'<'_x not
+R3978:3980 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x_'<'_x not
+R3977:3977 Blackhole.Kerr.BPT_ISCO <> a:20 var
+R3977:3977 Blackhole.Kerr.BPT_ISCO <> a:20 var
+R3981:3981 Blackhole.Kerr.BPT_ISCO <> M:19 var
+R4014:4016 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3988:4009 Blackhole.Kerr.BPT_ISCO <> isco_radius_retrograde def
+R4011:4011 Blackhole.Kerr.BPT_ISCO <> M:19 var
+R4013:4013 Blackhole.Kerr.BPT_ISCO <> a:20 var
+R4017:4036 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R4038:4038 Blackhole.Kerr.BPT_ISCO <> M:19 var
+R4040:4040 Blackhole.Kerr.BPT_ISCO <> a:20 var
+R4079:4098 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R4101:4122 Blackhole.Kerr.BPT_ISCO <> isco_radius_retrograde def
+def 4368:4391 <> kerr_effective_potential
+R4406:4406 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4394:4394 <> r:21
+binder 4396:4396 <> M:22
+binder 4398:4398 <> a:23
+binder 4400:4400 <> E:24
+binder 4402:4402 <> L:25
+R4411:4411 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4418:4418 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4460:4463 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4454:4456 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4419:4419 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4433:4437 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4453:4453 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4423:4425 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4431:4431 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4429:4429 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4430:4430 Blackhole.Kerr.BPT_ISCO <> M:22 var
+R4432:4432 Blackhole.Kerr.BPT_ISCO <> r:21 var
+R4441:4443 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4447:4448 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4452:4452 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4445:4445 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4444:4444 Blackhole.Kerr.BPT_ISCO <> L:25 var
+R4450:4450 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4449:4449 Blackhole.Kerr.BPT_ISCO <> r:21 var
+R4458:4458 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4457:4457 Blackhole.Kerr.BPT_ISCO <> E:24 var
+R4465:4465 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4464:4464 Blackhole.Kerr.BPT_ISCO <> r:21 var
+def 4529:4552 <> circular_orbit_condition
+R4565:4565 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4555:4555 <> r:26
+binder 4557:4557 <> M:27
+binder 4559:4559 <> a:28
+binder 4561:4561 <> L:29
+R4597:4599 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R4583:4586 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4596:4596 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4581:4581 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4580:4580 Blackhole.Kerr.BPT_ISCO <> L:29 var
+R4588:4590 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4587:4587 Blackhole.Kerr.BPT_ISCO <> r:26 var
+R4594:4594 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4595:4595 Blackhole.Kerr.BPT_ISCO <> M:27 var
+R4601:4603 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4600:4600 Blackhole.Kerr.BPT_ISCO <> M:27 var
+R4605:4605 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4604:4604 Blackhole.Kerr.BPT_ISCO <> r:26 var
+def 4684:4697 <> isco_condition
+R4710:4710 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4700:4700 <> r:30
+binder 4702:4702 <> M:31
+binder 4704:4704 <> a:32
+binder 4706:4706 <> L:33
+R4890:4895 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R4858:4881 Blackhole.Kerr.BPT_ISCO <> circular_orbit_condition def
+R4883:4883 Blackhole.Kerr.BPT_ISCO <> r:30 var
+R4885:4885 Blackhole.Kerr.BPT_ISCO <> M:31 var
+R4887:4887 Blackhole.Kerr.BPT_ISCO <> a:32 var
+R4889:4889 Blackhole.Kerr.BPT_ISCO <> L:33 var
+R4897:4899 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R4896:4896 Blackhole.Kerr.BPT_ISCO <> r:30 var
+R4900:4919 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R4921:4921 Blackhole.Kerr.BPT_ISCO <> M:31 var
+R4923:4923 Blackhole.Kerr.BPT_ISCO <> a:32 var
+def 4973:4983 <> isco_energy
+R4992:4992 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4986:4986 <> M:34
+binder 4988:4988 <> a:35
+R4997:4997 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5018:5037 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R5039:5039 Blackhole.Kerr.BPT_ISCO <> M:34 var
+R5041:5041 Blackhole.Kerr.BPT_ISCO <> a:35 var
+binder 5008:5013 <> r_isco:36
+R5061:5070 Blackhole.Kerr.Metric <> kerr_Delta def
+R5072:5077 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
+R5079:5079 Blackhole.Kerr.BPT_ISCO <> M:34 var
+R5081:5081 Blackhole.Kerr.BPT_ISCO <> a:35 var
+binder 5052:5056 <> Delta:37
+R5101:5110 Blackhole.Kerr.Metric <> kerr_Sigma def
+R5112:5117 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
+R5122:5122 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5120:5121 Stdlib.Reals.Rtrigo1 <> PI def
+R5126:5126 Blackhole.Kerr.BPT_ISCO <> a:35 var
+binder 5092:5096 <> Sigma:38
+R5133:5136 Stdlib.Reals.R_sqrt <> sqrt def
+R5138:5138 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5168:5172 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5198:5198 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5162:5164 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5147:5149 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5145:5145 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5139:5144 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
+R5155:5155 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5153:5153 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5154:5154 Blackhole.Kerr.BPT_ISCO <> M:34 var
+R5156:5161 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
+R5166:5166 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5165:5165 Blackhole.Kerr.BPT_ISCO <> a:35 var
+R5179:5182 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5197:5197 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5173:5178 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
+R5191:5193 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
 R5189:5189 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R5188:5188 Blackhole.Kerr.BPT_ISCO <> a:35 var
-R5202:5205 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R5220:5220 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R5196:5201 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
-R5214:5216 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
-R5212:5212 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R5206:5211 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
-R5218:5218 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
-R5217:5217 Blackhole.Kerr.BPT_ISCO <> a:35 var
-def 5282:5302 <> isco_angular_momentum
-R5311:5311 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 5305:5305 <> M:39
-binder 5307:5307 <> a:40
-R5316:5316 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R5337:5356 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R5358:5358 Blackhole.Kerr.BPT_ISCO <> M:39 var
-R5360:5360 Blackhole.Kerr.BPT_ISCO <> a:40 var
-binder 5327:5332 <> r_isco:41
-R5380:5389 Blackhole.Kerr.Metric <> kerr_Delta def
-R5391:5396 Blackhole.Kerr.BPT_ISCO <> r_isco:41 var
-R5398:5398 Blackhole.Kerr.BPT_ISCO <> M:39 var
-R5400:5400 Blackhole.Kerr.BPT_ISCO <> a:40 var
-binder 5371:5375 <> Delta:42
-R5444:5446 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R5425:5428 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R5443:5443 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
-R5408:5410 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R5407:5407 Blackhole.Kerr.BPT_ISCO <> M:39 var
-R5411:5414 Stdlib.Reals.R_sqrt <> sqrt def
-R5417:5417 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R5416:5416 Blackhole.Kerr.BPT_ISCO <> M:39 var
-R5418:5423 Blackhole.Kerr.BPT_ISCO <> r_isco:41 var
-R5435:5437 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R5429:5434 Blackhole.Kerr.BPT_ISCO <> r_isco:41 var
-R5441:5441 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
-R5442:5442 Blackhole.Kerr.BPT_ISCO <> M:39 var
-R5447:5452 Blackhole.Kerr.BPT_ISCO <> r_isco:41 var
-def 5544:5562 <> binding_energy_isco
-R5571:5571 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 5565:5565 <> M:43
-binder 5567:5567 <> a:44
-R5576:5576 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R5586:5588 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
-R5589:5599 Blackhole.Kerr.BPT_ISCO <> isco_energy def
-R5601:5601 Blackhole.Kerr.BPT_ISCO <> M:43 var
-R5603:5603 Blackhole.Kerr.BPT_ISCO <> a:44 var
-def 5651:5668 <> kerr_isco_prograde
-R5677:5677 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 5671:5671 <> M:45
-binder 5673:5673 <> a:46
-R5682:5682 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R5689:5708 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
-R5710:5710 Blackhole.Kerr.BPT_ISCO <> M:45 var
-R5712:5712 Blackhole.Kerr.BPT_ISCO <> a:46 var
-def 5727:5746 <> kerr_isco_retrograde
-R5755:5755 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 5749:5749 <> M:47
-binder 5751:5751 <> a:48
-R5760:5760 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R5767:5788 Blackhole.Kerr.BPT_ISCO <> isco_radius_retrograde def
-R5790:5790 Blackhole.Kerr.BPT_ISCO <> M:47 var
-R5792:5792 Blackhole.Kerr.BPT_ISCO <> a:48 var
-def 5807:5822 <> kerr_isco_energy
-R5831:5831 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 5825:5825 <> M:49
-binder 5827:5827 <> a:50
-R5836:5836 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R5843:5853 Blackhole.Kerr.BPT_ISCO <> isco_energy def
-R5855:5855 Blackhole.Kerr.BPT_ISCO <> M:49 var
-R5857:5857 Blackhole.Kerr.BPT_ISCO <> a:50 var
-def 5872:5897 <> kerr_isco_angular_momentum
-R5906:5906 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 5900:5900 <> M:51
-binder 5902:5902 <> a:52
-R5911:5911 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R5918:5938 Blackhole.Kerr.BPT_ISCO <> isco_angular_momentum def
-R5940:5940 Blackhole.Kerr.BPT_ISCO <> M:51 var
-R5942:5942 Blackhole.Kerr.BPT_ISCO <> a:52 var
-def 5957:5975 <> kerr_binding_energy
-R5984:5984 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-binder 5978:5978 <> M:53
-binder 5980:5980 <> a:54
-R5989:5989 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
-R5996:6014 Blackhole.Kerr.BPT_ISCO <> binding_energy_isco def
-R6016:6016 Blackhole.Kerr.BPT_ISCO <> M:53 var
-R6018:6018 Blackhole.Kerr.BPT_ISCO <> a:54 var
+R5183:5188 Blackhole.Kerr.BPT_ISCO <> r_isco:36 var
+R5195:5195 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5194:5194 Blackhole.Kerr.BPT_ISCO <> a:35 var
+def 5259:5279 <> isco_angular_momentum
+R5288:5288 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5282:5282 <> M:39
+binder 5284:5284 <> a:40
+R5293:5293 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5314:5333 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R5335:5335 Blackhole.Kerr.BPT_ISCO <> M:39 var
+R5337:5337 Blackhole.Kerr.BPT_ISCO <> a:40 var
+binder 5304:5309 <> r_isco:41
+R5357:5366 Blackhole.Kerr.Metric <> kerr_Delta def
+R5368:5373 Blackhole.Kerr.BPT_ISCO <> r_isco:41 var
+R5375:5375 Blackhole.Kerr.BPT_ISCO <> M:39 var
+R5377:5377 Blackhole.Kerr.BPT_ISCO <> a:40 var
+binder 5348:5352 <> Delta:42
+R5421:5423 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5402:5405 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5420:5420 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5385:5387 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5384:5384 Blackhole.Kerr.BPT_ISCO <> M:39 var
+R5388:5391 Stdlib.Reals.R_sqrt <> sqrt def
+R5394:5394 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5393:5393 Blackhole.Kerr.BPT_ISCO <> M:39 var
+R5395:5400 Blackhole.Kerr.BPT_ISCO <> r_isco:41 var
+R5412:5414 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5406:5411 Blackhole.Kerr.BPT_ISCO <> r_isco:41 var
+R5418:5418 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5419:5419 Blackhole.Kerr.BPT_ISCO <> M:39 var
+R5424:5429 Blackhole.Kerr.BPT_ISCO <> r_isco:41 var
+def 5521:5539 <> binding_energy_isco
+R5548:5548 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5542:5542 <> M:43
+binder 5544:5544 <> a:44
+R5553:5553 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5563:5565 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5566:5576 Blackhole.Kerr.BPT_ISCO <> isco_energy def
+R5578:5578 Blackhole.Kerr.BPT_ISCO <> M:43 var
+R5580:5580 Blackhole.Kerr.BPT_ISCO <> a:44 var
+def 5628:5645 <> kerr_isco_prograde
+R5654:5654 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5648:5648 <> M:45
+binder 5650:5650 <> a:46
+R5659:5659 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5666:5685 Blackhole.Kerr.BPT_ISCO <> isco_radius_prograde def
+R5687:5687 Blackhole.Kerr.BPT_ISCO <> M:45 var
+R5689:5689 Blackhole.Kerr.BPT_ISCO <> a:46 var
+def 5704:5723 <> kerr_isco_retrograde
+R5732:5732 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5726:5726 <> M:47
+binder 5728:5728 <> a:48
+R5737:5737 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5744:5765 Blackhole.Kerr.BPT_ISCO <> isco_radius_retrograde def
+R5767:5767 Blackhole.Kerr.BPT_ISCO <> M:47 var
+R5769:5769 Blackhole.Kerr.BPT_ISCO <> a:48 var
+def 5784:5799 <> kerr_isco_energy
+R5808:5808 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5802:5802 <> M:49
+binder 5804:5804 <> a:50
+R5813:5813 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5820:5830 Blackhole.Kerr.BPT_ISCO <> isco_energy def
+R5832:5832 Blackhole.Kerr.BPT_ISCO <> M:49 var
+R5834:5834 Blackhole.Kerr.BPT_ISCO <> a:50 var
+def 5849:5874 <> kerr_isco_angular_momentum
+R5883:5883 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5877:5877 <> M:51
+binder 5879:5879 <> a:52
+R5888:5888 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5895:5915 Blackhole.Kerr.BPT_ISCO <> isco_angular_momentum def
+R5917:5917 Blackhole.Kerr.BPT_ISCO <> M:51 var
+R5919:5919 Blackhole.Kerr.BPT_ISCO <> a:52 var
+def 5934:5952 <> kerr_binding_energy
+R5961:5961 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5955:5955 <> M:53
+binder 5957:5957 <> a:54
+R5966:5966 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5973:5991 Blackhole.Kerr.BPT_ISCO <> binding_energy_isco def
+R5993:5993 Blackhole.Kerr.BPT_ISCO <> M:53 var
+R5995:5995 Blackhole.Kerr.BPT_ISCO <> a:54 var

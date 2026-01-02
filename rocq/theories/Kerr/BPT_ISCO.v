@@ -36,7 +36,7 @@ Definition bpt_Z1 (a : R) : R :=
 
 (** Helper function Z2 from Bardeen-Press-Teukolsky formula **)
 Definition bpt_Z2 (a : R) : R :=
-  sqrt(bpt_Z1 a * (bpt_Z1 a + 2.0 * (1.0 - a^2)^(1/3))).
+  sqrt(3.0 * a^2 + (bpt_Z1 a)^2).
 
 (** ISCO radius for prograde orbits (co-rotating with black hole) **)
 Definition isco_radius_prograde (M a : R) : R :=

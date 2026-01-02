@@ -432,6 +432,13 @@ inline void christoffel_accel_batch_sse2(
  * 3. xsimd SSE2 (legacy fallback) - slower but compatible
  * 4. Scalar (always available)
  */
+
+// Forward declaration for scalar fallback
+inline void christoffel_accel_batch_scalar(
+    const double* r, const double* dr, const double* dtheta,
+    const double* dphi, const double* theta, double r_s,
+    double* accel_out, std::size_t count);
+
 inline void christoffel_accel_dispatch(
     const double* r,
     const double* dr,

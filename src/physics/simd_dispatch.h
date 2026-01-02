@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 
 // ============================================================================
 // Feature Detection Macros

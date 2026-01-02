@@ -1266,17 +1266,12 @@ let bpt_Z1 a =
 
 let bpt_Z2 a =
   sqrt
-    (RbaseSymbolsImpl.coq_Rmult (bpt_Z1 a)
-      (RbaseSymbolsImpl.coq_Rplus (bpt_Z1 a)
-        (RbaseSymbolsImpl.coq_Rmult
-          (q2R { qnum = (Zpos (XO (XO (XI (XO XH))))); qden = (XO (XI (XO
-            XH))) })
-          (pow0
-            (rminus
-              (q2R { qnum = (Zpos (XO (XI (XO XH)))); qden = (XO (XI (XO
-                XH))) })
-              (pow0 a (succ (succ 0))))
-            (Nat.div (succ 0) (succ (succ (succ 0))))))))
+    (RbaseSymbolsImpl.coq_Rplus
+      (RbaseSymbolsImpl.coq_Rmult
+        (q2R { qnum = (Zpos (XO (XI (XI (XI XH))))); qden = (XO (XI (XO
+          XH))) })
+        (pow0 a (succ (succ 0))))
+      (pow0 (bpt_Z1 a) (succ (succ 0))))
 
 (** val isco_radius_prograde :
     RbaseSymbolsImpl.coq_R -> RbaseSymbolsImpl.coq_R -> RbaseSymbolsImpl.coq_R **)
