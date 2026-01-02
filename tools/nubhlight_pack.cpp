@@ -329,8 +329,10 @@ int main(int argc, char **argv) {
   std::vector<float> packed;
   packed.resize(voxelCount * 4);
 
-  std::vector<double> minValues(4, std::numeric_limits<double>::infinity());
-  std::vector<double> maxValues(4, -std::numeric_limits<double>::infinity());
+  // Use max/lowest instead of infinity due to fast-math optimization flag
+  // that makes infinity() return 0 with -ffinite-math-only
+  std::vector<double> minValues(4, std::numeric_limits<double>::max());
+  std::vector<double> maxValues(4, std::numeric_limits<double>::lowest());
 
   auto updateMinMax = [&](std::size_t channel, double value) {
     minValues[channel] = std::min(minValues[channel], value);

@@ -14,6 +14,7 @@ class BlackholeConan(ConanFile):
         "enable_meshoptimizer": [True, False],
         "enable_shader_watcher": [True, False],
         "enable_fastnoise2": [True, False],
+        "enable_eigen": [True, False],
     }
     default_options = {
         "hdf5/*:shared": True,
@@ -24,8 +25,9 @@ class BlackholeConan(ConanFile):
         "enable_openimageio": False,
         "enable_spirv_tooling": True,
         "enable_meshoptimizer": True,
-        "enable_shader_watcher": False,
+        "enable_shader_watcher": True,
         "enable_fastnoise2": True,
+        "enable_eigen": True,
     }
 
     def requirements(self):
@@ -33,6 +35,8 @@ class BlackholeConan(ConanFile):
         self.requires("glbinding/3.5.0")
         self.requires("glm/1.0.1")
         self.requires("xsimd/13.2.0", override=True)
+        self.requires("highway/1.2.0")
+        self.requires("sleef/3.9.0")
         self.requires("entt/3.15.0")
         self.requires("pcg-cpp/cci.20220409")
         self.requires("taskflow/3.10.0")
@@ -66,6 +70,8 @@ class BlackholeConan(ConanFile):
             self.requires("ktx/4.3.2")
         if self.options.enable_openimageio:
             self.requires("openimageio/3.1.8.0")
+        if self.options.enable_eigen:
+            self.requires("eigen/3.4.0")
 
     def layout(self):
         cmake_layout(self, build_folder=".")

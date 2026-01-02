@@ -62,3 +62,50 @@ For strict parity, set:
 BLACKHOLE_COMPARE_MAX_STEPS=1000 \
 BLACKHOLE_COMPARE_STEP_SIZE=0.02
 ```
+
+## FP Precision Testing (Compute Shader Optimization)
+
+To test the impact of SPIR-V optimization on floating-point precision in compute shaders,
+use the `SPIRV_SKIP_OPT_COMPUTE` environment variable during shader compilation.
+
+### Shader Size Impact
+
+| Shader | Unoptimized | Optimized | Reduction |
+|--------|-------------|-----------|-----------|
+| geodesic_trace.comp | 52k | 27k | 48% |
+| drawid_cull.comp | 2.4k | 1.7k | 29% |
+
+### Testing Procedure
+
+1. Compile shaders without compute optimization:
+   ```bash
+   rm -rf build/shader_cache/*
+   SPIRV_SKIP_OPT_COMPUTE=1 scripts/compile_shaders_spirv.sh
+   ```
+
+2. Run the application and capture a reference frame:
+   ```bash
+   BLACKHOLE_COMPARE_SWEEP=1 \
+   BLACKHOLE_COMPARE_BASELINE=1 \
+   BLACKHOLE_COMPARE_WRITE_OUTPUTS=1 \
+   ./build/Release/Blackhole
+   cp logs/compare/compare_0_compute.ppm /tmp/unopt_compute.ppm
+   ```
+
+3. Recompile with optimization (default):
+   ```bash
+   rm -rf build/shader_cache/*
+   scripts/compile_shaders_spirv.sh
+   ```
+
+4. Run again and compare:
+   ```bash
+   BLACKHOLE_COMPARE_SWEEP=1 \
+   BLACKHOLE_COMPARE_BASELINE=1 \
+   BLACKHOLE_COMPARE_WRITE_OUTPUTS=1 \
+   ./build/Release/Blackhole
+   compare -metric RMSE /tmp/unopt_compute.ppm logs/compare/compare_0_compute.ppm /tmp/diff.png
+   ```
+
+The RMSE value indicates the precision difference caused by FP contraction optimizations.
+Values under 0.001 typically indicate acceptable precision for visualization purposes.

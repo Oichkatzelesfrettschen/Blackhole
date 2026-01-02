@@ -129,6 +129,21 @@ if(ENABLE_SPIRV_TOOLING)
 endif()
 
 # ============================================================================
+# Mesh Optimization (meshoptimizer)
+# ============================================================================
+
+option(ENABLE_MESHOPTIMIZER "Enable meshoptimizer for geometry optimization" ON)
+if(ENABLE_MESHOPTIMIZER)
+  find_package(meshoptimizer CONFIG QUIET)
+  if(meshoptimizer_FOUND)
+    message(STATUS "meshoptimizer found: overdraw optimization available")
+  else()
+    message(STATUS "meshoptimizer not found: overdraw optimization disabled")
+    set(ENABLE_MESHOPTIMIZER OFF)
+  endif()
+endif()
+
+# ============================================================================
 # Optional UI Layers
 # ============================================================================
 
@@ -161,6 +176,66 @@ if(ENABLE_KTX)
   add_compile_definitions(BLACKHOLE_ENABLE_KTX=1)
 endif()
 
+# ============================================================================
+# Taskflow (parallel task execution)
+# ============================================================================
+
+option(ENABLE_TASKFLOW "Enable Taskflow for parallel LUT generation" ON)
+if(ENABLE_TASKFLOW)
+  find_package(Taskflow CONFIG QUIET)
+  if(Taskflow_FOUND)
+    message(STATUS "Taskflow found: parallel batch processing available")
+  else()
+    message(STATUS "Taskflow not found: falling back to serial execution")
+    set(ENABLE_TASKFLOW OFF)
+  endif()
+endif()
+
+# ============================================================================
+# xsimd (explicit SIMD abstraction library)
+# ============================================================================
+
+option(ENABLE_XSIMD "Enable xsimd for explicit SIMD vectorization" ON)
+if(ENABLE_XSIMD)
+  find_package(xsimd CONFIG QUIET)
+  if(xsimd_FOUND)
+    message(STATUS "xsimd found: explicit SIMD abstraction available")
+  else()
+    message(STATUS "xsimd not found: using Eigen auto-vectorization only")
+    set(ENABLE_XSIMD OFF)
+  endif()
+endif()
+
+# ============================================================================
+# Highway (performance-portable SIMD with runtime dispatch)
+# ============================================================================
+
+option(ENABLE_HIGHWAY "Enable Highway for performance-portable SIMD" ON)
+if(ENABLE_HIGHWAY)
+  find_package(hwy CONFIG QUIET)
+  if(hwy_FOUND)
+    message(STATUS "Highway found: performance-portable SIMD available")
+  else()
+    message(STATUS "Highway not found: SIMD functionality limited to xsimd/Eigen")
+    set(ENABLE_HIGHWAY OFF)
+  endif()
+endif()
+
+# ============================================================================
+# SLEEF (vectorized transcendental math functions)
+# ============================================================================
+
+option(ENABLE_SLEEF "Enable SLEEF for optimized vectorized transcendentals" ON)
+if(ENABLE_SLEEF)
+  find_package(sleef CONFIG QUIET)
+  if(sleef_FOUND)
+    message(STATUS "SLEEF found: vectorized sin/cos/sqrt available")
+  else()
+    message(STATUS "SLEEF not found: using xsimd transcendentals")
+    set(ENABLE_SLEEF OFF)
+  endif()
+endif()
+
 option(ENABLE_OPENIMAGEIO "Enable OpenImageIO ingestion (optional)" OFF)
 if(ENABLE_OPENIMAGEIO)
   add_compile_definitions(BLACKHOLE_ENABLE_OPENIMAGEIO=1)
@@ -172,6 +247,13 @@ option(ENABLE_EIGEN "Enable Eigen-backed physics math types (adds -DBLACKHOLE_US
 if(ENABLE_EIGEN)
   add_compile_definitions(BLACKHOLE_USE_EIGEN=1)
   message(STATUS "Eigen backend enabled: BLACKHOLE_USE_EIGEN will be defined for targets")
+endif()
+
+option(ENABLE_SHADER_WATCHER "Enable shader hot-reload file watcher" OFF)
+if(ENABLE_SHADER_WATCHER)
+  find_package(watcher REQUIRED)
+  add_compile_definitions(BLACKHOLE_ENABLE_SHADER_WATCHER=1)
+  message(STATUS "Shader watcher enabled: hot-reload support active")
 endif()
 
 # ============================================================================
@@ -239,23 +321,258 @@ add_library(implot::implot ALIAS implot)
 # ============================================================================
 # SIMD and Optimization Configuration
 # ============================================================================
+# Comprehensive SIMD detection and configuration for SSE through AVX-512.
+# GLM, Eigen, and compiler flags are configured based on detected capabilities.
+# ============================================================================
 
-# GLM SIMD intrinsics - enable SSE2 for portable SIMD
-add_compile_definitions(GLM_FORCE_INTRINSICS)
-add_compile_definitions(GLM_FORCE_SSE2)
-add_compile_definitions(GLM_FORCE_ALIGNED_GENTYPES)
-
-# Detect if AVX2 is available on build machine (optional)
 include(CheckCXXCompilerFlag)
+include(CheckCXXSourceCompiles)
+
+# SIMD tier: AUTO detects best available, or set explicitly to SSE2/SSE4/AVX/AVX2/AVX512
+set(SIMD_TIER "AUTO" CACHE STRING "SIMD instruction set tier: AUTO, SSE2, SSE4, AVX, AVX2, AVX512")
+set_property(CACHE SIMD_TIER PROPERTY STRINGS AUTO SSE2 SSE4 AVX AVX2 AVX512)
+
+# Native architecture optimization (enables best SIMD for build machine)
+option(ENABLE_NATIVE_ARCH "Enable -march=native for optimal SIMD on this CPU" OFF)
+
+# Detect available SIMD extensions
+message(STATUS "=== SIMD Detection ===")
+
+# First, check compiler support for SIMD flags (required for code generation)
+check_cxx_compiler_flag("-msse" COMPILER_SUPPORTS_SSE)
+check_cxx_compiler_flag("-msse2" COMPILER_SUPPORTS_SSE2)
+check_cxx_compiler_flag("-msse3" COMPILER_SUPPORTS_SSE3)
+check_cxx_compiler_flag("-mssse3" COMPILER_SUPPORTS_SSSE3)
+check_cxx_compiler_flag("-msse4.1" COMPILER_SUPPORTS_SSE41)
+check_cxx_compiler_flag("-msse4.2" COMPILER_SUPPORTS_SSE42)
+check_cxx_compiler_flag("-mfma" COMPILER_SUPPORTS_FMA)
+check_cxx_compiler_flag("-mavx" COMPILER_SUPPORTS_AVX)
 check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
-if(COMPILER_SUPPORTS_AVX2)
-  option(ENABLE_AVX2 "Enable AVX2 optimizations" OFF)
-  if(ENABLE_AVX2)
-    add_compile_definitions(GLM_FORCE_AVX2)
-    add_compile_options(-mavx2 -mfma)
-    message(STATUS "AVX2 SIMD optimizations enabled")
+check_cxx_compiler_flag("-mavx512f" COMPILER_SUPPORTS_AVX512F)
+check_cxx_compiler_flag("-mavx512dq" COMPILER_SUPPORTS_AVX512DQ)
+check_cxx_compiler_flag("-mavx512cd" COMPILER_SUPPORTS_AVX512CD)
+check_cxx_compiler_flag("-mavx512bw" COMPILER_SUPPORTS_AVX512BW)
+check_cxx_compiler_flag("-mavx512vl" COMPILER_SUPPORTS_AVX512VL)
+
+# For AUTO mode, detect actual CPU features via CPUID (not just compiler support)
+# This ensures we only use instructions the CPU actually supports at runtime
+include(CheckCXXSourceRuns)
+
+if(SIMD_TIER STREQUAL "AUTO" AND NOT CMAKE_CROSSCOMPILING)
+  # CPU feature detection using CPUID
+  set(CMAKE_REQUIRED_FLAGS "")
+
+  # Check AVX-512 support (requires both CPU and OS support via XGETBV)
+  check_cxx_source_runs("
+    #include <cpuid.h>
+    #include <cstdint>
+    int main() {
+      unsigned int eax, ebx, ecx, edx;
+      if (!__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) return 1;
+      bool avx512f = (ebx >> 16) & 1;
+      bool avx512dq = (ebx >> 17) & 1;
+      if (!avx512f || !avx512dq) return 1;
+      // Check XGETBV for OS support of ZMM registers (bits 5,6,7 of XCR0)
+      unsigned int xcr0_lo, xcr0_hi;
+      asm volatile(\"xgetbv\" : \"=a\"(xcr0_lo), \"=d\"(xcr0_hi) : \"c\"(0));
+      bool zmm_enabled = ((xcr0_lo >> 5) & 7) == 7;
+      return zmm_enabled ? 0 : 1;
+    }
+  " CPU_HAS_AVX512)
+
+  # Check AVX2 + FMA support
+  check_cxx_source_runs("
+    #include <cpuid.h>
+    int main() {
+      unsigned int eax, ebx, ecx, edx;
+      if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) return 1;
+      bool fma = (ecx >> 12) & 1;
+      bool avx = (ecx >> 28) & 1;
+      if (!fma || !avx) return 1;
+      if (!__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) return 1;
+      bool avx2 = (ebx >> 5) & 1;
+      return avx2 ? 0 : 1;
+    }
+  " CPU_HAS_AVX2)
+
+  # Check AVX support
+  check_cxx_source_runs("
+    #include <cpuid.h>
+    int main() {
+      unsigned int eax, ebx, ecx, edx;
+      if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) return 1;
+      bool avx = (ecx >> 28) & 1;
+      // Also check OSXSAVE to ensure OS supports AVX state
+      bool osxsave = (ecx >> 27) & 1;
+      return (avx && osxsave) ? 0 : 1;
+    }
+  " CPU_HAS_AVX)
+
+  # Check SSE4.2 support
+  check_cxx_source_runs("
+    #include <cpuid.h>
+    int main() {
+      unsigned int eax, ebx, ecx, edx;
+      if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) return 1;
+      bool sse42 = (ecx >> 20) & 1;
+      return sse42 ? 0 : 1;
+    }
+  " CPU_HAS_SSE42)
+
+  # Report actual CPU capabilities
+  set(CPU_DETECTED "")
+  if(CPU_HAS_SSE42)
+    list(APPEND CPU_DETECTED "SSE4.2")
+  endif()
+  if(CPU_HAS_AVX)
+    list(APPEND CPU_DETECTED "AVX")
+  endif()
+  if(CPU_HAS_AVX2)
+    list(APPEND CPU_DETECTED "AVX2+FMA")
+  endif()
+  if(CPU_HAS_AVX512)
+    list(APPEND CPU_DETECTED "AVX-512")
+  endif()
+  list(JOIN CPU_DETECTED ", " CPU_DETECTED_STR)
+  message(STATUS "CPU SIMD features: ${CPU_DETECTED_STR}")
+else()
+  message(STATUS "Using compiler-based SIMD detection (explicit tier or cross-compiling)")
+endif()
+
+# Determine effective SIMD tier based on AUTO detection or explicit selection
+set(SIMD_EFFECTIVE_TIER "SSE2") # Baseline
+if(SIMD_TIER STREQUAL "AUTO")
+  if(NOT CMAKE_CROSSCOMPILING)
+    # Use actual CPU capabilities for AUTO mode
+    if(CPU_HAS_AVX512 AND COMPILER_SUPPORTS_AVX512F)
+      set(SIMD_EFFECTIVE_TIER "AVX512")
+    elseif(CPU_HAS_AVX2 AND COMPILER_SUPPORTS_AVX2)
+      set(SIMD_EFFECTIVE_TIER "AVX2")
+    elseif(CPU_HAS_AVX AND COMPILER_SUPPORTS_AVX)
+      set(SIMD_EFFECTIVE_TIER "AVX")
+    elseif(CPU_HAS_SSE42 AND COMPILER_SUPPORTS_SSE42)
+      set(SIMD_EFFECTIVE_TIER "SSE4")
+    else()
+      set(SIMD_EFFECTIVE_TIER "SSE2")
+    endif()
+  else()
+    # Cross-compiling: fall back to conservative SSE2
+    set(SIMD_EFFECTIVE_TIER "SSE2")
+  endif()
+  message(STATUS "AUTO-detected SIMD tier: ${SIMD_EFFECTIVE_TIER}")
+else()
+  set(SIMD_EFFECTIVE_TIER ${SIMD_TIER})
+  message(STATUS "Explicit SIMD tier: ${SIMD_EFFECTIVE_TIER}")
+endif()
+
+# Native architecture flag (overrides specific tier when enabled)
+if(ENABLE_NATIVE_ARCH)
+  check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+  if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    add_compile_options(-march=native)
+    message(STATUS "Native architecture optimization enabled (-march=native)")
+    # Native implies best available, skip explicit flags
+    set(SIMD_USE_NATIVE ON)
+  else()
+    set(SIMD_USE_NATIVE OFF)
+  endif()
+else()
+  set(SIMD_USE_NATIVE OFF)
+endif()
+
+# Apply SIMD tier flags and definitions
+if(NOT SIMD_USE_NATIVE)
+  if(SIMD_EFFECTIVE_TIER STREQUAL "AVX512")
+    add_compile_options(-mavx512f -mavx512dq -mavx512cd -mavx512bw -mavx512vl)
+    add_compile_options(-mavx2 -mfma -mavx -msse4.2 -msse4.1 -mssse3 -msse3 -msse2)
+    message(STATUS "Enabling AVX-512 (F+DQ+CD+BW+VL) + all predecessors")
+  elseif(SIMD_EFFECTIVE_TIER STREQUAL "AVX2")
+    add_compile_options(-mavx2 -mfma -mavx -msse4.2 -msse4.1 -mssse3 -msse3 -msse2)
+    message(STATUS "Enabling AVX2 + FMA + all SSE variants")
+  elseif(SIMD_EFFECTIVE_TIER STREQUAL "AVX")
+    add_compile_options(-mavx -msse4.2 -msse4.1 -mssse3 -msse3 -msse2)
+    message(STATUS "Enabling AVX + all SSE variants")
+  elseif(SIMD_EFFECTIVE_TIER STREQUAL "SSE4")
+    add_compile_options(-msse4.2 -msse4.1 -mssse3 -msse3 -msse2)
+    message(STATUS "Enabling SSE4.2 + SSE4.1 + SSSE3 + SSE3 + SSE2")
+  else()
+    add_compile_options(-msse2)
+    message(STATUS "Enabling SSE2 baseline")
   endif()
 endif()
+
+# GLM SIMD intrinsics configuration
+add_compile_definitions(GLM_FORCE_INTRINSICS)
+add_compile_definitions(GLM_FORCE_ALIGNED_GENTYPES)
+
+if(SIMD_EFFECTIVE_TIER STREQUAL "AVX512" OR (SIMD_USE_NATIVE AND CPU_HAS_AVX512))
+  add_compile_definitions(GLM_FORCE_AVX512F)
+  add_compile_definitions(GLM_FORCE_AVX2)
+  add_compile_definitions(GLM_FORCE_AVX)
+  add_compile_definitions(GLM_FORCE_SSE42)
+  add_compile_definitions(GLM_FORCE_SSE41)
+  add_compile_definitions(GLM_FORCE_SSE2)
+elseif(SIMD_EFFECTIVE_TIER STREQUAL "AVX2" OR (SIMD_USE_NATIVE AND CPU_HAS_AVX2))
+  add_compile_definitions(GLM_FORCE_AVX2)
+  add_compile_definitions(GLM_FORCE_AVX)
+  add_compile_definitions(GLM_FORCE_SSE42)
+  add_compile_definitions(GLM_FORCE_SSE41)
+  add_compile_definitions(GLM_FORCE_SSE2)
+elseif(SIMD_EFFECTIVE_TIER STREQUAL "AVX" OR (SIMD_USE_NATIVE AND CPU_HAS_AVX))
+  add_compile_definitions(GLM_FORCE_AVX)
+  add_compile_definitions(GLM_FORCE_SSE42)
+  add_compile_definitions(GLM_FORCE_SSE41)
+  add_compile_definitions(GLM_FORCE_SSE2)
+elseif(SIMD_EFFECTIVE_TIER STREQUAL "SSE4" OR (SIMD_USE_NATIVE AND CPU_HAS_SSE42))
+  add_compile_definitions(GLM_FORCE_SSE42)
+  add_compile_definitions(GLM_FORCE_SSE41)
+  add_compile_definitions(GLM_FORCE_SSE2)
+else()
+  add_compile_definitions(GLM_FORCE_SSE2)
+endif()
+
+# Eigen-specific SIMD configuration (when ENABLE_EIGEN is ON)
+if(ENABLE_EIGEN)
+  add_compile_definitions(EIGEN_DONT_VECTORIZE=0)
+
+  if(SIMD_EFFECTIVE_TIER STREQUAL "AVX512" OR (SIMD_USE_NATIVE AND CPU_HAS_AVX512))
+    add_compile_definitions(EIGEN_VECTORIZE_AVX512)
+    add_compile_definitions(EIGEN_VECTORIZE_AVX2)
+    add_compile_definitions(EIGEN_VECTORIZE_FMA)
+    add_compile_definitions(EIGEN_VECTORIZE_AVX)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE4_2)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE4_1)
+    add_compile_definitions(EIGEN_VECTORIZE_SSSE3)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE3)
+    message(STATUS "Eigen AVX-512 vectorization enabled (full stack)")
+  elseif(SIMD_EFFECTIVE_TIER STREQUAL "AVX2" OR (SIMD_USE_NATIVE AND CPU_HAS_AVX2))
+    add_compile_definitions(EIGEN_VECTORIZE_AVX2)
+    add_compile_definitions(EIGEN_VECTORIZE_FMA)
+    add_compile_definitions(EIGEN_VECTORIZE_AVX)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE4_2)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE4_1)
+    add_compile_definitions(EIGEN_VECTORIZE_SSSE3)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE3)
+    message(STATUS "Eigen AVX2+FMA vectorization enabled")
+  elseif(SIMD_EFFECTIVE_TIER STREQUAL "AVX" OR (SIMD_USE_NATIVE AND CPU_HAS_AVX))
+    add_compile_definitions(EIGEN_VECTORIZE_AVX)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE4_2)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE4_1)
+    add_compile_definitions(EIGEN_VECTORIZE_SSSE3)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE3)
+    message(STATUS "Eigen AVX vectorization enabled")
+  elseif(SIMD_EFFECTIVE_TIER STREQUAL "SSE4" OR (SIMD_USE_NATIVE AND CPU_HAS_SSE42))
+    add_compile_definitions(EIGEN_VECTORIZE_SSE4_2)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE4_1)
+    add_compile_definitions(EIGEN_VECTORIZE_SSSE3)
+    add_compile_definitions(EIGEN_VECTORIZE_SSE3)
+    message(STATUS "Eigen SSE4.2 vectorization enabled")
+  else()
+    message(STATUS "Eigen SSE2 baseline vectorization enabled")
+  endif()
+endif()
+
+message(STATUS "=== SIMD Configuration Complete ===")
 
 # Fast math for non-critical paths (can be disabled for precision)
 option(ENABLE_FAST_MATH "Enable fast math optimizations" ON)
@@ -491,6 +808,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/render.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader_manager.cpp"
+  "${PROJECT_SOURCE_DIR}/src/shader_watcher.cpp"
   "${PROJECT_SOURCE_DIR}/src/texture.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_packed_loader.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
@@ -555,12 +873,35 @@ endif()
 if(ENABLE_TRACY)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Tracy::TracyClient)
 endif()
+if(ENABLE_SHADER_WATCHER)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE watcher::watcher)
+endif()
+if(ENABLE_MESHOPTIMIZER)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE meshoptimizer::meshoptimizer)
+endif()
+if(ENABLE_TASKFLOW)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Taskflow::Taskflow)
+endif()
+if(ENABLE_XSIMD)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE xsimd)
+endif()
+if(ENABLE_HIGHWAY)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE hwy::hwy)
+endif()
+if(ENABLE_SLEEF)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE sleef::sleef)
+endif()
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
   GLFW_INCLUDE_NONE
   IMGUI_IMPL_OPENGL_LOADER_CUSTOM
   BLACKHOLE_ENABLE_RMLUI=$<BOOL:${ENABLE_RMLUI}>
   BLACKHOLE_ENABLE_SPIRV_TOOLING=$<BOOL:${ENABLE_SPIRV_TOOLING}>
+  BLACKHOLE_ENABLE_MESHOPTIMIZER=$<BOOL:${ENABLE_MESHOPTIMIZER}>
+  BLACKHOLE_ENABLE_TASKFLOW=$<BOOL:${ENABLE_TASKFLOW}>
+  BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
+  BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
+  BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
 )
 if(ENABLE_TRACY)
   target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE TRACY_ENABLE)
@@ -598,8 +939,20 @@ target_compile_options(physics_bench PRIVATE ${PROJECT_WARNINGS})
 target_compile_definitions(physics_bench PRIVATE
   GLFW_INCLUDE_NONE
   IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+  BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
+  BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
+  BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
 )
 target_link_libraries(physics_bench PRIVATE glfw glbinding::glbinding glm::glm)
+if(ENABLE_XSIMD)
+  target_link_libraries(physics_bench PRIVATE xsimd)
+endif()
+if(ENABLE_HIGHWAY)
+  target_link_libraries(physics_bench PRIVATE hwy::hwy)
+endif()
+if(ENABLE_SLEEF)
+  target_link_libraries(physics_bench PRIVATE sleef::sleef)
+endif()
 
 # Copy assets files after build.
 add_custom_command(
@@ -657,7 +1010,7 @@ if(ENABLE_SPIRV_TOOLING)
     CXX_EXTENSIONS OFF
   )
 
-  target_link_libraries(spirv_bake PRIVATE CLI11::CLI11 spirv_tooling)
+  target_link_libraries(spirv_bake PRIVATE CLI11::CLI11 spirv_tooling nlohmann_json::nlohmann_json)
   target_compile_options(spirv_bake PRIVATE ${PROJECT_WARNINGS})
   target_compile_definitions(spirv_bake PRIVATE BLACKHOLE_ENABLE_SPIRV_TOOLING=1)
 endif()
@@ -881,6 +1234,26 @@ add_custom_target(analyze
   COMMENT "Running static analysis tools"
 )
 
+# Performance pack: GPU timing + flamegraph + analysis reports
+add_custom_target(perf-pack
+  COMMAND ${CMAKE_COMMAND} -E echo "Collecting performance pack (5s run)..."
+  COMMAND ${PROJECT_SOURCE_DIR}/scripts/collect_perf_pack.sh 5
+  DEPENDS Blackhole
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  COMMENT "Collecting GPU timing, flamegraph, and analysis reports"
+  VERBATIM
+)
+
+# GPU timing analysis only (no app run)
+add_custom_target(analyze-gpu-timing
+  COMMAND ${CMAKE_COMMAND} -E echo "Analyzing GPU timing data..."
+  COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/analyze_gpu_timing.py
+    ${PROJECT_SOURCE_DIR}/logs/perf/gpu_timing.csv
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  COMMENT "Analyzing GPU timing CSV with outlier detection"
+  VERBATIM
+)
+
 # cppcheck standalone target
 if(CPPCHECK_EXE)
   add_custom_target(cppcheck
@@ -1092,6 +1465,11 @@ if(BUILD_TESTING)
     )
     target_compile_options(math_types_parity_test PRIVATE ${PROJECT_WARNINGS})
     target_compile_definitions(math_types_parity_test PRIVATE GLM_FORCE_PURE)
+    target_link_libraries(math_types_parity_test PRIVATE glm::glm)
+    if(ENABLE_EIGEN)
+      find_package(Eigen3 CONFIG REQUIRED)
+      target_link_libraries(math_types_parity_test PRIVATE Eigen3::Eigen)
+    endif()
     add_test(NAME math_types_parity COMMAND math_types_parity_test)
     set_tests_properties(math_types_parity PROPERTIES
       LABELS "math;parity"
@@ -1099,6 +1477,51 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(math_types_parity PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Coordinate transformation validation tests (Phase 1.4.5)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/coordinates_test.cpp")
+    add_executable(coordinates_test
+      "${PROJECT_SOURCE_DIR}/tests/coordinates_test.cpp"
+    )
+    target_include_directories(coordinates_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(coordinates_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME coordinates_validation COMMAND coordinates_test)
+    set_tests_properties(coordinates_validation PROPERTIES
+      LABELS "physics;coordinates"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(coordinates_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Connection coefficient validation tests (Phase 1.4.6)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/connection_test.cpp")
+    add_executable(connection_test
+      "${PROJECT_SOURCE_DIR}/tests/connection_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
+    )
+    target_include_directories(connection_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(connection_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME connection_validation COMMAND connection_test)
+    set_tests_properties(connection_validation PROPERTIES
+      LABELS "physics;connection"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(connection_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()

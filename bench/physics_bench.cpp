@@ -12,11 +12,15 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "physics/batch.h"
 #include "physics/constants.h"
 #include "physics/kerr.h"
 #include "physics/lut.h"
 #include "physics/raytracer.h"
 #include "physics/schwarzschild.h"
+#include "physics/xsimd_eval.h"
+#include "physics/highway_eval.h"
+#include "physics/simd_dispatch.h"
 #include "shader.h"
 
 struct BenchConfig {
@@ -448,6 +452,93 @@ int main(int argc, char **argv) {
       cpuAccum += static_cast<double>(v);
     }
   }));
+
+  // Batch geodesic benchmark: SIMD-accelerated batch tracing vs scalar Schwarzschild
+  results.push_back(runBench("Batch geodesic (SIMD)", cfg.iterations, cfg.warmup,
+                             static_cast<double>(cfg.rays), [&]() {
+    const double mass = cfg.massSolar * physics::M_SUN;
+    const double r_s = physics::schwarzschild_radius(mass);
+    const double step_size = 0.02 * r_s;
+    const double escape_radius = 100.0 * r_s;
+
+    // Initialize batch state with SoA layout
+    physics::BatchRayState initial;
+    initial.resize(static_cast<std::size_t>(cfg.rays));
+
+    for (int i = 0; i < cfg.rays; ++i) {
+      double angle = (static_cast<double>(i) / cfg.rays) * (physics::PI * 0.9);
+      auto idx = static_cast<std::size_t>(i);
+
+      // Starting position: 30 r_s, equatorial plane
+      initial.r[idx] = 30.0 * r_s;
+      initial.theta[idx] = physics::PI * 0.5;
+      initial.phi[idx] = 0.0;
+
+      // Initial velocity: radial + angular components
+      initial.dr[idx] = std::cos(angle);
+      initial.dtheta[idx] = std::sin(angle) * 0.1;  // Small theta component
+      initial.dphi[idx] = std::sin(angle) * 0.9;    // Primarily azimuthal
+      initial.status[idx] = physics::BatchRayStatus::PROPAGATING;
+      initial.steps[idx] = 0;
+    }
+
+    // Trace batch with SIMD-accelerated integration
+    auto result = physics::traceGeodesicBatch(initial, mass, step_size, cfg.steps, escape_radius);
+
+    // Accumulate results to prevent optimization
+    for (std::size_t i = 0; i < result.final_r.size(); ++i) {
+      cpuAccum += result.final_r[i] + result.redshift[i] + result.steps_taken[i];
+    }
+  }));
+
+  // xsimd vs scalar comparison benchmark
+  std::cout << "\n=== xsimd Evaluation ===\n";
+  std::cout << "Architecture: " << physics::xsimd_eval::getArchitectureName() << "\n";
+  std::cout << "SIMD width (doubles): " << physics::xsimd_eval::getSimdWidth() << "\n\n";
+
+  {
+    auto xb = physics::xsimd_eval::benchSchwarzschild_f(
+        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+    std::cout << std::fixed << std::setprecision(3);
+    std::cout << xb.name << ": scalar=" << xb.scalar_ms << " ms, xsimd=" << xb.xsimd_ms
+              << " ms, speedup=" << xb.speedup << "x\n";
+  }
+  {
+    auto xb = physics::xsimd_eval::benchRedshift(
+        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+    std::cout << xb.name << ": scalar=" << xb.scalar_ms << " ms, xsimd=" << xb.xsimd_ms
+              << " ms, speedup=" << xb.speedup << "x\n";
+  }
+  {
+    auto xb = physics::xsimd_eval::benchChristoffelAccel(
+        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+    std::cout << xb.name << ": scalar=" << xb.scalar_ms << " ms, xsimd=" << xb.xsimd_ms
+              << " ms, speedup=" << xb.speedup << "x\n";
+  }
+
+  // Highway vs scalar comparison benchmark
+  std::cout << "\n=== Highway Evaluation ===\n";
+  std::cout << "Architecture: " << physics::highway_eval::getArchitectureName() << "\n";
+  std::cout << "SIMD width (doubles): " << physics::highway_eval::getSimdWidth() << "\n\n";
+
+  {
+    auto hb = physics::highway_eval::benchSchwarzschild_f(
+        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+    std::cout << hb.name << ": scalar=" << hb.scalar_ms << " ms, highway=" << hb.highway_ms
+              << " ms, speedup=" << hb.speedup << "x\n";
+  }
+  {
+    auto hb = physics::highway_eval::benchRedshift(
+        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+    std::cout << hb.name << ": scalar=" << hb.scalar_ms << " ms, highway=" << hb.highway_ms
+              << " ms, speedup=" << hb.speedup << "x\n";
+  }
+  {
+    auto hb = physics::highway_eval::benchChristoffelAccel(
+        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+    std::cout << hb.name << ": scalar=" << hb.scalar_ms << " ms, highway=" << hb.highway_ms
+              << " ms, speedup=" << hb.speedup << "x\n";
+  }
 
   if (cfg.gpuEnabled) {
     std::string gpuError;

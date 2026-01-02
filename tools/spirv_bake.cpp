@@ -1,4 +1,5 @@
 #include <CLI/CLI.hpp>
+#include <nlohmann/json.hpp>
 #include <shaderc/shaderc.hpp>
 #include <spirv-tools/optimizer.hpp>
 #include <spirv_cross/spirv_cross.hpp>
@@ -122,6 +123,67 @@ void dumpResources(const spirv_cross::Compiler &compiler) {
   printGroup("Push constants", resources.push_constant_buffers);
 }
 
+nlohmann::json buildReflectionJson(const spirv_cross::Compiler &compiler,
+                                   const std::string &inputPath) {
+  nlohmann::json root;
+  root["schema_version"] = 1;
+  root["source"] = inputPath;
+
+  // Entry points
+  nlohmann::json entries = nlohmann::json::array();
+  for (const auto &entry : compiler.get_entry_points_and_stages()) {
+    nlohmann::json e;
+    e["name"] = entry.name;
+    e["stage"] = static_cast<int>(entry.execution_model);
+    entries.push_back(e);
+  }
+  root["entry_points"] = entries;
+
+  auto resources = compiler.get_shader_resources();
+
+  auto buildResourceArray = [&](const auto &resourceList) -> nlohmann::json {
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto &res : resourceList) {
+      nlohmann::json item;
+      item["name"] = res.name;
+      item["id"] = static_cast<uint32_t>(res.id);
+      if (compiler.has_decoration(res.id, spv::DecorationDescriptorSet)) {
+        item["set"] = compiler.get_decoration(res.id, spv::DecorationDescriptorSet);
+      }
+      if (compiler.has_decoration(res.id, spv::DecorationBinding)) {
+        item["binding"] = compiler.get_decoration(res.id, spv::DecorationBinding);
+      }
+      if (compiler.has_decoration(res.id, spv::DecorationLocation)) {
+        item["location"] = compiler.get_decoration(res.id, spv::DecorationLocation);
+      }
+      arr.push_back(item);
+    }
+    return arr;
+  };
+
+  root["uniform_buffers"] = buildResourceArray(resources.uniform_buffers);
+  root["storage_buffers"] = buildResourceArray(resources.storage_buffers);
+  root["sampled_images"] = buildResourceArray(resources.sampled_images);
+  root["storage_images"] = buildResourceArray(resources.storage_images);
+  root["separate_samplers"] = buildResourceArray(resources.separate_samplers);
+  root["separate_images"] = buildResourceArray(resources.separate_images);
+  root["push_constants"] = buildResourceArray(resources.push_constant_buffers);
+
+  // Stage inputs/outputs
+  root["stage_inputs"] = buildResourceArray(resources.stage_inputs);
+  root["stage_outputs"] = buildResourceArray(resources.stage_outputs);
+
+  return root;
+}
+
+void writeJsonFile(const std::string &path, const nlohmann::json &data) {
+  std::ofstream out(path);
+  if (!out) {
+    throw std::runtime_error("Failed to write JSON file: " + path);
+  }
+  out << data.dump(2);
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -131,6 +193,7 @@ int main(int argc, char **argv) {
   std::string outputPath;
   std::string stage;
   std::string entryPoint = "main";
+  std::string reflectJsonPath;
   bool optimize = false;
   bool stripDebug = false;
   bool reflect = false;
@@ -139,9 +202,10 @@ int main(int argc, char **argv) {
   app.add_option("output", outputPath, "Output SPIR-V file")->required();
   app.add_option("--stage", stage, "Stage override: vert/frag/comp/geom/tesc/tese");
   app.add_option("--entry", entryPoint, "Entry point name");
+  app.add_option("--reflect-json", reflectJsonPath, "Output reflection data as JSON");
   app.add_flag("--opt", optimize, "Run SPIR-V optimizer (performance passes)");
   app.add_flag("--strip", stripDebug, "Strip debug info");
-  app.add_flag("--reflect", reflect, "Dump resource bindings");
+  app.add_flag("--reflect", reflect, "Dump resource bindings to stdout");
 
   CLI11_PARSE(app, argc, argv);
 
@@ -193,13 +257,21 @@ int main(int argc, char **argv) {
     spirv = std::move(optimized);
   }
 
-  if (reflect) {
+  if (reflect || !reflectJsonPath.empty()) {
     spirv_cross::Compiler reflector(spirv);
-    std::cout << "Entry points:\n";
-    for (const auto &entry : reflector.get_entry_points_and_stages()) {
-      std::cout << "  " << entry.name << " stage=" << entry.execution_model << "\n";
+
+    if (reflect) {
+      std::cout << "Entry points:\n";
+      for (const auto &entry : reflector.get_entry_points_and_stages()) {
+        std::cout << "  " << entry.name << " stage=" << entry.execution_model << "\n";
+      }
+      dumpResources(reflector);
     }
-    dumpResources(reflector);
+
+    if (!reflectJsonPath.empty()) {
+      nlohmann::json reflectionData = buildReflectionJson(reflector, inputPath);
+      writeJsonFile(reflectJsonPath, reflectionData);
+    }
   }
 
   writeBinaryFile(outputPath, spirv);

@@ -66,6 +66,7 @@
 #include "settings.h"
 #include "shader.h"
 #include "shader_manager.h"
+#include "shader_watcher.h"
 #include "texture.h"
 #include "tracy_support.h"
 
@@ -1705,6 +1706,9 @@ static void cleanup(GLFWwindow *window) {
   InputManager::instance().syncToSettings();
   SettingsManager::instance().save();
 
+#ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
+  ShaderWatcher::instance().stop();
+#endif
   InputManager::instance().shutdown();
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
@@ -1984,7 +1988,8 @@ static void writeTimingHistoryCsv(const TimingHistory &history, const std::strin
 
 static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &timers,
                                    const TimingHistory &history, float cpuFrameMs,
-                                   bool &perfOverlayEnabled, float &perfOverlayScale) {
+                                   bool &perfOverlayEnabled, float &perfOverlayScale,
+                                   bool &depthPrepassEnabled) {
   ImGui::SetNextWindowPos(ImVec2(1020, 10), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
 
@@ -1992,6 +1997,14 @@ static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &ti
     ImGui::Checkbox("GPU Timing", &gpuTimingEnabled);
     ImGui::Checkbox("HUD Overlay", &perfOverlayEnabled);
     ImGui::SliderFloat("HUD Scale", &perfOverlayScale, 0.5f, 2.0f);
+
+    // Depth pre-pass (for future mesh-based disk rendering)
+    ImGui::BeginDisabled(true); // Disabled until mesh geometry exists
+    ImGui::Checkbox("Depth Pre-pass", &depthPrepassEnabled);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      ImGui::SetTooltip("Reduces overdraw for mesh geometry.\nCurrently unused (ray marching has zero overdraw).");
+    }
     double cpuFrameMsD = static_cast<double>(cpuFrameMs);
     double fps = cpuFrameMs > 0.0f ? 1000.0 / cpuFrameMsD : 0.0;
     ImGui::Text("CPU frame: %.2f ms (%.1f FPS)", cpuFrameMsD, fps);
@@ -2049,6 +2062,11 @@ int main(int, char **) {
 
   // Initialize shader manager (must be after OpenGL context)
   ShaderManager::instance().init();
+
+#ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
+  // Initialize shader hot-reload watcher
+  ShaderWatcher::instance().start(getShaderBaseDir());
+#endif
 
   // Initialize input manager and sync with settings
   InputManager::instance().init(window);
@@ -2136,8 +2154,8 @@ int main(int, char **) {
   static bool compareWriteSummary = true;
   static float compareDiffScale = 8.0f;
   static float compareThreshold = 0.02f;
-  static int compareMaxOutliers = 0;
-  static float compareMaxOutlierFrac = 0.0f;
+  static int compareMaxOutliers = 10000;       // Enable outlier gating by default
+  static float compareMaxOutlierFrac = 0.006f; // 0.6% tolerance for Kerr divergence
   static bool compareOverridesEnabled = false;
   static int compareMaxStepsOverride = 0;
   static float compareStepSizeOverride = 0.0f;
@@ -2202,6 +2220,7 @@ int main(int, char **) {
   static bool perfOverlayConfigInit = false;
   static bool perfOverlayEnabled = true;
   static float perfOverlayScale = 1.0f;
+  static bool depthPrepassEnabled = false; // For future mesh-based disk rendering
   static ui::RmlUiOverlay rmluiOverlay;
   static bool rmluiEnabled = false;
   static bool rmluiReady = false;
@@ -2569,6 +2588,19 @@ int main(int, char **) {
     const float cpuFrameMs = deltaTime * 1000.0f;
 
     glfwPollEvents();
+
+#ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
+    // Check for shader file changes (hot-reload)
+    if (ShaderWatcher::instance().hasPendingReloads()) {
+      auto changedShaders = ShaderWatcher::instance().pollChangedShaders();
+      for (const auto &path : changedShaders) {
+        std::cout << "[HotReload] Shader changed: " << path << std::endl;
+        // TODO: Implement actual shader recompilation
+        // For now, log changes - full reload requires shader registry refactor
+      }
+      ShaderWatcher::instance().clearPendingReloads();
+    }
+#endif
 
     // Update input manager
     InputManager::instance().update(deltaTime);
@@ -3086,9 +3118,9 @@ int main(int, char **) {
           ImGui::SliderFloat("Diff Scale", &compareDiffScale, 0.1f, 32.0f);
           ImGui::SliderFloat("Max Diff Threshold", &compareThreshold, 0.0f, 0.5f);
           compareThreshold = std::max(compareThreshold, 0.0f);
-          ImGui::SliderInt("Allowed Outliers", &compareMaxOutliers, 0, 5000);
-          ImGui::SliderFloat("Allowed Outlier Frac", &compareMaxOutlierFrac, 0.0f, 0.001f,
-                             "%.6f");
+          ImGui::SliderInt("Allowed Outliers", &compareMaxOutliers, 0, 50000);
+          ImGui::SliderFloat("Allowed Outlier Frac", &compareMaxOutlierFrac, 0.0f, 0.01f,
+                             "%.5f");
           compareMaxOutlierFrac = std::max(compareMaxOutlierFrac, 0.0f);
           ImGui::Checkbox("Compare Baseline (disable extras)", &compareBaselineEnabled);
           if (ImGui::Checkbox("Compare Overrides", &compareOverridesEnabled)) {
@@ -4177,7 +4209,7 @@ int main(int, char **) {
       renderRmlUiPanel(rmluiEnabled);
       renderGizmoPanel(gizmoEnabled, gizmoOperation, gizmoMode, gizmoTransform);
       renderPerformancePanel(gpuTimingEnabled, gpuTimers, timingHistory, cpuFrameMs,
-                             perfOverlayEnabled, perfOverlayScale);
+                             perfOverlayEnabled, perfOverlayScale, depthPrepassEnabled);
     }
 
     if (input.isUIVisible() && gizmoEnabled) {

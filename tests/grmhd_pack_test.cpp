@@ -95,10 +95,12 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // Use max/lowest instead of infinity due to fast-math optimization flag
+  // that makes infinity() return 0 with -ffinite-math-only
   std::array<float, 4> expectedMin;
   std::array<float, 4> expectedMax;
-  expectedMin.fill(std::numeric_limits<float>::infinity());
-  expectedMax.fill(-std::numeric_limits<float>::infinity());
+  expectedMin.fill(std::numeric_limits<float>::max());
+  expectedMax.fill(std::numeric_limits<float>::lowest());
   for (std::size_t i = 0; i + 3 < data.size(); i += 4) {
     for (std::size_t c = 0; c < 4; ++c) {
       expectedMin[c] = std::min(expectedMin[c], data[i + c]);

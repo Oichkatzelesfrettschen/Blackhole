@@ -80,8 +80,10 @@ std::string checksumFnv1a64(const std::vector<float> &data) {
 
 void computeMinMax(const std::vector<float> &blob, std::array<float, 4> &minValues,
                    std::array<float, 4> &maxValues) {
-  minValues.fill(std::numeric_limits<float>::infinity());
-  maxValues.fill(-std::numeric_limits<float>::infinity());
+  // Use max/lowest instead of infinity due to fast-math optimization flag
+  // that makes infinity() return 0 with -ffinite-math-only
+  minValues.fill(std::numeric_limits<float>::max());
+  maxValues.fill(std::numeric_limits<float>::lowest());
   for (std::size_t i = 0; i + 3 < blob.size(); i += 4) {
     for (std::size_t c = 0; c < 4; ++c) {
       float value = blob[i + c];

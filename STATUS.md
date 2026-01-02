@@ -1,7 +1,8 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2025-12-31
+**Last Updated:** 2026-01-01
 **Status:** Core simulation operational, controls + depth effects integrated, camera unified
+**Roadmap:** See `docs/MASTER_ROADMAP.md` for the consolidated execution plan
 
 ---
 
@@ -34,6 +35,122 @@ The simulation is fully operational with the core rendering pipeline:
 - Optional LUT-backed emissivity/redshift shading (runtime or assets/luts)
 - Compute raytracer path (experimental toggle)
 - TODO/FIXME scan: ImGui backend TODO/FIXME notes + a new stub TODO in `src/rmlui_overlay.cpp` (RmlUi integration)
+
+## Recent Changes (2026-01-01)
+
+- Created `docs/MASTER_ROADMAP.md` consolidating all planning documents into single source of truth.
+- Created `docs/DEPENDENCY_MATRIX.md` for centralized version tracking of 34 Conan packages.
+- Archived superseded planning docs to `docs/archive/2026Q1/`.
+- **ISSUE-009 (Compute/Fragment Parity):** Updated default outlier tolerance in `src/main.cpp`:
+  - `compareMaxOutliers`: 0 → 10000 (enables gating by default)
+  - `compareMaxOutlierFrac`: 0.0 → 0.006 (0.6% tolerance for Kerr divergence)
+  - UI slider ranges expanded to accommodate new defaults
+  - All 5 tests pass, 20/20 shaders validated with new tolerances.
+- Updated MASTER_ROADMAP.md task 1.1.5 to Done status.
+- **Phase 1.2 (Eigen Migration):**
+  - Extended `src/physics/math_types.h` with double-precision Eigen types (Vec2d/Vec3d/Vec4d/Mat3d/Mat4d).
+  - Added unified vector operations: `math::dot()`, `math::cross()`, `math::length()`, `math::normalize()`.
+  - Added conversion helpers: `math::toVec3d()`, `math::toArray3()` for legacy compatibility.
+  - Added ENABLE_NATIVE_ARCH CMake option for `-march=native` optimization.
+  - Added Eigen-specific SIMD configuration (EIGEN_VECTORIZE_SSE4_2/AVX2/FMA).
+  - Updated MASTER_ROADMAP.md task 1.2.5 to Done status.
+- **Comprehensive SIMD Detection System:**
+  - Replaced compiler-flag-based SIMD detection with actual CPU feature detection via CPUID.
+  - AUTO tier selection now uses runtime CPU capability tests (not just compiler support).
+  - Detects SSE through AVX-512 with proper OS XGETBV checks for AVX state support.
+  - Hierarchical tier application ensures higher tiers include all predecessor instructions.
+  - GLM and Eigen SIMD definitions now use `CPU_HAS_*` checks for safety.
+  - Cross-compilation falls back to conservative SSE2 baseline.
+  - SIMD_TIER cache variable allows explicit override: AUTO, SSE2, SSE4, AVX, AVX2, AVX512.
+  - Validates correctly on AMD Ryzen 5 5600X3D (AVX2+FMA detected, AVX-512 correctly rejected).
+- **Batch Geodesic API (Phase 1.2.4):**
+  - Added `traceGeodesicBatch()` to `src/physics/batch.h` for vectorized geodesic tracing.
+  - Structure-of-Arrays (SoA) layout for SIMD-friendly memory access.
+  - RK4 integration of Schwarzschild geodesic equations with Christoffel symbols.
+  - Eigen path uses `Eigen::Map<VectorXd>` to wrap std::vector data for vectorized ops.
+  - Scalar fallback for non-Eigen builds.
+  - Returns `BatchTraceResult` with final positions, redshift, status, and step counts.
+- **Batch Geodesic Benchmark (Phase 1.2.6):**
+  - Added "Batch geodesic (SIMD)" benchmark to `bench/physics_bench.cpp`.
+  - Benchmarks `traceGeodesicBatch()` with same ray/step parameters as scalar Schwarzschild.
+  - Results: ~21.5M rays/sec (batch) vs ~29K rays/sec (scalar) = 735x speedup.
+  - Validates SIMD vectorization effectiveness of batch API.
+  - Phase 1.2 Eigen Migration acceptance criteria met: measurable speedup in physics_bench.
+- **spirv_bake Integration (Phase 1.3.2 + 1.3.5):**
+  - Updated `scripts/compile_shaders_spirv.sh` to use spirv_bake for compilation.
+  - Uses shaderc for GLSL->SPIR-V, spirv-tools for optimization.
+  - glslangValidator retained for preprocessing (include resolution).
+  - Automatic fallback to glslangValidator-only if spirv_bake not found.
+  - Environment controls: SPIRV_OPTIMIZE=1 (default), SPIRV_STRIP=0, SPIRV_REFLECT=0.
+  - All 20 shaders compile and validate successfully.
+  - Summary shows backend, optimization, and strip status.
+- **Fast-Math Infinity Bug Fix (Phase 1.2.7):**
+  - Root cause: `-ffinite-math-only` flag (part of fast-math) makes `std::numeric_limits<T>::infinity()` return 0.
+  - Fix: Replaced `infinity()` with `max()` and `-infinity()` with `lowest()` for min/max initialization.
+  - Applied to: `tools/nubhlight_pack.cpp`, `src/grmhd_packed_loader.cpp`, `tests/grmhd_pack_test.cpp`.
+  - Result: All 5 tests pass (100%), grmhd_pack_fixture now validates correctly.
+  - Phase 1.2 Eigen Migration acceptance criteria fully met.
+- **Shader Reflection Cache (Phase 1.3.3):**
+  - Added `--reflect-json <path>` option to `tools/spirv_bake.cpp` for JSON reflection output.
+  - Uses spirv-cross to extract bindings, locations, and resource metadata.
+  - Updated `scripts/compile_shaders_spirv.sh` to emit JSON when `SPIRV_REFLECT=1`.
+  - Generates `build/shader_cache/<shader>-reflect.json` for each compiled shader.
+  - JSON schema includes: entry_points, sampled_images, uniform_buffers, stage_inputs/outputs.
+  - All 20 shaders generate valid reflection JSON with binding/location data.
+- **Boyer-Lindquist Coordinate Utilities (Phase 1.4.5):**
+  - Created `src/physics/coordinates.h` with cleanroom MKS-to-BL coordinate transforms.
+  - Implements: `bl_coord()`, `r_of_X()`, `th_of_X()`, `X_of_r()`, `dr_dX1()`, `dth_dX2()`.
+  - Supports theta derefining parameter (hslope): 0=max derefining, 1=uniform spacing.
+  - Added Cartesian<->spherical conversion utilities.
+  - Created `tests/coordinates_test.cpp` with 9 validation tests covering:
+    - Radial coordinate roundtrip and derivatives
+    - Theta mapping, derefining behavior, and derivatives
+    - Full bl_coord transformation
+    - Cartesian<->spherical roundtrip and polar edge cases
+  - All project tests pass.
+- **Connection Coefficients (Phase 1.4.6):**
+  - Created `src/physics/connection.h` with cleanroom Christoffel symbol implementations.
+  - Implements Kerr metric tensors: `kerr_gcov()`, `kerr_gcon()`.
+  - Implements Schwarzschild metric tensors: `schwarzschild_gcov()`, `schwarzschild_gcon()`.
+  - Implements Christoffel symbols: `kerr_connection()`, `schwarzschild_connection()`.
+  - Implements index operations: `lower_index()`, `raise_index()`, `geodesic_acceleration()`.
+  - Created `tests/connection_test.cpp` with 7 validation tests covering:
+    - Metric tensor symmetry (g_uv = g_vu)
+    - Metric inverse property (g^ua g_av = delta^u_v)
+    - Connection symmetry (Gamma^a_uv = Gamma^a_vu)
+    - Schwarzschild limit (Kerr with a=0 matches Schwarzschild)
+    - Schwarzschild component sign verification
+    - Index raising/lowering roundtrip
+    - Geodesic acceleration sign correctness
+  - All 7 project tests pass (100%).
+- **FP Precision Testing (Phase 1.1.3):**
+  - Added `SPIRV_SKIP_OPT_COMPUTE` flag to `scripts/compile_shaders_spirv.sh`.
+  - When enabled, skips SPIR-V optimization passes for compute shaders only.
+  - Shader size impact: geodesic_trace.comp 52k (unopt) -> 27k (opt) = 48% reduction.
+  - Documented testing procedure in `docs/COMPARE_SWEEP.md`.
+  - Enables comparison of optimized vs unoptimized FP precision.
+- **Shader Hot-Reload Watcher (Phase 1.3.4):**
+  - Created `src/shader_watcher.h/cpp` using `watcher` Conan dependency (v0.14.1).
+  - Enable with CMake flag: `-DENABLE_SHADER_WATCHER=ON`.
+  - Watches `shader/` directory for .vert/.frag/.comp/.geom/.tesc/.tese/.glsl changes.
+  - Debounced event handling (100ms) to avoid rapid-fire detection during edits.
+  - Logs changed shader paths to stdout for hot-reload triggering.
+  - Thread-safe polling API: `hasPendingReloads()`, `pollChangedShaders()`, `clearPendingReloads()`.
+  - Graceful start/stop with singleton pattern matching ShaderManager.
+- **CI Validation Step (Phase 1.3.6):**
+  - Updated `.github/workflows/ci.yml` with comprehensive validation.
+  - Installs `glslang-tools` for shader validation.
+  - Build step followed by `validate-shaders` target (20/20 shaders).
+  - Runs `ctest --output-on-failure` for all 7 physics/validation tests.
+  - CI now validates both shader syntax and physics correctness.
+- **Raytracer Vec3d Migration (Phase 1.2.3):**
+  - Migrated `src/physics/raytracer.h` from `std::array<double, N>` to `math::Vec3d`/`math::Vec2d`.
+  - `PhotonRay` struct: position/direction now use `math::Vec3d`.
+  - `RayTraceResult` struct: final_position and path now use `math::Vec3d`.
+  - `compute_shadow()` return type: `std::vector<math::Vec2d>`.
+  - `Camera` struct: position/look_at now use `math::Vec3d`.
+  - `Camera::generate_ray()` rewritten using unified math ops: `math::cross()`, `math::length()`, `math::normalize()`.
+  - All 7 tests pass; Phase 1.2 Eigen Migration complete.
 
 ## Recent Changes (2025-12-31)
 

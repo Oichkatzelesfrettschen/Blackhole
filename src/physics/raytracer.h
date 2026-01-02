@@ -22,6 +22,7 @@
 #define PHYSICS_RAYTRACER_H
 
 #include "constants.h"
+#include "math_types.h"
 #include "schwarzschild.h"
 #include "geodesics.h"
 #include "kerr.h"
@@ -54,27 +55,27 @@ enum class RayStatus {
  * @brief Photon ray in curved spacetime.
  */
 struct PhotonRay {
-  std::array<double, 3> position;    ///< (r, θ, φ) in spherical coords [cm, rad, rad]
-  std::array<double, 3> direction;   ///< Unit direction vector (normalized)
-  double frequency;                   ///< Photon frequency [Hz]
-  RayStatus status;                   ///< Current status
+  math::Vec3d position;    ///< (r, θ, φ) in spherical coords [cm, rad, rad]
+  math::Vec3d direction;   ///< Unit direction vector (normalized)
+  double frequency;         ///< Photon frequency [Hz]
+  RayStatus status;         ///< Current status
 
   // Conserved quantities (for Kerr)
-  double energy;                      ///< E = -p_t
-  double angular_momentum;            ///< L = p_φ
-  double carter_constant;             ///< Q (Carter constant for Kerr)
+  double energy;            ///< E = -p_t
+  double angular_momentum;  ///< L = p_φ
+  double carter_constant;   ///< Q (Carter constant for Kerr)
 };
 
 /**
  * @brief Result of ray tracing.
  */
 struct RayTraceResult {
-  std::array<double, 3> final_position;  ///< Final position
-  double total_distance;                  ///< Proper distance traveled [cm]
-  double redshift;                        ///< Total gravitational redshift
-  int steps_taken;                        ///< Number of integration steps
-  RayStatus status;                       ///< Final status
-  std::vector<std::array<double, 3>> path; ///< Path points (if recorded)
+  math::Vec3d final_position;       ///< Final position
+  double total_distance;             ///< Proper distance traveled [cm]
+  double redshift;                   ///< Total gravitational redshift
+  int steps_taken;                   ///< Number of integration steps
+  RayStatus status;                  ///< Final status
+  std::vector<math::Vec3d> path;    ///< Path points (if recorded)
 };
 
 // ============================================================================
@@ -159,7 +160,7 @@ public:
     state[5] = L / (r * r * sin_theta * sin_theta);
 
     if (record_path_) {
-      result.path.push_back({state[0], state[1], state[2]});
+      result.path.push_back(math::Vec3d(state[0], state[1], state[2]));
     }
 
     // RK4 integration
@@ -197,7 +198,7 @@ public:
       ++result.steps_taken;
 
       if (record_path_) {
-        result.path.push_back({state[0], state[1], state[2]});
+        result.path.push_back(math::Vec3d(state[0], state[1], state[2]));
       }
     }
 
@@ -205,7 +206,7 @@ public:
       result.status = RayStatus::MAX_STEPS;
     }
 
-    result.final_position = {state[0], state[1], state[2]};
+    result.final_position = math::Vec3d(state[0], state[1], state[2]);
 
     // Compute total redshift
     double r_initial = ray.position[0];
@@ -227,15 +228,16 @@ public:
    * @param n_points Number of points around shadow
    * @return Vector of (b_x, b_y) impact parameters
    */
-  std::vector<std::array<double, 2>> compute_shadow(int n_points = 100) const {
-    std::vector<std::array<double, 2>> shadow;
+  std::vector<math::Vec2d> compute_shadow(int n_points = 100) const {
+    std::vector<math::Vec2d> shadow;
+    shadow.reserve(static_cast<std::size_t>(n_points));
 
     // For Schwarzschild, shadow is circular with radius b_crit
     double b_crit = critical_impact_parameter(mass_);
 
     for (int i = 0; i < n_points; ++i) {
       double phi = TWO_PI * i / n_points;
-      shadow.push_back({b_crit * std::cos(phi), b_crit * std::sin(phi)});
+      shadow.push_back(math::Vec2d(b_crit * std::cos(phi), b_crit * std::sin(phi)));
     }
 
     return shadow;
@@ -366,7 +368,7 @@ public:
     KerrGeodesicState state = initial;
 
     if (record_path_) {
-      result.path.push_back({state.r, state.theta, state.phi});
+      result.path.push_back(math::Vec3d(state.r, state.theta, state.phi));
     }
 
     for (int step = 0; step < max_steps_; ++step) {
@@ -395,7 +397,7 @@ public:
       ++result.steps_taken;
 
       if (record_path_) {
-        result.path.push_back({state.r, state.theta, state.phi});
+        result.path.push_back(math::Vec3d(state.r, state.theta, state.phi));
       }
     }
 
@@ -404,7 +406,7 @@ public:
                                                          : RayStatus::ESCAPED;
     }
 
-    result.final_position = {state.r, state.theta, state.phi};
+    result.final_position = math::Vec3d(state.r, state.theta, state.phi);
     if (state.r > r_horizon_ * 1.001) {
       result.redshift = 1.0 + kerr_.redshift(state.r, state.theta);
     }
@@ -437,11 +439,11 @@ private:
  * @brief Virtual camera for rendering black hole images.
  */
 struct Camera {
-  std::array<double, 3> position;  ///< Camera position (r, θ, φ)
-  std::array<double, 3> look_at;   ///< Point camera looks at
-  double fov;                       ///< Field of view [rad]
-  int width;                        ///< Image width in pixels
-  int height;                       ///< Image height in pixels
+  math::Vec3d position;  ///< Camera position (r, θ, φ)
+  math::Vec3d look_at;   ///< Point camera looks at
+  double fov;             ///< Field of view [rad]
+  int width;              ///< Image width in pixels
+  int height;             ///< Image height in pixels
 
   /**
    * @brief Generate ray for given pixel.
@@ -464,51 +466,30 @@ struct Camera {
     double ndc_y = (2.0 * py / height - 1.0) * std::tan(fov / 2.0) * height / width;
 
     // Compute camera basis vectors
-    double dx = look_at[0] - position[0];
-    double dy = look_at[1] - position[1];
-    double dz = look_at[2] - position[2];
-    double len = std::sqrt(dx*dx + dy*dy + dz*dz);
+    math::Vec3d delta = look_at - position;
+    double len = math::length(delta);
 
     // Forward direction
-    std::array<double, 3> forward = {dx/len, dy/len, dz/len};
+    math::Vec3d forward = delta / len;
 
     // Up vector (approximate)
-    std::array<double, 3> up = {0, 0, 1};
+    math::Vec3d up(0.0, 0.0, 1.0);
 
     // Right vector
-    std::array<double, 3> right = {
-      forward[1] * up[2] - forward[2] * up[1],
-      forward[2] * up[0] - forward[0] * up[2],
-      forward[0] * up[1] - forward[1] * up[0]
-    };
-    double right_len = std::sqrt(right[0]*right[0] + right[1]*right[1] + right[2]*right[2]);
+    math::Vec3d right = math::cross(forward, up);
+    double right_len = math::length(right);
     if (right_len > 1e-10) {
-      right[0] /= right_len;
-      right[1] /= right_len;
-      right[2] /= right_len;
+      right = right / right_len;
     }
 
     // Recalculate up
-    up = {
-      right[1] * forward[2] - right[2] * forward[1],
-      right[2] * forward[0] - right[0] * forward[2],
-      right[0] * forward[1] - right[1] * forward[0]
-    };
+    up = math::cross(right, forward);
 
     // Ray direction
-    ray.direction = {
-      forward[0] + ndc_x * right[0] + ndc_y * up[0],
-      forward[1] + ndc_x * right[1] + ndc_y * up[1],
-      forward[2] + ndc_x * right[2] + ndc_y * up[2]
-    };
+    ray.direction = forward + ndc_x * right + ndc_y * up;
 
     // Normalize
-    double dir_len = std::sqrt(ray.direction[0]*ray.direction[0] +
-                               ray.direction[1]*ray.direction[1] +
-                               ray.direction[2]*ray.direction[2]);
-    ray.direction[0] /= dir_len;
-    ray.direction[1] /= dir_len;
-    ray.direction[2] /= dir_len;
+    ray.direction = math::normalize(ray.direction);
 
     return ray;
   }

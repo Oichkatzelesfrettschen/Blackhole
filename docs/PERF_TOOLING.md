@@ -9,7 +9,7 @@ Enable CSV logging via environment variables:
 ```bash
 BLACKHOLE_GPU_TIMING_LOG=1 \
 BLACKHOLE_GPU_TIMING_LOG_STRIDE=1 \
-./build/Riced/Debug/Blackhole
+./build/Release/Blackhole
 ```
 
 Output:
@@ -18,6 +18,52 @@ Output:
 Notes:
 - `BLACKHOLE_GPU_TIMING_LOG_STRIDE` controls sample cadence in frames.
 - Logging auto-enables GPU timers when set.
+
+## GPU timing analysis
+
+Analyze timing logs with statistical outlier detection:
+```bash
+# Text report (default)
+python scripts/analyze_gpu_timing.py logs/perf/gpu_timing.csv
+
+# JSON output for CI/automation
+python scripts/analyze_gpu_timing.py --json
+
+# Custom IQR threshold (default: 1.5)
+python scripts/analyze_gpu_timing.py --threshold 2.0
+
+# Write to file
+python scripts/analyze_gpu_timing.py -o logs/perf/timing_report.txt
+```
+
+Features:
+- Computes mean, median, std, min, max, P25/P75/P95/P99 for each metric
+- Detects outliers using IQR method (Q1 - 1.5*IQR to Q3 + 1.5*IQR)
+- Reports outlier indices for investigation
+- Returns exit code 1 when outliers detected (CI-friendly)
+- JSON output for machine processing
+
+## Performance pack (CMake targets)
+
+Collect GPU timing + flamegraph + analysis in one command:
+```bash
+# Full performance pack (5s run, generates timing + flamegraph + reports)
+cmake --build build/Release --target perf-pack
+
+# Analyze existing GPU timing data only
+cmake --build build/Release --target analyze-gpu-timing
+```
+
+Manual collection with custom duration:
+```bash
+./scripts/collect_perf_pack.sh 10  # 10-second collection
+```
+
+Output directory: `logs/perf/perf_pack_<timestamp>/`
+- `gpu_timing.csv` - Raw timing samples
+- `timing_report.txt` - Human-readable analysis
+- `timing_report.json` - Machine-readable analysis
+- `flamegraph.svg` - CPU flamegraph (if perf available)
 
 ## Perf sysctl settings
 
