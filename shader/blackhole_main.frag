@@ -319,12 +319,14 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
           // Orange-yellow glow color for photon ring
           const vec3 GLOW_COLOR = vec3(1.0, 0.7, 0.3);
           color += GLOW_COLOR * glowIntensity * alpha;
+          // Phase 8.2 Priority 3: Cache distance computation
           depthDistance = min(depthDistance, length(pos - origin));
         }
       }
 
       if (adiskEnabled > 0.5) {
         if (adiskColor(pos, color, alpha)) {
+          // Phase 8.2 Priority 3: Cache distance computation
           depthDistance = min(depthDistance, length(pos - origin));
         }
       }
