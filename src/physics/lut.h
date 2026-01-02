@@ -156,6 +156,33 @@ inline Lut1D generate_photon_glow_lut(int size = 256) {
   return lut;
 }
 
+/**
+ * Generate accretion disk density profile LUT (Phase 8.2 Priority 2).
+ * Precomputes normalized density as function of normalized radius.
+ * Formula: density(r) = (1 - r)^power for r in [0, 1]
+ * Replaces inline pow() and smoothstep() calculations in disk shader.
+ */
+inline Lut1D generate_disk_density_lut(int size = 256, double power = 1.5) {
+  Lut1D lut;
+  if (size <= 1) {
+    return lut;
+  }
+
+  lut.r_min = 0.0f;
+  lut.r_max = 1.0f;
+  lut.values.resize(static_cast<std::size_t>(size));
+
+  for (int i = 0; i < size; ++i) {
+    double u = static_cast<double>(i) / (size - 1);
+    // u=0 corresponds to inner radius (ISCO), u=1 to outer radius
+    // density decreases smoothly from 1.0 to 0.0
+    double density = std::pow(1.0 - u, power);
+    lut.values[static_cast<std::size_t>(i)] = static_cast<float>(density);
+  }
+
+  return lut;
+}
+
 } // namespace physics
 
 #endif // PHYSICS_LUT_H

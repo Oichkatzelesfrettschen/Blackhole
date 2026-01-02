@@ -22,6 +22,7 @@ uniform sampler2D redshiftLUT;
 uniform sampler2D spectralLUT;
 uniform sampler2D grbModulationLUT;
 uniform sampler2D photonGlowLUT; // Phase 8.2: LUT for exp(-distance*4.0)
+uniform sampler2D diskDensityLUT; // Phase 8.2: Disk density profile LUT
 uniform sampler3D noiseTexture;
 uniform sampler3D grmhdTexture;
 uniform samplerCube galaxy;
