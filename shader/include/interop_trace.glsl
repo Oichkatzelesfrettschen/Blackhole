@@ -1,6 +1,8 @@
 #ifndef INTEROP_TRACE_GLSL
 #define INTEROP_TRACE_GLSL
 
+#include "include/physics_constants.glsl"
+
 const float BH_EPSILON = 1e-6;
 const float BH_DEBUG_MAX_RADIUS_MULT = 4.0;
 const int BH_DEBUG_FLAG_NAN = 1;

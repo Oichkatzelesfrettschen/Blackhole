@@ -40,6 +40,21 @@ float applyBlueshift(float wavelength, float z) {
 }
 
 /**
+ * Gravitational redshift only (no Doppler component).
+ *
+ * z_grav = 1/√(1 - r_s/r) - 1
+ *
+ * This is the exact formula for static observers in Schwarzschild spacetime.
+ *
+ * @param r Radial position
+ * @param r_s Schwarzschild radius
+ */
+float gravitationalRedshift(float r, float r_s) {
+    float f = max(1.0 - r_s / r, 0.001);
+    return 1.0 / sqrt(f) - 1.0;
+}
+
+/**
  * Combined gravitational + Doppler redshift.
  *
  * z_total = (1 + z_grav)(1 + z_doppler) - 1
@@ -51,8 +66,7 @@ float applyBlueshift(float wavelength, float z) {
 float totalRedshift(float r, float r_s, float v_los) {
     // Gravitational redshift: z_g = 1/√(1 - r_s/r) - 1
     // This is exact for static observers in Schwarzschild spacetime
-    float f = max(1.0 - r_s / r, 0.001);
-    float z_grav = 1.0 / sqrt(f) - 1.0;
+    float z_grav = gravitationalRedshift(r, r_s);
 
     // Relativistic longitudinal Doppler effect (exact formula):
     // z_d = √((1+β)/(1-β)) - 1  where β = v/c

@@ -6,7 +6,11 @@
 
 // Legacy includes (maintained for compatibility)
 #include "include/redshift.glsl"
+#include "include/kerr.glsl"
 #include "include/interop_raygen.glsl"
+
+// Phase 10.1: Hawking radiation thermal glow
+#include "hawking_glow.glsl"
 
 const float EPSILON = 0.0001;
 const float INFINITY = 1000000.0;
@@ -77,6 +81,15 @@ uniform float photonSphereRadius = 3.0;  // r_ph = 1.5 * r_s
 uniform float iscoRadius = 6.0;          // r_ISCO = 3 * r_s (Schwarzschild)
 uniform float enableRedshift = 0.0;      // Toggle gravitational redshift
 uniform float enablePhotonSphere = 0.0;  // Toggle photon sphere glow
+
+// Phase 10.1: Hawking radiation parameters
+uniform float hawkingGlowEnabled = 0.0;  // Toggle Hawking thermal glow
+uniform float hawkingTempScale = 1.0;    // Temperature scaling (1.0=physical, 1e6=primordial, 1e9=extreme)
+uniform float hawkingGlowIntensity = 1.0; // Glow intensity multiplier [0, 5]
+uniform sampler2D hawkingTempLUT;        // Temperature T_H(M) LUT
+uniform sampler2D hawkingSpectrumLUT;    // Blackbody RGB spectrum LUT
+uniform float useHawkingLUTs = 1.0;      // Use LUTs (1.0) vs direct calculation (0.0)
+uniform float blackHoleMass = 1.989e33;  // Black hole mass [g] (default: 1 solar mass)
 
 #include "include/interop_trace.glsl"
 
@@ -306,6 +319,23 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
       if (r < schwarzschildRadius) {
         // Ray captured by black hole - return accumulated color (mostly black)
         depthDistance = min(depthDistance, length(pos - origin));
+
+        // Phase 10.1: Apply Hawking thermal glow near event horizon
+        if (hawkingGlowEnabled > 0.5) {
+          color = applyHawkingGlow(
+            color,
+            blackHoleMass,
+            r,
+            schwarzschildRadius,
+            hawkingGlowEnabled,
+            hawkingTempScale,
+            hawkingGlowIntensity,
+            hawkingTempLUT,
+            hawkingSpectrumLUT,
+            useHawkingLUTs
+          );
+        }
+
         return color;
       }
 

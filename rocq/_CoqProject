@@ -10,6 +10,8 @@
 theories/Prelim.v
 theories/Metrics/Schwarzschild.v
 theories/Metrics/Kerr.v
+theories/Metrics/KerrNewman.v
+theories/Metrics/KerrDeSitter.v
 theories/Kerr/Metric.v
 theories/Kerr/Horizons.v
 theories/Kerr/BPT_ISCO.v

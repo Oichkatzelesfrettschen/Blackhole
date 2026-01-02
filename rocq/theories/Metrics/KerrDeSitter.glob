@@ -1,0 +1,568 @@
+DIGEST 88aedeea16855f1ceb16224d665eb1c4
+FBlackhole.Metrics.KerrDeSitter
+R1204:1219 Blackhole.Prelim <> <> lib
+R1237:1258 Blackhole.Metrics.Kerr <> <> lib
+R1288:1292 Stdlib.Reals.Reals <> <> lib
+R1294:1296 Stdlib.micromega.Lra <> <> lib
+def 1631:1639 <> kds_Sigma
+R1654:1654 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1642:1642 <> r:1
+binder 1644:1648 <> theta:2
+binder 1650:1650 <> a:3
+R1659:1659 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1669:1671 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1667:1667 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1666:1666 Blackhole.Metrics.KerrDeSitter <> r:1 var
+R1675:1677 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1673:1673 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1672:1672 Blackhole.Metrics.KerrDeSitter <> a:3 var
+R1678:1678 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1688:1689 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1679:1681 Stdlib.Reals.Rtrigo_def <> cos def
+R1683:1687 Blackhole.Metrics.KerrDeSitter <> theta:2 var
+def 1857:1865 <> kds_Delta
+R1883:1883 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1868:1868 <> r:4
+binder 1870:1870 <> M:5
+binder 1872:1872 <> a:6
+binder 1874:1879 <> Lambda:7
+R1888:1888 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1916:1918 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1910:1912 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1898:1900 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1896:1896 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1895:1895 Blackhole.Metrics.KerrDeSitter <> r:4 var
+R1906:1908 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1902:1904 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1905:1905 Blackhole.Metrics.KerrDeSitter <> M:5 var
+R1909:1909 Blackhole.Metrics.KerrDeSitter <> r:4 var
+R1914:1914 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1913:1913 Blackhole.Metrics.KerrDeSitter <> a:6 var
+R1931:1933 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1925:1927 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1919:1924 Blackhole.Metrics.KerrDeSitter <> Lambda:7 var
+R1929:1929 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1928:1928 Blackhole.Metrics.KerrDeSitter <> r:4 var
+def 2044:2048 <> kds_A
+R2072:2072 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2051:2051 <> r:8
+binder 2053:2057 <> theta:9
+binder 2059:2059 <> M:10
+binder 2061:2061 <> a:11
+binder 2063:2068 <> Lambda:12
+R2077:2077 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2097:2099 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R2084:2084 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2094:2095 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2088:2090 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2086:2086 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2085:2085 Blackhole.Metrics.KerrDeSitter <> r:8 var
+R2092:2092 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2091:2091 Blackhole.Metrics.KerrDeSitter <> a:11 var
+R2128:2130 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2103:2105 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2101:2101 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2100:2100 Blackhole.Metrics.KerrDeSitter <> a:11 var
+R2106:2114 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+R2116:2116 Blackhole.Metrics.KerrDeSitter <> r:8 var
+R2118:2118 Blackhole.Metrics.KerrDeSitter <> M:10 var
+R2120:2120 Blackhole.Metrics.KerrDeSitter <> a:11 var
+R2122:2127 Blackhole.Metrics.KerrDeSitter <> Lambda:12 var
+R2131:2131 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2141:2142 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2132:2134 Stdlib.Reals.Rtrigo_def <> sin def
+R2136:2140 Blackhole.Metrics.KerrDeSitter <> theta:9 var
+def 2488:2495 <> kds_g_tt
+R2519:2519 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2498:2498 <> r:13
+binder 2500:2504 <> theta:14
+binder 2506:2506 <> M:15
+binder 2508:2508 <> a:16
+binder 2510:2515 <> Lambda:17
+R2524:2524 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2544:2552 Blackhole.Metrics.KerrDeSitter <> kds_Sigma def
+R2554:2554 Blackhole.Metrics.KerrDeSitter <> r:13 var
+R2556:2560 Blackhole.Metrics.KerrDeSitter <> theta:14 var
+R2562:2562 Blackhole.Metrics.KerrDeSitter <> a:16 var
+binder 2535:2539 <> Sigma:18
+R2569:2570 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R2627:2627 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R2592:2594 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2572:2574 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R2584:2586 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2580:2582 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2576:2578 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2579:2579 Blackhole.Metrics.KerrDeSitter <> M:15 var
+R2583:2583 Blackhole.Metrics.KerrDeSitter <> r:13 var
+R2587:2591 Blackhole.Metrics.KerrDeSitter <> Sigma:18 var
+R2623:2625 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2607:2609 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2601:2603 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2595:2600 Blackhole.Metrics.KerrDeSitter <> Lambda:17 var
+R2605:2605 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2604:2604 Blackhole.Metrics.KerrDeSitter <> r:13 var
+R2610:2610 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2620:2621 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2611:2613 Stdlib.Reals.Rtrigo_def <> sin def
+R2615:2619 Blackhole.Metrics.KerrDeSitter <> theta:14 var
+def 2694:2701 <> kds_g_rr
+R2725:2725 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2704:2704 <> r:19
+binder 2706:2710 <> theta:20
+binder 2712:2712 <> M:21
+binder 2714:2714 <> a:22
+binder 2716:2721 <> Lambda:23
+R2730:2730 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2756:2758 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2737:2745 Blackhole.Metrics.KerrDeSitter <> kds_Sigma def
+R2747:2747 Blackhole.Metrics.KerrDeSitter <> r:19 var
+R2749:2753 Blackhole.Metrics.KerrDeSitter <> theta:20 var
+R2755:2755 Blackhole.Metrics.KerrDeSitter <> a:22 var
+R2759:2767 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+R2769:2769 Blackhole.Metrics.KerrDeSitter <> r:19 var
+R2771:2771 Blackhole.Metrics.KerrDeSitter <> M:21 var
+R2773:2773 Blackhole.Metrics.KerrDeSitter <> a:22 var
+R2775:2780 Blackhole.Metrics.KerrDeSitter <> Lambda:23 var
+def 2860:2869 <> kds_g_thth
+R2884:2884 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2872:2872 <> r:24
+binder 2874:2878 <> theta:25
+binder 2880:2880 <> a:26
+R2889:2889 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2896:2904 Blackhole.Metrics.KerrDeSitter <> kds_Sigma def
+R2906:2906 Blackhole.Metrics.KerrDeSitter <> r:24 var
+R2908:2912 Blackhole.Metrics.KerrDeSitter <> theta:25 var
+R2914:2914 Blackhole.Metrics.KerrDeSitter <> a:26 var
+def 3066:3075 <> kds_g_phph
+R3099:3099 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3078:3078 <> r:27
+binder 3080:3084 <> theta:28
+binder 3086:3086 <> M:29
+binder 3088:3088 <> a:30
+binder 3090:3095 <> Lambda:31
+R3104:3104 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3124:3132 Blackhole.Metrics.KerrDeSitter <> kds_Sigma def
+R3134:3134 Blackhole.Metrics.KerrDeSitter <> r:27 var
+R3136:3140 Blackhole.Metrics.KerrDeSitter <> theta:28 var
+R3142:3142 Blackhole.Metrics.KerrDeSitter <> a:30 var
+binder 3115:3119 <> Sigma:32
+R3161:3161 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3171:3172 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3162:3164 Stdlib.Reals.Rtrigo_def <> sin def
+R3166:3170 Blackhole.Metrics.KerrDeSitter <> theta:28 var
+binder 3153:3156 <> sin2:33
+R3180:3180 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3252:3255 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3223:3228 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3190:3192 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3184:3186 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3182:3182 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3181:3181 Blackhole.Metrics.KerrDeSitter <> r:27 var
+R3188:3188 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3187:3187 Blackhole.Metrics.KerrDeSitter <> a:30 var
+R3215:3217 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3208:3210 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3202:3204 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3198:3200 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3194:3196 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3197:3197 Blackhole.Metrics.KerrDeSitter <> M:29 var
+R3201:3201 Blackhole.Metrics.KerrDeSitter <> r:27 var
+R3206:3206 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3205:3205 Blackhole.Metrics.KerrDeSitter <> a:30 var
+R3211:3214 Blackhole.Metrics.KerrDeSitter <> sin2:33 var
+R3218:3222 Blackhole.Metrics.KerrDeSitter <> Sigma:32 var
+R3248:3250 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3241:3243 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3235:3237 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3229:3234 Blackhole.Metrics.KerrDeSitter <> Lambda:31 var
+R3239:3239 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3238:3238 Blackhole.Metrics.KerrDeSitter <> r:27 var
+R3244:3247 Blackhole.Metrics.KerrDeSitter <> sin2:33 var
+R3256:3259 Blackhole.Metrics.KerrDeSitter <> sin2:33 var
+def 3377:3385 <> kds_g_tph
+R3402:3402 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3388:3388 <> r:34
+binder 3390:3394 <> theta:35
+binder 3396:3396 <> M:36
+binder 3398:3398 <> a:37
+R3407:3407 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3427:3435 Blackhole.Metrics.KerrDeSitter <> kds_Sigma def
+R3437:3437 Blackhole.Metrics.KerrDeSitter <> r:34 var
+R3439:3443 Blackhole.Metrics.KerrDeSitter <> theta:35 var
+R3445:3445 Blackhole.Metrics.KerrDeSitter <> a:37 var
+binder 3418:3422 <> Sigma:38
+R3482:3484 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3466:3468 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3462:3464 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3458:3460 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3454:3456 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3457:3457 Blackhole.Metrics.KerrDeSitter <> M:36 var
+R3461:3461 Blackhole.Metrics.KerrDeSitter <> r:34 var
+R3465:3465 Blackhole.Metrics.KerrDeSitter <> a:37 var
+R3469:3469 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3479:3480 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3470:3472 Stdlib.Reals.Rtrigo_def <> sin def
+R3474:3478 Blackhole.Metrics.KerrDeSitter <> theta:35 var
+R3485:3489 Blackhole.Metrics.KerrDeSitter <> Sigma:38 var
+def 4104:4120 <> kds_inner_horizon
+R4136:4136 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4123:4123 <> M:39
+binder 4125:4125 <> a:40
+binder 4127:4132 <> Lambda:41
+R4141:4141 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4161:4164 Stdlib.Reals.R_sqrt <> sqrt def
+R4170:4172 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4168:4168 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4167:4167 Blackhole.Metrics.KerrDeSitter <> M:39 var
+R4174:4174 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4173:4173 Blackhole.Metrics.KerrDeSitter <> a:40 var
+binder 4152:4156 <> delta:42
+R4198:4200 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4197:4197 Blackhole.Metrics.KerrDeSitter <> M:39 var
+R4201:4205 Blackhole.Metrics.KerrDeSitter <> delta:42 var
+binder 4187:4192 <> r_kerr:43
+R4218:4220 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4212:4217 Blackhole.Metrics.KerrDeSitter <> r_kerr:43 var
+R4238:4240 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4227:4229 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4221:4226 Blackhole.Metrics.KerrDeSitter <> Lambda:41 var
+R4236:4236 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4230:4235 Blackhole.Metrics.KerrDeSitter <> r_kerr:43 var
+def 4366:4382 <> kds_event_horizon
+R4398:4398 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4385:4385 <> M:44
+binder 4387:4387 <> a:45
+binder 4389:4394 <> Lambda:46
+R4403:4403 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4423:4426 Stdlib.Reals.R_sqrt <> sqrt def
+R4432:4434 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4430:4430 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4429:4429 Blackhole.Metrics.KerrDeSitter <> M:44 var
+R4436:4436 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4435:4435 Blackhole.Metrics.KerrDeSitter <> a:45 var
+binder 4414:4418 <> delta:47
+R4460:4462 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4459:4459 Blackhole.Metrics.KerrDeSitter <> M:44 var
+R4463:4467 Blackhole.Metrics.KerrDeSitter <> delta:47 var
+binder 4449:4454 <> r_kerr:48
+R4480:4482 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4474:4479 Blackhole.Metrics.KerrDeSitter <> r_kerr:48 var
+R4500:4502 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4489:4491 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4483:4488 Blackhole.Metrics.KerrDeSitter <> Lambda:46 var
+R4498:4498 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4492:4497 Blackhole.Metrics.KerrDeSitter <> r_kerr:48 var
+def 4699:4722 <> kds_cosmological_horizon
+R4734:4734 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4725:4730 <> Lambda:49
+R4739:4739 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4746:4749 Stdlib.Reals.R_sqrt <> sqrt def
+R4753:4755 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4756:4761 Blackhole.Metrics.KerrDeSitter <> Lambda:49 var
+def 4957:4977 <> kds_ergosphere_radius
+R4999:4999 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4980:4984 <> theta:50
+binder 4986:4986 <> M:51
+binder 4988:4988 <> a:52
+binder 4990:4995 <> Lambda:53
+R5004:5004 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5012:5014 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5011:5011 Blackhole.Metrics.KerrDeSitter <> M:51 var
+R5015:5018 Stdlib.Reals.R_sqrt <> sqrt def
+R5024:5026 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5022:5022 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5021:5021 Blackhole.Metrics.KerrDeSitter <> M:51 var
+R5030:5032 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5028:5028 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5027:5027 Blackhole.Metrics.KerrDeSitter <> a:52 var
+R5033:5033 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5043:5044 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5034:5036 Stdlib.Reals.Rtrigo_def <> cos def
+R5038:5042 Blackhole.Metrics.KerrDeSitter <> theta:50 var
+def 5420:5443 <> kds_frame_dragging_omega
+R5467:5467 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5446:5446 <> r:54
+binder 5448:5452 <> theta:55
+binder 5454:5454 <> M:56
+binder 5456:5456 <> a:57
+binder 5458:5463 <> Lambda:58
+R5472:5472 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5492:5500 Blackhole.Metrics.KerrDeSitter <> kds_g_tph def
+R5502:5502 Blackhole.Metrics.KerrDeSitter <> r:54 var
+R5504:5508 Blackhole.Metrics.KerrDeSitter <> theta:55 var
+R5510:5510 Blackhole.Metrics.KerrDeSitter <> M:56 var
+R5512:5512 Blackhole.Metrics.KerrDeSitter <> a:57 var
+binder 5483:5487 <> g_tph:59
+R5533:5542 Blackhole.Metrics.KerrDeSitter <> kds_g_phph def
+R5544:5544 Blackhole.Metrics.KerrDeSitter <> r:54 var
+R5546:5550 Blackhole.Metrics.KerrDeSitter <> theta:55 var
+R5552:5552 Blackhole.Metrics.KerrDeSitter <> M:56 var
+R5554:5554 Blackhole.Metrics.KerrDeSitter <> a:57 var
+R5556:5561 Blackhole.Metrics.KerrDeSitter <> Lambda:58 var
+binder 5523:5528 <> g_phph:60
+R5575:5577 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5568:5569 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R5570:5574 Blackhole.Metrics.KerrDeSitter <> g_tph:59 var
+R5578:5583 Blackhole.Metrics.KerrDeSitter <> g_phph:60 var
+def 6066:6091 <> is_physical_kds_black_hole
+R6107:6107 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6094:6094 <> M:61
+binder 6096:6096 <> a:62
+binder 6098:6103 <> Lambda:63
+R6127:6130 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R6123:6125 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6122:6122 Blackhole.Metrics.KerrDeSitter <> M:61 var
+R6141:6144 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R6137:6139 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6131:6136 Blackhole.Metrics.KerrDeSitter <> Lambda:63 var
+R6148:6151 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R6146:6146 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6145:6145 Blackhole.Metrics.KerrDeSitter <> M:61 var
+R6153:6153 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6152:6152 Blackhole.Metrics.KerrDeSitter <> a:62 var
+def 6299:6316 <> is_exterior_region
+R6334:6334 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6319:6319 <> r:64
+binder 6321:6321 <> M:65
+binder 6323:6323 <> a:66
+binder 6325:6330 <> Lambda:67
+R6363:6379 Blackhole.Metrics.KerrDeSitter <> kds_event_horizon def
+R6381:6381 Blackhole.Metrics.KerrDeSitter <> M:65 var
+R6383:6383 Blackhole.Metrics.KerrDeSitter <> a:66 var
+R6385:6390 Blackhole.Metrics.KerrDeSitter <> Lambda:67 var
+binder 6353:6358 <> r_plus:68
+R6412:6435 Blackhole.Metrics.KerrDeSitter <> kds_cosmological_horizon def
+R6437:6442 Blackhole.Metrics.KerrDeSitter <> Lambda:67 var
+binder 6401:6407 <> r_cosmo:69
+R6459:6462 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R6450:6452 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6449:6449 Blackhole.Metrics.KerrDeSitter <> r:64 var
+R6453:6458 Blackhole.Metrics.KerrDeSitter <> r_plus:68 var
+R6464:6466 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R6463:6463 Blackhole.Metrics.KerrDeSitter <> r:64 var
+R6467:6473 Blackhole.Metrics.KerrDeSitter <> r_cosmo:69 var
+def 6589:6604 <> is_in_ergosphere
+R6628:6628 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6607:6607 <> r:70
+binder 6609:6613 <> theta:71
+binder 6615:6615 <> M:72
+binder 6617:6617 <> a:73
+binder 6619:6624 <> Lambda:74
+R6670:6672 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6643:6650 Blackhole.Metrics.KerrDeSitter <> kds_g_tt def
+R6652:6652 Blackhole.Metrics.KerrDeSitter <> r:70 var
+R6654:6658 Blackhole.Metrics.KerrDeSitter <> theta:71 var
+R6660:6660 Blackhole.Metrics.KerrDeSitter <> M:72 var
+R6662:6662 Blackhole.Metrics.KerrDeSitter <> a:73 var
+R6664:6669 Blackhole.Metrics.KerrDeSitter <> Lambda:74 var
+prf 6936:6954 <> kds_reduces_to_kerr
+R6979:6979 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6965:6965 <> r:75
+binder 6967:6971 <> theta:76
+binder 6973:6973 <> M:77
+binder 6975:6975 <> a:78
+R6989:6994 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6985:6987 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6984:6984 Blackhole.Metrics.KerrDeSitter <> M:77 var
+R7000:7005 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6996:6998 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6995:6995 Blackhole.Metrics.KerrDeSitter <> r:75 var
+R7023:7025 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7006:7014 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+R7016:7016 Blackhole.Metrics.KerrDeSitter <> r:75 var
+R7018:7018 Blackhole.Metrics.KerrDeSitter <> M:77 var
+R7020:7020 Blackhole.Metrics.KerrDeSitter <> a:78 var
+R7041:7043 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R7029:7031 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R7027:7027 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7026:7026 Blackhole.Metrics.KerrDeSitter <> r:75 var
+R7037:7039 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R7033:7035 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R7036:7036 Blackhole.Metrics.KerrDeSitter <> M:77 var
+R7040:7040 Blackhole.Metrics.KerrDeSitter <> r:75 var
+R7045:7045 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7044:7044 Blackhole.Metrics.KerrDeSitter <> a:78 var
+R7093:7101 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+prf 7239:7262 <> kds_reduces_to_de_sitter
+R7284:7284 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7273:7273 <> r:79
+binder 7275:7280 <> Lambda:80
+R7299:7304 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7295:7297 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7289:7294 Blackhole.Metrics.KerrDeSitter <> Lambda:80 var
+R7310:7315 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7306:7308 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7305:7305 Blackhole.Metrics.KerrDeSitter <> r:79 var
+R7338:7340 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7316:7324 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+R7326:7326 Blackhole.Metrics.KerrDeSitter <> r:79 var
+R7332:7337 Blackhole.Metrics.KerrDeSitter <> Lambda:80 var
+R7344:7347 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R7362:7362 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R7342:7342 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7341:7341 Blackhole.Metrics.KerrDeSitter <> r:79 var
+R7349:7351 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R7358:7360 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R7352:7357 Blackhole.Metrics.KerrDeSitter <> Lambda:80 var
+R7411:7419 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+prf 7510:7537 <> kds_event_horizon_kerr_limit
+R7554:7554 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7548:7548 <> M:81
+binder 7550:7550 <> a:82
+R7564:7569 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7560:7562 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7559:7559 Blackhole.Metrics.KerrDeSitter <> M:81 var
+R7580:7585 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7573:7576 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R7571:7571 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7570:7570 Blackhole.Metrics.KerrDeSitter <> M:81 var
+R7578:7578 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7577:7577 Blackhole.Metrics.KerrDeSitter <> a:82 var
+R7609:7611 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7586:7602 Blackhole.Metrics.KerrDeSitter <> kds_event_horizon def
+R7604:7604 Blackhole.Metrics.KerrDeSitter <> M:81 var
+R7606:7606 Blackhole.Metrics.KerrDeSitter <> a:82 var
+R7613:7615 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R7612:7612 Blackhole.Metrics.KerrDeSitter <> M:81 var
+R7616:7619 Stdlib.Reals.R_sqrt <> sqrt def
+R7625:7627 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R7623:7623 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7622:7622 Blackhole.Metrics.KerrDeSitter <> M:81 var
+R7629:7629 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7628:7628 Blackhole.Metrics.KerrDeSitter <> a:82 var
+R7671:7687 Blackhole.Metrics.KerrDeSitter <> kds_event_horizon def
+ax 8053:8072 <> kds_horizon_ordering
+R8096:8096 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8083:8083 <> M:83
+binder 8085:8085 <> a:84
+binder 8087:8092 <> Lambda:85
+R8138:8143 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8101:8126 Blackhole.Metrics.KerrDeSitter <> is_physical_kds_black_hole def
+R8128:8128 Blackhole.Metrics.KerrDeSitter <> M:83 var
+R8130:8130 Blackhole.Metrics.KerrDeSitter <> a:84 var
+R8132:8137 Blackhole.Metrics.KerrDeSitter <> Lambda:85 var
+R8159:8175 Blackhole.Metrics.KerrDeSitter <> kds_inner_horizon def
+R8177:8177 Blackhole.Metrics.KerrDeSitter <> M:83 var
+R8179:8179 Blackhole.Metrics.KerrDeSitter <> a:84 var
+R8181:8186 Blackhole.Metrics.KerrDeSitter <> Lambda:85 var
+binder 8148:8154 <> r_minus:86
+R8207:8223 Blackhole.Metrics.KerrDeSitter <> kds_event_horizon def
+R8225:8225 Blackhole.Metrics.KerrDeSitter <> M:83 var
+R8227:8227 Blackhole.Metrics.KerrDeSitter <> a:84 var
+R8229:8234 Blackhole.Metrics.KerrDeSitter <> Lambda:85 var
+binder 8197:8202 <> r_plus:87
+R8256:8279 Blackhole.Metrics.KerrDeSitter <> kds_cosmological_horizon def
+R8281:8286 Blackhole.Metrics.KerrDeSitter <> Lambda:85 var
+binder 8245:8251 <> r_cosmo:88
+R8309:8312 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R8300:8302 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R8293:8299 Blackhole.Metrics.KerrDeSitter <> r_minus:86 var
+R8303:8308 Blackhole.Metrics.KerrDeSitter <> r_plus:87 var
+R8319:8321 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R8313:8318 Blackhole.Metrics.KerrDeSitter <> r_plus:87 var
+R8322:8328 Blackhole.Metrics.KerrDeSitter <> r_cosmo:88 var
+ax 8447:8476 <> kds_cosmological_horizon_bound
+R8500:8500 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8487:8487 <> M:91
+binder 8489:8489 <> a:92
+binder 8491:8496 <> Lambda:93
+R8542:8547 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8505:8530 Blackhole.Metrics.KerrDeSitter <> is_physical_kds_black_hole def
+R8532:8532 Blackhole.Metrics.KerrDeSitter <> M:91 var
+R8534:8534 Blackhole.Metrics.KerrDeSitter <> a:92 var
+R8536:8541 Blackhole.Metrics.KerrDeSitter <> Lambda:93 var
+R8576:8578 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R8548:8564 Blackhole.Metrics.KerrDeSitter <> kds_event_horizon def
+R8566:8566 Blackhole.Metrics.KerrDeSitter <> M:91 var
+R8568:8568 Blackhole.Metrics.KerrDeSitter <> a:92 var
+R8570:8575 Blackhole.Metrics.KerrDeSitter <> Lambda:93 var
+R8579:8602 Blackhole.Metrics.KerrDeSitter <> kds_cosmological_horizon def
+R8604:8609 Blackhole.Metrics.KerrDeSitter <> Lambda:93 var
+prf 8873:8890 <> kds_Sigma_positive
+R8913:8913 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8901:8901 <> r:96
+binder 8903:8907 <> theta:97
+binder 8909:8909 <> a:98
+R8923:8928 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8919:8921 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R8918:8918 Blackhole.Metrics.KerrDeSitter <> r:96 var
+R8935:8940 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8930:8933 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R8929:8929 Blackhole.Metrics.KerrDeSitter <> a:98 var
+R8960:8962 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R8941:8949 Blackhole.Metrics.KerrDeSitter <> kds_Sigma def
+R8951:8951 Blackhole.Metrics.KerrDeSitter <> r:96 var
+R8953:8957 Blackhole.Metrics.KerrDeSitter <> theta:97 var
+R8959:8959 Blackhole.Metrics.KerrDeSitter <> a:98 var
+R9008:9016 Blackhole.Metrics.KerrDeSitter <> kds_Sigma def
+ax 9114:9132 <> kds_Delta_has_roots
+R9156:9156 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9143:9143 <> M:99
+binder 9145:9145 <> a:100
+binder 9147:9152 <> Lambda:101
+R9198:9203 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R9161:9186 Blackhole.Metrics.KerrDeSitter <> is_physical_kds_black_hole def
+R9188:9188 Blackhole.Metrics.KerrDeSitter <> M:99 var
+R9190:9190 Blackhole.Metrics.KerrDeSitter <> a:100 var
+R9192:9197 Blackhole.Metrics.KerrDeSitter <> Lambda:101 var
+R9204:9210 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R9223:9228 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R9222:9222 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9211:9212 <> r1:102
+R9222:9222 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9214:9215 <> r2:103
+R9222:9222 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9217:9218 <> r3:104
+R9236:9239 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R9231:9233 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R9229:9230 Blackhole.Metrics.KerrDeSitter <> r1:102 var
+R9234:9235 Blackhole.Metrics.KerrDeSitter <> r2:103 var
+R9247:9254 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R9242:9244 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R9240:9241 Blackhole.Metrics.KerrDeSitter <> r2:103 var
+R9245:9246 Blackhole.Metrics.KerrDeSitter <> r3:104 var
+R9282:9289 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R9278:9280 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R9255:9263 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+R9265:9266 Blackhole.Metrics.KerrDeSitter <> r1:102 var
+R9268:9268 Blackhole.Metrics.KerrDeSitter <> M:99 var
+R9270:9270 Blackhole.Metrics.KerrDeSitter <> a:100 var
+R9272:9277 Blackhole.Metrics.KerrDeSitter <> Lambda:101 var
+R9317:9324 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R9313:9315 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R9290:9298 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+R9300:9301 Blackhole.Metrics.KerrDeSitter <> r2:103 var
+R9303:9303 Blackhole.Metrics.KerrDeSitter <> M:99 var
+R9305:9305 Blackhole.Metrics.KerrDeSitter <> a:100 var
+R9307:9312 Blackhole.Metrics.KerrDeSitter <> Lambda:101 var
+R9348:9350 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R9325:9333 Blackhole.Metrics.KerrDeSitter <> kds_Delta def
+R9335:9336 Blackhole.Metrics.KerrDeSitter <> r3:104 var
+R9338:9338 Blackhole.Metrics.KerrDeSitter <> M:99 var
+R9340:9340 Blackhole.Metrics.KerrDeSitter <> a:100 var
+R9342:9347 Blackhole.Metrics.KerrDeSitter <> Lambda:101 var
+ax 9429:9451 <> kds_A_positive_exterior
+R9483:9483 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9462:9462 <> r:107
+binder 9464:9468 <> theta:108
+binder 9470:9470 <> M:109
+binder 9472:9472 <> a:110
+binder 9474:9479 <> Lambda:111
+R9525:9530 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R9488:9513 Blackhole.Metrics.KerrDeSitter <> is_physical_kds_black_hole def
+R9515:9515 Blackhole.Metrics.KerrDeSitter <> M:109 var
+R9517:9517 Blackhole.Metrics.KerrDeSitter <> a:110 var
+R9519:9524 Blackhole.Metrics.KerrDeSitter <> Lambda:111 var
+R9562:9567 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R9531:9548 Blackhole.Metrics.KerrDeSitter <> is_exterior_region def
+R9550:9550 Blackhole.Metrics.KerrDeSitter <> r:107 var
+R9552:9552 Blackhole.Metrics.KerrDeSitter <> M:109 var
+R9554:9554 Blackhole.Metrics.KerrDeSitter <> a:110 var
+R9556:9561 Blackhole.Metrics.KerrDeSitter <> Lambda:111 var
+R9592:9594 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R9568:9572 Blackhole.Metrics.KerrDeSitter <> kds_A def
+R9574:9574 Blackhole.Metrics.KerrDeSitter <> r:107 var
+R9576:9580 Blackhole.Metrics.KerrDeSitter <> theta:108 var
+R9582:9582 Blackhole.Metrics.KerrDeSitter <> M:109 var
+R9584:9584 Blackhole.Metrics.KerrDeSitter <> a:110 var
+R9586:9591 Blackhole.Metrics.KerrDeSitter <> Lambda:111 var

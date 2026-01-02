@@ -479,8 +479,8 @@ TEST_F(Z3VerificationTest, EdgeCaseHighAngularMomentum) {
     // Ray with high tangential velocity
     double constraint_drift = 0.0;
     double E_initial = 0.0, E_final = 0.0;
-    
-    verified::StateVector final_state = integrateSingleRay(
+
+    [[maybe_unused]] verified::StateVector final_state = integrateSingleRay(
         100.0,
         0.01,
         0.5,        // High angular momentum

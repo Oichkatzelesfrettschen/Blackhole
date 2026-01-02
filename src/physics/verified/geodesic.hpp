@@ -359,6 +359,7 @@ enum class OrbitType {
     const double norm = four_norm(g, s);
     return norm > -tolerance && norm < tolerance;
 }
+#define VERIFIED_IS_NULL_ALREADY_DEFINED
 
 /**
  * @brief Check if state represents a timelike geodesic

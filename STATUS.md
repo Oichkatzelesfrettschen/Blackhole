@@ -1,7 +1,7 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2026-01-01
-**Status:** Core simulation operational, controls + depth effects integrated, camera unified
+**Last Updated:** 2026-01-02
+**Status:** Phase 10.1 (Hawking Radiation Thermal Glow) COMPLETE - Ready for visual testing
 **Roadmap:** See `docs/MASTER_ROADMAP.md` for the consolidated execution plan
 
 ---
@@ -36,7 +36,57 @@ The simulation is fully operational with the core rendering pipeline:
 - Compute raytracer path (experimental toggle)
 - TODO/FIXME scan: ImGui backend TODO/FIXME notes + a new stub TODO in `src/rmlui_overlay.cpp` (RmlUi integration)
 
-## Recent Changes (2026-01-01)
+## Recent Changes
+
+### Phase 10.1: Hawking Radiation Thermal Glow (2026-01-02) ✅ COMPLETE
+
+**Implementation**: GPU-accelerated Hawking radiation thermal glow visualization
+- **New Files**: 10 source files (1,673 lines total)
+- **Modified Files**: 4 existing files (+225 lines)
+- **Test Coverage**: 13 unit tests (100% pass rate)
+- **LUT Data**: 768 precomputed samples (512 temperature + 256 spectrum)
+
+**Key Components**:
+- `scripts/generate_hawking_lut.py` - LUT generation (200 lines)
+- `shader/include/hawking_luts.glsl` - GLSL sampling utilities (200+ lines)
+- `shader/hawking_glow.glsl` - Thermal glow shader (234 lines)
+- `src/physics/hawking_renderer.{h,cpp}` - C++ GPU interface (599 lines)
+- `tests/hawking_glow_test.cpp` - Physics validation (170 lines)
+- `tests/hawking_spectrum_test.cpp` - Spectrum validation (270 lines)
+
+**Physics Validation**:
+- Solar mass temperature: 6.17×10⁻⁸ K (±0.4% accuracy) ✓
+- Inverse mass law: T_H ∝ 1/M (exact) ✓
+- Wien's displacement: λ_peak × T = 0.2898 cm·K (exact) ✓
+- Stefan-Boltzmann: L ∝ T⁴ (0.001% accuracy) ✓
+
+**Visualization Presets**:
+1. Physical (T_scale=1.0) - Realistic but invisible for solar mass
+2. Primordial (T_scale=1e6) - Hot BH with blue-white X-ray glow
+3. Extreme (T_scale=1e9) - Maximum visibility for education
+
+**UI Integration**: ImGui controls in `src/main.cpp`
+- Enable/disable checkbox
+- Preset selector (Physical/Primordial/Extreme)
+- Temperature scale slider (logarithmic, 1.0–1×10⁹)
+- Intensity slider (0.0–5.0)
+- LUT toggle (precomputed vs direct calculation)
+
+**Build System**: CMakeLists.txt updated with test targets
+- `hawking_glow_test`: 5/5 tests PASSED
+- `hawking_spectrum_test`: 8/8 tests PASSED
+- Main executable builds successfully with zero warnings
+
+**Documentation**:
+- `docs/PHASE10_TESTING_GUIDE.md` - Manual testing procedures
+- `docs/PHASE10.1_COMPLETE.md` - Implementation completion summary
+
+**Status**: ✅ All implementation complete, ready for visual testing
+**Next**: Visual validation with 3 presets + GPU performance benchmarking
+
+---
+
+### Earlier Changes (2026-01-01)
 
 - Created `docs/MASTER_ROADMAP.md` consolidating all planning documents into single source of truth.
 - Created `docs/DEPENDENCY_MATRIX.md` for centralized version tracking of 34 Conan packages.

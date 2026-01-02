@@ -67,11 +67,13 @@ namespace verified {
  * @param tol Tolerance for comparison to zero
  * @return true if |C| < tol
  */
+#ifndef VERIFIED_IS_NULL_ALREADY_DEFINED
 [[nodiscard]] constexpr bool is_null(
     const MetricComponents& g, const StateVector& s, double tol = 1e-10) noexcept
 {
     return std::abs(null_constraint_function(g, s)) < tol;
 }
+#endif // VERIFIED_IS_NULL_ALREADY_DEFINED
 
 // ============================================================================
 // Constraint After Integration Step (from Rocq: constraint_after_step)

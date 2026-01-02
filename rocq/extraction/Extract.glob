@@ -1,27 +1,2 @@
 DIGEST 78deba91fd5ae8b49aa7aad9d964fbbe
-FBlackhole.Extract
-R463:478 Blackhole.Prelim <> <> lib
-R496:526 Blackhole.Metrics.Schwarzschild <> <> lib
-R544:565 Blackhole.Metrics.Kerr <> <> lib
-R583:603 Blackhole.Kerr.Metric <> <> lib
-R621:643 Blackhole.Kerr.Horizons <> <> lib
-R661:683 Blackhole.Kerr.BPT_ISCO <> <> lib
-R701:732 Blackhole.Wormholes.MorrisThorne <> <> lib
-R750:774 Blackhole.Wormholes.EREPR <> <> lib
-R792:818 Blackhole.Wormholes.Islands <> <> lib
-R836:858 Blackhole.Geodesics.RK4 <> <> lib
-R876:904 Blackhole.Geodesics.Equations <> <> lib
-R922:955 Blackhole.Geodesics.NullConstraint <> <> lib
-R973:1003 Blackhole.Cosmology.Axiodilaton <> <> lib
-R1045:1058 Stdlib.extraction.ExtrOcamlBasic <> <> lib
-R1099:1113 Stdlib.extraction.ExtrOCamlFloats <> <> lib
-R1143:1152 Stdlib.extraction.Extraction <> <> lib
-R1182:1186 Stdlib.Reals.Reals <> <> lib
-R1271:1273 Corelib.Init.Datatypes <> nat ind
-R1386:1389 Corelib.Init.Datatypes <> bool ind
-R1453:1458 Corelib.Init.Datatypes <> option ind
-R1521:1524 Corelib.Init.Datatypes <> list ind
-R2826:2833 Blackhole.Prelim <> BLCoords rec
-R2957:2966 Blackhole.Prelim <> FourVector rec
-R3081:3096 Blackhole.Prelim <> MetricComponents rec
-R3226:3236 Blackhole.Geodesics.RK4 <> StateVector rec
+FExtract

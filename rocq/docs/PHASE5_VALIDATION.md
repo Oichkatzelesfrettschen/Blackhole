@@ -312,7 +312,7 @@ theories/Cosmology/Axiodilaton.v
 
 ### OCaml Extraction Prepared
 
-All 6 Rocq modules ready for `coqc extraction/Extract.v`:
+All 6 Rocq modules ready for `rocq compile extraction/Extract.v`:
 
 ```ocaml
 (* Physics module organization *)

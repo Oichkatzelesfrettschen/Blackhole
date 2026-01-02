@@ -59,6 +59,7 @@
 #include "imgui_impl_opengl3.h"
 #include "hud_overlay.h"
 #include "input.h"
+#include "physics/hawking_renderer.h"
 #include "physics/lut.h"
 #include "physics/noise.h"
 #include "rmlui_overlay.h"
@@ -726,7 +727,8 @@ static void appendCompareUniforms(const std::string &path, int index, const std:
 }
 
 static void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &interop,
-                                 bool parityMode) {
+                                 bool parityMode, bool hawkingEnabled, float hawkingTempScale,
+                                 float hawkingIntensity, bool hawkingUseLUTs, double blackHoleMass) {
   rtti.vec3Uniforms["cameraPos"] = interop.cameraPos;
   rtti.mat3Uniforms["cameraBasis"] = interop.cameraBasis;
   rtti.floatUniforms["fovScale"] = interop.fovScale;
@@ -752,6 +754,13 @@ static void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniform
   rtti.floatUniforms["interopParityMode"] = parityMode ? 1.0f : 0.0f;
   rtti.floatUniforms["interopMaxSteps"] = static_cast<float>(interop.maxSteps);
   rtti.floatUniforms["interopStepSize"] = interop.stepSize;
+
+  // Hawking radiation uniforms
+  rtti.floatUniforms["hawkingGlowEnabled"] = hawkingEnabled ? 1.0f : 0.0f;
+  rtti.floatUniforms["hawkingTempScale"] = hawkingTempScale;
+  rtti.floatUniforms["hawkingGlowIntensity"] = hawkingIntensity;
+  rtti.floatUniforms["useHawkingLUTs"] = hawkingUseLUTs ? 1.0f : 0.0f;
+  rtti.floatUniforms["blackHoleMass"] = static_cast<float>(blackHoleMass);
 }
 
 static void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
@@ -785,6 +794,22 @@ static void applyInteropComputeUniforms(GLuint program, const InteropUniforms &i
   glUniform1f(glGetUniformLocation(program, "grbTime"), interop.grbTime);
   glUniform1f(glGetUniformLocation(program, "grbTimeMin"), interop.grbTimeMin);
   glUniform1f(glGetUniformLocation(program, "grbTimeMax"), interop.grbTimeMax);
+}
+
+static void applyHawkingUniforms(GLuint program, const physics::HawkingRenderer& renderer,
+                                 bool enabled, float tempScale, float intensity,
+                                 bool useLUTs, double blackHoleMass) {
+  if (!renderer.isReady()) {
+    return;
+  }
+
+  physics::HawkingGlowParams params;
+  params.enabled = enabled;
+  params.tempScale = tempScale;
+  params.intensity = intensity;
+  params.useLUTs = useLUTs;
+
+  renderer.setShaderUniforms(program, blackHoleMass, params);
 }
 
 static bool loadLutCsv(const std::string &path, std::vector<float> &values) {
@@ -2143,6 +2168,13 @@ int main(int, char **) {
   static float kerrSpin = 0.0f;
   static bool enablePhotonSphere = false;
   static bool enableRedshift = false;
+  static bool hawkingGlowEnabled = false;
+  static float hawkingTempScale = 1.0f;
+  static float hawkingGlowIntensity = 1.0f;
+  static bool hawkingUseLUTs = true;
+  static int hawkingPreset = 0; // 0=Physical, 1=Primordial, 2=Extreme
+  static physics::HawkingRenderer hawkingRenderer;
+  static bool hawkingLutsLoaded = false;
   static bool useComputeRaytracer = false;
   static bool compareComputeFragment = false;
   static int compareSampleSize = 16;
@@ -2937,6 +2969,8 @@ int main(int, char **) {
       rtti.textureUniforms["diskDensityLUT"] = texDiskDensityLUT != 0 ? texDiskDensityLUT : fallback2D;  // Phase 8.2 P2
       rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
       rtti.textureUniforms["grbModulationLUT"] = grbModulationReady ? texGrbModulationLUT : fallback2D;
+      rtti.textureUniforms["hawkingTempLUT"] = hawkingLutsLoaded ? hawkingRenderer.getTempLUTTexture() : fallback2D;
+      rtti.textureUniforms["hawkingSpectrumLUT"] = hawkingLutsLoaded ? hawkingRenderer.getSpectrumLUTTexture() : fallback2D;
       for (int i = 0; i < kBackgroundLayers; ++i) {
         const std::string name = "backgroundLayers[" + std::to_string(i) + "]";
         rtti.textureUniforms[name] =
@@ -3046,6 +3080,35 @@ int main(int, char **) {
         // Physics visualization toggles
         ImGui::Checkbox("enablePhotonSphere", &enablePhotonSphere);
         ImGui::Checkbox("enableRedshift", &enableRedshift);
+
+        ImGui::Separator();
+        ImGui::Text("Hawking Radiation Glow");
+        ImGui::Checkbox("Enable Hawking Glow", &hawkingGlowEnabled);
+
+        if (hawkingGlowEnabled) {
+          // Preset buttons
+          const char* presetLabels[] = {"Physical", "Primordial", "Extreme"};
+          if (ImGui::Combo("Preset", &hawkingPreset, presetLabels, 3)) {
+            // Apply preset
+            physics::HawkingPreset preset = static_cast<physics::HawkingPreset>(hawkingPreset);
+            physics::HawkingGlowParams params = physics::HawkingRenderer::applyPreset(preset);
+            hawkingTempScale = params.tempScale;
+            hawkingGlowIntensity = params.intensity;
+          }
+
+          // Manual controls
+          ImGui::SliderFloat("Temp Scale", &hawkingTempScale, 1.0f, 1e9f, "%.1e",
+                           ImGuiSliderFlags_Logarithmic);
+          ImGui::TextDisabled("1=physical, 1e6=primordial, 1e9=extreme");
+          ImGui::SliderFloat("Glow Intensity", &hawkingGlowIntensity, 0.0f, 5.0f);
+          ImGui::Checkbox("Use LUTs", &hawkingUseLUTs);
+
+          if (hawkingLutsLoaded) {
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "LUTs loaded");
+          } else {
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "LUTs not loaded");
+          }
+        }
 
         ImGui::Separator();
         ImGui::Text("Spectral LUT");
@@ -3242,6 +3305,19 @@ int main(int, char **) {
         }
       }
 
+      // Load Hawking radiation LUTs
+      if (!hawkingLutsLoaded) {
+        std::filesystem::path lutPath = "assets/luts";
+        if (std::filesystem::exists(lutPath)) {
+          hawkingLutsLoaded = hawkingRenderer.loadLUTs(lutPath);
+          if (hawkingLutsLoaded) {
+            std::cout << "Hawking radiation LUTs loaded successfully" << std::endl;
+          } else {
+            std::cerr << "Failed to load Hawking radiation LUTs" << std::endl;
+          }
+        }
+      }
+
       const double referenceMass = physics::M_SUN;
       const double referenceRs = physics::schwarzschild_radius(referenceMass);
       const double referenceRg = physics::G * referenceMass / physics::C2;
@@ -3304,6 +3380,8 @@ int main(int, char **) {
       rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
       rtti.textureUniforms["grbModulationLUT"] =
           grbModulationEnabled ? texGrbModulationLUT : fallback2D;
+      rtti.textureUniforms["hawkingTempLUT"] = hawkingLutsLoaded ? hawkingRenderer.getTempLUTTexture() : fallback2D;
+      rtti.textureUniforms["hawkingSpectrumLUT"] = hawkingLutsLoaded ? hawkingRenderer.getSpectrumLUTTexture() : fallback2D;
       rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
       rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
       rtti.floatUniforms["backgroundEnabled"] =
@@ -3340,7 +3418,11 @@ int main(int, char **) {
       interop.grbTime = grbTimeSeconds;
       interop.grbTimeMin = grbTimeMin;
       interop.grbTimeMax = grbTimeMax;
-      applyInteropUniforms(rtti, interop, compareActive);
+
+      // Convert black hole mass to grams (CGS units for Hawking calculation)
+      double bhMassGrams = static_cast<double>(blackHoleMass) * physics::M_SUN;
+      applyInteropUniforms(rtti, interop, compareActive, hawkingGlowEnabled,
+                          hawkingTempScale, hawkingGlowIntensity, hawkingUseLUTs, bhMassGrams);
 
       rtti.floatUniforms["gravitationalLensing"] = gravitationalLensing ? 1.0f : 0.0f;
       rtti.floatUniforms["renderBlackHole"] = renderBlackHole ? 1.0f : 0.0f;
@@ -3383,6 +3465,11 @@ int main(int, char **) {
 
         glUseProgram(computeProgram);
         applyInteropComputeUniforms(computeProgram, interop, renderWidth, renderHeight);
+
+        // Apply Hawking radiation uniforms
+        double bhMass = static_cast<double>(blackHoleMass) * physics::M_SUN;
+        applyHawkingUniforms(computeProgram, hawkingRenderer, hawkingGlowEnabled,
+                           hawkingTempScale, hawkingGlowIntensity, hawkingUseLUTs, bhMass);
 
         GLint texUnit = 0;
         glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));

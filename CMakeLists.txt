@@ -749,7 +749,7 @@ endif()
 # Source Files
 # ============================================================================
 
-# Physics library source files
+# Physics library source files (pure physics, no OpenGL dependencies)
 set(PHYSICS_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
   "${PROJECT_SOURCE_DIR}/src/physics/geodesics.cpp"
@@ -773,6 +773,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/input.cpp"
   "${PROJECT_SOURCE_DIR}/src/settings.cpp"
   "${PROJECT_SOURCE_DIR}/src/GLDebugMessageCallback.cc"
+  "${PROJECT_SOURCE_DIR}/src/physics/hawking_renderer.cpp"  # OpenGL-dependent physics renderer
   ${PHYSICS_SRC_FILES}
 )
 
@@ -1227,6 +1228,40 @@ if(ENABLE_COVERAGE)
 endif()
 
 # ============================================================================
+# GLSL Shader Generation from C++23 Verified Kernels (Phase 9.0.1)
+# ============================================================================
+# Pipeline: verified C++23 headers -> GLSL 4.60 shaders via transpiler
+# Supports Lovelace (SM_89) consumer GPU optimization
+
+find_program(PYTHON3_EXECUTABLE python3)
+
+if(PYTHON3_EXECUTABLE)
+  set(GLSL_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/physics/verified")
+  set(GLSL_OUTPUT_DIR "${PROJECT_SOURCE_DIR}/shader/include/verified")
+
+  # Custom target to generate GLSL shaders from C++23 headers
+  add_custom_target(generate_glsl
+    COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/cpp_to_glsl.py"
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Generating GLSL 4.60 shaders from verified C++23 kernels"
+    VERBATIM
+  )
+
+  # Find all generated GLSL files
+  file(GLOB GENERATED_GLSL_FILES "${GLSL_OUTPUT_DIR}/*.glsl")
+
+  message(STATUS "GLSL shader generation configured")
+  message(STATUS "  Source: ${GLSL_SOURCE_DIR}")
+  message(STATUS "  Output: ${GLSL_OUTPUT_DIR}")
+  if(GENERATED_GLSL_FILES)
+    list(LENGTH GENERATED_GLSL_FILES GLSL_COUNT)
+    message(STATUS "  Generated shaders: ${GLSL_COUNT} files")
+  endif()
+else()
+  message(STATUS "python3 not found - GLSL shader generation disabled")
+endif()
+
+# ============================================================================
 # Testing Support (CTest)
 # ============================================================================
 
@@ -1448,6 +1483,85 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(connection_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # ========================================================================
+  # Phase 8.3: Horizon Dynamics Verification Tests
+  # ========================================================================
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/horizon_dynamics_test.cpp")
+    add_executable(horizon_dynamics_test
+      "${PROJECT_SOURCE_DIR}/tests/horizon_dynamics_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
+    )
+    target_include_directories(horizon_dynamics_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(horizon_dynamics_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME horizon_dynamics_validation COMMAND horizon_dynamics_test)
+    set_tests_properties(horizon_dynamics_validation PROPERTIES
+      LABELS "physics;horizon;kerr"
+      TIMEOUT 15
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(horizon_dynamics_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # ========================================================================
+  # Phase 10.1: Hawking Radiation Tests
+  # ========================================================================
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/hawking_glow_test.cpp")
+    add_executable(hawking_glow_test
+      "${PROJECT_SOURCE_DIR}/tests/hawking_glow_test.cpp"
+    )
+    target_include_directories(hawking_glow_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(hawking_glow_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(hawking_glow_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME hawking_glow_validation COMMAND hawking_glow_test)
+    set_tests_properties(hawking_glow_validation PROPERTIES
+      LABELS "physics;hawking;phase10"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(hawking_glow_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/hawking_spectrum_test.cpp")
+    add_executable(hawking_spectrum_test
+      "${PROJECT_SOURCE_DIR}/tests/hawking_spectrum_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
+    )
+    target_include_directories(hawking_spectrum_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(hawking_spectrum_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(hawking_spectrum_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME hawking_spectrum_validation COMMAND hawking_spectrum_test)
+    set_tests_properties(hawking_spectrum_validation PROPERTIES
+      LABELS "physics;hawking;spectrum;phase10"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(hawking_spectrum_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()

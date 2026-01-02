@@ -26,6 +26,7 @@
 #include "constants.h"
 #include "kerr.h"
 #include "schwarzschild.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
