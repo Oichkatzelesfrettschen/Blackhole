@@ -1,6 +1,14 @@
 #ifndef PHYSICS_BATCH_H
 #define PHYSICS_BATCH_H
 
+// Verified physics kernels (Phase 6 - extracted from Rocq proofs)
+#include "verified/schwarzschild.h"
+#include "verified/kerr.h"
+#include "verified/rk4.h"
+#include "verified/geodesic.h"
+#include "verified/axiodilaton.h"
+
+// Legacy headers (kept for compatibility)
 #include "kerr.h"
 #include "schwarzschild.h"
 #include "thin_disk.h"
@@ -84,6 +92,64 @@ struct BatchTraceResult {
   std::vector<BatchRayStatus> status;
   std::vector<int> steps_taken;
 };
+
+// ============================================================================
+// Verified Physics Kernel Wrappers (Phase 6 - from Rocq extraction)
+// ============================================================================
+
+/**
+ * @brief Wrapper for verified Schwarzschild Christoffel symbols
+ *
+ * Uses verified:: namespace functions that are extracted from Rocq proofs.
+ * These provide mathematical guarantees about correctness.
+ */
+inline double christoffel_t_tr_verified(double r, double M) noexcept {
+  return verified::christoffel_t_tr(r, M);
+}
+
+inline double christoffel_r_tt_verified(double r, double M) noexcept {
+  return verified::christoffel_r_tt(r, M);
+}
+
+inline double christoffel_r_rr_verified(double r, double M) noexcept {
+  return verified::christoffel_r_rr(r, M);
+}
+
+inline double christoffel_r_thth_verified(double r, double M) noexcept {
+  return verified::christoffel_r_thth(r, M);
+}
+
+inline double christoffel_r_phph_verified(double r, double M, double theta) noexcept {
+  return verified::christoffel_r_phph(r, M, theta);
+}
+
+/**
+ * @brief Wrapper for verified Kerr metric computations
+ */
+inline double kerr_g_tt_verified(double r, double theta, double M, double a) noexcept {
+  return verified::kerr_g_tt(r, theta, M, a);
+}
+
+inline double kerr_g_rr_verified(double r, double theta, double M, double a) noexcept {
+  return verified::kerr_g_rr(r, theta, M, a);
+}
+
+inline double kerr_isco_prograde_verified(double M, double a) noexcept {
+  return verified::isco_radius_prograde(M, a);
+}
+
+/**
+ * @brief Verified radial acceleration computation
+ *
+ * Computes d²r/dλ² using verified Christoffel symbols from Rocq proofs.
+ * This is the core computation for geodesic integration.
+ */
+inline double radial_acceleration_verified(
+    double r, double M, double theta,
+    double dr_dlambda, double dtheta_dlambda, double dphi_dlambda) noexcept
+{
+  return verified::radial_acceleration(r, M, theta, dr_dlambda, dtheta_dlambda, dphi_dlambda);
+}
 
 // ============================================================================
 // SIMD Christoffel Acceleration (xsimd vectorized)

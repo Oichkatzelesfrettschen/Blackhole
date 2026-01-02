@@ -1,12 +1,15 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : enable
 
-// Physics library includes
-#include "include/physics_constants.glsl"
-#include "include/schwarzschild.glsl"
-#include "include/geodesics.glsl"
+// Physics library includes - Phase 3: Verified from Rocq formalization
+#include "include/verified/schwarzschild.glsl"
+#include "include/verified/kerr.glsl"
+#include "include/verified/geodesic.glsl"
+#include "include/verified/eos.glsl"
+#include "include/verified/cosmology.glsl"
+
+// Legacy includes (maintained for compatibility)
 #include "include/redshift.glsl"
-#include "include/kerr.glsl"
 #include "include/interop_raygen.glsl"
 
 const float EPSILON = 0.0001;

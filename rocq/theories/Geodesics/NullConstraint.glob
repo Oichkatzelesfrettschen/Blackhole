@@ -1,0 +1,322 @@
+DIGEST 12ee6e580c27913b36632c58387b0ec4
+FBlackhole.Geodesics.NullConstraint
+R387:402 Blackhole.Prelim <> <> lib
+R420:442 Blackhole.Geodesics.RK4 <> <> lib
+R460:488 Blackhole.Geodesics.Equations <> <> lib
+R518:522 Stdlib.Reals.Reals <> <> lib
+R524:526 Stdlib.micromega.Lra <> <> lib
+def 661:684 <> null_constraint_function
+R691:706 Blackhole.Prelim <> MetricComponents rec
+binder 687:687 <> g:1
+R714:724 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 710:710 <> s:2
+R729:729 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R745:748 Blackhole.Prelim <> mkFV constr
+R753:754 Blackhole.Geodesics.RK4 <> v0 proj
+R750:750 Blackhole.Geodesics.NullConstraint <> s:2 var
+R760:761 Blackhole.Geodesics.RK4 <> v1 proj
+R757:757 Blackhole.Geodesics.NullConstraint <> s:2 var
+R767:768 Blackhole.Geodesics.RK4 <> v2 proj
+R764:764 Blackhole.Geodesics.NullConstraint <> s:2 var
+R774:775 Blackhole.Geodesics.RK4 <> v3 proj
+R771:771 Blackhole.Geodesics.NullConstraint <> s:2 var
+binder 740:740 <> v:3
+R783:791 Blackhole.Prelim <> four_norm def
+R793:793 Blackhole.Geodesics.NullConstraint <> g:1 var
+R795:795 Blackhole.Geodesics.NullConstraint <> v:3 var
+def 854:867 <> initially_null
+R874:889 Blackhole.Prelim <> MetricComponents rec
+binder 870:870 <> g:4
+R897:907 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 893:893 <> s:5
+R950:952 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R922:945 Blackhole.Geodesics.NullConstraint <> null_constraint_function def
+R947:947 Blackhole.Geodesics.NullConstraint <> g:4 var
+R949:949 Blackhole.Geodesics.NullConstraint <> s:5 var
+prf 1086:1110 <> constraint_first_integral
+R1128:1143 Blackhole.Prelim <> MetricComponents rec
+binder 1124:1124 <> g:6
+R1151:1161 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 1147:1147 <> s:7
+R1179:1194 Blackhole.Geodesics.Equations <> ChristoffelAccel rec
+binder 1165:1175 <> christoffel:8
+R1313:1316 Corelib.Init.Logic <> True ind
+def 1446:1466 <> constraint_after_step
+R1473:1488 Blackhole.Prelim <> MetricComponents rec
+binder 1469:1469 <> g:9
+R1540:1555 Blackhole.Geodesics.Equations <> ChristoffelAccel rec
+binder 1526:1536 <> christoffel:10
+R1597:1597 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1593:1593 <> h:11
+R1605:1615 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 1601:1601 <> s:12
+R1620:1620 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1637:1644 Blackhole.Geodesics.RK4 <> rk4_step def
+R1647:1658 Blackhole.Geodesics.Equations <> geodesic_rhs def
+R1660:1670 Blackhole.Geodesics.NullConstraint <> christoffel:10 var
+R1673:1673 Blackhole.Geodesics.NullConstraint <> h:11 var
+R1675:1675 Blackhole.Geodesics.NullConstraint <> s:12 var
+binder 1631:1632 <> s':13
+R1682:1705 Blackhole.Geodesics.NullConstraint <> null_constraint_function def
+R1707:1707 Blackhole.Geodesics.NullConstraint <> g:9 var
+R1709:1710 Blackhole.Geodesics.NullConstraint <> s':13 var
+def 1761:1781 <> constraint_drift_step
+R1788:1803 Blackhole.Prelim <> MetricComponents rec
+binder 1784:1784 <> g:14
+R1855:1870 Blackhole.Geodesics.Equations <> ChristoffelAccel rec
+binder 1841:1851 <> christoffel:15
+R1912:1912 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1908:1908 <> h:16
+R1920:1930 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 1916:1916 <> s:17
+R1935:1935 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1981:1983 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1942:1962 Blackhole.Geodesics.NullConstraint <> constraint_after_step def
+R1964:1964 Blackhole.Geodesics.NullConstraint <> g:14 var
+R1966:1976 Blackhole.Geodesics.NullConstraint <> christoffel:15 var
+R1978:1978 Blackhole.Geodesics.NullConstraint <> h:16 var
+R1980:1980 Blackhole.Geodesics.NullConstraint <> s:17 var
+R1984:2007 Blackhole.Geodesics.NullConstraint <> null_constraint_function def
+R2009:2009 Blackhole.Geodesics.NullConstraint <> g:14 var
+R2011:2011 Blackhole.Geodesics.NullConstraint <> s:17 var
+prf 2118:2144 <> null_constraint_drift_bound
+R2162:2177 Blackhole.Prelim <> MetricComponents rec
+binder 2158:2158 <> g:18
+R2195:2210 Blackhole.Geodesics.Equations <> ChristoffelAccel rec
+binder 2181:2191 <> christoffel:19
+R2218:2228 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 2214:2214 <> s:20
+R2236:2236 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2232:2232 <> h:21
+R2249:2256 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2245:2247 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2244:2244 Blackhole.Geodesics.NullConstraint <> h:21 var
+R2275:2344 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2257:2270 Blackhole.Geodesics.NullConstraint <> initially_null def
+R2272:2272 Blackhole.Geodesics.NullConstraint <> g:18 var
+R2274:2274 Blackhole.Geodesics.NullConstraint <> s:20 var
+R2345:2351 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R2357:2358 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R2356:2356 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2352:2352 <> C:22
+R2364:2373 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R2360:2362 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2359:2359 Blackhole.Geodesics.NullConstraint <> C:22 var
+R2420:2423 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x not
+R2374:2377 Stdlib.Reals.Rbasic_fun <> Rabs def
+R2380:2400 Blackhole.Geodesics.NullConstraint <> constraint_drift_step def
+R2402:2402 Blackhole.Geodesics.NullConstraint <> g:18 var
+R2404:2414 Blackhole.Geodesics.NullConstraint <> christoffel:19 var
+R2416:2416 Blackhole.Geodesics.NullConstraint <> h:21 var
+R2418:2418 Blackhole.Geodesics.NullConstraint <> s:20 var
+R2425:2427 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2424:2424 Blackhole.Geodesics.NullConstraint <> C:22 var
+R2429:2429 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2428:2428 Blackhole.Geodesics.NullConstraint <> h:21 var
+R2699:2719 Blackhole.Geodesics.NullConstraint <> constraint_drift_step def
+R2722:2742 Blackhole.Geodesics.NullConstraint <> constraint_after_step def
+prf 2922:2949 <> null_constraint_global_drift
+R2967:2982 Blackhole.Prelim <> MetricComponents rec
+binder 2963:2963 <> g:23
+R3000:3015 Blackhole.Geodesics.Equations <> ChristoffelAccel rec
+binder 2986:2996 <> christoffel:24
+R3023:3033 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 3019:3019 <> s:25
+R3041:3041 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3037:3037 <> h:26
+R3049:3051 Corelib.Init.Datatypes <> nat ind
+binder 3045:3045 <> N:27
+R3064:3071 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3060:3062 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3059:3059 Blackhole.Geodesics.NullConstraint <> h:26 var
+R3090:3097 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3072:3085 Blackhole.Geodesics.NullConstraint <> initially_null def
+R3087:3087 Blackhole.Geodesics.NullConstraint <> g:23 var
+R3089:3089 Blackhole.Geodesics.NullConstraint <> s:25 var
+R3098:3104 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R3110:3111 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R3109:3109 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3105:3105 <> C:28
+R3117:3182 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R3113:3115 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3112:3112 Blackhole.Geodesics.NullConstraint <> C:28 var
+R3183:3186 Corelib.Init.Logic <> True ind
+def 3439:3454 <> renormalize_null
+R3461:3476 Blackhole.Prelim <> MetricComponents rec
+binder 3457:3457 <> g:29
+R3484:3494 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 3480:3480 <> s:30
+R3499:3509 Blackhole.Geodesics.RK4 <> StateVector rec
+R3657:3660 Stdlib.Reals.R_sqrt <> sqrt def
+R3668:3668 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3746:3750 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3760:3760 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3717:3724 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3688:3695 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3677:3679 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3672:3675 Blackhole.Prelim <> g_rr proj
+R3669:3669 Blackhole.Geodesics.NullConstraint <> g:29 var
+R3686:3686 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3683:3684 Blackhole.Geodesics.RK4 <> v1 proj
+R3680:3680 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3706:3708 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3699:3704 Blackhole.Prelim <> g_thth proj
+R3696:3696 Blackhole.Geodesics.NullConstraint <> g:29 var
+R3715:3715 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3712:3713 Blackhole.Geodesics.RK4 <> v2 proj
+R3709:3709 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3735:3737 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3728:3733 Blackhole.Prelim <> g_phph proj
+R3725:3725 Blackhole.Geodesics.NullConstraint <> g:29 var
+R3744:3744 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3741:3742 Blackhole.Geodesics.RK4 <> v3 proj
+R3738:3738 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3751:3751 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R3755:3758 Blackhole.Prelim <> g_tt proj
+R3752:3752 Blackhole.Geodesics.NullConstraint <> g:29 var
+binder 3647:3652 <> new_v0:31
+R3771:3774 Blackhole.Geodesics.RK4 <> mkSV constr
+R3779:3780 Blackhole.Geodesics.RK4 <> x0 proj
+R3776:3776 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3786:3787 Blackhole.Geodesics.RK4 <> x1 proj
+R3783:3783 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3793:3794 Blackhole.Geodesics.RK4 <> x2 proj
+R3790:3790 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3800:3801 Blackhole.Geodesics.RK4 <> x3 proj
+R3797:3797 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3811:3816 Blackhole.Geodesics.NullConstraint <> new_v0:31 var
+R3821:3822 Blackhole.Geodesics.RK4 <> v1 proj
+R3818:3818 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3828:3829 Blackhole.Geodesics.RK4 <> v2 proj
+R3825:3825 Blackhole.Geodesics.NullConstraint <> s:30 var
+R3835:3836 Blackhole.Geodesics.RK4 <> v3 proj
+R3832:3832 Blackhole.Geodesics.NullConstraint <> s:30 var
+prf 3904:3932 <> renormalization_restores_null
+binder 3945:3945 <> g:32
+binder 3947:3947 <> s:33
+R3969:3976 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3954:3966 Blackhole.Prelim <> is_lorentzian def
+R3968:3968 Blackhole.Geodesics.NullConstraint <> g:32 var
+R4018:4025 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3988:3991 Corelib.Init.Logic <> ::type_scope:x_'\/'_x not
+R3983:3986 Corelib.Init.Logic <> ::type_scope:x_'<>'_x not
+R3980:3981 Blackhole.Geodesics.RK4 <> v1 proj
+R3977:3977 Blackhole.Geodesics.NullConstraint <> s:33 var
+R4003:4006 Corelib.Init.Logic <> ::type_scope:x_'\/'_x not
+R3998:4001 Corelib.Init.Logic <> ::type_scope:x_'<>'_x not
+R3995:3996 Blackhole.Geodesics.RK4 <> v2 proj
+R3992:3992 Blackhole.Geodesics.NullConstraint <> s:33 var
+R4013:4016 Corelib.Init.Logic <> ::type_scope:x_'<>'_x not
+R4010:4011 Blackhole.Geodesics.RK4 <> v3 proj
+R4007:4007 Blackhole.Geodesics.NullConstraint <> s:33 var
+R4026:4039 Blackhole.Geodesics.NullConstraint <> initially_null def
+R4041:4041 Blackhole.Geodesics.NullConstraint <> g:32 var
+R4044:4059 Blackhole.Geodesics.NullConstraint <> renormalize_null def
+R4061:4061 Blackhole.Geodesics.NullConstraint <> g:32 var
+R4063:4063 Blackhole.Geodesics.NullConstraint <> s:33 var
+R4107:4120 Blackhole.Geodesics.NullConstraint <> initially_null def
+R4123:4138 Blackhole.Geodesics.NullConstraint <> renormalize_null def
+R4141:4164 Blackhole.Geodesics.NullConstraint <> null_constraint_function def
+def 4331:4351 <> needs_renormalization
+R4358:4373 Blackhole.Prelim <> MetricComponents rec
+binder 4354:4354 <> g:34
+R4381:4391 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 4377:4377 <> s:35
+R4401:4401 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4395:4397 <> tol:36
+R4406:4409 Corelib.Init.Datatypes <> bool ind
+R4419:4425 Stdlib.Reals.RIneq <> Rlt_dec thm
+R4427:4429 Blackhole.Geodesics.NullConstraint <> tol:36 var
+R4432:4435 Stdlib.Reals.Rbasic_fun <> Rabs def
+R4438:4461 Blackhole.Geodesics.NullConstraint <> null_constraint_function def
+R4463:4463 Blackhole.Geodesics.NullConstraint <> g:34 var
+R4465:4465 Blackhole.Geodesics.NullConstraint <> s:35 var
+R4486:4490 Corelib.Init.Datatypes <> false constr
+R4474:4477 Corelib.Init.Datatypes <> true constr
+def 4591:4611 <> mass_shell_constraint
+R4618:4633 Blackhole.Prelim <> MetricComponents rec
+binder 4614:4614 <> g:37
+R4641:4651 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 4637:4637 <> s:38
+R4659:4659 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4655:4655 <> m:39
+R4664:4664 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4699:4701 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4671:4694 Blackhole.Geodesics.NullConstraint <> null_constraint_function def
+R4696:4696 Blackhole.Geodesics.NullConstraint <> g:37 var
+R4698:4698 Blackhole.Geodesics.NullConstraint <> s:38 var
+R4703:4703 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4702:4702 Blackhole.Geodesics.NullConstraint <> m:39 var
+prf 4772:4799 <> massive_constraint_preserved
+R4817:4832 Blackhole.Prelim <> MetricComponents rec
+binder 4813:4813 <> g:40
+R4850:4865 Blackhole.Geodesics.Equations <> ChristoffelAccel rec
+binder 4836:4846 <> christoffel:41
+R4873:4883 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 4869:4869 <> s:42
+R4893:4893 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4887:4887 <> h:43
+binder 4889:4889 <> m:44
+R4906:4909 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4902:4904 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4901:4901 Blackhole.Geodesics.NullConstraint <> h:43 var
+R4915:4922 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4911:4913 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4910:4910 Blackhole.Geodesics.NullConstraint <> m:44 var
+R4954:4961 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4950:4952 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R4923:4943 Blackhole.Geodesics.NullConstraint <> mass_shell_constraint def
+R4945:4945 Blackhole.Geodesics.NullConstraint <> g:40 var
+R4947:4947 Blackhole.Geodesics.NullConstraint <> s:42 var
+R4949:4949 Blackhole.Geodesics.NullConstraint <> m:44 var
+R4962:4968 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R4974:4975 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R4973:4973 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4969:4969 <> C:45
+R4981:4990 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R4977:4979 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4976:4976 Blackhole.Geodesics.NullConstraint <> C:45 var
+R5091:5094 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x not
+R4991:4994 Stdlib.Reals.Rbasic_fun <> Rabs def
+R4997:5017 Blackhole.Geodesics.NullConstraint <> mass_shell_constraint def
+R5019:5019 Blackhole.Geodesics.NullConstraint <> g:40 var
+R5035:5042 Blackhole.Geodesics.RK4 <> rk4_step def
+R5045:5056 Blackhole.Geodesics.Equations <> geodesic_rhs def
+R5058:5068 Blackhole.Geodesics.NullConstraint <> christoffel:41 var
+R5071:5071 Blackhole.Geodesics.NullConstraint <> h:43 var
+R5073:5073 Blackhole.Geodesics.NullConstraint <> s:42 var
+R5089:5089 Blackhole.Geodesics.NullConstraint <> m:44 var
+R5096:5098 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5095:5095 Blackhole.Geodesics.NullConstraint <> C:45 var
+R5100:5100 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5099:5099 Blackhole.Geodesics.NullConstraint <> h:43 var
+def 5216:5236 <> check_null_constraint
+R5243:5258 Blackhole.Prelim <> MetricComponents rec
+binder 5239:5239 <> g:46
+R5266:5276 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 5262:5262 <> s:47
+R5281:5281 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5288:5311 Blackhole.Geodesics.NullConstraint <> null_constraint_function def
+R5313:5313 Blackhole.Geodesics.NullConstraint <> g:46 var
+R5315:5315 Blackhole.Geodesics.NullConstraint <> s:47 var
+def 5330:5352 <> correct_null_constraint
+R5359:5374 Blackhole.Prelim <> MetricComponents rec
+binder 5355:5355 <> g:48
+R5382:5392 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 5378:5378 <> s:49
+R5397:5407 Blackhole.Geodesics.RK4 <> StateVector rec
+R5414:5429 Blackhole.Geodesics.NullConstraint <> renormalize_null def
+R5431:5431 Blackhole.Geodesics.NullConstraint <> g:48 var
+R5433:5433 Blackhole.Geodesics.NullConstraint <> s:49 var
+def 5448:5461 <> should_correct
+R5468:5483 Blackhole.Prelim <> MetricComponents rec
+binder 5464:5464 <> g:50
+R5491:5501 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 5487:5487 <> s:51
+R5511:5511 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5505:5507 <> tol:52
+R5516:5519 Corelib.Init.Datatypes <> bool ind
+R5526:5546 Blackhole.Geodesics.NullConstraint <> needs_renormalization def
+R5548:5548 Blackhole.Geodesics.NullConstraint <> g:50 var
+R5550:5550 Blackhole.Geodesics.NullConstraint <> s:51 var
+R5552:5554 Blackhole.Geodesics.NullConstraint <> tol:52 var

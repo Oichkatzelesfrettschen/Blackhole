@@ -1,0 +1,259 @@
+DIGEST be903452d8e6b5318133bab101f7aa01
+FBlackhole.Cosmology.FLRW
+R573:588 Blackhole.Prelim <> <> lib
+R618:622 Stdlib.Reals.Reals <> <> lib
+R624:626 Stdlib.micromega.Lra <> <> lib
+def 760:770 <> H0_Planck18
+R774:774 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 814:829 <> Omega_m_Planck18
+R833:833 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 896:911 <> Omega_b_Planck18
+R915:915 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 972:985 <> T_CMB_Planck18
+R989:989 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 1095:1111 <> Omega_Lambda_flat
+R1124:1124 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1114:1120 <> Omega_m:1
+R1129:1129 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1135:1137 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1138:1144 Blackhole.Cosmology.FLRW <> Omega_m:1 var
+rec 1202:1209 <> FlatLCDM
+proj 1229:1230 <> H0
+proj 1280:1286 <> Omega_m
+proj 1344:1350 <> Omega_b
+proj 1392:1396 <> T_CMB
+R1234:1234 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1290:1290 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1354:1354 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1400:1400 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 1491:1498 <> Planck18
+R1502:1509 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+R1516:1525 Blackhole.Cosmology.FLRW <> mkFlatLCDM constr
+R1527:1537 Blackhole.Cosmology.FLRW <> H0_Planck18 def
+R1539:1554 Blackhole.Cosmology.FLRW <> Omega_m_Planck18 def
+R1556:1571 Blackhole.Cosmology.FLRW <> Omega_b_Planck18 def
+R1573:1586 Blackhole.Cosmology.FLRW <> T_CMB_Planck18 def
+def 1663:1674 <> Omega_Lambda
+R1685:1692 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 1677:1681 <> cosmo:7
+R1697:1697 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1705:1707 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1715:1721 Blackhole.Cosmology.FLRW <> Omega_m proj
+R1708:1712 Blackhole.Cosmology.FLRW <> cosmo:7 var
+def 1893:1895 <> E_z
+R1906:1913 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 1898:1902 <> cosmo:8
+R1921:1921 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1917:1917 <> z:9
+R1926:1926 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1933:1936 Stdlib.Reals.R_sqrt <> sqrt def
+R1966:1968 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1954:1956 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1946:1952 Blackhole.Cosmology.FLRW <> Omega_m proj
+R1939:1943 Blackhole.Cosmology.FLRW <> cosmo:8 var
+R1957:1957 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1963:1964 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1959:1961 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1962:1962 Blackhole.Cosmology.FLRW <> z:9 var
+R1969:1980 Blackhole.Cosmology.FLRW <> Omega_Lambda def
+R1982:1986 Blackhole.Cosmology.FLRW <> cosmo:8 var
+def 2070:2085 <> hubble_parameter
+R2096:2103 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 2088:2092 <> cosmo:10
+R2111:2111 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2107:2107 <> z:11
+R2116:2116 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2133:2135 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2130:2131 Blackhole.Cosmology.FLRW <> H0 proj
+R2123:2127 Blackhole.Cosmology.FLRW <> cosmo:10 var
+R2136:2138 Blackhole.Cosmology.FLRW <> E_z def
+R2140:2144 Blackhole.Cosmology.FLRW <> cosmo:10 var
+R2146:2146 Blackhole.Cosmology.FLRW <> z:11 var
+rec 2451:2467 <> AxiodilatonParams
+proj 2490:2499 <> ad_Omega_m
+proj 2534:2544 <> ad_Omega_ad
+proj 2588:2598 <> ad_coupling
+R2503:2503 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2548:2548 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2602:2602 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 2728:2740 <> f_axiodilaton
+R2747:2747 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2743:2743 <> z:16
+R2756:2772 Blackhole.Cosmology.FLRW <> AxiodilatonParams rec
+binder 2751:2752 <> ad:17
+R2777:2777 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2918:2920 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2906:2916 Blackhole.Cosmology.FLRW <> ad_Omega_ad proj
+R2902:2903 Blackhole.Cosmology.FLRW <> ad:17 var
+R2921:2921 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2927:2928 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2923:2925 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2926:2926 Blackhole.Cosmology.FLRW <> z:16 var
+def 2994:3011 <> hubble_axiodilaton
+R3019:3019 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3014:3015 <> H0:18
+R3028:3044 Blackhole.Cosmology.FLRW <> AxiodilatonParams rec
+binder 3023:3024 <> ad:19
+R3052:3052 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3048:3048 <> z:20
+R3057:3057 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3103:3105 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3085:3087 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3092:3101 Blackhole.Cosmology.FLRW <> ad_Omega_m proj
+R3088:3089 Blackhole.Cosmology.FLRW <> ad:19 var
+R3110:3120 Blackhole.Cosmology.FLRW <> ad_Omega_ad proj
+R3106:3107 Blackhole.Cosmology.FLRW <> ad:19 var
+binder 3068:3079 <> Omega_Lambda:21
+R3130:3132 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3128:3129 Blackhole.Cosmology.FLRW <> H0:18 var
+R3133:3136 Stdlib.Reals.R_sqrt <> sqrt def
+R3200:3215 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3166:3181 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3154:3156 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3143:3152 Blackhole.Cosmology.FLRW <> ad_Omega_m proj
+R3139:3140 Blackhole.Cosmology.FLRW <> ad:19 var
+R3157:3157 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3163:3164 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3159:3161 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3162:3162 Blackhole.Cosmology.FLRW <> z:20 var
+R3182:3194 Blackhole.Cosmology.FLRW <> f_axiodilaton def
+R3196:3196 Blackhole.Cosmology.FLRW <> z:20 var
+R3198:3199 Blackhole.Cosmology.FLRW <> ad:19 var
+R3216:3227 Blackhole.Cosmology.FLRW <> Omega_Lambda:21 var
+prf 3321:3327 <> E_at_z0
+R3346:3353 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 3338:3342 <> cosmo:22
+R3378:3383 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3373:3376 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R3365:3371 Blackhole.Cosmology.FLRW <> Omega_m proj
+R3358:3362 Blackhole.Cosmology.FLRW <> cosmo:22 var
+R3407:3412 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3402:3405 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R3384:3395 Blackhole.Cosmology.FLRW <> Omega_Lambda def
+R3397:3401 Blackhole.Cosmology.FLRW <> cosmo:22 var
+R3424:3426 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R3413:3415 Blackhole.Cosmology.FLRW <> E_z def
+R3417:3421 Blackhole.Cosmology.FLRW <> cosmo:22 var
+R3470:3472 Blackhole.Cosmology.FLRW <> E_z def
+R3475:3486 Blackhole.Cosmology.FLRW <> Omega_Lambda def
+prf 3665:3693 <> E_increasing_matter_dominated
+R3713:3720 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 3705:3709 <> cosmo:23
+R3732:3732 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3724:3725 <> z1:24
+binder 3727:3728 <> z2:25
+R3757:3762 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3753:3755 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3745:3751 Blackhole.Cosmology.FLRW <> Omega_m proj
+R3738:3742 Blackhole.Cosmology.FLRW <> cosmo:23 var
+R3770:3775 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3765:3767 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3763:3764 Blackhole.Cosmology.FLRW <> z2:25 var
+R3768:3769 Blackhole.Cosmology.FLRW <> z1:24 var
+R3783:3788 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3778:3781 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R3776:3777 Blackhole.Cosmology.FLRW <> z1:24 var
+R3801:3803 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3789:3791 Blackhole.Cosmology.FLRW <> E_z def
+R3793:3797 Blackhole.Cosmology.FLRW <> cosmo:23 var
+R3799:3800 Blackhole.Cosmology.FLRW <> z2:25 var
+R3804:3806 Blackhole.Cosmology.FLRW <> E_z def
+R3808:3812 Blackhole.Cosmology.FLRW <> cosmo:23 var
+R3814:3815 Blackhole.Cosmology.FLRW <> z1:24 var
+def 4091:4101 <> hubble_time
+R4109:4109 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4104:4105 <> H0:26
+R4114:4114 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4120:4122 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4123:4124 Blackhole.Cosmology.FLRW <> H0:26 var
+def 4261:4266 <> c_km_s
+R4270:4270 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 4299:4311 <> hubble_length
+R4319:4319 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4314:4315 <> H0:27
+R4324:4324 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4335:4337 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4329:4334 Blackhole.Cosmology.FLRW <> c_km_s def
+R4338:4339 Blackhole.Cosmology.FLRW <> H0:27 var
+def 4897:4906 <> z_equality
+R4927:4927 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4909:4915 <> Omega_m:28
+binder 4917:4923 <> Omega_r:29
+R4932:4932 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4956:4958 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4946:4948 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4939:4945 Blackhole.Cosmology.FLRW <> Omega_m:28 var
+R4949:4955 Blackhole.Cosmology.FLRW <> Omega_r:29 var
+def 5094:5107 <> deceleration_q
+R5118:5125 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 5110:5114 <> cosmo:30
+R5133:5133 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5129:5129 <> z:31
+R5138:5138 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5154:5156 Blackhole.Cosmology.FLRW <> E_z def
+R5158:5162 Blackhole.Cosmology.FLRW <> cosmo:30 var
+R5164:5164 Blackhole.Cosmology.FLRW <> z:31 var
+binder 5149:5149 <> E:32
+R5218:5221 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5227:5227 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5206:5208 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5183:5183 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5187:5190 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5185:5185 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5198:5204 Blackhole.Cosmology.FLRW <> Omega_m proj
+R5191:5195 Blackhole.Cosmology.FLRW <> cosmo:30 var
+R5209:5209 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5215:5216 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5211:5213 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5214:5214 Blackhole.Cosmology.FLRW <> z:31 var
+R5223:5225 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5226:5226 Blackhole.Cosmology.FLRW <> E:32 var
+binder 5175:5178 <> dEdz:33
+R5236:5238 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5253:5255 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5239:5239 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5245:5248 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5241:5243 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5244:5244 Blackhole.Cosmology.FLRW <> z:31 var
+R5249:5252 Blackhole.Cosmology.FLRW <> dEdz:33 var
+R5256:5256 Blackhole.Cosmology.FLRW <> E:32 var
+def 5409:5419 <> compute_E_z
+R5434:5434 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5422:5428 <> Omega_m:34
+binder 5430:5430 <> z:35
+R5439:5439 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5446:5449 Stdlib.Reals.R_sqrt <> sqrt def
+R5471:5474 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5486:5486 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5459:5461 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5452:5458 Blackhole.Cosmology.FLRW <> Omega_m:34 var
+R5462:5462 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5468:5469 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5464:5466 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5467:5467 Blackhole.Cosmology.FLRW <> z:35 var
+R5476:5478 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5479:5485 Blackhole.Cosmology.FLRW <> Omega_m:34 var
+def 5502:5515 <> compute_hubble
+R5533:5533 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5518:5519 <> H0:36
+binder 5521:5527 <> Omega_m:37
+binder 5529:5529 <> z:38
+R5538:5538 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5547:5549 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5545:5546 Blackhole.Cosmology.FLRW <> H0:36 var
+R5550:5560 Blackhole.Cosmology.FLRW <> compute_E_z def
+R5562:5568 Blackhole.Cosmology.FLRW <> Omega_m:37 var
+R5570:5570 Blackhole.Cosmology.FLRW <> z:38 var
+def 5585:5605 <> compute_hubble_length
+R5613:5613 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5608:5609 <> H0:39
+R5618:5618 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5631:5633 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5625:5630 Blackhole.Cosmology.FLRW <> c_km_s def
+R5634:5635 Blackhole.Cosmology.FLRW <> H0:39 var
+def 5650:5669 <> compute_Omega_Lambda
+R5682:5682 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5672:5678 <> Omega_m:40
+R5687:5687 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5695:5697 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5698:5704 Blackhole.Cosmology.FLRW <> Omega_m:40 var

@@ -1,0 +1,463 @@
+DIGEST db3fd4de9311785ca0002a3d1cd67ec9
+FBlackhole.Kerr.Horizons
+R1014:1029 Blackhole.Prelim <> <> lib
+R1047:1077 Blackhole.Metrics.Schwarzschild <> <> lib
+R1095:1115 Blackhole.Kerr.Metric <> <> lib
+R1145:1149 Stdlib.Reals.Reals <> <> lib
+R1151:1153 Stdlib.micromega.Lra <> <> lib
+def 1289:1301 <> outer_horizon
+R1310:1310 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1304:1304 <> M:1
+binder 1306:1306 <> a:2
+R1315:1315 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1323:1325 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1322:1322 Blackhole.Kerr.Horizons <> M:1 var
+R1326:1329 Stdlib.Reals.R_sqrt <> sqrt def
+R1335:1337 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1333:1333 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1332:1332 Blackhole.Kerr.Horizons <> M:1 var
+R1339:1339 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1338:1338 Blackhole.Kerr.Horizons <> a:2 var
+def 1420:1432 <> inner_horizon
+R1441:1441 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1435:1435 <> M:3
+binder 1437:1437 <> a:4
+R1446:1446 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1454:1456 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1453:1453 Blackhole.Kerr.Horizons <> M:3 var
+R1457:1460 Stdlib.Reals.R_sqrt <> sqrt def
+R1466:1468 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1464:1464 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1463:1463 Blackhole.Kerr.Horizons <> M:3 var
+R1470:1470 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1469:1469 Blackhole.Kerr.Horizons <> a:4 var
+prf 1588:1613 <> horizons_exist_subextremal
+R1630:1630 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1624:1624 <> M:5
+binder 1626:1626 <> a:6
+R1640:1645 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1636:1638 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1635:1635 Blackhole.Kerr.Horizons <> M:5 var
+R1655:1660 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1649:1651 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R1647:1647 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1646:1646 Blackhole.Kerr.Horizons <> a:6 var
+R1653:1653 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1652:1652 Blackhole.Kerr.Horizons <> M:5 var
+R1661:1667 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R1686:1691 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R1685:1685 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1668:1673 <> r_plus:7
+R1685:1685 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1675:1681 <> r_minus:8
+R1718:1725 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R1698:1700 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1692:1697 Blackhole.Kerr.Horizons <> r_plus:7 var
+R1701:1713 Blackhole.Kerr.Horizons <> outer_horizon def
+R1715:1715 Blackhole.Kerr.Horizons <> M:5 var
+R1717:1717 Blackhole.Kerr.Horizons <> a:6 var
+R1753:1760 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R1733:1735 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1726:1732 Blackhole.Kerr.Horizons <> r_minus:8 var
+R1736:1748 Blackhole.Kerr.Horizons <> inner_horizon def
+R1750:1750 Blackhole.Kerr.Horizons <> M:5 var
+R1752:1752 Blackhole.Kerr.Horizons <> a:6 var
+R1777:1784 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R1767:1769 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1761:1766 Blackhole.Kerr.Horizons <> r_plus:7 var
+R1770:1776 Blackhole.Kerr.Horizons <> r_minus:8 var
+R1799:1806 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R1791:1793 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1785:1790 Blackhole.Kerr.Horizons <> r_plus:7 var
+R1795:1797 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1798:1798 Blackhole.Kerr.Horizons <> M:5 var
+R1814:1816 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1807:1813 Blackhole.Kerr.Horizons <> r_minus:8 var
+R1858:1870 Blackhole.Kerr.Horizons <> outer_horizon def
+R1858:1870 Blackhole.Kerr.Horizons <> outer_horizon def
+R1888:1900 Blackhole.Kerr.Horizons <> inner_horizon def
+R1888:1900 Blackhole.Kerr.Horizons <> inner_horizon def
+R1978:1990 Blackhole.Kerr.Horizons <> outer_horizon def
+R1993:2005 Blackhole.Kerr.Horizons <> inner_horizon def
+prf 2219:2239 <> subextremal_necessary
+R2256:2256 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2250:2250 <> M:9
+binder 2252:2252 <> a:10
+R2266:2271 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2262:2264 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2261:2261 Blackhole.Kerr.Horizons <> M:9 var
+R2309:2314 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2289:2291 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2272:2284 Blackhole.Kerr.Horizons <> outer_horizon def
+R2286:2286 Blackhole.Kerr.Horizons <> M:9 var
+R2288:2288 Blackhole.Kerr.Horizons <> a:10 var
+R2292:2304 Blackhole.Kerr.Horizons <> inner_horizon def
+R2306:2306 Blackhole.Kerr.Horizons <> M:9 var
+R2308:2308 Blackhole.Kerr.Horizons <> a:10 var
+R2318:2320 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R2316:2316 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2315:2315 Blackhole.Kerr.Horizons <> a:10 var
+R2322:2322 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2321:2321 Blackhole.Kerr.Horizons <> M:9 var
+R2369:2381 Blackhole.Kerr.Horizons <> outer_horizon def
+R2384:2396 Blackhole.Kerr.Horizons <> inner_horizon def
+prf 2601:2626 <> extremal_horizons_coincide
+R2641:2641 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2637:2637 <> M:11
+R2651:2656 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2647:2649 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2646:2646 Blackhole.Kerr.Horizons <> M:11 var
+R2674:2676 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2657:2669 Blackhole.Kerr.Horizons <> outer_horizon def
+R2671:2671 Blackhole.Kerr.Horizons <> M:11 var
+R2673:2673 Blackhole.Kerr.Horizons <> M:11 var
+R2677:2689 Blackhole.Kerr.Horizons <> inner_horizon def
+R2691:2691 Blackhole.Kerr.Horizons <> M:11 var
+R2693:2693 Blackhole.Kerr.Horizons <> M:11 var
+R2727:2739 Blackhole.Kerr.Horizons <> outer_horizon def
+R2742:2754 Blackhole.Kerr.Horizons <> inner_horizon def
+prf 2899:2929 <> naked_singularity_superextremal
+R2946:2946 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2940:2940 <> M:12
+binder 2942:2942 <> a:13
+R2956:2961 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2952:2954 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2951:2951 Blackhole.Kerr.Horizons <> M:12 var
+R2967:2972 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2963:2965 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2962:2962 Blackhole.Kerr.Horizons <> a:13 var
+R2966:2966 Blackhole.Kerr.Horizons <> M:12 var
+R2984:2984 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2980:2980 <> r:14
+R3007:3010 Corelib.Init.Logic <> ::type_scope:x_'<>'_x not
+R2991:3000 Blackhole.Kerr.Metric <> kerr_Delta def
+R3002:3002 Blackhole.Kerr.Horizons <> r:14 var
+R3004:3004 Blackhole.Kerr.Horizons <> M:12 var
+R3006:3006 Blackhole.Kerr.Horizons <> a:13 var
+R3053:3062 Blackhole.Kerr.Metric <> kerr_Delta def
+def 3328:3350 <> ergosphere_outer_radius
+R3365:3365 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3353:3357 <> theta:15
+binder 3359:3359 <> M:16
+binder 3361:3361 <> a:17
+R3370:3370 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3378:3380 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3377:3377 Blackhole.Kerr.Horizons <> M:16 var
+R3381:3384 Stdlib.Reals.R_sqrt <> sqrt def
+R3390:3392 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3388:3388 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3387:3387 Blackhole.Kerr.Horizons <> M:16 var
+R3396:3398 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3394:3394 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3393:3393 Blackhole.Kerr.Horizons <> a:17 var
+R3399:3399 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3409:3410 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3400:3402 Stdlib.Reals.Rtrigo_def <> cos def
+R3404:3408 Blackhole.Kerr.Horizons <> theta:15 var
+prf 3484:3520 <> ergosphere_inner_equals_outer_horizon
+R3537:3537 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3531:3531 <> M:18
+binder 3533:3533 <> a:19
+R3547:3552 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3543:3545 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3542:3542 Blackhole.Kerr.Horizons <> M:18 var
+R3562:3567 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3556:3558 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R3554:3554 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3553:3553 Blackhole.Kerr.Horizons <> a:19 var
+R3560:3560 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3559:3559 Blackhole.Kerr.Horizons <> M:18 var
+R3602:3604 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R3568:3590 Blackhole.Kerr.Horizons <> ergosphere_outer_radius def
+R3595:3595 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3593:3594 Stdlib.Reals.Rtrigo1 <> PI def
+R3599:3599 Blackhole.Kerr.Horizons <> M:18 var
+R3601:3601 Blackhole.Kerr.Horizons <> a:19 var
+R3605:3617 Blackhole.Kerr.Horizons <> outer_horizon def
+R3619:3619 Blackhole.Kerr.Horizons <> M:18 var
+R3621:3621 Blackhole.Kerr.Horizons <> a:19 var
+R3661:3683 Blackhole.Kerr.Horizons <> ergosphere_outer_radius def
+R3686:3698 Blackhole.Kerr.Horizons <> outer_horizon def
+prf 3964:3996 <> ergosphere_extends_beyond_horizon
+R4013:4013 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4007:4007 <> M:20
+binder 4009:4009 <> a:21
+R4023:4028 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4019:4021 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4018:4018 Blackhole.Kerr.Horizons <> M:20 var
+R4038:4043 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4030:4032 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x_'<'_x not
+R4034:4036 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x_'<'_x not
+R4033:4033 Blackhole.Kerr.Horizons <> a:21 var
+R4033:4033 Blackhole.Kerr.Horizons <> a:21 var
+R4037:4037 Blackhole.Kerr.Horizons <> M:20 var
+R4073:4075 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4044:4066 Blackhole.Kerr.Horizons <> ergosphere_outer_radius def
+R4070:4070 Blackhole.Kerr.Horizons <> M:20 var
+R4072:4072 Blackhole.Kerr.Horizons <> a:21 var
+R4076:4088 Blackhole.Kerr.Horizons <> outer_horizon def
+R4090:4090 Blackhole.Kerr.Horizons <> M:20 var
+R4092:4092 Blackhole.Kerr.Horizons <> a:21 var
+R4131:4153 Blackhole.Kerr.Horizons <> ergosphere_outer_radius def
+R4156:4168 Blackhole.Kerr.Horizons <> outer_horizon def
+def 4452:4466 <> surface_gravity
+R4475:4475 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4469:4469 <> M:22
+binder 4471:4471 <> a:23
+R4480:4480 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4501:4513 Blackhole.Kerr.Horizons <> outer_horizon def
+R4515:4515 Blackhole.Kerr.Horizons <> M:22 var
+R4517:4517 Blackhole.Kerr.Horizons <> a:23 var
+binder 4491:4496 <> r_plus:24
+R4553:4555 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4544:4546 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4547:4552 Blackhole.Kerr.Horizons <> r_plus:24 var
+R4557:4559 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4560:4560 Blackhole.Kerr.Horizons <> M:22 var
+binder 4528:4538 <> Delta_prime:25
+R4578:4581 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4604:4604 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4567:4577 Blackhole.Kerr.Horizons <> Delta_prime:25 var
+R4594:4596 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4583:4585 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4592:4592 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4586:4591 Blackhole.Kerr.Horizons <> r_plus:24 var
+R4598:4600 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4602:4602 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4601:4601 Blackhole.Kerr.Horizons <> a:23 var
+def 4664:4682 <> hawking_temperature
+R4691:4691 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4685:4685 <> M:26
+binder 4687:4687 <> a:27
+R4696:4696 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4722:4725 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4732:4732 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4703:4717 Blackhole.Kerr.Horizons <> surface_gravity def
+R4719:4719 Blackhole.Kerr.Horizons <> M:26 var
+R4721:4721 Blackhole.Kerr.Horizons <> a:27 var
+R4727:4729 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4730:4731 Stdlib.Reals.Rtrigo1 <> PI def
+prf 4801:4829 <> extremal_zero_surface_gravity
+R4844:4844 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4840:4840 <> M:28
+R4854:4859 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4850:4852 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4849:4849 Blackhole.Kerr.Horizons <> M:28 var
+R4879:4881 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R4860:4874 Blackhole.Kerr.Horizons <> surface_gravity def
+R4876:4876 Blackhole.Kerr.Horizons <> M:28 var
+R4878:4878 Blackhole.Kerr.Horizons <> M:28 var
+R4916:4930 Blackhole.Kerr.Horizons <> surface_gravity def
+R4933:4945 Blackhole.Kerr.Horizons <> outer_horizon def
+def 5201:5215 <> is_null_surface
+R5222:5222 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5218:5218 <> r:29
+R5232:5232 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5226:5226 <> M:30
+binder 5228:5228 <> a:31
+R5263:5265 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R5247:5256 Blackhole.Kerr.Metric <> kerr_Delta def
+R5258:5258 Blackhole.Kerr.Horizons <> r:29 var
+R5260:5260 Blackhole.Kerr.Horizons <> M:30 var
+R5262:5262 Blackhole.Kerr.Horizons <> a:31 var
+prf 5317:5334 <> event_horizon_null
+R5351:5351 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5345:5345 <> M:32
+binder 5347:5347 <> a:33
+R5361:5366 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5357:5359 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R5356:5356 Blackhole.Kerr.Horizons <> M:32 var
+R5376:5381 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5370:5372 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R5368:5368 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5367:5367 Blackhole.Kerr.Horizons <> a:33 var
+R5374:5374 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5373:5373 Blackhole.Kerr.Horizons <> M:32 var
+R5382:5396 Blackhole.Kerr.Horizons <> is_null_surface def
+R5399:5411 Blackhole.Kerr.Horizons <> outer_horizon def
+R5413:5413 Blackhole.Kerr.Horizons <> M:32 var
+R5415:5415 Blackhole.Kerr.Horizons <> a:33 var
+R5418:5418 Blackhole.Kerr.Horizons <> M:32 var
+R5420:5420 Blackhole.Kerr.Horizons <> a:33 var
+R5460:5474 Blackhole.Kerr.Horizons <> is_null_surface def
+R5477:5489 Blackhole.Kerr.Horizons <> outer_horizon def
+R5492:5501 Blackhole.Kerr.Metric <> kerr_Delta def
+prf 5684:5702 <> cauchy_horizon_null
+R5719:5719 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5713:5713 <> M:34
+binder 5715:5715 <> a:35
+R5729:5734 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5725:5727 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R5724:5724 Blackhole.Kerr.Horizons <> M:34 var
+R5744:5749 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5738:5740 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R5736:5736 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5735:5735 Blackhole.Kerr.Horizons <> a:35 var
+R5742:5742 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5741:5741 Blackhole.Kerr.Horizons <> M:34 var
+R5750:5764 Blackhole.Kerr.Horizons <> is_null_surface def
+R5767:5779 Blackhole.Kerr.Horizons <> inner_horizon def
+R5781:5781 Blackhole.Kerr.Horizons <> M:34 var
+R5783:5783 Blackhole.Kerr.Horizons <> a:35 var
+R5786:5786 Blackhole.Kerr.Horizons <> M:34 var
+R5788:5788 Blackhole.Kerr.Horizons <> a:35 var
+R5828:5842 Blackhole.Kerr.Horizons <> is_null_surface def
+R5845:5857 Blackhole.Kerr.Horizons <> inner_horizon def
+R5860:5869 Blackhole.Kerr.Metric <> kerr_Delta def
+def 6113:6123 <> in_exterior
+R6130:6130 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6126:6126 <> r:36
+R6140:6140 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6134:6134 <> M:37
+binder 6136:6136 <> a:38
+R6156:6158 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6155:6155 Blackhole.Kerr.Horizons <> r:36 var
+R6159:6171 Blackhole.Kerr.Horizons <> outer_horizon def
+R6173:6173 Blackhole.Kerr.Horizons <> M:37 var
+R6175:6175 Blackhole.Kerr.Horizons <> a:38 var
+def 6264:6279 <> between_horizons
+R6286:6286 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6282:6282 <> r:39
+R6296:6296 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6290:6290 <> M:40
+binder 6292:6292 <> a:41
+R6332:6335 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R6328:6330 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R6311:6323 Blackhole.Kerr.Horizons <> inner_horizon def
+R6325:6325 Blackhole.Kerr.Horizons <> M:40 var
+R6327:6327 Blackhole.Kerr.Horizons <> a:41 var
+R6331:6331 Blackhole.Kerr.Horizons <> r:39 var
+R6337:6339 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R6336:6336 Blackhole.Kerr.Horizons <> r:39 var
+R6340:6352 Blackhole.Kerr.Horizons <> outer_horizon def
+R6354:6354 Blackhole.Kerr.Horizons <> M:40 var
+R6356:6356 Blackhole.Kerr.Horizons <> a:41 var
+def 6431:6449 <> black_hole_interior
+R6456:6456 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6452:6452 <> r:42
+R6466:6466 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6460:6460 <> M:43
+binder 6462:6462 <> a:44
+R6482:6484 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R6481:6481 Blackhole.Kerr.Horizons <> r:42 var
+R6485:6497 Blackhole.Kerr.Horizons <> inner_horizon def
+R6499:6499 Blackhole.Kerr.Horizons <> M:43 var
+R6501:6501 Blackhole.Kerr.Horizons <> a:44 var
+prf 6560:6585 <> metric_lorentzian_exterior
+R6610:6610 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6596:6596 <> r:45
+binder 6598:6602 <> theta:46
+binder 6604:6604 <> M:47
+binder 6606:6606 <> a:48
+R6620:6625 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6616:6618 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6615:6615 Blackhole.Kerr.Horizons <> M:47 var
+R6636:6641 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6627:6630 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x_'<'_x not
+R6632:6634 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x_'<'_x not
+R6631:6631 Blackhole.Kerr.Horizons <> a:48 var
+R6631:6631 Blackhole.Kerr.Horizons <> a:48 var
+R6635:6635 Blackhole.Kerr.Horizons <> M:47 var
+R6659:6664 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6642:6652 Blackhole.Kerr.Horizons <> in_exterior def
+R6654:6654 Blackhole.Kerr.Horizons <> r:45 var
+R6656:6656 Blackhole.Kerr.Horizons <> M:47 var
+R6658:6658 Blackhole.Kerr.Horizons <> a:48 var
+R6665:6677 Blackhole.Prelim <> is_lorentzian def
+R6680:6697 Blackhole.Kerr.Metric <> kerr_metric_tensor def
+R6699:6699 Blackhole.Kerr.Horizons <> r:45 var
+R6701:6705 Blackhole.Kerr.Horizons <> theta:46 var
+R6707:6707 Blackhole.Kerr.Horizons <> M:47 var
+R6709:6709 Blackhole.Kerr.Horizons <> a:48 var
+R6767:6777 Blackhole.Kerr.Horizons <> in_exterior def
+R6780:6792 Blackhole.Kerr.Horizons <> outer_horizon def
+R6817:6829 Blackhole.Prelim <> is_lorentzian def
+R6832:6849 Blackhole.Kerr.Metric <> kerr_metric_tensor def
+prf 7013:7045 <> metric_signature_flips_at_horizon
+R7068:7068 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7056:7060 <> theta:49
+binder 7062:7062 <> M:50
+binder 7064:7064 <> a:51
+R7078:7083 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7074:7076 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7073:7073 Blackhole.Kerr.Horizons <> M:50 var
+R7093:7098 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7085:7087 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x_'<'_x not
+R7089:7091 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x_'<'_x not
+R7088:7088 Blackhole.Kerr.Horizons <> a:51 var
+R7088:7088 Blackhole.Kerr.Horizons <> a:51 var
+R7092:7092 Blackhole.Kerr.Horizons <> M:50 var
+R7116:7116 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7106:7112 <> epsilon:52
+R7134:7141 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7130:7132 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7123:7129 Blackhole.Kerr.Horizons <> epsilon:52 var
+R7156:7168 Blackhole.Kerr.Horizons <> outer_horizon def
+R7170:7170 Blackhole.Kerr.Horizons <> M:50 var
+R7172:7172 Blackhole.Kerr.Horizons <> a:51 var
+binder 7146:7151 <> r_plus:53
+R7198:7215 Blackhole.Kerr.Metric <> kerr_metric_tensor def
+R7224:7226 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R7218:7223 Blackhole.Kerr.Horizons <> r_plus:53 var
+R7227:7233 Blackhole.Kerr.Horizons <> epsilon:52 var
+R7236:7240 Blackhole.Kerr.Horizons <> theta:49 var
+R7242:7242 Blackhole.Kerr.Horizons <> M:50 var
+R7244:7244 Blackhole.Kerr.Horizons <> a:51 var
+binder 7185:7193 <> g_outside:54
+R7269:7286 Blackhole.Kerr.Metric <> kerr_metric_tensor def
+R7295:7297 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R7289:7294 Blackhole.Kerr.Horizons <> r_plus:53 var
+R7298:7304 Blackhole.Kerr.Horizons <> epsilon:52 var
+R7307:7311 Blackhole.Kerr.Horizons <> theta:49 var
+R7313:7313 Blackhole.Kerr.Horizons <> M:50 var
+R7315:7315 Blackhole.Kerr.Horizons <> a:51 var
+binder 7257:7264 <> g_inside:55
+R7342:7345 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R7338:7340 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R7324:7327 Blackhole.Prelim <> g_tt proj
+R7329:7337 Blackhole.Kerr.Horizons <> g_outside:54 var
+R7359:7361 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7346:7349 Blackhole.Prelim <> g_tt proj
+R7351:7358 Blackhole.Kerr.Horizons <> g_inside:55 var
+def 7718:7735 <> kerr_outer_horizon
+R7744:7744 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7738:7738 <> M:56
+binder 7740:7740 <> a:57
+R7749:7749 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R7756:7768 Blackhole.Kerr.Horizons <> outer_horizon def
+R7770:7770 Blackhole.Kerr.Horizons <> M:56 var
+R7772:7772 Blackhole.Kerr.Horizons <> a:57 var
+def 7787:7804 <> kerr_inner_horizon
+R7813:7813 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7807:7807 <> M:58
+binder 7809:7809 <> a:59
+R7818:7818 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R7825:7837 Blackhole.Kerr.Horizons <> inner_horizon def
+R7839:7839 Blackhole.Kerr.Horizons <> M:58 var
+R7841:7841 Blackhole.Kerr.Horizons <> a:59 var
+def 7856:7877 <> kerr_ergosphere_radius
+R7892:7892 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7880:7884 <> theta:60
+binder 7886:7886 <> M:61
+binder 7888:7888 <> a:62
+R7897:7897 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R7904:7926 Blackhole.Kerr.Horizons <> ergosphere_outer_radius def
+R7928:7932 Blackhole.Kerr.Horizons <> theta:60 var
+R7934:7934 Blackhole.Kerr.Horizons <> M:61 var
+R7936:7936 Blackhole.Kerr.Horizons <> a:62 var
+def 7951:7970 <> kerr_surface_gravity
+R7979:7979 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7973:7973 <> M:63
+binder 7975:7975 <> a:64
+R7984:7984 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R7991:8005 Blackhole.Kerr.Horizons <> surface_gravity def
+R8007:8007 Blackhole.Kerr.Horizons <> M:63 var
+R8009:8009 Blackhole.Kerr.Horizons <> a:64 var
+def 8024:8047 <> kerr_hawking_temperature
+R8056:8056 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8050:8050 <> M:65
+binder 8052:8052 <> a:66
+R8061:8061 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R8068:8086 Blackhole.Kerr.Horizons <> hawking_temperature def
+R8088:8088 Blackhole.Kerr.Horizons <> M:65 var
+R8090:8090 Blackhole.Kerr.Horizons <> a:66 var

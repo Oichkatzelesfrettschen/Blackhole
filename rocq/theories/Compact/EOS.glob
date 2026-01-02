@@ -1,0 +1,283 @@
+DIGEST ddc55052264878e8b738027bf3601427
+FBlackhole.Compact.EOS
+R590:605 Blackhole.Prelim <> <> lib
+R635:639 Stdlib.Reals.Reals <> <> lib
+R641:643 Stdlib.micromega.Lra <> <> lib
+R645:650 Stdlib.Reals.Rpower <> <> lib
+rec 990:1004 <> PolytropeParams
+proj 1025:1030 <> poly_K
+proj 1071:1080 <> poly_gamma
+R1034:1034 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1084:1084 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 1182:1196 <> valid_polytrope
+R1203:1217 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 1199:1199 <> p:4
+R1246:1249 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R1242:1244 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1235:1240 Blackhole.Compact.EOS <> poly_K proj
+R1232:1232 Blackhole.Compact.EOS <> p:4 var
+R1264:1266 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1253:1262 Blackhole.Compact.EOS <> poly_gamma proj
+R1250:1250 Blackhole.Compact.EOS <> p:4 var
+def 1330:1347 <> polytrope_pressure
+R1354:1368 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 1350:1350 <> p:5
+R1378:1378 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1372:1374 <> rho:6
+R1383:1383 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1400:1402 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1393:1398 Blackhole.Compact.EOS <> poly_K proj
+R1390:1390 Blackhole.Compact.EOS <> p:5 var
+R1403:1408 Stdlib.Reals.Rpower <> Rpower def
+R1410:1412 Blackhole.Compact.EOS <> rho:6 var
+R1417:1426 Blackhole.Compact.EOS <> poly_gamma proj
+R1414:1414 Blackhole.Compact.EOS <> p:5 var
+def 1587:1610 <> polytrope_energy_density
+R1617:1631 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 1613:1613 <> p:7
+R1641:1641 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1635:1637 <> rho:8
+R1646:1646 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1662:1679 Blackhole.Compact.EOS <> polytrope_pressure def
+R1681:1681 Blackhole.Compact.EOS <> p:7 var
+R1683:1685 Blackhole.Compact.EOS <> rho:8 var
+binder 1657:1657 <> P:9
+R1695:1697 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1692:1694 Blackhole.Compact.EOS <> rho:8 var
+R1699:1702 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1721:1721 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1698:1698 Blackhole.Compact.EOS <> P:9 var
+R1717:1719 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1706:1715 Blackhole.Compact.EOS <> poly_gamma proj
+R1703:1703 Blackhole.Compact.EOS <> p:7 var
+def 1857:1880 <> polytrope_sound_speed_sq
+R1887:1901 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 1883:1883 <> p:10
+R1911:1911 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1905:1907 <> rho:11
+R1916:1916 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1932:1949 Blackhole.Compact.EOS <> polytrope_pressure def
+R1951:1951 Blackhole.Compact.EOS <> p:10 var
+R1953:1955 Blackhole.Compact.EOS <> rho:11 var
+binder 1927:1927 <> P:12
+R1973:1996 Blackhole.Compact.EOS <> polytrope_energy_density def
+R1998:1998 Blackhole.Compact.EOS <> p:10 var
+R2000:2002 Blackhole.Compact.EOS <> rho:11 var
+binder 1966:1968 <> eps:13
+R2027:2030 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2038:2038 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2023:2025 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2012:2021 Blackhole.Compact.EOS <> poly_gamma proj
+R2009:2009 Blackhole.Compact.EOS <> p:10 var
+R2026:2026 Blackhole.Compact.EOS <> P:12 var
+R2034:2036 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2031:2033 Blackhole.Compact.EOS <> eps:13 var
+R2037:2037 Blackhole.Compact.EOS <> P:12 var
+prf 2131:2147 <> pressure_positive
+R2163:2177 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 2159:2159 <> p:14
+R2187:2187 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2181:2183 <> rho:15
+R2210:2215 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2193:2207 Blackhole.Compact.EOS <> valid_polytrope def
+R2209:2209 Blackhole.Compact.EOS <> p:14 var
+R2223:2228 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2219:2221 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2216:2218 Blackhole.Compact.EOS <> rho:15 var
+R2253:2255 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2229:2246 Blackhole.Compact.EOS <> polytrope_pressure def
+R2248:2248 Blackhole.Compact.EOS <> p:14 var
+R2250:2252 Blackhole.Compact.EOS <> rho:15 var
+R2308:2325 Blackhole.Compact.EOS <> polytrope_pressure def
+R2336:2352 Stdlib.Reals.RIneq <> Rmult_gt_0_compat thm
+R2336:2352 Stdlib.Reals.RIneq <> Rmult_gt_0_compat thm
+prf 2475:2498 <> energy_exceeds_rest_mass
+R2514:2528 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 2510:2510 <> p:16
+R2538:2538 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2532:2534 <> rho:17
+R2561:2566 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2544:2558 Blackhole.Compact.EOS <> valid_polytrope def
+R2560:2560 Blackhole.Compact.EOS <> p:16 var
+R2574:2579 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2570:2572 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2567:2569 Blackhole.Compact.EOS <> rho:17 var
+R2610:2612 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2580:2603 Blackhole.Compact.EOS <> polytrope_energy_density def
+R2605:2605 Blackhole.Compact.EOS <> p:16 var
+R2607:2609 Blackhole.Compact.EOS <> rho:17 var
+R2613:2615 Blackhole.Compact.EOS <> rho:17 var
+R2662:2685 Blackhole.Compact.EOS <> polytrope_energy_density def
+prf 2854:2875 <> sound_speed_subluminal
+R2891:2905 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 2887:2887 <> p:18
+R2915:2915 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2909:2911 <> rho:19
+R2938:2943 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2921:2935 Blackhole.Compact.EOS <> valid_polytrope def
+R2937:2937 Blackhole.Compact.EOS <> p:18 var
+R2963:2996 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2958:2961 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x not
+R2947:2956 Blackhole.Compact.EOS <> poly_gamma proj
+R2944:2944 Blackhole.Compact.EOS <> p:18 var
+R3004:3009 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3000:3002 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2997:2999 Blackhole.Compact.EOS <> rho:19 var
+R3040:3042 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R3010:3033 Blackhole.Compact.EOS <> polytrope_sound_speed_sq def
+R3035:3035 Blackhole.Compact.EOS <> p:18 var
+R3037:3039 Blackhole.Compact.EOS <> rho:19 var
+def 3284:3306 <> gamma_nonrel_degenerate
+R3310:3310 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3316:3318 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+def 3394:3418 <> gamma_ultrarel_degenerate
+R3422:3422 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3428:3430 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+def 3488:3498 <> gamma_stiff
+R3502:3502 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 3562:3576 <> gamma_radiation
+R3580:3580 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3586:3588 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+def 3729:3744 <> polytropic_index
+R3755:3755 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3747:3751 <> gamma:20
+R3760:3760 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3768:3771 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3781:3781 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3777:3779 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3772:3776 Blackhole.Compact.EOS <> gamma:20 var
+prf 3834:3849 <> gamma_from_index
+R3864:3864 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3860:3860 <> n:21
+R3874:3879 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3870:3872 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3869:3869 Blackhole.Compact.EOS <> n:21 var
+R3887:3889 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R3881:3883 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3885:3885 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3886:3886 Blackhole.Compact.EOS <> n:21 var
+R3890:3890 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3896:3899 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3892:3894 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3891:3891 Blackhole.Compact.EOS <> n:21 var
+R3900:3900 Blackhole.Compact.EOS <> n:21 var
+def 4232:4249 <> polytrope_enthalpy
+R4256:4270 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 4252:4252 <> p:22
+R4280:4280 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4274:4276 <> rho:23
+R4285:4285 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4301:4318 Blackhole.Compact.EOS <> polytrope_pressure def
+R4320:4320 Blackhole.Compact.EOS <> p:22 var
+R4322:4324 Blackhole.Compact.EOS <> rho:23 var
+binder 4296:4296 <> P:24
+R4342:4365 Blackhole.Compact.EOS <> polytrope_energy_density def
+R4367:4367 Blackhole.Compact.EOS <> p:22 var
+R4369:4371 Blackhole.Compact.EOS <> rho:23 var
+binder 4335:4337 <> eps:25
+R4378:4378 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4386:4389 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4382:4384 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4379:4381 Blackhole.Compact.EOS <> eps:25 var
+R4385:4385 Blackhole.Compact.EOS <> P:24 var
+R4390:4392 Blackhole.Compact.EOS <> rho:23 var
+def 4454:4475 <> polytrope_log_enthalpy
+R4482:4496 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 4478:4478 <> p:26
+R4506:4506 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4500:4502 <> rho:27
+R4511:4511 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4518:4519 Stdlib.Reals.Rpower <> ln def
+R4522:4539 Blackhole.Compact.EOS <> polytrope_enthalpy def
+R4541:4541 Blackhole.Compact.EOS <> p:26 var
+R4543:4545 Blackhole.Compact.EOS <> rho:27 var
+def 4716:4730 <> adiabatic_index
+R4737:4751 Blackhole.Compact.EOS <> PolytropeParams rec
+binder 4733:4733 <> p:28
+R4756:4756 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4766:4775 Blackhole.Compact.EOS <> poly_gamma proj
+R4763:4763 Blackhole.Compact.EOS <> p:28 var
+def 5129:5144 <> compute_pressure
+R5161:5161 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5147:5147 <> K:29
+binder 5149:5153 <> gamma:30
+binder 5155:5157 <> rho:31
+R5166:5166 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5174:5176 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5173:5173 Blackhole.Compact.EOS <> K:29 var
+R5177:5182 Stdlib.Reals.Rpower <> Rpower def
+R5184:5186 Blackhole.Compact.EOS <> rho:31 var
+R5188:5192 Blackhole.Compact.EOS <> gamma:30 var
+def 5207:5228 <> compute_energy_density
+R5245:5245 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5231:5231 <> K:32
+binder 5233:5237 <> gamma:33
+binder 5239:5241 <> rho:34
+R5250:5250 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5267:5269 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5266:5266 Blackhole.Compact.EOS <> K:32 var
+R5270:5275 Stdlib.Reals.Rpower <> Rpower def
+R5277:5279 Blackhole.Compact.EOS <> rho:34 var
+R5281:5285 Blackhole.Compact.EOS <> gamma:33 var
+binder 5261:5261 <> P:35
+R5295:5297 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5292:5294 Blackhole.Compact.EOS <> rho:34 var
+R5299:5302 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5312:5312 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5298:5298 Blackhole.Compact.EOS <> P:35 var
+R5308:5310 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5303:5307 Blackhole.Compact.EOS <> gamma:33 var
+def 5327:5348 <> compute_sound_speed_sq
+R5365:5365 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5351:5351 <> K:36
+binder 5353:5357 <> gamma:37
+binder 5359:5361 <> rho:38
+R5370:5370 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5387:5389 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5386:5386 Blackhole.Compact.EOS <> K:36 var
+R5390:5395 Stdlib.Reals.Rpower <> Rpower def
+R5397:5399 Blackhole.Compact.EOS <> rho:38 var
+R5401:5405 Blackhole.Compact.EOS <> gamma:37 var
+binder 5381:5381 <> P:39
+R5426:5428 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5423:5425 Blackhole.Compact.EOS <> rho:38 var
+R5430:5433 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5443:5443 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5429:5429 Blackhole.Compact.EOS <> P:39 var
+R5439:5441 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5434:5438 Blackhole.Compact.EOS <> gamma:37 var
+binder 5416:5418 <> eps:40
+R5459:5462 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5470:5470 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5455:5457 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5450:5454 Blackhole.Compact.EOS <> gamma:37 var
+R5458:5458 Blackhole.Compact.EOS <> P:39 var
+R5466:5468 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5463:5465 Blackhole.Compact.EOS <> eps:40 var
+R5469:5469 Blackhole.Compact.EOS <> P:39 var
+def 5485:5500 <> compute_enthalpy
+R5517:5517 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5503:5503 <> K:41
+binder 5505:5509 <> gamma:42
+binder 5511:5513 <> rho:43
+R5522:5522 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5539:5541 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5538:5538 Blackhole.Compact.EOS <> K:41 var
+R5542:5547 Stdlib.Reals.Rpower <> Rpower def
+R5549:5551 Blackhole.Compact.EOS <> rho:43 var
+R5553:5557 Blackhole.Compact.EOS <> gamma:42 var
+binder 5533:5533 <> P:44
+R5578:5580 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5575:5577 Blackhole.Compact.EOS <> rho:43 var
+R5582:5585 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5595:5595 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5581:5581 Blackhole.Compact.EOS <> P:44 var
+R5591:5593 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5586:5590 Blackhole.Compact.EOS <> gamma:42 var
+binder 5568:5570 <> eps:45
+R5602:5602 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5610:5613 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5606:5608 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5603:5605 Blackhole.Compact.EOS <> eps:45 var
+R5609:5609 Blackhole.Compact.EOS <> P:44 var
+R5614:5616 Blackhole.Compact.EOS <> rho:43 var

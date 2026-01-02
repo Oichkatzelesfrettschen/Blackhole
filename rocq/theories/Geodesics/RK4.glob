@@ -1,0 +1,590 @@
+DIGEST 156194ffd3b1d8ed76c8373921d30f33
+FBlackhole.Geodesics.RK4
+R424:439 Blackhole.Prelim <> <> lib
+R469:473 Stdlib.Reals.Reals <> <> lib
+R475:477 Stdlib.micromega.Lra <> <> lib
+rec 656:668 <> GeodesicState
+proj 685:687 <> pos
+proj 748:750 <> vel
+R691:698 Blackhole.Prelim <> BLCoords rec
+R754:763 Blackhole.Prelim <> FourVector rec
+def 893:907 <> rk4_step_scalar
+R915:918 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R914:914 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R919:919 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 910:910 <> f:4
+R929:929 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 923:923 <> h:5
+binder 925:925 <> y:6
+R934:934 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R951:951 Blackhole.Geodesics.RK4 <> f:4 var
+R953:953 Blackhole.Geodesics.RK4 <> y:6 var
+binder 945:946 <> k1:7
+R970:970 Blackhole.Geodesics.RK4 <> f:4 var
+R974:976 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R973:973 Blackhole.Geodesics.RK4 <> y:6 var
+R980:982 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R978:978 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R977:977 Blackhole.Geodesics.RK4 <> h:5 var
+R983:984 Blackhole.Geodesics.RK4 <> k1:7 var
+binder 964:965 <> k2:8
+R1002:1002 Blackhole.Geodesics.RK4 <> f:4 var
+R1006:1008 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1005:1005 Blackhole.Geodesics.RK4 <> y:6 var
+R1012:1014 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1010:1010 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1009:1009 Blackhole.Geodesics.RK4 <> h:5 var
+R1015:1016 Blackhole.Geodesics.RK4 <> k2:8 var
+binder 996:997 <> k3:9
+R1034:1034 Blackhole.Geodesics.RK4 <> f:4 var
+R1038:1040 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1037:1037 Blackhole.Geodesics.RK4 <> y:6 var
+R1042:1044 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1041:1041 Blackhole.Geodesics.RK4 <> h:5 var
+R1045:1046 Blackhole.Geodesics.RK4 <> k3:9 var
+binder 1028:1029 <> k4:10
+R1055:1057 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1054:1054 Blackhole.Geodesics.RK4 <> y:6 var
+R1061:1064 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1086:1086 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1059:1059 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1058:1058 Blackhole.Geodesics.RK4 <> h:5 var
+R1081:1083 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1074:1076 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1067:1069 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1065:1066 Blackhole.Geodesics.RK4 <> k1:7 var
+R1071:1071 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1072:1073 Blackhole.Geodesics.RK4 <> k2:8 var
+R1078:1078 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1079:1080 Blackhole.Geodesics.RK4 <> k3:9 var
+R1084:1085 Blackhole.Geodesics.RK4 <> k4:10 var
+rec 1191:1201 <> StateVector
+proj 1215:1216 <> x0
+proj 1234:1235 <> x1
+proj 1253:1254 <> x2
+proj 1276:1277 <> x3
+proj 1297:1298 <> v0
+proj 1325:1326 <> v1
+proj 1353:1354 <> v2
+proj 1385:1386 <> v3
+R1220:1220 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1239:1239 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1258:1258 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1281:1281 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1302:1302 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1330:1330 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1358:1358 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1390:1390 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 1451:1456 <> sv_add
+R1465:1475 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 1459:1459 <> a:20
+binder 1461:1461 <> b:21
+R1480:1490 Blackhole.Geodesics.RK4 <> StateVector rec
+R1497:1500 Blackhole.Geodesics.RK4 <> mkSV constr
+R1509:1511 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1506:1507 Blackhole.Geodesics.RK4 <> x0 proj
+R1503:1503 Blackhole.Geodesics.RK4 <> a:20 var
+R1515:1516 Blackhole.Geodesics.RK4 <> x0 proj
+R1512:1512 Blackhole.Geodesics.RK4 <> b:21 var
+R1527:1529 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1524:1525 Blackhole.Geodesics.RK4 <> x1 proj
+R1521:1521 Blackhole.Geodesics.RK4 <> a:20 var
+R1533:1534 Blackhole.Geodesics.RK4 <> x1 proj
+R1530:1530 Blackhole.Geodesics.RK4 <> b:21 var
+R1552:1554 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1549:1550 Blackhole.Geodesics.RK4 <> x2 proj
+R1546:1546 Blackhole.Geodesics.RK4 <> a:20 var
+R1558:1559 Blackhole.Geodesics.RK4 <> x2 proj
+R1555:1555 Blackhole.Geodesics.RK4 <> b:21 var
+R1570:1572 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1567:1568 Blackhole.Geodesics.RK4 <> x3 proj
+R1564:1564 Blackhole.Geodesics.RK4 <> a:20 var
+R1576:1577 Blackhole.Geodesics.RK4 <> x3 proj
+R1573:1573 Blackhole.Geodesics.RK4 <> b:21 var
+R1595:1597 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1592:1593 Blackhole.Geodesics.RK4 <> v0 proj
+R1589:1589 Blackhole.Geodesics.RK4 <> a:20 var
+R1601:1602 Blackhole.Geodesics.RK4 <> v0 proj
+R1598:1598 Blackhole.Geodesics.RK4 <> b:21 var
+R1613:1615 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1610:1611 Blackhole.Geodesics.RK4 <> v1 proj
+R1607:1607 Blackhole.Geodesics.RK4 <> a:20 var
+R1619:1620 Blackhole.Geodesics.RK4 <> v1 proj
+R1616:1616 Blackhole.Geodesics.RK4 <> b:21 var
+R1638:1640 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1635:1636 Blackhole.Geodesics.RK4 <> v2 proj
+R1632:1632 Blackhole.Geodesics.RK4 <> a:20 var
+R1644:1645 Blackhole.Geodesics.RK4 <> v2 proj
+R1641:1641 Blackhole.Geodesics.RK4 <> b:21 var
+R1656:1658 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R1653:1654 Blackhole.Geodesics.RK4 <> v3 proj
+R1650:1650 Blackhole.Geodesics.RK4 <> a:20 var
+R1662:1663 Blackhole.Geodesics.RK4 <> v3 proj
+R1659:1659 Blackhole.Geodesics.RK4 <> b:21 var
+def 1709:1716 <> sv_scale
+R1723:1723 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1719:1719 <> c:22
+R1731:1741 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 1727:1727 <> a:23
+R1746:1756 Blackhole.Geodesics.RK4 <> StateVector rec
+R1763:1766 Blackhole.Geodesics.RK4 <> mkSV constr
+R1770:1772 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1769:1769 Blackhole.Geodesics.RK4 <> c:22 var
+R1776:1777 Blackhole.Geodesics.RK4 <> x0 proj
+R1773:1773 Blackhole.Geodesics.RK4 <> a:23 var
+R1783:1785 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1782:1782 Blackhole.Geodesics.RK4 <> c:22 var
+R1789:1790 Blackhole.Geodesics.RK4 <> x1 proj
+R1786:1786 Blackhole.Geodesics.RK4 <> a:23 var
+R1803:1805 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1802:1802 Blackhole.Geodesics.RK4 <> c:22 var
+R1809:1810 Blackhole.Geodesics.RK4 <> x2 proj
+R1806:1806 Blackhole.Geodesics.RK4 <> a:23 var
+R1816:1818 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1815:1815 Blackhole.Geodesics.RK4 <> c:22 var
+R1822:1823 Blackhole.Geodesics.RK4 <> x3 proj
+R1819:1819 Blackhole.Geodesics.RK4 <> a:23 var
+R1836:1838 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1835:1835 Blackhole.Geodesics.RK4 <> c:22 var
+R1842:1843 Blackhole.Geodesics.RK4 <> v0 proj
+R1839:1839 Blackhole.Geodesics.RK4 <> a:23 var
+R1849:1851 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1848:1848 Blackhole.Geodesics.RK4 <> c:22 var
+R1855:1856 Blackhole.Geodesics.RK4 <> v1 proj
+R1852:1852 Blackhole.Geodesics.RK4 <> a:23 var
+R1869:1871 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1868:1868 Blackhole.Geodesics.RK4 <> c:22 var
+R1875:1876 Blackhole.Geodesics.RK4 <> v2 proj
+R1872:1872 Blackhole.Geodesics.RK4 <> a:23 var
+R1882:1884 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1881:1881 Blackhole.Geodesics.RK4 <> c:22 var
+R1888:1889 Blackhole.Geodesics.RK4 <> v3 proj
+R1885:1885 Blackhole.Geodesics.RK4 <> a:23 var
+def 2058:2065 <> rk4_step
+R2083:2086 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2072:2082 Blackhole.Geodesics.RK4 <> StateVector rec
+R2087:2097 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 2068:2068 <> f:24
+R2105:2105 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2101:2101 <> h:25
+R2113:2123 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 2109:2109 <> y:26
+R2128:2138 Blackhole.Geodesics.RK4 <> StateVector rec
+R2155:2155 Blackhole.Geodesics.RK4 <> f:24 var
+R2157:2157 Blackhole.Geodesics.RK4 <> y:26 var
+binder 2149:2150 <> k1:27
+R2174:2174 Blackhole.Geodesics.RK4 <> f:24 var
+R2177:2182 Blackhole.Geodesics.RK4 <> sv_add def
+R2184:2184 Blackhole.Geodesics.RK4 <> y:26 var
+R2187:2194 Blackhole.Geodesics.RK4 <> sv_scale def
+R2198:2198 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2197:2197 Blackhole.Geodesics.RK4 <> h:25 var
+R2202:2203 Blackhole.Geodesics.RK4 <> k1:27 var
+binder 2168:2169 <> k2:28
+R2222:2222 Blackhole.Geodesics.RK4 <> f:24 var
+R2225:2230 Blackhole.Geodesics.RK4 <> sv_add def
+R2232:2232 Blackhole.Geodesics.RK4 <> y:26 var
+R2235:2242 Blackhole.Geodesics.RK4 <> sv_scale def
+R2246:2246 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2245:2245 Blackhole.Geodesics.RK4 <> h:25 var
+R2250:2251 Blackhole.Geodesics.RK4 <> k2:28 var
+binder 2216:2217 <> k3:29
+R2270:2270 Blackhole.Geodesics.RK4 <> f:24 var
+R2273:2278 Blackhole.Geodesics.RK4 <> sv_add def
+R2280:2280 Blackhole.Geodesics.RK4 <> y:26 var
+R2283:2290 Blackhole.Geodesics.RK4 <> sv_scale def
+R2292:2292 Blackhole.Geodesics.RK4 <> h:25 var
+R2294:2295 Blackhole.Geodesics.RK4 <> k3:29 var
+binder 2264:2265 <> k4:30
+R2304:2309 Blackhole.Geodesics.RK4 <> sv_add def
+R2311:2311 Blackhole.Geodesics.RK4 <> y:26 var
+R2314:2321 Blackhole.Geodesics.RK4 <> sv_scale def
+R2325:2325 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2324:2324 Blackhole.Geodesics.RK4 <> h:25 var
+R2334:2339 Blackhole.Geodesics.RK4 <> sv_add def
+R2341:2342 Blackhole.Geodesics.RK4 <> k1:27 var
+R2351:2356 Blackhole.Geodesics.RK4 <> sv_add def
+R2359:2366 Blackhole.Geodesics.RK4 <> sv_scale def
+R2370:2371 Blackhole.Geodesics.RK4 <> k2:28 var
+R2383:2388 Blackhole.Geodesics.RK4 <> sv_add def
+R2391:2398 Blackhole.Geodesics.RK4 <> sv_scale def
+R2402:2403 Blackhole.Geodesics.RK4 <> k3:29 var
+R2406:2407 Blackhole.Geodesics.RK4 <> k4:30 var
+def 2571:2587 <> local_error_bound
+R2596:2596 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2590:2590 <> C:31
+binder 2592:2592 <> h:32
+R2601:2601 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2609:2611 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2608:2608 Blackhole.Geodesics.RK4 <> C:31 var
+R2613:2613 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2612:2612 Blackhole.Geodesics.RK4 <> h:32 var
+def 2690:2707 <> global_error_bound
+R2718:2718 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2710:2710 <> C:33
+binder 2712:2712 <> L:34
+binder 2714:2714 <> h:35
+R2723:2723 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2784:2786 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2783:2783 Blackhole.Geodesics.RK4 <> C:33 var
+R2788:2788 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2787:2787 Blackhole.Geodesics.RK4 <> h:35 var
+prf 2834:2842 <> rk4_order
+R2859:2859 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2853:2853 <> C:36
+binder 2855:2855 <> h:37
+R2869:2872 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2865:2867 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2864:2864 Blackhole.Geodesics.RK4 <> h:37 var
+R2878:2883 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2874:2876 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2873:2873 Blackhole.Geodesics.RK4 <> C:36 var
+R2905:2907 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2884:2900 Blackhole.Geodesics.RK4 <> local_error_bound def
+R2902:2902 Blackhole.Geodesics.RK4 <> C:36 var
+R2904:2904 Blackhole.Geodesics.RK4 <> h:37 var
+R2909:2911 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2908:2908 Blackhole.Geodesics.RK4 <> C:36 var
+R2913:2913 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2912:2912 Blackhole.Geodesics.RK4 <> h:37 var
+R2953:2969 Blackhole.Geodesics.RK4 <> local_error_bound def
+prf 3055:3068 <> rk4_refinement
+R3085:3085 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3079:3079 <> C:38
+binder 3081:3081 <> h:39
+R3095:3098 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3091:3093 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3090:3090 Blackhole.Geodesics.RK4 <> h:39 var
+R3104:3109 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3100:3102 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3099:3099 Blackhole.Geodesics.RK4 <> C:38 var
+R3135:3137 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R3110:3126 Blackhole.Geodesics.RK4 <> local_error_bound def
+R3128:3128 Blackhole.Geodesics.RK4 <> C:38 var
+R3132:3132 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3131:3131 Blackhole.Geodesics.RK4 <> h:39 var
+R3159:3161 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3138:3154 Blackhole.Geodesics.RK4 <> local_error_bound def
+R3156:3156 Blackhole.Geodesics.RK4 <> C:38 var
+R3158:3158 Blackhole.Geodesics.RK4 <> h:39 var
+R3202:3218 Blackhole.Geodesics.RK4 <> local_error_bound def
+def 3346:3360 <> null_constraint
+R3367:3382 Blackhole.Prelim <> MetricComponents rec
+binder 3363:3363 <> g:40
+R3390:3399 Blackhole.Prelim <> FourVector rec
+binder 3386:3386 <> v:41
+R3404:3404 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3411:3419 Blackhole.Prelim <> four_norm def
+R3421:3421 Blackhole.Geodesics.RK4 <> g:40 var
+R3423:3423 Blackhole.Geodesics.RK4 <> v:41 var
+def 3471:3486 <> constraint_drift
+R3508:3523 Blackhole.Prelim <> MetricComponents rec
+binder 3489:3496 <> g_before:42
+binder 3498:3504 <> g_after:43
+R3573:3582 Blackhole.Prelim <> FourVector rec
+binder 3554:3561 <> v_before:44
+binder 3563:3569 <> v_after:45
+R3587:3587 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3625:3627 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3594:3608 Blackhole.Geodesics.RK4 <> null_constraint def
+R3610:3616 Blackhole.Geodesics.RK4 <> g_after:43 var
+R3618:3624 Blackhole.Geodesics.RK4 <> v_after:45 var
+R3628:3642 Blackhole.Geodesics.RK4 <> null_constraint def
+R3644:3651 Blackhole.Geodesics.RK4 <> g_before:42 var
+R3653:3660 Blackhole.Geodesics.RK4 <> v_before:44 var
+prf 3719:3746 <> null_constraint_preservation
+R3769:3769 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3757:3763 <> epsilon:46
+binder 3765:3765 <> h:47
+R3779:3784 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3775:3777 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3774:3774 Blackhole.Geodesics.RK4 <> h:47 var
+R3785:3791 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R3797:3798 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R3796:3796 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3792:3792 <> C:48
+R3804:3809 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R3800:3802 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3799:3799 Blackhole.Geodesics.RK4 <> C:48 var
+binder 3817:3817 <> g:49
+binder 3819:3819 <> v:50
+binder 3821:3822 <> g':51
+binder 3824:3825 <> v':52
+R3918:3921 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x not
+R3885:3888 Stdlib.Reals.Rbasic_fun <> Rabs def
+R3891:3906 Blackhole.Geodesics.RK4 <> constraint_drift def
+R3908:3908 Blackhole.Geodesics.RK4 <> g:49 var
+R3910:3911 Blackhole.Geodesics.RK4 <> g':51 var
+R3913:3913 Blackhole.Geodesics.RK4 <> v:50 var
+R3915:3916 Blackhole.Geodesics.RK4 <> v':52 var
+R3923:3925 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3922:3922 Blackhole.Geodesics.RK4 <> C:48 var
+R3927:3927 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3926:3926 Blackhole.Geodesics.RK4 <> h:47 var
+def 4300:4323 <> phase_space_volume_drift
+R4330:4332 Corelib.Init.Datatypes <> nat ind
+binder 4326:4326 <> N:53
+R4340:4340 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4336:4336 <> h:54
+R4345:4345 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4404:4406 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4399:4401 Stdlib.Reals.Raxioms <> INR def
+R4403:4403 Blackhole.Geodesics.RK4 <> N:53 var
+R4408:4408 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4407:4407 Blackhole.Geodesics.RK4 <> h:54 var
+prf 4486:4507 <> rk4_sufficient_for_viz
+R4524:4524 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4518:4518 <> N:55
+binder 4520:4520 <> h:56
+R4534:4537 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4530:4532 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4529:4529 Blackhole.Geodesics.RK4 <> h:56 var
+R4543:4548 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4539:4541 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4538:4538 Blackhole.Geodesics.RK4 <> N:55 var
+R4561:4591 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4554:4556 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R4550:4552 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4549:4549 Blackhole.Geodesics.RK4 <> N:55 var
+R4553:4553 Blackhole.Geodesics.RK4 <> h:56 var
+R4636:4638 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R4592:4615 Blackhole.Geodesics.RK4 <> phase_space_volume_drift def
+R4618:4625 Stdlib.ZArith.BinInt Z to_nat def
+R4628:4629 Stdlib.Reals.Rdefinitions <> up def
+R4631:4631 Blackhole.Geodesics.RK4 <> N:55 var
+R4635:4635 Blackhole.Geodesics.RK4 <> h:56 var
+R4685:4708 Blackhole.Geodesics.RK4 <> phase_space_volume_drift def
+def 4882:4899 <> rk4_error_estimate
+R4917:4920 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4906:4916 Blackhole.Geodesics.RK4 <> StateVector rec
+R4921:4931 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 4902:4902 <> f:57
+R4939:4939 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4935:4935 <> h:58
+R4947:4957 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 4943:4943 <> y:59
+R4962:4962 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4979:4986 Blackhole.Geodesics.RK4 <> rk4_step def
+R4988:4988 Blackhole.Geodesics.RK4 <> f:57 var
+R4990:4990 Blackhole.Geodesics.RK4 <> h:58 var
+R4992:4992 Blackhole.Geodesics.RK4 <> y:59 var
+binder 4973:4974 <> y1:60
+R5013:5020 Blackhole.Geodesics.RK4 <> rk4_step def
+R5022:5022 Blackhole.Geodesics.RK4 <> f:57 var
+R5026:5026 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5025:5025 Blackhole.Geodesics.RK4 <> h:58 var
+R5030:5030 Blackhole.Geodesics.RK4 <> y:59 var
+binder 5003:5008 <> y_half:61
+R5047:5054 Blackhole.Geodesics.RK4 <> rk4_step def
+R5056:5056 Blackhole.Geodesics.RK4 <> f:57 var
+R5060:5060 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5059:5059 Blackhole.Geodesics.RK4 <> h:58 var
+R5064:5069 Blackhole.Geodesics.RK4 <> y_half:61 var
+binder 5041:5042 <> y2:62
+R5158:5160 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5134:5137 Stdlib.Reals.Rbasic_fun <> Rabs def
+R5147:5149 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5144:5145 Blackhole.Geodesics.RK4 <> x1 proj
+R5140:5141 Blackhole.Geodesics.RK4 <> y1:60 var
+R5154:5155 Blackhole.Geodesics.RK4 <> x1 proj
+R5150:5151 Blackhole.Geodesics.RK4 <> y2:62 var
+def 5248:5259 <> optimal_step
+R5274:5274 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5262:5262 <> h:63
+binder 5264:5266 <> err:64
+binder 5268:5270 <> tol:65
+R5279:5279 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5350:5352 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5346:5348 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5349:5349 Blackhole.Geodesics.RK4 <> h:63 var
+R5353:5353 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5363:5367 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5371:5371 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5357:5359 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5354:5356 Blackhole.Geodesics.RK4 <> tol:65 var
+R5360:5362 Blackhole.Geodesics.RK4 <> err:64 var
+R5369:5369 Stdlib.Arith.PeanoNat <> ::nat_scope:x_'/'_x not
+rec 5564:5574 <> GeodesicRHS
+proj 5589:5608 <> compute_acceleration
+R5623:5626 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5612:5622 Blackhole.Geodesics.RK4 <> StateVector rec
+R5627:5637 Blackhole.Geodesics.RK4 <> StateVector rec
+def 5776:5795 <> position_derivatives
+R5802:5812 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 5798:5798 <> s:68
+R5817:5827 Blackhole.Geodesics.RK4 <> StateVector rec
+R5834:5837 Blackhole.Geodesics.RK4 <> mkSV constr
+R5842:5843 Blackhole.Geodesics.RK4 <> v0 proj
+R5839:5839 Blackhole.Geodesics.RK4 <> s:68 var
+R5849:5850 Blackhole.Geodesics.RK4 <> v1 proj
+R5846:5846 Blackhole.Geodesics.RK4 <> s:68 var
+R5856:5857 Blackhole.Geodesics.RK4 <> v2 proj
+R5853:5853 Blackhole.Geodesics.RK4 <> s:68 var
+R5863:5864 Blackhole.Geodesics.RK4 <> v3 proj
+R5860:5860 Blackhole.Geodesics.RK4 <> s:68 var
+def 5966:5974 <> integrate
+R5983:5993 Blackhole.Geodesics.RK4 <> GeodesicRHS rec
+binder 5977:5979 <> rhs:69
+R6001:6001 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5997:5997 <> h:70
+R6009:6019 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 6005:6005 <> s:71
+R6027:6029 Corelib.Init.Datatypes <> nat ind
+binder 6023:6023 <> n:72
+R6034:6044 Blackhole.Geodesics.RK4 <> StateVector rec
+R6057:6057 Blackhole.Geodesics.RK4 <> n:72 var
+R6068:6068 Corelib.Init.Datatypes <> O constr
+R6073:6073 Blackhole.Geodesics.RK4 <> s:71 var
+R6079:6079 Corelib.Init.Datatypes <> S constr
+R6087:6095 Blackhole.Geodesics.RK4 <> integrate:73 def
+R6104:6111 Blackhole.Geodesics.RK4 <> rk4_step def
+R6118:6137 Blackhole.Geodesics.RK4 <> compute_acceleration proj
+R6113:6115 Blackhole.Geodesics.RK4 <> rhs:69 var
+R6140:6140 Blackhole.Geodesics.RK4 <> h:70 var
+R6142:6142 Blackhole.Geodesics.RK4 <> s:71 var
+R6101:6101 Blackhole.Geodesics.RK4 <> h:70 var
+R6097:6099 Blackhole.Geodesics.RK4 <> rhs:69 var
+prf 6200:6218 <> integration_bounded
+R6236:6246 Blackhole.Geodesics.RK4 <> GeodesicRHS rec
+binder 6230:6232 <> rhs:75
+R6254:6254 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6250:6250 <> h:76
+R6262:6272 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 6258:6258 <> s:77
+R6280:6282 Corelib.Init.Datatypes <> nat ind
+binder 6276:6276 <> n:78
+R6294:6294 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6286:6290 <> r_max:79
+R6305:6308 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6301:6303 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6300:6300 Blackhole.Geodesics.RK4 <> h:76 var
+R6318:6323 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6314:6316 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6309:6313 Blackhole.Geodesics.RK4 <> r_max:79 var
+R6338:6389 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6330:6332 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R6327:6328 Blackhole.Geodesics.RK4 <> x1 proj
+R6324:6324 Blackhole.Geodesics.RK4 <> s:77 var
+R6333:6337 Blackhole.Geodesics.RK4 <> r_max:79 var
+R6390:6393 Corelib.Init.Logic <> True ind
+ind 6525:6538 <> GeodesicStatus
+constr 6547:6557 <> Propagating
+constr 6589:6595 <> Escaped
+constr 6626:6633 <> Captured
+constr 6664:6671 <> MaxSteps
+scheme 6525:6538 <> GeodesicStatus_rect
+scheme 6525:6538 <> GeodesicStatus_ind
+scheme 6525:6538 <> GeodesicStatus_rec
+scheme 6525:6538 <> GeodesicStatus_sind
+def 6716:6732 <> check_termination
+R6739:6749 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 6735:6735 <> s:82
+R6774:6774 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6753:6761 <> r_horizon:83
+binder 6763:6770 <> r_escape:84
+R6795:6797 Corelib.Init.Datatypes <> nat ind
+binder 6778:6781 <> step:85
+binder 6783:6791 <> max_steps:86
+R6802:6815 Blackhole.Geodesics.RK4 <> GeodesicStatus ind
+R6825:6831 Stdlib.Reals.RIneq <> Rlt_dec thm
+R6836:6837 Blackhole.Geodesics.RK4 <> x1 proj
+R6833:6833 Blackhole.Geodesics.RK4 <> s:82 var
+R6840:6848 Blackhole.Geodesics.RK4 <> r_horizon:83 var
+R6874:6880 Stdlib.Reals.RIneq <> Rgt_dec thm
+R6885:6886 Blackhole.Geodesics.RK4 <> x1 proj
+R6882:6882 Blackhole.Geodesics.RK4 <> s:82 var
+R6889:6896 Blackhole.Geodesics.RK4 <> r_escape:84 var
+R6921:6927 Stdlib.Arith.PeanoNat Nat leb def
+R6929:6937 Blackhole.Geodesics.RK4 <> max_steps:86 var
+R6939:6942 Blackhole.Geodesics.RK4 <> step:85 var
+R6965:6975 Blackhole.Geodesics.RK4 <> Propagating constr
+R6949:6956 Blackhole.Geodesics.RK4 <> MaxSteps constr
+R6903:6909 Blackhole.Geodesics.RK4 <> Escaped constr
+R6855:6862 Blackhole.Geodesics.RK4 <> Captured constr
+def 7059:7064 <> rk4_k1
+R7082:7085 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7071:7081 Blackhole.Geodesics.RK4 <> StateVector rec
+R7086:7096 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7067:7067 <> f:87
+R7104:7114 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7100:7100 <> y:88
+R7119:7129 Blackhole.Geodesics.RK4 <> StateVector rec
+R7136:7136 Blackhole.Geodesics.RK4 <> f:87 var
+R7138:7138 Blackhole.Geodesics.RK4 <> y:88 var
+def 7153:7158 <> rk4_k2
+R7176:7179 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7165:7175 Blackhole.Geodesics.RK4 <> StateVector rec
+R7180:7190 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7161:7161 <> f:89
+R7198:7198 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7194:7194 <> h:90
+R7209:7219 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7202:7202 <> y:91
+binder 7204:7205 <> k1:92
+R7224:7234 Blackhole.Geodesics.RK4 <> StateVector rec
+R7241:7241 Blackhole.Geodesics.RK4 <> f:89 var
+R7244:7249 Blackhole.Geodesics.RK4 <> sv_add def
+R7251:7251 Blackhole.Geodesics.RK4 <> y:91 var
+R7254:7261 Blackhole.Geodesics.RK4 <> sv_scale def
+R7265:7265 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R7264:7264 Blackhole.Geodesics.RK4 <> h:90 var
+R7269:7270 Blackhole.Geodesics.RK4 <> k1:92 var
+def 7287:7292 <> rk4_k3
+R7310:7313 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7299:7309 Blackhole.Geodesics.RK4 <> StateVector rec
+R7314:7324 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7295:7295 <> f:93
+R7332:7332 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7328:7328 <> h:94
+R7343:7353 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7336:7336 <> y:95
+binder 7338:7339 <> k2:96
+R7358:7368 Blackhole.Geodesics.RK4 <> StateVector rec
+R7375:7375 Blackhole.Geodesics.RK4 <> f:93 var
+R7378:7383 Blackhole.Geodesics.RK4 <> sv_add def
+R7385:7385 Blackhole.Geodesics.RK4 <> y:95 var
+R7388:7395 Blackhole.Geodesics.RK4 <> sv_scale def
+R7399:7399 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R7398:7398 Blackhole.Geodesics.RK4 <> h:94 var
+R7403:7404 Blackhole.Geodesics.RK4 <> k2:96 var
+def 7421:7426 <> rk4_k4
+R7444:7447 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7433:7443 Blackhole.Geodesics.RK4 <> StateVector rec
+R7448:7458 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7429:7429 <> f:97
+R7466:7466 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7462:7462 <> h:98
+R7477:7487 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7470:7470 <> y:99
+binder 7472:7473 <> k3:100
+R7492:7502 Blackhole.Geodesics.RK4 <> StateVector rec
+R7509:7509 Blackhole.Geodesics.RK4 <> f:97 var
+R7512:7517 Blackhole.Geodesics.RK4 <> sv_add def
+R7519:7519 Blackhole.Geodesics.RK4 <> y:99 var
+R7522:7529 Blackhole.Geodesics.RK4 <> sv_scale def
+R7531:7531 Blackhole.Geodesics.RK4 <> h:98 var
+R7533:7534 Blackhole.Geodesics.RK4 <> k3:100 var
+def 7551:7561 <> rk4_combine
+R7568:7568 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7564:7564 <> h:101
+R7588:7598 Blackhole.Geodesics.RK4 <> StateVector rec
+binder 7572:7572 <> y:102
+binder 7574:7575 <> k1:103
+binder 7577:7578 <> k2:104
+binder 7580:7581 <> k3:105
+binder 7583:7584 <> k4:106
+R7603:7613 Blackhole.Geodesics.RK4 <> StateVector rec
+R7620:7625 Blackhole.Geodesics.RK4 <> sv_add def
+R7627:7627 Blackhole.Geodesics.RK4 <> y:102 var
+R7630:7637 Blackhole.Geodesics.RK4 <> sv_scale def
+R7641:7641 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R7640:7640 Blackhole.Geodesics.RK4 <> h:101 var
+R7650:7655 Blackhole.Geodesics.RK4 <> sv_add def
+R7657:7658 Blackhole.Geodesics.RK4 <> k1:103 var
+R7667:7672 Blackhole.Geodesics.RK4 <> sv_add def
+R7675:7682 Blackhole.Geodesics.RK4 <> sv_scale def
+R7686:7687 Blackhole.Geodesics.RK4 <> k2:104 var
+R7699:7704 Blackhole.Geodesics.RK4 <> sv_add def
+R7707:7714 Blackhole.Geodesics.RK4 <> sv_scale def
+R7718:7719 Blackhole.Geodesics.RK4 <> k3:105 var
+R7722:7723 Blackhole.Geodesics.RK4 <> k4:106 var

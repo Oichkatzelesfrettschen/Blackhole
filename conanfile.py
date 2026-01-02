@@ -10,7 +10,6 @@ class BlackholeConan(ConanFile):
     options = {
         "enable_ktx": [True, False],
         "enable_openimageio": [True, False],
-        "enable_spirv_tooling": [True, False],
         "enable_meshoptimizer": [True, False],
         "enable_shader_watcher": [True, False],
         "enable_fastnoise2": [True, False],
@@ -23,7 +22,6 @@ class BlackholeConan(ConanFile):
         "boost/*:without_cobalt": True,
         "enable_ktx": False,
         "enable_openimageio": False,
-        "enable_spirv_tooling": True,
         "enable_meshoptimizer": True,
         "enable_shader_watcher": True,
         "enable_fastnoise2": True,
@@ -55,11 +53,6 @@ class BlackholeConan(ConanFile):
         self.requires("mpfr/4.2.2")
         self.requires("stb/cci.20240531")
         self.requires("z3/4.14.1")
-        if self.options.enable_spirv_tooling:
-            self.requires("shaderc/2025.3")
-            self.requires("spirv-tools/1.4.313.0")
-            self.requires("spirv-cross/1.4.321.0")
-            self.requires("spirv-headers/1.4.313.0")
         if self.options.enable_meshoptimizer:
             self.requires("meshoptimizer/0.25")
         if self.options.enable_shader_watcher:

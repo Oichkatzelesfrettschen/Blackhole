@@ -1,0 +1,263 @@
+DIGEST 459eb3fbd633791bb360f7c27e8a287d
+FBlackhole.Cosmology.Distances
+R568:583 Blackhole.Prelim <> <> lib
+R601:624 Blackhole.Cosmology.FLRW <> <> lib
+R654:658 Stdlib.Reals.Reals <> <> lib
+R660:662 Stdlib.micromega.Lra <> <> lib
+def 1164:1187 <> comoving_distance_linear
+R1198:1205 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 1190:1194 <> cosmo:1
+R1213:1213 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1209:1209 <> z:2
+R1218:1218 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1249:1251 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1225:1237 Blackhole.Cosmology.FLRW <> hubble_length def
+R1246:1247 Blackhole.Cosmology.FLRW <> H0 proj
+R1239:1243 Blackhole.Cosmology.Distances <> cosmo:1 var
+R1252:1252 Blackhole.Cosmology.Distances <> z:2 var
+ax 1598:1614 <> comoving_distance
+R1626:1629 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1618:1625 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+R1631:1634 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1630:1630 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1635:1635 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+ax 1691:1713 <> comoving_distance_at_z0
+R1732:1739 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 1724:1728 <> cosmo:5
+R1769:1771 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1744:1760 Blackhole.Cosmology.Distances <> comoving_distance defax
+R1762:1766 Blackhole.Cosmology.Distances <> cosmo:5 var
+ax 1835:1862 <> comoving_distance_increasing
+R1882:1889 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 1874:1878 <> cosmo:8
+R1901:1901 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1893:1894 <> z1:9
+binder 1896:1897 <> z2:10
+R1914:1917 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1909:1911 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1907:1908 Blackhole.Cosmology.Distances <> z2:10 var
+R1912:1913 Blackhole.Cosmology.Distances <> z1:9 var
+R1925:1930 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1920:1923 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R1918:1919 Blackhole.Cosmology.Distances <> z1:9 var
+R1957:1959 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1931:1947 Blackhole.Cosmology.Distances <> comoving_distance defax
+R1949:1953 Blackhole.Cosmology.Distances <> cosmo:8 var
+R1955:1956 Blackhole.Cosmology.Distances <> z2:10 var
+R1960:1976 Blackhole.Cosmology.Distances <> comoving_distance defax
+R1978:1982 Blackhole.Cosmology.Distances <> cosmo:8 var
+R1984:1985 Blackhole.Cosmology.Distances <> z1:9 var
+def 2206:2224 <> luminosity_distance
+R2235:2242 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 2227:2231 <> cosmo:13
+R2250:2250 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2246:2246 <> z:14
+R2255:2255 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2262:2262 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2268:2271 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2264:2266 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2267:2267 Blackhole.Cosmology.Distances <> z:14 var
+R2272:2288 Blackhole.Cosmology.Distances <> comoving_distance defax
+R2290:2294 Blackhole.Cosmology.Distances <> cosmo:13 var
+R2296:2296 Blackhole.Cosmology.Distances <> z:14 var
+prf 2344:2368 <> luminosity_distance_at_z0
+R2387:2394 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 2379:2383 <> cosmo:15
+R2426:2428 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2399:2417 Blackhole.Cosmology.Distances <> luminosity_distance def
+R2419:2423 Blackhole.Cosmology.Distances <> cosmo:15 var
+R2464:2482 Blackhole.Cosmology.Distances <> luminosity_distance def
+R2495:2517 Blackhole.Cosmology.Distances <> comoving_distance_at_z0 prfax
+R2495:2517 Blackhole.Cosmology.Distances <> comoving_distance_at_z0 prfax
+R2495:2517 Blackhole.Cosmology.Distances <> comoving_distance_at_z0 prfax
+def 2751:2775 <> angular_diameter_distance
+R2786:2793 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 2778:2782 <> cosmo:16
+R2801:2801 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2797:2797 <> z:17
+R2806:2806 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2838:2841 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2847:2847 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2813:2829 Blackhole.Cosmology.Distances <> comoving_distance defax
+R2831:2835 Blackhole.Cosmology.Distances <> cosmo:16 var
+R2837:2837 Blackhole.Cosmology.Distances <> z:17 var
+R2843:2845 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2846:2846 Blackhole.Cosmology.Distances <> z:17 var
+prf 2929:2944 <> distance_duality
+R2964:2971 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 2956:2960 <> cosmo:18
+R2979:2979 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2975:2975 <> z:19
+R2990:2995 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2986:2988 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2985:2985 Blackhole.Cosmology.Distances <> z:19 var
+R3023:3025 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2996:3014 Blackhole.Cosmology.Distances <> luminosity_distance def
+R3016:3020 Blackhole.Cosmology.Distances <> cosmo:18 var
+R3022:3022 Blackhole.Cosmology.Distances <> z:19 var
+R3035:3037 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3026:3026 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3032:3033 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3028:3030 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3031:3031 Blackhole.Cosmology.Distances <> z:19 var
+R3038:3062 Blackhole.Cosmology.Distances <> angular_diameter_distance def
+R3064:3068 Blackhole.Cosmology.Distances <> cosmo:18 var
+R3070:3070 Blackhole.Cosmology.Distances <> z:19 var
+R3110:3128 Blackhole.Cosmology.Distances <> luminosity_distance def
+R3131:3155 Blackhole.Cosmology.Distances <> angular_diameter_distance def
+def 3429:3444 <> distance_modulus
+R3457:3457 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3447:3453 <> D_L_Mpc:20
+R3462:3462 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3491:3493 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3483:3485 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3470:3472 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3473:3474 Stdlib.Reals.Rpower <> ln def
+R3476:3482 Blackhole.Cosmology.Distances <> D_L_Mpc:20 var
+R3486:3487 Stdlib.Reals.Rpower <> ln def
+ax 3734:3746 <> lookback_time
+R3758:3761 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3750:3757 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+R3763:3766 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3762:3762 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3767:3767 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+ax 3815:3833 <> lookback_time_at_z0
+R3852:3859 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 3844:3848 <> cosmo:23
+R3885:3887 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R3864:3876 Blackhole.Cosmology.Distances <> lookback_time defax
+R3878:3882 Blackhole.Cosmology.Distances <> cosmo:23 var
+def 4114:4128 <> comoving_volume
+R4139:4146 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 4131:4135 <> cosmo:26
+R4154:4154 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4150:4150 <> z:27
+R4159:4159 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4166:4166 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4177:4180 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4173:4175 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4168:4170 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4171:4172 Stdlib.Reals.Rtrigo1 <> PI def
+R4181:4181 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4207:4208 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4182:4198 Blackhole.Cosmology.Distances <> comoving_distance defax
+R4200:4204 Blackhole.Cosmology.Distances <> cosmo:26 var
+R4206:4206 Blackhole.Cosmology.Distances <> z:27 var
+def 4511:4538 <> transverse_comoving_distance
+R4549:4556 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 4541:4545 <> cosmo:28
+R4564:4564 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4560:4560 <> z:29
+R4569:4569 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4576:4592 Blackhole.Cosmology.Distances <> comoving_distance defax
+R4594:4598 Blackhole.Cosmology.Distances <> cosmo:28 var
+R4600:4600 Blackhole.Cosmology.Distances <> z:29 var
+def 4772:4793 <> proper_motion_distance
+R4804:4811 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 4796:4800 <> cosmo:30
+R4819:4819 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4815:4815 <> z:31
+R4824:4824 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4831:4858 Blackhole.Cosmology.Distances <> transverse_comoving_distance def
+R4860:4864 Blackhole.Cosmology.Distances <> cosmo:30 var
+R4866:4866 Blackhole.Cosmology.Distances <> z:31 var
+ax 5046:5061 <> particle_horizon
+R5073:5076 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5065:5072 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+R5077:5077 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+ax 5269:5281 <> event_horizon
+R5293:5296 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5285:5292 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+R5298:5301 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5297:5297 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5302:5302 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 5428:5449 <> sound_horizon_Planck18
+R5453:5453 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 5704:5726 <> comoving_distance_trapz
+R5737:5744 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 5729:5733 <> cosmo:36
+R5754:5754 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5748:5748 <> z:37
+binder 5750:5750 <> n:38
+R5759:5759 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5777:5779 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5776:5776 Blackhole.Cosmology.Distances <> z:37 var
+R5780:5780 Blackhole.Cosmology.Distances <> n:38 var
+binder 5770:5771 <> dz:39
+R5798:5810 Blackhole.Cosmology.FLRW <> hubble_length def
+R5819:5820 Blackhole.Cosmology.FLRW <> H0 proj
+R5812:5816 Blackhole.Cosmology.Distances <> cosmo:36 var
+binder 5791:5793 <> D_H:40
+R5882:5884 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5878:5880 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5875:5877 Blackhole.Cosmology.Distances <> D_H:40 var
+R5881:5881 Blackhole.Cosmology.Distances <> z:37 var
+R5885:5887 Blackhole.Cosmology.FLRW <> E_z def
+R5889:5893 Blackhole.Cosmology.Distances <> cosmo:36 var
+R5897:5899 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5896:5896 Blackhole.Cosmology.Distances <> z:37 var
+def 5948:5974 <> compute_luminosity_distance
+R5985:5992 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 5977:5981 <> cosmo:41
+R6000:6000 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5996:5996 <> z:42
+R6005:6005 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6012:6030 Blackhole.Cosmology.Distances <> luminosity_distance def
+R6032:6036 Blackhole.Cosmology.Distances <> cosmo:41 var
+R6038:6038 Blackhole.Cosmology.Distances <> z:42 var
+def 6053:6085 <> compute_angular_diameter_distance
+R6096:6103 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 6088:6092 <> cosmo:43
+R6111:6111 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6107:6107 <> z:44
+R6116:6116 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6123:6147 Blackhole.Cosmology.Distances <> angular_diameter_distance def
+R6149:6153 Blackhole.Cosmology.Distances <> cosmo:43 var
+R6155:6155 Blackhole.Cosmology.Distances <> z:44 var
+def 6170:6193 <> compute_distance_modulus
+R6206:6206 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6196:6202 <> D_L_Mpc:45
+R6211:6211 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6218:6233 Blackhole.Cosmology.Distances <> distance_modulus def
+R6235:6241 Blackhole.Cosmology.Distances <> D_L_Mpc:45 var
+def 6256:6278 <> compute_comoving_volume
+R6289:6296 Blackhole.Cosmology.FLRW <> FlatLCDM rec
+binder 6281:6285 <> cosmo:46
+R6304:6304 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6300:6300 <> z:47
+R6309:6309 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6316:6330 Blackhole.Cosmology.Distances <> comoving_volume def
+R6332:6336 Blackhole.Cosmology.Distances <> cosmo:46 var
+R6338:6338 Blackhole.Cosmology.Distances <> z:47 var
+def 6404:6435 <> compute_comoving_distance_linear
+R6445:6445 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6438:6439 <> H0:48
+binder 6441:6441 <> z:49
+R6450:6450 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6468:6470 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6463:6465 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6457:6462 Blackhole.Cosmology.FLRW <> c_km_s def
+R6466:6467 Blackhole.Cosmology.Distances <> H0:48 var
+R6471:6471 Blackhole.Cosmology.Distances <> z:49 var
+def 6516:6538 <> verify_distance_duality
+R6553:6553 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6541:6543 <> D_L:50
+binder 6545:6547 <> D_A:51
+binder 6549:6549 <> z:52
+R6558:6561 Corelib.Init.Datatypes <> bool ind
+R6584:6587 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6603:6603 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6581:6583 Blackhole.Cosmology.Distances <> D_L:50 var
+R6597:6599 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6588:6588 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6594:6595 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6590:6592 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R6593:6593 Blackhole.Cosmology.Distances <> z:52 var
+R6600:6602 Blackhole.Cosmology.Distances <> D_A:51 var
+binder 6572:6576 <> ratio:53
+R6613:6619 Stdlib.Reals.RIneq <> Rlt_dec thm
+R6622:6625 Stdlib.Reals.Rbasic_fun <> Rabs def
+R6633:6635 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R6628:6632 Blackhole.Cosmology.Distances <> ratio:53 var
+R6661:6665 Corelib.Init.Datatypes <> false constr
+R6651:6654 Corelib.Init.Datatypes <> true constr

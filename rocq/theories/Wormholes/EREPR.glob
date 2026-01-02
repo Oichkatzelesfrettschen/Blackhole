@@ -1,0 +1,355 @@
+DIGEST 07174218eb7646b855bc9963b403ce00
+FBlackhole.Wormholes.EREPR
+R1022:1037 Blackhole.Prelim <> <> lib
+R1067:1071 Stdlib.Reals.Reals <> <> lib
+R1073:1075 Stdlib.micromega.Lra <> <> lib
+def 1161:1162 <> pi
+R1166:1166 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 1426:1439 <> shape_function
+R1449:1449 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1442:1443 <> b0:1
+binder 1445:1445 <> r:2
+R1454:1454 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1463:1466 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1473:1473 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1461:1462 Blackhole.Wormholes.EREPR <> b0:1 var
+R1469:1471 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1467:1468 Blackhole.Wormholes.EREPR <> b0:1 var
+R1472:1472 Blackhole.Wormholes.EREPR <> r:2 var
+def 1616:1628 <> throat_radius
+R1636:1636 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1631:1632 <> b0:3
+R1641:1641 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1648:1649 Blackhole.Wormholes.EREPR <> b0:3 var
+def 1776:1798 <> proper_distance_element
+R1808:1808 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1801:1802 <> b0:4
+binder 1804:1804 <> r:5
+R1813:1813 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1820:1823 Stdlib.Reals.R_sqrt <> sqrt def
+R1829:1831 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1851:1853 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1832:1845 Blackhole.Wormholes.EREPR <> shape_function def
+R1847:1848 Blackhole.Wormholes.EREPR <> b0:4 var
+R1850:1850 Blackhole.Wormholes.EREPR <> r:5 var
+R1854:1854 Blackhole.Wormholes.EREPR <> r:5 var
+def 2028:2043 <> embedding_height
+R2053:2053 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2046:2047 <> b0:6
+binder 2049:2049 <> r:7
+R2058:2058 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2067:2070 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2083:2083 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2065:2066 Blackhole.Wormholes.EREPR <> b0:6 var
+R2075:2077 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R2071:2072 Stdlib.Reals.Rpower <> ln def
+R2074:2074 Blackhole.Wormholes.EREPR <> r:7 var
+R2078:2079 Stdlib.Reals.Rpower <> ln def
+R2081:2082 Blackhole.Wormholes.EREPR <> b0:6 var
+def 2242:2258 <> redshift_function
+R2265:2265 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2261:2261 <> r:8
+R2270:2270 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 2452:2472 <> null_energy_condition
+R2485:2485 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2475:2477 <> rho:9
+binder 2479:2481 <> p_r:10
+R2509:2512 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R2503:2505 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2500:2502 Blackhole.Wormholes.EREPR <> rho:9 var
+R2506:2508 Blackhole.Wormholes.EREPR <> p_r:10 var
+def 2567:2587 <> weak_energy_condition
+R2596:2596 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2590:2592 <> rho:11
+R2614:2617 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R2611:2613 Blackhole.Wormholes.EREPR <> rho:11 var
+def 2690:2714 <> dominant_energy_condition
+R2741:2741 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2717:2719 <> rho:12
+binder 2721:2723 <> p_r:13
+binder 2725:2731 <> p_theta:14
+binder 2733:2737 <> p_phi:15
+R2764:2767 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R2759:2762 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R2756:2758 Blackhole.Wormholes.EREPR <> rho:12 var
+R2783:2786 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R2771:2774 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R2768:2770 Blackhole.Wormholes.EREPR <> rho:12 var
+R2775:2778 Stdlib.Reals.Rbasic_fun <> Rabs def
+R2780:2782 Blackhole.Wormholes.EREPR <> p_r:13 var
+R2806:2809 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R2790:2793 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R2787:2789 Blackhole.Wormholes.EREPR <> rho:12 var
+R2794:2797 Stdlib.Reals.Rbasic_fun <> Rabs def
+R2799:2805 Blackhole.Wormholes.EREPR <> p_theta:14 var
+R2813:2816 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R2810:2812 Blackhole.Wormholes.EREPR <> rho:12 var
+R2817:2820 Stdlib.Reals.Rbasic_fun <> Rabs def
+R2822:2826 Blackhole.Wormholes.EREPR <> p_phi:15 var
+def 2915:2927 <> exotic_matter
+R2940:2940 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2930:2932 <> rho:16
+binder 2934:2936 <> p_r:17
+R2964:2966 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R2958:2960 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2955:2957 Blackhole.Wormholes.EREPR <> rho:16 var
+R2961:2963 Blackhole.Wormholes.EREPR <> p_r:17 var
+def 3448:3467 <> entanglement_entropy
+R3485:3485 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3470:3472 <> S_A:18
+binder 3474:3476 <> S_B:19
+binder 3478:3481 <> S_AB:20
+R3490:3490 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3497:3499 Blackhole.Wormholes.EREPR <> S_A:18 var
+def 3626:3651 <> thermal_correlation_length
+R3663:3663 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3654:3657 <> beta:21
+binder 3659:3659 <> M:22
+R3668:3668 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3679:3682 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3695:3695 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3675:3678 Blackhole.Wormholes.EREPR <> beta:21 var
+R3691:3693 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3686:3688 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3689:3690 Blackhole.Wormholes.EREPR <> pi def
+R3694:3694 Blackhole.Wormholes.EREPR <> M:22 var
+def 3884:3901 <> page_curve_entropy
+R3920:3920 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3904:3908 <> S_QFT:23
+binder 3910:3916 <> area_dx:24
+R3925:3925 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3937:3939 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3932:3936 Blackhole.Wormholes.EREPR <> S_QFT:23 var
+R3947:3949 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3940:3946 Blackhole.Wormholes.EREPR <> area_dx:24 var
+def 4124:4142 <> throat_pinch_factor
+R4168:4168 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4145:4152 <> r_throat:25
+binder 4154:4164 <> proper_dist:26
+R4173:4173 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4188:4191 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4214:4214 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4180:4187 Blackhole.Wormholes.EREPR <> r_throat:25 var
+R4203:4205 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4192:4202 Blackhole.Wormholes.EREPR <> proper_dist:26 var
+R4206:4213 Blackhole.Wormholes.EREPR <> r_throat:25 var
+rec 4554:4562 <> ER_bridge
+proj 4571:4586 <> throat_radius_EB
+proj 4595:4600 <> mass_A
+proj 4609:4614 <> mass_B
+proj 4623:4645 <> entanglement_entropy_AB
+proj 4654:4674 <> exotic_matter_density
+proj 4708:4729 <> exotic_matter_pressure
+R4590:4590 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4604:4604 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4618:4618 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4649:4649 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4678:4678 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4733:4733 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 4957:4968 <> ER_connected
+R4976:4984 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 4971:4972 <> er:34
+R5014:5019 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R5010:5012 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R5003:5008 Blackhole.Wormholes.EREPR <> mass_A proj
+R4999:5000 Blackhole.Wormholes.EREPR <> er:34 var
+R5035:5040 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R5031:5033 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R5024:5029 Blackhole.Wormholes.EREPR <> mass_B proj
+R5020:5021 Blackhole.Wormholes.EREPR <> er:34 var
+R5066:5071 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R5062:5064 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R5045:5060 Blackhole.Wormholes.EREPR <> throat_radius_EB proj
+R5041:5042 Blackhole.Wormholes.EREPR <> er:34 var
+R5072:5084 Blackhole.Wormholes.EREPR <> exotic_matter def
+R5090:5110 Blackhole.Wormholes.EREPR <> exotic_matter_density proj
+R5086:5087 Blackhole.Wormholes.EREPR <> er:34 var
+R5117:5138 Blackhole.Wormholes.EREPR <> exotic_matter_pressure proj
+R5113:5114 Blackhole.Wormholes.EREPR <> er:34 var
+def 5218:5233 <> EPR_correlations
+R5253:5253 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5236:5249 <> S_entanglement:35
+R5258:5258 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5265:5278 Blackhole.Wormholes.EREPR <> S_entanglement:35 var
+def 5396:5415 <> EREPR_correspondence
+R5423:5431 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 5418:5419 <> er:36
+R5461:5466 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R5446:5457 Blackhole.Wormholes.EREPR <> ER_connected def
+R5459:5460 Blackhole.Wormholes.EREPR <> er:36 var
+R5512:5518 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R5467:5482 Blackhole.Wormholes.EREPR <> EPR_correlations def
+R5488:5510 Blackhole.Wormholes.EREPR <> entanglement_entropy_AB proj
+R5484:5485 Blackhole.Wormholes.EREPR <> er:36 var
+R5519:5538 Blackhole.Wormholes.EREPR <> entanglement_entropy def
+R5548:5570 Blackhole.Wormholes.EREPR <> entanglement_entropy_AB proj
+R5544:5545 Blackhole.Wormholes.EREPR <> er:36 var
+def 5859:5886 <> entanglement_wedge_dimension
+R5902:5902 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5889:5898 <> S_entangle:37
+R5907:5907 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5914:5923 Blackhole.Wormholes.EREPR <> S_entangle:37 var
+def 6031:6050 <> island_boundary_area
+R6064:6064 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6053:6060 <> A_island:38
+R6069:6069 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6084:6086 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6076:6083 Blackhole.Wormholes.EREPR <> A_island:38 var
+def 6386:6397 <> tidal_stress
+R6423:6423 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6400:6407 <> r_throat:39
+binder 6409:6419 <> proper_dist:40
+R6428:6428 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6438:6441 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6464:6464 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6450:6452 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6442:6449 Blackhole.Wormholes.EREPR <> r_throat:39 var
+R6453:6463 Blackhole.Wormholes.EREPR <> proper_dist:40 var
+def 6479:6501 <> is_traversable_wormhole
+R6527:6527 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6504:6505 <> b0:41
+binder 6507:6523 <> throat_radius_val:42
+R6548:6553 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R6544:6546 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6542:6543 Blackhole.Wormholes.EREPR <> b0:41 var
+R6575:6580 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R6571:6573 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6554:6570 Blackhole.Wormholes.EREPR <> throat_radius_val:42 var
+R6583:6585 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R6581:6582 Blackhole.Wormholes.EREPR <> b0:41 var
+R6586:6602 Blackhole.Wormholes.EREPR <> throat_radius_val:42 var
+def 6681:6704 <> is_traversable_ER_bridge
+R6712:6720 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 6707:6708 <> er:43
+R6803:6808 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R6735:6747 Blackhole.Wormholes.EREPR <> exotic_matter def
+R6753:6773 Blackhole.Wormholes.EREPR <> exotic_matter_density proj
+R6749:6750 Blackhole.Wormholes.EREPR <> er:43 var
+R6780:6801 Blackhole.Wormholes.EREPR <> exotic_matter_pressure proj
+R6776:6777 Blackhole.Wormholes.EREPR <> er:43 var
+R6840:6842 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6809:6812 Stdlib.Reals.Rbasic_fun <> Rabs def
+R6818:6838 Blackhole.Wormholes.EREPR <> exotic_matter_density proj
+R6814:6815 Blackhole.Wormholes.EREPR <> er:43 var
+R6846:6853 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6907:6907 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6857:6860 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6906:6906 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6882:6884 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6865:6880 Blackhole.Wormholes.EREPR <> throat_radius_EB proj
+R6861:6862 Blackhole.Wormholes.EREPR <> er:43 var
+R6889:6904 Blackhole.Wormholes.EREPR <> throat_radius_EB proj
+R6885:6886 Blackhole.Wormholes.EREPR <> er:43 var
+prf 7204:7229 <> throat_bounds_entanglement
+R7245:7253 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 7240:7241 <> er:44
+R7273:7278 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7258:7269 Blackhole.Wormholes.EREPR <> ER_connected def
+R7271:7272 Blackhole.Wormholes.EREPR <> er:44 var
+R7307:7310 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x not
+R7283:7305 Blackhole.Wormholes.EREPR <> entanglement_entropy_AB proj
+R7279:7280 Blackhole.Wormholes.EREPR <> er:44 var
+R7319:7321 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R7314:7316 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R7317:7318 Blackhole.Wormholes.EREPR <> pi def
+R7343:7343 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7326:7341 Blackhole.Wormholes.EREPR <> throat_radius_EB proj
+R7322:7323 Blackhole.Wormholes.EREPR <> er:44 var
+R7395:7406 Blackhole.Wormholes.EREPR <> ER_connected def
+prf 7513:7546 <> ER_bridge_information_preservation
+R7562:7570 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 7557:7558 <> er:45
+R7590:7595 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7575:7586 Blackhole.Wormholes.EREPR <> ER_connected def
+R7588:7589 Blackhole.Wormholes.EREPR <> er:45 var
+R7625:7630 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7596:7597 Corelib.Init.Logic <> ::type_scope:'~'_x not
+R7598:7621 Blackhole.Wormholes.EREPR <> is_traversable_ER_bridge def
+R7623:7624 Blackhole.Wormholes.EREPR <> er:45 var
+R7684:7686 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7631:7650 Blackhole.Wormholes.EREPR <> entanglement_entropy def
+R7660:7682 Blackhole.Wormholes.EREPR <> entanglement_entropy_AB proj
+R7656:7657 Blackhole.Wormholes.EREPR <> er:45 var
+R7740:7751 Blackhole.Wormholes.EREPR <> ER_connected def
+prf 7900:7928 <> EREPR_information_equivalence
+R7944:7952 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 7939:7940 <> er:46
+R7972:7977 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7957:7968 Blackhole.Wormholes.EREPR <> ER_connected def
+R7970:7971 Blackhole.Wormholes.EREPR <> er:46 var
+R7978:7984 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R7999:8004 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R7998:7998 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7985:7994 <> entangle_S:47
+R8046:8053 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R8015:8017 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R8005:8014 Blackhole.Wormholes.EREPR <> entangle_S:47 var
+R8022:8044 Blackhole.Wormholes.EREPR <> entanglement_entropy_AB proj
+R8018:8019 Blackhole.Wormholes.EREPR <> er:46 var
+R8054:8073 Blackhole.Wormholes.EREPR <> EREPR_correspondence def
+R8075:8076 Blackhole.Wormholes.EREPR <> er:46 var
+R8116:8138 Blackhole.Wormholes.EREPR <> entanglement_entropy_AB proj
+R8116:8138 Blackhole.Wormholes.EREPR <> entanglement_entropy_AB proj
+R8151:8170 Blackhole.Wormholes.EREPR <> EREPR_correspondence def
+prf 8269:8298 <> page_curve_from_island_formula
+R8325:8325 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8309:8313 <> S_QFT:48
+binder 8315:8321 <> area_dI:49
+R8340:8345 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8335:8338 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R8330:8334 Blackhole.Wormholes.EREPR <> S_QFT:48 var
+R8358:8363 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8353:8356 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R8346:8352 Blackhole.Wormholes.EREPR <> area_dI:49 var
+R8396:8399 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R8364:8381 Blackhole.Wormholes.EREPR <> page_curve_entropy def
+R8383:8387 Blackhole.Wormholes.EREPR <> S_QFT:48 var
+R8389:8395 Blackhole.Wormholes.EREPR <> area_dI:49 var
+R8400:8404 Blackhole.Wormholes.EREPR <> S_QFT:48 var
+R8453:8470 Blackhole.Wormholes.EREPR <> page_curve_entropy def
+prf 8609:8640 <> ER_bridge_requires_exotic_matter
+R8656:8664 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 8651:8652 <> er:50
+R8684:8689 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8669:8680 Blackhole.Wormholes.EREPR <> ER_connected def
+R8682:8683 Blackhole.Wormholes.EREPR <> er:50 var
+R8705:8725 Blackhole.Wormholes.EREPR <> exotic_matter_density proj
+R8701:8702 Blackhole.Wormholes.EREPR <> er:50 var
+binder 8694:8696 <> rho:51
+R8748:8769 Blackhole.Wormholes.EREPR <> exotic_matter_pressure proj
+R8744:8745 Blackhole.Wormholes.EREPR <> er:50 var
+binder 8737:8739 <> p_r:52
+R8786:8788 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R8780:8782 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R8777:8779 Blackhole.Wormholes.EREPR <> rho:51 var
+R8783:8785 Blackhole.Wormholes.EREPR <> p_r:52 var
+R8827:8838 Blackhole.Wormholes.EREPR <> ER_connected def
+R8841:8853 Blackhole.Wormholes.EREPR <> exotic_matter def
+def 9074:9095 <> ER_throat_radius_param
+R9103:9111 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 9098:9099 <> er:53
+R9116:9116 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R9127:9142 Blackhole.Wormholes.EREPR <> throat_radius_EB proj
+R9123:9124 Blackhole.Wormholes.EREPR <> er:53 var
+def 9158:9186 <> ER_entanglement_entropy_param
+R9194:9202 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 9189:9190 <> er:54
+R9207:9207 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R9218:9240 Blackhole.Wormholes.EREPR <> entanglement_entropy_AB proj
+R9214:9215 Blackhole.Wormholes.EREPR <> er:54 var
+def 9256:9277 <> ER_exotic_matter_param
+R9285:9293 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 9280:9281 <> er:55
+R9298:9298 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R9309:9329 Blackhole.Wormholes.EREPR <> exotic_matter_density proj
+R9305:9306 Blackhole.Wormholes.EREPR <> er:55 var
+def 9345:9365 <> ER_is_connected_param
+R9373:9381 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 9368:9369 <> er:56
+R9396:9407 Blackhole.Wormholes.EREPR <> ER_connected def
+R9409:9410 Blackhole.Wormholes.EREPR <> er:56 var
+def 9425:9447 <> ER_correspondence_param
+R9455:9463 Blackhole.Wormholes.EREPR <> ER_bridge rec
+binder 9450:9451 <> er:57
+R9478:9497 Blackhole.Wormholes.EREPR <> EREPR_correspondence def
+R9499:9500 Blackhole.Wormholes.EREPR <> er:57 var

@@ -1,0 +1,405 @@
+DIGEST f98910b1b47d0d74266de32a33e173f7
+FBlackhole.Cosmology.Axiodilaton
+R1217:1232 Blackhole.Prelim <> <> lib
+R1250:1273 Blackhole.Cosmology.FLRW <> <> lib
+R1303:1307 Stdlib.Reals.Reals <> <> lib
+R1309:1311 Stdlib.micromega.Lra <> <> lib
+def 1474:1486 <> dilaton_field
+R1493:1493 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1489:1489 <> z:1
+R1498:1498 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1505:1505 Blackhole.Cosmology.Axiodilaton <> z:1 var
+def 1650:1678 <> axiodilaton_coupling_constant
+R1682:1682 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 1914:1930 <> omega_axiodilaton
+R1956:1956 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1933:1939 <> Omega_m:2
+binder 1941:1952 <> Omega_Lambda:3
+R1961:1961 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1981:1983 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1971:1973 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1974:1980 Blackhole.Cosmology.Axiodilaton <> Omega_m:2 var
+R1984:1995 Blackhole.Cosmology.Axiodilaton <> Omega_Lambda:3 var
+def 2306:2325 <> axiodilaton_function
+R2338:2338 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2328:2328 <> z:4
+binder 2330:2334 <> alpha:5
+R2343:2343 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2350:2352 Stdlib.Reals.Rtrigo_def <> exp def
+R2360:2362 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2355:2359 Blackhole.Cosmology.Axiodilaton <> alpha:5 var
+R2363:2364 Stdlib.Reals.Rpower <> ln def
+R2370:2372 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2373:2373 Blackhole.Cosmology.Axiodilaton <> z:4 var
+def 2885:2913 <> axiodilaton_hubble_normalized
+R2943:2943 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2916:2916 <> z:6
+binder 2918:2924 <> Omega_m:7
+binder 2926:2933 <> Omega_ad:8
+binder 2935:2939 <> alpha:9
+R2948:2948 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2988:2990 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R2978:2980 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R2981:2987 Blackhole.Cosmology.Axiodilaton <> Omega_m:7 var
+R2991:2998 Blackhole.Cosmology.Axiodilaton <> Omega_ad:8 var
+binder 2959:2970 <> Omega_Lambda:10
+R3092:3107 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3037:3052 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3023:3025 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3016:3022 Blackhole.Cosmology.Axiodilaton <> Omega_m:7 var
+R3026:3026 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3034:3035 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3030:3032 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3033:3033 Blackhole.Cosmology.Axiodilaton <> z:6 var
+R3061:3063 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3053:3060 Blackhole.Cosmology.Axiodilaton <> Omega_ad:8 var
+R3064:3083 Blackhole.Cosmology.Axiodilaton <> axiodilaton_function def
+R3085:3085 Blackhole.Cosmology.Axiodilaton <> z:6 var
+R3087:3091 Blackhole.Cosmology.Axiodilaton <> alpha:9 var
+R3108:3119 Blackhole.Cosmology.Axiodilaton <> Omega_Lambda:10 var
+binder 3009:3011 <> E_z:11
+R3126:3129 Stdlib.Reals.R_sqrt <> sqrt def
+R3131:3133 Blackhole.Cosmology.Axiodilaton <> E_z:11 var
+def 3260:3287 <> axiodilaton_hubble_parameter
+R3320:3320 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3290:3291 <> H0:12
+binder 3293:3293 <> z:13
+binder 3295:3301 <> Omega_m:14
+binder 3303:3310 <> Omega_ad:15
+binder 3312:3316 <> alpha:16
+R3325:3325 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3334:3336 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3332:3333 Blackhole.Cosmology.Axiodilaton <> H0:12 var
+R3337:3365 Blackhole.Cosmology.Axiodilaton <> axiodilaton_hubble_normalized def
+R3367:3367 Blackhole.Cosmology.Axiodilaton <> z:13 var
+R3369:3375 Blackhole.Cosmology.Axiodilaton <> Omega_m:14 var
+R3377:3384 Blackhole.Cosmology.Axiodilaton <> Omega_ad:15 var
+R3386:3390 Blackhole.Cosmology.Axiodilaton <> alpha:16 var
+def 3654:3678 <> axiodilaton_H0_prediction
+R3682:3682 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 3859:3870 <> scale_factor
+R3877:3877 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3873:3873 <> z:17
+R3882:3882 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3892:3895 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3903:3903 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3899:3901 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3902:3902 Blackhole.Cosmology.Axiodilaton <> z:17 var
+def 4080:4108 <> axiodilaton_comoving_distance
+R4143:4143 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4111:4111 <> c:18
+binder 4113:4114 <> H0:19
+binder 4116:4116 <> z:20
+binder 4118:4124 <> Omega_m:21
+binder 4126:4133 <> Omega_ad:22
+binder 4135:4139 <> alpha:23
+R4148:4148 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4155:4155 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4162:4165 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4157:4159 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4156:4156 Blackhole.Cosmology.Axiodilaton <> c:18 var
+R4160:4161 Blackhole.Cosmology.Axiodilaton <> H0:19 var
+R4166:4166 Blackhole.Cosmology.Axiodilaton <> z:20 var
+def 4368:4398 <> axiodilaton_luminosity_distance
+R4433:4433 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4401:4401 <> c:24
+binder 4403:4404 <> H0:25
+binder 4406:4406 <> z:26
+binder 4408:4414 <> Omega_m:27
+binder 4416:4423 <> Omega_ad:28
+binder 4425:4429 <> alpha:29
+R4438:4438 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4445:4445 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4453:4456 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4449:4451 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4452:4452 Blackhole.Cosmology.Axiodilaton <> z:26 var
+R4457:4485 Blackhole.Cosmology.Axiodilaton <> axiodilaton_comoving_distance def
+R4487:4487 Blackhole.Cosmology.Axiodilaton <> c:24 var
+R4489:4490 Blackhole.Cosmology.Axiodilaton <> H0:25 var
+R4492:4492 Blackhole.Cosmology.Axiodilaton <> z:26 var
+R4494:4500 Blackhole.Cosmology.Axiodilaton <> Omega_m:27 var
+R4502:4509 Blackhole.Cosmology.Axiodilaton <> Omega_ad:28 var
+R4511:4515 Blackhole.Cosmology.Axiodilaton <> alpha:29 var
+def 4642:4678 <> axiodilaton_angular_diameter_distance
+R4713:4713 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4681:4681 <> c:30
+binder 4683:4684 <> H0:31
+binder 4686:4686 <> z:32
+binder 4688:4694 <> Omega_m:33
+binder 4696:4703 <> Omega_ad:34
+binder 4705:4709 <> alpha:35
+R4718:4718 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4786:4789 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4803:4803 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4725:4755 Blackhole.Cosmology.Axiodilaton <> axiodilaton_luminosity_distance def
+R4757:4757 Blackhole.Cosmology.Axiodilaton <> c:30 var
+R4759:4760 Blackhole.Cosmology.Axiodilaton <> H0:31 var
+R4762:4762 Blackhole.Cosmology.Axiodilaton <> z:32 var
+R4764:4770 Blackhole.Cosmology.Axiodilaton <> Omega_m:33 var
+R4772:4779 Blackhole.Cosmology.Axiodilaton <> Omega_ad:34 var
+R4781:4785 Blackhole.Cosmology.Axiodilaton <> alpha:35 var
+R4790:4790 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4798:4801 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R4794:4796 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R4797:4797 Blackhole.Cosmology.Axiodilaton <> z:32 var
+def 5082:5110 <> axiodilaton_equation_of_state
+R5132:5132 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5113:5113 <> z:36
+binder 5115:5122 <> Omega_ad:37
+binder 5124:5128 <> alpha:38
+R5137:5137 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5191:5193 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+def 5377:5411 <> axiodilaton_total_equation_of_state
+R5446:5446 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5414:5425 <> Omega_Lambda:39
+binder 5427:5434 <> Omega_ad:40
+binder 5436:5436 <> z:41
+binder 5438:5442 <> alpha:42
+R5451:5451 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5462:5469 <> w_Lambda:43
+R5496:5524 Blackhole.Cosmology.Axiodilaton <> axiodilaton_equation_of_state def
+R5526:5526 Blackhole.Cosmology.Axiodilaton <> z:41 var
+R5528:5535 Blackhole.Cosmology.Axiodilaton <> Omega_ad:40 var
+R5537:5541 Blackhole.Cosmology.Axiodilaton <> alpha:42 var
+binder 5488:5491 <> w_ad:44
+R5548:5548 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5590:5594 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5618:5618 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5572:5574 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5561:5563 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5549:5560 Blackhole.Cosmology.Axiodilaton <> Omega_Lambda:39 var
+R5564:5571 Blackhole.Cosmology.Axiodilaton <> w_Lambda:43 var
+R5583:5585 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5575:5582 Blackhole.Cosmology.Axiodilaton <> Omega_ad:40 var
+R5586:5589 Blackhole.Cosmology.Axiodilaton <> w_ad:44 var
+R5607:5609 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5595:5606 Blackhole.Cosmology.Axiodilaton <> Omega_Lambda:39 var
+R5610:5617 Blackhole.Cosmology.Axiodilaton <> Omega_ad:40 var
+def 5816:5849 <> axiodilaton_deceleration_parameter
+R5877:5877 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5852:5858 <> Omega_m:45
+binder 5860:5867 <> Omega_ad:46
+binder 5869:5873 <> alpha:47
+R5882:5882 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5922:5924 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5912:5914 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5915:5921 Blackhole.Cosmology.Axiodilaton <> Omega_m:45 var
+R5925:5932 Blackhole.Cosmology.Axiodilaton <> Omega_ad:46 var
+binder 5893:5904 <> Omega_Lambda:48
+R5952:5954 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5946:5948 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5939:5945 Blackhole.Cosmology.Axiodilaton <> Omega_m:45 var
+R5955:5966 Blackhole.Cosmology.Axiodilaton <> Omega_Lambda:48 var
+prf 6215:6245 <> axiodilaton_parameters_physical
+R6281:6281 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6256:6262 <> Omega_m:49
+binder 6264:6271 <> Omega_ad:50
+binder 6273:6277 <> alpha:51
+R6298:6303 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6293:6296 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R6286:6292 Blackhole.Cosmology.Axiodilaton <> Omega_m:49 var
+R6317:6322 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6312:6315 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R6304:6311 Blackhole.Cosmology.Axiodilaton <> Omega_ad:50 var
+R6332:6337 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6328:6330 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6323:6327 Blackhole.Cosmology.Axiodilaton <> alpha:51 var
+R6371:6373 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R6361:6363 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R6364:6370 Blackhole.Cosmology.Axiodilaton <> Omega_m:49 var
+R6374:6381 Blackhole.Cosmology.Axiodilaton <> Omega_ad:50 var
+binder 6342:6353 <> Omega_Lambda:52
+R6405:6410 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6400:6403 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R6388:6399 Blackhole.Cosmology.Axiodilaton <> Omega_Lambda:52 var
+R6444:6446 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R6429:6431 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R6418:6420 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R6411:6417 Blackhole.Cosmology.Axiodilaton <> Omega_m:49 var
+R6421:6428 Blackhole.Cosmology.Axiodilaton <> Omega_ad:50 var
+R6432:6443 Blackhole.Cosmology.Axiodilaton <> Omega_Lambda:52 var
+R6514:6525 Blackhole.Cosmology.FLRW <> Omega_Lambda def
+prf 6726:6753 <> axiodilaton_hubble_monotonic
+R6794:6794 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6764:6765 <> H0:53
+binder 6767:6767 <> z:54
+binder 6769:6775 <> Omega_m:55
+binder 6777:6784 <> Omega_ad:56
+binder 6786:6790 <> alpha:57
+R6805:6810 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6801:6803 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6799:6800 Blackhole.Cosmology.Axiodilaton <> H0:53 var
+R6822:6827 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6818:6820 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6811:6817 Blackhole.Cosmology.Axiodilaton <> Omega_m:55 var
+R6833:6838 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6829:6831 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6828:6828 Blackhole.Cosmology.Axiodilaton <> z:54 var
+R6895:6899 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6839:6866 Blackhole.Cosmology.Axiodilaton <> axiodilaton_hubble_parameter def
+R6868:6869 Blackhole.Cosmology.Axiodilaton <> H0:53 var
+R6871:6871 Blackhole.Cosmology.Axiodilaton <> z:54 var
+R6873:6879 Blackhole.Cosmology.Axiodilaton <> Omega_m:55 var
+R6881:6888 Blackhole.Cosmology.Axiodilaton <> Omega_ad:56 var
+R6890:6894 Blackhole.Cosmology.Axiodilaton <> alpha:57 var
+R6900:6927 Blackhole.Cosmology.Axiodilaton <> axiodilaton_hubble_parameter def
+R6929:6930 Blackhole.Cosmology.Axiodilaton <> H0:53 var
+R6934:6940 Blackhole.Cosmology.Axiodilaton <> Omega_m:55 var
+R6942:6949 Blackhole.Cosmology.Axiodilaton <> Omega_ad:56 var
+R6951:6955 Blackhole.Cosmology.Axiodilaton <> alpha:57 var
+R7023:7050 Blackhole.Cosmology.Axiodilaton <> axiodilaton_hubble_parameter def
+R7053:7081 Blackhole.Cosmology.Axiodilaton <> axiodilaton_hubble_normalized def
+prf 7286:7326 <> axiodilaton_luminosity_distance_monotonic
+R7369:7369 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7337:7337 <> c:58
+binder 7339:7340 <> H0:59
+binder 7342:7342 <> z:60
+binder 7344:7350 <> Omega_m:61
+binder 7352:7359 <> Omega_ad:62
+binder 7361:7365 <> alpha:63
+R7380:7385 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7376:7378 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7374:7375 Blackhole.Cosmology.Axiodilaton <> H0:59 var
+R7391:7396 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7387:7389 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7386:7386 Blackhole.Cosmology.Axiodilaton <> c:58 var
+R7402:7407 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7398:7400 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7397:7397 Blackhole.Cosmology.Axiodilaton <> z:60 var
+R7469:7473 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7408:7438 Blackhole.Cosmology.Axiodilaton <> axiodilaton_luminosity_distance def
+R7440:7440 Blackhole.Cosmology.Axiodilaton <> c:58 var
+R7442:7443 Blackhole.Cosmology.Axiodilaton <> H0:59 var
+R7445:7445 Blackhole.Cosmology.Axiodilaton <> z:60 var
+R7447:7453 Blackhole.Cosmology.Axiodilaton <> Omega_m:61 var
+R7455:7462 Blackhole.Cosmology.Axiodilaton <> Omega_ad:62 var
+R7464:7468 Blackhole.Cosmology.Axiodilaton <> alpha:63 var
+R7474:7504 Blackhole.Cosmology.Axiodilaton <> axiodilaton_luminosity_distance def
+R7506:7506 Blackhole.Cosmology.Axiodilaton <> c:58 var
+R7508:7509 Blackhole.Cosmology.Axiodilaton <> H0:59 var
+R7513:7519 Blackhole.Cosmology.Axiodilaton <> Omega_m:61 var
+R7521:7528 Blackhole.Cosmology.Axiodilaton <> Omega_ad:62 var
+R7530:7534 Blackhole.Cosmology.Axiodilaton <> alpha:63 var
+R7603:7633 Blackhole.Cosmology.Axiodilaton <> axiodilaton_luminosity_distance def
+prf 7822:7855 <> axiodilaton_bridges_hubble_tension
+R7887:7887 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7866:7873 <> H0_local:64
+binder 7875:7883 <> H0_planck:65
+R7907:7912 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7900:7902 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7892:7899 Blackhole.Cosmology.Axiodilaton <> H0_local:64 var
+R7929:7934 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7922:7924 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7913:7921 Blackhole.Cosmology.Axiodilaton <> H0_planck:65 var
+R7972:7977 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R7960:7962 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7935:7959 Blackhole.Cosmology.Axiodilaton <> axiodilaton_H0_prediction def
+R7963:7971 Blackhole.Cosmology.Axiodilaton <> H0_planck:65 var
+R8003:8005 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R7978:8002 Blackhole.Cosmology.Axiodilaton <> axiodilaton_H0_prediction def
+R8006:8013 Blackhole.Cosmology.Axiodilaton <> H0_local:64 var
+R8067:8091 Blackhole.Cosmology.Axiodilaton <> axiodilaton_H0_prediction def
+prf 8389:8420 <> axiodilaton_present_acceleration
+R8456:8456 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8431:8437 <> Omega_m:66
+binder 8439:8446 <> Omega_ad:67
+binder 8448:8452 <> alpha:68
+R8472:8477 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8468:8470 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R8461:8467 Blackhole.Cosmology.Axiodilaton <> Omega_m:66 var
+R8490:8495 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8486:8488 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R8478:8485 Blackhole.Cosmology.Axiodilaton <> Omega_ad:67 var
+R8509:8514 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8503:8505 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R8496:8502 Blackhole.Cosmology.Axiodilaton <> Omega_m:66 var
+R8529:8534 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R8523:8525 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R8515:8522 Blackhole.Cosmology.Axiodilaton <> Omega_ad:67 var
+R8592:8594 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R8535:8568 Blackhole.Cosmology.Axiodilaton <> axiodilaton_deceleration_parameter def
+R8570:8576 Blackhole.Cosmology.Axiodilaton <> Omega_m:66 var
+R8578:8585 Blackhole.Cosmology.Axiodilaton <> Omega_ad:67 var
+R8587:8591 Blackhole.Cosmology.Axiodilaton <> alpha:68 var
+R8677:8710 Blackhole.Cosmology.Axiodilaton <> axiodilaton_deceleration_parameter def
+def 8862:8881 <> axiodilaton_H0_param
+R8885:8885 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R8892:8916 Blackhole.Cosmology.Axiodilaton <> axiodilaton_H0_prediction def
+def 8931:8952 <> axiodilaton_E_function
+R8982:8982 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8955:8955 <> z:69
+binder 8957:8963 <> Omega_m:70
+binder 8965:8972 <> Omega_ad:71
+binder 8974:8978 <> alpha:72
+R8987:8987 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R8994:9022 Blackhole.Cosmology.Axiodilaton <> axiodilaton_hubble_normalized def
+R9024:9024 Blackhole.Cosmology.Axiodilaton <> z:69 var
+R9026:9032 Blackhole.Cosmology.Axiodilaton <> Omega_m:70 var
+R9034:9041 Blackhole.Cosmology.Axiodilaton <> Omega_ad:71 var
+R9043:9047 Blackhole.Cosmology.Axiodilaton <> alpha:72 var
+def 9062:9083 <> axiodilaton_H_function
+R9116:9116 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9086:9087 <> H0:73
+binder 9089:9089 <> z:74
+binder 9091:9097 <> Omega_m:75
+binder 9099:9106 <> Omega_ad:76
+binder 9108:9112 <> alpha:77
+R9121:9121 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R9128:9155 Blackhole.Cosmology.Axiodilaton <> axiodilaton_hubble_parameter def
+R9157:9158 Blackhole.Cosmology.Axiodilaton <> H0:73 var
+R9160:9160 Blackhole.Cosmology.Axiodilaton <> z:74 var
+R9162:9168 Blackhole.Cosmology.Axiodilaton <> Omega_m:75 var
+R9170:9177 Blackhole.Cosmology.Axiodilaton <> Omega_ad:76 var
+R9179:9183 Blackhole.Cosmology.Axiodilaton <> alpha:77 var
+def 9198:9212 <> axiodilaton_D_L
+R9247:9247 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9215:9215 <> c:78
+binder 9217:9218 <> H0:79
+binder 9220:9220 <> z:80
+binder 9222:9228 <> Omega_m:81
+binder 9230:9237 <> Omega_ad:82
+binder 9239:9243 <> alpha:83
+R9252:9252 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R9259:9289 Blackhole.Cosmology.Axiodilaton <> axiodilaton_luminosity_distance def
+R9291:9291 Blackhole.Cosmology.Axiodilaton <> c:78 var
+R9293:9294 Blackhole.Cosmology.Axiodilaton <> H0:79 var
+R9296:9296 Blackhole.Cosmology.Axiodilaton <> z:80 var
+R9298:9304 Blackhole.Cosmology.Axiodilaton <> Omega_m:81 var
+R9306:9313 Blackhole.Cosmology.Axiodilaton <> Omega_ad:82 var
+R9315:9319 Blackhole.Cosmology.Axiodilaton <> alpha:83 var
+def 9334:9348 <> axiodilaton_D_A
+R9383:9383 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9351:9351 <> c:84
+binder 9353:9354 <> H0:85
+binder 9356:9356 <> z:86
+binder 9358:9364 <> Omega_m:87
+binder 9366:9373 <> Omega_ad:88
+binder 9375:9379 <> alpha:89
+R9388:9388 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R9395:9431 Blackhole.Cosmology.Axiodilaton <> axiodilaton_angular_diameter_distance def
+R9433:9433 Blackhole.Cosmology.Axiodilaton <> c:84 var
+R9435:9436 Blackhole.Cosmology.Axiodilaton <> H0:85 var
+R9438:9438 Blackhole.Cosmology.Axiodilaton <> z:86 var
+R9440:9446 Blackhole.Cosmology.Axiodilaton <> Omega_m:87 var
+R9448:9455 Blackhole.Cosmology.Axiodilaton <> Omega_ad:88 var
+R9457:9461 Blackhole.Cosmology.Axiodilaton <> alpha:89 var
+def 9476:9494 <> axiodilaton_w_param
+R9516:9516 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9497:9497 <> z:90
+binder 9499:9506 <> Omega_ad:91
+binder 9508:9512 <> alpha:92
+R9521:9521 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R9528:9556 Blackhole.Cosmology.Axiodilaton <> axiodilaton_equation_of_state def
+R9558:9558 Blackhole.Cosmology.Axiodilaton <> z:90 var
+R9560:9567 Blackhole.Cosmology.Axiodilaton <> Omega_ad:91 var
+R9569:9573 Blackhole.Cosmology.Axiodilaton <> alpha:92 var
+def 9588:9606 <> axiodilaton_q_param
+R9634:9634 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 9609:9615 <> Omega_m:93
+binder 9617:9624 <> Omega_ad:94
+binder 9626:9630 <> alpha:95
+R9639:9639 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R9646:9679 Blackhole.Cosmology.Axiodilaton <> axiodilaton_deceleration_parameter def
+R9681:9687 Blackhole.Cosmology.Axiodilaton <> Omega_m:93 var
+R9689:9696 Blackhole.Cosmology.Axiodilaton <> Omega_ad:94 var
+R9698:9702 Blackhole.Cosmology.Axiodilaton <> alpha:95 var

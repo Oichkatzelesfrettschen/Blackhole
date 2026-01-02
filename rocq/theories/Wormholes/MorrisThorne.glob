@@ -1,0 +1,423 @@
+DIGEST ec919c704614108860b9c68e0f53069e
+FBlackhole.Wormholes.MorrisThorne
+R656:671 Blackhole.Prelim <> <> lib
+R701:705 Stdlib.Reals.Reals <> <> lib
+R707:709 Stdlib.micromega.Lra <> <> lib
+def 997:1010 <> shape_constant
+R1018:1018 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1013:1014 <> b0:1
+R1024:1027 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1023:1023 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1028:1028 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1044:1045 Blackhole.Wormholes.MorrisThorne <> b0:1 var
+def 1106:1116 <> shape_ellis
+R1124:1124 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1119:1120 <> b0:2
+R1130:1133 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1129:1129 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1134:1134 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1145:1145 <> r:3
+R1154:1156 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1152:1152 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1150:1151 Blackhole.Wormholes.MorrisThorne <> b0:2 var
+R1157:1157 Blackhole.Wormholes.MorrisThorne <> r:3 var
+def 1215:1234 <> valid_shape_function
+R1242:1245 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1241:1241 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1246:1246 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1237:1237 <> b:4
+R1255:1255 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1250:1251 <> b0:5
+R1279:1333 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R1274:1276 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1270:1270 Blackhole.Wormholes.MorrisThorne <> b:4 var
+R1272:1273 Blackhole.Wormholes.MorrisThorne <> b0:5 var
+R1277:1278 Blackhole.Wormholes.MorrisThorne <> b0:5 var
+binder 1341:1341 <> r:6
+R1350:1353 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1345:1347 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1344:1344 Blackhole.Wormholes.MorrisThorne <> r:6 var
+R1348:1349 Blackhole.Wormholes.MorrisThorne <> b0:5 var
+R1365:1400 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R1361:1363 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R1357:1359 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1354:1354 Blackhole.Wormholes.MorrisThorne <> b:4 var
+R1356:1356 Blackhole.Wormholes.MorrisThorne <> r:6 var
+R1360:1360 Blackhole.Wormholes.MorrisThorne <> r:6 var
+binder 1408:1408 <> r:7
+R1417:1420 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1412:1414 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1411:1411 Blackhole.Wormholes.MorrisThorne <> r:7 var
+R1415:1416 Blackhole.Wormholes.MorrisThorne <> b0:5 var
+R1424:1426 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1421:1421 Blackhole.Wormholes.MorrisThorne <> b:4 var
+R1423:1423 Blackhole.Wormholes.MorrisThorne <> r:7 var
+def 1585:1604 <> morris_thorne_metric
+R1620:1620 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1607:1607 <> r:8
+binder 1609:1613 <> theta:9
+binder 1615:1616 <> b0:10
+R1625:1640 Blackhole.Prelim <> MetricComponents rec
+R1647:1654 Blackhole.Prelim <> mkMetric constr
+R1725:1728 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1739:1739 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1730:1732 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R1735:1737 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1733:1734 Blackhole.Wormholes.MorrisThorne <> b0:10 var
+R1738:1738 Blackhole.Wormholes.MorrisThorne <> r:8 var
+R1785:1785 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1784:1784 Blackhole.Wormholes.MorrisThorne <> r:8 var
+R1840:1842 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1838:1838 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1837:1837 Blackhole.Wormholes.MorrisThorne <> r:8 var
+R1843:1843 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1853:1854 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1844:1846 Stdlib.Reals.Rtrigo_def <> sin def
+R1848:1852 Blackhole.Wormholes.MorrisThorne <> theta:9 var
+def 2036:2048 <> throat_radius
+R2056:2056 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2051:2052 <> b0:11
+R2061:2061 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2066:2067 Blackhole.Wormholes.MorrisThorne <> b0:11 var
+prf 2136:2154 <> throat_grr_singular
+R2176:2176 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2165:2169 <> theta:12
+binder 2171:2172 <> b0:13
+R2187:2192 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2183:2185 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2181:2182 Blackhole.Wormholes.MorrisThorne <> b0:13 var
+R2204:2206 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2194:2196 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R2199:2201 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2197:2198 Blackhole.Wormholes.MorrisThorne <> b0:13 var
+R2202:2203 Blackhole.Wormholes.MorrisThorne <> b0:13 var
+prf 2312:2328 <> throat_no_horizon
+R2350:2350 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2339:2343 <> theta:14
+binder 2345:2346 <> b0:15
+R2361:2366 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2357:2359 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2355:2356 Blackhole.Wormholes.MorrisThorne <> b0:15 var
+R2406:2408 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2367:2370 Blackhole.Prelim <> g_tt proj
+R2373:2392 Blackhole.Wormholes.MorrisThorne <> morris_thorne_metric def
+R2394:2395 Blackhole.Wormholes.MorrisThorne <> b0:15 var
+R2397:2401 Blackhole.Wormholes.MorrisThorne <> theta:14 var
+R2403:2404 Blackhole.Wormholes.MorrisThorne <> b0:15 var
+R2452:2471 Blackhole.Wormholes.MorrisThorne <> morris_thorne_metric def
+def 2733:2746 <> energy_density
+R2754:2757 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2753:2753 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2758:2758 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2749:2749 <> b:16
+R2766:2766 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2762:2762 <> r:17
+R2771:2771 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 2954:2968 <> radial_pressure
+R2976:2979 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2975:2975 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2980:2980 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2971:2971 <> b:18
+R2991:2994 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2990:2990 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2995:2995 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2984:2986 <> Phi:19
+R3003:3003 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2999:2999 <> r:20
+R3008:3008 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 3192:3198 <> nec_sum
+R3206:3209 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3205:3205 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3210:3210 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3201:3201 <> b:21
+R3221:3224 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3220:3220 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3225:3225 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3214:3216 <> Phi:22
+R3233:3233 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3229:3229 <> r:23
+R3238:3238 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3263:3265 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3245:3258 Blackhole.Wormholes.MorrisThorne <> energy_density def
+R3260:3260 Blackhole.Wormholes.MorrisThorne <> b:21 var
+R3262:3262 Blackhole.Wormholes.MorrisThorne <> r:23 var
+R3266:3280 Blackhole.Wormholes.MorrisThorne <> radial_pressure def
+R3282:3282 Blackhole.Wormholes.MorrisThorne <> b:21 var
+R3284:3286 Blackhole.Wormholes.MorrisThorne <> Phi:22 var
+R3288:3288 Blackhole.Wormholes.MorrisThorne <> r:23 var
+prf 3353:3374 <> nec_violated_at_throat
+R3390:3390 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3385:3386 <> b0:24
+R3401:3468 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3397:3399 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3395:3396 Blackhole.Wormholes.MorrisThorne <> b0:24 var
+R3469:3472 Corelib.Init.Logic <> True ind
+def 3644:3658 <> proper_distance
+R3668:3668 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3661:3661 <> r:25
+binder 3663:3664 <> b0:26
+R3673:3673 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3803:3806 Stdlib.Reals.R_sqrt <> sqrt def
+R3812:3814 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3810:3810 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3809:3809 Blackhole.Wormholes.MorrisThorne <> r:25 var
+R3817:3817 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3815:3816 Blackhole.Wormholes.MorrisThorne <> b0:26 var
+prf 3905:3926 <> proper_distance_throat
+R3942:3942 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3937:3938 <> b0:27
+R3953:3958 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3949:3951 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3947:3948 Blackhole.Wormholes.MorrisThorne <> b0:27 var
+R3980:3982 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R3959:3973 Blackhole.Wormholes.MorrisThorne <> proper_distance def
+R3975:3976 Blackhole.Wormholes.MorrisThorne <> b0:27 var
+R3978:3979 Blackhole.Wormholes.MorrisThorne <> b0:27 var
+R4019:4033 Blackhole.Wormholes.MorrisThorne <> proper_distance def
+R4046:4059 Stdlib.Reals.RIneq <> Rminus_diag_eq thm
+R4046:4059 Stdlib.Reals.RIneq <> Rminus_diag_eq thm
+R4046:4059 Stdlib.Reals.RIneq <> Rminus_diag_eq thm
+R4046:4059 Stdlib.Reals.RIneq <> Rminus_diag_eq thm
+R4089:4094 Stdlib.Reals.R_sqrt <> sqrt_0 thm
+R4089:4094 Stdlib.Reals.R_sqrt <> sqrt_0 thm
+R4089:4094 Stdlib.Reals.R_sqrt <> sqrt_0 thm
+prf 4176:4200 <> proper_distance_increases
+R4218:4218 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4211:4211 <> r:28
+binder 4213:4214 <> b0:29
+R4229:4232 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4225:4227 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4223:4224 Blackhole.Wormholes.MorrisThorne <> b0:29 var
+R4239:4244 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4234:4236 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4233:4233 Blackhole.Wormholes.MorrisThorne <> r:28 var
+R4237:4238 Blackhole.Wormholes.MorrisThorne <> b0:29 var
+R4265:4267 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4245:4259 Blackhole.Wormholes.MorrisThorne <> proper_distance def
+R4261:4261 Blackhole.Wormholes.MorrisThorne <> r:28 var
+R4263:4264 Blackhole.Wormholes.MorrisThorne <> b0:29 var
+R4309:4323 Blackhole.Wormholes.MorrisThorne <> proper_distance def
+R4334:4343 Stdlib.Reals.R_sqrt <> sqrt_lt_R0 thm
+R4334:4343 Stdlib.Reals.R_sqrt <> sqrt_lt_R0 thm
+def 4616:4627 <> radial_tidal
+R4637:4640 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4636:4636 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4641:4641 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4630:4632 <> Phi:30
+R4649:4649 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4645:4645 <> r:31
+R4654:4654 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 4759:4771 <> lateral_tidal
+R4779:4782 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4778:4778 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4783:4783 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4774:4774 <> b:32
+R4794:4797 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4793:4793 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4798:4798 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4787:4789 <> Phi:33
+R4806:4806 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4802:4802 <> r:34
+R4811:4811 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+prf 4965:4985 <> comfortable_traversal
+R5001:5001 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4996:4997 <> b0:35
+R5012:5017 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5008:5010 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R5006:5007 Blackhole.Wormholes.MorrisThorne <> b0:35 var
+R5050:5055 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R5046:5048 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R5018:5029 Blackhole.Wormholes.MorrisThorne <> radial_tidal def
+R5044:5045 Blackhole.Wormholes.MorrisThorne <> b0:35 var
+R5105:5107 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R5056:5068 Blackhole.Wormholes.MorrisThorne <> lateral_tidal def
+R5071:5084 Blackhole.Wormholes.MorrisThorne <> shape_constant def
+R5086:5087 Blackhole.Wormholes.MorrisThorne <> b0:35 var
+R5103:5104 Blackhole.Wormholes.MorrisThorne <> b0:35 var
+def 5240:5258 <> mt_christoffel_r_rr
+R5268:5268 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5261:5261 <> r:36
+binder 5263:5264 <> b0:37
+R5273:5273 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5282:5285 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5302:5302 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5280:5281 Blackhole.Wormholes.MorrisThorne <> b0:37 var
+R5291:5294 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5301:5301 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5287:5289 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5290:5290 Blackhole.Wormholes.MorrisThorne <> r:36 var
+R5296:5298 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5295:5295 Blackhole.Wormholes.MorrisThorne <> r:36 var
+R5299:5300 Blackhole.Wormholes.MorrisThorne <> b0:37 var
+def 5317:5337 <> mt_christoffel_r_thth
+R5347:5347 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5340:5340 <> r:38
+binder 5342:5343 <> b0:39
+R5352:5352 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5359:5360 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R5367:5367 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R5362:5364 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5361:5361 Blackhole.Wormholes.MorrisThorne <> r:38 var
+R5365:5366 Blackhole.Wormholes.MorrisThorne <> b0:39 var
+def 5382:5402 <> mt_christoffel_r_phph
+R5418:5418 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5405:5405 <> r:40
+binder 5407:5411 <> theta:41
+binder 5413:5414 <> b0:42
+R5423:5423 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5439:5441 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5430:5431 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R5438:5438 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R5433:5435 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5432:5432 Blackhole.Wormholes.MorrisThorne <> r:40 var
+R5436:5437 Blackhole.Wormholes.MorrisThorne <> b0:42 var
+R5442:5442 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5452:5453 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5443:5445 Stdlib.Reals.Rtrigo_def <> sin def
+R5447:5451 Blackhole.Wormholes.MorrisThorne <> theta:41 var
+def 5469:5489 <> mt_christoffel_th_rth
+R5496:5496 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5492:5492 <> r:43
+R5501:5501 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5509:5511 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5512:5512 Blackhole.Wormholes.MorrisThorne <> r:43 var
+def 5527:5548 <> mt_christoffel_th_phph
+R5559:5559 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5551:5555 <> theta:44
+R5564:5564 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5582:5584 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5571:5572 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R5573:5575 Stdlib.Reals.Rtrigo_def <> sin def
+R5577:5581 Blackhole.Wormholes.MorrisThorne <> theta:44 var
+R5585:5587 Stdlib.Reals.Rtrigo_def <> cos def
+R5589:5593 Blackhole.Wormholes.MorrisThorne <> theta:44 var
+def 5608:5628 <> mt_christoffel_ph_rph
+R5635:5635 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5631:5631 <> r:45
+R5640:5640 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5648:5650 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5651:5651 Blackhole.Wormholes.MorrisThorne <> r:45 var
+def 5666:5687 <> mt_christoffel_ph_thph
+R5698:5698 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5690:5694 <> theta:46
+R5703:5703 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5719:5721 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R5710:5712 Stdlib.Reals.Rtrigo_def <> cos def
+R5714:5718 Blackhole.Wormholes.MorrisThorne <> theta:46 var
+R5722:5724 Stdlib.Reals.Rtrigo_def <> sin def
+R5726:5730 Blackhole.Wormholes.MorrisThorne <> theta:46 var
+def 5859:5879 <> morris_thorne_general
+R5898:5898 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5882:5882 <> r:47
+binder 5884:5888 <> theta:48
+binder 5890:5892 <> Phi:49
+binder 5894:5894 <> b:50
+R5903:5918 Blackhole.Prelim <> MetricComponents rec
+R5925:5932 Blackhole.Prelim <> mkMetric constr
+R5939:5940 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R5941:5943 Stdlib.Reals.Rtrigo_def <> exp def
+R5947:5949 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5950:5952 Blackhole.Wormholes.MorrisThorne <> Phi:49 var
+R5999:6002 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6012:6012 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6004:6006 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R6008:6010 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6007:6007 Blackhole.Wormholes.MorrisThorne <> b:50 var
+R6011:6011 Blackhole.Wormholes.MorrisThorne <> r:47 var
+R6045:6045 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6044:6044 Blackhole.Wormholes.MorrisThorne <> r:47 var
+R6095:6097 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6093:6093 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6092:6092 Blackhole.Wormholes.MorrisThorne <> r:47 var
+R6098:6098 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6108:6109 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6099:6101 Stdlib.Reals.Rtrigo_def <> sin def
+R6103:6107 Blackhole.Wormholes.MorrisThorne <> theta:48 var
+def 6201:6222 <> gravitational_redshift
+R6237:6237 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6225:6228 <> Phi1:51
+binder 6230:6233 <> Phi2:52
+R6242:6242 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6249:6251 Stdlib.Reals.Rtrigo_def <> exp def
+R6258:6260 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R6254:6257 Blackhole.Wormholes.MorrisThorne <> Phi1:51 var
+R6261:6264 Blackhole.Wormholes.MorrisThorne <> Phi2:52 var
+def 6359:6374 <> embedding_height
+R6384:6384 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6377:6377 <> r:53
+binder 6379:6380 <> b0:54
+R6389:6389 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6487:6489 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6490:6493 Stdlib.Reals.R_sqrt <> sqrt def
+R6498:6501 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6508:6508 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R6496:6497 Blackhole.Wormholes.MorrisThorne <> b0:54 var
+R6503:6505 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R6502:6502 Blackhole.Wormholes.MorrisThorne <> r:53 var
+R6506:6507 Blackhole.Wormholes.MorrisThorne <> b0:54 var
+prf 6566:6588 <> embedding_smooth_throat
+R6604:6604 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6599:6600 <> b0:55
+R6615:6620 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6611:6613 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6609:6610 Blackhole.Wormholes.MorrisThorne <> b0:55 var
+R6643:6645 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R6621:6636 Blackhole.Wormholes.MorrisThorne <> embedding_height def
+R6638:6639 Blackhole.Wormholes.MorrisThorne <> b0:55 var
+R6641:6642 Blackhole.Wormholes.MorrisThorne <> b0:55 var
+R6682:6697 Blackhole.Wormholes.MorrisThorne <> embedding_height def
+R6710:6723 Stdlib.Reals.RIneq <> Rminus_diag_eq thm
+R6710:6723 Stdlib.Reals.RIneq <> Rminus_diag_eq thm
+R6710:6723 Stdlib.Reals.RIneq <> Rminus_diag_eq thm
+R6710:6723 Stdlib.Reals.RIneq <> Rminus_diag_eq thm
+R6753:6761 Stdlib.Reals.RIneq <> Rmult_0_r thm
+R6753:6761 Stdlib.Reals.RIneq <> Rmult_0_r thm
+R6753:6761 Stdlib.Reals.RIneq <> Rmult_0_r thm
+R6774:6779 Stdlib.Reals.R_sqrt <> sqrt_0 thm
+R6774:6779 Stdlib.Reals.R_sqrt <> sqrt_0 thm
+R6774:6779 Stdlib.Reals.R_sqrt <> sqrt_0 thm
+def 6838:6844 <> mt_g_tt
+R6848:6848 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 6869:6875 <> mt_g_rr
+R6885:6885 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6878:6878 <> r:56
+binder 6880:6881 <> b0:57
+R6890:6890 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6898:6901 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6912:6912 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6903:6905 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R6908:6910 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R6906:6907 Blackhole.Wormholes.MorrisThorne <> b0:57 var
+R6911:6911 Blackhole.Wormholes.MorrisThorne <> r:56 var
+def 6927:6935 <> mt_g_thth
+R6942:6942 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6938:6938 <> r:58
+R6947:6947 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R6955:6955 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R6954:6954 Blackhole.Wormholes.MorrisThorne <> r:58 var
+def 6971:6979 <> mt_g_phph
+R6992:6992 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6982:6982 <> r:59
+binder 6984:6988 <> theta:60
+R6997:6997 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R7007:7009 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R7005:7005 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7004:7004 Blackhole.Wormholes.MorrisThorne <> r:59 var
+R7010:7010 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7020:7021 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R7011:7013 Stdlib.Reals.Rtrigo_def <> sin def
+R7015:7019 Blackhole.Wormholes.MorrisThorne <> theta:60 var
+def 7037:7053 <> mt_shape_constant
+R7063:7063 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7056:7057 <> b0:61
+binder 7059:7059 <> r:62
+R7068:7068 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R7075:7076 Blackhole.Wormholes.MorrisThorne <> b0:61 var
+def 7091:7108 <> mt_proper_distance
+R7118:7118 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7111:7111 <> r:63
+binder 7113:7114 <> b0:64
+R7123:7123 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R7130:7144 Blackhole.Wormholes.MorrisThorne <> proper_distance def
+R7146:7146 Blackhole.Wormholes.MorrisThorne <> r:63 var
+R7148:7149 Blackhole.Wormholes.MorrisThorne <> b0:64 var

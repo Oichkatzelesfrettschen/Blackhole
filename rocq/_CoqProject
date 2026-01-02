@@ -1,0 +1,32 @@
+# Blackhole Physics Formalization
+# The Rocq Prover project configuration
+# Pipeline: Rocq -> OCaml -> C++23 -> GLSL 4.60
+
+# Compiler flags
+-Q theories Blackhole
+-Q extraction Blackhole
+
+# Theory files (in dependency order)
+theories/Prelim.v
+theories/Metrics/Schwarzschild.v
+theories/Metrics/Kerr.v
+theories/Kerr/Metric.v
+theories/Kerr/Horizons.v
+theories/Kerr/BPT_ISCO.v
+theories/Wormholes/MorrisThorne.v
+theories/Wormholes/EREPR.v
+theories/Wormholes/Islands.v
+theories/Geodesics/RK4.v
+theories/Geodesics/Equations.v
+theories/Geodesics/NullConstraint.v
+
+# Compact object physics (Phase 1)
+theories/Compact/EOS.v
+
+# Cosmology (Phase 1-2)
+theories/Cosmology/FLRW.v
+theories/Cosmology/Distances.v
+theories/Cosmology/Axiodilaton.v
+
+# Extraction (after all theories)
+extraction/Extract.v

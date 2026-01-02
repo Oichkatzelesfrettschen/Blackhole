@@ -1,0 +1,326 @@
+DIGEST 73e1665d7ebd587d548ce586407cc4aa
+FBlackhole.Wormholes.Islands
+R1029:1044 Blackhole.Prelim <> <> lib
+R1074:1078 Stdlib.Reals.Reals <> <> lib
+R1080:1082 Stdlib.micromega.Lra <> <> lib
+def 1170:1171 <> pi
+R1175:1175 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 1646:1654 <> page_time
+R1661:1661 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1657:1657 <> M:1
+R1666:1666 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1676:1678 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1679:1679 Blackhole.Wormholes.Islands <> M:1 var
+def 1791:1806 <> page_curve_early
+R1815:1815 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1809:1809 <> t:2
+binder 1811:1811 <> M:3
+R1820:1820 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R1839:1841 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R1835:1837 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1827:1830 Stdlib.Reals.R_sqrt <> sqrt def
+R1833:1833 Blackhole.Wormholes.Islands <> t:2 var
+R1838:1838 Blackhole.Wormholes.Islands <> M:3 var
+def 1961:1975 <> page_curve_late
+R1991:1991 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1978:1978 <> t:4
+binder 1980:1985 <> t_page:5
+binder 1987:1987 <> M:6
+R1996:1996 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2031:2033 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R2025:2030 Blackhole.Wormholes.Islands <> t_page:5 var
+R2034:2034 Blackhole.Wormholes.Islands <> t:4 var
+binder 2007:2020 <> remaining_time:7
+R2066:2068 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2062:2064 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2041:2044 Stdlib.Reals.R_sqrt <> sqrt def
+R2047:2060 Blackhole.Wormholes.Islands <> remaining_time:7 var
+R2065:2065 Blackhole.Wormholes.Islands <> M:6 var
+def 2178:2198 <> evaporation_timescale
+R2205:2205 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2201:2201 <> M:8
+R2210:2210 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2222:2224 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2218:2220 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2217:2217 Blackhole.Wormholes.Islands <> M:8 var
+R2221:2221 Blackhole.Wormholes.Islands <> M:8 var
+R2225:2225 Blackhole.Wormholes.Islands <> M:8 var
+def 2628:2651 <> quantum_extremal_surface
+R2672:2672 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2654:2658 <> S_out:9
+binder 2660:2668 <> A_surface:10
+R2710:2713 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R2692:2694 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2687:2691 Blackhole.Wormholes.Islands <> S_out:9 var
+R2704:2706 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2695:2703 Blackhole.Wormholes.Islands <> A_surface:10 var
+def 2832:2850 <> generalized_entropy
+R2864:2864 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2853:2858 <> S_bulk:11
+binder 2860:2860 <> A:12
+R2869:2869 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2882:2884 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R2876:2881 Blackhole.Wormholes.Islands <> S_bulk:11 var
+R2886:2888 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2885:2885 Blackhole.Wormholes.Islands <> A:12 var
+rec 2958:2963 <> island
+proj 2972:2985 <> island_entropy
+proj 3019:3038 <> island_boundary_area
+proj 3066:3076 <> is_extremal
+R2989:2989 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3042:3042 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 3197:3218 <> entropy_without_island
+R3227:3227 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3221:3223 <> S_R:17
+R3232:3232 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3239:3241 Blackhole.Wormholes.Islands <> S_R:17 var
+def 3329:3347 <> entropy_with_island
+R3371:3371 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3350:3352 <> S_R:18
+binder 3354:3356 <> S_I:19
+binder 3358:3367 <> A_boundary:20
+R3376:3376 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3401:3403 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3398:3400 Blackhole.Wormholes.Islands <> S_R:18 var
+R3404:3406 Blackhole.Wormholes.Islands <> S_I:19 var
+binder 3387:3393 <> S_union:21
+R3435:3437 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3428:3434 Blackhole.Wormholes.Islands <> S_union:21 var
+R3448:3450 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3438:3447 Blackhole.Wormholes.Islands <> A_boundary:20 var
+binder 3417:3423 <> G_total:22
+R3460:3466 Blackhole.Wormholes.Islands <> G_total:22 var
+def 3555:3564 <> page_curve
+R3580:3580 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3567:3567 <> t:23
+binder 3569:3574 <> t_evap:24
+binder 3576:3576 <> M:25
+R3585:3585 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3612:3614 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R3592:3607 Blackhole.Wormholes.Islands <> page_curve_early def
+R3609:3609 Blackhole.Wormholes.Islands <> t:23 var
+R3611:3611 Blackhole.Wormholes.Islands <> M:25 var
+R3615:3629 Blackhole.Wormholes.Islands <> page_curve_late def
+R3631:3631 Blackhole.Wormholes.Islands <> t:23 var
+R3634:3654 Blackhole.Wormholes.Islands <> evaporation_timescale def
+R3656:3656 Blackhole.Wormholes.Islands <> M:25 var
+R3659:3659 Blackhole.Wormholes.Islands <> M:25 var
+def 3726:3756 <> critical_island_transition_time
+R3763:3763 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3759:3759 <> M:26
+R3768:3768 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3790:3792 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3786:3788 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3782:3784 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3778:3780 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3781:3781 Blackhole.Wormholes.Islands <> M:26 var
+R3785:3785 Blackhole.Wormholes.Islands <> M:26 var
+R3789:3789 Blackhole.Wormholes.Islands <> M:26 var
+def 4144:4175 <> holographic_entanglement_entropy
+R4190:4190 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4178:4186 <> A_minimal:27
+R4195:4195 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4211:4213 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4202:4210 Blackhole.Wormholes.Islands <> A_minimal:27 var
+def 4291:4312 <> ryu_takayanagi_entropy
+R4327:4327 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4315:4323 <> A_minimal:28
+R4332:4332 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4339:4370 Blackhole.Wormholes.Islands <> holographic_entanglement_entropy def
+R4372:4380 Blackhole.Wormholes.Islands <> A_minimal:28 var
+def 4451:4480 <> ryu_takayanagi_bulk_correction
+R4484:4484 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+def 4836:4863 <> entanglement_wedge_dimension
+R4879:4879 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4866:4875 <> S_entangle:29
+R4884:4884 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4901:4904 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4913:4913 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4891:4900 Blackhole.Wormholes.Islands <> S_entangle:29 var
+R4908:4910 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4911:4912 Blackhole.Wormholes.Islands <> pi def
+def 5027:5038 <> causal_patch
+R5054:5054 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5041:5050 <> S_boundary:30
+R5059:5059 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5066:5075 Blackhole.Wormholes.Islands <> S_boundary:30 var
+def 5169:5189 <> extremal_surface_area
+R5212:5212 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5192:5197 <> S_bulk:31
+binder 5199:5208 <> S_boundary:32
+R5217:5217 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5230:5232 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5224:5229 Blackhole.Wormholes.Islands <> S_bulk:31 var
+R5233:5242 Blackhole.Wormholes.Islands <> S_boundary:32 var
+def 5359:5394 <> entanglement_wedge_contains_interior
+binder 5401:5410 <> has_island:33
+R5432:5441 Blackhole.Wormholes.Islands <> has_island:33 var
+def 5768:5792 <> hawking_radiation_entropy
+R5801:5801 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5795:5795 <> t:34
+binder 5797:5797 <> M:35
+R5806:5806 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5813:5822 Blackhole.Wormholes.Islands <> page_curve def
+R5824:5824 Blackhole.Wormholes.Islands <> t:34 var
+R5828:5828 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5827:5827 Blackhole.Wormholes.Islands <> M:35 var
+R5832:5832 Blackhole.Wormholes.Islands <> M:35 var
+def 5903:5924 <> accessible_information
+R5950:5950 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5927:5937 <> S_radiation:36
+binder 5939:5946 <> S_island:37
+R5955:5955 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5973:5975 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'+'_x not
+R5962:5972 Blackhole.Wormholes.Islands <> S_radiation:36 var
+R5976:5983 Blackhole.Wormholes.Islands <> S_island:37 var
+def 6053:6078 <> is_information_recoverable
+binder 6081:6081 <> t:38
+binder 6083:6088 <> t_page:39
+R6110:6115 Blackhole.Wormholes.Islands <> t_page:39 var
+prf 6436:6458 <> page_curve_from_islands
+R6482:6482 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6469:6469 <> t:40
+binder 6471:6476 <> t_evap:41
+binder 6478:6478 <> M:42
+R6492:6497 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6488:6490 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6487:6487 Blackhole.Wormholes.Islands <> M:42 var
+R6504:6509 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6499:6502 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R6498:6498 Blackhole.Wormholes.Islands <> t:40 var
+R6538:6543 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6511:6514 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<='_x not
+R6510:6510 Blackhole.Wormholes.Islands <> t:40 var
+R6515:6535 Blackhole.Wormholes.Islands <> evaporation_timescale def
+R6537:6537 Blackhole.Wormholes.Islands <> M:42 var
+R6565:6568 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R6544:6553 Blackhole.Wormholes.Islands <> page_curve def
+R6555:6555 Blackhole.Wormholes.Islands <> t:40 var
+R6557:6562 Blackhole.Wormholes.Islands <> t_evap:41 var
+R6564:6564 Blackhole.Wormholes.Islands <> M:42 var
+R6624:6633 Blackhole.Wormholes.Islands <> page_curve def
+R6636:6651 Blackhole.Wormholes.Islands <> page_curve_early def
+R6654:6668 Blackhole.Wormholes.Islands <> page_curve_late def
+prf 6738:6767 <> island_transition_at_page_time
+R6786:6786 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 6778:6778 <> M:43
+binder 6780:6782 <> t_p:44
+R6796:6801 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6792:6794 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6791:6791 Blackhole.Wormholes.Islands <> M:43 var
+R6841:6846 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R6805:6807 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R6802:6804 Blackhole.Wormholes.Islands <> t_p:44 var
+R6808:6838 Blackhole.Wormholes.Islands <> critical_island_transition_time def
+R6840:6840 Blackhole.Wormholes.Islands <> M:43 var
+R6889:6891 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R6847:6856 Blackhole.Wormholes.Islands <> page_curve def
+R6858:6860 Blackhole.Wormholes.Islands <> t_p:44 var
+R6863:6883 Blackhole.Wormholes.Islands <> evaporation_timescale def
+R6885:6885 Blackhole.Wormholes.Islands <> M:43 var
+R6888:6888 Blackhole.Wormholes.Islands <> M:43 var
+R6936:6966 Blackhole.Wormholes.Islands <> critical_island_transition_time def
+R6969:6978 Blackhole.Wormholes.Islands <> page_curve def
+R6981:6996 Blackhole.Wormholes.Islands <> page_curve_early def
+prf 7093:7122 <> ryu_takayanagi_as_special_case
+R7141:7141 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7133:7137 <> A_min:45
+R7155:7160 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7151:7153 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7146:7150 Blackhole.Wormholes.Islands <> A_min:45 var
+R7189:7193 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7161:7182 Blackhole.Wormholes.Islands <> ryu_takayanagi_entropy def
+R7184:7188 Blackhole.Wormholes.Islands <> A_min:45 var
+R7194:7225 Blackhole.Wormholes.Islands <> holographic_entanglement_entropy def
+R7227:7231 Blackhole.Wormholes.Islands <> A_min:45 var
+R7281:7302 Blackhole.Wormholes.Islands <> ryu_takayanagi_entropy def
+R7305:7336 Blackhole.Wormholes.Islands <> holographic_entanglement_entropy def
+prf 7442:7474 <> island_enables_entanglement_wedge
+R7502:7502 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7485:7491 <> has_isl:46
+binder 7493:7498 <> S_bulk:47
+R7517:7522 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7513:7515 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7507:7512 Blackhole.Wormholes.Islands <> S_bulk:47 var
+R7572:7577 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7523:7558 Blackhole.Wormholes.Islands <> entanglement_wedge_contains_interior def
+R7567:7569 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7561:7566 Blackhole.Wormholes.Islands <> S_bulk:47 var
+R7578:7584 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R7597:7602 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R7591:7596 Blackhole.Wormholes.Islands <> island rec
+binder 7585:7587 <> isl:48
+R7623:7625 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R7608:7621 Blackhole.Wormholes.Islands <> island_entropy proj
+R7603:7605 Blackhole.Wormholes.Islands <> isl:48 var
+R7626:7631 Blackhole.Wormholes.Islands <> S_bulk:47 var
+R7700:7713 Blackhole.Wormholes.Islands <> island_entropy proj
+R7700:7713 Blackhole.Wormholes.Islands <> island_entropy proj
+R7700:7713 Blackhole.Wormholes.Islands <> island_entropy proj
+R7737:7756 Blackhole.Wormholes.Islands <> island_boundary_area proj
+R7737:7756 Blackhole.Wormholes.Islands <> island_boundary_area proj
+R7777:7787 Blackhole.Wormholes.Islands <> is_extremal proj
+R7777:7787 Blackhole.Wormholes.Islands <> is_extremal proj
+R7792:7795 Corelib.Init.Logic <> True ind
+R7700:7713 Blackhole.Wormholes.Islands <> island_entropy proj
+R7700:7713 Blackhole.Wormholes.Islands <> island_entropy proj
+R7700:7713 Blackhole.Wormholes.Islands <> island_entropy proj
+R7737:7756 Blackhole.Wormholes.Islands <> island_boundary_area proj
+R7737:7756 Blackhole.Wormholes.Islands <> island_boundary_area proj
+R7777:7787 Blackhole.Wormholes.Islands <> is_extremal proj
+R7777:7787 Blackhole.Wormholes.Islands <> is_extremal proj
+R7792:7795 Corelib.Init.Logic <> True ind
+prf 7897:7928 <> information_in_hawking_radiation
+R7952:7952 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 7939:7939 <> t:49
+binder 7941:7946 <> t_page:50
+binder 7948:7948 <> M:51
+R7962:7967 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7958:7960 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7957:7957 Blackhole.Wormholes.Islands <> M:51 var
+R7979:7984 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R7969:7972 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>='_x not
+R7968:7968 Blackhole.Wormholes.Islands <> t:49 var
+R7973:7978 Blackhole.Wormholes.Islands <> t_page:50 var
+R8014:8016 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R7985:8009 Blackhole.Wormholes.Islands <> hawking_radiation_entropy def
+R8011:8011 Blackhole.Wormholes.Islands <> t:49 var
+R8013:8013 Blackhole.Wormholes.Islands <> M:51 var
+R8063:8087 Blackhole.Wormholes.Islands <> hawking_radiation_entropy def
+R8090:8099 Blackhole.Wormholes.Islands <> page_curve def
+R8102:8116 Blackhole.Wormholes.Islands <> page_curve_late def
+def 8263:8280 <> islands_page_curve
+R8289:8289 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8283:8283 <> t:52
+binder 8285:8285 <> M:53
+R8294:8294 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R8301:8310 Blackhole.Wormholes.Islands <> page_curve def
+R8312:8312 Blackhole.Wormholes.Islands <> t:52 var
+R8315:8335 Blackhole.Wormholes.Islands <> evaporation_timescale def
+R8337:8337 Blackhole.Wormholes.Islands <> M:53 var
+R8340:8340 Blackhole.Wormholes.Islands <> M:53 var
+def 8355:8381 <> islands_generalized_entropy
+R8395:8395 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8384:8389 <> S_bulk:54
+binder 8391:8391 <> A:55
+R8400:8400 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R8407:8425 Blackhole.Wormholes.Islands <> generalized_entropy def
+R8427:8432 Blackhole.Wormholes.Islands <> S_bulk:54 var
+R8434:8434 Blackhole.Wormholes.Islands <> A:55 var
+def 8449:8469 <> islands_critical_time
+R8476:8476 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8472:8472 <> M:56
+R8481:8481 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R8488:8518 Blackhole.Wormholes.Islands <> critical_island_transition_time def
+R8520:8520 Blackhole.Wormholes.Islands <> M:56 var
+def 8535:8560 <> islands_entanglement_wedge
+R8576:8576 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8563:8572 <> S_entangle:57
+R8581:8581 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R8588:8615 Blackhole.Wormholes.Islands <> entanglement_wedge_dimension def
+R8617:8626 Blackhole.Wormholes.Islands <> S_entangle:57 var
+def 8641:8668 <> islands_information_recovery
+R8682:8682 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 8671:8671 <> t:58
+binder 8673:8678 <> t_page:59
+R8687:8687 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax

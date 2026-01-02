@@ -1,0 +1,385 @@
+DIGEST 3a53947fdda8a6a158028b4af8f7fef3
+FBlackhole.Metrics.Schwarzschild
+R493:508 Blackhole.Prelim <> <> lib
+R538:542 Stdlib.Reals.Reals <> <> lib
+R544:546 Stdlib.micromega.Lra <> <> lib
+def 689:703 <> f_schwarzschild
+R712:712 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 706:706 <> r:1
+binder 708:708 <> M:2
+R717:717 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R725:727 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R728:728 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R734:737 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R730:732 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R733:733 Blackhole.Metrics.Schwarzschild <> M:2 var
+R738:738 Blackhole.Metrics.Schwarzschild <> r:1 var
+def 823:842 <> schwarzschild_metric
+R857:857 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 845:845 <> r:3
+binder 847:851 <> theta:4
+binder 853:853 <> M:5
+R862:877 Blackhole.Prelim <> MetricComponents rec
+R893:907 Blackhole.Metrics.Schwarzschild <> f_schwarzschild def
+R909:909 Blackhole.Metrics.Schwarzschild <> r:3 var
+R911:911 Blackhole.Metrics.Schwarzschild <> M:5 var
+binder 888:888 <> f:6
+R918:925 Blackhole.Prelim <> mkMetric constr
+R932:933 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R934:934 Blackhole.Metrics.Schwarzschild <> f:6 var
+R981:983 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R984:984 Blackhole.Metrics.Schwarzschild <> f:6 var
+R1030:1030 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1029:1029 Blackhole.Metrics.Schwarzschild <> r:3 var
+R1074:1076 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1072:1072 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1071:1071 Blackhole.Metrics.Schwarzschild <> r:3 var
+R1077:1077 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1087:1088 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R1078:1080 Stdlib.Reals.Rtrigo_def <> sin def
+R1082:1086 Blackhole.Metrics.Schwarzschild <> theta:4 var
+prf 1270:1293 <> schwarzschild_lorentzian
+R1316:1316 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1304:1304 <> r:7
+binder 1306:1310 <> theta:8
+binder 1312:1312 <> M:9
+R1326:1331 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1322:1324 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1321:1321 Blackhole.Metrics.Schwarzschild <> M:9 var
+R1351:1356 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1332:1346 Blackhole.Prelim <> outside_horizon def
+R1348:1348 Blackhole.Metrics.Schwarzschild <> r:7 var
+R1350:1350 Blackhole.Metrics.Schwarzschild <> M:9 var
+R1366:1371 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1362:1364 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1357:1361 Blackhole.Metrics.Schwarzschild <> theta:8 var
+R1382:1387 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1377:1379 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'<'_x not
+R1372:1376 Blackhole.Metrics.Schwarzschild <> theta:8 var
+R1380:1381 Stdlib.Reals.Rtrigo1 <> PI def
+R1388:1400 Blackhole.Prelim <> is_lorentzian def
+R1403:1422 Blackhole.Metrics.Schwarzschild <> schwarzschild_metric def
+R1424:1424 Blackhole.Metrics.Schwarzschild <> r:7 var
+R1426:1430 Blackhole.Metrics.Schwarzschild <> theta:8 var
+R1432:1432 Blackhole.Metrics.Schwarzschild <> M:9 var
+R1495:1507 Blackhole.Prelim <> is_lorentzian def
+R1510:1529 Blackhole.Metrics.Schwarzschild <> schwarzschild_metric def
+R1532:1546 Blackhole.Metrics.Schwarzschild <> f_schwarzschild def
+R1558:1572 Blackhole.Prelim <> outside_horizon def
+R1575:1594 Blackhole.Prelim <> schwarzschild_radius def
+prf 1840:1864 <> schwarzschild_horizon_gtt
+R1885:1885 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 1875:1879 <> theta:10
+binder 1881:1881 <> M:11
+R1895:1900 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1891:1893 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R1890:1890 Blackhole.Metrics.Schwarzschild <> M:11 var
+R1944:1946 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1901:1904 Blackhole.Prelim <> g_tt proj
+R1907:1926 Blackhole.Metrics.Schwarzschild <> schwarzschild_metric def
+R1930:1932 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R1933:1933 Blackhole.Metrics.Schwarzschild <> M:11 var
+R1936:1940 Blackhole.Metrics.Schwarzschild <> theta:10 var
+R1942:1942 Blackhole.Metrics.Schwarzschild <> M:11 var
+R1987:2006 Blackhole.Metrics.Schwarzschild <> schwarzschild_metric def
+R2009:2023 Blackhole.Metrics.Schwarzschild <> f_schwarzschild def
+prf 2120:2153 <> schwarzschild_horizon_grr_singular
+R2168:2168 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2164:2164 <> M:12
+R2178:2183 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2174:2176 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2173:2173 Blackhole.Metrics.Schwarzschild <> M:12 var
+R2209:2211 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2184:2198 Blackhole.Metrics.Schwarzschild <> f_schwarzschild def
+R2202:2204 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2205:2205 Blackhole.Metrics.Schwarzschild <> M:12 var
+R2208:2208 Blackhole.Metrics.Schwarzschild <> M:12 var
+R2246:2260 Blackhole.Metrics.Schwarzschild <> f_schwarzschild def
+def 2395:2419 <> kretschmann_schwarzschild
+R2428:2428 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2422:2422 <> r:13
+binder 2424:2424 <> M:14
+R2433:2433 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R2448:2450 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R2442:2444 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R2446:2446 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2445:2445 Blackhole.Metrics.Schwarzschild <> M:14 var
+R2452:2452 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R2451:2451 Blackhole.Metrics.Schwarzschild <> r:13 var
+prf 2508:2537 <> kretschmann_singular_at_origin
+R2552:2552 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2548:2548 <> M:15
+R2562:2567 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2558:2560 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2557:2557 Blackhole.Metrics.Schwarzschild <> M:15 var
+R2585:2585 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2575:2581 <> epsilon:16
+R2599:2604 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2595:2597 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2588:2594 Blackhole.Metrics.Schwarzschild <> epsilon:16 var
+R2605:2611 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R2617:2618 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R2616:2616 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2612:2612 <> r:17
+R2624:2627 Corelib.Init.Logic <> ::type_scope:x_'/\'_x not
+R2620:2622 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2619:2619 Blackhole.Metrics.Schwarzschild <> r:17 var
+R2657:2659 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2628:2652 Blackhole.Metrics.Schwarzschild <> kretschmann_schwarzschild def
+R2654:2654 Blackhole.Metrics.Schwarzschild <> r:17 var
+R2656:2656 Blackhole.Metrics.Schwarzschild <> M:15 var
+R2660:2666 Blackhole.Metrics.Schwarzschild <> epsilon:16 var
+prf 2936:2960 <> schwarzschild_isco_radius
+R2975:2975 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 2971:2971 <> M:18
+R2985:2990 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2981:2983 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R2980:2980 Blackhole.Metrics.Schwarzschild <> M:18 var
+R3011:3013 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2991:3008 Blackhole.Prelim <> schwarzschild_isco def
+R3010:3010 Blackhole.Metrics.Schwarzschild <> M:18 var
+R3015:3017 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3018:3018 Blackhole.Metrics.Schwarzschild <> M:18 var
+R3052:3069 Blackhole.Prelim <> schwarzschild_isco def
+prf 3181:3207 <> schwarzschild_photon_sphere
+R3222:3222 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3218:3218 <> M:19
+R3232:3237 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R3228:3230 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R3227:3227 Blackhole.Metrics.Schwarzschild <> M:19 var
+R3260:3262 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R3238:3257 Blackhole.Prelim <> photon_sphere_radius def
+R3259:3259 Blackhole.Metrics.Schwarzschild <> M:19 var
+R3264:3266 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3267:3267 Blackhole.Metrics.Schwarzschild <> M:19 var
+R3301:3320 Blackhole.Prelim <> photon_sphere_radius def
+def 3461:3476 <> christoffel_t_tr
+R3485:3485 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3479:3479 <> r:20
+binder 3481:3481 <> M:21
+R3490:3490 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3498:3501 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3517:3517 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3497:3497 Blackhole.Metrics.Schwarzschild <> M:21 var
+R3503:3506 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3516:3516 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3502:3502 Blackhole.Metrics.Schwarzschild <> r:20 var
+R3508:3510 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3507:3507 Blackhole.Metrics.Schwarzschild <> r:20 var
+R3512:3514 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3515:3515 Blackhole.Metrics.Schwarzschild <> M:21 var
+def 3570:3585 <> christoffel_r_tt
+R3594:3594 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3588:3588 <> r:22
+binder 3590:3590 <> M:23
+R3599:3599 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3621:3623 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3607:3610 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3620:3620 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3606:3606 Blackhole.Metrics.Schwarzschild <> M:23 var
+R3612:3614 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3611:3611 Blackhole.Metrics.Schwarzschild <> r:22 var
+R3616:3618 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3619:3619 Blackhole.Metrics.Schwarzschild <> M:23 var
+R3625:3625 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3624:3624 Blackhole.Metrics.Schwarzschild <> r:22 var
+def 3680:3695 <> christoffel_r_rr
+R3704:3704 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3698:3698 <> r:24
+binder 3700:3700 <> M:25
+R3709:3709 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3719:3722 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3738:3738 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R3716:3717 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R3718:3718 Blackhole.Metrics.Schwarzschild <> M:25 var
+R3724:3727 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3737:3737 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3723:3723 Blackhole.Metrics.Schwarzschild <> r:24 var
+R3729:3731 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3728:3728 Blackhole.Metrics.Schwarzschild <> r:24 var
+R3733:3735 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3736:3736 Blackhole.Metrics.Schwarzschild <> M:25 var
+def 3787:3804 <> christoffel_r_thth
+R3813:3813 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3807:3807 <> r:26
+binder 3809:3809 <> M:27
+R3818:3818 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3825:3826 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R3836:3836 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R3828:3830 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3827:3827 Blackhole.Metrics.Schwarzschild <> r:26 var
+R3832:3834 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3835:3835 Blackhole.Metrics.Schwarzschild <> M:27 var
+def 3898:3915 <> christoffel_r_phph
+R3930:3930 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 3918:3918 <> r:28
+binder 3920:3924 <> theta:29
+binder 3926:3926 <> M:30
+R3935:3935 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R3954:3956 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3942:3943 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R3953:3953 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R3945:3947 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R3944:3944 Blackhole.Metrics.Schwarzschild <> r:28 var
+R3949:3951 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R3952:3952 Blackhole.Metrics.Schwarzschild <> M:30 var
+R3957:3957 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3967:3968 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R3958:3960 Stdlib.Reals.Rtrigo_def <> sin def
+R3962:3966 Blackhole.Metrics.Schwarzschild <> theta:29 var
+def 4031:4048 <> christoffel_th_rth
+R4055:4055 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4051:4051 <> r:31
+R4060:4060 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4068:4070 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4071:4071 Blackhole.Metrics.Schwarzschild <> r:31 var
+def 4133:4151 <> christoffel_th_phph
+R4162:4162 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4154:4158 <> theta:32
+R4167:4167 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4185:4187 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4174:4175 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R4176:4178 Stdlib.Reals.Rtrigo_def <> sin def
+R4180:4184 Blackhole.Metrics.Schwarzschild <> theta:32 var
+R4188:4190 Stdlib.Reals.Rtrigo_def <> cos def
+R4192:4196 Blackhole.Metrics.Schwarzschild <> theta:32 var
+def 4258:4275 <> christoffel_ph_rph
+R4282:4282 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4278:4278 <> r:33
+R4287:4287 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4295:4297 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4298:4298 Blackhole.Metrics.Schwarzschild <> r:33 var
+def 4369:4387 <> christoffel_ph_thph
+R4398:4398 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4390:4394 <> theta:34
+R4403:4403 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R4419:4421 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'/'_x not
+R4410:4412 Stdlib.Reals.Rtrigo_def <> cos def
+R4414:4418 Blackhole.Metrics.Schwarzschild <> theta:34 var
+R4422:4424 Stdlib.Reals.Rtrigo_def <> sin def
+R4426:4430 Blackhole.Metrics.Schwarzschild <> theta:34 var
+prf 4545:4566 <> christoffel_symmetry_t
+R4583:4583 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4577:4577 <> r:35
+binder 4579:4579 <> M:36
+R4593:4596 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4589:4591 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R4588:4588 Blackhole.Metrics.Schwarzschild <> M:36 var
+R4616:4621 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R4597:4611 Blackhole.Prelim <> outside_horizon def
+R4613:4613 Blackhole.Metrics.Schwarzschild <> r:35 var
+R4615:4615 Blackhole.Metrics.Schwarzschild <> M:36 var
+R4642:4644 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R4622:4637 Blackhole.Metrics.Schwarzschild <> christoffel_t_tr def
+R4639:4639 Blackhole.Metrics.Schwarzschild <> r:35 var
+R4641:4641 Blackhole.Metrics.Schwarzschild <> M:36 var
+R4645:4660 Blackhole.Metrics.Schwarzschild <> christoffel_t_tr def
+R4662:4662 Blackhole.Metrics.Schwarzschild <> r:35 var
+R4664:4664 Blackhole.Metrics.Schwarzschild <> M:36 var
+def 4864:4882 <> radial_acceleration
+R4912:4912 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 4885:4885 <> r:37
+binder 4887:4888 <> dr:38
+binder 4890:4895 <> dtheta:39
+binder 4897:4900 <> dphi:40
+binder 4902:4906 <> theta:41
+binder 4908:4908 <> M:42
+R4917:4917 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5059:5063 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R5014:5018 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4950:4983 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'-'_x not
+R4946:4948 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4924:4925 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R4926:4941 Blackhole.Metrics.Schwarzschild <> christoffel_r_tt def
+R4943:4943 Blackhole.Metrics.Schwarzschild <> r:37 var
+R4945:4945 Blackhole.Metrics.Schwarzschild <> M:42 var
+R5009:5011 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5004:5006 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R4984:4999 Blackhole.Metrics.Schwarzschild <> christoffel_r_rr def
+R5001:5001 Blackhole.Metrics.Schwarzschild <> r:37 var
+R5003:5003 Blackhole.Metrics.Schwarzschild <> M:42 var
+R5007:5008 Blackhole.Metrics.Schwarzschild <> dr:38 var
+R5012:5013 Blackhole.Metrics.Schwarzschild <> dr:38 var
+R5050:5052 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5041:5043 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5019:5036 Blackhole.Metrics.Schwarzschild <> christoffel_r_thth def
+R5038:5038 Blackhole.Metrics.Schwarzschild <> r:37 var
+R5040:5040 Blackhole.Metrics.Schwarzschild <> M:42 var
+R5044:5049 Blackhole.Metrics.Schwarzschild <> dtheta:39 var
+R5053:5058 Blackhole.Metrics.Schwarzschild <> dtheta:39 var
+R5099:5101 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5092:5094 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5064:5081 Blackhole.Metrics.Schwarzschild <> christoffel_r_phph def
+R5083:5083 Blackhole.Metrics.Schwarzschild <> r:37 var
+R5085:5089 Blackhole.Metrics.Schwarzschild <> theta:41 var
+R5091:5091 Blackhole.Metrics.Schwarzschild <> M:42 var
+R5095:5098 Blackhole.Metrics.Schwarzschild <> dphi:40 var
+R5102:5105 Blackhole.Metrics.Schwarzschild <> dphi:40 var
+prf 5188:5212 <> schwarzschild_determinant
+R5235:5235 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5223:5223 <> r:43
+binder 5225:5229 <> theta:44
+binder 5231:5231 <> M:45
+R5245:5248 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5241:5243 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R5240:5240 Blackhole.Metrics.Schwarzschild <> M:45 var
+R5254:5257 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5250:5252 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'>'_x not
+R5249:5249 Blackhole.Metrics.Schwarzschild <> r:43 var
+R5272:5277 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R5267:5270 Corelib.Init.Logic <> ::type_scope:x_'<>'_x not
+R5258:5260 Stdlib.Reals.Rtrigo_def <> sin def
+R5262:5266 Blackhole.Metrics.Schwarzschild <> theta:44 var
+R5321:5323 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R5278:5287 Blackhole.Prelim <> metric_det def
+R5290:5309 Blackhole.Metrics.Schwarzschild <> schwarzschild_metric def
+R5311:5311 Blackhole.Metrics.Schwarzschild <> r:43 var
+R5313:5317 Blackhole.Metrics.Schwarzschild <> theta:44 var
+R5319:5319 Blackhole.Metrics.Schwarzschild <> M:45 var
+R5329:5331 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5324:5325 Stdlib.Reals.Rdefinitions <> ::R_scope:'-'_x not
+R5327:5327 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5326:5326 Blackhole.Metrics.Schwarzschild <> r:43 var
+R5332:5332 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5342:5343 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5333:5335 Stdlib.Reals.Rtrigo_def <> sin def
+R5337:5341 Blackhole.Metrics.Schwarzschild <> theta:44 var
+R5394:5403 Blackhole.Prelim <> metric_det def
+R5406:5425 Blackhole.Metrics.Schwarzschild <> schwarzschild_metric def
+R5428:5442 Blackhole.Metrics.Schwarzschild <> f_schwarzschild def
+def 5668:5685 <> schwarzschild_g_tt
+R5694:5694 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5688:5688 <> r:46
+binder 5690:5690 <> M:47
+R5699:5699 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5706:5709 Blackhole.Prelim <> g_tt proj
+R5712:5731 Blackhole.Metrics.Schwarzschild <> schwarzschild_metric def
+R5733:5733 Blackhole.Metrics.Schwarzschild <> r:46 var
+R5737:5737 Blackhole.Metrics.Schwarzschild <> M:47 var
+def 5753:5770 <> schwarzschild_g_rr
+R5779:5779 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5773:5773 <> r:48
+binder 5775:5775 <> M:49
+R5784:5784 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5791:5794 Blackhole.Prelim <> g_rr proj
+R5797:5816 Blackhole.Metrics.Schwarzschild <> schwarzschild_metric def
+R5818:5818 Blackhole.Metrics.Schwarzschild <> r:48 var
+R5822:5822 Blackhole.Metrics.Schwarzschild <> M:49 var
+def 5838:5857 <> schwarzschild_g_thth
+R5864:5864 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5860:5860 <> r:50
+R5869:5869 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5877:5877 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5876:5876 Blackhole.Metrics.Schwarzschild <> r:50 var
+def 5893:5912 <> schwarzschild_g_phph
+R5925:5925 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+binder 5915:5915 <> r:51
+binder 5917:5921 <> theta:52
+R5930:5930 Stdlib.Reals.Rdefinitions RbaseSymbolsImpl R defax
+R5940:5942 Stdlib.Reals.Rdefinitions <> ::R_scope:x_'*'_x not
+R5938:5938 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5937:5937 Blackhole.Metrics.Schwarzschild <> r:51 var
+R5943:5943 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5953:5954 Stdlib.Reals.Rfunctions <> ::R_scope:x_'^'_x not
+R5944:5946 Stdlib.Reals.Rtrigo_def <> sin def
+R5948:5952 Blackhole.Metrics.Schwarzschild <> theta:52 var

@@ -77,56 +77,9 @@ find_package(stb REQUIRED)
 find_package(HighFive REQUIRED)
 find_package(CLI11 REQUIRED)
 find_package(nlohmann_json REQUIRED)
-
-# ============================================================================
-# SPIR-V Tooling (shaderc + spirv-tools + spirv-cross)
-# ============================================================================
-
-option(ENABLE_SPIRV_TOOLING "Enable SPIR-V build/reflect tooling" ON)
-if(ENABLE_SPIRV_TOOLING)
-  find_package(shaderc REQUIRED)
-  find_package(SPIRV-Tools REQUIRED)
-  find_package(spirv-cross REQUIRED)
-  find_package(SPIRV-Headers REQUIRED)
-
-  function(resolve_imported_target OUT_VAR)
-    foreach(CANDIDATE IN LISTS ARGN)
-      if(TARGET ${CANDIDATE})
-        set(${OUT_VAR} ${CANDIDATE} PARENT_SCOPE)
-        return()
-      endif()
-    endforeach()
-    message(FATAL_ERROR "Required target not found: ${ARGN}")
-  endfunction()
-
-  resolve_imported_target(SHADERC_TARGET
-    shaderc::shaderc
-    shaderc::shaderc_shared
-    shaderc
-  )
-  resolve_imported_target(SPIRV_TOOLS_TARGET
-    SPIRV-Tools::SPIRV-Tools
-    spirv-tools::spirv-tools
-    SPIRV-Tools
-  )
-  resolve_imported_target(SPIRV_CROSS_TARGET
-    spirv-cross::spirv-cross
-    spirv-cross
-  )
-  resolve_imported_target(SPIRV_HEADERS_TARGET
-    spirv-headers::spirv-headers
-    SPIRV-Headers::SPIRV-Headers
-    spirv-headers
-  )
-
-  add_library(spirv_tooling INTERFACE)
-  target_link_libraries(spirv_tooling INTERFACE
-    ${SHADERC_TARGET}
-    ${SPIRV_TOOLS_TARGET}
-    ${SPIRV_CROSS_TARGET}
-    ${SPIRV_HEADERS_TARGET}
-  )
-endif()
+# SPIR-V Tooling removed in Phase 3 (C++23 -> GLSL transpilation)
+# All SPIR-V compilation now uses GLSL 4.60 shader includes directly
+# Validation and optional compilation still available via glslangValidator and glslc
 
 # ============================================================================
 # Mesh Optimization (meshoptimizer)
@@ -896,7 +849,6 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
   GLFW_INCLUDE_NONE
   IMGUI_IMPL_OPENGL_LOADER_CUSTOM
   BLACKHOLE_ENABLE_RMLUI=$<BOOL:${ENABLE_RMLUI}>
-  BLACKHOLE_ENABLE_SPIRV_TOOLING=$<BOOL:${ENABLE_SPIRV_TOOLING}>
   BLACKHOLE_ENABLE_MESHOPTIMIZER=$<BOOL:${ENABLE_MESHOPTIMIZER}>
   BLACKHOLE_ENABLE_TASKFLOW=$<BOOL:${ENABLE_TASKFLOW}>
   BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
@@ -998,22 +950,6 @@ set_target_properties(nubhlight_pack PROPERTIES
 target_link_libraries(nubhlight_pack PRIVATE HighFive::HighFive CLI11::CLI11)
 target_compile_options(nubhlight_pack PRIVATE ${PROJECT_WARNINGS})
 target_compile_options(nubhlight_pack PRIVATE -Wno-stack-usage)
-
-if(ENABLE_SPIRV_TOOLING)
-  add_executable(spirv_bake
-    "${PROJECT_SOURCE_DIR}/tools/spirv_bake.cpp"
-  )
-
-  set_target_properties(spirv_bake PROPERTIES
-    CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-  )
-
-  target_link_libraries(spirv_bake PRIVATE CLI11::CLI11 spirv_tooling nlohmann_json::nlohmann_json)
-  target_compile_options(spirv_bake PRIVATE ${PROJECT_WARNINGS})
-  target_compile_definitions(spirv_bake PRIVATE BLACKHOLE_ENABLE_SPIRV_TOOLING=1)
-endif()
 
 if(ENABLE_Z3)
   add_executable(z3_sanity
@@ -1193,33 +1129,8 @@ if(ENABLE_SHADER_VALIDATION)
       VERBATIM
     )
 
-    # SPIR-V compilation target (optional)
-    if(GLSLC)
-      message(STATUS "glslc found: ${GLSLC}")
-
-      set(SPIRV_OUTPUT_DIR "${CMAKE_BINARY_DIR}/spirv")
-      file(MAKE_DIRECTORY ${SPIRV_OUTPUT_DIR})
-
-      set(SPIRV_COMPILE_COMMANDS)
-      foreach(shader ${ALL_SHADERS})
-        get_filename_component(shader_name ${shader} NAME)
-        set(spirv_output "${SPIRV_OUTPUT_DIR}/${shader_name}.spv")
-        list(APPEND SPIRV_COMPILE_COMMANDS
-          COMMAND ${GLSLC}
-            -c
-            -O
-            -I${PROJECT_SOURCE_DIR}/shader/include
-            ${shader}
-            -o ${spirv_output}
-        )
-      endforeach()
-
-      add_custom_target(compile-spirv
-        ${SPIRV_COMPILE_COMMANDS}
-        COMMENT "Compiling shaders to SPIR-V"
-        VERBATIM
-      )
-    endif()
+    # SPIR-V compilation removed in Phase 3 (pure GLSL 4.60 pipeline)
+    # For optional SPIR-V compilation via glslc, use: glslc -c shader.frag -o out.spv
   else()
     message(STATUS "glslangValidator not found - shader validation disabled")
   endif()
@@ -1525,6 +1436,102 @@ if(BUILD_TESTING)
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
+  endif()
+
+  # ========================================================================
+  # Phase 4: Z3 SMT Solver Constraint Verification (Formal Verification)
+  # ========================================================================
+
+  # Z3 verification test - coupled GPU/Z3 constraint verification
+  option(ENABLE_Z3_VERIFICATION "Enable Z3 constraint verification tests (Phase 4)" ON)
+
+  if(ENABLE_Z3_VERIFICATION AND EXISTS "${PROJECT_SOURCE_DIR}/tests/z3_verification_test.cpp")
+    # Find Z3 library (optional for build, required for runtime)
+    find_package(Z3 CONFIG QUIET)
+
+    add_executable(z3_verification_test
+      "${PROJECT_SOURCE_DIR}/tests/z3_verification_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+
+    # Z3 verification requires OpenGL 4.6 and GLFW
+    target_include_directories(z3_verification_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+
+    target_compile_definitions(z3_verification_test PRIVATE
+      GLFW_INCLUDE_NONE
+      IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+    )
+
+    target_compile_options(z3_verification_test PRIVATE ${PROJECT_WARNINGS})
+
+    if(ENABLE_FAST_MATH)
+      target_compile_options(z3_verification_test PRIVATE -fno-fast-math)
+    endif()
+
+    target_link_libraries(z3_verification_test PRIVATE
+      glfw
+      glbinding::glbinding
+      glm::glm
+    )
+
+    # Optional Z3 linking if available
+    if(Z3_FOUND)
+      target_link_libraries(z3_verification_test PRIVATE Z3::z3)
+      target_compile_definitions(z3_verification_test PRIVATE BLACKHOLE_Z3_AVAILABLE=1)
+      message(STATUS "Z3 library found: Z3 constraint proofs enabled")
+    else()
+      message(STATUS "Z3 not found: Z3 constraint proofs will be skipped (fallback to numerical verification)")
+    endif()
+
+    # Register with CTest
+    add_test(NAME z3_verification COMMAND z3_verification_test)
+    set_tests_properties(z3_verification PROPERTIES
+      LABELS "phase4;verification;gpu"
+      TIMEOUT 300  # 5 minute timeout for comprehensive testing
+    )
+
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(z3_verification PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Python Z3 constraint verification scripts (Phase 4)
+  option(ENABLE_Z3_PYTHON_SCRIPTS "Enable Z3 Python constraint verification (Phase 4)" ON)
+
+  if(ENABLE_Z3_PYTHON_SCRIPTS)
+    # Create custom target to run Z3 verification scripts
+    add_custom_target(verify-constraints
+      COMMAND python3 "${PROJECT_SOURCE_DIR}/rocq/z3/constraint_verification.py" --verbose
+      COMMAND python3 "${PROJECT_SOURCE_DIR}/rocq/z3/christoffel_symmetry.py"
+      COMMAND python3 "${PROJECT_SOURCE_DIR}/rocq/z3/conservation_laws.py"
+      COMMENT "Running Z3 constraint verification scripts"
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      VERBATIM
+    )
+  endif()
+
+  # TLA+ Specification (Phase 4)
+  option(ENABLE_TLAPLUS "Enable TLA+ model checking (Phase 4)" ON)
+
+  if(ENABLE_TLAPLUS)
+    message(STATUS "TLA+ model specification available: rocq/tla+/Geodesic.tla")
+    message(STATUS "  Run TLC model checker with: tlc rocq/tla+/Geodesic.tla")
+    message(STATUS "  Or use Apalache symbolic checker for larger state spaces")
+
+    # Create informational custom target
+    add_custom_target(check-tla
+      COMMAND ${CMAKE_COMMAND} -E echo "TLA+ model checking requires TLC or Apalache:"
+      COMMAND ${CMAKE_COMMAND} -E echo "  1. Install TLA+ Toolbox or use tlc directly"
+      COMMAND ${CMAKE_COMMAND} -E echo "  2. Run: tlc rocq/tla+/Geodesic.tla -config rocq/tla+/Geodesic.cfg"
+      COMMAND ${CMAKE_COMMAND} -E echo "  3. See rocq/docs/PHASE4_VALIDATION.md for details"
+      COMMENT "TLA+ model checking instructions"
+      VERBATIM
+    )
   endif()
 
   if(ENABLE_PRECISION_TESTS AND EXISTS "${PROJECT_SOURCE_DIR}/tests/precision_regression_test.cpp")
