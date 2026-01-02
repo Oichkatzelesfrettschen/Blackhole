@@ -226,29 +226,30 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
   vec3 dustColor =
       texture(colorMap, vec2(sphericalCoord.x / outerRadius, 0.5)).rgb;
 
-  float emissivity = 1.0;
-  if (useLUTs > 0.5) {
-    float rNorm = r / max(schwarzschildRadius, EPSILON);  // Use cached radius
-    float denom = max(lutRadiusMax - lutRadiusMin, 0.0001);
-    float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
-    emissivity = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
-  }
+  // Phase 8.2 Priority 3: Conditional texture batching with mix() to avoid branch divergence
+  float rNorm = r / max(schwarzschildRadius, EPSILON);  // Use cached radius
+
+  // Emissivity LUT: use mix() instead of if/else to eliminate branch divergence
+  float lutEmissivity = 1.0;
+  float denom = max(lutRadiusMax - lutRadiusMin, 0.0001);
+  float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
+  lutEmissivity = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
+  float emissivity = mix(1.0, lutEmissivity, step(0.5, useLUTs));
   density *= emissivity;
 
-  if (useSpectralLUT > 0.5) {
-    float rNorm = r / max(schwarzschildRadius, EPSILON);  // Use cached radius
-    float denom = max(spectralRadiusMax - spectralRadiusMin, 0.0001);
-    float u = clamp((rNorm - spectralRadiusMin) / denom, 0.0, 1.0);
-    float spectral = texture(spectralLUT, vec2(u, 0.5)).r;
-    density *= max(spectral, 0.0);
-  }
+  // Spectral LUT: use mix() instead of if/else
+  float spectralValue = 1.0;
+  denom = max(spectralRadiusMax - spectralRadiusMin, 0.0001);
+  u = clamp((rNorm - spectralRadiusMin) / denom, 0.0, 1.0);
+  spectralValue = max(0.0, texture(spectralLUT, vec2(u, 0.5)).r);
+  density *= mix(1.0, spectralValue, step(0.5, useSpectralLUT));
 
-  if (useGrbModulation > 0.5) {
-    float denom = max(grbTimeMax - grbTimeMin, 0.0001);
-    float u = clamp((grbTime - grbTimeMin) / denom, 0.0, 1.0);
-    float modulation = texture(grbModulationLUT, vec2(u, 0.5)).r;
-    density *= max(modulation, 0.0);
-  }
+  // GRB modulation: use mix() instead of if/else
+  float grbValue = 1.0;
+  denom = max(grbTimeMax - grbTimeMin, 0.0001);
+  u = clamp((grbTime - grbTimeMin) / denom, 0.0, 1.0);
+  grbValue = max(0.0, texture(grbModulationLUT, vec2(u, 0.5)).r);
+  density *= mix(1.0, grbValue, step(0.5, useGrbModulation));
 
   // Apply gravitational redshift to disk emission
   if (enableRedshift > 0.5) {
