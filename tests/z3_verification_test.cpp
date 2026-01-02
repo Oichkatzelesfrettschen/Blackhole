@@ -106,8 +106,8 @@ protected:
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
-        
+        glfwWindowHint(GLFW_VISIBLE, static_cast<int>(GL_FALSE));
+
         GLFWwindow* shared_window = glfwCreateWindow(1, 1, "Z3 Test", nullptr, nullptr);
         if (!shared_window) {
             throw std::runtime_error("Failed to create GLFW window");
@@ -124,8 +124,8 @@ protected:
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
-        
+        glfwWindowHint(GLFW_VISIBLE, static_cast<int>(GL_FALSE));
+
         window = glfwCreateWindow(1, 1, "Z3 Test Window", nullptr, nullptr);
         ASSERT_NE(window, nullptr);
         glfwMakeContextCurrent(window);
@@ -140,7 +140,7 @@ protected:
     // CPU reference implementation: RK4 integration of single ray
     verified::StateVector integrateSingleRay(
         double r_start,
-        double v_r,
+        [[maybe_unused]] double v_r,
         double v_phi,
         double h,
         int max_steps,

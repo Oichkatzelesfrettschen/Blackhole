@@ -405,8 +405,8 @@ inline Connection4 schwarzschild_connection(double r, double theta, double r_s) 
 inline std::array<double, 4> lower_index(const std::array<double, 4> &ucon,
                                          const Metric4 &gcov) {
   std::array<double, 4> ucov{};
-  for (int mu = 0; mu < 4; ++mu) {
-    for (int nu = 0; nu < 4; ++nu) {
+  for (size_t mu = 0; mu < 4; ++mu) {
+    for (size_t nu = 0; nu < 4; ++nu) {
       ucov[mu] += gcov[mu][nu] * ucon[nu];
     }
   }
@@ -425,8 +425,8 @@ inline std::array<double, 4> lower_index(const std::array<double, 4> &ucon,
 inline std::array<double, 4> raise_index(const std::array<double, 4> &ucov,
                                          const Metric4 &gcon) {
   std::array<double, 4> ucon{};
-  for (int mu = 0; mu < 4; ++mu) {
-    for (int nu = 0; nu < 4; ++nu) {
+  for (size_t mu = 0; mu < 4; ++mu) {
+    for (size_t nu = 0; nu < 4; ++nu) {
       ucon[mu] += gcon[mu][nu] * ucov[nu];
     }
   }
@@ -445,9 +445,9 @@ inline std::array<double, 4> raise_index(const std::array<double, 4> &ucov,
 inline std::array<double, 4> geodesic_acceleration(
     const std::array<double, 4> &ucon, const Connection4 &conn) {
   std::array<double, 4> acc{};
-  for (int alpha = 0; alpha < 4; ++alpha) {
-    for (int mu = 0; mu < 4; ++mu) {
-      for (int nu = 0; nu < 4; ++nu) {
+  for (size_t alpha = 0; alpha < 4; ++alpha) {
+    for (size_t mu = 0; mu < 4; ++mu) {
+      for (size_t nu = 0; nu < 4; ++nu) {
         acc[alpha] -= conn[alpha][mu][nu] * ucon[mu] * ucon[nu];
       }
     }

@@ -38,7 +38,7 @@ static int test_metric_symmetry() {
   std::uniform_real_distribution<double> dist_theta(0.1, physics::PI - 0.1);
   std::uniform_real_distribution<double> dist_a(0.0, 0.99);
 
-  for (int i = 0; i < 50; ++i) {
+  for (size_t i = 0; i < 50; ++i) {
     double r = dist_r(rng);
     double theta = dist_theta(rng);
     double a = dist_a(rng);
@@ -48,8 +48,8 @@ static int test_metric_symmetry() {
     auto gcon = physics::kerr_gcon(r, theta, a, r_s);
 
     // Check symmetry
-    for (int mu = 0; mu < 4; ++mu) {
-      for (int nu = mu + 1; nu < 4; ++nu) {
+    for (size_t mu = 0; mu < 4; ++mu) {
+      for (size_t nu = mu + 1; nu < 4; ++nu) {
         if (!approx_eq(gcov[mu][nu], gcov[nu][mu])) {
           std::cerr << "  FAIL: gcov[" << mu << "][" << nu << "] != gcov["
                     << nu << "][" << mu << "]\n";
@@ -77,7 +77,7 @@ static int test_metric_inverse() {
   std::uniform_real_distribution<double> dist_theta(0.2, physics::PI - 0.2);
   std::uniform_real_distribution<double> dist_a(0.0, 0.95);
 
-  for (int i = 0; i < 50; ++i) {
+  for (size_t i = 0; i < 50; ++i) {
     double r = dist_r(rng);
     double theta = dist_theta(rng);
     double a = dist_a(rng);
@@ -87,10 +87,10 @@ static int test_metric_inverse() {
     auto gcon = physics::kerr_gcon(r, theta, a, r_s);
 
     // Compute g^μα g_αν
-    for (int mu = 0; mu < 4; ++mu) {
-      for (int nu = 0; nu < 4; ++nu) {
+    for (size_t mu = 0; mu < 4; ++mu) {
+      for (size_t nu = 0; nu < 4; ++nu) {
         double sum = 0.0;
-        for (int alpha = 0; alpha < 4; ++alpha) {
+        for (size_t alpha = 0; alpha < 4; ++alpha) {
           sum += gcon[mu][alpha] * gcov[alpha][nu];
         }
 
@@ -118,7 +118,7 @@ static int test_connection_symmetry() {
   std::uniform_real_distribution<double> dist_theta(0.3, physics::PI - 0.3);
   std::uniform_real_distribution<double> dist_a(0.0, 0.9);
 
-  for (int i = 0; i < 50; ++i) {
+  for (size_t i = 0; i < 50; ++i) {
     double r = dist_r(rng);
     double theta = dist_theta(rng);
     double a = dist_a(rng);
@@ -127,9 +127,9 @@ static int test_connection_symmetry() {
     auto conn = physics::kerr_connection(r, theta, a, r_s);
 
     // Check symmetry in lower indices
-    for (int alpha = 0; alpha < 4; ++alpha) {
-      for (int mu = 0; mu < 4; ++mu) {
-        for (int nu = mu + 1; nu < 4; ++nu) {
+    for (size_t alpha = 0; alpha < 4; ++alpha) {
+      for (size_t mu = 0; mu < 4; ++mu) {
+        for (size_t nu = mu + 1; nu < 4; ++nu) {
           if (!approx_eq(conn[alpha][mu][nu], conn[alpha][nu][mu], 1e-9)) {
             std::cerr << "  FAIL: Γ^" << alpha << "_" << mu << nu
                       << " != Γ^" << alpha << "_" << nu << mu << "\n";
@@ -154,7 +154,7 @@ static int test_schwarzschild_limit() {
   std::uniform_real_distribution<double> dist_r(3.0, 50.0);
   std::uniform_real_distribution<double> dist_theta(0.3, physics::PI - 0.3);
 
-  for (int i = 0; i < 30; ++i) {
+  for (size_t i = 0; i < 30; ++i) {
     double r = dist_r(rng);
     double theta = dist_theta(rng);
     double r_s = 2.0;
@@ -163,9 +163,9 @@ static int test_schwarzschild_limit() {
     auto conn_schw = physics::schwarzschild_connection(r, theta, r_s);
 
     // All components should match
-    for (int alpha = 0; alpha < 4; ++alpha) {
-      for (int mu = 0; mu < 4; ++mu) {
-        for (int nu = 0; nu < 4; ++nu) {
+    for (size_t alpha = 0; alpha < 4; ++alpha) {
+      for (size_t mu = 0; mu < 4; ++mu) {
+        for (size_t nu = 0; nu < 4; ++nu) {
           if (!approx_eq(conn_kerr[alpha][mu][nu], conn_schw[alpha][mu][nu],
                          1e-9)) {
             std::cerr << "  FAIL: Kerr(a=0) != Schwarzschild at Γ^" << alpha
@@ -247,7 +247,7 @@ static int test_index_operations() {
   auto ucov = physics::lower_index(ucon, gcov);
   auto ucon_back = physics::raise_index(ucov, gcon);
 
-  for (int i = 0; i < 4; ++i) {
+  for (size_t i = 0; i < 4; ++i) {
     if (!approx_eq(ucon[i], ucon_back[i], 1e-9)) {
       std::cerr << "  FAIL: raise/lower roundtrip failed for component " << i
                 << "\n";

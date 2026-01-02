@@ -27,7 +27,7 @@ struct GLCapabilities {
 
 // Shader version tiers
 enum class ShaderTier {
-  GLSL_460, // OpenGL 4.6 - SPIR-V, latest features
+  GLSL_460, // OpenGL 4.6 - latest features
   GLSL_450, // OpenGL 4.5 - DSA, SSBOs
   GLSL_410, // OpenGL 4.1 - Apple max, tessellation
   GLSL_330, // OpenGL 3.3 - Core profile baseline
