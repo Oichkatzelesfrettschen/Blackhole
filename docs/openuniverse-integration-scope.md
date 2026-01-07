@@ -55,8 +55,8 @@ lambda-synthesis-experiments | none | C/Python | synthesis patterns -> tooling
 Johnsons-Narrative-Spittoon-Inversion | none | Markdown | narrative references
 compact-common | pyproject | Python | EOS/geodesics -> C++23 physics core
 cern-analysis-common | pyproject | Python | stats/IO -> validation utilities
-openuniverse-common | pyproject | Python | typed adapters -> offline LUT pipeline
-openuniverse-knowledge | none | Markdown | knowledge base references
+common | pyproject | Python | typed adapters -> offline LUT pipeline
+knowledge | none | Markdown | knowledge base references
 
 ## Openuniverse top-level build map (current)
 Module | Build markers | Notes
@@ -93,8 +93,8 @@ lambda-synthesis-experiments | none | tooling patterns
 nubhlight | Makefile + python build scripts | GRMHD output (HDF5)
 opendata.cern.ch | none | dataset references
 openuniverse | none | submodule container
-openuniverse-common | pyproject.toml | typed adapters
-openuniverse-knowledge | none | knowledge base
+common | pyproject.toml | typed adapters
+knowledge | none | knowledge base
 pantheon | pyproject.toml, requirements.txt | cosmology data
 qgp-light-ion | pyproject.toml, Makefile | QGP references
 rns | none | rotating NS reference
@@ -113,7 +113,7 @@ xcosm | pyproject.toml, Makefile | redshift tools
 - Confirmed module locations in monorepo:
   `openuniverse/compact-common`, `openuniverse/grb-common`, `openuniverse/nubhlight`,
   `openuniverse/tardis`.
-- Separate clones outside monorepo also exist for `openuniverse-common`.
+- Separate clones outside monorepo also exist for `common`.
 
 ## Audit pass (2025-12-30, README scan)
 - `openuniverse` root README enumerates domain clusters; priority modules for Blackhole are
@@ -134,7 +134,7 @@ xcosm | pyproject.toml, Makefile | redshift tools
   the validation baseline for GRB modulation and spectral LUTs.
 - `tardis` README confirms supernova spectral synthesis; use offline only for spectral LUT calibration
   (heavy Python stack, forked submodule).
-- `openuniverse-common` README: typed spine/adapters with minimal dependencies; use for schema
+- `common` README: typed spine/adapters with minimal dependencies; use for schema
   definitions and offline pipeline contracts (no runtime coupling).
 - `ASGARD_GRBAfterglow` README confirms Fortran PDE solver for electron evolution + synchrotron/SSC;
   use for spectral/temporal shape references only (cleanroom).
@@ -160,12 +160,12 @@ xcosm | pyproject.toml, Makefile | redshift tools
 - `MathScienceCompendium` README confirms equation validation tooling + references; use as
   offline math validation source only.
 - `PhysicsForge` README confirms LaTeX-based physics papers; reference-only.
-- `openuniverse-knowledge` README confirms LFS binary store for papers/figures; reference-only.
+- `knowledge` README confirms LFS binary store for papers/figures; reference-only.
 - `openuniverse/Colorblindness` has no README; contains docs/examples/templates for palettes;
   only use if accessibility work is explicitly requested.
 
 ## Separate clones outside monorepo (~/Github)
-- openuniverse-common: pyproject.toml (Python >=3.10, minimal deps)
+- common: pyproject.toml (Python >=3.10, minimal deps)
 - cern-analysis-common: pyproject.toml (not yet audited)
 - openuniverse: pyproject.toml + Makefile (root)
 
@@ -191,7 +191,7 @@ xcosm | pyproject.toml, Makefile | redshift tools
 ## Dependency highlights (from pyproject/requirements)
 - compact-common: numpy, scipy, astropy; optional numba, emcee/dynesty/ultranest, matplotlib/corner.
 - grb-common: numpy, scipy, astropy; optional h5py/pandas, emcee/dynesty/pymultinest, matplotlib/corner, extinction.
-- openuniverse-common: no runtime deps; optional hypothesis/deal/crosshair; dev uses pytest/ruff/mypy.
+- common: no runtime deps; optional hypothesis/deal/crosshair; dev uses pytest/ruff/mypy.
 - ASGARD_GRBAfterglow: numpy, scipy, astropy, matplotlib, emcee, corner, extinction, schwimmbad, h5py.
 - boxfit: HDF5 dev libraries; MPI optional; BOX datasets downloaded separately.
 - nubhlight: C99 + MPI + (parallel) HDF5 + GSL; optional gfortran for opacities.
@@ -267,7 +267,7 @@ xcosm | pyproject.toml, Makefile | redshift tools
 - eos/*: polytrope, sigma-omega MFA, Fermi gas, tabulated EOS; use as offline LUT generators.
 - structure/*: TOV solver + tidal deformability; use as reference curves for tests, not runtime.
 
-## openuniverse-common module notes (openuniverse/openuniverse-common)
+## common module notes (openuniverse/common)
 - units.py: CODATA 2022 CGS constants + conversions; can seed C++ constants and unit helpers.
 - validation.py: pre/postcondition + finite/positive guards; port as lightweight runtime validators
   to catch NaNs/infinities during physics steps.

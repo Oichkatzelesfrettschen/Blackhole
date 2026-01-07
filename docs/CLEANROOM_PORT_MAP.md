@@ -46,7 +46,7 @@ No source code is copied; only equations, data formats, and behaviors.
 - PsrSigSim -> pulsar timing noise models (future GW/TOA validation reference)
 
 ## Knowledgebase / Research
-- openuniverse-knowledge -> LFS store for papers/datasets (reference only)
+- knowledge -> LFS store for papers/datasets (reference only)
 - MathScienceCompendium -> fact-checking patterns + bibliography management (reference only)
 - Superframework -> speculative fractional-calculus framework (do not integrate into runtime)
 
@@ -68,16 +68,16 @@ No source code is copied; only equations, data formats, and behaviors.
 - microwindows64: minimal windowing/Nano-X + input notes for HUD/input design ideas.
 
 ## Tooling Patterns
-- openuniverse-common -> registry/units patterns for model factories
-- openuniverse-common/units.py -> CODATA 2022 CGS constants for cross-checking
-- openuniverse-common/validation.py -> finite/positive guards for runtime sanity checks
-- openuniverse-common/types.py -> DatasetRef/RunResult schemas for offline pipeline metadata
-- openuniverse-common/adapters/* -> schema hints for tardis/xcosm/torax/pantheon integration
+- common -> registry/units patterns for model factories
+- common/units.py -> CODATA 2022 CGS constants for cross-checking
+- common/validation.py -> finite/positive guards for runtime sanity checks
+- common/types.py -> DatasetRef/RunResult schemas for offline pipeline metadata
+- common/adapters/* -> schema hints for tardis/xcosm/torax/pantheon integration
 - cern-analysis-common -> I/O/validation patterns (offline only)
 
 ## Port Sequencing (priority order)
 1) compact-common (spacetime + EOS): ISCO/photon/redshift curves, validation LUTs.
-2) openuniverse-common: schema contracts + validation guards for offline pipelines.
+2) common: schema contracts + validation guards for offline pipelines.
 3) grb-common/JetFit/boxfit: GRB light-curve + spectral LUT inputs.
 4) nubhlight: GRMHD HDF5 ingestion + texture packing.
 5) tardis: spectral calibration LUTs (offline only).

@@ -246,7 +246,7 @@ The simulation is fully operational with the core rendering pipeline:
 - Confirmed GLFW hints request OpenGL 4.6 core + debug context; DSA usage remains bind-based for now.
 - Added ultrawide render-scale presets (3440x1440, 5120x2160) in the Display panel.
 - Added `src/physics/math_interop.h` for guarded GLM/Eigen conversions (no runtime use yet).
-- Expanded `docs/CLEANROOM_PORT_MAP.md` with openuniverse-common validation/types adapter notes.
+- Expanded `docs/CLEANROOM_PORT_MAP.md` with common validation/types adapter notes.
 - Added optional Tracy hooks (`ENABLE_TRACY=ON`) with frame-level plots for CPU/GPU timings.
 - Shader validation (`validate-shaders`) passes cleanly (no warnings).
 - Added `nubhlight_inspect` tool to emit HDF5 dataset metadata for GRMHD ingestion.

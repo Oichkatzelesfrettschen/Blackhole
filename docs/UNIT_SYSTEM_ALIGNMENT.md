@@ -13,7 +13,7 @@ code paths and the validation assets used to keep them consistent.
 - Mass inputs: grams (e.g., `M_SUN`).
 - Distances: cm (`r_s = 2GM/c^2`, `r_g = GM/c^2`).
 - Frequencies: Hz.
-- Validation constants cross-checked against `openuniverse-common` and `grb-common`
+- Validation constants cross-checked against `common` and `grb-common`
   (CODATA/astropy-based CGS values).
 
 ## GPU (GLSL) Units

@@ -8,7 +8,7 @@ audits will be added per project priority.
 - MangoHud: HUD/overlay reference (cleanroom HUD port).
 - graphics-programming, ancient_compute: rendering/math reference patterns.
 - microwindows64: low-level windowing/UI patterns.
-- openuniverse, openuniverse-common, compact-common: physics references.
+- openuniverse, common, compact-common: physics references.
 - cern-analysis-common: data/IO patterns.
 
 ## Focus targets (next audit pass)
@@ -84,7 +84,7 @@ audits will be added per project priority.
 | openperception | .png, .jpg, .pdf, .md, .py | Papers/assets; possible reference material. |
 | openrival-tools | .md, .txt, .py, noext, .pcapng | Tooling; minor relevance. |
 | openuniverse | .h, .py, .md, .json, .cxx | Primary physics reference base. |
-| openuniverse-common | .py, .md, .toml, .typed | Spine/adapter patterns. |
+| common | .py, .md, .toml, .typed | Spine/adapter patterns. |
 | posix-compliance | .c, .txt, .xml, .sh, noext | OS compliance tests; low relevance. |
 | puzzles | .png, .make, .cmake, .h, noext | Assets + build; low relevance. |
 | ryzen-boost-service | noext, .sh, .py, .rules, .service | System tuning; low relevance. |
