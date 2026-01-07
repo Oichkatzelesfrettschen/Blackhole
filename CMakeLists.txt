@@ -763,6 +763,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/main.cpp"
   "${PROJECT_SOURCE_DIR}/src/hud_overlay.cpp"
   "${PROJECT_SOURCE_DIR}/src/rmlui_overlay.cpp"
+  "${PROJECT_SOURCE_DIR}/src/overlay.cpp"
   "${PROJECT_SOURCE_DIR}/src/render.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader_manager.cpp"

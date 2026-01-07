@@ -55,6 +55,15 @@ cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/Release \
 cmake --build build/Release
 ```
 
+## Optional: curve overlay
+
+Plot a 2-column TSV (for example CompactStar critical curves) in the ImGui
+overlay:
+
+```bash
+./build/Blackhole --curve-tsv /absolute/path/to/Crit_curve_smooth.tsv
+```
+
 ## OpenGL 4.6 scope
 
 See `docs/opengl-4-6-scope.md` for validation and platform notes.

@@ -59,6 +59,7 @@
 #include "imgui_impl_opengl3.h"
 #include "hud_overlay.h"
 #include "input.h"
+#include "overlay.h"
 #include "physics/hawking_renderer.h"
 #include "physics/lut.h"
 #include "physics/noise.h"
@@ -248,6 +249,55 @@ static bool readTextFile(const std::string &path, std::string &out) {
   buffer << file.rdbuf();
   out = buffer.str();
   return !out.empty();
+}
+
+static void printUsage(const char *argv0) {
+  std::printf("Usage: %s [--curve-tsv <path>]\n", argv0);
+  std::printf("  --curve-tsv <path>   Load a 2-column TSV and plot it in ImGui.\n");
+}
+
+static void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
+  ImDrawList *drawList = ImGui::GetWindowDrawList();
+  ImVec2 p0 = ImGui::GetCursorScreenPos();
+  ImVec2 p1 = ImVec2(p0.x + size.x, p0.y + size.y);
+
+  ImGui::InvisibleButton("curve_plot", size);
+
+  drawList->AddRectFilled(p0, p1, IM_COL32(20, 20, 20, 255), 0.0f);
+  drawList->AddRect(p0, p1, IM_COL32(200, 200, 200, 255), 0.0f);
+
+  float xSpan = curve.max.x - curve.min.x;
+  float ySpan = curve.max.y - curve.min.y;
+  if (xSpan == 0.0f) {
+    xSpan = 1.0f;
+  }
+  if (ySpan == 0.0f) {
+    ySpan = 1.0f;
+  }
+
+  const float pad = 6.0f;
+  ImVec2 q0 = ImVec2(p0.x + pad, p0.y + pad);
+  ImVec2 q1 = ImVec2(p1.x - pad, p1.y - pad);
+  float w = std::max(1.0f, q1.x - q0.x);
+  float h = std::max(1.0f, q1.y - q0.y);
+
+  std::vector<ImVec2> pts;
+  pts.reserve(curve.points.size());
+  for (const auto &pt : curve.points) {
+    float nx = (pt.x - curve.min.x) / xSpan;
+    float ny = (pt.y - curve.min.y) / ySpan;
+    float px = q0.x + nx * w;
+    float py = q1.y - ny * h;
+    pts.emplace_back(px, py);
+  }
+
+  if (pts.size() >= 2) {
+    drawList->AddPolyline(pts.data(), static_cast<int>(pts.size()),
+                          IM_COL32(80, 200, 255, 255), false, 2.0f);
+  }
+
+  ImGui::Text("x:[%.4g, %.4g]  y:[%.4g, %.4g]  n=%d", curve.min.x, curve.max.x,
+              curve.min.y, curve.max.y, static_cast<int>(curve.points.size()));
 }
 
 static bool hasExtension(const char *name) {
@@ -2070,9 +2120,25 @@ static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &ti
   ImGui::End();
 }
 
-int main(int, char **) {
+int main(int argc, char **argv) {
   installCrashHandlers();
   try {
+    std::string curveTsvPath;
+    for (int i = 1; i < argc; ++i) {
+      std::string arg = argv[i];
+      if (arg == "--help" || arg == "-h") {
+        printUsage(argv[0]);
+        return 0;
+      }
+      if (arg == "--curve-tsv" && i + 1 < argc) {
+        curveTsvPath = argv[++i];
+        continue;
+      }
+      std::printf("Unknown argument: %s\n", arg.c_str());
+      printUsage(argv[0]);
+      return 2;
+    }
+
     // Load settings first
     SettingsManager::instance().load();
     auto &settings = SettingsManager::instance().get();
@@ -2102,6 +2168,14 @@ int main(int, char **) {
 
   // Initialize ImGui
   initializeImGui(window);
+
+  if (!curveTsvPath.empty()) {
+    curveOverlayLoaded = curveOverlay.LoadFromTsv(curveTsvPath);
+    if (!curveOverlayLoaded) {
+      std::fprintf(stderr, "curve overlay load failed: %s\n",
+                   curveOverlay.lastError.c_str());
+    }
+  }
 
   // Create fullscreen quad for rendering
   GLuint quadVAO = createQuadVAO();
@@ -2146,6 +2220,7 @@ int main(int, char **) {
   static float noiseTextureScale = 0.25f;
   static int noiseTextureSize = 32;
   static float adiskSpeed = 0.5f;
+  static float dopplerStrength = 1.0f;
   static bool useGrmhd = false;
   static bool grmhdLoaded = false;
   static GrmhdPackedTexture grmhdTexture;
@@ -2258,6 +2333,10 @@ int main(int, char **) {
   static bool rmluiReady = false;
   static int rmluiWidth = 0;
   static int rmluiHeight = 0;
+  static OverlayCurve2D curveOverlay;
+  static bool curveOverlayLoaded = false;
+  static bool curveOverlayEnabled = true;
+  static bool curveOverlayWindowOpen = true;
   static int computeMaxSteps = 300;
   static float computeStepSize = 0.1f;
   static bool computeTiled = false;
@@ -3020,6 +3099,7 @@ int main(int, char **) {
         ImGui::Checkbox("Noise Texture", &useNoiseTexture);
         ImGui::SliderFloat("Noise Tex Scale", &noiseTextureScale, 0.05f, 2.0f);
         ImGui::SliderFloat("adiskSpeed", &adiskSpeed, 0.0f, 1.0f);
+        ImGui::SliderFloat("dopplerStrength", &dopplerStrength, 0.0f, 5.0f);
 
         ImGui::Separator();
         ImGui::Text("GRMHD Packed");
@@ -3284,6 +3364,30 @@ int main(int, char **) {
         ImGui::End();
       }
 
+      if (curveOverlayWindowOpen) {
+        ImGui::Begin("Curve Overlay", &curveOverlayWindowOpen);
+        ImGui::Checkbox("Enabled", &curveOverlayEnabled);
+        if (ImGui::Button("Reload") && !curveTsvPath.empty()) {
+          curveOverlayLoaded = curveOverlay.LoadFromTsv(curveTsvPath);
+        }
+        if (!curveTsvPath.empty()) {
+          ImGui::SameLine();
+          ImGui::Text("%s", curveTsvPath.c_str());
+        }
+
+        if (curveTsvPath.empty()) {
+          ImGui::Text("Pass --curve-tsv <path> to plot a 2-column TSV.");
+        } else if (!curveOverlayLoaded) {
+          ImGui::Text("Load error: %s", curveOverlay.lastError.c_str());
+        } else if (curveOverlayEnabled) {
+          ImVec2 plotSize = ImGui::GetContentRegionAvail();
+          plotSize.y = std::max(plotSize.y, 220.0f);
+          drawCurvePlot(curveOverlay, plotSize);
+        }
+
+        ImGui::End();
+      }
+
       updateLuts(kerrSpin);
       if (!spectralLutTried) {
         spectralLutTried = true;
@@ -3434,6 +3538,7 @@ int main(int, char **) {
       rtti.floatUniforms["adiskNoiseLOD"] = adiskNoiseLOD;
       rtti.floatUniforms["adiskNoiseScale"] = adiskNoiseScale;
       rtti.floatUniforms["adiskSpeed"] = adiskSpeed;
+      rtti.floatUniforms["dopplerStrength"] = dopplerStrength;
       rtti.floatUniforms["photonSphereRadius"] = photonSphereRadius;
       rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphereEffective ? 1.0f : 0.0f;
 

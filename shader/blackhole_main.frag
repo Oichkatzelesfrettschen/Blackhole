@@ -74,6 +74,7 @@ uniform float adiskDensityH = 1.0;
 uniform float adiskNoiseScale = 1.0;
 uniform float adiskNoiseLOD = 5.0;
 uniform float adiskSpeed = 0.5;
+uniform float dopplerStrength = 1.0;
 
 // Physics parameters
 uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geometric units)
@@ -165,7 +166,7 @@ vec3 toSpherical2(vec3 pos) {
 
 float sqrLength(vec3 a) { return dot(a, a); }
 
-bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
+bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   // Inner radius at ISCO (innermost stable circular orbit)
   // For Schwarzschild: r_ISCO = 3 * r_s where r_s = 2GM/c²
   // iscoRadius is already in the same coordinate units as positions
@@ -238,6 +239,11 @@ bool adiskColor(vec3 pos, inout vec3 color, inout float alpha) {
 
   vec3 dustColor =
       texture(colorMap, vec2(sphericalCoord.x / outerRadius, 0.5)).rgb;
+
+  // Relativistic Doppler beaming (boosts the approaching side of the disk)
+  vec3 velDir = normalize(vec3(-pos.z, 0.0, pos.x));
+  float doppler = 1.0 + dot(velDir, normalize(rayDir)) * 0.5 * dopplerStrength;
+  dustColor *= max(0.2, doppler);
 
   // Phase 8.2 Priority 3: Conditional texture batching with mix() to avoid branch divergence
   float rNorm = r / max(schwarzschildRadius, EPSILON);  // Use cached radius
@@ -355,7 +361,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
       }
 
       if (adiskEnabled > 0.5) {
-        if (adiskColor(pos, color, alpha)) {
+        if (adiskColor(pos, dir, color, alpha)) {
           // Phase 8.2 Priority 3: Cache distance computation
           depthDistance = min(depthDistance, length(pos - origin));
         }
