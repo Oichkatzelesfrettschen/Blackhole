@@ -65,6 +65,7 @@
 #include "physics/noise.h"
 #include "rmlui_overlay.h"
 #include "render.h"
+#include "render/noise_texture_cache.h"
 #include "settings.h"
 #include "shader.h"
 #include "shader_manager.h"
@@ -2224,7 +2225,7 @@ int main(int argc, char **argv) {
   static float adiskNoiseScale = 0.8f;
   static bool useNoiseTexture = true;
   static float noiseTextureScale = 0.25f;
-  static int noiseTextureSize = 32;
+  [[maybe_unused]] static int noiseTextureSize = 32;
   static float adiskSpeed = 0.5f;
   static float dopplerStrength = 1.0f;
   static bool useGrmhd = false;
@@ -2396,6 +2397,7 @@ int main(int argc, char **argv) {
   static int renderWidth = 0;
   static int renderHeight = 0;
   static bool noiseTextureReady = false;
+  static blackhole::NoiseTextureCache noiseCache;
 
   if (!compareAutoInit) {
     const char *sweepEnv = std::getenv("BLACKHOLE_COMPARE_SWEEP");
@@ -2853,9 +2855,10 @@ int main(int argc, char **argv) {
     GLuint backgroundFallback = backgroundBase != 0 ? backgroundBase : fallback2D;
     backgroundTextures.fill(backgroundFallback);
     if (!noiseTextureReady) {
-      auto volume = physics::generate_noise_volume(noiseTextureSize, 1337u);
-      texNoiseVolume = createFloatTexture3D(volume.size, volume.size, volume.size, volume.values);
-      noiseTextureReady = true;
+      noiseTextureReady = noiseCache.initialize();
+      if (noiseTextureReady) {
+        texNoiseVolume = noiseCache.getTurbulenceTexture();
+      }
     }
 
     if (!cameraSettingsLoaded) {

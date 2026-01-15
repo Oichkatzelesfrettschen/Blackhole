@@ -809,6 +809,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/overlay.cpp"
   "${PROJECT_SOURCE_DIR}/src/render.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader_manager.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader_watcher.cpp"
@@ -1641,6 +1642,17 @@ if(BUILD_TESTING)
       LABELS "render;noise;procedural;phase3"
       TIMEOUT 30
     )
+
+    # FastNoise2 mathematical audit (deep verification)
+    add_executable(noise_math_audit
+      "${PROJECT_SOURCE_DIR}/tests/noise_math_audit.cpp"
+      "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
+    )
+    target_include_directories(noise_math_audit PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(noise_math_audit PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(noise_math_audit PRIVATE FastNoise2::FastNoise)
   endif()
 
   # ========================================================================
