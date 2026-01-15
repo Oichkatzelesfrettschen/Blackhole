@@ -65,6 +65,7 @@
 #include "physics/noise.h"
 #include "rmlui_overlay.h"
 #include "render.h"
+#include "render/noise_texture_cache.h"
 #include "settings.h"
 #include "shader.h"
 #include "shader_manager.h"
@@ -373,12 +374,17 @@ struct WiregridParams {
   int spokeCount = 32;
   float radiusMin = 2.0f;
   float radiusMax = 50.0f;
+  float curvatureScale = 1.0f;
+  bool showCurvature = true;
+  float schwarzschildRadius = 1.0f;
 };
 
 static bool wiregridParamsEqual(const WiregridParams &a, const WiregridParams &b) {
   return a.ringCount == b.ringCount && a.ringSegments == b.ringSegments &&
          a.spokeCount == b.spokeCount && a.radiusMin == b.radiusMin &&
-         a.radiusMax == b.radiusMax;
+         a.radiusMax == b.radiusMax && a.curvatureScale == b.curvatureScale &&
+         a.showCurvature == b.showCurvature &&
+         a.schwarzschildRadius == b.schwarzschildRadius;
 }
 
 static void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params) {
@@ -389,15 +395,29 @@ static void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params)
     return;
   }
 
+  // Curvature function: gravitational potential visualization
+  // y(r) = -scale * r_s / r, normalized so y(radiusMax) = 0
+  auto computeCurvature = [&](float r) -> float {
+    if (!params.showCurvature || params.schwarzschildRadius <= 0.0f) {
+      return 0.0f;
+    }
+    float rs = params.schwarzschildRadius;
+    float rMax = params.radiusMax;
+    // Gravitational potential: -r_s/r, shifted so radiusMax is at y=0
+    float potential = -(rs / r) + (rs / rMax);
+    return potential * params.curvatureScale;
+  };
+
   const float twoPi = 6.283185307179586f;
   for (int ring = 0; ring < params.ringCount; ++ring) {
     float t = static_cast<float>(ring) / static_cast<float>(params.ringCount - 1);
     float r = params.radiusMin + t * (params.radiusMax - params.radiusMin);
+    float y = computeCurvature(r);
     for (int seg = 0; seg < params.ringSegments; ++seg) {
       float a0 = twoPi * static_cast<float>(seg) / static_cast<float>(params.ringSegments);
       float a1 = twoPi * static_cast<float>(seg + 1) / static_cast<float>(params.ringSegments);
-      glm::vec3 p0(r * std::cos(a0), 0.0f, r * std::sin(a0));
-      glm::vec3 p1(r * std::cos(a1), 0.0f, r * std::sin(a1));
+      glm::vec3 p0(r * std::cos(a0), y, r * std::sin(a0));
+      glm::vec3 p1(r * std::cos(a1), y, r * std::sin(a1));
       vertices.push_back(p0);
       vertices.push_back(p1);
     }
@@ -405,10 +425,20 @@ static void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params)
 
   for (int spoke = 0; spoke < params.spokeCount; ++spoke) {
     float a = twoPi * static_cast<float>(spoke) / static_cast<float>(params.spokeCount);
-    glm::vec3 p0(params.radiusMin * std::cos(a), 0.0f, params.radiusMin * std::sin(a));
-    glm::vec3 p1(params.radiusMax * std::cos(a), 0.0f, params.radiusMax * std::sin(a));
-    vertices.push_back(p0);
-    vertices.push_back(p1);
+    // Spokes need multiple segments to show curvature
+    const int spokeSegments = params.ringCount;
+    for (int i = 0; i < spokeSegments; ++i) {
+      float t0 = static_cast<float>(i) / static_cast<float>(spokeSegments);
+      float t1 = static_cast<float>(i + 1) / static_cast<float>(spokeSegments);
+      float r0 = params.radiusMin + t0 * (params.radiusMax - params.radiusMin);
+      float r1 = params.radiusMin + t1 * (params.radiusMax - params.radiusMin);
+      float y0 = computeCurvature(r0);
+      float y1 = computeCurvature(r1);
+      glm::vec3 p0(r0 * std::cos(a), y0, r0 * std::sin(a));
+      glm::vec3 p1(r1 * std::cos(a), y1, r1 * std::sin(a));
+      vertices.push_back(p0);
+      vertices.push_back(p1);
+    }
   }
 
   if (mesh.vao == 0) {
@@ -1761,6 +1791,11 @@ static void renderWiregridPanel(bool &wiregridEnabled, WiregridParams &params,
     ImGui::SliderInt("Spokes", &params.spokeCount, 4, 64);
     ImGui::SliderFloat("Radius Min", &params.radiusMin, 0.5f, 10.0f);
     ImGui::SliderFloat("Radius Max", &params.radiusMax, 10.0f, 200.0f);
+    ImGui::Separator();
+    ImGui::Checkbox("Show Curvature", &params.showCurvature);
+    if (params.showCurvature) {
+      ImGui::SliderFloat("Curvature Scale", &params.curvatureScale, 0.0f, 10.0f);
+    }
     ImGui::ColorEdit4("Color", reinterpret_cast<float *>(&color));
   }
   ImGui::End();
@@ -2224,7 +2259,7 @@ int main(int argc, char **argv) {
   static float adiskNoiseScale = 0.8f;
   static bool useNoiseTexture = true;
   static float noiseTextureScale = 0.25f;
-  static int noiseTextureSize = 32;
+  [[maybe_unused]] static int noiseTextureSize = 32;
   static float adiskSpeed = 0.5f;
   static float dopplerStrength = 1.0f;
   static bool useGrmhd = false;
@@ -2396,6 +2431,7 @@ int main(int argc, char **argv) {
   static int renderWidth = 0;
   static int renderHeight = 0;
   static bool noiseTextureReady = false;
+  static blackhole::NoiseTextureCache noiseCache;
 
   if (!compareAutoInit) {
     const char *sweepEnv = std::getenv("BLACKHOLE_COMPARE_SWEEP");
@@ -2853,9 +2889,10 @@ int main(int argc, char **argv) {
     GLuint backgroundFallback = backgroundBase != 0 ? backgroundBase : fallback2D;
     backgroundTextures.fill(backgroundFallback);
     if (!noiseTextureReady) {
-      auto volume = physics::generate_noise_volume(noiseTextureSize, 1337u);
-      texNoiseVolume = createFloatTexture3D(volume.size, volume.size, volume.size, volume.values);
-      noiseTextureReady = true;
+      noiseTextureReady = noiseCache.initialize();
+      if (noiseTextureReady) {
+        texNoiseVolume = noiseCache.getTurbulenceTexture();
+      }
     }
 
     if (!cameraSettingsLoaded) {
@@ -2993,6 +3030,7 @@ int main(int argc, char **argv) {
     }
     wiregridParams.radiusMax =
         std::max(wiregridParams.radiusMax, wiregridParams.radiusMin + 0.1f);
+    wiregridParams.schwarzschildRadius = 2.0f * blackHoleMass;
     if (wiregridEnabled &&
         (wiregridMesh.vao == 0 ||
          !wiregridParamsEqual(wiregridParams, wiregridParamsCached))) {

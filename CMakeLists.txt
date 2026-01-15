@@ -215,6 +215,22 @@ if(ENABLE_SHADER_WATCHER)
 endif()
 
 # ============================================================================
+# FastNoise2 (procedural noise generation)
+# ============================================================================
+
+option(ENABLE_FASTNOISE2 "Enable FastNoise2 for procedural texture generation" ON)
+if(ENABLE_FASTNOISE2)
+  find_package(FastNoise2 CONFIG QUIET)
+  if(FastNoise2_FOUND)
+    add_compile_definitions(BLACKHOLE_ENABLE_FASTNOISE2=1)
+    message(STATUS "FastNoise2 found: procedural noise generation available")
+  else()
+    message(STATUS "FastNoise2 not found: procedural noise disabled")
+    set(ENABLE_FASTNOISE2 OFF)
+  endif()
+endif()
+
+# ============================================================================
 # Optional non-Conan dependencies (FetchContent)
 # ============================================================================
 
@@ -792,6 +808,8 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/rmlui_overlay.cpp"
   "${PROJECT_SOURCE_DIR}/src/overlay.cpp"
   "${PROJECT_SOURCE_DIR}/src/render.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader_manager.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader_watcher.cpp"
@@ -810,10 +828,11 @@ set(THIRDPARTY_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/imgui_impl_opengl3.cpp"
 )
 
-# Collect all header files including physics subdirectory
+# Collect all header files including physics and render subdirectories
 file(GLOB HEADER_FILES "${PROJECT_SOURCE_DIR}/src/*.h" "${PROJECT_SOURCE_DIR}/src/*.hpp")
 file(GLOB PHYSICS_HEADER_FILES "${PROJECT_SOURCE_DIR}/src/physics/*.h")
-list(APPEND HEADER_FILES ${PHYSICS_HEADER_FILES})
+file(GLOB RENDER_HEADER_FILES "${PROJECT_SOURCE_DIR}/src/render/*.h")
+list(APPEND HEADER_FILES ${PHYSICS_HEADER_FILES} ${RENDER_HEADER_FILES})
 
 add_executable(${CMAKE_PROJECT_NAME} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
 
@@ -865,6 +884,9 @@ if(ENABLE_TRACY)
 endif()
 if(ENABLE_SHADER_WATCHER)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE watcher::watcher)
+endif()
+if(ENABLE_FASTNOISE2)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE FastNoise2::FastNoise)
 endif()
 if(ENABLE_MESHOPTIMIZER)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE meshoptimizer::meshoptimizer)
@@ -1602,6 +1624,35 @@ if(BUILD_TESTING)
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
+  endif()
+
+  # FastNoise2 integration test
+  if(ENABLE_FASTNOISE2)
+    add_executable(noise_generator_test
+      "${PROJECT_SOURCE_DIR}/tests/noise_generator_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
+    )
+    target_include_directories(noise_generator_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(noise_generator_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(noise_generator_test PRIVATE FastNoise2::FastNoise)
+    add_test(NAME noise_generator_validation COMMAND noise_generator_test)
+    set_tests_properties(noise_generator_validation PROPERTIES
+      LABELS "render;noise;procedural;phase3"
+      TIMEOUT 30
+    )
+
+    # FastNoise2 mathematical audit (deep verification)
+    add_executable(noise_math_audit
+      "${PROJECT_SOURCE_DIR}/tests/noise_math_audit.cpp"
+      "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
+    )
+    target_include_directories(noise_math_audit PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(noise_math_audit PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(noise_math_audit PRIVATE FastNoise2::FastNoise)
   endif()
 
   # ========================================================================

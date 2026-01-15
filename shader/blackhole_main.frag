@@ -382,9 +382,42 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
     pos += dir;
   }
 
-  // Sample skybox color with optional gravitational redshift
+  // Sample background with parallax layers or fallback to cubemap
   dir = rotateVector(dir, vec3(0.0, 1.0, 0.0), time);
-  vec3 skyColor = texture(galaxy, dir).rgb;
+  vec3 skyColor = vec3(0.0);
+
+  if (backgroundEnabled > 0.5) {
+    // Convert 3D direction to equirectangular UV coordinates
+    vec3 d = normalize(dir);
+    float u = atan(d.z, d.x) / (2.0 * 3.14159265359) + 0.5;
+    float v = asin(clamp(d.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
+    vec2 baseUV = vec2(u, v);
+
+    // Sample and blend all parallax layers
+    for (int i = 0; i < 3; i++) {
+      vec4 params = backgroundLayerParams[i];
+      vec2 offset = params.xy;
+      float scale = params.z;
+      float intensity = params.w;
+      float lodBias = backgroundLayerLodBias[i];
+
+      // Apply parallax offset and scale
+      vec2 uv = (baseUV - 0.5) * scale + 0.5 + offset;
+
+      // Sample layer with LOD bias
+      vec3 layerColor = textureLod(backgroundLayers[i], uv, lodBias).rgb;
+
+      // Accumulate with intensity weighting
+      skyColor += layerColor * intensity;
+    }
+
+    // Normalize by total intensity and apply global intensity
+    float totalIntensity = backgroundLayerParams[0].w + backgroundLayerParams[1].w + backgroundLayerParams[2].w;
+    skyColor = (skyColor / max(totalIntensity, 0.01)) * backgroundIntensity;
+  } else {
+    // Fallback to cubemap galaxy texture
+    skyColor = texture(galaxy, dir).rgb;
+  }
 
   // Apply gravitational redshift to background light
   if (enableRedshift > 0.5 && minRadiusReached < schwarzschildRadius * 10.0) {
