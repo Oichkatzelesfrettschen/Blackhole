@@ -296,8 +296,10 @@ static void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
                           IM_COL32(80, 200, 255, 255), false, 2.0f);
   }
 
-  ImGui::Text("x:[%.4g, %.4g]  y:[%.4g, %.4g]  n=%d", curve.min.x, curve.max.x,
-              curve.min.y, curve.max.y, static_cast<int>(curve.points.size()));
+  ImGui::Text("x:[%.4g, %.4g]  y:[%.4g, %.4g]  n=%d",
+              static_cast<double>(curve.min.x), static_cast<double>(curve.max.x),
+              static_cast<double>(curve.min.y), static_cast<double>(curve.max.y),
+              static_cast<int>(curve.points.size()));
 }
 
 static bool hasExtension(const char *name) {
@@ -392,8 +394,8 @@ static void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params)
     float t = static_cast<float>(ring) / static_cast<float>(params.ringCount - 1);
     float r = params.radiusMin + t * (params.radiusMax - params.radiusMin);
     for (int seg = 0; seg < params.ringSegments; ++seg) {
-      float a0 = twoPi * static_cast<float>(seg) / params.ringSegments;
-      float a1 = twoPi * static_cast<float>(seg + 1) / params.ringSegments;
+      float a0 = twoPi * static_cast<float>(seg) / static_cast<float>(params.ringSegments);
+      float a1 = twoPi * static_cast<float>(seg + 1) / static_cast<float>(params.ringSegments);
       glm::vec3 p0(r * std::cos(a0), 0.0f, r * std::sin(a0));
       glm::vec3 p1(r * std::cos(a1), 0.0f, r * std::sin(a1));
       vertices.push_back(p0);
@@ -402,7 +404,7 @@ static void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params)
   }
 
   for (int spoke = 0; spoke < params.spokeCount; ++spoke) {
-    float a = twoPi * static_cast<float>(spoke) / params.spokeCount;
+    float a = twoPi * static_cast<float>(spoke) / static_cast<float>(params.spokeCount);
     glm::vec3 p0(params.radiusMin * std::cos(a), 0.0f, params.radiusMin * std::sin(a));
     glm::vec3 p1(params.radiusMax * std::cos(a), 0.0f, params.radiusMax * std::sin(a));
     vertices.push_back(p0);
@@ -588,7 +590,7 @@ static std::size_t countDiffOutliers(const std::vector<float> &a, const std::vec
     double dr = std::abs(static_cast<double>(a[i]) - static_cast<double>(b[i]));
     double dg = std::abs(static_cast<double>(a[i + 1]) - static_cast<double>(b[i + 1]));
     double db = std::abs(static_cast<double>(a[i + 2]) - static_cast<double>(b[i + 2]));
-    if (std::max({dr, dg, db}) > threshold) {
+    if (std::max({dr, dg, db}) > static_cast<double>(threshold)) {
       ++count;
     }
   }
@@ -1041,7 +1043,7 @@ static void configureParallelShaderCompile() {
   }
   const char *threadEnv = std::getenv("BLACKHOLE_SHADER_COMPILE_THREADS");
   if (threadEnv != nullptr) {
-    threads = std::max(1, std::atoi(threadEnv));
+    threads = static_cast<unsigned int>(std::max(1, std::atoi(threadEnv)));
   }
   glMaxShaderCompilerThreadsKHR(static_cast<GLuint>(threads));
   std::cout << "Parallel shader compile enabled (" << threads << " threads).\n";
@@ -2676,8 +2678,8 @@ int main(int argc, char **argv) {
       constexpr double kMdotEdd = 0.1;
 
       auto emissivityLut =
-          physics::generate_emissivity_lut(kLutSize, kMassSolar, spin, kMdotEdd, true);
-      auto redshiftLut = physics::generate_redshift_lut(kLutSize, kMassSolar, spin);
+          physics::generate_emissivity_lut(kLutSize, kMassSolar, static_cast<double>(spin), kMdotEdd, true);
+      auto redshiftLut = physics::generate_redshift_lut(kLutSize, kMassSolar, static_cast<double>(spin));
 
       texEmissivityLUT = createFloatTexture2D(kLutSize, 1, emissivityLut.values);
       texRedshiftLUT = createFloatTexture2D(kLutSize, 1, redshiftLut.values);
@@ -2984,9 +2986,9 @@ int main(int argc, char **argv) {
     glm::vec2 drift = glm::vec2(std::cos(static_cast<float>(currentTime) * 0.02f),
                                 std::sin(static_cast<float>(currentTime) * 0.02f)) *
                       settings.backgroundDriftStrength;
-    for (int i = 0; i < kBackgroundLayers; ++i) {
+    for (std::size_t i = 0; i < static_cast<std::size_t>(kBackgroundLayers); ++i) {
       glm::vec2 offset = drift + parallaxBase * backgroundLayerDepth[i];
-      backgroundLayerParams[static_cast<std::size_t>(i)] =
+      backgroundLayerParams[i] =
           glm::vec4(offset, backgroundLayerScale[i], backgroundLayerIntensity[i]);
     }
     wiregridParams.radiusMax =
@@ -3691,7 +3693,7 @@ int main(int argc, char **argv) {
             std::size_t limitFromFrac = 0;
             if (compareMaxOutlierFrac > 0.0f && totalPixels > 0) {
               limitFromFrac = static_cast<std::size_t>(
-                  compareMaxOutlierFrac * static_cast<double>(totalPixels));
+                  static_cast<double>(compareMaxOutlierFrac) * static_cast<double>(totalPixels));
             }
             std::size_t limitFromCount =
                 static_cast<std::size_t>(std::max(compareMaxOutliers, 0));

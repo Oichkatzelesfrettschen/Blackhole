@@ -117,7 +117,7 @@ template<CosmologyScalar Real>
 // q(z) = -d(ln H) / d(ln a) = (1/2)(1 + 3w * Omega_matter) - Omega_Lambda
 template<CosmologyScalar Real>
 [[nodiscard]] constexpr Real axiodilaton_deceleration_parameter(
-    Real Omega_m, Real Omega_ad, Real Omega_Lambda) noexcept
+    Real Omega_m, [[maybe_unused]] Real Omega_ad, Real Omega_Lambda) noexcept
 {
     const Real w = axiodilaton_equation_of_state(0.0);
     return 0.5 * (1.0 + 3.0 * w * Omega_m) - Omega_Lambda;

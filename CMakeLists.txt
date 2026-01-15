@@ -536,6 +536,10 @@ message(STATUS "=== SIMD Configuration Complete ===")
 option(ENABLE_FAST_MATH "Enable fast math optimizations" ON)
 if(ENABLE_FAST_MATH)
   add_compile_options(-ffast-math)
+  # Clang warns about infinity/NaN usage with fast-math; suppress as we handle edge cases
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-Wno-nan-infinity-disabled)
+  endif()
   message(STATUS "Fast math optimizations enabled")
 endif()
 
@@ -565,10 +569,7 @@ set(WARN_LEVEL1
 set(WARN_LEVEL2
   ${WARN_LEVEL1}
   -Wformat=2
-  -Wformat-overflow=2
-  -Wformat-truncation=2
   -Wformat-security
-  -Wformat-signedness
   -Wshadow
   -Wconversion
   -Wsign-conversion
@@ -576,6 +577,14 @@ set(WARN_LEVEL2
   -Wnarrowing
   -Wstrict-overflow=2
 )
+# GCC-specific format warnings (not supported by Clang)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  list(APPEND WARN_LEVEL2
+    -Wformat-overflow=2
+    -Wformat-truncation=2
+    -Wformat-signedness
+  )
+endif()
 
 # Level 3: C++ specific warnings
 set(WARN_LEVEL3
@@ -585,39 +594,59 @@ set(WARN_LEVEL3
   -Wold-style-cast
   -Wcast-align
   -Wcast-qual
-  -Wuseless-cast
   -Wzero-as-null-pointer-constant
   -Wextra-semi
   -Wmissing-declarations
 )
+# GCC-specific C++ warnings
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  list(APPEND WARN_LEVEL3 -Wuseless-cast)
+endif()
 
-# Level 4: Extra strictness (GCC-specific, may not work on Clang)
+# Level 4: Extra strictness
 set(WARN_LEVEL4
   ${WARN_LEVEL3}
   -Wdouble-promotion
   -Wnull-dereference
-  -Wimplicit-fallthrough=5
-  -Wduplicated-cond
-  -Wduplicated-branches
-  -Wlogical-op
   -Wundef
   -Wunused-macros
-  -Wstack-usage=8192
 )
+# GCC-specific level 4 warnings
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  list(APPEND WARN_LEVEL4
+    -Wimplicit-fallthrough=5
+    -Wduplicated-cond
+    -Wduplicated-branches
+    -Wlogical-op
+    -Wstack-usage=8192
+  )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  list(APPEND WARN_LEVEL4 -Wimplicit-fallthrough)
+endif()
 
 # Level 5: Maximum strictness
 set(WARN_LEVEL5
   ${WARN_LEVEL4}
-  -Warray-bounds=2
-  -Wattribute-alias=2
-  -Wstringop-overflow=4
   -Walloca
   -Wvla
-  -Wtrampolines
-  -Wshift-overflow=2
   -Wredundant-decls
   # Note: -Winline omitted as it triggers on implicit destructors
 )
+# GCC-specific level 5 warnings
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  list(APPEND WARN_LEVEL5
+    -Warray-bounds=2
+    -Wattribute-alias=2
+    -Wstringop-overflow=4
+    -Wtrampolines
+    -Wshift-overflow=2
+  )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  list(APPEND WARN_LEVEL5
+    -Warray-bounds
+    -Wshift-overflow
+  )
+endif()
 
 # Select warning level
 if(WARNING_LEVEL STREQUAL "1")
@@ -803,9 +832,12 @@ set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES
 
 # Sanitizers and heavy inlining can push stack usage estimates beyond the strict global threshold.
 # Keep -Wstack-usage enabled for most of the codebase, but avoid failing the build on main.cpp.
-set_source_files_properties("${PROJECT_SOURCE_DIR}/src/main.cpp" PROPERTIES
-  COMPILE_OPTIONS "-Wno-stack-usage"
-)
+# Note: -Wstack-usage is GCC-only
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set_source_files_properties("${PROJECT_SOURCE_DIR}/src/main.cpp" PROPERTIES
+    COMPILE_OPTIONS "-Wno-stack-usage"
+  )
+endif()
 
 # Third-party files get relaxed warnings
 set_source_files_properties(${THIRDPARTY_SRC_FILES} PROPERTIES
@@ -942,7 +974,9 @@ set_target_properties(nubhlight_inspect PROPERTIES
 
 target_link_libraries(nubhlight_inspect PRIVATE HighFive::HighFive CLI11::CLI11)
 target_compile_options(nubhlight_inspect PRIVATE ${PROJECT_WARNINGS})
-target_compile_options(nubhlight_inspect PRIVATE -Wno-stack-usage)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(nubhlight_inspect PRIVATE -Wno-stack-usage)
+endif()
 
 add_executable(nubhlight_pack
   "${PROJECT_SOURCE_DIR}/tools/nubhlight_pack.cpp"
@@ -956,7 +990,9 @@ set_target_properties(nubhlight_pack PROPERTIES
 
 target_link_libraries(nubhlight_pack PRIVATE HighFive::HighFive CLI11::CLI11)
 target_compile_options(nubhlight_pack PRIVATE ${PROJECT_WARNINGS})
-target_compile_options(nubhlight_pack PRIVATE -Wno-stack-usage)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(nubhlight_pack PRIVATE -Wno-stack-usage)
+endif()
 
 if(ENABLE_Z3)
   add_executable(z3_sanity
@@ -1299,7 +1335,9 @@ if(BUILD_TESTING)
 	    target_compile_options(physics_test PRIVATE ${PROJECT_WARNINGS})
 	    # physics_test has a large, table-driven runner that can exceed the global
 	    # stack-usage threshold when warnings are promoted to errors.
-	    target_compile_options(physics_test PRIVATE -Wno-stack-usage)
+	    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	      target_compile_options(physics_test PRIVATE -Wno-stack-usage)
+	    endif()
 	    if(ENABLE_FAST_MATH)
 	      target_compile_options(physics_test PRIVATE -fno-fast-math)
 	    endif()

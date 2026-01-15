@@ -11,11 +11,11 @@ namespace physics {
 // Speed of light in km/s for cosmology calculations
 static constexpr double C_KM_S = 299792.458;
 
-// Seconds per Gyr
-static constexpr double SEC_PER_GYR = 3.15576e16;
+// Seconds per Gyr (for future age-of-universe calculations)
+[[maybe_unused]] static constexpr double SEC_PER_GYR = 3.15576e16;
 
-// km/s/Mpc to 1/s conversion (H0 units)
-static constexpr double KM_S_MPC_TO_PER_SEC = 1.0 / (MPC * 1.0e-5);
+// km/s/Mpc to 1/s conversion (H0 units, for future use)
+[[maybe_unused]] static constexpr double KM_S_MPC_TO_PER_SEC = 1.0 / (MPC * 1.0e-5);
 
 // ============================================================================
 // Hubble Parameter
