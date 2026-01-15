@@ -36,17 +36,17 @@ namespace physics {
 // Planck Scale Constants
 // ============================================================================
 
-/// Planck mass m_P = √(ℏc/G) [g]
-inline constexpr double M_PLANCK = std::sqrt(HBAR * C / G);
+/// Planck mass m_P = √(ℏc/G) ≈ 2.176e-5 g
+inline const double M_PLANCK = std::sqrt(HBAR * C / G);
 
-/// Planck length l_P = √(ℏG/c³) [cm]
-inline constexpr double L_PLANCK = std::sqrt(HBAR * G / (C * C * C));
+/// Planck length l_P = √(ℏG/c³) ≈ 1.616e-33 cm
+inline const double L_PLANCK = std::sqrt(HBAR * G / (C * C * C));
 
-/// Planck time t_P = √(ℏG/c⁵) [s]
-inline constexpr double T_PLANCK = std::sqrt(HBAR * G / (C * C * C * C * C));
+/// Planck time t_P = √(ℏG/c⁵) ≈ 5.391e-44 s
+inline const double T_PLANCK = std::sqrt(HBAR * G / (C * C * C * C * C));
 
-/// Planck temperature T_P = √(ℏc⁵/(Gk_B²)) [K]
-inline constexpr double TEMP_PLANCK = std::sqrt(HBAR * C * C * C * C * C / (G * K_B * K_B));
+/// Planck temperature T_P = √(ℏc⁵/(Gk_B²)) ≈ 1.417e32 K
+inline const double TEMP_PLANCK = std::sqrt(HBAR * C * C * C * C * C / (G * K_B * K_B));
 
 // ============================================================================
 // Hawking Temperature

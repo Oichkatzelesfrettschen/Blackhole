@@ -2169,6 +2169,10 @@ int main(int argc, char **argv) {
   // Initialize ImGui
   initializeImGui(window);
 
+  // Curve overlay for plotting (e.g., critical curves)
+  static OverlayCurve2D curveOverlay;
+  static bool curveOverlayLoaded = false;
+
   if (!curveTsvPath.empty()) {
     curveOverlayLoaded = curveOverlay.LoadFromTsv(curveTsvPath);
     if (!curveOverlayLoaded) {
@@ -2333,8 +2337,7 @@ int main(int argc, char **argv) {
   static bool rmluiReady = false;
   static int rmluiWidth = 0;
   static int rmluiHeight = 0;
-  static OverlayCurve2D curveOverlay;
-  static bool curveOverlayLoaded = false;
+  // curveOverlay and curveOverlayLoaded are declared earlier near curve TSV loading
   static bool curveOverlayEnabled = true;
   static bool curveOverlayWindowOpen = true;
   static int computeMaxSteps = 300;
