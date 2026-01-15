@@ -59,19 +59,18 @@
 // v2 : R;  (* dtheta/dlambda *)
 // v3 : R;  (* dphi/dlambda *)
 // }.
-layout(std140) uniform struct_StateVector {
-    Lindquist coordinates
-    double x0;
-    float x1;
-    float x2;
-    float x3;
-    float v0;
-    dlambda double v1;
-    dlambda double v2;
-    dlambda double v3;
-    return x1;
-    return x2;
-} StateVector;
+// 8-dimensional phase space state for geodesic integration
+// In Boyer-Lindquist coordinates: (t, r, theta, phi) and their derivatives
+struct StateVector {
+    float x0;  // t coordinate
+    float x1;  // r coordinate
+    float x2;  // theta coordinate
+    float x3;  // phi coordinate
+    float v0;  // dt/dlambda
+    float v1;  // dr/dlambda
+    float v2;  // dtheta/dlambda
+    float v3;  // dphi/dlambda
+};
 
 // Function definitions (verified from Rocq proofs)
 
@@ -83,10 +82,10 @@ layout(std140) uniform struct_StateVector {
  * Rocq Derivation: Derived from Rocq:...
  */
 StateVector sv_add(StateVector a, StateVector b) {
-    return StateVector{
-    a.x0 + b.x0, a.x1 + b.x1, a.x2 + b.x2, a.x3 + b.x3,
-    a.v0 + b.v0, a.v1 + b.v1, a.v2 + b.v2, a.v3 + b.v3
-    };
+    return StateVector(
+        a.x0 + b.x0, a.x1 + b.x1, a.x2 + b.x2, a.x3 + b.x3,
+        a.v0 + b.v0, a.v1 + b.v1, a.v2 + b.v2, a.v3 + b.v3
+    );
 }
 
 /**
@@ -95,10 +94,10 @@ StateVector sv_add(StateVector a, StateVector b) {
  * Rocq Derivation: Derived from Rocq:...
  */
 StateVector sv_scale(float c, StateVector a) {
-    return StateVector{
-    c * a.x0, c * a.x1, c * a.x2, c * a.x3,
-    c * a.v0, c * a.v1, c * a.v2, c * a.v3
-    };
+    return StateVector(
+        c * a.x0, c * a.x1, c * a.x2, c * a.x3,
+        c * a.v0, c * a.v1, c * a.v2, c * a.v3
+    );
 }
 
 /**
@@ -144,25 +143,36 @@ float global_error_bound(float C, float h) {
 float phase_space_volume_drift(uint N, float h) {
     float h2 = h * h;
     float h4 = h2 * h2;
-    return static_cast<float>(N) * h4 * h;
+    return float(N) * h4 * h;
 }
+
+// Geodesic status constants
+const int GEODESIC_PROPAGATING = 0;
+const int GEODESIC_CAPTURED = 1;
+const int GEODESIC_ESCAPED = 2;
+const int GEODESIC_MAX_STEPS = 3;
 
 /**
  * Status of geodesic integration
  *
+ * Returns: GEODESIC_CAPTURED if r < r_horizon
+ *          GEODESIC_ESCAPED if r > r_escape
+ *          GEODESIC_MAX_STEPS if step >= max_steps
+ *          GEODESIC_PROPAGATING otherwise
+ *
  * Rocq Derivation: Derived from Rocq:...
  */
-GeodesicStatus check_termination(StateVector s, float r_horizon, float r_escape, uint step, uint max_steps) {
+int check_termination(StateVector s, float r_horizon, float r_escape, uint step, uint max_steps) {
     if (s.x1 < r_horizon) {
-    return GeodesicStatus::Captured;
+        return GEODESIC_CAPTURED;
     }
     if (s.x1 > r_escape) {
-    return GeodesicStatus::Escaped;
+        return GEODESIC_ESCAPED;
     }
     if (step >= max_steps) {
-    return GeodesicStatus::MaxSteps;
+        return GEODESIC_MAX_STEPS;
     }
-    return GeodesicStatus::Propagating;
+    return GEODESIC_PROPAGATING;
 }
 
 /**
@@ -186,10 +196,10 @@ float optimal_step(float h, float err, float tol) {
  * Depends on: zero
  */
 StateVector position_derivatives(StateVector s) {
-    return StateVector{
-    s.v0, s.v1, s.v2, s.v3,  // Positions get velocity values
-    0.0, 0.0, 0.0, 0.0       // Velocities get zero (no acceleration here)
-    };
+    return StateVector(
+        s.v0, s.v1, s.v2, s.v3,  // Positions get velocity values
+        0.0, 0.0, 0.0, 0.0       // Velocities get zero (no acceleration here)
+    );
 }
 
 /**

@@ -49,9 +49,6 @@
 // Null constraint verification (16 functions, photon sphere properties)
 #include "include/verified/null_constraint.glsl"
 
-// Geodesic integration module (Phase 9.0.4 - RK4 + constraint preservation)
-#include "integrator.glsl"
-
 // =============================================================================
 // Interface & Constants
 // =============================================================================
@@ -99,6 +96,10 @@ struct RayState {
     float energy;                    // Conserved energy E
     float hamiltonian;               // Constraint function H (should be 0)
 };
+
+// Geodesic integration module (Phase 9.0.4 - RK4 + constraint preservation)
+// NOTE: Must be included AFTER RayState definition
+#include "integrator.glsl"
 
 // Ray termination information
 struct TerminationInfo {

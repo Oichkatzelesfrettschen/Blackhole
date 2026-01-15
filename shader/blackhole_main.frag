@@ -97,6 +97,9 @@ uniform float blackHoleMass = 1.989e33;  // Black hole mass [g] (default: 1 sola
 // Derived physics quantities: use sch_* functions from schwarzschild.glsl
 // These macros ensure iscoRadius and photonSphereRadius are computed from schwarzschildRadius
 // rather than being redundant uniforms (eliminates parameter synchronization issues)
+// Define the sch_* functions inline to avoid include conflicts with redshift.glsl
+float sch_photonSphereRadius(float r_s) { return 1.5 * r_s; }
+float sch_iscoRadius(float r_s) { return 3.0 * r_s; }
 #define iscoRadius sch_iscoRadius(schwarzschildRadius)
 #define photonSphereRadius sch_photonSphereRadius(schwarzschildRadius)
 

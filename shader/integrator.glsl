@@ -19,7 +19,7 @@
  * - Typical cost: ~120 FMA operations/step (verified kernels)
  *
  * Register budget breakdown:
- * - RayState: 9 floats (t, r, theta, phi, dt, dr, dtheta, dphi, lambda)
+ * - RayState: 9 floats (t, r, theta, phi, dt, dr, dtheta, dphi, affine_param)
  * - k1, k2, k3: 3 x 4 floats = 12 floats (temporary storage)
  * - Intermediate values: 2 floats (h, constraint factor)
  * - Total: ~23 registers (under 24 target)
@@ -43,12 +43,12 @@
  * For a=0, uses simpler Schwarzschild equations; for a>0.001, uses full Kerr.
  *
  * @param state Current RayState
- * @param lambda Current affine parameter (for reference)
+ * @param affine_param Current affine parameter (for reference)
  * @param M Black hole mass (geometric units)
  * @param a Spin parameter (0 <= a < M)
  * @return 4-component acceleration vector
  */
-vec4 geodesic_rhs(RayState state, float lambda, float M, float a) {
+vec4 geodesic_rhs(RayState state, float affine_param, float M, float a) {
     const float schwarzschild_threshold = 0.001;
 
     if (abs(a) < schwarzschild_threshold) {
@@ -68,7 +68,7 @@ vec4 geodesic_rhs(RayState state, float lambda, float M, float a) {
     } else {
         // Use full Kerr RHS (verified from geodesic.glsl)
         // For now, return placeholder - actual implementation calls verified::kerr_geodesic_rhs()
-        // This would be: return verified::kerr_geodesic_rhs(state, lambda, M, a)
+        // This would be: return verified::kerr_geodesic_rhs(state, affine_param, M, a)
 
         // Temporary: approximate with Schwarzschild for fallback
         float r2 = state.r * state.r;
@@ -91,7 +91,7 @@ vec4 geodesic_rhs(RayState state, float lambda, float M, float a) {
 /**
  * Compute RK4 k1 value (initial slope)
  *
- * k1 = h * f(state, lambda)
+ * k1 = h * f(state, affine_param)
  *
  * @param state Current RayState
  * @param lambda Current affine parameter
@@ -100,9 +100,9 @@ vec4 geodesic_rhs(RayState state, float lambda, float M, float a) {
  * @param a Spin parameter
  * @return k1 delta values [dt, dr, dtheta, dphi, ddt, ddr, ddtheta, ddphi]
  */
-void compute_k1(RayState state, float lambda, float h, float M, float a,
+void compute_k1(RayState state, float affine_param, float h, float M, float a,
                 out vec4 k1_pos, out vec4 k1_vel) {
-    vec4 accel = geodesic_rhs(state, lambda, M, a);
+    vec4 accel = geodesic_rhs(state, affine_param, M, a);
 
     k1_pos = vec4(state.dt, state.dr, state.dtheta, state.dphi) * h;
     k1_vel = accel * h;
@@ -120,7 +120,7 @@ void compute_k1(RayState state, float lambda, float h, float M, float a,
  * @return k2 delta values
  */
 void compute_k2(RayState state, vec4 k1_pos, vec4 k1_vel,
-                float lambda, float h, float M, float a,
+                float affine_param, float h, float M, float a,
                 out vec4 k2_pos, out vec4 k2_vel) {
     // Construct state at midpoint: state + k1/2
     RayState state_mid = state;
@@ -133,7 +133,7 @@ void compute_k2(RayState state, vec4 k1_pos, vec4 k1_vel,
     state_mid.dtheta += k1_vel.z * 0.5;
     state_mid.dphi += k1_vel.w * 0.5;
 
-    vec4 accel = geodesic_rhs(state_mid, lambda + h * 0.5, M, a);
+    vec4 accel = geodesic_rhs(state_mid, affine_param + h * 0.5, M, a);
 
     k2_pos = vec4(state_mid.dt, state_mid.dr, state_mid.dtheta, state_mid.dphi) * h;
     k2_vel = accel * h;
@@ -146,7 +146,7 @@ void compute_k2(RayState state, vec4 k1_pos, vec4 k1_vel,
  * k3 = h * f(state_half, lambda + h/2)
  */
 void compute_k3(RayState state, vec4 k2_pos, vec4 k2_vel,
-                float lambda, float h, float M, float a,
+                float affine_param, float h, float M, float a,
                 out vec4 k3_pos, out vec4 k3_vel) {
     // Construct state at midpoint: state + k2/2
     RayState state_mid = state;
@@ -159,7 +159,7 @@ void compute_k3(RayState state, vec4 k2_pos, vec4 k2_vel,
     state_mid.dtheta += k2_vel.z * 0.5;
     state_mid.dphi += k2_vel.w * 0.5;
 
-    vec4 accel = geodesic_rhs(state_mid, lambda + h * 0.5, M, a);
+    vec4 accel = geodesic_rhs(state_mid, affine_param + h * 0.5, M, a);
 
     k3_pos = vec4(state_mid.dt, state_mid.dr, state_mid.dtheta, state_mid.dphi) * h;
     k3_vel = accel * h;
@@ -172,7 +172,7 @@ void compute_k3(RayState state, vec4 k2_pos, vec4 k2_vel,
  * k4 = h * f(state_end, lambda + h)
  */
 void compute_k4(RayState state, vec4 k3_pos, vec4 k3_vel,
-                float lambda, float h, float M, float a,
+                float affine_param, float h, float M, float a,
                 out vec4 k4_pos, out vec4 k4_vel) {
     // Construct state at endpoint: state + k3
     RayState state_end = state;
@@ -185,7 +185,7 @@ void compute_k4(RayState state, vec4 k3_pos, vec4 k3_vel,
     state_end.dtheta += k3_vel.z;
     state_end.dphi += k3_vel.w;
 
-    vec4 accel = geodesic_rhs(state_end, lambda + h, M, a);
+    vec4 accel = geodesic_rhs(state_end, affine_param + h, M, a);
 
     k4_pos = vec4(state_end.dt, state_end.dr, state_end.dtheta, state_end.dphi) * h;
     k4_vel = accel * h;
@@ -203,20 +203,20 @@ void compute_k4(RayState state, vec4 k3_pos, vec4 k3_vel,
  * @return Updated ray state after RK4 step
  */
 RayState rk4_step(RayState ray, float h, float M, float a) {
-    const float lambda = ray.lambda;  // Use current affine parameter
+    const float affine_param = ray.lambda;  // Use current affine parameter
 
     // Compute all four k values
     vec4 k1_pos, k1_vel;
-    compute_k1(ray, lambda, h, M, a, k1_pos, k1_vel);
+    compute_k1(ray, affine_param, h, M, a, k1_pos, k1_vel);
 
     vec4 k2_pos, k2_vel;
-    compute_k2(ray, k1_pos, k1_vel, lambda, h, M, a, k2_pos, k2_vel);
+    compute_k2(ray, k1_pos, k1_vel, affine_param, h, M, a, k2_pos, k2_vel);
 
     vec4 k3_pos, k3_vel;
-    compute_k3(ray, k2_pos, k2_vel, lambda, h, M, a, k3_pos, k3_vel);
+    compute_k3(ray, k2_pos, k2_vel, affine_param, h, M, a, k3_pos, k3_vel);
 
     vec4 k4_pos, k4_vel;
-    compute_k4(ray, k3_pos, k3_vel, lambda, h, M, a, k4_pos, k4_vel);
+    compute_k4(ray, k3_pos, k3_vel, affine_param, h, M, a, k4_pos, k4_vel);
 
     // Weighted average: (k1 + 2k2 + 2k3 + k4) / 6
     const float one_sixth = 1.0 / 6.0;
