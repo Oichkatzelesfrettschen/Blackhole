@@ -57,27 +57,22 @@
 // g_phph : R;
 // g_tph : R;  (* Off-diagonal for Kerr *)
 // }.
-layout(std140) uniform struct_MetricComponents {
-    float g_tt;
-    float g_rr;
-    Radial component
-    double g_thth;
-    theta component
-    double g_phph;
-    phi component
-    double g_tph;
-} MetricComponents;
+// Metric tensor components
+struct MetricComponents {
+    float g_tt;      // Time-time component
+    float g_rr;      // Radial component
+    float g_thth;    // Theta component
+    float g_phph;    // Phi component
+    float g_tph;     // Off-diagonal for Kerr
+};
 
-// @brief Christoffel-derived accelerations for geodesic equation
-// Derived from Rocq:
-// Record ChristoffelAccel := mkChristoffel {
-// accel_t : StateVector -> R;
-// accel_r : StateVector -> R;
-// accel_theta : StateVector -> R;
-// accel_phi : StateVector -> R;
-// }.
-layout(std140) uniform struct_ChristoffelAccel {
-} ChristoffelAccel;
+// Christoffel-derived accelerations for geodesic equation
+struct ChristoffelAccel {
+    float accel_t;
+    float accel_r;
+    float accel_theta;
+    float accel_phi;
+};
 
 // Function definitions (verified from Rocq proofs)
 
@@ -89,24 +84,13 @@ layout(std140) uniform struct_ChristoffelAccel {
  * Rocq Derivation: Derived from Rocq:...
  */
 StateVector geodesic_rhs(ChristoffelAccel christoffel, StateVector s) {
-    return StateVector{
-    s.v0, s.v1, s.v2, s.v3,           // dx/dlambda = v
-    christoffel.accel_t(s),           // dv_t/dlambda
-    christoffel.accel_r(s),           // dv_r/dlambda
-    christoffel.accel_theta(s),       // dv_theta/dlambda
-    christoffel.accel_phi(s)          // dv_phi/dlambda
-    };
-}
-
-/**
- * Create geodesic RHS function from Christoffel acceleration
- *
- * Depends on: geodesic_rhs
- */
-auto make_geodesic_rhs(ChristoffelAccel christoffel) {
-    return [christoffel](const StateVector& s) -> StateVector {
-    return geodesic_rhs(christoffel, s);
-    };
+    return StateVector(
+        s.v0, s.v1, s.v2, s.v3,           // dx/dlambda = v
+        christoffel.accel_t,              // dv_t/dlambda
+        christoffel.accel_r,              // dv_r/dlambda
+        christoffel.accel_theta,          // dv_theta/dlambda
+        christoffel.accel_phi             // dv_phi/dlambda
+    );
 }
 
 /**
@@ -179,20 +163,29 @@ float critical_impact_schwarzschild(float M) {
     return 3.0 * sqrt(3.0) * M;
 }
 
+// Orbit type constants
+const int ORBIT_PLUNGING = 0;
+const int ORBIT_BOUND = 1;
+const int ORBIT_FLYBY = 2;
+
 /**
  * Classification of geodesic orbits
  *
+ * Returns: ORBIT_PLUNGING if L < L_crit (4M)
+ *          ORBIT_BOUND if E < 1
+ *          ORBIT_FLYBY otherwise
+ *
  * Rocq Derivation: Derived from Rocq:...
  */
-OrbitType classify_orbit_schwarzschild(float M, float E, float L) {
+int classify_orbit_schwarzschild(float M, float E, float L) {
     float L_crit = 4.0 * M;
     if (L < L_crit) {
-    return OrbitType::Plunging;
+        return ORBIT_PLUNGING;
     }
     if (E < 1.0) {
-    return OrbitType::Bound;
+        return ORBIT_BOUND;
     }
-    return OrbitType::Flyby;
+    return ORBIT_FLYBY;
 }
 
 /**
@@ -243,10 +236,10 @@ StateVector init_null_geodesic(float r0, float theta0, float phi0, float dir_r, 
     g.g_thth * dir_theta * dir_theta +
     g.g_phph * dir_phi * dir_phi;
     float v_t = sqrt(spatial_norm / (-g.g_tt));
-    return StateVector{
-    0.0, r0, theta0, phi0,    // Position (t=0)
-    v_t, dir_r, dir_theta, dir_phi  // Velocity
-    };
+    return StateVector(
+        0.0, r0, theta0, phi0,              // Position (t=0)
+        v_t, dir_r, dir_theta, dir_phi      // Velocity
+    );
 }
 
 /**
@@ -262,10 +255,10 @@ StateVector init_null_geodesic_EL(float r0, float theta0, float E, float L, Metr
     // Null condition: g_tt v_t^2 + g_rr v_r^2 + g_phph v_phi^2 = 0
     float v_r_sq = -(g.g_tt * v_t * v_t + g.g_phph * v_phi * v_phi) / g.g_rr;
     float v_r = v_r_sq >= 0.0 ? sqrt(v_r_sq) : 0.0;
-    return StateVector{
-    0.0, r0, theta0, 0.0,
-    v_t, v_r, 0.0, v_phi
-    };
+    return StateVector(
+        0.0, r0, theta0, 0.0,
+        v_t, v_r, 0.0, v_phi
+    );
 }
 
 /**

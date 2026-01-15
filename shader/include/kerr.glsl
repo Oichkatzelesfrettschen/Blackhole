@@ -1,6 +1,8 @@
 #ifndef KERR_GLSL
 #define KERR_GLSL
 
+#include "physics_constants.glsl"
+
 struct KerrConsts {
   float E;
   float Lz;

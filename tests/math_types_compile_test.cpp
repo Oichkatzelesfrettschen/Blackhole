@@ -15,6 +15,8 @@ int main() {
 #if defined(BLACKHOLE_HAS_EIGEN) && BLACKHOLE_HAS_EIGEN
   auto ev = math::toEigen(gv);
   (void)math::toGlm(ev);
+#else
+  (void)gv;
 #endif
   return 0;
 }

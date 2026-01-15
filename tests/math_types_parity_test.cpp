@@ -1,5 +1,6 @@
 #include "physics/math_types.h"
 #include "physics/math_interop.h"
+#include "physics/safe_limits.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -9,8 +10,8 @@
 #include <limits>
 
 [[maybe_unused]] static bool approx_eq(float a, float b, float tol = 1e-5f) {
-  if (std::isnan(a) && std::isnan(b)) return true;
-  if (std::isinf(a) && std::isinf(b) && (std::signbit(a) == std::signbit(b))) return true;
+  if (physics::safe_isnan(a) && physics::safe_isnan(b)) return true;
+  if (physics::safe_isinf(a) && physics::safe_isinf(b) && (std::signbit(a) == std::signbit(b))) return true;
   return std::abs(a - b) <= tol * std::max(1.0f, std::abs(b));
 }
 

@@ -170,7 +170,7 @@ protected:
             
             // RK4 step
             state = verified::rk4_step(
-                [&g](const verified::StateVector& s) {
+                [](const verified::StateVector& s) {
                     return verified::geodesic_rhs({}, s);  // Simplified
                 },
                 h, state

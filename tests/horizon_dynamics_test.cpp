@@ -41,7 +41,7 @@ using physics::safe_isfinite;
 
 static constexpr double TOLERANCE = 1e-8;
 // Hawking temperature constant: k_B * c^3 / (4π * G * ℏ) ≈ 1.227e23 K
-static constexpr double HAWKING_TEMP_CONST = 1.227e23;
+[[maybe_unused]] static constexpr double HAWKING_TEMP_CONST = 1.227e23;
 
 static bool approx_eq(double a, double b, double tol = TOLERANCE) {
   if (safe_isnan(a) && safe_isnan(b)) return true;

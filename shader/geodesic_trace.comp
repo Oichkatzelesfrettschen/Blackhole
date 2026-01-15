@@ -12,13 +12,15 @@
 #extension GL_GOOGLE_include_directive : enable
 
 // Physics library includes - Phase 3: Verified from Rocq formalization
+// NOTE: rk4.glsl must come before geodesic.glsl (defines StateVector)
 #include "include/verified/schwarzschild.glsl"
-#include "include/verified/kerr.glsl"
-#include "include/verified/geodesic.glsl"
 #include "include/verified/rk4.glsl"
+#include "include/verified/geodesic.glsl"
+#include "include/verified/kerr.glsl"
 #include "include/verified/null_constraint.glsl"
 
 // Legacy includes (maintained for compatibility)
+#include "include/kerr.glsl"
 #include "include/redshift.glsl"
 
 // ============================================================================

@@ -671,7 +671,7 @@ int run_tests() {
       double maxRedshiftDiff = 0.0;
       for (std::size_t i = 0; i < count; ++i) {
         double expectedEmiss = (maxFlux > 0.0) ? fluxes[i] / maxFlux : 0.0;
-        double actualEmiss = emissivity[i];
+        double actualEmiss = static_cast<double>(emissivity[i]);
         maxEmissDiff = std::max(maxEmissDiff, std::abs(expectedEmiss - actualEmiss));
 
         double u = static_cast<double>(i) / static_cast<double>(count - 1);
@@ -681,7 +681,7 @@ int run_tests() {
           expectedRedshift = 0.0;
         }
         expectedRedshift = std::min(expectedRedshift, 10.0);
-        double actualRedshift = redshift[i];
+        double actualRedshift = static_cast<double>(redshift[i]);
         maxRedshiftDiff = std::max(maxRedshiftDiff, std::abs(expectedRedshift - actualRedshift));
       }
 

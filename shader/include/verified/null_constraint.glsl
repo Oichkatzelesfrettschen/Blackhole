@@ -183,7 +183,7 @@
 // // Solve for v0: g_tt * v0^2 = -spatial_norm
 // // v0 = sqrt(-spatial_norm / g_tt) = sqrt(spatial_norm / (-g_tt))
 // const double new_v0 = std::sqrt(spatial_norm / (-g.g_tt));
-// return StateVector{
+// return StateVector(
 // s.x0, s.x1, s.x2, s.x3,
 // new_v0, s.v1, s.v2, s.v3
 // };
@@ -218,7 +218,7 @@
 // // Since a = g_tt < 0, we need the sign that gives v0 > 0
 // const double sqrt_disc = std::sqrt(std::abs(discriminant));
 // const double new_v0 = (-b + sqrt_disc) / (2.0 * a);
-// return StateVector{
+// return StateVector(
 // s.x0, s.x1, s.x2, s.x3,
 // std::abs(new_v0), s.v1, s.v2, s.v3  // Ensure v0 > 0 (future-directed)
 // };
@@ -296,7 +296,7 @@
 // g.g_thth * s.v2 * s.v2 +
 // g.g_phph * s.v3 * s.v3;
 // const double new_v0 = std::sqrt((spatial_norm + m * m) / (-g.g_tt));
-// return StateVector{
+// return StateVector(
 // s.x0, s.x1, s.x2, s.x3,
 // new_v0, s.v1, s.v2, s.v3
 // };
@@ -381,13 +381,13 @@
 // // ============================================================================
 // // Constraint Monitoring Statistics
 // // ============================================================================
-// @brief Statistics for constraint monitoring during integration
-layout(std140) uniform struct_ConstraintStats {
-    float max_constraint;
-    observed double total_drift;
-    uint renorm_count;
-    uint step_count;
-} ConstraintStats;
+// Statistics for constraint monitoring during integration
+struct ConstraintStats {
+    float max_constraint;      // Maximum constraint violation observed
+    float total_drift;         // Total accumulated drift
+    uint renorm_count;         // Number of renormalizations performed
+    uint step_count;           // Total integration steps
+};
 
 // Function definitions (verified from Rocq proofs)
 
@@ -415,14 +415,10 @@ float null_constraint_function(MetricComponents g, StateVector s) {
  * Depends on: geodesic_rhs, null_constraint_function
  */
 float constraint_after_step(MetricComponents g, ChristoffelAccel christoffel, float h, StateVector s) {
-    // Create RHS function from Christoffel symbols
-    auto rhs = [&christoffel](const StateVector& state) -> StateVector {
-    return geodesic_rhs(christoffel, state);
-    };
-    // Perform RK4 step
-    StateVector s_new = rk4_step(rhs, h, s);
-    // Evaluate constraint at new state
-    return null_constraint_function(g, s_new);
+    // NOTE: This function requires rk4_step with function pointer/lambda support
+    // which is not directly supported in GLSL. Implementation requires refactoring.
+    // For now, return the current constraint as a placeholder.
+    return null_constraint_function(g, s);
 }
 
 /**
@@ -450,7 +446,7 @@ float constraint_drift_bound(float C, float h) {
  * Depends on: constraint_drift_bound
  */
 float global_drift_bound(float C, float h, uint N) {
-    return static_cast<float>(N) * constraint_drift_bound(C, h);
+    return float(N) * constraint_drift_bound(C, h);
 }
 
 /**
@@ -467,10 +463,10 @@ StateVector renormalize_null(MetricComponents g, StateVector s) {
     // Solve for v0: g_tt * v0^2 = -spatial_norm
     // v0 = sqrt(-spatial_norm / g_tt) = sqrt(spatial_norm / (-g_tt))
     float new_v0 = sqrt(spatial_norm / (-g.g_tt));
-    return StateVector{
-    s.x0, s.x1, s.x2, s.x3,
-    new_v0, s.v1, s.v2, s.v3
-    };
+    return StateVector(
+        s.x0, s.x1, s.x2, s.x3,
+        new_v0, s.v1, s.v2, s.v3
+    );
 }
 
 /**
@@ -497,10 +493,10 @@ StateVector renormalize_null_kerr(MetricComponents g, StateVector s) {
     // Since a = g_tt < 0, we need the sign that gives v0 > 0
     float sqrt_disc = sqrt(abs(discriminant));
     float new_v0 = (-b + sqrt_disc) / (2.0 * a);
-    return StateVector{
-    s.x0, s.x1, s.x2, s.x3,
-    abs(new_v0), s.v1, s.v2, s.v3  // Ensure v0 > 0 (future-directed)
-    };
+    return StateVector(
+        s.x0, s.x1, s.x2, s.x3,
+        abs(new_v0), s.v1, s.v2, s.v3  // Ensure v0 > 0 (future-directed)
+    );
 }
 
 /**
@@ -553,10 +549,10 @@ StateVector renormalize_massive(MetricComponents g, StateVector s, float m) {
     g.g_thth * s.v2 * s.v2 +
     g.g_phph * s.v3 * s.v3;
     float new_v0 = sqrt((spatial_norm + m * m) / (-g.g_tt));
-    return StateVector{
-    s.x0, s.x1, s.x2, s.x3,
-    new_v0, s.v1, s.v2, s.v3
-    };
+    return StateVector(
+        s.x0, s.x1, s.x2, s.x3,
+        new_v0, s.v1, s.v2, s.v3
+    );
 }
 
 /**
@@ -597,21 +593,11 @@ bool should_correct(MetricComponents g, StateVector s, float tol) {
  * Depends on: geodesic_rhs, if, needs_renormalization, renormalize_null, renormalize_null_kerr
  */
 StateVector rk4_step_null_preserving(ChristoffelAccel christoffel, float h, StateVector s, float tol) {
-    // Create RHS function
-    auto rhs = [&christoffel](const StateVector& state) -> StateVector {
-    return geodesic_rhs(christoffel, state);
-    };
-    // Perform RK4 step
-    StateVector s_new = rk4_step(rhs, h, s);
-    // Evaluate metric at new position
-    MetricComponents g_new = g_func(s_new.x1, s_new.x2, s_new.x3);
-    // Check if correction needed
-    if (needs_renormalization(g_new, s_new, tol)) {
-    // Apply renormalization
-    if (abs(g_new.g_tph) < 1e-15) {
-    s_new = renormalize_null(g_new, s_new);
-    } else {
-    s_new = renormalize_null_kerr(g_new, s_new);
+    // NOTE: This function requires rk4_step with function pointer/lambda support
+    // and metric evaluation function g_func which are not directly supported in GLSL.
+    // Implementation requires refactoring to work with GLSL constraints.
+    // For now, return the input state as a placeholder.
+    return s;
 }
 
 #endif // SHADER_VERIFIED_NULL_CONSTRAINT_HPP
