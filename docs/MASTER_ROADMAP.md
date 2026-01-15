@@ -228,19 +228,21 @@ This roadmap consolidates all planning into a single source of truth.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 3.1.1 Create IMAGE_SOURCES.md manifest | Done | License tracking |
-| 3.1.2 Download NASA/ESA 4K/8K assets | In Progress | PHASE3_ASSET_DOWNLOAD_GUIDE.md created; 6 sources documented (HLA, MAST, ESA, ESO, JWST, SVS) |
-| 3.1.3 Convert to KTX2 format | Pending | Optional ktx dep; toktx/basisu pipeline documented |
-| 3.1.4 Add parallax layer system | Pending | 6-layer architecture designed in guide; Per-layer drift + LOD |
+| 3.1.1 Create IMAGE_SOURCES.md manifest | Done | Comprehensive documentation with NASA/ESA/STScI sources |
+| 3.1.2 Download NASA/ESA 4K/8K assets | Done | 9 assets in manifest, 218 MB largest (Horsehead 16K) |
+| 3.1.3 Convert to KTX2 format | Deferred | Optimization for future; current JPG pipeline functional |
+| 3.1.4 Add parallax layer system | Done | 3-layer equirectangular with LOD bias, intensity blend |
 | 3.1.5 Evaluate HDR input path | Done | Evaluated: TIFF 16-bit (recommended), EXR (tinyexr), OpenImageIO |
 
 ### 3.2 Procedural Enhancements
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 3.2.1 Integrate fastnoise2 for disk detail | Pending | Conan dep ready |
-| 3.2.2 Add noise LUT upload path | Pending | 3D texture cache |
-| 3.2.3 Prototype wiregrid curvature overlay | Pending | Spacetime viz |
+| 3.2.1 Integrate fastnoise2 for disk detail | Done | FastNoise2 0.10.0-alpha via Conan, 5 presets implemented |
+| 3.2.2 Add noise LUT upload path | Done | NoiseTextureCache: 4 GL_TEXTURE_3D (18 MB GPU), trilinear filtering |
+| 3.2.3 Prototype wiregrid curvature overlay | Done | Gravitational potential visualization with runtime scale control |
+
+**Phase 3 Status:** COMPLETE (2026-01-15)
 
 ---
 
