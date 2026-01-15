@@ -229,10 +229,10 @@ This roadmap consolidates all planning into a single source of truth.
 | Task | Status | Notes |
 |------|--------|-------|
 | 3.1.1 Create IMAGE_SOURCES.md manifest | Done | License tracking |
-| 3.1.2 Download NASA/ESA 4K/8K assets | Pending | STScI/ESO archives |
-| 3.1.3 Convert to KTX2 format | Pending | Optional ktx dep |
-| 3.1.4 Add parallax layer system | Pending | Per-layer drift + LOD |
-| 3.1.5 Evaluate HDR input path | Pending | OpenImageIO/tinyexr |
+| 3.1.2 Download NASA/ESA 4K/8K assets | In Progress | PHASE3_ASSET_DOWNLOAD_GUIDE.md created; 6 sources documented (HLA, MAST, ESA, ESO, JWST, SVS) |
+| 3.1.3 Convert to KTX2 format | Pending | Optional ktx dep; toktx/basisu pipeline documented |
+| 3.1.4 Add parallax layer system | Pending | 6-layer architecture designed in guide; Per-layer drift + LOD |
+| 3.1.5 Evaluate HDR input path | Done | Evaluated: TIFF 16-bit (recommended), EXR (tinyexr), OpenImageIO |
 
 ### 3.2 Procedural Enhancements
 
