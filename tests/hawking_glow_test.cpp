@@ -15,6 +15,7 @@
 
 #include "physics/hawking.h"
 #include "physics/constants.h"
+#include "physics/safe_limits.h"
 
 #include <cmath>
 #include <iostream>
@@ -22,12 +23,12 @@
 
 // Tolerance for floating-point comparisons
 static constexpr double TOLERANCE = 1e-10;
-static constexpr double LOOSE_TOLERANCE = 1e-6;
+[[maybe_unused]] static constexpr double LOOSE_TOLERANCE = 1e-6;
 
 static bool approx_eq(double a, double b, double tol = TOLERANCE) {
-  if (std::isnan(a) && std::isnan(b))
+  if (physics::safe_isnan(a) && physics::safe_isnan(b))
     return true;
-  if (std::isinf(a) && std::isinf(b) && (std::signbit(a) == std::signbit(b)))
+  if (physics::safe_isinf(a) && physics::safe_isinf(b) && (std::signbit(a) == std::signbit(b)))
     return true;
   return std::abs(a - b) <= tol * std::max(1.0, std::abs(b));
 }

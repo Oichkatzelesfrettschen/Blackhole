@@ -246,7 +246,7 @@ public:
 private:
   double mass_;
   double r_s_;
-  double r_capture_;
+  [[maybe_unused]] double r_capture_;
   double r_escape_;
   double step_size_;
   int max_steps_;

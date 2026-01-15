@@ -356,16 +356,16 @@ int main(int argc, char **argv) {
               std::size_t channelCountLocal = dims.back();
               std::size_t rawIndex =
                   ((i0 * d1 + i1) * d2 + i2) * channelCountLocal + sel.index;
-              value = raw[rawIndex];
+              value = static_cast<double>(raw[rawIndex]);
             } else if (layoutLower == "channels-first") {
               std::size_t d0Local = dims[1];
               std::size_t d1Local = dims[2];
               std::size_t d2Local = dims[3];
               std::size_t rawIndex =
                   ((sel.index * d0Local + i0) * d1Local + i1) * d2Local + i2;
-              value = raw[rawIndex];
+              value = static_cast<double>(raw[rawIndex]);
             } else {
-              value = raw[gridIndex];
+              value = static_cast<double>(raw[gridIndex]);
             }
           }
           packed[outIndex + c] = static_cast<float>(value);
