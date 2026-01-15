@@ -1,7 +1,7 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2026-01-02
-**Status:** Phase 10.1 (Hawking Radiation Thermal Glow) COMPLETE - Ready for visual testing
+**Last Updated:** 2026-01-15
+**Status:** Phase 10.1+ Shader Validation COMPLETE - All 21 shaders compile without errors
 **Roadmap:** See `docs/MASTER_ROADMAP.md` for the consolidated execution plan
 
 ---
@@ -37,6 +37,58 @@ The simulation is fully operational with the core rendering pipeline:
 - TODO/FIXME scan: ImGui backend TODO/FIXME notes + a new stub TODO in `src/rmlui_overlay.cpp` (RmlUi integration)
 
 ## Recent Changes
+
+### Shader Validation & Transpilation Fixes (2026-01-15) ✅ COMPLETE
+
+**Achievement**: All 21 shaders now compile without errors (100% validation success)
+- **Fragment Shaders**: 14 validated (blackhole_main, raytracer, bloom chain, tonemapping, etc.)
+- **Vertex Shaders**: 5 validated (simple, wiregrid, overlay_text, drawid_probe, passthrough_drawid)
+- **Compute Shaders**: 2 validated (geodesic_trace, drawid_cull)
+
+**Major Fixes**:
+1. **C++23 to GLSL Transpilation** - Systematic pattern fixes across all verified modules:
+   - Aggregate initialization: `Type{...}` → `Type(...)`
+   - Type casts: `static_cast<T>()` → `T()`
+   - STL functions: `std::max()` → `max()`
+   - Type inference: `const auto` → explicit types
+   - Enum classes: Replaced with int constants
+   - Lambdas: Commented out (not supported in GLSL)
+
+2. **Reserved Keyword Fix** (`integrator.glsl`, 7 locations):
+   - Replaced `lambda` parameter/variable with `affine_param`
+   - `lambda` is reserved in GLSL for future anonymous function support
+
+3. **Include Order Dependencies** (2 shaders):
+   - `raytracer.frag`: Moved `integrator.glsl` include after RayState definition
+   - `geodesic_trace.comp`: Reordered to `rk4.glsl` → `geodesic.glsl` (StateVector dependency)
+
+4. **Legacy/Verified Module Coexistence** (`geodesic_trace.comp`):
+   - Include both `include/kerr.glsl` (legacy helpers) and `include/verified/kerr.glsl`
+   - `kerrOuterHorizon(r_s, a)` from legacy vs `outer_horizon(M, a)` from verified
+
+5. **Fast-Math Compatibility** (3 test files):
+   - Replaced `std::isnan()`/`std::isinf()` with `physics::safe_isnan()`/`safe_isinf()`
+   - Compatible with `-ffast-math -ffinite-math-only` optimization flags
+
+6. **Compiler Warning Fixes**:
+   - Added `[[maybe_unused]]` to scaffolding fields (r_capture_, LOOSE_TOLERANCE, etc.)
+   - Fixed double-promotion warnings with explicit `static_cast<double>()`
+
+**Documentation**:
+- Created `shader/README.md` - Comprehensive C++23→GLSL transpilation guide (500+ lines)
+- Created `CHANGELOG.md` - Complete version history from Phase 0 to Phase 10.1+
+- Documented all transpilation patterns, reserved keywords, include order rules
+
+**Build Status**:
+- Main `Blackhole` executable: ✅ Builds successfully
+- Shader validation: ✅ 21/21 shaders pass
+- Known issue: `z3_verification_test` has googletest linker error (tracked separately)
+
+**Verification Pipeline**:
+- Rocq 9.1+ → OCaml → C++23 → GLSL 4.60 pipeline fully operational
+- All verified physics modules (`rk4`, `geodesic`, `kerr`, `energy_conserving_geodesic`, `null_constraint`) compile
+
+---
 
 ### Phase 10.1: Hawking Radiation Thermal Glow (2026-01-02) ✅ COMPLETE
 
