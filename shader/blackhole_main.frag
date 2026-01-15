@@ -78,8 +78,10 @@ uniform float dopplerStrength = 1.0;
 
 // Physics parameters
 uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geometric units)
-uniform float photonSphereRadius = 3.0;  // r_ph = 1.5 * r_s
-uniform float iscoRadius = 6.0;          // r_ISCO = 3 * r_s (Schwarzschild)
+// Derived radii computed from schwarzschildRadius using physics functions:
+// - photonSphereRadius = 1.5 * r_s via sch_photonSphereRadius()
+// - iscoRadius = 3.0 * r_s via sch_iscoRadius()
+// These are now computed in adiskColor() and traceColor() to avoid redundant uniforms
 uniform float enableRedshift = 0.0;      // Toggle gravitational redshift
 uniform float enablePhotonSphere = 0.0;  // Toggle photon sphere glow
 
@@ -91,6 +93,12 @@ uniform sampler2D hawkingTempLUT;        // Temperature T_H(M) LUT
 uniform sampler2D hawkingSpectrumLUT;    // Blackbody RGB spectrum LUT
 uniform float useHawkingLUTs = 1.0;      // Use LUTs (1.0) vs direct calculation (0.0)
 uniform float blackHoleMass = 1.989e33;  // Black hole mass [g] (default: 1 solar mass)
+
+// Derived physics quantities: use sch_* functions from schwarzschild.glsl
+// These macros ensure iscoRadius and photonSphereRadius are computed from schwarzschildRadius
+// rather than being redundant uniforms (eliminates parameter synchronization issues)
+#define iscoRadius sch_iscoRadius(schwarzschildRadius)
+#define photonSphereRadius sch_photonSphereRadius(schwarzschildRadius)
 
 #include "include/interop_trace.glsl"
 
