@@ -23,6 +23,7 @@
  */
 
 #include "physics/kerr.h"
+#include "physics/safe_limits.h"
 #include "physics/schwarzschild.h"
 #include "physics/verified/kerr.hpp"
 
@@ -34,20 +35,24 @@
 #include <vector>
 #include <algorithm>
 
+using physics::safe_isnan;
+using physics::safe_isinf;
+using physics::safe_isfinite;
+
 static constexpr double TOLERANCE = 1e-8;
 // Hawking temperature constant: k_B * c^3 / (4π * G * ℏ) ≈ 1.227e23 K
 static constexpr double HAWKING_TEMP_CONST = 1.227e23;
 
 static bool approx_eq(double a, double b, double tol = TOLERANCE) {
-  if (std::isnan(a) && std::isnan(b)) return true;
-  if (std::isinf(a) && std::isinf(b) && std::signbit(a) == std::signbit(b)) return true;
+  if (safe_isnan(a) && safe_isnan(b)) return true;
+  if (safe_isinf(a) && safe_isinf(b) && std::signbit(a) == std::signbit(b)) return true;
   double scale = std::max(1.0, std::max(std::abs(a), std::abs(b)));
   return std::abs(a - b) <= tol * scale;
 }
 
 static bool approx_eq_relative(double a, double b, double rel_tol) {
-  if (std::isnan(a) && std::isnan(b)) return true;
-  if (std::isinf(a) && std::isinf(b) && std::signbit(a) == std::signbit(b)) return true;
+  if (safe_isnan(a) && safe_isnan(b)) return true;
+  if (safe_isinf(a) && safe_isinf(b) && std::signbit(a) == std::signbit(b)) return true;
   double scale = std::max(1.0, std::max(std::abs(a), std::abs(b)));
   return std::abs(a - b) <= rel_tol * scale;
 }
@@ -302,12 +307,12 @@ static int test_photon_orbits_exist() {
     [[maybe_unused]] double r_isco_pro = verified::kerr_isco_prograde(M, a);
 
     // Basic sanity: photon orbits should be finite and positive
-    if (std::isnan(r_ph_pro) || std::isinf(r_ph_pro) || r_ph_pro <= 0.0) {
+    if (safe_isnan(r_ph_pro) || safe_isinf(r_ph_pro) || r_ph_pro <= 0.0) {
       std::cerr << "  FAIL: Prograde photon orbit invalid at a=" << a << "\n";
       return 1;
     }
 
-    if (std::isnan(r_ph_ret) || std::isinf(r_ph_ret) || r_ph_ret <= 0.0) {
+    if (safe_isnan(r_ph_ret) || safe_isinf(r_ph_ret) || r_ph_ret <= 0.0) {
       std::cerr << "  FAIL: Retrograde photon orbit invalid at a=" << a << "\n";
       return 1;
     }
@@ -370,14 +375,14 @@ static int test_thermodynamic_properties() {
 
   for (double a = 0.0; a <= 0.99; a += 0.1) {
     double r_plus = verified::outer_horizon(M, a);
-    if (r_plus <= 0.0 || std::isnan(r_plus)) {
+    if (r_plus <= 0.0 || safe_isnan(r_plus)) {
       std::cerr << "  FAIL: Invalid outer horizon at a=" << a << "\n";
       return 1;
     }
 
     // Compute surface gravity using our helper function
     double kappa = surface_gravity(M, a, r_plus);
-    if (std::isnan(kappa) || std::isinf(kappa)) {
+    if (safe_isnan(kappa) || safe_isinf(kappa)) {
       std::cerr << "  FAIL: Invalid surface gravity at a=" << a << "\n";
       return 1;
     }
@@ -398,7 +403,7 @@ static int test_thermodynamic_properties() {
 
     // Compute Hawking temperature
     double T_H = hawking_temperature(M, kappa);
-    if (std::isnan(T_H) || std::isinf(T_H)) {
+    if (safe_isnan(T_H) || safe_isinf(T_H)) {
       std::cerr << "  FAIL: Invalid Hawking temperature at a=" << a << "\n";
       return 1;
     }
@@ -411,7 +416,7 @@ static int test_thermodynamic_properties() {
 
     // Compute entropy using Bekenstein-Hawking formula
     double S = schwarzschild_entropy_param(M, a, r_plus);
-    if (std::isnan(S) || S < 0.0) {
+    if (safe_isnan(S) || S < 0.0) {
       std::cerr << "  FAIL: Invalid entropy at a=" << a << "\n";
       return 1;
     }
@@ -489,7 +494,7 @@ static int test_isco_spin_limits() {
   double r_isco_ext = verified::kerr_isco_prograde(M, 0.9999);
 
   // Should be well-defined and reasonable
-  if (r_isco_ext <= 0.0 || std::isnan(r_isco_ext) || std::isinf(r_isco_ext)) {
+  if (r_isco_ext <= 0.0 || safe_isnan(r_isco_ext) || safe_isinf(r_isco_ext)) {
     std::cerr << "  FAIL: ISCO undefined at near-extremal spin\n";
     return 1;
   }

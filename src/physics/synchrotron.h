@@ -24,8 +24,8 @@
 #define PHYSICS_SYNCHROTRON_H
 
 #include "constants.h"
+#include "safe_limits.h"
 #include <cmath>
-#include <limits>
 
 namespace physics {
 
@@ -82,7 +82,7 @@ inline double gyrofrequency(double B) {
  */
 inline double gyroradius(double gamma, double B) {
   if (std::abs(B) < 1e-30) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   return gamma * M_ELECTRON * C / (E_CHARGE * std::abs(B));
 }
@@ -155,7 +155,7 @@ inline double synchrotron_power_single_electron(double gamma, double B) {
 inline double synchrotron_cooling_time(double gamma, double B) {
   double P = synchrotron_power_single_electron(gamma, B);
   if (P < 1e-50) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   return gamma * M_ELECTRON * C * C / P;
 }
@@ -172,7 +172,7 @@ inline double synchrotron_cooling_time(double gamma, double B) {
  */
 inline double synchrotron_cooling_lorentz_factor(double B, double t) {
   if (t < 1e-50 || std::abs(B) < 1e-30) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   return 6.0 * PI * M_ELECTRON * C / (SIGMA_THOMSON * B * B * t);
 }

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 
+#include "physics/safe_limits.h"
 #include "shader.h"
 #include "tracy_support.h"
 
@@ -144,10 +145,10 @@ glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
   }
 
   const EasyFontVertex *verts = reinterpret_cast<const EasyFontVertex *>(scratch.data());
-  float minx = std::numeric_limits<float>::infinity();
-  float miny = std::numeric_limits<float>::infinity();
-  float maxx = -std::numeric_limits<float>::infinity();
-  float maxy = -std::numeric_limits<float>::infinity();
+  float minx = physics::safe_max<float>();
+  float miny = physics::safe_max<float>();
+  float maxx = physics::safe_lowest<float>();
+  float maxy = physics::safe_lowest<float>();
 
   for (int q = 0; q < quads; ++q) {
     const EasyFontVertex *v = verts + q * 4;

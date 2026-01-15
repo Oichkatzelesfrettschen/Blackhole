@@ -29,8 +29,8 @@
 
 #include "constants.h"
 #include "kerr.h"
+#include "safe_limits.h"
 #include <cmath>
-#include <limits>
 
 namespace physics {
 
@@ -261,7 +261,7 @@ inline double bz_eddington_field(double mass, double a_star) {
   double omega_H = a_star * C / (2.0 * r_plus);
 
   if (std::abs(omega_H) < 1e-30) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
 
   double kappa = 0.05;

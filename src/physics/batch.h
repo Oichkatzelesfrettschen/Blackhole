@@ -10,6 +10,7 @@
 
 // Legacy headers (kept for compatibility)
 #include "kerr.h"
+#include "safe_limits.h"
 #include "schwarzschild.h"
 #include "thin_disk.h"
 #include "math_types.h"
@@ -761,7 +762,7 @@ inline void disk_flux_batch(const std::vector<double> &radii, const DiskParams &
   out.resize(radii.size());
   for (std::size_t i = 0; i < radii.size(); ++i) {
     double flux = disk_flux(radii[i], disk);
-    if (!std::isfinite(flux) || flux < 0.0) {
+    if (!safe_isfinite(flux) || flux < 0.0) {
       flux = 0.0;
     }
     out[i] = static_cast<float>(flux);
@@ -773,7 +774,7 @@ inline void kerr_redshift_batch(const std::vector<double> &radii, double theta, 
   out.resize(radii.size());
   for (std::size_t i = 0; i < radii.size(); ++i) {
     double z = kerr_redshift(radii[i], theta, mass, a);
-    if (!std::isfinite(z) || z < 0.0) {
+    if (!safe_isfinite(z) || z < 0.0) {
       z = 0.0;
     }
     z = std::min(z, 10.0);

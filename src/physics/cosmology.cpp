@@ -11,10 +11,14 @@ namespace physics {
 // Speed of light in km/s for cosmology calculations
 static constexpr double C_KM_S = 299792.458;
 
-// Seconds per Gyr (for future age-of-universe calculations)
+// Conversion factor: seconds per gigayear
+// 1 Gyr = 10^9 years × 365.25 days/year × 24 hours/day × 3600 s/hour
+// Reserved for future age-of-universe calculations with higher precision.
 [[maybe_unused]] static constexpr double SEC_PER_GYR = 3.15576e16;
 
-// km/s/Mpc to 1/s conversion (H0 units, for future use)
+// Conversion: H0 [km/s/Mpc] to [1/s]
+// Reserved for use in future lookback time refinements.
+// The current implementation uses a simplified H0_per_Gyr factor.
 [[maybe_unused]] static constexpr double KM_S_MPC_TO_PER_SEC = 1.0 / (MPC * 1.0e-5);
 
 // ============================================================================

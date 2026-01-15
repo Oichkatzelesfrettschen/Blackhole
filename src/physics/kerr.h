@@ -30,9 +30,9 @@
 #define PHYSICS_KERR_H
 
 #include "constants.h"
+#include "safe_limits.h"
 #include "schwarzschild.h"
 #include <cmath>
-#include <limits>
 #include <utility>
 
 namespace physics {
@@ -381,7 +381,7 @@ inline double kerr_redshift(double r, double theta, double mass, double a) {
 
   double factor = 1.0 - r_s * r / sigma;
   if (factor <= 0) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
 
   return 1.0 / std::sqrt(factor) - 1.0;

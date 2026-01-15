@@ -23,6 +23,7 @@
 
 #include "constants.h"
 #include "math_types.h"
+#include "safe_limits.h"
 #include "schwarzschild.h"
 #include "geodesics.h"
 #include "kerr.h"
@@ -31,7 +32,6 @@
 #include <cstddef>
 #include <cmath>
 #include <functional>
-#include <limits>
 #include <vector>
 
 namespace physics {
@@ -347,7 +347,7 @@ public:
         step_size_(0.02 * r_s_),
         max_steps_(10000),
         record_path_(false) {
-    if (!std::isfinite(r_horizon_) || r_horizon_ <= 0.0) {
+    if (!safe_isfinite(r_horizon_) || r_horizon_ <= 0.0) {
       r_horizon_ = r_s_;
     }
   }

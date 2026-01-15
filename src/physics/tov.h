@@ -24,10 +24,10 @@
 #define PHYSICS_TOV_H
 
 #include "constants.h"
+#include "safe_limits.h"
 #include "schwarzschild.h"
 #include <cmath>
 #include <functional>
-#include <limits>
 #include <vector>
 
 namespace physics {
@@ -142,7 +142,7 @@ inline double tov_dPdr(double r, double m, double P, double rho) {
 
   // Avoid singularity at r = r_s (shouldn't happen for stable stars)
   if (r <= r_s * 1.001) {
-    return -std::numeric_limits<double>::infinity();
+    return -safe_infinity<double>();
   }
 
   double G_over_c2 = G / C2;

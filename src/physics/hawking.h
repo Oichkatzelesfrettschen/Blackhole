@@ -25,10 +25,10 @@
 
 #include "constants.h"
 #include "kerr.h"
+#include "safe_limits.h"
 #include "schwarzschild.h"
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 namespace physics {
 
@@ -65,7 +65,7 @@ inline const double TEMP_PLANCK = std::sqrt(HBAR * C * C * C * C * C / (G * K_B 
  */
 inline double hawking_temperature(double mass) {
   if (mass <= 0) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   return HBAR * C * C * C / (8.0 * PI * G * mass * K_B);
 }
@@ -118,7 +118,7 @@ inline double hawking_temperature_kerr(double mass, double a_star) {
  */
 inline double hawking_luminosity(double mass) {
   if (mass <= 0) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   // L = ℏc⁶ / (15360 π G² M²)
   return HBAR * std::pow(C, 6) / (15360.0 * PI * G * G * mass * mass);
@@ -184,8 +184,8 @@ inline double mass_loss_rate(double mass) {
  */
 inline double hawking_peak_wavelength(double mass) {
   double T = hawking_temperature(mass);
-  if (T <= 0) {
-    return std::numeric_limits<double>::infinity();
+  if (T <= 0 || is_effectively_infinite(T)) {
+    return safe_infinity<double>();
   }
   // Wien displacement constant in CGS
   constexpr double b_wien = 0.2898; // cm·K

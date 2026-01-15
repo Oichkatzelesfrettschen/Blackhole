@@ -32,8 +32,8 @@
 #define PHYSICS_ELLIPTIC_INTEGRALS_H
 
 #include "constants.h"
+#include "safe_limits.h"
 #include <cmath>
-#include <limits>
 #include <tuple>
 
 namespace physics {
@@ -228,7 +228,7 @@ inline double carlson_RJ(double x, double y, double z, double p,
  */
 inline double elliptic_K(double k) {
   if (std::abs(k) >= 1.0) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   double k2 = k * k;
   return carlson_RF(0.0, 1.0 - k2, 1.0);
@@ -269,7 +269,7 @@ inline double elliptic_E(double k) {
  */
 inline double elliptic_Pi(double n, double k) {
   if (std::abs(k) >= 1.0) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
 
   double k2 = k * k;
@@ -351,7 +351,7 @@ inline double deflection_angle_schwarzschild(double b, double r_s) {
   double b_crit = 3.0 * std::sqrt(3.0) / 2.0 * r_s;
 
   if (b <= b_crit) {
-    return std::numeric_limits<double>::infinity(); // Photon captured
+    return safe_infinity<double>(); // Photon captured
   }
 
   // Find closest approach r₀ by solving:
@@ -453,7 +453,7 @@ inline double deflection_strong_field(double b, double r_s) {
   strong_field_coefficients_schwarzschild(r_s, a_bar, b_bar, b_m);
 
   if (b <= b_m) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
 
   double y = b / b_m - 1.0;
@@ -516,7 +516,7 @@ inline double relativistic_image_magnification(double beta, int n,
                                                double D_L, double D_S, double D_LS,
                                                double r_s) {
   if (std::abs(beta) < 1e-20) {
-    return std::numeric_limits<double>::infinity(); // Einstein ring
+    return safe_infinity<double>(); // Einstein ring
   }
 
   double a_bar, b_bar, b_m;
@@ -563,7 +563,7 @@ inline double critical_impact_parameter_kerr(double r_s, double a, bool prograde
   // Critical impact parameter
   double r_ph_minus_M = r_ph - M;
   if (std::abs(r_ph_minus_M) < 1e-20) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
 
   double b_crit = (r_ph * r_ph + a * a) / r_ph_minus_M;

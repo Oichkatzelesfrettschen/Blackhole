@@ -5,11 +5,28 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "${ROOT}/scripts/conan_env.sh"
 
+# Parse arguments
+FORCE_REINSTALL=0
 BUILD_TYPE="${1:-Release}"
+
+# Check for --force-reinstall flag
+for arg in "$@"; do
+  if [[ "$arg" == "--force-reinstall" ]]; then
+    FORCE_REINSTALL=1
+  fi
+done
+
 OUTPUT_DIR_REL="${2:-build}"
 OUTPUT_DIR="${ROOT}/${OUTPUT_DIR_REL}"
 shift $(( $# > 1 ? 2 : $# )) || true
-EXTRA_ARGS=("$@")
+
+# Filter out --force-reinstall from extra args
+EXTRA_ARGS=()
+for arg in "$@"; do
+  if [[ "$arg" != "--force-reinstall" ]]; then
+    EXTRA_ARGS+=("$arg")
+  fi
+done
 
 # Ensure output folder is inside the repo so cache/config stays repo-local
 case "$OUTPUT_DIR" in
@@ -39,11 +56,18 @@ else
   CONAN_MAJOR=1
 fi
 
+# Determine build policy
+BUILD_POLICY="missing"
+if (( FORCE_REINSTALL == 1 )); then
+  BUILD_POLICY="*"
+  echo "Force reinstall requested: rebuilding all dependencies"
+fi
+
 if (( CONAN_MAJOR >= 2 )); then
   echo "Using Conan ${CONAN_VER_STR} (2.x+) -- installing in ${OUTPUT_DIR_REL}"
   conan install "${ROOT}" \
     --output-folder="${OUTPUT_DIR}" \
-    --build=missing \
+    --build="${BUILD_POLICY}" \
     -s build_type="${BUILD_TYPE}" \
     -s compiler.cppstd=23 \
     -s:b build_type="${BUILD_TYPE}" \
@@ -53,10 +77,19 @@ else
   echo "WARNING: Detected Conan ${CONAN_VER_STR} (1.x). Consider upgrading to Conan 2.x -- continuing using compatibility options."
   conan install "${ROOT}" \
     --output-folder="${OUTPUT_DIR}" \
-    --build=missing \
+    --build="${BUILD_POLICY}" \
     -s build_type="${BUILD_TYPE}" \
     -s compiler.cppstd=23 \
     -s:b build_type="${BUILD_TYPE}" \
     -s:b compiler.cppstd=23 \
     "${EXTRA_ARGS[@]}"
 fi
+
+echo ""
+echo "Conan install complete."
+echo "  Dependencies cached in: .conan/"
+echo "  CMake toolchain in: ${OUTPUT_DIR_REL}/"
+echo ""
+echo "Next steps:"
+echo "  cmake --preset release   # or: cmake -B ${OUTPUT_DIR_REL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
+echo "  cmake --build ${OUTPUT_DIR_REL}"

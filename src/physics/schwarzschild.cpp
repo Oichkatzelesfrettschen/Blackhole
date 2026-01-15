@@ -5,6 +5,7 @@
 
 #include "schwarzschild.h"
 #include "constants.h"
+#include "safe_limits.h"
 
 namespace physics {
 
@@ -131,7 +132,7 @@ double christoffel_ph_thph(double theta) {
 double gravitational_redshift(double r, double mass) {
   double r_s = schwarzschild_radius(mass);
   if (r <= r_s) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   // z = 1/√(1 - r_s/r) - 1
   return 1.0 / std::sqrt(1.0 - r_s / r) - 1.0;
@@ -167,7 +168,7 @@ double orbital_period(double r, double mass) {
 double surface_gravity(double r, double mass) {
   double r_s = schwarzschild_radius(mass);
   if (r <= r_s) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   // κ = GM / (r² √(1 - r_s/r))
   return (G * mass) / (r * r * std::sqrt(1.0 - r_s / r));

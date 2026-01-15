@@ -1,8 +1,9 @@
 #include "overlay.h"
 
+#include "physics/safe_limits.h"
+
 #include <algorithm>
 #include <fstream>
-#include <limits>
 #include <sstream>
 
 static bool isIgnorableLine(const std::string &line) {
@@ -26,10 +27,10 @@ bool OverlayCurve2D::LoadFromTsv(const std::string &path) {
     return false;
   }
 
-  float minX = std::numeric_limits<float>::infinity();
-  float minY = std::numeric_limits<float>::infinity();
-  float maxX = -std::numeric_limits<float>::infinity();
-  float maxY = -std::numeric_limits<float>::infinity();
+  float minX = physics::safe_max<float>();
+  float minY = physics::safe_max<float>();
+  float maxX = physics::safe_lowest<float>();
+  float maxY = physics::safe_lowest<float>();
 
   std::string line;
   int lineNo = 0;

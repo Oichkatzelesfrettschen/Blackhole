@@ -82,6 +82,39 @@ pip install conan>=2.0
 - CMake toolchain generation changes
 - The scripts explicitly detect and adapt to Conan version, but 2.x is the primary target
 
+## Build Directory Structure
+
+This project separates compiled dependencies from build artifacts:
+
+```
+Blackhole/
+├── .conan/              # Conan package cache (persists across clean builds)
+│   ├── p/               # Compiled packages (reused)
+│   └── profiles/        # Build profiles
+├── build/               # CMake build directory (can be deleted for clean builds)
+│   └── Release/
+│       ├── generators/  # Conan CMake toolchain files
+│       └── Blackhole    # Built executable
+```
+
+**Key point:** Deleting `build/` does NOT delete `.conan/`. The compiled packages in `.conan/p/`
+are reused across builds. Only the CMake toolchain files need regeneration.
+
+### Clean Build Process
+
+```bash
+# Clean build (regenerate toolchain, reuse cached packages)
+rm -rf build
+./scripts/conan_install.sh Release build
+cmake --preset release
+cmake --build --preset release
+
+# Full rebuild (recompile ALL dependencies - rarely needed)
+./scripts/conan_install.sh Release build --force-reinstall
+cmake --preset release
+cmake --build --preset release
+```
+
 ## Build Process
 
 ### Quick Start
@@ -169,6 +202,18 @@ cmake --preset release -DENABLE_TRACY=ON -DENABLE_RMLUI=ON
 
 Run the dependency installation script first:
 ```bash
+./scripts/conan_install.sh Release build
+```
+
+### Dependency Corruption or Version Mismatch
+
+If packages seem corrupted or you need to rebuild all dependencies:
+```bash
+# Force rebuild all packages
+./scripts/conan_install.sh Release build --force-reinstall
+
+# Or completely reset Conan cache (nuclear option)
+rm -rf .conan build
 ./scripts/conan_install.sh Release build
 ```
 

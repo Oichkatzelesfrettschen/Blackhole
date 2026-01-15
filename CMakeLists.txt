@@ -536,10 +536,8 @@ message(STATUS "=== SIMD Configuration Complete ===")
 option(ENABLE_FAST_MATH "Enable fast math optimizations" ON)
 if(ENABLE_FAST_MATH)
   add_compile_options(-ffast-math)
-  # Clang warns about infinity/NaN usage with fast-math; suppress as we handle edge cases
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    add_compile_options(-Wno-nan-infinity-disabled)
-  endif()
+  # Note: infinity/NaN usage is handled via safe_limits.h which uses compiler
+  # builtins (__builtin_huge_val) that work correctly with -ffast-math.
   message(STATUS "Fast math optimizations enabled")
 endif()
 

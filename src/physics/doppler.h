@@ -24,8 +24,8 @@
 #define PHYSICS_DOPPLER_H
 
 #include "constants.h"
+#include "safe_limits.h"
 #include <cmath>
-#include <limits>
 
 namespace physics {
 
@@ -44,7 +44,7 @@ namespace physics {
 inline double lorentz_factor(double beta) {
   if (beta < 0) beta = -beta;
   if (beta >= 1.0) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   return 1.0 / std::sqrt(1.0 - beta * beta);
 }
@@ -84,7 +84,7 @@ inline double doppler_factor(double beta, double theta) {
   double denominator = gamma * (1.0 - beta * cos_theta);
 
   if (std::abs(denominator) < 1e-30) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
 
   return 1.0 / denominator;
@@ -100,7 +100,7 @@ inline double doppler_factor(double beta, double theta) {
  */
 inline double doppler_factor_approaching(double beta) {
   if (beta >= 1.0) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
   return std::sqrt((1.0 + beta) / (1.0 - beta));
 }
@@ -239,7 +239,7 @@ inline double apparent_superluminal_velocity(double beta, double theta) {
   double denominator = 1.0 - beta * cos_theta;
 
   if (std::abs(denominator) < 1e-30) {
-    return std::numeric_limits<double>::infinity();
+    return safe_infinity<double>();
   }
 
   return (beta * sin_theta) / denominator;

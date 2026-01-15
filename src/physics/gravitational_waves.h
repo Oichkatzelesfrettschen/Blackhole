@@ -32,6 +32,7 @@
 
 #include "constants.h"
 #include "kerr.h"
+#include "safe_limits.h"
 #include <cmath>
 #include <complex>
 #include <vector>
@@ -180,7 +181,7 @@ inline double frequency_derivative(double M_c, double f) {
  * @return Time to merger [s]
  */
 inline double time_to_coalescence(double M_c, double f) {
-  if (f <= 0) return std::numeric_limits<double>::infinity();
+  if (f <= 0) return safe_infinity<double>();
 
   double M_c_geo = chirp_mass_geometric(M_c);
 
@@ -204,7 +205,7 @@ inline double time_to_coalescence(double M_c, double f) {
  * @return Orbital separation [cm]
  */
 inline double orbital_separation(double M_total, double f) {
-  if (f <= 0) return std::numeric_limits<double>::infinity();
+  if (f <= 0) return safe_infinity<double>();
 
   double f_orb = f / 2.0; // Orbital frequency is half GW frequency
 
