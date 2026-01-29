@@ -25,6 +25,7 @@
 
 #include "constants.h"
 #include "safe_limits.h"
+#include <algorithm>
 #include <cmath>
 
 namespace physics {

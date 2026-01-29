@@ -1707,6 +1707,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Doppler beaming validation tests (Phase 4.1)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/doppler_beaming_test.cpp")
+    add_executable(doppler_beaming_test
+      "${PROJECT_SOURCE_DIR}/tests/doppler_beaming_test.cpp"
+    )
+    target_include_directories(doppler_beaming_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(doppler_beaming_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME doppler_beaming_validation COMMAND doppler_beaming_test)
+    set_tests_properties(doppler_beaming_validation PROPERTIES
+      LABELS "physics;doppler;relativistic;phase4"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(doppler_beaming_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test
