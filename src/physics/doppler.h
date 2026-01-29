@@ -346,6 +346,112 @@ inline double k_correction_factor(double z, double alpha) {
   return std::pow(1.0 + z, 1.0 + alpha);
 }
 
+// ============================================================================
+// Accretion Disk Doppler Beaming
+// ============================================================================
+
+/**
+ * @brief Compute Doppler boost for orbiting disk material
+ *
+ * WHY: Rotating accretion disks show 10-1000x flux asymmetry due to beaming
+ * WHAT: Relativistic Doppler factor for disk material in circular orbit
+ * HOW: Keplerian velocity + viewing angle geometry
+ *
+ * For a circular orbit at radius r around a Kerr black hole:
+ *   v_φ/c = √(M/(r - 2M ± a√M/r))
+ *
+ * Where ± is prograde (+) or retrograde (-).
+ *
+ * The Doppler boost factor for flux is:
+ *   F_obs = δ^(3+α) F_emit
+ *
+ * where δ = 1/(γ(1 - β cos θ)) and α is the spectral index.
+ *
+ * References:
+ *   - Begelman, Blandford, Rees (1984) Rev. Mod. Phys. 56, 255
+ *   - Cunningham (1975) ApJ 202, 788 (Kerr disk imaging)
+ *
+ * @param r Radius in units of M
+ * @param a_star Dimensionless spin parameter (-1 < a* < 1)
+ * @param phi Azimuthal angle [rad] (0 = approaching, π = receding)
+ * @param inclination Disk inclination [rad] (0 = face-on, π/2 = edge-on)
+ * @param alpha Spectral index (F_ν ∝ ν^α), use 0 for blackbody
+ * @return Doppler boost factor (1 = no boost)
+ */
+inline double disk_doppler_boost(double r, double a_star, double phi,
+                                  double inclination, double alpha = 0.0) {
+    // Clamp inputs
+    a_star = std::clamp(a_star, -0.9999, 0.9999);
+    r = std::max(r, 1.1);  // Minimum radius to avoid singularities
+
+    // Keplerian velocity for circular orbit (Schwarzschild approximation)
+    // v_φ/c ≈ √(M/r) for r >> M
+    // Exact: v_φ/c = √(M/(r - 2M ± a√M/r))
+    double discriminant = r - 2.0 + a_star * std::sqrt(1.0 / r);
+    if (discriminant <= 0.0) {
+        // Inside ISCO or unphysical orbit
+        return 1.0;
+    }
+
+    double v_orbital = std::sqrt(1.0 / discriminant);
+    double beta = std::min(v_orbital, 0.99);  // Cap at 0.99c
+
+    // Velocity components in observer frame
+    // v_x = v sin(φ) (perpendicular to line of sight if inclination = 0)
+    // v_y = v cos(φ) (along line of sight projection)
+    // v_z = 0 (disk is in equatorial plane)
+
+    // Line-of-sight velocity component
+    // θ is angle between velocity and line of sight
+    // cos θ = (v · n) / |v|
+    // where n is unit vector toward observer
+
+    // For disk in x-y plane, observer at inclination i:
+    // n = (0, sin i, cos i)
+    // v = v_φ (-sin φ, cos φ, 0)
+    // v · n = v_φ * sin(i) * cos(φ)
+
+    double cos_theta = std::sin(inclination) * std::cos(phi);
+
+    // Doppler factor
+    double delta = doppler_factor(beta, std::acos(std::clamp(cos_theta, -1.0, 1.0)));
+
+    // Beaming boost for flux
+    double boost_exponent = 3.0 + alpha;  // δ^(3+α) for optically thin
+    double boost = std::pow(delta, boost_exponent);
+
+    // Clamp to reasonable range (avoid numerical instability)
+    return std::clamp(boost, 0.01, 1000.0);
+}
+
+/**
+ * @brief Compute maximum Doppler boost for disk (edge-on, approaching side)
+ *
+ * Convenience function for maximum boost calculation.
+ *
+ * @param r Radius in units of M
+ * @param a_star Dimensionless spin parameter
+ * @param alpha Spectral index
+ * @return Maximum Doppler boost factor
+ */
+inline double disk_doppler_boost_max(double r, double a_star, double alpha = 0.0) {
+    return disk_doppler_boost(r, a_star, 0.0, M_PI / 2.0, alpha);
+}
+
+/**
+ * @brief Compute minimum Doppler boost for disk (edge-on, receding side)
+ *
+ * Convenience function for minimum boost calculation.
+ *
+ * @param r Radius in units of M
+ * @param a_star Dimensionless spin parameter
+ * @param alpha Spectral index
+ * @return Minimum Doppler boost factor
+ */
+inline double disk_doppler_boost_min(double r, double a_star, double alpha = 0.0) {
+    return disk_doppler_boost(r, a_star, M_PI, M_PI / 2.0, alpha);
+}
+
 } // namespace physics
 
 #endif // PHYSICS_DOPPLER_H
