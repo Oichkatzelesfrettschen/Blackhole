@@ -1,8 +1,9 @@
 # Blackhole Master Roadmap
 
 **Created:** 2026-01-01
-**Version:** 1.0.0
-**Status:** Active Development
+**Version:** 1.0.1
+**Last Updated:** 2026-01-29
+**Status:** Active Development (Phase 4)
 **Architecture:** C++23 / OpenGL 4.6 / Conan 2.x
 
 ---
@@ -248,31 +249,46 @@ This roadmap consolidates all planning into a single source of truth.
 
 ## Phase 4: Physics Extensions (Weeks 13-20)
 
+**Status:** In Progress (2026-01-29)
+**Progress:** Infrastructure 100%, Physics Implementation 25%
+
+### 4.0 Infrastructure & Documentation (COMPLETE)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| 4.0.1 Repository cleanup | Done | 5.6GB recovered, backup created |
+| 4.0.2 Documentation overhaul | Done | 7 new READMEs (rocq/, tools/, bench/, docs/) |
+| 4.0.3 Build system improvements | Done | Fuzz preset fix, riced-relwithdebinfo, shader/Python validation |
+| 4.0.4 Automated cleanup tooling | Done | scripts/cleanup_artifacts.sh with dry-run mode |
+
 ### 4.1 Accretion Physics
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 4.1.1 Novikov-Thorne disk profile | Pending | Replace procedural |
-| 4.1.2 Temperature-dependent emissivity | Pending | LUT generation |
-| 4.1.3 Doppler beaming integration | Pending | Disk rotation |
-| 4.1.4 Frame dragging visualization | Pending | Ergosphere effects |
+| 4.1.1 Novikov-Thorne disk profile | Done | src/physics/novikov_thorne.h (η, T, F formulas) |
+| 4.1.2 Temperature-dependent emissivity | Pending | scripts/generate_nt_lut.py (next) |
+| 4.1.3 Doppler beaming integration | Pending | Disk rotation asymmetry |
+| 4.1.4 Frame dragging visualization | Pending | Ergosphere overlay |
 
 ### 4.2 GRMHD Integration
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 4.2.1 nubhlight HDF5 full ingestion | Partial | Tools exist |
-| 4.2.2 3D texture streaming pipeline | Pending | GPU upload |
-| 4.2.3 GRMHD slice preview | Done | Debug shader |
+| 4.2.1 nubhlight HDF5 full ingestion | Partial | tools/nubhlight_pack functional |
+| 4.2.2 3D texture streaming pipeline | Pending | src/grmhd_streaming.h/cpp (planned) |
+| 4.2.3 GRMHD slice preview | Done | Debug shader operational |
 | 4.2.4 Reduced-order 2D GRMHD prototype | Future | Research phase |
 
 ### 4.3 Radiative Transfer
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 4.3.1 tardis spectral LUT pipeline | Partial | Stub exists |
+| 4.3.1 tardis spectral LUT pipeline | Partial | Stub exists, needs Python integration |
 | 4.3.2 Monte Carlo photon transport | Future | Research phase |
 | 4.3.3 Compton scattering model | Future | Corona effects |
+
+**Phase 4 Current Progress:** 23/40 tasks complete (57.5%)
+**Next Milestone:** LUT generation, Doppler integration, validation tests
 
 ---
 
