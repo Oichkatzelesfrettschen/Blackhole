@@ -1193,6 +1193,19 @@ if(ENABLE_SHADER_VALIDATION)
 
     # SPIR-V compilation removed in Phase 3 (pure GLSL 4.60 pipeline)
     # For optional SPIR-V compilation via glslc, use: glslc -c shader.frag -o out.spv
+
+    # Add shader validation as CTest test
+    if(GLSLANG_VALIDATOR AND BUILD_TESTING)
+      add_test(
+        NAME shader_validation
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target validate-shaders
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+      )
+      set_tests_properties(shader_validation PROPERTIES
+        LABELS "validation;shaders"
+        TIMEOUT 30
+      )
+    endif()
   else()
     message(STATUS "glslangValidator not found - shader validation disabled")
   endif()
@@ -1295,6 +1308,30 @@ find_program(PYTHON3_EXECUTABLE python3)
 if(PYTHON3_EXECUTABLE)
   set(GLSL_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/physics/verified")
   set(GLSL_OUTPUT_DIR "${PROJECT_SOURCE_DIR}/shader/include/verified")
+
+  # Validate Python dependencies for scripts
+  message(STATUS "Validating Python dependencies...")
+  set(REQUIRED_PYTHON_PACKAGES numpy scipy h5py matplotlib)
+  set(MISSING_PACKAGES "")
+
+  foreach(PACKAGE ${REQUIRED_PYTHON_PACKAGES})
+    execute_process(
+      COMMAND ${PYTHON3_EXECUTABLE} -c "import ${PACKAGE}"
+      RESULT_VARIABLE PACKAGE_CHECK
+      OUTPUT_QUIET
+      ERROR_QUIET
+    )
+    if(NOT PACKAGE_CHECK EQUAL 0)
+      list(APPEND MISSING_PACKAGES ${PACKAGE})
+    endif()
+  endforeach()
+
+  if(MISSING_PACKAGES)
+    message(WARNING "Missing Python packages: ${MISSING_PACKAGES}")
+    message(WARNING "Install with: pip install -r ${PROJECT_SOURCE_DIR}/scripts/requirements.txt")
+  else()
+    message(STATUS "All required Python packages found")
+  endif()
 
   # Custom target to generate GLSL shaders from C++23 headers
   add_custom_target(generate_glsl

@@ -177,12 +177,35 @@
       }
     },
     {
+      "name": "riced-relwithdebinfo",
+      "displayName": "Riced RelWithDebInfo",
+      "description": "Optimized build with debug symbols, Tracy, profiling, and shader validation",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/Riced/RelWithDebInfo",
+      "installDir": "${sourceDir}/install/Riced/RelWithDebInfo",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Riced/RelWithDebInfo/generators/conan_toolchain.cmake",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5",
+        "ENABLE_CLANG_TIDY": "OFF",
+        "ENABLE_CPPCHECK": "OFF",
+        "ENABLE_TRACY": "ON",
+        "ENABLE_PROFILING": "ON",
+        "ENABLE_SHADER_VALIDATION": "ON",
+        "ENABLE_HARDENING": "ON"
+      }
+    },
+    {
       "name": "fuzz",
       "displayName": "Fuzzing",
       "description": "Build fuzzing targets with libFuzzer",
       "inherits": "base",
+      "binaryDir": "${sourceDir}/build/Fuzz",
+      "installDir": "${sourceDir}/install/Fuzz",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Fuzz/generators/conan_toolchain.cmake",
         "ENABLE_FUZZING": "ON",
         "CMAKE_CXX_COMPILER": "clang++"
       }
@@ -235,6 +258,10 @@
     {
       "name": "profile",
       "configurePreset": "profile"
+    },
+    {
+      "name": "riced-relwithdebinfo",
+      "configurePreset": "riced-relwithdebinfo"
     },
     {
       "name": "analyze",
@@ -309,6 +336,13 @@
     {
       "name": "coverage",
       "configurePreset": "coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "riced-relwithdebinfo",
+      "configurePreset": "riced-relwithdebinfo",
       "output": {
         "outputOnFailure": true
       }
