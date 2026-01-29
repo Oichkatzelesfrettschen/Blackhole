@@ -2280,6 +2280,20 @@ int main(int argc, char **argv) {
   static float grmhdSliceMax = 1.0f;
   static int grmhdSliceSize = 256;
   static int grmhdSliceSizeCached = 0;
+
+  // GRMHD Time-Series Playback (Phase 4.3 - streaming infrastructure)
+  static bool grmhdTimeSeriesEnabled = false;
+  static std::array<char, 256> grmhdTimeSeriesJsonBuffer{};
+  static std::array<char, 256> grmhdTimeSeriesBinBuffer{};
+  static bool grmhdTimeSeriesLoaded = false;
+  static int grmhdCurrentFrame = 0;
+  static int grmhdMaxFrame = 0;
+  static bool grmhdPlaying = false;
+  static float grmhdPlaybackSpeed = 1.0f;
+  static double grmhdCacheHitRate = 0.0;
+  static int grmhdQueueDepth = 0;
+  // Note: GRMHDStreamer instance will be added when implementation is complete
+
   static float blackHoleMass = 1.0f;
   static float kerrSpin = 0.0f;
   static bool enablePhotonSphere = false;
@@ -3191,6 +3205,90 @@ int main(int argc, char **argv) {
           ImGui::Image(sliceId, ImVec2(192.0f, 192.0f));
         }
         ImGui::EndDisabled();
+
+        // GRMHD Time-Series Playback (Phase 4.3)
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.9f, 1.0f), "GRMHD Time-Series");
+        ImGui::Checkbox("Enable Time-Series Playback", &grmhdTimeSeriesEnabled);
+
+        ImGui::BeginDisabled(!grmhdTimeSeriesEnabled);
+
+        // File paths
+        ImGui::InputText("JSON Metadata", grmhdTimeSeriesJsonBuffer.data(),
+                         grmhdTimeSeriesJsonBuffer.size());
+        ImGui::InputText("Binary Data", grmhdTimeSeriesBinBuffer.data(),
+                         grmhdTimeSeriesBinBuffer.size());
+
+        // Load/Unload buttons
+        if (ImGui::Button("Load Time-Series")) {
+          // TODO: Initialize GRMHDStreamer when implementation is complete
+          // For now, just set placeholder state
+          grmhdTimeSeriesLoaded = true;
+          grmhdMaxFrame = 100;  // Placeholder: actual value from metadata
+          grmhdCurrentFrame = 0;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Unload Time-Series")) {
+          // TODO: Shutdown GRMHDStreamer
+          grmhdTimeSeriesLoaded = false;
+          grmhdCurrentFrame = 0;
+          grmhdMaxFrame = 0;
+          grmhdPlaying = false;
+        }
+
+        ImGui::BeginDisabled(!grmhdTimeSeriesLoaded);
+
+        // Frame control
+        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Playback");
+        if (ImGui::SliderInt("Frame", &grmhdCurrentFrame, 0, grmhdMaxFrame)) {
+          // TODO: Call streamer.seekFrame(grmhdCurrentFrame)
+        }
+        ImGui::Text("Time: %.2f s", static_cast<double>(grmhdCurrentFrame) / 30.0);
+
+        // Play/Pause button
+        if (grmhdPlaying) {
+          if (ImGui::Button("Pause")) {
+            grmhdPlaying = false;
+            // TODO: Call streamer.pause()
+          }
+        } else {
+          if (ImGui::Button("Play")) {
+            grmhdPlaying = true;
+            // TODO: Call streamer.play()
+          }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset")) {
+          grmhdCurrentFrame = 0;
+          // TODO: Call streamer.seekFrame(0)
+        }
+
+        // Playback speed
+        if (ImGui::SliderFloat("Playback Speed", &grmhdPlaybackSpeed, 0.1f, 4.0f)) {
+          // TODO: Call streamer.setPlaybackSpeed(grmhdPlaybackSpeed)
+        }
+
+        // Cache statistics
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Cache Statistics");
+        ImGui::Text("Hit Rate: %.1f%%", grmhdCacheHitRate * 100.0);
+        ImGui::Text("Queue Depth: %d", grmhdQueueDepth);
+
+        // Progress indicator for queue
+        if (grmhdQueueDepth > 0) {
+          ImGui::ProgressBar(static_cast<float>(grmhdQueueDepth) / 10.0f, ImVec2(-1.0f, 0.0f),
+                             nullptr);
+        }
+
+        // Performance targets reference
+        ImGui::Separator();
+        ImGui::TextDisabled("Performance Targets:");
+        ImGui::TextDisabled("  Cache hit rate: >90%%");
+        ImGui::TextDisabled("  Frame load time: <16ms (60 fps)");
+        ImGui::TextDisabled("  Memory footprint: <4GB");
+
+        ImGui::EndDisabled();  // !grmhdTimeSeriesLoaded
+        ImGui::EndDisabled();  // !grmhdTimeSeriesEnabled
 
         ImGui::Separator();
         ImGui::Text("Physics Parameters");
