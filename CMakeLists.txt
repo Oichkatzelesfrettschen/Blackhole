@@ -1685,6 +1685,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Frame dragging and ergosphere validation tests (Phase 4.1)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/frame_dragging_test.cpp")
+    add_executable(frame_dragging_test
+      "${PROJECT_SOURCE_DIR}/tests/frame_dragging_test.cpp"
+    )
+    target_include_directories(frame_dragging_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(frame_dragging_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME frame_dragging_validation COMMAND frame_dragging_test)
+    set_tests_properties(frame_dragging_validation PROPERTIES
+      LABELS "physics;kerr;ergosphere;phase4"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(frame_dragging_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test
