@@ -425,3 +425,92 @@ int main(int argc, char **argv) {
   std::cout << "Wrote " << outputBin << " and " << outputJson << "\n";
   return 0;
 }
+
+/**
+ * @brief Multi-dump sequence packing extension
+ * 
+ * WHY: Enable time-series GRMHD visualization with frame-by-frame streaming
+ * WHAT: Process multiple dump files, pack into single binary with frame index
+ * HOW: Glob pattern matching, sequential processing, concatenated binary output
+ * 
+ * Usage:
+ *   nubhlight_pack --multi --pattern "dump_*.h5" --dataset /dump/P \
+ *                  --output timeseries.json --fields rho,u,v1,v2
+ * 
+ * Output:
+ *   timeseries.json - metadata with frame count, timestamps, offsets
+ *   timeseries.bin  - concatenated RGBA32F texture data (all frames)
+ */
+
+#include <glob.h>
+
+struct MultiDumpMetadata {
+  std::vector<std::string> frameFiles;
+  std::vector<double> frameTimes;
+  std::vector<size_t> frameOffsets;  // Byte offsets in binary file
+  size_t frameCount;
+  size_t frameSize;  // Bytes per frame
+  PackMetadata singleFrameMetadata;  // Template metadata for each frame
+};
+
+static std::vector<std::string> globFiles(const std::string& pattern) {
+  std::vector<std::string> files;
+  glob_t globResult;
+  
+  if (glob(pattern.c_str(), GLOB_TILDE, nullptr, &globResult) == 0) {
+    for (size_t i = 0; i < globResult.gl_pathc; ++i) {
+      files.push_back(globResult.gl_pathv[i]);
+    }
+  }
+  globfree(&globResult);
+  
+  // Sort files lexicographically
+  std::sort(files.begin(), files.end());
+  return files;
+}
+
+static void writeMultiDumpMetadata(std::ostream& out, const MultiDumpMetadata& meta) {
+  out << "{\n";
+  out << "  \"version\": \"1.0-multi\",\n";
+  out << "  \"frameCount\": " << meta.frameCount << ",\n";
+  out << "  \"frameSize\": " << meta.frameSize << ",\n";
+  
+  out << "  \"frames\": [\n";
+  for (size_t i = 0; i < meta.frameCount; ++i) {
+    out << "    {\n";
+    out << "      \"file\": \"" << jsonEscape(meta.frameFiles[i]) << "\",\n";
+    out << "      \"time\": " << meta.frameTimes[i] << ",\n";
+    out << "      \"offset\": " << meta.frameOffsets[i] << "\n";
+    out << "    }";
+    if (i + 1 < meta.frameCount) out << ",";
+    out << "\n";
+  }
+  out << "  ],\n";
+  
+  // Include template metadata for frame structure
+  out << "  \"frameMetadata\": {\n";
+  out << "    \"gridDims\": [";
+  for (size_t i = 0; i < meta.singleFrameMetadata.gridDims.size(); ++i) {
+    out << meta.singleFrameMetadata.gridDims[i];
+    if (i + 1 < meta.singleFrameMetadata.gridDims.size()) out << ", ";
+  }
+  out << "],\n";
+  
+  out << "    \"channels\": [";
+  for (size_t i = 0; i < meta.singleFrameMetadata.channels.size(); ++i) {
+    out << "\"" << jsonEscape(meta.singleFrameMetadata.channels[i]) << "\"";
+    if (i + 1 < meta.singleFrameMetadata.channels.size()) out << ", ";
+  }
+  out << "],\n";
+  
+  out << "    \"format\": \"" << meta.singleFrameMetadata.format << "\",\n";
+  out << "    \"layout\": \"" << meta.singleFrameMetadata.layout << "\"\n";
+  out << "  }\n";
+  out << "}\n";
+}
+
+// Note: Multi-dump packing implementation would go here
+// For now, this is a stub showing the intended architecture
+// Full implementation requires refactoring main() to extract
+// the single-dump processing into a reusable function
+
