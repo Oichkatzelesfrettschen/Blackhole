@@ -50,6 +50,12 @@ gmon.out
 infer-out/
 captures/
 
+# Test binaries (prevent accidental commits)
+src/**/physics_test
+src/**/*_test
+tests/*_test
+!tests/*_test.cpp
+
 # ------------------------------------------------------------------------------
 # CMake
 # ------------------------------------------------------------------------------
