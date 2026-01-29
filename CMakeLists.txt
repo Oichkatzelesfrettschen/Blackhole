@@ -1663,6 +1663,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Novikov-Thorne disk model validation tests (Phase 4.1)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/novikov_thorne_test.cpp")
+    add_executable(novikov_thorne_test
+      "${PROJECT_SOURCE_DIR}/tests/novikov_thorne_test.cpp"
+    )
+    target_include_directories(novikov_thorne_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(novikov_thorne_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME novikov_thorne_validation COMMAND novikov_thorne_test)
+    set_tests_properties(novikov_thorne_validation PROPERTIES
+      LABELS "physics;accretion;disk;phase4"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(novikov_thorne_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test

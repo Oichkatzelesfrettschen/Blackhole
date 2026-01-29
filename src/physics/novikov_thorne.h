@@ -115,15 +115,15 @@ public:
 
         // Eddington mass accretion rate: Mdot_Edd = L_Edd / (η c²)
         const double eta = radiative_efficiency(a_star);
-        const double c_cgs = constants::C_LIGHT * 1e2; // cm/s
+        const double c_cgs = ::physics::C * 1e2; // cm/s (C is in cm/s already in CGS)
         const double mdot_edd_cgs = L_edd / (eta * c_cgs * c_cgs); // g/s
 
         // Actual mass accretion rate
         const double mdot_cgs = mdot_edd * mdot_edd_cgs;
 
         // Geometric units to CGS
-        const double M_cgs = mass_solar * constants::M_SUN; // g
-        const double r_cgs = r * constants::G_NEWTON * M_cgs / (c_cgs * c_cgs); // cm
+        const double M_cgs = mass_solar * ::physics::M_SUN; // g
+        const double r_cgs = r * ::physics::G * M_cgs / (c_cgs * c_cgs); // cm
 
         // Radial emissivity function f(r) - assumes zero-torque inner boundary
         // Simplified approximation: f(r) ≈ (1 - sqrt(r_isco/r))
@@ -133,7 +133,7 @@ public:
         const double sigma_sb = 5.67e-5;
 
         // Temperature (Page & Thorne 1974)
-        const double T4 = (3.0 * constants::G_NEWTON * M_cgs * mdot_cgs * f_r) /
+        const double T4 = (3.0 * ::physics::G * M_cgs * mdot_cgs * f_r) /
                           (8.0 * M_PI * sigma_sb * r_cgs * r_cgs * r_cgs);
 
         return std::pow(std::max(0.0, T4), 0.25);
@@ -212,7 +212,7 @@ public:
         const double L_edd = 1.26e38 * mass_solar; // erg/s
 
         // Eddington mass accretion rate
-        const double c_cgs = constants::C_LIGHT * 1e2;
+        const double c_cgs = ::physics::C * 1e2;
         const double mdot_edd_cgs = L_edd / (eta * c_cgs * c_cgs);
 
         // Actual luminosity
