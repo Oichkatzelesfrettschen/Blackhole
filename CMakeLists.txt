@@ -1886,6 +1886,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # GRMHD GPU async upload pipeline validation tests (Phase 6.2b)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_gpu_async_test.cpp")
+    add_executable(grmhd_gpu_async_test
+      "${PROJECT_SOURCE_DIR}/tests/grmhd_gpu_async_test.cpp"
+    )
+    target_include_directories(grmhd_gpu_async_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/grmhd"
+    )
+    target_compile_options(grmhd_gpu_async_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME grmhd_gpu_async_validation COMMAND grmhd_gpu_async_test)
+    set_tests_properties(grmhd_gpu_async_validation PROPERTIES
+      LABELS "grmhd;gpu;async;pbo;phase6"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(grmhd_gpu_async_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test
