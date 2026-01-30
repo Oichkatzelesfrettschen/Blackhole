@@ -205,7 +205,6 @@ inline double synchrotron_F(double x) {
     return std::sqrt(PI / 2.0) * std::sqrt(x) * std::exp(-x);
   } else {
     // Intermediate: use polynomial fit (Fouka & Ouichaoui 2013)
-    double ln_x = std::log(x);
     double F_approx = 1.8084 * std::pow(x, 1.0 / 3.0) *
                       std::exp(-x) *
                       (1.0 + 0.884 * std::pow(x, 2.0 / 3.0) +
@@ -252,10 +251,10 @@ inline double synchrotron_G(double x) {
  * @return Polarization degree (0 to 1)
  */
 inline double synchrotron_polarization(double x) {
-  double F = synchrotron_F(x);
-  double G = synchrotron_G(x);
-  if (F < 1e-50) return 0.0;
-  return G / F;
+  double F_val = synchrotron_F(x);
+  double G_val = synchrotron_G(x);
+  if (F_val < 1e-50) return 0.0;
+  return G_val / F_val;
 }
 
 // ============================================================================
@@ -339,12 +338,11 @@ inline double electron_index_from_spectral(double alpha) {
  * @param nu Frequency [Hz]
  * @param B Magnetic field [Gauss]
  * @param n_e Electron density [cm^-3]
- * @param gamma_min Minimum Lorentz factor
  * @param p Electron power-law index
  * @return Absorption coefficient [cm^-1]
  */
 inline double synchrotron_absorption_coefficient(double nu, double B,
-                                                  double n_e, double gamma_min,
+                                                  double n_e,
                                                   double p) {
   // Simplified formula (order of magnitude)
   double nu_B = gyrofrequency(B);
@@ -362,12 +360,11 @@ inline double synchrotron_absorption_coefficient(double nu, double B,
  * @param B Magnetic field [Gauss]
  * @param n_e Electron density [cm^-3]
  * @param R Source size [cm]
- * @param gamma_min Minimum Lorentz factor
  * @param p Electron power-law index
  * @return Self-absorption frequency [Hz]
  */
 inline double synchrotron_self_absorption_frequency(double B, double n_e,
-                                                     double R, double gamma_min,
+                                                     double R,
                                                      double p) {
   // Approximation: ν_a where τ = α_ν × R = 1
   double nu_B = gyrofrequency(B);

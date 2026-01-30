@@ -1685,6 +1685,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Synchrotron spectrum validation tests (Phase 5.1)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/synchrotron_spectrum_test.cpp")
+    add_executable(synchrotron_spectrum_test
+      "${PROJECT_SOURCE_DIR}/tests/synchrotron_spectrum_test.cpp"
+    )
+    target_include_directories(synchrotron_spectrum_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(synchrotron_spectrum_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME synchrotron_spectrum_validation COMMAND synchrotron_spectrum_test)
+    set_tests_properties(synchrotron_spectrum_validation PROPERTIES
+      LABELS "physics;synchrotron;emission;phase5"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(synchrotron_spectrum_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Frame dragging and ergosphere validation tests (Phase 4.1)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/frame_dragging_test.cpp")
     add_executable(frame_dragging_test
