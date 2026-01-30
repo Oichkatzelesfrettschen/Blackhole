@@ -1773,6 +1773,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Gravitational waveform validation tests (Phase 5.5)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gw_waveform_test.cpp")
+    add_executable(gw_waveform_test
+      "${PROJECT_SOURCE_DIR}/tests/gw_waveform_test.cpp"
+    )
+    target_include_directories(gw_waveform_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(gw_waveform_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME gw_waveform_validation COMMAND gw_waveform_test)
+    set_tests_properties(gw_waveform_validation PROPERTIES
+      LABELS "physics;gw;ligo;phase5"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(gw_waveform_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # EHT shadow diameter validation tests (Phase 5.4)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_shadow_test.cpp")
     add_executable(eht_shadow_test
