@@ -1908,6 +1908,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # GRMHD composite raytracer validation tests (Phase 6.3)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_composite_raytracer_test.cpp")
+    add_executable(grmhd_composite_raytracer_test
+      "${PROJECT_SOURCE_DIR}/tests/grmhd_composite_raytracer_test.cpp"
+    )
+    target_include_directories(grmhd_composite_raytracer_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/grmhd"
+    )
+    target_compile_options(grmhd_composite_raytracer_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME grmhd_composite_validation COMMAND grmhd_composite_raytracer_test)
+    set_tests_properties(grmhd_composite_validation PROPERTIES
+      LABELS "grmhd;composite;raytracer;phase6"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(grmhd_composite_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test
