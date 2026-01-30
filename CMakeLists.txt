@@ -1707,6 +1707,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Radiative transfer validation tests (Phase 5.2)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/radiative_transfer_test.cpp")
+    add_executable(radiative_transfer_test
+      "${PROJECT_SOURCE_DIR}/tests/radiative_transfer_test.cpp"
+    )
+    target_include_directories(radiative_transfer_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(radiative_transfer_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME radiative_transfer_validation COMMAND radiative_transfer_test)
+    set_tests_properties(radiative_transfer_validation PROPERTIES
+      LABELS "physics;radiative;transfer;phase5"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(radiative_transfer_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Frame dragging and ergosphere validation tests (Phase 4.1)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/frame_dragging_test.cpp")
     add_executable(frame_dragging_test
