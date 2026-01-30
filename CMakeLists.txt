@@ -1773,6 +1773,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # EHT shadow diameter validation tests (Phase 5.4)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_shadow_test.cpp")
+    add_executable(eht_shadow_test
+      "${PROJECT_SOURCE_DIR}/tests/eht_shadow_test.cpp"
+    )
+    target_include_directories(eht_shadow_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(eht_shadow_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME eht_shadow_validation COMMAND eht_shadow_test)
+    set_tests_properties(eht_shadow_validation PROPERTIES
+      LABELS "physics;eht;imaging;phase5"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(eht_shadow_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test
