@@ -1817,6 +1817,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Phase 5 multi-wavelength observational validation tests (Phase 5.6)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/phase5_multiwavelength_validation_test.cpp")
+    add_executable(phase5_multiwavelength_validation
+      "${PROJECT_SOURCE_DIR}/tests/phase5_multiwavelength_validation_test.cpp"
+    )
+    target_include_directories(phase5_multiwavelength_validation PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(phase5_multiwavelength_validation PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME phase5_multiwavelength_validation COMMAND phase5_multiwavelength_validation)
+    set_tests_properties(phase5_multiwavelength_validation PROPERTIES
+      LABELS "physics;synchrotron;radiative_transfer;eht;ligo;phase5"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(phase5_multiwavelength_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test
