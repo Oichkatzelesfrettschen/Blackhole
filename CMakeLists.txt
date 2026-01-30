@@ -1839,6 +1839,53 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # ========================================================================
+  # Phase 6: GPU Acceleration and GRMHD Integration
+  # ========================================================================
+
+  # GPU compute raytracer performance validation tests (Phase 6.1d)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gpu_compute_validation_test.cpp")
+    add_executable(gpu_compute_validation_test
+      "${PROJECT_SOURCE_DIR}/tests/gpu_compute_validation_test.cpp"
+    )
+    target_include_directories(gpu_compute_validation_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(gpu_compute_validation_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME gpu_compute_validation COMMAND gpu_compute_validation_test)
+    set_tests_properties(gpu_compute_validation PROPERTIES
+      LABELS "gpu;compute;phase6;raytracer"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(gpu_compute_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # GRMHD metadata and tile caching validation tests (Phase 6.2a)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_metadata_test.cpp")
+    add_executable(grmhd_metadata_test
+      "${PROJECT_SOURCE_DIR}/tests/grmhd_metadata_test.cpp"
+    )
+    target_include_directories(grmhd_metadata_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/grmhd"
+    )
+    target_compile_options(grmhd_metadata_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME grmhd_metadata_validation COMMAND grmhd_metadata_test)
+    set_tests_properties(grmhd_metadata_validation PROPERTIES
+      LABELS "grmhd;streaming;tile_cache;phase6"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(grmhd_metadata_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test
