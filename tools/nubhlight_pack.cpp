@@ -453,6 +453,9 @@ struct MultiDumpMetadata {
   PackMetadata singleFrameMetadata;  // Template metadata for each frame
 };
 
+// TODO: Phase 6.2 - Multi-dump GRMHD streaming support
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static std::vector<std::string> globFiles(const std::string& pattern) {
   std::vector<std::string> files;
   glob_t globResult;
@@ -508,6 +511,7 @@ static void writeMultiDumpMetadata(std::ostream& out, const MultiDumpMetadata& m
   out << "  }\n";
   out << "}\n";
 }
+#pragma GCC diagnostic pop
 
 // Note: Multi-dump packing implementation would go here
 // For now, this is a stub showing the intended architecture
