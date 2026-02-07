@@ -1930,6 +1930,226 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Absorption models validation tests (Phase 7.1a)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/absorption_models_test.cpp")
+    add_executable(absorption_models_test
+      "${PROJECT_SOURCE_DIR}/tests/absorption_models_test.cpp"
+    )
+    target_include_directories(absorption_models_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(absorption_models_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME absorption_models_validation COMMAND absorption_models_test)
+    set_tests_properties(absorption_models_validation PROPERTIES
+      LABELS "absorption;models;phase7"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(absorption_models_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Scattering models validation tests (Phase 7.1b)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/scattering_models_test.cpp")
+    add_executable(scattering_models_test
+      "${PROJECT_SOURCE_DIR}/tests/scattering_models_test.cpp"
+    )
+    target_include_directories(scattering_models_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(scattering_models_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME scattering_models_validation COMMAND scattering_models_test)
+    set_tests_properties(scattering_models_validation PROPERTIES
+      LABELS "scattering;models;phase7"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(scattering_models_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # RT-GRMHD composite validation tests (Phase 7.1c)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/rt_grmhd_composite_test.cpp")
+    add_executable(rt_grmhd_composite_test
+      "${PROJECT_SOURCE_DIR}/tests/rt_grmhd_composite_test.cpp"
+    )
+    target_include_directories(rt_grmhd_composite_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(rt_grmhd_composite_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME rt_grmhd_composite_validation COMMAND rt_grmhd_composite_test)
+    set_tests_properties(rt_grmhd_composite_validation PROPERTIES
+      LABELS "radiative;transfer;grmhd;phase7"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(rt_grmhd_composite_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Phase 7 pipeline validation tests (Phase 7.1d)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/phase7_pipeline_validation_test.cpp")
+    add_executable(phase7_pipeline_validation
+      "${PROJECT_SOURCE_DIR}/tests/phase7_pipeline_validation_test.cpp"
+    )
+    target_include_directories(phase7_pipeline_validation PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(phase7_pipeline_validation PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME phase7_pipeline_validation COMMAND phase7_pipeline_validation)
+    set_tests_properties(phase7_pipeline_validation PROPERTIES
+      LABELS "phase7;radiative;transfer;pipeline"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(phase7_pipeline_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Time series interpolation validation tests (Phase 8.1a)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/timeseries_interpolation_test.cpp")
+    add_executable(timeseries_interpolation_test
+      "${PROJECT_SOURCE_DIR}/tests/timeseries_interpolation_test.cpp"
+    )
+    target_include_directories(timeseries_interpolation_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(timeseries_interpolation_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME timeseries_interpolation_validation COMMAND timeseries_interpolation_test)
+    set_tests_properties(timeseries_interpolation_validation PROPERTIES
+      LABELS "timeseries;interpolation;phase8"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(timeseries_interpolation_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Temporal GRMHD field sampling tests (Phase 8.1b)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/temporal_grmhd_sampling_test.cpp")
+    add_executable(temporal_grmhd_sampling_test
+      "${PROJECT_SOURCE_DIR}/tests/temporal_grmhd_sampling_test.cpp"
+    )
+    target_include_directories(temporal_grmhd_sampling_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(temporal_grmhd_sampling_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME temporal_grmhd_sampling_validation COMMAND temporal_grmhd_sampling_test)
+    set_tests_properties(temporal_grmhd_sampling_validation PROPERTIES
+      LABELS "temporal;grmhd;sampling;phase8"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(temporal_grmhd_sampling_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Phase 8.1c: Advanced Playback Control
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/playback_control_test.cpp")
+    add_executable(playback_control_test
+      "${PROJECT_SOURCE_DIR}/tests/playback_control_test.cpp"
+    )
+    target_include_directories(playback_control_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(playback_control_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME playback_control_validation COMMAND playback_control_test)
+    set_tests_properties(playback_control_validation PROPERTIES
+      LABELS "playback;control;timeline;phase8"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(playback_control_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Phase 8.1d: Full Pipeline Validation
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/phase8_pipeline_validation_test.cpp")
+    add_executable(phase8_pipeline_validation
+      "${PROJECT_SOURCE_DIR}/tests/phase8_pipeline_validation_test.cpp"
+    )
+    target_include_directories(phase8_pipeline_validation PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(phase8_pipeline_validation PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME phase8_pipeline_validation COMMAND phase8_pipeline_validation)
+    set_tests_properties(phase8_pipeline_validation PROPERTIES
+      LABELS "phase8;pipeline;validation;integration"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(phase8_pipeline_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Phase 9.1: Parameter Adjustment & Multi-Sequence Sync
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/parameter_adjustment_test.cpp")
+    add_executable(parameter_adjustment_test
+      "${PROJECT_SOURCE_DIR}/tests/parameter_adjustment_test.cpp"
+    )
+    target_include_directories(parameter_adjustment_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(parameter_adjustment_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME parameter_adjustment_validation COMMAND parameter_adjustment_test)
+    set_tests_properties(parameter_adjustment_validation PROPERTIES
+      LABELS "parameter;adjustment;phase9;realtime"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(parameter_adjustment_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Phase 9.2: Snapshot Management & Parameter History
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/parameter_snapshots_test.cpp")
+    add_executable(parameter_snapshots_test
+      "${PROJECT_SOURCE_DIR}/tests/parameter_snapshots_test.cpp"
+    )
+    target_include_directories(parameter_snapshots_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(parameter_snapshots_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME parameter_snapshots_validation COMMAND parameter_snapshots_test)
+    set_tests_properties(parameter_snapshots_validation PROPERTIES
+      LABELS "parameter;snapshot;history;phase9"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(parameter_snapshots_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # FastNoise2 integration test
   if(ENABLE_FASTNOISE2)
     add_executable(noise_generator_test

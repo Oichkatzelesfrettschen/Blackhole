@@ -45,7 +45,9 @@ struct PixelBufferObject {
 class AsyncUploadPipeline {
 public:
     explicit AsyncUploadPipeline(uint32_t maxPendingUploads = 4)
-        : maxPending_(maxPendingUploads), uploadCount_(0), completionCount_(0) {}
+        : uploadCount_(0), completionCount_(0) {
+        (void)maxPendingUploads; // Suppress unused parameter warning
+    }
 
     /**
      * QueuePBOUpload: submit PBO for async GPU transfer
@@ -100,13 +102,13 @@ public:
     }
 
     // Statistics
-    uint32_t getPendingCount() const { return pendingUploads_.size(); }
+    uint32_t getPendingCount() const { return static_cast<uint32_t>(pendingUploads_.size()); }
     uint64_t getTotalUploads() const { return uploadCount_; }
     uint64_t getCompletedUploads() const { return completionCount_; }
 
 private:
     std::vector<std::shared_ptr<PixelBufferObject>> pendingUploads_;
-    uint32_t maxPending_;
+    // uint32_t maxPending_; // Unused
     uint64_t uploadCount_;
     uint64_t completionCount_;
 };
@@ -146,7 +148,7 @@ bool test_async_upload_queue() {
     std::vector<uint64_t> fenceIds;
     for (int i = 0; i < 6; ++i) {
         auto pbo = std::make_shared<grmhd::PixelBufferObject>();
-        pbo->id = i;
+        pbo->id = static_cast<uint32_t>(i);
         pbo->sizeBytes = 32768;
         uint64_t fenceId = pipeline.queuePBOUpload(pbo);
         fenceIds.push_back(fenceId);
@@ -193,7 +195,7 @@ bool test_batch_upload_wait() {
     // Queue 8 uploads
     for (int i = 0; i < 8; ++i) {
         auto pbo = std::make_shared<grmhd::PixelBufferObject>();
-        pbo->id = i;
+        pbo->id = static_cast<uint32_t>(i);
         pbo->sizeBytes = 32768;
         pipeline.queuePBOUpload(pbo);
     }
@@ -232,7 +234,7 @@ bool test_pbo_bandwidth() {
     // For 2040 tiles (1920x1080) at 60 FPS
     uint32_t tileCount = 2040;
     uint32_t frameRate = 60;
-    double totalBytesPerFrame = (double)pboSize * tileCount;
+    double totalBytesPerFrame = static_cast<double>(pboSize) * tileCount;
     double bandwidth_required = (totalBytesPerFrame * frameRate) / 1e9;
 
     bool bandwidth_ok = (bandwidth_required <= gpuBandwidth / 1e9);
@@ -298,7 +300,7 @@ bool test_async_throughput() {
     pipeline.waitForCompletion();
     bool completion_ok = (pipeline.getCompletedUploads() == tileCount);
 
-    double totalBytes = (double)tileCount * pboSize;
+    double totalBytes = static_cast<double>(tileCount) * pboSize;
     double totalGiB = totalBytes / (1024 * 1024 * 1024);
 
     std::cout << "  Tiles queued: " << tileCount << "\n"

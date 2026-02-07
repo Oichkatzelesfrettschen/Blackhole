@@ -1,7 +1,11 @@
 #ifndef KERR_GLSL
 #define KERR_GLSL
 
-#include "physics_constants.glsl"
+#include "include/physics_constants.glsl"
+
+// ============================================================================
+// Kerr Metric Utilities
+// ============================================================================
 
 struct KerrConsts {
   float E;

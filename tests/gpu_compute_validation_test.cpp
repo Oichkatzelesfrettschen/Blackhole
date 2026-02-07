@@ -159,7 +159,7 @@ bool test_register_pressure() {
     // RTX 40-series: 256 KB per SM / (threads per block) = max regs/thread
     uint32_t max_regs_per_thread = 256;  // Typical for RTX 40-series
 
-    float utilization = static_cast<float>(total_regs) / max_regs_per_thread * 100.0f;
+    float utilization = static_cast<float>(total_regs) / static_cast<float>(max_regs_per_thread) * 100.0f;
     bool pressure_ok = (total_regs <= 128);  // Conservative target
 
     std::cout << "  State registers: " << registers_per_state << "\n"

@@ -142,7 +142,7 @@ bool test_tile_retrieval() {
     grmhd::TileCache cache(256);
 
     // Simulate tile accesses
-    for (int i = 0; i < 10; ++i) {
+    for (uint32_t i = 0; i < 10; ++i) {
         cache.getTile(i, 0);
     }
 
@@ -229,7 +229,7 @@ bool test_multidump_sequence() {
     grmhd::GRMHDReader reader("/tmp");
     reader.loadSequenceMetadata("/tmp/mock_metadata.json");
 
-    uint32_t dumpCount = reader.getDumpCount();
+    uint32_t dumpCount = static_cast<uint32_t>(reader.getDumpCount());
     bool sequence_ok = (dumpCount >= 10);
 
     // Verify each dump can be read
