@@ -76,6 +76,7 @@ find_package(glm REQUIRED)
 find_package(stb REQUIRED)
 find_package(HighFive REQUIRED)
 find_package(CLI11 REQUIRED)
+find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 # SPIR-V Tooling removed in Phase 3 (C++23 -> GLSL transpilation)
 # All SPIR-V compilation now uses GLSL 4.60 shader includes directly
@@ -2232,6 +2233,8 @@ if(BUILD_TESTING)
       glfw
       glbinding::glbinding
       glm::glm
+      GTest::gtest
+      GTest::gtest_main
     )
 
     # Optional Z3 linking if available

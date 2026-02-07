@@ -141,6 +141,11 @@ public:
      */
     GLuint getSpectrumLUTTexture() const { return spectrumLUTTexture_; }
 
+    /**
+     * @brief Free OpenGL resources.
+     */
+    void cleanup();
+
 private:
     // OpenGL texture handles
     GLuint tempLUTTexture_ = 0;       // Temperature T_H(M) LUT
@@ -194,10 +199,6 @@ private:
                         std::vector<std::vector<float>>& columns,
                         bool skipHeader = true);
 
-    /**
-     * @brief Free OpenGL resources.
-     */
-    void cleanup();
 };
 
 /**

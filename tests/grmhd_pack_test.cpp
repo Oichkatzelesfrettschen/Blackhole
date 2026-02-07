@@ -88,17 +88,17 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (texture.width != static_cast<int>(dims[0]) ||
-      texture.height != static_cast<int>(dims[1]) ||
-      texture.depth != static_cast<int>(dims[2])) {
+  if (static_cast<std::size_t>(texture.width) != dims[0] ||
+      static_cast<std::size_t>(texture.height) != dims[1] ||
+      static_cast<std::size_t>(texture.depth) != dims[2]) {
     std::cerr << "[FAIL] grid dims mismatch\n";
     return 1;
   }
 
   // Use max/lowest instead of infinity due to fast-math optimization flag
   // that makes infinity() return 0 with -ffinite-math-only
-  std::array<float, 4> expectedMin;
-  std::array<float, 4> expectedMax;
+  std::array<float, 4> expectedMin{};
+  std::array<float, 4> expectedMax{};
   expectedMin.fill(std::numeric_limits<float>::max());
   expectedMax.fill(std::numeric_limits<float>::lowest());
   for (std::size_t i = 0; i + 3 < data.size(); i += 4) {

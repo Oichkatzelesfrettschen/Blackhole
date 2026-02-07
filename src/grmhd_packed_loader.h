@@ -18,7 +18,7 @@ struct GrmhdPackedTexture {
   std::vector<float> maxValues;
 };
 
-bool loadGrmhdPackedTexture(const std::string &metadataPath, GrmhdPackedTexture &out,
+bool loadGrmhdPackedTexture(const std::string &metadataPath, GrmhdPackedTexture &texture,
                             std::string &error, bool validate = true, bool upload = true);
 void destroyGrmhdPackedTexture(GrmhdPackedTexture &texture);
 

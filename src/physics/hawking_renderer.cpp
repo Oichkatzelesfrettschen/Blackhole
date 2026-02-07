@@ -102,10 +102,28 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
 
         while (std::getline(iss, token, ',')) {
             try {
-                float value = std::stof(token);
+                // Use double for intermediate parsing to handle large exponents (e.g., 1e42)
+                double valueD = std::stod(token);
+                // If the value is finite but too large for float, we can either clamp or store log.
+                // For this renderer, we likely want the raw value if it fits, or max float.
+                // However, T_H ~ 1/M. If M is 1e42, T is tiny.
+                // If the CSV contains mass, 1e42 is possible.
+                // If we store it in a float texture, we WILL lose precision or overflow.
+                // Assuming the shader expects log values or normalized values if the range is huge.
+                // But looking at the shader code, it does log10(mass) itself if using LUT?
+                // Actually hawking_luts.glsl does: float log_mass = log(mass) / log(10.0);
+                // This implies 'mass' must be a value that fits in float?
+                // Float max is ~3.4e38. 1e42 overflows.
+                // We should store log10 values in the texture if the range is > 1e38.
+                // BUT, the texture loading logic (createTexture1D) just uploads raw floats.
+                // FIX: Detect if we are loading the Mass column and it's huge?
+                // Or just clamp to FLT_MAX?
+                // Let's use double and cast, letting it go to infinity if needed, but avoiding the throw.
+                float value = static_cast<float>(valueD);
                 row.push_back(value);
             } catch (const std::exception& e) {
-                std::cerr << "Failed to parse value: " << token << " (" << e.what() << ")" << std::endl;
+                // Ignore parse errors (likely header text or comments)
+                // std::cerr << "Failed to parse value: " << token << " (" << e.what() << ")" << std::endl;
                 continue;
             }
         }

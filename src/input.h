@@ -207,6 +207,9 @@ public:
   // Effective delta time (accounts for pause and time scale)
   float getEffectiveDeltaTime(float rawDeltaTime) const;
 
+  // Override GUI capture (for Viewport interaction)
+  void setIgnoreGuiCapture(bool ignore) { ignoreGuiCapture_ = ignore; }
+
 private:
   InputManager() = default;
   ~InputManager() = default;
@@ -244,6 +247,7 @@ private:
   KeyAction remappingAction_ = KeyAction::COUNT;
 
   // State
+  bool ignoreGuiCapture_ = false;
   bool uiVisible_ = true;
   bool fullscreen_ = false;
   bool paused_ = false;

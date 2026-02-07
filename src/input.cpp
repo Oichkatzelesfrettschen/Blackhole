@@ -372,7 +372,7 @@ void InputManager::updateCamera(float deltaTime) {
   };
 
   // Keyboard camera controls (only when UI is not capturing input)
-  if (!ImGui::GetIO().WantCaptureKeyboard) {
+  if (!ImGui::GetIO().WantCaptureKeyboard || ignoreGuiCapture_) {
     // Orbit controls via keyboard
     if (isActive(KeyAction::CameraMoveLeft)) {
       camera_.yaw -= rotateSpeed * keyXMult;
@@ -411,7 +411,7 @@ void InputManager::updateCamera(float deltaTime) {
   }
 
   // Mouse orbit (right-click drag)
-  if (!ImGui::GetIO().WantCaptureMouse) {
+  if (!ImGui::GetIO().WantCaptureMouse || ignoreGuiCapture_) {
     if (isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
       camera_.yaw += mouseDeltaX_ * 0.3f * inputScale;
       camera_.pitch -= mouseDeltaY_ * 0.3f * inputScale;
@@ -429,7 +429,7 @@ void InputManager::updateCamera(float deltaTime) {
   }
 
   // Gamepad controls (sticks + triggers)
-  if (!ImGui::GetIO().WantCaptureKeyboard) {
+  if (!ImGui::GetIO().WantCaptureKeyboard || ignoreGuiCapture_) {
     updateGamepad(scaledDelta);
   }
 

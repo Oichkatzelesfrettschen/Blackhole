@@ -1,7 +1,7 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2026-01-15
-**Status:** Phase 10.1+ Shader Validation COMPLETE - All 21 shaders compile without errors
+**Last Updated:** 2026-02-06
+**Status:** Stable Release Candidate - Crash-free, functionality restored, 0 warnings
 **Roadmap:** See `docs/MASTER_ROADMAP.md` for the consolidated execution plan
 
 ---
@@ -9,8 +9,9 @@
 ## Executive Summary
 
 The black hole simulation renders correctly with:
-- Schwarzschild geodesic ray tracing
-- Accretion disk with procedural noise
+- Schwarzschild geodesics and experimental Kerr ray tracing
+- Accretion disk with procedural noise (vertical density control restored)
+- Physically accurate Flamm's paraboloid wiregrid visualization
 - 8-level bloom post-processing
 - ACES tonemapping
 - Optional LUT-backed emissivity/redshift shading (runtime or assets/luts)
@@ -37,6 +38,61 @@ The simulation is fully operational with the core rendering pipeline:
 - TODO/FIXME scan: ImGui backend TODO/FIXME notes + a new stub TODO in `src/rmlui_overlay.cpp` (RmlUi integration)
 
 ## Recent Changes
+
+### UI/UX & Wireframe Alignment (2026-02-06 23:05) ✅ COMPLETE
+
+**Achievement**: Refactored chaotic UI into a cohesive "Settings" panel and aligned geometry.
+- **Wireframe Alignment**:
+  - Enforced `radiusMin >= r_s * 1.01` to prevent grid clipping into the event horizon.
+  - Aligned grid coordinate system to match the black hole's gravity well.
+- **UI Refactor**:
+  - Implemented **Docking Viewport** architecture: The 3D scene is rendered to a texture and displayed in a central "Viewport" window, fully separated from UI panels.
+  - **Layout**: Default layout reset to a **Split Left Dock** (Settings/Display above, Controls/Performance below) and a large central Viewport.
+  - **Interactivity**: Implemented mouse capture override (`setIgnoreGuiCapture`) to allow camera control (orbit/zoom) when interacting with the Viewport window.
+  - Consolidated scattered windows into a unified **"Settings"** panel and organized overlays (Controls, Performance) into a sidebar layout.
+  - Applied a high-contrast **"16-bit Voxel"** dark theme.
+  - Disabled Multi-Viewports to resolve Linux/Wayland transparency artifacts.
+  - Fixed aspect ratio stretching by syncing render target size to the Viewport window dimensions.
+
+### Visual Fidelity & Stability Fixes (2026-02-06 22:45) ✅ COMPLETE
+
+**Achievement**: Addressed "crappy" visuals and log noise.
+- **Log Noise Fix**: Modified `HawkingRenderer::parseCSV` to silently skip non-numeric tokens (headers/comments), eliminating hundreds of `Failed to parse value` errors.
+- **Missing Asset Fix**: Created `assets/grmhd` directory structure to prevent "not found" errors.
+- **Visual Tuning**:
+  - **Wiregrid**: Increased fog range (100 -> 200) and softened pulse effect (mix 0.5, pow 4.0) for a majestic, non-intrusive look.
+  - **Tonemapping**: Reduced film grain (0.015) and chromatic aberration (0.002) for a cleaner, high-fidelity image.
+  - **UI**: Verified dark theme application.
+
+### Visual Fidelity Overhaul (2026-02-06) ✅ COMPLETE
+
+**Achievement**: Implemented "full, correct and proper" visual upgrades across UI, topology, and post-processing.
+- **Wiregrid Topology Upgrade**:
+  - Implemented **logarithmic radial spacing** ($r \propto \text{const}^t$) to concentrate geometry near the event horizon where curvature is highest.
+  - Increased default mesh resolution (32 rings, 256 segments) for smooth curves.
+  - Upgraded shaders to support **distance-based fog** and dynamic **energy pulse** effects for better depth perception.
+- **Post-Processing Pipeline**:
+  - Enhanced ACES tonemapper with **Chromatic Aberration** (lens dispersion), **Vignette** (corner darkening), and animated **Film Grain** (dithering) for cinematic look.
+- **UI Refinement**:
+  - Implemented `setupImGuiStyle()` with a polished "Blackhole" dark theme (rounded corners, dark grey/blue palette) replacing the default Dear ImGui style.
+
+### Stability & Functionality Restoration (2026-02-06) ✅ COMPLETE
+
+**Achievement**: Fixed startup/shutdown crashes and restored disconnected functionality.
+- **Crash Resolution**: Added explicit cleanup for static singletons (`NoiseTextureCache`, `HawkingRenderer`, `GrmhdPackedTexture`) before OpenGL context destruction, fixing `SIGSEGV` on shutdown.
+- **Functionality Restoration**: Reconnected `adiskDensityV` parameter to runtime LUT generation (`diskDensityLUT`), restoring vertical density control without shader code bloat.
+- **Wiregrid Upgrade**: Updated wiregrid visualization to use Flamm's paraboloid embedding ($z = 2\sqrt{r_s(r-r_s)}$) for physically accurate curvature representation.
+- **Code Cleanup**:
+  - Unified physics parameter calculations (`schwarzschildRadius`, `iscoRadius`, `photonSphereRadius`) to eliminate redundancy.
+  - Removed unused `adiskDensityV` uniform upload (now handled via LUT).
+  - Fixed `unused variable` warnings in `main.cpp`.
+  - Suppressed benign CSV header parsing errors in `HawkingRenderer`.
+
+**Build Status**:
+- Main executable builds cleanly with `-Werror`.
+- Runtime verified stable (no crash after 5 minutes of execution).
+
+---
 
 ### Shader Validation & Transpilation Fixes (2026-01-15) ✅ COMPLETE
 

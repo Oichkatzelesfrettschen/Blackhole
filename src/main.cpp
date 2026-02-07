@@ -48,6 +48,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <ImGuizmo.h>
 #include <implot.h>
 #include <nlohmann/json.hpp>
@@ -369,8 +370,8 @@ struct WiregridMesh {
 };
 
 struct WiregridParams {
-  int ringCount = 16;
-  int ringSegments = 128;
+  int ringCount = 32;
+  int ringSegments = 256;
   int spokeCount = 32;
   float radiusMin = 2.0f;
   float radiusMax = 50.0f;
@@ -395,23 +396,45 @@ static void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params)
     return;
   }
 
-  // Curvature function: gravitational potential visualization
-  // y(r) = -scale * r_s / r, normalized so y(radiusMax) = 0
+  // Curvature function: Flamm's paraboloid (spatial slice embedding)
+  // z(r) = 2 * sqrt(r_s * (r - r_s)) for r >= r_s
   auto computeCurvature = [&](float r) -> float {
     if (!params.showCurvature || params.schwarzschildRadius <= 0.0f) {
       return 0.0f;
     }
     float rs = params.schwarzschildRadius;
-    float rMax = params.radiusMax;
-    // Gravitational potential: -r_s/r, shifted so radiusMax is at y=0
-    float potential = -(rs / r) + (rs / rMax);
-    return potential * params.curvatureScale;
+    
+    // Clamp r to be slightly above rs to avoid singularity/NaN
+    float effectiveR = std::max(r, rs * 1.01f);
+    
+    // Flamm's paraboloid formula
+    // We invert it (-z) to show a "well"
+    float embeddingZ = 2.0f * std::sqrt(rs * (effectiveR - rs));
+    
+    // Shift so that outer radius is at y=0 (optional, but keeps grid grounded)
+    // float outerZ = 2.0f * std::sqrt(rs * (params.radiusMax - rs));
+    // return (embeddingZ - outerZ) * params.curvatureScale; 
+    
+    // Standard gravity well look: 
+    return -embeddingZ * params.curvatureScale;
   };
 
+  // Ensure grid starts outside the event horizon
+  float effectiveMin = std::max(params.radiusMin, params.schwarzschildRadius * 1.01f);
+  float effectiveMax = std::max(params.radiusMax, effectiveMin + 1.0f);
+
   const float twoPi = 6.283185307179586f;
+  const float logRatio = effectiveMax / effectiveMin;
+
+  auto getRadius = [&](float t) {
+    // Use logarithmic spacing to place more rings near the event horizon
+    // r = r_min * (r_max/r_min)^t
+    return effectiveMin * std::pow(logRatio, t);
+  };
+
   for (int ring = 0; ring < params.ringCount; ++ring) {
     float t = static_cast<float>(ring) / static_cast<float>(params.ringCount - 1);
-    float r = params.radiusMin + t * (params.radiusMax - params.radiusMin);
+    float r = getRadius(t);
     float y = computeCurvature(r);
     for (int seg = 0; seg < params.ringSegments; ++seg) {
       float a0 = twoPi * static_cast<float>(seg) / static_cast<float>(params.ringSegments);
@@ -426,12 +449,12 @@ static void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params)
   for (int spoke = 0; spoke < params.spokeCount; ++spoke) {
     float a = twoPi * static_cast<float>(spoke) / static_cast<float>(params.spokeCount);
     // Spokes need multiple segments to show curvature
-    const int spokeSegments = params.ringCount;
+    const int spokeSegments = params.ringCount * 2; // Increase resolution for smooth spokes
     for (int i = 0; i < spokeSegments; ++i) {
       float t0 = static_cast<float>(i) / static_cast<float>(spokeSegments);
       float t1 = static_cast<float>(i + 1) / static_cast<float>(spokeSegments);
-      float r0 = params.radiusMin + t0 * (params.radiusMax - params.radiusMin);
-      float r1 = params.radiusMin + t1 * (params.radiusMax - params.radiusMin);
+      float r0 = getRadius(t0);
+      float r1 = getRadius(t1);
       float y0 = computeCurvature(r0);
       float y1 = computeCurvature(r1);
       glm::vec3 p0(r0 * std::cos(a), y0, r0 * std::sin(a));
@@ -817,7 +840,6 @@ static void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniform
   rtti.floatUniforms["time"] = interop.timeSec;
   rtti.floatUniforms["depthFar"] = interop.depthFar;
   rtti.floatUniforms["schwarzschildRadius"] = interop.schwarzschildRadius;
-  rtti.floatUniforms["iscoRadius"] = interop.iscoRadius;
   rtti.floatUniforms["kerrSpin"] = interop.kerrSpin;
   rtti.floatUniforms["adiskEnabled"] = interop.adiskEnabled;
   rtti.floatUniforms["enableRedshift"] = interop.enableRedshift;
@@ -858,7 +880,6 @@ static void applyInteropComputeUniforms(GLuint program, const InteropUniforms &i
   glUniform1f(glGetUniformLocation(program, "schwarzschildRadius"),
               interop.schwarzschildRadius);
   glUniform1f(glGetUniformLocation(program, "kerrSpin"), interop.kerrSpin);
-  glUniform1f(glGetUniformLocation(program, "iscoRadius"), interop.iscoRadius);
   glUniform1i(glGetUniformLocation(program, "interopMaxSteps"), interop.maxSteps);
   glUniform1f(glGetUniformLocation(program, "interopStepSize"), interop.stepSize);
   glUniform1f(glGetUniformLocation(program, "depthFar"), interop.depthFar);
@@ -1135,6 +1156,78 @@ static GLFWwindow *initializeWindow(int width, int height) {
   return window;
 }
 
+// Configure custom ImGui style for "Blackhole" theme (16-bit Voxel Aesthetic)
+static void setupImGuiStyle() {
+  ImGuiStyle &style = ImGui::GetStyle();
+  ImVec4 *colors = style.Colors;
+
+  // Voxel/Retro Geometry: Sharp corners, distinct borders
+  style.WindowRounding = 0.0f;
+  style.FrameRounding = 0.0f;
+  style.PopupRounding = 0.0f;
+  style.ScrollbarRounding = 0.0f;
+  style.GrabRounding = 0.0f;
+  style.TabRounding = 0.0f;
+  style.FrameBorderSize = 1.0f;
+  style.WindowBorderSize = 1.0f;
+  style.PopupBorderSize = 1.0f;
+  style.WindowPadding = ImVec2(8, 8);
+  style.FramePadding = ImVec2(6, 4);
+  style.ItemSpacing = ImVec2(8, 6);
+
+  // Retro Palette: Deep Blue/Black bg, Cyan/Orange accents
+  colors[ImGuiCol_Text] = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
+  colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+  colors[ImGuiCol_WindowBg] = ImVec4(0.05f, 0.05f, 0.08f, 1.00f);
+  colors[ImGuiCol_ChildBg] = ImVec4(0.08f, 0.08f, 0.12f, 1.00f);
+  colors[ImGuiCol_PopupBg] = ImVec4(0.05f, 0.05f, 0.08f, 1.00f);
+  colors[ImGuiCol_Border] = ImVec4(0.30f, 0.30f, 0.40f, 1.00f);
+  colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+  colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.15f, 0.20f, 1.00f);
+  colors[ImGuiCol_FrameBgHovered] = ImVec4(0.25f, 0.25f, 0.35f, 1.00f);
+  colors[ImGuiCol_FrameBgActive] = ImVec4(0.30f, 0.30f, 0.45f, 1.00f);
+  colors[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.10f, 0.15f, 1.00f);
+  colors[ImGuiCol_TitleBgActive] = ImVec4(0.15f, 0.15f, 0.25f, 1.00f);
+  colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.05f, 0.05f, 0.08f, 1.00f);
+  colors[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.10f, 0.15f, 1.00f);
+  colors[ImGuiCol_ScrollbarBg] = ImVec4(0.05f, 0.05f, 0.08f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.30f, 0.30f, 0.40f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.40f, 0.50f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.50f, 0.50f, 0.60f, 1.00f);
+  colors[ImGuiCol_CheckMark] = ImVec4(0.00f, 0.80f, 1.00f, 1.00f); // Cyan
+  colors[ImGuiCol_SliderGrab] = ImVec4(0.00f, 0.60f, 0.80f, 1.00f);
+  colors[ImGuiCol_SliderGrabActive] = ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
+  colors[ImGuiCol_Button] = ImVec4(0.20f, 0.20f, 0.25f, 1.00f);
+  colors[ImGuiCol_ButtonHovered] = ImVec4(0.30f, 0.30f, 0.40f, 1.00f);
+  colors[ImGuiCol_ButtonActive] = ImVec4(0.00f, 0.50f, 0.70f, 1.00f);
+  colors[ImGuiCol_Header] = ImVec4(0.20f, 0.20f, 0.25f, 1.00f);
+  colors[ImGuiCol_HeaderHovered] = ImVec4(0.30f, 0.30f, 0.40f, 1.00f);
+  colors[ImGuiCol_HeaderActive] = ImVec4(0.00f, 0.50f, 0.70f, 1.00f);
+  colors[ImGuiCol_Separator] = ImVec4(0.30f, 0.30f, 0.40f, 1.00f);
+  colors[ImGuiCol_SeparatorHovered] = ImVec4(0.40f, 0.40f, 0.50f, 1.00f);
+  colors[ImGuiCol_SeparatorActive] = ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
+  colors[ImGuiCol_ResizeGrip] = ImVec4(0.30f, 0.30f, 0.40f, 1.00f);
+  colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.40f, 0.40f, 0.50f, 1.00f);
+  colors[ImGuiCol_ResizeGripActive] = ImVec4(0.50f, 0.50f, 0.60f, 1.00f);
+  colors[ImGuiCol_Tab] = ImVec4(0.15f, 0.15f, 0.20f, 1.00f);
+  colors[ImGuiCol_TabHovered] = ImVec4(0.30f, 0.30f, 0.40f, 1.00f);
+  colors[ImGuiCol_TabActive] = ImVec4(0.20f, 0.20f, 0.25f, 1.00f);
+  colors[ImGuiCol_TabUnfocused] = ImVec4(0.10f, 0.10f, 0.15f, 1.00f);
+  colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.15f, 0.15f, 0.20f, 1.00f);
+  colors[ImGuiCol_DockingPreview] = ImVec4(0.00f, 0.80f, 1.00f, 0.70f);
+  colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+  colors[ImGuiCol_PlotLines] = ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
+  colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.50f, 0.00f, 1.00f);
+  colors[ImGuiCol_PlotHistogram] = ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
+  colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.50f, 0.00f, 1.00f);
+  colors[ImGuiCol_TextSelectedBg] = ImVec4(0.00f, 0.50f, 0.80f, 0.35f);
+  colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+  colors[ImGuiCol_NavHighlight] = ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
+  colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+  colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+  colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.75f);
+}
+
 // Initialize ImGui context and backends
 static void initializeImGui(GLFWwindow *window) {
   const char *glsl_version = "#version 460";
@@ -1144,10 +1237,12 @@ static void initializeImGui(GLFWwindow *window) {
   ImPlot::CreateContext();
   ImGuiIO &io = ImGui::GetIO();
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable keyboard navigation
+  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
+  // io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;   // Disable Multi-Viewport (causes artifacts on Wayland)
   ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
   ImGuizmo::SetOrthographic(false);
 
-  ImGui::StyleColorsDark();
+  setupImGuiStyle();
 
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
@@ -1214,7 +1309,8 @@ static void renderControlsSettingsPanel(int &cameraModeIndex, float &orbitRadius
                                         float &orbitSpeed) {
   auto &input = InputManager::instance();
 
-  ImGui::SetNextWindowPos(ImVec2(320, 10), ImGuiCond_FirstUseEver);
+  // Stack on the right side
+  ImGui::SetNextWindowPos(ImVec2(1020, 10), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(360, 520), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -1636,8 +1732,9 @@ static void renderDisplaySettingsPanel(GLFWwindow *window, int &swapInterval, fl
   auto &input = InputManager::instance();
   auto &settings = SettingsManager::instance().get();
 
-  ImGui::SetNextWindowPos(ImVec2(690, 10), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(320, 220), ImGuiCond_FirstUseEver);
+  // Stack below Controls
+  ImGui::SetNextWindowPos(ImVec2(1020, 540), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(360, 220), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Display", nullptr, ImGuiWindowFlags_NoCollapse)) {
     bool fullscreen = input.isFullscreen();
@@ -1730,7 +1827,8 @@ static void renderBackgroundPanel(const std::vector<BackgroundAsset> &assets,
                                   std::array<float, kBackgroundLayers> &layerLodBias) {
   auto &settings = SettingsManager::instance().get();
 
-  ImGui::SetNextWindowPos(ImVec2(1020, 10), ImGuiCond_FirstUseEver);
+  // Stack on the left side
+  ImGui::SetNextWindowPos(ImVec2(10, 300), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 260), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Background", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -1781,7 +1879,8 @@ static void renderBackgroundPanel(const std::vector<BackgroundAsset> &assets,
 
 static void renderWiregridPanel(bool &wiregridEnabled, WiregridParams &params,
                                 glm::vec4 &color) {
-  ImGui::SetNextWindowPos(ImVec2(1020, 280), ImGuiCond_FirstUseEver);
+  // Stack below Background
+  ImGui::SetNextWindowPos(ImVec2(10, 570), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 220), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Wiregrid", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -2102,7 +2201,8 @@ static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &ti
                                    const TimingHistory &history, float cpuFrameMs,
                                    bool &perfOverlayEnabled, float &perfOverlayScale,
                                    bool &depthPrepassEnabled) {
-  ImGui::SetNextWindowPos(ImVec2(1020, 10), ImGuiCond_FirstUseEver);
+  // Stack below Wiregrid
+  ImGui::SetNextWindowPos(ImVec2(10, 800), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Performance", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -2155,6 +2255,35 @@ static void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &ti
     ImGui::TextDisabled("logs/perf/frame_times.csv");
   }
   ImGui::End();
+}
+
+static void resetLayout(ImGuiID dockspaceId) {
+    ImGui::DockBuilderRemoveNode(dockspaceId);
+    ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+
+    ImGuiID dockMainId = dockspaceId;
+    ImGuiID dockLeftId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, 0.30f, nullptr, &dockMainId);
+    ImGuiID dockLeftDownId = ImGui::DockBuilderSplitNode(dockLeftId, ImGuiDir_Down, 0.50f, nullptr, &dockLeftId);
+
+    // Dock Windows
+    ImGui::DockBuilderDockWindow("Viewport", dockMainId);
+    
+    // Left Upper: Main Settings
+    ImGui::DockBuilderDockWindow("Settings", dockLeftId);
+    ImGui::DockBuilderDockWindow("Display", dockLeftId);
+    ImGui::DockBuilderDockWindow("Background", dockLeftId);
+
+    // Left Lower: Controls, Performance, Tools
+    ImGui::DockBuilderDockWindow("Controls", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("Performance", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("Wiregrid", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("Depth Effects", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("Gizmo", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("Controls Help", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("RmlUi", dockLeftDownId);
+
+    ImGui::DockBuilderFinish(dockspaceId);
 }
 
 int main(int argc, char **argv) {
@@ -2357,13 +2486,13 @@ int main(int argc, char **argv) {
   static bool multiDrawIndirectCount = false;
   static bool multiDrawSupported = false;
   static bool multiDrawCountSupported = false;
-  static bool multiDrawOverlayEnabled = true;
-  static int multiDrawInstanceCount = 2;
-  static GLuint multiDrawProgram = 0;
-  static GLuint multiDrawInstanceBuffer = 0;
-  static GLuint multiDrawCommandBuffer = 0;
-  static GLuint multiDrawCountBuffer = 0;
-  static GLuint multiDrawComputeProgram = 0;
+  [[maybe_unused]] static bool multiDrawOverlayEnabled = true;
+  [[maybe_unused]] static int multiDrawInstanceCount = 2;
+  [[maybe_unused]] static GLuint multiDrawProgram = 0;
+  [[maybe_unused]] static GLuint multiDrawInstanceBuffer = 0;
+  [[maybe_unused]] static GLuint multiDrawCommandBuffer = 0;
+  [[maybe_unused]] static GLuint multiDrawCountBuffer = 0;
+  [[maybe_unused]] static GLuint multiDrawComputeProgram = 0;
   static bool gpuTimingEnabled = false;
   static bool gpuTimingLogInit = false;
   static bool gpuTimingLogEnabled = false;
@@ -2380,9 +2509,9 @@ int main(int argc, char **argv) {
   static HudOverlay perfOverlay;
   static bool perfOverlayReady = false;
   static bool perfOverlayConfigInit = false;
-  static bool perfOverlayEnabled = true;
-  static float perfOverlayScale = 1.0f;
-  static bool depthPrepassEnabled = false; // For future mesh-based disk rendering
+  [[maybe_unused]] static bool perfOverlayEnabled = true;
+  [[maybe_unused]] static float perfOverlayScale = 1.0f;
+  [[maybe_unused]] static bool depthPrepassEnabled = false; // For future mesh-based disk rendering
   static ui::RmlUiOverlay rmluiOverlay;
   static bool rmluiEnabled = false;
   static bool rmluiReady = false;
@@ -2446,6 +2575,24 @@ int main(int argc, char **argv) {
   static int renderHeight = 0;
   static bool noiseTextureReady = false;
   static blackhole::NoiseTextureCache noiseCache;
+
+  auto loadGrmhdPacked = [&](const std::string &path) {
+    std::string error;
+    if (!loadGrmhdPackedTexture(path, grmhdTexture, error, true, true)) {
+      grmhdLoadError = error;
+      grmhdLoaded = false;
+      return false;
+    }
+    grmhdLoadError.clear();
+    grmhdLoaded = true;
+    return true;
+  };
+
+  if (!grmhdPathInit) {
+    std::snprintf(grmhdPathBuffer.data(), grmhdPathBuffer.size(),
+                  "assets/grmhd/grmhd_pack.json");
+    grmhdPathInit = true;
+  }
 
   if (!compareAutoInit) {
     const char *sweepEnv = std::getenv("BLACKHOLE_COMPARE_SWEEP");
@@ -2643,7 +2790,9 @@ int main(int argc, char **argv) {
     renderHeight = newHeight;
   };
 
-  auto updateLuts = [&](float spin) {
+  static float lutAdiskDensityV = 0.0f;
+
+  auto updateLuts = [&](float spin, float densityV) {
     spin = std::clamp(spin, -0.99f, 0.99f);
     if (!lutAssetsTried) {
       lutAssetsTried = true;
@@ -2655,22 +2804,10 @@ int main(int argc, char **argv) {
         !lutAssetEmissivity.values.empty() && !lutAssetRedshift.values.empty();
     if (useAssetLuts) {
       if (!lutInitialized || !lutFromAssets) {
-        if (texEmissivityLUT != 0) {
-          glDeleteTextures(1, &texEmissivityLUT);
-          texEmissivityLUT = 0;
-        }
-        if (texRedshiftLUT != 0) {
-          glDeleteTextures(1, &texRedshiftLUT);
-          texRedshiftLUT = 0;
-        }
-        if (texPhotonGlowLUT != 0) {
-          glDeleteTextures(1, &texPhotonGlowLUT);
-          texPhotonGlowLUT = 0;
-        }
-        if (texDiskDensityLUT != 0) {
-          glDeleteTextures(1, &texDiskDensityLUT);
-          texDiskDensityLUT = 0;
-        }
+        if (texEmissivityLUT != 0) { glDeleteTextures(1, &texEmissivityLUT); texEmissivityLUT = 0; }
+        if (texRedshiftLUT != 0) { glDeleteTextures(1, &texRedshiftLUT); texRedshiftLUT = 0; }
+        if (texPhotonGlowLUT != 0) { glDeleteTextures(1, &texPhotonGlowLUT); texPhotonGlowLUT = 0; }
+        if (texDiskDensityLUT != 0) { glDeleteTextures(1, &texDiskDensityLUT); texDiskDensityLUT = 0; }
 
         int lutSize = static_cast<int>(lutAssetEmissivity.values.size());
         texEmissivityLUT = createFloatTexture2D(lutSize, 1, lutAssetEmissivity.values);
@@ -2692,36 +2829,21 @@ int main(int argc, char **argv) {
         std::cout << "LUT asset-only mode active; skipping generated LUT fallback.\n";
         lutAssetOnlyWarned = true;
       }
-      if (texEmissivityLUT != 0) {
-        glDeleteTextures(1, &texEmissivityLUT);
-        texEmissivityLUT = 0;
-      }
-      if (texRedshiftLUT != 0) {
-        glDeleteTextures(1, &texRedshiftLUT);
-        texRedshiftLUT = 0;
-      }
-      if (texPhotonGlowLUT != 0) {
-        glDeleteTextures(1, &texPhotonGlowLUT);
-        texPhotonGlowLUT = 0;
-      }
+      if (texEmissivityLUT != 0) { glDeleteTextures(1, &texEmissivityLUT); texEmissivityLUT = 0; }
+      if (texRedshiftLUT != 0) { glDeleteTextures(1, &texRedshiftLUT); texRedshiftLUT = 0; }
+      if (texPhotonGlowLUT != 0) { glDeleteTextures(1, &texPhotonGlowLUT); texPhotonGlowLUT = 0; }
       lutInitialized = false;
       lutFromAssets = false;
       return;
     }
 
-    if (!lutInitialized || std::abs(spin - lutSpin) > 1e-3f || lutFromAssets) {
-      if (texEmissivityLUT != 0) {
-        glDeleteTextures(1, &texEmissivityLUT);
-        texEmissivityLUT = 0;
-      }
-      if (texRedshiftLUT != 0) {
-        glDeleteTextures(1, &texRedshiftLUT);
-        texRedshiftLUT = 0;
-      }
-      if (texPhotonGlowLUT != 0) {
-        glDeleteTextures(1, &texPhotonGlowLUT);
-        texPhotonGlowLUT = 0;
-      }
+    // Only regenerate if parameters changed or not initialized
+    if (!lutInitialized || std::abs(spin - lutSpin) > 1e-3f || std::abs(densityV - lutAdiskDensityV) > 1e-3f || lutFromAssets) {
+      // Cleanup existing textures
+      if (texEmissivityLUT != 0) { glDeleteTextures(1, &texEmissivityLUT); texEmissivityLUT = 0; }
+      if (texRedshiftLUT != 0) { glDeleteTextures(1, &texRedshiftLUT); texRedshiftLUT = 0; }
+      if (texPhotonGlowLUT != 0) { glDeleteTextures(1, &texPhotonGlowLUT); texPhotonGlowLUT = 0; }
+      if (texDiskDensityLUT != 0) { glDeleteTextures(1, &texDiskDensityLUT); texDiskDensityLUT = 0; }
 
       constexpr int kLutSize = 256;
       constexpr double kMassSolar = 4.0e6;
@@ -2734,18 +2856,13 @@ int main(int argc, char **argv) {
       texEmissivityLUT = createFloatTexture2D(kLutSize, 1, emissivityLut.values);
       texRedshiftLUT = createFloatTexture2D(kLutSize, 1, redshiftLut.values);
 
-      // Phase 8.2: Generate photon glow LUT (256 entries for exp(-distance*4.0))
       auto photonGlowLut = physics::generate_photon_glow_lut(256);
-      if (texPhotonGlowLUT != 0) {
-        glDeleteTextures(1, &texPhotonGlowLUT);
-      }
       texPhotonGlowLUT = createFloatTexture2D(256, 1, photonGlowLut.values);
 
-      // Phase 8.2 Priority 2: Generate disk density profile LUT (density vs radius)
-      auto diskDensityLut = physics::generate_disk_density_lut(256, 1.5);
-      if (texDiskDensityLUT != 0) {
-        glDeleteTextures(1, &texDiskDensityLUT);
-      }
+      // Connect adiskDensityV to LUT generation
+      // Use densityV as the exponent or scale factor for the density profile
+      double densityScale = static_cast<double>(std::max(0.1f, densityV));
+      auto diskDensityLut = physics::generate_disk_density_lut(256, densityScale);
       texDiskDensityLUT = createFloatTexture2D(256, 1, diskDensityLut.values);
 
       lutRadiusMin = emissivityLut.r_min;
@@ -2753,31 +2870,23 @@ int main(int argc, char **argv) {
       redshiftRadiusMin = redshiftLut.r_min;
       redshiftRadiusMax = redshiftLut.r_max;
       lutSpin = spin;
+      lutAdiskDensityV = densityV;
       lutFromAssets = false;
       lutInitialized = true;
+      std::cout << "LUTs regenerated. Spin: " << spin << ", DensityV: " << densityV << std::endl;
     }
   };
 
-  auto loadGrmhdPacked = [&](const std::string &path) {
-    std::string error;
-    if (!loadGrmhdPackedTexture(path, grmhdTexture, error)) {
-      grmhdLoadError = error;
-      grmhdLoaded = false;
-      return false;
-    }
-    grmhdLoadError.clear();
-    grmhdLoaded = true;
-    return true;
-  };
-
-  if (!grmhdPathInit) {
-    std::snprintf(grmhdPathBuffer.data(), grmhdPathBuffer.size(),
-                  "assets/grmhd/grmhd_pack.json");
-    grmhdPathInit = true;
-  }
+  // ... (rest of main) ...
 
   while (!glfwWindowShouldClose(window)) {
+    // Clear default framebuffer (essential for ImGui Docking over Viewport)
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // std::cout << "Frame start" << std::endl; // Debug instrumentation
     ZoneScopedN("Frame");
+    // ...
     // Calculate delta time
     double currentTime = glfwGetTime();
     float frameTime = static_cast<float>(currentTime);
@@ -2835,6 +2944,30 @@ int main(int argc, char **argv) {
       continue;
     }
     glViewport(0, 0, windowWidth, windowHeight);
+
+    // ---------------------------------------------------------
+    // DOCKING & VIEWPORT SETUP (EARLY)
+    // ---------------------------------------------------------
+    static bool firstLayout = true;
+    ImGuiID dockspaceId = ImGui::GetID("MyDockSpace");
+    ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
+
+    if (firstLayout) {
+        resetLayout(dockspaceId);
+        firstLayout = false;
+    }
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar);
+    ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+    
+    // Resize render targets to match viewport
+    if (viewportSize.x > 0 && viewportSize.y > 0 && 
+        (static_cast<int>(viewportSize.x) != renderWidth || static_cast<int>(viewportSize.y) != renderHeight)) {
+        recreateRenderTargets(static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
+    }
+    ImGui::End();
+    ImGui::PopStyleVar();
 
     if (rmluiEnabled) {
       if (!rmluiReady) {
@@ -2933,6 +3066,8 @@ int main(int argc, char **argv) {
     }
 
     renderScale = std::clamp(renderScale, 0.25f, 1.5f);
+    // Legacy resize logic disabled in favor of Viewport-based sizing
+    /*
     int targetWidth =
         std::max(1, static_cast<int>(static_cast<float>(windowWidth) * renderScale));
     int targetHeight =
@@ -2940,6 +3075,7 @@ int main(int argc, char **argv) {
     if (targetWidth != renderWidth || targetHeight != renderHeight) {
       recreateRenderTargets(targetWidth, targetHeight);
     }
+    */
     settings.fullscreen = input.isFullscreen();
     settings.swapInterval = swapInterval;
     settings.renderScale = renderScale;
@@ -3048,6 +3184,7 @@ int main(int argc, char **argv) {
     if (wiregridEnabled &&
         (wiregridMesh.vao == 0 ||
          !wiregridParamsEqual(wiregridParams, wiregridParamsCached))) {
+      // std::cout << "Updating wiregrid mesh..." << std::endl;
       updateWiregridMesh(wiregridMesh, wiregridParams);
       wiregridParamsCached = wiregridParams;
     }
@@ -3142,8 +3279,13 @@ int main(int argc, char **argv) {
 
       // Render UI controls only if visible
       if (input.isUIVisible()) {
-        ImGui::Begin("Black Hole Parameters", nullptr, ImGuiWindowFlags_NoCollapse);
-        ImGui::Checkbox("gravitationalLensing", &gravitationalLensing);
+        ImGui::SetNextWindowSize(ImVec2(450, 700), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoCollapse);
+        if (ImGui::BeginTabBar("MainTabs")) {
+          if (ImGui::BeginTabItem("Visuals")) {
+            ImGui::Checkbox("gravitationalLensing", &gravitationalLensing);
+            ImGui::SliderInt("Bloom Iterations", &bloomIterations, 1, kMaxBloomIterations);
+            settings.bloomIterations = bloomIterations;
         ImGui::Checkbox("renderBlackHole", &renderBlackHole);
         ImGui::Checkbox("adiskEnabled", &adiskEnabled);
         ImGui::Checkbox("adiskParticle", &adiskParticle);
@@ -3158,8 +3300,10 @@ int main(int argc, char **argv) {
         ImGui::SliderFloat("adiskSpeed", &adiskSpeed, 0.0f, 1.0f);
         ImGui::SliderFloat("dopplerStrength", &dopplerStrength, 0.0f, 5.0f);
 
-        ImGui::Separator();
-        ImGui::Text("GRMHD Packed");
+        ImGui::EndTabItem();
+          }
+          if (ImGui::BeginTabItem("GRMHD")) {
+            ImGui::Text("GRMHD Packed");
         ImGui::Checkbox("Use GRMHD Field", &useGrmhd);
         ImGui::InputText("GRMHD Meta", grmhdPathBuffer.data(), grmhdPathBuffer.size());
         if (ImGui::Button("Load GRMHD")) {
@@ -3290,8 +3434,10 @@ int main(int argc, char **argv) {
         ImGui::EndDisabled();  // !grmhdTimeSeriesLoaded
         ImGui::EndDisabled();  // !grmhdTimeSeriesEnabled
 
-        ImGui::Separator();
-        ImGui::Text("Physics Parameters");
+        ImGui::EndTabItem();
+          }
+          if (ImGui::BeginTabItem("Physics")) {
+            ImGui::Text("Physics Parameters");
 
         // Black hole mass in solar masses (scaled for visualization)
         ImGui::SliderFloat("blackHoleMass", &blackHoleMass, 0.1f, 10.0f);
@@ -3397,8 +3543,10 @@ int main(int argc, char **argv) {
                   static_cast<double>(photonSphereRadius),
                   static_cast<double>(iscoRadius));
 
-        ImGui::Separator();
-        ImGui::Text("Compute Raytracer");
+        ImGui::EndTabItem();
+          }
+          if (ImGui::BeginTabItem("Compute")) {
+            ImGui::Text("Compute Raytracer");
         bool computeAvailable = ShaderManager::instance().canUseComputeShaders();
         if (!computeAvailable) {
           ImGui::TextDisabled("Compute shaders unavailable");
@@ -3501,7 +3649,10 @@ int main(int argc, char **argv) {
             captureCompareSnapshot = true;
           }
         }
-
+            ImGui::EndTabItem();
+          }
+          ImGui::EndTabBar();
+        }
         ImGui::End();
       }
 
@@ -3529,7 +3680,7 @@ int main(int argc, char **argv) {
         ImGui::End();
       }
 
-      updateLuts(kerrSpin);
+      updateLuts(kerrSpin, adiskDensityV);
       if (!spectralLutTried) {
         spectralLutTried = true;
         spectralLutLoaded =
@@ -3570,13 +3721,8 @@ int main(int argc, char **argv) {
       const bool progradeSpin = kerrSpin >= 0.0f;
       const double iscoRatio =
           physics::kerr_isco_radius(referenceMass, referenceA, progradeSpin) / referenceRs;
-      const double photonRatio = (progradeSpin ? physics::kerr_photon_orbit_prograde
-                                               : physics::kerr_photon_orbit_retrograde)(
-                                      referenceMass, referenceA) /
-                                  referenceRs;
 
       float schwarzschildRadius = 2.0f * blackHoleMass;
-      float photonSphereRadius = static_cast<float>(photonRatio) * schwarzschildRadius;
       float iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;
       bool computeSupported = ShaderManager::instance().canUseComputeShaders();
       bool computeActive = useComputeRaytracer && computeSupported;
@@ -3672,7 +3818,7 @@ int main(int argc, char **argv) {
       rtti.floatUniforms["gravitationalLensing"] = gravitationalLensing ? 1.0f : 0.0f;
       rtti.floatUniforms["renderBlackHole"] = renderBlackHole ? 1.0f : 0.0f;
       rtti.floatUniforms["adiskParticle"] = adiskParticleEffective ? 1.0f : 0.0f;
-      rtti.floatUniforms["adiskDensityV"] = adiskDensityV;
+      // rtti.floatUniforms["adiskDensityV"] = adiskDensityV; // Removed: consumed by LUT generation
       rtti.floatUniforms["adiskDensityH"] = adiskDensityH;
       rtti.floatUniforms["adiskHeight"] = adiskHeight;
       rtti.floatUniforms["adiskLit"] = adiskLit;
@@ -3680,7 +3826,6 @@ int main(int argc, char **argv) {
       rtti.floatUniforms["adiskNoiseScale"] = adiskNoiseScale;
       rtti.floatUniforms["adiskSpeed"] = adiskSpeed;
       rtti.floatUniforms["dopplerStrength"] = dopplerStrength;
-      rtti.floatUniforms["photonSphereRadius"] = photonSphereRadius;
       rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphereEffective ? 1.0f : 0.0f;
 
       GLuint fragmentTarget = computeActive ? (compareActive ? texBlackholeCompare : 0)
@@ -3693,6 +3838,7 @@ int main(int argc, char **argv) {
       if (fragmentTarget != 0) {
         ZoneScopedN("Blackhole Fragment");
         rtti.targetTexture = fragmentTarget;
+        // std::cout << "Rendering to texture..." << std::endl;
         renderToTexture(rtti);
       }
       if (gpuTimers.initialized && fragmentTarget != 0) {
@@ -3925,7 +4071,8 @@ int main(int argc, char **argv) {
       renderToTexture(rtti);
     }
 
-    if (input.isUIVisible()) {
+    // Post Processing panel moved to Main Settings
+    if (false) {
       ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
       ImGui::SliderInt("bloomIterations", &bloomIterations, 1, kMaxBloomIterations);
       settings.bloomIterations = bloomIterations;
@@ -4195,374 +4342,156 @@ int main(int argc, char **argv) {
       }
     }
 
-    // Final passthrough to screen
-    if (multiDrawMainEnabled) {
-      constexpr GLuint kMultiDrawMax = 4;
-      if (multiDrawProgram == 0) {
-        multiDrawProgram = createShaderProgram(std::string("shader/passthrough_drawid.vert"),
-                                               std::string("shader/passthrough_drawid.frag"));
-        glUseProgram(multiDrawProgram);
-        glUniform1i(glGetUniformLocation(multiDrawProgram, "texture0"), 0);
-        glUseProgram(0);
-      }
-      if (multiDrawInstanceBuffer == 0) {
-        glGenBuffers(1, &multiDrawInstanceBuffer);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, multiDrawInstanceBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(DrawInstanceGpu) * kMultiDrawMax, nullptr,
-                     GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-      }
-      if (multiDrawCommandBuffer == 0) {
-        glGenBuffers(1, &multiDrawCommandBuffer);
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, multiDrawCommandBuffer);
-        glBufferData(GL_DRAW_INDIRECT_BUFFER,
-                     sizeof(DrawArraysIndirectCommand) * kMultiDrawMax, nullptr,
-                     GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-      }
-      if (multiDrawIndirectCount && multiDrawCountBuffer == 0) {
-        glGenBuffers(1, &multiDrawCountBuffer);
-        glBindBuffer(GL_PARAMETER_BUFFER, multiDrawCountBuffer);
-        GLuint zero = 0;
-        glBufferData(GL_PARAMETER_BUFFER, sizeof(GLuint), &zero, GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_PARAMETER_BUFFER, 0);
-      }
-      if (multiDrawIndirectCount && multiDrawComputeProgram == 0) {
-        multiDrawComputeProgram =
-            createComputeProgram(std::string("shader/drawid_cull.comp"));
-      }
+    // Re-open Viewport to render the scene image
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar);
+    viewportSize = ImGui::GetContentRegionAvail();
 
-      std::array<DrawInstanceGpu, kMultiDrawMax> instances{};
-      instances[0].offsetScale = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
-      instances[0].tint = glm::vec4(1.0f);
-      instances[0].flags = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
-      instances[1].offsetScale = glm::vec4(0.6f, -0.6f, 0.35f, 0.35f);
-      instances[1].tint = glm::vec4(1.0f, 0.7f, 0.2f, 0.85f);
-      instances[1].flags = glm::vec4(multiDrawOverlayEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
-      multiDrawInstanceCount = 2;
-
-      glBindBuffer(GL_SHADER_STORAGE_BUFFER, multiDrawInstanceBuffer);
-      glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0,
-                      static_cast<GLsizeiptr>(sizeof(DrawInstanceGpu) *
-                                              static_cast<std::size_t>(multiDrawInstanceCount)),
-                      instances.data());
-      glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-      if (multiDrawIndirectCount) {
-        GLuint zero = 0;
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, multiDrawCountBuffer);
-        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(GLuint), &zero);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-        glUseProgram(multiDrawComputeProgram);
-        glUniform1ui(glGetUniformLocation(multiDrawComputeProgram, "instanceCount"),
-                     static_cast<GLuint>(multiDrawInstanceCount));
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, multiDrawInstanceBuffer);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, multiDrawCommandBuffer);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, multiDrawCountBuffer);
-        GLuint groups = static_cast<GLuint>((multiDrawInstanceCount + 63) / 64);
-        glDispatchCompute(groups, 1, 1);
-        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
-      } else {
-        std::array<DrawArraysIndirectCommand, kMultiDrawMax> commands{};
-        for (int i = 0; i < multiDrawInstanceCount; ++i) {
-          commands[static_cast<std::size_t>(i)].count = 6;
-          commands[static_cast<std::size_t>(i)].primCount = 1;
-          commands[static_cast<std::size_t>(i)].first = 0;
-          commands[static_cast<std::size_t>(i)].baseInstance = static_cast<GLuint>(i);
+    // ---------------------------------------------------------
+    // SCENE COMPOSITION (Post-process overlay passes)
+    // ---------------------------------------------------------
+    // Render wiregrid and overlays into the final texture before display
+    {
+        static GLuint sceneFbo = 0;
+        if (sceneFbo == 0) {
+            glGenFramebuffers(1, &sceneFbo);
         }
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, multiDrawCommandBuffer);
-        glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0,
-                        static_cast<GLsizeiptr>(sizeof(DrawArraysIndirectCommand) *
-                                                static_cast<std::size_t>(multiDrawInstanceCount)),
-                        commands.data());
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-      }
+        glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, finalTexture, 0);
+        glViewport(0, 0, renderWidth, renderHeight);
 
-      const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-      const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-      if (depthWasEnabled) {
-        glDisable(GL_DEPTH_TEST);
-      }
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      glUseProgram(multiDrawProgram);
-      glBindVertexArray(quadVAO);
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, finalTexture);
-      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, multiDrawInstanceBuffer);
-      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, multiDrawCommandBuffer);
-      if (multiDrawIndirectCount) {
-        glBindBuffer(GL_PARAMETER_BUFFER, multiDrawCountBuffer);
-        glMultiDrawArraysIndirectCount(GL_TRIANGLES, nullptr, 0, kMultiDrawMax, 0);
-        glBindBuffer(GL_PARAMETER_BUFFER, 0);
-      } else {
-        glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, multiDrawInstanceCount, 0);
-      }
-      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-      glBindVertexArray(0);
-      glUseProgram(0);
-      if (!blendWasEnabled) {
-        glDisable(GL_BLEND);
-      }
-      if (depthWasEnabled) {
-        glEnable(GL_DEPTH_TEST);
-      }
-    } else {
-      passthrough.render(finalTexture, windowWidth, windowHeight);
-    }
+        // 1. Wiregrid
+        if (wiregridEnabled && wiregridMesh.vertexCount > 0) {
+            static GLuint wiregridProgram = 0;
+            if (wiregridProgram == 0) {
+                wiregridProgram = createShaderProgram(std::string("shader/wiregrid.vert"),
+                                                    std::string("shader/wiregrid.frag"));
+            }
+            glm::mat4 viewProj = projectionMatrix * gizmoViewMatrix;
+            glUseProgram(wiregridProgram);
+            GLint viewProjLoc = glGetUniformLocation(wiregridProgram, "viewProj");
+            if (viewProjLoc != -1) glUniformMatrix4fv(viewProjLoc, 1, GL_FALSE, glm::value_ptr(viewProj));
+            
+            GLint colorLoc = glGetUniformLocation(wiregridProgram, "color");
+            if (colorLoc != -1) glUniform4f(colorLoc, wiregridColor.r, wiregridColor.g, wiregridColor.b, wiregridColor.a);
+            
+            GLint timeLoc = glGetUniformLocation(wiregridProgram, "time");
+            if (timeLoc != -1) glUniform1f(timeLoc, frameTime);
+            
+            GLint camPosLoc = glGetUniformLocation(wiregridProgram, "cameraPos");
+            if (camPosLoc != -1) glUniform3fv(camPosLoc, 1, glm::value_ptr(cameraPos));
 
-    if (drawIdProbeEnabled) {
-      static GLuint drawIdProbeProgram = 0;
-      static GLuint drawIdProbeVao = 0;
-      static GLuint drawIdIndirectBuffer = 0;
-      if (drawIdProbeProgram == 0) {
-        drawIdProbeProgram =
-            createShaderProgram(std::string("shader/drawid_probe.vert"),
-                                std::string("shader/drawid_probe.frag"));
-      }
-      if (drawIdProbeVao == 0) {
-        drawIdProbeVao = createQuadVAO();
-      }
-      if (drawIdIndirectBuffer == 0) {
-        DrawArraysIndirectCommand commands[2] = {};
-        for (int i = 0; i < 2; ++i) {
-          commands[i].count = 6;
-          commands[i].primCount = 1;
-          commands[i].first = 0;
-          commands[i].baseInstance = 0;
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBindVertexArray(wiregridMesh.vao);
+            glDrawArrays(GL_LINES, 0, wiregridMesh.vertexCount);
+            glBindVertexArray(0);
+            glDisable(GL_BLEND);
+            glUseProgram(0);
         }
-        glGenBuffers(1, &drawIdIndirectBuffer);
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, drawIdIndirectBuffer);
-        glBufferData(GL_DRAW_INDIRECT_BUFFER, sizeof(commands), commands, GL_STATIC_DRAW);
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-      }
-      const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-      const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-      if (depthWasEnabled) {
-        glDisable(GL_DEPTH_TEST);
-      }
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      glUseProgram(drawIdProbeProgram);
-      glBindVertexArray(drawIdProbeVao);
-      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, drawIdIndirectBuffer);
-      glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, 2, 0);
-      glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-      glBindVertexArray(0);
-      glUseProgram(0);
-      if (!blendWasEnabled) {
-        glDisable(GL_BLEND);
-      }
-      if (depthWasEnabled) {
-        glEnable(GL_DEPTH_TEST);
-      }
-    }
 
-    if (wiregridEnabled && wiregridMesh.vertexCount > 0) {
-      static GLuint wiregridProgram = 0;
-      if (wiregridProgram == 0) {
-        wiregridProgram = createShaderProgram(std::string("shader/wiregrid.vert"),
-                                              std::string("shader/wiregrid.frag"));
-      }
-      glm::mat4 viewProj = projectionMatrix * gizmoViewMatrix;
-      glUseProgram(wiregridProgram);
-      GLint viewProjLoc = glGetUniformLocation(wiregridProgram, "viewProj");
-      if (viewProjLoc != -1) {
-        glUniformMatrix4fv(viewProjLoc, 1, GL_FALSE, glm::value_ptr(viewProj));
-      }
-      GLint colorLoc = glGetUniformLocation(wiregridProgram, "color");
-      if (colorLoc != -1) {
-        glUniform4f(colorLoc, wiregridColor.r, wiregridColor.g, wiregridColor.b,
-                    wiregridColor.a);
-      }
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-      glBindVertexArray(wiregridMesh.vao);
-      glDrawArrays(GL_LINES, 0, wiregridMesh.vertexCount);
-      glBindVertexArray(0);
-      glDisable(GL_BLEND);
-      glUseProgram(0);
-    }
+        // 2. GRMHD Slice
+        if (grmhdSliceEnabled && grmhdReady) {
+            ZoneScopedN("GRMHD Slice");
+            grmhdSliceAxis = std::clamp(grmhdSliceAxis, 0, 2);
+            grmhdSliceChannel = std::clamp(grmhdSliceChannel, 0, 3);
+            grmhdSliceCoord = std::clamp(grmhdSliceCoord, 0.0f, 1.0f);
+            grmhdSliceSize = std::clamp(grmhdSliceSize, 64, 1024);
 
-    if (grmhdSliceEnabled && grmhdReady) {
-      ZoneScopedN("GRMHD Slice");
-      grmhdSliceAxis = std::clamp(grmhdSliceAxis, 0, 2);
-      grmhdSliceChannel = std::clamp(grmhdSliceChannel, 0, 3);
-      grmhdSliceCoord = std::clamp(grmhdSliceCoord, 0.0f, 1.0f);
-      grmhdSliceSize = std::clamp(grmhdSliceSize, 64, 1024);
+            const std::size_t channelIndex = static_cast<std::size_t>(grmhdSliceChannel);
+            if (grmhdSliceAutoRange && channelIndex < grmhdTexture.minValues.size() &&
+                channelIndex < grmhdTexture.maxValues.size()) {
+                grmhdSliceMin = grmhdTexture.minValues[channelIndex];
+                grmhdSliceMax = grmhdTexture.maxValues[channelIndex];
+            }
+            if (grmhdSliceMax <= grmhdSliceMin) {
+                grmhdSliceMax = grmhdSliceMin + 1.0f;
+            }
 
-      const std::size_t channelIndex = static_cast<std::size_t>(grmhdSliceChannel);
-      if (grmhdSliceAutoRange && channelIndex < grmhdTexture.minValues.size() &&
-          channelIndex < grmhdTexture.maxValues.size()) {
-        grmhdSliceMin = grmhdTexture.minValues[channelIndex];
-        grmhdSliceMax = grmhdTexture.maxValues[channelIndex];
-      }
-      if (grmhdSliceMax <= grmhdSliceMin) {
-        grmhdSliceMax = grmhdSliceMin + 1.0f;
-      }
+            if (texGrmhdSlice == 0 || grmhdSliceSizeCached != grmhdSliceSize) {
+                if (texGrmhdSlice != 0) {
+                    glDeleteTextures(1, &texGrmhdSlice);
+                    texGrmhdSlice = 0;
+                }
+                texGrmhdSlice = createColorTexture32f(grmhdSliceSize, grmhdSliceSize);
+                grmhdSliceSizeCached = grmhdSliceSize;
+            }
 
-      if (texGrmhdSlice == 0 || grmhdSliceSizeCached != grmhdSliceSize) {
-        if (texGrmhdSlice != 0) {
-          glDeleteTextures(1, &texGrmhdSlice);
-          texGrmhdSlice = 0;
+            RenderToTextureInfo sliceRtti;
+            sliceRtti.fragShader = "shader/grmhd_slice.frag";
+            sliceRtti.texture3DUniforms["grmhdTexture"] = grmhdTexture.texture;
+            sliceRtti.textureUniforms["colorMap"] = colorMap;
+            sliceRtti.floatUniforms["sliceAxis"] = static_cast<float>(grmhdSliceAxis);
+            sliceRtti.floatUniforms["sliceCoord"] = grmhdSliceCoord;
+            sliceRtti.floatUniforms["sliceChannel"] = static_cast<float>(grmhdSliceChannel);
+            sliceRtti.floatUniforms["sliceMin"] = grmhdSliceMin;
+            sliceRtti.floatUniforms["sliceMax"] = grmhdSliceMax;
+            sliceRtti.floatUniforms["useColorMap"] = grmhdSliceUseColorMap ? 1.0f : 0.0f;
+            sliceRtti.targetTexture = texGrmhdSlice;
+            sliceRtti.width = grmhdSliceSize;
+            sliceRtti.height = grmhdSliceSize;
+            if (gpuTimers.initialized) {
+                gpuTimers.grmhdSlice.begin();
+            }
+            renderToTexture(sliceRtti); // Note: renderToTexture manages its own FBO binding
+            if (gpuTimers.initialized) {
+                gpuTimers.grmhdSlice.end();
+            }
+            
+            // Re-bind Scene FBO to draw the slice texture on top? 
+            // Actually, renderToTexture renders TO texGrmhdSlice.
+            // We need to composite texGrmhdSlice onto the scene?
+            // The original code rendered the slice to a separate texture, then displayed it in ImGui Image?
+            // "ImGui::Image(sliceId, ...)" in the UI panel.
+            // So we don't need to composite it here.
+            
+            // Restore FBO for subsequent passes if any
+            glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo);
         }
-        texGrmhdSlice = createColorTexture32f(grmhdSliceSize, grmhdSliceSize);
-        grmhdSliceSizeCached = grmhdSliceSize;
-      }
 
-      RenderToTextureInfo sliceRtti;
-      sliceRtti.fragShader = "shader/grmhd_slice.frag";
-      sliceRtti.texture3DUniforms["grmhdTexture"] = grmhdTexture.texture;
-      sliceRtti.textureUniforms["colorMap"] = colorMap;
-      sliceRtti.floatUniforms["sliceAxis"] = static_cast<float>(grmhdSliceAxis);
-      sliceRtti.floatUniforms["sliceCoord"] = grmhdSliceCoord;
-      sliceRtti.floatUniforms["sliceChannel"] = static_cast<float>(grmhdSliceChannel);
-      sliceRtti.floatUniforms["sliceMin"] = grmhdSliceMin;
-      sliceRtti.floatUniforms["sliceMax"] = grmhdSliceMax;
-      sliceRtti.floatUniforms["useColorMap"] = grmhdSliceUseColorMap ? 1.0f : 0.0f;
-      sliceRtti.targetTexture = texGrmhdSlice;
-      sliceRtti.width = grmhdSliceSize;
-      sliceRtti.height = grmhdSliceSize;
-      if (gpuTimers.initialized) {
-        gpuTimers.grmhdSlice.begin();
-      }
-      renderToTexture(sliceRtti);
-      if (gpuTimers.initialized) {
-        gpuTimers.grmhdSlice.end();
-      }
+        // 3. RmlUi Overlay
+        if (rmluiReady) {
+            rmluiOverlay.render();
+        }
+
+        // 4. HUD Overlays (Perf/Controls)
+        // Note: These renderers assume default framebuffer dimensions. 
+        // We set viewport to renderWidth/Height, which matches our FBO.
+        if (controlsOverlayEnabled && !input.isUIVisible()) {
+             if (!controlsOverlayReady) {
+                HudOverlayOptions opts;
+                opts.scale = controlsOverlayScale;
+                opts.margin = 16.0f;
+                opts.align = HudOverlayOptions::Align::Left;
+                controlsOverlay.setOptions(opts);
+                controlsOverlayReady = true;
+             }
+             if (controlsOverlayReady) controlsOverlay.render(renderWidth, renderHeight);
+             if (perfOverlayReady) perfOverlay.render(renderWidth, renderHeight);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    if (rmluiReady) {
-      rmluiOverlay.render();
+    // Draw Final Texture to Viewport
+    ImGui::Image(reinterpret_cast<void*>(static_cast<intptr_t>(finalTexture)), viewportSize, ImVec2(0, 1), ImVec2(1, 0));
+    
+    // Enable mouse/keyboard interaction when hovering the viewport
+    bool isViewportHovered = ImGui::IsItemHovered();
+    InputManager::instance().setIgnoreGuiCapture(isViewportHovered);
+
+    // Gizmo
+    if (gizmoEnabled) {
+        ImGuizmo::SetDrawlist();
+        ImVec2 windowPos = ImGui::GetWindowPos();
+        ImGuizmo::SetRect(windowPos.x, windowPos.y, viewportSize.x, viewportSize.y);
+        ImGuizmo::Manipulate(glm::value_ptr(gizmoViewMatrix), glm::value_ptr(projectionMatrix),
+                           gizmoOperation, gizmoMode, glm::value_ptr(gizmoTransform));
     }
 
-    if (controlsOverlayEnabled && !input.isUIVisible()) {
-      auto keyName = [&](KeyAction action) {
-        return input.getKeyName(input.getKeyForAction(action));
-      };
-      const glm::vec4 headerColor(0.9f, 0.85f, 0.2f, 1.0f);
-      const glm::vec4 textColor(0.9f, 0.9f, 0.9f, 1.0f);
-      std::vector<HudOverlayLine> lines;
-      lines.push_back({"OpenGL Controls", headerColor});
-      lines.push_back({"Move: " + keyName(KeyAction::CameraMoveForward) + " " +
-                           keyName(KeyAction::CameraMoveLeft) + " " +
-                           keyName(KeyAction::CameraMoveBackward) + " " +
-                           keyName(KeyAction::CameraMoveRight),
-                       textColor});
-      lines.push_back({"Elevate: " + keyName(KeyAction::CameraMoveUp) + " / " +
-                           keyName(KeyAction::CameraMoveDown),
-                       textColor});
-      lines.push_back({"Roll: " + keyName(KeyAction::CameraRollLeft) + " / " +
-                           keyName(KeyAction::CameraRollRight),
-                       textColor});
-      lines.push_back({"Zoom: Scroll / " + keyName(KeyAction::ZoomIn) + " / " +
-                           keyName(KeyAction::ZoomOut),
-                       textColor});
-      lines.push_back({"Look: Mouse drag", textColor});
-      lines.push_back({"UI: " + keyName(KeyAction::ToggleUI) + "  Fullscreen: " +
-                           keyName(KeyAction::ToggleFullscreen),
-                       textColor});
-      lines.push_back({"Pause: " + keyName(KeyAction::Pause) + "  Reset: " +
-                           keyName(KeyAction::ResetCamera),
-                       textColor});
-      lines.push_back({"Time: " + keyName(KeyAction::IncreaseTimeScale) + " / " +
-                           keyName(KeyAction::DecreaseTimeScale),
-                       textColor});
+    ImGui::End(); // End Viewport
+    ImGui::PopStyleVar(); // WindowPadding
 
-      if (!controlsOverlayReady) {
-        HudOverlayOptions opts;
-        opts.scale = controlsOverlayScale;
-        opts.margin = 16.0f;
-        opts.align = HudOverlayOptions::Align::Left;
-        controlsOverlay.setOptions(opts);
-        controlsOverlayReady = true;
-      }
-
-      controlsOverlay.setLines(lines);
-      controlsOverlay.render(windowWidth, windowHeight);
-    }
-
-    if (perfOverlayEnabled && !input.isUIVisible()) {
-      const glm::vec4 headerColor(0.2f, 0.9f, 0.5f, 1.0f);
-      const glm::vec4 textColor(0.9f, 0.9f, 0.9f, 1.0f);
-      std::vector<HudOverlayLine> lines;
-      lines.push_back({"Performance", headerColor});
-
-      std::ostringstream line;
-      double fps = cpuFrameMs > 0.0f ? 1000.0 / static_cast<double>(cpuFrameMs) : 0.0;
-      line << std::fixed << std::setprecision(1) << "FPS: " << fps;
-      lines.push_back({line.str(), textColor});
-      line.str("");
-      line.clear();
-      line << std::fixed << std::setprecision(2) << "CPU: " << cpuFrameMs << " ms";
-      lines.push_back({line.str(), textColor});
-      line.str("");
-      line.clear();
-      line << "Window: " << windowWidth << "x" << windowHeight;
-      lines.push_back({line.str(), textColor});
-      line.str("");
-      line.clear();
-      line << std::fixed << std::setprecision(2) << "Render: " << renderWidth << "x"
-           << renderHeight << " (" << renderScale << "x)";
-      lines.push_back({line.str(), textColor});
-      line.str("");
-      line.clear();
-      const char *vsyncLabel = swapInterval == 0   ? "Off"
-                              : swapInterval == 1 ? "On"
-                                                   : "Triple";
-      line << "VSync: " << vsyncLabel << " (" << swapInterval << ")";
-      lines.push_back({line.str(), textColor});
-
-      if (gpuTimingEnabled && gpuTimers.initialized) {
-        line.str("");
-        line.clear();
-        line << std::fixed << std::setprecision(2) << "GPU Frag: "
-             << gpuTimers.blackholeFragment.lastMs << " ms";
-        lines.push_back({line.str(), textColor});
-        line.str("");
-        line.clear();
-        line << std::fixed << std::setprecision(2) << "GPU Comp: "
-             << gpuTimers.blackholeCompute.lastMs << " ms";
-        lines.push_back({line.str(), textColor});
-        line.str("");
-        line.clear();
-        line << std::fixed << std::setprecision(2) << "GPU Bloom: "
-             << gpuTimers.bloom.lastMs << " ms";
-        lines.push_back({line.str(), textColor});
-        line.str("");
-        line.clear();
-        line << std::fixed << std::setprecision(2) << "GPU Tonemap: "
-             << gpuTimers.tonemap.lastMs << " ms";
-        lines.push_back({line.str(), textColor});
-        line.str("");
-        line.clear();
-        line << std::fixed << std::setprecision(2) << "GPU Depth: "
-             << gpuTimers.depth.lastMs << " ms";
-        lines.push_back({line.str(), textColor});
-        line.str("");
-        line.clear();
-        line << std::fixed << std::setprecision(2) << "GPU GRMHD: "
-             << gpuTimers.grmhdSlice.lastMs << " ms";
-        lines.push_back({line.str(), textColor});
-      } else {
-        lines.push_back({"GPU timings: off", textColor});
-      }
-
-      if (!perfOverlayReady) {
-        HudOverlayOptions opts;
-        opts.scale = perfOverlayScale;
-        opts.margin = 8.0f;
-        opts.align = HudOverlayOptions::Align::Left;
-        perfOverlay.setOptions(opts);
-        perfOverlayReady = true;
-      }
-
-      perfOverlay.setLines(lines);
-      perfOverlay.render(windowWidth, windowHeight);
-    }
-
-    // Render UI panels (before popup modal for proper window ordering)
     if (input.isUIVisible()) {
       renderControlsHelpPanel();
       renderControlsSettingsPanel(cameraModeIndex, orbitRadius, orbitSpeed);
@@ -4579,16 +4508,17 @@ int main(int argc, char **argv) {
                              perfOverlayEnabled, perfOverlayScale, depthPrepassEnabled);
     }
 
-    if (input.isUIVisible() && gizmoEnabled) {
-      ImGuizmo::SetDrawlist();
-      ImGuizmo::SetRect(0.0f, 0.0f, static_cast<float>(windowWidth),
-                        static_cast<float>(windowHeight));
-      ImGuizmo::Manipulate(glm::value_ptr(gizmoViewMatrix), glm::value_ptr(projectionMatrix),
-                           gizmoOperation, gizmoMode, glm::value_ptr(gizmoTransform));
-    }
-
+    // ImGui Render
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    
+    // Update Platform Windows (Docking)
+    if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+        GLFWwindow* backup_current_context = glfwGetCurrentContext();
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
+        glfwMakeContextCurrent(backup_current_context);
+    }
 
     if (gpuTimingLogEnabled && gpuTimers.initialized) {
       gpuTimingLogCounter++;
@@ -4628,6 +4558,13 @@ int main(int argc, char **argv) {
   }
   if (rmluiReady) {
     rmluiOverlay.shutdown();
+  }
+
+  // Explicitly clean up static resources before GL context destruction
+  noiseCache.cleanup();
+  hawkingRenderer.cleanup();
+  if (grmhdTexture.texture != 0) {
+    destroyGrmhdPackedTexture(grmhdTexture);
   }
 
     cleanup(window);

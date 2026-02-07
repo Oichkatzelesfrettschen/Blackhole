@@ -53,6 +53,7 @@ class BlackholeConan(ConanFile):
         self.requires("mpfr/4.2.2")
         self.requires("stb/cci.20240531")
         self.requires("z3/4.14.1")
+        self.requires("gtest/1.14.0")
         if self.options.enable_meshoptimizer:
             self.requires("meshoptimizer/0.25")
         if self.options.enable_shader_watcher:
