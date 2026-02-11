@@ -1,6 +1,7 @@
 #ifndef KERR_GLSL
 #define KERR_GLSL
 
+// Use include/ prefix for shader loader compatibility
 #include "include/physics_constants.glsl"
 
 // ============================================================================

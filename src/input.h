@@ -247,8 +247,8 @@ private:
   KeyAction remappingAction_ = KeyAction::COUNT;
 
   // State
-  bool ignoreGuiCapture_ = false;
-  bool uiVisible_ = true;
+  bool ignoreGuiCapture_ = false;  // Ignore GUI input capture (for debugging)
+  bool uiVisible_ = true;          // UI visible on startup (set false for perf benchmarking)
   bool fullscreen_ = false;
   bool paused_ = false;
   float timeScale_ = 1.0f;

@@ -2,6 +2,7 @@
 
 // C++ system headers
 #include <iostream>
+#include <unordered_map>
 
 // Third-party library headers
 #include <GLFW/glfw3.h>
@@ -177,9 +178,29 @@ GLuint createQuadVAO() {
   return vao;
 }
 
+static std::map<GLuint, GLuint> textureFramebufferMap;
+static std::map<std::string, GLuint> shaderProgramMap;
+
+// PERFORMANCE FIX: Cache uniform locations to avoid expensive glGetUniformLocation calls every frame
+static std::unordered_map<GLuint, std::unordered_map<std::string, GLint>> uniformLocationCache;
+
+// Helper function to get cached uniform location
+static GLint getCachedUniformLocation(GLuint program, const std::string &name) {
+  auto &cache = uniformLocationCache[program];
+  auto it = cache.find(name);
+  if (it != cache.end()) {
+    return it->second;  // Cache hit - fast hash lookup
+  }
+
+  // Cache miss - query driver once and store result
+  GLint loc = glGetUniformLocation(program, name.c_str());
+  cache[name] = loc;
+  return loc;
+}
+
 static bool bindToTextureUnit(GLuint program, const std::string &name, GLenum textureType,
                               GLuint texture, int textureUnitIndex) {
-  GLint loc = glGetUniformLocation(program, name.c_str());
+  GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
   if (loc != -1) {
     glUniform1i(loc, textureUnitIndex);
 
@@ -198,14 +219,12 @@ static bool bindToTextureUnit(GLuint program, const std::string &name, GLenum te
   }
 }
 
-static std::map<GLuint, GLuint> textureFramebufferMap;
-static std::map<std::string, GLuint> shaderProgramMap;
-
 void clearRenderToTextureCache() {
   for (auto const &[texture, framebuffer] : textureFramebufferMap) {
     glDeleteFramebuffers(1, &framebuffer);
   }
   textureFramebufferMap.clear();
+  uniformLocationCache.clear();  // Clear uniform location cache too
 }
 
 void renderToTexture(const RenderToTextureInfo &rtti) {
@@ -251,16 +270,17 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
     // Set up the uniforms.
     {
-      glUniform2f(glGetUniformLocation(program, "resolution"),
+      // PERF FIX: Use cached uniform locations
+      glUniform2f(getCachedUniformLocation(program, "resolution"),
                   static_cast<float>(rtti.width),
                   static_cast<float>(rtti.height));
 
-      glUniform1f(glGetUniformLocation(program, "time"),
+      glUniform1f(getCachedUniformLocation(program, "time"),
                   static_cast<float>(glfwGetTime()));
 
       // Update float uniforms
       for (auto const &[name, val] : rtti.floatUniforms) {
-        GLint loc = glGetUniformLocation(program, name.c_str());
+        GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform1f(loc, val);
         } else {
@@ -275,7 +295,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update vec3 uniforms
       for (auto const &[name, val] : rtti.vec3Uniforms) {
-        GLint loc = glGetUniformLocation(program, name.c_str());
+        GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform3f(loc, val.x, val.y, val.z);
         } else {
@@ -290,7 +310,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update vec4 uniforms
       for (auto const &[name, val] : rtti.vec4Uniforms) {
-        GLint loc = glGetUniformLocation(program, name.c_str());
+        GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform4f(loc, val.x, val.y, val.z, val.w);
         } else {
@@ -305,7 +325,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update mat3 uniforms
       for (auto const &[name, val] : rtti.mat3Uniforms) {
-        GLint loc = glGetUniformLocation(program, name.c_str());
+        GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
         if (loc != -1) {
           glUniformMatrix3fv(loc, 1, GL_FALSE, glm::value_ptr(val));
         } else {

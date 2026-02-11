@@ -1,6 +1,7 @@
 #ifndef INTEROP_TRACE_GLSL
 #define INTEROP_TRACE_GLSL
 
+// Use include/ prefix for shader loader compatibility
 #include "include/physics_constants.glsl"
 
 const float BH_EPSILON = 1e-6;

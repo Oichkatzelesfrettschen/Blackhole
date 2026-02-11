@@ -1,6 +1,9 @@
 #version 460 core
 #extension GL_GOOGLE_include_directive : enable
 
+// Mathematical and physical constants
+#include "include/physics_constants.glsl"
+
 // Physics library includes - Phase 7: Verified from Rocq formalization
 #include "include/verified/physics.glsl"
 
@@ -62,8 +65,8 @@ uniform float gravitationalLensing = 1.0;
 uniform float renderBlackHole = 1.0;
 uniform float fovScale = 1.0;
 uniform float interopParityMode = 0.0;
-uniform float interopMaxSteps = 300.0;
-uniform float interopStepSize = 0.1;
+uniform float interopMaxSteps = 48.0;  // Balanced quality/performance (was 300, ultra-fast=20)
+uniform float interopStepSize = 0.2;   // Balanced (was 0.1, ultra-fast=0.25)
 
 uniform float adiskEnabled = 1.0;
 uniform float adiskParticle = 1.0;

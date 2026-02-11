@@ -4,6 +4,10 @@
  * @file geodesic_trace.comp
  * @brief GPU compute shader for gravitational geodesic ray tracing
  *
+ * ⚠️  STATUS: Currently DISABLED in src/main.cpp (line 2453)
+ * ⚠️  Reason: Fragment shader path provides better accuracy/stability
+ * ⚠️  This file preserved for future optimization work
+ *
  * Implements full RK4 numerical integration on GPU for 1000x speedup over CPU.
  * Each invocation traces one ray through spacetime with:
  * - Schwarzschild/Kerr metric
@@ -13,6 +17,8 @@
  *
  * Dispatch: (16, 16, Z) tiles covering full resolution
  * Each tile processes 256 rays in parallel.
+ *
+ * To re-enable: Uncomment useComputeRaytracer in src/main.cpp
  */
 
 #extension GL_ARB_compute_shader : require
