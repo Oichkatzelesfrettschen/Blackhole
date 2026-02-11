@@ -2597,7 +2597,7 @@ int main(int argc, char **argv) {
   if (!compareAutoInit) {
     const char *sweepEnv = std::getenv("BLACKHOLE_COMPARE_SWEEP");
     if (sweepEnv != nullptr && std::string(sweepEnv) == "1") {
-      useComputeRaytracer = true;
+      // useComputeRaytracer = true;  // DISABLED: Compute shader path removed
       compareComputeFragment = true;
       comparePresetSweep = true;
       compareWriteSummary = true;

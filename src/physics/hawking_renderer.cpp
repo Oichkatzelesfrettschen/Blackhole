@@ -81,17 +81,11 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
     }
 
     std::string line;
-    bool headerSkipped = !skipHeader;
+    (void)skipHeader;  // Unused parameter - headers detected automatically
 
     while (std::getline(file, line)) {
-        // Skip comment lines
-        if (line.empty() || line[0] == '#') {
-            continue;
-        }
-
-        // Skip header row
-        if (!headerSkipped) {
-            headerSkipped = true;
+        // Skip comment lines and empty lines
+        if (line.empty() || line[0] == '#' || line[0] == '"') {
             continue;
         }
 
@@ -99,8 +93,16 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
         std::istringstream iss(line);
         std::string token;
         std::vector<float> row;
+        bool isHeaderRow = false;
 
         while (std::getline(iss, token, ',')) {
+            // Skip rows that contain non-numeric headers (letters except 'e' for scientific notation)
+            // Allow: digits, '.', '+', '-', 'e', 'E' (for numbers like 1.23e+45)
+            if (token.find_first_of("abcdfghijklmnopqrstuvwxyzABCDFGHIJKLMNOPQRSTUVWXYZ_") != std::string::npos) {
+                isHeaderRow = true;
+                break;
+            }
+
             try {
                 // Use double for intermediate parsing to handle large exponents (e.g., 1e42)
                 double valueD = std::stod(token);
@@ -126,6 +128,10 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
                 // std::cerr << "Failed to parse value: " << token << " (" << e.what() << ")" << std::endl;
                 continue;
             }
+        }
+
+        if (isHeaderRow) {
+            continue;  // Skip this entire row
         }
 
         // Grow columns vector if needed
