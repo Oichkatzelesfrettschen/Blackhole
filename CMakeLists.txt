@@ -308,7 +308,7 @@ set(SIMD_TIER "AUTO" CACHE STRING "SIMD instruction set tier: AUTO, SSE2, SSE4, 
 set_property(CACHE SIMD_TIER PROPERTY STRINGS AUTO SSE2 SSE4 AVX AVX2 AVX512)
 
 # Native architecture optimization (enables best SIMD for build machine)
-option(ENABLE_NATIVE_ARCH "Enable -march=native for optimal SIMD on this CPU" OFF)
+option(ENABLE_NATIVE_ARCH "Enable -march=native for optimal SIMD on this CPU" ON)
 
 # Detect available SIMD extensions
 message(STATUS "=== SIMD Detection ===")
@@ -557,6 +557,197 @@ if(ENABLE_FAST_MATH)
   # builtins (__builtin_huge_val) that work correctly with -ffast-math.
   message(STATUS "Fast math optimizations enabled")
 endif()
+
+# ============================================================================
+# Aggressive Optimization Configuration
+# ============================================================================
+# Comprehensive optimization infrastructure for maximum performance:
+# - Compiler optimization levels (-O3)
+# - CPU-specific optimizations (-march=native, already configured in SIMD section)
+# - Link Time Optimization (LTO/IPO) - "Fat" LTO for cross-module optimization
+# - Profile-Guided Optimization (PGO) - two-phase build for runtime profiling
+# - Profiling tool support (perf, valgrind, flamegraph)
+# ============================================================================
+
+# Build type defaults
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo" "MinSizeRel" "PGO-Gen" "PGO-Use")
+endif()
+
+message(STATUS "=== Optimization Configuration ===")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+# Force -O3 for Release builds (append to Conan flags)
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "PGO-Gen" OR CMAKE_BUILD_TYPE STREQUAL "PGO-Use")
+  # Ensure -O3 is set (append if not present)
+  if(NOT CMAKE_CXX_FLAGS_RELEASE MATCHES "-O3")
+    string(REGEX REPLACE "-O[0-9s]" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3" CACHE STRING "Release flags with -O3" FORCE)
+  endif()
+  message(STATUS "Optimization level: -O3 (maximum performance)")
+endif()
+
+# RelWithDebInfo: -O3 with debug info (for profiling)
+if(NOT CMAKE_CXX_FLAGS_RELWITHDEBINFO MATCHES "-O[0-9]")
+  string(REGEX REPLACE "-O[0-9s]" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O3 -g" CACHE STRING "RelWithDebInfo with -O3" FORCE)
+endif()
+
+# ============================================================================
+# Link Time Optimization (LTO/IPO) - "Fat" LTO
+# ============================================================================
+include(CheckIPOSupported)
+
+option(ENABLE_LTO "Enable Link Time Optimization (LTO/IPO)" ON)
+option(ENABLE_FAT_LTO "Enable Fat LTO (parallel LTO with full optimization)" ON)
+
+if(ENABLE_LTO)
+  check_ipo_supported(RESULT LTO_SUPPORTED OUTPUT LTO_ERROR)
+
+  if(LTO_SUPPORTED)
+    message(STATUS "LTO/IPO: Supported")
+
+    # Enable IPO for all targets
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+    if(ENABLE_FAT_LTO)
+      # Fat LTO: maximum optimization, parallel LTO
+      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC: use -flto=auto for parallel LTO with full optimization
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto=auto -fno-fat-lto-objects")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=auto -fuse-linker-plugin")
+        message(STATUS "Fat LTO: Enabled (GCC parallel LTO)")
+      elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # Clang: ThinLTO for fast parallel LTO
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto=thin")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=thin")
+        message(STATUS "Fat LTO: Enabled (Clang ThinLTO)")
+      endif()
+    else()
+      message(STATUS "Standard LTO: Enabled")
+    endif()
+  else()
+    message(WARNING "LTO/IPO not supported: ${LTO_ERROR}")
+    set(ENABLE_LTO OFF)
+  endif()
+endif()
+
+# ============================================================================
+# Profile-Guided Optimization (PGO)
+# ============================================================================
+# Two-phase build process:
+# 1. PGO-Gen: Build with instrumentation, run program to generate profile data
+# 2. PGO-Use: Rebuild with profile data for optimized binary
+#
+# Usage:
+#   cmake -B build -DCMAKE_BUILD_TYPE=PGO-Gen
+#   cmake --build build && cd build && ./Blackhole  # Generate profile
+#   cmake -B build -DCMAKE_BUILD_TYPE=PGO-Use
+#   cmake --build build  # Build optimized binary
+# ============================================================================
+
+option(ENABLE_PGO "Enable Profile-Guided Optimization support" OFF)
+set(PGO_PROFILE_DIR "${CMAKE_BINARY_DIR}/pgo-profiles" CACHE PATH "Directory for PGO profile data")
+
+if(CMAKE_BUILD_TYPE STREQUAL "PGO-Gen")
+  set(ENABLE_PGO ON)
+  file(MAKE_DIRECTORY "${PGO_PROFILE_DIR}")
+
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-fprofile-generate="${PGO_PROFILE_DIR}")
+    add_link_options(-fprofile-generate="${PGO_PROFILE_DIR}")
+    message(STATUS "PGO: Instrumentation enabled (GCC) - profile dir: ${PGO_PROFILE_DIR}")
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-fprofile-instr-generate="${PGO_PROFILE_DIR}/default.profraw")
+    add_link_options(-fprofile-instr-generate="${PGO_PROFILE_DIR}/default.profraw")
+    message(STATUS "PGO: Instrumentation enabled (Clang) - profile dir: ${PGO_PROFILE_DIR}")
+  endif()
+
+  # PGO-Gen should still be optimized (-O3) for realistic profiling
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+  message(STATUS "PGO: Phase 1 - Generate profile data (run executable after build)")
+
+elseif(CMAKE_BUILD_TYPE STREQUAL "PGO-Use")
+  set(ENABLE_PGO ON)
+
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if(EXISTS "${PGO_PROFILE_DIR}")
+      add_compile_options(-fprofile-use="${PGO_PROFILE_DIR}" -fprofile-correction)
+      add_link_options(-fprofile-use="${PGO_PROFILE_DIR}")
+      message(STATUS "PGO: Optimization enabled (GCC) - using profiles from: ${PGO_PROFILE_DIR}")
+    else()
+      message(FATAL_ERROR "PGO profile directory not found: ${PGO_PROFILE_DIR}\nRun PGO-Gen build first!")
+    endif()
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(PGO_PROFDATA "${PGO_PROFILE_DIR}/default.profdata")
+    if(EXISTS "${PGO_PROFDATA}")
+      add_compile_options(-fprofile-instr-use="${PGO_PROFDATA}")
+      add_link_options(-fprofile-instr-use="${PGO_PROFDATA}")
+      message(STATUS "PGO: Optimization enabled (Clang) - using profile: ${PGO_PROFDATA}")
+    else()
+      message(FATAL_ERROR "PGO profile data not found: ${PGO_PROFDATA}\n"
+                          "After PGO-Gen build, run: llvm-profdata merge -output=${PGO_PROFDATA} ${PGO_PROFILE_DIR}/default.profraw")
+    endif()
+  endif()
+
+  message(STATUS "PGO: Phase 2 - Using profile data for optimization")
+endif()
+
+# ============================================================================
+# Profiling and Analysis Tool Support
+# ============================================================================
+# Configurations for various profiling and analysis tools:
+# - perf: Linux performance profiling (frame pointers preserved)
+# - valgrind: Memory/cache analysis (already in profiling flags)
+# - flamegraph: Stack trace visualization (requires perf data)
+# ============================================================================
+
+option(ENABLE_PERF_PROFILING "Enable perf-friendly compilation (frame pointers)" OFF)
+option(ENABLE_VALGRIND_FRIENDLY "Enable valgrind-friendly compilation" OFF)
+
+if(ENABLE_PERF_PROFILING)
+  # Preserve frame pointers for accurate perf stack traces
+  add_compile_options(-fno-omit-frame-pointer -fno-optimize-sibling-calls)
+  message(STATUS "Perf profiling: Enabled (frame pointers preserved)")
+  message(STATUS "  Usage: perf record -F 99 -g ./Blackhole")
+  message(STATUS "  Flamegraph: perf script | stackcollapse-perf.pl | flamegraph.pl > flame.svg")
+endif()
+
+if(ENABLE_VALGRIND_FRIENDLY)
+  # Disable optimizations that confuse valgrind
+  add_compile_options(-fno-inline-small-functions -fno-inline-functions-called-once)
+  message(STATUS "Valgrind-friendly: Enabled")
+  message(STATUS "  Usage: valgrind --tool=callgrind --cache-sim=yes ./Blackhole")
+  message(STATUS "  Visualize: kcachegrind callgrind.out.*")
+endif()
+
+# ============================================================================
+# Optimization Summary
+# ============================================================================
+
+message(STATUS "")
+message(STATUS "=== Optimization Summary ===")
+message(STATUS "  Build Type:        ${CMAKE_BUILD_TYPE}")
+message(STATUS "  Optimization:      -O3 (maximum)")
+message(STATUS "  Native Arch:       ${ENABLE_NATIVE_ARCH} (already configured in SIMD)")
+message(STATUS "  LTO/IPO:           ${ENABLE_LTO}")
+if(ENABLE_LTO)
+  message(STATUS "    Fat LTO:         ${ENABLE_FAT_LTO}")
+endif()
+message(STATUS "  PGO:               ${ENABLE_PGO}")
+if(ENABLE_PGO)
+  if(CMAKE_BUILD_TYPE STREQUAL "PGO-Gen")
+    message(STATUS "    Phase:           1 - Generate profiles")
+  elseif(CMAKE_BUILD_TYPE STREQUAL "PGO-Use")
+    message(STATUS "    Phase:           2 - Use profiles")
+  endif()
+endif()
+message(STATUS "  Fast Math:         ${ENABLE_FAST_MATH}")
+message(STATUS "  Perf Profiling:    ${ENABLE_PERF_PROFILING}")
+message(STATUS "  Valgrind Ready:    ${ENABLE_VALGRIND_FRIENDLY}")
+message(STATUS "=== End Optimization Summary ===")
+message(STATUS "")
 
 # ============================================================================
 # Tiered Warning Flag System (OpenSSF Recommended + C++ Specific)
