@@ -16,13 +16,18 @@
     {
       "name": "release",
       "displayName": "Release",
-      "description": "Optimized release build",
+      "description": "Optimized release build with maximum performance (-O3, -march=native, Fat LTO, fast-math)",
       "inherits": "base",
       "binaryDir": "${sourceDir}/build/Release",
       "installDir": "${sourceDir}/install/Release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Release/generators/conan_toolchain.cmake",
+        "ENABLE_NATIVE_ARCH": "ON",
+        "ENABLE_LTO": "ON",
+        "ENABLE_FAT_LTO": "ON",
+        "ENABLE_FAST_MATH": "ON",
+        "ENABLE_WERROR": "ON",
         "ENABLE_HARDENING": "ON",
         "ENABLE_LINKER_HARDENING": "ON",
         "WARNING_LEVEL": "5"
@@ -220,6 +225,65 @@
         "ENABLE_CPPCHECK": "ON",
         "ENABLE_SHADER_VALIDATION": "ON"
       }
+    },
+    {
+      "name": "profiling",
+      "displayName": "Profiling (perf/valgrind)",
+      "description": "RelWithDebInfo build optimized for perf, valgrind, and flamegraph profiling",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/Profiling",
+      "installDir": "${sourceDir}/install/Profiling",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Profiling/generators/conan_toolchain.cmake",
+        "ENABLE_NATIVE_ARCH": "ON",
+        "ENABLE_LTO": "OFF",
+        "ENABLE_FAST_MATH": "OFF",
+        "ENABLE_PERF_PROFILING": "ON",
+        "ENABLE_VALGRIND_FRIENDLY": "ON",
+        "ENABLE_PROFILING": "ON",
+        "ENABLE_WERROR": "OFF",
+        "WARNING_LEVEL": "3"
+      }
+    },
+    {
+      "name": "pgo-gen",
+      "displayName": "PGO Phase 1 (Profile Generation)",
+      "description": "Build with instrumentation to generate profile data for PGO optimization",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/PGO-Gen",
+      "installDir": "${sourceDir}/install/PGO-Gen",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/PGO-Gen/generators/conan_toolchain.cmake",
+        "ENABLE_NATIVE_ARCH": "ON",
+        "ENABLE_LTO": "ON",
+        "ENABLE_FAT_LTO": "ON",
+        "ENABLE_FAST_MATH": "ON",
+        "ENABLE_PGO_GEN": "ON",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5"
+      }
+    },
+    {
+      "name": "pgo-use",
+      "displayName": "PGO Phase 2 (Optimized with Profiles)",
+      "description": "Build using previously generated profile data for maximum optimization",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/PGO-Use",
+      "installDir": "${sourceDir}/install/PGO-Use",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/PGO-Use/generators/conan_toolchain.cmake",
+        "ENABLE_NATIVE_ARCH": "ON",
+        "ENABLE_LTO": "ON",
+        "ENABLE_FAT_LTO": "ON",
+        "ENABLE_FAST_MATH": "ON",
+        "ENABLE_PGO_USE": "ON",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5",
+        "PGO_PROFILE_DIR": "${sourceDir}/build/PGO-Gen/pgo-profiles"
+      }
     }
   ],
   "buildPresets": [
@@ -274,6 +338,18 @@
     {
       "name": "ci",
       "configurePreset": "ci"
+    },
+    {
+      "name": "profiling",
+      "configurePreset": "profiling"
+    },
+    {
+      "name": "pgo-gen",
+      "configurePreset": "pgo-gen"
+    },
+    {
+      "name": "pgo-use",
+      "configurePreset": "pgo-use"
     }
   ],
   "testPresets": [

@@ -41,17 +41,20 @@ else()
 endif()
 
 # ============================================================================
-# C++ Standard (C++23 only)
+# C++ Standard (C++17 for maximum compatibility)
 # ============================================================================
+# C++17 provides excellent balance of modern features and compiler support
+# Compatible with all major compilers (GCC 7+, Clang 5+, MSVC 2017+)
+# Conan 2.x recommended standard for broad compatibility
 
-set(BLACKHOLE_CXX_STANDARD 23)
+set(BLACKHOLE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD ${BLACKHOLE_CXX_STANDARD})
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_definitions(
   BLACKHOLE_CXX_STANDARD=${BLACKHOLE_CXX_STANDARD}
-  BLACKHOLE_CXX23=1
+  BLACKHOLE_CXX17=1
 )
 
 message(STATUS "Using C++ standard: C++${BLACKHOLE_CXX_STANDARD}")
@@ -648,9 +651,12 @@ endif()
 # ============================================================================
 
 option(ENABLE_PGO "Enable Profile-Guided Optimization support" OFF)
+option(ENABLE_PGO_GEN "Enable PGO profile generation (Phase 1)" OFF)
+option(ENABLE_PGO_USE "Enable PGO optimization using profiles (Phase 2)" OFF)
 set(PGO_PROFILE_DIR "${CMAKE_BINARY_DIR}/pgo-profiles" CACHE PATH "Directory for PGO profile data")
 
-if(CMAKE_BUILD_TYPE STREQUAL "PGO-Gen")
+# Support both CMAKE_BUILD_TYPE and explicit ENABLE_PGO_* options
+if(CMAKE_BUILD_TYPE STREQUAL "PGO-Gen" OR ENABLE_PGO_GEN)
   set(ENABLE_PGO ON)
   file(MAKE_DIRECTORY "${PGO_PROFILE_DIR}")
 
@@ -668,7 +674,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "PGO-Gen")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
   message(STATUS "PGO: Phase 1 - Generate profile data (run executable after build)")
 
-elseif(CMAKE_BUILD_TYPE STREQUAL "PGO-Use")
+elseif(CMAKE_BUILD_TYPE STREQUAL "PGO-Use" OR ENABLE_PGO_USE)
   set(ENABLE_PGO ON)
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
