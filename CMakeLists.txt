@@ -1231,8 +1231,8 @@ endif()
 # Static Analysis Tools Integration
 # ============================================================================
 
-option(ENABLE_CLANG_TIDY "Enable clang-tidy static analysis" OFF)
-option(ENABLE_CPPCHECK "Enable cppcheck static analysis" OFF)
+option(ENABLE_CLANG_TIDY "Enable clang-tidy static analysis" ON)
+option(ENABLE_CPPCHECK "Enable cppcheck static analysis" ON)
 option(ENABLE_IWYU "Enable include-what-you-use" OFF)
 option(ENABLE_GCC_ANALYZER "Enable GCC -fanalyzer" OFF)
 
