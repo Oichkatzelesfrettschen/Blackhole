@@ -94,11 +94,10 @@ check "z3 4.15.4" "grep -q 'z3/4.15.4' conanfile.py"
 check "meshoptimizer 1.0" "grep -q 'meshoptimizer/1.0' conanfile.py"
 check "eigen 3.4.1" "grep -q 'eigen/3.4.1' conanfile.py"
 
-# Check C++17
+# Check C++23
 section "C++ Standard"
-check "CMakeLists.txt uses C++17" "grep -q 'set(BLACKHOLE_CXX_STANDARD 17)' CMakeLists.txt"
-check "BLACKHOLE_CXX17 defined" "grep -q 'BLACKHOLE_CXX17=1' CMakeLists.txt"
-check "C++23 references removed" "! grep -q 'BLACKHOLE_CXX23' CMakeLists.txt"
+check "CMakeLists.txt uses C++23" "grep -q 'set(BLACKHOLE_CXX_STANDARD 23)' CMakeLists.txt"
+check "BLACKHOLE_CXX23 defined" "grep -q 'BLACKHOLE_CXX23=1' CMakeLists.txt"
 
 # Check build artifacts
 section "Build Verification"

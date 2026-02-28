@@ -122,7 +122,7 @@ class BlackholeConan(ConanFile):
 
     def validate(self):
         """Conan 2.x: Validate configuration"""
-        # C++17 minimum requirement
+        # C++23 minimum requirement (concepts, ranges, set::contains, etc.)
         if self.settings.compiler.get_safe("cppstd"):
-            if int(str(self.settings.compiler.cppstd)) < 17:
-                raise ConanInvalidConfiguration("Blackhole requires C++17 or later")
+            if int(str(self.settings.compiler.cppstd)) < 23:
+                raise ConanInvalidConfiguration("Blackhole requires C++23 or later")

@@ -24,10 +24,10 @@ All build configurations are defined natively in CMake - **no shell scripts requ
 conan profile detect
 
 # Install dependencies for Release build
-conan install . --output-folder=build/Release --build=missing -s build_type=Release -s compiler.cppstd=17
+conan install . --output-folder=build/Release --build=missing -s build_type=Release -s compiler.cppstd=23
 
 # Or for Debug build
-conan install . --output-folder=build/Debug --build=missing -s build_type=Debug -s compiler.cppstd=17
+conan install . --output-folder=build/Debug --build=missing -s build_type=Debug -s compiler.cppstd=23
 ```
 
 ### 2. Configure and Build
@@ -57,7 +57,7 @@ All configurations are defined in `CMakePresets.json`. Use them directly without
 Flags: `-O3`, `-march=native`, Fat LTO, fast-math
 
 ```bash
-conan install . --output-folder=build/Release --build=missing -s build_type=Release -s compiler.cppstd=17
+conan install . --output-folder=build/Release --build=missing -s build_type=Release -s compiler.cppstd=23
 cmake --preset release
 cmake --build --preset release
 ```
@@ -74,7 +74,7 @@ cmake --build --preset release
 Optimized with debug symbols for profiling tools.
 
 ```bash
-conan install . --output-folder=build/Profiling --build=missing -s build_type=RelWithDebInfo -s compiler.cppstd=17
+conan install . --output-folder=build/Profiling --build=missing -s build_type=RelWithDebInfo -s compiler.cppstd=23
 cmake --preset profiling
 cmake --build --preset profiling
 ```
@@ -103,7 +103,7 @@ perf script | stackcollapse-perf.pl | flamegraph.pl > flame.svg
 Full debug symbols, no optimization.
 
 ```bash
-conan install . --output-folder=build/Debug --build=missing -s build_type=Debug -s compiler.cppstd=17
+conan install . --output-folder=build/Debug --build=missing -s build_type=Debug -s compiler.cppstd=23
 cmake --preset debug
 cmake --build --preset debug
 ```
@@ -116,7 +116,7 @@ Two-phase build for 10-20% performance improvement over standard -O3.
 
 ```bash
 # Install dependencies
-conan install . --output-folder=build/PGO-Gen --build=missing -s build_type=Release -s compiler.cppstd=17
+conan install . --output-folder=build/PGO-Gen --build=missing -s build_type=Release -s compiler.cppstd=23
 
 # Build with instrumentation
 cmake --preset pgo-gen
@@ -136,7 +136,7 @@ llvm-profdata merge -output=build/PGO-Gen/pgo-profiles/default.profdata build/PG
 
 ```bash
 # Install dependencies
-conan install . --output-folder=build/PGO-Use --build=missing -s build_type=Release -s compiler.cppstd=17
+conan install . --output-folder=build/PGO-Use --build=missing -s build_type=Release -s compiler.cppstd=23
 
 # Build optimized binary
 cmake --preset pgo-use
@@ -157,7 +157,7 @@ Create or edit `~/.conan2/profiles/default`:
 arch=x86_64
 build_type=Release
 compiler=clang
-compiler.cppstd=17
+compiler.cppstd=23
 compiler.libcxx=libstdc++11
 compiler.version=21
 os=Linux
@@ -174,20 +174,20 @@ CXX=clang++
 
 ```bash
 # Release
-conan install . --output-folder=build/Release --build=missing -s build_type=Release -s compiler.cppstd=17
+conan install . --output-folder=build/Release --build=missing -s build_type=Release -s compiler.cppstd=23
 
 # Debug
-conan install . --output-folder=build/Debug --build=missing -s build_type=Debug -s compiler.cppstd=17
+conan install . --output-folder=build/Debug --build=missing -s build_type=Debug -s compiler.cppstd=23
 
 # Profiling
-conan install . --output-folder=build/Profiling --build=missing -s build_type=RelWithDebInfo -s compiler.cppstd=17
+conan install . --output-folder=build/Profiling --build=missing -s build_type=RelWithDebInfo -s compiler.cppstd=23
 ```
 
 ### Using Conan Lockfiles (Reproducible Builds)
 
 ```bash
 # Generate lockfile
-conan lock create . --lockfile=conan.lock -s compiler.cppstd=17
+conan lock create . --lockfile=conan.lock -s compiler.cppstd=23
 
 # Install using lockfile
 conan install . --lockfile=conan.lock --output-folder=build/Release --build=missing
@@ -246,13 +246,12 @@ Latest Conan 2.x native versions:
 
 All packages verified in ConanCenter as Conan 2.x native.
 
-## C++ Standard: C++17
+## C++ Standard: C++23
 
-Project uses **C++17** for maximum compatibility:
+Project uses **C++23** (concepts, std::ranges, std::set::contains, etc.):
 
-- **Compiler support**: GCC 7+, Clang 5+, MSVC 2017+
-- **Conan 2.x recommended**: Standard for broad compatibility
-- **OpenGL ecosystem**: Most libraries target C++17
+- **Compiler support**: GCC 11+, Clang 14+, MSVC 2022+
+- **Required by**: `compat.h`, verified concepts in physics headers
 
 Configured in `conanfile.py` and enforced in CMake.
 
@@ -277,7 +276,7 @@ Expected output:
 ```
 ✓ Conan 2.x installed
 ✓ conanfile.py exists
-✓ C++17 configured
+✓ C++23 configured
 ✓ All packages at latest versions
 ✓ No deprecated Conan 1.x features
 ```
@@ -292,7 +291,7 @@ rm -rf build build-* .conan/
 conan remove "*" -c
 
 # Fresh build
-conan install . --output-folder=build/Release --build=missing -s build_type=Release -s compiler.cppstd=17
+conan install . --output-folder=build/Release --build=missing -s build_type=Release -s compiler.cppstd=23
 cmake --preset release
 cmake --build --preset release
 ```
@@ -325,24 +324,7 @@ CLion automatically detects CMakePresets.json:
 **Solution**: Run `conan install` before `cmake`:
 
 ```bash
-conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=17
-```
-
-### Wrong C++ standard (compiler.cppstd=23)
-
-**Problem**: Build uses C++23 instead of C++17
-
-**Solution**: Add `-s compiler.cppstd=17` to conan install:
-
-```bash
-conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=17
-```
-
-Or update your default profile:
-
-```bash
-conan profile show default
-# Edit ~/.conan2/profiles/default and set: compiler.cppstd=17
+conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=23
 ```
 
 ### Missing dependencies
@@ -352,7 +334,7 @@ conan profile show default
 **Solution**: Run `conan install` with `--build=missing`:
 
 ```bash
-conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=17
+conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=23
 ```
 
 ## Migration from Shell Scripts
@@ -361,8 +343,8 @@ If you previously used shell scripts, here's the mapping:
 
 | Old Script | New Native Command |
 |------------|-------------------|
-| `./scripts/build-optimized.sh Release` | `conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=17 && cmake --preset release && cmake --build --preset release` |
-| `./scripts/build-profiling.sh` | `conan install . --output-folder=build/Profiling --build=missing -s compiler.cppstd=17 -s build_type=RelWithDebInfo && cmake --preset profiling && cmake --build --preset profiling` |
+| `./scripts/build-optimized.sh Release` | `conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=23 && cmake --preset release && cmake --build --preset release` |
+| `./scripts/build-profiling.sh` | `conan install . --output-folder=build/Profiling --build=missing -s compiler.cppstd=23 -s build_type=RelWithDebInfo && cmake --preset profiling && cmake --build --preset profiling` |
 | `./scripts/build-master.sh` | Use presets directly: `cmake --preset <name>` |
 
 **Note**: Shell scripts are kept for backwards compatibility but are no longer required.
@@ -380,13 +362,13 @@ If you previously used shell scripts, here's the mapping:
 ✅ **No shell script dependency**
 ✅ **All options in CMakePresets.json**
 ✅ **Transparent and reproducible**
-✅ **C++17 standard**
+✅ **C++23 standard**
 ✅ **Latest package versions**
 ✅ **OpenGL-native stack**
 
 **Workflow**:
 ```bash
-conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=17
+conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=23
 cmake --preset release
 cmake --build --preset release
 ./build/Release/Blackhole

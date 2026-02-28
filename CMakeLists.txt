@@ -41,20 +41,19 @@ else()
 endif()
 
 # ============================================================================
-# C++ Standard (C++17 for maximum compatibility)
+# C++ Standard (C++23 required)
 # ============================================================================
-# C++17 provides excellent balance of modern features and compiler support
-# Compatible with all major compilers (GCC 7+, Clang 5+, MSVC 2017+)
-# Conan 2.x recommended standard for broad compatibility
+# C++23 required for concepts, std::ranges, std::set::contains(), etc.
+# Compatible with GCC 11+, Clang 14+, MSVC 2022+
 
-set(BLACKHOLE_CXX_STANDARD 17)
+set(BLACKHOLE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD ${BLACKHOLE_CXX_STANDARD})
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_definitions(
   BLACKHOLE_CXX_STANDARD=${BLACKHOLE_CXX_STANDARD}
-  BLACKHOLE_CXX17=1
+  BLACKHOLE_CXX23=1
 )
 
 message(STATUS "Using C++ standard: C++${BLACKHOLE_CXX_STANDARD}")
@@ -1036,11 +1035,7 @@ list(APPEND HEADER_FILES ${PHYSICS_HEADER_FILES} ${RENDER_HEADER_FILES})
 
 add_executable(${CMAKE_PROJECT_NAME} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
 
-set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
-  CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-  CXX_STANDARD_REQUIRED ON
-  CXX_EXTENSIONS OFF
-)
+# CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
 
 # Apply tiered warning flags only to project source files
 set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES
@@ -1135,11 +1130,7 @@ add_executable(physics_bench
   "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
 )
 
-set_target_properties(physics_bench PROPERTIES
-  CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-  CXX_STANDARD_REQUIRED ON
-  CXX_EXTENSIONS OFF
-)
+# CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
 
 target_include_directories(physics_bench PRIVATE
   "${PROJECT_SOURCE_DIR}/src"
@@ -1186,11 +1177,7 @@ add_executable(nubhlight_inspect
   "${PROJECT_SOURCE_DIR}/tools/nubhlight_inspect.cpp"
 )
 
-set_target_properties(nubhlight_inspect PROPERTIES
-  CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-  CXX_STANDARD_REQUIRED ON
-  CXX_EXTENSIONS OFF
-)
+# CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
 
 target_link_libraries(nubhlight_inspect PRIVATE HighFive::HighFive CLI11::CLI11)
 target_compile_options(nubhlight_inspect PRIVATE ${PROJECT_WARNINGS})
@@ -1202,11 +1189,7 @@ add_executable(nubhlight_pack
   "${PROJECT_SOURCE_DIR}/tools/nubhlight_pack.cpp"
 )
 
-set_target_properties(nubhlight_pack PROPERTIES
-  CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-  CXX_STANDARD_REQUIRED ON
-  CXX_EXTENSIONS OFF
-)
+# CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
 
 target_link_libraries(nubhlight_pack PRIVATE HighFive::HighFive CLI11::CLI11)
 target_compile_options(nubhlight_pack PRIVATE ${PROJECT_WARNINGS})
@@ -1219,11 +1202,7 @@ if(ENABLE_Z3)
     "${PROJECT_SOURCE_DIR}/tools/z3_sanity.cpp"
   )
 
-  set_target_properties(z3_sanity PROPERTIES
-    CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-  )
+  # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
 
   target_link_libraries(z3_sanity PRIVATE ${Z3_TARGET})
   target_compile_options(z3_sanity PRIVATE ${PROJECT_WARNINGS})
@@ -1583,11 +1562,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
-    set_target_properties(physics_test PROPERTIES
-      CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-      CXX_STANDARD_REQUIRED ON
-      CXX_EXTENSIONS OFF
-	    )
+    # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
 	    # Apply project warnings to test sources
 	    target_compile_options(physics_test PRIVATE ${PROJECT_WARNINGS})
 	    # physics_test has a large, table-driven runner that can exceed the global
@@ -2580,10 +2555,7 @@ if(ENABLE_FUZZING)
         "${PROJECT_SOURCE_DIR}/src"
         "${PROJECT_SOURCE_DIR}/src/physics"
       )
-      set_target_properties(fuzz_physics PROPERTIES
-        CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-        CXX_STANDARD_REQUIRED ON
-      )
+      # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
     endif()
 
     # Shader preprocessor fuzz target
@@ -2596,10 +2568,7 @@ if(ENABLE_FUZZING)
       target_include_directories(fuzz_shader PRIVATE
         "${PROJECT_SOURCE_DIR}/src"
       )
-      set_target_properties(fuzz_shader PROPERTIES
-        CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-        CXX_STANDARD_REQUIRED ON
-      )
+      # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
     endif()
 
     # Header-only physics library fuzz target
@@ -2614,10 +2583,7 @@ if(ENABLE_FUZZING)
         "${PROJECT_SOURCE_DIR}/src"
         "${PROJECT_SOURCE_DIR}/src/physics"
       )
-      set_target_properties(fuzz_headers PROPERTIES
-        CXX_STANDARD ${BLACKHOLE_CXX_STANDARD}
-        CXX_STANDARD_REQUIRED ON
-      )
+      # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
     endif()
   else()
     message(WARNING "Fuzzing requires Clang compiler")

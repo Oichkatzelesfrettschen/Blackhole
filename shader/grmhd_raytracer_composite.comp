@@ -115,7 +115,7 @@ void main() {
     RayResult rayResult = rayResults.rays[pixelId];
     
     // Phase 1: Ray result is base color
-    vec4 output = rayResult.color;
+    vec4 composite = rayResult.color;
     
     // Phase 2: If ray hit accretion disk (depth > 0), sample GRMHD
     if (rayResult.depth >= 0.0 && rayResult.depth < 1e6) {
@@ -136,10 +136,10 @@ void main() {
         vec3 rayColor = rayResult.color.rgb;
         vec3 syncColor = vec3(synchFrac) * (grmhdField.x + 0.5);  // Density-weighted
         
-        output.rgb = mix(rayColor, syncColor, 0.3);  // 30% synchrotron blend
-        output.a = rayResult.color.a;
+        composite.rgb = mix(rayColor, syncColor, 0.3);  // 30% synchrotron blend
+        composite.a = rayResult.color.a;
     }
-    
+
     // Phase 3: Output composite pixel
-    compositeOutput.pixels[pixelId] = output;
+    compositeOutput.pixels[pixelId] = composite;
 }

@@ -237,13 +237,13 @@ vec4 multiwavelength_rt_integration(vec4 ray_color, float depth,
     );
 
     // ========== Combine channels ==========
-    vec4 output;
-    output.r = (intensity_radio.r * 0.5 + intensity_optical.r * 0.3 + intensity_xray.r * 0.2);
-    output.g = (intensity_optical.g * 0.6 + intensity_radio.g * 0.2 + intensity_xray.g * 0.2);
-    output.b = (intensity_xray.b * 0.7 + intensity_optical.b * 0.2 + intensity_radio.b * 0.1);
-    output.a = ray_color.a;
+    vec4 combined;
+    combined.r = (intensity_radio.r * 0.5 + intensity_optical.r * 0.3 + intensity_xray.r * 0.2);
+    combined.g = (intensity_optical.g * 0.6 + intensity_radio.g * 0.2 + intensity_xray.g * 0.2);
+    combined.b = (intensity_xray.b * 0.7 + intensity_optical.b * 0.2 + intensity_radio.b * 0.1);
+    combined.a = ray_color.a;
 
-    return output;
+    return combined;
 }
 
 void main() {

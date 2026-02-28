@@ -99,11 +99,11 @@ rm -rf build .conan/
 ./scripts/verify-conan2-migration.sh
 ```
 
-Expected: All checks pass, C++17 verified, latest packages confirmed.
+Expected: All checks pass, C++23 verified, latest packages confirmed.
 
 ## Technology Stack
 
-- **C++17** (GCC 7+, Clang 5+, MSVC 2017+)
+- **C++23** (GCC 11+, Clang 14+, MSVC 2022+)
 - **Conan 2.x** (native, no deprecated features)
 - **OpenGL** (glfw 3.4, glbinding 3.5.0, glm 1.0.1, imgui 1.92.5-docking)
 - **SIMD** (xsimd 14.0.0, highway 1.3.0, sleef 3.9.0)
@@ -113,15 +113,7 @@ Expected: All checks pass, C++17 verified, latest packages confirmed.
 **Q**: Conan toolchain not found?
 **A**: Run `conan install` before `cmake`:
 ```bash
-conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=17
-```
-
-**Q**: Wrong C++ standard (C++23 instead of C++17)?
-**A**: Add `-s compiler.cppstd=17` to `conan install` or update your profile:
-```bash
-# Edit ~/.conan2/profiles/default
-[settings]
-compiler.cppstd=17
+conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=23
 ```
 
 **Q**: Missing dependencies?

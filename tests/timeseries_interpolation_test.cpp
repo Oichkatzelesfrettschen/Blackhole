@@ -50,11 +50,11 @@ bool test_interpolation_state_finding() {
     InterpolationState s3 = get_interpolation_state(ts, 3.5);  // Past end (clamp to last)
     InterpolationState s4 = get_interpolation_state(ts, -0.5); // Before start (clamp to first)
 
-    // When out of bounds, should extrapolate (dump_left=0, dump_right=1)
+    // Out of bounds: implementation clamps to nearest boundary dump
     bool state_ok = (s1.dump_left == 0 && s1.dump_right == 1 && std::abs(s1.alpha - 0.5) < 1e-10) &&
                     (s2.dump_left == 1 && s2.dump_right == 2 && std::abs(s2.alpha - 0.5) < 1e-10) &&
-                    (s3.dump_left == 0 && s3.dump_right == 1 && s3.alpha == 0.0) &&  // Out of bounds
-                    (s4.dump_left == 0 && s4.dump_right == 1 && s4.alpha == 0.0);    // Out of bounds
+                    (s3.dump_left == 3 && s3.dump_right == 3 && s3.alpha == 1.0) &&  // Past end: hold last
+                    (s4.dump_left == 0 && s4.dump_right == 0 && s4.alpha == 0.0);    // Before start: hold first
 
     std::cout << "  t=0.5 (middle): [" << s1.dump_left << "," << s1.dump_right << "] alpha=" << std::fixed << std::setprecision(2) << s1.alpha << "\n"
               << "  t=1.5 (middle): [" << s2.dump_left << "," << s2.dump_right << "] alpha=" << s2.alpha << "\n"
