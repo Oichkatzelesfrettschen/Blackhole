@@ -268,21 +268,25 @@ inline double gw_strain_1pn(double M_c, double eta, double f, double D) {
 }
 
 /**
- * @brief Compute GW phase with 3.5PN corrections, including spin couplings.
+ * @brief Compute GW phase with full 3.5PN corrections including spin couplings.
  *
- * Phi(f) = 2*pi*f*t_c - Phi_c - pi/4 + (3/128)*(pi*M*f)^(-5/3)
+ * Phi(f) = 2*pi*f*t_c - Phi_c - pi/4 + (3/128 eta)*(pi*M*f)^(-5/3)
  *           * [1 + PN_corrections + spin_corrections]
  *
- * Spin corrections added (WHY: O(10%) effect for a*>0.3):
- *   Spin-orbit (1.5PN, Kidder 1995):
- *     psi_SO = (113/12 + 25*eta/4) * chi_eff * v^3
- *   Spin-spin (2PN, Cutler & Flanagan 1994):
- *     psi_SS = -50 * eta * chi1 * chi2 * v^4
+ * Non-spin terms through 3.5PN from Blanchet (2014) Living Rev. Rel.
  *
- * References:
- *   - Blanchet (2014), Living Reviews in Relativity, for non-spin terms
- *   - Kidder (1995), Phys. Rev. D 52, 821 for spin-orbit
- *   - Cutler & Flanagan (1994), Phys. Rev. D 49, 2658 for spin-spin
+ * Spin corrections:
+ *   1.5PN SO  -- Kidder (1995) Phys. Rev. D 52, 821
+ *   2PN  SS   -- Poisson (1998) Phys. Rev. D 57, 5287
+ *   2.5PN SO  -- Blanchet, Buonanno, Faye (2006) Phys. Rev. D 74, 104034
+ *   3PN  SO   -- Blanchet, Buonanno, Faye (2011) arXiv:1104.5659 Eq. 7.10
+ *   3PN  SS   -- Mikoczi, Vasuth, Gergely (2005) Phys. Rev. D 71, 124043
+ *   3.5PN SO  -- Blanchet, Buonanno, Faye (2011) arXiv:1104.5659 Eq. 7.11
+ *
+ * Uses symmetric/antisymmetric spin combinations:
+ *   chi_s = (chi1 + chi2) / 2
+ *   chi_a = (chi1 - chi2) / 2
+ *   delta = (m1 - m2) / (m1 + m2) = sqrt(1 - 4*eta)
  *
  * @param M_c    Chirp mass [g]
  * @param eta    Symmetric mass ratio
@@ -307,36 +311,111 @@ inline double gw_phase_3p5pn(double M_c, double eta, double f,
   double v3 = v2 * v;
   double v4 = v3 * v;
   double v5 = v4 * v;
+  double v6 = v5 * v;
+  double v7 = v6 * v;
+  double log_v = std::log(v);
 
-  // Coefficients (Blanchet 2014)
   double eta2 = eta * eta;
+  double eta3 = eta2 * eta;
+
+  // Symmetric/antisymmetric spin combinations
+  double chi_s = 0.5 * (chi1 + chi2);
+  double chi_a = 0.5 * (chi1 - chi2);
+  double delta = std::sqrt(std::max(1.0 - 4.0 * eta, 0.0));  // (m1-m2)/M
+
+  // ====================================================================
+  // Non-spin PN coefficients (Blanchet 2014 LRR, Eqs. 234-241)
+  // ====================================================================
 
   // Leading order
   double psi_N = 1.0;
 
-  // 1PN (point-mass)
+  // 1PN
   double psi_1PN = (3715.0 / 756.0 + 55.0 * eta / 9.0) * v2;
 
-  // 1.5PN (point-mass tail + spin-orbit)
-  // WHY: spin-orbit enters at same PN order as the leading tail term
-  // psi_SO coefficient from Kidder (1995) Eq. 2.9, aligned-spin limit
-  double psi_15PN = (-16.0 * M_PI + (113.0 / 12.0 + 25.0 * eta / 4.0) * chi_eff) * v3;
+  // 1.5PN (tail)
+  double psi_15PN_pm = -16.0 * M_PI * v3;
 
-  // 2PN (point-mass + spin-spin)
-  // WHY: spin-spin enters at 2PN
-  double psi_SS = -50.0 * eta * chi1 * chi2 * v4;
-  double psi_2PN = (15293365.0 / 508032.0 + 27145.0 * eta / 504.0 +
-                    3085.0 * eta2 / 72.0) * v4 + psi_SS;
+  // 2PN
+  double psi_2PN_pm = (15293365.0 / 508032.0 + 27145.0 * eta / 504.0 +
+                        3085.0 * eta2 / 72.0) * v4;
 
   // 2.5PN (includes log term)
-  double psi_25PN = M_PI * (38645.0 / 756.0 - 65.0 * eta / 9.0) *
-                    (1.0 + 3.0 * std::log(v)) * v5;
+  double psi_25PN_pm = M_PI * (38645.0 / 756.0 - 65.0 * eta / 9.0) *
+                       (1.0 + 3.0 * log_v) * v5;
 
-  // Sum PN corrections
-  double pn_sum = psi_N + psi_1PN + psi_15PN + psi_2PN + psi_25PN;
+  // 3PN (Blanchet 2014 Eq. 238, Euler-Mascheroni gamma_E = 0.5772...)
+  constexpr double gamma_E = 0.5772156649015329;
+  double psi_3PN_pm = (11583231236531.0 / 4694215680.0
+                       - 640.0 * M_PI * M_PI / 3.0
+                       - 6848.0 * gamma_E / 21.0
+                       + eta * (-15737765635.0 / 3048192.0
+                                + 2255.0 * M_PI * M_PI / 12.0)
+                       + 76055.0 * eta2 / 1728.0
+                       - 127825.0 * eta3 / 1296.0
+                       - 6848.0 * std::log(4.0 * v) / 21.0) * v6;
 
-  // Leading phase factor (3/128) / (pi M f)^(5/3)
-  double psi_leading = (3.0 / 128.0) / std::pow(M_PI * M_geo * f, 5.0 / 3.0);
+  // 3.5PN
+  double psi_35PN_pm = M_PI * (77096675.0 / 254016.0
+                                + 378515.0 * eta / 1512.0
+                                - 74045.0 * eta2 / 756.0) * v7;
+
+  // ====================================================================
+  // Spin-orbit corrections (aligned-spin TaylorF2 phasing)
+  // ====================================================================
+
+  // 1.5PN SO -- Kidder (1995)
+  // beta = (113/12)*chi_s + (113/12)*delta*chi_a - (19/6)*eta*(chi_s)
+  // Simplified for chi_eff convention:
+  //   (113/12 + 25*eta/4)*chi_eff = (113/12 - 19/6*eta)*chi_s + (113/12)*delta*chi_a
+  // Both forms are equivalent for aligned spins with the mass-weighted chi_eff definition.
+  double psi_15PN_SO = (113.0 / 12.0 + 25.0 * eta / 4.0) * chi_eff * v3;
+
+  // 2PN SS -- self-spin + cross-spin (Poisson 1998, Mikoczi et al. 2005)
+  double psi_2PN_SS = -(25.0 / 2.0) * eta * (chi1 * chi1 + chi2 * chi2
+                       + 2.0 * chi1 * chi2) * v4;
+
+  // 2.5PN SO -- Blanchet, Buonanno, Faye (2006) Eq. 8.3
+  double psi_25PN_SO = M_PI * (
+    (-4159.0 / 672.0 - 189.0 * eta / 8.0) * chi_s
+    + delta * (-4159.0 / 672.0 + 189.0 * eta / 8.0) * chi_a
+  ) * v5;
+
+  // 3PN SO -- Blanchet, Buonanno, Faye (2011) arXiv:1104.5659 Eq. 7.10
+  // (NNLO spin-orbit, the key new term)
+  double psi_3PN_SO = (
+    (14585.0 / 8.0 - 215.0 * eta / 2.0 - 15.0 * eta2 / 2.0) * chi_s
+    + delta * (14585.0 / 8.0 - 475.0 * eta / 6.0) * chi_a
+  ) * v6;
+
+  // 3PN SS -- quadrupole-monopole + self-spin (Mikoczi et al. 2005)
+  double chi_s2 = chi_s * chi_s;
+  double chi_a2 = chi_a * chi_a;
+  double psi_3PN_SS = (
+    (5.0 / 2.0 + 40.0 * eta / 3.0) * chi_s2
+    + 5.0 * delta * chi_s * chi_a
+    + (5.0 / 2.0 - 10.0 * eta) * chi_a2
+  ) * v6;
+
+  // 3.5PN SO -- Blanchet, Buonanno, Faye (2011) arXiv:1104.5659 Eq. 7.11
+  double psi_35PN_SO = M_PI * (
+    (732985.0 / 2268.0 - 140.0 * eta / 9.0) * chi_s
+    + delta * (732985.0 / 2268.0 - 24260.0 * eta / 81.0) * chi_a
+  ) * v7;
+
+  // ====================================================================
+  // Sum all PN terms
+  // ====================================================================
+  double pn_sum = psi_N
+                + psi_1PN
+                + psi_15PN_pm + psi_15PN_SO
+                + psi_2PN_pm  + psi_2PN_SS
+                + psi_25PN_pm + psi_25PN_SO
+                + psi_3PN_pm  + psi_3PN_SO + psi_3PN_SS
+                + psi_35PN_pm + psi_35PN_SO;
+
+  // Leading phase factor (3/128 eta) / v^5
+  double psi_leading = 3.0 / (128.0 * eta * v5);
 
   return 2.0 * M_PI * f * t_c - phi_c - M_PI / 4.0 + psi_leading * pn_sum;
 }
