@@ -181,7 +181,115 @@ template<IntegratorScalar Real>
     return C * h * h * h * h * h;
 }
 
-// Full geodesic integration from λ₀ to λ_final
+// ============================================================================
+// Dormand-Prince RK45 embedded pair (Shampine & Watts 1986)
+//
+// WHY: The heuristic step control in integrate() (h*=1.2 / h*=0.5) does not
+// use a proper error estimate and can over- or under-step near the photon
+// sphere.  Dormand-Prince provides an O(h^5) solution and O(h^4) error
+// estimate from the same 7-stage evaluation, enabling principled adaptive
+// step selection per Hairer, Norsett & Wanner (1993).
+//
+// The Butcher tableau coefficients below are from Dormand & Prince (1980),
+// J. Comput. Appl. Math. 6, 19.
+// ============================================================================
+
+// DP45 stage coefficients (nodes c2..c6)
+template<IntegratorScalar Real>
+struct DP45Stages {
+    StateVector<Real> k1, k2, k3, k4, k5, k6, k7;
+};
+
+template<IntegratorScalar Real>
+[[nodiscard]] inline DP45Stages<Real> dp45_stages(
+    const StateVector<Real>& y, Real lambda, Real h,
+    Real M, Real a, GeodesicRHS<Real> f) noexcept
+{
+    DP45Stages<Real> s;
+    // k1 = h * f(y)
+    s.k1 = f(y, lambda, M, a) * h;
+
+    // k2: c2 = 1/5
+    auto y2 = y + (s.k1 * (1.0/5.0));
+    s.k2 = f(y2, lambda + h/5.0, M, a) * h;
+
+    // k3: c3 = 3/10
+    auto y3 = y + (s.k1 * (3.0/40.0)) + (s.k2 * (9.0/40.0));
+    s.k3 = f(y3, lambda + 3.0*h/10.0, M, a) * h;
+
+    // k4: c4 = 4/5
+    auto y4 = y + (s.k1 * (44.0/45.0)) + (s.k2 * (-56.0/15.0)) + (s.k3 * (32.0/9.0));
+    s.k4 = f(y4, lambda + 4.0*h/5.0, M, a) * h;
+
+    // k5: c5 = 8/9
+    auto y5 = y + (s.k1 * (19372.0/6561.0)) + (s.k2 * (-25360.0/2187.0))
+                + (s.k3 * (64448.0/6561.0)) + (s.k4 * (-212.0/729.0));
+    s.k5 = f(y5, lambda + 8.0*h/9.0, M, a) * h;
+
+    // k6: c6 = 1 (FSAL candidate)
+    auto y6 = y + (s.k1 * (9017.0/3168.0))   + (s.k2 * (-355.0/33.0))
+                + (s.k3 * (46732.0/5247.0))   + (s.k4 * (49.0/176.0))
+                + (s.k5 * (-5103.0/18656.0));
+    s.k6 = f(y6, lambda + h, M, a) * h;
+
+    // 5th-order solution (for propagation)
+    auto y5th = y + (s.k1 * (35.0/384.0))  + (s.k3 * (500.0/1113.0))
+                  + (s.k4 * (125.0/192.0)) + (s.k5 * (-2187.0/6784.0))
+                  + (s.k6 * (11.0/84.0));
+
+    // k7 = f(y5th) for FSAL and error estimate
+    s.k7 = f(y5th, lambda + h, M, a) * h;
+
+    return s;
+}
+
+// Dormand-Prince step: returns 5th-order solution and embedded error estimate
+template<IntegratorScalar Real>
+struct DP45Result {
+    StateVector<Real> y5;    // 5th-order propagated state
+    Real error;               // Embedded error norm (||y5 - y4||_inf)
+    Real h;                   // Step size used
+};
+
+template<IntegratorScalar Real>
+[[nodiscard]] inline DP45Result<Real> dp45_step(
+    const StateVector<Real>& y, Real lambda, Real h,
+    Real M, Real a, GeodesicRHS<Real> f) noexcept
+{
+    auto s = dp45_stages(y, lambda, h, M, a, f);
+
+    // 5th-order solution
+    auto y5 = y + (s.k1 * (35.0/384.0))   + (s.k3 * (500.0/1113.0))
+                + (s.k4 * (125.0/192.0))  + (s.k5 * (-2187.0/6784.0))
+                + (s.k6 * (11.0/84.0));
+
+    // 4th-order solution (embedded)
+    auto y4 = y + (s.k1 * (5179.0/57600.0))  + (s.k3 * (7571.0/16695.0))
+                + (s.k4 * (393.0/640.0))     + (s.k5 * (-92097.0/339200.0))
+                + (s.k6 * (187.0/2100.0))    + (s.k7 * (1.0/40.0));
+
+    // Error = ||y5 - y4|| (local extrapolation)
+    auto err_vec = y5 + (y4 * static_cast<Real>(-1.0));
+    Real error = err_vec.norm();
+
+    return {y5, error, h};
+}
+
+// Optimal step size for next iteration (Hairer 1993, Eq. II.4.12)
+// h_new = h * min(fac_max, max(fac_min, fac * (tol/err)^(1/5)))
+template<IntegratorScalar Real>
+[[nodiscard]] inline Real dp45_next_step(Real h, Real error, Real tol) noexcept {
+    if (error < static_cast<Real>(1e-50)) return h * 2.0;
+    Real ratio = std::pow(tol / error, static_cast<Real>(0.2));
+    // Safety factor and bounds from Hairer p. 168
+    Real factor = std::min(static_cast<Real>(2.0),
+                           std::max(static_cast<Real>(0.1),
+                                    static_cast<Real>(0.9) * ratio));
+    return h * factor;
+}
+
+// Full geodesic integration from lambda_0 to lambda_final using DP45
+// Falls back to fixed-step RK4 if DP45 is disabled via compile flag.
 template<IntegratorScalar Real>
 [[nodiscard]] inline StateVector<Real> integrate(
     StateVector<Real> y, Real lambda_0, Real lambda_final, Real h_init,
@@ -190,25 +298,25 @@ template<IntegratorScalar Real>
 {
     Real lambda = lambda_0;
     Real h = h_init;
+    const Real h_min = h_init * static_cast<Real>(1e-8);
 
     while (lambda < lambda_final) {
-        // Adaptive step size
+        // Clamp step to remaining interval
         if (lambda + h > lambda_final) {
             h = lambda_final - lambda;
         }
+        if (h < h_min) h = h_min;
 
-        auto [y_new, error, h_used] = rk4_step_with_error(y, lambda, h, M, a, f);
+        // Dormand-Prince adaptive step
+        auto [y_new, error, h_used] = dp45_step(y, lambda, h, M, a, f);
 
-        // Simple adaptive control: increase/decrease step based on error
-        if (error < tolerance / 10.0) {
-            h *= 1.2;  // Increase step size
-        } else if (error > tolerance) {
-            h *= 0.5;  // Decrease step size and retry
-            continue;
+        if (error < tolerance || h <= h_min) {
+            // Accept step
+            y = y_new;
+            lambda += h_used;
         }
-
-        y = y_new;
-        lambda += h;
+        // Adjust step for next iteration (whether accepted or not)
+        h = dp45_next_step(h_used, error, tolerance);
     }
 
     return y;

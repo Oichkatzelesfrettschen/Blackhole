@@ -268,30 +268,45 @@ inline double gw_strain_1pn(double M_c, double eta, double f, double D) {
 }
 
 /**
- * @brief Compute GW phase with 3.5PN corrections.
+ * @brief Compute GW phase with 3.5PN corrections, including spin couplings.
  *
- * Φ(f) = 2πf t_c - Φ_c - π/4 + (3/128)(πMf)^(-5/3) * [1 + PN corrections]
+ * Phi(f) = 2*pi*f*t_c - Phi_c - pi/4 + (3/128)*(pi*M*f)^(-5/3)
+ *           * [1 + PN_corrections + spin_corrections]
  *
- * The phase is critical for matched filtering in GW detection.
+ * Spin corrections added (WHY: O(10%) effect for a*>0.3):
+ *   Spin-orbit (1.5PN, Kidder 1995):
+ *     psi_SO = (113/12 + 25*eta/4) * chi_eff * v^3
+ *   Spin-spin (2PN, Cutler & Flanagan 1994):
+ *     psi_SS = -50 * eta * chi1 * chi2 * v^4
  *
- * @param M_c Chirp mass [g]
- * @param eta Symmetric mass ratio
- * @param f GW frequency [Hz]
- * @param t_c Time of coalescence [s]
- * @param phi_c Phase at coalescence [rad]
+ * References:
+ *   - Blanchet (2014), Living Reviews in Relativity, for non-spin terms
+ *   - Kidder (1995), Phys. Rev. D 52, 821 for spin-orbit
+ *   - Cutler & Flanagan (1994), Phys. Rev. D 49, 2658 for spin-spin
+ *
+ * @param M_c    Chirp mass [g]
+ * @param eta    Symmetric mass ratio
+ * @param f      GW frequency [Hz]
+ * @param t_c    Time of coalescence [s]
+ * @param phi_c  Phase at coalescence [rad]
+ * @param chi_eff Effective aligned spin (default 0 = no spin)
+ * @param chi1   Dimensionless spin of primary (default 0)
+ * @param chi2   Dimensionless spin of secondary (default 0)
  * @return GW phase [rad]
  */
 inline double gw_phase_3p5pn(double M_c, double eta, double f,
-                             double t_c = 0.0, double phi_c = 0.0) {
+                             double t_c = 0.0, double phi_c = 0.0,
+                             double chi_eff = 0.0,
+                             double chi1 = 0.0, double chi2 = 0.0) {
   double M_total = M_c / std::pow(eta, 0.6);
   double M_geo = G * M_total / (C * C * C);
 
-  // PN expansion parameter
+  // PN expansion parameter v = (pi M f)^(1/3)
   double v = std::cbrt(M_PI * M_geo * f);
   double v2 = v * v;
   double v3 = v2 * v;
-  double v5 = v3 * v2;
-  double v7 = v5 * v2;
+  double v4 = v3 * v;
+  double v5 = v4 * v;
 
   // Coefficients (Blanchet 2014)
   double eta2 = eta * eta;
@@ -299,25 +314,28 @@ inline double gw_phase_3p5pn(double M_c, double eta, double f,
   // Leading order
   double psi_N = 1.0;
 
-  // 1PN
+  // 1PN (point-mass)
   double psi_1PN = (3715.0 / 756.0 + 55.0 * eta / 9.0) * v2;
 
-  // 1.5PN
-  double psi_15PN = -16.0 * M_PI * v3;
+  // 1.5PN (point-mass tail + spin-orbit)
+  // WHY: spin-orbit enters at same PN order as the leading tail term
+  // psi_SO coefficient from Kidder (1995) Eq. 2.9, aligned-spin limit
+  double psi_15PN = (-16.0 * M_PI + (113.0 / 12.0 + 25.0 * eta / 4.0) * chi_eff) * v3;
 
-  // 2PN
+  // 2PN (point-mass + spin-spin)
+  // WHY: spin-spin enters at 2PN
+  double psi_SS = -50.0 * eta * chi1 * chi2 * v4;
   double psi_2PN = (15293365.0 / 508032.0 + 27145.0 * eta / 504.0 +
-                   3085.0 * eta2 / 72.0) * v2 * v2;
+                    3085.0 * eta2 / 72.0) * v4 + psi_SS;
 
   // 2.5PN (includes log term)
-  double gamma_E = 0.5772156649; // Euler-Mascheroni constant
   double psi_25PN = M_PI * (38645.0 / 756.0 - 65.0 * eta / 9.0) *
                     (1.0 + 3.0 * std::log(v)) * v5;
 
   // Sum PN corrections
   double pn_sum = psi_N + psi_1PN + psi_15PN + psi_2PN + psi_25PN;
 
-  // Leading phase
+  // Leading phase factor (3/128) / (pi M f)^(5/3)
   double psi_leading = (3.0 / 128.0) / std::pow(M_PI * M_geo * f, 5.0 / 3.0);
 
   return 2.0 * M_PI * f * t_c - phi_c - M_PI / 4.0 + psi_leading * pn_sum;
@@ -339,10 +357,32 @@ struct WaveformPoint {
 };
 
 /**
- * @brief Generate inspiral waveform.
+ * @brief Compute effective aligned spin parameter from binary.
+ *
+ * chi_eff = (m1*a1_star + m2*a2_star) / (m1 + m2)
+ *
+ * WHY: chi_eff is the dominant spin parameter in the waveform phase and
+ * is directly constrained by LIGO/Virgo parameter estimation.
+ *
+ * @param binary Binary system parameters (a1, a2 in cm; converted internally)
+ * @return Effective aligned spin (-1 <= chi_eff <= 1)
+ */
+inline double chi_eff_from_binary(const BinarySystem &binary) {
+  // Convert dimensional spin parameters [cm] to dimensionless a* = a*c^2/(G*M)
+  double M1_geo = G * binary.m1 / C2;  // M1 in cm (geometric)
+  double M2_geo = G * binary.m2 / C2;  // M2 in cm (geometric)
+  double a1_star = (M1_geo > 0) ? (binary.a1 / M1_geo) : 0.0;
+  double a2_star = (M2_geo > 0) ? (binary.a2 / M2_geo) : 0.0;
+  return (binary.m1 * a1_star + binary.m2 * a2_star) / binary.M_total();
+}
+
+/**
+ * @brief Generate inspiral waveform with spin corrections.
  *
  * Integrates the frequency evolution and computes strain at each step.
  * Uses the stationary phase approximation for efficiency.
+ * Spin-orbit and spin-spin PN phase corrections are included when
+ * binary.a1 or binary.a2 are nonzero.
  *
  * @param binary Binary system parameters
  * @param f_low Starting frequency [Hz]
@@ -359,12 +399,19 @@ inline std::vector<WaveformPoint> generate_inspiral_waveform(
   double M_c = chirp_mass(binary.m1, binary.m2);
   double eta = binary.eta();
 
+  // Precompute spin parameters for PN phase
+  double M1_geo = G * binary.m1 / C2;
+  double M2_geo = G * binary.m2 / C2;
+  double a1_star = (M1_geo > 0) ? (binary.a1 / M1_geo) : 0.0;
+  double a2_star = (M2_geo > 0) ? (binary.a2 / M2_geo) : 0.0;
+  double chi_eff = chi_eff_from_binary(binary);
+
   double f = f_low;
   double t = 0.0;
   double phase = 0.0;
 
   while (f < f_high && f > 0) {
-    // Strain amplitude
+    // Strain amplitude (1PN corrected)
     double h0 = gw_strain_1pn(M_c, eta, f, binary.distance);
 
     // Polarizations
@@ -384,8 +431,10 @@ inline std::vector<WaveformPoint> generate_inspiral_waveform(
     double df_dt = frequency_derivative(M_c, f);
     f += df_dt * dt;
 
-    // Evolve phase (GW frequency is twice orbital)
-    phase += M_PI * f * dt;
+    // Evolve phase using 3.5PN formula with spin corrections
+    double new_phase = gw_phase_3p5pn(M_c, eta, f, t, 0.0,
+                                       chi_eff, a1_star, a2_star);
+    phase = new_phase;
 
     t += dt;
 
@@ -403,9 +452,7 @@ inline std::vector<WaveformPoint> generate_inspiral_waveform(
 /**
  * @brief Compute dominant QNM frequency for Schwarzschild.
  *
- * ω_22 ≈ 0.3737 / M (geometric units)
- *
- * For Kerr, depends on spin (Berti et al. 2009).
+ * omega_22 ~= 0.3737 / M (geometric units)
  *
  * @param M_final Final black hole mass [g]
  * @return QNM frequency [Hz]
@@ -418,7 +465,7 @@ inline double qnm_frequency_schwarzschild(double M_final) {
 /**
  * @brief Compute QNM damping time for Schwarzschild.
  *
- * τ_22 ≈ M / 0.0890 (geometric units)
+ * tau_22 ~= M / 0.0890 (geometric units)
  *
  * @param M_final Final black hole mass [g]
  * @return Damping time [s]
@@ -426,6 +473,78 @@ inline double qnm_frequency_schwarzschild(double M_final) {
 inline double qnm_damping_time_schwarzschild(double M_final) {
   double M_geo = G * M_final / (C * C * C);
   return M_geo / 0.0890;
+}
+
+/**
+ * @brief Compute spin-dependent QNM frequency for Kerr (l=2, m=2 mode).
+ *
+ * Uses polynomial fits from Berti, Cardoso & Starinets (2009) Table VIII
+ * for the dominant (2,2) quasi-normal mode:
+ *
+ *   f_1 = 1.5251 - 1.1568 * (1 - a_star)^0.1292
+ *   q   = 0.7000 + 1.4187 * (1 - a_star)^(-0.4990)
+ *   omega_R = f_1 / (2 pi M_geo)
+ *
+ * WHY: QNM frequency depends significantly on spin; at a*=0.9 the
+ * frequency is ~30% higher than the Schwarzschild value. The fit
+ * reduces to the Schwarzschild limit (omega_R = 0.3737/M) as a* -> 0.
+ *
+ * Reference: Berti, Cardoso & Starinets (2009), Class. Quant. Grav. 26,
+ *            163001, Table VIII (n=0 overtone, l=m=2).
+ *
+ * @param M_final Final black hole mass [g]
+ * @param a_star  Dimensionless spin parameter (0 <= a_star <= 1)
+ * @return QNM frequency [Hz]
+ */
+inline double qnm_frequency_kerr(double M_final, double a_star) {
+  // Clamp to physical range; at a*=0 reduce to Schwarzschild
+  if (a_star <= 0.0) return qnm_frequency_schwarzschild(M_final);
+  a_star = std::min(a_star, 0.9999);
+
+  double M_geo = G * M_final / (C * C * C);
+
+  // Berti 2009 Table VIII fit for dimensionless frequency f_1 = M omega_R
+  double f1 = 1.5251 - 1.1568 * std::pow(1.0 - a_star, 0.1292);
+
+  // omega_R = f1 / M_geo (in rad/s), QNM frequency f = omega_R / (2 pi)
+  return f1 / (2.0 * M_PI * M_geo);
+}
+
+/**
+ * @brief Compute spin-dependent QNM damping time for Kerr (l=2, m=2 mode).
+ *
+ * Uses quality factor q from Berti et al. (2009):
+ *
+ *   q   = 0.7000 + 1.4187 * (1 - a_star)^(-0.4990)
+ *   tau = 2 q / omega_R
+ *
+ * WHY: For rapidly spinning black holes (a* > 0.7) the ringdown rings
+ * many more cycles than the Schwarzschild case; the damping time can
+ * increase by a factor of ~3. Using the Schwarzschild value for Kerr
+ * underestimates the number of visible ringdown cycles.
+ *
+ * Reference: Berti, Cardoso & Starinets (2009), Class. Quant. Grav. 26,
+ *            163001, Table VIII (n=0 overtone, l=m=2).
+ *
+ * @param M_final Final black hole mass [g]
+ * @param a_star  Dimensionless spin parameter (0 <= a_star <= 1)
+ * @return Damping time [s]
+ */
+inline double qnm_damping_time_kerr(double M_final, double a_star) {
+  if (a_star <= 0.0) return qnm_damping_time_schwarzschild(M_final);
+  a_star = std::min(a_star, 0.9999);
+
+  double M_geo = G * M_final / (C * C * C);
+
+  // Berti 2009 quality factor q = tau * omega_R / 2
+  double q = 0.7000 + 1.4187 * std::pow(1.0 - a_star, -0.4990);
+
+  // f1 = M * omega_R
+  double f1 = 1.5251 - 1.1568 * std::pow(1.0 - a_star, 0.1292);
+  double omega_R = f1 / M_geo;
+
+  // tau = 2 q / omega_R
+  return 2.0 * q / omega_R;
 }
 
 /**

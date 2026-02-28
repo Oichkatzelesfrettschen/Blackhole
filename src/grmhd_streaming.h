@@ -34,10 +34,12 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -187,14 +189,20 @@ public:
 private:
     GRMHDMetadata metadata_;
     TileCache cache_;
-    
+
     std::atomic<uint32_t> currentFrame_{0};
     std::atomic<bool> running_{false};
     std::atomic<bool> playing_{false};
     std::atomic<double> playbackSpeed_{1.0};
-    
+
+    // Async work queue: main thread enqueues, loaderThread_ drains.
+    // Queue element is TileID (load request type private to .cpp).
+    mutable std::mutex queueMutex_;
+    std::condition_variable queueCV_;
+    std::queue<TileID> loadQueue_;
+
     std::thread loaderThread_;
-    
+
     void loaderThreadFunc();
     std::shared_ptr<GRMHDTile> loadTile(const TileID& id);
 };

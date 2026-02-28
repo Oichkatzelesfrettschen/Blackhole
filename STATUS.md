@@ -1,8 +1,62 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2026-02-06
-**Status:** Stable Release Candidate - Crash-free, functionality restored, 0 warnings
+**Last Updated:** 2026-02-27
+**Status:** Active Development - Phase 6 physics fidelity upgrades in progress
 **Roadmap:** See `docs/MASTER_ROADMAP.md` for the consolidated execution plan
+
+---
+
+## Recent Changes
+
+### Phase 6 Physics Fidelity Batch (2026-02-27) -- Items C, D, E, G, B
+
+**Kerr QNM Spin-Dependent Ringdown (Item C)** -- COMPLETE
+- Added `qnm_frequency_kerr(M, a_star)` and `qnm_damping_time_kerr(M, a_star)`
+  using Berti, Cardoso & Starinets (2009) Table VIII polynomial fits for the (l=2,m=2) mode.
+  Previously the code used the Schwarzschild frequency regardless of spin; error exceeds 10%
+  for a* > 0.3.
+- Added `chi_eff_from_binary(binary)` to extract mass-weighted effective aligned spin.
+- `generate_inspiral_waveform` now uses the spin-aware Kerr QNM branch when spin != 0.
+- Test: `tests/kerr_qnm_spin_test.cpp` -- 6/6 tests pass (label: qnm, gw, spin, phase6).
+
+**GW Spin-Orbit and Spin-Spin PN Phase (Item D)** -- COMPLETE
+- Extended `gw_phase_3p5pn()` with optional chi_eff, chi1, chi2 parameters (defaults 0).
+- Spin-orbit: 1.5PN Kidder (1995) term (+113/12 + 25*eta/4) * chi_eff * v^3.
+- Spin-spin: 2PN Cutler-Flanagan (1994) term -50*eta*chi1*chi2*v^4.
+- For a* > 0.3, spin corrections are O(10%) of total GW phase -- important for matched
+  filtering of spinning BBH events.
+- Test: `tests/kerr_qnm_spin_test.cpp` tests 4-6 validate spin PN corrections.
+
+**Synchrotron F(x) Bessel K_{5/3} Upgrade (Item E)** -- COMPLETE
+- Replaced Fouka & Ouichaoui (2013) polynomial fit in the intermediate regime (0.01 < x < 10)
+  with two-segment 16-point Gauss-Legendre quadrature of K_{5/3}(xi) via boost::math.
+- Segment 1: [x, x+max(2x, 0.5)] captures rapid variation near the lower limit.
+- Segment 2: [x+delta, x+30] captures the exponential tail.
+- Accuracy: sub-0.2% vs scipy reference (was ~1% with polynomial).
+- GPU/GLSL path retains the polynomial approximation (boost unavailable in GLSL).
+- Test: test 9 in `tests/synchrotron_spectrum_test.cpp` passes (label: synchrotron, phase5).
+
+**Dormand-Prince RK45 Adaptive Step Control (Item G)** -- COMPLETE
+- Replaced heuristic `h *= 1.2 / h *= 0.5` step control in `src/physics/verified/rk4.h`
+  with the Dormand-Prince 4(5) embedded error estimate (Hairer 1993).
+- `dp45_stages()`: computes 7 stages k1..k7 with full Butcher tableau.
+- `dp45_step()`: returns 5th-order solution + embedded error estimate.
+- `dp45_next_step()`: optimal step control h_new = h * min(2, max(0.1, 0.9*(tol/err)^0.2)).
+- `integrate()` now uses DP45 accept/reject with fallback to h_min.
+
+**GRMHD Async Tile Streaming (Item B)** -- COMPLETE
+- Implemented all 9 previously-stub TODO entries in `src/grmhd_streaming.cpp`.
+- `init()`: nlohmann_json metadata parse (schema_version, grid_dims, channels, frames),
+  binary file size detection, relative bin-path resolution against JSON directory.
+- `loaderThreadFunc()`: std::thread + condition_variable drain loop.
+- `getTile()`: LRU cache lookup; on miss enqueues TileID to loadQueue_.
+- `seekFrame()`: sets currentFrame_, prefetches next 3 frames to loadQueue_.
+- `loadTile()`: seeks to per-frame byteOffset in binary, reads RGBA32F voxel slab.
+
+**Physics Math Lacunae Reference**
+- `docs/PHYSICS_MATH_LACUNAE.md` (written 2026-02-27): structured analysis of remaining
+  physics/math/perf gaps covering GRMHD, RTE, 4D slicing, GW, integrator, NP formalism,
+  float32 horizon precision, and Conan library mapping.
 
 ---
 

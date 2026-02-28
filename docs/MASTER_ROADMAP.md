@@ -1,9 +1,9 @@
 # Blackhole Master Roadmap
 
 **Created:** 2026-01-01
-**Version:** 1.2.0
-**Last Updated:** 2026-01-29
-**Status:** Phase 5 COMPLETE - Active Development (Phase 6 Planning)
+**Version:** 1.3.0
+**Last Updated:** 2026-02-27
+**Status:** Phase 6 Active - Physics fidelity batch C/D/E/G/B complete; Phase 10.1 complete
 **Architecture:** C++23 / OpenGL 4.6 / Conan 2.x / Multi-wavelength observational framework
 
 ---
@@ -390,8 +390,20 @@ This roadmap consolidates all planning into a single source of truth.
 
 ## Phase 6: GPU Acceleration & Full GRMHD (Weeks 37-48)
 
-**Status:** Planning
-**Goal:** 1000x raytracer speedup + full GRMHD streaming implementation
+**Status:** Active -- physics fidelity batch (Items C/D/E/G/B) complete 2026-02-27
+**Goal:** 1000x raytracer speedup + full GRMHD streaming implementation + physics accuracy
+
+### 6.0 Physics Fidelity Batch (2026-02-27) -- COMPLETE
+
+| Task | Status | Notes |
+|------|--------|-------|
+| C. Kerr QNM spin-dependent ringdown | COMPLETE | Berti 2009 fits; 6/6 tests pass |
+| D. GW spin-orbit/spin-spin PN phase | COMPLETE | Kidder 1995, Cutler-Flanagan 1994 |
+| E. Synchrotron K_{5/3} Bessel upgrade | COMPLETE | Two-segment GL quad; <0.2% vs scipy |
+| G. Dormand-Prince RK45 step control | COMPLETE | Replaces heuristic; Hairer 1993 |
+| B. GRMHD async tile streaming | COMPLETE | 9 TODOs filled; JSON+binary+LRU+thread |
+
+See `docs/PHYSICS_MATH_LACUNAE.md` for the full gap analysis driving Phase 6 work.
 
 ### 6.1 GPU Compute Raytracer
 
@@ -401,6 +413,7 @@ This roadmap consolidates all planning into a single source of truth.
 | 6.1.2 Port Christoffel symbols to GPU | Future | Leverage 5.17x SIMD patterns |
 | 6.1.3 Async compute pipeline with PBOs | Future | Overlap compute with raster |
 | 6.1.4 Tiled dispatch for large resolutions | Future | 16x16 or 32x32 tiles |
+| A. FMA parity fix (ISSUE-009) | Future | `precise` qualifier on outlier sub-exprs |
 
 **Target:** 6M rays/s @ 1920x1080 (1000x speedup over CPU)
 
@@ -408,26 +421,25 @@ This roadmap consolidates all planning into a single source of truth.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 6.2.1 JSON metadata parsing | Future | nlohmann/json integration |
-| 6.2.2 Binary file memory mapping | Future | mmap or std::fstream with PBO |
-| 6.2.3 Thread pool for async loading | Future | std::jthread or Taskflow |
-| 6.2.4 OpenGL PBO GPU upload | Future | Async transfer queue |
+| 6.2.1 JSON metadata parsing | COMPLETE | nlohmann_json; schema_version, grid_dims |
+| 6.2.2 Binary file read with frame offsets | COMPLETE | seekg per-frame byteOffset |
+| 6.2.3 Background loader thread | COMPLETE | std::thread + condition_variable |
+| 6.2.4 OpenGL PBO GPU upload | Future | Async transfer queue (post-tile-loading) |
 | 6.2.5 Synchrotron emission formulas | Future | grmhdEmission() in grmhd_octree.glsl |
 | 6.2.6 Self-absorption model | Future | grmhdAbsorption() implementation |
 
-**Estimated Effort:** 800-1200 LOC, 2-3 weeks
 **Target:** 60fps @ 1080p with multi-frame interpolation, >90% cache hit rate
 
-### 6.3 Radiative Transfer Completion
+### 6.3 Remaining Physics Gaps (from PHYSICS_MATH_LACUNAE.md)
 
 | Task | Status | Notes |
 |------|--------|-------|
-| 6.3.1 Tardis spectral LUT Python integration | Future | Generate wavelength-dependent emission |
-| 6.3.2 Fe Kα line at 6.4 keV | Future | Relativistic Doppler + gravitational redshift |
-| 6.3.3 Wavelength-dependent ray marching | Future | Multi-channel texture sampling |
+| F. Kerr-Schild GPU coordinates | Future | Eliminate BL singularity; ~200 LOC |
+| H. Analytic Kerr geodesic (elliptic) | Future | Gralla-Lupsasca 2020; O(1) vs O(N) |
+| Volumetric RTE (dI/ds = j - alpha*I) | Future | Full radiative transfer; ~10k LOC |
+| Fe K-alpha line at 6.4 keV | Future | Relativistic Doppler + grav. redshift |
 
-**Estimated Effort:** 3-4 weeks
-**Target:** EHT image reconstruction comparison
+**Reference:** `docs/PHYSICS_MATH_LACUNAE.md` (written 2026-02-27)
 
 ---
 
@@ -530,6 +542,7 @@ export BLACKHOLE_PERF_HUD=1
 | TODO_FIXES.md | Issue backlog | Active |
 | AGENTS.md | Repository guidelines | Reference |
 | PHYSICS_ARCHITECTURE.md | Physics deep dive | Reference |
+| docs/PHYSICS_MATH_LACUNAE.md | Gap analysis: physics/math/perf gaps for Phase 6+ | Active |
 | CLEANROOM_IMPORTS.md | Provenance tracking | Active |
 | CLEANROOM_PORT_MAP.md | Module mapping | Reference |
 | EIGEN_REFACTOR_PLAN.md | Math migration | Active |

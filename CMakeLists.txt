@@ -81,6 +81,7 @@ find_package(HighFive REQUIRED)
 find_package(CLI11 REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(Boost CONFIG QUIET)
 # SPIR-V Tooling removed in Phase 3 (C++23 -> GLSL transpilation)
 # All SPIR-V compilation now uses GLSL 4.60 shader includes directly
 # Validation and optional compilation still available via glslangValidator and glslc
@@ -1013,6 +1014,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/shader_watcher.cpp"
   "${PROJECT_SOURCE_DIR}/src/texture.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_packed_loader.cpp"
+  "${PROJECT_SOURCE_DIR}/src/grmhd_streaming.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
   "${PROJECT_SOURCE_DIR}/src/input.cpp"
   "${PROJECT_SOURCE_DIR}/src/settings.cpp"
@@ -1893,6 +1895,9 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(synchrotron_spectrum_test PRIVATE ${PROJECT_WARNINGS})
+    if(Boost_FOUND OR TARGET boost::boost)
+      target_link_libraries(synchrotron_spectrum_test PRIVATE boost::boost)
+    endif()
     add_test(NAME synchrotron_spectrum_validation COMMAND synchrotron_spectrum_test)
     set_tests_properties(synchrotron_spectrum_validation PROPERTIES
       LABELS "physics;synchrotron;emission;phase5"
@@ -1988,6 +1993,28 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(gw_waveform_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Kerr QNM spin-dependent ringdown + spin PN phase validation (Phase 6.3a)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_qnm_spin_test.cpp")
+    add_executable(kerr_qnm_spin_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_qnm_spin_test.cpp"
+    )
+    target_include_directories(kerr_qnm_spin_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_qnm_spin_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME kerr_qnm_spin_validation COMMAND kerr_qnm_spin_test)
+    set_tests_properties(kerr_qnm_spin_validation PROPERTIES
+      LABELS "physics;gw;qnm;kerr;spin;phase6"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_qnm_spin_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
