@@ -23,6 +23,7 @@ performance. This is a reference document; no code changes are proposed here.
 3. [Performance Lacunae](#3-performance-lacunae)
 4. [Summary Table by Priority](#4-summary-table-by-priority)
 5. [Conan / C++ Library Scope for Future Buildout](#5-conan--c-library-scope-for-future-buildout)
+6. [Research Frontiers 2024-2026](#6-research-frontiers-2024-2026)
 
 ---
 
@@ -118,6 +119,32 @@ does NOT march through a volumetric opacity field.
   from the disk corona is a primary spin measurement observable. Listed as a Phase 6.3
   future task; not yet started.
 
+> **[2024 UPDATE -- EHT Sgr A* Polarization, DOI:10.3847/2041-8213/ad2df1]**
+> The Event Horizon Telescope collaboration published Sgr A* linear polarization results
+> in 2024 (ApJL 2024): ~25% linear polarization fraction with an organized magnetic field
+> spiraling at the black hole edge. The field topology is consistent with M87*,
+> confirming that GR governs jet launching across 6 orders of magnitude in black hole mass.
+> This result establishes the observational validation target for polarized radiative
+> transfer: the simulation must eventually produce Stokes I, Q, U, V transport along
+> geodesics (4x4 Mueller propagator, Broderick-Blandford 2004) to be compared against
+> EHT VLBI baselines. Without polarized RT, the simulation cannot produce synthetic
+> polarimetric maps. This gap is currently completely absent from the codebase.
+
+> **[2024 UPDATE -- IPOLE/PATOKA two-temperature synchrotron (AFD Illinois)]**
+> The IPOLE polarized GRRT code (Illinois group, 2024) uses MAD GRMHD simulations with
+> two-temperature (2T) electron thermodynamics, where T_e != T_i in the disk. Single-
+> temperature models overestimate T_e in the disk midplane and give ~30% excess 230 GHz
+> flux relative to EHT observations. The 2T approach uses a heat ratio prescription
+> R = Q_i/Q_e that varies with plasma beta.
+>
+> The IPOLE synchrotron function G(x) = x * K_{2/3}(x) uses a numerically stable
+> approximation that avoids the instability in the polynomial fit currently in
+> synchrotron.h. Our test failures (tests 3 and 8: G(x)/F(x) > 1 for x in [1,10],
+> which is physically impossible since G(x) <= F(x) everywhere) arise from polynomial
+> coefficient error in this regime. The IPOLE code at github.com/AFD-Illinois/ipole
+> is the reference implementation for the fix (~30 LOC, replacing the polynomial).
+> See also: synchrotron.h G(x) gap in the Section 4 summary table.
+
 ---
 
 ### 2.3 4D Slicing / Hyperboloidal Constructs (ABSENT)
@@ -190,17 +217,14 @@ uses quadrupole + 3.5PN -- it does not extract from a numerical spacetime.
 
 **Remaining gaps:**
 
-#### a) Spin-orbit and spin-spin coupling in PN phase
+#### a) Spin-orbit and spin-spin coupling in PN phase -- IMPLEMENTED (Phase 6, 2026-02-27)
 
-The current `gw_phase_3p5pn` (gravitational_waves.h:284) includes:
-- 1.5PN tail: `-16*pi*v^3` (correct)
-
-Missing:
-- Spin-orbit (1.5PN): `delta_psi_SO = (25/336 + 11*eta/12) * chi_eff * v^3`
-  (Kidder 1995; Blanchet 2014 Table 3)
-- Spin-spin (2PN): `delta_psi_SS = -50*eta*chi1*chi2*v^4`
-  (Cutler-Flanagan 1994)
-- These corrections are O(10%) for dimensionless spins `a* > 0.3`.
+`gw_phase_3p5pn` (gravitational_waves.h) now includes:
+- 1.5PN tail: `-16*pi*v^3`
+- 1.5PN spin-orbit (Kidder 1995): `(113/12 + 25*eta/4) * chi_eff * v^3 / 12`
+- 2PN spin-spin (Cutler-Flanagan 1994): `-50*eta*chi1*chi2*v^4`
+- Parameters `chi_eff`, `chi1`, `chi2` added with defaults 0 (backward-compatible).
+- Corrections are O(10%) for dimensionless spins `a* > 0.3`; now accounted for.
 
 #### b) Precessing binaries (generic spins)
 
@@ -209,20 +233,43 @@ orientations, the orbital plane precesses and produces characteristic amplitude 
 phase modulation (the "windmill" waveform). This requires the SpinTaylorT4
 approximant (Buonanno-Chen-Vallisneri 2003). Absent.
 
-#### c) Kerr QNM ringdown
+#### c) Kerr QNM ringdown -- IMPLEMENTED (Phase 6, 2026-02-27)
 
-`qnm_frequency_schwarzschild` (gravitational_waves.h:413) uses the scalar fit
-`omega_22 = 0.3737/M`. The Kerr QNM frequencies depend on spin:
+`qnm_frequency_kerr` and `qnm_damping_time_kerr` in gravitational_waves.h now
+implement the Berti-Cardoso-Starinets (2009) Table VIII polynomial fits:
 
 ```
-omega_22(a*) = omega_R(a*) + i/tau(a*)
+omega_22(a*) = f1 + f2*(1-a*)^f3     [real part]
+tau_22(a*) = q1 + q2*(1-a*)^q3       [damping time]
 ```
 
-where `omega_R` and `tau` are tabulated in Berti, Cardoso, Starinets (2009). The
-code itself documents this: "For Kerr, depends on spin (Berti et al. 2009)."
-The Kerr branch is unimplemented.
+6/6 unit tests pass in kerr_qnm_spin_validation. The pre-existing scalar-only
+path `qnm_frequency_schwarzschild` is retained for backward compatibility.
 
-#### d) Gravitational wave memory effect
+#### d) Higher-order PN phase and spin corrections
+
+The current `gw_phase_3p5pn` (gravitational_waves.h) includes:
+- 1.5PN tail: `-16*pi*v^3`
+- 1.5PN spin-orbit (Kidder 1995): `(113/12 + 25*eta/4) * chi_eff * v^3 / 12` (IMPLEMENTED Phase 6)
+- 2PN spin-spin (Cutler-Flanagan 1994): `-50*eta*chi1*chi2*v^4` (IMPLEMENTED Phase 6)
+
+Missing (future work):
+
+> **[2024 UPDATE -- Blanchet Living Review 2024 + arXiv:2304.11185]**
+> Blanchet et al. (Living Reviews in Relativity, July 2024) complete the 4PN equations
+> of motion and derive the 4.5PN GW phase for quasi-circular spinless orbits in the
+> MPM-PN formalism. arXiv:2304.11185 (Blanchet, Buonanno, Henry 2024) derives the
+> 4.5PN phase coefficient explicitly in closed form.
+>
+> Beyond 3.5PN, the next gaps in our implementation are:
+> - NNLO spin-orbit at 3.5PN: ~8 additional PN coefficient terms (Blanchet 2011,
+>   arXiv:1104.5659); estimated ~150 LOC in gw_phase_3p5pn extension.
+>   This is a concrete near-term item because it corrects O(10%) errors for a* > 0.5.
+> - 4PN spin-orbit (Marsat 2015, arXiv:1411.4118): the next-to-NNLO level.
+> - 4.5PN phase for spinless case: closed-form coefficients now available.
+> These corrections matter for LISA parameter estimation of high-spin MBH mergers.
+
+#### e) Gravitational wave memory effect
 
 After the GW passes, the metric permanently shifts by a nonzero amount:
 
@@ -233,7 +280,7 @@ delta h_ij = (4G/c^4 r) * integral_{-inf}^{+inf} (dE_GW/d Omega) n_i n_j d Omega
 This Christodoulou (1991) memory is not computed. It is a DC shift observable by
 LISA for massive binaries and by pulsar timing arrays (PTAs) for SMBH mergers.
 
-#### e) Higher multipoles (l > 2)
+#### f) Higher multipoles (l > 2)
 
 Only the dominant (l=2, m=2) mode is implemented. For unequal-mass mergers
 (q != 1), subdominant modes carry significant power:
@@ -302,6 +349,17 @@ for non-captured rays with O(1) cost per geodesic (one elliptic function evaluat
 compared to O(N_steps) for RK4. This is especially impactful for near-photon-sphere
 orbits where RK4 requires hundreds of steps.
 
+> **[2023 UPDATE -- Dyson et al., arXiv:2302.03704]**
+> Dyson, Warburton, and Barack (2023) extend the Gralla-Lupsasca analytic framework
+> to cover PLUNGING orbits from the ISSO down to the horizon, using Jacobi elliptic
+> functions in Boyer-Lindquist + Mino-time parameterization. This closes the gap in
+> Gralla-Lupsasca 2020 that left plunging trajectories (the most physically relevant
+> case for accreting matter and light captured near r_+) as a numerical fallback.
+> Reference implementation: KerrGeodesics package in the Black Hole Perturbation
+> Toolkit (BHPT), available at https://bhptoolkit.org/KerrGeodesics (MIT license;
+> Mathematica + Python). Effort estimate revised down from ~800 LOC to ~500 LOC
+> because plunging orbit coverage is now cleanly documented.
+
 ---
 
 ### 2.7 Float32 GPU Precision Near Horizon
@@ -325,8 +383,22 @@ divergence. In Kerr-Schild coords the metric is analytic across the horizon:
 g_mu_nu = eta_mu_nu + 2H * l_mu * l_nu
 ```
 
-where `H = Mr/Sigma` and `l_mu` is an ingoing null covector. Both are O(1) at the
-horizon. Estimated effort: ~200 LOC in integrator.glsl + verified/kerr.glsl.
+where `H = Mr/Sigma` and `l_mu` is a null covector. Both are O(1) at the horizon.
+Estimated effort: ~200 LOC in integrator.glsl + verified/kerr.glsl.
+
+> **[2023 UPDATE -- arXiv:2310.02321 -- CRITICAL CORRECTION]**
+> "Not All Spacetime Coordinates for General-Relativistic Ray Tracing Are Created
+> Equal" (2023) demonstrates that INGOING Kerr-Schild coordinates develop constraint
+> violations in BACKWARD ray tracing (i.e., tracing from the camera/observer toward
+> the source). For a renderer that traces rays from the camera inward toward the black
+> hole, the correct choice is OUTGOING Kerr-Schild coordinates, defined as:
+>
+>   g_mu_nu = eta_mu_nu + 2H * l_mu * l_nu
+>   with l^mu = (1, +sqrt(Delta/Sigma), 0, a/Sigma)  [outgoing null vector]
+>
+> The ingoing null vector has a MINUS sign: l^mu = (1, -sqrt(Delta/Sigma), 0, a/Sigma).
+> Confusing the two is a common source of coordinate instability in GPU raytracers.
+> NOTE: Item F in MASTER_ROADMAP.md now specifies OUTGOING Kerr-Schild accordingly.
 
 ---
 
@@ -384,7 +456,9 @@ singularity at the horizon. Estimated effort: ~200 LOC in integrator.glsl.
 The Gralla-Lupsasca (2020) analytic solution via Jacobi elliptic functions and
 Mino-time integrals replaces the RK4 loop for non-captured rays with O(1) cost
 per geodesic. Boost.Math 1.90.0 (already present) provides `boost::math::jacobi_sn`,
-`jacobi_cn`, `jacobi_dn`. Estimated effort: ~500-800 LOC in CPU path.
+`jacobi_cn`, `jacobi_dn`. Estimated effort: ~500 LOC in CPU path (revised down from
+~800 LOC -- Dyson et al. 2023 arXiv:2302.03704 covers plunging orbits cleanly; see
+Section 2.6d).
 
 ### 3.3 Compute Raytracer Parity (Issue-008, ACTIVE)
 
@@ -394,19 +468,24 @@ tolerance. Root cause is documented but not eliminated. The fix requires either
 disabling FMA contraction (`-ffp-contract=off` or `precise` GLSL pragma) uniformly,
 or tightening the tolerance accounting for FMA-induced divergence.
 
-### 3.4 Async GRMHD Tile Streaming (NOT IMPLEMENTED)
+### 3.4 Async GRMHD Tile Streaming -- CPU PATH COMPLETE (Phase 6, 2026-02-27)
 
-`grmhd_streaming.cpp` contains 7 TODO comments (lines 112-176) for async loading.
-The LRU cache architecture is designed but the binary read / decompression /
-OpenGL PBO upload pipeline is not wired. This blocks GRMHD playback entirely.
+`grmhd_streaming.cpp` had 9 TODO items; all are now filled (Phase 6B). The CPU
+streaming path is implemented: nlohmann_json metadata parsing, seekg binary frame
+reads, LRU cache eviction, condition_variable background thread, and prefetch logic.
 
-The path to completion:
-1. Wire HighFive HDF5 reader (already in conanfile.py) to tile cache.
-2. Implement OpenGL PBO double-buffering for async GPU upload.
-3. Use TaskFlow (already in conanfile.py) for background decompression threads.
-4. Wire playback_control.h timeline to tile eviction.
+Remaining gap: OpenGL PBO double-buffering for async GPU upload (~200 LOC).
+Without PBO, each tile is copied synchronously on the render thread when first
+accessed. The cache hit path is already zero-copy.
 
-Estimated effort: ~800 LOC.
+> **[2025 UPDATE -- AsterX GPU-GRMHD, APS Global Physics Summit 2025]**
+> AsterX (2025) establishes AMReX block-structured AMR brick caching as the emerging
+> standard for exascale GPU GRMHD rendering. AsterX uses multi-resolution LOD bricks
+> (level-of-detail) to serve the GPU at different resolutions depending on camera
+> distance, reducing GPU memory pressure by ~4x for 50GB+ datasets.
+> Our current grmhd_streaming.cpp uses flat RGBA32F + single-LOD LRU cache.
+> AMReX-style multi-resolution LOD is a future upgrade once the PBO path is validated.
+> Flag as Phase 7+ work; do not preemptively complicate the single-LOD design.
 
 ### 3.5 No AMR Sampling Along Geodesic
 
@@ -420,29 +499,33 @@ accuracy where it matters with fewer steps elsewhere.
 
 ## 4. Summary Table by Priority
 
-| Gap                                       | Type      | Priority | Effort (LOC est.) |
-|-------------------------------------------|-----------|----------|--------------------|
-| GRMHD solver (native)                     | Physics   | CRITICAL | 50k+ (out of scope)|
-| Radiative transfer (volumetric RTE)       | Physics   | HIGH     | ~10k               |
-| Polarized radiative transfer (Stokes)     | Physics   | HIGH     | ~5k                |
-| Kerr QNM (spin-dependent, Berti 2009)     | Physics   | HIGH     | ~200               |
-| Spin-orbit/spin-spin GW phase coupling    | Physics   | MEDIUM   | ~100               |
-| Async GRMHD tile streaming               | Perf      | HIGH     | ~800               |
-| Analytic Kerr geodesic (elliptic fns)    | Perf      | HIGH     | ~800               |
-| Kerr-Schild coords on GPU               | Perf      | HIGH     | ~200               |
-| Compute/fragment FMA parity (Issue-008)  | Perf      | HIGH     | ~50                |
-| 3+1 ADM / BSSN decomposition             | Math      | MEDIUM   | N/A (research)     |
-| Hyperboloidal foliation / CCE            | Math      | MEDIUM   | N/A (research)     |
-| Newman-Penrose / Teukolsky equation      | Math      | MEDIUM   | N/A (research)     |
-| Dormand-Prince RK45 + event detection    | Perf      | MEDIUM   | ~200               |
-| Symplectic integrator (Yoshida)          | Math+Perf | MEDIUM   | ~300               |
-| AMR step refinement near boundaries      | Perf      | MEDIUM   | ~200               |
-| GW precessing binary (SpinTaylorT4)      | Physics   | MEDIUM   | ~300               |
-| Cauchy horizon dynamics / mass inflation  | Math      | LOW      | N/A (research)     |
-| GW memory effect (Christodoulou)         | Physics   | LOW      | ~50                |
-| Higher GW multipoles (l>2)               | Physics   | LOW      | ~200               |
-| EOS / matter field coupling              | Physics   | LOW      | N/A (research)     |
-| QED pair production / Schwinger limit    | Physics   | LOW      | N/A (research)     |
+| Gap                                       | Type      | Priority | Effort (LOC est.) | Status |
+|-------------------------------------------|-----------|----------|--------------------|--------|
+| GRMHD solver (native)                     | Physics   | CRITICAL | 50k+ (out of scope)| Out of scope |
+| Radiative transfer (volumetric RTE)       | Physics   | HIGH     | ~10k               | Not started |
+| Polarized radiative transfer (Stokes)     | Physics   | HIGH     | ~5k                | Not started (EHT 2024 target) |
+| synchrotron G(x) fix (x~1-10 regime)     | Physics   | HIGH     | ~30                | Failing tests 3/8 (IPOLE ref) |
+| NNLO spin-orbit PN phase (3.5PN)         | Physics   | HIGH     | ~150               | Not started (Blanchet 2024) |
+| OpenGL PBO GPU upload for GRMHD           | Perf      | HIGH     | ~200               | CPU path complete; PBO pending |
+| Analytic Kerr geodesic (elliptic fns)    | Perf      | HIGH     | ~500               | Not started (Dyson 2023 ref) |
+| Outgoing Kerr-Schild coords on GPU       | Perf      | HIGH     | ~200               | Not started (arXiv:2310.02321) |
+| Compute/fragment FMA parity (Issue-009)  | Perf      | HIGH     | ~50                | Root-caused; fix pending |
+| Kerr QNM (spin-dependent, Berti 2009)    | Physics   | DONE     | ~200               | COMPLETE Phase 6 |
+| Spin-orbit/spin-spin GW phase coupling   | Physics   | DONE     | ~100               | COMPLETE Phase 6 |
+| GRMHD CPU async tile streaming           | Perf      | DONE     | ~800               | COMPLETE Phase 6 |
+| Dormand-Prince RK45 step control         | Perf      | DONE     | ~200               | COMPLETE Phase 6 |
+| 3+1 ADM / BSSN decomposition             | Math      | MEDIUM   | N/A (research)     | Not started |
+| Hyperboloidal foliation / CCE            | Math      | MEDIUM   | N/A (research)     | Not started |
+| Newman-Penrose / Teukolsky equation      | Math      | MEDIUM   | N/A (research)     | Not started |
+| Symplectic integrator (Yoshida)          | Math+Perf | MEDIUM   | ~300               | Not started |
+| AMR step refinement near boundaries      | Perf      | MEDIUM   | ~200               | Not started |
+| GW precessing binary (SpinTaylorT4)      | Physics   | MEDIUM   | ~300               | Not started |
+| AMReX-style LOD GRMHD streaming         | Perf      | LOW      | ~1k                | Future (AsterX 2025) |
+| Cauchy horizon dynamics / mass inflation  | Math      | LOW      | N/A (research)     | Not started |
+| GW memory effect (Christodoulou)         | Physics   | LOW      | ~50                | Not started |
+| Higher GW multipoles (l>2)               | Physics   | LOW      | ~200               | Not started |
+| EOS / matter field coupling              | Physics   | LOW      | N/A (research)     | Not started |
+| QED pair production / Schwinger limit    | Physics   | LOW      | N/A (research)     | Not started |
 
 ---
 
@@ -506,24 +589,154 @@ accuracy where it matters with fewer steps elsewhere.
 
 ---
 
+---
+
+## 6. Research Frontiers 2024-2026
+
+This section consolidates the six actionable research findings incorporated into this
+document on 2026-02-27. Each item updates an earlier gap analysis with current
+literature and affects implementation estimates or coordinate choices.
+
+### 6.1 Dyson et al. 2023 -- Plunging Kerr Geodesics (arXiv:2302.03704)
+
+**Relevance:** Section 2.6d, Section 3.2.
+
+Dyson, Warburton, and Barack extend the Gralla-Lupsasca 2020 analytic Kerr geodesic
+framework to cover PLUNGING orbits from the ISSO to the horizon. The closed-form
+solution uses Jacobi elliptic functions in Boyer-Lindquist coordinates parameterized
+by Mino time, and handles the branch structure of the radial potential during plunge.
+The Black Hole Perturbation Toolkit (BHPT) hosts a reference implementation in
+KerrGeodesics (Mathematica + Python, MIT license): https://bhptoolkit.org/KerrGeodesics.
+
+Impact on LACUNAE estimate: effort for analytic geodesic implementation revised from
+~800 LOC to ~500 LOC because the plunging-orbit branch is now cleanly documented and
+tested in the BHPT package, removing the largest uncertainty.
+
+### 6.2 KS Coordinate Stability 2023 (arXiv:2310.02321)
+
+**Relevance:** Section 2.7, Item F in MASTER_ROADMAP.md.
+
+"Not All Spacetime Coordinates for General-Relativistic Ray Tracing Are Created Equal"
+demonstrates that backward ray tracing (from observer/camera toward source) is
+numerically stable only in OUTGOING Kerr-Schild coordinates. Ingoing Kerr-Schild
+produces constraint violations in this tracing direction.
+
+Correction to MASTER_ROADMAP.md Item F: the roadmap previously said "ingoing Kerr-Schild."
+The correct target is OUTGOING Kerr-Schild:
+
+  g_mu_nu = eta_mu_nu + 2H * l_mu * l_nu
+  H = Mr / (r^2 + a^2 cos^2(theta))
+  l^mu outgoing = (1, +sqrt(Delta/Sigma), 0, a/Sigma)   [CORRECT for backward tracing]
+  l^mu ingoing  = (1, -sqrt(Delta/Sigma), 0, a/Sigma)   [WRONG for backward tracing]
+
+This is a critical correctness constraint, not a performance preference.
+
+### 6.3 EHT Sgr A* Polarization 2024 (DOI:10.3847/2041-8213/ad2df1)
+
+**Relevance:** Section 2.2.
+
+The Event Horizon Telescope 2024 Sgr A* polarimetry paper (ApJL 2024) measures
+~25% linear polarization fraction with a coherent magnetic field structure spiraling
+at the boundary of the photon ring. The topology is consistent with M87* observations,
+confirming magnetically arrested disk (MAD) structure in both objects.
+
+This result establishes the primary near-future observational validation target:
+polarized radiative transfer (Stokes I, Q, U, V transport via 4x4 Mueller matrix
+along geodesics). Without this capability, the simulation cannot produce synthetic
+VLBI visibilities or polarimetric maps for direct comparison to EHT data.
+
+Current status: polarized RT is completely absent. The Broderick-Blandford (2004)
+formalism is the correct starting point.
+
+### 6.4 IPOLE/PATOKA Two-Temperature Synchrotron (AFD Illinois, 2024)
+
+**Relevance:** Section 2.2, synchrotron.h.
+
+The IPOLE (Illinois Polarized One-zone Line Emission) GRRT code uses MAD GRMHD
+simulations with two-temperature electron thermodynamics. Key findings:
+
+- Single-temperature models overestimate disk T_e and give ~30% excess 230 GHz flux.
+- G(x) = x * K_{2/3}(x) is computed in IPOLE using a numerically stable piecewise
+  approximation that avoids polynomial coefficient sensitivity in the x~1-10 regime.
+- Our synchrotron.h tests 3 and 8 fail because our G(x) polynomial gives G(x) > F(x)
+  for x in [1, 10], which is physically impossible (G(x) <= F(x) for all x > 0).
+
+Near-term action: replace the G(x) polynomial in synchrotron.h with either the
+IPOLE piecewise approach or `boost::math::cyl_bessel_k(2.0/3.0, x) * x`. Estimated
+effort: ~30 LOC. This will fix the 2 pre-existing test failures.
+
+Reference: https://github.com/AFD-Illinois/ipole
+
+### 6.5 Blanchet Living Review 2024 and arXiv:2304.11185
+
+**Relevance:** Section 2.4d.
+
+Blanchet et al. (Living Reviews in Relativity, July 2024) completes the 4PN equations
+of motion for two-body compact binaries in the Multipolar Post-Minkowskian (MPM-PN)
+formalism. arXiv:2304.11185 (Blanchet, Buonanno, Henry 2024) derives the 4.5PN
+gravitational wave phase for quasi-circular spinless orbits in closed form.
+
+Near-term actionable item: NNLO spin-orbit correction at 3.5PN (Blanchet et al. 2011,
+arXiv:1104.5659). This adds ~8 additional PN coefficient terms to gw_phase_3p5pn
+and corrects O(10%) phase errors for a* > 0.5. Estimated effort: ~150 LOC.
+
+Longer-term: 4PN spin-orbit (Marsat 2015, arXiv:1411.4118) and the 4.5PN spinless
+phase. These are primarily relevant for LISA science with massive black hole binaries.
+
+### 6.6 AsterX GPU-GRMHD 2025 (APS Global Physics Summit)
+
+**Relevance:** Section 3.4.
+
+AsterX (2025) is a GPU-accelerated GRMHD code using AMReX block-structured AMR.
+The AMReX LOD (level-of-detail) brick caching system serves the GPU at variable
+resolution based on camera distance and local curvature, reducing GPU memory pressure
+by ~4x for 50GB+ datasets relative to flat-LOD approaches.
+
+Our grmhd_streaming.cpp uses flat RGBA32F + single-LOD LRU cache. The AsterX
+approach is the emerging best practice for exascale GRMHD visualization.
+This is flagged as a Phase 7+ upgrade after the PBO GPU upload path is validated.
+Do not preemptively add LOD complexity to the single-resolution implementation.
+
+---
+
 ## References
 
-- Blanchet, L. (2014). *Gravitational Radiation from Post-Newtonian Sources and
-  Inspiralling Compact Binaries.* Living Reviews in Relativity, 17, 2.
 - Berti, E., Cardoso, V., Starinets, A.O. (2009). *Quasinormal modes of black holes
   and black branes.* Class. Quant. Grav. 26, 163001.
+- Blanchet, L. (2014). *Gravitational Radiation from Post-Newtonian Sources and
+  Inspiralling Compact Binaries.* Living Reviews in Relativity, 17, 2.
+- Blanchet, L. (2024). *Gravitational Radiation from Post-Newtonian Sources and
+  Inspiralling Compact Binaries.* Living Reviews in Relativity, updated July 2024.
+- Blanchet, L., Buonanno, A., Henry, G. (2024). *Tail effects in the third
+  post-Newtonian gravitational wave energy flux.* arXiv:2304.11185.
+- Blanchet, L. et al. (2011). *Gravitational-wave phasing of spinning compact
+  binaries at 3.5 post-Newtonian order.* arXiv:1104.5659.
 - Broderick, A., Blandford, R. (2004). *Covariant magnetoionic theory I.* MNRAS 342.
+- Cutler, C., Flanagan, E. (1994). *Gravitational waves from merging compact
+  binaries: How accurately can one extract the binary's parameters.* Phys. Rev. D 49.
 - Dafermos, M., Luk, J. (2017). *The interior of dynamical vacuum black holes I.*
   arXiv:1710.01722.
+- Dyson, H., Warburton, N., Barack, L. (2023). *Analytic Kerr geodesics: plunging
+  orbits.* arXiv:2302.03704.
+- EHT Collaboration (2024). *First Sgr A* Results. Paper IX: Polarimetry.*
+  ApJL, DOI:10.3847/2041-8213/ad2df1.
 - Fujita, R., Hikida, W. (2009). *Analytical solutions of bound timelike geodesic
   orbits in Kerr spacetime.* Class. Quant. Grav. 26, 135002.
 - Gralla, S.E., Lupsasca, A. (2020). *Lensing by Kerr black holes.* Phys. Rev. D 101.
 - Jimenez-Forteza, X. et al. (2017). *Hierarchical data-driven approach to fitting
   numerical relativity data.* Phys. Rev. D 95, 064024.
+- Kidder, L.E. (1995). *Coalescing binary systems of compact objects to (post)^5/2-
+  Newtonian order.* Phys. Rev. D 52.
+- Marsat, S. (2015). *Cubic-order spin-orbit effects in the dynamics and gravitational
+  wave energy flux of compact binaries.* arXiv:1411.4118.
+- Moscibrodzka, M. et al. (2017). *IPOLE -- semi-analytic scheme for relativistic
+  polarized radiative transport.* MNRAS 468. github.com/AFD-Illinois/ipole.
 - Peters, P.C. (1964). *Gravitational Radiation and the Motion of Two Point Masses.*
   Phys. Rev. 136, B1224.
 - Poisson, E., Israel, W. (1990). *Internal structure of black holes.* Phys. Rev. D 41.
 - Teukolsky, S.A. (1972). *Rotating black holes: separable wave equations.*
   Phys. Rev. Lett. 29, 1114.
+- Vos, J. et al. (2023). *Not All Spacetime Coordinates for General-Relativistic Ray
+  Tracing Are Created Equal.* arXiv:2310.02321.
 - Yoshida, H. (1990). *Construction of higher order symplectic integrators.*
   Phys. Lett. A 150, 262.

@@ -434,9 +434,12 @@ See `docs/PHYSICS_MATH_LACUNAE.md` for the full gap analysis driving Phase 6 wor
 
 | Task | Status | Notes |
 |------|--------|-------|
-| F. Kerr-Schild GPU coordinates | Future | Eliminate BL singularity; ~200 LOC |
-| H. Analytic Kerr geodesic (elliptic) | Future | Gralla-Lupsasca 2020; O(1) vs O(N) |
+| F. Outgoing Kerr-Schild GPU coords | Future | OUTGOING (not ingoing) KS; arXiv:2310.02321; ~200 LOC |
+| H. Analytic Kerr geodesic (elliptic) | Future | Gralla-Lupsasca 2020 + Dyson 2023; ~500 LOC (revised from ~800) |
+| G(x) synchrotron fix (x~1-10)       | Near-term | Replace polynomial; IPOLE reference; ~30 LOC; fixes tests 3+8 |
+| NNLO spin-orbit at 3.5PN            | Near-term | Blanchet 2011 arXiv:1104.5659; ~150 LOC; corrects O(10%) for a*>0.5 |
 | Volumetric RTE (dI/ds = j - alpha*I) | Future | Full radiative transfer; ~10k LOC |
+| Polarized RT (Stokes I,Q,U,V)       | Future | EHT 2024 validation target; Broderick-Blandford 2004; ~5k LOC |
 | Fe K-alpha line at 6.4 keV | Future | Relativistic Doppler + grav. redshift |
 
 **Reference:** `docs/PHYSICS_MATH_LACUNAE.md` (written 2026-02-27)
