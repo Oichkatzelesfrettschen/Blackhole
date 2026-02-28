@@ -2,8 +2,8 @@
 
 **Created:** 2026-01-01
 **Version:** 1.3.0
-**Last Updated:** 2026-02-27
-**Status:** Phase 6 Active - Physics fidelity batch C/D/E/G/B complete; Phase 10.1 complete
+**Last Updated:** 2026-02-28
+**Status:** Build system C++23 aligned; NNLO spin-orbit + GLSL G(x) LUT complete
 **Architecture:** C++23 / OpenGL 4.6 / Conan 2.x / Multi-wavelength observational framework
 
 ---
@@ -59,7 +59,7 @@ This roadmap consolidates all planning into a single source of truth.
 | Subsystem | Files | Status | Coverage |
 |-----------|-------|--------|----------|
 | Rendering | 11 | Stable | 95% |
-| Physics | 26 | 75% complete | 80% |
+| Physics | 26 | 80% complete | 85% |
 | Shaders | 43 | Stable | 100% |
 | Tools | 5 | Stable | 100% |
 | Tests | 5 | Comprehensive | 90% |

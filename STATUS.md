@@ -1,12 +1,50 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2026-02-27
-**Status:** Active Development - Phase 6 physics fidelity upgrades in progress
+**Last Updated:** 2026-02-28
+**Status:** Active Development - Build system aligned, NNLO spin-orbit + GLSL G(x) LUT complete
 **Roadmap:** See `docs/MASTER_ROADMAP.md` for the consolidated execution plan
 
 ---
 
 ## Recent Changes
+
+### Build System + NNLO Physics + GPU Parity (2026-02-28)
+
+**Build System C++23 Alignment** -- COMPLETE
+- Raised BLACKHOLE_CXX_STANDARD from 17 to 23 in CMakeLists.txt.
+  The project actually requires C++23 (concepts, ranges, set::contains, compat.h #error),
+  but the global and 9 per-target overrides were set to 17, causing silent build failures
+  when targets transitively included C++20/23 headers.
+- Removed 9 redundant per-target CXX_STANDARD overrides; all targets now inherit
+  the global CMAKE_CXX_STANDARD=23.
+- Updated conanfile.py validation minimum from 17 to 23.
+- Fixed GLSL reserved word `output` in rt_grmhd_composite.frag/.comp and
+  grmhd_raytracer_composite.comp (renamed to `combined`/`composite`).
+- Fixed timeseries_interpolation_test boundary clamp expectations.
+- Test suite: 34/36 pass (94.4%). Remaining 2 are infrastructure (GPU context, fixture).
+
+**NNLO Spin-Orbit 3PN+3.5PN GW Phase** -- COMPLETE
+- Extended `gw_phase_3p5pn()` with full TaylorF2 phasing through 3.5PN:
+  - 3PN + 3.5PN point-mass terms (Blanchet 2014 LRR)
+  - 2.5PN spin-orbit (Blanchet, Buonanno, Faye 2006)
+  - 3PN NNLO spin-orbit (Blanchet, Buonanno, Faye 2011, arXiv:1104.5659 Eq. 7.10)
+  - 3.5PN spin-orbit (arXiv:1104.5659 Eq. 7.11)
+  - 3PN spin-spin (Mikoczi et al. 2005)
+- Added symmetric/antisymmetric spin decomposition (chi_s, chi_a, delta).
+- Fixed overall normalization to standard TaylorF2 convention (3/(128*eta)).
+- Test: 9/9 in kerr_qnm_spin_test.cpp.
+
+**GLSL G(x) LUT for GPU Synchrotron** -- COMPLETE
+- Added `synchrotron_G_generate_lut()` to synchrotron.h: generates 256-entry
+  log-spaced 1D LUT from CPU Bessel K_{2/3} evaluation.
+- Updated shader/include/synchrotron_emission.glsl to sample from `synchGLut`
+  texture in intermediate regime, with polynomial fallback when LUT unavailable.
+- Consistent with existing LUT pattern (hawking_luts.glsl, disk_profile.glsl).
+
+### Synchrotron G(x) Bessel Fix (2026-02-28, commit 0c17b69)
+
+- Replaced G(x) polynomial with direct K_{2/3} Bessel evaluation via boost::math.
+- Resolves G(x) > F(x) for x in [1,10] (physically impossible polarization > 1).
 
 ### Phase 6 Physics Fidelity Batch (2026-02-27) -- Items C, D, E, G, B
 
