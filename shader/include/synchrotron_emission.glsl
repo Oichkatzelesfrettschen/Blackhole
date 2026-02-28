@@ -69,13 +69,26 @@ float synchrotron_F(float x) {
 }
 
 // ============================================================================
-// Synchrotron Function G(x) - Polarization
+// Synchrotron Function G(x) - Polarization (LUT-based)
 // ============================================================================
 
+// 1D LUT generated from CPU Bessel K_{2/3} evaluation.
+// Upload with synchrotron_G_generate_lut() from synchrotron.h.
+// Bound to a sampler2D (1-row texture) by the renderer.
+// If no LUT is available, set synchGLutAvailable = 0 to use the asymptotic
+// fallback (accurate for x < 0.01 and x > 10, ~10% error in between).
+uniform sampler2D synchGLut;
+uniform int synchGLutAvailable;
+
+// LUT domain constants (must match synchrotron.h SYNCH_G_LUT_X_MIN/X_MAX)
+const float SYNCH_G_LUT_X_MIN = 0.001;
+const float SYNCH_G_LUT_X_MAX = 30.0;
+
 /**
- * G(x) = x * K_2/3(x) for circular polarization
+ * G(x) = x * K_2/3(x) for polarized emission.
  *
- * Used to compute polarization degree: Pol = G(x) / F(x)
+ * Uses a precomputed LUT (log-spaced) when available; asymptotic
+ * approximations otherwise.
  *
  * @param x Dimensionless frequency
  * @return G(x) function value
@@ -83,21 +96,27 @@ float synchrotron_F(float x) {
 float synchrotron_G(float x) {
   if (x <= 0.0) return 0.0;
 
-  if (x < 0.01) {
+  // Small-x asymptote (always accurate)
+  if (x < SYNCH_G_LUT_X_MIN) {
     return 1.3541 * pow(x, 1.0/3.0);
   }
-  else if (x > 10.0) {
+
+  // Large-x asymptote (always accurate)
+  if (x > SYNCH_G_LUT_X_MAX) {
     return sqrt(3.14159265359 / 2.0) * sqrt(x) * exp(-x);
   }
-  else {
-    float x13 = pow(x, 1.0/3.0);
-    float x23 = pow(x, 2.0/3.0);
 
-    float G_base = 1.3541 * x13;
-    float correction = 1.0 + 0.6 * x23;
-
-    return G_base * exp(-x) * correction;
+  // LUT lookup: u = log(x / x_min) / log(x_max / x_min), sample at (u, 0.5)
+  if (synchGLutAvailable != 0) {
+    float log_ratio = log(SYNCH_G_LUT_X_MAX / SYNCH_G_LUT_X_MIN);
+    float u = log(x / SYNCH_G_LUT_X_MIN) / log_ratio;
+    return texture(synchGLut, vec2(u, 0.5)).r;
   }
+
+  // Polynomial fallback (~10% error for x in [1,10])
+  float x13 = pow(x, 1.0/3.0);
+  float x23 = pow(x, 2.0/3.0);
+  return 1.3541 * x13 * exp(-x) * (1.0 + 0.6 * x23);
 }
 
 // ============================================================================

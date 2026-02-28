@@ -459,6 +459,41 @@ inline double synchrotron_self_absorption_frequency(double B, double n_e,
   return nu_B * std::pow(n_e * R / 1e20, exponent);
 }
 
+// ============================================================================
+// GPU LUT Generation for G(x)
+// ============================================================================
+
+/**
+ * @brief Generate a 1D lookup table for G(x) = x * K_{2/3}(x).
+ *
+ * WHY: GLSL cannot call boost::math, so we precompute G(x) on the CPU
+ * and upload it as a 1D float texture. The shader samples this LUT
+ * using log-spaced u = log(x/x_min) / log(x_max/x_min).
+ *
+ * The LUT covers x in [x_min, x_max] with N entries, log-spaced for
+ * uniform fractional resolution across the dynamic range.
+ *
+ * @param lut      Output array (must hold N floats)
+ * @param N        Number of LUT entries (256 recommended)
+ * @param x_min    Minimum x value (0.001 recommended)
+ * @param x_max    Maximum x value (30.0 recommended -- G(30) ~ 1e-13)
+ */
+inline void synchrotron_G_generate_lut(float* lut, int N,
+                                       double x_min = 0.001,
+                                       double x_max = 30.0) {
+  double log_ratio = std::log(x_max / x_min);
+  for (int i = 0; i < N; ++i) {
+    double u = static_cast<double>(i) / (N - 1);
+    double x = x_min * std::exp(u * log_ratio);
+    lut[i] = static_cast<float>(synchrotron_G(x));
+  }
+}
+
+/// LUT range constants matching the generation defaults above.
+/// Shaders must use these same values for the log-space mapping.
+constexpr float SYNCH_G_LUT_X_MIN = 0.001f;
+constexpr float SYNCH_G_LUT_X_MAX = 30.0f;
+
 } // namespace physics
 
 #endif // PHYSICS_SYNCHROTRON_H
