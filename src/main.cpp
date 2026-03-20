@@ -99,6 +99,7 @@
 #include "shader.h"
 #include "shader_manager.h"
 #include "texture.h"
+#include <stb_image_write.h>
 #include "tracy_support.h"
 
 #ifndef BLACKHOLE_HAS_CUDA
@@ -294,8 +295,9 @@ bool readTextFile(const std::string &path, std::string &out) {
 }
 
 void printUsage(const char *argv0) {
-  std::printf("Usage: %s [--curve-tsv <path>]\n", argv0);
-  std::printf("  --curve-tsv <path>   Load a 2-column TSV and plot it in ImGui.\n");
+  std::printf("Usage: %s [--curve-tsv <path>] [--export-frame <path.png>]\n", argv0);
+  std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
+  std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
 }
 
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
@@ -402,127 +404,16 @@ struct DrawInstanceGpu {
   glm::vec4 flags;
 };
 
-struct WiregridMesh {
-  GLuint vao = 0;
-  GLuint vbo = 0;
-  GLsizei vertexCount = 0;
-};
-
+// WHY: WiregridParams controls the Boyer-Lindquist coordinate overlay rendered in the
+//      fragment shader (task A2) and CUDA kernel (task A4) via wiregrid.glsl's
+//      wiregridOverlay(r, theta, phi, a_star, show_ergosphere, grid_scale).
+//      The previous Euclidean Flamm's-paraboloid mesh was rendered with a separate
+//      gizmo perspective matrix, producing a 3D embedding diagram that was geometrically
+//      inconsistent with the ray-traced geodesic view and has been removed.
 struct WiregridParams {
-  int ringCount = 32;
-  int ringSegments = 256;
-  int spokeCount = 32;
-  float radiusMin = 2.0f;
-  float radiusMax = 50.0f;
-  float curvatureScale = 1.0f;
-  bool showCurvature = true;
-  float schwarzschildRadius = 1.0f;
+  bool  showErgosphere = true; // Show ergosphere boundary + interior glow
+  float gridScale      = 1.0f; // Grid density: 1.0 = pi/6 spacing, >1 = denser
 };
-
-bool wiregridParamsEqual(const WiregridParams &a, const WiregridParams &b) {
-  return a.ringCount == b.ringCount && a.ringSegments == b.ringSegments &&
-         a.spokeCount == b.spokeCount && a.radiusMin == b.radiusMin && a.radiusMax == b.radiusMax &&
-         a.curvatureScale == b.curvatureScale && a.showCurvature == b.showCurvature &&
-         a.schwarzschildRadius == b.schwarzschildRadius;
-}
-
-void updateWiregridMesh(WiregridMesh &mesh, const WiregridParams &params) {
-  std::vector<glm::vec3> vertices;
-  if (params.ringCount < 2 || params.ringSegments < 3 || params.spokeCount < 1 ||
-      params.radiusMax <= params.radiusMin) {
-    mesh.vertexCount = 0;
-    return;
-  }
-
-  // Curvature function: Flamm's paraboloid (spatial slice embedding)
-  // z(r) = 2 * sqrt(r_s * (r - r_s)) for r >= r_s
-  auto computeCurvature = [&](float r) -> float {
-    if (!params.showCurvature || params.schwarzschildRadius <= 0.0f) {
-      return 0.0f;
-    }
-    float const rs = params.schwarzschildRadius;
-
-    // Clamp r to be slightly above rs to avoid singularity/NaN
-    float const effectiveR = std::max(r, rs * 1.01f);
-
-    // Flamm's paraboloid formula
-    // We invert it (-z) to show a "well"
-    float const embeddingZ = 2.0f * std::sqrt(rs * (effectiveR - rs));
-
-    // Shift so that outer radius is at y=0 (optional, but keeps grid grounded)
-    // float outerZ = 2.0f * std::sqrt(rs * (params.radiusMax - rs));
-    // return (embeddingZ - outerZ) * params.curvatureScale;
-
-    // Standard gravity well look:
-    return -embeddingZ * params.curvatureScale;
-  };
-
-  // Ensure grid starts outside the event horizon
-  float effectiveMin = std::max(params.radiusMin, params.schwarzschildRadius * 1.01f);
-  float const effectiveMax = std::max(params.radiusMax, effectiveMin + 1.0f);
-
-  const float twoPi = 6.283185307179586f;
-  const float logRatio = effectiveMax / effectiveMin;
-
-  auto getRadius = [&](float t) {
-    // Use logarithmic spacing to place more rings near the event horizon
-    // r = r_min * (r_max/r_min)^t
-    return effectiveMin * std::pow(logRatio, t);
-  };
-
-  for (int ring = 0; ring < params.ringCount; ++ring) {
-    float const t = static_cast<float>(ring) / static_cast<float>(params.ringCount - 1);
-    float const r = getRadius(t);
-    float const y = computeCurvature(r);
-    for (int seg = 0; seg < params.ringSegments; ++seg) {
-      float const a0 = twoPi * static_cast<float>(seg) / static_cast<float>(params.ringSegments);
-      float const a1 =
-          twoPi * static_cast<float>(seg + 1) / static_cast<float>(params.ringSegments);
-      glm::vec3 const p0(r * std::cos(a0), y, r * std::sin(a0));
-      glm::vec3 const p1(r * std::cos(a1), y, r * std::sin(a1));
-      vertices.push_back(p0);
-      vertices.push_back(p1);
-    }
-  }
-
-  for (int spoke = 0; spoke < params.spokeCount; ++spoke) {
-    float const a = twoPi * static_cast<float>(spoke) / static_cast<float>(params.spokeCount);
-    // Spokes need multiple segments to show curvature
-    const int spokeSegments = params.ringCount * 2; // Increase resolution for smooth spokes
-    for (int i = 0; i < spokeSegments; ++i) {
-      float const t0 = static_cast<float>(i) / static_cast<float>(spokeSegments);
-      float const t1 = static_cast<float>(i + 1) / static_cast<float>(spokeSegments);
-      float const r0 = getRadius(t0);
-      float const r1 = getRadius(t1);
-      float const y0 = computeCurvature(r0);
-      float const y1 = computeCurvature(r1);
-      glm::vec3 const p0(r0 * std::cos(a), y0, r0 * std::sin(a));
-      glm::vec3 const p1(r1 * std::cos(a), y1, r1 * std::sin(a));
-      vertices.push_back(p0);
-      vertices.push_back(p1);
-    }
-  }
-
-  if (mesh.vao == 0) {
-    glGenVertexArrays(1, &mesh.vao);
-  }
-  if (mesh.vbo == 0) {
-    glGenBuffers(1, &mesh.vbo);
-  }
-
-  glBindVertexArray(mesh.vao);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
-               vertices.data(), GL_STATIC_DRAW);
-
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), reinterpret_cast<void *>(0));
-
-  glBindVertexArray(0);
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-  mesh.vertexCount = static_cast<GLsizei>(vertices.size());
-}
 
 std::vector<BackgroundAsset> loadBackgroundAssets() {
   std::vector<BackgroundAsset> assets;
@@ -1981,22 +1872,14 @@ void renderBackgroundPanel(const std::vector<BackgroundAsset> &assets, int &back
 }
 
 void renderWiregridPanel(bool &wiregridEnabled, WiregridParams &params, glm::vec4 &color) {
-  // Stack below Background
   ImGui::SetNextWindowPos(ImVec2(10, 570), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(300, 220), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(300, 140), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Wiregrid", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::Checkbox("Enable Wiregrid", &wiregridEnabled);
-    ImGui::SliderInt("Rings", &params.ringCount, 4, 64);
-    ImGui::SliderInt("Ring Segments", &params.ringSegments, 16, 256);
-    ImGui::SliderInt("Spokes", &params.spokeCount, 4, 64);
-    ImGui::SliderFloat("Radius Min", &params.radiusMin, 0.5f, 10.0f);
-    ImGui::SliderFloat("Radius Max", &params.radiusMax, 10.0f, 200.0f);
+    ImGui::Checkbox("Show Ergosphere", &params.showErgosphere);
+    ImGui::SliderFloat("Grid Scale", &params.gridScale, 0.25f, 4.0f);
     ImGui::Separator();
-    ImGui::Checkbox("Show Curvature", &params.showCurvature);
-    if (params.showCurvature) {
-      ImGui::SliderFloat("Curvature Scale", &params.curvatureScale, 0.0f, 10.0f);
-    }
     ImGui::ColorEdit4("Color", reinterpret_cast<float *>(&color));
   }
   ImGui::End();
@@ -2399,6 +2282,7 @@ int main(int argc, char **argv) {
   installCrashHandlers();
   try {
     std::string curveTsvPath;
+    std::string exportFramePath;
     for (int i = 1; i < argc; ++i) {
       std::string const arg = argv[i];
       if (arg == "--help" || arg == "-h") {
@@ -2407,6 +2291,10 @@ int main(int argc, char **argv) {
       }
       if (arg == "--curve-tsv" && i + 1 < argc) {
         curveTsvPath = argv[++i];
+        continue;
+      }
+      if (arg == "--export-frame" && i + 1 < argc) {
+        exportFramePath = argv[++i];
         continue;
       }
       std::printf("Unknown argument: %s\n", arg.c_str());
@@ -3199,8 +3087,6 @@ int main(int argc, char **argv) {
       static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
       static bool wiregridEnabled = false;
       static WiregridParams wiregridParams;
-      static WiregridParams wiregridParamsCached;
-      static WiregridMesh wiregridMesh;
       static glm::vec4 wiregridColor = glm::vec4(0.2f, 0.6f, 1.0f, 0.4f);
       static GLuint fallback2D = 0;
       static GLuint fallback3D = 0;
@@ -3385,16 +3271,6 @@ int main(int argc, char **argv) {
         backgroundLayerParams.at(i) =
             glm::vec4(offset, backgroundLayerScale.at(i), backgroundLayerIntensity.at(i));
       }
-      wiregridParams.radiusMax =
-          std::max(wiregridParams.radiusMax, wiregridParams.radiusMin + 0.1f);
-      wiregridParams.schwarzschildRadius = 2.0f * blackHoleMass;
-      if (wiregridEnabled &&
-          (wiregridMesh.vao == 0 || !wiregridParamsEqual(wiregridParams, wiregridParamsCached))) {
-        // std::cout << "Updating wiregrid mesh..." << std::endl;
-        updateWiregridMesh(wiregridMesh, wiregridParams);
-        wiregridParamsCached = wiregridParams;
-      }
-
       glm::mat4 projectionMatrix = glm::perspective(
           glm::radians(cam.fov), static_cast<float>(renderWidth) / static_cast<float>(renderHeight),
           0.1f, depthFar);
@@ -4698,44 +4574,7 @@ int main(int argc, char **argv) {
                                0);
         glViewport(0, 0, renderWidth, renderHeight);
 
-        // 1. Wiregrid
-        if (wiregridEnabled && wiregridMesh.vertexCount > 0) {
-          static GLuint wiregridProgram = 0;
-          if (wiregridProgram == 0) {
-            wiregridProgram = createShaderProgram(std::string("shader/wiregrid.vert"),
-                                                  std::string("shader/wiregrid.frag"));
-          }
-          glm::mat4 viewProj = projectionMatrix * gizmoViewMatrix;
-          glUseProgram(wiregridProgram);
-          GLint const viewProjLoc = glGetUniformLocation(wiregridProgram, "viewProj");
-          if (viewProjLoc != -1) {
-            glUniformMatrix4fv(viewProjLoc, 1, GL_FALSE, glm::value_ptr(viewProj));
-          }
-
-          GLint const colorLoc = glGetUniformLocation(wiregridProgram, "color");
-          if (colorLoc != -1) {
-            glUniform4f(colorLoc, wiregridColor.r, wiregridColor.g, wiregridColor.b,
-                        wiregridColor.a);
-          }
-
-          GLint const timeLoc = glGetUniformLocation(wiregridProgram, "time");
-          if (timeLoc != -1) {
-            glUniform1f(timeLoc, frameTime);
-          }
-
-          GLint const camPosLoc = glGetUniformLocation(wiregridProgram, "cameraPos");
-          if (camPosLoc != -1) {
-            glUniform3fv(camPosLoc, 1, glm::value_ptr(cameraPos));
-          }
-
-          glEnable(GL_BLEND);
-          glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-          glBindVertexArray(wiregridMesh.vao);
-          glDrawArrays(GL_LINES, 0, wiregridMesh.vertexCount);
-          glBindVertexArray(0);
-          glDisable(GL_BLEND);
-          glUseProgram(0);
-        }
+        // 1. Wiregrid BL-coord overlay -- implemented in task A2 (fragment shader)
 
         // 2. GRMHD Slice
         if (grmhdSliceEnabled && grmhdReady) {
@@ -4862,6 +4701,29 @@ int main(int argc, char **argv) {
                                perfOverlayEnabled, perfOverlayScale, depthPrepassEnabled);
       }
 
+      /* --export-frame: read tonemapped texture via glGetTexImage before ImGui. */
+      if (!exportFramePath.empty()) {
+        static int exportWarmup = 0;
+        if (++exportWarmup >= 5 && texTonemapped != 0 && renderWidth > 0 && renderHeight > 0) {
+          int const w = renderWidth;
+          int const h = renderHeight;
+          std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+          glBindTexture(GL_TEXTURE_2D, texTonemapped);
+          glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+          glBindTexture(GL_TEXTURE_2D, 0);
+          /* glGetTexImage gives bottom-to-top; flip for PNG. */
+          std::vector<unsigned char> flipped(px.size());
+          for (int row = 0; row < h; ++row) {
+            std::memcpy(
+                flipped.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 3,
+                px.data() + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3,
+                static_cast<size_t>(w) * 3);
+          }
+          stbi_write_png(exportFramePath.c_str(), w, h, 3, flipped.data(), w * 3);
+          std::printf("Exported frame: %s (%dx%d)\n", exportFramePath.c_str(), w, h);
+        }
+      }
+
       // ImGui Render
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -4889,6 +4751,14 @@ int main(int argc, char **argv) {
       }
       FRAME_MARK;
       glfwSwapBuffers(window);
+
+      /* --export-frame: break after the frame was exported above. */
+      if (!exportFramePath.empty()) {
+        static int exportDone = 0;
+        if (++exportDone >= 6) { /* 5 warmup + 1 export frame */
+          break;
+        }
+      }
     }
 
     {
