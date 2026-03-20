@@ -28,7 +28,8 @@ static void sync_lut_constants(const LutManager& luts) {
         (unsigned long long)lutGetTex(luts, BhLutRedshift),
         (unsigned long long)lutGetTex(luts, BhLutSpectral),
         (unsigned long long)lutGetTex(luts, BhLutGrb),
-        (unsigned long long)lutGetTex(luts, BhLutGalaxy)
+        (unsigned long long)lutGetTex(luts, BhLutGalaxy),
+        (unsigned long long)lutGetTex(luts, BhLutGrmhd)
     );
 }
 

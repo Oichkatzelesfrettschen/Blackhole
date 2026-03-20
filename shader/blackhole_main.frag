@@ -245,7 +245,12 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
     vec3 boundsSize = max(grmhdBoundsMax - grmhdBoundsMin, vec3(EPSILON));
     vec3 grmhdCoord = clamp((pos - grmhdBoundsMin) / boundsSize, 0.0, 1.0);
     vec4 grmhdSample = texture(grmhdTexture, grmhdCoord);
-    density *= max(grmhdSample.r, 0.0);
+    /* Synchrotron emissivity: j_nu ~ rho * B^2.
+     * Approximate B^2 ~ u (internal energy; plasma beta ~ 1).
+     * Both channels are pre-normalised to [0,1] by nubhlight_pack min/max. */
+    float rho = max(grmhdSample.r, 0.0);
+    float uu  = max(grmhdSample.g, 0.0);
+    density *= rho * uu;
   }
 
   if (adiskParticle < 0.5) {

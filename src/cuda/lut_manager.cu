@@ -37,6 +37,9 @@
 /* GL cubemap target constant (0x8513) -- avoids including GL headers here */
 static constexpr unsigned int kGLTextureCubeMap = 0x8513U;
 
+/* GL 3D texture target constant (0x806F) */
+static constexpr unsigned int kGLTexture3D = 0x806FU;
+
 /* Number of faces in a cubemap */
 static constexpr int kCubeFaces = 6;
 
@@ -245,6 +248,76 @@ static int lutRegisterCubemap(LutManager &mgr, int slot, unsigned int glTex) {
   return 0;
 }
 
+/**
+ * @brief Register a GL_TEXTURE_3D texture (GRMHD volume, slot 5).
+ *
+ * Maps the GL 3D texture to obtain the underlying CUDA array and creates a
+ * normalised-coordinate tex3D texture object suitable for tex3D<float4>
+ * sampling.  Address modes follow BL coordinate semantics:
+ *   S=r (clamp), T=theta (mirror), R=phi (wrap).
+ *
+ * @param mgr   LUT manager to update.
+ * @param slot  BhLutSlot index (should be BhLutGrmhd = 5).
+ * @param glTex GL 3D texture name.
+ * @return 0 on success, -1 on any CUDA error.
+ */
+static int lutRegister3D(LutManager &mgr, int slot, unsigned int glTex) {
+  cudaError_t err =
+      cudaGraphicsGLRegisterImage(&mgr.resources[slot], glTex, kGLTexture3D,
+                                  cudaGraphicsRegisterFlagsReadOnly);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr, "lutRegister3D slot %d: RegisterImage failed: %s\n", slot,
+                  cudaGetErrorString(err));
+    return -1;
+  }
+
+  err = cudaGraphicsMapResources(1, &mgr.resources[slot], nullptr);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr, "lutRegister3D slot %d: MapResources failed: %s\n", slot,
+                  cudaGetErrorString(err));
+    cudaGraphicsUnregisterResource(mgr.resources[slot]);
+    mgr.resources[slot] = nullptr;
+    return -1;
+  }
+
+  cudaArray_t array = nullptr;
+  err = cudaGraphicsSubResourceGetMappedArray(&array, mgr.resources[slot], 0, 0);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr, "lutRegister3D slot %d: GetMappedArray failed: %s\n", slot,
+                  cudaGetErrorString(err));
+    cudaGraphicsUnmapResources(1, &mgr.resources[slot], nullptr);
+    cudaGraphicsUnregisterResource(mgr.resources[slot]);
+    mgr.resources[slot] = nullptr;
+    return -1;
+  }
+
+  cudaResourceDesc resDesc = {};
+  resDesc.resType         = cudaResourceTypeArray;
+  resDesc.res.array.array = array;
+
+  cudaTextureDesc texDesc = {};
+  texDesc.addressMode[0]  = cudaAddressModeClamp;  /* r: clamp */
+  texDesc.addressMode[1]  = cudaAddressModeMirror; /* theta: mirror */
+  texDesc.addressMode[2]  = cudaAddressModeWrap;   /* phi: wrap */
+  texDesc.filterMode      = cudaFilterModeLinear;
+  texDesc.readMode        = cudaReadModeElementType;
+  texDesc.normalizedCoords = 1;
+
+  err = cudaCreateTextureObject(&mgr.texObjects[slot], &resDesc, &texDesc, nullptr);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr, "lutRegister3D slot %d: CreateTextureObject failed: %s\n", slot,
+                  cudaGetErrorString(err));
+    cudaGraphicsUnmapResources(1, &mgr.resources[slot], nullptr);
+    cudaGraphicsUnregisterResource(mgr.resources[slot]);
+    mgr.resources[slot] = nullptr;
+    return -1;
+  }
+
+  cudaGraphicsUnmapResources(1, &mgr.resources[slot], nullptr);
+  mgr.registered[slot] = true;
+  return 0;
+}
+
 int lutRegister(LutManager &mgr, int slot, unsigned int glTex, unsigned int glTarget) {
   if (slot < 0 || slot >= BhLutCount) {
     return -1;
@@ -257,6 +330,9 @@ int lutRegister(LutManager &mgr, int slot, unsigned int glTex, unsigned int glTa
 
   if (glTarget == kGLTextureCubeMap) {
     return lutRegisterCubemap(mgr, slot, glTex);
+  }
+  if (glTarget == kGLTexture3D) {
+    return lutRegister3D(mgr, slot, glTex);
   }
   return lutRegister2D(mgr, slot, glTex, glTarget);
 }

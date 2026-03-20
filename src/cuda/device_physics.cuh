@@ -57,12 +57,13 @@ extern __constant__ float d_spectral_radius_max;
 extern __constant__ float d_time_sec;
 /* LUT texture objects (cudaTextureObject_t = unsigned long long).
  * Zero means the slot is not registered; all device sampling sites guard on 0.
- * Matches BhLutSlot order: emissivity=0, redshift=1, spectral=2, grb=3, galaxy=4. */
+ * Matches BhLutSlot order: emissivity=0, redshift=1, spectral=2, grb=3, galaxy=4, grmhd=5. */
 extern __constant__ unsigned long long d_tex_emissivity; /**< @brief Slot 0: accretion emissivity. */
 extern __constant__ unsigned long long d_tex_redshift;   /**< @brief Slot 1: gravitational redshift. */
 extern __constant__ unsigned long long d_tex_spectral;   /**< @brief Slot 2: spectral modulation. */
 extern __constant__ unsigned long long d_tex_grb;        /**< @brief Slot 3: GRB overlay LUT. */
 extern __constant__ unsigned long long d_tex_galaxy;     /**< @brief Slot 4: galaxy cubemap. */
+extern __constant__ unsigned long long d_tex_grmhd;      /**< @brief Slot 5: GRMHD volume (RGBA32F 3D). */
 extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;

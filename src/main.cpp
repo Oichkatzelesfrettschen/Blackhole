@@ -2650,6 +2650,13 @@ int main(int argc, char **argv) {
       const float r = grmhdTexture.rMax;
       grmhdBoundsMin = glm::vec3(-r, -r, -r);
       grmhdBoundsMax = glm::vec3( r,  r,  r);
+      /* Register GRMHD volume as CUDA texture object (slot 5 = BhLutGrmhd).
+       * Registration is non-fatal: CUDA kernel falls back to no GRMHD sampling
+       * if the backend is not active or registration fails. */
+      if (cudaState.backend != nullptr && grmhdTexture.texture != 0) {
+        bhCudaRegisterLut(cudaState.backend, 5 /*BhLutGrmhd*/, grmhdTexture.texture,
+                          static_cast<unsigned int>(GL_TEXTURE_3D));
+      }
       return true;
     };
 

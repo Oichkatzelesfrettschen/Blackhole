@@ -25,7 +25,8 @@ enum BhLutSlot { // NOLINT(cppcoreguidelines-use-enum-class)
   BhLutSpectral   = 2, /**< @brief Spectral modulation LUT. */
   BhLutGrb        = 3, /**< @brief Gamma-ray burst overlay LUT. */
   BhLutGalaxy     = 4, /**< @brief Galaxy cubemap background texture. */
-  BhLutCount      = 5  /**< @brief Sentinel: total number of LUT slots. */
+  BhLutGrmhd      = 5, /**< @brief GRMHD simulation volume (RGBA32F 3D texture). */
+  BhLutCount      = 6  /**< @brief Sentinel: total number of LUT slots. */
 };
 
 /**

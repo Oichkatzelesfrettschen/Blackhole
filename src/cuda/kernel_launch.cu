@@ -45,13 +45,14 @@ __constant__ float d_spectral_radius_min;
 __constant__ float d_spectral_radius_max;
 __constant__ float d_time_sec;
 /* LUT texture objects (cudaTextureObject_t = unsigned long long, 0 = not registered).
- * All five BhLutSlot entries are mirrored here so bh_upload_lut_textures() can push
+ * All six BhLutSlot entries are mirrored here so bh_upload_lut_textures() can push
  * any combination of registered textures to the device in a single call. */
 __constant__ unsigned long long d_tex_emissivity; /**< @brief Accretion disk emissivity LUT. */
 __constant__ unsigned long long d_tex_redshift;   /**< @brief Gravitational redshift LUT. */
 __constant__ unsigned long long d_tex_spectral;   /**< @brief Spectral modulation LUT. */
 __constant__ unsigned long long d_tex_grb;        /**< @brief Gamma-ray burst overlay LUT. */
 __constant__ unsigned long long d_tex_galaxy;     /**< @brief Galaxy cubemap background. */
+__constant__ unsigned long long d_tex_grmhd;      /**< @brief GRMHD simulation volume (RGBA32F 3D). */
 __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
 __constant__ int d_background_enabled;
@@ -206,15 +207,18 @@ extern "C" int bh_select_kernel_variant(void) {
  * @param spectral   cudaTextureObject_t for slot 2 (spectral modulation LUT).
  * @param grb        cudaTextureObject_t for slot 3 (GRB overlay LUT).
  * @param galaxy     cudaTextureObject_t for slot 4 (galaxy cubemap background).
+ * @param grmhd      cudaTextureObject_t for slot 5 (GRMHD simulation volume).
  */
 extern "C" void bh_upload_lut_textures(unsigned long long emissivity,
                                        unsigned long long redshift,
                                        unsigned long long spectral,
                                        unsigned long long grb,
-                                       unsigned long long galaxy) {
+                                       unsigned long long galaxy,
+                                       unsigned long long grmhd) {
   (void)cudaMemcpyToSymbol(d_tex_emissivity, &emissivity, sizeof(emissivity));
   (void)cudaMemcpyToSymbol(d_tex_redshift,   &redshift,   sizeof(redshift));
   (void)cudaMemcpyToSymbol(d_tex_spectral,   &spectral,   sizeof(spectral));
   (void)cudaMemcpyToSymbol(d_tex_grb,        &grb,        sizeof(grb));
   (void)cudaMemcpyToSymbol(d_tex_galaxy,     &galaxy,     sizeof(galaxy));
+  (void)cudaMemcpyToSymbol(d_tex_grmhd,      &grmhd,      sizeof(grmhd));
 }
