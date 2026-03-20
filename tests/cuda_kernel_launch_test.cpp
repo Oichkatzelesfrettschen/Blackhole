@@ -38,9 +38,10 @@ TEST(CudaKernelLaunch, LaunchParamsSize) {
      * + 1 int (background_enabled = 4) = 140
      * + 1 int (wiregrid_enabled = 4) = 144
      * + 2 floats (wiregrid_show_ergo, wiregrid_grid_scale = 8) = 152
+     * + 2 floats (grmhd_r_min, grmhd_r_max = 8) = 160
      * All fields 4-byte, naturally aligned => no padding expected.
      */
-    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(152))
+    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(160))
         << "BH_LaunchParams size changed -- verify device_physics.cuh offsets"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
 }
 

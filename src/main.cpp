@@ -4176,6 +4176,9 @@ int main(int argc, char **argv) {
             cp.wiregrid_enabled    = wiregridEnabled ? 1 : 0;
             cp.wiregrid_show_ergo  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
             cp.wiregrid_grid_scale = wiregridParams.gridScale;
+            // GRMHD volume radial bounds (task C1l)
+            cp.grmhd_r_min = grmhdTexture.rMin;
+            cp.grmhd_r_max = grmhdTexture.rMax;
 
             if (bhCudaRenderFrame(cudaState.backend, &cp) != 0) {
               fprintf(

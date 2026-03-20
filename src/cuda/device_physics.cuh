@@ -22,6 +22,7 @@
 #define D_TWO_PI        6.28318530717958647692f /**< @brief 2*pi. */
 #define D_HALF_PI       1.57079632679489661923f /**< @brief pi/2. */
 #define D_INV_PI        0.31830988618379067154f /**< @brief 1/pi. */
+#define D_INV_TWO_PI    0.15915494309189533577f /**< @brief 1/(2*pi). */
 #define D_EPSILON       1.0e-6f                 /**< @brief Small guard value for division and comparisons. */
 #define D_PHOTON_SPHERE 1.5f                    /**< @brief Photon sphere radius in units of rs (= 3M/2M = 1.5). */
 #define D_ISCO_RATIO    3.0f                    /**< @brief ISCO radius ratio (Schwarzschild: r_ISCO = 3*rs). */
@@ -70,6 +71,8 @@ extern __constant__ int   d_background_enabled;
 extern __constant__ int   d_wiregrid_enabled;    /**< @brief BL-coord wiregrid overlay flag. */
 extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere boundary+glow. */
 extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
+extern __constant__ float d_grmhd_r_min;         /**< @brief Inner radial bound of GRMHD grid. */
+extern __constant__ float d_grmhd_r_max;         /**< @brief Outer radial bound of GRMHD grid. */
 
 /* ========================================================================
  * Vector helpers (replacing GLSL vec3 operations)
@@ -993,6 +996,57 @@ __device__ __forceinline__ float4 d_background_color(float3 dir) {
     return make_float4(sky.x, sky.y, sky.z, 1.0f);
 }
 
+/* ========================================================================
+ * GRMHD volume sampling
+ * ======================================================================== */
+
+/**
+ * @brief Sample the GRMHD 3D texture at a Cartesian world-space position.
+ *
+ * Converts the Cartesian position to Boyer-Lindquist (r, theta, phi) coordinates,
+ * normalizes each axis to [0, 1] using the registered GRMHD grid bounds, and
+ * samples the RGBA32F 3D texture object.
+ *
+ * The texture was registered with address modes:
+ *   S = cudaAddressModeClamp  (r axis: finite radial extent)
+ *   T = cudaAddressModeMirror (theta axis: equatorial symmetry)
+ *   R = cudaAddressModeWrap   (phi axis: 2*pi periodic)
+ *
+ * Returns make_float4(0,0,0,0) if the GRMHD texture object is not registered
+ * (d_tex_grmhd == 0) or if d_grmhd_r_max <= d_grmhd_r_min (degenerate bounds).
+ *
+ * @param pos World-space Cartesian position (x, y, z) in geometric units.
+ * @return float4 with (rho, internal_energy, v1, v2), normalized to [0, 1]
+ *         by nubhlight_pack convention.
+ */
+__device__ __forceinline__ float4 d_sample_grmhd(float3 pos) {
+    if (d_tex_grmhd == 0ULL) {
+        return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+    float const r_range = d_grmhd_r_max - d_grmhd_r_min;
+    if (r_range <= D_EPSILON) {
+        return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+
+    /* Cartesian -> spherical (BL coincides with spherical in the grid frame) */
+    float const r = sqrtf(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+    /* theta in [0, pi] -- guard against division by zero at origin */
+    float const theta = (r > D_EPSILON) ? acosf(pos.z / r) : 0.0f;
+    /* phi in [-pi, pi] -> shift to [0, 2*pi] for uniform wrap */
+    float phi = atan2f(pos.y, pos.x);
+    if (phi < 0.0f) phi += D_TWO_PI;
+
+    /* Normalize to [0, 1]:
+     *   u = (r - r_min) / (r_max - r_min)  [clamped by texture address mode]
+     *   v = theta / pi                      [mirrored at 1.0 = pi]
+     *   w = phi / (2*pi)                    [wrapped at 1.0 = 2*pi]        */
+    float const u = (r - d_grmhd_r_min) / r_range;
+    float const v = theta * D_INV_PI;
+    float const w = phi * D_INV_TWO_PI;
+
+    return tex3D<float4>((cudaTextureObject_t)d_tex_grmhd, u, v, w);
+}
+
 /**
  * @brief Dispatch shading for a completed HitResult.
  *
@@ -1009,7 +1063,19 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     if (hit.hit_disk) {
-        return d_disk_color(hit, d_rs);
+        float4 disk_col = d_disk_color(hit, d_rs);
+        /* GRMHD emissivity modulation: j_nu ~ rho * B^2, B^2 ~ u (plasma beta ~ 1).
+         * Matches blackhole_main.frag: density *= rho * uu at disk hit point. */
+        if (d_use_luts && d_tex_grmhd) {
+            float4 grmhd = d_sample_grmhd(hit.hit_point);
+            float rho = fmaxf(grmhd.x, 0.0f);
+            float uu  = fmaxf(grmhd.y, 0.0f);
+            float grmhd_scale = rho * uu;
+            disk_col.x *= grmhd_scale;
+            disk_col.y *= grmhd_scale;
+            disk_col.z *= grmhd_scale;
+        }
+        return disk_col;
     }
     float3 dir = d_normalize(d_sub(hit.hit_point, cam_pos));
     float4 bg = d_background_color(dir);

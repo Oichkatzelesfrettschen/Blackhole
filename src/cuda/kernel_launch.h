@@ -71,6 +71,10 @@ struct BH_LaunchParams {
     int   wiregrid_enabled;    /**< @brief 1 = apply Boyer-Lindquist coordinate overlay. */
     float wiregrid_show_ergo;  /**< @brief 1.0 = render ergosphere boundary + glow. */
     float wiregrid_grid_scale; /**< @brief Grid density multiplier (1.0 = pi/6 spacing). */
+
+    /* GRMHD volume bounds (task C1l) */
+    float grmhd_r_min; /**< @brief Inner radial bound of GRMHD grid (geometric units). */
+    float grmhd_r_max; /**< @brief Outer radial bound of GRMHD grid (geometric units). */
 };
 
 /**
