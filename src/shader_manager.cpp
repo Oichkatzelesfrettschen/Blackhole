@@ -1,10 +1,14 @@
 #include "shader_manager.h"
 
-#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <vector>
+
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 
 ShaderManager &ShaderManager::instance() {
   static ShaderManager instance;
@@ -50,43 +54,45 @@ void ShaderManager::detectCapabilities() {
   const char *glslVersion =
       reinterpret_cast<const char *>(glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-  capabilities_.vendorString = vendor ? vendor : "Unknown";
-  capabilities_.rendererString = renderer ? renderer : "Unknown";
-  capabilities_.versionString = version ? version : "Unknown";
-  capabilities_.glslVersionString = glslVersion ? glslVersion : "Unknown";
+  capabilities_.vendorString = (vendor != nullptr) ? vendor : "Unknown";
+  capabilities_.rendererString = (renderer != nullptr) ? renderer : "Unknown";
+  capabilities_.versionString = (version != nullptr) ? version : "Unknown";
+  capabilities_.glslVersionString = (glslVersion != nullptr) ? glslVersion : "Unknown";
 
   // Get numeric version (OpenGL 3.0+ method)
   glGetIntegerv(GL_MAJOR_VERSION, &capabilities_.majorVersion);
   glGetIntegerv(GL_MINOR_VERSION, &capabilities_.minorVersion);
 
   // Map GL version to GLSL version
-  int major = capabilities_.majorVersion;
-  int minor = capabilities_.minorVersion;
+  int const major = capabilities_.majorVersion;
+  int const minor = capabilities_.minorVersion;
 
   if (major >= 4) {
-    if (minor >= 6)
+    if (minor >= 6) {
       capabilities_.glslVersion = 460;
-    else if (minor >= 5)
+    } else if (minor >= 5) {
       capabilities_.glslVersion = 450;
-    else if (minor >= 4)
+    } else if (minor >= 4) {
       capabilities_.glslVersion = 440;
-    else if (minor >= 3)
+    } else if (minor >= 3) {
       capabilities_.glslVersion = 430;
-    else if (minor >= 2)
+    } else if (minor >= 2) {
       capabilities_.glslVersion = 420;
-    else if (minor >= 1)
+    } else if (minor >= 1) {
       capabilities_.glslVersion = 410;
-    else
+    } else {
       capabilities_.glslVersion = 400;
+    }
   } else if (major == 3) {
-    if (minor >= 3)
+    if (minor >= 3) {
       capabilities_.glslVersion = 330;
-    else if (minor >= 2)
+    } else if (minor >= 2) {
       capabilities_.glslVersion = 150;
-    else if (minor >= 1)
+    } else if (minor >= 1) {
       capabilities_.glslVersion = 140;
-    else
+    } else {
       capabilities_.glslVersion = 130;
+    }
   } else {
     // OpenGL 2.x
     capabilities_.glslVersion = 120;
@@ -102,27 +108,32 @@ void ShaderManager::detectCapabilities() {
 }
 
 ShaderTier ShaderManager::determineTier() const {
-  int glsl = capabilities_.glslVersion;
+  int const glsl = capabilities_.glslVersion;
 
-  if (glsl >= 460)
-    return ShaderTier::GLSL_460;
-  if (glsl >= 450)
-    return ShaderTier::GLSL_450;
-  if (glsl >= 410)
-    return ShaderTier::GLSL_410;
-  if (glsl >= 330)
-    return ShaderTier::GLSL_330;
-  if (glsl >= 120)
-    return ShaderTier::GLSL_120;
+  if (glsl >= 460) {
+    return ShaderTier::Glsl460;
+  }
+  if (glsl >= 450) {
+    return ShaderTier::Glsl450;
+  }
+  if (glsl >= 410) {
+    return ShaderTier::Glsl410;
+  }
+  if (glsl >= 330) {
+    return ShaderTier::Glsl330;
+  }
+  if (glsl >= 120) {
+    return ShaderTier::Glsl120;
+  }
 
   return ShaderTier::UNKNOWN;
 }
 
 std::string ShaderManager::getVersionDirective() const {
   char buffer[64];
-  std::snprintf(buffer, sizeof(buffer), "#version %d core\n",
-                capabilities_.glslVersion);
-  return std::string(buffer);
+  (void)std::snprintf(buffer, sizeof(buffer), "#version %d core\n",
+                      capabilities_.glslVersion);
+  return {buffer};
 }
 
 bool ShaderManager::isApplePlatform() const {
@@ -130,7 +141,7 @@ bool ShaderManager::isApplePlatform() const {
   return true;
 #else
   // Also check if vendor string contains Apple
-  return capabilities_.vendorString.find("Apple") != std::string::npos;
+  return capabilities_.vendorString.contains("Apple");
 #endif
 }
 
@@ -172,9 +183,9 @@ std::string ShaderManager::preprocessShader(const std::string &source) const {
 
   // Find and remove existing #version directive from source
   std::string processedSource = source;
-  size_t versionPos = processedSource.find("#version");
+  size_t const versionPos = processedSource.find("#version");
   if (versionPos != std::string::npos) {
-    size_t endLine = processedSource.find('\n', versionPos);
+    size_t const endLine = processedSource.find('\n', versionPos);
     if (endLine != std::string::npos) {
       processedSource = processedSource.substr(endLine + 1);
     }
@@ -190,19 +201,19 @@ ShaderManager::findBestShaderFile(const std::string &basePath) const {
   std::vector<std::string> suffixes;
 
   switch (currentTier_) {
-  case ShaderTier::GLSL_460:
+  case ShaderTier::Glsl460:
     suffixes = {".460", ".450", ".410", ".330", ""};
     break;
-  case ShaderTier::GLSL_450:
+  case ShaderTier::Glsl450:
     suffixes = {".450", ".410", ".330", ""};
     break;
-  case ShaderTier::GLSL_410:
+  case ShaderTier::Glsl410:
     suffixes = {".410", ".330", ""};
     break;
-  case ShaderTier::GLSL_330:
+  case ShaderTier::Glsl330:
     suffixes = {".330", ""};
     break;
-  case ShaderTier::GLSL_120:
+  case ShaderTier::Glsl120:
     suffixes = {".120", ""};
     break;
   default:
@@ -212,7 +223,7 @@ ShaderManager::findBestShaderFile(const std::string &basePath) const {
 
   for (const auto &suffix : suffixes) {
     std::string path = basePath + suffix;
-    std::ifstream file(path);
+    std::ifstream const file(path);
     if (file.good()) {
       return path;
     }
@@ -223,11 +234,11 @@ ShaderManager::findBestShaderFile(const std::string &basePath) const {
 }
 
 std::string ShaderManager::loadShaderSource(const std::string &basePath) const {
-  std::string actualPath = findBestShaderFile(basePath);
+  std::string const actualPath = findBestShaderFile(basePath);
 
   std::ifstream file(actualPath);
   if (!file.is_open()) {
-    std::fprintf(stderr, "Failed to open shader file: %s\n", actualPath.c_str());
+    (void)std::fprintf(stderr, "Failed to open shader file: %s\n", actualPath.c_str());
     return "";
   }
 
@@ -238,12 +249,12 @@ std::string ShaderManager::loadShaderSource(const std::string &basePath) const {
 
 GLuint ShaderManager::compileShader(const std::string &basePath,
                                     GLenum shaderType) const {
-  std::string source = loadShaderSource(basePath);
+  std::string const source = loadShaderSource(basePath);
   if (source.empty()) {
     return 0;
   }
 
-  GLuint shader = glCreateShader(shaderType);
+  GLuint const shader = glCreateShader(shaderType);
   const char *sourcePtr = source.c_str();
   glShaderSource(shader, 1, &sourcePtr, nullptr);
   glCompileShader(shader);
@@ -251,11 +262,11 @@ GLuint ShaderManager::compileShader(const std::string &basePath,
   // Check compilation status
   GLint success;
   glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-  if (!success) {
+  if (success == 0) {
     GLchar infoLog[1024];
     glGetShaderInfoLog(shader, sizeof(infoLog), nullptr, infoLog);
-    std::fprintf(stderr, "Shader compilation failed (%s):\n%s\n",
-                 basePath.c_str(), infoLog);
+    (void)std::fprintf(stderr, "Shader compilation failed (%s):\n%s\n",
+                       basePath.c_str(), infoLog);
     glDeleteShader(shader);
     return 0;
   }
@@ -265,18 +276,18 @@ GLuint ShaderManager::compileShader(const std::string &basePath,
 
 GLuint ShaderManager::createProgram(const std::string &vertPath,
                                     const std::string &fragPath) const {
-  GLuint vertShader = compileShader(vertPath, GL_VERTEX_SHADER);
+  GLuint const vertShader = compileShader(vertPath, GL_VERTEX_SHADER);
   if (vertShader == 0) {
     return 0;
   }
 
-  GLuint fragShader = compileShader(fragPath, GL_FRAGMENT_SHADER);
+  GLuint const fragShader = compileShader(fragPath, GL_FRAGMENT_SHADER);
   if (fragShader == 0) {
     glDeleteShader(vertShader);
     return 0;
   }
 
-  GLuint program = glCreateProgram();
+  GLuint const program = glCreateProgram();
   glAttachShader(program, vertShader);
   glAttachShader(program, fragShader);
   glLinkProgram(program);
@@ -284,10 +295,10 @@ GLuint ShaderManager::createProgram(const std::string &vertPath,
   // Check link status
   GLint success;
   glGetProgramiv(program, GL_LINK_STATUS, &success);
-  if (!success) {
+  if (success == 0) {
     GLchar infoLog[1024];
     glGetProgramInfoLog(program, sizeof(infoLog), nullptr, infoLog);
-    std::fprintf(stderr, "Program linking failed:\n%s\n", infoLog);
+    (void)std::fprintf(stderr, "Program linking failed:\n%s\n", infoLog);
     glDeleteProgram(program);
     glDeleteShader(vertShader);
     glDeleteShader(fragShader);
@@ -303,15 +314,15 @@ GLuint ShaderManager::createProgram(const std::string &vertPath,
 
 const char *shaderTierToString(ShaderTier tier) {
   switch (tier) {
-  case ShaderTier::GLSL_460:
+  case ShaderTier::Glsl460:
     return "GLSL 4.60 (OpenGL 4.6)";
-  case ShaderTier::GLSL_450:
+  case ShaderTier::Glsl450:
     return "GLSL 4.50 (OpenGL 4.5)";
-  case ShaderTier::GLSL_410:
+  case ShaderTier::Glsl410:
     return "GLSL 4.10 (OpenGL 4.1)";
-  case ShaderTier::GLSL_330:
+  case ShaderTier::Glsl330:
     return "GLSL 3.30 (OpenGL 3.3)";
-  case ShaderTier::GLSL_120:
+  case ShaderTier::Glsl120:
     return "GLSL 1.20 (OpenGL 2.1)";
   default:
     return "Unknown";
@@ -320,15 +331,15 @@ const char *shaderTierToString(ShaderTier tier) {
 
 int shaderTierToGLSLVersion(ShaderTier tier) {
   switch (tier) {
-  case ShaderTier::GLSL_460:
+  case ShaderTier::Glsl460:
     return 460;
-  case ShaderTier::GLSL_450:
+  case ShaderTier::Glsl450:
     return 450;
-  case ShaderTier::GLSL_410:
+  case ShaderTier::Glsl410:
     return 410;
-  case ShaderTier::GLSL_330:
+  case ShaderTier::Glsl330:
     return 330;
-  case ShaderTier::GLSL_120:
+  case ShaderTier::Glsl120:
     return 120;
   default:
     return 330;

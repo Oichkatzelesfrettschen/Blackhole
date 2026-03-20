@@ -7,10 +7,10 @@
  * - Kerr metric (Boyer-Lindquist coordinates)
  *
  * The Christoffel symbols of the second kind are:
- *   Γ^α_μν = (1/2) g^αβ (∂_μ g_βν + ∂_ν g_βμ - ∂_β g_μν)
+ *   Gamma^alpha_mu_nu = (1/2) g^alpha_beta (d_mu g_beta_nu + d_nu g_beta_mu - d_beta g_mu_nu)
  *
  * Used in the geodesic equation:
- *   d²x^α/dλ² + Γ^α_μν (dx^μ/dλ)(dx^ν/dλ) = 0
+ *   d^2 x^alpha / dlambda^2 + Gamma^alpha_mu_nu (dx^mu/dlambda)(dx^nu/dlambda) = 0
  *
  * References:
  *   - Misner, Thorne, Wheeler (1973) - Gravitation
@@ -22,10 +22,9 @@
 #ifndef PHYSICS_CONNECTION_H
 #define PHYSICS_CONNECTION_H
 
-#include "constants.h"
-#include "kerr.h"
 #include <array>
 #include <cmath>
+#include <cstddef>
 
 namespace physics {
 
@@ -43,7 +42,7 @@ using Metric4 = std::array<std::array<double, 4>, 4>;
 /**
  * @brief 4x4x4 connection coefficients.
  *
- * conn[alpha][mu][nu] = Γ^α_μν
+ * conn[alpha][mu][nu] = Gamma^alpha_mu_nu
  */
 using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
 
@@ -52,40 +51,39 @@ using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
 // ============================================================================
 
 /**
- * @brief Compute covariant Kerr metric tensor g_μν.
+ * @brief Compute covariant Kerr metric tensor g_mu_nu.
  *
- * In Boyer-Lindquist coordinates (t, r, θ, φ):
+ * In Boyer-Lindquist coordinates (t, r, theta, phi):
  *
- *   g_tt = -(1 - r_s r/Σ)
- *   g_tφ = g_φt = -r_s r a sin²θ / Σ
- *   g_rr = Σ/Δ
- *   g_θθ = Σ
- *   g_φφ = (r² + a² + r_s r a² sin²θ / Σ) sin²θ
+ *   g_tt = -(1 - r_s r/Sigma)
+ *   g_tphi = g_phit = -r_s r a sin^2(theta) / Sigma
+ *   g_rr = Sigma/Delta
+ *   g_thth = Sigma
+ *   g_phiphi = (r^2 + a^2 + r_s r a^2 sin^2(theta) / Sigma) sin^2(theta)
  *
- * where Σ = r² + a² cos²θ, Δ = r² - r_s r + a²
+ * where Sigma = r^2 + a^2 cos^2(theta), Delta = r^2 - r_s r + a^2
  *
  * @param r Radial coordinate
  * @param theta Polar angle
  * @param a Spin parameter
- * @param r_s Schwarzschild radius
+ * @param rS Schwarzschild radius
  * @return Covariant metric tensor
  */
-inline Metric4 kerr_gcov(double r, double theta, double a, double r_s) {
+[[nodiscard]] inline Metric4 kerrGcov(double r, double theta, double a, double rS) {
   Metric4 g{};
 
-  double cos_theta = std::cos(theta);
-  double sin_theta = std::sin(theta);
-  double sin2 = sin_theta * sin_theta;
-  double cos2 = cos_theta * cos_theta;
+  const double cosTheta = std::cos(theta);
+  const double sinTheta = std::sin(theta);
+  const double sin2 = sinTheta * sinTheta;
+  const double cos2 = cosTheta * cosTheta;
+  const double a2 = a * a;
+  const double r2 = r * r;
 
-  double a2 = a * a;
-  double r2 = r * r;
+  // Sigma = r^2 + a^2 cos^2(theta)
+  double sigma = r2 + (a2 * cos2);
 
-  // Σ = r² + a² cos²θ
-  double sigma = r2 + a2 * cos2;
-
-  // Δ = r² - r_s r + a²
-  double delta = r2 - r_s * r + a2;
+  // Delta = r^2 - r_s r + a^2
+  double delta = r2 - (rS * r) + a2;
 
   // Avoid division by zero
   if (std::abs(sigma) < 1e-30) {
@@ -97,83 +95,85 @@ inline Metric4 kerr_gcov(double r, double theta, double a, double r_s) {
 
   // Metric components (in c=G=1 units, geometric)
   // g_tt
-  g[0][0] = -(1.0 - r_s * r / sigma);
+  g.at(0).at(0) = -(1.0 - ((rS * r) / sigma));
 
-  // g_tφ = g_φt
-  g[0][3] = -r_s * r * a * sin2 / sigma;
-  g[3][0] = g[0][3];
+  // g_tphi = g_phit
+  g.at(0).at(3) = -((rS * r * a * sin2) / sigma);
+  g.at(3).at(0) = g.at(0).at(3);
 
   // g_rr
-  g[1][1] = sigma / delta;
+  g.at(1).at(1) = sigma / delta;
 
-  // g_θθ
-  g[2][2] = sigma;
+  // g_thth
+  g.at(2).at(2) = sigma;
 
-  // g_φφ
-  g[3][3] = (r2 + a2 + r_s * r * a2 * sin2 / sigma) * sin2;
+  // g_phiphi
+  g.at(3).at(3) = (r2 + a2 + ((rS * r * a2 * sin2) / sigma)) * sin2;
 
   return g;
 }
 
 /**
- * @brief Compute contravariant Kerr metric tensor g^μν.
+ * @brief Compute contravariant Kerr metric tensor g^mu_nu.
  *
  * The inverse metric for Kerr in Boyer-Lindquist coordinates.
  *
  * @param r Radial coordinate
  * @param theta Polar angle
  * @param a Spin parameter
- * @param r_s Schwarzschild radius
+ * @param rS Schwarzschild radius
  * @return Contravariant metric tensor
  */
-inline Metric4 kerr_gcon(double r, double theta, double a, double r_s) {
+[[nodiscard]] inline Metric4 kerrGcon(double r, double theta, double a, double rS) {
   Metric4 g{};
 
-  double cos_theta = std::cos(theta);
-  double sin_theta = std::sin(theta);
-  double sin2 = sin_theta * sin_theta;
-  double cos2 = cos_theta * cos_theta;
+  const double cosTheta = std::cos(theta);
+  const double sinTheta = std::sin(theta);
+  const double sin2 = sinTheta * sinTheta;
+  const double cos2 = cosTheta * cosTheta;
+  const double a2 = a * a;
+  const double r2 = r * r;
 
-  double a2 = a * a;
-  double r2 = r * r;
+  // Sigma = r^2 + a^2 cos^2(theta)
+  double sigma = r2 + (a2 * cos2);
 
-  // Σ = r² + a² cos²θ
-  double sigma = r2 + a2 * cos2;
+  // Delta = r^2 - r_s r + a^2
+  double delta = r2 - (rS * r) + a2;
 
-  // Δ = r² - r_s r + a²
-  double delta = r2 - r_s * r + a2;
-
-  // A = (r² + a²)² - a² Δ sin²θ
-  double r2_plus_a2 = r2 + a2;
-  double A = r2_plus_a2 * r2_plus_a2 - a2 * delta * sin2;
+  // bigA = (r^2 + a^2)^2 - a^2 Delta sin^2(theta)
+  const double r2PlusA2 = r2 + a2;
+  double bigA = (r2PlusA2 * r2PlusA2) - (a2 * delta * sin2);
 
   // Avoid singularities
-  if (std::abs(sigma) < 1e-30)
+  if (std::abs(sigma) < 1e-30) {
     sigma = 1e-30;
-  if (std::abs(delta) < 1e-30)
+  }
+  if (std::abs(delta) < 1e-30) {
     delta = (delta >= 0) ? 1e-30 : -1e-30;
-  if (std::abs(A) < 1e-30)
-    A = 1e-30;
+  }
+  if (std::abs(bigA) < 1e-30) {
+    bigA = 1e-30;
+  }
 
   // Inverse metric components
-  // g^tt = -A / (Δ Σ)
-  g[0][0] = -A / (delta * sigma);
+  // g^tt = -bigA / (Delta Sigma)
+  g.at(0).at(0) = -(bigA / (delta * sigma));
 
-  // g^tφ = g^φt = -r_s r a / (Δ Σ)
-  g[0][3] = -r_s * r * a / (delta * sigma);
-  g[3][0] = g[0][3];
+  // g^tphi = g^phit = -r_s r a / (Delta Sigma)
+  g.at(0).at(3) = -((rS * r * a) / (delta * sigma));
+  g.at(3).at(0) = g.at(0).at(3);
 
-  // g^rr = Δ / Σ
-  g[1][1] = delta / sigma;
+  // g^rr = Delta / Sigma
+  g.at(1).at(1) = delta / sigma;
 
-  // g^θθ = 1 / Σ
-  g[2][2] = 1.0 / sigma;
+  // g^thth = 1 / Sigma
+  g.at(2).at(2) = 1.0 / sigma;
 
-  // g^φφ = (Δ - a² sin²θ) / (Δ Σ sin²θ)
+  // g^phiphi = (Delta - a^2 sin^2(theta)) / (Delta Sigma sin^2(theta))
   if (std::abs(sin2) > 1e-30) {
-    g[3][3] = (delta - a2 * sin2) / (delta * sigma * sin2);
+    g.at(3).at(3) = (delta - (a2 * sin2)) / (delta * sigma * sin2);
   } else {
-    g[3][3] = 0.0; // At poles
+    g.at(3).at(3) = 0.0; // At poles
   }
 
   return g;
@@ -186,35 +186,34 @@ inline Metric4 kerr_gcon(double r, double theta, double a, double r_s) {
 /**
  * @brief Compute Christoffel symbols for Kerr metric.
  *
- * Returns Γ^α_μν for the Kerr metric in Boyer-Lindquist coordinates.
+ * Returns Gamma^alpha_mu_nu for the Kerr metric in Boyer-Lindquist coordinates.
  * Uses analytic expressions from Chandrasekhar (1983).
  *
  * @param r Radial coordinate
  * @param theta Polar angle
  * @param a Spin parameter
- * @param r_s Schwarzschild radius
- * @return Connection coefficients conn[α][μ][ν] = Γ^α_μν
+ * @param rS Schwarzschild radius
+ * @return Connection coefficients conn[alpha][mu][nu] = Gamma^alpha_mu_nu
  */
-inline Connection4 kerr_connection(double r, double theta, double a, double r_s) {
+[[nodiscard]] inline Connection4 kerrConnection(double r, double theta, double a, double rS) {
   Connection4 conn{};
 
-  double cos_theta = std::cos(theta);
-  double sin_theta = std::sin(theta);
-  double sin2 = sin_theta * sin_theta;
-  double cos2 = cos_theta * cos_theta;
+  const double cosTheta = std::cos(theta);
+  const double sinTheta = std::sin(theta);
+  const double sin2 = sinTheta * sinTheta;
+  const double cos2 = cosTheta * cosTheta;
+  const double a2 = a * a;
+  const double r2 = r * r;
 
-  double a2 = a * a;
-  double r2 = r * r;
+  // Sigma = r^2 + a^2 cos^2(theta)
+  const double sigma = r2 + (a2 * cos2);
 
-  // Σ = r² + a² cos²θ
-  double sigma = r2 + a2 * cos2;
-
-  // Δ = r² - r_s r + a²
-  double delta = r2 - r_s * r + a2;
+  // Delta = r^2 - r_s r + a^2
+  double delta = r2 - (rS * r) + a2;
 
   // Avoid singularities
-  double sigma2 = sigma * sigma;
-  double sigma3 = sigma2 * sigma;
+  const double sigma2 = sigma * sigma;
+  const double sigma3 = sigma2 * sigma;
   if (std::abs(sigma) < 1e-30) {
     return conn; // Return zeros near singularity
   }
@@ -223,125 +222,125 @@ inline Connection4 kerr_connection(double r, double theta, double a, double r_s)
   }
 
   // Useful combinations
-  double r2_plus_a2 = r2 + a2;
-  double rs_r = r_s * r;
+  const double r2PlusA2 = r2 + a2;
+  const double rsR = rS * r;
 
   // ============================================================
-  // Γ^t components
+  // Gamma^t components
   // ============================================================
 
-  // Γ^t_tr = Γ^t_rt
-  double gamma_t_tr = rs_r * (r2 - a2 * cos2) / (sigma2 * delta);
-  conn[0][0][1] = gamma_t_tr;
-  conn[0][1][0] = gamma_t_tr;
+  // Gamma^t_tr = Gamma^t_rt
+  const double gammaTTr = (rsR * (r2 - (a2 * cos2))) / (sigma2 * delta);
+  conn.at(0).at(0).at(1) = gammaTTr;
+  conn.at(0).at(1).at(0) = gammaTTr;
 
-  // Γ^t_tθ = Γ^t_θt
-  double gamma_t_ttheta = -rs_r * a2 * sin_theta * cos_theta / sigma2;
-  conn[0][0][2] = gamma_t_ttheta;
-  conn[0][2][0] = gamma_t_ttheta;
+  // Gamma^t_ttheta = Gamma^t_thetat
+  const double gammaTTtheta = -((rsR * a2 * sinTheta * cosTheta) / sigma2);
+  conn.at(0).at(0).at(2) = gammaTTtheta;
+  conn.at(0).at(2).at(0) = gammaTTtheta;
 
-  // Γ^t_rφ = Γ^t_φr
-  double gamma_t_rphi =
-      -a * rs_r * sin2 * (r2 - a2 * cos2) / (sigma2 * delta) -
-      a * r_s * sin2 / sigma;
-  conn[0][1][3] = gamma_t_rphi;
-  conn[0][3][1] = gamma_t_rphi;
+  // Gamma^t_rphi = Gamma^t_phir
+  const double gammaTRphi =
+      -((a * rsR * sin2 * (r2 - (a2 * cos2))) / (sigma2 * delta)) -
+      ((a * rS * sin2) / sigma);
+  conn.at(0).at(1).at(3) = gammaTRphi;
+  conn.at(0).at(3).at(1) = gammaTRphi;
 
-  // Γ^t_θφ = Γ^t_φθ
-  double gamma_t_thetaphi =
-      2.0 * a * rs_r * (r2 + a2) * sin_theta * cos_theta / sigma2;
-  conn[0][2][3] = gamma_t_thetaphi;
-  conn[0][3][2] = gamma_t_thetaphi;
+  // Gamma^t_thetaphi = Gamma^t_phitheta
+  const double gammaTThetaphi =
+      (2.0 * a * rsR * (r2 + a2) * sinTheta * cosTheta) / sigma2;
+  conn.at(0).at(2).at(3) = gammaTThetaphi;
+  conn.at(0).at(3).at(2) = gammaTThetaphi;
 
   // ============================================================
-  // Γ^r components
+  // Gamma^r components
   // ============================================================
 
-  // Γ^r_tt
-  conn[1][0][0] = delta * rs_r * (r2 - a2 * cos2) / sigma3;
+  // Gamma^r_tt
+  conn.at(1).at(0).at(0) = (delta * rsR * (r2 - (a2 * cos2))) / sigma3;
 
-  // Γ^r_tφ = Γ^r_φt
-  double gamma_r_tphi =
-      -a * delta * rs_r * sin2 * (r2 - a2 * cos2) / sigma3;
-  conn[1][0][3] = gamma_r_tphi;
-  conn[1][3][0] = gamma_r_tphi;
+  // Gamma^r_tphi = Gamma^r_phit
+  const double gammaRTphi =
+      -((a * delta * rsR * sin2 * (r2 - (a2 * cos2))) / sigma3);
+  conn.at(1).at(0).at(3) = gammaRTphi;
+  conn.at(1).at(3).at(0) = gammaRTphi;
 
-  // Γ^r_rr
-  conn[1][1][1] = (r * delta - sigma * (r - r_s / 2.0)) / (sigma * delta);
+  // Gamma^r_rr
+  conn.at(1).at(1).at(1) = ((r * delta) - (sigma * (r - (rS / 2.0)))) / (sigma * delta);
 
-  // Γ^r_rθ = Γ^r_θr
-  double gamma_r_rtheta = -a2 * sin_theta * cos_theta / sigma;
-  conn[1][1][2] = gamma_r_rtheta;
-  conn[1][2][1] = gamma_r_rtheta;
+  // Gamma^r_rtheta = Gamma^r_thetar
+  const double gammaRRtheta = -((a2 * sinTheta * cosTheta) / sigma);
+  conn.at(1).at(1).at(2) = gammaRRtheta;
+  conn.at(1).at(2).at(1) = gammaRRtheta;
 
-  // Γ^r_θθ
-  conn[1][2][2] = -r * delta / sigma;
+  // Gamma^r_thth
+  conn.at(1).at(2).at(2) = -((r * delta) / sigma);
 
-  // Γ^r_φφ
-  conn[1][3][3] = (-delta * r * sin2 -
-                   delta * a2 * sin2 * sin2 * rs_r * (r2 - a2 * cos2) / sigma2) /
+  // Gamma^r_phiphi
+  conn.at(1).at(3).at(3) = ((-delta * r * sin2) -
+                   ((delta * a2 * sin2 * sin2 * rsR * (r2 - (a2 * cos2))) / sigma2)) /
                   sigma;
 
   // ============================================================
-  // Γ^θ components
+  // Gamma^theta components
   // ============================================================
 
-  // Γ^θ_tt
-  conn[2][0][0] = -rs_r * a2 * sin_theta * cos_theta / sigma3;
+  // Gamma^theta_tt
+  conn.at(2).at(0).at(0) = -((rsR * a2 * sinTheta * cosTheta) / sigma3);
 
-  // Γ^θ_tφ = Γ^θ_φt
-  double gamma_theta_tphi =
-      a * rs_r * (r2 + a2) * sin_theta * cos_theta / sigma3;
-  conn[2][0][3] = gamma_theta_tphi;
-  conn[2][3][0] = gamma_theta_tphi;
+  // Gamma^theta_tphi = Gamma^theta_phit
+  const double gammaThetaTphi =
+      (a * rsR * (r2 + a2) * sinTheta * cosTheta) / sigma3;
+  conn.at(2).at(0).at(3) = gammaThetaTphi;
+  conn.at(2).at(3).at(0) = gammaThetaTphi;
 
-  // Γ^θ_rr
-  conn[2][1][1] = a2 * sin_theta * cos_theta / (sigma * delta);
+  // Gamma^theta_rr
+  conn.at(2).at(1).at(1) = (a2 * sinTheta * cosTheta) / (sigma * delta);
 
-  // Γ^θ_rθ = Γ^θ_θr
-  double gamma_theta_rtheta = r / sigma;
-  conn[2][1][2] = gamma_theta_rtheta;
-  conn[2][2][1] = gamma_theta_rtheta;
+  // Gamma^theta_rtheta = Gamma^theta_thetar
+  const double gammaThetaRtheta = r / sigma;
+  conn.at(2).at(1).at(2) = gammaThetaRtheta;
+  conn.at(2).at(2).at(1) = gammaThetaRtheta;
 
-  // Γ^θ_θθ
-  conn[2][2][2] = -a2 * sin_theta * cos_theta / sigma;
+  // Gamma^theta_thth
+  conn.at(2).at(2).at(2) = -((a2 * sinTheta * cosTheta) / sigma);
 
-  // Γ^θ_φφ
-  double sin_cos = sin_theta * cos_theta;
-  double A_term = r2_plus_a2 * r2_plus_a2 + a2 * delta * sin2;
-  conn[2][3][3] = -sin_cos *
-                  (A_term / sigma + 2.0 * a2 * rs_r * sin2 / sigma2) / sigma;
+  // Gamma^theta_phiphi
+  const double sinCos = sinTheta * cosTheta;
+  const double aTerm = (r2PlusA2 * r2PlusA2) + (a2 * delta * sin2);
+  conn.at(2).at(3).at(3) = -(sinCos *
+                    ((aTerm / sigma) + ((2.0 * a2 * rsR * sin2) / sigma2))) /
+                  sigma;
 
   // ============================================================
-  // Γ^φ components
+  // Gamma^phi components
   // ============================================================
 
-  // Γ^φ_tr = Γ^φ_rt
-  double gamma_phi_tr = a * rs_r * (r2 - a2 * cos2) / (sigma2 * delta);
-  conn[3][0][1] = gamma_phi_tr;
-  conn[3][1][0] = gamma_phi_tr;
+  // Gamma^phi_tr = Gamma^phi_rt
+  const double gammaPhiTr = (a * rsR * (r2 - (a2 * cos2))) / (sigma2 * delta);
+  conn.at(3).at(0).at(1) = gammaPhiTr;
+  conn.at(3).at(1).at(0) = gammaPhiTr;
 
-  // Γ^φ_tθ = Γ^φ_θt
-  double gamma_phi_ttheta =
-      -a * rs_r * cos_theta / (sigma2 * sin_theta);
-  if (std::abs(sin_theta) > 1e-10) {
-    conn[3][0][2] = gamma_phi_ttheta;
-    conn[3][2][0] = gamma_phi_ttheta;
+  // Gamma^phi_ttheta = Gamma^phi_thetat
+  const double gammaPhiTtheta = -((a * rsR * cosTheta) / (sigma2 * sinTheta));
+  if (std::abs(sinTheta) > 1e-10) {
+    conn.at(3).at(0).at(2) = gammaPhiTtheta;
+    conn.at(3).at(2).at(0) = gammaPhiTtheta;
   }
 
-  // Γ^φ_rφ = Γ^φ_φr
-  double gamma_phi_rphi =
-      r / sigma - a2 * sin2 * rs_r * (r2 - a2 * cos2) / (sigma2 * delta);
-  conn[3][1][3] = gamma_phi_rphi;
-  conn[3][3][1] = gamma_phi_rphi;
+  // Gamma^phi_rphi = Gamma^phi_phir
+  const double gammaPhiRphi =
+      (r / sigma) - ((a2 * sin2 * rsR * (r2 - (a2 * cos2))) / (sigma2 * delta));
+  conn.at(3).at(1).at(3) = gammaPhiRphi;
+  conn.at(3).at(3).at(1) = gammaPhiRphi;
 
-  // Γ^φ_θφ = Γ^φ_φθ
-  double gamma_phi_thetaphi =
-      cos_theta / sin_theta +
-      a2 * rs_r * sin_theta * cos_theta / (sigma2);
-  if (std::abs(sin_theta) > 1e-10) {
-    conn[3][2][3] = gamma_phi_thetaphi;
-    conn[3][3][2] = gamma_phi_thetaphi;
+  // Gamma^phi_thetaphi = Gamma^phi_phitheta
+  const double gammaPhiThetaphi =
+      (cosTheta / sinTheta) +
+      ((a2 * rsR * sinTheta * cosTheta) / sigma2);
+  if (std::abs(sinTheta) > 1e-10) {
+    conn.at(3).at(2).at(3) = gammaPhiThetaphi;
+    conn.at(3).at(3).at(2) = gammaPhiThetaphi;
   }
 
   return conn;
@@ -357,12 +356,12 @@ inline Connection4 kerr_connection(double r, double theta, double a, double r_s)
  * Special case of Kerr with a=0.
  *
  * @param r Radial coordinate
- * @param theta Polar angle (only needed for φφ component)
- * @param r_s Schwarzschild radius
+ * @param theta Polar angle (only needed for phi-phi component)
+ * @param rS Schwarzschild radius
  * @return Covariant metric tensor
  */
-inline Metric4 schwarzschild_gcov(double r, double theta, double r_s) {
-  return kerr_gcov(r, theta, 0.0, r_s);
+[[nodiscard]] inline Metric4 schwarzschildGcov(double r, double theta, double rS) {
+  return kerrGcov(r, theta, 0.0, rS);
 }
 
 /**
@@ -370,11 +369,11 @@ inline Metric4 schwarzschild_gcov(double r, double theta, double r_s) {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param r_s Schwarzschild radius
+ * @param rS Schwarzschild radius
  * @return Contravariant metric tensor
  */
-inline Metric4 schwarzschild_gcon(double r, double theta, double r_s) {
-  return kerr_gcon(r, theta, 0.0, r_s);
+[[nodiscard]] inline Metric4 schwarzschildGcon(double r, double theta, double rS) {
+  return kerrGcon(r, theta, 0.0, rS);
 }
 
 /**
@@ -382,11 +381,11 @@ inline Metric4 schwarzschild_gcon(double r, double theta, double r_s) {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param r_s Schwarzschild radius
+ * @param rS Schwarzschild radius
  * @return Connection coefficients
  */
-inline Connection4 schwarzschild_connection(double r, double theta, double r_s) {
-  return kerr_connection(r, theta, 0.0, r_s);
+[[nodiscard]] inline Connection4 schwarzschildConnection(double r, double theta, double rS) {
+  return kerrConnection(r, theta, 0.0, rS);
 }
 
 // ============================================================================
@@ -396,18 +395,18 @@ inline Connection4 schwarzschild_connection(double r, double theta, double r_s) 
 /**
  * @brief Lower index on a 4-vector.
  *
- * u_μ = g_μν u^ν
+ * u_mu = g_mu_nu u^nu
  *
- * @param ucon Contravariant 4-vector u^μ
+ * @param ucon Contravariant 4-vector u^mu
  * @param gcov Covariant metric tensor
- * @return Covariant 4-vector u_μ
+ * @return Covariant 4-vector u_mu
  */
-inline std::array<double, 4> lower_index(const std::array<double, 4> &ucon,
-                                         const Metric4 &gcov) {
+[[nodiscard]] inline std::array<double, 4> lowerIndex(const std::array<double, 4> &ucon,
+                                                      const Metric4 &gcov) {
   std::array<double, 4> ucov{};
   for (size_t mu = 0; mu < 4; ++mu) {
     for (size_t nu = 0; nu < 4; ++nu) {
-      ucov[mu] += gcov[mu][nu] * ucon[nu];
+      ucov.at(mu) += gcov.at(mu).at(nu) * ucon.at(nu);
     }
   }
   return ucov;
@@ -416,18 +415,18 @@ inline std::array<double, 4> lower_index(const std::array<double, 4> &ucon,
 /**
  * @brief Raise index on a 4-vector.
  *
- * u^μ = g^μν u_ν
+ * u^mu = g^mu_nu u_nu
  *
- * @param ucov Covariant 4-vector u_μ
+ * @param ucov Covariant 4-vector u_mu
  * @param gcon Contravariant metric tensor
- * @return Contravariant 4-vector u^μ
+ * @return Contravariant 4-vector u^mu
  */
-inline std::array<double, 4> raise_index(const std::array<double, 4> &ucov,
-                                         const Metric4 &gcon) {
+[[nodiscard]] inline std::array<double, 4> raiseIndex(const std::array<double, 4> &ucov,
+                                                      const Metric4 &gcon) {
   std::array<double, 4> ucon{};
   for (size_t mu = 0; mu < 4; ++mu) {
     for (size_t nu = 0; nu < 4; ++nu) {
-      ucon[mu] += gcon[mu][nu] * ucov[nu];
+      ucon.at(mu) += gcon.at(mu).at(nu) * ucov.at(nu);
     }
   }
   return ucon;
@@ -436,19 +435,19 @@ inline std::array<double, 4> raise_index(const std::array<double, 4> &ucov,
 /**
  * @brief Compute geodesic acceleration from connection.
  *
- * a^α = -Γ^α_μν u^μ u^ν
+ * a^alpha = -Gamma^alpha_mu_nu u^mu u^nu
  *
- * @param ucon 4-velocity u^μ
+ * @param ucon 4-velocity u^mu
  * @param conn Connection coefficients
- * @return 4-acceleration a^α
+ * @return 4-acceleration a^alpha
  */
-inline std::array<double, 4> geodesic_acceleration(
+[[nodiscard]] inline std::array<double, 4> geodesicAcceleration(
     const std::array<double, 4> &ucon, const Connection4 &conn) {
   std::array<double, 4> acc{};
   for (size_t alpha = 0; alpha < 4; ++alpha) {
     for (size_t mu = 0; mu < 4; ++mu) {
       for (size_t nu = 0; nu < 4; ++nu) {
-        acc[alpha] -= conn[alpha][mu][nu] * ucon[mu] * ucon[nu];
+        acc.at(alpha) -= conn.at(alpha).at(mu).at(nu) * ucon.at(mu) * ucon.at(nu);
       }
     }
   }

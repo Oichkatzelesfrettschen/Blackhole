@@ -16,7 +16,6 @@
 
 #include "constants.h"
 
-#include <cmath>
 #include <string>
 
 namespace physics {
@@ -27,21 +26,21 @@ inline constexpr double RAD_TO_UAS = 206264.806e6;
 
 struct SourceParams {
   std::string name;
-  double mass_msun;       // black hole mass [solar masses]
+  double massMsun;        // black hole mass [solar masses]
   double spin;            // dimensionless Kerr parameter a* in [0,1)
-  double distance_cm;     // observer distance [cm]
-  double inclination_deg; // observer inclination from spin axis [deg]
-  double freq_hz;         // observing frequency [Hz] (default 230 GHz)
+  double distanceCm;      // observer distance [cm]
+  double inclinationDeg;  // observer inclination from spin axis [deg]
+  double freqHz;          // observing frequency [Hz] (default 230 GHz)
 
   // Gravitational radius r_g = GM/c^2 [cm].
-  inline double r_g() const {
-    return G * mass_msun * M_SUN / C2;
+  [[nodiscard]] double rG() const {
+    return G * massMsun * M_SUN / C2;
   }
 
   // Angular scale of one r_g as seen by the observer [microarcseconds].
   // theta = r_g / D  converted to uas.
-  inline double angular_scale_uas() const {
-    return (r_g() / distance_cm) * RAD_TO_UAS;
+  [[nodiscard]] double angularScaleUas() const {
+    return (rG() / distanceCm) * RAD_TO_UAS;
   }
 
   // Approximate shadow diameter for a Schwarzschild (a*=0) black hole
@@ -49,8 +48,8 @@ struct SourceParams {
   // a critical impact parameter b_c = 3*sqrt(3) r_g ~ 5.196 r_g,
   // so the shadow diameter is ~10.39 r_g.  We use the conventional
   // rounded factor 10.4 r_g following EHT papers.
-  inline double shadow_diameter_uas() const {
-    return 10.4 * angular_scale_uas();
+  [[nodiscard]] double shadowDiameterUas() const {
+    return 10.4 * angularScaleUas();
   }
 };
 
@@ -59,14 +58,14 @@ struct SourceParams {
 // M87*: EHT Collaboration (2019).
 // M = 6.5e9 Msun, D = 16.8 Mpc, a* = 0.9375 (EHT best-fit),
 // inclination 17 deg, EHT band 230 GHz.
-inline SourceParams source_m87() {
+inline SourceParams sourceM87() {
   return SourceParams{
-    .name            = "M87*",
-    .mass_msun       = 6.5e9,
-    .spin            = 0.9375,
-    .distance_cm     = 16.8 * MPC,
-    .inclination_deg = 17.0,
-    .freq_hz         = 230.0e9,
+    .name           = "M87*",
+    .massMsun       = 6.5e9,
+    .spin           = 0.9375,
+    .distanceCm     = 16.8 * MPC,
+    .inclinationDeg = 17.0,
+    .freqHz         = 230.0e9,
   };
 }
 
@@ -75,14 +74,14 @@ inline SourceParams source_m87() {
 // a* = 0.5 (fiducial; observational range poorly constrained),
 // inclination 30 deg (fiducial; plausible range 25-50 deg),
 // EHT band 230 GHz.
-inline SourceParams source_sgra() {
+inline SourceParams sourceSgra() {
   return SourceParams{
-    .name            = "Sgr A*",
-    .mass_msun       = 4.0e6,
-    .spin            = 0.5,
-    .distance_cm     = 8.178e3 * PARSEC,
-    .inclination_deg = 30.0,
-    .freq_hz         = 230.0e9,
+    .name           = "Sgr A*",
+    .massMsun       = 4.0e6,
+    .spin           = 0.5,
+    .distanceCm     = 8.178e3 * PARSEC,
+    .inclinationDeg = 30.0,
+    .freqHz         = 230.0e9,
   };
 }
 

@@ -86,7 +86,7 @@ struct SnapshotHistory {
                                          ParameterAdjustmentState& state) {
     if (snapshotIdx >= history.nSnapshots) { return false; }
 
-    state = history.snapshots[snapshotIdx].state;
+    state = history.snapshots.at(snapshotIdx).state;
     return true;
 }
 
@@ -121,7 +121,7 @@ inline void clearSnapshots(SnapshotHistory& history) {
 [[nodiscard]] inline double getSnapshotTimestamp(const SnapshotHistory& history,
                                                uint32_t snapshotIdx) {
     if (snapshotIdx >= history.nSnapshots) { return -1.0; }
-    return history.snapshots[snapshotIdx].timestamp;
+    return history.snapshots.at(snapshotIdx).timestamp;
 }
 
 // ============================================================================
@@ -140,10 +140,10 @@ inline void clearSnapshots(SnapshotHistory& history) {
                                                       const FieldModifier& modB,
                                                       double alpha) {
     FieldModifier result;
-    result.scale = modA.scale + alpha * (modB.scale - modA.scale);
-    result.offset = modA.offset + alpha * (modB.offset - modA.offset);
-    result.clampMin = modA.clampMin + alpha * (modB.clampMin - modA.clampMin);
-    result.clampMax = modA.clampMax + alpha * (modB.clampMax - modA.clampMax);
+    result.scale = modA.scale + (alpha * (modB.scale - modA.scale));
+    result.offset = modA.offset + (alpha * (modB.offset - modA.offset));
+    result.clampMin = modA.clampMin + (alpha * (modB.clampMin - modA.clampMin));
+    result.clampMax = modA.clampMax + (alpha * (modB.clampMax - modA.clampMax));
     return result;
 }
 
@@ -179,10 +179,11 @@ inline void clearSnapshots(SnapshotHistory& history) {
                                                    snapB.state.otherMods[i], alpha);
     }
 
-    result.densityScale = snapA.state.densityScale +
-                         alpha * (snapB.state.densityScale - snapA.state.densityScale);
-    result.temperatureScale = snapA.state.temperatureScale +
-                              alpha * (snapB.state.temperatureScale - snapA.state.temperatureScale);
+    result.densityScale =
+        snapA.state.densityScale + (alpha * (snapB.state.densityScale - snapA.state.densityScale));
+    result.temperatureScale =
+        snapA.state.temperatureScale +
+        (alpha * (snapB.state.temperatureScale - snapA.state.temperatureScale));
 
     // Use current enable state (from snap_a)
     result.enableAdjustments = snapA.state.enableAdjustments;
@@ -206,12 +207,13 @@ inline void clearSnapshots(SnapshotHistory& history) {
     if (history.nSnapshots == 0) { return false; }
 
     // Find bracketing snapshots
-    uint32_t idxLeft = 0, idxRight = 0;
+    uint32_t idxLeft = 0;
+    uint32_t idxRight = 0;
     bool found = false;
 
     for (uint32_t i = 0; i < history.nSnapshots - 1; i++) {
-        if (history.snapshots[i].timestamp <= t &&
-            t <= history.snapshots[i + 1].timestamp) {
+        if (history.snapshots.at(i).timestamp <= t &&
+            t <= history.snapshots.at(i + 1).timestamp) {
             idxLeft = i;
             idxRight = i + 1;
             found = true;
@@ -221,17 +223,17 @@ inline void clearSnapshots(SnapshotHistory& history) {
 
     if (!found) {
         // Out of range - clamp to nearest snapshot
-        if (t < history.snapshots[0].timestamp) {
-            result = history.snapshots[0].state;
+        if (t < history.snapshots.at(0).timestamp) {
+            result = history.snapshots.at(0).state;
         } else {
-            result = history.snapshots[history.nSnapshots - 1].state;
+            result = history.snapshots.at(history.nSnapshots - 1).state;
         }
         return true;
     }
 
     // Interpolate between bracketing snapshots
-    result = interpolateSnapshots(history.snapshots[idxLeft],
-                                  history.snapshots[idxRight],
+    result = interpolateSnapshots(history.snapshots.at(idxLeft),
+                                  history.snapshots.at(idxRight),
                                   t);
     return true;
 }
@@ -285,10 +287,10 @@ inline void clearSnapshots(SnapshotHistory& history) {
     if (history.nSnapshots == 0) { return UINT32_MAX; }
 
     uint32_t nearest = 0;
-    double minDistance = std::abs(history.snapshots[0].timestamp - t);
+    double minDistance = std::abs(history.snapshots.at(0).timestamp - t);
 
     for (uint32_t i = 1; i < history.nSnapshots; i++) {
-        const double distance = std::abs(history.snapshots[i].timestamp - t);
+        const double distance = std::abs(history.snapshots.at(i).timestamp - t);
         if (distance < minDistance) {
             minDistance = distance;
             nearest = i;

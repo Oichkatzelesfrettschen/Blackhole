@@ -27,11 +27,14 @@
 #ifndef PHYSICS_JET_PHYSICS_H
 #define PHYSICS_JET_PHYSICS_H
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <vector>
+
 #include "constants.h"
 #include "kerr.h"
 #include "mad_disk.h"
-#include <cmath>
-#include <algorithm>
 
 namespace physics {
 
@@ -47,12 +50,12 @@ struct JetParams {
   double a;                 ///< Spin parameter [cm]
   double mdot;              ///< Accretion rate [g/s]
   AccretionState state;     ///< Accretion state (affects jet power)
-  double magnetic_flux;     ///< Dimensionless magnetic flux Φ_BH
+  double magneticFlux;      ///< Dimensionless magnetic flux Φ_BH
 
   // Jet properties
-  double lorentz_factor;    ///< Bulk Lorentz factor Γ
-  double opening_angle;     ///< Half-opening angle [rad]
-  double base_distance;     ///< Distance of jet base from horizon [cm]
+  double lorentzFactor; ///< Bulk Lorentz factor Γ
+  double openingAngle;  ///< Half-opening angle [rad]
+  double baseDistance;  ///< Distance of jet base from horizon [cm]
 };
 
 /**
@@ -64,31 +67,31 @@ struct JetParams {
  * @param mdot_edd Accretion rate in Eddington units (~0.001)
  * @return JetParams
  */
-inline JetParams m87_jet(double a_star = 0.9, double mdot_edd = 0.001) {
-  JetParams jet;
+inline JetParams m87Jet(double aStar = 0.9, double mdotEdd = 0.001) {
+  JetParams jet{};
 
   // M87* mass: ~6.5 billion solar masses
-  double M_solar = 6.5e9;
-  jet.mass = M_solar * M_SUN;
+  double const mSolar = 6.5e9;
+  jet.mass = mSolar * M_SUN;
 
   // Spin
-  double M_geo = G * jet.mass / C2;
-  jet.a = a_star * M_geo;
+  double const mGeo = G * jet.mass / C2;
+  jet.a = aStar * mGeo;
 
   // Low accretion rate
-  double L_edd = 1.26e38 * M_solar;
-  jet.mdot = mdot_edd * L_edd / (0.1 * C2);
+  double const lEdd = 1.26e38 * mSolar;
+  jet.mdot = mdotEdd * lEdd / (0.1 * C2);
 
   // MAD state (favored by EHT observations)
   jet.state = AccretionState::MAD;
-  jet.magnetic_flux = 50.0;
+  jet.magneticFlux = 50.0;
 
   // Jet properties
-  jet.lorentz_factor = 15.0;  // Γ ~ 10-20 for M87
-  jet.opening_angle = 10.0 * (PI / 180.0);  // ~10 degrees
+  jet.lorentzFactor = 15.0;               // Γ ~ 10-20 for M87
+  jet.openingAngle = 10.0 * (PI / 180.0); // ~10 degrees
 
   // Jet base: 0.09 light-years = 8.5×10^17 cm
-  jet.base_distance = 0.09 * 9.461e17;  // Convert ly to cm
+  jet.baseDistance = 0.09 * 9.461e17; // Convert ly to cm
 
   return jet;
 }
@@ -100,31 +103,31 @@ inline JetParams m87_jet(double a_star = 0.9, double mdot_edd = 0.001) {
  * @param mdot_edd Accretion rate (~10^-5 for Sgr A*)
  * @return JetParams
  */
-inline JetParams sgr_a_star_jet(double a_star = 0.94, double mdot_edd = 1e-5) {
-  JetParams jet;
+inline JetParams sgrAStarJet(double aStar = 0.94, double mdotEdd = 1e-5) {
+  JetParams jet{};
 
   // Sgr A* mass: 4.3 million solar masses
-  double M_solar = 4.3e6;
-  jet.mass = M_solar * M_SUN;
+  double const mSolar = 4.3e6;
+  jet.mass = mSolar * M_SUN;
 
   // High spin (EHT-constrained)
-  double M_geo = G * jet.mass / C2;
-  jet.a = a_star * M_geo;
+  double const mGeo = G * jet.mass / C2;
+  jet.a = aStar * mGeo;
 
   // Very low accretion rate
-  double L_edd = 1.26e38 * M_solar;
-  jet.mdot = mdot_edd * L_edd / (0.1 * C2);
+  double const lEdd = 1.26e38 * mSolar;
+  jet.mdot = mdotEdd * lEdd / (0.1 * C2);
 
   // MAD state
   jet.state = AccretionState::MAD;
-  jet.magnetic_flux = 50.0;
+  jet.magneticFlux = 50.0;
 
   // Weaker jets than M87
-  jet.lorentz_factor = 10.0;  // Γ ~ 5-15
-  jet.opening_angle = 15.0 * (PI / 180.0);  // ~15 degrees
+  jet.lorentzFactor = 10.0;               // Γ ~ 5-15
+  jet.openingAngle = 15.0 * (PI / 180.0); // ~15 degrees
 
   // Jet base closer to horizon (smaller mass)
-  jet.base_distance = 0.01 * 9.461e17;  // ~0.01 ly
+  jet.baseDistance = 0.01 * 9.461e17; // ~0.01 ly
 
   return jet;
 }
@@ -144,15 +147,15 @@ inline JetParams sgr_a_star_jet(double a_star = 0.94, double mdot_edd = 1e-5) {
  * @param a Spin parameter [cm]
  * @return Angular velocity [rad/s]
  */
-inline double horizon_angular_velocity(double mass, double a) {
-  double r_plus = kerr_outer_horizon(mass, a);
-  double M_geo = G * mass / C2;
+inline double horizonAngularVelocity(double mass, double a) {
+  double const rPlus = kerrOuterHorizon(mass, a);
+  double const mGeo = G * mass / C2;
 
   // Ω_H in geometric units
-  double omega_geom = a / (2.0 * M_geo * r_plus);
+  double const omegaGeom = a / (2.0 * mGeo * rPlus);
 
   // Convert to physical units [rad/s]
-  return omega_geom * C / M_geo;
+  return omegaGeom * C / mGeo;
 }
 
 /**
@@ -165,25 +168,25 @@ inline double horizon_angular_velocity(double mass, double a) {
  * @param jet Jet parameters
  * @return Magnetic field at horizon [Gauss]
  */
-inline double horizon_magnetic_field(const JetParams &jet) {
-  double r_plus = kerr_outer_horizon(jet.mass, jet.a);
+inline double horizonMagneticField(const JetParams &jet) {
+  double const rPlus = kerrOuterHorizon(jet.mass, jet.a);
 
   // Gas density near horizon (rough estimate)
   // ρ ~ Ṁ / (4π r² v) where v ~ c
-  double rho = jet.mdot / (FOUR_PI * r_plus * r_plus * C);
+  double const rho = jet.mdot / (FOUR_PI * rPlus * rPlus * C);
 
   // For MAD: P_mag ~ P_gas ~ ρ c²
-  double P_mag = rho * C2;
+  double const pMag = rho * C2;
 
   // B = sqrt(8π P_mag)
-  double B = std::sqrt(8.0 * PI * P_mag);
+  double b = std::sqrt(8.0 * PI * pMag);
 
   // MAD state has stronger fields
   if (jet.state == AccretionState::MAD) {
-    B *= 2.0;  // Enhancement factor
+    b *= 2.0; // Enhancement factor
   }
 
-  return B;
+  return b;
 }
 
 /**
@@ -199,33 +202,33 @@ inline double horizon_magnetic_field(const JetParams &jet) {
  * @param jet Jet parameters
  * @return Jet power [erg/s]
  */
-inline double blandford_znajek_power(const JetParams &jet) {
-  double r_plus = kerr_outer_horizon(jet.mass, jet.a);
-  double M_geo = G * jet.mass / C2;
-  double a_star = jet.a / M_geo;
+inline double blandfordZnajekPower(const JetParams &jet) {
+  double const rPlus = kerrOuterHorizon(jet.mass, jet.a);
+  double const mGeo = G * jet.mass / C2;
+  double const aStar = jet.a / mGeo;
 
   // Horizon angular velocity
-  double Omega_H = horizon_angular_velocity(jet.mass, jet.a);
+  double const omegaH = horizonAngularVelocity(jet.mass, jet.a);
 
   // Magnetic field at horizon
-  double B_H = horizon_magnetic_field(jet);
+  double const bH = horizonMagneticField(jet);
 
   // BZ power formula
   // P_BZ ~ (B_H² r_+² c / 4π) Ω_H² for a* ~ 1
-  double power_prefactor = (B_H * B_H * r_plus * r_plus * C) / FOUR_PI;
-  double omega_factor = Omega_H * Omega_H;
+  double const powerPrefactor = (bH * bH * rPlus * rPlus * C) / FOUR_PI;
+  double const omegaFactor = omegaH * omegaH;
 
   // Spin-dependent enhancement: f(a*) ~ a*² for near-extremal
-  double spin_factor = a_star * a_star;
+  double const spinFactor = aStar * aStar;
 
-  double P_BZ = power_prefactor * omega_factor * spin_factor;
+  double pBz = powerPrefactor * omegaFactor * spinFactor;
 
   // For MAD state, efficiency can be higher
   if (jet.state == AccretionState::MAD) {
-    P_BZ *= 2.0;  // MAD enhancement
+    pBz *= 2.0; // MAD enhancement
   }
 
-  return P_BZ;
+  return pBz;
 }
 
 /**
@@ -234,11 +237,11 @@ inline double blandford_znajek_power(const JetParams &jet) {
  * @param jet Jet parameters
  * @return Efficiency (0 to ~0.4)
  */
-inline double jet_efficiency(const JetParams &jet) {
-  double P_jet = blandford_znajek_power(jet);
-  double P_accretion = jet.mdot * C2;
+inline double jetEfficiency(const JetParams &jet) {
+  double const pJet = blandfordZnajekPower(jet);
+  double const pAccretion = jet.mdot * C2;
 
-  double eta = P_jet / P_accretion;
+  double const eta = pJet / pAccretion;
 
   // Clamp to physical range
   return std::clamp(eta, 0.0, 0.4);
@@ -256,9 +259,9 @@ inline double jet_efficiency(const JetParams &jet) {
  * @param jet Jet parameters
  * @return Half-opening angle [rad]
  */
-inline double jet_opening_angle(const JetParams &jet) {
+inline double jetOpeningAngle(const JetParams &jet) {
   // Base opening angle
-  double theta = jet.opening_angle;
+  double theta = jet.openingAngle;
 
   // MAD jets are more collimated
   if (jet.state == AccretionState::MAD) {
@@ -278,16 +281,16 @@ inline double jet_opening_angle(const JetParams &jet) {
  * @param jet Jet parameters
  * @return true if inside jet
  */
-inline bool is_inside_jet(double r, double theta, const JetParams &jet) {
+inline bool isInsideJet(double r, double theta, const JetParams &jet) {
   // Jet only exists above base distance
-  if (r < jet.base_distance) {
+  if (r < jet.baseDistance) {
     return false;
   }
 
   // Conical jet
-  double half_angle = jet_opening_angle(jet);
+  double const halfAngle = jetOpeningAngle(jet);
 
-  return (theta < half_angle) || (theta > (PI - half_angle));
+  return (theta < halfAngle) || (theta > (PI - halfAngle));
 }
 
 /**
@@ -300,21 +303,21 @@ inline bool is_inside_jet(double r, double theta, const JetParams &jet) {
  * @param jet Jet parameters
  * @return Lorentz factor Γ(r)
  */
-inline double jet_lorentz_factor_at_radius(double r, const JetParams &jet) {
+inline double jetLorentzFactorAtRadius(double r, const JetParams &jet) {
   // Acceleration scale: ~10 times horizon radius
-  double r_plus = kerr_outer_horizon(jet.mass, jet.a);
-  double r_accel = 10.0 * r_plus;
+  double const rPlus = kerrOuterHorizon(jet.mass, jet.a);
+  double const rAccel = 10.0 * rPlus;
 
   // At base: Γ ~ 2 (mildly relativistic)
   // At large r: Γ → Γ_∞ (terminal Lorentz factor)
-  double Gamma_base = 2.0;
-  double Gamma_inf = jet.lorentz_factor;
+  double const gammaBase = 2.0;
+  double const gammaInf = jet.lorentzFactor;
 
   // Smooth acceleration profile
-  double x = (r - jet.base_distance) / r_accel;
-  double Gamma = Gamma_base + (Gamma_inf - Gamma_base) * std::tanh(x);
+  double const x = (r - jet.baseDistance) / rAccel;
+  double const gamma = gammaBase + ((gammaInf - gammaBase) * std::tanh(x));
 
-  return Gamma;
+  return gamma;
 }
 
 /**
@@ -325,9 +328,11 @@ inline double jet_lorentz_factor_at_radius(double r, const JetParams &jet) {
  * @param Gamma Lorentz factor
  * @return Velocity in units of c
  */
-inline double lorentz_to_beta(double Gamma) {
-  if (Gamma <= 1.0) return 0.0;
-  return std::sqrt(1.0 - 1.0 / (Gamma * Gamma));
+inline double lorentzToBeta(double gamma) {
+  if (gamma <= 1.0) {
+    return 0.0;
+  }
+  return std::sqrt(1.0 - (1.0 / (gamma * gamma)));
 }
 
 /**
@@ -339,11 +344,11 @@ inline double lorentz_to_beta(double Gamma) {
  * @param theta_obs Viewing angle [rad]
  * @return Doppler factor
  */
-inline double jet_doppler_factor(double Gamma, double theta_obs) {
-  double beta = lorentz_to_beta(Gamma);
-  double cos_theta = std::cos(theta_obs);
+inline double jetDopplerFactor(double gamma, double thetaObs) {
+  double const beta = lorentzToBeta(gamma);
+  double const cosTheta = std::cos(thetaObs);
 
-  return 1.0 / (Gamma * (1.0 - beta * cos_theta));
+  return 1.0 / (gamma * (1.0 - (beta * cosTheta)));
 }
 
 // ============================================================================
@@ -363,31 +368,31 @@ inline double jet_doppler_factor(double Gamma, double theta_obs) {
  * @param jet Jet parameters
  * @return Emissivity [erg/(s cm³ Hz sr)]
  */
-inline double jet_synchrotron_emissivity(double r, double theta, double nu, const JetParams &jet) {
-  if (!is_inside_jet(r, theta, jet)) {
+inline double jetSynchrotronEmissivity(double r, double theta, double nu, const JetParams &jet) {
+  if (!isInsideJet(r, theta, jet)) {
     return 0.0;
   }
 
   // Magnetic field in jet (decreases with distance)
-  double r_plus = kerr_outer_horizon(jet.mass, jet.a);
-  double B_base = horizon_magnetic_field(jet);
-  double B = B_base * (r_plus / r);  // B ∝ 1/r
+  double const rPlus = kerrOuterHorizon(jet.mass, jet.a);
+  double const bBase = horizonMagneticField(jet);
+  double const b = bBase * (rPlus / r); // B ∝ 1/r
 
   // Electron density (decreases as jet expands)
-  double n_e_base = jet.mdot / (FOUR_PI * r_plus * r_plus * C * 9.109e-28);  // Rough estimate
-  double n_e = n_e_base * (r_plus * r_plus) / (r * r);  // n ∝ 1/r²
+  double const nEBase = jet.mdot / (FOUR_PI * rPlus * rPlus * C * 9.109e-28); // Rough estimate
+  double const nE = nEBase * (rPlus * rPlus) / (r * r);                       // n ∝ 1/r²
 
   // Power-law index
-  double p = 2.5;  // Typical non-thermal
-  double alpha = (p - 1.0) / 2.0;
+  double const p = 2.5; // Typical non-thermal
+  double const alpha = (p - 1.0) / 2.0;
 
   // Synchrotron emissivity (simplified)
-  double j_nu = n_e * std::pow(B, (p + 1.0) / 2.0) * std::pow(nu, -alpha);
+  double jNu = nE * std::pow(b, (p + 1.0) / 2.0) * std::pow(nu, -alpha);
 
   // Normalization constant (order of magnitude)
-  j_nu *= 1.0e-20;
+  jNu *= 1.0e-20;
 
-  return j_nu;
+  return jNu;
 }
 
 /**
@@ -402,24 +407,24 @@ inline double jet_synchrotron_emissivity(double r, double theta, double nu, cons
  * @param jet Jet parameters
  * @return Observed flux
  */
-inline double jet_observed_flux(double r, double theta, double theta_obs,
-                                double nu, const JetParams &jet) {
+inline double jetObservedFlux(double r, double theta, double thetaObs, double nu,
+                              const JetParams &jet) {
   // Intrinsic emissivity
-  double F_emit = jet_synchrotron_emissivity(r, theta, nu, jet);
+  double const fEmit = jetSynchrotronEmissivity(r, theta, nu, jet);
 
   // Lorentz factor at this radius
-  double Gamma = jet_lorentz_factor_at_radius(r, jet);
+  double const gamma = jetLorentzFactorAtRadius(r, jet);
 
   // Doppler factor
-  double delta = jet_doppler_factor(Gamma, theta_obs);
+  double const delta = jetDopplerFactor(gamma, thetaObs);
 
   // Spectral index
-  double alpha = 0.7;
+  double const alpha = 0.7;
 
   // Doppler boosting: F_obs = F_emit * δ^(3+α)
-  double boost = std::pow(delta, 3.0 + alpha);
+  double const boost = std::pow(delta, 3.0 + alpha);
 
-  return F_emit * boost;
+  return fEmit * boost;
 }
 
 // ============================================================================
@@ -432,10 +437,10 @@ inline double jet_observed_flux(double r, double theta, double theta_obs,
 struct JetStructurePoint {
   double r;              ///< Distance from BH [cm]
   double theta;          ///< Polar angle [rad]
-  double lorentz_factor; ///< Local Γ
+  double lorentzFactor;  ///< Local Γ
   double beta;           ///< Local β = v/c
   double emissivity;     ///< Synchrotron emissivity
-  double B_field;        ///< Magnetic field [Gauss]
+  double bField;         ///< Magnetic field [Gauss]
 };
 
 /**
@@ -445,32 +450,32 @@ struct JetStructurePoint {
  * @param n_points Number of points
  * @return Vector of structure points
  */
-inline std::vector<JetStructurePoint> jet_structure_profile(const JetParams &jet, int n_points = 100) {
+inline std::vector<JetStructurePoint> jetStructureProfile(const JetParams &jet, int nPoints = 100) {
   std::vector<JetStructurePoint> profile;
-  profile.reserve(static_cast<std::size_t>(n_points));
+  profile.reserve(static_cast<std::size_t>(nPoints));
 
-  double r_plus = kerr_outer_horizon(jet.mass, jet.a);
-  double r_min = jet.base_distance;
-  double r_max = r_min * 1000.0;  // Extend to 1000× base distance
+  double const rPlus = kerrOuterHorizon(jet.mass, jet.a);
+  double const rMin = jet.baseDistance;
+  double const rMax = rMin * 1000.0; // Extend to 1000× base distance
 
-  double log_r_min = std::log(r_min);
-  double log_r_max = std::log(r_max);
-  double d_log_r = (log_r_max - log_r_min) / (n_points - 1);
+  double const logRMin = std::log(rMin);
+  double const logRMax = std::log(rMax);
+  double const dLogR = (logRMax - logRMin) / (nPoints - 1);
 
-  for (int i = 0; i < n_points; ++i) {
-    JetStructurePoint pt;
-    pt.r = std::exp(log_r_min + i * d_log_r);
+  for (int i = 0; i < nPoints; ++i) {
+    JetStructurePoint pt{};
+    pt.r = std::exp(logRMin + (i * dLogR));
     pt.theta = 0.0;  // Along axis
 
-    pt.lorentz_factor = jet_lorentz_factor_at_radius(pt.r, jet);
-    pt.beta = lorentz_to_beta(pt.lorentz_factor);
+    pt.lorentzFactor = jetLorentzFactorAtRadius(pt.r, jet);
+    pt.beta = lorentzToBeta(pt.lorentzFactor);
 
     // Magnetic field
-    double B_base = horizon_magnetic_field(jet);
-    pt.B_field = B_base * (r_plus / pt.r);
+    double const bBase = horizonMagneticField(jet);
+    pt.bField = bBase * (rPlus / pt.r);
 
     // Emissivity at 230 GHz
-    pt.emissivity = jet_synchrotron_emissivity(pt.r, pt.theta, 230.0e9, jet);
+    pt.emissivity = jetSynchrotronEmissivity(pt.r, pt.theta, 230.0e9, jet);
 
     profile.push_back(pt);
   }

@@ -18,7 +18,6 @@
  * missing bridge between them.
  *
  * HOW: Include this header when converting between unit systems.
- * Each conversion function is named: <source>_to_<target>_<quantity>.
  *
  * MODULE UNIT AUDIT (as of 2026-03-19):
  *
@@ -58,8 +57,7 @@
 #include "constants.h"
 #include <cmath>
 
-namespace physics {
-namespace units {
+namespace physics::units {
 
 // ============================================================================
 // CGS <-> Geometric Unit Conversions
@@ -70,31 +68,31 @@ namespace units {
  *
  * M_geom = G * M_cgs / c^2  [cm]
  *
- * @param mass_g Mass in grams
+ * @param massG Mass in grams
  * @return Geometric mass [cm]
  */
-inline constexpr double mass_cgs_to_geom(double mass_g) {
-  return G * mass_g / C2;
+[[nodiscard]] constexpr double massCgsToGeom(double massG) {
+  return (G * massG) / C2;
 }
 
 /**
  * @brief Convert mass from geometric units back to grams.
  *
- * @param M_geom Geometric mass [cm]
+ * @param mGeom Geometric mass [cm]
  * @return Mass in grams
  */
-inline constexpr double mass_geom_to_cgs(double M_geom) {
-  return M_geom * C2 / G;
+[[nodiscard]] constexpr double massGeomToCgs(double mGeom) {
+  return (mGeom * C2) / G;
 }
 
 /**
  * @brief Convert mass from solar masses to geometric units.
  *
- * @param mass_msun Mass in solar masses
+ * @param massMsun Mass in solar masses
  * @return Geometric mass [cm]
  */
-inline constexpr double mass_msun_to_geom(double mass_msun) {
-  return G * mass_msun * M_SUN / C2;
+[[nodiscard]] constexpr double massMsunToGeom(double massMsun) {
+  return (G * massMsun * M_SUN) / C2;
 }
 
 /**
@@ -102,38 +100,41 @@ inline constexpr double mass_msun_to_geom(double mass_msun) {
  *
  * t_geom = c * t_cgs  [cm]
  *
- * @param t_s Time in seconds
+ * @param tS Time in seconds
  * @return Time in geometric units [cm]
  */
-inline constexpr double time_cgs_to_geom(double t_s) {
-  return C * t_s;
+[[nodiscard]] constexpr double timeCgsToGeom(double tS) {
+  return C * tS;
 }
 
 /**
  * @brief Convert time from geometric units to seconds.
+ *
+ * @param tGeom Time in geometric units [cm]
+ * @return Time in seconds
  */
-inline constexpr double time_geom_to_cgs(double t_geom) {
-  return t_geom / C;
+[[nodiscard]] constexpr double timeGeomToCgs(double tGeom) {
+  return tGeom / C;
 }
 
 /**
  * @brief Gravitational radius r_g = GM/c^2.
  *
- * @param mass_msun Mass in solar masses
+ * @param massMsun Mass in solar masses
  * @return r_g [cm]
  */
-inline constexpr double r_g(double mass_msun) {
-  return G * mass_msun * M_SUN / C2;
+[[nodiscard]] constexpr double rG(double massMsun) {
+  return (G * massMsun * M_SUN) / C2;
 }
 
 /**
  * @brief Schwarzschild radius r_s = 2GM/c^2.
  *
- * @param mass_msun Mass in solar masses
+ * @param massMsun Mass in solar masses
  * @return r_s [cm]
  */
-inline constexpr double r_s(double mass_msun) {
-  return 2.0 * G * mass_msun * M_SUN / C2;
+[[nodiscard]] constexpr double rS(double massMsun) {
+  return (2.0 * G * massMsun * M_SUN) / C2;
 }
 
 // ============================================================================
@@ -149,12 +150,12 @@ inline constexpr double r_s(double mass_msun) {
  * The actual scale factor depends on the mass accretion rate M_dot,
  * which is a free parameter set to match observed flux.
  *
- * @param rho_code Code density (dimensionless)
- * @param rho_unit Density scale factor [g/cm^3]
+ * @param rhoCode Code density (dimensionless)
+ * @param rhoUnit Density scale factor [g/cm^3]
  * @return Density in CGS [g/cm^3]
  */
-inline double density_code_to_cgs(double rho_code, double rho_unit) {
-  return rho_code * rho_unit;
+[[nodiscard]] inline double densityCodeToCgs(double rhoCode, double rhoUnit) {
+  return rhoCode * rhoUnit;
 }
 
 /**
@@ -163,13 +164,13 @@ inline double density_code_to_cgs(double rho_code, double rho_unit) {
  * B_cgs = B_code * B_unit
  * where B_unit = c * sqrt(4 * pi * rho_unit)
  *
- * @param B_code Code magnetic field (dimensionless)
- * @param rho_unit Density scale factor [g/cm^3]
+ * @param bCode Code magnetic field (dimensionless)
+ * @param rhoUnit Density scale factor [g/cm^3]
  * @return Magnetic field in Gauss
  */
-inline double B_code_to_cgs(double B_code, double rho_unit) {
-  double B_unit = C * std::sqrt(FOUR_PI * rho_unit);
-  return B_code * B_unit;
+[[nodiscard]] inline double bCodeToCgs(double bCode, double rhoUnit) {
+  const double bUnit = C * std::sqrt(FOUR_PI * rhoUnit);
+  return bCode * bUnit;
 }
 
 /**
@@ -177,13 +178,13 @@ inline double B_code_to_cgs(double B_code, double rho_unit) {
  *
  * rho_unit = M_dot / (4 * pi * r_g^2 * c)
  *
- * @param M_dot Mass accretion rate [g/s]
- * @param mass_msun Black hole mass [solar masses]
+ * @param mDot Mass accretion rate [g/s]
+ * @param massMsun Black hole mass [solar masses]
  * @return Density unit [g/cm^3]
  */
-inline double rho_unit_from_mdot(double M_dot, double mass_msun) {
-  double rg = r_g(mass_msun);
-  return M_dot / (FOUR_PI * rg * rg * C);
+[[nodiscard]] inline double rhoUnitFromMdot(double mDot, double massMsun) {
+  const double rg = rG(massMsun);
+  return mDot / (FOUR_PI * rg * rg * C);
 }
 
 // ============================================================================
@@ -193,32 +194,34 @@ inline double rho_unit_from_mdot(double M_dot, double mass_msun) {
 /**
  * @brief Convert physical size to angular size.
  *
- * @param size_cm Physical size [cm]
- * @param distance_cm Distance [cm]
+ * @param sizeCm Physical size [cm]
+ * @param distanceCm Distance [cm]
  * @return Angular size [radians]
  */
-inline double size_to_angle_rad(double size_cm, double distance_cm) {
-  return size_cm / distance_cm;
+[[nodiscard]] inline double sizeToAngleRad(double sizeCm, double distanceCm) {
+  return sizeCm / distanceCm;
 }
 
 /**
  * @brief Convert angular size to microarcseconds.
  *
- * @param angle_rad Angle in radians
+ * @param angleRad Angle in radians
  * @return Angle in microarcseconds
  */
-inline constexpr double rad_to_uas(double angle_rad) {
-  return angle_rad * 206265.0e6; // 1 rad = 206265 arcsec = 206265e6 uas
+[[nodiscard]] constexpr double radToUas(double angleRad) {
+  return angleRad * 206265.0e6; // 1 rad = 206265 arcsec = 206265e6 uas
 }
 
 /**
  * @brief Convert microarcseconds to radians.
+ *
+ * @param uas Angle in microarcseconds
+ * @return Angle in radians
  */
-inline constexpr double uas_to_rad(double uas) {
+[[nodiscard]] constexpr double uasToRad(double uas) {
   return uas / 206265.0e6;
 }
 
-} // namespace units
-} // namespace physics
+} // namespace physics::units
 
 #endif // PHYSICS_UNIT_SYSTEM_H

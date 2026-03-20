@@ -3,12 +3,18 @@
 // C++ system headers
 #include <algorithm>
 #include <iostream>
+#include <string>
 #include <vector>
 
 // Third-party library headers
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions-patches.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 #include <stb_image.h>
 
-static bool supportsAnisotropy() {
+namespace {
+bool supportsAnisotropy() {
   static bool checked = false;
   static bool supported = false;
   if (checked) {
@@ -19,7 +25,7 @@ static bool supportsAnisotropy() {
   GLint minor = 0;
   glGetIntegerv(GL_MAJOR_VERSION, &major);
   glGetIntegerv(GL_MINOR_VERSION, &minor);
-  bool versionIs46 = (major > 4) || (major == 4 && minor >= 6);
+  bool const versionIs46 = (major > 4) || (major == 4 && minor >= 6);
   bool hasExt = false;
   GLint count = 0;
   glGetIntegerv(GL_NUM_EXTENSIONS, &count);
@@ -37,7 +43,7 @@ static bool supportsAnisotropy() {
   return supported;
 }
 
-static void applyAnisotropy(GLenum target) {
+void applyAnisotropy(GLenum target) {
   if (!supportsAnisotropy()) {
     return;
   }
@@ -47,17 +53,20 @@ static void applyAnisotropy(GLenum target) {
     return;
   }
   constexpr GLfloat kDefaultAniso = 8.0f;
-  GLfloat aniso = std::min(maxAniso, kDefaultAniso);
+  GLfloat const aniso = std::min(maxAniso, kDefaultAniso);
   glTexParameterf(target, GL_TEXTURE_MAX_ANISOTROPY, aniso);
 }
+} // namespace
 
 GLuint loadTexture2D(const std::string &file, bool repeat) {
   GLuint textureID;
   glGenTextures(1, &textureID);
 
-  int width, height, comp;
+  int width;
+  int height;
+  int comp;
   unsigned char *data = stbi_load(file.c_str(), &width, &height, &comp, 0);
-  if (data) {
+  if (data != nullptr) {
     GLenum format = GL_RGB;
     GLenum internalFormat = GL_RGB;
     if (comp == 1) {
@@ -84,7 +93,7 @@ GLuint loadTexture2D(const std::string &file, bool repeat) {
 
     stbi_image_free(data);
   } else {
-    std::cout << "ERROR: Failed to load texture at: " << file << std::endl;
+    std::cout << "ERROR: Failed to load texture at: " << file << '\n';
     stbi_image_free(data);
     glDeleteTextures(1, &textureID);
     textureID = 0;
@@ -101,17 +110,19 @@ GLuint loadCubemap(const std::string &cubemapDir) {
   glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 
   bool ok = true;
-  int width, height, comp;
+  int width;
+  int height;
+  int comp;
   for (GLuint i = 0; i < faces.size(); i++) {
     unsigned char *data =
-        stbi_load((cubemapDir + "/" + faces[i] + ".png").c_str(), &width, &height, &comp, 0);
-    if (data) {
+        stbi_load((cubemapDir + "/" + faces.at(i) + ".png").c_str(), &width, &height, &comp, 0);
+    if (data != nullptr) {
       glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_SRGB, width, height, 0, GL_RGB,
                    GL_UNSIGNED_BYTE, data);
       stbi_image_free(data);
     } else {
       std::cout << "Cubemap texture failed to load at path: "
-                << (cubemapDir + "/" + faces[i] + ".png").c_str() << std::endl;
+                << (cubemapDir + "/" + faces.at(i) + ".png").c_str() << '\n';
       stbi_image_free(data);
       ok = false;
     }

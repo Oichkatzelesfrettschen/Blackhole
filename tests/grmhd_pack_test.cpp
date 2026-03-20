@@ -1,14 +1,19 @@
-#include <highfive/H5File.hpp>
-
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <limits>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include <highfive/H5DataSpace.hpp>
+#include <highfive/H5File.hpp>
 
 #include "grmhd_packed_loader.h"
 
@@ -21,18 +26,18 @@ std::string quote(const std::filesystem::path &path) {
 }
 
 bool approxEqual(float a, float b, float tol = 1e-4f) {
-  float scale = std::max(1.0f, std::max(std::abs(a), std::abs(b)));
+  float const scale = std::max({1.0f, std::abs(a), std::abs(b)});
   return std::abs(a - b) <= tol * scale;
 }
 
 } // namespace
 
 int main(int argc, char **argv) {
-  std::filesystem::path outDir = std::filesystem::current_path() / "logs" / "perf";
+  std::filesystem::path const outDir = std::filesystem::current_path() / "logs" / "perf";
   std::filesystem::create_directories(outDir);
 
-  std::filesystem::path h5Path = outDir / "grmhd_fixture.h5";
-  std::filesystem::path metaPath = outDir / "grmhd_pack.json";
+  std::filesystem::path const h5Path = outDir / "grmhd_fixture.h5";
+  std::filesystem::path const metaPath = outDir / "grmhd_pack.json";
 
   const std::array<std::size_t, 4> dims = {2, 2, 2, 4};
   std::vector<float> data(dims[0] * dims[1] * dims[2] * dims[3], 0.0f);
@@ -40,9 +45,9 @@ int main(int argc, char **argv) {
     for (std::size_t i1 = 0; i1 < dims[1]; ++i1) {
       for (std::size_t i2 = 0; i2 < dims[2]; ++i2) {
         for (std::size_t c = 0; c < dims[3]; ++c) {
-          std::size_t idx = ((i0 * dims[1] + i1) * dims[2] + i2) * dims[3] + c;
-          float value = static_cast<float>(i0) + static_cast<float>(i1) * 0.1f +
-                        static_cast<float>(i2) * 0.01f + static_cast<float>(c) * 0.5f;
+          std::size_t const idx = (((((i0 * dims[1]) + i1) * dims[2]) + i2) * dims[3]) + c;
+          float const value = static_cast<float>(i0) + (static_cast<float>(i1) * 0.1f) +
+                              (static_cast<float>(i2) * 0.01f) + (static_cast<float>(c) * 0.5f);
           data[idx] = value;
         }
       }
@@ -54,7 +59,7 @@ int main(int argc, char **argv) {
     auto space = HighFive::DataSpace({dims[0], dims[1], dims[2], dims[3]});
     auto dataset = file.createDataSet<float>("/dump/P", space);
     dataset.write_raw(data.data());
-    std::vector<std::string> vnams = {"RHO", "UU", "U1", "U2"};
+    std::vector<std::string> const vnams = {"RHO", "UU", "U1", "U2"};
     dataset.createAttribute<std::string>("vnams", HighFive::DataSpace::From(vnams)).write(vnams);
   } catch (const std::exception &ex) {
     std::cerr << "[FAIL] Failed to write fixture: " << ex.what() << "\n";
@@ -65,8 +70,8 @@ int main(int argc, char **argv) {
     std::cerr << "[FAIL] Missing argv[0]\n";
     return 1;
   }
-  std::filesystem::path exeDir = std::filesystem::path(argv[0]).parent_path();
-  std::filesystem::path packExe = exeDir / "nubhlight_pack";
+  std::filesystem::path const exeDir = std::filesystem::path(argv[0]).parent_path();
+  std::filesystem::path const packExe = exeDir / "nubhlight_pack";
   if (!std::filesystem::exists(packExe)) {
     std::cerr << "[FAIL] nubhlight_pack not found at " << packExe << "\n";
     return 1;
@@ -75,7 +80,7 @@ int main(int argc, char **argv) {
   std::ostringstream cmd;
   cmd << quote(packExe) << " -i " << quote(h5Path)
       << " -d /dump/P --fields RHO,UU,U1,U2 -o " << quote(metaPath);
-  int rc = std::system(cmd.str().c_str());
+  int const rc = std::system(cmd.str().c_str());
   if (rc != 0) {
     std::cerr << "[FAIL] nubhlight_pack failed with code " << rc << "\n";
     return 1;
@@ -88,9 +93,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (static_cast<std::size_t>(texture.width) != dims[0] ||
-      static_cast<std::size_t>(texture.height) != dims[1] ||
-      static_cast<std::size_t>(texture.depth) != dims[2]) {
+  if (std::cmp_not_equal(texture.width, dims[0]) || std::cmp_not_equal(texture.height, dims[1]) ||
+      std::cmp_not_equal(texture.depth, dims[2])) {
     std::cerr << "[FAIL] grid dims mismatch\n";
     return 1;
   }

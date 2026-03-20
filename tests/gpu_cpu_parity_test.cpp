@@ -1,16 +1,18 @@
-#include <gtest/gtest.h>
+#include <cmath>
+#include <exception>
+#include <stdexcept>
+#include <string>
+
+#include <GL/gl.h>
+#include <GL/glext.h>
+#include <GLFW/glfw3.h>
 #include <glbinding/gl/gl.h>
 #include <glbinding/glbinding.h>
-#include <GLFW/glfw3.h>
-#include <cmath>
-#include <array>
-#include <sstream>
+#include <gtest/gtest.h>
 
 // C++ verified implementations (included from Phase 2)
-#include "physics/verified/schwarzschild.hpp"
-#include "physics/verified/kerr.hpp"
 #include "physics/verified/eos.hpp"
-#include "physics/verified/cosmology.hpp"
+#include "physics/verified/schwarzschild.hpp"
 
 using namespace gl;
 
@@ -32,8 +34,8 @@ protected:
 
     static void SetUpTestSuite() {
         // Initialize GLFW
-        if (!glfwInit()) {
-            throw std::runtime_error("Failed to initialize GLFW");
+        if (glfwInit() == 0) {
+          throw std::runtime_error("Failed to initialize GLFW");
         }
 
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -41,11 +43,11 @@ protected:
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
 
-        GLFWwindow* shared_window = glfwCreateWindow(1, 1, "GPU Test", nullptr, nullptr);
-        if (!shared_window) {
-            throw std::runtime_error("Failed to create GLFW window");
+        GLFWwindow *sharedWindow = glfwCreateWindow(1, 1, "GPU Test", nullptr, nullptr);
+        if (sharedWindow == nullptr) {
+          throw std::runtime_error("Failed to create GLFW window");
         }
-        glfwMakeContextCurrent(shared_window);
+        glfwMakeContextCurrent(sharedWindow);
         glbinding::initialize(glfwGetProcAddress);
     }
 
@@ -65,56 +67,56 @@ protected:
     }
 
     void TearDown() override {
-        if (window) {
-            glfwDestroyWindow(window);
-        }
+      if (window != nullptr) {
+        glfwDestroyWindow(window);
+      }
     }
 
     /**
      * Create and compile a compute shader
      */
-    GLuint createComputeShader(const std::string& source) {
-        GLuint shader = glCreateShader(GL_COMPUTE_SHADER);
-        const char* src_ptr = source.c_str();
-        glShaderSource(shader, 1, &src_ptr, nullptr);
-        glCompileShader(shader);
+    static GLuint createComputeShader(const std::string &source) {
+      GLuint shader = glCreateShader(GL_COMPUTE_SHADER);
+      const char *srcPtr = source.c_str();
+      glShaderSource(shader, 1, &srcPtr, nullptr);
+      glCompileShader(shader);
 
-        // Check compilation status
-        GLint status;
-        glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
-        if (!status) {
-            GLint length;
-            glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
-            std::string log(length, '\0');
-            glGetShaderInfoLog(shader, length, nullptr, log.data());
-            glDeleteShader(shader);
-            throw std::runtime_error("Compute shader compilation failed:\n" + log);
-        }
+      // Check compilation status
+      GLint status;
+      glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+      if (status == 0) {
+        GLint length;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+        std::string log(length, '\0');
+        glGetShaderInfoLog(shader, length, nullptr, log.data());
+        glDeleteShader(shader);
+        throw std::runtime_error("Compute shader compilation failed:\n" + log);
+      }
 
-        return shader;
+      return shader;
     }
 
     /**
      * Create a compute program from shader source
      */
-    GLuint createComputeProgram(const std::string& source) {
-        GLuint shader = createComputeShader(source);
-        GLuint program = glCreateProgram();
-        glAttachShader(program, shader);
-        glLinkProgram(program);
+    static GLuint createComputeProgram(const std::string &source) {
+      GLuint const shader = createComputeShader(source);
+      GLuint program = glCreateProgram();
+      glAttachShader(program, shader);
+      glLinkProgram(program);
 
-        // Check link status
-        GLint status;
-        glGetProgramiv(program, GL_LINK_STATUS, &status);
-        if (!status) {
-            GLint length;
-            glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
-            std::string log(length, '\0');
-            glGetProgramInfoLog(program, length, nullptr, log.data());
-            glDeleteProgram(program);
-            glDeleteShader(shader);
-            throw std::runtime_error("Compute program linking failed:\n" + log);
-        }
+      // Check link status
+      GLint status;
+      glGetProgramiv(program, GL_LINK_STATUS, &status);
+      if (status == 0) {
+        GLint length;
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+        std::string log(length, '\0');
+        glGetProgramInfoLog(program, length, nullptr, log.data());
+        glDeleteProgram(program);
+        glDeleteShader(shader);
+        throw std::runtime_error("Compute program linking failed:\n" + log);
+      }
 
         glDeleteShader(shader);
         return program;
@@ -123,18 +125,18 @@ protected:
     /**
      * Run a compute shader and read back results
      */
-    std::vector<float> runComputeShader(GLuint program, GLuint output_buffer) {
-        glUseProgram(program);
-        glDispatchCompute(1, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    static std::vector<float> runComputeShader(GLuint program, GLuint outputBuffer) {
+      glUseProgram(program);
+      glDispatchCompute(1, 1, 1);
+      glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-        float* ptr = (float*)glMapNamedBufferRange(
-            output_buffer, 0, sizeof(float) * 8, GL_MAP_READ_BIT);
-        std::vector<float> result(8);
-        std::copy(ptr, ptr + 8, result.begin());
-        glUnmapNamedBuffer(output_buffer);
+      auto *ptr =
+          (float *)glMapNamedBufferRange(outputBuffer, 0, sizeof(float) * 8, GL_MAP_READ_BIT);
+      std::vector<float> result(8);
+      std::copy(ptr, ptr + 8, result.begin());
+      glUnmapNamedBuffer(outputBuffer);
 
-        return result;
+      return result;
     }
 };
 
@@ -144,11 +146,12 @@ protected:
 
 TEST_F(GPUCPUParityTest, SchwarzschildGTT) {
     // C++ reference
-    double r = 10.0, M = 1.0;
-    double cpu_result = verified::schwarzschild_g_tt(r, M);
+    double const r = 10.0;
+    double const m = 1.0;
+    double const cpuResult = verified::schwarzschild_g_tt(r, m);
 
     // GLSL compute shader
-    std::string compute_src = R"(
+    std::string computeSrc = R"(
         #version 460 core
         layout(local_size_x = 1) in;
         layout(std430, binding = 0) buffer Output { float result[8]; };
@@ -163,36 +166,35 @@ TEST_F(GPUCPUParityTest, SchwarzschildGTT) {
     )";
 
     try {
-        GLuint program = createComputeProgram(compute_src);
+      GLuint const program = createComputeProgram(computeSrc);
 
-        GLuint ssbo;
-        glCreateBuffers(1, &ssbo);
-        glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+      GLuint ssbo;
+      glCreateBuffers(1, &ssbo);
+      glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
-        auto results = runComputeShader(program, ssbo);
-        float gpu_result = results[0];
+      auto results = runComputeShader(program, ssbo);
+      float gpuResult = results[0];
 
-        float rel_error = std::abs(gpu_result - cpu_result) / std::abs(cpu_result);
-        EXPECT_LE(rel_error, TOLERANCE_SINGLE)
-            << "Schwarzschild g_tt: CPU=" << cpu_result
-            << " GPU=" << gpu_result
-            << " rel_error=" << rel_error;
+      float const relError = std::abs(gpuResult - cpuResult) / std::abs(cpuResult);
+      EXPECT_LE(relError, TOLERANCE_SINGLE) << true << (cpuResult != 0.0) << true
+                                            << (gpuResult != 0.0f) << true << (relError != 0.0f);
 
-        glDeleteBuffers(1, &ssbo);
-        glDeleteProgram(program);
+      glDeleteBuffers(1, &ssbo);
+      glDeleteProgram(program);
     } catch (const std::exception& e) {
-        GTEST_SKIP() << "GPU test skipped: " << e.what();
+      GTEST_SKIP() << true << (e.what() != nullptr);
     }
 }
 
 TEST_F(GPUCPUParityTest, SchwarzschildGRR) {
     // C++ reference
-    double r = 10.0, M = 1.0;
-    double cpu_result = verified::schwarzschild_g_rr(r, M);
+    double const r = 10.0;
+    double const m = 1.0;
+    double const cpuResult = verified::schwarzschild_g_rr(r, m);
 
     // GLSL compute shader
-    std::string compute_src = R"(
+    std::string computeSrc = R"(
         #version 460 core
         layout(local_size_x = 1) in;
         layout(std430, binding = 0) buffer Output { float result[8]; };
@@ -207,36 +209,35 @@ TEST_F(GPUCPUParityTest, SchwarzschildGRR) {
     )";
 
     try {
-        GLuint program = createComputeProgram(compute_src);
+      GLuint const program = createComputeProgram(computeSrc);
 
-        GLuint ssbo;
-        glCreateBuffers(1, &ssbo);
-        glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+      GLuint ssbo;
+      glCreateBuffers(1, &ssbo);
+      glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
-        auto results = runComputeShader(program, ssbo);
-        float gpu_result = results[0];
+      auto results = runComputeShader(program, ssbo);
+      float gpuResult = results[0];
 
-        float rel_error = std::abs(gpu_result - cpu_result) / std::abs(cpu_result);
-        EXPECT_LE(rel_error, TOLERANCE_SINGLE)
-            << "Schwarzschild g_rr: CPU=" << cpu_result
-            << " GPU=" << gpu_result
-            << " rel_error=" << rel_error;
+      float const relError = std::abs(gpuResult - cpuResult) / std::abs(cpuResult);
+      EXPECT_LE(relError, TOLERANCE_SINGLE) << true << (cpuResult != 0.0) << true
+                                            << (gpuResult != 0.0f) << true << (relError != 0.0f);
 
-        glDeleteBuffers(1, &ssbo);
-        glDeleteProgram(program);
+      glDeleteBuffers(1, &ssbo);
+      glDeleteProgram(program);
     } catch (const std::exception& e) {
-        GTEST_SKIP() << "GPU test skipped: " << e.what();
+      GTEST_SKIP() << true << (e.what() != nullptr);
     }
 }
 
 TEST_F(GPUCPUParityTest, SchwarzschildChristoffelTTR) {
     // C++ reference
-    double r = 10.0, M = 1.0;
-    double cpu_result = verified::christoffel_t_tr(r, M);
+    double const r = 10.0;
+    double const m = 1.0;
+    double const cpuResult = verified::christoffel_t_tr(r, m);
 
     // GLSL compute shader
-    std::string compute_src = R"(
+    std::string computeSrc = R"(
         #version 460 core
         layout(local_size_x = 1) in;
         layout(std430, binding = 0) buffer Output { float result[8]; };
@@ -251,26 +252,24 @@ TEST_F(GPUCPUParityTest, SchwarzschildChristoffelTTR) {
     )";
 
     try {
-        GLuint program = createComputeProgram(compute_src);
+      GLuint const program = createComputeProgram(computeSrc);
 
-        GLuint ssbo;
-        glCreateBuffers(1, &ssbo);
-        glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+      GLuint ssbo;
+      glCreateBuffers(1, &ssbo);
+      glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
-        auto results = runComputeShader(program, ssbo);
-        float gpu_result = results[0];
+      auto results = runComputeShader(program, ssbo);
+      float gpuResult = results[0];
 
-        float abs_error = std::abs(gpu_result - cpu_result);
-        EXPECT_LE(abs_error, TOLERANCE_SINGLE)
-            << "Christoffel symbol t_tr: CPU=" << cpu_result
-            << " GPU=" << gpu_result
-            << " abs_error=" << abs_error;
+      float const absError = std::abs(gpuResult - cpuResult);
+      EXPECT_LE(absError, TOLERANCE_SINGLE) << true << (cpuResult != 0.0) << true
+                                            << (gpuResult != 0.0f) << true << (absError != 0.0f);
 
-        glDeleteBuffers(1, &ssbo);
-        glDeleteProgram(program);
+      glDeleteBuffers(1, &ssbo);
+      glDeleteProgram(program);
     } catch (const std::exception& e) {
-        GTEST_SKIP() << "GPU test skipped: " << e.what();
+      GTEST_SKIP() << true << (e.what() != nullptr);
     }
 }
 
@@ -280,12 +279,12 @@ TEST_F(GPUCPUParityTest, SchwarzschildChristoffelTTR) {
 
 TEST_F(GPUCPUParityTest, PolytropePressure) {
     // C++ reference
-    verified::PolytropeParams p{1.0, 2.0};  // K=1.0, gamma=2.0
-    double rho = 1.5;
-    double cpu_result = verified::polytrope_pressure(p, rho);
+    verified::PolytropeParams const p{1.0, 2.0}; // K=1.0, gamma=2.0
+    double const rho = 1.5;
+    double const cpuResult = verified::polytrope_pressure(p, rho);
 
     // GLSL compute shader
-    std::string compute_src = R"(
+    std::string computeSrc = R"(
         #version 460 core
         layout(local_size_x = 1) in;
         layout(std430, binding = 0) buffer Output { float result[8]; };
@@ -302,26 +301,24 @@ TEST_F(GPUCPUParityTest, PolytropePressure) {
     )";
 
     try {
-        GLuint program = createComputeProgram(compute_src);
+      GLuint const program = createComputeProgram(computeSrc);
 
-        GLuint ssbo;
-        glCreateBuffers(1, &ssbo);
-        glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+      GLuint ssbo;
+      glCreateBuffers(1, &ssbo);
+      glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
-        auto results = runComputeShader(program, ssbo);
-        float gpu_result = results[0];
+      auto results = runComputeShader(program, ssbo);
+      float gpuResult = results[0];
 
-        float rel_error = std::abs(gpu_result - cpu_result) / std::abs(cpu_result);
-        EXPECT_LE(rel_error, TOLERANCE_SINGLE)
-            << "Polytrope pressure: CPU=" << cpu_result
-            << " GPU=" << gpu_result
-            << " rel_error=" << rel_error;
+      float const relError = std::abs(gpuResult - cpuResult) / std::abs(cpuResult);
+      EXPECT_LE(relError, TOLERANCE_SINGLE) << true << (cpuResult != 0.0) << true
+                                            << (gpuResult != 0.0f) << true << (relError != 0.0f);
 
-        glDeleteBuffers(1, &ssbo);
-        glDeleteProgram(program);
+      glDeleteBuffers(1, &ssbo);
+      glDeleteProgram(program);
     } catch (const std::exception& e) {
-        GTEST_SKIP() << "GPU test skipped: " << e.what();
+      GTEST_SKIP() << true << (e.what() != nullptr);
     }
 }
 
@@ -331,11 +328,11 @@ TEST_F(GPUCPUParityTest, PolytropePressure) {
 
 TEST_F(GPUCPUParityTest, CosmologyHubble) {
     // C++ reference (Planck 2018)
-    double z = 0.1;  // redshift
-    double cpu_result = verified::cosmology_hubble_z(z);
+    double const z = 0.1; // redshift
+    double cpuResult = verified::cosmology_hubble_z(z);
 
     // GLSL compute shader
-    std::string compute_src = R"(
+    std::string computeSrc = R"(
         #version 460 core
         layout(local_size_x = 1) in;
         layout(std430, binding = 0) buffer Output { float result[8]; };
@@ -349,26 +346,24 @@ TEST_F(GPUCPUParityTest, CosmologyHubble) {
     )";
 
     try {
-        GLuint program = createComputeProgram(compute_src);
+      GLuint const program = createComputeProgram(computeSrc);
 
-        GLuint ssbo;
-        glCreateBuffers(1, &ssbo);
-        glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+      GLuint ssbo;
+      glCreateBuffers(1, &ssbo);
+      glNamedBufferData(ssbo, sizeof(float) * 8, nullptr, GL_DYNAMIC_DRAW);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
-        auto results = runComputeShader(program, ssbo);
-        float gpu_result = results[0];
+      auto results = runComputeShader(program, ssbo);
+      float gpuResult = results[0];
 
-        float rel_error = std::abs(gpu_result - cpu_result) / std::abs(cpu_result);
-        EXPECT_LE(rel_error, TOLERANCE_SINGLE)
-            << "Hubble parameter H(z): CPU=" << cpu_result
-            << " GPU=" << gpu_result
-            << " rel_error=" << rel_error;
+      float const relError = std::abs(gpuResult - cpuResult) / std::abs(cpuResult);
+      EXPECT_LE(relError, TOLERANCE_SINGLE) << true << (cpuResult != 0.0) << true
+                                            << (gpuResult != 0.0f) << true << (relError != 0.0f);
 
-        glDeleteBuffers(1, &ssbo);
-        glDeleteProgram(program);
+      glDeleteBuffers(1, &ssbo);
+      glDeleteProgram(program);
     } catch (const std::exception& e) {
-        GTEST_SKIP() << "GPU test skipped: " << e.what();
+      GTEST_SKIP() << true << (e.what() != nullptr);
     }
 }
 
@@ -381,7 +376,7 @@ TEST_F(GPUCPUParityTest, RK4SingleStep) {
     // This is a more complex test that requires multiple functions
 
     try {
-        std::string compute_src = R"(
+      std::string computeSrc = R"(
             #version 460 core
             layout(local_size_x = 1) in;
             layout(std430, binding = 0) buffer Output {
@@ -405,28 +400,26 @@ TEST_F(GPUCPUParityTest, RK4SingleStep) {
             }
         )";
 
-        GLuint program = createComputeProgram(compute_src);
+      GLuint const program = createComputeProgram(computeSrc);
 
-        GLuint ssbo;
-        glCreateBuffers(1, &ssbo);
-        glNamedBufferData(ssbo,
-            sizeof(float) * 4 +  // position
-            sizeof(float) * 4 +  // velocity
-            sizeof(float),       // constraint_check
-            nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+      GLuint ssbo;
+      glCreateBuffers(1, &ssbo);
+      glNamedBufferData(ssbo,
+                        (sizeof(float) * 4) +     // position
+                            (sizeof(float) * 4) + // velocity
+                            sizeof(float),        // constraint_check
+                        nullptr, GL_DYNAMIC_DRAW);
+      glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
-        auto results = runComputeShader(program, ssbo);
+      auto results = runComputeShader(program, ssbo);
 
-        // Results[12] should be the constraint check
-        EXPECT_LE(results[12], 1e-5f)
-            << "RK4 step: null constraint drift="
-            << results[12];
+      // Results[12] should be the constraint check
+      EXPECT_LE(results[12], 1e-5f) << true << results[12];
 
-        glDeleteBuffers(1, &ssbo);
-        glDeleteProgram(program);
+      glDeleteBuffers(1, &ssbo);
+      glDeleteProgram(program);
     } catch (const std::exception& e) {
-        GTEST_SKIP() << "GPU integration test skipped: " << e.what();
+      GTEST_SKIP() << true << (e.what() != nullptr);
     }
 }
 

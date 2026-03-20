@@ -23,17 +23,21 @@
 #ifndef PHYSICS_XSIMD_EVAL_H
 #define PHYSICS_XSIMD_EVAL_H
 
-#include "constants.h"
 #include <chrono>
 #include <cmath>
-#include <vector>
+#include <cstddef>
+#include <ratio>
+#include <vector> // NOLINT(misc-include-cleaner) -- std::vector used in benchmark functions; transitive provision is fragile
+
+#include "constants.h"
 
 #if BLACKHOLE_ENABLE_XSIMD
-#include <xsimd/xsimd.hpp>
+#include <xsimd/config/xsimd_arch.hpp> // NOLINT(misc-include-cleaner) -- explicit include for xsimd::default_arch
+#include <xsimd/types/xsimd_api.hpp>
+#include <xsimd/types/xsimd_batch.hpp> // NOLINT(misc-include-cleaner) -- explicit include for xsimd::batch
 #endif
 
-namespace physics {
-namespace xsimd_eval {
+namespace physics::xsimd_eval {
 
 // ============================================================================
 // Architecture Detection
@@ -398,18 +402,23 @@ struct BenchResult {
  * @brief Run comparison benchmark for Christoffel acceleration.
  */
 [[nodiscard]] inline BenchResult benchChristoffelAccel(std::size_t count, int iterations) {
-    std::vector<double> rVec(count), drVec(count), dthetaVec(count), dphiVec(count), thetaVec(count);
-    std::vector<double> outScalar(count), outXsimd(count);
+  std::vector<double> rVec(count);
+  std::vector<double> drVec(count);
+  std::vector<double> dthetaVec(count);
+  std::vector<double> dphiVec(count);
+  std::vector<double> thetaVec(count);
+  std::vector<double> outScalar(count);
+  std::vector<double> outXsimd(count);
 
-    const double rS = 2.0;
-    for (std::size_t i = 0; i < count; ++i) {
-        const double u = static_cast<double>(i) / static_cast<double>(count);
-        rVec[i]     = (6.0 * rS) + (50.0 * u * rS);
-        drVec[i]    = -0.5 + u;
-        dthetaVec[i] = 0.1 * u;
-        dphiVec[i]  = 0.5 + (0.5 * u);
-        thetaVec[i] = PI * 0.5;
-    }
+  const double rS = 2.0;
+  for (std::size_t i = 0; i < count; ++i) {
+    const double u = static_cast<double>(i) / static_cast<double>(count);
+    rVec[i] = (6.0 * rS) + (50.0 * u * rS);
+    drVec[i] = -0.5 + u;
+    dthetaVec[i] = 0.1 * u;
+    dphiVec[i] = 0.5 + (0.5 * u);
+    thetaVec[i] = PI * 0.5;
+  }
 
     // Warmup
     christoffelAccelScalar(rVec.data(), drVec.data(), dthetaVec.data(), dphiVec.data(),
@@ -437,7 +446,6 @@ struct BenchResult {
             .speedup = scalarMs / xsimdMs, .elements = count};
 }
 
-} // namespace xsimd_eval
-} // namespace physics
+} // namespace physics::xsimd_eval
 
 #endif // PHYSICS_XSIMD_EVAL_H

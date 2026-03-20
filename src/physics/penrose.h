@@ -42,11 +42,11 @@ namespace physics {
  * @brief Result of Penrose process calculation.
  */
 struct PenroseResult {
-  double E_in;        ///< Input particle energy
-  double E_out;       ///< Output (escaping) particle energy
-  double E_absorbed;  ///< Energy absorbed by black hole (can be negative!)
-  double efficiency;  ///< Extraction efficiency (E_out - E_in) / E_in
-  bool successful;    ///< Whether extraction was possible
+  double eIn{};        ///< Input particle energy
+  double eOut{};       ///< Output (escaping) particle energy
+  double eAbsorbed{};  ///< Energy absorbed by black hole (can be negative!)
+  double efficiency{}; ///< Extraction efficiency (eOut - eIn) / eIn
+  bool successful{};   ///< Whether extraction was possible
 };
 
 /**
@@ -60,53 +60,41 @@ struct PenroseResult {
  * infinity) while the particle has positive local energy.
  *
  * @param kerr Kerr black hole
- * @param E_in Input particle energy at infinity
- * @param L_in Input particle angular momentum
+ * @param eIn Input particle energy at infinity
+ * @param lIn Input particle angular momentum
  * @return PenroseResult with extraction details
  */
-inline PenroseResult penrose_process_energy_extraction(const Kerr &kerr,
-                                                        double E_in,
-                                                        double L_in) {
+[[nodiscard]] inline PenroseResult penroseProcessEnergyExtraction(const Kerr &kerr,
+                                                                   double eIn,
+                                                                   [[maybe_unused]] double lIn) {
   PenroseResult result;
-  result.E_in = E_in;
+  result.eIn = eIn;
   result.successful = false;
 
-  double a = kerr.spin();
-  double M = G * kerr.mass() / C2; // Geometric mass
-  double a_star = kerr.dimensionless_spin();
+  const double aStar = kerr.dimensionless_spin();
 
   // Check if spin is sufficient for Penrose process
-  if (std::abs(a_star) < 1e-10) {
+  if (std::abs(aStar) < 1e-10) {
     // Schwarzschild: no ergosphere, no Penrose process
-    result.E_out = E_in;
-    result.E_absorbed = 0;
+    result.eOut = eIn;
+    result.eAbsorbed = 0;
     result.efficiency = 0;
     return result;
   }
 
   // Maximum energy extractable is limited by irreducible mass
-  // M_irr = M × √((1 + √(1 - a*²))/2)
-  double sqrt_factor = std::sqrt(1.0 - a_star * a_star);
-  double M_irr_ratio = std::sqrt((1.0 + sqrt_factor) / 2.0);
+  // M_irr = M * sqrt((1 + sqrt(1 - a*^2))/2)
+  const double sqrtFactor = std::sqrt(1.0 - (aStar * aStar));
+  const double mIrrRatio = std::sqrt((1.0 + sqrtFactor) / 2.0);
 
-  // Energy extractable: E_rot = M - M_irr = M × (1 - M_irr_ratio)
-  double E_rot_fraction = 1.0 - M_irr_ratio;
-
-  // Simplified model: assume optimal split in ergosphere
-  // The escaping particle gets the input energy plus some rotational energy
-  // Maximum efficiency for single split is about 20.7% (a* = 1)
-
-  // For given angular momentum, compute extraction
-  double omega_H = a_star * C / (2.0 * kerr.outer_horizon()); // Horizon angular velocity
-
-  // Condition for negative energy: L > E/ω_H
-  // Energy that can be extracted: ΔE = ω_H × ΔL - E_absorbed
+  // Energy extractable: E_rot = M - M_irr = M * (1 - mIrrRatio)
+  const double eRotFraction = 1.0 - mIrrRatio;
 
   // Simple efficiency model based on spin
-  double eta = 0.5 * a_star * a_star * E_rot_fraction;
+  const double eta = 0.5 * aStar * aStar * eRotFraction;
 
-  result.E_out = E_in * (1.0 + eta);
-  result.E_absorbed = -E_in * eta; // Negative energy absorbed
+  result.eOut = eIn * (1.0 + eta);
+  result.eAbsorbed = -(eIn * eta); // Negative energy absorbed
   result.efficiency = eta;
   result.successful = (eta > 0);
 
@@ -122,13 +110,13 @@ inline PenroseResult penrose_process_energy_extraction(const Kerr &kerr,
  * For general spin:
  * η_max = 1 - √((1 + √(1 - a*²))/2)
  *
- * @param a_star Dimensionless spin parameter |a*| ≤ 1
+ * @param aStar Dimensionless spin parameter |a*| <= 1
  * @return Maximum efficiency (0 to ~0.293)
  */
-inline double penrose_maximum_efficiency(double a_star) {
-  a_star = std::clamp(std::abs(a_star), 0.0, 1.0);
-  double sqrt_factor = std::sqrt(1.0 - a_star * a_star);
-  return 1.0 - std::sqrt((1.0 + sqrt_factor) / 2.0);
+[[nodiscard]] inline double penroseMaximumEfficiency(double aStar) {
+  aStar = std::clamp(std::abs(aStar), 0.0, 1.0);
+  const double sqrtFactor = std::sqrt(1.0 - (aStar * aStar));
+  return 1.0 - std::sqrt((1.0 + sqrtFactor) / 2.0);
 }
 
 /**
@@ -140,13 +128,13 @@ inline double penrose_maximum_efficiency(double a_star) {
  * This mass cannot be reduced; it only increases.
  *
  * @param mass Black hole mass [g]
- * @param a_star Dimensionless spin
+ * @param aStar Dimensionless spin
  * @return Irreducible mass [g]
  */
-inline double irreducible_mass(double mass, double a_star) {
-  a_star = std::clamp(std::abs(a_star), 0.0, 1.0);
-  double sqrt_factor = std::sqrt(1.0 - a_star * a_star);
-  return mass * std::sqrt((1.0 + sqrt_factor) / 2.0);
+[[nodiscard]] inline double irreducibleMass(double mass, double aStar) {
+  aStar = std::clamp(std::abs(aStar), 0.0, 1.0);
+  const double sqrtFactor = std::sqrt(1.0 - (aStar * aStar));
+  return mass * std::sqrt((1.0 + sqrtFactor) / 2.0);
 }
 
 /**
@@ -157,12 +145,12 @@ inline double irreducible_mass(double mass, double a_star) {
  * This is the maximum energy extractable via the Penrose process.
  *
  * @param mass Black hole mass [g]
- * @param a_star Dimensionless spin
+ * @param aStar Dimensionless spin
  * @return Rotational energy [erg]
  */
-inline double rotational_energy(double mass, double a_star) {
-  double M_irr = irreducible_mass(mass, a_star);
-  return (mass - M_irr) * C2;
+[[nodiscard]] inline double rotationalEnergy(double mass, double aStar) {
+  const double mIrr = irreducibleMass(mass, aStar);
+  return (mass - mIrr) * C2;
 }
 
 // ============================================================================
@@ -180,10 +168,10 @@ inline double rotational_energy(double mass, double a_star) {
  * @param a Spin parameter [cm]
  * @return Horizon angular velocity [rad/s]
  */
-inline double horizon_angular_velocity(double mass, double a) {
-  Kerr kerr(mass, a);
-  double r_plus = kerr.outer_horizon();
-  return a * C / (r_plus * r_plus + a * a);
+[[nodiscard]] inline double horizonAngularVelocity(double mass, double a) {
+  const Kerr kerr(mass, a);
+  const double rPlus = kerr.outer_horizon();
+  return (a * C) / ((rPlus * rPlus) + (a * a));
 }
 
 /**
@@ -193,12 +181,12 @@ inline double horizon_angular_velocity(double mass, double a) {
  *
  * @param mass Black hole mass [g]
  * @param a Spin parameter [cm]
- * @return Horizon area [cm²]
+ * @return Horizon area [cm^2]
  */
-inline double horizon_area(double mass, double a) {
-  Kerr kerr(mass, a);
-  double r_plus = kerr.outer_horizon();
-  return 4.0 * PI * (r_plus * r_plus + a * a);
+[[nodiscard]] inline double horizonArea(double mass, double a) {
+  const Kerr kerr(mass, a);
+  const double rPlus = kerr.outer_horizon();
+  return 4.0 * PI * ((rPlus * rPlus) + (a * a));
 }
 
 // ============================================================================
@@ -216,29 +204,27 @@ inline double horizon_area(double mass, double a) {
  * where f(a*) is a spin-dependent factor.
  *
  * @param mass Black hole mass [g]
- * @param a_star Dimensionless spin
- * @param B_field Magnetic field strength at horizon [Gauss]
+ * @param aStar Dimensionless spin
+ * @param bField Magnetic field strength at horizon [Gauss]
  * @return Power output [erg/s]
  */
-inline double blandford_znajek_power(double mass, double a_star, double B_field) {
-  a_star = std::clamp(std::abs(a_star), 0.0, 0.998);
+[[nodiscard]] inline double blandfordZnajekPower(double mass, double aStar, double bField) {
+  aStar = std::clamp(std::abs(aStar), 0.0, 0.998);
 
-  double M = G * mass / C2; // Geometric mass [cm]
-  double r_plus = M * (1.0 + std::sqrt(1.0 - a_star * a_star));
+  const double mGeo = G * mass / C2; // Geometric mass [cm]
+  const double rPlus = mGeo * (1.0 + std::sqrt(1.0 - (aStar * aStar)));
 
   // Blandford-Znajek formula with Tchekhovskoy et al. correction
-  // P ≈ (κ/4π c) × Φ² × Ω_H² × f(Ω_H)
-  // Simplified: P ∝ B² r_+² c a*²
+  // P ~ (kappa/4*pi*c) * Phi^2 * Omega_H^2 * f(Omega_H)
+  // Simplified: P ~ B^2 r_+^2 c a*^2
 
-  double Phi_squared = B_field * B_field * PI * r_plus * r_plus; // Magnetic flux squared
-  double omega_H = a_star * C / (2.0 * r_plus);
+  const double phiSquared = bField * bField * PI * rPlus * rPlus; // Magnetic flux squared
+  const double omegaH = (aStar * C) / (2.0 * rPlus);
 
   // Numerical factor from simulations (Tchekhovskoy+2010)
-  double kappa = 0.05;
+  const double kappa = 0.05;
 
-  double P_BZ = kappa * Phi_squared * omega_H * omega_H / C;
-
-  return P_BZ;
+  return kappa * phiSquared * (omegaH * omegaH) / C;
 }
 
 /**
@@ -248,26 +234,26 @@ inline double blandford_znajek_power(double mass, double a_star, double B_field)
  * B ∼ 10^4 × (M/M_sun)^(-1/2) Gauss
  *
  * @param mass Black hole mass [g]
- * @param a_star Dimensionless spin
+ * @param aStar Dimensionless spin
  * @return Required magnetic field [Gauss]
  */
-inline double bz_eddington_field(double mass, double a_star) {
-  // Eddington luminosity: L_Edd = 4π G M m_p c / σ_T
-  double L_Edd = 4.0 * PI * G * mass * 1.6726e-24 * C / SIGMA_THOMSON;
+[[nodiscard]] inline double bzEddingtonField(double mass, double aStar) {
+  // Eddington luminosity: L_Edd = 4*pi*G*M*m_p*c / sigma_T
+  const double lEdd = (4.0 * PI * G * mass * 1.6726e-24 * C) / SIGMA_THOMSON;
 
   // Invert BZ formula to find B
-  double M_geo = G * mass / C2;
-  double r_plus = M_geo * (1.0 + std::sqrt(1.0 - a_star * a_star));
-  double omega_H = a_star * C / (2.0 * r_plus);
+  const double mGeo = G * mass / C2;
+  const double rPlus = mGeo * (1.0 + std::sqrt(1.0 - (aStar * aStar)));
+  const double omegaH = (aStar * C) / (2.0 * rPlus);
 
-  if (std::abs(omega_H) < 1e-30) {
-    return safe_infinity<double>();
+  if (std::abs(omegaH) < 1e-30) {
+    return safeInfinity<double>();
   }
 
-  double kappa = 0.05;
-  double B_squared = L_Edd * C / (kappa * PI * r_plus * r_plus * omega_H * omega_H);
+  const double kappa = 0.05;
+  const double bSquared = (lEdd * C) / (kappa * PI * rPlus * rPlus * omegaH * omegaH);
 
-  return std::sqrt(B_squared);
+  return std::sqrt(bSquared);
 }
 
 // ============================================================================
@@ -286,9 +272,9 @@ inline double bz_eddington_field(double mass, double a_star) {
  * @param a Spin parameter [cm]
  * @return true if superradiance is possible
  */
-inline bool is_superradiant(double omega, int m, double mass, double a) {
-  double Omega_H = horizon_angular_velocity(mass, a);
-  return omega < static_cast<double>(m) * Omega_H;
+[[nodiscard]] inline bool isSuperradiant(double omega, int m, double mass, double a) {
+  const double omegaH = horizonAngularVelocity(mass, a);
+  return omega < (static_cast<double>(m) * omegaH);
 }
 
 /**
@@ -300,27 +286,26 @@ inline bool is_superradiant(double omega, int m, double mass, double a) {
  * @param omega Wave frequency [rad/s]
  * @param m Azimuthal mode number
  * @param mass Black hole mass [g]
- * @param a_star Dimensionless spin
+ * @param aStar Dimensionless spin
  * @return Amplification factor (1 = no amplification)
  */
-inline double superradiant_amplification(double omega, int m,
-                                          double mass, double a_star) {
-  a_star = std::clamp(std::abs(a_star), 0.0, 0.998);
+[[nodiscard]] inline double superradiantAmplification(double omega, int m,
+                                                      double mass, double aStar) {
+  aStar = std::clamp(std::abs(aStar), 0.0, 0.998);
 
-  double M = G * mass / C2;
-  double r_plus = M * (1.0 + std::sqrt(1.0 - a_star * a_star));
-  double Omega_H = a_star * C / (2.0 * r_plus);
+  const double mGeo = G * mass / C2;
+  const double rPlus = mGeo * (1.0 + std::sqrt(1.0 - (aStar * aStar)));
+  const double omegaH = (aStar * C) / (2.0 * rPlus);
 
-  double m_omega_H = static_cast<double>(m) * Omega_H;
+  const double mOmegaH = static_cast<double>(m) * omegaH;
 
-  if (omega >= m_omega_H) {
+  if (omega >= mOmegaH) {
     return 1.0; // No superradiance
   }
 
   // Simplified amplification factor (exact requires solving Teukolsky equation)
-  // Z ∝ (m Ω_H - ω) × (product of reflection coefficients)
-  double superradiant_factor = (m_omega_H - omega) / m_omega_H;
-  return 1.0 + 0.05 * superradiant_factor * a_star * a_star;
+  const double superradiantFactor = (mOmegaH - omega) / mOmegaH;
+  return 1.0 + (0.05 * superradiantFactor * aStar * aStar);
 }
 
 } // namespace physics

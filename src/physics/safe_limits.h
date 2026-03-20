@@ -20,8 +20,8 @@
 #ifndef PHYSICS_SAFE_LIMITS_H
 #define PHYSICS_SAFE_LIMITS_H
 
-#include <cmath>
 #include <limits>
+#include <type_traits>
 
 namespace physics {
 
@@ -35,7 +35,7 @@ namespace physics {
  * @return Maximum finite value
  */
 template<typename T>
-[[nodiscard]] constexpr T safe_max() noexcept {
+[[nodiscard]] constexpr T safeMax() noexcept {
     return std::numeric_limits<T>::max();
 }
 
@@ -49,7 +49,7 @@ template<typename T>
  * @return Minimum finite value
  */
 template<typename T>
-[[nodiscard]] constexpr T safe_lowest() noexcept {
+[[nodiscard]] constexpr T safeLowest() noexcept {
     return std::numeric_limits<T>::lowest();
 }
 
@@ -67,7 +67,7 @@ template<typename T>
  * @return Positive infinity
  */
 template<typename T>
-[[nodiscard]] inline T safe_infinity() noexcept {
+[[nodiscard]] inline T safeInfinity() noexcept {
     // Use compiler builtins that bypass -ffinite-math-only
 #if defined(__GNUC__) || defined(__clang__)
     if constexpr (std::is_same_v<T, double>) {
@@ -92,7 +92,7 @@ template<typename T>
  * @return true if x is very large (> 0.99 * max)
  */
 template<typename T>
-[[nodiscard]] constexpr bool is_effectively_infinite(T x) noexcept {
+[[nodiscard]] constexpr bool isEffectivelyInfinite(T x) noexcept {
     return x > T(0.99) * std::numeric_limits<T>::max();
 }
 
@@ -101,13 +101,13 @@ template<typename T>
  *
  * When returning infinity to indicate "no valid solution", this
  * function provides a safe value that works with -ffast-math.
- * Callers should use is_effectively_infinite() to check results.
+ * Callers should use isEffectivelyInfinite() to check results.
  *
  * @tparam T Floating point type
  * @return Large positive value representing "no solution"
  */
 template<typename T>
-[[nodiscard]] constexpr T divergent_result() noexcept {
+[[nodiscard]] constexpr T divergentResult() noexcept {
     // Return a very large but finite value
     // This avoids UB with -ffast-math while still being "infinity-like"
     return std::numeric_limits<T>::max() / T(2);
@@ -115,7 +115,7 @@ template<typename T>
 
 // Clang warns about infinity/NaN checks even when using builtins with -ffast-math.
 // We deliberately want to check for these edge cases, so locally disable the warning.
-#if defined(__clang__)
+#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnan-infinity-disabled"
 #endif
@@ -131,16 +131,12 @@ template<typename T>
  * @return true if x is finite
  */
 template<typename T>
-[[nodiscard]] inline bool safe_isfinite(T x) noexcept {
+[[nodiscard]] inline bool safeIsfinite(T x) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-    // Use builtin that bypasses -ffinite-math-only optimization
-    if constexpr (std::is_same_v<T, double>) {
-        return __builtin_isfinite(x);
-    } else if constexpr (std::is_same_v<T, float>) {
-        return __builtin_isfinite(x);
-    } else if constexpr (std::is_same_v<T, long double>) {
-        return __builtin_isfinite(x);
-    }
+    // Use builtin that bypasses -ffinite-math-only optimization.
+    // WHY: __builtin_isfinite handles all float types uniformly;
+    // the single call avoids a repeated-branch-body warning.
+    return __builtin_isfinite(x);
 #else
     return std::isfinite(x);
 #endif
@@ -155,7 +151,7 @@ template<typename T>
  * @return true if x is NaN
  */
 template<typename T>
-[[nodiscard]] inline bool safe_isnan(T x) noexcept {
+[[nodiscard]] inline bool safeIsnan(T x) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
     return __builtin_isnan(x);
 #else
@@ -172,7 +168,7 @@ template<typename T>
  * @return true if x is positive or negative infinity
  */
 template<typename T>
-[[nodiscard]] inline bool safe_isinf(T x) noexcept {
+[[nodiscard]] inline bool safeIsinf(T x) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
     return __builtin_isinf(x);
 #else
@@ -180,7 +176,7 @@ template<typename T>
 #endif
 }
 
-#if defined(__clang__)
+#ifdef __clang__
 #pragma clang diagnostic pop
 #endif
 

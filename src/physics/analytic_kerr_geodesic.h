@@ -40,7 +40,6 @@
 #ifndef PHYSICS_ANALYTIC_KERR_GEODESIC_H
 #define PHYSICS_ANALYTIC_KERR_GEODESIC_H
 
-#include "constants.h"
 #include <array>
 #include <cmath>
 #include <complex>
@@ -50,8 +49,7 @@
 #  if __has_include(<boost/math/special_functions/jacobi_elliptic.hpp>)
 #    include <boost/math/special_functions/jacobi_elliptic.hpp>
 #    include <boost/math/special_functions/ellint_1.hpp>
-#    include <boost/math/special_functions/ellint_2.hpp>
-#    define PHYSICS_HAS_BOOST_JACOBI 1
+#define PHYSICS_HAS_BOOST_JACOBI 1 // NOLINT(cppcoreguidelines-macro-usage) -- feature-detection flag, not a constant
 #  endif
 #endif
 
@@ -204,16 +202,16 @@ struct QuarticCoeffs {
   }
 
   // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma)
-  const double A = y1 + c.c2;
+  const double a = y1 + c.c2;
 
-  if (A < 0.0) {
+  if (a < 0.0) {
     // alpha is imaginary; all roots come in complex conjugate pairs
     result.nReal = 0;
     result.type  = RadialMotionType::Plunge;
     return result;
   }
 
-  const double alpha = std::sqrt(A);
+  const double alpha = std::sqrt(a);
   double beta = 0.0;
   double gamma = 0.0;
 
@@ -372,8 +370,8 @@ struct QuarticCoeffs {
   if (scale < 1e-30) { return 0.0; }
 
   const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double K = boost::math::ellint_1(k);
-  return K / scale;
+  const double k = boost::math::ellint_1(k);
+  return k / scale;
 }
 
 #endif // PHYSICS_HAS_BOOST_JACOBI

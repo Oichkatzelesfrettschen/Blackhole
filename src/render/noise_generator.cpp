@@ -7,11 +7,23 @@
 
 #include "noise_generator.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include <FastNoise/Generators/Cellular.h>
+#include <FastNoise/Generators/DomainWarp.h>
+#include <FastNoise/Generators/Fractal.h>
+#include <FastNoise/Generators/Generator.h>
+#include <FastNoise/Generators/Perlin.h>
+#include <FastNoise/Generators/Simplex.h>
+#include <FastNoise/Generators/Value.h>
+#include <FastNoise/SmartNode.h>
+
 #ifdef BLACKHOLE_ENABLE_FASTNOISE2
 
 #include <FastNoise/FastNoise.h>
-#include <algorithm>
-#include <cmath>
 
 namespace blackhole {
 
@@ -141,7 +153,7 @@ NoiseVolume NoiseGenerator::generate3D(
     volume.width = width;
     volume.height = height;
     volume.depth = depth;
-    volume.data.resize(width * height * depth);
+    volume.data.resize(static_cast<size_t>(width) * height * depth);
 
     // Set generator frequency and seed
     generator_->GenUniformGrid3D(
@@ -167,7 +179,7 @@ std::vector<float> NoiseGenerator::generate2D(
     uint32_t height,
     [[maybe_unused]] float zSlice
 ) {
-    std::vector<float> data(width * height);
+    std::vector<float> data(static_cast<size_t>(width) * height);
 
     // Generate 2D slice at specified Z
     generator_->GenUniformGrid2D(
@@ -182,7 +194,7 @@ std::vector<float> NoiseGenerator::generate2D(
 
     // Remap output range
     for (auto& value : data) {
-        value = config_.outputMin + (value + 1.0f) * 0.5f * (config_.outputMax - config_.outputMin);
+      value = config_.outputMin + ((value + 1.0f) * 0.5f * (config_.outputMax - config_.outputMin));
     }
 
     return data;
@@ -194,7 +206,7 @@ void NoiseGenerator::remapOutput(NoiseVolume& volume) const {
     const float offset = config_.outputMin + scale;
 
     for (auto& value : volume.data) {
-        value = offset + value * scale;
+      value = offset + (value * scale);
     }
 }
 

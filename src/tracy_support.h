@@ -12,6 +12,7 @@
 // To enable: add -DTRACY_ENABLE to your target via CMake (the repo presets do
 // this for development profiles).
 
+// NOLINTBEGIN(cppcoreguidelines-macro-usage) -- Tracy profiler macros capture source location via __LINE__/__FUNCTION__; cannot be replaced with constexpr
 #ifdef TRACY_ENABLE
 // Import the full Tracy API when enabled.
 #include <tracy/Tracy.hpp>
@@ -23,48 +24,48 @@
 // No-op fallbacks (Tracy disabled)
 // ------------------------------
 // Zone macros
-#define ZoneScoped ((void)0)
-#define ZoneScopedN(name) ((void)0)
-#define ZoneScopedC(color) ((void)0)
-#define ZoneScopedNC(name, color) ((void)0)
-#define ZoneNamed(var, active) ((void)0)
-#define ZoneNamedN(var, name, active) ((void)0)
-#define ZoneNamedC(var, color, active) ((void)0)
-#define ZoneNamedNC(var, name, color, active) ((void)0)
-#define ZoneScopedS(depth) ((void)0)
-#define ZoneScopedNS(name, depth) ((void)0)
-#define ZoneScopedCS(color, depth) ((void)0)
-#define ZoneScopedNCS(name, color, depth) ((void)0)
-#define ZoneText(text) ((void)0)
+#define ZONE_SCOPED ((void)0)
+#define ZONE_SCOPED_N(name) ((void)0)
+#define ZONE_SCOPED_C(color) ((void)0)
+#define ZONE_SCOPED_NC(name, color) ((void)0)
+#define ZONE_NAMED(var, active) ((void)0)
+#define ZONE_NAMED_N(var, name, active) ((void)0)
+#define ZONE_NAMED_C(var, color, active) ((void)0)
+#define ZONE_NAMED_NC(var, name, color, active) ((void)0)
+#define ZONE_SCOPED_S(depth) ((void)0)
+#define ZONE_SCOPED_NS(name, depth) ((void)0)
+#define ZONE_SCOPED_CS(color, depth) ((void)0)
+#define ZONE_SCOPED_NCS(name, color, depth) ((void)0)
+#define ZONE_TEXT(text) ((void)0)
 
 // Frame markers
-#define FrameMark ((void)0)
-#define FrameMarkNamed(name) ((void)0)
-#define FrameMarkStart(name) ((void)0)
-#define FrameMarkEnd(name) ((void)0)
+#define FRAME_MARK ((void)0)
+#define FRAME_MARK_NAMED(name) ((void)0)
+#define FRAME_MARK_START(name) ((void)0)
+#define FRAME_MARK_END(name) ((void)0)
 
 // Plotting
-#define TracyPlot(name, value) ((void)0)
-#define TracyPlotConfig(name, type, step, fill, color) ((void)0)
+#define TRACY_PLOT(name, value) ((void)0)
+#define TRACY_PLOT_CONFIG(name, type, step, fill, color) ((void)0)
 
 // Debug/Message API
-#define TracyMessage(msg) ((void)0)
-#define TracyMessageL(msg, len) ((void)0)
-#define TracyMessageC(msg, color) ((void)0)
+#define TRACY_MESSAGE(msg) ((void)0)
+#define TRACY_MESSAGE_L(msg, len) ((void)0)
+#define TRACY_MESSAGE_C(msg, color) ((void)0)
 
 // Memory tracking (allocation markers)
-#define TracyAlloc(ptr, size) ((void)0)
-#define TracyFree(ptr) ((void)0)
+#define TRACY_ALLOC(ptr, size) ((void)0)
+#define TRACY_FREE(ptr) ((void)0)
 
 // C API fallbacks (useful for mixed C/C++ files)
-#define TracyCFrameMark ((void)0)
-#define TracyCFrameMarkNamed(x) ((void)0)
-#define TracyCFrameMarkStart(x) ((void)0)
-#define TracyCFrameMarkEnd(x) ((void)0)
+#define TRACY_C_FRAME_MARK ((void)0)
+#define TRACY_C_FRAME_MARK_NAMED(x) ((void)0)
+#define TRACY_C_FRAME_MARK_START(x) ((void)0)
+#define TRACY_C_FRAME_MARK_END(x) ((void)0)
 
-#define TracyCZone(ctx) ((void)0)
-#define TracyCZoneN(ctx, name, active) ((void)0)
-#define TracyCZoneEnd(ctx) ((void)0)
+#define TRACY_C_ZONE(ctx) ((void)0)
+#define TRACY_C_ZONE_N(ctx, name, active) ((void)0)
+#define TRACY_C_ZONE_END(ctx) ((void)0)
 
 #endif // TRACY_ENABLE
 
@@ -113,3 +114,4 @@
 #define BH_ALLOC(ptr, size) ((void)0)
 #define BH_FREE(ptr) ((void)0)
 #endif // BH_TRACY_ENABLED
+// NOLINTEND(cppcoreguidelines-macro-usage)

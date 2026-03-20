@@ -29,7 +29,7 @@ public:
   /// @param shaderDir Path to shader source directory
   /// @param onReload Callback invoked with list of changed shader paths
   /// @return true if watcher started successfully
-  bool start(const std::string &shaderDir, ReloadCallback onReload = nullptr);
+  bool start(const std::string &shaderDir, const ReloadCallback &onReload = nullptr);
 
   /// Stop watching
   void stop();
@@ -53,14 +53,15 @@ public:
   /// Get watched directory
   const std::string &getWatchedDir() const { return watchedDir_; }
 
-private:
-  ShaderWatcher() = default;
-  ~ShaderWatcher();
   ShaderWatcher(const ShaderWatcher &) = delete;
   ShaderWatcher &operator=(const ShaderWatcher &) = delete;
 
+private:
+  ShaderWatcher() = default;
+  ~ShaderWatcher();
+
   /// Check if file extension is a shader source
-  bool isShaderSource(const std::string &path) const;
+  static bool isShaderSource(const std::string &path);
 
   /// Handle filesystem event
   void onFileEvent(const std::string &path, bool isModify);

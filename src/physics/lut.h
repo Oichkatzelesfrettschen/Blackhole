@@ -2,130 +2,131 @@
  * @file lut.h
  * @brief LUT generation helpers for emissivity and redshift.
  *
- * Generates normalized 1D lookup tables in geometric units (r/r_s).
+ * Generates normalized 1D lookup tables in geometric units (r/rS).
  */
 
 #ifndef PHYSICS_LUT_H
 #define PHYSICS_LUT_H
 
 #include "batch.h"
+#include "constants.h"
 #include "kerr.h"
 #include "schwarzschild.h"
 #include "thin_disk.h"
 #include <algorithm>
 #include <cmath>
-#include <limits>
+#include <cstddef>
 #include <vector>
 
 namespace physics {
 
 struct Lut1D {
   std::vector<float> values;
-  float r_min = 0.0f; // in units of r_s
-  float r_max = 0.0f; // in units of r_s
+  float rMin = 0.0f; // in units of rS
+  float rMax = 0.0f; // in units of rS
 };
 
 struct SpinRadiiLut {
   std::vector<float> spins;
-  std::vector<float> r_isco_over_rs;
-  std::vector<float> r_ph_over_rs;
+  std::vector<float> rIscoOverRs;
+  std::vector<float> rPhOverRs;
 };
 
-inline Lut1D generate_emissivity_lut(int size, double mass_solar, double a_star,
-                                     double mdot_edd, bool prograde = true) {
+inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
+                                     double mdotEdd, bool prograde = true) {
   Lut1D lut;
   if (size <= 1) {
     return lut;
   }
 
-  const double mass = mass_solar * M_SUN;
-  const double r_s = schwarzschildRadius(mass);
-  const double r_g = G * mass / C2;
-  const double a = a_star * r_g;
-  const double r_in = kerrIscoRadius(mass, a, prograde);
-  const double r_out = r_in * 4.0;
+  const double mass = massSolar * M_SUN;
+  const double rS = schwarzschildRadius(mass);
+  const double rG = G * mass / C2;
+  const double a = aStar * rG;
+  const double rIn = kerrIscoRadius(mass, a, prograde);
+  const double rOut = rIn * 4.0;
 
-  DiskParams disk = kerrDisk(mass_solar, a_star, mdot_edd, prograde);
-  disk.rIn  = r_in;
-  disk.rOut = r_out;
+  DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd, prograde);
+  disk.rIn  = rIn;
+  disk.rOut = rOut;
 
-  lut.r_min = static_cast<float>(r_in / r_s);
-  lut.r_max = static_cast<float>(r_out / r_s);
+  lut.rMin = static_cast<float>(rIn / rS);
+  lut.rMax = static_cast<float>(rOut / rS);
   std::vector<double> radii(static_cast<std::size_t>(size));
-  fill_linspace(radii, r_in, r_out);
-  disk_flux_batch(radii, disk, lut.values);
+  fillLinspace(radii, rIn, rOut);
+  diskFluxBatch(radii, disk, lut.values);
 
-  double max_flux = 0.0;
-  for (float v : lut.values) {
-    max_flux = std::max(max_flux, static_cast<double>(v));
+  double maxFlux = 0.0;
+  for (float const v : lut.values) {
+    maxFlux = std::max(maxFlux, static_cast<double>(v));
   }
 
-  if (max_flux > 0.0) {
+  if (maxFlux > 0.0) {
     for (auto &v : lut.values) {
-      v = static_cast<float>(static_cast<double>(v) / max_flux);
+      v = static_cast<float>(static_cast<double>(v) / maxFlux);
     }
   }
 
   return lut;
 }
 
-inline Lut1D generate_redshift_lut(int size, double mass_solar, double a_star,
+inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar,
                                    double theta = 0.5 * PI) {
   Lut1D lut;
   if (size <= 1) {
     return lut;
   }
 
-  const double mass = mass_solar * M_SUN;
-  const double r_s = schwarzschildRadius(mass);
-  const double r_g = G * mass / C2;
-  const double a = a_star * r_g;
-  const double r_in = kerrIscoRadius(mass, a, true);
-  const double r_out = r_in * 4.0;
+  const double mass = massSolar * M_SUN;
+  const double rS = schwarzschildRadius(mass);
+  const double rG = G * mass / C2;
+  const double a = aStar * rG;
+  const double rIn = kerrIscoRadius(mass, a, true);
+  const double rOut = rIn * 4.0;
 
-  lut.r_min = static_cast<float>(r_in / r_s);
-  lut.r_max = static_cast<float>(r_out / r_s);
+  lut.rMin = static_cast<float>(rIn / rS);
+  lut.rMax = static_cast<float>(rOut / rS);
   std::vector<double> radii(static_cast<std::size_t>(size));
-  fill_linspace(radii, r_in, r_out);
-  kerr_redshift_batch(radii, theta, mass, a, lut.values);
+  fillLinspace(radii, rIn, rOut);
+  kerrRedshiftBatch(radii, theta, mass, a, lut.values);
 
   return lut;
 }
 
-inline SpinRadiiLut generate_spin_radii_lut(int size, double mass_solar,
-                                            double spin_min = -0.99,
-                                            double spin_max = 0.99) {
+inline SpinRadiiLut generateSpinRadiiLut(int size, double massSolar,
+                                            double spinMin = -0.99,
+                                            double spinMax = 0.99) {
   SpinRadiiLut lut;
   if (size <= 1) {
     return lut;
   }
 
-  spin_min = std::clamp(spin_min, -0.99, 0.99);
-  spin_max = std::clamp(spin_max, -0.99, 0.99);
-  if (spin_max <= spin_min) {
-    spin_max = std::min(spin_min + 0.01, 0.99);
+  spinMin = std::clamp(spinMin, -0.99, 0.99);
+  spinMax = std::clamp(spinMax, -0.99, 0.99);
+  if (spinMax <= spinMin) {
+    spinMax = std::min(spinMin + 0.01, 0.99);
   }
 
-  const double mass = mass_solar * M_SUN;
-  const double r_s = schwarzschildRadius(mass);
-  const double r_g = G * mass / C2;
+  const double mass = massSolar * M_SUN;
+  const double rS = schwarzschildRadius(mass);
+  const double rG = G * mass / C2;
 
   lut.spins.resize(static_cast<std::size_t>(size));
-  lut.r_isco_over_rs.resize(static_cast<std::size_t>(size));
-  lut.r_ph_over_rs.resize(static_cast<std::size_t>(size));
+  lut.rIscoOverRs.resize(static_cast<std::size_t>(size));
+  lut.rPhOverRs.resize(static_cast<std::size_t>(size));
 
   for (int i = 0; i < size; ++i) {
-    double u = static_cast<double>(i) / (size - 1);
-    double spin = spin_min + u * (spin_max - spin_min);
-    double a = spin * r_g;
-    bool prograde = spin >= 0.0;
-    double r_isco = kerrIscoRadius(mass, a, prograde);
-    double r_ph = prograde ? kerrPhotonOrbitPrograde(mass, a)
-                           : kerrPhotonOrbitRetrograde(mass, a);
+    double const u = static_cast<double>(i) / (size - 1);
+    double const spin = spinMin + (u * (spinMax - spinMin));
+    double const a = spin * rG;
+    bool const prograde = spin >= 0.0;
+    double const rIsco = kerrIscoRadius(mass, a, prograde);
+    double const rPh =
+        prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
 
-    lut.spins[static_cast<std::size_t>(i)] = static_cast<float>(spin);
-    lut.r_isco_over_rs[static_cast<std::size_t>(i)] = static_cast<float>(r_isco / r_s);
-    lut.r_ph_over_rs[static_cast<std::size_t>(i)] = static_cast<float>(r_ph / r_s);
+    lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
+    lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);
+    lut.rPhOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rPh / rS);
   }
 
   return lut;
@@ -136,21 +137,21 @@ inline SpinRadiiLut generate_spin_radii_lut(int size, double mass_solar,
  * Precomputes exp(-distance * 4.0) for distance in [0, 0.5].
  * Used to replace transcendental exp() computation in shader.
  */
-inline Lut1D generate_photon_glow_lut(int size = 256) {
+inline Lut1D generatePhotonGlowLut(int size = 256) {
   Lut1D lut;
   if (size <= 1) {
     return lut;
   }
 
-  lut.r_min = 0.0f;
-  lut.r_max = 0.5f;
+  lut.rMin = 0.0f;
+  lut.rMax = 0.5f;
   lut.values.resize(static_cast<std::size_t>(size));
 
   for (int i = 0; i < size; ++i) {
-    double u = static_cast<double>(i) / (size - 1);
-    double distance = u * 0.5;  // distance in [0, 0.5]
-    double glow_intensity = std::exp(-distance * 4.0);
-    lut.values[static_cast<std::size_t>(i)] = static_cast<float>(glow_intensity);
+    double const u = static_cast<double>(i) / (size - 1);
+    double const distance = u * 0.5; // distance in [0, 0.5]
+    double const glowIntensity = std::exp(-distance * 4.0);
+    lut.values.at(static_cast<std::size_t>(i)) = static_cast<float>(glowIntensity);
   }
 
   return lut;
@@ -162,22 +163,22 @@ inline Lut1D generate_photon_glow_lut(int size = 256) {
  * Formula: density(r) = (1 - r)^power for r in [0, 1]
  * Replaces inline pow() and smoothstep() calculations in disk shader.
  */
-inline Lut1D generate_disk_density_lut(int size = 256, double power = 1.5) {
+inline Lut1D generateDiskDensityLut(int size = 256, double power = 1.5) {
   Lut1D lut;
   if (size <= 1) {
     return lut;
   }
 
-  lut.r_min = 0.0f;
-  lut.r_max = 1.0f;
+  lut.rMin = 0.0f;
+  lut.rMax = 1.0f;
   lut.values.resize(static_cast<std::size_t>(size));
 
   for (int i = 0; i < size; ++i) {
-    double u = static_cast<double>(i) / (size - 1);
+    double const u = static_cast<double>(i) / (size - 1);
     // u=0 corresponds to inner radius (ISCO), u=1 to outer radius
     // density decreases smoothly from 1.0 to 0.0
-    double density = std::pow(1.0 - u, power);
-    lut.values[static_cast<std::size_t>(i)] = static_cast<float>(density);
+    double const density = std::pow(1.0 - u, power);
+    lut.values.at(static_cast<std::size_t>(i)) = static_cast<float>(density);
   }
 
   return lut;

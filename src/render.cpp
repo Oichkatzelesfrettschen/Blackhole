@@ -1,15 +1,27 @@
 #include "render.h"
 
 // C++ system headers
+#include <cstddef>
 #include <iostream>
+#include <map>
+#include <set>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 // Third-party library headers
 #include <GLFW/glfw3.h>
+#include <glbinding/gl/bitfield.h>
+#include <glbinding/gl/boolean.h>
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions-patches.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
+
+#include <glm/ext/vector_float3.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 // Local headers
-#include "gl_loader.h"
 #include "shader.h"
 
 // Out-of-line destructor definition to prevent -Winline warnings.
@@ -25,7 +37,7 @@ GLuint createColorTexture(int width, int height, bool hdr) {
 
   glBindTexture(GL_TEXTURE_2D, colorTexture);
   glTexImage2D(GL_TEXTURE_2D, 0, hdr ? GL_RGBA16F : GL_RGBA, width, height, 0, GL_RGBA,
-               hdr ? GL_FLOAT : GL_UNSIGNED_BYTE, NULL);
+               hdr ? GL_FLOAT : GL_UNSIGNED_BYTE, nullptr);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -129,7 +141,7 @@ GLuint createFramebuffer(const FramebufferCreateInfo &info) {
 
   // Check the completeness of the framebuffer.
   if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-    std::cout << "ERROR: Framebuffer is not complete!" << std::endl;
+    std::cout << "ERROR: Framebuffer is not complete!\n";
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return 0;
   }
@@ -142,13 +154,13 @@ GLuint createFramebuffer(const FramebufferCreateInfo &info) {
 GLuint createQuadVAO() {
   std::vector<glm::vec3> vertices;
 
-  vertices.push_back(glm::vec3(-1, -1, 0));
-  vertices.push_back(glm::vec3(-1, 1, 0));
-  vertices.push_back(glm::vec3(1, 1, 0));
+  vertices.emplace_back(-1, -1, 0);
+  vertices.emplace_back(-1, 1, 0);
+  vertices.emplace_back(1, 1, 0);
 
-  vertices.push_back(glm::vec3(1, 1, 0));
-  vertices.push_back(glm::vec3(1, -1, 0));
-  vertices.push_back(glm::vec3(-1, -1, 0));
+  vertices.emplace_back(1, 1, 0);
+  vertices.emplace_back(1, -1, 0);
+  vertices.emplace_back(-1, -1, 0);
 
   // Create VBO
   GLuint vao;
@@ -160,7 +172,7 @@ GLuint createQuadVAO() {
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER,
                static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
-               &vertices[0], GL_STATIC_DRAW);
+               vertices.data(), GL_STATIC_DRAW);
 
   // 1st attribute buffer: positions
   glEnableVertexAttribArray(0);
@@ -178,14 +190,16 @@ GLuint createQuadVAO() {
   return vao;
 }
 
-static std::map<GLuint, GLuint> textureFramebufferMap;
-static std::map<std::string, GLuint> shaderProgramMap;
+namespace {
+
+std::map<GLuint, GLuint> textureFramebufferMap;
+std::map<std::string, GLuint> shaderProgramMap;
 
 // PERFORMANCE FIX: Cache uniform locations to avoid expensive glGetUniformLocation calls every frame
-static std::unordered_map<GLuint, std::unordered_map<std::string, GLint>> uniformLocationCache;
+std::unordered_map<GLuint, std::unordered_map<std::string, GLint>> uniformLocationCache;
 
 // Helper function to get cached uniform location
-static GLint getCachedUniformLocation(GLuint program, const std::string &name) {
+GLint getCachedUniformLocation(GLuint program, const std::string &name) {
   auto &cache = uniformLocationCache[program];
   auto it = cache.find(name);
   if (it != cache.end()) {
@@ -193,14 +207,14 @@ static GLint getCachedUniformLocation(GLuint program, const std::string &name) {
   }
 
   // Cache miss - query driver once and store result
-  GLint loc = glGetUniformLocation(program, name.c_str());
+  const GLint loc = glGetUniformLocation(program, name.c_str());
   cache[name] = loc;
   return loc;
 }
 
-static bool bindToTextureUnit(GLuint program, const std::string &name, GLenum textureType,
-                              GLuint texture, int textureUnitIndex) {
-  GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+bool bindToTextureUnit(GLuint program, const std::string &name, GLenum textureType,
+                       GLuint texture, int textureUnitIndex) {
+  const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
   if (loc != -1) {
     glUniform1i(loc, textureUnitIndex);
 
@@ -208,16 +222,17 @@ static bool bindToTextureUnit(GLuint program, const std::string &name, GLenum te
     glActiveTexture(GL_TEXTURE0 + static_cast<GLuint>(textureUnitIndex));
     glBindTexture(textureType, texture);
     return true;
-  } else {
-    static std::set<std::string> warnedMissing;
-    const std::string key = std::to_string(program) + ":" + name;
-    if (!warnedMissing.contains(key)) {
-      std::cout << "WARNING: uniform " << name << " is not found in shader" << std::endl;
-      warnedMissing.insert(key);
-    }
-    return false;
   }
+  static std::set<std::string> warnedMissing;
+  const std::string key = std::to_string(program) + ":" + name;
+  if (!warnedMissing.contains(key)) {
+    std::cout << "WARNING: uniform " << name << " is not found in shader\n";
+    warnedMissing.insert(key);
+  }
+  return false;
 }
+
+} // namespace
 
 void clearRenderToTextureCache() {
   for (auto const &[texture, framebuffer] : textureFramebufferMap) {
@@ -236,22 +251,22 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
   // Lazy creation of a framebuffer as the render target and attach the texture
   // as the color attachment.
   GLuint targetFramebuffer;
-  if (!textureFramebufferMap.count(rtti.targetTexture)) {
+  if (!textureFramebufferMap.contains(rtti.targetTexture)) {
     FramebufferCreateInfo createInfo;
     createInfo.colorTexture = rtti.targetTexture;
     targetFramebuffer = createFramebuffer(createInfo);
     textureFramebufferMap[rtti.targetTexture] = targetFramebuffer;
   } else {
-    targetFramebuffer = textureFramebufferMap[rtti.targetTexture];
+    targetFramebuffer = textureFramebufferMap.at(rtti.targetTexture);
   }
 
   // Lazy-load the shader program.
   GLuint program;
-  if (!shaderProgramMap.count(rtti.fragShader)) {
+  if (!shaderProgramMap.contains(rtti.fragShader)) {
     program = createShaderProgram(rtti.vertexShader, rtti.fragShader);
     shaderProgramMap[rtti.fragShader] = program;
   } else {
-    program = shaderProgramMap[rtti.fragShader];
+    program = shaderProgramMap.at(rtti.fragShader);
   }
 
   // Rendering a quad.
@@ -280,14 +295,14 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update float uniforms
       for (auto const &[name, val] : rtti.floatUniforms) {
-        GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+        const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform1f(loc, val);
         } else {
           static std::set<std::string> warnedMissing;
           const std::string key = std::to_string(program) + ":" + name;
           if (!warnedMissing.contains(key)) {
-            std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+            std::cout << "WARNING: uniform " << name << " is not found\n";
             warnedMissing.insert(key);
           }
         }
@@ -295,14 +310,14 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update vec3 uniforms
       for (auto const &[name, val] : rtti.vec3Uniforms) {
-        GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+        const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform3f(loc, val.x, val.y, val.z);
         } else {
           static std::set<std::string> warnedMissing;
           const std::string key = std::to_string(program) + ":" + name;
           if (!warnedMissing.contains(key)) {
-            std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+            std::cout << "WARNING: uniform " << name << " is not found\n";
             warnedMissing.insert(key);
           }
         }
@@ -310,14 +325,14 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update vec4 uniforms
       for (auto const &[name, val] : rtti.vec4Uniforms) {
-        GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+        const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform4f(loc, val.x, val.y, val.z, val.w);
         } else {
           static std::set<std::string> warnedMissing;
           const std::string key = std::to_string(program) + ":" + name;
           if (!warnedMissing.contains(key)) {
-            std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+            std::cout << "WARNING: uniform " << name << " is not found\n";
             warnedMissing.insert(key);
           }
         }
@@ -325,14 +340,14 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update mat3 uniforms
       for (auto const &[name, val] : rtti.mat3Uniforms) {
-        GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+        const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
         if (loc != -1) {
           glUniformMatrix3fv(loc, 1, GL_FALSE, glm::value_ptr(val));
         } else {
           static std::set<std::string> warnedMissing;
           const std::string key = std::to_string(program) + ":" + name;
           if (!warnedMissing.contains(key)) {
-            std::cout << "WARNING: uniform " << name << " is not found" << std::endl;
+            std::cout << "WARNING: uniform " << name << " is not found\n";
             warnedMissing.insert(key);
           }
         }

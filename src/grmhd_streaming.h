@@ -90,17 +90,13 @@ namespace blackhole {
  * @brief GRMHD data tile (RGBA32F texture chunk)
  */
 struct GRMHDTile {
-    TileID id;
-    std::vector<float> data;  // RGBA32F packed (4 channels × width × height × depth)
-    size_t width, height, depth;
-    
-    bool ready() const noexcept {
-        return !data.empty();
-    }
-    
-    size_t sizeBytes() const noexcept {
-        return data.size() * sizeof(float);
-    }
+  TileID id{};
+  std::vector<float> data; // RGBA32F packed (4 channels × width × height × depth)
+  size_t width{}, height{}, depth{};
+
+  [[nodiscard]] bool ready() const noexcept { return !data.empty(); }
+
+  [[nodiscard]] size_t sizeBytes() const noexcept { return data.size() * sizeof(float); }
 };
 
 /**
@@ -119,8 +115,8 @@ struct GRMHDFrame {
 struct GRMHDMetadata {
     std::string jsonPath;
     std::string binPath;
-    size_t frameCount;
-    size_t gridX, gridY, gridZ;  // Full resolution grid dimensions
+    size_t frameCount{};
+    size_t gridX{}, gridY{}, gridZ{}; // Full resolution grid dimensions
     std::vector<GRMHDFrame> frames;
     std::vector<std::string> channels;  // e.g., ["rho", "u", "v1", "v2"]
 };
@@ -135,7 +131,7 @@ public:
     
     // Thread-safe cache operations
     std::shared_ptr<GRMHDTile> get(const TileID& id);
-    void put(const TileID& id, std::shared_ptr<GRMHDTile> tile);
+    void put(const TileID &id, const std::shared_ptr<GRMHDTile> &tile);
     void clear();
     
     // Statistics
@@ -145,8 +141,8 @@ public:
 private:
     struct CacheEntry {
         std::shared_ptr<GRMHDTile> tile;
-        size_t accessCount;
-        uint64_t lastAccess;  // Timestamp for LRU
+        size_t accessCount{};
+        uint64_t lastAccess{}; // Timestamp for LRU
     };
     
     mutable std::mutex mutex_;
@@ -166,6 +162,9 @@ class GRMHDStreamer {
 public:
     explicit GRMHDStreamer(const std::string& jsonPath, const std::string& binPath);
     ~GRMHDStreamer();
+
+    GRMHDStreamer(const GRMHDStreamer&) = delete;
+    GRMHDStreamer& operator=(const GRMHDStreamer&) = delete;
     
     // Lifecycle
     bool init();

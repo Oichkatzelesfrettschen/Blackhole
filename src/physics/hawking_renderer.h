@@ -24,11 +24,10 @@
 #ifndef PHYSICS_HAWKING_RENDERER_H
 #define PHYSICS_HAWKING_RENDERER_H
 
-#include <string>
-#include <vector>
 #include <filesystem>
-#include "gl_loader.h"
-#include "hawking.h"
+#include <vector>
+
+#include "../gl_loader.h" // NOLINT(misc-include-cleaner) -- provides `using namespace gl` for bare GLuint/GLenum
 
 namespace physics {
 
@@ -95,7 +94,7 @@ public:
      * @param blackHoleMass Black hole mass [g]
      * @param params Rendering parameters
      */
-    void setShaderUniforms(GLuint shaderProgram, double blackHoleMass,
+    void setShaderUniforms(GLuint shaderProgram, double blackHoleMass, // NOLINT(misc-include-cleaner) -- GLuint provided via gl_loader.h using namespace gl
                           const HawkingGlowParams& params) const;
 
     /**
@@ -123,23 +122,21 @@ public:
      *
      * @return true if both LUTs are loaded
      */
-    bool isReady() const {
-        return tempLUTLoaded_ && spectrumLUTLoaded_;
-    }
+    [[nodiscard]] bool isReady() const { return tempLUTLoaded_ && spectrumLUTLoaded_; }
 
     /**
      * @brief Get temperature LUT texture ID.
      *
      * @return OpenGL texture handle (0 if not loaded)
      */
-    GLuint getTempLUTTexture() const { return tempLUTTexture_; }
+    [[nodiscard]] GLuint getTempLUTTexture() const { return tempLUTTexture_; }
 
     /**
      * @brief Get spectrum LUT texture ID.
      *
      * @return OpenGL texture handle (0 if not loaded)
      */
-    GLuint getSpectrumLUTTexture() const { return spectrumLUTTexture_; }
+    [[nodiscard]] GLuint getSpectrumLUTTexture() const { return spectrumLUTTexture_; }
 
     /**
      * @brief Free OpenGL resources.

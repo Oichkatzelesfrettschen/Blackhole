@@ -91,9 +91,13 @@ void kerrStep(inout KerrRay ray, float r_s, float a, KerrConsts c, float dlam) {
   float A = (r * r + a * a) * c.E - a * c.Lz;
   float Lz_minus_aE = c.Lz - a * c.E;
 
-  float R = A * A - Delta * (c.Q + Lz_minus_aE * Lz_minus_aE);
-  float Theta = c.Q + (a * a * c.E * c.E * cosTheta * cosTheta) -
-                (c.Lz * c.Lz / sin2);
+  /* Issue-009: FMA contraction can reorder the subtract in R and Theta,
+   * changing the sign at turning points differently between compute and
+   * fragment shaders.  'precise' forces IEEE-754 sequential evaluation
+   * of each expression, making sign detection deterministic across paths. */
+  precise float R = A * A - Delta * (c.Q + Lz_minus_aE * Lz_minus_aE);
+  precise float Theta = c.Q + (a * a * c.E * c.E * cosTheta * cosTheta) -
+                        (c.Lz * c.Lz / sin2);
 
   if (R < 0.0) {
     ray.sign_r *= -1.0;

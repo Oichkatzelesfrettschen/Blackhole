@@ -22,39 +22,49 @@
  * - Energy conservation properties
  */
 
-#include "physics/kerr.h"
-#include "physics/safe_limits.h"
-#include "physics/schwarzschild.h"
-#include "physics/verified/kerr.hpp"
-
+#include <numbers>
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
-#include <iomanip>
+#include <limits>
 #include <random>
-#include <vector>
-#include <algorithm>
 
-using physics::safe_isnan;
-using physics::safe_isinf;
-using physics::safe_isfinite;
 
-static constexpr double TOLERANCE = 1e-8;
+#include "physics/kerr.h"
+#include "physics/safe_limits.h"
+
+#include "physics/verified/kerr.hpp"
+
+using physics::safeIsnan;
+using physics::safeIsinf;
+
+constexpr double TOLERANCE = 1e-8;
 // Hawking temperature constant: k_B * c^3 / (4π * G * ℏ) ≈ 1.227e23 K
 [[maybe_unused]] static constexpr double HAWKING_TEMP_CONST = 1.227e23;
 
-static bool approx_eq(double a, double b, double tol = TOLERANCE) {
-  if (safe_isnan(a) && safe_isnan(b)) return true;
-  if (safe_isinf(a) && safe_isinf(b) && std::signbit(a) == std::signbit(b)) return true;
-  double scale = std::max(1.0, std::max(std::abs(a), std::abs(b)));
+namespace {
+
+bool approxEq(double a, double b, double tol = TOLERANCE) {
+  if (safeIsnan(a) && safeIsnan(b)) {
+    return true;
+  }
+  if (safeIsinf(a) && safeIsinf(b) && std::signbit(a) == std::signbit(b)) {
+    return true;
+  }
+  double const scale = std::max({1.0, std::abs(a), std::abs(b)});
   return std::abs(a - b) <= tol * scale;
 }
 
-static bool approx_eq_relative(double a, double b, double rel_tol) {
-  if (safe_isnan(a) && safe_isnan(b)) return true;
-  if (safe_isinf(a) && safe_isinf(b) && std::signbit(a) == std::signbit(b)) return true;
-  double scale = std::max(1.0, std::max(std::abs(a), std::abs(b)));
-  return std::abs(a - b) <= rel_tol * scale;
+bool approxEqRelative(double a, double b, double relTol) {
+  if (safeIsnan(a) && safeIsnan(b)) {
+    return true;
+  }
+  if (safeIsinf(a) && safeIsinf(b) && std::signbit(a) == std::signbit(b)) {
+    return true;
+  }
+  double const scale = std::max({1.0, std::abs(a), std::abs(b)});
+  return std::abs(a - b) <= relTol * scale;
 }
 
 // ============================================================================
@@ -69,13 +79,17 @@ static bool approx_eq_relative(double a, double b, double rel_tol) {
  *
  * Units: [1/time]
  */
-static double surface_gravity(double M, double a, double r_plus) {
-  if (r_plus <= 0.0 || std::abs(a) > M) return std::numeric_limits<double>::quiet_NaN();
-  double r_s = 2.0 * M;  // Schwarzschild radius (geometric units, c=G=1)
-  double delta_prime = 2.0 * r_plus - r_s;
-  double denominator = 2.0 * r_plus * (r_plus * r_plus + a * a);
-  if (denominator < 1e-30) return 0.0;
-  return delta_prime / denominator;
+double surfaceGravity(double m, double a, double rPlus) {
+  if (rPlus <= 0.0 || std::abs(a) > m) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  double const rS = 2.0 * m; // Schwarzschild radius (geometric units, c=G=1)
+  double const deltaPrime = (2.0 * rPlus) - rS;
+  double const denominator = 2.0 * rPlus * ((rPlus * rPlus) + (a * a));
+  if (denominator < 1e-30) {
+    return 0.0;
+  }
+  return deltaPrime / denominator;
 }
 
 /**
@@ -87,10 +101,12 @@ static double surface_gravity(double M, double a, double r_plus) {
  *
  * Returns normalized temperature (multiply by HAWKING_TEMP_CONST / (8π²M) for SI units)
  */
-static double hawking_temperature(double M, double kappa) {
-  if (M <= 0.0 || kappa < 0.0) return std::numeric_limits<double>::quiet_NaN();
+double hawkingTemperature(double m, double kappa) {
+  if (m <= 0.0 || kappa < 0.0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
   // T_H = κ / (8π²M) in geometric units
-  return kappa / (8.0 * M_PI * M_PI * M);
+  return kappa / (8.0 * std::numbers::pi * std::numbers::pi * m);
 }
 
 /**
@@ -99,43 +115,45 @@ static double hawking_temperature(double M, double kappa) {
  * A = 4π(r₊² + a²)  [horizon area]
  * S = A / 4 = π(r₊² + a²)  [entropy in units of k_B * c³/(G*ℏ)]
  */
-static double schwarzschild_entropy_param([[maybe_unused]] double M, double a, double r_plus) {
-  if (r_plus <= 0.0) return std::numeric_limits<double>::quiet_NaN();
+double schwarzschildEntropyParam([[maybe_unused]] double m, double a, double rPlus) {
+  if (rPlus <= 0.0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
   // Entropy parameter: proportional to (r₊² + a²)
-  return M_PI * (r_plus * r_plus + a * a);
+  return std::numbers::pi * ((rPlus * rPlus) + (a * a));
 }
 
 // ============================================================================
 // Test 1: Horizon Ordering (r₊ > r₋ > 0)
 // ============================================================================
 
-static int test_horizon_ordering() {
+int testHorizonOrdering() {
   std::cout << "Testing horizon ordering (r₊ > r₋)...\n";
 
-  std::mt19937 rng(42);
-  std::uniform_real_distribution<double> dist_a(0.0, 0.999);
-  double M = 1.0;
+  std::mt19937 rng(42); // NOLINT(cert-msc32-c,cert-msc51-cpp,bugprone-random-generator-seed) -- deterministic seed for reproducible test
+  std::uniform_real_distribution<double> distA(0.0, 0.999);
+  double const m = 1.0;
 
   for (size_t i = 0; i < 50; ++i) {
-    double a = dist_a(rng);
+    double const a = distA(rng);
 
-    double r_plus = verified::outer_horizon(M, a);
-    double r_minus = verified::inner_horizon(M, a);
+    double const rPlus = verified::outer_horizon(m, a);
+    double const rMinus = verified::inner_horizon(m, a);
 
     // Check ordering: r₊ > r₋ > 0
-    if (!(r_plus > r_minus && r_minus >= 0.0)) {
-      std::cerr << "  FAIL: Horizon ordering violated at a=" << a
-                << " (r₊=" << r_plus << ", r₋=" << r_minus << ")\n";
+    if (rPlus <= rMinus || rMinus < 0.0) {
+      std::cerr << "  FAIL: Horizon ordering violated at a=" << a << " (r₊=" << rPlus
+                << ", r₋=" << rMinus << ")\n";
       return 1;
     }
   }
 
   // Test extremal case: a → M → r₊ → r₋
-  double a_extremal = 0.999;
-  double r_plus_ext = verified::outer_horizon(M, a_extremal);
-  double r_minus_ext = verified::inner_horizon(M, a_extremal);
+  double const aExtremal = 0.999;
+  double const rPlusExt = verified::outer_horizon(m, aExtremal);
+  double const rMinusExt = verified::inner_horizon(m, aExtremal);
 
-  if (!approx_eq_relative(r_plus_ext, r_minus_ext, 0.01)) {
+  if (!approxEqRelative(rPlusExt, rMinusExt, 0.01)) {
     std::cerr << "  WARN: Near-extremal horizons not converging\n";
   }
 
@@ -147,48 +165,49 @@ static int test_horizon_ordering() {
 // Test 2: ISCO Monotonicity with Spin
 // ============================================================================
 
-static int test_isco_monotonicity() {
+int testIscoMonotonicity() {
   std::cout << "Testing ISCO monotonicity with spin...\n";
 
-  double M = 1.0;
+  double const m = 1.0;
 
   // Prograde ISCO should decrease with spin (move closer to horizon)
-  double r_isco_0_pro = verified::kerr_isco_prograde(M, 0.0);
-  double r_isco_5_pro = verified::kerr_isco_prograde(M, 0.5);
-  double r_isco_9_pro = verified::kerr_isco_prograde(M, 0.9);
+  double const rIsco0Pro = verified::kerr_isco_prograde(m, 0.0);
+  double const rIsco5Pro = verified::kerr_isco_prograde(m, 0.5);
+  double const rIsco9Pro = verified::kerr_isco_prograde(m, 0.9);
 
-  if (!(r_isco_0_pro > r_isco_5_pro && r_isco_5_pro > r_isco_9_pro)) {
+  if (rIsco0Pro <= rIsco5Pro || rIsco5Pro <= rIsco9Pro) {
     std::cerr << "  FAIL: Prograde ISCO not monotonic decreasing with spin\n";
-    std::cerr << "    a=0.0: r=" << r_isco_0_pro << "M\n";
-    std::cerr << "    a=0.5: r=" << r_isco_5_pro << "M\n";
-    std::cerr << "    a=0.9: r=" << r_isco_9_pro << "M\n";
+    std::cerr << "    a=0.0: r=" << rIsco0Pro << "M\n";
+    std::cerr << "    a=0.5: r=" << rIsco5Pro << "M\n";
+    std::cerr << "    a=0.9: r=" << rIsco9Pro << "M\n";
     return 1;
   }
 
   // Retrograde ISCO should increase with spin (move farther from horizon)
-  double r_isco_0_ret = verified::kerr_isco_retrograde(M, 0.0);
-  double r_isco_5_ret = verified::kerr_isco_retrograde(M, 0.5);
-  double r_isco_9_ret = verified::kerr_isco_retrograde(M, 0.9);
+  double const rIsco0Ret = verified::kerr_isco_retrograde(m, 0.0);
+  double const rIsco5Ret = verified::kerr_isco_retrograde(m, 0.5);
+  double const rIsco9Ret = verified::kerr_isco_retrograde(m, 0.9);
 
-  if (!(r_isco_0_ret <= r_isco_5_ret && r_isco_5_ret < r_isco_9_ret)) {
+  if (rIsco0Ret > rIsco5Ret || rIsco5Ret >= rIsco9Ret) {
     std::cerr << "  FAIL: Retrograde ISCO not monotonic increasing with spin\n";
-    std::cerr << "    a=0.0: r=" << r_isco_0_ret << "M\n";
-    std::cerr << "    a=0.5: r=" << r_isco_5_ret << "M\n";
-    std::cerr << "    a=0.9: r=" << r_isco_9_ret << "M\n";
+    std::cerr << "    a=0.0: r=" << rIsco0Ret << "M\n";
+    std::cerr << "    a=0.5: r=" << rIsco5Ret << "M\n";
+    std::cerr << "    a=0.9: r=" << rIsco9Ret << "M\n";
     return 1;
   }
 
   // At a=0 (Schwarzschild), prograde and retrograde ISCO should be equal
-  if (!approx_eq(r_isco_0_pro, r_isco_0_ret, 1e-10)) {
+  if (!approxEq(rIsco0Pro, rIsco0Ret, 1e-10)) {
     std::cerr << "  FAIL: Schwarzschild limit violated (pro != ret at a=0)\n";
     return 1;
   }
 
   // For non-zero spin, retrograde >= prograde (equality only at a=0)
-  for (double a = 0.1; a <= 0.9; a += 0.1) {
-    double r_pro = verified::kerr_isco_prograde(M, a);
-    double r_ret = verified::kerr_isco_retrograde(M, a);
-    if (r_ret < r_pro) {
+  for (int ia = 1; ia <= 9; ++ia) {
+    double const a = 0.1 * static_cast<double>(ia);
+    double const rPro = verified::kerr_isco_prograde(m, a);
+    double const rRet = verified::kerr_isco_retrograde(m, a);
+    if (rRet < rPro) {
       std::cerr << "  FAIL: Retrograde ISCO < prograde at a=" << a << "\n";
       return 1;
     }
@@ -202,20 +221,20 @@ static int test_isco_monotonicity() {
 // Test 3: ISCO Outside Horizon Constraint
 // ============================================================================
 
-static int test_isco_outside_horizon() {
+int testIscoOutsideHorizon() {
   std::cout << "Testing ISCO > outer horizon constraint...\n";
 
-  double M = 1.0;
+  double const m = 1.0;
 
-  for (double a = 0.0; a <= 0.99; a += 0.1) {
-    double r_plus = verified::outer_horizon(M, a);
-    double r_isco_pro = verified::kerr_isco_prograde(M, a);
-    double r_isco_ret = verified::kerr_isco_retrograde(M, a);
+  for (int ia = 0; ia <= 9; ++ia) {
+      double const a = 0.1 * static_cast<double>(ia);
+    double const rPlus = verified::outer_horizon(m, a);
+    double const rIscoPro = verified::kerr_isco_prograde(m, a);
+    double const rIscoRet = verified::kerr_isco_retrograde(m, a);
 
-    if (r_isco_pro <= r_plus || r_isco_ret <= r_plus) {
-      std::cerr << "  FAIL: ISCO <= horizon at a=" << a
-                << " (r₊=" << r_plus << ", r_isco_pro=" << r_isco_pro
-                << ", r_isco_ret=" << r_isco_ret << ")\n";
+    if (rIscoPro <= rPlus || rIscoRet <= rPlus) {
+      std::cerr << "  FAIL: ISCO <= horizon at a=" << a << " (r₊=" << rPlus
+                << ", r_isco_pro=" << rIscoPro << ", r_isco_ret=" << rIscoRet << ")\n";
       return 1;
     }
   }
@@ -228,21 +247,21 @@ static int test_isco_outside_horizon() {
 // Test 4: Ergosphere Structure
 // ============================================================================
 
-static int test_ergosphere_extent() {
+int testErgosphereExtent() {
   std::cout << "Testing ergosphere bounds...\n";
 
-  double M = 1.0;
-  double a = 0.7;
+  double const m = 1.0;
+  double const a = 0.7;
 
   // Ergosphere radius: r_ergo(θ) = M + √(M² - a² cos²θ)
   // Maximum at poles (θ=0): r_ergo(0) = r₊
   // Minimum at equator (θ=π/2): r_ergo(π/2) = M
 
-  double r_ergo_pole = M + std::sqrt(M * M - a * a);
-  double r_plus = verified::outer_horizon(M, a);
+  double const rErgoPole = m + std::sqrt((m * m) - (a * a));
+  double const rPlus = verified::outer_horizon(m, a);
 
   // Ergosphere at poles should equal outer horizon
-  if (!approx_eq(r_ergo_pole, r_plus, TOLERANCE)) {
+  if (!approxEq(rErgoPole, rPlus, TOLERANCE)) {
     std::cerr << "  FAIL: Ergosphere at pole != outer horizon\n";
     return 1;
   }
@@ -255,35 +274,35 @@ static int test_ergosphere_extent() {
 // Test 5: Schwarzschild Limit (a=0)
 // ============================================================================
 
-static int test_schwarzschild_limit() {
+int testSchwarzschildLimit() {
   std::cout << "Testing Schwarzschild limit (a=0)...\n";
 
-  double M = 1.0;
-  double a = 0.0;
+  double const m = 1.0;
+  double const a = 0.0;
 
   // Schwarzschild: single horizon at r_s = 2M
   // Note: In Schwarzschild limit (a=0), inner horizon degenerates to r=0 (singularity)
-  double r_plus = verified::outer_horizon(M, a);
-  double r_minus = verified::inner_horizon(M, a);
+  double const rPlus = verified::outer_horizon(m, a);
+  double const rMinus = verified::inner_horizon(m, a);
 
   // Outer horizon should equal Schwarzschild radius
-  double r_s = 2.0 * M;
+  double const rS = 2.0 * m;
 
-  if (!approx_eq(r_plus, r_s, TOLERANCE)) {
+  if (!approxEq(rPlus, rS, TOLERANCE)) {
     std::cerr << "  FAIL: Outer horizon != 2M in Schwarzschild limit\n";
     return 1;
   }
 
   // Inner horizon degenerates to singularity at r=0 in Schwarzschild
-  if (!approx_eq(r_minus, 0.0, TOLERANCE)) {
+  if (!approxEq(rMinus, 0.0, TOLERANCE)) {
     std::cerr << "  FAIL: Inner horizon != 0 (singularity) in Schwarzschild limit\n";
     return 1;
   }
 
   // ISCO in Schwarzschild should be exactly 6M
-  double r_isco = verified::kerr_isco_prograde(M, a);
-  if (!approx_eq(r_isco, 6.0 * M, TOLERANCE)) {
-    std::cerr << "  FAIL: ISCO != 6M in Schwarzschild limit (got " << r_isco << ")\n";
+  double const rIsco = verified::kerr_isco_prograde(m, a);
+  if (!approxEq(rIsco, 6.0 * m, TOLERANCE)) {
+    std::cerr << "  FAIL: ISCO != 6M in Schwarzschild limit (got " << rIsco << ")\n";
     return 1;
   }
 
@@ -295,24 +314,25 @@ static int test_schwarzschild_limit() {
 // Test 6: Photon Orbit Existence (Defining Property)
 // ============================================================================
 
-static int test_photon_orbits_exist() {
+int testPhotonOrbitsExist() {
   std::cout << "Testing Kerr photon orbit existence...\n";
 
-  double M = 1.0;
+  double const m = 1.0;
 
   // Photon orbits should exist for all sub-extremal spins
-  for (double a = 0.0; a <= 0.99; a += 0.1) {
-    double r_ph_pro = verified::photon_orbit_prograde(M, a);
-    double r_ph_ret = verified::photon_orbit_retrograde(M, a);
-    [[maybe_unused]] double r_isco_pro = verified::kerr_isco_prograde(M, a);
+  for (int ia = 0; ia <= 9; ++ia) {
+      double const a = 0.1 * static_cast<double>(ia);
+    double const rPhPro = verified::photon_orbit_prograde(m, a);
+    double const rPhRet = verified::photon_orbit_retrograde(m, a);
+    [[maybe_unused]] double const rIscoPro = verified::kerr_isco_prograde(m, a);
 
     // Basic sanity: photon orbits should be finite and positive
-    if (safe_isnan(r_ph_pro) || safe_isinf(r_ph_pro) || r_ph_pro <= 0.0) {
+    if (safeIsnan(rPhPro) || safeIsinf(rPhPro) || rPhPro <= 0.0) {
       std::cerr << "  FAIL: Prograde photon orbit invalid at a=" << a << "\n";
       return 1;
     }
 
-    if (safe_isnan(r_ph_ret) || safe_isinf(r_ph_ret) || r_ph_ret <= 0.0) {
+    if (safeIsnan(rPhRet) || safeIsinf(rPhRet) || rPhRet <= 0.0) {
       std::cerr << "  FAIL: Retrograde photon orbit invalid at a=" << a << "\n";
       return 1;
     }
@@ -322,9 +342,9 @@ static int test_photon_orbits_exist() {
   }
 
   // Schwarzschild limit: photon sphere = 3M
-  double r_ph_schw = physics::kerr_photon_orbit_prograde(M, 0.0);
-  if (!approx_eq(r_ph_schw, 3.0 * M, 0.01)) {
-    std::cerr << "  WARN: Schwarzschild photon sphere not 3M (got " << r_ph_schw << ")\n";
+  double const rPhSchw = physics::kerrPhotonOrbitPrograde(m, 0.0);
+  if (!approxEq(rPhSchw, 3.0 * m, 0.01)) {
+    std::cerr << "  WARN: Schwarzschild photon sphere not 3M (got " << rPhSchw << ")\n";
   }
 
   std::cout << "  PASS: Photon orbits exist\n";
@@ -335,29 +355,29 @@ static int test_photon_orbits_exist() {
 // Test 7: Surface Gravity Monotonicity
 // ============================================================================
 
-static int test_surface_gravity_monotonicity() {
+int testSurfaceGravityMonotonicity() {
   std::cout << "Testing surface gravity with spin...\n";
 
-  double M = 1.0;
+  double const m = 1.0;
 
   // Surface gravity should decrease with increasing spin
-  double a_values[] = {0.0, 0.3, 0.6, 0.9};
-  double prev_kappa = -1.0;
+  double const aValues[] = {0.0, 0.3, 0.6, 0.9};
+  double prevKappa = -1.0;
 
-  for (double a : a_values) {
-    double r_plus = verified::outer_horizon(M, a);
+  for (double const a : aValues) {
+    double const rPlus = verified::outer_horizon(m, a);
 
     // κ = Δ'/(2(r₊² + a²)) where Δ' = 2(r-M)
-    double A_plus = (r_plus * r_plus + a * a);
-    double delta_prime = 2.0 * (r_plus - M);
-    double kappa = std::abs(delta_prime) / (2.0 * A_plus);
+    double const aPlus = ((rPlus * rPlus) + (a * a));
+    double const deltaPrime = 2.0 * (rPlus - m);
+    double const kappa = std::abs(deltaPrime) / (2.0 * aPlus);
 
-    if (prev_kappa >= 0.0 && kappa > prev_kappa * 1.02) {
+    if (prevKappa >= 0.0 && kappa > prevKappa * 1.02) {
       std::cerr << "  FAIL: Surface gravity increasing with spin\n";
       return 1;
     }
 
-    prev_kappa = kappa;
+    prevKappa = kappa;
   }
 
   std::cout << "  PASS: Surface gravity monotonicity\n";
@@ -368,21 +388,22 @@ static int test_surface_gravity_monotonicity() {
 // Test 8: Black Hole Thermodynamics (Hawking & Bekenstein)
 // ============================================================================
 
-static int test_thermodynamic_properties() {
+int testThermodynamicProperties() {
   std::cout << "Testing black hole thermodynamic properties...\n";
 
-  double M = 1.0;
+  double const m = 1.0;
 
-  for (double a = 0.0; a <= 0.99; a += 0.1) {
-    double r_plus = verified::outer_horizon(M, a);
-    if (r_plus <= 0.0 || safe_isnan(r_plus)) {
+  for (int ia = 0; ia <= 9; ++ia) {
+      double const a = 0.1 * static_cast<double>(ia);
+    double const rPlus = verified::outer_horizon(m, a);
+    if (rPlus <= 0.0 || safeIsnan(rPlus)) {
       std::cerr << "  FAIL: Invalid outer horizon at a=" << a << "\n";
       return 1;
     }
 
     // Compute surface gravity using our helper function
-    double kappa = surface_gravity(M, a, r_plus);
-    if (safe_isnan(kappa) || safe_isinf(kappa)) {
+    double const kappa = surfaceGravity(m, a, rPlus);
+    if (safeIsnan(kappa) || safeIsinf(kappa)) {
       std::cerr << "  FAIL: Invalid surface gravity at a=" << a << "\n";
       return 1;
     }
@@ -395,28 +416,28 @@ static int test_thermodynamic_properties() {
 
     // At Schwarzschild limit (a=0), κ = 1/(4M)
     if (a < 0.01) {
-      double expected_kappa = 1.0 / (4.0 * M);
-      if (!approx_eq_relative(kappa, expected_kappa, 0.02)) {
+      double const expectedKappa = 1.0 / (4.0 * m);
+      if (!approxEqRelative(kappa, expectedKappa, 0.02)) {
         std::cerr << "  WARN: Schwarzschild surface gravity mismatch at a=" << a << "\n";
       }
     }
 
     // Compute Hawking temperature
-    double T_H = hawking_temperature(M, kappa);
-    if (safe_isnan(T_H) || safe_isinf(T_H)) {
+    double const tH = hawkingTemperature(m, kappa);
+    if (safeIsnan(tH) || safeIsinf(tH)) {
       std::cerr << "  FAIL: Invalid Hawking temperature at a=" << a << "\n";
       return 1;
     }
 
     // Temperature should be non-negative
-    if (T_H < 0.0) {
+    if (tH < 0.0) {
       std::cerr << "  FAIL: Negative Hawking temperature at a=" << a << "\n";
       return 1;
     }
 
     // Compute entropy using Bekenstein-Hawking formula
-    double S = schwarzschild_entropy_param(M, a, r_plus);
-    if (safe_isnan(S) || S < 0.0) {
+    double const s = schwarzschildEntropyParam(m, a, rPlus);
+    if (safeIsnan(s) || s < 0.0) {
       std::cerr << "  FAIL: Invalid entropy at a=" << a << "\n";
       return 1;
     }
@@ -424,23 +445,23 @@ static int test_thermodynamic_properties() {
     // Entropy should increase with mass (area increases with r₊²)
     // For larger a, entropy might decrease due to frame-dragging effects,
     // but should always be positive
-    if (S < 0.0) {
+    if (s < 0.0) {
       std::cerr << "  FAIL: Negative entropy (impossible) at a=" << a << "\n";
       return 1;
     }
 
     // For Schwarzschild (a=0): S = π(2M)² = 4πM²
     if (a < 0.01) {
-      double expected_S = M_PI * 4.0 * M * M;
-      if (!approx_eq_relative(S, expected_S, 0.02)) {
+      double const expectedS = std::numbers::pi * 4.0 * m * m;
+      if (!approxEqRelative(s, expectedS, 0.02)) {
         std::cerr << "  WARN: Schwarzschild entropy mismatch at a=" << a << "\n";
       }
     }
 
     // Temperature times entropy should scale as mass
     // This is a thermodynamic consistency check
-    double T_times_S = T_H * S;
-    if (T_times_S <= 0.0) {
+    double const tTimesS = tH * s;
+    if (tTimesS <= 0.0) {
       std::cerr << "  FAIL: T*S <= 0 at a=" << a << "\n";
       return 1;
     }
@@ -454,25 +475,25 @@ static int test_thermodynamic_properties() {
 // Test 9: Extremal Black Hole Properties
 // ============================================================================
 
-static int test_extremal_limits() {
+int testExtremalLimits() {
   std::cout << "Testing extremal black hole limits...\n";
 
-  double M = 1.0;
-  double a_near_ext = 0.9999;
+  double const m = 1.0;
+  double const aNearExt = 0.9999;
 
   // Near extremal: horizons should converge
-  double r_plus = verified::outer_horizon(M, a_near_ext);
-  double r_minus = verified::inner_horizon(M, a_near_ext);
+  double const rPlus = verified::outer_horizon(m, aNearExt);
+  double const rMinus = verified::inner_horizon(m, aNearExt);
 
   // For near-extremal, r₊ - r₋ should be very small
-  if ((r_plus - r_minus) > 0.1) {
+  if ((rPlus - rMinus) > 0.1) {
     std::cerr << "  FAIL: Near-extremal horizons not converging\n";
     return 1;
   }
 
   // Surface gravity should be very small
-  double A = (r_plus * r_plus + a_near_ext * a_near_ext);
-  double kappa = 2.0 * (r_plus - M) / (2.0 * A);
+  double const a = ((rPlus * rPlus) + (aNearExt * aNearExt));
+  double const kappa = 2.0 * (rPlus - m) / (2.0 * a);
   if (kappa > 0.05) {
     std::cerr << "  WARN: Near-extremal surface gravity not small\n";
   }
@@ -485,23 +506,23 @@ static int test_extremal_limits() {
 // Test 9: ISCO Spin Dependence Limits
 // ============================================================================
 
-static int test_isco_spin_limits() {
+int testIscoSpinLimits() {
   std::cout << "Testing ISCO spin-dependence limits...\n";
 
-  double M = 1.0;
+  double const m = 1.0;
 
   // Prograde ISCO for near-extremal spin
-  double r_isco_ext = verified::kerr_isco_prograde(M, 0.9999);
+  double const rIscoExt = verified::kerr_isco_prograde(m, 0.9999);
 
   // Should be well-defined and reasonable
-  if (r_isco_ext <= 0.0 || safe_isnan(r_isco_ext) || safe_isinf(r_isco_ext)) {
+  if (rIscoExt <= 0.0 || safeIsnan(rIscoExt) || safeIsinf(rIscoExt)) {
     std::cerr << "  FAIL: ISCO undefined at near-extremal spin\n";
     return 1;
   }
 
   // Extremal limit constraint: prograde ISCO at a=M should approach M
   // (For a≈M, prograde ISCO → M as a → 1)
-  if (r_isco_ext < M || r_isco_ext > 10.0 * M) {
+  if (rIscoExt < m || rIscoExt > 10.0 * m) {
     std::cerr << "  FAIL: ISCO out of reasonable range at near-extremal\n";
     return 1;
   }
@@ -514,6 +535,8 @@ static int test_isco_spin_limits() {
 // Main Test Runner
 // ============================================================================
 
+} // namespace
+
 int main() {
   std::cout << "=== Horizon Dynamics Verification Tests (Phase 8.3 - Refactored) ===\n";
   std::cout << "Based on peer-reviewed research:\n";
@@ -524,16 +547,16 @@ int main() {
 
   int result = 0;
 
-  result |= test_horizon_ordering();
-  result |= test_isco_monotonicity();
-  result |= test_isco_outside_horizon();
-  result |= test_ergosphere_extent();
-  result |= test_schwarzschild_limit();
-  result |= test_photon_orbits_exist();
-  result |= test_surface_gravity_monotonicity();
-  result |= test_thermodynamic_properties();  // NEW: Hawking-Bekenstein validation
-  result |= test_extremal_limits();
-  result |= test_isco_spin_limits();
+  result |= testHorizonOrdering();
+  result |= testIscoMonotonicity();
+  result |= testIscoOutsideHorizon();
+  result |= testErgosphereExtent();
+  result |= testSchwarzschildLimit();
+  result |= testPhotonOrbitsExist();
+  result |= testSurfaceGravityMonotonicity();
+  result |= testThermodynamicProperties(); // NEW: Hawking-Bekenstein validation
+  result |= testExtremalLimits();
+  result |= testIscoSpinLimits();
 
   std::cout << "\n";
   if (result == 0) {

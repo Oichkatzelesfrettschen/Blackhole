@@ -18,7 +18,7 @@
  */
 
 #include <gtest/gtest.h>
-#include <cuda_runtime.h>
+#include <cuda_runtime.h>   // NOLINT(misc-include-cleaner) -- umbrella header
 #include <cstddef>
 
 /* POD-only firewall header -- must not pull in any C++23 types */
@@ -39,7 +39,7 @@ TEST(CudaKernelLaunch, LaunchParamsSize) {
      * All fields 4-byte, naturally aligned => no padding expected.
      */
     EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(140))
-        << "BH_LaunchParams size changed -- verify device_physics.cuh offsets";
+        << "BH_LaunchParams size changed -- verify device_physics.cuh offsets"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
 }
 
 TEST(CudaKernelLaunch, LaunchParamsFieldOffsets) {
@@ -98,11 +98,11 @@ TEST(CudaKernelLaunch, KernelVariantEnumValues) {
 TEST(CudaKernelLaunch, RegistryAllVariantsHaveNames) {
     for (int v = 0; v < BH_KERNEL_COUNT; ++v) {
         const RtKernelInfo* info = registry_get_info(v);
-        ASSERT_NE(info, nullptr) << "registry_get_info(" << v << ") returned null";
-        EXPECT_NE(info->name, nullptr) << "variant " << v << " has null name";
-        EXPECT_GT(info->min_sm, 0) << "variant " << v << " min_sm <= 0";
-        EXPECT_GT(info->tpb, 0) << "variant " << v << " tpb <= 0";
-        EXPECT_GT(info->estimated_registers, 0) << "variant " << v << " regs <= 0";
+        ASSERT_NE(info, nullptr) << "registry_get_info(" << v << ") returned null"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
+        EXPECT_NE(info->name, nullptr) << "variant " << v << " has null name"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
+        EXPECT_GT(info->min_sm, 0) << "variant " << v << " min_sm <= 0"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
+        EXPECT_GT(info->tpb, 0) << "variant " << v << " tpb <= 0"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
+        EXPECT_GT(info->estimated_registers, 0) << "variant " << v << " regs <= 0"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
     }
 }
 
@@ -142,31 +142,31 @@ TEST(CudaKernelLaunch, RegistryVariantOrdering) {
  * ======================================================================== */
 
 TEST(CudaKernelLaunch, SelectVariantReturnsValidIndex) {
-    int dev_count = 0;
-    cudaGetDeviceCount(&dev_count);
-    if (dev_count == 0) {
-        GTEST_SKIP() << "No CUDA device available -- skipping runtime selection test";
+    int devCount = 0;
+    cudaGetDeviceCount(&devCount); // NOLINT(misc-include-cleaner)
+    if (devCount == 0) {
+        GTEST_SKIP() << "No CUDA device available -- skipping runtime selection test"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
     }
 
-    int v = bh_select_kernel_variant();
-    EXPECT_GE(v, 0)             << "bh_select_kernel_variant() returned < 0";
-    EXPECT_LT(v, BH_KERNEL_COUNT) << "bh_select_kernel_variant() returned >= BH_KERNEL_COUNT";
+    const int variant = bh_select_kernel_variant();
+    EXPECT_GE(variant, 0)               << "bh_select_kernel_variant() returned < 0"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
+    EXPECT_LT(variant, BH_KERNEL_COUNT) << "bh_select_kernel_variant() returned >= BH_KERNEL_COUNT"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
 }
 
 TEST(CudaKernelLaunch, SelectVariantCallableWithoutDevice) {
     /* bh_select_kernel_variant() must not crash or abort even when there is
      * no CUDA device -- it should degrade gracefully to FP32_BASELINE. */
-    int dev_count = 0;
-    cudaGetDeviceCount(&dev_count);
+    int devCount = 0;
+    cudaGetDeviceCount(&devCount); // NOLINT(misc-include-cleaner)
 
-    int v = bh_select_kernel_variant();
+    const int variant = bh_select_kernel_variant();
 
     /* Whether or not a device exists, the result must be a valid variant. */
-    EXPECT_GE(v, 0);
-    EXPECT_LT(v, BH_KERNEL_COUNT);
+    EXPECT_GE(variant, 0);
+    EXPECT_LT(variant, BH_KERNEL_COUNT);
 
-    if (dev_count == 0) {
+    if (devCount == 0) {
         /* Without a device, baseline is the only safe choice */
-        EXPECT_EQ(v, BH_KERNEL_FP32_BASELINE);
+        EXPECT_EQ(variant, BH_KERNEL_FP32_BASELINE);
     }
 }

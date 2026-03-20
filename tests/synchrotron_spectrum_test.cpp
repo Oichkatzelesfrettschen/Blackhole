@@ -11,13 +11,14 @@
  * - Longair (2011) "High Energy Astrophysics" Ch. 8
  */
 
-#include "../src/physics/synchrotron.h"
-#include "../src/physics/constants.h"
-#include <iostream>
+#include <numbers>
+#include <cassert>
 #include <cmath>
 #include <iomanip>
-#include <cassert>
+#include <iostream>
 #include <vector>
+
+#include "../src/physics/synchrotron.h"
 
 using namespace physics;
 
@@ -36,30 +37,32 @@ constexpr double RELAXED_TOLERANCE = 0.15;  // 15% tolerance for approx boundari
  * Note: Test only values well within low-freq regime (x << 0.01)
  * Boundary at x=0.01 has regime transition errors
  */
-bool test_synchrotron_f_low_freq() {
-    std::cout << "\n[TEST 1] Synchrotron F(x) - Low Frequency Regime\n";
-    std::cout << "=================================================\n";
+namespace {
 
-    std::vector<double> test_vals = {1e-4, 1e-3, 5e-3};
-    bool all_passed = true;
+bool testSynchrotronFLowFreq() {
+  std::cout << "\n[TEST 1] Synchrotron F(x) - Low Frequency Regime\n";
+  std::cout << "=================================================\n";
 
-    for (double x : test_vals) {
-        double F_x = synchrotron_F(x);
-        double expected = 1.8084 * std::pow(x, 1.0/3.0);
-        double error = std::abs(F_x - expected) / expected;
+  std::vector<double> const testVals = {1e-4, 1e-3, 5e-3};
+  bool allPassed = true;
 
-        std::cout << std::fixed << std::setprecision(8);
-        std::cout << "  x = " << x << "\n";
-        std::cout << "    F(x) computed: " << F_x << "\n";
-        std::cout << "    F(x) expected: " << expected << "\n";
-        std::cout << "    Relative err:  " << error << "\n";
+  for (double const x : testVals) {
+    double const fX = synchrotronF(x);
+    double const expected = 1.8084 * std::pow(x, 1.0 / 3.0);
+    double const error = std::abs(fX - expected) / expected;
 
-        bool passed = error < TOLERANCE;  // Strict tolerance in pure low-freq regime
-        std::cout << "    Status:        " << (passed ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && passed;
-    }
+    std::cout << std::fixed << std::setprecision(8);
+    std::cout << "  x = " << x << "\n";
+    std::cout << "    F(x) computed: " << fX << "\n";
+    std::cout << "    F(x) expected: " << expected << "\n";
+    std::cout << "    Relative err:  " << error << "\n";
 
-    return all_passed;
+    bool const passed = error < TOLERANCE; // Strict tolerance in pure low-freq regime
+    std::cout << "    Status:        " << (passed ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && passed;
+  }
+
+  return allPassed;
 }
 
 /**
@@ -68,30 +71,30 @@ bool test_synchrotron_f_low_freq() {
  * For x >> 1, F(x) ~= sqrt(pi/2) * sqrt(x) * exp(-x)
  * Note: Only test x >> 10 to avoid transition boundary
  */
-bool test_synchrotron_f_high_freq() {
-    std::cout << "\n[TEST 2] Synchrotron F(x) - High Frequency Regime\n";
-    std::cout << "==================================================\n";
+bool testSynchrotronFHighFreq() {
+  std::cout << "\n[TEST 2] Synchrotron F(x) - High Frequency Regime\n";
+  std::cout << "==================================================\n";
 
-    std::vector<double> test_vals = {20.0, 50.0, 100.0};
-    bool all_passed = true;
+  std::vector<double> const testVals = {20.0, 50.0, 100.0};
+  bool allPassed = true;
 
-    for (double x : test_vals) {
-        double F_x = synchrotron_F(x);
-        double expected = std::sqrt(M_PI / 2.0) * std::sqrt(x) * std::exp(-x);
-        double error = std::abs(F_x - expected) / expected;
+  for (double const x : testVals) {
+    double const fX = synchrotronF(x);
+    double const expected = std::sqrt(std::numbers::pi / 2.0) * std::sqrt(x) * std::exp(-x);
+    double const error = std::abs(fX - expected) / expected;
 
-        std::cout << std::fixed << std::setprecision(8);
-        std::cout << "  x = " << x << "\n";
-        std::cout << "    F(x) computed: " << F_x << "\n";
-        std::cout << "    F(x) expected: " << expected << "\n";
-        std::cout << "    Relative err:  " << error << "\n";
+    std::cout << std::fixed << std::setprecision(8);
+    std::cout << "  x = " << x << "\n";
+    std::cout << "    F(x) computed: " << fX << "\n";
+    std::cout << "    F(x) expected: " << expected << "\n";
+    std::cout << "    Relative err:  " << error << "\n";
 
-        bool passed = error < TOLERANCE;  // Strict tolerance in pure high-freq regime
-        std::cout << "    Status:        " << (passed ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && passed;
-    }
+    bool const passed = error < TOLERANCE; // Strict tolerance in pure high-freq regime
+    std::cout << "    Status:        " << (passed ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && passed;
+  }
 
-    return all_passed;
+  return allPassed;
 }
 
 /**
@@ -100,31 +103,31 @@ bool test_synchrotron_f_high_freq() {
  * G(x) represents circular polarization: Pol = G(x) / F(x)
  * Expected: G(x) < F(x) for all x (linear polarization always < 1)
  */
-bool test_synchrotron_g_polarization() {
-    std::cout << "\n[TEST 3] Synchrotron G(x) - Polarization Degree\n";
-    std::cout << "================================================\n";
+bool testSynchrotronGPolarization() {
+  std::cout << "\n[TEST 3] Synchrotron G(x) - Polarization Degree\n";
+  std::cout << "================================================\n";
 
-    std::vector<double> test_vals = {1e-3, 0.1, 1.0, 10.0, 100.0};
-    bool all_passed = true;
+  std::vector<double> const testVals = {1e-3, 0.1, 1.0, 10.0, 100.0};
+  bool allPassed = true;
 
-    for (double x : test_vals) {
-        double F_x = synchrotron_F(x);
-        double G_x = synchrotron_G(x);
-        double pol = G_x / F_x;
+  for (double const x : testVals) {
+    double const fX = synchrotronF(x);
+    double const gX = synchrotronG(x);
+    double const pol = gX / fX;
 
-        std::cout << std::fixed << std::setprecision(8);
-        std::cout << "  x = " << x << "\n";
-        std::cout << "    F(x) = " << F_x << "\n";
-        std::cout << "    G(x) = " << G_x << "\n";
-        std::cout << "    Pol  = " << pol << "\n";
+    std::cout << std::fixed << std::setprecision(8);
+    std::cout << "  x = " << x << "\n";
+    std::cout << "    F(x) = " << fX << "\n";
+    std::cout << "    G(x) = " << gX << "\n";
+    std::cout << "    Pol  = " << pol << "\n";
 
-        // Polarization degree must be between 0 and 1
-        bool passed = (pol >= 0.0 && pol <= 1.0);
-        std::cout << "    Status: " << (passed ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && passed;
-    }
+    // Polarization degree must be between 0 and 1
+    bool const passed = (pol >= 0.0 && pol <= 1.0);
+    std::cout << "    Status: " << (passed ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && passed;
+  }
 
-    return all_passed;
+  return allPassed;
 }
 
 /**
@@ -134,41 +137,41 @@ bool test_synchrotron_g_polarization() {
  * F_nu ~ nu^(-(p-1)/2) in optically thin regime
  * Expected: spectral index alpha = -(p-1)/2
  */
-bool test_power_law_spectrum() {
-    std::cout << "\n[TEST 4] Power-Law Spectrum Shape\n";
-    std::cout << "==================================\n";
+bool testPowerLawSpectrum() {
+  std::cout << "\n[TEST 4] Power-Law Spectrum Shape\n";
+  std::cout << "==================================\n";
 
-    double B = 100.0;  // Gauss (typical AGN jet)
-    double gamma_min = 1.0;
-    double gamma_max = 1e6;
-    double p = 2.5;    // Typical jet power-law index
+  double const b = 100.0; // Gauss (typical AGN jet)
+  double const gammaMin = 1.0;
+  double const gammaMax = 1e6;
+  double const p = 2.5; // Typical jet power-law index
 
-    // Compute spectrum at three frequencies
-    double nu1 = synchrotron_frequency_critical(gamma_min, B) * 10.0;
-    double nu2 = nu1 * 100.0;
-    double nu3 = nu2 * 100.0;
+  // Compute spectrum at three frequencies
+  double const nu1 = synchrotronFrequencyCritical(gammaMin, b) * 10.0;
+  double const nu2 = nu1 * 100.0;
+  double const nu3 = nu2 * 100.0;
 
-    double F1 = synchrotron_spectrum_power_law(nu1, B, gamma_min, gamma_max, p);
-    double F2 = synchrotron_spectrum_power_law(nu2, B, gamma_min, gamma_max, p);
-    double F3 = synchrotron_spectrum_power_law(nu3, B, gamma_min, gamma_max, p);
+  double const f1 = synchrotronSpectrumPowerLaw(nu1, b, gammaMin, gammaMax, p);
+  double const f2 = synchrotronSpectrumPowerLaw(nu2, b, gammaMin, gammaMax, p);
+  double const f3 = synchrotronSpectrumPowerLaw(nu3, b, gammaMin, gammaMax, p);
 
-    // Compute spectral indices from ratios
-    double alpha_12 = std::log(F1 / F2) / std::log(nu1 / nu2);
-    double alpha_23 = std::log(F2 / F3) / std::log(nu2 / nu3);
-    double expected_alpha = -(p - 1.0) / 2.0;
+  // Compute spectral indices from ratios
+  double const alpha12 = std::log(f1 / f2) / std::log(nu1 / nu2);
+  double const alpha23 = std::log(f2 / f3) / std::log(nu2 / nu3);
+  double const expectedAlpha = -(p - 1.0) / 2.0;
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "  Power-law index: p = " << p << "\n";
-    std::cout << "  Expected spectral index: alpha = " << expected_alpha << "\n";
-    std::cout << "  Computed alpha (nu1-nu2): " << alpha_12 << "\n";
-    std::cout << "  Computed alpha (nu2-nu3): " << alpha_23 << "\n";
-    std::cout << "  Error: " << std::abs(alpha_12 - expected_alpha) << "\n";
+  std::cout << std::fixed << std::setprecision(6);
+  std::cout << "  Power-law index: p = " << p << "\n";
+  std::cout << "  Expected spectral index: alpha = " << expectedAlpha << "\n";
+  std::cout << "  Computed alpha (nu1-nu2): " << alpha12 << "\n";
+  std::cout << "  Computed alpha (nu2-nu3): " << alpha23 << "\n";
+  std::cout << "  Error: " << std::abs(alpha12 - expectedAlpha) << "\n";
 
-    bool passed = (std::abs(alpha_12 - expected_alpha) < RELAXED_TOLERANCE &&
-                   std::abs(alpha_23 - expected_alpha) < RELAXED_TOLERANCE);
-    std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
+  bool const passed = (std::abs(alpha12 - expectedAlpha) < RELAXED_TOLERANCE &&
+                       std::abs(alpha23 - expectedAlpha) < RELAXED_TOLERANCE);
+  std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
 
-    return passed;
+  return passed;
 }
 
 /**
@@ -178,29 +181,29 @@ bool test_power_law_spectrum() {
  * Below nu_a: F_nu ~ nu^2.5 (Rayleigh-Jeans regime)
  * Above nu_a: F_nu ~ nu^(-(p-1)/2) (power-law)
  */
-bool test_self_absorption_transition() {
-    std::cout << "\n[TEST 5] Self-Absorption Transition\n";
-    std::cout << "====================================\n";
+bool testSelfAbsorptionTransition() {
+  std::cout << "\n[TEST 5] Self-Absorption Transition\n";
+  std::cout << "====================================\n";
 
-    double B = 100.0;
-    double gamma_min = 10.0;
-    double p = 2.5;
-    double n_e = 1e3;   // Electron density [cm^-3]
-    double R = 1e16;    // Source size [cm]
+  double const b = 100.0;
+  double const gammaMin = 10.0;
+  double const p = 2.5;
+  double const nE = 1e3; // Electron density [cm^-3]
+  double const r = 1e16; // Source size [cm]
 
-    double nu_a = synchrotron_self_absorption_frequency(B, n_e, R, p);
-    double nu_min = synchrotron_frequency_critical(gamma_min, B);
+  double const nuA = synchrotronSelfAbsorptionFrequency(b, nE, r, p);
+  double const nuMin = synchrotronFrequencyCritical(gammaMin, b);
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "  nu_min (critical freq): " << nu_min << " Hz\n";
-    std::cout << "  nu_a (absorption freq): " << nu_a << " Hz\n";
-    std::cout << "  Ratio nu_a / nu_min: " << (nu_a / nu_min) << "\n";
+  std::cout << std::fixed << std::setprecision(6);
+  std::cout << "  nu_min (critical freq): " << nuMin << " Hz\n";
+  std::cout << "  nu_a (absorption freq): " << nuA << " Hz\n";
+  std::cout << "  Ratio nu_a / nu_min: " << (nuA / nuMin) << "\n";
 
-    // Self-absorption frequency should be < critical frequency
-    bool passed = (nu_a > 0.0 && nu_a < nu_min);
-    std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
+  // Self-absorption frequency should be < critical frequency
+  bool const passed = (nuA > 0.0 && nuA < nuMin);
+  std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
 
-    return passed;
+  return passed;
 }
 
 /**
@@ -209,38 +212,38 @@ bool test_self_absorption_transition() {
  * For power-law electrons: alpha_nu ~ nu^(-(p+4)/2)
  * Expected: steep frequency dependence, strong suppression at high freq
  */
-bool test_absorption_coefficient() {
-    std::cout << "\n[TEST 6] Absorption Coefficient Frequency Dependence\n";
-    std::cout << "======================================================\n";
+bool testAbsorptionCoefficient() {
+  std::cout << "\n[TEST 6] Absorption Coefficient Frequency Dependence\n";
+  std::cout << "======================================================\n";
 
-    double B = 100.0;
-    double n_e = 1e3;  // cm^-3 (typical AGN)
-    double p = 2.5;
+  double const b = 100.0;
+  double const nE = 1e3; // cm^-3 (typical AGN)
+  double const p = 2.5;
 
-    double nu1 = 1e9;   // 1 GHz
-    double nu2 = 1e10;  // 10 GHz (10x higher)
-    double nu3 = 1e11;  // 100 GHz (100x higher)
+  double const nu1 = 1e9;  // 1 GHz
+  double const nu2 = 1e10; // 10 GHz (10x higher)
+  double const nu3 = 1e11; // 100 GHz (100x higher)
 
-    double alpha1 = synchrotron_absorption_coefficient(nu1, B, n_e, p);
-    double alpha2 = synchrotron_absorption_coefficient(nu2, B, n_e, p);
-    double alpha3 = synchrotron_absorption_coefficient(nu3, B, n_e, p);
+  double const alpha1 = synchrotronAbsorptionCoefficient(nu1, b, nE, p);
+  double const alpha2 = synchrotronAbsorptionCoefficient(nu2, b, nE, p);
+  double const alpha3 = synchrotronAbsorptionCoefficient(nu3, b, nE, p);
 
-    // Compute frequency dependence exponent
-    double exp_12 = std::log(alpha1 / alpha2) / std::log(nu1 / nu2);
-    double exp_23 = std::log(alpha2 / alpha3) / std::log(nu2 / nu3);
-    double expected_exp = -(p + 4.0) / 2.0;
+  // Compute frequency dependence exponent
+  double const exp12 = std::log(alpha1 / alpha2) / std::log(nu1 / nu2);
+  double const exp23 = std::log(alpha2 / alpha3) / std::log(nu2 / nu3);
+  double const expectedExp = -(p + 4.0) / 2.0;
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "  Expected exponent: " << expected_exp << "\n";
-    std::cout << "  Computed exponent (nu1-nu2): " << exp_12 << "\n";
-    std::cout << "  Computed exponent (nu2-nu3): " << exp_23 << "\n";
-    std::cout << "  Error: " << std::abs(exp_12 - expected_exp) << "\n";
+  std::cout << std::fixed << std::setprecision(6);
+  std::cout << "  Expected exponent: " << expectedExp << "\n";
+  std::cout << "  Computed exponent (nu1-nu2): " << exp12 << "\n";
+  std::cout << "  Computed exponent (nu2-nu3): " << exp23 << "\n";
+  std::cout << "  Error: " << std::abs(exp12 - expectedExp) << "\n";
 
-    bool passed = (std::abs(exp_12 - expected_exp) < RELAXED_TOLERANCE &&
-                   std::abs(exp_23 - expected_exp) < RELAXED_TOLERANCE);
-    std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
+  bool const passed = (std::abs(exp12 - expectedExp) < RELAXED_TOLERANCE &&
+                       std::abs(exp23 - expectedExp) < RELAXED_TOLERANCE);
+  std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
 
-    return passed;
+  return passed;
 }
 
 /**
@@ -249,32 +252,32 @@ bool test_absorption_coefficient() {
  * Spectral index α = -(p - 1)/2 and inverse: p = 1 - 2α
  * For typical jets p=2-3, giving α = -0.5 to -1.0
  */
-bool test_spectral_index_calculation() {
-    std::cout << "\n[TEST 7] Spectral Index Calculation\n";
-    std::cout << "====================================\n";
+bool testSpectralIndexCalculation() {
+  std::cout << "\n[TEST 7] Spectral Index Calculation\n";
+  std::cout << "====================================\n";
 
-    std::vector<double> p_values = {2.0, 2.5, 3.0, 3.5};
-    bool all_passed = true;
+  std::vector<double> const pValues = {2.0, 2.5, 3.0, 3.5};
+  bool allPassed = true;
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "  Testing spectral index: alpha = -(p-1)/2\n\n";
+  std::cout << std::fixed << std::setprecision(6);
+  std::cout << "  Testing spectral index: alpha = -(p-1)/2\n\n";
 
-    for (double p : p_values) {
-        double alpha = synchrotron_spectral_index(p);
-        double expected_alpha = -(p - 1.0) / 2.0;
-        double p_back = electron_index_from_spectral(alpha);
+  for (double const p : pValues) {
+    double const alpha = synchrotronSpectralIndex(p);
+    double const expectedAlpha = -(p - 1.0) / 2.0;
+    double const pBack = electronIndexFromSpectral(alpha);
 
-        std::cout << "  p = " << p << "\n";
-        std::cout << "    alpha = " << alpha << " (expected " << expected_alpha << ")\n";
-        std::cout << "    p (from alpha) = " << p_back << " (expected " << p << ")\n";
+    std::cout << "  p = " << p << "\n";
+    std::cout << "    alpha = " << alpha << " (expected " << expectedAlpha << ")\n";
+    std::cout << "    p (from alpha) = " << pBack << " (expected " << p << ")\n";
 
-        bool passed = (std::abs(alpha - expected_alpha) < TOLERANCE &&
-                       std::abs(p_back - p) < TOLERANCE);
-        std::cout << "    Status: " << (passed ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && passed;
-    }
+    bool const passed =
+        (std::abs(alpha - expectedAlpha) < TOLERANCE && std::abs(pBack - p) < TOLERANCE);
+    std::cout << "    Status: " << (passed ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && passed;
+  }
 
-    return all_passed;
+  return allPassed;
 }
 
 /**
@@ -284,31 +287,31 @@ bool test_spectral_index_calculation() {
  * Note: Theory gives Pol_max = (p+1)/(p+7/3) for certain regimes
  * but computed max depends on approximation accuracy
  */
-bool test_polarization_bounds() {
-    std::cout << "\n[TEST 8] Polarization Degree Bounds\n";
-    std::cout << "====================================\n";
+bool testPolarizationBounds() {
+  std::cout << "\n[TEST 8] Polarization Degree Bounds\n";
+  std::cout << "====================================\n";
 
-    std::vector<double> test_x = {1e-3, 0.01, 0.1, 1.0, 5.0, 10.0, 50.0, 100.0};
-    bool all_passed = true;
+  std::vector<double> const testX = {1e-3, 0.01, 0.1, 1.0, 5.0, 10.0, 50.0, 100.0};
+  bool allPassed = true;
 
-    std::cout << std::fixed << std::setprecision(6);
+  std::cout << std::fixed << std::setprecision(6);
 
-    for (double x : test_x) {
-        double F_val = synchrotron_F(x);
-        double G_val = synchrotron_G(x);
-        double pol = (F_val > 1e-30) ? (G_val / F_val) : 0.0;
+  for (double const x : testX) {
+    double const fVal = synchrotronF(x);
+    double const gVal = synchrotronG(x);
+    double const pol = (fVal > 1e-30) ? (gVal / fVal) : 0.0;
 
-        // Polarization must be in [0, 1]
-        bool passed = (pol >= 0.0 && pol <= 1.0);
+    // Polarization must be in [0, 1]
+    bool const passed = (pol >= 0.0 && pol <= 1.0);
 
-        std::cout << "  x = " << x << ": Pol = " << pol;
-        std::cout << " " << (passed ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && passed;
-    }
+    std::cout << "  x = " << x << ": Pol = " << pol;
+    std::cout << " " << (passed ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && passed;
+  }
 
-    std::cout << "  Status: " << (all_passed ? "PASS" : "FAIL") << "\n";
+  std::cout << "  Status: " << (allPassed ? "PASS" : "FAIL") << "\n";
 
-    return all_passed;
+  return allPassed;
 }
 
 /**
@@ -323,43 +326,44 @@ bool test_polarization_bounds() {
  *
  * Tolerance: 0.01% when boost is present, 2% otherwise (polynomial fallback).
  */
-bool test_synchrotron_f_rybicki_lightman_table() {
-    std::cout << "\n[TEST 9] Synchrotron F(x) vs Rybicki-Lightman Table A1\n";
-    std::cout << "=========================================================\n";
+bool testSynchrotronFRybickiLightmanTable() {
+  std::cout << "\n[TEST 9] Synchrotron F(x) vs Rybicki-Lightman Table A1\n";
+  std::cout << "=========================================================\n";
 
-    // {x, F(x)} pairs verified against scipy.integrate.quad(kv(5/3, xi), x, inf)
-    // Primary source: Rybicki & Lightman (1979) Table A1 (3 sig figs);
-    // x=10 corrected from R&L 0.0195 (typo or wrong row) to scipy value 1.92e-4.
-    struct TestPoint { double x, F_ref; };
-    static const TestPoint pts[] = {
-        {0.01,  0.4450},  // scipy: 0.444973
-        {0.1,   0.8182},  // scipy: 0.818186
-        {1.0,   0.6514},  // scipy: 0.651423  (R&L gives 0.655, ~0.5% rounding)
-        {10.0,  1.922e-4}, // scipy: 1.922e-4  (R&L Table A1 row x=10 was misread)
-    };
-    // Note: R&L values are rounded to 3 significant figures; we use 1% tolerance
-    // for the boost::math path (machine precision integration vs 3-digit table).
-    static const double RL_TOLERANCE = 0.01;  // 1%
+  // {x, F(x)} pairs verified against scipy.integrate.quad(kv(5/3, xi), x, inf)
+  // Primary source: Rybicki & Lightman (1979) Table A1 (3 sig figs);
+  // x=10 corrected from R&L 0.0195 (typo or wrong row) to scipy value 1.92e-4.
+  struct TestPoint {
+    double x, fRef;
+  };
+  static const TestPoint pts[] = {
+      {.x = 0.01, .fRef = 0.4450},   // scipy: 0.444973
+      {.x = 0.1, .fRef = 0.8182},    // scipy: 0.818186
+      {.x = 1.0, .fRef = 0.6514},    // scipy: 0.651423  (R&L gives 0.655, ~0.5% rounding)
+      {.x = 10.0, .fRef = 1.922e-4}, // scipy: 1.922e-4  (R&L Table A1 row x=10 was misread)
+  };
+  // Note: R&L values are rounded to 3 significant figures; we use 1% tolerance
+  // for the boost::math path (machine precision integration vs 3-digit table).
+  static const double rlTolerance = 0.01; // 1%
 #ifdef PHYSICS_HAS_BOOST_BESSEL
-    static const double BOOST_TOLERANCE = 0.03;  // same: R&L table imprecision
-    (void)BOOST_TOLERANCE;
+  static const double boostTolerance = 0.03; // same: R&L table imprecision
+  (void)boostTolerance;
 #endif
 
-    bool all_passed = true;
-    std::cout << std::fixed << std::setprecision(6);
+  bool allPassed = true;
+  std::cout << std::fixed << std::setprecision(6);
 
-    for (const auto& pt : pts) {
-        double F_x = synchrotron_F(pt.x);
-        double rel_err = std::abs(F_x - pt.F_ref) / pt.F_ref;
+  for (const auto &pt : pts) {
+    double const fX = synchrotronF(pt.x);
+    double const relErr = std::abs(fX - pt.fRef) / pt.fRef;
 
-        std::cout << "  x = " << pt.x << "  F_computed = " << F_x
-                  << "  F_ref = " << pt.F_ref
-                  << "  err = " << rel_err;
+    std::cout << "  x = " << pt.x << "  F_computed = " << fX << "  F_ref = " << pt.fRef
+              << "  err = " << relErr;
 
-        bool passed = (rel_err < RL_TOLERANCE);
-        std::cout << "  " << (passed ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && passed;
-    }
+    bool const passed = (relErr < rlTolerance);
+    std::cout << "  " << (passed ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && passed;
+  }
 
 #ifdef PHYSICS_HAS_BOOST_BESSEL
     std::cout << "  (boost::math Gauss-Legendre path active)\n";
@@ -367,13 +371,15 @@ bool test_synchrotron_f_rybicki_lightman_table() {
     std::cout << "  (polynomial fallback path active)\n";
 #endif
 
-    std::cout << "  Status: " << (all_passed ? "PASS" : "FAIL") << "\n";
-    return all_passed;
+    std::cout << "  Status: " << (allPassed ? "PASS" : "FAIL") << "\n";
+    return allPassed;
 }
 
 /**
  * @brief Main test driver
  */
+} // namespace
+
 int main() {
     std::cout << "\n"
               << "====================================================\n"
@@ -382,17 +388,35 @@ int main() {
               << "====================================================\n";
 
     int passed = 0;
-    int total = 9;
+    int const total = 9;
 
-    if (test_synchrotron_f_low_freq())      passed++;
-    if (test_synchrotron_f_high_freq())     passed++;
-    if (test_synchrotron_g_polarization())  passed++;
-    if (test_power_law_spectrum())          passed++;
-    if (test_self_absorption_transition())  passed++;
-    if (test_absorption_coefficient())      passed++;
-    if (test_spectral_index_calculation())  passed++;
-    if (test_polarization_bounds())         passed++;
-    if (test_synchrotron_f_rybicki_lightman_table()) passed++;
+    if (testSynchrotronFLowFreq()) {
+      passed++;
+    }
+    if (testSynchrotronFHighFreq()) {
+      passed++;
+    }
+    if (testSynchrotronGPolarization()) {
+      passed++;
+    }
+    if (testPowerLawSpectrum()) {
+      passed++;
+    }
+    if (testSelfAbsorptionTransition()) {
+      passed++;
+    }
+    if (testAbsorptionCoefficient()) {
+      passed++;
+    }
+    if (testSpectralIndexCalculation()) {
+      passed++;
+    }
+    if (testPolarizationBounds()) {
+      passed++;
+    }
+    if (testSynchrotronFRybickiLightmanTable()) {
+      passed++;
+    }
 
     std::cout << "\n"
               << "====================================================\n"

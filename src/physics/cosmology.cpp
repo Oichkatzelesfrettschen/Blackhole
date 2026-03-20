@@ -6,96 +6,98 @@
 #include "cosmology.h"
 #include "constants.h"
 
+#include <cmath>
+
 namespace physics {
 
 // Speed of light in km/s for cosmology calculations
 static constexpr double C_KM_S = 299792.458;
 
 // Conversion factor: seconds per gigayear
-// 1 Gyr = 10^9 years × 365.25 days/year × 24 hours/day × 3600 s/hour
+// 1 Gyr = 10^9 years x 365.25 days/year x 24 hours/day x 3600 s/hour
 // Reserved for future age-of-universe calculations with higher precision.
 [[maybe_unused]] static constexpr double SEC_PER_GYR = 3.15576e16;
 
 // Conversion: H0 [km/s/Mpc] to [1/s]
 // Reserved for use in future lookback time refinements.
-// The current implementation uses a simplified H0_per_Gyr factor.
+// The current implementation uses a simplified h0PerGyr factor.
 [[maybe_unused]] static constexpr double KM_S_MPC_TO_PER_SEC = 1.0 / (MPC * 1.0e-5);
 
 // ============================================================================
 // Hubble Parameter
 // ============================================================================
 
-double hubble_E(double z, double omega_m) {
-  double omega_lambda = 1.0 - omega_m;
-  double one_plus_z = 1.0 + z;
-  double one_plus_z_cubed = one_plus_z * one_plus_z * one_plus_z;
-  return std::sqrt(omega_m * one_plus_z_cubed + omega_lambda);
+double hubbleE(double z, double omegaM) {
+  const double omegaLambda = 1.0 - omegaM;
+  const double onePlusZ = 1.0 + z;
+  const double onePlusZCubed = onePlusZ * onePlusZ * onePlusZ;
+  return std::sqrt((omegaM * onePlusZCubed) + omegaLambda);
 }
 
-double hubble_parameter(double z, double H0, double omega_m) {
-  return H0 * hubble_E(z, omega_m);
+double hubbleParameter(double z, double h0, double omegaM) {
+  return h0 * hubbleE(z, omegaM);
 }
 
 // ============================================================================
 // Cosmological Distances
 // ============================================================================
 
-double comoving_distance(double z, double H0, double omega_m, int n_steps) {
+double comovingDistance(double z, double h0, double omegaM, int nSteps) {
   if (z <= 0.0) {
     return 0.0;
   }
 
   // Trapezoidal integration of 1/E(z') from 0 to z
-  double dz = z / static_cast<double>(n_steps);
+  const double dz = z / static_cast<double>(nSteps);
   double integral = 0.0;
 
   // Endpoints
-  integral += 0.5 / hubble_E(0.0, omega_m);
-  integral += 0.5 / hubble_E(z, omega_m);
+  integral += 0.5 / hubbleE(0.0, omegaM);
+  integral += 0.5 / hubbleE(z, omegaM);
 
   // Interior points
-  for (int i = 1; i < n_steps; ++i) {
-    double zi = static_cast<double>(i) * dz;
-    integral += 1.0 / hubble_E(zi, omega_m);
+  for (int i = 1; i < nSteps; ++i) {
+    const double zi = static_cast<double>(i) * dz;
+    integral += 1.0 / hubbleE(zi, omegaM);
   }
 
   integral *= dz;
 
   // D_C = (c/H0) * integral [Mpc]
-  return (C_KM_S / H0) * integral;
+  return (C_KM_S / h0) * integral;
 }
 
-double luminosity_distance(double z, double H0, double omega_m) {
+double luminosityDistance(double z, double h0, double omegaM) {
   // D_L = (1+z) * D_C
-  return (1.0 + z) * comoving_distance(z, H0, omega_m);
+  return (1.0 + z) * comovingDistance(z, h0, omegaM);
 }
 
-double angular_diameter_distance(double z, double H0, double omega_m) {
+double angularDiameterDistance(double z, double h0, double omegaM) {
   // D_A = D_C / (1+z)
-  return comoving_distance(z, H0, omega_m) / (1.0 + z);
+  return comovingDistance(z, h0, omegaM) / (1.0 + z);
 }
 
-double distance_modulus(double z, double H0, double omega_m) {
-  double D_L = luminosity_distance(z, H0, omega_m);
-  // μ = 5 log₁₀(D_L [Mpc]) + 25
-  return 5.0 * std::log10(D_L) + 25.0;
+double distanceModulus(double z, double h0, double omegaM) {
+  const double dL = luminosityDistance(z, h0, omegaM);
+  // mu = 5 log10(D_L [Mpc]) + 25
+  return (5.0 * std::log10(dL)) + 25.0;
 }
 
 // ============================================================================
 // Redshift Relations
 // ============================================================================
 
-double wavelength_to_redshift(double lambda_observed, double lambda_emitted) {
-  return lambda_observed / lambda_emitted - 1.0;
+double wavelengthToRedshift(double lambdaObserved, double lambdaEmitted) {
+  return (lambdaObserved / lambdaEmitted) - 1.0;
 }
 
-double apply_redshift_to_wavelength(double lambda_emitted, double z) {
-  return lambda_emitted * (1.0 + z);
+double applyRedshiftToWavelength(double lambdaEmitted, double z) {
+  return lambdaEmitted * (1.0 + z);
 }
 
-double redshift_flux_dimming(double z) {
-  double one_plus_z = 1.0 + z;
-  double factor = one_plus_z * one_plus_z * one_plus_z * one_plus_z;
+double redshiftFluxDimming(double z) {
+  const double onePlusZ = 1.0 + z;
+  const double factor = onePlusZ * onePlusZ * onePlusZ * onePlusZ;
   return 1.0 / factor;
 }
 
@@ -103,26 +105,26 @@ double redshift_flux_dimming(double z) {
 // Lookback Time
 // ============================================================================
 
-double lookback_time(double z, double H0, double omega_m) {
+double lookbackTime(double z, double h0, double omegaM) {
   if (z <= 0.0) {
     return 0.0;
   }
 
-  // t_L = (1/H0) ∫₀^z dz' / ((1+z') E(z'))
-  int n_steps = 1000;
-  double dz = z / static_cast<double>(n_steps);
+  // t_L = (1/H0) int_0^z dz' / ((1+z') E(z'))
+  const int nSteps = 1000;
+  const double dz = z / static_cast<double>(nSteps);
   double integral = 0.0;
 
   // Trapezoidal integration
-  auto integrand = [omega_m](double zp) {
-    return 1.0 / ((1.0 + zp) * hubble_E(zp, omega_m));
+  auto integrand = [omegaM](double zp) {
+    return 1.0 / ((1.0 + zp) * hubbleE(zp, omegaM));
   };
 
   integral += 0.5 * integrand(0.0);
   integral += 0.5 * integrand(z);
 
-  for (int i = 1; i < n_steps; ++i) {
-    double zi = static_cast<double>(i) * dz;
+  for (int i = 1; i < nSteps; ++i) {
+    const double zi = static_cast<double>(i) * dz;
     integral += integrand(zi);
   }
 
@@ -133,16 +135,16 @@ double lookback_time(double z, double H0, double omega_m) {
   // 1 Mpc = 3.086e19 km
   // 1 Gyr = 3.156e16 s
   // H0 [1/Gyr] = H0 [km/s/Mpc] * 3.086e19 / 3.156e16 = H0 * 977.8
-  double H0_per_Gyr = H0 * 0.001022; // 1/(977.8)
+  const double h0PerGyr = h0 * 0.001022; // 1/(977.8)
 
-  return integral / H0_per_Gyr;
+  return integral / h0PerGyr;
 }
 
-double universe_age_at_z(double z, double H0, double omega_m) {
+double universeAgeAtZ(double z, double h0, double omegaM) {
   // Age at z = current age - lookback time
-  // For Planck 2018 cosmology, current age ≈ 13.8 Gyr
-  double age_now = lookback_time(1000.0, H0, omega_m); // Approximate
-  return age_now - lookback_time(z, H0, omega_m);
+  // For Planck 2018 cosmology, current age approx 13.8 Gyr
+  const double ageNow = lookbackTime(1000.0, h0, omegaM); // Approximate
+  return ageNow - lookbackTime(z, h0, omegaM);
 }
 
 } // namespace physics

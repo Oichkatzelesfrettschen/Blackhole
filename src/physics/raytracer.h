@@ -21,18 +21,18 @@
 #ifndef PHYSICS_RAYTRACER_H
 #define PHYSICS_RAYTRACER_H
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <vector>
+
 #include "constants.h"
+#include "geodesics.h"
+#include "kerr.h"
 #include "math_types.h"
 #include "safe_limits.h"
 #include "schwarzschild.h"
-#include "geodesics.h"
-#include "kerr.h"
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <cmath>
-#include <functional>
-#include <vector>
 
 namespace physics {
 
@@ -47,8 +47,8 @@ enum class RayStatus {
   PROPAGATING,  ///< Still traveling
   ESCAPED,      ///< Escaped to infinity
   CAPTURED,     ///< Fell into black hole
-  HIT_DISK,     ///< Hit accretion disk
-  MAX_STEPS     ///< Exceeded maximum integration steps
+  HitDisk,      ///< Hit accretion disk
+  MaxSteps      ///< Exceeded maximum integration steps
 };
 
 /**
@@ -95,13 +95,9 @@ public:
    * @param mass Black hole mass [g]
    */
   explicit SchwarzschildRaytracer(double mass)
-      : mass_(mass),
-        rS_(schwarzschildRadius(mass)),
-        rCapture_(1.5 * rS_),      // Photon sphere
-        rEscape_(1000.0 * rS_),    // Consider escaped
-        stepSize_(0.1 * rS_),
-        maxSteps_(10000),
-        recordPath_(false) {}
+      : mass_(mass), rS_(schwarzschildRadius(mass)), rCapture_(1.5 * rS_), // Photon sphere
+        rEscape_(1000.0 * rS_),                                            // Consider escaped
+        stepSize_(0.1 * rS_) {}
 
   // Configuration
   void setStepSize(double h)       { stepSize_   = h; }
@@ -123,35 +119,35 @@ public:
 
     // State: [r, theta, phi, dr/dlambda, dtheta/dlambda, dphi/dlambda]
     std::array<double, 6> state{};
-    state.at(0) = ray.position[0];  // r
-    state.at(1) = ray.position[1];  // theta
-    state.at(2) = ray.position[2];  // phi
+    state.at(0) = ray.position.x;  // r
+    state.at(1) = ray.position.y;  // theta
+    state.at(2) = ray.position.z;  // phi
 
     const double r     = state.at(0);
     const double theta = state.at(1);
 
     // Compute impact parameter from initial direction
-    const double b = computeImpactParameter(ray);
-    const double L = b;
-    const double f = 1.0 - (rS_ / r);
+    const double b      = computeImpactParameter(ray);
+    const double angMom = b;
+    const double f      = 1.0 - (rS_ / r);
 
     // dr/dlambda from null geodesic: (dr/dlambda)^2 = E^2 - V_eff
-    const double vEff = f * L * L / (r * r);
+    const double vEff = (f * angMom * angMom) / (r * r);
     const double drSq = 1.0 - vEff;
 
     if (drSq < 0) {
       state.at(3) = 0.0; // Turning point - ray is purely tangential
     } else {
-      const double drSign = (ray.direction[0] > 0) ? 1.0 : -1.0;
+      const double drSign = (ray.direction.x > 0) ? 1.0 : -1.0;
       state.at(3) = drSign * std::sqrt(drSq);
     }
 
     const double sinTheta = std::sin(theta);
     state.at(4) = 0.0; // Assume equatorial for simplicity
-    state.at(5) = L / (r * r * sinTheta * sinTheta);
+    state.at(5) = angMom / (r * r * sinTheta * sinTheta);
 
     if (recordPath_) {
-      result.path.push_back(math::Vec3d(state.at(0), state.at(1), state.at(2)));
+      result.path.emplace_back(state.at(0), state.at(1), state.at(2));
     }
 
     // RK4 integration
@@ -185,17 +181,17 @@ public:
       ++result.stepsTaken;
 
       if (recordPath_) {
-        result.path.push_back(math::Vec3d(state.at(0), state.at(1), state.at(2)));
+        result.path.emplace_back(state.at(0), state.at(1), state.at(2));
       }
     }
 
     if (result.stepsTaken >= maxSteps_) {
-      result.status = RayStatus::MAX_STEPS;
+      result.status = RayStatus::MaxSteps;
     }
 
     result.finalPosition = math::Vec3d(state.at(0), state.at(1), state.at(2));
 
-    const double rInitial = ray.position[0];
+    const double rInitial = ray.position.x;
     const double rFinal   = state.at(0);
     if (rFinal > rS_ && rInitial > rS_) {
       const double zInitial = 1.0 / std::sqrt(1.0 - (rS_ / rInitial));
@@ -222,7 +218,7 @@ public:
 
     for (int i = 0; i < nPoints; ++i) {
       const double phi = TWO_PI * i / nPoints;
-      shadow.push_back(math::Vec2d(bCrit * std::cos(phi), bCrit * std::sin(phi)));
+      shadow.emplace_back(bCrit * std::cos(phi), bCrit * std::sin(phi));
     }
 
     return shadow;
@@ -234,12 +230,12 @@ private:
   [[maybe_unused]] double rCapture_;
   double rEscape_;
   double stepSize_;
-  int maxSteps_;
-  bool recordPath_;
+  int maxSteps_{10000};
+  bool recordPath_{false};
 
-  [[nodiscard]] double computeImpactParameter(const PhotonRay &ray) const {
-    const double r        = ray.position[0];
-    const double sinAngle = std::sqrt(1.0 - (ray.direction[0] * ray.direction[0]));
+  [[nodiscard]] static double computeImpactParameter(const PhotonRay &ray) {
+    const double r        = ray.position.x;
+    const double sinAngle = std::sqrt(1.0 - (ray.direction.x * ray.direction.x));
     return r * sinAngle;
   }
 
@@ -290,9 +286,9 @@ private:
     return deriv;
   }
 
-  [[nodiscard]] std::array<double, 6> addScaled(const std::array<double, 6> &x,
-                                                  const std::array<double, 6> &dx,
-                                                  double scale) const {
+  [[nodiscard]] static std::array<double, 6> addScaled(const std::array<double, 6> &x,
+                                                         const std::array<double, 6> &dx,
+                                                         double scale) {
     std::array<double, 6> result{};
     for (std::size_t i = 0; i < result.size(); ++i) {
       result.at(i) = x.at(i) + (scale * dx.at(i));
@@ -315,13 +311,8 @@ private:
 class KerrRaytracer {
 public:
   KerrRaytracer(double mass, double spinParam)
-      : kerr_(mass, spinParam),
-        rS_(schwarzschildRadius(mass)),
-        rHorizon_(kerr_.outerHorizon()),
-        rEscape_(1000.0 * rS_),
-        stepSize_(0.02 * rS_),
-        maxSteps_(10000),
-        recordPath_(false) {
+      : kerr_(mass, spinParam), rS_(schwarzschildRadius(mass)), rHorizon_(kerr_.outerHorizon()),
+        rEscape_(1000.0 * rS_), stepSize_(0.02 * rS_) {
     if (!safeIsfinite(rHorizon_) || rHorizon_ <= 0.0) {
       rHorizon_ = rS_;
     }
@@ -343,7 +334,7 @@ public:
     KerrGeodesicState state = initial;
 
     if (recordPath_) {
-      result.path.push_back(math::Vec3d(state.r, state.theta, state.phi));
+      result.path.emplace_back(state.r, state.theta, state.phi);
     }
 
     for (int step = 0; step < maxSteps_; ++step) {
@@ -372,12 +363,12 @@ public:
       ++result.stepsTaken;
 
       if (recordPath_) {
-        result.path.push_back(math::Vec3d(state.r, state.theta, state.phi));
+        result.path.emplace_back(state.r, state.theta, state.phi);
       }
     }
 
     if (result.status == RayStatus::PROPAGATING) {
-      result.status = (result.stepsTaken >= maxSteps_) ? RayStatus::MAX_STEPS
+      result.status = (result.stepsTaken >= maxSteps_) ? RayStatus::MaxSteps
                                                         : RayStatus::ESCAPED;
     }
 
@@ -402,8 +393,8 @@ private:
   double rHorizon_;
   double rEscape_;
   double stepSize_;
-  int maxSteps_;
-  bool recordPath_;
+  int maxSteps_{10000};
+  bool recordPath_{false};
 };
 
 // ============================================================================

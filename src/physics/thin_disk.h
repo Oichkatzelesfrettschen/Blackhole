@@ -36,9 +36,9 @@
 
 #include "constants.h"
 #include "kerr.h"
-#include "schwarzschild.h"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <numbers>
 #include <vector>
@@ -304,9 +304,7 @@ inline void diskPeakTemperature(const DiskParams &disk,
   rPeak = (49.0 / 12.0) * disk.rIn;
 
   // Ensure within disk bounds
-  if (rPeak > disk.rOut) {
-    rPeak = disk.rOut;
-  }
+  rPeak = std::min(rPeak, disk.rOut);
 
   tMax = diskTemperature(rPeak, disk);
 }
@@ -324,12 +322,12 @@ inline void diskPeakTemperature(const DiskParams &disk,
  * @param T Temperature [K]
  * @return Specific intensity [erg/(s cm^2 Hz sr)]
  */
-[[nodiscard]] inline double planckFunction(double nu, double T) {
-  if (T <= 0 || nu <= 0) { return 0.0; }
+[[nodiscard]] inline double planckFunction(double nu, double tempK) {
+  if (tempK <= 0 || nu <= 0) { return 0.0; }
 
   constexpr double h = 6.62607015e-27; // Planck constant [erg s]
 
-  const double x = (h * nu) / (K_B * T);
+  const double x = (h * nu) / (K_B * tempK);
 
   // Avoid overflow
   if (x > 700) { return 0.0; }
@@ -360,8 +358,8 @@ inline void diskPeakTemperature(const DiskParams &disk,
     const double logR = logRIn + ((i + 0.5) * dLogR);
     const double r    = std::exp(logR);
 
-    const double T    = diskTemperature(r, disk);
-    const double bNu  = planckFunction(nu, T);
+    const double diskTemp = diskTemperature(r, disk);
+    const double bNu  = planckFunction(nu, diskTemp);
 
     // Integrate r dr = r^2 d(log r)
     sum += bNu * r * r * dLogR;
@@ -534,18 +532,18 @@ struct DiskProfilePoint {
  */
 inline void temperatureToRgb(double tempK, double &outR, double &outG, double &outB) {
   // Clamp temperature range
-  const double T = std::clamp(tempK, 1000.0, 40000.0);
-  const double t = T / 100.0;
+  const double tClamped = std::clamp(tempK, 1000.0, 40000.0);
+  const double t = tClamped / 100.0;
 
   // Red
-  if (T <= 6600) {
+  if (tClamped <= 6600) {
     outR = 1.0;
   } else {
     outR = std::clamp(329.698727446 * std::pow(t - 60.0, -0.1332047592) / 255.0, 0.0, 1.0);
   }
 
   // Green
-  if (T <= 6600) {
+  if (tClamped <= 6600) {
     outG = (99.4708025861 * std::log(t)) - 161.1195681661;
   } else {
     outG = 288.1221695283 * std::pow(t - 60.0, -0.0755148492);
@@ -553,9 +551,9 @@ inline void temperatureToRgb(double tempK, double &outR, double &outG, double &o
   outG = std::clamp(outG / 255.0, 0.0, 1.0);
 
   // Blue
-  if (T >= 6600) {
+  if (tClamped >= 6600) {
     outB = 1.0;
-  } else if (T <= 1900) {
+  } else if (tClamped <= 1900) {
     outB = 0.0;
   } else {
     outB = std::clamp((138.5177312231 * std::log(t - 10.0)) - 305.0447927307, 0.0, 255.0) / 255.0;

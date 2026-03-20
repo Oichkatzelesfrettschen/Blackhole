@@ -11,7 +11,7 @@ int main() {
   overlay.setOptions(opts);
 
   std::vector<HudOverlayLine> lines;
-  lines.push_back({"Test", {1.0f, 1.0f, 1.0f, 1.0f}});
+  lines.push_back({.text = "Test", .color = {1.0f, 1.0f, 1.0f, 1.0f}});
   overlay.setLines(lines);
 
   // measureText should work without GL context.

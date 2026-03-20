@@ -9,9 +9,9 @@
  * - Radio lobes
  *
  * Key formulas:
- *   Critical frequency: ν_c = (3/2) × (eB)/(2πm_e c) × γ²
- *   Power per electron: P = (4/3) σ_T c γ² U_B
- *   Cooling time: t_cool = γm_e c² / P
+ *   Critical frequency: nu_c = (3/2) * (eB)/(2*pi*m_e*c) * gamma^2
+ *   Power per electron: P = (4/3) * sigma_T * c * gamma^2 * U_B
+ *   Cooling time: t_cool = gamma*m_e*c^2 / P
  *
  * References:
  *   - Rybicki & Lightman (1979) "Radiative Processes in Astrophysics" Ch. 6
@@ -25,11 +25,16 @@
 
 #include "constants.h"
 #include "safe_limits.h"
+#include <algorithm>
 #include <cmath>
 #ifdef __has_include
 #  if __has_include(<boost/math/special_functions/bessel.hpp>)
 #    include <boost/math/special_functions/bessel.hpp>
+// NOLINTBEGIN(cppcoreguidelines-macro-usage)
+// WHY: PHYSICS_HAS_BOOST_BESSEL guards #ifdef/#else paths; constexpr cannot
+// replace a preprocessor symbol used in conditional compilation directives.
 #    define PHYSICS_HAS_BOOST_BESSEL 1
+// NOLINTEND(cppcoreguidelines-macro-usage)
 #  endif
 #endif
 
@@ -45,17 +50,19 @@ inline constexpr double M_ELECTRON = 9.1093837015e-28;
 /// Electron charge [esu = g^1/2 cm^3/2 / s]
 inline constexpr double E_CHARGE = 4.80320425e-10;
 
-/// Classical electron radius r_e = e²/(m_e c²) [cm]
+/// Classical electron radius r_e = e^2/(m_e c^2) [cm]
 inline constexpr double R_ELECTRON = 2.8179403262e-13;
 
-/// Thomson cross section σ_T = (8π/3) r_e² [cm²]
+/// Thomson cross section sigma_T = (8*pi/3) * r_e^2 [cm^2]
 inline constexpr double SIGMA_THOMSON = 6.6524587321e-25;
 
-/// Fine structure constant α ≈ 1/137
+/// Fine structure constant alpha ~ 1/137
 inline constexpr double ALPHA_FINE = 7.2973525693e-3;
 
-/// Synchrotron constant: 3e/(4π m_e³ c⁵) for critical frequency
-inline constexpr double SYNCHROTRON_CONST = 3.0 * E_CHARGE / (4.0 * PI * M_ELECTRON * M_ELECTRON * M_ELECTRON * C * C * C * C * C);
+/// Synchrotron constant: 3e/(4*pi * m_e^3 * c^5) for critical frequency
+inline constexpr double SYNCHROTRON_CONST =
+    3.0 * E_CHARGE /
+    (4.0 * PI * M_ELECTRON * M_ELECTRON * M_ELECTRON * C * C * C * C * C);
 
 // ============================================================================
 // Electron Gyration
@@ -64,33 +71,33 @@ inline constexpr double SYNCHROTRON_CONST = 3.0 * E_CHARGE / (4.0 * PI * M_ELECT
 /**
  * @brief Compute electron gyrofrequency (cyclotron frequency).
  *
- * ω_B = eB/(m_e c)
- * ν_B = ω_B/(2π) = eB/(2π m_e c)
+ * omega_B = eB/(m_e c)
+ * nu_B = omega_B/(2*pi) = eB/(2*pi*m_e*c)
  *
- * @param B Magnetic field strength [Gauss]
+ * @param bField Magnetic field strength [Gauss]
  * @return Gyrofrequency [Hz]
  */
-inline double gyrofrequency(double B) {
-  return E_CHARGE * std::abs(B) / (TWO_PI * M_ELECTRON * C);
+[[nodiscard]] inline double gyrofrequency(double bField) {
+  return E_CHARGE * std::abs(bField) / (TWO_PI * M_ELECTRON * C);
 }
 
 /**
  * @brief Compute electron gyroradius (Larmor radius).
  *
- * r_L = γ m_e c² / (eB) = γ v_⊥ / ω_B
+ * r_L = gamma * m_e * c^2 / (eB) = gamma * v_perp / omega_B
  *
- * For relativistic electrons with v ≈ c:
- * r_L ≈ γ m_e c / (eB)
+ * For relativistic electrons with v ~ c:
+ * r_L ~ gamma * m_e * c / (eB)
  *
  * @param gamma Electron Lorentz factor
- * @param B Magnetic field strength [Gauss]
+ * @param bField Magnetic field strength [Gauss]
  * @return Gyroradius [cm]
  */
-inline double gyroradius(double gamma, double B) {
-  if (std::abs(B) < 1e-30) {
-    return safe_infinity<double>();
+[[nodiscard]] inline double gyroradius(double gamma, double bField) {
+  if (std::abs(bField) < 1e-30) {
+    return safeInfinity<double>();
   }
-  return gamma * M_ELECTRON * C / (E_CHARGE * std::abs(B));
+  return gamma * M_ELECTRON * C / (E_CHARGE * std::abs(bField));
 }
 
 // ============================================================================
@@ -100,87 +107,88 @@ inline double gyroradius(double gamma, double B) {
 /**
  * @brief Compute synchrotron critical frequency.
  *
- * ν_c = (3/2) × (eB)/(2π m_e c) × γ² × sin α
+ * nu_c = (3/2) * (eB)/(2*pi*m_e*c) * gamma^2 * sin(alpha)
  *
- * For pitch angle α = π/2 (perpendicular to field):
- * ν_c = (3/4π) × (eB)/(m_e c) × γ²
+ * For pitch angle alpha = pi/2 (perpendicular to field):
+ * nu_c = (3/(4*pi)) * (eB)/(m_e*c) * gamma^2
  *
  * @param gamma Electron Lorentz factor
- * @param B Magnetic field strength [Gauss]
- * @param pitch_angle Pitch angle [rad], default π/2
+ * @param bField Magnetic field strength [Gauss]
+ * @param pitchAngle Pitch angle [rad], default pi/2
  * @return Critical frequency [Hz]
  */
-inline double synchrotron_frequency_critical(double gamma, double B,
-                                              double pitch_angle = PI / 2.0) {
-  double sin_alpha = std::sin(pitch_angle);
-  return (3.0 / (4.0 * PI)) * (E_CHARGE * std::abs(B)) / (M_ELECTRON * C) *
-         gamma * gamma * sin_alpha;
+[[nodiscard]] inline double synchrotronFrequencyCritical(double gamma,
+                                                          double bField,
+                                                          double pitchAngle = PI / 2.0) {
+  const double sinAlpha = std::sin(pitchAngle);
+  return (3.0 / (4.0 * PI)) * (E_CHARGE * std::abs(bField)) / (M_ELECTRON * C) *
+         gamma * gamma * sinAlpha;
 }
 
 /**
  * @brief Compute peak synchrotron frequency.
  *
- * The spectrum peaks at ν_peak ≈ 0.29 ν_c
+ * The spectrum peaks at nu_peak ~= 0.29 * nu_c
  *
  * @param gamma Electron Lorentz factor
- * @param B Magnetic field strength [Gauss]
+ * @param bField Magnetic field strength [Gauss]
  * @return Peak frequency [Hz]
  */
-inline double synchrotron_frequency_peak(double gamma, double B) {
-  return 0.29 * synchrotron_frequency_critical(gamma, B);
+[[nodiscard]] inline double synchrotronFrequencyPeak(double gamma, double bField) {
+  return 0.29 * synchrotronFrequencyCritical(gamma, bField);
 }
 
 /**
  * @brief Compute synchrotron power radiated by single electron.
  *
- * P = (4/3) σ_T c γ² β² U_B
+ * P = (4/3) * sigma_T * c * gamma^2 * beta^2 * U_B
  *
- * where U_B = B²/(8π) is magnetic energy density.
- * For ultrarelativistic electrons (β ≈ 1):
- * P = (4/3) σ_T c γ² (B²/8π)
+ * where U_B = B^2/(8*pi) is magnetic energy density.
+ * For ultrarelativistic electrons (beta ~ 1):
+ * P = (4/3) * sigma_T * c * gamma^2 * (B^2 / (8*pi))
  *
  * @param gamma Electron Lorentz factor
- * @param B Magnetic field strength [Gauss]
+ * @param bField Magnetic field strength [Gauss]
  * @return Power radiated [erg/s]
  */
-inline double synchrotron_power_single_electron(double gamma, double B) {
-  double U_B = B * B / (8.0 * PI); // Magnetic energy density
-  double beta_sq = 1.0 - 1.0 / (gamma * gamma);
-  return (4.0 / 3.0) * SIGMA_THOMSON * C * gamma * gamma * beta_sq * U_B;
+[[nodiscard]] inline double synchrotronPowerSingleElectron(double gamma, double bField) {
+  const double uB = bField * bField / (8.0 * PI);
+  const double betaSq = 1.0 - (1.0 / (gamma * gamma));
+  return (4.0 / 3.0) * SIGMA_THOMSON * C * gamma * gamma * betaSq * uB;
 }
 
 /**
  * @brief Compute synchrotron cooling time.
  *
- * t_cool = E / P = γ m_e c² / P
+ * t_cool = E / P = gamma * m_e * c^2 / P
  *
  * @param gamma Electron Lorentz factor
- * @param B Magnetic field strength [Gauss]
+ * @param bField Magnetic field strength [Gauss]
  * @return Cooling time [s]
  */
-inline double synchrotron_cooling_time(double gamma, double B) {
-  double P = synchrotron_power_single_electron(gamma, B);
-  if (P < 1e-50) {
-    return safe_infinity<double>();
+[[nodiscard]] inline double synchrotronCoolingTime(double gamma, double bField) {
+  const double pPow = synchrotronPowerSingleElectron(gamma, bField);
+  if (pPow < 1e-50) {
+    return safeInfinity<double>();
   }
-  return gamma * M_ELECTRON * C * C / P;
+  return gamma * M_ELECTRON * C * C / pPow;
 }
 
 /**
  * @brief Compute cooling Lorentz factor at given time.
  *
- * Electrons above γ_cool have cooled significantly.
- * γ_cool = 6π m_e c / (σ_T B² t)
+ * Electrons above gamma_cool have cooled significantly.
+ * gamma_cool = 6*pi * m_e * c / (sigma_T * B^2 * t)
  *
- * @param B Magnetic field strength [Gauss]
+ * @param bField Magnetic field strength [Gauss]
  * @param t Time since injection [s]
  * @return Cooling Lorentz factor
  */
-inline double synchrotron_cooling_lorentz_factor(double B, double t) {
-  if (t < 1e-50 || std::abs(B) < 1e-30) {
-    return safe_infinity<double>();
+[[nodiscard]] inline double synchrotronCoolingLorentzFactor(double bField, double t) {
+  if (t < 1e-50 || std::abs(bField) < 1e-30) {
+    return safeInfinity<double>();
   }
-  return 6.0 * PI * M_ELECTRON * C / (SIGMA_THOMSON * B * B * t);
+  return 6.0 * PI * M_ELECTRON * C / (SIGMA_THOMSON * bField * bField * t);
 }
 
 // ============================================================================
@@ -210,8 +218,8 @@ inline double synchrotron_cooling_lorentz_factor(double B, double t) {
  * @param x Dimensionless frequency nu/nu_c
  * @return F(x) synchrotron function value
  */
-inline double synchrotron_F(double x) {
-  if (x <= 0) return 0.0;
+[[nodiscard]] inline double synchrotronF(double x) {
+  if (x <= 0) { return 0.0; }
 
   // Low frequency asymptote: F(x) ~= 1.8084 * x^(1/3)  [Rybicki-Lightman 6.36]
   if (x < 0.01) {
@@ -232,7 +240,7 @@ inline double synchrotron_F(double x) {
   // where delta = max(2*x, 0.5).  This captures the near-singularity at x~0.
   //
   // Gauss-Legendre nodes and weights for n=16 on [-1,1]
-  static const double gl_nodes[16] = {
+  static const double glNodes[16] = {
     -0.9894009349916499, -0.9445750230732326,
     -0.8656312023341783, -0.7554044083550030,
     -0.6178762444026438, -0.4580167776572274,
@@ -242,7 +250,7 @@ inline double synchrotron_F(double x) {
      0.7554044083550030,  0.8656312023341783,
      0.9445750230732326,  0.9894009349916499
   };
-  static const double gl_weights[16] = {
+  static const double glWeights[16] = {
     0.0271524594117541, 0.0622535239386479,
     0.0951585116824928, 0.1246289512509922,
     0.1495959888165767, 0.1691565193950025,
@@ -254,26 +262,26 @@ inline double synchrotron_F(double x) {
   };
 
   // Helper lambda: GL integral over [a, b]
-  auto gl_integral = [&](double a, double b) -> double {
-    double hr  = 0.5 * (b - a);
-    double mid = 0.5 * (b + a);
+  auto glIntegral = [&](double a, double b) -> double {
+    const double hr  = 0.5 * (b - a);
+    const double mid = 0.5 * (b + a);
     double sum = 0.0;
     for (int i = 0; i < 16; ++i) {
-      double xi = mid + hr * gl_nodes[i];
-      if (xi <= 0.0) continue;
-      sum += gl_weights[i] * boost::math::cyl_bessel_k(5.0 / 3.0, xi);
+      const double xi = mid + (hr * glNodes[i]);
+      if (xi <= 0.0) { continue; }
+      sum += glWeights[i] * boost::math::cyl_bessel_k(5.0 / 3.0, xi);
     }
     return sum * hr;
   };
 
   // Segment 1: near the lower limit where the integrand is large
-  double delta = std::max(2.0 * x, 0.5);
-  double integral = gl_integral(x, x + delta);
+  const double delta = std::max(2.0 * x, 0.5);
+  double integral = glIntegral(x, x + delta);
 
   // Segment 2: tail; K_{5/3} is small here; integrate up to x + 30
-  double x_tail = x + 30.0;
-  if (x + delta < x_tail) {
-    integral += gl_integral(x + delta, x_tail);
+  const double xTail = x + 30.0;
+  if (x + delta < xTail) {
+    integral += glIntegral(x + delta, xTail);
   }
 
   return x * integral;
@@ -289,15 +297,15 @@ inline double synchrotron_F(double x) {
 /**
  * @brief Synchrotron function G(x) for polarized emission.
  *
- * G(x) = x × K_{2/3}(x)
+ * G(x) = x * K_{2/3}(x)
  *
  * Used for calculating polarization degree.
  *
- * @param x Dimensionless frequency ν/ν_c
+ * @param x Dimensionless frequency nu/nu_c
  * @return G(x) function value
  */
-inline double synchrotron_G(double x) {
-  if (x <= 0) return 0.0;
+[[nodiscard]] inline double synchrotronG(double x) {
+  if (x <= 0) { return 0.0; }
 
   // Small-x asymptote: K_{2/3}(x) ~ Gamma(2/3)/2 * (2/x)^(2/3)
   // => G(x) = x * K_{2/3}(x) ~ 1.3541 * x^(1/3)  [R&L 1979 Appendix]
@@ -327,19 +335,19 @@ inline double synchrotron_G(double x) {
 /**
  * @brief Compute synchrotron polarization degree.
  *
- * Π = G(x) / F(x)
+ * Pi = G(x) / F(x)
  *
  * For power-law electron distribution with index p:
- * Π_max = (p + 1) / (p + 7/3)
+ * Pi_max = (p + 1) / (p + 7/3)
  *
- * @param x Dimensionless frequency ν/ν_c
+ * @param x Dimensionless frequency nu/nu_c
  * @return Polarization degree (0 to 1)
  */
-inline double synchrotron_polarization(double x) {
-  double F_val = synchrotron_F(x);
-  double G_val = synchrotron_G(x);
-  if (F_val < 1e-50) return 0.0;
-  return G_val / F_val;
+[[nodiscard]] inline double synchrotronPolarization(double x) {
+  const double fVal = synchrotronF(x);
+  const double gVal = synchrotronG(x);
+  if (fVal < 1e-50) { return 0.0; }
+  return gVal / fVal;
 }
 
 // ============================================================================
@@ -349,62 +357,63 @@ inline double synchrotron_polarization(double x) {
 /**
  * @brief Compute synchrotron spectrum from power-law electrons.
  *
- * For electron distribution N(γ) ∝ γ^(-p) between γ_min and γ_max,
- * the spectrum is F_ν ∝ ν^(-(p-1)/2) between break frequencies.
+ * For electron distribution N(gamma) ~ gamma^(-p) between gammaMin and gammaMax,
+ * the spectrum is F_nu ~ nu^(-(p-1)/2) between break frequencies.
  *
  * @param nu Frequency [Hz]
- * @param B Magnetic field [Gauss]
- * @param gamma_min Minimum electron Lorentz factor
- * @param gamma_max Maximum electron Lorentz factor
+ * @param bField Magnetic field [Gauss]
+ * @param gammaMin Minimum electron Lorentz factor
+ * @param gammaMax Maximum electron Lorentz factor
  * @param p Power-law index (typically 2-3)
  * @return Relative spectral power (normalized)
  */
-inline double synchrotron_spectrum_power_law(double nu, double B,
-                                              double gamma_min, double gamma_max,
-                                              double p) {
+[[nodiscard]] inline double synchrotronSpectrumPowerLaw(double nu, double bField,
+                                                         double gammaMin,
+                                                         double gammaMax,
+                                                         double p) {
   // Characteristic frequencies
-  double nu_min = synchrotron_frequency_critical(gamma_min, B);
-  double nu_max = synchrotron_frequency_critical(gamma_max, B);
+  const double nuMin = synchrotronFrequencyCritical(gammaMin, bField);
+  const double nuMax = synchrotronFrequencyCritical(gammaMax, bField);
 
-  if (nu <= 0) return 0.0;
+  if (nu <= 0) { return 0.0; }
 
   // Spectral index for optically thin synchrotron
-  double alpha = -(p - 1.0) / 2.0;
+  const double alpha = -(p - 1.0) / 2.0;
 
-  if (nu < nu_min) {
-    // Below minimum: self-absorbed regime, F ∝ ν^(5/2)
-    return std::pow(nu / nu_min, 2.5);
-  } else if (nu < nu_max) {
-    // Power-law regime
-    return std::pow(nu / nu_min, alpha);
-  } else {
-    // Exponential cutoff above γ_max
-    return std::pow(nu_max / nu_min, alpha) * std::exp(-(nu - nu_max) / nu_max);
+  if (nu < nuMin) {
+    // Below minimum: self-absorbed regime, F ~ nu^(5/2)
+    return std::pow(nu / nuMin, 2.5);
   }
+  if (nu < nuMax) {
+    // Power-law regime
+    return std::pow(nu / nuMin, alpha);
+  }
+  // Exponential cutoff above gammaMax
+  return std::pow(nuMax / nuMin, alpha) * std::exp(-(nu - nuMax) / nuMax);
 }
 
 /**
  * @brief Compute spectral index for power-law electrons.
  *
- * α = -(p - 1)/2 where F_ν ∝ ν^α
+ * alpha = -(p - 1)/2 where F_nu ~ nu^alpha
  *
  * @param p Electron power-law index
  * @return Spectral index
  */
-inline double synchrotron_spectral_index(double p) {
+[[nodiscard]] inline double synchrotronSpectralIndex(double p) {
   return -(p - 1.0) / 2.0;
 }
 
 /**
  * @brief Compute electron index from spectral index.
  *
- * p = 1 - 2α
+ * p = 1 - 2*alpha
  *
  * @param alpha Spectral index
  * @return Electron power-law index
  */
-inline double electron_index_from_spectral(double alpha) {
-  return 1.0 - 2.0 * alpha;
+[[nodiscard]] inline double electronIndexFromSpectral(double alpha) {
+  return 1.0 - (2.0 * alpha);
 }
 
 // ============================================================================
@@ -415,48 +424,48 @@ inline double electron_index_from_spectral(double alpha) {
  * @brief Compute synchrotron self-absorption coefficient.
  *
  * The absorption coefficient scales as:
- * α_ν ∝ ν^(-(p+4)/2) for power-law electrons
+ * alpha_nu ~ nu^(-(p+4)/2) for power-law electrons
  *
- * Below the self-absorption frequency ν_a, the source becomes
- * optically thick and the spectrum changes to F_ν ∝ ν^(5/2).
+ * Below the self-absorption frequency nu_a, the source becomes
+ * optically thick and the spectrum changes to F_nu ~ nu^(5/2).
  *
  * @param nu Frequency [Hz]
- * @param B Magnetic field [Gauss]
- * @param n_e Electron density [cm^-3]
+ * @param bField Magnetic field [Gauss]
+ * @param nE Electron density [cm^-3]
  * @param p Electron power-law index
  * @return Absorption coefficient [cm^-1]
  */
-inline double synchrotron_absorption_coefficient(double nu, double B,
-                                                  double n_e,
-                                                  double p) {
+[[nodiscard]] inline double synchrotronAbsorptionCoefficient(double nu, double bField,
+                                                              double nE,
+                                                              double p) {
   // Simplified formula (order of magnitude)
-  double nu_B = gyrofrequency(B);
-  double prefactor = 0.02 * E_CHARGE * n_e / (M_ELECTRON * C);
+  const double nuB = gyrofrequency(bField);
+  const double prefactor = 0.02 * E_CHARGE * nE / (M_ELECTRON * C);
 
-  double exponent = -(p + 4.0) / 2.0;
-  return prefactor * std::pow(nu_B, (p + 2.0) / 2.0) * std::pow(nu, exponent);
+  const double exponent = -(p + 4.0) / 2.0;
+  return prefactor * std::pow(nuB, (p + 2.0) / 2.0) * std::pow(nu, exponent);
 }
 
 /**
  * @brief Compute self-absorption frequency.
  *
- * The frequency where τ_ν = 1 (optical depth unity).
+ * The frequency where tau_nu = 1 (optical depth unity).
  *
- * @param B Magnetic field [Gauss]
- * @param n_e Electron density [cm^-3]
- * @param R Source size [cm]
+ * @param bField Magnetic field [Gauss]
+ * @param nE Electron density [cm^-3]
+ * @param rSize Source size [cm]
  * @param p Electron power-law index
  * @return Self-absorption frequency [Hz]
  */
-inline double synchrotron_self_absorption_frequency(double B, double n_e,
-                                                     double R,
-                                                     double p) {
-  // Approximation: ν_a where τ = α_ν × R = 1
-  double nu_B = gyrofrequency(B);
+[[nodiscard]] inline double synchrotronSelfAbsorptionFrequency(double bField, double nE,
+                                                                double rSize,
+                                                                double p) {
+  // Approximation: nu_a where tau = alpha_nu * R = 1
+  const double nuB = gyrofrequency(bField);
 
-  // Scaling: ν_a ∝ (n_e R)^(2/(p+4)) × B^((p+2)/(p+4))
-  double exponent = 2.0 / (p + 4.0);
-  return nu_B * std::pow(n_e * R / 1e20, exponent);
+  // Scaling: nu_a ~ (n_e R)^(2/(p+4)) * B^((p+2)/(p+4))
+  const double exponent = 2.0 / (p + 4.0);
+  return nuB * std::pow(nE * rSize / 1e20, exponent);
 }
 
 // ============================================================================
@@ -468,24 +477,24 @@ inline double synchrotron_self_absorption_frequency(double B, double n_e,
  *
  * WHY: GLSL cannot call boost::math, so we precompute G(x) on the CPU
  * and upload it as a 1D float texture. The shader samples this LUT
- * using log-spaced u = log(x/x_min) / log(x_max/x_min).
+ * using log-spaced u = log(x/xMin) / log(xMax/xMin).
  *
- * The LUT covers x in [x_min, x_max] with N entries, log-spaced for
+ * The LUT covers x in [xMin, xMax] with nEntries entries, log-spaced for
  * uniform fractional resolution across the dynamic range.
  *
- * @param lut      Output array (must hold N floats)
- * @param N        Number of LUT entries (256 recommended)
- * @param x_min    Minimum x value (0.001 recommended)
- * @param x_max    Maximum x value (30.0 recommended -- G(30) ~ 1e-13)
+ * @param lut       Output array (must hold nEntries floats)
+ * @param nEntries  Number of LUT entries (256 recommended)
+ * @param xMin      Minimum x value (0.001 recommended)
+ * @param xMax      Maximum x value (30.0 recommended -- G(30) ~ 1e-13)
  */
-inline void synchrotron_G_generate_lut(float* lut, int N,
-                                       double x_min = 0.001,
-                                       double x_max = 30.0) {
-  double log_ratio = std::log(x_max / x_min);
-  for (int i = 0; i < N; ++i) {
-    double u = static_cast<double>(i) / (N - 1);
-    double x = x_min * std::exp(u * log_ratio);
-    lut[i] = static_cast<float>(synchrotron_G(x));
+inline void synchrotronGGenerateLut(float* lut, int nEntries,
+                                    double xMin = 0.001,
+                                    double xMax = 30.0) {
+  const double logRatio = std::log(xMax / xMin);
+  for (int i = 0; i < nEntries; ++i) {
+    const double u = static_cast<double>(i) / (nEntries - 1);
+    const double x = xMin * std::exp(u * logRatio);
+    lut[i] = static_cast<float>(synchrotronG(x));
   }
 }
 

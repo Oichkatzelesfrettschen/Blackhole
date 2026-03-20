@@ -13,7 +13,7 @@ struct OverlayCurve2D {
   glm::vec2 max = glm::vec2(0.0f);
   std::string lastError;
 
-  bool LoadFromTsv(const std::string &path);
+  bool loadFromTsv(const std::string &path);
 };
 
 #endif /* OVERLAY_H */

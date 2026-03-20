@@ -11,7 +11,7 @@ struct NoiseVolume {
   std::vector<float> values;
 };
 
-NoiseVolume generate_noise_volume(int size, std::uint32_t seed);
+NoiseVolume generateNoiseVolume(int size, std::uint32_t seed);
 
 } // namespace physics
 

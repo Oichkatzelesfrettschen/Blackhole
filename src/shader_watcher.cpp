@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <iostream>
 
-namespace fs = std::filesystem;
+namespace fs = std::filesystem; // NOLINT(misc-unused-alias-decls) -- used conditionally in ENABLE_SHADER_WATCHER block
 
 ShaderWatcher &ShaderWatcher::instance() {
   static ShaderWatcher inst;
@@ -13,14 +13,13 @@ ShaderWatcher &ShaderWatcher::instance() {
 
 ShaderWatcher::~ShaderWatcher() { stop(); }
 
-bool ShaderWatcher::isShaderSource(const std::string &path) const {
+bool ShaderWatcher::isShaderSource(const std::string &path) {
   // Shader source extensions (not compiled .spv files)
   static const std::vector<std::string> extensions = {
       ".vert", ".frag", ".comp", ".geom", ".tesc", ".tese", ".glsl"};
 
   std::string lowerPath = path;
-  std::transform(lowerPath.begin(), lowerPath.end(), lowerPath.begin(),
-                 ::tolower);
+  std::ranges::transform(lowerPath, lowerPath.begin(), ::tolower);
 
   // Skip .spv files
   if (lowerPath.size() >= 4 &&
@@ -28,13 +27,10 @@ bool ShaderWatcher::isShaderSource(const std::string &path) const {
     return false;
   }
 
-  for (const auto &ext : extensions) {
-    if (lowerPath.size() >= ext.size() &&
-        lowerPath.substr(lowerPath.size() - ext.size()) == ext) {
-      return true;
-    }
-  }
-  return false;
+  return std::ranges::any_of(extensions, [&](const auto &ext) {
+    return lowerPath.size() >= ext.size() &&
+           lowerPath.substr(lowerPath.size() - ext.size()) == ext;
+  });
 }
 
 void ShaderWatcher::onFileEvent(const std::string &path, bool /*isModify*/) {
@@ -55,17 +51,17 @@ void ShaderWatcher::onFileEvent(const std::string &path, bool /*isModify*/) {
 
   // Add to pending set
   {
-    std::lock_guard<std::mutex> lock(pendingMutex_);
+    std::scoped_lock const lock(pendingMutex_);
     pendingShaders_.insert(path);
   }
 
-  std::cout << "[ShaderWatcher] Shader modified: " << path << std::endl;
+  std::cout << "[ShaderWatcher] Shader modified: " << path << '\n';
 }
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
 
 bool ShaderWatcher::start(const std::string &shaderDir,
-                          ReloadCallback onReload) {
+                          const ReloadCallback &onReload) {
   if (running_) {
     std::cerr << "[ShaderWatcher] Already running" << std::endl;
     return false;
@@ -79,7 +75,7 @@ bool ShaderWatcher::start(const std::string &shaderDir,
   }
 
   watchedDir_ = fs::absolute(shaderDir).string();
-  reloadCallback_ = std::move(onReload);
+  reloadCallback_ = onReload;
   lastEventTime_ = std::chrono::steady_clock::now();
 
   try {
@@ -131,13 +127,13 @@ void ShaderWatcher::stop() {
 
 #else // !BLACKHOLE_ENABLE_SHADER_WATCHER
 
-bool ShaderWatcher::start(const std::string &shaderDir,
-                          ReloadCallback onReload) {
+bool ShaderWatcher::start(const std::string &shaderDir, // NOLINT(readability-convert-member-functions-to-static) -- stub for disabled build
+                          const ReloadCallback &onReload) {
   (void)shaderDir;
   (void)onReload;
   std::cout << "[ShaderWatcher] Hot-reload disabled (build without "
                "ENABLE_SHADER_WATCHER)"
-            << std::endl;
+            << '\n';
   return false;
 }
 
@@ -150,19 +146,19 @@ void ShaderWatcher::stop() {
 bool ShaderWatcher::isRunning() const { return running_; }
 
 std::vector<std::string> ShaderWatcher::pollChangedShaders() {
-  std::lock_guard<std::mutex> lock(pendingMutex_);
+  std::scoped_lock const lock(pendingMutex_);
   std::vector<std::string> result(pendingShaders_.begin(),
                                   pendingShaders_.end());
   return result;
 }
 
 bool ShaderWatcher::hasPendingReloads() const {
-  std::lock_guard<std::mutex> lock(pendingMutex_);
+  std::scoped_lock const lock(pendingMutex_);
   return !pendingShaders_.empty();
 }
 
 void ShaderWatcher::clearPendingReloads() {
-  std::lock_guard<std::mutex> lock(pendingMutex_);
+  std::scoped_lock const lock(pendingMutex_);
   pendingShaders_.clear();
 }
 

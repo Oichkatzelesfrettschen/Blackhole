@@ -60,6 +60,10 @@ class HudOverlay {
 public:
   HudOverlay() = default;
   ~HudOverlay();
+  HudOverlay(const HudOverlay &) = delete;
+  HudOverlay &operator=(const HudOverlay &) = delete;
+  HudOverlay(HudOverlay &&) = delete;
+  HudOverlay &operator=(HudOverlay &&) = delete;
 
   // Initialize GL resources if necessary. Safe to call multiple times.
   void init();

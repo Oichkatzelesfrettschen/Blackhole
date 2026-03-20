@@ -7,8 +7,17 @@
 
 #include "noise_texture_cache.h"
 
+#include <cstddef>
 #include <iostream>
-#include <iomanip>
+#include <memory>
+#include <utility>
+
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions-patches.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
+
+#include "render/noise_generator.h"
 
 namespace blackhole {
 
@@ -59,12 +68,12 @@ NoiseTextureCache& NoiseTextureCache::operator=(NoiseTextureCache&& other) noexc
 
 bool NoiseTextureCache::initialize() {
     if (initialized_) {
-        std::cerr << "NoiseTextureCache: Already initialized" << std::endl;
-        return true;
+      std::cerr << "NoiseTextureCache: Already initialized" << '\n';
+      return true;
     }
 
 #ifdef BLACKHOLE_ENABLE_FASTNOISE2
-    std::cout << "NoiseTextureCache: Initializing 3D noise LUTs..." << std::endl;
+    std::cout << "NoiseTextureCache: Initializing 3D noise LUTs..." << '\n';
 
     // ========================================================================
     // 1. Turbulence (FractalFBm, 128³, high frequency)
@@ -76,10 +85,10 @@ bool NoiseTextureCache::initialize() {
 
         texture_turbulence_ = uploadNoiseVolume(volume);
         if (texture_turbulence_ == 0) {
-            std::cerr << "\n  ERROR: Failed to upload turbulence texture" << std::endl;
-            return false;
+          std::cerr << "\n  ERROR: Failed to upload turbulence texture" << '\n';
+          return false;
         }
-        std::cout << " OK (" << (volume.sizeBytes() / 1024 / 1024) << " MB)" << std::endl;
+        std::cout << " OK (" << (volume.sizeBytes() / 1024 / 1024) << " MB)" << '\n';
     }
 
     // ========================================================================
@@ -92,11 +101,11 @@ bool NoiseTextureCache::initialize() {
 
         texture_density_ = uploadNoiseVolume(volume);
         if (texture_density_ == 0) {
-            std::cerr << "\n  ERROR: Failed to upload density texture" << std::endl;
-            cleanup();
-            return false;
+          std::cerr << "\n  ERROR: Failed to upload density texture" << '\n';
+          cleanup();
+          return false;
         }
-        std::cout << " OK (" << (volume.sizeBytes() / 1024 / 1024) << " MB)" << std::endl;
+        std::cout << " OK (" << (volume.sizeBytes() / 1024 / 1024) << " MB)" << '\n';
     }
 
     // ========================================================================
@@ -109,11 +118,11 @@ bool NoiseTextureCache::initialize() {
 
         texture_ridged_ = uploadNoiseVolume(volume);
         if (texture_ridged_ == 0) {
-            std::cerr << "\n  ERROR: Failed to upload ridged texture" << std::endl;
-            cleanup();
-            return false;
+          std::cerr << "\n  ERROR: Failed to upload ridged texture" << '\n';
+          cleanup();
+          return false;
         }
-        std::cout << " OK (" << (volume.sizeBytes() / 1024) << " KB)" << std::endl;
+        std::cout << " OK (" << (volume.sizeBytes() / 1024) << " KB)" << '\n';
     }
 
     // ========================================================================
@@ -126,15 +135,15 @@ bool NoiseTextureCache::initialize() {
 
         texture_cellular_ = uploadNoiseVolume(volume);
         if (texture_cellular_ == 0) {
-            std::cerr << "\n  ERROR: Failed to upload cellular texture" << std::endl;
-            cleanup();
-            return false;
+          std::cerr << "\n  ERROR: Failed to upload cellular texture" << '\n';
+          cleanup();
+          return false;
         }
-        std::cout << " OK (" << (volume.sizeBytes() / 1024) << " KB)" << std::endl;
+        std::cout << " OK (" << (volume.sizeBytes() / 1024) << " KB)" << '\n';
     }
 
     initialized_ = true;
-    std::cout << "NoiseTextureCache: Initialization complete" << std::endl;
+    std::cout << "NoiseTextureCache: Initialization complete" << '\n';
     printStatistics();
 
     return true;
@@ -150,7 +159,7 @@ void NoiseTextureCache::cleanup() {
         return;
     }
 
-    std::cout << "NoiseTextureCache: Cleaning up GPU resources..." << std::endl;
+    std::cout << "NoiseTextureCache: Cleaning up GPU resources..." << '\n';
 
     if (texture_turbulence_ != 0) {
         glDeleteTextures(1, &texture_turbulence_);
@@ -182,15 +191,15 @@ void NoiseTextureCache::cleanup() {
 
 GLuint NoiseTextureCache::uploadNoiseVolume(const NoiseVolume& volume) {
     if (volume.data.empty()) {
-        std::cerr << "NoiseTextureCache: Empty volume, cannot upload" << std::endl;
-        return 0;
+      std::cerr << "NoiseTextureCache: Empty volume, cannot upload" << '\n';
+      return 0;
     }
 
     GLuint texture = 0;
     glGenTextures(1, &texture);
     if (texture == 0) {
-        std::cerr << "NoiseTextureCache: glGenTextures failed" << std::endl;
-        return 0;
+      std::cerr << "NoiseTextureCache: glGenTextures failed" << '\n';
+      return 0;
     }
 
     glBindTexture(GL_TEXTURE_3D, texture);
@@ -213,12 +222,12 @@ GLuint NoiseTextureCache::uploadNoiseVolume(const NoiseVolume& volume) {
     );
 
     // Check for errors
-    GLenum error = glGetError();
+    GLenum const error = glGetError();
     if (error != GL_NO_ERROR) {
-        std::cerr << "NoiseTextureCache: glTexImage3D failed with error 0x"
-                  << std::hex << static_cast<unsigned int>(error) << std::dec << std::endl;
-        glDeleteTextures(1, &texture);
-        return 0;
+      std::cerr << "NoiseTextureCache: glTexImage3D failed with error 0x" << std::hex
+                << static_cast<unsigned int>(error) << std::dec << '\n';
+      glDeleteTextures(1, &texture);
+      return 0;
     }
 
     // Set filtering: trilinear (linear in X, Y, Z)
@@ -235,27 +244,27 @@ GLuint NoiseTextureCache::uploadNoiseVolume(const NoiseVolume& volume) {
     return texture;
 }
 
-void NoiseTextureCache::bindAll(GLint base_unit) {
-    if (!initialized_) {
-        std::cerr << "NoiseTextureCache: Cannot bind, not initialized" << std::endl;
-        return;
-    }
+void NoiseTextureCache::bindAll(GLint baseUnit) const {
+  if (!initialized_) {
+    std::cerr << "NoiseTextureCache: Cannot bind, not initialized" << '\n';
+    return;
+  }
 
-    // Turbulence
-    glActiveTexture(GL_TEXTURE0 + static_cast<unsigned int>(base_unit));
-    glBindTexture(GL_TEXTURE_3D, texture_turbulence_);
+  // Turbulence
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned int>(baseUnit));
+  glBindTexture(GL_TEXTURE_3D, texture_turbulence_);
 
-    // Density
-    glActiveTexture(GL_TEXTURE0 + static_cast<unsigned int>(base_unit + 1));
-    glBindTexture(GL_TEXTURE_3D, texture_density_);
+  // Density
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned int>(baseUnit + 1));
+  glBindTexture(GL_TEXTURE_3D, texture_density_);
 
-    // Ridged
-    glActiveTexture(GL_TEXTURE0 + static_cast<unsigned int>(base_unit + 2));
-    glBindTexture(GL_TEXTURE_3D, texture_ridged_);
+  // Ridged
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned int>(baseUnit + 2));
+  glBindTexture(GL_TEXTURE_3D, texture_ridged_);
 
-    // Cellular
-    glActiveTexture(GL_TEXTURE0 + static_cast<unsigned int>(base_unit + 3));
-    glBindTexture(GL_TEXTURE_3D, texture_cellular_);
+  // Cellular
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned int>(baseUnit + 3));
+  glBindTexture(GL_TEXTURE_3D, texture_cellular_);
 }
 
 size_t NoiseTextureCache::getMemoryUsageBytes() const {
@@ -265,35 +274,33 @@ size_t NoiseTextureCache::getMemoryUsageBytes() const {
 
     size_t total = 0;
 
-    // Turbulence: 128³ × 4 bytes/float
-    total += 128 * 128 * 128 * sizeof(float);
+    // Turbulence: 128^3 x 4 bytes/float
+    total += size_t{128} * 128 * 128 * sizeof(float);
 
-    // Density: 128³ × 4 bytes/float
-    total += 128 * 128 * 128 * sizeof(float);
+    // Density: 128^3 x 4 bytes/float
+    total += size_t{128} * 128 * 128 * sizeof(float);
 
-    // Ridged: 64³ × 4 bytes/float
-    total += 64 * 64 * 64 * sizeof(float);
+    // Ridged: 64^3 x 4 bytes/float
+    total += size_t{64} * 64 * 64 * sizeof(float);
 
-    // Cellular: 64³ × 4 bytes/float
-    total += 64 * 64 * 64 * sizeof(float);
+    // Cellular: 64^3 x 4 bytes/float
+    total += size_t{64} * 64 * 64 * sizeof(float);
 
     return total;
 }
 
 void NoiseTextureCache::printStatistics() const {
-    std::cout << "NoiseTextureCache Statistics:" << std::endl;
-    std::cout << "  Turbulence: " << (texture_turbulence_ != 0 ? "OK" : "FAIL")
-              << " (128³, " << (128*128*128*4 / 1024 / 1024) << " MB)" << std::endl;
-    std::cout << "  Density:    " << (texture_density_ != 0 ? "OK" : "FAIL")
-              << " (128³, " << (128*128*128*4 / 1024 / 1024) << " MB)" << std::endl;
-    std::cout << "  Ridged:     " << (texture_ridged_ != 0 ? "OK" : "FAIL")
-              << " (64³, " << (64*64*64*4 / 1024) << " KB)" << std::endl;
-    std::cout << "  Cellular:   " << (texture_cellular_ != 0 ? "OK" : "FAIL")
-              << " (64³, " << (64*64*64*4 / 1024) << " KB)" << std::endl;
-    std::cout << "  Total GPU memory: " << (getMemoryUsageBytes() / 1024 / 1024)
-              << " MB" << std::endl;
-    std::cout << "  Recommended texture units: "
-              << turbulenceUnit() << "-" << cellularUnit() << std::endl;
+  std::cout << "NoiseTextureCache Statistics:" << '\n';
+  std::cout << "  Turbulence: " << (texture_turbulence_ != 0 ? "OK" : "FAIL") << " (128³, "
+            << (128 * 128 * 128 * 4 / 1024 / 1024) << " MB)" << '\n';
+  std::cout << "  Density:    " << (texture_density_ != 0 ? "OK" : "FAIL") << " (128³, "
+            << (128 * 128 * 128 * 4 / 1024 / 1024) << " MB)" << '\n';
+  std::cout << "  Ridged:     " << (texture_ridged_ != 0 ? "OK" : "FAIL") << " (64³, "
+            << (64 * 64 * 64 * 4 / 1024) << " KB)" << '\n';
+  std::cout << "  Cellular:   " << (texture_cellular_ != 0 ? "OK" : "FAIL") << " (64³, "
+            << (64 * 64 * 64 * 4 / 1024) << " KB)" << '\n';
+  std::cout << "  Total GPU memory: " << (getMemoryUsageBytes() / 1024 / 1024) << " MB" << '\n';
+  std::cout << "  Recommended texture units: " << turbulenceUnit() << "-" << cellularUnit() << '\n';
 }
 
 } // namespace blackhole

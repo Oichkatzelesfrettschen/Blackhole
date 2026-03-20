@@ -25,15 +25,19 @@
 
 #include "grmhd_streaming.h"
 
-#include <nlohmann/json.hpp>
-
 #include <algorithm>
-#include <chrono>
 #include <condition_variable>
+#include <cstddef>
+#include <cstdint>
 #include <fstream>
-#include <functional>
+#include <ios>
+#include <memory>
+#include <mutex>
 #include <queue>
-#include <stdexcept>
+#include <string>
+
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 using json = nlohmann::json;
 
@@ -46,56 +50,56 @@ namespace blackhole {
 TileCache::TileCache(size_t maxBytes) : maxBytes_(maxBytes) {}
 
 std::shared_ptr<GRMHDTile> TileCache::get(const TileID& id) {
-    std::lock_guard<std::mutex> lock(mutex_);
+  std::scoped_lock const lock(mutex_);
 
-    auto it = cache_.find(id);
-    if (it != cache_.end()) {
-        it->second.accessCount++;
-        it->second.lastAccess = hits_ + misses_;
-        hits_++;
-        return it->second.tile;
-    }
+  auto it = cache_.find(id);
+  if (it != cache_.end()) {
+    it->second.accessCount++;
+    it->second.lastAccess = hits_ + misses_;
+    hits_++;
+    return it->second.tile;
+  }
 
     misses_++;
     return nullptr;
 }
 
-void TileCache::put(const TileID& id, std::shared_ptr<GRMHDTile> tile) {
-    std::lock_guard<std::mutex> lock(mutex_);
+void TileCache::put(const TileID &id, const std::shared_ptr<GRMHDTile> &tile) {
+  std::scoped_lock const lock(mutex_);
 
-    size_t tileSize = tile->sizeBytes();
+  size_t const tileSize = tile->sizeBytes();
 
-    // Evict LRU tiles while over memory budget
-    while (currentBytes_ + tileSize > maxBytes_ && !cache_.empty()) {
-        evictLRU();
-    }
+  // Evict LRU tiles while over memory budget
+  while (currentBytes_ + tileSize > maxBytes_ && !cache_.empty()) {
+    evictLRU();
+  }
 
-    CacheEntry entry;
-    entry.tile        = tile;
-    entry.accessCount = 1;
-    entry.lastAccess  = hits_ + misses_;
+  CacheEntry entry;
+  entry.tile = tile;
+  entry.accessCount = 1;
+  entry.lastAccess = hits_ + misses_;
 
-    cache_[id]    = entry;
-    currentBytes_ += tileSize;
+  cache_[id] = entry;
+  currentBytes_ += tileSize;
 }
 
 void TileCache::clear() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    cache_.clear();
-    currentBytes_ = 0;
-    hits_         = 0;
-    misses_       = 0;
+  std::scoped_lock const lock(mutex_);
+  cache_.clear();
+  currentBytes_ = 0;
+  hits_ = 0;
+  misses_ = 0;
 }
 
 size_t TileCache::hitRate() const noexcept {
-    std::lock_guard<std::mutex> lock(mutex_);
-    size_t total = hits_ + misses_;
-    return total > 0 ? (hits_ * 100) / total : 0;
+  std::scoped_lock const lock(mutex_);
+  size_t const total = hits_ + misses_;
+  return total > 0 ? (hits_ * 100) / total : 0;
 }
 
 size_t TileCache::currentBytes() const noexcept {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return currentBytes_;
+  std::scoped_lock const lock(mutex_);
+  return currentBytes_;
 }
 
 void TileCache::evictLRU() {
@@ -147,17 +151,17 @@ bool GRMHDStreamer::init() {
         }
 
         // WHY: schema_version field guards against future format changes.
-        int schemaVer = doc.value("schema_version", 0);
+        int const schemaVer = doc.value("schema_version", 0);
         if (schemaVer < 1) {
             return false;
         }
 
         // Resolve binary path: prefer JSON "bin" field, fall back to
         // the binPath passed in the constructor.
-        if (doc.contains("bin") && doc["bin"].is_string()) {
-            std::string binRelative = doc["bin"].get<std::string>();
+        if (doc.contains("bin") && doc.at("bin").is_string()) {
+            std::string binRelative = doc.at("bin").get<std::string>();
             // If relative, resolve against the JSON directory.
-            if (!binRelative.empty() && binRelative[0] != '/') {
+            if (!binRelative.empty() && binRelative.front() != '/') {
                 auto dir = metadata_.jsonPath.rfind('/');
                 if (dir != std::string::npos) {
                     binRelative = metadata_.jsonPath.substr(0, dir + 1) + binRelative;
@@ -167,19 +171,19 @@ bool GRMHDStreamer::init() {
         }
 
         // Grid dimensions: "grid_dims": [X, Y, Z]
-        if (doc.contains("grid_dims") && doc["grid_dims"].is_array()
-                && doc["grid_dims"].size() >= 3) {
-            metadata_.gridX = doc["grid_dims"][0].get<size_t>();
-            metadata_.gridY = doc["grid_dims"][1].get<size_t>();
-            metadata_.gridZ = doc["grid_dims"][2].get<size_t>();
+        if (doc.contains("grid_dims") && doc.at("grid_dims").is_array()
+                && doc.at("grid_dims").size() >= 3) {
+            metadata_.gridX = doc.at("grid_dims").at(0).get<size_t>();
+            metadata_.gridY = doc.at("grid_dims").at(1).get<size_t>();
+            metadata_.gridZ = doc.at("grid_dims").at(2).get<size_t>();
         } else {
             return false;
         }
 
         // Channel names
-        if (doc.contains("channels") && doc["channels"].is_array()) {
+        if (doc.contains("channels") && doc.at("channels").is_array()) {
             metadata_.channels.clear();
-            for (const auto& ch : doc["channels"]) {
+            for (const auto& ch : doc.at("channels")) {
                 metadata_.channels.push_back(ch.get<std::string>());
             }
         }
@@ -187,9 +191,9 @@ bool GRMHDStreamer::init() {
         // nubhlight_pack writes a single dataset snapshot per file, not a
         // time-series.  Treat it as a single frame at time 0.
         // A future multi-frame format can add "frames": [...] to the JSON.
-        if (doc.contains("frames") && doc["frames"].is_array()) {
+        if (doc.contains("frames") && doc.at("frames").is_array()) {
             metadata_.frames.clear();
-            for (const auto& fr : doc["frames"]) {
+            for (const auto& fr : doc.at("frames")) {
                 GRMHDFrame frame{};
                 frame.frameIndex = fr.value("index",  0u);
                 frame.time       = fr.value("time",   0.0);
@@ -217,10 +221,10 @@ bool GRMHDStreamer::init() {
             // if the caller will provide data another way.
             metadata_.frameCount = 0;
         } else {
-            std::streamsize binSize = binCheck.tellg();
-            if (metadata_.frames.size() == 1 && metadata_.frames[0].byteSize == 0) {
-                metadata_.frames[0].byteSize = static_cast<size_t>(binSize);
-            }
+          std::streamsize const binSize = binCheck.tellg();
+          if (metadata_.frames.size() == 1 && metadata_.frames.at(0).byteSize == 0) {
+            metadata_.frames.at(0).byteSize = static_cast<size_t>(binSize);
+          }
         }
     }
 
@@ -233,8 +237,8 @@ bool GRMHDStreamer::init() {
 
 void GRMHDStreamer::shutdown() {
     {
-        std::lock_guard<std::mutex> lk(queueMutex_);
-        running_ = false;
+      std::scoped_lock const lk(queueMutex_);
+      running_ = false;
     }
     queueCV_.notify_all();
     if (loaderThread_.joinable()) {
@@ -249,17 +253,17 @@ void GRMHDStreamer::shutdown() {
 void GRMHDStreamer::seekFrame(uint32_t frameIndex) {
     currentFrame_ = frameIndex;
     // Prefetch: enqueue the next N_PREFETCH frames so they are warm in cache.
-    static constexpr uint32_t N_PREFETCH = 3;
-    for (uint32_t i = 1; i <= N_PREFETCH; ++i) {
-        uint32_t nextFrame = frameIndex + i;
-        if (nextFrame < static_cast<uint32_t>(metadata_.frameCount)) {
-            TileID id{nextFrame, 0, 0, 0, 0};
-            if (!cache_.get(id)) {
-                std::lock_guard<std::mutex> lk(queueMutex_);
-                loadQueue_.push(id);
-                queueCV_.notify_one();
-            }
+    static constexpr uint32_t nPrefetch = 3;
+    for (uint32_t i = 1; i <= nPrefetch; ++i) {
+      uint32_t const nextFrame = frameIndex + i;
+      if (nextFrame < static_cast<uint32_t>(metadata_.frameCount)) {
+        TileID const id{.frame = nextFrame, .x = 0, .y = 0, .z = 0, .level = 0};
+        if (!cache_.get(id)) {
+          std::scoped_lock const lk(queueMutex_);
+          loadQueue_.push(id);
+          queueCV_.notify_one();
         }
+      }
     }
 }
 
@@ -281,17 +285,17 @@ void GRMHDStreamer::pause() {
 
 std::shared_ptr<GRMHDTile> GRMHDStreamer::getTile(uint16_t x, uint16_t y,
                                                     uint16_t z, uint8_t level) {
-    TileID id{currentFrame_.load(), x, y, z, level};
+  TileID const id{.frame = currentFrame_.load(), .x = x, .y = y, .z = z, .level = level};
 
-    auto tile = cache_.get(id);
-    if (tile) {
-        return tile;
-    }
+  auto tile = cache_.get(id);
+  if (tile) {
+    return tile;
+  }
 
     // Queue an async load for this tile
     {
-        std::lock_guard<std::mutex> lk(queueMutex_);
-        loadQueue_.push(id);
+      std::scoped_lock const lk(queueMutex_);
+      loadQueue_.push(id);
     }
     queueCV_.notify_one();
     return nullptr;
@@ -302,8 +306,8 @@ double GRMHDStreamer::cacheHitRate() const noexcept {
 }
 
 size_t GRMHDStreamer::queueDepth() const noexcept {
-    std::lock_guard<std::mutex> lk(queueMutex_);
-    return loadQueue_.size();
+  std::scoped_lock const lk(queueMutex_);
+  return loadQueue_.size();
 }
 
 // ---------------------------------------------------------------------------
@@ -321,13 +325,17 @@ void GRMHDStreamer::loaderThreadFunc() {
             if (!running_.load() && loadQueue_.empty()) {
                 break;
             }
-            if (loadQueue_.empty()) continue;
+            if (loadQueue_.empty()) {
+              continue;
+            }
             id = loadQueue_.front();
             loadQueue_.pop();
         }
 
         // Check cache again -- another thread may have loaded it already.
-        if (cache_.get(id)) continue;
+        if (cache_.get(id)) {
+          continue;
+        }
 
         auto tile = loadTile(id);
         if (tile) {
@@ -345,11 +353,11 @@ void GRMHDStreamer::loaderThreadFunc() {
 // ---------------------------------------------------------------------------
 
 std::shared_ptr<GRMHDTile> GRMHDStreamer::loadTile(const TileID& id) {
-    uint32_t frame = id.frame;
-    if (frame >= static_cast<uint32_t>(metadata_.frames.size())) {
-        return nullptr;
-    }
-    const GRMHDFrame& fi = metadata_.frames[frame];
+  uint32_t const frame = id.frame;
+  if (frame >= static_cast<uint32_t>(metadata_.frames.size())) {
+    return nullptr;
+  }
+    const GRMHDFrame& fi = metadata_.frames.at(frame);
     if (fi.byteSize == 0 || metadata_.binPath.empty()) {
         return nullptr;
     }
@@ -366,29 +374,28 @@ std::shared_ptr<GRMHDTile> GRMHDStreamer::loadTile(const TileID& id) {
     }
 
     // Compute voxel count and RGBA32F element count
-    size_t voxels      = metadata_.gridX * metadata_.gridY * metadata_.gridZ;
-    size_t n_channels  = 4;  // RGBA32F always 4 channels
-    size_t n_floats    = voxels * n_channels;
-    size_t expected_bytes = n_floats * sizeof(float);
+    size_t const voxels = metadata_.gridX * metadata_.gridY * metadata_.gridZ;
+    size_t const nChannels = 4; // RGBA32F always 4 channels
+    size_t const nFloats = voxels * nChannels;
+    size_t const expectedBytes = nFloats * sizeof(float);
 
     // Guard: only read as many bytes as available in the frame slab
-    size_t read_bytes = std::min(expected_bytes, fi.byteSize);
-    size_t read_floats = read_bytes / sizeof(float);
+    size_t const readBytes = std::min(expectedBytes, fi.byteSize);
+    size_t const readFloats = readBytes / sizeof(float);
 
     auto tile = std::make_shared<GRMHDTile>();
     tile->id     = id;
     tile->width  = metadata_.gridX;
     tile->height = metadata_.gridY;
     tile->depth  = metadata_.gridZ;
-    tile->data.resize(read_floats, 0.0f);
+    tile->data.resize(readFloats, 0.0f);
 
     // Read the raw float data
-    bin.read(reinterpret_cast<char*>(tile->data.data()),
-             static_cast<std::streamsize>(read_bytes));
+    bin.read(reinterpret_cast<char *>(tile->data.data()), static_cast<std::streamsize>(readBytes));
 
     if (!bin) {
         // Partial read -- fill remainder with zero (already done by resize)
-        tile->data.resize(n_floats, 0.0f);
+        tile->data.resize(nFloats, 0.0f);
     }
 
     return tile;

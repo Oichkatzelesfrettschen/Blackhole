@@ -10,19 +10,19 @@
  * that can be written as FITS header keywords, HDF5 attributes,
  * or JSON sidecar files.
  *
- * HOW: Call build_manifest() to get compile-time info. Add runtime
+ * HOW: Call buildManifest() to get compile-time info. Add runtime
  * parameters before writing to output.
  */
 
 #ifndef PHYSICS_REPRODUCIBILITY_H
 #define PHYSICS_REPRODUCIBILITY_H
 
-#include <string>
-#include <vector>
-#include <utility>
 #include <ctime>
-#include <sstream>
 #include <iomanip>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace physics {
 
@@ -55,7 +55,7 @@ struct ReproducibilityManifest {
 
   [[nodiscard]] std::string get(const std::string& key) const {
     for (const auto& [k, v] : entries) {
-      if (k == key) return v;
+      if (k == key) { return v; }
     }
     return "";
   }
@@ -63,13 +63,13 @@ struct ReproducibilityManifest {
   /**
    * @brief Serialize manifest to JSON string.
    */
-  [[nodiscard]] std::string to_json() const {
+  [[nodiscard]] std::string toJson() const {
     std::ostringstream oss;
     oss << "{\n";
-    for (size_t i = 0; i < entries.size(); ++i) {
-      oss << "  \"" << entries[i].first << "\": \""
-          << entries[i].second << "\"";
-      if (i + 1 < entries.size()) oss << ",";
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+      oss << "  \"" << entries.at(i).first << "\": \""
+          << entries.at(i).second << "\"";
+      if (i + 1 < entries.size()) { oss << ","; }
       oss << "\n";
     }
     oss << "}";
@@ -82,7 +82,7 @@ struct ReproducibilityManifest {
  *
  * Captures compile-time information that cannot change at runtime.
  */
-inline ReproducibilityManifest build_manifest() {
+inline ReproducibilityManifest buildManifest() {
   ReproducibilityManifest m;
 
   m.add("code", "Blackhole");
@@ -94,11 +94,11 @@ inline ReproducibilityManifest build_manifest() {
 #endif
 
   // Compiler identification
-#if defined(__clang__)
+#ifdef __clang__
   m.add("compiler", "Clang " + std::to_string(__clang_major__) + "." +
         std::to_string(__clang_minor__) + "." +
         std::to_string(__clang_patchlevel__));
-#elif defined(__GNUC__)
+#elifdef __GNUC__
   m.add("compiler", "GCC " + std::to_string(__GNUC__) + "." +
         std::to_string(__GNUC_MINOR__) + "." +
         std::to_string(__GNUC_PATCHLEVEL__));
@@ -121,24 +121,24 @@ inline ReproducibilityManifest build_manifest() {
 #endif
 
   // Platform
-#if defined(__linux__)
+#ifdef __linux__
   m.add("platform", "Linux");
-#elif defined(__APPLE__)
+#elifdef __APPLE__
   m.add("platform", "macOS");
-#elif defined(_WIN32)
+#elifdef _WIN32
   m.add("platform", "Windows");
 #else
   m.add("platform", "unknown");
 #endif
 
   // SIMD tier
-#if defined(__AVX512F__)
+#ifdef __AVX512F__
   m.add("simd", "AVX-512");
-#elif defined(__AVX2__)
+#elifdef __AVX2__
   m.add("simd", "AVX2");
-#elif defined(__AVX__)
+#elifdef __AVX__
   m.add("simd", "AVX");
-#elif defined(__SSE4_2__)
+#elifdef __SSE4_2__
   m.add("simd", "SSE4.2");
 #else
   m.add("simd", "SSE2");
@@ -146,6 +146,9 @@ inline ReproducibilityManifest build_manifest() {
 
   // Timestamp
   auto t = std::time(nullptr);
+  // NOLINTNEXTLINE(concurrency-mt-unsafe)
+  // WHY: gmtime is not thread-safe on POSIX but this manifest function is
+  // intended to be called once at startup before worker threads launch.
   auto tm = *std::gmtime(&t);
   std::ostringstream ts;
   ts << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
@@ -158,27 +161,27 @@ inline ReproducibilityManifest build_manifest() {
  * @brief Add physics simulation parameters to a manifest.
  *
  * @param m Manifest to populate
- * @param mass_msun Black hole mass [Msun]
+ * @param massMsun Black hole mass [Msun]
  * @param spin Dimensionless spin a*
- * @param inclination_deg Observer inclination [degrees]
- * @param freq_hz Observing frequency [Hz]
+ * @param inclinationDeg Observer inclination [degrees]
+ * @param freqHz Observing frequency [Hz]
  * @param nx Image width [pixels]
  * @param ny Image height [pixels]
- * @param fov_uas Field of view [microarcseconds]
+ * @param fovUas Field of view [microarcseconds]
  */
-inline void add_physics_params(ReproducibilityManifest& m,
-                                double mass_msun, double spin,
-                                double inclination_deg,
-                                double freq_hz,
-                                int nx, int ny,
-                                double fov_uas) {
-  m.add("bh_mass_msun", mass_msun);
+inline void addPhysicsParams(ReproducibilityManifest& m,
+                              double massMsun, double spin,
+                              double inclinationDeg,
+                              double freqHz,
+                              int nx, int ny,
+                              double fovUas) {
+  m.add("bh_mass_msun", massMsun);
   m.add("bh_spin", spin);
-  m.add("inclination_deg", inclination_deg);
-  m.add("freq_hz", freq_hz);
+  m.add("inclination_deg", inclinationDeg);
+  m.add("freq_hz", freqHz);
   m.add("image_nx", nx);
   m.add("image_ny", ny);
-  m.add("fov_uas", fov_uas);
+  m.add("fov_uas", fovUas);
 }
 
 } // namespace physics

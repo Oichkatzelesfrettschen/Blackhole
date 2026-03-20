@@ -11,14 +11,16 @@
  * - Longair (2011) "High Energy Astrophysics" Ch. 1
  */
 
-#include "../src/physics/synchrotron.h"
-#include "../src/physics/constants.h"
-#include <iostream>
-#include <cmath>
-#include <iomanip>
-#include <cassert>
-#include <vector>
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <iomanip>
+#include <iostream>
+#include <utility>
+#include <vector>
+
+#include "../src/physics/synchrotron.h"
 
 using namespace physics;
 
@@ -29,14 +31,18 @@ constexpr double RELAXED_TOLERANCE = 1e-2;
 /**
  * @brief Simulate optical depth integration (CPU reference)
  */
-double cpu_optical_depth_integrate(const std::vector<double>& alpha_array,
-                                    const std::vector<double>& ds_array) {
-  if (alpha_array.size() < 2) return 0.0;
+namespace {
+
+double cpuOpticalDepthIntegrate(const std::vector<double> &alphaArray,
+                                       const std::vector<double> &dsArray) {
+  if (alphaArray.size() < 2) {
+    return 0.0;
+  }
 
   double tau = 0.0;
-  for (size_t i = 0; i < alpha_array.size() - 1; i++) {
-    double alpha_avg = 0.5 * (alpha_array[i] + alpha_array[i + 1]);
-    tau += alpha_avg * ds_array[i];
+  for (size_t i = 0; i < alphaArray.size() - 1; i++) {
+    double const alphaAvg = 0.5 * (alphaArray.at(i) + alphaArray.at(i + 1));
+    tau += alphaAvg * dsArray.at(i);
   }
   return tau;
 }
@@ -44,15 +50,15 @@ double cpu_optical_depth_integrate(const std::vector<double>& alpha_array,
 /**
  * @brief Simulate radiative transfer step (CPU reference)
  */
-double cpu_intensity_step(double I_current, double j_nu, double alpha_nu, double ds) {
-  double tau_segment = alpha_nu * ds;
-  if (tau_segment > 100.0) tau_segment = 100.0;
+double cpuIntensityStep(double iCurrent, double jNu, double alphaNu, double ds) {
+  double tauSegment = alphaNu * ds;
+  tauSegment = std::min(tauSegment, 100.0);
 
-  double T = std::exp(-tau_segment);
-  double S = (alpha_nu > 1e-30) ? (j_nu / alpha_nu) : j_nu;
+  double const t = std::exp(-tauSegment);
+  double const s = (alphaNu > 1e-30) ? (jNu / alphaNu) : jNu;
 
-  double I_new = I_current * T + S * (1.0 - T);
-  return I_new;
+  double const iNew = (iCurrent * t) + (s * (1.0 - t));
+  return iNew;
 }
 
 /**
@@ -60,59 +66,57 @@ double cpu_intensity_step(double I_current, double j_nu, double alpha_nu, double
  *
  * Expected: Doubling steps should reduce error by factor ~4 (2nd-order method)
  */
-bool test_optical_depth_convergence() {
-    std::cout << "\n[TEST 1] Optical Depth Convergence\n";
-    std::cout << "===================================\n";
+bool testOpticalDepthConvergence() {
+  std::cout << "\n[TEST 1] Optical Depth Convergence\n";
+  std::cout << "===================================\n";
 
-    double B = 100.0;      // Gauss
-    double n_e = 1e3;      // cm^-3
-    double nu = 1e10;      // Hz
-    double p = 2.5;
-    double path_length = 1e16;  // cm
+  double b = 100.0; // Gauss
+  double nE = 1e3;  // cm^-3
+  double nu = 1e10; // Hz
+  double p = 2.5;
+  double pathLength = 1e16; // cm
 
-    // Create optical depth profile: increasing B along path
-    auto create_absorption_profile = [&](int n_steps) -> std::vector<double> {
-        std::vector<double> alpha_array;
-        for (int i = 0; i < n_steps; i++) {
-            double s = static_cast<double>(i) / (n_steps - 1) * path_length;
-            // Increase B with distance: B(s) = B_0 * (1 + s/path_length)
-            double B_s = B * (1.0 + s / path_length);
-            double alpha = synchrotron_absorption_coefficient(nu, B_s, n_e, p);
-            alpha_array.push_back(alpha);
-        }
-        return alpha_array;
-    };
-
-    std::vector<int> step_counts = {10, 20, 40, 80};
-    std::vector<double> tau_results;
-
-    std::cout << std::fixed << std::setprecision(8);
-    for (int n_steps : step_counts) {
-        auto alpha_array = create_absorption_profile(n_steps);
-        std::vector<double> ds_array(static_cast<size_t>(n_steps - 1),
-                                      path_length / (n_steps - 1));
-
-        double tau = cpu_optical_depth_integrate(alpha_array, ds_array);
-        tau_results.push_back(tau);
-
-        std::cout << "  Steps: " << n_steps << ", tau = " << tau;
-
-        if (tau_results.size() > 1) {
-            double error_ratio = std::abs(tau_results.back() - tau_results[tau_results.size() - 2]) /
-                                std::abs(tau_results[tau_results.size() - 2] - tau_results[tau_results.size() - 3] + 1e-20);
-            std::cout << ", convergence ratio = " << error_ratio;
-        }
-        std::cout << "\n";
+  // Create optical depth profile: increasing B along path
+  auto createAbsorptionProfile = [&](int nSteps) -> std::vector<double> {
+    std::vector<double> alphaArray;
+    for (int i = 0; i < nSteps; i++) {
+      double const s = static_cast<double>(i) / (nSteps - 1) * pathLength;
+      // Increase B with distance: B(s) = B_0 * (1 + s/path_length)
+      double const bS = b * (1.0 + (s / pathLength));
+      double const alpha = synchrotronAbsorptionCoefficient(nu, bS, nE, p);
+      alphaArray.push_back(alpha);
     }
+    return alphaArray;
+  };
 
-    // Check convergence: errors should decrease
-    bool passed = (tau_results.size() > 3) &&
-                  (tau_results[1] < tau_results[0]) &&
-                  (tau_results[2] < tau_results[1]) &&
-                  (tau_results[3] < tau_results[2]);
+  std::vector<int> const stepCounts = {10, 20, 40, 80};
+  std::vector<double> tauResults;
 
-    std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
-    return passed;
+  std::cout << std::fixed << std::setprecision(8);
+  for (int const nSteps : stepCounts) {
+    auto alphaArray = createAbsorptionProfile(nSteps);
+    std::vector<double> const dsArray(static_cast<size_t>(nSteps - 1), pathLength / (nSteps - 1));
+
+    double const tau = cpuOpticalDepthIntegrate(alphaArray, dsArray);
+    tauResults.push_back(tau);
+
+    std::cout << "  Steps: " << nSteps << ", tau = " << tau;
+
+    if (tauResults.size() > 2) {
+      double const errorRatio =
+          std::abs(tauResults.back() - tauResults.at(tauResults.size() - 2)) /
+          std::abs(tauResults.at(tauResults.size() - 2) - tauResults.at(tauResults.size() - 3) + 1e-20);
+      std::cout << ", convergence ratio = " << errorRatio;
+    }
+    std::cout << "\n";
+  }
+
+  // Check convergence: errors should decrease
+  bool const passed = (tauResults.size() > 3) && (tauResults.at(1) < tauResults.at(0)) &&
+                      (tauResults.at(2) < tauResults.at(1)) && (tauResults.at(3) < tauResults.at(2));
+
+  std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
+  return passed;
 }
 
 /**
@@ -120,25 +124,25 @@ bool test_optical_depth_convergence() {
  *
  * T(tau) = exp(-tau) must satisfy: 0 <= T <= 1 for all tau >= 0
  */
-bool test_transmission_factor_bounds() {
-    std::cout << "\n[TEST 2] Transmission Factor Bounds\n";
-    std::cout << "====================================\n";
+bool testTransmissionFactorBounds() {
+  std::cout << "\n[TEST 2] Transmission Factor Bounds\n";
+  std::cout << "====================================\n";
 
-    std::vector<double> tau_values = {0.0, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0};
-    bool all_passed = true;
+  std::vector<double> const tauValues = {0.0, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0};
+  bool allPassed = true;
 
-    std::cout << std::fixed << std::setprecision(8);
-    for (double tau : tau_values) {
-        double T = std::exp(-tau);
+  std::cout << std::fixed << std::setprecision(8);
+  for (double const tau : tauValues) {
+    double const t = std::exp(-tau);
 
-        bool passed = (T >= 0.0 && T <= 1.0);
-        std::cout << "  tau = " << tau << ", T = " << T;
-        std::cout << " " << (passed ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && passed;
-    }
+    bool const passed = (t >= 0.0 && t <= 1.0);
+    std::cout << "  tau = " << tau << ", T = " << t;
+    std::cout << " " << (passed ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && passed;
+  }
 
-    std::cout << "  Status: " << (all_passed ? "PASS" : "FAIL") << "\n";
-    return all_passed;
+  std::cout << "  Status: " << (allPassed ? "PASS" : "FAIL") << "\n";
+  return allPassed;
 }
 
 /**
@@ -147,38 +151,38 @@ bool test_transmission_factor_bounds() {
  * When tau << 1: dI/ds ≈ j_nu (linear accumulation for weak absorption)
  * Expected: Full radiative transfer ≈ optically thin as alpha -> 0
  */
-bool test_optically_thin_limit() {
-    std::cout << "\n[TEST 3] Optically Thin Limit\n";
-    std::cout << "=============================\n";
+bool testOpticallyThinLimit() {
+  std::cout << "\n[TEST 3] Optically Thin Limit\n";
+  std::cout << "=============================\n";
 
-    double j_nu = 1e-8;     // Emissivity
-    double alpha_nu = 1e-25; // Extremely small absorption (tau ~ 1e-9)
-    double ds = 1e16;        // Path segment [cm]
+  double const jNu = 1e-8;      // Emissivity
+  double const alphaNu = 1e-25; // Extremely small absorption (tau ~ 1e-9)
+  double const ds = 1e16;       // Path segment [cm]
 
-    double I_current = 1e-9; // Non-zero starting intensity
+  double const iCurrent = 1e-9; // Non-zero starting intensity
 
-    // Full formula
-    double I_full = cpu_intensity_step(I_current, j_nu, alpha_nu, ds);
+  // Full formula
+  double const iFull = cpuIntensityStep(iCurrent, jNu, alphaNu, ds);
 
-    // Optically thin limit: I ≈ I_old + j*ds (ignoring absorption)
-    double I_thin = I_current + j_nu * ds;
+  // Optically thin limit: I ≈ I_old + j*ds (ignoring absorption)
+  double const iThin = iCurrent + (jNu * ds);
 
-    // In the limit alpha -> 0, the absorption term (j/alpha)*( 1 - exp(-tau))
-    // becomes (j/alpha) * tau = j * ds (since tau -> 0, 1-exp(-tau) -> tau)
+  // In the limit alpha -> 0, the absorption term (j/alpha)*( 1 - exp(-tau))
+  // becomes (j/alpha) * tau = j * ds (since tau -> 0, 1-exp(-tau) -> tau)
 
-    double error = std::abs(I_full - I_thin) / (std::abs(I_thin) + 1e-30);
+  double const error = std::abs(iFull - iThin) / (std::abs(iThin) + 1e-30);
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  Emissivity j_nu = " << j_nu << "\n";
-    std::cout << "  Absorption alpha_nu = " << alpha_nu << "\n";
-    std::cout << "  Optical depth tau = " << (alpha_nu * ds) << " (<< 1)\n";
-    std::cout << "  Full formula result: " << I_full << "\n";
-    std::cout << "  Optically thin limit: " << I_thin << "\n";
-    std::cout << "  Relative error: " << error << "\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  Emissivity j_nu = " << jNu << "\n";
+  std::cout << "  Absorption alpha_nu = " << alphaNu << "\n";
+  std::cout << "  Optical depth tau = " << (alphaNu * ds) << " (<< 1)\n";
+  std::cout << "  Full formula result: " << iFull << "\n";
+  std::cout << "  Optically thin limit: " << iThin << "\n";
+  std::cout << "  Relative error: " << error << "\n";
 
-    bool passed = error < RELAXED_TOLERANCE;
-    std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
-    return passed;
+  bool const passed = error < RELAXED_TOLERANCE;
+  std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
+  return passed;
 }
 
 /**
@@ -186,35 +190,35 @@ bool test_optically_thin_limit() {
  *
  * When tau >> 1 and source uniform: I -> S_nu = j/alpha (blackbody limit)
  */
-bool test_optically_thick_limit() {
-    std::cout << "\n[TEST 4] Optically Thick Limit\n";
-    std::cout << "===============================\n";
+bool testOpticallyThickLimit() {
+  std::cout << "\n[TEST 4] Optically Thick Limit\n";
+  std::cout << "===============================\n";
 
-    double j_nu = 1e-8;     // Emissivity
-    double alpha_nu = 1e-8; // Strong absorption
-    double ds = 1e18;       // Very large path (tau >> 1)
+  double const jNu = 1e-8;     // Emissivity
+  double const alphaNu = 1e-8; // Strong absorption
+  double const ds = 1e18;      // Very large path (tau >> 1)
 
-    double I_current = 0.0;
+  double const iCurrent = 0.0;
 
-    // Full formula
-    double I_full = cpu_intensity_step(I_current, j_nu, alpha_nu, ds);
+  // Full formula
+  double const iFull = cpuIntensityStep(iCurrent, jNu, alphaNu, ds);
 
-    // Optically thick limit (source function)
-    double S_nu = j_nu / alpha_nu;
+  // Optically thick limit (source function)
+  double const sNu = jNu / alphaNu;
 
-    double error = std::abs(I_full - S_nu) / (S_nu + 1e-30);
+  double const error = std::abs(iFull - sNu) / (sNu + 1e-30);
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  Emissivity j_nu = " << j_nu << "\n";
-    std::cout << "  Absorption alpha_nu = " << alpha_nu << "\n";
-    std::cout << "  Optical depth tau = " << (alpha_nu * ds) << " (>> 1)\n";
-    std::cout << "  Full formula result: " << I_full << "\n";
-    std::cout << "  Source function S = " << S_nu << "\n";
-    std::cout << "  Relative error: " << error << "\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  Emissivity j_nu = " << jNu << "\n";
+  std::cout << "  Absorption alpha_nu = " << alphaNu << "\n";
+  std::cout << "  Optical depth tau = " << (alphaNu * ds) << " (>> 1)\n";
+  std::cout << "  Full formula result: " << iFull << "\n";
+  std::cout << "  Source function S = " << sNu << "\n";
+  std::cout << "  Relative error: " << error << "\n";
 
-    bool passed = error < RELAXED_TOLERANCE;
-    std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
-    return passed;
+  bool const passed = error < RELAXED_TOLERANCE;
+  std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
+  return passed;
 }
 
 /**
@@ -224,44 +228,44 @@ bool test_optically_thick_limit() {
  * Intensity approaches the source function S = j/alpha
  * This tests the equilibrium behavior: I_final ~ S
  */
-bool test_energy_conservation_emission() {
-    std::cout << "\n[TEST 5] Energy Conservation (Equilibrium)\n";
-    std::cout << "==========================================\n";
+bool testEnergyConservationEmission() {
+  std::cout << "\n[TEST 5] Energy Conservation (Equilibrium)\n";
+  std::cout << "==========================================\n";
 
-    // Case: weak absorption with small tau
-    double j_nu = 1e-8;      // Emissivity
-    double alpha_nu = 1e-12; // Very weak absorption
-    double S = j_nu / alpha_nu;  // Source function ≈ 1e4
+  // Case: weak absorption with small tau
+  double const jNu = 1e-8;        // Emissivity
+  double const alphaNu = 1e-12;   // Very weak absorption
+  double const s = jNu / alphaNu; // Source function ≈ 1e4
 
-    double ds = 1e14;  // Path segment [cm]
-    double tau = alpha_nu * ds;  // Optical depth = 1e2 (moderate)
+  double const ds = 1e14;          // Path segment [cm]
+  double const tau = alphaNu * ds; // Optical depth = 1e2 (moderate)
 
-    std::vector<double> I_sequence;
-    double I = 100.0;  // Start with much less than S
+  std::vector<double> iSequence;
+  double i = 100.0; // Start with much less than S
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  Source function S = " << S << "\n";
-    std::cout << "  Optical depth per step = " << tau << "\n";
-    std::cout << "  Starting intensity = " << I << "\n\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  Source function S = " << s << "\n";
+  std::cout << "  Optical depth per step = " << tau << "\n";
+  std::cout << "  Starting intensity = " << i << "\n\n";
 
-    for (int step = 0; step < 4; step++) {
-        I = cpu_intensity_step(I, j_nu, alpha_nu, ds);
-        I_sequence.push_back(I);
-        std::cout << "  Step " << step << ": I = " << I << "\n";
-    }
+  for (int step = 0; step < 4; step++) {
+    i = cpuIntensityStep(i, jNu, alphaNu, ds);
+    iSequence.push_back(i);
+    std::cout << "  Step " << step << ": I = " << i << "\n";
+  }
 
-    // Check that intensity approaches or reaches the source function
-    // It should either decrease distance to S or stabilize at S
-    double delta_start = std::abs(I_sequence[0] - S);
-    double delta_end = std::abs(I_sequence[I_sequence.size()-1] - S);
+  // Check that intensity approaches or reaches the source function
+  // It should either decrease distance to S or stabilize at S
+  double const deltaStart = std::abs(iSequence.at(0) - s);
+  double const deltaEnd = std::abs(iSequence.at(iSequence.size() - 1) - s);
 
-    // Test passes if we moved closer to S or reached it
-    bool approaching = (delta_end <= delta_start) || (delta_end < 1.0);
+  // Test passes if we moved closer to S or reached it
+  bool const approaching = (deltaEnd <= deltaStart) || (deltaEnd < 1.0);
 
-    std::cout << "  Distance from S: start = " << delta_start;
-    std::cout << ", final = " << delta_end << "\n";
-    std::cout << "  Status: " << (approaching ? "PASS" : "FAIL") << "\n";
-    return approaching;
+  std::cout << "  Distance from S: start = " << deltaStart;
+  std::cout << ", final = " << deltaEnd << "\n";
+  std::cout << "  Status: " << (approaching ? "PASS" : "FAIL") << "\n";
+  return approaching;
 }
 
 /**
@@ -270,33 +274,33 @@ bool test_energy_conservation_emission() {
  * Pure absorption (j=0): I decreases exponentially with tau
  * Expected: I_out = I_in * exp(-tau)
  */
-bool test_intensity_attenuation() {
-    std::cout << "\n[TEST 6] Intensity Attenuation\n";
-    std::cout << "==============================\n";
+bool testIntensityAttenuation() {
+  std::cout << "\n[TEST 6] Intensity Attenuation\n";
+  std::cout << "==============================\n";
 
-    double I_initial = 1e-8;
-    double alpha_nu = 1e-8;
-    std::vector<double> path_lengths = {1e14, 1e15, 1e16, 1e17};
-    bool all_passed = true;
+  double const iInitial = 1e-8;
+  double const alphaNu = 1e-8;
+  std::vector<double> const pathLengths = {1e14, 1e15, 1e16, 1e17};
+  bool allPassed = true;
 
-    std::cout << std::fixed << std::setprecision(6);
-    for (double ds : path_lengths) {
-        double tau = alpha_nu * ds;
-        double I_expected = I_initial * std::exp(-tau);
+  std::cout << std::fixed << std::setprecision(6);
+  for (double const ds : pathLengths) {
+    double const tau = alphaNu * ds;
+    double const iExpected = iInitial * std::exp(-tau);
 
-        // Pure absorption (j_nu = 0)
-        double I_computed = cpu_intensity_step(I_initial, 0.0, alpha_nu, ds);
+    // Pure absorption (j_nu = 0)
+    double const iComputed = cpuIntensityStep(iInitial, 0.0, alphaNu, ds);
 
-        double error = std::abs(I_computed - I_expected) / (I_expected + 1e-30);
+    double const error = std::abs(iComputed - iExpected) / (iExpected + 1e-30);
 
-        bool passed = error < TOLERANCE;
-        std::cout << "  ds = " << ds << " cm, tau = " << tau;
-        std::cout << ", error = " << error << " " << (passed ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && passed;
-    }
+    bool const passed = error < TOLERANCE;
+    std::cout << "  ds = " << ds << " cm, tau = " << tau;
+    std::cout << ", error = " << error << " " << (passed ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && passed;
+  }
 
-    std::cout << "  Status: " << (all_passed ? "PASS" : "FAIL") << "\n";
-    return all_passed;
+  std::cout << "  Status: " << (allPassed ? "PASS" : "FAIL") << "\n";
+  return allPassed;
 }
 
 /**
@@ -304,44 +308,44 @@ bool test_intensity_attenuation() {
  *
  * Spectrum integrated over frequency should equal sum of frequency bins
  */
-bool test_multifrequency_consistency() {
-    std::cout << "\n[TEST 7] Multi-Frequency Integration\n";
-    std::cout << "=====================================\n";
+bool testMultifrequencyConsistency() {
+  std::cout << "\n[TEST 7] Multi-Frequency Integration\n";
+  std::cout << "=====================================\n";
 
-    // Create spectrum: power-law
-    double B = 100.0;
-    double gamma_min = 10.0;
-    double gamma_max = 1e6;
-    double p = 2.5;
+  // Create spectrum: power-law
+  double const b = 100.0;
+  double const gammaMin = 10.0;
+  double const gammaMax = 1e6;
+  double const p = 2.5;
 
-    // Sample frequencies logarithmically
-    std::vector<double> freqs;
-    std::vector<double> fluxes;
+  // Sample frequencies logarithmically
+  std::vector<double> freqs;
+  std::vector<double> fluxes;
 
-    for (int i = 0; i < 20; i++) {
-        double nu = std::pow(10.0, 9.0 + 0.5 * i); // 1 GHz to 1 EHz
-        freqs.push_back(nu);
-        double flux = synchrotron_spectrum_power_law(nu, B, gamma_min, gamma_max, p);
-        fluxes.push_back(flux);
-    }
+  for (int i = 0; i < 20; i++) {
+    double const nu = std::pow(10.0, 9.0 + (0.5 * i)); // 1 GHz to 1 EHz
+    freqs.push_back(nu);
+    double const flux = synchrotronSpectrumPowerLaw(nu, b, gammaMin, gammaMax, p);
+    fluxes.push_back(flux);
+  }
 
-    // Integrate using trapezoidal rule
-    double integral = 0.0;
-    for (size_t i = 0; i < freqs.size() - 1; i++) {
-        double dnu = freqs[i + 1] - freqs[i];
-        double f_avg = 0.5 * (fluxes[i] + fluxes[i + 1]);
-        integral += f_avg * dnu;
-    }
+  // Integrate using trapezoidal rule
+  double integral = 0.0;
+  for (size_t i = 0; i < freqs.size() - 1; i++) {
+    double const dnu = freqs.at(i + 1) - freqs.at(i);
+    double const fAvg = 0.5 * (fluxes.at(i) + fluxes.at(i + 1));
+    integral += fAvg * dnu;
+  }
 
-    // Check that integral is positive
-    bool passed = integral > 0.0;
+  // Check that integral is positive
+  bool const passed = integral > 0.0;
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "  Frequency range: " << freqs.front() << " - " << freqs.back() << " Hz\n";
-    std::cout << "  Number of samples: " << freqs.size() << "\n";
-    std::cout << "  Integrated flux: " << integral << "\n";
-    std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
-    return passed;
+  std::cout << std::fixed << std::setprecision(6);
+  std::cout << "  Frequency range: " << freqs.front() << " - " << freqs.back() << " Hz\n";
+  std::cout << "  Number of samples: " << freqs.size() << "\n";
+  std::cout << "  Integrated flux: " << integral << "\n";
+  std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
+  return passed;
 }
 
 /**
@@ -349,33 +353,33 @@ bool test_multifrequency_consistency() {
  *
  * For tau << 1 everywhere: integrated I ~ sum(j * ds)
  */
-bool test_optically_thin_spectrum() {
-    std::cout << "\n[TEST 8] Optically Thin Spectrum\n";
-    std::cout << "==================================\n";
+bool testOpticallyThinSpectrum() {
+  std::cout << "\n[TEST 8] Optically Thin Spectrum\n";
+  std::cout << "==================================\n";
 
-    // Very low-opacity case
-    double B = 1.0;         // Very weak field
-    double n_e = 1e-2;      // Very low density
-    double p = 2.5;
-    double path_length = 1e14;  // Short path
+  // Very low-opacity case
+  double const b = 1.0;   // Very weak field
+  double const nE = 1e-2; // Very low density
+  double const p = 2.5;
+  double const pathLength = 1e14; // Short path
 
-    // Sample high frequency (less absorption)
-    double nu = 1e13;  // 10 THz optical
+  // Sample high frequency (less absorption)
+  double const nu = 1e13; // 10 THz optical
 
-    // Absorption coefficient
-    double alpha = synchrotron_absorption_coefficient(nu, B, n_e, p);
-    double tau_total = alpha * path_length;
+  // Absorption coefficient
+  double const alpha = synchrotronAbsorptionCoefficient(nu, b, nE, p);
+  double const tauTotal = alpha * pathLength;
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  Frequency: " << nu << " Hz\n";
-    std::cout << "  Absorption coefficient: " << alpha << " cm^-1\n";
-    std::cout << "  Total optical depth: " << tau_total << "\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  Frequency: " << nu << " Hz\n";
+  std::cout << "  Absorption coefficient: " << alpha << " cm^-1\n";
+  std::cout << "  Total optical depth: " << tauTotal << "\n";
 
-    bool optically_thin = tau_total < 0.1;
-    std::cout << "  Regime: " << (optically_thin ? "OPTICALLY THIN" : "OPTICALLY THICK") << "\n";
-    std::cout << "  Status: " << (optically_thin ? "PASS" : "FAIL") << "\n";
+  bool const opticallyThin = tauTotal < 0.1;
+  std::cout << "  Regime: " << (opticallyThin ? "OPTICALLY THIN" : "OPTICALLY THICK") << "\n";
+  std::cout << "  Status: " << (opticallyThin ? "PASS" : "FAIL") << "\n";
 
-    return optically_thin;
+  return opticallyThin;
 }
 
 /**
@@ -383,33 +387,33 @@ bool test_optically_thin_spectrum() {
  *
  * For tau >> 1: integrated I -> uniform (blackbody-like)
  */
-bool test_optically_thick_spectrum() {
-    std::cout << "\n[TEST 9] Optically Thick Spectrum\n";
-    std::cout << "==================================\n";
+bool testOpticallyThickSpectrum() {
+  std::cout << "\n[TEST 9] Optically Thick Spectrum\n";
+  std::cout << "==================================\n";
 
-    // High-opacity case
-    double B = 1000.0;      // Strong field
-    double n_e = 1e4;       // High density
-    double p = 2.5;
-    double path_length = 1e18;  // Very long path
+  // High-opacity case
+  double const b = 1000.0; // Strong field
+  double const nE = 1e4;   // High density
+  double const p = 2.5;
+  double const pathLength = 1e18; // Very long path
 
-    // Sample single frequency
-    double nu = 1e9;   // 1 GHz
+  // Sample single frequency
+  double const nu = 1e9; // 1 GHz
 
-    // Absorption coefficient
-    double alpha = synchrotron_absorption_coefficient(nu, B, n_e, p);
-    double tau_total = alpha * path_length;
+  // Absorption coefficient
+  double const alpha = synchrotronAbsorptionCoefficient(nu, b, nE, p);
+  double const tauTotal = alpha * pathLength;
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  Frequency: " << nu << " Hz\n";
-    std::cout << "  Absorption coefficient: " << alpha << " cm^-1\n";
-    std::cout << "  Total optical depth: " << tau_total << "\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  Frequency: " << nu << " Hz\n";
+  std::cout << "  Absorption coefficient: " << alpha << " cm^-1\n";
+  std::cout << "  Total optical depth: " << tauTotal << "\n";
 
-    bool optically_thick = tau_total > 10.0;
-    std::cout << "  Regime: " << (optically_thick ? "OPTICALLY THICK" : "OPTICALLY THIN") << "\n";
-    std::cout << "  Status: " << (optically_thick ? "PASS" : "FAIL") << "\n";
+  bool const opticallyThick = tauTotal > 10.0;
+  std::cout << "  Regime: " << (opticallyThick ? "OPTICALLY THICK" : "OPTICALLY THIN") << "\n";
+  std::cout << "  Status: " << (opticallyThick ? "PASS" : "FAIL") << "\n";
 
-    return optically_thick;
+  return opticallyThick;
 }
 
 /**
@@ -417,31 +421,31 @@ bool test_optically_thick_spectrum() {
  *
  * Check that radiative transfer doesn't produce NaN or Inf
  */
-bool test_numerical_stability() {
-    std::cout << "\n[TEST 10] Numerical Stability\n";
-    std::cout << "=============================\n";
+bool testNumericalStability() {
+  std::cout << "\n[TEST 10] Numerical Stability\n";
+  std::cout << "=============================\n";
 
-    std::vector<std::pair<double, double>> test_cases = {
-        {1e-30, 1e-30},  // Both extremely small
-        {1e10, 1e-30},   // Large j, tiny alpha
-        {1e-30, 1e10},   // Tiny j, large alpha
-        {1e10, 1e10},    // Both large
-    };
+  std::vector<std::pair<double, double>> const testCases = {
+      {1e-30, 1e-30}, // Both extremely small
+      {1e10, 1e-30},  // Large j, tiny alpha
+      {1e-30, 1e10},  // Tiny j, large alpha
+      {1e10, 1e10},   // Both large
+  };
 
-    bool all_passed = true;
+  bool allPassed = true;
 
-    for (const auto& [j_nu, alpha_nu] : test_cases) {
-        double I = cpu_intensity_step(0.0, j_nu, alpha_nu, 1e16);
+  for (const auto &[j_nu, alpha_nu] : testCases) {
+    double const i = cpuIntensityStep(0.0, j_nu, alpha_nu, 1e16);
 
-        // Check for valid (non-NaN, non-infinity) result
-        bool valid = (I >= -1e300 && I <= 1e300) || (I == 0.0);
-        std::cout << "  j=" << j_nu << ", alpha=" << alpha_nu;
-        std::cout << " -> I=" << I << " " << (valid ? "PASS" : "FAIL") << "\n";
-        all_passed = all_passed && valid;
-    }
+    // Check for valid (non-NaN, non-infinity) result
+    bool const valid = (i >= -1e300 && i <= 1e300) || (i == 0.0);
+    std::cout << "  j=" << j_nu << ", alpha=" << alpha_nu;
+    std::cout << " -> I=" << i << " " << (valid ? "PASS" : "FAIL") << "\n";
+    allPassed = allPassed && valid;
+  }
 
-    std::cout << "  Status: " << (all_passed ? "PASS" : "FAIL") << "\n";
-    return all_passed;
+  std::cout << "  Status: " << (allPassed ? "PASS" : "FAIL") << "\n";
+  return allPassed;
 }
 
 /**
@@ -449,30 +453,30 @@ bool test_numerical_stability() {
  *
  * Verify spectral index calculation is self-consistent
  */
-bool test_spectral_shape_preservation() {
-    std::cout << "\n[TEST 11] Spectral Index Consistency\n";
-    std::cout << "======================================\n";
+bool testSpectralShapePreservation() {
+  std::cout << "\n[TEST 11] Spectral Index Consistency\n";
+  std::cout << "======================================\n";
 
-    // Test that spectral index calculation is consistent
-    std::vector<double> p_values = {2.0, 2.5, 3.0, 3.5};
-    bool all_passed = true;
+  // Test that spectral index calculation is consistent
+  std::vector<double> const pValues = {2.0, 2.5, 3.0, 3.5};
+  bool allPassed = true;
 
-    std::cout << std::fixed << std::setprecision(6);
-    for (double p : p_values) {
-        double alpha = -(p - 1.0) / 2.0;
-        double p_back = 1.0 - 2.0 * alpha;
+  std::cout << std::fixed << std::setprecision(6);
+  for (double const p : pValues) {
+    double const alpha = -(p - 1.0) / 2.0;
+    double const pBack = 1.0 - (2.0 * alpha);
 
-        double error = std::abs(p_back - p);
-        bool passed = error < TOLERANCE;
+    double const error = std::abs(pBack - p);
+    bool const passed = error < TOLERANCE;
 
-        std::cout << "  p = " << p << ", alpha = " << alpha;
-        std::cout << ", p(back) = " << p_back << " " << (passed ? "PASS" : "FAIL") << "\n";
+    std::cout << "  p = " << p << ", alpha = " << alpha;
+    std::cout << ", p(back) = " << pBack << " " << (passed ? "PASS" : "FAIL") << "\n";
 
-        all_passed = all_passed && passed;
-    }
+    allPassed = allPassed && passed;
+  }
 
-    std::cout << "  Status: " << (all_passed ? "PASS" : "FAIL") << "\n";
-    return all_passed;
+  std::cout << "  Status: " << (allPassed ? "PASS" : "FAIL") << "\n";
+  return allPassed;
 }
 
 /**
@@ -480,39 +484,41 @@ bool test_spectral_shape_preservation() {
  *
  * Multiple steps should accumulate intensity consistently
  */
-bool test_ray_marching_consistency() {
-    std::cout << "\n[TEST 12] Ray Marching Consistency\n";
-    std::cout << "====================================\n";
+bool testRayMarchingConsistency() {
+  std::cout << "\n[TEST 12] Ray Marching Consistency\n";
+  std::cout << "====================================\n";
 
-    double j_nu = 1e-10;
-    double alpha_nu = 1e-12;
-    double ds = 1e16;
+  double const jNu = 1e-10;
+  double const alphaNu = 1e-12;
+  double const ds = 1e16;
 
-    // Method 1: Single large step
-    double I_single = cpu_intensity_step(0.0, j_nu, alpha_nu, 5.0 * ds);
+  // Method 1: Single large step
+  double const iSingle = cpuIntensityStep(0.0, jNu, alphaNu, 5.0 * ds);
 
-    // Method 2: Five small steps
-    double I_multi = 0.0;
-    for (int i = 0; i < 5; i++) {
-        I_multi = cpu_intensity_step(I_multi, j_nu, alpha_nu, ds);
-    }
+  // Method 2: Five small steps
+  double iMulti = 0.0;
+  for (int i = 0; i < 5; i++) {
+    iMulti = cpuIntensityStep(iMulti, jNu, alphaNu, ds);
+  }
 
-    double error = std::abs(I_single - I_multi) / (std::abs(I_multi) + 1e-30);
+  double const error = std::abs(iSingle - iMulti) / (std::abs(iMulti) + 1e-30);
 
-    std::cout << std::fixed << std::setprecision(10);
-    std::cout << "  Single 5*ds step: " << I_single << "\n";
-    std::cout << "  Five ds steps: " << I_multi << "\n";
-    std::cout << "  Relative error: " << error << "\n";
+  std::cout << std::fixed << std::setprecision(10);
+  std::cout << "  Single 5*ds step: " << iSingle << "\n";
+  std::cout << "  Five ds steps: " << iMulti << "\n";
+  std::cout << "  Relative error: " << error << "\n";
 
-    // Allow larger error due to exponential approximation differences
-    bool passed = error < 0.1;
-    std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
-    return passed;
+  // Allow larger error due to exponential approximation differences
+  bool const passed = error < 0.1;
+  std::cout << "  Status: " << (passed ? "PASS" : "FAIL") << "\n";
+  return passed;
 }
 
 /**
  * @brief Main test driver
  */
+} // namespace
+
 int main() {
     std::cout << "\n"
               << "====================================================\n"
@@ -521,20 +527,44 @@ int main() {
               << "====================================================\n";
 
     int passed = 0;
-    int total = 12;
+    int const total = 12;
 
-    if (test_optical_depth_convergence())    passed++;
-    if (test_transmission_factor_bounds())   passed++;
-    if (test_optically_thin_limit())         passed++;
-    if (test_optically_thick_limit())        passed++;
-    if (test_energy_conservation_emission()) passed++;
-    if (test_intensity_attenuation())        passed++;
-    if (test_multifrequency_consistency())   passed++;
-    if (test_optically_thin_spectrum())      passed++;
-    if (test_optically_thick_spectrum())     passed++;
-    if (test_numerical_stability())          passed++;
-    if (test_spectral_shape_preservation())  passed++;
-    if (test_ray_marching_consistency())     passed++;
+    if (testOpticalDepthConvergence()) {
+      passed++;
+    }
+    if (testTransmissionFactorBounds()) {
+      passed++;
+    }
+    if (testOpticallyThinLimit()) {
+      passed++;
+    }
+    if (testOpticallyThickLimit()) {
+      passed++;
+    }
+    if (testEnergyConservationEmission()) {
+      passed++;
+    }
+    if (testIntensityAttenuation()) {
+      passed++;
+    }
+    if (testMultifrequencyConsistency()) {
+      passed++;
+    }
+    if (testOpticallyThinSpectrum()) {
+      passed++;
+    }
+    if (testOpticallyThickSpectrum()) {
+      passed++;
+    }
+    if (testNumericalStability()) {
+      passed++;
+    }
+    if (testSpectralShapePreservation()) {
+      passed++;
+    }
+    if (testRayMarchingConsistency()) {
+      passed++;
+    }
 
     std::cout << "\n"
               << "====================================================\n"

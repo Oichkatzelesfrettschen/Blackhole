@@ -26,18 +26,18 @@ namespace gpu {
 
 struct ComputeCommand {
     struct Dispatch {
-        uint32_t grid_x, grid_y, grid_z;  // Workgroup counts
-        uint32_t block_x, block_y, block_z; // Workgroup sizes
+      uint32_t gridX, gridY, gridZ;    // Workgroup counts
+      uint32_t blockX, blockY, blockZ; // Workgroup sizes
     } dispatch;
 
     struct Bindings {
-        uint32_t ssbo_count;
-        uint32_t ubo_count;
-        uint32_t texture_count;
-        uint32_t binding_indices[16];
+      uint32_t ssboCount;
+      uint32_t uboCount;
+      uint32_t textureCount;
+      uint32_t bindingIndices[16];
     } bindings;
 
-    uint32_t compute_shader_id;
+    uint32_t computeShaderId;
     uint32_t timestamp;  // Fence tracking
 };
 
@@ -46,12 +46,12 @@ struct ComputeCommand {
 // ============================================================================
 
 enum class PipelineState : uint32_t {
-    IDLE = 0,           // Ready for commands
-    RECORDING = 1,      // Recording command buffer
-    SUBMITTED = 2,      // On GPU queue
-    EXECUTING = 3,      // GPU actively processing
-    FENCE_PENDING = 4,  // Waiting for GPU sync
-    COMPLETE = 5        // Results ready for readback
+  IDLE = 0,         // Ready for commands
+  RECORDING = 1,    // Recording command buffer
+  SUBMITTED = 2,    // On GPU queue
+  EXECUTING = 3,    // GPU actively processing
+  FencePending = 4, // Waiting for GPU sync
+  COMPLETE = 5      // Results ready for readback
 };
 
 // ============================================================================
@@ -60,52 +60,52 @@ enum class PipelineState : uint32_t {
 
 class AsyncComputePipeline {
 public:
-    explicit AsyncComputePipeline(uint32_t max_commands = 256);
-    ~AsyncComputePipeline();
+  explicit AsyncComputePipeline(uint32_t maxCommands = 256);
+  ~AsyncComputePipeline();
 
-    // Command recording API
-    void beginRecording();
-    void recordDispatch(const ComputeCommand& cmd);
-    void recordBarrier(uint32_t stage_mask);
-    void recordMemoryCopy(uint32_t src_ssbo, uint32_t dst_ssbo, uint32_t size);
-    void endRecording();
+  // Command recording API
+  void beginRecording();
+  void recordDispatch(const ComputeCommand &cmd);
+  void recordBarrier(uint32_t stageMask);
+  void recordMemoryCopy(uint32_t srcSsbo, uint32_t dstSsbo, uint32_t size);
+  void endRecording();
 
-    // GPU submission
-    void submitToGPU();
-    void waitForCompletion();
+  // GPU submission
+  void submitToGPU();
+  void waitForCompletion();
 
-    // Double buffer management
-    void swapBuffers();
-    bool isReadyForReadback() const;
+  // Double buffer management
+  void swapBuffers();
+  [[nodiscard]] bool isReadyForReadback() const;
 
-    // Async readback with PBO
-    void beginAsyncReadback(uint32_t ssbo_id, uint32_t offset, uint32_t size);
-    bool readbackComplete() const;
-    const uint8_t* getReadbackData() const;
+  // Async readback with PBO
+  void beginAsyncReadback(uint32_t ssboId, uint32_t offset, uint32_t size); // NOLINT(readability-inconsistent-declaration-parameter-name) -- ssboId unused in stub impl
+  [[nodiscard]] bool readbackComplete() const;
+  [[nodiscard]] const uint8_t *getReadbackData() const;
 
-    // State inspection
-    PipelineState getState() const { return state_; }
-    uint32_t getPendingCommandCount() const { return pending_commands_.size(); }
-    uint32_t getGPUTimestampNS() const { return gpu_timestamp_; }
+  // State inspection
+  [[nodiscard]] PipelineState getState() const { return state_; }
+  [[nodiscard]] uint32_t getPendingCommandCount() const { return pending_commands_.size(); }
+  [[nodiscard]] uint32_t getGPUTimestampNS() const { return gpu_timestamp_; }
 
 private:
     // Command buffer management
     struct CommandBuffer {
         std::vector<ComputeCommand> commands;
         std::vector<uint32_t> barriers;
-        uint32_t gpu_fence;
-        uint32_t timestamp;
-        PipelineState state;
+        uint32_t gpuFence{};
+        uint32_t timestamp{};
+        PipelineState state{};
     };
 
     // Double-buffered command buffers
     CommandBuffer buffers_[2];
-    uint32_t current_buffer_;
-    uint32_t submitted_buffer_;
+    uint32_t current_buffer_{0};
+    uint32_t submitted_buffer_{1};
 
     // State tracking
     std::atomic<PipelineState> state_;
-    uint32_t gpu_timestamp_;
+    uint32_t gpu_timestamp_{0};
 
     // Command queues
     std::queue<ComputeCommand> pending_commands_;
@@ -113,16 +113,16 @@ private:
 
     // Async readback PBO
     struct AsyncReadback {
-        uint32_t pbo_id;
-        uint32_t size;
-        void* mapped_ptr;
-        uint32_t gpu_fence;
-        bool complete;
-    } readback_;
+      uint32_t pboId;
+      uint32_t size;
+      void *mappedPtr;
+      uint32_t gpuFence;
+      bool complete;
+    } readback_{};
 
     // GPU resource IDs (from OpenGL context)
-    uint32_t command_buffer_id_;
-    uint32_t compute_queue_id_;
+    uint32_t command_buffer_id_{};
+    uint32_t compute_queue_id_{};
 
     // Helper methods
     void recordCommandToBuffer(const ComputeCommand& cmd, CommandBuffer& buf);
@@ -136,26 +136,26 @@ private:
 class TileDispatcher {
 public:
     struct TileConfig {
-        uint32_t tile_size_x;   // e.g., 32x32 pixels
-        uint32_t tile_size_y;
-        uint32_t frame_width;
-        uint32_t frame_height;
+      uint32_t tileSizeX; // e.g., 32x32 pixels
+      uint32_t tileSizeY;
+      uint32_t frameWidth;
+      uint32_t frameHeight;
     };
 
     explicit TileDispatcher(const TileConfig& config);
 
     // Generate tile dispatch commands
-    std::vector<ComputeCommand> generateTileDispatches(uint32_t compute_shader_id);
+    std::vector<ComputeCommand> generateTileDispatches(uint32_t computeShaderId);
 
     // Adaptive tiling based on occupancy
-    void optimizeForOccupancy(float target_occupancy);
+    void optimizeForOccupancy(float targetOccupancy);
 
     // Progressive rendering: return commands for priority tiles first
-    std::vector<ComputeCommand> getPriorityTiles(uint32_t compute_shader_id, float priority);
+    static std::vector<ComputeCommand> getPriorityTiles(uint32_t computeShaderId, float priority);
 
-private:
+  private:
     TileConfig config_;
-    float current_occupancy_;
+    float current_occupancy_{0.5f};
 
     struct Tile {
         uint32_t x, y;
@@ -174,39 +174,35 @@ private:
 class FramePipeline {
 public:
     // Frame stages: GPU compute -> readback -> CPU processing
-    enum class FrameStage {
-        COMPUTE_DISPATCH = 0,
-        READBACK_WAIT = 1,
-        CPU_POSTPROCESS = 2
-    };
+  enum class FrameStage { ComputeDispatch = 0, ReadbackWait = 1, CpuPostprocess = 2 };
 
-    struct FrameState {
-        uint32_t frame_number;
-        uint32_t compute_fence;
-        uint32_t readback_fence;
-        FrameStage stage;
-        uint64_t timestamp_ns;
-    };
+  struct FrameState {
+    uint32_t frameNumber;
+    uint32_t computeFence;
+    uint32_t readbackFence;
+    FrameStage stage;
+    uint64_t timestampNs;
+  };
 
     FramePipeline();
 
     // Submit frame for processing
-    void submitFrame(uint32_t frame_number);
+    void submitFrame(uint32_t frameNumber);
 
     // Advance pipeline stages
     void advance();
 
     // Get current frame being processed
-    const FrameState* getCurrentFrame() const;
+    [[nodiscard]] const FrameState *getCurrentFrame() const;
 
     // Statistics
-    double getFrameTimeMS() const;
-    double getGPUUtilizationPercent() const;
+    static [[nodiscard]] double getFrameTimeMS();
+    static [[nodiscard]] double getGPUUtilizationPercent();
 
-private:
+  private:
     std::vector<FrameState> frames_;
-    uint32_t current_idx_;
-    uint64_t frame_submit_time_;
+    uint32_t current_idx_{0};
+    uint64_t frame_submit_time_{0};
 };
 
 } // namespace gpu

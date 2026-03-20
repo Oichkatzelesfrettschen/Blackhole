@@ -442,9 +442,9 @@ int main(int argc, char **argv) {
 
   results.push_back(runBench("LUT generation", cfg.iterations, cfg.warmup,
                              static_cast<double>(cfg.lutSize), [&]() {
-    auto emissivity = physics::generate_emissivity_lut(cfg.lutSize, cfg.massSolar, cfg.spin,
+    auto emissivity = physics::generateEmissivityLut(cfg.lutSize, cfg.massSolar, cfg.spin,
                                                        cfg.mdotEdd, true);
-    auto redshift = physics::generate_redshift_lut(cfg.lutSize, cfg.massSolar, cfg.spin);
+    auto redshift = physics::generateRedshiftLut(cfg.lutSize, cfg.massSolar, cfg.spin);
     for (float v : emissivity.values) {
       cpuAccum += static_cast<double>(v);
     }
@@ -486,8 +486,8 @@ int main(int argc, char **argv) {
     auto result = physics::traceGeodesicBatch(initial, mass, step_size, cfg.steps, escape_radius);
 
     // Accumulate results to prevent optimization
-    for (std::size_t i = 0; i < result.final_r.size(); ++i) {
-      cpuAccum += result.final_r[i] + result.redshift[i] + result.steps_taken[i];
+    for (std::size_t i = 0; i < result.finalR.size(); ++i) {
+      cpuAccum += result.finalR[i] + result.redshift[i] + result.stepsTaken[i];
     }
   }));
 
@@ -522,7 +522,7 @@ int main(int argc, char **argv) {
   std::cout << "SIMD width (doubles): " << physics::highway_eval::getSimdWidth() << "\n\n";
 
   {
-    const auto hb = physics::highway_eval::benchSchwarzschild_f(
+    const auto hb = physics::highway_eval::benchSchwarzschildF(
         static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
     std::cout << hb.name << ": scalar=" << hb.scalarMs << " ms, highway=" << hb.highwayMs
               << " ms, speedup=" << hb.speedup << "x\n";

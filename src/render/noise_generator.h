@@ -88,19 +88,19 @@ struct NoiseVolume {
     uint32_t depth = 0;
 
     // Linear index: z * (width * height) + y * width + x
-    inline size_t index(uint32_t x, uint32_t y, uint32_t z) const {
-        return z * (width * height) + y * width + x;
+    [[nodiscard]] size_t index(uint32_t x, uint32_t y, uint32_t z) const {
+        return (z * (width * height)) + (y * width) + x;
     }
 
-    inline float sample(uint32_t x, uint32_t y, uint32_t z) const {
-        return data[index(x, y, z)];
+    [[nodiscard]] float sample(uint32_t x, uint32_t y, uint32_t z) const {
+        return data.at(index(x, y, z));
     }
 
-    inline void set(uint32_t x, uint32_t y, uint32_t z, float value) {
-        data[index(x, y, z)] = value;
+    void set(uint32_t x, uint32_t y, uint32_t z, float value) {
+        data.at(index(x, y, z)) = value;
     }
 
-    size_t sizeBytes() const {
+    [[nodiscard]] size_t sizeBytes() const {
         return data.size() * sizeof(float);
     }
 };
@@ -159,7 +159,7 @@ public:
     /**
      * @brief Get current configuration
      */
-    const NoiseConfig& config() const { return config_; }
+    [[nodiscard]] const NoiseConfig& config() const { return config_; }
 
     /**
      * @brief Get FastNoise2 version string
@@ -170,15 +170,15 @@ private:
     /**
      * @brief Build FastNoise2 node tree from config
      */
-    FastNoise::SmartNode<> buildNoiseTree(const NoiseConfig& config);
+  static FastNoise::SmartNode<> buildNoiseTree(const NoiseConfig &config);
 
-    /**
-     * @brief Apply output remapping: [-1,1] → [outputMin, outputMax]
-     */
-    void remapOutput(NoiseVolume& volume) const;
+  /**
+   * @brief Apply output remapping: [-1,1] → [outputMin, outputMax]
+   */
+  void remapOutput(NoiseVolume &volume) const;
 
-    NoiseConfig config_;
-    FastNoise::SmartNode<> generator_;
+  NoiseConfig config_;
+  FastNoise::SmartNode<> generator_;
 };
 
 // ============================================================================
@@ -299,19 +299,26 @@ namespace blackhole {
 // Stub implementation when FastNoise2 is disabled
 struct NoiseConfig {};
 struct NoiseVolume {
-    std::vector<float> data;
-    uint32_t width = 0, height = 0, depth = 0;
+  std::vector<float> data{};
+  uint32_t width = 0, height = 0, depth = 0;
 };
 
 class NoiseGenerator {
 public:
-    explicit NoiseGenerator(const NoiseConfig& = NoiseConfig{}) {}
-    void configure(const NoiseConfig&) {}
-    NoiseVolume generate3D(uint32_t, uint32_t, uint32_t, float = 0, float = 0, float = 0) {
-        return NoiseVolume{};
-    }
-    std::vector<float> generate2D(uint32_t, uint32_t, float = 0) { return {}; }
-    const NoiseConfig& config() const { static NoiseConfig cfg; return cfg; }
+  explicit NoiseGenerator(const NoiseConfig & /*unused*/ = NoiseConfig{}) {}
+  void configure(const NoiseConfig & /*unused*/) {}
+  static NoiseVolume generate3D(uint32_t /*unused*/, uint32_t /*unused*/, uint32_t /*unused*/,
+                                float /*unused*/ = 0, float /*unused*/ = 0, float /*unused*/ = 0) {
+    return NoiseVolume{};
+  }
+  static std::vector<float> generate2D(uint32_t /*unused*/, uint32_t /*unused*/,
+                                       float /*unused*/ = 0) {
+    return {};
+  }
+  [[nodiscard]] static const NoiseConfig &config() {
+    static NoiseConfig const cfg;
+    return cfg;
+  }
     static std::string version() { return "FastNoise2 disabled"; }
 };
 

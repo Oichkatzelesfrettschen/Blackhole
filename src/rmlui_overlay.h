@@ -9,8 +9,8 @@ class RmlUiOverlay {
   bool init(GLFWwindow *window, int width, int height);
   void shutdown();
   void resize(int width, int height);
-  void render();
-  bool isEnabled() const;
+  void render() const;
+  [[nodiscard]] bool isEnabled() const;
   void setEnabled(bool enabled);
 
  private:

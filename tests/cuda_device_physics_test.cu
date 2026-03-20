@@ -174,8 +174,11 @@ TEST_F(CudaDevicePhysicsTest, SchwarzschildEscape) {
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 0.0f; p.cam_basis[5] =-1.0f;
     p.cam_basis[6] = 0.0f; p.cam_basis[7] =-1.0f; p.cam_basis[8] = 0.0f;
+    /* Enable background so escaped rays return a gradient color instead of (0,0,0,1)
+     * which is indistinguishable from the horizon when background_enabled=0. */
+    p.background_enabled = 1;
     /* Ray goes in +Y from (0,0,10): n.y=1 in the sky gradient, so background
-     * color = (0.01, 0.01, 0.03) -- non-black and distinguishable from horizon. */
+     * color = (0.01*intensity, 0.01*intensity, 0.03*intensity) != horizon. */
 
     int rc = bh_launch_geodesic_kernel(d_fb_1x1, &p, BH_KERNEL_FP32_BASELINE, nullptr);
     ASSERT_EQ(rc, 0) << "bh_launch_geodesic_kernel returned error " << rc;
@@ -230,12 +233,12 @@ TEST_F(CudaDevicePhysicsTest, DiskIntersection) {
     p.adisk_enabled = 1;
     p.isco          = 6.0f;  /* disk inner radius */
 
-    /* Camera at (50, 0, 20): off-axis and ABOVE the equatorial plane (z=20).
+    /* Camera at (25, 0, 20): off-axis and ABOVE the equatorial plane (z=20).
      * Identity basis: local (0,0,-1) -> world (0,0,-1), ray falls straight down.
      * The ray starts at z=20 and crosses z=0 (equatorial plane) at approximately
-     * (50, 0, 0), giving disk_r = 50, which is between isco=6 and r_out=200.
+     * (25, 0, 0), giving disk_r = 25, which is between isco=6 and r_out=20*rs=40.
      * The sign change in z triggers d_check_disk, producing a disk color hit. */
-    p.cam_pos[0] = 50.0f;
+    p.cam_pos[0] = 25.0f;
     p.cam_pos[1] =  0.0f;
     p.cam_pos[2] = 20.0f;
     p.max_dist   = 300.0f;   /* ensure ray travels far enough */

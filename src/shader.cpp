@@ -1,20 +1,19 @@
 #include "shader.h"
 
 // C++ system headers
-#include <algorithm>
-#include <filesystem>
+#include <cstddef>
 #include <fstream>
 #include <iostream>
-#include <set>
 #include <sstream>
 #include <string>
-#include <vector>
+#include <string_view>
 
 // Third-party library headers
-#include "gl_loader.h"
 
 // Base directory for shader files (set during loading)
-static std::string shaderBaseDir = "shader/";
+namespace {
+std::string shaderBaseDir = "shader/";
+} // namespace
 
 // Allow external code to override the base directory used when resolving
 // relative includes (#include "...") and when loading shader files. This is
@@ -27,15 +26,16 @@ const std::string &getShaderBaseDir() {
   return shaderBaseDir;
 }
 
-static std::string readFile(const std::string &file) {
+namespace {
+
+std::string readFile(const std::string &file) {
   std::ifstream ifs(file, std::ios::in);
   if (ifs.is_open()) {
     std::stringstream ss;
     ss << ifs.rdbuf();
     return ss.str();
-  } else {
-    throw "Failed to open file: " + file;
   }
+  throw "Failed to open file: " + file;
 }
 
 
@@ -51,7 +51,7 @@ static std::string readFile(const std::string &file) {
  * @param included Set of already-included files (for circular detection)
  * @return Processed source with includes expanded
  */
-static std::string processIncludes(const std::string &source,
+std::string processIncludes(const std::string &source,
                                    const std::string &basePath,
                                    std::set<std::string> &included) {
   std::string result;
@@ -60,7 +60,7 @@ static std::string processIncludes(const std::string &source,
 
   auto parseInclude = [](const std::string &input, std::string &includeFile) -> bool {
     std::size_t pos = input.find_first_not_of(" \t");
-    if (pos == std::string::npos || input[pos] != '#') {
+    if (pos == std::string::npos || input.at(pos) != '#') {
       return false;
     }
 
@@ -80,8 +80,10 @@ static std::string processIncludes(const std::string &source,
       return false;
     }
 
-    const char open = input[pos];
-    const char close = (open == '"') ? '"' : ((open == '<') ? '>' : '\0');
+    const char open = input.at(pos);
+    char close = '\0';
+    if (open == '"') { close = '"'; }
+    else if (open == '<') { close = '>'; }
     if (close == '\0') {
       return false;
     }
@@ -121,7 +123,7 @@ static std::string processIncludes(const std::string &source,
 
       // Try to read and process the included file
       try {
-        std::string includeSource = readFile(fullPath);
+        std::string const includeSource = readFile(fullPath);
         result += "// Begin include: " + includeFile + "\n";
         result += processIncludes(includeSource, basePath, included);
         result += "// End include: " + includeFile + "\n";
@@ -140,7 +142,7 @@ static std::string processIncludes(const std::string &source,
 /**
  * @brief Read shader file with include processing.
  */
-static std::string readShaderWithIncludes(const std::string &file) {
+std::string readShaderWithIncludes(const std::string &file) {
   // Extract base directory from file path
   std::string basePath = shaderBaseDir;
   size_t lastSlash = file.find_last_of("/\\");
@@ -148,13 +150,13 @@ static std::string readShaderWithIncludes(const std::string &file) {
     basePath = file.substr(0, lastSlash + 1);
   }
 
-  std::string source = readFile(file);
+  std::string const source = readFile(file);
   std::set<std::string> included;
   included.insert(file); // Mark main file as included
   return processIncludes(source, basePath, included);
 }
 
-static GLuint compileShader(const std::string &shaderSource, GLenum shaderType) {
+GLuint compileShader(const std::string &shaderSource, GLenum shaderType) {
   // Create shader
   GLuint shader = glCreateShader(shaderType);
   if (shader == 0) {
@@ -188,7 +190,7 @@ struct CompiledShader {
   GLuint id = 0;
 };
 
-static CompiledShader compileShaderFromFile(const std::string &shaderFile, GLenum shaderType,
+CompiledShader compileShaderFromFile(const std::string &shaderFile, GLenum shaderType,
                                             const char *label) {
   std::cout << "Compiling " << label << " shader: " << shaderFile << std::endl;
   return {compileShader(readShaderWithIncludes(shaderFile), shaderType)};
@@ -210,8 +212,10 @@ static CompiledShader compileShaderFromFile(const std::string &shaderFile, GLenu
  * @note This function assumes an active OpenGL context and relies on helper functions
  *       readShaderWithIncludes() and compileShader() for file reading and shader compilation.
  */
+} // namespace
+
 GLuint createShaderProgram(const std::string &vertexShaderFile,
-                           const std::string &fragmentShaderFile) {
+                                  const std::string &fragmentShaderFile) {
 
   // Compile vertex and fragment shaders with include processing.
   CompiledShader vertexShader =
@@ -275,3 +279,4 @@ GLuint createComputeProgram(const std::string &computeShaderFile) {
 
   return program;
 }
+

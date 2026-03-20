@@ -29,15 +29,15 @@
 // ============================================================================
 
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
-#define SIMD_X86 1
+#define SIMD_X86 1  // NOLINT(cppcoreguidelines-macro-usage)
 #else
-#define SIMD_X86 0
+#define SIMD_X86 0  // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 
 #if defined(__aarch64__) || defined(_M_ARM64)
-#define SIMD_ARM64 1
+#define SIMD_ARM64 1  // NOLINT(cppcoreguidelines-macro-usage)
 #else
-#define SIMD_ARM64 0
+#define SIMD_ARM64 0  // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 
 // CPUID-based runtime detection for x86
@@ -54,44 +54,44 @@
 // ============================================================================
 
 #if BLACKHOLE_ENABLE_SLEEF
-#include <sleef.h>
+#include <sleef.h>  // NOLINT(misc-include-cleaner) -- conditional include, used in #if block
 
 // SLEEF provides multiple accuracy levels:
 // - _u10 : 1.0 ULP accuracy (high precision)
 // - _u35 : 3.5 ULP accuracy (faster, still good)
 // We use _u10 for physics accuracy by default.
 
-#if defined(__AVX512F__)
+#ifdef __AVX512F__
 #define SLEEF_SIN_VEC  Sleef_sind8_u10avx512f
 #define SLEEF_COS_VEC  Sleef_cosd8_u10avx512f
 #define SLEEF_SQRT_VEC Sleef_sqrtd8_avx512f
-#define SLEEF_VEC_WIDTH 8
+#define SLEEF_VEC_WIDTH 8  // NOLINT(cppcoreguidelines-macro-usage)
 #elif defined(__AVX2__) || defined(__FMA__)
 #define SLEEF_SIN_VEC  Sleef_sind4_u10avx2
 #define SLEEF_COS_VEC  Sleef_cosd4_u10avx2
 #define SLEEF_SQRT_VEC Sleef_sqrtd4_avx2
-#define SLEEF_VEC_WIDTH 4
-#elif defined(__AVX__)
+#define SLEEF_VEC_WIDTH 4  // NOLINT(cppcoreguidelines-macro-usage)
+#elifdef __AVX__
 #define SLEEF_SIN_VEC  Sleef_sind4_u10avx
 #define SLEEF_COS_VEC  Sleef_cosd4_u10avx
 #define SLEEF_SQRT_VEC Sleef_sqrtd4_avx
-#define SLEEF_VEC_WIDTH 4
+#define SLEEF_VEC_WIDTH 4  // NOLINT(cppcoreguidelines-macro-usage)
 #elif defined(__SSE4_1__) || defined(__SSE4_2__)
 #define SLEEF_SIN_VEC  Sleef_sind2_u10sse4
 #define SLEEF_COS_VEC  Sleef_cosd2_u10sse4
 #define SLEEF_SQRT_VEC Sleef_sqrtd2_sse4
-#define SLEEF_VEC_WIDTH 2
+#define SLEEF_VEC_WIDTH 2  // NOLINT(cppcoreguidelines-macro-usage)
 #elif defined(__SSE2__)
 #define SLEEF_SIN_VEC  Sleef_sind2_u10sse2
 #define SLEEF_COS_VEC  Sleef_cosd2_u10sse2
 #define SLEEF_SQRT_VEC Sleef_sqrtd2_sse2
-#define SLEEF_VEC_WIDTH 2
+#define SLEEF_VEC_WIDTH 2  // NOLINT(cppcoreguidelines-macro-usage)
 #else
 // Scalar fallback
 #define SLEEF_SIN_VEC  Sleef_sin_u10
 #define SLEEF_COS_VEC  Sleef_cos_u10
 #define SLEEF_SQRT_VEC Sleef_sqrt
-#define SLEEF_VEC_WIDTH 1
+#define SLEEF_VEC_WIDTH 1  // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 
 #endif // BLACKHOLE_ENABLE_SLEEF
@@ -101,7 +101,7 @@
 // ============================================================================
 
 #if BLACKHOLE_ENABLE_XSIMD
-#include <xsimd/xsimd.hpp>
+#include <xsimd/xsimd.hpp>  // NOLINT(misc-include-cleaner) -- conditional include, used in #if block
 #endif
 
 namespace simd {
@@ -124,9 +124,9 @@ enum class ArchTier : uint8_t {
     SSE41    = 4,   ///< 128-bit, blend, round, extract
     SSE42    = 5,   ///< 128-bit, string ops, popcnt
     AVX      = 6,   ///< 256-bit, VEX encoding
-    AVX_FMA  = 7,   ///< 256-bit + FMA3
+    AvxFma  = 7,   ///< 256-bit + FMA3
     AVX2     = 8,   ///< 256-bit integer SIMD
-    AVX2_FMA = 9,   ///< 256-bit + FMA3 (optimal tier for most)
+    Avx2Fma = 9,   ///< 256-bit + FMA3 (optimal tier for most)
     AVX512   = 10,  ///< 512-bit (rare on consumer CPUs)
 };
 
@@ -147,7 +147,7 @@ enum class FmaVariant : uint8_t {
 
 namespace detail {
 
-inline void cpuid(int info[4], int leaf, int subleaf = 0) {
+inline void cpuid(int info[4], int leaf, int subleaf = 0) {  // NOLINT(readability-non-const-parameter) -- info is written to via __cpuid_count
 #ifdef _MSC_VER
     __cpuidex(info, leaf, subleaf);
 #else
@@ -159,9 +159,10 @@ inline uint64_t xgetbv(uint32_t xcr) {
 #ifdef _MSC_VER
     return _xgetbv(xcr);
 #else
-    uint32_t eax, edx;
-    __asm__ volatile("xgetbv" : "=a"(eax), "=d"(edx) : "c"(xcr));
-    return (static_cast<uint64_t>(edx) << 32) | eax;
+  uint32_t eax;
+  uint32_t edx;
+  __asm__ volatile("xgetbv" : "=a"(eax), "=d"(edx) : "c"(xcr));
+  return (static_cast<uint64_t>(edx) << 32) | eax;
 #endif
 }
 
@@ -177,68 +178,70 @@ inline ArchTier getCurrentArchTier() {
     static ArchTier cached = ArchTier::SCALAR;
     static bool detected = false;
 
-    if (detected) return cached;
+    if (detected) {
+      return cached;
+    }
     detected = true;
 
     int info[4];
 
     // Get basic CPUID info
     detail::cpuid(info, 0);
-    int max_leaf = info[0];
-    if (max_leaf < 1) {
+    int const maxLeaf = info[0];
+    if (maxLeaf < 1) {
         cached = ArchTier::SCALAR;
         return cached;
     }
 
     // Leaf 1: SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, AVX, FMA
     detail::cpuid(info, 1);
-    bool has_sse2  = (info[3] & (1 << 26)) != 0;
-    bool has_sse3  = (info[2] & (1 <<  0)) != 0;
-    bool has_ssse3 = (info[2] & (1 <<  9)) != 0;
-    bool has_sse41 = (info[2] & (1 << 19)) != 0;
-    bool has_sse42 = (info[2] & (1 << 20)) != 0;
-    bool has_avx   = (info[2] & (1 << 28)) != 0;
-    bool has_fma3  = (info[2] & (1 << 12)) != 0;
-    bool has_osxsave = (info[2] & (1 << 27)) != 0;
+    bool const hasSse2 = (info[3] & (1 << 26)) != 0;
+    bool const hasSse3 = (info[2] & (1 << 0)) != 0;
+    bool const hasSsse3 = (info[2] & (1 << 9)) != 0;
+    bool const hasSse41 = (info[2] & (1 << 19)) != 0;
+    bool const hasSse42 = (info[2] & (1 << 20)) != 0;
+    bool const hasAvx = (info[2] & (1 << 28)) != 0;
+    bool const hasFma3 = (info[2] & (1 << 12)) != 0;
+    bool const hasOsxsave = (info[2] & (1 << 27)) != 0;
 
     // Check OS AVX support via XGETBV
-    bool os_avx_support = false;
-    bool os_avx512_support = false;
-    if (has_osxsave) {
-        uint64_t xcr0 = detail::xgetbv(0);
-        os_avx_support = (xcr0 & 0x6) == 0x6;  // XMM + YMM state
-        os_avx512_support = (xcr0 & 0xE6) == 0xE6;  // + ZMM state
+    bool osAvxSupport = false;
+    bool osAvx512Support = false;
+    if (hasOsxsave) {
+      uint64_t const xcr0 = detail::xgetbv(0);
+      osAvxSupport = (xcr0 & 0x6) == 0x6;      // XMM + YMM state
+      osAvx512Support = (xcr0 & 0xE6) == 0xE6; // + ZMM state
     }
 
     // Leaf 7: AVX2, AVX-512
-    bool has_avx2 = false;
-    bool has_avx512f = false;
-    if (max_leaf >= 7) {
+    bool hasAvx2 = false;
+    bool hasAvx512f = false;
+    if (maxLeaf >= 7) {
         detail::cpuid(info, 7, 0);
-        has_avx2 = (info[1] & (1 << 5)) != 0;
-        has_avx512f = (info[1] & (1 << 16)) != 0;
+        hasAvx2 = (info[1] & (1 << 5)) != 0;
+        hasAvx512f = (info[1] & (1 << 16)) != 0;
     }
 
     // Determine tier
-    if (has_avx512f && os_avx512_support) {
+    if (hasAvx512f && osAvx512Support) {
         cached = ArchTier::AVX512;
-    } else if (has_avx2 && os_avx_support && has_fma3) {
-        cached = ArchTier::AVX2_FMA;
-    } else if (has_avx2 && os_avx_support) {
+    } else if (hasAvx2 && osAvxSupport && hasFma3) {
+        cached = ArchTier::Avx2Fma;
+    } else if (hasAvx2 && osAvxSupport) {
         cached = ArchTier::AVX2;
-    } else if (has_avx && os_avx_support && has_fma3) {
-        cached = ArchTier::AVX_FMA;
-    } else if (has_avx && os_avx_support) {
+    } else if (hasAvx && osAvxSupport && hasFma3) {
+        cached = ArchTier::AvxFma;
+    } else if (hasAvx && osAvxSupport) {
         cached = ArchTier::AVX;
-    } else if (has_sse42) {
+    } else if (hasSse42) {
         cached = ArchTier::SSE42;
-    } else if (has_sse41) {
+    } else if (hasSse41) {
         cached = ArchTier::SSE41;
-    } else if (has_ssse3) {
+    } else if (hasSsse3) {
         cached = ArchTier::SSSE3;
-    } else if (has_sse3) {
+    } else if (hasSse3) {
         cached = ArchTier::SSE3;
-    } else if (has_sse2) {
+    } else if (hasSse2) {
         cached = ArchTier::SSE2;
     } else {
         cached = ArchTier::SCALAR;
@@ -253,14 +256,18 @@ inline ArchTier getCurrentArchTier() {
 inline FmaVariant getFmaVariant() {
     int info[4];
     detail::cpuid(info, 1);
-    bool has_fma3 = (info[2] & (1 << 12)) != 0;
+    bool const hasFma3 = (info[2] & (1 << 12)) != 0;
 
     // Check for FMA4 (AMD Bulldozer, rare)
     detail::cpuid(info, static_cast<int>(0x80000001u));
-    bool has_fma4 = (info[2] & (1 << 16)) != 0;
+    bool const hasFma4 = (info[2] & (1 << 16)) != 0;
 
-    if (has_fma4) return FmaVariant::FMA4;
-    if (has_fma3) return FmaVariant::FMA3;
+    if (hasFma4) {
+      return FmaVariant::FMA4;
+    }
+    if (hasFma3) {
+      return FmaVariant::FMA3;
+    }
     return FmaVariant::NONE;
 }
 
@@ -304,9 +311,9 @@ inline const char* getArchTierName(ArchTier tier) {
         case ArchTier::SSE41:    return "SSE4.1";
         case ArchTier::SSE42:    return "SSE4.2";
         case ArchTier::AVX:      return "AVX";
-        case ArchTier::AVX_FMA:  return "AVX+FMA";
+        case ArchTier::AvxFma:  return "AVX+FMA";
         case ArchTier::AVX2:     return "AVX2";
-        case ArchTier::AVX2_FMA: return "AVX2+FMA";
+        case ArchTier::Avx2Fma: return "AVX2+FMA";
         case ArchTier::AVX512:   return "AVX-512";
         default:                 return "Unknown";
     }
@@ -318,9 +325,9 @@ inline const char* getArchTierName(ArchTier tier) {
 inline std::size_t getVectorWidth(ArchTier tier) {
     switch (tier) {
         case ArchTier::AVX512:   return 8;
-        case ArchTier::AVX2_FMA:
+        case ArchTier::Avx2Fma:
         case ArchTier::AVX2:
-        case ArchTier::AVX_FMA:
+        case ArchTier::AvxFma:
         case ArchTier::AVX:      return 4;
         case ArchTier::SSE42:
         case ArchTier::SSE41:
@@ -343,7 +350,8 @@ inline std::size_t getVectorWidth(ArchTier tier) {
  * xsimd::dispatch selects the best available implementation at runtime.
  * We include all architectures that might be available on the target.
  */
-#if defined(__AVX512F__)
+// NOLINTBEGIN(misc-include-cleaner) -- xsimd types provided by conditional xsimd.hpp include
+#ifdef __AVX512F__
 using supported_archs = xsimd::arch_list<
     xsimd::avx512bw,
     xsimd::avx512dq,
@@ -359,7 +367,7 @@ using supported_archs = xsimd::arch_list<
     xsimd::sse3,
     xsimd::sse2
 >;
-#elif defined(__AVX2__)
+#elifdef __AVX2__
 using supported_archs = xsimd::arch_list<
     xsimd::fma3<xsimd::avx2>,
     xsimd::avx2,
@@ -371,7 +379,7 @@ using supported_archs = xsimd::arch_list<
     xsimd::sse3,
     xsimd::sse2
 >;
-#elif defined(__AVX__)
+#elifdef __AVX__
 using supported_archs = xsimd::arch_list<
     xsimd::fma3<xsimd::avx>,
     xsimd::avx,
@@ -410,6 +418,7 @@ inline const char* getXsimdArchName() {
 inline std::size_t getXsimdBatchSize() {
     return xsimd::batch<double>::size;
 }
+// NOLINTEND(misc-include-cleaner)
 
 #endif // BLACKHOLE_ENABLE_XSIMD
 
@@ -443,15 +452,16 @@ inline const char* getSleefAccuracyMode() {
  * @brief Print SIMD configuration to stdout.
  */
 inline void printSimdConfig() {
-    ArchTier tier = getCurrentArchTier();
-    FmaVariant fma = getFmaVariant();
+  ArchTier const tier = getCurrentArchTier();
+  FmaVariant const fma = getFmaVariant();
 
-    printf("=== SIMD Configuration ===\n");
-    printf("Runtime tier: %s\n", getArchTierName(tier));
-    printf("Vector width: %zu doubles\n", getVectorWidth(tier));
-    printf("FMA variant: %s\n",
-           fma == FmaVariant::FMA3 ? "FMA3" :
-           fma == FmaVariant::FMA4 ? "FMA4" : "None");
+  printf("=== SIMD Configuration ===\n");
+  printf("Runtime tier: %s\n", getArchTierName(tier));
+  printf("Vector width: %zu doubles\n", getVectorWidth(tier));
+  const char* fmaName = "None";
+  if (fma == FmaVariant::FMA3) { fmaName = "FMA3"; }
+  else if (fma == FmaVariant::FMA4) { fmaName = "FMA4"; }
+  printf("FMA variant: %s\n", fmaName);
 
 #if BLACKHOLE_ENABLE_XSIMD
     printf("xsimd arch: %s\n", getXsimdArchName());

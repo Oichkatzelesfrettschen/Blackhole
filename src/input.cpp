@@ -1,10 +1,14 @@
 #include "input.h"
-#include "settings.h"
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <string>
 
+#include <GLFW/glfw3.h>
 #include <imgui.h>
+
+#include "settings.h"
 
 InputManager &InputManager::instance() {
   static InputManager instance;
@@ -20,7 +24,8 @@ void InputManager::init(GLFWwindow *window) {
   glfwGetWindowSize(window_, &windowedWidth_, &windowedHeight_);
 
   // Initialize mouse position
-  double mx, my;
+  double mx;
+  double my;
   glfwGetCursorPos(window_, &mx, &my);
   mouseX_ = static_cast<float>(mx);
   mouseY_ = static_cast<float>(my);
@@ -195,13 +200,12 @@ void InputManager::syncToSettings() {
 
 void InputManager::update(float deltaTime) {
   // Update previous state
-  std::copy(std::begin(keyState_), std::end(keyState_), std::begin(prevKeyState_));
-  std::copy(std::begin(mouseButtonState_), std::end(mouseButtonState_),
-            std::begin(prevMouseButtonState_));
+  std::ranges::copy(keyState_, std::begin(prevKeyState_));
+  std::ranges::copy(mouseButtonState_, std::begin(prevMouseButtonState_));
 
   // Calculate mouse delta with sensitivity and inversion
-  float rawDeltaX = mouseX_ - prevMouseX_;
-  float rawDeltaY = mouseY_ - prevMouseY_;
+  float const rawDeltaX = mouseX_ - prevMouseX_;
+  float const rawDeltaY = mouseY_ - prevMouseY_;
 
   mouseDeltaX_ = rawDeltaX * mouseSensitivity_ * (invertMouseX_ ? -1.0f : 1.0f);
   mouseDeltaY_ = rawDeltaY * mouseSensitivity_ * (invertMouseY_ ? -1.0f : 1.0f);
@@ -287,8 +291,9 @@ void InputManager::update(float deltaTime) {
 }
 
 void InputManager::handleHoldToToggle(KeyAction action, bool justPressed, bool /*justReleased*/) {
-  if (!justPressed)
+  if (!justPressed) {
     return;
+  }
 
   // Toggle the corresponding state
   switch (action) {
@@ -330,12 +335,12 @@ void InputManager::handleHoldToToggle(KeyAction action, bool justPressed, bool /
 void InputManager::updateCamera(float deltaTime) {
   const float inputScale = timeScale_;
   const float scaledDelta = deltaTime * inputScale;
-  float moveSpeed = cameraMoveSpeed_ * scaledDelta * keyboardSensitivity_;
-  float rotateSpeed = cameraRotateSpeed_ * scaledDelta * keyboardSensitivity_;
+  float const moveSpeed = cameraMoveSpeed_ * scaledDelta * keyboardSensitivity_;
+  float const rotateSpeed = cameraRotateSpeed_ * scaledDelta * keyboardSensitivity_;
 
   // Apply keyboard axis inversion
-  float keyXMult = invertKeyboardX_ ? -1.0f : 1.0f;
-  float keyYMult = invertKeyboardY_ ? -1.0f : 1.0f;
+  float const keyXMult = invertKeyboardX_ ? -1.0f : 1.0f;
+  float const keyYMult = invertKeyboardY_ ? -1.0f : 1.0f;
 
   // Determine if action is active (either held or toggled on)
   auto isActive = [this](KeyAction action) {
@@ -438,31 +443,37 @@ void InputManager::updateCamera(float deltaTime) {
   camera_.distance = std::clamp(camera_.distance, 0.5f, 50.0f);
 
   // Normalize angles
-  while (camera_.yaw > 180.0f)
+  while (camera_.yaw > 180.0f) {
     camera_.yaw -= 360.0f;
-  while (camera_.yaw < -180.0f)
+  }
+  while (camera_.yaw < -180.0f) {
     camera_.yaw += 360.0f;
-  while (camera_.roll > 180.0f)
+  }
+  while (camera_.roll > 180.0f) {
     camera_.roll -= 360.0f;
-  while (camera_.roll < -180.0f)
+  }
+  while (camera_.roll < -180.0f) {
     camera_.roll += 360.0f;
+  }
 }
 
-static float applyDeadzone(float value, float deadzone) {
+namespace {
+float applyDeadzone(float value, float deadzone) {
   if (std::abs(value) < deadzone) {
     return 0.0f;
   }
-  float sign = value < 0.0f ? -1.0f : 1.0f;
-  float scaled = (std::abs(value) - deadzone) / (1.0f - deadzone);
+  float const sign = value < 0.0f ? -1.0f : 1.0f;
+  float const scaled = (std::abs(value) - deadzone) / (1.0f - deadzone);
   return scaled * sign;
 }
 
-static float normalizeTrigger(float value) {
+float normalizeTrigger(float value) {
   if (value >= 0.0f && value <= 1.0f) {
     return value;
   }
   return std::clamp((value + 1.0f) * 0.5f, 0.0f, 1.0f);
 }
+} // namespace
 
 float InputManager::getGamepadAxisRaw(int axis) const {
   if (axis < 0 || axis >= GLFW_GAMEPAD_AXIS_LAST + 1) {
@@ -478,7 +489,7 @@ float InputManager::getGamepadAxisFiltered(int axis) const {
   return gamepadAxisFiltered_[axis];
 }
 
-bool InputManager::isGamepadConnected() const {
+bool InputManager::isGamepadConnected() {
   return glfwJoystickIsGamepad(GLFW_JOYSTICK_1) == GLFW_TRUE;
 }
 
@@ -499,8 +510,7 @@ void InputManager::updateGamepad(float deltaTime) {
     return;
   }
 
-  std::copy(std::begin(gamepadButtonState_), std::end(gamepadButtonState_),
-            std::begin(prevGamepadButtonState_));
+  std::ranges::copy(gamepadButtonState_, std::begin(prevGamepadButtonState_));
   for (int i = 0; i < GLFW_GAMEPAD_BUTTON_LAST + 1; ++i) {
     gamepadButtonState_[i] = state.buttons[i] == GLFW_PRESS;
   }
@@ -546,9 +556,9 @@ void InputManager::updateGamepad(float deltaTime) {
 
   updateAxis(gamepadZoomInAxis_);
   updateAxis(gamepadZoomOutAxis_);
-  float zoomIn = normalizeTrigger(gamepadAxisRaw_[gamepadZoomInAxis_]);
-  float zoomOut = normalizeTrigger(gamepadAxisRaw_[gamepadZoomOutAxis_]);
-  float triggerZoom = (zoomOut - zoomIn) * gamepadTriggerZoomSensitivity_ * deltaTime;
+  float const zoomIn = normalizeTrigger(gamepadAxisRaw_[gamepadZoomInAxis_]);
+  float const zoomOut = normalizeTrigger(gamepadAxisRaw_[gamepadZoomOutAxis_]);
+  float const triggerZoom = (zoomOut - zoomIn) * gamepadTriggerZoomSensitivity_ * deltaTime;
   camera_.distance += triggerZoom;
 
   if (isGamepadButtonJustPressed(gamepadResetButton_)) {
@@ -566,62 +576,71 @@ void InputManager::updateGamepad(float deltaTime) {
 void InputManager::shutdown() { window_ = nullptr; }
 
 bool InputManager::isKeyPressed(int key) const {
-  if (key < 0 || key > GLFW_KEY_LAST)
+  if (key < 0 || key > GLFW_KEY_LAST) {
     return false;
+  }
   return keyState_[key];
 }
 
 bool InputManager::isKeyJustPressed(int key) const {
-  if (key < 0 || key > GLFW_KEY_LAST)
+  if (key < 0 || key > GLFW_KEY_LAST) {
     return false;
+  }
   return keyState_[key] && !prevKeyState_[key];
 }
 
 bool InputManager::isKeyJustReleased(int key) const {
-  if (key < 0 || key > GLFW_KEY_LAST)
+  if (key < 0 || key > GLFW_KEY_LAST) {
     return false;
+  }
   return !keyState_[key] && prevKeyState_[key];
 }
 
 bool InputManager::isMouseButtonPressed(int button) const {
-  if (button < 0 || button > GLFW_MOUSE_BUTTON_LAST)
+  if (button < 0 || button > GLFW_MOUSE_BUTTON_LAST) {
     return false;
+  }
   return mouseButtonState_[button];
 }
 
 bool InputManager::isMouseButtonJustPressed(int button) const {
-  if (button < 0 || button > GLFW_MOUSE_BUTTON_LAST)
+  if (button < 0 || button > GLFW_MOUSE_BUTTON_LAST) {
     return false;
+  }
   return mouseButtonState_[button] && !prevMouseButtonState_[button];
 }
 
 bool InputManager::isActionPressed(KeyAction action) const {
   auto it = keyBindings_.find(action);
-  if (it == keyBindings_.end())
+  if (it == keyBindings_.end()) {
     return false;
+  }
   return isKeyPressed(it->second);
 }
 
 bool InputManager::isActionJustPressed(KeyAction action) const {
   auto it = keyBindings_.find(action);
-  if (it == keyBindings_.end())
+  if (it == keyBindings_.end()) {
     return false;
+  }
   return isKeyJustPressed(it->second);
 }
 
 int InputManager::getKeyForAction(KeyAction action) const {
   auto it = keyBindings_.find(action);
-  if (it == keyBindings_.end())
+  if (it == keyBindings_.end()) {
     return GLFW_KEY_UNKNOWN;
+  }
   return it->second;
 }
 
 void InputManager::setKeyForAction(KeyAction action, int key) { keyBindings_[action] = key; }
 
-std::string InputManager::getKeyName(int key) const {
+std::string InputManager::getKeyName(int key) {
   const char *name = glfwGetKeyName(key, 0);
-  if (name)
-    return std::string(name);
+  if (name != nullptr) {
+    return {name};
+  }
 
   // Handle special keys
   switch (key) {
@@ -666,7 +685,7 @@ std::string InputManager::getKeyName(int key) const {
   }
 }
 
-const char *InputManager::getActionName(KeyAction action) const {
+const char *InputManager::getActionName(KeyAction action) {
   switch (action) {
   case KeyAction::Quit:
     return "Quit";

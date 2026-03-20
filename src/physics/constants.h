@@ -11,7 +11,7 @@
 #ifndef PHYSICS_CONSTANTS_H
 #define PHYSICS_CONSTANTS_H
 
-#include <cmath>
+#include <numbers>
 
 namespace physics {
 
@@ -78,7 +78,7 @@ inline constexpr double OMEGA_LAMBDA_PLANCK = 1.0 - OMEGA_M_PLANCK;
 // ============================================================================
 
 /// Pi
-inline constexpr double PI = 3.14159265358979323846;
+inline constexpr double PI = std::numbers::pi;
 
 /// 2*Pi
 inline constexpr double TWO_PI = 2.0 * PI;
@@ -107,28 +107,28 @@ inline constexpr double FOUR_G_OVER_C2 = 4.0 * G_OVER_C2;
 // ============================================================================
 
 /// Convert solar masses to grams
-inline constexpr double solar_masses_to_g(double m_sun) {
-  return m_sun * M_SUN;
+constexpr double solarMassesToG(double mSun) {
+  return mSun * M_SUN;
 }
 
 /// Convert grams to solar masses
-inline constexpr double g_to_solar_masses(double g) {
-  return g / M_SUN;
+constexpr double gToSolarMasses(double grams) {
+  return grams / M_SUN;
 }
 
 /// Convert km to cm
-inline constexpr double km_to_cm(double km) {
+constexpr double kmToCm(double km) {
   return km * 1.0e5;
 }
 
 /// Convert cm to km
-inline constexpr double cm_to_km(double cm) {
+constexpr double cmToKm(double cm) {
   return cm * 1.0e-5;
 }
 
 /// Convert Schwarzschild radii to cm (given mass in solar masses)
-inline constexpr double r_s_to_cm(double r_s_units, double mass_solar) {
-  return r_s_units * TWO_G_OVER_C2 * mass_solar * M_SUN;
+constexpr double rSToCm(double rSUnits, double massSolar) {
+  return rSUnits * TWO_G_OVER_C2 * massSolar * M_SUN;
 }
 
 } // namespace physics

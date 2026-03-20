@@ -27,11 +27,11 @@ struct GLCapabilities {
 
 // Shader version tiers
 enum class ShaderTier {
-  GLSL_460, // OpenGL 4.6 - latest features
-  GLSL_450, // OpenGL 4.5 - DSA, SSBOs
-  GLSL_410, // OpenGL 4.1 - Apple max, tessellation
-  GLSL_330, // OpenGL 3.3 - Core profile baseline
-  GLSL_120, // OpenGL 2.1 - Legacy fallback
+  Glsl460, // OpenGL 4.6 - latest features
+  Glsl450, // OpenGL 4.5 - DSA, SSBOs
+  Glsl410, // OpenGL 4.1 - Apple max, tessellation
+  Glsl330, // OpenGL 3.3 - Core profile baseline
+  Glsl120, // OpenGL 2.1 - Legacy fallback
   UNKNOWN
 };
 
@@ -44,49 +44,50 @@ public:
   void shutdown();
 
   // Get detected capabilities
-  const GLCapabilities &getCapabilities() const { return capabilities_; }
-  ShaderTier getCurrentTier() const { return currentTier_; }
+  [[nodiscard]] const GLCapabilities &getCapabilities() const { return capabilities_; }
+  [[nodiscard]] ShaderTier getCurrentTier() const { return currentTier_; }
 
   // Get version string for shader preprocessor
-  std::string getVersionDirective() const;
+  [[nodiscard]] std::string getVersionDirective() const;
 
   // Load shader with automatic version selection
   // Returns shader source with appropriate #version and defines
-  std::string loadShaderSource(const std::string &basePath) const;
+  [[nodiscard]] std::string loadShaderSource(const std::string &basePath) const;
 
   // Compile shader with automatic fallback
-  GLuint compileShader(const std::string &basePath, GLenum shaderType) const;
+  [[nodiscard]] GLuint compileShader(const std::string &basePath, GLenum shaderType) const;
 
   // Create program from vertex and fragment shaders
-  GLuint createProgram(const std::string &vertPath,
-                       const std::string &fragPath) const;
+  [[nodiscard]] GLuint createProgram(const std::string &vertPath,
+                                     const std::string &fragPath) const;
 
   // Feature availability queries
-  bool canUseComputeShaders() const { return capabilities_.hasComputeShaders; }
-  bool canUseTessellation() const { return capabilities_.hasTessellation; }
-  bool canUseDSA() const { return capabilities_.hasDSA; }
+  [[nodiscard]] bool canUseComputeShaders() const { return capabilities_.hasComputeShaders; }
+  [[nodiscard]] bool canUseTessellation() const { return capabilities_.hasTessellation; }
+  [[nodiscard]] bool canUseDSA() const { return capabilities_.hasDSA; }
 
   // Get GLSL version number (e.g., 330, 410, 450)
-  int getGLSLVersion() const { return capabilities_.glslVersion; }
+  [[nodiscard]] int getGLSLVersion() const { return capabilities_.glslVersion; }
 
   // Check if running on Apple (OpenGL 4.1 max)
-  bool isApplePlatform() const;
+  [[nodiscard]] bool isApplePlatform() const;
+
+  ShaderManager(const ShaderManager &) = delete;
+  ShaderManager &operator=(const ShaderManager &) = delete;
 
 private:
   ShaderManager() = default;
   ~ShaderManager() = default;
-  ShaderManager(const ShaderManager &) = delete;
-  ShaderManager &operator=(const ShaderManager &) = delete;
 
   void detectCapabilities();
-  ShaderTier determineTier() const;
+  [[nodiscard]] ShaderTier determineTier() const;
 
   // Prepend version and feature defines to shader source
-  std::string preprocessShader(const std::string &source) const;
+  [[nodiscard]] std::string preprocessShader(const std::string &source) const;
 
   // Try to load shader file with version suffix fallback
   // e.g., "shader.frag" -> try "shader.frag.410", "shader.frag.330", etc.
-  std::string findBestShaderFile(const std::string &basePath) const;
+  [[nodiscard]] std::string findBestShaderFile(const std::string &basePath) const;
 
   GLCapabilities capabilities_;
   ShaderTier currentTier_ = ShaderTier::UNKNOWN;

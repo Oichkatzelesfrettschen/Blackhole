@@ -32,6 +32,7 @@ struct GLFWwindow;
 struct GLFWmonitor;
 
 // Follow "Getting Started" link and check examples/ folder to learn about using backends!
+// NOLINTBEGIN(readability-identifier-naming) -- vendor ImGui backend API uses ImGui_ prefix convention
 IMGUI_IMPL_API bool     ImGui_ImplGlfw_InitForOpenGL(GLFWwindow* window, bool install_callbacks);
 IMGUI_IMPL_API bool     ImGui_ImplGlfw_InitForVulkan(GLFWwindow* window, bool install_callbacks);
 IMGUI_IMPL_API bool     ImGui_ImplGlfw_InitForOther(GLFWwindow* window, bool install_callbacks);
@@ -68,6 +69,7 @@ IMGUI_IMPL_API void     ImGui_ImplGlfw_MonitorCallback(GLFWmonitor* monitor, int
 IMGUI_IMPL_API void     ImGui_ImplGlfw_Sleep(int milliseconds);
 IMGUI_IMPL_API float    ImGui_ImplGlfw_GetContentScaleForWindow(GLFWwindow* window);
 IMGUI_IMPL_API float    ImGui_ImplGlfw_GetContentScaleForMonitor(GLFWmonitor* monitor);
+// NOLINTEND(readability-identifier-naming)
 
 
 #endif // #ifndef IMGUI_DISABLE

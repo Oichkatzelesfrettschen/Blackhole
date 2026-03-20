@@ -43,8 +43,8 @@ public:
     // Disable copy, enable move
     NoiseTextureCache(const NoiseTextureCache&) = delete;
     NoiseTextureCache& operator=(const NoiseTextureCache&) = delete;
-    NoiseTextureCache(NoiseTextureCache&&) noexcept;
-    NoiseTextureCache& operator=(NoiseTextureCache&&) noexcept;
+    NoiseTextureCache(NoiseTextureCache && /*other*/) noexcept;
+    NoiseTextureCache &operator=(NoiseTextureCache && /*other*/) noexcept;
 
     /**
      * @brief Initialize cache and generate all preset noise LUTs
@@ -67,7 +67,7 @@ public:
     /**
      * @brief Check if cache is initialized
      */
-    bool isInitialized() const { return initialized_; }
+    [[nodiscard]] bool isInitialized() const { return initialized_; }
 
     // ========================================================================
     // Texture Access
@@ -77,25 +77,25 @@ public:
      * @brief Get turbulence texture (FractalFBm, 128³)
      * Primary disk turbulence detail
      */
-    GLuint getTurbulenceTexture() const { return texture_turbulence_; }
+    [[nodiscard]] GLuint getTurbulenceTexture() const { return texture_turbulence_; }
 
     /**
      * @brief Get density texture (Perlin, 128³)
      * Large-scale density modulation
      */
-    GLuint getDensityTexture() const { return texture_density_; }
+    [[nodiscard]] GLuint getDensityTexture() const { return texture_density_; }
 
     /**
      * @brief Get ridged texture (FractalRidged, 64³)
      * Sharp shock fronts and features
      */
-    GLuint getRidgedTexture() const { return texture_ridged_; }
+    [[nodiscard]] GLuint getRidgedTexture() const { return texture_ridged_; }
 
     /**
      * @brief Get cellular texture (Voronoi, 64³)
      * Discrete cell structure
      */
-    GLuint getCellularTexture() const { return texture_cellular_; }
+    [[nodiscard]] GLuint getCellularTexture() const { return texture_cellular_; }
 
     // ========================================================================
     // Texture Unit Binding Helpers
@@ -112,7 +112,7 @@ public:
      *
      * @param base_unit Starting texture unit (e.g., 10)
      */
-    void bindAll(GLint base_unit);
+    void bindAll(GLint baseUnit) const;
 
     /**
      * @brief Get recommended texture unit for turbulence
@@ -142,7 +142,7 @@ public:
     /**
      * @brief Get total GPU memory usage (bytes)
      */
-    size_t getMemoryUsageBytes() const;
+    [[nodiscard]] size_t getMemoryUsageBytes() const;
 
     /**
      * @brief Print cache statistics to stdout
@@ -161,21 +161,21 @@ private:
      * @param volume Noise data to upload
      * @return OpenGL texture name, or 0 on failure
      */
-    GLuint uploadNoiseVolume(const NoiseVolume& volume);
+  static GLuint uploadNoiseVolume(const NoiseVolume &volume);
 
-    bool initialized_ = false;
+  bool initialized_ = false;
 
-    // Texture handles
-    GLuint texture_turbulence_ = 0;
-    GLuint texture_density_ = 0;
-    GLuint texture_ridged_ = 0;
-    GLuint texture_cellular_ = 0;
+  // Texture handles
+  GLuint texture_turbulence_ = 0;
+  GLuint texture_density_ = 0;
+  GLuint texture_ridged_ = 0;
+  GLuint texture_cellular_ = 0;
 
-    // Noise generators (kept alive for potential runtime regeneration)
-    std::unique_ptr<NoiseGenerator> gen_turbulence_;
-    std::unique_ptr<NoiseGenerator> gen_density_;
-    std::unique_ptr<NoiseGenerator> gen_ridged_;
-    std::unique_ptr<NoiseGenerator> gen_cellular_;
+  // Noise generators (kept alive for potential runtime regeneration)
+  std::unique_ptr<NoiseGenerator> gen_turbulence_;
+  std::unique_ptr<NoiseGenerator> gen_density_;
+  std::unique_ptr<NoiseGenerator> gen_ridged_;
+  std::unique_ptr<NoiseGenerator> gen_cellular_;
 };
 
 } // namespace blackhole

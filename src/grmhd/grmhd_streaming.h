@@ -37,21 +37,21 @@ namespace grmhd {
  * Tracks: time coordinate, grid dimensions, variable names, file location
  */
 struct DumpMetadata {
-    double time;                        // Simulation time (gravitational units)
-    std::string filepath;               // HDF5 file path
-    std::string datasetName;            // HDF5 dataset path (e.g., "/primitives")
+  double time{};           // Simulation time (gravitational units)
+  std::string filepath;    // HDF5 file path
+  std::string datasetName; // HDF5 dataset path (e.g., "/primitives")
 
-    struct GridInfo {
-        uint32_t nx, ny, nz;            // Grid dimensions
-        double xmin, xmax;              // Boyer-Lindquist r range
-        double ymin, ymax;              // Boyer-Lindquist theta range
-        double zmin, zmax;              // Boyer-Lindquist phi range
-    } grid;
+  struct GridInfo {
+    uint32_t nx, ny, nz; // Grid dimensions
+    double xmin, xmax;   // Boyer-Lindquist r range
+    double ymin, ymax;   // Boyer-Lindquist theta range
+    double zmin, zmax;   // Boyer-Lindquist phi range
+  } grid{};
 
     struct Variables {
         std::vector<std::string> names; // ["rho", "uu", "u1", "u2", "u3", "B1", "B2", "B3"]
         std::vector<uint32_t> indices;  // Indices into HDF5 dataset
-        uint32_t varCount;              // Total variable count
+        uint32_t varCount{};            // Total variable count
     } variables;
 
     bool valid = false;                 // Metadata successfully loaded
@@ -71,9 +71,9 @@ struct SequenceMetadata {
     std::map<std::string, size_t> filenameIndex;  // filename -> dump index
 
     // Statistics
-    double tStart, tEnd;
-    uint32_t dumpCount;
-    size_t estimatedTotalSize;              // Bytes
+    double tStart{}, tEnd{};
+    uint32_t dumpCount{};
+    size_t estimatedTotalSize{}; // Bytes
 };
 
 // ============================================================================
@@ -92,7 +92,7 @@ struct GRMHDTile {
         // Conservative variables (8 floats per cell)
         float rho, uu;                  // Density, internal energy density
         float u1, u2, u3;               // 3-velocity components (CONTRAVARIANT)
-        float B1, B2, B3;               // Magnetic field (CONTRAVARIANT)
+        float b1, b2, b3;               // Magnetic field (CONTRAVARIANT)
     };
 
     std::vector<CellData> data;         // 32*32 = 1024 cells
@@ -117,15 +117,15 @@ public:
 
     // Tile access
     std::optional<std::shared_ptr<GRMHDTile>> getTile(uint32_t x, uint32_t y, uint32_t dumpIdx);
-    void insertTile(std::shared_ptr<GRMHDTile> tile);
+    void insertTile(const std::shared_ptr<GRMHDTile> &tile);
     void evictLRU();
 
     // Statistics
-    uint32_t getCurrentSize() const { return tiles_.size(); }
-    uint32_t getHitCount() const { return hitCount_; }
-    uint32_t getMissCount() const { return missCount_; }
+    [[nodiscard]] uint32_t getCurrentSize() const { return tiles_.size(); }
+    [[nodiscard]] uint32_t getHitCount() const { return hitCount_; }
+    [[nodiscard]] uint32_t getMissCount() const { return missCount_; }
 
-private:
+  private:
     std::map<std::tuple<uint32_t, uint32_t, uint32_t>, std::shared_ptr<GRMHDTile>> tiles_;
     std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> lruOrder_;
     uint32_t maxTiles_;
@@ -144,24 +144,24 @@ private:
  */
 class GRMHDReader {
 public:
-    explicit GRMHDReader(const std::string& metadataPath);
-    ~GRMHDReader();
+  explicit GRMHDReader(std::string metadataPath);
+  ~GRMHDReader();
 
-    // Load sequence metadata from JSON
-    bool loadSequenceMetadata(const std::string& jsonPath);
+  // Load sequence metadata from JSON
+  bool loadSequenceMetadata(const std::string &jsonPath);
 
-    // Get metadata for specific dump
-    std::optional<DumpMetadata> getDumpMetadata(size_t dumpIndex) const;
-    std::optional<DumpMetadata> getDumpAtTime(double time) const;
+  // Get metadata for specific dump
+  [[nodiscard]] std::optional<DumpMetadata> getDumpMetadata(size_t dumpIndex) const;
+  [[nodiscard]] std::optional<DumpMetadata> getDumpAtTime(double time) const;
 
-    // Dump statistics
-    size_t getDumpCount() const { return sequence_.dumps.size(); }
-    double getTimeSpan() const { return sequence_.tEnd - sequence_.tStart; }
+  // Dump statistics
+  [[nodiscard]] size_t getDumpCount() const { return sequence_.dumps.size(); }
+  [[nodiscard]] double getTimeSpan() const { return sequence_.tEnd - sequence_.tStart; }
 
-    // Low-level HDF5 I/O
-    bool readHDF5Dump(size_t dumpIndex, std::vector<float>& buffer);
-    bool readHDF5Variable(size_t dumpIndex, const std::string& varName,
-                         std::vector<float>& buffer);
+  // Low-level HDF5 I/O
+  bool readHDF5Dump(size_t dumpIndex, std::vector<float> &buffer);
+  bool readHDF5Variable(size_t dumpIndex, const std::string &varName,
+                        std::vector<float> &buffer) const;
 
 private:
     SequenceMetadata sequence_;
@@ -169,7 +169,7 @@ private:
 
     // JSON parsing helpers
     bool parseJsonMetadata(const std::string& jsonContent);
-    DumpMetadata parseDumpEntry(const std::string& jsonEntry);
+    static DumpMetadata parseDumpEntry(const std::string &jsonEntry);
 };
 
 // ============================================================================
@@ -186,15 +186,15 @@ public:
     ~GRMHDPipeline();
 
     // Queue tile for async GPU upload
-    void queueTileUpload(std::shared_ptr<GRMHDTile> tile);
+    void queueTileUpload(const std::shared_ptr<GRMHDTile> &tile);
 
     // Wait for all pending uploads
     void waitForCompletion();
 
     // Check upload progress
-    uint32_t getPendingCount() const { return pendingUploads_.size(); }
+    [[nodiscard]] uint32_t getPendingCount() const { return pendingUploads_.size(); }
 
-private:
+  private:
     std::vector<std::shared_ptr<GRMHDTile>> pendingUploads_;
     uint32_t maxConcurrentUploads_;
 };

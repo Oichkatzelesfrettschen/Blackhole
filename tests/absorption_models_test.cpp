@@ -6,12 +6,11 @@
  * across a frequency range from radio to X-ray.
  */
 
-#include <iostream>
 #include <cassert>
-#include <cstdint>
-#include <vector>
 #include <cmath>
 #include <iomanip>
+#include <iostream>
+#include <vector>
 
 // Import absorption models from Phase 7.1a
 #include "../src/physics/absorption_models.h"
@@ -19,219 +18,220 @@
 using namespace physics;
 
 // Test 1: Synchrotron Self-Absorption frequency dependence
-bool test_ssa_frequency_dependence() {
-    std::cout << "Test 1: SSA Frequency Dependence\n";
+namespace {
 
-    double B = 100.0;   // Gauss
-    double n_e = 1e3;   // cm^-3
-    double T = 1e7;     // K
-    double nu_ref = 1e10; // Hz reference
+bool testSsaFrequencyDependence() {
+  std::cout << "Test 1: SSA Frequency Dependence\n";
 
-    double alpha_low = synchrotron_self_absorption(nu_ref, B, n_e, T);
-    double alpha_mid = synchrotron_self_absorption(nu_ref * 10.0, B, n_e, T);
-    double alpha_high = synchrotron_self_absorption(nu_ref * 100.0, B, n_e, T);
+  double const b = 100.0;    // Gauss
+  double const nE = 1e3;     // cm^-3
+  double const t = 1e7;      // K
+  double const nuRef = 1e10; // Hz reference
 
-    // SSA should decrease as 1/nu^2
-    // So alpha(10*nu) ~ alpha(nu) / 100, ratio = 0.01
-    double ratio_1 = alpha_mid / alpha_low;
-    double ratio_2 = alpha_high / alpha_mid;
+  double const alphaLow = synchrotronSelfAbsorption(nuRef, b, nE, t);
+  double const alphaMid = synchrotronSelfAbsorption(nuRef * 10.0, b, nE, t);
+  double const alphaHigh = synchrotronSelfAbsorption(nuRef * 100.0, b, nE, t);
 
-    bool freq_dep_ok = (ratio_1 < 0.015 && ratio_1 > 0.005) &&
-                       (ratio_2 < 0.015 && ratio_2 > 0.005);
+  // SSA should decrease as 1/nu^2
+  // So alpha(10*nu) ~ alpha(nu) / 100, ratio = 0.01
+  double const ratio1 = alphaMid / alphaLow;
+  double const ratio2 = alphaHigh / alphaMid;
 
-    std::cout << "  nu_ref: " << nu_ref << " Hz\n"
-              << "  alpha(nu): " << std::scientific << alpha_low << "\n"
-              << "  alpha(10*nu): " << alpha_mid << "\n"
-              << "  alpha(100*nu): " << alpha_high << "\n"
-              << "  Ratio (10x): " << ratio_1 << " (expect ~0.1)\n"
-              << "  Ratio (100x): " << ratio_2 << " (expect ~0.1)\n"
-              << "  Status: " << (freq_dep_ok ? "PASS" : "FAIL") << "\n\n";
+  bool const freqDepOk = (ratio1 < 0.015 && ratio1 > 0.005) && (ratio2 < 0.015 && ratio2 > 0.005);
 
-    return freq_dep_ok;
+  std::cout << "  nu_ref: " << nuRef << " Hz\n"
+            << "  alpha(nu): " << std::scientific << alphaLow << "\n"
+            << "  alpha(10*nu): " << alphaMid << "\n"
+            << "  alpha(100*nu): " << alphaHigh << "\n"
+            << "  Ratio (10x): " << ratio1 << " (expect ~0.1)\n"
+            << "  Ratio (100x): " << ratio2 << " (expect ~0.1)\n"
+            << "  Status: " << (freqDepOk ? "PASS" : "FAIL") << "\n\n";
+
+  return freqDepOk;
 }
 
 // Test 2: Free-Free Absorption temperature dependence
-bool test_ff_temperature_dependence() {
-    std::cout << "Test 2: Free-Free Temperature Dependence\n";
+bool testFfTemperatureDependence() {
+  std::cout << "Test 2: Free-Free Temperature Dependence\n";
 
-    double nu = 1e10;    // Hz
-    double n_e = 1e3;    // cm^-3
-    double T_low = 1e6;  // K
-    double T_high = 1e7; // K (10x hotter)
+  double const nu = 1e10;   // Hz
+  double const nE = 1e3;    // cm^-3
+  double const tLow = 1e6;  // K
+  double const tHigh = 1e7; // K (10x hotter)
 
-    double alpha_cool = free_free_absorption(nu, n_e, T_low);
-    double alpha_hot = free_free_absorption(nu, n_e, T_high);
+  double const alphaCool = freeFreeAbsorption(nu, nE, tLow);
+  double const alphaHot = freeFreeAbsorption(nu, nE, tHigh);
 
-    // Free-free ~ 1/T^(3/2)
-    // So alpha(10*T) ~ alpha(T) / 10^(3/2) ~ alpha(T) / 31.6
-    double ratio = alpha_cool / alpha_hot;
-    bool temp_dep_ok = (ratio > 25.0 && ratio < 40.0);  // ~31.6 expected
+  // Free-free ~ 1/T^(3/2)
+  // So alpha(10*T) ~ alpha(T) / 10^(3/2) ~ alpha(T) / 31.6
+  double const ratio = alphaCool / alphaHot;
+  bool const tempDepOk = (ratio > 25.0 && ratio < 40.0); // ~31.6 expected
 
-    std::cout << "  T_cool = " << T_low << " K: alpha = " << std::scientific << alpha_cool << "\n"
-              << "  T_hot = " << T_high << " K: alpha = " << alpha_hot << "\n"
-              << "  Ratio (cool/hot): " << ratio << " (expect ~31.6)\n"
-              << "  Status: " << (temp_dep_ok ? "PASS" : "FAIL") << "\n\n";
+  std::cout << "  T_cool = " << tLow << " K: alpha = " << std::scientific << alphaCool << "\n"
+            << "  T_hot = " << tHigh << " K: alpha = " << alphaHot << "\n"
+            << "  Ratio (cool/hot): " << ratio << " (expect ~31.6)\n"
+            << "  Status: " << (tempDepOk ? "PASS" : "FAIL") << "\n\n";
 
-    return temp_dep_ok;
+  return tempDepOk;
 }
 
 // Test 3: Compton absorption (Thomson limit)
-bool test_compton_thomson_limit() {
-    std::cout << "Test 3: Compton Absorption (Thomson Limit)\n";
+bool testComptonThomsonLimit() {
+  std::cout << "Test 3: Compton Absorption (Thomson Limit)\n";
 
-    double nu = 1e10;  // Radio (low energy, Thomson regime)
-    double n_e = 1e3;  // cm^-3
-    double theta = 0.1; // Mildly relativistic temperature
+  double const nu = 1e10;   // Radio (low energy, Thomson regime)
+  double const nE = 1e3;    // cm^-3
+  double const theta = 0.1; // Mildly relativistic temperature
 
-    double alpha_comp = compton_absorption(nu, n_e, theta);
+  double const alphaComp = comptonAbsorption(nu, nE, theta);
 
-    // In Thomson limit, alpha_comp = n_e * sigma_T ~ 1e-24 * 1e3 ~ 1e-21 cm^-1
-    bool comp_ok = (alpha_comp > 1e-24 && alpha_comp < 1e-20);
+  // In Thomson limit, alpha_comp = n_e * sigma_T ~ 1e-24 * 1e3 ~ 1e-21 cm^-1
+  bool const compOk = (alphaComp > 1e-24 && alphaComp < 1e-20);
 
-    std::cout << "  nu: " << nu << " Hz (radio)\n"
-              << "  n_e: " << n_e << " cm^-3\n"
-              << "  alpha_comp: " << std::scientific << alpha_comp << " cm^-1\n"
-              << "  Expected range: 1e-24 to 1e-20\n"
-              << "  Status: " << (comp_ok ? "PASS" : "FAIL") << "\n\n";
+  std::cout << "  nu: " << nu << " Hz (radio)\n"
+            << "  n_e: " << nE << " cm^-3\n"
+            << "  alpha_comp: " << std::scientific << alphaComp << " cm^-1\n"
+            << "  Expected range: 1e-24 to 1e-20\n"
+            << "  Status: " << (compOk ? "PASS" : "FAIL") << "\n\n";
 
-    return comp_ok;
+  return compOk;
 }
 
 // Test 4: Total absorption coefficient (all mechanisms)
-bool test_total_absorption() {
-    std::cout << "Test 4: Total Absorption Coefficient\n";
+bool testTotalAbsorption() {
+  std::cout << "Test 4: Total Absorption Coefficient\n";
 
-    double nu = 1e12;   // Microwave
-    double B = 100.0;   // Gauss
-    double n_e = 1e3;   // cm^-3
-    double T = 1e7;     // K
+  double const nu = 1e12; // Microwave
+  double const b = 100.0; // Gauss
+  double const nE = 1e3;  // cm^-3
+  double const t = 1e7;   // K
 
-    double alpha_ssa = synchrotron_self_absorption(nu, B, n_e, T);
-    double alpha_ff = free_free_absorption(nu, n_e, T);
-    double theta = (BOLTZMANN * T) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
-    double alpha_comp = compton_absorption(nu, n_e, theta);
-    double alpha_total = total_absorption_coefficient(nu, B, n_e, T);
+  double const alphaSsa = synchrotronSelfAbsorption(nu, b, nE, t);
+  double const alphaFf = freeFreeAbsorption(nu, nE, t);
+  double const theta = (BOLTZMANN * t) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
+  double const alphaComp = comptonAbsorption(nu, nE, theta);
+  double const alphaTotal = totalAbsorptionCoefficient(nu, b, nE, t);
 
-    // Total should equal sum of components
-    double expected_total = alpha_ssa + alpha_ff + alpha_comp;
-    bool total_ok = (std::abs(alpha_total - expected_total) / expected_total < 1e-10);
+  // Total should equal sum of components
+  double const expectedTotal = alphaSsa + alphaFf + alphaComp;
+  bool const totalOk = (std::abs(alphaTotal - expectedTotal) / expectedTotal < 1e-10);
 
-    std::cout << "  SSA:   " << std::scientific << alpha_ssa << "\n"
-              << "  FF:    " << alpha_ff << "\n"
-              << "  Comp:  " << alpha_comp << "\n"
-              << "  Total: " << alpha_total << "\n"
-              << "  Sum:   " << expected_total << "\n"
-              << "  Status: " << (total_ok ? "PASS" : "FAIL") << "\n\n";
+  std::cout << "  SSA:   " << std::scientific << alphaSsa << "\n"
+            << "  FF:    " << alphaFf << "\n"
+            << "  Comp:  " << alphaComp << "\n"
+            << "  Total: " << alphaTotal << "\n"
+            << "  Sum:   " << expectedTotal << "\n"
+            << "  Status: " << (totalOk ? "PASS" : "FAIL") << "\n\n";
 
-    return total_ok;
+  return totalOk;
 }
 
 // Test 5: Dominant absorption mode identification
-bool test_dominant_absorption_mode() {
-    std::cout << "Test 5: Dominant Absorption Mode Identification\n";
+bool testDominantAbsorptionMode() {
+  std::cout << "Test 5: Dominant Absorption Mode Identification\n";
 
-    double B = 100.0;  // Gauss
-    double n_e = 1e3;  // cm^-3
-    double T = 1e7;    // K
+  double const b = 100.0; // Gauss
+  double const nE = 1e3;  // cm^-3
+  double const t = 1e7;   // K
 
-    // Low frequency: SSA should dominate
-    int mode_radio = dominant_absorption_mode(1e9, B, n_e, T);  // 1 GHz
+  // Low frequency: SSA should dominate
+  int const modeRadio = dominantAbsorptionMode(1e9, b, nE, t); // 1 GHz
 
-    // Mid frequency: free-free might dominate
-    int mode_optical = dominant_absorption_mode(1e15, B, n_e, T);  // Optical
+  // Mid frequency: free-free might dominate
+  int const modeOptical = dominantAbsorptionMode(1e15, b, nE, t); // Optical
 
-    // Very high frequency: Compton/free-free
-    int mode_xray = dominant_absorption_mode(1e18, B, n_e, T);  // X-ray
+  // Very high frequency: Compton/free-free
+  int const modeXray = dominantAbsorptionMode(1e18, b, nE, t); // X-ray
 
-    bool mode_ok = (mode_radio >= 0 && mode_radio <= 2) &&
-                   (mode_optical >= 0 && mode_optical <= 2) &&
-                   (mode_xray >= 0 && mode_xray <= 2);
+  bool const modeOk = (modeRadio >= 0 && modeRadio <= 2) &&
+                      (modeOptical >= 0 && modeOptical <= 2) && (modeXray >= 0 && modeXray <= 2);
 
-    const char* mode_names[] = {"SSA", "Free-Free", "Compton"};
+  const char * const modeNames[] = {"SSA", "Free-Free", "Compton"};
 
-    std::cout << "  1 GHz:    Dominant = " << mode_names[mode_radio] << "\n"
-              << "  Optical:  Dominant = " << mode_names[mode_optical] << "\n"
-              << "  X-ray:    Dominant = " << mode_names[mode_xray] << "\n"
-              << "  Status: " << (mode_ok ? "PASS" : "FAIL") << "\n\n";
+  std::cout << "  1 GHz:    Dominant = " << modeNames[modeRadio] << "\n"
+            << "  Optical:  Dominant = " << modeNames[modeOptical] << "\n"
+            << "  X-ray:    Dominant = " << modeNames[modeXray] << "\n"
+            << "  Status: " << (modeOk ? "PASS" : "FAIL") << "\n\n";
 
-    return mode_ok;
+  return modeOk;
 }
 
 // Test 6: Optical depth threshold frequency
-bool test_optical_depth_threshold() {
-    std::cout << "Test 6: Optical Depth Threshold Frequency\n";
+bool testOpticalDepthThreshold() {
+  std::cout << "Test 6: Optical Depth Threshold Frequency\n";
 
-    double B = 100.0;         // Gauss
-    double n_e = 1e3;         // cm^-3
-    double T = 1e7;           // K
-    double path_length = 1e16; // cm
+  double const b = 100.0;         // Gauss
+  double const nE = 1e3;          // cm^-3
+  double const t = 1e7;           // K
+  double const pathLength = 1e16; // cm
 
-    // Find threshold frequency for Compton (mode=2) which is strongest for these parameters
-    double nu_threshold = optical_depth_threshold_frequency(B, n_e, T, path_length, 2);
+  // Find threshold frequency for Compton (mode=2) which is strongest for these parameters
+  double const nuThreshold = opticalDepthThresholdFrequency(b, nE, t, pathLength, 2);
 
-    // Verify that the function produces a valid frequency within search range
-    bool freq_in_range = (nu_threshold >= 1e8 && nu_threshold <= 1e20);
+  // Verify that the function produces a valid frequency within search range
+  bool const freqInRange = (nuThreshold >= 1e8 && nuThreshold <= 1e20);
 
-    // Verify it returns a different frequency than extremes
-    double tau_low = compton_absorption(1e9, n_e, 0.1) * path_length;
-    double tau_high = compton_absorption(1e19, n_e, 0.1) * path_length;
+  // Verify it returns a different frequency than extremes
+  double const tauLow = comptonAbsorption(1e9, nE, 0.1) * pathLength;
+  double const tauHigh = comptonAbsorption(1e19, nE, 0.1) * pathLength;
 
-    // Compton absorption is nearly constant, so threshold should be between extremes
-    bool threshold_ok = freq_in_range && (tau_low > 1e-10);
+  // Compton absorption is nearly constant, so threshold should be between extremes
+  bool const thresholdOk = freqInRange && (tauLow > 1e-10);
 
-    std::cout << "  B: " << B << " Gauss, n_e: " << n_e << " cm^-3\n"
-              << "  Path length: " << path_length << " cm\n"
-              << "  Threshold freq (Compton): " << std::scientific << nu_threshold << " Hz\n"
-              << "  Frequency in valid range [1e8, 1e20]: " << (freq_in_range ? "yes" : "no") << "\n"
-              << "  Tau at low freq: " << tau_low << "\n"
-              << "  Tau at high freq: " << tau_high << "\n"
-              << "  Status: " << (threshold_ok ? "PASS" : "FAIL") << "\n\n";
+  std::cout << "  B: " << b << " Gauss, n_e: " << nE << " cm^-3\n"
+            << "  Path length: " << pathLength << " cm\n"
+            << "  Threshold freq (Compton): " << std::scientific << nuThreshold << " Hz\n"
+            << "  Frequency in valid range [1e8, 1e20]: " << (freqInRange ? "yes" : "no") << "\n"
+            << "  Tau at low freq: " << tauLow << "\n"
+            << "  Tau at high freq: " << tauHigh << "\n"
+            << "  Status: " << (thresholdOk ? "PASS" : "FAIL") << "\n\n";
 
-    return threshold_ok;
+  return thresholdOk;
 }
 
 // Test 7: Absorption across full frequency spectrum
-bool test_spectrum_absorption() {
-    std::cout << "Test 7: Absorption Across Frequency Spectrum\n";
+bool testSpectrumAbsorption() {
+  std::cout << "Test 7: Absorption Across Frequency Spectrum\n";
 
-    double B = 100.0;  // Gauss
-    double n_e = 1e3;  // cm^-3
-    double T = 1e7;    // K
+  double const b = 100.0; // Gauss
+  double const nE = 1e3;  // cm^-3
+  double const t = 1e7;   // K
 
-    std::vector<double> frequencies = {
-        1e9,    // 1 GHz (radio)
-        1e12,   // 1 THz (microwave)
-        1e15,   // 1 PHz (infrared)
-        1e18,   // 1 EHz (X-ray)
-    };
+  std::vector<double> const frequencies = {
+      1e9,  // 1 GHz (radio)
+      1e12, // 1 THz (microwave)
+      1e15, // 1 PHz (infrared)
+      1e18, // 1 EHz (X-ray)
+  };
 
-    std::vector<const char*> names = {"Radio", "Microwave", "Infrared", "X-ray"};
+  std::vector<const char *> const names = {"Radio", "Microwave", "Infrared", "X-ray"};
 
-    std::cout << "  Absorption coefficients across spectrum:\n";
-    std::cout << "  Freq Range    | Alpha Total  | Dominant Mode\n";
-    std::cout << "  --------------|--------------|---------------\n";
+  std::cout << "  Absorption coefficients across spectrum:\n";
+  std::cout << "  Freq Range    | Alpha Total  | Dominant Mode\n";
+  std::cout << "  --------------|--------------|---------------\n";
 
-    bool spectrum_ok = true;
-    for (size_t i = 0; i < frequencies.size(); i++) {
-        double nu = frequencies[i];
-        double alpha_total = total_absorption_coefficient(nu, B, n_e, T);
-        int mode = dominant_absorption_mode(nu, B, n_e, T);
-        const char* mode_name = (mode == 0) ? "SSA" : (mode == 1) ? "FF" : "Compton";
+  bool spectrumOk = true;
+  for (double const nu : frequencies) {
+    double const alphaTotal = totalAbsorptionCoefficient(nu, b, nE, t);
+    int const mode = dominantAbsorptionMode(nu, b, nE, t);
+    const char *modeName = (mode == 0) ? "SSA" : (mode == 1) ? "FF" : "Compton";
 
-        std::cout << std::scientific << std::setprecision(2);
-        std::cout << "  " << nu << " Hz | " << alpha_total << " | " << mode_name << "\n";
+    std::cout << std::scientific << std::setprecision(2);
+    std::cout << "  " << nu << " Hz | " << alphaTotal << " | " << modeName << "\n";
 
-        spectrum_ok = spectrum_ok && (alpha_total > 0.0);
-    }
+    spectrumOk = spectrumOk && (alphaTotal > 0.0);
+  }
 
-    std::cout << "  Status: " << (spectrum_ok ? "PASS" : "FAIL") << "\n\n";
+  std::cout << "  Status: " << (spectrumOk ? "PASS" : "FAIL") << "\n\n";
 
-    return spectrum_ok;
+  return spectrumOk;
 }
 
 // ============================================================================
 // Main Test Driver
 // ============================================================================
+
+} // namespace
 
 int main() {
     std::cout << "\n====================================================\n"
@@ -240,15 +240,29 @@ int main() {
               << "====================================================\n";
 
     int passed = 0;
-    int total = 7;
+    int const total = 7;
 
-    if (test_ssa_frequency_dependence())    passed++;
-    if (test_ff_temperature_dependence())   passed++;
-    if (test_compton_thomson_limit())       passed++;
-    if (test_total_absorption())            passed++;
-    if (test_dominant_absorption_mode())    passed++;
-    if (test_optical_depth_threshold())     passed++;
-    if (test_spectrum_absorption())         passed++;
+    if (testSsaFrequencyDependence()) {
+      passed++;
+    }
+    if (testFfTemperatureDependence()) {
+      passed++;
+    }
+    if (testComptonThomsonLimit()) {
+      passed++;
+    }
+    if (testTotalAbsorption()) {
+      passed++;
+    }
+    if (testDominantAbsorptionMode()) {
+      passed++;
+    }
+    if (testOpticalDepthThreshold()) {
+      passed++;
+    }
+    if (testSpectrumAbsorption()) {
+      passed++;
+    }
 
     std::cout << "====================================================\n"
               << "RESULTS: " << passed << "/" << total << " tests passed\n"

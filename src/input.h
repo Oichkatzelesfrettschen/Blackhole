@@ -83,118 +83,120 @@ public:
   void syncToSettings();
 
   // Keyboard state
-  bool isKeyPressed(int key) const;
-  bool isKeyJustPressed(int key) const;
-  bool isKeyJustReleased(int key) const;
+  [[nodiscard]] bool isKeyPressed(int key) const;
+  [[nodiscard]] bool isKeyJustPressed(int key) const;
+  [[nodiscard]] bool isKeyJustReleased(int key) const;
 
   // Mouse state
-  bool isMouseButtonPressed(int button) const;
-  bool isMouseButtonJustPressed(int button) const;
-  float getMouseX() const { return mouseX_; }
-  float getMouseY() const { return mouseY_; }
-  float getMouseDeltaX() const { return mouseDeltaX_; }
-  float getMouseDeltaY() const { return mouseDeltaY_; }
-  float getScrollDelta() const { return scrollDelta_; }
+  [[nodiscard]] bool isMouseButtonPressed(int button) const;
+  [[nodiscard]] bool isMouseButtonJustPressed(int button) const;
+  [[nodiscard]] float getMouseX() const { return mouseX_; }
+  [[nodiscard]] float getMouseY() const { return mouseY_; }
+  [[nodiscard]] float getMouseDeltaX() const { return mouseDeltaX_; }
+  [[nodiscard]] float getMouseDeltaY() const { return mouseDeltaY_; }
+  [[nodiscard]] float getScrollDelta() const { return scrollDelta_; }
 
   // Action bindings
-  bool isActionPressed(KeyAction action) const;
-  bool isActionJustPressed(KeyAction action) const;
-  int getKeyForAction(KeyAction action) const;
+  [[nodiscard]] bool isActionPressed(KeyAction action) const;
+  [[nodiscard]] bool isActionJustPressed(KeyAction action) const;
+  [[nodiscard]] int getKeyForAction(KeyAction action) const;
   void setKeyForAction(KeyAction action, int key);
-  std::string getKeyName(int key) const;
-  const char *getActionName(KeyAction action) const;
+  static [[nodiscard]] std::string getKeyName(int key);
+  static [[nodiscard]] const char *getActionName(KeyAction action);
 
   // UI state
-  bool isUIVisible() const { return uiVisible_; }
+  [[nodiscard]] bool isUIVisible() const { return uiVisible_; }
   void setUIVisible(bool visible) { uiVisible_ = visible; }
   void toggleUI() { uiVisible_ = !uiVisible_; }
 
   // Fullscreen
-  bool isFullscreen() const { return fullscreen_; }
+  [[nodiscard]] bool isFullscreen() const { return fullscreen_; }
   void toggleFullscreen();
 
   // Pause state
-  bool isPaused() const { return paused_; }
+  [[nodiscard]] bool isPaused() const { return paused_; }
   void setPaused(bool paused) { paused_ = paused; }
   void togglePause() { paused_ = !paused_; }
 
   // Time scale (0.0 = frozen, 1.0 = normal, 2.0 = 2x speed)
-  float getTimeScale() const { return timeScale_; }
+  [[nodiscard]] float getTimeScale() const { return timeScale_; }
   void setTimeScale(float scale) { timeScale_ = scale; }
 
   // Camera
   CameraState &camera() { return camera_; }
-  const CameraState &camera() const { return camera_; }
+  [[nodiscard]] const CameraState &camera() const { return camera_; }
 
   // Sensitivity settings
-  float getMouseSensitivity() const { return mouseSensitivity_; }
+  [[nodiscard]] float getMouseSensitivity() const { return mouseSensitivity_; }
   void setMouseSensitivity(float sens) { mouseSensitivity_ = sens; }
-  float getKeyboardSensitivity() const { return keyboardSensitivity_; }
+  [[nodiscard]] float getKeyboardSensitivity() const { return keyboardSensitivity_; }
   void setKeyboardSensitivity(float sens) { keyboardSensitivity_ = sens; }
-  float getScrollSensitivity() const { return scrollSensitivity_; }
+  [[nodiscard]] float getScrollSensitivity() const { return scrollSensitivity_; }
   void setScrollSensitivity(float sens) { scrollSensitivity_ = sens; }
 
   // Axis inversion
-  bool isMouseXInverted() const { return invertMouseX_; }
+  [[nodiscard]] bool isMouseXInverted() const { return invertMouseX_; }
   void setMouseXInverted(bool inv) { invertMouseX_ = inv; }
-  bool isMouseYInverted() const { return invertMouseY_; }
+  [[nodiscard]] bool isMouseYInverted() const { return invertMouseY_; }
   void setMouseYInverted(bool inv) { invertMouseY_ = inv; }
-  bool isKeyboardXInverted() const { return invertKeyboardX_; }
+  [[nodiscard]] bool isKeyboardXInverted() const { return invertKeyboardX_; }
   void setKeyboardXInverted(bool inv) { invertKeyboardX_ = inv; }
-  bool isKeyboardYInverted() const { return invertKeyboardY_; }
+  [[nodiscard]] bool isKeyboardYInverted() const { return invertKeyboardY_; }
   void setKeyboardYInverted(bool inv) { invertKeyboardY_ = inv; }
 
   // Hold-to-toggle mode
-  bool isHoldToToggleCamera() const { return holdToToggleCamera_; }
+  [[nodiscard]] bool isHoldToToggleCamera() const { return holdToToggleCamera_; }
   void setHoldToToggleCamera(bool enabled) { holdToToggleCamera_ = enabled; }
   HoldToggleState &holdToggleState() { return holdToggleState_; }
 
   // Gamepad settings
-  bool isGamepadEnabled() const { return gamepadEnabled_; }
+  [[nodiscard]] bool isGamepadEnabled() const { return gamepadEnabled_; }
   void setGamepadEnabled(bool enabled) { gamepadEnabled_ = enabled; }
-  float getGamepadDeadzone() const { return gamepadDeadzone_; }
+  [[nodiscard]] float getGamepadDeadzone() const { return gamepadDeadzone_; }
   void setGamepadDeadzone(float deadzone) { gamepadDeadzone_ = deadzone; }
-  float getGamepadLookSensitivity() const { return gamepadLookSensitivity_; }
+  [[nodiscard]] float getGamepadLookSensitivity() const { return gamepadLookSensitivity_; }
   void setGamepadLookSensitivity(float sens) { gamepadLookSensitivity_ = sens; }
-  float getGamepadRollSensitivity() const { return gamepadRollSensitivity_; }
+  [[nodiscard]] float getGamepadRollSensitivity() const { return gamepadRollSensitivity_; }
   void setGamepadRollSensitivity(float sens) { gamepadRollSensitivity_ = sens; }
-  float getGamepadZoomSensitivity() const { return gamepadZoomSensitivity_; }
+  [[nodiscard]] float getGamepadZoomSensitivity() const { return gamepadZoomSensitivity_; }
   void setGamepadZoomSensitivity(float sens) { gamepadZoomSensitivity_ = sens; }
-  float getGamepadTriggerZoomSensitivity() const { return gamepadTriggerZoomSensitivity_; }
+  [[nodiscard]] float getGamepadTriggerZoomSensitivity() const {
+    return gamepadTriggerZoomSensitivity_;
+  }
   void setGamepadTriggerZoomSensitivity(float sens) { gamepadTriggerZoomSensitivity_ = sens; }
-  bool isGamepadXInverted() const { return gamepadInvertX_; }
+  [[nodiscard]] bool isGamepadXInverted() const { return gamepadInvertX_; }
   void setGamepadXInverted(bool inv) { gamepadInvertX_ = inv; }
-  bool isGamepadYInverted() const { return gamepadInvertY_; }
+  [[nodiscard]] bool isGamepadYInverted() const { return gamepadInvertY_; }
   void setGamepadYInverted(bool inv) { gamepadInvertY_ = inv; }
-  bool isGamepadRollInverted() const { return gamepadInvertRoll_; }
+  [[nodiscard]] bool isGamepadRollInverted() const { return gamepadInvertRoll_; }
   void setGamepadRollInverted(bool inv) { gamepadInvertRoll_ = inv; }
-  bool isGamepadZoomInverted() const { return gamepadInvertZoom_; }
+  [[nodiscard]] bool isGamepadZoomInverted() const { return gamepadInvertZoom_; }
   void setGamepadZoomInverted(bool inv) { gamepadInvertZoom_ = inv; }
-  int getGamepadYawAxis() const { return gamepadYawAxis_; }
+  [[nodiscard]] int getGamepadYawAxis() const { return gamepadYawAxis_; }
   void setGamepadYawAxis(int axis) { gamepadYawAxis_ = axis; }
-  int getGamepadPitchAxis() const { return gamepadPitchAxis_; }
+  [[nodiscard]] int getGamepadPitchAxis() const { return gamepadPitchAxis_; }
   void setGamepadPitchAxis(int axis) { gamepadPitchAxis_ = axis; }
-  int getGamepadRollAxis() const { return gamepadRollAxis_; }
+  [[nodiscard]] int getGamepadRollAxis() const { return gamepadRollAxis_; }
   void setGamepadRollAxis(int axis) { gamepadRollAxis_ = axis; }
-  int getGamepadZoomAxis() const { return gamepadZoomAxis_; }
+  [[nodiscard]] int getGamepadZoomAxis() const { return gamepadZoomAxis_; }
   void setGamepadZoomAxis(int axis) { gamepadZoomAxis_ = axis; }
-  int getGamepadZoomInAxis() const { return gamepadZoomInAxis_; }
+  [[nodiscard]] int getGamepadZoomInAxis() const { return gamepadZoomInAxis_; }
   void setGamepadZoomInAxis(int axis) { gamepadZoomInAxis_ = axis; }
-  int getGamepadZoomOutAxis() const { return gamepadZoomOutAxis_; }
+  [[nodiscard]] int getGamepadZoomOutAxis() const { return gamepadZoomOutAxis_; }
   void setGamepadZoomOutAxis(int axis) { gamepadZoomOutAxis_ = axis; }
-  int getGamepadResetButton() const { return gamepadResetButton_; }
+  [[nodiscard]] int getGamepadResetButton() const { return gamepadResetButton_; }
   void setGamepadResetButton(int button) { gamepadResetButton_ = button; }
-  int getGamepadPauseButton() const { return gamepadPauseButton_; }
+  [[nodiscard]] int getGamepadPauseButton() const { return gamepadPauseButton_; }
   void setGamepadPauseButton(int button) { gamepadPauseButton_ = button; }
-  int getGamepadToggleUIButton() const { return gamepadToggleUIButton_; }
+  [[nodiscard]] int getGamepadToggleUIButton() const { return gamepadToggleUIButton_; }
   void setGamepadToggleUIButton(int button) { gamepadToggleUIButton_ = button; }
-  float getGamepadAxisRaw(int axis) const;
-  float getGamepadAxisFiltered(int axis) const;
-  bool isGamepadConnected() const;
+  [[nodiscard]] float getGamepadAxisRaw(int axis) const;
+  [[nodiscard]] float getGamepadAxisFiltered(int axis) const;
+  static [[nodiscard]] bool isGamepadConnected();
 
   // Key remapping mode
-  bool isRemappingKey() const { return remappingAction_ != KeyAction::COUNT; }
-  KeyAction getRemappingAction() const { return remappingAction_; }
+  [[nodiscard]] bool isRemappingKey() const { return remappingAction_ != KeyAction::COUNT; }
+  [[nodiscard]] KeyAction getRemappingAction() const { return remappingAction_; }
   void startKeyRemapping(KeyAction action) { remappingAction_ = action; }
   void cancelKeyRemapping() { remappingAction_ = KeyAction::COUNT; }
 
@@ -205,22 +207,23 @@ public:
   void onScroll(double xoffset, double yoffset);
 
   // Effective delta time (accounts for pause and time scale)
-  float getEffectiveDeltaTime(float rawDeltaTime) const;
+  [[nodiscard]] float getEffectiveDeltaTime(float rawDeltaTime) const;
 
   // Override GUI capture (for Viewport interaction)
   void setIgnoreGuiCapture(bool ignore) { ignoreGuiCapture_ = ignore; }
 
+  InputManager(const InputManager &) = delete;
+  InputManager &operator=(const InputManager &) = delete;
+
 private:
   InputManager() = default;
   ~InputManager() = default;
-  InputManager(const InputManager &) = delete;
-  InputManager &operator=(const InputManager &) = delete;
 
   void initDefaultBindings();
   void updateCamera(float deltaTime);
   void handleHoldToToggle(KeyAction action, bool justPressed, bool justReleased);
   void updateGamepad(float deltaTime);
-  bool isGamepadButtonJustPressed(int button) const;
+  [[nodiscard]] bool isGamepadButtonJustPressed(int button) const;
 
   GLFWwindow *window_ = nullptr;
 

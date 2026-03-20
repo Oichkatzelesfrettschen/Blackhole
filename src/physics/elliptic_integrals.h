@@ -31,10 +31,12 @@
 #ifndef PHYSICS_ELLIPTIC_INTEGRALS_H
 #define PHYSICS_ELLIPTIC_INTEGRALS_H
 
+#include <cmath>
+#include <limits>
+#include <numbers>
+
 #include "constants.h"
 #include "safe_limits.h"
-#include <cmath>
-#include <tuple>
 
 namespace physics {
 
@@ -55,28 +57,28 @@ namespace physics {
  * @param tol Convergence tolerance
  * @return R_F(x,y,z)
  */
-inline double carlson_RF(double x, double y, double z, double tol = 1e-10) {
-  const int max_iter = 100;
+inline double carlsonRf(double x, double y, double z, double tol = 1e-10) {
+  const int maxIter = 100;
 
   // Duplication algorithm
-  for (int n = 0; n < max_iter; ++n) {
-    double lambda = std::sqrt(x * y) + std::sqrt(y * z) + std::sqrt(z * x);
+  for (int n = 0; n < maxIter; ++n) {
+    double const lambda = std::sqrt(x * y) + std::sqrt(y * z) + std::sqrt(z * x);
     x = (x + lambda) / 4.0;
     y = (y + lambda) / 4.0;
     z = (z + lambda) / 4.0;
 
-    double A = (x + y + z) / 3.0;
-    double dx = 1.0 - x / A;
-    double dy = 1.0 - y / A;
-    double dz = 1.0 - z / A;
+    double const a = (x + y + z) / 3.0;
+    double const dx = 1.0 - (x / a);
+    double const dy = 1.0 - (y / a);
+    double const dz = 1.0 - (z / a);
 
     double eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
     if (eps < tol) {
       // Series expansion
-      double E2 = dx * dy + dy * dz + dz * dx;
-      double E3 = dx * dy * dz;
-      return (1.0 + E2 * (-0.1 + E2 * 3.0 / 44.0 + E3 / 14.0) +
-              E3 * (-3.0 / 22.0)) / std::sqrt(A);
+      double const e2 = (dx * dy) + (dy * dz) + (dz * dx);
+      double const e3 = dx * dy * dz;
+      return (1.0 + (e2 * (-0.1 + (e2 * 3.0 / 44.0) + (e3 / 14.0))) + (e3 * (-3.0 / 22.0))) /
+             std::sqrt(a);
     }
   }
 
@@ -93,11 +95,11 @@ inline double carlson_RF(double x, double y, double z, double tol = 1e-10) {
  * @param tol Convergence tolerance
  * @return R_C(x,y)
  */
-inline double carlson_RC(double x, double y, double tol = 1e-10) {
+inline double carlsonRc(double x, double y, double tol = 1e-10) {
   if (y <= 0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
-  return carlson_RF(x, y, y, tol);
+  return carlsonRf(x, y, y, tol);
 }
 
 /**
@@ -111,43 +113,44 @@ inline double carlson_RC(double x, double y, double tol = 1e-10) {
  * @param tol Convergence tolerance
  * @return R_D(x,y,z)
  */
-inline double carlson_RD(double x, double y, double z, double tol = 1e-10) {
-  const int max_iter = 100;
+inline double carlsonRd(double x, double y, double z, double tol = 1e-10) {
+  const int maxIter = 100;
 
   double sum = 0.0;
   double fac = 1.0;
 
-  for (int n = 0; n < max_iter; ++n) {
-    double lambda = std::sqrt(x * y) + std::sqrt(y * z) + std::sqrt(z * x);
+  for (int n = 0; n < maxIter; ++n) {
+    double const lambda = std::sqrt(x * y) + std::sqrt(y * z) + std::sqrt(z * x);
     sum += fac / (std::sqrt(z) * (z + lambda));
     fac /= 4.0;
     x = (x + lambda) / 4.0;
     y = (y + lambda) / 4.0;
     z = (z + lambda) / 4.0;
 
-    double A = (x + y + 3.0 * z) / 5.0;
-    double dx = 1.0 - x / A;
-    double dy = 1.0 - y / A;
-    double dz = 1.0 - z / A;
+    double const a = (x + y + (3.0 * z)) / 5.0;
+    double const dx = 1.0 - (x / a);
+    double const dy = 1.0 - (y / a);
+    double const dz = 1.0 - (z / a);
 
     double eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
     if (eps < tol) {
-      double E2 = dx * dy + dy * dz + 3.0 * dz * dz + dz * dx + dx * dz + dy * dz;
-      double E3 = dz * dz * dz + dx * dz * dz + 3.0 * dx * dy * dz +
-                  2.0 * dy * dz * dz + dy * dz * dz + 2.0 * dz * dz * dz;
-      double E4 = dy * dz * dz * dz + dx * dz * dz * dz + dx * dy * dz * dz +
-                  2.0 * dy * dz * dz * dz;
-      double E5 = dx * dy * dz * dz * dz;
+      double const e2 = (dx * dy) + (dy * dz) + (3.0 * dz * dz) + (dz * dx) + (dx * dz) + (dy * dz);
+      double const e3 = (dz * dz * dz) + (dx * dz * dz) + (3.0 * dx * dy * dz) +
+                        (2.0 * dy * dz * dz) + (dy * dz * dz) + (2.0 * dz * dz * dz);
+      double const e4 = (dy * dz * dz * dz) + (dx * dz * dz * dz) + (dx * dy * dz * dz) +
+                        (2.0 * dy * dz * dz * dz);
+      double const e5 = dx * dy * dz * dz * dz;
 
-      double result = (1.0 + E2 * (-3.0 / 14.0 + E2 * 9.0 / 88.0 - E3 * 9.0 / 52.0) +
-                       E3 * (1.0 / 6.0 - E2 * 3.0 / 22.0) + E4 * (-3.0 / 22.0) +
-                       E5 * (3.0 / 26.0)) / (A * std::sqrt(A));
-      return 3.0 * sum + fac * result;
+      double const result =
+          (1.0 + (e2 * ((-3.0 / 14.0) + (e2 * 9.0 / 88.0) - (e3 * 9.0 / 52.0))) +
+           (e3 * ((1.0 / 6.0) - (e2 * 3.0 / 22.0))) + (e4 * (-3.0 / 22.0)) + (e5 * (3.0 / 26.0))) /
+          (a * std::sqrt(a));
+      return (3.0 * sum) + (fac * result);
     }
   }
 
-  double A = (x + y + 3.0 * z) / 5.0;
-  return 3.0 * sum + fac / (A * std::sqrt(A));
+  double const a = (x + y + (3.0 * z)) / 5.0;
+  return (3.0 * sum) + (fac / (a * std::sqrt(a)));
 }
 
 /**
@@ -162,28 +165,27 @@ inline double carlson_RD(double x, double y, double z, double tol = 1e-10) {
  * @param tol Convergence tolerance
  * @return R_J(x,y,z,p)
  */
-inline double carlson_RJ(double x, double y, double z, double p,
-                         double tol = 1e-10) {
-  const int max_iter = 100;
+inline double carlsonRj(double x, double y, double z, double p, double tol = 1e-10) {
+  const int maxIter = 100;
 
   double sum = 0.0;
   double fac = 1.0;
-  double d = (p - x) * (p - y) * (p - z);
-  double e = x * y * z / d;
+  double const d = (p - x) * (p - y) * (p - z);
+  double const e = x * y * z / d;
 
-  for (int n = 0; n < max_iter; ++n) {
-    double sqrt_x = std::sqrt(x);
-    double sqrt_y = std::sqrt(y);
-    double sqrt_z = std::sqrt(z);
-    double sqrt_p = std::sqrt(p);
+  for (int n = 0; n < maxIter; ++n) {
+    double const sqrtX = std::sqrt(x);
+    double const sqrtY = std::sqrt(y);
+    double const sqrtZ = std::sqrt(z);
+    double const sqrtP = std::sqrt(p);
 
-    double lambda = sqrt_x * sqrt_y + sqrt_y * sqrt_z + sqrt_z * sqrt_x;
+    double const lambda = (sqrtX * sqrtY) + (sqrtY * sqrtZ) + (sqrtZ * sqrtX);
 
-    double alpha = p * (sqrt_x + sqrt_y + sqrt_z) + sqrt_x * sqrt_y * sqrt_z;
+    double alpha = (p * (sqrtX + sqrtY + sqrtZ)) + (sqrtX * sqrtY * sqrtZ);
     alpha *= alpha;
-    double beta = p * (p + lambda) * (p + lambda);
+    double const beta = p * (p + lambda) * (p + lambda);
 
-    sum += fac * carlson_RC(alpha, beta, tol);
+    sum += fac * carlsonRc(alpha, beta, tol);
     fac /= 4.0;
 
     x = (x + lambda) / 4.0;
@@ -191,27 +193,26 @@ inline double carlson_RJ(double x, double y, double z, double p,
     z = (z + lambda) / 4.0;
     p = (p + lambda) / 4.0;
 
-    double A = (x + y + z + 2.0 * p) / 5.0;
-    double dx = 1.0 - x / A;
-    double dy = 1.0 - y / A;
-    double dz = 1.0 - z / A;
-    double dp = 1.0 - p / A;
+    double const a = (x + y + z + (2.0 * p)) / 5.0;
+    double const dx = 1.0 - (x / a);
+    double const dy = 1.0 - (y / a);
+    double const dz = 1.0 - (z / a);
+    double const dp = 1.0 - (p / a);
 
     double eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz), std::abs(dp)});
     if (eps < tol) {
-      double E2 = dx * dy + dy * dz + 3.0 * dp * dp + dz * dx +
-                  2.0 * (dx * dp + dy * dp + dz * dp);
-      double E3 = dx * dy * dz + 2.0 * dp * dp * dp +
-                  3.0 * dp * (dx * dy + dy * dz + dz * dx + dp * (dx + dy + dz));
+      double const e2 = (dx * dy) + (dy * dz) + (3.0 * dp * dp) + (dz * dx) +
+                        (2.0 * ((dx * dp) + (dy * dp) + (dz * dp)));
+      double const e3 = (dx * dy * dz) + (2.0 * dp * dp * dp) +
+                        (3.0 * dp * ((dx * dy) + (dy * dz) + (dz * dx) + (dp * (dx + dy + dz))));
 
-      double result = (1.0 + E2 * (-3.0 / 14.0) + E3 * (1.0 / 6.0)) /
-                      (A * std::sqrt(A));
-      return 3.0 * sum + fac * result;
+      double const result = (1.0 + (e2 * (-3.0 / 14.0)) + (e3 * (1.0 / 6.0))) / (a * std::sqrt(a));
+      return (3.0 * sum) + (fac * result);
     }
   }
 
-  double A = (x + y + z + 2.0 * p) / 5.0;
-  return 3.0 * sum + fac / (A * std::sqrt(A));
+  double const a = (x + y + z + (2.0 * p)) / 5.0;
+  return (3.0 * sum) + (fac / (a * std::sqrt(a)));
 }
 
 // ============================================================================
@@ -226,12 +227,12 @@ inline double carlson_RJ(double x, double y, double z, double p,
  * @param k Modulus (0 ≤ k < 1)
  * @return K(k)
  */
-inline double elliptic_K(double k) {
+inline double ellipticK(double k) {
   if (std::abs(k) >= 1.0) {
-    return safe_infinity<double>();
+    return safeInfinity<double>();
   }
-  double k2 = k * k;
-  return carlson_RF(0.0, 1.0 - k2, 1.0);
+  double const k2 = k * k;
+  return carlsonRf(0.0, 1.0 - k2, 1.0);
 }
 
 /**
@@ -243,7 +244,7 @@ inline double elliptic_K(double k) {
  * @param k Modulus (0 ≤ k ≤ 1)
  * @return E(k)
  */
-inline double elliptic_E(double k) {
+inline double ellipticE(double k) {
   if (std::abs(k) > 1.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -251,11 +252,11 @@ inline double elliptic_E(double k) {
     return 1.0;
   }
 
-  double k2 = k * k;
-  double RF = carlson_RF(0.0, 1.0 - k2, 1.0);
-  double RD = carlson_RD(0.0, 1.0 - k2, 1.0);
+  double const k2 = k * k;
+  double const rf = carlsonRf(0.0, 1.0 - k2, 1.0);
+  double const rd = carlsonRd(0.0, 1.0 - k2, 1.0);
 
-  return RF - (k2 / 3.0) * RD;
+  return rf - ((k2 / 3.0) * rd);
 }
 
 /**
@@ -267,16 +268,16 @@ inline double elliptic_E(double k) {
  * @param k Modulus (0 ≤ k < 1)
  * @return Π(n,k)
  */
-inline double elliptic_Pi(double n, double k) {
+inline double ellipticPi(double n, double k) {
   if (std::abs(k) >= 1.0) {
-    return safe_infinity<double>();
+    return safeInfinity<double>();
   }
 
-  double k2 = k * k;
-  double RF = carlson_RF(0.0, 1.0 - k2, 1.0);
-  double RJ = carlson_RJ(0.0, 1.0 - k2, 1.0, 1.0 - n);
+  double const k2 = k * k;
+  double const rf = carlsonRf(0.0, 1.0 - k2, 1.0);
+  double const rj = carlsonRj(0.0, 1.0 - k2, 1.0, 1.0 - n);
 
-  return RF + (n / 3.0) * RJ;
+  return rf + ((n / 3.0) * rj);
 }
 
 // ============================================================================
@@ -292,15 +293,15 @@ inline double elliptic_Pi(double n, double k) {
  * @param k Modulus (0 ≤ k < 1)
  * @return F(φ,k)
  */
-inline double elliptic_F(double phi, double k) {
-  double s = std::sin(phi);
-  double c = std::cos(phi);
+inline double ellipticF(double phi, double k) {
+  double const s = std::sin(phi);
+  double const c = std::cos(phi);
 
-  double s2 = s * s;
-  double c2 = c * c;
-  double k2 = k * k;
+  double const s2 = s * s;
+  double const c2 = c * c;
+  double const k2 = k * k;
 
-  return s * carlson_RF(c2, 1.0 - k2 * s2, 1.0);
+  return s * carlsonRf(c2, 1.0 - (k2 * s2), 1.0);
 }
 
 /**
@@ -312,19 +313,19 @@ inline double elliptic_F(double phi, double k) {
  * @param k Modulus (0 ≤ k ≤ 1)
  * @return E(φ,k)
  */
-inline double elliptic_E_incomplete(double phi, double k) {
-  double s = std::sin(phi);
-  double c = std::cos(phi);
+inline double ellipticEIncomplete(double phi, double k) {
+  double const s = std::sin(phi);
+  double const c = std::cos(phi);
 
-  double s2 = s * s;
-  double s3 = s2 * s;
-  double c2 = c * c;
-  double k2 = k * k;
+  double const s2 = s * s;
+  double const s3 = s2 * s;
+  double const c2 = c * c;
+  double const k2 = k * k;
 
-  double RF = carlson_RF(c2, 1.0 - k2 * s2, 1.0);
-  double RD = carlson_RD(c2, 1.0 - k2 * s2, 1.0);
+  double const rf = carlsonRf(c2, 1.0 - (k2 * s2), 1.0);
+  double const rd = carlsonRd(c2, 1.0 - (k2 * s2), 1.0);
 
-  return s * RF - (k2 * s3 / 3.0) * RD;
+  return (s * rf) - ((k2 * s3 / 3.0) * rd);
 }
 
 // ============================================================================
@@ -346,12 +347,12 @@ inline double elliptic_E_incomplete(double phi, double k) {
  * @param r_s Schwarzschild radius [cm]
  * @return Deflection angle [rad], or infinity if b ≤ b_crit
  */
-inline double deflection_angle_schwarzschild(double b, double r_s) {
+inline double deflectionAngleSchwarzschild(double b, double rS) {
   // Critical impact parameter: b_crit = (3√3/2) r_s ≈ 2.598 r_s
-  double b_crit = 3.0 * std::sqrt(3.0) / 2.0 * r_s;
+  double const bCrit = 3.0 * std::numbers::sqrt3 / 2.0 * rS;
 
-  if (b <= b_crit) {
-    return safe_infinity<double>(); // Photon captured
+  if (b <= bCrit) {
+    return safeInfinity<double>(); // Photon captured
   }
 
   // Find closest approach r₀ by solving:
@@ -361,18 +362,20 @@ inline double deflection_angle_schwarzschild(double b, double r_s) {
   // Newton-Raphson for r₀
   double r0 = b; // Initial guess
   for (int i = 0; i < 50; ++i) {
-    double f = r0 * r0 * r0 - b * b * (r0 - r_s);
-    double df = 3.0 * r0 * r0 - b * b;
-    double dr = f / df;
+    double const f = (r0 * r0 * r0) - (b * b * (r0 - rS));
+    double const df = (3.0 * r0 * r0) - (b * b);
+    double const dr = f / df;
     r0 -= dr;
-    if (std::abs(dr) < 1e-12 * r0) break;
+    if (std::abs(dr) < 1e-12 * r0) {
+      break;
+    }
   }
 
   // Elliptic integral formulation
   // Following Darwin (1959)
 
-  double u0 = r_s / r0;
-  double q = b * b / (r0 * r0);
+  double const u0 = rS / r0;
+  double const q = b * b / (r0 * r0);
 
   // The deflection integral in terms of elliptic functions
   // α = 2 F(φ₀, k) - π
@@ -381,29 +384,29 @@ inline double deflection_angle_schwarzschild(double b, double r_s) {
   // Roots of (1-u)(1 - 3u + 2u²q) = 0
 
   // Simplified strong-field calculation using series near r₀
-  double x = r0 / r_s;
-  double x2 = x * x;
-  double x3 = x2 * x;
+  double const x = r0 / rS;
+  double const x2 = x * x;
+  double const x3 = x2 * x;
 
   // Leading term
-  double alpha = 4.0 * r_s / b;
+  double alpha = 4.0 * rS / b;
 
   // Higher-order corrections (post-Newtonian expansion)
-  double alpha_2 = (15.0 * M_PI / 16.0 - 1.0) * (r_s / b) * (r_s / b);
-  double alpha_3 = (128.0 / 3.0 - 15.0 * M_PI / 2.0) * std::pow(r_s / b, 3);
+  double const alpha2 = ((15.0 * physics::PI / 16.0) - 1.0) * (rS / b) * (rS / b);
+  double const alpha3 = ((128.0 / 3.0) - (15.0 * physics::PI / 2.0)) * std::pow(rS / b, 3);
 
   // Add relativistic corrections
-  alpha = alpha + alpha_2 * r_s + alpha_3 * r_s;
+  alpha = alpha + (alpha2 * rS) + (alpha3 * rS);
 
   // For very strong field (b close to b_crit), use logarithmic expansion
-  if (b < 1.5 * b_crit) {
-    double y = b / b_crit - 1.0;
+  if (b < 1.5 * bCrit) {
+    double const y = (b / bCrit) - 1.0;
     if (y > 0) {
       // Bozza (2002) strong-field limit
-      double a_bar = 1.0; // Depends on metric (1 for Schwarzschild)
-      double b_bar = -0.4002;
+      double const aBar = 1.0; // Depends on metric (1 for Schwarzschild)
+      double const bBar = -0.4002;
 
-      alpha = -a_bar * std::log(y) + b_bar + M_PI;
+      alpha = (-aBar * std::log(y)) + bBar + physics::PI;
     }
   }
 
@@ -413,32 +416,30 @@ inline double deflection_angle_schwarzschild(double b, double r_s) {
 /**
  * @brief Compute strong-field limit coefficients (Bozza 2002).
  *
- * In the strong-field limit (b → b_m):
- * α(b) = -ā log(b/b_m - 1) + b̄ + O(b - b_m)
+ * In the strong-field limit (b → bM):
+ * α(b) = -ā log(b/bM - 1) + b̄ + O(b - bM)
  *
  * @param r_s Schwarzschild radius [cm]
- * @param a_bar Output: logarithmic coefficient ā
- * @param b_bar Output: constant term b̄
- * @param b_m Output: critical impact parameter b_m [cm]
+ * @param aBar Output: logarithmic coefficient ā
+ * @param bBar Output: constant term b̄
+ * @param bM Output: critical impact parameter bM [cm]
  */
-inline void strong_field_coefficients_schwarzschild(double r_s,
-                                                    double &a_bar,
-                                                    double &b_bar,
-                                                    double &b_m) {
+inline void strongFieldCoefficientsSchwarzschild(double rS, double &aBar, double &bBar,
+                                                 double &bM) {
   // Photon sphere radius
-  double r_m = 1.5 * r_s;
+  double const rM = 1.5 * rS;
 
   // Critical impact parameter
-  b_m = r_m * std::sqrt(r_m / (r_m - r_s));
+  bM = rM * std::sqrt(rM / (rM - rS));
 
   // Schwarzschild coefficients (exact values)
-  a_bar = 1.0;
+  aBar = 1.0;
 
   // b̄ = -π + b_R + log(216(7 - 4√3))
   // where b_R is a geometric term
-  double log_arg = 216.0 * (7.0 - 4.0 * std::sqrt(3.0));
-  b_bar = -M_PI + std::log(log_arg);
-  b_bar = -0.4002; // Numerical value
+  double const logArg = 216.0 * (7.0 - (4.0 * std::numbers::sqrt3));
+  bBar = -physics::PI + std::log(logArg);
+  bBar = -0.4002; // Numerical value
 }
 
 /**
@@ -448,17 +449,19 @@ inline void strong_field_coefficients_schwarzschild(double r_s,
  * @param r_s Schwarzschild radius [cm]
  * @return Deflection angle [rad]
  */
-inline double deflection_strong_field(double b, double r_s) {
-  double a_bar, b_bar, b_m;
-  strong_field_coefficients_schwarzschild(r_s, a_bar, b_bar, b_m);
+inline double deflectionStrongField(double b, double rS) {
+  double aBar;
+  double bBar;
+  double bM;
+  strongFieldCoefficientsSchwarzschild(rS, aBar, bBar, bM);
 
-  if (b <= b_m) {
-    return safe_infinity<double>();
+  if (b <= bM) {
+    return safeInfinity<double>();
   }
 
-  double y = b / b_m - 1.0;
+  double const y = (b / bM) - 1.0;
 
-  return -a_bar * std::log(y) + b_bar;
+  return (-aBar * std::log(y)) + bBar;
 }
 
 /**
@@ -475,27 +478,28 @@ inline double deflection_strong_field(double b, double r_s) {
  * @param r_s Schwarzschild radius [cm]
  * @return Image angle θ_n [rad]
  */
-inline double relativistic_image_position(double beta, int n,
-                                          double D_L, double D_S, double D_LS,
-                                          double r_s) {
-  double a_bar, b_bar, b_m;
-  strong_field_coefficients_schwarzschild(r_s, a_bar, b_bar, b_m);
+inline double relativisticImagePosition(double /*beta*/, int n, double dL, double dS, double dLs,
+                                        double rS) {
+  double aBar;
+  double bBar;
+  double bM;
+  strongFieldCoefficientsSchwarzschild(rS, aBar, bBar, bM);
 
   // Angular critical impact parameter
-  double theta_m = b_m / D_L;
+  double const thetaM = bM / dL;
 
   // From lens equation with strong-field expansion
   // θ_n ≈ θ_m + θ_m exp((b̄ - 2nπ) / ā) * (1 + ...)
 
-  double delta_n = std::exp((b_bar - 2.0 * n * M_PI) / a_bar);
+  double const deltaN = std::exp((bBar - (2.0 * n * physics::PI)) / aBar);
 
   // Position of nth image
-  double theta_n = theta_m * (1.0 + delta_n);
+  double const thetaN = thetaM * (1.0 + deltaN);
 
   // Correction from source position
-  double lens_term = D_LS / D_S;
+  double const lensTerm = dLs / dS;
 
-  return theta_n;
+  return thetaN;
 }
 
 /**
@@ -512,22 +516,23 @@ inline double relativistic_image_position(double beta, int n,
  * @param r_s Schwarzschild radius [cm]
  * @return Magnification |μ_n|
  */
-inline double relativistic_image_magnification(double beta, int n,
-                                               double D_L, double D_S, double D_LS,
-                                               double r_s) {
+inline double relativisticImageMagnification(double beta, int n, double dL, double dS, double dLs,
+                                             double rS) {
   if (std::abs(beta) < 1e-20) {
-    return safe_infinity<double>(); // Einstein ring
+    return safeInfinity<double>(); // Einstein ring
   }
 
-  double a_bar, b_bar, b_m;
-  strong_field_coefficients_schwarzschild(r_s, a_bar, b_bar, b_m);
+  double aBar;
+  double bBar;
+  double bM;
+  strongFieldCoefficientsSchwarzschild(rS, aBar, bBar, bM);
 
-  double theta_m = b_m / D_L;
-  double delta_n = std::exp((b_bar - 2.0 * n * M_PI) / a_bar);
+  double const thetaM = bM / dL;
+  double const deltaN = std::exp((bBar - (2.0 * n * physics::PI)) / aBar);
 
-  double mu_n = (theta_m / std::abs(beta)) * (D_S / D_LS) * delta_n / a_bar;
+  double const muN = (thetaM / std::abs(beta)) * (dS / dLs) * deltaN / aBar;
 
-  return std::abs(mu_n);
+  return std::abs(muN);
 }
 
 // ============================================================================
@@ -545,35 +550,35 @@ inline double relativistic_image_magnification(double beta, int n,
  * @param prograde True for prograde photons
  * @return Critical impact parameter [cm]
  */
-inline double critical_impact_parameter_kerr(double r_s, double a, bool prograde) {
-  double M = r_s / 2.0;
+inline double criticalImpactParameterKerr(double rS, double a, bool prograde) {
+  double const m = rS / 2.0;
 
   // Photon orbit radius (simplified formula)
-  double a_star = a / M;
-  double r_ph;
+  double const aStar = a / m;
+  double rPh;
 
   if (prograde) {
-    double angle = (2.0 / 3.0) * std::acos(-a_star);
-    r_ph = 2.0 * M * (1.0 + std::cos(angle));
+    double const angle = (2.0 / 3.0) * std::acos(-aStar);
+    rPh = 2.0 * m * (1.0 + std::cos(angle));
   } else {
-    double angle = (2.0 / 3.0) * std::acos(a_star);
-    r_ph = 2.0 * M * (1.0 + std::cos(angle));
+    double const angle = (2.0 / 3.0) * std::acos(aStar);
+    rPh = 2.0 * m * (1.0 + std::cos(angle));
   }
 
   // Critical impact parameter
-  double r_ph_minus_M = r_ph - M;
-  if (std::abs(r_ph_minus_M) < 1e-20) {
-    return safe_infinity<double>();
+  double const rPhMinusM = rPh - m;
+  if (std::abs(rPhMinusM) < 1e-20) {
+    return safeInfinity<double>();
   }
 
-  double b_crit = (r_ph * r_ph + a * a) / r_ph_minus_M;
+  double bCrit = ((rPh * rPh) + (a * a)) / rPhMinusM;
   if (prograde) {
-    b_crit -= a;
+    bCrit -= a;
   } else {
-    b_crit += a;
+    bCrit += a;
   }
 
-  return std::abs(b_crit);
+  return std::abs(bCrit);
 }
 
 // ============================================================================
@@ -589,16 +594,18 @@ inline double critical_impact_parameter_kerr(double r_s, double a, bool prograde
  * @param k Modulus
  * @return am(u,k) in radians
  */
-inline double jacobi_am(double u, double k) {
+inline double jacobiAm(double u, double k) {
   // Newton-Raphson iteration
   double phi = u; // Initial guess (valid for small k)
 
   for (int i = 0; i < 20; ++i) {
-    double F_phi = elliptic_F(phi, k);
-    double dF = 1.0 / std::sqrt(1.0 - k * k * std::sin(phi) * std::sin(phi));
-    double d_phi = (u - F_phi) * dF;
-    phi += d_phi;
-    if (std::abs(d_phi) < 1e-12) break;
+    double const fPhi = ellipticF(phi, k);
+    double const dF = 1.0 / std::sqrt(1.0 - (k * k * std::sin(phi) * std::sin(phi)));
+    double const dPhi = (u - fPhi) * dF;
+    phi += dPhi;
+    if (std::abs(dPhi) < 1e-12) {
+      break;
+    }
   }
 
   return phi;
@@ -613,8 +620,8 @@ inline double jacobi_am(double u, double k) {
  * @param k Modulus
  * @return sn(u,k)
  */
-inline double jacobi_sn(double u, double k) {
-  return std::sin(jacobi_am(u, k));
+inline double jacobiSn(double u, double k) {
+  return std::sin(jacobiAm(u, k));
 }
 
 /**
@@ -626,8 +633,8 @@ inline double jacobi_sn(double u, double k) {
  * @param k Modulus
  * @return cn(u,k)
  */
-inline double jacobi_cn(double u, double k) {
-  return std::cos(jacobi_am(u, k));
+inline double jacobiCn(double u, double k) {
+  return std::cos(jacobiAm(u, k));
 }
 
 /**
@@ -639,9 +646,9 @@ inline double jacobi_cn(double u, double k) {
  * @param k Modulus
  * @return dn(u,k)
  */
-inline double jacobi_dn(double u, double k) {
-  double sn = jacobi_sn(u, k);
-  return std::sqrt(1.0 - k * k * sn * sn);
+inline double jacobiDn(double u, double k) {
+  double const sn = jacobiSn(u, k);
+  return std::sqrt(1.0 - (k * k * sn * sn));
 }
 
 } // namespace physics

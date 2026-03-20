@@ -30,8 +30,6 @@
 #ifndef PHYSICS_JOHANNSEN_PSALTIS_H
 #define PHYSICS_JOHANNSEN_PSALTIS_H
 
-#include "constants.h"
-#include "kerr.h"
 #include <array>
 #include <cmath>
 
@@ -55,10 +53,10 @@ namespace physics {
  * All parameters = 0 recovers exact Kerr.
  */
 struct JPParams {
-  double alpha_13 = 0.0;  // Leading tt deviation (EHT-constrained)
-  double alpha_22 = 0.0;  // rr deviation
-  double alpha_52 = 0.0;  // Higher-order deviation
-  double epsilon_3 = 0.0; // Alternative parametrization (Johannsen 2011)
+  double alpha13 = 0.0;  // Leading tt deviation (EHT-constrained)
+  double alpha22 = 0.0;  // rr deviation
+  double alpha52 = 0.0;  // Higher-order deviation
+  double epsilon3 = 0.0; // Alternative parametrization (Johannsen 2011)
 };
 
 // ============================================================================
@@ -75,12 +73,12 @@ struct JPParams {
  *
  * @param r Radial coordinate [geometric units]
  * @param M Geometric mass [geometric units]
- * @param alpha_13 Deviation parameter
+ * @param alpha13 Deviation parameter
  * @return A1(r) value
  */
-inline double jp_A1(double r, double M, double alpha_13) {
-  double Mr = M / r;
-  return 1.0 + alpha_13 * Mr * Mr * Mr;
+[[nodiscard]] inline double jpA1(double r, double mGeo, double alpha13) {
+  const double mR = mGeo / r;
+  return 1.0 + (alpha13 * mR * mR * mR);
 }
 
 /**
@@ -92,12 +90,12 @@ inline double jp_A1(double r, double M, double alpha_13) {
  *
  * @param r Radial coordinate [geometric units]
  * @param M Geometric mass [geometric units]
- * @param alpha_22 Deviation parameter
+ * @param alpha22 Deviation parameter
  * @return A2(r) value
  */
-inline double jp_A2(double r, double M, double alpha_22) {
-  double Mr = M / r;
-  return 1.0 + alpha_22 * Mr * Mr;
+[[nodiscard]] inline double jpA2(double r, double mGeo, double alpha22) {
+  const double mR = mGeo / r;
+  return 1.0 + (alpha22 * mR * mR);
 }
 
 /**
@@ -109,12 +107,12 @@ inline double jp_A2(double r, double M, double alpha_22) {
  *
  * @param r Radial coordinate [geometric units]
  * @param M Geometric mass [geometric units]
- * @param alpha_52 Deviation parameter
+ * @param alpha52 Deviation parameter
  * @return A5(r) value
  */
-inline double jp_A5(double r, double M, double alpha_52) {
-  double Mr = M / r;
-  return 1.0 + alpha_52 * Mr * Mr;
+[[nodiscard]] inline double jpA5(double r, double mGeo, double alpha52) {
+  const double mR = mGeo / r;
+  return 1.0 + (alpha52 * mR * mR);
 }
 
 // ============================================================================
@@ -146,36 +144,36 @@ inline double jp_A5(double r, double M, double alpha_52) {
  * @param params JP deviation parameters
  * @return {g_tt, g_rr, g_thth, g_phph, g_tph}
  */
-inline std::array<double, 5> jp_metric(double r, double theta,
-                                        double M, double a,
-                                        const JPParams& params) {
-  double cos_th = std::cos(theta);
-  double sin_th = std::sin(theta);
-  double sin2 = sin_th * sin_th;
-  double r_s = 2.0 * M;
+[[nodiscard]] inline std::array<double, 5> jpMetric(double r, double theta,
+                                                     double mGeo, double a,
+                                                     const JPParams& params) {
+  const double cosTh = std::cos(theta);
+  const double sinTh = std::sin(theta);
+  const double sin2 = sinTh * sinTh;
+  const double rS = 2.0 * mGeo;
 
   // Standard Kerr quantities
-  double sigma = r * r + a * a * cos_th * cos_th;
-  double delta = r * r - r_s * r + a * a;
+  const double sigma = (r * r) + (a * a * cosTh * cosTh);
+  const double delta = (r * r) - (rS * r) + (a * a);
 
   // BL Kerr metric components
-  double g_tt_kerr = -(1.0 - r_s * r / sigma);
-  double g_rr_kerr = sigma / delta;
-  double g_thth = sigma;
-  double g_phph_kerr = (r * r + a * a + r_s * r * a * a * sin2 / sigma) * sin2;
-  double g_tph_kerr = -r_s * r * a * sin2 / sigma;
+  const double gTtKerr = -(1.0 - ((rS * r) / sigma));
+  const double gRrKerr = sigma / delta;
+  const double gThth = sigma;
+  const double gPhphKerr = ((r * r) + (a * a) + ((rS * r * a * a * sin2) / sigma)) * sin2;
+  const double gTphKerr = -((rS * r * a * sin2) / sigma);
 
   // JP deviation functions
-  double A1 = jp_A1(r, M, params.alpha_13);
-  double A2 = jp_A2(r, M, params.alpha_22);
+  const double a1Val = jpA1(r, mGeo, params.alpha13);
+  const double a2Val = jpA2(r, mGeo, params.alpha22);
 
   // Modified metric components
-  double g_tt = g_tt_kerr * A1 * A1;
-  double g_rr = g_rr_kerr * A2 / A1;
-  double g_phph = g_phph_kerr * A1;
-  double g_tph = g_tph_kerr * A1;
+  const double gTt = gTtKerr * a1Val * a1Val;
+  const double gRr = (gRrKerr * a2Val) / a1Val;
+  const double gPhph = gPhphKerr * a1Val;
+  const double gTph = gTphKerr * a1Val;
 
-  return {g_tt, g_rr, g_thth, g_phph, g_tph};
+  return {gTt, gRr, gThth, gPhph, gTph};
 }
 
 // ============================================================================
@@ -192,24 +190,24 @@ inline std::array<double, 5> jp_metric(double r, double theta,
  *
  * @param M Geometric mass [geometric units]
  * @param a Spin parameter [geometric units]
- * @param alpha_13 Leading deviation parameter
+ * @param alpha13 Leading deviation parameter
  * @return Fractional shadow radius change
  */
-inline double jp_shadow_fractional_shift(double M, double a,
-                                          double alpha_13) {
+[[nodiscard]] inline double jpShadowFractionalShift(double mGeo, double a,
+                                                    double alpha13) {
   // Photon orbit in Kerr (prograde, equatorial)
   // For Schwarzschild: r_ph = 3M, for Kerr: r_ph depends on spin
   // Use Schwarzschild approximation for small spin
-  double r_ph = 3.0 * M;
-  if (std::abs(a) > 0.01 * M) {
+  double rPh = 3.0 * mGeo;
+  if (std::abs(a) > (0.01 * mGeo)) {
     // Bardeen formula for prograde photon orbit
-    double a_star = a / M;
-    r_ph = 2.0 * M * (1.0 + std::cos(2.0 / 3.0 *
-           std::acos(-std::abs(a_star))));
+    const double aStar = a / mGeo;
+    rPh = 2.0 * mGeo * (1.0 + std::cos((2.0 / 3.0) *
+           std::acos(-std::abs(aStar))));
   }
 
-  double Mr_ratio = M / r_ph;
-  return alpha_13 * Mr_ratio * Mr_ratio * Mr_ratio / 2.0;
+  const double mRatio = mGeo / rPh;
+  return (alpha13 * mRatio * mRatio * mRatio) / 2.0;
 }
 
 /**
@@ -221,10 +219,10 @@ inline double jp_shadow_fractional_shift(double M, double a,
  * @param params JP deviation parameters
  * @return true if within typical EHT bounds
  */
-inline bool jp_within_eht_bounds(const JPParams& params) {
+[[nodiscard]] inline bool jpWithinEhtBounds(const JPParams& params) {
   // Conservative bounds from EHT M87* analysis
-  return std::abs(params.alpha_13) < 2.0 &&
-         std::abs(params.alpha_22) < 5.0;
+  return (std::abs(params.alpha13) < 2.0) &&
+         (std::abs(params.alpha22) < 5.0);
 }
 
 /**
@@ -237,28 +235,30 @@ inline bool jp_within_eht_bounds(const JPParams& params) {
  * @param tol Tolerance for comparison
  * @return true if JP(alpha=0) == Kerr within tolerance
  */
-inline bool jp_kerr_limit_check(double r, double theta,
-                                 double M, double a,
-                                 double tol = 1e-14) {
-  JPParams zero_params; // all zeros
+[[nodiscard]] inline bool jpKerrLimitCheck(double r, double theta,
+                                            double mGeo, double a,
+                                            double tol = 1e-14) {
+  const JPParams zeroParams; // all zeros by default
 
-  auto jp = jp_metric(r, theta, M, a, zero_params);
+  const auto jp = jpMetric(r, theta, mGeo, a, zeroParams);
 
-  double sigma = r * r + a * a * std::cos(theta) * std::cos(theta);
-  double delta = r * r - 2.0 * M * r + a * a;
-  double sin2 = std::sin(theta) * std::sin(theta);
-  double r_s = 2.0 * M;
+  const double cosTheta = std::cos(theta);
+  const double sinTheta = std::sin(theta);
+  const double sin2 = sinTheta * sinTheta;
+  const double sigma = (r * r) + (a * a * cosTheta * cosTheta);
+  const double delta = (r * r) - (2.0 * mGeo * r) + (a * a);
+  const double rS = 2.0 * mGeo;
 
-  double g_tt_kerr = -(1.0 - r_s * r / sigma);
-  double g_rr_kerr = sigma / delta;
-  double g_phph_kerr = (r * r + a * a + r_s * r * a * a * sin2 / sigma) * sin2;
-  double g_tph_kerr = -r_s * r * a * sin2 / sigma;
+  const double gTtKerr = -(1.0 - ((rS * r) / sigma));
+  const double gRrKerr = sigma / delta;
+  const double gPhphKerr = ((r * r) + (a * a) + ((rS * r * a * a * sin2) / sigma)) * sin2;
+  const double gTphKerr = -((rS * r * a * sin2) / sigma);
 
-  return std::abs(jp[0] - g_tt_kerr) < tol &&
-         std::abs(jp[1] - g_rr_kerr) < tol &&
-         std::abs(jp[2] - sigma) < tol &&
-         std::abs(jp[3] - g_phph_kerr) < tol &&
-         std::abs(jp[4] - g_tph_kerr) < tol;
+  return (std::abs(jp.at(0) - gTtKerr) < tol) &&
+         (std::abs(jp.at(1) - gRrKerr) < tol) &&
+         (std::abs(jp.at(2) - sigma) < tol) &&
+         (std::abs(jp.at(3) - gPhphKerr) < tol) &&
+         (std::abs(jp.at(4) - gTphKerr) < tol);
 }
 
 } // namespace physics

@@ -47,9 +47,9 @@ struct RenderToTextureInfo {
   std::map<std::string, GLuint> textureUniforms;
   std::map<std::string, GLuint> texture3DUniforms;
   std::map<std::string, GLuint> cubemapUniforms;
-  GLuint targetTexture;
-  int width;
-  int height;
+  GLuint targetTexture{};
+  int width{};
+  int height{};
 
   // Explicitly declare destructor (defined out-of-line in render.cpp)
   // This prevents -Winline warnings from implicit inline expansion of

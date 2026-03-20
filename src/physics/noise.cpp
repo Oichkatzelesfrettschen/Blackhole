@@ -1,6 +1,8 @@
 #include "noise.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 
 namespace physics {
 namespace {
@@ -14,14 +16,14 @@ std::uint32_t mix(std::uint32_t x) {
   return x;
 }
 
-float to_unit_float(std::uint32_t x) {
+float toUnitFloat(std::uint32_t x) {
   constexpr float kInv = 1.0f / 16777215.0f;
   return static_cast<float>(x & 0x00ffffffu) * kInv;
 }
 
 } // namespace
 
-NoiseVolume generate_noise_volume(int size, std::uint32_t seed) {
+NoiseVolume generateNoiseVolume(int size, std::uint32_t seed) {
   NoiseVolume volume;
   size = std::clamp(size, 4, 128);
   volume.size = size;
@@ -38,13 +40,12 @@ NoiseVolume generate_noise_volume(int size, std::uint32_t seed) {
         h ^= static_cast<std::uint32_t>(y) * 0x85ebca77u;
         h ^= static_cast<std::uint32_t>(z) * 0xc2b2ae3du;
         h = mix(h);
-        std::size_t index = static_cast<std::size_t>(z) *
-                                static_cast<std::size_t>(size) *
-                                static_cast<std::size_t>(size) +
-                            static_cast<std::size_t>(y) *
-                                static_cast<std::size_t>(size) +
-                            static_cast<std::size_t>(x);
-        volume.values[index] = to_unit_float(h);
+        const std::size_t index =
+            (static_cast<std::size_t>(z) * static_cast<std::size_t>(size) *
+             static_cast<std::size_t>(size)) +
+            (static_cast<std::size_t>(y) * static_cast<std::size_t>(size)) +
+            static_cast<std::size_t>(x);
+        volume.values.at(index) = toUnitFloat(h);
       }
     }
   }

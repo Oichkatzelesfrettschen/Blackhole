@@ -339,6 +339,20 @@ if(ENABLE_CUDA)
 endif()
 
 # ============================================================================
+# Blender Bridge (shared library for Python ctypes)
+# ============================================================================
+# WHY: Expose Kerr geodesics, disk physics, and CUDA texture generation
+#      to Blender via a flat C ABI shared library.
+# WHAT: libblackhole_bridge.so callable from Blender Python.
+# HOW: cmake --preset release -DENABLE_BLENDER_BRIDGE=ON
+
+option(ENABLE_BLENDER_BRIDGE "Build Blender ctypes bridge (libblackhole_bridge.so)" OFF)
+if(ENABLE_BLENDER_BRIDGE)
+    add_subdirectory(src/blender_bridge)
+    message(STATUS "Blender bridge enabled: libblackhole_bridge.so will be built")
+endif()
+
+# ============================================================================
 # ImPlot (vendored until Conan packages support ImGui 1.92+)
 # ============================================================================
 

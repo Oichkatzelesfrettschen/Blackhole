@@ -11,8 +11,6 @@
 #ifndef PHYSICS_GEODESICS_H
 #define PHYSICS_GEODESICS_H
 
-#include <cmath>
-
 namespace physics {
 
 // ============================================================================
@@ -22,36 +20,36 @@ namespace physics {
 /**
  * @brief Compute gravitational light deflection angle (weak field).
  *
- * δφ = 4GM/(bc²)
+ * delta_phi = 4GM/(bc^2)
  *
  * This is the first-order approximation valid for b >> r_s.
  *
- * @param impact_param Impact parameter b [cm]
+ * @param impactParam Impact parameter b [cm]
  * @param mass Central mass [g]
  * @return Deflection angle [radians]
  */
-double gravitational_deflection(double impact_param, double mass);
+[[nodiscard]] double gravitationalDeflection(double impactParam, double mass);
 
 /**
  * @brief Compute critical impact parameter for photon capture.
  *
- * b_crit = (3√3/2) r_s ≈ 2.598 r_s
+ * b_crit = (3*sqrt(3)/2) r_s ~ 2.598 r_s
  *
  * Photons with b < b_crit are captured by the black hole.
  *
  * @param mass Black hole mass [g]
  * @return Critical impact parameter [cm]
  */
-double critical_impact_parameter(double mass);
+[[nodiscard]] double criticalImpactParameter(double mass);
 
 /**
  * @brief Check if a photon with given impact parameter will be captured.
  *
- * @param impact_param Impact parameter b [cm]
+ * @param impactParam Impact parameter b [cm]
  * @param mass Black hole mass [g]
  * @return true if photon will be captured (b < b_crit)
  */
-bool is_photon_captured(double impact_param, double mass);
+[[nodiscard]] bool isPhotonCaptured(double impactParam, double mass);
 
 // ============================================================================
 // Time Effects
@@ -60,22 +58,22 @@ bool is_photon_captured(double impact_param, double mass);
 /**
  * @brief Compute Shapiro time delay for light passing near mass.
  *
- * Δt = (2GM/c³) ln((r₁ + r₂ + d)/(r₁ + r₂ - d))
+ * delta_t = (2GM/c^3) * ln((r1 + r2 + d)/(r1 + r2 - d))
  *
- * where d = √((r₁ + r₂)² - b²)
+ * where d = sqrt((r1 + r2)^2 - b^2)
  *
  * @param r1 Distance from mass to source [cm]
  * @param r2 Distance from mass to observer [cm]
- * @param impact_param Impact parameter [cm]
+ * @param impactParam Impact parameter [cm]
  * @param mass Central mass [g]
  * @return Time delay [s]
  */
-double shapiro_delay(double r1, double r2, double impact_param, double mass);
+[[nodiscard]] double shapiroDelay(double r1, double r2, double impactParam, double mass);
 
 /**
  * @brief Compute gravitational time dilation factor.
  *
- * dτ/dt = √(1 - r_s/r)
+ * dtau/dt = sqrt(1 - r_s/r)
  *
  * This is the ratio of proper time to coordinate time.
  *
@@ -83,7 +81,7 @@ double shapiro_delay(double r1, double r2, double impact_param, double mass);
  * @param mass Black hole mass [g]
  * @return Time dilation factor (0 at horizon, 1 at infinity)
  */
-double time_dilation_factor(double r, double mass);
+[[nodiscard]] double timeDilationFactor(double r, double mass);
 
 // ============================================================================
 // Ray Tracing Helpers (for GPU integration)
@@ -92,36 +90,36 @@ double time_dilation_factor(double r, double mass);
 /**
  * @brief Compute effective potential for null geodesics.
  *
- * V_eff(r) = (1 - r_s/r) / r²
+ * V_eff(r) = (1 - rS/r) / r^2
  *
  * @param r Radial coordinate [cm]
- * @param r_s Schwarzschild radius [cm]
+ * @param rS Schwarzschild radius [cm]
  * @return Effective potential
  */
-double null_effective_potential(double r, double r_s);
+[[nodiscard]] double nullEffectivePotential(double r, double rS);
 
 /**
- * @brief Compute dr/dφ for null geodesics.
+ * @brief Compute (dr/dphi)^2 for null geodesics.
  *
- * (dr/dφ)² = r⁴/b² - r²(1 - r_s/r)
+ * (dr/dphi)^2 = r^4/b^2 - r^2*(1 - rS/r)
  *
  * @param r Current radius [cm]
- * @param r_s Schwarzschild radius [cm]
+ * @param rS Schwarzschild radius [cm]
  * @param b Impact parameter [cm]
- * @return (dr/dφ)² value
+ * @return (dr/dphi)^2 value
  */
-double null_radial_derivative_squared(double r, double r_s, double b);
+[[nodiscard]] double nullRadialDerivativeSquared(double r, double rS, double b);
 
 /**
  * @brief Compute turning point radius for photon trajectory.
  *
- * At the turning point, dr/dφ = 0.
+ * At the turning point, dr/dphi = 0.
  *
- * @param impact_param Impact parameter [cm]
+ * @param impactParam Impact parameter [cm]
  * @param mass Black hole mass [g]
  * @return Turning point radius [cm], or NaN if captured
  */
-double photon_turning_point(double impact_param, double mass);
+[[nodiscard]] double photonTurningPoint(double impactParam, double mass);
 
 // ============================================================================
 // Coordinate Transformations
@@ -137,8 +135,8 @@ double photon_turning_point(double impact_param, double mass);
  * @param[out] y Y coordinate [cm]
  * @param[out] z Z coordinate [cm]
  */
-void schwarzschild_to_cartesian(double r, double theta, double phi, double &x,
-                                double &y, double &z);
+void schwarzschildToCartesian(double r, double theta, double phi, double &x,
+                              double &y, double &z);
 
 /**
  * @brief Convert Cartesian to Schwarzschild coordinates.
@@ -150,8 +148,8 @@ void schwarzschild_to_cartesian(double r, double theta, double phi, double &x,
  * @param[out] theta Polar angle [rad]
  * @param[out] phi Azimuthal angle [rad]
  */
-void cartesian_to_schwarzschild(double x, double y, double z, double &r,
-                                double &theta, double &phi);
+void cartesianToSchwarzschild(double x, double y, double z, double &r,
+                              double &theta, double &phi);
 
 } // namespace physics
 

@@ -26,23 +26,25 @@ constexpr double RELAXED_TOLERANCE = 1e-4;
  * Expected: η = 0.0572 (5.72% efficiency for a=0)
  * Reference: Bardeen, Press, Teukolsky (1972), ApJ 178, 347
  */
-bool test_efficiency_schwarzschild() {
-    std::cout << "\n[TEST 1] Schwarzschild Radiative Efficiency\n";
-    std::cout << "============================================\n";
+namespace {
 
-    const double a_star = 0.0;
-    const double eta = NovikovThorneDisk::radiative_efficiency(a_star);
-    const double expected = 0.0572;
+bool testEfficiencySchwarzschild() {
+  std::cout << "\n[TEST 1] Schwarzschild Radiative Efficiency\n";
+  std::cout << "============================================\n";
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  Computed: η = " << eta << "\n";
-    std::cout << "  Expected: η = " << expected << "\n";
-    std::cout << "  Error:    " << std::abs(eta - expected) << "\n";
+  const double aStar = 0.0;
+  const double eta = NovikovThorneDisk::radiativeEfficiency(aStar);
+  const double expected = 0.0572;
 
-    const bool passed = std::abs(eta - expected) < RELAXED_TOLERANCE;
-    std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  Computed: η = " << eta << "\n";
+  std::cout << "  Expected: η = " << expected << "\n";
+  std::cout << "  Error:    " << std::abs(eta - expected) << "\n";
 
-    return passed;
+  const bool passed = std::abs(eta - expected) < RELAXED_TOLERANCE;
+  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+
+  return passed;
 }
 
 /**
@@ -51,31 +53,31 @@ bool test_efficiency_schwarzschild() {
  * Expected: η ≈ 0.42 (42% efficiency for a→1)
  * Reference: BPT (1972)
  */
-bool test_efficiency_kerr_maximal() {
-    std::cout << "\n[TEST 2] Near-Extremal Kerr Radiative Efficiency\n";
-    std::cout << "=================================================\n";
+bool testEfficiencyKerrMaximal() {
+  std::cout << "\n[TEST 2] Near-Extremal Kerr Radiative Efficiency\n";
+  std::cout << "=================================================\n";
 
-    const double a_star = 0.998;
-    const double eta = NovikovThorneDisk::radiative_efficiency(a_star);
+  const double aStar = 0.998;
+  const double eta = NovikovThorneDisk::radiativeEfficiency(aStar);
 
-    // Note: Simplified E_ISCO formula gives ~0.32 for a*=0.998
-    // Full BPT formula with angular momentum gives ~0.40-0.42
-    // We accept 0.30-0.42 as valid range for near-extremal Kerr
-    const double expected_range_min = 0.30;
-    const double expected_range_max = 0.42;
+  // Note: Simplified E_ISCO formula gives ~0.32 for a*=0.998
+  // Full BPT formula with angular momentum gives ~0.40-0.42
+  // We accept 0.30-0.42 as valid range for near-extremal Kerr
+  const double expectedRangeMin = 0.30;
+  const double expectedRangeMax = 0.42;
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  Spin:     a* = " << a_star << "\n";
-    std::cout << "  Computed: η = " << eta << "\n";
-    std::cout << "  Expected: η ∈ [" << expected_range_min << ", " << expected_range_max << "]\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  Spin:     a* = " << aStar << "\n";
+  std::cout << "  Computed: η = " << eta << "\n";
+  std::cout << "  Expected: η ∈ [" << expectedRangeMin << ", " << expectedRangeMax << "]\n";
 
-    const bool passed = (eta >= expected_range_min && eta <= expected_range_max);
-    std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
-    if (passed) {
-        std::cout << "  Note:     Simplified E_ISCO formula (acceptable for thin disk)\n";
-    }
+  const bool passed = (eta >= expectedRangeMin && eta <= expectedRangeMax);
+  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  if (passed) {
+    std::cout << "  Note:     Simplified E_ISCO formula (acceptable for thin disk)\n";
+  }
 
-    return passed;
+  return passed;
 }
 
 /**
@@ -84,23 +86,23 @@ bool test_efficiency_kerr_maximal() {
  * Expected: r_ISCO = 6M
  * Reference: Standard result from Schwarzschild metric
  */
-bool test_isco_schwarzschild() {
-    std::cout << "\n[TEST 3] Schwarzschild ISCO Radius\n";
-    std::cout << "===================================\n";
+bool testIscoSchwarzschild() {
+  std::cout << "\n[TEST 3] Schwarzschild ISCO Radius\n";
+  std::cout << "===================================\n";
 
-    const double a_star = 0.0;
-    const double r_isco = NovikovThorneDisk::isco_radius(a_star);
-    const double expected = 6.0;
+  const double aStar = 0.0;
+  const double rIsco = NovikovThorneDisk::iscoRadius(aStar);
+  const double expected = 6.0;
 
-    std::cout << std::fixed << std::setprecision(10);
-    std::cout << "  Computed: r_ISCO = " << r_isco << " M\n";
-    std::cout << "  Expected: r_ISCO = " << expected << " M\n";
-    std::cout << "  Error:    " << std::abs(r_isco - expected) << "\n";
+  std::cout << std::fixed << std::setprecision(10);
+  std::cout << "  Computed: r_ISCO = " << rIsco << " M\n";
+  std::cout << "  Expected: r_ISCO = " << expected << " M\n";
+  std::cout << "  Error:    " << std::abs(rIsco - expected) << "\n";
 
-    const bool passed = std::abs(r_isco - expected) < 1e-8;
-    std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  const bool passed = std::abs(rIsco - expected) < 1e-8;
+  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
 
-    return passed;
+  return passed;
 }
 
 /**
@@ -109,24 +111,24 @@ bool test_isco_schwarzschild() {
  * Expected: r_ISCO ≈ 1.24M (prograde orbit)
  * Reference: BPT (1972)
  */
-bool test_isco_kerr_maximal() {
-    std::cout << "\n[TEST 4] Near-Extremal Kerr ISCO Radius\n";
-    std::cout << "========================================\n";
+bool testIscoKerrMaximal() {
+  std::cout << "\n[TEST 4] Near-Extremal Kerr ISCO Radius\n";
+  std::cout << "========================================\n";
 
-    const double a_star = 0.998;
-    const double r_isco = NovikovThorneDisk::isco_radius(a_star);
-    const double expected = 1.24;  // Approximate
+  const double aStar = 0.998;
+  const double rIsco = NovikovThorneDisk::iscoRadius(aStar);
+  const double expected = 1.24; // Approximate
 
-    std::cout << std::fixed << std::setprecision(10);
-    std::cout << "  Spin:     a* = " << a_star << "\n";
-    std::cout << "  Computed: r_ISCO = " << r_isco << " M\n";
-    std::cout << "  Expected: r_ISCO ≈ " << expected << " M (±0.01)\n";
-    std::cout << "  Error:    " << std::abs(r_isco - expected) << "\n";
+  std::cout << std::fixed << std::setprecision(10);
+  std::cout << "  Spin:     a* = " << aStar << "\n";
+  std::cout << "  Computed: r_ISCO = " << rIsco << " M\n";
+  std::cout << "  Expected: r_ISCO ≈ " << expected << " M (±0.01)\n";
+  std::cout << "  Error:    " << std::abs(rIsco - expected) << "\n";
 
-    const bool passed = std::abs(r_isco - expected) < 0.01;
-    std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  const bool passed = std::abs(rIsco - expected) < 0.01;
+  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
 
-    return passed;
+  return passed;
 }
 
 /**
@@ -135,27 +137,27 @@ bool test_isco_kerr_maximal() {
  * Expected: T peaks at r ≈ 1.5 * r_ISCO (Page & Thorne 1974)
  * Reference: Page & Thorne (1974), ApJ 191, 499
  */
-bool test_temperature_peak() {
-    std::cout << "\n[TEST 5] Temperature Peak Location\n";
-    std::cout << "===================================\n";
+bool testTemperaturePeak() {
+  std::cout << "\n[TEST 5] Temperature Peak Location\n";
+  std::cout << "===================================\n";
 
-    const double a_star = 0.0;
-    const double r_peak = NovikovThorneDisk::peak_temperature_radius(a_star);
-    const double r_isco = NovikovThorneDisk::isco_radius(a_star);
-    const double expected_ratio = 1.5;
+  const double aStar = 0.0;
+  const double rPeak = NovikovThorneDisk::peakTemperatureRadius(aStar);
+  const double rIsco = NovikovThorneDisk::iscoRadius(aStar);
+  const double expectedRatio = 1.5;
 
-    const double ratio = r_peak / r_isco;
+  const double ratio = rPeak / rIsco;
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  r_ISCO:   " << r_isco << " M\n";
-    std::cout << "  r_peak:   " << r_peak << " M\n";
-    std::cout << "  Ratio:    r_peak / r_ISCO = " << ratio << "\n";
-    std::cout << "  Expected: " << expected_ratio << "\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  r_ISCO:   " << rIsco << " M\n";
+  std::cout << "  r_peak:   " << rPeak << " M\n";
+  std::cout << "  Ratio:    r_peak / r_ISCO = " << ratio << "\n";
+  std::cout << "  Expected: " << expectedRatio << "\n";
 
-    const bool passed = std::abs(ratio - expected_ratio) < TOLERANCE;
-    std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  const bool passed = std::abs(ratio - expectedRatio) < TOLERANCE;
+  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
 
-    return passed;
+  return passed;
 }
 
 /**
@@ -163,35 +165,37 @@ bool test_temperature_peak() {
  *
  * Expected: T(r < r_ISCO) = 0 (no stable disk)
  */
-bool test_temperature_inside_isco() {
-    std::cout << "\n[TEST 6] Temperature Inside ISCO\n";
-    std::cout << "=================================\n";
+bool testTemperatureInsideIsco() {
+  std::cout << "\n[TEST 6] Temperature Inside ISCO\n";
+  std::cout << "=================================\n";
 
-    const double a_star = 0.0;
-    const double r_isco = NovikovThorneDisk::isco_radius(a_star);
+  const double aStar = 0.0;
+  const double rIsco = NovikovThorneDisk::iscoRadius(aStar);
 
-    // Test points inside ISCO
-    const double test_radii[] = {1.0, 2.0, 3.0, 5.0, 5.9};
-    bool all_passed = true;
+  // Test points inside ISCO
+  const double testRadii[] = {1.0, 2.0, 3.0, 5.0, 5.9};
+  bool allPassed = true;
 
-    std::cout << std::fixed << std::setprecision(10);
-    std::cout << "  r_ISCO = " << r_isco << " M\n\n";
+  std::cout << std::fixed << std::setprecision(10);
+  std::cout << "  r_ISCO = " << rIsco << " M\n\n";
 
-    for (double r : test_radii) {
-        if (r >= r_isco) continue;  // Skip if outside ISCO
-
-        const double T = NovikovThorneDisk::disk_temperature(r, a_star, 0.1, 4.0e6);
-        const bool passed = (T == 0.0);
-
-        std::cout << "  r = " << r << " M: T = " << T << " K ";
-        std::cout << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
-
-        all_passed = all_passed && passed;
+  for (double const r : testRadii) {
+    if (r >= rIsco) {
+      continue; // Skip if outside ISCO
     }
 
-    std::cout << "  Status:   " << (all_passed ? "PASS ✓" : "FAIL ✗") << "\n";
+    const double t = NovikovThorneDisk::diskTemperature(r, aStar, 0.1, 4.0e6);
+    const bool passed = (t == 0.0);
 
-    return all_passed;
+    std::cout << "  r = " << r << " M: T = " << t << " K ";
+    std::cout << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+
+    allPassed = allPassed && passed;
+  }
+
+  std::cout << "  Status:   " << (allPassed ? "PASS ✓" : "FAIL ✗") << "\n";
+
+  return allPassed;
 }
 
 /**
@@ -199,38 +203,38 @@ bool test_temperature_inside_isco() {
  *
  * Expected: L = η * Mdot * c² (energy conservation)
  */
-bool test_integrated_luminosity() {
-    std::cout << "\n[TEST 7] Integrated Luminosity\n";
-    std::cout << "===============================\n";
+bool testIntegratedLuminosity() {
+  std::cout << "\n[TEST 7] Integrated Luminosity\n";
+  std::cout << "===============================\n";
 
-    const double a_star = 0.5;
-    const double mdot_edd = 0.1;
-    const double mass_solar = 4.0e6;  // Sgr A*
+  const double aStar = 0.5;
+  const double mdotEdd = 0.1;
+  const double massSolar = 4.0e6; // Sgr A*
 
-    const double eta = NovikovThorneDisk::radiative_efficiency(a_star);
-    const double L = NovikovThorneDisk::integrated_luminosity(mdot_edd, a_star, mass_solar);
+  const double eta = NovikovThorneDisk::radiativeEfficiency(aStar);
+  const double l = NovikovThorneDisk::integratedLuminosity(mdotEdd, aStar, massSolar);
 
-    // Eddington luminosity
-    const double L_edd = 1.26e38 * mass_solar;  // erg/s
+  // Eddington luminosity
+  const double lEdd = 1.26e38 * massSolar; // erg/s
 
-    // Expected luminosity
-    const double c_cgs = ::physics::C * 1e2;  // cm/s
-    const double mdot_edd_cgs = L_edd / (eta * c_cgs * c_cgs);
-    const double expected_L = eta * mdot_edd * mdot_edd_cgs * c_cgs * c_cgs;
+  // Expected luminosity
+  const double cCgs = ::physics::C * 1e2; // cm/s
+  const double mdotEddCgs = lEdd / (eta * cCgs * cCgs);
+  const double expectedL = eta * mdotEdd * mdotEddCgs * cCgs * cCgs;
 
-    std::cout << std::scientific << std::setprecision(6);
-    std::cout << "  Spin:          a* = " << a_star << "\n";
-    std::cout << "  Efficiency:    η = " << eta << "\n";
-    std::cout << "  Accretion:     Mdot = " << mdot_edd << " * Mdot_Edd\n";
-    std::cout << "  Mass:          M = " << mass_solar << " M_sun\n\n";
-    std::cout << "  Computed:      L = " << L << " erg/s\n";
-    std::cout << "  Expected:      L = " << expected_L << " erg/s\n";
-    std::cout << "  Relative err:  " << std::abs(L - expected_L) / expected_L << "\n";
+  std::cout << std::scientific << std::setprecision(6);
+  std::cout << "  Spin:          a* = " << aStar << "\n";
+  std::cout << "  Efficiency:    η = " << eta << "\n";
+  std::cout << "  Accretion:     Mdot = " << mdotEdd << " * Mdot_Edd\n";
+  std::cout << "  Mass:          M = " << massSolar << " M_sun\n\n";
+  std::cout << "  Computed:      L = " << l << " erg/s\n";
+  std::cout << "  Expected:      L = " << expectedL << " erg/s\n";
+  std::cout << "  Relative err:  " << std::abs(l - expectedL) / expectedL << "\n";
 
-    const bool passed = std::abs(L - expected_L) / expected_L < RELAXED_TOLERANCE;
-    std::cout << "  Status:        " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  const bool passed = std::abs(l - expectedL) / expectedL < RELAXED_TOLERANCE;
+  std::cout << "  Status:        " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
 
-    return passed;
+  return passed;
 }
 
 /**
@@ -238,42 +242,44 @@ bool test_integrated_luminosity() {
  *
  * Expected: Flux peaks near ISCO (1-2 * r_ISCO)
  */
-bool test_normalized_flux_peak() {
-    std::cout << "\n[TEST 8] Normalized Flux Peak\n";
-    std::cout << "==============================\n";
+bool testNormalizedFluxPeak() {
+  std::cout << "\n[TEST 8] Normalized Flux Peak\n";
+  std::cout << "==============================\n";
 
-    const double a_star = 0.0;
-    const double r_isco = NovikovThorneDisk::isco_radius(a_star);
+  const double aStar = 0.0;
+  const double rIsco = NovikovThorneDisk::iscoRadius(aStar);
 
-    // Sample flux at different radii
-    double max_flux = 0.0;
-    double r_at_max = 0.0;
+  // Sample flux at different radii
+  double maxFlux = 0.0;
+  double rAtMax = 0.0;
 
-    for (double r = r_isco; r <= 10.0; r += 0.01) {
-        const double flux = NovikovThorneDisk::normalized_flux(r, a_star);
-        if (flux > max_flux) {
-            max_flux = flux;
-            r_at_max = r;
-        }
+  for (double r = rIsco; r <= 10.0; r += 0.01) {
+    const double flux = NovikovThorneDisk::normalizedFlux(r, aStar);
+    if (flux > maxFlux) {
+      maxFlux = flux;
+      rAtMax = r;
     }
+  }
 
-    const double ratio = r_at_max / r_isco;
+  const double ratio = rAtMax / rIsco;
 
-    std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  r_ISCO:      " << r_isco << " M\n";
-    std::cout << "  r_peak_flux: " << r_at_max << " M\n";
-    std::cout << "  Ratio:       " << ratio << "\n";
-    std::cout << "  Expected:    1.0 - 2.0\n";
+  std::cout << std::fixed << std::setprecision(8);
+  std::cout << "  r_ISCO:      " << rIsco << " M\n";
+  std::cout << "  r_peak_flux: " << rAtMax << " M\n";
+  std::cout << "  Ratio:       " << ratio << "\n";
+  std::cout << "  Expected:    1.0 - 2.0\n";
 
-    const bool passed = (ratio >= 1.0 && ratio <= 2.0);
-    std::cout << "  Status:      " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  const bool passed = (ratio >= 1.0 && ratio <= 2.0);
+  std::cout << "  Status:      " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
 
-    return passed;
+  return passed;
 }
 
 /**
  * @brief Main test runner
  */
+} // namespace
+
 int main() {
     std::cout << "\n";
     std::cout << "========================================================\n";
@@ -281,17 +287,33 @@ int main() {
     std::cout << "========================================================\n";
 
     int passed = 0;
-    int total = 8;
+    int const total = 8;
 
     // Run all tests
-    if (test_efficiency_schwarzschild()) passed++;
-    if (test_efficiency_kerr_maximal()) passed++;
-    if (test_isco_schwarzschild()) passed++;
-    if (test_isco_kerr_maximal()) passed++;
-    if (test_temperature_peak()) passed++;
-    if (test_temperature_inside_isco()) passed++;
-    if (test_integrated_luminosity()) passed++;
-    if (test_normalized_flux_peak()) passed++;
+    if (testEfficiencySchwarzschild()) {
+      passed++;
+    }
+    if (testEfficiencyKerrMaximal()) {
+      passed++;
+    }
+    if (testIscoSchwarzschild()) {
+      passed++;
+    }
+    if (testIscoKerrMaximal()) {
+      passed++;
+    }
+    if (testTemperaturePeak()) {
+      passed++;
+    }
+    if (testTemperatureInsideIsco()) {
+      passed++;
+    }
+    if (testIntegratedLuminosity()) {
+      passed++;
+    }
+    if (testNormalizedFluxPeak()) {
+      passed++;
+    }
 
     // Summary
     std::cout << "\n========================================================\n";
@@ -304,9 +326,8 @@ int main() {
         std::cout << "\n  ✓ ALL TESTS PASSED\n";
         std::cout << "========================================================\n\n";
         return 0;
-    } else {
-        std::cout << "\n  ✗ SOME TESTS FAILED\n";
-        std::cout << "========================================================\n\n";
-        return 1;
     }
+    std::cout << "\n  ✗ SOME TESTS FAILED\n";
+    std::cout << "========================================================\n\n";
+    return 1;
 }

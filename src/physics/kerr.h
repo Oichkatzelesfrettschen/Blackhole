@@ -4,14 +4,15 @@
  *
  * The Kerr metric describes spacetime around a rotating, uncharged black hole:
  *
- *   ds² = -(1 - r_s r/Σ)c²dt² - (2r_s r a sin²θ/Σ) c dt dφ
- *       + (Σ/Δ)dr² + Σ dθ² + (r² + a² + r_s r a² sin²θ/Σ)sin²θ dφ²
+ *   ds^2 = -(1 - r_s r/Sigma)c^2 dt^2 - (2 r_s r a sin^2 theta / Sigma) c dt dphi
+ *        + (Sigma/Delta) dr^2 + Sigma dtheta^2
+ *        + (r^2 + a^2 + r_s r a^2 sin^2 theta / Sigma) sin^2 theta dphi^2
  *
  * where:
  *   a = J/(Mc) = spin parameter [cm]
- *   Σ = r² + a² cos²θ
- *   Δ = r² - r_s r + a²
- *   r_s = 2GM/c² = Schwarzschild radius
+ *   Sigma = r^2 + a^2 cos^2 theta
+ *   Delta = r^2 - r_s r + a^2
+ *   r_s = 2GM/c^2 = Schwarzschild radius
  *
  * Key features:
  *   - Reduces to Schwarzschild when a = 0
@@ -33,6 +34,7 @@
 #include "safe_limits.h"
 #include "schwarzschild.h"
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace physics {
@@ -46,26 +48,26 @@ namespace physics {
  *
  * a = J/(Mc) where J is angular momentum
  *
- * @param J Angular momentum [g cm²/s]
+ * @param angMomentum Angular momentum [g cm^2/s]
  * @param mass Black hole mass [g]
  * @return Spin parameter a [cm]
  */
-inline double spin_parameter(double J, double mass) {
-  return J / (mass * C);
+[[nodiscard]] inline double spinParameter(double angMomentum, double mass) {
+  return angMomentum / (mass * C);
 }
 
 /**
  * @brief Compute dimensionless spin from spin parameter.
  *
- * a* = a/M = Jc/(GM²) where 0 ≤ |a*| ≤ 1
+ * a* = a/M = Jc/(GM^2) where 0 <= |a*| <= 1
  *
  * @param a Spin parameter [cm]
  * @param mass Black hole mass [g]
  * @return Dimensionless spin a* (unitless)
  */
-inline double dimensionless_spin(double a, double mass) {
-  double M = G * mass / C2; // Geometric mass in cm
-  return a / M;
+[[nodiscard]] inline double dimensionlessSpin(double a, double mass) {
+  const double mGeom = G * mass / C2;  // Geometric mass in cm
+  return a / mGeom;
 }
 
 /**
@@ -74,43 +76,43 @@ inline double dimensionless_spin(double a, double mass) {
  * a = a* * GM/c^2
  *
  * @param mass Black hole mass [g]
- * @param a_star Dimensionless spin (unitless)
+ * @param aStar Dimensionless spin (unitless)
  * @return Spin parameter a [cm]
  */
-inline double spin_from_dimensionless(double mass, double a_star) {
-  double M = G * mass / C2; // Geometric mass in cm
-  return a_star * M;
+[[nodiscard]] inline double spinFromDimensionless(double mass, double aStar) {
+  const double mGeom = G * mass / C2;  // Geometric mass in cm
+  return aStar * mGeom;
 }
 
 /**
- * @brief Compute Kerr metric Σ function.
+ * @brief Compute Kerr metric Sigma function.
  *
- * Σ = r² + a² cos²θ
+ * Sigma = r^2 + a^2 cos^2 theta
  *
  * @param r Radial coordinate [cm]
  * @param a Spin parameter [cm]
  * @param theta Polar angle [rad]
- * @return Σ [cm²]
+ * @return Sigma [cm^2]
  */
-inline double kerr_sigma(double r, double a, double theta) {
-  double cos_theta = std::cos(theta);
-  return r * r + a * a * cos_theta * cos_theta;
+[[nodiscard]] inline double kerrSigma(double r, double a, double theta) {
+  const double cosTheta = std::cos(theta);
+  return (r * r) + (a * a * cosTheta * cosTheta);
 }
 
 /**
- * @brief Compute Kerr metric Δ function.
+ * @brief Compute Kerr metric Delta function.
  *
- * Δ = r² - r_s r + a² = (r - r_+)(r - r_-)
+ * Delta = r^2 - r_s r + a^2 = (r - r_+)(r - r_-)
  *
- * Horizons exist where Δ = 0.
+ * Horizons exist where Delta = 0.
  *
  * @param r Radial coordinate [cm]
  * @param a Spin parameter [cm]
- * @param r_s Schwarzschild radius [cm]
- * @return Δ [cm²]
+ * @param rS Schwarzschild radius [cm]
+ * @return Delta [cm^2]
  */
-inline double kerr_delta(double r, double a, double r_s) {
-  return r * r - r_s * r + a * a;
+[[nodiscard]] inline double kerrDelta(double r, double a, double rS) {
+  return (r * r) - (rS * r) + (a * a);
 }
 
 // ============================================================================
@@ -120,37 +122,37 @@ inline double kerr_delta(double r, double a, double r_s) {
 /**
  * @brief Compute outer (event) horizon radius.
  *
- * r_+ = (r_s/2) + √((r_s/2)² - a²) = M + √(M² - a²)
+ * r_+ = (r_s/2) + sqrt((r_s/2)^2 - a^2) = M + sqrt(M^2 - a^2)
  *
  * @param mass Black hole mass [g]
  * @param a Spin parameter [cm]
  * @return Outer horizon radius [cm], NaN if a > M (naked singularity)
  */
-inline double kerr_outer_horizon(double mass, double a) {
-  double M = G * mass / C2; // Geometric mass
-  double discriminant = M * M - a * a;
+[[nodiscard]] inline double kerrOuterHorizon(double mass, double a) {
+  const double mGeom = G * mass / C2;  // Geometric mass
+  const double discriminant = (mGeom * mGeom) - (a * a);
   if (discriminant < 0) {
-    return std::numeric_limits<double>::quiet_NaN(); // Naked singularity
+    return std::numeric_limits<double>::quiet_NaN();  // Naked singularity
   }
-  return M + std::sqrt(discriminant);
+  return mGeom + std::sqrt(discriminant);
 }
 
 /**
  * @brief Compute inner (Cauchy) horizon radius.
  *
- * r_- = (r_s/2) - √((r_s/2)² - a²) = M - √(M² - a²)
+ * r_- = (r_s/2) - sqrt((r_s/2)^2 - a^2) = M - sqrt(M^2 - a^2)
  *
  * @param mass Black hole mass [g]
  * @param a Spin parameter [cm]
  * @return Inner horizon radius [cm], NaN if a > M
  */
-inline double kerr_inner_horizon(double mass, double a) {
-  double M = G * mass / C2;
-  double discriminant = M * M - a * a;
+[[nodiscard]] inline double kerrInnerHorizon(double mass, double a) {
+  const double mGeom = G * mass / C2;
+  const double discriminant = (mGeom * mGeom) - (a * a);
   if (discriminant < 0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
-  return M - std::sqrt(discriminant);
+  return mGeom - std::sqrt(discriminant);
 }
 
 /**
@@ -160,8 +162,8 @@ inline double kerr_inner_horizon(double mass, double a) {
  * @param a Spin parameter [cm]
  * @return Pair {r_outer, r_inner} [cm]
  */
-inline std::pair<double, double> kerr_horizons(double mass, double a) {
-  return {kerr_outer_horizon(mass, a), kerr_inner_horizon(mass, a)};
+[[nodiscard]] inline std::pair<double, double> kerrHorizons(double mass, double a) {
+  return {kerrOuterHorizon(mass, a), kerrInnerHorizon(mass, a)};
 }
 
 // ============================================================================
@@ -171,7 +173,7 @@ inline std::pair<double, double> kerr_horizons(double mass, double a) {
 /**
  * @brief Compute ergosphere outer boundary.
  *
- * r_ergo(θ) = M + √(M² - a² cos²θ)
+ * r_ergo(theta) = M + sqrt(M^2 - a^2 cos^2 theta)
  *
  * Inside the ergosphere, no static observer can exist.
  *
@@ -180,14 +182,14 @@ inline std::pair<double, double> kerr_horizons(double mass, double a) {
  * @param theta Polar angle [rad]
  * @return Ergosphere radius [cm]
  */
-inline double ergosphere_radius(double mass, double a, double theta) {
-  double M = G * mass / C2;
-  double cos_theta = std::cos(theta);
-  double discriminant = M * M - a * a * cos_theta * cos_theta;
+[[nodiscard]] inline double ergosphereRadius(double mass, double a, double theta) {
+  const double mGeom = G * mass / C2;
+  const double cosTheta = std::cos(theta);
+  const double discriminant = (mGeom * mGeom) - (a * a * cosTheta * cosTheta);
   if (discriminant < 0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
-  return M + std::sqrt(discriminant);
+  return mGeom + std::sqrt(discriminant);
 }
 
 // ============================================================================
@@ -199,11 +201,11 @@ inline double ergosphere_radius(double mass, double a, double theta) {
  *
  * Uses the Bardeen-Press-Teukolsky (1972) formula.
  *
- * r_ISCO/M = 3 + Z2 ∓ √((3 - Z1)(3 + Z1 + 2Z2))
+ * r_ISCO/M = 3 + Z2 -/+ sqrt((3 - Z1)(3 + Z1 + 2Z2))
  *
  * where:
- *   Z1 = 1 + (1 - a*²)^(1/3) * ((1 + a*)^(1/3) + (1 - a*)^(1/3))
- *   Z2 = √(3a*² + Z1²)
+ *   Z1 = 1 + (1 - a*^2)^(1/3) * ((1 + a*)^(1/3) + (1 - a*)^(1/3))
+ *   Z2 = sqrt(3 a*^2 + Z1^2)
  *
  * Minus sign for prograde (co-rotating), plus for retrograde.
  *
@@ -212,29 +214,29 @@ inline double ergosphere_radius(double mass, double a, double theta) {
  * @param prograde true for prograde orbit, false for retrograde
  * @return ISCO radius [cm]
  */
-inline double kerr_isco_radius(double mass, double a, bool prograde = true) {
-  double M = G * mass / C2; // Geometric mass in cm
-  double a_star = a / M;    // Dimensionless spin
+[[nodiscard]] inline double kerrIscoRadius(double mass, double a, bool prograde = true) {
+  const double mGeom = G * mass / C2;  // Geometric mass in cm
+  const double aStar = a / mGeom;      // Dimensionless spin
 
-  if (std::abs(a_star) > 1.0) {
+  if (std::abs(aStar) > 1.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
 
   // BPT formula
-  double one_minus_a2 = 1.0 - a_star * a_star;
-  double cbrt_factor = std::cbrt(one_minus_a2);
-  double cbrt_plus = std::cbrt(1.0 + a_star);
-  double cbrt_minus = std::cbrt(1.0 - a_star);
+  const double oneMinusA2 = 1.0 - (aStar * aStar);
+  const double cbrtFactor = std::cbrt(oneMinusA2);
+  const double cbrtPlus = std::cbrt(1.0 + aStar);
+  const double cbrtMinus = std::cbrt(1.0 - aStar);
 
-  double Z1 = 1.0 + cbrt_factor * (cbrt_plus + cbrt_minus);
-  double Z2 = std::sqrt(3.0 * a_star * a_star + Z1 * Z1);
+  const double z1 = 1.0 + (cbrtFactor * (cbrtPlus + cbrtMinus));
+  const double z2 = std::sqrt((3.0 * aStar * aStar) + (z1 * z1));
 
-  double sqrt_term = std::sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
+  const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + (2.0 * z2)));
 
   // Prograde: minus sign; Retrograde: plus sign
-  double r_isco_over_M = prograde ? (3.0 + Z2 - sqrt_term) : (3.0 + Z2 + sqrt_term);
+  const double rIscoOverM = prograde ? (3.0 + z2 - sqrtTerm) : (3.0 + z2 + sqrtTerm);
 
-  return r_isco_over_M * M;
+  return rIscoOverM * mGeom;
 }
 
 // ============================================================================
@@ -250,15 +252,15 @@ inline double kerr_isco_radius(double mass, double a, bool prograde = true) {
  * @param a Spin parameter [cm]
  * @return Prograde photon orbit radius [cm]
  */
-inline double kerr_photon_orbit_prograde(double mass, double a) {
-  double M = G * mass / C2;
-  double a_star = a / M;
-  if (std::abs(a_star) > 1.0) {
+[[nodiscard]] inline double kerrPhotonOrbitPrograde(double mass, double a) {
+  const double mGeom = G * mass / C2;
+  const double aStar = a / mGeom;
+  if (std::abs(aStar) > 1.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
 
-  double angle = (2.0 / 3.0) * std::acos(-a_star);
-  return 2.0 * M * (1.0 + std::cos(angle));
+  const double angle = (2.0 / 3.0) * std::acos(-aStar);
+  return 2.0 * mGeom * (1.0 + std::cos(angle));
 }
 
 /**
@@ -270,15 +272,15 @@ inline double kerr_photon_orbit_prograde(double mass, double a) {
  * @param a Spin parameter [cm]
  * @return Retrograde photon orbit radius [cm]
  */
-inline double kerr_photon_orbit_retrograde(double mass, double a) {
-  double M = G * mass / C2;
-  double a_star = a / M;
-  if (std::abs(a_star) > 1.0) {
+[[nodiscard]] inline double kerrPhotonOrbitRetrograde(double mass, double a) {
+  const double mGeom = G * mass / C2;
+  const double aStar = a / mGeom;
+  if (std::abs(aStar) > 1.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
 
-  double angle = (2.0 / 3.0) * std::acos(a_star);
-  return 2.0 * M * (1.0 + std::cos(angle));
+  const double angle = (2.0 / 3.0) * std::acos(aStar);
+  return 2.0 * mGeom * (1.0 + std::cos(angle));
 }
 
 /**
@@ -289,9 +291,9 @@ inline double kerr_photon_orbit_retrograde(double mass, double a) {
  * @param prograde true for prograde orbit, false for retrograde
  * @return Photon orbit radius [cm]
  */
-inline double kerr_photon_orbit(double mass, double a, bool prograde = true) {
-  return prograde ? kerr_photon_orbit_prograde(mass, a)
-                  : kerr_photon_orbit_retrograde(mass, a);
+[[nodiscard]] inline double kerrPhotonOrbit(double mass, double a, bool prograde = true) {
+  return prograde ? kerrPhotonOrbitPrograde(mass, a)
+                  : kerrPhotonOrbitRetrograde(mass, a);
 }
 
 // ============================================================================
@@ -301,7 +303,7 @@ inline double kerr_photon_orbit(double mass, double a, bool prograde = true) {
 /**
  * @brief Compute frame-dragging angular velocity.
  *
- * ω = (2Ma r c) / (Σ(r² + a²) + 2Ma²r sin²θ)
+ * omega = (2Ma r c) / (Sigma(r^2 + a^2) + 2Ma^2 r sin^2 theta)
  *
  * This is the angular velocity at which local inertial frames are dragged.
  *
@@ -311,15 +313,16 @@ inline double kerr_photon_orbit(double mass, double a, bool prograde = true) {
  * @param a Spin parameter [cm]
  * @return Frame-dragging angular velocity [rad/s]
  */
-inline double frame_dragging_omega(double r, double theta, double mass, double a) {
-  double M = G * mass / C2;
-  double sigma = kerr_sigma(r, a, theta);
-  double sin_theta = std::sin(theta);
-  double sin2_theta = sin_theta * sin_theta;
+[[nodiscard]] inline double frameDraggingOmega(double r, double theta,
+                                               double mass, double a) {
+  const double mGeom = G * mass / C2;
+  const double sigma = kerrSigma(r, a, theta);
+  const double sinTheta = std::sin(theta);
+  const double sin2Theta = sinTheta * sinTheta;
 
-  double r2_plus_a2 = r * r + a * a;
-  double numerator = 2.0 * M * a * r * C;
-  double denominator = sigma * r2_plus_a2 + 2.0 * M * a * a * r * sin2_theta;
+  const double r2PlusA2 = (r * r) + (a * a);
+  const double numerator = 2.0 * mGeom * a * r * C;
+  const double denominator = (sigma * r2PlusA2) + (2.0 * mGeom * a * a * r * sin2Theta);
 
   if (denominator < 1e-30) {
     return 0.0;
@@ -332,31 +335,32 @@ inline double frame_dragging_omega(double r, double theta, double mass, double a
  * @brief Compute gravitational time dilation for Kerr.
  *
  * For a zero-angular-momentum observer (ZAMO):
- * dτ/dt = √(-g_tt - 2ω g_tφ - ω² g_φφ) / c
+ * dtau/dt = sqrt(-g_tt - 2 omega g_t_phi - omega^2 g_phi_phi) / c
  *
- * Simplified at equator (θ = π/2):
- * dτ/dt = √(Δ Σ) / (r² + a² + 2Ma²/r) / c
+ * Simplified at equator (theta = pi/2):
+ * dtau/dt = sqrt(Delta Sigma) / (r^2 + a^2 + 2Ma^2/r) / c
  *
  * @param r Radial coordinate [cm]
  * @param theta Polar angle [rad]
  * @param mass Black hole mass [g]
  * @param a Spin parameter [cm]
- * @return Time dilation factor dτ/dt
+ * @return Time dilation factor dtau/dt
  */
-inline double kerr_time_dilation(double r, double theta, double mass, double a) {
-  double r_s = schwarzschild_radius(mass);
-  double sigma = kerr_sigma(r, a, theta);
-  double delta = kerr_delta(r, a, r_s);
+[[nodiscard]] inline double kerrTimeDilation(double r, double theta,
+                                             double mass, double a) {
+  const double rS = schwarzschildRadius(mass);
+  const double sigma = kerrSigma(r, a, theta);
+  const double delta = kerrDelta(r, a, rS);
 
-  if (delta <= 0 || sigma <= 0) {
-    return 0.0; // Inside horizon
+  if ((delta <= 0) || (sigma <= 0)) {
+    return 0.0;  // Inside horizon
   }
 
   // g_tt component
-  double g_tt = -(1.0 - r_s * r / sigma);
+  const double gTt = -(1.0 - ((rS * r) / sigma));
 
   // For static observer (not ZAMO), simpler formula
-  return std::sqrt(-g_tt);
+  return std::sqrt(-gTt);
 }
 
 // ============================================================================
@@ -367,7 +371,7 @@ inline double kerr_time_dilation(double r, double theta, double mass, double a) 
  * @brief Compute gravitational redshift for Kerr spacetime.
  *
  * For a photon emitted at radius r and observed at infinity:
- * 1 + z = 1/√(-g_tt) = 1/√(1 - r_s r/Σ)
+ * 1 + z = 1/sqrt(-g_tt) = 1/sqrt(1 - r_s r/Sigma)
  *
  * @param r Radial coordinate [cm]
  * @param theta Polar angle [rad]
@@ -375,16 +379,16 @@ inline double kerr_time_dilation(double r, double theta, double mass, double a) 
  * @param a Spin parameter [cm]
  * @return Redshift z
  */
-inline double kerr_redshift(double r, double theta, double mass, double a) {
-  double r_s = schwarzschild_radius(mass);
-  double sigma = kerr_sigma(r, a, theta);
+[[nodiscard]] inline double kerrRedshift(double r, double theta, double mass, double a) {
+  const double rS = schwarzschildRadius(mass);
+  const double sigma = kerrSigma(r, a, theta);
 
-  double factor = 1.0 - r_s * r / sigma;
+  const double factor = 1.0 - ((rS * r) / sigma);
   if (factor <= 0) {
-    return safe_infinity<double>();
+    return safeInfinity<double>();
   }
 
-  return 1.0 / std::sqrt(factor) - 1.0;
+  return (1.0 / std::sqrt(factor)) - 1.0;
 }
 
 // ============================================================================
@@ -392,21 +396,22 @@ inline double kerr_redshift(double r, double theta, double mass, double a) {
 // ============================================================================
 
 struct KerrGeodesicConsts {
-  double E;   // Energy per unit mass
-  double Lz;  // Angular momentum
-  double Q;   // Carter constant
+  double e;   // Energy per unit mass
+  double lz;  // Angular momentum
+  double q;   // Carter constant
 };
 
 /**
- * @brief Convenience constants for equatorial null rays (Q = 0).
+ * @brief Convenience constants for equatorial null rays (q = 0).
  *
- * Impact parameter b = Lz / E in geometric units.
+ * Impact parameter b = lz / e in geometric units.
  */
-inline KerrGeodesicConsts kerr_equatorial_consts(double impact_param, double energy = 1.0) {
+[[nodiscard]] inline KerrGeodesicConsts kerrEquatorialConsts(
+    double impactParam, double energy = 1.0) {
   KerrGeodesicConsts c{};
-  c.E = energy;
-  c.Lz = impact_param * energy;
-  c.Q = 0.0;
+  c.e = energy;
+  c.lz = impactParam * energy;
+  c.q = 0.0;
   return c;
 }
 
@@ -415,36 +420,38 @@ struct KerrGeodesicState {
   double theta;
   double phi;
   double t;
-  double sign_r;      // +1 or -1
-  double sign_theta;  // +1 or -1
+  double signR;      // +1 or -1
+  double signTheta;  // +1 or -1
 };
 
 /**
  * @brief Initialize equatorial state with sign conventions.
  */
-inline KerrGeodesicState kerr_equatorial_state(double r, double phi, double sign_r) {
+[[nodiscard]] inline KerrGeodesicState kerrEquatorialState(
+    double r, double phi, double signR) {
   KerrGeodesicState s{};
   s.r = r;
   s.theta = 0.5 * PI;
   s.phi = phi;
   s.t = 0.0;
-  s.sign_r = (sign_r >= 0.0) ? 1.0 : -1.0;
-  s.sign_theta = 1.0;
+  s.signR = (signR >= 0.0) ? 1.0 : -1.0;
+  s.signTheta = 1.0;
   return s;
 }
 
 struct KerrPotentials {
-  double R;
+  double rPot;
   double dRdr;
-  double Theta;
+  double thetaPot;
   double dThetadtheta;
 };
 
-KerrPotentials kerr_potentials(double r, double theta, double mass, double a,
-                               const KerrGeodesicConsts &c);
+[[nodiscard]] KerrPotentials kerrPotentials(double r, double theta, double mass, double a,
+                                            const KerrGeodesicConsts& c);
 
-KerrGeodesicState kerr_step_mino(const KerrGeodesicState &state, double mass, double a,
-                                 const KerrGeodesicConsts &c, double dlam);
+[[nodiscard]] KerrGeodesicState kerrStepMino(const KerrGeodesicState& state, double mass,
+                                             double a, const KerrGeodesicConsts& c,
+                                             double dlam);
 
 // ============================================================================
 // Convenience Class
@@ -461,88 +468,92 @@ public:
    * @brief Construct Kerr spacetime.
    *
    * @param mass Black hole mass [g]
-   * @param spin_param Spin parameter a [cm], or use dimensionless a* with second
-   * constructor
+   * @param spinParam Spin parameter a [cm]
    */
-  explicit Kerr(double mass, double spin_param = 0.0)
-      : mass_(mass), a_(spin_param) {
-    M_ = G * mass / C2;
-    r_s_ = schwarzschild_radius(mass);
-    a_star_ = a_ / M_;
-
+  explicit Kerr(double mass, double spinParam = 0.0)
+      : mass_(mass), a_(spinParam),
+        mGeom_(G * mass / C2),
+        rS_(schwarzschildRadius(mass)),
+        aStar_(spinParam / (G * mass / C2)) {
     // Clamp to valid spin
-    if (std::abs(a_star_) > 1.0) {
-      a_star_ = (a_star_ > 0) ? 0.998 : -0.998; // Thorne limit
-      a_ = a_star_ * M_;
+    if (std::abs(aStar_) > 1.0) {
+      aStar_ = (aStar_ > 0) ? 0.998 : -0.998;  // Thorne limit
+      a_ = aStar_ * mGeom_;
     }
 
-    r_plus_ = kerr_outer_horizon(mass, a_);
-    r_minus_ = kerr_inner_horizon(mass, a_);
-    r_isco_pro_ = kerr_isco_radius(mass, a_, true);
-    r_isco_ret_ = kerr_isco_radius(mass, a_, false);
-    r_ph_pro_ = kerr_photon_orbit_prograde(mass, a_);
-    r_ph_ret_ = kerr_photon_orbit_retrograde(mass, a_);
+    rPlus_ = kerrOuterHorizon(mass, a_);
+    rMinus_ = kerrInnerHorizon(mass, a_);
+    rIscoPro_ = kerrIscoRadius(mass, a_, true);
+    rIscoRet_ = kerrIscoRadius(mass, a_, false);
+    rPhPro_ = kerrPhotonOrbitPrograde(mass, a_);
+    rPhRet_ = kerrPhotonOrbitRetrograde(mass, a_);
   }
 
   /**
    * @brief Construct from dimensionless spin a*.
    */
-  static Kerr from_dimensionless_spin(double mass, double a_star) {
-    double M = G * mass / C2;
-    return Kerr(mass, a_star * M);
+  [[nodiscard]] static Kerr fromDimensionlessSpin(double mass, double aStar) {
+    const double mGeom = G * mass / C2;
+    return Kerr(mass, aStar * mGeom);
   }
 
   // Accessors
-  double mass() const { return mass_; }
-  double spin() const { return a_; }
-  double dimensionless_spin() const { return a_star_; }
-  double outer_horizon() const { return r_plus_; }
-  double inner_horizon() const { return r_minus_; }
-  double isco_prograde() const { return r_isco_pro_; }
-  double isco_retrograde() const { return r_isco_ret_; }
-  double photon_orbit_prograde() const { return r_ph_pro_; }
-  double photon_orbit_retrograde() const { return r_ph_ret_; }
+  [[nodiscard]] double mass() const { return mass_; }
+  [[nodiscard]] double spin() const { return a_; }
+  [[nodiscard]] double dimensionlessSpin() const { return aStar_; }
+  [[nodiscard]] double outerHorizon() const { return rPlus_; }
+  [[nodiscard]] double innerHorizon() const { return rMinus_; }
+  [[nodiscard]] double iscoPrograde() const { return rIscoPro_; }
+  [[nodiscard]] double iscoRetrograde() const { return rIscoRet_; }
+  [[nodiscard]] double photonOrbitPrograde() const { return rPhPro_; }
+  [[nodiscard]] double photonOrbitRetrograde() const { return rPhRet_; }
 
   // Metric functions at point
-  double sigma(double r, double theta) const { return kerr_sigma(r, a_, theta); }
-  double delta(double r) const { return kerr_delta(r, a_, r_s_); }
-  double ergosphere(double theta) const { return ergosphere_radius(mass_, a_, theta); }
-  double frame_dragging(double r, double theta) const {
-    return frame_dragging_omega(r, theta, mass_, a_);
+  [[nodiscard]] double sigma(double r, double theta) const {
+    return kerrSigma(r, a_, theta);
   }
-  double redshift(double r, double theta) const {
-    return kerr_redshift(r, theta, mass_, a_);
+  [[nodiscard]] double delta(double r) const { return kerrDelta(r, a_, rS_); }
+  [[nodiscard]] double ergosphere(double theta) const {
+    return ergosphereRadius(mass_, a_, theta);
+  }
+  [[nodiscard]] double frameDragging(double r, double theta) const {
+    return frameDraggingOmega(r, theta, mass_, a_);
+  }
+  [[nodiscard]] double redshift(double r, double theta) const {
+    return kerrRedshift(r, theta, mass_, a_);
   }
 
-  KerrPotentials potentials(double r, double theta, const KerrGeodesicConsts &c) const {
-    return kerr_potentials(r, theta, mass_, a_, c);
+  [[nodiscard]] KerrPotentials potentials(double r, double theta,
+                                          const KerrGeodesicConsts& c) const {
+    return kerrPotentials(r, theta, mass_, a_, c);
   }
 
-  KerrGeodesicState step_mino(const KerrGeodesicState &state, const KerrGeodesicConsts &c,
-                              double dlam) const {
-    return kerr_step_mino(state, mass_, a_, c, dlam);
+  [[nodiscard]] KerrGeodesicState stepMino(const KerrGeodesicState& state,
+                                           const KerrGeodesicConsts& c,
+                                           double dlam) const {
+    return kerrStepMino(state, mass_, a_, c, dlam);
   }
 
   // Check if point is outside horizon
-  bool is_exterior(double r) const { return r > r_plus_; }
+  [[nodiscard]] bool isExterior(double r) const { return r > rPlus_; }
 
   // Check if point is in ergosphere
-  bool in_ergosphere(double r, double theta) const {
-    return r < ergosphere(theta) && r > r_plus_;
+  [[nodiscard]] bool inErgosphere(double r, double theta) const {
+    return (r < ergosphere(theta)) && (r > rPlus_);
   }
 
 private:
-  double mass_;      // Mass [g]
-  double a_;         // Spin parameter [cm]
-  double a_star_;    // Dimensionless spin
-  double M_;         // Geometric mass [cm]
-  double r_s_;       // Schwarzschild radius [cm]
-  double r_plus_;    // Outer horizon [cm]
-  double r_minus_;   // Inner horizon [cm]
-  double r_isco_pro_; // Prograde ISCO [cm]
-  double r_isco_ret_; // Retrograde ISCO [cm]
-  double r_ph_pro_;  // Prograde photon orbit [cm]
-  double r_ph_ret_;  // Retrograde photon orbit [cm]
+  double mass_;     // Mass [g]
+  double a_;        // Spin parameter [cm]
+  double mGeom_;    // Geometric mass [cm]
+  double rS_;       // Schwarzschild radius [cm]
+  double aStar_;    // Dimensionless spin
+  double rPlus_ = 0.0;    // Outer horizon [cm]
+  double rMinus_ = 0.0;   // Inner horizon [cm]
+  double rIscoPro_ = 0.0; // Prograde ISCO [cm]
+  double rIscoRet_ = 0.0; // Retrograde ISCO [cm]
+  double rPhPro_ = 0.0;   // Prograde photon orbit [cm]
+  double rPhRet_ = 0.0;   // Retrograde photon orbit [cm]
 };
 
 } // namespace physics

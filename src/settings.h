@@ -117,13 +117,14 @@ public:
 
   // Access settings
   Settings &get() { return settings_; }
-  const Settings &get() const { return settings_; }
+  [[nodiscard]] const Settings &get() const { return settings_; }
+
+  SettingsManager(const SettingsManager &) = delete;
+  SettingsManager &operator=(const SettingsManager &) = delete;
 
 private:
   SettingsManager() = default;
   ~SettingsManager() = default;
-  SettingsManager(const SettingsManager &) = delete;
-  SettingsManager &operator=(const SettingsManager &) = delete;
 
   Settings settings_;
   std::string lastFilepath_;

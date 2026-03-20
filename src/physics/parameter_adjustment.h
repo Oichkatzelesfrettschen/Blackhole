@@ -13,10 +13,12 @@
 #ifndef PARAMETER_ADJUSTMENT_H
 #define PARAMETER_ADJUSTMENT_H
 
-#include "timeseries_interpolation.h"
-#include "playback_control.h"
+#include <algorithm>
+#include <cstdint>
 #include <vector>
-#include <cmath>
+
+#include "playback_control.h"
+#include "timeseries_interpolation.h"
 
 namespace physics {
 
@@ -37,6 +39,7 @@ struct FieldModifier {
 /**
  * @brief Real-time parameter adjustment state
  */
+// NOLINTBEGIN(misc-no-recursion) -- snapshotHistory contains ParameterAdjustmentState; copy ops appear recursive to static analysis but terminate when vector is empty
 struct ParameterAdjustmentState {
     // Field modifiers (density, temperature, magnetic field, etc.)
     FieldModifier densityMod;
@@ -54,6 +57,7 @@ struct ParameterAdjustmentState {
     uint32_t currentSnapshot{0};
     std::vector<ParameterAdjustmentState> snapshotHistory;
 };
+// NOLINTEND(misc-no-recursion)
 
 // ============================================================================
 // Field Value Adjustment

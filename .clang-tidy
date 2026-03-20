@@ -17,6 +17,7 @@ Checks: >
   -cert-err58-cpp,
   -cppcoreguidelines-avoid-c-arrays,
   -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-avoid-non-const-global-variables,
   -cppcoreguidelines-init-variables,
   -cppcoreguidelines-no-malloc,
   -cppcoreguidelines-owning-memory,
@@ -27,6 +28,9 @@ Checks: >
   -cppcoreguidelines-pro-type-union-access,
   -cppcoreguidelines-pro-type-vararg,
   -misc-non-private-member-variables-in-classes,
+  -modernize-use-std-print,
+  -portability-simd-intrinsics,
+  -portability-avoid-pragma-once,
   -modernize-avoid-c-arrays,
   -modernize-use-trailing-return-type,
   -readability-avoid-const-params-in-decls,
@@ -74,6 +78,15 @@ CheckOptions:
     value: UPPER_CASE
   - key: readability-identifier-naming.GlobalConstantCase
     value: UPPER_CASE
+  # Local const variables use camelBack, not UPPER_CASE.
+  # WHY: misc-const-correctness requires 'const' on local vars, but
+  # ConstantCase: UPPER_CASE would then require UPPER_CASE names.
+  # These two checks contradict each other for local scope.
+  # ConstantParameterCase covers const lambda parameters (same rationale).
+  - key: readability-identifier-naming.LocalConstantCase
+    value: camelBack
+  - key: readability-identifier-naming.ConstantParameterCase
+    value: camelBack
   - key: readability-identifier-naming.MacroDefinitionCase
     value: UPPER_CASE
   - key: readability-identifier-naming.NamespaceCase

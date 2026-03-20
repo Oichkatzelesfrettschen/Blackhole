@@ -32,12 +32,12 @@ void RmlUiOverlay::shutdown() {
   initialized_ = false;
 }
 
-void RmlUiOverlay::resize(int width, int height) {
+void RmlUiOverlay::resize(int width, int height) { // NOLINT(readability-convert-member-functions-to-static) -- stub awaiting RmlUi impl
   static_cast<void>(width);
   static_cast<void>(height);
 }
 
-void RmlUiOverlay::render() {
+void RmlUiOverlay::render() const {
   if (!enabled_ || !initialized_) {
     return;
   }

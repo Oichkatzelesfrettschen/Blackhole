@@ -25,9 +25,10 @@
 
 #include "constants.h"
 #include "safe_limits.h"
-#include "schwarzschild.h"
+#include <algorithm>
 #include <cmath>
 #include <functional>
+#include <numbers>
 #include <vector>
 
 namespace physics {
@@ -53,11 +54,12 @@ using EOS = std::function<double(double)>;
  * @param gamma Adiabatic index (>1)
  * @return EOS function
  */
-inline EOS polytropic_eos(double K, double gamma) {
-  return [K, gamma](double rho) -> double {
-    if (rho <= 0)
+[[nodiscard]] inline EOS polytropicEos(double k, double gamma) {
+  return [k, gamma](double rho) -> double {
+    if (rho <= 0) {
       return 0.0;
-    return K * std::pow(rho, gamma);
+    }
+    return k * std::pow(rho, gamma);
   };
 }
 
@@ -93,11 +95,11 @@ constexpr double GAMMA_APR4 = 2.8;
  * @brief Result of TOV integration at a single radius.
  */
 struct TOVPoint {
-  double r;       ///< Radius [cm]
-  double m;       ///< Enclosed mass [g]
-  double P;       ///< Pressure [dyn/cm²]
-  double rho;     ///< Density [g/cm³]
-  double phi;     ///< Metric potential (for redshift)
+  double r{};     ///< Radius [cm]
+  double m{};     ///< Enclosed mass [g]
+  double press{}; ///< Pressure [dyn/cm^2]
+  double rho{};   ///< Density [g/cm^3]
+  double phi{};   ///< Metric potential (for redshift)
 };
 
 /**
@@ -105,12 +107,12 @@ struct TOVPoint {
  */
 struct TOVProfile {
   std::vector<TOVPoint> points; ///< Radial profile
-  double R;                     ///< Total radius [cm]
-  double M;                     ///< Total mass [g]
-  double rho_c;                 ///< Central density [g/cm³]
-  double P_c;                   ///< Central pressure [dyn/cm²]
-  double compactness;           ///< C = GM/(Rc²)
-  double surface_redshift;      ///< z = 1/√(1-2C) - 1
+  double rSurface{};            ///< Total radius [cm]
+  double mTotal{};              ///< Total mass [g]
+  double rhoCenter{};           ///< Central density [g/cm^3]
+  double pCenter{};             ///< Central pressure [dyn/cm^2]
+  double compactness{};         ///< C = GM/(Rc^2)
+  double surfaceRedshift{};     ///< z = 1/sqrt(1-2C) - 1
 };
 
 // ============================================================================
@@ -122,8 +124,8 @@ struct TOVProfile {
  *
  * dm/dr = 4πr²ρ
  */
-inline double tov_dmdr(double r, double rho) {
-  return 4.0 * M_PI * r * r * rho;
+[[nodiscard]] inline double tovDmdr(double r, double rho) {
+  return 4.0 * std::numbers::pi * r * r * rho;
 }
 
 /**
@@ -133,26 +135,26 @@ inline double tov_dmdr(double r, double rho) {
  *
  * Returns 0 at center (r=0) to avoid singularity.
  */
-inline double tov_dPdr(double r, double m, double P, double rho) {
+[[nodiscard]] inline double tovDPdr(double r, double m, double press, double rho) {
   if (r < 1e-10) {
     return 0.0; // Regular at center
   }
 
-  double r_s = 2.0 * G * m / C2; // Schwarzschild radius of enclosed mass
+  const double rS = (2.0 * G * m) / C2; // Schwarzschild radius of enclosed mass
 
-  // Avoid singularity at r = r_s (shouldn't happen for stable stars)
-  if (r <= r_s * 1.001) {
-    return -safe_infinity<double>();
+  // Avoid singularity at r = rS (shouldn't happen for stable stars)
+  if (r <= (rS * 1.001)) {
+    return -safeInfinity<double>();
   }
 
-  double G_over_c2 = G / C2;
-  double rho_eff = rho + P / C2;             // Effective density
-  double m_eff = m + 4.0 * M_PI * r * r * r * P / C2; // Effective mass
+  const double gOverC2 = G / C2;
+  const double rhoEff = rho + (press / C2);                                        // Effective density
+  const double mEff = m + ((4.0 * std::numbers::pi * r * r * r * press) / C2);    // Effective mass
 
-  double numerator = G_over_c2 * rho_eff * m_eff;
-  double denominator = r * (r - r_s);
+  const double numerator = gOverC2 * rhoEff * mEff;
+  const double denominator = r * (r - rS);
 
-  return -numerator / denominator;
+  return -(numerator / denominator);
 }
 
 /**
@@ -165,10 +167,11 @@ inline double tov_dPdr(double r, double m, double P, double rho) {
  * @param gamma Adiabatic index
  * @return Density [g/cm³]
  */
-inline double inverse_polytrope(double P, double K, double gamma) {
-  if (P <= 0)
+[[nodiscard]] inline double inversePolytrope(double press, double k, double gamma) {
+  if (press <= 0) {
     return 0.0;
-  return std::pow(P / K, 1.0 / gamma);
+  }
+  return std::pow(press / k, 1.0 / gamma);
 }
 
 /**
@@ -184,75 +187,75 @@ inline double inverse_polytrope(double P, double K, double gamma) {
  * @param max_steps Maximum integration steps
  * @return TOV profile, or empty if integration fails
  */
-inline TOVProfile integrate_tov(double rho_c, const EOS &eos, double K, double gamma,
-                                double dr_init = 1e3, int max_steps = 100000) {
+[[nodiscard]] inline TOVProfile integrateTov(double rhoC, const EOS &eos, double k, double gamma,
+                                             double drInit = 1e3, int maxSteps = 100000) {
   TOVProfile profile;
-  profile.rho_c = rho_c;
-  profile.P_c = eos(rho_c);
+  profile.rhoCenter = rhoC;
+  profile.pCenter = eos(rhoC);
 
   // Initial conditions at center
-  double r = dr_init;
-  double P = profile.P_c;
-  double m = (4.0 / 3.0) * M_PI * rho_c * r * r * r; // Central mass
+  double r = drInit;
+  double press = profile.pCenter;
+  double m = ((4.0 / 3.0) * std::numbers::pi * rhoC * r * r * r); // Central mass
 
-  double dr = dr_init;
+  double dr = drInit;
 
-  for (int step = 0; step < max_steps; ++step) {
+  for (int step = 0; step < maxSteps; ++step) {
     // Get density from pressure via inverse EOS
-    double rho = inverse_polytrope(P, K, gamma);
+    const double rho = inversePolytrope(press, k, gamma);
 
     // Store point
     TOVPoint pt;
     pt.r = r;
     pt.m = m;
-    pt.P = P;
+    pt.press = press;
     pt.rho = rho;
     profile.points.push_back(pt);
 
-    // Check for surface (P → 0)
-    if (P < 1e-10 * profile.P_c || rho < 1e-10 * rho_c) {
+    // Check for surface (press -> 0)
+    if ((press < (1e-10 * profile.pCenter)) || (rho < (1e-10 * rhoC))) {
       break;
     }
 
     // RK4 integration
-    double rho1 = rho;
-    double k1_m = tov_dmdr(r, rho1);
-    double k1_P = tov_dPdr(r, m, P, rho1);
+    const double rho1 = rho;
+    const double k1M = tovDmdr(r, rho1);
+    const double k1P = tovDPdr(r, m, press, rho1);
 
-    double rho2 = inverse_polytrope(P + 0.5 * dr * k1_P, K, gamma);
-    double k2_m = tov_dmdr(r + 0.5 * dr, rho2);
-    double k2_P = tov_dPdr(r + 0.5 * dr, m + 0.5 * dr * k1_m, P + 0.5 * dr * k1_P, rho2);
+    const double rho2 = inversePolytrope(press + (0.5 * dr * k1P), k, gamma);
+    const double k2M = tovDmdr(r + (0.5 * dr), rho2);
+    const double k2P = tovDPdr(r + (0.5 * dr), m + (0.5 * dr * k1M), press + (0.5 * dr * k1P), rho2);
 
-    double rho3 = inverse_polytrope(P + 0.5 * dr * k2_P, K, gamma);
-    double k3_m = tov_dmdr(r + 0.5 * dr, rho3);
-    double k3_P = tov_dPdr(r + 0.5 * dr, m + 0.5 * dr * k2_m, P + 0.5 * dr * k2_P, rho3);
+    const double rho3 = inversePolytrope(press + (0.5 * dr * k2P), k, gamma);
+    const double k3M = tovDmdr(r + (0.5 * dr), rho3);
+    const double k3P = tovDPdr(r + (0.5 * dr), m + (0.5 * dr * k2M), press + (0.5 * dr * k2P), rho3);
 
-    double rho4 = inverse_polytrope(P + dr * k3_P, K, gamma);
-    double k4_m = tov_dmdr(r + dr, rho4);
-    double k4_P = tov_dPdr(r + dr, m + dr * k3_m, P + dr * k3_P, rho4);
+    const double rho4 = inversePolytrope(press + (dr * k3P), k, gamma);
+    const double k4M = tovDmdr(r + dr, rho4);
+    const double k4P = tovDPdr(r + dr, m + (dr * k3M), press + (dr * k3P), rho4);
 
     // Update
-    m += (dr / 6.0) * (k1_m + 2.0 * k2_m + 2.0 * k3_m + k4_m);
-    P += (dr / 6.0) * (k1_P + 2.0 * k2_P + 2.0 * k3_P + k4_P);
-    r += dr;
+    m     += (dr / 6.0) * (k1M + (2.0 * k2M) + (2.0 * k3M) + k4M);
+    press += (dr / 6.0) * (k1P + (2.0 * k2P) + (2.0 * k3P) + k4P);
+    r     += dr;
 
     // Pressure must decrease monotonically
-    if (P < 0) {
-      P = 0;
+    if (press < 0) {
+      press = 0; // NOLINT(clang-analyzer-deadcode.DeadStores) -- clamp before break for clarity
       break;
     }
 
     // Adaptive step size (smaller near surface)
-    if (P < 0.01 * profile.P_c) {
+    if (press < (0.01 * profile.pCenter)) {
       dr = std::max(dr * 0.5, 100.0); // Minimum 100 cm
     }
   }
 
   // Final values
-  profile.R = r;
-  profile.M = m;
-  profile.compactness = G * m / (profile.R * C2);
-  profile.surface_redshift = 1.0 / std::sqrt(1.0 - 2.0 * profile.compactness) - 1.0;
+  profile.rSurface = r;
+  profile.mTotal = m;
+  profile.compactness = (G * m) / (profile.rSurface * C2);
+  profile.surfaceRedshift = (1.0 / std::sqrt(1.0 - (2.0 * profile.compactness))) - 1.0;
 
   return profile;
 }
@@ -272,9 +275,9 @@ inline TOVProfile integrate_tov(double rho_c, const EOS &eos, double K, double g
  * @param compactness C = GM/(Rc²)
  * @return Tidal Love number k₂
  */
-inline double tidal_love_number_k2(double compactness) {
+[[nodiscard]] inline double tidalLoveNumberK2(double compactness) {
   // Yagi & Yunes (2013) fitting formula (approximate)
-  double k2 = 0.05 + 0.1 * (1.0 - 5.0 * compactness);
+  const double k2 = 0.05 + (0.1 * (1.0 - (5.0 * compactness)));
   return std::clamp(k2, 0.0, 0.15);
 }
 
@@ -288,12 +291,13 @@ inline double tidal_love_number_k2(double compactness) {
  * @param compactness C = GM/(Rc²)
  * @return Dimensionless tidal deformability Λ
  */
-inline double tidal_deformability(double compactness) {
-  double k2 = tidal_love_number_k2(compactness);
-  double C5 = std::pow(compactness, 5);
-  if (C5 < 1e-30)
+[[nodiscard]] inline double tidalDeformability(double compactness) {
+  const double k2 = tidalLoveNumberK2(compactness);
+  const double c5 = std::pow(compactness, 5);
+  if (c5 < 1e-30) {
     return 0.0;
-  return (2.0 / 3.0) * k2 / C5;
+  }
+  return ((2.0 / 3.0) * k2) / c5;
 }
 
 // ============================================================================
@@ -303,9 +307,9 @@ inline double tidal_deformability(double compactness) {
 /**
  * @brief Compute neutron star for given central density with SLy4 EOS.
  */
-inline TOVProfile neutron_star_sly4(double rho_c) {
-  auto eos = polytropic_eos(eos_params::K_SLY4, eos_params::GAMMA_SLY4);
-  return integrate_tov(rho_c, eos, eos_params::K_SLY4, eos_params::GAMMA_SLY4);
+[[nodiscard]] inline TOVProfile neutronStarSly4(double rhoC) {
+  const auto eos = polytropicEos(eos_params::K_SLY4, eos_params::GAMMA_SLY4);
+  return integrateTov(rhoC, eos, eos_params::K_SLY4, eos_params::GAMMA_SLY4);
 }
 
 /**
@@ -313,25 +317,22 @@ inline TOVProfile neutron_star_sly4(double rho_c) {
  *
  * Scans central density to find the turning point (dM/dρ_c = 0).
  */
-inline double tov_maximum_mass(double K, double gamma,
-                               double rho_min = 1e14, double rho_max = 2e15,
-                               int n_samples = 50) {
-  auto eos = polytropic_eos(K, gamma);
-  double max_mass = 0;
+[[nodiscard]] inline double tovMaximumMass(double k, double gamma, double rhoMin = 1e14,
+                                           double rhoMax = 2e15, int nSamples = 50) {
+  const auto eos = polytropicEos(k, gamma);
+  double maxMass = 0;
 
-  double log_rho_min = std::log10(rho_min);
-  double log_rho_max = std::log10(rho_max);
-  double d_log_rho = (log_rho_max - log_rho_min) / n_samples;
+  const double logRhoMin = std::log10(rhoMin);
+  const double logRhoMax = std::log10(rhoMax);
+  const double dLogRho = (logRhoMax - logRhoMin) / nSamples;
 
-  for (int i = 0; i <= n_samples; ++i) {
-    double rho_c = std::pow(10.0, log_rho_min + i * d_log_rho);
-    auto profile = integrate_tov(rho_c, eos, K, gamma);
-    if (profile.M > max_mass) {
-      max_mass = profile.M;
-    }
+  for (int i = 0; i <= nSamples; ++i) {
+    const double rhoC = std::pow(10.0, logRhoMin + (i * dLogRho));
+    const auto profile = integrateTov(rhoC, eos, k, gamma);
+    maxMass = std::max(profile.mTotal, maxMass);
   }
 
-  return max_mass;
+  return maxMass;
 }
 
 } // namespace physics

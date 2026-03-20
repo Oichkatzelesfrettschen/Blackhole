@@ -27,9 +27,7 @@
 #define PHYSICS_EVENT_DETECTION_H
 
 #include "constants.h"
-#include <array>
 #include <cmath>
-#include <functional>
 
 namespace physics {
 
@@ -54,7 +52,7 @@ struct EventResult {
   double lambda = 0.0;       // Affine parameter at crossing
   double r = 0.0;            // Radial coordinate at crossing
   double theta = 0.0;        // Polar angle at crossing
-  int n_bisections = 0;      // Number of bisection iterations used
+  int nBisections = 0;       // Number of bisection iterations used
   bool detected = false;
 };
 
@@ -65,15 +63,15 @@ struct EventResult {
 /**
  * @brief Detect if a radial crossing occurred between two states.
  *
- * Returns true if r crossed r_target between r0 and r1.
+ * Returns true if r crossed rTarget between r0 and r1.
  *
  * @param r0 Radius at step start
  * @param r1 Radius at step end
- * @param r_target Target radius to detect crossing
- * @return true if (r0 - r_target) and (r1 - r_target) have opposite signs
+ * @param rTarget Target radius to detect crossing
+ * @return true if (r0 - rTarget) and (r1 - rTarget) have opposite signs
  */
-inline bool crossed_radius(double r0, double r1, double r_target) {
-  return (r0 - r_target) * (r1 - r_target) < 0.0;
+inline bool crossedRadius(double r0, double r1, double rTarget) {
+  return (r0 - rTarget) * (r1 - rTarget) < 0.0;
 }
 
 /**
@@ -83,7 +81,7 @@ inline bool crossed_radius(double r0, double r1, double r_target) {
  * @param vr1 Radial velocity at step end
  * @return true if vr changed sign
  */
-inline bool has_turning_point(double vr0, double vr1) {
+inline bool hasTurningPoint(double vr0, double vr1) {
   return vr0 * vr1 < 0.0;
 }
 
@@ -94,8 +92,8 @@ inline bool has_turning_point(double vr0, double vr1) {
  * @param theta1 Polar angle at step end
  * @return true if theta crossed pi/2
  */
-inline bool crossed_equator(double theta0, double theta1) {
-  return (theta0 - PI / 2.0) * (theta1 - PI / 2.0) < 0.0;
+inline bool crossedEquator(double theta0, double theta1) {
+  return (theta0 - (PI / 2.0)) * (theta1 - (PI / 2.0)) < 0.0;
 }
 
 // ============================================================================
@@ -106,7 +104,7 @@ inline bool crossed_equator(double theta0, double theta1) {
  * @brief Refine a radial crossing via bisection.
  *
  * Given two states at affine parameters lambda0 and lambda1 that
- * bracket a crossing of r_target, bisect to find the crossing point
+ * bracket a crossing of rTarget, bisect to find the crossing point
  * within tolerance.
  *
  * The integrator callback takes (lambda, state) -> new_state for
@@ -118,20 +116,20 @@ inline bool crossed_equator(double theta0, double theta1) {
  * @param lambda0 Affine parameter at step start
  * @param lambda1 Affine parameter at step end
  * @param state0 State at lambda0
- * @param r_target Target radius
+ * @param rTarget Target radius
  * @param stepper Integration step function
- * @param tol_r Radial tolerance for convergence [geometric units]
- * @param max_iter Maximum bisection iterations
+ * @param tolR Radial tolerance for convergence [geometric units]
+ * @param maxIter Maximum bisection iterations
  * @return EventResult with crossing location
  */
 template <typename State, typename Stepper>
-EventResult bisect_radial_crossing(
+EventResult bisectRadialCrossing(
     double lambda0, double lambda1,
     const State& state0,
-    double r_target,
-    Stepper&& stepper,
-    double tol_r = 1e-10,
-    int max_iter = 50) {
+    double rTarget,
+    const Stepper& stepper,
+    double tolR = 1e-10,
+    int maxIter = 50) {
 
   EventResult result;
   result.type = EventType::RadialThreshold;
@@ -140,23 +138,23 @@ EventResult bisect_radial_crossing(
   double lb = lambda1;
   State sa = state0;
 
-  for (int i = 0; i < max_iter; ++i) {
+  for (int i = 0; i < maxIter; ++i) {
     double lm = 0.5 * (la + lb);
     State sm = stepper(la, lm, sa);
 
-    double r_a = sa.x1;
-    double r_m = sm.x1;
+    double rA = sa.x1;
+    double rM = sm.x1;
 
-    if (std::abs(r_m - r_target) < tol_r) {
+    if (std::abs(rM - rTarget) < tolR) {
       result.detected = true;
       result.lambda = lm;
-      result.r = r_m;
+      result.r = rM;
       result.theta = sm.x2;
-      result.n_bisections = i + 1;
+      result.nBisections = i + 1;
       return result;
     }
 
-    if ((r_a - r_target) * (r_m - r_target) < 0.0) {
+    if ((rA - rTarget) * (rM - rTarget) < 0.0) {
       // Crossing is in [la, lm]
       lb = lm;
     } else {
@@ -173,7 +171,7 @@ EventResult bisect_radial_crossing(
   result.lambda = lm;
   result.r = sm.x1;
   result.theta = sm.x2;
-  result.n_bisections = max_iter;
+  result.nBisections = maxIter;
   return result;
 }
 
@@ -186,12 +184,12 @@ EventResult bisect_radial_crossing(
  * @tparam Stepper Callable: State(lambda_start, lambda_end, State)
  */
 template <typename State, typename Stepper>
-EventResult bisect_turning_point(
+EventResult bisectTurningPoint(
     double lambda0, double lambda1,
     const State& state0,
-    Stepper&& stepper,
-    double tol_vr = 1e-12,
-    int max_iter = 50) {
+    const Stepper& stepper,
+    double tolVr = 1e-12,
+    int maxIter = 50) {
 
   EventResult result;
   result.type = EventType::TurningPoint;
@@ -200,16 +198,16 @@ EventResult bisect_turning_point(
   double lb = lambda1;
   State sa = state0;
 
-  for (int i = 0; i < max_iter; ++i) {
+  for (int i = 0; i < maxIter; ++i) {
     double lm = 0.5 * (la + lb);
     State sm = stepper(la, lm, sa);
 
-    if (std::abs(sm.v1) < tol_vr) {
+    if (std::abs(sm.v1) < tolVr) {
       result.detected = true;
       result.lambda = lm;
       result.r = sm.x1;
       result.theta = sm.x2;
-      result.n_bisections = i + 1;
+      result.nBisections = i + 1;
       return result;
     }
 
@@ -227,7 +225,7 @@ EventResult bisect_turning_point(
   result.lambda = lm;
   result.r = sm.x1;
   result.theta = sm.x2;
-  result.n_bisections = max_iter;
+  result.nBisections = maxIter;
   return result;
 }
 
@@ -242,11 +240,11 @@ EventResult bisect_turning_point(
  *   n = 1: one half-orbit (first photon ring)
  *   n = 2: two half-orbits (second photon ring)
  *
- * @param turning_point_count Number of radial turning points detected
+ * @param turningPointCount Number of radial turning points detected
  * @return Photon ring subring index n
  */
-inline int photon_subring_index(int turning_point_count) {
-  return turning_point_count;
+inline int photonSubringIndex(int turningPointCount) {
+  return turningPointCount;
 }
 
 } // namespace physics

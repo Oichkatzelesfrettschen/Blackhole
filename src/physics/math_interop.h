@@ -1,13 +1,22 @@
-#pragma once
+#ifndef PHYSICS_MATH_INTEROP_H
+#define PHYSICS_MATH_INTEROP_H
 
+// NOLINTBEGIN(misc-include-cleaner)
+// WHY: glm/glm.hpp and glm/gtc/quaternion.hpp are umbrella headers for GLM;
+// include-cleaner cannot resolve umbrella headers to per-symbol sub-headers.
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+// NOLINTEND(misc-include-cleaner)
 
 #if __has_include(<Eigen/Core>)
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+// WHY: BLACKHOLE_HAS_EIGEN is a preprocessor token used in #if guards; it must
+// be a macro, not a constexpr constant.
 #define BLACKHOLE_HAS_EIGEN 1
 #else
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define BLACKHOLE_HAS_EIGEN 0
 #endif
 
@@ -83,3 +92,5 @@ inline glm::quat toGlm(const Eigen::Quaternionf &q) {
 #endif
 
 } // namespace math
+
+#endif // PHYSICS_MATH_INTEROP_H

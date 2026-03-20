@@ -13,10 +13,12 @@
 #ifndef PLAYBACK_CONTROL_H
 #define PLAYBACK_CONTROL_H
 
-#include "timeseries_interpolation.h"
-#include <cmath>
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <vector>
+
+#include "timeseries_interpolation.h"
 
 namespace physics {
 
@@ -369,7 +371,7 @@ inline void updateAdvancedPlayback(AdvancedPlaybackState& state,
     state.nMarkers++;
 
     // Keep markers sorted
-    std::sort(state.markers.begin(), state.markers.end());
+    std::ranges::sort(state.markers);
 
     return true;
 }

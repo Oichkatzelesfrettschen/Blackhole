@@ -1,13 +1,28 @@
 #include "hud_overlay.h"
 
 #include <algorithm>
-#include <cstdint>
+#include <cstddef>   // std::size_t
+#include <string>    // std::string (include-cleaner: direct use in append_text signature)
+#include <vector>    // std::vector (include-cleaner: direct use in append_text signature)
+
+// NOLINTBEGIN(misc-include-cleaner)
+// glbinding/gl/gl.h is the conventional umbrella header; include-cleaner
+// prefers per-symbol sub-headers but the umbrella is required for 'using namespace gl'.
+#include <glbinding/gl/gl.h>
+// NOLINTEND(misc-include-cleaner)
 
 #include "physics/safe_limits.h"
 #include "shader.h"
 #include "tracy_support.h"
 
 #include <stb_easy_font.h>
+
+using namespace gl;
+
+/* WHY: All GL symbols (glDrawArrays, GL_TRIANGLES, GLsizeiptr, etc.) come from
+ * the glbinding umbrella header above. clang-tidy include-cleaner cannot resolve
+ * umbrella headers to per-symbol sub-headers, so suppress it for this section. */
+// NOLINTBEGIN(misc-include-cleaner)
 
 namespace {
 
@@ -18,19 +33,22 @@ struct EasyFontVertex {
   [[maybe_unused]] unsigned char color[4];
 };
 
-float line_height(float scale) {
+float lineHeight(float scale) {
   const char *sample = "Ag";
-  return static_cast<float>(stb_easy_font_height(const_cast<char *>(sample))) * scale +
-         2.0f * scale;
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
+  // WHY: stb_easy_font_height takes char* (not const char*); no const version exists.
+  return (static_cast<float>(stb_easy_font_height(const_cast<char *>(sample))) * scale) +
+         (2.0f * scale);
+  // NOLINTEND(cppcoreguidelines-pro-type-const-cast)
 }
 
-void append_text(std::vector<float> &out, std::vector<unsigned char> &scratch, float x, float y,
-                 float scale, const std::string &text, const glm::vec4 &color) {
+void appendText(std::vector<float> &out, std::vector<unsigned char> &scratch, float x, float y,
+                float scale, const std::string &text, const glm::vec4 &color) {
   if (text.empty()) {
     return;
   }
 
-  const int estimated = static_cast<int>(text.size() * 270 + 16);
+  const int estimated = static_cast<int>((text.size() * 270) + 16);
   scratch.assign(static_cast<std::size_t>(estimated), 0);
 
   unsigned char rgba[4] = {
@@ -39,18 +57,22 @@ void append_text(std::vector<float> &out, std::vector<unsigned char> &scratch, f
       static_cast<unsigned char>(std::clamp(color.b, 0.0f, 1.0f) * 255.0f),
       static_cast<unsigned char>(std::clamp(color.a, 0.0f, 1.0f) * 255.0f)};
 
-  int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
-                                  scratch.data(), estimated);
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
+  // WHY: stb_easy_font_print takes char* (not const char*); no const version exists.
+  const int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
+                                        scratch.data(), estimated);
+  // NOLINTEND(cppcoreguidelines-pro-type-const-cast)
   const auto *verts = reinterpret_cast<const EasyFontVertex *>(scratch.data());
 
-  out.reserve(out.size() + static_cast<std::size_t>(quads) * 6 * 6);
+  out.reserve(out.size() + (static_cast<std::size_t>(quads) * 6U * 6U));
   for (int q = 0; q < quads; ++q) {
-    const EasyFontVertex *v = verts + q * 4;
+    // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result)
+    const EasyFontVertex *v = verts + (q * 4);
     const int indices[6] = {0, 1, 2, 0, 2, 3};
-    for (int idx = 0; idx < 6; ++idx) {
-      const EasyFontVertex &src = v[indices[idx]];
-      float px = x + src.x * scale;
-      float py = y + src.y * scale;
+    for (const int idx : indices) {
+      const EasyFontVertex &src = v[idx];
+      const float px = x + (src.x * scale);
+      const float py = y + (src.y * scale);
       out.push_back(px);
       out.push_back(py);
       out.push_back(color.r);
@@ -61,7 +83,7 @@ void append_text(std::vector<float> &out, std::vector<unsigned char> &scratch, f
   }
 }
 
-} // namespace
+}  // namespace
 
 void HudOverlay::init() {
   BH_ZONE();
@@ -80,12 +102,13 @@ void HudOverlay::init() {
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
   glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
 
-  const GLsizei stride = static_cast<GLsizei>(6 * sizeof(float));
+  const auto stride = static_cast<GLsizei>(6 * sizeof(float));
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, nullptr);
   glEnableVertexAttribArray(1);
+  // WHY: glVertexAttribPointer offset is passed as a void* cast from byte offset.
   glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, stride,
-                        reinterpret_cast<void *>(2 * sizeof(float)));
+                        reinterpret_cast<void *>(2 * sizeof(float)));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr)
 
   glBindVertexArray(0);
   stb_easy_font_spacing(1.0f);
@@ -134,24 +157,28 @@ glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
     return glm::vec2(0.0f);
   }
 
-  int estimated = static_cast<int>(text.size() * 270 + 16);
+  const int estimated = static_cast<int>((text.size() * 270) + 16);
   std::vector<unsigned char> scratch(static_cast<std::size_t>(estimated));
 
   unsigned char rgba[4] = {255, 255, 255, 255};
-  int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
-                                  scratch.data(), estimated);
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
+  // WHY: stb_easy_font_print takes char* (not const char*); no const version exists.
+  const int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
+                                        scratch.data(), estimated);
+  // NOLINTEND(cppcoreguidelines-pro-type-const-cast)
   if (quads <= 0) {
     return glm::vec2(0.0f);
   }
 
-  const EasyFontVertex *verts = reinterpret_cast<const EasyFontVertex *>(scratch.data());
-  float minx = physics::safe_max<float>();
-  float miny = physics::safe_max<float>();
-  float maxx = physics::safe_lowest<float>();
-  float maxy = physics::safe_lowest<float>();
+  const auto *verts = reinterpret_cast<const EasyFontVertex *>(scratch.data());
+  auto minx = physics::safeMax<float>();
+  auto miny = physics::safeMax<float>();
+  auto maxx = physics::safeLowest<float>();
+  auto maxy = physics::safeLowest<float>();
 
   for (int q = 0; q < quads; ++q) {
-    const EasyFontVertex *v = verts + q * 4;
+    // NOLINTNEXTLINE(bugprone-implicit-widening-of-multiplication-result)
+    const EasyFontVertex *v = verts + (q * 4);
     for (int i = 0; i < 4; ++i) {
       minx = std::min(minx, v[i].x);
       miny = std::min(miny, v[i].y);
@@ -160,9 +187,9 @@ glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
     }
   }
 
-  float width = (maxx - minx) * scale;
-  float height = (maxy - miny) * scale;
-  return glm::vec2(width, height);
+  const float width  = (maxx - minx) * scale;
+  const float height = (maxy - miny) * scale;
+  return {width, height};
 }
 
 void HudOverlay::rebuildVertices(int width, int height) {
@@ -172,8 +199,8 @@ void HudOverlay::rebuildVertices(int width, int height) {
     return;
   }
 
-  float scale = std::max(options_.scale, 0.25f);
-  const float baseLine = line_height(scale);
+  const float scale    = std::max(options_.scale, 0.25f);
+  const float baseLine = lineHeight(scale);
   const float lineStep = baseLine * options_.lineSpacing;
 
   // Precompute the starting Y depending on origin.
@@ -183,32 +210,32 @@ void HudOverlay::rebuildVertices(int width, int height) {
   } else {
     // Bottom-left origin: start such that last line sits at margin from bottom.
     cursorY = static_cast<float>(height) - options_.margin -
-              baseLine * (static_cast<float>(lines_.size()) - 1) * options_.lineSpacing;
+              (baseLine * (static_cast<float>(lines_.size()) - 1.0f) * options_.lineSpacing);
   }
 
   std::vector<unsigned char> scratch;
   for (const auto &line : lines_) {
     // Determine text extents to support alignment and background.
-    glm::vec2 extents = measureText(line.text, scale);
+    const glm::vec2 extents = measureText(line.text, scale);
     float x = 0.0f;
     if (options_.align == HudOverlayOptions::Align::Left) {
       x = options_.margin;
     } else if (options_.align == HudOverlayOptions::Align::Center) {
-      x = static_cast<float>(width) * 0.5f - extents.x * 0.5f;
-    } else { // Right
+      x = (static_cast<float>(width) * 0.5f) - (extents.x * 0.5f);
+    } else {  // Right
       x = static_cast<float>(width) - options_.margin - extents.x;
     }
 
     // Optional background box
     if (options_.drawBackground && line.background.a > 0.0f) {
       const float pad = 2.0f * scale;
-      float bx0 = x - pad;
-      float by0 = cursorY - pad;
-      float bx1 = x + extents.x + pad;
-      float by1 = cursorY + baseLine + pad;
+      const float bx0 = x - pad;
+      const float by0 = cursorY - pad;
+      const float bx1 = x + extents.x + pad;
+      const float by1 = cursorY + baseLine + pad;
 
       // Two triangles (6 vertices)
-      glm::vec4 bg = line.background;
+      const glm::vec4 bg = line.background;
       auto pushVertex = [&](float px, float py) {
         vertices_.push_back(px);
         vertices_.push_back(py);
@@ -229,7 +256,7 @@ void HudOverlay::rebuildVertices(int width, int height) {
     }
 
     // Append the text glyph quads
-    append_text(vertices_, scratch, x, cursorY, scale, line.text, line.color);
+    appendText(vertices_, scratch, x, cursorY, scale, line.text, line.color);
 
     cursorY += lineStep;
   }
@@ -264,7 +291,7 @@ void HudOverlay::render(int width, int height) {
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  const GLsizei vertexCount = static_cast<GLsizei>(vertices_.size() / 6);
+  const auto vertexCount = static_cast<GLsizei>(vertices_.size() / 6);
   glDrawArrays(GL_TRIANGLES, 0, vertexCount);
 
   glBindVertexArray(0);
@@ -284,12 +311,12 @@ void HudOverlay::render(int width, int height, float scale, float margin,
 
   scale = std::max(scale, 0.25f);
   float cursorY = margin;
-  const float lineStep = line_height(scale);
+  const float lineStep = lineHeight(scale);
 
   vertices_.clear();
   std::vector<unsigned char> scratch;
   for (const auto &line : lines) {
-    append_text(vertices_, scratch, margin, cursorY, scale, line.text, line.color);
+    appendText(vertices_, scratch, margin, cursorY, scale, line.text, line.color);
     cursorY += lineStep;
   }
 
@@ -311,9 +338,11 @@ void HudOverlay::render(int width, int height, float scale, float margin,
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  const GLsizei vertexCount = static_cast<GLsizei>(vertices_.size() / 6);
+  const auto vertexCount = static_cast<GLsizei>(vertices_.size() / 6);
   glDrawArrays(GL_TRIANGLES, 0, vertexCount);
 
   glBindVertexArray(0);
   glUseProgram(0);
 }
+
+// NOLINTEND(misc-include-cleaner)

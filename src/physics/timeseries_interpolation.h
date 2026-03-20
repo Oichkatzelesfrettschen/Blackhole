@@ -12,10 +12,9 @@
 #ifndef TIMESERIES_INTERPOLATION_H
 #define TIMESERIES_INTERPOLATION_H
 
-#include <vector>
 #include <cmath>
-#include <algorithm>
 #include <cstdint>
+#include <vector>
 
 namespace physics {
 

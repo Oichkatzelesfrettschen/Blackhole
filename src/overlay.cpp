@@ -1,13 +1,15 @@
 #include "overlay.h"
 
-#include "physics/safe_limits.h"
-
 #include <algorithm>
 #include <fstream>
 #include <sstream>
+#include <string>
 
-static bool isIgnorableLine(const std::string &line) {
-  for (char c : line) {
+#include "physics/safe_limits.h"
+
+namespace {
+bool isIgnorableLine(const std::string &line) {
+  for (char const c : line) {
     if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
       continue;
     }
@@ -15,8 +17,9 @@ static bool isIgnorableLine(const std::string &line) {
   }
   return true;
 }
+} // anonymous namespace
 
-bool OverlayCurve2D::LoadFromTsv(const std::string &path) {
+bool OverlayCurve2D::loadFromTsv(const std::string &path) {
   sourcePath = path;
   points.clear();
   lastError.clear();
@@ -27,10 +30,10 @@ bool OverlayCurve2D::LoadFromTsv(const std::string &path) {
     return false;
   }
 
-  float minX = physics::safe_max<float>();
-  float minY = physics::safe_max<float>();
-  float maxX = physics::safe_lowest<float>();
-  float maxY = physics::safe_lowest<float>();
+  auto minX = physics::safeMax<float>();
+  auto minY = physics::safeMax<float>();
+  auto maxX = physics::safeLowest<float>();
+  auto maxY = physics::safeLowest<float>();
 
   std::string line;
   int lineNo = 0;

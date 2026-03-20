@@ -11,10 +11,21 @@
  */
 
 #include "hawking_renderer.h"
+
+#include <algorithm>
+#include <cstddef>
+#include <exception>
+#include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <iostream>
-#include <cmath>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions-patches.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 
 namespace physics {
 
@@ -76,8 +87,8 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
                                bool skipHeader) {
     std::ifstream file(csvPath);
     if (!file.is_open()) {
-        std::cerr << "Failed to open CSV file: " << csvPath << std::endl;
-        return false;
+      std::cerr << "Failed to open CSV file: " << csvPath << '\n';
+      return false;
     }
 
     std::string line;
@@ -85,7 +96,7 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
 
     while (std::getline(file, line)) {
         // Skip comment lines and empty lines
-        if (line.empty() || line[0] == '#' || line[0] == '"') {
+        if (line.empty() || line.at(0) == '#' || line.at(0) == '"') {
             continue;
         }
 
@@ -105,7 +116,7 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
 
             try {
                 // Use double for intermediate parsing to handle large exponents (e.g., 1e42)
-                double valueD = std::stod(token);
+                double const valueD = std::stod(token);
                 // If the value is finite but too large for float, we can either clamp or store log.
                 // For this renderer, we likely want the raw value if it fits, or max float.
                 // However, T_H ~ 1/M. If M is 1e42, T is tiny.
@@ -121,7 +132,7 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
                 // FIX: Detect if we are loading the Mass column and it's huge?
                 // Or just clamp to FLT_MAX?
                 // Let's use double and cast, letting it go to infinity if needed, but avoiding the throw.
-                float value = static_cast<float>(valueD);
+                auto const value = static_cast<float>(valueD);
                 row.push_back(value);
             } catch (const std::exception& e) {
                 // Ignore parse errors (likely header text or comments)
@@ -141,7 +152,7 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
 
         // Add values to respective columns
         for (size_t i = 0; i < row.size() && i < columns.size(); ++i) {
-            columns[i].push_back(row[i]);
+            columns.at(i).push_back(row.at(i));
         }
     }
 
@@ -154,19 +165,21 @@ bool HawkingRenderer::parseCSV(const std::filesystem::path& csvPath,
 
 GLuint HawkingRenderer::createTexture1D(const std::vector<float>& data, int channels) {
     if (data.empty() || channels < 1 || channels > 4) {
-        std::cerr << "Invalid texture data: size=" << data.size() << ", channels=" << channels << std::endl;
-        return 0;
+      std::cerr << "Invalid texture data: size=" << data.size() << ", channels=" << channels
+                << '\n';
+      return 0;
     }
 
     // Calculate texture width
-    size_t width = data.size() / static_cast<size_t>(channels);
+    size_t const width = data.size() / static_cast<size_t>(channels);
     if (width == 0) {
-        std::cerr << "Texture width is zero" << std::endl;
-        return 0;
+      std::cerr << "Texture width is zero" << '\n';
+      return 0;
     }
 
     // Select format based on channel count
-    GLenum format, internalFormat;
+    GLenum format;
+    GLenum internalFormat;
     switch (channels) {
         case 1:
             format = GL_RED;
@@ -181,8 +194,8 @@ GLuint HawkingRenderer::createTexture1D(const std::vector<float>& data, int chan
             internalFormat = GL_RGBA32F;
             break;
         default:
-            std::cerr << "Unsupported channel count: " << channels << std::endl;
-            return 0;
+          std::cerr << "Unsupported channel count: " << channels << '\n';
+          return 0;
     }
 
     // Create OpenGL texture
@@ -204,7 +217,7 @@ GLuint HawkingRenderer::createTexture1D(const std::vector<float>& data, int chan
     glBindTexture(GL_TEXTURE_2D, 0);
 
     std::cout << "Created 1D texture: width=" << width << ", channels=" << channels
-              << ", texture=" << texture << std::endl;
+              << ", texture=" << texture << '\n';
 
     return texture;
 }
@@ -214,103 +227,102 @@ GLuint HawkingRenderer::createTexture1D(const std::vector<float>& data, int chan
 // ============================================================================
 
 bool HawkingRenderer::loadTemperatureLUT(const std::filesystem::path& csvPath) {
-    std::cout << "Loading temperature LUT: " << csvPath << std::endl;
+  std::cout << "Loading temperature LUT: " << csvPath << '\n';
 
-    std::vector<std::vector<float>> columns;
-    if (!parseCSV(csvPath, columns, true)) {
-        std::cerr << "Failed to parse temperature CSV" << std::endl;
-        return false;
-    }
+  std::vector<std::vector<float>> columns;
+  if (!parseCSV(csvPath, columns, true)) {
+    std::cerr << "Failed to parse temperature CSV" << '\n';
+    return false;
+  }
 
     // Expected columns: Mass_g, Temperature_K, Radius_cm
     if (columns.size() < 2) {
-        std::cerr << "Temperature CSV has insufficient columns: " << columns.size() << std::endl;
-        return false;
+      std::cerr << "Temperature CSV has insufficient columns: " << columns.size() << '\n';
+      return false;
     }
 
     // Extract temperature column (column 1)
-    const std::vector<float>& temperatures = columns[1];
+    const std::vector<float>& temperatures = columns.at(1);
 
     if (temperatures.empty()) {
-        std::cerr << "Temperature column is empty" << std::endl;
-        return false;
+      std::cerr << "Temperature column is empty" << '\n';
+      return false;
     }
 
     // Create 1D texture (single channel: temperature)
     tempLUTTexture_ = createTexture1D(temperatures, 1);
     if (tempLUTTexture_ == 0) {
-        std::cerr << "Failed to create temperature LUT texture" << std::endl;
-        return false;
+      std::cerr << "Failed to create temperature LUT texture" << '\n';
+      return false;
     }
 
     tempLUTLoaded_ = true;
-    std::cout << "Temperature LUT loaded: " << temperatures.size() << " samples" << std::endl;
+    std::cout << "Temperature LUT loaded: " << temperatures.size() << " samples" << '\n';
     return true;
 }
 
 bool HawkingRenderer::loadSpectrumLUT(const std::filesystem::path& csvPath) {
-    std::cout << "Loading spectrum LUT: " << csvPath << std::endl;
+  std::cout << "Loading spectrum LUT: " << csvPath << '\n';
 
-    std::vector<std::vector<float>> columns;
-    if (!parseCSV(csvPath, columns, true)) {
-        std::cerr << "Failed to parse spectrum CSV" << std::endl;
-        return false;
-    }
+  std::vector<std::vector<float>> columns;
+  if (!parseCSV(csvPath, columns, true)) {
+    std::cerr << "Failed to parse spectrum CSV" << '\n';
+    return false;
+  }
 
     // Expected columns: Temperature_K, Red, Green, Blue
     if (columns.size() < 4) {
-        std::cerr << "Spectrum CSV has insufficient columns: " << columns.size() << std::endl;
-        return false;
+      std::cerr << "Spectrum CSV has insufficient columns: " << columns.size() << '\n';
+      return false;
     }
 
     // Extract RGB columns (columns 1, 2, 3)
-    const std::vector<float>& red = columns[1];
-    const std::vector<float>& green = columns[2];
-    const std::vector<float>& blue = columns[3];
+    const std::vector<float>& red = columns.at(1);
+    const std::vector<float>& green = columns.at(2);
+    const std::vector<float>& blue = columns.at(3);
 
     if (red.size() != green.size() || red.size() != blue.size()) {
-        std::cerr << "RGB columns have mismatched sizes" << std::endl;
-        return false;
+      std::cerr << "RGB columns have mismatched sizes" << '\n';
+      return false;
     }
 
     // Interleave RGB data
     std::vector<float> rgbData;
     rgbData.reserve(red.size() * 3);
     for (size_t i = 0; i < red.size(); ++i) {
-        rgbData.push_back(red[i]);
-        rgbData.push_back(green[i]);
-        rgbData.push_back(blue[i]);
+        rgbData.push_back(red.at(i));
+        rgbData.push_back(green.at(i));
+        rgbData.push_back(blue.at(i));
     }
 
     // Create 1D texture (3 channels: RGB)
     spectrumLUTTexture_ = createTexture1D(rgbData, 3);
     if (spectrumLUTTexture_ == 0) {
-        std::cerr << "Failed to create spectrum LUT texture" << std::endl;
-        return false;
+      std::cerr << "Failed to create spectrum LUT texture" << '\n';
+      return false;
     }
 
     spectrumLUTLoaded_ = true;
-    std::cout << "Spectrum LUT loaded: " << red.size() << " samples" << std::endl;
+    std::cout << "Spectrum LUT loaded: " << red.size() << " samples" << '\n';
     return true;
 }
 
 bool HawkingRenderer::loadLUTs(const std::filesystem::path& lutDirectory) {
-    std::cout << "Loading Hawking LUTs from: " << lutDirectory << std::endl;
+  std::cout << "Loading Hawking LUTs from: " << lutDirectory << '\n';
 
-    auto tempPath = lutDirectory / "hawking_temp_lut.csv";
-    auto specPath = lutDirectory / "hawking_spectrum_lut.csv";
+  auto tempPath = lutDirectory / "hawking_temp_lut.csv";
+  auto specPath = lutDirectory / "hawking_spectrum_lut.csv";
 
-    bool tempOk = loadTemperatureLUT(tempPath);
-    bool specOk = loadSpectrumLUT(specPath);
+  bool const tempOk = loadTemperatureLUT(tempPath);
+  bool const specOk = loadSpectrumLUT(specPath);
 
-    if (tempOk && specOk) {
-        std::cout << "All Hawking LUTs loaded successfully" << std::endl;
-        return true;
-    } else {
-        std::cerr << "Failed to load some Hawking LUTs: temp=" << tempOk
-                  << ", spectrum=" << specOk << std::endl;
-        return false;
-    }
+  if (tempOk && specOk) {
+    std::cout << "All Hawking LUTs loaded successfully" << '\n';
+    return true;
+  }
+  std::cerr << "Failed to load some Hawking LUTs: temp=" << tempOk << ", spectrum=" << specOk
+            << '\n';
+  return false;
 }
 
 // ============================================================================
@@ -320,8 +332,8 @@ bool HawkingRenderer::loadLUTs(const std::filesystem::path& lutDirectory) {
 void HawkingRenderer::setShaderUniforms(GLuint shaderProgram, double blackHoleMass,
                                        const HawkingGlowParams& params) const {
     if (!isReady()) {
-        std::cerr << "Hawking LUTs not loaded, cannot set uniforms" << std::endl;
-        return;
+      std::cerr << "Hawking LUTs not loaded, cannot set uniforms" << '\n';
+      return;
     }
 
     // Set scalar uniforms
@@ -389,12 +401,12 @@ float HawkingRenderer::getRecommendedTempScale(double mass) {
 
     // For solar mass and above, scale based on inverse temperature
     // T_H ∝ 1/M, so scaling needs to be M/M_primordial
-    constexpr double M_primordial = 5e14;  // Primordial BH mass [g]
-    float scale = static_cast<float>(mass / M_primordial);
+    constexpr double mPrimordial = 5e14; // Primordial BH mass [g]
+    auto scale = static_cast<float>(mass / mPrimordial);
 
     // Clamp to reasonable range [1, 1e9]
-    if (scale < 1.0f) scale = 1.0f;
-    if (scale > 1e9f) scale = 1e9f;
+    scale = std::max(scale, 1.0f);
+    scale = std::min(scale, 1e9f);
 
     return scale;
 }

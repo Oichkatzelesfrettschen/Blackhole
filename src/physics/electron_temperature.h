@@ -37,6 +37,7 @@
 
 #include "constants.h"
 #include <cmath>
+#include <numbers>
 
 namespace physics {
 
@@ -63,9 +64,9 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  * @param R_high Temperature ratio parameter (1 = equal, 160 = very unequal)
  * @return T_p / T_e ratio (always >= 1)
  */
-inline double temperature_ratio(double beta, double R_high) {
-  double beta2 = beta * beta;
-  return R_high * beta2 / (1.0 + beta2) + 1.0;
+[[nodiscard]] inline double temperatureRatio(double beta, double rHigh) {
+  const double beta2 = beta * beta;
+  return ((rHigh * beta2) / (1.0 + beta2)) + 1.0;
 }
 
 /**
@@ -83,14 +84,14 @@ inline double temperature_ratio(double beta, double R_high) {
  *
  * @param T_gas Single-fluid gas temperature [K]
  * @param beta Plasma beta
- * @param R_high Temperature ratio parameter
+ * @param rHigh Temperature ratio parameter
  * @return Electron temperature T_e [K]
  */
-inline double electron_temperature(double T_gas, double beta, double R_high) {
-  double ratio = temperature_ratio(beta, R_high);
+[[nodiscard]] inline double electronTemperature(double tGas, double beta, double rHigh) {
+  const double ratio = temperatureRatio(beta, rHigh);
   // Exact two-species formula: T_e = T_gas / (1 + (m_e/m_p)*(ratio - 1))
   // Since m_e/m_p << 1, this is very close to T_gas / ratio for large ratio
-  return T_gas / (1.0 + (1.0 / MP_ME) * (ratio - 1.0));
+  return tGas / (1.0 + ((1.0 / MP_ME) * (ratio - 1.0)));
 }
 
 /**
@@ -101,13 +102,13 @@ inline double electron_temperature(double T_gas, double beta, double R_high) {
  * where mu is the mean molecular weight (0.5 for fully ionized H+e).
  *
  * @param rho Gas density [g/cm^3]
- * @param P_gas Gas pressure [erg/cm^3]
+ * @param pGas Gas pressure [erg/cm^3]
  * @param mu Mean molecular weight (default 0.5 for ionized hydrogen)
  * @return Gas temperature [K]
  */
-inline double gas_temperature(double rho, double P_gas, double mu = 0.5) {
-  if (rho <= 0.0) return 0.0;
-  return P_gas * mu * M_PROTON / (rho * K_B);
+[[nodiscard]] inline double gasTemperature(double rho, double pGas, double mu = 0.5) {
+  if (rho <= 0.0) { return 0.0; }
+  return (pGas * mu * M_PROTON) / (rho * K_B);
 }
 
 /**
@@ -118,13 +119,13 @@ inline double gas_temperature(double rho, double P_gas, double mu = 0.5) {
  * (In Gaussian CGS, P_mag = B^2 / (8*pi), but GRMHD codes typically
  * use Heaviside units where P_mag = B^2 / 2.)
  *
- * @param P_gas Gas pressure [code units]
- * @param B_sq Magnetic field squared B^2 = B_i B^i [code units]
+ * @param pGas Gas pressure [code units]
+ * @param bSq Magnetic field squared B^2 = B_i B^i [code units]
  * @return Plasma beta (dimensionless)
  */
-inline double plasma_beta(double P_gas, double B_sq) {
-  if (B_sq <= 0.0) return 1e10; // Unmagnetized limit
-  return 2.0 * P_gas / B_sq;
+[[nodiscard]] inline double plasmaBeta(double pGas, double bSq) {
+  if (bSq <= 0.0) { return 1e10; } // Unmagnetized limit
+  return (2.0 * pGas) / bSq;
 }
 
 // ============================================================================
@@ -137,12 +138,12 @@ inline double plasma_beta(double P_gas, double B_sq) {
  * This is the natural temperature scale for synchrotron emission.
  * Theta_e ~ 1 corresponds to T_e ~ 6e9 K (mildly relativistic electrons).
  *
- * @param T_e Electron temperature [K]
+ * @param tE Electron temperature [K]
  * @return Dimensionless temperature
  */
-inline double theta_e(double T_e) {
-  constexpr double ME_C2 = 9.1093837015e-28 * C * C; // m_e c^2 [erg]
-  return K_B * T_e / ME_C2;
+[[nodiscard]] inline double thetaE(double tE) {
+  constexpr double meC2 = 9.1093837015e-28 * C * C; // m_e c^2 [erg]
+  return (K_B * tE) / meC2;
 }
 
 /**
@@ -153,7 +154,7 @@ inline double theta_e(double T_e) {
  * @param rho Gas density [g/cm^3]
  * @return Electron number density [cm^-3]
  */
-inline double electron_density(double rho) {
+[[nodiscard]] inline double electronDensity(double rho) {
   return rho / M_PROTON;
 }
 
@@ -176,38 +177,38 @@ inline double electron_density(double rho) {
  *   j_nu ~ C * n_e * nu * exp(-(nu/nu_c)^(1/3)) / Theta_e^2
  *
  * @param nu Observing frequency [Hz]
- * @param n_e Electron density [cm^-3]
- * @param Theta_e Dimensionless electron temperature
+ * @param nE Electron density [cm^-3]
+ * @param thetaElec Dimensionless electron temperature
  * @param B Magnetic field strength [Gauss]
  * @return Emissivity j_nu [erg/s/cm^3/Hz/sr]
  */
-inline double thermal_synchrotron_emissivity(double nu, double n_e,
-                                              double Theta_e, double B) {
-  if (Theta_e <= 0.0 || B <= 0.0 || nu <= 0.0) return 0.0;
+[[nodiscard]] inline double thermalSynchrotronEmissivity(double nu, double nE,
+                                                          double thetaElec, double b) {
+  if (thetaElec <= 0.0 || b <= 0.0 || nu <= 0.0) { return 0.0; }
 
-  constexpr double E_CHARGE = 4.80320425e-10; // [esu]
-  constexpr double MASS_E = 9.1093837015e-28;    // [g]
+  constexpr double eCharge = 4.80320425e-10; // [esu]
+  constexpr double massE = 9.1093837015e-28;    // [g]
 
   // Cyclotron frequency
-  double nu_c = E_CHARGE * std::abs(B) / (TWO_PI * MASS_E * C);
+  const double nuC = (eCharge * std::abs(b)) / (TWO_PI * massE * C);
 
   // Synchrotron peak frequency for thermal electrons
-  double nu_s = (2.0 / 9.0) * nu_c * Theta_e * Theta_e;
+  const double nuS = (2.0 / 9.0) * nuC * thetaElec * thetaElec;
 
-  if (nu_s <= 0.0) return 0.0;
+  if (nuS <= 0.0) { return 0.0; }
 
-  double x_M = nu / nu_s;
+  const double xM = nu / nuS;
 
   // Fitting formula from Leung+ 2011, Eq. 24
-  // Valid for Theta_e > 1 (relativistic regime)
-  double x_M_13 = std::cbrt(x_M);
-  double prefactor = n_e * E_CHARGE * E_CHARGE * nu /
-                     (std::sqrt(3.0) * C * Theta_e * Theta_e);
+  // Valid for thetaElec > 1 (relativistic regime)
+  const double xM13 = std::cbrt(xM);
+  const double prefactor = (nE * eCharge * eCharge * nu) /
+                     (std::numbers::sqrt3 * C * thetaElec * thetaElec);
 
   // Approximate spectral shape
-  double shape = 4.0505 / x_M_13 *
-                 (1.0 + 0.40 / std::sqrt(x_M_13) + 0.5316 / x_M_13) *
-                 std::exp(-1.8899 * x_M_13);
+  const double shape = (4.0505 / xM13) *
+                 (1.0 + (0.40 / std::sqrt(xM13)) + (0.5316 / xM13)) *
+                 std::exp(-1.8899 * xM13);
 
   return prefactor * shape;
 }
@@ -222,22 +223,22 @@ inline double thermal_synchrotron_emissivity(double nu, double n_e,
  *   B_nu ~ 2 * nu^2 * m_e * c * Theta_e / c^2
  *        = 2 * nu^2 * k_B * T_e / c^2
  *
- * @param j_nu Emissivity [erg/s/cm^3/Hz/sr]
+ * @param jNu Emissivity [erg/s/cm^3/Hz/sr]
  * @param nu Frequency [Hz]
- * @param Theta_e Dimensionless electron temperature
+ * @param thetaElec Dimensionless electron temperature
  * @return Absorption coefficient [cm^-1]
  */
-inline double thermal_synchrotron_absorptivity(double j_nu, double nu,
-                                                double Theta_e) {
-  if (nu <= 0.0 || Theta_e <= 0.0 || j_nu <= 0.0) return 0.0;
+[[nodiscard]] inline double thermalSynchrotronAbsorptivity(double jNu, double nu,
+                                                            double thetaElec) {
+  if (nu <= 0.0 || thetaElec <= 0.0 || jNu <= 0.0) { return 0.0; }
 
   // Relativistic Planck function (Rayleigh-Jeans limit for kT >> hv)
-  constexpr double MASS_E = 9.1093837015e-28;
-  double B_nu = 2.0 * nu * nu * MASS_E * C * Theta_e / (C * C);
+  constexpr double massE = 9.1093837015e-28;
+  const double bNu = (2.0 * nu * nu * massE * C * thetaElec) / (C * C);
 
-  if (B_nu <= 0.0) return 0.0;
+  if (bNu <= 0.0) { return 0.0; }
 
-  return j_nu / B_nu;
+  return jNu / bNu;
 }
 
 // ============================================================================
