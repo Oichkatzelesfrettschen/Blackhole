@@ -20,16 +20,16 @@ AsyncComputePipeline::AsyncComputePipeline(uint32_t maxCommands) : state_(Pipeli
 AsyncComputePipeline::~AsyncComputePipeline() = default;
 
 void AsyncComputePipeline::beginRecording() {
-    state_ = PipelineState::RECORDING;
-    buffers_[current_buffer_].commands.clear();
-    buffers_[current_buffer_].barriers.clear();
+  state_ = PipelineState::RECORDING;
+  buffers_[current_buffer_].commands.clear();
+  buffers_[current_buffer_].barriers.clear();
 }
 
-void AsyncComputePipeline::recordDispatch(const ComputeCommand& cmd) {
+void AsyncComputePipeline::recordDispatch(const ComputeCommand &cmd) {
   if (state_ != PipelineState::RECORDING) {
     return;
   }
-    buffers_[current_buffer_].commands.push_back(cmd);
+  buffers_[current_buffer_].commands.push_back(cmd);
 }
 
 void AsyncComputePipeline::recordBarrier(uint32_t stageMask) {
@@ -44,7 +44,7 @@ void AsyncComputePipeline::recordMemoryCopy(uint32_t srcSsbo, uint32_t dstSsbo, 
 }
 
 void AsyncComputePipeline::endRecording() {
-    state_ = PipelineState::SUBMITTED;
+  state_ = PipelineState::SUBMITTED;
 }
 
 void AsyncComputePipeline::submitToGPU() {
@@ -52,26 +52,26 @@ void AsyncComputePipeline::submitToGPU() {
     return;
   }
 
-    state_ = PipelineState::EXECUTING;
-    buffers_[current_buffer_].timestamp = gpu_timestamp_++;
+  state_ = PipelineState::EXECUTING;
+  buffers_[current_buffer_].timestamp = gpu_timestamp_++;
 
-    // In real implementation: submit command buffer to GPU queue
-    // glDispatchCompute() for each recorded command
+  // In real implementation: submit command buffer to GPU queue
+  // glDispatchCompute() for each recorded command
 }
 
 void AsyncComputePipeline::waitForCompletion() {
-    while (state_ != PipelineState::COMPLETE) {
-        // Poll GPU fence or use glClientWaitSync()
-    }
+  while (state_ != PipelineState::COMPLETE) {
+    // Poll GPU fence or use glClientWaitSync()
+  }
 }
 
 void AsyncComputePipeline::swapBuffers() {
-    submitted_buffer_ = current_buffer_;
-    current_buffer_ = 1 - current_buffer_;
+  submitted_buffer_ = current_buffer_;
+  current_buffer_ = 1 - current_buffer_;
 }
 
 bool AsyncComputePipeline::isReadyForReadback() const {
-    return state_ == PipelineState::COMPLETE;
+  return state_ == PipelineState::COMPLETE;
 }
 
 void AsyncComputePipeline::beginAsyncReadback(uint32_t /*ssboId*/, uint32_t /*offset*/,
@@ -82,10 +82,10 @@ void AsyncComputePipeline::beginAsyncReadback(uint32_t /*ssboId*/, uint32_t /*of
 }
 
 bool AsyncComputePipeline::readbackComplete() const {
-    return readback_.complete;
+  return readback_.complete;
 }
 
-const uint8_t* AsyncComputePipeline::getReadbackData() const {
+const uint8_t *AsyncComputePipeline::getReadbackData() const {
   return static_cast<const uint8_t *>(readback_.mappedPtr);
 }
 
@@ -138,14 +138,14 @@ std::vector<ComputeCommand> TileDispatcher::getPriorityTiles(uint32_t /*computeS
 }
 
 void TileDispatcher::computeTilePriorities() {
-    // Center tiles have higher priority (foveated rendering)
-    for (auto& tile : tiles_) {
-      int const centerX = static_cast<int>(config_.frameWidth / 2);
-      int const centerY = static_cast<int>(config_.frameHeight / 2);
-      int const dx = static_cast<int>(tile.x * config_.tileSizeX) - centerX;
-      int const dy = static_cast<int>(tile.y * config_.tileSizeY) - centerY;
-      tile.priority = 1.0f / (1.0f + (static_cast<float>((dx * dx) + (dy * dy)) / 100000.0f));
-    }
+  // Center tiles have higher priority (foveated rendering)
+  for (auto &tile : tiles_) {
+    int const centerX = static_cast<int>(config_.frameWidth / 2);
+    int const centerY = static_cast<int>(config_.frameHeight / 2);
+    int const dx = static_cast<int>(tile.x * config_.tileSizeX) - centerX;
+    int const dy = static_cast<int>(tile.y * config_.tileSizeY) - centerY;
+    tile.priority = 1.0f / (1.0f + (static_cast<float>((dx * dx) + (dy * dy)) / 100000.0f));
+  }
 }
 
 // ============================================================================
@@ -163,28 +163,28 @@ void FramePipeline::submitFrame(uint32_t frameNumber) {
 }
 
 void FramePipeline::advance() {
-    // Advance frame through pipeline stages
-    if (!frames_.empty()) {
-        auto& frame = frames_.front();
-        switch (frame.stage) {
-        case FrameStage::ComputeDispatch:
-          frame.stage = FrameStage::ReadbackWait;
-          break;
-        case FrameStage::ReadbackWait:
-          frame.stage = FrameStage::CpuPostprocess;
-          break;
-        case FrameStage::CpuPostprocess:
-          frames_.erase(frames_.begin());
-          break;
-        }
+  // Advance frame through pipeline stages
+  if (!frames_.empty()) {
+    auto &frame = frames_.front();
+    switch (frame.stage) {
+    case FrameStage::ComputeDispatch:
+      frame.stage = FrameStage::ReadbackWait;
+      break;
+    case FrameStage::ReadbackWait:
+      frame.stage = FrameStage::CpuPostprocess;
+      break;
+    case FrameStage::CpuPostprocess:
+      frames_.erase(frames_.begin());
+      break;
     }
+  }
 }
 
-const FramePipeline::FrameState* FramePipeline::getCurrentFrame() const {
+const FramePipeline::FrameState *FramePipeline::getCurrentFrame() const {
   if (frames_.empty()) {
     return nullptr;
   }
-    return &frames_.front();
+  return &frames_.front();
 }
 
 double FramePipeline::getFrameTimeMS() {

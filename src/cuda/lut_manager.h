@@ -9,45 +9,49 @@
 #ifndef BLACKHOLE_CUDA_LUT_MANAGER_H
 #define BLACKHOLE_CUDA_LUT_MANAGER_H
 
-#include <cuda_runtime.h>
+#include <driver_types.h>  /* cudaGraphicsResource_t */
+#include <texture_types.h> /* cudaTextureObject_t */
 
-/* LUT slot indices matching the GL texture binding order */
-enum BH_LutSlot {
-    BH_LUT_EMISSIVITY = 0,
-    BH_LUT_REDSHIFT   = 1,
-    BH_LUT_SPECTRAL   = 2,
-    BH_LUT_GRB        = 3,
-    BH_LUT_GALAXY     = 4, /* cubemap */
-    BH_LUT_COUNT       = 5
+/* LUT slot indices matching the GL texture binding order.
+ * NOLINT(cppcoreguidelines-use-enum-class): unscoped enum intentional --
+ * the C API surface (bhCudaRegisterLut, lutRegister) takes int slot, so
+ * scoped enum values would require static_cast at every call site. */
+enum BhLutSlot { // NOLINT(cppcoreguidelines-use-enum-class)
+  BhLutEmissivity = 0,
+  BhLutRedshift = 1,
+  BhLutSpectral = 2,
+  BhLutGrb = 3,
+  BhLutGalaxy = 4, /* cubemap */
+  BhLutCount = 5
 };
 
 struct LutManager {
-    cudaGraphicsResource_t resources[BH_LUT_COUNT];
-    cudaTextureObject_t    tex_objects[BH_LUT_COUNT];
-    bool                   registered[BH_LUT_COUNT];
+  cudaGraphicsResource_t resources[BhLutCount]{};
+  cudaTextureObject_t texObjects[BhLutCount]{};
+  bool registered[BhLutCount]{};
 
-    LutManager() {
-        for (int i = 0; i < BH_LUT_COUNT; ++i) {
-            resources[i] = nullptr;
-            tex_objects[i] = 0;
-            registered[i] = false;
-        }
+  LutManager() {
+    for (int i = 0; i < BhLutCount; ++i) {
+      resources[i] = nullptr;
+      texObjects[i] = 0;
+      registered[i] = false;
     }
+  }
 };
 
 /* Register a GL texture as a read-only CUDA texture object.
  * slot: BH_LutSlot index.
  * gl_tex: GL texture ID.
  * gl_target: GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP. */
-int lut_register(LutManager& mgr, int slot, unsigned int gl_tex, unsigned int gl_target);
+int lutRegister(LutManager &mgr, int slot, unsigned int glTex, unsigned int glTarget);
 
 /* Unregister a slot (e.g., when LUT is regenerated). */
-void lut_unregister(LutManager& mgr, int slot);
+void lutUnregister(LutManager &mgr, int slot);
 
 /* Get the CUDA texture object for a slot (0 if not registered). */
-cudaTextureObject_t lut_get_tex(const LutManager& mgr, int slot);
+cudaTextureObject_t lutGetTex(const LutManager &mgr, int slot);
 
 /* Unregister all and cleanup. */
-void lut_shutdown(LutManager& mgr);
+void lutShutdown(LutManager &mgr);
 
 #endif /* BLACKHOLE_CUDA_LUT_MANAGER_H */

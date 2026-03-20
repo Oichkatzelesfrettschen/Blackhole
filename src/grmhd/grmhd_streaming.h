@@ -18,13 +18,13 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
+#include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
-#include <chrono>
-#include <cstdint>
+#include <string>
+#include <vector>
 
 namespace grmhd {
 
@@ -48,13 +48,13 @@ struct DumpMetadata {
     double zmin, zmax;   // Boyer-Lindquist phi range
   } grid{};
 
-    struct Variables {
-        std::vector<std::string> names; // ["rho", "uu", "u1", "u2", "u3", "B1", "B2", "B3"]
-        std::vector<uint32_t> indices;  // Indices into HDF5 dataset
-        uint32_t varCount{};            // Total variable count
-    } variables;
+  struct Variables {
+    std::vector<std::string> names; // ["rho", "uu", "u1", "u2", "u3", "B1", "B2", "B3"]
+    std::vector<uint32_t> indices;  // Indices into HDF5 dataset
+    uint32_t varCount{};            // Total variable count
+  } variables;
 
-    bool valid = false;                 // Metadata successfully loaded
+  bool valid = false; // Metadata successfully loaded
 };
 
 /**
@@ -62,18 +62,18 @@ struct DumpMetadata {
  * Loaded from JSON file describing multi-dump time series
  */
 struct SequenceMetadata {
-    std::string sequenceName;
-    std::string description;
-    std::vector<DumpMetadata> dumps;
+  std::string sequenceName;
+  std::string description;
+  std::vector<DumpMetadata> dumps;
 
-    // Lookup helpers
-    std::map<double, size_t> timeIndex;     // time -> dump index
-    std::map<std::string, size_t> filenameIndex;  // filename -> dump index
+  // Lookup helpers
+  std::map<double, size_t> timeIndex;          // time -> dump index
+  std::map<std::string, size_t> filenameIndex; // filename -> dump index
 
-    // Statistics
-    double tStart{}, tEnd{};
-    uint32_t dumpCount{};
-    size_t estimatedTotalSize{}; // Bytes
+  // Statistics
+  double tStart{}, tEnd{};
+  uint32_t dumpCount{};
+  size_t estimatedTotalSize{}; // Bytes
 };
 
 // ============================================================================
@@ -85,23 +85,23 @@ struct SequenceMetadata {
  * Cached in LRU order; evicted when capacity exceeded
  */
 struct GRMHDTile {
-    uint32_t tileX, tileY;              // Position in tile grid (0-based)
-    uint32_t dumpIndex;                 // Index into SequenceMetadata::dumps
+  uint32_t tileX, tileY; // Position in tile grid (0-based)
+  uint32_t dumpIndex;    // Index into SequenceMetadata::dumps
 
-    struct CellData {
-        // Conservative variables (8 floats per cell)
-        float rho, uu;                  // Density, internal energy density
-        float u1, u2, u3;               // 3-velocity components (CONTRAVARIANT)
-        float b1, b2, b3;               // Magnetic field (CONTRAVARIANT)
-    };
+  struct CellData {
+    // Conservative variables (8 floats per cell)
+    float rho, uu;    // Density, internal energy density
+    float u1, u2, u3; // 3-velocity components (CONTRAVARIANT)
+    float b1, b2, b3; // Magnetic field (CONTRAVARIANT)
+  };
 
-    std::vector<CellData> data;         // 32*32 = 1024 cells
+  std::vector<CellData> data; // 32*32 = 1024 cells
 
-    // GPU resource
-    uint32_t pboId;                     // Pixel buffer object ID
-    bool gpuResident;                   // Cached on GPU
+  // GPU resource
+  uint32_t pboId;   // Pixel buffer object ID
+  bool gpuResident; // Cached on GPU
 
-    std::chrono::high_resolution_clock::time_point accessTime;
+  std::chrono::high_resolution_clock::time_point accessTime;
 };
 
 /**
@@ -110,28 +110,28 @@ struct GRMHDTile {
  */
 class TileCache {
 public:
-    static constexpr uint32_t MAX_TILES_CACHED = 256;
+  static constexpr uint32_t MAX_TILES_CACHED = 256;
 
-    explicit TileCache(uint32_t maxTiles = MAX_TILES_CACHED);
-    ~TileCache();
+  explicit TileCache(uint32_t maxTiles = MAX_TILES_CACHED);
+  ~TileCache();
 
-    // Tile access
-    std::optional<std::shared_ptr<GRMHDTile>> getTile(uint32_t x, uint32_t y, uint32_t dumpIdx);
-    void insertTile(const std::shared_ptr<GRMHDTile> &tile);
-    void evictLRU();
+  // Tile access
+  std::optional<std::shared_ptr<GRMHDTile>> getTile(uint32_t x, uint32_t y, uint32_t dumpIdx);
+  void insertTile(const std::shared_ptr<GRMHDTile> &tile);
+  void evictLRU();
 
-    // Statistics
-    [[nodiscard]] uint32_t getCurrentSize() const { return tiles_.size(); }
-    [[nodiscard]] uint32_t getHitCount() const { return hitCount_; }
-    [[nodiscard]] uint32_t getMissCount() const { return missCount_; }
+  // Statistics
+  [[nodiscard]] uint32_t getCurrentSize() const { return tiles_.size(); }
+  [[nodiscard]] uint32_t getHitCount() const { return hitCount_; }
+  [[nodiscard]] uint32_t getMissCount() const { return missCount_; }
 
-  private:
-    std::map<std::tuple<uint32_t, uint32_t, uint32_t>, std::shared_ptr<GRMHDTile>> tiles_;
-    std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> lruOrder_;
-    uint32_t maxTiles_;
+private:
+  std::map<std::tuple<uint32_t, uint32_t, uint32_t>, std::shared_ptr<GRMHDTile>> tiles_;
+  std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> lruOrder_;
+  uint32_t maxTiles_;
 
-    uint32_t hitCount_ = 0;
-    uint32_t missCount_ = 0;
+  uint32_t hitCount_ = 0;
+  uint32_t missCount_ = 0;
 };
 
 // ============================================================================
@@ -164,12 +164,12 @@ public:
                         std::vector<float> &buffer) const;
 
 private:
-    SequenceMetadata sequence_;
-    std::string basePath_;
+  SequenceMetadata sequence_;
+  std::string basePath_;
 
-    // JSON parsing helpers
-    bool parseJsonMetadata(const std::string& jsonContent);
-    static DumpMetadata parseDumpEntry(const std::string &jsonEntry);
+  // JSON parsing helpers
+  bool parseJsonMetadata(const std::string &jsonContent);
+  static DumpMetadata parseDumpEntry(const std::string &jsonEntry);
 };
 
 // ============================================================================
@@ -182,22 +182,21 @@ private:
  */
 class GRMHDPipeline {
 public:
-    GRMHDPipeline(uint32_t maxConcurrentUploads = 4);
-    ~GRMHDPipeline();
+  explicit GRMHDPipeline(uint32_t maxConcurrentUploads = 4);
+  ~GRMHDPipeline();
 
-    // Queue tile for async GPU upload
-    void queueTileUpload(const std::shared_ptr<GRMHDTile> &tile);
+  // Queue tile for async GPU upload
+  void queueTileUpload(const std::shared_ptr<GRMHDTile> &tile);
 
-    // Wait for all pending uploads
-    void waitForCompletion();
+  // Wait for all pending uploads
+  void waitForCompletion();
 
-    // Check upload progress
-    [[nodiscard]] uint32_t getPendingCount() const { return pendingUploads_.size(); }
+  // Check upload progress
+  [[nodiscard]] uint32_t getPendingCount() const { return pendingUploads_.size(); }
 
-  private:
-    std::vector<std::shared_ptr<GRMHDTile>> pendingUploads_;
-    uint32_t maxConcurrentUploads_;
+private:
+  std::vector<std::shared_ptr<GRMHDTile>> pendingUploads_;
+  uint32_t maxConcurrentUploads_;
 };
 
 } // namespace grmhd
-

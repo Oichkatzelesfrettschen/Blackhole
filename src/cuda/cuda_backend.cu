@@ -17,13 +17,13 @@
  * Slots not yet registered produce tex_object == 0; device code guards on 0. */
 static void sync_lut_constants(const LutManager& luts) {
     bh_upload_lut_textures(
-        (unsigned long long)lut_get_tex(luts, BH_LUT_EMISSIVITY),
-        (unsigned long long)lut_get_tex(luts, BH_LUT_REDSHIFT),
-        (unsigned long long)lut_get_tex(luts, BH_LUT_SPECTRAL)
+        (unsigned long long)lutGetTex(luts, BhLutEmissivity),
+        (unsigned long long)lutGetTex(luts, BhLutRedshift),
+        (unsigned long long)lutGetTex(luts, BhLutSpectral)
     );
 }
 
-struct BH_CudaBackend {
+struct BhCudaBackend {
     CudaGLInterop interop;
     LutManager luts;
     int active_variant;
@@ -36,7 +36,7 @@ extern "C" BH_CudaBackend* bhCudaInit(unsigned int gl_texture, int width, int he
 
     b->active_variant = -1; /* auto */
 
-    if (interop_init(b->interop) != 0) {
+    if (interopInit(b->interop) != 0) {
         fprintf(stderr, "bh_cuda_init: interop_init failed\n");
         free(b);
         return nullptr;
@@ -46,15 +46,15 @@ extern "C" BH_CudaBackend* bhCudaInit(unsigned int gl_texture, int width, int he
     if (err != cudaSuccess) {
         fprintf(stderr, "bh_cuda_init: cudaStreamCreate failed: %s\n",
                 cudaGetErrorString(err));
-        interop_shutdown(b->interop);
+        interopShutdown(b->interop);
         free(b);
         return nullptr;
     }
 
-    if (interop_register(b->interop, gl_texture, width, height) != 0) {
+    if (interopRegister(b->interop, gl_texture, width, height) != 0) {
         fprintf(stderr, "bh_cuda_init: interop_register failed\n");
         cudaStreamDestroy(b->compute_stream);
-        interop_shutdown(b->interop);
+        interopShutdown(b->interop);
         free(b);
         return nullptr;
     }
@@ -73,7 +73,7 @@ extern "C" int bhCudaRenderFrame(BH_CudaBackend* backend,
                                      const struct BH_LaunchParams* params) {
     if (!backend || !params) return -1;
 
-    float4* fb = interop_framebuffer(backend->interop);
+    float4* fb = interopFramebuffer(backend->interop);
     if (!fb) return -1;
 
     int variant = backend->active_variant;
@@ -88,20 +88,20 @@ extern "C" int bhCudaRenderFrame(BH_CudaBackend* backend,
     /* Sync compute before blit */
     cudaStreamSynchronize(backend->compute_stream);
 
-    return interop_blit_to_gl(backend->interop);
+    return interopBlitToGl(backend->interop);
 }
 
 extern "C" int bhCudaResize(BH_CudaBackend* backend,
                                unsigned int gl_texture, int width, int height) {
     if (!backend) return -1;
-    return interop_resize(backend->interop, gl_texture, width, height);
+    return interopResize(backend->interop, gl_texture, width, height);
 }
 
 extern "C" int bhCudaRegisterLut(BH_CudaBackend* backend,
                                      int slot, unsigned int gl_texture,
                                      unsigned int target) {
     if (!backend) return -1;
-    int rc = lut_register(backend->luts, slot, gl_texture, target);
+    int rc = lutRegister(backend->luts, slot, gl_texture, target);
     if (rc == 0) {
         /* Keep __constant__ in sync so next frame picks up the new texture */
         sync_lut_constants(backend->luts);
@@ -128,8 +128,8 @@ extern "C" int bhCudaGetVariant(BH_CudaBackend* backend) {
 
 extern "C" void bhCudaShutdown(BH_CudaBackend* backend) {
     if (!backend) return;
-    lut_shutdown(backend->luts);
-    interop_shutdown(backend->interop);
+    lutShutdown(backend->luts);
+    interopShutdown(backend->interop);
     if (backend->compute_stream) {
         cudaStreamDestroy(backend->compute_stream);
     }

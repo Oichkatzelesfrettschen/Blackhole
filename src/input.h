@@ -101,8 +101,8 @@ public:
   [[nodiscard]] bool isActionJustPressed(KeyAction action) const;
   [[nodiscard]] int getKeyForAction(KeyAction action) const;
   void setKeyForAction(KeyAction action, int key);
-  static [[nodiscard]] std::string getKeyName(int key);
-  static [[nodiscard]] const char *getActionName(KeyAction action);
+  [[nodiscard]] static std::string getKeyName(int key);
+  [[nodiscard]] static const char *getActionName(KeyAction action);
 
   // UI state
   [[nodiscard]] bool isUIVisible() const { return uiVisible_; }
@@ -192,7 +192,7 @@ public:
   void setGamepadToggleUIButton(int button) { gamepadToggleUIButton_ = button; }
   [[nodiscard]] float getGamepadAxisRaw(int axis) const;
   [[nodiscard]] float getGamepadAxisFiltered(int axis) const;
-  static [[nodiscard]] bool isGamepadConnected();
+  [[nodiscard]] static bool isGamepadConnected();
 
   // Key remapping mode
   [[nodiscard]] bool isRemappingKey() const { return remappingAction_ != KeyAction::COUNT; }

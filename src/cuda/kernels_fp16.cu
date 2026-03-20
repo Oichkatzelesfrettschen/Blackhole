@@ -10,43 +10,55 @@
  * Core Kerr metric math stays FP32 for precision.
  */
 
-#include "device_physics.cuh"
 #include <cuda_fp16.h>
+#include <driver_types.h>     /* cudaStream_t */
+#include <math.h>             // NOLINT(modernize-deprecated-headers) -- CUDA device code
+#include <vector_functions.h> /* make_float3 */
+#include <vector_types.h>     /* float3, float4, dim3 */
+
+#include "device_physics.cuh"
 
 /* ========================================================================
- * FP16 storage helpers
+ * FP16 storage helpers (internal linkage via anonymous namespace)
  * ======================================================================== */
+
+namespace {
 
 /* phi and t are kept in FP32: phi can grow by ~1e5 radians/step near the
  * Kerr horizon (delta -> 0, delta_safe = 1e-6), far exceeding FP16 max 65504.
  * Only r, theta, and sign fields (bounded, slow-varying) use FP16. */
 struct HalfRayState {
-    __half r, theta;
-    float  phi, t;      /* FP32: avoids Inf -> sincosf NaN near horizon */
-    __half sign_r, sign_theta;
+  __half r;
+  __half theta;
+  float phi; /* FP32: avoids Inf -> sincosf NaN near horizon */
+  float t;   /* FP32: avoids Inf -> sincosf NaN near horizon */
+  __half signR;
+  __half signTheta;
 };
 
-__device__ __forceinline__ HalfRayState kerr_ray_to_half(const KerrRay& kr) {
-    HalfRayState h;
-    h.r = __float2half(kr.r);
-    h.theta = __float2half(kr.theta);
-    h.phi = kr.phi;             /* keep FP32 */
-    h.t = kr.t;                 /* keep FP32 */
-    h.sign_r = __float2half(kr.sign_r);
-    h.sign_theta = __float2half(kr.sign_theta);
-    return h;
+__device__ __forceinline__ HalfRayState kerrRayToHalf(const KerrRay &kr) {
+  HalfRayState h{};
+  h.r = __float2half(kr.r);
+  h.theta = __float2half(kr.theta);
+  h.phi = kr.phi; /* keep FP32 */
+  h.t = kr.t;     /* keep FP32 */
+  h.signR = __float2half(kr.sign_r);
+  h.signTheta = __float2half(kr.sign_theta);
+  return h;
 }
 
-__device__ __forceinline__ KerrRay half_to_kerr_ray(const HalfRayState& h) {
-    KerrRay kr;
-    kr.r = __half2float(h.r);
-    kr.theta = __half2float(h.theta);
-    kr.phi = h.phi;             /* keep FP32 */
-    kr.t = h.t;                 /* keep FP32 */
-    kr.sign_r = __half2float(h.sign_r);
-    kr.sign_theta = __half2float(h.sign_theta);
-    return kr;
+__device__ __forceinline__ KerrRay halfToKerrRay(const HalfRayState &h) {
+  KerrRay kr{};
+  kr.r = __half2float(h.r);
+  kr.theta = __half2float(h.theta);
+  kr.phi = h.phi; /* keep FP32 */
+  kr.t = h.t;     /* keep FP32 */
+  kr.sign_r = __half2float(h.signR);
+  kr.sign_theta = __half2float(h.signTheta);
+  return kr;
 }
+
+} // namespace
 
 /* ========================================================================
  * FP16 Storage Kernel
@@ -57,131 +69,140 @@ __device__ __forceinline__ KerrRay half_to_kerr_ray(const HalfRayState& h) {
  * ======================================================================== */
 
 __launch_bounds__(256, 4)
-__global__ void geodesic_trace_fp16_storage(float4* __restrict__ d_framebuffer) {
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
-    if (px >= d_width || py >= d_height) return;
+    // NOLINTNEXTLINE(misc-use-internal-linkage) -- __global__ cannot be static or in anonymous
+    // namespace
+    __global__ void geodesicTraceFp16Storage(float4 *__restrict__ dFramebuffer) {
+  int const px = static_cast<int>((blockIdx.x * blockDim.x) + threadIdx.x);
+  int const py = static_cast<int>((blockIdx.y * blockDim.y) + threadIdx.y);
+  if (px >= d_width || py >= d_height) {
+    return;
+  }
 
-    float3 cam = make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]);
-    float3 dir = d_ray_dir(px, py);
+  float3 const cam = make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]);
+  float3 const dir = d_ray_dir(px, py);
 
-    float rs = d_rs;
-    float a = 0.5f * d_spin * rs;
-    float dt = d_step_size;
-    int max_steps = d_max_steps;
-    float max_dist = d_max_dist;
+  float const rs = d_rs;
+  float const a = 0.5f * d_spin * rs;
+  float const dt = d_step_size;
+  int const maxSteps = d_max_steps;
+  float const maxDist = d_max_dist;
 
-    HitResult result;
-    result.hit_disk = false;
-    result.hit_horizon = false;
-    result.escaped = false;
-    result.hit_point = make_f3(0.0f, 0.0f, 0.0f);
-    result.phi = 0.0f;
-    result.redshift = 1.0f;
-    result.min_radius = d_length(cam);
+  HitResult result{};
+  result.hit_disk = false;
+  result.hit_horizon = false;
+  result.escaped = false;
+  result.hit_point = make_f3(0.0f, 0.0f, 0.0f);
+  result.phi = 0.0f;
+  result.redshift = 1.0f;
+  result.min_radius = d_length(cam);
 
-    if (d_kerr_enabled && fabsf(a) > D_EPSILON) {
-        float r_horizon = d_kerr_outer_horizon(rs, a);
-        if (r_horizon <= D_EPSILON) r_horizon = rs;
-        float r_disk_in = d_isco;
-        float r_disk_out = 100.0f * rs;
+  if ((d_kerr_enabled != 0) && fabsf(a) > D_EPSILON) {
+    float rHorizon = d_kerr_outer_horizon(rs, a);
+    if (rHorizon <= D_EPSILON) {
+      rHorizon = rs;
+    }
+    float const rDiskIn = d_isco;
+    float const rDiskOut = 100.0f * rs;
 
-        KerrConsts c = d_kerr_init_consts(cam, dir);
-        KerrRay kr = d_kerr_init_ray(cam, dir);
+    KerrConsts const c = d_kerr_init_consts(cam, dir);
+    KerrRay kr = d_kerr_init_ray(cam, dir);
 
-        /* Store initial state in FP16 */
-        HalfRayState hs = kerr_ray_to_half(kr);
+    /* Store initial state in FP16 */
+    HalfRayState hs = kerrRayToHalf(kr);
 
-        for (int step = 0; step < max_steps; ++step) {
-            /* Promote to FP32 for computation */
-            kr = half_to_kerr_ray(hs);
+    for (int step = 0; step < maxSteps; ++step) {
+      /* Promote to FP32 for computation */
+      kr = halfToKerrRay(hs);
 
-            float3 old_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
-            result.min_radius = fminf(result.min_radius, kr.r);
+      float3 const oldPos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+      result.min_radius = fminf(result.min_radius, kr.r);
 
-            if (kr.r <= r_horizon) {
-                result.hit_horizon = true;
-                result.hit_point = old_pos;
-                goto shade;
-            }
+      if (kr.r <= rHorizon) {
+        result.hit_horizon = true;
+        result.hit_point = oldPos;
+        goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
+      }
 
-            /* Kerr step in full FP32 precision */
-            d_kerr_step(kr, rs, a, c, dt);
+      /* Kerr step in full FP32 precision */
+      d_kerr_step(kr, rs, a, c, dt);
 
-            /* Demote back to FP16 for storage */
-            hs = kerr_ray_to_half(kr);
+      /* Demote back to FP16 for storage */
+      hs = kerrRayToHalf(kr);
 
-            float3 new_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+      {
+        float3 const newPos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
 
-            if (d_adisk_enabled) {
-                float3 disk_hit;
-                if (d_check_disk(old_pos, new_pos, r_disk_in, r_disk_out, disk_hit)) {
-                    result.hit_disk = true;
-                    result.hit_point = disk_hit;
-                    result.phi = atan2f(disk_hit.y, disk_hit.x);
-                    result.redshift = d_redshift_factor(d_length(disk_hit), rs);
-                    goto shade;
-                }
-            }
-
-            if (kr.r > max_dist) {
-                result.escaped = true;
-                result.hit_point = new_pos;
-                goto shade;
-            }
+        if (d_adisk_enabled != 0) {
+          float3 diskHit;
+          if (d_check_disk(oldPos, newPos, rDiskIn, rDiskOut, diskHit)) {
+            result.hit_disk = true;
+            result.hit_point = diskHit;
+            result.phi = atan2f(diskHit.y, diskHit.x);
+            result.redshift = d_redshift_factor(d_length(diskHit), rs);
+            goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
+          }
         }
-        result.escaped = true;
-        kr = half_to_kerr_ray(hs);
-        result.hit_point = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
-    } else {
-        /* Schwarzschild path: FP16 storage of position */
-        float3 pos = cam;
-        float3 vel = dir;
-        float r_disk_in = d_isco;
-        float r_disk_out = 100.0f * rs;
 
-        for (int step = 0; step < max_steps; ++step) {
-            float3 old_pos = pos;
-            d_step_rk4(pos, vel, rs, dt);
-
-            float r = d_length(pos);
-            result.min_radius = fminf(result.min_radius, r);
-
-            if (r <= rs) {
-                result.hit_horizon = true;
-                result.hit_point = pos;
-                goto shade;
-            }
-
-            if (d_adisk_enabled) {
-                float3 disk_hit;
-                if (d_check_disk(old_pos, pos, r_disk_in, r_disk_out, disk_hit)) {
-                    result.hit_disk = true;
-                    result.hit_point = disk_hit;
-                    result.phi = atan2f(disk_hit.y, disk_hit.x);
-                    result.redshift = d_redshift_factor(d_length(disk_hit), rs);
-                    goto shade;
-                }
-            }
-
-            if (r > max_dist) {
-                result.escaped = true;
-                result.hit_point = pos;
-                goto shade;
-            }
+        if (kr.r > maxDist) {
+          result.escaped = true;
+          result.hit_point = newPos;
+          goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
         }
+      }
+    }
+    result.escaped = true;
+    kr = halfToKerrRay(hs);
+    result.hit_point = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+  } else {
+    /* Schwarzschild path */
+    float3 pos = cam;
+    float3 vel = dir;
+    float const rDiskIn = d_isco;
+    float const rDiskOut = 100.0f * rs;
+
+    for (int step = 0; step < maxSteps; ++step) {
+      float3 const oldPos = pos;
+      d_step_rk4(pos, vel, rs, dt);
+
+      float const r = d_length(pos);
+      result.min_radius = fminf(result.min_radius, r);
+
+      if (r <= rs) {
+        result.hit_horizon = true;
+        result.hit_point = pos;
+        goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
+      }
+
+      if (d_adisk_enabled != 0) {
+        float3 diskHit;
+        if (d_check_disk(oldPos, pos, rDiskIn, rDiskOut, diskHit)) {
+          result.hit_disk = true;
+          result.hit_point = diskHit;
+          result.phi = atan2f(diskHit.y, diskHit.x);
+          result.redshift = d_redshift_factor(d_length(diskHit), rs);
+          goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
+        }
+      }
+
+      if (r > maxDist) {
         result.escaped = true;
         result.hit_point = pos;
+        goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
+      }
     }
+    result.escaped = true;
+    result.hit_point = pos;
+  }
 
 shade:
-    d_framebuffer[py * d_width + px] = d_shade_hit(result, cam);
+  dFramebuffer[(py * d_width) + px] = d_shade_hit(result, cam);
 }
 
 /* Host wrapper */
-extern "C" void launch_fp16_storage(float4* d_framebuffer, int width, int height,
-                                     cudaStream_t stream) {
-    dim3 block(16, 16);
-    dim3 grid((width + 15) / 16, (height + 15) / 16);
-    geodesic_trace_fp16_storage<<<grid, block, 0, stream>>>(d_framebuffer);
+extern "C" void launchFp16Storage(float4 *dFramebuffer, int width, int height,
+                                  cudaStream_t stream) {
+  dim3 const block(16, 16);
+  dim3 const grid(static_cast<unsigned int>((width + 15) / 16),
+                  static_cast<unsigned int>((height + 15) / 16));
+  geodesicTraceFp16Storage<<<grid, block, 0, stream>>>(dFramebuffer);
 }

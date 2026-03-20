@@ -34,14 +34,15 @@
 #ifndef PHYSICS_THIN_DISK_H
 #define PHYSICS_THIN_DISK_H
 
-#include "constants.h"
-#include "kerr.h"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
 #include <numbers>
 #include <vector>
+
+#include "constants.h"
+#include "kerr.h"
 
 namespace physics {
 
@@ -63,11 +64,11 @@ constexpr double RADIATION_CONSTANT = 4.0 * STEFAN_BOLTZMANN / C;
  * @brief Parameters for a thin accretion disk.
  */
 struct DiskParams {
-  double mass        = 0.0; ///< Black hole mass [g]
-  double mDot        = 0.0; ///< Accretion rate [g/s]
-  double a           = 0.0; ///< Spin parameter [cm] (0 for Schwarzschild)
-  double rIn         = 0.0; ///< Inner radius [cm] (typically ISCO)
-  double rOut        = 0.0; ///< Outer radius [cm]
+  double mass = 0.0;        ///< Black hole mass [g]
+  double mDot = 0.0;        ///< Accretion rate [g/s]
+  double a = 0.0;           ///< Spin parameter [cm] (0 for Schwarzschild)
+  double rIn = 0.0;         ///< Inner radius [cm] (typically ISCO)
+  double rOut = 0.0;        ///< Outer radius [cm]
   double inclination = 0.0; ///< Viewing inclination [rad]
 };
 
@@ -80,10 +81,10 @@ struct DiskParams {
  * @return DiskParams
  */
 [[nodiscard]] inline DiskParams schwarzschildDisk(double mSolar, double mDotEdd = 0.1,
-                                                   double rOutRg = 1000.0) {
+                                                  double rOutRg = 1000.0) {
   DiskParams disk;
   disk.mass = mSolar * M_SUN;
-  disk.a    = 0.0;
+  disk.a = 0.0;
 
   // Eddington luminosity: L_Edd = 4pi G M m_p c / sigma_T
   const double lEdd = 1.26e38 * mSolar; // erg/s
@@ -94,7 +95,7 @@ struct DiskParams {
 
   // Radii in cm
   const double rG = G * disk.mass / C2;
-  disk.rIn  = 6.0 * rG; // ISCO for Schwarzschild
+  disk.rIn = 6.0 * rG; // ISCO for Schwarzschild
   disk.rOut = rOutRg * rG;
   disk.inclination = 0.0;
 
@@ -110,8 +111,8 @@ struct DiskParams {
  * @param prograde True for prograde disk
  * @return DiskParams
  */
-[[nodiscard]] inline DiskParams kerrDisk(double mSolar, double aStar,
-                                          double mDotEdd = 0.1, bool prograde = true) {
+[[nodiscard]] inline DiskParams kerrDisk(double mSolar, double aStar, double mDotEdd = 0.1,
+                                         bool prograde = true) {
   DiskParams disk;
   disk.mass = mSolar * M_SUN;
 
@@ -128,7 +129,7 @@ struct DiskParams {
   disk.mDot = mDotEdd * lEdd / (eta * C2);
 
   // ISCO
-  disk.rIn  = kerrIscoRadius(disk.mass, disk.a, prograde);
+  disk.rIn = kerrIscoRadius(disk.mass, disk.a, prograde);
   disk.rOut = 1000.0 * mGeo;
   disk.inclination = 0.0;
 
@@ -150,13 +151,13 @@ struct DiskParams {
  */
 [[nodiscard]] inline double specificEnergySchwarzschild(double r, double mass) {
   const double rG = G * mass / C2;
-  const double x  = rG / r;
+  const double x = rG / r;
 
   if (r <= (3.0 * rG)) {
     return std::numeric_limits<double>::quiet_NaN();
   }
 
-  const double numerator   = 1.0 - (2.0 * x);
+  const double numerator = 1.0 - (2.0 * x);
   const double denominator = std::sqrt(1.0 - (3.0 * x));
 
   return numerator / denominator;
@@ -173,7 +174,7 @@ struct DiskParams {
  */
 [[nodiscard]] inline double specificAngularMomentumSchwarzschild(double r, double mass) {
   const double rG = G * mass / C2;
-  const double x  = rG / r;
+  const double x = rG / r;
 
   if (r <= (3.0 * rG)) {
     return std::numeric_limits<double>::quiet_NaN();
@@ -212,7 +213,7 @@ struct DiskParams {
   const double rG = G * mass / C2;
 
   // Dimensionless radii
-  const double x   = std::sqrt(r / rG);
+  const double x = std::sqrt(r / rG);
   const double xIn = std::sqrt(rIn / rG);
 
   // Page & Thorne (1974) formula
@@ -254,9 +255,9 @@ struct DiskParams {
     fR = novikovThorneFactor(r, disk.rIn, disk.mass);
   } else {
     // Kerr - simplified approximation
-    const double rG       = G * disk.mass / C2;
-    const double basic    = 1.0 - std::sqrt(disk.rIn / r);
-    const double aStar    = disk.a / rG;
+    const double rG = G * disk.mass / C2;
+    const double basic = 1.0 - std::sqrt(disk.rIn / r);
+    const double aStar = disk.a / rG;
     const double spinFactor = 1.0 + (0.5 * aStar * std::sqrt(rG / r));
     fR = basic * spinFactor;
   }
@@ -273,7 +274,9 @@ struct DiskParams {
  * @return Temperature [K]
  */
 [[nodiscard]] inline double diskTemperatureFromFlux(double flux) {
-  if (flux <= 0) { return 0.0; }
+  if (flux <= 0) {
+    return 0.0;
+  }
   return std::pow(flux / STEFAN_BOLTZMANN, 0.25);
 }
 
@@ -298,8 +301,7 @@ struct DiskParams {
  * @param tMax Output: peak temperature [K]
  * @param rPeak Output: radius of peak [cm]
  */
-inline void diskPeakTemperature(const DiskParams &disk,
-                                 double &tMax, double &rPeak) {
+inline void diskPeakTemperature(const DiskParams &disk, double &tMax, double &rPeak) {
   // Peak is roughly at (49/12) * rIn for Schwarzschild
   rPeak = (49.0 / 12.0) * disk.rIn;
 
@@ -323,17 +325,21 @@ inline void diskPeakTemperature(const DiskParams &disk,
  * @return Specific intensity [erg/(s cm^2 Hz sr)]
  */
 [[nodiscard]] inline double planckFunction(double nu, double tempK) {
-  if (tempK <= 0 || nu <= 0) { return 0.0; }
+  if (tempK <= 0 || nu <= 0) {
+    return 0.0;
+  }
 
   constexpr double h = 6.62607015e-27; // Planck constant [erg s]
 
   const double x = (h * nu) / (K_B * tempK);
 
   // Avoid overflow
-  if (x > 700) { return 0.0; }
+  if (x > 700) {
+    return 0.0;
+  }
 
   const double prefactor = (2.0 * h * nu * nu * nu) / (C * C);
-  return prefactor / (std::exp(x) - 1.0);
+  return prefactor / std::expm1(x);
 }
 
 /**
@@ -347,19 +353,18 @@ inline void diskPeakTemperature(const DiskParams &disk,
  * @param nPoints Number of integration points
  * @return Specific luminosity [erg/(s Hz)]
  */
-[[nodiscard]] inline double diskSpectrum(double nu, const DiskParams &disk,
-                                          int nPoints = 100) {
+[[nodiscard]] inline double diskSpectrum(double nu, const DiskParams &disk, int nPoints = 100) {
   double sum = 0.0;
-  const double logRIn  = std::log(disk.rIn);
+  const double logRIn = std::log(disk.rIn);
   const double logROut = std::log(disk.rOut);
-  const double dLogR   = (logROut - logRIn) / nPoints;
+  const double dLogR = (logROut - logRIn) / nPoints;
 
   for (int i = 0; i < nPoints; ++i) {
     const double logR = logRIn + ((i + 0.5) * dLogR);
-    const double r    = std::exp(logR);
+    const double r = std::exp(logR);
 
     const double diskTemp = diskTemperature(r, disk);
-    const double bNu  = planckFunction(nu, diskTemp);
+    const double bNu = planckFunction(nu, diskTemp);
 
     // Integrate r dr = r^2 d(log r)
     sum += bNu * r * r * dLogR;
@@ -385,7 +390,7 @@ inline void diskPeakTemperature(const DiskParams &disk,
   // Efficiency from ISCO binding energy
   // E_ISCO/c^2 for Schwarzschild: 1 - sqrt(8/9) ~ 0.0572
   const double eIsco = specificEnergySchwarzschild(rIsco, disk.mass);
-  const double eta   = 1.0 - eIsco;
+  const double eta = 1.0 - eIsco;
 
   return eta * disk.mDot * C2;
 }
@@ -405,9 +410,11 @@ inline void diskPeakTemperature(const DiskParams &disk,
  */
 [[nodiscard]] inline double diskRedshiftFactor(double r, double mass) {
   const double rG = G * mass / C2;
-  const double x  = (3.0 * rG) / r;
+  const double x = (3.0 * rG) / r;
 
-  if (x >= 1.0) { return 0.0; }
+  if (x >= 1.0) {
+    return 0.0;
+  }
   return std::sqrt(1.0 - x);
 }
 
@@ -425,13 +432,13 @@ inline void diskPeakTemperature(const DiskParams &disk,
  * @return Doppler factor
  */
 [[nodiscard]] inline double diskDopplerFactor(double r, double phi, double inclination,
-                                               double mass) {
+                                              double mass) {
   // Orbital velocity
-  const double v    = std::sqrt(G * mass / r);
+  const double v = std::sqrt(G * mass / r);
   const double beta = v / C;
 
   // Velocity component toward observer
-  const double sinI    = std::sin(inclination);
+  const double sinI = std::sin(inclination);
   const double betaLos = beta * std::sin(phi) * sinI;
 
   // Lorentz factor
@@ -452,11 +459,11 @@ inline void diskPeakTemperature(const DiskParams &disk,
  */
 [[nodiscard]] inline double diskFluxObserved(double r, double phi, const DiskParams &disk) {
   const double fEmit = diskFlux(r, disk);
-  const double g     = diskRedshiftFactor(r, disk.mass);
+  const double g = diskRedshiftFactor(r, disk.mass);
   const double delta = diskDopplerFactor(r, phi, disk.inclination, disk.mass);
 
   // Combined factor: I_obs/I_emit = (g*delta)^4 for specific intensity
-  const double factor  = g * delta;
+  const double factor = g * delta;
   const double factor4 = factor * factor * factor * factor;
 
   return fEmit * factor4;
@@ -470,12 +477,12 @@ inline void diskPeakTemperature(const DiskParams &disk,
  * @brief Radial profile point.
  */
 struct DiskProfilePoint {
-  double r           = 0.0; ///< Radius [cm]
-  double rRg         = 0.0; ///< Radius in gravitational radii
-  double flux        = 0.0; ///< Surface flux [erg/(cm^2 s)]
+  double r = 0.0;           ///< Radius [cm]
+  double rRg = 0.0;         ///< Radius in gravitational radii
+  double flux = 0.0;        ///< Surface flux [erg/(cm^2 s)]
   double temperature = 0.0; ///< Temperature [K]
-  double vOrb        = 0.0; ///< Orbital velocity [cm/s]
-  double omega       = 0.0; ///< Angular velocity [rad/s]
+  double vOrb = 0.0;        ///< Orbital velocity [cm/s]
+  double omega = 0.0;       ///< Angular velocity [rad/s]
 };
 
 /**
@@ -486,25 +493,25 @@ struct DiskProfilePoint {
  * @return Vector of profile points
  */
 [[nodiscard]] inline std::vector<DiskProfilePoint> diskProfile(const DiskParams &disk,
-                                                                int nPoints = 100) {
+                                                               int nPoints = 100) {
   std::vector<DiskProfilePoint> profile;
   if (nPoints <= 0) {
     return profile;
   }
   profile.reserve(static_cast<std::size_t>(nPoints));
 
-  const double rG     = G * disk.mass / C2;
-  const double logRIn  = std::log(disk.rIn);
+  const double rG = G * disk.mass / C2;
+  const double logRIn = std::log(disk.rIn);
   const double logROut = std::log(disk.rOut);
-  const double dLogR   = (logROut - logRIn) / (nPoints - 1);
+  const double dLogR = (logROut - logRIn) / (nPoints - 1);
 
   for (int i = 0; i < nPoints; ++i) {
     const double logR = logRIn + (i * dLogR);
-    const double r    = std::exp(logR);
+    const double r = std::exp(logR);
 
     DiskProfilePoint pt;
-    pt.r    = r;
-    pt.rRg  = r / rG;
+    pt.r = r;
+    pt.rRg = r / rG;
     pt.flux = diskFlux(r, disk);
     pt.temperature = diskTemperatureFromFlux(pt.flux);
     pt.vOrb = std::sqrt(G * disk.mass / r);

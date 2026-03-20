@@ -34,9 +34,8 @@ namespace physics {
  * @tparam T Floating point type
  * @return Maximum finite value
  */
-template<typename T>
-[[nodiscard]] constexpr T safeMax() noexcept {
-    return std::numeric_limits<T>::max();
+template <typename T> [[nodiscard]] constexpr T safeMax() noexcept {
+  return std::numeric_limits<T>::max();
 }
 
 /**
@@ -48,9 +47,8 @@ template<typename T>
  * @tparam T Floating point type
  * @return Minimum finite value
  */
-template<typename T>
-[[nodiscard]] constexpr T safeLowest() noexcept {
-    return std::numeric_limits<T>::lowest();
+template <typename T> [[nodiscard]] constexpr T safeLowest() noexcept {
+  return std::numeric_limits<T>::lowest();
 }
 
 /**
@@ -66,20 +64,19 @@ template<typename T>
  * @tparam T Floating point type (must be double or float)
  * @return Positive infinity
  */
-template<typename T>
-[[nodiscard]] inline T safeInfinity() noexcept {
-    // Use compiler builtins that bypass -ffinite-math-only
+template <typename T> [[nodiscard]] inline T safeInfinity() noexcept {
+  // Use compiler builtins that bypass -ffinite-math-only
 #if defined(__GNUC__) || defined(__clang__)
-    if constexpr (std::is_same_v<T, double>) {
-        return __builtin_huge_val();
-    } else if constexpr (std::is_same_v<T, float>) {
-        return __builtin_huge_valf();
-    } else if constexpr (std::is_same_v<T, long double>) {
-        return __builtin_huge_vall();
-    }
+  if constexpr (std::is_same_v<T, double>) {
+    return __builtin_huge_val();
+  } else if constexpr (std::is_same_v<T, float>) {
+    return __builtin_huge_valf();
+  } else {
+    return __builtin_huge_vall();
+  }
 #else
-    // Fallback for other compilers - may not work with fast-math
-    return std::numeric_limits<T>::infinity();
+  // Fallback for other compilers - may not work with fast-math
+  return std::numeric_limits<T>::infinity();
 #endif
 }
 
@@ -91,9 +88,8 @@ template<typename T>
  * @param x Value to check
  * @return true if x is very large (> 0.99 * max)
  */
-template<typename T>
-[[nodiscard]] constexpr bool isEffectivelyInfinite(T x) noexcept {
-    return x > T(0.99) * std::numeric_limits<T>::max();
+template <typename T> [[nodiscard]] constexpr bool isEffectivelyInfinite(T x) noexcept {
+  return x > T(0.99) * std::numeric_limits<T>::max();
 }
 
 /**
@@ -106,11 +102,10 @@ template<typename T>
  * @tparam T Floating point type
  * @return Large positive value representing "no solution"
  */
-template<typename T>
-[[nodiscard]] constexpr T divergentResult() noexcept {
-    // Return a very large but finite value
-    // This avoids UB with -ffast-math while still being "infinity-like"
-    return std::numeric_limits<T>::max() / T(2);
+template <typename T> [[nodiscard]] constexpr T divergentResult() noexcept {
+  // Return a very large but finite value
+  // This avoids UB with -ffast-math while still being "infinity-like"
+  return std::numeric_limits<T>::max() / T(2);
 }
 
 // Clang warns about infinity/NaN checks even when using builtins with -ffast-math.
@@ -130,15 +125,14 @@ template<typename T>
  * @param x Value to check
  * @return true if x is finite
  */
-template<typename T>
-[[nodiscard]] inline bool safeIsfinite(T x) noexcept {
+template <typename T> [[nodiscard]] inline bool safeIsfinite(T x) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-    // Use builtin that bypasses -ffinite-math-only optimization.
-    // WHY: __builtin_isfinite handles all float types uniformly;
-    // the single call avoids a repeated-branch-body warning.
-    return __builtin_isfinite(x);
+  // Use builtin that bypasses -ffinite-math-only optimization.
+  // WHY: __builtin_isfinite handles all float types uniformly;
+  // the single call avoids a repeated-branch-body warning.
+  return __builtin_isfinite(x);
 #else
-    return std::isfinite(x);
+  return std::isfinite(x);
 #endif
 }
 
@@ -150,12 +144,11 @@ template<typename T>
  * @param x Value to check
  * @return true if x is NaN
  */
-template<typename T>
-[[nodiscard]] inline bool safeIsnan(T x) noexcept {
+template <typename T> [[nodiscard]] inline bool safeIsnan(T x) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-    return __builtin_isnan(x);
+  return __builtin_isnan(x);
 #else
-    return std::isnan(x);
+  return std::isnan(x);
 #endif
 }
 
@@ -167,12 +160,11 @@ template<typename T>
  * @param x Value to check
  * @return true if x is positive or negative infinity
  */
-template<typename T>
-[[nodiscard]] inline bool safeIsinf(T x) noexcept {
+template <typename T> [[nodiscard]] inline bool safeIsinf(T x) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-    return __builtin_isinf(x);
+  return __builtin_isinf(x);
 #else
-    return std::isinf(x);
+  return std::isinf(x);
 #endif
 }
 

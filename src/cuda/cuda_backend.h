@@ -17,7 +17,7 @@ extern "C" {
 #endif
 
 /* Opaque handle to the CUDA backend state (interop + LUT manager). */
-using BH_CudaBackend = struct BH_CudaBackend;
+using BH_CudaBackend = struct BhCudaBackend;
 
 /* Initialize the CUDA backend. Selects the GL-compatible CUDA device,
  * creates streams, allocates the linear framebuffer.
@@ -55,6 +55,16 @@ void bhCudaShutdown(BH_CudaBackend *backend);
 
 #ifdef __cplusplus
 }
-#endif
+
+/* CUDA backend lifecycle state: bundles the 4 per-render-session variables
+ * that belong together as a single object rather than separate static locals.
+ * Initialize as: static BhCudaState cudaState = {nullptr, -1, false, false}; */
+struct BhCudaState {
+  BH_CudaBackend *backend; /* NULL when not initialized */
+  int kernelVariant;       /* -1 = auto-select; >= 0 = explicit variant */
+  bool initAttempted;      /* true after first init attempt (success or fail) */
+  bool enabled;            /* user UI toggle: use CUDA render path */
+};
+#endif /* __cplusplus */
 
 #endif /* BLACKHOLE_CUDA_BACKEND_H */

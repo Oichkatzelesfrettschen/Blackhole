@@ -29,7 +29,7 @@ namespace {
 constexpr double K_REFERENCE_MASS_MSUN = 1.0;
 
 double rGFromMsun(double msun) {
-    return physics::G * msun * physics::M_SUN / physics::C2;
+  return physics::G * msun * physics::M_SUN / physics::C2;
 }
 } // namespace
 
@@ -46,17 +46,17 @@ int bhbVersionMinor(void) {
 
 int bhbHasCuda(void) {
 #ifdef BLACKHOLE_HAS_CUDA
-    return 1;
+  return 1;
 #else
-    return 0;
+  return 0;
 #endif
 }
 
 int bhbHasBoost(void) {
 #ifdef PHYSICS_HAS_BOOST_BESSEL
-    return 1;
+  return 1;
 #else
-    return 0;
+  return 0;
 #endif
 }
 
@@ -66,7 +66,7 @@ int bhbHasBoost(void) {
 
 void bhbPresetM87(struct BhbSourceParams *out) {
   auto src = physics::sourceM87();
-  std::memset(out, 0, sizeof(*out));
+  *out = BhbSourceParams{};
   std::strncpy(out->name, src.name.c_str(), sizeof(out->name) - 1);
   out->massMsun = src.massMsun;
   out->spin = src.spin;
@@ -79,7 +79,7 @@ void bhbPresetM87(struct BhbSourceParams *out) {
 
 void bhbPresetSgra(struct BhbSourceParams *out) {
   auto src = physics::sourceSgra();
-  std::memset(out, 0, sizeof(*out));
+  *out = BhbSourceParams{};
   std::strncpy(out->name, src.name.c_str(), sizeof(out->name) - 1);
   out->massMsun = src.massMsun;
   out->spin = src.spin;
@@ -162,12 +162,11 @@ namespace {
  * Coordinates: (t, r, theta=pi/2, phi) with affine parameter lambda. */
 
 struct KerrState {
-    double r, phi, pr, pphi;
+  double r, phi, pr, pphi;
 };
 
 /* Equations of motion for equatorial null geodesics in Kerr. */
-void kerrEquatorial(double aStar, double b, const KerrState &s,
-                    KerrState &ds) {
+void kerrEquatorial(double aStar, double b, const KerrState &s, KerrState &ds) {
   double const r = s.r;
   double const r2 = r * r;
   double const a2 = aStar * aStar;
@@ -684,9 +683,9 @@ int bhbCudaRenderDiskTexture(const struct BhbDiskParams * /*unused*/, int /*unus
 
 #ifndef BLACKHOLE_HAS_CUDA
 /* Stub for ray-traced renderer when CUDA is not available. */
-int bhb_cuda_render_raytraced(
-    float, float, float, int, int, float *)
-{ return -1; }
+int bhb_cuda_render_raytraced(float, float, float, int, int, float *) {
+  return -1;
+}
 #endif
 
 /* ========================================================================
