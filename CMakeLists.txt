@@ -2110,6 +2110,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Higher GW multipole QNM modes (l>2) validation (Phase 6.3f)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gw_multipole_test.cpp")
+    add_executable(gw_multipole_test
+      "${PROJECT_SOURCE_DIR}/tests/gw_multipole_test.cpp"
+    )
+    target_include_directories(gw_multipole_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(gw_multipole_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME gw_multipole_validation COMMAND gw_multipole_test)
+    set_tests_properties(gw_multipole_validation PROPERTIES
+      LABELS "physics;gw;qnm;multipole;phase6"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(gw_multipole_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # EHT shadow diameter validation tests (Phase 5.4)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_shadow_test.cpp")
     add_executable(eht_shadow_test
