@@ -1087,8 +1087,10 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/shader_watcher.cpp"
   "${PROJECT_SOURCE_DIR}/src/texture.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_packed_loader.cpp"
+  "${PROJECT_SOURCE_DIR}/src/grmhd_pbo_uploader.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_streaming.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
+  "${PROJECT_SOURCE_DIR}/src/stb_image_write_impl.cpp"
   "${PROJECT_SOURCE_DIR}/src/input.cpp"
   "${PROJECT_SOURCE_DIR}/src/settings.cpp"
   "${PROJECT_SOURCE_DIR}/src/GLDebugMessageCallback.cc"
@@ -1711,6 +1713,27 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(grmhd_pack_fixture PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # GRMHD PBO uploader headless state-machine test
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_pbo_uploader_test.cpp")
+    add_executable(grmhd_pbo_uploader_test
+      "${PROJECT_SOURCE_DIR}/tests/grmhd_pbo_uploader_test.cpp"
+    )
+    target_include_directories(grmhd_pbo_uploader_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(grmhd_pbo_uploader_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME grmhd_pbo_state_machine COMMAND grmhd_pbo_uploader_test)
+    set_tests_properties(grmhd_pbo_state_machine PROPERTIES
+      LABELS "grmhd;gpu;perf;pbo"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(grmhd_pbo_state_machine PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
