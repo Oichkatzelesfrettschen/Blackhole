@@ -22,6 +22,7 @@
  */
 
 #extension GL_ARB_compute_shader : require
+#extension GL_GOOGLE_include_directive : enable
 #extension GL_ARB_shader_storage_buffer_object : require
 #extension GL_ARB_shader_clock : require
 // #extension GL_EXT_scalar_block_layout : require  // Not supported by driver
@@ -37,6 +38,10 @@ const float LARGE = 1e10;
 
 // Work group size: 16x16 = 256 rays per compute dispatch
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// WHY: BL-coord wiregrid overlay -- compute path parity with fragment shader (task A3)
+#include "include/wiregrid.glsl"
+
 
 // ============================================================================
 // Uniforms & Camera
@@ -66,6 +71,11 @@ layout(std140, binding = 1) uniform PhysicsData {
     float tolerance;          // Adaptive tolerance
     uint maxSteps;            // Maximum integration steps
 } physics;
+
+// Wiregrid overlay uniforms (task A3; mirroring blackhole_main.frag)
+uniform float wiregridEnabled   = 0.0;
+uniform float wiregridShowErgo  = 1.0;
+uniform float wiregridGridScale = 1.0;
 
 // ============================================================================
 // Output Storage
@@ -241,6 +251,15 @@ void main() {
         ray = rk4Step(ray, dt);
     }
 
+    // Apply BL-coord wiregrid overlay (task A3)
+    if (wiregridEnabled > 0.5 && ray.r > 1e-5) {
+      float theta_bl = ray.theta;
+      float phi_bl   = ray.phi;
+      bool  showErgo = wiregridShowErgo > 0.5;
+      vec4  wg = wiregridOverlay(ray.r, theta_bl, phi_bl,
+                                 physics.blackHoleSpin, showErgo, wiregridGridScale);
+      color = mix(color, wg.rgb, wg.a);
+    }
     // Write output
     rayOutput.data[rayIndex] = vec4(color, depth);
     rayDepth.depth[rayIndex] = depth;
