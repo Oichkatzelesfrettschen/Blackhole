@@ -21,19 +21,19 @@ using namespace physics;
 bool test_field_modifier_application() {
     std::cout << "Test 1: Field Modifier Application\n";
 
-    ParameterAdjustmentState state = create_parameter_adjustment_state();
+    ParameterAdjustmentState state = createParameterAdjustmentState();
 
     // Set density modifier: scale by 2.0, offset by 0.5
-    set_density_modifier(state, 2.0, 0.5, 0.0, 10.0);
+    setDensityModifier(state, 2.0, 0.5, 0.0, 10.0);
 
     // Test with various raw values
     double raw_1 = 1.0;
     double raw_5 = 5.0;
     double raw_10 = 10.0;
 
-    double adj_1 = adjust_density(raw_1, state);  // 1.0 * 2.0 + 0.5 = 2.5
-    double adj_5 = adjust_density(raw_5, state);  // 5.0 * 2.0 + 0.5 = 10.5 -> clamped to 10.0
-    double adj_10 = adjust_density(raw_10, state); // 10.0 * 2.0 + 0.5 = 20.5 -> clamped to 10.0
+    double adj_1 = adjustDensity(raw_1, state);  // 1.0 * 2.0 + 0.5 = 2.5
+    double adj_5 = adjustDensity(raw_5, state);  // 5.0 * 2.0 + 0.5 = 10.5 -> clamped to 10.0
+    double adj_10 = adjustDensity(raw_10, state); // 10.0 * 2.0 + 0.5 = 20.5 -> clamped to 10.0
 
     bool modifier_ok = (std::abs(adj_1 - 2.5) < 1e-10) &&
                       (std::abs(adj_5 - 10.0) < 1e-10) &&
@@ -51,18 +51,18 @@ bool test_field_modifier_application() {
 bool test_global_field_scaling() {
     std::cout << "Test 2: Global Field Scaling\n";
 
-    ParameterAdjustmentState state = create_parameter_adjustment_state();
+    ParameterAdjustmentState state = createParameterAdjustmentState();
 
     // Set global density and temperature scales
-    set_global_density_scale(state, 0.5);      // 50% density
-    set_global_temperature_scale(state, 2.0);  // 2x temperature
+    setGlobalDensityScale(state, 0.5);      // 50% density
+    setGlobalTemperatureScale(state, 2.0);  // 2x temperature
 
     // Test adjustment without per-field modifiers
     double raw_density = 10.0;
     double raw_temp = 1e7;
 
-    double adj_density = adjust_density(raw_density, state);   // 10.0 * 0.5 = 5.0
-    double adj_temp = adjust_temperature(raw_temp, state);     // 1e7 * 2.0 = 2e7
+    double adj_density = adjustDensity(raw_density, state);   // 10.0 * 0.5 = 5.0
+    double adj_temp = adjustTemperature(raw_temp, state);     // 1e7 * 2.0 = 2e7
 
     bool scaling_ok = (std::abs(adj_density - 5.0) < 1e-10) &&
                      (std::abs(adj_temp - 2e7) < 1e-5);
@@ -80,21 +80,21 @@ bool test_global_field_scaling() {
 bool test_multifield_adjustment() {
     std::cout << "Test 3: Multi-Field Adjustment\n";
 
-    ParameterAdjustmentState state = create_parameter_adjustment_state();
+    ParameterAdjustmentState state = createParameterAdjustmentState();
 
     // Set different modifiers for each field
-    set_density_modifier(state, 1.5, 0.1);           // 1.5x + 0.1
-    set_temperature_modifier(state, 0.8, 1e6);       // 0.8x + 1e6
-    set_magnetic_field_modifier(state, 2.0, -10.0);  // 2.0x - 10.0
+    setDensityModifier(state, 1.5, 0.1);           // 1.5x + 0.1
+    setTemperatureModifier(state, 0.8, 1e6);       // 0.8x + 1e6
+    setMagneticFieldModifier(state, 2.0, -10.0);  // 2.0x - 10.0
 
     // Adjust global scales too
-    set_global_density_scale(state, 1.0);      // No global scale
-    set_global_temperature_scale(state, 1.0);
+    setGlobalDensityScale(state, 1.0);      // No global scale
+    setGlobalTemperatureScale(state, 1.0);
 
     // Test each field independently
-    double rho = adjust_density(1.0, state);        // 1.0 * 1.0 * 1.5 + 0.1 = 1.6
-    double T = adjust_temperature(1e7, state);      // 1e7 * 1.0 * 0.8 + 1e6 = 9e6
-    double B = adjust_magnetic_field(50.0, state);  // 50.0 * 2.0 - 10.0 = 90.0
+    double rho = adjustDensity(1.0, state);        // 1.0 * 1.0 * 1.5 + 0.1 = 1.6
+    double T = adjustTemperature(1e7, state);      // 1e7 * 1.0 * 0.8 + 1e6 = 9e6
+    double B = adjustMagneticField(50.0, state);  // 50.0 * 2.0 - 10.0 = 90.0
 
     bool multifield_ok = (std::abs(rho - 1.6) < 1e-10) &&
                         (std::abs(T - 9e6) < 1e2) &&
@@ -113,14 +113,14 @@ bool test_multifield_adjustment() {
 bool test_clamping_bounds() {
     std::cout << "Test 4: Clamping and Bounds Checking\n";
 
-    ParameterAdjustmentState state = create_parameter_adjustment_state();
+    ParameterAdjustmentState state = createParameterAdjustmentState();
 
     // Set modifier with aggressive clamping
-    set_density_modifier(state, 3.0, -1.0, 0.5, 2.0);  // Scale 3x, offset -1, clamp [0.5, 2.0]
+    setDensityModifier(state, 3.0, -1.0, 0.5, 2.0);  // Scale 3x, offset -1, clamp [0.5, 2.0]
 
-    double val1 = adjust_density(0.1, state);  // 0.1 * 3.0 - 1.0 = -0.7 -> clamped to 0.5
-    double val2 = adjust_density(0.5, state);  // 0.5 * 3.0 - 1.0 = 0.5 (in range)
-    double val3 = adjust_density(1.5, state);  // 1.5 * 3.0 - 1.0 = 3.5 -> clamped to 2.0
+    double val1 = adjustDensity(0.1, state);  // 0.1 * 3.0 - 1.0 = -0.7 -> clamped to 0.5
+    double val2 = adjustDensity(0.5, state);  // 0.5 * 3.0 - 1.0 = 0.5 (in range)
+    double val3 = adjustDensity(1.5, state);  // 1.5 * 3.0 - 1.0 = 3.5 -> clamped to 2.0
 
     bool clamp_ok = (std::abs(val1 - 0.5) < 1e-10) &&
                    (std::abs(val2 - 0.5) < 1e-10) &&
@@ -139,20 +139,20 @@ bool test_clamping_bounds() {
 bool test_adjustment_enable_disable() {
     std::cout << "Test 5: Adjustment Enable/Disable\n";
 
-    ParameterAdjustmentState state = create_parameter_adjustment_state();
+    ParameterAdjustmentState state = createParameterAdjustmentState();
 
     // Set modifiers
-    set_density_modifier(state, 2.0, 0.0);
+    setDensityModifier(state, 2.0, 0.0);
 
     double raw = 5.0;
 
     // Adjustments enabled
-    set_adjustments_enabled(state, true);
-    double adj_enabled = adjust_density(raw, state);  // 5.0 * 2.0 = 10.0
+    setAdjustmentsEnabled(state, true);
+    double adj_enabled = adjustDensity(raw, state);  // 5.0 * 2.0 = 10.0
 
     // Adjustments disabled
-    set_adjustments_enabled(state, false);
-    double adj_disabled = adjust_density(raw, state);  // Should return raw value
+    setAdjustmentsEnabled(state, false);
+    double adj_disabled = adjustDensity(raw, state);  // Should return raw value
 
     bool enable_ok = (std::abs(adj_enabled - 10.0) < 1e-10) &&
                     (std::abs(adj_disabled - 5.0) < 1e-10);
@@ -174,36 +174,36 @@ bool test_multisequence_sync() {
                                                       static_cast<uint32_t>(times.size()));
 
     // Create 3 playback states for 3 sequences
-    AdvancedPlaybackState state1 = create_advanced_playback_state(ts, 1.0);
-    AdvancedPlaybackState state2 = create_advanced_playback_state(ts, 1.0);
-    AdvancedPlaybackState state3 = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state1 = createAdvancedPlaybackState(ts, 1.0);
+    AdvancedPlaybackState state2 = createAdvancedPlaybackState(ts, 1.0);
+    AdvancedPlaybackState state3 = createAdvancedPlaybackState(ts, 1.0);
 
     // Create sync group
-    SynchronizedPlaybackGroup group = create_sync_group();
-    add_to_sync_group(group, &state1);
-    add_to_sync_group(group, &state2);
-    add_to_sync_group(group, &state3);
+    SynchronizedPlaybackGroup group = createSyncGroup();
+    (void)addToSyncGroup(group, &state1);
+    (void)addToSyncGroup(group, &state2);
+    (void)addToSyncGroup(group, &state3);
 
     // Set all to forward mode
-    set_playback_mode(state1, PlaybackMode::Forward);
-    set_playback_mode(state2, PlaybackMode::Forward);
-    set_playback_mode(state3, PlaybackMode::Forward);
+    setPlaybackMode(state1, PlaybackMode::Forward);
+    setPlaybackMode(state2, PlaybackMode::Forward);
+    setPlaybackMode(state3, PlaybackMode::Forward);
 
     // Sync all to t=1.5
-    sync_seek_all(group, ts, 1.5);
+    syncSeekAll(group, ts, 1.5);
 
     // Verify all are at same time
-    bool sync_ok = (std::abs(state1.t_current - 1.5) < 1e-10) &&
-                  (std::abs(state2.t_current - 1.5) < 1e-10) &&
-                  (std::abs(state3.t_current - 1.5) < 1e-10) &&
-                  (group.n_sequences == 3) &&
-                  (std::abs(group.master_time - 1.5) < 1e-10);
+    bool sync_ok = (std::abs(state1.tCurrent - 1.5) < 1e-10) &&
+                  (std::abs(state2.tCurrent - 1.5) < 1e-10) &&
+                  (std::abs(state3.tCurrent - 1.5) < 1e-10) &&
+                  (group.nSequences == 3) &&
+                  (std::abs(group.masterTime - 1.5) < 1e-10);
 
-    std::cout << "  Synchronized " << group.n_sequences << " sequences\n"
-              << "  State 1 at t=" << std::fixed << std::setprecision(2) << state1.t_current << "\n"
-              << "  State 2 at t=" << state2.t_current << "\n"
-              << "  State 3 at t=" << state3.t_current << "\n"
-              << "  Master time: " << group.master_time << "\n"
+    std::cout << "  Synchronized " << group.nSequences << " sequences\n"
+              << "  State 1 at t=" << std::fixed << std::setprecision(2) << state1.tCurrent << "\n"
+              << "  State 2 at t=" << state2.tCurrent << "\n"
+              << "  State 3 at t=" << state3.tCurrent << "\n"
+              << "  Master time: " << group.masterTime << "\n"
               << "  Status: " << (sync_ok ? "PASS" : "FAIL") << "\n\n";
 
     return sync_ok;
@@ -213,34 +213,34 @@ bool test_multisequence_sync() {
 bool test_complete_adjustment_session() {
     std::cout << "Test 7: Complete Parameter Adjustment Session\n";
 
-    ParameterAdjustmentState state = create_parameter_adjustment_state();
+    ParameterAdjustmentState state = createParameterAdjustmentState();
 
     // Session: adjust fields progressively
-    set_global_density_scale(state, 1.0);
-    set_global_temperature_scale(state, 1.0);
+    setGlobalDensityScale(state, 1.0);
+    setGlobalTemperatureScale(state, 1.0);
 
     // Step 1: Double density
-    set_density_modifier(state, 2.0, 0.0);
-    double rho_1 = adjust_density(1.0, state);  // 2.0
+    setDensityModifier(state, 2.0, 0.0);
+    double rho_1 = adjustDensity(1.0, state);  // 2.0
 
     // Step 2: Increase temperature by 50%
-    set_temperature_modifier(state, 1.5, 0.0);
-    double T_1 = adjust_temperature(1e7, state);  // 1.5e7
+    setTemperatureModifier(state, 1.5, 0.0);
+    double T_1 = adjustTemperature(1e7, state);  // 1.5e7
 
     // Step 3: Reduce B-field by 20%
-    set_magnetic_field_modifier(state, 0.8, 0.0);
-    double B_1 = adjust_magnetic_field(100.0, state);  // 80.0
+    setMagneticFieldModifier(state, 0.8, 0.0);
+    double B_1 = adjustMagneticField(100.0, state);  // 80.0
 
     // Step 4: Add constraints
-    set_density_modifier(state, 2.0, 0.0, 1.0, 3.0);
+    setDensityModifier(state, 2.0, 0.0, 1.0, 3.0);
 
     // Step 5: Global scale on top
-    set_global_density_scale(state, 0.5);
-    double rho_2 = adjust_density(1.0, state);  // 1.0 * 0.5 * 2.0 = 1.0
+    setGlobalDensityScale(state, 0.5);
+    double rho_2 = adjustDensity(1.0, state);  // 1.0 * 0.5 * 2.0 = 1.0
 
     // Step 6: Disable all adjustments
-    set_adjustments_enabled(state, false);
-    double rho_3 = adjust_density(1.0, state);  // Returns raw 1.0
+    setAdjustmentsEnabled(state, false);
+    double rho_3 = adjustDensity(1.0, state);  // Returns raw 1.0
 
     bool session_ok = (std::abs(rho_1 - 2.0) < 1e-10) &&
                      (std::abs(T_1 - 1.5e7) < 1e4) &&

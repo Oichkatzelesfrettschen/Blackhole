@@ -29,8 +29,8 @@ namespace physics {
  * @brief Time-stamped parameter snapshot
  */
 struct ParameterSnapshot {
-    double timestamp;                  // Global simulation time
-    uint32_t frame_number;             // Frame when snapshot was taken
+    double timestamp{0.0};             // Global simulation time
+    uint32_t frameNumber{0};           // Frame when snapshot was taken
     ParameterAdjustmentState state;    // Complete parameter state
 };
 
@@ -39,9 +39,9 @@ struct ParameterSnapshot {
  */
 struct SnapshotHistory {
     std::vector<ParameterSnapshot> snapshots;
-    uint32_t n_snapshots;
-    uint32_t current_snapshot_idx;
-    double max_history_time;  // Max time span to keep (0 = unlimited)
+    uint32_t nSnapshots{0};
+    uint32_t currentSnapshotIdx{0};
+    double maxHistoryTime{0.0};  // Max time span to keep (0 = unlimited)
 };
 
 // ============================================================================
@@ -57,20 +57,20 @@ struct SnapshotHistory {
  * @param frame_num Frame number
  * @return Index of created snapshot
  */
-inline uint32_t create_snapshot(SnapshotHistory& history,
-                               const ParameterAdjustmentState& state,
-                               double timestamp,
-                               uint32_t frame_num) {
+[[nodiscard]] inline uint32_t createSnapshot(SnapshotHistory& history,
+                                            const ParameterAdjustmentState& state,
+                                            double timestamp,
+                                            uint32_t frameNum) {
     ParameterSnapshot snapshot;
     snapshot.timestamp = timestamp;
-    snapshot.frame_number = frame_num;
+    snapshot.frameNumber = frameNum;
     snapshot.state = state;
 
     history.snapshots.push_back(snapshot);
-    history.n_snapshots++;
-    history.current_snapshot_idx = history.n_snapshots - 1;
+    history.nSnapshots++;
+    history.currentSnapshotIdx = history.nSnapshots - 1;
 
-    return history.current_snapshot_idx;
+    return history.currentSnapshotIdx;
 }
 
 /**
@@ -81,12 +81,12 @@ inline uint32_t create_snapshot(SnapshotHistory& history,
  * @param state Parameter state to modify (modified in place)
  * @return Whether restoration was successful
  */
-inline bool restore_snapshot(const SnapshotHistory& history,
-                            uint32_t snapshot_idx,
-                            ParameterAdjustmentState& state) {
-    if (snapshot_idx >= history.n_snapshots) return false;
+[[nodiscard]] inline bool restoreSnapshot(const SnapshotHistory& history,
+                                         uint32_t snapshotIdx,
+                                         ParameterAdjustmentState& state) {
+    if (snapshotIdx >= history.nSnapshots) { return false; }
 
-    state = history.snapshots[snapshot_idx].state;
+    state = history.snapshots[snapshotIdx].state;
     return true;
 }
 
@@ -95,10 +95,10 @@ inline bool restore_snapshot(const SnapshotHistory& history,
  *
  * @param history Snapshot history (modified in place)
  */
-inline void clear_snapshots(SnapshotHistory& history) {
+inline void clearSnapshots(SnapshotHistory& history) {
     history.snapshots.clear();
-    history.n_snapshots = 0;
-    history.current_snapshot_idx = 0;
+    history.nSnapshots = 0;
+    history.currentSnapshotIdx = 0;
 }
 
 /**
@@ -107,8 +107,8 @@ inline void clear_snapshots(SnapshotHistory& history) {
  * @param history Snapshot history
  * @return Number of stored snapshots
  */
-inline uint32_t get_snapshot_count(const SnapshotHistory& history) {
-    return history.n_snapshots;
+[[nodiscard]] inline uint32_t getSnapshotCount(const SnapshotHistory& history) {
+    return history.nSnapshots;
 }
 
 /**
@@ -118,10 +118,10 @@ inline uint32_t get_snapshot_count(const SnapshotHistory& history) {
  * @param snapshot_idx Index of snapshot
  * @return Timestamp (-1 if invalid)
  */
-inline double get_snapshot_timestamp(const SnapshotHistory& history,
-                                    uint32_t snapshot_idx) {
-    if (snapshot_idx >= history.n_snapshots) return -1.0;
-    return history.snapshots[snapshot_idx].timestamp;
+[[nodiscard]] inline double getSnapshotTimestamp(const SnapshotHistory& history,
+                                               uint32_t snapshotIdx) {
+    if (snapshotIdx >= history.nSnapshots) { return -1.0; }
+    return history.snapshots[snapshotIdx].timestamp;
 }
 
 // ============================================================================
@@ -136,14 +136,14 @@ inline double get_snapshot_timestamp(const SnapshotHistory& history,
  * @param alpha Interpolation parameter [0, 1] where 0=a, 1=b
  * @return Interpolated modifier
  */
-inline FieldModifier interpolate_modifier(const FieldModifier& mod_a,
-                                         const FieldModifier& mod_b,
-                                         double alpha) {
+[[nodiscard]] inline FieldModifier interpolateModifier(const FieldModifier& modA,
+                                                      const FieldModifier& modB,
+                                                      double alpha) {
     FieldModifier result;
-    result.scale = mod_a.scale + alpha * (mod_b.scale - mod_a.scale);
-    result.offset = mod_a.offset + alpha * (mod_b.offset - mod_a.offset);
-    result.clamp_min = mod_a.clamp_min + alpha * (mod_b.clamp_min - mod_a.clamp_min);
-    result.clamp_max = mod_a.clamp_max + alpha * (mod_b.clamp_max - mod_a.clamp_max);
+    result.scale = modA.scale + alpha * (modB.scale - modA.scale);
+    result.offset = modA.offset + alpha * (modB.offset - modA.offset);
+    result.clampMin = modA.clampMin + alpha * (modB.clampMin - modA.clampMin);
+    result.clampMax = modA.clampMax + alpha * (modB.clampMax - modA.clampMax);
     return result;
 }
 
@@ -152,42 +152,42 @@ inline FieldModifier interpolate_modifier(const FieldModifier& mod_a,
  *
  * @param snap_a First snapshot
  * @param snap_b Second snapshot
- * @param t Interpolation time (should be between snap_a.timestamp and snap_b.timestamp)
+ * @param t Interpolation time (should be between snapA.timestamp and snapB.timestamp)
  * @return Interpolated parameter state
  */
-inline ParameterAdjustmentState interpolate_snapshots(const ParameterSnapshot& snap_a,
-                                                      const ParameterSnapshot& snap_b,
-                                                      double t) {
-    double t_total = snap_b.timestamp - snap_a.timestamp;
+[[nodiscard]] inline ParameterAdjustmentState interpolateSnapshots(const ParameterSnapshot& snapA,
+                                                                  const ParameterSnapshot& snapB,
+                                                                  double t) {
+    const double tTotal = snapB.timestamp - snapA.timestamp;
     double alpha = 0.0;
 
-    if (t_total > 1e-10) {
-        alpha = (t - snap_a.timestamp) / t_total;
+    if (tTotal > 1e-10) {
+        alpha = (t - snapA.timestamp) / tTotal;
         alpha = std::max(0.0, std::min(1.0, alpha));  // Clamp to [0, 1]
     }
 
     ParameterAdjustmentState result;
-    result.density_mod = interpolate_modifier(snap_a.state.density_mod,
-                                             snap_b.state.density_mod, alpha);
-    result.temperature_mod = interpolate_modifier(snap_a.state.temperature_mod,
-                                                 snap_b.state.temperature_mod, alpha);
-    result.magnetic_field_mod = interpolate_modifier(snap_a.state.magnetic_field_mod,
-                                                    snap_b.state.magnetic_field_mod, alpha);
+    result.densityMod = interpolateModifier(snapA.state.densityMod,
+                                             snapB.state.densityMod, alpha);
+    result.temperatureMod = interpolateModifier(snapA.state.temperatureMod,
+                                                 snapB.state.temperatureMod, alpha);
+    result.magneticFieldMod = interpolateModifier(snapA.state.magneticFieldMod,
+                                                    snapB.state.magneticFieldMod, alpha);
 
     for (int i = 0; i < 4; i++) {
-        result.other_mods[i] = interpolate_modifier(snap_a.state.other_mods[i],
-                                                   snap_b.state.other_mods[i], alpha);
+        result.otherMods[i] = interpolateModifier(snapA.state.otherMods[i],
+                                                   snapB.state.otherMods[i], alpha);
     }
 
-    result.density_scale = snap_a.state.density_scale +
-                         alpha * (snap_b.state.density_scale - snap_a.state.density_scale);
-    result.temperature_scale = snap_a.state.temperature_scale +
-                              alpha * (snap_b.state.temperature_scale - snap_a.state.temperature_scale);
+    result.densityScale = snapA.state.densityScale +
+                         alpha * (snapB.state.densityScale - snapA.state.densityScale);
+    result.temperatureScale = snapA.state.temperatureScale +
+                              alpha * (snapB.state.temperatureScale - snapA.state.temperatureScale);
 
     // Use current enable state (from snap_a)
-    result.enable_adjustments = snap_a.state.enable_adjustments;
-    result.n_snapshots = snap_a.state.n_snapshots;
-    result.current_snapshot = snap_a.state.current_snapshot;
+    result.enableAdjustments = snapA.state.enableAdjustments;
+    result.nSnapshots = snapA.state.nSnapshots;
+    result.currentSnapshot = snapA.state.currentSnapshot;
 
     return result;
 }
@@ -200,20 +200,20 @@ inline ParameterAdjustmentState interpolate_snapshots(const ParameterSnapshot& s
  * @param result Parameter state to populate (modified in place)
  * @return Whether interpolation was successful
  */
-inline bool get_interpolated_state_at_time(const SnapshotHistory& history,
-                                          double t,
-                                          ParameterAdjustmentState& result) {
-    if (history.n_snapshots == 0) return false;
+[[nodiscard]] inline bool getInterpolatedStateAtTime(const SnapshotHistory& history,
+                                                    double t,
+                                                    ParameterAdjustmentState& result) {
+    if (history.nSnapshots == 0) { return false; }
 
     // Find bracketing snapshots
-    uint32_t idx_left = 0, idx_right = 0;
+    uint32_t idxLeft = 0, idxRight = 0;
     bool found = false;
 
-    for (uint32_t i = 0; i < history.n_snapshots - 1; i++) {
+    for (uint32_t i = 0; i < history.nSnapshots - 1; i++) {
         if (history.snapshots[i].timestamp <= t &&
             t <= history.snapshots[i + 1].timestamp) {
-            idx_left = i;
-            idx_right = i + 1;
+            idxLeft = i;
+            idxRight = i + 1;
             found = true;
             break;
         }
@@ -224,14 +224,14 @@ inline bool get_interpolated_state_at_time(const SnapshotHistory& history,
         if (t < history.snapshots[0].timestamp) {
             result = history.snapshots[0].state;
         } else {
-            result = history.snapshots[history.n_snapshots - 1].state;
+            result = history.snapshots[history.nSnapshots - 1].state;
         }
         return true;
     }
 
     // Interpolate between bracketing snapshots
-    result = interpolate_snapshots(history.snapshots[idx_left],
-                                  history.snapshots[idx_right],
+    result = interpolateSnapshots(history.snapshots[idxLeft],
+                                  history.snapshots[idxRight],
                                   t);
     return true;
 }
@@ -247,14 +247,14 @@ inline bool get_interpolated_state_at_time(const SnapshotHistory& history,
  * @param state Parameter state to update (modified in place)
  * @return Whether successful
  */
-inline bool go_to_next_snapshot(SnapshotHistory& history,
-                               ParameterAdjustmentState& state) {
-    if (history.current_snapshot_idx + 1 >= history.n_snapshots) {
+[[nodiscard]] inline bool goToNextSnapshot(SnapshotHistory& history,
+                                          ParameterAdjustmentState& state) {
+    if (history.currentSnapshotIdx + 1 >= history.nSnapshots) {
         return false;  // Already at last snapshot
     }
 
-    history.current_snapshot_idx++;
-    return restore_snapshot(history, history.current_snapshot_idx, state);
+    history.currentSnapshotIdx++;
+    return restoreSnapshot(history, history.currentSnapshotIdx, state);
 }
 
 /**
@@ -264,14 +264,14 @@ inline bool go_to_next_snapshot(SnapshotHistory& history,
  * @param state Parameter state to update (modified in place)
  * @return Whether successful
  */
-inline bool go_to_previous_snapshot(SnapshotHistory& history,
-                                   ParameterAdjustmentState& state) {
-    if (history.current_snapshot_idx == 0) {
+[[nodiscard]] inline bool goToPreviousSnapshot(SnapshotHistory& history,
+                                              ParameterAdjustmentState& state) {
+    if (history.currentSnapshotIdx == 0) {
         return false;  // Already at first snapshot
     }
 
-    history.current_snapshot_idx--;
-    return restore_snapshot(history, history.current_snapshot_idx, state);
+    history.currentSnapshotIdx--;
+    return restoreSnapshot(history, history.currentSnapshotIdx, state);
 }
 
 /**
@@ -281,16 +281,16 @@ inline bool go_to_previous_snapshot(SnapshotHistory& history,
  * @param t Query time
  * @return Index of nearest snapshot (-1 if none)
  */
-inline uint32_t find_nearest_snapshot(const SnapshotHistory& history, double t) {
-    if (history.n_snapshots == 0) return UINT32_MAX;
+[[nodiscard]] inline uint32_t findNearestSnapshot(const SnapshotHistory& history, double t) {
+    if (history.nSnapshots == 0) { return UINT32_MAX; }
 
     uint32_t nearest = 0;
-    double min_distance = std::abs(history.snapshots[0].timestamp - t);
+    double minDistance = std::abs(history.snapshots[0].timestamp - t);
 
-    for (uint32_t i = 1; i < history.n_snapshots; i++) {
-        double distance = std::abs(history.snapshots[i].timestamp - t);
-        if (distance < min_distance) {
-            min_distance = distance;
+    for (uint32_t i = 1; i < history.nSnapshots; i++) {
+        const double distance = std::abs(history.snapshots[i].timestamp - t);
+        if (distance < minDistance) {
+            minDistance = distance;
             nearest = i;
         }
     }
@@ -308,11 +308,9 @@ inline uint32_t find_nearest_snapshot(const SnapshotHistory& history, double t) 
  * @param max_time Maximum time span to keep (0 = unlimited)
  * @return New SnapshotHistory
  */
-inline SnapshotHistory create_snapshot_history(double max_time = 0.0) {
+[[nodiscard]] inline SnapshotHistory createSnapshotHistory(double maxTime = 0.0) {
     SnapshotHistory history;
-    history.n_snapshots = 0;
-    history.current_snapshot_idx = 0;
-    history.max_history_time = max_time;
+    history.maxHistoryTime = maxTime;
     return history;
 }
 

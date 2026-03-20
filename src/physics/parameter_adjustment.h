@@ -28,10 +28,10 @@ namespace physics {
  * @brief Field scaling and offset adjustments
  */
 struct FieldModifier {
-    double scale;       // Multiplicative scale factor
-    double offset;      // Additive offset
-    double clamp_min;   // Minimum clamped value (-1 = no clamp)
-    double clamp_max;   // Maximum clamped value (-1 = no clamp)
+    double scale{1.0};      // Multiplicative scale factor
+    double offset{0.0};     // Additive offset
+    double clampMin{-1.0};  // Minimum clamped value (-1 = no clamp)
+    double clampMax{-1.0};  // Maximum clamped value (-1 = no clamp)
 };
 
 /**
@@ -39,20 +39,20 @@ struct FieldModifier {
  */
 struct ParameterAdjustmentState {
     // Field modifiers (density, temperature, magnetic field, etc.)
-    FieldModifier density_mod;
-    FieldModifier temperature_mod;
-    FieldModifier magnetic_field_mod;
-    FieldModifier other_mods[4];  // Up to 4 additional fields
+    FieldModifier densityMod;
+    FieldModifier temperatureMod;
+    FieldModifier magneticFieldMod;
+    FieldModifier otherMods[4];  // Up to 4 additional fields
 
     // Global modifiers
-    double density_scale;      // Global density scaling
-    double temperature_scale;  // Global temperature scaling
-    bool enable_adjustments;   // Master enable/disable
+    double densityScale{1.0};      // Global density scaling
+    double temperatureScale{1.0};  // Global temperature scaling
+    bool enableAdjustments{true};  // Master enable/disable
 
     // Snapshot management
-    uint32_t n_snapshots;
-    uint32_t current_snapshot;
-    std::vector<ParameterAdjustmentState> snapshot_history;
+    uint32_t nSnapshots{0};
+    uint32_t currentSnapshot{0};
+    std::vector<ParameterAdjustmentState> snapshotHistory;
 };
 
 // ============================================================================
@@ -66,14 +66,14 @@ struct ParameterAdjustmentState {
  * @param modifier Modifier with scale, offset, clamping
  * @return Modified field value
  */
-inline double apply_field_modifier(double raw_value, const FieldModifier& modifier) {
-    double modified = raw_value * modifier.scale + modifier.offset;
+[[nodiscard]] inline double applyFieldModifier(double rawValue, const FieldModifier& modifier) {
+    double modified = (rawValue * modifier.scale) + modifier.offset;
 
-    if (modifier.clamp_min >= 0.0) {
-        modified = std::max(modified, modifier.clamp_min);
+    if (modifier.clampMin >= 0.0) {
+        modified = std::max(modified, modifier.clampMin);
     }
-    if (modifier.clamp_max >= 0.0) {
-        modified = std::min(modified, modifier.clamp_max);
+    if (modifier.clampMax >= 0.0) {
+        modified = std::min(modified, modifier.clampMax);
     }
 
     return modified;
@@ -86,11 +86,11 @@ inline double apply_field_modifier(double raw_value, const FieldModifier& modifi
  * @param state Parameter adjustment state
  * @return Adjusted density value
  */
-inline double adjust_density(double raw_density, const ParameterAdjustmentState& state) {
-    if (!state.enable_adjustments) return raw_density;
+[[nodiscard]] inline double adjustDensity(double rawDensity, const ParameterAdjustmentState& state) {
+    if (!state.enableAdjustments) { return rawDensity; }
 
-    double scaled = raw_density * state.density_scale;
-    return apply_field_modifier(scaled, state.density_mod);
+    const double scaled = rawDensity * state.densityScale;
+    return applyFieldModifier(scaled, state.densityMod);
 }
 
 /**
@@ -100,12 +100,12 @@ inline double adjust_density(double raw_density, const ParameterAdjustmentState&
  * @param state Parameter adjustment state
  * @return Adjusted temperature value
  */
-inline double adjust_temperature(double raw_temperature,
-                                const ParameterAdjustmentState& state) {
-    if (!state.enable_adjustments) return raw_temperature;
+[[nodiscard]] inline double adjustTemperature(double rawTemperature,
+                                             const ParameterAdjustmentState& state) {
+    if (!state.enableAdjustments) { return rawTemperature; }
 
-    double scaled = raw_temperature * state.temperature_scale;
-    return apply_field_modifier(scaled, state.temperature_mod);
+    const double scaled = rawTemperature * state.temperatureScale;
+    return applyFieldModifier(scaled, state.temperatureMod);
 }
 
 /**
@@ -115,11 +115,11 @@ inline double adjust_temperature(double raw_temperature,
  * @param state Parameter adjustment state
  * @return Adjusted B-field value
  */
-inline double adjust_magnetic_field(double raw_b_field,
-                                   const ParameterAdjustmentState& state) {
-    if (!state.enable_adjustments) return raw_b_field;
+[[nodiscard]] inline double adjustMagneticField(double rawBField,
+                                               const ParameterAdjustmentState& state) {
+    if (!state.enableAdjustments) { return rawBField; }
 
-    return apply_field_modifier(raw_b_field, state.magnetic_field_mod);
+    return applyFieldModifier(rawBField, state.magneticFieldMod);
 }
 
 /**
@@ -130,12 +130,12 @@ inline double adjust_magnetic_field(double raw_b_field,
  * @param state Parameter adjustment state
  * @return Adjusted field value
  */
-inline double adjust_other_field(double raw_value,
-                                uint32_t field_index,
-                                const ParameterAdjustmentState& state) {
-    if (!state.enable_adjustments || field_index >= 4) return raw_value;
+[[nodiscard]] inline double adjustOtherField(double rawValue,
+                                            uint32_t fieldIndex,
+                                            const ParameterAdjustmentState& state) {
+    if (!state.enableAdjustments || fieldIndex >= 4) { return rawValue; }
 
-    return apply_field_modifier(raw_value, state.other_mods[field_index]);
+    return applyFieldModifier(rawValue, state.otherMods[fieldIndex]);
 }
 
 // ============================================================================
@@ -151,15 +151,15 @@ inline double adjust_other_field(double raw_value,
  * @param min_val Minimum clamped value (-1 = no clamp)
  * @param max_val Maximum clamped value (-1 = no clamp)
  */
-inline void set_density_modifier(ParameterAdjustmentState& state,
-                                double scale,
-                                double offset = 0.0,
-                                double min_val = -1.0,
-                                double max_val = -1.0) {
-    state.density_mod.scale = scale;
-    state.density_mod.offset = offset;
-    state.density_mod.clamp_min = min_val;
-    state.density_mod.clamp_max = max_val;
+inline void setDensityModifier(ParameterAdjustmentState& state,
+                               double scale,
+                               double offset = 0.0,
+                               double minVal = -1.0,
+                               double maxVal = -1.0) {
+    state.densityMod.scale = scale;
+    state.densityMod.offset = offset;
+    state.densityMod.clampMin = minVal;
+    state.densityMod.clampMax = maxVal;
 }
 
 /**
@@ -171,15 +171,15 @@ inline void set_density_modifier(ParameterAdjustmentState& state,
  * @param min_val Minimum clamped value (-1 = no clamp)
  * @param max_val Maximum clamped value (-1 = no clamp)
  */
-inline void set_temperature_modifier(ParameterAdjustmentState& state,
-                                    double scale,
-                                    double offset = 0.0,
-                                    double min_val = -1.0,
-                                    double max_val = -1.0) {
-    state.temperature_mod.scale = scale;
-    state.temperature_mod.offset = offset;
-    state.temperature_mod.clamp_min = min_val;
-    state.temperature_mod.clamp_max = max_val;
+inline void setTemperatureModifier(ParameterAdjustmentState& state,
+                                   double scale,
+                                   double offset = 0.0,
+                                   double minVal = -1.0,
+                                   double maxVal = -1.0) {
+    state.temperatureMod.scale = scale;
+    state.temperatureMod.offset = offset;
+    state.temperatureMod.clampMin = minVal;
+    state.temperatureMod.clampMax = maxVal;
 }
 
 /**
@@ -191,15 +191,15 @@ inline void set_temperature_modifier(ParameterAdjustmentState& state,
  * @param min_val Minimum clamped value (-1 = no clamp)
  * @param max_val Maximum clamped value (-1 = no clamp)
  */
-inline void set_magnetic_field_modifier(ParameterAdjustmentState& state,
-                                       double scale,
-                                       double offset = 0.0,
-                                       double min_val = -1.0,
-                                       double max_val = -1.0) {
-    state.magnetic_field_mod.scale = scale;
-    state.magnetic_field_mod.offset = offset;
-    state.magnetic_field_mod.clamp_min = min_val;
-    state.magnetic_field_mod.clamp_max = max_val;
+inline void setMagneticFieldModifier(ParameterAdjustmentState& state,
+                                     double scale,
+                                     double offset = 0.0,
+                                     double minVal = -1.0,
+                                     double maxVal = -1.0) {
+    state.magneticFieldMod.scale = scale;
+    state.magneticFieldMod.offset = offset;
+    state.magneticFieldMod.clampMin = minVal;
+    state.magneticFieldMod.clampMax = maxVal;
 }
 
 /**
@@ -208,8 +208,8 @@ inline void set_magnetic_field_modifier(ParameterAdjustmentState& state,
  * @param state Parameter adjustment state (modified in place)
  * @param scale Global density scale factor
  */
-inline void set_global_density_scale(ParameterAdjustmentState& state, double scale) {
-    state.density_scale = std::max(0.0, scale);
+inline void setGlobalDensityScale(ParameterAdjustmentState& state, double scale) {
+    state.densityScale = std::max(0.0, scale);
 }
 
 /**
@@ -218,8 +218,8 @@ inline void set_global_density_scale(ParameterAdjustmentState& state, double sca
  * @param state Parameter adjustment state (modified in place)
  * @param scale Global temperature scale factor
  */
-inline void set_global_temperature_scale(ParameterAdjustmentState& state, double scale) {
-    state.temperature_scale = std::max(0.0, scale);
+inline void setGlobalTemperatureScale(ParameterAdjustmentState& state, double scale) {
+    state.temperatureScale = std::max(0.0, scale);
 }
 
 /**
@@ -228,8 +228,8 @@ inline void set_global_temperature_scale(ParameterAdjustmentState& state, double
  * @param state Parameter adjustment state (modified in place)
  * @param enable Whether adjustments are active
  */
-inline void set_adjustments_enabled(ParameterAdjustmentState& state, bool enable) {
-    state.enable_adjustments = enable;
+inline void setAdjustmentsEnabled(ParameterAdjustmentState& state, bool enable) {
+    state.enableAdjustments = enable;
 }
 
 // ============================================================================
@@ -241,9 +241,9 @@ inline void set_adjustments_enabled(ParameterAdjustmentState& state, bool enable
  */
 struct SynchronizedPlaybackGroup {
     std::vector<AdvancedPlaybackState*> states;  // Pointers to playback states
-    uint32_t n_sequences;
-    double master_time;      // Master timeline time
-    bool synchronized;       // Whether all states are locked to master
+    uint32_t nSequences{0};
+    double masterTime{0.0};  // Master timeline time
+    bool synchronized{true}; // Whether all states are locked to master
 };
 
 /**
@@ -251,12 +251,8 @@ struct SynchronizedPlaybackGroup {
  *
  * @return New SynchronizedPlaybackGroup with no sequences
  */
-inline SynchronizedPlaybackGroup create_sync_group() {
-    SynchronizedPlaybackGroup group;
-    group.n_sequences = 0;
-    group.master_time = 0.0;
-    group.synchronized = true;
-    return group;
+[[nodiscard]] inline SynchronizedPlaybackGroup createSyncGroup() {
+    return SynchronizedPlaybackGroup{};
 }
 
 /**
@@ -266,12 +262,12 @@ inline SynchronizedPlaybackGroup create_sync_group() {
  * @param state Playback state to add
  * @return Whether addition was successful
  */
-inline bool add_to_sync_group(SynchronizedPlaybackGroup& group,
-                             AdvancedPlaybackState* state) {
-    if (state == nullptr) return false;
+[[nodiscard]] inline bool addToSyncGroup(SynchronizedPlaybackGroup& group,
+                                        AdvancedPlaybackState* state) {
+    if (state == nullptr) { return false; }
 
     group.states.push_back(state);
-    group.n_sequences++;
+    group.nSequences++;
     return true;
 }
 
@@ -280,9 +276,9 @@ inline bool add_to_sync_group(SynchronizedPlaybackGroup& group,
  *
  * @param group Synchronized group (modified in place)
  */
-inline void clear_sync_group(SynchronizedPlaybackGroup& group) {
+inline void clearSyncGroup(SynchronizedPlaybackGroup& group) {
     group.states.clear();
-    group.n_sequences = 0;
+    group.nSequences = 0;
 }
 
 /**
@@ -292,14 +288,14 @@ inline void clear_sync_group(SynchronizedPlaybackGroup& group) {
  * @param ts Time series metadata (same for all sequences)
  * @param t_seek Target seek time
  */
-inline void sync_seek_all(SynchronizedPlaybackGroup& group,
-                         const TimeSeriesMetadata& /* ts */,
-                         double t_seek) {
-    group.master_time = t_seek;
+inline void syncSeekAll(SynchronizedPlaybackGroup& group,
+                        const TimeSeriesMetadata& /* ts */,
+                        double tSeek) {
+    group.masterTime = tSeek;
 
-    for (uint32_t i = 0; i < group.n_sequences; i++) {
-        if (group.states[i] != nullptr) {
-            group.states[i]->t_current = t_seek;
+    for (uint32_t i = 0; i < group.nSequences; i++) {
+        if (group.states.at(i) != nullptr) {
+            group.states.at(i)->tCurrent = tSeek;
         }
     }
 }
@@ -311,34 +307,34 @@ inline void sync_seek_all(SynchronizedPlaybackGroup& group,
  * @param ts Time series metadata (for boundary checking)
  * @param dt_frame Frame time delta
  */
-inline void sync_update_all(SynchronizedPlaybackGroup& group,
-                           const TimeSeriesMetadata& ts,
-                           double dt_frame) {
-    if (!group.synchronized || group.n_sequences == 0) return;
+inline void syncUpdateAll(SynchronizedPlaybackGroup& group,
+                          const TimeSeriesMetadata& ts,
+                          double dtFrame) {
+    if (!group.synchronized || group.nSequences == 0) { return; }
 
     // Get master playback mode and speed from first state
-    if (group.states[0] == nullptr) return;
+    if (group.states.at(0) == nullptr) { return; }
 
-    AdvancedPlaybackState* master = group.states[0];
-    double dt_sim = dt_frame * master->playback_speed;
+    const AdvancedPlaybackState* const master = group.states.at(0);
+    double dtSim = dtFrame * master->playbackSpeed;
 
     if (master->mode == PlaybackMode::Reverse) {
-        dt_sim = -dt_sim * master->reverse_speed;
+        dtSim = -(dtSim * master->reverseSpeed);
     }
 
     // Update master time (use ts for advance_time boundaries)
     if (master->mode != PlaybackMode::Stopped &&
         master->mode != PlaybackMode::PausedForward &&
         master->mode != PlaybackMode::PausedReverse) {
-        group.master_time = advance_time(ts, group.master_time, dt_sim, true);
+        group.masterTime = advance_time(ts, group.masterTime, dtSim, true);
     }
 
     // Sync all to master time
-    for (uint32_t i = 0; i < group.n_sequences; i++) {
-        if (group.states[i] != nullptr) {
-            group.states[i]->t_current = group.master_time;
-            group.states[i]->frame_number = master->frame_number;
-            group.states[i]->mode = master->mode;
+    for (uint32_t i = 0; i < group.nSequences; i++) {
+        if (group.states.at(i) != nullptr) {
+            group.states.at(i)->tCurrent = group.masterTime;
+            group.states.at(i)->frameNumber = master->frameNumber;
+            group.states.at(i)->mode = master->mode;
         }
     }
 }
@@ -352,25 +348,8 @@ inline void sync_update_all(SynchronizedPlaybackGroup& group,
  *
  * @return New ParameterAdjustmentState with all modifiers at neutral (1.0)
  */
-inline ParameterAdjustmentState create_parameter_adjustment_state() {
-    ParameterAdjustmentState state;
-
-    // Initialize all modifiers to neutral (scale=1.0, offset=0.0)
-    state.density_mod = {1.0, 0.0, -1.0, -1.0};
-    state.temperature_mod = {1.0, 0.0, -1.0, -1.0};
-    state.magnetic_field_mod = {1.0, 0.0, -1.0, -1.0};
-
-    for (int i = 0; i < 4; i++) {
-        state.other_mods[i] = {1.0, 0.0, -1.0, -1.0};
-    }
-
-    state.density_scale = 1.0;
-    state.temperature_scale = 1.0;
-    state.enable_adjustments = true;
-    state.n_snapshots = 0;
-    state.current_snapshot = 0;
-
-    return state;
+[[nodiscard]] inline ParameterAdjustmentState createParameterAdjustmentState() {
+    return ParameterAdjustmentState{};
 }
 
 }  // namespace physics
