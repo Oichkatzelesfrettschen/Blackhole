@@ -43,7 +43,7 @@ __launch_bounds__(256, 4)
   float3 const dir = d_ray_dir(px, py);
 
   HitResult const hit = d_trace_geodesic(cam, dir);
-  float4 const color = d_shade_hit(hit, cam);
+  float4 color = d_shade_hit(hit, cam);
 
   /* Wiregrid BL-coord overlay (task A4): convert Cartesian hit->spherical BL */
   if (d_wiregrid_enabled != 0) {

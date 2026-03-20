@@ -214,8 +214,24 @@ __launch_bounds__(256, 4)
     result.hit_point = pos;
   }
 
-shade:
-  dFramebuffer[(py * d_width) + px] = d_shade_hit(result, cam);
+shade:;
+  float4 color16 = d_shade_hit(result, cam);
+  if (d_wiregrid_enabled != 0) {
+    float3 const hp = result.hit_point;
+    float const r_bl = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
+    if (r_bl > 1e-5f) {
+      float const theta_bl = acosf(fmaxf(-1.0f, fminf(hp.z / r_bl, 1.0f)));
+      float const phi_bl   = atan2f(hp.y, hp.x);
+      float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
+                                            d_spin, d_wiregrid_show_ergo != 0.0f,
+                                            d_wiregrid_grid_scale);
+      float const inv_a = 1.0f - wg.w;
+      color16 = make_float4(color16.x*inv_a + wg.x*wg.w,
+                             color16.y*inv_a + wg.y*wg.w,
+                             color16.z*inv_a + wg.z*wg.w, color16.w);
+    }
+  }
+  dFramebuffer[(py * d_width) + px] = color16;
 }
 
 /**

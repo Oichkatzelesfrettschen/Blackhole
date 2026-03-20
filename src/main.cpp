@@ -4071,6 +4071,10 @@ int main(int argc, char **argv) {
             cp.doppler_strength = dopplerStrength;
             cp.background_intensity = settings.backgroundIntensity;
             cp.background_enabled = backgroundEnabledEffective ? 1 : 0;
+            // Wiregrid BL-coord overlay (task A4)
+            cp.wiregrid_enabled    = wiregridEnabled ? 1 : 0;
+            cp.wiregrid_show_ergo  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
+            cp.wiregrid_grid_scale = wiregridParams.gridScale;
 
             if (bhCudaRenderFrame(cudaState.backend, &cp) != 0) {
               fprintf(

@@ -357,10 +357,23 @@ __launch_bounds__(128, 4)
     }
   }
 
-  /* Shade and write both pixels */
-  dFramebuffer[idx0] = d_shade_hit(hit0, cam);
+  /* Shade and write both pixels with optional wiregrid overlay */
+  auto const applyWGH2 = [](float4 c, HitResult const& h) -> float4 {
+    if (d_wiregrid_enabled == 0) return c;
+    float3 hp = h.hit_point;
+    float r = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
+    if (r < 1e-5f) return c;
+    float theta = acosf(fmaxf(-1.0f, fminf(hp.z / r, 1.0f)));
+    float phi   = atan2f(hp.y, hp.x);
+    float4 wg = d_wiregrid_overlay(r, theta, phi, d_spin,
+                                   d_wiregrid_show_ergo != 0.0f, d_wiregrid_grid_scale);
+    float inv_a = 1.0f - wg.w;
+    return make_float4(c.x*inv_a + wg.x*wg.w, c.y*inv_a + wg.y*wg.w,
+                       c.z*inv_a + wg.z*wg.w, c.w);
+  };
+  dFramebuffer[idx0] = applyWGH2(d_shade_hit(hit0, cam), hit0);
   if (hasRay1) {
-    dFramebuffer[idx1] = d_shade_hit(hit1, cam);
+    dFramebuffer[idx1] = applyWGH2(d_shade_hit(hit1, cam), hit1);
   }
 }
 
