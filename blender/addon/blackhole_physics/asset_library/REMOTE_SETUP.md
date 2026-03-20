@@ -4,7 +4,7 @@
 
 Serve the asset library directory over HTTP for team access:
 
-    cd /home/eirikr/Github/Blackhole/blender_addon/blackhole_physics/asset_library
+    cd /home/eirikr/Github/Blackhole/blender/addon/blackhole_physics/asset_library
     python3 -m http.server 8080
 
 Then in Blender on other machines:

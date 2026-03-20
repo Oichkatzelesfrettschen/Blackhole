@@ -11,7 +11,7 @@
       "credit": "NASA, ESA, CSA, STScI",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/deep-field-smacs0723-2k.jpg",
+      "path": "assets/backgrounds/source/deep-field-smacs0723-2k.jpg",
       "tags": ["jwst", "deep-field", "gravitational-lensing", "galaxy-cluster"]
     },
     {
@@ -24,7 +24,7 @@
       "credit": "NASA, ESA, CSA, STScI, Webb ERO Production Team",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/tarantula-nebula-2k.jpg",
+      "path": "assets/backgrounds/source/tarantula-nebula-2k.jpg",
       "tags": ["jwst", "nebula", "star-forming"]
     },
     {
@@ -37,7 +37,7 @@
       "credit": "NASA, ESA, CSA, STScI, J. DePasquale, A. Pagan, A. M. Koekemoer (STScI)",
       "resolution": { "width": 2048, "height": 1464 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/pillars-of-creation-2k.jpg",
+      "path": "assets/backgrounds/source/pillars-of-creation-2k.jpg",
       "tags": ["jwst", "nebula", "pillars", "star-forming"]
     },
     {
@@ -50,7 +50,7 @@
       "credit": "NASA, ESA, CSA, STScI, Webb ERO Production Team",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/wolf-rayet-124-2k.jpg",
+      "path": "assets/backgrounds/source/wolf-rayet-124-2k.jpg",
       "tags": ["jwst", "star", "wolf-rayet", "nebula"]
     },
     {
@@ -63,7 +63,7 @@
       "credit": "NASA, ESA, CSA, STScI",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/southern-ring-nebula-2k.jpg",
+      "path": "assets/backgrounds/source/southern-ring-nebula-2k.jpg",
       "tags": ["jwst", "planetary-nebula"]
     },
     {
@@ -76,7 +76,7 @@
       "credit": "NASA, ESA, CSA, STScI",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/stephans-quintet-2k.jpg",
+      "path": "assets/backgrounds/source/stephans-quintet-2k.jpg",
       "tags": ["jwst", "galaxy-group", "interaction"]
     },
     {
@@ -89,7 +89,7 @@
       "credit": "NASA, ESA, CSA, STScI, Webb ERO Production Team",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/cartwheel-galaxy-2k.jpg",
+      "path": "assets/backgrounds/source/cartwheel-galaxy-2k.jpg",
       "tags": ["jwst", "galaxy", "ring-galaxy"]
     },
     {
@@ -102,7 +102,7 @@
       "credit": "NASA, ESA, CSA, STScI",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/orion-bar-2k.jpg",
+      "path": "assets/backgrounds/source/orion-bar-2k.jpg",
       "tags": ["jwst", "nebula", "orion", "PDR"]
     },
     {
@@ -115,7 +115,7 @@
       "credit": "NASA, ESA, CSA, STScI, Jupiter ERS Team, image processing by Judy Schmidt",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/jwst/jupiter-auroras-2k.jpg",
+      "path": "assets/backgrounds/source/jupiter-auroras-2k.jpg",
       "tags": ["jwst", "planet", "jupiter", "auroras"]
     },
     {
@@ -128,7 +128,7 @@
       "credit": "NASA/JPL-Caltech",
       "resolution": { "width": 5120, "height": 2880 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/PIA22085_5120x2880.jpg",
+      "path": "assets/backgrounds/archive/PIA22085_5120x2880.jpg",
       "tags": ["nasa", "jpl", "artist-concept", "black-hole"]
     },
     {
@@ -141,7 +141,7 @@
       "credit": "NASA/JPL-Caltech",
       "resolution": { "width": 6000, "height": 6000 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/PIA15415_6000x6000.jpg",
+      "path": "assets/backgrounds/archive/PIA15415_6000x6000.jpg",
       "tags": ["nasa", "jpl", "nebula"]
     },
     {
@@ -154,7 +154,7 @@
       "credit": "NASA, ESA, the Hubble Heritage Team (STScI/AURA), A. Nota (ESA/STScI), and the Westerlund 2 Science Team",
       "resolution": { "width": 4000, "height": 2997 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/heic1509a_publication_4k.jpg",
+      "path": "assets/backgrounds/archive/heic1509a_publication_4k.jpg",
       "tags": ["esa", "hubble", "cluster"]
     },
     {
@@ -167,7 +167,7 @@
       "credit": "NASA, ESA, E. Sabbi (STScI)",
       "resolution": { "width": 4000, "height": 3596 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/heic1402a_publication_4k.jpg",
+      "path": "assets/backgrounds/archive/heic1402a_publication_4k.jpg",
       "tags": ["esa", "hubble", "nebula"]
     },
     {
@@ -180,7 +180,7 @@
       "credit": "NASA/JPL-Caltech",
       "resolution": { "width": 9400, "height": 7000 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/PIA15416_9400x7000.jpg",
+      "path": "assets/backgrounds/archive/PIA15416_9400x7000.jpg",
       "tags": ["nasa", "jpl"]
     },
     {
@@ -193,7 +193,7 @@
       "credit": "NASA/JPL-Caltech",
       "resolution": { "width": 14772, "height": 4953 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/PIA08506_14772x4953.jpg",
+      "path": "assets/backgrounds/archive/PIA08506_14772x4953.jpg",
       "tags": ["nasa", "jpl", "panorama"]
     },
     {
@@ -206,7 +206,7 @@
       "credit": "NASA, ESA, the Hubble Heritage Team (STScI/AURA), A. Nota (ESA/STScI), and the Westerlund 2 Science Team",
       "resolution": { "width": 8919, "height": 6683 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/heic1509a_large.jpg",
+      "path": "assets/backgrounds/archive/heic1509a_large.jpg",
       "tags": ["esa", "hubble", "cluster", "large"]
     },
     {
@@ -219,7 +219,7 @@
       "credit": "NASA, ESA, E. Sabbi (STScI)",
       "resolution": { "width": 16617, "height": 14939 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/heic1402a_large.jpg",
+      "path": "assets/backgrounds/archive/heic1402a_large.jpg",
       "tags": ["esa", "hubble", "nebula", "large"]
     },
     {
@@ -232,7 +232,7 @@
       "credit": "JAXA",
       "resolution": { "width": 480, "height": 320 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/jaxa_hayabusa2_main_001.jpg",
+      "path": "assets/backgrounds/archive/jaxa_hayabusa2_main_001.jpg",
       "tags": ["jaxa", "hayabusa2", "asteroid"]
     }
   ]

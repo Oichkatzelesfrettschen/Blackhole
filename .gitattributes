@@ -1,1 +1,2 @@
 assets/backgrounds/source/*.jpg filter=lfs diff=lfs merge=lfs -text
+assets/backgrounds/archive/*.jpg filter=lfs diff=lfs merge=lfs -text

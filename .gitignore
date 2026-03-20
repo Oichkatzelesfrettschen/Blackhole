@@ -1,26 +1,22 @@
 # ==============================================================================
-# Blackhole (C++ OpenGL) .gitignore
+# Blackhole .gitignore -- only build artifacts, caches, and editor junk
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
 # Build directories
 # ------------------------------------------------------------------------------
-/build
-build/
-/build-asan/
-/build_asan/
-/build-tsan/
-/build_tsan/
+/build/
+/build-*/
+/build_*/
 /install/
 
 # ------------------------------------------------------------------------------
-# C/C++ Compiled files
+# C/C++ object files and libraries produced by the build
 # ------------------------------------------------------------------------------
 *.o
 *.obj
 *.lo
 *.slo
-*.elf
 *.a
 *.lib
 *.lai
@@ -32,32 +28,26 @@ build/
 *.exe
 *.out
 *.app
+*.elf
 
-# Precompiled Headers
+# Precompiled headers
 *.gch
 *.pch
 
-# Debug files
+# Debug symbols
 *.dSYM/
 *.su
 
-# ----------------------------------------------------------------------
-# Local profiling + analysis outputs
-# ----------------------------------------------------------------------
-perf.data
-perf.data.old
-gmon.out
-infer-out/
-captures/
-
-# Test binaries (prevent accidental commits)
-src/**/physics_test
-src/**/*_test
-tests/*_test
-!tests/*_test.cpp
+# ------------------------------------------------------------------------------
+# CUDA build artifacts
+# ------------------------------------------------------------------------------
+*.ptx
+*.cubin
+*.fatbin
+*.gpu
 
 # ------------------------------------------------------------------------------
-# CMake
+# CMake generated files
 # ------------------------------------------------------------------------------
 CMakeCache.txt
 CMakeFiles/
@@ -66,22 +56,54 @@ compile_commands.json
 Makefile
 *.cmake
 !cmake/ValidateShader.cmake
+CMakeUserPresets.json
 
-# ----------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# Conan repo-local cache (packages are rebuilt, config is versioned)
+# ------------------------------------------------------------------------------
+.conan/*
+!.conan/global.conf
+!.conan/remotes.json
+
+# ------------------------------------------------------------------------------
 # Shader binaries (SPIR-V)
-# ----------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 *.spv
 
 # ------------------------------------------------------------------------------
-# macOS
+# Profiling / analysis outputs
 # ------------------------------------------------------------------------------
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
+perf.data
+perf.data.old
+gmon.out
+infer-out/
+captures/
+logs/
 
 # ------------------------------------------------------------------------------
-# IDE / Editors
+# Test binaries (prevent accidental commits of compiled tests)
+# ------------------------------------------------------------------------------
+src/**/physics_test
+src/**/*_test
+tests/*_test
+!tests/*_test.cpp
+
+# ------------------------------------------------------------------------------
+# Python caches
+# ------------------------------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# ------------------------------------------------------------------------------
+# Blender backup/temp files (project .blend files ARE tracked)
+# ------------------------------------------------------------------------------
+*.blend1
+*.blend2
+
+# ------------------------------------------------------------------------------
+# Editor / IDE
 # ------------------------------------------------------------------------------
 .idea/
 .vscode/
@@ -91,7 +113,15 @@ Makefile
 *.code-workspace
 
 # ------------------------------------------------------------------------------
-# General
+# OS junk
+# ------------------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ------------------------------------------------------------------------------
+# Misc temp / cache
 # ------------------------------------------------------------------------------
 *.tmp
 *.temp
@@ -99,12 +129,5 @@ Makefile
 *.log
 *.db
 settings.json
-logs/
-CMakeUserPresets.json
 imgui.ini
-.conan/
-!.conan/
-.conan/*
-!.conan/global.conf
-!.conan/remotes.json
-blender_addon/blackhole_physics/asset_library/blackhole_hybrid_scene.blend
+.cache/
