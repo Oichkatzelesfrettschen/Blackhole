@@ -1,0 +1,10 @@
+# Blender Asset Catalog Definition File
+# This file is machine-generated. Do not edit manually.
+VERSION 1
+
+# Blackhole Physics asset catalogs
+00000000-0000-0000-0000-000000000001:Blackhole Physics:
+00000000-0000-0000-0000-000000000002:Blackhole Physics/Presets:
+00000000-0000-0000-0000-000000000003:Blackhole Physics/Materials:
+00000000-0000-0000-0000-000000000004:Blackhole Physics/Node Groups:
+00000000-0000-0000-0000-000000000005:Blackhole Physics/Geometry:

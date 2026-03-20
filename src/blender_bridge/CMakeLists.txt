@@ -38,7 +38,7 @@ endif()
 
 # CUDA backend: adds the ray-traced renderer (cuda_renderer.cu)
 if(ENABLE_CUDA)
-    target_sources(blackhole_bridge PRIVATE cuda_renderer.cu)
+    target_sources(blackhole_bridge PRIVATE cuda_renderer.cu cuda_postprocess.cu)
     set_source_files_properties(cuda_renderer.cu PROPERTIES LANGUAGE CUDA)
     target_link_libraries(blackhole_bridge PRIVATE blackhole_cuda_rt CUDA::cudart)
     target_compile_definitions(blackhole_bridge PRIVATE BLACKHOLE_HAS_CUDA=1)

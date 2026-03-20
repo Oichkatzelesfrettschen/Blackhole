@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "assets": [
     {
       "id": "jwst_deep_field_smacs0723",
@@ -12,6 +12,7 @@
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
       "path": "assets/backgrounds/source/deep-field-smacs0723-2k.jpg",
+      "skyboxDir": "assets/skybox_jwst_deep_field",
       "tags": ["jwst", "deep-field", "gravitational-lensing", "galaxy-cluster"]
     },
     {
@@ -25,6 +26,7 @@
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
       "path": "assets/backgrounds/source/tarantula-nebula-2k.jpg",
+      "skyboxDir": "assets/skybox_jwst_tarantula",
       "tags": ["jwst", "nebula", "star-forming"]
     },
     {
@@ -38,6 +40,7 @@
       "resolution": { "width": 2048, "height": 1464 },
       "format": "jpg",
       "path": "assets/backgrounds/source/pillars-of-creation-2k.jpg",
+      "skyboxDir": "assets/skybox_jwst_pillars",
       "tags": ["jwst", "nebula", "pillars", "star-forming"]
     },
     {
@@ -77,6 +80,7 @@
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
       "path": "assets/backgrounds/source/stephans-quintet-2k.jpg",
+      "skyboxDir": "assets/skybox_jwst_stephans_quintet",
       "tags": ["jwst", "galaxy-group", "interaction"]
     },
     {
@@ -90,6 +94,7 @@
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
       "path": "assets/backgrounds/source/cartwheel-galaxy-2k.jpg",
+      "skyboxDir": "assets/skybox_jwst_cartwheel",
       "tags": ["jwst", "galaxy", "ring-galaxy"]
     },
     {
@@ -119,6 +124,111 @@
       "tags": ["jwst", "planet", "jupiter", "auroras"]
     },
     {
+      "id": "nasa_deep_starmap",
+      "title": "NASA Deep Star Map (Celestial)",
+      "source": "NASA/Goddard Space Flight Center Scientific Visualization Studio",
+      "sourceUrl": "https://svs.gsfc.nasa.gov/3895",
+      "license": "Public Domain",
+      "licenseUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "credit": "NASA/Goddard Space Flight Center Scientific Visualization Studio",
+      "resolution": { "width": 2048, "height": 1536 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/nasa-deep-starmap-2k.jpg",
+      "skyboxDir": "assets/skybox_nasa_starmap",
+      "equirectSource": "assets/backgrounds/equirect/nasa_deep_starmap_4k.jpg",
+      "tags": ["nasa", "starfield", "catalog", "equirectangular", "dark"]
+    },
+    {
+      "id": "nasa_deep_starmap_galactic",
+      "title": "NASA Deep Star Map (Galactic)",
+      "source": "NASA/Goddard Space Flight Center Scientific Visualization Studio",
+      "sourceUrl": "https://svs.gsfc.nasa.gov/3895",
+      "license": "Public Domain",
+      "licenseUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "credit": "NASA/Goddard Space Flight Center Scientific Visualization Studio",
+      "resolution": { "width": 2048, "height": 1536 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/nasa-deep-starmap-galactic-2k.jpg",
+      "skyboxDir": "assets/skybox_nasa_starmap_galactic",
+      "equirectSource": "assets/backgrounds/equirect/nasa_deep_starmap_galactic_4k.jpg",
+      "tags": ["nasa", "starfield", "catalog", "galactic", "equirectangular", "dark"]
+    },
+    {
+      "id": "esa_gaia_allsky",
+      "title": "ESA Gaia DR2 All-Sky Map",
+      "source": "ESA/Gaia/DPAC",
+      "sourceUrl": "https://sci.esa.int/web/gaia/-/60196-gaia-s-sky-in-colour-equirectangular-projection",
+      "license": "CC BY-SA 3.0 IGO",
+      "licenseUrl": "https://www.cosmos.esa.int/web/gaia/credit",
+      "credit": "ESA/Gaia/DPAC, CC BY-SA 3.0 IGO",
+      "resolution": { "width": 2048, "height": 1536 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/esa-gaia-allsky-2k.jpg",
+      "skyboxDir": "assets/skybox_esa_gaia",
+      "equirectSource": "assets/backgrounds/equirect/esa_gaia_dr2_4k.png",
+      "tags": ["esa", "gaia", "allsky", "equirectangular", "1.7-billion-stars"]
+    },
+    {
+      "id": "eso_milkyway_brunier",
+      "title": "ESO Milky Way Panorama",
+      "source": "ESO/S. Brunier",
+      "sourceUrl": "https://www.eso.org/public/images/eso0932a/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "credit": "ESO/S. Brunier",
+      "resolution": { "width": 2048, "height": 1536 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/eso-milkyway-brunier-2k.jpg",
+      "skyboxDir": "assets/skybox_eso_milkyway",
+      "equirectSource": "assets/backgrounds/equirect/eso_milkyway_brunier.jpg",
+      "tags": ["eso", "milky-way", "panorama", "equirectangular"]
+    },
+    {
+      "id": "hazy_nebulae_1",
+      "title": "Hazy Nebulae Starfield 1",
+      "source": "spacespheremaps.com",
+      "sourceUrl": "https://www.spacespheremaps.com/hazy-nebulae-spheremaps/",
+      "license": "Free for personal and commercial use",
+      "licenseUrl": "https://www.spacespheremaps.com/",
+      "credit": "spacespheremaps.com",
+      "resolution": { "width": 2048, "height": 1536 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/hazy-nebulae-1-2k.jpg",
+      "skyboxDir": "assets/skybox_hazy_nebulae_1",
+      "equirectSource": "assets/backgrounds/equirect/spacesphere_hazy_nebulae_1.png",
+      "tags": ["nebula", "starfield", "dark", "equirectangular"]
+    },
+    {
+      "id": "hazy_nebulae_2",
+      "title": "Hazy Nebulae Starfield 2",
+      "source": "spacespheremaps.com",
+      "sourceUrl": "https://www.spacespheremaps.com/hazy-nebulae-spheremaps/",
+      "license": "Free for personal and commercial use",
+      "licenseUrl": "https://www.spacespheremaps.com/",
+      "credit": "spacespheremaps.com",
+      "resolution": { "width": 2048, "height": 1536 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/hazy-nebulae-2-2k.jpg",
+      "skyboxDir": "assets/skybox_hazy_nebulae_2",
+      "equirectSource": "assets/backgrounds/equirect/spacesphere_hazy_nebulae_2.png",
+      "tags": ["nebula", "starfield", "dark", "equirectangular"]
+    },
+    {
+      "id": "plain_starfield",
+      "title": "Plain Starfield",
+      "source": "spacespheremaps.com",
+      "sourceUrl": "https://www.spacespheremaps.com/plain-starfield-spheremaps/",
+      "license": "Free for personal and commercial use",
+      "licenseUrl": "https://www.spacespheremaps.com/",
+      "credit": "spacespheremaps.com",
+      "resolution": { "width": 2048, "height": 1536 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/plain-starfield-2k.jpg",
+      "skyboxDir": "assets/skybox_plain_starfield",
+      "equirectSource": "assets/backgrounds/equirect/spacesphere_plain_starfield_1.png",
+      "tags": ["starfield", "dark", "minimal", "equirectangular"]
+    },
+    {
       "id": "nasa_pia22085",
       "title": "Black Hole With Jet (Artist's Concept)",
       "source": "NASA/JPL-Caltech",
@@ -146,7 +256,7 @@
     },
     {
       "id": "esa_heic1509a_4k",
-      "title": "Westerlund 2 — Hubble’s 25th anniversary image",
+      "title": "Westerlund 2 -- Hubble's 25th anniversary image",
       "source": "ESA/Hubble",
       "sourceUrl": "https://cdn.esahubble.org/archives/images/publicationjpg/heic1509a.jpg",
       "license": "CC BY 4.0",
@@ -198,7 +308,7 @@
     },
     {
       "id": "esa_heic1509a_large",
-      "title": "Westerlund 2 — Hubble (large)",
+      "title": "Westerlund 2 -- Hubble (large)",
       "source": "ESA/Hubble",
       "sourceUrl": "https://cdn.esahubble.org/archives/images/large/heic1509a.jpg",
       "license": "CC BY 4.0",
