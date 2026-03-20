@@ -16,16 +16,18 @@
 
 ## Build the code
 
-```bash
-# Install dependencies with repo-local Conan (output folder must match your CMake build dir).
+Install dependencies with repo-local Conan (output folder must match your CMake build dir).
 
 Preferred invocation (Conan 2.x):
 
 ```bash
 # repo-local cache
 ./scripts/conan_install.sh Release build
-# then configure
-cmake --preset profile
+./scripts/fetch_implot.sh
+
+# Configure the project and generate a native build system.
+cmake --preset release
+cmake --build --preset release
 ```
 
 If you must use raw conan commands, prefer the 2.x syntax:
@@ -34,13 +36,9 @@ If you must use raw conan commands, prefer the 2.x syntax:
 conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23
 ```
 
-./scripts/conan_install.sh Release build
-./scripts/fetch_implot.sh
+Optional build flags:
 
-# Configure the project and generate a native build system.
-cmake --preset release
-cmake --build --preset release
-
+```bash
 # Optional RmlUi overlay (MangoHUD port groundwork).
 cmake --preset release -DENABLE_RMLUI=ON
 
@@ -50,8 +48,6 @@ cmake --preset release -DENABLE_TRACY=ON
 # Or explicit configure/build.
 cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/Release \
   -DCMAKE_TOOLCHAIN_FILE=build/Release/generators/conan_toolchain.cmake
-
-# Compile / build the project.
 cmake --build build/Release
 ```
 
@@ -64,13 +60,17 @@ overlay:
 ./build/Blackhole --curve-tsv /absolute/path/to/Crit_curve_smooth.tsv
 ```
 
+## Documentation
+
+Full project documentation lives in [`docs/index.md`](docs/index.md).
+
 ## OpenGL 4.6 scope
 
-See `docs/opengl-4-6-scope.md` for validation and platform notes.
+See [`docs/gpu/scope.md`](docs/gpu/scope.md) for validation and platform notes.
 
 ## Status and validation
 
-- Roadmap + issue tracking: `STATUS.md` and `TODO_FIXES.md`.
+- Roadmap + issue tracking: [`docs/developer-guide/status.md`](docs/developer-guide/status.md) and [`docs/developer-guide/backlog.md`](docs/developer-guide/backlog.md).
 - GLSL validation (warnings treated as errors only when `ENABLE_WERROR=ON`):
   `cmake --build --preset release --target validate-shaders`
 - Physics validation tables:

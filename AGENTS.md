@@ -40,6 +40,7 @@ Run: `./build/Release/Blackhole` or `./build/Release/physics_bench`.
 - PRs include a short summary, tests run, and screenshots for visual changes.
 
 ## Progress & Documentation
-- Current status and active plans: `STATUS.md`.
-- Backlog only: `TODO_FIXES.md`.
+- Current status and active plans: [`docs/developer-guide/status.md`](docs/developer-guide/status.md).
+- Backlog only: [`docs/developer-guide/backlog.md`](docs/developer-guide/backlog.md).
 - Deep design references live in `docs/` (GRMHD, LUT pipeline, cleanroom ports).
+- Full documentation index: [`docs/index.md`](docs/index.md).

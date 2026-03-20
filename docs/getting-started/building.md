@@ -36,6 +36,11 @@ sudo dnf install -y \
     git-lfs
 ```
 
+**Arch Linux:**
+```bash
+sudo pacman -S cmake python python-pip conan mesa libxrandr libxinerama libxcursor libxi libxkbcommon git-lfs
+```
+
 ## Bootstrap: Conan 2.x
 
 This project **requires Conan 2.x**. The build scripts use Conan 2.x-specific commands (`conan profile detect`, updated `conan install` syntax).
@@ -82,39 +87,6 @@ pip install conan>=2.0
 - CMake toolchain generation changes
 - The scripts explicitly detect and adapt to Conan version, but 2.x is the primary target
 
-## Build Directory Structure
-
-This project separates compiled dependencies from build artifacts:
-
-```
-Blackhole/
-├── .conan/              # Conan package cache (persists across clean builds)
-│   ├── p/               # Compiled packages (reused)
-│   └── profiles/        # Build profiles
-├── build/               # CMake build directory (can be deleted for clean builds)
-│   └── Release/
-│       ├── generators/  # Conan CMake toolchain files
-│       └── Blackhole    # Built executable
-```
-
-**Key point:** Deleting `build/` does NOT delete `.conan/`. The compiled packages in `.conan/p/`
-are reused across builds. Only the CMake toolchain files need regeneration.
-
-### Clean Build Process
-
-```bash
-# Clean build (regenerate toolchain, reuse cached packages)
-rm -rf build
-./scripts/conan_install.sh Release build
-cmake --preset release
-cmake --build --preset release
-
-# Full rebuild (recompile ALL dependencies - rarely needed)
-./scripts/conan_install.sh Release build --force-reinstall
-cmake --preset release
-cmake --build --preset release
-```
-
 ## Build Process
 
 ### Quick Start
@@ -134,6 +106,24 @@ cmake --build --preset release
 
 # 4. Run
 ./build/Release/Blackhole
+```
+
+### One-Command Build
+
+```bash
+./scripts/build-quick.sh
+```
+
+Or with clean rebuild:
+
+```bash
+./scripts/build-quick.sh --clean
+```
+
+### One-Line Build (No Scripts)
+
+```bash
+conan install . --output-folder=build/Release --build=missing -s compiler.cppstd=23 && cmake --preset release && cmake --build --preset release
 ```
 
 ### Step-by-Step
@@ -183,6 +173,50 @@ cmake --build --preset release
 # Or: cmake --build build/Release
 ```
 
+## Build Directory Structure
+
+```
+Blackhole/
+  .conan/              # Conan package cache (persists across clean builds)
+    p/                 # Compiled packages (reused)
+    profiles/          # Build profiles
+  build/               # CMake build directory (can be deleted for clean builds)
+    Release/
+      generators/      # Conan CMake toolchain files
+      Blackhole        # Built executable
+```
+
+**Key point:** Deleting `build/` does NOT delete `.conan/`. The compiled packages in `.conan/p/`
+are reused across builds. Only the CMake toolchain files need regeneration.
+
+### Clean Build Process
+
+```bash
+# Clean build (regenerate toolchain, reuse cached packages)
+rm -rf build
+./scripts/conan_install.sh Release build
+cmake --preset release
+cmake --build --preset release
+
+# Full rebuild (recompile ALL dependencies - rarely needed)
+./scripts/conan_install.sh Release build --force-reinstall
+cmake --preset release
+cmake --build --preset release
+
+# Nuclear option (delete everything)
+rm -rf build .conan/
+./scripts/conan_install.sh Release build
+```
+
+## Build Configurations
+
+| Configuration | Command |
+|--------------|---------|
+| **Release** (Maximum Performance) | `cmake --preset release && cmake --build --preset release` |
+| **Debug** | `cmake --preset debug && cmake --build --preset debug` |
+| **Profiling** (perf/valgrind) | `cmake --preset profiling && cmake --build --preset profiling` |
+| **PGO** (Profile-Guided) | See PGO section below |
+
 ## Build Options
 
 | CMake Option | Default | Description |
@@ -190,11 +224,49 @@ cmake --build --preset release
 | `ENABLE_TRACY` | OFF | Enable Tracy profiler integration |
 | `ENABLE_RMLUI` | OFF | Enable RmlUi HUD overlay |
 | `ENABLE_WERROR` | OFF | Treat warnings as errors |
+| `ENABLE_CUDA` | OFF | Enable CUDA compute backend (SM80+) |
+| `ENABLE_EIGEN` | OFF | Enable Eigen for sparse ODE solvers |
 
 Example:
 ```bash
 cmake --preset release -DENABLE_TRACY=ON -DENABLE_RMLUI=ON
 ```
+
+## Profile-Guided Optimization (PGO)
+
+**Phase 1: Generate profiles**
+
+```bash
+conan install . --output-folder=build/PGO-Gen --build=missing -s compiler.cppstd=23
+cmake --preset pgo-gen && cmake --build --preset pgo-gen
+cd build/PGO-Gen && ./Blackhole  # Run typical workload
+# For Clang: llvm-profdata merge -output=pgo-profiles/default.profdata pgo-profiles/default.profraw
+```
+
+**Phase 2: Optimized build**
+
+```bash
+conan install . --output-folder=build/PGO-Use --build=missing -s compiler.cppstd=23
+cmake --preset pgo-use && cmake --build --preset pgo-use
+./build/PGO-Use/Blackhole  # 10-20% faster than -O3
+```
+
+## Optimizations Enabled by Default
+
+- **-O3**: Maximum compiler optimization
+- **-march=native**: CPU-specific SIMD instructions
+- **Fat LTO**: Link Time Optimization (full cross-module)
+- **fast-math**: Aggressive floating-point optimizations
+
+## Wayland Support
+
+To enable native Wayland rendering (better performance):
+
+1. Modify `conanfile.py` to build GLFW with Wayland
+2. Or use system GLFW: `paru -S glfw` (provides both X11 and Wayland)
+3. Rebuild
+
+**Note:** Current Conan GLFW uses X11/XWayland compatibility layer.
 
 ## Troubleshooting
 
@@ -203,6 +275,20 @@ cmake --preset release -DENABLE_TRACY=ON -DENABLE_RMLUI=ON
 Run the dependency installation script first:
 ```bash
 ./scripts/conan_install.sh Release build
+```
+
+### "Could not find toolchain file"
+
+Wrong path to `conan_toolchain.cmake`. Use absolute path or correct relative path:
+```bash
+cmake .. -DCMAKE_TOOLCHAIN_FILE=$PWD/Release/generators/conan_toolchain.cmake
+```
+
+### Double-nested `build/Release/Release/`
+
+Pass only `build` (not `build/Release`) to `conan_install.sh`:
+```bash
+./scripts/conan_install.sh Release build  # Correct
 ```
 
 ### Dependency Corruption or Version Mismatch
@@ -250,6 +336,17 @@ sudo apt-get install libgl1-mesa-dev
 sudo dnf install mesa-libGL-devel
 ```
 
+## IDE Support
+
+**VS Code**: Install CMake Tools, select preset, build (F7).
+**CLion**: Auto-detects CMakePresets.json, select from dropdown, build (Ctrl+F9).
+
+## Dependencies
+
+All managed via Conan (see `conanfile.py`):
+- GLFW (graphics), GLM (math), ImGui (UI), Eigen3 (linear algebra)
+- See `conanfile.py` for the full list (20+ packages)
+
 ## CI/CD
 
 The GitHub Actions workflow (`.github/workflows/ci.yml`) automates:
@@ -258,3 +355,18 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) automates:
 - Release build verification
 
 See the workflow file for the canonical CI build process.
+
+## Verification
+
+```bash
+./scripts/verify-conan2-migration.sh
+```
+
+Expected: All checks pass, C++23 verified, latest packages confirmed.
+
+## Technology Stack
+
+- **C++23** (GCC 13+, Clang 17+, MSVC 2022+)
+- **Conan 2.x** (native, no deprecated features)
+- **OpenGL** (glfw 3.4, glbinding 3.5.0, glm 1.0.1, imgui 1.92.5-docking)
+- **SIMD** (xsimd 14.0.0, highway 1.3.0, sleef 3.9.0)

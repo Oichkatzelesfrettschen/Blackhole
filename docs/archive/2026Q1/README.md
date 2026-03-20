@@ -31,7 +31,7 @@ and design decisions made during this quarter.
 - [ROADMAP.md](ROADMAP.md) - Q1 roadmap snapshot (if archived)
 
 **Execution Plans:**
-- [EXECUTION_PLAN_2026Q1.md](../../EXECUTION_PLAN_2026Q1.md) - Q1 execution plan
+- EXECUTION_PLAN_2026Q1.md - Q1 execution plan (removed; was a redirect stub)
 
 **Status Snapshots:**
 - See parent directory for current STATUS.md
@@ -129,8 +129,8 @@ and design decisions made during this quarter.
 
 **Documentation:**
 - Parent: [../../README.md](../../README.md)
-- Roadmap: [../../MASTER_ROADMAP.md](../../MASTER_ROADMAP.md)
-- Status: [../../STATUS.md](../../STATUS.md)
+- Roadmap: [../developer-guide/roadmap.md](../developer-guide/roadmap.md)
+- Status: [../developer-guide/status.md](../developer-guide/status.md)
 
 **External:**
 - EHT M87* Shadow: Akiyama+ 2019, ApJ 875:L1

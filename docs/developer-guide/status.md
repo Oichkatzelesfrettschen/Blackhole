@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-02-28
 **Status:** Active Development - Build system aligned, NNLO spin-orbit + GLSL G(x) LUT complete
-**Roadmap:** See `docs/MASTER_ROADMAP.md` for the consolidated execution plan
+**Roadmap:** See `roadmap.md` for the consolidated execution plan
 
 ---
 
@@ -546,7 +546,7 @@ The simulation is fully operational with the core rendering pipeline:
   1.4.313.0 to match spirv-tools/shaderc) and replaced unavailable fast-noise-lite
   with fastnoise2.
 - Conan install + Release build completed with new fastnoise2/spirv-cross packages
-  (external warnings observed; tracked in TODO_FIXES.md).
+  (external warnings observed; tracked in backlog.md).
 - Added optional parallel shader compile (`BLACKHOLE_PARALLEL_SHADER_COMPILE=1`) and
   no-error context (`BLACKHOLE_NO_ERROR_CONTEXT=1`) toggles.
 - Updated clang-tidy config to match lowerCamelCase and reduced noisy checks; fixed HUD overlay static usage, include guards, and cppcheck warnings.

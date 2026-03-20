@@ -541,12 +541,12 @@ export BLACKHOLE_PERF_HUD=1
 
 | Document | Purpose | Status |
 |----------|---------|--------|
-| STATUS.md | Current state + recent changes | Active |
-| TODO_FIXES.md | Issue backlog | Active |
-| AGENTS.md | Repository guidelines | Reference |
-| PHYSICS_ARCHITECTURE.md | Physics deep dive | Reference |
-| docs/PHYSICS_MATH_LACUNAE.md | Gap analysis: physics/math/perf gaps for Phase 6+ | Active |
-| CLEANROOM_IMPORTS.md | Provenance tracking | Active |
+| status.md | Current state + recent changes | Active |
+| backlog.md | Issue backlog | Active |
+| ../../AGENTS.md | Repository guidelines | Reference |
+| ../physics/architecture.md | Physics deep dive | Reference |
+| ../physics/lacunae.md | Gap analysis: physics/math/perf gaps for Phase 6+ | Active |
+| ../physics/cleanroom.md | Provenance tracking | Active |
 | CLEANROOM_PORT_MAP.md | Module mapping | Reference |
 | EIGEN_REFACTOR_PLAN.md | Math migration | Active |
 | IMAGE_SOURCES.md | Asset licensing | Active |

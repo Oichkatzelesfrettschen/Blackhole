@@ -398,7 +398,7 @@ Estimated effort: ~200 LOC in integrator.glsl + verified/kerr.glsl.
 >
 > The ingoing null vector has a MINUS sign: l^mu = (1, -sqrt(Delta/Sigma), 0, a/Sigma).
 > Confusing the two is a common source of coordinate instability in GPU raytracers.
-> NOTE: Item F in MASTER_ROADMAP.md now specifies OUTGOING Kerr-Schild accordingly.
+> NOTE: Item F in the roadmap now specifies OUTGOING Kerr-Schild accordingly.
 
 ---
 
@@ -614,14 +614,14 @@ tested in the BHPT package, removing the largest uncertainty.
 
 ### 6.2 KS Coordinate Stability 2023 (arXiv:2310.02321)
 
-**Relevance:** Section 2.7, Item F in MASTER_ROADMAP.md.
+**Relevance:** Section 2.7, Item F in the roadmap (`../developer-guide/roadmap.md`).
 
 "Not All Spacetime Coordinates for General-Relativistic Ray Tracing Are Created Equal"
 demonstrates that backward ray tracing (from observer/camera toward source) is
 numerically stable only in OUTGOING Kerr-Schild coordinates. Ingoing Kerr-Schild
 produces constraint violations in this tracing direction.
 
-Correction to MASTER_ROADMAP.md Item F: the roadmap previously said "ingoing Kerr-Schild."
+Correction to roadmap Item F: the roadmap previously said "ingoing Kerr-Schild."
 The correct target is OUTGOING Kerr-Schild:
 
   g_mu_nu = eta_mu_nu + 2H * l_mu * l_nu

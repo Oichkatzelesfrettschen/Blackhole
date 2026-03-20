@@ -578,7 +578,7 @@ F_ν ∝ ν^(-α)  (optically thin)
 - M87 jet base (0.09 ly from EHT Jan 2026)
 
 **Previous versions:**
-- See STATUS.md for development history
+- See `../developer-guide/status.md` for development history
 
 ---
 
@@ -586,9 +586,8 @@ F_ν ∝ ν^(-α)  (optically thin)
 
 **Documentation:**
 - README.md: Overview and build instructions
-- PHYSICS_ARCHITECTURE.md: Physics foundations
-- PHYSICS_UPDATE_2026.md: Latest observational data
-- STATUS.md: Development status
+- `../physics/architecture.md`: Physics foundations
+- `../developer-guide/status.md`: Development status
 
 **Issues and Bugs:**
 - Report at: https://github.com/Oichkatzelesfrettschen/Blackhole/issues

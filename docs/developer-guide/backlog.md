@@ -1,11 +1,11 @@
 # Blackhole Backlog
 
 **Last Updated:** 2026-01-01
-**Roadmap:** See `docs/MASTER_ROADMAP.md` for consolidated execution plan
-**Dependencies:** See `docs/DEPENDENCY_MATRIX.md` for version tracking
+**Roadmap:** See `roadmap.md` for consolidated execution plan
+**Dependencies:** See `dependencies.md` for version tracking
 
 This file is a lightweight backlog only. For current state, recent changes, and
-active plans, see `STATUS.md`.
+active plans, see `status.md`.
 
 | Issue | Priority | Status | Notes |
 | --- | --- | --- | --- |
