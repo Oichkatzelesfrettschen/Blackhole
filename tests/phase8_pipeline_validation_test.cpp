@@ -35,21 +35,21 @@ bool test_multifield_grmhd_playback() {
         B_field.push_back(100.0 + 50.0 * std::sin(i * 0.628));
     }
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(),
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(),
                                                       static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
-    set_playback_mode(state, PlaybackMode::Forward);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
+    setPlaybackMode(state, PlaybackMode::Forward);
 
     // Sample all 3 fields at multiple times
     std::vector<double> sampled_rho, sampled_T, sampled_B;
 
     for (int frame = 0; frame < 5; frame++) {
-        update_advanced_playback(state, ts, 1.0 / 30.0, 0.0);
+        updateAdvancedPlayback(state, ts, 1.0 / 30.0, 0.0);
 
-        double rho = interpolate_field(ts, rho_field.data(), state.t_current, false);
-        double temp = interpolate_field(ts, T_field.data(), state.t_current, false);
-        double B = interpolate_field(ts, B_field.data(), state.t_current, true);  // Hermite
+        double rho = interpolateField(ts, rho_field.data(), state.tCurrent, false);
+        double temp = interpolateField(ts, T_field.data(), state.tCurrent, false);
+        double B = interpolateField(ts, B_field.data(), state.tCurrent, true);  // Hermite
 
         sampled_rho.push_back(rho);
         sampled_T.push_back(temp);
@@ -81,15 +81,15 @@ bool test_interpolation_mode_switching() {
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
     std::vector<double> field = {1.0, 5.0, 2.0, 8.0, 3.0, 7.0};
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(),
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(),
                                                       static_cast<uint32_t>(times.size()));
 
     // Sample at mid-points with both methods
-    double linear_2p5 = interpolate_field(ts, field.data(), 2.5, false);
-    double hermite_2p5 = interpolate_field(ts, field.data(), 2.5, true);
+    double linear_2p5 = interpolateField(ts, field.data(), 2.5, false);
+    double hermite_2p5 = interpolateField(ts, field.data(), 2.5, true);
 
-    double linear_4p5 = interpolate_field(ts, field.data(), 4.5, false);
-    double hermite_4p5 = interpolate_field(ts, field.data(), 4.5, true);
+    double linear_4p5 = interpolateField(ts, field.data(), 4.5, false);
+    double hermite_4p5 = interpolateField(ts, field.data(), 4.5, true);
 
     // Hermite should be smoother (closer to Catmull-Rom continuity)
     bool switching_ok = (linear_2p5 > 1.0 && linear_2p5 < 8.0) &&
@@ -113,32 +113,32 @@ bool test_multirate_playback() {
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0};
     std::vector<double> field = {0.0, 10.0, 20.0, 30.0};
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(),
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(),
                                                       static_cast<uint32_t>(times.size()));
 
     // Test 1x speed
-    AdvancedPlaybackState state_1x = create_advanced_playback_state(ts, 1.0);
-    set_playback_mode(state_1x, PlaybackMode::Forward);
+    AdvancedPlaybackState state_1x = createAdvancedPlaybackState(ts, 1.0);
+    setPlaybackMode(state_1x, PlaybackMode::Forward);
 
     // Test 2x speed (fast-forward)
-    AdvancedPlaybackState state_2x = create_advanced_playback_state(ts, 2.0);
-    set_playback_mode(state_2x, PlaybackMode::Forward);
+    AdvancedPlaybackState state_2x = createAdvancedPlaybackState(ts, 2.0);
+    setPlaybackMode(state_2x, PlaybackMode::Forward);
 
     // Test 0.5x speed (slow-motion)
-    AdvancedPlaybackState state_05x = create_advanced_playback_state(ts, 0.5);
-    set_playback_mode(state_05x, PlaybackMode::Forward);
+    AdvancedPlaybackState state_05x = createAdvancedPlaybackState(ts, 0.5);
+    setPlaybackMode(state_05x, PlaybackMode::Forward);
 
     // Simulate 1 frame at 60 FPS
     double dt_frame = 1.0 / 60.0;
 
-    update_advanced_playback(state_1x, ts, dt_frame, 0.0);
-    update_advanced_playback(state_2x, ts, dt_frame, 0.0);
-    update_advanced_playback(state_05x, ts, dt_frame, 0.0);
+    updateAdvancedPlayback(state_1x, ts, dt_frame, 0.0);
+    updateAdvancedPlayback(state_2x, ts, dt_frame, 0.0);
+    updateAdvancedPlayback(state_05x, ts, dt_frame, 0.0);
 
     // At 2x speed, time should advance ~2x faster than 1x
     // At 0.5x speed, time should advance ~0.5x slower than 1x
-    bool t_2x_faster = (state_2x.t_current > state_1x.t_current);
-    bool t_05x_slower = (state_05x.t_current < state_1x.t_current);
+    bool t_2x_faster = (state_2x.tCurrent > state_1x.tCurrent);
+    bool t_05x_slower = (state_05x.tCurrent < state_1x.tCurrent);
 
     bool multirate_ok = (state_1x.mode == PlaybackMode::Forward) &&
                        (state_2x.mode == PlaybackMode::Forward) &&
@@ -146,9 +146,9 @@ bool test_multirate_playback() {
                        t_2x_faster && t_05x_slower;
 
     std::cout << "  1x speed: t = " << std::fixed << std::setprecision(4)
-              << state_1x.t_current << "\n"
-              << "  2x speed: t = " << state_2x.t_current << " (faster)\n"
-              << "  0.5x speed: t = " << state_05x.t_current << " (slower)\n"
+              << state_1x.tCurrent << "\n"
+              << "  2x speed: t = " << state_2x.tCurrent << " (faster)\n"
+              << "  0.5x speed: t = " << state_05x.tCurrent << " (slower)\n"
               << "  Status: " << (multirate_ok ? "PASS" : "FAIL") << "\n\n";
 
     return multirate_ok;
@@ -167,32 +167,32 @@ bool test_reverse_with_interpolation() {
         smooth_field.push_back(10.0 + 5.0 * std::sin(i * 0.314));
     }
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(),
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(),
                                                       static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
-    state.t_current = ts.t_end;  // Start at end
-    set_playback_mode(state, PlaybackMode::Reverse);
-    state.reverse_speed = 1.0;
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
+    state.tCurrent = ts.tEnd;  // Start at end
+    setPlaybackMode(state, PlaybackMode::Reverse);
+    state.reverseSpeed = 1.0;
 
     // Simulate 5 frames backward
     std::vector<double> reverse_samples;
 
     for (int frame = 0; frame < 5; frame++) {
-        update_advanced_playback(state, ts, 1.0 / 30.0, 0.0);
-        double val = interpolate_field(ts, smooth_field.data(), state.t_current, true);
+        updateAdvancedPlayback(state, ts, 1.0 / 30.0, 0.0);
+        double val = interpolateField(ts, smooth_field.data(), state.tCurrent, true);
         reverse_samples.push_back(val);
     }
 
     // Check that time decreased monotonically
-    bool reverse_ok = (state.frame_number == 5) &&
+    bool reverse_ok = (state.frameNumber == 5) &&
                      (state.mode == PlaybackMode::Reverse) &&
-                     (state.t_current < ts.t_end) &&
-                     (state.t_current > ts.t_start) &&
+                     (state.tCurrent < ts.tEnd) &&
+                     (state.tCurrent > ts.tStart) &&
                      (reverse_samples.size() == 5);
 
-    std::cout << "  Frames played backward: " << state.frame_number << "\n"
-              << "  Current time: " << std::fixed << std::setprecision(3) << state.t_current << "\n"
+    std::cout << "  Frames played backward: " << state.frameNumber << "\n"
+              << "  Current time: " << std::fixed << std::setprecision(3) << state.tCurrent << "\n"
               << "  Field values sampled: " << reverse_samples.size() << "\n"
               << "  All samples in valid range: "
               << (reverse_samples[0] > 5.0 && reverse_samples[0] < 15.0 ? "yes" : "no") << "\n"
@@ -214,22 +214,22 @@ bool test_frame_stepping_integration() {
         density.push_back(1.0 + 0.2 * i);
     }
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(),
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(),
                                                       static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
 
     // Step through all frames manually (with safety limit)
     std::vector<double> densities_at_frames;
 
     uint32_t max_steps = 50;  // Safety limit
-    while (state.t_current <= ts.t_end && max_steps-- > 0) {
-        double rho = interpolate_field(ts, density.data(), state.t_current, false);
+    while (state.tCurrent <= ts.tEnd && max_steps-- > 0) {
+        double rho = interpolateField(ts, density.data(), state.tCurrent, false);
         densities_at_frames.push_back(rho);
 
-        step_frame_forward(state, ts);
+        stepFrameForward(state, ts);
 
-        if (state.t_current > ts.t_end) break;
+        if (state.tCurrent > ts.tEnd) break;
     }
 
     // Verify samples are in reasonable range
@@ -242,10 +242,10 @@ bool test_frame_stepping_integration() {
     }
 
     bool stepping_ok = (densities_at_frames.size() > 5) &&
-                      (state.frame_number > 5) &&
+                      (state.frameNumber > 5) &&
                       all_positive;
 
-    std::cout << "  Frame count: " << state.frame_number << "\n"
+    std::cout << "  Frame count: " << state.frameNumber << "\n"
               << "  Samples collected: " << densities_at_frames.size() << "\n"
               << "  All samples in valid range [0,3]: " << (all_positive ? "yes" : "no") << "\n"
               << "  First density: " << std::fixed << std::setprecision(2)
@@ -263,35 +263,35 @@ bool test_marker_navigation() {
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
     std::vector<double> field = {10.0, 20.0, 15.0, 25.0, 18.0, 22.0};
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(),
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(),
                                                       static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
 
     // Add markers at peaks and valleys
-    add_timeline_marker(state, 1.0, ts);  // Peak
-    add_timeline_marker(state, 2.0, ts);  // Valley
-    add_timeline_marker(state, 3.0, ts);  // Peak
-    add_timeline_marker(state, 4.0, ts);  // Valley
-    add_timeline_marker(state, 5.0, ts);  // Peak
+    (void)addTimelineMarker(state, 1.0, ts);  // Peak
+    (void)addTimelineMarker(state, 2.0, ts);  // Valley
+    (void)addTimelineMarker(state, 3.0, ts);  // Peak
+    (void)addTimelineMarker(state, 4.0, ts);  // Valley
+    (void)addTimelineMarker(state, 5.0, ts);  // Peak
 
     // Navigate to markers and sample field
     std::vector<double> marker_samples;
 
-    state.t_current = 0.5;
-    for (uint32_t i = 0; i < state.n_markers; i++) {
-        seek_to_marker(state, ts, true);
-        double val = interpolate_field(ts, field.data(), state.t_current, false);
+    state.tCurrent = 0.5;
+    for (uint32_t i = 0; i < state.nMarkers; i++) {
+        (void)seekToMarker(state, ts, true);
+        double val = interpolateField(ts, field.data(), state.tCurrent, false);
         marker_samples.push_back(val);
 
-        if (state.t_current >= ts.t_end) break;
+        if (state.tCurrent >= ts.tEnd) break;
     }
 
-    bool marker_ok = (state.n_markers == 5) &&
+    bool marker_ok = (state.nMarkers == 5) &&
                     (marker_samples.size() > 2) &&
                     (marker_samples[0] > 15.0);  // First marker is at 1.0, field=20.0
 
-    std::cout << "  Markers created: " << state.n_markers << "\n"
+    std::cout << "  Markers created: " << state.nMarkers << "\n"
               << "  Markers navigated: " << marker_samples.size() << "\n"
               << "  Fields at markers: ";
     for (size_t i = 0; i < marker_samples.size() && i < 3; i++) {
@@ -319,29 +319,29 @@ bool test_complete_phase8_pipeline() {
         psi.push_back(0.5 * (1.0 + 0.2 * std::cos(i * 0.314)));
     }
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(),
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(),
                                                       static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
 
     // Add key markers
-    add_timeline_marker(state, 0.25, ts);  // Early time
-    add_timeline_marker(state, 0.50, ts);  // Mid time
-    add_timeline_marker(state, 0.95, ts);  // Late time
+    (void)addTimelineMarker(state, 0.25, ts);  // Early time
+    (void)addTimelineMarker(state, 0.50, ts);  // Mid time
+    (void)addTimelineMarker(state, 0.95, ts);  // Late time
 
     // Full simulation: forward, pause, seek, reverse
-    set_playback_mode(state, PlaybackMode::Forward);
+    setPlaybackMode(state, PlaybackMode::Forward);
 
     uint32_t total_samples = 0;
     double sum_rho = 0.0, sum_T = 0.0, sum_B = 0.0;
 
     // Play forward 5 frames
     for (int f = 0; f < 5; f++) {
-        update_advanced_playback(state, ts, 1.0 / 30.0, 50.0);
+        updateAdvancedPlayback(state, ts, 1.0 / 30.0, 50.0);
 
-        double rho_val = interpolate_field(ts, rho.data(), state.t_current, false);
-        double T_val = interpolate_field(ts, T.data(), state.t_current, false);
-        double B_val = interpolate_field(ts, B.data(), state.t_current, true);
+        double rho_val = interpolateField(ts, rho.data(), state.tCurrent, false);
+        double T_val = interpolateField(ts, T.data(), state.tCurrent, false);
+        double B_val = interpolateField(ts, B.data(), state.tCurrent, true);
 
         sum_rho += rho_val;
         sum_T += T_val;
@@ -350,19 +350,19 @@ bool test_complete_phase8_pipeline() {
     }
 
     // Pause and seek
-    toggle_pause(state);
-    seek_to_marker(state, ts, true);
+    togglePause(state);
+    (void)seekToMarker(state, ts, true);
 
     // Play backward 3 frames
-    reverse_playback_direction(state);
-    toggle_pause(state);
+    reversePlaybackDirection(state);
+    togglePause(state);
 
     for (int f = 0; f < 3; f++) {
-        update_advanced_playback(state, ts, 1.0 / 30.0, 55.0);
+        updateAdvancedPlayback(state, ts, 1.0 / 30.0, 55.0);
 
-        double rho_val = interpolate_field(ts, rho.data(), state.t_current, false);
-        double T_val = interpolate_field(ts, T.data(), state.t_current, false);
-        double B_val = interpolate_field(ts, B.data(), state.t_current, true);
+        double rho_val = interpolateField(ts, rho.data(), state.tCurrent, false);
+        double T_val = interpolateField(ts, T.data(), state.tCurrent, false);
+        double B_val = interpolateField(ts, B.data(), state.tCurrent, true);
 
         sum_rho += rho_val;
         sum_T += T_val;
@@ -372,25 +372,25 @@ bool test_complete_phase8_pipeline() {
 
     // Verify stats
     bool pipeline_ok = (total_samples == 8) &&
-                      (ts.n_dumps == 20) &&
-                      (state.n_markers == 3) &&
-                      (state.frame_number == 8) &&
+                      (ts.nDumps == 20) &&
+                      (state.nMarkers == 3) &&
+                      (state.frameNumber == 8) &&
                       (sum_rho > 0.0) &&
                       (sum_T > 0.0) &&
                       (sum_B > 0.0) &&
-                      (state.avg_interpolation_time > 0.0) &&
-                      (state.interpolation_calls == 8);
+                      (state.avgInterpolationTime > 0.0) &&
+                      (state.interpolationCalls == 8);
 
-    std::cout << "  GRMHD dumps: " << ts.n_dumps << "\n"
-              << "  Total timeline markers: " << state.n_markers << "\n"
-              << "  Total frames played: " << state.frame_number << "\n"
+    std::cout << "  GRMHD dumps: " << ts.nDumps << "\n"
+              << "  Total timeline markers: " << state.nMarkers << "\n"
+              << "  Total frames played: " << state.frameNumber << "\n"
               << "  Field samples collected: " << total_samples << "\n"
               << "  Avg density: " << std::fixed << std::setprecision(2)
               << (sum_rho / total_samples) << "\n"
               << "  Avg temperature: " << std::scientific << (sum_T / total_samples)
               << std::defaultfloat << "\n"
               << "  Avg B-field: " << (sum_B / total_samples) << "\n"
-              << "  Interpolation overhead: " << state.avg_interpolation_time << " us\n"
+              << "  Interpolation overhead: " << state.avgInterpolationTime << " us\n"
               << "  Status: " << (pipeline_ok ? "PASS" : "FAIL") << "\n\n";
 
     return pipeline_ok;

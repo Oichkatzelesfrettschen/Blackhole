@@ -27,10 +27,10 @@ namespace physics {
  * @brief Single GRMHD dump metadata
  */
 struct DumpMetadata {
-    double time;           // Code time unit
-    double dt;             // Time step to next dump
-    uint32_t dump_number;  // Sequential index
-    uint32_t fields_offset; // Byte offset in field storage
+    double time{0.0};          // Code time unit
+    double dt{0.0};            // Time step to next dump
+    uint32_t dumpNumber{0};    // Sequential index
+    uint32_t fieldsOffset{0};  // Byte offset in field storage
 };
 
 /**
@@ -38,10 +38,10 @@ struct DumpMetadata {
  */
 struct TimeSeriesMetadata {
     std::vector<DumpMetadata> dumps;
-    double t_start;     // Earliest time
-    double t_end;       // Latest time
-    uint32_t n_dumps;   // Total number of dumps
-    double frequency;   // Time sampling frequency (Hz in code units)
+    double tStart{0.0};     // Earliest time
+    double tEnd{0.0};       // Latest time
+    uint32_t nDumps{0};     // Total number of dumps
+    double frequency{0.0};  // Time sampling frequency (Hz in code units)
 };
 
 // ============================================================================
@@ -52,11 +52,11 @@ struct TimeSeriesMetadata {
  * @brief Interpolation state for current time
  */
 struct InterpolationState {
-    uint32_t dump_left;    // Index of left dump
-    uint32_t dump_right;   // Index of right dump
-    double alpha;          // Interpolation parameter [0, 1]
-    double time_current;   // Current interpolation time
-    bool is_valid;         // Whether interpolation is within bounds
+    uint32_t dumpLeft{0};     // Index of left dump
+    uint32_t dumpRight{0};    // Index of right dump
+    double alpha{0.0};        // Interpolation parameter [0, 1]
+    double timeCurrent{0.0};  // Current interpolation time
+    bool isValid{false};      // Whether interpolation is within bounds
 };
 
 /**
@@ -78,17 +78,17 @@ struct HermiteCoefficients {
  * @param n_dumps Number of dumps
  * @return TimeSeriesMetadata structure
  */
-inline TimeSeriesMetadata build_timeseries_metadata(const double* times, uint32_t n_dumps) {
+[[nodiscard]] inline TimeSeriesMetadata buildTimeseriesMetadata(const double* times, uint32_t nDumps) {
     TimeSeriesMetadata ts;
-    ts.n_dumps = n_dumps;
+    ts.nDumps = nDumps;
 
-    for (uint32_t i = 0; i < n_dumps; i++) {
+    for (uint32_t i = 0; i < nDumps; i++) {
         DumpMetadata dm;
         dm.time = times[i];
-        dm.dump_number = i;
-        dm.fields_offset = 0;  // Would be set during actual file loading
+        dm.dumpNumber = i;
+        dm.fieldsOffset = 0;  // Would be set during actual file loading
 
-        if (i < n_dumps - 1) {
+        if (i < nDumps - 1) {
             dm.dt = times[i + 1] - times[i];
         } else {
             dm.dt = 0.0;  // Last dump
@@ -97,12 +97,12 @@ inline TimeSeriesMetadata build_timeseries_metadata(const double* times, uint32_
         ts.dumps.push_back(dm);
     }
 
-    if (n_dumps > 0) {
-        ts.t_start = times[0];
-        ts.t_end = times[n_dumps - 1];
-        ts.frequency = 1.0 / ((ts.t_end - ts.t_start) / (n_dumps - 1));
+    if (nDumps > 0) {
+        ts.tStart = times[0];
+        ts.tEnd = times[nDumps - 1];
+        ts.frequency = 1.0 / ((ts.tEnd - ts.tStart) / static_cast<double>(nDumps - 1));
     } else {
-        ts.t_start = ts.t_end = 0.0;
+        ts.tStart = ts.tEnd = 0.0;
         ts.frequency = 0.0;
     }
 
@@ -120,49 +120,43 @@ inline TimeSeriesMetadata build_timeseries_metadata(const double* times, uint32_
  * @param t_query Query time
  * @return InterpolationState with left/right dumps and alpha
  */
-inline InterpolationState get_interpolation_state(const TimeSeriesMetadata& ts, double t_query) {
+[[nodiscard]] inline InterpolationState getInterpolationState(const TimeSeriesMetadata& ts, double tQuery) {
     InterpolationState state;
-    state.time_current = t_query;
-    state.is_valid = false;
+    state.timeCurrent = tQuery;
 
     // Clamp to valid range
-    if (t_query < ts.t_start) {
-        state.dump_left = 0;
-        state.dump_right = 0;
-        state.alpha = 0.0;
+    if (tQuery < ts.tStart) {
         return state;
     }
 
-    if (t_query > ts.t_end) {
-        state.dump_left = ts.n_dumps - 1;
-        state.dump_right = ts.n_dumps - 1;
+    if (tQuery > ts.tEnd) {
+        state.dumpLeft = ts.nDumps - 1;
+        state.dumpRight = ts.nDumps - 1;
         state.alpha = 1.0;
         return state;
     }
 
     // Binary search for bracketing dumps
-    for (uint32_t i = 0; i < ts.n_dumps - 1; i++) {
-        if (ts.dumps[i].time <= t_query && t_query <= ts.dumps[i + 1].time) {
-            state.dump_left = i;
-            state.dump_right = i + 1;
+    for (uint32_t i = 0; i < ts.nDumps - 1; i++) {
+        if (ts.dumps.at(i).time <= tQuery && tQuery <= ts.dumps.at(i + 1).time) {
+            state.dumpLeft = i;
+            state.dumpRight = i + 1;
 
-            double dt = ts.dumps[i + 1].time - ts.dumps[i].time;
+            const double dt = ts.dumps.at(i + 1).time - ts.dumps.at(i).time;
             if (dt > 0.0) {
-                state.alpha = (t_query - ts.dumps[i].time) / dt;
-            } else {
-                state.alpha = 0.0;
+                state.alpha = (tQuery - ts.dumps.at(i).time) / dt;
             }
 
-            state.is_valid = true;
+            state.isValid = true;
             return state;
         }
     }
 
     // Fallback: use last dump
-    state.dump_left = ts.n_dumps - 1;
-    state.dump_right = ts.n_dumps - 1;
+    state.dumpLeft = ts.nDumps - 1;
+    state.dumpRight = ts.nDumps - 1;
     state.alpha = 1.0;
-    state.is_valid = true;
+    state.isValid = true;
 
     return state;
 }
@@ -177,8 +171,8 @@ inline InterpolationState get_interpolation_state(const TimeSeriesMetadata& ts, 
  * @param f_right Right value
  * @return Interpolated value
  */
-inline double linear_interpolate(double alpha, double f_left, double f_right) {
-    return (1.0 - alpha) * f_left + alpha * f_right;
+[[nodiscard]] inline double linearInterpolate(double alpha, double fLeft, double fRight) {
+    return ((1.0 - alpha) * fLeft) + (alpha * fRight);
 }
 
 /**
@@ -195,21 +189,21 @@ inline double linear_interpolate(double alpha, double f_left, double f_right) {
  * @param p3 Value at t=2
  * @return Interpolated value at t
  */
-inline double hermite_interpolate(double t, double p0, double p1, double p2, double p3) {
+[[nodiscard]] inline double hermiteInterpolate(double t, double p0, double p1, double p2, double p3) {
     // Catmull-Rom tangent vectors
-    double m0 = 0.5 * (p2 - p0);
-    double m1 = 0.5 * (p3 - p1);
+    const double m0 = 0.5 * (p2 - p0);
+    const double m1 = 0.5 * (p3 - p1);
 
     // Hermite basis functions
-    double t2 = t * t;
-    double t3 = t2 * t;
+    const double t2 = t * t;
+    const double t3 = t2 * t;
 
-    double h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
-    double h10 = t3 - 2.0 * t2 + t;
-    double h01 = -2.0 * t3 + 3.0 * t2;
-    double h11 = t3 - t2;
+    const double h00 = (2.0 * t3) - (3.0 * t2) + 1.0;
+    const double h10 = t3 - (2.0 * t2) + t;
+    const double h01 = (-2.0 * t3) + (3.0 * t2);
+    const double h11 = t3 - t2;
 
-    return h00 * p1 + h10 * m0 + h01 * p2 + h11 * m1;
+    return (h00 * p1) + (h10 * m0) + (h01 * p2) + (h11 * m1);
 }
 
 // ============================================================================
@@ -225,37 +219,36 @@ inline double hermite_interpolate(double t, double p0, double p1, double p2, dou
  * @param use_hermite Use Hermite spline (true) vs linear (false)
  * @return Interpolated field value
  */
-inline double interpolate_field(const TimeSeriesMetadata& ts,
-                                const double* field_values,
-                                double t_query,
-                                bool use_hermite = false) {
-    InterpolationState state = get_interpolation_state(ts, t_query);
+[[nodiscard]] inline double interpolateField(const TimeSeriesMetadata& ts,
+                                             const double* fieldValues,
+                                             double tQuery,
+                                             bool useHermite = false) {
+    const InterpolationState state = getInterpolationState(ts, tQuery);
 
-    if (!state.is_valid) {
-        return field_values[state.dump_left];
+    if (!state.isValid) {
+        return fieldValues[state.dumpLeft];
     }
 
-    if (!use_hermite) {
-        // Linear interpolation
-        return linear_interpolate(state.alpha,
-                                 field_values[state.dump_left],
-                                 field_values[state.dump_right]);
+    if (!useHermite) {
+        return linearInterpolate(state.alpha,
+                                 fieldValues[state.dumpLeft],
+                                 fieldValues[state.dumpRight]);
     }
 
     // Hermite interpolation (requires 4 points)
-    if (state.dump_left == 0 || state.dump_right >= ts.n_dumps - 1) {
+    if (state.dumpLeft == 0 || state.dumpRight >= ts.nDumps - 1) {
         // At boundaries, fall back to linear
-        return linear_interpolate(state.alpha,
-                                 field_values[state.dump_left],
-                                 field_values[state.dump_right]);
+        return linearInterpolate(state.alpha,
+                                 fieldValues[state.dumpLeft],
+                                 fieldValues[state.dumpRight]);
     }
 
-    double p0 = field_values[state.dump_left - 1];
-    double p1 = field_values[state.dump_left];
-    double p2 = field_values[state.dump_right];
-    double p3 = field_values[state.dump_right + 1];
+    const double p0 = fieldValues[state.dumpLeft - 1];
+    const double p1 = fieldValues[state.dumpLeft];
+    const double p2 = fieldValues[state.dumpRight];
+    const double p3 = fieldValues[state.dumpRight + 1];
 
-    return hermite_interpolate(state.alpha, p0, p1, p2, p3);
+    return hermiteInterpolate(state.alpha, p0, p1, p2, p3);
 }
 
 // ============================================================================
@@ -271,22 +264,22 @@ inline double interpolate_field(const TimeSeriesMetadata& ts,
  * @param wrap_around If true, loop from end to start; if false, clamp at end
  * @return Advanced time
  */
-inline double advance_time(const TimeSeriesMetadata& ts, double t_current,
-                          double dt, bool wrap_around = true) {
-    double t_next = t_current + dt;
+[[nodiscard]] inline double advanceTime(const TimeSeriesMetadata& ts, double tCurrent,
+                                       double dt, bool wrapAround = true) {
+    double tNext = tCurrent + dt;
 
-    if (t_next > ts.t_end) {
-        if (wrap_around) {
+    if (tNext > ts.tEnd) {
+        if (wrapAround) {
             // Loop back to start
-            double period = ts.t_end - ts.t_start;
-            t_next = ts.t_start + std::fmod(t_next - ts.t_start, period);
+            const double period = ts.tEnd - ts.tStart;
+            tNext = ts.tStart + std::fmod(tNext - ts.tStart, period);
         } else {
             // Clamp at end
-            t_next = ts.t_end;
+            tNext = ts.tEnd;
         }
     }
 
-    return t_next;
+    return tNext;
 }
 
 // ============================================================================
@@ -297,11 +290,11 @@ inline double advance_time(const TimeSeriesMetadata& ts, double t_current,
  * @brief Playback state for time series animation
  */
 struct PlaybackState {
-    double t_current;      // Current playback time
-    double playback_speed; // Speed multiplier (1.0 = real-time)
-    bool is_playing;       // Whether animation is running
-    bool loop;             // Whether to loop when reaching end
-    uint32_t frame_number; // Current frame number
+    double tCurrent{0.0};      // Current playback time
+    double playbackSpeed{1.0}; // Speed multiplier (1.0 = real-time)
+    bool isPlaying{false};     // Whether animation is running
+    bool loop{true};           // Whether to loop when reaching end
+    uint32_t frameNumber{0};   // Current frame number
 };
 
 /**
@@ -311,13 +304,10 @@ struct PlaybackState {
  * @param speed Playback speed multiplier
  * @return Initial PlaybackState
  */
-inline PlaybackState create_playback_state(const TimeSeriesMetadata& ts, double speed = 1.0) {
+[[nodiscard]] inline PlaybackState createPlaybackState(const TimeSeriesMetadata& ts, double speed = 1.0) {
     PlaybackState ps;
-    ps.t_current = ts.t_start;
-    ps.playback_speed = speed;
-    ps.is_playing = false;
-    ps.loop = true;
-    ps.frame_number = 0;
+    ps.tCurrent = ts.tStart;
+    ps.playbackSpeed = speed;
     return ps;
 }
 
@@ -328,12 +318,12 @@ inline PlaybackState create_playback_state(const TimeSeriesMetadata& ts, double 
  * @param ts Time series metadata
  * @param dt_frame Frame time step (real time)
  */
-inline void update_playback(PlaybackState& ps, const TimeSeriesMetadata& ts, double dt_frame) {
-    if (!ps.is_playing) return;
+inline void updatePlayback(PlaybackState& ps, const TimeSeriesMetadata& ts, double dtFrame) {
+    if (!ps.isPlaying) { return; }
 
-    double dt_sim = dt_frame * ps.playback_speed;
-    ps.t_current = advance_time(ts, ps.t_current, dt_sim, ps.loop);
-    ps.frame_number++;
+    const double dtSim = dtFrame * ps.playbackSpeed;
+    ps.tCurrent = advanceTime(ts, ps.tCurrent, dtSim, ps.loop);
+    ps.frameNumber++;
 }
 
 }  // namespace physics

@@ -170,7 +170,7 @@ bool test_multisequence_sync() {
     std::cout << "Test 6: Multi-Sequence Synchronization\n";
 
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0};
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(),
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(),
                                                       static_cast<uint32_t>(times.size()));
 
     // Create 3 playback states for 3 sequences

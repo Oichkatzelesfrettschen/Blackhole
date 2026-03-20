@@ -22,26 +22,26 @@ bool test_playback_mode_transitions() {
     std::cout << "Test 1: Playback Mode Transitions\n";
 
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0};
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
 
     // Test mode changes
     assert(state.mode == PlaybackMode::Stopped);
 
-    set_playback_mode(state, PlaybackMode::Forward);
+    setPlaybackMode(state, PlaybackMode::Forward);
     assert(state.mode == PlaybackMode::Forward);
 
-    toggle_pause(state);
+    togglePause(state);
     assert(state.mode == PlaybackMode::PausedForward);
 
-    toggle_pause(state);
+    togglePause(state);
     assert(state.mode == PlaybackMode::Forward);
 
-    reverse_playback_direction(state);
+    reversePlaybackDirection(state);
     assert(state.mode == PlaybackMode::Reverse);
 
-    toggle_pause(state);
+    togglePause(state);
     assert(state.mode == PlaybackMode::PausedReverse);
 
     bool mode_ok = (state.mode == PlaybackMode::PausedReverse);
@@ -57,22 +57,22 @@ bool test_timeline_seeking() {
     std::cout << "Test 2: Timeline Seeking & Scrubbing\n";
 
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0, 4.0};
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
 
     // Test immediate seek
-    bool seek1 = seek_timeline(state, ts, 1.5, 0);
-    bool seek2 = seek_timeline(state, ts, 3.5, 0);
-    bool seek3 = seek_timeline(state, ts, -1.0, 0);  // Out of bounds
+    bool seek1 = seekTimeline(state, ts, 1.5, 0);
+    bool seek2 = seekTimeline(state, ts, 3.5, 0);
+    bool seek3 = seekTimeline(state, ts, -1.0, 0);  // Out of bounds
 
     bool seek_ok = seek1 && seek2 && !seek3 &&
-                   (std::abs(state.t_current - 3.5) < 1e-10);
+                   (std::abs(state.tCurrent - 3.5) < 1e-10);
 
     std::cout << "  Seek to 1.5: " << (seek1 ? "ok" : "fail") << "\n"
               << "  Seek to 3.5: " << (seek2 ? "ok" : "fail") << "\n"
               << "  Seek to -1.0 (invalid): " << (!seek3 ? "rejected" : "ERROR") << "\n"
-              << "  Final position: " << std::fixed << std::setprecision(2) << state.t_current << "\n"
+              << "  Final position: " << std::fixed << std::setprecision(2) << state.tCurrent << "\n"
               << "  Status: " << (seek_ok ? "PASS" : "FAIL") << "\n\n";
 
     return seek_ok;
@@ -83,25 +83,25 @@ bool test_frame_stepping() {
     std::cout << "Test 3: Frame Stepping\n";
 
     std::vector<double> times = {0.0, 0.5, 1.0, 1.5, 2.0};
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
-    state.t_current = 1.0;
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
+    state.tCurrent = 1.0;
 
-    uint32_t initial_frames = state.frame_number;
+    uint32_t initial_frames = state.frameNumber;
 
     // Step forward 2 frames
-    step_frame_forward(state, ts);
-    step_frame_forward(state, ts);
+    stepFrameForward(state, ts);
+    stepFrameForward(state, ts);
 
-    double t_after_forward = state.t_current;
-    uint32_t frames_after_forward = state.frame_number;
+    double t_after_forward = state.tCurrent;
+    uint32_t frames_after_forward = state.frameNumber;
 
     // Step backward 1 frame
-    step_frame_backward(state, ts);
+    stepFrameBackward(state, ts);
 
-    double t_after_backward = state.t_current;
-    uint32_t final_frames = state.frame_number;
+    double t_after_backward = state.tCurrent;
+    uint32_t final_frames = state.frameNumber;
 
     bool stepping_ok = (frames_after_forward == initial_frames + 2) &&
                       (final_frames == initial_frames + 3) &&
@@ -122,27 +122,27 @@ bool test_timeline_markers() {
     std::cout << "Test 4: Timeline Markers\n";
 
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0, 4.0};
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
 
     // Add markers at key times
-    bool m1 = add_timeline_marker(state, 1.0, ts);
-    bool m2 = add_timeline_marker(state, 2.5, ts);
-    bool m3 = add_timeline_marker(state, 4.0, ts);
-    bool m_invalid = add_timeline_marker(state, 5.0, ts);  // Out of bounds
+    bool m1 = addTimelineMarker(state, 1.0, ts);
+    bool m2 = addTimelineMarker(state, 2.5, ts);
+    bool m3 = addTimelineMarker(state, 4.0, ts);
+    bool m_invalid = addTimelineMarker(state, 5.0, ts);  // Out of bounds
 
     // Test seeking to markers
-    state.t_current = 0.5;
-    seek_to_marker(state, ts, true);
-    double t_at_next = state.t_current;
+    state.tCurrent = 0.5;
+    (void)seekToMarker(state, ts, true);
+    double t_at_next = state.tCurrent;
 
-    state.t_current = 3.0;
-    seek_to_marker(state, ts, false);
-    double t_at_prev = state.t_current;
+    state.tCurrent = 3.0;
+    (void)seekToMarker(state, ts, false);
+    double t_at_prev = state.tCurrent;
 
     bool markers_ok = m1 && m2 && m3 && !m_invalid &&
-                     (state.n_markers == 3) &&
+                     (state.nMarkers == 3) &&
                      (std::abs(t_at_next - 1.0) < 1e-10) &&
                      (std::abs(t_at_prev - 2.5) < 1e-10);
 
@@ -151,7 +151,7 @@ bool test_timeline_markers() {
               << "  Seek from 0.5 to next (expect 1.0): " << std::fixed << std::setprecision(2)
               << t_at_next << "\n"
               << "  Seek from 3.0 to prev (expect 2.5): " << t_at_prev << "\n"
-              << "  Total markers: " << state.n_markers << "\n"
+              << "  Total markers: " << state.nMarkers << "\n"
               << "  Status: " << (markers_ok ? "PASS" : "FAIL") << "\n\n";
 
     return markers_ok;
@@ -162,38 +162,38 @@ bool test_reverse_playback() {
     std::cout << "Test 5: Reverse Playback\n";
 
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0};
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
-    state.reverse_speed = 1.0;
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
+    state.reverseSpeed = 1.0;
 
     // Start at end, play backward
-    state.t_current = 3.0;
-    set_playback_mode(state, PlaybackMode::Reverse);
+    state.tCurrent = 3.0;
+    setPlaybackMode(state, PlaybackMode::Reverse);
 
     // Simulate 3 frames of backward playback at 1.0 FPS
     double dt_frame = 1.0 / 3.0;  // ~33ms per frame
 
-    update_advanced_playback(state, ts, dt_frame, 0.0);
-    double t_1frame = state.t_current;
+    updateAdvancedPlayback(state, ts, dt_frame, 0.0);
+    double t_1frame = state.tCurrent;
 
-    update_advanced_playback(state, ts, dt_frame, 0.0);
-    double t_2frames = state.t_current;
+    updateAdvancedPlayback(state, ts, dt_frame, 0.0);
+    double t_2frames = state.tCurrent;
 
-    update_advanced_playback(state, ts, dt_frame, 0.0);
-    double t_3frames = state.t_current;
+    updateAdvancedPlayback(state, ts, dt_frame, 0.0);
+    double t_3frames = state.tCurrent;
 
-    bool reverse_ok = (state.frame_number == 3) &&
+    bool reverse_ok = (state.frameNumber == 3) &&
                      (t_1frame < 3.0) &&
                      (t_2frames < t_1frame) &&
                      (t_3frames < t_2frames) &&
-                     (t_3frames > ts.t_start);  // Still within bounds
+                     (t_3frames > ts.tStart);  // Still within bounds
 
     std::cout << "  Start at t=3.0, reverse mode\n"
               << "  After frame 1: t=" << std::fixed << std::setprecision(3) << t_1frame << "\n"
               << "  After frame 2: t=" << t_2frames << "\n"
               << "  After frame 3: t=" << t_3frames << "\n"
-              << "  Frame counter: " << state.frame_number << "\n"
+              << "  Frame counter: " << state.frameNumber << "\n"
               << "  Status: " << (reverse_ok ? "PASS" : "FAIL") << "\n\n";
 
     return reverse_ok;
@@ -204,32 +204,32 @@ bool test_performance_metrics() {
     std::cout << "Test 6: Performance Metrics\n";
 
     std::vector<double> times = {0.0, 1.0, 2.0};
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
 
     // Simulate 10 frames with varying interpolation times
-    set_playback_mode(state, PlaybackMode::Forward);
+    setPlaybackMode(state, PlaybackMode::Forward);
 
     for (int i = 0; i < 10; i++) {
         double dt_frame = 1.0 / 60.0;  // 60 FPS
         double interp_time = 100.0 + (i * 10.0);  // 100-190 microseconds
 
-        update_advanced_playback(state, ts, dt_frame, interp_time);
+        updateAdvancedPlayback(state, ts, dt_frame, interp_time);
     }
 
     // Check metrics
-    bool metrics_ok = (state.frame_count == 0) &&  // Not explicitly incremented
-                     (state.interpolation_calls == 10) &&
-                     (state.avg_interpolation_time > 100.0 && state.avg_interpolation_time < 200.0) &&
-                     (state.peak_interpolation_time >= 190.0) &&
-                     (std::abs(state.frame_time_ms - 16.67) < 0.1);
+    bool metrics_ok = (state.frameCount == 0) &&  // Not explicitly incremented
+                     (state.interpolationCalls == 10) &&
+                     (state.avgInterpolationTime > 100.0 && state.avgInterpolationTime < 200.0) &&
+                     (state.peakInterpolationTime >= 190.0) &&
+                     (std::abs(state.frameTimeMs - 16.67) < 0.1);
 
-    std::cout << "  Interpolation calls: " << state.interpolation_calls << " (expect 10)\n"
+    std::cout << "  Interpolation calls: " << state.interpolationCalls << " (expect 10)\n"
               << "  Avg interp time: " << std::fixed << std::setprecision(1)
-              << state.avg_interpolation_time << " us (expect ~145)\n"
-              << "  Peak interp time: " << state.peak_interpolation_time << " us (expect ~190)\n"
-              << "  Frame time: " << state.frame_time_ms << " ms (expect ~16.67)\n"
+              << state.avgInterpolationTime << " us (expect ~145)\n"
+              << "  Peak interp time: " << state.peakInterpolationTime << " us (expect ~190)\n"
+              << "  Frame time: " << state.frameTimeMs << " ms (expect ~16.67)\n"
               << "  Status: " << (metrics_ok ? "PASS" : "FAIL") << "\n\n";
 
     return metrics_ok;
@@ -240,56 +240,56 @@ bool test_complete_timeline_control() {
     std::cout << "Test 7: Complete Timeline Control Session\n";
 
     std::vector<double> times = {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0};
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
-    AdvancedPlaybackState state = create_advanced_playback_state(ts, 1.0);
+    AdvancedPlaybackState state = createAdvancedPlaybackState(ts, 1.0);
 
     // Add markers at interesting points
-    add_timeline_marker(state, 1.0, ts);
-    add_timeline_marker(state, 2.0, ts);
+    (void)addTimelineMarker(state, 1.0, ts);
+    (void)addTimelineMarker(state, 2.0, ts);
 
     // Simulate interactive session:
     // 1. Start playback
-    set_playback_mode(state, PlaybackMode::Forward);
+    setPlaybackMode(state, PlaybackMode::Forward);
     assert(state.mode == PlaybackMode::Forward);
 
     // 2. Play forward 2 frames
     for (int i = 0; i < 2; i++) {
-        update_advanced_playback(state, ts, 1.0 / 30.0, 50.0);
+        updateAdvancedPlayback(state, ts, 1.0 / 30.0, 50.0);
     }
-    double t_after_play = state.t_current;
+    double t_after_play = state.tCurrent;
 
     // 3. Pause
-    toggle_pause(state);
-    double t_paused = state.t_current;
+    togglePause(state);
+    double t_paused = state.tCurrent;
 
     // 4. Seek to marker
-    seek_to_marker(state, ts, true);
-    double t_after_seek = state.t_current;
+    (void)seekToMarker(state, ts, true);
+    double t_after_seek = state.tCurrent;
 
     // 5. Resume and play backward
-    reverse_playback_direction(state);
-    toggle_pause(state);
+    reversePlaybackDirection(state);
+    togglePause(state);
     assert(state.mode == PlaybackMode::Reverse);
 
     // 6. Play backward 1 frame
-    update_advanced_playback(state, ts, 1.0 / 30.0, 60.0);
-    double t_final = state.t_current;
+    updateAdvancedPlayback(state, ts, 1.0 / 30.0, 60.0);
+    double t_final = state.tCurrent;
 
-    bool session_ok = (state.frame_number >= 3) &&
+    bool session_ok = (state.frameNumber >= 3) &&
                      (std::abs(t_paused - t_after_play) < 1e-10) &&  // Paused unchanged
                      (std::abs(t_after_seek - 1.0) < 1e-10) &&  // Seeked to first marker
                      (t_final < t_after_seek) &&  // Playing backward moves time down
-                     (state.n_markers == 2) &&
-                     (state.interpolation_calls == 3);  // 2 forward + 1 backward (pause doesn't call update)
+                     (state.nMarkers == 2) &&
+                     (state.interpolationCalls == 3);  // 2 forward + 1 backward (pause doesn't call update)
 
     std::cout << "  After 2 forward frames: t=" << std::fixed << std::setprecision(3) << t_after_play << "\n"
               << "  Paused at: t=" << t_paused << "\n"
               << "  Seeked to marker: t=" << t_after_seek << "\n"
               << "  After 1 reverse frame: t=" << t_final << "\n"
-              << "  Total frames: " << state.frame_number << "\n"
-              << "  Markers: " << state.n_markers << "\n"
-              << "  Interpolation calls: " << state.interpolation_calls << "\n"
+              << "  Total frames: " << state.frameNumber << "\n"
+              << "  Markers: " << state.nMarkers << "\n"
+              << "  Interpolation calls: " << state.interpolationCalls << "\n"
               << "  Status: " << (session_ok ? "PASS" : "FAIL") << "\n\n";
 
     return session_ok;

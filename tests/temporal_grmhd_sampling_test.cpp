@@ -30,12 +30,12 @@ bool test_grmhd_field_evolution() {
         rho_field.push_back(1.0 + 0.5 * std::sin(i * 0.628));
     }
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
     // Sample at multiple times
-    double rho_0 = interpolate_field(ts, rho_field.data(), 0.0, false);
-    double rho_mid = interpolate_field(ts, rho_field.data(), 0.45, false);
-    double rho_end = interpolate_field(ts, rho_field.data(), 0.9, false);
+    double rho_0 = interpolateField(ts, rho_field.data(), 0.0, false);
+    double rho_mid = interpolateField(ts, rho_field.data(), 0.45, false);
+    double rho_end = interpolateField(ts, rho_field.data(), 0.9, false);
 
     bool evolution_ok = (std::abs(rho_0 - 1.0) < 0.1) &&
                         (rho_mid > 0.5 && rho_mid < 1.5) &&
@@ -58,11 +58,11 @@ bool test_multi_field_interpolation() {
     std::vector<double> rho = {1.0, 1.2, 1.1, 0.9};
     std::vector<double> temp = {1e7, 2e7, 1.5e7, 1.2e7};
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
     // Sample both fields at mid-points
-    double rho_1p5 = interpolate_field(ts, rho.data(), 1.5, false);
-    double temp_1p5 = interpolate_field(ts, temp.data(), 1.5, false);
+    double rho_1p5 = interpolateField(ts, rho.data(), 1.5, false);
+    double temp_1p5 = interpolateField(ts, temp.data(), 1.5, false);
 
     bool multi_ok = (rho_1p5 > 1.1 && rho_1p5 < 1.2) &&
                     (temp_1p5 > 1.5e7 && temp_1p5 < 2e7);
@@ -83,14 +83,14 @@ bool test_fine_timescale_sampling() {
     std::vector<double> times = {0.0, 0.025, 0.05, 0.075, 0.1};
     std::vector<double> B_field = {100.0, 105.0, 110.0, 105.0, 100.0};
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
     // Sample at very fine resolution
     std::vector<double> sample_times = {0.01, 0.03, 0.06, 0.08};
     std::vector<double> samples;
 
     for (double t : sample_times) {
-        samples.push_back(interpolate_field(ts, B_field.data(), t, false));
+        samples.push_back(interpolateField(ts, B_field.data(), t, false));
     }
 
     // All samples should be between min and max
@@ -116,15 +116,15 @@ bool test_boundary_sampling() {
     std::vector<double> times = {0.0, 1.0, 2.0};
     std::vector<double> field = {10.0, 20.0, 15.0};
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
     // Sample at exact boundaries
-    double f_start = interpolate_field(ts, field.data(), 0.0, false);
-    double f_end = interpolate_field(ts, field.data(), 2.0, false);
+    double f_start = interpolateField(ts, field.data(), 0.0, false);
+    double f_end = interpolateField(ts, field.data(), 2.0, false);
 
     // Sample just beyond boundaries
-    double f_before = interpolate_field(ts, field.data(), -0.5, false);
-    double f_after = interpolate_field(ts, field.data(), 2.5, false);
+    double f_before = interpolateField(ts, field.data(), -0.5, false);
+    double f_after = interpolateField(ts, field.data(), 2.5, false);
 
     bool boundary_ok = (std::abs(f_start - 10.0) < 1e-10) &&
                        (std::abs(f_end - 15.0) < 1e-10) &&
@@ -154,12 +154,12 @@ bool test_oscillating_fields() {
         B_osc.push_back(100.0 + 50.0 * std::sin(i * 1.57));  // freq ~ 10 Hz
     }
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
     // Sample at intermediate times
-    double B_mid = interpolate_field(ts, B_osc.data(), 0.475, false);
-    double B_peak1 = interpolate_field(ts, B_osc.data(), 0.25, false);
-    double B_valley = interpolate_field(ts, B_osc.data(), 0.5, false);
+    double B_mid = interpolateField(ts, B_osc.data(), 0.475, false);
+    double B_peak1 = interpolateField(ts, B_osc.data(), 0.25, false);
+    double B_valley = interpolateField(ts, B_osc.data(), 0.5, false);
 
     bool osc_ok = (B_mid > 50.0 && B_mid < 150.0) &&
                   (B_peak1 > 100.0) &&
@@ -182,10 +182,10 @@ bool test_interpolation_smoothness() {
     std::vector<double> times = {0.0, 1.0, 2.0, 3.0, 4.0};
     std::vector<double> field = {1.0, 10.0, 2.0, 10.0, 1.0};
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
 
-    double lin_1p5 = interpolate_field(ts, field.data(), 1.5, false);
-    double herm_1p5 = interpolate_field(ts, field.data(), 1.5, true);
+    double lin_1p5 = interpolateField(ts, field.data(), 1.5, false);
+    double herm_1p5 = interpolateField(ts, field.data(), 1.5, true);
 
     // Hermite should be smoother than linear near sharp transitions
     bool smoothness_ok = (lin_1p5 > 2.0 && lin_1p5 < 10.0) &&
@@ -214,25 +214,25 @@ bool test_animation_cycle() {
         accretion_rate.push_back(1.0 + 0.5 * std::sin(i * 0.628));
     }
 
-    TimeSeriesMetadata ts = build_timeseries_metadata(times.data(), static_cast<uint32_t>(times.size()));
-    PlaybackState pb = create_playback_state(ts, 1.0);
+    TimeSeriesMetadata ts = buildTimeseriesMetadata(times.data(), static_cast<uint32_t>(times.size()));
+    PlaybackState pb = createPlaybackState(ts, 1.0);
 
     // Simulate 30 frames at 30 FPS
-    pb.is_playing = true;
+    pb.isPlaying = true;
     int frame_count = 0;
 
     for (int f = 0; f < 30; f++) {
-        update_playback(pb, ts, 1.0 / 30.0);
-        double mdot = interpolate_field(ts, accretion_rate.data(), pb.t_current, false);
+        updatePlayback(pb, ts, 1.0 / 30.0);
+        double mdot = interpolateField(ts, accretion_rate.data(), pb.tCurrent, false);
         if (mdot > 0.5 && mdot < 1.5) frame_count++;
     }
 
-    bool cycle_ok = (pb.frame_number == 30) &&
-                    (pb.t_current > ts.t_start) &&
+    bool cycle_ok = (pb.frameNumber == 30) &&
+                    (pb.tCurrent > ts.tStart) &&
                     (frame_count >= 25);  // Most frames should have valid field
 
-    std::cout << "  Total frames: " << pb.frame_number << " (expect 30)\n"
-              << "  Final time: " << std::fixed << std::setprecision(3) << pb.t_current << "\n"
+    std::cout << "  Total frames: " << pb.frameNumber << " (expect 30)\n"
+              << "  Final time: " << std::fixed << std::setprecision(3) << pb.tCurrent << "\n"
               << "  Valid field frames: " << frame_count << "/30\n"
               << "  Status: " << (cycle_ok ? "PASS" : "FAIL") << "\n\n";
 

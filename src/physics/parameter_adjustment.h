@@ -326,7 +326,7 @@ inline void syncUpdateAll(SynchronizedPlaybackGroup& group,
     if (master->mode != PlaybackMode::Stopped &&
         master->mode != PlaybackMode::PausedForward &&
         master->mode != PlaybackMode::PausedReverse) {
-        group.masterTime = advance_time(ts, group.masterTime, dtSim, true);
+        group.masterTime = advanceTime(ts, group.masterTime, dtSim, true);
     }
 
     // Sync all to master time
