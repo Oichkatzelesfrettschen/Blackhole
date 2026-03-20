@@ -116,18 +116,23 @@ int bh_launch_geodesic_kernel(void* framebuffer,
 int bh_select_kernel_variant(void);
 
 /**
- * @brief Upload LUT CUDA texture object handles to __constant__ memory.
+ * @brief Upload all five LUT CUDA texture object handles to __constant__ memory.
  *
  * Must be called after bhCudaRegisterLut() and before each frame render so
- * device kernels see up-to-date texture object handles.
+ * device kernels see up-to-date texture object handles.  Pass 0 for any slot
+ * that has not been registered; device code checks for zero before sampling.
  *
- * @param emissivity cudaTextureObject_t for the emissivity LUT (0 = not registered).
- * @param redshift   cudaTextureObject_t for the redshift LUT (0 = not registered).
- * @param spectral   cudaTextureObject_t for the spectral LUT (0 = not registered).
+ * @param emissivity cudaTextureObject_t for slot 0 (accretion emissivity LUT).
+ * @param redshift   cudaTextureObject_t for slot 1 (gravitational redshift LUT).
+ * @param spectral   cudaTextureObject_t for slot 2 (spectral modulation LUT).
+ * @param grb        cudaTextureObject_t for slot 3 (GRB overlay LUT).
+ * @param galaxy     cudaTextureObject_t for slot 4 (galaxy cubemap background).
  */
 void bh_upload_lut_textures(unsigned long long emissivity,
                              unsigned long long redshift,
-                             unsigned long long spectral);
+                             unsigned long long spectral,
+                             unsigned long long grb,
+                             unsigned long long galaxy);
 
 #ifdef __cplusplus
 }

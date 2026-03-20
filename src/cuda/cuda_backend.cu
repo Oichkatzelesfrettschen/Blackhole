@@ -14,9 +14,11 @@
 #include <stdlib.h>
 
 /**
- * @brief Upload the three physics LUT texture objects to __constant__ memory.
+ * @brief Upload all five LUT texture objects to __constant__ memory.
  *
- * Slots not yet registered produce tex_object == 0; device code guards on 0.
+ * Pushes handles for all BhLutSlot entries so device kernels can sample any
+ * registered LUT without a separate upload step.  Unregistered slots produce
+ * 0; device code guards on 0 before sampling.
  *
  * @param luts Reference to the LUT manager holding registered texture objects.
  */
@@ -24,7 +26,9 @@ static void sync_lut_constants(const LutManager& luts) {
     bh_upload_lut_textures(
         (unsigned long long)lutGetTex(luts, BhLutEmissivity),
         (unsigned long long)lutGetTex(luts, BhLutRedshift),
-        (unsigned long long)lutGetTex(luts, BhLutSpectral)
+        (unsigned long long)lutGetTex(luts, BhLutSpectral),
+        (unsigned long long)lutGetTex(luts, BhLutGrb),
+        (unsigned long long)lutGetTex(luts, BhLutGalaxy)
     );
 }
 

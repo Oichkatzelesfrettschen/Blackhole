@@ -44,10 +44,14 @@ __constant__ float d_redshift_radius_max;
 __constant__ float d_spectral_radius_min;
 __constant__ float d_spectral_radius_max;
 __constant__ float d_time_sec;
-/* LUT texture objects (cudaTextureObject_t = unsigned long long, 0 = not registered) */
-__constant__ unsigned long long d_tex_emissivity;
-__constant__ unsigned long long d_tex_redshift;
-__constant__ unsigned long long d_tex_spectral;
+/* LUT texture objects (cudaTextureObject_t = unsigned long long, 0 = not registered).
+ * All five BhLutSlot entries are mirrored here so bh_upload_lut_textures() can push
+ * any combination of registered textures to the device in a single call. */
+__constant__ unsigned long long d_tex_emissivity; /**< @brief Accretion disk emissivity LUT. */
+__constant__ unsigned long long d_tex_redshift;   /**< @brief Gravitational redshift LUT. */
+__constant__ unsigned long long d_tex_spectral;   /**< @brief Spectral modulation LUT. */
+__constant__ unsigned long long d_tex_grb;        /**< @brief Gamma-ray burst overlay LUT. */
+__constant__ unsigned long long d_tex_galaxy;     /**< @brief Galaxy cubemap background. */
 __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
 __constant__ int d_background_enabled;
@@ -186,13 +190,31 @@ extern "C" int bh_select_kernel_variant(void) {
   return registry_select_variant();
 }
 
-/* Upload LUT texture object handles to __constant__ memory.
- * Called by cuda_backend.cu after lut_register and before each render frame.
- * emissivity/redshift/spectral are cudaTextureObject_t cast to unsigned long long
- * (0 = not registered; device code checks before sampling). */
-extern "C" void bh_upload_lut_textures(unsigned long long emissivity, unsigned long long redshift,
-                                       unsigned long long spectral) {
+/**
+ * @brief Upload all five LUT texture object handles to __constant__ memory.
+ *
+ * Called by cuda_backend.cu::sync_lut_constants() after any lut_register() call
+ * and at the start of every frame render so that device kernels see up-to-date
+ * handles.  A value of 0 means the slot is not yet registered; device code
+ * guards on zero before sampling.
+ *
+ * cudaMemcpyToSymbol errors are non-fatal: a failed upload leaves the old
+ * constant value in place and the kernel simply falls back to analytic paths.
+ *
+ * @param emissivity cudaTextureObject_t for slot 0 (accretion emissivity LUT).
+ * @param redshift   cudaTextureObject_t for slot 1 (gravitational redshift LUT).
+ * @param spectral   cudaTextureObject_t for slot 2 (spectral modulation LUT).
+ * @param grb        cudaTextureObject_t for slot 3 (GRB overlay LUT).
+ * @param galaxy     cudaTextureObject_t for slot 4 (galaxy cubemap background).
+ */
+extern "C" void bh_upload_lut_textures(unsigned long long emissivity,
+                                       unsigned long long redshift,
+                                       unsigned long long spectral,
+                                       unsigned long long grb,
+                                       unsigned long long galaxy) {
   (void)cudaMemcpyToSymbol(d_tex_emissivity, &emissivity, sizeof(emissivity));
-  (void)cudaMemcpyToSymbol(d_tex_redshift, &redshift, sizeof(redshift));
-  (void)cudaMemcpyToSymbol(d_tex_spectral, &spectral, sizeof(spectral));
+  (void)cudaMemcpyToSymbol(d_tex_redshift,   &redshift,   sizeof(redshift));
+  (void)cudaMemcpyToSymbol(d_tex_spectral,   &spectral,   sizeof(spectral));
+  (void)cudaMemcpyToSymbol(d_tex_grb,        &grb,        sizeof(grb));
+  (void)cudaMemcpyToSymbol(d_tex_galaxy,     &galaxy,     sizeof(galaxy));
 }

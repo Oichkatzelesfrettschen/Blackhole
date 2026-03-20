@@ -56,10 +56,13 @@ extern __constant__ float d_spectral_radius_min;
 extern __constant__ float d_spectral_radius_max;
 extern __constant__ float d_time_sec;
 /* LUT texture objects (cudaTextureObject_t = unsigned long long).
- * Zero means the LUT is not registered; device code checks before sampling. */
-extern __constant__ unsigned long long d_tex_emissivity;
-extern __constant__ unsigned long long d_tex_redshift;
-extern __constant__ unsigned long long d_tex_spectral;
+ * Zero means the slot is not registered; all device sampling sites guard on 0.
+ * Matches BhLutSlot order: emissivity=0, redshift=1, spectral=2, grb=3, galaxy=4. */
+extern __constant__ unsigned long long d_tex_emissivity; /**< @brief Slot 0: accretion emissivity. */
+extern __constant__ unsigned long long d_tex_redshift;   /**< @brief Slot 1: gravitational redshift. */
+extern __constant__ unsigned long long d_tex_spectral;   /**< @brief Slot 2: spectral modulation. */
+extern __constant__ unsigned long long d_tex_grb;        /**< @brief Slot 3: GRB overlay LUT. */
+extern __constant__ unsigned long long d_tex_galaxy;     /**< @brief Slot 4: galaxy cubemap. */
 extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
@@ -850,22 +853,109 @@ __device__ __forceinline__ float d_hash(float3 p) {
 }
 
 /**
+ * @brief Sample the galaxy cubemap background at ray direction @p dir.
+ *
+ * WHY: The OpenGL path samples a GL_TEXTURE_CUBE_MAP via @c texture(galaxy, dir)
+ *      which the driver dispatches using hardware cubemap addressing.  The CUDA
+ *      path receives the same six-face data stored in a tex2DLayered object
+ *      (see lut_manager.cu::lutRegisterCubemap).  This function replicates the
+ *      face selection and UV normalisation that the GL fixed function performs.
+ *
+ * FACE ORDERING (matches GL_TEXTURE_CUBE_MAP_POSITIVE_X sequence):
+ *   layer 0 = +X (right),  layer 1 = -X (left),
+ *   layer 2 = +Y (top),    layer 3 = -Y (bottom),
+ *   layer 4 = +Z (front),  layer 5 = -Z (back)
+ *
+ * HOW (standard cubemap face selection):
+ *   Find dominant axis; divide the other two components by its magnitude to
+ *   get face coordinates in [-1,1]; remap to [0,1] for normalised tex coords.
+ *   The sign conventions follow OpenGL spec section 8.13 (cube map face
+ *   selection, Table 8.19).
+ *
+ * @param dir Un-normalised ray direction (length != 0).
+ * @return RGB sky colour in linear light (alpha discarded).  Returns (0,0,0)
+ *         if d_tex_galaxy is 0 (not registered) or if @p dir is zero.
+ */
+__device__ __forceinline__ float3 d_sample_galaxy_cubemap(float3 dir) {
+    if (!d_tex_galaxy) {
+        return make_f3(0.0f, 0.0f, 0.0f);
+    }
+
+    float ax = fabsf(dir.x);
+    float ay = fabsf(dir.y);
+    float az = fabsf(dir.z);
+
+    float u, v;
+    int   layer;
+
+    if (ax >= ay && ax >= az) {
+        /* Dominant X axis */
+        float sc = 1.0f / fmaxf(ax, D_EPSILON);
+        if (dir.x > 0.0f) {
+            /* +X face: s = -z/|x|, t = -y/|x| */
+            layer = 0; u = -dir.z * sc; v = -dir.y * sc;
+        } else {
+            /* -X face: s = +z/|x|, t = -y/|x| */
+            layer = 1; u = dir.z * sc;  v = -dir.y * sc;
+        }
+    } else if (ay >= ax && ay >= az) {
+        /* Dominant Y axis */
+        float sc = 1.0f / fmaxf(ay, D_EPSILON);
+        if (dir.y > 0.0f) {
+            /* +Y face: s = +x/|y|, t = +z/|y| */
+            layer = 2; u = dir.x * sc;  v = dir.z * sc;
+        } else {
+            /* -Y face: s = +x/|y|, t = -z/|y| */
+            layer = 3; u = dir.x * sc;  v = -dir.z * sc;
+        }
+    } else {
+        /* Dominant Z axis */
+        float sc = 1.0f / fmaxf(az, D_EPSILON);
+        if (dir.z > 0.0f) {
+            /* +Z face: s = +x/|z|, t = -y/|z| */
+            layer = 4; u = dir.x * sc;  v = -dir.y * sc;
+        } else {
+            /* -Z face: s = -x/|z|, t = -y/|z| */
+            layer = 5; u = -dir.x * sc; v = -dir.y * sc;
+        }
+    }
+
+    /* Remap face coordinates from [-1,1] to normalised [0,1] */
+    u = 0.5f * (u + 1.0f);
+    v = 0.5f * (v + 1.0f);
+
+    float4 s = tex2DLayered<float4>((cudaTextureObject_t)d_tex_galaxy, u, v, layer);
+    return make_f3(s.x, s.y, s.z);
+}
+
+/**
  * @brief Compute the background sky color for an escaped ray direction.
  *
- * Generates a procedural star field using d_hash() on a 300-unit directional
- * grid (threshold ~2.2% density, x^8 sharpening via 3 squarings) with
- * temperature-varied color (blue-white / yellow-white / orange). Adds a dim
- * ambient nebula glow scaled by d_background_intensity.
+ * WHY: When the galaxy cubemap texture object is registered (d_tex_galaxy != 0)
+ *      we sample it via d_sample_galaxy_cubemap() to match the OpenGL path
+ *      (texture(galaxy, dir).rgb in interop_trace.glsl).  When not registered,
+ *      falls back to the procedural star field: d_hash() on a 300-unit
+ *      directional grid (threshold ~2.2% density, x^8 sharpening via 3
+ *      squarings) with temperature-varied colour (blue-white / yellow-white /
+ *      orange) plus a dim ambient nebula glow scaled by d_background_intensity.
+ *
  * Returns black if d_background_enabled is 0.
  *
- * @param dir Escaped ray direction (normalized in d_shade_hit).
- * @return RGBA float4 sky color.
+ * @param dir Escaped ray direction (normalised in d_shade_hit).
+ * @return RGBA float4 sky colour.
  */
 __device__ __forceinline__ float4 d_background_color(float3 dir) {
     if (!d_background_enabled) {
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     float3 n = d_normalize(dir);
+
+    /* If galaxy cubemap is registered, sample it directly (matches GL path). */
+    if (d_tex_galaxy) {
+        float3 sky = d_sample_galaxy_cubemap(n);
+        sky = d_scale(sky, d_background_intensity);
+        return make_float4(sky.x, sky.y, sky.z, 1.0f);
+    }
 
     /* Procedural star field: hash-based point stars */
     /* 300-unit grid gives finer point stars; threshold 0.978 -> ~2.2% density */

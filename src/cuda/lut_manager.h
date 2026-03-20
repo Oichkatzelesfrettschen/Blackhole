@@ -31,20 +31,25 @@ enum BhLutSlot { // NOLINT(cppcoreguidelines-use-enum-class)
 /**
  * @brief Holds CUDA graphics resources and texture objects for all LUT slots.
  *
- * Each slot stores the cudaGraphicsResource_t registered from GL and the
- * derived cudaTextureObject_t used for device-side sampling. Slots that have
- * not been registered hold nullptr / 0 / false.
+ * For 2D slots (emissivity, redshift, spectral, GRB) the texture object wraps
+ * the mapped GL array directly.  For cubemap slots (galaxy, slot 4) the
+ * registration path allocates a new 6-layer cudaArray owned by this struct;
+ * @c layeredArrays holds that pointer and lutUnregister() frees it.
+ *
+ * Slots that have not been registered hold nullptr / 0 / false.
  */
 struct LutManager {
-  cudaGraphicsResource_t resources[BhLutCount]{}; /**< @brief Per-slot registered GL resources. */
-  cudaTextureObject_t texObjects[BhLutCount]{};   /**< @brief Per-slot CUDA texture objects (0 = unregistered). */
-  bool registered[BhLutCount]{};                  /**< @brief True when the slot holds a valid texture object. */
+  cudaGraphicsResource_t resources[BhLutCount]{};    /**< @brief Per-slot registered GL resources. */
+  cudaTextureObject_t texObjects[BhLutCount]{};      /**< @brief Per-slot CUDA texture objects (0 = unregistered). */
+  cudaArray_t layeredArrays[BhLutCount]{};           /**< @brief Owned 6-layer arrays for cubemap slots (null for 2D slots). */
+  bool registered[BhLutCount]{};                     /**< @brief True when the slot holds a valid texture object. */
 
   LutManager() {
     for (int i = 0; i < BhLutCount; ++i) {
-      resources[i] = nullptr;
-      texObjects[i] = 0;
-      registered[i] = false;
+      resources[i]     = nullptr;
+      texObjects[i]    = 0;
+      layeredArrays[i] = nullptr;
+      registered[i]    = false;
     }
   }
 };

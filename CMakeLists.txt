@@ -1778,6 +1778,27 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Wiregrid BL overlay headless math test (no GL/CUDA dependencies)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/wiregrid_overlay_test.cpp")
+    add_executable(wiregrid_overlay_test
+      "${PROJECT_SOURCE_DIR}/tests/wiregrid_overlay_test.cpp"
+    )
+    target_include_directories(wiregrid_overlay_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(wiregrid_overlay_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME wiregrid_overlay_math COMMAND wiregrid_overlay_test)
+    set_tests_properties(wiregrid_overlay_math PROPERTIES
+      LABELS "wiregrid;physics;overlay"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(wiregrid_overlay_math PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # HUD overlay compile-only test
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/hud_overlay_compile_test.cpp")
     add_executable(hud_overlay_compile_test

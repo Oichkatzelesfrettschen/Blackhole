@@ -4029,6 +4029,15 @@ int main(int argc, char **argv) {
               if (cudaState.kernelVariant >= 0) {
                 bhCudaSetVariant(cudaState.backend, cudaState.kernelVariant);
               }
+              /* Register galaxy cubemap as CUDA texture object (slot 4 = BhLutGalaxy).
+               * The cubemap is a static GLuint loaded once above; it is valid here
+               * because the static initializer at line ~3126 runs before this block.
+               * Registration failure is non-fatal: kernels fall back to no background. */
+              GLuint const galaxyTexForCuda = (galaxy != 0) ? galaxy : fallbackCubemap;
+              if (galaxyTexForCuda != 0) {
+                bhCudaRegisterLut(cudaState.backend, 4, galaxyTexForCuda,
+                                  static_cast<unsigned int>(GL_TEXTURE_CUBE_MAP));
+              }
             } else {
               /* Init failed this frame; set attempted so we don't retry every
                * frame. User must toggle the checkbox to reset and retry. */
