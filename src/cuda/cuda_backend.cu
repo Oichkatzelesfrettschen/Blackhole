@@ -30,7 +30,7 @@ struct BH_CudaBackend {
     cudaStream_t compute_stream;
 };
 
-extern "C" BH_CudaBackend* bh_cuda_init(unsigned int gl_texture, int width, int height) {
+extern "C" BH_CudaBackend* bhCudaInit(unsigned int gl_texture, int width, int height) {
     BH_CudaBackend* b = (BH_CudaBackend*)calloc(1, sizeof(BH_CudaBackend));
     if (!b) return nullptr;
 
@@ -69,7 +69,7 @@ extern "C" BH_CudaBackend* bh_cuda_init(unsigned int gl_texture, int width, int 
     return b;
 }
 
-extern "C" int bh_cuda_render_frame(BH_CudaBackend* backend,
+extern "C" int bhCudaRenderFrame(BH_CudaBackend* backend,
                                      const struct BH_LaunchParams* params) {
     if (!backend || !params) return -1;
 
@@ -91,13 +91,13 @@ extern "C" int bh_cuda_render_frame(BH_CudaBackend* backend,
     return interop_blit_to_gl(backend->interop);
 }
 
-extern "C" int bh_cuda_resize(BH_CudaBackend* backend,
+extern "C" int bhCudaResize(BH_CudaBackend* backend,
                                unsigned int gl_texture, int width, int height) {
     if (!backend) return -1;
     return interop_resize(backend->interop, gl_texture, width, height);
 }
 
-extern "C" int bh_cuda_register_lut(BH_CudaBackend* backend,
+extern "C" int bhCudaRegisterLut(BH_CudaBackend* backend,
                                      int slot, unsigned int gl_texture,
                                      unsigned int target) {
     if (!backend) return -1;
@@ -109,7 +109,7 @@ extern "C" int bh_cuda_register_lut(BH_CudaBackend* backend,
     return rc;
 }
 
-extern "C" int bh_cuda_set_variant(BH_CudaBackend* backend, int variant) {
+extern "C" int bhCudaSetVariant(BH_CudaBackend* backend, int variant) {
     if (!backend) return -1;
     if (variant < 0) {
         variant = registry_select_variant();
@@ -121,12 +121,12 @@ extern "C" int bh_cuda_set_variant(BH_CudaBackend* backend, int variant) {
     return variant;
 }
 
-extern "C" int bh_cuda_get_variant(BH_CudaBackend* backend) {
+extern "C" int bhCudaGetVariant(BH_CudaBackend* backend) {
     if (!backend) return -1;
     return backend->active_variant;
 }
 
-extern "C" void bh_cuda_shutdown(BH_CudaBackend* backend) {
+extern "C" void bhCudaShutdown(BH_CudaBackend* backend) {
     if (!backend) return;
     lut_shutdown(backend->luts);
     interop_shutdown(backend->interop);

@@ -206,20 +206,26 @@ __device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, con
     float A = fmaf(r * r + a * a, c.E, -a * c.Lz);
     float Lz_minus_aE = c.Lz - a * c.E;
 
+    /* Precompute reciprocals once: MUFU.RCP = 41.55 cy on Ada (YSU-engine SASS RE).
+     * sin2 appears in Theta AND dphi_dlam; delta_safe appears in dphi_dlam AND dt_dlam.
+     * Explicit temps guarantee 1 MUFU.RCP each, not 2. */
+    float inv_sin2 = 1.0f / sin2;
+    float delta_safe = fmaxf(Delta, 1.0e-6f);
+    float inv_delta = 1.0f / delta_safe;
+
     float R = fmaf(A, A, -Delta * (c.Q + Lz_minus_aE * Lz_minus_aE));
-    float Theta = c.Q + a * a * c.E * c.E * cos_t * cos_t - c.Lz * c.Lz / sin2;
+    float Theta = c.Q + a * a * c.E * c.E * cos_t * cos_t - c.Lz * c.Lz * inv_sin2;
 
     if (R < 0.0f) ray.sign_r *= -1.0f;
     if (Theta < 0.0f) ray.sign_theta *= -1.0f;
 
     float sqrt_R = sqrtf(fmaxf(R, 0.0f));
     float sqrt_Theta = sqrtf(fmaxf(Theta, 0.0f));
-    float delta_safe = fmaxf(Delta, 1.0e-6f);
 
     float dr_dlam = ray.sign_r * sqrt_R;
     float dtheta_dlam = ray.sign_theta * sqrt_Theta;
-    float dphi_dlam = c.Lz / sin2 - a * c.E + a * A / delta_safe;
-    float dt_dlam = (r * r + a * a) * A / delta_safe + a * (c.Lz - a * c.E * sin2);
+    float dphi_dlam = c.Lz * inv_sin2 - a * c.E + a * A * inv_delta;
+    float dt_dlam = (r * r + a * a) * A * inv_delta + a * (c.Lz - a * c.E * sin2);
 
     ray.r += dlam * dr_dlam;
     ray.theta += dlam * dtheta_dlam;
@@ -327,7 +333,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         float r_horizon = d_kerr_outer_horizon(rs, a);
         if (r_horizon <= D_EPSILON) r_horizon = rs;
         float r_disk_in = d_isco;
-        float r_disk_out = 100.0f * rs;
+        float r_disk_out = 30.0f * rs;
 
         KerrConsts c = d_kerr_init_consts(cam_pos, ray_dir);
         KerrRay kr = d_kerr_init_ray(cam_pos, ray_dir);
@@ -369,7 +375,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         float3 pos = cam_pos;
         float3 vel = ray_dir;
         float r_disk_in = d_isco;
-        float r_disk_out = 100.0f * rs;
+        float r_disk_out = 30.0f * rs;
 
         for (int step = 0; step < max_steps; ++step) {
             float3 old_pos = pos;
@@ -431,14 +437,30 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
         flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
     }
 
-    float T_norm = powf(flux, 0.25f);
+    /* x^0.25 = sqrtf(sqrtf(x)): 2x MUFU.SQRT ~16 cy vs powf LG2+EX2 ~35 cy. */
+    float T_norm = sqrtf(sqrtf(flux));
+
+    /* Smooth blackbody color ramp with 8 interpolation points.
+     * Deep red -> orange -> golden -> yellow-white -> hot white. */
     float3 color;
-    if (T_norm > 0.6f) {
-        color = make_f3(1.0f, 0.9f, 0.8f);
-    } else if (T_norm > 0.3f) {
-        color = make_f3(1.0f, 0.6f, 0.2f);
+    if (T_norm > 0.85f) {
+        float t = (T_norm - 0.85f) / 0.15f;
+        color = d_lerp(make_f3(1.0f, 0.90f, 0.60f), make_f3(1.0f, 0.97f, 0.90f), t);
+    } else if (T_norm > 0.65f) {
+        float t = (T_norm - 0.65f) / 0.20f;
+        color = d_lerp(make_f3(1.0f, 0.70f, 0.20f), make_f3(1.0f, 0.90f, 0.60f), t);
+    } else if (T_norm > 0.45f) {
+        float t = (T_norm - 0.45f) / 0.20f;
+        color = d_lerp(make_f3(1.0f, 0.45f, 0.04f), make_f3(1.0f, 0.70f, 0.20f), t);
+    } else if (T_norm > 0.25f) {
+        float t = (T_norm - 0.25f) / 0.20f;
+        color = d_lerp(make_f3(0.90f, 0.15f, 0.00f), make_f3(1.0f, 0.45f, 0.04f), t);
+    } else if (T_norm > 0.10f) {
+        float t = (T_norm - 0.10f) / 0.15f;
+        color = d_lerp(make_f3(0.50f, 0.03f, 0.00f), make_f3(0.90f, 0.15f, 0.00f), t);
     } else {
-        color = make_f3(0.8f, 0.2f, 0.1f);
+        float t = T_norm / 0.10f;
+        color = d_lerp(make_f3(0.10f, 0.00f, 0.00f), make_f3(0.50f, 0.03f, 0.00f), t);
     }
 
     /* Spectral LUT modulation */
@@ -452,13 +474,25 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
                                              u, 0.5f));
     }
 
-    float intensity = flux * 2.0f * spectral;
+    /* Boosted intensity: 20x base for standalone rendering visibility */
+    float intensity = flux * 20.0f * spectral;
 
     /* Doppler beaming approximation */
     float v = sqrtf(0.5f * rs / fmaxf(r, D_EPSILON));
     float cos_phi = cosf(hit.phi);
     float doppler = 1.0f + d_doppler_strength * v * cos_phi;
     intensity *= doppler * doppler * doppler;
+
+    /* Doppler color shift: approaching side -> blueshift, receding -> redshift */
+    if (doppler > 1.0f) {
+        /* Blueshift: shift color toward blue-white */
+        float shift = fminf((doppler - 1.0f) * 1.5f, 0.6f);
+        color = d_lerp(color, make_f3(0.7f, 0.85f, 1.0f), shift);
+    } else {
+        /* Redshift: shift color toward deep red */
+        float shift = fminf((1.0f - doppler) * 2.0f, 0.7f);
+        color = d_lerp(color, make_f3(0.6f, 0.05f, 0.0f), shift);
+    }
 
     /* Gravitational redshift: LUT or analytic */
     if (d_redshift_enabled) {
@@ -483,11 +517,60 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
 }
 
 /* Background sky color (simplified -- no cubemap in baseline, just gradient) */
+/* Hash function for procedural star field.
+ * Integer multiply-xorshift (PCG-style): avoids MUFU.SIN (~17 cy on Ada per
+ * YSU-engine SASS RE). Input p holds floorf() values (integer-valued floats). */
+__device__ __forceinline__ float d_hash(float3 p) {
+    /* Cast integer-valued floats to signed int, then to unsigned for safe mixing */
+    unsigned int ix = (unsigned int)((int)p.x + 16384);
+    unsigned int iy = (unsigned int)((int)p.y + 16384);
+    unsigned int iz = (unsigned int)((int)p.z + 16384);
+    unsigned int h = ix * 1664525u ^ iy * 22695477u ^ iz * 1013904223u;
+    h ^= h >> 16;
+    h *= 0x45d9f3bu;
+    h ^= h >> 16;
+    /* Map top 23 bits to [0, 1) -- avoids fmodf entirely */
+    return (float)(h >> 9) * (1.0f / 8388608.0f);
+}
+
 __device__ __forceinline__ float4 d_background_color(float3 dir) {
+    if (!d_background_enabled) {
+        return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
     float3 n = d_normalize(dir);
-    /* Simple sky gradient: dark near horizon, blue at zenith */
-    float y = fabsf(n.y);
-    float3 sky = make_f3(0.01f * y, 0.01f * y, 0.03f * y);
+
+    /* Procedural star field: hash-based point stars */
+    /* 300-unit grid gives finer point stars; threshold 0.978 -> ~2.2% density */
+    float3 grid = make_f3(floorf(n.x * 300.0f), floorf(n.y * 300.0f),
+                          floorf(n.z * 300.0f));
+    float h = d_hash(grid);
+    /* x^8 via 3 squarings: ~14 cy (3x FMUL at 4.54 cy) vs powf ~35 cy (LG2+EX2).
+     * YSU-engine SASS RE: MUFU.EX2 = 17.55 cy, MUFU.LG2 similar. */
+    float star;
+    if (h > 0.978f) {
+        float sx = (h - 0.978f) * (1.0f / 0.022f);
+        float sx2 = sx * sx;
+        float sx4 = sx2 * sx2;
+        star = sx4 * sx4;
+    } else {
+        star = 0.0f;
+    }
+
+    /* Star color: slight temperature variation */
+    float temp = d_hash(d_add(grid, make_f3(1.0f, 2.0f, 3.0f)));
+    float3 star_col;
+    if (temp > 0.7f) {
+        star_col = make_f3(0.8f, 0.85f, 1.0f);  /* blue-white */
+    } else if (temp > 0.3f) {
+        star_col = make_f3(1.0f, 0.95f, 0.85f);  /* yellow-white */
+    } else {
+        star_col = make_f3(1.0f, 0.7f, 0.5f);    /* orange */
+    }
+
+    /* Ambient nebula glow: ensures escaped rays are distinguishable from the
+     * horizon color (0,0,0,1). Physically motivated by CMB + zodiacal light. */
+    float3 ambient = d_scale(make_f3(0.002f, 0.002f, 0.008f), d_background_intensity);
+    float3 sky = d_add(d_scale(star_col, star * d_background_intensity), ambient);
     return make_float4(sky.x, sky.y, sky.z, 1.0f);
 }
 
@@ -500,7 +583,21 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         return d_disk_color(hit, d_rs);
     }
     float3 dir = d_normalize(d_sub(hit.hit_point, cam_pos));
-    return d_background_color(dir);
+    float4 bg = d_background_color(dir);
+
+    /* Photon ring proximity glow: rays that graze r ~ 1.5*rs (photon sphere)
+     * see scattered disk emission from multiple orbits. Add a warm golden halo
+     * that peaks at the photon sphere and fades over 2.5*rs above it. */
+    float r_ph = D_PHOTON_SPHERE * d_rs;
+    float excess = fmaxf(hit.min_radius - r_ph, 0.0f);
+    float falloff_scale = 1.0f / fmaxf(2.5f * d_rs, D_EPSILON);
+    float x = fmaxf(0.0f, 1.0f - excess * falloff_scale);
+    float glow = x * x * x;   /* cubic: sharp near photon sphere, smooth fade */
+    bg.x = fminf(bg.x + glow * 1.4f, 100.0f);
+    bg.y = fminf(bg.y + glow * 0.9f, 100.0f);
+    bg.z = fminf(bg.z + glow * 0.1f, 100.0f);
+
+    return bg;
 }
 
 /* ========================================================================

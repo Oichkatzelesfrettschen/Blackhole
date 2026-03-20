@@ -10,6 +10,11 @@
 #ifndef BLACKHOLE_CUDA_KERNEL_LAUNCH_H
 #define BLACKHOLE_CUDA_KERNEL_LAUNCH_H
 
+/* NOLINTBEGIN(readability-identifier-naming,cppcoreguidelines-use-enum-class,modernize-redundant-void-arg)
+ * WHY: This is a C-compatible POD firewall header. All naming follows C
+ * conventions intentionally (BH_ prefix, snake_case members, plain enum).
+ * nvcc C++17 cannot see C++23 STL; no std:: types, no enum class, no (). */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -93,5 +98,7 @@ void bh_upload_lut_textures(unsigned long long emissivity,
 #ifdef __cplusplus
 }
 #endif
+
+// NOLINTEND(readability-identifier-naming,cppcoreguidelines-use-enum-class,modernize-redundant-void-arg)
 
 #endif /* BLACKHOLE_CUDA_KERNEL_LAUNCH_H */

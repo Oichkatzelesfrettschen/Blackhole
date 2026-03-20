@@ -47,25 +47,37 @@ int registry_select_variant(void) {
      * cudaDevAttrMaxRegistersPerMultiprocessor gives the SM register file size.
      * cudaDevAttrMaxThreadsPerMultiProcessor / 32 gives the warp slots.
      * This bounds the per-thread register budget at full occupancy. */
-    int regs_per_sm = 0, max_threads_per_sm = 0;
+    int regs_per_sm = 0;
     cudaDeviceGetAttribute(&regs_per_sm,
                            cudaDevAttrMaxRegistersPerMultiprocessor, device);
-    cudaDeviceGetAttribute(&max_threads_per_sm,
-                           cudaDevAttrMaxThreadsPerMultiProcessor, device);
 
-    int max_regs_per_thread = 255; /* SM default cap */
-    if (regs_per_sm > 0 && max_threads_per_sm > 0) {
-        /* Register limit for sustaining at least one full warp per block */
-        max_regs_per_thread = regs_per_sm / max_threads_per_sm;
-    }
+    /* Walk variants from most capable to least, pick first that fits.
+     *
+     * WHY the old formula was wrong:
+     *   max_regs_per_thread = regs_per_sm / max_threads_per_sm
+     *   On SM8.9: 65536 / 1536 = 42.  This is the register budget at FULL
+     *   occupancy (all 48 warp slots occupied).  It incorrectly rejected
+     *   FP32_BASELINE (48 regs), FP32_COARSENED (80), and FP16_H2_ILP (96),
+     *   leaving only FP16_STORAGE (40 regs) on every Ada device.
+     *
+     * CORRECT gate: a variant is runnable if it can schedule >= MIN_BLOCKS
+     *   concurrent blocks per SM given the register file.  Compute-bound kernels
+     *   tolerate 33% occupancy; 2 blocks/SM is sufficient for warp latency hiding.
+     *   For H2_ILP on SM8.9: floor(65536 / (128 * 96)) = 5 blocks >= 2 -> PASS.
+     *
+     * YSU-engine SASS RE reference: SM8.9 has 65536 regs/SM, 48 warp slots (1536
+     * threads).  At 96 regs/thread with tpb=128, 5 blocks fit -> 640 threads = 42%
+     * occupancy.  Acceptable for a compute-bound geodesic kernel.
+     */
+    const int MIN_BLOCKS = 2;
 
-    /* Walk variants from most capable to least, pick first that fits */
     for (int v = BH_KERNEL_COUNT - 1; v >= 0; --v) {
         const RtKernelInfo& info = RT_KERNEL_INFO[v];
         if (sm_version < info.min_sm) continue;
-        /* Reject if this variant's estimated register pressure exceeds the
-         * per-thread budget at target occupancy. */
-        if (info.estimated_registers > max_regs_per_thread) continue;
+        if (regs_per_sm > 0) {
+            int blocks_per_sm = regs_per_sm / (info.tpb * info.estimated_registers);
+            if (blocks_per_sm < MIN_BLOCKS) continue;
+        }
         return v;
     }
 
