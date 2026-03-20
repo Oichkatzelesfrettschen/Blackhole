@@ -73,11 +73,14 @@ float synchrotron_F(float x) {
 // ============================================================================
 
 // 1D LUT generated from CPU Bessel K_{2/3} evaluation.
-// Upload with synchrotron_G_generate_lut() from synchrotron.h.
-// Bound to a sampler2D (1-row texture) by the renderer.
+// Upload with synchrotron_G_generate_lut() from synchrotron.h and
+// gpu::LutTexture1D from gpu/lut_texture.h.
+//
+// Uses GL_TEXTURE_1D with GL_LINEAR filtering for free hardware
+// interpolation between LUT entries (arXiv:2505.08855).
 // If no LUT is available, set synchGLutAvailable = 0 to use the asymptotic
 // fallback (accurate for x < 0.01 and x > 10, ~10% error in between).
-uniform sampler2D synchGLut;
+uniform sampler1D synchGLut;
 uniform int synchGLutAvailable;
 
 // LUT domain constants (must match synchrotron.h SYNCH_G_LUT_X_MIN/X_MAX)
@@ -106,11 +109,12 @@ float synchrotron_G(float x) {
     return sqrt(3.14159265359 / 2.0) * sqrt(x) * exp(-x);
   }
 
-  // LUT lookup: u = log(x / x_min) / log(x_max / x_min), sample at (u, 0.5)
+  // LUT lookup: u = log(x / x_min) / log(x_max / x_min)
+  // Uses sampler1D with GL_LINEAR for free hardware interpolation
   if (synchGLutAvailable != 0) {
     float log_ratio = log(SYNCH_G_LUT_X_MAX / SYNCH_G_LUT_X_MIN);
     float u = log(x / SYNCH_G_LUT_X_MIN) / log_ratio;
-    return texture(synchGLut, vec2(u, 0.5)).r;
+    return texture(synchGLut, u).r;
   }
 
   // Polynomial fallback (~10% error for x in [1,10])

@@ -420,6 +420,171 @@ inline double gw_phase_3p5pn(double M_c, double eta, double f,
   return 2.0 * M_PI * f * t_c - phi_c - M_PI / 4.0 + psi_leading * pn_sum;
 }
 
+/**
+ * @brief Compute GW phase with full 4.5PN corrections including spin couplings.
+ *
+ * Extends gw_phase_3p5pn() with 4PN and 4.5PN point-mass contributions.
+ *
+ * 4PN non-log:  [3058673/7056 + 5429*eta/7 + 617*eta^2/72] * v^8
+ * 4PN log:      -6848/21 * (gamma_E + log(4*v)) * v^8
+ *               (tail-of-tail logarithmic contribution)
+ * 4.5PN:        pi * (38645/756 - 65*eta/9) * [1 + 3*log(v/v_lso)] * v^9
+ *               where v_lso = 1/sqrt(6)
+ *
+ * Spin corrections are identical to gw_phase_3p5pn() (through 3.5PN SO/SS).
+ *
+ * References:
+ * - Blanchet+ (2023) arXiv:2304.11185 (4PN point-mass)
+ * - Blanchet (2014) Living Rev. Rel. (lower-order terms)
+ * - Spin references same as gw_phase_3p5pn()
+ *
+ * @param f      GW frequency [Hz]
+ * @param M_chirp Chirp mass [g]
+ * @param eta    Symmetric mass ratio
+ * @param chi_eff Effective aligned spin (default 0)
+ * @param chi1   Dimensionless spin of primary (default 0)
+ * @param chi2   Dimensionless spin of secondary (default 0)
+ * @param t_c    Time of coalescence [s] (default 0)
+ * @param phi_c  Phase at coalescence [rad] (default 0)
+ * @return GW phase [rad]
+ */
+inline double gw_phase_4p5pn(double f, double M_chirp, double eta,
+                              double chi_eff = 0.0,
+                              double chi1 = 0.0, double chi2 = 0.0,
+                              double t_c = 0.0, double phi_c = 0.0) {
+  double M_total = M_chirp / std::pow(eta, 0.6);
+  double M_geo = G * M_total / (C * C * C);
+
+  // PN expansion parameter v = (pi M f)^(1/3)
+  double v = std::cbrt(M_PI * M_geo * f);
+  double v2 = v * v;
+  double v3 = v2 * v;
+  double v4 = v3 * v;
+  double v5 = v4 * v;
+  double v6 = v5 * v;
+  double v7 = v6 * v;
+  double v8 = v7 * v;
+  double v9 = v8 * v;
+  double log_v = std::log(v);
+
+  double eta2 = eta * eta;
+  double eta3 = eta2 * eta;
+
+  // Symmetric/antisymmetric spin combinations
+  double chi_s = 0.5 * (chi1 + chi2);
+  double chi_a = 0.5 * (chi1 - chi2);
+  double delta = std::sqrt(std::max(1.0 - 4.0 * eta, 0.0));
+
+  // ==================================================================
+  // Non-spin PN coefficients (Blanchet 2014 LRR, Eqs. 234-241)
+  // ==================================================================
+
+  // Leading order
+  double psi_N = 1.0;
+
+  // 1PN
+  double psi_1PN = (3715.0 / 756.0 + 55.0 * eta / 9.0) * v2;
+
+  // 1.5PN (tail)
+  double psi_15PN_pm = -16.0 * M_PI * v3;
+
+  // 2PN
+  double psi_2PN_pm = (15293365.0 / 508032.0 + 27145.0 * eta / 504.0 +
+                        3085.0 * eta2 / 72.0) * v4;
+
+  // 2.5PN (includes log term)
+  double psi_25PN_pm = M_PI * (38645.0 / 756.0 - 65.0 * eta / 9.0) *
+                       (1.0 + 3.0 * log_v) * v5;
+
+  // 3PN (Euler-Mascheroni gamma_E)
+  constexpr double EULER_GAMMA = 0.5772156649015329;
+  double psi_3PN_pm = (11583231236531.0 / 4694215680.0
+                       - 640.0 * M_PI * M_PI / 3.0
+                       - 6848.0 * EULER_GAMMA / 21.0
+                       + eta * (-15737765635.0 / 3048192.0
+                                + 2255.0 * M_PI * M_PI / 12.0)
+                       + 76055.0 * eta2 / 1728.0
+                       - 127825.0 * eta3 / 1296.0
+                       - 6848.0 * std::log(4.0 * v) / 21.0) * v6;
+
+  // 3.5PN
+  double psi_35PN_pm = M_PI * (77096675.0 / 254016.0
+                                + 378515.0 * eta / 1512.0
+                                - 74045.0 * eta2 / 756.0) * v7;
+
+  // 4PN point-mass (Blanchet+ 2023 arXiv:2304.11185)
+  // Non-logarithmic piece
+  double psi_4PN_nonlog = (3058673.0 / 7056.0
+                           + 5429.0 * eta / 7.0
+                           + 617.0 * eta2 / 72.0) * v8;
+  // Logarithmic piece (tail-of-tail)
+  double psi_4PN_log = -6848.0 / 21.0
+                       * (EULER_GAMMA + std::log(4.0 * v)) * v8;
+  double psi_4PN_pm = psi_4PN_nonlog + psi_4PN_log;
+
+  // 4.5PN point-mass
+  // v_lso = 1/sqrt(6) for Schwarzschild ISCO
+  constexpr double v_lso = 1.0 / 2.44948974278317809819; // 1/sqrt(6)
+  double psi_45PN_pm = M_PI * (38645.0 / 756.0 - 65.0 * eta / 9.0)
+                       * (1.0 + 3.0 * std::log(v / v_lso)) * v9;
+
+  // ==================================================================
+  // Spin-orbit corrections (aligned-spin TaylorF2 phasing)
+  // ==================================================================
+
+  // 1.5PN SO -- Kidder (1995)
+  double psi_15PN_SO = (113.0 / 12.0 + 25.0 * eta / 4.0) * chi_eff * v3;
+
+  // 2PN SS -- self-spin + cross-spin (Poisson 1998, Mikoczi et al. 2005)
+  double psi_2PN_SS = -(25.0 / 2.0) * eta * (chi1 * chi1 + chi2 * chi2
+                       + 2.0 * chi1 * chi2) * v4;
+
+  // 2.5PN SO -- Blanchet, Buonanno, Faye (2006) Eq. 8.3
+  double psi_25PN_SO = M_PI * (
+    (-4159.0 / 672.0 - 189.0 * eta / 8.0) * chi_s
+    + delta * (-4159.0 / 672.0 + 189.0 * eta / 8.0) * chi_a
+  ) * v5;
+
+  // 3PN SO -- Blanchet, Buonanno, Faye (2011) arXiv:1104.5659 Eq. 7.10
+  double psi_3PN_SO = (
+    (14585.0 / 8.0 - 215.0 * eta / 2.0 - 15.0 * eta2 / 2.0) * chi_s
+    + delta * (14585.0 / 8.0 - 475.0 * eta / 6.0) * chi_a
+  ) * v6;
+
+  // 3PN SS -- quadrupole-monopole + self-spin (Mikoczi et al. 2005)
+  double chi_s2 = chi_s * chi_s;
+  double chi_a2 = chi_a * chi_a;
+  double psi_3PN_SS = (
+    (5.0 / 2.0 + 40.0 * eta / 3.0) * chi_s2
+    + 5.0 * delta * chi_s * chi_a
+    + (5.0 / 2.0 - 10.0 * eta) * chi_a2
+  ) * v6;
+
+  // 3.5PN SO -- Blanchet, Buonanno, Faye (2011) arXiv:1104.5659 Eq. 7.11
+  double psi_35PN_SO = M_PI * (
+    (732985.0 / 2268.0 - 140.0 * eta / 9.0) * chi_s
+    + delta * (732985.0 / 2268.0 - 24260.0 * eta / 81.0) * chi_a
+  ) * v7;
+
+  // ==================================================================
+  // Sum all PN terms
+  // ==================================================================
+  double pn_sum = psi_N
+                + psi_1PN
+                + psi_15PN_pm + psi_15PN_SO
+                + psi_2PN_pm  + psi_2PN_SS
+                + psi_25PN_pm + psi_25PN_SO
+                + psi_3PN_pm  + psi_3PN_SO + psi_3PN_SS
+                + psi_35PN_pm + psi_35PN_SO
+                + psi_4PN_pm
+                + psi_45PN_pm;
+
+  // Leading phase factor (3/128 eta) / v^5
+  double psi_leading = 3.0 / (128.0 * eta * v5);
+
+  return 2.0 * M_PI * f * t_c - phi_c - M_PI / 4.0 + psi_leading * pn_sum;
+}
+
 // ============================================================================
 // Waveform Generation
 // ============================================================================

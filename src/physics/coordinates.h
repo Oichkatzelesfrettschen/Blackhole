@@ -261,35 +261,305 @@ inline BLCoord cartesian_to_spherical(double x, double y, double z) {
 }
 
 // ============================================================================
-// Kerr-Schild to Boyer-Lindquist
+// Kerr-Schild Coordinates
+// ============================================================================
+//
+// Kerr-Schild (KS) coordinates are horizon-penetrating: the metric is
+// regular at both horizons, unlike Boyer-Lindquist which has coordinate
+// singularities at r = r_+/-.
+//
+// The KS metric is:
+//   g_mu_nu = eta_mu_nu + f * l_mu * l_nu
+//
+// where f = 2Mr / Sigma, and l^mu is a null vector.
+//
+// CRITICAL: For backward ray tracing (rays from camera into the scene),
+// the OUTGOING null vector must be used (arXiv:2310.02321):
+//   l^mu_out = (1, +sqrt(Delta/Sigma), 0, a/Sigma)
+//
+// Using the ingoing null vector gives wrong caustic structure for
+// observer-to-source ray tracing.
+//
+// References:
+//   - arXiv:2310.02321 (Coordinate choice for backward ray tracing)
+//   - Kerr (1963), Visser (2007) "The Kerr spacetime" Ch. 1
+//   - MTW Ch. 33
 // ============================================================================
 
 /**
- * @brief Convert Kerr-Schild (KS) coordinates to Boyer-Lindquist.
+ * @brief Kerr-Schild coordinate state.
  *
- * The transformation involves:
- *   t_BL = t_KS - integral term
- *   r_BL = r_KS (same)
- *   theta_BL = theta_KS (same)
- *   phi_BL = phi_KS - integral term
- *
- * For ray tracing, we often only need (r, theta, phi) which are unchanged.
- *
- * @param r Radial coordinate (same in both systems)
- * @param theta Polar angle (same in both systems)
- * @param phi_ks Kerr-Schild azimuthal angle
- * @param mass Black hole mass [g]
- * @param a Spin parameter [cm]
- * @return Boyer-Lindquist phi coordinate
+ * KS coordinates share (r, theta) with BL but differ in (t, phi).
+ * The radial coordinate r is defined implicitly via:
+ *   x^2 + y^2 = (r^2 + a^2) sin^2(theta)
+ *   z = r cos(theta)
  */
-inline double ks_to_bl_phi(double r, double phi_ks, double mass, double a) {
-  // For null geodesics at infinity, phi_BL ≈ phi_KS
-  // The full transformation requires the geodesic history
-  // This is a simplified version for distant observers
-  (void)r;
-  (void)mass;
-  (void)a;
-  return phi_ks;
+struct KSCoord {
+  double t;      // KS time
+  double r;      // Radial (same as BL r)
+  double theta;  // Polar (same as BL theta)
+  double phi;    // KS azimuthal (differs from BL phi)
+};
+
+/**
+ * @brief Outgoing principal null vector l^mu in outgoing KS coordinates.
+ *
+ * In outgoing Kerr-Schild coordinates, the outgoing principal null
+ * vector of the Kerr spacetime takes the simple form:
+ *   l^mu = (1, 1, 0, 0)
+ *
+ * This is a geodesic, shear-free, null vector that generates the
+ * KS foliation. It is null with respect to both the flat background
+ * eta_mu_nu (in Cartesian form) and the full metric g_mu_nu.
+ *
+ * Proof: g_tt + 2*g_tr + g_rr = 0 (verified algebraically using
+ * the BL transformation; the numerator reduces to -Delta*Sigma^2
+ * which cancels exactly with Sigma/Delta from g_rr^BL).
+ */
+inline std::array<double, 4> ks_outgoing_null_vector(
+    [[maybe_unused]] double r, [[maybe_unused]] double theta,
+    [[maybe_unused]] double a, [[maybe_unused]] double r_s) {
+  return {1.0, 1.0, 0.0, 0.0};
+}
+
+/**
+ * @brief Kerr-Schild scalar function f = 2Mr/Sigma.
+ *
+ * The KS metric is g = eta + f * l (x) l.
+ *
+ * @param r Radial coordinate [geometric units]
+ * @param theta Polar angle [rad]
+ * @param M Geometric mass = GM_phys/c^2 [geometric units]
+ * @param a Spin parameter [geometric units]
+ * @return f (dimensionless)
+ */
+inline double ks_f(double r, double theta, double M, double a) {
+  double sigma = r * r + a * a * std::cos(theta) * std::cos(theta);
+  if (sigma < 1e-30) return 0.0;
+  return 2.0 * M * r / sigma;
+}
+
+/**
+ * @brief Outgoing KS metric tensor components g_mu_nu.
+ *
+ * Derived from the BL metric via the outgoing coordinate transformation:
+ *   dt_BL = dt_KS + (2Mr/Delta) dr
+ *   dphi_BL = dphi_KS + (a/Delta) dr
+ *   r, theta unchanged
+ *
+ * This yields a metric regular at the outer horizon (Delta=0).
+ *
+ * Returns the 10 independent components as a flat array:
+ * [g_tt, g_tr, g_t_theta, g_t_phi, g_rr, g_r_theta, g_r_phi,
+ *  g_theta_theta, g_theta_phi, g_phi_phi]
+ *
+ * @param r Radial coordinate [geometric units]
+ * @param theta Polar angle [rad]
+ * @param M Geometric mass [geometric units]
+ * @param a Spin parameter [geometric units]
+ * @return 10 independent metric components (lower indices)
+ */
+inline std::array<double, 10> ks_outgoing_metric(
+    double r, double theta, double M, double a) {
+  double cos_th = std::cos(theta);
+  double sin_th = std::sin(theta);
+  double sin2 = sin_th * sin_th;
+  double sigma = r * r + a * a * cos_th * cos_th;
+  double delta = r * r - 2.0 * M * r + a * a;
+  double r_s = 2.0 * M;
+
+  // BL metric components
+  double bl_tt = -(1.0 - r_s * r / sigma);
+  double bl_tph = -r_s * r * a * sin2 / sigma;
+  double bl_rr = sigma / delta;
+  double bl_thth = sigma;
+  double bl_phph = (r * r + a * a + r_s * r * a * a * sin2 / sigma) * sin2;
+
+  // Transformation: alpha = 2Mr/Delta, beta = a/Delta
+  double alpha = r_s * r / delta;
+  double beta = a / delta;
+
+  // KS metric via substitution dt_BL = dt + alpha*dr, dphi_BL = dphi + beta*dr
+  double g_tt = bl_tt;
+  double g_tr = bl_tt * alpha + bl_tph * beta;
+  double g_tth = 0.0;
+  double g_tph = bl_tph;
+  double g_rr = bl_tt * alpha * alpha + 2.0 * bl_tph * alpha * beta
+              + bl_rr + bl_phph * beta * beta;
+  double g_rth = 0.0;
+  double g_rph = bl_tph * alpha + bl_phph * beta;
+  double g_thth = bl_thth;
+  double g_thph = 0.0;
+  double g_phph = bl_phph;
+
+  return {g_tt, g_tr, g_tth, g_tph, g_rr, g_rth, g_rph,
+          g_thth, g_thph, g_phph};
+}
+
+/**
+ * @brief Ingoing principal null vector n^mu in outgoing KS coordinates.
+ *
+ * Solves g_mu_nu n^mu n^nu = 0 for radial ingoing rays (n^theta=0, n^phi=0)
+ * with n^r = -1. The quadratic g_tt (n^t)^2 - 2 g_tr n^t + g_rr = 0
+ * gives n^t = (g_tr +/- sqrt(g_tr^2 - g_tt*g_rr)) / g_tt.
+ * We choose the branch with larger |n^t| (the one representing ingoing rays).
+ */
+inline std::array<double, 4> ks_ingoing_null_vector(
+    double r, double theta, double a, double r_s) {
+  auto g = ks_outgoing_metric(r, theta, r_s / 2.0, a);
+  double gtt = g[0], gtr = g[1], grr = g[4];
+
+  if (std::abs(gtt) < 1e-30) {
+    return {1.0, -1.0, 0.0, 0.0};
+  }
+
+  double disc = gtr * gtr - gtt * grr;
+  double sqrt_disc = (disc > 0.0) ? std::sqrt(disc) : 0.0;
+
+  // Choose the ingoing branch
+  double nt = (gtr + sqrt_disc) / gtt;
+
+  return {nt, -1.0, 0.0, 0.0};
+}
+
+/**
+ * @brief BL to outgoing KS time transformation (differential).
+ *
+ * dt_KS = dt_BL + (2Mr / Delta) dr
+ *
+ * For outgoing KS, the sign in front of dr is positive.
+ *
+ * @param r Current radial position [geometric units]
+ * @param M Geometric mass [geometric units]
+ * @param a Spin parameter [geometric units]
+ * @return dt_KS/dr correction factor
+ */
+inline double bl_to_ks_dt_dr(double r, double M, double a) {
+  double delta = r * r - 2.0 * M * r + a * a;
+  if (std::abs(delta) < 1e-30) return 0.0; // At horizon
+  return 2.0 * M * r / delta;
+}
+
+/**
+ * @brief BL to outgoing KS azimuthal transformation (differential).
+ *
+ * dphi_KS = dphi_BL + (a / Delta) dr
+ *
+ * @param r Current radial position [geometric units]
+ * @param M Geometric mass [geometric units]
+ * @param a Spin parameter [geometric units]
+ * @return dphi_KS/dr correction factor
+ */
+inline double bl_to_ks_dphi_dr(double r, double M, double a) {
+  double delta = r * r - 2.0 * M * r + a * a;
+  if (std::abs(delta) < 1e-30) return 0.0;
+  return a / delta;
+}
+
+/**
+ * @brief Convert BL 4-velocity to outgoing KS 4-velocity.
+ *
+ * Transforms u^mu from Boyer-Lindquist to outgoing Kerr-Schild:
+ *   u^t_KS = u^t_BL + (2Mr/Delta) u^r_BL
+ *   u^r_KS = u^r_BL
+ *   u^theta_KS = u^theta_BL
+ *   u^phi_KS = u^phi_BL + (a/Delta) u^r_BL
+ *
+ * @param u_bl BL 4-velocity {u^t, u^r, u^theta, u^phi}
+ * @param r Radial coordinate [geometric units]
+ * @param M Geometric mass [geometric units]
+ * @param a Spin parameter [geometric units]
+ * @return KS 4-velocity {u^t, u^r, u^theta, u^phi}
+ */
+inline std::array<double, 4> bl_to_ks_velocity(
+    const std::array<double, 4>& u_bl,
+    double r, double M, double a) {
+  double delta = r * r - 2.0 * M * r + a * a;
+  double correction = (std::abs(delta) > 1e-30) ? 1.0 / delta : 0.0;
+
+  return {
+    u_bl[0] + 2.0 * M * r * correction * u_bl[1],  // u^t_KS
+    u_bl[1],                                          // u^r_KS (unchanged)
+    u_bl[2],                                          // u^theta_KS (unchanged)
+    u_bl[3] + a * correction * u_bl[1]               // u^phi_KS
+  };
+}
+
+/**
+ * @brief Convert outgoing KS 4-velocity to BL 4-velocity.
+ *
+ * Inverse of bl_to_ks_velocity:
+ *   u^t_BL = u^t_KS - (2Mr/Delta) u^r_KS
+ *   u^r_BL = u^r_KS
+ *   u^theta_BL = u^theta_KS
+ *   u^phi_BL = u^phi_KS - (a/Delta) u^r_KS
+ */
+inline std::array<double, 4> ks_to_bl_velocity(
+    const std::array<double, 4>& u_ks,
+    double r, double M, double a) {
+  double delta = r * r - 2.0 * M * r + a * a;
+  double correction = (std::abs(delta) > 1e-30) ? 1.0 / delta : 0.0;
+
+  return {
+    u_ks[0] - 2.0 * M * r * correction * u_ks[1],
+    u_ks[1],
+    u_ks[2],
+    u_ks[3] - a * correction * u_ks[1]
+  };
+}
+
+/**
+ * @brief Check if outgoing KS metric is regular at given radius.
+ *
+ * Unlike BL coordinates, KS should be regular everywhere outside the
+ * ring singularity (r=0, theta=pi/2). Returns true if all metric
+ * components are finite.
+ */
+inline bool ks_metric_is_regular(double r, double theta, double M, double a) {
+  auto g = ks_outgoing_metric(r, theta, M, a);
+  for (double val : g) {
+    // Use builtin to work with -ffast-math (which assumes no inf/nan)
+    if (val != val || val > 1e30 || val < -1e30) return false;
+  }
+  return true;
+}
+
+/**
+ * @brief Convert Kerr-Schild (KS) phi to Boyer-Lindquist phi.
+ *
+ * The exact transformation requires integrating a/Delta along the geodesic.
+ * For a single snapshot at radius r:
+ *   phi_BL = phi_KS - a * ln|r - r_+| / (r_+ - r_-) + a * ln|r - r_-| / (r_+ - r_-)
+ *
+ * This function computes the instantaneous (non-integrated) correction.
+ *
+ * @param r Radial coordinate [geometric units]
+ * @param phi_ks KS azimuthal angle
+ * @param M Geometric mass [geometric units]
+ * @param a Spin parameter [geometric units]
+ * @return BL phi coordinate (approximate for finite-r observers)
+ */
+inline double ks_to_bl_phi(double r, double phi_ks, double M, double a) {
+  if (std::abs(a) < 1e-15) return phi_ks; // Schwarzschild: no correction
+
+  double disc = M * M - a * a;
+  if (disc <= 0.0) return phi_ks; // Extremal or super-extremal
+
+  double sqrt_disc = std::sqrt(disc);
+  double r_plus = M + sqrt_disc;
+  double r_minus = M - sqrt_disc;
+  double dr = r_plus - r_minus;
+
+  if (std::abs(dr) < 1e-15) return phi_ks;
+
+  // Integrated correction from infinity to r
+  // phi_BL = phi_KS - (a / (r_+ - r_-)) * ln|(r - r_+) / (r - r_-)|
+  double arg_plus = std::abs(r - r_plus);
+  double arg_minus = std::abs(r - r_minus);
+
+  if (arg_plus < 1e-15 || arg_minus < 1e-15) return phi_ks;
+
+  return phi_ks - (a / dr) * std::log(arg_plus / arg_minus);
 }
 
 } // namespace physics
