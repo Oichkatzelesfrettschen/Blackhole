@@ -85,6 +85,7 @@
 // Local headers
 #include "GLDebugMessageCallback.h"
 #include "grmhd_packed_loader.h"
+#include "grmhd_streaming.h"
 #include "hud_overlay.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -2467,9 +2468,9 @@ int main(int argc, char **argv) {
     static int grmhdMaxFrame = 0;
     static bool grmhdPlaying = false;
     static float grmhdPlaybackSpeed = 1.0f;
-    static double const grmhdCacheHitRate = 0.0;
-    static int const grmhdQueueDepth = 0;
-    // Note: GRMHDStreamer instance will be added when implementation is complete
+    static double grmhdCacheHitRate = 0.0;
+    static int grmhdQueueDepth = 0;
+    static std::unique_ptr<blackhole::GRMHDStreamer> grmhdStreamer;
 
     static float blackHoleMass = 1.0f;
     static float kerrSpin = 0.0f;
@@ -3499,19 +3500,38 @@ int main(int argc, char **argv) {
 
               // Load/Unload buttons
               if (ImGui::Button("Load Time-Series")) {
-                // TODO: Initialize GRMHDStreamer when implementation is complete
-                // For now, just set placeholder state
-                grmhdTimeSeriesLoaded = true;
-                grmhdMaxFrame = 100; // Placeholder: actual value from metadata
-                grmhdCurrentFrame = 0;
+                /* Shut down any previously loaded dataset */
+                if (grmhdStreamer) {
+                  grmhdStreamer->shutdown();
+                  grmhdStreamer.reset();
+                  grmhdTimeSeriesLoaded = false;
+                }
+                std::string const jsonPath(grmhdTimeSeriesJsonBuffer.data());
+                std::string const binPath(grmhdTimeSeriesBinBuffer.data());
+                if (!jsonPath.empty()) {
+                  grmhdStreamer = std::make_unique<blackhole::GRMHDStreamer>(jsonPath, binPath);
+                  if (grmhdStreamer->init()) {
+                    grmhdTimeSeriesLoaded = true;
+                    grmhdMaxFrame = static_cast<int>(grmhdStreamer->metadata().frameCount) - 1;
+                    grmhdCurrentFrame = 0;
+                    grmhdStreamer->seekFrame(0);
+                  } else {
+                    grmhdStreamer.reset();
+                  }
+                }
               }
               ImGui::SameLine();
               if (ImGui::Button("Unload Time-Series")) {
-                // TODO: Shutdown GRMHDStreamer
+                if (grmhdStreamer) {
+                  grmhdStreamer->shutdown();
+                  grmhdStreamer.reset();
+                }
                 grmhdTimeSeriesLoaded = false;
                 grmhdCurrentFrame = 0;
                 grmhdMaxFrame = 0;
                 grmhdPlaying = false;
+                grmhdCacheHitRate = 0.0;
+                grmhdQueueDepth = 0;
               }
 
               ImGui::BeginDisabled(!grmhdTimeSeriesLoaded);
@@ -3519,7 +3539,9 @@ int main(int argc, char **argv) {
               // Frame control
               ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Playback");
               if (ImGui::SliderInt("Frame", &grmhdCurrentFrame, 0, grmhdMaxFrame)) {
-                // TODO: Call streamer.seekFrame(grmhdCurrentFrame)
+                if (grmhdStreamer) {
+                  grmhdStreamer->seekFrame(static_cast<uint32_t>(grmhdCurrentFrame));
+                }
               }
               ImGui::Text("Time: %.2f s", static_cast<double>(grmhdCurrentFrame) / 30.0);
 
@@ -3527,26 +3549,36 @@ int main(int argc, char **argv) {
               if (grmhdPlaying) {
                 if (ImGui::Button("Pause")) {
                   grmhdPlaying = false;
-                  // TODO: Call streamer.pause()
+                  if (grmhdStreamer) { grmhdStreamer->pause(); }
                 }
               } else {
                 if (ImGui::Button("Play")) {
                   grmhdPlaying = true;
-                  // TODO: Call streamer.play()
+                  if (grmhdStreamer) { grmhdStreamer->play(); }
                 }
               }
               ImGui::SameLine();
               if (ImGui::Button("Reset")) {
                 grmhdCurrentFrame = 0;
-                // TODO: Call streamer.seekFrame(0)
+                if (grmhdStreamer) { grmhdStreamer->seekFrame(0); }
               }
 
               // Playback speed
               if (ImGui::SliderFloat("Playback Speed", &grmhdPlaybackSpeed, 0.1f, 4.0f)) {
-                // TODO: Call streamer.setPlaybackSpeed(grmhdPlaybackSpeed)
+                if (grmhdStreamer) {
+                  grmhdStreamer->setPlaybackSpeed(static_cast<double>(grmhdPlaybackSpeed));
+                }
               }
 
               // Cache statistics
+              /* Refresh cache stats from live streamer each frame */
+              if (grmhdStreamer) {
+                grmhdCacheHitRate = grmhdStreamer->cacheHitRate();
+                grmhdQueueDepth = static_cast<int>(grmhdStreamer->queueDepth());
+                /* Mirror current frame from streamer (updated by background thread) */
+                grmhdCurrentFrame = static_cast<int>(grmhdStreamer->currentFrame());
+              }
+
               ImGui::Separator();
               ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Cache Statistics");
               ImGui::Text("Hit Rate: %.1f%%", grmhdCacheHitRate * 100.0);
