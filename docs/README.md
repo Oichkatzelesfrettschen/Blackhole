@@ -1,187 +1,114 @@
-# Blackhole Documentation Index
+# Real-time Black Hole Rendering in OpenGL
 
-**WHY:** Centralized navigation for all project documentation
-**WHAT:** Index of design docs, guides, roadmaps, and API references
-**HOW:** Start here, follow links to specific topics
+![Screenshot](docs/blackhole-screenrecord.gif)
 
----
+## Highlights
+- Schwarzschild/Kerr geodesic tracing (fragment + compute paths).
+- LUT-driven emissivity/redshift and validation assets in `assets/`.
+- C++23 + OpenGL 4.6 with tunable post-processing and controls.
 
-## Quick Links
+## Prerequisite
 
-**Getting Started:**
-- [BUILDING.md](BUILDING.md) - Build instructions for all platforms
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
-- [SIMD_GUIDE.md](SIMD_GUIDE.md) - SIMD tier selection and performance
+- [cmake](https://cmake.org/)
+- [conan](https://conan.io/) package manager (repo-local home; see `scripts/conan_env.sh`)
+- C++23-capable compiler
+- OpenGL 4.6-capable GPU/driver
 
-**Project Management:**
-- [MASTER_ROADMAP.md](MASTER_ROADMAP.md) - Canonical roadmap (Phases 0-5)
-- [STATUS.md](STATUS.md) - Current project status
-- [AGENTS.md](../AGENTS.md) - Agent coordination and contribution guide
+## Build the code
 
-**Physics & Accuracy:**
-- [CLEANROOM_DECISIONS.md](CLEANROOM_DECISIONS.md) - Physics validation strategy
-- [COMPARE_SWEEP.md](COMPARE_SWEEP.md) - Compute/fragment parity analysis
-- [../rocq/README.md](../rocq/README.md) - Formal verification (Rocq proofs)
+```bash
+# Install dependencies with repo-local Conan (output folder must match your CMake build dir).
 
-**Performance:**
-- [../bench/README.md](../bench/README.md) - Benchmark suite
-- [SIMD_GUIDE.md](SIMD_GUIDE.md) - SIMD optimization guide
-- [HALIDE_FEASIBILITY.md](HALIDE_FEASIBILITY.md) - Halide integration analysis
+Preferred invocation (Conan 2.x):
 
-**Data Pipelines:**
-- [GRMHD_INGESTION_PLAN.md](GRMHD_INGESTION_PLAN.md) - GRMHD data streaming
-- [BACKGROUND_ASSET_PIPELINE.md](BACKGROUND_ASSET_PIPELINE.md) - Background assets
-- [IMAGE_SOURCES.md](IMAGE_SOURCES.md) - Image attribution
-
-**Development:**
-- [GLSL_BUILD_GUIDE.md](GLSL_BUILD_GUIDE.md) - Shader development
-- [INTEROP_BEST_PRACTICES.md](INTEROP_BEST_PRACTICES.md) - Cross-language interop
-- [../tools/README.md](../tools/README.md) - Utility tools
-
----
-
-## Documentation Structure
-
-```
-docs/
-├── README.md                    # This file - documentation index
-├── BUILDING.md                  # Build instructions
-├── TROUBLESHOOTING.md           # Common issues
-├── SIMD_GUIDE.md               # SIMD performance guide
-├── MASTER_ROADMAP.md           # Canonical roadmap
-├── STATUS.md                   # Project status
-│
-├── Physics & Validation/
-│   ├── CLEANROOM_DECISIONS.md
-│   ├── COMPARE_SWEEP.md
-│   └── DEPENDENCY_MATRIX.md
-│
-├── Planning & Execution/
-│   ├── EXECUTION_PLAN_2026Q1.md
-│   ├── EIGEN_REFACTOR_PLAN.md
-│   ├── GRB_MODULATION_PLAN.md
-│   └── GRMHD_INGESTION_PLAN.md
-│
-├── Development Guides/
-│   ├── GLSL_BUILD_GUIDE.md
-│   ├── INTEROP_BEST_PRACTICES.md
-│   └── HUD.md
-│
-├── Assets & Data/
-│   ├── BACKGROUND_ASSET_PIPELINE.md
-│   ├── IMAGE_SOURCES.md
-│   └── IMAGE_CANDIDATES.md
-│
-└── archive/
-    └── 2026Q1/                 # Quarterly snapshots
+```bash
+# repo-local cache
+./scripts/conan_install.sh Release build
+# then configure
+cmake --preset profile
 ```
 
----
+If you must use raw conan commands, prefer the 2.x syntax:
 
-## Topic Categories
-
-### 1. Getting Started
-
-New to the project? Start here:
-1. Read [../README.md](../README.md) - Project overview
-2. Read [BUILDING.md](BUILDING.md) - Build the project
-3. Read [MASTER_ROADMAP.md](MASTER_ROADMAP.md) - Understand project phases
-4. Read [../AGENTS.md](../AGENTS.md) - Contribution workflow
-
-### 2. Physics Implementation
-
-Understanding the black hole physics:
-- [CLEANROOM_DECISIONS.md](CLEANROOM_DECISIONS.md) - Validation methodology
-- [COMPARE_SWEEP.md](COMPARE_SWEEP.md) - Accuracy analysis
-- [../rocq/README.md](../rocq/README.md) - Formal proofs
-- [../rocq/docs/PHASE2_VALIDATION.md](../rocq/docs/PHASE2_VALIDATION.md) - OCaml extraction
-
-### 3. Performance Optimization
-
-Making it fast:
-- [SIMD_GUIDE.md](SIMD_GUIDE.md) - CPU vectorization
-- [../bench/README.md](../bench/README.md) - Benchmarking
-- [HALIDE_FEASIBILITY.md](HALIDE_FEASIBILITY.md) - Auto-scheduling
-
-### 4. Data Pipelines
-
-Working with GRMHD and image data:
-- [GRMHD_INGESTION_PLAN.md](GRMHD_INGESTION_PLAN.md) - GRMHD streaming
-- [BACKGROUND_ASSET_PIPELINE.md](BACKGROUND_ASSET_PIPELINE.md) - Background images
-- [IMAGE_SOURCES.md](IMAGE_SOURCES.md) - Attribution
-
-### 5. Build System
-
-CMake, dependencies, presets:
-- [BUILDING.md](BUILDING.md) - Build instructions
-- [DEPENDENCY_MATRIX.md](DEPENDENCY_MATRIX.md) - Dependency graph
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common build issues
-
-### 6. Shader Development
-
-Writing and debugging GLSL:
-- [GLSL_BUILD_GUIDE.md](GLSL_BUILD_GUIDE.md) - Shader workflow
-- [HUD.md](HUD.md) - ImGui interface
-- [../shader/README.md](../shader/README.md) - Shader organization
-
----
-
-## Archive Policy
-
-**Quarterly Snapshots:**
-- End-of-quarter docs archived to `archive/YYYYQ#/`
-- Preserves historical design decisions
-- Current docs remain in `docs/` root
-
-**Archive Structure:**
-```
-archive/
-└── 2026Q1/
-    ├── README.md               # Quarter summary
-    ├── ROADMAP.md             # Roadmap snapshot
-    ├── STATUS.md              # Status snapshot
-    └── EXECUTION_PLAN.md      # Execution snapshot
+```bash
+conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=23
 ```
 
----
+./scripts/conan_install.sh Release build
+./scripts/fetch_implot.sh
 
-## Document Conventions
+# Configure the project and generate a native build system.
+cmake --preset release
+cmake --build --preset release
 
-**Frontmatter (WHY/WHAT/HOW):**
-All new documents should start with:
-```markdown
-**WHY:** Goal or rationale
-**WHAT:** Scope and artifacts
-**HOW:** Repeatable steps
+# Optional RmlUi overlay (MangoHUD port groundwork).
+cmake --preset release -DENABLE_RMLUI=ON
+
+# Optional Tracy profiling.
+cmake --preset release -DENABLE_TRACY=ON
+
+# Or explicit configure/build.
+cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/Release \
+  -DCMAKE_TOOLCHAIN_FILE=build/Release/generators/conan_toolchain.cmake
+
+# Compile / build the project.
+cmake --build build/Release
 ```
 
-**Linking:**
-- Use relative paths: `[BUILDING.md](BUILDING.md)`
-- Link to source files: `[kerr.h](../src/physics/kerr.h)`
-- Link to tools: `[physics_bench](../bench/physics_bench.cpp)`
+## Optional: curve overlay
 
-**Updates:**
-- Add "Last Updated: YYYY-MM-DD" at document end
-- Update MASTER_ROADMAP.md when completing phases
-- Archive outdated docs to `archive/`
+Plot a 2-column TSV (for example CompactStar critical curves) in the ImGui
+overlay:
 
----
+```bash
+./build/Blackhole --curve-tsv /absolute/path/to/Crit_curve_smooth.tsv
+```
 
-## Contributing to Documentation
+## OpenGL 4.6 scope
 
-**When to Update:**
-- After completing a roadmap phase
-- After major refactors or rewrites
-- When fixing bugs mentioned in TROUBLESHOOTING.md
-- When adding new features or tools
+See `docs/opengl-4-6-scope.md` for validation and platform notes.
 
-**Documentation Standards:**
-- Keep docs under 500 lines (split if larger)
-- Use code blocks with language hints
-- Include command examples with expected output
-- Link to related docs and source files
+## Status and validation
 
----
+- Roadmap + issue tracking: `STATUS.md` and `TODO_FIXES.md`.
+- GLSL validation (warnings treated as errors only when `ENABLE_WERROR=ON`):
+  `cmake --build --preset release --target validate-shaders`
+- Physics validation tables:
+  `python3 scripts/generate_validation_tables.py`
 
-**Last Updated:** 2026-01-29
-**Maintainer:** See ../AGENTS.md for contributors
+## Acknowledgements
+
+**Papers**
+
+- Gravitational Lensing by Spinning Black Holes in Astrophysics, and in the Movie Interstellar
+- Trajectory Around A Spherically Symmetric Non-Rotating Black Hole - Sumanta
+- Approximating Light Rays In The Schwarzschild Field - O. Semerak
+- Implementing a Rasterization Framework for a Black Hole Spacetime - Yoshiyuki Yamashita
+
+<!-- https://arxiv.org/pdf/1502.03808.pdf -->
+<!-- https://arxiv.org/pdf/1109.0676.pdf -->
+<!-- https://arxiv.org/pdf/1412.5650.pdf -->
+<!-- https://pdfs.semanticscholar.org/56ff/9c575c29ae8ed6042e23075ff0ca00031ccc.pdfhttps://pdfs.semanticscholar.org/56ff/9c575c29ae8ed6042e23075ff0ca00031ccc.pdf -->
+
+**Articles**
+
+- Physics of oseiskar.github.io/black-hole - https://oseiskar.github.io/black-hole/docs/physics.html
+- Schwarzschild geodesics - https://en.wikipedia.org/wiki/Schwarzschild_geodesics
+- Photons and black holes - https://flannelhead.github.io/posts/2016-03-06-photons-and-black-holes.html
+- A real-time simulation of the visual appearance of a Schwarzschild Black Hole - http://spiro.fisica.unipd.it/~antonell/schwarzschild/
+- Ray Tracing a Black Hole in C# by Mikolaj Barwicki - https://www.codeproject.com/Articles/994466/Ray-Tracing-a-Black-Hole-in-Csharp
+- Ray Marching and Signed Distance Functions - http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
+- Einstein's Rings and the Fabric of Space - https://www.youtube.com/watch?v=Rl8H4XEs0hw)
+- Opus 2, GLSL ray tracing tutorial - http://fhtr.blogspot.com/2013/12/opus-2-glsl-ray-tracing-tutorial.html
+- Ray Tracing in One Weekend - https://raytracing.github.io/
+- On ray casting, ray tracing, ray marching and the like - http://hugi.scene.org/online/hugi37/- hugi%2037%20-%20coding%20adok%20on%20ray%20casting,%20ray%20tracing,%20ray%20marching%20and%20the%20like.htm
+
+**Other GitHub Projects**
+
+- https://github.com/sirxemic/Interstellar
+- https://github.com/ssloy/tinyraytracer
+- https://github.com/RayTracing/raytracing.github.io
+- https://awesomeopensource.com/projects/raytracing
+- Ray-traced simulation of a black hole - https://github.com/oseiskar/black-hole
+- Raytracing a blackhole - https://rantonels.github.io/starless/
+- https://github.com/rantonels/schwarzschild
