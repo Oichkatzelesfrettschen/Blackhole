@@ -217,19 +217,41 @@ bool loadGrmhdPackedTexture(const std::string &metadataPath, GrmhdPackedTexture 
     return false;
   }
 
+  /* Read optional BL radial extent fields ("r_min", "r_max" in geometric units M=1).
+   * If absent, keep the struct defaults (1.0 / 50.0) so older datasets work. */
+  const float rMinGrid = json.contains("r_min") ? json.at("r_min").get<float>() : 1.0f;
+  const float rMaxGrid = json.contains("r_max") ? json.at("r_max").get<float>() : 50.0f;
+
   // Populate metadata; only create GL texture when a context is available.
   destroyGrmhdPackedTexture(texture);
 
   texture.width = gridWidth;
   texture.height = gridHeight;
   texture.depth = gridDepth;
+  texture.rMin = rMinGrid;
+  texture.rMax = rMaxGrid;
   texture.channels = std::move(channels);
   texture.minValues = std::move(metaMin);
   texture.maxValues = std::move(metaMax);
   /* WHY: upload=false lets headless tests (no GL context) validate metadata
    * without crashing on glGenTextures.  Pass true from the render path. */
+  /* WHY: The packed data is always RGBA32F (4 floats per voxel -- density,
+   * internal energy, v1, v2).  createFloatTexture3D uses GL_R32F / GL_RED
+   * which silently discards channels 1-3; use the RGBA variant instead. */
   texture.texture = upload
-      ? createFloatTexture3D(gridWidth, gridHeight, gridDepth, blob) : 0;
+      ? createRGBA32FTexture3D(gridWidth, gridHeight, gridDepth, blob) : 0;
+
+  /* Fix BL coordinate wrap modes: createRGBA32FTexture3D defaults to
+   * GL_CLAMP_TO_EDGE on all axes; override T and R for correct BL semantics.
+   * S=r (clamp -- finite range), T=theta (mirror -- equatorial symmetry),
+   * R=phi (repeat -- 2*pi periodic). */
+  if (texture.texture != 0) {
+    glBindTexture(GL_TEXTURE_3D, texture.texture);             // NOLINT(misc-include-cleaner)
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);  // NOLINT(misc-include-cleaner)
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT); // NOLINT(misc-include-cleaner)
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);          // NOLINT(misc-include-cleaner)
+    glBindTexture(GL_TEXTURE_3D, 0);                           // NOLINT(misc-include-cleaner)
+  }
 
   return true;
 }

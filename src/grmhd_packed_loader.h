@@ -42,14 +42,18 @@
  */
 struct GrmhdPackedTexture {
   GLuint texture = 0;        /**< @brief GL texture object (GL_TEXTURE_3D, RGBA32F). */
-  int width = 0;             /**< @brief Voxel grid width (X dimension). */
-  int height = 0;            /**< @brief Voxel grid height (Y dimension). */
-  int depth = 0;             /**< @brief Voxel grid depth (Z dimension). */
+  int width = 0;             /**< @brief Voxel grid width (X dimension = r). */
+  int height = 0;            /**< @brief Voxel grid height (Y dimension = theta). */
+  int depth = 0;             /**< @brief Voxel grid depth (Z dimension = phi). */
   std::string format;        /**< @brief Texture format string (always "RGBA32F"). */
   std::string layout;        /**< @brief Data layout string (reserved for future use). */
   std::vector<std::string> channels;  /**< @brief Physical field names per channel. */
   std::vector<float> minValues;       /**< @brief Per-channel minimum for normalization. */
   std::vector<float> maxValues;       /**< @brief Per-channel maximum for normalization. */
+  /** @brief Boyer-Lindquist radial extent of the grid (in M = 1 geometric units).
+   *  Read from JSON fields "r_min" / "r_max"; default to 1.0 / 50.0 when absent. */
+  float rMin = 1.0f;
+  float rMax = 50.0f;
 };
 
 /**

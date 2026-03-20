@@ -85,6 +85,7 @@
 // Local headers
 #include "GLDebugMessageCallback.h"
 #include "grmhd_packed_loader.h"
+#include "grmhd_pbo_uploader.h"
 #include "grmhd_streaming.h"
 #include "hud_overlay.h"
 #include "imgui_impl_glfw.h"
@@ -409,9 +410,10 @@ bool supportsIndirectCount() {
 
 /** @brief Metadata for a single background skybox asset loaded from manifest.json. */
 struct BackgroundAsset {
-  std::string id;    ///< Unique asset identifier matching the manifest "id" field.
-  std::string title; ///< Human-readable display name shown in the UI.
-  std::string path;  ///< Relative file path to the image on disk.
+  std::string id;        ///< Unique asset identifier matching the manifest "id" field.
+  std::string title;     ///< Human-readable display name shown in the UI.
+  std::string path;      ///< Relative file path to the 2D background image on disk.
+  std::string skyboxDir; ///< Directory containing 6 cubemap face PNGs (empty = use default).
 };
 
 /**
@@ -465,6 +467,7 @@ std::vector<BackgroundAsset> loadBackgroundAssets() {
     asset.id = entry.value("id", "");
     asset.title = entry.value("title", asset.id);
     asset.path = entry.value("path", "");
+    asset.skyboxDir = entry.value("skyboxDir", "");
     if (!asset.id.empty() && !asset.path.empty()) {
       assets.push_back(std::move(asset));
     }
@@ -2471,6 +2474,10 @@ int main(int argc, char **argv) {
     static double grmhdCacheHitRate = 0.0;
     static int grmhdQueueDepth = 0;
     static std::unique_ptr<blackhole::GRMHDStreamer> grmhdStreamer;
+    /* PBO uploader for streaming time-series tiles.  Initialized once when the
+     * streamer loads a dataset and shut down when the dataset is unloaded.
+     * Its texture() replaces grmhdTexture.texture for the time-series path. */
+    static blackhole::GrmhdPBOUploader grmhdPboUploader;
 
     static float blackHoleMass = 1.0f;
     static float kerrSpin = 0.0f;
@@ -2638,6 +2645,11 @@ int main(int argc, char **argv) {
       }
       grmhdLoadError.clear();
       grmhdLoaded = true;
+      /* Wire BL radial extent from grid header into the Cartesian bounds uniforms.
+       * The grid is spherical so the conservative bounding box is [-rMax, rMax]^3. */
+      const float r = grmhdTexture.rMax;
+      grmhdBoundsMin = glm::vec3(-r, -r, -r);
+      grmhdBoundsMax = glm::vec3( r,  r,  r);
       return true;
     };
 
@@ -3124,11 +3136,12 @@ int main(int argc, char **argv) {
         rmluiReady = false;
       }
 
-      static GLuint const galaxy = loadCubemap(std::string("assets/skybox_nebula_dark"));
+      static GLuint galaxy = loadCubemap(std::string("assets/skybox_nebula_dark"));
       static GLuint const colorMap = loadTexture2D(std::string("assets/color_map.png"));
       static std::vector<BackgroundAsset> backgroundAssets;
       static int backgroundIndex = 0;
       static std::string backgroundLoadedId;
+      static std::string skyboxLoadedDir;
       static GLuint backgroundBase = 0;
       static std::array<GLuint, K_BACKGROUND_LAYERS> backgroundTextures = {};
       static std::array<glm::vec4, K_BACKGROUND_LAYERS> backgroundLayerParams = {};
@@ -3169,6 +3182,17 @@ int main(int argc, char **argv) {
             }
             backgroundBase = nextTexture;
             backgroundLoadedId = asset.id;
+          }
+          // Swap cubemap skybox if the asset specifies one.
+          if (!asset.skyboxDir.empty() && skyboxLoadedDir != asset.skyboxDir) {
+            GLuint const nextCubemap = loadCubemap(asset.skyboxDir);
+            if (nextCubemap != 0) {
+              if (galaxy != 0) {
+                glDeleteTextures(1, &galaxy);
+              }
+              galaxy = nextCubemap;
+              skyboxLoadedDir = asset.skyboxDir;
+            }
           }
         }
       }
@@ -3329,8 +3353,27 @@ int main(int argc, char **argv) {
           glm::lookAt(cameraPos, focusTarget, cameraBasis[1]); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
                                                                // -- glm::mat has no .at()
       bool computeActiveForLog = false;
-      bool const grmhdReady = grmhdLoaded && grmhdTexture.texture != 0;
+
+      /* Per-frame streaming tile upload: when GRMHDStreamer is running and the
+       * PBOUploader is initialized, obtain the current frame tile and upload.
+       * getTile() is non-blocking; on a cache miss it enqueues the request. */
+      if (grmhdStreamer && grmhdPboUploader.texture() != 0) {
+        auto tile = grmhdStreamer->getTile(0, 0, 0, 0);
+        if (tile && tile->ready()) {
+          grmhdPboUploader.upload(tile->data.data(), tile->data.size());
+        }
+      }
+
+      /* grmhdReady: true when packed texture OR PBO streaming path is valid. */
+      bool const grmhdReady = (grmhdLoaded && grmhdTexture.texture != 0) ||
+                              (grmhdTimeSeriesLoaded && grmhdPboUploader.ready());
       bool grmhdEnabled = useGrmhd && grmhdReady;
+      /* grmhdTexId: prefer PBO streaming texture when the streamer is running;
+       * fall back to the packed static texture otherwise. */
+      GLuint const grmhdTexId =
+          (grmhdTimeSeriesLoaded && grmhdPboUploader.ready())
+              ? grmhdPboUploader.texture()
+              : grmhdTexture.texture;
       bool const spectralReady = spectralLutLoaded && texSpectralLUT != 0;
       bool spectralEnabled = useSpectralLut && spectralReady;
       spectralRadiusMin = std::max(0.0f, spectralRadiusMin);
@@ -3389,7 +3432,7 @@ int main(int argc, char **argv) {
         noiseTextureScale = std::max(noiseTextureScale, 0.01f);
         bool noiseReady = useNoiseTexture && texNoiseVolume != 0;
         rtti.texture3DUniforms["noiseTexture"] = noiseReady ? texNoiseVolume : fallback3D;
-        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexture.texture : fallback3D;
+        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : fallback3D;
 
         rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
         rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
@@ -3515,6 +3558,15 @@ int main(int argc, char **argv) {
                     grmhdMaxFrame = static_cast<int>(grmhdStreamer->metadata().frameCount) - 1;
                     grmhdCurrentFrame = 0;
                     grmhdStreamer->seekFrame(0);
+                    /* Initialize PBOUploader with the grid dimensions from metadata.
+                     * Shuts down any previous allocation first. */
+                    const auto &meta = grmhdStreamer->metadata();
+                    if (grmhdPboUploader.texture() != 0) {
+                      grmhdPboUploader.shutdown();
+                    }
+                    grmhdPboUploader.init(static_cast<int>(meta.gridX),
+                                         static_cast<int>(meta.gridY),
+                                         static_cast<int>(meta.gridZ));
                   } else {
                     grmhdStreamer.reset();
                   }
@@ -3526,6 +3578,7 @@ int main(int argc, char **argv) {
                   grmhdStreamer->shutdown();
                   grmhdStreamer.reset();
                 }
+                grmhdPboUploader.shutdown();
                 grmhdTimeSeriesLoaded = false;
                 grmhdCurrentFrame = 0;
                 grmhdMaxFrame = 0;
@@ -3977,7 +4030,7 @@ int main(int argc, char **argv) {
         grbModulationEnabled = useGrbModulationEffective && grbModulationReady;
         noiseReady = useNoiseTextureEffective && texNoiseVolume != 0;
         rtti.texture3DUniforms["noiseTexture"] = noiseReady ? texNoiseVolume : fallback3D;
-        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexture.texture : fallback3D;
+        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : fallback3D;
         rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
         rtti.textureUniforms["grbModulationLUT"] =
             grbModulationEnabled ? texGrbModulationLUT : fallback2D;
@@ -4703,7 +4756,10 @@ int main(int argc, char **argv) {
 
           RenderToTextureInfo sliceRtti;
           sliceRtti.fragShader = "shader/grmhd_slice.frag";
-          sliceRtti.texture3DUniforms["grmhdTexture"] = grmhdTexture.texture;
+          sliceRtti.texture3DUniforms["grmhdTexture"] =
+              (grmhdTimeSeriesLoaded && grmhdPboUploader.ready())
+                  ? grmhdPboUploader.texture()
+                  : grmhdTexture.texture;
           sliceRtti.textureUniforms["colorMap"] = colorMap;
           sliceRtti.floatUniforms["sliceAxis"] = static_cast<float>(grmhdSliceAxis);
           sliceRtti.floatUniforms["sliceCoord"] = grmhdSliceCoord;
