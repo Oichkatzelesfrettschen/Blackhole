@@ -107,3 +107,4 @@ imgui.ini
 .conan/*
 !.conan/global.conf
 !.conan/remotes.json
+blender_addon/blackhole_physics/asset_library/blackhole_hybrid_scene.blend
