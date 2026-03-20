@@ -1,3 +1,9 @@
+/**
+ * @file shader_watcher.cpp
+ * @brief Implementation of ShaderWatcher: filesystem event handling, debouncing,
+ *        and the wtr/watcher integration (or stub when the feature is disabled).
+ */
+
 #include "shader_watcher.h"
 
 #include <algorithm>

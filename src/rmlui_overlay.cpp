@@ -1,3 +1,7 @@
+/**
+ * @file rmlui_overlay.cpp
+ * @brief Implementation of RmlUiOverlay -- lifecycle stubs and optional RmlUi context management.
+ */
 #include "rmlui_overlay.h"
 
 #if BLACKHOLE_ENABLE_RMLUI

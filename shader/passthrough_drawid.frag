@@ -1,3 +1,14 @@
+/**
+ * @file passthrough_drawid.frag
+ * @brief Textured quad fragment shader with per-instance tint and draw-ID shading.
+ *
+ * Samples texture0 at the interpolated UV, multiplies by a per-instance tint
+ * from the DrawInstances SSBO, and applies a slight draw-ID-based intensity
+ * variation for debugging multi-draw-indirect batches.
+ * Key inputs: texture0 (binding 0), DrawInstances SSBO (binding 3).
+ * Inputs: uv (vec2), drawId (uint, flat), instanceId (uint, flat).
+ * Outputs: fragColor (tinted texel color).
+ */
 #version 460 core
 
 layout(binding = 0) uniform sampler2D texture0;

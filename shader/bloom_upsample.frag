@@ -1,3 +1,13 @@
+/**
+ * @file bloom_upsample.frag
+ * @brief Bloom upsample pass: 2x box-filter upsample with additive accumulation.
+ *
+ * Performs a 4-tap box filter on texture0 and adds the result to texture1
+ * (the previous pyramid level), building the upsampled bloom chain.
+ * Key uniforms: texture0 (current level), texture1 (accumulation buffer), resolution.
+ * Inputs: uv (interpolated texture coordinates).
+ * Outputs: fragColor (upsampled level added to previous accumulation).
+ */
 #version 460 core
 
 layout(location = 0) in vec2 uv;

@@ -1,3 +1,23 @@
+/**
+ * @file async_compute_pipeline.cpp
+ * @brief Async compute pipeline, tile dispatcher, and frame pipeline -- implementation.
+ *
+ * WHY: See async_compute_pipeline.h.  Key implementation notes:
+ *
+ *   1. AsyncComputePipeline::submitToGPU() and beginAsyncReadback() are stubs
+ *      (Phase 6.1c).  The state machine transitions and command buffering are
+ *      complete; the actual glDispatchCompute() / PBO calls are marked with
+ *      "In real implementation" comments pending render path integration.
+ *
+ *   2. TileDispatcher assigns center-weighted priorities via an inverse
+ *      squared-distance formula.  Center tiles are rendered first so the
+ *      viewer sees a sharp black hole image before the background fills in.
+ *
+ *   3. FramePipeline::getFrameTimeMS() and getGPUUtilizationPercent() return
+ *      hardcoded targets (16.67 ms, 75%).  These will be replaced with
+ *      GL_TIME_ELAPSED query results once the render path is wired up.
+ */
+
 #include "async_compute_pipeline.h"
 
 #include <cstddef>

@@ -1,3 +1,13 @@
+/**
+ * @file drawid_cull.comp
+ * @brief GPU-driven draw call culling compute shader.
+ *
+ * Reads per-instance flags from a DrawInstances SSBO and compacts only the
+ * visible instances into an indirect draw command buffer using atomic counters.
+ * Key uniforms: instanceCount.
+ * Inputs: DrawInstances (binding 3), DrawCommands (binding 4), DrawCount (binding 5).
+ * Outputs: DrawCommands and DrawCount filled with surviving instances.
+ */
 #version 460 core
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;

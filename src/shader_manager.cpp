@@ -1,3 +1,9 @@
+/**
+ * @file shader_manager.cpp
+ * @brief Implementation of ShaderManager: GL capability detection, tier selection,
+ *        shader preprocessing, compilation, and program linking.
+ */
+
 #include "shader_manager.h"
 
 #include <cstdio>

@@ -1,3 +1,12 @@
+/**
+ * @file test_input.cpp
+ * @brief Standalone smoke-test harness for InputManager.
+ *
+ * Exercises key-press state transitions, action bindings, mouse button
+ * tracking, and gamepad query functions without a real GLFW window.
+ * Run as a standalone executable; a non-zero exit code indicates failure.
+ */
+
 #include "input.h"
 #include <imgui.h>
 #include <cassert>

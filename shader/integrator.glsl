@@ -1,28 +1,13 @@
 /**
- * shader/integrator.glsl
+ * @file integrator.glsl
+ * @brief Geodesic integration module: RK4 stepping with Hamiltonian constraint preservation.
  *
- * PHASE 9.0.4: Geodesic Integration Module
- *
- * Encapsulates RK4 stepping with Hamiltonian constraint preservation.
- * Bridges raytracer.frag placeholder calls to verified GLSL physics kernels.
- *
- * Key components:
- * 1. RK4 step function with geodesic RHS evaluation
- * 2. Energy-conserving constraint correction (rescaling)
- * 3. Adaptive step size logic (optional, for stability)
- * 4. Constraint monitoring for diagnostics
- *
- * Performance notes:
- * - Designed for <24 registers/thread on Lovelace (SM_89)
- * - Uses verified functions from rk4.glsl, geodesic.glsl, energy_conserving_geodesic.glsl
- * - One RK4 step ≈ 4 geodesic RHS evaluations + 1 constraint correction
- * - Typical cost: ~120 FMA operations/step (verified kernels)
- *
- * Register budget breakdown:
- * - RayState: 9 floats (t, r, theta, phi, dt, dr, dtheta, dphi, affine_param)
- * - k1, k2, k3: 3 x 4 floats = 12 floats (temporary storage)
- * - Intermediate values: 2 floats (h, constraint factor)
- * - Total: ~23 registers (under 24 target)
+ * Provides rk4_step(), apply_constraint_correction(), and integrate_geodesic_step()
+ * used by raytracer.frag to advance photon states through curved spacetime.
+ * Designed for <24 registers/thread on SM_89; one step costs ~120 FMA operations.
+ * Inputs: RayState struct (must be defined by including shader before this file),
+ *   black hole mass M, spin a, step size h, is_photon flag.
+ * Outputs: updated RayState with corrected Boyer-Lindquist coordinates and velocities.
  */
 
 #ifndef SHADER_INTEGRATOR_GLSL

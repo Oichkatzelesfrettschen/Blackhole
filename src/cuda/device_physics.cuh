@@ -1,11 +1,11 @@
-/*
- * device_physics.cuh
- * CUDA __device__ implementations of Kerr metric geodesic tracing and shading.
+/**
+ * @file device_physics.cuh
+ * @brief CUDA __device__ implementations of Kerr metric geodesic tracing and shading.
  *
  * Ported from shader/include/kerr.glsl and shader/include/interop_trace.glsl.
  *
- * FIREWALL: This file includes ONLY <cuda_runtime.h>, <math.h>, <float.h>.
- * NO standard library headers beyond C99. NO headers from src/physics/.
+ * FIREWALL: This file includes ONLY <cuda_runtime.h> and <math.h>.
+ * No standard library headers beyond C99. No headers from src/physics/.
  */
 
 #ifndef BLACKHOLE_CUDA_DEVICE_PHYSICS_CUH
@@ -18,13 +18,13 @@
  * Constants (mirrors physics_constants.glsl)
  * ======================================================================== */
 
-#define D_PI            3.14159265358979323846f
-#define D_TWO_PI        6.28318530717958647692f
-#define D_HALF_PI       1.57079632679489661923f
-#define D_INV_PI        0.31830988618379067154f
-#define D_EPSILON       1.0e-6f
-#define D_PHOTON_SPHERE 1.5f
-#define D_ISCO_RATIO    3.0f
+#define D_PI            3.14159265358979323846f /**< @brief Pi. */
+#define D_TWO_PI        6.28318530717958647692f /**< @brief 2*pi. */
+#define D_HALF_PI       1.57079632679489661923f /**< @brief pi/2. */
+#define D_INV_PI        0.31830988618379067154f /**< @brief 1/pi. */
+#define D_EPSILON       1.0e-6f                 /**< @brief Small guard value for division and comparisons. */
+#define D_PHOTON_SPHERE 1.5f                    /**< @brief Photon sphere radius in units of rs (= 3M/2M = 1.5). */
+#define D_ISCO_RATIO    3.0f                    /**< @brief ISCO radius ratio (Schwarzschild: r_ISCO = 3*rs). */
 
 /* ========================================================================
  * Constant memory (filled by host before kernel launch)
@@ -63,28 +63,36 @@ extern __constant__ unsigned long long d_tex_spectral;
 extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
+extern __constant__ int   d_wiregrid_enabled;    /**< @brief BL-coord wiregrid overlay flag. */
+extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere boundary+glow. */
+extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
 
 /* ========================================================================
  * Vector helpers (replacing GLSL vec3 operations)
  * ======================================================================== */
 
+/** @brief Construct a float3 from three scalar components. */
 __device__ __forceinline__ float3 make_f3(float x, float y, float z) {
     return make_float3(x, y, z);
 }
 
+/** @brief Dot product of two float3 vectors using FMA. */
 __device__ __forceinline__ float d_dot(float3 a, float3 b) {
     return fmaf(a.x, b.x, fmaf(a.y, b.y, a.z * b.z));
 }
 
+/** @brief Euclidean length of a float3 vector. */
 __device__ __forceinline__ float d_length(float3 v) {
     return sqrtf(d_dot(v, v));
 }
 
+/** @brief Normalize a float3 vector; guards against zero-length with a 1e-12 floor. */
 __device__ __forceinline__ float3 d_normalize(float3 v) {
     float inv = rsqrtf(fmaxf(d_dot(v, v), 1.0e-12f));
     return make_f3(v.x * inv, v.y * inv, v.z * inv);
 }
 
+/** @brief Cross product of two float3 vectors using FMA. */
 __device__ __forceinline__ float3 d_cross(float3 a, float3 b) {
     return make_f3(
         fmaf(a.y, b.z, -a.z * b.y),
@@ -93,18 +101,22 @@ __device__ __forceinline__ float3 d_cross(float3 a, float3 b) {
     );
 }
 
+/** @brief Scale a float3 vector by a scalar. */
 __device__ __forceinline__ float3 d_scale(float3 v, float s) {
     return make_f3(v.x * s, v.y * s, v.z * s);
 }
 
+/** @brief Component-wise addition of two float3 vectors. */
 __device__ __forceinline__ float3 d_add(float3 a, float3 b) {
     return make_f3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
+/** @brief Component-wise subtraction of two float3 vectors. */
 __device__ __forceinline__ float3 d_sub(float3 a, float3 b) {
     return make_f3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
+/** @brief Linear interpolation between two float3 vectors using FMA. */
 __device__ __forceinline__ float3 d_lerp(float3 a, float3 b, float t) {
     return make_f3(
         fmaf(t, b.x - a.x, a.x),
@@ -113,7 +125,13 @@ __device__ __forceinline__ float3 d_lerp(float3 a, float3 b, float t) {
     );
 }
 
-/* mat3 * vec3 (column-major, matching glm layout) */
+/**
+ * @brief Multiply a column-major 3x3 matrix by a float3 vector (matches glm layout).
+ *
+ * @param m Pointer to 9 floats in column-major order.
+ * @param v Input vector.
+ * @return Transformed vector m * v.
+ */
 __device__ __forceinline__ float3 d_mat3_mul(const float* m, float3 v) {
     return make_f3(
         fmaf(m[0], v.x, fmaf(m[3], v.y, m[6] * v.z)),
@@ -126,29 +144,69 @@ __device__ __forceinline__ float3 d_mat3_mul(const float* m, float3 v) {
  * Kerr metric functions (from kerr.glsl)
  * ======================================================================== */
 
+/**
+ * @brief Conserved quantities for a Kerr geodesic.
+ *
+ * These constants of motion (energy, axial angular momentum, Carter constant)
+ * are computed once at ray initialization and reused at every integration step.
+ */
 struct KerrConsts {
-    float E;
-    float Lz;
-    float Q;
+    float E;  /**< @brief Conserved energy per unit rest mass (set to 1 for photons). */
+    float Lz; /**< @brief Conserved axial angular momentum (z-component of L x r). */
+    float Q;  /**< @brief Carter constant: |L|^2 - Lz^2 (clamped >= 0). */
 };
 
+/**
+ * @brief Mutable state of a photon ray integrating through the Kerr metric.
+ *
+ * Coordinates are Boyer-Lindquist (r, theta, phi, t). The sign fields track
+ * the current direction of motion in the potential wells for R(r) and Theta(theta).
+ */
 struct KerrRay {
-    float r;
-    float theta;
-    float phi;
-    float t;
-    float sign_r;
-    float sign_theta;
+    float r;           /**< @brief Radial Boyer-Lindquist coordinate. */
+    float theta;       /**< @brief Polar angle (0 at north pole, pi at south pole). */
+    float phi;         /**< @brief Azimuthal angle; can accumulate large values near horizon. */
+    float t;           /**< @brief Coordinate time; grows monotonically along the ray. */
+    float sign_r;      /**< @brief Sign of dr/dlambda (+1 outgoing, -1 ingoing). */
+    float sign_theta;  /**< @brief Sign of dtheta/dlambda; flips at turning points. */
 };
 
+/**
+ * @brief Compute the Kerr sigma function: Sigma = r^2 + a^2 * cos^2(theta).
+ *
+ * @param r         Radial coordinate.
+ * @param a         Spin parameter (a = J/M).
+ * @param cos_theta cos(theta) precomputed by the caller.
+ * @return Sigma value.
+ */
 __device__ __forceinline__ float d_kerr_sigma(float r, float a, float cos_theta) {
     return fmaf(r, r, a * a * cos_theta * cos_theta);
 }
 
+/**
+ * @brief Compute the Kerr delta function: Delta = r^2 - rs*r + a^2.
+ *
+ * Delta = 0 defines the event horizons. Clamped to a minimum of 1e-6 in
+ * d_kerr_step() before inversion to avoid singularity at the horizon.
+ *
+ * @param r  Radial coordinate.
+ * @param a  Spin parameter.
+ * @param rs Schwarzschild radius (= 2M).
+ * @return Delta value.
+ */
 __device__ __forceinline__ float d_kerr_delta(float r, float a, float rs) {
     return fmaf(r, r, -rs * r + a * a);
 }
 
+/**
+ * @brief Compute the outer event horizon radius: r+ = M + sqrt(M^2 - a^2).
+ *
+ * Falls back to rs when the discriminant is negative (over-extremal spin input).
+ *
+ * @param rs Schwarzschild radius (= 2M).
+ * @param a  Spin parameter (physical, not dimensionless; a = J/M).
+ * @return Outer horizon radius r+.
+ */
 __device__ __forceinline__ float d_kerr_outer_horizon(float rs, float a) {
     float M = 0.5f * rs;
     float disc = fmaf(M, M, -(a * a));
@@ -156,6 +214,16 @@ __device__ __forceinline__ float d_kerr_outer_horizon(float rs, float a) {
     return M + sqrtf(disc);
 }
 
+/**
+ * @brief Convert Boyer-Lindquist spherical coordinates to Cartesian.
+ *
+ * Uses sincosf for a single MUFU.SINCOS instruction per angle pair.
+ *
+ * @param r     Radial coordinate.
+ * @param theta Polar angle.
+ * @param phi   Azimuthal angle.
+ * @return Cartesian position (x, y, z).
+ */
 __device__ __forceinline__ float3 d_kerr_to_cartesian(float r, float theta, float phi) {
     float sin_t, cos_t, sin_p, cos_p;
     sincosf(theta, &sin_t, &cos_t);
@@ -163,6 +231,17 @@ __device__ __forceinline__ float3 d_kerr_to_cartesian(float r, float theta, floa
     return make_f3(r * sin_t * cos_p, r * sin_t * sin_p, r * cos_t);
 }
 
+/**
+ * @brief Compute conserved quantities for a photon ray at the given position and direction.
+ *
+ * E is set to 1 (photon normalization). Lz is the z-component of the orbital
+ * angular momentum. Q (Carter constant) is clamped to zero to avoid negative
+ * values from floating-point rounding.
+ *
+ * @param pos Camera position in Cartesian coordinates.
+ * @param dir Normalized ray direction in Cartesian coordinates.
+ * @return KerrConsts with E, Lz, and Q.
+ */
 __device__ __forceinline__ KerrConsts d_kerr_init_consts(float3 pos, float3 dir) {
     KerrConsts c;
     c.E = 1.0f;
@@ -173,6 +252,16 @@ __device__ __forceinline__ KerrConsts d_kerr_init_consts(float3 pos, float3 dir)
     return c;
 }
 
+/**
+ * @brief Initialize a KerrRay from a Cartesian position and direction.
+ *
+ * Converts pos to Boyer-Lindquist (r, theta, phi). sign_r and sign_theta are
+ * set from the radial and polar projections of dir onto the local frame.
+ *
+ * @param pos Camera position in Cartesian coordinates.
+ * @param dir Normalized ray direction in Cartesian coordinates.
+ * @return Initialized KerrRay with t = 0.
+ */
 __device__ __forceinline__ KerrRay d_kerr_init_ray(float3 pos, float3 dir) {
     KerrRay ray;
     ray.r = d_length(pos);
@@ -195,6 +284,21 @@ __device__ __forceinline__ KerrRay d_kerr_init_ray(float3 pos, float3 dir) {
     return ray;
 }
 
+/**
+ * @brief Advance a Kerr geodesic by one affine parameter step using the Mino-time equations.
+ *
+ * Computes dr/dlam, dtheta/dlam, dphi/dlam, dt/dlam from the first-order Kerr
+ * geodesic equations. inv_sin2 and inv_delta are precomputed once (one MUFU.RCP
+ * each) to avoid duplicate reciprocal instructions. sign_r and sign_theta are
+ * flipped at turning points where R(r) or Theta(theta) changes sign.
+ * theta is clamped to [1e-6, pi-1e-6] to avoid pole singularities.
+ *
+ * @param ray  Ray state to advance in-place.
+ * @param rs   Schwarzschild radius.
+ * @param a    Spin parameter (physical units).
+ * @param c    Conserved quantities (E, Lz, Q).
+ * @param dlam Affine (Mino) parameter step size.
+ */
 __device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, const KerrConsts& c, float dlam) {
     float r = ray.r;
     float theta = ray.theta;
@@ -239,6 +343,17 @@ __device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, con
  * Schwarzschild geodesic (from interop_trace.glsl)
  * ======================================================================== */
 
+/**
+ * @brief Compute the geodesic acceleration in the Schwarzschild metric.
+ *
+ * Uses the effective potential formula: a = -1.5 * rs * |L|^2 / r^5 * pos,
+ * where L = pos x vel is the specific angular momentum.
+ *
+ * @param pos Current photon position.
+ * @param vel Current photon velocity.
+ * @param rs  Schwarzschild radius.
+ * @return Acceleration 3-vector.
+ */
 __device__ __forceinline__ float3 d_schwarzschild_accel(float3 pos, float3 vel, float rs) {
     float r = d_length(pos);
     if (r < D_EPSILON) return make_f3(0.0f, 0.0f, 0.0f);
@@ -250,6 +365,17 @@ __device__ __forceinline__ float3 d_schwarzschild_accel(float3 pos, float3 vel, 
     return d_scale(pos, coeff);
 }
 
+/**
+ * @brief Advance a Schwarzschild geodesic by one step using classic 4th-order Runge-Kutta.
+ *
+ * Updates position x and velocity v in-place using four evaluations of
+ * d_schwarzschild_accel() with the standard RK4 coefficients (1/6, 1/3, 1/3, 1/6).
+ *
+ * @param[in,out] x  Photon position; updated by one step.
+ * @param[in,out] v  Photon velocity; updated by one step.
+ * @param rs         Schwarzschild radius.
+ * @param dt         Step size.
+ */
 __device__ __forceinline__ void d_step_rk4(float3& x, float3& v, float rs, float dt) {
     float3 k1_x = v;
     float3 k1_v = d_schwarzschild_accel(x, v, rs);
@@ -278,6 +404,20 @@ __device__ __forceinline__ void d_step_rk4(float3& x, float3& v, float rs, float
  * Disk intersection + redshift (from interop_trace.glsl)
  * ======================================================================== */
 
+/**
+ * @brief Test whether a ray segment crosses the equatorial accretion disk.
+ *
+ * Detects a sign change in z between old_pos and new_pos (equatorial plane
+ * crossing), then linearly interpolates the crossing point and checks that
+ * its cylindrical radius falls within [r_in, r_out].
+ *
+ * @param old_pos  Ray position at start of step.
+ * @param new_pos  Ray position at end of step.
+ * @param r_in     Inner disk radius.
+ * @param r_out    Outer disk radius.
+ * @param[out] hit Interpolated disk crossing point if true is returned.
+ * @return true if the segment crosses the disk annulus, false otherwise.
+ */
 __device__ __forceinline__ bool d_check_disk(float3 old_pos, float3 new_pos,
                              float r_in, float r_out, float3& hit) {
     if (old_pos.z * new_pos.z > 0.0f) return false;
@@ -287,6 +427,15 @@ __device__ __forceinline__ bool d_check_disk(float3 old_pos, float3 new_pos,
     return r >= r_in && r <= r_out;
 }
 
+/**
+ * @brief Compute the analytic Schwarzschild gravitational redshift factor sqrt(1 - rs/r).
+ *
+ * Returns 0 if r <= rs (inside or at the horizon).
+ *
+ * @param r  Emission radius.
+ * @param rs Schwarzschild radius.
+ * @return Redshift factor in [0, 1].
+ */
 __device__ __forceinline__ float d_redshift_factor(float r, float rs) {
     if (r <= rs) return 0.0f;
     float f = 1.0f - rs / r;
@@ -298,20 +447,170 @@ __device__ __forceinline__ float d_redshift_factor(float r, float rs) {
  * Hit result
  * ======================================================================== */
 
+/**
+ * @brief Outcome of tracing one geodesic ray through the scene.
+ *
+ * Exactly one of hit_disk, hit_horizon, or escaped will be true at exit.
+ * min_radius records the closest approach to the black hole center, used
+ * for the photon ring proximity glow in d_shade_hit().
+ */
+
+/* ========================================================================
+ * BL-coordinate wiregrid overlay (mirrors shader/include/wiregrid.glsl)
+ * ======================================================================== */
+
+/**
+ * @brief Compute Kerr event horizon radius r_+ = M + sqrt(M^2 - a^2), M=1.
+ *
+ * @param a_star Dimensionless Kerr spin parameter in [-1, 1).
+ * @return Event horizon radius in geometric units (M=1).
+ */
+__device__ __forceinline__ float d_wg_event_horizon(float a_star) {
+    float a = fmaxf(-0.9999f, fminf(a_star, 0.9999f));
+    return 1.0f + sqrtf(fmaxf(1.0f - a * a, 0.0f));
+}
+
+/**
+ * @brief Compute Kerr ergosphere outer boundary: r_ergo = M + sqrt(M^2 - a^2 cos^2 theta).
+ *
+ * @param a_star Dimensionless Kerr spin parameter.
+ * @param theta  Polar angle in radians (0 = north pole, pi/2 = equator).
+ * @return Ergosphere radius in geometric units (M=1).
+ */
+__device__ __forceinline__ float d_wg_ergosphere(float a_star, float theta) {
+    float a = fmaxf(-0.9999f, fminf(a_star, 0.9999f));
+    float cos_t = cosf(theta);
+    return 1.0f + sqrtf(fmaxf(1.0f - a * a * cos_t * cos_t, 0.0f));
+}
+
+/**
+ * @brief Kerr lapse function alpha = sqrt(1 - 2/r): proxy for spacetime curvature.
+ *
+ * Returns 0 inside or on the event horizon, and approaches 1 at large r.
+ *
+ * @param r      Radial coordinate in geometric units (M=1).
+ * @param a_star Dimensionless Kerr spin parameter.
+ * @return Lapse function value in [0, 1].
+ */
+__device__ __forceinline__ float d_wg_lapse(float r, float a_star) {
+    if (r <= d_wg_event_horizon(a_star)) return 0.0f;
+    return sqrtf(fmaxf(1.0f - 2.0f / r, 0.0f));
+}
+
+/**
+ * @brief Frame dragging angular velocity Omega_ZAMO = 2Mar / (r^3 + a^2 r + 2a^2), M=1.
+ *
+ * @param r      Radial BL coordinate.
+ * @param a_star Dimensionless Kerr spin parameter.
+ * @return Frame-dragging frequency in geometric units.
+ */
+__device__ __forceinline__ float d_wg_frame_drag(float r, float a_star) {
+    float a = fmaxf(-0.9999f, fminf(a_star, 0.9999f));
+    float denom = r * r * r + a * a * r + 2.0f * a * a;
+    return (denom < 1e-10f) ? 0.0f : (2.0f * a * r) / denom;
+}
+
+/**
+ * @brief Smoothstep falloff: 1 at dist=0, 0 at dist=edge (GLSL smoothstep semantics).
+ */
+__device__ __forceinline__ float d_wg_smoothstep(float edge, float dist) {
+    float t = fmaxf(0.0f, fminf(dist / fmaxf(edge, 1e-10f), 1.0f));
+    return 1.0f - t * t * (3.0f - 2.0f * t);
+}
+
+/**
+ * @brief Per-pixel Boyer-Lindquist coordinate wiregrid overlay (CUDA device equivalent of
+ *        GLSL wiregridOverlay() in shader/include/wiregrid.glsl).
+ *
+ * Evaluates spherical BL coordinate grid lines (constant phi and theta) plus optional
+ * ergosphere boundary and interior glow.  Designed to be called with the Cartesian
+ * hit_point converted to BL spherical approximation:
+ *   r     = length(hit_point)
+ *   theta = acosf(hit_point.z / r)
+ *   phi   = atan2f(hit_point.y, hit_point.x)
+ *
+ * @param r         BL radial coordinate in geometric units (M=1).
+ * @param theta     Polar angle in radians.
+ * @param phi       Azimuthal angle in radians.
+ * @param a_star    Dimensionless Kerr spin parameter.
+ * @param show_ergo Non-zero to show ergosphere boundary and interior glow.
+ * @param grid_scale Grid density multiplier (1.0 = pi/6 spacing, 2.0 = pi/12, etc.).
+ * @return float4 RGBA overlay: .xyz = color, .w = opacity to blend with scene.
+ */
+__device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float phi,
+                                                       float a_star, int show_ergo,
+                                                       float grid_scale) {
+    const float k_pi6 = 0.523598776f; // pi/6
+    float spacing = k_pi6 / fmaxf(grid_scale, 0.01f);
+    float lw      = 0.02f / fmaxf(grid_scale, 0.01f);
+
+    // Phi grid line
+    float phi_phase = fmodf(phi, spacing);
+    if (phi_phase < 0.0f) phi_phase += spacing;
+    float phi_dist = fminf(phi_phase, spacing - phi_phase);
+    float phi_line = d_wg_smoothstep(lw, phi_dist);
+
+    // Theta grid line
+    float theta_phase = fmodf(theta, spacing);
+    float theta_dist  = fminf(theta_phase, spacing - theta_phase);
+    float theta_line  = d_wg_smoothstep(lw, theta_dist);
+
+    float grid  = fmaxf(phi_line, theta_line);
+    float boost = 1.0f + (1.0f - d_wg_lapse(r, a_star)) * 2.0f; // 3x near horizon
+    grid *= boost;
+
+    float grid_alpha = fminf(grid * 0.5f, 0.8f);
+
+    float ergo_alpha = 0.0f;
+    if (show_ergo) {
+        float r_ergo = d_wg_ergosphere(a_star, theta);
+        float boundary = d_wg_smoothstep(0.2f, fabsf(r - r_ergo));
+        float r_plus = d_wg_event_horizon(a_star);
+        float interior = 0.0f;
+        if (r > r_plus && r < r_ergo) {
+            float omega     = d_wg_frame_drag(r, a_star);
+            float omega_max = d_wg_frame_drag(r_plus + 0.01f, a_star);
+            interior = (omega / fmaxf(omega_max, 1e-10f)) * 0.3f;
+        }
+        ergo_alpha = fmaxf(boundary * 0.9f, interior);
+    }
+
+    float total = grid_alpha + ergo_alpha;
+    float t = ergo_alpha / fmaxf(total, 0.01f);
+    // grid_rgb = (0.3, 0.8, 1.0), ergo_rgb = (1.0, 0.3, 0.0)
+    float cr = 0.3f + t * (1.0f - 0.3f);
+    float cg = 0.8f + t * (0.3f - 0.8f);
+    float cb = 1.0f + t * (0.0f - 1.0f);
+    float ca = fmaxf(grid_alpha, ergo_alpha);
+    return make_float4(cr, cg, cb, ca);
+}
+
 struct HitResult {
-    bool hit_disk;
-    bool hit_horizon;
-    bool escaped;
-    float3 hit_point;
-    float phi;
-    float redshift;
-    float min_radius;
+    bool hit_disk;     /**< @brief Ray terminated on the accretion disk. */
+    bool hit_horizon;  /**< @brief Ray crossed the event horizon. */
+    bool escaped;      /**< @brief Ray escaped to infinity (r > max_dist or step budget exhausted). */
+    float3 hit_point;  /**< @brief World-space position of the termination event. */
+    float phi;         /**< @brief Azimuthal angle at disk hit (for Doppler beaming); 0 otherwise. */
+    float redshift;    /**< @brief Gravitational redshift factor at disk hit; 1 otherwise. */
+    float min_radius;  /**< @brief Minimum radial distance reached along this ray. */
 };
 
 /* ========================================================================
  * Full geodesic trace (from bhTraceGeodesic)
  * ======================================================================== */
 
+/**
+ * @brief Trace a single geodesic ray through the Kerr or Schwarzschild spacetime.
+ *
+ * Dispatches to the Kerr Mino-time integrator (d_kerr_step) when d_kerr_enabled
+ * is set and |a| > D_EPSILON, otherwise uses the Schwarzschild RK4 integrator
+ * (d_step_rk4). Checks for horizon crossing, disk intersection, and escape at
+ * each step. All scene parameters are read from __constant__ memory.
+ *
+ * @param cam_pos Camera position in world (Cartesian) coordinates.
+ * @param ray_dir Normalized ray direction in world coordinates.
+ * @return HitResult describing where and how the ray terminated.
+ */
 __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray_dir) {
     HitResult result;
     result.hit_disk = false;
@@ -417,8 +716,19 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
  * Shading (from interop_trace.glsl: bhDiskColorFromHit, bhShadeHit)
  * ======================================================================== */
 
-/* Disk color: Novikov-Thorne flux with optional LUT sampling.
- * Matches bhDiskColorFromHit in interop_trace.glsl. */
+/**
+ * @brief Compute RGBA color for a disk hit using Novikov-Thorne flux and Doppler beaming.
+ *
+ * If d_use_luts and d_tex_emissivity are set, samples the emissivity LUT for
+ * flux; otherwise uses the analytic Novikov-Thorne x^3*(1-sqrt(x)) formula.
+ * Applies a smooth blackbody color ramp (6 segments), optional spectral LUT
+ * modulation, Doppler beaming (intensity ~ doppler^3), Doppler color shift,
+ * and optional gravitational redshift (LUT or analytic).
+ *
+ * @param hit Result of a disk-terminated geodesic trace.
+ * @param rs  Schwarzschild radius.
+ * @return RGBA float4 with pre-multiplied intensity.
+ */
 __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
     float r = sqrtf(fmaf(hit.hit_point.x, hit.hit_point.x,
                          hit.hit_point.y * hit.hit_point.y));
@@ -516,10 +826,16 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
                        color.z * intensity, 1.0f);
 }
 
-/* Background sky color (simplified -- no cubemap in baseline, just gradient) */
-/* Hash function for procedural star field.
- * Integer multiply-xorshift (PCG-style): avoids MUFU.SIN (~17 cy on Ada per
- * YSU-engine SASS RE). Input p holds floorf() values (integer-valued floats). */
+/**
+ * @brief Integer multiply-xorshift hash for the procedural star field.
+ *
+ * Converts integer-valued floats (from floorf() grid coordinates) to unsigned
+ * integers and mixes them with PCG-style multiply-xorshift. Maps the top 23
+ * bits of the result to [0, 1), avoiding fmodf and MUFU.SIN entirely.
+ *
+ * @param p Grid cell coordinates as integer-valued floats.
+ * @return Pseudo-random float in [0, 1).
+ */
 __device__ __forceinline__ float d_hash(float3 p) {
     /* Cast integer-valued floats to signed int, then to unsigned for safe mixing */
     unsigned int ix = (unsigned int)((int)p.x + 16384);
@@ -533,6 +849,18 @@ __device__ __forceinline__ float d_hash(float3 p) {
     return (float)(h >> 9) * (1.0f / 8388608.0f);
 }
 
+/**
+ * @brief Compute the background sky color for an escaped ray direction.
+ *
+ * Generates a procedural star field using d_hash() on a 300-unit directional
+ * grid (threshold ~2.2% density, x^8 sharpening via 3 squarings) with
+ * temperature-varied color (blue-white / yellow-white / orange). Adds a dim
+ * ambient nebula glow scaled by d_background_intensity.
+ * Returns black if d_background_enabled is 0.
+ *
+ * @param dir Escaped ray direction (normalized in d_shade_hit).
+ * @return RGBA float4 sky color.
+ */
 __device__ __forceinline__ float4 d_background_color(float3 dir) {
     if (!d_background_enabled) {
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -574,7 +902,17 @@ __device__ __forceinline__ float4 d_background_color(float3 dir) {
     return make_float4(sky.x, sky.y, sky.z, 1.0f);
 }
 
-/* Full shading dispatch */
+/**
+ * @brief Dispatch shading for a completed HitResult.
+ *
+ * Returns black for horizon hits, calls d_disk_color() for disk hits, and
+ * calls d_background_color() for escaped rays with an added photon ring
+ * proximity glow (cubic falloff from the photon sphere at 1.5*rs over 2.5*rs).
+ *
+ * @param hit     Completed HitResult from d_trace_geodesic().
+ * @param cam_pos Camera position used to reconstruct the escaped ray direction.
+ * @return Final RGBA float4 pixel color.
+ */
 __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_pos) {
     if (hit.hit_horizon) {
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -604,6 +942,17 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
  * Ray generation from pixel coordinates
  * ======================================================================== */
 
+/**
+ * @brief Generate a world-space ray direction for pixel (px, py).
+ *
+ * Maps pixel coordinates to normalized device coordinates in [-fov_scale,
+ * fov_scale] (with aspect ratio correction on u), constructs a local direction
+ * (u, v, -1) and transforms it by the camera basis matrix from __constant__ memory.
+ *
+ * @param px Pixel column index (0-based).
+ * @param py Pixel row index (0-based).
+ * @return Normalized world-space ray direction.
+ */
 __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
     float u = (2.0f * (px + 0.5f) / (float)d_width - 1.0f) * d_fov_scale;
     float v = (2.0f * (py + 0.5f) / (float)d_height - 1.0f) * d_fov_scale;

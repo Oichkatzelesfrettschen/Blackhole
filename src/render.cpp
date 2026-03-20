@@ -1,3 +1,9 @@
+/**
+ * @file render.cpp
+ * @brief Implementation of GL texture creation, framebuffer management, quad VAO
+ *        construction, and the render-to-texture helper with uniform caching.
+ */
+
 #include "render.h"
 
 // C++ system headers

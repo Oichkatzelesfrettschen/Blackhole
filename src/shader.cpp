@@ -1,3 +1,11 @@
+/**
+ * @file shader.cpp
+ * @brief Implementation of GLSL shader compilation and program linking utilities.
+ *
+ * Handles file reading, recursive #include expansion, per-shader compilation,
+ * and GL program linking for both vertex/fragment and compute shader programs.
+ */
+
 #include "shader.h"
 
 // C++ system headers

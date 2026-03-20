@@ -1,3 +1,13 @@
+/**
+ * @file bloom_composite.frag
+ * @brief Bloom final composite: blends the tonemapped scene with the bloom buffer.
+ *
+ * Adds the blurred bloom texture to the base scene image, weighted by
+ * bloomStrength, and scales the scene contribution by the tone factor.
+ * Key uniforms: texture0 (scene), texture1 (bloom), tone, bloomStrength, resolution.
+ * Inputs: uv (interpolated texture coordinates).
+ * Outputs: fragColor (composited HDR image).
+ */
 #version 460 core
 
 layout(location = 0) in vec2 uv;

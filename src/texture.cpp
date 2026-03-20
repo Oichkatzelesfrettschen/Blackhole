@@ -1,3 +1,12 @@
+/**
+ * @file texture.cpp
+ * @brief Implementation of OpenGL texture loading and creation helpers.
+ *
+ * Uses stb_image for image decoding and applies anisotropic filtering when
+ * the GL_EXT/ARB_texture_filter_anisotropic extension (or OpenGL 4.6) is
+ * available.
+ */
+
 #include "texture.h"
 
 // C++ system headers

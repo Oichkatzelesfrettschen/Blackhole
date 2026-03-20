@@ -1,16 +1,17 @@
-#pragma once
+/**
+ * @file tracy_support.h
+ * @brief Lightweight wrapper for Tracy profiler integration.
+ *
+ * When TRACY_ENABLE is defined by the build (CMake / Conan profiles), the
+ * official Tracy header is included and its full API is exposed.  When Tracy
+ * is disabled, every macro is replaced with a no-op so instrumentation can
+ * remain in place without scattering @c \#ifdef blocks across the codebase.
+ *
+ * To enable: add @c -DTRACY_ENABLE to the target via CMake (development
+ * presets do this automatically).
+ */
 
-// tracy_support.h
-// Lightweight wrapper for Tracy profiler integration used in this project.
-//
-// - When TRACY_ENABLE is defined by the build (CMake / Conan profiles), we
-//   import the official Tracy header and expose its API.
-// - When Tracy is not enabled, we provide no-op fallbacks for the macros the
-//   codebase uses so instrumentation can remain in place without sprinkling
-//   #ifdefs across the codebase.
-//
-// To enable: add -DTRACY_ENABLE to your target via CMake (the repo presets do
-// this for development profiles).
+#pragma once
 
 // NOLINTBEGIN(cppcoreguidelines-macro-usage) -- Tracy profiler macros capture source location via __LINE__/__FUNCTION__; cannot be replaced with constexpr
 #ifdef TRACY_ENABLE

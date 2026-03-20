@@ -1,3 +1,14 @@
+/**
+ * @file tonemapping.frag
+ * @brief Post-process tonemapping with ACES, chromatic aberration, vignette, and film grain.
+ *
+ * When tonemappingEnabled > 0.5: applies edge-weighted chromatic aberration,
+ * vignette, ACES filmic tone mapping (Narkowicz 2015), animated film grain,
+ * and gamma correction.  Otherwise passes texture0 through unchanged.
+ * Key uniforms: texture0 (HDR scene), resolution, time, gamma, tonemappingEnabled.
+ * Inputs: uv (interpolated texture coordinates).
+ * Outputs: fragColor (gamma-corrected LDR output).
+ */
 #version 460 core
 
 layout(location = 0) in vec2 uv;

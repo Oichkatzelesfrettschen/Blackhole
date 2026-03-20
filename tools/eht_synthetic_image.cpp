@@ -49,7 +49,12 @@ const double PARSEC = 3.086e16;       // Parsec [m]
 const double MPC = 1e6 * PARSEC;      // Megaparsec [m]
 const double GRAV = 6.67430e-11;      // Gravitational constant [m^3 kg^-1 s^-2]
 
-// Schwarzschild radius: r_s = 2GM/c^2
+/**
+ * @brief Compute the Schwarzschild radius for a given mass.
+ *
+ * @param mass_solar Black hole mass in solar masses.
+ * @return Schwarzschild radius r_s = 2GM/c^2 in metres.
+ */
 inline double schwarzschild_radius(double mass_solar) {
     double mass_kg = mass_solar * SOLAR_MASS;
     return 2.0 * GRAV * mass_kg / (C * C);
@@ -59,6 +64,13 @@ inline double schwarzschild_radius(double mass_solar) {
 // EHT Synthetic Image Generator
 // ============================================================================
 
+/**
+ * @brief End-to-end EHT synthetic image generator.
+ *
+ * Performs ray marching through a simplified Schwarzschild spacetime,
+ * convolves the result with the EHT instrumental beam, measures the
+ * shadow diameter, and exports the image for comparison with M87* and Sgr A*.
+ */
 class EHTSyntheticImage {
 public:
     double mass_solar;      // Black hole mass [solar masses]

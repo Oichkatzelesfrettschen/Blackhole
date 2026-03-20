@@ -1,3 +1,14 @@
+/**
+ * @file wiregrid.frag
+ * @brief Fragment shader for the spacetime wireframe grid overlay.
+ *
+ * Computes distance-based fog fade and an outward-pulsing energy-wave glow
+ * effect originating from the singularity, then blends the result with the
+ * configured grid color.
+ * Key uniforms: color (vec4, location 4), time, cameraPos.
+ * Inputs: worldPos (vec3, world-space position from vertex shader).
+ * Outputs: fragColor (grid color with fog and pulse glow).
+ */
 #version 460 core
 
 in vec3 worldPos;

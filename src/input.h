@@ -1,3 +1,8 @@
+/**
+ * @file input.h
+ * @brief GLFW input manager: keyboard, mouse, gamepad, and camera orbit state.
+ */
+
 #ifndef INPUT_H
 #define INPUT_H
 
@@ -9,7 +14,12 @@
 // Forward declaration
 struct Settings;
 
-// Key action identifiers for remapping
+/**
+ * @brief Logical key actions that can be rebound by the user.
+ *
+ * The COUNT sentinel marks the end of the range and doubles as a
+ * "no action being remapped" value in the key-remapping state machine.
+ */
 enum class KeyAction {
   Quit,
   ToggleUI,
@@ -34,6 +44,12 @@ enum class KeyAction {
   COUNT
 };
 
+/**
+ * @brief Spherical-coordinate camera pose around the black hole origin.
+ *
+ * Angles are in degrees; distance is in scene units.  The renderer converts
+ * this into a view matrix each frame.
+ */
 struct CameraState {
   float yaw = 0.0f;
   float pitch = 0.0f;
@@ -41,6 +57,7 @@ struct CameraState {
   float distance = 15.0f;
   float fov = 45.0f;
 
+  /** @brief Resets all camera pose fields to their default values. */
   void reset() {
     yaw = 0.0f;
     pitch = 0.0f;
@@ -50,7 +67,12 @@ struct CameraState {
   }
 };
 
-// Hold-to-toggle state for each camera action
+/**
+ * @brief Per-action toggle flags for hold-to-toggle camera mode.
+ *
+ * When holdToToggleCamera is enabled, each key press flips the corresponding
+ * flag rather than requiring the key to be held continuously.
+ */
 struct HoldToggleState {
   bool forward = false;
   bool backward = false;
@@ -63,6 +85,7 @@ struct HoldToggleState {
   bool zoomIn = false;
   bool zoomOut = false;
 
+  /** @brief Clears all toggle flags, stopping continuous camera motion. */
   void reset() {
     forward = backward = left = right = false;
     up = down = rollLeft = rollRight = false;
@@ -70,25 +93,69 @@ struct HoldToggleState {
   }
 };
 
+/**
+ * @brief Singleton input manager for keyboard, mouse, and gamepad.
+ *
+ * Wraps raw GLFW event callbacks into a frame-coherent state machine that
+ * exposes pressed/just-pressed/just-released queries, remappable key actions,
+ * and integrated camera orbit/zoom/roll controls.  Call init() once after the
+ * GLFW window is created, update() every frame, and shutdown() before
+ * destroying the window.
+ */
 class InputManager {
 public:
+  /** @brief Returns the process-wide singleton instance. */
   static InputManager &instance();
 
+  /**
+   * @brief Initialises input state and registers default key bindings.
+   * @param window GLFW window whose events this manager will consume.
+   */
   void init(GLFWwindow *window);
+
+  /**
+   * @brief Advances input state by one frame, processing deferred actions and updating the camera.
+   * @param deltaTime Elapsed wall-clock time since the previous frame, in seconds.
+   */
   void update(float deltaTime);
+
+  /** @brief Releases the window pointer; call before destroying the GLFW window. */
   void shutdown();
 
-  // Sync with settings
+  /** @brief Copies all relevant fields from SettingsManager into this manager. */
   void syncFromSettings();
+
+  /** @brief Writes the current bindings and sensitivity values back into SettingsManager. */
   void syncToSettings();
 
-  // Keyboard state
+  /**
+   * @brief Returns true while the given GLFW key code is held down.
+   * @param key GLFW key code (e.g. GLFW_KEY_W).
+   */
   [[nodiscard]] bool isKeyPressed(int key) const;
+
+  /**
+   * @brief Returns true only on the first frame the given key transitions to pressed.
+   * @param key GLFW key code.
+   */
   [[nodiscard]] bool isKeyJustPressed(int key) const;
+
+  /**
+   * @brief Returns true only on the first frame the given key transitions to released.
+   * @param key GLFW key code.
+   */
   [[nodiscard]] bool isKeyJustReleased(int key) const;
 
-  // Mouse state
+  /**
+   * @brief Returns true while the given mouse button is held down.
+   * @param button GLFW mouse button constant (e.g. GLFW_MOUSE_BUTTON_RIGHT).
+   */
   [[nodiscard]] bool isMouseButtonPressed(int button) const;
+
+  /**
+   * @brief Returns true only on the first frame the given mouse button transitions to pressed.
+   * @param button GLFW mouse button constant.
+   */
   [[nodiscard]] bool isMouseButtonJustPressed(int button) const;
   [[nodiscard]] float getMouseX() const { return mouseX_; }
   [[nodiscard]] float getMouseY() const { return mouseY_; }
@@ -96,12 +163,44 @@ public:
   [[nodiscard]] float getMouseDeltaY() const { return mouseDeltaY_; }
   [[nodiscard]] float getScrollDelta() const { return scrollDelta_; }
 
-  // Action bindings
+  /**
+   * @brief Returns true while the key bound to the given action is held.
+   * @param action Logical action to query.
+   */
   [[nodiscard]] bool isActionPressed(KeyAction action) const;
+
+  /**
+   * @brief Returns true only on the first frame the bound key transitions to pressed.
+   * @param action Logical action to query.
+   */
   [[nodiscard]] bool isActionJustPressed(KeyAction action) const;
+
+  /**
+   * @brief Returns the GLFW key code currently bound to the given action.
+   * @param action Logical action.
+   * @return GLFW key code, or GLFW_KEY_UNKNOWN if the action has no binding.
+   */
   [[nodiscard]] int getKeyForAction(KeyAction action) const;
+
+  /**
+   * @brief Replaces the key binding for the given action.
+   * @param action Logical action to rebind.
+   * @param key    New GLFW key code.
+   */
   void setKeyForAction(KeyAction action, int key);
+
+  /**
+   * @brief Returns a human-readable name for the given GLFW key code.
+   * @param key GLFW key code.
+   * @return Short label string (e.g. "ESC", "Space", "F11").
+   */
   [[nodiscard]] static std::string getKeyName(int key);
+
+  /**
+   * @brief Returns the display name for the given logical action.
+   * @param action Logical action.
+   * @return Short label string (e.g. "Quit", "Zoom In").
+   */
   [[nodiscard]] static const char *getActionName(KeyAction action);
 
   // UI state
@@ -194,22 +293,60 @@ public:
   [[nodiscard]] float getGamepadAxisFiltered(int axis) const;
   [[nodiscard]] static bool isGamepadConnected();
 
-  // Key remapping mode
+  /** @brief Returns true when the manager is waiting for the user to press a key for rebinding. */
   [[nodiscard]] bool isRemappingKey() const { return remappingAction_ != KeyAction::COUNT; }
+  /** @brief Returns the action currently being rebound, or KeyAction::COUNT if none. */
   [[nodiscard]] KeyAction getRemappingAction() const { return remappingAction_; }
+  /**
+   * @brief Enters key-remapping mode; the next key press will be bound to @p action.
+   * @param action Logical action to rebind.
+   */
   void startKeyRemapping(KeyAction action) { remappingAction_ = action; }
+  /** @brief Cancels an in-progress key remap without changing any binding. */
   void cancelKeyRemapping() { remappingAction_ = KeyAction::COUNT; }
 
-  // Callbacks (called from GLFW callbacks)
+  /**
+   * @brief GLFW key event callback; forwards into internal key state arrays.
+   * @param key      GLFW key code.
+   * @param scancode Platform scan code (unused).
+   * @param action   GLFW_PRESS, GLFW_RELEASE, or GLFW_REPEAT.
+   * @param mods     Modifier key bitmask (unused).
+   */
   void onKey(int key, int scancode, int action, int mods);
+
+  /**
+   * @brief GLFW mouse-button event callback.
+   * @param button GLFW mouse button constant.
+   * @param action GLFW_PRESS or GLFW_RELEASE.
+   * @param mods   Modifier key bitmask (unused).
+   */
   void onMouseButton(int button, int action, int mods);
+
+  /**
+   * @brief GLFW cursor-position event callback.
+   * @param x New cursor X position in screen coordinates.
+   * @param y New cursor Y position in screen coordinates.
+   */
   void onMouseMove(double x, double y);
+
+  /**
+   * @brief GLFW scroll-wheel event callback.
+   * @param xoffset Horizontal scroll offset (unused).
+   * @param yoffset Vertical scroll offset; positive = scroll up.
+   */
   void onScroll(double xoffset, double yoffset);
 
-  // Effective delta time (accounts for pause and time scale)
+  /**
+   * @brief Computes the simulation delta time after applying pause and time-scale.
+   * @param rawDeltaTime Wall-clock frame time in seconds.
+   * @return 0 when paused; rawDeltaTime * timeScale otherwise.
+   */
   [[nodiscard]] float getEffectiveDeltaTime(float rawDeltaTime) const;
 
-  // Override GUI capture (for Viewport interaction)
+  /**
+   * @brief When set to true, camera and viewport input ignores ImGui capture flags.
+   * @param ignore Pass true to allow input even when ImGui is focused.
+   */
   void setIgnoreGuiCapture(bool ignore) { ignoreGuiCapture_ = ignore; }
 
   InputManager(const InputManager &) = delete;

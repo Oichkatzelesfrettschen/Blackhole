@@ -25,6 +25,7 @@
 // GPU Raytracer Benchmark Results
 // ============================================================================
 
+/** @brief Performance and correctness metrics collected for one benchmark run. */
 struct GPURaytracerMetrics {
     // Performance metrics
     double throughput_rays_per_sec;  // Rays/sec
@@ -57,6 +58,13 @@ struct GPURaytracerMetrics {
 // - A100: 6,912 CUDA cores, 312 TFLOPs, 2040 GB/s bandwidth
 // - MI300X: 61,440 stream processors, 1457 TFLOPs, 6144 GB/s bandwidth
 
+/**
+ * @brief Analytical GPU performance model for throughput estimation.
+ *
+ * Encodes peak FLOP rates, memory bandwidths, and assumed utilization
+ * fractions for RTX 4090, A100, MI300X, and a single-threaded CPU baseline.
+ * All figures are static estimates; actual measured values will differ.
+ */
 class GPUPerformanceModel {
 public:
     enum class DeviceType {
@@ -68,7 +76,13 @@ public:
 
     explicit GPUPerformanceModel(DeviceType device) : device_(device) {}
 
-    // Estimate rays per second for given resolution
+    /**
+     * @brief Estimate ray throughput (rays/sec) for the modelled device.
+     *
+     * @param width  Render target width in pixels.
+     * @param height Render target height in pixels.
+     * @return Estimated rays per second based on peak FLOPs and utilization.
+     */
     double estimateRaysThroughput(uint32_t width, uint32_t height) const {
         uint64_t total_rays = static_cast<uint64_t>(width) * height;
         double compute_per_ray = 5000.0;  // FLOPs per ray (RK4 integration)
@@ -93,7 +107,13 @@ public:
         return 0.0;
     }
 
-    // Estimate memory bandwidth utilization
+    /**
+     * @brief Estimate memory bandwidth utilization (seconds per frame) for the modelled device.
+     *
+     * @param width  Render target width in pixels.
+     * @param height Render target height in pixels.
+     * @return Estimated time in seconds needed to satisfy the per-ray memory traffic.
+     */
     double estimateMemoryBandwidth(uint32_t width, uint32_t height) const {
         // Each ray requires:
         // - Input: camera data (256 bytes)
@@ -121,7 +141,13 @@ public:
         return 0.0;
     }
 
-    // Estimate speedup over CPU
+    /**
+     * @brief Estimate GPU speedup relative to the CPU baseline for the same workload.
+     *
+     * @param width  Render target width in pixels.
+     * @param height Render target height in pixels.
+     * @return Ratio of GPU throughput to CPU_BASELINE throughput.
+     */
     double estimateSpeedup(uint32_t width, uint32_t height) const {
         double gpu_throughput = estimateRaysThroughput(width, height);
         double cpu_throughput = GPUPerformanceModel(DeviceType::CPU_BASELINE)
@@ -137,13 +163,26 @@ private:
 // Black Hole Physics Validation
 // ============================================================================
 
-// Validate shadow diameter for given resolution
+/**
+ * @brief Validate a measured shadow diameter against an expected value.
+ *
+ * @param measured_uas  Measured shadow diameter in microarcseconds.
+ * @param expected_uas  Reference diameter to compare against.
+ * @param tolerance     Maximum allowed fractional error (default 5%).
+ * @return true if |measured - expected| / expected <= tolerance.
+ */
 bool validateShadowDiameter(double measured_uas, double expected_uas, double tolerance = 0.05) {
     double error = std::abs(measured_uas - expected_uas) / expected_uas;
     return error <= tolerance;
 }
 
-// Validate photon ring detection
+/**
+ * @brief Validate that the photon-ring peak intensity meets a minimum threshold.
+ *
+ * @param intensity    Measured peak intensity of the photon ring (normalized).
+ * @param expected_min Minimum acceptable intensity (default 0.3).
+ * @return true if intensity >= expected_min.
+ */
 bool validatePhotonRing(double intensity, double expected_min = 0.3) {
     return intensity >= expected_min;
 }
@@ -152,6 +191,16 @@ bool validatePhotonRing(double intensity, double expected_min = 0.3) {
 // Benchmark Suite
 // ============================================================================
 
+/**
+ * @brief Run a simulated RTX 4090 benchmark for a given render resolution.
+ *
+ * Populates a GPURaytracerMetrics struct using the analytical performance
+ * model and synthetic physics validation values.  No real GPU dispatch occurs.
+ *
+ * @param width  Render target width in pixels.
+ * @param height Render target height in pixels.
+ * @return GPURaytracerMetrics with estimated throughput, timing, and physics checks.
+ */
 GPURaytracerMetrics benchmarkGPUCompute(uint32_t width, uint32_t height) {
     GPURaytracerMetrics metrics;
 

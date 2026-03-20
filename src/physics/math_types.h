@@ -1,19 +1,19 @@
+/**
+ * @file math_types.h
+ * @brief Math type aliases that unify GLM and Eigen across the codebase.
+ *
+ * Prefer math::Vec3, math::Mat4, math::Quat etc. so that switching between
+ * GLM (default) and Eigen (opt-in via BLACKHOLE_USE_EIGEN) requires no
+ * call-site changes.
+ *
+ * Selection rules:
+ * - If Eigen headers are present AND BLACKHOLE_USE_EIGEN is defined, aliases
+ *   map to Eigen types (VectorXf/MatrixXf/Quaternionf).
+ * - Otherwise aliases map to GLM types (vecX/matX/quat).
+ */
+
 #ifndef PHYSICS_MATH_TYPES_H
 #define PHYSICS_MATH_TYPES_H
-
-/**
- * math_types.h
- *
- * Small, header-only compatibility layer that centralises math type aliases
- * used throughout the codebase. Prefer `math::Vec3`, `math::Mat4`, `math::Quat` etc
- * to make it straightforward to switch between GLM and Eigen where appropriate.
- *
- * How it works:
- * - If Eigen headers are available and the build defines `BLACKHOLE_USE_EIGEN`,
- *   the aliases map to Eigen types (VectorXf/MatrixXf/Quaternionf).
- * - Otherwise the aliases map to GLM types (vecX/matX/quat) which are the
- *   repository default.
- */
 
 #include <array>
 // NOLINTBEGIN(misc-include-cleaner)
@@ -93,6 +93,7 @@ static constexpr bool USING_EIGEN_DOUBLE = false;
 #endif
 
 // Helper accessors for raw pointers (column-major ordering)
+/** @brief Return raw const pointer to Vec2 data. */
 inline const Float *dataPtr(const Vec2 &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
@@ -101,6 +102,7 @@ inline const Float *dataPtr(const Vec2 &v) {
 #endif
 }
 
+/** @brief Return raw const pointer to Vec3 data. */
 inline const Float *dataPtr(const Vec3 &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
@@ -109,6 +111,7 @@ inline const Float *dataPtr(const Vec3 &v) {
 #endif
 }
 
+/** @brief Return raw const pointer to Vec4 data. */
 inline const Float *dataPtr(const Vec4 &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
@@ -117,6 +120,7 @@ inline const Float *dataPtr(const Vec4 &v) {
 #endif
 }
 
+/** @brief Return raw const pointer to Mat4 data (column-major). */
 inline const Float *dataPtr(const Mat4 &m) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return m.data();
@@ -126,6 +130,7 @@ inline const Float *dataPtr(const Mat4 &m) {
 }
 
 // Double-precision accessors for physics
+/** @brief Return raw const pointer to Vec3d data. */
 inline const Double *dataPtrd(const Vec3d &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
@@ -134,6 +139,7 @@ inline const Double *dataPtrd(const Vec3d &v) {
 #endif
 }
 
+/** @brief Return raw const pointer to Vec4d data. */
 inline const Double *dataPtrd(const Vec4d &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
@@ -142,6 +148,7 @@ inline const Double *dataPtrd(const Vec4d &v) {
 #endif
 }
 
+/** @brief Return raw const pointer to Mat4d data (column-major). */
 inline const Double *dataPtrd(const Mat4d &m) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return m.data();
@@ -151,10 +158,12 @@ inline const Double *dataPtrd(const Mat4d &m) {
 }
 
 // Convert std::array<double,3> to/from Vec3d for legacy compatibility
+/** @brief Convert std::array<double,3> to Vec3d. */
 inline Vec3d toVec3d(const std::array<double, 3> &arr) {
   return {arr.at(0), arr.at(1), arr.at(2)};
 }
 
+/** @brief Convert Vec3d to std::array<double,3>. */
 inline std::array<double, 3> toArray3(const Vec3d &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return {v[0], v[1], v[2]};
@@ -166,6 +175,7 @@ inline std::array<double, 3> toArray3(const Vec3d &v) {
 // Vector operations (unified interface for GLM and Eigen)
 // NOLINTBEGIN(misc-include-cleaner)
 // WHY: glm::dot, cross, length, normalize come from glm/glm.hpp umbrella header.
+/** @brief Dot product of two Vec3d vectors. */
 inline double dot(const Vec3d &a, const Vec3d &b) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return a.dot(b);
@@ -174,6 +184,7 @@ inline double dot(const Vec3d &a, const Vec3d &b) {
 #endif
 }
 
+/** @brief Cross product of two Vec3d vectors. */
 inline Vec3d cross(const Vec3d &a, const Vec3d &b) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return a.cross(b);
@@ -182,6 +193,7 @@ inline Vec3d cross(const Vec3d &a, const Vec3d &b) {
 #endif
 }
 
+/** @brief Euclidean length of a Vec3d. */
 inline double length(const Vec3d &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.norm();
@@ -190,6 +202,7 @@ inline double length(const Vec3d &v) {
 #endif
 }
 
+/** @brief Return unit-length Vec3d in the direction of v. */
 inline Vec3d normalize(const Vec3d &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.normalized();

@@ -1,6 +1,6 @@
-/*
- * kernel_launch.h
- * POD-only C-compatible interface between C++23 host code and C++17 CUDA code.
+/**
+ * @file kernel_launch.h
+ * @brief POD-only C-compatible interface between C++23 host code and C++17 CUDA code.
  *
  * FIREWALL: This header must compile with a plain C compiler.
  * NO std:: types, NO glm::, NO templates, NO C++ containers.
@@ -19,78 +19,112 @@
 extern "C" {
 #endif
 
-/* All parameters needed by the geodesic tracing kernel.
- * Filled by main.cpp from its C++23 InteropUniforms / glm types. */
+/**
+ * @brief All parameters needed by the geodesic tracing kernel.
+ *
+ * Filled by main.cpp from its C++23 InteropUniforms / glm types and passed
+ * to bh_launch_geodesic_kernel(), which copies each field into __constant__ memory.
+ */
 struct BH_LaunchParams {
     /* Black hole parameters */
-    float rs;           /* Schwarzschild radius */
-    float spin;         /* Kerr spin parameter a/M (dimensionless, 0..1) */
-    float isco;         /* ISCO radius */
-    float step_size;    /* Integration step size */
-    float fov_scale;    /* Field of view scale factor */
-    float max_dist;     /* Maximum ray travel distance */
+    float rs;           /**< @brief Schwarzschild radius (geometric units). */
+    float spin;         /**< @brief Kerr spin parameter a/M (dimensionless, 0..1). */
+    float isco;         /**< @brief ISCO radius. */
+    float step_size;    /**< @brief Integration step size (affine parameter increment). */
+    float fov_scale;    /**< @brief Field of view scale factor. */
+    float max_dist;     /**< @brief Maximum ray travel distance before declaring escape. */
 
     /* Camera */
-    float cam_pos[3];       /* Camera position (x,y,z) */
-    float cam_basis[9];     /* Camera basis matrix (3x3, column-major like glm) */
+    float cam_pos[3];   /**< @brief Camera position (x, y, z) in world space. */
+    float cam_basis[9]; /**< @brief Camera basis matrix (3x3, column-major, matching glm). */
 
     /* Integration */
-    int max_steps;      /* Maximum integration steps per ray */
-    int width;          /* Framebuffer width */
-    int height;         /* Framebuffer height */
+    int max_steps;      /**< @brief Maximum integration steps per ray. */
+    int width;          /**< @brief Framebuffer width in pixels. */
+    int height;         /**< @brief Framebuffer height in pixels. */
 
     /* Feature flags (int for C compat, 0=off, 1=on) */
-    int adisk_enabled;
-    int redshift_enabled;
-    int kerr_enabled;
-    int use_luts;
+    int adisk_enabled;      /**< @brief Enable accretion disk intersection. */
+    int redshift_enabled;   /**< @brief Enable gravitational redshift dimming. */
+    int kerr_enabled;       /**< @brief Use Kerr (vs Schwarzschild) metric. */
+    int use_luts;           /**< @brief Sample physics LUT textures when available. */
 
     /* LUT domain bounds */
-    float lut_radius_min;
-    float lut_radius_max;
-    float redshift_radius_min;
-    float redshift_radius_max;
-    float spectral_radius_min;
-    float spectral_radius_max;
+    float lut_radius_min;       /**< @brief Minimum normalized radius for emissivity LUT. */
+    float lut_radius_max;       /**< @brief Maximum normalized radius for emissivity LUT. */
+    float redshift_radius_min;  /**< @brief Minimum normalized radius for redshift LUT. */
+    float redshift_radius_max;  /**< @brief Maximum normalized radius for redshift LUT. */
+    float spectral_radius_min;  /**< @brief Minimum normalized radius for spectral LUT. */
+    float spectral_radius_max;  /**< @brief Maximum normalized radius for spectral LUT. */
 
     /* Time */
-    float time_sec;
+    float time_sec;             /**< @brief Elapsed simulation time in seconds. */
 
     /* Doppler / beaming */
-    float doppler_strength;
+    float doppler_strength;     /**< @brief Doppler beaming strength multiplier (0=off). */
 
     /* Background */
-    float background_intensity;
-    int background_enabled;
+    float background_intensity; /**< @brief Background sky intensity scale. */
+    int background_enabled;     /**< @brief Enable procedural star-field background. */
+
+    /* Wiregrid BL-coordinate overlay (task A4) */
+    int   wiregrid_enabled;    /**< @brief 1 = apply Boyer-Lindquist coordinate overlay. */
+    float wiregrid_show_ergo;  /**< @brief 1.0 = render ergosphere boundary + glow. */
+    float wiregrid_grid_scale; /**< @brief Grid density multiplier (1.0 = pi/6 spacing). */
 };
 
-/* Kernel variant selection */
+/**
+ * @brief Kernel variant selection.
+ *
+ * Variants are ordered from least to most capable. The registry auto-selects
+ * the highest variant supported by the current device's SM version and
+ * register budget.
+ */
 enum BH_KernelVariant {
-    BH_KERNEL_FP32_BASELINE = 0,
-    BH_KERNEL_FP32_COARSENED = 1,
-    BH_KERNEL_FP16_STORAGE = 2,
-    BH_KERNEL_FP16_H2_ILP = 3,
-    BH_KERNEL_COUNT = 4
+    BH_KERNEL_FP32_BASELINE  = 0, /**< @brief FP32, 1 ray/thread, SM5.0+. Safe default. */
+    BH_KERNEL_FP32_COARSENED = 1, /**< @brief FP32, 2 rays/thread with per-step ILP, SM7.5+. */
+    BH_KERNEL_FP16_STORAGE   = 2, /**< @brief FP16 ray state storage, FP32 compute, SM8.0+. */
+    BH_KERNEL_FP16_H2_ILP    = 3, /**< @brief __half2 packed 2-ray ILP, Ada/Hopper SM8.9+. */
+    BH_KERNEL_COUNT          = 4  /**< @brief Sentinel: number of defined variants. */
 };
 
-/* Launch a geodesic tracing kernel into the given linear framebuffer.
- * framebuffer: device pointer to float4[width*height] (linear memory).
- * params: launch parameters (will be copied to __constant__ memory).
- * variant: which kernel to run (auto-selected if negative).
- * stream: CUDA stream handle (pass NULL/0 for default stream). */
+/**
+ * @brief Launch a geodesic tracing kernel into the given linear framebuffer.
+ *
+ * Copies all fields from @p params into __constant__ memory, then dispatches
+ * the selected kernel variant.
+ *
+ * @param framebuffer Device pointer to float4[width*height] (linear memory).
+ * @param params      Launch parameters; copied to __constant__ memory before launch.
+ * @param variant     BH_KernelVariant to run; auto-selected when negative.
+ * @param stream      CUDA stream handle (cast from cudaStream_t); NULL for default stream.
+ * @return 0 on success, non-zero if constant upload or kernel launch fails.
+ */
 int bh_launch_geodesic_kernel(void* framebuffer,
                               const struct BH_LaunchParams* params,
                               int variant,
                               void* stream);
 
-/* Query the recommended kernel variant for the current device.
- * Returns a BH_KernelVariant value. */
+/**
+ * @brief Query the recommended kernel variant for the current CUDA device.
+ *
+ * Inspects SM version and per-SM register budget to pick the highest variant
+ * that achieves at least 2 concurrent blocks per SM.
+ *
+ * @return BH_KernelVariant value best suited for the active device.
+ */
 int bh_select_kernel_variant(void);
 
-/* Upload LUT CUDA texture object handles to __constant__ memory.
- * emissivity, redshift, spectral: cudaTextureObject_t values cast to
- * unsigned long long (use 0 for unregistered slots).
- * Called by the backend after bh_cuda_register_lut and before each frame. */
+/**
+ * @brief Upload LUT CUDA texture object handles to __constant__ memory.
+ *
+ * Must be called after bhCudaRegisterLut() and before each frame render so
+ * device kernels see up-to-date texture object handles.
+ *
+ * @param emissivity cudaTextureObject_t for the emissivity LUT (0 = not registered).
+ * @param redshift   cudaTextureObject_t for the redshift LUT (0 = not registered).
+ * @param spectral   cudaTextureObject_t for the spectral LUT (0 = not registered).
+ */
 void bh_upload_lut_textures(unsigned long long emissivity,
                              unsigned long long redshift,
                              unsigned long long spectral);

@@ -1,10 +1,10 @@
-/*
- * lut_manager.cu
- * Implementation of GL-to-CUDA LUT texture object management.
+/**
+ * @file lut_manager.cu
+ * @brief Implementation of GL-to-CUDA LUT texture object management.
  *
- * Registers GL textures as CUDA graphics resources, maps them to get
- * cudaArray_t, and creates cudaTextureObject_t for kernel sampling.
- * Texture objects are cached and only recreated when the LUT changes.
+ * Registers GL textures as CUDA graphics resources, maps them to obtain a
+ * cudaArray_t, and creates a cudaTextureObject_t for kernel sampling.
+ * Texture objects are cached per slot and only recreated when the LUT changes.
  */
 
 #include <cstdio>

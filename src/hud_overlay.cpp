@@ -1,3 +1,7 @@
+/**
+ * @file hud_overlay.cpp
+ * @brief Implementation of HudOverlay -- stb_easy_font-based text overlay renderer.
+ */
 #include "hud_overlay.h"
 
 #include <algorithm>
@@ -26,6 +30,7 @@ using namespace gl;
 
 namespace {
 
+/** @brief Raw vertex layout produced by stb_easy_font_print. */
 struct EasyFontVertex {
   float x;
   float y;
@@ -33,6 +38,11 @@ struct EasyFontVertex {
   [[maybe_unused]] unsigned char color[4];
 };
 
+/**
+ * @brief Return the pixel height of one text line at the given scale.
+ * @param scale Glyph scale multiplier.
+ * @return Line height in pixels.
+ */
 float lineHeight(float scale) {
   const char *sample = "Ag";
   // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
@@ -42,6 +52,20 @@ float lineHeight(float scale) {
   // NOLINTEND(cppcoreguidelines-pro-type-const-cast)
 }
 
+/**
+ * @brief Rasterize a text string into the interleaved float vertex buffer.
+ *
+ * Converts stb_easy_font quads into two triangles each (x,y,r,g,b,a layout)
+ * and appends them to @p out.
+ *
+ * @param out     Destination vertex buffer (x,y,r,g,b,a per vertex, appended).
+ * @param scratch Reusable scratch buffer for stb_easy_font output (resized internally).
+ * @param x       Left origin in pixels.
+ * @param y       Top origin in pixels.
+ * @param scale   Glyph scale multiplier.
+ * @param text    String to rasterize (ASCII only).
+ * @param color   RGBA color in [0,1] range.
+ */
 void appendText(std::vector<float> &out, std::vector<unsigned char> &scratch, float x, float y,
                 float scale, const std::string &text, const glm::vec4 &color) {
   if (text.empty()) {

@@ -1,3 +1,12 @@
+/**
+ * @file drawid_probe.vert
+ * @brief Debug vertex shader that positions two side-by-side draw call quads.
+ *
+ * Separates draw 0 and draw 1 into left/right halves of the viewport using
+ * gl_DrawID, and forwards the draw ID to the fragment stage for color coding.
+ * Inputs: position (vec3, location 0).
+ * Outputs: gl_Position, drawId (flat int).
+ */
 #version 460 core
 
 layout(location = 0) in vec3 position;

@@ -135,7 +135,11 @@ struct LutDomain {
   float x_max;
   int n_entries;
 
-  /// Compute texture coordinate from physical value
+  /**
+   * @brief Map a physical value to a texture coordinate in [0, 1].
+   * @param x Physical value; clamped to [x_min, x_max].
+   * @return Log-mapped texture coordinate.
+   */
   [[nodiscard]] float to_texcoord(float x) const {
     if (x <= x_min) return 0.0f;
     if (x >= x_max) return 1.0f;
@@ -143,14 +147,18 @@ struct LutDomain {
     return std::log(x / x_min) / log_ratio;
   }
 
-  /// Compute physical value from texture coordinate
+  /**
+   * @brief Recover the physical value from a texture coordinate.
+   * @param u Texture coordinate in [0, 1].
+   * @return Physical value on the log scale.
+   */
   [[nodiscard]] float from_texcoord(float u) const {
     float log_ratio = std::log(x_max / x_min);
     return x_min * std::exp(u * log_ratio);
   }
 };
 
-/// Standard domain for synchrotron G(x) LUT
+/** @brief Standard log-spaced domain for the synchrotron G(x) emission LUT. */
 inline constexpr LutDomain SYNCH_G_DOMAIN = {0.001f, 30.0f, 256};
 
 } // namespace gpu

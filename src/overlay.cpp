@@ -1,3 +1,8 @@
+/**
+ * @file overlay.cpp
+ * @brief Implementation of OverlayCurve2D::loadFromTsv().
+ */
+
 #include "overlay.h"
 
 #include <algorithm>

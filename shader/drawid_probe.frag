@@ -1,3 +1,12 @@
+/**
+ * @file drawid_probe.frag
+ * @brief Debug fragment shader that colors geometry by gl_DrawID.
+ *
+ * Assigns a distinct semi-transparent color per draw call (blue for draw 0,
+ * orange for draw 1+) to help diagnose multi-draw-indirect batching.
+ * Inputs: drawId (flat int from vertex shader).
+ * Outputs: fragColor (color coded by draw call index, alpha = 0.35).
+ */
 #version 460 core
 
 layout(location = 0) flat in int drawId;

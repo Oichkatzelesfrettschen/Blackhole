@@ -108,6 +108,10 @@ using unexpected = std::unexpected<E>;
 #include <variant>
 namespace blackhole {
 
+/**
+ * @brief Fallback implementation of std::unexpected<E> for pre-C++23 builds.
+ * @tparam E Error type.
+ */
 template <typename E>
 class unexpected {
 public:
@@ -120,6 +124,11 @@ private:
   E error_;
 };
 
+/**
+ * @brief Fallback implementation of std::expected<T, E> for pre-C++23 builds.
+ * @tparam T Value type returned on success.
+ * @tparam E Error type returned on failure.
+ */
 template <typename T, typename E>
 class expected {
 public:
@@ -169,6 +178,11 @@ using span = std::span<T, Extent>;
 namespace blackhole {
 inline constexpr std::size_t dynamic_extent = static_cast<std::size_t>(-1);
 
+/**
+ * @brief Fallback implementation of std::span<T, Extent> for pre-C++20 builds.
+ * @tparam T       Element type.
+ * @tparam Extent  Static extent, or dynamic_extent for a runtime-sized view.
+ */
 template <typename T, std::size_t Extent = dynamic_extent>
 class span {
 public:
@@ -212,16 +226,23 @@ private:
 
 namespace blackhole {
 
+/** @brief Satisfied by any arithmetic type (integral or floating-point). */
 template <typename T>
 concept Numeric = std::is_arithmetic_v<T>;
 
+/** @brief Satisfied by floating-point types only. */
 template <typename T>
 concept FloatingPoint = std::floating_point<T>;
 
+/** @brief Satisfied by integral types only. */
 template <typename T>
 concept Integral = std::integral<T>;
 
-// Physics-specific concepts
+/**
+ * @brief Satisfied by types that support the four arithmetic operations with double scaling.
+ *
+ * Used to constrain physics quantity types that must compose linearly.
+ */
 template <typename T>
 concept PhysicalQuantity = requires(T a, T b) {
   { a + b } -> std::same_as<T>;
@@ -347,6 +368,11 @@ inline constexpr double RAD_TO_DEG = 180.0 / PI;
 // Helper for returning multiple values with named fields
 namespace blackhole {
 
+/**
+ * @brief Two-element aggregate with structured binding support.
+ * @tparam T1 Type of the first element.
+ * @tparam T2 Type of the second element.
+ */
 template <typename T1, typename T2>
 struct Pair {
   T1 first;
@@ -370,6 +396,12 @@ struct Pair {
   }
 };
 
+/**
+ * @brief Three-element aggregate with structured binding support.
+ * @tparam T1 Type of the first element.
+ * @tparam T2 Type of the second element.
+ * @tparam T3 Type of the third element.
+ */
 template <typename T1, typename T2, typename T3>
 struct Triple {
   T1 first;

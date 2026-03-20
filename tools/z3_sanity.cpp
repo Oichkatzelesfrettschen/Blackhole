@@ -1,3 +1,18 @@
+/**
+ * @file z3_sanity.cpp
+ * @brief Sanity-check the Z3 SMT solver installation and verify basic relativistic constraints.
+ *
+ * Runs two probes:
+ *   1. Integer satisfiability: finds positive integers x, y with x^2 + y^2 = 25,
+ *      confirming that Z3 can solve Diophantine constraints.
+ *   2. Schwarzschild redshift unsatisfiability: asserts that the gravitational
+ *      redshift factor (1 - r_s/r) can be <= 0 for r > r_s, expecting UNSAT.
+ *      This verifies that the Schwarzschild metric is well-posed outside the
+ *      event horizon.
+ *
+ * Returns 0 if both checks pass, 1 on any failure.
+ */
+
 #include <z3++.h>
 
 #include <z3++.h>

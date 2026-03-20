@@ -1,3 +1,14 @@
+/**
+ * @file passthrough_drawid.vert
+ * @brief Vertex shader for indirect multi-draw quads with per-instance offset and scale.
+ *
+ * Reads per-instance transform (offsetScale) from the DrawInstances SSBO using
+ * gl_BaseInstance, applies 2D scale + offset to position, and forwards the
+ * draw ID and instance ID to the fragment stage.
+ * Key inputs: DrawInstances SSBO (binding 3).
+ * Inputs: position (vec3, location 0).
+ * Outputs: gl_Position, uv (vec2), drawId (uint, flat), instanceId (uint, flat).
+ */
 #version 460 core
 
 layout(location = 0) in vec3 position;

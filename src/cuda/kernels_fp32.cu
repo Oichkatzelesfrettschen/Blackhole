@@ -1,12 +1,12 @@
-/*
- * kernels_fp32.cu
- * FP32 baseline and FP32 coarsened geodesic tracing kernels.
+/**
+ * @file kernels_fp32.cu
+ * @brief FP32 baseline and FP32 coarsened geodesic tracing kernels.
  *
- * Baseline: 1 thread = 1 pixel = 1 ray. 16x16 thread blocks.
- * Coarsened: 1 thread = 2 pixels = 2 rays, interleaved per-step ILP.
+ * - Baseline: 1 thread = 1 pixel = 1 ray, 16x16 thread blocks.
+ * - Coarsened: 1 thread = 2 pixels = 2 rays, interleaved per-step ILP.
  *
  * Output: linear float4* dFramebuffer (perfectly coalesced writes).
- * Uses __constant__ memory for params (following YSU-engine kernels_fp32_soa_cs.cu).
+ * Parameters are read from __constant__ memory populated by kernel_launch.cu.
  */
 
 #include <driver_types.h>     /* cudaStream_t */
@@ -20,6 +20,15 @@
  * FP32 Baseline Kernel
  * ======================================================================== */
 
+/**
+ * @brief FP32 baseline geodesic tracing kernel (1 ray per thread).
+ *
+ * Each thread maps to one framebuffer pixel. Reads all scene parameters from
+ * __constant__ memory, traces a Kerr or Schwarzschild geodesic, shades the
+ * hit result, and writes a float4 RGBA value to the linear framebuffer.
+ *
+ * @param dFramebuffer Device pointer to float4[d_width * d_height]; output RGBA pixels.
+ */
 __launch_bounds__(256, 4)
     // NOLINTNEXTLINE(misc-use-internal-linkage) -- __global__ cannot be static or in anonymous
     // namespace
@@ -36,6 +45,24 @@ __launch_bounds__(256, 4)
   HitResult const hit = d_trace_geodesic(cam, dir);
   float4 const color = d_shade_hit(hit, cam);
 
+  /* Wiregrid BL-coord overlay (task A4): convert Cartesian hit->spherical BL */
+  if (d_wiregrid_enabled != 0) {
+    float3 const hp = hit.hit_point;
+    float const r_bl = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
+    if (r_bl > 1e-5f) {
+      float const theta_bl = acosf(fmaxf(-1.0f, fminf(hp.z / r_bl, 1.0f)));
+      float const phi_bl   = atan2f(hp.y, hp.x);
+      float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
+                                            d_spin, d_wiregrid_show_ergo != 0.0f,
+                                            d_wiregrid_grid_scale);
+      /* Blend: color = mix(color, wg.rgb, wg.a) */
+      float const inv_a = 1.0f - wg.w;
+      color = make_float4(color.x*inv_a + wg.x*wg.w,
+                          color.y*inv_a + wg.y*wg.w,
+                          color.z*inv_a + wg.z*wg.w,
+                          color.w);
+    }
+  }
   /* Perfectly coalesced linear write: adjacent threads write adjacent float4s */
   dFramebuffer[(py * d_width) + px] = color;
 }
@@ -57,6 +84,17 @@ __launch_bounds__(256, 4)
  * within the same basic block.
  * ======================================================================== */
 
+/**
+ * @brief FP32 coarsened geodesic tracing kernel (2 rays per thread, interleaved ILP).
+ *
+ * Thread k processes linearized pixel indices 2k and 2k+1. Both geodesic
+ * chains advance one integration step per loop iteration, exposing independent
+ * FMA instruction chains to the Ada warp dual-issue scheduler. The explicit
+ * loop replaces two sequential d_trace_geodesic() calls to make both chains
+ * visible within the same basic block.
+ *
+ * @param dFramebuffer Device pointer to float4[d_width * d_height]; output RGBA pixels.
+ */
 __launch_bounds__(256, 4)
     // NOLINTNEXTLINE(misc-use-internal-linkage,readability-function-cognitive-complexity)
     __global__ void geodesicTraceFp32Coarsened(float4 *__restrict__ dFramebuffer) {
@@ -268,9 +306,23 @@ __launch_bounds__(256, 4)
     }
   }
 
-  dFramebuffer[idx0] = d_shade_hit(hit0, cam);
+  /* Apply wiregrid overlay and write */
+  auto const applyWG = [](float4 c, HitResult const& h) -> float4 {
+    if (d_wiregrid_enabled == 0) return c;
+    float3 hp = h.hit_point;
+    float r = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
+    if (r < 1e-5f) return c;
+    float theta = acosf(fmaxf(-1.0f, fminf(hp.z / r, 1.0f)));
+    float phi   = atan2f(hp.y, hp.x);
+    float4 wg = d_wiregrid_overlay(r, theta, phi, d_spin,
+                                   d_wiregrid_show_ergo != 0.0f, d_wiregrid_grid_scale);
+    float inv_a = 1.0f - wg.w;
+    return make_float4(c.x*inv_a + wg.x*wg.w, c.y*inv_a + wg.y*wg.w,
+                       c.z*inv_a + wg.z*wg.w, c.w);
+  };
+  dFramebuffer[idx0] = applyWG(d_shade_hit(hit0, cam), hit0);
   if (hasRay1) {
-    dFramebuffer[idx1] = d_shade_hit(hit1, cam);
+    dFramebuffer[idx1] = applyWG(d_shade_hit(hit1, cam), hit1);
   }
 }
 
@@ -278,6 +330,14 @@ __launch_bounds__(256, 4)
  * Host wrapper to launch FP32 kernels
  * ======================================================================== */
 
+/**
+ * @brief Launch the FP32 baseline kernel (1 ray/thread, 16x16 blocks).
+ *
+ * @param dFramebuffer Device framebuffer pointer (float4[width*height]).
+ * @param width        Framebuffer width in pixels.
+ * @param height       Framebuffer height in pixels.
+ * @param stream       CUDA stream to launch on.
+ */
 extern "C" void launchFp32Baseline(float4 *dFramebuffer, int width, int height,
                                    cudaStream_t stream) {
   dim3 const block(16, 16);
@@ -286,6 +346,14 @@ extern "C" void launchFp32Baseline(float4 *dFramebuffer, int width, int height,
   geodesicTraceFp32<<<grid, block, 0, stream>>>(dFramebuffer);
 }
 
+/**
+ * @brief Launch the FP32 coarsened kernel (2 rays/thread, 1D blocks of 256).
+ *
+ * @param dFramebuffer Device framebuffer pointer (float4[width*height]).
+ * @param width        Framebuffer width in pixels.
+ * @param height       Framebuffer height in pixels.
+ * @param stream       CUDA stream to launch on.
+ */
 extern "C" void launchFp32Coarsened(float4 *dFramebuffer, int width, int height,
                                     cudaStream_t stream) {
   int const totalPixels = width * height;

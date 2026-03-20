@@ -1,11 +1,11 @@
 /**
- * physics_test.cpp
- * Validation tests for physics library calculations.
+ * @file physics_test.cpp
+ * @brief Validation tests for the physics library.
  *
- * Compares cleanroom C++ implementation against known reference values.
+ * Compares the cleanroom C++ implementation against known reference values.
  * Reference: OpenUniverse compact domain physics formulas.
  *
- * To build and run:
+ * To build and run standalone:
  *   g++ -std=c++23 -I../.. physics_test.cpp schwarzschild.cpp geodesics.cpp cosmology.cpp -o physics_test && ./physics_test
  */
 
@@ -33,6 +33,11 @@ namespace {
 
 constexpr double TOLERANCE = 1e-10;
 
+/**
+ * @brief Return true when a and b agree to within relative tolerance tol.
+ *
+ * Falls back to absolute tolerance when b is near zero.
+ */
 bool approxEqual(double a, double b, double tol = TOLERANCE) {
   if (std::abs(b) < 1e-30) {
     return std::abs(a) < tol;
@@ -40,6 +45,7 @@ bool approxEqual(double a, double b, double tol = TOLERANCE) {
   return std::abs(a - b) / std::abs(b) < tol;
 }
 
+/** @brief Result record for a single named test comparison. */
 struct TestResult {
   std::string name;
   double expected;
@@ -47,6 +53,10 @@ struct TestResult {
   bool passed;
 };
 
+/**
+ * @brief Print a TestResult to stdout, including relative error on failure.
+ * @param r Test result to print
+ */
 void printResult(const TestResult &r) {
   std::cout << (r.passed ? "[PASS]" : "[FAIL]") << " " << r.name << "\n"
             << "  Expected: " << std::scientific << std::setprecision(10)
@@ -59,6 +69,12 @@ void printResult(const TestResult &r) {
   std::cout << "\n";
 }
 
+/**
+ * @brief Read an entire text file into a string.
+ * @param path  Path to file
+ * @param out   Output string (set on success)
+ * @return true if the file was read and non-empty, false otherwise
+ */
 bool readTextFile(const std::string &path, std::string &out) {
   std::ifstream file(path);
   if (!file.is_open()) {
@@ -70,6 +86,16 @@ bool readTextFile(const std::string &path, std::string &out) {
   return !out.empty();
 }
 
+/**
+ * @brief Extract a numeric value from a JSON-formatted string by key.
+ *
+ * Minimal single-key parser used to read reference values from JSON fixtures.
+ *
+ * @param text  JSON text to search
+ * @param key   Key name (without quotes)
+ * @param out   Parsed double value (set on success)
+ * @return true if the key was found and parsed, false otherwise
+ */
 bool parseJsonNumber(const std::string &text, const std::string &key, double &out) {
   std::string const needle = "\"" + key + "\"";
   std::size_t pos = text.find(needle);

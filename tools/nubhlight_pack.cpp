@@ -1,3 +1,21 @@
+/**
+ * @file nubhlight_pack.cpp
+ * @brief Pack nubhlight HDF5 datasets into RGBA32F texture blobs for GPU upload.
+ *
+ * Reads a 3-D or 4-D floating-point dataset from a nubhlight HDF5 dump file,
+ * selects up to four channels (by field name or index), reorders them into a
+ * tightly-packed RGBA32F binary blob, and writes a companion JSON metadata file.
+ * The binary blob can be uploaded directly to a GL_RGBA32F 3-D texture via the
+ * GrmhdPBOUploader pipeline.
+ *
+ * Layout detection (channels-first vs channels-last) is performed automatically
+ * from the vnams attribute when present, and can be overridden with --layout.
+ *
+ * Usage:
+ *   nubhlight_pack -i dump.h5 -d /dump/P -o out.json [--bin out.bin]
+ *                  [--fields rho,u,v1,v2] [--layout auto|channels-first|channels-last]
+ */
+
 #include <CLI/CLI.hpp>
 #include <highfive/H5File.hpp>
 
@@ -15,12 +33,14 @@
 #include <string>
 #include <vector>
 
+/** @brief Describes how a single RGBA output channel is sourced from the dataset. */
 struct ChannelSelection {
-  std::string name;
-  std::size_t index;
-  double fill = 0.0;
+  std::string name;   /**< Human-readable channel label (vnams entry or "chanN"). */
+  std::size_t index;  /**< Source channel index; sentinel max() means use fill. */
+  double fill = 0.0;  /**< Constant value written when no source channel is mapped. */
 };
 
+/** @brief All provenance and structural information written to the companion JSON. */
 struct PackMetadata {
   std::string input;
   std::string dataset;
@@ -39,6 +59,12 @@ struct PackMetadata {
   std::optional<std::size_t> channelDimIndex;
 };
 
+/**
+ * @brief Escape a string for safe embedding in a JSON value.
+ *
+ * @param text Raw string that may contain backslashes, quotes, or control chars.
+ * @return JSON-safe escaped string (without surrounding quotes).
+ */
 static std::string jsonEscape(const std::string &text) {
   std::string out;
   out.reserve(text.size() + 8);
@@ -67,12 +93,24 @@ static std::string jsonEscape(const std::string &text) {
   return out;
 }
 
+/**
+ * @brief Convert a string to lowercase in-place.
+ *
+ * @param value String to convert.
+ * @return Lowercase copy of @p value.
+ */
 static std::string lower(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
 }
 
+/**
+ * @brief Read the vnams string attribute from an HDF5 dataset if present.
+ *
+ * @param dataset Dataset to query.
+ * @return Vector of variable name strings, or empty if the attribute is absent.
+ */
 static std::vector<std::string> readVnams(const HighFive::DataSet &dataset) {
   std::vector<std::string> vnams;
   if (dataset.hasAttribute("vnams")) {
@@ -84,6 +122,11 @@ static std::vector<std::string> readVnams(const HighFive::DataSet &dataset) {
   return vnams;
 }
 
+/**
+ * @brief Create all parent directories for a given file path if they do not exist.
+ *
+ * @param path Target file path whose parent directories should be created.
+ */
 static void ensureParentDir(const std::string &path) {
   std::filesystem::path outputPath(path);
   auto parent = outputPath.parent_path();
@@ -92,6 +135,14 @@ static void ensureParentDir(const std::string &path) {
   }
 }
 
+/**
+ * @brief Compute an FNV-1a 64-bit checksum over a packed float buffer.
+ *
+ * Used for integrity verification of the binary texture blob.
+ *
+ * @param data Packed float values to hash.
+ * @return 16-character lowercase hex string of the 64-bit hash.
+ */
 static std::string checksumFnv1a64(const std::vector<float> &data) {
   constexpr std::uint64_t kOffset = 14695981039346656037ull;
   constexpr std::uint64_t kPrime = 1099511628211ull;
@@ -107,6 +158,16 @@ static std::string checksumFnv1a64(const std::vector<float> &data) {
   return out.str();
 }
 
+/**
+ * @brief Serialize pack metadata to a JSON stream.
+ *
+ * Writes schema_version, source, layout, channel names, per-channel min/max,
+ * checksum, and grid dimensions so the GPU loader can reconstruct the texture
+ * without re-reading the original HDF5 file.
+ *
+ * @param out  Destination stream (file or stdout).
+ * @param meta Populated PackMetadata describing the packed blob.
+ */
 static void writeMetadata(std::ostream &out, const PackMetadata &meta) {
   out << "{\n";
   out << "  \"schema_version\": 1,\n";
@@ -444,17 +505,27 @@ int main(int argc, char **argv) {
 
 #include <glob.h>
 
+/**
+ * @brief Metadata for a multi-dump time-series binary, used by the Phase 6.2
+ *        GRMHD streaming path (not yet fully implemented).
+ */
 struct MultiDumpMetadata {
-  std::vector<std::string> frameFiles;
-  std::vector<double> frameTimes;
-  std::vector<size_t> frameOffsets;  // Byte offsets in binary file
-  size_t frameCount;
-  size_t frameSize;  // Bytes per frame
-  PackMetadata singleFrameMetadata;  // Template metadata for each frame
+  std::vector<std::string> frameFiles;  /**< Source HDF5 path for each frame. */
+  std::vector<double> frameTimes;       /**< Simulation time of each frame. */
+  std::vector<size_t> frameOffsets;     /**< Byte offset of each frame within the binary blob. */
+  size_t frameCount;                    /**< Total number of frames. */
+  size_t frameSize;                     /**< Size in bytes of one RGBA32F frame. */
+  PackMetadata singleFrameMetadata;     /**< Template metadata describing per-frame layout. */
 };
 
 // TODO: Phase 6.2 - Multi-dump GRMHD streaming support
 // These functions are preserved for future multi-frame GRMHD streaming
+/**
+ * @brief Expand a shell glob pattern to a sorted list of matching file paths.
+ *
+ * @param pattern Shell glob pattern (supports ~ expansion via GLOB_TILDE).
+ * @return Lexicographically sorted vector of matching file paths.
+ */
 [[maybe_unused]] static std::vector<std::string> globFiles(const std::string& pattern) {
   std::vector<std::string> files;
   glob_t globResult;
@@ -471,6 +542,16 @@ struct MultiDumpMetadata {
   return files;
 }
 
+/**
+ * @brief Serialize multi-dump time-series metadata to a JSON stream.
+ *
+ * Writes frame count, per-frame file paths, simulation times, byte offsets,
+ * and a shared frame-layout section so the streaming loader can seek to any
+ * frame without scanning the entire binary file.
+ *
+ * @param out  Destination stream.
+ * @param meta Populated MultiDumpMetadata for the time-series.
+ */
 [[maybe_unused]] static void writeMultiDumpMetadata(std::ostream& out, const MultiDumpMetadata& meta) {
   out << "{\n";
   out << "  \"version\": \"1.0-multi\",\n";

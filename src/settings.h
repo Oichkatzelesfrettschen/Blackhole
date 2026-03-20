@@ -1,9 +1,19 @@
+/**
+ * @file settings.h
+ * @brief Persistent user settings and singleton manager for the black hole renderer.
+ */
+
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
 #include <string>
 
-// User-configurable settings (core simulation only)
+/**
+ * @brief User-configurable settings for the core simulation and renderer.
+ *
+ * All fields correspond to JSON keys written and read by SettingsManager.
+ * Defaults represent a sensible out-of-the-box experience at 1920x1080.
+ */
 struct Settings {
   // === DISPLAY ===
   int windowWidth = 1920;
@@ -102,21 +112,38 @@ struct Settings {
   float adiskSpeed = 0.5f;
 };
 
+/**
+ * @brief Singleton that owns the active Settings instance and handles JSON persistence.
+ *
+ * Use SettingsManager::instance() to obtain the global object.  Call load() once
+ * at startup and save() before exit (or whenever a setting changes) to persist
+ * user preferences across sessions.
+ */
 class SettingsManager {
 public:
+  /** @brief Returns the process-wide singleton instance. */
   static SettingsManager &instance();
 
-  // Load settings from file (returns false if file doesn't exist)
+  /**
+   * @brief Loads settings from a JSON file, leaving defaults for missing keys.
+   * @param filepath Path to the JSON settings file.
+   * @return true on success; false if the file could not be opened.
+   */
   bool load(const std::string &filepath = "settings.json");
 
-  // Save settings to file
+  /**
+   * @brief Serialises the current settings to a JSON file.
+   * @param filepath Destination path for the JSON settings file.
+   * @return true on success; false if the file could not be created.
+   */
   bool save(const std::string &filepath = "settings.json");
 
-  // Reset to defaults
+  /** @brief Resets all settings to their compiled-in defaults. */
   void resetToDefaults();
 
-  // Access settings
+  /** @brief Returns a mutable reference to the active settings. */
   Settings &get() { return settings_; }
+  /** @brief Returns a read-only reference to the active settings. */
   [[nodiscard]] const Settings &get() const { return settings_; }
 
   SettingsManager(const SettingsManager &) = delete;

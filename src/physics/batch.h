@@ -1,3 +1,12 @@
+/**
+ * @file batch.h
+ * @brief Batch ray state and SIMD-accelerated geodesic integration utilities.
+ *
+ * Provides Structure-of-Arrays ray batches for vectorized geodesic tracing,
+ * wrappers around Rocq-extracted verified physics kernels, and xsimd/SLEEF
+ * Christoffel acceleration kernels for the render hot-path.
+ */
+
 #ifndef PHYSICS_BATCH_H
 #define PHYSICS_BATCH_H
 

@@ -336,6 +336,29 @@ sudo apt-get install libgl1-mesa-dev
 sudo dnf install mesa-libGL-devel
 ```
 
+## API Documentation (Doxygen)
+
+Generate HTML API docs from source comments:
+
+```bash
+# Install tools (Arch)
+sudo pacman -S doxygen graphviz
+
+# Or on Ubuntu/Debian
+# sudo apt install doxygen graphviz
+
+# Configure with Doxygen enabled
+cmake --preset release -DENABLE_DOXYGEN=ON
+
+# Build documentation
+cmake --build --preset release --target doxygen
+```
+
+Output: `build/Release/docs/api/html/index.html`
+
+The Doxygen target is independent of the main build -- it only processes source
+comments and generates HTML. Graphviz (`dot`) is optional but enables call graphs.
+
 ## IDE Support
 
 **VS Code**: Install CMake Tools, select preset, build (F7).

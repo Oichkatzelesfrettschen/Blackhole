@@ -1,3 +1,8 @@
+/**
+ * @file settings.cpp
+ * @brief Implementation of SettingsManager: JSON load/save and default reset.
+ */
+
 #include "settings.h"
 
 #include <cstdio>

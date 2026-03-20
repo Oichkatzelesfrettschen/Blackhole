@@ -1,3 +1,8 @@
+/**
+ * @file kerr.cpp
+ * @brief Implementation of Kerr geodesic integration (Mino-time RK4).
+ */
+
 #include "physics/kerr.h"
 #include "physics/constants.h"
 
@@ -7,6 +12,12 @@
 namespace physics {
 
 namespace {
+
+/**
+ * @brief First-order derivatives of Kerr geodesic coordinates w.r.t. Mino time.
+ *
+ * Carries dr/dlambda, dtheta/dlambda, dphi/dlambda, dt/dlambda for one RK4 stage.
+ */
 struct KerrMinoDerivs {
   double dr;
   double dtheta;
@@ -14,6 +25,18 @@ struct KerrMinoDerivs {
   double dt;
 };
 
+/**
+ * @brief Evaluate Kerr Mino-time derivatives at a given geodesic state.
+ *
+ * Computes the right-hand side of the Kerr geodesic ODEs using the effective
+ * potentials R(r) and Theta(theta) with the Carter constant Q.
+ *
+ * @param state Current geodesic state (r, theta, phi, t, sign flags)
+ * @param mass  Black hole mass [g]
+ * @param a     Spin parameter [cm]
+ * @param c     Conserved quantities (E, L_z, Q)
+ * @return Mino-time derivatives (dr, dtheta, dphi, dt)
+ */
 KerrMinoDerivs kerrMinoDerivatives(const KerrGeodesicState& state, double mass, double a,
                                    const KerrGeodesicConsts& c) {
   const double mGeom = G * mass / C2;

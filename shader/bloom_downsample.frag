@@ -1,3 +1,13 @@
+/**
+ * @file bloom_downsample.frag
+ * @brief Bloom downsample pass: 2x box-filter downsample for the bloom pyramid.
+ *
+ * Samples four half-texel-offset corners of texture0 and averages them,
+ * building one level of the bloom mip pyramid.
+ * Key uniforms: texture0 (input mip level), resolution (of the input texture).
+ * Inputs: uv (interpolated texture coordinates).
+ * Outputs: fragColor (quarter-resolution average).
+ */
 #version 460 core
 
 layout(location = 0) in vec2 uv;

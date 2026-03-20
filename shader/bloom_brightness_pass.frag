@@ -1,3 +1,14 @@
+/**
+ * @file bloom_brightness_pass.frag
+ * @brief Bloom pre-pass: extracts pixels above a luminance threshold.
+ *
+ * Samples the scene color and zeroes out any pixel whose luminance is below
+ * brightPassThreshold (1.0), leaving only the brightest highlights for the
+ * subsequent blur passes.
+ * Key uniforms: texture0 (scene color), resolution.
+ * Inputs: gl_FragCoord.
+ * Outputs: fragColor (bright regions only, black elsewhere).
+ */
 #version 460 core
 
 out vec4 fragColor;

@@ -1,3 +1,12 @@
+/**
+ * @file simple.vert
+ * @brief Minimal full-screen-quad vertex shader that emits UV coordinates.
+ *
+ * Passes clip-space position through unchanged and derives UV coordinates
+ * from the XY position range [-1, 1] -> [0, 1].
+ * Inputs: position (vec3, location 0, expected range [-1,1]).
+ * Outputs: gl_Position (clip space), uv (vec2, location 0).
+ */
 #version 460 core
 
 layout(location = 0) in vec3 position;

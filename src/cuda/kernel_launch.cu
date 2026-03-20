@@ -1,7 +1,7 @@
-/*
- * kernel_launch.cu
- * Host dispatch: copies LaunchParams to __constant__ memory and launches
- * the selected kernel variant.
+/**
+ * @file kernel_launch.cu
+ * @brief Host dispatch: copies LaunchParams to __constant__ memory and launches
+ *        the selected kernel variant.
  */
 
 #include <cstdio>
@@ -16,9 +16,12 @@
 
 #include "device_physics.cuh"
 
-/* __constant__ memory: declared extern in device_physics.cuh, defined here.
- * Only ONE translation unit may define each __constant__ symbol under
- * separable compilation -- nvlink enforces this at link time. */
+/**
+ * @brief __constant__ memory definitions for all per-frame physics parameters.
+ *
+ * Declared extern in device_physics.cuh; defined exactly once here.
+ * Under separable compilation nvlink enforces single-definition per symbol.
+ */
 __constant__ float d_rs;
 __constant__ float d_spin;
 __constant__ float d_isco;
@@ -48,6 +51,9 @@ __constant__ unsigned long long d_tex_spectral;
 __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
 __constant__ int d_background_enabled;
+__constant__ int   d_wiregrid_enabled;     /**< @brief BL-coord wiregrid overlay flag. */
+__constant__ float d_wiregrid_show_ergo;   /**< @brief Show ergosphere boundary+glow. */
+__constant__ float d_wiregrid_grid_scale;  /**< @brief Grid density multiplier. */
 
 /* External launch wrappers from each kernel file */
 extern "C" void launchFp32Baseline(float4 *fb, int w, int h, cudaStream_t s);
@@ -69,9 +75,16 @@ namespace {
     }                                                                                              \
   } while (0) /* NOLINT(cppcoreguidelines-avoid-do-while) */
 
-/* Upload LaunchParams to __constant__ memory defined above.
- * WHY: Flat scalar upload avoids struct-layout ABI mismatch between host C++23
- * and device C++17. Each COPY_CONST is one cudaMemcpyToSymbol call (~1 us). */
+/**
+ * @brief Upload all fields of BH_LaunchParams to __constant__ memory.
+ *
+ * Each field is uploaded as a separate scalar via cudaMemcpyToSymbol to avoid
+ * struct-layout ABI mismatch between host C++23 and device C++17.
+ * Each COPY_CONST call costs approximately 1 us on a typical system.
+ *
+ * @param p Pointer to the launch parameters to upload.
+ * @return 0 on success, -1 if any cudaMemcpyToSymbol call fails.
+ */
 // NOLINT(readability-function-cognitive-complexity) -- 23 scalar uploads, each identical
 int uploadConstants(
     const struct BH_LaunchParams *p) { // NOLINT(readability-function-cognitive-complexity)
@@ -98,6 +111,9 @@ int uploadConstants(
   COPY_CONST(d_doppler_strength, p->doppler_strength);
   COPY_CONST(d_background_intensity, p->background_intensity);
   COPY_CONST(d_background_enabled, p->background_enabled);
+  COPY_CONST(d_wiregrid_enabled, p->wiregrid_enabled);
+  COPY_CONST(d_wiregrid_show_ergo, p->wiregrid_show_ergo);
+  COPY_CONST(d_wiregrid_grid_scale, p->wiregrid_grid_scale);
 
   /* Array copies */
   cudaError_t const errPos = cudaMemcpyToSymbol(d_cam_pos, p->cam_pos, sizeof(p->cam_pos));

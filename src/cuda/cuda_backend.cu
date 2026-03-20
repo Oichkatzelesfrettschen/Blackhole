@@ -1,6 +1,6 @@
-/*
- * cuda_backend.cu
- * High-level CUDA backend: wraps interop + LUT manager + kernel dispatch.
+/**
+ * @file cuda_backend.cu
+ * @brief High-level CUDA backend: wraps interop + LUT manager + kernel dispatch.
  *
  * Provides the C API declared in cuda_backend.h for use by main.cpp.
  */
@@ -13,8 +13,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* Upload the three physics LUT texture objects to __constant__ memory.
- * Slots not yet registered produce tex_object == 0; device code guards on 0. */
+/**
+ * @brief Upload the three physics LUT texture objects to __constant__ memory.
+ *
+ * Slots not yet registered produce tex_object == 0; device code guards on 0.
+ *
+ * @param luts Reference to the LUT manager holding registered texture objects.
+ */
 static void sync_lut_constants(const LutManager& luts) {
     bh_upload_lut_textures(
         (unsigned long long)lutGetTex(luts, BhLutEmissivity),
@@ -23,11 +28,17 @@ static void sync_lut_constants(const LutManager& luts) {
     );
 }
 
+/**
+ * @brief Internal implementation of the opaque BH_CudaBackend handle.
+ *
+ * Aggregates all per-session CUDA state: GL interop context, LUT texture
+ * manager, the selected kernel variant index, and the dedicated compute stream.
+ */
 struct BhCudaBackend {
-    CudaGLInterop interop;
-    LutManager luts;
-    int active_variant;
-    cudaStream_t compute_stream;
+    CudaGLInterop interop;       /**< @brief GL-CUDA interop context and framebuffer. */
+    LutManager luts;             /**< @brief Registered GL LUT texture objects. */
+    int active_variant;          /**< @brief Active BH_KernelVariant index (-1 = auto). */
+    cudaStream_t compute_stream; /**< @brief Non-blocking stream for geodesic kernel launches. */
 };
 
 extern "C" BH_CudaBackend* bhCudaInit(unsigned int gl_texture, int width, int height) {

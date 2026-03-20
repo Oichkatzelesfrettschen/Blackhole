@@ -1,25 +1,27 @@
-/*
- * kernel_registry.cu
- * Kernel variant metadata table and auto-selection logic.
+/**
+ * @file kernel_registry.cu
+ * @brief Kernel variant metadata table and auto-selection logic.
  *
- * Following YSU-engine lbm_kernels.h: enum -> metadata -> auto-select by SM.
+ * Following the YSU-engine lbm_kernels.h pattern: enum -> metadata table ->
+ * auto-select by SM version and per-SM register budget.
  */
 
 #include "kernel_registry.h"
 #include <cuda_runtime.h>
 #include <stdio.h>
 
-/* Metadata table indexed by BH_KernelVariant.
+/**
+ * @brief Metadata table indexed by BH_KernelVariant.
  *
- * min_sm: minimum SM version for correctness (e.g. 89 = SM8.9 Ada).
- * estimated_registers: conservative register count per thread from ncu
- *   ptxas report. Used to gate occupancy: if the variant would exceed
- *   max_registers_per_thread on the device, fall back.
+ * - min_sm: minimum SM version for correctness (e.g. 89 = SM8.9 Ada).
+ * - estimated_registers: conservative per-thread register count from ncu ptxas
+ *   report. Used to gate occupancy; fall back if the variant cannot achieve
+ *   MIN_BLOCKS concurrent blocks per SM on the target device.
  *
  * H2 ILP min_sm = 89: the 2-ray dual-issue benefit is Ada/Hopper specific.
- *   On SM8.0 (Ampere) the dual-issue FP32 pipeline is narrower and the
- *   extra register pressure from doubling live state can reduce occupancy
- *   enough to negate ILP gains. Benchmarked in YSU-engine against A100.
+ * On SM8.0 (Ampere) the dual-issue FP32 pipeline is narrower and the extra
+ * register pressure from doubling live state can reduce occupancy enough to
+ * negate ILP gains. Benchmarked in YSU-engine against A100.
  */
 const RtKernelInfo RT_KERNEL_INFO[BH_KERNEL_COUNT] = {
     /* FP32_BASELINE: safe default, works everywhere */

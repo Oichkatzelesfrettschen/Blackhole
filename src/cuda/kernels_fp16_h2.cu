@@ -1,26 +1,22 @@
-/*
- * kernels_fp16_h2.cu
- * H2 ILP variant: 2 rays per thread with __half2 packed intermediate storage.
+/**
+ * @file kernels_fp16_h2.cu
+ * @brief H2 ILP variant: 2 rays per thread with __half2 packed intermediate storage.
  *
- * Following YSU-engine kernels_fp16_soa_half2.cu pattern:
- * - Thread k processes pixels (2k, 2k+1) in linearized grid
- * - Two independent geodesic chains interleave on Ada dual-issue FP32 pipelines
- * - __half2 packs both rays' bounded fields into one 32-bit register each:
- *     hR     = (kr0.r,       kr1.r)        -- both in [r_horizon, max_dist]
- *     hTheta = (kr0.theta,   kr1.theta)    -- both in [0, pi]
- *     hSignr = (kr0.sign_r,  kr1.sign_r)   -- both in {-1, +1}
- *     hSignt = (kr0.sign_theta, kr1.sign_theta)
- *     hMinr  = (min_radius0, min_radius1)  -- tracked via __hmin2
- *   phi and t remain FP32 per ray (can exceed FP16 max near the horizon).
- * - Core Kerr metric FMA stays FP32 for precision.
- * - __half2 promote/demote cost amortized over max_steps iterations.
+ * Following the YSU-engine kernels_fp16_soa_half2.cu pattern:
+ * - Thread k processes pixels (2k, 2k+1) in a linearized grid.
+ * - Two independent geodesic chains interleave on Ada dual-issue FP32 pipelines.
+ * - __half2 packs both rays' bounded fields (r, theta, sign_r, sign_theta) into
+ *   one 32-bit register each; min_radius is tracked via __hmin2 (one HMNMX2
+ *   SASS instruction per step instead of two fminf calls).
+ *   phi and t remain FP32 per ray to avoid overflow near the horizon.
+ * - Core Kerr metric FMA stays FP32 for numerical precision.
+ * - __half2 promote/demote cost is amortized over max_steps iterations.
  *
- * REGISTER PRESSURE WARNING: Kerr RK4 is compute-heavy. If register spill
- * is detected via `ncu --metrics l1tex__t_sectors_pipe_lsu_mem_local_op_ld`,
- * reduce max_steps or demote to FP16_STORAGE. The registry gates this
- * variant at SM89+ to ensure Ada dual-issue FP16 pipelines are present.
- *
- * __launch_bounds__(128, 4) limits active blocks to 4/SM for register budget.
+ * Register pressure: if spill is detected via
+ *   ncu --metrics l1tex__t_sectors_pipe_lsu_mem_local_op_ld
+ * reduce max_steps or fall back to FP16_STORAGE. The registry gates this
+ * variant at SM8.9+ to ensure Ada dual-issue FP16 pipelines are present.
+ * __launch_bounds__(128, 4) limits active blocks to 4/SM for the register budget.
  */
 
 #include <cuda_fp16.h>
@@ -33,26 +29,36 @@
 
 /* ========================================================================
  * HalfRayPair: packed __half2 intermediate storage for 2-ray threads.
- * (internal linkage via anonymous namespace)
- *
- * Fields in []:
- *   hR, hTheta, hSignr, hSignt -- bounded, safe for FP16
- *   phi0, phi1, t0, t1         -- FP32: can overflow FP16 near horizon
  * ======================================================================== */
 
 namespace {
 
+/**
+ * @brief Packed __half2 intermediate storage for a pair of Kerr rays.
+ *
+ * Bounded fields (r, theta, sign_r, sign_theta) are stored as __half2 pairs
+ * to halve register consumption for those values.  phi and t are kept FP32
+ * because they can reach ~1e5 radians/step near the Kerr horizon, exceeding
+ * the FP16 representable range of 65504.
+ */
 struct HalfRayPair {
-  __half2 hR;     /* (kr0.r,          kr1.r)          */
-  __half2 hTheta; /* (kr0.theta,       kr1.theta)      */
-  __half2 hSignr; /* (kr0.sign_r,      kr1.sign_r)     */
-  __half2 hSignt; /* (kr0.sign_theta,  kr1.sign_theta) */
-  float phi0;
-  float phi1; /* FP32: phi can reach ~1e5 rad/step */
-  float t0;
-  float t1;
+  __half2 hR;     /**< @brief (kr0.r,          kr1.r)          */
+  __half2 hTheta; /**< @brief (kr0.theta,       kr1.theta)      */
+  __half2 hSignr; /**< @brief (kr0.sign_r,      kr1.sign_r)     */
+  __half2 hSignt; /**< @brief (kr0.sign_theta,  kr1.sign_theta) */
+  float phi0;     /**< @brief Ray 0 azimuthal angle (FP32). */
+  float phi1;     /**< @brief Ray 1 azimuthal angle (FP32). */
+  float t0;       /**< @brief Ray 0 coordinate time (FP32). */
+  float t1;       /**< @brief Ray 1 coordinate time (FP32). */
 };
 
+/**
+ * @brief Pack two FP32 KerrRay states into a HalfRayPair.
+ *
+ * @param a First ray (maps to .x of each __half2 field).
+ * @param b Second ray (maps to .y of each __half2 field).
+ * @return Packed HalfRayPair with bounded fields in FP16 and phi/t in FP32.
+ */
 __device__ __forceinline__ HalfRayPair raysToPair(const KerrRay &a, const KerrRay &b) {
   HalfRayPair h{};
   h.hR = __floats2half2_rn(a.r, b.r);
@@ -66,6 +72,13 @@ __device__ __forceinline__ HalfRayPair raysToPair(const KerrRay &a, const KerrRa
   return h;
 }
 
+/**
+ * @brief Unpack a HalfRayPair into two full-precision KerrRay states.
+ *
+ * @param h   Packed FP16/FP32 ray pair.
+ * @param[out] a  First ray (unpacked from .x fields).
+ * @param[out] b  Second ray (unpacked from .y fields).
+ */
 __device__ __forceinline__ void pairToRays(const HalfRayPair &h, KerrRay &a, KerrRay &b) {
   float2 const r = __half22float2(h.hR);
   float2 const th = __half22float2(h.hTheta);
@@ -89,12 +102,21 @@ __device__ __forceinline__ void pairToRays(const HalfRayPair &h, KerrRay &a, Ker
 
 /* ========================================================================
  * H2 ILP Kernel: 2 rays/thread, __half2 accumulation
- *
- * Uses interleaved tracing: both rays advance one step at a time,
- * allowing the instruction scheduler to hide latency across the two
- * independent chains.
  * ======================================================================== */
 
+/**
+ * @brief H2 ILP geodesic tracing kernel (2 rays/thread, __half2 packed storage).
+ *
+ * Each thread handles linearized pixel pair (2*tid, 2*tid+1). Both geodesic
+ * chains advance one integration step per loop iteration with FP32 metric
+ * math, enabling the Ada dual-issue scheduler to overlap independent FMA
+ * chains. Bounded ray state fields are kept in packed __half2 registers
+ * between steps; min_radius is updated via __hmin2.
+ * Requires SM8.9+ (Ada/Hopper). __launch_bounds__(128, 4) caps active
+ * blocks per SM to respect the elevated register budget.
+ *
+ * @param dFramebuffer Device pointer to float4[d_width * d_height]; output RGBA pixels.
+ */
 __launch_bounds__(128, 4)
     // NOLINTNEXTLINE(misc-use-internal-linkage,readability-function-cognitive-complexity)
     __global__ void geodesicTraceFp16H2(float4 *__restrict__ dFramebuffer) {
@@ -342,7 +364,14 @@ __launch_bounds__(128, 4)
   }
 }
 
-/* Host wrapper */
+/**
+ * @brief Launch the FP16 H2 ILP kernel (2 rays/thread, 1D blocks of 128).
+ *
+ * @param dFramebuffer Device framebuffer pointer (float4[width*height]).
+ * @param width        Framebuffer width in pixels.
+ * @param height       Framebuffer height in pixels.
+ * @param stream       CUDA stream to launch on.
+ */
 extern "C" void launchFp16H2Ilp(float4 *dFramebuffer, int width, int height, cudaStream_t stream) {
   int const totalPixels = width * height;
   int const threadsNeeded = (totalPixels + 1) / 2;

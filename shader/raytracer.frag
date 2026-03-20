@@ -1,28 +1,16 @@
 #version 460 core
 
 /**
- * shader/raytracer.frag
+ * @file raytracer.frag
+ * @brief Main ray-tracing fragment shader using verified RK4 geodesic integration.
  *
- * PHASE 9.0.3: Main Ray-Tracing Fragment Shader
- *
- * Integrates verified C++23 physics kernels transpiled to GLSL 4.60
- * Optimized for Lovelace (SM_89) consumer GPUs with L2 cache blocking
- *
- * Pipeline:
- * 1. Ray initialization from camera coordinates
- * 2. Geodesic integration via verified RK4 with energy conservation
- * 3. Termination condition checks (escape/capture)
- * 4. Pixel color computation from physics
- *
- * Performance Target: 100+ Mray/s on RTX 4090 (1080p 60fps = 72M rays/frame)
- * Register Pressure: <24 regs/thread (achieved via L2 cache blocking)
- *
- * Verified Physics:
- * - Schwarzschild metric (Phase 6, Rocq verified)
- * - Kerr metric (Phase 6, Rocq verified)
- * - RK4 integration (Phase 6, Rocq verified)
- * - Energy-conserving geodesics (Phase 8.3, Hamiltonian correction)
- * - Christoffel symbol acceleration (Phase 6, verified)
+ * Initializes null geodesics from camera NDC coordinates, integrates them
+ * through Schwarzschild/Kerr spacetime via integrator.glsl, and shades pixels
+ * based on escape, capture, or Hamiltonian error status.
+ * Key uniforms: M (mass), a (spin), cameraPos, cameraForward/Right/Up, fov,
+ *   maxSteps, stepSize, energyTolerance, escapeRadius, horizonMargin.
+ * Inputs: uv (NDC, location 0).
+ * Outputs: fragColor (shaded pixel with redshift; alpha encodes step fraction).
  */
 
 #extension GL_GOOGLE_include_directive : enable

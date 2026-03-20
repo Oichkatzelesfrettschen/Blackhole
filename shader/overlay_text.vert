@@ -1,3 +1,13 @@
+/**
+ * @file overlay_text.vert
+ * @brief Vertex shader for screen-space HUD text rendering.
+ *
+ * Converts pixel-space positions to normalized device coordinates using the
+ * screen size uniform, and forwards the per-vertex color to the fragment stage.
+ * Key uniforms: uScreenSize (viewport dimensions in pixels).
+ * Inputs: inPos (vec2, pixel coords, location 0), inColor (vec4, location 1).
+ * Outputs: gl_Position (NDC), vColor (vec4).
+ */
 #version 460 core
 
 layout(location = 0) in vec2 inPos;

@@ -1,6 +1,6 @@
-/*
- * cuda_renderer.cu
- * Standalone CUDA renderer for the Blender bridge.
+/**
+ * @file cuda_renderer.cu
+ * @brief Standalone CUDA renderer for the Blender bridge.
  *
  * WHY: Render physically-correct black hole images (with actual Kerr geodesic
  *      ray tracing, photon ring, disk warping, Doppler beaming) to a host
@@ -17,12 +17,19 @@
 
 #include "../cuda/kernel_launch.h"
 
-/* Fill BH_LaunchParams matching the main renderer's conventions.
+/**
+ * @brief Populate a BH_LaunchParams struct for the geodesic kernel, matching main.cpp conventions.
  *
- * Key insight from main.cpp: the ray tracer uses fov_scale=1.0 with the
- * camera at distance ~15 r_s. The d_ray_dir function maps pixel (px,py)
- * to NDC [-fov_scale, +fov_scale] and shoots a ray through cameraBasis.
- * schwarzschildRadius is always 1.0 in the renderer's internal units.
+ * Sets rs = 1.0 (Schwarzschild radius in internal units), computes the ISCO,
+ * and builds the camera position and orthonormal basis from @p observer_r and
+ * @p inclination_rad. Feature flags are set for disk + redshift rendering.
+ *
+ * @param p              Output params struct (zeroed on entry).
+ * @param spin           Dimensionless spin a*.
+ * @param observer_r     Observer distance [r_s].
+ * @param inclination_rad Observer inclination from spin axis [rad].
+ * @param width          Framebuffer width in pixels.
+ * @param height         Framebuffer height in pixels.
  */
 static void fill_params(struct BH_LaunchParams *p,
                         float spin, float observer_r, float inclination_rad,
@@ -107,10 +114,21 @@ static void fill_params(struct BH_LaunchParams *p,
 
 extern "C" {
 
-/*
- * Render a black hole image using the CUDA geodesic kernel.
- * Output: RGBA float buffer (4 * width * height floats).
- * Returns 0 on success, -1 on failure.
+/**
+ * @brief Render a physically correct black hole image on the CUDA device.
+ *
+ * Allocates a device float4 framebuffer, runs bh_launch_geodesic_kernel with
+ * the best available variant, applies bhb_cuda_postprocess() (bloom + ACES
+ * tonemap + chromatic aberration + vignette + film grain), then copies the
+ * result to @p out_rgba.
+ *
+ * @param spin            Dimensionless spin a*.
+ * @param observer_r      Observer distance [r_s].
+ * @param inclination_rad Observer inclination [rad].
+ * @param width           Image width in pixels.
+ * @param height          Image height in pixels.
+ * @param out_rgba        Caller-allocated host buffer: width * height * 4 floats.
+ * @return 0 on success, -1 on any CUDA error or invalid arguments.
  */
 int bhb_cuda_render_raytraced(
     float spin, float observer_r, float inclination_rad,
@@ -147,13 +165,24 @@ int bhb_cuda_render_raytraced(
         return -1;
     }
 
-    /* Synchronize */
+    /* Synchronize after geodesic kernel */
     err = cudaDeviceSynchronize();
     if (err != cudaSuccess) {
         fprintf(stderr, "[cuda_renderer] Sync failed: %s\n", cudaGetErrorString(err));
         cudaFree(d_framebuffer);
         return -1;
     }
+
+    /* Apply CUDA post-processing: bloom + ACES tonemap + CA + vignette + grain.
+     * This matches the main app's shader/bloom_*.frag + shader/tonemapping.frag. */
+    extern int bhb_cuda_postprocess(float4*, int, int, float, float, float, float);
+    bhb_cuda_postprocess(d_framebuffer, width, height,
+                          0.8f,   /* bloom threshold (matches bloom_brightness_pass.frag) */
+                          0.1f,   /* bloom strength (matches bloom_composite.frag) */
+                          30.0f,  /* exposure gain (kernel output is dim, ~0.01-1.3 per channel) */
+                          params.time_sec);
+
+    cudaDeviceSynchronize();
 
     /* Copy to host (float4 -> flat float RGBA) */
     err = cudaMemcpy(out_rgba, d_framebuffer, fb_size, cudaMemcpyDeviceToHost);

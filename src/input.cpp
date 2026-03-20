@@ -1,3 +1,8 @@
+/**
+ * @file input.cpp
+ * @brief Implementation of InputManager: GLFW event handling, camera updates, and gamepad polling.
+ */
+
 #include "input.h"
 
 #include <algorithm>

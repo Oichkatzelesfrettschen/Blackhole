@@ -1,3 +1,26 @@
+/**
+ * @file grmhd_packed_loader.cpp
+ * @brief nubhlight_pack GRMHD dataset loader -- implementation.
+ *
+ * WHY: See grmhd_packed_loader.h.  Key implementation points:
+ *
+ *   1. JSON schema version is checked via "schema_version"; the loader
+ *      accepts both the current "bin" field and the legacy "binary_file"
+ *      field so older datasets remain loadable.
+ *
+ *   2. FNV-1a64 checksum validation is optional (controlled by the
+ *      "checksum_fnv1a64" JSON field).  It is O(n) in dataset size and
+ *      is intentionally skipped when the field is absent.
+ *
+ *   3. Channels can be either a flat string array (current nubhlight_pack
+ *      format with top-level "min"/"max" arrays) or a legacy array of
+ *      objects with per-channel "name"/"min"/"max" fields.  Both forms
+ *      are handled by the isObjectArray branch in loadGrmhdPackedTexture().
+ *
+ *   4. upload=false lets headless tests validate parsing and checksums
+ *      without a live GL context.  The render path passes upload=true.
+ */
+
 #include "grmhd_packed_loader.h"
 
 // C++ system headers

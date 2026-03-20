@@ -1,13 +1,12 @@
-/*
- * kernels_fp16.cu
- * FP16 storage / FP32 compute geodesic tracing kernel.
+/**
+ * @file kernels_fp16.cu
+ * @brief FP16 storage / FP32 compute geodesic tracing kernel.
  *
- * Following YSU-engine kernels_fp16_soa.cu pattern:
- * - Load ray state as __half, promote to float for metric computation
- * - Demote accumulation results back to __half for intermediate storage
- * - Benefit: reduced register pressure, potential for FP16 texture fetches
- *
- * Core Kerr metric math stays FP32 for precision.
+ * Following the YSU-engine kernels_fp16_soa.cu pattern:
+ * - Ray state (r, theta, sign fields) stored as __half between steps to reduce
+ *   register pressure; phi and t remain FP32 to avoid overflow near the horizon.
+ * - All Kerr metric arithmetic is promoted to FP32 before each step.
+ * - Requires SM8.0+ (Ampere) for native FP16 storage throughput.
  */
 
 #include <cuda_fp16.h>
@@ -24,18 +23,28 @@
 
 namespace {
 
-/* phi and t are kept in FP32: phi can grow by ~1e5 radians/step near the
- * Kerr horizon (delta -> 0, delta_safe = 1e-6), far exceeding FP16 max 65504.
- * Only r, theta, and sign fields (bounded, slow-varying) use FP16. */
+/**
+ * @brief Compact ray state with FP16-compressed bounded fields.
+ *
+ * phi and t are kept in FP32 because phi can grow by ~1e5 rad/step near the
+ * Kerr horizon (delta -> 0, delta_safe = 1e-6), exceeding FP16 max 65504.
+ * Only r, theta, and sign fields (bounded and slow-varying) use FP16.
+ */
 struct HalfRayState {
-  __half r;
-  __half theta;
-  float phi; /* FP32: avoids Inf -> sincosf NaN near horizon */
-  float t;   /* FP32: avoids Inf -> sincosf NaN near horizon */
-  __half signR;
-  __half signTheta;
+  __half r;          /**< @brief Radial coordinate stored as FP16. */
+  __half theta;      /**< @brief Polar angle stored as FP16. */
+  float phi;         /**< @brief Azimuthal angle kept FP32 to avoid Inf near horizon. */
+  float t;           /**< @brief Coordinate time kept FP32 to avoid Inf near horizon. */
+  __half signR;      /**< @brief Sign of dr/dlambda stored as FP16. */
+  __half signTheta;  /**< @brief Sign of dtheta/dlambda stored as FP16. */
 };
 
+/**
+ * @brief Compress a full-precision KerrRay into a HalfRayState.
+ *
+ * @param kr Source FP32 ray state.
+ * @return Compressed HalfRayState with r, theta, signR, signTheta in FP16.
+ */
 __device__ __forceinline__ HalfRayState kerrRayToHalf(const KerrRay &kr) {
   HalfRayState h{};
   h.r = __float2half(kr.r);
@@ -47,6 +56,12 @@ __device__ __forceinline__ HalfRayState kerrRayToHalf(const KerrRay &kr) {
   return h;
 }
 
+/**
+ * @brief Promote a HalfRayState back to a full-precision KerrRay for computation.
+ *
+ * @param h Compressed FP16 ray state.
+ * @return Full FP32 KerrRay suitable for metric integration.
+ */
 __device__ __forceinline__ KerrRay halfToKerrRay(const HalfRayState &h) {
   KerrRay kr{};
   kr.r = __half2float(h.r);
@@ -62,12 +77,17 @@ __device__ __forceinline__ KerrRay halfToKerrRay(const HalfRayState &h) {
 
 /* ========================================================================
  * FP16 Storage Kernel
- *
- * Trace geodesic with FP16 intermediate storage of ray state.
- * All Kerr metric arithmetic is FP32; only the ray state between
- * integration steps is stored in FP16 to reduce register pressure.
  * ======================================================================== */
 
+/**
+ * @brief FP16 storage / FP32 compute geodesic tracing kernel (1 ray per thread).
+ *
+ * Traces a Kerr or Schwarzschild geodesic. Ray state is stored in HalfRayState
+ * (FP16 for r, theta, sign fields) between integration steps to reduce register
+ * pressure. All Kerr metric arithmetic is promoted to FP32 before each step.
+ *
+ * @param dFramebuffer Device pointer to float4[d_width * d_height]; output RGBA pixels.
+ */
 __launch_bounds__(256, 4)
     // NOLINTNEXTLINE(misc-use-internal-linkage) -- __global__ cannot be static or in anonymous
     // namespace
@@ -198,7 +218,14 @@ shade:
   dFramebuffer[(py * d_width) + px] = d_shade_hit(result, cam);
 }
 
-/* Host wrapper */
+/**
+ * @brief Launch the FP16 storage kernel (1 ray/thread, 16x16 blocks).
+ *
+ * @param dFramebuffer Device framebuffer pointer (float4[width*height]).
+ * @param width        Framebuffer width in pixels.
+ * @param height       Framebuffer height in pixels.
+ * @param stream       CUDA stream to launch on.
+ */
 extern "C" void launchFp16Storage(float4 *dFramebuffer, int width, int height,
                                   cudaStream_t stream) {
   dim3 const block(16, 16);

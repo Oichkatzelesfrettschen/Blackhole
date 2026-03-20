@@ -1,6 +1,6 @@
-/*
- * blender_bridge.cpp
- * Implementation of the C-linkage Blender bridge API.
+/**
+ * @file blender_bridge.cpp
+ * @brief Implementation of the C-linkage Blender bridge API.
  *
  * WHY: Wrap the C++ physics:: namespace into a flat C ABI for ctypes.
  * WHAT: Each bhb_* function delegates to the corresponding physics:: call
@@ -28,6 +28,7 @@ namespace {
 /* Geometric unit helpers: convert between r_g-normalized and CGS. */
 constexpr double K_REFERENCE_MASS_MSUN = 1.0;
 
+/** @brief Return the gravitational radius r_g = GM/c^2 [cm] for a mass in solar masses. */
 double rGFromMsun(double msun) {
   return physics::G * msun * physics::M_SUN / physics::C2;
 }
@@ -98,7 +99,12 @@ namespace {
 /* Internal: use a 1-solar-mass BH for unit conversion, then normalize. */
 constexpr double K_UNIT_MASS = 1.9885e33; /* 1 M_sun in grams */
 
-/* Convert dimensionless a_star to physical spin for a unit-mass BH. */
+/**
+ * @brief Convert dimensionless spin a* to physical spin [cm] for the unit-mass BH.
+ *
+ * All bhbKerr* functions call physics:: with physical units then divide back
+ * by the geometric mass M = G*M_unit/c^2 to recover dimensionless r_g ratios.
+ */
 double unitSpin(double aStar) {
   double const mGeom = physics::G * K_UNIT_MASS / physics::C2;
   return aStar * mGeom;
@@ -161,11 +167,25 @@ namespace {
  * Uses the effective potential approach for equatorial photons.
  * Coordinates: (t, r, theta=pi/2, phi) with affine parameter lambda. */
 
+/**
+ * @brief Phase-space state for a single equatorial null geodesic in Boyer-Lindquist coordinates.
+ *
+ * Only the equatorial slice (theta = pi/2) is represented; Q = 0 (Carter constant).
+ */
 struct KerrState {
   double r, phi, pr, pphi;
 };
 
-/* Equations of motion for equatorial null geodesics in Kerr. */
+/**
+ * @brief Evaluate the Hamilton-Jacobi equations of motion for an equatorial Kerr null geodesic.
+ *
+ * Fills @p ds with derivatives (dr/dlambda, dphi/dlambda, dpr/dlambda, dpphi/dlambda).
+ *
+ * @param aStar Dimensionless spin.
+ * @param b     Impact parameter (conserved angular momentum with E = 1).
+ * @param s     Current state.
+ * @param ds    Output: derivatives at @p s.
+ */
 void kerrEquatorial(double aStar, double b, const KerrState &s, KerrState &ds) {
   double const r = s.r;
   double const r2 = r * r;
@@ -187,7 +207,14 @@ void kerrEquatorial(double aStar, double b, const KerrState &s, KerrState &ds) {
   ds.pphi = 0.0;
 }
 
-/* Simple RK4 step. */
+/**
+ * @brief Advance the geodesic state by one classical fourth-order Runge-Kutta step.
+ *
+ * @param aStar Dimensionless spin.
+ * @param b     Impact parameter.
+ * @param s     State to update in-place.
+ * @param h     Affine parameter step size.
+ */
 void rk4Step(double aStar, double b, KerrState &s, double h) {
   KerrState k1{};
   KerrState k2{};

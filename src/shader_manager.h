@@ -1,3 +1,13 @@
+/**
+ * @file shader_manager.h
+ * @brief Runtime OpenGL capability detection and GLSL version-tier selection.
+ *
+ * ShaderManager is a singleton that inspects the active OpenGL context on
+ * startup, maps the GL/GLSL version to a ShaderTier, and exposes helpers for
+ * loading, preprocessing, compiling, and linking shader programs with the
+ * correct version directive and feature defines.
+ */
+
 #ifndef SHADER_MANAGER_H
 #define SHADER_MANAGER_H
 
@@ -6,7 +16,7 @@
 #include <string>
 #include <vector>
 
-// OpenGL version capabilities detected at runtime
+/** @brief OpenGL version capabilities detected at runtime. */
 struct GLCapabilities {
   int majorVersion = 0;
   int minorVersion = 0;
@@ -25,7 +35,7 @@ struct GLCapabilities {
   std::string glslVersionString;
 };
 
-// Shader version tiers
+/** @brief GLSL capability tier derived from the detected GL version. */
 enum class ShaderTier {
   Glsl460, // OpenGL 4.6 - latest features
   Glsl450, // OpenGL 4.5 - DSA, SSBOs
@@ -35,29 +45,64 @@ enum class ShaderTier {
   UNKNOWN
 };
 
+/**
+ * @brief Singleton manager for runtime OpenGL capability detection and shader loading.
+ *
+ * Call init() once after the GL context is created. All other methods are
+ * valid only after a successful init().
+ */
 class ShaderManager {
 public:
+  /** @brief Returns the process-wide singleton instance. */
   static ShaderManager &instance();
 
-  // Initialize - must be called after OpenGL context is created
+  /**
+   * @brief Detect GL capabilities and select the active ShaderTier.
+   *
+   * Must be called once after the OpenGL context is created. Subsequent
+   * calls are no-ops.
+   */
   void init();
+
+  /** @brief Reset initialized state (call before destroying the GL context). */
   void shutdown();
 
-  // Get detected capabilities
   [[nodiscard]] const GLCapabilities &getCapabilities() const { return capabilities_; }
   [[nodiscard]] ShaderTier getCurrentTier() const { return currentTier_; }
 
-  // Get version string for shader preprocessor
+  /**
+   * @brief Return the GLSL #version directive string for the current tier.
+   * @return String of the form "#version NNN core\n".
+   */
   [[nodiscard]] std::string getVersionDirective() const;
 
-  // Load shader with automatic version selection
-  // Returns shader source with appropriate #version and defines
+  /**
+   * @brief Load and preprocess a shader source file for the current tier.
+   *
+   * Finds the best-matching versioned file (e.g. "shader.frag.450") and
+   * prepends the version directive plus feature defines.
+   *
+   * @param basePath Base file path without version suffix.
+   * @return Preprocessed GLSL source, or an empty string on failure.
+   */
   [[nodiscard]] std::string loadShaderSource(const std::string &basePath) const;
 
-  // Compile shader with automatic fallback
+  /**
+   * @brief Compile a single shader stage from file.
+   *
+   * @param basePath Base file path (version suffix resolved automatically).
+   * @param shaderType GL shader stage constant (e.g. GL_VERTEX_SHADER).
+   * @return Non-zero GL shader object on success, 0 on failure.
+   */
   [[nodiscard]] GLuint compileShader(const std::string &basePath, GLenum shaderType) const;
 
-  // Create program from vertex and fragment shaders
+  /**
+   * @brief Compile and link a vertex+fragment program.
+   *
+   * @param vertPath Base path for the vertex shader.
+   * @param fragPath Base path for the fragment shader.
+   * @return Non-zero GL program object on success, 0 on failure.
+   */
   [[nodiscard]] GLuint createProgram(const std::string &vertPath,
                                      const std::string &fragPath) const;
 
@@ -94,8 +139,18 @@ private:
   bool initialized_ = false;
 };
 
-// Utility functions
+/**
+ * @brief Return a human-readable string for a ShaderTier value.
+ * @param tier The tier to describe.
+ * @return Null-terminated string such as "GLSL 4.60 (OpenGL 4.6)".
+ */
 const char *shaderTierToString(ShaderTier tier);
+
+/**
+ * @brief Map a ShaderTier to its integer GLSL version number.
+ * @param tier The tier to query.
+ * @return Integer version (e.g. 460, 450, 330). Returns 330 for UNKNOWN.
+ */
 int shaderTierToGLSLVersion(ShaderTier tier);
 
 #endif // SHADER_MANAGER_H

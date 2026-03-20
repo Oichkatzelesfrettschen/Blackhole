@@ -1,3 +1,15 @@
+/**
+ * @file grmhd_slice.frag
+ * @brief 2D slice viewer for the GRMHD 3D texture data volume.
+ *
+ * Samples a single axis-aligned cross-section of grmhdTexture, selects one
+ * RGBA channel, normalizes it to [sliceMin, sliceMax], and optionally maps
+ * through a colormap for false-color visualization.
+ * Key uniforms: grmhdTexture, colorMap, sliceAxis, sliceCoord, sliceChannel,
+ *   sliceMin, sliceMax, useColorMap.
+ * Inputs: uv (texture coordinates for the 2D slice plane).
+ * Outputs: fragColor (false-color or grayscale slice visualization).
+ */
 #version 460 core
 
 layout(location = 0) in vec2 uv;

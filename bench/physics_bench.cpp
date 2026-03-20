@@ -1,3 +1,21 @@
+/**
+ * @file physics_bench.cpp
+ * @brief CPU and GPU performance benchmarks for the Blackhole ray-tracer physics kernels.
+ *
+ * Exercises the following subsystems and reports average, min, and max wall-clock
+ * time together with a throughput figure (work units per second):
+ *   - Schwarzschild RK4 raytracer (CPU, scalar)
+ *   - Kerr effective-potential evaluator (CPU, scalar)
+ *   - Kerr geodesic integrator using Mino-time RK4 (CPU, scalar)
+ *   - Emissivity and redshift LUT generation
+ *   - Batch geodesic integrator with SIMD acceleration (SoA layout)
+ *   - xsimd vs scalar comparison (Schwarzschild F, redshift, Christoffel)
+ *   - Google Highway vs scalar comparison (same kernels)
+ *   - OpenGL compute shader geodesic dispatch (optional, --gpu flag)
+ *
+ * Results can be saved to JSON (--json) and/or CSV (--csv) for regression tracking.
+ */
+
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -23,6 +41,7 @@
 #include "physics/simd_dispatch.h"
 #include "shader.h"
 
+/** @brief All tunable parameters for a benchmark run, populated from argv. */
 struct BenchConfig {
   int rays = 2000;
   int steps = 2000;
@@ -42,6 +61,16 @@ struct BenchConfig {
   std::string csvPath;
 };
 
+/**
+ * @brief Parse command-line arguments into a BenchConfig.
+ *
+ * Unknown arguments are silently ignored.  Numeric values are clamped to
+ * safe ranges so downstream code does not need to guard against zeroes.
+ *
+ * @param argc Argument count from main().
+ * @param argv Argument vector from main().
+ * @return Populated BenchConfig with validated, clamped values.
+ */
 static BenchConfig parseArgs(int argc, char **argv) {
   BenchConfig cfg;
   for (int i = 1; i < argc; ++i) {
@@ -93,6 +122,7 @@ static BenchConfig parseArgs(int argc, char **argv) {
   return cfg;
 }
 
+/** @brief Timing and throughput results from a single benchmark case. */
 struct BenchResult {
   std::string name;
   double avgMs = 0.0;
@@ -103,6 +133,19 @@ struct BenchResult {
   int iterations = 0;
 };
 
+/**
+ * @brief Run a benchmark function and collect timing statistics.
+ *
+ * Executes @p fn @p warmup times (results discarded) then @p iterations times,
+ * measuring wall-clock time with std::chrono::high_resolution_clock.
+ *
+ * @param label      Human-readable name printed and stored in the result.
+ * @param iterations Number of timed repetitions.
+ * @param warmup     Number of un-timed warm-up calls before measurement.
+ * @param workUnits  Denominator for throughput (e.g. ray count or LUT entries).
+ * @param fn         Zero-argument callable that performs the work to be measured.
+ * @return BenchResult with avg/min/max milliseconds and work units per second.
+ */
 template <typename Fn>
 static BenchResult runBench(const std::string &label, int iterations, int warmup,
                             double workUnits, Fn fn) {
@@ -141,6 +184,7 @@ static BenchResult runBench(const std::string &label, int iterations, int warmup
   return result;
 }
 
+/** @brief OpenGL / GLFW state owned for the duration of a GPU benchmark run. */
 struct GpuBenchContext {
   GLFWwindow *window = nullptr;
   GLuint program = 0;
@@ -150,6 +194,14 @@ struct GpuBenchContext {
   int height = 0;
 };
 
+/**
+ * @brief Release all OpenGL and GLFW resources held by a GpuBenchContext.
+ *
+ * Safe to call on a partially-initialized context; zero-valued handles are
+ * skipped.
+ *
+ * @param ctx Context to tear down (all handles set to 0 / nullptr on return).
+ */
 static void shutdownGpuBench(GpuBenchContext &ctx) {
   if (ctx.query != 0) {
     glDeleteQueries(1, &ctx.query);
@@ -170,6 +222,16 @@ static void shutdownGpuBench(GpuBenchContext &ctx) {
   glfwTerminate();
 }
 
+/**
+ * @brief Initialize GLFW, create an invisible OpenGL 4.6 window, compile the
+ *        geodesic compute shader, and allocate the output texture and timer query.
+ *
+ * @param ctx    Output context populated on success.
+ * @param width  Render target width in pixels.
+ * @param height Render target height in pixels.
+ * @param error  Human-readable error message on failure; untouched on success.
+ * @return true on success, false if any step fails (ctx is cleaned up before return).
+ */
 static bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::string &error) {
   if (!glfwInit()) {
     error = "Failed to initialize GLFW";
@@ -209,6 +271,18 @@ static bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::strin
   return true;
 }
 
+/**
+ * @brief Run the GPU geodesic compute shader benchmark.
+ *
+ * Initializes an OpenGL context, uploads uniforms, dispatches the compute
+ * shader cfg.gpuIterations times using GL_TIME_ELAPSED queries for precise
+ * GPU timing, then tears down the context.
+ *
+ * @param cfg           Benchmark configuration (resolution, iterations, spin, etc.).
+ * @param gpuElapsedNs  Accumulates total GPU nanoseconds across all iterations.
+ * @param error         Set to a descriptive message on failure; empty on success.
+ * @return BenchResult with GPU timing statistics, or a zeroed result on failure.
+ */
 static BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::string &error) {
   GpuBenchContext ctx;
   if (!initGpuBench(ctx, cfg.gpuWidth, cfg.gpuHeight, error)) {
@@ -289,6 +363,18 @@ static BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std
   return result;
 }
 
+/**
+ * @brief Write benchmark results to a CSV file for regression tracking.
+ *
+ * Each row contains the full configuration alongside per-result timing columns
+ * so that results from different runs remain self-describing.
+ *
+ * @param path         Output file path.
+ * @param cfg          Benchmark configuration used for the run.
+ * @param results      All collected BenchResult records.
+ * @param cpuAccum     Final value of the CPU accumulator (prevents dead-code elimination).
+ * @param gpuElapsedNs Total GPU nanoseconds (0 if GPU benchmarking was not enabled).
+ */
 static void writeCsv(const std::string &path, const BenchConfig &cfg,
                      const std::vector<BenchResult> &results, double cpuAccum,
                      double gpuElapsedNs) {
@@ -313,6 +399,18 @@ static void writeCsv(const std::string &path, const BenchConfig &cfg,
   }
 }
 
+/**
+ * @brief Write benchmark results to a JSON file for regression tracking.
+ *
+ * Emits a top-level object with "config", "results" array, and accumulator
+ * fields so the file is self-contained and machine-parseable.
+ *
+ * @param path         Output file path.
+ * @param cfg          Benchmark configuration used for the run.
+ * @param results      All collected BenchResult records.
+ * @param cpuAccum     Final value of the CPU accumulator.
+ * @param gpuElapsedNs Total GPU nanoseconds (0 if GPU benchmarking was not enabled).
+ */
 static void writeJson(const std::string &path, const BenchConfig &cfg,
                       const std::vector<BenchResult> &results, double cpuAccum,
                       double gpuElapsedNs) {

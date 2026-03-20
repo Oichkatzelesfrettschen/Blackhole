@@ -1471,6 +1471,45 @@ if(ENABLE_SHADER_VALIDATION)
 endif()
 
 # ============================================================================
+# Doxygen API Documentation
+# ============================================================================
+
+option(ENABLE_DOXYGEN "Enable Doxygen API documentation generation" OFF)
+
+if(ENABLE_DOXYGEN)
+  find_program(DOXYGEN_EXECUTABLE NAMES doxygen)
+  if(DOXYGEN_EXECUTABLE)
+    message(STATUS "Doxygen found: ${DOXYGEN_EXECUTABLE}")
+    find_program(DOT_EXECUTABLE NAMES dot)
+    if(DOT_EXECUTABLE)
+      set(DOXYGEN_HAVE_DOT "YES")
+      get_filename_component(DOXYGEN_DOT_PATH "${DOT_EXECUTABLE}" DIRECTORY)
+    else()
+      set(DOXYGEN_HAVE_DOT "NO")
+      set(DOXYGEN_DOT_PATH "")
+    endif()
+    set(DOXYFILE_IN "${PROJECT_SOURCE_DIR}/Doxyfile.in")
+    set(DOXYFILE_OUT "${CMAKE_BINARY_DIR}/Doxyfile")
+    if(EXISTS "${DOXYFILE_IN}")
+      configure_file("${DOXYFILE_IN}" "${DOXYFILE_OUT}" @ONLY)
+      add_custom_target(doxygen
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/docs/api
+        COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_OUT}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Generating API documentation with Doxygen"
+        VERBATIM
+      )
+    else()
+      message(WARNING "Doxyfile.in not found")
+      set(ENABLE_DOXYGEN OFF)
+    endif()
+  else()
+    message(STATUS "Doxygen not found - API documentation disabled")
+    set(ENABLE_DOXYGEN OFF)
+  endif()
+endif()
+
+# ============================================================================
 # Static Analysis Aggregate Target
 # ============================================================================
 
@@ -3023,6 +3062,7 @@ message(STATUS "  ENABLE_FUZZING:           ${ENABLE_FUZZING}")
 message(STATUS "  ENABLE_PROFILING:         ${ENABLE_PROFILING}")
 message(STATUS "  ENABLE_GPROF:             ${ENABLE_GPROF}")
 message(STATUS "  ENABLE_COVERAGE:          ${ENABLE_COVERAGE}")
+message(STATUS "  ENABLE_DOXYGEN:           ${ENABLE_DOXYGEN}")
 message(STATUS "  ENABLE_KTX:               ${ENABLE_KTX}")
 message(STATUS "  ENABLE_OPENIMAGEIO:       ${ENABLE_OPENIMAGEIO}")
 message(STATUS "")

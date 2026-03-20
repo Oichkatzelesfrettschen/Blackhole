@@ -1,3 +1,14 @@
+/**
+ * @file shader_watcher.h
+ * @brief Hot-reload file watcher for GLSL shader sources.
+ *
+ * ShaderWatcher monitors a shader directory for modifications and exposes a
+ * poll-based interface so the main render loop can safely query and consume
+ * pending reload events on the main thread.  The underlying filesystem watch
+ * is provided by the wtr/watcher library when the project is built with
+ * BLACKHOLE_ENABLE_SHADER_WATCHER; otherwise all operations are stubs.
+ */
+
 #ifndef SHADER_WATCHER_H
 #define SHADER_WATCHER_H
 
@@ -14,43 +25,64 @@
 #include <wtr/watcher.hpp>
 #endif
 
-/// Shader hot-reload file watcher
-///
-/// Monitors shader source directory for changes and triggers recompilation.
-/// Thread-safe design allows main loop to poll for pending reloads.
+/**
+ * @brief Singleton file watcher that detects shader source modifications.
+ *
+ * Monitors a shader directory on a background thread and accumulates changed
+ * paths in a mutex-protected set.  The main thread calls pollChangedShaders()
+ * each frame to consume pending events without blocking.
+ */
 class ShaderWatcher {
 public:
+  /** @brief Callback type invoked with the list of changed shader file paths. */
   using ReloadCallback = std::function<void(const std::vector<std::string> &)>;
 
-  /// Singleton access
+  /** @brief Returns the process-wide singleton instance. */
   static ShaderWatcher &instance();
 
-  /// Start watching shader directory
-  /// @param shaderDir Path to shader source directory
-  /// @param onReload Callback invoked with list of changed shader paths
-  /// @return true if watcher started successfully
+  /**
+   * @brief Begin watching a shader directory for source file changes.
+   *
+   * @param shaderDir Path to the directory containing GLSL source files.
+   * @param onReload  Optional callback invoked from the watcher thread when
+   *                  files change.  The main thread should prefer pollChangedShaders().
+   * @return true if the watcher started successfully; false otherwise.
+   */
   bool start(const std::string &shaderDir, const ReloadCallback &onReload = nullptr);
 
-  /// Stop watching
+  /** @brief Stop the file watcher and release resources. */
   void stop();
 
-  /// Check if watcher is active
+  /** @brief Return true if the watcher is currently active. */
   bool isRunning() const;
 
-  /// Poll for pending shader changes (call from main thread)
-  /// @return List of shader paths that need recompilation
+  /**
+   * @brief Consume and return all pending changed shader paths.
+   *
+   * Safe to call from the main thread at any time.  Does NOT clear the pending
+   * set; call clearPendingReloads() after processing the returned paths.
+   *
+   * @return Snapshot of paths that have been modified since the last poll.
+   */
   std::vector<std::string> pollChangedShaders();
 
-  /// Check if any shaders need reloading
+  /** @brief Return true if there are unprocessed shader change events. */
   bool hasPendingReloads() const;
 
-  /// Clear pending reloads (after processing)
+  /** @brief Discard all accumulated pending reload events. */
   void clearPendingReloads();
 
-  /// Set debounce interval (default 100ms)
+  /**
+   * @brief Set the debounce window in milliseconds (default 100 ms).
+   *
+   * Events arriving faster than this interval are coalesced into a single
+   * notification to avoid recompiling during rapid saves.
+   *
+   * @param ms Debounce duration in milliseconds.
+   */
   void setDebounceMs(int ms);
 
-  /// Get watched directory
+  /** @brief Return the absolute path of the currently watched directory. */
   const std::string &getWatchedDir() const { return watchedDir_; }
 
   ShaderWatcher(const ShaderWatcher &) = delete;
@@ -60,10 +92,18 @@ private:
   ShaderWatcher() = default;
   ~ShaderWatcher();
 
-  /// Check if file extension is a shader source
+  /** @brief Return true if the file extension is a recognized GLSL source extension. */
   static bool isShaderSource(const std::string &path);
 
-  /// Handle filesystem event
+  /**
+   * @brief Process a single filesystem event.
+   *
+   * Applies debounce logic and, if the path is a shader source, inserts it
+   * into the pending set.
+   *
+   * @param path     Absolute path of the changed file.
+   * @param isModify True for modify/create events; false for deletions (ignored).
+   */
   void onFileEvent(const std::string &path, bool isModify);
 
   std::string watchedDir_;

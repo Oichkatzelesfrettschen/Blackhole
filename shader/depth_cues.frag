@@ -1,3 +1,14 @@
+/**
+ * @file depth_cues.frag
+ * @brief Post-process depth cues: fog, edge outlines, desaturation, chromatic depth, and DoF.
+ *
+ * Reads the scene color and the packed depth value (alpha channel of depthTexture)
+ * and applies a configurable stack of monocular depth perception effects.
+ * Key uniforms: texture0 (scene), depthTexture (depth in alpha), resolution, time,
+ *   fog*, edge*, dof*, depthDesat*, chromaDepth*, motionParallaxHint, depthCurve.
+ * Inputs: gl_FragCoord.
+ * Outputs: fragColor (color with depth cues applied).
+ */
 #version 460 core
 
 // Depth effects post-process

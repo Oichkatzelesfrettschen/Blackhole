@@ -1,3 +1,18 @@
+/**
+ * @file nubhlight_inspect.cpp
+ * @brief Inspect nubhlight HDF5 output files and emit dataset metadata as JSON.
+ *
+ * Recursively walks all groups in a nubhlight HDF5 dump file, collects every
+ * dataset's path, shape, and optional variable-name attribute (vnams), and
+ * writes the result as a JSON document.  The output is intended for use by
+ * nubhlight_pack and downstream tooling that needs to discover which datasets
+ * and channels are available before packing them into GPU textures.
+ *
+ * Usage:
+ *   nubhlight_inspect -i dump.h5 [-o metadata.json]
+ *   With no -o flag the JSON is written to stdout.
+ */
+
 #include <CLI/CLI.hpp>
 #include <highfive/H5File.hpp>
 
@@ -7,12 +22,20 @@
 #include <string>
 #include <vector>
 
+/** @brief Metadata collected for a single HDF5 dataset. */
 struct DatasetInfo {
-  std::string path;
-  std::vector<std::size_t> dims;
-  std::vector<std::string> vnams;
+  std::string path;               /**< Absolute HDF5 path (e.g. /dump/P). */
+  std::vector<std::size_t> dims;  /**< Dataset dimensions in row-major order. */
+  std::vector<std::string> vnams; /**< Variable names from the vnams attribute, if present. */
 };
 
+/**
+ * @brief Concatenate an HDF5 group prefix and object name into an absolute path.
+ *
+ * @param prefix Current group path, or "" / "/" for the root group.
+ * @param name   Object name within the group.
+ * @return Absolute HDF5 path string.
+ */
 static std::string joinPath(const std::string &prefix, const std::string &name) {
   if (prefix.empty() || prefix == "/") {
     return "/" + name;
@@ -20,6 +43,12 @@ static std::string joinPath(const std::string &prefix, const std::string &name) 
   return prefix + "/" + name;
 }
 
+/**
+ * @brief Escape a string for safe embedding in a JSON value.
+ *
+ * @param text Raw string that may contain backslashes, quotes, or control chars.
+ * @return JSON-safe escaped string (without surrounding quotes).
+ */
 static std::string jsonEscape(const std::string &text) {
   std::string out;
   out.reserve(text.size() + 8);
@@ -48,6 +77,16 @@ static std::string jsonEscape(const std::string &text) {
   return out;
 }
 
+/**
+ * @brief Recursively collect dataset metadata from an HDF5 group tree.
+ *
+ * Descends into subgroups and appends a DatasetInfo entry for each dataset
+ * encountered.  The vnams attribute is read when present.
+ *
+ * @param group  HDF5 group to inspect.
+ * @param prefix Absolute path of @p group used to build child paths.
+ * @param out    Accumulator for discovered DatasetInfo records.
+ */
 static void collectDatasets(const HighFive::Group &group, const std::string &prefix,
                             std::vector<DatasetInfo> &out) {
   for (const auto &name : group.listObjectNames()) {
@@ -72,6 +111,13 @@ static void collectDatasets(const HighFive::Group &group, const std::string &pre
   }
 }
 
+/**
+ * @brief Serialize dataset metadata to JSON and write to a stream.
+ *
+ * @param out      Destination stream (file or stdout).
+ * @param input    Original HDF5 file path, included in the JSON for provenance.
+ * @param datasets List of dataset records produced by collectDatasets().
+ */
 static void writeJson(std::ostream &out, const std::string &input,
                       const std::vector<DatasetInfo> &datasets) {
   out << "{\n";

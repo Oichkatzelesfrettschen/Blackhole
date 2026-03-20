@@ -20,18 +20,33 @@
 
 namespace physics {
 
+/** @brief 1D float lookup table with radial domain in units of r_s. */
 struct Lut1D {
   std::vector<float> values;
-  float rMin = 0.0f; // in units of rS
-  float rMax = 0.0f; // in units of rS
+  float rMin = 0.0f; ///< Inner radius in units of r_s
+  float rMax = 0.0f; ///< Outer radius in units of r_s
 };
 
+/** @brief Lookup table mapping spin values to ISCO and photon-sphere radii. */
 struct SpinRadiiLut {
-  std::vector<float> spins;
-  std::vector<float> rIscoOverRs;
-  std::vector<float> rPhOverRs;
+  std::vector<float> spins;        ///< Dimensionless spin a* values
+  std::vector<float> rIscoOverRs;  ///< ISCO radius in units of r_s
+  std::vector<float> rPhOverRs;    ///< Photon-sphere radius in units of r_s
 };
 
+/**
+ * @brief Generate a normalized disk emissivity LUT for a Kerr black hole.
+ *
+ * Computes the Novikov-Thorne flux profile from r_ISCO to 4*r_ISCO,
+ * then normalizes to [0, 1] by the peak flux value.
+ *
+ * @param size       Number of LUT samples
+ * @param massSolar  Black hole mass [solar masses]
+ * @param aStar      Dimensionless spin a* in (-1, 1)
+ * @param mdotEdd    Eddington-scaled accretion rate
+ * @param prograde   True for prograde orbits (default)
+ * @return Lut1D with normalized emissivity values
+ */
 inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
                                      double mdotEdd, bool prograde = true) {
   Lut1D lut;
@@ -70,6 +85,18 @@ inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
   return lut;
 }
 
+/**
+ * @brief Generate a gravitational redshift LUT for a Kerr black hole.
+ *
+ * Samples the Kerr redshift factor from r_ISCO to 4*r_ISCO along
+ * a geodesic at inclination angle theta.
+ *
+ * @param size       Number of LUT samples
+ * @param massSolar  Black hole mass [solar masses]
+ * @param aStar      Dimensionless spin a* in (-1, 1)
+ * @param theta      Observer inclination angle [rad] (default pi/2, equatorial)
+ * @return Lut1D with redshift values
+ */
 inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar,
                                    double theta = 0.5 * PI) {
   Lut1D lut;
@@ -93,6 +120,19 @@ inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar,
   return lut;
 }
 
+/**
+ * @brief Generate a spin-radii LUT mapping a* to ISCO and photon-sphere radii.
+ *
+ * Sweeps spin from spinMin to spinMax and records r_ISCO/r_s and r_ph/r_s
+ * for each value.  Used by the shader to look up orbital radii without
+ * recomputing at runtime.
+ *
+ * @param size      Number of spin samples
+ * @param massSolar Black hole mass [solar masses]
+ * @param spinMin   Minimum spin value (clamped to [-0.99, 0.99])
+ * @param spinMax   Maximum spin value (clamped to [-0.99, 0.99])
+ * @return SpinRadiiLut with per-spin ISCO and photon-sphere radii
+ */
 inline SpinRadiiLut generateSpinRadiiLut(int size, double massSolar,
                                             double spinMin = -0.99,
                                             double spinMax = 0.99) {
@@ -133,9 +173,13 @@ inline SpinRadiiLut generateSpinRadiiLut(int size, double massSolar,
 }
 
 /**
- * Generate photon sphere glow LUT (Phase 8.2 optimization).
+ * @brief Generate a photon-sphere glow LUT.
+ *
  * Precomputes exp(-distance * 4.0) for distance in [0, 0.5].
- * Used to replace transcendental exp() computation in shader.
+ * Used to replace the transcendental exp() call in the photon-glow shader path.
+ *
+ * @param size Number of samples (default 256)
+ * @return Lut1D with glow intensity values in [0, 1]
  */
 inline Lut1D generatePhotonGlowLut(int size = 256) {
   Lut1D lut;
@@ -158,10 +202,15 @@ inline Lut1D generatePhotonGlowLut(int size = 256) {
 }
 
 /**
- * Generate accretion disk density profile LUT (Phase 8.2 Priority 2).
- * Precomputes normalized density as function of normalized radius.
- * Formula: density(r) = (1 - r)^power for r in [0, 1]
- * Replaces inline pow() and smoothstep() calculations in disk shader.
+ * @brief Generate a normalized accretion disk density profile LUT.
+ *
+ * Precomputes density(r) = (1 - r)^power for normalized radius r in [0, 1],
+ * where r=0 is the ISCO and r=1 is the outer disk edge.
+ * Replaces inline pow() and smoothstep() calculations in the disk shader.
+ *
+ * @param size  Number of samples (default 256)
+ * @param power Falloff exponent (default 1.5)
+ * @return Lut1D with density values decreasing from 1 to 0
  */
 inline Lut1D generateDiskDensityLut(int size = 256, double power = 1.5) {
   Lut1D lut;
