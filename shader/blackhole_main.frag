@@ -1,3 +1,15 @@
+/**
+ * @file blackhole_main.frag
+ * @brief Primary black hole ray-tracing fragment shader.
+ *
+ * Marches rays through Schwarzschild/Kerr spacetime, samples the accretion
+ * disk with noise and LUTs, applies gravitational lensing, Doppler beaming,
+ * gravitational redshift, photon-sphere glow, and optional Hawking thermal glow.
+ * Key uniforms: resolution, cameraPos, cameraBasis, schwarzschildRadius, kerrSpin,
+ *   adisk*, hawking*, backgroundLayers[3], grmhdTexture, noiseTexture.
+ * Inputs: gl_FragCoord.
+ * Outputs: fragColor (RGB = HDR color, A = normalized depth).
+ */
 #version 460 core
 #extension GL_GOOGLE_include_directive : enable
 
@@ -14,6 +26,7 @@
 
 // Phase 10.1: Hawking radiation thermal glow
 #include "hawking_glow.glsl"
+#include "include/wiregrid.glsl"
 
 const float EPSILON = 0.0001;
 const float INFINITY = 1000000.0;
@@ -96,6 +109,11 @@ uniform sampler2D hawkingTempLUT;        // Temperature T_H(M) LUT
 uniform sampler2D hawkingSpectrumLUT;    // Blackbody RGB spectrum LUT
 uniform float useHawkingLUTs = 1.0;      // Use LUTs (1.0) vs direct calculation (0.0)
 uniform float blackHoleMass = 1.989e33;  // Black hole mass [g] (default: 1 solar mass)
+
+// Wiregrid BL-coordinate overlay uniforms (task A2)
+uniform float wiregridEnabled  = 0.0; // 1.0 = overlay active
+uniform float wiregridShowErgo = 1.0; // 1.0 = show ergosphere boundary
+uniform float wiregridGridScale = 1.0; // Grid density multiplier
 
 // Derived physics quantities: use sch_* functions from schwarzschild.glsl
 // These macros ensure iscoRadius and photonSphereRadius are computed from schwarzschildRadius
@@ -301,10 +319,11 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   return true;
 }
 
-vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
+vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
   vec3 color = vec3(0.0);
   float alpha = 1.0;
   vec3 origin = pos;
+  lastPos = pos; // updated at each early-return; final pos = ray endpoint
 
   depthDistance = depthFar;
 
@@ -320,6 +339,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
   float r_ph = photonSphereRadius; // 1.5 * r_s
 
   for (int i = 0; i < 300; i++) {
+    lastPos = pos;
     float r = length(pos);
     minRadiusReached = min(minRadiusReached, r);
 
@@ -438,6 +458,20 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance) {
   return color;
 }
 
+// Compute approximate Boyer-Lindquist (r, theta, phi) from Cartesian hit position.
+// WHY: The geodesic integrator tracks Cartesian-space pos; BL coords are recovered by
+//      the spherical-coordinates transform, valid as an approximation for the overlay.
+void applyWiregridOverlay(inout vec3 color, vec3 hitPos) {
+  if (wiregridEnabled < 0.5) return;
+  float r = length(hitPos);
+  if (r < 1e-5) return;
+  float theta = acos(clamp(hitPos.z / r, -1.0, 1.0));
+  float phi   = atan(hitPos.y, hitPos.x);
+  bool  showErgo = wiregridShowErgo > 0.5;
+  vec4  wg = wiregridOverlay(r, theta, phi, kerrSpin, showErgo, wiregridGridScale);
+  color = mix(color, wg.rgb, wg.a);
+}
+
 void main() {
   vec3 dir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
   vec3 pos = cameraPos;
@@ -454,12 +488,16 @@ void main() {
     vec4 shaded = bhShadeHit(hit, cameraPos, schwarzschildRadius);
     float depthNormalized =
         clamp(length(hit.hitPoint - cameraPos) / max(depthFar, 0.0001), 0.0, 1.0);
-    fragColor = vec4(shaded.rgb, depthNormalized);
+    vec3 interopColor = shaded.rgb;
+    applyWiregridOverlay(interopColor, hit.hitPoint);
+    fragColor = vec4(interopColor, depthNormalized);
     return;
   }
 
   float depthDistance = depthFar;
-  vec3 color = traceColor(pos, dir, depthDistance);
+  vec3 lastPos;
+  vec3 color = traceColor(pos, dir, depthDistance, lastPos);
+  applyWiregridOverlay(color, lastPos);
   float depthNormalized = clamp(depthDistance / depthFar, 0.0, 1.0);
   fragColor = vec4(color, depthNormalized);
 }

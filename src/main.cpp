@@ -110,6 +110,8 @@
 #endif
 
 namespace { // NOLINT(misc-use-anonymous-namespace) -- file-scope helpers
+
+/** @brief Active camera control mode governing how cameraPos is computed each frame. */
 enum class CameraMode { Input = 0, Front, Top, Orbit };
 
 constexpr int K_BACKGROUND_LAYERS = 3;
@@ -253,6 +255,14 @@ void installCrashHandlers() {
 static void installCrashHandlers() {}
 #endif
 
+/**
+ * @brief Convert spherical yaw/pitch angles to a Cartesian camera position.
+ *
+ * @param yawDeg   Horizontal rotation in degrees (0 = +Z axis).
+ * @param pitchDeg Vertical elevation in degrees (positive = above equator).
+ * @param radius   Distance from origin in world units.
+ * @return World-space camera position on the sphere of the given radius.
+ */
 glm::vec3 cameraPositionFromYawPitch(float yawDeg, float pitchDeg, float radius) {
   float const yawRad = glm::radians(yawDeg);
   float const pitchRad = glm::radians(pitchDeg);
@@ -260,6 +270,17 @@ glm::vec3 cameraPositionFromYawPitch(float yawDeg, float pitchDeg, float radius)
           radius * std::cos(pitchRad) * std::cos(yawRad)};
 }
 
+/**
+ * @brief Build an orthonormal camera basis (right, up, forward) from a look-at pair plus roll.
+ *
+ * Handles the degenerate case where forward is nearly parallel to world-up by
+ * falling back to the +Z world axis as the up reference.
+ *
+ * @param cameraPos World-space camera origin.
+ * @param target    World-space look-at point.
+ * @param rollDeg   Camera roll in degrees applied after the standard basis is constructed.
+ * @return Column-major mat3 with columns [right, up, forward].
+ */
 glm::mat3 buildCameraBasis(const glm::vec3 &cameraPos, const glm::vec3 &target, float rollDeg) {
   glm::vec3 const forward = glm::normalize(target - cameraPos);
   glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
@@ -385,34 +406,47 @@ bool supportsIndirectCount() {
   return versionIs46 || hasExtension("GL_ARB_indirect_parameters");
 }
 
+/** @brief Metadata for a single background skybox asset loaded from manifest.json. */
 struct BackgroundAsset {
-  std::string id;
-  std::string title;
-  std::string path;
+  std::string id;    ///< Unique asset identifier matching the manifest "id" field.
+  std::string title; ///< Human-readable display name shown in the UI.
+  std::string path;  ///< Relative file path to the image on disk.
 };
 
+/**
+ * @brief GPU-side draw command for glMultiDrawArraysIndirect.
+ *
+ * Layout matches the OpenGL specification for GL_DRAW_ARRAYS_INDIRECT_BUFFER.
+ */
 struct DrawArraysIndirectCommand {
-  GLuint count = 0;
-  GLuint primCount = 0;
-  GLuint first = 0;
-  GLuint baseInstance = 0;
+  GLuint count = 0;        ///< Number of vertices to draw.
+  GLuint primCount = 0;    ///< Number of instances.
+  GLuint first = 0;        ///< Starting index in the enabled arrays.
+  GLuint baseInstance = 0; ///< Base instance for instanced attributes.
 };
 
+/**
+ * @brief Per-instance data uploaded to the GPU for instanced background rendering.
+ *
+ * Matches the std140 layout expected by the corresponding GLSL shader.
+ */
 struct DrawInstanceGpu {
-  glm::vec4 offsetScale;
-  glm::vec4 tint;
-  glm::vec4 flags;
+  glm::vec4 offsetScale; ///< xy = NDC offset, zw = scale factors.
+  glm::vec4 tint;        ///< RGBA tint multiplier applied in the fragment shader.
+  glm::vec4 flags;       ///< Bit-packed feature flags (x = layer index, etc.).
 };
 
-// WHY: WiregridParams controls the Boyer-Lindquist coordinate overlay rendered in the
-//      fragment shader (task A2) and CUDA kernel (task A4) via wiregrid.glsl's
-//      wiregridOverlay(r, theta, phi, a_star, show_ergosphere, grid_scale).
-//      The previous Euclidean Flamm's-paraboloid mesh was rendered with a separate
-//      gizmo perspective matrix, producing a 3D embedding diagram that was geometrically
-//      inconsistent with the ray-traced geodesic view and has been removed.
+/**
+ * @brief Parameters for the Boyer-Lindquist coordinate wiregrid overlay.
+ *
+ * Controls the fragment-shader wiregridOverlay() call (wiregrid.glsl) and the
+ * matching CUDA kernel path.  The overlay replaces the former Euclidean
+ * Flamm's-paraboloid mesh, which was geometrically inconsistent with the
+ * ray-traced geodesic view.
+ */
 struct WiregridParams {
-  bool  showErgosphere = true; // Show ergosphere boundary + interior glow
-  float gridScale      = 1.0f; // Grid density: 1.0 = pi/6 spacing, >1 = denser
+  bool  showErgosphere = true; ///< Render ergosphere boundary and interior glow.
+  float gridScale      = 1.0f; ///< Grid density: 1.0 = pi/6 angular spacing; >1 = denser.
 };
 
 std::vector<BackgroundAsset> loadBackgroundAssets() {
@@ -466,11 +500,12 @@ bool parseJsonNumber(const std::string &text, const std::string &key, double &ou
   return end != start;
 }
 
+/** @brief Summary statistics for a per-pixel difference image used in compute/fragment parity tests. */
 struct DiffStats {
-  float meanAbs = 0.0f;
-  float maxAbs = 0.0f;
-  float rms = 0.0f;
-  bool valid = false;
+  float meanAbs = 0.0f; ///< Mean absolute per-channel difference across sampled pixels.
+  float maxAbs  = 0.0f; ///< Maximum absolute per-channel difference.
+  float rms     = 0.0f; ///< Root-mean-square per-channel difference.
+  bool  valid   = false; ///< False if inputs were invalid or no pixels were sampled.
 };
 
 DiffStats sampleTextureDiff(GLuint texA, GLuint texB, int width, int height, int sampleSize) {
@@ -667,13 +702,19 @@ void appendCompareSummary(const std::string &path, int index, const std::string 
       << "," << grbTime << "," << outlierCount << "," << outlierLimit << "," << outlierFrac << "\n";
 }
 
+/**
+ * @brief A named camera + physics configuration used by the compute/fragment parity test suite.
+ *
+ * Each preset is rendered with both the GL fragment path and the CUDA compute
+ * path; DiffStats are compared to detect arithmetic divergence (Issue-009).
+ */
 struct ComparePreset {
-  const char *label{};
-  CameraMode mode{CameraMode::Input};
-  CameraState camera;
-  float orbitRadius{};
-  float orbitSpeed{};
-  float kerrSpin{};
+  const char *label{};               ///< Human-readable name shown in the compare UI.
+  CameraMode  mode{CameraMode::Input}; ///< Camera positioning mode for this preset.
+  CameraState camera;                ///< Camera state (used when mode == Input).
+  float       orbitRadius{};         ///< Orbit radius in gravitational radii (Orbit mode).
+  float       orbitSpeed{};          ///< Orbit angular speed in degrees per second.
+  float       kerrSpin{};            ///< Dimensionless Kerr spin parameter a* in [0, 1).
 };
 
 constexpr float K_COMPARE_KERR_SPIN = 0.8f;
@@ -758,6 +799,13 @@ constexpr std::array<ComparePreset, 12> K_COMPARE_PRESETS = {{
      .kerrSpin = K_COMPARE_KERR_SPIN},
 }};
 
+/**
+ * @brief Aggregated uniform values shared between the GL fragment shader and the CUDA compute path.
+ *
+ * applyInteropUniforms() copies these fields into a RenderToTextureInfo uniform
+ * map before each render call, ensuring both paths receive identical inputs for
+ * the compute/fragment parity comparison (Issue-009).
+ */
 struct InteropUniforms {
   glm::vec3 cameraPos{};
   glm::mat3 cameraBasis{1.0f};
@@ -849,6 +897,8 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   rtti.floatUniforms["hawkingGlowIntensity"] = hawkingIntensity;
   rtti.floatUniforms["useHawkingLUTs"] = hawkingUseLUTs ? 1.0f : 0.0f;
   rtti.floatUniforms["blackHoleMass"] = static_cast<float>(blackHoleMass);
+  // Wiregrid BL-coord overlay (task A2) -- filled by caller via wiregridEnabled flag
+  // (wiregridEnabled/ShowErgo/GridScale are set in the render loop after this call)
 }
 
 void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop, int width,
@@ -3944,6 +3994,9 @@ int main(int argc, char **argv) {
         applyInteropUniforms(rtti, interop, compareActive, hawkingGlowEnabled, hawkingTempScale,
                              hawkingGlowIntensity, hawkingUseLUTs, bhMassGrams);
 
+        rtti.floatUniforms["wiregridEnabled"]   = wiregridEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["wiregridShowErgo"]  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
+        rtti.floatUniforms["wiregridGridScale"] = wiregridParams.gridScale;
         rtti.floatUniforms["gravitationalLensing"] = gravitationalLensing ? 1.0f : 0.0f;
         rtti.floatUniforms["renderBlackHole"] = renderBlackHole ? 1.0f : 0.0f;
         rtti.floatUniforms["adiskParticle"] = adiskParticleEffective ? 1.0f : 0.0f;
