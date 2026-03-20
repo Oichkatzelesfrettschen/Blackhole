@@ -16,6 +16,7 @@ class BlackholeConan(ConanFile):
         "enable_shader_watcher": [True, False],
         "enable_fastnoise2": [True, False],
         "enable_eigen": [True, False],
+        "enable_cuda": [True, False],
     }
 
     default_options = {
@@ -29,6 +30,7 @@ class BlackholeConan(ConanFile):
         "enable_shader_watcher": True,
         "enable_fastnoise2": True,
         "enable_eigen": True,
+        "enable_cuda": False,
     }
 
     def requirements(self):

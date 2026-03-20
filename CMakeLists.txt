@@ -81,6 +81,27 @@ find_package(CLI11 REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(Boost CONFIG QUIET)
+
+# cfitsio for FITS image output (scientific data products)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(CFITSIO cfitsio)
+endif()
+if(NOT CFITSIO_FOUND)
+  # Fallback: try finding the library directly
+  find_library(CFITSIO_LIBRARIES cfitsio)
+  find_path(CFITSIO_INCLUDE_DIRS fitsio.h)
+  if(CFITSIO_LIBRARIES AND CFITSIO_INCLUDE_DIRS)
+    set(CFITSIO_FOUND TRUE)
+  endif()
+endif()
+if(CFITSIO_FOUND)
+  message(STATUS "cfitsio found: FITS image output available")
+  add_compile_definitions(BLACKHOLE_HAS_CFITSIO=1)
+else()
+  message(STATUS "cfitsio not found: FITS output disabled (install cfitsio for scientific output)")
+endif()
+
 # SPIR-V Tooling removed in Phase 3 (C++23 -> GLSL transpilation)
 # All SPIR-V compilation now uses GLSL 4.60 shader includes directly
 # Validation and optional compilation still available via glslangValidator and glslc
@@ -276,6 +297,45 @@ if(ENABLE_AMREX)
     GIT_TAG 23.08
   )
   FetchContent_MakeAvailable(amrex)
+endif()
+
+# ============================================================================
+# CUDA Ray Tracing Backend (optional)
+# ============================================================================
+# WHY: Move physics compute from GLSL to pure CUDA for precision tiering,
+#      ILP kernel variants, and YSU-engine-style SoA + __half2 patterns.
+# WHAT: Builds src/cuda/ as a separate static library (C++17 CUDA) linked
+#       into the C++23 host binary via a POD-only C-compatible interface.
+# HOW: cmake --preset release -DENABLE_CUDA=ON
+
+option(ENABLE_CUDA "Enable CUDA ray tracing backend" OFF)
+if(ENABLE_CUDA)
+    include(CheckLanguage)
+    check_language(CUDA)
+    if(CMAKE_CUDA_COMPILER)
+        # Set CUDA standard BEFORE enable_language so the ABI detection
+        # test project does not inherit CMAKE_CXX_STANDARD=23, which nvcc
+        # does not support.
+        set(CMAKE_CUDA_STANDARD 17)
+        set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+        enable_language(CUDA)
+        # C language needed by check_c_source_compiles in src/cuda/CMakeLists.txt
+        # (kernel_launch.h C-compat firewall check)
+        enable_language(C)
+        find_package(CUDAToolkit REQUIRED)
+        set(CMAKE_CUDA_ARCHITECTURES "89;80")
+        # The host linker (clang++) doesn't automatically search CUDA's lib dir.
+        # Add it globally so -lcudadevrt and -lcudart_static resolve for all
+        # targets that link against the separable-compilation cuda_rt library.
+        get_filename_component(_cuda_lib_dir
+            "${CUDA_cudart_static_LIBRARY}" DIRECTORY)
+        link_directories("${_cuda_lib_dir}")
+        add_subdirectory(src/cuda)
+        message(STATUS "CUDA backend enabled: SM${CMAKE_CUDA_ARCHITECTURES}")
+    else()
+        message(WARNING "ENABLE_CUDA=ON but no CUDA compiler found. Disabling.")
+        set(ENABLE_CUDA OFF)
+    endif()
 endif()
 
 # ============================================================================
@@ -1098,6 +1158,10 @@ endif()
 if(ENABLE_SLEEF)
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE sleef::sleef)
 endif()
+if(ENABLE_CUDA)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE blackhole_cuda_rt CUDA::cudart)
+  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE BLACKHOLE_HAS_CUDA=1)
+endif()
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
   GLFW_INCLUDE_NONE
@@ -1731,6 +1795,43 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(coordinates_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Kerr-Schild coordinate tests
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_schild_test.cpp")
+    add_executable(kerr_schild_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_schild_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(kerr_schild_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_schild_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_schild_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_schild_test PRIVATE GTest::gtest_main)
+    if(ENABLE_XSIMD)
+      target_link_libraries(kerr_schild_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(kerr_schild_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(kerr_schild_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME kerr_schild_validation COMMAND kerr_schild_test)
+    set_tests_properties(kerr_schild_validation PROPERTIES
+      LABELS "physics;coordinates;kerr-schild"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_schild_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
@@ -2493,6 +2594,121 @@ if(BUILD_TESTING)
     )
   endif()
 
+  # Johannsen-Psaltis metric test
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/johannsen_psaltis_test.cpp")
+    add_executable(johannsen_psaltis_test
+      "${PROJECT_SOURCE_DIR}/tests/johannsen_psaltis_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(johannsen_psaltis_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(johannsen_psaltis_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(johannsen_psaltis_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(johannsen_psaltis_test PRIVATE GTest::gtest_main)
+    if(ENABLE_XSIMD)
+      target_link_libraries(johannsen_psaltis_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(johannsen_psaltis_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(johannsen_psaltis_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME johannsen_psaltis_validation COMMAND johannsen_psaltis_test)
+    set_tests_properties(johannsen_psaltis_validation PROPERTIES
+      LABELS "physics;beyond-gr;metric"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(johannsen_psaltis_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Electron temperature test
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/electron_temperature_test.cpp")
+    add_executable(electron_temperature_test
+      "${PROJECT_SOURCE_DIR}/tests/electron_temperature_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(electron_temperature_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(electron_temperature_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(electron_temperature_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(electron_temperature_test PRIVATE GTest::gtest_main)
+    if(ENABLE_XSIMD)
+      target_link_libraries(electron_temperature_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(electron_temperature_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(electron_temperature_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME electron_temperature_validation COMMAND electron_temperature_test)
+    set_tests_properties(electron_temperature_validation PROPERTIES
+      LABELS "physics;electron;thermal"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(electron_temperature_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # FITS writer test (requires cfitsio)
+  if(CFITSIO_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/tests/fits_writer_test.cpp")
+    add_executable(fits_writer_test
+      "${PROJECT_SOURCE_DIR}/tests/fits_writer_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(fits_writer_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+      ${CFITSIO_INCLUDE_DIRS}
+    )
+    target_compile_options(fits_writer_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(fits_writer_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(fits_writer_test PRIVATE
+      GTest::gtest_main
+      ${CFITSIO_LIBRARIES}
+    )
+    if(ENABLE_XSIMD)
+      target_link_libraries(fits_writer_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(fits_writer_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(fits_writer_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME fits_writer_validation COMMAND fits_writer_test)
+    set_tests_properties(fits_writer_validation PROPERTIES
+      LABELS "fits;io;unit"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(fits_writer_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(ENABLE_PRECISION_TESTS AND EXISTS "${PROJECT_SOURCE_DIR}/tests/precision_regression_test.cpp")
     find_package(gmp CONFIG REQUIRED)
     find_package(mpfr CONFIG REQUIRED)
@@ -2524,6 +2740,119 @@ if(BUILD_TESTING)
       )
     endif()
   endif()
+
+  # ========================================================================
+  # CUDA Backend Tests (gated on ENABLE_CUDA)
+  # WHY: CUDA kernel variants must be validated independently from the host
+  #      build. These tests cover struct layout, physics correctness, and
+  #      cross-variant consistency without requiring an OpenGL context.
+  # HOW: cmake --preset release -DENABLE_CUDA=ON && ctest -L cuda
+  # ========================================================================
+
+  if(ENABLE_CUDA)
+
+    # 1. POD struct layout + registry metadata (pure C++, no CUDA device needed)
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_kernel_launch_test.cpp")
+      add_executable(cuda_kernel_launch_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_kernel_launch_test.cpp"
+      )
+      set_target_properties(cuda_kernel_launch_test PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+      )
+      target_include_directories(cuda_kernel_launch_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_kernel_launch_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+      # CUDA::cudadevrt is not exported by FindCUDAToolkit in all cmake versions.
+      # The separable-compilation device runtime must be linked explicitly.
+      target_link_libraries(cuda_kernel_launch_test PRIVATE
+        "${_cuda_lib_dir}/libcudadevrt.a"
+      )
+
+      add_test(NAME cuda_kernel_launch_layout COMMAND cuda_kernel_launch_test)
+      set_tests_properties(cuda_kernel_launch_layout PROPERTIES
+        LABELS "cuda;unit;layout"
+        TIMEOUT 15
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_kernel_launch_layout PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
+    # 2. Device physics via the bh_launch_geodesic_kernel C API
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_device_physics_test.cu")
+      add_executable(cuda_device_physics_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_device_physics_test.cu"
+      )
+      set_target_properties(cuda_device_physics_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_device_physics_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_device_physics_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_device_physics_validation COMMAND cuda_device_physics_test)
+      set_tests_properties(cuda_device_physics_validation PROPERTIES
+        LABELS "cuda;physics;geodesic"
+        TIMEOUT 60
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_device_physics_validation PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
+    # 3. Cross-variant consistency (64x64 scene, RMSE bounds)
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_variants_test.cu")
+      add_executable(cuda_variants_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_variants_test.cu"
+      )
+      set_target_properties(cuda_variants_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_variants_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_variants_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_variants_consistency COMMAND cuda_variants_test)
+      set_tests_properties(cuda_variants_consistency PROPERTIES
+        LABELS "cuda;variants;precision"
+        TIMEOUT 120
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_variants_consistency PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
+  endif() # ENABLE_CUDA
+
 endif()
 
 # ============================================================================

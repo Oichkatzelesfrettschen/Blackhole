@@ -74,6 +74,13 @@
 #include "texture.h"
 #include "tracy_support.h"
 
+#ifndef BLACKHOLE_HAS_CUDA
+#define BLACKHOLE_HAS_CUDA 0
+#endif
+#if BLACKHOLE_HAS_CUDA
+#include "cuda/cuda_backend.h"
+#endif
+
 enum class CameraMode { Input = 0, Front, Top, Orbit };
 
 static constexpr int kBackgroundLayers = 3;
@@ -2435,6 +2442,12 @@ int main(int argc, char **argv) {
   static physics::HawkingRenderer hawkingRenderer;
   static bool hawkingLutsLoaded = false;
   static bool useComputeRaytracer = false;
+#if BLACKHOLE_HAS_CUDA
+  static bool useCudaRaytracer = false;
+  static BH_CudaBackend* cudaBackend = nullptr;
+  static int cudaKernelVariant = -1; /* -1 = auto */
+  static bool cudaInitAttempted = false;
+#endif
   static bool compareComputeFragment = false;
   static int compareSampleSize = 16;
   static int compareFrameStride = 1;
@@ -2788,6 +2801,17 @@ int main(int argc, char **argv) {
 
     renderWidth = newWidth;
     renderHeight = newHeight;
+
+#if BLACKHOLE_HAS_CUDA
+    if (cudaBackend) {
+      if (bh_cuda_resize(cudaBackend, texBlackhole, newWidth, newHeight) != 0) {
+        fprintf(stderr, "CUDA: resize failed; shutting down backend\n");
+        bh_cuda_shutdown(cudaBackend);
+        cudaBackend = nullptr;
+        cudaInitAttempted = false;
+      }
+    }
+#endif
   };
 
   static float lutAdiskDensityV = 0.0f;
@@ -3562,6 +3586,43 @@ int main(int argc, char **argv) {
             ImGui::SliderInt("Compute Tile Size", &computeTileSize, 64, 1024);
           }
         }
+#if BLACKHOLE_HAS_CUDA
+        ImGui::Separator();
+        ImGui::Text("CUDA Backend");
+        if (ImGui::Checkbox("Use CUDA Raytracer", &useCudaRaytracer)) {
+          /* On toggle-off, reset the init flag so the user can retry by
+           * re-enabling. Without this, a failed init permanently blocks
+           * re-initialization for the lifetime of the process. */
+          if (!useCudaRaytracer) {
+            cudaInitAttempted = false;
+          }
+        }
+        if (useCudaRaytracer) {
+          const char* variantNames[] = {
+            "FP32 Baseline", "FP32 Coarsened (2 ray/thread)",
+            "FP16 Storage", "FP16 H2 ILP (2 ray/thread)", "Auto"
+          };
+          int variantUI = cudaKernelVariant < 0 ? 4 : cudaKernelVariant;
+          if (ImGui::Combo("Kernel Variant", &variantUI, variantNames, 5)) {
+            cudaKernelVariant = (variantUI >= 4) ? -1 : variantUI;
+            if (cudaBackend) {
+              bh_cuda_set_variant(cudaBackend, cudaKernelVariant);
+            }
+          }
+          if (cudaBackend) {
+            int actual = bh_cuda_get_variant(cudaBackend);
+            if (actual >= 0 && actual < BH_KERNEL_COUNT) {
+              ImGui::TextDisabled("Active: %s", variantNames[actual]);
+            }
+          } else if (cudaInitAttempted) {
+            ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f),
+                               "Init failed -- toggle checkbox to retry");
+          } else {
+            ImGui::TextDisabled("Will init on next frame");
+          }
+        }
+        ImGui::Separator();
+#endif
         ImGui::Checkbox("Compare Compute vs Fragment", &compareComputeFragment);
         if (compareComputeFragment) {
           ImGui::SliderInt("Compare Sample Size", &compareSampleSize, 4, 64);
@@ -3828,6 +3889,75 @@ int main(int argc, char **argv) {
       rtti.floatUniforms["dopplerStrength"] = dopplerStrength;
       rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphereEffective ? 1.0f : 0.0f;
 
+#if BLACKHOLE_HAS_CUDA
+      /* CUDA dispatch path: bypasses both fragment and compute GLSL paths */
+      if (useCudaRaytracer) {
+        ZoneScopedN("Blackhole CUDA");
+
+        /* Lazy init on first use or after resize */
+        if (!cudaBackend && !cudaInitAttempted) {
+          cudaBackend = bh_cuda_init(texBlackhole, renderWidth, renderHeight);
+          if (cudaBackend) {
+            /* Mark attempted only on success so that toggling the checkbox
+             * off/on (which resets cudaInitAttempted) allows a clean retry.
+             * We don't want spurious retries every frame on failure -- that
+             * is prevented by cudaInitAttempted staying false until success,
+             * and by the checkbox guard resetting it only on user action. */
+            cudaInitAttempted = true;
+            if (cudaKernelVariant >= 0) {
+              bh_cuda_set_variant(cudaBackend, cudaKernelVariant);
+            }
+          } else {
+            /* Init failed this frame; set attempted so we don't retry every
+             * frame. User must toggle the checkbox to reset and retry. */
+            cudaInitAttempted = true;
+            fprintf(stderr, "CUDA: bh_cuda_init failed; toggle checkbox to retry\n");
+          }
+        }
+
+        if (cudaBackend) {
+          BH_LaunchParams cp = {};
+          cp.rs = interop.schwarzschildRadius;
+          cp.spin = interop.kerrSpin;
+          cp.isco = interop.iscoRadius;
+          cp.step_size = interop.stepSize;
+          cp.fov_scale = interop.fovScale;
+          cp.max_dist = interop.depthFar;
+          cp.cam_pos[0] = interop.cameraPos.x;
+          cp.cam_pos[1] = interop.cameraPos.y;
+          cp.cam_pos[2] = interop.cameraPos.z;
+          /* glm mat3 is column-major, same layout as our flat array */
+          std::memcpy(cp.cam_basis, glm::value_ptr(interop.cameraBasis), 9 * sizeof(float));
+          cp.max_steps = interop.maxSteps;
+          cp.width = renderWidth;
+          cp.height = renderHeight;
+          cp.adisk_enabled = adiskEnabledEffective ? 1 : 0;
+          cp.redshift_enabled = enableRedshiftEffective ? 1 : 0;
+          cp.kerr_enabled = (fabsf(interop.kerrSpin) > 1e-6f) ? 1 : 0;
+          cp.use_luts = (interop.useLUTs > 0.5f) ? 1 : 0;
+          cp.lut_radius_min = interop.lutRadiusMin;
+          cp.lut_radius_max = interop.lutRadiusMax;
+          cp.redshift_radius_min = interop.redshiftRadiusMin;
+          cp.redshift_radius_max = interop.redshiftRadiusMax;
+          cp.spectral_radius_min = interop.spectralRadiusMin;
+          cp.spectral_radius_max = interop.spectralRadiusMax;
+          cp.time_sec = interop.timeSec;
+          cp.doppler_strength = dopplerStrength;
+          cp.background_intensity = settings.backgroundIntensity;
+          cp.background_enabled = backgroundEnabledEffective ? 1 : 0;
+
+          if (bh_cuda_render_frame(cudaBackend, &cp) != 0) {
+            fprintf(stderr, "CUDA: render frame failed; shutting down backend\n");
+            bh_cuda_shutdown(cudaBackend);
+            cudaBackend = nullptr;
+            cudaInitAttempted = false;
+          }
+        }
+      } else
+#endif
+      {
+      /* Original GLSL fragment/compute paths */
+
       GLuint fragmentTarget = computeActive ? (compareActive ? texBlackholeCompare : 0)
                                             : texBlackhole;
       GLuint computeTarget = computeActive ? texBlackhole
@@ -4043,6 +4173,7 @@ int main(int argc, char **argv) {
         compareLastOutliers = 0;
         compareLastOutlierLimit = 0;
       }
+      } /* end of GLSL fragment/compute else block */
     }
     if (compareRestorePending && !comparePresetSweep && comparePresetSaved &&
         !captureCompareSnapshot) {
@@ -4567,6 +4698,12 @@ int main(int argc, char **argv) {
     destroyGrmhdPackedTexture(grmhdTexture);
   }
 
+#if BLACKHOLE_HAS_CUDA
+  if (cudaBackend) {
+    bh_cuda_shutdown(cudaBackend);
+    cudaBackend = nullptr;
+  }
+#endif
     cleanup(window);
     return 0;
 #if BLACKHOLE_HAS_CPPTRACE
