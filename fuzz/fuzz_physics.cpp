@@ -184,27 +184,27 @@ void fuzz_gw(FuzzDataReader &reader) {
   double D = reader.get_positive_double() * 1e6 * PARSEC; // Distance in Mpc
   double f = reader.get_frequency();
 
-  double M_c = chirp_mass(m1, m2);
+  double M_c = chirpMass(m1, m2);
   double eta = (m1 * m2) / ((m1 + m2) * (m1 + m2));
 
   // Test strain calculations
-  (void)gw_strain_amplitude(M_c, f, D);
-  (void)gw_strain_1pn(M_c, eta, f, D);
-  (void)frequency_derivative(M_c, f);
-  (void)time_to_coalescence(M_c, f);
-  (void)orbital_separation(m1 + m2, f);
-  (void)gw_frequency_isco(m1 + m2);
+  (void)gwStrainAmplitude(M_c, f, D);
+  (void)gwStrain1pn(M_c, eta, f, D);
+  (void)frequencyDerivative(M_c, f);
+  (void)timeToCoalescence(M_c, f);
+  (void)orbitalSeparation(m1 + m2, f);
+  (void)gwFrequencyIsco(m1 + m2);
 
   // Test QNM
-  (void)qnm_frequency_schwarzschild(m1 + m2);
-  (void)qnm_damping_time_schwarzschild(m1 + m2);
+  (void)qnmFrequencySchwarzschild(m1 + m2);
+  (void)qnmDampingTimeSchwarzschild(m1 + m2);
 
   // Test luminosity
-  (void)gw_luminosity(m1 + m2, eta, f);
-  (void)gw_energy_radiated(m1 + m2, eta);
+  (void)gwLuminosity(m1 + m2, eta, f);
+  (void)gwEnergyRadiated(m1 + m2, eta);
 
   // Test characteristic strain
-  (void)characteristic_strain(M_c, f, D);
+  (void)characteristicStrain(M_c, f, D);
 }
 
 // Fuzz thin disk
@@ -212,55 +212,55 @@ void fuzz_thin_disk(FuzzDataReader &reader) {
   double M_solar = std::abs(reader.get_double()) + 1.0;
   M_solar = std::clamp(M_solar, 1.0, 1e10);
 
-  DiskParams disk = schwarzschild_disk(M_solar);
+  DiskParams disk = schwarzschildDisk(M_solar);
 
   // Test at various radii
   for (int i = 0; i < 5 && reader.has_data(); ++i) {
-    double r = disk.r_in + std::abs(reader.get_double()) * (disk.r_out - disk.r_in);
-    (void)disk_flux(r, disk);
-    (void)disk_temperature(r, disk);
-    (void)disk_redshift_factor(r, disk.M);
+    double r = disk.rIn + std::abs(reader.get_double()) * (disk.rOut - disk.rIn);
+    (void)diskFlux(r, disk);
+    (void)diskTemperature(r, disk);
+    (void)diskRedshiftFactor(r, disk.mass);
   }
 
   // Test disk luminosity
-  (void)disk_luminosity(disk);
+  (void)diskLuminosity(disk);
 
   // Test Planck function
   double nu = reader.get_positive_double() * 1e15; // Frequency ~optical
   double T = reader.get_positive_double() * 1e6;   // Temperature
   T = std::clamp(T, 100.0, 1e8);
-  (void)planck_function(nu, T);
+  (void)planckFunction(nu, T);
 }
 
 // Fuzz TOV integration
 void fuzz_tov(FuzzDataReader &reader) {
-  double rho_c = reader.get_density();
+  const double rhoC = reader.get_density();
 
-  auto eos = polytropic_eos(eos_params::K_SLY4, eos_params::GAMMA_SLY4);
+  const auto eos = polytropicEos(eos_params::K_SLY4, eos_params::GAMMA_SLY4);
 
   // Test EOS
-  (void)eos(rho_c);
-  (void)inverse_polytrope(eos(rho_c), eos_params::K_SLY4, eos_params::GAMMA_SLY4);
+  (void)eos(rhoC);
+  (void)inversePolytrope(eos(rhoC), eos_params::K_SLY4, eos_params::GAMMA_SLY4);
 
   // Test TOV derivatives
-  double r = reader.get_positive_double() * 1e6; // ~km
-  double m = reader.get_positive_double() * M_SUN;
-  double P = eos(rho_c);
-  (void)tov_dmdr(r, rho_c);
-  (void)tov_dPdr(r, m, P, rho_c);
+  const double r = reader.get_positive_double() * 1e6; // ~km
+  const double m = reader.get_positive_double() * M_SUN;
+  const double press = eos(rhoC);
+  (void)tovDmdr(r, rhoC);
+  (void)tovDPdr(r, m, press, rhoC);
 
   // Full integration is expensive, only do occasionally
   static int counter = 0;
   if (++counter % 100 == 0) {
-    auto profile = integrate_tov(rho_c, eos, eos_params::K_SLY4, eos_params::GAMMA_SLY4,
-                                 1e3, 1000); // Limit steps for fuzzing
-    (void)profile.M;
-    (void)profile.R;
+    const auto profile = integrateTov(rhoC, eos, eos_params::K_SLY4, eos_params::GAMMA_SLY4,
+                                      1e3, 1000); // Limit steps for fuzzing
+    (void)profile.mTotal;
+    (void)profile.rSurface;
 
     // Test tidal deformability
-    if (profile.compactness > 0 && profile.compactness < 0.5) {
-      (void)tidal_deformability(profile.compactness);
-      (void)tidal_love_number_k2(profile.compactness);
+    if ((profile.compactness > 0) && (profile.compactness < 0.5)) {
+      (void)tidalDeformability(profile.compactness);
+      (void)tidalLoveNumberK2(profile.compactness);
     }
   }
 }

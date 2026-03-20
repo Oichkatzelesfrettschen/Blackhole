@@ -39,15 +39,15 @@ inline Lut1D generate_emissivity_lut(int size, double mass_solar, double a_star,
   }
 
   const double mass = mass_solar * M_SUN;
-  const double r_s = schwarzschild_radius(mass);
+  const double r_s = schwarzschildRadius(mass);
   const double r_g = G * mass / C2;
   const double a = a_star * r_g;
-  const double r_in = kerr_isco_radius(mass, a, prograde);
+  const double r_in = kerrIscoRadius(mass, a, prograde);
   const double r_out = r_in * 4.0;
 
-  DiskParams disk = kerr_disk(mass_solar, a_star, mdot_edd, prograde);
-  disk.r_in = r_in;
-  disk.r_out = r_out;
+  DiskParams disk = kerrDisk(mass_solar, a_star, mdot_edd, prograde);
+  disk.rIn  = r_in;
+  disk.rOut = r_out;
 
   lut.r_min = static_cast<float>(r_in / r_s);
   lut.r_max = static_cast<float>(r_out / r_s);
@@ -77,10 +77,10 @@ inline Lut1D generate_redshift_lut(int size, double mass_solar, double a_star,
   }
 
   const double mass = mass_solar * M_SUN;
-  const double r_s = schwarzschild_radius(mass);
+  const double r_s = schwarzschildRadius(mass);
   const double r_g = G * mass / C2;
   const double a = a_star * r_g;
-  const double r_in = kerr_isco_radius(mass, a, true);
+  const double r_in = kerrIscoRadius(mass, a, true);
   const double r_out = r_in * 4.0;
 
   lut.r_min = static_cast<float>(r_in / r_s);
@@ -107,7 +107,7 @@ inline SpinRadiiLut generate_spin_radii_lut(int size, double mass_solar,
   }
 
   const double mass = mass_solar * M_SUN;
-  const double r_s = schwarzschild_radius(mass);
+  const double r_s = schwarzschildRadius(mass);
   const double r_g = G * mass / C2;
 
   lut.spins.resize(static_cast<std::size_t>(size));
@@ -119,9 +119,9 @@ inline SpinRadiiLut generate_spin_radii_lut(int size, double mass_solar,
     double spin = spin_min + u * (spin_max - spin_min);
     double a = spin * r_g;
     bool prograde = spin >= 0.0;
-    double r_isco = kerr_isco_radius(mass, a, prograde);
-    double r_ph = prograde ? kerr_photon_orbit_prograde(mass, a)
-                           : kerr_photon_orbit_retrograde(mass, a);
+    double r_isco = kerrIscoRadius(mass, a, prograde);
+    double r_ph = prograde ? kerrPhotonOrbitPrograde(mass, a)
+                           : kerrPhotonOrbitRetrograde(mass, a);
 
     lut.spins[static_cast<std::size_t>(i)] = static_cast<float>(spin);
     lut.r_isco_over_rs[static_cast<std::size_t>(i)] = static_cast<float>(r_isco / r_s);

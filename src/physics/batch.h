@@ -523,7 +523,7 @@ inline BatchTraceResult traceGeodesicBatch(
     double escape_radius) {
 
   const std::size_t n = initial.size();
-  const double r_s = schwarzschild_radius(mass);
+  const double r_s = schwarzschildRadius(mass);
   const double r_capture = r_s * 1.01;
 
   BatchTraceResult result;
@@ -761,8 +761,8 @@ inline void disk_flux_batch(const std::vector<double> &radii, const DiskParams &
                             std::vector<float> &out) {
   out.resize(radii.size());
   for (std::size_t i = 0; i < radii.size(); ++i) {
-    double flux = disk_flux(radii[i], disk);
-    if (!safe_isfinite(flux) || flux < 0.0) {
+    double flux = diskFlux(radii[i], disk);
+    if (!safeIsfinite(flux) || flux < 0.0) {
       flux = 0.0;
     }
     out[i] = static_cast<float>(flux);
@@ -773,8 +773,8 @@ inline void kerr_redshift_batch(const std::vector<double> &radii, double theta, 
                                 double a, std::vector<float> &out) {
   out.resize(radii.size());
   for (std::size_t i = 0; i < radii.size(); ++i) {
-    double z = kerr_redshift(radii[i], theta, mass, a);
-    if (!safe_isfinite(z) || z < 0.0) {
+    double z = kerrRedshift(radii[i], theta, mass, a);
+    if (!safeIsfinite(z) || z < 0.0) {
       z = 0.0;
     }
     z = std::min(z, 10.0);

@@ -293,7 +293,7 @@ int run_tests() {
   // r_s = 2.95325e5 cm = 2.95325 km
   {
     double mass = physics::M_SUN; // 1 solar mass in grams
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double expected = 2.9532500765e5; // cm (verified value)
 
     TestResult r{"Schwarzschild radius (1 M_sun)", expected, r_s,
@@ -306,7 +306,7 @@ int run_tests() {
   // This is the supermassive black hole at the center of our galaxy
   {
     double mass = 4.0e6 * physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double expected = 1.1813e12; // cm (~0.08 AU)
 
     TestResult r{"Schwarzschild radius (4e6 M_sun, Sgr A*)", expected, r_s,
@@ -318,8 +318,8 @@ int run_tests() {
   // Test 3: Photon sphere radius = 1.5 * r_s
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
-    double r_ph = physics::photon_sphere_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
+    double r_ph = physics::photonSphereRadius(mass);
     double expected = 1.5 * r_s;
 
     TestResult r{"Photon sphere radius = 1.5 r_s", expected, r_ph,
@@ -331,8 +331,8 @@ int run_tests() {
   // Test 4: ISCO radius = 3 * r_s (for Schwarzschild)
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
-    double r_isco = physics::isco_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
+    double r_isco = physics::iscoRadius(mass);
     double expected = 3.0 * r_s;
 
     TestResult r{"ISCO radius = 3 r_s", expected, r_isco,
@@ -345,9 +345,9 @@ int run_tests() {
   // z = 1/sqrt(1 - r_s/r) - 1 = 1/sqrt(1/2) - 1 = sqrt(2) - 1 ~ 0.414
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double r = 2.0 * r_s;
-    double z = physics::gravitational_redshift(r, mass);
+    double z = physics::gravitationalRedshift(r, mass);
     double expected = std::sqrt(2.0) - 1.0;
 
     TestResult r_test{"Gravitational redshift at r=2r_s", expected, z,
@@ -360,9 +360,9 @@ int run_tests() {
   // z = 1/sqrt(1 - 0.1) - 1 = 1/sqrt(0.9) - 1 ~ 0.0541
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double r = 10.0 * r_s;
-    double z = physics::gravitational_redshift(r, mass);
+    double z = physics::gravitationalRedshift(r, mass);
     double expected = 1.0 / std::sqrt(0.9) - 1.0;
 
     TestResult r_test{"Gravitational redshift at r=10r_s", expected, z,
@@ -375,8 +375,8 @@ int run_tests() {
   // b_crit = sqrt(27) * r_s / 2 ~ 2.598 * r_s
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
-    double b_crit = physics::critical_impact_parameter(mass);
+    double r_s = physics::schwarzschildRadius(mass);
+    double b_crit = physics::criticalImpactParameter(mass);
     double expected = std::sqrt(27.0) * r_s / 2.0;
 
     TestResult r{"Critical impact parameter", expected, b_crit,
@@ -389,9 +389,9 @@ int run_tests() {
   // v_esc = c * sqrt(r_s/r) = c * sqrt(1/2) ~ 0.707 c
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double r = 2.0 * r_s;
-    double v_esc = physics::escape_velocity(r, mass);
+    double v_esc = physics::escapeVelocity(r, mass);
     double expected = physics::C * std::sqrt(0.5);
 
     TestResult r_test{"Escape velocity at r=2r_s", expected, v_esc,
@@ -404,9 +404,9 @@ int run_tests() {
   // delta_phi ~ 4GM/(b*c^2) for b >> r_s
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double b = 1000.0 * r_s; // Far from black hole
-    double delta_phi = physics::gravitational_deflection(b, mass);
+    double delta_phi = physics::gravitationalDeflection(b, mass);
     double expected = 2.0 * r_s / b; // First-order approximation
 
     TestResult r{"Light deflection (weak field)", expected, delta_phi,
@@ -417,7 +417,7 @@ int run_tests() {
 
   // Test 10: Hubble parameter E(z=0) should equal 1
   {
-    double E = physics::hubble_E(0.0);
+    double E = physics::hubbleE(0.0);
     double expected = 1.0;
 
     TestResult r{"Hubble E(z=0) = 1", expected, E, approx_equal(E, expected)};
@@ -428,9 +428,9 @@ int run_tests() {
   // Test 11: Kerr ISCO reduces to Schwarzschild when a=0
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double a = 0.0;
-    double r_isco = physics::kerr_isco_radius(mass, a, true);
+    double r_isco = physics::kerrIscoRadius(mass, a, true);
     double expected = 3.0 * r_s;
 
     TestResult r{"Kerr ISCO (a=0) == 3 r_s", expected, r_isco,
@@ -442,9 +442,9 @@ int run_tests() {
   // Test 12: Kerr photon orbit reduces to Schwarzschild when a=0
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double a = 0.0;
-    double r_ph = physics::kerr_photon_orbit_prograde(mass, a);
+    double r_ph = physics::kerrPhotonOrbitPrograde(mass, a);
     double expected = 1.5 * r_s;
 
     TestResult r{"Kerr photon orbit (a=0) == 1.5 r_s", expected, r_ph,
@@ -458,9 +458,9 @@ int run_tests() {
     double mass = physics::M_SUN;
     double M_geom = physics::G * mass / physics::C2;
     double a = M_geom;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double expected = 0.5 * r_s;
-    double r_isco = physics::kerr_isco_radius(mass, a, true);
+    double r_isco = physics::kerrIscoRadius(mass, a, true);
 
     TestResult r{"Kerr ISCO prograde (a*=1)", expected, r_isco,
                  approx_equal(r_isco, expected, 1e-4)};
@@ -473,9 +473,9 @@ int run_tests() {
     double mass = physics::M_SUN;
     double M_geom = physics::G * mass / physics::C2;
     double a = M_geom;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double expected = 4.5 * r_s;
-    double r_isco = physics::kerr_isco_radius(mass, a, false);
+    double r_isco = physics::kerrIscoRadius(mass, a, false);
 
     TestResult r{"Kerr ISCO retrograde (a*=1)", expected, r_isco,
                  approx_equal(r_isco, expected, 1e-4)};
@@ -486,8 +486,8 @@ int run_tests() {
   // Test 15: Kerr horizons reduce to Schwarzschild when a=0
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
-    auto horizons = physics::kerr_horizons(mass, 0.0);
+    double r_s = physics::schwarzschildRadius(mass);
+    auto horizons = physics::kerrHorizons(mass, 0.0);
     bool ok = approx_equal(horizons.first, r_s, 1e-8) && approx_equal(horizons.second, 0.0, 1e-8);
 
     TestResult r{"Kerr horizons (a=0)", 1.0, ok ? 1.0 : 0.0, ok};
@@ -500,8 +500,8 @@ int run_tests() {
     double mass = physics::M_SUN;
     double M_geom = physics::G * mass / physics::C2;
     double a = 1.2 * M_geom;
-    double r_isco = physics::kerr_isco_radius(mass, a, true);
-    double r_ph = physics::kerr_photon_orbit_prograde(mass, a);
+    double r_isco = physics::kerrIscoRadius(mass, a, true);
+    double r_ph = physics::kerrPhotonOrbitPrograde(mass, a);
     bool ok = std::isnan(r_isco) && std::isnan(r_ph);
 
     TestResult r{"Kerr invalid spin -> NaN", 1.0, ok ? 1.0 : 0.0, ok};
@@ -512,10 +512,10 @@ int run_tests() {
   // Test 17: Kerr redshift at a=0 matches Schwarzschild in equatorial plane
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double radius = 10.0 * r_s;
-    double z_schw = physics::gravitational_redshift(radius, mass);
-    double z_kerr = physics::kerr_redshift(radius, 0.5 * physics::PI, mass, 0.0);
+    double z_schw = physics::gravitationalRedshift(radius, mass);
+    double z_kerr = physics::kerrRedshift(radius, 0.5 * physics::PI, mass, 0.0);
 
     TestResult result{"Kerr redshift (a=0) == Schwarzschild", z_schw, z_kerr,
                       approx_equal(z_kerr, z_schw, 1e-6)};
@@ -526,25 +526,25 @@ int run_tests() {
   // Test 18: Kerr photon orbit potentials vanish at a=0 photon sphere
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double M_geom = physics::G * mass / physics::C2;
     double r = 1.5 * r_s; // 3M
     double a = 0.0;
 
     physics::KerrGeodesicConsts c{};
-    c.E = 1.0;
-    c.Lz = 3.0 * std::sqrt(3.0) * M_geom;
-    c.Q = 0.0;
+    c.e = 1.0;
+    c.lz = 3.0 * std::sqrt(3.0) * M_geom;
+    c.q = 0.0;
 
     physics::KerrPotentials pot =
-        physics::kerr_potentials(r, 0.5 * physics::PI, mass, a, c);
+        physics::kerrPotentials(r, 0.5 * physics::PI, mass, a, c);
 
     double scaleR = M_geom * M_geom * M_geom * M_geom;
     double scaleD = M_geom * M_geom * M_geom;
-    bool r_ok = std::abs(pot.R) / scaleR < 1e-6;
+    bool r_ok = std::abs(pot.rPot) / scaleR < 1e-6;
     bool d_ok = std::abs(pot.dRdr) / scaleD < 1e-6;
 
-    TestResult rPot{"Kerr R potential at photon orbit", 0.0, pot.R, r_ok};
+    TestResult rPot{"Kerr R potential at photon orbit", 0.0, pot.rPot, r_ok};
     TestResult dPot{"Kerr dR/dr at photon orbit", 0.0, pot.dRdr, d_ok};
     print_result(rPot);
     print_result(dPot);
@@ -555,23 +555,23 @@ int run_tests() {
   // Test 19: Kerr turning point potential vanishes (a=0, equatorial)
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double M_geom = physics::G * mass / physics::C2;
     double r = 4.0 * r_s; // turning point radius
     double a = 0.0;
 
     physics::KerrGeodesicConsts c{};
-    c.E = 1.0;
-    c.Lz = std::sqrt((r * r * r) / (r - r_s)); // Lz^2 = r^3 / (r - r_s)
-    c.Q = 0.0;
+    c.e = 1.0;
+    c.lz = std::sqrt((r * r * r) / (r - r_s)); // Lz^2 = r^3 / (r - r_s)
+    c.q = 0.0;
 
     physics::KerrPotentials pot =
-        physics::kerr_potentials(r, 0.5 * physics::PI, mass, a, c);
+        physics::kerrPotentials(r, 0.5 * physics::PI, mass, a, c);
 
     double scaleR = M_geom * M_geom * M_geom * M_geom;
-    bool ok = std::abs(pot.R) / scaleR < 1e-6;
+    bool ok = std::abs(pot.rPot) / scaleR < 1e-6;
 
-    TestResult rPot{"Kerr turning point R=0", 0.0, pot.R, ok};
+    TestResult rPot{"Kerr turning point R=0", 0.0, pot.rPot, ok};
     print_result(rPot);
     rPot.passed ? ++passed : ++failed;
   }
@@ -579,20 +579,20 @@ int run_tests() {
   // Test 20: Kerr raytracer produces finite output (a=0)
   {
     double mass = physics::M_SUN;
-    double r_s = physics::schwarzschild_radius(mass);
+    double r_s = physics::schwarzschildRadius(mass);
     double M_geom = physics::G * mass / physics::C2;
     double a = 0.0;
 
     physics::KerrRaytracer tracer(mass, a);
     double impact = 3.0 * std::sqrt(3.0) * M_geom;
-    physics::KerrGeodesicConsts c = physics::kerr_equatorial_consts(impact, 1.0);
-    physics::KerrGeodesicState state = physics::kerr_equatorial_state(10.0 * r_s, 0.0, -1.0);
+    physics::KerrGeodesicConsts c = physics::kerrEquatorialConsts(impact, 1.0);
+    physics::KerrGeodesicState state = physics::kerrEquatorialState(10.0 * r_s, 0.0, -1.0);
 
     auto result = tracer.trace(state, c);
     bool finite =
-        std::isfinite(result.final_position[0]) &&
-        std::isfinite(result.final_position[1]) &&
-        std::isfinite(result.final_position[2]);
+        std::isfinite(result.finalPosition[0]) &&
+        std::isfinite(result.finalPosition[1]) &&
+        std::isfinite(result.finalPosition[2]);
 
     TestResult r{"Kerr raytracer finite output", 1.0, finite ? 1.0 : 0.0, finite};
     print_result(r);
@@ -634,7 +634,7 @@ int run_tests() {
     if (hasAssets) {
       const std::size_t count = emissivity.size();
       const double mass = massSolar * physics::M_SUN;
-      const double r_s = physics::schwarzschild_radius(mass);
+      const double r_s = physics::schwarzschildRadius(mass);
       const double r_g = physics::G * mass / physics::C2;
       const double a = spin * r_g;
       const double r_in = rInOverRs * r_s;
@@ -676,7 +676,7 @@ int run_tests() {
 
         double u = static_cast<double>(i) / static_cast<double>(count - 1);
         double r = r_in + u * (r_out - r_in);
-        double expectedRedshift = physics::kerr_redshift(r, 0.5 * physics::PI, mass, a);
+        double expectedRedshift = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
         if (!std::isfinite(expectedRedshift) || expectedRedshift < 0.0) {
           expectedRedshift = 0.0;
         }
@@ -722,13 +722,13 @@ int run_tests() {
 
     if (hasAssets) {
       const double mass = massSolar * physics::M_SUN;
-      const double expectedRs = physics::schwarzschild_radius(mass);
+      const double expectedRs = physics::schwarzschildRadius(mass);
       const double r_g = physics::G * mass / physics::C2;
       const double a = spin * r_g;
       const bool prograde = spin >= 0.0;
-      const double expectedIsco = physics::kerr_isco_radius(mass, a, prograde);
-      const double expectedPh = prograde ? physics::kerr_photon_orbit_prograde(mass, a)
-                                         : physics::kerr_photon_orbit_retrograde(mass, a);
+      const double expectedIsco = physics::kerrIscoRadius(mass, a, prograde);
+      const double expectedPh = prograde ? physics::kerrPhotonOrbitPrograde(mass, a)
+                                         : physics::kerrPhotonOrbitRetrograde(mass, a);
 
       TestResult rsResult{"Validation r_s", expectedRs, rS,
                           approx_equal(rS, expectedRs, 1e-6)};
@@ -748,7 +748,7 @@ int run_tests() {
       double maxRedshiftDiff = 0.0;
       for (std::size_t i = 0; i < rOverRs.size(); ++i) {
         double r = rOverRs[i] * expectedRs;
-        double expectedZ = physics::kerr_redshift(r, 0.5 * physics::PI, mass, a);
+        double expectedZ = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
         if (!std::isfinite(expectedZ) || expectedZ < 0.0) {
           expectedZ = 0.0;
         }
@@ -776,7 +776,7 @@ int run_tests() {
 
     if (hasCurve) {
       const double mass = physics::M_SUN;
-      const double r_s = physics::schwarzschild_radius(mass);
+      const double r_s = physics::schwarzschildRadius(mass);
       const double r_g = physics::G * mass / physics::C2;
 
       double maxIscoDiff = 0.0;
@@ -785,9 +785,9 @@ int run_tests() {
         double spin = spins[i];
         double a = spin * r_g;
         bool prograde = spin >= 0.0;
-        double expectedIsco = physics::kerr_isco_radius(mass, a, prograde) / r_s;
-        double expectedPh = prograde ? physics::kerr_photon_orbit_prograde(mass, a) / r_s
-                                     : physics::kerr_photon_orbit_retrograde(mass, a) / r_s;
+        double expectedIsco = physics::kerrIscoRadius(mass, a, prograde) / r_s;
+        double expectedPh = prograde ? physics::kerrPhotonOrbitPrograde(mass, a) / r_s
+                                     : physics::kerrPhotonOrbitRetrograde(mass, a) / r_s;
         maxIscoDiff = std::max(maxIscoDiff, std::abs(expectedIsco - iscoOverRs[i]));
         maxPhDiff = std::max(maxPhDiff, std::abs(expectedPh - phOverRs[i]));
       }

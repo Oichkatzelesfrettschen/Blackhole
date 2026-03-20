@@ -76,23 +76,23 @@ void fuzz_doppler(FuzzReader &r) {
   double z = r.positive() * 10.0;       // redshift
 
   // Lorentz factor
-  (void)lorentz_factor(beta);
+  (void)lorentzFactor(beta);
 
   // Doppler factor
-  (void)doppler_factor(beta, theta);
+  (void)dopplerFactor(beta, theta);
 
   // Relativistic Doppler shift
-  (void)doppler_shift_relativistic(nu_emit, beta, theta);
+  (void)dopplerShiftRelativistic(nu_emit, beta, theta);
 
   // Beaming
-  (void)relativistic_beaming_intensity(1.0, beta, theta, 3.0);
+  (void)relativisticBeamingIntensity(1.0, beta, theta, 3.0);
 
   // Aberration
-  (void)relativistic_aberration(theta, beta);
+  (void)relativisticAberration(theta, beta);
 
   // Cosmological redshift
-  (void)observed_frequency(nu_emit, z);
-  (void)k_correction_power_law(1.0, z, -0.7);
+  (void)observedFrequency(nu_emit, z);
+  (void)kCorrectionPowerLaw(1.0, z, -0.7);
 }
 
 // Fuzz synchrotron module
@@ -103,23 +103,23 @@ void fuzz_synchrotron(FuzzReader &r) {
   double p = 2.0 + r.fraction();       // Power-law index
 
   // Characteristic frequency
-  (void)synchrotron_frequency_critical(gamma_e, B);
+  (void)synchrotronFrequencyCritical(gamma_e, B);
 
   // Power radiated
-  (void)synchrotron_power_single_electron(gamma_e, B);
+  (void)synchrotronPowerSingleElectron(gamma_e, B);
 
   // Cooling time
-  (void)synchrotron_cooling_time(gamma_e, B);
+  (void)synchrotronCoolingTime(gamma_e, B);
 
   // Spectrum shape
-  double x = nu / (synchrotron_frequency_critical(gamma_e, B) + 1e-30);
-  (void)synchrotron_F(x);
-  (void)synchrotron_G(x);
+  double x = nu / (synchrotronFrequencyCritical(gamma_e, B) + 1e-30);
+  (void)synchrotronF(x);
+  (void)synchrotronG(x);
 
   // Power-law distribution
   double nu_min = r.positive() * 1e9;
   double nu_max = nu_min * 1e6;
-  (void)synchrotron_spectrum_power_law(nu, B, gamma_e, 1e6 * gamma_e, p);
+  (void)synchrotronSpectrumPowerLaw(nu, B, gamma_e, 1e6 * gamma_e, p);
 }
 
 // Fuzz Penrose process
@@ -137,16 +137,16 @@ void fuzz_penrose(FuzzReader &r) {
   // Penrose energy extraction
   double E_in = r.positive();
   double L_in = r.next_double();
-  auto result = penrose_process_energy_extraction(kerr, E_in, L_in);
-  (void)result.E_out;
+  auto result = penroseProcessEnergyExtraction(kerr, E_in, L_in);
+  (void)result.eOut;
   (void)result.efficiency;
 
   // Maximum efficiency
-  (void)penrose_maximum_efficiency(a_star);
+  (void)penroseMaximumEfficiency(a_star);
 
   // Blandford-Znajek power
   double B_field = r.positive() * 1e4;
-  (void)blandford_znajek_power(mass, a_star, B_field);
+  (void)blandfordZnajekPower(mass, a_star, B_field);
 }
 
 // Fuzz Hawking radiation
@@ -154,23 +154,23 @@ void fuzz_hawking(FuzzReader &r) {
   double mass = r.positive() * M_SUN;
 
   // Temperature
-  (void)hawking_temperature(mass);
+  (void)hawkingTemperature(mass);
 
   // Luminosity
-  (void)hawking_luminosity(mass);
+  (void)hawkingLuminosity(mass);
 
   // Evaporation time
-  (void)hawking_evaporation_time(mass);
+  (void)hawkingEvaporationTime(mass);
 
   // Peak wavelength
-  (void)hawking_peak_wavelength(mass);
+  (void)hawkingPeakWavelength(mass);
 
   // Entropy
   (void)bekenstein_hawking_entropy(mass);
 
   // Information paradox related
-  (void)page_time(mass);
-  (void)scrambling_time(mass);
+  (void)pageTime(mass);
+  (void)scramblingTime(mass);
 }
 
 // Fuzz raytracer
@@ -198,12 +198,12 @@ void fuzz_raytracer(FuzzReader &r) {
 
   // Trace (limited steps for fuzzing)
   SchwarzschildRaytracer tracer(mass);
-  tracer.set_max_steps(100);
-  tracer.set_step_size(r_s * 0.1);
+  tracer.setMaxSteps(100);
+  tracer.setStepSize(r_s * 0.1);
 
   auto result = tracer.trace(ray);
-  (void)result.final_position[0];
-  (void)result.steps_taken;
+  (void)result.finalPosition[0];
+  (void)result.stepsTaken;
   (void)result.redshift;
 }
 

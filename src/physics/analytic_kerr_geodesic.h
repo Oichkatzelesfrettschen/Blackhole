@@ -82,8 +82,8 @@ enum class RadialMotionType {
  * determine the geodesic trajectory.
  */
 struct ImpactParams {
-  double xi;   // L/E
-  double eta;  // Q/E^2
+  double xi  = 0.0; // L/E
+  double eta = 0.0; // Q/E^2
 };
 
 /**
@@ -95,8 +95,8 @@ struct ImpactParams {
  * two roots may be complex conjugates.
  */
 struct RadialRoots {
-  std::array<std::complex<double>, 4> roots;
-  int n_real = 0;        // Number of real roots
+  std::array<std::complex<double>, 4> roots{};
+  int nReal            = 0;                     // Number of real roots
   RadialMotionType type = RadialMotionType::Invalid;
 };
 
@@ -117,14 +117,14 @@ struct RadialRoots {
  * @param eta Impact parameter Q/E^2
  * @return R(r) value
  */
-inline double radial_potential(double r, double a, double xi, double eta) {
-  double r2 = r * r;
-  double a2 = a * a;
-  double xi_a = xi - a;
-  double delta = r2 - 2.0 * r + a2; // M=1
+[[nodiscard]] inline double radialPotential(double r, double a, double xi, double eta) {
+  const double r2   = r * r;
+  const double a2   = a * a;
+  const double xiA  = xi - a;
+  const double delta = (r2 - (2.0 * r)) + a2; // M=1
 
-  double term1 = r2 + a2 - a * xi;
-  return term1 * term1 - delta * (eta + xi_a * xi_a);
+  const double term1 = (r2 + a2) - (a * xi);
+  return (term1 * term1) - (delta * (eta + (xiA * xiA)));
 }
 
 /**
@@ -147,18 +147,21 @@ inline double radial_potential(double r, double a, double xi, double eta) {
  * Note: c3 = 0 (no r^3 term), which is correct.
  */
 struct QuarticCoeffs {
-  double c0, c1, c2; // R(r) = r^4 + c2*r^2 + c1*r + c0
+  double c0 = 0.0; // constant term
+  double c1 = 0.0; // linear coefficient
+  double c2 = 0.0; // quadratic coefficient (R(r) = r^4 + c2*r^2 + c1*r + c0)
 };
 
-inline QuarticCoeffs radial_quartic_coeffs(double a, double xi, double eta) {
-  double a2 = a * a;
-  double xi_a = xi - a;
-  double xi_a2 = xi_a * xi_a;
+[[nodiscard]] inline QuarticCoeffs radialQuarticCoeffs(double a, double xi, double eta) {
+  const double a2   = a * a;
+  const double xiA  = xi - a;
+  const double xiA2 = xiA * xiA;
+  const double aXi  = a2 - (a * xi);
 
   QuarticCoeffs c;
-  c.c2 = 2.0 * (a2 - a * xi) - eta - xi_a2;
-  c.c1 = 2.0 * (eta + xi_a2); // M=1
-  c.c0 = (a2 - a * xi) * (a2 - a * xi) - a2 * (eta + xi_a2);
+  c.c2 = (2.0 * aXi) - eta - xiA2;
+  c.c1 = 2.0 * (eta + xiA2); // M=1
+  c.c0 = (aXi * aXi) - (a2 * (eta + xiA2));
 
   return c;
 }
@@ -175,127 +178,109 @@ inline QuarticCoeffs radial_quartic_coeffs(double a, double xi, double eta) {
  * @param c Quartic coefficients
  * @return RadialRoots with up to 4 roots
  */
-inline RadialRoots find_radial_roots(const QuarticCoeffs& c) {
+[[nodiscard]] inline RadialRoots findRadialRoots(const QuarticCoeffs& c) {
   RadialRoots result;
 
   // Ferrari's resolvent cubic: y^3 - c2*y^2 - 4*c0*y + (4*c2*c0 - c1^2) = 0
   // Substituting y = t + c2/3 to get depressed cubic t^3 + pt + q = 0
-  double p_coeff = -c.c2 * c.c2 / 3.0 - 4.0 * c.c0;
-  double q_coeff = -2.0 * c.c2 * c.c2 * c.c2 / 27.0
-                 + 4.0 * c.c2 * c.c0 / 3.0 - c.c1 * c.c1;
+  const double pCoeff = (-(c.c2 * c.c2) / 3.0) - (4.0 * c.c0);
+  const double qCoeff = ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0)
+                      + ((4.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
 
   // Cardano's formula for the resolvent cubic
-  double disc = q_coeff * q_coeff / 4.0 + p_coeff * p_coeff * p_coeff / 27.0;
+  const double disc = ((qCoeff * qCoeff) / 4.0) + ((pCoeff * pCoeff * pCoeff) / 27.0);
 
-  double y1;
+  double y1 = 0.0;
   if (disc >= 0.0) {
-    double sq = std::sqrt(disc);
-    double u = std::cbrt(-q_coeff / 2.0 + sq);
-    double v = std::cbrt(-q_coeff / 2.0 - sq);
-    y1 = u + v + c.c2 / 3.0;
+    const double sq = std::sqrt(disc);
+    const double u  = std::cbrt((-qCoeff / 2.0) + sq);
+    const double v  = std::cbrt((-qCoeff / 2.0) - sq);
+    y1 = u + v + (c.c2 / 3.0);
   } else {
     // Three real roots; use trigonometric form
-    double r_val = std::sqrt(-p_coeff * p_coeff * p_coeff / 27.0);
-    double phi = std::acos(-q_coeff / (2.0 * r_val));
-    y1 = 2.0 * std::cbrt(r_val) * std::cos(phi / 3.0) + c.c2 / 3.0;
+    const double rVal = std::sqrt(-(pCoeff * pCoeff * pCoeff) / 27.0);
+    const double phi  = std::acos(-qCoeff / (2.0 * rVal));
+    y1 = (2.0 * std::cbrt(rVal) * std::cos(phi / 3.0)) + (c.c2 / 3.0);
   }
 
-  // Factor quartic using y1
-  // r^4 + c2*r^2 + c1*r + c0 = (r^2 + y1/2)^2 - [(y1 + c2)*r^2 - c1*r + y1^2/4 - c0]
-  // The second factor is a quadratic in r: A*r^2 + B*r + C
-  double A = y1 + c.c2;
-  double B = -c.c1;
-  double C = y1 * y1 / 4.0 - c.c0;
-
-  // Two quadratics: r^2 +/- sqrt(A)*r + (y1/2 +/- C/sqrt(A)) ... etc.
-  // Actually, use the direct factorization:
-  // r^4 + c2*r^2 + c1*r + c0 = (r^2 + alpha*r + beta)(r^2 - alpha*r + gamma)
-  // where alpha^2 = y1 + c2, beta + gamma = c2 + alpha^2 = y1 + 2*c2, beta*gamma = c0, (gamma-beta)*alpha = c1
+  // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma)
+  const double A = y1 + c.c2;
 
   if (A < 0.0) {
     // alpha is imaginary; all roots come in complex conjugate pairs
-    result.n_real = 0;
-    result.type = RadialMotionType::Plunge;
+    result.nReal = 0;
+    result.type  = RadialMotionType::Plunge;
     return result;
   }
 
-  double alpha = std::sqrt(A);
-  double gamma, beta;
+  const double alpha = std::sqrt(A);
+  double beta = 0.0;
+  double gamma = 0.0;
 
   if (std::abs(alpha) > 1e-15) {
-    gamma = (c.c1 / alpha + y1) / 2.0 + c.c2 / 2.0 + A / 2.0;
-    beta = (-c.c1 / alpha + y1) / 2.0 + c.c2 / 2.0 + A / 2.0;
-
-    // More robust: beta + gamma = y1 + 2*c2 ... no, let me use the direct relations
-    // gamma - beta = c1 / alpha, beta + gamma = c2 + alpha^2, beta * gamma = c0
-    // From (gamma-beta) = c1/alpha and (gamma+beta) computed from the quartic:
-    // Actually, let me just solve the two quadratics directly.
+    // Quadratic 1: r^2 + alpha*r + beta = 0; use robust relations
+    beta  = (y1 / 2.0) - (c.c1 / (2.0 * alpha));
+    gamma = (y1 / 2.0) + (c.c1 / (2.0 * alpha));
   } else {
     // alpha ~ 0: degenerate case
-    double disc1 = -4.0 * c.c0;
+    const double disc1 = -4.0 * c.c0;
     if (disc1 < 0.0) {
-      result.n_real = 0;
-      result.type = RadialMotionType::Plunge;
+      result.nReal = 0;
+      result.type  = RadialMotionType::Plunge;
       return result;
     }
-    double sq = std::sqrt(disc1);
-    result.roots[0] = std::complex<double>(sq / 2.0, 0);
-    result.roots[1] = std::complex<double>(-sq / 2.0, 0);
-    result.roots[2] = result.roots[0];
-    result.roots[3] = result.roots[1];
-    result.n_real = 2;
-    result.type = RadialMotionType::Transit;
+    const double sq = std::sqrt(disc1);
+    result.roots.at(0) = std::complex<double>(sq / 2.0, 0);
+    result.roots.at(1) = std::complex<double>(-sq / 2.0, 0);
+    result.roots.at(2) = result.roots.at(0);
+    result.roots.at(3) = result.roots.at(1);
+    result.nReal = 2;
+    result.type  = RadialMotionType::Transit;
     return result;
   }
 
-  // Quadratic 1: r^2 + alpha*r + beta = 0
-  // Use the robust relations:
-  beta = y1 / 2.0 - c.c1 / (2.0 * alpha);
-  gamma = y1 / 2.0 + c.c1 / (2.0 * alpha);
+  const double disc1 = (alpha * alpha) - (4.0 * beta);
+  const double disc2 = (alpha * alpha) - (4.0 * gamma);
 
-  double disc1 = alpha * alpha - 4.0 * beta;
-  double disc2 = alpha * alpha - 4.0 * gamma;
-
-  result.n_real = 0;
+  result.nReal = 0;
 
   if (disc1 >= 0.0) {
-    double sq1 = std::sqrt(disc1);
-    result.roots[0] = std::complex<double>((-alpha + sq1) / 2.0, 0);
-    result.roots[1] = std::complex<double>((-alpha - sq1) / 2.0, 0);
-    result.n_real += 2;
+    const double sq1 = std::sqrt(disc1);
+    result.roots.at(0) = std::complex<double>((-alpha + sq1) / 2.0, 0);
+    result.roots.at(1) = std::complex<double>((-alpha - sq1) / 2.0, 0);
+    result.nReal += 2;
   } else {
-    double sq1 = std::sqrt(-disc1);
-    result.roots[0] = std::complex<double>(-alpha / 2.0, sq1 / 2.0);
-    result.roots[1] = std::complex<double>(-alpha / 2.0, -sq1 / 2.0);
+    const double sq1 = std::sqrt(-disc1);
+    result.roots.at(0) = std::complex<double>(-alpha / 2.0,  sq1 / 2.0);
+    result.roots.at(1) = std::complex<double>(-alpha / 2.0, -sq1 / 2.0);
   }
 
   if (disc2 >= 0.0) {
-    double sq2 = std::sqrt(disc2);
-    result.roots[2] = std::complex<double>((alpha + sq2) / 2.0, 0);
-    result.roots[3] = std::complex<double>((alpha - sq2) / 2.0, 0);
-    result.n_real += 2;
+    const double sq2 = std::sqrt(disc2);
+    result.roots.at(2) = std::complex<double>((alpha + sq2) / 2.0, 0);
+    result.roots.at(3) = std::complex<double>((alpha - sq2) / 2.0, 0);
+    result.nReal += 2;
   } else {
-    double sq2 = std::sqrt(-disc2);
-    result.roots[2] = std::complex<double>(alpha / 2.0, sq2 / 2.0);
-    result.roots[3] = std::complex<double>(alpha / 2.0, -sq2 / 2.0);
+    const double sq2 = std::sqrt(-disc2);
+    result.roots.at(2) = std::complex<double>(alpha / 2.0,  sq2 / 2.0);
+    result.roots.at(3) = std::complex<double>(alpha / 2.0, -sq2 / 2.0);
   }
 
   // Classify motion type
-  if (result.n_real == 4) {
+  if (result.nReal == 4) {
     result.type = RadialMotionType::Transit;
-  } else if (result.n_real == 2) {
+  } else if (result.nReal == 2) {
     result.type = RadialMotionType::Scatter;
   } else {
     result.type = RadialMotionType::Plunge;
   }
 
   // Sort real roots in descending order
-  if (result.n_real >= 2) {
-    // Simple bubble sort on real parts
+  if (result.nReal >= 2) {
     for (int i = 0; i < 3; ++i) {
       for (int j = i + 1; j < 4; ++j) {
-        if (result.roots[j].real() > result.roots[i].real()) {
-          std::swap(result.roots[i], result.roots[j]);
+        if (result.roots.at(j).real() > result.roots.at(i).real()) {
+          std::swap(result.roots.at(i), result.roots.at(j));
         }
       }
     }
@@ -327,41 +312,38 @@ inline RadialRoots find_radial_roots(const QuarticCoeffs& c) {
  * @param lambda0 Initial affine parameter offset
  * @return Radial coordinate r
  */
-inline double r_analytic(double lambda, const RadialRoots& roots,
-                          double lambda0 = 0.0) {
-  if (roots.n_real < 4) {
+[[nodiscard]] inline double rAnalytic(double lambda, const RadialRoots& roots,
+                                       double lambda0 = 0.0) {
+  if (roots.nReal < 4) {
     return -1.0; // Not a transit orbit; analytic formula requires 4 real roots
   }
 
-  double r1 = roots.roots[0].real();
-  double r2 = roots.roots[1].real();
-  double r3 = roots.roots[2].real();
-  double r4 = roots.roots[3].real();
+  const double r1 = roots.roots.at(0).real();
+  const double r2 = roots.roots.at(1).real();
+  const double r3 = roots.roots.at(2).real();
+  const double r4 = roots.roots.at(3).real();
 
   // Elliptic modulus
-  double num = (r2 - r3) * (r1 - r4);
-  double den = (r1 - r3) * (r2 - r4);
-  if (std::abs(den) < 1e-30) return r3;
-  double m = num / den;
+  const double num = (r2 - r3) * (r1 - r4);
+  const double den = (r1 - r3) * (r2 - r4);
+  if (std::abs(den) < 1e-30) { return r3; }
+  const double m = num / den;
 
   // Argument
-  double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
-  double u = scale * (lambda - lambda0);
+  const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
+  const double u     = scale * (lambda - lambda0);
 
   // Jacobi elliptic function sn(u | k) where k = sqrt(m)
-  double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-  double sn_val = boost::math::jacobi_sn(k, u);
-  double cn_val = boost::math::jacobi_cn(k, u);
-  (void)cn_val; // unused but kept for symmetry
+  const double k     = std::sqrt(std::clamp(m, 0.0, 1.0));
+  const double snVal = boost::math::jacobi_sn(k, u);
+  (void)boost::math::jacobi_cn(k, u); // unused but kept for symmetry
 
-  double sn2 = sn_val * sn_val;
+  const double sn2    = snVal * snVal;
+  const double aCoeff = (r3 * (r1 - r4)) - (r4 * (r1 - r3) * sn2);
+  const double bCoeff = (r1 - r4) - ((r1 - r3) * sn2);
 
-  // r(lambda)
-  double a_coeff = r3 * (r1 - r4) - r4 * (r1 - r3) * sn2;
-  double b_coeff = (r1 - r4) - (r1 - r3) * sn2;
-
-  if (std::abs(b_coeff) < 1e-30) return r1; // At turning point
-  return a_coeff / b_coeff;
+  if (std::abs(bCoeff) < 1e-30) { return r1; } // At turning point
+  return aCoeff / bCoeff;
 }
 
 /**
@@ -373,24 +355,24 @@ inline double r_analytic(double lambda, const RadialRoots& roots,
  * @param roots Radial roots
  * @return Half-period in affine parameter
  */
-inline double radial_half_period(const RadialRoots& roots) {
-  if (roots.n_real < 4) return 0.0;
+[[nodiscard]] inline double radialHalfPeriod(const RadialRoots& roots) {
+  if (roots.nReal < 4) { return 0.0; }
 
-  double r1 = roots.roots[0].real();
-  double r2 = roots.roots[1].real();
-  double r3 = roots.roots[2].real();
-  double r4 = roots.roots[3].real();
+  const double r1 = roots.roots.at(0).real();
+  const double r2 = roots.roots.at(1).real();
+  const double r3 = roots.roots.at(2).real();
+  const double r4 = roots.roots.at(3).real();
 
-  double num = (r2 - r3) * (r1 - r4);
-  double den = (r1 - r3) * (r2 - r4);
-  if (std::abs(den) < 1e-30) return 0.0;
-  double m = num / den;
+  const double num = (r2 - r3) * (r1 - r4);
+  const double den = (r1 - r3) * (r2 - r4);
+  if (std::abs(den) < 1e-30) { return 0.0; }
+  const double m = num / den;
 
-  double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
-  if (scale < 1e-30) return 0.0;
+  const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
+  if (scale < 1e-30) { return 0.0; }
 
-  double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-  double K = boost::math::ellint_1(k);
+  const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
+  const double K = boost::math::ellint_1(k);
   return K / scale;
 }
 
@@ -416,46 +398,39 @@ inline double radial_half_period(const RadialRoots& roots) {
  * @param a Spin parameter
  * @return Impact parameters {xi, eta}
  */
-inline ImpactParams critical_impact_params(double r_ph, double a) {
-  double r2 = r_ph * r_ph;
-  double a2 = a * a;
-  double delta = r2 - 2.0 * r_ph + a2;
-  double delta_prime = 2.0 * r_ph - 2.0; // d(Delta)/dr
+[[nodiscard]] inline ImpactParams criticalImpactParams(double rPh, double a) {
+  const double r2         = rPh * rPh;
+  const double a2         = a * a;
+  const double delta      = (r2 - (2.0 * rPh)) + a2;
+  const double deltaPrime = (2.0 * rPh) - 2.0; // d(Delta)/dr
 
   ImpactParams ip;
 
   if (std::abs(a) < 1e-15) {
-    // Schwarzschild: xi = 0 (by symmetry), eta = 27*M^2 at r=3M
-    ip.xi = 0.0;
-    ip.eta = r2 * r_ph * (4.0 * delta_prime - r_ph * 2.0) /
-             (1e-30); // degenerate for a=0
-    // Use known result: eta = 27 at r=3 for M=1
+    // Schwarzschild: xi = 0 (by symmetry), eta = 27 at r=3 for M=1
+    ip.xi  = 0.0;
     ip.eta = 27.0;
     return ip;
   }
 
-  // xi_c = (r^2*(r-3) + a^2*(r+1)) / (a*(1-r))  [Chandrasekhar]
-  // For M=1: xi = -(r^2 + a^2)/a + 2*r*delta/(a*delta_prime)
-  if (std::abs(delta_prime) < 1e-15) {
-    ip.xi = 0.0;
+  if (std::abs(deltaPrime) < 1e-15) {
+    ip.xi  = 0.0;
     ip.eta = 0.0;
     return ip;
   }
 
-  ip.xi = (r2 + a2) / a - 2.0 * r_ph * delta / (a * delta_prime);
+  ip.xi = ((r2 + a2) / a) - ((2.0 * rPh * delta) / (a * deltaPrime));
 
   // eta_c from Chandrasekhar:
   // eta = r^2 * (4*delta*delta_prime' - (delta_prime)^2*r) / (a^2 * delta_prime^2)
   // With delta'' = 2:
-  double eta_num = r2 * (4.0 * delta * 2.0 -
-                   delta_prime * delta_prime * r_ph);
-  ip.eta = eta_num / (a2 * delta_prime * delta_prime);
+  const double etaNum = r2 * ((4.0 * delta * 2.0) - (deltaPrime * deltaPrime * rPh));
+  ip.eta = etaNum / (a2 * deltaPrime * deltaPrime);
 
-  // Simpler formula: eta = r^2 * [4*M*Delta - r*(r-M)^2] / (a^2 * (r-M)^2)
-  // With M=1: eta = r^2 * [4*delta - r*(r-1)^2] / (a^2 * (r-1)^2)
-  double rm1 = r_ph - 1.0;
+  // Simpler formula with M=1: eta = r^2 * [4*delta - r*(r-1)^2] / (a^2*(r-1)^2)
+  const double rm1 = rPh - 1.0;
   if (std::abs(rm1) > 1e-15) {
-    ip.eta = r2 * (4.0 * delta - r_ph * rm1 * rm1) / (a2 * rm1 * rm1);
+    ip.eta = (r2 * ((4.0 * delta) - (rPh * rm1 * rm1))) / (a2 * rm1 * rm1);
   }
 
   return ip;
@@ -471,8 +446,8 @@ inline ImpactParams critical_impact_params(double r_ph, double a) {
  * @param a Spin parameter (|a| <= 1 for M=1)
  * @return Prograde photon orbit radius
  */
-inline double prograde_photon_orbit(double a) {
-  return 2.0 * (1.0 + std::cos(2.0 / 3.0 * std::acos(-std::abs(a))));
+[[nodiscard]] inline double progradePhotonOrbit(double a) {
+  return 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(-std::abs(a))));
 }
 
 /**
@@ -482,8 +457,8 @@ inline double prograde_photon_orbit(double a) {
  *
  * Range: r_ph = 3 (Schwarzschild) to r_ph = 4 (extremal Kerr retrograde).
  */
-inline double retrograde_photon_orbit(double a) {
-  return 2.0 * (1.0 + std::cos(2.0 / 3.0 * std::acos(std::abs(a))));
+[[nodiscard]] inline double retrogradePhotonOrbit(double a) {
+  return 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(std::abs(a))));
 }
 
 } // namespace physics

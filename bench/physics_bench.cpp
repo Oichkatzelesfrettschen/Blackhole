@@ -381,24 +381,24 @@ int main(int argc, char **argv) {
   results.push_back(runBench("Schwarzschild raytracer", cfg.iterations, cfg.warmup,
                              static_cast<double>(cfg.rays), [&]() {
     const double mass = cfg.massSolar * physics::M_SUN;
-    const double r_s = physics::schwarzschild_radius(mass);
+    const double r_s = physics::schwarzschildRadius(mass);
     physics::SchwarzschildRaytracer tracer(mass);
-    tracer.set_step_size(0.02 * r_s);
-    tracer.set_max_steps(cfg.steps);
+    tracer.setStepSize(0.02 * r_s);
+    tracer.setMaxSteps(cfg.steps);
 
     for (int i = 0; i < cfg.rays; ++i) {
       double angle = (static_cast<double>(i) / cfg.rays) * (physics::PI * 0.9);
       physics::PhotonRay ray{};
-      ray.position = {30.0 * r_s, physics::PI * 0.5, 0.0};
-      ray.direction = {std::cos(angle), std::sin(angle), 0.0};
-      ray.frequency = 1.0;
-      ray.status = physics::RayStatus::PROPAGATING;
-      ray.energy = 1.0;
-      ray.angular_momentum = 0.0;
-      ray.carter_constant = 0.0;
+      ray.position        = {30.0 * r_s, physics::PI * 0.5, 0.0};
+      ray.direction       = {std::cos(angle), std::sin(angle), 0.0};
+      ray.frequency       = 1.0;
+      ray.status          = physics::RayStatus::PROPAGATING;
+      ray.energy          = 1.0;
+      ray.angularMomentum = 0.0;
+      ray.carterConstant  = 0.0;
 
       auto result = tracer.trace(ray);
-      cpuAccum += result.total_distance + result.redshift + result.steps_taken;
+      cpuAccum += result.totalDistance + result.redshift + result.stepsTaken;
     }
   }));
 
@@ -413,30 +413,30 @@ int main(int argc, char **argv) {
       double u = static_cast<double>(i) / (cfg.rays * 10);
       double r = (6.0 + 20.0 * u) * r_g;
       double theta = physics::PI * (0.25 + 0.5 * u);
-      auto p = physics::kerr_potentials(r, theta, mass, a, c);
-      cpuAccum += p.R + p.Theta + p.dRdr + p.dThetadtheta;
+      auto p = physics::kerrPotentials(r, theta, mass, a, c);
+      cpuAccum += p.rPot + p.thetaPot + p.dRdr + p.dThetadtheta;
     }
   }));
 
   results.push_back(runBench("Kerr raytracer (mino)", cfg.iterations, cfg.warmup,
                              static_cast<double>(cfg.rays), [&]() {
     const double mass = cfg.massSolar * physics::M_SUN;
-    const double r_s = physics::schwarzschild_radius(mass);
+    const double r_s = physics::schwarzschildRadius(mass);
     const double r_g = physics::G * mass / physics::C2;
     const double a = cfg.spin * r_g;
 
     physics::KerrRaytracer tracer(mass, a);
-    tracer.set_step_size(0.02 * r_s);
-    tracer.set_max_steps(cfg.steps);
+    tracer.setStepSize(0.02 * r_s);
+    tracer.setMaxSteps(cfg.steps);
 
     double impact = 3.0 * std::sqrt(3.0) * r_g;
-    auto c = physics::kerr_equatorial_consts(impact, 1.0);
+    auto c = physics::kerrEquatorialConsts(impact, 1.0);
 
     for (int i = 0; i < cfg.rays; ++i) {
       double phi = (static_cast<double>(i) / cfg.rays) * physics::TWO_PI;
-      auto state = physics::kerr_equatorial_state(12.0 * r_s, phi, -1.0);
+      auto state = physics::kerrEquatorialState(12.0 * r_s, phi, -1.0);
       auto result = tracer.trace(state, c);
-      cpuAccum += result.total_distance + result.redshift + result.steps_taken;
+      cpuAccum += result.totalDistance + result.redshift + result.stepsTaken;
     }
   }));
 
@@ -457,7 +457,7 @@ int main(int argc, char **argv) {
   results.push_back(runBench("Batch geodesic (SIMD)", cfg.iterations, cfg.warmup,
                              static_cast<double>(cfg.rays), [&]() {
     const double mass = cfg.massSolar * physics::M_SUN;
-    const double r_s = physics::schwarzschild_radius(mass);
+    const double r_s = physics::schwarzschildRadius(mass);
     const double step_size = 0.02 * r_s;
     const double escape_radius = 100.0 * r_s;
 
@@ -497,22 +497,22 @@ int main(int argc, char **argv) {
   std::cout << "SIMD width (doubles): " << physics::xsimd_eval::getSimdWidth() << "\n\n";
 
   {
-    auto xb = physics::xsimd_eval::benchSchwarzschild_f(
+    const auto xb = physics::xsimd_eval::benchSchwarzschildF(
         static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
     std::cout << std::fixed << std::setprecision(3);
-    std::cout << xb.name << ": scalar=" << xb.scalar_ms << " ms, xsimd=" << xb.xsimd_ms
+    std::cout << xb.name << ": scalar=" << xb.scalarMs << " ms, xsimd=" << xb.xsimdMs
               << " ms, speedup=" << xb.speedup << "x\n";
   }
   {
-    auto xb = physics::xsimd_eval::benchRedshift(
+    const auto xb = physics::xsimd_eval::benchRedshift(
         static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
-    std::cout << xb.name << ": scalar=" << xb.scalar_ms << " ms, xsimd=" << xb.xsimd_ms
+    std::cout << xb.name << ": scalar=" << xb.scalarMs << " ms, xsimd=" << xb.xsimdMs
               << " ms, speedup=" << xb.speedup << "x\n";
   }
   {
-    auto xb = physics::xsimd_eval::benchChristoffelAccel(
+    const auto xb = physics::xsimd_eval::benchChristoffelAccel(
         static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
-    std::cout << xb.name << ": scalar=" << xb.scalar_ms << " ms, xsimd=" << xb.xsimd_ms
+    std::cout << xb.name << ": scalar=" << xb.scalarMs << " ms, xsimd=" << xb.xsimdMs
               << " ms, speedup=" << xb.speedup << "x\n";
   }
 
@@ -522,21 +522,21 @@ int main(int argc, char **argv) {
   std::cout << "SIMD width (doubles): " << physics::highway_eval::getSimdWidth() << "\n\n";
 
   {
-    auto hb = physics::highway_eval::benchSchwarzschild_f(
+    const auto hb = physics::highway_eval::benchSchwarzschild_f(
         static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
-    std::cout << hb.name << ": scalar=" << hb.scalar_ms << " ms, highway=" << hb.highway_ms
+    std::cout << hb.name << ": scalar=" << hb.scalarMs << " ms, highway=" << hb.highwayMs
               << " ms, speedup=" << hb.speedup << "x\n";
   }
   {
-    auto hb = physics::highway_eval::benchRedshift(
+    const auto hb = physics::highway_eval::benchRedshift(
         static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
-    std::cout << hb.name << ": scalar=" << hb.scalar_ms << " ms, highway=" << hb.highway_ms
+    std::cout << hb.name << ": scalar=" << hb.scalarMs << " ms, highway=" << hb.highwayMs
               << " ms, speedup=" << hb.speedup << "x\n";
   }
   {
-    auto hb = physics::highway_eval::benchChristoffelAccel(
+    const auto hb = physics::highway_eval::benchChristoffelAccel(
         static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
-    std::cout << hb.name << ": scalar=" << hb.scalar_ms << " ms, highway=" << hb.highway_ms
+    std::cout << hb.name << ": scalar=" << hb.scalarMs << " ms, highway=" << hb.highwayMs
               << " ms, speedup=" << hb.speedup << "x\n";
   }
 

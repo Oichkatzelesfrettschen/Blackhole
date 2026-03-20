@@ -104,20 +104,20 @@ inline MADDiskParams sgr_a_star_mad_disk(double a_star = 0.94, double M_dot_edd 
 
   // Sgr A* mass: 4.3 million solar masses
   double M_solar = 4.3e6;
-  disk.M = M_solar * M_SUN;
+  disk.mass = M_solar * M_SUN;
 
   // Spin parameter (EHT-constrained)
-  double M_geo = G * disk.M / C2;
+  double M_geo = G * disk.mass / C2;
   disk.a = a_star * M_geo;
 
   // Very low accretion rate (Sgr A* is highly sub-Eddington)
   double L_edd = 1.26e38 * M_solar;
   double eta = 0.3;  // High efficiency for near-extremal spin
-  disk.M_dot = M_dot_edd * L_edd / (eta * C2);
+  disk.mDot = M_dot_edd * L_edd / (eta * C2);
 
   // ISCO for highly spinning black hole
-  disk.r_in = kerr_isco_radius(disk.M, disk.a, true);  // Prograde
-  disk.r_out = 1000.0 * M_geo;
+  disk.rIn  = kerrIscoRadius(disk.mass, disk.a, true);  // Prograde
+  disk.rOut = 1000.0 * M_geo;
   disk.inclination = 0.0;
 
   // MAD state parameters
@@ -153,17 +153,17 @@ inline double mad_magnetic_field(double r, const MADDiskParams &disk) {
   // Gas pressure from ideal gas law
   // P_gas ~ ρ k_B T / (μ m_p)
   // Approximate from radiative flux and hydrostatic equilibrium
-  double T = disk_temperature(r, disk);
+  double T = diskTemperature(r, disk);
 
   // Surface density (order of magnitude estimate)
-  // Σ ~ Ṁ / (3π ν) where ν is kinematic viscosity
-  // For α-disk: ν ~ α c_s H
-  double r_g = G * disk.M / C2;
+  // Sigma ~ Mdot / (3pi nu) where nu is kinematic viscosity
+  // For alpha-disk: nu ~ alpha c_s H
+  double r_g = G * disk.mass / C2;
   double H_over_r = 0.1;  // Thin disk approximation
   double c_s = std::sqrt(K_B * T / (0.6 * M_PROTON));  // Sound speed
-  double nu_visc = 0.1 * c_s * H_over_r * r;  // α = 0.1
+  double nu_visc = 0.1 * c_s * H_over_r * r;  // alpha = 0.1
 
-  double Sigma = disk.M_dot / (3.0 * M_PI * nu_visc);
+  double Sigma = disk.mDot / (3.0 * M_PI * nu_visc);
   double rho = Sigma / (H_over_r * r);  // Volume density
 
   // Gas pressure
@@ -177,7 +177,7 @@ inline double mad_magnetic_field(double r, const MADDiskParams &disk) {
   double B = std::sqrt(8.0 * M_PI * P_mag);
 
   // Geometry factor: stronger near ISCO
-  double geometry_factor = std::pow(disk.r_in / r, 1.5);
+  double geometry_factor = std::pow(disk.rIn / r, 1.5);
 
   // MAD fields can be very strong near horizon
   if (disk.state == AccretionState::MAD) {
@@ -232,13 +232,13 @@ inline bool is_flux_eruption_active(const MADDiskParams &disk) {
 inline double mad_jet_power(const MADDiskParams &disk) {
   if (disk.state == AccretionState::SANE) {
     // SANE: weak jets (~1% of accretion power)
-    return 0.01 * disk.M_dot * C2;
+    return 0.01 * disk.mDot * C2;
   }
 
   // Horizon angular velocity
-  double M_geo = G * disk.M / C2;
+  double M_geo = G * disk.mass / C2;
   double a_star = disk.a / M_geo;
-  double r_plus = kerr_outer_horizon(disk.M, disk.a);
+  double r_plus = kerrOuterHorizon(disk.mass, disk.a);
   double Omega_H = a_star / (2.0 * r_plus);  // rad/M
 
   // Blandford-Znajek power
@@ -258,7 +258,7 @@ inline double mad_jet_power(const MADDiskParams &disk) {
     eta_jet = std::max(eta_jet, disk.jet_efficiency);
   }
 
-  return eta_jet * disk.M_dot * C2;
+  return eta_jet * disk.mDot * C2;
 }
 
 /**
@@ -275,10 +275,10 @@ inline double mad_jet_lorentz_factor(const MADDiskParams &disk) {
   }
 
   // MAD jets: Γ ~ 5-15 for Sgr A*, up to ~50 for blazars
-  double M_geo = G * disk.M / C2;
+  double M_geo = G * disk.mass / C2;
   double a_star = disk.a / M_geo;
 
-  // Higher spin → faster jets
+  // Higher spin -> faster jets
   double Gamma = 5.0 + 10.0 * a_star;
 
   return Gamma;
@@ -302,7 +302,7 @@ inline double mad_flux_variability(const MADDiskParams &disk) {
   }
 
   // Variability timescale: orbital period at ISCO
-  double omega_isco = std::sqrt(G * disk.M / (disk.r_in * disk.r_in * disk.r_in));
+  double omega_isco = std::sqrt(G * disk.mass / (disk.rIn * disk.rIn * disk.rIn));
   double T_orb = 2.0 * M_PI / omega_isco;
 
   // Phase
@@ -349,14 +349,14 @@ inline void mad_update_time(MADDiskParams &disk, double dt) {
  */
 inline double mad_disk_temperature(double r, const MADDiskParams &disk) {
   // Base Novikov-Thorne temperature
-  double T_base = disk_temperature(r, disk);
+  double T_base = diskTemperature(r, disk);
 
   if (disk.state == AccretionState::SANE) {
     return T_base;
   }
 
   // MAD: magnetic reconnection heating near ISCO
-  double r_ratio = disk.r_in / r;
+  double r_ratio = disk.rIn / r;
   double magnetic_heating = 1.0 + 0.2 * std::pow(r_ratio, 2.0);
 
   // During flux eruptions, additional heating
@@ -375,7 +375,7 @@ inline double mad_disk_temperature(double r, const MADDiskParams &disk) {
  * @return Radiative flux [erg/(cm² s)]
  */
 inline double mad_disk_flux(double r, const MADDiskParams &disk) {
-  double F_base = disk_flux(r, disk);
+  double F_base = diskFlux(r, disk);
 
   if (disk.state == AccretionState::SANE) {
     return F_base;

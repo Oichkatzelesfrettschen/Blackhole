@@ -276,15 +276,15 @@ inline MultiFreqLut generate_multifreq_emissivity_lut(int size, double mass_sola
   }
 
   const double mass = mass_solar * M_SUN;
-  const double r_s = schwarzschild_radius(mass);
+  const double r_s = schwarzschildRadius(mass);
   const double r_g = G * mass / C2;
   const double a = a_star * r_g;
   const double r_in = kerr_isco_radius(mass, a, prograde);
   const double r_out = r_in * 4.0;
 
-  DiskParams disk = kerr_disk(mass_solar, a_star, mdot_edd, prograde);
-  disk.r_in = r_in;
-  disk.r_out = r_out;
+  DiskParams disk = kerrDisk(mass_solar, a_star, mdot_edd, prograde);
+  disk.rIn  = r_in;
+  disk.rOut = r_out;
 
   lut.r_min = static_cast<float>(r_in / r_s);
   lut.r_max = static_cast<float>(r_out / r_s);
