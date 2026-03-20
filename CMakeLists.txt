@@ -2991,6 +2991,37 @@ if(BUILD_TESTING)
       endif()
     endif()
 
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_grmhd_lut_test.cu")
+      add_executable(cuda_grmhd_lut_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_grmhd_lut_test.cu"
+      )
+      set_target_properties(cuda_grmhd_lut_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_grmhd_lut_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_grmhd_lut_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_grmhd_lut COMMAND cuda_grmhd_lut_test)
+      set_tests_properties(cuda_grmhd_lut PROPERTIES
+        LABELS "cuda;grmhd;lut"
+        TIMEOUT 120
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_grmhd_lut PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
   endif() # ENABLE_CUDA
 
 endif()
