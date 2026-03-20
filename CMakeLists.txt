@@ -1799,6 +1799,27 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Galaxy cubemap face-selection headless math test (no GL/CUDA dependencies)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/galaxy_cubemap_face_test.cpp")
+    add_executable(galaxy_cubemap_face_test
+      "${PROJECT_SOURCE_DIR}/tests/galaxy_cubemap_face_test.cpp"
+    )
+    target_include_directories(galaxy_cubemap_face_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(galaxy_cubemap_face_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME galaxy_cubemap_face_math COMMAND galaxy_cubemap_face_test)
+    set_tests_properties(galaxy_cubemap_face_math PROPERTIES
+      LABELS "galaxy;cubemap;physics;overlay"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(galaxy_cubemap_face_math PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # HUD overlay compile-only test
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/hud_overlay_compile_test.cpp")
     add_executable(hud_overlay_compile_test
