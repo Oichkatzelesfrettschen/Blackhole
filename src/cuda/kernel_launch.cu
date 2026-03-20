@@ -35,6 +35,10 @@ __constant__ float d_redshift_radius_max;
 __constant__ float d_spectral_radius_min;
 __constant__ float d_spectral_radius_max;
 __constant__ float d_time_sec;
+/* LUT texture objects (cudaTextureObject_t = unsigned long long, 0 = not registered) */
+__constant__ unsigned long long d_tex_emissivity;
+__constant__ unsigned long long d_tex_redshift;
+__constant__ unsigned long long d_tex_spectral;
 __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
 __constant__ int   d_background_enabled;
@@ -144,4 +148,16 @@ extern "C" int bh_launch_geodesic_kernel(void* framebuffer,
 
 extern "C" int bh_select_kernel_variant(void) {
     return registry_select_variant();
+}
+
+/* Upload LUT texture object handles to __constant__ memory.
+ * Called by cuda_backend.cu after lut_register and before each render frame.
+ * emissivity/redshift/spectral are cudaTextureObject_t cast to unsigned long long
+ * (0 = not registered; device code checks before sampling). */
+extern "C" void bh_upload_lut_textures(unsigned long long emissivity,
+                                        unsigned long long redshift,
+                                        unsigned long long spectral) {
+    cudaMemcpyToSymbol(d_tex_emissivity, &emissivity, sizeof(emissivity));
+    cudaMemcpyToSymbol(d_tex_redshift,   &redshift,   sizeof(redshift));
+    cudaMemcpyToSymbol(d_tex_spectral,   &spectral,   sizeof(spectral));
 }

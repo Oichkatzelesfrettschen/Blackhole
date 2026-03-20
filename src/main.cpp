@@ -2837,6 +2837,16 @@ int main(int argc, char **argv) {
         texEmissivityLUT = createFloatTexture2D(lutSize, 1, lutAssetEmissivity.values);
         texRedshiftLUT = createFloatTexture2D(lutSize, 1, lutAssetRedshift.values);
 
+#if BLACKHOLE_HAS_CUDA
+        /* Share asset LUTs with CUDA backend (slot 0=emissivity, 1=redshift) */
+        if (cudaBackend) {
+          bh_cuda_register_lut(cudaBackend, 0, texEmissivityLUT,
+                               static_cast<unsigned int>(GL_TEXTURE_2D));
+          bh_cuda_register_lut(cudaBackend, 1, texRedshiftLUT,
+                               static_cast<unsigned int>(GL_TEXTURE_2D));
+        }
+#endif
+
         lutRadiusMin = lutAssetEmissivity.r_min;
         lutRadiusMax = lutAssetEmissivity.r_max;
         redshiftRadiusMin = lutAssetRedshift.r_min;
@@ -2879,6 +2889,16 @@ int main(int argc, char **argv) {
 
       texEmissivityLUT = createFloatTexture2D(kLutSize, 1, emissivityLut.values);
       texRedshiftLUT = createFloatTexture2D(kLutSize, 1, redshiftLut.values);
+
+#if BLACKHOLE_HAS_CUDA
+      /* Share generated LUTs with CUDA backend (slot 0=emissivity, 1=redshift) */
+      if (cudaBackend) {
+        bh_cuda_register_lut(cudaBackend, 0, texEmissivityLUT,
+                             static_cast<unsigned int>(GL_TEXTURE_2D));
+        bh_cuda_register_lut(cudaBackend, 1, texRedshiftLUT,
+                             static_cast<unsigned int>(GL_TEXTURE_2D));
+      }
+#endif
 
       auto photonGlowLut = physics::generate_photon_glow_lut(256);
       texPhotonGlowLUT = createFloatTexture2D(256, 1, photonGlowLut.values);
@@ -3753,6 +3773,13 @@ int main(int argc, char **argv) {
           }
           int lutSize = static_cast<int>(spectralLutValues.size());
           texSpectralLUT = createFloatTexture2D(lutSize, 1, spectralLutValues);
+#if BLACKHOLE_HAS_CUDA
+          /* Share spectral LUT with CUDA backend (slot 2=spectral) */
+          if (cudaBackend) {
+            bh_cuda_register_lut(cudaBackend, 2, texSpectralLUT,
+                                 static_cast<unsigned int>(GL_TEXTURE_2D));
+          }
+#endif
           spectralRadiusMin = lutRadiusMin;
           spectralRadiusMax = lutRadiusMax;
           if (spectralRadiusMax <= spectralRadiusMin) {

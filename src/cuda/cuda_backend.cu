@@ -8,9 +8,20 @@
 #include "cuda_backend.h"
 #include "bh_gl_interop.h"
 #include "lut_manager.h"
+#include "kernel_launch.h"
 #include "kernel_registry.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+/* Upload the three physics LUT texture objects to __constant__ memory.
+ * Slots not yet registered produce tex_object == 0; device code guards on 0. */
+static void sync_lut_constants(const LutManager& luts) {
+    bh_upload_lut_textures(
+        (unsigned long long)lut_get_tex(luts, BH_LUT_EMISSIVITY),
+        (unsigned long long)lut_get_tex(luts, BH_LUT_REDSHIFT),
+        (unsigned long long)lut_get_tex(luts, BH_LUT_SPECTRAL)
+    );
+}
 
 struct BH_CudaBackend {
     CudaGLInterop interop;
@@ -68,6 +79,9 @@ extern "C" int bh_cuda_render_frame(BH_CudaBackend* backend,
     int variant = backend->active_variant;
     if (variant < 0) variant = registry_select_variant();
 
+    /* Refresh LUT texture object handles in case they changed since last frame */
+    sync_lut_constants(backend->luts);
+
     int rc = bh_launch_geodesic_kernel(fb, params, variant, backend->compute_stream);
     if (rc != 0) return rc;
 
@@ -87,7 +101,12 @@ extern "C" int bh_cuda_register_lut(BH_CudaBackend* backend,
                                      int slot, unsigned int gl_texture,
                                      unsigned int target) {
     if (!backend) return -1;
-    return lut_register(backend->luts, slot, gl_texture, target);
+    int rc = lut_register(backend->luts, slot, gl_texture, target);
+    if (rc == 0) {
+        /* Keep __constant__ in sync so next frame picks up the new texture */
+        sync_lut_constants(backend->luts);
+    }
+    return rc;
 }
 
 extern "C" int bh_cuda_set_variant(BH_CudaBackend* backend, int variant) {

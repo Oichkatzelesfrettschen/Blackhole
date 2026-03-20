@@ -55,6 +55,11 @@ extern __constant__ float d_redshift_radius_max;
 extern __constant__ float d_spectral_radius_min;
 extern __constant__ float d_spectral_radius_max;
 extern __constant__ float d_time_sec;
+/* LUT texture objects (cudaTextureObject_t = unsigned long long).
+ * Zero means the LUT is not registered; device code checks before sampling. */
+extern __constant__ unsigned long long d_tex_emissivity;
+extern __constant__ unsigned long long d_tex_redshift;
+extern __constant__ unsigned long long d_tex_spectral;
 extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
@@ -406,14 +411,25 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
  * Shading (from interop_trace.glsl: bhDiskColorFromHit, bhShadeHit)
  * ======================================================================== */
 
-/* Simple Novikov-Thorne-like flux profile (analytic, no LUT) */
+/* Disk color: Novikov-Thorne flux with optional LUT sampling.
+ * Matches bhDiskColorFromHit in interop_trace.glsl. */
 __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
     float r = sqrtf(fmaf(hit.hit_point.x, hit.hit_point.x,
                          hit.hit_point.y * hit.hit_point.y));
-    float r_in = d_isco;
-    float x = r_in / fmaxf(r, D_EPSILON);
-    float flux = x * x * x * (1.0f - sqrtf(x));
-    flux = fmaxf(0.0f, flux);
+
+    /* Emissivity flux: LUT or analytic Novikov-Thorne */
+    float flux;
+    if (d_use_luts && d_tex_emissivity) {
+        float rNorm = r / fmaxf(rs, D_EPSILON);
+        float denom = fmaxf(d_lut_radius_max - d_lut_radius_min, 1e-4f);
+        float u = fmaxf(0.0f, fminf(1.0f, (rNorm - d_lut_radius_min) / denom));
+        flux = fmaxf(0.0f, tex2D<float>((cudaTextureObject_t)d_tex_emissivity,
+                                         u, 0.5f));
+    } else {
+        float r_in = d_isco;
+        float x = r_in / fmaxf(r, D_EPSILON);
+        flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
+    }
 
     float T_norm = powf(flux, 0.25f);
     float3 color;
@@ -425,7 +441,18 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
         color = make_f3(0.8f, 0.2f, 0.1f);
     }
 
-    float intensity = flux * 2.0f;
+    /* Spectral LUT modulation */
+    float spectral = 1.0f;
+    if (d_use_luts && d_tex_spectral) {
+        float rNorm = r / fmaxf(rs, D_EPSILON);
+        float denom = fmaxf(d_spectral_radius_max - d_spectral_radius_min, 1e-4f);
+        float u = fmaxf(0.0f, fminf(1.0f,
+                    (rNorm - d_spectral_radius_min) / denom));
+        spectral = fmaxf(0.0f, tex2D<float>((cudaTextureObject_t)d_tex_spectral,
+                                             u, 0.5f));
+    }
+
+    float intensity = flux * 2.0f * spectral;
 
     /* Doppler beaming approximation */
     float v = sqrtf(0.5f * rs / fmaxf(r, D_EPSILON));
@@ -433,9 +460,19 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
     float doppler = 1.0f + d_doppler_strength * v * cos_phi;
     intensity *= doppler * doppler * doppler;
 
-    /* Gravitational redshift dimming */
+    /* Gravitational redshift: LUT or analytic */
     if (d_redshift_enabled) {
-        float z = 1.0f / fmaxf(hit.redshift, D_EPSILON) - 1.0f;
+        float z;
+        if (d_use_luts && d_tex_redshift) {
+            float rNorm = r / fmaxf(rs, D_EPSILON);
+            float denom = fmaxf(d_redshift_radius_max - d_redshift_radius_min,
+                                1e-4f);
+            float u = fmaxf(0.0f, fminf(1.0f,
+                        (rNorm - d_redshift_radius_min) / denom));
+            z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
+        } else {
+            z = 1.0f / fmaxf(hit.redshift, D_EPSILON) - 1.0f;
+        }
         float one_plus_z = 1.0f + z;
         float dimming = 1.0f / (one_plus_z * one_plus_z * one_plus_z);
         color = d_scale(color, dimming);

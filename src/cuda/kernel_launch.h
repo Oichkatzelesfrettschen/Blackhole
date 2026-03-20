@@ -82,6 +82,14 @@ int bh_launch_geodesic_kernel(void* framebuffer,
  * Returns a BH_KernelVariant value. */
 int bh_select_kernel_variant(void);
 
+/* Upload LUT CUDA texture object handles to __constant__ memory.
+ * emissivity, redshift, spectral: cudaTextureObject_t values cast to
+ * unsigned long long (use 0 for unregistered slots).
+ * Called by the backend after bh_cuda_register_lut and before each frame. */
+void bh_upload_lut_textures(unsigned long long emissivity,
+                             unsigned long long redshift,
+                             unsigned long long spectral);
+
 #ifdef __cplusplus
 }
 #endif
