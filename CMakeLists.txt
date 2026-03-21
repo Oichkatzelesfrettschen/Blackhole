@@ -3042,6 +3042,43 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Fe K-alpha relativistic line profile test (D10)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/iron_kline_test.cpp")
+    add_executable(iron_kline_test
+      "${PROJECT_SOURCE_DIR}/tests/iron_kline_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(iron_kline_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(iron_kline_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(iron_kline_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(iron_kline_test PRIVATE GTest::gtest_main)
+    if(ENABLE_XSIMD)
+      target_link_libraries(iron_kline_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(iron_kline_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(iron_kline_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME iron_kline_validation COMMAND iron_kline_test)
+    set_tests_properties(iron_kline_validation PROPERTIES
+      LABELS "physics;spectral;fe-kline;disk"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(iron_kline_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Symplectic integrator test (D9/G6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp")
     add_executable(symplectic_integrator_test
