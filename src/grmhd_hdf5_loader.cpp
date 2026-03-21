@@ -22,14 +22,17 @@
  */
 
 #include "grmhd_hdf5_loader.h"
+#include "grmhd_streaming.h"   // GRMHDTile (misc-include-cleaner: used directly here)
 
-#include <algorithm>
+#include <cstddef>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include <highfive/H5File.hpp>
+#include <highfive/H5DataSet.hpp>  // HighFive::DataSet
+#include <highfive/H5File.hpp>     // HighFive::File
 
 namespace blackhole {
 
@@ -95,9 +98,11 @@ bool readGridDim(const HighFive::File &file,
 
 std::shared_ptr<GRMHDTile> loadIharm3d(const std::string &path,
                                          GRMHDHdf5Info *info) {
-    HighFive::File file(path, HighFive::File::ReadOnly);
+    const HighFive::File file(path, HighFive::File::ReadOnly);
 
-    std::size_t n1{}, n2{}, n3{};
+    std::size_t n1{};
+    std::size_t n2{};
+    std::size_t n3{};
     if (!readGridDim(file, "n1", "N1", n1) ||
         !readGridDim(file, "n2", "N2", n2) ||
         !readGridDim(file, "n3", "N3", n3)) {
@@ -116,7 +121,7 @@ std::shared_ptr<GRMHDTile> loadIharm3d(const std::string &path,
         return nullptr;
     }
 
-    HighFive::DataSet primsDs = file.getDataSet("prims");
+    const HighFive::DataSet primsDs = file.getDataSet("prims");
     std::vector<std::size_t> dims = primsDs.getSpace().getDimensions();
     if (dims.size() != 4) {
         std::cerr << "[GRMHDHdf5Loader] iharm3d: 'prims' must be 4D, got "
@@ -185,14 +190,14 @@ std::shared_ptr<GRMHDTile> loadIharm3d(const std::string &path,
     for (std::size_t k = 0; k < voxels; ++k) {
         auto chanVal = [&](std::size_t ch) -> float {
             const double v = channelsLast
-                                 ? raw.at(k * nvar + ch)
-                                 : raw.at(ch * voxels + k);
+                                 ? raw.at((k * nvar) + ch)
+                                 : raw.at((ch * voxels) + k);
             return static_cast<float>(v);
         };
-        tile->data.at(k * 4 + 0) = chanVal(0); // RHO
-        tile->data.at(k * 4 + 1) = chanVal(1); // UU
-        tile->data.at(k * 4 + 2) = chanVal(2); // U1
-        tile->data.at(k * 4 + 3) = chanVal(3); // U2
+        tile->data.at((k * 4) + 0) = chanVal(0); // RHO
+        tile->data.at((k * 4) + 1) = chanVal(1); // UU
+        tile->data.at((k * 4) + 2) = chanVal(2); // U1
+        tile->data.at((k * 4) + 3) = chanVal(3); // U2
     }
 
     if (info != nullptr) {
@@ -225,9 +230,11 @@ std::shared_ptr<GRMHDTile> loadIharm3d(const std::string &path,
 
 std::shared_ptr<GRMHDTile> loadBhac(const std::string &path,
                                      GRMHDHdf5Info *info) {
-    HighFive::File file(path, HighFive::File::ReadOnly);
+    const HighFive::File file(path, HighFive::File::ReadOnly);
 
-    std::size_t n1{}, n2{}, n3{};
+    std::size_t n1{};
+    std::size_t n2{};
+    std::size_t n3{};
     if (!readGridDim(file, "n1", "NX", n1) ||
         !readGridDim(file, "n2", "NY", n2) ||
         !readGridDim(file, "n3", "NZ", n3)) {
@@ -275,10 +282,10 @@ std::shared_ptr<GRMHDTile> loadBhac(const std::string &path,
     tile->data.resize(voxels * 4, 0.0f);
 
     for (std::size_t k = 0; k < voxels; ++k) {
-        tile->data.at(k * 4 + 0) = static_cast<float>(rho.at(k));
-        tile->data.at(k * 4 + 1) = (ug.size() > k) ? static_cast<float>(ug.at(k))  : 0.0f;
-        tile->data.at(k * 4 + 2) = (u1.size() > k) ? static_cast<float>(u1.at(k))  : 0.0f;
-        tile->data.at(k * 4 + 3) = (u2.size() > k) ? static_cast<float>(u2.at(k))  : 0.0f;
+        tile->data.at((k * 4) + 0) = static_cast<float>(rho.at(k));
+        tile->data.at((k * 4) + 1) = (ug.size() > k) ? static_cast<float>(ug.at(k))  : 0.0f;
+        tile->data.at((k * 4) + 2) = (u1.size() > k) ? static_cast<float>(u1.at(k))  : 0.0f;
+        tile->data.at((k * 4) + 3) = (u2.size() > k) ? static_cast<float>(u2.at(k))  : 0.0f;
     }
 
     if (info != nullptr) {
@@ -302,7 +309,7 @@ std::shared_ptr<GRMHDTile> loadBhac(const std::string &path,
 
 GRMHDCode GRMHDHdf5Loader::detectCode(const std::string &path) {
     try {
-        HighFive::File file(path, HighFive::File::ReadOnly);
+        const HighFive::File file(path, HighFive::File::ReadOnly);
 
         /* iharm3d / KORAL: identified by the "prims" primitives dataset. */
         if (file.exist("prims")) {
