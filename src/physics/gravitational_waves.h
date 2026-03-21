@@ -585,6 +585,188 @@ struct WaveformPoint {
 }
 
 // ============================================================================
+// Higher Inspiral Multipoles -- leading-order h_lm PN amplitude modes
+// Reference: Blanchet, Faye, Iyer, Sinha (2008), arXiv:0802.1249, Eqs 6.1-6.5
+// ============================================================================
+
+/**
+ * @brief PN velocity parameter v = (pi * G * M_total * f_gw / (2 c^3))^(1/3).
+ *
+ * Defined so v ~ 0.1-0.5 over the inspiral band (v=0 at start, v~0.41 at ISCO
+ * for Schwarzschild).  x = v^2 is the standard TaylorF2 expansion parameter.
+ *
+ * @param mTotal  Total binary mass [g]
+ * @param fGw     Gravitational-wave frequency [Hz]
+ * @return PN velocity parameter v (dimensionless, in (0, 1))
+ */
+[[nodiscard]] inline double gwPNVelocity(double mTotal, double fGw) noexcept {
+    if (mTotal <= 0.0 || fGw <= 0.0) { return 0.0; }
+    /* f_orb = f_gw / 2; v = (pi * G * M * f_orb / c^3)^(1/3) */
+    const double mGeo = (G * mTotal) / (C * C * C); /* G*M/c^3 [s] */
+    return std::cbrt(physics::PI * mGeo * fGw / 2.0);
+}
+
+/**
+ * @brief h+ angular factor F+(l,m,iota) for inspiral mode (l,m).
+ *
+ * Derived by combining h_lm and h_{l,-m} via spin-2 spherical harmonics
+ * (Goldberg 1967; Blanchet et al. 2008, arXiv:0802.1249):
+ *
+ *   (2,2): (1 + cos^2 iota) / 2       -- dominant quadrupole, max face-on
+ *   (2,1): |sin(iota) * cos(iota)|    -- antisymmetric, max near iota=45 deg
+ *   (3,3): |sin iota| * (1 + cos^2 iota) / 2  -- vanishes face-on
+ *   (4,4): sin^2 iota * (1 + cos^2 iota) / 2  -- vanishes face-on
+ *
+ * WHY: Sub-dominant modes have different angular patterns.  Edge-on binaries
+ * show enhanced (3,3) and (4,4) contributions relative to face-on.
+ *
+ * @param l     Angular multipole (2 <= l <= 4)
+ * @param m     Azimuthal index (m > 0)
+ * @param iota  Orbital inclination [rad] (0 = face-on, pi/2 = edge-on)
+ * @return Angular factor in [0, 1]
+ */
+[[nodiscard]] inline double gwInspiralAngularPlus(int l, int m,
+                                                   double iota) noexcept {
+    const double ci = std::cos(iota);
+    const double si = std::abs(std::sin(iota));
+    if (l == 2 && m == 2) { return (1.0 + (ci * ci)) / 2.0; }
+    if (l == 2 && m == 1) { return si * std::abs(ci); }
+    if (l == 3 && m == 3) { return si * (1.0 + (ci * ci)) / 2.0; }
+    if (l == 4 && m == 4) { return (si * si) * (1.0 + (ci * ci)) / 2.0; }
+    return 0.0;
+}
+
+/**
+ * @brief h* angular factor Fx(l,m,iota) for inspiral mode (l,m).
+ *
+ *   (2,2): |cos iota|
+ *   (2,1): |sin iota|
+ *   (3,3): |sin iota * cos iota|
+ *   (4,4): sin^2 iota * |cos iota|
+ */
+[[nodiscard]] inline double gwInspiralAngularCross(int l, int m,
+                                                    double iota) noexcept {
+    const double ci = std::abs(std::cos(iota));
+    const double si = std::abs(std::sin(iota));
+    if (l == 2 && m == 2) { return ci; }
+    if (l == 2 && m == 1) { return si; }
+    if (l == 3 && m == 3) { return si * ci; }
+    if (l == 4 && m == 4) { return (si * si) * ci; }
+    return 0.0;
+}
+
+/**
+ * @brief Amplitude of inspiral mode (l,m) relative to dominant (2,2).
+ *
+ * Leading-order ratios from Blanchet et al. (2008), arXiv:0802.1249, Eqs 6.1-6.5:
+ *
+ *   |h_21 / h_22| = sqrt(5/6)/3      * |delta| * v      [0.5PN]
+ *   |h_33 / h_22| = (9/32)*sqrt(30/7) * |delta| * v      [0.5PN]
+ *   |h_44 / h_22| = sqrt(10/63)/9    * |1-3*eta| * v^2   [1PN]
+ *
+ * delta = (m1-m2)/(m1+m2), v = gwPNVelocity(mTotal, fGw).
+ *
+ * WHY: For GW190521 (q~0.5, delta~0.33, v~0.4): |h_33/h_22|~8%, detectable.
+ * For GW150914 (q~0.82, delta~0.10, v~0.35): |h_33/h_22|~2%, sub-threshold.
+ *
+ * @param l     Angular multipole (2 <= l <= 4)
+ * @param m     Azimuthal index (m > 0)
+ * @param v     PN velocity (from gwPNVelocity())
+ * @param delta Mass asymmetry (m1-m2)/(m1+m2) in [-1, 1]
+ * @param eta   Symmetric mass ratio in (0, 1/4]
+ * @return Amplitude ratio |h_lm / h_22| >= 0
+ */
+[[nodiscard]] inline double gwInspiralModeFraction(int l, int m, double v,
+                                                    double delta,
+                                                    double eta) noexcept {
+    if (l == 2 && m == 2) { return 1.0; }
+    if (v <= 0.0) { return 0.0; }
+    if (l == 2 && m == 1) {
+        /* sqrt(5/6)/3 approx 0.2722 */
+        return (std::sqrt(5.0 / 6.0) / 3.0) * std::abs(delta) * v;
+    }
+    if (l == 3 && m == 3) {
+        /* (9/32)*sqrt(30/7) approx 0.5822 */
+        return (9.0 / 32.0) * std::sqrt(30.0 / 7.0) * std::abs(delta) * v;
+    }
+    if (l == 4 && m == 4) {
+        /* sqrt(10/63)/9 approx 0.04427 */
+        (void)eta;
+        return (std::sqrt(10.0 / 63.0) / 9.0) *
+               std::abs(1.0 - (3.0 * eta)) * (v * v);
+    }
+    (void)eta;
+    return 0.0;
+}
+
+/**
+ * @brief Multi-mode inspiral strain h+, h* summing (2,2), (2,1), (3,3), (4,4).
+ *
+ * For each mode (l,m) at orbital phase phiOrb:
+ *   h+(lm) = h22 * R_lm * F+(l,m,iota) * cos(m * phiOrb + phi_offset_lm)
+ *   h*(lm) = h22 * R_lm * F*(l,m,iota) * sin(m * phiOrb + phi_offset_lm)
+ *
+ * The (2,1) mode has an additional pi/2 offset because h_21 is imaginary
+ * at leading PN order (mass-octupole radiation).  Its h+ uses sin(phiOrb).
+ *
+ * @param mc       Chirp mass [g]
+ * @param mTotal   Total mass [g]
+ * @param etaVal   Symmetric mass ratio
+ * @param deltaVal Mass asymmetry (m1-m2)/(m1+m2)
+ * @param fGw      GW frequency [Hz]
+ * @param d        Luminosity distance [cm]
+ * @param iota     Inclination [rad]
+ * @param phiOrb   Orbital phase [rad]
+ * @param hPlus    [out] h+ polarization
+ * @param hCross   [out] h* polarization
+ */
+inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
+                                       double deltaVal, double fGw, double d,
+                                       double iota, double phiOrb,
+                                       double &hPlus,
+                                       double &hCross) noexcept {
+    hPlus  = 0.0;
+    hCross = 0.0;
+    if (d <= 0.0 || fGw <= 0.0 || mTotal <= 0.0) { return; }
+
+    const double h22amp = gwStrain1pn(mc, etaVal, fGw, d);
+    const double v      = gwPNVelocity(mTotal, fGw);
+
+    /* (2,2): standard quadrupole */
+    {
+        const double r22 = gwInspiralModeFraction(2, 2, v, deltaVal, etaVal);
+        hPlus  += h22amp * r22 * gwInspiralAngularPlus(2, 2, iota)
+                   * std::cos(2.0 * phiOrb);
+        hCross += h22amp * r22 * gwInspiralAngularCross(2, 2, iota)
+                   * std::sin(2.0 * phiOrb);
+    }
+    /* (2,1): mass-octupole, h_21 ~ i*...*e^{-i phi}, so h+ uses sin(phiOrb) */
+    {
+        const double r21 = gwInspiralModeFraction(2, 1, v, deltaVal, etaVal);
+        hPlus  += h22amp * r21 * gwInspiralAngularPlus(2, 1, iota)
+                   * std::sin(phiOrb);
+        hCross -= h22amp * r21 * gwInspiralAngularCross(2, 1, iota)
+                   * std::cos(phiOrb);
+    }
+    /* (3,3): current octupole */
+    {
+        const double r33 = gwInspiralModeFraction(3, 3, v, deltaVal, etaVal);
+        hPlus  += h22amp * r33 * gwInspiralAngularPlus(3, 3, iota)
+                   * std::cos(3.0 * phiOrb);
+        hCross += h22amp * r33 * gwInspiralAngularCross(3, 3, iota)
+                   * std::sin(3.0 * phiOrb);
+    }
+    /* (4,4): mass hexadecapole */
+    {
+        const double r44 = gwInspiralModeFraction(4, 4, v, deltaVal, etaVal);
+        hPlus  += h22amp * r44 * gwInspiralAngularPlus(4, 4, iota)
+                   * std::cos(4.0 * phiOrb);
+        hCross += h22amp * r44 * gwInspiralAngularCross(4, 4, iota)
+                   * std::sin(4.0 * phiOrb);
+    }
+}
+
+// ============================================================================
 // Ringdown (Quasi-Normal Modes)
 // ============================================================================
 
@@ -1096,7 +1278,7 @@ struct QNMFitParams {
   const double mScale = (G * mTotal) / (C2 * d);       // dimensionless
 
   const double cosI   = std::cos(iota);
-  return (eta / 7.0) * mScale * v2 * (17.0 + cosI * cosI);
+  return (eta / 7.0) * mScale * v2 * (17.0 + (cosI * cosI));
 }
 
 /**
@@ -1176,7 +1358,7 @@ struct QNMFitParams {
   const double cpSec    = (m1 >= m2) ? chi2Perp : chi1Perp;
 
   const double q     = mSec / mPrim;                         // q in (0, 1]
-  const double ratio = q * (4.0 * q + 3.0) / (4.0 + 3.0 * q);  // A_2 m2^2 / (A_1 m1^2)
+  const double ratio = q * ((4.0 * q) + 3.0) / (4.0 + (3.0 * q));  // A_2 m2^2 / (A_1 m1^2)
   return std::max(cpPrim, ratio * cpSec);
 }
 
@@ -1205,7 +1387,7 @@ struct QNMFitParams {
  */
 [[nodiscard]] inline double precessingOpeningAngle(double chiEff,
                                                    double chiPVal) noexcept {
-  const double denom = std::sqrt(chiEff * chiEff + chiPVal * chiPVal);
+  const double denom = std::sqrt((chiEff * chiEff) + (chiPVal * chiPVal));
   if (denom < 1.0e-12) { return 0.0; }
   return std::atan2(chiPVal, std::abs(chiEff));  // [0, pi/2]
 }
@@ -1291,8 +1473,8 @@ inline void precessedPolarizations(double hPlus0, double hCross0,
                                    double& hCrossPrec) noexcept {
   const double cos2a = std::cos(2.0 * alpha);
   const double sin2a = std::sin(2.0 * alpha);
-  hPlusPrec  = hPlus0 * cos2a - hCross0 * sin2a;
-  hCrossPrec = hPlus0 * sin2a + hCross0 * cos2a;
+  hPlusPrec  = (hPlus0 * cos2a) - (hCross0 * sin2a);
+  hCrossPrec = (hPlus0 * sin2a) + (hCross0 * cos2a);
 }
 
 } // namespace physics

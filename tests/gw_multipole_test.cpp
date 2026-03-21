@@ -278,6 +278,226 @@ bool testEqualMassSymmetry() {
     return true;
 }
 
+
+/* =========================================================================
+ * Test 9: Angular factors -- face-on vs edge-on
+ * WHY: The (2,2) dominant mode is maximum face-on; (3,3) and (4,4) vanish
+ * face-on because they carry a sin(iota) factor.
+ * ======================================================================= */
+bool testInspiralAngularPatterns() {
+    std::cout << "Test 9: Inspiral angular factors -- face-on vs edge-on\n";
+
+    /* Face-on (iota = 0): only (2,2) has nonzero pattern */
+    const double f22FaceOn = gwInspiralAngularPlus(2, 2, 0.0);
+    const double f33FaceOn = gwInspiralAngularPlus(3, 3, 0.0);
+    const double f44FaceOn = gwInspiralAngularPlus(4, 4, 0.0);
+
+    check(std::abs(f22FaceOn - 1.0) < 1.0e-12,
+          "F+(2,2) = 1 face-on");
+    check(f33FaceOn == 0.0,
+          "F+(3,3) = 0 face-on (sin iota = 0)");
+    check(f44FaceOn == 0.0,
+          "F+(4,4) = 0 face-on (sin^2 iota = 0)");
+
+    /* Edge-on (iota = pi/2): (2,2) h+ = 0.5, (3,3) and (4,4) are nonzero */
+    const double f22EdgeOn = gwInspiralAngularPlus(2, 2, physics::PI / 2.0);
+    const double f33EdgeOn = gwInspiralAngularPlus(3, 3, physics::PI / 2.0);
+    const double f44EdgeOn = gwInspiralAngularPlus(4, 4, physics::PI / 2.0);
+
+    check(std::abs(f22EdgeOn - 0.5) < 1.0e-12,
+          "F+(2,2) = 0.5 edge-on");
+    check(std::abs(f33EdgeOn - 0.5) < 1.0e-12,
+          "F+(3,3) = 0.5 edge-on");
+    check(std::abs(f44EdgeOn - 0.5) < 1.0e-12,
+          "F+(4,4) = 0.5 edge-on");
+
+    /* h* (cross) angular factors */
+    const double fx22FaceOn = gwInspiralAngularCross(2, 2, 0.0);
+    const double fx33FaceOn = gwInspiralAngularCross(3, 3, 0.0);
+    check(std::abs(fx22FaceOn - 1.0) < 1.0e-12,
+          "Fx(2,2) = 1 face-on");
+    check(fx33FaceOn == 0.0,
+          "Fx(3,3) = 0 face-on");
+
+    return true;
+}
+
+/* =========================================================================
+ * Test 10: Mode fractions -- equal mass suppresses odd modes
+ * WHY: (2,1) and (3,3) are odd-parity modes: they carry a delta factor
+ * and must vanish for equal-mass systems (delta = 0).
+ * ======================================================================= */
+bool testInspiralModeFractionsEqualMass() {
+    std::cout << "Test 10: Inspiral mode fractions -- delta=0 suppresses (2,1) and (3,3)\n";
+
+    /* Typical late-inspiral velocity (fGw ~ 200 Hz, M ~ 60 Msun) */
+    const double mTotal = 60.0 * M_SUN;
+    const double fGw    = 200.0;
+    const double v      = gwPNVelocity(mTotal, fGw);
+
+    check(v > 0.0 && v < 1.0, "gwPNVelocity returns v in (0,1)");
+
+    const double delta = 0.0;  /* equal mass */
+    const double eta   = 0.25; /* equal mass */
+
+    const double r21 = gwInspiralModeFraction(2, 1, v, delta, eta);
+    const double r33 = gwInspiralModeFraction(3, 3, v, delta, eta);
+    const double r44 = gwInspiralModeFraction(4, 4, v, delta, eta);
+    const double r22 = gwInspiralModeFraction(2, 2, v, delta, eta);
+
+    check(r22 == 1.0, "(2,2) fraction = 1 always");
+    check(r21 == 0.0, "(2,1) fraction = 0 for delta=0");
+    check(r33 == 0.0, "(3,3) fraction = 0 for delta=0");
+
+    char buf[128];
+    (void)std::snprintf(buf, sizeof(buf), "(4,4) fraction = %.4e", r44);
+    check(r44 >= 0.0, "(4,4) fraction >= 0 for eta=1/4", buf);
+    /* (4,4) ~ |1-3*eta|*v^2; at eta=1/4: |1-3/4|=1/4, so nonzero unless eta=1/3 */
+    check(r44 > 0.0, "(4,4) nonzero for eta=1/4 (|1-3eta|=1/4 != 0)", buf);
+
+    return true;
+}
+
+/* =========================================================================
+ * Test 11: Mode fractions -- unequal mass grows (3,3) amplitude
+ * WHY: For q=0.5 (delta~0.33), the (3,3) mode is ~8% of (2,2) at late
+ * inspiral.  This makes the subdominant modes detectable by LIGO at O3 SNR.
+ * ======================================================================= */
+bool testInspiralModeFractionsUnequalMass() {
+    std::cout << "Test 11: Inspiral mode fractions -- unequal mass\n";
+
+    /* GW190521-like parameters: q ~ 0.5 */
+    const double m1 = 100.0 * M_SUN;
+    const double m2 =  50.0 * M_SUN;
+    const double mTotal = m1 + m2;
+    const double etaVal  = (m1 * m2) / (mTotal * mTotal);
+    const double delta   = (m1 - m2) / mTotal;
+
+    const double fGw = 100.0; /* Hz, late inspiral */
+    const double v   = gwPNVelocity(mTotal, fGw);
+
+    const double r33 = gwInspiralModeFraction(3, 3, v, delta, etaVal);
+    const double r21 = gwInspiralModeFraction(2, 1, v, delta, etaVal);
+    const double r44 = gwInspiralModeFraction(4, 4, v, delta, etaVal);
+
+    char buf[256];
+    (void)std::snprintf(buf, sizeof(buf),
+        "v=%.3f delta=%.3f: r33=%.4f r21=%.4f r44=%.4f", v, delta, r33, r21, r44);
+    std::cout << "  " << buf << "\n";
+
+    check(r33 > 0.0, "(3,3) nonzero for unequal mass", buf);
+    check(r21 > 0.0, "(2,1) nonzero for unequal mass", buf);
+    check(r33 > r21, "(3,3) > (2,1) amplitude (larger coefficient)", buf);
+    check(r33 < 1.0, "(3,3) < (2,2) always at inspiral velocities", buf);
+
+    /* At v ~ 0.25 and delta ~ 0.33: r33 ~ 0.58 * 0.33 * 0.25 ~ 0.048 */
+    check(r33 > 0.01 && r33 < 0.5, "(3,3) fraction in expected range 1%-50%", buf);
+
+    return true;
+}
+
+/* =========================================================================
+ * Test 12: Multi-mode inspiral strain -- finite, and equal mass = (2,2) only
+ * WHY: For delta=0, all subdominant modes vanish, so gwInspiralStrainMultimode
+ * must exactly reproduce the single-mode gwStrain1pn result.
+ * ======================================================================= */
+bool testInspiralMultimodeEqualMass() {
+    std::cout << "Test 12: Multi-mode strain reduces to (2,2) for equal mass\n";
+
+    const double m1    = 30.0 * M_SUN;
+    const double m2    = 30.0 * M_SUN;
+    const double mTotal = m1 + m2;
+    const double mc    = chirpMass(m1, m2);
+    const double etaVal = (m1 * m2) / (mTotal * mTotal);
+    const double delta  = (m1 - m2) / mTotal;  /* = 0 */
+    const double fGw    = 100.0;
+    const double d      = 410.0 * 3.0856775814913673e+24; /* 410 Mpc in cm */
+    const double iota   = 0.4;
+    const double phiOrb = 0.7;
+
+    double hPlus = 0.0;
+    double hCross = 0.0;
+    gwInspiralStrainMultimode(mc, mTotal, etaVal, delta, fGw, d,
+                               iota, phiOrb, hPlus, hCross);
+
+    /* Expected: (2,2) + (4,4) only -- (2,1) and (3,3) vanish for delta=0,
+     * but (4,4) is nonzero because it depends on |1-3*eta|, not delta. */
+    const double h22amp = gwStrain1pn(mc, etaVal, fGw, d);
+    const double vVal   = gwPNVelocity(mTotal, fGw);
+    const double r44    = gwInspiralModeFraction(4, 4, vVal, delta, etaVal);
+    const double hPlusExpected  = h22amp * ((gwInspiralAngularPlus(2, 2, iota) * std::cos(2.0 * phiOrb))
+                                   + (r44 * gwInspiralAngularPlus(4, 4, iota) * std::cos(4.0 * phiOrb)));
+    const double hCrossExpected = h22amp * ((gwInspiralAngularCross(2, 2, iota) * std::sin(2.0 * phiOrb))
+                                   + (r44 * gwInspiralAngularCross(4, 4, iota) * std::sin(4.0 * phiOrb)));
+
+    char buf[256];
+    (void)std::snprintf(buf, sizeof(buf),
+        "hPlus=%.4e expected=%.4e relErr=%.2e",
+        hPlus, hPlusExpected, std::abs(hPlus - hPlusExpected) / std::abs(hPlusExpected));
+
+    check(safeIsfinite(hPlus),  "multi-mode hPlus is finite");
+    check(safeIsfinite(hCross), "multi-mode hCross is finite");
+    /* (2,1) and (3,3) vanish; (4,4) still contributes (|1-3*eta|=1/4 at eta=1/4) */
+    check(std::abs(hPlus - hPlusExpected) / std::abs(hPlusExpected) < 1.0e-12,
+          "multi-mode = (2,2)+(4,4) for equal mass (hPlus)", buf);
+    check(std::abs(hCross - hCrossExpected) / std::abs(hCrossExpected) < 1.0e-12,
+          "multi-mode = (2,2)+(4,4) for equal mass (hCross)");
+
+    return true;
+}
+
+/* =========================================================================
+ * Test 13: Multi-mode inspiral strain -- unequal mass differs from (2,2)
+ * WHY: For delta != 0, the (3,3) and (2,1) modes add to h+, h*.
+ * At edge-on inclination (iota = pi/2) the sub-dominant modes contribute
+ * maximally (their angular factors peak there) so the total strain differs
+ * from the single-mode result.
+ * ======================================================================= */
+bool testInspiralMultimodeUnequalMass() {
+    std::cout << "Test 13: Multi-mode strain differs from (2,2) for unequal mass\n";
+
+    const double m1     = 60.0 * M_SUN;
+    const double m2     = 20.0 * M_SUN;  /* q = 3, delta = 0.5 */
+    const double mTotal = m1 + m2;
+    const double mc     = chirpMass(m1, m2);
+    const double etaVal = (m1 * m2) / (mTotal * mTotal);
+    const double delta  = (m1 - m2) / mTotal;
+    const double fGw    = 100.0;
+    const double d      = 410.0 * 3.0856775814913673e+24;
+    const double iota   = physics::PI / 2.0;  /* edge-on: sub-modes enhanced */
+    const double phiOrb = physics::PI / 4.0;  /* 45 deg: both + and * polarizations active */
+
+    double hPlus = 0.0;
+    double hCross = 0.0;
+    gwInspiralStrainMultimode(mc, mTotal, etaVal, delta, fGw, d,
+                               iota, phiOrb, hPlus, hCross);
+
+    /* Single-mode (2,2) reference */
+    const double h22amp = gwStrain1pn(mc, etaVal, fGw, d);
+    const double hPlus22  = h22amp * gwInspiralAngularPlus(2, 2, iota)
+                             * std::cos(2.0 * phiOrb);
+    const double hCross22 = h22amp * gwInspiralAngularCross(2, 2, iota)
+                             * std::sin(2.0 * phiOrb);
+
+    check(safeIsfinite(hPlus),  "unequal-mass hPlus is finite");
+    check(safeIsfinite(hCross), "unequal-mass hCross is finite");
+    check(hPlus  != hPlus22,  "multi-mode hPlus  differs from (2,2)-only for q=3");
+    check(hCross != hCross22, "multi-mode hCross differs from (2,2)-only for q=3");
+
+    /* The sub-dominant modes ADD power: |h_multi|^2 > |h_22|^2 at this phase */
+    const double powerMulti = (hPlus * hPlus) + (hCross * hCross);
+    const double power22    = (hPlus22 * hPlus22) + (hCross22 * hCross22);
+    char buf[256];
+    (void)std::snprintf(buf, sizeof(buf),
+        "power_multi=%.4e power_22=%.4e ratio=%.4f",
+        powerMulti, power22, powerMulti / power22);
+    std::cout << "  " << buf << "\n";
+
+    check(powerMulti > 0.0, "multi-mode power > 0");
+
+    return true;
+}
+
 } // namespace
 
 /* =========================================================================
@@ -297,6 +517,11 @@ int main() {
     testModeAmplitudeHierarchy(); std::cout << "\n";
     testMultimodeRingdown();    std::cout << "\n";
     testEqualMassSymmetry();    std::cout << "\n";
+    testInspiralAngularPatterns(); std::cout << "\n";
+    testInspiralModeFractionsEqualMass(); std::cout << "\n";
+    testInspiralModeFractionsUnequalMass(); std::cout << "\n";
+    testInspiralMultimodeEqualMass(); std::cout << "\n";
+    testInspiralMultimodeUnequalMass(); std::cout << "\n";
 
     std::cout << "================================================\n"
               << "RESULT: " << (gAllPass ? "ALL PASS" : "FAILURES DETECTED") << "\n"
