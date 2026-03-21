@@ -72,7 +72,7 @@ inline double carlsonRf(double x, double y, double z, double tol = 1e-10) {
     double const dy = 1.0 - (y / a);
     double const dz = 1.0 - (z / a);
 
-    double eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
+    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
     if (eps < tol) {
       // Series expansion
       double const e2 = (dx * dy) + (dy * dz) + (dz * dx);
@@ -132,7 +132,7 @@ inline double carlsonRd(double x, double y, double z, double tol = 1e-10) {
     double const dy = 1.0 - (y / a);
     double const dz = 1.0 - (z / a);
 
-    double eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
+    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
     if (eps < tol) {
       double const e2 = (dx * dy) + (dy * dz) + (3.0 * dz * dz) + (dz * dx) + (dx * dz) + (dy * dz);
       double const e3 = (dz * dz * dz) + (dx * dz * dz) + (3.0 * dx * dy * dz) +
@@ -170,14 +170,10 @@ inline double carlsonRj(double x, double y, double z, double p, double tol = 1e-
 
   double sum = 0.0;
   double fac = 1.0;
-  double const d = (p - x) * (p - y) * (p - z);
-  double const e = x * y * z / d;
-
   for (int n = 0; n < maxIter; ++n) {
     double const sqrtX = std::sqrt(x);
     double const sqrtY = std::sqrt(y);
     double const sqrtZ = std::sqrt(z);
-    double const sqrtP = std::sqrt(p);
 
     double const lambda = (sqrtX * sqrtY) + (sqrtY * sqrtZ) + (sqrtZ * sqrtX);
 
@@ -199,7 +195,7 @@ inline double carlsonRj(double x, double y, double z, double p, double tol = 1e-
     double const dz = 1.0 - (z / a);
     double const dp = 1.0 - (p / a);
 
-    double eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz), std::abs(dp)});
+    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz), std::abs(dp)});
     if (eps < tol) {
       double const e2 = (dx * dy) + (dy * dz) + (3.0 * dp * dp) + (dz * dx) +
                         (2.0 * ((dx * dp) + (dy * dp) + (dz * dp)));
@@ -374,9 +370,6 @@ inline double deflectionAngleSchwarzschild(double b, double rS) {
   // Elliptic integral formulation
   // Following Darwin (1959)
 
-  double const u0 = rS / r0;
-  double const q = b * b / (r0 * r0);
-
   // The deflection integral in terms of elliptic functions
   // α = 2 F(φ₀, k) - π
 
@@ -384,10 +377,6 @@ inline double deflectionAngleSchwarzschild(double b, double rS) {
   // Roots of (1-u)(1 - 3u + 2u²q) = 0
 
   // Simplified strong-field calculation using series near r₀
-  double const x = r0 / rS;
-  double const x2 = x * x;
-  double const x3 = x2 * x;
-
   // Leading term
   double alpha = 4.0 * rS / b;
 
@@ -478,7 +467,8 @@ inline double deflectionStrongField(double b, double rS) {
  * @param r_s Schwarzschild radius [cm]
  * @return Image angle θ_n [rad]
  */
-inline double relativisticImagePosition(double /*beta*/, int n, double dL, double dS, double dLs,
+inline double relativisticImagePosition(double /*beta*/, int n, double dL,
+                                        double /*dS*/, double /*dLs*/,
                                         double rS) {
   double aBar;
   double bBar;
@@ -495,9 +485,6 @@ inline double relativisticImagePosition(double /*beta*/, int n, double dL, doubl
 
   // Position of nth image
   double const thetaN = thetaM * (1.0 + deltaN);
-
-  // Correction from source position
-  double const lensTerm = dLs / dS;
 
   return thetaN;
 }

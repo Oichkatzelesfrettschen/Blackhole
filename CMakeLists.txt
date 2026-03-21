@@ -3127,6 +3127,32 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Elliptic integrals validation (Carlson, Jacobi, lensing)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/elliptic_integrals_test.cpp")
+    add_executable(elliptic_integrals_test
+      "${PROJECT_SOURCE_DIR}/tests/elliptic_integrals_test.cpp"
+    )
+    target_include_directories(elliptic_integrals_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(elliptic_integrals_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(elliptic_integrals_test PRIVATE -fno-fast-math)
+    endif()
+
+    add_test(NAME elliptic_integrals_validation COMMAND elliptic_integrals_test)
+    set_tests_properties(elliptic_integrals_validation PROPERTIES
+      LABELS "physics;math;elliptic;jacobi;lensing"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(elliptic_integrals_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Penrose process + TOV stellar structure validation
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/penrose_tov_test.cpp")
     add_executable(penrose_tov_test
