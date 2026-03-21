@@ -2285,6 +2285,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # GW phase 4.5PN validation tests (4PN+4.5PN point-mass corrections)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gw_phase_4p5pn_test.cpp")
+    add_executable(gw_phase_4p5pn_test
+      "${PROJECT_SOURCE_DIR}/tests/gw_phase_4p5pn_test.cpp"
+    )
+    target_include_directories(gw_phase_4p5pn_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(gw_phase_4p5pn_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME gw_phase_4p5pn_validation COMMAND gw_phase_4p5pn_test)
+    set_tests_properties(gw_phase_4p5pn_validation PROPERTIES
+      LABELS "physics;gw;pn-phase;4.5pn"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(gw_phase_4p5pn_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Volumetric RTE CPU integrator tests (D1): formal solution, emission, GR transforms
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/rte_integrator_test.cpp")
     add_executable(rte_integrator_test
