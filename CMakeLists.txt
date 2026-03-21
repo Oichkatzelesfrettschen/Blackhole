@@ -3101,6 +3101,32 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Jet physics + MAD disk validation tests (BZ mechanism, Lorentz/Doppler, eruptions)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/jet_physics_mad_disk_test.cpp")
+    add_executable(jet_physics_mad_disk_test
+      "${PROJECT_SOURCE_DIR}/tests/jet_physics_mad_disk_test.cpp"
+    )
+    target_include_directories(jet_physics_mad_disk_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(jet_physics_mad_disk_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(jet_physics_mad_disk_test PRIVATE -fno-fast-math)
+    endif()
+
+    add_test(NAME jet_physics_mad_disk_validation COMMAND jet_physics_mad_disk_test)
+    set_tests_properties(jet_physics_mad_disk_validation PROPERTIES
+      LABELS "physics;jets;bz;mad-disk"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(jet_physics_mad_disk_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Symplectic integrator test (D9/G6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp")
     add_executable(symplectic_integrator_test
