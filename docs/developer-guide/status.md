@@ -1,12 +1,25 @@
 # Blackhole Simulation - Development Status
 
 **Last Updated:** 2026-03-21
-**Status:** Active Development - All HIGH/MEDIUM lacunae resolved; 74/74 tests pass
+**Status:** Active Development - All HIGH/MEDIUM lacunae resolved; 75/75 tests pass
 **Roadmap:** See `roadmap.md` for the consolidated execution plan
 
 ---
 
 ## Recent Changes
+
+### Fe K-alpha Relativistic Line Profile (2026-03-21)
+
+**D-spec -- Fe K-alpha Relativistically Broadened Line Profile (Laor 1991)** -- COMPLETE
+- src/physics/iron_kline.h: iscoGeom() (BPT prograde ISCO, geometrized units),
+  kerrDiskGFactor() (Cunningham 1975 g-factor for circular equatorial Kerr orbits),
+  ironKLineProfile() (2D disk integration, g^4 flux weighting, normalized F(E)),
+  ironKLineGMin() (red-edge g at ISCO face-on).
+- 2-pass histogram: first pass finds g range [gMin,gMax]; second pass bins flux;
+  logarithmic radial grid; emissivity power-law epsilon(r) ~ r^{-q}.
+- tests/iron_kline_test.cpp: 10 tests -- exact g=sqrt(0.5) at Schwarzschild ISCO,
+  Doppler blueshift/redshift on approaching/receding sides, flat-space limit,
+  integral=1.0+/-1%, spin-redshift scaling, inclination broadening.
 
 ### Session Batch 2026-03-21 -- All HIGH/MEDIUM Lacunae Complete
 
