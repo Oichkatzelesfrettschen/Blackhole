@@ -1,12 +1,38 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2026-02-28
-**Status:** Active Development - Build system aligned, NNLO spin-orbit + GLSL G(x) LUT complete
+**Last Updated:** 2026-03-21
+**Status:** Active Development - All HIGH/MEDIUM lacunae resolved; 74/74 tests pass
 **Roadmap:** See `roadmap.md` for the consolidated execution plan
 
 ---
 
 ## Recent Changes
+
+### Session Batch 2026-03-21 -- All HIGH/MEDIUM Lacunae Complete
+
+**D4 -- Polarized Stokes IQUV Transport (GLSL + CUDA)** -- COMPLETE
+- stokes_transport.glsl: stokesStep() exact analytic propagation of I,Q,U,V
+- bhTraceGeodesicStokes() in interop_trace.glsl; stokesEnabled/stokesBFieldAngle/stokesNeScale uniforms
+- DStokes struct + d_stokes_step() + d_trace_geodesic_stokes() in device_physics.cuh
+- BH_LaunchParams grows to 184 bytes; 6/6 CUDA Stokes tests pass
+
+**C1e + G3 -- GRMHD HDF5 Loader + Streamer End-to-End Test** -- COMPLETE
+- grmhd_hdf5_loader.h/.cpp: iharm3d/KORAL channels-last/first + BHAC Grid datasets; 6/6 tests
+- grmhd_streamer_test.cpp: 7-subtest lifecycle, tile injection, PBO upload, ring buffer wraparound
+
+**F1/F2/F3 -- Render Integration** -- COMPLETE
+- F1: reloadAllRenderShaders() in render.cpp (shaderVertMap caches fragment->vertex path)
+- F2: rmlui_overlay.cpp -- Rml::Initialise/Context/Render/Shutdown (RmlUi 6.x API)
+- F3: blender_bridge CUDA dispatch -- bhb_lensing_map/bhb_disk_texture -> bh_launch_geodesic_kernel
+
+**Newman-Penrose Null Tetrad Formalism** -- COMPLETE
+- src/physics/newman_penrose.h: kerrWeylPsi2(), kerrKretschmann(), Kinnersley l/n vectors
+- 12/12 tests: Psi_2 Schwarzschild, K=48|Psi_2|^2, Petrov Type D, ring singularity guard
+
+**Higher GW Inspiral Multipoles h_lm (l=2,3,4)** -- COMPLETE
+- gwPNVelocity, gwInspiralAngularPlus/Cross, gwInspiralModeFraction, gwInspiralStrainMultimode
+- (2,1)/(3,3) vanish at equal mass (delta=0); (4,4) nonzero via |1-3*eta|
+- 13/13 tests pass in gw_multipole_test.cpp (tests 9-13 new)
 
 ### Build System + NNLO Physics + GPU Parity (2026-02-28)
 
