@@ -2771,6 +2771,43 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Kerr-Newman metric test (D5/G5)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_newman_test.cpp")
+    add_executable(kerr_newman_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_newman_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(kerr_newman_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_newman_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_newman_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_newman_test PRIVATE GTest::gtest_main)
+    if(ENABLE_XSIMD)
+      target_link_libraries(kerr_newman_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(kerr_newman_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(kerr_newman_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME kerr_newman_validation COMMAND kerr_newman_test)
+    set_tests_properties(kerr_newman_validation PROPERTIES
+      LABELS "physics;metric;kerr-newman;beyond-gr"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_newman_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Electron temperature test
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/electron_temperature_test.cpp")
     add_executable(electron_temperature_test
