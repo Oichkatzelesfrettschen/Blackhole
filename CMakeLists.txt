@@ -1089,6 +1089,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/grmhd_packed_loader.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_pbo_uploader.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_streaming.cpp"
+  "${PROJECT_SOURCE_DIR}/src/grmhd_hdf5_loader.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image_write_impl.cpp"
   "${PROJECT_SOURCE_DIR}/src/input.cpp"
@@ -1132,6 +1133,7 @@ set_source_files_properties(${THIRDPARTY_SRC_FILES} PROPERTIES
   COMPILE_OPTIONS "-w"
 )
 
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE HighFive::HighFive)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imgui::imgui)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imguizmo::imguizmo)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE implot::implot)
@@ -2214,6 +2216,31 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Newman-Penrose null tetrad + Weyl scalars + Kretschmann invariant (Kerr)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/newman_penrose_test.cpp")
+    add_executable(newman_penrose_test
+      "${PROJECT_SOURCE_DIR}/tests/newman_penrose_test.cpp"
+    )
+    target_include_directories(newman_penrose_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(newman_penrose_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(newman_penrose_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME newman_penrose_validation COMMAND newman_penrose_test)
+    set_tests_properties(newman_penrose_validation PROPERTIES
+      LABELS "physics;kerr;np;weyl;kretschmann"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(newman_penrose_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Higher GW multipole QNM modes (l>2) validation (Phase 6.3f)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gw_multipole_test.cpp")
     add_executable(gw_multipole_test
@@ -2441,6 +2468,57 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(grmhd_metadata_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # GRMHD streamer end-to-end test (G3): real GRMHDStreamer with synthetic data
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_streamer_test.cpp")
+    add_executable(grmhd_streamer_test
+      "${PROJECT_SOURCE_DIR}/tests/grmhd_streamer_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/grmhd_streaming.cpp"
+    )
+    target_include_directories(grmhd_streamer_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(grmhd_streamer_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(grmhd_streamer_test PRIVATE
+      nlohmann_json::nlohmann_json
+    )
+    add_test(NAME grmhd_streamer_e2e COMMAND grmhd_streamer_test)
+    set_tests_properties(grmhd_streamer_e2e PROPERTIES
+      LABELS "grmhd;streaming;e2e;G3"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(grmhd_streamer_e2e PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # GRMHD HDF5 loader test (C1e): iharm3d/KORAL/BHAC single-snapshot loading
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_hdf5_loader_test.cpp")
+    add_executable(grmhd_hdf5_loader_test
+      "${PROJECT_SOURCE_DIR}/tests/grmhd_hdf5_loader_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/grmhd_hdf5_loader.cpp"
+      "${PROJECT_SOURCE_DIR}/src/grmhd_streaming.cpp"
+    )
+    target_include_directories(grmhd_hdf5_loader_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(grmhd_hdf5_loader_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(grmhd_hdf5_loader_test PRIVATE
+      HighFive::HighFive
+    )
+    add_test(NAME grmhd_hdf5_loader COMMAND grmhd_hdf5_loader_test)
+    set_tests_properties(grmhd_hdf5_loader PROPERTIES
+      LABELS "grmhd;hdf5;C1e"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(grmhd_hdf5_loader PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
@@ -3343,6 +3421,38 @@ if(BUILD_TESTING)
       )
       if(SANITIZER_TEST_ENV)
         set_tests_properties(cuda_rte PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
+    # D4: Polarized Stokes IQUV transport tests
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_stokes_test.cu")
+      add_executable(cuda_stokes_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_stokes_test.cu"
+      )
+      set_target_properties(cuda_stokes_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_stokes_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_stokes_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_stokes COMMAND cuda_stokes_test)
+      set_tests_properties(cuda_stokes PROPERTIES
+        LABELS "cuda;stokes;polarized;D4"
+        TIMEOUT 120
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_stokes PROPERTIES
           ENVIRONMENT "${SANITIZER_TEST_ENV}"
         )
       endif()
