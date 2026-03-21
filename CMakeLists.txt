@@ -2845,6 +2845,43 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Symplectic integrator test (D9/G6)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp")
+    add_executable(symplectic_integrator_test
+      "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(symplectic_integrator_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(symplectic_integrator_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(symplectic_integrator_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(symplectic_integrator_test PRIVATE GTest::gtest_main)
+    if(ENABLE_XSIMD)
+      target_link_libraries(symplectic_integrator_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(symplectic_integrator_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(symplectic_integrator_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME symplectic_integrator_validation COMMAND symplectic_integrator_test)
+    set_tests_properties(symplectic_integrator_validation PROPERTIES
+      LABELS "physics;geodesic;symplectic"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(symplectic_integrator_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Electron temperature test
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/electron_temperature_test.cpp")
     add_executable(electron_temperature_test
