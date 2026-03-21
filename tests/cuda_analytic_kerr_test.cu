@@ -17,7 +17,7 @@
  *   3. EllpjQuarterPeriod   -- sn(K(k), m=k^2) = 1, cn = 0 for k=0.5
  *   4. EllintKPiOver2       -- K(0) = pi/2 = 1.5707963...
  *   5. ProgradePhotonOrbit  -- a=0 gives r_ph=3; a=0.9 gives r_ph~1.565
- *   6. AnalyticRadialRound  -- r(0)=r3 and r(T/2)=r1 for a transit orbit
+ *   6. AnalyticRadialRound  -- r(0)=r3 and r(T/2)=r2 for a bound orbit [r3,r2]
  *
  * HOW: Each test allocates a small device float buffer, launches a 1-thread
  *      kernel, copies to host, and asserts with EXPECT_NEAR.
@@ -88,9 +88,9 @@ __global__ void k_analytic_radial(
         float lambda0, float* out)
 {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
-    /* r(lambda0) should equal r3 (inner turning point) */
+    /* r(lambda0) should equal r3 (inner turning point, sn=0) */
     out[0] = d_kerr_r_analytic(lambda0, r1, r2, r3, r4, lambda0);
-    /* r(lambda0 + half_period) should equal r1 (outer turning point) */
+    /* r(lambda0 + K/scale) should equal r2 (outer turning point, sn=1) */
     float half_T = d_kerr_radial_half_period(r1, r2, r3, r4);
     out[1] = d_kerr_r_analytic(lambda0 + half_T, r1, r2, r3, r4, lambda0);
     out[2] = half_T;
@@ -261,7 +261,7 @@ TEST_F(AnalyticKerrTest, AnalyticRadialRoundTrip)
         k_analytic_radial<<<1,1>>>(r1, r2, r3, r4, 0.0f, d);
     }, rad_out);
 
-    EXPECT_NEAR(rad_out[0], r3, 1.0e-3f); /* r(lambda0) = r3 */
-    EXPECT_NEAR(rad_out[1], r1, 1.0e-3f); /* r(lambda0 + T/2) = r1 */
+    EXPECT_NEAR(rad_out[0], r3, 1.0e-3f); /* r(lambda0)      = r3 (inner, sn=0) */
+    EXPECT_NEAR(rad_out[1], r2, 1.0e-3f); /* r(lambda0+T/2)  = r2 (outer, sn=1) */
     EXPECT_GT(rad_out[2], 0.0f);          /* half_period > 0 */
 }

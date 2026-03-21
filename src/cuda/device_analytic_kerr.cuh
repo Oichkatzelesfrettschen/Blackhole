@@ -298,23 +298,31 @@ __device__ int d_quartic_real_roots(float c2, float c1, float c0, float r[4])
  * ============================================================================ */
 
 /**
- * @brief Compute r(lambda) analytically for a Kerr transit orbit.
+ * @brief Compute r(lambda) analytically for a Kerr bound orbit.
  *
- * For a transit orbit with four real roots r1 >= r2 >= r3 >= r4:
+ * For a bound orbit with four real roots r1 >= r2 >= r3 >= r4, the photon
+ * oscillates in the allowed region [r3, r2] where R(r) >= 0.
  *
- *   r(lambda) = [r3*(r1-r4) - r4*(r1-r3)*sn^2(u|m)] /
- *               [(r1-r4) - (r1-r3)*sn^2(u|m)]
+ * Correct formula (Dexter & Agol 2009):
+ *
+ *   r(lambda) = r3 + (r2 - r3) * sn^2(u | m_DA)
  *
  * where:
- *   m = (r2-r3)*(r1-r4) / [(r1-r3)*(r2-r4)]   (parameter, k^2)
- *   u = sqrt(|(r1-r3)*(r2-r4)|) / 2 * (lambda - lambda0)
+ *   m_DA = (r1-r2)*(r3-r4) / [(r1-r3)*(r2-r4)]   (Dexter & Agol modulus)
+ *   u    = sqrt(|(r1-r3)*(r2-r4)|) / 2 * (lambda - lambda0)
  *
- * At lambda = lambda0: r = r3 (inner turning point).
- * At sn = 1 (u = K(k)): r = r1 (outer turning point).
+ * Note: m_DA is the COMPLEMENT of the naive m_CPU = (r2-r3)*(r1-r4)/[(r1-r3)*(r2-r4)].
+ * (m_DA + m_CPU = 1). The naive formula traverses r3 -> r1, crossing the
+ * forbidden region [r2, r1] where R(r) < 0.
+ *
+ * At lambda = lambda0: sn=0 => r = r3 (inner turning point).
+ * At u = K(k_DA): sn=1 => r = r2 (outer turning point).
+ *
+ * Reference: Dexter & Agol (2009), ApJ 696, 1616, Appendix A.
  *
  * @param lambda   Affine parameter value
  * @param r1..r4   Roots in descending order (r1 >= r2 >= r3 >= r4)
- * @param lambda0  Reference affine parameter (default: ray starts at r3)
+ * @param lambda0  Reference affine parameter (ray starts at r3)
  * @return r at the given lambda, or r3 if degenerate
  */
 __device__ float d_kerr_r_analytic(
@@ -322,7 +330,8 @@ __device__ float d_kerr_r_analytic(
         float r1, float r2, float r3, float r4,
         float lambda0)
 {
-    float num_m = (r2 - r3) * (r1 - r4);
+    /* Dexter & Agol modulus: m_DA = (r1-r2)*(r3-r4) / [(r1-r3)*(r2-r4)] */
+    float num_m = (r1 - r2) * (r3 - r4);
     float den_m = (r1 - r3) * (r2 - r4);
 
     if (fabsf(den_m) < 1.0e-20f) return r3;
@@ -336,21 +345,20 @@ __device__ float d_kerr_r_analytic(
     float sn, cn, dn;
     d_ellpj(u, m, &sn, &cn, &dn);
 
-    float sn2    = sn * sn;
-    float a_coef = r3 * (r1 - r4) - r4 * (r1 - r3) * sn2;
-    float b_coef = (r1 - r4) - (r1 - r3) * sn2;
-
-    if (fabsf(b_coef) < 1.0e-20f) return r1; /* at outer turning point */
-    return a_coef / b_coef;
+    /* r(u) = r3 + (r2-r3)*sn^2  stays in [r3, r2] for all u */
+    return r3 + (r2 - r3) * sn * sn;
 }
 
 /**
  * @brief Half-period of radial oscillation in affine parameter.
  *
- * T_r/2 = K(k) / scale
+ * T_r/2 = K(k_DA) / scale
  *
- * where k = sqrt(m) and scale = sqrt(|(r1-r3)*(r2-r4)|) / 2.
- * Returns 0 if the orbit is not a transit (degenerate case).
+ * where k_DA = sqrt(m_DA), m_DA = (r1-r2)*(r3-r4)/[(r1-r3)*(r2-r4)],
+ * and scale = sqrt(|(r1-r3)*(r2-r4)|) / 2.
+ *
+ * Uses the Dexter & Agol modulus to match d_kerr_r_analytic.
+ * Returns 0 if the orbit is degenerate.
  *
  * @param r1..r4  Sorted radial roots (r1 >= r2 >= r3 >= r4)
  * @return Half-period in affine parameter units
@@ -358,7 +366,8 @@ __device__ float d_kerr_r_analytic(
 __device__ __forceinline__ float d_kerr_radial_half_period(
         float r1, float r2, float r3, float r4)
 {
-    float num_m = (r2 - r3) * (r1 - r4);
+    /* Dexter & Agol modulus (matches d_kerr_r_analytic) */
+    float num_m = (r1 - r2) * (r3 - r4);
     float den_m = (r1 - r3) * (r2 - r4);
 
     if (fabsf(den_m) < 1.0e-20f) return 0.0f;
