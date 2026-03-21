@@ -3180,6 +3180,36 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Analytic Kerr geodesics + reproducibility manifest
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/analytic_geodesic_reproducibility_test.cpp")
+    add_executable(analytic_geodesic_reproducibility_test
+      "${PROJECT_SOURCE_DIR}/tests/analytic_geodesic_reproducibility_test.cpp"
+    )
+    target_include_directories(analytic_geodesic_reproducibility_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(analytic_geodesic_reproducibility_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(analytic_geodesic_reproducibility_test PRIVATE -fno-fast-math)
+    endif()
+    if(TARGET Boost::math)
+      target_link_libraries(analytic_geodesic_reproducibility_test PRIVATE Boost::math)
+    endif()
+
+    add_test(NAME analytic_geodesic_reproducibility_validation
+             COMMAND analytic_geodesic_reproducibility_test)
+    set_tests_properties(analytic_geodesic_reproducibility_validation PROPERTIES
+      LABELS "physics;analytic;geodesic;photon-sphere;reproducibility"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(analytic_geodesic_reproducibility_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Physics infrastructure: conservation_monitor + event_detection + source_presets + unit_system
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/physics_infrastructure_test.cpp")
     add_executable(physics_infrastructure_test

@@ -275,8 +275,8 @@ struct QuarticCoeffs {
 
   // Sort real roots in descending order
   if (result.nReal >= 2) {
-    for (int i = 0; i < 3; ++i) {
-      for (int j = i + 1; j < 4; ++j) {
+    for (std::size_t i = 0; i < 3; ++i) {
+      for (std::size_t j = i + 1; j < 4; ++j) {
         if (result.roots.at(j).real() > result.roots.at(i).real()) {
           std::swap(result.roots.at(i), result.roots.at(j));
         }
@@ -369,9 +369,9 @@ struct QuarticCoeffs {
   const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
   if (scale < 1e-30) { return 0.0; }
 
-  const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double k = boost::math::ellint_1(k);
-  return k / scale;
+  const double k         = std::sqrt(std::clamp(m, 0.0, 1.0));
+  const double kComplete = boost::math::ellint_1(k);
+  return kComplete / scale;
 }
 
 #endif // PHYSICS_HAS_BOOST_JACOBI
@@ -417,19 +417,15 @@ struct QuarticCoeffs {
     return ip;
   }
 
-  ip.xi = ((r2 + a2) / a) - ((2.0 * rPh * delta) / (a * deltaPrime));
+  // From R(r_ph)=0 and R'(r_ph)=0 simultaneously (Gralla & Lupsasca 2020, M=1):
+  //   R'=0 => r^2+a^2-a*xi = 4r*Delta/Delta'  => xi_c = (r^2+a^2)/a - 4r*Delta/(a*Delta')
+  //   R =0  => eta_c = 16r^2*Delta/Delta'^2 - (xi_c - a)^2
+  // Note: factor is 4 (not 2) in the xi formula.
+  ip.xi = ((r2 + a2) / a) - ((4.0 * rPh * delta) / (a * deltaPrime));
 
-  // eta_c from Chandrasekhar:
-  // eta = r^2 * (4*delta*delta_prime' - (delta_prime)^2*r) / (a^2 * delta_prime^2)
-  // With delta'' = 2:
-  const double etaNum = r2 * ((4.0 * delta * 2.0) - (deltaPrime * deltaPrime * rPh));
-  ip.eta = etaNum / (a2 * deltaPrime * deltaPrime);
-
-  // Simpler formula with M=1: eta = r^2 * [4*delta - r*(r-1)^2] / (a^2*(r-1)^2)
-  const double rm1 = rPh - 1.0;
-  if (std::abs(rm1) > 1e-15) {
-    ip.eta = (r2 * ((4.0 * delta) - (rPh * rm1 * rm1))) / (a2 * rm1 * rm1);
-  }
+  const double dp2   = deltaPrime * deltaPrime;
+  const double xiA   = ip.xi - a;
+  ip.eta = ((16.0 * r2 * delta) / dp2) - (xiA * xiA);
 
   return ip;
 }
