@@ -3022,6 +3022,38 @@ if(BUILD_TESTING)
       endif()
     endif()
 
+    # 5. Analytic Kerr geodesics -- Jacobi elliptic / quartic root / r(lambda)
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_analytic_kerr_test.cu")
+      add_executable(cuda_analytic_kerr_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_analytic_kerr_test.cu"
+      )
+      set_target_properties(cuda_analytic_kerr_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_analytic_kerr_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_analytic_kerr_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_analytic_kerr COMMAND cuda_analytic_kerr_test)
+      set_tests_properties(cuda_analytic_kerr PROPERTIES
+        LABELS "cuda;analytic;geodesic"
+        TIMEOUT 60
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_analytic_kerr PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
   endif() # ENABLE_CUDA
 
 endif()
