@@ -1041,6 +1041,260 @@ struct QNMFitParams {
   return h;
 }
 
+// ============================================================================
+// GW Memory Effect (D7)
+// ============================================================================
+
+/**
+ * @brief Non-linear GW memory strain accumulated from zero frequency to fGw.
+ *
+ * WHY: The gravitational wave memory effect (Christodoulou 1991; Blanchet &
+ * Damour 1992) is a non-oscillatory, permanent change in h+ that accumulates
+ * during the inspiral.  Unlike the oscillatory signal at 2 f_orb, the memory
+ * does not oscillate: it grows monotonically as the binary hardens and leaves
+ * a permanent DC offset in the detector output long after the merger.
+ * The memory can reach ~60% of the peak oscillatory strain for face-on binaries.
+ *
+ * WHAT: At leading (0PN) order for a quasi-circular inspiral, the accumulated
+ * non-linear memory strain from an early reference frequency to fGw is
+ * (Favata 2009, Phys. Rev. D 80, 024002, Eq. 5.7):
+ *
+ *   h_+^{mem}(f) = (eta G M) / (7 D c^2) * (17 + cos^2 iota) * v(f)^2
+ *
+ * where v = (pi G M f / c^3)^{1/3} is the PN velocity (fraction of c), and
+ * (17 + cos^2 iota) is the inclination-dependent angular pattern factor that
+ * arises from integrating the asymmetric GW energy flux over the sky.
+ *
+ * Relation to oscillatory strain h0:
+ *   h^{mem} / h0 = (17 + cos^2 iota) / 28     (using Mc = M eta^{3/5})
+ * At iota=0 (face-on): h^{mem} ~ 0.64 h0.
+ * At iota=pi/2 (edge-on): h^{mem} ~ 0.61 h0.
+ *
+ * References:
+ *   - Christodoulou (1991), PRL 67, 1486   -- original non-linear memory
+ *   - Blanchet & Damour (1992), PRD 46, 4304  -- PN derivation
+ *   - Favata (2009), PRD 80, 024002  -- quasi-circular BBH memory formula
+ *   - Lasky et al. (2016), Phys. Rev. Lett. 117, 061102 -- LIGO detectability
+ *
+ * @param mTotal  Total binary mass [g]
+ * @param eta     Symmetric mass ratio in (0, 1/4]
+ * @param fGw     Gravitational wave frequency [Hz]
+ * @param d       Luminosity distance [cm]
+ * @param iota    Orbital inclination angle [rad] (0 = face-on)
+ * @return h_+^{mem} [dimensionless strain]; zero if any input is non-positive.
+ */
+[[nodiscard]] inline double gwMemoryStrain(double mTotal, double eta,
+                                           double fGw, double d,
+                                           double iota = 0.0) noexcept {
+  if (mTotal <= 0.0 || eta <= 0.0 || fGw <= 0.0 || d <= 0.0) { return 0.0; }
+
+  // PN velocity squared: v^2 = (pi G M f / c^3)^{2/3}
+  const double mGeo  = (G * mTotal) / (C * C * C);     // [s]
+  const double v2    = std::pow(physics::PI * mGeo * fGw, 2.0 / 3.0);  // dimensionless
+
+  // Geometric strain scale: G M / (D c^2) = r_S / (2 D)
+  const double mScale = (G * mTotal) / (C2 * d);       // dimensionless
+
+  const double cosI   = std::cos(iota);
+  return (eta / 7.0) * mScale * v2 * (17.0 + cosI * cosI);
+}
+
+/**
+ * @brief GW memory strain increment between two GW frequencies.
+ *
+ * Delta h_+^{mem} = h_+^{mem}(fHi) - h_+^{mem}(fLo)
+ *
+ * This is the physically observable memory signal in a detector that begins
+ * integrating at fLo and ends at fHi: the memory accumulated during that
+ * frequency interval.  Because the memory grows monotonically with f, this
+ * quantity is always non-negative for fHi > fLo.
+ *
+ * @param mTotal  Total binary mass [g]
+ * @param eta     Symmetric mass ratio
+ * @param fLo     Lower GW frequency bound [Hz]
+ * @param fHi     Upper GW frequency bound [Hz]
+ * @param d       Luminosity distance [cm]
+ * @param iota    Orbital inclination [rad]
+ * @return Delta h_+^{mem} [dimensionless]; zero if fHi <= fLo.
+ */
+[[nodiscard]] inline double gwMemoryDelta(double mTotal, double eta,
+                                          double fLo, double fHi,
+                                          double d,
+                                          double iota = 0.0) noexcept {
+  if (fHi <= fLo) { return 0.0; }
+  return gwMemoryStrain(mTotal, eta, fHi, d, iota)
+       - gwMemoryStrain(mTotal, eta, fLo, d, iota);
+}
+
+// ============================================================================
+// Precessing Binary PN Phase (D8)
+// ============================================================================
+
+/**
+ * @brief Effective precession parameter chi_p for a binary with generic spins.
+ *
+ * WHY: For binaries with generic (non-aligned) spin orientations, the orbital
+ * plane precesses around the total angular momentum J.  The dominant effect is
+ * captured by a single "effective precession spin" chi_p that measures how much
+ * spin angular momentum is stored in the in-plane (perpendicular to L) components.
+ * Aligned spins contribute to the inspiral phase (chi_eff) but not to precession;
+ * only in-plane spin drives orbital-plane precession.  chi_p is the leading-order
+ * parameter entering the precessing-waveform approximant IMRPhenomPv2.
+ *
+ * WHAT: Schmidt, Hannam & Husa (2015), PRD 91, 024039, Eq. (2):
+ *
+ *   chi_p = max(chi_{1,perp},  q(4q+3)/(4+3q) * chi_{2,perp})
+ *
+ * where q = m2/m1 <= 1 (secondary-to-primary mass ratio), and chi_{i,perp} is
+ * the dimensionless in-plane spin (|S_i x L_hat| / m_i^2) of each body.
+ *
+ * The weight q(4q+3)/(4+3q) = A_2 m_2^2 / (A_1 m_1^2) encodes the relative
+ * spin-orbit coupling strength via A_i = 2 + 3 m_{j!=i} / (2 m_i).
+ *
+ * LIMITS:
+ *   - Aligned spins (chi1Perp = chi2Perp = 0): chi_p = 0 (no precession)
+ *   - Single spin, primary only (chi2Perp = 0): chi_p = chi1Perp
+ *   - Equal mass (q = 1): weight = 1, chi_p = max(chi1Perp, chi2Perp)
+ *   - q -> 0: weight -> q^2 -> 0, secondary spin decouples
+ *
+ * Reference: Schmidt, Hannam & Husa (2015), PRD 91, 024039.
+ *
+ * @param m1        Primary mass [any unit]; m1 >= m2 by convention but enforced
+ * @param m2        Secondary mass [same unit]
+ * @param chi1Perp  Dimensionless in-plane spin of primary [0, 1]
+ * @param chi2Perp  Dimensionless in-plane spin of secondary [0, 1]
+ * @return chi_p in [0, 1]
+ */
+[[nodiscard]] inline double chiP(double m1, double m2,
+                                 double chi1Perp, double chi2Perp) noexcept {
+  if (m1 <= 0.0 || m2 <= 0.0) { return 0.0; }
+
+  // Enforce canonical ordering: primary is the heavier body
+  const double mPrim    = std::max(m1, m2);
+  const double mSec     = std::min(m1, m2);
+  const double cpPrim   = (m1 >= m2) ? chi1Perp : chi2Perp;
+  const double cpSec    = (m1 >= m2) ? chi2Perp : chi1Perp;
+
+  const double q     = mSec / mPrim;                         // q in (0, 1]
+  const double ratio = q * (4.0 * q + 3.0) / (4.0 + 3.0 * q);  // A_2 m2^2 / (A_1 m1^2)
+  return std::max(cpPrim, ratio * cpSec);
+}
+
+/**
+ * @brief Opening angle beta between orbital angular momentum L and total J.
+ *
+ * In the "simple precession" approximation (Apostolatos et al. 1994,
+ * PRD 49, 6274), the opening angle beta remains approximately constant
+ * during the inspiral.  Here we estimate it from the ratio of in-plane to
+ * aligned spin:
+ *
+ *   beta = arctan(chi_p / |chi_eff|)
+ *
+ * This is exact when the aligned spin dominates the total spin magnitude.
+ *
+ * LIMITS:
+ *   - Aligned spins (chi_p = 0): beta = 0 (L parallel to J, no precession cone)
+ *   - Purely in-plane spin (chi_eff = 0): beta = pi/2 (maximum precession)
+ *   - Both zero: beta = 0 (defined by convention, no preferred direction)
+ *
+ * Reference: Apostolatos et al. (1994), PRD 49, 6274, Eq. (44).
+ *
+ * @param chiEff  Effective aligned spin chi_eff = (m1 a1_star + m2 a2_star) / M
+ * @param chiPVal Effective precession parameter chi_p from chiP()
+ * @return Opening angle beta [rad] in [0, pi/2]
+ */
+[[nodiscard]] inline double precessingOpeningAngle(double chiEff,
+                                                   double chiPVal) noexcept {
+  const double denom = std::sqrt(chiEff * chiEff + chiPVal * chiPVal);
+  if (denom < 1.0e-12) { return 0.0; }
+  return std::atan2(chiPVal, std::abs(chiEff));  // [0, pi/2]
+}
+
+/**
+ * @brief Accumulated precession angle of the orbital plane at GW frequency fGw.
+ *
+ * WHY: As the binary inspirals, the orbital angular momentum L precesses
+ * around the total angular momentum J under the torque from spin-orbit coupling.
+ * The precession angle alpha(f) increases as the orbit tightens.  For the
+ * "simple precession" approximation (Apostolatos et al. 1994), L precesses
+ * around J at a rate Omega_prec ~ chi_eff v^5 / M_geo at leading PN order.
+ *
+ * WHAT: Integrating the precession rate Omega_prec over the inspiral evolution
+ * (using dv/dt = (32/5) eta v^9 / M_geo^2) gives (at leading 1.5PN order):
+ *
+ *   alpha(f) = (3 chi_eff) / (4 eta v(f)^3)
+ *
+ * where v = (pi G M f / c^3)^{1/3} is the PN velocity and the formula gives
+ * the accumulated angle from coalescence backward to fGw.  The precession angle
+ * INCREASES as f increases (orbit shrinks, faster precession; but also less time
+ * left, so the net integral grows with frequency at this order).
+ *
+ * MONOTONICITY: Because v^3 = pi M_geo f increases with f, alpha(f) ~ 1/f
+ * DECREASES with frequency.  This is the total remaining precession from the
+ * current frequency to coalescence.  The ACCUMULATED precession DURING the
+ * inspiral from fLo to fHi > fLo is:
+ *   Delta alpha = alpha(fLo) - alpha(fHi) > 0  (positive for prograde chi_eff > 0).
+ *
+ * For GW150914-like parameters (M=65 Msun, chi_eff=0.7, eta=0.25):
+ *   alpha(68 Hz) ~ 22 rad, alpha(10 Hz) ~ 150 rad.
+ *   Delta alpha (10->68 Hz) ~ 128 rad ~ 20 precession cycles.
+ *
+ * Reference: Apostolatos et al. (1994), PRD 49, 6274, Eq. (A6).
+ *
+ * @param mTotal  Total binary mass [g]
+ * @param eta     Symmetric mass ratio
+ * @param chiEff  Effective aligned spin chi_eff in (-1, 1)
+ * @param fGw     Gravitational wave frequency [Hz]
+ * @return Accumulated precession angle alpha [rad]; zero for non-positive inputs.
+ */
+[[nodiscard]] inline double simplePrecessionPhase(double mTotal, double eta,
+                                                  double chiEff,
+                                                  double fGw) noexcept {
+  if (mTotal <= 0.0 || eta <= 0.0 || fGw <= 0.0) { return 0.0; }
+
+  // PN velocity cube: v^3 = pi G M f / c^3 (dimensionless)
+  const double mGeo = (G * mTotal) / (C * C * C);  // [s]
+  const double v3   = physics::PI * mGeo * fGw;
+  if (v3 <= 0.0) { return 0.0; }
+
+  // Apostolatos 1994 simple precession (leading 1.5PN, Eq. A6):
+  //   alpha(v) = (3 chi_eff) / (4 eta v^3)
+  return (3.0 / 4.0) * chiEff / (eta * v3);
+}
+
+/**
+ * @brief Rotate GW polarizations by the precession angle alpha.
+ *
+ * In the co-precessing frame, the waveform looks like an ordinary non-precessing
+ * signal (h+_co, hx_co).  Transforming to the inertial (detector) frame requires
+ * rotating the polarization basis by twice the precession angle alpha, since
+ * gravitational waves have spin weight 2:
+ *
+ *   h+  = h+_co * cos(2 alpha) - hx_co * sin(2 alpha)
+ *   hx  = h+_co * sin(2 alpha) + hx_co * cos(2 alpha)
+ *
+ * This is the leading-order "twisted-up" transformation.  The rotation preserves
+ * the GW polarization invariant:  h+^2 + hx^2 = h+_co^2 + hx_co^2  (isometry).
+ * Tests can exploit this property to verify correctness independent of alpha.
+ *
+ * Reference: Hannam et al. (2014), PRD 89, 124025, Eq. (3).
+ *
+ * @param hPlus0    Plus polarization in co-precessing frame
+ * @param hCross0   Cross polarization in co-precessing frame
+ * @param alpha     Precession angle [rad] from simplePrecessionPhase()
+ * @param hPlusPrec  Output: plus polarization in inertial frame
+ * @param hCrossPrec Output: cross polarization in inertial frame
+ */
+inline void precessedPolarizations(double hPlus0, double hCross0,
+                                   double alpha,
+                                   double& hPlusPrec,
+                                   double& hCrossPrec) noexcept {
+  const double cos2a = std::cos(2.0 * alpha);
+  const double sin2a = std::sin(2.0 * alpha);
+  hPlusPrec  = hPlus0 * cos2a - hCross0 * sin2a;
+  hCrossPrec = hPlus0 * sin2a + hCross0 * cos2a;
+}
+
 } // namespace physics
 
 #endif // PHYSICS_GRAVITATIONAL_WAVES_H

@@ -2236,6 +2236,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # GW memory effect + precessing binary PN phase tests (D7/D8)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gw_memory_precession_test.cpp")
+    add_executable(gw_memory_precession_test
+      "${PROJECT_SOURCE_DIR}/tests/gw_memory_precession_test.cpp"
+    )
+    target_include_directories(gw_memory_precession_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(gw_memory_precession_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME gw_memory_precession_validation COMMAND gw_memory_precession_test)
+    set_tests_properties(gw_memory_precession_validation PROPERTIES
+      LABELS "physics;gw;memory;precession"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(gw_memory_precession_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # EHT shadow diameter validation tests (Phase 5.4)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_shadow_test.cpp")
     add_executable(eht_shadow_test
