@@ -58,14 +58,17 @@ extern __constant__ float d_spectral_radius_max;
 extern __constant__ float d_time_sec;
 /* LUT texture objects (cudaTextureObject_t = unsigned long long).
  * Zero means the slot is not registered; all device sampling sites guard on 0.
- * Matches BhLutSlot order: emissivity=0, redshift=1, spectral=2, grb=3, galaxy=4, grmhd=5. */
-extern __constant__ unsigned long long d_tex_emissivity; /**< @brief Slot 0: accretion emissivity. */
-extern __constant__ unsigned long long d_tex_redshift;   /**< @brief Slot 1: gravitational redshift. */
-extern __constant__ unsigned long long d_tex_spectral;   /**< @brief Slot 2: spectral modulation. */
-extern __constant__ unsigned long long d_tex_grb;        /**< @brief Slot 3: GRB overlay LUT. */
-extern __constant__ unsigned long long d_tex_galaxy;     /**< @brief Slot 4: galaxy cubemap. */
-extern __constant__ unsigned long long d_tex_grmhd;      /**< @brief Slot 5: GRMHD volume (RGBA32F 3D). */
-extern __constant__ unsigned long long d_tex_synch_g;    /**< @brief Slot 6: synchrotron G(x)=x*K_{2/3}(x) LUT (R32F 2D, height=1). */
+ * Matches BhLutSlot order: emissivity=0, redshift=1, spectral=2, grb=3, galaxy=4,
+ * grmhd=5, synch_g=6, grmhd_right=7. */
+extern __constant__ unsigned long long d_tex_emissivity;   /**< @brief Slot 0: accretion emissivity. */
+extern __constant__ unsigned long long d_tex_redshift;     /**< @brief Slot 1: gravitational redshift. */
+extern __constant__ unsigned long long d_tex_spectral;     /**< @brief Slot 2: spectral modulation. */
+extern __constant__ unsigned long long d_tex_grb;          /**< @brief Slot 3: GRB overlay LUT. */
+extern __constant__ unsigned long long d_tex_galaxy;       /**< @brief Slot 4: galaxy cubemap. */
+extern __constant__ unsigned long long d_tex_grmhd;        /**< @brief Slot 5: GRMHD left frame (RGBA32F 3D). */
+extern __constant__ unsigned long long d_tex_synch_g;      /**< @brief Slot 6: synchrotron G(x)=x*K_{2/3}(x) LUT (R32F 2D, height=1). */
+extern __constant__ unsigned long long d_tex_grmhd_right;  /**< @brief Slot 7: GRMHD right frame for time interpolation (RGBA32F 3D). */
+extern __constant__ float d_grmhd_alpha;                   /**< @brief Blend factor [0,1] between left and right GRMHD frames (C1d). */
 extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
@@ -1160,7 +1163,21 @@ __device__ __forceinline__ float4 d_sample_grmhd(float3 pos) {
     float const v = theta * D_INV_PI;
     float const w = phi * D_INV_TWO_PI;
 
-    return tex3D<float4>((cudaTextureObject_t)d_tex_grmhd, u, v, w);
+    float4 const left = tex3D<float4>((cudaTextureObject_t)d_tex_grmhd, u, v, w);
+
+    /* C1d: temporal interpolation between adjacent GRMHD simulation frames.
+     * When right texture is absent (alpha==0 or slot unregistered), return
+     * the left frame directly (lerp(L, ?, 0) = L, no right sample needed). */
+    if (d_tex_grmhd_right == 0ULL || d_grmhd_alpha <= D_EPSILON) {
+        return left;
+    }
+    float4 const right = tex3D<float4>((cudaTextureObject_t)d_tex_grmhd_right, u, v, w);
+    float const a = d_grmhd_alpha;
+    return make_float4(
+        left.x + a * (right.x - left.x),
+        left.y + a * (right.y - left.y),
+        left.z + a * (right.z - left.z),
+        left.w + a * (right.w - left.w));
 }
 
 /**

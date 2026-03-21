@@ -52,8 +52,10 @@ __constant__ unsigned long long d_tex_redshift;   /**< @brief Gravitational reds
 __constant__ unsigned long long d_tex_spectral;   /**< @brief Spectral modulation LUT. */
 __constant__ unsigned long long d_tex_grb;        /**< @brief Gamma-ray burst overlay LUT. */
 __constant__ unsigned long long d_tex_galaxy;     /**< @brief Galaxy cubemap background. */
-__constant__ unsigned long long d_tex_grmhd;      /**< @brief GRMHD simulation volume (RGBA32F 3D). */
-__constant__ unsigned long long d_tex_synch_g;    /**< @brief Synchrotron G(x)=x*K_{2/3}(x) LUT (R32F 2D, height=1). */
+__constant__ unsigned long long d_tex_grmhd;       /**< @brief GRMHD left frame (RGBA32F 3D). */
+__constant__ unsigned long long d_tex_synch_g;     /**< @brief Synchrotron G(x)=x*K_{2/3}(x) LUT (R32F 2D, height=1). */
+__constant__ unsigned long long d_tex_grmhd_right; /**< @brief GRMHD right frame for time interpolation (RGBA32F 3D). */
+__constant__ float d_grmhd_alpha;                  /**< @brief Blend [0,1] between left and right GRMHD frames (C1d). */
 __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
 __constant__ int d_background_enabled;
@@ -128,6 +130,7 @@ int uploadConstants(
   COPY_CONST(d_grmhd_r_max, p->grmhd_r_max);
   COPY_CONST(d_rte_enabled, p->rte_enabled);
   COPY_CONST(d_rte_opacity_scale, p->rte_opacity_scale);
+  COPY_CONST(d_grmhd_alpha, p->grmhd_alpha);
 
   /* Array copies */
   cudaError_t const errPos = cudaMemcpyToSymbol(d_cam_pos, p->cam_pos, sizeof(p->cam_pos));
@@ -211,13 +214,14 @@ extern "C" int bh_select_kernel_variant(void) {
  * cudaMemcpyToSymbol errors are non-fatal: a failed upload leaves the old
  * constant value in place and the kernel simply falls back to analytic paths.
  *
- * @param emissivity cudaTextureObject_t for slot 0 (accretion emissivity LUT).
- * @param redshift   cudaTextureObject_t for slot 1 (gravitational redshift LUT).
- * @param spectral   cudaTextureObject_t for slot 2 (spectral modulation LUT).
- * @param grb        cudaTextureObject_t for slot 3 (GRB overlay LUT).
- * @param galaxy     cudaTextureObject_t for slot 4 (galaxy cubemap background).
- * @param grmhd      cudaTextureObject_t for slot 5 (GRMHD simulation volume).
- * @param synch_g    cudaTextureObject_t for slot 6 (synchrotron G(x)=x*K_{2/3}(x) LUT).
+ * @param emissivity  cudaTextureObject_t for slot 0 (accretion emissivity LUT).
+ * @param redshift    cudaTextureObject_t for slot 1 (gravitational redshift LUT).
+ * @param spectral    cudaTextureObject_t for slot 2 (spectral modulation LUT).
+ * @param grb         cudaTextureObject_t for slot 3 (GRB overlay LUT).
+ * @param galaxy      cudaTextureObject_t for slot 4 (galaxy cubemap background).
+ * @param grmhd       cudaTextureObject_t for slot 5 (GRMHD left frame).
+ * @param synch_g     cudaTextureObject_t for slot 6 (synchrotron G(x)=x*K_{2/3}(x) LUT).
+ * @param grmhd_right cudaTextureObject_t for slot 7 (GRMHD right frame; 0 = no interpolation).
  */
 extern "C" void bh_upload_lut_textures(unsigned long long emissivity,
                                        unsigned long long redshift,
@@ -225,12 +229,14 @@ extern "C" void bh_upload_lut_textures(unsigned long long emissivity,
                                        unsigned long long grb,
                                        unsigned long long galaxy,
                                        unsigned long long grmhd,
-                                       unsigned long long synch_g) {
-  (void)cudaMemcpyToSymbol(d_tex_emissivity, &emissivity, sizeof(emissivity));
-  (void)cudaMemcpyToSymbol(d_tex_redshift,   &redshift,   sizeof(redshift));
-  (void)cudaMemcpyToSymbol(d_tex_spectral,   &spectral,   sizeof(spectral));
-  (void)cudaMemcpyToSymbol(d_tex_grb,        &grb,        sizeof(grb));
-  (void)cudaMemcpyToSymbol(d_tex_galaxy,     &galaxy,     sizeof(galaxy));
-  (void)cudaMemcpyToSymbol(d_tex_grmhd,      &grmhd,      sizeof(grmhd));
-  (void)cudaMemcpyToSymbol(d_tex_synch_g,    &synch_g,    sizeof(synch_g));
+                                       unsigned long long synch_g,
+                                       unsigned long long grmhd_right) {
+  (void)cudaMemcpyToSymbol(d_tex_emissivity,   &emissivity,   sizeof(emissivity));
+  (void)cudaMemcpyToSymbol(d_tex_redshift,     &redshift,     sizeof(redshift));
+  (void)cudaMemcpyToSymbol(d_tex_spectral,     &spectral,     sizeof(spectral));
+  (void)cudaMemcpyToSymbol(d_tex_grb,          &grb,          sizeof(grb));
+  (void)cudaMemcpyToSymbol(d_tex_galaxy,       &galaxy,       sizeof(galaxy));
+  (void)cudaMemcpyToSymbol(d_tex_grmhd,        &grmhd,        sizeof(grmhd));
+  (void)cudaMemcpyToSymbol(d_tex_synch_g,      &synch_g,      sizeof(synch_g));
+  (void)cudaMemcpyToSymbol(d_tex_grmhd_right,  &grmhd_right,  sizeof(grmhd_right));
 }

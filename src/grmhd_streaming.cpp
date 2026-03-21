@@ -299,6 +299,17 @@ std::shared_ptr<GRMHDTile> GRMHDStreamer::getTile(uint16_t x, uint16_t y, uint16
   return nullptr;
 }
 
+std::shared_ptr<GRMHDTile> GRMHDStreamer::getAdjacentTile(uint16_t x, uint16_t y,
+                                                           uint16_t z, uint8_t level) {
+  uint32_t const cur = currentFrame_.load();
+  uint32_t const next = cur + 1;
+  if (next >= static_cast<uint32_t>(metadata_.frameCount)) {
+    return nullptr;  // at last frame; no adjacent frame
+  }
+  TileID const id{.frame = next, .x = x, .y = y, .z = z, .level = level};
+  return cache_.get(id);  // returns nullptr on miss (prefetch already queued by seekFrame)
+}
+
 double GRMHDStreamer::cacheHitRate() const noexcept {
   return static_cast<double>(cache_.hitRate()) / 100.0;
 }

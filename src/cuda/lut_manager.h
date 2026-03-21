@@ -25,9 +25,10 @@ enum BhLutSlot { // NOLINT(cppcoreguidelines-use-enum-class)
   BhLutSpectral   = 2, /**< @brief Spectral modulation LUT. */
   BhLutGrb        = 3, /**< @brief Gamma-ray burst overlay LUT. */
   BhLutGalaxy     = 4, /**< @brief Galaxy cubemap background texture. */
-  BhLutGrmhd      = 5, /**< @brief GRMHD simulation volume (RGBA32F 3D texture). */
+  BhLutGrmhd      = 5, /**< @brief GRMHD simulation volume left frame (RGBA32F 3D texture). */
   BhLutSynchG     = 6, /**< @brief Synchrotron G(x) = x*K_{2/3}(x) polarization LUT (R32F 2D, height=1). */
-  BhLutCount      = 7  /**< @brief Sentinel: total number of LUT slots. */
+  BhLutGrmhdRight = 7, /**< @brief GRMHD simulation volume right frame for time interpolation (RGBA32F 3D). */
+  BhLutCount      = 8  /**< @brief Sentinel: total number of LUT slots. */
 };
 
 /**

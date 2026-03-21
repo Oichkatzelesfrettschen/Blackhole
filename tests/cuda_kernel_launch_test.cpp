@@ -41,9 +41,10 @@ TEST(CudaKernelLaunch, LaunchParamsSize) {
      * + 2 floats (grmhd_r_min, grmhd_r_max = 8) = 160
      * + 1 int (rte_enabled = 4) = 164
      * + 1 float (rte_opacity_scale = 4) = 168
+     * + 1 float (grmhd_alpha = 4) = 172   [C1d]
      * All fields 4-byte, naturally aligned => no padding expected.
      */
-    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(168))
+    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(172))
         << "BH_LaunchParams size changed -- verify device_physics.cuh offsets"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
 }
 
@@ -82,6 +83,9 @@ TEST(CudaKernelLaunch, LaunchParamsFieldOffsets) {
     EXPECT_EQ(offsetof(BH_LaunchParams, doppler_strength),     static_cast<std::size_t>(128));
     EXPECT_EQ(offsetof(BH_LaunchParams, background_intensity), static_cast<std::size_t>(132));
     EXPECT_EQ(offsetof(BH_LaunchParams, background_enabled),   static_cast<std::size_t>(136));
+
+    /* C1d: GRMHD temporal interpolation */
+    EXPECT_EQ(offsetof(BH_LaunchParams, grmhd_alpha),          static_cast<std::size_t>(168)); // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
 }
 
 /* ========================================================================

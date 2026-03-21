@@ -247,6 +247,21 @@ public:
      */
     std::shared_ptr<GRMHDTile> getTile(uint16_t x, uint16_t y, uint16_t z, uint8_t level);
 
+    /**
+     * @brief Return the tile for (currentFrame + 1) at the given coordinates.
+     *
+     * The adjacent frame is typically pre-cached by seekFrame()'s prefetch.
+     * Returns nullptr when at the last frame or when the tile is not yet cached.
+     * Used by C1d GRMHD temporal interpolation to blend between two frames.
+     *
+     * @param x     Tile X grid index.
+     * @param y     Tile Y grid index.
+     * @param z     Tile Z grid index.
+     * @param level Octree level (0 = full resolution).
+     * @return Shared pointer to the next-frame tile, or nullptr.
+     */
+    std::shared_ptr<GRMHDTile> getAdjacentTile(uint16_t x, uint16_t y, uint16_t z, uint8_t level);
+
     /** @brief Read-only access to the parsed dataset metadata. */
     const GRMHDMetadata& metadata() const noexcept { return metadata_; }
 

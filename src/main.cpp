@@ -2488,6 +2488,11 @@ int main(int argc, char **argv) {
      * streamer loads a dataset and shut down when the dataset is unloaded.
      * Its texture() replaces grmhdTexture.texture for the time-series path. */
     static blackhole::GrmhdPBOUploader grmhdPboUploader;
+    /* C1d: second PBO uploader for the adjacent (next) GRMHD frame.
+     * Holds frame N+1; blended with grmhdPboUploader (frame N) using grmhdFrameAlpha. */
+    static blackhole::GrmhdPBOUploader grmhdPboUploaderRight;
+    /* Sub-frame blend factor [0,1): fraction of current inter-frame interval elapsed. */
+    static float grmhdFrameAlpha = 0.0f;
 
     static float blackHoleMass = 1.0f;
     static float kerrSpin = 0.0f;
@@ -3382,6 +3387,33 @@ int main(int argc, char **argv) {
           grmhdPboUploader.upload(tile->data.data(), tile->data.size());
         }
       }
+      /* C1d: upload adjacent (next) frame into the right PBO uploader for
+       * temporal interpolation.  getAdjacentTile() returns nullptr at the last
+       * frame or on a cache miss (seekFrame prefetch keeps it warm).
+       * grmhdFrameAlpha is the sub-frame blend fraction; sub-frame position is
+       * approximated as the fractional part of (current_frame + time_bias). */
+      grmhdFrameAlpha = 0.0f;
+      if (grmhdStreamer && grmhdPboUploaderRight.texture() != 0) {
+        auto rightTile = grmhdStreamer->getAdjacentTile(0, 0, 0, 0);
+        if (rightTile && rightTile->ready()) {
+          grmhdPboUploaderRight.upload(rightTile->data.data(), rightTile->data.size());
+        }
+        /* Advance CUDA slot 7 registration when the right PBO first becomes ready */
+        if (grmhdPboUploaderRight.ready() && cudaState.backend != nullptr) {
+          static GLuint registeredRightTex = 0;
+          if (registeredRightTex != grmhdPboUploaderRight.texture()) {
+            registeredRightTex = grmhdPboUploaderRight.texture();
+            bhCudaRegisterLut(cudaState.backend, 7 /*BhLutGrmhdRight*/,
+                              registeredRightTex,
+                              static_cast<unsigned int>(GL_TEXTURE_3D));
+          }
+          /* Sub-frame alpha: fraction of inter-frame interval elapsed.
+           * grmhdPlaybackSpeed controls simulation-time advance per real second. */
+          grmhdFrameAlpha = std::fmod(
+              static_cast<float>(grmhdCurrentFrame) * grmhdPlaybackSpeed, 1.0f);
+          grmhdFrameAlpha = std::max(0.0f, std::min(1.0f, grmhdFrameAlpha));
+        }
+      }
 
       /* grmhdReady: true when packed texture OR PBO streaming path is valid. */
       bool const grmhdReady = (grmhdLoaded && grmhdTexture.texture != 0) ||
@@ -3593,6 +3625,13 @@ int main(int argc, char **argv) {
                     grmhdPboUploader.init(static_cast<int>(meta.gridX),
                                          static_cast<int>(meta.gridY),
                                          static_cast<int>(meta.gridZ));
+                    /* C1d: initialize right-frame uploader with same dimensions */
+                    if (grmhdPboUploaderRight.texture() != 0) {
+                      grmhdPboUploaderRight.shutdown();
+                    }
+                    grmhdPboUploaderRight.init(static_cast<int>(meta.gridX),
+                                              static_cast<int>(meta.gridY),
+                                              static_cast<int>(meta.gridZ));
                   } else {
                     grmhdStreamer.reset();
                   }
@@ -3605,6 +3644,8 @@ int main(int argc, char **argv) {
                   grmhdStreamer.reset();
                 }
                 grmhdPboUploader.shutdown();
+                grmhdPboUploaderRight.shutdown();  /* C1d: tear down right-frame uploader */
+                grmhdFrameAlpha = 0.0f;
                 grmhdTimeSeriesLoaded = false;
                 grmhdCurrentFrame = 0;
                 grmhdMaxFrame = 0;
@@ -4223,9 +4264,10 @@ int main(int argc, char **argv) {
             cp.wiregrid_enabled    = wiregridEnabled ? 1 : 0;
             cp.wiregrid_show_ergo  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
             cp.wiregrid_grid_scale = wiregridParams.gridScale;
-            // GRMHD volume radial bounds (task C1l)
-            cp.grmhd_r_min = grmhdTexture.rMin;
-            cp.grmhd_r_max = grmhdTexture.rMax;
+            // GRMHD volume radial bounds (task C1l) + temporal blend (C1d)
+            cp.grmhd_r_min  = grmhdTexture.rMin;
+            cp.grmhd_r_max  = grmhdTexture.rMax;
+            cp.grmhd_alpha  = grmhdFrameAlpha;
             // Volumetric RTE (D3): mirrors GLSL rteEnabled path
             cp.rte_enabled      = (interop.rteEnabled > 0.5f) ? 1 : 0;
             cp.rte_opacity_scale = interop.rteOpacityScale;

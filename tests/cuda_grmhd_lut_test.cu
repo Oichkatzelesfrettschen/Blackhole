@@ -221,7 +221,7 @@ protected:
 
     void TearDown() override {
         /* Reset d_tex_grmhd to 0 so subsequent tests start clean */
-        bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
+        bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
 
         if (d_fb) { cudaFree(d_fb); d_fb = nullptr; }
 
@@ -268,7 +268,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationZeroInputZeroOutput) {
 
     /* Upload to d_tex_grmhd */
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
-                           static_cast<unsigned long long>(tex), 0ULL);
+                           static_cast<unsigned long long>(tex), 0ULL, 0ULL);
 
     BH_LaunchParams p = make_disk_params(kW, kH);
     p.use_luts = 1;
@@ -303,7 +303,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationUnitInputMatchesBaseline) {
     /* Baseline: no GRMHD (use_luts=0) */
     BH_LaunchParams p = make_disk_params(kW, kH);
     p.use_luts = 0;
-    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
     auto baseline = render(p);
     ASSERT_EQ(baseline.size(), static_cast<std::size_t>(kN));
 
@@ -320,7 +320,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationUnitInputMatchesBaseline) {
         << "Failed to create unit GRMHD texture: " << cudaGetErrorString(err);
 
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
-                           static_cast<unsigned long long>(tex), 0ULL);
+                           static_cast<unsigned long long>(tex), 0ULL, 0ULL);
 
     p.use_luts = 1;
     auto with_unit_grmhd = render(p);
@@ -347,7 +347,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationHalfStrengthDimsOutput) {
     /* Baseline: no GRMHD */
     BH_LaunchParams p = make_disk_params(kW, kH);
     p.use_luts = 0;
-    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
     auto baseline = render(p);
     ASSERT_EQ(baseline.size(), static_cast<std::size_t>(kN));
 
@@ -364,7 +364,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationHalfStrengthDimsOutput) {
         << "Failed to create half GRMHD texture: " << cudaGetErrorString(err);
 
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
-                           static_cast<unsigned long long>(tex), 0ULL);
+                           static_cast<unsigned long long>(tex), 0ULL, 0ULL);
 
     p.use_luts = 1;
     auto with_half = render(p);
@@ -422,7 +422,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdPhiUniformNoSeam) {
         << "Failed to create uniform phi GRMHD texture: " << cudaGetErrorString(err);
 
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
-                           static_cast<unsigned long long>(tex), 0ULL);
+                           static_cast<unsigned long long>(tex), 0ULL, 0ULL);
 
     /* Ray set 1: camera at (+25, 0, 20), hits disk at phi~0 (positive x side).
      * Use the fixture's kW x kH framebuffer; pick the center pixel (index kN/2). */
@@ -531,4 +531,119 @@ TEST_F(CudaGrmhdLutTest, GrmhdPhiBoundaryWrapsCleanly) {
     cudaFree(d_near_twopi);
     cudaDestroyTextureObject(tex);
     cudaFreeArray(arr);
+}
+
+/* ========================================================================
+ * C1d -- Temporal interpolation between two GRMHD frames
+ * ======================================================================== */
+
+/**
+ * @test GrmhdInterpolationAlphaZeroMatchesLeft (C1d)
+ *
+ * With alpha=0 the blend must return the left frame unchanged.
+ * Left = rho=0.8, uu=0.6; right = rho=1.0, uu=1.0.
+ * At alpha=0 the disk pixel brightness must match left-only baseline.
+ */
+TEST_F(CudaGrmhdLutTest, GrmhdInterpolationAlphaZeroMatchesLeft) {
+    /* Left texture: rho=0.8, uu=0.6 */
+    std::vector<float4> left_data(
+        static_cast<std::size_t>(kTW * kTH * kTD),
+        make_float4(0.8f, 0.6f, 0.0f, 0.0f));
+    /* Right texture: rho=1.0, uu=1.0 */
+    std::vector<float4> right_data(
+        static_cast<std::size_t>(kTW * kTH * kTD),
+        make_float4(1.0f, 1.0f, 0.0f, 0.0f));
+
+    cudaArray_t arr_l = nullptr, arr_r = nullptr;
+    cudaTextureObject_t tex_l = 0, tex_r = 0;
+    ASSERT_EQ(cudaSuccess, make_grmhd_texture(left_data.data(),  kTW, kTH, kTD, &arr_l, &tex_l));
+    ASSERT_EQ(cudaSuccess, make_grmhd_texture(right_data.data(), kTW, kTH, kTD, &arr_r, &tex_r));
+
+    BH_LaunchParams p = make_disk_params(kW, kH);
+    p.use_luts   = 1;
+    p.grmhd_alpha = 0.0f;  /* left frame only */
+
+    /* Render with left-only (right slot = 0) to get baseline */
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
+                           static_cast<unsigned long long>(tex_l), 0ULL, 0ULL);
+    auto left_only = render(p);
+    ASSERT_EQ(left_only.size(), static_cast<std::size_t>(kN));
+
+    /* Render with alpha=0 and right slot populated -- must match left_only */
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
+                           static_cast<unsigned long long>(tex_l), 0ULL,
+                           static_cast<unsigned long long>(tex_r));
+    auto blended = render(p);
+    ASSERT_EQ(blended.size(), static_cast<std::size_t>(kN));
+
+    double r = rmse(left_only, blended);
+    EXPECT_LT(r, 1e-5)
+        << "alpha=0 blend must match left-only render; RMSE=" << r;
+
+    cudaDestroyTextureObject(tex_l); cudaFreeArray(arr_l);
+    cudaDestroyTextureObject(tex_r); cudaFreeArray(arr_r);
+}
+
+/**
+ * @test GrmhdInterpolationAlphaOneMatchesRight (C1d)
+ *
+ * With alpha=1 the blend must return the right frame.
+ * Left = rho=0.0, uu=0.0 (black after modulation).
+ * Right = rho=1.0, uu=1.0 (full brightness).
+ * At alpha=1 pixels must be >= baseline brightness; at alpha=0 all black.
+ */
+TEST_F(CudaGrmhdLutTest, GrmhdInterpolationAlphaOneMatchesRight) {
+    std::vector<float4> left_data(
+        static_cast<std::size_t>(kTW * kTH * kTD),
+        make_float4(0.0f, 0.0f, 0.0f, 0.0f));
+    std::vector<float4> right_data(
+        static_cast<std::size_t>(kTW * kTH * kTD),
+        make_float4(1.0f, 1.0f, 0.0f, 0.0f));
+
+    cudaArray_t arr_l = nullptr, arr_r = nullptr;
+    cudaTextureObject_t tex_l = 0, tex_r = 0;
+    ASSERT_EQ(cudaSuccess, make_grmhd_texture(left_data.data(),  kTW, kTH, kTD, &arr_l, &tex_l));
+    ASSERT_EQ(cudaSuccess, make_grmhd_texture(right_data.data(), kTW, kTH, kTD, &arr_r, &tex_r));
+
+    BH_LaunchParams p = make_disk_params(kW, kH);
+    p.use_luts    = 1;
+
+    /* alpha=0: left (zero) => all-black */
+    p.grmhd_alpha = 0.0f;
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
+                           static_cast<unsigned long long>(tex_l), 0ULL,
+                           static_cast<unsigned long long>(tex_r));
+    auto at_zero = render(p);
+
+    /* alpha=1: right (unit) => disk should be bright */
+    p.grmhd_alpha = 1.0f;
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
+                           static_cast<unsigned long long>(tex_l), 0ULL,
+                           static_cast<unsigned long long>(tex_r));
+    auto at_one = render(p);
+
+    ASSERT_EQ(at_zero.size(), static_cast<std::size_t>(kN));
+    ASSERT_EQ(at_one.size(),  static_cast<std::size_t>(kN));
+
+    /* With alpha=0 and zero left texture, all disk pixels must be black. */
+    for (int i = 0; i < kN; ++i) {
+        const float4& px = at_zero[static_cast<std::size_t>(i)];
+        EXPECT_FLOAT_EQ(px.x, 0.0f) << "alpha=0 pixel " << i << " R not black";
+        EXPECT_FLOAT_EQ(px.y, 0.0f) << "alpha=0 pixel " << i << " G not black";
+        EXPECT_FLOAT_EQ(px.z, 0.0f) << "alpha=0 pixel " << i << " B not black";
+    }
+
+    /* With alpha=1 and unit right texture, at least one pixel must be brighter. */
+    float max_brightness = 0.0f;
+    for (int i = 0; i < kN; ++i) {
+        const float4& px = at_one[static_cast<std::size_t>(i)];
+        float const chan_max = px.x > px.y ? (px.x > px.z ? px.x : px.z)
+                                             : (px.y > px.z ? px.y : px.z);
+        max_brightness = max_brightness > chan_max ? max_brightness : chan_max;
+    }
+    EXPECT_GT(max_brightness, 0.0f)
+        << "alpha=1 with unit right frame: no bright pixel found -- disk may not be hit";
+
+    cudaDestroyTextureObject(tex_l); cudaFreeArray(arr_l);
+    cudaDestroyTextureObject(tex_r); cudaFreeArray(arr_r);
 }

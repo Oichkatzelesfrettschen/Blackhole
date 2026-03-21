@@ -79,6 +79,9 @@ struct BH_LaunchParams {
     /* Volumetric RTE (D3) */
     int   rte_enabled;       /**< @brief 1 = use front-to-back volumetric RTE instead of single-scatter. */
     float rte_opacity_scale; /**< @brief alpha_nu = rte_opacity_scale * j_nu; tune in ImGui. */
+
+    /* GRMHD temporal interpolation (C1d) */
+    float grmhd_alpha; /**< @brief Blend [0,1] between left (slot 5) and right (slot 7) GRMHD frames. */
 };
 
 /**
@@ -130,13 +133,14 @@ int bh_select_kernel_variant(void);
  * device kernels see up-to-date texture object handles.  Pass 0 for any slot
  * that has not been registered; device code checks for zero before sampling.
  *
- * @param emissivity cudaTextureObject_t for slot 0 (accretion emissivity LUT).
- * @param redshift   cudaTextureObject_t for slot 1 (gravitational redshift LUT).
- * @param spectral   cudaTextureObject_t for slot 2 (spectral modulation LUT).
- * @param grb        cudaTextureObject_t for slot 3 (GRB overlay LUT).
- * @param galaxy     cudaTextureObject_t for slot 4 (galaxy cubemap background).
- * @param grmhd      cudaTextureObject_t for slot 5 (GRMHD simulation volume).
- * @param synch_g    cudaTextureObject_t for slot 6 (synchrotron G(x)=x*K_{2/3}(x) LUT).
+ * @param emissivity  cudaTextureObject_t for slot 0 (accretion emissivity LUT).
+ * @param redshift    cudaTextureObject_t for slot 1 (gravitational redshift LUT).
+ * @param spectral    cudaTextureObject_t for slot 2 (spectral modulation LUT).
+ * @param grb         cudaTextureObject_t for slot 3 (GRB overlay LUT).
+ * @param galaxy      cudaTextureObject_t for slot 4 (galaxy cubemap background).
+ * @param grmhd       cudaTextureObject_t for slot 5 (GRMHD left frame).
+ * @param synch_g     cudaTextureObject_t for slot 6 (synchrotron G(x)=x*K_{2/3}(x) LUT).
+ * @param grmhd_right cudaTextureObject_t for slot 7 (GRMHD right frame; 0 = no interpolation).
  */
 void bh_upload_lut_textures(unsigned long long emissivity,
                              unsigned long long redshift,
@@ -144,7 +148,8 @@ void bh_upload_lut_textures(unsigned long long emissivity,
                              unsigned long long grb,
                              unsigned long long galaxy,
                              unsigned long long grmhd,
-                             unsigned long long synch_g);
+                             unsigned long long synch_g,
+                             unsigned long long grmhd_right);
 
 #ifdef __cplusplus
 }
