@@ -3180,6 +3180,32 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Physics infrastructure: conservation_monitor + event_detection + source_presets + unit_system
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/physics_infrastructure_test.cpp")
+    add_executable(physics_infrastructure_test
+      "${PROJECT_SOURCE_DIR}/tests/physics_infrastructure_test.cpp"
+    )
+    target_include_directories(physics_infrastructure_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(physics_infrastructure_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(physics_infrastructure_test PRIVATE -fno-fast-math)
+    endif()
+
+    add_test(NAME physics_infrastructure_validation COMMAND physics_infrastructure_test)
+    set_tests_properties(physics_infrastructure_validation PROPERTIES
+      LABELS "physics;conservation;event-detection;source-presets;unit-system"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(physics_infrastructure_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Symplectic integrator test (D9/G6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp")
     add_executable(symplectic_integrator_test
