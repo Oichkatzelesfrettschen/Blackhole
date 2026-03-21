@@ -3054,6 +3054,38 @@ if(BUILD_TESTING)
       endif()
     endif()
 
+    # 6. Geodesic orbit parity -- R(r)>=0 constraint + RK4 vs analytic RMSE
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_geodesic_orbit_test.cu")
+      add_executable(cuda_geodesic_orbit_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_geodesic_orbit_test.cu"
+      )
+      set_target_properties(cuda_geodesic_orbit_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_geodesic_orbit_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_geodesic_orbit_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_geodesic_orbit COMMAND cuda_geodesic_orbit_test)
+      set_tests_properties(cuda_geodesic_orbit PROPERTIES
+        LABELS "cuda;analytic;geodesic;parity"
+        TIMEOUT 60
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_geodesic_orbit PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
   endif() # ENABLE_CUDA
 
 endif()

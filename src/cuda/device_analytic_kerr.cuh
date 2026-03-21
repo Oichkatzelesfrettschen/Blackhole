@@ -303,22 +303,34 @@ __device__ int d_quartic_real_roots(float c2, float c1, float c0, float r[4])
  * For a bound orbit with four real roots r1 >= r2 >= r3 >= r4, the photon
  * oscillates in the allowed region [r3, r2] where R(r) >= 0.
  *
- * Correct formula (Dexter & Agol 2009):
+ * Uses the bilinear (Mobius) substitution (Fujita & Hikida 2009):
  *
- *   r(lambda) = r3 + (r2 - r3) * sn^2(u | m_DA)
+ *   r(u) = [r3*(r2-r4) - r4*(r2-r3)*sn^2(u|m)] /
+ *           [(r2-r4)       -     (r2-r3)*sn^2(u|m)]
  *
  * where:
- *   m_DA = (r1-r2)*(r3-r4) / [(r1-r3)*(r2-r4)]   (Dexter & Agol modulus)
- *   u    = sqrt(|(r1-r3)*(r2-r4)|) / 2 * (lambda - lambda0)
+ *   m     = (r2-r3)*(r1-r4) / [(r1-r3)*(r2-r4)]   (standard Jacobi modulus)
+ *   scale = sqrt(|(r1-r3)*(r2-r4)|) / 2
+ *   u     = scale * (lambda - lambda0)
  *
- * Note: m_DA is the COMPLEMENT of the naive m_CPU = (r2-r3)*(r1-r4)/[(r1-r3)*(r2-r4)].
- * (m_DA + m_CPU = 1). The naive formula traverses r3 -> r1, crossing the
- * forbidden region [r2, r1] where R(r) < 0.
+ * WHY the Mobius form (not the simpler r3+(r2-r3)*sn^2):
+ *   The substitution r = r3+(r2-r3)*sn^2 produces a sn^4 residual in the
+ *   ODE identity (dr/dlambda)^2 = R(r) that does not cancel.  The Mobius
+ *   form satisfies the quartic ODE exactly: after substituting and using
+ *   dn^2 = 1-m*sn^2, the (sn^4)-degree terms cancel and one gets
+ *   (dr/du)^2 = scale^2 * R(r) as a polynomial identity.
+ *
+ * WHY r2 in the anchor terms (not r1 as in the CPU source):
+ *   Using r1 gives the correct modulus but targets the WRONG endpoint (r1),
+ *   crossing the forbidden region [r2, r1] where R(r) < 0.  Using r2 ensures
+ *   the Mobius transform maps sn^2 in [0,1] monotonically to r in [r3, r2].
  *
  * At lambda = lambda0: sn=0 => r = r3 (inner turning point).
- * At u = K(k_DA): sn=1 => r = r2 (outer turning point).
+ * At u = K(k):          sn=1 => r = r2 (outer turning point).
  *
- * Reference: Dexter & Agol (2009), ApJ 696, 1616, Appendix A.
+ * References:
+ *   Fujita & Hikida (2009) arXiv:0906.1420, eq.(22)
+ *   Byrd & Friedman (1971) Handbook of Elliptic Integrals, form 361.00
  *
  * @param lambda   Affine parameter value
  * @param r1..r4   Roots in descending order (r1 >= r2 >= r3 >= r4)
@@ -330,8 +342,8 @@ __device__ float d_kerr_r_analytic(
         float r1, float r2, float r3, float r4,
         float lambda0)
 {
-    /* Dexter & Agol modulus: m_DA = (r1-r2)*(r3-r4) / [(r1-r3)*(r2-r4)] */
-    float num_m = (r1 - r2) * (r3 - r4);
+    /* m = (r2-r3)*(r1-r4) / [(r1-r3)*(r2-r4)]  (Fujita & Hikida modulus) */
+    float num_m = (r2 - r3) * (r1 - r4);
     float den_m = (r1 - r3) * (r2 - r4);
 
     if (fabsf(den_m) < 1.0e-20f) return r3;
@@ -345,19 +357,26 @@ __device__ float d_kerr_r_analytic(
     float sn, cn, dn;
     d_ellpj(u, m, &sn, &cn, &dn);
 
-    /* r(u) = r3 + (r2-r3)*sn^2  stays in [r3, r2] for all u */
-    return r3 + (r2 - r3) * sn * sn;
+    /* Mobius formula: r = [r3*(r2-r4) - r4*(r2-r3)*sn^2] / [(r2-r4) - (r2-r3)*sn^2] */
+    float sn2    = sn * sn;
+    float r24    = r2 - r4; /* r2 - r4 */
+    float r23    = r2 - r3; /* r2 - r3 */
+    float a_coef = r3 * r24 - r4 * r23 * sn2;
+    float b_coef = r24 - r23 * sn2;
+
+    if (fabsf(b_coef) < 1.0e-20f) return r2; /* at outer turning point */
+    return a_coef / b_coef;
 }
 
 /**
  * @brief Half-period of radial oscillation in affine parameter.
  *
- * T_r/2 = K(k_DA) / scale
+ * T_r/2 = K(k) / scale
  *
- * where k_DA = sqrt(m_DA), m_DA = (r1-r2)*(r3-r4)/[(r1-r3)*(r2-r4)],
+ * where k = sqrt(m), m = (r2-r3)*(r1-r4)/[(r1-r3)*(r2-r4)] (Fujita & Hikida),
  * and scale = sqrt(|(r1-r3)*(r2-r4)|) / 2.
  *
- * Uses the Dexter & Agol modulus to match d_kerr_r_analytic.
+ * Modulus matches d_kerr_r_analytic; K is the quarter-period of sn(u,k).
  * Returns 0 if the orbit is degenerate.
  *
  * @param r1..r4  Sorted radial roots (r1 >= r2 >= r3 >= r4)
@@ -366,8 +385,8 @@ __device__ float d_kerr_r_analytic(
 __device__ __forceinline__ float d_kerr_radial_half_period(
         float r1, float r2, float r3, float r4)
 {
-    /* Dexter & Agol modulus (matches d_kerr_r_analytic) */
-    float num_m = (r1 - r2) * (r3 - r4);
+    /* Fujita & Hikida modulus: m = (r2-r3)*(r1-r4)/[(r1-r3)*(r2-r4)] */
+    float num_m = (r2 - r3) * (r1 - r4);
     float den_m = (r1 - r3) * (r2 - r4);
 
     if (fabsf(den_m) < 1.0e-20f) return 0.0f;
