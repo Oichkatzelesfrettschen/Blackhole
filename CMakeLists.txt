@@ -2258,6 +2258,31 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Volumetric RTE CPU integrator tests (D1): formal solution, emission, GR transforms
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/rte_integrator_test.cpp")
+    add_executable(rte_integrator_test
+      "${PROJECT_SOURCE_DIR}/tests/rte_integrator_test.cpp"
+    )
+    target_include_directories(rte_integrator_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(rte_integrator_test PRIVATE ${PROJECT_WARNINGS})
+    if(TARGET Boost::math)
+      target_link_libraries(rte_integrator_test PRIVATE Boost::math)
+    endif()
+    add_test(NAME rte_integrator_validation COMMAND rte_integrator_test)
+    set_tests_properties(rte_integrator_validation PROPERTIES
+      LABELS "physics;rte;radiative_transfer"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(rte_integrator_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # EHT visibility pipeline tests (D11): UV coverage, DFT visibilities, closure quantities
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_visibility_test.cpp")
     add_executable(eht_visibility_test
