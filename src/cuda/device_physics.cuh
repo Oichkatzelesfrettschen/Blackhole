@@ -79,6 +79,9 @@ extern __constant__ float d_grmhd_r_min;         /**< @brief Inner radial bound 
 extern __constant__ float d_grmhd_r_max;         /**< @brief Outer radial bound of GRMHD grid. */
 extern __constant__ int   d_rte_enabled;          /**< @brief 1 = volumetric RTE path (D3). */
 extern __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_scale * j_nu. */
+extern __constant__ int   d_stokes_enabled;       /**< @brief 1 = polarized Stokes IQUV transport (D4). */
+extern __constant__ float d_stokes_b_angle;       /**< @brief EVPA of projected B field on sky [rad] (D4). */
+extern __constant__ float d_stokes_ne_scale;      /**< @brief Faraday rotation strength multiplier (D4). */
 
 /* ========================================================================
  * Vector helpers (replacing GLSL vec3 operations)
@@ -1425,6 +1428,270 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         accum_i.z += transmit * bg.z;
     }
     return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
+}
+
+/* ========================================================================
+ * Stokes polarized radiative transfer (D4)
+ * ======================================================================== */
+
+/**
+ * @brief Packed Stokes vector (I, Q, U, V) for CUDA device code.
+ *
+ * WHY: float4 would work but the component names (xyzw) are non-mnemonic.
+ *      A named struct eliminates index errors in the step function logic.
+ */
+struct DStokes {
+    float i;  /**< @brief Total intensity. */
+    float q;  /**< @brief Linear polarization: 0/90-deg axis. */
+    float u;  /**< @brief Linear polarization: 45/135-deg axis. */
+    float v;  /**< @brief Circular polarization (V>0: right-circular). */
+};
+
+/**
+ * @brief Exact analytic Stokes step for simplified K matrix (alpha_I + rho_V).
+ *
+ * Mirrors stokesStep() in src/physics/stokes_transport.h, ported to float
+ * arithmetic for the CUDA device.
+ *
+ * Simplified K: total absorption alpha_I for all channels, plus Faraday
+ * rotation rho_V coupling Q <-> U.  I and V evolve as independent scalar RTE
+ * channels; (Q,U) evolve under simultaneous absorption and rotation.
+ *
+ * EXACT SOLUTION for (Q,U):
+ *   D = A^2 + R^2   (A = alphaI, R = rhoV)
+ *   Ic = [A*(1-E*C) + R*E*S] / D
+ *   Is = [R*(1-E*C) - A*E*S] / D
+ *   Q_new = Q_hom + jQ*Ic - jU*Is
+ *   U_new = U_hom + jQ*Is + jU*Ic
+ *
+ * @param s       Current Stokes state.
+ * @param jI,jQ,jU,jV  Emission coefficients.
+ * @param alphaI  Total absorption coefficient [1/path-unit].
+ * @param rhoV    Faraday rotation rate [rad/path-unit].
+ * @param ds      Segment length [path-units].
+ * @return Updated Stokes state.
+ */
+__device__ __forceinline__ DStokes d_stokes_step(DStokes s,
+                                                  float jI, float jQ,
+                                                  float jU, float jV,
+                                                  float alphaI, float rhoV,
+                                                  float ds) {
+    if (ds <= 0.0f) { return s; }
+
+    float const A    = fmaxf(alphaI, 0.0f);
+    float const R    = rhoV;
+    float const tauL = A * ds;
+    float const E    = (tauL < 700.0f) ? expf(-tauL) : 0.0f;
+    float const phi  = R * ds;
+    float const Cp   = cosf(phi);
+    float const Sp   = sinf(phi);
+
+    /* I channel: standard scalar RTE */
+    float iNew;
+    if (A < 1.0e-30f) {
+        iNew = s.i + jI * ds;
+    } else if (tauL < 1.0e-4f) {
+        iNew = s.i * (1.0f - tauL) + jI * ds;
+    } else {
+        iNew = fmaf(s.i, E, (jI / A) * (1.0f - E));
+    }
+
+    /* V channel: scalar RTE (decoupled in simplified K) */
+    float vNew;
+    if (A < 1.0e-30f) {
+        vNew = s.v + jV * ds;
+    } else if (tauL < 1.0e-4f) {
+        vNew = s.v * (1.0f - tauL) + jV * ds;
+    } else {
+        vNew = fmaf(s.v, E, (jV / A) * (1.0f - E));
+    }
+
+    /* (Q,U) homogeneous: decay + rotation */
+    float const qHom = E * fmaf(s.q, Cp, -s.u * Sp);
+    float const uHom = E * fmaf(s.q, Sp,  s.u * Cp);
+
+    float qNew, uNew;
+    float const D = fmaf(A, A, R * R);
+
+    if (D < 1.0e-60f) {
+        /* Pure emission (neither absorption nor rotation) */
+        qNew = s.q + jQ * ds;
+        uNew = s.u + jU * ds;
+    } else if (A < 1.0e-15f * fabsf(R)) {
+        /* Rotation-dominated (A ~ 0) */
+        float const ic  =  Sp / R;
+        float const is_ = (1.0f - Cp) / R;
+        qNew = fmaf(jQ, ic,  fmaf(-jU, is_, qHom));
+        uNew = fmaf(jQ, is_, fmaf( jU, ic,  uHom));
+    } else if (fabsf(R) < 1.0e-15f * A) {
+        /* Absorption-dominated (R ~ 0) */
+        float const oneME = (tauL < 1.0e-4f) ? fmaf(-0.5f * tauL, ds, ds) : (1.0f - E) / A;
+        qNew = fmaf(jQ, oneME, qHom);
+        uNew = fmaf(jU, oneME, uHom);
+    } else {
+        float const ec  = E * Cp;
+        float const es  = E * Sp;
+        float const oneMec = 1.0f - ec;
+        float const ic  = fmaf(A, oneMec, R * es) / D;
+        float const is_ = fmaf(R, oneMec, -(A * es)) / D;
+        qNew = fmaf(jQ, ic,  fmaf(-jU, is_, qHom));
+        uNew = fmaf(jQ, is_, fmaf( jU, ic,  uHom));
+    }
+
+    return {iNew, qNew, uNew, vNew};
+}
+
+/**
+ * @brief Trace a Kerr geodesic with polarized Stokes I,Q,U,V transport.
+ *
+ * Extends d_trace_geodesic_rte() to track Stokes polarization state alongside
+ * the color-accurate intensity accumulator.  The I channel uses the same
+ * front-to-back compositing as d_trace_geodesic_rte() for color consistency.
+ * Q, U, V evolve under d_stokes_step() (simplified K: alpha_I + rho_V).
+ *
+ * At exit, the Stokes state is mapped to a display color by tinting the
+ * accumulated RGB intensity with EVPA-derived hue and linear polarization
+ * fraction.
+ *
+ * Polarization model:
+ *   PI_LIN = 0.75 (thermal synchrotron, Theta_e >> 1, Mahadevan 1996).
+ *   B-field EVPA: d_stokes_b_angle [rad] (uniform field, tuned via ImGui).
+ *   Faraday: rhoV = d_stokes_ne_scale * rhoNorm (density-modulated).
+ *
+ * @param cam_pos Camera position in world (Cartesian) coordinates.
+ * @param ray_dir Normalized ray direction.
+ * @return Display-ready RGBA float4 pixel.
+ */
+__device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
+                                                            float3 ray_dir) {
+    float const rs = d_rs;
+    float const a  = 0.5f * d_spin * rs;
+
+    if (!d_kerr_enabled || fabsf(a) < D_EPSILON) {
+        HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
+        return d_shade_hit(hit, cam_pos);
+    }
+
+    float r_horizon = d_kerr_outer_horizon(rs, a);
+    if (r_horizon <= D_EPSILON) { r_horizon = rs; }
+
+    float const r_disk_in   = d_isco;
+    float const r_disk_out  = 100.0f * rs;
+    float const h_disk      = fmaxf(0.1f * rs, D_EPSILON);
+    float const dt          = d_step_size;
+    float const max_dist    = d_max_dist;
+    int   const max_steps   = d_max_steps;
+    float const opacity_scl = d_rte_opacity_scale;
+
+    /* Intrinsic thermal synchrotron linear polarization fraction ~0.75 */
+    float const pi_lin = 0.75f;
+    float const b_angle = d_stokes_b_angle;
+    float const ne_scale = d_stokes_ne_scale;
+
+    KerrConsts const c  = d_kerr_init_consts(cam_pos, ray_dir);
+    KerrRay          kr = d_kerr_init_ray(cam_pos, ray_dir);
+
+    /* Color-accurate intensity accumulator (same as d_trace_geodesic_rte) */
+    float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
+    float  transmit = 1.0f;
+    float  min_r    = kr.r;
+
+    /* Stokes Q, U, V accumulators (I uses accum_i above) */
+    DStokes stokes = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    for (int step = 0; step < max_steps; ++step) {
+        float3 const cur_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        min_r = fminf(min_r, kr.r);
+
+        if (kr.r <= r_horizon) {
+            return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
+        }
+
+        float const step_dt = d_adaptive_step(kr.r, rs, r_horizon, dt);
+        d_kerr_step(kr, rs, a, c, step_dt);
+        float3 const new_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+
+        if (d_adisk_enabled) {
+            float const r_cyl = sqrtf(fmaf(new_pos.x, new_pos.x, new_pos.y * new_pos.y));
+            if (r_cyl >= r_disk_in && r_cyl <= r_disk_out) {
+                float const x    = r_disk_in / fmaxf(r_cyl, D_EPSILON);
+                float const flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
+
+                float const t_norm = sqrtf(sqrtf(fmaxf(flux, 0.0f)));
+                float3 emit_color;
+                if (t_norm > 0.6f) {
+                    emit_color = make_f3(1.0f, 0.9f, 0.8f);
+                } else if (t_norm > 0.3f) {
+                    emit_color = make_f3(1.0f, 0.6f, 0.2f);
+                } else {
+                    emit_color = make_f3(0.8f, 0.2f, 0.1f);
+                }
+
+                float const v       = sqrtf(0.5f * rs / fmaxf(r_cyl, D_EPSILON));
+                float const phi_ang = atan2f(new_pos.y, new_pos.x);
+                float const doppler = 1.0f + 0.3f * v * cosf(phi_ang);
+                float const g3      = doppler * doppler * doppler;
+
+                float const z_over_h  = new_pos.z / h_disk;
+                float const rho_norm  = expf(-0.5f * z_over_h * z_over_h);
+
+                float const j_eff    = flux * g3 * rho_norm;
+                float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
+
+                /* Intensity path: same as d_rte_step() */
+                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu,
+                                                   step_dt, transmit);
+                accum_i = d_add(accum_i, contrib);
+
+                /* Polarized emission: j_Q, j_U from B-field EVPA */
+                float const cos2b = cosf(2.0f * b_angle);
+                float const sin2b = sinf(2.0f * b_angle);
+                float const jI_s  = j_eff * (emit_color.x + emit_color.y + emit_color.z)
+                                    * 0.33333333f;
+                float const jQ_s  = -jI_s * pi_lin * cos2b;
+                float const jU_s  = -jI_s * pi_lin * sin2b;
+
+                /* Faraday rotation: rhoV = ne_scale * rho_norm */
+                float const rho_v = ne_scale * rho_norm;
+
+                /* Stokes step for Q, U, V (I is handled by accum_i above) */
+                stokes = d_stokes_step(stokes, 0.0f, jQ_s, jU_s, 0.0f,
+                                       alpha_nu, rho_v, step_dt);
+
+                if (transmit < 0.005f) { break; }
+            }
+        }
+
+        if (kr.r > max_dist) {
+            float3 const esc_dir = d_sub(new_pos, cur_pos);
+            if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
+                float4 const bg = d_background_color(d_normalize(esc_dir));
+                accum_i.x += transmit * bg.x;
+                accum_i.y += transmit * bg.y;
+                accum_i.z += transmit * bg.z;
+            }
+            break;
+        }
+    }
+
+    /* Map Stokes state to display color: tint intensity by EVPA and P_lin */
+    float const I_lum = (accum_i.x + accum_i.y + accum_i.z) * 0.33333333f;
+    float const P_lin = (I_lum > 1.0e-10f)
+        ? sqrtf(fmaf(stokes.q, stokes.q, stokes.u * stokes.u)) / I_lum
+        : 0.0f;
+    float const p_clamped = fminf(P_lin, 1.0f);
+    float const chi       = 0.5f * atan2f(stokes.u, stokes.q);
+    float const v_frac    = (I_lum > 1.0e-10f)
+        ? fmaxf(-0.5f, fminf(0.5f, stokes.v / I_lum)) : 0.0f;
+
+    float const tint_r = 1.0f + p_clamped * 0.4f * cosf(2.0f * chi);
+    float const tint_g = 1.0f + p_clamped * 0.4f * sinf(2.0f * chi);
+    float const tint_b = 1.0f + v_frac * 0.2f;
+
+    return make_float4(fmaxf(accum_i.x * tint_r, 0.0f),
+                       fmaxf(accum_i.y * tint_g, 0.0f),
+                       fmaxf(accum_i.z * tint_b, 0.0f),
+                       1.0f);
 }
 
 #endif /* BLACKHOLE_CUDA_DEVICE_PHYSICS_CUH */

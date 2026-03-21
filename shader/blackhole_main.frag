@@ -84,6 +84,11 @@ uniform float interopStepSize = 0.2;   // Balanced (was 0.1, ultra-fast=0.25)
 uniform float rteEnabled      = 0.0;   // 0=single-scatter (legacy), 1=volumetric RTE
 uniform float rteOpacityScale = 0.5;   // alpha_nu = rteOpacityScale * j_nu
 
+// D4: Polarized Stokes I,Q,U,V transport (supersedes rteEnabled when on)
+uniform float stokesEnabled    = 0.0;  // 1 = track Stokes IQUV alongside intensity
+uniform float stokesBFieldAngle = 0.0; // EVPA of projected B field on sky [rad]
+uniform float stokesNeScale    = 0.0;  // Faraday rotation strength (0 = no Faraday)
+
 uniform float adiskEnabled = 1.0;
 uniform float adiskParticle = 1.0;
 uniform float adiskHeight = 0.2;
@@ -491,6 +496,17 @@ void main() {
     ray.affineParameter = 0.0;
 
     int steps = int(max(1.0, interopMaxSteps + 0.5));
+
+    if (stokesEnabled > 0.5) {
+      // D4: Polarized Stokes IQUV transport (supersedes scalar RTE)
+      vec4 stokesColor = bhTraceGeodesicStokes(ray, schwarzschildRadius, depthFar, steps,
+                                                interopStepSize, rteOpacityScale,
+                                                stokesBFieldAngle, stokesNeScale);
+      vec3 interopColor = stokesColor.rgb;
+      applyWiregridOverlay(interopColor, ray.position + dir * depthFar);
+      fragColor = vec4(interopColor, 1.0);
+      return;
+    }
 
     if (rteEnabled > 0.5) {
       // D2: Volumetric RTE path -- accumulates emission/absorption through disk

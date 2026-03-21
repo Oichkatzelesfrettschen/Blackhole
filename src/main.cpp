@@ -3052,6 +3052,11 @@ int main(int argc, char **argv) {
 
     // ... (rest of main) ...
 
+    /* WHY: computeProgram is hoisted here (rather than a static local inside the
+     * frame loop) so the hot-reload handler at the top of each frame can delete
+     * and reset it to 0, triggering lazy re-creation on the next iteration. */
+    GLuint computeProgram = 0;
+
     while (glfwWindowShouldClose(window) == 0) {
       // Clear default framebuffer (essential for ImGui Docking over Viewport)
       glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -3070,15 +3075,27 @@ int main(int argc, char **argv) {
       glfwPollEvents();
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
-      // Check for shader file changes (hot-reload)
+      // Check for shader file changes and recompile all affected programs.
       if (ShaderWatcher::instance().hasPendingReloads()) {
         auto changedShaders = ShaderWatcher::instance().pollChangedShaders();
         for (const auto &path : changedShaders) {
-          std::cout << "[HotReload] Shader changed: " << path << std::endl;
-          // TODO: Implement actual shader recompilation
-          // For now, log changes - full reload requires shader registry refactor
+          std::cout << "[HotReload] Shader changed: " << path << "\n";
         }
         ShaderWatcher::instance().clearPendingReloads();
+
+        /* WHY: reloadAllRenderShaders() recompiles every render-to-texture
+         * program cached in render.cpp's shaderProgramMap.  This covers
+         * blackhole_main.frag, all bloom stages, tonemapping.frag, and
+         * depth_cues.frag -- any shader routed through renderToTexture().
+         * The compute shader (computeProgram) is managed here in main.cpp;
+         * resetting it to 0 triggers lazy re-creation on the next frame. */
+        reloadAllRenderShaders();
+
+        if (computeProgram != 0) {
+          glDeleteProgram(computeProgram);
+          computeProgram = 0;
+          std::cout << "[HotReload] Queued recompile: shader/geodesic_trace.comp\n";
+        }
       }
 #endif
 
@@ -4318,7 +4335,6 @@ int main(int argc, char **argv) {
           }
           if (computeTarget != 0) {
             ZONE_SCOPED_N("Blackhole Compute");
-            static GLuint computeProgram = 0;
             if (computeProgram == 0) {
               computeProgram = createComputeProgram(std::string("shader/geodesic_trace.comp"));
             }

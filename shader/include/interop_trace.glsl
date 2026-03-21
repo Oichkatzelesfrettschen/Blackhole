@@ -4,6 +4,7 @@
 // Use include/ prefix for shader loader compatibility
 #include "include/physics_constants.glsl"
 #include "include/rte_step.glsl"
+#include "include/stokes_transport.glsl"
 
 const float BH_EPSILON = 1e-6;
 const float BH_DEBUG_MAX_RADIUS_MULT = 4.0;
@@ -518,6 +519,144 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
                                                   minR, r_s).rgb;
   }
   return vec4(accumI, 1.0);
+}
+
+// ---------------------------------------------------------------------------
+// bhTraceGeodesicStokes
+//
+// Polarized radiative transfer along a Kerr geodesic.  Extends
+// bhTraceGeodesicRTE() to track Stokes Q, U, V alongside the scalar
+// intensity accumulator.
+//
+// The I channel uses the same front-to-back compositing as bhTraceGeodesicRTE()
+// (vec3 color-accurate accumulation).  The Q, U, V channels evolve under the
+// stokesStep() exact solution (simplified K: alpha_I + rho_V) at each disk
+// step, using the same alphaI and stepDt as the intensity path so the
+// polarimetric and photometric results remain consistent.
+//
+// Polarization model:
+//   - Intrinsic linear polarization fraction: PI_LIN = 0.75 (thermal synchrotron
+//     at Theta_e >> 1, Mahadevan 1996, matches thermalSynchLinearPolarFrac)
+//   - B-field EVPA on sky: bFieldAngle [rad] (uniform field, tuned via ImGui)
+//   - Faraday rotation rate: rhoV = neScale * rhoNorm (neScale tunable)
+//
+// At exit: stokesDisplayColor() tints the accumulated intensity by EVPA and
+// linear polarization fraction so the result is visually informative.
+//
+// Parameters:
+//   bFieldAngle -- projected B-field EVPA on sky [rad]
+//   neScale     -- Faraday rotation strength multiplier (0 = no Faraday)
+// ---------------------------------------------------------------------------
+vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
+                            float stepSize, float opacityScale,
+                            float bFieldAngle, float neScale) {
+  float a = 0.5 * kerrSpin * r_s;
+  if (abs(a) < BH_EPSILON) {
+    // Schwarzschild: no volumetric path -- single-scatter fallback
+    HitResult hit = bhTraceGeodesic(ray, r_s, maxDistance, maxSteps, stepSize);
+    if (hit.hitHorizon) { return bhHorizonColor(); }
+    if (hit.hitDisk)    { return bhDiskColorFromHit(hit, r_s); }
+    return bhBackgroundColorFromDir(normalize(hit.hitPoint - ray.position),
+                                    hit.minRadius, r_s);
+  }
+
+  float r_horizon = kerrOuterHorizon(r_s, a);
+  if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
+
+  float r_disk_in  = iscoRadius;
+  float r_disk_out = 100.0 * r_s;
+  float h_disk     = max(0.1 * r_s, BH_EPSILON);
+
+  // Thermal synchrotron intrinsic linear polarization fraction (~0.75 at Theta_e >> 1)
+  const float PI_LIN = 0.75;
+
+  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity);
+  KerrRay    kRay = kerrInitRay(ray.position, ray.velocity);
+
+  vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
+  vec2  stokesQU = vec2(0.0);   // Q and U Stokes components
+  float stokesV  = 0.0;         // V Stokes component
+  float transmit = 1.0;
+  float minR     = kRay.r;
+
+  for (int step = 0; step < maxSteps; ++step) {
+    vec3 curPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    minR = min(minR, kRay.r);
+
+    if (kRay.r <= r_horizon) {
+      accumI += transmit * bhHorizonColor().rgb;
+      float I = (accumI.r + accumI.g + accumI.b) / 3.0;
+      vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
+      return vec4(stokesDisplayColor(stokes, accumI), 1.0);
+    }
+
+    float stepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
+    kerrStep(kRay, r_s, a, c, stepDt);
+    vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+
+    if (adiskEnabled > 0.5) {
+      float rCyl = length(newPos.xy);
+      if (rCyl >= r_disk_in && rCyl <= r_disk_out) {
+        // Novikov-Thorne flux profile (same as bhTraceGeodesicRTE)
+        float x    = r_disk_in / max(rCyl, BH_EPSILON);
+        float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
+
+        float T_norm = pow(max(flux, 0.0), 0.25);
+        vec3 emitColor;
+        if (T_norm > 0.6) {
+          emitColor = vec3(1.0, 0.9, 0.8);
+        } else if (T_norm > 0.3) {
+          emitColor = vec3(1.0, 0.6, 0.2);
+        } else {
+          emitColor = vec3(0.8, 0.2, 0.1);
+        }
+
+        float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
+        float phi_ang = atan(newPos.y, newPos.x);
+        float doppler = 1.0 + 0.3 * v * cos(phi_ang);
+        float g3      = doppler * doppler * doppler;
+
+        float rhoNorm = exp(-0.5 * (newPos.z / h_disk) * (newPos.z / h_disk));
+        float jEff    = flux * g3 * rhoNorm;
+        float alphaNu = opacityScale * max(jEff, 0.0);
+
+        // Intensity path (front-to-back compositing identical to RTE path)
+        accumI += rteStepVec3(emitColor, jEff, alphaNu, stepDt, transmit);
+
+        // Polarization path: stokesStep() for Q, U, V
+        // jI_scalar: mean color intensity for the emission vector
+        float jI_scalar = jEff * (emitColor.r + emitColor.g + emitColor.b) / 3.0;
+        // Polarized emission: j_Q, j_U from B-field EVPA; j_V = 0
+        vec4 emStokes = synchrotronPolarizedEmission(jI_scalar, PI_LIN, bFieldAngle);
+
+        // Faraday rotation rate: rhoV = neScale * rhoNorm (density-modulated)
+        float rhoV = neScale * rhoNorm;
+
+        // Evolve Q, U, V under simplified K (alpha_I + rho_V)
+        // WHY: I and V decouple in simplified K; we evolve Q/U coupled via rhoV.
+        vec4 quv = stokesStep(vec4(0.0, stokesQU.x, stokesQU.y, stokesV),
+                              emStokes, alphaNu, rhoV, stepDt);
+        stokesQU = quv.yz;
+        stokesV  = quv.w;
+
+        if (transmit < 0.005) { break; }
+      }
+    }
+
+    if (kRay.r > maxDistance) {
+      vec3 escDir = newPos - curPos;
+      if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
+        accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
+                                                      minR, r_s).rgb;
+      }
+      break;
+    }
+  }
+
+  // Map accumulated Stokes state to display color
+  float I = (accumI.r + accumI.g + accumI.b) / 3.0;
+  vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
+  return vec4(stokesDisplayColor(stokes, accumI), 1.0);
 }
 
 #endif // INTEROP_TRACE_GLSL

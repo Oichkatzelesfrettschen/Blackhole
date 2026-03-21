@@ -42,9 +42,11 @@ TEST(CudaKernelLaunch, LaunchParamsSize) {
      * + 1 int (rte_enabled = 4) = 164
      * + 1 float (rte_opacity_scale = 4) = 168
      * + 1 float (grmhd_alpha = 4) = 172   [C1d]
+     * + 1 int (stokes_enabled = 4) = 176  [D4]
+     * + 2 floats (stokes_b_field_angle, stokes_ne_scale = 8) = 184  [D4]
      * All fields 4-byte, naturally aligned => no padding expected.
      */
-    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(172))
+    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(184))
         << "BH_LaunchParams size changed -- verify device_physics.cuh offsets"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
 }
 

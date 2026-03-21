@@ -82,6 +82,11 @@ struct BH_LaunchParams {
 
     /* GRMHD temporal interpolation (C1d) */
     float grmhd_alpha; /**< @brief Blend [0,1] between left (slot 5) and right (slot 7) GRMHD frames. */
+
+    /* Polarized Stokes IQUV transport (D4) */
+    int   stokes_enabled;     /**< @brief 1 = track Stokes Q,U,V alongside intensity (D4). */
+    float stokes_b_field_angle; /**< @brief EVPA of projected B field on sky [rad] (D4). */
+    float stokes_ne_scale;    /**< @brief Faraday rotation strength multiplier (0=no Faraday) (D4). */
 };
 
 /**

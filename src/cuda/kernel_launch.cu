@@ -66,6 +66,9 @@ __constant__ float d_grmhd_r_min;          /**< @brief Inner radial bound of GRM
 __constant__ float d_grmhd_r_max;          /**< @brief Outer radial bound of GRMHD grid. */
 __constant__ int   d_rte_enabled;          /**< @brief 1 = volumetric RTE path (D3). */
 __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_scale * j_nu. */
+__constant__ int   d_stokes_enabled;       /**< @brief 1 = polarized Stokes IQUV transport (D4). */
+__constant__ float d_stokes_b_angle;       /**< @brief EVPA of projected B field on sky [rad] (D4). */
+__constant__ float d_stokes_ne_scale;      /**< @brief Faraday rotation strength multiplier (D4). */
 
 /* External launch wrappers from each kernel file */
 extern "C" void launchFp32Baseline(float4 *fb, int w, int h, cudaStream_t s);
@@ -131,6 +134,9 @@ int uploadConstants(
   COPY_CONST(d_rte_enabled, p->rte_enabled);
   COPY_CONST(d_rte_opacity_scale, p->rte_opacity_scale);
   COPY_CONST(d_grmhd_alpha, p->grmhd_alpha);
+  COPY_CONST(d_stokes_enabled, p->stokes_enabled);
+  COPY_CONST(d_stokes_b_angle, p->stokes_b_field_angle);
+  COPY_CONST(d_stokes_ne_scale, p->stokes_ne_scale);
 
   /* Array copies */
   cudaError_t const errPos = cudaMemcpyToSymbol(d_cam_pos, p->cam_pos, sizeof(p->cam_pos));

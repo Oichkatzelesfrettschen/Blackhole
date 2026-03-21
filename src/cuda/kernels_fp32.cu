@@ -43,11 +43,11 @@ __launch_bounds__(256, 4)
   float3 const dir = d_ray_dir(px, py);
 
   float4 color;
-  /* D3: dispatch to volumetric RTE when enabled; baseline only (not coarsened
-   * -- two live ray states plus RTE accum would push past 128 regs/thread).
-   * Wiregrid overlay is skipped in RTE mode: the volumetric path has no single
-   * hit point that maps cleanly to BL coordinates. */
-  if (d_rte_enabled) {
+  /* D4: Stokes polarized path supersedes scalar RTE; D3: scalar RTE.
+   * Wiregrid overlay is skipped in volumetric modes (no single hit point). */
+  if (d_stokes_enabled) {
+    color = d_trace_geodesic_stokes(cam, dir);
+  } else if (d_rte_enabled) {
     color = d_trace_geodesic_rte(cam, dir);
   } else {
     HitResult const hit = d_trace_geodesic(cam, dir);
