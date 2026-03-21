@@ -3127,6 +3127,33 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Penrose process + TOV stellar structure validation
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/penrose_tov_test.cpp")
+    add_executable(penrose_tov_test
+      "${PROJECT_SOURCE_DIR}/tests/penrose_tov_test.cpp"
+      ${PHYSICS_SRC_FILES}
+    )
+    target_include_directories(penrose_tov_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(penrose_tov_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(penrose_tov_test PRIVATE -fno-fast-math)
+    endif()
+
+    add_test(NAME penrose_tov_validation COMMAND penrose_tov_test)
+    set_tests_properties(penrose_tov_validation PROPERTIES
+      LABELS "physics;penrose;tov;neutron-star"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(penrose_tov_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Symplectic integrator test (D9/G6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp")
     add_executable(symplectic_integrator_test

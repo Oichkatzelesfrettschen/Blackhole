@@ -34,8 +34,11 @@ inline constexpr double HBAR = 1.054571817e-27;
 /// Boltzmann constant [erg/K]
 inline constexpr double K_B = 1.380649e-16;
 
-/// Stefan-Boltzmann constant [erg/(cm²·s·K⁴)]
+/// Stefan-Boltzmann constant [erg/(cm^2 s K^4)]
 inline constexpr double SIGMA_SB = 5.670374419e-5;
+
+/// Thomson scattering cross-section [cm^2]
+inline constexpr double SIGMA_THOMSON = 6.6524587321e-25;
 
 // ============================================================================
 // Astronomical Constants (CGS)

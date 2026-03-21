@@ -71,7 +71,7 @@ struct PenroseResult {
   result.eIn = eIn;
   result.successful = false;
 
-  const double aStar = kerr.dimensionless_spin();
+  const double aStar = kerr.dimensionlessSpin();
 
   // Check if spin is sufficient for Penrose process
   if (std::abs(aStar) < 1e-10) {
@@ -170,7 +170,7 @@ struct PenroseResult {
  */
 [[nodiscard]] inline double horizonAngularVelocity(double mass, double a) {
   const Kerr kerr(mass, a);
-  const double rPlus = kerr.outer_horizon();
+  const double rPlus = kerr.outerHorizon();
   return (a * C) / ((rPlus * rPlus) + (a * a));
 }
 
@@ -185,7 +185,7 @@ struct PenroseResult {
  */
 [[nodiscard]] inline double horizonArea(double mass, double a) {
   const Kerr kerr(mass, a);
-  const double rPlus = kerr.outer_horizon();
+  const double rPlus = kerr.outerHorizon();
   return 4.0 * PI * ((rPlus * rPlus) + (a * a));
 }
 
