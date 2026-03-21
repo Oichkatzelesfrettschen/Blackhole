@@ -25,12 +25,12 @@
 #include <cassert>
 #include <cstdio>
 #include <iostream>
-#include <memory>
 #include <string>
 #include <vector>
 
 #include <unistd.h>  // getpid
 
+#include <highfive/H5DataSpace.hpp> // HighFive::DataSpace
 #include <highfive/H5File.hpp>
 
 #include "grmhd_hdf5_loader.h"
@@ -52,7 +52,7 @@ std::vector<double> makePrimsChannelsLast() {
     std::vector<double> data(N1 * N2 * N3 * NVAR, 0.0);
     for (std::size_t vox = 0; vox < N1 * N2 * N3; ++vox) {
         for (std::size_t ch = 0; ch < NVAR; ++ch) {
-            data.at(vox * NVAR + ch) = static_cast<double>((ch + 1) * 10);
+            data.at((vox * NVAR) + ch) = static_cast<double>((ch + 1) * 10);
         }
     }
     return data;
@@ -63,7 +63,7 @@ std::vector<double> makePrimsChannelsFirst() {
     std::vector<double> data(NVAR * N1 * N2 * N3, 0.0);
     for (std::size_t ch = 0; ch < NVAR; ++ch) {
         for (std::size_t vox = 0; vox < N1 * N2 * N3; ++vox) {
-            data.at(ch * N1 * N2 * N3 + vox) = static_cast<double>((ch + 1) * 10);
+            data.at((ch * N1 * N2 * N3) + vox) = static_cast<double>((ch + 1) * 10);
         }
     }
     return data;
@@ -314,6 +314,7 @@ int testUnknownFormat(const std::string &path) {
 // main
 // ---------------------------------------------------------------------------
 
+// NOLINTNEXTLINE(bugprone-exception-escape) -- test binary; HDF5 exceptions propagate to crash with useful messages
 int main() {
     const std::string base = "/tmp/grmhd_hdf5_test_" + std::to_string(getpid());
 
