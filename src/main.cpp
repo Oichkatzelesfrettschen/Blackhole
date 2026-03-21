@@ -61,7 +61,6 @@
 
 // Third-party library headers
 #include "constants.h"
-#include "kernel_launch.h"
 #include "kerr.h"
 #include "schwarzschild.h"
 #ifndef BLACKHOLE_HAS_CPPTRACE
@@ -2670,10 +2669,12 @@ int main(int argc, char **argv) {
       /* Register GRMHD volume as CUDA texture object (slot 5 = BhLutGrmhd).
        * Registration is non-fatal: CUDA kernel falls back to no GRMHD sampling
        * if the backend is not active or registration fails. */
+#if BLACKHOLE_HAS_CUDA
       if (cudaState.backend != nullptr && grmhdTexture.texture != 0) {
         bhCudaRegisterLut(cudaState.backend, 5 /*BhLutGrmhd*/, grmhdTexture.texture,
                           static_cast<unsigned int>(GL_TEXTURE_3D));
       }
+#endif
       return true;
     };
 
@@ -3416,6 +3417,7 @@ int main(int argc, char **argv) {
           grmhdPboUploaderRight.upload(rightTile->data.data(), rightTile->data.size());
         }
         /* Advance CUDA slot 7 registration when the right PBO first becomes ready */
+#if BLACKHOLE_HAS_CUDA
         if (grmhdPboUploaderRight.ready() && cudaState.backend != nullptr) {
           static GLuint registeredRightTex = 0;
           if (registeredRightTex != grmhdPboUploaderRight.texture()) {
@@ -3424,6 +3426,9 @@ int main(int argc, char **argv) {
                               registeredRightTex,
                               static_cast<unsigned int>(GL_TEXTURE_3D));
           }
+        }
+#endif
+        if (grmhdPboUploaderRight.ready()) {
           /* Sub-frame alpha: fraction of inter-frame interval elapsed.
            * grmhdPlaybackSpeed controls simulation-time advance per real second. */
           grmhdFrameAlpha = std::fmod(
