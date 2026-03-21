@@ -95,7 +95,12 @@ __launch_bounds__(256, 4)
  *
  * @param dFramebuffer Device pointer to float4[d_width * d_height]; output RGBA pixels.
  */
-__launch_bounds__(256, 4)
+/* WHY 128 not 256: __launch_bounds__(256, 4) forces the compiler to target
+ * 65536/(256*4)=64 regs/thread on SM8.9, which is insufficient for two live
+ * FP32 ray states (~80 regs needed).  The excess overflows to local memory.
+ * __launch_bounds__(128, 4) gives a 128-reg budget (same as H2 ILP) and
+ * achieves the same 33% minimum occupancy without spill. */
+__launch_bounds__(128, 4)
     // NOLINTNEXTLINE(misc-use-internal-linkage,readability-function-cognitive-complexity)
     __global__ void geodesicTraceFp32Coarsened(float4 *__restrict__ dFramebuffer) {
   int const tid = static_cast<int>((blockIdx.x * blockDim.x) + threadIdx.x);
@@ -358,7 +363,7 @@ extern "C" void launchFp32Coarsened(float4 *dFramebuffer, int width, int height,
                                     cudaStream_t stream) {
   int const totalPixels = width * height;
   int const threadsNeeded = (totalPixels + 1) / 2;
-  dim3 const block(256);
-  dim3 const grid(static_cast<unsigned int>((threadsNeeded + 255) / 256));
+  dim3 const block(128);
+  dim3 const grid(static_cast<unsigned int>((threadsNeeded + 127) / 128));
   geodesicTraceFp32Coarsened<<<grid, block, 0, stream>>>(dFramebuffer);
 }

@@ -24,14 +24,21 @@
  * negate ILP gains. Benchmarked in YSU-engine against A100.
  */
 const RtKernelInfo RT_KERNEL_INFO[BH_KERNEL_COUNT] = {
-    /* FP32_BASELINE: safe default, works everywhere */
-    {"FP32 Baseline (1 ray/thread)",    50, 1, 256, 48},
-    /* FP32_COARSENED: 2 rays/thread ILP at FP32, Turing+ recommended */
-    {"FP32 Coarsened (2 rays/thread)",  75, 2, 256, 80},
-    /* FP16_STORAGE: FP16 ray state, FP32 compute, Ampere+ */
-    {"FP16 Storage / FP32 Compute",     80, 1, 256, 40},
-    /* FP16_H2_ILP: 2 rays/thread with __half2, Ada/Hopper dual-issue */
-    {"FP16 H2 ILP (2 rays/thread)",     89, 2, 128, 96},
+    /* FP32_BASELINE: safe default, works everywhere.
+     * measured: 45 regs/thread (ncu SM8.9, 2026-03-21) */
+    {"FP32 Baseline (1 ray/thread)",    50, 1, 256, 45},
+    /* FP32_COARSENED: 2 rays/thread ILP at FP32, Turing+ recommended.
+     * tpb=128: __launch_bounds__(128,4) gives 128-reg budget on SM8.9.
+     * __launch_bounds__(256,4) forced 64 regs -- insufficient for 2 live FP32
+     * ray states and caused 347K local memory LD spill sectors.
+     * measured: 74 regs/thread, 0 spill (ptxas SM8.9, 2026-03-21) */
+    {"FP32 Coarsened (2 rays/thread)",  75, 2, 128, 74},
+    /* FP16_STORAGE: FP16 ray state, FP32 compute, Ampere+.
+     * measured: 42 regs/thread (ncu SM8.9, 2026-03-21) */
+    {"FP16 Storage / FP32 Compute",     80, 1, 256, 42},
+    /* FP16_H2_ILP: 2 rays/thread with __half2, Ada/Hopper dual-issue.
+     * measured: 72 regs/thread, 0 local memory spill (ncu SM8.9, 2026-03-21) */
+    {"FP16 H2 ILP (2 rays/thread)",     89, 2, 128, 72},
 };
 
 int registry_select_variant(void) {
@@ -65,10 +72,10 @@ int registry_select_variant(void) {
      * CORRECT gate: a variant is runnable if it can schedule >= MIN_BLOCKS
      *   concurrent blocks per SM given the register file.  Compute-bound kernels
      *   tolerate 33% occupancy; 2 blocks/SM is sufficient for warp latency hiding.
-     *   For H2_ILP on SM8.9: floor(65536 / (128 * 96)) = 5 blocks >= 2 -> PASS.
+     *   For H2_ILP on SM8.9: floor(65536 / (128 * 72)) = 7 blocks >= 2 -> PASS.
      *
      * YSU-engine SASS RE reference: SM8.9 has 65536 regs/SM, 48 warp slots (1536
-     * threads).  At 96 regs/thread with tpb=128, 5 blocks fit -> 640 threads = 42%
+     * threads).  At 72 regs/thread with tpb=128, 7 blocks fit -> 896 threads = 58%
      * occupancy.  Acceptable for a compute-bound geodesic kernel.
      */
     const int MIN_BLOCKS = 2;
