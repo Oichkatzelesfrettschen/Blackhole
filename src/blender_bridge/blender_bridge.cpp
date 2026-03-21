@@ -712,6 +712,8 @@ int bhb_cuda_render_lensing_map(float a_star, float obs_r, float inc_rad,
                                  int width, int height, float *out_rgba);
 int bhb_cuda_render_disk_texture(float a_star, float r_out_rg, float inc_rad,
                                   int width, int height, float *out_rgba);
+int bhb_cuda_render_raytraced(float spin, float observer_r, float inclination_rad,
+                               int width, int height, float *out_rgba);
 }
 
 int bhbCudaRenderLensingMap(double aStar, double observerRRg, double inclinationRad,
@@ -731,6 +733,11 @@ int bhbCudaRenderDiskTexture(const struct BhbDiskParams *params, int width, int 
                                        width, height, outRgba);
 }
 
+int bhbCudaRenderRaytraced(float spin, float observerR, float inclinationRad,
+                            int width, int height, float *outRgba) {
+  return bhb_cuda_render_raytraced(spin, observerR, inclinationRad, width, height, outRgba);
+}
+
 #else /* !BLACKHOLE_HAS_CUDA */
 
 int bhbCudaRenderLensingMap(double /*unused*/, double /*unused*/, double /*unused*/,
@@ -744,7 +751,8 @@ int bhbCudaRenderDiskTexture(const struct BhbDiskParams * /*unused*/, int /*unus
 }
 
 /* Stub for ray-traced renderer when CUDA is not available. */
-int bhb_cuda_render_raytraced(float, float, float, int, int, float *) {
+int bhbCudaRenderRaytraced(float /*spin*/, float /*observerR*/, float /*inclinationRad*/,
+                            int /*width*/, int /*height*/, float * /*outRgba*/) {
   return -1;
 }
 

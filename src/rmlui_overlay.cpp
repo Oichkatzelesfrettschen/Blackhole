@@ -68,6 +68,7 @@ void RmlUiOverlay::shutdown() {
   initialized_ = false;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static) -- uses context_ when BLACKHOLE_ENABLE_RMLUI is set
 void RmlUiOverlay::resize(int width, int height) {
 #if BLACKHOLE_ENABLE_RMLUI
   if (context_ != nullptr) {

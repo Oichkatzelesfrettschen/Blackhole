@@ -1,6 +1,6 @@
 # Blackhole Backlog
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-03-21
 **Roadmap:** See `roadmap.md` for consolidated execution plan
 **Dependencies:** See `dependencies.md` for version tracking
 
@@ -20,6 +20,6 @@ active plans, see `status.md`.
 | ISSUE-009: Compute vs fragment compare sweep threshold failures | LOW | Root-caused | **Root cause:** RK4 integrator FP arithmetic differences (FMA contraction) between compute/fragment pipelines. Only preset 0 (Schwarzschild "Input Near" at ~4 r_s) fails with 2-4 outlier pixels out of 2M (0.0002%). Error is at rays grazing event horizon where tiny FP differences cause divergent capture/escape outcomes. **Resolution:** Expected driver behavior; adjust tolerance threshold or use strict sweep (1000 steps, 0.02 step) which passes 12/12. |
 | ISSUE-010: LD_PRELOAD mklfakeintel missing | LOW | Mitigated | Added zshenv cleanup for invalid LD_PRELOAD entries; automated runs may still inherit stale env vars (clear LD_PRELOAD for CI/builds). |
 | ISSUE-011: Background parallax/LOD tuning | LOW | Implemented (needs validation) | Parallax/drift persisted; per-layer LOD bias sliders added; verify visuals/perf on high-res assets. |
-| ISSUE-012: TSAN clang-tidy warnings in shader.cpp | MEDIUM | Mitigated | include-cleaner + non-const globals + readability/perf warnings cleaned; recheck under clang + riced-tsan after next sweep. |
+| ISSUE-012: TSAN clang-tidy warnings in shader.cpp | MEDIUM | Done | Zero warnings in shader.cpp and shader_watcher.cpp: added direct glbinding sub-headers, const-correctness, endl->'\n', .contains(), NOLINTNEXTLINE for intentional static/recursion. (commit 4fe1fc6, 2026-03-21) |
 | ISSUE-013: spirv_bake warnings under GCC | LOW | Scoped | -Wstack-usage warning in main (CLI11 stack use); clean up for Werror builds. |
 | ISSUE-014: External dependency warnings under GCC | LOW | Scoped | fastnoise2 overflow warnings + spirv-cross deprecated lambda captures; suppress via system includes or patch recipes if Werror is enabled. |
