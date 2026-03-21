@@ -2258,6 +2258,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # EHT visibility pipeline tests (D11): UV coverage, DFT visibilities, closure quantities
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_visibility_test.cpp")
+    add_executable(eht_visibility_test
+      "${PROJECT_SOURCE_DIR}/tests/eht_visibility_test.cpp"
+    )
+    target_include_directories(eht_visibility_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(eht_visibility_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME eht_visibility_validation COMMAND eht_visibility_test)
+    set_tests_properties(eht_visibility_validation PROPERTIES
+      LABELS "physics;eht;visibility"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(eht_visibility_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # EHT shadow diameter validation tests (Phase 5.4)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_shadow_test.cpp")
     add_executable(eht_shadow_test
