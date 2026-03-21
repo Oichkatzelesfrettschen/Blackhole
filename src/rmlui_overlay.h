@@ -7,6 +7,12 @@
  * absent all methods compile as stubs so call sites need no preprocessor guards.
  */
 
+#if BLACKHOLE_ENABLE_RMLUI
+namespace Rml {
+class Context;
+}
+#endif
+
 struct GLFWwindow;
 
 namespace ui {
@@ -66,6 +72,9 @@ class RmlUiOverlay {
  private:
   bool enabled_ = false;
   bool initialized_ = false;
+#if BLACKHOLE_ENABLE_RMLUI
+  Rml::Context *context_ = nullptr;
+#endif
 };
 
 } // namespace ui

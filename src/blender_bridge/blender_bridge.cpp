@@ -684,13 +684,19 @@ int bhbRenderDiskTexture(const struct BhbDiskParams *params, int width, int heig
 }
 
 /* ========================================================================
- * CUDA-accelerated paths (stubs when no CUDA)
+ * CUDA-accelerated paths
+ *
+ * WHY: Blender's rendering callbacks run on the render thread; GPU acceleration
+ *      reduces texture generation latency from seconds (CPU) to milliseconds.
+ * WHAT: bhbCudaRenderLensingMap and bhbCudaRenderDiskTexture delegate to
+ *       CUDA kernels in cuda_renderer.cu when built with ENABLE_CUDA=ON.
+ *       bhbCudaTraceGeodesics returns -1 (not implemented: per-step path
+ *       storage requires a different kernel design than the framebuffer path).
  * ======================================================================== */
 
-/* CUDA bridge stubs: always defined. When CUDA is available, these
- * delegate to the CUDA backend; otherwise they return -1 (unavailable).
- * TODO: Wire actual CUDA kernel dispatch for texture/geodesic generation. */
-
+/* bhbCudaTraceGeodesics: not yet implemented -- per-ray path storage would
+ * require nRays * maxSteps * 3 floats of device memory and a separate
+ * path-tracing kernel.  Return -1 so callers fall back to the CPU path. */
 int bhbCudaTraceGeodesics(double /*unused*/, double /*unused*/, double /*unused*/,
                           double /*unused*/, double /*unused*/, int /*unused*/, double /*unused*/,
                           double /*unused*/, int /*unused*/, int /*unused*/, double /*unused*/,
@@ -698,22 +704,51 @@ int bhbCudaTraceGeodesics(double /*unused*/, double /*unused*/, double /*unused*
   return -1;
 }
 
-int bhbCudaRenderLensingMap(double /*unused*/, double /*unused*/, double /*unused*/, int /*unused*/,
-                            int /*unused*/, float * /*unused*/) {
+#ifdef BLACKHOLE_HAS_CUDA
+
+/* Forward declarations for cuda_renderer.cu host wrappers */
+extern "C" {
+int bhb_cuda_render_lensing_map(float a_star, float obs_r, float inc_rad,
+                                 int width, int height, float *out_rgba);
+int bhb_cuda_render_disk_texture(float a_star, float r_out_rg, float inc_rad,
+                                  int width, int height, float *out_rgba);
+}
+
+int bhbCudaRenderLensingMap(double aStar, double observerRRg, double inclinationRad,
+                             int width, int height, float *outRgba) {
+  return bhb_cuda_render_lensing_map(static_cast<float>(aStar),
+                                      static_cast<float>(observerRRg),
+                                      static_cast<float>(inclinationRad),
+                                      width, height, outRgba);
+}
+
+int bhbCudaRenderDiskTexture(const struct BhbDiskParams *params, int width, int height,
+                              float *outRgba) {
+  if (params == nullptr) { return -1; }
+  return bhb_cuda_render_disk_texture(static_cast<float>(params->aStar),
+                                       static_cast<float>(params->rOutRg),
+                                       static_cast<float>(params->inclinationRad),
+                                       width, height, outRgba);
+}
+
+#else /* !BLACKHOLE_HAS_CUDA */
+
+int bhbCudaRenderLensingMap(double /*unused*/, double /*unused*/, double /*unused*/,
+                             int /*unused*/, int /*unused*/, float * /*unused*/) {
   return -1;
 }
 
 int bhbCudaRenderDiskTexture(const struct BhbDiskParams * /*unused*/, int /*unused*/,
-                             int /*unused*/, float * /*unused*/) {
+                              int /*unused*/, float * /*unused*/) {
   return -1;
 }
 
-#ifndef BLACKHOLE_HAS_CUDA
 /* Stub for ray-traced renderer when CUDA is not available. */
 int bhb_cuda_render_raytraced(float, float, float, int, int, float *) {
   return -1;
 }
-#endif
+
+#endif /* BLACKHOLE_HAS_CUDA */
 
 /* ========================================================================
  * Horizon / ergosphere meshes

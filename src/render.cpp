@@ -200,6 +200,9 @@ namespace {
 
 std::map<GLuint, GLuint> textureFramebufferMap;
 std::map<std::string, GLuint> shaderProgramMap;
+/* WHY: reloadAllRenderShaders() needs to know the vertex path per fragment shader.
+ * We populate this alongside shaderProgramMap on first use and read it on reload. */
+std::map<std::string, std::string> shaderVertMap;
 
 // PERFORMANCE FIX: Cache uniform locations to avoid expensive glGetUniformLocation calls every frame
 std::unordered_map<GLuint, std::unordered_map<std::string, GLint>> uniformLocationCache;
@@ -248,6 +251,32 @@ void clearRenderToTextureCache() {
   uniformLocationCache.clear();  // Clear uniform location cache too
 }
 
+void reloadAllRenderShaders() {
+  /* WHY: On hot-reload, every cached program must be replaced with a freshly
+   * compiled one.  We iterate the frag->program map, recompile using the
+   * stored vertex path, swap the handle, and wipe the uniform location cache
+   * for the old program so getCachedUniformLocation() repopulates from the new
+   * program's layout.  Programs that fail to recompile are left unchanged so
+   * the renderer stays functional with the last known-good shaders. */
+  for (auto &[frag, oldProgram] : shaderProgramMap) {
+    const auto vertIt = shaderVertMap.find(frag);
+    const std::string vert = (vertIt != shaderVertMap.end())
+                                 ? vertIt->second
+                                 : std::string("shader/simple.vert");
+
+    const GLuint newProgram = createShaderProgram(vert, frag);
+    if (newProgram == 0) {
+      std::cout << "[HotReload] Recompile failed for " << frag << " -- keeping old program\n";
+      continue;
+    }
+
+    uniformLocationCache.erase(oldProgram);
+    glDeleteProgram(oldProgram);
+    oldProgram = newProgram;
+    std::cout << "[HotReload] Reloaded " << frag << "\n";
+  }
+}
+
 void renderToTexture(const RenderToTextureInfo &rtti) {
   static GLuint quadVao = 0;
   if (quadVao == 0) {
@@ -271,6 +300,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
   if (!shaderProgramMap.contains(rtti.fragShader)) {
     program = createShaderProgram(rtti.vertexShader, rtti.fragShader);
     shaderProgramMap[rtti.fragShader] = program;
+    shaderVertMap[rtti.fragShader]    = rtti.vertexShader;
   } else {
     program = shaderProgramMap.at(rtti.fragShader);
   }

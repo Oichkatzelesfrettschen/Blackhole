@@ -140,4 +140,18 @@ void renderToTexture(const RenderToTextureInfo &rtti);
  */
 void clearRenderToTextureCache();
 
+/**
+ * @brief Recompile every cached render-to-texture shader program in place.
+ *
+ * WHY: The ShaderWatcher hot-reload path needs to re-issue all GL program
+ *      links when a fragment or vertex source file changes on disk.
+ * WHAT: Iterates the internal frag->program map, calls createShaderProgram()
+ *       for each entry, swaps the handle, and clears stale uniform caches.
+ *       Programs that fail to recompile are left unchanged so rendering
+ *       continues with the last working version.
+ * HOW: Call once per hot-reload event, after all changed paths are detected.
+ *      The compute shader is owned by main.cpp and must be reloaded separately.
+ */
+void reloadAllRenderShaders();
+
 #endif /* RENDER_H */

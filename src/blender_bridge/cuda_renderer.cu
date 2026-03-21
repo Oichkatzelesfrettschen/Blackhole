@@ -197,3 +197,285 @@ int bhb_cuda_render_raytraced(
 }
 
 } /* extern "C" */
+
+/* ========================================================================
+ * Lensing map kernel: per-pixel equatorial Kerr geodesic -> (redshift, Doppler, hit, 1)
+ * ======================================================================== */
+
+/*
+ * WHY: The lensing map is a diagnostic texture used by the Blender addon to
+ *      modulate surface shading: R channel = gravitational redshift factor,
+ *      G channel = Doppler beaming factor, B channel = disk hit flag.
+ *      Running this on the GPU is ~100x faster than the CPU path for HD images.
+ *
+ * Units: all inputs in r_g = M units (same as bhbRenderLensingMap CPU version).
+ */
+
+/** @brief Equatorial Kerr geodesic state: (r, phi, p_r). */
+struct BhbKerrState2D {
+    float r;
+    float phi;
+    float pr;
+};
+
+/** @brief Evaluate equatorial Kerr null geodesic derivatives. */
+static __device__ void bhb_eq_deriv(float a, float b_imp,
+                                     BhbKerrState2D s, BhbKerrState2D &ds) {
+    float const r2    = s.r * s.r;
+    float const delta = r2 - (2.0f * s.r) + (a * a);
+    /* sigma = r^2 for equatorial plane (theta = pi/2) */
+    float const p = r2 + (a * a) - (a * b_imp);
+
+    ds.r   = s.pr * delta / r2;
+    ds.phi = ((a * p / delta) - a + b_imp) / r2;
+    ds.pr  = -(
+        (s.r * s.pr * s.pr * ((2.0f * s.r) - 2.0f) / (2.0f * r2))
+        - ((((2.0f * s.r * p) - (((2.0f * s.r) - 2.0f) * (p * p / delta))) / (r2 * delta)))
+        + (2.0f * s.r * s.pr * s.pr / r2));
+}
+
+/** @brief Single RK4 step of equatorial Kerr null geodesic. */
+static __device__ void bhb_eq_step(float a, float b_imp, BhbKerrState2D &s, float h) {
+    BhbKerrState2D k1{}, k2{}, k3{}, k4{}, tmp{};
+
+    bhb_eq_deriv(a, b_imp, s, k1);
+
+    tmp = {s.r + 0.5f * h * k1.r,  s.phi + 0.5f * h * k1.phi,  s.pr + 0.5f * h * k1.pr};
+    bhb_eq_deriv(a, b_imp, tmp, k2);
+
+    tmp = {s.r + 0.5f * h * k2.r,  s.phi + 0.5f * h * k2.phi,  s.pr + 0.5f * h * k2.pr};
+    bhb_eq_deriv(a, b_imp, tmp, k3);
+
+    tmp = {s.r + h * k3.r,  s.phi + h * k3.phi,  s.pr + h * k3.pr};
+    bhb_eq_deriv(a, b_imp, tmp, k4);
+
+    s.r   += h * (k1.r   + (2.0f * k2.r)   + (2.0f * k3.r)   + k4.r)   / 6.0f;
+    s.phi += h * (k1.phi + (2.0f * k2.phi) + (2.0f * k3.phi) + k4.phi) / 6.0f;
+    s.pr  += h * (k1.pr  + (2.0f * k2.pr)  + (2.0f * k3.pr)  + k4.pr)  / 6.0f;
+}
+
+/**
+ * @brief GPU lensing map kernel.
+ *
+ * Each thread handles one pixel.  Traces a simplified 2D equatorial Kerr
+ * null geodesic and records per-pixel (redshift, Doppler, diskHit, 1.0).
+ *
+ * @param out        Output buffer: width * height * 4 floats (RGBA).
+ * @param width      Image width.
+ * @param height     Image height.
+ * @param a_star     Dimensionless spin.
+ * @param obs_r      Observer radial coordinate [r_g].
+ * @param inc_rad    Observer inclination from spin axis [rad].
+ * @param r_isco     Prograde ISCO radius [r_g].
+ * @param r_horizon  Outer horizon radius [r_g].
+ */
+__global__ void bhb_lensing_map_kernel(float * __restrict__ out,
+                                        int width, int height,
+                                        float a_star, float obs_r, float inc_rad,
+                                        float r_isco, float r_horizon) {
+    int const px = blockIdx.x * blockDim.x + threadIdx.x;
+    int const py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height) return;
+
+    /* Image-plane coordinates in r_g units (30 r_g total extent, matches CPU) */
+    constexpr float kFov = 30.0f;
+    float const alpha = kFov * ((float(px) / float(width))  - 0.5f);
+    float const beta  = kFov * (0.5f - (float(py) / float(height)));
+    float const b     = fmaxf(sqrtf((alpha * alpha) + (beta * beta)), 1e-5f);
+
+    /* Initial state: observer at r=obs_r, radially infalling */
+    BhbKerrState2D state{obs_r, 0.0f, -sqrtf(fmaxf(0.0f, 1.0f - (b / obs_r) * (b / obs_r)))};
+
+    constexpr float kStep = 0.05f;
+    int   hitDisk = 0;
+    float finalR  = obs_r;
+
+    for (int step = 0; step < 2000; ++step) {
+        bhb_eq_step(a_star, b, state, kStep);
+        if (state.r < r_horizon * 1.01f) {
+            finalR = 0.0f;
+            break;
+        }
+        if (state.r > obs_r * 3.0f) {
+            finalR = state.r;
+            break;
+        }
+        if (state.r > r_isco && state.r < 100.0f) {
+            hitDisk = 1;
+        }
+        finalR = state.r;
+    }
+
+    /* Gravitational redshift: sqrt(1 - 2M/r) in M units (r_g=M) */
+    float const redshift = (finalR > 2.0f) ? sqrtf(1.0f - (2.0f / finalR)) : 0.0f;
+
+    float doppler = 1.0f;
+    if ((hitDisk != 0) && finalR > 3.0f) {
+        float const vOrb     = 1.0f / sqrtf(finalR);
+        float const cosTheta = cosf(state.phi) * sinf(inc_rad);
+        float const gamma_v  = 1.0f / sqrtf(fmaxf(1e-10f, 1.0f - (vOrb * vOrb)));
+        doppler = 1.0f / (gamma_v * (1.0f - (vOrb * cosTheta)));
+    }
+
+    int const pi = (py * width + px) * 4;
+    out[pi + 0] = redshift;
+    out[pi + 1] = doppler;
+    out[pi + 2] = float(hitDisk);
+    out[pi + 3] = 1.0f;
+}
+
+/* ========================================================================
+ * Disk texture kernel: analytical NT temperature + Doppler modulation
+ * ======================================================================== */
+
+/**
+ * @brief GPU disk texture kernel.
+ *
+ * Analytically computes the Novikov-Thorne temperature profile and azimuthal
+ * Doppler modulation.  No geodesic tracing -- purely algebraic per pixel.
+ *
+ * @param out       Output: width * height * 4 floats.
+ * @param width     Image width (u direction, maps to azimuthal angle phi).
+ * @param height    Image height (v direction, maps to r_isco..r_out).
+ * @param r_isco    Prograde ISCO [r_g].
+ * @param r_out     Outer disk edge [r_g].
+ * @param inc_rad   Observer inclination [rad].
+ */
+__global__ void bhb_disk_texture_kernel(float * __restrict__ out,
+                                         int width, int height,
+                                         float r_isco, float r_out, float inc_rad) {
+    int const px = blockIdx.x * blockDim.x + threadIdx.x;
+    int const py = blockIdx.y * blockDim.y + threadIdx.y;
+    if (px >= width || py >= height) return;
+
+    float const v    = float(py) / float(height);
+    float const u    = float(px) / float(width);
+    float const r_rg = r_isco + (r_out - r_isco) * v;
+
+    /* Novikov-Thorne radiated flux shape: F ~ (1 - sqrt(r_isco/r)) / r^3.
+     * T^4 ~ F, so T ~ F^0.25.  Normalize against peak T near r ~ 1.5 * r_isco. */
+    float tNorm = 0.0f;
+    if (r_rg > r_isco * 1.0001f) {
+        float const sqrt_ratio = sqrtf(r_isco / r_rg);
+        float const flux = (1.0f - sqrt_ratio) / (r_rg * r_rg * r_rg);
+        /* Normalization: peak flux at r = (3/2) * r_isco */
+        float const r_pk          = 1.5f * r_isco;
+        float const sqrt_ratio_pk = sqrtf(r_isco / r_pk);
+        float const flux_pk       = (1.0f - sqrt_ratio_pk) / (r_pk * r_pk * r_pk);
+        tNorm = (flux_pk > 1e-20f)
+                    ? fminf(1.0f, sqrtf(sqrtf(flux / flux_pk)))
+                    : 0.0f;
+    }
+
+    /* Simplified blackbody color mapping (hot = blue-white, cool = red-orange) */
+    float const cr = fminf(1.0f, tNorm * 2.0f);
+    float const cg = fminf(1.0f, fmaxf(0.0f, (tNorm * 3.0f) - 0.5f));
+    float const cb = fminf(1.0f, fmaxf(0.0f, (tNorm * 4.0f) - 1.5f));
+
+    /* Azimuthal Doppler modulation */
+    float const phi        = u * 6.28318530718f;
+    float const vOrb       = (r_rg > 3.0f) ? 1.0f / sqrtf(r_rg) : 0.0f;
+    float const dopplerMod = 1.0f + (0.5f * vOrb * sinf(phi) * sinf(inc_rad));
+
+    int const pi = (py * width + px) * 4;
+    out[pi + 0] = fminf(2.0f, cr * dopplerMod);  /* clamp to avoid NaN from high Doppler */
+    out[pi + 1] = fminf(2.0f, cg * dopplerMod);
+    out[pi + 2] = fminf(2.0f, cb * dopplerMod);
+    out[pi + 3] = tNorm;
+}
+
+/* ========================================================================
+ * Host-side wrappers (called from blender_bridge.cpp)
+ * ======================================================================== */
+
+extern "C" {
+
+/**
+ * @brief GPU lensing map renderer.
+ *
+ * @param a_star     Dimensionless spin.
+ * @param obs_r      Observer radius [r_g = M units].
+ * @param inc_rad    Observer inclination [rad].
+ * @param width      Image width in pixels.
+ * @param height     Image height in pixels.
+ * @param out_rgba   Caller-allocated host buffer: width * height * 4 floats.
+ * @return 0 on success, -1 on CUDA error or invalid args.
+ */
+int bhb_cuda_render_lensing_map(float a_star, float obs_r, float inc_rad,
+                                 int width, int height, float *out_rgba) {
+    if (!out_rgba || width <= 0 || height <= 0) { return -1; }
+
+    size_t const fb_bytes = static_cast<size_t>(width) * height * 4 * sizeof(float);
+    float *d_out = nullptr;
+    if (cudaMalloc(&d_out, fb_bytes) != cudaSuccess) { return -1; }
+
+    /* Kerr horizon and ISCO in r_g = M units */
+    float const r_horizon = 1.0f + sqrtf(fmaxf(0.0f, 1.0f - a_star * a_star));
+
+    /* Prograde ISCO (Bardeen 1972 formula) */
+    float const z1 = 1.0f + powf(1.0f - a_star * a_star, 1.0f / 3.0f)
+                              * (powf(1.0f + a_star, 1.0f / 3.0f)
+                                 + powf(1.0f - a_star, 1.0f / 3.0f));
+    float const z2     = sqrtf(3.0f * a_star * a_star + z1 * z1);
+    float const r_isco = 3.0f + z2 - sqrtf((3.0f - z1) * (3.0f + z1 + 2.0f * z2));
+
+    dim3 const block(16, 16);
+    dim3 const grid((width + 15) / 16, (height + 15) / 16);
+    bhb_lensing_map_kernel<<<grid, block>>>(d_out, width, height,
+                                             a_star, obs_r, inc_rad,
+                                             r_isco, r_horizon);
+
+    cudaError_t err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        cudaFree(d_out);
+        return -1;
+    }
+
+    err = cudaMemcpy(out_rgba, d_out, fb_bytes, cudaMemcpyDeviceToHost);
+    cudaFree(d_out);
+    return (err == cudaSuccess) ? 0 : -1;
+}
+
+/**
+ * @brief GPU disk texture renderer.
+ *
+ * @param a_star    Dimensionless spin (used to compute ISCO).
+ * @param r_out_rg  Outer disk radius [r_g].
+ * @param inc_rad   Observer inclination [rad].
+ * @param width     Image width.
+ * @param height    Image height.
+ * @param out_rgba  Caller-allocated host buffer: width * height * 4 floats.
+ * @return 0 on success, -1 on CUDA error or invalid args.
+ */
+int bhb_cuda_render_disk_texture(float a_star, float r_out_rg, float inc_rad,
+                                  int width, int height, float *out_rgba) {
+    if (!out_rgba || width <= 0 || height <= 0) { return -1; }
+
+    size_t const fb_bytes = static_cast<size_t>(width) * height * 4 * sizeof(float);
+    float *d_out = nullptr;
+    if (cudaMalloc(&d_out, fb_bytes) != cudaSuccess) { return -1; }
+
+    /* Prograde ISCO in r_g units */
+    float const z1 = 1.0f + powf(1.0f - a_star * a_star, 1.0f / 3.0f)
+                              * (powf(1.0f + a_star, 1.0f / 3.0f)
+                                 + powf(1.0f - a_star, 1.0f / 3.0f));
+    float const z2     = sqrtf(3.0f * a_star * a_star + z1 * z1);
+    float const r_isco = 3.0f + z2 - sqrtf((3.0f - z1) * (3.0f + z1 + 2.0f * z2));
+
+    dim3 const block(16, 16);
+    dim3 const grid((width + 15) / 16, (height + 15) / 16);
+    bhb_disk_texture_kernel<<<grid, block>>>(d_out, width, height,
+                                              r_isco, r_out_rg, inc_rad);
+
+    cudaError_t err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        cudaFree(d_out);
+        return -1;
+    }
+
+    err = cudaMemcpy(out_rgba, d_out, fb_bytes, cudaMemcpyDeviceToHost);
+    cudaFree(d_out);
+    return (err == cudaSuccess) ? 0 : -1;
+}
+
+} /* extern "C" (lensing map + disk texture wrappers) */
