@@ -2283,6 +2283,31 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Polarized Stokes I,Q,U,V transport tests (D4): Mueller matrix propagation, Faraday rotation
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/stokes_transport_test.cpp")
+    add_executable(stokes_transport_test
+      "${PROJECT_SOURCE_DIR}/tests/stokes_transport_test.cpp"
+    )
+    target_include_directories(stokes_transport_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(stokes_transport_test PRIVATE ${PROJECT_WARNINGS})
+    if(TARGET Boost::math)
+      target_link_libraries(stokes_transport_test PRIVATE Boost::math)
+    endif()
+    add_test(NAME stokes_transport_validation COMMAND stokes_transport_test)
+    set_tests_properties(stokes_transport_validation PROPERTIES
+      LABELS "physics;polarization;stokes"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(stokes_transport_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # EHT visibility pipeline tests (D11): UV coverage, DFT visibilities, closure quantities
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_visibility_test.cpp")
     add_executable(eht_visibility_test
