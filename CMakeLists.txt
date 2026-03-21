@@ -2308,6 +2308,31 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # G7: Stokes rotation invariants -- I^2=Q^2+U^2+V^2 conservation, Faraday parity
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/stokes_invariants_test.cpp")
+    add_executable(stokes_invariants_test
+      "${PROJECT_SOURCE_DIR}/tests/stokes_invariants_test.cpp"
+    )
+    target_include_directories(stokes_invariants_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(stokes_invariants_test PRIVATE ${PROJECT_WARNINGS})
+    if(TARGET Boost::math)
+      target_link_libraries(stokes_invariants_test PRIVATE Boost::math)
+    endif()
+    add_test(NAME stokes_invariants_validation COMMAND stokes_invariants_test)
+    set_tests_properties(stokes_invariants_validation PROPERTIES
+      LABELS "physics;polarization;stokes;invariants"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(stokes_invariants_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # EHT visibility pipeline tests (D11): UV coverage, DFT visibilities, closure quantities
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_visibility_test.cpp")
     add_executable(eht_visibility_test

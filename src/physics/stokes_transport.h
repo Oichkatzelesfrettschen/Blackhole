@@ -279,7 +279,7 @@ struct FaradayPropagation {
     // ---------------------------------------------------------------------------
     double iNew = 0.0;
     if (tauL < 1.0e-4) {
-        iNew = s.i + em.jI * L;  // optically thin Taylor
+        iNew = s.i * (1.0 - tauL) + em.jI * L;  // 1st-order Taylor (includes decay)
     } else {
         iNew = s.i * E + (em.jI / A) * (1.0 - E);
     }
@@ -289,7 +289,7 @@ struct FaradayPropagation {
     // ---------------------------------------------------------------------------
     double vNew = 0.0;
     if (tauL < 1.0e-4) {
-        vNew = s.v + em.jV * L;
+        vNew = s.v * (1.0 - tauL) + em.jV * L;  // 1st-order Taylor (includes decay)
     } else {
         vNew = s.v * E + (em.jV / A) * (1.0 - E);
     }
