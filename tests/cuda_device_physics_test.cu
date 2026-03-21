@@ -340,3 +340,73 @@ TEST_F(CudaDevicePhysicsTest, AlphaAlwaysOne) {
             << "pixel " << i << " alpha is not 1.0";
     }
 }
+
+/* ========================================================================
+ * 7. Adaptive step (D10): near-photon-sphere rays produce finite output
+ *
+ * With adaptive step refinement, rays that graze r ~ 1.5*rs (photon sphere)
+ * take smaller steps -- the integration must still terminate correctly
+ * (horizon hit, escape, or max steps) and produce finite, non-negative RGBA.
+ *
+ * Camera at (0, 0, 5): 2.5*rs from the BH.  Many rays graze the photon
+ * sphere at 1.5*rs before escaping.  Use high spin=0.9 to exercise the
+ * Kerr adaptive-step path specifically.
+ * ======================================================================== */
+TEST_F(CudaDevicePhysicsTest, AdaptiveStepFiniteNearPhotonSphere) {
+    /* Small render to keep test fast; 32x32 covers many viewing angles */
+    int const W = 32, H = 32;
+    int const n = W * H;
+    float4 *d_fb = nullptr;
+    cudaMalloc(&d_fb, static_cast<std::size_t>(n) * sizeof(float4));
+
+    BH_LaunchParams p = {};
+    p.rs             = 2.0f;
+    p.spin           = 0.9f;
+    p.isco           = 2.0f;
+    p.step_size      = 0.05f;
+    p.fov_scale      = 1.2f;   /* wider FOV to include photon-sphere-grazing rays */
+    p.max_dist       = 100.0f;
+    p.max_steps      = 2000;   /* more steps for orbiting rays */
+    p.width          = W;
+    p.height         = H;
+    p.adisk_enabled    = 0;
+    p.redshift_enabled = 0;
+    p.kerr_enabled     = 1;
+    p.use_luts         = 0;
+
+    /* Camera at (0, 0, 5): 2.5*rs from BH -- photon sphere at 1.5*rs is
+     * reachable by edge-of-frame rays with FOV 1.2. */
+    p.cam_pos[0] = 0.0f; p.cam_pos[1] = 0.0f; p.cam_pos[2] = 5.0f;
+    p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
+    p.cam_basis[3] = 0.0f; p.cam_basis[4] = 1.0f; p.cam_basis[5] = 0.0f;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = 1.0f;
+    p.lut_radius_min = p.isco; p.lut_radius_max = 100.0f;
+    p.redshift_radius_min = p.isco; p.redshift_radius_max = 100.0f;
+    p.spectral_radius_min = p.isco; p.spectral_radius_max = 100.0f;
+    p.time_sec = 0.0f; p.doppler_strength = 1.0f;
+    p.background_intensity = 0.0f; p.background_enabled = 0;
+    p.wiregrid_enabled = 0; p.wiregrid_show_ergo = 0.0f;
+    p.wiregrid_grid_scale = 1.0f;
+    p.grmhd_r_min = 0.0f; p.grmhd_r_max = 0.0f;
+    p.rte_enabled = 0; p.rte_opacity_scale = 0.5f;
+
+    int rc = bh_launch_geodesic_kernel(d_fb, &p, BH_KERNEL_FP32_BASELINE, nullptr);
+    ASSERT_EQ(rc, 0) << "adaptive-step near-photon-sphere launch failed: " << rc;
+
+    cudaDeviceSynchronize();
+
+    std::vector<float4> host(static_cast<std::size_t>(n));
+    cudaMemcpy(host.data(), d_fb,
+               static_cast<std::size_t>(n) * sizeof(float4),
+               cudaMemcpyDeviceToHost);
+    cudaFree(d_fb);
+
+    for (int i = 0; i < n; ++i) {
+        auto const& px = host[static_cast<std::size_t>(i)];
+        EXPECT_TRUE(is_finite(px))
+            << "pixel " << i << " is NaN/Inf under adaptive-step near photon sphere";
+        EXPECT_GE(px.x, 0.0f) << "pixel " << i << " R < 0";
+        EXPECT_GE(px.y, 0.0f) << "pixel " << i << " G < 0";
+        EXPECT_GE(px.z, 0.0f) << "pixel " << i << " B < 0";
+    }
+}

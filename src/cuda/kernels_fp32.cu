@@ -181,7 +181,9 @@ __launch_bounds__(128, 4)
           hit0.hit_point = old0;
           done0 = true;
         } else {
-          d_kerr_step(kr0, rs, aSpin, c0, dt);
+          /* D10: adaptive step near horizon and photon sphere */
+          float const sdt0 = d_adaptive_step(kr0.r, rs, rHorizon, dt);
+          d_kerr_step(kr0, rs, aSpin, c0, sdt0);
           float3 const new0 = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
           if (d_adisk_enabled != 0) {
             float3 dh;
@@ -211,7 +213,8 @@ __launch_bounds__(128, 4)
           hit1.hit_point = old1;
           done1 = true;
         } else {
-          d_kerr_step(kr1, rs, aSpin, c1, dt);
+          float const sdt1 = d_adaptive_step(kr1.r, rs, rHorizon, dt);
+          d_kerr_step(kr1, rs, aSpin, c1, sdt1);
           float3 const new1 = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
           if (d_adisk_enabled != 0) {
             float3 dh;

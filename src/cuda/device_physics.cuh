@@ -629,6 +629,51 @@ struct HitResult {
 };
 
 /* ========================================================================
+ * Adaptive step size (D10: AMR geodesic refinement near critical surfaces)
+ * ======================================================================== */
+
+/**
+ * @brief Compute an adaptive Mino-time step for the Kerr geodesic integrator.
+ *
+ * Reduces the base step near two critical surfaces where fixed steps accumulate
+ * the most integration error:
+ *
+ *   1. Event horizon (r -> r_h): step scales as (r - r_h)/rs, clamped to
+ *      [0.1, 1.0].  Ensures the horizon-termination check triggers before the
+ *      ray can jump across it on a coarse step.
+ *
+ *   2. Photon sphere (r ~ r_ph ~ 1.5*rs): rays that orbit near the light ring
+ *      accumulate angular error with coarse steps.  A smooth falloff centered
+ *      on r_ph halves the step at the photon sphere.
+ *
+ * WHY Mino time: d_kerr_step() integrates in Mino time lambda.  The adaptive
+ * step is applied to the same Mino time increment dt, not to proper time.  This
+ * is correct because Mino time is the affine parameter for Kerr geodesics.
+ *
+ * @param r       Current BL radial coordinate.
+ * @param rs      Schwarzschild radius.
+ * @param r_h     Outer event horizon radius (d_kerr_outer_horizon result).
+ * @param base_dt Base Mino time step from __constant__ d_step_size.
+ * @return        Adaptive step in [0.1*base_dt, base_dt].
+ */
+__device__ __forceinline__ float d_adaptive_step(float r, float rs, float r_h,
+                                                  float base_dt) {
+    /* Zone 1: horizon proximity -- scale ~ (r - r_h) / rs */
+    float const d_horiz = r - r_h;
+    float const scale_h = fmaxf(0.1f, fminf(1.0f, d_horiz / fmaxf(rs, D_EPSILON)));
+
+    /* Zone 2: photon-sphere proximity -- smooth falloff centered on r_ph.
+     * r_ph ~ 1.5*rs (Schwarzschild limit); Kerr shifts this but 1.5*rs is a
+     * conservative upper bound that still gives useful refinement. */
+    float const r_ph    = 1.5f * rs;
+    float const d_ph    = fabsf(r - r_ph) / fmaxf(rs, D_EPSILON);
+    /* scale_ph: 0.5 at r_ph, rises to 1.0 at |r - r_ph| = 0.5*rs */
+    float const scale_ph = fminf(1.0f, 0.5f + d_ph);
+
+    return base_dt * fminf(scale_h, scale_ph);
+}
+
+/* ========================================================================
  * Full geodesic trace (from bhTraceGeodesic)
  * ======================================================================== */
 
@@ -680,7 +725,9 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
                 return result;
             }
 
-            d_kerr_step(kr, rs, a, c, dt);
+            /* D10: AMR step refinement near horizon and photon sphere */
+            float const step_dt = d_adaptive_step(kr.r, rs, r_horizon, dt);
+            d_kerr_step(kr, rs, a, c, step_dt);
             float3 new_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
 
             if (d_adisk_enabled) {
@@ -1294,7 +1341,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
             return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
         }
 
-        d_kerr_step(kr, rs, a, c, dt);
+        /* D10: AMR step refinement near horizon and photon sphere */
+        float const step_dt_rte = d_adaptive_step(kr.r, rs, r_horizon, dt);
+        d_kerr_step(kr, rs, a, c, step_dt_rte);
         float3 const new_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
 
         if (d_adisk_enabled) {
@@ -1328,7 +1377,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
                 float const j_eff   = flux * g3 * rho_norm;
                 float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
 
-                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, dt, transmit);
+                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, step_dt_rte, transmit);
                 accum_i = d_add(accum_i, contrib);
 
                 if (transmit < 0.005f) {

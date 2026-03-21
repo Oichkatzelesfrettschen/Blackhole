@@ -57,6 +57,28 @@ int bhDebugEvaluate(vec3 pos, vec3 vel, float maxDistance) {
   return flags;
 }
 
+// ---------------------------------------------------------------------------
+// bhAdaptiveStep (D10: AMR geodesic refinement near critical surfaces)
+//
+// Returns a scaled step in [0.1, 1.0] * stepSize based on two refinement zones:
+//   1. Horizon proximity: scale ~ (r - r_horizon) / r_s, min 0.1
+//   2. Photon-sphere proximity: at r_ph ~ 1.5*r_s, scale is halved and
+//      recovers to 1.0 at |r - r_ph| = 0.5*r_s.
+//
+// WHY: Fixed Mino-time steps overshoot near the horizon (missing the termination
+// check) and accumulate angular error for photon-sphere-grazing orbits.
+// ---------------------------------------------------------------------------
+float bhAdaptiveStep(float r, float r_s, float r_horizon, float stepSize) {
+  float d_horiz  = r - r_horizon;
+  float scale_h  = clamp(d_horiz / max(r_s, BH_EPSILON), 0.1, 1.0);
+
+  float r_ph     = 1.5 * r_s;
+  float d_ph     = abs(r - r_ph) / max(r_s, BH_EPSILON);
+  float scale_ph = min(1.0, 0.5 + d_ph);
+
+  return stepSize * min(scale_h, scale_ph);
+}
+
 vec3 bhSchwarzschildAccel(vec3 pos, vec3 vel, float r_s) {
   float r = length(pos);
   if (r < BH_EPSILON) {
@@ -165,7 +187,9 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
         return result;
       }
 
-      kerrStep(kerrRay, r_s, a, c, dt);
+      /* D10: AMR step refinement near horizon and photon sphere */
+      float stepDt = bhAdaptiveStep(kerrRay.r, r_s, r_horizon, dt);
+      kerrStep(kerrRay, r_s, a, c, stepDt);
       vec3 newPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
       result.debugFlags |= bhDebugEvaluate(newPos, newPos - oldPos, maxDistance);
       if ((bhDebugMask() & BH_DEBUG_FLAG_RANGE) != 0 && kerrRay.r < 0.0) {
@@ -432,7 +456,9 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
       return vec4(accumI, 1.0);
     }
 
-    kerrStep(kRay, r_s, a, c, stepSize);
+    /* D10: AMR step refinement near horizon and photon sphere */
+    float rteStepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
+    kerrStep(kRay, r_s, a, c, rteStepDt);
     vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
 
     if (adiskEnabled > 0.5) {
@@ -465,7 +491,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
         float jEff    = flux * g3 * rhoNorm;
         float alphaNu = opacityScale * max(jEff, 0.0);
 
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, stepSize, transmit);
+        accumI += rteStepVec3(emitColor, jEff, alphaNu, rteStepDt, transmit);
 
         // Early exit when medium becomes opaque
         if (transmit < 0.005) {
