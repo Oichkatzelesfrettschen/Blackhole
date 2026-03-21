@@ -14,7 +14,7 @@
 #include <stdlib.h>
 
 /**
- * @brief Upload all five LUT texture objects to __constant__ memory.
+ * @brief Upload all LUT texture objects to __constant__ memory.
  *
  * Pushes handles for all BhLutSlot entries so device kernels can sample any
  * registered LUT without a separate upload step.  Unregistered slots produce
@@ -29,7 +29,8 @@ static void sync_lut_constants(const LutManager& luts) {
         (unsigned long long)lutGetTex(luts, BhLutSpectral),
         (unsigned long long)lutGetTex(luts, BhLutGrb),
         (unsigned long long)lutGetTex(luts, BhLutGalaxy),
-        (unsigned long long)lutGetTex(luts, BhLutGrmhd)
+        (unsigned long long)lutGetTex(luts, BhLutGrmhd),
+        (unsigned long long)lutGetTex(luts, BhLutSynchG)
     );
 }
 

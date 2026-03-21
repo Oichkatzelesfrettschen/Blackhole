@@ -65,6 +65,7 @@ extern __constant__ unsigned long long d_tex_spectral;   /**< @brief Slot 2: spe
 extern __constant__ unsigned long long d_tex_grb;        /**< @brief Slot 3: GRB overlay LUT. */
 extern __constant__ unsigned long long d_tex_galaxy;     /**< @brief Slot 4: galaxy cubemap. */
 extern __constant__ unsigned long long d_tex_grmhd;      /**< @brief Slot 5: GRMHD volume (RGBA32F 3D). */
+extern __constant__ unsigned long long d_tex_synch_g;    /**< @brief Slot 6: synchrotron G(x)=x*K_{2/3}(x) LUT (R32F 2D, height=1). */
 extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
@@ -717,6 +718,49 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         result.hit_point = pos;
     }
     return result;
+}
+
+/* ========================================================================
+ * Synchrotron G(x) = x * K_{2/3}(x) -- polarized emission function
+ * ======================================================================== */
+
+/**
+ * @brief Synchrotron polarization function G(x) = x * K_{2/3}(x).
+ *
+ * Matches synchrotron_emission.glsl::synchrotron_G().
+ * Domain constants (log-spaced LUT): x in [0.001, 30].
+ * Asymptotes: small-x: 1.3541*x^(1/3); large-x: sqrt(pi/(2x))*exp(-x)*x.
+ *
+ * Sampling: log-space u = log(x/xMin) / log(xMax/xMin), tex2D height=0.5.
+ * Fallback: polynomial 1.3541*x^(1/3)*exp(-x)*(1+0.6*x^(2/3)) if LUT absent.
+ *
+ * @param x Dimensionless frequency (nu / nu_c).
+ * @return G(x) value, 0 if x <= 0.
+ */
+__device__ __forceinline__ float d_synchrotron_G(float x) {
+    if (x <= 0.0f) return 0.0f;
+
+    /* Small-x asymptote: G(x) ~ 1.3541 * x^(1/3) (exact at x -> 0) */
+    if (x < 0.001f) {
+        return 1.3541f * cbrtf(x);
+    }
+
+    /* Large-x asymptote: G(x) ~ sqrt(pi/(2x)) * exp(-x) * x */
+    if (x > 30.0f) {
+        return sqrtf(1.5707963268f / x) * expf(-x) * x;
+    }
+
+    /* LUT mid-range: log-spaced texture lookup */
+    if (d_tex_synch_g) {
+        /* log(xMax/xMin) = log(30/0.001) = log(30000) */
+        float const log_ratio = 10.30895f; /* log(30000) precomputed */
+        float const u = __logf(x / 0.001f) / log_ratio;
+        return tex2D<float>((cudaTextureObject_t)d_tex_synch_g, u, 0.5f);
+    }
+
+    /* Polynomial fallback (~10% error for x in [1,10]) */
+    float const x13 = cbrtf(x);
+    return 1.3541f * x13 * expf(-x) * (1.0f + 0.6f * x13 * x13);
 }
 
 /* ========================================================================

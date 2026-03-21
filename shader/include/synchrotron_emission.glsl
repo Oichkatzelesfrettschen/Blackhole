@@ -73,14 +73,15 @@ float synchrotron_F(float x) {
 // ============================================================================
 
 // 1D LUT generated from CPU Bessel K_{2/3} evaluation.
-// Upload with synchrotron_G_generate_lut() from synchrotron.h and
-// gpu::LutTexture1D from gpu/lut_texture.h.
+// Upload with synchrotron_G_generate_lut() from synchrotron.h.
 //
-// Uses GL_TEXTURE_1D with GL_LINEAR filtering for free hardware
-// interpolation between LUT entries (arXiv:2505.08855).
+// Stored as GL_TEXTURE_2D (width=LUT size, height=1) so the same texture
+// object can be registered for CUDA-GL interop via cudaGraphicsGLRegisterImage,
+// which does not support GL_TEXTURE_1D.
+// Uses GL_LINEAR filtering for free hardware interpolation.
 // If no LUT is available, set synchGLutAvailable = 0 to use the asymptotic
 // fallback (accurate for x < 0.01 and x > 10, ~10% error in between).
-uniform sampler1D synchGLut;
+uniform sampler2D synchGLut;
 uniform int synchGLutAvailable;
 
 // LUT domain constants (must match synchrotron.h SYNCH_G_LUT_X_MIN/X_MAX)
@@ -114,7 +115,7 @@ float synchrotron_G(float x) {
   if (synchGLutAvailable != 0) {
     float log_ratio = log(SYNCH_G_LUT_X_MAX / SYNCH_G_LUT_X_MIN);
     float u = log(x / SYNCH_G_LUT_X_MIN) / log_ratio;
-    return texture(synchGLut, u).r;
+    return texture(synchGLut, vec2(u, 0.5)).r;
   }
 
   // Polynomial fallback (~10% error for x in [1,10])

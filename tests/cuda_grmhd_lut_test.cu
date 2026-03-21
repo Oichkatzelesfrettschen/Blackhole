@@ -221,7 +221,7 @@ protected:
 
     void TearDown() override {
         /* Reset d_tex_grmhd to 0 so subsequent tests start clean */
-        bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
+        bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
 
         if (d_fb) { cudaFree(d_fb); d_fb = nullptr; }
 
@@ -268,7 +268,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationZeroInputZeroOutput) {
 
     /* Upload to d_tex_grmhd */
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
-                           static_cast<unsigned long long>(tex));
+                           static_cast<unsigned long long>(tex), 0ULL);
 
     BH_LaunchParams p = make_disk_params(kW, kH);
     p.use_luts = 1;
@@ -303,7 +303,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationUnitInputMatchesBaseline) {
     /* Baseline: no GRMHD (use_luts=0) */
     BH_LaunchParams p = make_disk_params(kW, kH);
     p.use_luts = 0;
-    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
     auto baseline = render(p);
     ASSERT_EQ(baseline.size(), static_cast<std::size_t>(kN));
 
@@ -320,7 +320,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationUnitInputMatchesBaseline) {
         << "Failed to create unit GRMHD texture: " << cudaGetErrorString(err);
 
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
-                           static_cast<unsigned long long>(tex));
+                           static_cast<unsigned long long>(tex), 0ULL);
 
     p.use_luts = 1;
     auto with_unit_grmhd = render(p);
@@ -347,7 +347,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationHalfStrengthDimsOutput) {
     /* Baseline: no GRMHD */
     BH_LaunchParams p = make_disk_params(kW, kH);
     p.use_luts = 0;
-    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL);
     auto baseline = render(p);
     ASSERT_EQ(baseline.size(), static_cast<std::size_t>(kN));
 
@@ -364,7 +364,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationHalfStrengthDimsOutput) {
         << "Failed to create half GRMHD texture: " << cudaGetErrorString(err);
 
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
-                           static_cast<unsigned long long>(tex));
+                           static_cast<unsigned long long>(tex), 0ULL);
 
     p.use_luts = 1;
     auto with_half = render(p);
@@ -422,7 +422,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdPhiUniformNoSeam) {
         << "Failed to create uniform phi GRMHD texture: " << cudaGetErrorString(err);
 
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
-                           static_cast<unsigned long long>(tex));
+                           static_cast<unsigned long long>(tex), 0ULL);
 
     /* Ray set 1: camera at (+25, 0, 20), hits disk at phi~0 (positive x side).
      * Use the fixture's kW x kH framebuffer; pick the center pixel (index kN/2). */

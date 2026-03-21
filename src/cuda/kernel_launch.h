@@ -120,7 +120,7 @@ int bh_launch_geodesic_kernel(void* framebuffer,
 int bh_select_kernel_variant(void);
 
 /**
- * @brief Upload all six LUT CUDA texture object handles to __constant__ memory.
+ * @brief Upload all seven LUT CUDA texture object handles to __constant__ memory.
  *
  * Must be called after bhCudaRegisterLut() and before each frame render so
  * device kernels see up-to-date texture object handles.  Pass 0 for any slot
@@ -132,13 +132,15 @@ int bh_select_kernel_variant(void);
  * @param grb        cudaTextureObject_t for slot 3 (GRB overlay LUT).
  * @param galaxy     cudaTextureObject_t for slot 4 (galaxy cubemap background).
  * @param grmhd      cudaTextureObject_t for slot 5 (GRMHD simulation volume).
+ * @param synch_g    cudaTextureObject_t for slot 6 (synchrotron G(x)=x*K_{2/3}(x) LUT).
  */
 void bh_upload_lut_textures(unsigned long long emissivity,
                              unsigned long long redshift,
                              unsigned long long spectral,
                              unsigned long long grb,
                              unsigned long long galaxy,
-                             unsigned long long grmhd);
+                             unsigned long long grmhd,
+                             unsigned long long synch_g);
 
 #ifdef __cplusplus
 }

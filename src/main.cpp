@@ -94,6 +94,7 @@
 #include "overlay.h"
 #include "physics/hawking_renderer.h"
 #include "physics/lut.h"
+#include "physics/synchrotron.h"
 #include "render.h"
 #include "render/noise_texture_cache.h"
 #include "rmlui_overlay.h"
@@ -2595,6 +2596,7 @@ int main(int argc, char **argv) {
     static physics::Lut1D lutAssetRedshift;
     static bool spectralLutTried = false;
     static bool spectralLutLoaded = false;
+    static bool synchGLutCreated = false;
     static bool useSpectralLut = false;
     static float spectralWavelengthMin = 0.0f;
     static float spectralWavelengthMax = 0.0f;
@@ -2621,6 +2623,7 @@ int main(int argc, char **argv) {
     static GLuint texPhotonGlowLUT = 0;  // Phase 8.2: Photon sphere glow effect LUT
     static GLuint texDiskDensityLUT = 0; // Phase 8.2: Accretion disk density profile LUT
     static GLuint texSpectralLUT = 0;
+    static GLuint texSynchGLut = 0;   /**< @brief Synchrotron G(x) LUT (GL_TEXTURE_2D, height=1). */
     static GLuint texNoiseVolume = 0;
     static GLuint texGrmhdSlice = 0;
     static GLuint texBlackhole = 0;
@@ -3970,6 +3973,31 @@ int main(int argc, char **argv) {
               spectralRadiusMax = 1.0f;
             }
           }
+        }
+
+        /* Generate synchrotron G(x)=x*K_{2/3}(x) LUT once (task E5).
+         * Stored as GL_TEXTURE_2D (width=256, height=1) so the same handle
+         * can be registered for CUDA-GL interop via cudaGraphicsGLRegisterImage,
+         * which does not support GL_TEXTURE_1D.  The GLSL path samples it
+         * via sampler2D with y=0.5; the CUDA path uses tex2D at v=0.5. */
+        if (!synchGLutCreated) {
+          synchGLutCreated = true;
+          constexpr int kSynchGLutSize = 256;
+          std::vector<float> synchGData(static_cast<std::size_t>(kSynchGLutSize));
+          physics::synchrotronGGenerateLut(synchGData.data(), kSynchGLutSize,
+                                           static_cast<double>(physics::SYNCH_G_LUT_X_MIN),
+                                           static_cast<double>(physics::SYNCH_G_LUT_X_MAX));
+          if (texSynchGLut != 0) {
+            glDeleteTextures(1, &texSynchGLut);
+            texSynchGLut = 0;
+          }
+          texSynchGLut = createFloatTexture2D(kSynchGLutSize, 1, synchGData);
+#if BLACKHOLE_HAS_CUDA
+          if (cudaState.backend != nullptr) {
+            bhCudaRegisterLut(cudaState.backend, 6 /*BhLutSynchG*/, texSynchGLut,
+                              static_cast<unsigned int>(GL_TEXTURE_2D));
+          }
+#endif
         }
 
         // Load Hawking radiation LUTs
