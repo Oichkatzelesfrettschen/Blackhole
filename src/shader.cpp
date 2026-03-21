@@ -12,14 +12,22 @@
 #include <cstddef>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
-// Third-party library headers
+// Third-party library headers (glbinding sub-headers: clang-tidy misc-include-cleaner
+// requires direct includes for the symbols used here rather than the umbrella gl.h)
+#include <glbinding/gl/enum.h>     // GL_COMPILE_STATUS, GL_VERTEX_SHADER, etc.
+#include <glbinding/gl/functions.h> // glCreateShader, glShaderSource, glCompileShader, ...
+#include <glbinding/gl/types.h>    // GLuint, GLenum, GLint, GLchar
+#include "gl_loader.h" // NOLINT(misc-include-cleaner) -- provides `using namespace gl;`
 
 // Base directory for shader files (set during loading)
 namespace {
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization) -- std::string ctor throws only on OOM; acceptable for a small one-time static literal
 std::string shaderBaseDir = "shader/";
 } // namespace
 
@@ -59,6 +67,7 @@ std::string readFile(const std::string &file) {
  * @param included Set of already-included files (for circular detection)
  * @return Processed source with includes expanded
  */
+// NOLINTNEXTLINE(misc-no-recursion) -- intentional: GLSL #include files may themselves contain further #include directives (depth bounded by FS)
 std::string processIncludes(const std::string &source,
                                    const std::string &basePath,
                                    std::set<std::string> &included) {
@@ -109,7 +118,7 @@ std::string processIncludes(const std::string &source,
 
   while (std::getline(stream, line)) {
     std::string includeFile;
-    std::size_t nonSpace = line.find_first_not_of(" \t");
+    const std::size_t nonSpace = line.find_first_not_of(" \t");
     if (nonSpace != std::string::npos &&
         line.compare(nonSpace, 10, "#extension") == 0 &&
         line.find("GL_GOOGLE_include_directive", nonSpace) != std::string::npos) {
@@ -118,10 +127,10 @@ std::string processIncludes(const std::string &source,
     if (parseInclude(line, includeFile)) {
 
       // Construct full path
-      std::string fullPath = basePath + includeFile;
+      const std::string fullPath = basePath + includeFile;
 
       // Check for circular include
-      if (included.find(fullPath) != included.end()) {
+      if (included.contains(fullPath)) {
         result += "// Skipped circular include: " + includeFile + "\n";
         continue;
       }
@@ -136,7 +145,7 @@ std::string processIncludes(const std::string &source,
         result += processIncludes(includeSource, basePath, included);
         result += "// End include: " + includeFile + "\n";
       } catch (...) {
-        std::cerr << "Warning: Failed to include " << fullPath << std::endl;
+        std::cerr << "Warning: Failed to include " << fullPath << '\n';
         result += "// Failed to include: " + includeFile + "\n";
       }
     } else {
@@ -153,7 +162,7 @@ std::string processIncludes(const std::string &source,
 std::string readShaderWithIncludes(const std::string &file) {
   // Extract base directory from file path
   std::string basePath = shaderBaseDir;
-  size_t lastSlash = file.find_last_of("/\\");
+  const size_t lastSlash = file.find_last_of("/\\");
   if (lastSlash != std::string::npos) {
     basePath = file.substr(0, lastSlash + 1);
   }
@@ -166,9 +175,9 @@ std::string readShaderWithIncludes(const std::string &file) {
 
 GLuint compileShader(const std::string &shaderSource, GLenum shaderType) {
   // Create shader
-  GLuint shader = glCreateShader(shaderType);
+  const GLuint shader = glCreateShader(shaderType);
   if (shader == 0) {
-    std::cerr << "Failed to create shader object." << std::endl;
+    std::cerr << "Failed to create shader object.\n";
     throw "Failed to create the shader object.";
   }
 
@@ -184,7 +193,7 @@ GLuint compileShader(const std::string &shaderSource, GLenum shaderType) {
   if (maxLength > 1) {
     std::vector<GLchar> infoLog(static_cast<size_t>(maxLength));
     glGetShaderInfoLog(shader, maxLength, nullptr, infoLog.data());
-    std::cerr << infoLog.data() << std::endl;
+    std::cerr << infoLog.data() << '\n';
   }
   if (success == 0) {
     glDeleteShader(shader);
@@ -200,7 +209,7 @@ struct CompiledShader {
 
 CompiledShader compileShaderFromFile(const std::string &shaderFile, GLenum shaderType,
                                             const char *label) {
-  std::cout << "Compiling " << label << " shader: " << shaderFile << std::endl;
+  std::cout << "Compiling " << label << " shader: " << shaderFile << '\n';
   return {compileShader(readShaderWithIncludes(shaderFile), shaderType)};
 }
 
@@ -226,13 +235,13 @@ GLuint createShaderProgram(const std::string &vertexShaderFile,
                                   const std::string &fragmentShaderFile) {
 
   // Compile vertex and fragment shaders with include processing.
-  CompiledShader vertexShader =
+  const CompiledShader vertexShader =
       compileShaderFromFile(vertexShaderFile, GL_VERTEX_SHADER, "vertex");
-  CompiledShader fragmentShader =
+  const CompiledShader fragmentShader =
       compileShaderFromFile(fragmentShaderFile, GL_FRAGMENT_SHADER, "fragment");
 
   // Create shader program.
-  GLuint program = glCreateProgram();
+  const GLuint program = glCreateProgram();
   glAttachShader(program, vertexShader.id);
   glAttachShader(program, fragmentShader.id);
 
@@ -245,7 +254,7 @@ GLuint createShaderProgram(const std::string &vertexShaderFile,
   if (maxLength > 1) {
     std::vector<GLchar> infoLog(static_cast<size_t>(maxLength));
     glGetProgramInfoLog(program, maxLength, nullptr, infoLog.data());
-    std::cerr << infoLog.data() << std::endl;
+    std::cerr << infoLog.data() << '\n';
   }
   if (isLinked == 0) {
     throw "Failed to link the shader.";
@@ -262,10 +271,10 @@ GLuint createShaderProgram(const std::string &vertexShaderFile,
 }
 
 GLuint createComputeProgram(const std::string &computeShaderFile) {
-  CompiledShader computeShader =
+  const CompiledShader computeShader =
       compileShaderFromFile(computeShaderFile, GL_COMPUTE_SHADER, "compute");
 
-  GLuint program = glCreateProgram();
+  const GLuint program = glCreateProgram();
   glAttachShader(program, computeShader.id);
   glLinkProgram(program);
 
@@ -276,7 +285,7 @@ GLuint createComputeProgram(const std::string &computeShaderFile) {
   if (maxLength > 1) {
     std::vector<GLchar> infoLog(static_cast<size_t>(maxLength));
     glGetProgramInfoLog(program, maxLength, nullptr, infoLog.data());
-    std::cerr << infoLog.data() << std::endl;
+    std::cerr << infoLog.data() << '\n';
   }
   if (isLinked == 0) {
     throw "Failed to link the compute shader.";

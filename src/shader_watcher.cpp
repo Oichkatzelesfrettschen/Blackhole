@@ -7,10 +7,12 @@
 #include "shader_watcher.h"
 
 #include <algorithm>
-#include <filesystem>
+#include <cctype>
+#include <chrono>
 #include <iostream>
-
-namespace fs = std::filesystem; // NOLINT(misc-unused-alias-decls) -- used conditionally in ENABLE_SHADER_WATCHER block
+#include <mutex>
+#include <string>
+#include <vector>
 
 ShaderWatcher &ShaderWatcher::instance() {
   static ShaderWatcher inst;
@@ -65,6 +67,9 @@ void ShaderWatcher::onFileEvent(const std::string &path, bool /*isModify*/) {
 }
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
+
+#include <filesystem>
+namespace fs = std::filesystem;
 
 bool ShaderWatcher::start(const std::string &shaderDir,
                           const ReloadCallback &onReload) {
