@@ -21,5 +21,5 @@ active plans, see `status.md`.
 | ISSUE-010: LD_PRELOAD mklfakeintel missing | LOW | Mitigated | Added zshenv cleanup for invalid LD_PRELOAD entries; automated runs may still inherit stale env vars (clear LD_PRELOAD for CI/builds). |
 | ISSUE-011: Background parallax/LOD tuning | LOW | Implemented (needs validation) | Parallax/drift persisted; per-layer LOD bias sliders added; verify visuals/perf on high-res assets. |
 | ISSUE-012: TSAN clang-tidy warnings in shader.cpp | MEDIUM | Done | Zero warnings in shader.cpp and shader_watcher.cpp: added direct glbinding sub-headers, const-correctness, endl->'\n', .contains(), NOLINTNEXTLINE for intentional static/recursion. (commit 4fe1fc6, 2026-03-21) |
-| ISSUE-013: spirv_bake warnings under GCC | LOW | Scoped | -Wstack-usage warning in main (CLI11 stack use); clean up for Werror builds. |
+| ISSUE-013: spirv_bake warnings under GCC | LOW | Closed (obsolete) | spirv_bake.cpp deleted (Phase 3); CMake target removed. compile_shaders_spirv.sh still references the binary but has graceful fallback to glslangValidator. No source to warn about. |
 | ISSUE-014: External dependency warnings under GCC | LOW | Scoped | fastnoise2 overflow warnings + spirv-cross deprecated lambda captures; suppress via system includes or patch recipes if Werror is enabled. |
