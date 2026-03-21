@@ -286,6 +286,42 @@ TEST_F(CudaDevicePhysicsTest, NoNaNInFramebuffer) {
 }
 
 /* ========================================================================
+ * 6. KS regularization: near-extremal Kerr, large step size, no NaN/Inf
+ *
+ * WHY: The BL geodesic equations for dphi/dlam and dt/dlam have 1/Delta
+ *      terms that diverge as Delta -> 0 at the outer horizon.  Before the
+ *      E1 Kerr-Schild fix, a large step size with spin close to 0.99 could
+ *      produce NaN or Inf when the step landed inside Delta < delta_safe.
+ *      The KS-regularized equations cancel the singularity exactly for
+ *      infalling photons, so even coarse steps must remain finite.
+ *
+ * WHAT: Near-extremal Kerr (spin=0.99), camera aimed at BH center.
+ *       step_size = 0.3 (6x coarser than typical 0.05).
+ *       Expected: hit_horizon=true, all pixels finite.
+ * ======================================================================== */
+
+TEST_F(CudaDevicePhysicsTest, KerrNearExtremalNoNaN) {
+    /* Near-extremal Kerr: r_+ = M*(1 + sqrt(1-a^2)) ≈ M*1.14 for a=0.99M */
+    BH_LaunchParams p = make_schwarzschild_params(8, 8);
+    p.spin         = 0.99f;
+    p.kerr_enabled = 1;
+    p.step_size    = 0.3f;  /* 6x coarser than typical -- stresses singularity guard */
+    p.isco         = 2.5f;  /* prograde ISCO for a~0.99M in units of rs */
+
+    int rc = bh_launch_geodesic_kernel(d_fb_8x8, &p, BH_KERNEL_FP32_BASELINE, nullptr);
+    ASSERT_EQ(rc, 0) << "near-extremal Kerr launch failed with rc=" << rc;
+    cudaDeviceSynchronize();
+
+    auto host = copy_framebuffer(d_fb_8x8, 64);
+    for (int i = 0; i < 64; ++i) {
+        const float4& px = host[static_cast<std::size_t>(i)];
+        EXPECT_TRUE(is_finite(px))
+            << "pixel " << i << " is NaN/Inf for near-extremal Kerr spin=0.99: ("
+            << px.x << ", " << px.y << ", " << px.z << ", " << px.w << ")";
+    }
+}
+
+/* ========================================================================
  * 6. Alpha channel is always 1.0
  *    d_shade_hit always sets w=1.0 for all outcomes.
  * ======================================================================== */

@@ -301,6 +301,22 @@ __device__ __forceinline__ KerrRay d_kerr_init_ray(float3 pos, float3 dir) {
  * flipped at turning points where R(r) or Theta(theta) changes sign.
  * theta is clamped to [1e-6, pi-1e-6] to avoid pole singularities.
  *
+ * WHY Kerr-Schild regularization (task E1):
+ * In Boyer-Lindquist (BL) coordinates, dphi/dlam = Lz/sin^2 - aE + aA/Delta
+ * and dt/dlam = (r^2+a^2)*A/Delta + ... diverge as Delta -> 0 at the outer
+ * horizon.  In outgoing Kerr-Schild (KS) coordinates, the t and phi equations
+ * are transformed by:
+ *   dphi_KS/dlam = dphi_BL/dlam + (a/Delta) * dr/dlam
+ *   dt_KS/dlam  = dt_BL/dlam  + (rs*r/Delta) * dr/dlam  (rs = 2M)
+ * For an infalling photon at r_+, Delta -> 0 and dr/dlam = sign_r * sqrt(R).
+ * Since r_+^2 + a^2 = rs * r_+ (algebraic identity), the numerators of the
+ * combined expressions vanish when A + dr/dlam -> 0 (i.e. at the horizon
+ * for ingoing photons), giving a finite KS increment even as Delta -> 0.
+ * The (r, theta) equations are identical in BL and outgoing KS; only the
+ * t and phi coordinates change.  We track phi in KS and convert back to
+ * Cartesian via the same formula (phi_KS = phi_BL + correction, but the
+ * correction is only relevant for t which is not used for disk shading).
+ *
  * @param ray  Ray state to advance in-place.
  * @param rs   Schwarzschild radius.
  * @param a    Spin parameter (physical units).
@@ -319,8 +335,8 @@ __device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, con
     float Lz_minus_aE = c.Lz - a * c.E;
 
     /* Precompute reciprocals once: MUFU.RCP = 41.55 cy on Ada (YSU-engine SASS RE).
-     * sin2 appears in Theta AND dphi_dlam; delta_safe appears in dphi_dlam AND dt_dlam.
-     * Explicit temps guarantee 1 MUFU.RCP each, not 2. */
+     * sin2 appears in Theta AND dphi; Delta guarded to 1e-6 so inv_delta is always
+     * finite, but the KS numerators cancel before reaching delta=0 in practice. */
     float inv_sin2 = 1.0f / sin2;
     float delta_safe = fmaxf(Delta, 1.0e-6f);
     float inv_delta = 1.0f / delta_safe;
@@ -336,8 +352,15 @@ __device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, con
 
     float dr_dlam = ray.sign_r * sqrt_R;
     float dtheta_dlam = ray.sign_theta * sqrt_Theta;
-    float dphi_dlam = c.Lz * inv_sin2 - a * c.E + a * A * inv_delta;
-    float dt_dlam = (r * r + a * a) * A * inv_delta + a * (c.Lz - a * c.E * sin2);
+
+    /* KS-regularized phi and t equations (task E1).
+     * BL form: dphi = Lz/sin^2 - aE + aA/Delta    (singular at Delta=0)
+     * KS form: dphi = Lz/sin^2 - aE + a*(A + dr_dlam)/Delta
+     * The numerator (A + dr_dlam) cancels at the outer horizon for infalling
+     * photons: A(r_+) = sqrt(R(r_+)) = sqrt(R), so A + (-sqrt_R) = 0. */
+    float dphi_dlam = c.Lz * inv_sin2 - a * c.E + a * (A + dr_dlam) * inv_delta;
+    float dt_dlam = fmaf(r * r + a * a, A, rs * r * dr_dlam) * inv_delta
+                    + a * (c.Lz - a * c.E * sin2);
 
     ray.r += dlam * dr_dlam;
     ray.theta += dlam * dtheta_dlam;
