@@ -4226,6 +4226,9 @@ int main(int argc, char **argv) {
             // GRMHD volume radial bounds (task C1l)
             cp.grmhd_r_min = grmhdTexture.rMin;
             cp.grmhd_r_max = grmhdTexture.rMax;
+            // Volumetric RTE (D3): mirrors GLSL rteEnabled path
+            cp.rte_enabled      = (interop.rteEnabled > 0.5f) ? 1 : 0;
+            cp.rte_opacity_scale = interop.rteOpacityScale;
 
             if (bhCudaRenderFrame(cudaState.backend, &cp) != 0) {
               fprintf(

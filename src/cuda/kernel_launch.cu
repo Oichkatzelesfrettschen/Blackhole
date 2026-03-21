@@ -62,6 +62,8 @@ __constant__ float d_wiregrid_show_ergo;   /**< @brief Show ergosphere boundary+
 __constant__ float d_wiregrid_grid_scale;  /**< @brief Grid density multiplier. */
 __constant__ float d_grmhd_r_min;          /**< @brief Inner radial bound of GRMHD grid. */
 __constant__ float d_grmhd_r_max;          /**< @brief Outer radial bound of GRMHD grid. */
+__constant__ int   d_rte_enabled;          /**< @brief 1 = volumetric RTE path (D3). */
+__constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_scale * j_nu. */
 
 /* External launch wrappers from each kernel file */
 extern "C" void launchFp32Baseline(float4 *fb, int w, int h, cudaStream_t s);
@@ -124,6 +126,8 @@ int uploadConstants(
   COPY_CONST(d_wiregrid_grid_scale, p->wiregrid_grid_scale);
   COPY_CONST(d_grmhd_r_min, p->grmhd_r_min);
   COPY_CONST(d_grmhd_r_max, p->grmhd_r_max);
+  COPY_CONST(d_rte_enabled, p->rte_enabled);
+  COPY_CONST(d_rte_opacity_scale, p->rte_opacity_scale);
 
   /* Array copies */
   cudaError_t const errPos = cudaMemcpyToSymbol(d_cam_pos, p->cam_pos, sizeof(p->cam_pos));

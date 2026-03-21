@@ -75,6 +75,10 @@ struct BH_LaunchParams {
     /* GRMHD volume bounds (task C1l) */
     float grmhd_r_min; /**< @brief Inner radial bound of GRMHD grid (geometric units). */
     float grmhd_r_max; /**< @brief Outer radial bound of GRMHD grid (geometric units). */
+
+    /* Volumetric RTE (D3) */
+    int   rte_enabled;       /**< @brief 1 = use front-to-back volumetric RTE instead of single-scatter. */
+    float rte_opacity_scale; /**< @brief alpha_nu = rte_opacity_scale * j_nu; tune in ImGui. */
 };
 
 /**

@@ -3316,6 +3316,38 @@ if(BUILD_TESTING)
       endif()
     endif()
 
+    # 7. Volumetric RTE CUDA path (D3): d_rte_step + d_trace_geodesic_rte via kernel API
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_rte_test.cu")
+      add_executable(cuda_rte_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_rte_test.cu"
+      )
+      set_target_properties(cuda_rte_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_rte_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_rte_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_rte COMMAND cuda_rte_test)
+      set_tests_properties(cuda_rte PROPERTIES
+        LABELS "cuda;rte;volumetric"
+        TIMEOUT 120
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_rte PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
   endif() # ENABLE_CUDA
 
 endif()

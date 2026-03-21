@@ -42,25 +42,33 @@ __launch_bounds__(256, 4)
   float3 const cam = make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]);
   float3 const dir = d_ray_dir(px, py);
 
-  HitResult const hit = d_trace_geodesic(cam, dir);
-  float4 color = d_shade_hit(hit, cam);
+  float4 color;
+  /* D3: dispatch to volumetric RTE when enabled; baseline only (not coarsened
+   * -- two live ray states plus RTE accum would push past 128 regs/thread).
+   * Wiregrid overlay is skipped in RTE mode: the volumetric path has no single
+   * hit point that maps cleanly to BL coordinates. */
+  if (d_rte_enabled) {
+    color = d_trace_geodesic_rte(cam, dir);
+  } else {
+    HitResult const hit = d_trace_geodesic(cam, dir);
+    color = d_shade_hit(hit, cam);
 
-  /* Wiregrid BL-coord overlay (task A4): convert Cartesian hit->spherical BL */
-  if (d_wiregrid_enabled != 0) {
-    float3 const hp = hit.hit_point;
-    float const r_bl = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
-    if (r_bl > 1e-5f) {
-      float const theta_bl = acosf(fmaxf(-1.0f, fminf(hp.z / r_bl, 1.0f)));
-      float const phi_bl   = atan2f(hp.y, hp.x);
-      float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
-                                            d_spin, d_wiregrid_show_ergo != 0.0f,
-                                            d_wiregrid_grid_scale);
-      /* Blend: color = mix(color, wg.rgb, wg.a) */
-      float const inv_a = 1.0f - wg.w;
-      color = make_float4(color.x*inv_a + wg.x*wg.w,
-                          color.y*inv_a + wg.y*wg.w,
-                          color.z*inv_a + wg.z*wg.w,
-                          color.w);
+    /* Wiregrid BL-coord overlay (task A4): convert Cartesian hit->spherical BL */
+    if (d_wiregrid_enabled != 0) {
+      float3 const hp = hit.hit_point;
+      float const r_bl = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
+      if (r_bl > 1e-5f) {
+        float const theta_bl = acosf(fmaxf(-1.0f, fminf(hp.z / r_bl, 1.0f)));
+        float const phi_bl   = atan2f(hp.y, hp.x);
+        float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
+                                              d_spin, d_wiregrid_show_ergo != 0.0f,
+                                              d_wiregrid_grid_scale);
+        float const inv_a = 1.0f - wg.w;
+        color = make_float4(color.x*inv_a + wg.x*wg.w,
+                            color.y*inv_a + wg.y*wg.w,
+                            color.z*inv_a + wg.z*wg.w,
+                            color.w);
+      }
     }
   }
   /* Perfectly coalesced linear write: adjacent threads write adjacent float4s */

@@ -74,6 +74,8 @@ extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere bou
 extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
 extern __constant__ float d_grmhd_r_min;         /**< @brief Inner radial bound of GRMHD grid. */
 extern __constant__ float d_grmhd_r_max;         /**< @brief Outer radial bound of GRMHD grid. */
+extern __constant__ int   d_rte_enabled;          /**< @brief 1 = volumetric RTE path (D3). */
+extern __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_scale * j_nu. */
 
 /* ========================================================================
  * Vector helpers (replacing GLSL vec3 operations)
@@ -1185,6 +1187,178 @@ __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
 
     float3 local_dir = d_normalize(make_f3(u, v, -1.0f));
     return d_mat3_mul(d_cam_basis, local_dir);
+}
+
+/* ========================================================================
+ * Volumetric Radiative Transfer Equation (D3)
+ * Mirrors rteStepVec3() and bhTraceGeodesicRTE() from shader/include/.
+ * ======================================================================== */
+
+/**
+ * @brief One front-to-back RTE segment: updates transmittance, returns contribution.
+ *
+ * Analytic formal solution over uniform segment of length step_size:
+ *   I_new = I_old * exp(-tau) + S * (1 - exp(-tau)),  tau = alpha_nu * step_size
+ * Taylor fallback for tau < 1e-5 to avoid (1-exp(-tau)) cancellation.
+ *
+ * @param emit_color RGB emission color (temperature-mapped, pre-Doppler).
+ * @param j_eff      Effective emission coefficient (includes Doppler g^3, density).
+ * @param alpha_nu   Absorption coefficient [1/step-unit].
+ * @param step_size  Segment path length [same units as alpha_nu denominator].
+ * @param transmit   [in/out] Current path transmittance; decremented by exp(-tau).
+ * @return Segment contribution to add to accumI (= transmit_before * S * (1-exp(-tau))).
+ */
+__device__ __forceinline__ float3 d_rte_step(float3 emit_color, float j_eff,
+                                              float alpha_nu, float step_size,
+                                              float &transmit) {
+    float const tau = fmaxf(alpha_nu * step_size, 0.0f);
+
+    float one_m_exp_tau;
+    float exp_tau;
+    if (tau < 1.0e-5f) {
+        /* Taylor: avoid (1 - exp(-tau)) cancellation for small tau */
+        one_m_exp_tau = tau * (1.0f - 0.5f * tau);
+        exp_tau       = 1.0f - tau;
+    } else {
+        exp_tau       = expf(-tau);
+        one_m_exp_tau = 1.0f - exp_tau;
+    }
+
+    float3 seg_emit;
+    if (alpha_nu < 1.0e-30f) {
+        /* No absorption: pure emission, I += j * ds */
+        seg_emit = d_scale(emit_color, j_eff * step_size);
+    } else {
+        seg_emit = d_scale(emit_color, (j_eff / alpha_nu) * one_m_exp_tau);
+    }
+
+    float3 const contribution = d_scale(seg_emit, transmit);
+    transmit *= fmaxf(exp_tau, 0.0f);
+    return contribution;
+}
+
+/**
+ * @brief Trace a Kerr geodesic with front-to-back volumetric RTE compositing.
+ *
+ * Mirrors bhTraceGeodesicRTE() in shader/include/interop_trace.glsl.
+ * For Schwarzschild (d_kerr_enabled=0 or |a| < D_EPSILON), falls back to
+ * d_trace_geodesic() + d_shade_hit() (single-scatter, bit-exact parity).
+ *
+ * Disk emission model at each step inside [r_disk_in, r_disk_out]:
+ *   - Novikov-Thorne flux: F ~ (r_in/r)^3 * (1 - sqrt(r_in/r))
+ *   - Temperature color: 3-band ramp (matches GLSL bhTraceGeodesicRTE)
+ *   - Doppler beaming: g = 1 + 0.3 * sqrt(rs/2r) * cos(phi),  intensity *= g^3
+ *   - Gaussian vertical density: rho ~ exp(-z^2 / 2*h_disk^2),  h_disk = 0.1*rs
+ *
+ * Background is added at escape weighted by surviving transmittance.
+ * Early exit when transmit < 0.005 (medium is effectively opaque).
+ *
+ * @param cam_pos Camera position in world (Cartesian) coordinates.
+ * @param ray_dir Normalized ray direction in world coordinates.
+ * @return Composited RGBA float4 pixel color.
+ */
+__device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ray_dir) {
+    float const rs = d_rs;
+    float const a  = 0.5f * d_spin * rs;
+
+    if (!d_kerr_enabled || fabsf(a) < D_EPSILON) {
+        /* Schwarzschild fallback: single-scatter (same as baseline kernel) */
+        HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
+        return d_shade_hit(hit, cam_pos);
+    }
+
+    float r_horizon = d_kerr_outer_horizon(rs, a);
+    if (r_horizon <= D_EPSILON) { r_horizon = rs; }
+
+    float const r_disk_in   = d_isco;
+    float const r_disk_out  = 100.0f * rs;
+    float const h_disk      = fmaxf(0.1f * rs, D_EPSILON);
+    float const dt          = d_step_size;
+    float const max_dist    = d_max_dist;
+    int   const max_steps   = d_max_steps;
+    float const opacity_scl = d_rte_opacity_scale;
+
+    KerrConsts const c  = d_kerr_init_consts(cam_pos, ray_dir);
+    KerrRay          kr = d_kerr_init_ray(cam_pos, ray_dir);
+
+    float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
+    float  transmit = 1.0f;
+    float  min_r    = kr.r;
+
+    for (int step = 0; step < max_steps; ++step) {
+        float3 const cur_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        min_r = fminf(min_r, kr.r);
+
+        if (kr.r <= r_horizon) {
+            /* Horizon absorbs everything: return accumulated emission */
+            return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
+        }
+
+        d_kerr_step(kr, rs, a, c, dt);
+        float3 const new_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+
+        if (d_adisk_enabled) {
+            float const r_cyl = sqrtf(fmaf(new_pos.x, new_pos.x, new_pos.y * new_pos.y));
+            if (r_cyl >= r_disk_in && r_cyl <= r_disk_out) {
+                /* Novikov-Thorne flux profile */
+                float const x    = r_disk_in / fmaxf(r_cyl, D_EPSILON);
+                float const flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
+
+                /* Temperature-to-color: 3-band ramp (matches bhTraceGeodesicRTE GLSL) */
+                float const t_norm = sqrtf(sqrtf(fmaxf(flux, 0.0f)));
+                float3 emit_color;
+                if (t_norm > 0.6f) {
+                    emit_color = make_f3(1.0f, 0.9f, 0.8f);
+                } else if (t_norm > 0.3f) {
+                    emit_color = make_f3(1.0f, 0.6f, 0.2f);
+                } else {
+                    emit_color = make_f3(0.8f, 0.2f, 0.1f);
+                }
+
+                /* Keplerian Doppler beaming: v ~ sqrt(rs / 2r), boost ~ (1 + 0.3*v*cos phi)^3 */
+                float const v       = sqrtf(0.5f * rs / fmaxf(r_cyl, D_EPSILON));
+                float const phi_ang = atan2f(new_pos.y, new_pos.x);
+                float const doppler = 1.0f + 0.3f * v * cosf(phi_ang);
+                float const g3      = doppler * doppler * doppler;
+
+                /* Gaussian vertical density falloff: rho ~ exp(-z^2 / 2 h^2) */
+                float const z_over_h  = new_pos.z / h_disk;
+                float const rho_norm  = expf(-0.5f * z_over_h * z_over_h);
+
+                float const j_eff   = flux * g3 * rho_norm;
+                float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
+
+                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, dt, transmit);
+                accum_i = d_add(accum_i, contrib);
+
+                if (transmit < 0.005f) {
+                    return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
+                }
+            }
+        }
+
+        if (kr.r > max_dist) {
+            float3 const esc_dir = d_sub(new_pos, cur_pos);
+            if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
+                float4 const bg = d_background_color(d_normalize(esc_dir));
+                accum_i.x += transmit * bg.x;
+                accum_i.y += transmit * bg.y;
+                accum_i.z += transmit * bg.z;
+            }
+            return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
+        }
+    }
+
+    /* Step budget exhausted -- treat as escaped along last known direction */
+    float3 const final_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+    float3 const esc_dir   = d_sub(final_pos, cam_pos);
+    if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
+        float4 const bg = d_background_color(d_normalize(esc_dir));
+        accum_i.x += transmit * bg.x;
+        accum_i.y += transmit * bg.y;
+        accum_i.z += transmit * bg.z;
+    }
+    return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
 }
 
 #endif /* BLACKHOLE_CUDA_DEVICE_PHYSICS_CUH */
