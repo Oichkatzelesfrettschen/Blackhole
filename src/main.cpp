@@ -836,6 +836,9 @@ struct InteropUniforms {
   float grbTime = 0.0f;
   float grbTimeMin = 0.0f;
   float grbTimeMax = 1.0f;
+  // D2: volumetric RTE
+  float rteEnabled      = 0.0f;
+  float rteOpacityScale = 0.5f;
 };
 
 void appendCompareUniforms(const std::string &path, int index, const std::string &label,
@@ -902,6 +905,9 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   rtti.floatUniforms["hawkingGlowIntensity"] = hawkingIntensity;
   rtti.floatUniforms["useHawkingLUTs"] = hawkingUseLUTs ? 1.0f : 0.0f;
   rtti.floatUniforms["blackHoleMass"] = static_cast<float>(blackHoleMass);
+  // D2: volumetric RTE
+  rtti.floatUniforms["rteEnabled"]      = interop.rteEnabled;
+  rtti.floatUniforms["rteOpacityScale"] = interop.rteOpacityScale;
   // Wiregrid BL-coord overlay (task A2) -- filled by caller via wiregridEnabled flag
   // (wiregridEnabled/ShowErgo/GridScale are set in the render loop after this call)
 }
@@ -2433,6 +2439,9 @@ int main(int argc, char **argv) {
     static bool renderBlackHole = true;
     static bool adiskEnabled = true;
     static bool adiskParticle = true;
+    // D2: volumetric RTE
+    static bool  rteVolumetricEnabled = false;
+    static float rteOpacityScale      = 0.5f;
     static float adiskDensityV = 2.0f;
     static float adiskDensityH = 4.0f;
     static float adiskHeight = 0.55f;
@@ -3489,6 +3498,13 @@ int main(int argc, char **argv) {
               ImGui::SliderFloat("adiskSpeed", &adiskSpeed, 0.0f, 1.0f);
               ImGui::SliderFloat("dopplerStrength", &dopplerStrength, 0.0f, 5.0f);
 
+              ImGui::Separator();
+              ImGui::Text("Volumetric RTE (D2)");
+              ImGui::Checkbox("Volumetric RTE", &rteVolumetricEnabled);
+              if (rteVolumetricEnabled) {
+                ImGui::SliderFloat("RTE Opacity Scale", &rteOpacityScale, 0.0f, 5.0f);
+              }
+
               ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("GRMHD")) {
@@ -4108,6 +4124,9 @@ int main(int argc, char **argv) {
         interop.grbTime = grbTimeSeconds;
         interop.grbTimeMin = grbTimeMin;
         interop.grbTimeMax = grbTimeMax;
+        // D2: volumetric RTE
+        interop.rteEnabled      = rteVolumetricEnabled ? 1.0f : 0.0f;
+        interop.rteOpacityScale = rteOpacityScale;
 
         // Convert black hole mass to grams (CGS units for Hawking calculation)
         double const bhMassGrams = static_cast<double>(blackHoleMass) * physics::M_SUN;

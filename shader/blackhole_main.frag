@@ -80,6 +80,9 @@ uniform float fovScale = 1.0;
 uniform float interopParityMode = 0.0;
 uniform float interopMaxSteps = 48.0;  // Balanced quality/performance (was 300, ultra-fast=20)
 uniform float interopStepSize = 0.2;   // Balanced (was 0.1, ultra-fast=0.25)
+// D2: Volumetric RTE path -- accumulates emission/absorption through disk volume
+uniform float rteEnabled      = 0.0;   // 0=single-scatter (legacy), 1=volumetric RTE
+uniform float rteOpacityScale = 0.5;   // alpha_nu = rteOpacityScale * j_nu
 
 uniform float adiskEnabled = 1.0;
 uniform float adiskParticle = 1.0;
@@ -488,6 +491,17 @@ void main() {
     ray.affineParameter = 0.0;
 
     int steps = int(max(1.0, interopMaxSteps + 0.5));
+
+    if (rteEnabled > 0.5) {
+      // D2: Volumetric RTE path -- accumulates emission/absorption through disk
+      vec4 rteColor = bhTraceGeodesicRTE(ray, schwarzschildRadius, depthFar, steps,
+                                          interopStepSize, rteOpacityScale);
+      vec3 interopColor = rteColor.rgb;
+      applyWiregridOverlay(interopColor, ray.position + dir * depthFar);
+      fragColor = vec4(interopColor, 1.0);
+      return;
+    }
+
     HitResult hit =
         bhTraceGeodesic(ray, schwarzschildRadius, depthFar, steps, interopStepSize);
     vec4 shaded = bhShadeHit(hit, cameraPos, schwarzschildRadius);

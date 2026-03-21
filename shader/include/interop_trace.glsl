@@ -3,6 +3,7 @@
 
 // Use include/ prefix for shader loader compatibility
 #include "include/physics_constants.glsl"
+#include "include/rte_step.glsl"
 
 const float BH_EPSILON = 1e-6;
 const float BH_DEBUG_MAX_RADIUS_MULT = 4.0;
@@ -383,6 +384,114 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
   }
   return bhBackgroundColorFromDir(normalize(hit.hitPoint - cameraPos),
                                   hit.minRadius, r_s);
+}
+
+// ---------------------------------------------------------------------------
+// bhTraceGeodesicRTE
+//
+// Volumetric radiative transfer along a Kerr geodesic using front-to-back
+// compositing.  Each step inside the disk volume accumulates emission via
+// rteStepVec3(); background and horizon contributions are weighted by the
+// surviving transmittance at escape.
+//
+// opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui)
+// ---------------------------------------------------------------------------
+vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
+                        float stepSize, float opacityScale) {
+  float a = 0.5 * kerrSpin * r_s;
+  if (abs(a) < BH_EPSILON) {
+    // Schwarzschild: single-scatter fallback (no volumetric path)
+    HitResult hit = bhTraceGeodesic(ray, r_s, maxDistance, maxSteps, stepSize);
+    if (hit.hitHorizon) { return bhHorizonColor(); }
+    if (hit.hitDisk)    { return bhDiskColorFromHit(hit, r_s); }
+    return bhBackgroundColorFromDir(normalize(hit.hitPoint - ray.position),
+                                    hit.minRadius, r_s);
+  }
+
+  float r_horizon = kerrOuterHorizon(r_s, a);
+  if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
+
+  float r_disk_in  = iscoRadius;
+  float r_disk_out = 100.0 * r_s;
+  // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
+  float h_disk = max(0.1 * r_s, BH_EPSILON);
+
+  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity);
+  KerrRay    kRay = kerrInitRay(ray.position, ray.velocity);
+
+  vec3  accumI   = vec3(0.0);
+  float transmit = 1.0;
+  float minR     = kRay.r;
+
+  for (int step = 0; step < maxSteps; ++step) {
+    vec3 curPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    minR = min(minR, kRay.r);
+
+    if (kRay.r <= r_horizon) {
+      accumI += transmit * bhHorizonColor().rgb;
+      return vec4(accumI, 1.0);
+    }
+
+    kerrStep(kRay, r_s, a, c, stepSize);
+    vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+
+    if (adiskEnabled > 0.5) {
+      float rCyl = length(newPos.xy);
+      if (rCyl >= r_disk_in && rCyl <= r_disk_out) {
+        // Novikov-Thorne surface flux profile
+        float x    = r_disk_in / max(rCyl, BH_EPSILON);
+        float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
+
+        // Temperature-to-color mapping (three bands)
+        float T_norm = pow(max(flux, 0.0), 0.25);
+        vec3 emitColor;
+        if (T_norm > 0.6) {
+          emitColor = vec3(1.0, 0.9, 0.8);
+        } else if (T_norm > 0.3) {
+          emitColor = vec3(1.0, 0.6, 0.2);
+        } else {
+          emitColor = vec3(0.8, 0.2, 0.1);
+        }
+
+        // Doppler beaming (Keplerian v ~ sqrt(r_s / 2r))
+        float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
+        float phi_ang = atan(newPos.y, newPos.x);
+        float doppler = 1.0 + 0.3 * v * cos(phi_ang);
+        float g3      = doppler * doppler * doppler;
+
+        // Gaussian vertical density: rho ~ exp(-z^2 / 2h^2)
+        float rhoNorm = exp(-0.5 * (newPos.z / h_disk) * (newPos.z / h_disk));
+
+        float jEff    = flux * g3 * rhoNorm;
+        float alphaNu = opacityScale * max(jEff, 0.0);
+
+        accumI += rteStepVec3(emitColor, jEff, alphaNu, stepSize, transmit);
+
+        // Early exit when medium becomes opaque
+        if (transmit < 0.005) {
+          return vec4(accumI, 1.0);
+        }
+      }
+    }
+
+    if (kRay.r > maxDistance) {
+      vec3 escDir = newPos - curPos;
+      if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
+        accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
+                                                      minR, r_s).rgb;
+      }
+      return vec4(accumI, 1.0);
+    }
+  }
+
+  // Max steps exhausted -- treat as escaped toward last known direction
+  vec3 finalPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+  vec3 escDir   = finalPos - ray.position;
+  if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
+    accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
+                                                  minR, r_s).rgb;
+  }
+  return vec4(accumI, 1.0);
 }
 
 #endif // INTEROP_TRACE_GLSL
