@@ -62,10 +62,11 @@ static BH_LaunchParams make_rte_params(int w, int h, float spin,
     p.cam_pos[1] = 0.0f;
     p.cam_pos[2] = 20.0f;
 
-    /* Identity basis */
+    /* col2=(0,0,-1): d_ray_dir returns local (0,0,1) for center pixel;
+     * world_dir = col2 = (0,0,-1), pointing from z=20 toward BH at origin. */
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 1.0f; p.cam_basis[5] = 0.0f;
-    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = 1.0f;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = -1.0f;
 
     p.lut_radius_min      = p.isco;
     p.lut_radius_max      = 100.0f;

@@ -141,6 +141,7 @@ static BH_LaunchParams make_disk_params(int w, int h) {
     p.kerr_enabled     = 0;
     p.use_luts         = 0;  /* will be overridden per test */
     p.doppler_strength = 0.0f; /* disable Doppler for cleaner comparisons */
+    p.adisk_lit        = 1.0f; /* non-zero so d_disk_color returns visible brightness */
     p.background_enabled   = 0;
     p.background_intensity = 0.0f;
 
@@ -150,10 +151,11 @@ static BH_LaunchParams make_disk_params(int w, int h) {
     p.cam_pos[1] =  0.0f;
     p.cam_pos[2] = 20.0f;
 
-    /* Identity basis */
+    /* Basis with col2=(0,0,-1): d_ray_dir returns local (0,0,1) for center pixel;
+     * world_dir = col2 = (0,0,-1), so center ray falls toward z=0 (equatorial plane). */
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 1.0f; p.cam_basis[5] = 0.0f;
-    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = 1.0f;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = -1.0f;
 
     p.lut_radius_min      = p.isco;
     p.lut_radius_max      = 100.0f;
@@ -376,11 +378,14 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationHalfStrengthDimsOutput) {
         const float4& bl = baseline[static_cast<std::size_t>(i)];
         const float4& hf = with_half[static_cast<std::size_t>(i)];
 
-        /* Only check pixels that were actually bright (disk hits) */
-        if (bl.x > 0.1f || bl.y > 0.1f || bl.z > 0.1f) {
+        /* Only check pixels that were actually bright (disk hits).
+         * Camera at r=25 hits disk at r~21 where flux~0.011, intensity~0.022.
+         * Threshold 0.01 matches the actual disk brightness at that radius. */
+        if (bl.x > 0.01f || bl.y > 0.01f || bl.z > 0.01f) {
             /* Dimmed pixel must be significantly less than baseline.
-             * Threshold 0.30 allows for boundary interpolation variance. */
-            if (bl.x > 0.1f) {
+             * grmhd_scale = rho*uu = 0.5*0.5 = 0.25. Threshold 0.30 allows
+             * boundary interpolation variance (0.25 < 0.30 passes). */
+            if (bl.x > 0.01f) {
                 EXPECT_LT(hf.x, bl.x * 0.30f)
                     << "pixel " << i << " R not dimmed: baseline=" << bl.x
                     << " half=" << hf.x;

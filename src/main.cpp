@@ -102,13 +102,14 @@
 #include "shader_manager.h"
 #include "texture.h"
 #include <stb_image_write.h>
+#include "cinematic.h"
 #include "tracy_support.h"
 
 #ifndef BLACKHOLE_HAS_CUDA
 #define BLACKHOLE_HAS_CUDA 0
 #endif
 #if BLACKHOLE_HAS_CUDA
-#include "cuda/cuda_backend.h"
+#include "cuda/cuda_render_manager.h"
 #endif
 
 namespace { // NOLINT(misc-use-anonymous-namespace) -- file-scope helpers
@@ -318,9 +319,14 @@ bool readTextFile(const std::string &path, std::string &out) {
 }
 
 void printUsage(const char *argv0) {
-  std::printf("Usage: %s [--curve-tsv <path>] [--export-frame <path.png>]\n", argv0);
+  std::printf("Usage: %s [--curve-tsv <path>] [--export-frame <path.png>]"
+              " [--record-frames <dir> <N>]\n", argv0);
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
+  std::printf("  --record-frames <dir> N  Record N cinematic frames as PNG into <dir>.\n");
+  std::printf("                           N defaults to %d (3 min @ 60 fps).\n",
+              K_CINEMATIC_FRAMES);
+  std::printf("  --start-frame N          Start recording from frame N (default: 0).\n");
 }
 
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
@@ -940,6 +946,9 @@ void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
   glUniform1f(glGetUniformLocation(program, "grbTime"), interop.grbTime);
   glUniform1f(glGetUniformLocation(program, "grbTimeMin"), interop.grbTimeMin);
   glUniform1f(glGetUniformLocation(program, "grbTimeMax"), interop.grbTimeMax);
+  // D2: volumetric RTE -- same source as fragment path
+  glUniform1f(glGetUniformLocation(program, "rteEnabled"),      interop.rteEnabled);
+  glUniform1f(glGetUniformLocation(program, "rteOpacityScale"), interop.rteOpacityScale);
 }
 
 void applyHawkingUniforms(GLuint program, const physics::HawkingRenderer &renderer, bool enabled,
@@ -2343,6 +2352,9 @@ int main(int argc, char **argv) {
   try {
     std::string curveTsvPath;
     std::string exportFramePath;
+    std::string recordFramesDir;
+    int         recordFramesTotal = K_CINEMATIC_FRAMES;
+    int         recordStartFrame  = 0;
     for (int i = 1; i < argc; ++i) {
       std::string const arg = argv[i];
       if (arg == "--help" || arg == "-h") {
@@ -2355,6 +2367,17 @@ int main(int argc, char **argv) {
       }
       if (arg == "--export-frame" && i + 1 < argc) {
         exportFramePath = argv[++i];
+        continue;
+      }
+      if (arg == "--record-frames" && i + 1 < argc) {
+        recordFramesDir = argv[++i];
+        if (i + 1 < argc && argv[i + 1][0] != '-') {
+          recordFramesTotal = std::atoi(argv[++i]);
+        }
+        continue;
+      }
+      if (arg == "--start-frame" && i + 1 < argc) {
+        recordStartFrame = std::atoi(argv[++i]);
         continue;
       }
       std::printf("Unknown argument: %s\n", arg.c_str());
@@ -2441,6 +2464,10 @@ int main(int argc, char **argv) {
     // D2: volumetric RTE
     static bool  rteVolumetricEnabled = false;
     static float rteOpacityScale      = 0.5f;
+    // D4: polarized Stokes IQUV
+    static bool  stokesEnabled        = false;
+    static float stokesBFieldAngle    = 0.0f;   // EVPA of projected B field [rad]
+    static float stokesNeScale        = 0.0f;   // Faraday rotation strength (0 = off)
     static float adiskDensityV = 2.0f;
     static float adiskDensityH = 4.0f;
     static float adiskHeight = 0.55f;
@@ -2493,6 +2520,16 @@ int main(int argc, char **argv) {
     /* Sub-frame blend factor [0,1): fraction of current inter-frame interval elapsed. */
     static float grmhdFrameAlpha = 0.0f;
 
+    // --record-frames: cinematic recording state
+    static bool         recordInitDone    = false;
+    static int          recordFrameIndex  = recordStartFrame;
+    static int          recordWarmup      = 0;
+    static float        recordCinematic   = static_cast<float>(recordStartFrame) / static_cast<float>(K_CINEMATIC_FPS);
+    static CinematicPath recordPath;
+    static CamKeyframe  recordCurrentKf   = K_CINEMATIC_KEYFRAMES[0];
+    static float        recordCurRs       = 2.0f;
+    static float        recordCurIsco     = 1.0f;
+
     static float blackHoleMass = 1.0f;
     static float kerrSpin = 0.0f;
     static bool enablePhotonSphere = false;
@@ -2506,7 +2543,7 @@ int main(int argc, char **argv) {
     static bool hawkingLutsLoaded = false;
     static bool useComputeRaytracer = false;
 #if BLACKHOLE_HAS_CUDA
-    static BhCudaState cudaState = {nullptr, -1, false, false};
+    static CudaRenderManager cudaManager;
 #endif
     static bool compareComputeFragment = false;
     static int compareSampleSize = 16;
@@ -2670,9 +2707,9 @@ int main(int argc, char **argv) {
        * Registration is non-fatal: CUDA kernel falls back to no GRMHD sampling
        * if the backend is not active or registration fails. */
 #if BLACKHOLE_HAS_CUDA
-      if (cudaState.backend != nullptr && grmhdTexture.texture != 0) {
-        bhCudaRegisterLut(cudaState.backend, 5 /*BhLutGrmhd*/, grmhdTexture.texture,
-                          static_cast<unsigned int>(GL_TEXTURE_3D));
+      if (grmhdTexture.texture != 0) {
+        cudaManager.registerLut(5 /*BhLutGrmhd*/, grmhdTexture.texture,
+                                static_cast<unsigned int>(GL_TEXTURE_3D));
       }
 #endif
       return true;
@@ -2689,7 +2726,7 @@ int main(int argc, char **argv) {
     if (!compareAutoInit) {
       const char *sweepEnv = std::getenv("BLACKHOLE_COMPARE_SWEEP");
       if (sweepEnv != nullptr && std::string(sweepEnv) == "1") {
-        // useComputeRaytracer = true;  // DISABLED: Compute shader path removed
+        useComputeRaytracer = true;
         compareComputeFragment = true;
         comparePresetSweep = true;
         compareWriteSummary = true;
@@ -2897,15 +2934,7 @@ int main(int argc, char **argv) {
       renderHeight = newHeight;
 
 #if BLACKHOLE_HAS_CUDA
-      if (cudaState.backend) {
-        if (bhCudaResize(cudaState.backend, texBlackhole, newWidth, newHeight) != 0) {
-          fprintf(stderr, "CUDA: resize failed; shutting down backend\n"); // NOLINT(cert-err33-c)
-                                                                           // -- diagnostic output
-          bhCudaShutdown(cudaState.backend);
-          cudaState.backend = nullptr;
-          cudaState.initAttempted = false;
-        }
-      }
+      cudaManager.resize(texBlackhole, newWidth, newHeight);
 #endif
     };
 
@@ -2946,12 +2975,8 @@ int main(int argc, char **argv) {
 
 #if BLACKHOLE_HAS_CUDA
           /* Share asset LUTs with CUDA backend (slot 0=emissivity, 1=redshift) */
-          if (cudaState.backend) {
-            bhCudaRegisterLut(cudaState.backend, 0, texEmissivityLUT,
-                              static_cast<unsigned int>(GL_TEXTURE_2D));
-            bhCudaRegisterLut(cudaState.backend, 1, texRedshiftLUT,
-                              static_cast<unsigned int>(GL_TEXTURE_2D));
-          }
+          cudaManager.registerLut(0, texEmissivityLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
+          cudaManager.registerLut(1, texRedshiftLUT,   static_cast<unsigned int>(GL_TEXTURE_2D));
 #endif
 
           lutRadiusMin = lutAssetEmissivity.rMin;
@@ -3022,12 +3047,8 @@ int main(int argc, char **argv) {
 
 #if BLACKHOLE_HAS_CUDA
         /* Share generated LUTs with CUDA backend (slot 0=emissivity, 1=redshift) */
-        if (cudaState.backend) {
-          bhCudaRegisterLut(cudaState.backend, 0, texEmissivityLUT,
-                            static_cast<unsigned int>(GL_TEXTURE_2D));
-          bhCudaRegisterLut(cudaState.backend, 1, texRedshiftLUT,
-                            static_cast<unsigned int>(GL_TEXTURE_2D));
-        }
+        cudaManager.registerLut(0, texEmissivityLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
+        cudaManager.registerLut(1, texRedshiftLUT,   static_cast<unsigned int>(GL_TEXTURE_2D));
 #endif
 
         auto photonGlowLut = physics::generatePhotonGlowLut(256);
@@ -3121,6 +3142,59 @@ int main(int argc, char **argv) {
         TRACY_PLOT("gpu_tonemap_ms", gpuTimers.tonemap.lastMs);
         TRACY_PLOT("gpu_depth_ms", gpuTimers.depth.lastMs);
         TRACY_PLOT("gpu_grmhd_slice_ms", gpuTimers.grmhdSlice.lastMs);
+      }
+
+      // --record-frames: one-time initialization (cinematic quality, 1920x1080, no vsync)
+      if (!recordFramesDir.empty() && !recordInitDone) {
+        recordInitDone     = true;
+        glfwSetWindowSize(window, 1920, 1080);
+        glfwSwapInterval(0);
+        swapInterval       = 0;
+        // Physics: on, but not everything -- avoids noise pileup / fuzz
+        adiskEnabled       = true;
+        adiskParticle      = false;  // particle mode adds visual noise
+        enableRedshift     = true;
+        enablePhotonSphere = true;
+        hawkingGlowEnabled = false;  // haze effect competes with disk shading
+        rteVolumetricEnabled = false; // volumetric fog washes out fine detail
+        stokesEnabled      = false;
+        // Skip noise texture LUT generation in record mode: FastNoise2
+        // SIMD code has a heap double-free at >= 128^3 on this system.
+        // The disk looks clean without it.
+        useNoiseTexture    = false;
+        noiseTextureReady  = true;   // mark done so we never call initialize()
+        adiskNoiseLOD      = 3.0f;
+        adiskNoiseScale    = 0.5f;
+        adiskDensityV      = 2.5f;
+        adiskLit           = 0.35f;
+        dopplerStrength    = 1.0f;
+        // Post-processing: enough bloom to glow, not enough to wash out
+        bloomIterations    = 5;
+        bloomStrength      = 0.12f;
+        tonemappingEnabled = true;
+        gamma              = 2.4f;
+        // Integration quality
+        computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
+        computeStepSize    = 0.08f;
+        // Escape radius must exceed the maximum camera distance (380 rs).
+        // depthFar is passed as interop.depthFar and used as the ray max_dist.
+        depthFar           = 500.0f;
+        kerrSpin           = K_CINEMATIC_KEYFRAMES[0].kerrSpin;
+        // Background: override to the ESO Milky Way panorama which ships as a real
+        // JPEG (not a Git LFS pointer) -- the default "nasa_pia22085" is LFS-tracked.
+        SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
+        SettingsManager::instance().get().backgroundEnabled = true;
+        SettingsManager::instance().get().backgroundIntensity = 0.8f;
+#if BLACKHOLE_HAS_CUDA
+        // isEnabled() gates the CUDA dispatch path (line ~4295). It is normally set
+        // via the ImGui "Use CUDA Raytracer" checkbox; record mode must set it directly.
+        // useComputeRaytracer alone is insufficient -- it only controls the GLSL compute
+        // path, not the CUDA path.
+        cudaManager.setEnabled(true);
+#endif
+        std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
+                    recordFramesDir.c_str(), recordFramesTotal,
+                    static_cast<double>(K_CINEMATIC_DURATION_S), K_CINEMATIC_FPS);
       }
 
       ImGui_ImplOpenGL3_NewFrame();
@@ -3335,6 +3409,15 @@ int main(int argc, char **argv) {
         }
       }
 
+      // --record-frames: drive camera and spin from the cinematic path
+      if (!recordFramesDir.empty()) {
+        recordCurrentKf = recordPath.evaluate(recordCinematic);
+        CameraState &camMutable = input.camera();
+        camMutable   = recordCurrentKf.cam;
+        cameraModeIndex = static_cast<int>(CameraMode::Input);
+        kerrSpin     = recordCurrentKf.kerrSpin;
+      }
+
       // Get camera state for shader
       const auto &cam = input.camera();
       cameraModeIndex = std::clamp(cameraModeIndex, 0, 3);
@@ -3418,13 +3501,12 @@ int main(int argc, char **argv) {
         }
         /* Advance CUDA slot 7 registration when the right PBO first becomes ready */
 #if BLACKHOLE_HAS_CUDA
-        if (grmhdPboUploaderRight.ready() && cudaState.backend != nullptr) {
+        if (grmhdPboUploaderRight.ready()) {
           static GLuint registeredRightTex = 0;
           if (registeredRightTex != grmhdPboUploaderRight.texture()) {
             registeredRightTex = grmhdPboUploaderRight.texture();
-            bhCudaRegisterLut(cudaState.backend, 7 /*BhLutGrmhdRight*/,
-                              registeredRightTex,
-                              static_cast<unsigned int>(GL_TEXTURE_3D));
+            cudaManager.registerLut(7 /*BhLutGrmhdRight*/, registeredRightTex,
+                                    static_cast<unsigned int>(GL_TEXTURE_3D));
           }
         }
 #endif
@@ -3557,6 +3639,14 @@ int main(int argc, char **argv) {
               ImGui::Checkbox("Volumetric RTE", &rteVolumetricEnabled);
               if (rteVolumetricEnabled) {
                 ImGui::SliderFloat("RTE Opacity Scale", &rteOpacityScale, 0.0f, 5.0f);
+              }
+
+              ImGui::Separator();
+              ImGui::Text("Polarized Stokes IQUV (D4)");
+              ImGui::Checkbox("Stokes Transport", &stokesEnabled);
+              if (stokesEnabled) {
+                ImGui::SliderFloat("B Field Angle (rad)", &stokesBFieldAngle, -3.14159f, 3.14159f);
+                ImGui::SliderFloat("Faraday Ne Scale",   &stokesNeScale,     0.0f, 5.0f);
               }
 
               ImGui::EndTabItem();
@@ -3874,31 +3964,26 @@ int main(int argc, char **argv) {
 #if BLACKHOLE_HAS_CUDA
               ImGui::Separator();
               ImGui::Text("CUDA Backend");
-              if (ImGui::Checkbox("Use CUDA Raytracer", &cudaState.enabled)) {
-                /* On toggle-off, reset the init flag so the user can retry by
-                 * re-enabling. Without this, a failed init permanently blocks
-                 * re-initialization for the lifetime of the process. */
-                if (!cudaState.enabled) {
-                  cudaState.initAttempted = false;
+              {
+                bool cudaEnabled = cudaManager.isEnabled();
+                if (ImGui::Checkbox("Use CUDA Raytracer", &cudaEnabled)) {
+                  cudaManager.setEnabled(cudaEnabled);
                 }
               }
-              if (cudaState.enabled) {
+              if (cudaManager.isEnabled()) {
                 const char *const variantNames[] = {"FP32 Baseline",
                                                     "FP32 Coarsened (2 ray/thread)", "FP16 Storage",
                                                     "FP16 H2 ILP (2 ray/thread)", "Auto"};
-                int variantUI = cudaState.kernelVariant < 0 ? 4 : cudaState.kernelVariant;
+                int variantUI = cudaManager.kernelVariant() < 0 ? 4 : cudaManager.kernelVariant();
                 if (ImGui::Combo("Kernel Variant", &variantUI, variantNames, 5)) {
-                  cudaState.kernelVariant = (variantUI >= 4) ? -1 : variantUI;
-                  if (cudaState.backend != nullptr) {
-                    bhCudaSetVariant(cudaState.backend, cudaState.kernelVariant);
-                  }
+                  cudaManager.setKernelVariant((variantUI >= 4) ? -1 : variantUI);
                 }
-                if (cudaState.backend != nullptr) {
-                  int const actual = bhCudaGetVariant(cudaState.backend);
+                if (cudaManager.isReady()) {
+                  int const actual = cudaManager.activeVariant();
                   if (actual >= 0 && actual < BH_KERNEL_COUNT) {
                     ImGui::TextDisabled("Active: %s", variantNames[actual]);
                   }
-                } else if (cudaState.initAttempted) {
+                } else if (cudaManager.wasInitAttempted()) {
                   ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f),
                                      "Init failed -- toggle checkbox to retry");
                 } else {
@@ -4040,10 +4125,7 @@ int main(int argc, char **argv) {
             texSpectralLUT = createFloatTexture2D(lutSize, 1, spectralLutValues);
 #if BLACKHOLE_HAS_CUDA
             /* Share spectral LUT with CUDA backend (slot 2=spectral) */
-            if (cudaState.backend != nullptr) {
-              bhCudaRegisterLut(cudaState.backend, 2, texSpectralLUT,
-                                static_cast<unsigned int>(GL_TEXTURE_2D));
-            }
+            cudaManager.registerLut(2, texSpectralLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
 #endif
             spectralRadiusMin = lutRadiusMin;
             spectralRadiusMax = lutRadiusMax;
@@ -4072,10 +4154,8 @@ int main(int argc, char **argv) {
           }
           texSynchGLut = createFloatTexture2D(kSynchGLutSize, 1, synchGData);
 #if BLACKHOLE_HAS_CUDA
-          if (cudaState.backend != nullptr) {
-            bhCudaRegisterLut(cudaState.backend, 6 /*BhLutSynchG*/, texSynchGLut,
-                              static_cast<unsigned int>(GL_TEXTURE_2D));
-          }
+          cudaManager.registerLut(6 /*BhLutSynchG*/, texSynchGLut,
+                                  static_cast<unsigned int>(GL_TEXTURE_2D));
 #endif
         }
 
@@ -4102,6 +4182,9 @@ int main(int argc, char **argv) {
 
         float const schwarzschildRadius = 2.0f * blackHoleMass;
         float const iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;
+        // Keep record-mode copies accessible outside this inner block
+        recordCurRs   = schwarzschildRadius;
+        recordCurIsco = iscoRadius;
         bool const computeSupported = ShaderManager::instance().canUseComputeShaders();
         bool const computeActive = useComputeRaytracer && computeSupported;
         bool const compareActive = compareComputeFragment && computeSupported;
@@ -4199,6 +4282,10 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["wiregridEnabled"]   = wiregridEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["wiregridShowErgo"]  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
         rtti.floatUniforms["wiregridGridScale"] = wiregridParams.gridScale;
+        // D4: polarized Stokes IQUV
+        rtti.floatUniforms["stokesEnabled"]     = stokesEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["stokesBFieldAngle"] = stokesBFieldAngle;
+        rtti.floatUniforms["stokesNeScale"]     = stokesNeScale;
         rtti.floatUniforms["gravitationalLensing"] = gravitationalLensing ? 1.0f : 0.0f;
         rtti.floatUniforms["renderBlackHole"] = renderBlackHole ? 1.0f : 0.0f;
         rtti.floatUniforms["adiskParticle"] = adiskParticleEffective ? 1.0f : 0.0f;
@@ -4215,44 +4302,25 @@ int main(int argc, char **argv) {
 
 #if BLACKHOLE_HAS_CUDA
         /* CUDA dispatch path: bypasses both fragment and compute GLSL paths */
-        if (cudaState.enabled) {
+        if (cudaManager.isEnabled()) {
           ZONE_SCOPED_N("Blackhole CUDA");
 
-          /* Lazy init on first use or after resize */
-          if ((cudaState.backend == nullptr) && !cudaState.initAttempted) {
-            cudaState.backend = bhCudaInit(texBlackhole, renderWidth, renderHeight);
-            if (cudaState.backend != nullptr) {
-              /* Mark attempted only on success so that toggling the checkbox
-               * off/on (which resets cudaState.initAttempted) allows a clean retry.
-               * We don't want spurious retries every frame on failure -- that
-               * is prevented by cudaState.initAttempted staying false until success,
-               * and by the checkbox guard resetting it only on user action. */
-              cudaState.initAttempted = true;
-              if (cudaState.kernelVariant >= 0) {
-                bhCudaSetVariant(cudaState.backend, cudaState.kernelVariant);
-              }
-              /* Register galaxy cubemap as CUDA texture object (slot 4 = BhLutGalaxy).
-               * The cubemap is a static GLuint loaded once above; it is valid here
-               * because the static initializer at line ~3126 runs before this block.
-               * Registration failure is non-fatal: kernels fall back to no background. */
-              GLuint const galaxyTexForCuda = (galaxy != 0) ? galaxy : fallbackCubemap;
-              if (galaxyTexForCuda != 0) {
-                bhCudaRegisterLut(cudaState.backend, 4, galaxyTexForCuda,
-                                  static_cast<unsigned int>(GL_TEXTURE_CUBE_MAP));
-              }
-            } else {
-              /* Init failed this frame; set attempted so we don't retry every
-               * frame. User must toggle the checkbox to reset and retry. */
-              cudaState.initAttempted = true;
-              fprintf(
-                  stderr,
-                  "CUDA: bh_cuda_init failed; toggle checkbox to retry\n"); // NOLINT(cert-err33-c)
-                                                                            // -- diagnostic output,
-                                                                            // return unused
+          /* Lazy init on first use or after resize.
+           * Track pre-call state to detect the single frame where init succeeds. */
+          bool const wasReady = cudaManager.isReady();
+          cudaManager.ensureInit(texBlackhole, renderWidth, renderHeight);
+          if (!wasReady && cudaManager.isReady()) {
+            /* Register galaxy cubemap as CUDA texture object (slot 4 = BhLutGalaxy).
+             * Done exactly once on the frame that init first succeeds.
+             * Registration failure is non-fatal: kernels fall back to no background. */
+            GLuint const galaxyTexForCuda = (galaxy != 0) ? galaxy : fallbackCubemap;
+            if (galaxyTexForCuda != 0) {
+              cudaManager.registerLut(4, galaxyTexForCuda,
+                                      static_cast<unsigned int>(GL_TEXTURE_CUBE_MAP));
             }
           }
 
-          if (cudaState.backend != nullptr) {
+          if (cudaManager.isReady()) {
             BH_LaunchParams cp = {};
             cp.rs = interop.schwarzschildRadius;
             cp.spin = interop.kerrSpin;
@@ -4291,19 +4359,16 @@ int main(int argc, char **argv) {
             cp.grmhd_r_max  = grmhdTexture.rMax;
             cp.grmhd_alpha  = grmhdFrameAlpha;
             // Volumetric RTE (D3): mirrors GLSL rteEnabled path
-            cp.rte_enabled      = (interop.rteEnabled > 0.5f) ? 1 : 0;
+            cp.rte_enabled       = (interop.rteEnabled > 0.5f) ? 1 : 0;
             cp.rte_opacity_scale = interop.rteOpacityScale;
+            // D4: polarized Stokes IQUV
+            cp.stokes_enabled     = stokesEnabled ? 1 : 0;
+            cp.stokes_b_field_angle = stokesBFieldAngle;
+            cp.stokes_ne_scale    = stokesNeScale;
+            // Disk brightness: matches adiskLit GLSL uniform (record mode sets 0.35)
+            cp.adisk_lit = adiskLit;
 
-            if (bhCudaRenderFrame(cudaState.backend, &cp) != 0) {
-              fprintf(
-                  stderr,
-                  "CUDA: render frame failed; shutting down backend\n"); // NOLINT(cert-err33-c) --
-                                                                         // diagnostic output,
-                                                                         // return unused
-              bhCudaShutdown(cudaState.backend);
-              cudaState.backend = nullptr;
-              cudaState.initAttempted = false;
-            }
+            cudaManager.renderFrame(&cp);
           }
         } else
 #endif
@@ -4351,6 +4416,22 @@ int main(int argc, char **argv) {
             double const bhMass = static_cast<double>(blackHoleMass) * physics::M_SUN;
             applyHawkingUniforms(computeProgram, hawkingRenderer, hawkingGlowEnabled,
                                  hawkingTempScale, hawkingGlowIntensity, hawkingUseLUTs, bhMass);
+
+            // Wiregrid BL-coord overlay (parity with fragment path)
+            glUniform1f(glGetUniformLocation(computeProgram, "wiregridEnabled"),
+                        wiregridEnabled ? 1.0f : 0.0f);
+            glUniform1f(glGetUniformLocation(computeProgram, "wiregridShowErgo"),
+                        wiregridParams.showErgosphere ? 1.0f : 0.0f);
+            glUniform1f(glGetUniformLocation(computeProgram, "wiregridGridScale"),
+                        wiregridParams.gridScale);
+
+            // D4: polarized Stokes IQUV (parity with fragment path)
+            glUniform1f(glGetUniformLocation(computeProgram, "stokesEnabled"),
+                        stokesEnabled ? 1.0f : 0.0f);
+            glUniform1f(glGetUniformLocation(computeProgram, "stokesBFieldAngle"),
+                        stokesBFieldAngle);
+            glUniform1f(glGetUniformLocation(computeProgram, "stokesNeScale"),
+                        stokesNeScale);
 
             GLint texUnit = 0;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
@@ -4963,7 +5044,8 @@ int main(int argc, char **argv) {
       ImGui::End();         // End Viewport
       ImGui::PopStyleVar(); // WindowPadding
 
-      if (input.isUIVisible()) {
+      // Normal UI panels are hidden in record mode so they don't appear in the video.
+      if (input.isUIVisible() && recordFramesDir.empty()) {
         renderControlsHelpPanel();
         renderControlsSettingsPanel(cameraModeIndex, orbitRadius, orbitSpeed);
         renderDisplaySettingsPanel(window, swapInterval, renderScale, windowWidth, windowHeight);
@@ -4982,11 +5064,16 @@ int main(int argc, char **argv) {
       if (!exportFramePath.empty()) {
         static int exportWarmup = 0;
         if (++exportWarmup >= 5 && texTonemapped != 0 && renderWidth > 0 && renderHeight > 0) {
-          int const w = renderWidth;
-          int const h = renderHeight;
-          std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
           glBindTexture(GL_TEXTURE_2D, texTonemapped);
+          GLint texW = 0, texH = 0;
+          glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
+          glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
+          int const w = (texW > 0) ? texW : renderWidth;
+          int const h = (texH > 0) ? texH : renderHeight;
+          std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+          glPixelStorei(GL_PACK_ALIGNMENT, 1);
           glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+          glPixelStorei(GL_PACK_ALIGNMENT, 4);
           glBindTexture(GL_TEXTURE_2D, 0);
           /* glGetTexImage gives bottom-to-top; flip for PNG. */
           std::vector<unsigned char> flipped(px.size());
@@ -5001,9 +5088,76 @@ int main(int argc, char **argv) {
         }
       }
 
+      /* --record-frames: draw cinematic physics HUD via foreground draw list.
+       * GetForegroundDrawList() adds to ImGui's draw list, so this must be called
+       * before ImGui::Render().  The overlay is composited over the scene by the
+       * ImGui backend when RenderDrawData() runs below. */
+      if (!recordFramesDir.empty() && ++recordWarmup >= 15) {
+        renderCinematicOverlay(recordCinematic, recordCurrentKf,
+                               glm::length(cameraPos),
+                               recordCurRs, recordCurIsco,
+                               recordFrameIndex, recordFramesTotal);
+      }
+
       // ImGui Render
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+      /* --record-frames: capture the tonemapped scene texture via glGetTexImage.
+       * WHY: glReadPixels(0) reads the window's default framebuffer which is
+       * mostly ImGui chrome (black panels).  texTonemapped holds the full
+       * rendered scene at renderWidth x renderHeight, identical to the
+       * --export-frame path that is known to work.  The cinematic HUD overlay
+       * drawn via GetForegroundDrawList() is composited by ffmpeg drawtext later;
+       * the overlay is still drawn above in the ImGui frame for live preview. */
+      /* WHY: glfwSetWindowSize() is asynchronous; the resize callback fires in
+       * glfwPollEvents().  Wait 15 warmup frames (~250ms) to let the window and
+       * render targets settle at the requested size before starting capture.
+       * If the WM caps the window smaller (e.g., in a desktop session), we accept
+       * whatever size the window settled at after the warmup period. */
+      if (!recordFramesDir.empty() && recordWarmup >= 15
+          && texTonemapped != 0 && renderWidth > 0 && renderHeight > 0) {
+        glBindTexture(GL_TEXTURE_2D, texTonemapped);
+        // Query actual stored texture dimensions -- these may differ from
+        // renderWidth/renderHeight if the texture was created at a different
+        // resolution (e.g. before the window settled to its current size).
+        // glGetTexImage writes texW*texH*channels bytes; a size mismatch would
+        // corrupt the heap metadata of the next allocation.
+        GLint texW = 0, texH = 0;
+        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
+        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
+        int const w = (texW > 0) ? texW : renderWidth;
+        int const h = (texH > 0) ? texH : renderHeight;
+        std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+        // GL_PACK_ALIGNMENT defaults to 4: each row is padded to a 4-byte boundary.
+        // For widths like 1343, row bytes = 1343*3=4029 which rounds up to 4032,
+        // overflowing our tightly-sized buffer by (4032-4029)*h = 3177 bytes and
+        // corrupting the next heap chunk's malloc header (SIGABRT on free).
+        // Setting alignment to 1 disables row padding for the download.
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        /* glGetTexImage is bottom-to-top; flip vertically for correct PNG. */
+        std::vector<unsigned char> flipped(px.size());
+        for (int row = 0; row < h; ++row) {
+          std::memcpy(
+              flipped.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 3,
+              px.data() + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3,
+              static_cast<size_t>(w) * 3);
+        }
+        char framePath[1024];
+        std::snprintf(framePath, sizeof(framePath), "%s/frame_%06d.png",
+                      recordFramesDir.c_str(), recordFrameIndex);
+        stbi_write_png(framePath, w, h, 3, flipped.data(), w * 3);
+        if (recordFrameIndex % K_CINEMATIC_FPS == 0) {
+          std::printf("Record: frame %d / %d  (t = %.1f s)  [%dx%d]\n",
+                      recordFrameIndex, recordFramesTotal,
+                      static_cast<double>(recordCinematic), w, h);
+        }
+        ++recordFrameIndex;
+        recordCinematic = static_cast<float>(recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS);
+      }
 
       // Update Platform Windows (Docking)
       if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0) {
@@ -5035,6 +5189,17 @@ int main(int argc, char **argv) {
         if (++exportDone >= 6) { /* 5 warmup + 1 export frame */
           break;
         }
+      }
+
+      /* --record-frames: break when all requested frames have been captured.
+       * recordFrameIndex starts at recordStartFrame; terminate when we have
+       * written recordFramesTotal frames (i.e. reached recordStartFrame+total). */
+      if (!recordFramesDir.empty()
+          && recordFrameIndex >= recordStartFrame + recordFramesTotal) {
+        int const written = recordFrameIndex - recordStartFrame;
+        std::printf("Record complete: %d frames written to %s\n",
+                    written, recordFramesDir.c_str());
+        break;
       }
     }
 
@@ -5069,10 +5234,7 @@ int main(int argc, char **argv) {
     }
 
 #if BLACKHOLE_HAS_CUDA
-    if (cudaState.backend != nullptr) {
-      bhCudaShutdown(cudaState.backend);
-      cudaState.backend = nullptr;
-    }
+    cudaManager.shutdown();
 #endif
     cleanup(window);
     return 0;

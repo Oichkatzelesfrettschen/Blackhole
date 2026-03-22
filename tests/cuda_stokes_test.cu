@@ -100,7 +100,8 @@ static BH_LaunchParams make_stokes_params(int w, int h, int stokes_on,
     p.kerr_enabled     = 1;
     p.use_luts         = 0;
     p.cam_pos[0] = 0.0f; p.cam_pos[1] = 0.0f; p.cam_pos[2] = 20.0f;
-    p.cam_basis[0] = 1.0f; p.cam_basis[4] = 1.0f; p.cam_basis[8] = 1.0f;
+    /* col2=(0,0,-1): center ray goes from z=20 toward BH at origin */
+    p.cam_basis[0] = 1.0f; p.cam_basis[4] = 1.0f; p.cam_basis[8] = -1.0f;
     p.lut_radius_min       = p.isco;
     p.lut_radius_max       = 100.0f;
     p.redshift_radius_min  = p.isco;
