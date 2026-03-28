@@ -76,13 +76,13 @@ def main(argv: list[str]) -> int:
         env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
         set_default_env(env, "BLACKHOLE_BRIDGE_ADISK_ENABLED", "0")
         set_default_env(env, "BLACKHOLE_BRIDGE_BACKGROUND_ENABLED", "1")
-        set_default_env(env, "BLACKHOLE_BRIDGE_BACKGROUND_INTENSITY", "0.9")
+        set_default_env(env, "BLACKHOLE_BRIDGE_BACKGROUND_INTENSITY", "0.2")
         set_default_env(env, "BLACKHOLE_BRIDGE_STEP_SIZE", "0.02")
         set_default_env(env, "BLACKHOLE_BRIDGE_MAX_STEPS", "1000")
         set_default_env(env, "BLACKHOLE_BRIDGE_MAX_DIST", "160")
-        set_default_env(env, "BLACKHOLE_BRIDGE_EXPOSURE", "2.6")
+        set_default_env(env, "BLACKHOLE_BRIDGE_EXPOSURE", "0.7")
         set_default_env(env, "BLACKHOLE_BRIDGE_BLOOM_STRENGTH", "0.0")
-        set_default_env(env, "BLACKHOLE_BRIDGE_PHOTON_GLOW_STRENGTH", "0.18")
+        set_default_env(env, "BLACKHOLE_BRIDGE_PHOTON_GLOW_STRENGTH", "0.02")
         if args.user_scripts:
             env["BLENDER_USER_SCRIPTS"] = str(args.user_scripts.resolve())
         if args.sanitize_ocio:
@@ -135,14 +135,14 @@ def main(argv: list[str]) -> int:
                 direction = Vector((0.0, 0.0, 0.0)) - camera.location
                 camera.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
 
-            def ensure_camera(scene, radius: float, inclination_deg: float):
+            def ensure_camera(scene, radius: float, inclination_deg: float, lens_mm: float):
                 if scene.camera is None:
                     camera_data = bpy.data.cameras.new('ShowcaseCamera')
                     camera_obj = bpy.data.objects.new('ShowcaseCamera', camera_data)
                     scene.collection.objects.link(camera_obj)
                     scene.camera = camera_obj
                 camera = scene.camera
-                camera.data.lens = 18.0
+                camera.data.lens = lens_mm
                 camera.data.sensor_width = 36.0
                 camera.data.clip_start = 0.01
                 camera.data.clip_end = 100000.0
@@ -195,16 +195,19 @@ def main(argv: list[str]) -> int:
             def render_profile(scene, props, engine_id: str, profile: str, artifact_dir: pathlib.Path):
                 if profile == 'harsh_lighting':
                     props.spin = 0.0
-                    props.inclination_deg = 82.0
-                    props.observer_distance = 8.0
+                    props.inclination_deg = 88.0
+                    props.observer_distance = 6.5
+                    lens_mm = 26.0
                 else:
                     props.spin = 0.0
-                    props.inclination_deg = 90.0
-                    props.observer_distance = 10.0
+                    props.inclination_deg = 88.0
+                    props.observer_distance = 8.0
+                    lens_mm = 26.0
                 ensure_camera(
                     scene,
                     float(props.observer_distance),
                     float(props.inclination_deg),
+                    lens_mm,
                 )
                 bpy.context.view_layer.update()
 
