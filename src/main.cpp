@@ -3365,14 +3365,14 @@ int main(int argc, char **argv) {
           kerrSpin           = 0.0f;
           SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
           SettingsManager::instance().get().backgroundEnabled = true;
-          SettingsManager::instance().get().backgroundIntensity = 1.05f;
+          SettingsManager::instance().get().backgroundIntensity = 0.72f;
           CameraState &camMutable = input.camera();
           camMutable = CameraState{
               .yaw = hasRecordYaw ? recordYawDeg : -90.0f,
-              .pitch = hasRecordPitch ? recordPitchDeg : 0.0f,
+              .pitch = hasRecordPitch ? recordPitchDeg : -6.0f,
               .roll = 0.0f,
-              .distance = hasRecordDistance ? recordDistance : 10.0f,
-              .fov = hasRecordFov ? recordFovDeg : 90.0f};
+              .distance = hasRecordDistance ? recordDistance : 14.0f,
+              .fov = hasRecordFov ? recordFovDeg : 68.0f};
           if (hasRecordExposure) {
             toneExposure = recordExposure;
           }
@@ -3508,11 +3508,11 @@ int main(int argc, char **argv) {
       static float tonemapVignetteStrength = 1.0f;
       static float tonemapFilmGrainStrength = 0.005f;
       if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
-        backgroundLayerScale = {1.0f, 1.14f, 1.32f};
-        backgroundLayerIntensity = {1.0f, 0.95f, 0.7f};
-        backgroundLayerLodBias = {1.25f, 2.25f, 3.5f};
+        backgroundLayerScale = {1.0f, 1.1f, 1.22f};
+        backgroundLayerIntensity = {0.95f, 0.72f, 0.45f};
+        backgroundLayerLodBias = {0.9f, 1.8f, 2.8f};
         tonemapChromaticAberrationStrength = 0.0004f;
-        tonemapVignetteStrength = 0.2f;
+        tonemapVignetteStrength = 0.12f;
         tonemapFilmGrainStrength = 0.0f;
       } else {
         backgroundLayerScale = {1.0f, 1.08f, 1.16f};
@@ -3601,7 +3601,7 @@ int main(int argc, char **argv) {
         if (hasRecordExposure) {
           toneExposure = recordExposure;
         } else if (recordProfile == "showcase-orbit") {
-          toneExposure = 6.0f;
+          toneExposure = 3.4f;
         }
       }
       if (!bloomSettingsLoaded) {
@@ -3696,10 +3696,10 @@ int main(int argc, char **argv) {
           float const sweepDeg = hasRecordSweep ? recordSweepDeg : 18.0f;
           CameraState &camMutable = input.camera();
           camMutable.yaw = baseYaw + progress * sweepDeg;
-          camMutable.pitch = hasRecordPitch ? recordPitchDeg : 0.0f;
+          camMutable.pitch = hasRecordPitch ? recordPitchDeg : -6.0f;
           camMutable.roll = 0.0f;
-          camMutable.distance = hasRecordDistance ? recordDistance : 10.0f;
-          camMutable.fov = hasRecordFov ? recordFovDeg : 90.0f;
+          camMutable.distance = hasRecordDistance ? recordDistance : 14.0f;
+          camMutable.fov = hasRecordFov ? recordFovDeg : 68.0f;
           cameraModeIndex = static_cast<int>(CameraMode::Input);
           kerrSpin = 0.0f;
           recordCurrentKf = CamKeyframe{

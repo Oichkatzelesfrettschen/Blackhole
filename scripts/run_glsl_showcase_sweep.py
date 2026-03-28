@@ -55,8 +55,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("/home/eirikr/Github/Blackhole/.cache/showcase_glsl_sweep"),
     )
-    parser.add_argument("--width", type=int, default=1280)
-    parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--width", type=int, default=2560)
+    parser.add_argument("--height", type=int, default=1004)
     parser.add_argument("--frames", type=int, default=1)
     parser.add_argument("--yaw", type=float, default=-90.0)
     parser.add_argument("--sweep-deg", type=float, default=0.0)
@@ -204,10 +204,10 @@ def main() -> int:
     output_root = args.output_dir.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
 
-    distances = [9.0, 10.0, 11.0]
-    pitches = [-2.0, 0.0, 4.0]
-    fovs = [82.0, 90.0]
-    exposures = [4.0, 6.0, 8.0]
+    distances = [13.0, 14.0, 15.5]
+    pitches = [-8.0, -6.0, -3.0]
+    fovs = [62.0, 68.0, 74.0]
+    exposures = [2.8, 3.4, 4.2]
 
     cases = [
         SweepCase(
