@@ -10,6 +10,7 @@
 
 // C++ system headers
 #include <cstddef>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -45,13 +46,23 @@ const std::string &getShaderBaseDir() {
 namespace {
 
 std::string readFile(const std::string &file) {
-  std::ifstream ifs(file, std::ios::in);
+  std::filesystem::path resolved = file;
+  if (!resolved.is_absolute()) {
+    std::filesystem::path const base(shaderBaseDir);
+    std::filesystem::path const rooted = base / resolved;
+    std::error_code ec;
+    if (std::filesystem::exists(rooted, ec)) {
+      resolved = rooted;
+    }
+  }
+
+  std::ifstream ifs(resolved, std::ios::in);
   if (ifs.is_open()) {
     std::stringstream ss;
     ss << ifs.rdbuf();
     return ss.str();
   }
-  throw "Failed to open file: " + file;
+  throw "Failed to open file: " + resolved.string();
 }
 
 
@@ -160,16 +171,27 @@ std::string processIncludes(const std::string &source,
  * @brief Read shader file with include processing.
  */
 std::string readShaderWithIncludes(const std::string &file) {
-  // Extract base directory from file path
-  std::string basePath = shaderBaseDir;
-  const size_t lastSlash = file.find_last_of("/\\");
-  if (lastSlash != std::string::npos) {
-    basePath = file.substr(0, lastSlash + 1);
+  std::filesystem::path resolvedFile = file;
+  if (!resolvedFile.is_absolute()) {
+    std::filesystem::path const base(shaderBaseDir);
+    std::filesystem::path const rooted = base / resolvedFile;
+    std::error_code ec;
+    if (std::filesystem::exists(rooted, ec)) {
+      resolvedFile = rooted;
+    }
   }
 
-  std::string const source = readFile(file);
+  // Extract base directory from file path
+  std::string basePath = shaderBaseDir;
+  std::string const resolvedFileString = resolvedFile.string();
+  const size_t lastSlash = resolvedFileString.find_last_of("/\\");
+  if (lastSlash != std::string::npos) {
+    basePath = resolvedFileString.substr(0, lastSlash + 1);
+  }
+
+  std::string const source = readFile(resolvedFileString);
   std::set<std::string> included;
-  included.insert(file); // Mark main file as included
+  included.insert(resolvedFileString); // Mark main file as included
   return processIncludes(source, basePath, included);
 }
 
@@ -296,4 +318,3 @@ GLuint createComputeProgram(const std::string &computeShaderFile) {
 
   return program;
 }
-

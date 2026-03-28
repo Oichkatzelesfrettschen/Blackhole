@@ -16,6 +16,7 @@ layout(location = 0) in vec2 uv;
 out vec4 fragColor;
 
 uniform float gamma = 2.2;
+uniform float exposure = 1.0;
 uniform float tonemappingEnabled;
 uniform sampler2D texture0;
 uniform vec2 resolution;
@@ -57,6 +58,9 @@ void main() {
     // Vignette (Subtle)
     float vignette = smoothstep(1.0, 0.2, dist);
     color *= vignette;
+
+    // Exposure trim before ACES tone mapping
+    color *= exposure;
 
     // ACES Tone Mapping
     color = aces(color);

@@ -5,9 +5,11 @@
  */
 
 #include "shader_manager.h"
+#include "shader.h"
 
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -15,6 +17,21 @@
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
+
+namespace {
+std::filesystem::path resolveShaderPath(const std::string &basePath) {
+  std::filesystem::path resolved = basePath;
+  if (!resolved.is_absolute()) {
+    std::filesystem::path const shaderBase(getShaderBaseDir());
+    std::filesystem::path const rooted = shaderBase / resolved;
+    std::error_code ec;
+    if (std::filesystem::exists(rooted, ec)) {
+      resolved = rooted;
+    }
+  }
+  return resolved;
+}
+} // namespace
 
 ShaderManager &ShaderManager::instance() {
   static ShaderManager instance;
@@ -203,6 +220,7 @@ std::string ShaderManager::preprocessShader(const std::string &source) const {
 
 std::string
 ShaderManager::findBestShaderFile(const std::string &basePath) const {
+  std::filesystem::path const resolvedBase = resolveShaderPath(basePath);
   // Try version-specific files first
   std::vector<std::string> suffixes;
 
@@ -228,7 +246,7 @@ ShaderManager::findBestShaderFile(const std::string &basePath) const {
   }
 
   for (const auto &suffix : suffixes) {
-    std::string path = basePath + suffix;
+    std::string path = resolvedBase.string() + suffix;
     std::ifstream const file(path);
     if (file.good()) {
       return path;
@@ -236,7 +254,7 @@ ShaderManager::findBestShaderFile(const std::string &basePath) const {
   }
 
   // Return base path if no versioned file found
-  return basePath;
+  return resolvedBase.string();
 }
 
 std::string ShaderManager::loadShaderSource(const std::string &basePath) const {

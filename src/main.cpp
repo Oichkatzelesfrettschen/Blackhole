@@ -108,6 +108,18 @@
 #ifndef BLACKHOLE_HAS_CUDA
 #define BLACKHOLE_HAS_CUDA 0
 #endif
+#ifndef BLACKHOLE_APP_VARIANT_GLSL_ONLY
+#define BLACKHOLE_APP_VARIANT_GLSL_ONLY 0
+#endif
+#ifndef BLACKHOLE_APP_VARIANT_CUDA_ONLY
+#define BLACKHOLE_APP_VARIANT_CUDA_ONLY 0
+#endif
+#if BLACKHOLE_APP_VARIANT_GLSL_ONLY && BLACKHOLE_APP_VARIANT_CUDA_ONLY
+#error "Blackhole desktop variant cannot be both GLSL-only and CUDA-only"
+#endif
+#if BLACKHOLE_APP_VARIANT_CUDA_ONLY && !BLACKHOLE_HAS_CUDA
+#error "Blackhole CUDA-only desktop variant requires BLACKHOLE_HAS_CUDA=1"
+#endif
 #if BLACKHOLE_HAS_CUDA
 #include "cuda/cuda_render_manager.h"
 #endif
@@ -118,6 +130,11 @@ namespace { // NOLINT(misc-use-anonymous-namespace) -- file-scope helpers
 enum class CameraMode { Input = 0, Front, Top, Orbit };
 
 constexpr int K_BACKGROUND_LAYERS = 3;
+constexpr bool kAppVariantGlslOnly = BLACKHOLE_APP_VARIANT_GLSL_ONLY != 0;
+constexpr bool kAppVariantCudaOnly = BLACKHOLE_APP_VARIANT_CUDA_ONLY != 0;
+constexpr const char *kWindowTitle = kAppVariantCudaOnly
+                                         ? "BlackholeCUDA"
+                                         : (kAppVariantGlslOnly ? "BlackholeGLSL" : "Blackhole");
 
 #if BLACKHOLE_HAS_CPPTRACE
 namespace {
@@ -257,6 +274,48 @@ void installCrashHandlers() {
 #else
 static void installCrashHandlers() {}
 #endif
+
+namespace {
+std::filesystem::path gResourceRoot = ".";
+
+bool isValidResourceRoot(const std::filesystem::path &root) {
+  std::error_code ec;
+  return std::filesystem::exists(root / "shader" / "simple.vert", ec) &&
+         std::filesystem::exists(root / "assets" / "backgrounds" / "manifest.json", ec) &&
+         std::filesystem::exists(root / "src" / "main.cpp", ec);
+}
+
+std::filesystem::path detectResourceRoot(const char *argv0) {
+  std::error_code ec;
+  std::vector<std::filesystem::path> seeds;
+  seeds.push_back(std::filesystem::current_path(ec));
+  if (argv0 != nullptr && argv0[0] != '\0') {
+    std::filesystem::path const exePath = std::filesystem::absolute(argv0, ec);
+    if (!ec) {
+      seeds.push_back(exePath.parent_path());
+    }
+  }
+
+  for (const auto &seed : seeds) {
+    std::filesystem::path probe = seed;
+    while (!probe.empty()) {
+      if (isValidResourceRoot(probe)) {
+        return probe;
+      }
+      std::filesystem::path const parent = probe.parent_path();
+      if (parent == probe) {
+        break;
+      }
+      probe = parent;
+    }
+  }
+  return std::filesystem::current_path(ec);
+}
+
+std::string resourcePath(std::string_view relativePath) {
+  return (gResourceRoot / std::filesystem::path(relativePath)).string();
+}
+} // namespace
 
 /**
  * @brief Convert spherical yaw/pitch angles to a Cartesian camera position.
@@ -462,7 +521,7 @@ struct WiregridParams {
 std::vector<BackgroundAsset> loadBackgroundAssets() {
   std::vector<BackgroundAsset> assets;
   std::string text;
-  if (!readTextFile("assets/backgrounds/manifest.json", text)) {
+  if (!readTextFile(resourcePath("assets/backgrounds/manifest.json"), text)) {
     return assets;
   }
   auto json = nlohmann::json::parse(text, nullptr, false);
@@ -475,6 +534,12 @@ std::vector<BackgroundAsset> loadBackgroundAssets() {
     asset.title = entry.value("title", asset.id);
     asset.path = entry.value("path", "");
     asset.skyboxDir = entry.value("skyboxDir", "");
+    if (!asset.path.empty() && !std::filesystem::path(asset.path).is_absolute()) {
+      asset.path = resourcePath(asset.path);
+    }
+    if (!asset.skyboxDir.empty() && !std::filesystem::path(asset.skyboxDir).is_absolute()) {
+      asset.skyboxDir = resourcePath(asset.skyboxDir);
+    }
     if (!asset.id.empty() && !asset.path.empty()) {
       assets.push_back(std::move(asset));
     }
@@ -1000,14 +1065,14 @@ bool loadLutCsv(const std::string &path, std::vector<float> &values) {
 bool loadLutAssets(physics::Lut1D &emissivity, physics::Lut1D &redshift, float &spinOut) {
   std::vector<float> emissivityValues;
   std::vector<float> redshiftValues;
-  if (!loadLutCsv("assets/luts/emissivity_lut.csv", emissivityValues)) {
+  if (!loadLutCsv(resourcePath("assets/luts/emissivity_lut.csv"), emissivityValues)) {
     return false;
   }
-  if (!loadLutCsv("assets/luts/redshift_lut.csv", redshiftValues)) {
+  if (!loadLutCsv(resourcePath("assets/luts/redshift_lut.csv"), redshiftValues)) {
     return false;
   }
   std::string metaText;
-  if (!readTextFile("assets/luts/lut_meta.json", metaText)) {
+  if (!readTextFile(resourcePath("assets/luts/lut_meta.json"), metaText)) {
     return false;
   }
   double rInOverRs = 0.0;
@@ -1033,11 +1098,11 @@ bool loadLutAssets(physics::Lut1D &emissivity, physics::Lut1D &redshift, float &
 
 bool loadSpectralLutAssets(std::vector<float> &values, float &wavelengthMin, float &wavelengthMax) {
   values.clear();
-  if (!loadLutCsv("assets/luts/rt_spectrum_lut.csv", values)) {
+  if (!loadLutCsv(resourcePath("assets/luts/rt_spectrum_lut.csv"), values)) {
     return false;
   }
   std::string metaText;
-  if (!readTextFile("assets/luts/rt_spectrum_meta.json", metaText)) {
+  if (!readTextFile(resourcePath("assets/luts/rt_spectrum_meta.json"), metaText)) {
     return false;
   }
   double waveMin = 0.0;
@@ -1055,11 +1120,11 @@ bool loadSpectralLutAssets(std::vector<float> &values, float &wavelengthMin, flo
 
 bool loadGrbModulationLutAssets(std::vector<float> &values, float &timeMin, float &timeMax) {
   values.clear();
-  if (!loadLutCsv("assets/luts/grb_modulation_lut.csv", values)) {
+  if (!loadLutCsv(resourcePath("assets/luts/grb_modulation_lut.csv"), values)) {
     return false;
   }
   std::string metaText;
-  if (!readTextFile("assets/luts/grb_modulation_meta.json", metaText)) {
+  if (!readTextFile(resourcePath("assets/luts/grb_modulation_meta.json"), metaText)) {
     return false;
   }
   double tMin = 0.0;
@@ -1174,7 +1239,7 @@ GLFWwindow *initializeWindow(int width, int height) {
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 #endif
 
-  GLFWwindow *window = glfwCreateWindow(width, height, "Blackhole", nullptr, nullptr);
+  GLFWwindow *window = glfwCreateWindow(width, height, kWindowTitle, nullptr, nullptr);
   if (window == nullptr) {
     return nullptr;
   }
@@ -2391,6 +2456,9 @@ int main(int argc, char **argv) {
       return 2;
     }
 
+    gResourceRoot = detectResourceRoot(argv[0]);
+    setShaderBaseDir(gResourceRoot.string() + "/");
+
     // Load settings first
     SettingsManager::instance().load();
     auto &settings = SettingsManager::instance().get();
@@ -2408,7 +2476,7 @@ int main(int argc, char **argv) {
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
     // Initialize shader hot-reload watcher
-    ShaderWatcher::instance().start(getShaderBaseDir());
+    ShaderWatcher::instance().start((std::filesystem::path(getShaderBaseDir()) / "shader").string());
 #endif
 
     // Initialize input manager and sync with settings
@@ -2462,6 +2530,7 @@ int main(int argc, char **argv) {
     static bool postProcessingSettingsLoaded = false;
     static float bloomStrength = 0.1f;
     static bool tonemappingEnabled = true;
+    static float toneExposure = 1.0f;
     static float gamma = 2.5f;
     static bool gravitationalLensing = true;
     static bool renderBlackHole = true;
@@ -2725,7 +2794,7 @@ int main(int argc, char **argv) {
       std::snprintf(
           grmhdPathBuffer.data(),
           grmhdPathBuffer.size(), // NOLINT(cert-err33-c) -- diagnostic output, return unused
-          "assets/grmhd/grmhd_pack.json");
+          "%s", resourcePath("assets/grmhd/grmhd_pack.json").c_str());
       grmhdPathInit = true;
     }
 
@@ -3181,6 +3250,7 @@ int main(int argc, char **argv) {
           bloomIterations    = 4;
           bloomStrength      = 0.08f;
           tonemappingEnabled = true;
+          toneExposure       = 1.0f;
           gamma              = 2.35f;
           computeMaxSteps    = 1000;
           computeStepSize    = 0.02f;
@@ -3208,14 +3278,15 @@ int main(int argc, char **argv) {
           noiseTextureReady  = true;   // mark done so we never call initialize()
           adiskNoiseLOD      = 3.0f;
           adiskNoiseScale    = 0.5f;
-          adiskDensityV      = 2.5f;
-          adiskLit           = 0.35f;
+          adiskDensityV      = 1.4f;
+          adiskLit           = 0.08f;
           dopplerStrength    = 1.0f;
-          // Post-processing: enough bloom to glow, not enough to wash out
-          bloomIterations    = 5;
-          bloomStrength      = 0.12f;
+          // Post-processing: preserve ring detail instead of washing it out
+          bloomIterations    = 3;
+          bloomStrength      = 0.03f;
           tonemappingEnabled = true;
-          gamma              = 2.4f;
+          toneExposure       = 0.02f;
+          gamma              = 2.25f;
           // Integration quality
           computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
           computeStepSize    = 0.08f;
@@ -3297,8 +3368,8 @@ int main(int argc, char **argv) {
         rmluiReady = false;
       }
 
-      static GLuint galaxy = loadCubemap(std::string("assets/skybox_nebula_dark"));
-      static GLuint const colorMap = loadTexture2D(std::string("assets/color_map.png"));
+      static GLuint galaxy = loadCubemap(resourcePath("assets/skybox_nebula_dark"));
+      static GLuint const colorMap = loadTexture2D(resourcePath("assets/color_map.png"));
       static std::vector<BackgroundAsset> backgroundAssets;
       static int backgroundIndex = 0;
       static std::string backgroundLoadedId;
@@ -3381,6 +3452,7 @@ int main(int argc, char **argv) {
       if (!postProcessingSettingsLoaded) {
         bloomStrength = settings.bloomStrength;
         tonemappingEnabled = settings.tonemappingEnabled;
+        toneExposure = 1.0f;
         gamma = settings.gamma;
         postProcessingSettingsLoaded = true;
       }
@@ -3511,7 +3583,7 @@ int main(int argc, char **argv) {
       }
 
       glm::mat3 cameraBasis = buildCameraBasis(cameraPos, focusTarget, cam.roll);
-      float const fovScale = 1.0f;
+      float const fovScale = std::tan(glm::radians(cam.fov) * 0.5f);
       glm::mat4 viewRotation(1.0f);
       viewRotation[0] = glm::vec4(cameraBasis[0], 0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
                                                          // -- glm::mat has no .at()
@@ -4011,8 +4083,14 @@ int main(int argc, char **argv) {
                 useComputeRaytracer = false;
                 compareComputeFragment = false;
               }
-              ImGui::Checkbox("Use Compute Raytracer", &useComputeRaytracer);
-              if (useComputeRaytracer) {
+              if (kAppVariantCudaOnly) {
+                useComputeRaytracer = false;
+                compareComputeFragment = false;
+                ImGui::TextDisabled("Compute/fragment comparison is disabled in BlackholeCUDA.");
+              } else {
+                ImGui::Checkbox("Use Compute Raytracer", &useComputeRaytracer);
+              }
+              if (useComputeRaytracer && !kAppVariantCudaOnly) {
                 ImGui::SliderInt("Compute Steps", &computeMaxSteps, 50, 600);
                 ImGui::SliderFloat("Compute Step Size", &computeStepSize, 0.01f, 1.0f);
                 ImGui::Checkbox("Compute Tiled", &computeTiled);
@@ -4051,8 +4129,10 @@ int main(int argc, char **argv) {
               }
               ImGui::Separator();
 #endif
-              ImGui::Checkbox("Compare Compute vs Fragment", &compareComputeFragment);
-              if (compareComputeFragment) {
+              if (!kAppVariantCudaOnly) {
+                ImGui::Checkbox("Compare Compute vs Fragment", &compareComputeFragment);
+              }
+              if (compareComputeFragment && !kAppVariantCudaOnly) {
                 ImGui::SliderInt("Compare Sample Size", &compareSampleSize, 4, 64);
                 ImGui::SliderInt("Compare Frame Stride", &compareFrameStride, 1, 60);
                 if (compareStats.valid) {
@@ -4220,7 +4300,7 @@ int main(int argc, char **argv) {
 
         // Load Hawking radiation LUTs
         if (!hawkingLutsLoaded) {
-          std::filesystem::path const lutPath = "assets/luts";
+          std::filesystem::path const lutPath = resourcePath("assets/luts");
           if (std::filesystem::exists(lutPath)) {
             hawkingLutsLoaded = hawkingRenderer.loadLUTs(lutPath);
             if (hawkingLutsLoaded) {
@@ -4244,9 +4324,17 @@ int main(int argc, char **argv) {
         // Keep record-mode copies accessible outside this inner block
         recordCurRs   = schwarzschildRadius;
         recordCurIsco = iscoRadius;
+#if BLACKHOLE_HAS_CUDA
+        if (kAppVariantCudaOnly) {
+          cudaManager.setEnabled(true);
+          useComputeRaytracer = false;
+          compareComputeFragment = false;
+        }
+#endif
         bool const computeSupported = ShaderManager::instance().canUseComputeShaders();
         bool const computeActive = useComputeRaytracer && computeSupported;
-        bool const compareActive = compareComputeFragment && computeSupported;
+        bool const compareActive =
+            compareComputeFragment && computeSupported && !kAppVariantCudaOnly;
         bool const compareBaselineActive = compareBaselineEnabled && compareActive;
         bool const adiskEnabledEffective = adiskEnabled && !compareBaselineActive;
         bool const adiskParticleEffective = adiskParticle && !compareBaselineActive;
@@ -4784,12 +4872,14 @@ int main(int argc, char **argv) {
         if (input.isUIVisible()) {
           ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
           ImGui::Checkbox("tonemappingEnabled", &tonemappingEnabled);
+          ImGui::SliderFloat("exposure", &toneExposure, 0.01f, 2.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
           ImGui::SliderFloat("gamma", &gamma, 1.0f, 4.0f);
           settings.tonemappingEnabled = tonemappingEnabled;
           settings.gamma = gamma;
           ImGui::End();
         }
         rtti.floatUniforms["tonemappingEnabled"] = tonemappingEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["exposure"] = toneExposure;
         rtti.floatUniforms["gamma"] = gamma;
 
         renderToTexture(rtti);
