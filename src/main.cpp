@@ -366,6 +366,35 @@ glm::mat3 buildCameraBasis(const glm::vec3 &cameraPos, const glm::vec3 &target, 
   return {right, up, forward};
 }
 
+struct ShowcaseOrbitComposition {
+  const char *name;
+  float frameOffsetX;
+  float frameOffsetY;
+  float pitchDeg;
+  float distance;
+  float fovDeg;
+  float exposure;
+  float backgroundIntensity;
+  float sweepDeg;
+};
+
+constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
+    {"centered", 0.0f, 0.0f, -6.0f, 14.0f, 68.0f, 3.4f, 0.72f, 10.0f},
+    {"left-third", 0.18f, 0.03f, -7.0f, 15.5f, 64.0f, 3.1f, 0.74f, 9.0f},
+    {"right-third", -0.18f, 0.03f, -7.0f, 15.5f, 64.0f, 3.1f, 0.74f, 9.0f},
+    {"wide-left", 0.12f, -0.02f, -6.0f, 18.0f, 58.0f, 3.0f, 0.78f, 7.0f},
+    {"wide-right", -0.12f, -0.02f, -6.0f, 18.0f, 58.0f, 3.0f, 0.78f, 7.0f},
+}};
+
+const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
+  for (const auto &composition : K_SHOWCASE_ORBIT_COMPOSITIONS) {
+    if (name == composition.name) {
+      return &composition;
+    }
+  }
+  return nullptr;
+}
+
 bool readTextFile(const std::string &path, std::string &out) {
   std::ifstream file(path);
   if (!file.is_open()) {
@@ -393,6 +422,9 @@ void printUsage(const char *argv0) {
   std::printf("  --record-fov <deg>       Override record camera field of view.\n");
   std::printf("  --record-exposure <x>    Override record tone-map exposure.\n");
   std::printf("  --record-sweep-deg <x>   Override orbit sweep degrees across frames.\n");
+  std::printf("  --record-composition <n> Showcase framing: centered | left-third | right-third | wide-left | wide-right.\n");
+  std::printf("  --record-frame-x <n>     Override horizontal framing offset in half-frame units.\n");
+  std::printf("  --record-frame-y <n>     Override vertical framing offset in half-frame units.\n");
 }
 
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
@@ -2434,6 +2466,7 @@ int main(int argc, char **argv) {
     std::string exportFramePath;
     std::string recordFramesDir;
     std::string recordProfile = "cinematic";
+    std::string recordComposition = "wide-right";
     int         recordFramesTotal = K_CINEMATIC_FRAMES;
     int         recordStartFrame  = 0;
     float       recordYawDeg = 0.0f;
@@ -2448,6 +2481,10 @@ int main(int argc, char **argv) {
     bool        hasRecordExposure = false;
     float       recordSweepDeg = 0.0f;
     bool        hasRecordSweep = false;
+    float       recordFrameX = 0.0f;
+    bool        hasRecordFrameX = false;
+    float       recordFrameY = 0.0f;
+    bool        hasRecordFrameY = false;
     for (int i = 1; i < argc; ++i) {
       std::string const arg = argv[i];
       if (arg == "--help" || arg == "-h") {
@@ -2475,6 +2512,10 @@ int main(int argc, char **argv) {
       }
       if (arg == "--record-profile" && i + 1 < argc) {
         recordProfile = argv[++i];
+        continue;
+      }
+      if (arg == "--record-composition" && i + 1 < argc) {
+        recordComposition = argv[++i];
         continue;
       }
       if (arg == "--record-yaw" && i + 1 < argc) {
@@ -2507,6 +2548,16 @@ int main(int argc, char **argv) {
         hasRecordSweep = true;
         continue;
       }
+      if (arg == "--record-frame-x" && i + 1 < argc) {
+        recordFrameX = std::strtof(argv[++i], nullptr);
+        hasRecordFrameX = true;
+        continue;
+      }
+      if (arg == "--record-frame-y" && i + 1 < argc) {
+        recordFrameY = std::strtof(argv[++i], nullptr);
+        hasRecordFrameY = true;
+        continue;
+      }
       std::printf("Unknown argument: %s\n", arg.c_str());
       printUsage(argv[0]);
       return 2;
@@ -2515,6 +2566,12 @@ int main(int argc, char **argv) {
     if (recordProfile != "cinematic" && recordProfile != "compare-orbit-near" &&
         recordProfile != "showcase-orbit") {
       std::printf("Unknown record profile: %s\n", recordProfile.c_str());
+      printUsage(argv[0]);
+      return 2;
+    }
+    if (recordProfile == "showcase-orbit" &&
+        findShowcaseOrbitComposition(recordComposition) == nullptr) {
+      std::printf("Unknown showcase composition: %s\n", recordComposition.c_str());
       printUsage(argv[0]);
       return 2;
     }
@@ -3340,6 +3397,8 @@ int main(int argc, char **argv) {
           camMutable = CameraState{.yaw = -90.0f, .pitch = 0.0f, .roll = 0.0f, .distance = 10.0f, .fov = 90.0f};
           cameraModeIndex = static_cast<int>(CameraMode::Input);
         } else if (recordProfile == "showcase-orbit") {
+          const ShowcaseOrbitComposition *const composition =
+              findShowcaseOrbitComposition(recordComposition);
           adiskEnabled       = false;
           adiskParticle      = false;
           enableRedshift     = false;
@@ -3365,16 +3424,23 @@ int main(int argc, char **argv) {
           kerrSpin           = 0.0f;
           SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
           SettingsManager::instance().get().backgroundEnabled = true;
-          SettingsManager::instance().get().backgroundIntensity = 0.72f;
+          SettingsManager::instance().get().backgroundIntensity =
+              composition != nullptr ? composition->backgroundIntensity : 0.72f;
           CameraState &camMutable = input.camera();
           camMutable = CameraState{
               .yaw = hasRecordYaw ? recordYawDeg : -90.0f,
-              .pitch = hasRecordPitch ? recordPitchDeg : -6.0f,
+              .pitch = hasRecordPitch ? recordPitchDeg
+                                      : (composition != nullptr ? composition->pitchDeg : -6.0f),
               .roll = 0.0f,
-              .distance = hasRecordDistance ? recordDistance : 14.0f,
-              .fov = hasRecordFov ? recordFovDeg : 68.0f};
+              .distance = hasRecordDistance ? recordDistance
+                                            : (composition != nullptr ? composition->distance
+                                                                      : 14.0f),
+              .fov = hasRecordFov ? recordFovDeg
+                                  : (composition != nullptr ? composition->fovDeg : 68.0f)};
           if (hasRecordExposure) {
             toneExposure = recordExposure;
+          } else if (composition != nullptr) {
+            toneExposure = composition->exposure;
           }
           cameraModeIndex = static_cast<int>(CameraMode::Input);
         } else {
@@ -3598,10 +3664,13 @@ int main(int argc, char **argv) {
         postProcessingSettingsLoaded = true;
       }
       if (!recordFramesDir.empty()) {
+        const ShowcaseOrbitComposition *const composition =
+            recordProfile == "showcase-orbit" ? findShowcaseOrbitComposition(recordComposition)
+                                              : nullptr;
         if (hasRecordExposure) {
           toneExposure = recordExposure;
         } else if (recordProfile == "showcase-orbit") {
-          toneExposure = 3.4f;
+          toneExposure = composition != nullptr ? composition->exposure : 3.4f;
         }
       }
       if (!bloomSettingsLoaded) {
@@ -3689,17 +3758,27 @@ int main(int argc, char **argv) {
           cameraModeIndex = static_cast<int>(CameraMode::Input);
           kerrSpin = 0.0f;
         } else if (recordProfile == "showcase-orbit") {
+          const ShowcaseOrbitComposition *const composition =
+              findShowcaseOrbitComposition(recordComposition);
           float const denom = static_cast<float>(std::max(recordFramesTotal - 1, 1));
           float const progress =
               static_cast<float>(recordFrameIndex - recordStartFrame) / denom;
           float const baseYaw = hasRecordYaw ? recordYawDeg : -90.0f;
-          float const sweepDeg = hasRecordSweep ? recordSweepDeg : 18.0f;
+          float const sweepDeg =
+              hasRecordSweep ? recordSweepDeg
+                             : (composition != nullptr ? composition->sweepDeg : 10.0f);
           CameraState &camMutable = input.camera();
           camMutable.yaw = baseYaw + progress * sweepDeg;
-          camMutable.pitch = hasRecordPitch ? recordPitchDeg : -6.0f;
+          camMutable.pitch = hasRecordPitch ? recordPitchDeg
+                                            : (composition != nullptr ? composition->pitchDeg
+                                                                      : -6.0f);
           camMutable.roll = 0.0f;
-          camMutable.distance = hasRecordDistance ? recordDistance : 14.0f;
-          camMutable.fov = hasRecordFov ? recordFovDeg : 68.0f;
+          camMutable.distance = hasRecordDistance ? recordDistance
+                                                  : (composition != nullptr
+                                                         ? composition->distance
+                                                         : 14.0f);
+          camMutable.fov = hasRecordFov ? recordFovDeg
+                                        : (composition != nullptr ? composition->fovDeg : 68.0f);
           cameraModeIndex = static_cast<int>(CameraMode::Input);
           kerrSpin = 0.0f;
           recordCurrentKf = CamKeyframe{
@@ -3751,7 +3830,29 @@ int main(int argc, char **argv) {
         break;
       }
 
-      glm::mat3 cameraBasis = buildCameraBasis(cameraPos, focusTarget, cam.roll);
+      glm::vec3 aimTarget = focusTarget;
+      if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
+        const ShowcaseOrbitComposition *const composition =
+            findShowcaseOrbitComposition(recordComposition);
+        float const frameX =
+            hasRecordFrameX ? recordFrameX
+                            : (composition != nullptr ? composition->frameOffsetX : 0.0f);
+        float const frameY =
+            hasRecordFrameY ? recordFrameY
+                            : (composition != nullptr ? composition->frameOffsetY : 0.0f);
+        if (std::abs(frameX) > 0.0001f || std::abs(frameY) > 0.0001f) {
+          glm::mat3 const baseBasis = buildCameraBasis(cameraPos, focusTarget, cam.roll);
+          float const halfHeight = std::tan(glm::radians(cam.fov) * 0.5f) * cam.distance;
+          float const aspect =
+              static_cast<float>(std::max(renderWidth, 1)) /
+              static_cast<float>(std::max(renderHeight, 1));
+          float const halfWidth = halfHeight * aspect;
+          aimTarget = focusTarget + baseBasis[0] * (frameX * halfWidth) +
+                      baseBasis[1] * (frameY * halfHeight);
+        }
+      }
+
+      glm::mat3 cameraBasis = buildCameraBasis(cameraPos, aimTarget, cam.roll);
       float const fovScale = std::tan(glm::radians(cam.fov) * 0.5f);
       glm::mat4 viewRotation(1.0f);
       viewRotation[0] = glm::vec4(cameraBasis[0], 0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
@@ -3775,7 +3876,7 @@ int main(int argc, char **argv) {
           glm::radians(cam.fov), static_cast<float>(renderWidth) / static_cast<float>(renderHeight),
           0.1f, depthFar);
       glm::mat4 gizmoViewMatrix =
-          glm::lookAt(cameraPos, focusTarget, cameraBasis[1]); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+          glm::lookAt(cameraPos, aimTarget, cameraBasis[1]); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
                                                                // -- glm::mat has no .at()
       bool computeActiveForLog = false;
 

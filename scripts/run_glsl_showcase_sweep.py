@@ -24,6 +24,7 @@ class SweepCase:
     exposure: float
     yaw: float
     sweep_deg: float
+    composition: str
 
 
 @dataclass
@@ -60,6 +61,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frames", type=int, default=1)
     parser.add_argument("--yaw", type=float, default=-90.0)
     parser.add_argument("--sweep-deg", type=float, default=0.0)
+    parser.add_argument(
+        "--record-composition",
+        default="wide-right",
+        choices=("centered", "left-third", "right-third", "wide-left", "wide-right"),
+    )
     parser.add_argument("--top-k", type=int, default=6)
     return parser.parse_args()
 
@@ -95,6 +101,8 @@ def run_case(
         str(height),
         "--record-profile",
         "showcase-orbit",
+        "--record-composition",
+        case.composition,
         "--record-yaw",
         f"{case.yaw:.3f}",
         "--record-pitch",
@@ -177,9 +185,10 @@ def write_contact_sheet(results: list[SweepResult], destination: Path) -> None:
             f"score {result.score:.2f}",
             f"d={params.distance:.1f} p={params.pitch:.1f} fov={params.fov:.1f}",
             f"exp={params.exposure:.3f} yaw={params.yaw:.1f}",
+            params.composition,
             Path(result.frame_path).parent.name,
         ]
-        y = 220
+        y = 208
         for line in lines:
             draw.text((12, y), line, fill=(230, 230, 230))
             y += 12
@@ -217,6 +226,7 @@ def main() -> int:
             exposure=exposure,
             yaw=args.yaw,
             sweep_deg=args.sweep_deg,
+            composition=args.record_composition,
         )
         for distance, pitch, fov, exposure in itertools.product(
             distances, pitches, fovs, exposures
@@ -227,7 +237,8 @@ def main() -> int:
     for index, case in enumerate(cases):
         print(
             f"[{index + 1:02d}/{len(cases):02d}] "
-            f"d={case.distance:.1f} p={case.pitch:.1f} fov={case.fov:.1f} exp={case.exposure:.3f}"
+            f"{case.composition} d={case.distance:.1f} "
+            f"p={case.pitch:.1f} fov={case.fov:.1f} exp={case.exposure:.3f}"
         )
         frame_path = run_case(
             repo_root=repo_root,

@@ -42,11 +42,18 @@ def parse_args() -> argparse.Namespace:
         default="showcase-orbit",
         choices=("showcase-orbit", "compare-orbit-near", "cinematic"),
     )
+    parser.add_argument(
+        "--record-composition",
+        default="wide-right",
+        choices=("centered", "left-third", "right-third", "wide-left", "wide-right"),
+    )
     parser.add_argument("--record-yaw", type=float)
     parser.add_argument("--record-pitch", type=float)
     parser.add_argument("--record-distance", type=float)
     parser.add_argument("--record-fov", type=float)
     parser.add_argument("--record-exposure", type=float)
+    parser.add_argument("--record-frame-x", type=float)
+    parser.add_argument("--record-frame-y", type=float)
     parser.add_argument("--record-sweep-deg", type=float, default=0.0)
     parser.add_argument("--start-frame", type=int)
     parser.add_argument("--log-path", type=Path)
@@ -63,6 +70,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         str(args.record_frames),
         "--record-profile",
         args.record_profile,
+        "--record-composition",
+        args.record_composition,
     ]
     optional_pairs = [
         ("--record-yaw", args.record_yaw),
@@ -70,6 +79,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         ("--record-distance", args.record_distance),
         ("--record-fov", args.record_fov),
         ("--record-exposure", args.record_exposure),
+        ("--record-frame-x", args.record_frame_x),
+        ("--record-frame-y", args.record_frame_y),
         ("--record-sweep-deg", args.record_sweep_deg),
         ("--start-frame", args.start_frame),
     ]
@@ -203,6 +214,8 @@ def run_detached_tmux(args: argparse.Namespace) -> int:
         str(args.record_frames),
         "--record-profile",
         args.record_profile,
+        "--record-composition",
+        args.record_composition,
     ]
     optional_pairs = [
         ("--record-yaw", args.record_yaw),
@@ -210,6 +223,8 @@ def run_detached_tmux(args: argparse.Namespace) -> int:
         ("--record-distance", args.record_distance),
         ("--record-fov", args.record_fov),
         ("--record-exposure", args.record_exposure),
+        ("--record-frame-x", args.record_frame_x),
+        ("--record-frame-y", args.record_frame_y),
         ("--record-sweep-deg", args.record_sweep_deg),
         ("--start-frame", args.start_frame),
         ("--log-path", args.log_path),

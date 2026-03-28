@@ -53,11 +53,9 @@ python3 scripts/run_glsl_headless.py \
   --record-dir .cache/headless_one \
   --record-frames 1 \
   --record-profile showcase-orbit \
-  --record-yaw -90 \
-  --record-pitch 0 \
-  --record-distance 10 \
-  --record-fov 90 \
-  --record-exposure 1.0
+  --record-composition wide-right \
+  --width 2560 \
+  --height 1004
 ```
 
 Detached tmux-backed run:
@@ -70,7 +68,7 @@ python3 scripts/run_glsl_headless.py \
   --record-dir .cache/headless_batch \
   --record-frames 120 \
   --record-profile showcase-orbit \
-  --record-sweep-deg 18
+  --record-composition wide-right
 ```
 
 Notes:
@@ -81,5 +79,16 @@ Notes:
   machine the hidden-window path is more reliable than GLX under `Xvfb`.
 - It sets `BLACKHOLE_RECORD_WIDTH` and `BLACKHOLE_RECORD_HEIGHT` from the
   requested headless resolution.
+- `showcase-orbit` now supports named framing presets:
+  - `centered`
+  - `left-third`
+  - `right-third`
+  - `wide-left`
+  - `wide-right`
+- You can also override the framing directly with:
+  - `--record-frame-x`
+  - `--record-frame-y`
+  These are measured in half-frame units in camera space. Positive `x` pushes
+  the black hole left in frame. Positive `y` pushes it down in frame.
 - No `sudo`, `yay`, or askpass helper is needed if the required tools are
   already installed.
