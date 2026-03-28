@@ -86,6 +86,8 @@ extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere bou
 extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
 extern __constant__ float d_wiregrid_motion_scale; /**< @brief Frame-dragging azimuth advection strength. */
 extern __constant__ float d_wiregrid_infall_scale; /**< @brief Inward radial-shell advection strength. */
+extern __constant__ float d_wiregrid_strength;     /**< @brief Post-attenuation alpha multiplier. */
+extern __constant__ float d_wiregrid_scene_preserve; /**< @brief 1 = yield to scene luminance. */
 extern __constant__ float d_wiregrid_color[4];     /**< @brief Base RGBA for the coordinate grid overlay. */
 extern __constant__ float d_grmhd_r_min;         /**< @brief Inner radial bound of GRMHD grid. */
 extern __constant__ float d_grmhd_r_max;         /**< @brief Outer radial bound of GRMHD grid. */
@@ -675,6 +677,12 @@ __device__ __forceinline__ float d_wg_overlay_attenuation(float3 scene_color) {
     float const t = fmaxf(0.0f, fminf((scene_luma - 0.12f) / 0.78f, 1.0f));
     float const s = t * t * (3.0f - 2.0f * t);
     return 1.0f + s * (0.18f - 1.0f);
+}
+
+__device__ __forceinline__ float d_wg_overlay_blend_alpha(float4 wg, float3 scene_color) {
+    float const preserve = fminf(fmaxf(d_wiregrid_scene_preserve, 0.0f), 1.0f);
+    float const attenuation = 1.0f + (d_wg_overlay_attenuation(scene_color) - 1.0f) * preserve;
+    return fminf(fmaxf(wg.w * attenuation * fmaxf(d_wiregrid_strength, 0.0f), 0.0f), 1.0f);
 }
 
 __device__ __forceinline__ float d_wg_radial_line(float r, float a_star, float spacing,

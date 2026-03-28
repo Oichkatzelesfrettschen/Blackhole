@@ -124,10 +124,12 @@ uniform float blackHoleMass = 1.989e33;  // Black hole mass [g] (default: 1 sola
 // Wiregrid BL-coordinate overlay uniforms (task A2)
 uniform float wiregridEnabled  = 0.0; // 1.0 = overlay active
 uniform float wiregridShowErgo = 1.0; // 1.0 = show ergosphere boundary
-uniform float wiregridGridScale = 1.0; // Grid density multiplier
-uniform float wiregridMotionScale = 1.0; // Frame-dragging advection strength
-uniform float wiregridInfallScale = 0.6; // Inward shell motion strength
-uniform vec4 wiregridColor = vec4(0.3, 0.8, 1.0, 0.5); // Base grid RGBA
+uniform float wiregridGridScale = 0.92; // Grid density multiplier
+uniform float wiregridMotionScale = 0.62; // Frame-dragging advection strength
+uniform float wiregridInfallScale = 0.24; // Inward shell motion strength
+uniform float wiregridStrength = 0.84; // Post-attenuation alpha multiplier
+uniform float wiregridScenePreserve = 1.0; // 1 = yield to scene luminance, 0 = diagnostic
+uniform vec4 wiregridColor = vec4(0.21, 0.62, 0.92, 0.16); // Base grid RGBA
 
 // Derived physics quantities: use sch_* functions from schwarzschild.glsl
 // These macros ensure iscoRadius and photonSphereRadius are computed from schwarzschildRadius
@@ -544,18 +546,21 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     // narrow bright sector and lets the rest of the lensed field stay dark.
     // Reproduce that here with local, anisotropic escaped-background shaping
     // rather than more global bloom or ring lift.
-    float brightSector = smoothstep(0.68, 0.965, alignedFlow);
-    float counterSector = smoothstep(0.18, 0.50, alignedFlow);
-    float localShadow = mix(1.0, 0.24, nearHoleWeight * (1.0 - brightSector * 0.92));
-    float localLift = 1.0 + nearHoleWeight * (0.84 * brightSector + 0.10 * counterSector);
+    float brightSector = smoothstep(0.74, 0.972, alignedFlow);
+    float counterSector = smoothstep(0.24, 0.54, alignedFlow);
+    float localShadow = mix(1.0, 0.18, nearHoleWeight * (1.0 - brightSector * 0.94));
+    float localLift = 1.0 + nearHoleWeight * (0.78 * brightSector + 0.04 * counterSector);
     skyColor *= localShadow * localLift;
 
     float skyLuma = luminance(skyColor);
-    float sectorContrast = nearHoleWeight * mix(-0.28, 0.34, brightSector);
+    float sectorContrast = nearHoleWeight * mix(-0.36, 0.28, brightSector);
     skyColor += skyColor * sectorContrast * clamp(skyLuma - 0.03, 0.0, 1.0);
 
     vec3 arcTint = mix(vec3(0.84, 0.80, 0.96), vec3(1.06, 0.98, 0.88), brightSector);
-    skyColor = mix(skyColor, skyColor * arcTint, nearHoleWeight * (0.10 + 0.16 * brightSector));
+    skyColor = mix(skyColor, skyColor * arcTint, nearHoleWeight * (0.06 + 0.12 * brightSector));
+
+    float exclusion = nearHoleWeight * (1.0 - brightSector) * smoothstep(0.04, 0.26, skyLuma);
+    skyColor *= 1.0 - 0.14 * exclusion;
   }
 
   color += skyColor * alpha;
@@ -575,7 +580,10 @@ void applyWiregridOverlay(inout vec3 color, vec3 hitPos) {
   vec4  wg = wiregridOverlay(r, theta, phi, kerrSpin, showErgo, wiregridGridScale,
                              wiregridMotionScale, wiregridInfallScale,
                              wiregridColor, time);
-  float alpha = wg.a * wg_overlayAttenuation(color);
+  float scenePreserve = clamp(wiregridScenePreserve, 0.0, 1.0);
+  float alpha = wg.a * mix(1.0, wg_overlayAttenuation(color), scenePreserve) *
+                max(wiregridStrength, 0.0);
+  alpha = clamp(alpha, 0.0, 1.0);
   color = mix(color, wg.rgb, alpha);
 }
 

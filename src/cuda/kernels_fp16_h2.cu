@@ -370,7 +370,7 @@ __launch_bounds__(128, 4)
     float phi   = atan2f(hp.y, hp.x);
     float4 wg = d_wiregrid_overlay(r, theta, phi, d_spin,
                                    d_wiregrid_show_ergo != 0.0f, d_wiregrid_grid_scale);
-    float alpha = wg.w * d_wg_overlay_attenuation(make_f3(c.x, c.y, c.z));
+    float alpha = d_wg_overlay_blend_alpha(wg, make_f3(c.x, c.y, c.z));
     float inv_a = 1.0f - alpha;
     return make_float4(c.x*inv_a + wg.x*alpha, c.y*inv_a + wg.y*alpha,
                        c.z*inv_a + wg.z*alpha, c.w);

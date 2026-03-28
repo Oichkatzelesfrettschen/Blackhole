@@ -174,8 +174,8 @@ vec4 wiregridOverlay(float r, float theta, float phi, float a_star,
 
 // Convenience overload with default grid_scale = 1.0
 vec4 wiregridOverlay(float r, float theta, float phi, float a_star, bool show_ergo) {
-    return wiregridOverlay(r, theta, phi, a_star, show_ergo, 1.0, 0.85, 0.38,
-                           vec4(0.3, 0.8, 1.0, 0.22), 0.0);
+    return wiregridOverlay(r, theta, phi, a_star, show_ergo, 0.92, 0.62, 0.24,
+                           vec4(0.21, 0.62, 0.92, 0.16), 0.0);
 }
 
 #endif // WIREGRID_GLSL_OVERLAY

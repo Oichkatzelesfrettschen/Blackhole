@@ -225,7 +225,7 @@ shade:;
       float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
                                             d_spin, d_wiregrid_show_ergo != 0.0f,
                                             d_wiregrid_grid_scale);
-      float const alpha = wg.w * d_wg_overlay_attenuation(make_f3(color16.x, color16.y, color16.z));
+      float const alpha = d_wg_overlay_blend_alpha(wg, make_f3(color16.x, color16.y, color16.z));
       float const inv_a = 1.0f - alpha;
       color16 = make_float4(color16.x*inv_a + wg.x*alpha,
                              color16.y*inv_a + wg.y*alpha,

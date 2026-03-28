@@ -127,10 +127,12 @@ uniform float stokesNeScale     = 0.0;
 // --- Wiregrid BL-coordinate overlay (set by compute dispatch block in main.cpp) ---
 uniform float wiregridEnabled   = 0.0;
 uniform float wiregridShowErgo  = 1.0;
-uniform float wiregridGridScale = 1.0;
-uniform float wiregridMotionScale = 1.0;
-uniform float wiregridInfallScale = 0.6;
-uniform vec4  wiregridColor = vec4(0.3, 0.8, 1.0, 0.5);
+uniform float wiregridGridScale = 0.92;
+uniform float wiregridMotionScale = 0.62;
+uniform float wiregridInfallScale = 0.24;
+uniform float wiregridStrength = 0.84;
+uniform float wiregridScenePreserve = 1.0;
+uniform vec4  wiregridColor = vec4(0.21, 0.62, 0.92, 0.16);
 
 // ============================================================================
 // Derived physics macros
@@ -165,7 +167,10 @@ void applyWiregridOverlay(inout vec3 color, vec3 hitPos) {
     vec4  wg = wiregridOverlay(r, theta, phi, kerrSpin, showErgo, wiregridGridScale,
                                wiregridMotionScale, wiregridInfallScale,
                                wiregridColor, time);
-    float alpha = wg.a * wg_overlayAttenuation(color);
+    float scenePreserve = clamp(wiregridScenePreserve, 0.0, 1.0);
+    float alpha = wg.a * mix(1.0, wg_overlayAttenuation(color), scenePreserve) *
+                  max(wiregridStrength, 0.0);
+    alpha = clamp(alpha, 0.0, 1.0);
     color = mix(color, wg.rgb, alpha);
 }
 

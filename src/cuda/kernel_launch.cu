@@ -73,6 +73,8 @@ __constant__ float d_wiregrid_show_ergo;   /**< @brief Show ergosphere boundary+
 __constant__ float d_wiregrid_grid_scale;  /**< @brief Grid density multiplier. */
 __constant__ float d_wiregrid_motion_scale; /**< @brief Frame-dragging azimuth advection strength. */
 __constant__ float d_wiregrid_infall_scale; /**< @brief Inward radial-shell advection strength. */
+__constant__ float d_wiregrid_strength;     /**< @brief Post-attenuation alpha multiplier. */
+__constant__ float d_wiregrid_scene_preserve; /**< @brief 1 = yield to scene luminance. */
 __constant__ float d_wiregrid_color[4];     /**< @brief Base RGBA for the coordinate grid overlay. */
 __constant__ float d_grmhd_r_min;          /**< @brief Inner radial bound of GRMHD grid. */
 __constant__ float d_grmhd_r_max;          /**< @brief Outer radial bound of GRMHD grid. */
@@ -150,6 +152,8 @@ int uploadConstants(
   COPY_CONST(d_wiregrid_grid_scale, p->wiregrid_grid_scale);
   COPY_CONST(d_wiregrid_motion_scale, p->wiregrid_motion_scale);
   COPY_CONST(d_wiregrid_infall_scale, p->wiregrid_infall_scale);
+  COPY_CONST(d_wiregrid_strength, p->wiregrid_strength);
+  COPY_CONST(d_wiregrid_scene_preserve, p->wiregrid_scene_preserve);
   {
     cudaError_t const _err =
         cudaMemcpyToSymbol(d_wiregrid_color, p->wiregrid_color, sizeof(p->wiregrid_color));

@@ -561,11 +561,38 @@ struct DrawInstanceGpu {
  * ray-traced geodesic view.
  */
 struct WiregridParams {
+  enum class Mode { Beauty = 0, Diagnostic = 1 };
+
+  Mode  mode            = Mode::Beauty; ///< Intended use: beauty scene vs diagnostic teaching.
   bool  showErgosphere = true; ///< Render ergosphere boundary and interior glow.
   float gridScale      = 1.0f; ///< Grid density: 1.0 = pi/6 angular spacing; >1 = denser.
   float motionScale    = 1.0f; ///< Frame-dragging azimuth advection strength.
   float infallScale    = 0.6f; ///< Inward radial-shell advection strength.
+  float strength       = 1.0f; ///< Overall overlay alpha multiplier after scene attenuation.
+  float scenePreserve  = 1.0f; ///< 1 = fully defer to scene luminance, 0 = diagnostic override.
 };
+
+void applyWiregridModeProfile(WiregridParams::Mode mode, WiregridParams &params,
+                              glm::vec4 &color) {
+  params.mode = mode;
+  params.showErgosphere = true;
+  if (mode == WiregridParams::Mode::Diagnostic) {
+    params.gridScale = 1.24f;
+    params.motionScale = 1.18f;
+    params.infallScale = 0.58f;
+    params.strength = 1.26f;
+    params.scenePreserve = 0.24f;
+    color = glm::vec4(0.28f, 0.82f, 0.99f, 0.36f);
+    return;
+  }
+
+  params.gridScale = 0.92f;
+  params.motionScale = 0.62f;
+  params.infallScale = 0.24f;
+  params.strength = 0.84f;
+  params.scenePreserve = 1.0f;
+  color = glm::vec4(0.21f, 0.62f, 0.92f, 0.16f);
+}
 
 std::vector<BackgroundAsset> loadBackgroundAssets() {
   std::vector<BackgroundAsset> assets;
@@ -2065,14 +2092,27 @@ void renderBackgroundPanel(const std::vector<BackgroundAsset> &assets, int &back
 
 void renderWiregridPanel(bool &wiregridEnabled, WiregridParams &params, glm::vec4 &color) {
   ImGui::SetNextWindowPos(ImVec2(10, 570), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(320, 220), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(320, 290), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Wiregrid", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    constexpr const char *kModeItems[] = {"Beauty", "Diagnostic"};
+    int modeIndex = params.mode == WiregridParams::Mode::Diagnostic ? 1 : 0;
     ImGui::Checkbox("Enable Wiregrid", &wiregridEnabled);
+    if (ImGui::Combo("Mode", &modeIndex, kModeItems, IM_ARRAYSIZE(kModeItems))) {
+      applyWiregridModeProfile(modeIndex == 1 ? WiregridParams::Mode::Diagnostic
+                                              : WiregridParams::Mode::Beauty,
+                               params, color);
+    }
+    ImGui::TextDisabled("%s",
+                        params.mode == WiregridParams::Mode::Diagnostic
+                            ? "Diagnostic: clearer and stronger for teaching/debug."
+                            : "Beauty: subtler and secondary to the scene.");
     ImGui::Checkbox("Show Ergosphere", &params.showErgosphere);
     ImGui::SliderFloat("Grid Scale", &params.gridScale, 0.25f, 4.0f);
     ImGui::SliderFloat("Motion Scale", &params.motionScale, 0.0f, 4.0f);
     ImGui::SliderFloat("Infall Scale", &params.infallScale, 0.0f, 2.0f);
+    ImGui::SliderFloat("Strength", &params.strength, 0.1f, 2.0f);
+    ImGui::SliderFloat("Scene Preserve", &params.scenePreserve, 0.0f, 1.0f);
     ImGui::Separator();
     ImGui::ColorEdit4("Color", reinterpret_cast<float *>(&color));
   }
@@ -3655,7 +3695,7 @@ int main(int argc, char **argv) {
       }
       static bool wiregridEnabled = false;
       static WiregridParams wiregridParams;
-      static glm::vec4 wiregridColor = glm::vec4(0.24f, 0.68f, 0.95f, 0.22f);
+      static glm::vec4 wiregridColor = glm::vec4(0.21f, 0.62f, 0.92f, 0.16f);
       static bool wiregridEnvApplied = false;
       if (!wiregridEnvApplied) {
         auto parseEnvFloat = [](const char *name, float &out) {
@@ -3670,12 +3710,24 @@ int main(int argc, char **argv) {
         if (const char *enabled = std::getenv("BLACKHOLE_WIREGRID_ENABLED")) {
           wiregridEnabled = (std::strcmp(enabled, "0") != 0);
         }
+        applyWiregridModeProfile(WiregridParams::Mode::Beauty, wiregridParams, wiregridColor);
+        if (const char *mode = std::getenv("BLACKHOLE_WIREGRID_MODE")) {
+          if (std::strcmp(mode, "diagnostic") == 0) {
+            applyWiregridModeProfile(WiregridParams::Mode::Diagnostic, wiregridParams,
+                                     wiregridColor);
+          } else if (std::strcmp(mode, "beauty") == 0) {
+            applyWiregridModeProfile(WiregridParams::Mode::Beauty, wiregridParams,
+                                     wiregridColor);
+          }
+        }
         if (const char *showErgo = std::getenv("BLACKHOLE_WIREGRID_SHOW_ERGO")) {
           wiregridParams.showErgosphere = (std::strcmp(showErgo, "0") != 0);
         }
         parseEnvFloat("BLACKHOLE_WIREGRID_GRID_SCALE", wiregridParams.gridScale);
         parseEnvFloat("BLACKHOLE_WIREGRID_MOTION_SCALE", wiregridParams.motionScale);
         parseEnvFloat("BLACKHOLE_WIREGRID_INFALL_SCALE", wiregridParams.infallScale);
+        parseEnvFloat("BLACKHOLE_WIREGRID_STRENGTH", wiregridParams.strength);
+        parseEnvFloat("BLACKHOLE_WIREGRID_SCENE_PRESERVE", wiregridParams.scenePreserve);
         parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_R", wiregridColor.r);
         parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_G", wiregridColor.g);
         parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_B", wiregridColor.b);
@@ -4795,6 +4847,8 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["wiregridGridScale"] = wiregridParams.gridScale;
         rtti.floatUniforms["wiregridMotionScale"] = wiregridParams.motionScale;
         rtti.floatUniforms["wiregridInfallScale"] = wiregridParams.infallScale;
+        rtti.floatUniforms["wiregridStrength"] = wiregridParams.strength;
+        rtti.floatUniforms["wiregridScenePreserve"] = wiregridParams.scenePreserve;
         rtti.vec4Uniforms["wiregridColor"] = wiregridColor;
         // D4: polarized Stokes IQUV
         rtti.floatUniforms["stokesEnabled"]     = stokesEnabled ? 1.0f : 0.0f;
@@ -4871,6 +4925,8 @@ int main(int argc, char **argv) {
             cp.wiregrid_grid_scale = wiregridParams.gridScale;
             cp.wiregrid_motion_scale = wiregridParams.motionScale;
             cp.wiregrid_infall_scale = wiregridParams.infallScale;
+            cp.wiregrid_strength = wiregridParams.strength;
+            cp.wiregrid_scene_preserve = wiregridParams.scenePreserve;
             cp.wiregrid_color[0] = wiregridColor.r;
             cp.wiregrid_color[1] = wiregridColor.g;
             cp.wiregrid_color[2] = wiregridColor.b;
@@ -4949,6 +5005,10 @@ int main(int argc, char **argv) {
                         wiregridParams.motionScale);
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridInfallScale"),
                         wiregridParams.infallScale);
+            glUniform1f(glGetUniformLocation(computeProgram, "wiregridStrength"),
+                        wiregridParams.strength);
+            glUniform1f(glGetUniformLocation(computeProgram, "wiregridScenePreserve"),
+                        wiregridParams.scenePreserve);
             glUniform4f(glGetUniformLocation(computeProgram, "wiregridColor"),
                         wiregridColor.r, wiregridColor.g, wiregridColor.b, wiregridColor.a);
 

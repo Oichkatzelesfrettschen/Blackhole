@@ -56,7 +56,7 @@ __launch_bounds__(256, 4)
         float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
                                              d_spin, d_wiregrid_show_ergo != 0.0f,
                                              d_wiregrid_grid_scale);
-        float const alpha = wg.w * d_wg_overlay_attenuation(make_f3(color.x, color.y, color.z));
+        float const alpha = d_wg_overlay_blend_alpha(wg, make_f3(color.x, color.y, color.z));
         float const inv_a = 1.0f - alpha;
         color = make_float4(color.x * inv_a + wg.x * alpha,
                             color.y * inv_a + wg.y * alpha,
@@ -75,7 +75,7 @@ __launch_bounds__(256, 4)
         float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
                                              d_spin, d_wiregrid_show_ergo != 0.0f,
                                              d_wiregrid_grid_scale);
-        float const alpha = wg.w * d_wg_overlay_attenuation(make_f3(color.x, color.y, color.z));
+        float const alpha = d_wg_overlay_blend_alpha(wg, make_f3(color.x, color.y, color.z));
         float const inv_a = 1.0f - alpha;
         color = make_float4(color.x * inv_a + wg.x * alpha,
                             color.y * inv_a + wg.y * alpha,
@@ -97,7 +97,7 @@ __launch_bounds__(256, 4)
         float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
                                               d_spin, d_wiregrid_show_ergo != 0.0f,
                                               d_wiregrid_grid_scale);
-        float const alpha = wg.w * d_wg_overlay_attenuation(make_f3(color.x, color.y, color.z));
+        float const alpha = d_wg_overlay_blend_alpha(wg, make_f3(color.x, color.y, color.z));
         float const inv_a = 1.0f - alpha;
         color = make_float4(color.x*inv_a + wg.x*alpha,
                             color.y*inv_a + wg.y*alpha,
@@ -367,7 +367,7 @@ __launch_bounds__(128, 4)
     float phi   = atan2f(hp.y, hp.x);
     float4 wg = d_wiregrid_overlay(r, theta, phi, d_spin,
                                    d_wiregrid_show_ergo != 0.0f, d_wiregrid_grid_scale);
-    float alpha = wg.w * d_wg_overlay_attenuation(make_f3(c.x, c.y, c.z));
+    float alpha = d_wg_overlay_blend_alpha(wg, make_f3(c.x, c.y, c.z));
     float inv_a = 1.0f - alpha;
     return make_float4(c.x*inv_a + wg.x*alpha, c.y*inv_a + wg.y*alpha,
                        c.z*inv_a + wg.z*alpha, c.w);

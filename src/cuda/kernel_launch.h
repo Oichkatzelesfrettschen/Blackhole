@@ -81,6 +81,8 @@ struct BH_LaunchParams {
     float wiregrid_grid_scale; /**< @brief Grid density multiplier (1.0 = pi/6 spacing). */
     float wiregrid_motion_scale; /**< @brief Frame-dragging azimuth advection strength. */
     float wiregrid_infall_scale; /**< @brief Inward radial-shell advection strength. */
+    float wiregrid_strength; /**< @brief Post-attenuation alpha multiplier for the overlay. */
+    float wiregrid_scene_preserve; /**< @brief 1 = yield to scene luminance, 0 = diagnostic. */
     float wiregrid_color[4]; /**< @brief Base RGBA for the coordinate grid overlay. */
 
     /* GRMHD volume bounds (task C1l) */
