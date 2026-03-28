@@ -54,6 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--record-exposure", type=float)
     parser.add_argument("--record-frame-x", type=float)
     parser.add_argument("--record-frame-y", type=float)
+    parser.add_argument("--record-background-id")
     parser.add_argument("--record-bg-yaw", type=float)
     parser.add_argument("--record-bg-pitch", type=float)
     parser.add_argument("--record-sweep-deg", type=float, default=0.0)
@@ -83,6 +84,7 @@ def build_command(args: argparse.Namespace) -> list[str]:
         ("--record-exposure", args.record_exposure),
         ("--record-frame-x", args.record_frame_x),
         ("--record-frame-y", args.record_frame_y),
+        ("--record-background-id", args.record_background_id),
         ("--record-bg-yaw", args.record_bg_yaw),
         ("--record-bg-pitch", args.record_bg_pitch),
         ("--record-sweep-deg", args.record_sweep_deg),
@@ -229,6 +231,7 @@ def run_detached_tmux(args: argparse.Namespace) -> int:
         ("--record-exposure", args.record_exposure),
         ("--record-frame-x", args.record_frame_x),
         ("--record-frame-y", args.record_frame_y),
+        ("--record-background-id", args.record_background_id),
         ("--record-bg-yaw", args.record_bg_yaw),
         ("--record-bg-pitch", args.record_bg_pitch),
         ("--record-sweep-deg", args.record_sweep_deg),

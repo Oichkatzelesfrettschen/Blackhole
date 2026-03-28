@@ -368,6 +368,7 @@ glm::mat3 buildCameraBasis(const glm::vec3 &cameraPos, const glm::vec3 &target, 
 
 struct ShowcaseOrbitComposition {
   const char *name;
+  const char *backgroundId;
   float frameOffsetX;
   float frameOffsetY;
   float pitchDeg;
@@ -383,11 +384,11 @@ struct ShowcaseOrbitComposition {
 };
 
 constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"centered", 0.0f, 0.0f, -7.0f, 18.0f, 58.0f, 2.9f, 0.78f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
-    {"left-third", 0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.8f, 0.8f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
-    {"right-third", -0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.8f, 0.8f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
-    {"wide-left", 0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.84f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
-    {"wide-right", -0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.84f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
+    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -7.0f, 18.0f, 58.0f, 2.85f, 0.72f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
+    {"left-third", "nasa_deep_starmap", 0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.75f, 0.74f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
+    {"right-third", "nasa_deep_starmap_galactic", -0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.75f, 0.74f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
+    {"wide-left", "eso_milkyway_brunier", 0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.55f, 0.68f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
+    {"wide-right", "nasa_deep_starmap_galactic", -0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.78f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
 }};
 
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
@@ -429,6 +430,7 @@ void printUsage(const char *argv0) {
   std::printf("  --record-composition <n> Showcase framing: centered | left-third | right-third | wide-left | wide-right.\n");
   std::printf("  --record-frame-x <n>     Override horizontal framing offset in half-frame units.\n");
   std::printf("  --record-frame-y <n>     Override vertical framing offset in half-frame units.\n");
+  std::printf("  --record-background-id <id>  Override showcase background asset id.\n");
   std::printf("  --record-bg-yaw <deg>    Override showcase background yaw.\n");
   std::printf("  --record-bg-pitch <deg>  Override showcase background pitch.\n");
 }
@@ -2473,6 +2475,7 @@ int main(int argc, char **argv) {
     std::string recordFramesDir;
     std::string recordProfile = "cinematic";
     std::string recordComposition = "wide-right";
+    std::string recordBackgroundId;
     int         recordFramesTotal = K_CINEMATIC_FRAMES;
     int         recordStartFrame  = 0;
     float       recordYawDeg = 0.0f;
@@ -2491,6 +2494,7 @@ int main(int argc, char **argv) {
     bool        hasRecordFrameX = false;
     float       recordFrameY = 0.0f;
     bool        hasRecordFrameY = false;
+    bool        hasRecordBackgroundId = false;
     float       recordBackgroundYawDeg = 0.0f;
     bool        hasRecordBackgroundYaw = false;
     float       recordBackgroundPitchDeg = 0.0f;
@@ -2566,6 +2570,11 @@ int main(int argc, char **argv) {
       if (arg == "--record-frame-y" && i + 1 < argc) {
         recordFrameY = std::strtof(argv[++i], nullptr);
         hasRecordFrameY = true;
+        continue;
+      }
+      if (arg == "--record-background-id" && i + 1 < argc) {
+        recordBackgroundId = argv[++i];
+        hasRecordBackgroundId = true;
         continue;
       }
       if (arg == "--record-bg-yaw" && i + 1 < argc) {
@@ -3442,7 +3451,11 @@ int main(int argc, char **argv) {
           computeStepSize    = 0.02f;
           depthFar           = 154.367004f;
           kerrSpin           = 0.35f;
-          SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
+          SettingsManager::instance().get().backgroundId =
+              hasRecordBackgroundId
+                  ? recordBackgroundId
+                  : (composition != nullptr ? composition->backgroundId
+                                            : "nasa_deep_starmap_galactic");
           SettingsManager::instance().get().backgroundEnabled = true;
           SettingsManager::instance().get().backgroundIntensity =
               composition != nullptr ? composition->backgroundIntensity : 0.72f;

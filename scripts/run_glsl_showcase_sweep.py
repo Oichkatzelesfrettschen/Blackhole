@@ -66,6 +66,7 @@ def parse_args() -> argparse.Namespace:
         default="wide-right",
         choices=("centered", "left-third", "right-third", "wide-left", "wide-right"),
     )
+    parser.add_argument("--record-background-id")
     parser.add_argument("--top-k", type=int, default=6)
     return parser.parse_args()
 
@@ -74,6 +75,7 @@ def run_case(
     repo_root: Path,
     runner: Path,
     backend: str,
+    record_background_id: str | None,
     output_root: Path,
     index: int,
     width: int,
@@ -116,6 +118,8 @@ def run_case(
         "--record-sweep-deg",
         f"{case.sweep_deg:.3f}",
     ]
+    if record_background_id:
+        command.extend(["--record-background-id", record_background_id])
     with log_path.open("w", encoding="utf-8") as log_file:
         subprocess.run(
             command,
@@ -244,6 +248,7 @@ def main() -> int:
             repo_root=repo_root,
             runner=runner,
             backend=args.backend,
+            record_background_id=args.record_background_id,
             output_root=output_root,
             index=index,
             width=args.width,

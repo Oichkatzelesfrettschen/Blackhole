@@ -97,5 +97,12 @@ Notes:
   - `--record-bg-pitch`
   Use these when the lensed background structure is landing in the wrong part
   of the frame and you need a sharper still than the preset default.
+- You can override the showcase background asset directly with:
+  - `--record-background-id <asset-id>`
+  Showcase mode now treats the environment map as a first-class input, not
+  generic wallpaper. The shipped defaults bias toward darker all-sky assets for
+  `centered`, `left-third`, `right-third`, and `wide-right`, while `wide-left`
+  uses a restrained Milky Way panorama to pull more lensed structure into the
+  frame.
 - No `sudo`, `yay`, or askpass helper is needed if the required tools are
   already installed.
