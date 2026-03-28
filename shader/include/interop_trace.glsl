@@ -61,10 +61,15 @@ int bhDebugEvaluate(vec3 pos, vec3 vel, float maxDistance) {
 // ---------------------------------------------------------------------------
 // bhAdaptiveStep (D10: AMR geodesic refinement near critical surfaces)
 //
-// Returns a scaled step in [0.1, 1.0] * stepSize based on two refinement zones:
+// Returns a scaled step based on three refinement zones:
 //   1. Horizon proximity: scale ~ (r - r_horizon) / r_s, min 0.1
 //   2. Photon-sphere proximity: at r_ph ~ 1.5*r_s, scale is halved and
 //      recovers to 1.0 at |r - r_ph| = 0.5*r_s.
+//   3. Far-field overshoot prevention: in Mino time sqrt(R) ~ r^2 for large r,
+//      so dr ~ r^2 * dlam per step.  At r=350, dlam=0.08 gives dr=9800,
+//      skipping the BH entirely.  scale_far = min(1, 0.5/r) limits each step
+//      to at most 0.5*r in radial distance.  Mirrors d_adaptive_step Zone 3
+//      in src/cuda/device_physics.cuh for GLSL/CUDA parity.
 //
 // WHY: Fixed Mino-time steps overshoot near the horizon (missing the termination
 // check) and accumulate angular error for photon-sphere-grazing orbits.
@@ -77,7 +82,10 @@ float bhAdaptiveStep(float r, float r_s, float r_horizon, float stepSize) {
   float d_ph     = abs(r - r_ph) / max(r_s, BH_EPSILON);
   float scale_ph = min(1.0, 0.5 + d_ph);
 
-  return stepSize * min(scale_h, scale_ph);
+  // Zone 3: far-field step limiting -- see d_adaptive_step in device_physics.cuh
+  float scale_far = min(1.0, 0.5 / max(r, BH_EPSILON));
+
+  return stepSize * min(scale_far, min(scale_h, scale_ph));
 }
 
 vec3 bhSchwarzschildAccel(vec3 pos, vec3 vel, float r_s) {
@@ -172,7 +180,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     float r_disk_in = iscoRadius;
     float r_disk_out = 100.0 * r_s;
 
-    KerrConsts c = kerrInitConsts(ray.position, ray.velocity);
+    KerrConsts c = kerrInitConsts(ray.position, ray.velocity, r_s, a);
     KerrRay kerrRay = kerrInitRay(ray.position, ray.velocity);
 
     vec3 oldPos;
@@ -422,11 +430,12 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 // opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui)
 // ---------------------------------------------------------------------------
 vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
-                        float stepSize, float opacityScale) {
+                        float stepSize, float opacityScale, out vec3 terminalPos) {
   float a = 0.5 * kerrSpin * r_s;
   if (abs(a) < BH_EPSILON) {
     // Schwarzschild: single-scatter fallback (no volumetric path)
     HitResult hit = bhTraceGeodesic(ray, r_s, maxDistance, maxSteps, stepSize);
+    terminalPos = hit.hitPoint;
     if (hit.hitHorizon) { return bhHorizonColor(); }
     if (hit.hitDisk)    { return bhDiskColorFromHit(hit, r_s); }
     return bhBackgroundColorFromDir(normalize(hit.hitPoint - ray.position),
@@ -441,7 +450,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
   float h_disk = max(0.1 * r_s, BH_EPSILON);
 
-  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity);
+  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity, r_s, a);
   KerrRay    kRay = kerrInitRay(ray.position, ray.velocity);
 
   vec3  accumI   = vec3(0.0);
@@ -453,6 +462,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
     minR = min(minR, kRay.r);
 
     if (kRay.r <= r_horizon) {
+      terminalPos = curPos;
       accumI += transmit * bhHorizonColor().rgb;
       return vec4(accumI, 1.0);
     }
@@ -496,6 +506,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
         // Early exit when medium becomes opaque
         if (transmit < 0.005) {
+          terminalPos = newPos;
           return vec4(accumI, 1.0);
         }
       }
@@ -503,6 +514,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     if (kRay.r > maxDistance) {
       vec3 escDir = newPos - curPos;
+      terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
         accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
                                                       minR, r_s).rgb;
@@ -513,6 +525,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
   // Max steps exhausted -- treat as escaped toward last known direction
   vec3 finalPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+  terminalPos = finalPos;
   vec3 escDir   = finalPos - ray.position;
   if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
     accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
@@ -549,11 +562,13 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 // ---------------------------------------------------------------------------
 vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
                             float stepSize, float opacityScale,
-                            float bFieldAngle, float neScale) {
+                            float bFieldAngle, float neScale,
+                            out vec3 terminalPos) {
   float a = 0.5 * kerrSpin * r_s;
   if (abs(a) < BH_EPSILON) {
     // Schwarzschild: no volumetric path -- single-scatter fallback
     HitResult hit = bhTraceGeodesic(ray, r_s, maxDistance, maxSteps, stepSize);
+    terminalPos = hit.hitPoint;
     if (hit.hitHorizon) { return bhHorizonColor(); }
     if (hit.hitDisk)    { return bhDiskColorFromHit(hit, r_s); }
     return bhBackgroundColorFromDir(normalize(hit.hitPoint - ray.position),
@@ -570,7 +585,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Thermal synchrotron intrinsic linear polarization fraction (~0.75 at Theta_e >> 1)
   const float PI_LIN = 0.75;
 
-  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity);
+  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity, r_s, a);
   KerrRay    kRay = kerrInitRay(ray.position, ray.velocity);
 
   vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
@@ -584,6 +599,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
     minR = min(minR, kRay.r);
 
     if (kRay.r <= r_horizon) {
+      terminalPos = curPos;
       accumI += transmit * bhHorizonColor().rgb;
       float I = (accumI.r + accumI.g + accumI.b) / 3.0;
       vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
@@ -645,6 +661,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     if (kRay.r > maxDistance) {
       vec3 escDir = newPos - curPos;
+      terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
         accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
                                                       minR, r_s).rgb;
@@ -654,6 +671,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   }
 
   // Map accumulated Stokes state to display color
+  terminalPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
   vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
   return vec4(stokesDisplayColor(stokes, accumI), 1.0);

@@ -14,6 +14,7 @@
 #include <cassert>
 #include <cmath>
 #include <csignal>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 
@@ -562,6 +563,8 @@ struct DrawInstanceGpu {
 struct WiregridParams {
   bool  showErgosphere = true; ///< Render ergosphere boundary and interior glow.
   float gridScale      = 1.0f; ///< Grid density: 1.0 = pi/6 angular spacing; >1 = denser.
+  float motionScale    = 1.0f; ///< Frame-dragging azimuth advection strength.
+  float infallScale    = 0.6f; ///< Inward radial-shell advection strength.
 };
 
 std::vector<BackgroundAsset> loadBackgroundAssets() {
@@ -2062,12 +2065,14 @@ void renderBackgroundPanel(const std::vector<BackgroundAsset> &assets, int &back
 
 void renderWiregridPanel(bool &wiregridEnabled, WiregridParams &params, glm::vec4 &color) {
   ImGui::SetNextWindowPos(ImVec2(10, 570), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(300, 140), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(320, 220), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Wiregrid", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::Checkbox("Enable Wiregrid", &wiregridEnabled);
     ImGui::Checkbox("Show Ergosphere", &params.showErgosphere);
     ImGui::SliderFloat("Grid Scale", &params.gridScale, 0.25f, 4.0f);
+    ImGui::SliderFloat("Motion Scale", &params.motionScale, 0.0f, 4.0f);
+    ImGui::SliderFloat("Infall Scale", &params.infallScale, 0.0f, 2.0f);
     ImGui::Separator();
     ImGui::ColorEdit4("Color", reinterpret_cast<float *>(&color));
   }
@@ -3651,6 +3656,32 @@ int main(int argc, char **argv) {
       static bool wiregridEnabled = false;
       static WiregridParams wiregridParams;
       static glm::vec4 wiregridColor = glm::vec4(0.2f, 0.6f, 1.0f, 0.4f);
+      static bool wiregridEnvApplied = false;
+      if (!wiregridEnvApplied) {
+        auto parseEnvFloat = [](const char *name, float &out) {
+          if (const char *value = std::getenv(name)) {
+            char *end = nullptr;
+            float parsed = std::strtof(value, &end);
+            if (end != value) {
+              out = parsed;
+            }
+          }
+        };
+        if (const char *enabled = std::getenv("BLACKHOLE_WIREGRID_ENABLED")) {
+          wiregridEnabled = (std::strcmp(enabled, "0") != 0);
+        }
+        if (const char *showErgo = std::getenv("BLACKHOLE_WIREGRID_SHOW_ERGO")) {
+          wiregridParams.showErgosphere = (std::strcmp(showErgo, "0") != 0);
+        }
+        parseEnvFloat("BLACKHOLE_WIREGRID_GRID_SCALE", wiregridParams.gridScale);
+        parseEnvFloat("BLACKHOLE_WIREGRID_MOTION_SCALE", wiregridParams.motionScale);
+        parseEnvFloat("BLACKHOLE_WIREGRID_INFALL_SCALE", wiregridParams.infallScale);
+        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_R", wiregridColor.r);
+        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_G", wiregridColor.g);
+        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_B", wiregridColor.b);
+        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_A", wiregridColor.a);
+        wiregridEnvApplied = true;
+      }
       static GLuint fallback2D = 0;
       static GLuint fallback3D = 0;
       static GLuint fallbackCubemap = 0;
@@ -4762,6 +4793,9 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["wiregridEnabled"]   = wiregridEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["wiregridShowErgo"]  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
         rtti.floatUniforms["wiregridGridScale"] = wiregridParams.gridScale;
+        rtti.floatUniforms["wiregridMotionScale"] = wiregridParams.motionScale;
+        rtti.floatUniforms["wiregridInfallScale"] = wiregridParams.infallScale;
+        rtti.vec4Uniforms["wiregridColor"] = wiregridColor;
         // D4: polarized Stokes IQUV
         rtti.floatUniforms["stokesEnabled"]     = stokesEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["stokesBFieldAngle"] = stokesBFieldAngle;
@@ -4835,6 +4869,12 @@ int main(int argc, char **argv) {
             cp.wiregrid_enabled    = wiregridEnabled ? 1 : 0;
             cp.wiregrid_show_ergo  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
             cp.wiregrid_grid_scale = wiregridParams.gridScale;
+            cp.wiregrid_motion_scale = wiregridParams.motionScale;
+            cp.wiregrid_infall_scale = wiregridParams.infallScale;
+            cp.wiregrid_color[0] = wiregridColor.r;
+            cp.wiregrid_color[1] = wiregridColor.g;
+            cp.wiregrid_color[2] = wiregridColor.b;
+            cp.wiregrid_color[3] = wiregridColor.a;
             // GRMHD volume radial bounds (task C1l) + temporal blend (C1d)
             cp.grmhd_r_min  = grmhdTexture.rMin;
             cp.grmhd_r_max  = grmhdTexture.rMax;
@@ -4905,6 +4945,12 @@ int main(int argc, char **argv) {
                         wiregridParams.showErgosphere ? 1.0f : 0.0f);
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridGridScale"),
                         wiregridParams.gridScale);
+            glUniform1f(glGetUniformLocation(computeProgram, "wiregridMotionScale"),
+                        wiregridParams.motionScale);
+            glUniform1f(glGetUniformLocation(computeProgram, "wiregridInfallScale"),
+                        wiregridParams.infallScale);
+            glUniform4f(glGetUniformLocation(computeProgram, "wiregridColor"),
+                        wiregridColor.r, wiregridColor.g, wiregridColor.b, wiregridColor.a);
 
             // D4: polarized Stokes IQUV (parity with fragment path)
             glUniform1f(glGetUniformLocation(computeProgram, "stokesEnabled"),

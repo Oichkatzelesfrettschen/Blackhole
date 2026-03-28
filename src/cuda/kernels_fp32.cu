@@ -44,11 +44,43 @@ __launch_bounds__(256, 4)
 
   float4 color;
   /* D4: Stokes polarized path supersedes scalar RTE; D3: scalar RTE.
-   * Wiregrid overlay is skipped in volumetric modes (no single hit point). */
+   * Volumetric modes now return a terminal position for wiregrid parity. */
   if (d_stokes_enabled) {
-    color = d_trace_geodesic_stokes(cam, dir);
+    float3 term_pos;
+    color = d_trace_geodesic_stokes(cam, dir, &term_pos);
+    if (d_wiregrid_enabled != 0) {
+      float const r_bl = sqrtf(term_pos.x * term_pos.x + term_pos.y * term_pos.y + term_pos.z * term_pos.z);
+      if (r_bl > 1e-5f) {
+        float const theta_bl = acosf(fmaxf(-1.0f, fminf(term_pos.z / r_bl, 1.0f)));
+        float const phi_bl   = atan2f(term_pos.y, term_pos.x);
+        float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
+                                             d_spin, d_wiregrid_show_ergo != 0.0f,
+                                             d_wiregrid_grid_scale);
+        float const inv_a = 1.0f - wg.w;
+        color = make_float4(color.x * inv_a + wg.x * wg.w,
+                            color.y * inv_a + wg.y * wg.w,
+                            color.z * inv_a + wg.z * wg.w,
+                            color.w);
+      }
+    }
   } else if (d_rte_enabled) {
-    color = d_trace_geodesic_rte(cam, dir);
+    float3 term_pos;
+    color = d_trace_geodesic_rte(cam, dir, &term_pos);
+    if (d_wiregrid_enabled != 0) {
+      float const r_bl = sqrtf(term_pos.x * term_pos.x + term_pos.y * term_pos.y + term_pos.z * term_pos.z);
+      if (r_bl > 1e-5f) {
+        float const theta_bl = acosf(fmaxf(-1.0f, fminf(term_pos.z / r_bl, 1.0f)));
+        float const phi_bl   = atan2f(term_pos.y, term_pos.x);
+        float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
+                                             d_spin, d_wiregrid_show_ergo != 0.0f,
+                                             d_wiregrid_grid_scale);
+        float const inv_a = 1.0f - wg.w;
+        color = make_float4(color.x * inv_a + wg.x * wg.w,
+                            color.y * inv_a + wg.y * wg.w,
+                            color.z * inv_a + wg.z * wg.w,
+                            color.w);
+      }
+    }
   } else {
     HitResult const hit = d_trace_geodesic(cam, dir);
     color = d_shade_hit(hit, cam);
@@ -158,9 +190,9 @@ __launch_bounds__(128, 4)
     float const rDiskIn = d_isco;
     float const rDiskOut = 100.0f * rs;
 
-    KerrConsts const c0 = d_kerr_init_consts(cam, dir0);
+    KerrConsts const c0 = d_kerr_init_consts(cam, dir0, rs, aSpin);
     KerrRay kr0 = d_kerr_init_ray(cam, dir0);
-    KerrConsts const c1 = d_kerr_init_consts(cam, dir1);
+    KerrConsts const c1 = d_kerr_init_consts(cam, dir1, rs, aSpin);
     KerrRay kr1 = d_kerr_init_ray(cam, dir1);
 
     bool done0 = false;

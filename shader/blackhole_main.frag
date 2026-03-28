@@ -125,6 +125,9 @@ uniform float blackHoleMass = 1.989e33;  // Black hole mass [g] (default: 1 sola
 uniform float wiregridEnabled  = 0.0; // 1.0 = overlay active
 uniform float wiregridShowErgo = 1.0; // 1.0 = show ergosphere boundary
 uniform float wiregridGridScale = 1.0; // Grid density multiplier
+uniform float wiregridMotionScale = 1.0; // Frame-dragging advection strength
+uniform float wiregridInfallScale = 0.6; // Inward shell motion strength
+uniform vec4 wiregridColor = vec4(0.3, 0.8, 1.0, 0.5); // Base grid RGBA
 
 // Derived physics quantities: use sch_* functions from schwarzschild.glsl
 // These macros ensure iscoRadius and photonSphereRadius are computed from schwarzschildRadius
@@ -541,18 +544,18 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     // narrow bright sector and lets the rest of the lensed field stay dark.
     // Reproduce that here with local, anisotropic escaped-background shaping
     // rather than more global bloom or ring lift.
-    float brightSector = smoothstep(0.58, 0.96, alignedFlow);
-    float counterSector = smoothstep(0.08, 0.44, alignedFlow);
-    float localShadow = mix(1.0, 0.34, nearHoleWeight * (1.0 - brightSector * 0.88));
-    float localLift = 1.0 + nearHoleWeight * (0.92 * brightSector + 0.22 * counterSector);
+    float brightSector = smoothstep(0.68, 0.965, alignedFlow);
+    float counterSector = smoothstep(0.18, 0.50, alignedFlow);
+    float localShadow = mix(1.0, 0.24, nearHoleWeight * (1.0 - brightSector * 0.92));
+    float localLift = 1.0 + nearHoleWeight * (0.84 * brightSector + 0.10 * counterSector);
     skyColor *= localShadow * localLift;
 
     float skyLuma = luminance(skyColor);
-    float sectorContrast = nearHoleWeight * mix(-0.18, 0.42, brightSector);
+    float sectorContrast = nearHoleWeight * mix(-0.28, 0.34, brightSector);
     skyColor += skyColor * sectorContrast * clamp(skyLuma - 0.03, 0.0, 1.0);
 
     vec3 arcTint = mix(vec3(0.84, 0.80, 0.96), vec3(1.06, 0.98, 0.88), brightSector);
-    skyColor = mix(skyColor, skyColor * arcTint, nearHoleWeight * (0.14 + 0.22 * brightSector));
+    skyColor = mix(skyColor, skyColor * arcTint, nearHoleWeight * (0.10 + 0.16 * brightSector));
   }
 
   color += skyColor * alpha;
@@ -569,7 +572,9 @@ void applyWiregridOverlay(inout vec3 color, vec3 hitPos) {
   float theta = acos(clamp(hitPos.z / r, -1.0, 1.0));
   float phi   = atan(hitPos.y, hitPos.x);
   bool  showErgo = wiregridShowErgo > 0.5;
-  vec4  wg = wiregridOverlay(r, theta, phi, kerrSpin, showErgo, wiregridGridScale);
+  vec4  wg = wiregridOverlay(r, theta, phi, kerrSpin, showErgo, wiregridGridScale,
+                             wiregridMotionScale, wiregridInfallScale,
+                             wiregridColor, time);
   color = mix(color, wg.rgb, wg.a);
 }
 
@@ -587,21 +592,25 @@ void main() {
 
     if (stokesEnabled > 0.5) {
       // D4: Polarized Stokes IQUV transport (supersedes scalar RTE)
+      vec3 terminalPos;
       vec4 stokesColor = bhTraceGeodesicStokes(ray, schwarzschildRadius, depthFar, steps,
-                                                interopStepSize, rteOpacityScale,
-                                                stokesBFieldAngle, stokesNeScale);
+                                               interopStepSize, rteOpacityScale,
+                                               stokesBFieldAngle, stokesNeScale,
+                                               terminalPos);
       vec3 interopColor = stokesColor.rgb;
-      applyWiregridOverlay(interopColor, ray.position + dir * depthFar);
+      applyWiregridOverlay(interopColor, terminalPos);
       fragColor = vec4(interopColor, 1.0);
       return;
     }
 
     if (rteEnabled > 0.5) {
       // D2: Volumetric RTE path -- accumulates emission/absorption through disk
+      vec3 terminalPos;
       vec4 rteColor = bhTraceGeodesicRTE(ray, schwarzschildRadius, depthFar, steps,
-                                          interopStepSize, rteOpacityScale);
+                                         interopStepSize, rteOpacityScale,
+                                         terminalPos);
       vec3 interopColor = rteColor.rgb;
-      applyWiregridOverlay(interopColor, ray.position + dir * depthFar);
+      applyWiregridOverlay(interopColor, terminalPos);
       fragColor = vec4(interopColor, 1.0);
       return;
     }

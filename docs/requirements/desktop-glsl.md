@@ -104,5 +104,16 @@ Notes:
   `centered`, `left-third`, `right-third`, and `wide-right`, while `wide-left`
   uses a restrained Milky Way panorama to pull more lensed structure into the
   frame.
+- You can enable and tune the spacetime wiregrid in hidden-window runs with
+  environment overrides:
+  - `BLACKHOLE_WIREGRID_ENABLED=1`
+  - `BLACKHOLE_WIREGRID_SHOW_ERGO=0|1`
+  - `BLACKHOLE_WIREGRID_GRID_SCALE=<float>`
+  - `BLACKHOLE_WIREGRID_MOTION_SCALE=<float>`
+  - `BLACKHOLE_WIREGRID_INFALL_SCALE=<float>`
+  - `BLACKHOLE_WIREGRID_COLOR_R/G/B/A=<float>`
+  This now works consistently across `BlackholeGLSL`, `Blackhole`, and
+  `BlackholeCUDA`, including volumetric paths that used to place the overlay at
+  a fake far-plane point or skip it entirely.
 - No `sudo`, `yay`, or askpass helper is needed if the required tools are
   already installed.

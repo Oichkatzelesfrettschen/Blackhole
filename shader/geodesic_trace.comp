@@ -2,265 +2,235 @@
 
 /**
  * @file geodesic_trace.comp
- * @brief GPU compute shader for gravitational geodesic ray tracing
+ * @brief Compute shader: full Kerr geodesic raytracer (parity with blackhole_main.frag).
  *
- * ⚠️  STATUS: Currently DISABLED in src/main.cpp (line 2453)
- * ⚠️  Reason: Fragment shader path provides better accuracy/stability
- * ⚠️  This file preserved for future optimization work
+ * WHY: blackhole_main.frag's interopParityMode branch (bhTraceGeodesic / bhTraceGeodesicRTE /
+ *      bhTraceGeodesicStokes) is the validated physics path.  This compute shader implements
+ *      the same dispatch so that compare-compute-fragment testing (ISSUE-008) has a correct
+ *      reference implementation rather than the old Schwarzschild-only SSBO stub.
  *
- * Implements full RK4 numerical integration on GPU for 1000x speedup over CPU.
- * Each invocation traces one ray through spacetime with:
- * - Schwarzschild/Kerr metric
- * - RK4 4th-order integration
- * - Adaptive step size control
- * - Christoffel symbol caching
+ * WHAT:
+ *   - Output: GL_RGBA32F image2D via imageStore (binding 0 = texBlackhole or texBlackholeCompare
+ *     as bound by main.cpp before glDispatchCompute).
+ *   - Dispatch: 16x16 workgroups.  tileOffset shifts global IDs for tiled dispatch.
+ *   - Always uses the interop path: Stokes (D4) > RTE (D2) > single-scatter (default).
  *
- * Dispatch: (16, 16, Z) tiles covering full resolution
- * Each tile processes 256 rays in parallel.
+ * HOW (integration with main.cpp):
+ *   applyInteropComputeUniforms(computeProgram, interop, width, height)
+ *   + texture bindings (units 0-7, 10-11 by convention in main.cpp)
+ *   + glBindImageTexture(0, computeTarget, ...)
+ *   + glUniform2i("tileOffset", x, y)   per tile when computeTiled=true
+ *   + glDispatchCompute(groupsX, groupsY, 1)
  *
- * To re-enable: Uncomment useComputeRaytracer in src/main.cpp
+ * References:
+ *   - shader/blackhole_main.frag      (interopParityMode branch -- this shader mirrors it)
+ *   - shader/include/interop_trace.glsl  (bhTraceGeodesic, bhTraceGeodesicRTE, bhShadeHit)
+ *   - src/main.cpp applyInteropComputeUniforms()  (uniform contract)
  */
 
-#extension GL_ARB_compute_shader : require
 #extension GL_GOOGLE_include_directive : enable
-#extension GL_ARB_shader_storage_buffer_object : require
-#extension GL_ARB_shader_clock : require
-// #extension GL_EXT_scalar_block_layout : require  // Not supported by driver
-#extension GL_ARB_gpu_shader5 : require
 
-// ============================================================================
-// Constants & Layout
-// ============================================================================
-
-const float PI = 3.14159265358979;
-const float EPS = 1e-8;
-const float LARGE = 1e10;
-
-// Work group size: 16x16 = 256 rays per compute dispatch
+// Work-group size: 16x16 = 256 rays per dispatch.
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-// WHY: BL-coord wiregrid overlay -- compute path parity with fragment shader (task A3)
+// Output: GL_RGBA32F image bound as image unit 0 by main.cpp.
+layout(rgba32f, binding = 0) uniform writeonly image2D outputImage;
+
+// Tiled dispatch: main.cpp sets this per tile when computeTiled=true.
+// Default ivec2(0,0) for full-frame (non-tiled) dispatch.
+uniform ivec2 tileOffset = ivec2(0, 0);
+
+// ============================================================================
+// Physics library includes
+// Same order as blackhole_main.frag.
+// ============================================================================
+
+#include "include/physics_constants.glsl"
+#include "include/verified/physics.glsl"
+#include "include/redshift.glsl"
+#include "include/kerr.glsl"
+#include "include/interop_raygen.glsl"
 #include "include/wiregrid.glsl"
 
-
 // ============================================================================
-// Uniforms & Camera
+// Uniforms
+//
+// These mirror the uniforms set by applyInteropComputeUniforms() and the
+// texture-binding block in main.cpp (lines ~4355-4400).
+//
+// All uniforms below are now set by main.cpp:
+//   applyInteropComputeUniforms() -- camera, physics, LUT flags, rteEnabled/rteOpacityScale
+//   compute dispatch block        -- wiregrid*, stokesEnabled/BFieldAngle/NeScale, Hawking
+// Defaults are kept as fallbacks for any future callers that omit optional uniforms.
 // ============================================================================
 
-layout(std140, binding = 0) uniform CameraData {
-    mat4 worldToCamera;
-    vec4 position;
-    vec4 forward;
-    vec4 right;
-    vec4 up;
-    float fov;
-    float aperture;
-    float focusDistance;
-    uint frameNumber;
-} camera;
+// --- Camera / scene ---
+uniform vec2  resolution;           // set by applyInteropComputeUniforms
+uniform vec3  cameraPos;
+uniform mat3  cameraBasis;
+uniform float fovScale        = 1.0;
+uniform float time            = 0.0;
+uniform float depthFar        = 50.0;
 
-layout(std140, binding = 1) uniform PhysicsData {
-    float blackHoleMass;      // Solar masses (normalized)
-    float blackHoleSpin;      // a/M dimensionless spin
-    float observer_distance;  // Distance from BH (in units where M=1)
-    float observer_inclination; // Inclination angle
+// --- Physics ---
+uniform float schwarzschildRadius = 2.0;
+uniform float kerrSpin            = 0.0;
 
-    // RK4 integration parameters
-    float dt_init;            // Initial step size
-    float dt_max;             // Maximum step size
-    float tolerance;          // Adaptive tolerance
-    uint maxSteps;            // Maximum integration steps
-} physics;
+// --- Integrator ---
+// Declared as int to match glUniform1i() in applyInteropComputeUniforms().
+uniform int   interopMaxSteps  = 48;
+uniform float interopStepSize  = 0.2;
 
-// Wiregrid overlay uniforms (task A3; mirroring blackhole_main.frag)
+// --- Accretion disk ---
+uniform float adiskEnabled = 1.0;
+
+// --- LUT radius ranges ---
+uniform float useLUTs            = 0.0;
+uniform float lutRadiusMin       = 0.0;
+uniform float lutRadiusMax       = 1.0;
+uniform float useSpectralLUT     = 0.0;
+uniform float spectralRadiusMin  = 0.0;
+uniform float spectralRadiusMax  = 1.0;
+uniform float enableRedshift     = 0.0;
+uniform float redshiftRadiusMin  = 0.0;
+uniform float redshiftRadiusMax  = 1.0;
+
+// --- GRB modulation ---
+uniform float useGrbModulation = 0.0;
+uniform float grbTime          = 0.0;
+uniform float grbTimeMin       = 0.0;
+uniform float grbTimeMax       = 1.0;
+
+// --- LUT texture samplers (units 0-3, matching main.cpp binding order) ---
+uniform sampler2D emissivityLUT;
+uniform sampler2D redshiftLUT;
+uniform sampler2D spectralLUT;
+uniform sampler2D grbModulationLUT;
+
+// --- Sky / background (units 4-7) ---
+uniform samplerCube galaxy;
+uniform sampler2D   backgroundLayers[3];
+uniform vec4        backgroundLayerParams[3];
+uniform float       backgroundLayerLodBias[3];
+uniform float       backgroundEnabled   = 0.0;
+uniform float       backgroundIntensity = 1.0;
+
+// --- D2: Volumetric RTE (set by applyInteropComputeUniforms) ---
+uniform float rteEnabled      = 0.0;
+uniform float rteOpacityScale = 0.5;
+
+// --- D4: Polarized Stokes IQUV (set by compute dispatch block in main.cpp) ---
+uniform float stokesEnabled     = 0.0;
+uniform float stokesBFieldAngle = 0.0;
+uniform float stokesNeScale     = 0.0;
+
+// --- Wiregrid BL-coordinate overlay (set by compute dispatch block in main.cpp) ---
 uniform float wiregridEnabled   = 0.0;
 uniform float wiregridShowErgo  = 1.0;
 uniform float wiregridGridScale = 1.0;
+uniform float wiregridMotionScale = 1.0;
+uniform float wiregridInfallScale = 0.6;
+uniform vec4  wiregridColor = vec4(0.3, 0.8, 1.0, 0.5);
 
 // ============================================================================
-// Output Storage
+// Derived physics macros
+// Same definitions as blackhole_main.frag lines 130-133.
 // ============================================================================
 
-layout(std430, binding = 2) buffer RayOutput {
-    vec4 data[];  // Packed ray result: xyz=color, w=depth
-} rayOutput;
-
-layout(std430, binding = 3) buffer RayDepth {
-    float depth[];
-} rayDepth;
+float sch_iscoRadius(float r_s)         { return 3.0 * r_s; }
+float sch_photonSphereRadius(float r_s) { return 1.5 * r_s; }
+#define iscoRadius         sch_iscoRadius(schwarzschildRadius)
+#define photonSphereRadius sch_photonSphereRadius(schwarzschildRadius)
 
 // ============================================================================
-// Christoffel Symbol LUT (precomputed)
+// Full interop ray-tracing library.
+// MUST come after all uniforms it references (kerrSpin, adiskEnabled, iscoRadius,
+// emissivityLUT, galaxy, backgroundLayers, enableRedshift, ...).
 // ============================================================================
 
-layout(std430, binding = 4) readonly buffer ChristoffelLUT {
-    vec4 data[];  // Packed Christoffel symbols
-} christoffelLUT;
+#include "include/interop_trace.glsl"
 
 // ============================================================================
-// Schwarzschild Metric (simplified CPU baseline)
+// Wiregrid overlay helper
+// Mirrors applyWiregridOverlay() in blackhole_main.frag (lines 477-486).
 // ============================================================================
 
-// Return g_rr, g_θθ, g_φφ for Schwarzschild metric
-// r, θ are Boyer-Lindquist coordinates
-vec3 schwarzschildMetricComponents(float r, float theta) {
-    float M = physics.blackHoleMass;
-    float rho_sq = r * r + M * M * cos(theta) * cos(theta);
-    float delta = r * r - 2.0 * M * r + M * M;
-
-    // g_rr = rho^2 / delta
-    float g_rr = rho_sq / max(delta, EPS);
-
-    // g_θθ = rho^2
-    float g_theta = rho_sq;
-
-    // g_φφ = (r^2 + a^2 + 2Mr a^2/rho^2) sin^2(θ)
-    float a = physics.blackHoleSpin * M;
-    float sin_theta = sin(theta);
-    float g_phi = (r * r + a * a + 2.0 * M * r * a * a / rho_sq) * sin_theta * sin_theta;
-
-    return vec3(g_rr, g_theta, g_phi);
+void applyWiregridOverlay(inout vec3 color, vec3 hitPos) {
+    if (wiregridEnabled < 0.5) return;
+    float r = length(hitPos);
+    if (r < 1e-5) return;
+    float theta    = acos(clamp(hitPos.z / r, -1.0, 1.0));
+    float phi      = atan(hitPos.y, hitPos.x);
+    bool  showErgo = wiregridShowErgo > 0.5;
+    vec4  wg = wiregridOverlay(r, theta, phi, kerrSpin, showErgo, wiregridGridScale,
+                               wiregridMotionScale, wiregridInfallScale,
+                               wiregridColor, time);
+    color = mix(color, wg.rgb, wg.a);
 }
 
 // ============================================================================
-// RK4 Geodesic Integrator
-// ============================================================================
-
-// State vector: (t, r, θ, φ, dt/dλ, dr/dλ, dθ/dλ, dφ/dλ)
-struct GeodesicState {
-    float t, r, theta, phi;
-    float t_dot, r_dot, theta_dot, phi_dot;
-};
-
-// Right-hand side of geodesic equation: dY/dλ = F(λ, Y)
-GeodesicState geodesicRHS(GeodesicState Y) {
-    GeodesicState dY;
-
-    dY.t = Y.t_dot;
-    dY.r = Y.r_dot;
-    dY.theta = Y.theta_dot;
-    dY.phi = Y.phi_dot;
-
-    // Geodesic equations: d²x^μ/dλ² + Γ^μ_αβ dx^α/dλ dx^β/dλ = 0
-    // Simplified Schwarzschild version
-    float M = physics.blackHoleMass;
-    float rho_sq = Y.r * Y.r + M * M * cos(Y.theta) * cos(Y.theta);
-    float delta = Y.r * Y.r - 2.0 * M * Y.r + M * M;
-
-    // d²r/dλ² = ... (Christoffel symbol terms)
-    dY.r_dot = (M / (Y.r * Y.r)) * Y.r_dot * Y.r_dot / max(delta, EPS)
-             - Y.theta_dot * Y.theta_dot * Y.r
-             - Y.phi_dot * Y.phi_dot * Y.r * sin(Y.theta) * sin(Y.theta);
-
-    // d²θ/dλ² = ...
-    dY.theta_dot = -2.0 * Y.r_dot * Y.theta_dot / Y.r
-                 + Y.phi_dot * Y.phi_dot * sin(Y.theta) * cos(Y.theta);
-
-    // d²φ/dλ² = ...
-    dY.phi_dot = -2.0 * Y.r_dot * Y.phi_dot / Y.r
-               - 2.0 * Y.theta_dot * Y.phi_dot / tan(Y.theta);
-
-    // t_dot depends on normalization (null geodesic for photons)
-    dY.t_dot = 0.0;
-
-    return dY;
-}
-
-// RK4 integration step
-GeodesicState rk4Step(GeodesicState Y, float dt) {
-    GeodesicState k1 = geodesicRHS(Y);
-
-    GeodesicState Y2 = Y;
-    Y2.r += 0.5 * dt * k1.r_dot;
-    Y2.theta += 0.5 * dt * k1.theta_dot;
-    Y2.phi += 0.5 * dt * k1.phi_dot;
-    GeodesicState k2 = geodesicRHS(Y2);
-
-    GeodesicState Y3 = Y;
-    Y3.r += 0.5 * dt * k2.r_dot;
-    Y3.theta += 0.5 * dt * k2.theta_dot;
-    Y3.phi += 0.5 * dt * k2.phi_dot;
-    GeodesicState k3 = geodesicRHS(Y3);
-
-    GeodesicState Y4 = Y;
-    Y4.r += dt * k3.r_dot;
-    Y4.theta += dt * k3.theta_dot;
-    Y4.phi += dt * k3.phi_dot;
-    GeodesicState k4 = geodesicRHS(Y4);
-
-    GeodesicState result = Y;
-    result.r += (dt / 6.0) * (k1.r_dot + 2.0*k2.r_dot + 2.0*k3.r_dot + k4.r_dot);
-    result.theta += (dt / 6.0) * (k1.theta_dot + 2.0*k2.theta_dot + 2.0*k3.theta_dot + k4.theta_dot);
-    result.phi += (dt / 6.0) * (k1.phi_dot + 2.0*k2.phi_dot + 2.0*k3.phi_dot + k4.phi_dot);
-    result.t += (dt / 6.0) * (k1.t_dot + 2.0*k2.t_dot + 2.0*k3.t_dot + k4.t_dot);
-
-    return result;
-}
-
-// ============================================================================
-// Ray Tracing Main Loop
+// main()
 // ============================================================================
 
 void main() {
-    ivec3 gid = ivec3(gl_GlobalInvocationID);
-    uint rayIndex = gid.y * 1920 + gid.x;  // Assuming 1920x1080
+    // Global pixel coordinate, shifted by tileOffset for tiled dispatch.
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy) + tileOffset;
 
-    if (gid.x >= 1920 || gid.y >= 1080) return;
-
-    // Initialize ray at camera position
-    // Construct initial 4-velocity from camera parameters
-    float normalizedX = (float(gid.x) - 960.0) / 960.0;
-    float normalizedY = (float(gid.y) - 540.0) / 540.0;
-
-    // Initial position in Boyer-Lindquist coordinates
-    GeodesicState ray;
-    ray.r = physics.observer_distance;
-    ray.theta = physics.observer_inclination;
-    ray.phi = 0.0;
-    ray.t = 0.0;
-
-    // Initial velocity from camera direction
-    // For photons: normalize such that g_μν k^μ k^ν = 0
-    ray.r_dot = 0.01 * normalizedY;
-    ray.theta_dot = 0.01 * (normalizedX * cos(ray.theta));
-    ray.phi_dot = 0.01 * normalizedX;
-    ray.t_dot = 1.0;
-
-    // Integrate geodesic until impact or escape
-    vec3 color = vec3(0.0);
-    float depth = -1.0;
-    float dt = physics.dt_init;
-
-    for (uint step = 0; step < physics.maxSteps; step++) {
-        // Check for black hole impact (r < 2M)
-        float M = physics.blackHoleMass;
-        if (ray.r < 2.0 * M) {
-            color = vec3(0.0);  // Black
-            depth = -1.0;
-            break;
-        }
-
-        // Check for escape (r > observer distance * 10)
-        if (ray.r > physics.observer_distance * 10.0) {
-            color = vec3(0.2, 0.2, 0.3);  // Sky color
-            depth = 1.0;
-            break;
-        }
-
-        // RK4 integration step
-        ray = rk4Step(ray, dt);
+    // Bounds check against the uniform resolution (set by applyInteropComputeUniforms).
+    ivec2 imgDims = ivec2(int(resolution.x), int(resolution.y));
+    if (gid.x >= imgDims.x || gid.y >= imgDims.y) {
+        return;
     }
 
-    // Apply BL-coord wiregrid overlay (task A3)
-    if (wiregridEnabled > 0.5 && ray.r > 1e-5) {
-      float theta_bl = ray.theta;
-      float phi_bl   = ray.phi;
-      bool  showErgo = wiregridShowErgo > 0.5;
-      vec4  wg = wiregridOverlay(ray.r, theta_bl, phi_bl,
-                                 physics.blackHoleSpin, showErgo, wiregridGridScale);
-      color = mix(color, wg.rgb, wg.a);
+    // Pixel center (+0.5) matches gl_FragCoord convention in the fragment shader.
+    vec2 pixelCoord = vec2(gid) + vec2(0.5);
+
+    vec3 dir = bhRayDir(pixelCoord, resolution, fovScale, cameraBasis);
+    vec3 pos = cameraPos;
+
+    Ray ray;
+    ray.position        = pos;
+    ray.velocity        = dir;
+    ray.affineParameter = 0.0;
+
+    vec4 result;
+
+    // Dispatch priority: Stokes (D4) > RTE (D2) > single-scatter.
+    // Mirrors the fragment shader interopParityMode branch (frag lines 500-529).
+    if (stokesEnabled > 0.5) {
+        // D4: Polarized Stokes IQUV transport.
+        vec3 terminalPos;
+        vec4 stokesColor = bhTraceGeodesicStokes(
+            ray, schwarzschildRadius, depthFar,
+            interopMaxSteps, interopStepSize, rteOpacityScale,
+            stokesBFieldAngle, stokesNeScale, terminalPos);
+        vec3 col = stokesColor.rgb;
+        applyWiregridOverlay(col, terminalPos);
+        result = vec4(col, 1.0);
+
+    } else if (rteEnabled > 0.5) {
+        // D2: Volumetric radiative transfer.
+        vec3 terminalPos;
+        vec4 rteColor = bhTraceGeodesicRTE(
+            ray, schwarzschildRadius, depthFar,
+            interopMaxSteps, interopStepSize, rteOpacityScale, terminalPos);
+        vec3 col = rteColor.rgb;
+        applyWiregridOverlay(col, terminalPos);
+        result = vec4(col, 1.0);
+
+    } else {
+        // Default: single-scatter Kerr geodesic (bhTraceGeodesic + bhShadeHit).
+        HitResult hit = bhTraceGeodesic(
+            ray, schwarzschildRadius, depthFar,
+            interopMaxSteps, interopStepSize);
+        vec4 shaded = bhShadeHit(hit, cameraPos, schwarzschildRadius);
+        float depthNorm = clamp(
+            length(hit.hitPoint - cameraPos) / max(depthFar, 0.0001),
+            0.0, 1.0);
+        vec3 col = shaded.rgb;
+        applyWiregridOverlay(col, hit.hitPoint);
+        result = vec4(col, depthNorm);
     }
-    // Write output
-    rayOutput.data[rayIndex] = vec4(color, depth);
-    rayDepth.depth[rayIndex] = depth;
+
+    imageStore(outputImage, gid, result);
 }

@@ -84,6 +84,9 @@ extern __constant__ float d_background_layer_lod_bias[3];
 extern __constant__ int   d_wiregrid_enabled;    /**< @brief BL-coord wiregrid overlay flag. */
 extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere boundary+glow. */
 extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
+extern __constant__ float d_wiregrid_motion_scale; /**< @brief Frame-dragging azimuth advection strength. */
+extern __constant__ float d_wiregrid_infall_scale; /**< @brief Inward radial-shell advection strength. */
+extern __constant__ float d_wiregrid_color[4];     /**< @brief Base RGBA for the coordinate grid overlay. */
 extern __constant__ float d_grmhd_r_min;         /**< @brief Inner radial bound of GRMHD grid. */
 extern __constant__ float d_grmhd_r_max;         /**< @brief Outer radial bound of GRMHD grid. */
 extern __constant__ int   d_rte_enabled;          /**< @brief 1 = volumetric RTE path (D3). */
@@ -665,6 +668,20 @@ __device__ __forceinline__ float d_wg_smoothstep(float edge, float dist) {
     return 1.0f - t * t * (3.0f - 2.0f * t);
 }
 
+__device__ __forceinline__ float d_wg_radial_line(float r, float a_star, float spacing,
+                                                  float width, float time_sec,
+                                                  float infall_scale) {
+    float const r_h = d_wg_event_horizon(a_star);
+    float const r_local = fmaxf(r - r_h + 0.05f, 0.05f);
+    float const lapse = 1.0f - d_wg_lapse(r, a_star);
+    float const inward_phase = time_sec * infall_scale * (0.2f + lapse * 1.1f);
+    float const radial_coord = logf(r_local) - inward_phase;
+    float phase = fmodf(radial_coord, spacing);
+    if (phase < 0.0f) phase += spacing;
+    float const dist = fminf(phase, spacing - phase);
+    return d_wg_smoothstep(width, dist);
+}
+
 /**
  * @brief Per-pixel Boyer-Lindquist coordinate wiregrid overlay (CUDA device equivalent of
  *        GLSL wiregridOverlay() in shader/include/wiregrid.glsl).
@@ -690,9 +707,12 @@ __device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float
     const float k_pi6 = 0.523598776f; // pi/6
     float spacing = k_pi6 / fmaxf(grid_scale, 0.01f);
     float lw      = 0.02f / fmaxf(grid_scale, 0.01f);
+    float radial_spacing = 0.34f / fmaxf(grid_scale, 0.01f);
+    float drag = d_wg_frame_drag(r, a_star) * d_time_sec * d_wiregrid_motion_scale *
+                 (0.25f + (1.0f - d_wg_lapse(r, a_star)) * 1.15f);
 
     // Phi grid line
-    float phi_phase = fmodf(phi, spacing);
+    float phi_phase = fmodf(phi - drag, spacing);
     if (phi_phase < 0.0f) phi_phase += spacing;
     float phi_dist = fminf(phi_phase, spacing - phi_phase);
     float phi_line = d_wg_smoothstep(lw, phi_dist);
@@ -701,12 +721,14 @@ __device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float
     float theta_phase = fmodf(theta, spacing);
     float theta_dist  = fminf(theta_phase, spacing - theta_phase);
     float theta_line  = d_wg_smoothstep(lw, theta_dist);
+    float radial_line = d_wg_radial_line(r, a_star, radial_spacing, lw * 1.15f,
+                                         d_time_sec, d_wiregrid_infall_scale);
 
-    float grid  = fmaxf(phi_line, theta_line);
+    float grid  = fmaxf(fmaxf(phi_line, theta_line), radial_line * 0.82f);
     float boost = 1.0f + (1.0f - d_wg_lapse(r, a_star)) * 2.0f; // 3x near horizon
     grid *= boost;
 
-    float grid_alpha = fminf(grid * 0.5f, 0.8f);
+    float grid_alpha = fminf(grid * d_wiregrid_color[3], 0.92f);
 
     float ergo_alpha = 0.0f;
     if (show_ergo) {
@@ -724,10 +746,9 @@ __device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float
 
     float total = grid_alpha + ergo_alpha;
     float t = ergo_alpha / fmaxf(total, 0.01f);
-    // grid_rgb = (0.3, 0.8, 1.0), ergo_rgb = (1.0, 0.3, 0.0)
-    float cr = 0.3f + t * (1.0f - 0.3f);
-    float cg = 0.8f + t * (0.3f - 0.8f);
-    float cb = 1.0f + t * (0.0f - 1.0f);
+    float cr = d_wiregrid_color[0] + t * (1.0f - d_wiregrid_color[0]);
+    float cg = d_wiregrid_color[1] + t * (0.3f - d_wiregrid_color[1]);
+    float cb = d_wiregrid_color[2] + t * (0.0f - d_wiregrid_color[2]);
     float ca = fmaxf(grid_alpha, ergo_alpha);
     return make_float4(cr, cg, cb, ca);
 }
@@ -1641,13 +1662,15 @@ __device__ __forceinline__ float3 d_rte_step(float3 emit_color, float j_eff,
  * @param ray_dir Normalized ray direction in world coordinates.
  * @return Composited RGBA float4 pixel color.
  */
-__device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ray_dir) {
+__device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ray_dir,
+                                                       float3 *terminal_pos) {
     float const rs = d_rs;
     float const a  = 0.5f * d_spin * rs;
 
     if (!d_kerr_enabled || fabsf(a) < D_EPSILON) {
         /* Schwarzschild fallback: single-scatter (same as baseline kernel) */
         HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
+        if (terminal_pos != nullptr) { *terminal_pos = hit.hit_point; }
         return d_shade_hit(hit, cam_pos);
     }
 
@@ -1675,6 +1698,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
 
         if (kr.r <= r_horizon) {
             /* Horizon absorbs everything: return accumulated emission */
+            if (terminal_pos != nullptr) { *terminal_pos = cur_pos; }
             return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
         }
 
@@ -1718,6 +1742,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
                 accum_i = d_add(accum_i, contrib);
 
                 if (transmit < 0.005f) {
+                    if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
                     return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
                 }
             }
@@ -1725,6 +1750,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
 
         if (kr.r > max_dist) {
             float3 const esc_dir = d_sub(new_pos, cur_pos);
+            if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
                 float4 const bg = d_background_color(d_normalize(esc_dir));
                 accum_i.x += transmit * bg.x;
@@ -1737,6 +1763,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
 
     /* Step budget exhausted -- treat as escaped along last known direction */
     float3 const final_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+    if (terminal_pos != nullptr) { *terminal_pos = final_pos; }
     float3 const esc_dir   = d_sub(final_pos, cam_pos);
     if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
         float4 const bg = d_background_color(d_normalize(esc_dir));
@@ -1880,12 +1907,14 @@ __device__ __forceinline__ DStokes d_stokes_step(DStokes s,
  * @return Display-ready RGBA float4 pixel.
  */
 __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
-                                                            float3 ray_dir) {
+                                                          float3 ray_dir,
+                                                          float3 *terminal_pos) {
     float const rs = d_rs;
     float const a  = 0.5f * d_spin * rs;
 
     if (!d_kerr_enabled || fabsf(a) < D_EPSILON) {
         HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
+        if (terminal_pos != nullptr) { *terminal_pos = hit.hit_point; }
         return d_shade_hit(hit, cam_pos);
     }
 
@@ -1921,6 +1950,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         min_r = fminf(min_r, kr.r);
 
         if (kr.r <= r_horizon) {
+            if (terminal_pos != nullptr) { *terminal_pos = cur_pos; }
             return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
         }
 
@@ -1981,6 +2011,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
 
         if (kr.r > max_dist) {
             float3 const esc_dir = d_sub(new_pos, cur_pos);
+            if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
                 float4 const bg = d_background_color(d_normalize(esc_dir));
                 accum_i.x += transmit * bg.x;
@@ -1992,6 +2023,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     }
 
     /* Map Stokes state to display color: tint intensity by EVPA and P_lin */
+    if (terminal_pos != nullptr) {
+        *terminal_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+    }
     float const I_lum = (accum_i.x + accum_i.y + accum_i.z) * 0.33333333f;
     float const P_lin = (I_lum > 1.0e-10f)
         ? sqrtf(fmaf(stokes.q, stokes.q, stokes.u * stokes.u)) / I_lum

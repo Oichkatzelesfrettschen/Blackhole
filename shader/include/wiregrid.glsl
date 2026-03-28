@@ -80,11 +80,29 @@ float wg_thetaLine(float theta, float spacing, float width) {
     return smoothstep(width, 0.0, dist);
 }
 
+float wg_radialLine(float r, float a_star, float spacing, float width,
+                    float time_sec, float infall_scale) {
+    float r_h = wg_eventHorizon(a_star);
+    float r_local = max(r - r_h + 0.05, 0.05);
+    float lapse = 1.0 - wg_lapse(r, a_star);
+    float inward_phase = time_sec * infall_scale * mix(0.2, 1.3, lapse);
+    float radial_coord = log(r_local) - inward_phase;
+    float phase = mod(radial_coord, spacing);
+    float dist = min(phase, spacing - phase);
+    return smoothstep(width, 0.0, dist);
+}
+
 float wg_sphericalGrid(float r, float theta, float phi, float a_star,
-                       float phi_spacing, float theta_spacing, float line_width) {
-    float phi_line   = wg_phiLine(phi, phi_spacing, line_width);
+                       float phi_spacing, float theta_spacing, float radial_spacing,
+                       float line_width, float time_sec, float motion_scale,
+                       float infall_scale) {
+    float drag = wg_frameDragging(r, a_star) * time_sec * motion_scale *
+                 mix(0.25, 1.4, 1.0 - wg_lapse(r, a_star));
+    float phi_line   = wg_phiLine(phi - drag, phi_spacing, line_width);
     float theta_line = wg_thetaLine(theta, theta_spacing, line_width);
-    float grid = max(phi_line, theta_line);
+    float radial_line = wg_radialLine(r, a_star, radial_spacing, line_width * 1.15,
+                                      time_sec, infall_scale);
+    float grid = max(max(phi_line, theta_line), radial_line * 0.82);
     // Boost near horizon (alpha -> 0 -> boost -> 3x)
     float boost = 1.0 + (1.0 - wg_lapse(r, a_star)) * 2.0;
     return grid * boost;
@@ -123,13 +141,17 @@ float wg_ergoInterior(float r, float theta, float a_star) {
  * @return RGBA: RGB = overlay color, A = opacity to blend with scene
  */
 vec4 wiregridOverlay(float r, float theta, float phi, float a_star,
-                     bool show_ergo, float grid_scale) {
+                     bool show_ergo, float grid_scale, float motion_scale,
+                     float infall_scale, vec4 grid_color_rgba, float time_sec) {
     float spacing   = 0.523598776 / grid_scale; // pi/6 rad = 30 deg
     float lw        = 0.02 / max(grid_scale, 0.01);
+    float radial_spacing = 0.34 / max(grid_scale, 0.01);
 
-    float grid       = wg_sphericalGrid(r, theta, phi, a_star, spacing, spacing, lw);
-    vec3  grid_rgb   = vec3(0.3, 0.8, 1.0);   // Cyan-white
-    float grid_alpha = clamp(grid * 0.5, 0.0, 0.8);
+    float grid       = wg_sphericalGrid(r, theta, phi, a_star, spacing, spacing,
+                                        radial_spacing, lw, time_sec,
+                                        motion_scale, infall_scale);
+    vec3  grid_rgb   = grid_color_rgba.rgb;
+    float grid_alpha = clamp(grid * grid_color_rgba.a, 0.0, 0.92);
 
     vec3  ergo_rgb   = vec3(1.0, 0.3, 0.0);   // Orange-red (frame dragging)
     float ergo_alpha = 0.0;
@@ -147,7 +169,8 @@ vec4 wiregridOverlay(float r, float theta, float phi, float a_star,
 
 // Convenience overload with default grid_scale = 1.0
 vec4 wiregridOverlay(float r, float theta, float phi, float a_star, bool show_ergo) {
-    return wiregridOverlay(r, theta, phi, a_star, show_ergo, 1.0);
+    return wiregridOverlay(r, theta, phi, a_star, show_ergo, 1.0, 1.0, 0.6,
+                           vec4(0.3, 0.8, 1.0, 0.5), 0.0);
 }
 
 #endif // WIREGRID_GLSL_OVERLAY

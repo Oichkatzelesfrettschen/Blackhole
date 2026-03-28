@@ -71,6 +71,9 @@ __constant__ float d_background_layer_lod_bias[3];
 __constant__ int   d_wiregrid_enabled;     /**< @brief BL-coord wiregrid overlay flag. */
 __constant__ float d_wiregrid_show_ergo;   /**< @brief Show ergosphere boundary+glow. */
 __constant__ float d_wiregrid_grid_scale;  /**< @brief Grid density multiplier. */
+__constant__ float d_wiregrid_motion_scale; /**< @brief Frame-dragging azimuth advection strength. */
+__constant__ float d_wiregrid_infall_scale; /**< @brief Inward radial-shell advection strength. */
+__constant__ float d_wiregrid_color[4];     /**< @brief Base RGBA for the coordinate grid overlay. */
 __constant__ float d_grmhd_r_min;          /**< @brief Inner radial bound of GRMHD grid. */
 __constant__ float d_grmhd_r_max;          /**< @brief Outer radial bound of GRMHD grid. */
 __constant__ int   d_rte_enabled;          /**< @brief 1 = volumetric RTE path (D3). */
@@ -145,6 +148,17 @@ int uploadConstants(
   COPY_CONST(d_wiregrid_enabled, p->wiregrid_enabled);
   COPY_CONST(d_wiregrid_show_ergo, p->wiregrid_show_ergo);
   COPY_CONST(d_wiregrid_grid_scale, p->wiregrid_grid_scale);
+  COPY_CONST(d_wiregrid_motion_scale, p->wiregrid_motion_scale);
+  COPY_CONST(d_wiregrid_infall_scale, p->wiregrid_infall_scale);
+  {
+    cudaError_t const _err =
+        cudaMemcpyToSymbol(d_wiregrid_color, p->wiregrid_color, sizeof(p->wiregrid_color));
+    if (_err != cudaSuccess) {
+      (void)fprintf(stderr, "cudaMemcpyToSymbol(%s) failed: %s\n", "d_wiregrid_color",
+                    cudaGetErrorString(_err));
+      return -1;
+    }
+  }
   COPY_CONST(d_grmhd_r_min, p->grmhd_r_min);
   COPY_CONST(d_grmhd_r_max, p->grmhd_r_max);
   COPY_CONST(d_rte_enabled, p->rte_enabled);
