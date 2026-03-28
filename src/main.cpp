@@ -379,11 +379,11 @@ struct ShowcaseOrbitComposition {
 };
 
 constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"centered", 0.0f, 0.0f, -6.0f, 14.0f, 68.0f, 3.4f, 0.72f, 10.0f},
-    {"left-third", 0.18f, 0.03f, -7.0f, 15.5f, 64.0f, 3.1f, 0.74f, 9.0f},
-    {"right-third", -0.18f, 0.03f, -7.0f, 15.5f, 64.0f, 3.1f, 0.74f, 9.0f},
-    {"wide-left", 0.12f, -0.02f, -6.0f, 18.0f, 58.0f, 3.0f, 0.78f, 7.0f},
-    {"wide-right", -0.12f, -0.02f, -6.0f, 18.0f, 58.0f, 3.0f, 0.78f, 7.0f},
+    {"centered", 0.0f, 0.0f, -7.0f, 18.0f, 58.0f, 2.9f, 0.78f, 8.0f},
+    {"left-third", 0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.8f, 0.8f, 7.0f},
+    {"right-third", -0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.8f, 0.8f, 7.0f},
+    {"wide-left", 0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.84f, 6.0f},
+    {"wide-right", -0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.84f, 6.0f},
 }};
 
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
@@ -3399,29 +3399,29 @@ int main(int argc, char **argv) {
         } else if (recordProfile == "showcase-orbit") {
           const ShowcaseOrbitComposition *const composition =
               findShowcaseOrbitComposition(recordComposition);
-          adiskEnabled       = false;
+          adiskEnabled       = true;
           adiskParticle      = false;
-          enableRedshift     = false;
-          enablePhotonSphere = false;
+          enableRedshift     = true;
+          enablePhotonSphere = true;
           hawkingGlowEnabled = false;
           rteVolumetricEnabled = false;
           stokesEnabled      = false;
           useNoiseTexture    = false;
           noiseTextureReady  = true;
           adiskNoiseLOD      = 3.0f;
-          adiskNoiseScale    = 0.5f;
-          adiskDensityV      = 2.0f;
-          adiskLit           = 0.25f;
-          dopplerStrength    = 1.0f;
+          adiskNoiseScale    = 0.35f;
+          adiskDensityV      = 1.35f;
+          adiskLit           = 0.14f;
+          dopplerStrength    = 0.75f;
           bloomIterations    = 4;
-          bloomStrength      = 0.08f;
+          bloomStrength      = 0.035f;
           tonemappingEnabled = true;
           toneExposure       = 1.0f;
           gamma              = 2.35f;
           computeMaxSteps    = 1000;
           computeStepSize    = 0.02f;
           depthFar           = 154.367004f;
-          kerrSpin           = 0.0f;
+          kerrSpin           = 0.35f;
           SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
           SettingsManager::instance().get().backgroundEnabled = true;
           SettingsManager::instance().get().backgroundIntensity =
@@ -3574,9 +3574,9 @@ int main(int argc, char **argv) {
       static float tonemapVignetteStrength = 1.0f;
       static float tonemapFilmGrainStrength = 0.005f;
       if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
-        backgroundLayerScale = {1.0f, 1.1f, 1.22f};
-        backgroundLayerIntensity = {0.95f, 0.72f, 0.45f};
-        backgroundLayerLodBias = {0.9f, 1.8f, 2.8f};
+        backgroundLayerScale = {1.0f, 1.14f, 1.3f};
+        backgroundLayerIntensity = {1.0f, 0.82f, 0.56f};
+        backgroundLayerLodBias = {0.6f, 1.45f, 2.35f};
         tonemapChromaticAberrationStrength = 0.0004f;
         tonemapVignetteStrength = 0.12f;
         tonemapFilmGrainStrength = 0.0f;
