@@ -329,6 +329,8 @@ static void fill_params(struct BH_LaunchParams *p,
     p->background_intensity = env_float("BLACKHOLE_BRIDGE_BACKGROUND_INTENSITY", 0.8f);
     p->background_enabled = env_flag("BLACKHOLE_BRIDGE_BACKGROUND_ENABLED", 1);
     p->photon_glow_strength = env_float("BLACKHOLE_BRIDGE_PHOTON_GLOW_STRENGTH", 1.0f);
+    p->background_yaw_rad = env_float("BLACKHOLE_BRIDGE_BACKGROUND_YAW_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
+    p->background_pitch_rad = env_float("BLACKHOLE_BRIDGE_BACKGROUND_PITCH_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
     p->adisk_lit = env_float("BLACKHOLE_BRIDGE_ADISK_LIT", 0.35f);
 }
 

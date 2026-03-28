@@ -60,6 +60,8 @@ __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
 __constant__ int d_background_enabled;
 __constant__ float d_photon_glow_strength;
+__constant__ float d_background_yaw_rad;
+__constant__ float d_background_pitch_rad;
 __constant__ int   d_wiregrid_enabled;     /**< @brief BL-coord wiregrid overlay flag. */
 __constant__ float d_wiregrid_show_ergo;   /**< @brief Show ergosphere boundary+glow. */
 __constant__ float d_wiregrid_grid_scale;  /**< @brief Grid density multiplier. */
@@ -129,6 +131,8 @@ int uploadConstants(
   COPY_CONST(d_background_intensity, p->background_intensity);
   COPY_CONST(d_background_enabled, p->background_enabled);
   COPY_CONST(d_photon_glow_strength, p->photon_glow_strength);
+  COPY_CONST(d_background_yaw_rad, p->background_yaw_rad);
+  COPY_CONST(d_background_pitch_rad, p->background_pitch_rad);
   COPY_CONST(d_wiregrid_enabled, p->wiregrid_enabled);
   COPY_CONST(d_wiregrid_show_ergo, p->wiregrid_show_ergo);
   COPY_CONST(d_wiregrid_grid_scale, p->wiregrid_grid_scale);

@@ -28,6 +28,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--artifact-dir", type=pathlib.Path, required=True)
     parser.add_argument("--sanitize-ocio", action="store_true")
     parser.add_argument("--timeout-seconds", type=float, default=900.0)
+    parser.add_argument("--background-yaw-deg", type=float, default=0.0)
+    parser.add_argument("--background-pitch-deg", type=float, default=0.0)
     return parser.parse_args(argv)
 
 
@@ -83,6 +85,8 @@ def main(argv: list[str]) -> int:
         set_default_env(env, "BLACKHOLE_BRIDGE_EXPOSURE", "0.7")
         set_default_env(env, "BLACKHOLE_BRIDGE_BLOOM_STRENGTH", "0.0")
         set_default_env(env, "BLACKHOLE_BRIDGE_PHOTON_GLOW_STRENGTH", "0.02")
+        env["BLACKHOLE_BRIDGE_BACKGROUND_YAW_DEG"] = str(args.background_yaw_deg)
+        env["BLACKHOLE_BRIDGE_BACKGROUND_PITCH_DEG"] = str(args.background_pitch_deg)
         if args.user_scripts:
             env["BLENDER_USER_SCRIPTS"] = str(args.user_scripts.resolve())
         if args.sanitize_ocio:

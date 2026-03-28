@@ -73,6 +73,8 @@ extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
 extern __constant__ float d_photon_glow_strength;
+extern __constant__ float d_background_yaw_rad;
+extern __constant__ float d_background_pitch_rad;
 extern __constant__ int   d_wiregrid_enabled;    /**< @brief BL-coord wiregrid overlay flag. */
 extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere boundary+glow. */
 extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
@@ -1122,6 +1124,24 @@ __device__ __forceinline__ float d_hash(float3 p) {
 __device__ __forceinline__ float3 d_sample_galaxy_cubemap(float3 dir) {
     if (!d_tex_galaxy) {
         return make_f3(0.0f, 0.0f, 0.0f);
+    }
+
+    if (fabsf(d_background_yaw_rad) > D_EPSILON) {
+        float const cy = cosf(d_background_yaw_rad);
+        float const sy = sinf(d_background_yaw_rad);
+        dir = make_f3(
+            dir.x * cy + dir.z * sy,
+            dir.y,
+            -dir.x * sy + dir.z * cy);
+    }
+
+    if (fabsf(d_background_pitch_rad) > D_EPSILON) {
+        float const cp = cosf(d_background_pitch_rad);
+        float const sp = sinf(d_background_pitch_rad);
+        dir = make_f3(
+            dir.x,
+            dir.y * cp - dir.z * sp,
+            dir.y * sp + dir.z * cp);
     }
 
     float ax = fabsf(dir.x);

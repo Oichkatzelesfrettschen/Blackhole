@@ -67,6 +67,8 @@ struct BH_LaunchParams {
     float background_intensity; /**< @brief Background sky intensity scale. */
     int background_enabled;     /**< @brief Enable procedural star-field background. */
     float photon_glow_strength; /**< @brief Photon-ring glow multiplier for escaped rays. */
+    float background_yaw_rad;   /**< @brief Skybox yaw rotation around the spin axis [rad]. */
+    float background_pitch_rad; /**< @brief Skybox pitch rotation around the camera-right axis [rad]. */
 
     /* Wiregrid BL-coordinate overlay (task A4) */
     int   wiregrid_enabled;    /**< @brief 1 = apply Boyer-Lindquist coordinate overlay. */

@@ -26,6 +26,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inclination-deg", type=float, default=88.0)
     parser.add_argument("--fov-scale", type=float, default=0.7)
     parser.add_argument("--background-intensity", type=float, default=0.2)
+    parser.add_argument("--background-yaw-deg", type=float, default=0.0)
+    parser.add_argument("--background-pitch-deg", type=float, default=0.0)
     parser.add_argument("--exposure", type=float, default=0.7)
     parser.add_argument("--photon-glow", type=float, default=0.02)
     parser.add_argument("--max-steps", type=int, default=1000)
@@ -58,6 +60,8 @@ def main() -> int:
     os.environ["BLACKHOLE_BRIDGE_ADISK_ENABLED"] = "0"
     os.environ["BLACKHOLE_BRIDGE_BACKGROUND_ENABLED"] = "1"
     os.environ["BLACKHOLE_BRIDGE_BACKGROUND_INTENSITY"] = str(args.background_intensity)
+    os.environ["BLACKHOLE_BRIDGE_BACKGROUND_YAW_DEG"] = str(args.background_yaw_deg)
+    os.environ["BLACKHOLE_BRIDGE_BACKGROUND_PITCH_DEG"] = str(args.background_pitch_deg)
     os.environ["BLACKHOLE_BRIDGE_EXPOSURE"] = str(args.exposure)
     os.environ["BLACKHOLE_BRIDGE_PHOTON_GLOW_STRENGTH"] = str(args.photon_glow)
     os.environ["BLACKHOLE_BRIDGE_MAX_STEPS"] = str(args.max_steps)
@@ -101,6 +105,8 @@ def main() -> int:
         "inclination_deg": args.inclination_deg,
         "fov_scale": args.fov_scale,
         "background_intensity": args.background_intensity,
+        "background_yaw_deg": args.background_yaw_deg,
+        "background_pitch_deg": args.background_pitch_deg,
         "exposure": args.exposure,
         "photon_glow": args.photon_glow,
         "max_steps": args.max_steps,
