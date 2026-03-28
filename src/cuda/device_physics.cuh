@@ -42,6 +42,8 @@ extern __constant__ float d_fov_scale;
 extern __constant__ float d_max_dist;
 extern __constant__ float d_cam_pos[3];
 extern __constant__ float d_cam_basis[9];
+extern __constant__ float d_frame_shift_x;
+extern __constant__ float d_frame_shift_y;
 extern __constant__ int   d_max_steps;
 extern __constant__ int   d_width;
 extern __constant__ int   d_height;
@@ -75,6 +77,7 @@ extern __constant__ int   d_background_enabled;
 extern __constant__ float d_photon_glow_strength;
 extern __constant__ float d_background_yaw_rad;
 extern __constant__ float d_background_pitch_rad;
+extern __constant__ float d_background_filter_radius;
 extern __constant__ int   d_wiregrid_enabled;    /**< @brief BL-coord wiregrid overlay flag. */
 extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere boundary+glow. */
 extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
@@ -1121,7 +1124,7 @@ __device__ __forceinline__ float d_hash(float3 p) {
  * @return RGB sky colour in linear light (alpha discarded).  Returns (0,0,0)
  *         if d_tex_galaxy is 0 (not registered) or if @p dir is zero.
  */
-__device__ __forceinline__ float3 d_sample_galaxy_cubemap(float3 dir) {
+__device__ __forceinline__ float3 d_sample_galaxy_cubemap_raw(float3 dir) {
     if (!d_tex_galaxy) {
         return make_f3(0.0f, 0.0f, 0.0f);
     }
@@ -1189,6 +1192,25 @@ __device__ __forceinline__ float3 d_sample_galaxy_cubemap(float3 dir) {
 
     float4 s = tex2DLayered<float4>((cudaTextureObject_t)d_tex_galaxy, u, v, layer);
     return make_f3(s.x, s.y, s.z);
+}
+
+__device__ __forceinline__ float3 d_sample_galaxy_cubemap(float3 dir) {
+    float3 n = d_normalize(dir);
+    float radius = fmaxf(d_background_filter_radius, 0.0f);
+    if (radius <= D_EPSILON) {
+        return d_sample_galaxy_cubemap_raw(n);
+    }
+
+    float3 up = (fabsf(n.y) < 0.9f) ? make_f3(0.0f, 1.0f, 0.0f) : make_f3(1.0f, 0.0f, 0.0f);
+    float3 tangent = d_normalize(d_cross(up, n));
+    float3 bitangent = d_normalize(d_cross(n, tangent));
+
+    float3 sum = d_sample_galaxy_cubemap_raw(n);
+    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_normalize(d_add(n, d_scale(tangent, radius)))));
+    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_normalize(d_add(n, d_scale(tangent, -radius)))));
+    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_normalize(d_add(n, d_scale(bitangent, radius)))));
+    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_normalize(d_add(n, d_scale(bitangent, -radius)))));
+    return d_scale(sum, 0.2f);
 }
 
 /**
@@ -1397,6 +1419,8 @@ __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
     float v = (2.0f * (py + 0.5f) / (float)d_height - 1.0f) * d_fov_scale;
     /* Correct for aspect ratio (matches GLSL uv.x *= resolution.x/resolution.y) */
     u *= (float)d_width / (float)d_height;
+    u += d_frame_shift_x;
+    v += d_frame_shift_y;
 
     /* -u: matches GLSL -uv.x (horizontal mirror to right-hand camera convention).
      * -v: py=0 is image-top in CUDA; gl_FragCoord.y=0 is image-bottom in GLSL,

@@ -30,6 +30,8 @@ __constant__ float d_fov_scale;
 __constant__ float d_max_dist;
 __constant__ float d_cam_pos[3];
 __constant__ float d_cam_basis[9];
+__constant__ float d_frame_shift_x;
+__constant__ float d_frame_shift_y;
 __constant__ int d_max_steps;
 __constant__ int d_width;
 __constant__ int d_height;
@@ -62,6 +64,7 @@ __constant__ int d_background_enabled;
 __constant__ float d_photon_glow_strength;
 __constant__ float d_background_yaw_rad;
 __constant__ float d_background_pitch_rad;
+__constant__ float d_background_filter_radius;
 __constant__ int   d_wiregrid_enabled;     /**< @brief BL-coord wiregrid overlay flag. */
 __constant__ float d_wiregrid_show_ergo;   /**< @brief Show ergosphere boundary+glow. */
 __constant__ float d_wiregrid_grid_scale;  /**< @brief Grid density multiplier. */
@@ -113,6 +116,8 @@ int uploadConstants(
   COPY_CONST(d_step_size, p->step_size);
   COPY_CONST(d_fov_scale, p->fov_scale);
   COPY_CONST(d_max_dist, p->max_dist);
+  COPY_CONST(d_frame_shift_x, p->frame_shift_x);
+  COPY_CONST(d_frame_shift_y, p->frame_shift_y);
   COPY_CONST(d_max_steps, p->max_steps);
   COPY_CONST(d_width, p->width);
   COPY_CONST(d_height, p->height);
@@ -133,6 +138,7 @@ int uploadConstants(
   COPY_CONST(d_photon_glow_strength, p->photon_glow_strength);
   COPY_CONST(d_background_yaw_rad, p->background_yaw_rad);
   COPY_CONST(d_background_pitch_rad, p->background_pitch_rad);
+  COPY_CONST(d_background_filter_radius, p->background_filter_radius);
   COPY_CONST(d_wiregrid_enabled, p->wiregrid_enabled);
   COPY_CONST(d_wiregrid_show_ergo, p->wiregrid_show_ergo);
   COPY_CONST(d_wiregrid_grid_scale, p->wiregrid_grid_scale);

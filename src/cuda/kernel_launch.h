@@ -37,6 +37,8 @@ struct BH_LaunchParams {
     /* Camera */
     float cam_pos[3];   /**< @brief Camera position (x, y, z) in world space. */
     float cam_basis[9]; /**< @brief Camera basis matrix (3x3, column-major, matching glm). */
+    float frame_shift_x; /**< @brief Image-plane horizontal shift in local camera space. */
+    float frame_shift_y; /**< @brief Image-plane vertical shift in local camera space. */
 
     /* Integration */
     int max_steps;      /**< @brief Maximum integration steps per ray. */
@@ -69,6 +71,7 @@ struct BH_LaunchParams {
     float photon_glow_strength; /**< @brief Photon-ring glow multiplier for escaped rays. */
     float background_yaw_rad;   /**< @brief Skybox yaw rotation around the spin axis [rad]. */
     float background_pitch_rad; /**< @brief Skybox pitch rotation around the camera-right axis [rad]. */
+    float background_filter_radius; /**< @brief Skybox angular prefilter radius in direction-space units. */
 
     /* Wiregrid BL-coordinate overlay (task A4) */
     int   wiregrid_enabled;    /**< @brief 1 = apply Boyer-Lindquist coordinate overlay. */

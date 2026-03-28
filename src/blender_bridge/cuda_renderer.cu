@@ -318,6 +318,8 @@ static void fill_params(struct BH_LaunchParams *p,
     p->cam_basis[0] = rx; p->cam_basis[1] = ry; p->cam_basis[2] = rz;
     p->cam_basis[3] = ux; p->cam_basis[4] = uy; p->cam_basis[5] = uz;
     p->cam_basis[6] = fx; p->cam_basis[7] = fy; p->cam_basis[8] = fz;
+    p->frame_shift_x = env_float("BLACKHOLE_BRIDGE_FRAME_SHIFT_X", 0.0f);
+    p->frame_shift_y = env_float("BLACKHOLE_BRIDGE_FRAME_SHIFT_Y", 0.0f);
 
     /* Feature flags */
     p->adisk_enabled = env_flag("BLACKHOLE_BRIDGE_ADISK_ENABLED", 1);
@@ -331,6 +333,7 @@ static void fill_params(struct BH_LaunchParams *p,
     p->photon_glow_strength = env_float("BLACKHOLE_BRIDGE_PHOTON_GLOW_STRENGTH", 1.0f);
     p->background_yaw_rad = env_float("BLACKHOLE_BRIDGE_BACKGROUND_YAW_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
     p->background_pitch_rad = env_float("BLACKHOLE_BRIDGE_BACKGROUND_PITCH_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
+    p->background_filter_radius = env_float("BLACKHOLE_BRIDGE_BACKGROUND_FILTER_RADIUS", 0.0f);
     p->adisk_lit = env_float("BLACKHOLE_BRIDGE_ADISK_LIT", 0.35f);
 }
 
