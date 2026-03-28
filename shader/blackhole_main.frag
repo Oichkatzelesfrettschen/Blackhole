@@ -51,6 +51,8 @@ uniform vec4 backgroundLayerParams[3];
 uniform float backgroundLayerLodBias[3];
 uniform float backgroundEnabled = 0.0;
 uniform float backgroundIntensity = 1.0;
+uniform float backgroundYawRad = 0.0;
+uniform float backgroundPitchRad = 0.0;
 uniform float kerrSpin = 0.0;
 uniform float useLUTs = 0.0;
 uniform float useNoiseTexture = 0.0;
@@ -425,6 +427,12 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
   if (backgroundEnabled > 0.5) {
     // Convert 3D direction to equirectangular UV coordinates
     vec3 d = normalize(dir);
+    if (abs(backgroundYawRad) > EPSILON) {
+      d = rotateVector(d, vec3(0.0, 1.0, 0.0), backgroundYawRad);
+    }
+    if (abs(backgroundPitchRad) > EPSILON) {
+      d = rotateVector(d, normalize(cameraBasis[0]), backgroundPitchRad);
+    }
     float u = atan(d.z, d.x) / (2.0 * 3.14159265359) + 0.5;
     float v = asin(clamp(d.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
     vec2 baseUV = vec2(u, v);

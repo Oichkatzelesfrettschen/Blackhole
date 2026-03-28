@@ -375,15 +375,19 @@ struct ShowcaseOrbitComposition {
   float fovDeg;
   float exposure;
   float backgroundIntensity;
+  float backgroundYawDeg;
+  float backgroundPitchDeg;
+  float backgroundOffsetX;
+  float backgroundOffsetY;
   float sweepDeg;
 };
 
 constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"centered", 0.0f, 0.0f, -7.0f, 18.0f, 58.0f, 2.9f, 0.78f, 8.0f},
-    {"left-third", 0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.8f, 0.8f, 7.0f},
-    {"right-third", -0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.8f, 0.8f, 7.0f},
-    {"wide-left", 0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.84f, 6.0f},
-    {"wide-right", -0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.84f, 6.0f},
+    {"centered", 0.0f, 0.0f, -7.0f, 18.0f, 58.0f, 2.9f, 0.78f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
+    {"left-third", 0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.8f, 0.8f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
+    {"right-third", -0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.8f, 0.8f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
+    {"wide-left", 0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.84f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
+    {"wide-right", -0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.84f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
 }};
 
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
@@ -425,6 +429,8 @@ void printUsage(const char *argv0) {
   std::printf("  --record-composition <n> Showcase framing: centered | left-third | right-third | wide-left | wide-right.\n");
   std::printf("  --record-frame-x <n>     Override horizontal framing offset in half-frame units.\n");
   std::printf("  --record-frame-y <n>     Override vertical framing offset in half-frame units.\n");
+  std::printf("  --record-bg-yaw <deg>    Override showcase background yaw.\n");
+  std::printf("  --record-bg-pitch <deg>  Override showcase background pitch.\n");
 }
 
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
@@ -2485,6 +2491,10 @@ int main(int argc, char **argv) {
     bool        hasRecordFrameX = false;
     float       recordFrameY = 0.0f;
     bool        hasRecordFrameY = false;
+    float       recordBackgroundYawDeg = 0.0f;
+    bool        hasRecordBackgroundYaw = false;
+    float       recordBackgroundPitchDeg = 0.0f;
+    bool        hasRecordBackgroundPitch = false;
     for (int i = 1; i < argc; ++i) {
       std::string const arg = argv[i];
       if (arg == "--help" || arg == "-h") {
@@ -2556,6 +2566,16 @@ int main(int argc, char **argv) {
       if (arg == "--record-frame-y" && i + 1 < argc) {
         recordFrameY = std::strtof(argv[++i], nullptr);
         hasRecordFrameY = true;
+        continue;
+      }
+      if (arg == "--record-bg-yaw" && i + 1 < argc) {
+        recordBackgroundYawDeg = std::strtof(argv[++i], nullptr);
+        hasRecordBackgroundYaw = true;
+        continue;
+      }
+      if (arg == "--record-bg-pitch" && i + 1 < argc) {
+        recordBackgroundPitchDeg = std::strtof(argv[++i], nullptr);
+        hasRecordBackgroundPitch = true;
         continue;
       }
       std::printf("Unknown argument: %s\n", arg.c_str());
@@ -3570,13 +3590,31 @@ int main(int argc, char **argv) {
       static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerScale = {1.0f, 1.08f, 1.16f};
       static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
       static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
+      static glm::vec2 backgroundLayerGlobalOffset = glm::vec2(0.0f);
+      static float backgroundYawRad = 0.0f;
+      static float backgroundPitchRad = 0.0f;
       static float tonemapChromaticAberrationStrength = 0.002f;
       static float tonemapVignetteStrength = 1.0f;
       static float tonemapFilmGrainStrength = 0.005f;
       if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
+        const ShowcaseOrbitComposition *const composition =
+            findShowcaseOrbitComposition(recordComposition);
         backgroundLayerScale = {1.0f, 1.14f, 1.3f};
         backgroundLayerIntensity = {1.0f, 0.82f, 0.56f};
         backgroundLayerLodBias = {0.6f, 1.45f, 2.35f};
+        backgroundLayerGlobalOffset =
+            composition != nullptr
+                ? glm::vec2(composition->backgroundOffsetX, composition->backgroundOffsetY)
+                : glm::vec2(0.0f);
+        backgroundYawRad = glm::radians(hasRecordBackgroundYaw
+                                            ? recordBackgroundYawDeg
+                                            : (composition != nullptr ? composition->backgroundYawDeg
+                                                                      : 0.0f));
+        backgroundPitchRad = glm::radians(hasRecordBackgroundPitch
+                                              ? recordBackgroundPitchDeg
+                                              : (composition != nullptr
+                                                     ? composition->backgroundPitchDeg
+                                                     : 0.0f));
         tonemapChromaticAberrationStrength = 0.0004f;
         tonemapVignetteStrength = 0.12f;
         tonemapFilmGrainStrength = 0.0f;
@@ -3584,6 +3622,9 @@ int main(int argc, char **argv) {
         backgroundLayerScale = {1.0f, 1.08f, 1.16f};
         backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
         backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
+        backgroundLayerGlobalOffset = glm::vec2(0.0f);
+        backgroundYawRad = 0.0f;
+        backgroundPitchRad = 0.0f;
         tonemapChromaticAberrationStrength = 0.002f;
         tonemapVignetteStrength = 1.0f;
         tonemapFilmGrainStrength = 0.005f;
@@ -3870,7 +3911,8 @@ int main(int argc, char **argv) {
       for (std::size_t i = 0; i < static_cast<std::size_t>(K_BACKGROUND_LAYERS); ++i) {
         glm::vec2 const offset = drift + parallaxBase * backgroundLayerDepth.at(i);
         backgroundLayerParams.at(i) =
-            glm::vec4(offset, backgroundLayerScale.at(i), backgroundLayerIntensity.at(i));
+            glm::vec4(offset + backgroundLayerGlobalOffset, backgroundLayerScale.at(i),
+                      backgroundLayerIntensity.at(i));
       }
       glm::mat4 projectionMatrix = glm::perspective(
           glm::radians(cam.fov), static_cast<float>(renderWidth) / static_cast<float>(renderHeight),
@@ -3995,6 +4037,8 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["noiseTextureScale"] = noiseTextureScale;
         rtti.floatUniforms["backgroundEnabled"] = settings.backgroundEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["backgroundIntensity"] = settings.backgroundIntensity;
+        rtti.floatUniforms["backgroundYawRad"] = backgroundYawRad;
+        rtti.floatUniforms["backgroundPitchRad"] = backgroundPitchRad;
         rtti.floatUniforms["time"] = frameTime;
         rtti.vec3Uniforms["grmhdBoundsMin"] = grmhdBoundsMin;
         rtti.vec3Uniforms["grmhdBoundsMax"] = grmhdBoundsMax;

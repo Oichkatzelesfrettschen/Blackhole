@@ -85,10 +85,17 @@ Notes:
   - `right-third`
   - `wide-left`
   - `wide-right`
+  Each preset now carries sane camera and background defaults, not just camera
+  framing.
 - You can also override the framing directly with:
   - `--record-frame-x`
   - `--record-frame-y`
   These are measured in half-frame units in camera space. Positive `x` pushes
   the black hole left in frame. Positive `y` pushes it down in frame.
+- You can override showcase background placement directly with:
+  - `--record-bg-yaw`
+  - `--record-bg-pitch`
+  Use these when the lensed background structure is landing in the wrong part
+  of the frame and you need a sharper still than the preset default.
 - No `sudo`, `yay`, or askpass helper is needed if the required tools are
   already installed.
