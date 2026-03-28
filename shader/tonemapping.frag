@@ -21,6 +21,9 @@ uniform float tonemappingEnabled;
 uniform sampler2D texture0;
 uniform vec2 resolution;
 uniform float time;
+uniform float chromaticAberrationStrength = 0.002;
+uniform float vignetteStrength = 1.0;
+uniform float filmGrainStrength = 0.005;
 
 ///----
 /// Narkowicz 2015, "ACES Filmic Tone Mapping Curve"
@@ -47,7 +50,7 @@ void main() {
     // Chromatic Aberration (Simulate lens dispersion)
     // Stronger at edges
     float dist = distance(texCoord, vec2(0.5));
-    float caStrength = 0.002 * dist; // Reduced strength
+    float caStrength = chromaticAberrationStrength * dist;
     vec2 dir = texCoord - 0.5;
     
     float r = texture(texture0, texCoord - dir * caStrength).r;
@@ -56,7 +59,7 @@ void main() {
     color = vec3(r, g, b);
 
     // Vignette (Subtle)
-    float vignette = smoothstep(1.0, 0.2, dist);
+    float vignette = mix(1.0, smoothstep(1.0, 0.2, dist), clamp(vignetteStrength, 0.0, 1.0));
     color *= vignette;
 
     // Exposure trim before ACES tone mapping
@@ -66,9 +69,8 @@ void main() {
     color = aces(color);
 
     // Film Grain (Animated, Subtle)
-    float grainStrength = 0.005;
     float noise = random(texCoord + mod(time, 10.0));
-    color += (noise - 0.5) * grainStrength;
+    color += (noise - 0.5) * filmGrainStrength;
 
     // Gamma Correction
     color = pow(color, vec3(1.0 / gamma));

@@ -3365,7 +3365,7 @@ int main(int argc, char **argv) {
           kerrSpin           = 0.0f;
           SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
           SettingsManager::instance().get().backgroundEnabled = true;
-          SettingsManager::instance().get().backgroundIntensity = 0.45f;
+          SettingsManager::instance().get().backgroundIntensity = 1.05f;
           CameraState &camMutable = input.camera();
           camMutable = CameraState{
               .yaw = hasRecordYaw ? recordYawDeg : -90.0f,
@@ -3504,6 +3504,24 @@ int main(int argc, char **argv) {
       static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerScale = {1.0f, 1.08f, 1.16f};
       static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
       static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
+      static float tonemapChromaticAberrationStrength = 0.002f;
+      static float tonemapVignetteStrength = 1.0f;
+      static float tonemapFilmGrainStrength = 0.005f;
+      if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
+        backgroundLayerScale = {1.0f, 1.14f, 1.32f};
+        backgroundLayerIntensity = {1.0f, 0.95f, 0.7f};
+        backgroundLayerLodBias = {1.25f, 2.25f, 3.5f};
+        tonemapChromaticAberrationStrength = 0.0004f;
+        tonemapVignetteStrength = 0.2f;
+        tonemapFilmGrainStrength = 0.0f;
+      } else {
+        backgroundLayerScale = {1.0f, 1.08f, 1.16f};
+        backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
+        backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
+        tonemapChromaticAberrationStrength = 0.002f;
+        tonemapVignetteStrength = 1.0f;
+        tonemapFilmGrainStrength = 0.005f;
+      }
       static bool wiregridEnabled = false;
       static WiregridParams wiregridParams;
       static glm::vec4 wiregridColor = glm::vec4(0.2f, 0.6f, 1.0f, 0.4f);
@@ -5032,6 +5050,9 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["tonemappingEnabled"] = tonemappingEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["exposure"] = toneExposure;
         rtti.floatUniforms["gamma"] = gamma;
+        rtti.floatUniforms["chromaticAberrationStrength"] = tonemapChromaticAberrationStrength;
+        rtti.floatUniforms["vignetteStrength"] = tonemapVignetteStrength;
+        rtti.floatUniforms["filmGrainStrength"] = tonemapFilmGrainStrength;
 
         renderToTexture(rtti);
       }
