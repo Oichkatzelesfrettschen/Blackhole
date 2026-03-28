@@ -45,10 +45,11 @@ def parse_args() -> argparse.Namespace:
         default=Path("/home/eirikr/Github/Blackhole"),
     )
     parser.add_argument(
-        "--binary",
+        "--runner",
         type=Path,
-        default=Path("/home/eirikr/Github/Blackhole/build/Release/BlackholeGLSL"),
+        default=Path("/home/eirikr/Github/Blackhole/scripts/run_glsl_headless.py"),
     )
+    parser.add_argument("--backend", choices=("hidden", "xvfb"), default="hidden")
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -57,7 +58,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--frames", type=int, default=1)
-    parser.add_argument("--yaw", type=float, default=-112.0)
+    parser.add_argument("--yaw", type=float, default=-90.0)
     parser.add_argument("--sweep-deg", type=float, default=0.0)
     parser.add_argument("--top-k", type=int, default=6)
     return parser.parse_args()
@@ -65,7 +66,8 @@ def parse_args() -> argparse.Namespace:
 
 def run_case(
     repo_root: Path,
-    binary: Path,
+    runner: Path,
+    backend: str,
     output_root: Path,
     index: int,
     width: int,
@@ -79,10 +81,18 @@ def run_case(
     case_dir.mkdir(parents=True, exist_ok=True)
     log_path = case_dir / "run.log"
     command = [
-        str(binary),
-        "--record-frames",
+        "python3",
+        str(runner),
+        "--backend",
+        backend,
+        "--record-dir",
         str(case_dir),
+        "--record-frames",
         str(frames),
+        "--width",
+        str(width),
+        "--height",
+        str(height),
         "--record-profile",
         "showcase-orbit",
         "--record-yaw",
@@ -98,15 +108,11 @@ def run_case(
         "--record-sweep-deg",
         f"{case.sweep_deg:.3f}",
     ]
-    env = dict(os.environ)
-    env["BLACKHOLE_RECORD_WIDTH"] = str(width)
-    env["BLACKHOLE_RECORD_HEIGHT"] = str(height)
     with log_path.open("w", encoding="utf-8") as log_file:
         subprocess.run(
             command,
             check=True,
             cwd=repo_root,
-            env=env,
             stdout=log_file,
             stderr=subprocess.STDOUT,
         )
@@ -194,14 +200,14 @@ def write_contact_sheet(results: list[SweepResult], destination: Path) -> None:
 def main() -> int:
     args = parse_args()
     repo_root = args.source_dir.resolve()
-    binary = args.binary.resolve()
+    runner = args.runner.resolve()
     output_root = args.output_dir.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
 
     distances = [9.0, 10.0, 11.0]
     pitches = [-2.0, 0.0, 4.0]
-    fovs = [72.0, 90.0]
-    exposures = [0.8, 1.0]
+    fovs = [82.0, 90.0]
+    exposures = [4.0, 6.0, 8.0]
 
     cases = [
         SweepCase(
@@ -225,7 +231,8 @@ def main() -> int:
         )
         frame_path = run_case(
             repo_root=repo_root,
-            binary=binary,
+            runner=runner,
+            backend=args.backend,
             output_root=output_root,
             index=index,
             width=args.width,
@@ -263,7 +270,8 @@ def main() -> int:
         shutil.copy2(source, destination)
 
     manifest = {
-        "binary": str(binary),
+        "runner": str(runner),
+        "backend": args.backend,
         "source_dir": str(repo_root),
         "cases": [asdict(result) for result in results],
         "top_cases": [asdict(result) for result in top_results],

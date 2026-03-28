@@ -3327,7 +3327,7 @@ int main(int argc, char **argv) {
           bloomIterations    = 4;
           bloomStrength      = 0.08f;
           tonemappingEnabled = true;
-          toneExposure       = 1.0f;
+          toneExposure       = 6.0f;
           gamma              = 2.35f;
           computeMaxSteps    = 1000;
           computeStepSize    = 0.02f;
@@ -3335,7 +3335,7 @@ int main(int argc, char **argv) {
           kerrSpin           = 0.0f;
           SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
           SettingsManager::instance().get().backgroundEnabled = true;
-          SettingsManager::instance().get().backgroundIntensity = 0.45f;
+          SettingsManager::instance().get().backgroundIntensity = 0.8f;
           CameraState &camMutable = input.camera();
           camMutable = CameraState{.yaw = -90.0f, .pitch = 0.0f, .roll = 0.0f, .distance = 10.0f, .fov = 90.0f};
           cameraModeIndex = static_cast<int>(CameraMode::Input);
@@ -3578,6 +3578,13 @@ int main(int argc, char **argv) {
         toneExposure = 1.0f;
         gamma = settings.gamma;
         postProcessingSettingsLoaded = true;
+      }
+      if (!recordFramesDir.empty()) {
+        if (hasRecordExposure) {
+          toneExposure = recordExposure;
+        } else if (recordProfile == "showcase-orbit") {
+          toneExposure = 6.0f;
+        }
       }
       if (!bloomSettingsLoaded) {
         bloomIterations = std::clamp(settings.bloomIterations, 1, kMaxBloomIterations);
