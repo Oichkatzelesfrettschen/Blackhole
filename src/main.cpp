@@ -3446,7 +3446,7 @@ int main(int argc, char **argv) {
           adiskHeight        = 0.42f;
           adiskLit           = 0.24f;
           dopplerStrength    = 1.15f;
-          photonSphereGlowStrength = 1.85f;
+          photonSphereGlowStrength = 1.15f;
           bloomIterations    = 5;
           bloomStrength      = 0.055f;
           tonemappingEnabled = true;

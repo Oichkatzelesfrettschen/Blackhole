@@ -243,6 +243,7 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   }
 
   vec3 sphericalCoord = toSpherical(pos);
+  float radial01 = clamp((r - innerRadius) / max(outerRadius - innerRadius, EPSILON), 0.0, 1.0);
 
   // Scale the rho and phi so that the particales appear to be at the correct
   // scale visually.
@@ -288,10 +289,28 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   vec3 dustColor =
       texture(colorMap, vec2(sphericalCoord.x / outerRadius, 0.5)).rgb;
 
+  // Give the inner disk a hotter, brighter thermal character so the accretion
+  // structure reads as a scene element instead of a uniformly tinted slab.
+  vec3 thermalInner = vec3(1.35, 0.78, 0.28);
+  vec3 thermalOuter = vec3(0.92, 0.86, 0.78);
+  vec3 thermalTint = mix(thermalInner, thermalOuter, sqrt(radial01));
+  dustColor *= thermalTint;
+
   // Relativistic Doppler beaming (boosts the approaching side of the disk)
   vec3 velDir = normalize(vec3(-pos.z, 0.0, pos.x));
-  float doppler = 1.0 + dot(velDir, normalize(rayDir)) * 0.5 * dopplerStrength;
-  dustColor *= max(0.2, doppler);
+  float doppler = 1.0 + dot(velDir, normalize(rayDir)) * 0.65 * dopplerStrength;
+  float beaming = pow(max(0.18, doppler), 1.35);
+  dustColor *= beaming;
+
+  // Viewing the thin disk closer to edge-on should increase its visual force.
+  float grazingBoost = pow(clamp(1.0 - abs(rayDir.y), 0.0, 1.0), 1.5);
+  dustColor *= mix(1.0, 1.55, grazingBoost);
+
+  // Emphasize the inner-crescent read where the disk is both hot and seen as a
+  // thin luminous sheet near the hole.
+  float midplaneBoost = pow(clamp(1.0 - normalizedV, 0.0, 1.0), 0.45);
+  float crescentBoost = mix(1.0, 1.8, midplaneBoost * (1.0 - radial01));
+  dustColor *= crescentBoost;
 
   // Phase 8.2 Priority 3: Conditional texture batching with mix() to avoid branch divergence
   float rNorm = r / max(schwarzschildRadius, EPSILON);  // Use cached radius
@@ -331,7 +350,11 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
     dustColor = applyGravitationalRedshift(dustColor, z);
   }
 
-  color += density * adiskLit * dustColor * alpha * abs(noise);
+  // Push more emissive structure toward the near-ISCO region so the disk has a
+  // brighter asymmetric crescent rather than reading as a faint halo.
+  float innerBoost = mix(1.8, 0.85, pow(radial01, 0.65));
+  float emission = density * adiskLit * alpha * abs(noise) * innerBoost;
+  color += emission * dustColor;
   return true;
 }
 
@@ -402,10 +425,14 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
           // Phase 8.2 optimization: LUT for exp(-distance*4.0) avoids transcendental
           float u = photonSphereDistance / 0.5;  // Normalize to [0,1]
           float glowIntensity =
-              texture(photonGlowLUT, vec2(u, 0.5)).r * 0.3 * photonSphereGlowStrength;
-          // Orange-yellow glow color for photon ring
-          const vec3 GLOW_COLOR = vec3(1.0, 0.7, 0.3);
-          color += GLOW_COLOR * glowIntensity * alpha;
+              texture(photonGlowLUT, vec2(u, 0.5)).r * 0.22 * photonSphereGlowStrength;
+          glowIntensity = pow(glowIntensity, 1.08);
+          // A brighter warm-white core with amber shoulders reads more like a
+          // concentrated photon ring than a generic orange haze.
+          const vec3 GLOW_COLOR = vec3(1.06, 0.86, 0.58);
+          const vec3 RIM_COLOR = vec3(1.22, 1.0, 0.78);
+          float rimMix = smoothstep(0.09, 0.0, photonSphereDistance);
+          color += mix(GLOW_COLOR, RIM_COLOR, rimMix) * glowIntensity * alpha;
           // Phase 8.2 Priority 3: Cache distance computation
           depthDistance = min(depthDistance, length(pos - origin));
         }
