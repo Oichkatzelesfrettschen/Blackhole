@@ -65,6 +65,20 @@ int bhCudaRegisterLut(BH_CudaBackend *backend, int slot, unsigned int glTexture,
                       unsigned int target);
 
 /**
+ * @brief Register the desktop renderer's standalone equirect background texture.
+ *
+ * This supplements the numbered LUT slots so CUDA can sample the same layered
+ * 2D background asset class that the GLSL desktop lane uses.
+ *
+ * @param backend   Non-null backend handle.
+ * @param glTexture GL texture ID.
+ * @param target    GL texture target (GL_TEXTURE_2D).
+ * @return 0 on success, non-zero on error.
+ */
+int bhCudaRegisterBackgroundTexture(BH_CudaBackend *backend, unsigned int glTexture,
+                                    unsigned int target);
+
+/**
  * @brief Set the active kernel variant.
  *
  * @param backend Non-null backend handle.

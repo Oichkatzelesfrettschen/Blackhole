@@ -112,6 +112,82 @@ static int lutRegister2D(LutManager &mgr, int slot, unsigned int glTex,
   return 0;
 }
 
+static int lutRegisterStandalone2D(cudaGraphicsResource_t &resource,
+                                   cudaTextureObject_t &texture,
+                                   bool &registered,
+                                   unsigned int glTex,
+                                   unsigned int glTarget) {
+  cudaError_t err =
+      cudaGraphicsGLRegisterImage(&resource, glTex, glTarget,
+                                  cudaGraphicsRegisterFlagsReadOnly);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr,
+                  "lutRegisterStandalone2D: cudaGraphicsGLRegisterImage failed: %s\n",
+                  cudaGetErrorString(err));
+    return -1;
+  }
+
+  err = cudaGraphicsMapResources(1, &resource, nullptr);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr, "lutRegisterStandalone2D: MapResources failed: %s\n",
+                  cudaGetErrorString(err));
+    cudaGraphicsUnregisterResource(resource);
+    resource = nullptr;
+    return -1;
+  }
+
+  cudaArray_t array = nullptr;
+  err = cudaGraphicsSubResourceGetMappedArray(&array, resource, 0, 0);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr, "lutRegisterStandalone2D: GetMappedArray failed: %s\n",
+                  cudaGetErrorString(err));
+    cudaGraphicsUnmapResources(1, &resource, nullptr);
+    cudaGraphicsUnregisterResource(resource);
+    resource = nullptr;
+    return -1;
+  }
+
+  cudaResourceDesc resDesc = {};
+  resDesc.resType         = cudaResourceTypeArray;
+  resDesc.res.array.array = array;
+
+  cudaChannelFormatDesc channelDesc = {};
+  cudaExtent extent = {};
+  unsigned int arrayFlags = 0U;
+  err = cudaArrayGetInfo(&channelDesc, &extent, &arrayFlags, array);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr, "lutRegisterStandalone2D: cudaArrayGetInfo failed: %s\n",
+                  cudaGetErrorString(err));
+    cudaGraphicsUnmapResources(1, &resource, nullptr);
+    cudaGraphicsUnregisterResource(resource);
+    resource = nullptr;
+    return -1;
+  }
+
+  cudaTextureDesc texDesc = {};
+  texDesc.addressMode[0]  = cudaAddressModeWrap;
+  texDesc.addressMode[1]  = cudaAddressModeClamp;
+  texDesc.filterMode      = cudaFilterModeLinear;
+  texDesc.readMode        = (channelDesc.f == cudaChannelFormatKindFloat)
+                                ? cudaReadModeElementType
+                                : cudaReadModeNormalizedFloat;
+  texDesc.normalizedCoords = 1;
+
+  err = cudaCreateTextureObject(&texture, &resDesc, &texDesc, nullptr);
+  if (err != cudaSuccess) {
+    (void)fprintf(stderr, "lutRegisterStandalone2D: CreateTextureObject failed: %s\n",
+                  cudaGetErrorString(err));
+    cudaGraphicsUnmapResources(1, &resource, nullptr);
+    cudaGraphicsUnregisterResource(resource);
+    resource = nullptr;
+    return -1;
+  }
+
+  cudaGraphicsUnmapResources(1, &resource, nullptr);
+  registered = true;
+  return 0;
+}
+
 /**
  * @brief Register a GL_TEXTURE_CUBE_MAP texture (galaxy background, slot 4).
  *
@@ -368,7 +444,35 @@ cudaTextureObject_t lutGetTex(const LutManager &mgr, int slot) {
   return mgr.texObjects[slot];
 }
 
+int lutRegisterBackground(LutManager &mgr, unsigned int glTex, unsigned int glTarget) {
+  if (mgr.backgroundRegistered) {
+    lutUnregisterBackground(mgr);
+  }
+  return lutRegisterStandalone2D(mgr.backgroundResource, mgr.backgroundTexture,
+                                 mgr.backgroundRegistered, glTex, glTarget);
+}
+
+void lutUnregisterBackground(LutManager &mgr) {
+  if (!mgr.backgroundRegistered) {
+    return;
+  }
+  if (mgr.backgroundTexture != 0u) {
+    cudaDestroyTextureObject(mgr.backgroundTexture);
+    mgr.backgroundTexture = 0;
+  }
+  if (mgr.backgroundResource != nullptr) {
+    cudaGraphicsUnregisterResource(mgr.backgroundResource);
+    mgr.backgroundResource = nullptr;
+  }
+  mgr.backgroundRegistered = false;
+}
+
+cudaTextureObject_t lutGetBackgroundTex(const LutManager &mgr) {
+  return mgr.backgroundRegistered ? mgr.backgroundTexture : 0;
+}
+
 void lutShutdown(LutManager &mgr) {
+  lutUnregisterBackground(mgr);
   for (int i = 0; i < BhLutCount; ++i) {
     lutUnregister(mgr, i);
   }

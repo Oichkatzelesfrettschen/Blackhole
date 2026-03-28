@@ -4925,6 +4925,13 @@ int main(int argc, char **argv) {
               cudaManager.registerLut(4, galaxyTexForCuda,
                                       static_cast<unsigned int>(GL_TEXTURE_CUBE_MAP));
             }
+            /* Register the layered desktop background equirect texture so the CUDA
+             * lane samples the same 2D scene asset class as the GLSL desktop lane. */
+            GLuint const backgroundTexForCuda = (backgroundBase != 0) ? backgroundBase : fallback2D;
+            if (backgroundTexForCuda != 0) {
+              bhCudaRegisterBackgroundTexture(cudaManager.backend(), backgroundTexForCuda,
+                                              static_cast<unsigned int>(GL_TEXTURE_2D));
+            }
           }
 
           if (cudaManager.isReady()) {
@@ -4957,6 +4964,21 @@ int main(int argc, char **argv) {
             cp.doppler_strength = dopplerStrength;
             cp.background_intensity = settings.backgroundIntensity;
             cp.background_enabled = backgroundEnabledEffective ? 1 : 0;
+            cp.photon_glow_strength = enablePhotonSphereEffective ? photonSphereGlowStrength : 0.0f;
+            cp.background_yaw_rad = backgroundYawRad;
+            cp.background_pitch_rad = backgroundPitchRad;
+            cp.background_filter_radius = 0.0f;
+            cp.frame_shift_x = 0.0f;
+            cp.frame_shift_y = 0.0f;
+            for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
+              auto const &params = backgroundLayerParams.at(static_cast<std::size_t>(i));
+              cp.background_layer_params[i * 4 + 0] = params.x;
+              cp.background_layer_params[i * 4 + 1] = params.y;
+              cp.background_layer_params[i * 4 + 2] = params.z;
+              cp.background_layer_params[i * 4 + 3] = params.w;
+              cp.background_layer_lod_bias[i] =
+                  std::max(backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
+            }
             // Wiregrid BL-coord overlay (task A4)
             cp.wiregrid_enabled    = wiregridEnabled ? 1 : 0;
             cp.wiregrid_show_ergo  = wiregridParams.showErgosphere ? 1.0f : 0.0f;

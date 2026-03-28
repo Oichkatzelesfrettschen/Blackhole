@@ -46,6 +46,9 @@ struct LutManager {
   cudaTextureObject_t texObjects[BhLutCount]{};      /**< @brief Per-slot CUDA texture objects (0 = unregistered). */
   cudaArray_t layeredArrays[BhLutCount]{};           /**< @brief Owned 6-layer arrays for cubemap slots (null for 2D slots). */
   bool registered[BhLutCount]{};                     /**< @brief True when the slot holds a valid texture object. */
+  cudaGraphicsResource_t backgroundResource{};       /**< @brief Optional standalone equirect background GL resource. */
+  cudaTextureObject_t backgroundTexture{};           /**< @brief CUDA texture object for the standalone equirect background. */
+  bool backgroundRegistered{};                       /**< @brief True when the standalone background texture is valid. */
 
   LutManager() {
     for (int i = 0; i < BhLutCount; ++i) {
@@ -54,6 +57,9 @@ struct LutManager {
       layeredArrays[i] = nullptr;
       registered[i]    = false;
     }
+    backgroundResource = nullptr;
+    backgroundTexture = 0;
+    backgroundRegistered = false;
   }
 };
 
@@ -88,6 +94,35 @@ void lutUnregister(LutManager &mgr, int slot);
  * @return cudaTextureObject_t for the slot, or 0 if not registered or out of range.
  */
 cudaTextureObject_t lutGetTex(const LutManager &mgr, int slot);
+
+/**
+ * @brief Register a standalone GL_TEXTURE_2D background for layered equirect sampling.
+ *
+ * This is intentionally separate from the BhLutSlot table because the desktop
+ * renderer already consumes all numbered LUT slots. The registered texture is
+ * uploaded to the dedicated d_tex_background_equirect constant.
+ *
+ * @param mgr      LUT manager to update.
+ * @param glTex    GL texture ID.
+ * @param glTarget GL texture target (must be GL_TEXTURE_2D).
+ * @return 0 on success, -1 on error.
+ */
+int lutRegisterBackground(LutManager &mgr, unsigned int glTex, unsigned int glTarget);
+
+/**
+ * @brief Unregister the standalone background texture.
+ *
+ * @param mgr LUT manager.
+ */
+void lutUnregisterBackground(LutManager &mgr);
+
+/**
+ * @brief Get the standalone background texture object, or 0 if unavailable.
+ *
+ * @param mgr LUT manager.
+ * @return cudaTextureObject_t for the standalone background texture.
+ */
+cudaTextureObject_t lutGetBackgroundTex(const LutManager &mgr);
 
 /**
  * @brief Unregister all slots and free all CUDA LUT resources.

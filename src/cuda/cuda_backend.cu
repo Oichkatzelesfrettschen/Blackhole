@@ -33,6 +33,9 @@ static void sync_lut_constants(const LutManager& luts) {
         (unsigned long long)lutGetTex(luts, BhLutSynchG),
         (unsigned long long)lutGetTex(luts, BhLutGrmhdRight)
     );
+    bh_upload_bridge_background_texture(
+        (unsigned long long)lutGetBackgroundTex(luts)
+    );
 }
 
 /**
@@ -122,6 +125,17 @@ extern "C" int bhCudaRegisterLut(BH_CudaBackend* backend,
     int rc = lutRegister(backend->luts, slot, gl_texture, target);
     if (rc == 0) {
         /* Keep __constant__ in sync so next frame picks up the new texture */
+        sync_lut_constants(backend->luts);
+    }
+    return rc;
+}
+
+extern "C" int bhCudaRegisterBackgroundTexture(BH_CudaBackend* backend,
+                                               unsigned int gl_texture,
+                                               unsigned int target) {
+    if (!backend) return -1;
+    int rc = lutRegisterBackground(backend->luts, gl_texture, target);
+    if (rc == 0) {
         sync_lut_constants(backend->luts);
     }
     return rc;

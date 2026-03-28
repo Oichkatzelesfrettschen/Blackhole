@@ -775,6 +775,7 @@ struct HitResult {
     bool hit_horizon;  /**< @brief Ray crossed the event horizon. */
     bool escaped;      /**< @brief Ray escaped to infinity (r > max_dist or step budget exhausted). */
     float3 hit_point;  /**< @brief World-space position of the termination event. */
+    float3 closest_approach_point; /**< @brief World-space position at minimum radius along the ray. */
     float phi;         /**< @brief Azimuthal angle at disk hit (for Doppler beaming); 0 otherwise. */
     float redshift;    /**< @brief Gravitational redshift factor at disk hit; 1 otherwise. */
     float min_radius;  /**< @brief Minimum radial distance reached along this ray. */
@@ -863,6 +864,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
     result.hit_horizon = false;
     result.escaped = false;
     result.hit_point = make_f3(0.0f, 0.0f, 0.0f);
+    result.closest_approach_point = cam_pos;
     result.phi = 0.0f;
     result.redshift = 1.0f;
     result.min_radius = d_length(cam_pos);
@@ -885,7 +887,10 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
 
         for (int step = 0; step < max_steps; ++step) {
             float3 old_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
-            result.min_radius = fminf(result.min_radius, kr.r);
+            if (kr.r < result.min_radius) {
+                result.min_radius = kr.r;
+                result.closest_approach_point = old_pos;
+            }
 
             if (kr.r <= r_horizon) {
                 result.hit_horizon = true;
@@ -929,7 +934,10 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
             d_step_rk4(pos, vel, rs, dt);
 
             float r = d_length(pos);
-            result.min_radius = fminf(result.min_radius, r);
+            if (r < result.min_radius) {
+                result.min_radius = r;
+                result.closest_approach_point = pos;
+            }
 
             if (r <= rs) {
                 result.hit_horizon = true;
@@ -1458,6 +1466,85 @@ __device__ __forceinline__ float4 d_background_color(float3 dir) {
     return make_float4(sky.x, sky.y, sky.z, 1.0f);
 }
 
+__device__ __forceinline__ float d_luminance(float3 color) {
+    return 0.2126f * color.x + 0.7152f * color.y + 0.0722f * color.z;
+}
+
+__device__ __forceinline__ float3 d_apply_simple_redshift(float3 color, float z) {
+    float one_plus_z = 1.0f + z;
+    float dimming = 1.0f / fmaxf(one_plus_z * one_plus_z * one_plus_z, D_EPSILON);
+    return d_scale(color, dimming);
+}
+
+__device__ __forceinline__ float d_smoothstep_range(float edge0, float edge1, float x) {
+    float t = fmaxf(0.0f, fminf((x - edge0) / fmaxf(edge1 - edge0, D_EPSILON), 1.0f));
+    return t * t * (3.0f - 2.0f * t);
+}
+
+__device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
+                                                             float min_radius,
+                                                             float3 closest_pos,
+                                                             float3 cam_pos,
+                                                             float rs,
+                                                             float spin) {
+    if (d_redshift_enabled && min_radius < rs * 10.0f) {
+        float z;
+        if (d_use_luts && d_tex_redshift) {
+            float r_norm = min_radius / fmaxf(rs, D_EPSILON);
+            float denom = fmaxf(d_redshift_radius_max - d_redshift_radius_min, 0.0001f);
+            float u = fmaxf(0.0f, fminf((r_norm - d_redshift_radius_min) / denom, 1.0f));
+            z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
+        } else {
+            z = 1.0f / fmaxf(d_redshift_factor(min_radius, rs), D_EPSILON) - 1.0f;
+        }
+        sky = d_apply_simple_redshift(sky, z);
+    }
+
+    if (min_radius < rs * 5.0f) {
+        float3 closest_n = d_normalize(closest_pos);
+        float3 approach_dir = d_normalize(d_sub(cam_pos, closest_pos));
+        float spin_y = spin >= 0.0f ? 1.0f : -1.0f;
+        float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
+        float3 flow_dir = d_normalize(d_cross(spin_axis, closest_n));
+        float aligned_flow = 0.5f + 0.5f * d_dot(flow_dir, approach_dir);
+        float near_hole_weight =
+            powf(fmaxf(0.0f, fminf(1.0f - (min_radius - rs) / fmaxf(rs * 3.0f, D_EPSILON), 1.0f)),
+                 1.55f);
+
+        float bright_sector = d_smoothstep_range(0.79f, 0.978f, aligned_flow);
+        float rim_sector = d_smoothstep_range(0.88f, 0.992f, aligned_flow);
+        float counter_sector = d_smoothstep_range(0.28f, 0.56f, aligned_flow);
+        float local_shadow =
+            1.0f + (0.14f - 1.0f) * near_hole_weight * (1.0f - bright_sector * 0.95f);
+        float local_lift =
+            1.0f + near_hole_weight *
+                       (0.60f * bright_sector + 0.20f * rim_sector + 0.02f * counter_sector);
+        sky = d_scale(sky, local_shadow * local_lift);
+
+        float sky_luma = d_luminance(sky);
+        float sector_contrast =
+            near_hole_weight * ((-0.44f) + (0.24f - (-0.44f)) * bright_sector);
+        sky = d_add(sky, d_scale(sky, sector_contrast * fmaxf(fminf(sky_luma - 0.03f, 1.0f), 0.0f)));
+
+        float3 cool_tint = make_f3(0.84f, 0.80f, 0.96f);
+        float3 warm_tint = make_f3(1.06f, 0.98f, 0.88f);
+        float3 arc_tint = make_f3(cool_tint.x + (warm_tint.x - cool_tint.x) * rim_sector,
+                                  cool_tint.y + (warm_tint.y - cool_tint.y) * rim_sector,
+                                  cool_tint.z + (warm_tint.z - cool_tint.z) * rim_sector);
+        float tint_mix = near_hole_weight * (0.04f + 0.10f * rim_sector);
+        float3 tinted = make_f3(sky.x * arc_tint.x, sky.y * arc_tint.y, sky.z * arc_tint.z);
+        sky = make_f3(sky.x + (tinted.x - sky.x) * tint_mix,
+                      sky.y + (tinted.y - sky.y) * tint_mix,
+                      sky.z + (tinted.z - sky.z) * tint_mix);
+
+        float exclusion = near_hole_weight * (1.0f - bright_sector) *
+                          d_smoothstep_range(0.035f, 0.22f, sky_luma);
+        sky = d_scale(sky, 1.0f - 0.20f * exclusion);
+    }
+
+    return sky;
+}
+
 /* ========================================================================
  * GRMHD volume sampling
  * ======================================================================== */
@@ -1555,6 +1642,11 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     }
     float3 dir = d_normalize(d_sub(hit.hit_point, cam_pos));
     float4 bg = d_background_color(dir);
+    float3 shaped_bg = d_shape_escaped_background(make_f3(bg.x, bg.y, bg.z),
+                                                  hit.min_radius,
+                                                  hit.closest_approach_point,
+                                                  cam_pos, d_rs, d_spin);
+    bg = make_float4(shaped_bg.x, shaped_bg.y, shaped_bg.z, bg.w);
 
     /* Photon ring proximity glow: rays that graze r ~ 1.5*rs (photon sphere)
      * see scattered disk emission from multiple orbits. Add a warm golden halo
@@ -1708,10 +1800,14 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
     float  transmit = 1.0f;
     float  min_r    = kr.r;
+    float3 closest_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
 
     for (int step = 0; step < max_steps; ++step) {
         float3 const cur_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
-        min_r = fminf(min_r, kr.r);
+        if (kr.r < min_r) {
+            min_r = kr.r;
+            closest_pos = cur_pos;
+        }
 
         if (kr.r <= r_horizon) {
             /* Horizon absorbs everything: return accumulated emission */
@@ -1769,7 +1865,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
             float3 const esc_dir = d_sub(new_pos, cur_pos);
             if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
-                float4 const bg = d_background_color(d_normalize(esc_dir));
+                float4 const bg4 = d_background_color(d_normalize(esc_dir));
+                float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
+                bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
                 accum_i.x += transmit * bg.x;
                 accum_i.y += transmit * bg.y;
                 accum_i.z += transmit * bg.z;
@@ -1783,7 +1881,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     if (terminal_pos != nullptr) { *terminal_pos = final_pos; }
     float3 const esc_dir   = d_sub(final_pos, cam_pos);
     if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
-        float4 const bg = d_background_color(d_normalize(esc_dir));
+        float4 const bg4 = d_background_color(d_normalize(esc_dir));
+        float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
+        bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
         accum_i.x += transmit * bg.x;
         accum_i.y += transmit * bg.y;
         accum_i.z += transmit * bg.z;
@@ -1958,13 +2058,17 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
     float  transmit = 1.0f;
     float  min_r    = kr.r;
+    float3 closest_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
 
     /* Stokes Q, U, V accumulators (I uses accum_i above) */
     DStokes stokes = {0.0f, 0.0f, 0.0f, 0.0f};
 
     for (int step = 0; step < max_steps; ++step) {
         float3 const cur_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
-        min_r = fminf(min_r, kr.r);
+        if (kr.r < min_r) {
+            min_r = kr.r;
+            closest_pos = cur_pos;
+        }
 
         if (kr.r <= r_horizon) {
             if (terminal_pos != nullptr) { *terminal_pos = cur_pos; }
@@ -2030,7 +2134,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
             float3 const esc_dir = d_sub(new_pos, cur_pos);
             if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
-                float4 const bg = d_background_color(d_normalize(esc_dir));
+                float4 const bg4 = d_background_color(d_normalize(esc_dir));
+                float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
+                bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
                 accum_i.x += transmit * bg.x;
                 accum_i.y += transmit * bg.y;
                 accum_i.z += transmit * bg.z;
