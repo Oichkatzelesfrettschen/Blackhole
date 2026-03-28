@@ -59,6 +59,7 @@ __constant__ float d_grmhd_alpha;                  /**< @brief Blend [0,1] betwe
 __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
 __constant__ int d_background_enabled;
+__constant__ float d_photon_glow_strength;
 __constant__ int   d_wiregrid_enabled;     /**< @brief BL-coord wiregrid overlay flag. */
 __constant__ float d_wiregrid_show_ergo;   /**< @brief Show ergosphere boundary+glow. */
 __constant__ float d_wiregrid_grid_scale;  /**< @brief Grid density multiplier. */
@@ -69,6 +70,7 @@ __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_sc
 __constant__ int   d_stokes_enabled;       /**< @brief 1 = polarized Stokes IQUV transport (D4). */
 __constant__ float d_stokes_b_angle;       /**< @brief EVPA of projected B field on sky [rad] (D4). */
 __constant__ float d_stokes_ne_scale;      /**< @brief Faraday rotation strength multiplier (D4). */
+__constant__ float d_adisk_lit;            /**< @brief Disk luminosity scale (1.0 = GLSL flux*2 level). */
 
 /* External launch wrappers from each kernel file */
 extern "C" void launchFp32Baseline(float4 *fb, int w, int h, cudaStream_t s);
@@ -126,6 +128,7 @@ int uploadConstants(
   COPY_CONST(d_doppler_strength, p->doppler_strength);
   COPY_CONST(d_background_intensity, p->background_intensity);
   COPY_CONST(d_background_enabled, p->background_enabled);
+  COPY_CONST(d_photon_glow_strength, p->photon_glow_strength);
   COPY_CONST(d_wiregrid_enabled, p->wiregrid_enabled);
   COPY_CONST(d_wiregrid_show_ergo, p->wiregrid_show_ergo);
   COPY_CONST(d_wiregrid_grid_scale, p->wiregrid_grid_scale);
@@ -137,6 +140,7 @@ int uploadConstants(
   COPY_CONST(d_stokes_enabled, p->stokes_enabled);
   COPY_CONST(d_stokes_b_angle, p->stokes_b_field_angle);
   COPY_CONST(d_stokes_ne_scale, p->stokes_ne_scale);
+  COPY_CONST(d_adisk_lit, p->adisk_lit);
 
   /* Array copies */
   cudaError_t const errPos = cudaMemcpyToSymbol(d_cam_pos, p->cam_pos, sizeof(p->cam_pos));

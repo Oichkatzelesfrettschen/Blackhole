@@ -72,6 +72,7 @@ extern __constant__ float d_grmhd_alpha;                   /**< @brief Blend fac
 extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
+extern __constant__ float d_photon_glow_strength;
 extern __constant__ int   d_wiregrid_enabled;    /**< @brief BL-coord wiregrid overlay flag. */
 extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere boundary+glow. */
 extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
@@ -82,6 +83,7 @@ extern __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opa
 extern __constant__ int   d_stokes_enabled;       /**< @brief 1 = polarized Stokes IQUV transport (D4). */
 extern __constant__ float d_stokes_b_angle;       /**< @brief EVPA of projected B field on sky [rad] (D4). */
 extern __constant__ float d_stokes_ne_scale;      /**< @brief Faraday rotation strength multiplier (D4). */
+extern __constant__ float d_adisk_lit;            /**< @brief Disk luminosity scale (1.0 = GLSL flux*2 level). */
 
 /* ========================================================================
  * Vector helpers (replacing GLSL vec3 operations)
@@ -169,7 +171,7 @@ __device__ __forceinline__ float3 d_mat3_mul(const float* m, float3 v) {
 struct KerrConsts {
     float E;  /**< @brief Conserved energy per unit rest mass (set to 1 for photons). */
     float Lz; /**< @brief Conserved axial angular momentum (z-component of L x r). */
-    float Q;  /**< @brief Carter constant: |L|^2 - Lz^2 (clamped >= 0). */
+    float Q;  /**< @brief Carter constant (code convention, can be negative near poles). */
 };
 
 /**
@@ -248,23 +250,101 @@ __device__ __forceinline__ float3 d_kerr_to_cartesian(float r, float theta, floa
 }
 
 /**
- * @brief Compute conserved quantities for a photon ray at the given position and direction.
+ * @brief Compute exact conserved quantities for a Kerr null geodesic.
  *
- * E is set to 1 (photon normalization). Lz is the z-component of the orbital
- * angular momentum. Q (Carter constant) is clamped to zero to avoid negative
- * values from floating-point rounding.
+ * Projects the Cartesian direction `dir` onto Boyer-Lindquist coordinates,
+ * solves the null condition g_mu_nu k^mu k^nu = 0 for k^t (future-directed
+ * root), then reads off E = -k_t and Lz = k_phi from the covariant components.
+ * Q is derived from the code convention:
+ *   Theta = Q + a^2 cos^2(theta) - Lz^2/sin^2(theta) = (Sigma * k^theta)^2
+ * Result is normalized to E = 1 to preserve existing step-size calibration.
+ * Q can be negative for radial photons near the poles (e.g. Q = -a^2 at theta=0).
+ *
+ * WHY: the old flat-space approx (E=1, Q=|L|^2-Lz^2) gives R>0 for tangential
+ * rays that have no radial component, producing incorrect geodesic paths.  The
+ * exact formula yields the correct impact parameters b=Lz/E and q=Q/E^2.
  *
  * @param pos Camera position in Cartesian coordinates.
  * @param dir Normalized ray direction in Cartesian coordinates.
- * @return KerrConsts with E, Lz, and Q.
+ * @param rs  Schwarzschild radius = 2M [geometric units].
+ * @param a   Spin parameter [geometric units].
+ * @return KerrConsts with E=1, Lz, and Q.
  */
-__device__ __forceinline__ KerrConsts d_kerr_init_consts(float3 pos, float3 dir) {
+__device__ __forceinline__ KerrConsts d_kerr_init_consts(float3 pos, float3 dir,
+                                                          float rs, float a) {
     KerrConsts c;
-    c.E = 1.0f;
-    float3 L = d_cross(pos, dir);
-    c.Lz = L.z;
-    float L2 = d_dot(L, L);
-    c.Q = fmaxf(0.0f, L2 - c.Lz * c.Lz);
+
+    float r = d_length(pos);
+    if (r < D_EPSILON) {
+        c.E = 1.0f; c.Lz = 0.0f; c.Q = 0.0f;
+        return c;
+    }
+
+    float inv_r = 1.0f / r;
+    float cos_t = fminf(fmaxf(pos.z * inv_r, -1.0f), 1.0f);
+    float sin_t = sqrtf(fmaxf(1.0f - cos_t * cos_t, 0.0f));
+    float sin2  = sin_t * sin_t;
+    float phi   = atan2f(pos.y, pos.x);
+    float cos_p, sin_p;
+    sincosf(phi, &sin_p, &cos_p);
+
+    /* Spherical basis at pos (same orientation as d_kerr_init_ray). */
+    float3 e_r     = make_f3(sin_t * cos_p,  sin_t * sin_p,  cos_t);
+    float3 e_theta = make_f3(cos_t * cos_p,  cos_t * sin_p, -sin_t);
+    float3 e_phi   = make_f3(-sin_p,          cos_p,          0.0f);
+
+    /* BL contravariant spatial components of the null direction. */
+    float kr     = d_dot(dir, e_r);
+    float ktheta = d_dot(dir, e_theta) * inv_r;
+    float kphi   = (sin_t > D_EPSILON) ? (d_dot(dir, e_phi) / (r * sin_t)) : 0.0f;
+
+    /* Kerr metric at (r, theta); rs = 2M convention. */
+    float sigma  = fmaf(r, r, a * a * cos_t * cos_t);
+    float delta  = fmaf(r, r, fmaf(-rs, r, a * a));
+    float f      = (sigma > D_EPSILON) ? (rs * r / sigma) : 0.0f;
+    float gtt    = -(1.0f - f);
+    float gtphi  = -f * a * sin2;
+    float grr    = sigma / fmaxf(fabsf(delta), D_EPSILON);
+    float gthth  = sigma;
+    float gphph  = fmaf(r * r + a * a, 1.0f, f * a * a * sin2) * sin2;
+
+    /* Solve null condition gtt*(k^t)^2 + 2*gtphi*kphi*(k^t) + spatial = 0
+     * for the future-directed root (k^t > 0). */
+    float spatial = fmaf(grr, kr * kr,
+                    fmaf(gthth, ktheta * ktheta, gphph * kphi * kphi));
+    float hb      = gtphi * kphi;
+    float disc    = fmaf(hb, hb, -gtt * spatial);
+    float kt;
+    if (disc >= 0.0f && fabsf(gtt) > D_EPSILON) {
+        float sq_d = sqrtf(disc);
+        float kt_a = (-hb + sq_d) / gtt;
+        float kt_b = (-hb - sq_d) / gtt;
+        kt = (kt_a > 0.0f) ? kt_a : kt_b;
+        if (kt <= 0.0f) kt = fmaxf(kt_a, kt_b);  /* ergosphere: pick best root */
+    } else {
+        kt = 1.0f;  /* degenerate or inside ergosphere: flat-space fallback */
+    }
+
+    /* E = -(g_tt k^t + g_tphi k^phi),  Lz = g_tphi k^t + g_phph k^phi. */
+    float E_raw  = fmaf(-gtt, kt, -gtphi * kphi);
+    float Lz_raw = fmaf(gtphi, kt,  gphph * kphi);
+
+    /* Normalize to E = 1 to preserve existing step-size calibration. */
+    float inv_E = (E_raw > D_EPSILON) ? (1.0f / E_raw) : 1.0f;
+    c.E  = 1.0f;
+    c.Lz = Lz_raw * inv_E;
+
+    /* Carter Q (code convention: Theta = Q + a^2 cos^2 - Lz^2/sin^2 = (Sigma k^theta)^2).
+     * Q can be negative for radial photons near the poles (e.g. Q = -a^2 at theta=0). */
+    float p_theta = sigma * ktheta * inv_E;  /* p_theta = Sigma * k^theta (E-normalized) */
+    if (sin_t > D_EPSILON) {
+        c.Q = fmaf(p_theta, p_theta,
+              fmaf(-a * a, cos_t * cos_t, c.Lz * c.Lz / sin2));
+    } else {
+        /* Pole: kphi = 0, Lz = 0.  Q = ptheta^2 - a^2. */
+        c.Q = fmaf(p_theta, p_theta, -(a * a));
+    }
+
     return c;
 }
 
@@ -309,21 +389,17 @@ __device__ __forceinline__ KerrRay d_kerr_init_ray(float3 pos, float3 dir) {
  * flipped at turning points where R(r) or Theta(theta) changes sign.
  * theta is clamped to [1e-6, pi-1e-6] to avoid pole singularities.
  *
- * WHY Kerr-Schild regularization (task E1):
- * In Boyer-Lindquist (BL) coordinates, dphi/dlam = Lz/sin^2 - aE + aA/Delta
- * and dt/dlam = (r^2+a^2)*A/Delta + ... diverge as Delta -> 0 at the outer
- * horizon.  In outgoing Kerr-Schild (KS) coordinates, the t and phi equations
- * are transformed by:
- *   dphi_KS/dlam = dphi_BL/dlam + (a/Delta) * dr/dlam
- *   dt_KS/dlam  = dt_BL/dlam  + (rs*r/Delta) * dr/dlam  (rs = 2M)
- * For an infalling photon at r_+, Delta -> 0 and dr/dlam = sign_r * sqrt(R).
- * Since r_+^2 + a^2 = rs * r_+ (algebraic identity), the numerators of the
- * combined expressions vanish when A + dr/dlam -> 0 (i.e. at the horizon
- * for ingoing photons), giving a finite KS increment even as Delta -> 0.
- * The (r, theta) equations are identical in BL and outgoing KS; only the
- * t and phi coordinates change.  We track phi in KS and convert back to
- * Cartesian via the same formula (phi_KS = phi_BL + correction, but the
- * correction is only relevant for t which is not used for disk shading).
+ * WHY rationalized KS regularization (task E1):
+ * In Boyer-Lindquist (BL) coordinates, dphi/dlam and dt/dlam diverge as
+ * Delta -> 0 at the outer horizon.  Outgoing Kerr-Schild (KS) coordinates
+ * add a (1/Delta)*dr correction whose numerator cancels Delta for ingoing
+ * photons.  The rationalized form uses the algebraic identity:
+ *   (A - sqrt_R) / Delta = Q_eff / (A + sqrt_R)   where Q_eff = Q + (Lz-aE)^2
+ * so dphi and dt for ingoing rays can be written with no Delta in the
+ * denominator at all -- exact float32 regularity at the horizon.
+ * Outgoing rays (after turning points) use the standard KS form with a
+ * guarded inv_delta (Delta is bounded away from 0 for outgoing rays).
+ * The (r, theta) equations are identical in BL and KS; only phi/t change.
  *
  * @param ray  Ray state to advance in-place.
  * @param rs   Schwarzschild radius.
@@ -339,18 +415,24 @@ __device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, con
     float sin2 = fmaxf(sin_t * sin_t, 1.0e-6f);
 
     float Delta = d_kerr_delta(r, a, rs);
-    float A = fmaf(r * r + a * a, c.E, -a * c.Lz);
-    float Lz_minus_aE = c.Lz - a * c.E;
+    /* E is normalized to 1 in d_kerr_init_consts; A = (r^2+a^2)*E - a*Lz.
+     * fmaf(r,r,a*a) replaces the non-fused r*r + a*a to emit FFMA not FMUL+FADD.
+     * YSU-engine ncu audit: 6.6M non-fused vs 4.5M fused FP32 in this kernel;
+     * explicit fmaf in hot loop body is the primary fix alongside --extra-device-vectorization. */
+    float r2_a2 = fmaf(r, r, a * a);
+    float A = fmaf(r2_a2, c.E, -a * c.Lz);
+    float Lz_minus_aE = fmaf(-a, c.E, c.Lz);
 
     /* Precompute reciprocals once: MUFU.RCP = 41.55 cy on Ada (YSU-engine SASS RE).
-     * sin2 appears in Theta AND dphi; Delta guarded to 1e-6 so inv_delta is always
-     * finite, but the KS numerators cancel before reaching delta=0 in practice. */
+     * inv_sin2 used in Theta AND dphi.  inv_delta used only for the outgoing
+     * branch; the ingoing branch uses the rationalized form with no Delta. */
     float inv_sin2 = 1.0f / sin2;
-    float delta_safe = fmaxf(Delta, 1.0e-6f);
-    float inv_delta = 1.0f / delta_safe;
+    float Q_eff = fmaf(Lz_minus_aE, Lz_minus_aE, c.Q);
 
-    float R = fmaf(A, A, -Delta * (c.Q + Lz_minus_aE * Lz_minus_aE));
-    float Theta = c.Q + a * a * c.E * c.E * cos_t * cos_t - c.Lz * c.Lz * inv_sin2;
+    float R = fmaf(A, A, -Delta * Q_eff);
+    /* Theta = Q + a^2*E^2*cos^2 - Lz^2/sin^2.  E=1, so a^2*E^2 = a^2.
+     * Use fmaf to chain Q + a^2*cos^2 - Lz^2*inv_sin2 without separate FADD. */
+    float Theta = fmaf(a * a, cos_t * cos_t, fmaf(-c.Lz, c.Lz * inv_sin2, c.Q));
 
     if (R < 0.0f) ray.sign_r *= -1.0f;
     if (Theta < 0.0f) ray.sign_theta *= -1.0f;
@@ -358,17 +440,35 @@ __device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, con
     float sqrt_R = sqrtf(fmaxf(R, 0.0f));
     float sqrt_Theta = sqrtf(fmaxf(Theta, 0.0f));
 
-    float dr_dlam = ray.sign_r * sqrt_R;
+    float dr_dlam     = ray.sign_r     * sqrt_R;
     float dtheta_dlam = ray.sign_theta * sqrt_Theta;
 
-    /* KS-regularized phi and t equations (task E1).
-     * BL form: dphi = Lz/sin^2 - aE + aA/Delta    (singular at Delta=0)
-     * KS form: dphi = Lz/sin^2 - aE + a*(A + dr_dlam)/Delta
-     * The numerator (A + dr_dlam) cancels at the outer horizon for infalling
-     * photons: A(r_+) = sqrt(R(r_+)) = sqrt(R), so A + (-sqrt_R) = 0. */
-    float dphi_dlam = c.Lz * inv_sin2 - a * c.E + a * (A + dr_dlam) * inv_delta;
-    float dt_dlam = fmaf(r * r + a * a, A, rs * r * dr_dlam) * inv_delta
-                    + a * (c.Lz - a * c.E * sin2);
+    /* Rationalized outgoing KS phi/t (task E1 upgrade -- no deltaSafe in denom).
+     *
+     * Ingoing ray (sign_r < 0): identity (A-sqrtR)/Delta = Q_eff/(A+sqrtR)
+     * where Q_eff = c.Q + Lz_minus_aE^2.  Numerators vanish together with Delta
+     * at r_+, but the ratio is finite.  No clamping required.
+     * Using r^2+a^2-rs*r = Delta:
+     *   [(r^2+a^2)*A - rs*r*sqrtR] / Delta = A + rs*r*Q_eff/(A+sqrtR)
+     *
+     * Outgoing ray (sign_r > 0): after a turning point Delta is bounded away
+     * from 0 (ray moves away from horizon), so the standard KS formula with
+     * inv_delta is numerically safe.  Both branches agree when sqrtR = 0. */
+    float dphi_dlam, dt_dlam;
+    /* dphi_dlam and dt_dlam share the term `c.Lz - a*c.E` (= Lz_minus_aE by definition).
+     * Reuse it to avoid a redundant SUB instruction. */
+    if (ray.sign_r < 0.0f) {
+        float inv_Aps = 1.0f / fmaxf(A + sqrt_R, 1.0e-30f);
+        dphi_dlam = fmaf(a, Q_eff * inv_Aps, fmaf(c.Lz, inv_sin2, -a * c.E));
+        dt_dlam   = fmaf(rs * r, Q_eff * inv_Aps, A)
+                    + a * fmaf(-a * c.E, sin2, c.Lz);
+    } else {
+        float inv_delta = 1.0f / fmaxf(Delta, 1.0e-6f);
+        dphi_dlam = fmaf(a, (A + sqrt_R) * inv_delta, fmaf(c.Lz, inv_sin2, -a * c.E));
+        /* r2_a2 = r^2+a^2 already computed above; reuse to save one FMUL. */
+        dt_dlam   = fmaf(r2_a2, A, rs * r * sqrt_R) * inv_delta
+                    + a * fmaf(-a * c.E, sin2, c.Lz);
+    }
 
     ray.r += dlam * dr_dlam;
     ray.theta += dlam * dtheta_dlam;
@@ -652,6 +752,14 @@ struct HitResult {
  *      accumulate angular error with coarse steps.  A smooth falloff centered
  *      on r_ph halves the step at the photon sphere.
  *
+ *   3. Far-field overshoot prevention: in Mino time dr/dlambda = sqrt(R) ~ r^2
+ *      for large r (nearly-radial photon).  With the default base_dt = 0.08
+ *      and r = 350, one step moves dr ~ 350^2 * 0.08 = 9800, overshooting
+ *      the BH entirely.  Zone 3 limits each step to at most 0.5 * r in radial
+ *      distance by capping dlambda * sqrt(R) <= 0.5 * r.  Since sqrt(R) <= r^2
+ *      (upper bound for the generic case), the required scale is 0.5 / r.
+ *      This makes scale_far ~ 0.5/r for large r and converges to 1.0 at r = 0.5.
+ *
  * WHY Mino time: d_kerr_step() integrates in Mino time lambda.  The adaptive
  * step is applied to the same Mino time increment dt, not to proper time.  This
  * is correct because Mino time is the affine parameter for Kerr geodesics.
@@ -660,7 +768,7 @@ struct HitResult {
  * @param rs      Schwarzschild radius.
  * @param r_h     Outer event horizon radius (d_kerr_outer_horizon result).
  * @param base_dt Base Mino time step from __constant__ d_step_size.
- * @return        Adaptive step in [0.1*base_dt, base_dt].
+ * @return        Adaptive step in (0, base_dt].
  */
 __device__ __forceinline__ float d_adaptive_step(float r, float rs, float r_h,
                                                   float base_dt) {
@@ -676,7 +784,15 @@ __device__ __forceinline__ float d_adaptive_step(float r, float rs, float r_h,
     /* scale_ph: 0.5 at r_ph, rises to 1.0 at |r - r_ph| = 0.5*rs */
     float const scale_ph = fminf(1.0f, 0.5f + d_ph);
 
-    return base_dt * fminf(scale_h, scale_ph);
+    /* Zone 3: far-field Mino-time step limiting.
+     * sqrt(R) ~ r^2 for large r, so dr ~ r^2 * dlam per step.  Without this
+     * zone, a camera at r = 350 with dlam = 0.08 would jump dr = 9800 and
+     * overshoot the BH in one step, producing an all-black image.
+     * scale_far = min(1, 0.5/r): at r = 350 gives scale = 0.00143 (dr ~ 14),
+     * at r = 10 gives scale = 0.05 (dr ~ 0.4), at r = 2 zone 1 dominates. */
+    float const scale_far = fminf(1.0f, 0.5f / fmaxf(r, D_EPSILON));
+
+    return base_dt * fminf(scale_far, fminf(scale_h, scale_ph));
 }
 
 /* ========================================================================
@@ -718,7 +834,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         float r_disk_in = d_isco;
         float r_disk_out = 30.0f * rs;
 
-        KerrConsts c = d_kerr_init_consts(cam_pos, ray_dir);
+        KerrConsts c = d_kerr_init_consts(cam_pos, ray_dir, rs, a);
         KerrRay kr = d_kerr_init_ray(cam_pos, ray_dir);
 
         for (int step = 0; step < max_steps; ++step) {
@@ -913,8 +1029,9 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
                                              u, 0.5f));
     }
 
-    /* Boosted intensity: 20x base for standalone rendering visibility */
-    float intensity = flux * 20.0f * spectral;
+    /* WHY: GLSL interop_trace.glsl uses flux*2.0 as base intensity. d_adisk_lit matches
+     * the adiskLit uniform that record mode sets to 0.35 for cinematic brightness balance. */
+    float intensity = flux * 2.0f * d_adisk_lit * spectral;
 
     /* Doppler beaming approximation */
     float v = sqrtf(0.5f * rs / fmaxf(r, D_EPSILON));
@@ -1224,9 +1341,10 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     float falloff_scale = 1.0f / fmaxf(2.5f * d_rs, D_EPSILON);
     float x = fmaxf(0.0f, 1.0f - excess * falloff_scale);
     float glow = x * x * x;   /* cubic: sharp near photon sphere, smooth fade */
-    bg.x = fminf(bg.x + glow * 1.4f, 100.0f);
-    bg.y = fminf(bg.y + glow * 0.9f, 100.0f);
-    bg.z = fminf(bg.z + glow * 0.1f, 100.0f);
+    float glow_scale = fmaxf(d_photon_glow_strength, 0.0f);
+    bg.x = fminf(bg.x + glow * 1.4f * glow_scale, 100.0f);
+    bg.y = fminf(bg.y + glow * 0.9f * glow_scale, 100.0f);
+    bg.z = fminf(bg.z + glow * 0.1f * glow_scale, 100.0f);
 
     return bg;
 }
@@ -1238,9 +1356,17 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
 /**
  * @brief Generate a world-space ray direction for pixel (px, py).
  *
- * Maps pixel coordinates to normalized device coordinates in [-fov_scale,
- * fov_scale] (with aspect ratio correction on u), constructs a local direction
- * (u, v, -1) and transforms it by the camera basis matrix from __constant__ memory.
+ * Matches GLSL interop_raygen.glsl::bhRayDirFromUv() exactly:
+ *   GLSL: dir = normalize(vec3(-uv.x * fovScale, uv.y * fovScale, 1.0))
+ *              then cameraBasis * dir
+ *   Convention: basis col2 = forward (toward BH), z=+1 = forward direction.
+ *   x is negated to match GLSL image-space orientation (left=+right, right=-right).
+ *   v is negated because CUDA py=0 is image-top (like D3D) while GLSL uv.y is
+ *   positive at the image-top (gl_FragCoord.y=0 is bottom, so uv.y=top is +0.5).
+ *
+ * WHY the previous -1.0f was wrong: with z=-1 and basis[2]=forward, the center
+ * ray would map to -forward (looking BACKWARD from the camera), causing the
+ * entire render to show the scene behind the camera.
  *
  * @param px Pixel column index (0-based).
  * @param py Pixel row index (0-based).
@@ -1249,10 +1375,14 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
 __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
     float u = (2.0f * (px + 0.5f) / (float)d_width - 1.0f) * d_fov_scale;
     float v = (2.0f * (py + 0.5f) / (float)d_height - 1.0f) * d_fov_scale;
-    /* Correct for aspect ratio */
+    /* Correct for aspect ratio (matches GLSL uv.x *= resolution.x/resolution.y) */
     u *= (float)d_width / (float)d_height;
 
-    float3 local_dir = d_normalize(make_f3(u, v, -1.0f));
+    /* -u: matches GLSL -uv.x (horizontal mirror to right-hand camera convention).
+     * -v: py=0 is image-top in CUDA; gl_FragCoord.y=0 is image-bottom in GLSL,
+     *     so GLSL uv.y is positive-at-top, CUDA v is negative-at-top.
+     * +1: basis col2 = forward, so local +z maps to world forward (toward BH). */
+    float3 local_dir = d_normalize(make_f3(-u, -v, 1.0f));
     return d_mat3_mul(d_cam_basis, local_dir);
 }
 
@@ -1345,7 +1475,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     int   const max_steps   = d_max_steps;
     float const opacity_scl = d_rte_opacity_scale;
 
-    KerrConsts const c  = d_kerr_init_consts(cam_pos, ray_dir);
+    KerrConsts const c  = d_kerr_init_consts(cam_pos, ray_dir, rs, a);
     KerrRay          kr = d_kerr_init_ray(cam_pos, ray_dir);
 
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
@@ -1588,7 +1718,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     float const b_angle = d_stokes_b_angle;
     float const ne_scale = d_stokes_ne_scale;
 
-    KerrConsts const c  = d_kerr_init_consts(cam_pos, ray_dir);
+    KerrConsts const c  = d_kerr_init_consts(cam_pos, ray_dir, rs, a);
     KerrRay          kr = d_kerr_init_ray(cam_pos, ray_dir);
 
     /* Color-accurate intensity accumulator (same as d_trace_geodesic_rte) */

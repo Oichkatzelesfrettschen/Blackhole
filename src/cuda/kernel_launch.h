@@ -66,6 +66,7 @@ struct BH_LaunchParams {
     /* Background */
     float background_intensity; /**< @brief Background sky intensity scale. */
     int background_enabled;     /**< @brief Enable procedural star-field background. */
+    float photon_glow_strength; /**< @brief Photon-ring glow multiplier for escaped rays. */
 
     /* Wiregrid BL-coordinate overlay (task A4) */
     int   wiregrid_enabled;    /**< @brief 1 = apply Boyer-Lindquist coordinate overlay. */
@@ -87,6 +88,11 @@ struct BH_LaunchParams {
     int   stokes_enabled;     /**< @brief 1 = track Stokes Q,U,V alongside intensity (D4). */
     float stokes_b_field_angle; /**< @brief EVPA of projected B field on sky [rad] (D4). */
     float stokes_ne_scale;    /**< @brief Faraday rotation strength multiplier (0=no Faraday) (D4). */
+
+    /* Disk brightness (matches GLSL adiskLit uniform).
+     * WHY: GLSL interop_trace.glsl uses flux*2.0 as base; adisk_lit multiplies that.
+     * 1.0 = GLSL default brightness (flux*2.0). 0.35 = cinematic record setting. */
+    float adisk_lit;
 };
 
 /**

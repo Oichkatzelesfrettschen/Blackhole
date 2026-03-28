@@ -11,11 +11,229 @@
  */
 
 #include <cuda_runtime.h>
-#include <cstring>
-#include <cstdio>
+#include <array>
 #include <cmath>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <string>
 
 #include "../cuda/kernel_launch.h"
+#include "stb_image.h"
+
+namespace {
+
+int env_flag(const char *name, int fallback) {
+    if (const char *raw = std::getenv(name)) {
+        if (*raw == '\0') {
+            return fallback;
+        }
+        if (std::strcmp(raw, "0") == 0 || std::strcmp(raw, "false") == 0 ||
+            std::strcmp(raw, "FALSE") == 0 || std::strcmp(raw, "off") == 0 ||
+            std::strcmp(raw, "OFF") == 0) {
+            return 0;
+        }
+        return 1;
+    }
+    return fallback;
+}
+
+float env_float(const char *name, float fallback) {
+    if (const char *raw = std::getenv(name)) {
+        if (*raw == '\0') {
+            return fallback;
+        }
+        char *end = nullptr;
+        float const value = std::strtof(raw, &end);
+        if (end != raw) {
+            return value;
+        }
+    }
+    return fallback;
+}
+
+int env_int(const char *name, int fallback) {
+    if (const char *raw = std::getenv(name)) {
+        if (*raw == '\0') {
+            return fallback;
+        }
+        char *end = nullptr;
+        long const value = std::strtol(raw, &end, 10);
+        if (end != raw) {
+            return static_cast<int>(value);
+        }
+    }
+    return fallback;
+}
+
+struct BridgeBackgroundState {
+    cudaArray_t layered_array = nullptr;
+    cudaTextureObject_t texture = 0;
+    std::string loaded_dir;
+};
+
+BridgeBackgroundState &bridge_background_state() {
+    static BridgeBackgroundState state;
+    return state;
+}
+
+void release_bridge_background(BridgeBackgroundState &state) {
+    if (state.texture != 0) {
+        (void)cudaDestroyTextureObject(state.texture);
+        state.texture = 0;
+    }
+    if (state.layered_array != nullptr) {
+        (void)cudaFreeArray(state.layered_array);
+        state.layered_array = nullptr;
+    }
+    state.loaded_dir.clear();
+}
+
+std::filesystem::path resolve_bridge_skybox_dir() {
+    if (const char *explicit_dir = std::getenv("BLACKHOLE_BRIDGE_BACKGROUND_SKYBOX_DIR")) {
+        if (*explicit_dir != '\0') {
+            return std::filesystem::path(explicit_dir);
+        }
+    }
+
+    if (const char *source_dir = std::getenv("BLACKHOLE_SOURCE_DIR")) {
+        if (*source_dir != '\0') {
+            return std::filesystem::path(source_dir) / "assets" / "skybox_eso_milkyway";
+        }
+    }
+
+    if (const char *showcase_dir = std::getenv("BLACKHOLE_SHOWCASE_SOURCE_DIR")) {
+        if (*showcase_dir != '\0') {
+            return std::filesystem::path(showcase_dir) / "assets" / "skybox_eso_milkyway";
+        }
+    }
+
+    return {};
+}
+
+int ensure_bridge_background_loaded() {
+    BridgeBackgroundState &state = bridge_background_state();
+    std::filesystem::path const skybox_dir = resolve_bridge_skybox_dir();
+    if (skybox_dir.empty()) {
+        release_bridge_background(state);
+        return 0;
+    }
+
+    std::string const canonical_dir = skybox_dir.lexically_normal().string();
+    if (state.texture != 0 && state.loaded_dir == canonical_dir) {
+        return 0;
+    }
+
+    release_bridge_background(state);
+
+    static const char *kFaces[6] = {"right.png", "left.png", "top.png",
+                                    "bottom.png", "front.png", "back.png"};
+
+    int width = 0;
+    int height = 0;
+    cudaChannelFormatDesc const desc = cudaCreateChannelDesc<uchar4>();
+    cudaExtent const extent = make_cudaExtent(0, 0, 6);
+    (void)extent;
+
+    std::array<unsigned char *, 6> face_pixels = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+
+    for (int face = 0; face < 6; ++face) {
+        int face_width = 0;
+        int face_height = 0;
+        int components = 0;
+        std::filesystem::path const face_path = skybox_dir / kFaces[face];
+        face_pixels[face] = stbi_load(face_path.string().c_str(), &face_width, &face_height, &components, 4);
+        if (face_pixels[face] == nullptr) {
+            std::fprintf(stderr, "[cuda_renderer] Failed to load skybox face: %s\n",
+                         face_path.string().c_str());
+            for (unsigned char *pixels : face_pixels) {
+                if (pixels != nullptr) {
+                    stbi_image_free(pixels);
+                }
+            }
+            return -1;
+        }
+        if (face == 0) {
+            width = face_width;
+            height = face_height;
+        } else if (face_width != width || face_height != height) {
+            std::fprintf(stderr,
+                         "[cuda_renderer] Skybox face dimensions do not match in %s\n",
+                         skybox_dir.string().c_str());
+            for (unsigned char *pixels : face_pixels) {
+                if (pixels != nullptr) {
+                    stbi_image_free(pixels);
+                }
+            }
+            return -1;
+        }
+    }
+
+    cudaExtent const layered_extent = make_cudaExtent(
+        static_cast<size_t>(width),
+        static_cast<size_t>(height),
+        6);
+    cudaError_t err = cudaMalloc3DArray(&state.layered_array, &desc, layered_extent, cudaArrayLayered);
+    if (err != cudaSuccess) {
+        std::fprintf(stderr, "[cuda_renderer] cudaMalloc3DArray skybox failed: %s\n",
+                     cudaGetErrorString(err));
+        for (unsigned char *pixels : face_pixels) {
+            stbi_image_free(pixels);
+        }
+        release_bridge_background(state);
+        return -1;
+    }
+
+    for (int face = 0; face < 6; ++face) {
+        cudaMemcpy3DParms parms = {};
+        parms.srcPtr = make_cudaPitchedPtr(
+            face_pixels[face],
+            static_cast<size_t>(width) * 4U * sizeof(unsigned char),
+            static_cast<size_t>(width),
+            static_cast<size_t>(height));
+        parms.dstArray = state.layered_array;
+        parms.dstPos = make_cudaPos(0, 0, static_cast<size_t>(face));
+        parms.extent = make_cudaExtent(
+            static_cast<size_t>(width),
+            static_cast<size_t>(height),
+            1);
+        parms.kind = cudaMemcpyHostToDevice;
+        err = cudaMemcpy3D(&parms);
+        stbi_image_free(face_pixels[face]);
+        face_pixels[face] = nullptr;
+        if (err != cudaSuccess) {
+            std::fprintf(stderr, "[cuda_renderer] cudaMemcpy3D skybox face failed: %s\n",
+                         cudaGetErrorString(err));
+            release_bridge_background(state);
+            return -1;
+        }
+    }
+
+    cudaResourceDesc res_desc = {};
+    res_desc.resType = cudaResourceTypeArray;
+    res_desc.res.array.array = state.layered_array;
+
+    cudaTextureDesc tex_desc = {};
+    tex_desc.addressMode[0] = cudaAddressModeClamp;
+    tex_desc.addressMode[1] = cudaAddressModeClamp;
+    tex_desc.filterMode = cudaFilterModeLinear;
+    tex_desc.readMode = cudaReadModeNormalizedFloat;
+    tex_desc.normalizedCoords = 1;
+
+    err = cudaCreateTextureObject(&state.texture, &res_desc, &tex_desc, nullptr);
+    if (err != cudaSuccess) {
+        std::fprintf(stderr, "[cuda_renderer] cudaCreateTextureObject skybox failed: %s\n",
+                     cudaGetErrorString(err));
+        release_bridge_background(state);
+        return -1;
+    }
+
+    state.loaded_dir = canonical_dir;
+    return 0;
+}
+
+} // namespace
 
 /**
  * @brief Populate a BH_LaunchParams struct for the geodesic kernel, matching main.cpp conventions.
@@ -32,7 +250,7 @@
  * @param height         Framebuffer height in pixels.
  */
 static void fill_params(struct BH_LaunchParams *p,
-                        float spin, float observer_r, float inclination_rad,
+                        float spin, float observer_r, float inclination_rad, float fov_scale,
                         int width, int height) {
     memset(p, 0, sizeof(*p));
 
@@ -51,10 +269,10 @@ static void fill_params(struct BH_LaunchParams *p,
     p->rs = rs;
     p->spin = spin;
     p->isco = isco_rs;
-    p->step_size = 0.15f;      /* matches main.cpp default interopStepSize */
-    p->fov_scale = 1.0f;       /* matches main.cpp: full NDC range */
-    p->max_dist = 100.0f;      /* depthFar from main.cpp */
-    p->max_steps = 300;        /* reasonable quality/speed tradeoff */
+    p->step_size = env_float("BLACKHOLE_BRIDGE_STEP_SIZE", 0.08f);
+    p->fov_scale = fmaxf(fov_scale, 0.05f);
+    p->max_dist = env_float("BLACKHOLE_BRIDGE_MAX_DIST", 500.0f);
+    p->max_steps = env_int("BLACKHOLE_BRIDGE_MAX_STEPS", 600);
     p->width = width;
     p->height = height;
 
@@ -102,14 +320,16 @@ static void fill_params(struct BH_LaunchParams *p,
     p->cam_basis[6] = fx; p->cam_basis[7] = fy; p->cam_basis[8] = fz;
 
     /* Feature flags */
-    p->adisk_enabled = 1;
-    p->redshift_enabled = 1;
+    p->adisk_enabled = env_flag("BLACKHOLE_BRIDGE_ADISK_ENABLED", 1);
+    p->redshift_enabled = env_flag("BLACKHOLE_BRIDGE_REDSHIFT_ENABLED", 1);
     p->kerr_enabled = (fabsf(spin) > 1e-6f) ? 1 : 0;
     p->use_luts = 0;
     p->time_sec = 0.0f;
-    p->doppler_strength = 1.0f;
-    p->background_intensity = 0.0f;
-    p->background_enabled = 0;
+    p->doppler_strength = env_float("BLACKHOLE_BRIDGE_DOPPLER_STRENGTH", 1.0f);
+    p->background_intensity = env_float("BLACKHOLE_BRIDGE_BACKGROUND_INTENSITY", 0.8f);
+    p->background_enabled = env_flag("BLACKHOLE_BRIDGE_BACKGROUND_ENABLED", 1);
+    p->photon_glow_strength = env_float("BLACKHOLE_BRIDGE_PHOTON_GLOW_STRENGTH", 1.0f);
+    p->adisk_lit = env_float("BLACKHOLE_BRIDGE_ADISK_LIT", 0.35f);
 }
 
 extern "C" {
@@ -130,8 +350,8 @@ extern "C" {
  * @param out_rgba        Caller-allocated host buffer: width * height * 4 floats.
  * @return 0 on success, -1 on any CUDA error or invalid arguments.
  */
-int bhb_cuda_render_raytraced(
-    float spin, float observer_r, float inclination_rad,
+int bhb_cuda_render_raytraced_camera(
+    float spin, float observer_r, float inclination_rad, float fov_scale,
     int width, int height,
     float *out_rgba)
 {
@@ -152,10 +372,19 @@ int bhb_cuda_render_raytraced(
 
     /* Fill launch params */
     struct BH_LaunchParams params;
-    fill_params(&params, spin, observer_r, inclination_rad, width, height);
+    fill_params(&params, spin, observer_r, inclination_rad, fov_scale, width, height);
 
-    /* Select best kernel variant */
-    int variant = bh_select_kernel_variant();
+    unsigned long long galaxy_texture = 0ULL;
+    if (ensure_bridge_background_loaded() == 0) {
+        galaxy_texture = static_cast<unsigned long long>(bridge_background_state().texture);
+    }
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, galaxy_texture, 0ULL, 0ULL, 0ULL);
+
+    /* Bridge renders prioritize visual correctness over benchmark throughput.
+     * The aggressive FP16/ILP variants are still valuable in the desktop app,
+     * but the Blender bridge should start from the conservative baseline so the
+     * addon does not surface architecture-specific striping artifacts. */
+    int variant = BH_KERNEL_FP32_BASELINE;
 
     /* Launch */
     int ret = bh_launch_geodesic_kernel(d_framebuffer, &params, variant, nullptr);
@@ -173,13 +402,17 @@ int bhb_cuda_render_raytraced(
         return -1;
     }
 
-    /* Apply CUDA post-processing: bloom + ACES tonemap + CA + vignette + grain.
-     * This matches the main app's shader/bloom_*.frag + shader/tonemapping.frag. */
+    /* Apply restrained post-processing for the bridge path.
+     * WHY: the addon/render-engine lane should stay diagnostic and stable, not
+     * inherit every cinematic embellishment from the interactive desktop app. */
     extern int bhb_cuda_postprocess(float4*, int, int, float, float, float, float);
+    float const bloom_threshold = env_float("BLACKHOLE_BRIDGE_BLOOM_THRESHOLD", 1.0f);
+    float const bloom_strength = env_float("BLACKHOLE_BRIDGE_BLOOM_STRENGTH", 0.0f);
+    float const exposure_gain = env_float("BLACKHOLE_BRIDGE_EXPOSURE", 12.0f);
     bhb_cuda_postprocess(d_framebuffer, width, height,
-                          0.8f,   /* bloom threshold (matches bloom_brightness_pass.frag) */
-                          0.1f,   /* bloom strength (matches bloom_composite.frag) */
-                          30.0f,  /* exposure gain (kernel output is dim, ~0.01-1.3 per channel) */
+                          bloom_threshold,
+                          bloom_strength,
+                          exposure_gain,
                           params.time_sec);
 
     cudaDeviceSynchronize();
@@ -194,6 +427,21 @@ int bhb_cuda_render_raytraced(
     }
 
     return 0;
+}
+
+int bhb_cuda_render_raytraced(
+    float spin, float observer_r, float inclination_rad,
+    int width, int height,
+    float *out_rgba)
+{
+    return bhb_cuda_render_raytraced_camera(
+        spin,
+        observer_r,
+        inclination_rad,
+        1.0f,
+        width,
+        height,
+        out_rgba);
 }
 
 } /* extern "C" */
@@ -476,6 +724,19 @@ int bhb_cuda_render_disk_texture(float a_star, float r_out_rg, float inc_rad,
     err = cudaMemcpy(out_rgba, d_out, fb_bytes, cudaMemcpyDeviceToHost);
     cudaFree(d_out);
     return (err == cudaSuccess) ? 0 : -1;
+}
+
+int bhb_cuda_reset_device_impl(void) {
+    cudaError_t err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        cudaGetLastError();
+    }
+    err = cudaDeviceReset();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "[cuda_renderer] cudaDeviceReset failed: %s\n", cudaGetErrorString(err));
+        return -1;
+    }
+    return 0;
 }
 
 } /* extern "C" (lensing map + disk texture wrappers) */
