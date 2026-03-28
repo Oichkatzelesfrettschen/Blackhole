@@ -80,6 +80,11 @@ float wg_thetaLine(float theta, float spacing, float width) {
     return smoothstep(width, 0.0, dist);
 }
 
+float wg_overlayAttenuation(vec3 scene_color) {
+    float scene_luma = dot(scene_color, vec3(0.2126, 0.7152, 0.0722));
+    return mix(1.0, 0.18, smoothstep(0.12, 0.9, scene_luma));
+}
+
 float wg_radialLine(float r, float a_star, float spacing, float width,
                     float time_sec, float infall_scale) {
     float r_h = wg_eventHorizon(a_star);
@@ -102,7 +107,7 @@ float wg_sphericalGrid(float r, float theta, float phi, float a_star,
     float theta_line = wg_thetaLine(theta, theta_spacing, line_width);
     float radial_line = wg_radialLine(r, a_star, radial_spacing, line_width * 1.15,
                                       time_sec, infall_scale);
-    float grid = max(max(phi_line, theta_line), radial_line * 0.82);
+    float grid = max(max(phi_line, theta_line), radial_line * 0.58);
     // Boost near horizon (alpha -> 0 -> boost -> 3x)
     float boost = 1.0 + (1.0 - wg_lapse(r, a_star)) * 2.0;
     return grid * boost;
@@ -151,14 +156,14 @@ vec4 wiregridOverlay(float r, float theta, float phi, float a_star,
                                         radial_spacing, lw, time_sec,
                                         motion_scale, infall_scale);
     vec3  grid_rgb   = grid_color_rgba.rgb;
-    float grid_alpha = clamp(grid * grid_color_rgba.a, 0.0, 0.92);
+    float grid_alpha = clamp(grid * grid_color_rgba.a, 0.0, 0.72);
 
     vec3  ergo_rgb   = vec3(1.0, 0.3, 0.0);   // Orange-red (frame dragging)
     float ergo_alpha = 0.0;
     if (show_ergo) {
         float boundary = wg_ergoBoundary(r, theta, a_star, 0.2);
         float interior = wg_ergoInterior(r, theta, a_star);
-        ergo_alpha = max(boundary * 0.9, interior);
+        ergo_alpha = max(boundary * 0.58, interior * 0.6);
     }
 
     float total = grid_alpha + ergo_alpha;
@@ -169,8 +174,8 @@ vec4 wiregridOverlay(float r, float theta, float phi, float a_star,
 
 // Convenience overload with default grid_scale = 1.0
 vec4 wiregridOverlay(float r, float theta, float phi, float a_star, bool show_ergo) {
-    return wiregridOverlay(r, theta, phi, a_star, show_ergo, 1.0, 1.0, 0.6,
-                           vec4(0.3, 0.8, 1.0, 0.5), 0.0);
+    return wiregridOverlay(r, theta, phi, a_star, show_ergo, 1.0, 0.85, 0.38,
+                           vec4(0.3, 0.8, 1.0, 0.22), 0.0);
 }
 
 #endif // WIREGRID_GLSL_OVERLAY

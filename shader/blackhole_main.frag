@@ -575,7 +575,8 @@ void applyWiregridOverlay(inout vec3 color, vec3 hitPos) {
   vec4  wg = wiregridOverlay(r, theta, phi, kerrSpin, showErgo, wiregridGridScale,
                              wiregridMotionScale, wiregridInfallScale,
                              wiregridColor, time);
-  color = mix(color, wg.rgb, wg.a);
+  float alpha = wg.a * wg_overlayAttenuation(color);
+  color = mix(color, wg.rgb, alpha);
 }
 
 void main() {

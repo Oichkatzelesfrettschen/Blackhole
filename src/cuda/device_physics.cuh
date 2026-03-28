@@ -668,6 +668,15 @@ __device__ __forceinline__ float d_wg_smoothstep(float edge, float dist) {
     return 1.0f - t * t * (3.0f - 2.0f * t);
 }
 
+__device__ __forceinline__ float d_wg_overlay_attenuation(float3 scene_color) {
+    float const scene_luma = 0.2126f * scene_color.x +
+                             0.7152f * scene_color.y +
+                             0.0722f * scene_color.z;
+    float const t = fmaxf(0.0f, fminf((scene_luma - 0.12f) / 0.78f, 1.0f));
+    float const s = t * t * (3.0f - 2.0f * t);
+    return 1.0f + s * (0.18f - 1.0f);
+}
+
 __device__ __forceinline__ float d_wg_radial_line(float r, float a_star, float spacing,
                                                   float width, float time_sec,
                                                   float infall_scale) {
@@ -724,11 +733,11 @@ __device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float
     float radial_line = d_wg_radial_line(r, a_star, radial_spacing, lw * 1.15f,
                                          d_time_sec, d_wiregrid_infall_scale);
 
-    float grid  = fmaxf(fmaxf(phi_line, theta_line), radial_line * 0.82f);
+    float grid  = fmaxf(fmaxf(phi_line, theta_line), radial_line * 0.58f);
     float boost = 1.0f + (1.0f - d_wg_lapse(r, a_star)) * 2.0f; // 3x near horizon
     grid *= boost;
 
-    float grid_alpha = fminf(grid * d_wiregrid_color[3], 0.92f);
+    float grid_alpha = fminf(grid * d_wiregrid_color[3], 0.72f);
 
     float ergo_alpha = 0.0f;
     if (show_ergo) {
@@ -741,7 +750,7 @@ __device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float
             float omega_max = d_wg_frame_drag(r_plus + 0.01f, a_star);
             interior = (omega / fmaxf(omega_max, 1e-10f)) * 0.3f;
         }
-        ergo_alpha = fmaxf(boundary * 0.9f, interior);
+        ergo_alpha = fmaxf(boundary * 0.58f, interior * 0.6f);
     }
 
     float total = grid_alpha + ergo_alpha;

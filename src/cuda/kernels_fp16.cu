@@ -124,7 +124,7 @@ __launch_bounds__(256, 4)
     float const rDiskIn = d_isco;
     float const rDiskOut = 100.0f * rs;
 
-    KerrConsts const c = d_kerr_init_consts(cam, dir);
+    KerrConsts const c = d_kerr_init_consts(cam, dir, rs, a);
     KerrRay kr = d_kerr_init_ray(cam, dir);
 
     /* Store initial state in FP16 */
@@ -225,10 +225,11 @@ shade:;
       float4 const wg = d_wiregrid_overlay(r_bl, theta_bl, phi_bl,
                                             d_spin, d_wiregrid_show_ergo != 0.0f,
                                             d_wiregrid_grid_scale);
-      float const inv_a = 1.0f - wg.w;
-      color16 = make_float4(color16.x*inv_a + wg.x*wg.w,
-                             color16.y*inv_a + wg.y*wg.w,
-                             color16.z*inv_a + wg.z*wg.w, color16.w);
+      float const alpha = wg.w * d_wg_overlay_attenuation(make_f3(color16.x, color16.y, color16.z));
+      float const inv_a = 1.0f - alpha;
+      color16 = make_float4(color16.x*inv_a + wg.x*alpha,
+                             color16.y*inv_a + wg.y*alpha,
+                             color16.z*inv_a + wg.z*alpha, color16.w);
     }
   }
   dFramebuffer[(py * d_width) + px] = color16;

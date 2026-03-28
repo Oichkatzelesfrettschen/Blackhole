@@ -170,9 +170,9 @@ __launch_bounds__(128, 4)
     float const rDiskIn = d_isco;
     float const rDiskOut = 100.0f * rs;
 
-    KerrConsts const c0 = d_kerr_init_consts(cam, dir0);
+    KerrConsts const c0 = d_kerr_init_consts(cam, dir0, rs, aSpin);
     KerrRay kr0 = d_kerr_init_ray(cam, dir0);
-    KerrConsts const c1 = d_kerr_init_consts(cam, dir1);
+    KerrConsts const c1 = d_kerr_init_consts(cam, dir1, rs, aSpin);
     KerrRay kr1 = d_kerr_init_ray(cam, dir1);
 
     /* Pack initial ray state into __half2 pairs.
@@ -207,7 +207,9 @@ __launch_bounds__(128, 4)
           hit0.hit_point = old0;
           done0 = true;
         } else {
-          d_kerr_step(kr0, rs, aSpin, c0, dt);
+          /* D10: adaptive step near horizon -- matches FP32_COARSENED quality */
+          float const sdt0 = d_adaptive_step(kr0.r, rs, rHorizon, dt);
+          d_kerr_step(kr0, rs, aSpin, c0, sdt0);
           float3 const new0 = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
 
           if (d_adisk_enabled != 0) {
@@ -237,7 +239,8 @@ __launch_bounds__(128, 4)
           hit1.hit_point = old1;
           done1 = true;
         } else {
-          d_kerr_step(kr1, rs, aSpin, c1, dt);
+          float const sdt1 = d_adaptive_step(kr1.r, rs, rHorizon, dt);
+          d_kerr_step(kr1, rs, aSpin, c1, sdt1);
           float3 const new1 = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
 
           if (d_adisk_enabled != 0) {
@@ -367,9 +370,10 @@ __launch_bounds__(128, 4)
     float phi   = atan2f(hp.y, hp.x);
     float4 wg = d_wiregrid_overlay(r, theta, phi, d_spin,
                                    d_wiregrid_show_ergo != 0.0f, d_wiregrid_grid_scale);
-    float inv_a = 1.0f - wg.w;
-    return make_float4(c.x*inv_a + wg.x*wg.w, c.y*inv_a + wg.y*wg.w,
-                       c.z*inv_a + wg.z*wg.w, c.w);
+    float alpha = wg.w * d_wg_overlay_attenuation(make_f3(c.x, c.y, c.z));
+    float inv_a = 1.0f - alpha;
+    return make_float4(c.x*inv_a + wg.x*alpha, c.y*inv_a + wg.y*alpha,
+                       c.z*inv_a + wg.z*alpha, c.w);
   };
   dFramebuffer[idx0] = applyWGH2(d_shade_hit(hit0, cam), hit0);
   if (hasRay1) {

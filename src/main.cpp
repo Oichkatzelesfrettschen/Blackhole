@@ -3655,7 +3655,7 @@ int main(int argc, char **argv) {
       }
       static bool wiregridEnabled = false;
       static WiregridParams wiregridParams;
-      static glm::vec4 wiregridColor = glm::vec4(0.2f, 0.6f, 1.0f, 0.4f);
+      static glm::vec4 wiregridColor = glm::vec4(0.24f, 0.68f, 0.95f, 0.22f);
       static bool wiregridEnvApplied = false;
       if (!wiregridEnvApplied) {
         auto parseEnvFloat = [](const char *name, float &out) {
