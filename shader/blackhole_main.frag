@@ -110,6 +110,7 @@ uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geomet
 // These are now computed in adiskColor() and traceColor() to avoid redundant uniforms
 uniform float enableRedshift = 0.0;      // Toggle gravitational redshift
 uniform float enablePhotonSphere = 0.0;  // Toggle photon sphere glow
+uniform float photonSphereGlowStrength = 1.0;
 
 // Phase 10.1: Hawking radiation parameters
 uniform float hawkingGlowEnabled = 0.0;  // Toggle Hawking thermal glow
@@ -400,7 +401,8 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
         if (photonSphereDistance < 0.5) {
           // Phase 8.2 optimization: LUT for exp(-distance*4.0) avoids transcendental
           float u = photonSphereDistance / 0.5;  // Normalize to [0,1]
-          float glowIntensity = texture(photonGlowLUT, vec2(u, 0.5)).r * 0.3;
+          float glowIntensity =
+              texture(photonGlowLUT, vec2(u, 0.5)).r * 0.3 * photonSphereGlowStrength;
           // Orange-yellow glow color for photon ring
           const vec3 GLOW_COLOR = vec3(1.0, 0.7, 0.3);
           color += GLOW_COLOR * glowIntensity * alpha;

@@ -384,11 +384,11 @@ struct ShowcaseOrbitComposition {
 };
 
 constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -7.0f, 18.0f, 58.0f, 2.85f, 0.72f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
-    {"left-third", "nasa_deep_starmap", 0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.75f, 0.74f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
-    {"right-third", "nasa_deep_starmap_galactic", -0.18f, 0.03f, -7.5f, 20.0f, 56.0f, 2.75f, 0.74f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
-    {"wide-left", "eso_milkyway_brunier", 0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.55f, 0.68f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
-    {"wide-right", "nasa_deep_starmap_galactic", -0.12f, -0.02f, -6.5f, 24.0f, 50.0f, 2.7f, 0.78f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
+    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 60.0f, 3.05f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
+    {"left-third", "nasa_deep_starmap", 0.18f, 0.03f, -8.0f, 23.0f, 58.0f, 2.95f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
+    {"right-third", "nasa_deep_starmap_galactic", -0.18f, 0.03f, -8.0f, 23.0f, 58.0f, 2.95f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
+    {"wide-left", "eso_milkyway_brunier", 0.12f, -0.02f, -7.0f, 27.5f, 54.0f, 2.75f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
+    {"wide-right", "nasa_deep_starmap_galactic", -0.12f, -0.02f, -7.0f, 27.5f, 54.0f, 2.9f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
 }};
 
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
@@ -2703,6 +2703,7 @@ int main(int argc, char **argv) {
     [[maybe_unused]] static int const noiseTextureSize = 32;
     static float adiskSpeed = 0.5f;
     static float dopplerStrength = 1.0f;
+    static float photonSphereGlowStrength = 1.0f;
     static bool useGrmhd = false;
     static bool grmhdLoaded = false;
     static GrmhdPackedTexture grmhdTexture;
@@ -3410,6 +3411,7 @@ int main(int argc, char **argv) {
           adiskDensityV      = 2.0f;
           adiskLit           = 0.25f;
           dopplerStrength    = 1.0f;
+          photonSphereGlowStrength = 1.0f;
           bloomIterations    = 4;
           bloomStrength      = 0.08f;
           tonemappingEnabled = true;
@@ -3439,18 +3441,21 @@ int main(int argc, char **argv) {
           noiseTextureReady  = true;
           adiskNoiseLOD      = 3.0f;
           adiskNoiseScale    = 0.35f;
-          adiskDensityV      = 1.35f;
-          adiskLit           = 0.14f;
-          dopplerStrength    = 0.75f;
-          bloomIterations    = 4;
-          bloomStrength      = 0.035f;
+          adiskDensityV      = 1.6f;
+          adiskDensityH      = 2.1f;
+          adiskHeight        = 0.42f;
+          adiskLit           = 0.24f;
+          dopplerStrength    = 1.15f;
+          photonSphereGlowStrength = 1.85f;
+          bloomIterations    = 5;
+          bloomStrength      = 0.055f;
           tonemappingEnabled = true;
           toneExposure       = 1.0f;
           gamma              = 2.35f;
           computeMaxSteps    = 1000;
-          computeStepSize    = 0.02f;
+          computeStepSize    = 0.016f;
           depthFar           = 154.367004f;
-          kerrSpin           = 0.35f;
+          kerrSpin           = 0.62f;
           SettingsManager::instance().get().backgroundId =
               hasRecordBackgroundId
                   ? recordBackgroundId
@@ -3495,6 +3500,7 @@ int main(int argc, char **argv) {
           adiskDensityV      = 1.4f;
           adiskLit           = 0.08f;
           dopplerStrength    = 1.0f;
+          photonSphereGlowStrength = 1.0f;
           // Post-processing: preserve ring detail instead of washing it out
           bloomIterations    = 3;
           bloomStrength      = 0.03f;
@@ -3612,9 +3618,9 @@ int main(int argc, char **argv) {
       if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
         const ShowcaseOrbitComposition *const composition =
             findShowcaseOrbitComposition(recordComposition);
-        backgroundLayerScale = {1.0f, 1.14f, 1.3f};
-        backgroundLayerIntensity = {1.0f, 0.82f, 0.56f};
-        backgroundLayerLodBias = {0.6f, 1.45f, 2.35f};
+        backgroundLayerScale = {1.0f, 1.18f, 1.42f};
+        backgroundLayerIntensity = {1.0f, 0.94f, 0.72f};
+        backgroundLayerLodBias = {0.45f, 1.2f, 1.9f};
         backgroundLayerGlobalOffset =
             composition != nullptr
                 ? glm::vec2(composition->backgroundOffsetX, composition->backgroundOffsetY)
@@ -3628,8 +3634,8 @@ int main(int argc, char **argv) {
                                               : (composition != nullptr
                                                      ? composition->backgroundPitchDeg
                                                      : 0.0f));
-        tonemapChromaticAberrationStrength = 0.0004f;
-        tonemapVignetteStrength = 0.12f;
+        tonemapChromaticAberrationStrength = 0.00015f;
+        tonemapVignetteStrength = 0.05f;
         tonemapFilmGrainStrength = 0.0f;
       } else {
         backgroundLayerScale = {1.0f, 1.08f, 1.16f};
@@ -4772,6 +4778,7 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["adiskNoiseScale"] = adiskNoiseScale;
         rtti.floatUniforms["adiskSpeed"] = adiskSpeed;
         rtti.floatUniforms["dopplerStrength"] = dopplerStrength;
+        rtti.floatUniforms["photonSphereGlowStrength"] = photonSphereGlowStrength;
         rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphereEffective ? 1.0f : 0.0f;
 
 #if BLACKHOLE_HAS_CUDA
