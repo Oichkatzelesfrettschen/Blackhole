@@ -69,8 +69,11 @@ int env_int(const char *name, int fallback) {
 
 struct BridgeBackgroundState {
     cudaArray_t layered_array = nullptr;
-    cudaTextureObject_t texture = 0;
+    cudaTextureObject_t cubemap_texture = 0;
+    cudaArray_t equirect_array = nullptr;
+    cudaTextureObject_t equirect_texture = 0;
     std::string loaded_dir;
+    std::string loaded_equirect;
 };
 
 BridgeBackgroundState &bridge_background_state() {
@@ -79,15 +82,24 @@ BridgeBackgroundState &bridge_background_state() {
 }
 
 void release_bridge_background(BridgeBackgroundState &state) {
-    if (state.texture != 0) {
-        (void)cudaDestroyTextureObject(state.texture);
-        state.texture = 0;
+    if (state.cubemap_texture != 0) {
+        (void)cudaDestroyTextureObject(state.cubemap_texture);
+        state.cubemap_texture = 0;
     }
     if (state.layered_array != nullptr) {
         (void)cudaFreeArray(state.layered_array);
         state.layered_array = nullptr;
     }
+    if (state.equirect_texture != 0) {
+        (void)cudaDestroyTextureObject(state.equirect_texture);
+        state.equirect_texture = 0;
+    }
+    if (state.equirect_array != nullptr) {
+        (void)cudaFreeArray(state.equirect_array);
+        state.equirect_array = nullptr;
+    }
     state.loaded_dir.clear();
+    state.loaded_equirect.clear();
 }
 
 std::filesystem::path resolve_bridge_skybox_dir() {
@@ -99,13 +111,23 @@ std::filesystem::path resolve_bridge_skybox_dir() {
 
     if (const char *source_dir = std::getenv("BLACKHOLE_SOURCE_DIR")) {
         if (*source_dir != '\0') {
-            return std::filesystem::path(source_dir) / "assets" / "skybox_eso_milkyway";
+            return std::filesystem::path(source_dir) / "assets" / "skybox_nebula_dark";
         }
     }
 
     if (const char *showcase_dir = std::getenv("BLACKHOLE_SHOWCASE_SOURCE_DIR")) {
         if (*showcase_dir != '\0') {
-            return std::filesystem::path(showcase_dir) / "assets" / "skybox_eso_milkyway";
+            return std::filesystem::path(showcase_dir) / "assets" / "skybox_nebula_dark";
+        }
+    }
+
+    return {};
+}
+
+std::filesystem::path resolve_bridge_equirect_file() {
+    if (const char *explicit_file = std::getenv("BLACKHOLE_BRIDGE_BACKGROUND_EQUIRECT_FILE")) {
+        if (*explicit_file != '\0') {
+            return std::filesystem::path(explicit_file);
         }
     }
 
@@ -115,17 +137,72 @@ std::filesystem::path resolve_bridge_skybox_dir() {
 int ensure_bridge_background_loaded() {
     BridgeBackgroundState &state = bridge_background_state();
     std::filesystem::path const skybox_dir = resolve_bridge_skybox_dir();
-    if (skybox_dir.empty()) {
+    std::filesystem::path const equirect_file = resolve_bridge_equirect_file();
+    if (skybox_dir.empty() && equirect_file.empty()) {
         release_bridge_background(state);
         return 0;
     }
 
     std::string const canonical_dir = skybox_dir.lexically_normal().string();
-    if (state.texture != 0 && state.loaded_dir == canonical_dir) {
+    std::string const canonical_equirect = equirect_file.lexically_normal().string();
+    if ((state.cubemap_texture != 0 || state.equirect_texture != 0) &&
+        state.loaded_dir == canonical_dir &&
+        state.loaded_equirect == canonical_equirect) {
         return 0;
     }
 
     release_bridge_background(state);
+
+    if (!equirect_file.empty() && std::filesystem::exists(equirect_file)) {
+        int width = 0;
+        int height = 0;
+        int components = 0;
+        unsigned char *pixels = stbi_load(equirect_file.string().c_str(), &width, &height, &components, 4);
+        if (pixels != nullptr) {
+            cudaChannelFormatDesc const desc2d = cudaCreateChannelDesc<uchar4>();
+            cudaError_t err2d = cudaMallocArray(&state.equirect_array, &desc2d,
+                                                static_cast<size_t>(width),
+                                                static_cast<size_t>(height));
+            if (err2d == cudaSuccess) {
+                err2d = cudaMemcpy2DToArray(
+                    state.equirect_array, 0, 0, pixels,
+                    static_cast<size_t>(width) * 4U * sizeof(unsigned char),
+                    static_cast<size_t>(width) * 4U * sizeof(unsigned char),
+                    static_cast<size_t>(height), cudaMemcpyHostToDevice);
+            }
+            stbi_image_free(pixels);
+            if (err2d != cudaSuccess) {
+                std::fprintf(stderr, "[cuda_renderer] Failed to upload equirect background: %s\n",
+                             cudaGetErrorString(err2d));
+                release_bridge_background(state);
+                return -1;
+            }
+
+            cudaResourceDesc res_desc = {};
+            res_desc.resType = cudaResourceTypeArray;
+            res_desc.res.array.array = state.equirect_array;
+
+            cudaTextureDesc tex_desc = {};
+            tex_desc.addressMode[0] = cudaAddressModeWrap;
+            tex_desc.addressMode[1] = cudaAddressModeClamp;
+            tex_desc.filterMode = cudaFilterModeLinear;
+            tex_desc.readMode = cudaReadModeNormalizedFloat;
+            tex_desc.normalizedCoords = 1;
+
+            err2d = cudaCreateTextureObject(&state.equirect_texture, &res_desc, &tex_desc, nullptr);
+            if (err2d != cudaSuccess) {
+                std::fprintf(stderr, "[cuda_renderer] cudaCreateTextureObject equirect failed: %s\n",
+                             cudaGetErrorString(err2d));
+                release_bridge_background(state);
+                return -1;
+            }
+            state.loaded_equirect = canonical_equirect;
+        }
+    }
+
+    if (skybox_dir.empty()) {
+        return 0;
+    }
 
     static const char *kFaces[6] = {"right.png", "left.png", "top.png",
                                     "bottom.png", "front.png", "back.png"};
@@ -221,7 +298,7 @@ int ensure_bridge_background_loaded() {
     tex_desc.readMode = cudaReadModeNormalizedFloat;
     tex_desc.normalizedCoords = 1;
 
-    err = cudaCreateTextureObject(&state.texture, &res_desc, &tex_desc, nullptr);
+    err = cudaCreateTextureObject(&state.cubemap_texture, &res_desc, &tex_desc, nullptr);
     if (err != cudaSuccess) {
         std::fprintf(stderr, "[cuda_renderer] cudaCreateTextureObject skybox failed: %s\n",
                      cudaGetErrorString(err));
@@ -380,10 +457,14 @@ int bhb_cuda_render_raytraced_camera(
     fill_params(&params, spin, observer_r, inclination_rad, fov_scale, width, height);
 
     unsigned long long galaxy_texture = 0ULL;
+    unsigned long long background_equirect_texture = 0ULL;
     if (ensure_bridge_background_loaded() == 0) {
-        galaxy_texture = static_cast<unsigned long long>(bridge_background_state().texture);
+        galaxy_texture = static_cast<unsigned long long>(bridge_background_state().cubemap_texture);
+        background_equirect_texture =
+            static_cast<unsigned long long>(bridge_background_state().equirect_texture);
     }
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, galaxy_texture, 0ULL, 0ULL, 0ULL);
+    bh_upload_bridge_background_texture(background_equirect_texture);
 
     /* Bridge renders prioritize visual correctness over benchmark throughput.
      * The aggressive FP16/ILP variants are still valuable in the desktop app,

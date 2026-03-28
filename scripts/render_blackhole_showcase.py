@@ -66,7 +66,7 @@ def main(argv: list[str]) -> int:
         env["BLACKHOLE_SOURCE_DIR"] = str(source_dir)
         env["BLACKHOLE_BRIDGE_BACKGROUND_SKYBOX_DIR"] = os.environ.get(
             "BLACKHOLE_BRIDGE_BACKGROUND_SKYBOX_DIR",
-            str(source_dir / "assets" / "skybox_eso_milkyway"),
+            str(source_dir / "assets" / "skybox_nebula_dark"),
         )
         env["BLACKHOLE_SHOWCASE_SOURCE_DIR"] = str(source_dir)
         env["BLACKHOLE_SHOWCASE_REPORT_JSON"] = str(inner_report)

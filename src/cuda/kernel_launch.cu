@@ -57,6 +57,7 @@ __constant__ unsigned long long d_tex_galaxy;     /**< @brief Galaxy cubemap bac
 __constant__ unsigned long long d_tex_grmhd;       /**< @brief GRMHD left frame (RGBA32F 3D). */
 __constant__ unsigned long long d_tex_synch_g;     /**< @brief Synchrotron G(x)=x*K_{2/3}(x) LUT (R32F 2D, height=1). */
 __constant__ unsigned long long d_tex_grmhd_right; /**< @brief GRMHD right frame for time interpolation (RGBA32F 3D). */
+__constant__ unsigned long long d_tex_background_equirect; /**< @brief Optional bridge 2D equirectangular background. */
 __constant__ float d_grmhd_alpha;                  /**< @brief Blend [0,1] between left and right GRMHD frames (C1d). */
 __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
@@ -259,4 +260,9 @@ extern "C" void bh_upload_lut_textures(unsigned long long emissivity,
   (void)cudaMemcpyToSymbol(d_tex_grmhd,        &grmhd,        sizeof(grmhd));
   (void)cudaMemcpyToSymbol(d_tex_synch_g,      &synch_g,      sizeof(synch_g));
   (void)cudaMemcpyToSymbol(d_tex_grmhd_right,  &grmhd_right,  sizeof(grmhd_right));
+}
+
+extern "C" void bh_upload_bridge_background_texture(unsigned long long background_equirect) {
+  (void)cudaMemcpyToSymbol(d_tex_background_equirect, &background_equirect,
+                           sizeof(background_equirect));
 }

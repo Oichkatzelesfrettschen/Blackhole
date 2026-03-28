@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--background-yaw-deg", type=float, default=40.0)
     parser.add_argument("--background-pitch-deg", type=float, default=20.0)
     parser.add_argument("--background-filter-radius", type=float, default=0.006)
+    parser.add_argument("--background-equirect-file", type=Path)
     parser.add_argument("--adisk-enabled", action="store_true")
     parser.add_argument("--adisk-lit", type=float, default=0.18)
     parser.add_argument("--frame-shift-x", type=float, default=0.11)
@@ -64,8 +65,12 @@ def main() -> int:
 
     os.environ["BLACKHOLE_SOURCE_DIR"] = str(source_dir)
     os.environ["BLACKHOLE_BRIDGE_BACKGROUND_SKYBOX_DIR"] = str(
-        source_dir / "assets" / "skybox_eso_milkyway"
+        source_dir / "assets" / "skybox_nebula_dark"
     )
+    if args.background_equirect_file is not None:
+        os.environ["BLACKHOLE_BRIDGE_BACKGROUND_EQUIRECT_FILE"] = str(args.background_equirect_file.resolve())
+    else:
+        os.environ.pop("BLACKHOLE_BRIDGE_BACKGROUND_EQUIRECT_FILE", None)
     os.environ["BLACKHOLE_BRIDGE_ADISK_ENABLED"] = "1" if args.adisk_enabled else "0"
     os.environ["BLACKHOLE_BRIDGE_ADISK_LIT"] = str(args.adisk_lit)
     os.environ["BLACKHOLE_BRIDGE_BACKGROUND_ENABLED"] = "1"
@@ -127,6 +132,7 @@ def main() -> int:
         "background_yaw_deg": args.background_yaw_deg,
         "background_pitch_deg": args.background_pitch_deg,
         "background_filter_radius": args.background_filter_radius,
+        "background_equirect_file": str(args.background_equirect_file.resolve()) if args.background_equirect_file else None,
         "adisk_enabled": args.adisk_enabled,
         "adisk_lit": args.adisk_lit,
         "frame_shift_x": args.frame_shift_x,

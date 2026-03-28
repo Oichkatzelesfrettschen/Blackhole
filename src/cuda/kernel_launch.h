@@ -167,6 +167,13 @@ void bh_upload_lut_textures(unsigned long long emissivity,
                              unsigned long long synch_g,
                              unsigned long long grmhd_right);
 
+/**
+ * @brief Upload the optional equirectangular bridge background texture handle.
+ *
+ * @param background_equirect cudaTextureObject_t for a 2D equirectangular background.
+ */
+void bh_upload_bridge_background_texture(unsigned long long background_equirect);
+
 #ifdef __cplusplus
 }
 #endif

@@ -70,6 +70,7 @@ extern __constant__ unsigned long long d_tex_galaxy;       /**< @brief Slot 4: g
 extern __constant__ unsigned long long d_tex_grmhd;        /**< @brief Slot 5: GRMHD left frame (RGBA32F 3D). */
 extern __constant__ unsigned long long d_tex_synch_g;      /**< @brief Slot 6: synchrotron G(x)=x*K_{2/3}(x) LUT (R32F 2D, height=1). */
 extern __constant__ unsigned long long d_tex_grmhd_right;  /**< @brief Slot 7: GRMHD right frame for time interpolation (RGBA32F 3D). */
+extern __constant__ unsigned long long d_tex_background_equirect; /**< @brief Optional bridge 2D equirectangular background. */
 extern __constant__ float d_grmhd_alpha;                   /**< @brief Blend factor [0,1] between left and right GRMHD frames (C1d). */
 extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
@@ -1213,6 +1214,35 @@ __device__ __forceinline__ float3 d_sample_galaxy_cubemap(float3 dir) {
     return d_scale(sum, 0.2f);
 }
 
+__device__ __forceinline__ float3 d_sample_background_equirect(float3 dir) {
+    if (!d_tex_background_equirect) {
+        return make_f3(0.0f, 0.0f, 0.0f);
+    }
+
+    float3 n = d_normalize(dir);
+    if (fabsf(d_background_yaw_rad) > D_EPSILON) {
+        float const cy = cosf(d_background_yaw_rad);
+        float const sy = sinf(d_background_yaw_rad);
+        n = make_f3(
+            n.x * cy + n.z * sy,
+            n.y,
+            -n.x * sy + n.z * cy);
+    }
+    if (fabsf(d_background_pitch_rad) > D_EPSILON) {
+        float const cp = cosf(d_background_pitch_rad);
+        float const sp = sinf(d_background_pitch_rad);
+        n = make_f3(
+            n.x,
+            n.y * cp - n.z * sp,
+            n.y * sp + n.z * cp);
+    }
+
+    float const u = atan2f(n.z, n.x) * D_INV_TWO_PI + 0.5f;
+    float const v = asinf(fmaxf(-1.0f, fminf(n.y, 1.0f))) * D_INV_PI + 0.5f;
+    float4 const s = tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v);
+    return make_f3(s.x, s.y, s.z);
+}
+
 /**
  * @brief Compute the background sky color for an escaped ray direction.
  *
@@ -1234,6 +1264,12 @@ __device__ __forceinline__ float4 d_background_color(float3 dir) {
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     float3 n = d_normalize(dir);
+
+    if (d_tex_background_equirect) {
+        float3 sky = d_sample_background_equirect(n);
+        sky = d_scale(sky, d_background_intensity);
+        return make_float4(sky.x, sky.y, sky.z, 1.0f);
+    }
 
     /* If galaxy cubemap is registered, sample it directly (matches GL path). */
     if (d_tex_galaxy) {
