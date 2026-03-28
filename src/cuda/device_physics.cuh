@@ -1261,7 +1261,7 @@ __device__ __forceinline__ float3 d_sample_background_equirect(float3 dir) {
     float2 const uv = d_dir_to_uv(n);
     float const u = uv.x;
     float const v = uv.y;
-    float4 const s = tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v);
+    float4 const s = tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v, 0.0f);
     return make_f3(s.x, s.y, s.z);
 }
 
@@ -1291,23 +1291,46 @@ __device__ __forceinline__ float3 d_sample_background_equirect_layered(float3 di
         float const u = d_fract(base_uv.x * scale + offset_x);
         float const v = d_fract(base_uv.y * scale + offset_y);
         float const lod_bias = fmaxf(d_background_layer_lod_bias[i], 0.0f);
-        float const layer_radius = radius + lod_bias * 0.0025f;
+        float const base_radius = fmaxf(radius, 0.0015f);
+        float const layer_radius = base_radius * (1.0f + 1.5f * lod_bias);
 
-        float4 sample = tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v);
+        float4 sample =
+            tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v, lod_bias);
         if (layer_radius > D_EPSILON) {
+            float const diagonal_radius = layer_radius * 0.70710678f;
             float4 sample_pos_u =
-                tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, d_fract(u + layer_radius), v);
+                tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect,
+                                 d_fract(u + layer_radius), v, lod_bias);
             float4 sample_neg_u =
-                tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, d_fract(u - layer_radius), v);
+                tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect,
+                                 d_fract(u - layer_radius), v, lod_bias);
             float v_pos = fminf(v + layer_radius, 1.0f);
             float v_neg = fmaxf(v - layer_radius, 0.0f);
             float4 sample_pos_v =
-                tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v_pos);
+                tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v_pos, lod_bias);
             float4 sample_neg_v =
-                tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v_neg);
-            sample.x = 0.2f * (sample.x + sample_pos_u.x + sample_neg_u.x + sample_pos_v.x + sample_neg_v.x);
-            sample.y = 0.2f * (sample.y + sample_pos_u.y + sample_neg_u.y + sample_pos_v.y + sample_neg_v.y);
-            sample.z = 0.2f * (sample.z + sample_pos_u.z + sample_neg_u.z + sample_pos_v.z + sample_neg_v.z);
+                tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v_neg, lod_bias);
+            float4 sample_pp =
+                tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect,
+                                 d_fract(u + diagonal_radius), fminf(v + diagonal_radius, 1.0f), lod_bias);
+            float4 sample_pn =
+                tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect,
+                                 d_fract(u + diagonal_radius), fmaxf(v - diagonal_radius, 0.0f), lod_bias);
+            float4 sample_np =
+                tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect,
+                                 d_fract(u - diagonal_radius), fminf(v + diagonal_radius, 1.0f), lod_bias);
+            float4 sample_nn =
+                tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect,
+                                 d_fract(u - diagonal_radius), fmaxf(v - diagonal_radius, 0.0f), lod_bias);
+            sample.x = (4.0f * sample.x +
+                        2.0f * (sample_pos_u.x + sample_neg_u.x + sample_pos_v.x + sample_neg_v.x) +
+                        sample_pp.x + sample_pn.x + sample_np.x + sample_nn.x) * (1.0f / 16.0f);
+            sample.y = (4.0f * sample.y +
+                        2.0f * (sample_pos_u.y + sample_neg_u.y + sample_pos_v.y + sample_neg_v.y) +
+                        sample_pp.y + sample_pn.y + sample_np.y + sample_nn.y) * (1.0f / 16.0f);
+            sample.z = (4.0f * sample.z +
+                        2.0f * (sample_pos_u.z + sample_neg_u.z + sample_pos_v.z + sample_neg_v.z) +
+                        sample_pp.z + sample_pn.z + sample_np.z + sample_nn.z) * (1.0f / 16.0f);
         }
 
         accum = d_add(accum, d_scale(make_f3(sample.x, sample.y, sample.z), weight));

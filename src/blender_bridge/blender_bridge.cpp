@@ -18,6 +18,7 @@
 
 #include "../physics/constants.h"
 #include "../physics/doppler.h"
+#include "../physics/gravitational_waves.h"
 #include "../physics/kerr.h"
 #include "../physics/novikov_thorne.h"
 #include "../physics/source_presets.h"
@@ -59,6 +60,14 @@ int bhbHasBoost(void) {
 #else
   return 0;
 #endif
+}
+
+int bhbSizeofSourceParams(void) {
+  return static_cast<int>(sizeof(struct BhbSourceParams));
+}
+
+int bhbSizeofDiskParams(void) {
+  return static_cast<int>(sizeof(struct BhbDiskParams));
 }
 
 /* ========================================================================
@@ -714,6 +723,11 @@ int bhb_cuda_render_disk_texture(float a_star, float r_out_rg, float inc_rad,
                                   int width, int height, float *out_rgba);
 int bhb_cuda_render_raytraced(float spin, float observer_r, float inclination_rad,
                                int width, int height, float *out_rgba);
+int bhb_cuda_render_raytraced_camera(float spin, float observer_r, float inclination_rad,
+                                      float fov_scale, int width, int height, float *out_rgba);
+int bhb_cuda_render_raytraced_view(float spin, const float *cam_pos, const float *cam_basis,
+                                    float fov_scale, int width, int height, float *out_rgba);
+int bhb_cuda_reset_device_impl(void);
 }
 
 int bhbCudaRenderLensingMap(double aStar, double observerRRg, double inclinationRad,
@@ -738,6 +752,34 @@ int bhbCudaRenderRaytraced(float spin, float observerR, float inclinationRad,
   return bhb_cuda_render_raytraced(spin, observerR, inclinationRad, width, height, outRgba);
 }
 
+int bhbCudaRenderRaytracedCamera(float spin, float observerR, float inclinationRad, float fovScale,
+                                 int width, int height, float *outRgba) {
+  return bhb_cuda_render_raytraced_camera(
+      spin,
+      observerR,
+      inclinationRad,
+      fovScale,
+      width,
+      height,
+      outRgba);
+}
+
+int bhbCudaRenderRaytracedView(float spin, const float *camPos, const float *camBasis,
+                               float fovScale, int width, int height, float *outRgba) {
+  return bhb_cuda_render_raytraced_view(
+      spin,
+      camPos,
+      camBasis,
+      fovScale,
+      width,
+      height,
+      outRgba);
+}
+
+int bhbCudaResetDevice(void) {
+  return bhb_cuda_reset_device_impl();
+}
+
 #else /* !BLACKHOLE_HAS_CUDA */
 
 int bhbCudaRenderLensingMap(double /*unused*/, double /*unused*/, double /*unused*/,
@@ -754,6 +796,10 @@ int bhbCudaRenderDiskTexture(const struct BhbDiskParams * /*unused*/, int /*unus
 int bhbCudaRenderRaytraced(float /*spin*/, float /*observerR*/, float /*inclinationRad*/,
                             int /*width*/, int /*height*/, float * /*outRgba*/) {
   return -1;
+}
+
+int bhbCudaResetDevice(void) {
+  return 0;
 }
 
 #endif /* BLACKHOLE_HAS_CUDA */
@@ -876,3 +922,191 @@ int bhbGenerateErgosphereMesh(double aStar, int nTheta, int nPhi, float *outPos,
 
   return 0;
 }
+
+/* ========================================================================
+ * Gravitational wave inspiral waveform
+ * ======================================================================== */
+
+int bhbGWInspiral(double m1Msun, double m2Msun, double a1Star, double a2Star, double distMpc,
+                  double incRad, double fLowHz, double fHighHz, double dtSec, double *outBuf,
+                  int maxPoints) {
+  if ((outBuf == nullptr) || maxPoints <= 0 || m1Msun <= 0.0 || m2Msun <= 0.0 ||
+      distMpc <= 0.0 || fLowHz <= 0.0 || fHighHz <= fLowHz || dtSec <= 0.0) {
+    return -1;
+  }
+
+  /* bbhSystem handles all CGS conversions (masses, spins, distance). */
+  physics::BinarySystem binary = physics::bbhSystem(m1Msun, m2Msun, a1Star, a2Star, distMpc);
+  binary.inclination = incRad;
+
+  auto waveform = physics::generateInspiralWaveform(binary, fLowHz, fHighHz, dtSec);
+
+  int const nPoints =
+      static_cast<int>(std::min(waveform.size(), static_cast<size_t>(maxPoints)));
+
+  for (int i = 0; i < nPoints; ++i) {
+    double *p = outBuf + (static_cast<ptrdiff_t>(i) * 5);
+    p[0] = waveform[i].t;
+    p[1] = waveform[i].f;
+    p[2] = waveform[i].hPlus;
+    p[3] = waveform[i].hCross;
+    p[4] = waveform[i].phase;
+  }
+
+  return nPoints;
+}
+
+/* ========================================================================
+ * Underscore aliases for Python ctypes (bridge.py uses bhb_snake_case names)
+ *
+ * WHY: Blender Python bridge.py accesses symbols as lib.bhb_foo_bar but the
+ *      primary C ABI exports camelCase names (bhbFooBar).  These thin wrappers
+ *      forward every call so both naming conventions resolve to the same code.
+ * ======================================================================== */
+
+extern "C" {
+
+int bhb_version_major(void) { return bhbVersionMajor(); }
+int bhb_version_minor(void) { return bhbVersionMinor(); }
+int bhb_has_cuda(void)      { return bhbHasCuda(); }
+int bhb_has_boost(void)     { return bhbHasBoost(); }
+int bhb_sizeof_source_params(void) { return bhbSizeofSourceParams(); }
+int bhb_sizeof_disk_params(void)   { return bhbSizeofDiskParams(); }
+int bhb_cuda_reset_device(void)    { return bhbCudaResetDevice(); }
+
+void bhb_preset_m87(struct BhbSourceParams *out)  { bhbPresetM87(out); }
+void bhb_preset_sgra(struct BhbSourceParams *out) { bhbPresetSgra(out); }
+
+double bhb_kerr_outer_horizon(double aStar)  { return bhbKerrOuterHorizon(aStar); }
+double bhb_kerr_inner_horizon(double aStar)  { return bhbKerrInnerHorizon(aStar); }
+
+double bhb_kerr_ergosphere(double aStar, double thetaRad) {
+  return bhbKerrErgosphere(aStar, thetaRad);
+}
+double bhb_kerr_isco(double aStar, int prograde) { return bhbKerrIsco(aStar, prograde); }
+double bhb_kerr_photon_orbit_prograde(double aStar)   { return bhbKerrPhotonOrbitPrograde(aStar); }
+double bhb_kerr_photon_orbit_retrograde(double aStar) { return bhbKerrPhotonOrbitRetrograde(aStar); }
+double bhb_kerr_sigma(double rRg, double aStar, double thetaRad) {
+  return bhbKerrSigma(rRg, aStar, thetaRad);
+}
+double bhb_kerr_delta(double rRg, double aStar) { return bhbKerrDelta(rRg, aStar); }
+
+int bhb_trace_geodesics_equatorial(double aStar, double observerRRg, double bMin, double bMax,
+                                    int nRays, int maxSteps, double stepSize,
+                                    float *outXyz, int *outCounts) {
+  return bhbTraceGeodesicsEquatorial(aStar, observerRRg, bMin, bMax, nRays, maxSteps, stepSize,
+                                     outXyz, outCounts);
+}
+
+int bhb_trace_geodesics_image_plane(double aStar, double observerRRg, double inclinationRad,
+                                     double alphaMin, double alphaMax, int nAlpha,
+                                     double betaMin, double betaMax, int nBeta,
+                                     int maxSteps, double stepSize,
+                                     float *outXyz, int *outCounts) {
+  return bhbTraceGeodesicsImagePlane(aStar, observerRRg, inclinationRad, alphaMin, alphaMax,
+                                     nAlpha, betaMin, betaMax, nBeta, maxSteps, stepSize,
+                                     outXyz, outCounts);
+}
+
+int bhb_generate_disk_mesh(const struct BhbDiskParams *params, int nRadial, int nAzimuthal,
+                            float *outPos, float *outNormals, float *outTemp, float *outUvs,
+                            int *outIndices, int *outVertexCount, int *outIndexCount) {
+  return bhbGenerateDiskMesh(params, nRadial, nAzimuthal, outPos, outNormals, outTemp, outUvs,
+                              outIndices, outVertexCount, outIndexCount);
+}
+
+double bhb_nt_radiative_efficiency(double aStar)  { return bhbNtRadiativeEfficiency(aStar); }
+double bhb_nt_isco_radius(double aStar)           { return bhbNtIscoRadius(aStar); }
+
+int bhb_nt_temperature_profile(double aStar, double massMsun, double mdotEdd,
+                                const double *rValues, int n,
+                                double *outTemp, double *outFlux) {
+  return bhbNtTemperatureProfile(aStar, massMsun, mdotEdd, rValues, n, outTemp, outFlux);
+}
+
+double bhb_lorentz_factor(double beta)                      { return bhbLorentzFactor(beta); }
+double bhb_doppler_factor(double beta, double cosTheta)     { return bhbDopplerFactor(beta, cosTheta); }
+double bhb_beaming_flux(double delta, double alphaSpectral) { return bhbBeamingFlux(delta, alphaSpectral); }
+
+/* bhb_synchrotron_gyrofreq: bridge.py assigns argtypes=[c_double, c_double] in the loop
+ * that covers all four synchrotron functions; accept two args to match that prototype. */
+double bhb_synchrotron_gyrofreq(double bGauss, double /*unused*/) {
+  return bhbSynchrotronGyrofreq(bGauss);
+}
+double bhb_synchrotron_critical_freq(double bGauss, double gamma) {
+  return bhbSynchrotronCriticalFreq(bGauss, gamma);
+}
+double bhb_synchrotron_power(double bGauss, double gamma) {
+  return bhbSynchrotronPower(bGauss, gamma);
+}
+double bhb_synchrotron_cooling_time(double bGauss, double gamma) {
+  return bhbSynchrotronCoolingTime(bGauss, gamma);
+}
+
+int bhb_render_lensing_map(double aStar, double observerRRg, double inclinationRad,
+                            int width, int height, float *outRgba) {
+  return bhbRenderLensingMap(aStar, observerRRg, inclinationRad, width, height, outRgba);
+}
+
+int bhb_render_disk_texture(const struct BhbDiskParams *params, int width, int height,
+                             float *outRgba) {
+  return bhbRenderDiskTexture(params, width, height, outRgba);
+}
+
+int bhb_generate_horizon_mesh(double aStar, int nTheta, int nPhi,
+                               float *outPos, int *outIndices,
+                               int *outVertexCount, int *outIndexCount) {
+  return bhbGenerateHorizonMesh(aStar, nTheta, nPhi, outPos, outIndices, outVertexCount,
+                                outIndexCount);
+}
+
+int bhb_generate_ergosphere_mesh(double aStar, int nTheta, int nPhi,
+                                  float *outPos, int *outIndices,
+                                  int *outVertexCount, int *outIndexCount) {
+  return bhbGenerateErgosphereMesh(aStar, nTheta, nPhi, outPos, outIndices, outVertexCount,
+                                   outIndexCount);
+}
+
+int bhb_cuda_trace_geodesics(double aStar, double observerRRg, double inclinationRad,
+                              double alphaMin, double alphaMax, int nAlpha,
+                              double betaMin, double betaMax, int nBeta,
+                              int maxSteps, double stepSize, float *outXyz, int *outCounts) {
+  return bhbCudaTraceGeodesics(aStar, observerRRg, inclinationRad, alphaMin, alphaMax, nAlpha,
+                                betaMin, betaMax, nBeta, maxSteps, stepSize, outXyz, outCounts);
+}
+
+int bhb_gw_inspiral(double m1Msun, double m2Msun, double a1Star, double a2Star, double distMpc,
+                    double incRad, double fLowHz, double fHighHz, double dtSec,
+                    double *outBuf, int maxPoints) {
+  return bhbGWInspiral(m1Msun, m2Msun, a1Star, a2Star, distMpc, incRad, fLowHz, fHighHz, dtSec,
+                       outBuf, maxPoints);
+}
+
+/* When built without CUDA, provide underscore-named stubs so the .so always
+ * exports these symbols and bridge.py can probe them without OSError. */
+#ifndef BLACKHOLE_HAS_CUDA
+int bhb_cuda_render_lensing_map(float /*a_star*/, float /*obs_r*/, float /*inc_rad*/,
+                                 int /*width*/, int /*height*/, float * /*out_rgba*/) {
+  return -1;
+}
+int bhb_cuda_render_disk_texture(float /*a_star*/, float /*r_out_rg*/, float /*inc_rad*/,
+                                  int /*width*/, int /*height*/, float * /*out_rgba*/) {
+  return -1;
+}
+int bhb_cuda_render_raytraced(float /*spin*/, float /*observer_r*/, float /*inc_rad*/,
+                               int /*width*/, int /*height*/, float * /*out_rgba*/) {
+  return -1;
+}
+int bhb_cuda_render_raytraced_camera(float /*spin*/, float /*observer_r*/, float /*inc_rad*/,
+                                      float /*fov_scale*/, int /*width*/, int /*height*/,
+                                      float * /*out_rgba*/) {
+  return -1;
+}
+int bhb_cuda_render_raytraced_view(float /*spin*/, const float * /*cam_pos*/,
+                                    const float * /*cam_basis*/, float /*fov_scale*/,
+                                    int /*width*/, int /*height*/, float * /*out_rgba*/) {
+  return -1;
+}
+#endif /* !BLACKHOLE_HAS_CUDA */
+
+} /* extern "C" */

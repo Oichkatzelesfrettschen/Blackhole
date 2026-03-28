@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <vector>
 #include <string>
 
 #include "../cuda/kernel_launch.h"
@@ -70,7 +71,7 @@ int env_int(const char *name, int fallback) {
 struct BridgeBackgroundState {
     cudaArray_t layered_array = nullptr;
     cudaTextureObject_t cubemap_texture = 0;
-    cudaArray_t equirect_array = nullptr;
+    cudaMipmappedArray_t equirect_mipmapped_array = nullptr;
     cudaTextureObject_t equirect_texture = 0;
     std::string loaded_dir;
     std::string loaded_equirect;
@@ -94,9 +95,9 @@ void release_bridge_background(BridgeBackgroundState &state) {
         (void)cudaDestroyTextureObject(state.equirect_texture);
         state.equirect_texture = 0;
     }
-    if (state.equirect_array != nullptr) {
-        (void)cudaFreeArray(state.equirect_array);
-        state.equirect_array = nullptr;
+    if (state.equirect_mipmapped_array != nullptr) {
+        (void)cudaFreeMipmappedArray(state.equirect_mipmapped_array);
+        state.equirect_mipmapped_array = nullptr;
     }
     state.loaded_dir.clear();
     state.loaded_equirect.clear();
@@ -160,15 +161,103 @@ int ensure_bridge_background_loaded() {
         unsigned char *pixels = stbi_load(equirect_file.string().c_str(), &width, &height, &components, 4);
         if (pixels != nullptr) {
             cudaChannelFormatDesc const desc2d = cudaCreateChannelDesc<uchar4>();
-            cudaError_t err2d = cudaMallocArray(&state.equirect_array, &desc2d,
-                                                static_cast<size_t>(width),
-                                                static_cast<size_t>(height));
+            size_t mip_levels = 1;
+            for (int edge = std::max(width, height); edge > 1; edge /= 2) {
+                ++mip_levels;
+            }
+            cudaExtent const mip_extent = make_cudaExtent(
+                static_cast<size_t>(width),
+                static_cast<size_t>(height),
+                1);
+            cudaError_t err2d = cudaMallocMipmappedArray(
+                &state.equirect_mipmapped_array,
+                &desc2d,
+                mip_extent,
+                static_cast<unsigned int>(mip_levels));
+            if (err2d != cudaSuccess) {
+                std::fprintf(stderr,
+                             "[cuda_renderer] cudaMallocMipmappedArray equirect (%d x %d, mips=%zu) failed: %s\n",
+                             width,
+                             height,
+                             mip_levels,
+                             cudaGetErrorString(err2d));
+            }
+            std::vector<unsigned char> level_pixels;
             if (err2d == cudaSuccess) {
-                err2d = cudaMemcpy2DToArray(
-                    state.equirect_array, 0, 0, pixels,
-                    static_cast<size_t>(width) * 4U * sizeof(unsigned char),
-                    static_cast<size_t>(width) * 4U * sizeof(unsigned char),
-                    static_cast<size_t>(height), cudaMemcpyHostToDevice);
+                level_pixels.assign(
+                    pixels,
+                    pixels + (static_cast<size_t>(width) * static_cast<size_t>(height) * 4U));
+                int level_width = width;
+                int level_height = height;
+                for (size_t level = 0; level < mip_levels && err2d == cudaSuccess; ++level) {
+                    cudaArray_t level_array = nullptr;
+                    err2d = cudaGetMipmappedArrayLevel(
+                        &level_array,
+                        state.equirect_mipmapped_array,
+                        static_cast<unsigned int>(level));
+                    if (err2d != cudaSuccess) {
+                        std::fprintf(stderr,
+                                     "[cuda_renderer] cudaGetMipmappedArrayLevel(%zu) failed: %s\n",
+                                     level,
+                                     cudaGetErrorString(err2d));
+                        break;
+                    }
+                    err2d = cudaMemcpy2DToArray(
+                        level_array,
+                        0,
+                        0,
+                        level_pixels.data(),
+                        static_cast<size_t>(level_width) * 4U * sizeof(unsigned char),
+                        static_cast<size_t>(level_width) * 4U * sizeof(unsigned char),
+                        static_cast<size_t>(level_height),
+                        cudaMemcpyHostToDevice);
+                    if (err2d != cudaSuccess || level + 1 >= mip_levels) {
+                        if (err2d != cudaSuccess) {
+                            std::fprintf(stderr,
+                                         "[cuda_renderer] cudaMemcpy2DToArray mip level %zu (%d x %d) failed: %s\n",
+                                         level,
+                                         level_width,
+                                         level_height,
+                                         cudaGetErrorString(err2d));
+                        }
+                        break;
+                    }
+
+                    int const next_width = std::max(1, level_width / 2);
+                    int const next_height = std::max(1, level_height / 2);
+                    std::vector<unsigned char> next_pixels(
+                        static_cast<size_t>(next_width) * static_cast<size_t>(next_height) * 4U,
+                        0);
+                    for (int y = 0; y < next_height; ++y) {
+                        for (int x = 0; x < next_width; ++x) {
+                            unsigned int accum[4] = {0U, 0U, 0U, 0U};
+                            unsigned int taps = 0U;
+                            for (int dy = 0; dy < 2; ++dy) {
+                                int const src_y = std::min(level_height - 1, y * 2 + dy);
+                                for (int dx = 0; dx < 2; ++dx) {
+                                    int const src_x = std::min(level_width - 1, x * 2 + dx);
+                                    size_t const src_idx =
+                                        (static_cast<size_t>(src_y) * static_cast<size_t>(level_width) +
+                                         static_cast<size_t>(src_x)) * 4U;
+                                    for (int c = 0; c < 4; ++c) {
+                                        accum[c] += level_pixels[src_idx + static_cast<size_t>(c)];
+                                    }
+                                    ++taps;
+                                }
+                            }
+                            size_t const dst_idx =
+                                (static_cast<size_t>(y) * static_cast<size_t>(next_width) +
+                                 static_cast<size_t>(x)) * 4U;
+                            for (int c = 0; c < 4; ++c) {
+                                next_pixels[dst_idx + static_cast<size_t>(c)] =
+                                    static_cast<unsigned char>(accum[c] / std::max(taps, 1U));
+                            }
+                        }
+                    }
+                    level_pixels = std::move(next_pixels);
+                    level_width = next_width;
+                    level_height = next_height;
+                }
             }
             stbi_image_free(pixels);
             if (err2d != cudaSuccess) {
@@ -179,19 +268,24 @@ int ensure_bridge_background_loaded() {
             }
 
             cudaResourceDesc res_desc = {};
-            res_desc.resType = cudaResourceTypeArray;
-            res_desc.res.array.array = state.equirect_array;
+            res_desc.resType = cudaResourceTypeMipmappedArray;
+            res_desc.res.mipmap.mipmap = state.equirect_mipmapped_array;
 
             cudaTextureDesc tex_desc = {};
             tex_desc.addressMode[0] = cudaAddressModeWrap;
             tex_desc.addressMode[1] = cudaAddressModeClamp;
             tex_desc.filterMode = cudaFilterModeLinear;
+            tex_desc.mipmapFilterMode = cudaFilterModeLinear;
             tex_desc.readMode = cudaReadModeNormalizedFloat;
             tex_desc.normalizedCoords = 1;
+            tex_desc.minMipmapLevelClamp = 0.0f;
+            tex_desc.maxMipmapLevelClamp = static_cast<float>(mip_levels - 1U);
 
             err2d = cudaCreateTextureObject(&state.equirect_texture, &res_desc, &tex_desc, nullptr);
             if (err2d != cudaSuccess) {
-                std::fprintf(stderr, "[cuda_renderer] cudaCreateTextureObject equirect failed: %s\n",
+                std::fprintf(stderr,
+                             "[cuda_renderer] cudaCreateTextureObject equirect failed (mips=%zu): %s\n",
+                             mip_levels,
                              cudaGetErrorString(err2d));
                 release_bridge_background(state);
                 return -1;
@@ -326,6 +420,8 @@ int ensure_bridge_background_loaded() {
  * @param width          Framebuffer width in pixels.
  * @param height         Framebuffer height in pixels.
  */
+static void apply_bridge_feature_defaults(struct BH_LaunchParams *p);
+
 static void fill_params(struct BH_LaunchParams *p,
                         float spin, float observer_r, float inclination_rad, float fov_scale,
                         int width, int height) {
@@ -398,18 +494,23 @@ static void fill_params(struct BH_LaunchParams *p,
     p->frame_shift_x = env_float("BLACKHOLE_BRIDGE_FRAME_SHIFT_X", 0.0f);
     p->frame_shift_y = env_float("BLACKHOLE_BRIDGE_FRAME_SHIFT_Y", 0.0f);
 
-    /* Feature flags */
+    apply_bridge_feature_defaults(p);
+}
+
+static void apply_bridge_feature_defaults(struct BH_LaunchParams *p) {
     p->adisk_enabled = env_flag("BLACKHOLE_BRIDGE_ADISK_ENABLED", 1);
     p->redshift_enabled = env_flag("BLACKHOLE_BRIDGE_REDSHIFT_ENABLED", 1);
-    p->kerr_enabled = (fabsf(spin) > 1e-6f) ? 1 : 0;
+    p->kerr_enabled = (fabsf(p->spin) > 1.0e-6f) ? 1 : 0;
     p->use_luts = 0;
     p->time_sec = 0.0f;
     p->doppler_strength = env_float("BLACKHOLE_BRIDGE_DOPPLER_STRENGTH", 1.0f);
     p->background_intensity = env_float("BLACKHOLE_BRIDGE_BACKGROUND_INTENSITY", 0.8f);
     p->background_enabled = env_flag("BLACKHOLE_BRIDGE_BACKGROUND_ENABLED", 1);
     p->photon_glow_strength = env_float("BLACKHOLE_BRIDGE_PHOTON_GLOW_STRENGTH", 1.0f);
-    p->background_yaw_rad = env_float("BLACKHOLE_BRIDGE_BACKGROUND_YAW_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
-    p->background_pitch_rad = env_float("BLACKHOLE_BRIDGE_BACKGROUND_PITCH_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
+    p->background_yaw_rad =
+        env_float("BLACKHOLE_BRIDGE_BACKGROUND_YAW_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
+    p->background_pitch_rad =
+        env_float("BLACKHOLE_BRIDGE_BACKGROUND_PITCH_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
     p->background_filter_radius = env_float("BLACKHOLE_BRIDGE_BACKGROUND_FILTER_RADIUS", 0.0f);
     {
         float const parallax_strength = env_float("BLACKHOLE_BRIDGE_BACKGROUND_PARALLAX_STRENGTH", 0.0006f);
@@ -451,6 +552,37 @@ static void fill_params(struct BH_LaunchParams *p,
         }
     }
     p->adisk_lit = env_float("BLACKHOLE_BRIDGE_ADISK_LIT", 0.35f);
+}
+
+static void fill_params_from_view(struct BH_LaunchParams *p, float spin, const float *cam_pos,
+                                  const float *cam_basis, float fov_scale, int width,
+                                  int height) {
+    memset(p, 0, sizeof(*p));
+
+    float rs = 1.0f;
+    float a = spin;
+    float z1 = 1.0f + powf(1.0f - a * a, 1.0f / 3.0f) *
+               (powf(1.0f + a, 1.0f / 3.0f) + powf(1.0f - a, 1.0f / 3.0f));
+    float z2 = sqrtf(3.0f * a * a + z1 * z1);
+    float isco_M = 3.0f + z2 - sqrtf((3.0f - z1) * (3.0f + z1 + 2.0f * z2));
+    float isco_rs = isco_M * 0.5f;
+
+    p->rs = rs;
+    p->spin = spin;
+    p->isco = isco_rs;
+    p->step_size = env_float("BLACKHOLE_BRIDGE_STEP_SIZE", 0.08f);
+    p->fov_scale = fmaxf(fov_scale, 0.05f);
+    p->max_dist = env_float("BLACKHOLE_BRIDGE_MAX_DIST", 500.0f);
+    p->max_steps = env_int("BLACKHOLE_BRIDGE_MAX_STEPS", 600);
+    p->width = width;
+    p->height = height;
+
+    std::memcpy(p->cam_pos, cam_pos, sizeof(p->cam_pos));
+    std::memcpy(p->cam_basis, cam_basis, sizeof(p->cam_basis));
+    p->frame_shift_x = env_float("BLACKHOLE_BRIDGE_FRAME_SHIFT_X", 0.0f);
+    p->frame_shift_y = env_float("BLACKHOLE_BRIDGE_FRAME_SHIFT_Y", 0.0f);
+
+    apply_bridge_feature_defaults(p);
 }
 
 extern "C" {
@@ -548,6 +680,75 @@ int bhb_cuda_render_raytraced_camera(
 
     if (err != cudaSuccess) {
         fprintf(stderr, "[cuda_renderer] Memcpy failed: %s\n", cudaGetErrorString(err));
+        return -1;
+    }
+
+    return 0;
+}
+
+int bhb_cuda_render_raytraced_view(
+    float spin, const float *cam_pos, const float *cam_basis, float fov_scale,
+    int width, int height,
+    float *out_rgba)
+{
+    if (!out_rgba || !cam_pos || !cam_basis || width <= 0 || height <= 0) return -1;
+
+    float4 *d_framebuffer = nullptr;
+    size_t fb_size = static_cast<size_t>(width) * static_cast<size_t>(height) * sizeof(float4);
+
+    cudaError_t err = cudaMalloc(&d_framebuffer, fb_size);
+    if (err != cudaSuccess) {
+        std::fprintf(stderr, "[cuda_renderer] cudaMalloc failed: %s\n", cudaGetErrorString(err));
+        return -1;
+    }
+
+    cudaMemset(d_framebuffer, 0, fb_size);
+
+    struct BH_LaunchParams params;
+    fill_params_from_view(&params, spin, cam_pos, cam_basis, fov_scale, width, height);
+
+    unsigned long long galaxy_texture = 0ULL;
+    unsigned long long background_equirect_texture = 0ULL;
+    if (ensure_bridge_background_loaded() == 0) {
+        galaxy_texture = static_cast<unsigned long long>(bridge_background_state().cubemap_texture);
+        background_equirect_texture =
+            static_cast<unsigned long long>(bridge_background_state().equirect_texture);
+    }
+    bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, galaxy_texture, 0ULL, 0ULL, 0ULL);
+    bh_upload_bridge_background_texture(background_equirect_texture);
+
+    int variant = BH_KERNEL_FP32_BASELINE;
+    int ret = bh_launch_geodesic_kernel(d_framebuffer, &params, variant, nullptr);
+    if (ret != 0) {
+        std::fprintf(stderr, "[cuda_renderer] Kernel launch failed: %d\n", ret);
+        cudaFree(d_framebuffer);
+        return -1;
+    }
+
+    err = cudaDeviceSynchronize();
+    if (err != cudaSuccess) {
+        std::fprintf(stderr, "[cuda_renderer] Sync failed: %s\n", cudaGetErrorString(err));
+        cudaFree(d_framebuffer);
+        return -1;
+    }
+
+    extern int bhb_cuda_postprocess(float4*, int, int, float, float, float, float);
+    float const bloom_threshold = env_float("BLACKHOLE_BRIDGE_BLOOM_THRESHOLD", 1.0f);
+    float const bloom_strength = env_float("BLACKHOLE_BRIDGE_BLOOM_STRENGTH", 0.0f);
+    float const exposure_gain = env_float("BLACKHOLE_BRIDGE_EXPOSURE", 12.0f);
+    bhb_cuda_postprocess(d_framebuffer, width, height,
+                         bloom_threshold,
+                         bloom_strength,
+                         exposure_gain,
+                         params.time_sec);
+
+    cudaDeviceSynchronize();
+
+    err = cudaMemcpy(out_rgba, d_framebuffer, fb_size, cudaMemcpyDeviceToHost);
+    cudaFree(d_framebuffer);
+
+    if (err != cudaSuccess) {
+        std::fprintf(stderr, "[cuda_renderer] Memcpy failed: %s\n", cudaGetErrorString(err));
         return -1;
     }
 

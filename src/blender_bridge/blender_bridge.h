@@ -28,6 +28,12 @@ int bhbVersionMinor(void);
 int bhbHasCuda(void);
 /** @brief Return 1 if the library was compiled with Boost math support, 0 otherwise. */
 int bhbHasBoost(void);
+/** @brief Return sizeof(BhbSourceParams) for ctypes layout verification. */
+int bhbSizeofSourceParams(void);
+/** @brief Return sizeof(BhbDiskParams) for ctypes layout verification. */
+int bhbSizeofDiskParams(void);
+/** @brief Reset the CUDA device used by the bridge so external CUDA renderers can reuse it. */
+int bhbCudaResetDevice(void);
 
 /* ========================================================================
  * Source presets
@@ -378,6 +384,26 @@ int bhbCudaRenderDiskTexture(const struct BhbDiskParams *params, int width, int 
 int bhbCudaRenderRaytraced(float spin, float observerR, float inclinationRad, int width, int height,
                            float *outRgba);
 
+/**
+ * @brief Render a ray-traced black hole image with an explicit camera FOV scale.
+ *
+ * This preserves the simplified axisymmetric camera API while allowing Blender
+ * to pass its actual perspective framing instead of hard-wiring a full-range
+ * default.
+ */
+int bhbCudaRenderRaytracedCamera(float spin, float observerR, float inclinationRad, float fovScale,
+                                 int width, int height, float *outRgba);
+
+/**
+ * @brief Render a ray-traced black hole image from an exact world-space camera.
+ *
+ * Accepts the camera position and column-major basis directly, matching the
+ * desktop interop path more closely than the reduced observerR/inclination API.
+ * The basis columns are [right, up, forward].
+ */
+int bhbCudaRenderRaytracedView(float spin, const float *camPos, const float *camBasis,
+                               float fovScale, int width, int height, float *outRgba);
+
 /* ========================================================================
  * Ergosphere / horizon surface meshes
  * ======================================================================== */
@@ -419,6 +445,34 @@ int bhbGenerateHorizonMesh(double aStar, int nTheta, int nPhi,
  */
 int bhbGenerateErgosphereMesh(double aStar, int nTheta, int nPhi, float *outPositions,
                               int *outIndices, int *outVertexCount, int *outIndexCount);
+
+/* ========================================================================
+ * Gravitational wave inspiral waveform
+ * ======================================================================== */
+
+/**
+ * @brief Compute a GW inspiral waveform and write points into @p outBuf.
+ *
+ * Wraps physics::generateInspiralWaveform() with convenient SI/CGS input units.
+ * Spin-orbit and spin-spin 3.5PN phase corrections included when spins are nonzero.
+ *
+ * @param m1Msun    Primary mass [solar masses].
+ * @param m2Msun    Secondary mass [solar masses].
+ * @param a1Star    Primary dimensionless spin a* in [0, 1).
+ * @param a2Star    Secondary dimensionless spin a* in [0, 1).
+ * @param distMpc   Luminosity distance [Mpc].
+ * @param incRad    Orbital inclination from line of sight [rad].
+ * @param fLowHz    Start frequency [Hz].
+ * @param fHighHz   End frequency [Hz].
+ * @param dtSec     Time step [s].
+ * @param outBuf    Caller-allocated: maxPoints * 5 doubles.
+ *                  Layout per point: [t_s, f_Hz, h_plus, h_cross, phase_rad].
+ * @param maxPoints Maximum waveform points to write.
+ * @return Actual points written, or -1 on invalid arguments.
+ */
+int bhbGWInspiral(double m1Msun, double m2Msun, double a1Star, double a2Star, double distMpc,
+                  double incRad, double fLowHz, double fHighHz, double dtSec, double *outBuf,
+                  int maxPoints);
 
 #ifdef __cplusplus
 }
