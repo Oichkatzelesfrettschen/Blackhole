@@ -4968,8 +4968,19 @@ int main(int argc, char **argv) {
             cp.background_yaw_rad = backgroundYawRad;
             cp.background_pitch_rad = backgroundPitchRad;
             cp.background_filter_radius = 0.0f;
-            cp.frame_shift_x = 0.0f;
-            cp.frame_shift_y = 0.0f;
+            if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
+              const ShowcaseOrbitComposition *const composition =
+                  findShowcaseOrbitComposition(recordComposition);
+              cp.frame_shift_x =
+                  hasRecordFrameX ? recordFrameX
+                                  : (composition != nullptr ? composition->frameOffsetX : 0.0f);
+              cp.frame_shift_y =
+                  hasRecordFrameY ? recordFrameY
+                                  : (composition != nullptr ? composition->frameOffsetY : 0.0f);
+            } else {
+              cp.frame_shift_x = 0.0f;
+              cp.frame_shift_y = 0.0f;
+            }
             for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
               auto const &params = backgroundLayerParams.at(static_cast<std::size_t>(i));
               cp.background_layer_params[i * 4 + 0] = params.x;

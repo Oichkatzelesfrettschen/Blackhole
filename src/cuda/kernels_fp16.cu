@@ -112,6 +112,7 @@ __launch_bounds__(256, 4)
   result.hit_horizon = false;
   result.escaped = false;
   result.hit_point = make_f3(0.0f, 0.0f, 0.0f);
+  result.closest_approach_point = cam;
   result.phi = 0.0f;
   result.redshift = 1.0f;
   result.min_radius = d_length(cam);
@@ -135,7 +136,10 @@ __launch_bounds__(256, 4)
       kr = halfToKerrRay(hs);
 
       float3 const oldPos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
-      result.min_radius = fminf(result.min_radius, kr.r);
+      if (kr.r < result.min_radius) {
+        result.min_radius = kr.r;
+        result.closest_approach_point = oldPos;
+      }
 
       if (kr.r <= rHorizon) {
         result.hit_horizon = true;
@@ -185,7 +189,10 @@ __launch_bounds__(256, 4)
       d_step_rk4(pos, vel, rs, dt);
 
       float const r = d_length(pos);
-      result.min_radius = fminf(result.min_radius, r);
+      if (r < result.min_radius) {
+        result.min_radius = r;
+        result.closest_approach_point = pos;
+      }
 
       if (r <= rs) {
         result.hit_horizon = true;

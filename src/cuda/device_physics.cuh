@@ -1028,9 +1028,13 @@ __device__ __forceinline__ float d_synchrotron_G(float x) {
  * @param rs  Schwarzschild radius.
  * @return RGBA float4 with pre-multiplied intensity.
  */
-__device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
+__device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_pos, float rs) {
     float r = sqrtf(fmaf(hit.hit_point.x, hit.hit_point.x,
                          hit.hit_point.y * hit.hit_point.y));
+    float inner_radius = d_isco;
+    float outer_radius = inner_radius * 4.0f;
+    float radial01 =
+        fmaxf(0.0f, fminf((r - inner_radius) / fmaxf(outer_radius - inner_radius, D_EPSILON), 1.0f));
 
     /* Emissivity flux: LUT or analytic Novikov-Thorne */
     float flux;
@@ -1083,15 +1087,44 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
                                              u, 0.5f));
     }
 
+    /* Give the inner disk a hotter thermal read and stronger asymmetric structure,
+     * matching the GLSL desktop lane more closely than the old flat ramp. */
+    float3 thermal_inner = make_f3(1.35f, 0.78f, 0.28f);
+    float3 thermal_outer = make_f3(0.92f, 0.86f, 0.78f);
+    float radial_sqrt = sqrtf(radial01);
+    float3 thermal_tint = d_lerp(thermal_inner, thermal_outer, radial_sqrt);
+    color = make_f3(color.x * thermal_tint.x, color.y * thermal_tint.y, color.z * thermal_tint.z);
+
+    float3 ray_dir = d_normalize(d_sub(hit.hit_point, cam_pos));
+    float3 view_dir = d_scale(ray_dir, -1.0f);
+    float3 vel_dir = d_normalize(make_f3(-hit.hit_point.z, 0.0f, hit.hit_point.x));
+
     /* WHY: GLSL interop_trace.glsl uses flux*2.0 as base intensity. d_adisk_lit matches
      * the adiskLit uniform that record mode sets to 0.35 for cinematic brightness balance. */
     float intensity = flux * 2.0f * d_adisk_lit * spectral;
 
     /* Doppler beaming approximation */
     float v = sqrtf(0.5f * rs / fmaxf(r, D_EPSILON));
-    float cos_phi = cosf(hit.phi);
-    float doppler = 1.0f + d_doppler_strength * v * cos_phi;
+    float view_alignment = d_dot(vel_dir, d_normalize(ray_dir));
+    float doppler = 1.0f + view_alignment * 0.65f * d_doppler_strength;
     intensity *= doppler * doppler * doppler;
+
+    float spin_y = d_spin >= 0.0f ? 1.0f : -1.0f;
+    float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
+    float3 flow_dir = d_normalize(d_cross(spin_axis, d_normalize(hit.hit_point)));
+    float spin_view = 0.5f + 0.5f * d_dot(flow_dir, view_dir);
+    float spin_t = fmaxf(0.0f, fminf((fabsf(d_spin) - 0.05f) / fmaxf(0.85f - 0.05f, D_EPSILON), 1.0f));
+    float spin_weight = spin_t * spin_t * (3.0f - 2.0f * spin_t);
+    float anisotropic_boost = 1.0f + ((0.82f + (1.55f - 0.82f) * spin_view) - 1.0f) * spin_weight;
+    color = d_scale(color, anisotropic_boost);
+
+    float grazing = powf(fmaxf(0.0f, fminf(1.0f - fabsf(ray_dir.y), 1.0f)), 1.5f);
+    color = d_scale(color, 1.0f + (1.55f - 1.0f) * grazing);
+
+    float normalized_v = fabsf(hit.hit_point.y) / fmaxf(0.42f, D_EPSILON);
+    float midplane_boost = powf(fmaxf(0.0f, fminf(1.0f - normalized_v, 1.0f)), 0.45f);
+    float crescent_boost = 1.0f + (1.8f - 1.0f) * (midplane_boost * (1.0f - radial01));
+    color = d_scale(color, crescent_boost);
 
     /* Doppler color shift: approaching side -> blueshift, receding -> redshift */
     if (doppler > 1.0f) {
@@ -1121,6 +1154,9 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
         float dimming = 1.0f / (one_plus_z * one_plus_z * one_plus_z);
         color = d_scale(color, dimming);
     }
+
+    float inner_boost = 1.8f + (0.85f - 1.8f) * powf(radial01, 0.65f);
+    intensity *= inner_boost;
 
     return make_float4(color.x * intensity, color.y * intensity,
                        color.z * intensity, 1.0f);
@@ -1626,7 +1662,7 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     if (hit.hit_disk) {
-        float4 disk_col = d_disk_color(hit, d_rs);
+        float4 disk_col = d_disk_color(hit, cam_pos, d_rs);
         /* GRMHD emissivity modulation: j_nu ~ rho * B^2, B^2 ~ u (plasma beta ~ 1).
          * Matches blackhole_main.frag: density *= rho * uu at disk hit point. */
         if (d_use_luts && d_tex_grmhd) {
@@ -1648,18 +1684,33 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
                                                   cam_pos, d_rs, d_spin);
     bg = make_float4(shaped_bg.x, shaped_bg.y, shaped_bg.z, bg.w);
 
-    /* Photon ring proximity glow: rays that graze r ~ 1.5*rs (photon sphere)
-     * see scattered disk emission from multiple orbits. Add a warm golden halo
-     * that peaks at the photon sphere and fades over 2.5*rs above it. */
+    /* Photon ring proximity glow: match the GLSL lane's narrower, more
+     * anisotropic ring instead of a broad uniform halo. */
     float r_ph = D_PHOTON_SPHERE * d_rs;
-    float excess = fmaxf(hit.min_radius - r_ph, 0.0f);
-    float falloff_scale = 1.0f / fmaxf(2.5f * d_rs, D_EPSILON);
-    float x = fmaxf(0.0f, 1.0f - excess * falloff_scale);
-    float glow = x * x * x;   /* cubic: sharp near photon sphere, smooth fade */
+    float photon_dist = fabsf(hit.min_radius - r_ph);
+    float x = fmaxf(0.0f, 1.0f - photon_dist / fmaxf(0.5f * d_rs, D_EPSILON));
+    float glow = x * x * x;
     float glow_scale = fmaxf(d_photon_glow_strength, 0.0f);
-    bg.x = fminf(bg.x + glow * 1.4f * glow_scale, 100.0f);
-    bg.y = fminf(bg.y + glow * 0.9f * glow_scale, 100.0f);
-    bg.z = fminf(bg.z + glow * 0.1f * glow_scale, 100.0f);
+    if (glow > 0.0f) {
+        float3 closest_n = d_normalize(hit.closest_approach_point);
+        float3 approach_dir = d_normalize(d_sub(cam_pos, hit.closest_approach_point));
+        float spin_y = d_spin >= 0.0f ? 1.0f : -1.0f;
+        float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
+        float3 flow_dir = d_normalize(d_cross(spin_axis, closest_n));
+        float aligned_flow = 0.5f + 0.5f * d_dot(flow_dir, approach_dir);
+        float spin_t = fmaxf(0.0f, fminf((fabsf(d_spin) - 0.05f) / fmaxf(0.85f - 0.05f, D_EPSILON), 1.0f));
+        float spin_weight = spin_t * spin_t * (3.0f - 2.0f * spin_t);
+        float anisotropic_ring =
+            1.0f + ((0.72f + (1.65f - 0.72f) * aligned_flow) - 1.0f) * spin_weight;
+        float glow_intensity = powf(glow * 0.22f * glow_scale, 1.08f) * anisotropic_ring;
+        float rim_mix = d_smoothstep_range(0.09f * d_rs, 0.0f, photon_dist);
+        float3 glow_color = make_f3(1.06f, 0.86f, 0.58f);
+        float3 rim_color = make_f3(1.22f, 1.0f, 0.78f);
+        float3 ring_color = d_lerp(glow_color, rim_color, rim_mix);
+        bg.x = fminf(bg.x + ring_color.x * glow_intensity, 100.0f);
+        bg.y = fminf(bg.y + ring_color.y * glow_intensity, 100.0f);
+        bg.z = fminf(bg.z + ring_color.z * glow_intensity, 100.0f);
+    }
 
     return bg;
 }
