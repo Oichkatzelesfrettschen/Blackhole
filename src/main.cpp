@@ -382,11 +382,17 @@ void printUsage(const char *argv0) {
               " [--record-frames <dir> <N>] [--record-profile <name>]\n", argv0);
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
-  std::printf("  --record-frames <dir> N  Record N cinematic frames as PNG into <dir>.\n");
+  std::printf("  --record-frames <dir> N  Record N profile-driven frames as PNG into <dir>.\n");
   std::printf("                           N defaults to %d (3 min @ 60 fps).\n",
               K_CINEMATIC_FRAMES);
-  std::printf("  --record-profile <name>  Recording profile: cinematic | compare-orbit-near.\n");
+  std::printf("  --record-profile <name>  Recording profile: cinematic | compare-orbit-near | showcase-orbit.\n");
   std::printf("  --start-frame N          Start recording from frame N (default: 0).\n");
+  std::printf("  --record-yaw <deg>       Override record camera yaw.\n");
+  std::printf("  --record-pitch <deg>     Override record camera pitch.\n");
+  std::printf("  --record-distance <r>    Override record camera distance.\n");
+  std::printf("  --record-fov <deg>       Override record camera field of view.\n");
+  std::printf("  --record-exposure <x>    Override record tone-map exposure.\n");
+  std::printf("  --record-sweep-deg <x>   Override orbit sweep degrees across frames.\n");
 }
 
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
@@ -1225,6 +1231,14 @@ GLFWwindow *initializeWindow(int width, int height) {
   }
 
   glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
+  const char *hiddenWindowEnv = std::getenv("BLACKHOLE_WINDOW_HIDDEN");
+  if (hiddenWindowEnv != nullptr && std::string(hiddenWindowEnv) == "1") {
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_FOCUSED, GLFW_FALSE);
+#if GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3)
+    glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
+#endif
+  }
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -2422,6 +2436,18 @@ int main(int argc, char **argv) {
     std::string recordProfile = "cinematic";
     int         recordFramesTotal = K_CINEMATIC_FRAMES;
     int         recordStartFrame  = 0;
+    float       recordYawDeg = 0.0f;
+    bool        hasRecordYaw = false;
+    float       recordPitchDeg = 0.0f;
+    bool        hasRecordPitch = false;
+    float       recordDistance = 0.0f;
+    bool        hasRecordDistance = false;
+    float       recordFovDeg = 0.0f;
+    bool        hasRecordFov = false;
+    float       recordExposure = 0.0f;
+    bool        hasRecordExposure = false;
+    float       recordSweepDeg = 0.0f;
+    bool        hasRecordSweep = false;
     for (int i = 1; i < argc; ++i) {
       std::string const arg = argv[i];
       if (arg == "--help" || arg == "-h") {
@@ -2451,7 +2477,44 @@ int main(int argc, char **argv) {
         recordProfile = argv[++i];
         continue;
       }
+      if (arg == "--record-yaw" && i + 1 < argc) {
+        recordYawDeg = std::strtof(argv[++i], nullptr);
+        hasRecordYaw = true;
+        continue;
+      }
+      if (arg == "--record-pitch" && i + 1 < argc) {
+        recordPitchDeg = std::strtof(argv[++i], nullptr);
+        hasRecordPitch = true;
+        continue;
+      }
+      if (arg == "--record-distance" && i + 1 < argc) {
+        recordDistance = std::strtof(argv[++i], nullptr);
+        hasRecordDistance = true;
+        continue;
+      }
+      if (arg == "--record-fov" && i + 1 < argc) {
+        recordFovDeg = std::strtof(argv[++i], nullptr);
+        hasRecordFov = true;
+        continue;
+      }
+      if (arg == "--record-exposure" && i + 1 < argc) {
+        recordExposure = std::strtof(argv[++i], nullptr);
+        hasRecordExposure = true;
+        continue;
+      }
+      if (arg == "--record-sweep-deg" && i + 1 < argc) {
+        recordSweepDeg = std::strtof(argv[++i], nullptr);
+        hasRecordSweep = true;
+        continue;
+      }
       std::printf("Unknown argument: %s\n", arg.c_str());
+      printUsage(argv[0]);
+      return 2;
+    }
+
+    if (recordProfile != "cinematic" && recordProfile != "compare-orbit-near" &&
+        recordProfile != "showcase-orbit") {
+      std::printf("Unknown record profile: %s\n", recordProfile.c_str());
       printUsage(argv[0]);
       return 2;
     }
@@ -3229,7 +3292,21 @@ int main(int argc, char **argv) {
           return 1;
         }
         recordInitDone     = true;
-        glfwSetWindowSize(window, 1920, 1080);
+        int recordWidth = 1920;
+        int recordHeight = 1080;
+        if (char const *const envWidth = std::getenv("BLACKHOLE_RECORD_WIDTH")) {
+          int const parsed = std::atoi(envWidth);
+          if (parsed > 0) {
+            recordWidth = parsed;
+          }
+        }
+        if (char const *const envHeight = std::getenv("BLACKHOLE_RECORD_HEIGHT")) {
+          int const parsed = std::atoi(envHeight);
+          if (parsed > 0) {
+            recordHeight = parsed;
+          }
+        }
+        glfwSetWindowSize(window, recordWidth, recordHeight);
         glfwSwapInterval(0);
         swapInterval       = 0;
         if (recordProfile == "compare-orbit-near") {
@@ -3261,6 +3338,44 @@ int main(int argc, char **argv) {
           SettingsManager::instance().get().backgroundIntensity = 0.45f;
           CameraState &camMutable = input.camera();
           camMutable = CameraState{.yaw = -90.0f, .pitch = 0.0f, .roll = 0.0f, .distance = 10.0f, .fov = 90.0f};
+          cameraModeIndex = static_cast<int>(CameraMode::Input);
+        } else if (recordProfile == "showcase-orbit") {
+          adiskEnabled       = false;
+          adiskParticle      = false;
+          enableRedshift     = false;
+          enablePhotonSphere = false;
+          hawkingGlowEnabled = false;
+          rteVolumetricEnabled = false;
+          stokesEnabled      = false;
+          useNoiseTexture    = false;
+          noiseTextureReady  = true;
+          adiskNoiseLOD      = 3.0f;
+          adiskNoiseScale    = 0.5f;
+          adiskDensityV      = 2.0f;
+          adiskLit           = 0.25f;
+          dopplerStrength    = 1.0f;
+          bloomIterations    = 4;
+          bloomStrength      = 0.08f;
+          tonemappingEnabled = true;
+          toneExposure       = 1.0f;
+          gamma              = 2.35f;
+          computeMaxSteps    = 1000;
+          computeStepSize    = 0.02f;
+          depthFar           = 154.367004f;
+          kerrSpin           = 0.0f;
+          SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
+          SettingsManager::instance().get().backgroundEnabled = true;
+          SettingsManager::instance().get().backgroundIntensity = 0.45f;
+          CameraState &camMutable = input.camera();
+          camMutable = CameraState{
+              .yaw = hasRecordYaw ? recordYawDeg : -90.0f,
+              .pitch = hasRecordPitch ? recordPitchDeg : 0.0f,
+              .roll = 0.0f,
+              .distance = hasRecordDistance ? recordDistance : 10.0f,
+              .fov = hasRecordFov ? recordFovDeg : 90.0f};
+          if (hasRecordExposure) {
+            toneExposure = recordExposure;
+          }
           cameraModeIndex = static_cast<int>(CameraMode::Input);
         } else {
           // Physics: on, but not everything -- avoids noise pileup / fuzz
@@ -3301,11 +3416,19 @@ int main(int argc, char **argv) {
           SettingsManager::instance().get().backgroundIntensity = 0.8f;
         }
 #if BLACKHOLE_HAS_CUDA
-        // isEnabled() gates the CUDA dispatch path (line ~4295). It is normally set
-        // via the ImGui "Use CUDA Raytracer" checkbox; record mode must set it directly.
-        // useComputeRaytracer alone is insufficient -- it only controls the GLSL compute
-        // path, not the CUDA path.
-        cudaManager.setEnabled(true);
+        // Keep legacy record profiles on the CUDA path in the hybrid app, but let
+        // showcase-orbit remain a true GLSL lane for apples-to-apples captures.
+        if (recordProfile != "showcase-orbit") {
+          // isEnabled() gates the CUDA dispatch path (line ~4295). It is normally set
+          // via the ImGui "Use CUDA Raytracer" checkbox; record mode must set it directly.
+          // useComputeRaytracer alone is insufficient -- it only controls the GLSL compute
+          // path, not the CUDA path.
+          cudaManager.setEnabled(true);
+        } else {
+          cudaManager.setEnabled(false);
+          useComputeRaytracer = false;
+          compareComputeFragment = false;
+        }
 #endif
         std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
                     recordFramesDir.c_str(), recordFramesTotal,
@@ -3526,7 +3649,7 @@ int main(int argc, char **argv) {
         }
       }
 
-      // --record-frames: drive camera and spin from the cinematic path
+      // --record-frames: drive camera and spin from the selected record path
       if (!recordFramesDir.empty()) {
         if (recordProfile == "compare-orbit-near") {
           float const denom = static_cast<float>(std::max(recordFramesTotal - 1, 1));
@@ -3540,6 +3663,27 @@ int main(int argc, char **argv) {
           camMutable.fov = 90.0f;
           cameraModeIndex = static_cast<int>(CameraMode::Input);
           kerrSpin = 0.0f;
+        } else if (recordProfile == "showcase-orbit") {
+          float const denom = static_cast<float>(std::max(recordFramesTotal - 1, 1));
+          float const progress =
+              static_cast<float>(recordFrameIndex - recordStartFrame) / denom;
+          float const baseYaw = hasRecordYaw ? recordYawDeg : -90.0f;
+          float const sweepDeg = hasRecordSweep ? recordSweepDeg : 18.0f;
+          CameraState &camMutable = input.camera();
+          camMutable.yaw = baseYaw + progress * sweepDeg;
+          camMutable.pitch = hasRecordPitch ? recordPitchDeg : 0.0f;
+          camMutable.roll = 0.0f;
+          camMutable.distance = hasRecordDistance ? recordDistance : 10.0f;
+          camMutable.fov = hasRecordFov ? recordFovDeg : 90.0f;
+          cameraModeIndex = static_cast<int>(CameraMode::Input);
+          kerrSpin = 0.0f;
+          recordCurrentKf = CamKeyframe{
+              .t_sec = static_cast<float>(recordFrameIndex - recordStartFrame) /
+                       static_cast<float>(K_CINEMATIC_FPS),
+              .cam = camMutable,
+              .kerrSpin = kerrSpin,
+              .caption = "Showcase orbit",
+          };
         } else {
           recordCurrentKf = recordPath.evaluate(recordCinematic);
           CameraState &camMutable = input.camera();
@@ -5241,7 +5385,10 @@ int main(int argc, char **argv) {
        * GetForegroundDrawList() adds to ImGui's draw list, so this must be called
        * before ImGui::Render().  The overlay is composited over the scene by the
        * ImGui backend when RenderDrawData() runs below. */
-      if (!recordFramesDir.empty() && ++recordWarmup >= 15) {
+      if (!recordFramesDir.empty()) {
+        ++recordWarmup;
+      }
+      if (!recordFramesDir.empty() && recordProfile == "cinematic" && recordWarmup >= 15) {
         renderCinematicOverlay(recordCinematic, recordCurrentKf,
                                glm::length(cameraPos),
                                recordCurRs, recordCurIsco,
