@@ -411,6 +411,45 @@ static void fill_params(struct BH_LaunchParams *p,
     p->background_yaw_rad = env_float("BLACKHOLE_BRIDGE_BACKGROUND_YAW_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
     p->background_pitch_rad = env_float("BLACKHOLE_BRIDGE_BACKGROUND_PITCH_DEG", 0.0f) * (3.14159265358979323846f / 180.0f);
     p->background_filter_radius = env_float("BLACKHOLE_BRIDGE_BACKGROUND_FILTER_RADIUS", 0.0f);
+    {
+        float const parallax_strength = env_float("BLACKHOLE_BRIDGE_BACKGROUND_PARALLAX_STRENGTH", 0.0006f);
+        float const drift_strength = env_float("BLACKHOLE_BRIDGE_BACKGROUND_DRIFT_STRENGTH", 0.01f);
+        std::array<float, 3> const layer_depth = {
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER0_DEPTH", 0.2f),
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER1_DEPTH", 0.5f),
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER2_DEPTH", 0.9f),
+        };
+        std::array<float, 3> const layer_scale = {
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER0_SCALE", 1.0f),
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER1_SCALE", 1.08f),
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER2_SCALE", 1.16f),
+        };
+        std::array<float, 3> const layer_intensity = {
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER0_INTENSITY", 1.0f),
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER1_INTENSITY", 0.6f),
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER2_INTENSITY", 0.35f),
+        };
+        std::array<float, 3> const layer_lod_bias = {
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER0_LOD_BIAS", 0.0f),
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER1_LOD_BIAS", 1.0f),
+            env_float("BLACKHOLE_BRIDGE_BACKGROUND_LAYER2_LOD_BIAS", 2.0f),
+        };
+
+        float const parallax_x = p->cam_pos[0] * parallax_strength;
+        float const parallax_y = p->cam_pos[1] * parallax_strength;
+        float const drift_x = cosf(p->time_sec * 0.02f) * drift_strength;
+        float const drift_y = sinf(p->time_sec * 0.02f) * drift_strength;
+
+        for (int i = 0; i < 3; ++i) {
+            float const offset_x = drift_x + parallax_x * layer_depth[static_cast<size_t>(i)];
+            float const offset_y = drift_y + parallax_y * layer_depth[static_cast<size_t>(i)];
+            p->background_layer_params[i * 4 + 0] = offset_x;
+            p->background_layer_params[i * 4 + 1] = offset_y;
+            p->background_layer_params[i * 4 + 2] = layer_scale[static_cast<size_t>(i)];
+            p->background_layer_params[i * 4 + 3] = layer_intensity[static_cast<size_t>(i)];
+            p->background_layer_lod_bias[i] = fmaxf(layer_lod_bias[static_cast<size_t>(i)], 0.0f);
+        }
+    }
     p->adisk_lit = env_float("BLACKHOLE_BRIDGE_ADISK_LIT", 0.35f);
 }
 

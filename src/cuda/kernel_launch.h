@@ -72,6 +72,8 @@ struct BH_LaunchParams {
     float background_yaw_rad;   /**< @brief Skybox yaw rotation around the spin axis [rad]. */
     float background_pitch_rad; /**< @brief Skybox pitch rotation around the camera-right axis [rad]. */
     float background_filter_radius; /**< @brief Skybox angular prefilter radius in direction-space units. */
+    float background_layer_params[12]; /**< @brief Three vec4 layer params: offset_x, offset_y, scale, weight. */
+    float background_layer_lod_bias[3]; /**< @brief Three non-negative layer LOD biases. */
 
     /* Wiregrid BL-coordinate overlay (task A4) */
     int   wiregrid_enabled;    /**< @brief 1 = apply Boyer-Lindquist coordinate overlay. */

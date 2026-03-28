@@ -66,6 +66,8 @@ __constant__ float d_photon_glow_strength;
 __constant__ float d_background_yaw_rad;
 __constant__ float d_background_pitch_rad;
 __constant__ float d_background_filter_radius;
+__constant__ float d_background_layer_params[12];
+__constant__ float d_background_layer_lod_bias[3];
 __constant__ int   d_wiregrid_enabled;     /**< @brief BL-coord wiregrid overlay flag. */
 __constant__ float d_wiregrid_show_ergo;   /**< @brief Show ergosphere boundary+glow. */
 __constant__ float d_wiregrid_grid_scale;  /**< @brief Grid density multiplier. */
@@ -160,6 +162,18 @@ int uploadConstants(
   }
   cudaError_t const errBasis = cudaMemcpyToSymbol(d_cam_basis, p->cam_basis, sizeof(p->cam_basis));
   if (errBasis != cudaSuccess) {
+    return -1;
+  }
+  cudaError_t const errLayerParams =
+      cudaMemcpyToSymbol(d_background_layer_params, p->background_layer_params,
+                         sizeof(p->background_layer_params));
+  if (errLayerParams != cudaSuccess) {
+    return -1;
+  }
+  cudaError_t const errLayerLod =
+      cudaMemcpyToSymbol(d_background_layer_lod_bias, p->background_layer_lod_bias,
+                         sizeof(p->background_layer_lod_bias));
+  if (errLayerLod != cudaSuccess) {
     return -1;
   }
 

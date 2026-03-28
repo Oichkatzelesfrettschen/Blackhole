@@ -63,12 +63,16 @@ def main() -> int:
     render_width = int(args.width) * oversample_factor
     render_height = int(args.height) * oversample_factor
 
+    default_equirect = source_dir / "assets" / "backgrounds" / "equirect" / "eso_milkyway_brunier.jpg"
+
     os.environ["BLACKHOLE_SOURCE_DIR"] = str(source_dir)
     os.environ["BLACKHOLE_BRIDGE_BACKGROUND_SKYBOX_DIR"] = str(
         source_dir / "assets" / "skybox_nebula_dark"
     )
     if args.background_equirect_file is not None:
         os.environ["BLACKHOLE_BRIDGE_BACKGROUND_EQUIRECT_FILE"] = str(args.background_equirect_file.resolve())
+    elif default_equirect.exists():
+        os.environ["BLACKHOLE_BRIDGE_BACKGROUND_EQUIRECT_FILE"] = str(default_equirect)
     else:
         os.environ.pop("BLACKHOLE_BRIDGE_BACKGROUND_EQUIRECT_FILE", None)
     os.environ["BLACKHOLE_BRIDGE_ADISK_ENABLED"] = "1" if args.adisk_enabled else "0"

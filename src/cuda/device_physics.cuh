@@ -79,6 +79,8 @@ extern __constant__ float d_photon_glow_strength;
 extern __constant__ float d_background_yaw_rad;
 extern __constant__ float d_background_pitch_rad;
 extern __constant__ float d_background_filter_radius;
+extern __constant__ float d_background_layer_params[12];
+extern __constant__ float d_background_layer_lod_bias[3];
 extern __constant__ int   d_wiregrid_enabled;    /**< @brief BL-coord wiregrid overlay flag. */
 extern __constant__ float d_wiregrid_show_ergo;  /**< @brief Show ergosphere boundary+glow. */
 extern __constant__ float d_wiregrid_grid_scale; /**< @brief Grid density multiplier. */
@@ -1195,22 +1197,58 @@ __device__ __forceinline__ float3 d_sample_galaxy_cubemap_raw(float3 dir) {
     return make_f3(s.x, s.y, s.z);
 }
 
+__device__ __forceinline__ float d_fract(float x) {
+    return x - floorf(x);
+}
+
+__device__ __forceinline__ float2 d_dir_to_uv(float3 dir) {
+    float3 const n = d_normalize(dir);
+    float const u = atan2f(n.z, n.x) * D_INV_TWO_PI + 0.5f;
+    float const v = asinf(fmaxf(-1.0f, fminf(n.y, 1.0f))) * D_INV_PI + 0.5f;
+    return make_float2(u, v);
+}
+
+__device__ __forceinline__ float3 d_rotate_background_dir(float3 dir) {
+    if (fabsf(d_background_yaw_rad) > D_EPSILON) {
+        float const cy = cosf(d_background_yaw_rad);
+        float const sy = sinf(d_background_yaw_rad);
+        dir = make_f3(
+            dir.x * cy + dir.z * sy,
+            dir.y,
+            -dir.x * sy + dir.z * cy);
+    }
+
+    if (fabsf(d_background_pitch_rad) > D_EPSILON) {
+        float const cp = cosf(d_background_pitch_rad);
+        float const sp = sinf(d_background_pitch_rad);
+        dir = make_f3(
+            dir.x,
+            dir.y * cp - dir.z * sp,
+            dir.y * sp + dir.z * cp);
+    }
+    return dir;
+}
+
 __device__ __forceinline__ float3 d_sample_galaxy_cubemap(float3 dir) {
     float3 n = d_normalize(dir);
     float radius = fmaxf(d_background_filter_radius, 0.0f);
     if (radius <= D_EPSILON) {
-        return d_sample_galaxy_cubemap_raw(n);
+        return d_sample_galaxy_cubemap_raw(d_rotate_background_dir(n));
     }
 
     float3 up = (fabsf(n.y) < 0.9f) ? make_f3(0.0f, 1.0f, 0.0f) : make_f3(1.0f, 0.0f, 0.0f);
     float3 tangent = d_normalize(d_cross(up, n));
     float3 bitangent = d_normalize(d_cross(n, tangent));
 
-    float3 sum = d_sample_galaxy_cubemap_raw(n);
-    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_normalize(d_add(n, d_scale(tangent, radius)))));
-    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_normalize(d_add(n, d_scale(tangent, -radius)))));
-    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_normalize(d_add(n, d_scale(bitangent, radius)))));
-    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_normalize(d_add(n, d_scale(bitangent, -radius)))));
+    float3 sum = d_sample_galaxy_cubemap_raw(d_rotate_background_dir(n));
+    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_rotate_background_dir(
+        d_normalize(d_add(n, d_scale(tangent, radius))))));
+    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_rotate_background_dir(
+        d_normalize(d_add(n, d_scale(tangent, -radius))))));
+    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_rotate_background_dir(
+        d_normalize(d_add(n, d_scale(bitangent, radius))))));
+    sum = d_add(sum, d_sample_galaxy_cubemap_raw(d_rotate_background_dir(
+        d_normalize(d_add(n, d_scale(bitangent, -radius))))));
     return d_scale(sum, 0.2f);
 }
 
@@ -1219,28 +1257,70 @@ __device__ __forceinline__ float3 d_sample_background_equirect(float3 dir) {
         return make_f3(0.0f, 0.0f, 0.0f);
     }
 
-    float3 n = d_normalize(dir);
-    if (fabsf(d_background_yaw_rad) > D_EPSILON) {
-        float const cy = cosf(d_background_yaw_rad);
-        float const sy = sinf(d_background_yaw_rad);
-        n = make_f3(
-            n.x * cy + n.z * sy,
-            n.y,
-            -n.x * sy + n.z * cy);
-    }
-    if (fabsf(d_background_pitch_rad) > D_EPSILON) {
-        float const cp = cosf(d_background_pitch_rad);
-        float const sp = sinf(d_background_pitch_rad);
-        n = make_f3(
-            n.x,
-            n.y * cp - n.z * sp,
-            n.y * sp + n.z * cp);
-    }
-
-    float const u = atan2f(n.z, n.x) * D_INV_TWO_PI + 0.5f;
-    float const v = asinf(fmaxf(-1.0f, fminf(n.y, 1.0f))) * D_INV_PI + 0.5f;
+    float3 const n = d_rotate_background_dir(d_normalize(dir));
+    float2 const uv = d_dir_to_uv(n);
+    float const u = uv.x;
+    float const v = uv.y;
     float4 const s = tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v);
     return make_f3(s.x, s.y, s.z);
+}
+
+__device__ __forceinline__ float3 d_sample_background_equirect_layered(float3 dir, float *weight_out) {
+    if (weight_out != nullptr) {
+        *weight_out = 0.0f;
+    }
+    if (!d_tex_background_equirect) {
+        return make_f3(0.0f, 0.0f, 0.0f);
+    }
+
+    float3 const n = d_rotate_background_dir(d_normalize(dir));
+    float2 const base_uv = d_dir_to_uv(n);
+    float radius = fmaxf(d_background_filter_radius, 0.0f);
+    float3 accum = make_f3(0.0f, 0.0f, 0.0f);
+    float total_weight = 0.0f;
+
+    for (int i = 0; i < 3; ++i) {
+        float const offset_x = d_background_layer_params[i * 4 + 0];
+        float const offset_y = d_background_layer_params[i * 4 + 1];
+        float const scale = d_background_layer_params[i * 4 + 2];
+        float const weight = d_background_layer_params[i * 4 + 3];
+        if (weight <= 0.0f || scale <= D_EPSILON) {
+            continue;
+        }
+
+        float const u = d_fract(base_uv.x * scale + offset_x);
+        float const v = d_fract(base_uv.y * scale + offset_y);
+        float const lod_bias = fmaxf(d_background_layer_lod_bias[i], 0.0f);
+        float const layer_radius = radius + lod_bias * 0.0025f;
+
+        float4 sample = tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v);
+        if (layer_radius > D_EPSILON) {
+            float4 sample_pos_u =
+                tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, d_fract(u + layer_radius), v);
+            float4 sample_neg_u =
+                tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, d_fract(u - layer_radius), v);
+            float v_pos = fminf(v + layer_radius, 1.0f);
+            float v_neg = fmaxf(v - layer_radius, 0.0f);
+            float4 sample_pos_v =
+                tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v_pos);
+            float4 sample_neg_v =
+                tex2D<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v_neg);
+            sample.x = 0.2f * (sample.x + sample_pos_u.x + sample_neg_u.x + sample_pos_v.x + sample_neg_v.x);
+            sample.y = 0.2f * (sample.y + sample_pos_u.y + sample_neg_u.y + sample_pos_v.y + sample_neg_v.y);
+            sample.z = 0.2f * (sample.z + sample_pos_u.z + sample_neg_u.z + sample_pos_v.z + sample_neg_v.z);
+        }
+
+        accum = d_add(accum, d_scale(make_f3(sample.x, sample.y, sample.z), weight));
+        total_weight += weight;
+    }
+
+    if (total_weight > 0.0f) {
+        accum = d_scale(accum, 1.0f / total_weight);
+    }
+    if (weight_out != nullptr) {
+        *weight_out = total_weight;
+    }
+    return accum;
 }
 
 /**
@@ -1266,7 +1346,11 @@ __device__ __forceinline__ float4 d_background_color(float3 dir) {
     float3 n = d_normalize(dir);
 
     if (d_tex_background_equirect) {
-        float3 sky = d_sample_background_equirect(n);
+        float layer_weight = 0.0f;
+        float3 sky = d_sample_background_equirect_layered(n, &layer_weight);
+        if (layer_weight <= 0.0f) {
+            sky = d_sample_background_equirect(n);
+        }
         sky = d_scale(sky, d_background_intensity);
         return make_float4(sky.x, sky.y, sky.z, 1.0f);
     }
