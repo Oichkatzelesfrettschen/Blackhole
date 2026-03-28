@@ -546,21 +546,22 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     // narrow bright sector and lets the rest of the lensed field stay dark.
     // Reproduce that here with local, anisotropic escaped-background shaping
     // rather than more global bloom or ring lift.
-    float brightSector = smoothstep(0.74, 0.972, alignedFlow);
-    float counterSector = smoothstep(0.24, 0.54, alignedFlow);
-    float localShadow = mix(1.0, 0.18, nearHoleWeight * (1.0 - brightSector * 0.94));
-    float localLift = 1.0 + nearHoleWeight * (0.78 * brightSector + 0.04 * counterSector);
+    float brightSector = smoothstep(0.79, 0.978, alignedFlow);
+    float rimSector = smoothstep(0.88, 0.992, alignedFlow);
+    float counterSector = smoothstep(0.28, 0.56, alignedFlow);
+    float localShadow = mix(1.0, 0.14, nearHoleWeight * (1.0 - brightSector * 0.95));
+    float localLift = 1.0 + nearHoleWeight * (0.60 * brightSector + 0.20 * rimSector + 0.02 * counterSector);
     skyColor *= localShadow * localLift;
 
     float skyLuma = luminance(skyColor);
-    float sectorContrast = nearHoleWeight * mix(-0.36, 0.28, brightSector);
+    float sectorContrast = nearHoleWeight * mix(-0.44, 0.24, brightSector);
     skyColor += skyColor * sectorContrast * clamp(skyLuma - 0.03, 0.0, 1.0);
 
-    vec3 arcTint = mix(vec3(0.84, 0.80, 0.96), vec3(1.06, 0.98, 0.88), brightSector);
-    skyColor = mix(skyColor, skyColor * arcTint, nearHoleWeight * (0.06 + 0.12 * brightSector));
+    vec3 arcTint = mix(vec3(0.84, 0.80, 0.96), vec3(1.06, 0.98, 0.88), rimSector);
+    skyColor = mix(skyColor, skyColor * arcTint, nearHoleWeight * (0.04 + 0.10 * rimSector));
 
-    float exclusion = nearHoleWeight * (1.0 - brightSector) * smoothstep(0.04, 0.26, skyLuma);
-    skyColor *= 1.0 - 0.14 * exclusion;
+    float exclusion = nearHoleWeight * (1.0 - brightSector) * smoothstep(0.035, 0.22, skyLuma);
+    skyColor *= 1.0 - 0.20 * exclusion;
   }
 
   color += skyColor * alpha;

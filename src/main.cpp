@@ -594,6 +594,40 @@ void applyWiregridModeProfile(WiregridParams::Mode mode, WiregridParams &params,
   color = glm::vec4(0.21f, 0.62f, 0.92f, 0.16f);
 }
 
+void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, WiregridParams &params,
+                                       glm::vec4 &color) {
+  if (params.mode != WiregridParams::Mode::Beauty) {
+    return;
+  }
+
+  if (compositionName == "wide-right") {
+    params.gridScale = 0.78f;
+    params.motionScale = 0.48f;
+    params.infallScale = 0.16f;
+    params.strength = 0.48f;
+    params.scenePreserve = 1.0f;
+    color = glm::vec4(0.19f, 0.58f, 0.90f, 0.11f);
+    return;
+  }
+  if (compositionName == "right-third") {
+    params.gridScale = 0.84f;
+    params.motionScale = 0.54f;
+    params.infallScale = 0.20f;
+    params.strength = 0.56f;
+    params.scenePreserve = 1.0f;
+    color = glm::vec4(0.20f, 0.60f, 0.91f, 0.12f);
+    return;
+  }
+  if (compositionName == "wide-left") {
+    params.gridScale = 0.82f;
+    params.motionScale = 0.50f;
+    params.infallScale = 0.18f;
+    params.strength = 0.52f;
+    params.scenePreserve = 1.0f;
+    color = glm::vec4(0.19f, 0.58f, 0.89f, 0.11f);
+  }
+}
+
 std::vector<BackgroundAsset> loadBackgroundAssets() {
   std::vector<BackgroundAsset> assets;
   std::string text;
@@ -3733,6 +3767,10 @@ int main(int argc, char **argv) {
         parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_B", wiregridColor.b);
         parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_A", wiregridColor.a);
         wiregridEnvApplied = true;
+      }
+      if (!recordFramesDir.empty() && recordProfile == "showcase-orbit" &&
+          wiregridEnabled && wiregridParams.mode == WiregridParams::Mode::Beauty) {
+        applyShowcaseBeautyWiregridTuning(recordComposition, wiregridParams, wiregridColor);
       }
       static GLuint fallback2D = 0;
       static GLuint fallback3D = 0;
