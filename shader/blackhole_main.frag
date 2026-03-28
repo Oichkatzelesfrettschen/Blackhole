@@ -146,6 +146,10 @@ vec3 panoramaColor(sampler2D tex, vec3 dir) {
   return texture(tex, uv).rgb;
 }
 
+float luminance(vec3 color) {
+  return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
 // Inlined accel() computation (Phase 8.2 optimization: eliminates function call overhead)
 // a = -1.5 * r_s * h² * pos / r⁵ where r = |pos|
 
@@ -522,16 +526,33 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     skyColor = applySimpleRedshift(skyColor, z);
   }
 
-  if (abs(kerrSpin) > 0.05 && minRadiusReached < schwarzschildRadius * 5.0) {
+  if (minRadiusReached < schwarzschildRadius * 5.0) {
+    vec3 approachDir = normalize(origin - closestApproachPos);
     vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
     vec3 flowDir = normalize(cross(spinAxis, normalize(closestApproachPos)));
-    float arcFocus =
-        mix(0.72, 1.42, 0.5 + 0.5 * dot(flowDir, normalize(origin - closestApproachPos)));
+    float alignedFlow = 0.5 + 0.5 * dot(flowDir, approachDir);
     float nearHoleWeight =
-        pow(clamp(1.0 - (minRadiusReached - schwarzschildRadius) / max(schwarzschildRadius * 3.5, EPSILON),
+        pow(clamp(1.0 - (minRadiusReached - schwarzschildRadius) /
+                              max(schwarzschildRadius * 3.0, EPSILON),
                   0.0, 1.0),
-            1.3);
-    skyColor *= mix(1.0, arcFocus, nearHoleWeight);
+            1.55);
+
+    // The compute/desktop path wins because it concentrates contrast into a
+    // narrow bright sector and lets the rest of the lensed field stay dark.
+    // Reproduce that here with local, anisotropic escaped-background shaping
+    // rather than more global bloom or ring lift.
+    float brightSector = smoothstep(0.58, 0.96, alignedFlow);
+    float counterSector = smoothstep(0.08, 0.44, alignedFlow);
+    float localShadow = mix(1.0, 0.34, nearHoleWeight * (1.0 - brightSector * 0.88));
+    float localLift = 1.0 + nearHoleWeight * (0.92 * brightSector + 0.22 * counterSector);
+    skyColor *= localShadow * localLift;
+
+    float skyLuma = luminance(skyColor);
+    float sectorContrast = nearHoleWeight * mix(-0.18, 0.42, brightSector);
+    skyColor += skyColor * sectorContrast * clamp(skyLuma - 0.03, 0.0, 1.0);
+
+    vec3 arcTint = mix(vec3(0.84, 0.80, 0.96), vec3(1.06, 0.98, 0.88), brightSector);
+    skyColor = mix(skyColor, skyColor * arcTint, nearHoleWeight * (0.14 + 0.22 * brightSector));
   }
 
   color += skyColor * alpha;
