@@ -302,6 +302,13 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   float beaming = pow(max(0.18, doppler), 1.35);
   dustColor *= beaming;
 
+  // Kerr showcase shots need asymmetric energy placement, not a globally
+  // brighter disk. Bias the inner emission toward the approaching/prograde side.
+  vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
+  float spinView = 0.5 + 0.5 * dot(normalize(cross(spinAxis, normalize(pos))), -normalize(rayDir));
+  float anisotropicBoost = mix(1.0, mix(0.82, 1.55, spinView), smoothstep(0.05, 0.85, abs(kerrSpin)));
+  dustColor *= anisotropicBoost;
+
   // Viewing the thin disk closer to edge-on should increase its visual force.
   float grazingBoost = pow(clamp(1.0 - abs(rayDir.y), 0.0, 1.0), 1.5);
   dustColor *= mix(1.0, 1.55, grazingBoost);
@@ -375,12 +382,16 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
 
   // Track closest approach to photon sphere
   float minRadiusReached = length(pos);
+  vec3 closestApproachPos = pos;
   float r_ph = photonSphereRadius; // 1.5 * r_s
 
   for (int i = 0; i < 300; i++) {
     lastPos = pos;
     float r = length(pos);
-    minRadiusReached = min(minRadiusReached, r);
+    if (r < minRadiusReached) {
+      minRadiusReached = r;
+      closestApproachPos = pos;
+    }
 
     if (renderBlackHole > 0.5) {
       // Apply gravitational lensing (geodesic bending)
@@ -427,6 +438,13 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
           float glowIntensity =
               texture(photonGlowLUT, vec2(u, 0.5)).r * 0.22 * photonSphereGlowStrength;
           glowIntensity = pow(glowIntensity, 1.08);
+          vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
+          vec3 flowDir = normalize(cross(spinAxis, normalize(pos)));
+          float anisotropicRing =
+              mix(1.0,
+                  mix(0.72, 1.65, 0.5 + 0.5 * dot(flowDir, normalize(origin - pos))),
+                  smoothstep(0.05, 0.85, abs(kerrSpin)));
+          glowIntensity *= anisotropicRing;
           // A brighter warm-white core with amber shoulders reads more like a
           // concentrated photon ring than a generic orange haze.
           const vec3 GLOW_COLOR = vec3(1.06, 0.86, 0.58);
@@ -502,6 +520,18 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       z = texture(redshiftLUT, vec2(u, 0.5)).r;
     }
     skyColor = applySimpleRedshift(skyColor, z);
+  }
+
+  if (abs(kerrSpin) > 0.05 && minRadiusReached < schwarzschildRadius * 5.0) {
+    vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
+    vec3 flowDir = normalize(cross(spinAxis, normalize(closestApproachPos)));
+    float arcFocus =
+        mix(0.72, 1.42, 0.5 + 0.5 * dot(flowDir, normalize(origin - closestApproachPos)));
+    float nearHoleWeight =
+        pow(clamp(1.0 - (minRadiusReached - schwarzschildRadius) / max(schwarzschildRadius * 3.5, EPSILON),
+                  0.0, 1.0),
+            1.3);
+    skyColor *= mix(1.0, arcFocus, nearHoleWeight);
   }
 
   color += skyColor * alpha;
