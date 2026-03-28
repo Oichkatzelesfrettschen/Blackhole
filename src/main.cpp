@@ -320,12 +320,13 @@ bool readTextFile(const std::string &path, std::string &out) {
 
 void printUsage(const char *argv0) {
   std::printf("Usage: %s [--curve-tsv <path>] [--export-frame <path.png>]"
-              " [--record-frames <dir> <N>]\n", argv0);
+              " [--record-frames <dir> <N>] [--record-profile <name>]\n", argv0);
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
   std::printf("  --record-frames <dir> N  Record N cinematic frames as PNG into <dir>.\n");
   std::printf("                           N defaults to %d (3 min @ 60 fps).\n",
               K_CINEMATIC_FRAMES);
+  std::printf("  --record-profile <name>  Recording profile: cinematic | compare-orbit-near.\n");
   std::printf("  --start-frame N          Start recording from frame N (default: 0).\n");
 }
 
@@ -2353,6 +2354,7 @@ int main(int argc, char **argv) {
     std::string curveTsvPath;
     std::string exportFramePath;
     std::string recordFramesDir;
+    std::string recordProfile = "cinematic";
     int         recordFramesTotal = K_CINEMATIC_FRAMES;
     int         recordStartFrame  = 0;
     for (int i = 1; i < argc; ++i) {
@@ -2378,6 +2380,10 @@ int main(int argc, char **argv) {
       }
       if (arg == "--start-frame" && i + 1 < argc) {
         recordStartFrame = std::atoi(argv[++i]);
+        continue;
+      }
+      if (arg == "--record-profile" && i + 1 < argc) {
+        recordProfile = argv[++i];
         continue;
       }
       std::printf("Unknown argument: %s\n", arg.c_str());
@@ -3146,45 +3152,83 @@ int main(int argc, char **argv) {
 
       // --record-frames: one-time initialization (cinematic quality, 1920x1080, no vsync)
       if (!recordFramesDir.empty() && !recordInitDone) {
+        std::error_code recordDirEc;
+        std::filesystem::create_directories(recordFramesDir, recordDirEc);
+        if (recordDirEc) {
+          std::fprintf(stderr, "record output directory create failed: %s (%s)\n",
+                       recordFramesDir.c_str(), recordDirEc.message().c_str());
+          return 1;
+        }
         recordInitDone     = true;
         glfwSetWindowSize(window, 1920, 1080);
         glfwSwapInterval(0);
         swapInterval       = 0;
-        // Physics: on, but not everything -- avoids noise pileup / fuzz
-        adiskEnabled       = true;
-        adiskParticle      = false;  // particle mode adds visual noise
-        enableRedshift     = true;
-        enablePhotonSphere = true;
-        hawkingGlowEnabled = false;  // haze effect competes with disk shading
-        rteVolumetricEnabled = false; // volumetric fog washes out fine detail
-        stokesEnabled      = false;
-        // Skip noise texture LUT generation in record mode: FastNoise2
-        // SIMD code has a heap double-free at >= 128^3 on this system.
-        // The disk looks clean without it.
-        useNoiseTexture    = false;
-        noiseTextureReady  = true;   // mark done so we never call initialize()
-        adiskNoiseLOD      = 3.0f;
-        adiskNoiseScale    = 0.5f;
-        adiskDensityV      = 2.5f;
-        adiskLit           = 0.35f;
-        dopplerStrength    = 1.0f;
-        // Post-processing: enough bloom to glow, not enough to wash out
-        bloomIterations    = 5;
-        bloomStrength      = 0.12f;
-        tonemappingEnabled = true;
-        gamma              = 2.4f;
-        // Integration quality
-        computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
-        computeStepSize    = 0.08f;
-        // Escape radius must exceed the maximum camera distance (380 rs).
-        // depthFar is passed as interop.depthFar and used as the ray max_dist.
-        depthFar           = 500.0f;
-        kerrSpin           = K_CINEMATIC_KEYFRAMES[0].kerrSpin;
-        // Background: override to the ESO Milky Way panorama which ships as a real
-        // JPEG (not a Git LFS pointer) -- the default "nasa_pia22085" is LFS-tracked.
-        SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
-        SettingsManager::instance().get().backgroundEnabled = true;
-        SettingsManager::instance().get().backgroundIntensity = 0.8f;
+        if (recordProfile == "compare-orbit-near") {
+          adiskEnabled       = false;
+          adiskParticle      = false;
+          enableRedshift     = false;
+          enablePhotonSphere = false;
+          hawkingGlowEnabled = false;
+          rteVolumetricEnabled = false;
+          stokesEnabled      = false;
+          useNoiseTexture    = false;
+          noiseTextureReady  = true;
+          adiskNoiseLOD      = 3.0f;
+          adiskNoiseScale    = 0.5f;
+          adiskDensityV      = 2.0f;
+          adiskLit           = 0.25f;
+          dopplerStrength    = 1.0f;
+          bloomIterations    = 4;
+          bloomStrength      = 0.08f;
+          tonemappingEnabled = true;
+          gamma              = 2.35f;
+          computeMaxSteps    = 1000;
+          computeStepSize    = 0.02f;
+          depthFar           = 154.367004f;
+          kerrSpin           = 0.0f;
+          SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
+          SettingsManager::instance().get().backgroundEnabled = true;
+          SettingsManager::instance().get().backgroundIntensity = 0.45f;
+          CameraState &camMutable = input.camera();
+          camMutable = CameraState{.yaw = -90.0f, .pitch = 0.0f, .roll = 0.0f, .distance = 10.0f, .fov = 90.0f};
+          cameraModeIndex = static_cast<int>(CameraMode::Input);
+        } else {
+          // Physics: on, but not everything -- avoids noise pileup / fuzz
+          adiskEnabled       = true;
+          adiskParticle      = false;  // particle mode adds visual noise
+          enableRedshift     = true;
+          enablePhotonSphere = true;
+          hawkingGlowEnabled = false;  // haze effect competes with disk shading
+          rteVolumetricEnabled = false; // volumetric fog washes out fine detail
+          stokesEnabled      = false;
+          // Skip noise texture LUT generation in record mode: FastNoise2
+          // SIMD code has a heap double-free at >= 128^3 on this system.
+          // The disk looks clean without it.
+          useNoiseTexture    = false;
+          noiseTextureReady  = true;   // mark done so we never call initialize()
+          adiskNoiseLOD      = 3.0f;
+          adiskNoiseScale    = 0.5f;
+          adiskDensityV      = 2.5f;
+          adiskLit           = 0.35f;
+          dopplerStrength    = 1.0f;
+          // Post-processing: enough bloom to glow, not enough to wash out
+          bloomIterations    = 5;
+          bloomStrength      = 0.12f;
+          tonemappingEnabled = true;
+          gamma              = 2.4f;
+          // Integration quality
+          computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
+          computeStepSize    = 0.08f;
+          // Escape radius must exceed the maximum camera distance (380 rs).
+          // depthFar is passed as interop.depthFar and used as the ray max_dist.
+          depthFar           = 500.0f;
+          kerrSpin           = K_CINEMATIC_KEYFRAMES[0].kerrSpin;
+          // Background: override to the ESO Milky Way panorama which ships as a real
+          // JPEG (not a Git LFS pointer) -- the default "nasa_pia22085" is LFS-tracked.
+          SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
+          SettingsManager::instance().get().backgroundEnabled = true;
+          SettingsManager::instance().get().backgroundIntensity = 0.8f;
+        }
 #if BLACKHOLE_HAS_CUDA
         // isEnabled() gates the CUDA dispatch path (line ~4295). It is normally set
         // via the ImGui "Use CUDA Raytracer" checkbox; record mode must set it directly.
@@ -3195,6 +3239,7 @@ int main(int argc, char **argv) {
         std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
                     recordFramesDir.c_str(), recordFramesTotal,
                     static_cast<double>(K_CINEMATIC_DURATION_S), K_CINEMATIC_FPS);
+        std::printf("Record profile: %s\n", recordProfile.c_str());
       }
 
       ImGui_ImplOpenGL3_NewFrame();
@@ -3411,11 +3456,25 @@ int main(int argc, char **argv) {
 
       // --record-frames: drive camera and spin from the cinematic path
       if (!recordFramesDir.empty()) {
-        recordCurrentKf = recordPath.evaluate(recordCinematic);
-        CameraState &camMutable = input.camera();
-        camMutable   = recordCurrentKf.cam;
-        cameraModeIndex = static_cast<int>(CameraMode::Input);
-        kerrSpin     = recordCurrentKf.kerrSpin;
+        if (recordProfile == "compare-orbit-near") {
+          float const denom = static_cast<float>(std::max(recordFramesTotal - 1, 1));
+          float const progress =
+              static_cast<float>(recordFrameIndex - recordStartFrame) / denom;
+          CameraState &camMutable = input.camera();
+          camMutable.yaw = -90.0f + progress * 18.0f;
+          camMutable.pitch = 0.0f;
+          camMutable.roll = 0.0f;
+          camMutable.distance = 10.0f;
+          camMutable.fov = 90.0f;
+          cameraModeIndex = static_cast<int>(CameraMode::Input);
+          kerrSpin = 0.0f;
+        } else {
+          recordCurrentKf = recordPath.evaluate(recordCinematic);
+          CameraState &camMutable = input.camera();
+          camMutable   = recordCurrentKf.cam;
+          cameraModeIndex = static_cast<int>(CameraMode::Input);
+          kerrSpin     = recordCurrentKf.kerrSpin;
+        }
       }
 
       // Get camera state for shader
