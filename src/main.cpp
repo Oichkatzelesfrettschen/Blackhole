@@ -414,9 +414,11 @@ bool readTextFile(const std::string &path, std::string &out) {
 
 void printUsage(const char *argv0) {
   std::printf("Usage: %s [--curve-tsv <path>] [--export-frame <path.png>]"
+              " [--export-raw-frame <path.pfm>]"
               " [--record-frames <dir> <N>] [--record-profile <name>]\n", argv0);
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
+  std::printf("  --export-raw-frame <path> Export raw texBlackhole HDR RGB as PFM, then exit.\n");
   std::printf("  --record-frames <dir> N  Record N profile-driven frames as PNG into <dir>.\n");
   std::printf("                           N defaults to %d (3 min @ 60 fps).\n",
               K_CINEMATIC_FRAMES);
@@ -749,6 +751,50 @@ bool readTextureRGBA(GLuint texture, int width, int height, std::vector<float> &
   glGetTextureSubImage(texture, 0, 0, 0, 0, width, height, 1, GL_RGBA, GL_FLOAT,
                        static_cast<GLsizei>(channelCount * sizeof(float)), out.data());
   return true;
+}
+
+bool writePfmRgb(const std::string &path, const std::vector<float> &rgba, int width, int height) {
+  if (width <= 0 || height <= 0) {
+    return false;
+  }
+  std::size_t const expected =
+      static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u;
+  if (rgba.size() < expected) {
+    return false;
+  }
+
+  std::filesystem::path const outPath(path);
+  std::error_code dirEc;
+  if (outPath.has_parent_path()) {
+    std::filesystem::create_directories(outPath.parent_path(), dirEc);
+    if (dirEc) {
+      std::fprintf(stderr, "Failed to create directory for raw export %s: %s\n",
+                   outPath.string().c_str(), dirEc.message().c_str());
+      return false;
+    }
+  }
+
+  std::ofstream out(path, std::ios::binary);
+  if (!out.is_open()) {
+    return false;
+  }
+
+  out << "PF\n" << width << " " << height << "\n-1.0\n";
+  std::vector<float> row(static_cast<std::size_t>(width) * 3u, 0.0f);
+  for (int y = height - 1; y >= 0; --y) {
+    for (int x = 0; x < width; ++x) {
+      std::size_t const src =
+          (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+           static_cast<std::size_t>(x)) * 4u;
+      std::size_t const dst = static_cast<std::size_t>(x) * 3u;
+      row[dst + 0] = rgba[src + 0];
+      row[dst + 1] = rgba[src + 1];
+      row[dst + 2] = rgba[src + 2];
+    }
+    out.write(reinterpret_cast<const char *>(row.data()),
+              static_cast<std::streamsize>(row.size() * sizeof(float)));
+  }
+  return static_cast<bool>(out);
 }
 
 DiffStats computeDiffStats(const std::vector<float> &a, const std::vector<float> &b) {
@@ -2551,6 +2597,7 @@ int main(int argc, char **argv) {
   try {
     std::string curveTsvPath;
     std::string exportFramePath;
+    std::string exportRawFramePath;
     std::string recordFramesDir;
     std::string recordProfile = "cinematic";
     std::string recordComposition = "wide-right";
@@ -2590,6 +2637,10 @@ int main(int argc, char **argv) {
       }
       if (arg == "--export-frame" && i + 1 < argc) {
         exportFramePath = argv[++i];
+        continue;
+      }
+      if (arg == "--export-raw-frame" && i + 1 < argc) {
+        exportRawFramePath = argv[++i];
         continue;
       }
       if (arg == "--record-frames" && i + 1 < argc) {
@@ -5741,31 +5792,54 @@ int main(int argc, char **argv) {
                                perfOverlayEnabled, perfOverlayScale, depthPrepassEnabled);
       }
 
-      /* --export-frame: read tonemapped texture via glGetTexImage before ImGui. */
-      if (!exportFramePath.empty()) {
+      /* --export-frame / --export-raw-frame: export textures before ImGui. */
+      if (!exportFramePath.empty() || !exportRawFramePath.empty()) {
         static int exportWarmup = 0;
-        if (++exportWarmup >= 5 && texTonemapped != 0 && renderWidth > 0 && renderHeight > 0) {
-          glBindTexture(GL_TEXTURE_2D, texTonemapped);
-          GLint texW = 0, texH = 0;
-          glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
-          glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
-          int const w = (texW > 0) ? texW : renderWidth;
-          int const h = (texH > 0) ? texH : renderHeight;
-          std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
-          glPixelStorei(GL_PACK_ALIGNMENT, 1);
-          glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
-          glPixelStorei(GL_PACK_ALIGNMENT, 4);
-          glBindTexture(GL_TEXTURE_2D, 0);
-          /* glGetTexImage gives bottom-to-top; flip for PNG. */
-          std::vector<unsigned char> flipped(px.size());
-          for (int row = 0; row < h; ++row) {
-            std::memcpy(
-                flipped.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 3,
-                px.data() + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3,
-                static_cast<size_t>(w) * 3);
+        static bool exportPerformed = false;
+        if (++exportWarmup >= 5 && !exportPerformed && renderWidth > 0 && renderHeight > 0) {
+          if (!exportFramePath.empty() && texTonemapped != 0) {
+            glBindTexture(GL_TEXTURE_2D, texTonemapped);
+            GLint texW = 0, texH = 0;
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
+            int const w = (texW > 0) ? texW : renderWidth;
+            int const h = (texH > 0) ? texH : renderHeight;
+            std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+            glPixelStorei(GL_PACK_ALIGNMENT, 4);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            /* glGetTexImage gives bottom-to-top; flip for PNG. */
+            std::vector<unsigned char> flipped(px.size());
+            for (int row = 0; row < h; ++row) {
+              std::memcpy(
+                  flipped.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 3,
+                  px.data() + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3,
+                  static_cast<size_t>(w) * 3);
+            }
+            stbi_write_png(exportFramePath.c_str(), w, h, 3, flipped.data(), w * 3);
+            std::printf("Exported frame: %s (%dx%d)\n", exportFramePath.c_str(), w, h);
           }
-          stbi_write_png(exportFramePath.c_str(), w, h, 3, flipped.data(), w * 3);
-          std::printf("Exported frame: %s (%dx%d)\n", exportFramePath.c_str(), w, h);
+
+          if (!exportRawFramePath.empty() && texBlackhole != 0) {
+            GLint texW = 0;
+            GLint texH = 0;
+            glBindTexture(GL_TEXTURE_2D, texBlackhole);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
+            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            int const w = (texW > 0) ? texW : renderWidth;
+            int const h = (texH > 0) ? texH : renderHeight;
+            std::vector<float> raw;
+            if (readTextureRGBA(texBlackhole, w, h, raw) &&
+                writePfmRgb(exportRawFramePath, raw, w, h)) {
+              std::printf("Exported raw frame: %s (%dx%d)\n", exportRawFramePath.c_str(), w, h);
+            } else {
+              std::fprintf(stderr, "Failed to export raw frame: %s\n",
+                           exportRawFramePath.c_str());
+            }
+          }
+          exportPerformed = true;
         }
       }
 
@@ -5867,8 +5941,8 @@ int main(int argc, char **argv) {
       FRAME_MARK;
       glfwSwapBuffers(window);
 
-      /* --export-frame: break after the frame was exported above. */
-      if (!exportFramePath.empty()) {
+      /* --export-frame / --export-raw-frame: break after the export frame above. */
+      if (!exportFramePath.empty() || !exportRawFramePath.empty()) {
         static int exportDone = 0;
         if (++exportDone >= 6) { /* 5 warmup + 1 export frame */
           break;

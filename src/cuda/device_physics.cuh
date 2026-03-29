@@ -1575,19 +1575,19 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
             powf(fmaxf(0.0f, fminf(1.0f - (min_radius - rs) / fmaxf(rs * 3.0f, D_EPSILON), 1.0f)),
                  1.55f);
 
-        float bright_sector = d_smoothstep_range(0.79f, 0.978f, aligned_flow);
-        float rim_sector = d_smoothstep_range(0.88f, 0.992f, aligned_flow);
-        float counter_sector = d_smoothstep_range(0.28f, 0.56f, aligned_flow);
+        float bright_sector = d_smoothstep_range(0.83f, 0.985f, aligned_flow);
+        float rim_sector = d_smoothstep_range(0.91f, 0.995f, aligned_flow);
+        float counter_sector = d_smoothstep_range(0.24f, 0.48f, aligned_flow);
         float local_shadow =
-            1.0f + (0.14f - 1.0f) * near_hole_weight * (1.0f - bright_sector * 0.95f);
+            1.0f + (0.10f - 1.0f) * near_hole_weight * (1.0f - bright_sector * 0.95f);
         float local_lift =
             1.0f + near_hole_weight *
-                       (0.60f * bright_sector + 0.20f * rim_sector + 0.02f * counter_sector);
+                       (0.52f * bright_sector + 0.16f * rim_sector + 0.01f * counter_sector);
         sky = d_scale(sky, local_shadow * local_lift);
 
         float sky_luma = d_luminance(sky);
         float sector_contrast =
-            near_hole_weight * ((-0.44f) + (0.24f - (-0.44f)) * bright_sector);
+            near_hole_weight * ((-0.50f) + (0.20f - (-0.50f)) * bright_sector);
         sky = d_add(sky, d_scale(sky, sector_contrast * fmaxf(fminf(sky_luma - 0.03f, 1.0f), 0.0f)));
 
         float3 cool_tint = make_f3(0.84f, 0.80f, 0.96f);
@@ -1602,8 +1602,8 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
                       sky.z + (tinted.z - sky.z) * tint_mix);
 
         float exclusion = near_hole_weight * (1.0f - bright_sector) *
-                          d_smoothstep_range(0.035f, 0.22f, sky_luma);
-        sky = d_scale(sky, 1.0f - 0.20f * exclusion);
+                          d_smoothstep_range(0.025f, 0.18f, sky_luma);
+        sky = d_scale(sky, 1.0f - 0.28f * exclusion);
     }
 
     return sky;
