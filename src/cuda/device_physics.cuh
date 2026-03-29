@@ -1579,10 +1579,10 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         float rim_sector = d_smoothstep_range(0.91f, 0.995f, aligned_flow);
         float counter_sector = d_smoothstep_range(0.24f, 0.48f, aligned_flow);
         float local_shadow =
-            1.0f + (0.10f - 1.0f) * near_hole_weight * (1.0f - bright_sector * 0.95f);
+            1.0f + (0.08f - 1.0f) * near_hole_weight * (1.0f - bright_sector * 0.95f);
         float local_lift =
             1.0f + near_hole_weight *
-                       (0.45f * bright_sector + 0.11f * rim_sector + 0.0f * counter_sector);
+                       (0.40f * bright_sector + 0.08f * rim_sector + 0.0f * counter_sector);
         sky = d_scale(sky, local_shadow * local_lift);
 
         float sky_luma = d_luminance(sky);
@@ -1595,7 +1595,7 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         float3 arc_tint = make_f3(cool_tint.x + (warm_tint.x - cool_tint.x) * rim_sector,
                                   cool_tint.y + (warm_tint.y - cool_tint.y) * rim_sector,
                                   cool_tint.z + (warm_tint.z - cool_tint.z) * rim_sector);
-        float tint_mix = near_hole_weight * (0.02f + 0.07f * rim_sector);
+        float tint_mix = near_hole_weight * (0.012f + 0.05f * rim_sector);
         float3 tinted = make_f3(sky.x * arc_tint.x, sky.y * arc_tint.y, sky.z * arc_tint.z);
         sky = make_f3(sky.x + (tinted.x - sky.x) * tint_mix,
                       sky.y + (tinted.y - sky.y) * tint_mix,
@@ -1608,6 +1608,10 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         float negative_space =
             near_hole_weight * (1.0f - bright_sector) * d_smoothstep_range(0.01f, 0.08f, sky_luma);
         sky = d_scale(sky, 1.0f - 0.24f * negative_space);
+
+        float field_suppression =
+            near_hole_weight * (1.0f - bright_sector) * d_smoothstep_range(0.018f, 0.12f, sky_luma);
+        sky = d_scale(sky, 1.0f - 0.16f * field_suppression);
     }
 
     return sky;

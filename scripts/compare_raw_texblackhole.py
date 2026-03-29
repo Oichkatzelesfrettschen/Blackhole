@@ -73,6 +73,24 @@ def _luminance(image: np.ndarray) -> np.ndarray:
     return 0.2126 * image[:, :, 0] + 0.7152 * image[:, :, 1] + 0.0722 * image[:, :, 2]
 
 
+def _dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
+    out = mask.copy()
+    for _ in range(iterations):
+        padded = np.pad(out, 1, mode="constant", constant_values=False)
+        out = (
+            padded[:-2, :-2]
+            | padded[:-2, 1:-1]
+            | padded[:-2, 2:]
+            | padded[1:-1, :-2]
+            | padded[1:-1, 1:-1]
+            | padded[1:-1, 2:]
+            | padded[2:, :-2]
+            | padded[2:, 1:-1]
+            | padded[2:, 2:]
+        )
+    return out
+
+
 def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     diff = np.mean(np.abs(other - base), axis=2)
     base_luma = _luminance(base)
@@ -98,6 +116,10 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     negative_threshold = float(np.percentile(base_luma, 40.0))
     arc_mask = base_luma >= bright_threshold
     negative_mask = base_luma <= negative_threshold
+    right_half = np.zeros_like(base_luma, dtype=bool)
+    right_half[:, w // 2 :] = True
+    arc_adjacent_mask = _dilate(arc_mask, 22) & right_half & (~arc_mask)
+    broad_right_bg_mask = right_half & (~arc_adjacent_mask) & (~arc_mask)
     summary["masks"] = {
         "bright_arc": {
             "threshold": bright_threshold,
@@ -105,6 +127,18 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
             "mean_abs": float(diff[arc_mask].mean()),
             "base_luma": float(base_luma[arc_mask].mean()),
             "other_luma": float(other_luma[arc_mask].mean()),
+        },
+        "bright_arc_adjacent_right": {
+            "count": int(arc_adjacent_mask.sum()),
+            "mean_abs": float(diff[arc_adjacent_mask].mean()),
+            "base_luma": float(base_luma[arc_adjacent_mask].mean()),
+            "other_luma": float(other_luma[arc_adjacent_mask].mean()),
+        },
+        "broad_right_background": {
+            "count": int(broad_right_bg_mask.sum()),
+            "mean_abs": float(diff[broad_right_bg_mask].mean()),
+            "base_luma": float(base_luma[broad_right_bg_mask].mean()),
+            "other_luma": float(other_luma[broad_right_bg_mask].mean()),
         },
         "negative_space": {
             "threshold": negative_threshold,
