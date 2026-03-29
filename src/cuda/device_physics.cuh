@@ -173,6 +173,21 @@ __device__ __forceinline__ float3 d_mat3_mul(const float* m, float3 v) {
     );
 }
 
+__device__ __forceinline__ float d_srgb_channel_to_linear(float c) {
+    c = fmaxf(0.0f, fminf(c, 1.0f));
+    if (c <= 0.04045f) {
+        return c * (1.0f / 12.92f);
+    }
+    return powf((c + 0.055f) * (1.0f / 1.055f), 2.4f);
+}
+
+__device__ __forceinline__ float3 d_srgb_to_linear(float3 color) {
+    return make_f3(
+        d_srgb_channel_to_linear(color.x),
+        d_srgb_channel_to_linear(color.y),
+        d_srgb_channel_to_linear(color.z));
+}
+
 /* ========================================================================
  * Kerr metric functions (from kerr.glsl)
  * ======================================================================== */
@@ -1306,7 +1321,7 @@ __device__ __forceinline__ float3 d_sample_galaxy_cubemap_raw(float3 dir) {
     v = 0.5f * (v + 1.0f);
 
     float4 s = tex2DLayered<float4>((cudaTextureObject_t)d_tex_galaxy, u, v, layer);
-    return make_f3(s.x, s.y, s.z);
+    return d_srgb_to_linear(make_f3(s.x, s.y, s.z));
 }
 
 __device__ __forceinline__ float d_fract(float x) {
@@ -1374,7 +1389,7 @@ __device__ __forceinline__ float3 d_sample_background_equirect(float3 dir) {
     float const u = uv.x;
     float const v = uv.y;
     float4 const s = tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v, 0.0f);
-    return make_f3(s.x, s.y, s.z);
+    return d_srgb_to_linear(make_f3(s.x, s.y, s.z));
 }
 
 __device__ __forceinline__ float3 d_sample_background_equirect_layered(float3 dir, float *weight_out) {
@@ -1444,7 +1459,7 @@ __device__ __forceinline__ float3 d_sample_background_equirect_layered(float3 di
                         sample_pp.z + sample_pn.z + sample_np.z + sample_nn.z) * (1.0f / 16.0f);
         }
 
-        accum = d_add(accum, d_scale(make_f3(sample.x, sample.y, sample.z), weight));
+        accum = d_add(accum, d_scale(d_srgb_to_linear(make_f3(sample.x, sample.y, sample.z)), weight));
         total_weight += weight;
     }
 

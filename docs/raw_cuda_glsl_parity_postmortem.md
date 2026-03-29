@@ -78,6 +78,46 @@ And for `right-third`:
 
 That is real progress, and it happened before we touched the near-hole shaping block.
 
+## The Big Color-Space RCA
+
+The next decisive fix was more fundamental than another shaping tweak.
+
+The desktop backgrounds are loaded as `GL_SRGB` / `GL_SRGB_ALPHA`, so the GLSL lane
+samples them in linear space after automatic sRGB decode. CUDA was sampling those
+same registered textures as normalized float values with no explicit decode.
+
+That matched the observed failure mode exactly:
+
+- pre-redshift CUDA background too bright
+- pre-redshift CUDA background too colorful
+- right-side escaped field heavily biased even before shaping
+
+Once CUDA background samplers were switched to explicit sRGB-to-linear decode, the
+pre-redshift parity improved dramatically.
+
+For `wide-right`:
+
+- mean abs: `0.04281 -> 0.00637`
+- `bright_arc_adjacent_right` luma gap: `0.08660 -> 0.00405`
+- `bright_arc_adjacent_right` chroma gap: `0.01295 -> 0.00051`
+- `broad_right_background` luma gap: `0.07335 -> 0.00855`
+- `broad_right_background` chroma gap: `0.01062 -> 0.00156`
+- `negative_space` luma gap: `0.03738 -> 0.00495`
+- `negative_space` chroma gap: `0.00537 -> 0.00093`
+
+For `right-third`:
+
+- mean abs: `0.04286 -> 0.00626`
+- `bright_arc_adjacent_right` luma gap: `0.08602 -> 0.00389`
+- `bright_arc_adjacent_right` chroma gap: `0.01187 -> 0.00052`
+- `broad_right_background` luma gap: `0.07395 -> 0.00823`
+- `broad_right_background` chroma gap: `0.01092 -> 0.00157`
+- `negative_space` luma gap: `0.03762 -> 0.00485`
+- `negative_space` chroma gap: `0.00558 -> 0.00096`
+
+This is the first upstream parity fix that clearly solved the right problem instead of
+merely redistributing error.
+
 ## Regions That Matter
 
 The most useful raw masks have been:
@@ -182,6 +222,24 @@ Takeaway:
 
 - shaping parity cannot be solved cleanly until the escaped background input is closer
 
+### 6. Color-Space Blindness
+
+Examples:
+
+- treating CUDA background texture samples as if they were already linear-light values
+
+Why it failed:
+
+- OpenGL was sampling `GL_SRGB` textures with automatic decode
+- CUDA was reading the same texture data as normalized float without decode
+- this made the escaped background too bright and too saturated before redshift
+
+Takeaway:
+
+- color-space parity is part of mathematical correctness here
+- raw image parity is not trustworthy if one lane is still in encoded sRGB while the other
+  is in linear space
+
 ## What Consistently Helped
 
 ### 1. Raw Measurement By Region
@@ -213,16 +271,17 @@ upstream background composition and chroma parity before more near-hole shaping 
 The remaining parity debt is now best described like this:
 
 1. The largest luma mismatch was upstream escaped-background composition, not redshift.
-2. The strongest fixed upstream bug so far was the missing time rotation in CUDA.
-3. After those upstream fixes, the remaining debt is increasingly chroma-heavy:
-   CUDA is still too colorful in the right-side escaped field even when luma improves.
+2. The strongest early upstream bug was the missing time rotation in CUDA.
+3. The biggest chroma mismatch was also upstream: CUDA was not decoding sRGB backgrounds.
+4. After those fixes, the escaped-field parity is much closer in both luma and chroma.
+5. The main remaining debt has shifted to the true bright arc core, which is now relatively
+   under-hot in CUDA compared with GLSL.
 
-That suggests the next control surface should not be another generic shaping tweak.
-It should be a pre-redshift background-composition/chroma investigation:
+That means the next control surface should move forward from the now-cleaner upstream baseline:
 
-1. verify the layered equirect sampling path against the desktop GLSL lane again
-2. compare pre-redshift chroma by region, not just luma
-3. only then return to near-hole shaping parity
+1. preserve the fixed upstream background parity
+2. measure arc-core under-brightness carefully at raw stage
+3. only then return to near-hole or arc-core parity work
 
 ## Practical Rule Going Forward
 
