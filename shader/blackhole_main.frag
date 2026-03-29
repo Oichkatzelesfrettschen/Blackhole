@@ -84,6 +84,7 @@ uniform float interopMaxSteps = 48.0;  // Balanced quality/performance (was 300,
 uniform float interopStepSize = 0.2;   // Balanced (was 0.1, ultra-fast=0.25)
 uniform float debugPreRedshiftBackground = 0.0;
 uniform float debugPreShapingBackground = 0.0;
+uniform float debugPostShapingBackground = 0.0;
 // D2: Volumetric RTE path -- accumulates emission/absorption through disk volume
 uniform float rteEnabled      = 0.0;   // 0=single-scatter (legacy), 1=volumetric RTE
 uniform float rteOpacityScale = 0.5;   // alpha_nu = rteOpacityScale * j_nu
@@ -418,7 +419,8 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       // Note: r_s = 2GM/c² is the coordinate radius where g_tt = 0
       // The factor of 2 was already included in the definition of schwarzschildRadius
       if (r < schwarzschildRadius) {
-        if (debugPreRedshiftBackground > 0.5 || debugPreShapingBackground > 0.5) {
+        if (debugPreRedshiftBackground > 0.5 || debugPreShapingBackground > 0.5 ||
+            debugPostShapingBackground > 0.5) {
           return vec3(0.0);
         }
         // Ray captured by black hole - return accumulated color (mostly black)
@@ -445,6 +447,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
 
       // Photon sphere glow effect (rays grazing r_ph = 1.5 * r_s)
       if (debugPreRedshiftBackground <= 0.5 && debugPreShapingBackground <= 0.5 &&
+          debugPostShapingBackground <= 0.5 &&
           enablePhotonSphere > 0.5) {
         float photonSphereDistance = abs(r - r_ph);
         if (photonSphereDistance < 0.5) {
@@ -472,6 +475,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       }
 
       if (debugPreRedshiftBackground <= 0.5 && debugPreShapingBackground <= 0.5 &&
+          debugPostShapingBackground <= 0.5 &&
           adiskEnabled > 0.5) {
         if (adiskColor(pos, dir, color, alpha)) {
           // Phase 8.2 Priority 3: Cache distance computation
@@ -577,6 +581,10 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
 
     float exclusion = nearHoleWeight * (1.0 - brightSector) * smoothstep(0.035, 0.22, skyLuma);
     skyColor *= 1.0 - 0.20 * exclusion;
+  }
+
+  if (debugPostShapingBackground > 0.5) {
+    return skyColor;
   }
 
   color += skyColor * alpha;

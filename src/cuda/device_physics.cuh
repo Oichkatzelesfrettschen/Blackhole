@@ -78,6 +78,7 @@ extern __constant__ int   d_background_enabled;
 extern __constant__ float d_photon_glow_strength;
 extern __constant__ int   d_debug_pre_redshift_background;
 extern __constant__ int   d_debug_pre_shaping_background;
+extern __constant__ int   d_debug_post_shaping_background;
 extern __constant__ float d_background_yaw_rad;
 extern __constant__ float d_background_pitch_rad;
 extern __constant__ float d_background_filter_radius;
@@ -1740,7 +1741,8 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     if (hit.hit_disk) {
-        if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
+        if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+            d_debug_post_shaping_background != 0) {
             return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
         }
         float4 disk_col = d_disk_color(hit, cam_pos, d_rs);
@@ -1766,6 +1768,10 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     bg = make_float4(shaped_bg.x, shaped_bg.y, shaped_bg.z, bg.w);
 
     if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
+        return bg;
+    }
+
+    if (d_debug_post_shaping_background != 0) {
         return bg;
     }
 
@@ -2004,7 +2010,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
-                if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
+                if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                    d_debug_post_shaping_background != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }
                 accum_i.x += transmit * bg.x;
@@ -2023,7 +2030,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         float4 const bg4 = d_background_color(d_normalize(esc_dir));
         float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
         bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
-        if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
+        if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+            d_debug_post_shaping_background != 0) {
             return make_float4(bg.x, bg.y, bg.z, 1.0f);
         }
         accum_i.x += transmit * bg.x;
@@ -2279,7 +2287,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
-                if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
+                if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                    d_debug_post_shaping_background != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }
                 accum_i.x += transmit * bg.x;

@@ -28,6 +28,7 @@ We now have two raw export checkpoints:
 
 - `pre-redshift-background`
 - `pre-shaping-background`
+- `post-shaping-background`
 
 That split changed the RCA materially.
 
@@ -36,6 +37,8 @@ What it showed:
 1. The main mismatch is already present before redshift.
 2. Redshift only changes the CUDA-vs-GLSL gap slightly for these showcase stills.
 3. The real debt is upstream background sampling/composition, not just near-hole shaping.
+4. Once the upstream background path was fixed, `post-shaping-background` showed the
+   remaining bright-arc debt is already present before the later photon-ring add.
 
 Representative evidence:
 
@@ -50,6 +53,15 @@ The redshift-stage delta was small compared with the pre-redshift gap:
 - `right-third`: mean abs `0.04508 -> 0.04509`
 
 So redshift is not the primary offender.
+
+The later stage split mattered too. After the time-rotation and sRGB fixes were in place,
+`post-shaping-background` still showed the CUDA arc core far below GLSL:
+
+- `wide-right` bright arc core luma: about `0.08948` (GLSL) vs `0.00928` (CUDA)
+- `right-third` bright arc core luma: about `0.07579` (GLSL) vs `0.01049` (CUDA)
+
+That means the remaining gap is not mainly the later photon-ring term. It is already baked
+into the shaped escaped background.
 
 ## Upstream Background Parity Bugs We Confirmed
 
@@ -222,6 +234,27 @@ Takeaway:
 
 - shaping parity cannot be solved cleanly until the escaped background input is closer
 
+### 7. Full Desktop-Shaper Ports After Upstream Fixes
+
+Examples:
+
+- copying the stronger desktop GLSL near-hole shaping constants directly into CUDA
+- adding local core-only emphasis after the existing CUDA suppressions
+
+Why it failed:
+
+- the full desktop-style shaper reheated the broad right-side field without lifting the
+  arc core enough
+- the narrow core-only emphasis made the core worse on exact reruns
+- the `post-shaping-background` stage proved these were real shaper failures, not
+  later photon-ring artifacts
+
+Takeaway:
+
+- the remaining debt is inside the CUDA shaper, but it will not be solved by a broad
+  copy of the desktop GLSL constants
+- the next correction has to be more local than "use the desktop shaper"
+
 ### 6. Color-Space Blindness
 
 Examples:
@@ -274,13 +307,14 @@ The remaining parity debt is now best described like this:
 2. The strongest early upstream bug was the missing time rotation in CUDA.
 3. The biggest chroma mismatch was also upstream: CUDA was not decoding sRGB backgrounds.
 4. After those fixes, the escaped-field parity is much closer in both luma and chroma.
-5. The main remaining debt has shifted to the true bright arc core, which is now relatively
-   under-hot in CUDA compared with GLSL.
+5. The `post-shaping-background` stage shows the main remaining debt has shifted to the
+   true bright arc core, which is now relatively under-hot in CUDA compared with GLSL.
+6. The later photon-ring add is not the main offender anymore.
 
 That means the next control surface should move forward from the now-cleaner upstream baseline:
 
 1. preserve the fixed upstream background parity
-2. measure arc-core under-brightness carefully at raw stage
+2. use `post-shaping-background` to keep the shaper honest while tuning arc-core parity
 3. only then return to near-hole or arc-core parity work
 
 ## Practical Rule Going Forward
