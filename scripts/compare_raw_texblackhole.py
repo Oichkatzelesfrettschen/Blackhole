@@ -69,6 +69,54 @@ def _summarize(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     }
 
 
+def _luminance(image: np.ndarray) -> np.ndarray:
+    return 0.2126 * image[:, :, 0] + 0.7152 * image[:, :, 1] + 0.0722 * image[:, :, 2]
+
+
+def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
+    diff = np.mean(np.abs(other - base), axis=2)
+    base_luma = _luminance(base)
+    other_luma = _luminance(other)
+    h, w = diff.shape
+    regions = {
+        "top_left": (slice(0, h // 2), slice(0, w // 2)),
+        "top_right": (slice(0, h // 2), slice(w // 2, w)),
+        "bottom_left": (slice(h // 2, h), slice(0, w // 2)),
+        "bottom_right": (slice(h // 2, h), slice(w // 2, w)),
+        "center_box": (slice(h // 2 - 120, h // 2 + 120), slice(w // 2 - 120, w // 2 + 120)),
+        "right_arc_box": (slice(h // 2 - 220, h // 2 + 220), slice(w // 2, min(w, w // 2 + 360))),
+    }
+    summary: dict[str, Any] = {}
+    for name, (ys, xs) in regions.items():
+        summary[name] = {
+            "mean_abs": float(diff[ys, xs].mean()),
+            "base_luma": float(base_luma[ys, xs].mean()),
+            "other_luma": float(other_luma[ys, xs].mean()),
+        }
+
+    bright_threshold = float(np.percentile(base_luma, 99.5))
+    negative_threshold = float(np.percentile(base_luma, 40.0))
+    arc_mask = base_luma >= bright_threshold
+    negative_mask = base_luma <= negative_threshold
+    summary["masks"] = {
+        "bright_arc": {
+            "threshold": bright_threshold,
+            "count": int(arc_mask.sum()),
+            "mean_abs": float(diff[arc_mask].mean()),
+            "base_luma": float(base_luma[arc_mask].mean()),
+            "other_luma": float(other_luma[arc_mask].mean()),
+        },
+        "negative_space": {
+            "threshold": negative_threshold,
+            "count": int(negative_mask.sum()),
+            "mean_abs": float(diff[negative_mask].mean()),
+            "base_luma": float(base_luma[negative_mask].mean()),
+            "other_luma": float(other_luma[negative_mask].mean()),
+        },
+    }
+    return summary
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=pathlib.Path, default=pathlib.Path(__file__).resolve().parents[1])
@@ -109,6 +157,7 @@ def main() -> int:
         "shape": list(glsl.shape),
         "glsl": _summarize(glsl, glsl),
         "cuda": _summarize(glsl, cuda),
+        "regions": _region_summary(glsl, cuda),
     }
     summary_path = output_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

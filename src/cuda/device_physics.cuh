@@ -1582,7 +1582,7 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
             1.0f + (0.10f - 1.0f) * near_hole_weight * (1.0f - bright_sector * 0.95f);
         float local_lift =
             1.0f + near_hole_weight *
-                       (0.52f * bright_sector + 0.16f * rim_sector + 0.01f * counter_sector);
+                       (0.45f * bright_sector + 0.11f * rim_sector + 0.0f * counter_sector);
         sky = d_scale(sky, local_shadow * local_lift);
 
         float sky_luma = d_luminance(sky);
@@ -1595,7 +1595,7 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         float3 arc_tint = make_f3(cool_tint.x + (warm_tint.x - cool_tint.x) * rim_sector,
                                   cool_tint.y + (warm_tint.y - cool_tint.y) * rim_sector,
                                   cool_tint.z + (warm_tint.z - cool_tint.z) * rim_sector);
-        float tint_mix = near_hole_weight * (0.04f + 0.10f * rim_sector);
+        float tint_mix = near_hole_weight * (0.02f + 0.07f * rim_sector);
         float3 tinted = make_f3(sky.x * arc_tint.x, sky.y * arc_tint.y, sky.z * arc_tint.z);
         sky = make_f3(sky.x + (tinted.x - sky.x) * tint_mix,
                       sky.y + (tinted.y - sky.y) * tint_mix,
@@ -1604,6 +1604,10 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         float exclusion = near_hole_weight * (1.0f - bright_sector) *
                           d_smoothstep_range(0.025f, 0.18f, sky_luma);
         sky = d_scale(sky, 1.0f - 0.28f * exclusion);
+
+        float negative_space =
+            near_hole_weight * (1.0f - bright_sector) * d_smoothstep_range(0.01f, 0.08f, sky_luma);
+        sky = d_scale(sky, 1.0f - 0.24f * negative_space);
     }
 
     return sky;
