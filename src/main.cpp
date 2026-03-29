@@ -2848,6 +2848,7 @@ int main(int argc, char **argv) {
     static bool useComputeRaytracer = false;
 #if BLACKHOLE_HAS_CUDA
     static CudaRenderManager cudaManager;
+    static bool cudaVariantEnvApplied = false;
 #endif
     static bool compareComputeFragment = false;
     static int compareSampleSize = 16;
@@ -3092,6 +3093,23 @@ int main(int argc, char **argv) {
       }
       compareAutoInit = true;
     }
+
+#if BLACKHOLE_HAS_CUDA
+    if (!cudaVariantEnvApplied) {
+      if (const char *variantEnv = std::getenv("BLACKHOLE_CUDA_KERNEL_VARIANT")) {
+        int requestedVariant = std::atoi(variantEnv);
+        if (requestedVariant < -1 || requestedVariant >= BH_KERNEL_COUNT) {
+          std::fprintf(stderr,
+                       "Ignoring BLACKHOLE_CUDA_KERNEL_VARIANT=%s (expected -1..%d)\n",
+                       variantEnv, BH_KERNEL_COUNT - 1);
+        } else {
+          cudaManager.setKernelVariant(requestedVariant);
+          std::printf("CUDA kernel variant override: %d\n", requestedVariant);
+        }
+      }
+      cudaVariantEnvApplied = true;
+    }
+#endif
 
     if (!gpuTimingLogInit) {
       const char *logEnv = std::getenv("BLACKHOLE_GPU_TIMING_LOG");
