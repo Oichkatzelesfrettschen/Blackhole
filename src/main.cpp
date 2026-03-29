@@ -1066,6 +1066,7 @@ struct InteropUniforms {
   // D2: volumetric RTE
   float rteEnabled      = 0.0f;
   float rteOpacityScale = 0.5f;
+  float debugPreRedshiftBackground = 0.0f;
   float debugPreShapingBackground = 0.0f;
 };
 
@@ -1126,6 +1127,7 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   rtti.floatUniforms["interopParityMode"] = parityMode ? 1.0f : 0.0f;
   rtti.floatUniforms["interopMaxSteps"] = static_cast<float>(interop.maxSteps);
   rtti.floatUniforms["interopStepSize"] = interop.stepSize;
+  rtti.floatUniforms["debugPreRedshiftBackground"] = interop.debugPreRedshiftBackground;
   rtti.floatUniforms["debugPreShapingBackground"] = interop.debugPreShapingBackground;
 
   // Hawking radiation uniforms
@@ -1170,6 +1172,8 @@ void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
   glUniform1f(glGetUniformLocation(program, "grbTime"), interop.grbTime);
   glUniform1f(glGetUniformLocation(program, "grbTimeMin"), interop.grbTimeMin);
   glUniform1f(glGetUniformLocation(program, "grbTimeMax"), interop.grbTimeMax);
+  glUniform1f(glGetUniformLocation(program, "debugPreRedshiftBackground"),
+              interop.debugPreRedshiftBackground);
   glUniform1f(glGetUniformLocation(program, "debugPreShapingBackground"),
               interop.debugPreShapingBackground);
   // D2: volumetric RTE -- same source as fragment path
@@ -3803,11 +3807,14 @@ int main(int argc, char **argv) {
       static bool wiregridEnabled = false;
       static WiregridParams wiregridParams;
       static glm::vec4 wiregridColor = glm::vec4(0.21f, 0.62f, 0.92f, 0.16f);
+      static bool debugPreRedshiftBackground = false;
       static bool debugPreShapingBackground = false;
       static bool debugPreShapingBackgroundEnvApplied = false;
       static bool wiregridEnvApplied = false;
       if (!debugPreShapingBackgroundEnvApplied) {
         if (const char *stage = std::getenv("BLACKHOLE_EXPORT_RAW_STAGE")) {
+          debugPreRedshiftBackground =
+              (std::strcmp(stage, "pre-redshift-background") == 0);
           debugPreShapingBackground =
               (std::strcmp(stage, "pre-shaping-background") == 0);
         }
@@ -4956,6 +4963,7 @@ int main(int argc, char **argv) {
         // D2: volumetric RTE
         interop.rteEnabled      = rteVolumetricEnabled ? 1.0f : 0.0f;
         interop.rteOpacityScale = rteOpacityScale;
+        interop.debugPreRedshiftBackground = debugPreRedshiftBackground ? 1.0f : 0.0f;
         interop.debugPreShapingBackground = debugPreShapingBackground ? 1.0f : 0.0f;
 
         // Convert black hole mass to grams (CGS units for Hawking calculation)
@@ -5048,6 +5056,7 @@ int main(int argc, char **argv) {
             cp.background_intensity = settings.backgroundIntensity;
             cp.background_enabled = backgroundEnabledEffective ? 1 : 0;
             cp.photon_glow_strength = enablePhotonSphereEffective ? photonSphereGlowStrength : 0.0f;
+            cp.debug_pre_redshift_background = debugPreRedshiftBackground ? 1 : 0;
             cp.debug_pre_shaping_background = debugPreShapingBackground ? 1 : 0;
             cp.background_yaw_rad = backgroundYawRad;
             cp.background_pitch_rad = backgroundPitchRad;

@@ -69,6 +69,7 @@ struct BH_LaunchParams {
     float background_intensity; /**< @brief Background sky intensity scale. */
     int background_enabled;     /**< @brief Enable procedural star-field background. */
     float photon_glow_strength; /**< @brief Photon-ring glow multiplier for escaped rays. */
+    int debug_pre_redshift_background; /**< @brief 1 = export escaped background before redshift and near-hole shaping. */
     int debug_pre_shaping_background; /**< @brief 1 = export escaped background after redshift but before near-hole shaping. */
     float background_yaw_rad;   /**< @brief Skybox yaw rotation around the spin axis [rad]. */
     float background_pitch_rad; /**< @brief Skybox pitch rotation around the camera-right axis [rad]. */

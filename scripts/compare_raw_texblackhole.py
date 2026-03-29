@@ -231,7 +231,7 @@ def main() -> int:
     parser.add_argument(
         "--stage",
         default="final",
-        choices=["final", "pre-shaping-background"],
+        choices=["final", "pre-redshift-background", "pre-shaping-background"],
         help="Which raw renderer stage to export.",
     )
     parser.add_argument(

@@ -22,6 +22,62 @@ What the raw probe proved:
    - `bright_arc_adjacent_right`
    - `broad_right_background`
 
+## Stage Split: Before Redshift vs After Redshift
+
+We now have two raw export checkpoints:
+
+- `pre-redshift-background`
+- `pre-shaping-background`
+
+That split changed the RCA materially.
+
+What it showed:
+
+1. The main mismatch is already present before redshift.
+2. Redshift only changes the CUDA-vs-GLSL gap slightly for these showcase stills.
+3. The real debt is upstream background sampling/composition, not just near-hole shaping.
+
+Representative evidence:
+
+- `showcase-orbit_wide-right_preredshift_bg1`
+- `showcase-orbit_wide-right_preshaping_bg2`
+- `showcase-orbit_right-third_preredshift_bg1`
+- `showcase-orbit_right-third_preshaping_bg2`
+
+The redshift-stage delta was small compared with the pre-redshift gap:
+
+- `wide-right`: mean abs `0.04506 -> 0.04510`
+- `right-third`: mean abs `0.04508 -> 0.04509`
+
+So redshift is not the primary offender.
+
+## Upstream Background Parity Bugs We Confirmed
+
+The stage split let us stop guessing and inspect the actual background path.
+
+Confirmed parity bugs:
+
+1. CUDA was not rotating the escaped background by `time` before sampling, while GLSL was.
+2. CUDA's layered equirect path was using a different layer UV transform from GLSL.
+3. CUDA's background pitch rotation path was not using the camera-right axis that GLSL uses.
+4. CUDA's layered equirect path was always applying a small blur kernel even when
+   `background_filter_radius == 0`, which is not what the desktop GLSL lane does.
+
+The time-rotation fix was the clearest measurable win so far. After the upstream fixes,
+the pre-redshift wide-right gap moved:
+
+- overall mean abs: `0.04506 -> 0.04281`
+- `broad_right_background` luma gap: `0.08123 -> 0.07335`
+- `negative_space` luma gap: `0.04182 -> 0.03738`
+
+And for `right-third`:
+
+- overall mean abs: `0.04508 -> 0.04286`
+- `broad_right_background` luma gap: `0.08111 -> 0.07395`
+- `negative_space` luma gap: `0.04182 -> 0.03762`
+
+That is real progress, and it happened before we touched the near-hole shaping block.
+
 ## Regions That Matter
 
 The most useful raw masks have been:
@@ -110,6 +166,22 @@ Takeaway:
 - local chroma is a better signal than sector membership alone
 - but acting on palette endpoints is still not localized enough
 
+### 5. Near-Hole Shaping Fixes Applied Too Early
+
+Examples:
+
+- direct CUDA copies of the active GLSL shaping block
+- adjacent spill suppression before background-path parity was established
+
+Why it failed:
+
+- the background entering the shaping block was already too different
+- some direct "GLSL parity" shaping ports actually made arc-core chroma worse
+
+Takeaway:
+
+- shaping parity cannot be solved cleanly until the escaped background input is closer
+
 ## What Consistently Helped
 
 ### 1. Raw Measurement By Region
@@ -133,21 +205,24 @@ helpful, especially when they left the true bright arc intact.
 The closer a change got to the actual tint/lift contribution in the adjacent band,
 the more promising it became.
 
-This is why the next move should target the blend path after `rim_sector` interpolation,
-not the global palette definition.
+This is why the next move should target the correct stage first. Right now that means
+upstream background composition and chroma parity before more near-hole shaping work.
 
 ## Current Working Hypothesis
 
-The remaining parity debt is not primarily "wrong hue endpoints" or "not enough dimming."
-It is that the CUDA escaped-field path still lets too much colored tint contribution survive
-after the warm/cool interpolation step in the adjacent band.
+The remaining parity debt is now best described like this:
 
-That suggests a better control surface:
+1. The largest luma mismatch was upstream escaped-background composition, not redshift.
+2. The strongest fixed upstream bug so far was the missing time rotation in CUDA.
+3. After those upstream fixes, the remaining debt is increasingly chroma-heavy:
+   CUDA is still too colorful in the right-side escaped field even when luma improves.
 
-1. Keep the warm/cool palette fixed.
-2. Keep `rim_sector` interpolation fixed.
-3. Modify only the final adjacent-band contribution of `arc_tint`, using local luma/chroma
-   to soften its chroma without flattening the true bright arc.
+That suggests the next control surface should not be another generic shaping tweak.
+It should be a pre-redshift background-composition/chroma investigation:
+
+1. verify the layered equirect sampling path against the desktop GLSL lane again
+2. compare pre-redshift chroma by region, not just luma
+3. only then return to near-hole shaping parity
 
 ## Practical Rule Going Forward
 

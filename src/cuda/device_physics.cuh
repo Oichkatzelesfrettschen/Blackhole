@@ -76,6 +76,7 @@ extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
 extern __constant__ float d_photon_glow_strength;
+extern __constant__ int   d_debug_pre_redshift_background;
 extern __constant__ int   d_debug_pre_shaping_background;
 extern __constant__ float d_background_yaw_rad;
 extern __constant__ float d_background_pitch_rad;
@@ -1319,23 +1320,23 @@ __device__ __forceinline__ float2 d_dir_to_uv(float3 dir) {
     return make_float2(u, v);
 }
 
+__device__ __forceinline__ float3 d_rotate_about_axis(float3 v, float3 axis, float angle) {
+    float3 const n = d_normalize(axis);
+    float const c = cosf(angle);
+    float const s = sinf(angle);
+    return d_add(
+        d_add(d_scale(v, c), d_scale(d_cross(n, v), s)),
+        d_scale(n, d_dot(n, v) * (1.0f - c)));
+}
+
 __device__ __forceinline__ float3 d_rotate_background_dir(float3 dir) {
     if (fabsf(d_background_yaw_rad) > D_EPSILON) {
-        float const cy = cosf(d_background_yaw_rad);
-        float const sy = sinf(d_background_yaw_rad);
-        dir = make_f3(
-            dir.x * cy + dir.z * sy,
-            dir.y,
-            -dir.x * sy + dir.z * cy);
+        dir = d_rotate_about_axis(dir, make_f3(0.0f, 1.0f, 0.0f), d_background_yaw_rad);
     }
 
     if (fabsf(d_background_pitch_rad) > D_EPSILON) {
-        float const cp = cosf(d_background_pitch_rad);
-        float const sp = sinf(d_background_pitch_rad);
-        dir = make_f3(
-            dir.x,
-            dir.y * cp - dir.z * sp,
-            dir.y * sp + dir.z * cp);
+        float3 const camera_right = make_f3(d_cam_basis[0], d_cam_basis[1], d_cam_basis[2]);
+        dir = d_rotate_about_axis(dir, camera_right, d_background_pitch_rad);
     }
     return dir;
 }
@@ -1399,11 +1400,10 @@ __device__ __forceinline__ float3 d_sample_background_equirect_layered(float3 di
             continue;
         }
 
-        float const u = d_fract(base_uv.x * scale + offset_x);
-        float const v = d_fract(base_uv.y * scale + offset_y);
+        float const u = d_fract((base_uv.x - 0.5f) * scale + 0.5f + offset_x);
+        float const v = d_fract((base_uv.y - 0.5f) * scale + 0.5f + offset_y);
         float const lod_bias = fmaxf(d_background_layer_lod_bias[i], 0.0f);
-        float const base_radius = fmaxf(radius, 0.0015f);
-        float const layer_radius = base_radius * (1.0f + 1.5f * lod_bias);
+        float const layer_radius = radius * (1.0f + 1.5f * lod_bias);
 
         float4 sample =
             tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v, lod_bias);
@@ -1478,6 +1478,7 @@ __device__ __forceinline__ float4 d_background_color(float3 dir) {
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     float3 n = d_normalize(dir);
+    n = d_rotate_about_axis(n, make_f3(0.0f, 1.0f, 0.0f), d_time_sec);
 
     if (d_tex_background_equirect) {
         float layer_weight = 0.0f;
@@ -1552,6 +1553,10 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
                                                              float3 cam_pos,
                                                              float rs,
                                                              float spin) {
+    if (d_debug_pre_redshift_background != 0) {
+        return sky;
+    }
+
     if (d_redshift_enabled && min_radius < rs * 10.0f) {
         float z;
         if (d_use_luts && d_tex_redshift) {
@@ -1720,7 +1725,7 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     if (hit.hit_disk) {
-        if (d_debug_pre_shaping_background != 0) {
+        if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
             return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
         }
         float4 disk_col = d_disk_color(hit, cam_pos, d_rs);
@@ -1745,7 +1750,7 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
                                                   cam_pos, d_rs, d_spin);
     bg = make_float4(shaped_bg.x, shaped_bg.y, shaped_bg.z, bg.w);
 
-    if (d_debug_pre_shaping_background != 0) {
+    if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
         return bg;
     }
 
@@ -1984,7 +1989,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
-                if (d_debug_pre_shaping_background != 0) {
+                if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }
                 accum_i.x += transmit * bg.x;
@@ -2003,7 +2008,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         float4 const bg4 = d_background_color(d_normalize(esc_dir));
         float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
         bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
-        if (d_debug_pre_shaping_background != 0) {
+        if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
             return make_float4(bg.x, bg.y, bg.z, 1.0f);
         }
         accum_i.x += transmit * bg.x;
@@ -2259,7 +2264,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
-                if (d_debug_pre_shaping_background != 0) {
+                if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }
                 accum_i.x += transmit * bg.x;
