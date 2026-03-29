@@ -73,6 +73,10 @@ def _luminance(image: np.ndarray) -> np.ndarray:
     return 0.2126 * image[:, :, 0] + 0.7152 * image[:, :, 1] + 0.0722 * image[:, :, 2]
 
 
+def _chroma(image: np.ndarray) -> np.ndarray:
+    return np.max(image, axis=2) - np.min(image, axis=2)
+
+
 def _dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
     out = mask.copy()
     for _ in range(iterations):
@@ -95,6 +99,8 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     diff = np.mean(np.abs(other - base), axis=2)
     base_luma = _luminance(base)
     other_luma = _luminance(other)
+    base_chroma = _chroma(base)
+    other_chroma = _chroma(other)
     h, w = diff.shape
     regions = {
         "top_left": (slice(0, h // 2), slice(0, w // 2)),
@@ -110,6 +116,8 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
             "mean_abs": float(diff[ys, xs].mean()),
             "base_luma": float(base_luma[ys, xs].mean()),
             "other_luma": float(other_luma[ys, xs].mean()),
+            "base_chroma": float(base_chroma[ys, xs].mean()),
+            "other_chroma": float(other_chroma[ys, xs].mean()),
         }
 
     bright_threshold = float(np.percentile(base_luma, 99.5))
@@ -127,18 +135,24 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
             "mean_abs": float(diff[arc_mask].mean()),
             "base_luma": float(base_luma[arc_mask].mean()),
             "other_luma": float(other_luma[arc_mask].mean()),
+            "base_chroma": float(base_chroma[arc_mask].mean()),
+            "other_chroma": float(other_chroma[arc_mask].mean()),
         },
         "bright_arc_adjacent_right": {
             "count": int(arc_adjacent_mask.sum()),
             "mean_abs": float(diff[arc_adjacent_mask].mean()),
             "base_luma": float(base_luma[arc_adjacent_mask].mean()),
             "other_luma": float(other_luma[arc_adjacent_mask].mean()),
+            "base_chroma": float(base_chroma[arc_adjacent_mask].mean()),
+            "other_chroma": float(other_chroma[arc_adjacent_mask].mean()),
         },
         "broad_right_background": {
             "count": int(broad_right_bg_mask.sum()),
             "mean_abs": float(diff[broad_right_bg_mask].mean()),
             "base_luma": float(base_luma[broad_right_bg_mask].mean()),
             "other_luma": float(other_luma[broad_right_bg_mask].mean()),
+            "base_chroma": float(base_chroma[broad_right_bg_mask].mean()),
+            "other_chroma": float(other_chroma[broad_right_bg_mask].mean()),
         },
         "negative_space": {
             "threshold": negative_threshold,
@@ -146,6 +160,8 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
             "mean_abs": float(diff[negative_mask].mean()),
             "base_luma": float(base_luma[negative_mask].mean()),
             "other_luma": float(other_luma[negative_mask].mean()),
+            "base_chroma": float(base_chroma[negative_mask].mean()),
+            "other_chroma": float(other_chroma[negative_mask].mean()),
         },
     }
     return summary
