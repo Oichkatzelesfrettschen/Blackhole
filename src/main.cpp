@@ -2968,6 +2968,7 @@ int main(int argc, char **argv) {
     static bool captureCompareSnapshot = false;
     static int compareFrameCounter = 0;
     static bool compareAutoInit = false;
+    static bool forceInteropFragmentEnvApplied = false;
     static bool drawIdProbeEnabled = false;
     static bool drawIdProbeConfigInit = false;
     static bool drawIdProbeSupported = false;
@@ -3167,6 +3168,19 @@ int main(int argc, char **argv) {
         }
       }
       compareAutoInit = true;
+    }
+    if (!forceInteropFragmentEnvApplied) {
+      const char *interopEnv = std::getenv("BLACKHOLE_FORCE_INTEROP_FRAGMENT");
+      if (interopEnv != nullptr && std::string(interopEnv) == "1") {
+        compareComputeFragment = true;
+        useComputeRaytracer = false;
+#if BLACKHOLE_HAS_CUDA
+        if (!kAppVariantCudaOnly) {
+          cudaManager.setEnabled(false);
+        }
+#endif
+      }
+      forceInteropFragmentEnvApplied = true;
     }
 
 #if BLACKHOLE_HAS_CUDA

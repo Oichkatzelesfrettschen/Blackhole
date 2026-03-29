@@ -24,6 +24,8 @@ struct HitResult {
   bool hitHorizon;
   bool escaped;
   vec3 hitPoint;
+  vec3 closestApproachPoint;
+  vec3 escapedDir;
   float phi;
   float redshiftFactor;
   float minRadius;
@@ -158,6 +160,26 @@ float bhComputeRedshiftFactor(float r, float r_s) {
   return sqrt(factor);
 }
 
+vec3 bhPackShaperInputs(float minRadiusReached, vec3 closestApproachPos, vec3 origin, float r_s) {
+  float alignedFlow = 0.5;
+  float nearHoleWeight = 0.0;
+  if (minRadiusReached < r_s * 5.0) {
+    vec3 approachDir = normalize(origin - closestApproachPos);
+    vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
+    vec3 flowDir = normalize(cross(spinAxis, normalize(closestApproachPos)));
+    alignedFlow = 0.5 + 0.5 * dot(flowDir, approachDir);
+    nearHoleWeight =
+        pow(clamp(1.0 - (minRadiusReached - r_s) / max(r_s * 3.0, BH_EPSILON), 0.0, 1.0), 1.55);
+  }
+  float minRadiusNorm = clamp(minRadiusReached / max(r_s * 5.0, BH_EPSILON), 0.0, 1.0);
+  return vec3(minRadiusNorm, clamp(alignedFlow, 0.0, 1.0), clamp(nearHoleWeight, 0.0, 1.0));
+}
+
+vec3 bhEncodeUnitVector(vec3 v) {
+  vec3 n = normalize(v);
+  return 0.5 * (n + vec3(1.0));
+}
+
 HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
                           float stepSize) {
   HitResult result;
@@ -165,6 +187,8 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.hitHorizon = false;
   result.escaped = false;
   result.hitPoint = vec3(0.0);
+  result.closestApproachPoint = ray.position;
+  result.escapedDir = normalize(ray.velocity);
   result.phi = 0.0;
   result.redshiftFactor = 1.0;
   result.minRadius = length(ray.position);
@@ -188,7 +212,10 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     for (int step = 0; step < maxSteps; ++step) {
       oldPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-      result.minRadius = min(result.minRadius, kerrRay.r);
+      if (kerrRay.r < result.minRadius) {
+        result.minRadius = kerrRay.r;
+        result.closestApproachPoint = oldPos;
+      }
 
       if (kerrRay.r <= r_horizon) {
         result.hitHorizon = true;
@@ -219,12 +246,14 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
       if (kerrRay.r > maxDistance) {
         result.escaped = true;
         result.hitPoint = newPos;
+        result.escapedDir = normalize(newPos - oldPos);
         return result;
       }
     }
 
     result.escaped = true;
     result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+    result.escapedDir = normalize(result.hitPoint - oldPos);
     return result;
   }
 
@@ -240,7 +269,10 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     result.debugFlags |= bhDebugEvaluate(ray.position, ray.velocity, maxDistance);
 
     float r = length(ray.position);
-    result.minRadius = min(result.minRadius, r);
+    if (r < result.minRadius) {
+      result.minRadius = r;
+      result.closestApproachPoint = ray.position;
+    }
     if (r <= r_s) {
       result.hitHorizon = true;
       result.hitPoint = ray.position;
@@ -261,12 +293,14 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     if (r > maxDistance) {
       result.escaped = true;
       result.hitPoint = ray.position;
+      result.escapedDir = normalize(ray.position - oldPos);
       return result;
     }
   }
 
   result.escaped = true;
   result.hitPoint = ray.position;
+  result.escapedDir = normalize(ray.position - oldPos);
   return result;
 }
 
@@ -415,8 +449,16 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
   if (hit.hitDisk) {
     return bhDiskColorFromHit(hit, r_s);
   }
-  return bhBackgroundColorFromDir(normalize(hit.hitPoint - cameraPos),
-                                  hit.minRadius, r_s);
+  if (debugShaperInputs > 0.5) {
+    return vec4(bhPackShaperInputs(hit.minRadius, hit.closestApproachPoint, cameraPos, r_s), 1.0);
+  }
+  if (debugClosestApproachDirection > 0.5) {
+    return vec4(bhEncodeUnitVector(hit.closestApproachPoint), 1.0);
+  }
+  if (debugEscapedDirection > 0.5) {
+    return vec4(bhEncodeUnitVector(hit.escapedDir), 1.0);
+  }
+  return bhBackgroundColorFromDir(normalize(hit.escapedDir), hit.minRadius, r_s);
 }
 
 // ---------------------------------------------------------------------------

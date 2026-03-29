@@ -94,6 +94,12 @@ uniform float spectralRadiusMax  = 1.0;
 uniform float enableRedshift     = 0.0;
 uniform float redshiftRadiusMin  = 0.0;
 uniform float redshiftRadiusMax  = 1.0;
+uniform float debugPreRedshiftBackground = 0.0;
+uniform float debugPreShapingBackground = 0.0;
+uniform float debugPostShapingBackground = 0.0;
+uniform float debugShaperInputs = 0.0;
+uniform float debugClosestApproachDirection = 0.0;
+uniform float debugEscapedDirection = 0.0;
 
 // --- GRB modulation ---
 uniform float useGrbModulation = 0.0;

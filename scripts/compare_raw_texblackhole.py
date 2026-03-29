@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Compare raw texBlackhole exports between two desktop lanes.
+"""Compare raw texBlackhole exports between desktop lanes.
 
 Exports pre-bloom, pre-tonemap HDR frames via --export-raw-frame and reports
 basic parity statistics so CUDA-vs-GLSL analysis does not depend on the shared
 postprocess stack.
 
-Important: this script launches each binary in its normal desktop mode. With the
-default `BlackholeGLSL` binary that means the legacy `traceColor()` fragment lane,
-not the interop parity lane.
+By default the GLSL capture uses the legacy `traceColor()` fragment lane. Pass
+`--glsl-mode interop-fragment` to force the geodesic fragment path instead.
 """
 
 from __future__ import annotations
@@ -48,11 +47,15 @@ def _capture(
     profile: str,
     composition: str,
     stage: str,
+    *,
+    interop_fragment: bool = False,
 ) -> None:
     env = os.environ.copy()
     env.setdefault("BLACKHOLE_WINDOW_HIDDEN", "1")
     env.setdefault("BLACKHOLE_WIREGRID_ENABLED", "0")
     env["BLACKHOLE_EXPORT_RAW_STAGE"] = stage
+    if interop_fragment:
+        env["BLACKHOLE_FORCE_INTEROP_FRAGMENT"] = "1"
     output.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         str(binary),
@@ -314,7 +317,13 @@ def main() -> int:
     parser.add_argument(
         "--glsl-binary",
         default="build/Release/BlackholeGLSL",
-        help="Desktop GLSL host to capture. The default BlackholeGLSL binary uses the legacy traceColor lane.",
+        help="Desktop GLSL host to capture.",
+    )
+    parser.add_argument(
+        "--glsl-mode",
+        default="legacy",
+        choices=["legacy", "interop-fragment"],
+        help="Capture the default legacy traceColor lane or force the geodesic fragment parity lane.",
     )
     parser.add_argument("--cuda-binary", default="build/Release/BlackholeCUDA")
     parser.add_argument("--profile", default="showcase-orbit")
@@ -352,7 +361,14 @@ def main() -> int:
 
     glsl_raw = output_dir / "glsl_raw.pfm"
     cuda_raw = output_dir / "cuda_raw.pfm"
-    _capture(glsl_binary, glsl_raw, args.profile, args.composition, args.stage)
+    _capture(
+        glsl_binary,
+        glsl_raw,
+        args.profile,
+        args.composition,
+        args.stage,
+        interop_fragment=(args.glsl_mode == "interop-fragment"),
+    )
     _capture(cuda_binary, cuda_raw, args.profile, args.composition, args.stage)
 
     glsl = _read_pfm(glsl_raw)
@@ -364,6 +380,7 @@ def main() -> int:
         "profile": args.profile,
         "composition": args.composition,
         "stage": args.stage,
+        "glsl_mode": args.glsl_mode,
         "shape": list(glsl.shape),
         "glsl": _summarize(glsl, glsl),
         "cuda": _summarize(glsl, cuda),

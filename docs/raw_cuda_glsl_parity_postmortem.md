@@ -438,3 +438,53 @@ That means the next control surface should move forward from the now-cleaner ups
 Do not promote a CUDA still into `openperception` unless the raw probe says the right-side
 escaped field is genuinely closer to GLSL in both luma and chroma, not just in a sweep-time
 score or a post-tonemap screenshot.
+
+## Interop-Fragment Baseline Follow-Up
+
+The next cleanup step was to stop comparing CUDA only against the legacy desktop
+`traceColor()` lane. We added an env-driven interop-fragment capture mode so the raw comparer
+can launch `BlackholeGLSL` with the geodesic fragment branch active while still exporting
+the same `texBlackhole` target.
+
+That required adding the same geometry debug stages to the interop path:
+
+- `shaper-inputs`
+- `closest-approach-direction`
+- `escaped-direction`
+
+The geodesic follow-up made the next fix priority much clearer.
+
+Representative evidence:
+
+- `showcase-orbit_wide-right_shaperinputs_interop2`
+- `showcase-orbit_right-third_shaperinputs_interop2`
+- `showcase-orbit_wide-right_closestdir_interop1`
+- `showcase-orbit_right-third_closestdir_interop1`
+- `showcase-orbit_wide-right_escapeddir_interop1`
+- `showcase-orbit_right-third_escapeddir_interop1`
+
+What changed:
+
+1. The "wrong baseline" trap is now controlled. We can compare CUDA against a geodesic
+   fragment lane instead of only the legacy desktop shader.
+2. The result did not exonerate CUDA geometry. It made the remaining debt cleaner:
+   CUDA still lands on neutral shaper inputs where the interop fragment lane reports
+   strong near-hole geometry.
+3. The dominant remaining mismatch is still closest-approach state, not escaped direction.
+
+For the interop fragment baseline, `bright_arc_core` still shows:
+
+- geodesic fragment `shaper-inputs` mean RGB: about `[0.7105, 0.9694, 0.0528]`
+- CUDA `shaper-inputs` mean RGB: `[1.0, 0.5, 0.0]`
+
+And the geometry comparison stays lopsided:
+
+- `closest-approach-direction`, `bright_arc_core`
+  - mean angle: about `125.65 deg`
+  - mean dot: about `-0.582`
+- `escaped-direction`, `bright_arc_core`
+  - mean angle: about `50.78 deg`
+  - mean dot: about `0.631`
+
+So the next fix is not another shaper tweak. It is upstream `HitResult` geometry/tracer work,
+because the closest-approach state is still much more wrong than the final escaped direction.
