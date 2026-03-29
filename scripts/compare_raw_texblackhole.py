@@ -38,10 +38,17 @@ def _read_pfm(path: pathlib.Path) -> np.ndarray:
         return np.flipud(image)
 
 
-def _capture(binary: pathlib.Path, output: pathlib.Path, profile: str, composition: str) -> None:
+def _capture(
+    binary: pathlib.Path,
+    output: pathlib.Path,
+    profile: str,
+    composition: str,
+    stage: str,
+) -> None:
     env = os.environ.copy()
     env.setdefault("BLACKHOLE_WINDOW_HIDDEN", "1")
     env.setdefault("BLACKHOLE_WIREGRID_ENABLED", "0")
+    env["BLACKHOLE_EXPORT_RAW_STAGE"] = stage
     output.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         str(binary),
@@ -222,6 +229,12 @@ def main() -> int:
     parser.add_argument("--profile", default="showcase-orbit")
     parser.add_argument("--composition", default="wide-right")
     parser.add_argument(
+        "--stage",
+        default="final",
+        choices=["final", "pre-shaping-background"],
+        help="Which raw renderer stage to export.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=pathlib.Path,
         default=None,
@@ -240,8 +253,8 @@ def main() -> int:
 
     glsl_raw = output_dir / "glsl_raw.pfm"
     cuda_raw = output_dir / "cuda_raw.pfm"
-    _capture(glsl_binary, glsl_raw, args.profile, args.composition)
-    _capture(cuda_binary, cuda_raw, args.profile, args.composition)
+    _capture(glsl_binary, glsl_raw, args.profile, args.composition, args.stage)
+    _capture(cuda_binary, cuda_raw, args.profile, args.composition, args.stage)
 
     glsl = _read_pfm(glsl_raw)
     cuda = _read_pfm(cuda_raw)
@@ -251,6 +264,7 @@ def main() -> int:
     summary = {
         "profile": args.profile,
         "composition": args.composition,
+        "stage": args.stage,
         "shape": list(glsl.shape),
         "glsl": _summarize(glsl, glsl),
         "cuda": _summarize(glsl, cuda),

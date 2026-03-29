@@ -63,6 +63,7 @@ __constant__ float d_doppler_strength;
 __constant__ float d_background_intensity;
 __constant__ int d_background_enabled;
 __constant__ float d_photon_glow_strength;
+__constant__ int d_debug_pre_shaping_background;
 __constant__ float d_background_yaw_rad;
 __constant__ float d_background_pitch_rad;
 __constant__ float d_background_filter_radius;
@@ -144,6 +145,7 @@ int uploadConstants(
   COPY_CONST(d_background_intensity, p->background_intensity);
   COPY_CONST(d_background_enabled, p->background_enabled);
   COPY_CONST(d_photon_glow_strength, p->photon_glow_strength);
+  COPY_CONST(d_debug_pre_shaping_background, p->debug_pre_shaping_background);
   COPY_CONST(d_background_yaw_rad, p->background_yaw_rad);
   COPY_CONST(d_background_pitch_rad, p->background_pitch_rad);
   COPY_CONST(d_background_filter_radius, p->background_filter_radius);

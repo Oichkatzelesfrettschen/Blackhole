@@ -82,6 +82,7 @@ uniform float fovScale = 1.0;
 uniform float interopParityMode = 0.0;
 uniform float interopMaxSteps = 48.0;  // Balanced quality/performance (was 300, ultra-fast=20)
 uniform float interopStepSize = 0.2;   // Balanced (was 0.1, ultra-fast=0.25)
+uniform float debugPreShapingBackground = 0.0;
 // D2: Volumetric RTE path -- accumulates emission/absorption through disk volume
 uniform float rteEnabled      = 0.0;   // 0=single-scatter (legacy), 1=volumetric RTE
 uniform float rteOpacityScale = 0.5;   // alpha_nu = rteOpacityScale * j_nu
@@ -416,6 +417,9 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       // Note: r_s = 2GM/c² is the coordinate radius where g_tt = 0
       // The factor of 2 was already included in the definition of schwarzschildRadius
       if (r < schwarzschildRadius) {
+        if (debugPreShapingBackground > 0.5) {
+          return vec3(0.0);
+        }
         // Ray captured by black hole - return accumulated color (mostly black)
         depthDistance = min(depthDistance, length(pos - origin));
 
@@ -439,7 +443,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       }
 
       // Photon sphere glow effect (rays grazing r_ph = 1.5 * r_s)
-      if (enablePhotonSphere > 0.5) {
+      if (debugPreShapingBackground <= 0.5 && enablePhotonSphere > 0.5) {
         float photonSphereDistance = abs(r - r_ph);
         if (photonSphereDistance < 0.5) {
           // Phase 8.2 optimization: LUT for exp(-distance*4.0) avoids transcendental
@@ -465,7 +469,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
         }
       }
 
-      if (adiskEnabled > 0.5) {
+      if (debugPreShapingBackground <= 0.5 && adiskEnabled > 0.5) {
         if (adiskColor(pos, dir, color, alpha)) {
           // Phase 8.2 Priority 3: Cache distance computation
           depthDistance = min(depthDistance, length(pos - origin));
@@ -529,6 +533,10 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       z = texture(redshiftLUT, vec2(u, 0.5)).r;
     }
     skyColor = applySimpleRedshift(skyColor, z);
+  }
+
+  if (debugPreShapingBackground > 0.5) {
+    return skyColor;
   }
 
   if (minRadiusReached < schwarzschildRadius * 5.0) {

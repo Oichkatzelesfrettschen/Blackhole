@@ -76,6 +76,7 @@ extern __constant__ float d_doppler_strength;
 extern __constant__ float d_background_intensity;
 extern __constant__ int   d_background_enabled;
 extern __constant__ float d_photon_glow_strength;
+extern __constant__ int   d_debug_pre_shaping_background;
 extern __constant__ float d_background_yaw_rad;
 extern __constant__ float d_background_pitch_rad;
 extern __constant__ float d_background_filter_radius;
@@ -1564,6 +1565,10 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         sky = d_apply_simple_redshift(sky, z);
     }
 
+    if (d_debug_pre_shaping_background != 0) {
+        return sky;
+    }
+
     if (min_radius < rs * 5.0f) {
         float3 closest_n = d_normalize(closest_pos);
         float3 approach_dir = d_normalize(d_sub(cam_pos, closest_pos));
@@ -1715,6 +1720,9 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
     if (hit.hit_disk) {
+        if (d_debug_pre_shaping_background != 0) {
+            return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+        }
         float4 disk_col = d_disk_color(hit, cam_pos, d_rs);
         /* GRMHD emissivity modulation: j_nu ~ rho * B^2, B^2 ~ u (plasma beta ~ 1).
          * Matches blackhole_main.frag: density *= rho * uu at disk hit point. */
@@ -1736,6 +1744,10 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
                                                   hit.closest_approach_point,
                                                   cam_pos, d_rs, d_spin);
     bg = make_float4(shaped_bg.x, shaped_bg.y, shaped_bg.z, bg.w);
+
+    if (d_debug_pre_shaping_background != 0) {
+        return bg;
+    }
 
     /* Photon ring proximity glow: match the GLSL lane's narrower, more
      * anisotropic ring instead of a broad uniform halo. */
@@ -1972,6 +1984,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
+                if (d_debug_pre_shaping_background != 0) {
+                    return make_float4(bg.x, bg.y, bg.z, 1.0f);
+                }
                 accum_i.x += transmit * bg.x;
                 accum_i.y += transmit * bg.y;
                 accum_i.z += transmit * bg.z;
@@ -1988,6 +2003,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         float4 const bg4 = d_background_color(d_normalize(esc_dir));
         float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
         bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
+        if (d_debug_pre_shaping_background != 0) {
+            return make_float4(bg.x, bg.y, bg.z, 1.0f);
+        }
         accum_i.x += transmit * bg.x;
         accum_i.y += transmit * bg.y;
         accum_i.z += transmit * bg.z;
@@ -2241,6 +2259,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
+                if (d_debug_pre_shaping_background != 0) {
+                    return make_float4(bg.x, bg.y, bg.z, 1.0f);
+                }
                 accum_i.x += transmit * bg.x;
                 accum_i.y += transmit * bg.y;
                 accum_i.z += transmit * bg.z;
