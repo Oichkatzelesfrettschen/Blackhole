@@ -95,6 +95,55 @@ def _dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
     return out
 
 
+def _erode(mask: np.ndarray, iterations: int) -> np.ndarray:
+    out = mask.copy()
+    for _ in range(iterations):
+        padded = np.pad(out, 1, mode="constant", constant_values=False)
+        out = (
+            padded[:-2, :-2]
+            & padded[:-2, 1:-1]
+            & padded[:-2, 2:]
+            & padded[1:-1, :-2]
+            & padded[1:-1, 1:-1]
+            & padded[1:-1, 2:]
+            & padded[2:, :-2]
+            & padded[2:, 1:-1]
+            & padded[2:, 2:]
+        )
+    return out
+
+
+def _mask_stats(
+    diff: np.ndarray,
+    base_luma: np.ndarray,
+    other_luma: np.ndarray,
+    base_chroma: np.ndarray,
+    other_chroma: np.ndarray,
+    mask: np.ndarray,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    stats: dict[str, Any] = {
+        "count": int(mask.sum()),
+        "mean_abs": float(diff[mask].mean()),
+        "base_luma": float(base_luma[mask].mean()),
+        "other_luma": float(other_luma[mask].mean()),
+        "base_chroma": float(base_chroma[mask].mean()),
+        "other_chroma": float(other_chroma[mask].mean()),
+    }
+    if extra:
+        stats.update(extra)
+    return stats
+
+
+def _safe_eroded_core(mask: np.ndarray, max_iterations: int) -> tuple[np.ndarray, int]:
+    for iterations in range(max_iterations, -1, -1):
+        candidate = _erode(mask, iterations) if iterations > 0 else mask.copy()
+        if candidate.any():
+            return candidate, iterations
+    return mask.copy(), 0
+
+
 def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     diff = np.mean(np.abs(other - base), axis=2)
     base_luma = _luminance(base)
@@ -123,46 +172,44 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     bright_threshold = float(np.percentile(base_luma, 99.5))
     negative_threshold = float(np.percentile(base_luma, 40.0))
     arc_mask = base_luma >= bright_threshold
+    arc_core_mask, arc_core_iterations = _safe_eroded_core(arc_mask, 8)
+    arc_shell_mask = arc_mask & (~arc_core_mask)
     negative_mask = base_luma <= negative_threshold
     right_half = np.zeros_like(base_luma, dtype=bool)
     right_half[:, w // 2 :] = True
     arc_adjacent_mask = _dilate(arc_mask, 22) & right_half & (~arc_mask)
     broad_right_bg_mask = right_half & (~arc_adjacent_mask) & (~arc_mask)
     summary["masks"] = {
-        "bright_arc": {
-            "threshold": bright_threshold,
-            "count": int(arc_mask.sum()),
-            "mean_abs": float(diff[arc_mask].mean()),
-            "base_luma": float(base_luma[arc_mask].mean()),
-            "other_luma": float(other_luma[arc_mask].mean()),
-            "base_chroma": float(base_chroma[arc_mask].mean()),
-            "other_chroma": float(other_chroma[arc_mask].mean()),
-        },
-        "bright_arc_adjacent_right": {
-            "count": int(arc_adjacent_mask.sum()),
-            "mean_abs": float(diff[arc_adjacent_mask].mean()),
-            "base_luma": float(base_luma[arc_adjacent_mask].mean()),
-            "other_luma": float(other_luma[arc_adjacent_mask].mean()),
-            "base_chroma": float(base_chroma[arc_adjacent_mask].mean()),
-            "other_chroma": float(other_chroma[arc_adjacent_mask].mean()),
-        },
-        "broad_right_background": {
-            "count": int(broad_right_bg_mask.sum()),
-            "mean_abs": float(diff[broad_right_bg_mask].mean()),
-            "base_luma": float(base_luma[broad_right_bg_mask].mean()),
-            "other_luma": float(other_luma[broad_right_bg_mask].mean()),
-            "base_chroma": float(base_chroma[broad_right_bg_mask].mean()),
-            "other_chroma": float(other_chroma[broad_right_bg_mask].mean()),
-        },
-        "negative_space": {
-            "threshold": negative_threshold,
-            "count": int(negative_mask.sum()),
-            "mean_abs": float(diff[negative_mask].mean()),
-            "base_luma": float(base_luma[negative_mask].mean()),
-            "other_luma": float(other_luma[negative_mask].mean()),
-            "base_chroma": float(base_chroma[negative_mask].mean()),
-            "other_chroma": float(other_chroma[negative_mask].mean()),
-        },
+        "bright_arc": _mask_stats(
+            diff, base_luma, other_luma, base_chroma, other_chroma, arc_mask, extra={"threshold": bright_threshold}
+        ),
+        "bright_arc_core": _mask_stats(
+            diff,
+            base_luma,
+            other_luma,
+            base_chroma,
+            other_chroma,
+            arc_core_mask,
+            extra={"erosion_iterations": arc_core_iterations},
+        ),
+        "bright_arc_shell": _mask_stats(
+            diff,
+            base_luma,
+            other_luma,
+            base_chroma,
+            other_chroma,
+            arc_shell_mask,
+            extra={"erosion_iterations": arc_core_iterations},
+        ),
+        "bright_arc_adjacent_right": _mask_stats(
+            diff, base_luma, other_luma, base_chroma, other_chroma, arc_adjacent_mask
+        ),
+        "broad_right_background": _mask_stats(
+            diff, base_luma, other_luma, base_chroma, other_chroma, broad_right_bg_mask
+        ),
+        "negative_space": _mask_stats(
+            diff, base_luma, other_luma, base_chroma, other_chroma, negative_mask, extra={"threshold": negative_threshold}
+        ),
     }
     return summary
 
