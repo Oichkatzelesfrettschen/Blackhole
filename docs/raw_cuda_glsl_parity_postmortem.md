@@ -43,6 +43,9 @@ What it showed:
 3. The real debt is upstream background sampling/composition, not just near-hole shaping.
 4. Once the upstream background path was fixed, `post-shaping-background` showed the
    remaining bright-arc debt is already present before the later photon-ring add.
+5. The current raw comparer launches `BlackholeGLSL` in its default desktop mode, so the
+   baseline lane in these artifacts is the legacy `traceColor()` fragment path unless we
+   explicitly force an interop parity capture through another host path.
 
 Representative evidence:
 
@@ -302,6 +305,63 @@ Takeaway:
 - the next correction should target geodesic / closest-approach / escaped-ray geometry parity
   before more shaper-coefficient tuning
 
+### 9. Geometry Instrumentation Changed The Target Again
+
+Examples:
+
+- exporting `closest-approach-direction` as `0.5 * (normalize(closestApproachPos) + 1.0)`
+- exporting `escaped-direction` as `0.5 * (normalize(final dir) + 1.0)`
+- comparing those vector fields in the same bright-arc masks
+
+Why it mattered:
+
+- it separated closest-approach geometry failure from escaped-direction failure
+- it showed the worst remaining parity debt is not a small shaper-weight mismatch
+- it also exposed that the current comparison is between CUDA and the legacy
+  `traceColor()` desktop lane, not a strict interop-geodesic fragment baseline
+
+Representative evidence:
+
+- `showcase-orbit_wide-right_closestdir2`
+- `showcase-orbit_right-third_closestdir2`
+- `showcase-orbit_wide-right_escapeddir2`
+- `showcase-orbit_right-third_escapeddir2`
+
+For `wide-right bright_arc_core`:
+
+- closest-approach direction:
+  - mean angle: about `162.04 deg`
+  - mean dot: about `-0.951`
+  - GLSL mean vector: about `[0.4561, 0.7884, 0.4027]`
+  - CUDA mean vector: about `[-0.5774, -0.5774, -0.5774]`
+- escaped direction:
+  - mean angle: about `51.49 deg`
+  - mean dot: about `0.617`
+  - GLSL mean vector: about `[0.2982, 0.9452, 0.0951]`
+  - CUDA mean vector: about `[0.8770, 0.3810, -0.0589]`
+
+For `right-third bright_arc_core`:
+
+- closest-approach direction:
+  - mean angle: about `162.04 deg`
+  - mean dot: about `-0.951`
+- escaped direction:
+  - mean angle: about `54.01 deg`
+  - mean dot: about `0.577`
+
+The encoded RGB summaries exposed an even harsher detail: in the GLSL bright-arc masks,
+the CUDA `closest-approach-direction` stage often returns black (`other_mean_rgb = [0, 0, 0]`).
+That means many CUDA pixels in the desktop GLSL bright-arc masks are not even returning a
+meaningful escaped closest-approach direction in the current CUDA path.
+
+Takeaway:
+
+- the dominant remaining debt is closest-approach geometry/state, not just escaped-direction
+  geometry and not just shaper tuning
+- future parity claims must distinguish between:
+  - product parity: legacy `traceColor()` desktop GLSL versus CUDA desktop output
+  - tracer parity: interop geodesic fragment/compute versus CUDA
+
 ### 6. Color-Space Blindness
 
 Examples:
@@ -360,12 +420,18 @@ The remaining parity debt is now best described like this:
    coefficients themselves: CUDA often reaches the bright-arc masks with neutral
    shaper inputs.
 7. The later photon-ring add is not the main offender anymore.
+8. Geometry instrumentation shows the remaining bright-arc debt is dominated by
+   closest-approach state, with escaped-direction mismatch as a secondary contributor.
+9. Some of the remaining "CUDA vs GLSL" debt is really "CUDA tracer vs legacy `traceColor()`"
+   debt, which means tracer-parity and product-parity work need to be tracked separately.
 
 That means the next control surface should move forward from the now-cleaner upstream baseline:
 
 1. preserve the fixed upstream background parity
-2. use `shaper-inputs` and `post-shaping-background` together to keep geometry and shaping honest
-3. only then return to near-hole or arc-core parity work
+2. compare CUDA `HitResult` geometry against the desktop interop geodesic path, not only the
+   legacy `traceColor()` baseline
+3. use `shaper-inputs` and `post-shaping-background` together to keep geometry and shaping honest
+4. only then return to near-hole or arc-core parity work
 
 ## Practical Rule Going Forward
 

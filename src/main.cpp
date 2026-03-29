@@ -1070,6 +1070,8 @@ struct InteropUniforms {
   float debugPreShapingBackground = 0.0f;
   float debugPostShapingBackground = 0.0f;
   float debugShaperInputs = 0.0f;
+  float debugClosestApproachDirection = 0.0f;
+  float debugEscapedDirection = 0.0f;
 };
 
 void appendCompareUniforms(const std::string &path, int index, const std::string &label,
@@ -1133,6 +1135,8 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   rtti.floatUniforms["debugPreShapingBackground"] = interop.debugPreShapingBackground;
   rtti.floatUniforms["debugPostShapingBackground"] = interop.debugPostShapingBackground;
   rtti.floatUniforms["debugShaperInputs"] = interop.debugShaperInputs;
+  rtti.floatUniforms["debugClosestApproachDirection"] = interop.debugClosestApproachDirection;
+  rtti.floatUniforms["debugEscapedDirection"] = interop.debugEscapedDirection;
 
   // Hawking radiation uniforms
   rtti.floatUniforms["hawkingGlowEnabled"] = hawkingEnabled ? 1.0f : 0.0f;
@@ -1184,6 +1188,10 @@ void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
               interop.debugPostShapingBackground);
   glUniform1f(glGetUniformLocation(program, "debugShaperInputs"),
               interop.debugShaperInputs);
+  glUniform1f(glGetUniformLocation(program, "debugClosestApproachDirection"),
+              interop.debugClosestApproachDirection);
+  glUniform1f(glGetUniformLocation(program, "debugEscapedDirection"),
+              interop.debugEscapedDirection);
   // D2: volumetric RTE -- same source as fragment path
   glUniform1f(glGetUniformLocation(program, "rteEnabled"),      interop.rteEnabled);
   glUniform1f(glGetUniformLocation(program, "rteOpacityScale"), interop.rteOpacityScale);
@@ -3819,6 +3827,8 @@ int main(int argc, char **argv) {
       static bool debugPreShapingBackground = false;
       static bool debugPostShapingBackground = false;
       static bool debugShaperInputs = false;
+      static bool debugClosestApproachDirection = false;
+      static bool debugEscapedDirection = false;
       static bool debugPreShapingBackgroundEnvApplied = false;
       static bool wiregridEnvApplied = false;
       if (!debugPreShapingBackgroundEnvApplied) {
@@ -3831,6 +3841,10 @@ int main(int argc, char **argv) {
               (std::strcmp(stage, "post-shaping-background") == 0);
           debugShaperInputs =
               (std::strcmp(stage, "shaper-inputs") == 0);
+          debugClosestApproachDirection =
+              (std::strcmp(stage, "closest-approach-direction") == 0);
+          debugEscapedDirection =
+              (std::strcmp(stage, "escaped-direction") == 0);
         }
         debugPreShapingBackgroundEnvApplied = true;
       }
@@ -4981,6 +4995,8 @@ int main(int argc, char **argv) {
         interop.debugPreShapingBackground = debugPreShapingBackground ? 1.0f : 0.0f;
         interop.debugPostShapingBackground = debugPostShapingBackground ? 1.0f : 0.0f;
         interop.debugShaperInputs = debugShaperInputs ? 1.0f : 0.0f;
+        interop.debugClosestApproachDirection = debugClosestApproachDirection ? 1.0f : 0.0f;
+        interop.debugEscapedDirection = debugEscapedDirection ? 1.0f : 0.0f;
 
         // Convert black hole mass to grams (CGS units for Hawking calculation)
         double const bhMassGrams = static_cast<double>(blackHoleMass) * physics::M_SUN;
@@ -5076,6 +5092,8 @@ int main(int argc, char **argv) {
             cp.debug_pre_shaping_background = debugPreShapingBackground ? 1 : 0;
             cp.debug_post_shaping_background = debugPostShapingBackground ? 1 : 0;
             cp.debug_shaper_inputs = debugShaperInputs ? 1 : 0;
+            cp.debug_closest_approach_direction = debugClosestApproachDirection ? 1 : 0;
+            cp.debug_escaped_direction = debugEscapedDirection ? 1 : 0;
             cp.background_yaw_rad = backgroundYawRad;
             cp.background_pitch_rad = backgroundPitchRad;
             cp.background_filter_radius = 0.0f;

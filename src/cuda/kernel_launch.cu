@@ -67,6 +67,8 @@ __constant__ int d_debug_pre_redshift_background;
 __constant__ int d_debug_pre_shaping_background;
 __constant__ int d_debug_post_shaping_background;
 __constant__ int d_debug_shaper_inputs;
+__constant__ int d_debug_closest_approach_direction;
+__constant__ int d_debug_escaped_direction;
 __constant__ float d_background_yaw_rad;
 __constant__ float d_background_pitch_rad;
 __constant__ float d_background_filter_radius;
@@ -152,6 +154,8 @@ int uploadConstants(
   COPY_CONST(d_debug_pre_shaping_background, p->debug_pre_shaping_background);
   COPY_CONST(d_debug_post_shaping_background, p->debug_post_shaping_background);
   COPY_CONST(d_debug_shaper_inputs, p->debug_shaper_inputs);
+  COPY_CONST(d_debug_closest_approach_direction, p->debug_closest_approach_direction);
+  COPY_CONST(d_debug_escaped_direction, p->debug_escaped_direction);
   COPY_CONST(d_background_yaw_rad, p->background_yaw_rad);
   COPY_CONST(d_background_pitch_rad, p->background_pitch_rad);
   COPY_CONST(d_background_filter_radius, p->background_filter_radius);

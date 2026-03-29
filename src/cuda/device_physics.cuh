@@ -80,6 +80,8 @@ extern __constant__ int   d_debug_pre_redshift_background;
 extern __constant__ int   d_debug_pre_shaping_background;
 extern __constant__ int   d_debug_post_shaping_background;
 extern __constant__ int   d_debug_shaper_inputs;
+extern __constant__ int   d_debug_closest_approach_direction;
+extern __constant__ int   d_debug_escaped_direction;
 extern __constant__ float d_background_yaw_rad;
 extern __constant__ float d_background_pitch_rad;
 extern __constant__ float d_background_filter_radius;
@@ -1574,6 +1576,11 @@ __device__ __forceinline__ float3 d_pack_shaper_inputs(float min_radius,
                    fmaxf(0.0f, fminf(near_hole_weight, 1.0f)));
 }
 
+__device__ __forceinline__ float3 d_encode_unit_vector(float3 v) {
+    float3 n = d_normalize(v);
+    return make_f3(0.5f * (n.x + 1.0f), 0.5f * (n.y + 1.0f), 0.5f * (n.z + 1.0f));
+}
+
 __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
                                                              float min_radius,
                                                              float3 closest_pos,
@@ -1616,6 +1623,10 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
                      1.55f);
         }
         return d_pack_shaper_inputs(min_radius, aligned_flow, near_hole_weight, rs);
+    }
+
+    if (d_debug_closest_approach_direction != 0) {
+        return d_encode_unit_vector(closest_pos);
     }
 
     if (min_radius < rs * 5.0f) {
@@ -1771,6 +1782,8 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     if (hit.hit_disk) {
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
             d_debug_shaper_inputs != 0 ||
+            d_debug_closest_approach_direction != 0 ||
+            d_debug_escaped_direction != 0 ||
             d_debug_post_shaping_background != 0) {
             return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
         }
@@ -1797,8 +1810,13 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     bg = make_float4(shaped_bg.x, shaped_bg.y, shaped_bg.z, bg.w);
 
     if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
-        d_debug_shaper_inputs != 0) {
+        d_debug_shaper_inputs != 0 || d_debug_closest_approach_direction != 0) {
         return bg;
+    }
+
+    if (d_debug_escaped_direction != 0) {
+        float3 encoded_dir = d_encode_unit_vector(dir);
+        return make_float4(encoded_dir.x, encoded_dir.y, encoded_dir.z, 1.0f);
     }
 
     if (d_debug_post_shaping_background != 0) {
@@ -2042,6 +2060,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
                     d_debug_shaper_inputs != 0 ||
+                    d_debug_closest_approach_direction != 0 ||
+                    d_debug_escaped_direction != 0 ||
                     d_debug_post_shaping_background != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }
@@ -2063,6 +2083,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
             d_debug_shaper_inputs != 0 ||
+            d_debug_closest_approach_direction != 0 ||
+            d_debug_escaped_direction != 0 ||
             d_debug_post_shaping_background != 0) {
             return make_float4(bg.x, bg.y, bg.z, 1.0f);
         }
@@ -2321,6 +2343,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
                     d_debug_shaper_inputs != 0 ||
+                    d_debug_closest_approach_direction != 0 ||
+                    d_debug_escaped_direction != 0 ||
                     d_debug_post_shaping_background != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }

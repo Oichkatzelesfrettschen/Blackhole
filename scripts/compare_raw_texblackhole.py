@@ -4,6 +4,10 @@
 Exports pre-bloom, pre-tonemap HDR frames via --export-raw-frame and reports
 basic parity statistics so CUDA-vs-GLSL analysis does not depend on the shared
 postprocess stack.
+
+Important: this script launches each binary in its normal desktop mode. With the
+default `BlackholeGLSL` binary that means the legacy `traceColor()` fragment lane,
+not the interop parity lane.
 """
 
 from __future__ import annotations
@@ -84,6 +88,13 @@ def _chroma(image: np.ndarray) -> np.ndarray:
     return np.max(image, axis=2) - np.min(image, axis=2)
 
 
+def _decode_unit_vector(image: np.ndarray) -> np.ndarray:
+    vec = image * 2.0 - 1.0
+    norm = np.linalg.norm(vec, axis=2, keepdims=True)
+    safe = np.where(norm > 1.0e-8, vec / norm, 0.0)
+    return safe
+
+
 def _dilate(mask: np.ndarray, iterations: int) -> np.ndarray:
     out = mask.copy()
     for _ in range(iterations):
@@ -133,8 +144,24 @@ def _mask_stats(
     *,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    count = int(mask.sum())
+    if count == 0:
+        stats = {
+            "count": 0,
+            "mean_abs": 0.0,
+            "channel_mean_abs_rgb": [0.0, 0.0, 0.0],
+            "base_mean_rgb": [0.0, 0.0, 0.0],
+            "other_mean_rgb": [0.0, 0.0, 0.0],
+            "base_luma": 0.0,
+            "other_luma": 0.0,
+            "base_chroma": 0.0,
+            "other_chroma": 0.0,
+        }
+        if extra:
+            stats.update(extra)
+        return stats
     stats: dict[str, Any] = {
-        "count": int(mask.sum()),
+        "count": count,
         "mean_abs": float(diff[mask].mean()),
         "channel_mean_abs_rgb": [float(x) for x in diff_rgb[mask].mean(axis=0)],
         "base_mean_rgb": [float(x) for x in base[mask].mean(axis=0)],
@@ -149,6 +176,28 @@ def _mask_stats(
     return stats
 
 
+def _vector_mask_stats(base_vec: np.ndarray, other_vec: np.ndarray, mask: np.ndarray) -> dict[str, Any]:
+    base_sel = base_vec[mask]
+    other_sel = other_vec[mask]
+    if base_sel.shape[0] == 0:
+        return {
+            "base_mean_vec": [0.0, 0.0, 0.0],
+            "other_mean_vec": [0.0, 0.0, 0.0],
+            "mean_dot": 0.0,
+            "mean_angle_deg": 0.0,
+            "max_angle_deg": 0.0,
+        }
+    dots = np.clip(np.sum(base_sel * other_sel, axis=1), -1.0, 1.0)
+    angles = np.degrees(np.arccos(dots))
+    return {
+        "base_mean_vec": [float(x) for x in base_sel.mean(axis=0)],
+        "other_mean_vec": [float(x) for x in other_sel.mean(axis=0)],
+        "mean_dot": float(dots.mean()),
+        "mean_angle_deg": float(angles.mean()),
+        "max_angle_deg": float(angles.max()),
+    }
+
+
 def _safe_eroded_core(mask: np.ndarray, max_iterations: int) -> tuple[np.ndarray, int]:
     for iterations in range(max_iterations, -1, -1):
         candidate = _erode(mask, iterations) if iterations > 0 else mask.copy()
@@ -157,13 +206,21 @@ def _safe_eroded_core(mask: np.ndarray, max_iterations: int) -> tuple[np.ndarray
     return mask.copy(), 0
 
 
-def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
+def _region_summary(base: np.ndarray, other: np.ndarray, *, stage: str) -> dict[str, Any]:
     diff = np.mean(np.abs(other - base), axis=2)
     diff_rgb = np.abs(other - base)
     base_luma = _luminance(base)
     other_luma = _luminance(other)
     base_chroma = _chroma(base)
     other_chroma = _chroma(other)
+    vector_stage = stage in {"closest-approach-direction", "escaped-direction"}
+    if vector_stage:
+        base_vec = _decode_unit_vector(base)
+        other_vec = _decode_unit_vector(other)
+    else:
+        base_vec = None
+        other_vec = None
+
     h, w = diff.shape
     regions = {
         "top_left": (slice(0, h // 2), slice(0, w // 2)),
@@ -185,6 +242,10 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
             "base_chroma": float(base_chroma[ys, xs].mean()),
             "other_chroma": float(other_chroma[ys, xs].mean()),
         }
+        if vector_stage:
+            mask = np.zeros_like(diff, dtype=bool)
+            mask[ys, xs] = True
+            summary[name]["vector"] = _vector_mask_stats(base_vec, other_vec, mask)
 
     bright_threshold = float(np.percentile(base_luma, 99.5))
     negative_threshold = float(np.percentile(base_luma, 40.0))
@@ -234,20 +295,42 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
             diff, diff_rgb, base, other, base_luma, other_luma, base_chroma, other_chroma, negative_mask, extra={"threshold": negative_threshold}
         ),
     }
+    if vector_stage:
+        for key, mask in (
+            ("bright_arc", arc_mask),
+            ("bright_arc_core", arc_core_mask),
+            ("bright_arc_shell", arc_shell_mask),
+            ("bright_arc_adjacent_right", arc_adjacent_mask),
+            ("broad_right_background", broad_right_bg_mask),
+            ("negative_space", negative_mask),
+        ):
+            summary["masks"][key]["vector"] = _vector_mask_stats(base_vec, other_vec, mask)
     return summary
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=pathlib.Path, default=pathlib.Path(__file__).resolve().parents[1])
-    parser.add_argument("--glsl-binary", default="build/Release/BlackholeGLSL")
+    parser.add_argument(
+        "--glsl-binary",
+        default="build/Release/BlackholeGLSL",
+        help="Desktop GLSL host to capture. The default BlackholeGLSL binary uses the legacy traceColor lane.",
+    )
     parser.add_argument("--cuda-binary", default="build/Release/BlackholeCUDA")
     parser.add_argument("--profile", default="showcase-orbit")
     parser.add_argument("--composition", default="wide-right")
     parser.add_argument(
         "--stage",
         default="final",
-        choices=["final", "pre-redshift-background", "pre-shaping-background", "post-shaping-background", "shaper-inputs"],
+        choices=[
+            "final",
+            "pre-redshift-background",
+            "pre-shaping-background",
+            "post-shaping-background",
+            "shaper-inputs",
+            "closest-approach-direction",
+            "escaped-direction",
+        ],
         help="Which raw renderer stage to export.",
     )
     parser.add_argument(
@@ -284,7 +367,7 @@ def main() -> int:
         "shape": list(glsl.shape),
         "glsl": _summarize(glsl, glsl),
         "cuda": _summarize(glsl, cuda),
-        "regions": _region_summary(glsl, cuda),
+        "regions": _region_summary(glsl, cuda, stage=args.stage),
     }
     summary_path = output_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
