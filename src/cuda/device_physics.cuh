@@ -1579,7 +1579,7 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         float rim_sector = d_smoothstep_range(0.91f, 0.995f, aligned_flow);
         float counter_sector = d_smoothstep_range(0.24f, 0.48f, aligned_flow);
         float adjacent_sector =
-            d_smoothstep_range(0.74f, 0.95f, aligned_flow) * (1.0f - bright_sector);
+            d_smoothstep_range(0.76f, 0.95f, aligned_flow) * (1.0f - bright_sector);
         float broad_field_sector =
             d_smoothstep_range(0.46f, 0.84f, aligned_flow) * (1.0f - adjacent_sector) *
             (1.0f - bright_sector);
@@ -1620,11 +1620,11 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
 
         float arc_adjacent_suppression =
             near_hole_weight * adjacent_sector * d_smoothstep_range(0.016f, 0.13f, sky_luma);
-        sky = d_scale(sky, 1.0f - 0.21f * arc_adjacent_suppression);
+        sky = d_scale(sky, 1.0f - 0.27f * arc_adjacent_suppression);
 
         float broad_field_suppression =
             near_hole_weight * broad_field_sector * d_smoothstep_range(0.014f, 0.10f, sky_luma);
-        sky = d_scale(sky, 1.0f - 0.15f * broad_field_suppression);
+        sky = d_scale(sky, 1.0f - 0.13f * broad_field_suppression);
     }
 
     return sky;
