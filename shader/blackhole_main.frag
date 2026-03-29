@@ -85,6 +85,7 @@ uniform float interopStepSize = 0.2;   // Balanced (was 0.1, ultra-fast=0.25)
 uniform float debugPreRedshiftBackground = 0.0;
 uniform float debugPreShapingBackground = 0.0;
 uniform float debugPostShapingBackground = 0.0;
+uniform float debugShaperInputs = 0.0;
 // D2: Volumetric RTE path -- accumulates emission/absorption through disk volume
 uniform float rteEnabled      = 0.0;   // 0=single-scatter (legacy), 1=volumetric RTE
 uniform float rteOpacityScale = 0.5;   // alpha_nu = rteOpacityScale * j_nu
@@ -420,6 +421,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       // The factor of 2 was already included in the definition of schwarzschildRadius
       if (r < schwarzschildRadius) {
         if (debugPreRedshiftBackground > 0.5 || debugPreShapingBackground > 0.5 ||
+            debugShaperInputs > 0.5 ||
             debugPostShapingBackground > 0.5) {
           return vec3(0.0);
         }
@@ -447,6 +449,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
 
       // Photon sphere glow effect (rays grazing r_ph = 1.5 * r_s)
       if (debugPreRedshiftBackground <= 0.5 && debugPreShapingBackground <= 0.5 &&
+          debugShaperInputs <= 0.5 &&
           debugPostShapingBackground <= 0.5 &&
           enablePhotonSphere > 0.5) {
         float photonSphereDistance = abs(r - r_ph);
@@ -475,6 +478,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       }
 
       if (debugPreRedshiftBackground <= 0.5 && debugPreShapingBackground <= 0.5 &&
+          debugShaperInputs <= 0.5 &&
           debugPostShapingBackground <= 0.5 &&
           adiskEnabled > 0.5) {
         if (adiskColor(pos, dir, color, alpha)) {
@@ -548,6 +552,26 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
 
   if (debugPreShapingBackground > 0.5) {
     return skyColor;
+  }
+
+  if (debugShaperInputs > 0.5) {
+    float alignedFlow = 0.5;
+    float nearHoleWeight = 0.0;
+    if (minRadiusReached < schwarzschildRadius * 5.0) {
+      vec3 approachDir = normalize(origin - closestApproachPos);
+      vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
+      vec3 flowDir = normalize(cross(spinAxis, normalize(closestApproachPos)));
+      alignedFlow = 0.5 + 0.5 * dot(flowDir, approachDir);
+      nearHoleWeight =
+          pow(clamp(1.0 - (minRadiusReached - schwarzschildRadius) /
+                                max(schwarzschildRadius * 3.0, EPSILON),
+                    0.0, 1.0),
+              1.55);
+    }
+    float minRadiusNorm = clamp(minRadiusReached / max(schwarzschildRadius * 5.0, EPSILON),
+                                0.0, 1.0);
+    return vec3(minRadiusNorm, clamp(alignedFlow, 0.0, 1.0),
+                clamp(nearHoleWeight, 0.0, 1.0));
   }
 
   if (minRadiusReached < schwarzschildRadius * 5.0) {

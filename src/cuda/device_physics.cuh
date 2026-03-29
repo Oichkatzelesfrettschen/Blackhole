@@ -79,6 +79,7 @@ extern __constant__ float d_photon_glow_strength;
 extern __constant__ int   d_debug_pre_redshift_background;
 extern __constant__ int   d_debug_pre_shaping_background;
 extern __constant__ int   d_debug_post_shaping_background;
+extern __constant__ int   d_debug_shaper_inputs;
 extern __constant__ float d_background_yaw_rad;
 extern __constant__ float d_background_pitch_rad;
 extern __constant__ float d_background_filter_radius;
@@ -1563,6 +1564,16 @@ __device__ __forceinline__ float d_smoothstep_range(float edge0, float edge1, fl
     return t * t * (3.0f - 2.0f * t);
 }
 
+__device__ __forceinline__ float3 d_pack_shaper_inputs(float min_radius,
+                                                       float aligned_flow,
+                                                       float near_hole_weight,
+                                                       float rs) {
+    float min_radius_norm = fmaxf(0.0f, fminf(min_radius / fmaxf(rs * 5.0f, D_EPSILON), 1.0f));
+    return make_f3(min_radius_norm,
+                   fmaxf(0.0f, fminf(aligned_flow, 1.0f)),
+                   fmaxf(0.0f, fminf(near_hole_weight, 1.0f)));
+}
+
 __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
                                                              float min_radius,
                                                              float3 closest_pos,
@@ -1588,6 +1599,23 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
 
     if (d_debug_pre_shaping_background != 0) {
         return sky;
+    }
+
+    if (d_debug_shaper_inputs != 0) {
+        float aligned_flow = 0.5f;
+        float near_hole_weight = 0.0f;
+        if (min_radius < rs * 5.0f) {
+            float3 closest_n = d_normalize(closest_pos);
+            float3 approach_dir = d_normalize(d_sub(cam_pos, closest_pos));
+            float spin_y = spin >= 0.0f ? 1.0f : -1.0f;
+            float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
+            float3 flow_dir = d_normalize(d_cross(spin_axis, closest_n));
+            aligned_flow = 0.5f + 0.5f * d_dot(flow_dir, approach_dir);
+            near_hole_weight =
+                powf(fmaxf(0.0f, fminf(1.0f - (min_radius - rs) / fmaxf(rs * 3.0f, D_EPSILON), 1.0f)),
+                     1.55f);
+        }
+        return d_pack_shaper_inputs(min_radius, aligned_flow, near_hole_weight, rs);
     }
 
     if (min_radius < rs * 5.0f) {
@@ -1742,6 +1770,7 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     }
     if (hit.hit_disk) {
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+            d_debug_shaper_inputs != 0 ||
             d_debug_post_shaping_background != 0) {
             return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
         }
@@ -1767,7 +1796,8 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
                                                   cam_pos, d_rs, d_spin);
     bg = make_float4(shaped_bg.x, shaped_bg.y, shaped_bg.z, bg.w);
 
-    if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0) {
+    if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+        d_debug_shaper_inputs != 0) {
         return bg;
     }
 
@@ -2011,6 +2041,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                    d_debug_shaper_inputs != 0 ||
                     d_debug_post_shaping_background != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }
@@ -2031,6 +2062,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
         bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+            d_debug_shaper_inputs != 0 ||
             d_debug_post_shaping_background != 0) {
             return make_float4(bg.x, bg.y, bg.z, 1.0f);
         }
@@ -2288,6 +2320,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
                 bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                    d_debug_shaper_inputs != 0 ||
                     d_debug_post_shaping_background != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }

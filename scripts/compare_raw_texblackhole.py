@@ -122,6 +122,9 @@ def _erode(mask: np.ndarray, iterations: int) -> np.ndarray:
 
 def _mask_stats(
     diff: np.ndarray,
+    diff_rgb: np.ndarray,
+    base: np.ndarray,
+    other: np.ndarray,
     base_luma: np.ndarray,
     other_luma: np.ndarray,
     base_chroma: np.ndarray,
@@ -133,6 +136,9 @@ def _mask_stats(
     stats: dict[str, Any] = {
         "count": int(mask.sum()),
         "mean_abs": float(diff[mask].mean()),
+        "channel_mean_abs_rgb": [float(x) for x in diff_rgb[mask].mean(axis=0)],
+        "base_mean_rgb": [float(x) for x in base[mask].mean(axis=0)],
+        "other_mean_rgb": [float(x) for x in other[mask].mean(axis=0)],
         "base_luma": float(base_luma[mask].mean()),
         "other_luma": float(other_luma[mask].mean()),
         "base_chroma": float(base_chroma[mask].mean()),
@@ -153,6 +159,7 @@ def _safe_eroded_core(mask: np.ndarray, max_iterations: int) -> tuple[np.ndarray
 
 def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     diff = np.mean(np.abs(other - base), axis=2)
+    diff_rgb = np.abs(other - base)
     base_luma = _luminance(base)
     other_luma = _luminance(other)
     base_chroma = _chroma(base)
@@ -170,6 +177,9 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     for name, (ys, xs) in regions.items():
         summary[name] = {
             "mean_abs": float(diff[ys, xs].mean()),
+            "channel_mean_abs_rgb": [float(x) for x in diff_rgb[ys, xs].mean(axis=(0, 1))],
+            "base_mean_rgb": [float(x) for x in base[ys, xs].mean(axis=(0, 1))],
+            "other_mean_rgb": [float(x) for x in other[ys, xs].mean(axis=(0, 1))],
             "base_luma": float(base_luma[ys, xs].mean()),
             "other_luma": float(other_luma[ys, xs].mean()),
             "base_chroma": float(base_chroma[ys, xs].mean()),
@@ -188,10 +198,13 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
     broad_right_bg_mask = right_half & (~arc_adjacent_mask) & (~arc_mask)
     summary["masks"] = {
         "bright_arc": _mask_stats(
-            diff, base_luma, other_luma, base_chroma, other_chroma, arc_mask, extra={"threshold": bright_threshold}
+            diff, diff_rgb, base, other, base_luma, other_luma, base_chroma, other_chroma, arc_mask, extra={"threshold": bright_threshold}
         ),
         "bright_arc_core": _mask_stats(
             diff,
+            diff_rgb,
+            base,
+            other,
             base_luma,
             other_luma,
             base_chroma,
@@ -201,6 +214,9 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
         ),
         "bright_arc_shell": _mask_stats(
             diff,
+            diff_rgb,
+            base,
+            other,
             base_luma,
             other_luma,
             base_chroma,
@@ -209,13 +225,13 @@ def _region_summary(base: np.ndarray, other: np.ndarray) -> dict[str, Any]:
             extra={"erosion_iterations": arc_core_iterations},
         ),
         "bright_arc_adjacent_right": _mask_stats(
-            diff, base_luma, other_luma, base_chroma, other_chroma, arc_adjacent_mask
+            diff, diff_rgb, base, other, base_luma, other_luma, base_chroma, other_chroma, arc_adjacent_mask
         ),
         "broad_right_background": _mask_stats(
-            diff, base_luma, other_luma, base_chroma, other_chroma, broad_right_bg_mask
+            diff, diff_rgb, base, other, base_luma, other_luma, base_chroma, other_chroma, broad_right_bg_mask
         ),
         "negative_space": _mask_stats(
-            diff, base_luma, other_luma, base_chroma, other_chroma, negative_mask, extra={"threshold": negative_threshold}
+            diff, diff_rgb, base, other, base_luma, other_luma, base_chroma, other_chroma, negative_mask, extra={"threshold": negative_threshold}
         ),
     }
     return summary
@@ -231,7 +247,7 @@ def main() -> int:
     parser.add_argument(
         "--stage",
         default="final",
-        choices=["final", "pre-redshift-background", "pre-shaping-background", "post-shaping-background"],
+        choices=["final", "pre-redshift-background", "pre-shaping-background", "post-shaping-background", "shaper-inputs"],
         help="Which raw renderer stage to export.",
     )
     parser.add_argument(

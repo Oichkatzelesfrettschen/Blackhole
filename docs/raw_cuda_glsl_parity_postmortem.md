@@ -29,6 +29,10 @@ We now have two raw export checkpoints:
 - `pre-redshift-background`
 - `pre-shaping-background`
 - `post-shaping-background`
+- `shaper-inputs` packed as:
+  - `R = clamp(minRadiusReached / (5 * rs), 0, 1)`
+  - `G = alignedFlow`
+  - `B = nearHoleWeight`
 
 That split changed the RCA materially.
 
@@ -62,6 +66,16 @@ The later stage split mattered too. After the time-rotation and sRGB fixes were 
 
 That means the remaining gap is not mainly the later photon-ring term. It is already baked
 into the shaped escaped background.
+
+The `shaper-inputs` stage sharpened that further. For pixels that GLSL classifies as the
+bright arc core, CUDA often reports the neutral fallback input:
+
+- `minRadiusNorm = 1.0`
+- `alignedFlow = 0.5`
+- `nearHoleWeight = 0.0`
+
+That is not just a weighting mismatch. It means many CUDA rays that GLSL treats as
+near-hole arc-core rays are not entering the near-hole shaping regime at all on the CUDA side.
 
 ## Upstream Background Parity Bugs We Confirmed
 
@@ -255,6 +269,39 @@ Takeaway:
   copy of the desktop GLSL constants
 - the next correction has to be more local than "use the desktop shaper"
 
+### 8. Shaper-Input Instrumentation Changed The Target
+
+Examples:
+
+- exporting `minRadiusReached`, `alignedFlow`, and `nearHoleWeight` directly as a packed raw stage
+- comparing those maps by channel in the same regional masks
+
+Why it mattered:
+
+- it showed the shaped-background mismatch is not only about the shaping coefficients
+- in the GLSL bright arc core, CUDA often arrives with neutral shaper inputs instead of
+  near-hole inputs
+
+Representative evidence:
+
+- `showcase-orbit_wide-right_shaperinputs1`
+- `showcase-orbit_right-third_shaperinputs1`
+
+For `wide-right bright_arc_core`:
+
+- GLSL mean RGB: about `[0.7104, 0.9694, 0.0529]`
+- CUDA mean RGB: about `[1.0, 0.5, 0.0]`
+
+For `right-third bright_arc_core`:
+
+- GLSL mean RGB: about `[0.7086, 0.9686, 0.0549]`
+- CUDA mean RGB: about `[1.0, 0.5, 0.0]`
+
+Takeaway:
+
+- the next correction should target geodesic / closest-approach / escaped-ray geometry parity
+  before more shaper-coefficient tuning
+
 ### 6. Color-Space Blindness
 
 Examples:
@@ -309,12 +356,15 @@ The remaining parity debt is now best described like this:
 4. After those fixes, the escaped-field parity is much closer in both luma and chroma.
 5. The `post-shaping-background` stage shows the main remaining debt has shifted to the
    true bright arc core, which is now relatively under-hot in CUDA compared with GLSL.
-6. The later photon-ring add is not the main offender anymore.
+6. The `shaper-inputs` stage shows that some of that debt is upstream of the shaper
+   coefficients themselves: CUDA often reaches the bright-arc masks with neutral
+   shaper inputs.
+7. The later photon-ring add is not the main offender anymore.
 
 That means the next control surface should move forward from the now-cleaner upstream baseline:
 
 1. preserve the fixed upstream background parity
-2. use `post-shaping-background` to keep the shaper honest while tuning arc-core parity
+2. use `shaper-inputs` and `post-shaping-background` together to keep geometry and shaping honest
 3. only then return to near-hole or arc-core parity work
 
 ## Practical Rule Going Forward
