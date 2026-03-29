@@ -1118,6 +1118,23 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
     float anisotropic_boost = 1.0f + ((0.82f + (1.55f - 0.82f) * spin_view) - 1.0f) * spin_weight;
     color = d_scale(color, anisotropic_boost);
 
+    /* Keep the disk energy concentrated in a narrow, approaching-side sector.
+     * The GLSL/desktop still wins because it preserves dark negative space and
+     * lets only a small inner crescent survive with high local contrast. */
+    float inner_weight = powf(fmaxf(0.0f, 1.0f - radial01), 0.72f);
+    auto smooth_range = [](float edge0, float edge1, float x) {
+        float t = fmaxf(0.0f, fminf((x - edge0) / fmaxf(edge1 - edge0, D_EPSILON), 1.0f));
+        return t * t * (3.0f - 2.0f * t);
+    };
+    float bright_sector = smooth_range(0.83f, 0.985f, spin_view);
+    float rim_sector = smooth_range(0.91f, 0.997f, spin_view);
+    float counter_sector = smooth_range(0.20f, 0.54f, spin_view);
+    float sector_shadow =
+        1.0f + (0.18f - 1.0f) * inner_weight * (1.0f - bright_sector * 0.94f);
+    float sector_lift =
+        1.0f + inner_weight * (0.92f * bright_sector + 0.22f * rim_sector + 0.04f * counter_sector);
+    intensity *= sector_shadow * sector_lift;
+
     float grazing = powf(fmaxf(0.0f, fminf(1.0f - fabsf(ray_dir.y), 1.0f)), 1.5f);
     color = d_scale(color, 1.0f + (1.55f - 1.0f) * grazing);
 
@@ -1125,6 +1142,17 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
     float midplane_boost = powf(fmaxf(0.0f, fminf(1.0f - normalized_v, 1.0f)), 0.45f);
     float crescent_boost = 1.0f + (1.8f - 1.0f) * (midplane_boost * (1.0f - radial01));
     color = d_scale(color, crescent_boost);
+
+    float disk_luma = 0.2126f * color.x + 0.7152f * color.y + 0.0722f * color.z;
+    float sector_contrast =
+        inner_weight * ((-0.36f) + (0.26f - (-0.36f)) * bright_sector);
+    color = d_add(
+        color,
+        d_scale(color, sector_contrast * fmaxf(fminf(disk_luma - 0.05f, 1.0f), 0.0f)));
+
+    float exclusion = inner_weight * (1.0f - bright_sector) *
+                      smooth_range(0.05f, 0.25f, disk_luma);
+    color = d_scale(color, 1.0f - 0.22f * exclusion);
 
     /* Doppler color shift: approaching side -> blueshift, receding -> redshift */
     if (doppler > 1.0f) {
