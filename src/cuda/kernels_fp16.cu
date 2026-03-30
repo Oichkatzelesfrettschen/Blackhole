@@ -116,6 +116,9 @@ __launch_bounds__(256, 4)
   result.phi = 0.0f;
   result.redshift = 1.0f;
   result.min_radius = d_length(cam);
+  result.closest_approach_update_count = 0;
+  result.first_closest_approach_step = -1;
+  result.last_closest_approach_step = -1;
 
   if ((d_kerr_enabled != 0) && fabsf(a) > D_EPSILON) {
     float rHorizon = d_kerr_outer_horizon(rs, a);
@@ -136,10 +139,7 @@ __launch_bounds__(256, 4)
       kr = halfToKerrRay(hs);
 
       float3 const oldPos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
-      if (kr.r < result.min_radius) {
-        result.min_radius = kr.r;
-        result.closest_approach_point = oldPos;
-      }
+      d_record_closest_approach(result, kr.r, oldPos, step);
 
       if (kr.r <= rHorizon) {
         result.hit_horizon = true;
@@ -189,10 +189,7 @@ __launch_bounds__(256, 4)
       d_step_rk4(pos, vel, rs, dt);
 
       float const r = d_length(pos);
-      if (r < result.min_radius) {
-        result.min_radius = r;
-        result.closest_approach_point = pos;
-      }
+      d_record_closest_approach(result, r, pos, step);
 
       if (r <= rs) {
         result.hit_horizon = true;

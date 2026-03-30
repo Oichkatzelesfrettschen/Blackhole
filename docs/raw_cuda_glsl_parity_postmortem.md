@@ -488,3 +488,41 @@ And the geometry comparison stays lopsided:
 
 So the next fix is not another shaper tweak. It is upstream `HitResult` geometry/tracer work,
 because the closest-approach state is still much more wrong than the final escaped direction.
+
+## Stepwise Closest-Approach Instrumentation
+
+We then added two more raw geometry stages so we could stop arguing from final packed inputs
+alone and inspect the closest-approach tracker itself:
+
+- `closest-approach-state`
+  - `R = min_radius / (5 * rs)`
+  - `G = length(closest_approach_point) / (5 * rs)`
+  - `B = abs(length(closest_approach_point) - min_radius) / (5 * rs)`
+- `closest-approach-timeline`
+  - `R = first_closest_approach_step / (max_steps - 1)`
+  - `G = last_closest_approach_step / (max_steps - 1)`
+  - `B = closest_approach_update_count / 16`
+
+Representative evidence:
+
+- `showcase-orbit_wide-right_closeststate1`
+- `showcase-orbit_right-third_closeststate1`
+- `showcase-orbit_wide-right_closesttimeline1`
+- `showcase-orbit_right-third_closesttimeline1`
+
+What this resolved:
+
+1. The remaining debt is not mainly "stored point drift." In the hot masks, CUDA often reports
+   `closest-approach-state` near `[1, 1, 0]`, which means `min_radius` and the stored point
+   still agree with each other. They just agree on a far-field closest approach.
+2. The remaining debt is also not "no updates ever happened." The timeline stage shows that
+   CUDA does record many closest-approach updates, often saturating the count channel.
+3. The actual failure is that CUDA updates closest approach too late and too far out, so the
+   final tracked state never enters the same near-hole regime as the interop fragment lane.
+
+That means the next justified fix is even more upstream than the shaper:
+
+- trace how the CUDA kernels advance and record `min_radius` / `closest_approach_point`
+  step by step
+- compare that against the interop fragment geodesic loop, not the legacy desktop lane
+- only then revisit shaper or arc-core tuning

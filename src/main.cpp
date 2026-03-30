@@ -1070,6 +1070,8 @@ struct InteropUniforms {
   float debugPreShapingBackground = 0.0f;
   float debugPostShapingBackground = 0.0f;
   float debugShaperInputs = 0.0f;
+  float debugClosestApproachState = 0.0f;
+  float debugClosestApproachTimeline = 0.0f;
   float debugClosestApproachDirection = 0.0f;
   float debugEscapedDirection = 0.0f;
 };
@@ -1135,6 +1137,8 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   rtti.floatUniforms["debugPreShapingBackground"] = interop.debugPreShapingBackground;
   rtti.floatUniforms["debugPostShapingBackground"] = interop.debugPostShapingBackground;
   rtti.floatUniforms["debugShaperInputs"] = interop.debugShaperInputs;
+  rtti.floatUniforms["debugClosestApproachState"] = interop.debugClosestApproachState;
+  rtti.floatUniforms["debugClosestApproachTimeline"] = interop.debugClosestApproachTimeline;
   rtti.floatUniforms["debugClosestApproachDirection"] = interop.debugClosestApproachDirection;
   rtti.floatUniforms["debugEscapedDirection"] = interop.debugEscapedDirection;
 
@@ -1188,6 +1192,10 @@ void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
               interop.debugPostShapingBackground);
   glUniform1f(glGetUniformLocation(program, "debugShaperInputs"),
               interop.debugShaperInputs);
+  glUniform1f(glGetUniformLocation(program, "debugClosestApproachState"),
+              interop.debugClosestApproachState);
+  glUniform1f(glGetUniformLocation(program, "debugClosestApproachTimeline"),
+              interop.debugClosestApproachTimeline);
   glUniform1f(glGetUniformLocation(program, "debugClosestApproachDirection"),
               interop.debugClosestApproachDirection);
   glUniform1f(glGetUniformLocation(program, "debugEscapedDirection"),
@@ -3841,6 +3849,8 @@ int main(int argc, char **argv) {
       static bool debugPreShapingBackground = false;
       static bool debugPostShapingBackground = false;
       static bool debugShaperInputs = false;
+      static bool debugClosestApproachState = false;
+      static bool debugClosestApproachTimeline = false;
       static bool debugClosestApproachDirection = false;
       static bool debugEscapedDirection = false;
       static bool debugPreShapingBackgroundEnvApplied = false;
@@ -3855,6 +3865,10 @@ int main(int argc, char **argv) {
               (std::strcmp(stage, "post-shaping-background") == 0);
           debugShaperInputs =
               (std::strcmp(stage, "shaper-inputs") == 0);
+          debugClosestApproachState =
+              (std::strcmp(stage, "closest-approach-state") == 0);
+          debugClosestApproachTimeline =
+              (std::strcmp(stage, "closest-approach-timeline") == 0);
           debugClosestApproachDirection =
               (std::strcmp(stage, "closest-approach-direction") == 0);
           debugEscapedDirection =
@@ -5009,6 +5023,8 @@ int main(int argc, char **argv) {
         interop.debugPreShapingBackground = debugPreShapingBackground ? 1.0f : 0.0f;
         interop.debugPostShapingBackground = debugPostShapingBackground ? 1.0f : 0.0f;
         interop.debugShaperInputs = debugShaperInputs ? 1.0f : 0.0f;
+        interop.debugClosestApproachState = debugClosestApproachState ? 1.0f : 0.0f;
+        interop.debugClosestApproachTimeline = debugClosestApproachTimeline ? 1.0f : 0.0f;
         interop.debugClosestApproachDirection = debugClosestApproachDirection ? 1.0f : 0.0f;
         interop.debugEscapedDirection = debugEscapedDirection ? 1.0f : 0.0f;
 
@@ -5106,6 +5122,8 @@ int main(int argc, char **argv) {
             cp.debug_pre_shaping_background = debugPreShapingBackground ? 1 : 0;
             cp.debug_post_shaping_background = debugPostShapingBackground ? 1 : 0;
             cp.debug_shaper_inputs = debugShaperInputs ? 1 : 0;
+            cp.debug_closest_approach_state = debugClosestApproachState ? 1 : 0;
+            cp.debug_closest_approach_timeline = debugClosestApproachTimeline ? 1 : 0;
             cp.debug_closest_approach_direction = debugClosestApproachDirection ? 1 : 0;
             cp.debug_escaped_direction = debugEscapedDirection ? 1 : 0;
             cp.background_yaw_rad = backgroundYawRad;

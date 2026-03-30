@@ -29,6 +29,9 @@ struct HitResult {
   float phi;
   float redshiftFactor;
   float minRadius;
+  int closestApproachUpdateCount;
+  int firstClosestApproachStep;
+  int lastClosestApproachStep;
   int debugFlags;
 };
 
@@ -180,6 +183,35 @@ vec3 bhEncodeUnitVector(vec3 v) {
   return 0.5 * (n + vec3(1.0));
 }
 
+void bhRecordClosestApproach(inout HitResult result, float radius, vec3 point, int step) {
+  if (radius < result.minRadius) {
+    result.minRadius = radius;
+    result.closestApproachPoint = point;
+    if (result.closestApproachUpdateCount == 0) {
+      result.firstClosestApproachStep = step;
+    }
+    result.lastClosestApproachStep = step;
+    result.closestApproachUpdateCount += 1;
+  }
+}
+
+vec3 bhPackClosestApproachState(float minRadiusReached, vec3 closestApproachPos, float r_s) {
+  float radiusScale = max(r_s * 5.0, BH_EPSILON);
+  float minRadiusNorm = clamp(minRadiusReached / radiusScale, 0.0, 1.0);
+  float closestRadius = length(closestApproachPos);
+  float closestRadiusNorm = clamp(closestRadius / radiusScale, 0.0, 1.0);
+  float mismatchNorm = clamp(abs(closestRadius - minRadiusReached) / radiusScale, 0.0, 1.0);
+  return vec3(minRadiusNorm, closestRadiusNorm, mismatchNorm);
+}
+
+vec3 bhPackClosestApproachTimeline(int firstStep, int lastStep, int updateCount, int maxSteps) {
+  float denom = max(float(maxSteps - 1), 1.0);
+  float firstNorm = updateCount > 0 ? clamp(float(firstStep) / denom, 0.0, 1.0) : 0.0;
+  float lastNorm = updateCount > 0 ? clamp(float(lastStep) / denom, 0.0, 1.0) : 0.0;
+  float countNorm = clamp(float(updateCount) / 16.0, 0.0, 1.0);
+  return vec3(firstNorm, lastNorm, countNorm);
+}
+
 HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
                           float stepSize) {
   HitResult result;
@@ -192,6 +224,9 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.phi = 0.0;
   result.redshiftFactor = 1.0;
   result.minRadius = length(ray.position);
+  result.closestApproachUpdateCount = 0;
+  result.firstClosestApproachStep = -1;
+  result.lastClosestApproachStep = -1;
   result.debugFlags = 0;
 
   float a = 0.5 * kerrSpin * r_s;
@@ -212,10 +247,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     for (int step = 0; step < maxSteps; ++step) {
       oldPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-      if (kerrRay.r < result.minRadius) {
-        result.minRadius = kerrRay.r;
-        result.closestApproachPoint = oldPos;
-      }
+      bhRecordClosestApproach(result, kerrRay.r, oldPos, step);
 
       if (kerrRay.r <= r_horizon) {
         result.hitHorizon = true;
@@ -269,10 +301,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     result.debugFlags |= bhDebugEvaluate(ray.position, ray.velocity, maxDistance);
 
     float r = length(ray.position);
-    if (r < result.minRadius) {
-      result.minRadius = r;
-      result.closestApproachPoint = ray.position;
-    }
+    bhRecordClosestApproach(result, r, ray.position, step);
     if (r <= r_s) {
       result.hitHorizon = true;
       result.hitPoint = ray.position;
@@ -451,6 +480,15 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
   }
   if (debugShaperInputs > 0.5) {
     return vec4(bhPackShaperInputs(hit.minRadius, hit.closestApproachPoint, cameraPos, r_s), 1.0);
+  }
+  if (debugClosestApproachState > 0.5) {
+    return vec4(bhPackClosestApproachState(hit.minRadius, hit.closestApproachPoint, r_s), 1.0);
+  }
+  if (debugClosestApproachTimeline > 0.5) {
+    return vec4(
+        bhPackClosestApproachTimeline(hit.firstClosestApproachStep, hit.lastClosestApproachStep,
+                                      hit.closestApproachUpdateCount, int(interopMaxSteps)),
+        1.0);
   }
   if (debugClosestApproachDirection > 0.5) {
     return vec4(bhEncodeUnitVector(hit.closestApproachPoint), 1.0);

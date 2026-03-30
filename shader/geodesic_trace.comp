@@ -98,6 +98,8 @@ uniform float debugPreRedshiftBackground = 0.0;
 uniform float debugPreShapingBackground = 0.0;
 uniform float debugPostShapingBackground = 0.0;
 uniform float debugShaperInputs = 0.0;
+uniform float debugClosestApproachState = 0.0;
+uniform float debugClosestApproachTimeline = 0.0;
 uniform float debugClosestApproachDirection = 0.0;
 uniform float debugEscapedDirection = 0.0;
 

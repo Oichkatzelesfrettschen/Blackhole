@@ -86,6 +86,8 @@ uniform float debugPreRedshiftBackground = 0.0;
 uniform float debugPreShapingBackground = 0.0;
 uniform float debugPostShapingBackground = 0.0;
 uniform float debugShaperInputs = 0.0;
+uniform float debugClosestApproachState = 0.0;
+uniform float debugClosestApproachTimeline = 0.0;
 uniform float debugClosestApproachDirection = 0.0;
 uniform float debugEscapedDirection = 0.0;
 // D2: Volumetric RTE path -- accumulates emission/absorption through disk volume
@@ -398,6 +400,9 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
   // Track closest approach to photon sphere
   float minRadiusReached = length(pos);
   vec3 closestApproachPos = pos;
+  int closestApproachUpdateCount = 0;
+  int firstClosestApproachStep = -1;
+  int lastClosestApproachStep = -1;
   float r_ph = photonSphereRadius; // 1.5 * r_s
 
   for (int i = 0; i < 300; i++) {
@@ -406,6 +411,11 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     if (r < minRadiusReached) {
       minRadiusReached = r;
       closestApproachPos = pos;
+      if (closestApproachUpdateCount == 0) {
+        firstClosestApproachStep = i;
+      }
+      lastClosestApproachStep = i;
+      closestApproachUpdateCount += 1;
     }
 
     if (renderBlackHole > 0.5) {
@@ -557,6 +567,15 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
 
   if (debugPreShapingBackground > 0.5) {
     return skyColor;
+  }
+
+  if (debugClosestApproachState > 0.5) {
+    return bhPackClosestApproachState(minRadiusReached, closestApproachPos, schwarzschildRadius);
+  }
+
+  if (debugClosestApproachTimeline > 0.5) {
+    return bhPackClosestApproachTimeline(firstClosestApproachStep, lastClosestApproachStep,
+                                         closestApproachUpdateCount, int(interopMaxSteps));
   }
 
   if (debugShaperInputs > 0.5) {

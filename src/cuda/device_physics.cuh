@@ -80,6 +80,8 @@ extern __constant__ int   d_debug_pre_redshift_background;
 extern __constant__ int   d_debug_pre_shaping_background;
 extern __constant__ int   d_debug_post_shaping_background;
 extern __constant__ int   d_debug_shaper_inputs;
+extern __constant__ int   d_debug_closest_approach_state;
+extern __constant__ int   d_debug_closest_approach_timeline;
 extern __constant__ int   d_debug_closest_approach_direction;
 extern __constant__ int   d_debug_escaped_direction;
 extern __constant__ float d_background_yaw_rad;
@@ -800,7 +802,25 @@ struct HitResult {
     float phi;         /**< @brief Azimuthal angle at disk hit (for Doppler beaming); 0 otherwise. */
     float redshift;    /**< @brief Gravitational redshift factor at disk hit; 1 otherwise. */
     float min_radius;  /**< @brief Minimum radial distance reached along this ray. */
+    int closest_approach_update_count; /**< @brief Number of times min_radius was improved after initialization. */
+    int first_closest_approach_step;   /**< @brief Step index of the first min-radius improvement, or -1. */
+    int last_closest_approach_step;    /**< @brief Step index of the last min-radius improvement, or -1. */
 };
+
+__device__ __forceinline__ void d_record_closest_approach(HitResult& hit,
+                                                          float radius,
+                                                          float3 point,
+                                                          int step) {
+    if (radius < hit.min_radius) {
+        hit.min_radius = radius;
+        hit.closest_approach_point = point;
+        if (hit.closest_approach_update_count == 0) {
+            hit.first_closest_approach_step = step;
+        }
+        hit.last_closest_approach_step = step;
+        hit.closest_approach_update_count += 1;
+    }
+}
 
 /* ========================================================================
  * Adaptive step size (D10: AMR geodesic refinement near critical surfaces)
@@ -889,6 +909,9 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
     result.phi = 0.0f;
     result.redshift = 1.0f;
     result.min_radius = d_length(cam_pos);
+    result.closest_approach_update_count = 0;
+    result.first_closest_approach_step = -1;
+    result.last_closest_approach_step = -1;
 
     float rs = d_rs;
     float a = 0.5f * d_spin * rs;
@@ -908,10 +931,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
 
         for (int step = 0; step < max_steps; ++step) {
             float3 old_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
-            if (kr.r < result.min_radius) {
-                result.min_radius = kr.r;
-                result.closest_approach_point = old_pos;
-            }
+            d_record_closest_approach(result, kr.r, old_pos, step);
 
             if (kr.r <= r_horizon) {
                 result.hit_horizon = true;
@@ -955,10 +975,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
             d_step_rk4(pos, vel, rs, dt);
 
             float r = d_length(pos);
-            if (r < result.min_radius) {
-                result.min_radius = r;
-                result.closest_approach_point = pos;
-            }
+            d_record_closest_approach(result, r, pos, step);
 
             if (r <= rs) {
                 result.hit_horizon = true;
@@ -1576,6 +1593,29 @@ __device__ __forceinline__ float3 d_pack_shaper_inputs(float min_radius,
                    fmaxf(0.0f, fminf(near_hole_weight, 1.0f)));
 }
 
+__device__ __forceinline__ float3 d_pack_closest_approach_state(float min_radius,
+                                                                float3 closest_pos,
+                                                                float rs) {
+    float radius_scale = fmaxf(rs * 5.0f, D_EPSILON);
+    float min_radius_norm = fmaxf(0.0f, fminf(min_radius / radius_scale, 1.0f));
+    float closest_radius = d_length(closest_pos);
+    float closest_radius_norm = fmaxf(0.0f, fminf(closest_radius / radius_scale, 1.0f));
+    float mismatch_norm =
+        fmaxf(0.0f, fminf(fabsf(closest_radius - min_radius) / radius_scale, 1.0f));
+    return make_f3(min_radius_norm, closest_radius_norm, mismatch_norm);
+}
+
+__device__ __forceinline__ float3 d_pack_closest_approach_timeline(int first_step,
+                                                                   int last_step,
+                                                                   int update_count,
+                                                                   int max_steps) {
+    float denom = fmaxf(static_cast<float>(max_steps - 1), 1.0f);
+    float first_norm = update_count > 0 ? fmaxf(0.0f, fminf(first_step / denom, 1.0f)) : 0.0f;
+    float last_norm = update_count > 0 ? fmaxf(0.0f, fminf(last_step / denom, 1.0f)) : 0.0f;
+    float count_norm = fmaxf(0.0f, fminf(update_count / 16.0f, 1.0f));
+    return make_f3(first_norm, last_norm, count_norm);
+}
+
 __device__ __forceinline__ float3 d_encode_unit_vector(float3 v) {
     float3 n = d_normalize(v);
     return make_f3(0.5f * (n.x + 1.0f), 0.5f * (n.y + 1.0f), 0.5f * (n.z + 1.0f));
@@ -1584,9 +1624,23 @@ __device__ __forceinline__ float3 d_encode_unit_vector(float3 v) {
 __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
                                                              float min_radius,
                                                              float3 closest_pos,
+                                                             int closest_update_count,
+                                                             int first_closest_step,
+                                                             int last_closest_step,
                                                              float3 cam_pos,
                                                              float rs,
                                                              float spin) {
+    if (d_debug_closest_approach_state != 0) {
+        return d_pack_closest_approach_state(min_radius, closest_pos, rs);
+    }
+
+    if (d_debug_closest_approach_timeline != 0) {
+        return d_pack_closest_approach_timeline(first_closest_step,
+                                                last_closest_step,
+                                                closest_update_count,
+                                                d_max_steps);
+    }
+
     if (d_debug_pre_redshift_background != 0) {
         return sky;
     }
@@ -1781,10 +1835,12 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     }
     if (hit.hit_disk) {
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+            d_debug_post_shaping_background != 0 ||
             d_debug_shaper_inputs != 0 ||
+            d_debug_closest_approach_state != 0 ||
+            d_debug_closest_approach_timeline != 0 ||
             d_debug_closest_approach_direction != 0 ||
-            d_debug_escaped_direction != 0 ||
-            d_debug_post_shaping_background != 0) {
+            d_debug_escaped_direction != 0) {
             return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
         }
         float4 disk_col = d_disk_color(hit, cam_pos, d_rs);
@@ -1806,11 +1862,18 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     float3 shaped_bg = d_shape_escaped_background(make_f3(bg.x, bg.y, bg.z),
                                                   hit.min_radius,
                                                   hit.closest_approach_point,
+                                                  hit.closest_approach_update_count,
+                                                  hit.first_closest_approach_step,
+                                                  hit.last_closest_approach_step,
                                                   cam_pos, d_rs, d_spin);
     bg = make_float4(shaped_bg.x, shaped_bg.y, shaped_bg.z, bg.w);
 
     if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
-        d_debug_shaper_inputs != 0 || d_debug_closest_approach_direction != 0) {
+        d_debug_post_shaping_background != 0 ||
+        d_debug_shaper_inputs != 0 ||
+        d_debug_closest_approach_state != 0 ||
+        d_debug_closest_approach_timeline != 0 ||
+        d_debug_closest_approach_direction != 0) {
         return bg;
     }
 
@@ -2057,12 +2120,14 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-                bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
+                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                    d_debug_post_shaping_background != 0 ||
                     d_debug_shaper_inputs != 0 ||
+                    d_debug_closest_approach_state != 0 ||
+                    d_debug_closest_approach_timeline != 0 ||
                     d_debug_closest_approach_direction != 0 ||
-                    d_debug_escaped_direction != 0 ||
-                    d_debug_post_shaping_background != 0) {
+                    d_debug_escaped_direction != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }
                 accum_i.x += transmit * bg.x;
@@ -2080,12 +2145,14 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
         float4 const bg4 = d_background_color(d_normalize(esc_dir));
         float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-        bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
+        bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+            d_debug_post_shaping_background != 0 ||
             d_debug_shaper_inputs != 0 ||
+            d_debug_closest_approach_state != 0 ||
+            d_debug_closest_approach_timeline != 0 ||
             d_debug_closest_approach_direction != 0 ||
-            d_debug_escaped_direction != 0 ||
-            d_debug_post_shaping_background != 0) {
+            d_debug_escaped_direction != 0) {
             return make_float4(bg.x, bg.y, bg.z, 1.0f);
         }
         accum_i.x += transmit * bg.x;
@@ -2340,12 +2407,14 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-                bg = d_shape_escaped_background(bg, min_r, closest_pos, cam_pos, rs, d_spin);
+                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                    d_debug_post_shaping_background != 0 ||
                     d_debug_shaper_inputs != 0 ||
+                    d_debug_closest_approach_state != 0 ||
+                    d_debug_closest_approach_timeline != 0 ||
                     d_debug_closest_approach_direction != 0 ||
-                    d_debug_escaped_direction != 0 ||
-                    d_debug_post_shaping_background != 0) {
+                    d_debug_escaped_direction != 0) {
                     return make_float4(bg.x, bg.y, bg.z, 1.0f);
                 }
                 accum_i.x += transmit * bg.x;

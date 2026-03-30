@@ -73,6 +73,8 @@ struct BH_LaunchParams {
     int debug_pre_shaping_background; /**< @brief 1 = export escaped background after redshift but before near-hole shaping. */
     int debug_post_shaping_background; /**< @brief 1 = export escaped background after near-hole shaping but before photon-ring glow. */
     int debug_shaper_inputs; /**< @brief 1 = export packed shaper inputs (minRadius, alignedFlow, nearHoleWeight). */
+    int debug_closest_approach_state; /**< @brief 1 = export packed closest-approach state (minRadius, stored-point radius, mismatch). */
+    int debug_closest_approach_timeline; /**< @brief 1 = export packed closest-approach timeline (first step, last step, update count). */
     int debug_closest_approach_direction; /**< @brief 1 = export encoded normalize(closest_approach_point). */
     int debug_escaped_direction; /**< @brief 1 = export encoded escaped direction. */
     float background_yaw_rad;   /**< @brief Skybox yaw rotation around the spin axis [rad]. */

@@ -337,6 +337,8 @@ def main() -> int:
             "pre-shaping-background",
             "post-shaping-background",
             "shaper-inputs",
+            "closest-approach-state",
+            "closest-approach-timeline",
             "closest-approach-direction",
             "escaped-direction",
         ],

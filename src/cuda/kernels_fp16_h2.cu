@@ -161,6 +161,9 @@ __launch_bounds__(128, 4)
   hit0.phi = 0.0f;
   hit0.redshift = 1.0f;
   hit0.min_radius = d_length(cam);
+  hit0.closest_approach_update_count = 0;
+  hit0.first_closest_approach_step = -1;
+  hit0.last_closest_approach_step = -1;
   HitResult hit1 = hit0;
 
   if (doKerr) {
@@ -202,10 +205,7 @@ __launch_bounds__(128, 4)
       /* --- Ray 0 step --- */
       if (!done0) {
         float3 const old0 = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
-        if (kr0.r < hit0.min_radius) {
-          hit0.min_radius = kr0.r;
-          hit0.closest_approach_point = old0;
-        }
+        d_record_closest_approach(hit0, kr0.r, old0, step);
 
         if (kr0.r <= rHorizon) {
           hit0.hit_horizon = true;
@@ -238,10 +238,7 @@ __launch_bounds__(128, 4)
       /* --- Ray 1 step (interleaved for dual-issue ILP) --- */
       if (!done1) {
         float3 const old1 = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
-        if (kr1.r < hit1.min_radius) {
-          hit1.min_radius = kr1.r;
-          hit1.closest_approach_point = old1;
-        }
+        d_record_closest_approach(hit1, kr1.r, old1, step);
 
         if (kr1.r <= rHorizon) {
           hit1.hit_horizon = true;
@@ -310,10 +307,7 @@ __launch_bounds__(128, 4)
         float3 const old0 = pos0;
         d_step_rk4(pos0, vel0, rs, dt);
         float const r = d_length(pos0);
-        if (r < hit0.min_radius) {
-          hit0.min_radius = r;
-          hit0.closest_approach_point = pos0;
-        }
+        d_record_closest_approach(hit0, r, pos0, step);
         if (r <= rs) {
           hit0.hit_horizon = true;
           hit0.hit_point = pos0;
@@ -339,10 +333,7 @@ __launch_bounds__(128, 4)
         float3 const old1 = pos1;
         d_step_rk4(pos1, vel1, rs, dt);
         float const r = d_length(pos1);
-        if (r < hit1.min_radius) {
-          hit1.min_radius = r;
-          hit1.closest_approach_point = pos1;
-        }
+        d_record_closest_approach(hit1, r, pos1, step);
         if (r <= rs) {
           hit1.hit_horizon = true;
           hit1.hit_point = pos1;
