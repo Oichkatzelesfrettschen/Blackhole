@@ -71,7 +71,7 @@ inline double thomsonCrossSectionCorrected(double nu, double theta) {
  *
  * kappa_T = n_e * sigma_T
  *
- * @param n_e Electron number density [cm^-3]
+ * @param nE Electron number density [cm^-3]
  * @return Thomson opacity [cm^-1]
  */
 inline double thomsonOpacity(double nE) {
@@ -95,8 +95,8 @@ inline double thomsonOpacity(double nE) {
  * where a = grain radius ~ 0.1 to 1 micron, n_d = refractive index
  *
  * @param nu Observing frequency [Hz]
- * @param grain_radius Dust grain radius [cm]
- * @param refractive_index Complex refractive index (magnitude)
+ * @param grainRadius Dust grain radius [cm]
+ * @param refractiveIndex Complex refractive index (magnitude)
  * @return Rayleigh scattering cross-section [cm^2]
  */
 inline double rayleighScattering(double nu, double grainRadius, double refractiveIndex) {
@@ -123,9 +123,9 @@ inline double rayleighScattering(double nu, double grainRadius, double refractiv
  * @brief Rayleigh scattering opacity
  *
  * @param nu Observing frequency [Hz]
- * @param grain_radius Dust grain radius [cm]
- * @param grain_density Dust grain number density [cm^-3]
- * @param refractive_index Refractive index of grain material
+ * @param grainRadius Dust grain radius [cm]
+ * @param grainDensity Dust grain number density [cm^-3]
+ * @param refractiveIndex Refractive index of grain material
  * @return Rayleigh opacity [cm^-1]
  */
 inline double rayleighOpacity(double nu, double grainRadius, double grainDensity,
@@ -147,7 +147,7 @@ inline double rayleighOpacity(double nu, double grainRadius, double grainDensity
  * where x = pi*d/lambda (size parameter), g = asymmetry parameter
  *
  * @param nu Observing frequency [Hz]
- * @param grain_radius Grain radius [cm]
+ * @param grainRadius Grain radius [cm]
  * @return Mie scattering efficiency [dimensionless, typically 0-4]
  */
 inline double mieScatteringEfficiency(double nu, double grainRadius) {
@@ -182,7 +182,7 @@ inline double mieScatteringEfficiency(double nu, double grainRadius) {
  * sigma_Mie = Q_sca * pi * a^2
  *
  * @param nu Observing frequency [Hz]
- * @param grain_radius Grain radius [cm]
+ * @param grainRadius Grain radius [cm]
  * @return Mie scattering cross-section [cm^2]
  */
 inline double mieScatteringCrossSection(double nu, double grainRadius) {
@@ -195,8 +195,8 @@ inline double mieScatteringCrossSection(double nu, double grainRadius) {
  * @brief Mie scattering opacity
  *
  * @param nu Observing frequency [Hz]
- * @param grain_radius Grain radius [cm]
- * @param grain_density Grain number density [cm^-3]
+ * @param grainRadius Grain radius [cm]
+ * @param grainDensity Grain number density [cm^-3]
  * @return Mie opacity [cm^-1]
  */
 inline double mieOpacity(double nu, double grainRadius, double grainDensity) {
@@ -212,10 +212,10 @@ inline double mieOpacity(double nu, double grainRadius, double grainDensity) {
  * @brief Single-scattering albedo
  *
  * Probability that a photon is scattered vs absorbed
- * omega = sigma_sca / (sigma_sca + sigma_abs)
+ * omega = sigmaSca / (sigmaSca + sigmaAbs)
  *
- * @param sigma_sca Scattering cross-section [cm^-1]
- * @param sigma_abs Absorption cross-section [cm^-1]
+ * @param sigmaSca Scattering cross-section [cm^-1]
+ * @param sigmaAbs Absorption cross-section [cm^-1]
  * @return Single-scattering albedo [0, 1]
  */
 inline double singleScatteringAlbedo(double sigmaSca, double sigmaAbs) {
@@ -237,9 +237,9 @@ inline double singleScatteringAlbedo(double sigmaSca, double sigmaAbs) {
  * For Thomson scattering: g ~ 0.2-0.3 (slightly forward peaked)
  * For Mie scattering: g ranges from 0 to ~0.9 depending on size
  *
- * @param scattering_type 0=Thomson, 1=Rayleigh, 2=Mie
+ * @param scatteringType 0=Thomson, 1=Rayleigh, 2=Mie
  * @param nu Observing frequency [Hz]
- * @param grain_radius Grain radius (for Mie) [cm]
+ * @param grainRadius Grain radius (for Mie) [cm]
  * @return Asymmetry parameter g [−1, 1]
  */
 inline double asymmetryParameter(int scatteringType, double nu, double grainRadius = 0.0) {
@@ -279,9 +279,9 @@ inline double asymmetryParameter(int scatteringType, double nu, double grainRadi
  * kappa_sca = kappa_T + kappa_R + kappa_Mie
  *
  * @param nu Observing frequency [Hz]
- * @param n_e Electron number density [cm^-3]
- * @param grain_radius Dust grain radius [cm]
- * @param grain_density Dust grain number density [cm^-3]
+ * @param nE Electron number density [cm^-3]
+ * @param grainRadius Dust grain radius [cm]
+ * @param grainDensity Dust grain number density [cm^-3]
  * @return Total scattering opacity [cm^-1]
  */
 inline double totalScatteringOpacity(double nu, double nE, double grainRadius,

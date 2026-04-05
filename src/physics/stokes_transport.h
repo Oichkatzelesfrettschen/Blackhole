@@ -435,6 +435,7 @@ struct FaradayPropagation {
  * @brief Verify the polarization invariant I >= sqrt(Q^2 + U^2 + V^2).
  *
  * @param s StokesVector to check
+ * @param tol Numerical slack on the invariant check
  * @return true if the polarization bound is satisfied (within tol)
  */
 [[nodiscard]] inline bool stokesPolarizationBound(const StokesVector& s,

@@ -28,7 +28,6 @@ namespace MeshOptimizer {
  * Reorders triangles to improve GPU vertex cache hit rate.
  *
  * @param indices Index buffer (modified in place)
- * @param indexCount Number of indices (must be multiple of 3)
  * @param vertexCount Number of unique vertices
  * @return true if optimization was performed
  */

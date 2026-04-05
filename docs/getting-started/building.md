@@ -104,7 +104,10 @@ cd Blackhole
 cmake --preset release
 cmake --build --preset release
 
-# 4. Run
+# 4. Generate the measured repo inventory for this build tree
+cmake --build --preset release --target repo-truth
+
+# 5. Run
 ./build/Release/Blackhole
 ```
 
@@ -217,20 +220,146 @@ rm -rf build .conan/
 | **Profiling** (perf/valgrind) | `cmake --preset profiling && cmake --build --preset profiling` |
 | **PGO** (Profile-Guided) | See PGO section below |
 
+## Product Presets
+
+The repo now exposes product-oriented presets so the desktop and bridge tracks
+can be built independently without relying on undocumented target assumptions.
+
+| Preset | Purpose | Conan install directory |
+|--------|---------|-------------------------|
+| `glsl-only` | Shared desktop UI with GLSL path only | `build/GLSL-Only/Release` |
+| `cuda-only` | Shared desktop UI with CUDA enabled | `build/CUDA-Only/Release` |
+| `blender-bridge` | Blender bridge without desktop app or benchmarks | `build/BlenderBridge/Release` |
+| `full-dev` | Shared desktop UI, CUDA, Blender bridge, tools, tests | `build/FullDev/RelWithDebInfo` |
+
+Example:
+
+```bash
+./scripts/conan_install.sh Release build/CUDA-Only/Release
+cmake --preset cuda-only
+cmake --build --preset cuda-only
+ctest --preset cuda-only
+```
+
 ## Build Options
 
 | CMake Option | Default | Description |
 |--------------|---------|-------------|
 | `ENABLE_TRACY` | OFF | Enable Tracy profiler integration |
 | `ENABLE_RMLUI` | OFF | Enable RmlUi HUD overlay |
-| `ENABLE_WERROR` | OFF | Treat warnings as errors |
+| `ENABLE_WERROR` | ON | Treat warnings as errors |
 | `ENABLE_CUDA` | OFF | Enable CUDA compute backend (SM80+) |
 | `ENABLE_EIGEN` | OFF | Enable Eigen for sparse ODE solvers |
+| `ENABLE_DESKTOP_APP` | ON | Build the shared desktop application |
+| `ENABLE_BENCHMARKS` | ON | Build benchmark executables |
+| `ENABLE_TOOLS` | ON | Build CLI/helper tools |
 
 Example:
 ```bash
 cmake --preset release -DENABLE_TRACY=ON -DENABLE_RMLUI=ON
 ```
+
+## Measured repo truth
+
+Use the generated repo-truth report whenever you need the authoritative local
+inventory for the configured build tree:
+
+```bash
+cmake --build --preset release --target repo-truth
+```
+
+This writes:
+
+- `build/<preset>/reports/repo_truth.json`
+- `build/<preset>/reports/repo_truth.md`
+
+The report captures the configured build options, `ctest -N` inventory, visible
+configure presets, key local tools, and selected system packages.
+
+It also folds in generated Blender/Octane evidence when those targets have
+been run:
+
+- `build/<preset>/reports/blender_addon_manifest.json`
+- `build/<preset>/reports/blender_bridge_abi.json`
+- `build/<preset>/reports/blender_addon_package.json`
+- `build/<preset>/reports/blender_addon_stage.json`
+- `build/<preset>/reports/blender_smoke.json`
+- `build/<preset>/reports/blender_smoke_verified.json`
+- `build/<preset>/reports/blender_interactive_benchmark.json`
+- `build/<preset>/reports/blender_interactive_benchmark_verified.json`
+- `build/<preset>/reports/octane_readiness.json`
+- `build/<preset>/reports/octane_smoke.json`
+- `build/<preset>/reports/octane_smoke_verified.json`
+
+## Blender and Octane lanes
+
+Use two different presets depending on what you are trying to validate:
+
+- `blender-bridge`: fastest way to build `libblackhole_bridge.so` and the
+  packaged addon artifact.
+- `full-dev`: simplest preset that guarantees both `ENABLE_BLENDER_BRIDGE=ON`
+  and `BUILD_TESTING=ON`, so the `ctest`-registered smoke tests exist.
+
+Bridge packaging only:
+
+```bash
+./scripts/conan_install.sh Release build/BlenderBridge/Release
+cmake --preset blender-bridge
+cmake --build --preset blender-bridge --target blackhole_bridge package-blender-addon verify-blender-addon-package verify-blender-bridge-abi stage-blender-addon
+```
+
+Smoke-tested Blender or Octane lane:
+
+```bash
+./scripts/conan_install.sh RelWithDebInfo build/FullDev/RelWithDebInfo
+cmake --preset full-dev
+cmake --build --preset full-dev --target blender-addon-smoke verify-blender-smoke-report
+ctest --preset full-dev -R "blender_bridge_abi|blender_addon_package|blender_addon_stage|blender_addon_smoke|blender_smoke_report"
+```
+
+Blender interactive benchmark lane:
+
+```bash
+cmake --build --preset full-dev --target benchmark-blender-interactive verify-blender-interactive-benchmark
+ctest --preset full-dev -R "blender_interactive_benchmark|blender_interactive_benchmark_report" --output-on-failure
+```
+
+That benchmark lane now uses the repo's isolated BlenderMCP bootstrap first,
+so the timed run starts from a saved studio scene generated through MCP rather
+than from an ad hoc factory-startup scene.
+
+For Octane:
+
+```bash
+cmake --build --preset full-dev --target probe-octane-readiness octane-addon-smoke verify-octane-smoke-report benchmark-octane-interactive verify-octane-interactive-benchmark
+ctest --preset full-dev -R "octane_readiness|octane_addon_smoke|octane_smoke_report|octane_interactive_benchmark|octane_interactive_benchmark_report" --output-on-failure
+```
+
+For the Octane tier sweep:
+
+```bash
+cmake --build --preset full-dev --target verify-octane-quality-sweep
+ctest --preset full-dev -R "octane_quality_sweep_report" --output-on-failure
+```
+
+For the harsher multi-light Octane scene:
+
+```bash
+cmake --build --preset full-dev --target verify-octane-harsh-scene
+ctest --preset full-dev -R "octane_harsh_scene_report" --output-on-failure
+```
+
+The Octane readiness probe exists because "OctaneBlender launches" and
+"headless Octane final rendering is automation-ready" are not the same state.
+If Octane still needs interactive sign-in, activation, cuDNN setup, or a live
+`OctaneServer`, the probe records that explicitly and the benchmark lane skips
+the final render with the same recorded reason.
+
+The smoke runner installs the packaged addon into an isolated temporary Blender
+user-scripts directory automatically. Interactive Blender sessions do not get
+that isolation for free; use the packaged addon zip from
+`build/<preset>/dist/blackhole_physics-addon.zip` or set
+`BLACKHOLE_BRIDGE_LIB=/absolute/path/to/libblackhole_bridge.so`.
 
 ## Profile-Guided Optimization (PGO)
 

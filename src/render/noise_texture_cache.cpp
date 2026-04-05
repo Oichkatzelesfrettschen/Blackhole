@@ -73,10 +73,18 @@ bool NoiseTextureCache::initialize() {
     }
 
 #ifdef BLACKHOLE_ENABLE_FASTNOISE2
+    // WHY: FastNoise2 SIMD GenUniformGrid3D writes beyond allocated buffer bounds at
+    // grid sizes >= 64^3, corrupting the malloc arena (SIGABRT double-free on next
+    // allocation). All four noise types trigger this. The accretion disk renders
+    // correctly from shader procedural code without these LUTs -- they are cosmetic.
+    // Re-enable once upstream FastNoise2 fixes the SIMD buffer overflow.
+    std::cout << "NoiseTextureCache: Skipping -- FastNoise2 SIMD heap corruption workaround\n";
+    return false;
+
     std::cout << "NoiseTextureCache: Initializing 3D noise LUTs..." << '\n';
 
     // ========================================================================
-    // 1. Turbulence (FractalFBm, 128³, high frequency)
+    // 1. Turbulence (FractalFBm, 128^3, high frequency)
     // ========================================================================
     {
         std::cout << "  Generating turbulence (FractalFBm, 128³)..." << std::flush;
@@ -127,19 +135,17 @@ bool NoiseTextureCache::initialize() {
 
     // ========================================================================
     // 4. Cellular (Voronoi, 64³, discrete cells)
+    //
+    // WHY skipped: FastNoise2 CellularValue::GenUniformGrid3D causes a heap
+    // double-free (SIGABRT) on some SIMD-capable builds due to internal jitter
+    // table overflow at 64^3.  The cellular texture is an aesthetic overlay on
+    // the accretion disk; the disk renders correctly without it using the
+    // turbulence and density volumes.  Re-enable once upstream is fixed.
     // ========================================================================
     {
-        std::cout << "  Generating cellular (Voronoi, 64³)..." << std::flush;
-        gen_cellular_ = std::make_unique<NoiseGenerator>(cellularPreset());
-        auto volume = gen_cellular_->generate3D(64, 64, 64);
-
-        texture_cellular_ = uploadNoiseVolume(volume);
-        if (texture_cellular_ == 0) {
-          std::cerr << "\n  ERROR: Failed to upload cellular texture" << '\n';
-          cleanup();
-          return false;
-        }
-        std::cout << " OK (" << (volume.sizeBytes() / 1024) << " KB)" << '\n';
+        std::cout << "  Skipping cellular (Voronoi) -- known FastNoise2 heap issue" << '\n';
+        texture_cellular_ = 0;
+        gen_cellular_.reset();
     }
 
     initialized_ = true;

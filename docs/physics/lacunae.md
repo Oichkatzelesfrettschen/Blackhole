@@ -376,15 +376,29 @@ precision; `Sigma/Delta` can reach `10^4 - 10^6` near the horizon, losing 4-6 di
 of mantissa. The 1e-6 relative error documented in shader headers is likely optimistic
 for rays that pass within `1.01 * r_+` of the horizon.
 
-**Fix:** Switching to Kerr-Schild (horizon-penetrating) coordinates eliminates this
-divergence. In Kerr-Schild coords the metric is analytic across the horizon:
+**Fix (PARTIAL -- 2026-03-21):** The dphi and dt equations in `shader/include/kerr.glsl`
+`kerrStep()` have been upgraded from the pure Boyer-Lindquist form (which accumulated large
+errors near the horizon via `deltaSafe = max(Delta, 1e-6)`) to outgoing Kerr-Schild
+equivalents that cancel the Delta pole for ingoing photons at r_+:
 
 ```
-g_mu_nu = eta_mu_nu + 2H * l_mu * l_nu
+dphi_KS = Lz/sin^2 - aE + a*(A + dr_dlam) / Delta   [numerator -> 0 at r_+]
+dt_KS   = [(r^2+a^2)*A + rs*r*dr_dlam] / Delta + ...
 ```
 
-where `H = Mr/Sigma` and `l_mu` is a null covector. Both are O(1) at the horizon.
-Estimated effort: ~200 LOC in integrator.glsl + verified/kerr.glsl.
+The (r, theta) equations are identical in BL and KS and were already regular.
+The `deltaSafe` clamp is still present as a float32 guard; the residual error is
+O(deltaSafe/A) per step, negligible for the integration step sizes used.
+The CUDA path (`d_kerr_step()` in `src/cuda/device_physics.cuh`) uses the same
+KS formulas and was the parity target for this fix.
+
+**Fully resolved (2026-03-21):** The rationalized form `a*Q_eff/(A+sqrtR)` is
+now implemented for the ingoing branch (sign_r < 0) in both `kerr.glsl`
+`kerrStep()` and `device_physics.cuh` `d_kerr_step()`.  No Delta in the
+denominator for ingoing rays -- exact float32 regularity at the horizon.
+Outgoing rays (post-turning-point) use the standard KS form with guarded
+inv_delta, which is numerically safe since Delta is bounded away from 0
+for outgoing rays.  Both branches agree at turning points (sqrtR = 0).
 
 > **[2023 UPDATE -- arXiv:2310.02321 -- CRITICAL CORRECTION]**
 > "Not All Spacetime Coordinates for General-Relativistic Ray Tracing Are Created
@@ -502,30 +516,34 @@ accuracy where it matters with fewer steps elsewhere.
 | Gap                                       | Type      | Priority | Effort (LOC est.) | Status |
 |-------------------------------------------|-----------|----------|--------------------|--------|
 | GRMHD solver (native)                     | Physics   | CRITICAL | 50k+ (out of scope)| Out of scope |
-| Radiative transfer (volumetric RTE)       | Physics   | HIGH     | ~10k               | Not started |
-| Polarized radiative transfer (Stokes)     | Physics   | HIGH     | ~5k                | Not started (EHT 2024 target) |
-| synchrotron G(x) fix (x~1-10 regime)     | Physics   | HIGH     | ~30                | Failing tests 3/8 (IPOLE ref) |
-| NNLO spin-orbit PN phase (3.5PN)         | Physics   | HIGH     | ~150               | Not started (Blanchet 2024) |
-| OpenGL PBO GPU upload for GRMHD           | Perf      | HIGH     | ~200               | CPU path complete; PBO pending |
-| Analytic Kerr geodesic (elliptic fns)    | Perf      | HIGH     | ~500               | Not started (Dyson 2023 ref) |
-| Outgoing Kerr-Schild coords on GPU       | Perf      | HIGH     | ~200               | Not started (arXiv:2310.02321) |
-| Compute/fragment FMA parity (Issue-009)  | Perf      | HIGH     | ~50                | Root-caused; fix pending |
+| Radiative transfer (volumetric RTE)       | Physics   | HIGH     | ~10k               | **COMPLETE** -- GLSL D2/D3 + CUDA d_trace_geodesic_rte(); 5/5 CUDA tests |
+| Polarized radiative transfer (Stokes)     | Physics   | HIGH     | ~5k                | **COMPLETE** -- GLSL D4 + CUDA d_trace_geodesic_stokes(); 6/6 CUDA tests |
+| synchrotron G(x) fix (x~1-10 regime)     | Physics   | HIGH     | ~30                | **COMPLETE** -- CPU K_{2/3} Bessel + GPU 256-entry LUT (commits 0c17b69/a5ba31f) |
+| NNLO spin-orbit PN phase (3.5PN)         | Physics   | HIGH     | ~150               | **COMPLETE** -- Blanchet 2011 TaylorF2; 3PN+3.5PN (commit fb532d5) |
+| OpenGL PBO GPU upload for GRMHD           | Perf      | HIGH     | ~200               | **COMPLETE** -- GrmhdPBOUploader + GRMHDGpuUploader; 6.2.4 |
+| Analytic Kerr geodesic (elliptic fns)    | Perf      | HIGH     | ~500               | **COMPLETE** -- analytic_kerr_geodesic.h 460 LOC; 15/15 C++ + 6/6 CUDA tests |
+| Outgoing Kerr-Schild coords on GPU       | Perf      | HIGH     | ~200               | **COMPLETE** -- kerr_schild.glsl + rationalized kerrStep/d_kerr_step; 8/8 tests |
+| Exact Kerr Carter constants init         | Perf+Phys | HIGH     | ~80                | **COMPLETE** -- kerrInitConsts/d_kerr_init_consts now solve null cond. for k^t, read E/Lz from metric, Q=ptheta^2-a^2*cos^2+Lz^2/sin^2; replaces flat-space L^2-Lz^2 approx; 70/70 tests |
+| Compute/fragment FMA parity (Issue-009)  | Perf      | HIGH     | ~50                | Root-caused; 0.0002% residual at horizon-grazing rays; strict sweep passes 12/12 |
 | Kerr QNM (spin-dependent, Berti 2009)    | Physics   | DONE     | ~200               | COMPLETE Phase 6 |
 | Spin-orbit/spin-spin GW phase coupling   | Physics   | DONE     | ~100               | COMPLETE Phase 6 |
 | GRMHD CPU async tile streaming           | Perf      | DONE     | ~800               | COMPLETE Phase 6 |
 | Dormand-Prince RK45 step control         | Perf      | DONE     | ~200               | COMPLETE Phase 6 |
-| 3+1 ADM / BSSN decomposition             | Math      | MEDIUM   | N/A (research)     | Not started |
-| Hyperboloidal foliation / CCE            | Math      | MEDIUM   | N/A (research)     | Not started |
-| Newman-Penrose / Teukolsky equation      | Math      | MEDIUM   | N/A (research)     | Not started |
-| Symplectic integrator (Yoshida)          | Math+Perf | MEDIUM   | ~300               | Not started |
-| AMR step refinement near boundaries      | Perf      | MEDIUM   | ~200               | Not started |
-| GW precessing binary (SpinTaylorT4)      | Physics   | MEDIUM   | ~300               | Not started |
+| Newman-Penrose null tetrad (Weyl Psi_2)  | Math      | DONE     | ~200               | COMPLETE -- newman_penrose.h; 12/12 tests |
+| Yoshida 4th-order symplectic integrator  | Math+Perf | DONE     | ~334               | COMPLETE -- symplectic_integrator.h; Yoshida 1990; tests pass |
+| GW memory effect (Christodoulou 1991)    | Physics   | DONE     | ~50                | COMPLETE -- gwMemoryStrain/gwMemoryDelta; 8/17 tests (D7) |
+| GW precessing binary (chi_p, D8)         | Physics   | DONE     | ~200               | COMPLETE -- chiP/precessingOpeningAngle/simplePrecessionPhase; 9/17 tests (D8) |
+| Higher GW multipoles h_lm (l=2,3,4)     | Physics   | DONE     | ~200               | COMPLETE -- gwInspiralStrainMultimode; 13/13 tests (gw_multipole) |
+| Fe K-alpha relativistic line (Laor 1991) | Physics   | DONE     | ~300               | COMPLETE -- ironKLineProfile; 10/10 tests |
+| 3+1 ADM / BSSN decomposition             | Math      | MEDIUM   | N/A (research)     | Not started -- research-only |
+| Hyperboloidal foliation / CCE            | Math      | MEDIUM   | N/A (research)     | Not started -- research-only |
+| Teukolsky equation (QNM Psi_4)          | Math      | MEDIUM   | N/A (research)     | Not started -- research-only |
+| AMR step refinement near boundaries      | Perf      | MEDIUM   | ~200               | Partial -- bhAdaptiveStep halves step near horizon; full curvature-based AMR pending |
+| SpinTaylorT4 time-domain waveform        | Physics   | MEDIUM   | ~300               | Partial -- simple precession (Apostolatos 1994) done; full coupled ODE not integrated |
 | AMReX-style LOD GRMHD streaming         | Perf      | LOW      | ~1k                | Future (AsterX 2025) |
-| Cauchy horizon dynamics / mass inflation  | Math      | LOW      | N/A (research)     | Not started |
-| GW memory effect (Christodoulou)         | Physics   | LOW      | ~50                | Not started |
-| Higher GW multipoles (l>2)               | Physics   | LOW      | ~200               | Not started |
-| EOS / matter field coupling              | Physics   | LOW      | N/A (research)     | Not started |
-| QED pair production / Schwinger limit    | Physics   | LOW      | N/A (research)     | Not started |
+| Cauchy horizon dynamics / mass inflation  | Math      | LOW      | N/A (research)     | Not started -- research-only |
+| EOS / matter field coupling              | Physics   | LOW      | N/A (research)     | Not started -- research-only |
+| QED pair production / Schwinger limit    | Physics   | LOW      | N/A (research)     | Not started -- research-only |
 
 ---
 

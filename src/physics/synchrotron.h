@@ -53,8 +53,7 @@ inline constexpr double E_CHARGE = 4.80320425e-10;
 /// Classical electron radius r_e = e^2/(m_e c^2) [cm]
 inline constexpr double R_ELECTRON = 2.8179403262e-13;
 
-/// Thomson cross section sigma_T = (8*pi/3) * r_e^2 [cm^2]
-inline constexpr double SIGMA_THOMSON = 6.6524587321e-25;
+// SIGMA_THOMSON is defined in constants.h (included above)
 
 /// Fine structure constant alpha ~ 1/137
 inline constexpr double ALPHA_FINE = 7.2973525693e-3;

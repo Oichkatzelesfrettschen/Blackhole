@@ -9,6 +9,11 @@
  *
  * Traversal: world coordinate -> cell index -> leaf node -> variables
  * Complexity: O(log N) for N total cells
+ *
+ * Phase 6.2.5: Synchrotron emission and self-absorption from GRMHD fields.
+ * Requires synchrotron_emission.glsl to be included before this file.
+ * Uniforms grmhdBGauss, grmhdNeCm3, grmhdGammaPL, grmhdGammaMin, grmhdGammaMax
+ * must be set from the CPU based on the simulation unit system.
  */
 
 #ifndef GRMHD_OCTREE_GLSL
@@ -127,6 +132,106 @@ CellData sampleOctree(vec3 coord) {
     result.B3 = 0.0;  // Placeholder: computed from divergence-free constraint
 
     return result;
+}
+
+// ============================================================================
+// Phase 6.2.5: Synchrotron Emission from GRMHD Fields
+//
+// WHY: GRMHD simulation outputs conservative variables (rho, uu, B) in code
+//      units. To compute observable synchrotron emission we need to convert
+//      to CGS, derive the electron distribution parameters, then evaluate the
+//      synchrotron functions from synchrotron_emission.glsl.
+//
+// Unit conversion uniforms (set from CPU, derived from simulation parameters):
+//   grmhdBGauss   -- B_Gauss = B_code * grmhdBGauss
+//   grmhdNeCm3    -- n_e [cm^-3] = rho_code * grmhdNeCm3
+//
+// Electron distribution (uniform across grid, set from CPU physics model):
+//   grmhdGammaPL  -- power-law index p (N(gamma) ~ gamma^-p, typically 2.5)
+//   grmhdGammaMin -- minimum Lorentz factor (default 10)
+//   grmhdGammaMax -- maximum Lorentz factor (default 1e4)
+// ============================================================================
+
+/// Magnetic field scale: sim units -> Gauss
+uniform float grmhdBGauss;
+/// Electron density scale: rho_code -> n_e [cm^-3]
+uniform float grmhdNeCm3;
+/// Power-law electron index p
+uniform float grmhdGammaPL;
+/// Minimum Lorentz factor for power-law electrons
+uniform float grmhdGammaMin;
+/// Maximum Lorentz factor for power-law electrons
+uniform float grmhdGammaMax;
+
+/**
+ * @brief Magnetic field magnitude [Gauss] from cell conservative variables.
+ *
+ * B = sqrt(B1^2 + B2^2 + B3^2) * grmhdBGauss
+ *
+ * B3 is held as 0.0 in the current octree (divergence-free reconstruction
+ * deferred). For emission the error is negligible when B1 and B2 dominate.
+ *
+ * @param cell GRMHD cell data from sampleOctree()
+ * @return Magnetic field strength [Gauss]
+ */
+float grmhdMagneticFieldGauss(CellData cell) {
+    float B2 = cell.B1 * cell.B1 + cell.B2 * cell.B2 + cell.B3 * cell.B3;
+    return sqrt(max(B2, 0.0)) * grmhdBGauss;
+}
+
+/**
+ * @brief Electron number density [cm^-3] from cell mass density.
+ *
+ * In GRMHD, rho is the rest-mass density in code units. Converting to
+ * physical CGS n_e requires the unit system and mean molecular weight:
+ *   n_e = rho_code * grmhdNeCm3
+ * where grmhdNeCm3 = rho_unit / (m_p * mu_e).
+ *
+ * @param cell GRMHD cell data from sampleOctree()
+ * @return Electron number density [cm^-3]
+ */
+float grmhdElectronDensityCm3(CellData cell) {
+    return max(cell.rho, 0.0) * grmhdNeCm3;
+}
+
+/**
+ * @brief Synchrotron emissivity from GRMHD cell at frequency nu [Hz].
+ *
+ * Integrates the power-law electron distribution N(gamma) ~ gamma^-p over
+ * the synchrotron single-electron spectrum F(x) using the function from
+ * synchrotron_emission.glsl. Result is in relative units (not absolute CGS)
+ * suitable for ray-marching emission accumulation.
+ *
+ * Returns 0 for cells with negligible magnetic field or density.
+ *
+ * @param cell GRMHD cell data from sampleOctree()
+ * @param nu   Observer frequency [Hz]
+ * @return Synchrotron specific intensity (relative units)
+ */
+float grmhdEmission(CellData cell, float nu) {
+    float B   = grmhdMagneticFieldGauss(cell);
+    float n_e = grmhdElectronDensityCm3(cell);
+    if (B < 1e-30 || n_e < 1e-30) return 0.0;
+    return synchrotron_intensity(nu, B, grmhdGammaMin, grmhdGammaMax,
+                                 grmhdGammaPL, n_e);
+}
+
+/**
+ * @brief Synchrotron self-absorption coefficient [cm^-1] from GRMHD cell.
+ *
+ * When the optical depth tau = integral(alpha * ds) exceeds ~1, the source
+ * transitions from optically thin to thick emission. This coefficient feeds
+ * into intensity_step() from radiative_transfer.glsl.
+ *
+ * @param cell GRMHD cell data from sampleOctree()
+ * @param nu   Observer frequency [Hz]
+ * @return Synchrotron absorption coefficient [cm^-1]
+ */
+float grmhdAbsorption(CellData cell, float nu) {
+    float B   = grmhdMagneticFieldGauss(cell);
+    float n_e = grmhdElectronDensityCm3(cell);
+    if (B < 1e-30 || n_e < 1e-30) return 0.0;
+    return absorption_coefficient(nu, B, n_e, grmhdGammaMin, grmhdGammaPL);
 }
 
 #endif  // GRMHD_OCTREE_GLSL

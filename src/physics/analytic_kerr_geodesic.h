@@ -392,7 +392,7 @@ struct QuarticCoeffs {
  *   xi_c(r) = (r^2 + a^2 - 2*r*Delta/Delta') / a
  *           = -(r^3 - 3r + 2a^2) / (a*(r-1))   [for M=1]
  *
- * @param r_ph Photon orbit radius [geometric units, M=1]
+ * @param rPh Photon orbit radius [geometric units, M=1]
  * @param a Spin parameter
  * @return Impact parameters {xi, eta}
  */

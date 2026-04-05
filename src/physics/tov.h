@@ -50,7 +50,7 @@ using EOS = std::function<double(double)>;
  *
  * P = K * ρ^γ
  *
- * @param K Polytropic constant [cgs]
+ * @param k Polytropic constant [cgs]
  * @param gamma Adiabatic index (>1)
  * @return EOS function
  */
@@ -162,8 +162,8 @@ struct TOVProfile {
  *
  * For polytrope: ρ = (P/K)^(1/γ)
  *
- * @param P Pressure [dyn/cm²]
- * @param K Polytropic constant
+ * @param press Pressure [dyn/cm²]
+ * @param k Polytropic constant
  * @param gamma Adiabatic index
  * @return Density [g/cm³]
  */
@@ -179,12 +179,12 @@ struct TOVProfile {
  *
  * Uses 4th-order Runge-Kutta with adaptive step size.
  *
- * @param rho_c Central density [g/cm³]
+ * @param rhoC Central density [g/cm³]
  * @param eos Equation of state P(ρ)
- * @param K Polytropic constant (for inverse EOS)
+ * @param k Polytropic constant (for inverse EOS)
  * @param gamma Adiabatic index (for inverse EOS)
- * @param dr_init Initial step size [cm]
- * @param max_steps Maximum integration steps
+ * @param drInit Initial step size [cm]
+ * @param maxSteps Maximum integration steps
  * @return TOV profile, or empty if integration fails
  */
 [[nodiscard]] inline TOVProfile integrateTov(double rhoC, const EOS &eos, double k, double gamma,

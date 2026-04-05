@@ -1,6 +1,6 @@
 # Dependency Matrix
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-03-22
 **Conan Home:** `.conan/` (repo-local, reproducible)
 **CMake Version:** 3.31+
 **Compiler:** GCC/Clang C++23
@@ -24,8 +24,10 @@
 
 | Package | Version | Purpose | Override |
 |---------|---------|---------|----------|
-| eigen | 3.4.0 | Math (physics path) | optional |
-| xsimd | 13.2.0 | SIMD vectorization | override |
+| eigen | 3.4.1 | Math (physics path) | optional |
+| xsimd | 14.0.0 | SIMD vectorization | override |
+| highway | 1.3.0 | Runtime-dispatched SIMD | - |
+| sleef | 3.9.0 | Vectorized transcendentals | - |
 | gmp | 6.3.0 | Multiprecision (validation) | - |
 | mpfr | 4.2.2 | Multiprecision (validation) | - |
 
@@ -42,7 +44,7 @@
 
 | Package | Version | Purpose | Override |
 |---------|---------|---------|----------|
-| entt | 3.15.0 | Entity-component system | - |
+| entt | 3.16.0 | Entity-component system | - |
 | pcg-cpp | cci.20220409 | Random number generation | - |
 | taskflow | 3.10.0 | Task parallelism | - |
 
@@ -50,26 +52,19 @@
 
 | Package | Version | Purpose | Override |
 |---------|---------|---------|----------|
-| spdlog | 1.16.0 | Structured logging | shared |
+| spdlog | 1.17.0 | Structured logging | shared |
 | fmt | 12.1.0 | Format strings | override, shared |
 | cli11 | 2.6.0 | Command-line parsing | - |
 | boost | 1.90.0 | Utility libraries | - |
+| nlohmann_json | 3.12.0 | JSON serialization | - |
+| gtest | 1.17.0 | Unit/integration tests | - |
 
 ### Profiling & Debug
 
 | Package | Version | Purpose | Override |
 |---------|---------|---------|----------|
 | tracy | 0.13.1 | CPU/GPU profiling | optional |
-| z3 | 4.14.1 | Constraint solver | optional |
-
-### SPIR-V Tooling (Optional)
-
-| Package | Version | Purpose | Override |
-|---------|---------|---------|----------|
-| shaderc | 2025.3 | GLSL -> SPIR-V | optional |
-| spirv-tools | 1.4.313.0 | SPIR-V optimizer | optional |
-| spirv-cross | 1.4.321.0 | SPIR-V reflection | optional |
-| spirv-headers | 1.4.313.0 | SPIR-V headers | optional |
+| z3 | 4.15.4 | Constraint solver | optional |
 
 ### Optional Features
 
@@ -77,9 +72,11 @@
 |---------|---------|---------|--------------|
 | ktx | 4.3.2 | KTX2 textures | ENABLE_KTX |
 | openimageio | 3.1.8.0 | HDR images | ENABLE_OPENIMAGEIO |
-| meshoptimizer | 0.25 | Mesh optimization | ENABLE_MESHOPTIMIZER |
+| meshoptimizer | 1.0 | Mesh optimization | ENABLE_MESHOPTIMIZER |
 | fastnoise2 | 0.10.0-alpha | Procedural noise | ENABLE_FASTNOISE2 |
 | watcher | 0.14.1 | File watching | ENABLE_SHADER_WATCHER |
+| benchmark | 1.9.4 | Microbenchmark harness | ENABLE_GOOGLE_BENCHMARK |
+| mimalloc | 2.2.4 | Allocator experiment lane | ENABLE_MIMALLOC |
 
 ---
 
@@ -88,15 +85,15 @@
 ```cmake
 option(ENABLE_KTX "Enable KTX texture support" OFF)
 option(ENABLE_OPENIMAGEIO "Enable OpenImageIO support" OFF)
-option(ENABLE_SPIRV_TOOLING "Enable SPIR-V compile/optimize/reflect" ON)
 option(ENABLE_MESHOPTIMIZER "Enable mesh optimization" ON)
 option(ENABLE_SHADER_WATCHER "Enable shader hot-reload" OFF)
 option(ENABLE_FASTNOISE2 "Enable FastNoise2" ON)
-option(ENABLE_EIGEN "Enable Eigen math backend" ON)
+option(ENABLE_EIGEN "Enable Eigen math backend" OFF)
 option(ENABLE_RMLUI "Enable RmlUi overlay" OFF)
 option(ENABLE_TRACY "Enable Tracy profiler" OFF)
 option(ENABLE_Z3 "Enable Z3 solver" OFF)
-option(ENABLE_PRECISION_TESTS "Enable GMP/MPFR tests" OFF)
+option(ENABLE_GOOGLE_BENCHMARK "Enable Google Benchmark microbench targets" OFF)
+option(ENABLE_MIMALLOC "Enable mimalloc for desktop/runtime binaries" OFF)
 ```
 
 ---
@@ -106,7 +103,9 @@ option(ENABLE_PRECISION_TESTS "Enable GMP/MPFR tests" OFF)
 | Preset | Purpose | Flags |
 |--------|---------|-------|
 | release | Production | -O3 -DNDEBUG |
+| release-mimalloc | Production allocator experiment | Release + mimalloc |
 | debug | Development | -g -O0 |
+| microbench | Lean perf lane | Release + Google Benchmark |
 | riced | Optimized debug | -O2 -g -march=native |
 | riced-asan | Address sanitizer | -fsanitize=address |
 | riced-tsan | Thread sanitizer | -fsanitize=thread |
@@ -143,7 +142,6 @@ option(ENABLE_PRECISION_TESTS "Enable GMP/MPFR tests" OFF)
 | Package | Issue | Workaround |
 |---------|-------|------------|
 | fastnoise2 | GCC overflow warnings | Suppress via system includes |
-| spirv-cross | Deprecated lambda captures | Suppress via system includes |
 | z3 | GCC 15 warnings | Keep non-fatal |
 | hdf5 | Requires shared=True | Set in default_options |
 
@@ -154,6 +152,8 @@ option(ENABLE_PRECISION_TESTS "Enable GMP/MPFR tests" OFF)
 | Tool | Version | Purpose |
 |------|---------|---------|
 | glslangValidator | System | Shader validation |
+| glslc | System | Optional shader compilation |
+| spirv-val | System | Optional shader validation |
 | perf | System | CPU profiling |
 | gcovr | System | Coverage reports |
 | clang-tidy | System | Static analysis |

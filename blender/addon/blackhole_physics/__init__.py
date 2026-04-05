@@ -9,7 +9,7 @@ bl_info = {
     "name": "Blackhole Physics",
     "author": "Blackhole Project",
     "version": (1, 0, 0),
-    "blender": (4, 3, 0),
+    "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Blackhole",
     "description": "Kerr geodesics, accretion disk, and gravitational lensing from libblackhole_bridge",
     "category": "Physics",
@@ -27,6 +27,8 @@ from . import panels
 from . import materials
 from . import assets
 from . import render_engine
+from . import quality
+from . import sd_textures  # noqa: F401 -- imported for side-effects (clear_pipeline_cache on unregister)
 
 
 classes = (
@@ -40,13 +42,26 @@ classes = (
     operators.BH_OT_ApplyPresetM87,
     operators.BH_OT_ApplyPresetSgrA,
     operators.BH_OT_SetupOctaneMaterials,
+    operators.BH_OT_ApplyStudioQuality,
     operators.BH_OT_BuildAssets,
+    operators.BH_OT_GenerateSDTexture,
+    operators.BH_OT_PrepareSceneForPolicyGeneration,
+    operators.BH_OT_GenerateDiskTextureWithPolicy,
+    operators.BH_OT_GenerateDiskTextureWithInteractivePolicy,
+    operators.BH_OT_GenerateBackgroundTextureWithPolicy,
+    operators.BH_OT_InvalidateDiskTextureArtifacts,
+    operators.BH_OT_InvalidateBackgroundTextureArtifacts,
+    operators.BH_OT_InvalidatePolicyPrerequisites,
+    operators.BH_OT_ClearSDCache,
+    operators.BH_OT_ExportGWWaveform,
     panels.BH_PT_MainPanel,
     panels.BH_PT_MetricPanel,
     panels.BH_PT_GeodesicsPanel,
     panels.BH_PT_DiskPanel,
     panels.BH_PT_TexturesPanel,
     panels.BH_PT_PresetsPanel,
+    panels.BH_PT_SDPanel,
+    panels.BH_PT_GWPanel,
     panels.BlackholeProperties,
 )
 
@@ -61,6 +76,7 @@ def register():
 
 def unregister():
     render_engine.unregister()
+    sd_textures.clear_pipeline_cache()
     bridge.unload_library()
     del bpy.types.Scene.blackhole
     for cls in reversed(classes):

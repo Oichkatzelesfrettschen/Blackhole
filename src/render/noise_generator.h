@@ -294,6 +294,10 @@ inline NoiseConfig warpedTurbulencePreset() {
 
 #else // BLACKHOLE_ENABLE_FASTNOISE2
 
+#include <cstdint>
+#include <string>
+#include <vector>
+
 namespace blackhole {
 
 // Stub implementation when FastNoise2 is disabled

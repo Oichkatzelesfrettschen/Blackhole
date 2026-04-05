@@ -157,17 +157,7 @@ struct PenroseResult {
 // Horizon Angular Velocity
 // ============================================================================
 
-/**
- * @brief Compute angular velocity of the event horizon.
- *
- * Ω_H = a/(r_+² + a²) where r_+ is outer horizon
- *
- * For a* → 1: Ω_H → c/(2M)
- *
- * @param mass Black hole mass [g]
- * @param a Spin parameter [cm]
- * @return Horizon angular velocity [rad/s]
- */
+// Penrose-process helper for the Kerr horizon angular velocity.
 [[nodiscard]] inline double horizonAngularVelocity(double mass, double a) {
   const Kerr kerr(mass, a);
   const double rPlus = kerr.outerHorizon();

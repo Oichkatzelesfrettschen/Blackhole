@@ -72,7 +72,7 @@ struct JPParams {
  * Must satisfy A1 > 0 outside the horizon for physical solutions.
  *
  * @param r Radial coordinate [geometric units]
- * @param M Geometric mass [geometric units]
+ * @param mGeo Geometric mass [geometric units]
  * @param alpha13 Deviation parameter
  * @return A1(r) value
  */
@@ -89,7 +89,7 @@ struct JPParams {
  * Modifies the rr component of the metric.
  *
  * @param r Radial coordinate [geometric units]
- * @param M Geometric mass [geometric units]
+ * @param mGeo Geometric mass [geometric units]
  * @param alpha22 Deviation parameter
  * @return A2(r) value
  */
@@ -106,7 +106,7 @@ struct JPParams {
  * Higher-order modification.
  *
  * @param r Radial coordinate [geometric units]
- * @param M Geometric mass [geometric units]
+ * @param mGeo Geometric mass [geometric units]
  * @param alpha52 Deviation parameter
  * @return A5(r) value
  */
@@ -139,7 +139,7 @@ struct JPParams {
  *
  * @param r Radial coordinate [geometric units]
  * @param theta Polar angle
- * @param M Geometric mass [geometric units]
+ * @param mGeo Geometric mass [geometric units]
  * @param a Spin parameter [geometric units]
  * @param params JP deviation parameters
  * @return {g_tt, g_rr, g_thth, g_phph, g_tph}
@@ -188,7 +188,7 @@ struct JPParams {
  *
  * where r_ph is the photon orbit radius (3M for Schwarzschild).
  *
- * @param M Geometric mass [geometric units]
+ * @param mGeo Geometric mass [geometric units]
  * @param a Spin parameter [geometric units]
  * @param alpha13 Leading deviation parameter
  * @return Fractional shadow radius change
@@ -230,7 +230,7 @@ struct JPParams {
  *
  * @param r Radial coordinate [geometric units]
  * @param theta Polar angle
- * @param M Geometric mass [geometric units]
+ * @param mGeo Geometric mass [geometric units]
  * @param a Spin parameter [geometric units]
  * @param tol Tolerance for comparison
  * @return true if JP(alpha=0) == Kerr within tolerance

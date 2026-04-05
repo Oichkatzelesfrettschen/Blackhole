@@ -74,8 +74,8 @@ struct AdvancedPlaybackState {
  *
  * @param state Playback state (modified in place)
  * @param ts Time series metadata
- * @param t_seek Target seek time
- * @param ease_frames Number of frames to ease to target (smooth seeking)
+ * @param tSeek Target seek time
+ * @param easeFrames Number of frames to ease to target (smooth seeking)
  * @return Whether seek was successful
  */
 [[nodiscard]] inline bool seekTimeline(AdvancedPlaybackState& state,
@@ -102,7 +102,7 @@ struct AdvancedPlaybackState {
  *
  * @param state Playback state
  * @param ts Time series metadata
- * @param frame_index Target frame (0-based)
+ * @param frameIndex Target frame (0-based)
  * @return Whether seek was successful
  */
 [[nodiscard]] inline bool seekToFrame(AdvancedPlaybackState& state,
@@ -266,8 +266,8 @@ inline void stepFrameBackward(AdvancedPlaybackState& state,
  *
  * @param state Playback state (modified in place)
  * @param ts Time series metadata
- * @param dt_frame Wall clock frame time in seconds
- * @param interp_time_us Time spent in interpolation (microseconds)
+ * @param dtFrame Wall clock frame time in seconds
+ * @param interpTimeUs Time spent in interpolation (microseconds)
  */
 inline void updateAdvancedPlayback(AdvancedPlaybackState& state,
                                     const TimeSeriesMetadata& ts,
@@ -356,7 +356,7 @@ inline void updateAdvancedPlayback(AdvancedPlaybackState& state,
  * @brief Add marker to timeline
  *
  * @param state Playback state (modified in place)
- * @param t_marker Marker time
+ * @param tMarker Marker time
  * @param ts Time series metadata (for bounds checking)
  * @return Whether marker was added (false if out of bounds)
  */

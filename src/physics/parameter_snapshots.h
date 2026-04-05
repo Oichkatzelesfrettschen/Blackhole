@@ -54,7 +54,7 @@ struct SnapshotHistory {
  * @param history Snapshot history (modified in place)
  * @param state Current parameter adjustment state
  * @param timestamp Time to associate with snapshot
- * @param frame_num Frame number
+ * @param frameNum Frame number
  * @return Index of created snapshot
  */
 [[nodiscard]] inline uint32_t createSnapshot(SnapshotHistory& history,
@@ -77,7 +77,7 @@ struct SnapshotHistory {
  * @brief Restore state from snapshot
  *
  * @param history Snapshot history
- * @param snapshot_idx Index of snapshot to restore
+ * @param snapshotIdx Index of snapshot to restore
  * @param state Parameter state to modify (modified in place)
  * @return Whether restoration was successful
  */
@@ -115,7 +115,7 @@ inline void clearSnapshots(SnapshotHistory& history) {
  * @brief Get timestamp of snapshot
  *
  * @param history Snapshot history
- * @param snapshot_idx Index of snapshot
+ * @param snapshotIdx Index of snapshot
  * @return Timestamp (-1 if invalid)
  */
 [[nodiscard]] inline double getSnapshotTimestamp(const SnapshotHistory& history,
@@ -131,8 +131,8 @@ inline void clearSnapshots(SnapshotHistory& history) {
 /**
  * @brief Linear interpolation of field modifier between two snapshots
  *
- * @param mod_a Modifier at time t_a
- * @param mod_b Modifier at time t_b
+ * @param modA Modifier at time t_a
+ * @param modB Modifier at time t_b
  * @param alpha Interpolation parameter [0, 1] where 0=a, 1=b
  * @return Interpolated modifier
  */
@@ -150,8 +150,8 @@ inline void clearSnapshots(SnapshotHistory& history) {
 /**
  * @brief Get interpolated parameter state between two snapshots
  *
- * @param snap_a First snapshot
- * @param snap_b Second snapshot
+ * @param snapA First snapshot
+ * @param snapB Second snapshot
  * @param t Interpolation time (should be between snapA.timestamp and snapB.timestamp)
  * @return Interpolated parameter state
  */
@@ -307,7 +307,7 @@ inline void clearSnapshots(SnapshotHistory& history) {
 /**
  * @brief Initialize snapshot history
  *
- * @param max_time Maximum time span to keep (0 = unlimited)
+ * @param maxTime Maximum time span to keep (0 = unlimited)
  * @return New SnapshotHistory
  */
 [[nodiscard]] inline SnapshotHistory createSnapshotHistory(double maxTime = 0.0) {

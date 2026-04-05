@@ -66,7 +66,7 @@ struct ParameterAdjustmentState {
 /**
  * @brief Apply field modifier to interpolated value
  *
- * @param raw_value Raw interpolated field value
+ * @param rawValue Raw interpolated field value
  * @param modifier Modifier with scale, offset, clamping
  * @return Modified field value
  */
@@ -86,7 +86,7 @@ struct ParameterAdjustmentState {
 /**
  * @brief Adjust interpolated density field
  *
- * @param raw_density Raw interpolated density
+ * @param rawDensity Raw interpolated density
  * @param state Parameter adjustment state
  * @return Adjusted density value
  */
@@ -100,7 +100,7 @@ struct ParameterAdjustmentState {
 /**
  * @brief Adjust interpolated temperature field
  *
- * @param raw_temperature Raw interpolated temperature
+ * @param rawTemperature Raw interpolated temperature
  * @param state Parameter adjustment state
  * @return Adjusted temperature value
  */
@@ -115,7 +115,7 @@ struct ParameterAdjustmentState {
 /**
  * @brief Adjust interpolated magnetic field
  *
- * @param raw_b_field Raw interpolated B-field magnitude
+ * @param rawBField Raw interpolated B-field magnitude
  * @param state Parameter adjustment state
  * @return Adjusted B-field value
  */
@@ -129,8 +129,8 @@ struct ParameterAdjustmentState {
 /**
  * @brief Adjust additional field (indexed 0-3)
  *
- * @param raw_value Raw interpolated field value
- * @param field_index Index into other_mods array (0-3)
+ * @param rawValue Raw interpolated field value
+ * @param fieldIndex Index into otherMods array (0-3)
  * @param state Parameter adjustment state
  * @return Adjusted field value
  */
@@ -152,8 +152,8 @@ struct ParameterAdjustmentState {
  * @param state Parameter adjustment state (modified in place)
  * @param scale Multiplicative scale (1.0 = unchanged)
  * @param offset Additive offset (0.0 = no offset)
- * @param min_val Minimum clamped value (-1 = no clamp)
- * @param max_val Maximum clamped value (-1 = no clamp)
+ * @param minVal Minimum clamped value (-1 = no clamp)
+ * @param maxVal Maximum clamped value (-1 = no clamp)
  */
 inline void setDensityModifier(ParameterAdjustmentState& state,
                                double scale,
@@ -172,8 +172,8 @@ inline void setDensityModifier(ParameterAdjustmentState& state,
  * @param state Parameter adjustment state (modified in place)
  * @param scale Multiplicative scale (1.0 = unchanged)
  * @param offset Additive offset (0.0 = no offset)
- * @param min_val Minimum clamped value (-1 = no clamp)
- * @param max_val Maximum clamped value (-1 = no clamp)
+ * @param minVal Minimum clamped value (-1 = no clamp)
+ * @param maxVal Maximum clamped value (-1 = no clamp)
  */
 inline void setTemperatureModifier(ParameterAdjustmentState& state,
                                    double scale,
@@ -192,8 +192,8 @@ inline void setTemperatureModifier(ParameterAdjustmentState& state,
  * @param state Parameter adjustment state (modified in place)
  * @param scale Multiplicative scale (1.0 = unchanged)
  * @param offset Additive offset (0.0 = no offset)
- * @param min_val Minimum clamped value (-1 = no clamp)
- * @param max_val Maximum clamped value (-1 = no clamp)
+ * @param minVal Minimum clamped value (-1 = no clamp)
+ * @param maxVal Maximum clamped value (-1 = no clamp)
  */
 inline void setMagneticFieldModifier(ParameterAdjustmentState& state,
                                      double scale,
@@ -290,11 +290,12 @@ inline void clearSyncGroup(SynchronizedPlaybackGroup& group) {
  *
  * @param group Synchronized group
  * @param ts Time series metadata (same for all sequences)
- * @param t_seek Target seek time
+ * @param tSeek Target seek time
  */
 inline void syncSeekAll(SynchronizedPlaybackGroup& group,
-                        const TimeSeriesMetadata& /* ts */,
+                        const TimeSeriesMetadata& ts,
                         double tSeek) {
+    static_cast<void>(ts);
     group.masterTime = tSeek;
 
     for (uint32_t i = 0; i < group.nSequences; i++) {
@@ -309,7 +310,7 @@ inline void syncSeekAll(SynchronizedPlaybackGroup& group,
  *
  * @param group Synchronized group
  * @param ts Time series metadata (for boundary checking)
- * @param dt_frame Frame time delta
+ * @param dtFrame Frame time delta
  */
 inline void syncUpdateAll(SynchronizedPlaybackGroup& group,
                           const TimeSeriesMetadata& ts,

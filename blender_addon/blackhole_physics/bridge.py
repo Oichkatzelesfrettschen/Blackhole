@@ -41,11 +41,20 @@ def _find_library():
     """Search for libblackhole_bridge.so in common locations."""
     candidates = []
 
-    # Relative to addon (if symlinked into repo)
     addon_dir = Path(__file__).parent
-    repo_root = addon_dir.parent.parent
-    candidates.append(repo_root / "build" / "Release" / "src" / "blender_bridge" / "libblackhole_bridge.so")
-    candidates.append(repo_root / "build" / "src" / "blender_bridge" / "libblackhole_bridge.so")
+    repo_root = None
+    for parent in addon_dir.parents:
+        if (parent / "CMakeLists.txt").exists() and (parent / "src" / "blender_bridge").exists():
+            repo_root = parent
+            break
+
+    if repo_root is not None:
+        candidates.extend([
+            repo_root / "build" / "Release" / "src" / "blender_bridge" / "libblackhole_bridge.so",
+            repo_root / "build" / "src" / "blender_bridge" / "libblackhole_bridge.so",
+            repo_root / "build" / "BlenderBridge" / "Release" / "src" / "blender_bridge" / "libblackhole_bridge.so",
+            repo_root / "build" / "FullDev" / "RelWithDebInfo" / "src" / "blender_bridge" / "libblackhole_bridge.so",
+        ])
 
     # System paths
     candidates.append(Path("/usr/local/lib/libblackhole_bridge.so"))
@@ -77,6 +86,10 @@ def _setup_prototypes(lib):
     lib.bhb_has_cuda.argtypes = []
     lib.bhb_has_boost.restype = ctypes.c_int
     lib.bhb_has_boost.argtypes = []
+    lib.bhb_sizeof_source_params.restype = ctypes.c_int
+    lib.bhb_sizeof_source_params.argtypes = []
+    lib.bhb_sizeof_disk_params.restype = ctypes.c_int
+    lib.bhb_sizeof_disk_params.argtypes = []
 
     # Source presets
     lib.bhb_preset_m87.restype = None
@@ -197,8 +210,51 @@ def _setup_prototypes(lib):
 
     # CUDA paths
     lib.bhb_cuda_trace_geodesics.restype = ctypes.c_int
+    lib.bhb_cuda_trace_geodesics.argtypes = [
+        ctypes.c_double, ctypes.c_double, ctypes.c_double,
+        ctypes.c_double, ctypes.c_double, ctypes.c_int,
+        ctypes.c_double, ctypes.c_double, ctypes.c_int,
+        ctypes.c_int, ctypes.c_double,
+        ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_int),
+    ]
     lib.bhb_cuda_render_lensing_map.restype = ctypes.c_int
+    lib.bhb_cuda_render_lensing_map.argtypes = [
+        ctypes.c_float, ctypes.c_float, ctypes.c_float,
+        ctypes.c_int, ctypes.c_int,
+        ctypes.POINTER(ctypes.c_float),
+    ]
     lib.bhb_cuda_render_disk_texture.restype = ctypes.c_int
+    lib.bhb_cuda_render_disk_texture.argtypes = [
+        ctypes.c_float, ctypes.c_float, ctypes.c_float,
+        ctypes.c_int, ctypes.c_int,
+        ctypes.POINTER(ctypes.c_float),
+    ]
+    lib.bhb_cuda_render_raytraced.restype = ctypes.c_int
+    lib.bhb_cuda_render_raytraced.argtypes = [
+        ctypes.c_float, ctypes.c_float, ctypes.c_float,
+        ctypes.c_int, ctypes.c_int,
+        ctypes.POINTER(ctypes.c_float),
+    ]
+    if hasattr(lib, "bhb_cuda_render_raytraced_camera"):
+        lib.bhb_cuda_render_raytraced_camera.restype = ctypes.c_int
+        lib.bhb_cuda_render_raytraced_camera.argtypes = [
+            ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float,
+            ctypes.c_int, ctypes.c_int,
+            ctypes.POINTER(ctypes.c_float),
+        ]
+
+    # Gravitational wave inspiral waveform
+    lib.bhb_gw_inspiral.restype = ctypes.c_int
+    lib.bhb_gw_inspiral.argtypes = [
+        ctypes.c_double, ctypes.c_double,  # m1_msun, m2_msun
+        ctypes.c_double, ctypes.c_double,  # a1_star, a2_star
+        ctypes.c_double, ctypes.c_double,  # dist_mpc, inc_rad
+        ctypes.c_double, ctypes.c_double,  # f_low_hz, f_high_hz
+        ctypes.c_double,                   # dt_sec
+        ctypes.POINTER(ctypes.c_double),   # out_buf (maxPoints * 5 doubles)
+        ctypes.c_int,                      # max_points
+    ]
 
 
 def try_load_library():
@@ -216,11 +272,28 @@ def try_load_library():
         v = f"{_lib.bhb_version_major()}.{_lib.bhb_version_minor()}"
         cuda = "yes" if _lib.bhb_has_cuda() else "no"
         boost = "yes" if _lib.bhb_has_boost() else "no"
+        source_size = ctypes.sizeof(BHB_SourceParams)
+        disk_size = ctypes.sizeof(BHB_DiskParams)
+        c_source_size = _lib.bhb_sizeof_source_params()
+        c_disk_size = _lib.bhb_sizeof_disk_params()
+        if c_source_size != source_size:
+            raise RuntimeError(
+                f"BHB_SourceParams layout mismatch: python={source_size} c={c_source_size}"
+            )
+        if c_disk_size != disk_size:
+            raise RuntimeError(
+                f"BHB_DiskParams layout mismatch: python={disk_size} c={c_disk_size}"
+            )
         print(f"[Blackhole] Loaded {path} v{v} (CUDA: {cuda}, Boost: {boost})")
         return True
     except OSError as e:
         print(f"[Blackhole] Failed to load {path}: {e}")
         _lib = None
+        return False
+    except RuntimeError as e:
+        print(f"[Blackhole] ABI validation failed for {path}: {e}")
+        _lib = None
+        _lib_path = None
         return False
 
 
@@ -238,6 +311,25 @@ def get_lib():
     if _lib is None:
         raise RuntimeError("libblackhole_bridge.so not loaded. Use Load Library operator first.")
     return _lib
+
+
+def get_library_path():
+    return _lib_path
+
+
+def get_version_tuple():
+    lib = get_lib()
+    return (lib.bhb_version_major(), lib.bhb_version_minor())
+
+
+def get_capabilities():
+    lib = get_lib()
+    return {
+        "cuda": bool(lib.bhb_has_cuda()),
+        "boost": bool(lib.bhb_has_boost()),
+        "source_params_size": lib.bhb_sizeof_source_params(),
+        "disk_params_size": lib.bhb_sizeof_disk_params(),
+    }
 
 
 # ============================================================================
@@ -396,3 +488,42 @@ def render_disk_texture(a_star, mass_msun, mdot_edd=0.1, r_out_rg=100.0,
     if ret != 0:
         raise RuntimeError(f"Disk texture render failed: {ret}")
     return np.array(buf, dtype=np.float32).reshape(height, width, 4)
+
+
+def compute_gw_inspiral(m1_msun, m2_msun, a1_star=0.0, a2_star=0.0,
+                        dist_mpc=100.0, inc_rad=0.0,
+                        f_low_hz=10.0, f_high_hz=2000.0, dt_sec=1.0 / 4096):
+    """Compute GW inspiral waveform using 3.5PN + NNLO spin-orbit formalism.
+
+    Returns a list of dicts, one per time step, with keys:
+        t       -- time [s]
+        f       -- GW frequency [Hz]
+        h_plus  -- plus polarization amplitude
+        h_cross -- cross polarization amplitude
+        phase   -- orbital phase [rad]
+    """
+    lib = get_lib()
+    # Allocate conservatively: (f_high - f_low) / (f_low * 1e-4) is the
+    # maximum number of frequency steps; add headroom for the time-domain buffer.
+    max_points = max(4096, int((f_high_hz - f_low_hz) / max(f_low_hz * 1e-4, 1e-10)) + 4096)
+    buf = (ctypes.c_double * (max_points * 5))()
+
+    n = lib.bhb_gw_inspiral(
+        m1_msun, m2_msun, a1_star, a2_star,
+        dist_mpc, inc_rad, f_low_hz, f_high_hz, dt_sec,
+        buf, max_points,
+    )
+    if n < 0:
+        raise RuntimeError(f"bhb_gw_inspiral failed (ret={n}): check argument ranges")
+
+    result = []
+    for i in range(n):
+        base = i * 5
+        result.append({
+            "t":       buf[base],
+            "f":       buf[base + 1],
+            "h_plus":  buf[base + 2],
+            "h_cross": buf[base + 3],
+            "phase":   buf[base + 4],
+        })
+    return result

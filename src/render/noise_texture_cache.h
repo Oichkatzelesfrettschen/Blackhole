@@ -105,12 +105,12 @@ public:
      * @brief Bind all noise textures to consecutive texture units
      *
      * Binds:
-     * - turbulence → base_unit + 0
-     * - density    → base_unit + 1
-     * - ridged     → base_unit + 2
-     * - cellular   → base_unit + 3
+     * - turbulence -> baseUnit + 0
+     * - density    -> baseUnit + 1
+     * - ridged     -> baseUnit + 2
+     * - cellular   -> baseUnit + 3
      *
-     * @param base_unit Starting texture unit (e.g., 10)
+     * @param baseUnit Starting texture unit (e.g., 10)
      */
     void bindAll(GLint baseUnit) const;
 

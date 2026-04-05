@@ -96,8 +96,8 @@ struct MADDiskParams : public DiskParams {
  *
  * Based on EHT-constrained GRMHD simulations (arXiv:2510.03602).
  *
- * @param a_star Dimensionless spin (0.94 from EHT)
- * @param M_dot_edd Accretion rate in Eddington units (low for Sgr A*)
+ * @param aStar Dimensionless spin (0.94 from EHT)
+ * @param mDotEdd Accretion rate in Eddington units (low for Sgr A*)
  * @return MADDiskParams
  */
 inline MADDiskParams sgrAStarMadDisk(double aStar = 0.94, double mDotEdd = 1e-5) {

@@ -48,7 +48,7 @@ struct GPURayBatch {
  * @brief Convert batch ray state to GPU format
  *
  * @param rays Input rays (verified::StateVector format)
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
  * @param scale Coordinate scale factor (default 1.0 for geometric units)
  * @return GPU-formatted rays with conserved quantities pre-computed
@@ -92,11 +92,11 @@ struct GPURayBatch {
  * This version uses CPU-friendly loop for validation and testing.
  *
  * @param batch Input rays
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
  * @param h Integration step size
- * @param max_steps Maximum iterations
- * @param out_states Output states after integration
+ * @param maxSteps Maximum iterations
+ * @param outStates Output states after integration
  * @return Number of successfully integrated rays
  */
 inline int traceBatchCpu(const GPURayBatch &batch, double m, double a, double h, int maxSteps,

@@ -74,7 +74,7 @@ struct HermiteCoefficients {
  * @brief Build time series metadata from dump array
  *
  * @param times Array of simulation times for each dump
- * @param n_dumps Number of dumps
+ * @param nDumps Number of dumps
  * @return TimeSeriesMetadata structure
  */
 [[nodiscard]] inline TimeSeriesMetadata buildTimeseriesMetadata(const double* times, uint32_t nDumps) {
@@ -116,7 +116,7 @@ struct HermiteCoefficients {
  * @brief Find interpolation state for given time
  *
  * @param ts Time series metadata
- * @param t_query Query time
+ * @param tQuery Query time
  * @return InterpolationState with left/right dumps and alpha
  */
 [[nodiscard]] inline InterpolationState getInterpolationState(const TimeSeriesMetadata& ts, double tQuery) {
@@ -166,8 +166,8 @@ struct HermiteCoefficients {
  * result = (1 - alpha) * f_left + alpha * f_right
  *
  * @param alpha Interpolation parameter [0, 1]
- * @param f_left Left value
- * @param f_right Right value
+ * @param fLeft Left value
+ * @param fRight Right value
  * @return Interpolated value
  */
 [[nodiscard]] inline double linearInterpolate(double alpha, double fLeft, double fRight) {
@@ -213,9 +213,9 @@ struct HermiteCoefficients {
  * @brief Interpolate scalar field value at time t
  *
  * @param ts Time series metadata
- * @param field_values Array of field values at each dump
- * @param t_query Query time
- * @param use_hermite Use Hermite spline (true) vs linear (false)
+ * @param fieldValues Array of field values at each dump
+ * @param tQuery Query time
+ * @param useHermite Use Hermite spline (true) vs linear (false)
  * @return Interpolated field value
  */
 [[nodiscard]] inline double interpolateField(const TimeSeriesMetadata& ts,
@@ -258,9 +258,9 @@ struct HermiteCoefficients {
  * @brief Advance time by dt, handling wrap-around
  *
  * @param ts Time series metadata
- * @param t_current Current time
+ * @param tCurrent Current time
  * @param dt Time step
- * @param wrap_around If true, loop from end to start; if false, clamp at end
+ * @param wrapAround If true, loop from end to start; if false, clamp at end
  * @return Advanced time
  */
 [[nodiscard]] inline double advanceTime(const TimeSeriesMetadata& ts, double tCurrent,
@@ -315,7 +315,7 @@ struct PlaybackState {
  *
  * @param ps PlaybackState (modified in place)
  * @param ts Time series metadata
- * @param dt_frame Frame time step (real time)
+ * @param dtFrame Frame time step (real time)
  */
 inline void updatePlayback(PlaybackState& ps, const TimeSeriesMetadata& ts, double dtFrame) {
     if (!ps.isPlaying) { return; }

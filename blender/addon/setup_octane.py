@@ -12,6 +12,9 @@ import bpy
 import addon_utils
 import sys
 
+
+DEFAULT_OCTANE_QUALITY_TIER = "balanced"
+
 def enable_addon(module_name):
     """Enable a Blender addon by module name."""
     try:
@@ -19,8 +22,19 @@ def enable_addon(module_name):
         print(f"[Setup] Enabled addon: {module_name}")
         return True
     except Exception as e:
-        print(f"[Setup] Failed to enable {module_name}: {e}")
-        return False
+        raise RuntimeError(
+            f"Failed to enable {module_name}. Install the packaged addon zip first "
+            "or set BLENDER_USER_SCRIPTS to a directory containing the addon."
+        ) from e
+
+
+def find_octane_engine_id():
+    available_engines = [e.bl_idname for e in bpy.types.RenderEngine.__subclasses__()]
+    print(f"[Setup] Available render engines: {available_engines}")
+    for engine_id in available_engines:
+        if "octane" in engine_id.lower():
+            return engine_id, available_engines
+    return None, available_engines
 
 
 def setup_octane_render():
@@ -29,40 +43,19 @@ def setup_octane_render():
 
     # Set render engine to Octane
     # OctaneBlender registers the engine as 'octane'
-    available_engines = [e.bl_idname for e in bpy.types.RenderEngine.__subclasses__()]
-    print(f"[Setup] Available render engines: {available_engines}")
-
-    octane_engine = None
-    for engine_id in ['octane', 'OCTANE', 'OctaneRender']:
-        if engine_id in available_engines:
-            octane_engine = engine_id
-            break
+    octane_engine, available_engines = find_octane_engine_id()
 
     if octane_engine:
         scene.render.engine = octane_engine
         print(f"[Setup] Render engine set to: {octane_engine}")
     else:
-        print("[Setup] WARNING: Octane render engine not found in this build")
-        print("[Setup] Available engines:", available_engines)
-        # Fallback to Cycles
-        if 'CYCLES' in available_engines:
-            scene.render.engine = 'CYCLES'
-            print("[Setup] Fell back to Cycles")
+        raise RuntimeError(
+            "Octane render engine not found in this build. Use stock Blender with "
+            "setup_blender5.py for the primary non-Octane lane."
+        )
 
-    # Render settings for scientific visualization
     scene.render.resolution_x = 2048
     scene.render.resolution_y = 2048
-    scene.render.film_transparent = True
-
-    # If Octane settings are available, configure them
-    if hasattr(scene, 'octane'):
-        oct = scene.octane
-        # High quality for black hole rendering
-        if hasattr(oct, 'max_samples'):
-            oct.max_samples = 4096
-        if hasattr(oct, 'kernel_type'):
-            oct.kernel_type = 'PATH_TRACING'  # Best for complex lighting
-        print("[Setup] Octane settings configured")
 
     print("[Setup] Render configuration complete")
 
@@ -98,9 +91,15 @@ def main():
 
     # Enable addons
     enable_addon("blackhole_physics")
+    from blackhole_physics import quality
 
     # Configure rendering
     setup_octane_render()
+    summary = quality.apply_studio_quality(
+        bpy.context.scene,
+        quality_tier=DEFAULT_OCTANE_QUALITY_TIER,
+    )
+    print(f"[Setup] Studio quality applied: {summary}")
     setup_world()
 
     # Save preferences
@@ -113,4 +112,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        print(f"[Setup] ERROR: {exc}")
+        raise SystemExit(1)

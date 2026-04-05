@@ -2840,6 +2840,9 @@ int main(int argc, char **argv) {
     static int bloomIterations = kMaxBloomIterations;
     static bool postProcessingSettingsLoaded = false;
     static float bloomStrength = 0.1f;
+    static float bloomThreshold = 0.4f;  // A2: was hardcoded 1.0 in shader (killed disk bloom)
+    static float bloomKnee = 0.15f;      // A3: soft knee half-width (was binary sign())
+    static float bloomTone = 1.0f;       // A6: scene weight in bloom composite (was never dispatched)
     static bool tonemappingEnabled = true;
     static float toneExposure = 1.0f;
     static float gamma = 2.5f;
@@ -3964,8 +3967,9 @@ int main(int argc, char **argv) {
       GLuint const backgroundFallback = backgroundBase != 0 ? backgroundBase : fallback2D;
       backgroundTextures.fill(backgroundFallback);
       if (!noiseTextureReady) {
-        noiseTextureReady = noiseCache.initialize();
-        if (noiseTextureReady) {
+        bool const noiseOk = noiseCache.initialize();
+        noiseTextureReady = true;  // don't retry regardless; FastNoise2 may be disabled
+        if (noiseOk) {
           texNoiseVolume = noiseCache.getTurbulenceTexture();
         }
       }
@@ -4880,6 +4884,17 @@ int main(int argc, char **argv) {
          * which does not support GL_TEXTURE_1D.  The GLSL path samples it
          * via sampler2D with y=0.5; the CUDA path uses tex2D at v=0.5. */
         if (!synchGLutCreated) {
+          // P2: Compile-time guard -- the CUDA device sampler in device_physics.cuh
+          // encodes D_SYNCH_G_X_MIN and D_SYNCH_G_LOG_RATIO as plain macros (CUDA
+          // device code cannot include synchrotron.h).  If these physics:: constants
+          // change, update D_SYNCH_G_X_MIN, D_SYNCH_G_X_MAX, and D_SYNCH_G_LOG_RATIO
+          // in device_physics.cuh, and x_min/x_max in gpu::SYNCH_G_DOMAIN (lut_texture.h).
+          static_assert(physics::SYNCH_G_LUT_X_MIN == 0.001f,
+              "SYNCH_G LUT x_min changed: update D_SYNCH_G_X_MIN and D_SYNCH_G_LOG_RATIO "
+              "in device_physics.cuh and gpu::SYNCH_G_DOMAIN in lut_texture.h");
+          static_assert(physics::SYNCH_G_LUT_X_MAX == 30.0f,
+              "SYNCH_G LUT x_max changed: update D_SYNCH_G_X_MAX and D_SYNCH_G_LOG_RATIO "
+              "in device_physics.cuh and gpu::SYNCH_G_DOMAIN in lut_texture.h");
           synchGLutCreated = true;
           constexpr int kSynchGLutSize = 256;
           std::vector<float> synchGData(static_cast<std::size_t>(kSynchGLutSize));
@@ -5463,6 +5478,8 @@ int main(int argc, char **argv) {
         rtti.targetTexture = texBrightness;
         rtti.width = renderWidth;
         rtti.height = renderHeight;
+        rtti.floatUniforms["brightPassThreshold"] = bloomThreshold;
+        rtti.floatUniforms["brightPassKnee"]      = bloomKnee;
         renderToTexture(rtti);
       }
 
@@ -5517,11 +5534,15 @@ int main(int argc, char **argv) {
 
         if (input.isUIVisible()) {
           ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
-          ImGui::SliderFloat("bloomStrength", &bloomStrength, 0.0f, 1.0f);
+          ImGui::SliderFloat("bloomStrength",  &bloomStrength, 0.0f, 1.0f);
+          ImGui::SliderFloat("bloomThreshold", &bloomThreshold, 0.0f, 2.0f);
+          ImGui::SliderFloat("bloomKnee",      &bloomKnee, 0.0f, 0.5f);
+          ImGui::SliderFloat("bloomTone",      &bloomTone, 0.0f, 2.0f);
           settings.bloomStrength = bloomStrength;
           ImGui::End();
         }
         rtti.floatUniforms["bloomStrength"] = bloomStrength;
+        rtti.floatUniforms["tone"]          = bloomTone;
 
         renderToTexture(rtti);
       }

@@ -44,9 +44,10 @@ TEST(CudaKernelLaunch, LaunchParamsSize) {
      * + 1 float (grmhd_alpha = 4) = 172   [C1d]
      * + 1 int (stokes_enabled = 4) = 176  [D4]
      * + 2 floats (stokes_b_field_angle, stokes_ne_scale = 8) = 184  [D4]
+     * + 1 float (adisk_lit = 4) = 188
      * All fields 4-byte, naturally aligned => no padding expected.
      */
-    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(184))
+    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(188))
         << "BH_LaunchParams size changed -- verify device_physics.cuh offsets"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
 }
 
@@ -88,6 +89,14 @@ TEST(CudaKernelLaunch, LaunchParamsFieldOffsets) {
 
     /* C1d: GRMHD temporal interpolation */
     EXPECT_EQ(offsetof(BH_LaunchParams, grmhd_alpha),          static_cast<std::size_t>(168)); // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
+
+    /* D4: polarized Stokes IQUV */
+    EXPECT_EQ(offsetof(BH_LaunchParams, stokes_enabled),       static_cast<std::size_t>(172));
+    EXPECT_EQ(offsetof(BH_LaunchParams, stokes_b_field_angle), static_cast<std::size_t>(176));
+    EXPECT_EQ(offsetof(BH_LaunchParams, stokes_ne_scale),      static_cast<std::size_t>(180));
+
+    /* Disk brightness */
+    EXPECT_EQ(offsetof(BH_LaunchParams, adisk_lit),            static_cast<std::size_t>(184)); // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
 }
 
 /* ========================================================================

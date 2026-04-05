@@ -1,12 +1,273 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2026-03-21
-**Status:** Active Development - All HIGH/MEDIUM lacunae resolved; 75/75 tests pass
+**Last Updated:** 2026-03-23
+**Status:** Active Development - desktop split, Blender/Octane smoke lanes, addon staging, interactive Blender benchmarking, Octane auto-launch readiness, Octane tier sweeps, Dream Textures runtime plus direct and image-conditioned addon-pipeline verification, and bridge/package/report verifiers are green locally; release-tree test count is tracked in repo truth
 **Roadmap:** See `roadmap.md` for the consolidated execution plan
 
 ---
 
 ## Recent Changes
+
+### Blender / Octane Verification Hardening (2026-03-22)
+
+- Added a dedicated Blender bridge ABI verifier:
+  - `scripts/verify_blender_bridge_abi.py`
+  - target: `verify-blender-bridge-abi`
+  - ctest: `blender_bridge_abi`
+- Added reproducible addon packaging + package verification:
+  - deterministic zip timestamps and file ordering in `scripts/package_blender_addon.py`
+  - addon manifest at `build/*/reports/blender_addon_manifest.json`
+  - package verifier `scripts/verify_blender_addon_package.py`
+  - ctest: `blender_addon_package`
+- Added a repo-local staged install path for the packaged addon:
+  - installer script `scripts/install_blender_addon.py`
+  - target: `stage-blender-addon`
+  - ctest: `blender_addon_stage`
+- Extended smoke infrastructure to emit machine-readable reports:
+  - `build/*/reports/blender_smoke.json`
+  - `build/*/reports/octane_smoke.json`
+  - paired log files under `build/*/reports/*.log`
+- Added post-smoke report verification:
+  - `scripts/verify_blender_smoke_report.py`
+  - `build/*/reports/blender_smoke_verified.json`
+  - `build/*/reports/octane_smoke_verified.json`
+  - ctests: `blender_smoke_report`, `octane_smoke_report`
+- Added the first repo-native Blender interactive benchmark lane:
+  - `scripts/run_blender_interactive_benchmark.py`
+  - `scripts/blender_interactive_benchmark_inner.py`
+  - `scripts/verify_blender_benchmark_report.py`
+  - `build/*/reports/blender_interactive_benchmark.json`
+  - `build/*/reports/blender_interactive_benchmark_verified.json`
+  - ctests: `blender_interactive_benchmark`, `blender_interactive_benchmark_report`
+- Added a shared Blender studio-quality profile:
+  - `blender/addon/blackhole_physics/quality.py`
+  - `blackhole.apply_studio_quality` operator in the addon UI
+  - setup scripts now apply the same quality profile for stock Blender and Octane
+  - smoke and benchmark reports now record studio-quality settings explicitly
+- Strengthened Blender ctypes ABI validation:
+  - filled in missing CUDA `argtypes` in `blender/addon/blackhole_physics/bridge.py`
+  - added C-side struct size exports and Python-side layout checks
+- Local integration state now verified in-repo:
+  - stock Blender smoke passes on Blender `5.2.0 Alpha`
+  - Octane smoke passes on OctaneBlender `2025.5 / Blender 4.5.5 LTS`
+  - Doxygen still builds cleanly with warnings treated as errors
+- Octane automation lane upgraded:
+  - local Arch PKGBUILDs updated to `octane-server-prime 2025.5_30.11.0-1`
+    and `octane-blender-prime 2025.5_30.11.0-1`
+  - `scripts/octane_server_util.py` now auto-launches detached `OctaneServer`
+    for readiness and benchmark runs
+  - `scripts/run_octane_readiness_probe.py` now reaches `ready` with a real
+    non-empty headless Octane render artifact
+  - `scripts/blender_interactive_benchmark_inner.py` now records pairwise
+    image-comparison metrics and diff artifacts across preview/final lanes
+  - `blender/addon/blackhole_physics/quality.py` now applies real tiered
+    Octane policies against the plugin's live properties, including
+    `adaptive_noise_threshold`, AI Light, coherent ratio, tile samples, and
+    path-tracing kernel selection
+  - `scripts/run_octane_quality_sweep.py` and
+    `scripts/verify_octane_quality_sweep.py` now benchmark and verify the
+    `interactive`, `balanced`, and `cinematic` Octane tiers end to end
+  - `scripts/blender_interactive_benchmark_inner.py` now supports a
+    `harsh_lighting` scene profile, and `verify-octane-harsh-scene` adds a
+    second Octane benchmark lane beyond the baseline scene
+  - `docs/references/bibliography.md` now serves as the running external
+    reference ledger for implementation-driving sources
+
+### Dream Textures Direct Pipeline Verification (2026-03-23)
+
+- Added a repo-native direct Dream Textures verifier:
+  - `scripts/verify_dream_textures_direct_pipeline.py`
+  - exercises the addon codepath inside stock Blender 5.2 and OctaneBlender
+  - generates a real `BlackholeDiskTexture` through the Dream Textures backend
+  - records prompt, backend, image statistics, and material-binding evidence
+- Added generated reports:
+  - `build/*/reports/dream_textures_blender_direct_verified.json`
+  - `build/*/reports/dream_textures_blender_direct_verified.md`
+  - `build/*/reports/dream_textures_blender_background_direct_verified.json`
+  - `build/*/reports/dream_textures_blender_background_direct_verified.md`
+  - `build/*/reports/dream_textures_octane_direct_verified.json`
+  - `build/*/reports/dream_textures_octane_direct_verified.md`
+  - `build/*/reports/dream_textures_octane_background_direct_verified.json`
+  - `build/*/reports/dream_textures_octane_background_direct_verified.md`
+- Added CMake/CTest coverage:
+  - targets: `verify-dream-textures-direct-blender`,
+    `verify-dream-textures-direct-blender-background`,
+    `verify-dream-textures-direct-octane`,
+    `verify-dream-textures-direct-octane-background`
+  - ctests: `dream_textures_blender_direct`,
+    `dream_textures_blender_background_direct`,
+    `dream_textures_octane_direct`,
+    `dream_textures_octane_background_direct`
+- The direct Dream Textures reports now include prompt-budget, prompt-provenance,
+  seed-policy, cache-state, asset-digest, backend-capability, and
+  world-environment binding metadata plus a replay helper path
+- `repo_truth` now ingests the direct Dream Textures reports alongside the
+  existing runtime-install evidence
+
+### Dream Textures Image Conditioning (2026-03-23)
+
+- Promoted Dream Textures `image_to_image` from a planned scaffold to a live
+  verified lane in both stock Blender 5.2 and OctaneBlender.
+- `blender/addon/blackhole_physics/sd_textures.py` now:
+  - reuses real Blackhole-generated source imagery for conditioning
+  - preserves the requested step count for conditioned SDXL Turbo runs
+  - records conditioning provenance without leaking raw arrays into JSON
+  - gates depth-conditioned lanes honestly on depth-capable model selection
+- Added conditioned verification targets and tests:
+  - `verify-dream-textures-direct-blender-conditioned`
+  - `verify-dream-textures-direct-octane-conditioned`
+  - `dream_textures_blender_conditioned_direct`
+  - `dream_textures_octane_conditioned_direct`
+- New reports:
+  - `build/*/reports/dream_textures_blender_conditioned_direct_verified.json`
+  - `build/*/reports/dream_textures_blender_conditioned_direct_verified.md`
+  - `build/*/reports/dream_textures_octane_conditioned_direct_verified.json`
+  - `build/*/reports/dream_textures_octane_conditioned_direct_verified.md`
+
+### Dream Textures Conditioning Sweeps (2026-03-23)
+
+- Added host-stable conditioning sweeps for both stock Blender 5.2 and
+  OctaneBlender:
+  - `verify-dream-textures-conditioning-sweep-blender`
+  - `verify-dream-textures-conditioning-sweep-octane`
+  - `dream_textures_blender_conditioning_sweep`
+  - `dream_textures_octane_conditioning_sweep`
+- Each sweep now:
+  - runs `none`, `image`, `depth`, and `image_depth` disk-generation modes
+  - uses a dedicated `conditioning_sweep` Dream Textures memory profile with
+    submodule CPU offload and fragmentation mitigation
+  - persists mode PNGs and diff heatmaps under `build/*/reports/..._artifacts/`
+  - records pairwise PSNR/MAE/luma-cosine comparisons in verified JSON/MD
+- Current measured outcome:
+  - Blender and OctaneBlender produce near-identical sweep statistics
+  - `image_depth` is much closer to `image` than to `depth` in PSNR on this
+    scene, which is now explicit measured evidence rather than an assumption
+
+### Dream Textures Scene-Aware Sweeps + Host Parity (2026-03-23)
+
+- Extended the conditioning sweep lane with explicit scene profiles:
+  - `baseline`
+  - `harsh_lighting`
+- Added harsh-scene verified reports:
+  - `build/*/reports/dream_textures_blender_harsh_conditioning_sweep_verified.json`
+  - `build/*/reports/dream_textures_octane_harsh_conditioning_sweep_verified.json`
+- Added host-parity verifiers:
+  - `verify-dream-textures-conditioning-parity`
+  - `verify-dream-textures-harsh-conditioning-parity`
+- Added measured parity reports:
+  - `build/*/reports/dream_textures_conditioning_baseline_parity.json`
+  - `build/*/reports/dream_textures_conditioning_harsh_parity.json`
+- Promoted the combined-lane quality floor into a build gate:
+  - `image_depth` vs `image` PSNR floor is now enforced by the sweep verifier
+  - Blender-vs-Octane host stability is now enforced by mean/PSNR/cosine
+    parity tolerances rather than manual inspection
+
+### Dream Textures Scene Policy + Trends (2026-03-23)
+
+- Added policy derivation on top of the verified scene-aware sweeps:
+  - `verify-dream-textures-conditioning-policy-blender`
+  - `verify-dream-textures-harsh-conditioning-policy-blender`
+  - `verify-dream-textures-conditioning-policy-octane`
+  - `verify-dream-textures-harsh-conditioning-policy-octane`
+- Added an aggregate cross-host trend digest:
+  - `verify-dream-textures-conditioning-trends`
+- New generated evidence:
+  - `build/*/reports/dream_textures_blender_conditioning_policy.json`
+  - `build/*/reports/dream_textures_blender_harsh_conditioning_policy.json`
+  - `build/*/reports/dream_textures_octane_conditioning_policy.json`
+  - `build/*/reports/dream_textures_octane_harsh_conditioning_policy.json`
+  - `build/*/reports/dream_textures_conditioning_trends.json`
+- Current measured recommendation:
+  - `baseline`: interactive `image`, production `image_depth`
+  - `harsh_lighting`: interactive `image`, production `image_depth`
+  - Blender and Octane agree on both scene recommendations
+- Wired those recommendations back into the addon UI as:
+  - `Auto (interactive)`
+  - `Auto (production)`
+- Added one-click slot-aware actions in the Stable Diffusion panel:
+  - `Regenerate Disk (Interactive Policy)`
+  - `Regenerate Disk (Scene Policy)`
+  - `Regenerate Background (Scene Policy)`
+  - `Prepare Scene for Policy Generation`
+  - `Invalidate Disk Texture Artifacts`
+  - `Invalidate Background Texture Artifacts`
+  - `Invalidate Policy Prerequisites`
+- Added a preparation-only policy operator and host verifiers:
+  - `blackhole.prepare_scene_for_policy_generation`
+  - `verify-dream-textures-policy-generation-blender`
+  - `verify-dream-textures-policy-generation-octane`
+- The disk quick action now auto-prepares its own prerequisites when needed:
+  - lensing map
+  - scene camera
+  - `EventHorizon`
+  - `AccretionDisk`
+- Those prerequisites are now signature-tracked so repeated policy runs can
+  reuse valid prepared inputs and only rebuild stale ones
+- Measured warm-cache evidence now exists in both hosts:
+  - `build/*/reports/dream_textures_blender_policy_generation_verified.json`
+  - `build/*/reports/dream_textures_octane_policy_generation_verified.json`
+  - current baseline warm pass: `lensing_map_reused` in both hosts
+- Added stale-refresh verification after scene mutation:
+  - `build/*/reports/dream_textures_blender_policy_stale_refresh_verified.json`
+  - `build/*/reports/dream_textures_octane_policy_stale_refresh_verified.json`
+  - current baseline -> harsh mutation refreshes the disk prerequisites instead
+    of reusing the old lensing signature
+- Added explicit prepare-only verification for:
+  - background / `none`
+  - production disk / `image_depth`
+  - both stock Blender and Octane hosts
+- Promoted the real rendered frames into stable showcase galleries with JSON
+  summaries:
+  - `build/Release/reports/blender_showcase_render.json`
+  - `build/Release/reports/octane_showcase_render.json`
+  - `build/Release/reports/blender_showcase_artifacts/baseline_final.png`
+  - `build/Release/reports/blender_showcase_artifacts/harsh_lighting_final.png`
+  - `build/Release/reports/octane_showcase_artifacts/baseline_final.png`
+  - `build/Release/reports/octane_showcase_artifacts/harsh_lighting_final.png`
+  - `build/Release/reports/octane_showcase_artifacts/baseline_native_proxy_final.png`
+  - `build/Release/reports/octane_showcase_artifacts/harsh_lighting_native_proxy_final.png`
+- Split the Octane final lane into two explicit products:
+  - `render_engine_native_final` for the pure Octane proxy scene
+  - `render_engine_final` for the synthesized CUDA backplate + Octane finishing
+    composite
+- Tightened the hybrid compositor so the CUDA render remains the true base
+  image and Octane contributes through a masked finishing pass instead of
+  darkening the whole frame
+- The Octane readiness probe is no longer allowed to suppress final benchmarking
+  when the server is actually available but the standalone preflight was merely
+  inconclusive
+- Native Octane handoff hardened further:
+  - `scripts/octane_server_util.py` now treats OctaneServer as live only when
+    `127.0.0.1:5130` is actually listening, not merely when a PID exists
+  - the mixed CUDA+Octane benchmark explicitly resets the bridge CUDA device
+    before Octane takes over, which cleared the previous mixed-lane CUDA/OOM
+    failure mode
+  - the disk proxy material now follows Octane's own converter-friendly path
+    (`ShaderNodeTexImage -> ShaderNodeEmission -> OctaneUniversalMaterial`)
+- Current measured Octane baseline benchmark truth:
+  - `bridge_cuda_preview` median frame time about `9.44 ms`, mean luma about
+    `0.0238`
+  - `render_engine_native_final` median frame time about `3666.29 ms`, mean
+    luma about `0.7449`
+  - `render_engine_final` median frame time about `3628.95 ms`, mean luma
+    about `0.7517`
+- Honest remaining gap:
+  - the native proxy is no longer black, but it still mismatches the CUDA
+    preview badly (`PSNR RGB` only about `2.64`)
+  - Octane logs still report
+    `Tex: ( Rgb32: 0, Rgb64: 0, grey8: 0, grey16: 0 )`, so direct native
+    texture ingestion is still unresolved even though the mixed lane is stable
+
+### Build Fix: SIGMA_THOMSON Redefinition + CUDA Backend Enabled (2026-03-21)
+
+- Removed duplicate `physics::SIGMA_THOMSON` from `src/physics/absorption_models.h`
+  (was also defined in `constants.h`; `inline` vs non-`inline` caused clang-diagnostic-error
+  when both headers were included in the same TU via scattering_models.h).
+- Added `#include "constants.h"` to `absorption_models.h`; aliased `SPEED_OF_LIGHT = C`
+  and `BOLTZMANN = K_B` to avoid further redefinitions.
+- Fixed `readability-math-missing-parentheses` in `stokes_invariants_test.cpp:429-430`.
+- Rebuilt with `ENABLE_CUDA=ON`: 70/70 tests pass (62 C++ + 8 CUDA kernel tests).
+- CUDA SM89+SM80, `--use_fast_math`, 4 kernel variants (FP32/FP32-coarsened/FP16/H2-ILP).
 
 ### Fe K-alpha Relativistic Line Profile (2026-03-21)
 

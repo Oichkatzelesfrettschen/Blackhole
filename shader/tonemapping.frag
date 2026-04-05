@@ -65,12 +65,14 @@ void main() {
     // Exposure trim before ACES tone mapping
     color *= exposure;
 
-    // ACES Tone Mapping
-    color = aces(color);
-
-    // Film Grain (Animated, Subtle)
+    // Film Grain: applied in linear HDR space BEFORE tonemapping so amplitude
+    // scales with the scene's exposure and is perceptually visible.
+    // Old position (after ACES clamp to [0,1]) gave only 0.25% modulation.
     float noise = random(texCoord + mod(time, 10.0));
     color += (noise - 0.5) * filmGrainStrength;
+
+    // ACES Tone Mapping
+    color = aces(color);
 
     // Gamma Correction
     color = pow(color, vec3(1.0 / gamma));

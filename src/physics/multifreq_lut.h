@@ -113,19 +113,7 @@ struct MultiFreqLut {
 // Synchrotron Emission
 // ============================================================================
 
-/**
- * @brief Compute synchrotron spectral index.
- *
- * For power-law electron distribution N(γ) ∝ γ^(-p):
- * α = (p - 1) / 2
- *
- * Typical values:
- * - Thermal: α ≈ 0.1 (flat spectrum)
- * - Non-thermal: α ≈ 0.7 (steep spectrum)
- *
- * @param p Electron power-law index
- * @return Spectral index α (F_ν ∝ ν^(-α))
- */
+// LUT helper; canonical synchrotron spectral-index docs live in synchrotron.h.
 inline double synchrotronSpectralIndex(double p = 2.5) {
   return (p - 1.0) / 2.0;
 }
@@ -139,7 +127,7 @@ inline double synchrotronSpectralIndex(double p = 2.5) {
  * where α is the spectral index.
  *
  * @param nu Frequency [Hz]
- * @param nu_ref Reference frequency [Hz] (typically 230 GHz)
+ * @param nuRef Reference frequency [Hz] (typically 230 GHz)
  * @param alpha Spectral index
  * @return Flux ratio F_ν / F_ν_ref
  */
@@ -153,8 +141,8 @@ inline double frequencyScaling(double nu, double nuRef = FREQ_230_GHZ, double al
  * τ_ν ∝ ν^(-2.1) in thermal synchrotron
  *
  * @param nu Frequency [Hz]
- * @param nu_ref Reference frequency [Hz]
- * @param tau_ref Optical depth at reference frequency
+ * @param nuRef Reference frequency [Hz]
+ * @param tauRef Optical depth at reference frequency
  * @return Optical depth τ_ν
  */
 inline double selfAbsorptionOpticalDepth(double nu, double nuRef = FREQ_230_GHZ,
@@ -167,7 +155,7 @@ inline double selfAbsorptionOpticalDepth(double nu, double nuRef = FREQ_230_GHZ,
  *
  * I_ν = I_0 (1 - exp(-τ_ν))
  *
- * @param intensity_thin Optically thin intensity
+ * @param intensityThin Optically thin intensity
  * @param tau Optical depth
  * @return Observed intensity
  */
@@ -272,9 +260,9 @@ inline double madDiskFluxAtFrequency(double r, const MADDiskParams &disk, double
  * Creates LUTs for both 230 GHz and 345 GHz.
  *
  * @param size Number of radial points
- * @param mass_solar Black hole mass in solar masses
- * @param a_star Dimensionless spin
- * @param mdot_edd Accretion rate in Eddington units
+ * @param massSolar Black hole mass in solar masses
+ * @param aStar Dimensionless spin
+ * @param mdotEdd Accretion rate in Eddington units
  * @param prograde True for prograde orbit
  * @return MultiFreqLut with both frequencies
  */

@@ -7,6 +7,7 @@
 
 import bpy
 import addon_utils
+import sys
 
 def main():
     print("\n" + "=" * 60)
@@ -18,15 +19,20 @@ def main():
         addon_utils.enable("blackhole_physics", default_set=True, persistent=True)
         print("[Setup] Enabled blackhole_physics addon")
     except Exception as e:
-        print(f"[Setup] Failed: {e}")
+        raise RuntimeError(
+            "Failed to enable blackhole_physics. Install the packaged addon zip first "
+            "or set BLENDER_USER_SCRIPTS to a directory containing the addon."
+        ) from e
+    from blackhole_physics import quality
 
     # Set Cycles as render engine (Octane not available in stock Blender)
     scene = bpy.context.scene
     scene.render.engine = 'CYCLES'
 
     # GPU compute if available
-    if hasattr(bpy.context.preferences.addons.get('cycles'), 'preferences'):
-        prefs = bpy.context.preferences.addons['cycles'].preferences
+    cycles_addon = bpy.context.preferences.addons.get('cycles')
+    if cycles_addon is not None and hasattr(cycles_addon, 'preferences'):
+        prefs = cycles_addon.preferences
         prefs.compute_device_type = 'CUDA'
         prefs.get_devices()
         for device in prefs.devices:
@@ -35,28 +41,16 @@ def main():
 
     scene.render.resolution_x = 2048
     scene.render.resolution_y = 2048
-    scene.render.film_transparent = True
-
-    # Cycles settings
-    scene.cycles.samples = 4096
-    scene.cycles.use_denoising = True
-
-    # Black world
-    world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
-    scene.world = world
-    world.use_nodes = True
-    nodes = world.node_tree.nodes
-    links = world.node_tree.links
-    nodes.clear()
-    output = nodes.new('ShaderNodeOutputWorld')
-    bg = nodes.new('ShaderNodeBackground')
-    bg.inputs['Color'].default_value = (0, 0, 0, 1)
-    bg.inputs['Strength'].default_value = 0.0
-    links.new(bg.outputs['Background'], output.inputs['Surface'])
+    summary = quality.apply_studio_quality(scene, target_engine='CYCLES')
+    print(f"[Setup] Studio quality applied: {summary}")
 
     bpy.ops.wm.save_userpref()
     print("[Setup] Blender 5.x configuration complete")
     print("=" * 60 + "\n")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        print(f"[Setup] ERROR: {exc}")
+        raise SystemExit(1)

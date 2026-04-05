@@ -61,7 +61,7 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  *   T_p / T_e = R_high * beta^2 / (1 + beta^2) + 1
  *
  * @param beta Plasma beta = P_gas / P_mag
- * @param R_high Temperature ratio parameter (1 = equal, 160 = very unequal)
+ * @param rHigh Temperature ratio parameter (1 = equal, 160 = very unequal)
  * @return T_p / T_e ratio (always >= 1)
  */
 [[nodiscard]] inline double temperatureRatio(double beta, double rHigh) {
@@ -82,7 +82,7 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  * The exact formula accounts for the two-species equation of state:
  *   T_gas = (T_p * m_e + T_e * m_p) / (m_p + m_e)
  *
- * @param T_gas Single-fluid gas temperature [K]
+ * @param tGas Single-fluid gas temperature [K]
  * @param beta Plasma beta
  * @param rHigh Temperature ratio parameter
  * @return Electron temperature T_e [K]
@@ -179,7 +179,7 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  * @param nu Observing frequency [Hz]
  * @param nE Electron density [cm^-3]
  * @param thetaElec Dimensionless electron temperature
- * @param B Magnetic field strength [Gauss]
+ * @param b Magnetic field strength [Gauss]
  * @return Emissivity j_nu [erg/s/cm^3/Hz/sr]
  */
 [[nodiscard]] inline double thermalSynchrotronEmissivity(double nu, double nE,

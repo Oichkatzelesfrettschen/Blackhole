@@ -1,18 +1,25 @@
 # Blackhole Documentation
 
-Real-time black hole rendering in OpenGL -- C++23 + OpenGL 4.6.
+Real-time black hole rendering and validation workbench with a shared desktop UI,
+GLSL and CUDA lanes, and Blender bridge integration.
 
 ## Getting Started
 
 - [Building](getting-started/building.md) -- full build guide (Conan 2.x, CMake presets, PGO)
+- [Product Matrix](getting-started/product-matrix.md) -- product presets and intended use
 - [User Guide](getting-started/user-guide.md) -- controls, presets, and runtime options
 - [Quick Reference](getting-started/quick-reference.md) -- cheat sheet
 - [Troubleshooting](getting-started/troubleshooting.md) -- common issues and fixes
 - [Requirements](getting-started/requirements.md) -- system and dependency requirements
+- [Module Requirements](requirements/index.md) -- per-product requirements for GLSL, CUDA, Blender, and Octane
 
 ## Developer Guide
 
 - [Status](developer-guide/status.md) -- current project status and active issues
+- [Repo Truth](developer-guide/repo-truth.md) -- measured build inventory and generated report
+- [Bibliography](references/bibliography.md) -- running external-reference ledger
+- [Blender Bridge Requirements](requirements/blender.md) -- bridge, addon, staging, and smoke workflows
+- [Octane Requirements](requirements/octane.md) -- optional Octane-backed Blender lane
 - [Roadmap](developer-guide/roadmap.md) -- master development roadmap
 - [Backlog](developer-guide/backlog.md) -- bug fixes and TODO items
 - [Build Optimization](developer-guide/build-optimization.md) -- compile-time optimization
@@ -20,11 +27,16 @@ Real-time black hole rendering in OpenGL -- C++23 + OpenGL 4.6.
 - [GLSL Build](developer-guide/glsl-build.md) -- shader compilation workflow
 - [Dependencies](developer-guide/dependencies.md) -- dependency matrix
 - [Perf Tooling](developer-guide/perf-tooling.md) -- profiling and benchmarking tools
+- [Dream Textures Integration](developer-guide/dream-textures-integration.md) -- disk/background texture generation policy and prompt design
+- [Dream Textures Conditioning Contract](developer-guide/dream-textures-conditioning-contract.md) -- staged image/depth inputs and future conditioning interface
+- [Octane Optimization](developer-guide/octane-optimization.md) -- tiered Octane quality/performance policy
 - [Sanitizers](developer-guide/sanitizers.md) -- ASan/TSan/UBSan workflows
 - [Compare Sweep](developer-guide/compare-sweep.md) -- compute/fragment parity sweeps
+- [API Docs](api-mainpage.md) -- Doxygen entry point for generated API documentation
 
 ## Physics
 
+- [Claims And Evidence](physics/claims-evidence.md) -- claim-by-claim local validation inventory
 - [Architecture](physics/architecture.md) -- physics module design and data flow
 - [Lacunae](physics/lacunae.md) -- structured analysis of physics/math/performance gaps
 - [Unit System](physics/unit-system.md) -- CGS/geometric/code unit alignment

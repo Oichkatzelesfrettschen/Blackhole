@@ -12,6 +12,9 @@
 #include <string>
 #include <vector>
 
+#ifdef BLACKHOLE_ENABLE_FASTNOISE2
+
+#include <FastNoise/FastNoise.h>
 #include <FastNoise/Generators/Cellular.h>
 #include <FastNoise/Generators/DomainWarp.h>
 #include <FastNoise/Generators/Fractal.h>
@@ -20,10 +23,6 @@
 #include <FastNoise/Generators/Simplex.h>
 #include <FastNoise/Generators/Value.h>
 #include <FastNoise/SmartNode.h>
-
-#ifdef BLACKHOLE_ENABLE_FASTNOISE2
-
-#include <FastNoise/FastNoise.h>
 
 namespace blackhole {
 

@@ -7,26 +7,89 @@ source "${ROOT}/scripts/conan_env.sh"
 
 # Parse arguments
 FORCE_REINSTALL=0
-BUILD_TYPE="${1:-Release}"
+CMAKE_PRESET=""
+POSITIONAL_ARGS=()
+PRESET_EXTRA_ARGS=()
 
-# Check for --force-reinstall flag
-for arg in "$@"; do
-  if [[ "$arg" == "--force-reinstall" ]]; then
-    FORCE_REINSTALL=1
-  fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force-reinstall)
+      FORCE_REINSTALL=1
+      shift
+      ;;
+    --cmake-preset|--preset)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: $1 requires a preset name" >&2
+        exit 2
+      fi
+      CMAKE_PRESET="$2"
+      shift 2
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
 done
 
-OUTPUT_DIR_REL="${2:-build}"
+PRESET_BUILD_TYPE=""
+PRESET_OUTPUT_DIR_REL=""
+if [[ -n "${CMAKE_PRESET}" ]]; then
+  case "${CMAKE_PRESET}" in
+    release)
+      PRESET_BUILD_TYPE="Release"
+      PRESET_OUTPUT_DIR_REL="build"
+      ;;
+    debug)
+      PRESET_BUILD_TYPE="Debug"
+      PRESET_OUTPUT_DIR_REL="build"
+      ;;
+    glsl-only)
+      PRESET_BUILD_TYPE="Release"
+      PRESET_OUTPUT_DIR_REL="build/GLSL-Only"
+      ;;
+    cuda-only)
+      PRESET_BUILD_TYPE="Release"
+      PRESET_OUTPUT_DIR_REL="build/CUDA-Only"
+      ;;
+    blender-bridge)
+      PRESET_BUILD_TYPE="Release"
+      PRESET_OUTPUT_DIR_REL="build/BlenderBridge"
+      ;;
+    full-dev)
+      PRESET_BUILD_TYPE="RelWithDebInfo"
+      PRESET_OUTPUT_DIR_REL="build/FullDev"
+      ;;
+    docs)
+      PRESET_BUILD_TYPE="Release"
+      PRESET_OUTPUT_DIR_REL="build/Docs"
+      ;;
+    microbench)
+      PRESET_BUILD_TYPE="Release"
+      PRESET_OUTPUT_DIR_REL="build/Microbench"
+      PRESET_EXTRA_ARGS+=(
+        "-o" "blackhole/*:enable_google_benchmark=True"
+        "-o" "blackhole/*:enable_highway=False"
+        "-c:h" "tools.build:cxxflags=['-Wno-c2y-extensions']"
+        "-c:b" "tools.build:cxxflags=['-Wno-c2y-extensions']"
+      )
+      ;;
+    release-mimalloc)
+      PRESET_BUILD_TYPE="Release"
+      PRESET_OUTPUT_DIR_REL="build/ReleaseMimalloc"
+      PRESET_EXTRA_ARGS+=("-o" "blackhole/*:enable_mimalloc=True")
+      ;;
+    *)
+      echo "ERROR: Unsupported preset '${CMAKE_PRESET}' for Conan install." >&2
+      exit 2
+      ;;
+  esac
+fi
+
+BUILD_TYPE="${POSITIONAL_ARGS[0]:-${PRESET_BUILD_TYPE:-Release}}"
+OUTPUT_DIR_REL="${POSITIONAL_ARGS[1]:-${PRESET_OUTPUT_DIR_REL:-build}}"
 OUTPUT_DIR="${ROOT}/${OUTPUT_DIR_REL}"
-shift $(( $# > 1 ? 2 : $# )) || true
-
-# Filter out --force-reinstall from extra args
-EXTRA_ARGS=()
-for arg in "$@"; do
-  if [[ "$arg" != "--force-reinstall" ]]; then
-    EXTRA_ARGS+=("$arg")
-  fi
-done
+EXTRA_ARGS=("${PRESET_EXTRA_ARGS[@]}" "${POSITIONAL_ARGS[@]:2}")
 
 # Ensure output folder is inside the repo so cache/config stays repo-local
 case "$OUTPUT_DIR" in
@@ -85,11 +148,22 @@ else
     "${EXTRA_ARGS[@]}"
 fi
 
+ROOT_USER_PRESETS="${ROOT}/CMakeUserPresets.json"
+if [[ -f "${ROOT_USER_PRESETS}" ]] && rg -q '"conan"' "${ROOT_USER_PRESETS}"; then
+  GENERATED_USER_PRESETS_DEST="${OUTPUT_DIR}/conan-generated-CMakeUserPresets.json"
+  mv "${ROOT_USER_PRESETS}" "${GENERATED_USER_PRESETS_DEST}"
+  echo "Moved Conan-generated root CMakeUserPresets.json to ${OUTPUT_DIR_REL}/conan-generated-CMakeUserPresets.json to avoid preset-name collisions."
+fi
+
 echo ""
 echo "Conan install complete."
 echo "  Dependencies cached in: .conan/"
 echo "  CMake toolchain in: ${OUTPUT_DIR_REL}/"
 echo ""
 echo "Next steps:"
-echo "  cmake --preset release   # or: cmake -B ${OUTPUT_DIR_REL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
+if [[ -n "${CMAKE_PRESET}" ]]; then
+  echo "  cmake --preset ${CMAKE_PRESET}"
+else
+  echo "  cmake --preset release   # or: cmake -B ${OUTPUT_DIR_REL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
+fi
 echo "  cmake --build ${OUTPUT_DIR_REL}"

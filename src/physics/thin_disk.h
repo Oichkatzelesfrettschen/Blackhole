@@ -315,15 +315,7 @@ inline void diskPeakTemperature(const DiskParams &disk, double &tMax, double &rP
 // Disk Spectrum
 // ============================================================================
 
-/**
- * @brief Compute Planck function at temperature T.
- *
- * B_nu(T) = (2h nu^3/c^2) / (exp(h*nu/kT) - 1)
- *
- * @param nu Frequency [Hz]
- * @param T Temperature [K]
- * @return Specific intensity [erg/(s cm^2 Hz sr)]
- */
+// Thin-disk-local blackbody helper; canonical Doxygen entry lives in rte_integrator.h.
 [[nodiscard]] inline double planckFunction(double nu, double tempK) {
   if (tempK <= 0 || nu <= 0) {
     return 0.0;

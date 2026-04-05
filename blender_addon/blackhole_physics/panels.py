@@ -98,6 +98,100 @@ class BlackholeProperties(bpy.types.PropertyGroup):
         description="Use GPU-accelerated paths when available",
     )
 
+    # Gravitational wave inspiral parameters
+    gw_m1_msun: FloatProperty(
+        name="M1 (Msun)", default=30.0, min=0.1, soft_max=1000.0,
+        description="Primary compact object mass [solar masses]",
+    )
+    gw_m2_msun: FloatProperty(
+        name="M2 (Msun)", default=25.0, min=0.1, soft_max=1000.0,
+        description="Secondary compact object mass [solar masses]",
+    )
+    gw_a1_star: FloatProperty(
+        name="a1*", default=0.0, min=0.0, max=0.9999, step=1, precision=4,
+        description="Primary dimensionless spin [0, 1)",
+    )
+    gw_a2_star: FloatProperty(
+        name="a2*", default=0.0, min=0.0, max=0.9999, step=1, precision=4,
+        description="Secondary dimensionless spin [0, 1)",
+    )
+    gw_dist_mpc: FloatProperty(
+        name="Distance (Mpc)", default=100.0, min=0.01, soft_max=10000.0,
+        description="Luminosity distance [Mpc]",
+    )
+    gw_inclination_deg: FloatProperty(
+        name="Inclination (deg)", default=0.0, min=0.0, max=90.0,
+        description="Orbital inclination from line of sight [deg]",
+    )
+    gw_f_low: FloatProperty(
+        name="f_low (Hz)", default=10.0, min=0.1, max=1000.0,
+        description="Start frequency for waveform integration [Hz]",
+    )
+    gw_f_high: FloatProperty(
+        name="f_high (Hz)", default=2000.0, min=10.0, max=8000.0,
+        description="End frequency (typically near ISCO) [Hz]",
+    )
+    gw_dt: FloatProperty(
+        name="dt (s)", default=1.0 / 4096, min=1e-5, max=0.1, precision=6,
+        description="Time step for waveform output [s]",
+    )
+
+    # Stable Diffusion texture generation
+    sd_model_path: StringProperty(
+        name="SD Model",
+        description=(
+            "Path to a .gguf model file (used with the sd_cpp backend) or a "
+            "HuggingFace model ID such as 'stabilityai/stable-diffusion-2-1' "
+            "(used with the diffusers backend)"
+        ),
+        default="",
+        subtype='FILE_PATH',
+    )
+    sd_target_slot: EnumProperty(
+        name="Target Slot",
+        description="Which Blender image / LUT slot receives the generated texture",
+        items=[
+            ("disk",       "Disk Emission",   "Replace 'BlackholeDiskTexture' (emission LUT, BhLutSlot 0)"),
+            ("background", "Background",       "Replace the world environment texture (Galaxy / starfield)"),
+        ],
+        default="disk",
+    )
+    sd_backend: EnumProperty(
+        name="Backend",
+        description="Inference backend to use for SD generation",
+        items=[
+            ("auto",      "Auto",             "sd_cpp for .gguf paths, diffusers otherwise"),
+            ("sd_cpp",    "sd.cpp (CUBLAS)",  "stable-diffusion.cpp subprocess -- zero CUDA conflict"),
+            ("diffusers", "diffusers (HF)",   "python-diffusers in-process -- requires diffusers+torch in Blender Python"),
+        ],
+        default="auto",
+    )
+    sd_prompt_prefix: StringProperty(
+        name="Prompt Prefix",
+        description="Optional text prepended to the auto-generated physics prompt",
+        default="",
+    )
+    sd_negative_prompt: StringProperty(
+        name="Negative Prompt",
+        description="SD negative prompt (leave empty for default)",
+        default="",
+    )
+    sd_steps: IntProperty(
+        name="Steps",
+        description="Number of diffusion denoising steps (higher = better quality, slower)",
+        default=25, min=5, max=150,
+    )
+    sd_seed: IntProperty(
+        name="Seed",
+        description="Random seed for reproducible generation (-1 for random)",
+        default=42, min=-1, max=2147483647,
+    )
+    sd_guidance_scale: FloatProperty(
+        name="Guidance Scale",
+        description="CFG guidance scale (diffusers backend only; higher = closer to prompt)",
+        default=7.5, min=1.0, max=20.0, step=5, precision=1,
+    )
+
 
 class BH_PT_MainPanel(bpy.types.Panel):
     bl_label = "Blackhole Physics"
@@ -125,6 +219,7 @@ class BH_PT_MainPanel(bpy.types.Panel):
         # Render engine info
         engine = context.scene.render.engine
         layout.label(text=f"Render: {engine}", icon='SCENE')
+        layout.operator("blackhole.apply_studio_quality", icon='SHADING_RENDERED')
 
 
 class BH_PT_MetricPanel(bpy.types.Panel):
@@ -251,3 +346,135 @@ class BH_PT_PresetsPanel(bpy.types.Panel):
 
         layout.separator()
         layout.operator("blackhole.build_assets", icon='ASSET_MANAGER')
+
+
+class BH_PT_SDPanel(bpy.types.Panel):
+    """Stable Diffusion texture generation panel.
+
+    WHY: Exposes the SD backends and physics-conditioned prompt controls in the
+    Blackhole sidebar so users can generate and iterate on astrophysical textures
+    without leaving Blender.
+
+    The generated image replaces the target Blender image in-place (same name), so
+    existing material nodes and LUT bindings update automatically on the next render.
+    """
+
+    bl_label = "Stable Diffusion"
+    bl_idname = "BH_PT_sd"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Blackhole"
+    bl_parent_id = "BH_PT_main"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.blackhole
+
+        from . import sd_textures
+
+        # Model configuration
+        col = layout.column(align=True)
+        col.label(text="Model:", icon='FILE_CACHE')
+        col.prop(props, "sd_model_path", text="")
+        col.prop(props, "sd_backend")
+
+        layout.separator()
+
+        # Target
+        layout.prop(props, "sd_target_slot")
+
+        # Generation parameters
+        box = layout.box()
+        box.label(text="Generation Parameters:", icon='SETTINGS')
+        col = box.column(align=True)
+        col.prop(props, "sd_steps")
+        col.prop(props, "sd_seed")
+        col.prop(props, "sd_guidance_scale")
+
+        # Prompt controls
+        box2 = layout.box()
+        box2.label(text="Prompt:", icon='TEXT')
+        box2.prop(props, "sd_prompt_prefix", text="Prefix")
+        box2.prop(props, "sd_negative_prompt", text="Negative")
+
+        # Show the auto-generated prompt for inspection
+        if props.sd_model_path.strip():
+            try:
+                preview = sd_textures.build_prompt(props)
+                box2.label(text="Preview:", icon='VIEWZOOM')
+                # Wrap long prompts over multiple label lines (Blender has no word wrap)
+                _draw_wrapped_text(box2, preview, max_chars=48)
+            except Exception:
+                pass
+
+        layout.separator()
+
+        # Available backends status
+        backends = sd_textures.available_backends()
+        row = layout.row(align=True)
+        row.label(
+            text="sd.cpp: " + ("ready" if "sd_cpp" in backends else "not found"),
+            icon='CHECKMARK' if "sd_cpp" in backends else 'X',
+        )
+        row.label(
+            text="diffusers: " + ("ready" if "diffusers" in backends else "not found"),
+            icon='CHECKMARK' if "diffusers" in backends else 'X',
+        )
+
+        layout.separator()
+        layout.operator("blackhole.generate_sd_texture", icon='RENDER_STILL')
+        layout.operator("blackhole.clear_sd_cache", icon='TRASH')
+
+
+class BH_PT_GWPanel(bpy.types.Panel):
+    """Gravitational wave inspiral waveform export."""
+
+    bl_label = "Gravitational Waves"
+    bl_idname = "BH_PT_gw"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Blackhole"
+    bl_parent_id = "BH_PT_main"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.blackhole
+
+        box = layout.box()
+        box.label(text="Binary Parameters:", icon='FORCE_HARMONIC')
+        col = box.column(align=True)
+        row = col.row(align=True)
+        row.prop(props, "gw_m1_msun")
+        row.prop(props, "gw_m2_msun")
+        row = col.row(align=True)
+        row.prop(props, "gw_a1_star")
+        row.prop(props, "gw_a2_star")
+        col.prop(props, "gw_dist_mpc")
+        col.prop(props, "gw_inclination_deg")
+
+        box2 = layout.box()
+        box2.label(text="Waveform Parameters:", icon='FCURVE')
+        col2 = box2.column(align=True)
+        row2 = col2.row(align=True)
+        row2.prop(props, "gw_f_low")
+        row2.prop(props, "gw_f_high")
+        col2.prop(props, "gw_dt")
+
+        layout.operator("blackhole.export_gw_waveform", icon='EXPORT')
+
+
+def _draw_wrapped_text(layout, text: str, max_chars: int = 48) -> None:
+    """Draw long text wrapped across multiple label lines."""
+    words = text.split()
+    line = ""
+    for word in words:
+        candidate = f"{line} {word}".strip()
+        if len(candidate) > max_chars and line:
+            layout.label(text=line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        layout.label(text=line)

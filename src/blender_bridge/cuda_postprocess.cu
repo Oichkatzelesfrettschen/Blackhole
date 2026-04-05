@@ -150,7 +150,7 @@ __global__ void bloom_composite(float4* __restrict__ base, const float4* __restr
 
 /**
  * @brief Combined tonemapping kernel: exposure -> ACES filmic -> chromatic aberration
- *        -> vignette -> film grain -> gamma 2.2.
+ *        -> vignette -> gamma 2.2.
  *
  * Matches shader/tonemapping.frag exactly. All operations are in-place on @p fb.
  *
@@ -173,7 +173,7 @@ __global__ void tonemap_kernel(float4* __restrict__ fb, int w, int h,
     float dist = sqrtf((u - 0.5f) * (u - 0.5f) + (v - 0.5f) * (v - 0.5f));
 
     /* Chromatic aberration */
-    float caStrength = 0.002f * dist;
+    float caStrength = 0.0f;
     float2 dir = make_float2(u - 0.5f, v - 0.5f);
     int rx = min(max((int)((u - dir.x * caStrength) * w), 0), w - 1);
     int ry = min(max((int)((v - dir.y * caStrength) * h), 0), h - 1);
@@ -203,13 +203,6 @@ __global__ void tonemap_kernel(float4* __restrict__ fb, int w, int h,
     color.x = fminf(fmaxf((color.x * (a * color.x + bb)) / (color.x * (c * color.x + d) + e), 0.0f), 1.0f);
     color.y = fminf(fmaxf((color.y * (a * color.y + bb)) / (color.y * (c * color.y + d) + e), 0.0f), 1.0f);
     color.z = fminf(fmaxf((color.z * (a * color.z + bb)) / (color.z * (c * color.z + d) + e), 0.0f), 1.0f);
-
-    /* Film grain */
-    float grainStrength = 0.005f;
-    float noise = fmodf(fabsf(sinf((float)px * 12.9898f + (float)py * 78.233f + time_sec) * 43758.5453f), 1.0f);
-    color.x += (noise - 0.5f) * grainStrength;
-    color.y += (noise - 0.5f) * grainStrength;
-    color.z += (noise - 0.5f) * grainStrength;
 
     /* Gamma */
     float gamma = 1.0f / 2.2f;

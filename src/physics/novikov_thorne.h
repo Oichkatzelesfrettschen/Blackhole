@@ -45,7 +45,7 @@ public:
      *
      * where E_ISCO is specific energy at ISCO radius.
      *
-     * @param a_star Dimensionless spin parameter (-1 ≤ a* ≤ 1)
+     * @param aStar Dimensionless spin parameter (-1 <= a* <= 1)
      * @return Radiative efficiency (0 < η < 0.42)
      *
      * Validation:
@@ -75,7 +75,7 @@ public:
     /**
      * @brief Compute ISCO radius for Kerr black hole
      *
-     * @param a_star Dimensionless spin parameter
+     * @param aStar Dimensionless spin parameter
      * @return ISCO radius in units of M
      */
   static constexpr double iscoRadius(double aStar) noexcept {
@@ -97,9 +97,9 @@ public:
      * where f(r) is the radial emissivity function.
      *
      * @param r Radius in units of M
-     * @param a_star Dimensionless spin parameter
-     * @param mdot_edd Accretion rate as fraction of Eddington
-     * @param mass_solar Black hole mass in solar masses
+     * @param aStar Dimensionless spin parameter
+     * @param mdotEdd Accretion rate as fraction of Eddington
+     * @param massSolar Black hole mass in solar masses
      * @return Temperature in Kelvin
      */
   static double diskTemperature(double r, double aStar, double mdotEdd, double massSolar) noexcept {
@@ -143,9 +143,9 @@ public:
      * @brief Compute disk flux (energy per unit area per unit time)
      *
      * @param r Radius in units of M
-     * @param a_star Dimensionless spin parameter
-     * @param mdot_edd Accretion rate as fraction of Eddington
-     * @param mass_solar Black hole mass in solar masses
+     * @param aStar Dimensionless spin parameter
+     * @param mdotEdd Accretion rate as fraction of Eddington
+     * @param massSolar Black hole mass in solar masses
      * @return Flux in erg cm⁻² s⁻¹
      */
   static double diskFlux(double r, double aStar, double mdotEdd, double massSolar) noexcept {
@@ -160,7 +160,7 @@ public:
      * Returns flux normalized to peak value for efficient texture sampling.
      *
      * @param r Radius in units of M
-     * @param a_star Dimensionless spin parameter
+     * @param aStar Dimensionless spin parameter
      * @return Normalized flux (0 ≤ F ≤ 1)
      */
   static double normalizedFlux(double r, double aStar) noexcept {
@@ -188,7 +188,7 @@ public:
      *
      * Temperature peaks at r ≈ 1.5 * r_ISCO (Page & Thorne 1974)
      *
-     * @param a_star Dimensionless spin parameter
+     * @param aStar Dimensionless spin parameter
      * @return Radius of peak temperature in units of M
      */
   static double peakTemperatureRadius(double aStar) noexcept { return 1.5 * iscoRadius(aStar); }
@@ -198,9 +198,9 @@ public:
    *
    * L = η * Mdot * c²
    *
-   * @param mdot_edd Accretion rate as fraction of Eddington
-   * @param a_star Dimensionless spin parameter
-   * @param mass_solar Black hole mass in solar masses
+   * @param mdotEdd Accretion rate as fraction of Eddington
+   * @param aStar Dimensionless spin parameter
+   * @param massSolar Black hole mass in solar masses
    * @return Luminosity in erg/s
    */
   static double integratedLuminosity(double mdotEdd, double aStar, double massSolar) noexcept {

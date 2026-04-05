@@ -19,7 +19,10 @@ uniform sampler2D texture0;
 uniform sampler2D texture1;
 
 void main() {
-  vec2 inputTexelSize = 1.0 / resolution * 0.5;
+  // Offset must reach ±0.5 input texels. Input is half the output resolution,
+  // so one input texel = 2/resolution in UV. Half of that = 1/resolution.
+  // The old *0.5 gave ±0.25 input texels -- all four taps hit the same texel.
+  vec2 inputTexelSize = 1.0 / resolution;
   vec4 o = inputTexelSize.xyxy * vec4(-1.0, -1.0, 1.0, 1.0); // Offset
   fragColor =
       0.25 * (texture(texture0, uv + o.xy) + texture(texture0, uv + o.zy) +

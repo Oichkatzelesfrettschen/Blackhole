@@ -8,17 +8,16 @@
 # WHAT: BlackholeRenderEngine registered as 'BLACKHOLE_RT'. Implements render()
 #       for final frames and view_draw() for viewport preview.
 #
-# HOW: ctypes calls to libblackhole_bridge.so -> bh_launch_geodesic_kernel.
+# HOW: ctypes calls to libblackhole_bridge.so -> bhb_cuda_render_raytraced.
 
 import bpy
 import ctypes as ct
 import numpy as np
-import math
 import gpu
 from gpu_extras.batch import batch_for_shader
-from mathutils import Matrix
 
 from . import bridge
+from .camera_mapping import observer_params_from_blender_position
 
 
 # ============================================================================
@@ -26,87 +25,60 @@ from . import bridge
 # ============================================================================
 
 class CUDARenderer:
-    """Manages CUDA framebuffer allocation and kernel dispatch."""
-
-    # BH_LaunchParams struct matching kernel_launch.h
-    class BH_LaunchParams(ct.Structure):
-        _fields_ = [
-            ('rs', ct.c_float), ('spin', ct.c_float), ('isco', ct.c_float),
-            ('step_size', ct.c_float), ('fov_scale', ct.c_float), ('max_dist', ct.c_float),
-            ('cam_pos', ct.c_float * 3), ('cam_basis', ct.c_float * 9),
-            ('max_steps', ct.c_int), ('width', ct.c_int), ('height', ct.c_int),
-            ('adisk_enabled', ct.c_int), ('redshift_enabled', ct.c_int),
-            ('kerr_enabled', ct.c_int), ('use_luts', ct.c_int),
-            ('lut_radius_min', ct.c_float), ('lut_radius_max', ct.c_float),
-            ('redshift_radius_min', ct.c_float), ('redshift_radius_max', ct.c_float),
-            ('spectral_radius_min', ct.c_float), ('spectral_radius_max', ct.c_float),
-            ('time_sec', ct.c_float), ('doppler_strength', ct.c_float),
-            ('background_intensity', ct.c_float), ('background_enabled', ct.c_int),
-        ]
+    """Manages ray-traced dispatch through the public Blender bridge ABI."""
 
     def __init__(self):
-        self._cuda_rt = None
         self._lib = None
-        self._d_fb = None
-        self._fb_w = 0
-        self._fb_h = 0
 
     def _ensure_cuda(self):
-        if self._cuda_rt is None:
-            self._cuda_rt = ct.CDLL("libcudart.so")
-            self._cuda_rt.cudaMalloc.restype = ct.c_int
-            self._cuda_rt.cudaMalloc.argtypes = [ct.POINTER(ct.c_void_p), ct.c_size_t]
-            self._cuda_rt.cudaMemcpy.restype = ct.c_int
-            self._cuda_rt.cudaFree.restype = ct.c_int
-            self._cuda_rt.cudaDeviceSynchronize.restype = ct.c_int
-            self._cuda_rt.cudaMemset.restype = ct.c_int
         if self._lib is None:
             self._lib = bridge.get_lib()
-            self._lib.bh_launch_geodesic_kernel.restype = ct.c_int
-            self._lib.bh_launch_geodesic_kernel.argtypes = [
-                ct.c_void_p, ct.POINTER(self.BH_LaunchParams), ct.c_int, ct.c_void_p
-            ]
-            self._lib.bh_select_kernel_variant.restype = ct.c_int
-
-    def _ensure_framebuffer(self, w, h):
-        if self._d_fb is not None and self._fb_w == w and self._fb_h == h:
-            return
-        self._free_framebuffer()
-        self._d_fb = ct.c_void_p()
-        self._cuda_rt.cudaMalloc(ct.byref(self._d_fb), w * h * 16)
-        self._fb_w = w
-        self._fb_h = h
-
-    def _free_framebuffer(self):
-        if self._d_fb is not None and self._d_fb.value:
-            self._cuda_rt.cudaFree(self._d_fb)
-            self._d_fb = None
 
     def render(self, params, w, h):
         """Launch kernel and return (h, w, 4) float32 numpy array."""
         self._ensure_cuda()
-        self._ensure_framebuffer(w, h)
-        self._cuda_rt.cudaMemset(self._d_fb, 0, w * h * 16)
-
-        params.width = w
-        params.height = h
-
-        variant = self._lib.bh_select_kernel_variant()
-        ret = self._lib.bh_launch_geodesic_kernel(
-            self._d_fb, ct.byref(params), variant, None
-        )
+        host = np.zeros((h, w, 4), dtype=np.float32)
+        if (
+            hasattr(self._lib, "bhb_cuda_render_raytraced_view")
+            and "cam_pos" in params
+            and "cam_basis" in params
+        ):
+            cam_pos = np.asarray(params["cam_pos"], dtype=np.float32)
+            cam_basis = np.asarray(params["cam_basis"], dtype=np.float32)
+            ret = self._lib.bhb_cuda_render_raytraced_view(
+                float(params["spin"]),
+                cam_pos.ctypes.data_as(ct.POINTER(ct.c_float)),
+                cam_basis.ctypes.data_as(ct.POINTER(ct.c_float)),
+                float(params["fov_scale"]),
+                w,
+                h,
+                host.ctypes.data_as(ct.POINTER(ct.c_float)),
+            )
+        elif hasattr(self._lib, "bhb_cuda_render_raytraced_camera"):
+            ret = self._lib.bhb_cuda_render_raytraced_camera(
+                float(params["spin"]),
+                float(params["observer_r"]),
+                float(params["inclination_rad"]),
+                float(params["fov_scale"]),
+                w,
+                h,
+                host.ctypes.data_as(ct.POINTER(ct.c_float)),
+            )
+        else:
+            ret = self._lib.bhb_cuda_render_raytraced(
+                float(params["spin"]),
+                float(params["observer_r"]),
+                float(params["inclination_rad"]),
+                w,
+                h,
+                host.ctypes.data_as(ct.POINTER(ct.c_float)),
+            )
         if ret != 0:
-            raise RuntimeError(f"CUDA kernel launch failed: {ret}")
-
-        self._cuda_rt.cudaDeviceSynchronize()
-
-        host = (ct.c_float * (w * h * 4))()
-        self._cuda_rt.cudaMemcpy(host, self._d_fb, w * h * 16, 2)  # D2H
-
-        return np.array(host, dtype=np.float32).reshape(h, w, 4)
+            raise RuntimeError(f"Bridge ray-traced render failed: {ret}")
+        return host
 
     def cleanup(self):
-        self._free_framebuffer()
+        self._lib = None
 
 
 # Singleton renderer
@@ -114,85 +86,50 @@ _renderer = CUDARenderer()
 
 
 def _blender_camera_to_params(scene, depsgraph):
-    """Convert Blender camera + scene properties to BH_LaunchParams."""
-    params = CUDARenderer.BH_LaunchParams()
+    """Convert Blender camera + scene properties to bridge render parameters."""
+    params = {
+        "spin": 0.0,
+        "observer_r": 15.0,
+        "inclination_rad": 0.0,
+        "fov_scale": 1.0,
+    }
 
     # Black hole parameters from scene properties
     props = scene.blackhole
     a_star = props.spin
 
-    params.rs = 1.0
-    params.spin = a_star
-
-    # ISCO
-    z1 = 1.0 + (1.0 - a_star**2)**(1/3) * ((1+a_star)**(1/3) + (1-a_star)**(1/3))
-    z2 = math.sqrt(3 * a_star**2 + z1**2)
-    isco_M = 3.0 + z2 - math.sqrt((3-z1)*(3+z1+2*z2))
-    params.isco = isco_M * 0.5
-
-    params.step_size = 0.08
-    params.max_dist = 120.0
-    params.max_steps = 600
+    params["spin"] = a_star
 
     # Camera: extract from Blender camera object
     camera_obj = scene.camera
     if camera_obj is None:
-        # Default fallback
-        params.cam_pos[0] = 0
-        params.cam_pos[1] = 0
-        params.cam_pos[2] = 15.0
-        for i in range(9):
-            params.cam_basis[i] = 1.0 if i % 4 == 0 else 0.0
-        params.fov_scale = 1.0
+        params["observer_r"] = 15.0
+        params["inclination_rad"] = 0.0
     else:
-        # Camera world position
         mat = camera_obj.matrix_world
         pos = mat.translation
-        params.cam_pos[0] = pos.x
-        params.cam_pos[1] = pos.y
-        params.cam_pos[2] = pos.z
-
-        # Camera basis: Blender camera looks along -Z local axis
-        # Extract right (X), up (Y), forward (-Z) from world matrix
-        right = mat.col[0].xyz.normalized()
-        up = mat.col[1].xyz.normalized()
-        # The kernel expects the ANTI-forward (the direction the camera faces away from)
-        # Blender camera -Z = look direction, so +Z = anti-forward
-        anti_fwd = mat.col[2].xyz.normalized()
-
-        # Column-major: col0=right, col1=up, col2=anti_fwd
-        params.cam_basis[0] = right.x
-        params.cam_basis[1] = right.y
-        params.cam_basis[2] = right.z
-        params.cam_basis[3] = up.x
-        params.cam_basis[4] = up.y
-        params.cam_basis[5] = up.z
-        params.cam_basis[6] = anti_fwd.x
-        params.cam_basis[7] = anti_fwd.y
-        params.cam_basis[8] = anti_fwd.z
-
-        # FOV scale from camera lens
-        cam_data = camera_obj.data
-        if cam_data.type == 'PERSP':
-            # fov_scale maps FOV to NDC range
-            # The kernel: u = (2*px/w - 1) * fov_scale * aspect
-            # For a 50mm lens on 36mm sensor: hfov = 2*atan(18/50) = 39.6 deg
-            # fov_scale = tan(hfov/2)
-            sensor_w = cam_data.sensor_width  # mm
-            focal = cam_data.lens  # mm
-            params.fov_scale = sensor_w / (2.0 * focal)
-        else:
-            params.fov_scale = 1.0
-
-    # Feature flags
-    params.adisk_enabled = 1
-    params.redshift_enabled = 1
-    params.kerr_enabled = 1 if abs(a_star) > 1e-6 else 0
-    params.use_luts = 0
-    params.doppler_strength = 1.5
-    params.background_enabled = 1
-    params.background_intensity = 3.0
-    params.time_sec = scene.frame_current / scene.render.fps
+        observer_r, inclination_rad = observer_params_from_blender_position(
+            float(pos.x),
+            float(pos.y),
+            float(pos.z),
+        )
+        params["observer_r"] = observer_r
+        params["inclination_rad"] = inclination_rad
+        camera_data = getattr(camera_obj, "data", None)
+        if camera_data is not None and getattr(camera_data, "type", "") == "PERSP":
+            sensor_width = max(float(getattr(camera_data, "sensor_width", 36.0)), 1.0e-6)
+            focal_length = max(float(getattr(camera_data, "lens", 50.0)), 1.0e-6)
+            params["fov_scale"] = sensor_width / (2.0 * focal_length)
+        rotation = mat.to_3x3()
+        right = rotation.col[0]
+        up = rotation.col[1]
+        back = rotation.col[2]
+        params["cam_pos"] = (float(pos.x), float(pos.y), float(pos.z))
+        params["cam_basis"] = (
+            float(right.x), float(right.y), float(right.z),
+            float(up.x), float(up.y), float(up.z),
+            float(-back.x), float(-back.y), float(-back.z),
+        )
 
     return params
 
@@ -219,11 +156,8 @@ class BlackholeRenderEngine(bpy.types.RenderEngine):
 
         self.update_stats("", "Blackhole: Preparing launch parameters")
         params = _blender_camera_to_params(scene, depsgraph)
-        # Faster for interactive use -- can be raised for production
-        params.max_steps = min(params.max_steps, 400)
-        params.step_size = max(params.step_size, 0.1)
 
-        self.update_stats("", f"Blackhole: Tracing {w}x{h} ({params.max_steps} steps)")
+        self.update_stats("", f"Blackhole: Tracing {w}x{h} via bridge ray tracer")
 
         try:
             rgba = _renderer.render(params, w, h)
@@ -231,10 +165,9 @@ class BlackholeRenderEngine(bpy.types.RenderEngine):
             self.report({'ERROR'}, str(e))
             return
 
-        # Apply intensity boost (kernel outputs dim HDR values due to flux * 20 at source)
-        rgba[:, :, :3] *= 50.0
-
         self.update_stats("", "Blackhole: Writing pixels")
+        rgba = np.nan_to_num(rgba, nan=0.0, posinf=1.0, neginf=0.0)
+        rgba = np.clip(rgba, 0.0, 1.0)
 
         # Write to Blender render result
         result = self.begin_result(0, 0, w, h)
@@ -269,12 +202,12 @@ class BlackholeRenderEngine(bpy.types.RenderEngine):
         try:
             params = _blender_camera_to_params(scene, depsgraph)
             rgba = _renderer.render(params, w, h)
-            rgba[:, :, :3] *= 10.0
         except Exception:
             return
 
-        # Clamp for display
-        rgba = np.clip(rgba, 0, 100)
+        # The CUDA bridge already applies bloom + ACES + gamma. Keep the
+        # viewport path display-referred instead of re-exposing and clipping it.
+        rgba = np.clip(rgba, 0.0, 1.0)
 
         # Upload to GPU texture and draw
         pixels = np.flipud(rgba).flatten()

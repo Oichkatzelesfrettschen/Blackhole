@@ -27,6 +27,13 @@
 #define D_PHOTON_SPHERE 1.5f                    /**< @brief Photon sphere radius in units of rs (= 3M/2M = 1.5). */
 #define D_ISCO_RATIO    3.0f                    /**< @brief ISCO radius ratio (Schwarzschild: r_ISCO = 3*rs). */
 
+/* Synchrotron G(x) LUT domain -- must match physics::SYNCH_G_LUT_X_MIN/XMAX in synchrotron.h
+ * and gpu::SYNCH_G_DOMAIN in lut_texture.h.  Change all three together. */
+#define D_SYNCH_G_X_MIN     0.001f   /**< @brief Minimum x for G(x) LUT (log-space lower bound). */
+#define D_SYNCH_G_X_MAX     30.0f    /**< @brief Maximum x for G(x) LUT (log-space upper bound). */
+/* log(D_SYNCH_G_X_MAX / D_SYNCH_G_X_MIN) = log(30 / 0.001) = log(30000) */
+#define D_SYNCH_G_LOG_RATIO 10.30895f /**< @brief log(x_max/x_min) precomputed for LUT address. */
+
 /* ========================================================================
  * Constant memory (filled by host before kernel launch)
  * ======================================================================== */
@@ -499,7 +506,10 @@ __device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, con
         dt_dlam   = fmaf(rs * r, Q_eff * inv_Aps, A)
                     + a * fmaf(-a * c.E, sin2, c.Lz);
     } else {
-        float inv_delta = 1.0f / fmaxf(Delta, 1.0e-6f);
+        // B6: Use fabsf(Delta) to match the metric construction at line 343.
+        // Without fabsf, a step that overshoots r_+ (Delta<0) before the horizon
+        // check fires would produce inv_delta<0, corrupting dphi and dt.
+        float inv_delta = 1.0f / fmaxf(fabsf(Delta), 1.0e-6f);
         dphi_dlam = fmaf(a, (A + sqrt_R) * inv_delta, fmaf(c.Lz, inv_sin2, -a * c.E));
         /* r2_a2 = r^2+a^2 already computed above; reuse to save one FMUL. */
         dt_dlam   = fmaf(r2_a2, A, rs * r * sqrt_R) * inv_delta
@@ -1036,11 +1046,11 @@ __device__ __forceinline__ float d_synchrotron_G(float x) {
         return sqrtf(1.5707963268f / x) * expf(-x) * x;
     }
 
-    /* LUT mid-range: log-spaced texture lookup */
+    /* LUT mid-range: log-spaced texture lookup.
+     * D_SYNCH_G_X_MIN / D_SYNCH_G_LOG_RATIO must match physics::SYNCH_G_LUT_X_MIN/XMAX
+     * (synchrotron.h) and gpu::SYNCH_G_DOMAIN (lut_texture.h).  See main.cpp static_assert. */
     if (d_tex_synch_g) {
-        /* log(xMax/xMin) = log(30/0.001) = log(30000) */
-        float const log_ratio = 10.30895f; /* log(30000) precomputed */
-        float const u = __logf(x / 0.001f) / log_ratio;
+        float const u = __logf(x / D_SYNCH_G_X_MIN) / D_SYNCH_G_LOG_RATIO;
         return tex2D<float>((cudaTextureObject_t)d_tex_synch_g, u, 0.5f);
     }
 

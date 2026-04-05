@@ -1,0 +1,64 @@
+# .pre-commit-config.yaml -- pre-commit hooks for Blackhole Python code.
+#
+# WHY: Automated enforcement at commit time prevents lint/format/type regressions
+#      from accumulating.  Tools are wired to pyproject.toml for config consistency.
+#
+# WHAT: Three hooks --
+#   ruff  -- lint (autofix) + format (single formatter; no Black in the chain)
+#   deptry -- unused/missing/transitive dependency detection
+#   pyright -- static type checking (local hook; uses virtualenv pyright)
+#
+# HOW (install once per clone):
+#   pip install pre-commit pyright deptry ruff
+#   pre-commit install
+#
+# HOW (run manually):
+#   pre-commit run --all-files
+
+repos:
+  # -------------------------------------------------------------------------
+  # Ruff: lint (with --fix) then format.
+  # WHY two hooks: the linter may introduce style changes that the formatter
+  #      then needs to normalize.  Running format last guarantees a stable diff.
+  # -------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        name: ruff lint (autofix)
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: ruff format
+        types_or: [python, pyi]
+
+  # -------------------------------------------------------------------------
+  # deptry: detect unused, missing, and transitive dependency mistakes.
+  # WHY: Catches drift between what the addon imports and what is declared as
+  #      a dependency -- before it silently breaks someone else's environment.
+  # Runs on the blender/ directory only; .conan/ is excluded via pyproject.toml.
+  # -------------------------------------------------------------------------
+  - repo: https://github.com/fpgmaas/deptry
+    rev: "0.20.0"
+    hooks:
+      - id: deptry
+        args: [blender]
+
+  # -------------------------------------------------------------------------
+  # Pyright: static type checking.
+  # WHY local hook: pyright version must match the dev venv to avoid false
+  #      positives from stale type stubs.  A versioned remote hook can lag.
+  # Requires: pip install pyright  (already in [dev] extras)
+  # -------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright type check
+        language: system
+        entry: pyright
+        types: [python]
+        # Check the whole package, not individual files, so cross-module
+        # inference works correctly (e.g., Protocol implementations).
+        pass_filenames: false
+        args: [blender/addon/blackhole_physics, tests/python]

@@ -1,5 +1,8 @@
 # Blackhole Requirements
 
+This page is the shared baseline. Product-specific requirements live under
+[`docs/requirements/`](../requirements/index.md).
+
 ## Build prerequisites
 - CMake 3.21+
 - Conan 2.x (repo-local home at `.conan/` via `scripts/conan_env.sh`)
@@ -71,8 +74,10 @@ sudo pacman -S --needed \
 - glfw/3.4
 - glbinding/3.5.0
 - glm/1.0.1
-- xsimd/13.2.0
-- entt/3.15.0
+- xsimd/14.0.0
+- highway/1.3.0
+- sleef/3.9.0
+- entt/3.16.0
 - pcg-cpp/cci.20220409
 - taskflow/3.10.0
 - imgui/1.92.5-docking
@@ -81,22 +86,23 @@ sudo pacman -S --needed \
 - flatbuffers/25.9.23
 - hdf5/1.14.6
 - highfive/3.1.1
-- spdlog/1.16.0
+- nlohmann_json/3.12.0
+- spdlog/1.17.0
 - fmt/12.1.0
 - tracy/0.13.1
 - cli11/2.6.0
-- shaderc/2025.3 (optional; `enable_spirv_tooling=True`)
-- spirv-tools/1.4.313.0 (optional; `enable_spirv_tooling=True`)
-- spirv-cross/1.4.321.0 (optional; `enable_spirv_tooling=True`)
-- spirv-headers/1.4.313.0 (optional; `enable_spirv_tooling=True`)
-- z3/4.14.1 (optional; enable with `-DENABLE_Z3=ON`)
+- gtest/1.17.0
+- z3/4.15.4 (optional; enable with `-DENABLE_Z3=ON`)
 - gmp/6.3.0 (optional; precision ground-truth via Boost.Multiprecision MPFR backend)
 - mpfr/4.2.2 (optional; precision ground-truth via Boost.Multiprecision MPFR backend)
 - boost/1.90.0
 - stb/cci.20240531
-- meshoptimizer/0.25 (default on; `enable_meshoptimizer=True`)
+- meshoptimizer/1.0 (default on; `enable_meshoptimizer=True`)
 - fastnoise2/0.10.0-alpha (default on; `enable_fastnoise2=True`)
 - watcher/0.14.1 (optional; `enable_shader_watcher=True`)
+- eigen/3.4.1 (optional; `enable_eigen=True`)
+- benchmark/1.9.4 (optional; `enable_google_benchmark=True`)
+- mimalloc/2.2.4 (optional; `enable_mimalloc=True`)
 
 Note: `conanfile.py` sets shared builds for hdf5/spdlog/fmt and disables
 `boost` cobalt to keep the dependency graph stable.
@@ -116,29 +122,31 @@ Latest recipes on conancenter (current pins in parentheses):
 - glfw: 3.4 (current 3.4)
 - glbinding: 3.5.0 (current 3.5.0)
 - glm: 1.0.1 (current 1.0.1)
-- xsimd: 13.2.0 (current 13.2.0)
-- entt: 3.15.0 (current 3.15.0)
+- xsimd: 14.0.0 (current 14.0.0)
+- highway: 1.3.0 (current 1.3.0)
+- sleef: 3.9.0 (current 3.9.0)
+- entt: 3.16.0 (current 3.16.0)
 - taskflow: 3.10.0 (current 3.10.0)
 - highfive: 3.1.1 (current 3.1.1)
 - flatbuffers: 25.9.23 (current 25.9.23)
-- spdlog: 1.16.0 (current 1.16.0)
+- spdlog: 1.17.0 (current 1.17.0)
 - fmt: 12.1.0 (current 12.1.0)
 - tracy: 0.12.2 (current 0.13.1; local recipe in `conan/recipes`)
 - rmlui: 4.4 (current 6.1; local recipe in `conan/recipes`)
 - cli11: 2.6.0 (current 2.6.0)
-- spirv-cross: 1.4.321.0 (current 1.4.321.0)
-- spirv-headers: 1.5.4 (current 1.4.313.0; pinned for shaderc/spirv-tools compatibility)
 - boost: 1.90.0 (current 1.90.0)
 - hdf5: 1.14.6 (current 1.14.6)
-- z3: 4.14.1 (current 4.14.1)
+- z3: 4.15.4 (current 4.15.4)
 - gmp: 6.3.0 (current 6.3.0)
 - mpfr: 4.2.2 (current 4.2.2)
-- eigen: 5.0.1 (optional/deferred; current 3.4.0)
+- eigen: 5.0.1 (optional/deferred; current 3.4.1)
 - pcg-cpp: cci.20220409 (current cci.20220409)
 - stb: cci.20240531 (current cci.20240531)
-- meshoptimizer: 0.25 (current 0.25)
+- meshoptimizer: 1.0 (current 1.0)
 - fastnoise2: 0.10.0-alpha (current 0.10.0-alpha)
 - watcher: 0.14.1 (current 0.14.1)
+- benchmark: 1.9.4 (optional; current 1.9.4)
+- mimalloc: 2.2.4 (optional; current 2.2.4)
 
 Optional additions for the cleanroom pipeline (on conancenter):
 - benchmark/1.9.4 (microbench harness)

@@ -1,0 +1,158 @@
+# pyproject.toml -- Python tooling configuration for the Blackhole project.
+#
+# WHY: The Python code lives in blender/addon/blackhole_physics/ and runs inside
+#      Blender's Python interpreter.  Dev tooling (lint, format, type-check, test)
+#      runs in a normal external virtualenv to avoid Blender ABI friction.
+#
+# WHAT: Configures Ruff (formatter + linter), Pyright (type checker), deptry
+#       (unused/missing dep detection), pytest, and coverage.
+#
+# HOW (one-time setup):
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -e ".[dev]"
+#   pre-commit install
+#
+# HOW (daily):
+#   ruff check --fix blender/ && ruff format blender/
+#   pyright blender/
+#   pytest tests/python --cov
+#   deptry blender/
+
+[project]
+name = "blackhole-blender-addon"
+version = "1.0.0"
+description = "Blender addon for Blackhole Kerr physics visualization with SD texture generation"
+requires-python = ">=3.11"
+# No runtime dependencies here: the addon runs inside Blender's Python, which
+# manages its own packages.  Dependencies below are dev/CI only.
+
+[project.optional-dependencies]
+# Inference stack for the diffusers backend (external venv, not Blender's Python)
+inference = [
+    "diffusers>=0.35.2",
+    "torch>=2.2",
+    "transformers>=4.40",
+    "optimum>=1.24",
+    "numpy>=1.26",
+]
+# Dev tooling: lint, format, typecheck, test
+dev = [
+    "ruff>=0.9",
+    "pyright>=1.1.390",
+    "deptry>=0.20",
+    "pytest>=8",
+    "pytest-cov>=5",
+    "hypothesis>=6.100",
+    "numpy>=1.26",
+    # OpenImageIO Python bindings -- installed as a system package on Arch/CachyOS
+    # (openimageio 3.1.11.0 from cachyos-extra-v3, AVX2/FMA-optimized, no CUDA).
+    # Not pip-installable; install via: sudo pacman -S openimageio
+    # "OpenImageIO",  # commented out: not on PyPI, system-installed
+    # Image regression fixtures
+    "pytest-regressions>=0.5",
+]
+
+# ---------------------------------------------------------------------------
+# Ruff -- formatter AND linter.  Do NOT add Black to the pre-commit chain.
+# The Ruff formatter is the single source of truth for code style.
+# WHY: Ruff documents that its formatter conflicts with certain lint rules (E1xx,
+#      W6xx, etc.) and recommends choosing one formatter only.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["blender"]
+exclude = [
+    ".conan",
+    ".git",
+    "build",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+# E/W: pycodestyle  F: pyflakes  I: isort  N: pep8-naming
+# UP: pyupgrade  ANN: flake8-annotations  B: flake8-bugbear
+# SIM: flake8-simplify  TID: flake8-tidy-imports  RUF: Ruff-native
+select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM", "TID", "RUF"]
+ignore = [
+    "ANN101",   # self annotation -- not idiomatic Python
+    "ANN102",   # cls annotation
+    "ANN401",   # Any is occasionally needed for bpy interop
+    "B008",     # do not perform function calls in default args (bpy.props pattern)
+    "N802",     # function name should be lowercase (Blender uses CamelCase operators)
+    "N806",     # variable in function should be lowercase (bpy panel pattern)
+    "SIM108",   # ternary operator -- longer form is clearer in operator methods
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files: relax annotation strictness; allow assert statements
+"tests/**/*.py" = ["ANN", "S101"]
+# Blender __init__ module: bl_info dict has wide-open types
+"blender/addon/blackhole_physics/__init__.py" = ["ANN"]
+
+[tool.ruff.format]
+# Ruff formatter settings (equivalent to Black defaults)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+# ---------------------------------------------------------------------------
+# Pyright -- static type checker.
+# WHY: Pyright gives fast, incremental feedback without a plugin ecosystem
+#      requirement.  It handles the Protocol pattern used in sd_textures.py to
+#      decouple from bpy without needing bpy stubs.
+# ---------------------------------------------------------------------------
+[tool.pyright]
+include = ["blender", "tests/python"]
+exclude = [".conan", "build", ".venv"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+# bpy and gpu are only available inside Blender; suppress missing-import errors
+# for them so pyright can still check all other code paths.
+reportMissingModuleSource = false
+reportMissingImports = "warning"
+
+# ---------------------------------------------------------------------------
+# deptry -- unused, missing, and transitive dependency detection.
+# WHY: Prevents environment drift where a package is used but not declared,
+#      or declared but never imported.
+# ---------------------------------------------------------------------------
+[tool.deptry]
+root = "."
+exclude = [".conan", "build", ".venv"]
+known_first_party = ["blackhole_physics"]
+# Blender builtins are not pip-installable; tell deptry to ignore them
+per_rule_ignores = { DEP002 = ["bpy", "bmesh", "gpu", "mathutils", "gpu_extras"] }
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+addopts = "--tb=short --strict-markers -q"
+markers = [
+    "slow: marks tests that call real SD inference (skip with -m 'not slow')",
+    "blender: marks tests that require a running Blender instance",
+]
+
+# ---------------------------------------------------------------------------
+# coverage.py
+# WHY: Branch coverage catches missed conditional paths -- especially important
+#      for the backend-selection logic and error-handling branches in sd_textures.
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["blender/addon/blackhole_physics"]
+branch = true
+omit = [
+    "**/__init__.py",
+    "**/render_engine.py",   # requires Blender GPU context; tested separately
+    "**/materials.py",       # Blender node graph API; tested in Blender headless
+    "**/assets.py",          # same
+    "**/panels.py",          # same
+    "**/operators.py",       # integration layer; covered by blender headless tests
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 60   # initial threshold; raise as coverage grows

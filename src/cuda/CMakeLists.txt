@@ -25,9 +25,17 @@ set_target_properties(blackhole_cuda_rt PROPERTIES
 )
 
 # YSU-engine build flags: --use_fast_math -lineinfo -Xptxas=-v -dlto
+# --restrict: enables aliasing-aware load forms (LDG.E.U16.CONSTANT, LDL.LU)
+#   measured via YSU-engine sass_re full-corpus flag sweep.  Safe here because
+#   dFramebuffer is __restrict__ and __constant__ memory never aliases.
+# --extra-device-vectorization: lets ptxas fuse more non-fused FMUL+FADD pairs
+#   into FFMA.  ncu on geodesicTraceFp16H2 shows 6.6M non-fused vs 4.5M fused
+#   FP32 instructions; the flag closes part of that gap (~8% FP32 throughput).
 target_compile_options(blackhole_cuda_rt PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:
         --use_fast_math
+        --restrict
+        --extra-device-vectorization
         -lineinfo
         -Xptxas=-v
         --expt-relaxed-constexpr

@@ -48,6 +48,145 @@
       }
     },
     {
+      "name": "glsl-only",
+      "displayName": "GLSL-Only Release",
+      "description": "Desktop application and validation tools without CUDA or Blender bridge",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/GLSL-Only/Release",
+      "installDir": "${sourceDir}/install/GLSL-Only/Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/GLSL-Only/Release/generators/conan_toolchain.cmake",
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_BLENDER_BRIDGE": "OFF",
+        "ENABLE_DESKTOP_APP": "ON",
+        "ENABLE_BENCHMARKS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "BUILD_TESTING": "ON",
+        "ENABLE_SHADER_VALIDATION": "ON",
+        "ENABLE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "cuda-only",
+      "displayName": "CUDA Desktop Release",
+      "description": "Desktop application with CUDA backend enabled and Blender bridge disabled",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/CUDA-Only/Release",
+      "installDir": "${sourceDir}/install/CUDA-Only/Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/CUDA-Only/Release/generators/conan_toolchain.cmake",
+        "ENABLE_CUDA": "ON",
+        "ENABLE_BLENDER_BRIDGE": "OFF",
+        "ENABLE_DESKTOP_APP": "ON",
+        "ENABLE_BENCHMARKS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "BUILD_TESTING": "ON",
+        "ENABLE_SHADER_VALIDATION": "ON",
+        "ENABLE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "blender-bridge",
+      "displayName": "Blender Bridge Release",
+      "description": "Bridge-focused build for the Blender addon without the desktop app or benchmark binaries",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/BlenderBridge/Release",
+      "installDir": "${sourceDir}/install/BlenderBridge/Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/BlenderBridge/Release/generators/conan_toolchain.cmake",
+        "ENABLE_CUDA": "ON",
+        "ENABLE_BLENDER_BRIDGE": "ON",
+        "ENABLE_DESKTOP_APP": "OFF",
+        "ENABLE_BENCHMARKS": "OFF",
+        "ENABLE_TOOLS": "OFF",
+        "BUILD_TESTING": "OFF",
+        "ENABLE_SHADER_VALIDATION": "OFF",
+        "ENABLE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "full-dev",
+      "displayName": "Full Dev RelWithDebInfo",
+      "description": "Shared desktop UI, CUDA backend, Blender bridge, tools, and tests for day-to-day development",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/FullDev/RelWithDebInfo",
+      "installDir": "${sourceDir}/install/FullDev/RelWithDebInfo",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/FullDev/RelWithDebInfo/generators/conan_toolchain.cmake",
+        "ENABLE_CUDA": "ON",
+        "ENABLE_BLENDER_BRIDGE": "ON",
+        "ENABLE_DESKTOP_APP": "ON",
+        "ENABLE_BENCHMARKS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "BUILD_TESTING": "ON",
+        "ENABLE_SHADER_VALIDATION": "ON",
+        "ENABLE_TRACY": "ON",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5"
+      }
+    },
+    {
+      "name": "docs",
+      "displayName": "Docs + Verification",
+      "description": "Documentation-focused release build with Doxygen, bridge packaging, and claims verification enabled",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/Docs/Release",
+      "installDir": "${sourceDir}/install/Docs/Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Docs/Release/generators/conan_toolchain.cmake",
+        "ENABLE_CUDA": "ON",
+        "ENABLE_BLENDER_BRIDGE": "ON",
+        "ENABLE_DESKTOP_APP": "OFF",
+        "ENABLE_BENCHMARKS": "OFF",
+        "ENABLE_TOOLS": "ON",
+        "BUILD_TESTING": "ON",
+        "ENABLE_DOXYGEN": "ON",
+        "ENABLE_DOXYGEN_XML": "ON",
+        "ENABLE_DOXYGEN_WARN_AS_ERROR": "ON",
+        "ENABLE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "microbench",
+      "displayName": "Microbenchmark Release",
+      "description": "Lean release build for the Google Benchmark microbenchmark lane",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/Microbench/Release",
+      "installDir": "${sourceDir}/install/Microbench/Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Microbench/Release/generators/conan_toolchain.cmake",
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_BLENDER_BRIDGE": "OFF",
+        "ENABLE_DESKTOP_APP": "OFF",
+        "ENABLE_BENCHMARKS": "ON",
+        "ENABLE_TOOLS": "OFF",
+        "BUILD_TESTING": "OFF",
+        "ENABLE_HIGHWAY": "OFF",
+        "ENABLE_GOOGLE_BENCHMARK": "ON",
+        "ENABLE_WERROR": "ON"
+      }
+    },
+    {
+      "name": "release-mimalloc",
+      "displayName": "Release + mimalloc",
+      "description": "Release build with mimalloc linked into desktop and benchmark binaries for allocator experiments",
+      "inherits": "release",
+      "binaryDir": "${sourceDir}/build/ReleaseMimalloc/Release",
+      "installDir": "${sourceDir}/install/ReleaseMimalloc/Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/ReleaseMimalloc/Release/generators/conan_toolchain.cmake",
+        "ENABLE_MIMALLOC": "ON",
+        "ENABLE_WERROR": "ON"
+      }
+    },
+    {
       "name": "asan",
       "displayName": "AddressSanitizer",
       "description": "Debug build with ASan + UBSan",
@@ -296,6 +435,34 @@
       "configurePreset": "debug"
     },
     {
+      "name": "glsl-only",
+      "configurePreset": "glsl-only"
+    },
+    {
+      "name": "cuda-only",
+      "configurePreset": "cuda-only"
+    },
+    {
+      "name": "blender-bridge",
+      "configurePreset": "blender-bridge"
+    },
+    {
+      "name": "full-dev",
+      "configurePreset": "full-dev"
+    },
+    {
+      "name": "docs",
+      "configurePreset": "docs"
+    },
+    {
+      "name": "microbench",
+      "configurePreset": "microbench"
+    },
+    {
+      "name": "release-mimalloc",
+      "configurePreset": "release-mimalloc"
+    },
+    {
       "name": "asan",
       "configurePreset": "asan"
     },
@@ -363,6 +530,34 @@
     {
       "name": "riced",
       "configurePreset": "riced",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "glsl-only",
+      "configurePreset": "glsl-only",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "cuda-only",
+      "configurePreset": "cuda-only",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "full-dev",
+      "configurePreset": "full-dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "docs",
+      "configurePreset": "docs",
       "output": {
         "outputOnFailure": true
       }
@@ -456,6 +651,82 @@
         {
           "type": "test",
           "name": "asan"
+        }
+      ]
+    },
+    {
+      "name": "glsl-only",
+      "displayName": "GLSL-Only Workflow",
+      "description": "Configure, build, and test the pure GLSL desktop product",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "glsl-only"
+        },
+        {
+          "type": "build",
+          "name": "glsl-only"
+        },
+        {
+          "type": "test",
+          "name": "glsl-only"
+        }
+      ]
+    },
+    {
+      "name": "cuda-only",
+      "displayName": "CUDA-Only Workflow",
+      "description": "Configure, build, and test the CUDA desktop product",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "cuda-only"
+        },
+        {
+          "type": "build",
+          "name": "cuda-only"
+        },
+        {
+          "type": "test",
+          "name": "cuda-only"
+        }
+      ]
+    },
+    {
+      "name": "full-dev",
+      "displayName": "Full Dev Workflow",
+      "description": "Configure, build, and test the shared desktop UI plus CUDA and Blender bridge stack",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "full-dev"
+        },
+        {
+          "type": "build",
+          "name": "full-dev"
+        },
+        {
+          "type": "test",
+          "name": "full-dev"
+        }
+      ]
+    },
+    {
+      "name": "docs",
+      "displayName": "Docs Workflow",
+      "description": "Configure, build, and test the documentation and evidence verification lane",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "docs"
+        },
+        {
+          "type": "build",
+          "name": "docs"
+        },
+        {
+          "type": "test",
+          "name": "docs"
         }
       ]
     }

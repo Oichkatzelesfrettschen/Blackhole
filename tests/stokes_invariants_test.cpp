@@ -426,8 +426,8 @@ static void testAbsorptionDominatedLimit() {
 
     // Expected from exact formula with R=0:
     const double E = std::exp(-alphaI * ds);
-    const double qExp = s0.q * E + (em.jQ / alphaI) * (1.0 - E);
-    const double uExp = s0.u * E + (em.jU / alphaI) * (1.0 - E);
+    const double qExp = (s0.q * E) + ((em.jQ / alphaI) * (1.0 - E));
+    const double uExp = (s0.u * E) + ((em.jU / alphaI) * (1.0 - E));
 
     check(nearRel(s.q, qExp, 1.0e-10), "absorption-dominated: Q matches scalar RTE");
     check(nearRel(s.u, uExp, 1.0e-10), "absorption-dominated: U matches scalar RTE");

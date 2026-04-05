@@ -1,4 +1,5 @@
 from conan import ConanFile
+from conan.errors import ConanInvalidConfiguration
 from conan.tools.cmake import cmake_layout
 
 
@@ -16,7 +17,10 @@ class BlackholeConan(ConanFile):
         "enable_shader_watcher": [True, False],
         "enable_fastnoise2": [True, False],
         "enable_eigen": [True, False],
+        "enable_highway": [True, False],
         "enable_cuda": [True, False],
+        "enable_google_benchmark": [True, False],
+        "enable_mimalloc": [True, False],
     }
 
     default_options = {
@@ -27,10 +31,13 @@ class BlackholeConan(ConanFile):
         "enable_ktx": False,
         "enable_openimageio": False,
         "enable_meshoptimizer": True,
-        "enable_shader_watcher": True,
+        "enable_shader_watcher": False,
         "enable_fastnoise2": True,
-        "enable_eigen": True,
+        "enable_eigen": False,
+        "enable_highway": True,
         "enable_cuda": False,
+        "enable_google_benchmark": False,
+        "enable_mimalloc": False,
     }
 
     def requirements(self):
@@ -47,7 +54,6 @@ class BlackholeConan(ConanFile):
 
         # SIMD & Performance
         self.requires("xsimd/14.0.0", override=True) # UPGRADED: 13.2.0 → 14.0.0
-        self.requires("highway/1.3.0")               # UPGRADED: 1.2.0 → 1.3.0
         self.requires("sleef/3.9.0")                 # Latest
 
         # ECS & Utilities
@@ -66,6 +72,7 @@ class BlackholeConan(ConanFile):
         # Data & I/O
         self.requires("hdf5/1.14.6", override=True)  # Latest
         self.requires("highfive/3.1.1")              # Latest
+        self.requires("nlohmann_json/3.12.0", override=True)  # Direct CMake dependency
 
         # Logging & Formatting
         self.requires("spdlog/1.17.0")               # UPGRADED: 1.16.0 → 1.17.0
@@ -103,6 +110,9 @@ class BlackholeConan(ConanFile):
         if self.options.enable_fastnoise2:
             self.requires("fastnoise2/0.10.0-alpha") # Only version
 
+        if self.options.enable_highway:
+            self.requires("highway/1.3.0")           # UPGRADED: 1.2.0 → 1.3.0
+
         if self.options.enable_ktx:
             self.requires("ktx/4.3.2")               # Latest
 
@@ -112,6 +122,12 @@ class BlackholeConan(ConanFile):
         if self.options.enable_eigen:
             # Using 3.4.1 instead of 5.x due to potential API breaks
             self.requires("eigen/3.4.1")             # UPGRADED: 3.4.0 → 3.4.1
+
+        if self.options.enable_google_benchmark:
+            self.requires("benchmark/1.9.4")
+
+        if self.options.enable_mimalloc:
+            self.requires("mimalloc/2.2.4")
 
     def layout(self):
         """Conan 2.x native layout"""

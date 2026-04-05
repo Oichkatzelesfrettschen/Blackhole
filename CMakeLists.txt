@@ -256,6 +256,36 @@ if(ENABLE_FASTNOISE2)
 endif()
 
 # ============================================================================
+# Google Benchmark (microbenchmark harness)
+# ============================================================================
+
+option(ENABLE_GOOGLE_BENCHMARK "Enable Google Benchmark microbench targets" OFF)
+if(ENABLE_GOOGLE_BENCHMARK)
+  find_package(benchmark CONFIG QUIET)
+  if(benchmark_FOUND)
+    message(STATUS "Google Benchmark found: microbenchmark targets available")
+  else()
+    message(STATUS "Google Benchmark not found: microbenchmark targets disabled")
+    set(ENABLE_GOOGLE_BENCHMARK OFF)
+  endif()
+endif()
+
+# ============================================================================
+# mimalloc (optional allocator)
+# ============================================================================
+
+option(ENABLE_MIMALLOC "Enable mimalloc for desktop/runtime binaries" OFF)
+if(ENABLE_MIMALLOC)
+  find_package(mimalloc CONFIG QUIET)
+  if(mimalloc_FOUND)
+    message(STATUS "mimalloc found: allocator override available")
+  else()
+    message(STATUS "mimalloc not found: allocator override disabled")
+    set(ENABLE_MIMALLOC OFF)
+  endif()
+endif()
+
+# ============================================================================
 # Optional non-Conan dependencies (FetchContent)
 # ============================================================================
 
@@ -351,6 +381,15 @@ if(ENABLE_BLENDER_BRIDGE)
     add_subdirectory(src/blender_bridge)
     message(STATUS "Blender bridge enabled: libblackhole_bridge.so will be built")
 endif()
+
+# ============================================================================
+# Product Surface Toggles
+# ============================================================================
+
+option(ENABLE_DESKTOP_APP "Build the desktop Blackhole application" ON)
+option(ENABLE_DESKTOP_VARIANTS "Build dedicated desktop GLSL/CUDA executables" ON)
+option(ENABLE_BENCHMARKS "Build benchmark executables" ON)
+option(ENABLE_TOOLS "Build CLI/helper tools" ON)
 
 # ============================================================================
 # ImPlot (vendored until Conan packages support ImGui 1.92+)
@@ -1089,6 +1128,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/grmhd_packed_loader.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_pbo_uploader.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_streaming.cpp"
+  "${PROJECT_SOURCE_DIR}/src/gpu/grmhd_gpu_uploader.cpp"
   "${PROJECT_SOURCE_DIR}/src/grmhd_hdf5_loader.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image_write_impl.cpp"
@@ -1110,10 +1150,6 @@ file(GLOB PHYSICS_HEADER_FILES "${PROJECT_SOURCE_DIR}/src/physics/*.h")
 file(GLOB RENDER_HEADER_FILES "${PROJECT_SOURCE_DIR}/src/render/*.h")
 list(APPEND HEADER_FILES ${PHYSICS_HEADER_FILES} ${RENDER_HEADER_FILES})
 
-add_executable(${CMAKE_PROJECT_NAME} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
-
-# CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
-
 # Apply tiered warning flags only to project source files
 set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES
   COMPILE_OPTIONS "${PROJECT_WARNINGS}"
@@ -1133,161 +1169,231 @@ set_source_files_properties(${THIRDPARTY_SRC_FILES} PROPERTIES
   COMPILE_OPTIONS "-w"
 )
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE HighFive::HighFive)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imgui::imgui)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE imguizmo::imguizmo)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE implot::implot)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glfw)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glbinding::glbinding)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE glm::glm)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE stb::stb)
+function(add_blackhole_desktop_target target_name)
+  set(options CUDA_ONLY GLSL_ONLY)
+  cmake_parse_arguments(BH_DESKTOP "${options}" "" "" ${ARGN})
+
+  add_executable(${target_name} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
+
+  target_link_libraries(${target_name} PRIVATE
+    HighFive::HighFive
+    imgui::imgui
+    imguizmo::imguizmo
+    implot::implot
+    glfw
+    glbinding::glbinding
+    glm::glm
+    nlohmann_json::nlohmann_json
+    stb::stb
+  )
+
+  if(CPPTRACE_LIBRARY)
+    target_link_libraries(${target_name} PRIVATE ${CPPTRACE_LIBRARY})
+    target_compile_definitions(${target_name} PRIVATE BLACKHOLE_HAS_CPPTRACE=1)
+  else()
+    target_compile_definitions(${target_name} PRIVATE BLACKHOLE_HAS_CPPTRACE=0)
+  endif()
+  if(ENABLE_RMLUI)
+    target_link_libraries(${target_name} PRIVATE rmlui::rmlui)
+  endif()
+  if(ENABLE_TRACY)
+    target_link_libraries(${target_name} PRIVATE Tracy::TracyClient)
+  endif()
+  if(ENABLE_SHADER_WATCHER)
+    target_link_libraries(${target_name} PRIVATE watcher::watcher)
+  endif()
+  if(ENABLE_FASTNOISE2)
+    target_link_libraries(${target_name} PRIVATE FastNoise2::FastNoise)
+  endif()
+  if(ENABLE_MESHOPTIMIZER)
+    target_link_libraries(${target_name} PRIVATE meshoptimizer::meshoptimizer)
+  endif()
+  if(ENABLE_TASKFLOW)
+    target_link_libraries(${target_name} PRIVATE Taskflow::Taskflow)
+  endif()
+  if(ENABLE_XSIMD)
+    target_link_libraries(${target_name} PRIVATE xsimd)
+  endif()
+  if(ENABLE_HIGHWAY)
+    target_link_libraries(${target_name} PRIVATE hwy::hwy)
+  endif()
+  if(ENABLE_SLEEF)
+    target_link_libraries(${target_name} PRIVATE sleef::sleef)
+  endif()
+  if(ENABLE_MIMALLOC)
+    target_link_libraries(${target_name} PRIVATE mimalloc::mimalloc)
+    target_compile_definitions(${target_name} PRIVATE BLACKHOLE_HAS_MIMALLOC=1)
+  endif()
+  if(ENABLE_CUDA AND NOT BH_DESKTOP_GLSL_ONLY)
+    target_link_libraries(${target_name} PRIVATE blackhole_cuda_rt CUDA::cudart)
+    target_compile_definitions(${target_name} PRIVATE BLACKHOLE_HAS_CUDA=1)
+  endif()
+
+  target_compile_definitions(${target_name} PRIVATE
+    GLFW_INCLUDE_NONE
+    IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+    BLACKHOLE_ENABLE_RMLUI=$<BOOL:${ENABLE_RMLUI}>
+    BLACKHOLE_ENABLE_MESHOPTIMIZER=$<BOOL:${ENABLE_MESHOPTIMIZER}>
+    BLACKHOLE_ENABLE_TASKFLOW=$<BOOL:${ENABLE_TASKFLOW}>
+    BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
+    BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
+    BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
+  )
+  if(ENABLE_TRACY)
+    target_compile_definitions(${target_name} PRIVATE TRACY_ENABLE)
+  endif()
+  if(BH_DESKTOP_GLSL_ONLY)
+    target_compile_definitions(${target_name} PRIVATE BLACKHOLE_APP_VARIANT_GLSL_ONLY=1)
+  endif()
+  if(BH_DESKTOP_CUDA_ONLY)
+    target_compile_definitions(${target_name} PRIVATE BLACKHOLE_APP_VARIANT_CUDA_ONLY=1)
+  endif()
+
+  target_include_directories(${target_name} PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/src/physics"
+  )
+  target_compile_options(${target_name} PRIVATE ${PROJECT_WARNINGS})
+
+  add_custom_command(
+    TARGET ${target_name}
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:${target_name}>/assets"
+  )
+  add_custom_command(
+    TARGET ${target_name}
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/shader/"
+            "$<TARGET_FILE_DIR:${target_name}>/shader"
+  )
+endfunction()
+
 find_library(CPPTRACE_LIBRARY cpptrace)
-if(CPPTRACE_LIBRARY)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE ${CPPTRACE_LIBRARY})
-  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE BLACKHOLE_HAS_CPPTRACE=1)
-else()
-  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE BLACKHOLE_HAS_CPPTRACE=0)
-endif()
-if(ENABLE_RMLUI)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE rmlui::rmlui)
-endif()
-if(ENABLE_TRACY)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Tracy::TracyClient)
-endif()
-if(ENABLE_SHADER_WATCHER)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE watcher::watcher)
-endif()
-if(ENABLE_FASTNOISE2)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE FastNoise2::FastNoise)
-endif()
-if(ENABLE_MESHOPTIMIZER)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE meshoptimizer::meshoptimizer)
-endif()
-if(ENABLE_TASKFLOW)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Taskflow::Taskflow)
-endif()
-if(ENABLE_XSIMD)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE xsimd)
-endif()
-if(ENABLE_HIGHWAY)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE hwy::hwy)
-endif()
-if(ENABLE_SLEEF)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE sleef::sleef)
-endif()
-if(ENABLE_CUDA)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE blackhole_cuda_rt CUDA::cudart)
-  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE BLACKHOLE_HAS_CUDA=1)
-endif()
 
-target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-  GLFW_INCLUDE_NONE
-  IMGUI_IMPL_OPENGL_LOADER_CUSTOM
-  BLACKHOLE_ENABLE_RMLUI=$<BOOL:${ENABLE_RMLUI}>
-  BLACKHOLE_ENABLE_MESHOPTIMIZER=$<BOOL:${ENABLE_MESHOPTIMIZER}>
-  BLACKHOLE_ENABLE_TASKFLOW=$<BOOL:${ENABLE_TASKFLOW}>
-  BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
-  BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
-  BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
-)
-if(ENABLE_TRACY)
-  target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE TRACY_ENABLE)
+if(ENABLE_DESKTOP_APP)
+  add_blackhole_desktop_target(${CMAKE_PROJECT_NAME})
+  if(ENABLE_DESKTOP_VARIANTS)
+    add_blackhole_desktop_target(BlackholeGLSL GLSL_ONLY)
+    if(ENABLE_CUDA)
+      add_blackhole_desktop_target(BlackholeCUDA CUDA_ONLY)
+    endif()
+  endif()
 endif()
-
-# Include directories for physics library
-target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-  "${PROJECT_SOURCE_DIR}/src"
-  "${PROJECT_SOURCE_DIR}/src/physics"
-)
 
 # ============================================================================
 # Benchmarks
 # ============================================================================
 
-add_executable(physics_bench
-  "${PROJECT_SOURCE_DIR}/bench/physics_bench.cpp"
-  "${PROJECT_SOURCE_DIR}/src/shader.cpp"
-  "${PROJECT_SOURCE_DIR}/src/physics/kerr.cpp"
-  "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
-)
+if(ENABLE_BENCHMARKS)
+  add_executable(physics_bench
+    "${PROJECT_SOURCE_DIR}/bench/physics_bench.cpp"
+    "${PROJECT_SOURCE_DIR}/src/shader.cpp"
+    "${PROJECT_SOURCE_DIR}/src/physics/kerr.cpp"
+    "${PROJECT_SOURCE_DIR}/src/physics/schwarzschild.cpp"
+  )
 
-# CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
+  # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
 
-target_include_directories(physics_bench PRIVATE
-  "${PROJECT_SOURCE_DIR}/src"
-  "${PROJECT_SOURCE_DIR}/src/physics"
-)
+  target_include_directories(physics_bench PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/src/physics"
+  )
 
-target_compile_options(physics_bench PRIVATE ${PROJECT_WARNINGS})
-target_compile_definitions(physics_bench PRIVATE
-  GLFW_INCLUDE_NONE
-  IMGUI_IMPL_OPENGL_LOADER_CUSTOM
-  BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
-  BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
-  BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
-)
-target_link_libraries(physics_bench PRIVATE glfw glbinding::glbinding glm::glm)
-if(ENABLE_XSIMD)
-  target_link_libraries(physics_bench PRIVATE xsimd)
+  target_compile_options(physics_bench PRIVATE ${PROJECT_WARNINGS})
+  target_compile_definitions(physics_bench PRIVATE
+    GLFW_INCLUDE_NONE
+    IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+    BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
+    BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
+    BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
+  )
+  target_link_libraries(physics_bench PRIVATE glfw glbinding::glbinding glm::glm)
+  if(ENABLE_MIMALLOC)
+    target_link_libraries(physics_bench PRIVATE mimalloc::mimalloc)
+  endif()
+  if(ENABLE_XSIMD)
+    target_link_libraries(physics_bench PRIVATE xsimd)
+  endif()
+  if(ENABLE_HIGHWAY)
+    target_link_libraries(physics_bench PRIVATE hwy::hwy)
+  endif()
+  if(ENABLE_SLEEF)
+    target_link_libraries(physics_bench PRIVATE sleef::sleef)
+  endif()
+
+  if(ENABLE_GOOGLE_BENCHMARK)
+    add_executable(physics_microbench
+      "${PROJECT_SOURCE_DIR}/bench/physics_google_bench.cpp"
+    )
+    target_include_directories(physics_microbench PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(physics_microbench PRIVATE ${PROJECT_WARNINGS})
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      target_compile_options(physics_microbench PRIVATE -Wno-c2y-extensions)
+    endif()
+    target_compile_definitions(physics_microbench PRIVATE
+      BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
+      BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
+      BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
+    )
+    target_link_libraries(physics_microbench PRIVATE benchmark::benchmark)
+    if(ENABLE_MIMALLOC)
+      target_link_libraries(physics_microbench PRIVATE mimalloc::mimalloc)
+    endif()
+    if(ENABLE_XSIMD)
+      target_link_libraries(physics_microbench PRIVATE xsimd)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(physics_microbench PRIVATE hwy::hwy)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(physics_microbench PRIVATE sleef::sleef)
+    endif()
+  endif()
 endif()
-if(ENABLE_HIGHWAY)
-  target_link_libraries(physics_bench PRIVATE hwy::hwy)
-endif()
-if(ENABLE_SLEEF)
-  target_link_libraries(physics_bench PRIVATE sleef::sleef)
-endif()
-
-# Copy assets files after build.
-add_custom_command(
-  TARGET ${CMAKE_PROJECT_NAME}
-  POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets"
-          "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/assets")
-
-add_custom_command(
-  TARGET ${CMAKE_PROJECT_NAME}
-  POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/shader/"
-          "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/shader")
 
 # ============================================================================
 # Tools
 # ============================================================================
 
-add_executable(nubhlight_inspect
-  "${PROJECT_SOURCE_DIR}/tools/nubhlight_inspect.cpp"
-)
-
-# CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
-
-target_link_libraries(nubhlight_inspect PRIVATE HighFive::HighFive CLI11::CLI11)
-target_compile_options(nubhlight_inspect PRIVATE ${PROJECT_WARNINGS})
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  target_compile_options(nubhlight_inspect PRIVATE -Wno-stack-usage)
-endif()
-
-add_executable(nubhlight_pack
-  "${PROJECT_SOURCE_DIR}/tools/nubhlight_pack.cpp"
-)
-
-# CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
-
-target_link_libraries(nubhlight_pack PRIVATE HighFive::HighFive CLI11::CLI11)
-target_compile_options(nubhlight_pack PRIVATE ${PROJECT_WARNINGS})
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  target_compile_options(nubhlight_pack PRIVATE -Wno-stack-usage)
-endif()
-
-if(ENABLE_Z3)
-  add_executable(z3_sanity
-    "${PROJECT_SOURCE_DIR}/tools/z3_sanity.cpp"
+if(ENABLE_TOOLS)
+  add_executable(nubhlight_inspect
+    "${PROJECT_SOURCE_DIR}/tools/nubhlight_inspect.cpp"
   )
 
   # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
 
-  target_link_libraries(z3_sanity PRIVATE ${Z3_TARGET})
-  target_compile_options(z3_sanity PRIVATE ${PROJECT_WARNINGS})
+  target_link_libraries(nubhlight_inspect PRIVATE HighFive::HighFive CLI11::CLI11)
+  target_compile_options(nubhlight_inspect PRIVATE ${PROJECT_WARNINGS})
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(nubhlight_inspect PRIVATE -Wno-stack-usage)
+  endif()
+
+  add_executable(nubhlight_pack
+    "${PROJECT_SOURCE_DIR}/tools/nubhlight_pack.cpp"
+  )
+
+  # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
+
+  target_link_libraries(nubhlight_pack PRIVATE HighFive::HighFive CLI11::CLI11)
+  target_compile_options(nubhlight_pack PRIVATE ${PROJECT_WARNINGS})
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(nubhlight_pack PRIVATE -Wno-stack-usage)
+  endif()
+
+  if(ENABLE_Z3)
+    add_executable(z3_sanity
+      "${PROJECT_SOURCE_DIR}/tools/z3_sanity.cpp"
+    )
+
+    # CXX_STANDARD inherited from global CMAKE_CXX_STANDARD (C++23)
+
+    target_link_libraries(z3_sanity PRIVATE ${Z3_TARGET})
+    target_compile_options(z3_sanity PRIVATE ${PROJECT_WARNINGS})
+  endif()
 endif()
 
 # ============================================================================
@@ -1477,6 +1583,8 @@ endif()
 # ============================================================================
 
 option(ENABLE_DOXYGEN "Enable Doxygen API documentation generation" OFF)
+option(ENABLE_DOXYGEN_XML "Generate Doxygen XML output for downstream tooling" OFF)
+option(ENABLE_DOXYGEN_WARN_AS_ERROR "Treat Doxygen warnings as errors" ON)
 
 if(ENABLE_DOXYGEN)
   find_program(DOXYGEN_EXECUTABLE NAMES doxygen)
@@ -1489,6 +1597,16 @@ if(ENABLE_DOXYGEN)
     else()
       set(DOXYGEN_HAVE_DOT "NO")
       set(DOXYGEN_DOT_PATH "")
+    endif()
+    if(ENABLE_DOXYGEN_XML)
+      set(DOXYGEN_GENERATE_XML "YES")
+    else()
+      set(DOXYGEN_GENERATE_XML "NO")
+    endif()
+    if(ENABLE_DOXYGEN_WARN_AS_ERROR)
+      set(DOXYGEN_WARN_AS_ERROR "YES")
+    else()
+      set(DOXYGEN_WARN_AS_ERROR "NO")
     endif()
     set(DOXYFILE_IN "${PROJECT_SOURCE_DIR}/Doxyfile.in")
     set(DOXYFILE_OUT "${CMAKE_BINARY_DIR}/Doxyfile")
@@ -1521,24 +1639,32 @@ add_custom_target(analyze
 )
 
 # Performance pack: GPU timing + flamegraph + analysis reports
-add_custom_target(perf-pack
-  COMMAND ${CMAKE_COMMAND} -E echo "Collecting performance pack (5s run)..."
-  COMMAND ${PROJECT_SOURCE_DIR}/scripts/collect_perf_pack.sh 5
-  DEPENDS Blackhole
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-  COMMENT "Collecting GPU timing, flamegraph, and analysis reports"
-  VERBATIM
-)
+if(TARGET ${CMAKE_PROJECT_NAME})
+  add_custom_target(perf-pack
+    COMMAND ${CMAKE_COMMAND} -E echo "Collecting performance pack (5s run)..."
+    COMMAND ${PROJECT_SOURCE_DIR}/scripts/collect_perf_pack.sh 5
+    DEPENDS ${CMAKE_PROJECT_NAME}
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Collecting GPU timing, flamegraph, and analysis reports"
+    VERBATIM
+  )
+else()
+  message(STATUS "Skipping perf-pack target because the desktop application is not enabled")
+endif()
 
 # GPU timing analysis only (no app run)
-add_custom_target(analyze-gpu-timing
-  COMMAND ${CMAKE_COMMAND} -E echo "Analyzing GPU timing data..."
-  COMMAND python3 ${PROJECT_SOURCE_DIR}/scripts/analyze_gpu_timing.py
-    ${PROJECT_SOURCE_DIR}/logs/perf/gpu_timing.csv
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-  COMMENT "Analyzing GPU timing CSV with outlier detection"
-  VERBATIM
-)
+if(PYTHON3_EXECUTABLE)
+  add_custom_target(analyze-gpu-timing
+    COMMAND ${CMAKE_COMMAND} -E echo "Analyzing GPU timing data..."
+    COMMAND ${PYTHON3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/analyze_gpu_timing.py
+      ${PROJECT_SOURCE_DIR}/logs/perf/gpu_timing.csv
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Analyzing GPU timing CSV with outlier detection"
+    VERBATIM
+  )
+else()
+  message(STATUS "Skipping analyze-gpu-timing target because python3 was not found")
+endif()
 
 # cppcheck standalone target
 if(CPPCHECK_EXE)
@@ -1604,6 +1730,155 @@ endif()
 # Supports Lovelace (SM_89) consumer GPU optimization
 
 find_program(PYTHON3_EXECUTABLE python3)
+find_program(BLENDER_EXECUTABLE NAMES blender)
+find_program(OCTANEBLENDER_EXECUTABLE NAMES OctaneBlender)
+set(REPO_TRUTH_JSON "${CMAKE_BINARY_DIR}/reports/repo_truth.json")
+set(REPO_TRUTH_MD "${CMAKE_BINARY_DIR}/reports/repo_truth.md")
+set(BLENDER_ADDON_PACKAGE "${CMAKE_BINARY_DIR}/dist/blackhole_physics-addon.zip")
+set(BLENDER_ADDON_MANIFEST_JSON "${CMAKE_BINARY_DIR}/reports/blender_addon_manifest.json")
+set(BLENDER_ADDON_PACKAGE_JSON "${CMAKE_BINARY_DIR}/reports/blender_addon_package.json")
+set(BLENDER_ADDON_PACKAGE_MD "${CMAKE_BINARY_DIR}/reports/blender_addon_package.md")
+set(BLENDER_ADDON_STAGE_JSON "${CMAKE_BINARY_DIR}/reports/blender_addon_stage.json")
+set(BLENDER_ADDON_STAGE_DIR "${CMAKE_BINARY_DIR}/staging/blender-user-scripts")
+set(BLENDER_BRIDGE_ABI_JSON "${CMAKE_BINARY_DIR}/reports/blender_bridge_abi.json")
+set(BLENDER_BRIDGE_ABI_MD "${CMAKE_BINARY_DIR}/reports/blender_bridge_abi.md")
+set(BLENDER_SMOKE_JSON "${CMAKE_BINARY_DIR}/reports/blender_smoke.json")
+set(BLENDER_SMOKE_LOG "${CMAKE_BINARY_DIR}/reports/blender_smoke.log")
+set(BLENDER_SMOKE_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/blender_smoke_verified.json")
+set(BLENDER_SMOKE_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/blender_smoke_verified.md")
+set(BLENDER_INTERACTIVE_BENCHMARK_JSON "${CMAKE_BINARY_DIR}/reports/blender_interactive_benchmark.json")
+set(BLENDER_INTERACTIVE_BENCHMARK_LOG "${CMAKE_BINARY_DIR}/reports/blender_interactive_benchmark.log")
+set(BLENDER_INTERACTIVE_BENCHMARK_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/blender_interactive_benchmark_verified.json")
+set(BLENDER_INTERACTIVE_BENCHMARK_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/blender_interactive_benchmark_verified.md")
+set(BLENDER_HARSH_BENCHMARK_JSON "${CMAKE_BINARY_DIR}/reports/blender_harsh_benchmark.json")
+set(BLENDER_HARSH_BENCHMARK_LOG "${CMAKE_BINARY_DIR}/reports/blender_harsh_benchmark.log")
+set(BLENDER_HARSH_BENCHMARK_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/blender_harsh_benchmark_verified.json")
+set(BLENDER_HARSH_BENCHMARK_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/blender_harsh_benchmark_verified.md")
+set(DREAM_TEXTURES_BLENDER_INSTALL_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_install.json")
+set(DREAM_TEXTURES_BLENDER_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_verified.json")
+set(DREAM_TEXTURES_BLENDER_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_verified.md")
+set(DREAM_TEXTURES_BLENDER_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender.log")
+set(DREAM_TEXTURES_BLENDER_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_direct_verified.json")
+set(DREAM_TEXTURES_BLENDER_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_direct_verified.md")
+set(DREAM_TEXTURES_BLENDER_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_direct.log")
+set(DREAM_TEXTURES_BLENDER_BACKGROUND_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_background_direct_verified.json")
+set(DREAM_TEXTURES_BLENDER_BACKGROUND_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_background_direct_verified.md")
+set(DREAM_TEXTURES_BLENDER_BACKGROUND_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_background_direct.log")
+set(DREAM_TEXTURES_BLENDER_CONDITIONED_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioned_direct_verified.json")
+set(DREAM_TEXTURES_BLENDER_CONDITIONED_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioned_direct_verified.md")
+set(DREAM_TEXTURES_BLENDER_CONDITIONED_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioned_direct.log")
+set(DREAM_TEXTURES_BLENDER_DEPTH_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_depth_direct_verified.json")
+set(DREAM_TEXTURES_BLENDER_DEPTH_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_depth_direct_verified.md")
+set(DREAM_TEXTURES_BLENDER_DEPTH_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_depth_direct.log")
+set(DREAM_TEXTURES_BLENDER_IMAGE_DEPTH_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_image_depth_direct_verified.json")
+set(DREAM_TEXTURES_BLENDER_IMAGE_DEPTH_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_image_depth_direct_verified.md")
+set(DREAM_TEXTURES_BLENDER_IMAGE_DEPTH_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_image_depth_direct.log")
+set(DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioning_sweep.json")
+set(DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioning_sweep.md")
+set(DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioning_sweep.log")
+set(DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioning_sweep_verified.json")
+set(DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioning_sweep_verified.md")
+set(DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_harsh_conditioning_sweep.json")
+set(DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_harsh_conditioning_sweep.md")
+set(DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_harsh_conditioning_sweep.log")
+set(DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_harsh_conditioning_sweep_verified.json")
+set(DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_harsh_conditioning_sweep_verified.md")
+set(DREAM_TEXTURES_OCTANE_INSTALL_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_install.json")
+set(DREAM_TEXTURES_OCTANE_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_verified.json")
+set(DREAM_TEXTURES_OCTANE_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_verified.md")
+set(DREAM_TEXTURES_OCTANE_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane.log")
+set(DREAM_TEXTURES_OCTANE_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_direct_verified.json")
+set(DREAM_TEXTURES_OCTANE_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_direct_verified.md")
+set(DREAM_TEXTURES_OCTANE_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_direct.log")
+set(DREAM_TEXTURES_OCTANE_BACKGROUND_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_background_direct_verified.json")
+set(DREAM_TEXTURES_OCTANE_BACKGROUND_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_background_direct_verified.md")
+set(DREAM_TEXTURES_OCTANE_BACKGROUND_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_background_direct.log")
+set(DREAM_TEXTURES_OCTANE_CONDITIONED_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioned_direct_verified.json")
+set(DREAM_TEXTURES_OCTANE_CONDITIONED_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioned_direct_verified.md")
+set(DREAM_TEXTURES_OCTANE_CONDITIONED_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioned_direct.log")
+set(DREAM_TEXTURES_OCTANE_DEPTH_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_depth_direct_verified.json")
+set(DREAM_TEXTURES_OCTANE_DEPTH_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_depth_direct_verified.md")
+set(DREAM_TEXTURES_OCTANE_DEPTH_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_depth_direct.log")
+set(DREAM_TEXTURES_OCTANE_IMAGE_DEPTH_DIRECT_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_image_depth_direct_verified.json")
+set(DREAM_TEXTURES_OCTANE_IMAGE_DEPTH_DIRECT_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_image_depth_direct_verified.md")
+set(DREAM_TEXTURES_OCTANE_IMAGE_DEPTH_DIRECT_VERIFY_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_image_depth_direct.log")
+set(DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioning_sweep.json")
+set(DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioning_sweep.md")
+set(DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioning_sweep.log")
+set(DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioning_sweep_verified.json")
+set(DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioning_sweep_verified.md")
+set(DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_harsh_conditioning_sweep.json")
+set(DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_harsh_conditioning_sweep.md")
+set(DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_harsh_conditioning_sweep.log")
+set(DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_harsh_conditioning_sweep_verified.json")
+set(DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_harsh_conditioning_sweep_verified.md")
+set(DREAM_TEXTURES_CONDITIONING_BASELINE_PARITY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_conditioning_baseline_parity.json")
+set(DREAM_TEXTURES_CONDITIONING_BASELINE_PARITY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_conditioning_baseline_parity.md")
+set(DREAM_TEXTURES_CONDITIONING_HARSH_PARITY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_conditioning_harsh_parity.json")
+set(DREAM_TEXTURES_CONDITIONING_HARSH_PARITY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_conditioning_harsh_parity.md")
+set(DREAM_TEXTURES_BLENDER_CONDITIONING_POLICY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioning_policy.json")
+set(DREAM_TEXTURES_BLENDER_CONDITIONING_POLICY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_conditioning_policy.md")
+set(DREAM_TEXTURES_OCTANE_CONDITIONING_POLICY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioning_policy.json")
+set(DREAM_TEXTURES_OCTANE_CONDITIONING_POLICY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_conditioning_policy.md")
+set(DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_POLICY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_harsh_conditioning_policy.json")
+set(DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_POLICY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_harsh_conditioning_policy.md")
+set(DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_POLICY_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_harsh_conditioning_policy.json")
+set(DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_POLICY_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_harsh_conditioning_policy.md")
+set(DREAM_TEXTURES_CONDITIONING_TRENDS_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_conditioning_trends.json")
+set(DREAM_TEXTURES_CONDITIONING_TRENDS_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_conditioning_trends.md")
+set(DREAM_TEXTURES_BLENDER_POLICY_GENERATION_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_generation_verified.json")
+set(DREAM_TEXTURES_BLENDER_POLICY_GENERATION_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_generation_verified.md")
+set(DREAM_TEXTURES_BLENDER_POLICY_GENERATION_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_generation.log")
+set(DREAM_TEXTURES_BLENDER_POLICY_BACKGROUND_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_background_prepare_verified.json")
+set(DREAM_TEXTURES_BLENDER_POLICY_BACKGROUND_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_background_prepare_verified.md")
+set(DREAM_TEXTURES_BLENDER_POLICY_BACKGROUND_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_background_prepare.log")
+set(DREAM_TEXTURES_BLENDER_POLICY_PRODUCTION_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_production_prepare_verified.json")
+set(DREAM_TEXTURES_BLENDER_POLICY_PRODUCTION_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_production_prepare_verified.md")
+set(DREAM_TEXTURES_BLENDER_POLICY_PRODUCTION_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_production_prepare.log")
+set(DREAM_TEXTURES_BLENDER_POLICY_STALE_REFRESH_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_stale_refresh_verified.json")
+set(DREAM_TEXTURES_BLENDER_POLICY_STALE_REFRESH_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_stale_refresh_verified.md")
+set(DREAM_TEXTURES_BLENDER_POLICY_STALE_REFRESH_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_blender_policy_stale_refresh.log")
+set(DREAM_TEXTURES_OCTANE_POLICY_GENERATION_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_generation_verified.json")
+set(DREAM_TEXTURES_OCTANE_POLICY_GENERATION_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_generation_verified.md")
+set(DREAM_TEXTURES_OCTANE_POLICY_GENERATION_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_generation.log")
+set(DREAM_TEXTURES_OCTANE_POLICY_BACKGROUND_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_background_prepare_verified.json")
+set(DREAM_TEXTURES_OCTANE_POLICY_BACKGROUND_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_background_prepare_verified.md")
+set(DREAM_TEXTURES_OCTANE_POLICY_BACKGROUND_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_background_prepare.log")
+set(DREAM_TEXTURES_OCTANE_POLICY_PRODUCTION_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_production_prepare_verified.json")
+set(DREAM_TEXTURES_OCTANE_POLICY_PRODUCTION_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_production_prepare_verified.md")
+set(DREAM_TEXTURES_OCTANE_POLICY_PRODUCTION_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_production_prepare.log")
+set(DREAM_TEXTURES_OCTANE_POLICY_STALE_REFRESH_JSON "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_stale_refresh_verified.json")
+set(DREAM_TEXTURES_OCTANE_POLICY_STALE_REFRESH_MD "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_stale_refresh_verified.md")
+set(DREAM_TEXTURES_OCTANE_POLICY_STALE_REFRESH_LOG "${CMAKE_BINARY_DIR}/reports/dream_textures_octane_policy_stale_refresh.log")
+set(BLENDER_SHOWCASE_RENDER_JSON "${CMAKE_BINARY_DIR}/reports/blender_showcase_render.json")
+set(BLENDER_SHOWCASE_RENDER_MD "${CMAKE_BINARY_DIR}/reports/blender_showcase_render.md")
+set(BLENDER_SHOWCASE_RENDER_LOG "${CMAKE_BINARY_DIR}/reports/blender_showcase_render.log")
+set(BLENDER_SHOWCASE_RENDER_ARTIFACT_DIR "${CMAKE_BINARY_DIR}/reports/blender_showcase_artifacts")
+set(OCTANE_SHOWCASE_RENDER_JSON "${CMAKE_BINARY_DIR}/reports/octane_showcase_render.json")
+set(OCTANE_SHOWCASE_RENDER_MD "${CMAKE_BINARY_DIR}/reports/octane_showcase_render.md")
+set(OCTANE_SHOWCASE_RENDER_LOG "${CMAKE_BINARY_DIR}/reports/octane_showcase_render.log")
+set(OCTANE_SHOWCASE_RENDER_ARTIFACT_DIR "${CMAKE_BINARY_DIR}/reports/octane_showcase_artifacts")
+set(OCTANE_READINESS_JSON "${CMAKE_BINARY_DIR}/reports/octane_readiness.json")
+set(OCTANE_READINESS_LOG "${CMAKE_BINARY_DIR}/reports/octane_readiness.log")
+set(OCTANE_INTERACTIVE_BENCHMARK_JSON "${CMAKE_BINARY_DIR}/reports/octane_interactive_benchmark.json")
+set(OCTANE_INTERACTIVE_BENCHMARK_LOG "${CMAKE_BINARY_DIR}/reports/octane_interactive_benchmark.log")
+set(OCTANE_INTERACTIVE_BENCHMARK_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/octane_interactive_benchmark_verified.json")
+set(OCTANE_INTERACTIVE_BENCHMARK_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/octane_interactive_benchmark_verified.md")
+set(OCTANE_HARSH_BENCHMARK_JSON "${CMAKE_BINARY_DIR}/reports/octane_harsh_benchmark.json")
+set(OCTANE_HARSH_BENCHMARK_LOG "${CMAKE_BINARY_DIR}/reports/octane_harsh_benchmark.log")
+set(OCTANE_HARSH_BENCHMARK_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/octane_harsh_benchmark_verified.json")
+set(OCTANE_HARSH_BENCHMARK_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/octane_harsh_benchmark_verified.md")
+set(OCTANE_QUALITY_SWEEP_JSON "${CMAKE_BINARY_DIR}/reports/octane_quality_sweep.json")
+set(OCTANE_QUALITY_SWEEP_LOG "${CMAKE_BINARY_DIR}/reports/octane_quality_sweep.log")
+set(OCTANE_QUALITY_SWEEP_MD "${CMAKE_BINARY_DIR}/reports/octane_quality_sweep.md")
+set(OCTANE_QUALITY_SWEEP_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/octane_quality_sweep_verified.json")
+set(OCTANE_QUALITY_SWEEP_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/octane_quality_sweep_verified.md")
+set(OCTANE_SMOKE_JSON "${CMAKE_BINARY_DIR}/reports/octane_smoke.json")
+set(OCTANE_SMOKE_LOG "${CMAKE_BINARY_DIR}/reports/octane_smoke.log")
+set(OCTANE_SMOKE_VERIFY_JSON "${CMAKE_BINARY_DIR}/reports/octane_smoke_verified.json")
+set(OCTANE_SMOKE_VERIFY_MD "${CMAKE_BINARY_DIR}/reports/octane_smoke_verified.md")
+set(PHYSICS_CLAIMS_MD "${CMAKE_BINARY_DIR}/reports/physics_claims.md")
+set(PHYSICS_CLAIMS_JSON "${CMAKE_BINARY_DIR}/reports/physics_claims.json")
 
 if(PYTHON3_EXECUTABLE)
   set(GLSL_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/physics/verified")
@@ -1651,6 +1926,951 @@ if(PYTHON3_EXECUTABLE)
     list(LENGTH GENERATED_GLSL_FILES GLSL_COUNT)
     message(STATUS "  Generated shaders: ${GLSL_COUNT} files")
   endif()
+
+  add_custom_target(repo-truth
+    COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/repo_truth.py"
+      --source-dir "${PROJECT_SOURCE_DIR}"
+      --build-dir "${CMAKE_BINARY_DIR}"
+      --json-out "${REPO_TRUTH_JSON}"
+      --md-out "${REPO_TRUTH_MD}"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    COMMENT "Generating measured repo truth report"
+    VERBATIM
+  )
+
+  add_custom_target(package-blender-addon
+    COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/package_blender_addon.py"
+      --source-dir "${PROJECT_SOURCE_DIR}"
+      --output "${BLENDER_ADDON_PACKAGE}"
+      --manifest-out "${BLENDER_ADDON_MANIFEST_JSON}"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    COMMENT "Packaging canonical Blender addon"
+    VERBATIM
+  )
+
+  add_custom_target(verify-blender-addon-package
+    COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_blender_addon_package.py"
+      --addon-zip "${BLENDER_ADDON_PACKAGE}"
+      --manifest "${BLENDER_ADDON_MANIFEST_JSON}"
+      --json-out "${BLENDER_ADDON_PACKAGE_JSON}"
+      --md-out "${BLENDER_ADDON_PACKAGE_MD}"
+    DEPENDS package-blender-addon
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    COMMENT "Verifying packaged Blender addon contents"
+    VERBATIM
+  )
+
+  add_custom_target(stage-blender-addon
+    COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/install_blender_addon.py"
+      --addon-zip "${BLENDER_ADDON_PACKAGE}"
+      --manifest "${BLENDER_ADDON_MANIFEST_JSON}"
+      --user-scripts "${BLENDER_ADDON_STAGE_DIR}"
+      --force
+      --json-out "${BLENDER_ADDON_STAGE_JSON}"
+    DEPENDS verify-blender-addon-package
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    COMMENT "Installing packaged Blender addon into a local staging tree"
+    VERBATIM
+  )
+
+  if(TARGET blackhole_bridge)
+    add_custom_target(verify-blender-bridge-abi
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_blender_bridge_abi.py"
+        --bridge-python "${PROJECT_SOURCE_DIR}/blender/addon/blackhole_physics/bridge.py"
+        --bridge-header "${PROJECT_SOURCE_DIR}/src/blender_bridge/blender_bridge.h"
+        --bridge-library "$<TARGET_FILE:blackhole_bridge>"
+        --json-out "${BLENDER_BRIDGE_ABI_JSON}"
+        --md-out "${BLENDER_BRIDGE_ABI_MD}"
+      DEPENDS blackhole_bridge
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Blender bridge ABI against ctypes bindings"
+      VERBATIM
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/docs/physics/claims_evidence.json")
+    add_custom_target(verify-physics-claims
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_claims_matrix.py"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --build-dir "${CMAKE_BINARY_DIR}"
+        --manifest "${PROJECT_SOURCE_DIR}/docs/physics/claims_evidence.json"
+        --md-out "${PHYSICS_CLAIMS_MD}"
+        --json-out "${PHYSICS_CLAIMS_JSON}"
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying physics claims manifest against docs and tests"
+      VERBATIM
+    )
+  endif()
+
+  if(TARGET blackhole_bridge AND BLENDER_EXECUTABLE)
+    add_custom_target(install-dream-textures-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/install_dream_textures_runtime.py"
+        --host blender52
+        --extra-model-id "carsonkatri/stable-diffusion-2-depth-diffusers"
+        --json-out "${DREAM_TEXTURES_BLENDER_INSTALL_JSON}"
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Installing Dream Textures runtime for Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_runtime.py"
+        --label "blender52"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --json-out "${DREAM_TEXTURES_BLENDER_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_VERIFY_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures runtime inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "blender52-direct"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --timeout-seconds 60
+        --json-out "${DREAM_TEXTURES_BLENDER_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying direct Dream Textures -> Blackhole disk pipeline inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-blender-background
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "blender52-background-direct"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --slot background
+        --timeout-seconds 60
+        --json-out "${DREAM_TEXTURES_BLENDER_BACKGROUND_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_BACKGROUND_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_BACKGROUND_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying direct Dream Textures -> Blackhole world-environment pipeline inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-blender-conditioned
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "blender52-conditioned-direct"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --conditioning-mode image
+        --timeout-seconds 90
+        --json-out "${DREAM_TEXTURES_BLENDER_CONDITIONED_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_CONDITIONED_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_CONDITIONED_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying image-conditioned Dream Textures -> Blackhole disk pipeline inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-blender-depth
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "blender52-depth-direct"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --model-id "carsonkatri/stable-diffusion-2-depth-diffusers"
+        --conditioning-mode depth
+        --timeout-seconds 120
+        --json-out "${DREAM_TEXTURES_BLENDER_DEPTH_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_DEPTH_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_DEPTH_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying depth-conditioned Dream Textures -> Blackhole disk pipeline inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-blender-image-depth
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "blender52-image-depth-direct"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --model-id "carsonkatri/stable-diffusion-2-depth-diffusers"
+        --conditioning-mode image_depth
+        --timeout-seconds 120
+        --json-out "${DREAM_TEXTURES_BLENDER_IMAGE_DEPTH_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_IMAGE_DEPTH_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_IMAGE_DEPTH_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying image+depth-conditioned Dream Textures -> Blackhole disk pipeline inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(run-dream-textures-conditioning-sweep-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_dream_textures_conditioning_sweep.py"
+        --label "blender52-conditioning-sweep"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --json-out "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Dream Textures conditioning sweep inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-conditioning-sweep-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_sweep.py"
+        --report "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_JSON}"
+        --expect-scene-profile baseline
+        --json-out "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_VERIFY_MD}"
+      DEPENDS run-dream-textures-conditioning-sweep-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures conditioning sweep inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(run-dream-textures-harsh-conditioning-sweep-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_dream_textures_conditioning_sweep.py"
+        --label "blender52-harsh-conditioning-sweep"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --scene-profile harsh_lighting
+        --json-out "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Dream Textures harsh-lighting conditioning sweep inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-harsh-conditioning-sweep-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_sweep.py"
+        --report "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_JSON}"
+        --expect-scene-profile harsh_lighting
+        --json-out "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_VERIFY_MD}"
+      DEPENDS run-dream-textures-harsh-conditioning-sweep-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures harsh-lighting conditioning sweep inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-conditioning-policy-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_policy.py"
+        --report "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --host-label "blender52"
+        --scene-profile baseline
+        --json-out "${DREAM_TEXTURES_BLENDER_CONDITIONING_POLICY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_CONDITIONING_POLICY_MD}"
+      DEPENDS verify-dream-textures-conditioning-sweep-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Deriving Dream Textures conditioning policy for Blender 5.2 baseline scene"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-harsh-conditioning-policy-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_policy.py"
+        --report "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --host-label "blender52"
+        --scene-profile harsh_lighting
+        --json-out "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_POLICY_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_POLICY_MD}"
+      DEPENDS verify-dream-textures-harsh-conditioning-sweep-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Deriving Dream Textures conditioning policy for Blender 5.2 harsh-lighting scene"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-generation-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_policy_generation.py"
+        --label "blender52-policy-generation"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --slot disk
+        --intent interactive
+        --scene-profile baseline
+        --json-out "${DREAM_TEXTURES_BLENDER_POLICY_GENERATION_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_POLICY_GENERATION_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_POLICY_GENERATION_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures policy generation and warm-cache reuse inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-background-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_policy_generation.py"
+        --label "blender52-policy-background"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --slot background
+        --intent production
+        --scene-profile baseline
+        --json-out "${DREAM_TEXTURES_BLENDER_POLICY_BACKGROUND_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_POLICY_BACKGROUND_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_POLICY_BACKGROUND_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures background policy preparation inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-production-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_policy_generation.py"
+        --label "blender52-policy-production"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --slot disk
+        --intent production
+        --scene-profile baseline
+        --json-out "${DREAM_TEXTURES_BLENDER_POLICY_PRODUCTION_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_POLICY_PRODUCTION_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_POLICY_PRODUCTION_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures production image-depth policy preparation inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-stale-refresh-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_policy_generation.py"
+        --label "blender52-policy-stale-refresh"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/5.2/scripts"
+        --slot disk
+        --intent interactive
+        --scene-profile baseline
+        --mutate-inclination-deg 34.0
+        --mutate-observer-distance 24.0
+        --json-out "${DREAM_TEXTURES_BLENDER_POLICY_STALE_REFRESH_JSON}"
+        --md-out "${DREAM_TEXTURES_BLENDER_POLICY_STALE_REFRESH_MD}"
+        --log-out "${DREAM_TEXTURES_BLENDER_POLICY_STALE_REFRESH_LOG}"
+      DEPENDS install-dream-textures-blender
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures policy stale-refresh behavior inside Blender 5.2"
+      VERBATIM
+    )
+
+    add_custom_target(blender-addon-smoke
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_blender_addon_smoke.py"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --addon-zip "${BLENDER_ADDON_PACKAGE}"
+        --bridge-lib "$<TARGET_FILE:blackhole_bridge>"
+        --label "blender"
+        --expect-engine cycles
+        --json-out "${BLENDER_SMOKE_JSON}"
+        --log-out "${BLENDER_SMOKE_LOG}"
+      DEPENDS package-blender-addon verify-blender-addon-package verify-blender-bridge-abi blackhole_bridge
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running stock Blender addon smoke test"
+      VERBATIM
+    )
+
+    add_custom_target(verify-blender-smoke-report
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_blender_smoke_report.py"
+        --report "${BLENDER_SMOKE_JSON}"
+        --expect-engine cycles
+        --json-out "${BLENDER_SMOKE_VERIFY_JSON}"
+        --md-out "${BLENDER_SMOKE_VERIFY_MD}"
+      DEPENDS blender-addon-smoke
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying generated Blender smoke report"
+      VERBATIM
+    )
+
+    add_custom_target(benchmark-blender-interactive
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_blender_interactive_benchmark.py"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --addon-zip "${BLENDER_ADDON_PACKAGE}"
+        --bridge-lib "$<TARGET_FILE:blackhole_bridge>"
+        --label "blender-interactive"
+        --width 640
+        --height 360
+        --measured-frames 4
+        --warmup-frames 1
+        --scenario all
+        --json-out "${BLENDER_INTERACTIVE_BENCHMARK_JSON}"
+        --log-out "${BLENDER_INTERACTIVE_BENCHMARK_LOG}"
+      DEPENDS package-blender-addon verify-blender-addon-package verify-blender-bridge-abi blackhole_bridge
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Blender interactive benchmark lane"
+      VERBATIM
+    )
+
+    add_custom_target(verify-blender-interactive-benchmark
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_blender_benchmark_report.py"
+        --report "${BLENDER_INTERACTIVE_BENCHMARK_JSON}"
+        --expect-engine blackhole
+        --json-out "${BLENDER_INTERACTIVE_BENCHMARK_VERIFY_JSON}"
+        --md-out "${BLENDER_INTERACTIVE_BENCHMARK_VERIFY_MD}"
+      DEPENDS benchmark-blender-interactive
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying generated Blender interactive benchmark report"
+      VERBATIM
+    )
+
+    add_custom_target(benchmark-blender-harsh-scene
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_blender_interactive_benchmark.py"
+        --blender-executable "${BLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --addon-zip "${BLENDER_ADDON_PACKAGE}"
+        --bridge-lib "$<TARGET_FILE:blackhole_bridge>"
+        --label "blender-harsh"
+        --scene-profile harsh_lighting
+        --width 640
+        --height 360
+        --measured-frames 2
+        --warmup-frames 1
+        --scenario all
+        --json-out "${BLENDER_HARSH_BENCHMARK_JSON}"
+        --log-out "${BLENDER_HARSH_BENCHMARK_LOG}"
+      DEPENDS package-blender-addon verify-blender-addon-package verify-blender-bridge-abi blackhole_bridge
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Blender harsh-lighting benchmark lane"
+      VERBATIM
+    )
+
+    add_custom_target(verify-blender-harsh-scene
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_blender_benchmark_report.py"
+        --report "${BLENDER_HARSH_BENCHMARK_JSON}"
+        --expect-engine blackhole
+        --expect-scene-profile harsh_lighting
+        --json-out "${BLENDER_HARSH_BENCHMARK_VERIFY_JSON}"
+        --md-out "${BLENDER_HARSH_BENCHMARK_VERIFY_MD}"
+      DEPENDS benchmark-blender-harsh-scene
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying generated Blender harsh-lighting benchmark report"
+      VERBATIM
+    )
+
+    add_custom_target(render-blackhole-showcase-blender
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/assemble_blackhole_showcase.py"
+        --label "blender52-showcase"
+        --host-label "blender52"
+        --baseline-report "${BLENDER_INTERACTIVE_BENCHMARK_VERIFY_JSON}"
+        --harsh-report "${BLENDER_HARSH_BENCHMARK_VERIFY_JSON}"
+        --artifact-dir "${BLENDER_SHOWCASE_RENDER_ARTIFACT_DIR}"
+        --json-out "${BLENDER_SHOWCASE_RENDER_JSON}"
+        --md-out "${BLENDER_SHOWCASE_RENDER_MD}"
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Assembling Blackhole showcase gallery for stock Blender"
+      VERBATIM
+    )
+  endif()
+
+  if(TARGET blackhole_bridge AND OCTANEBLENDER_EXECUTABLE)
+    add_custom_target(install-dream-textures-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/install_dream_textures_runtime.py"
+        --host octane45
+        --extra-model-id "carsonkatri/stable-diffusion-2-depth-diffusers"
+        --json-out "${DREAM_TEXTURES_OCTANE_INSTALL_JSON}"
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Installing Dream Textures runtime for OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_runtime.py"
+        --label "octane45"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --json-out "${DREAM_TEXTURES_OCTANE_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_VERIFY_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures runtime inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "octane45-direct"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --timeout-seconds 60
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying direct Dream Textures -> Blackhole disk pipeline inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-octane-background
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "octane45-background-direct"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --slot background
+        --timeout-seconds 60
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_BACKGROUND_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_BACKGROUND_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_BACKGROUND_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying direct Dream Textures -> Blackhole world-environment pipeline inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-octane-conditioned
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "octane45-conditioned-direct"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --conditioning-mode image
+        --timeout-seconds 90
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_CONDITIONED_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_CONDITIONED_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_CONDITIONED_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying image-conditioned Dream Textures -> Blackhole disk pipeline inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-octane-depth
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "octane45-depth-direct"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --model-id "carsonkatri/stable-diffusion-2-depth-diffusers"
+        --conditioning-mode depth
+        --timeout-seconds 120
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_DEPTH_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_DEPTH_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_DEPTH_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying depth-conditioned Dream Textures -> Blackhole disk pipeline inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-direct-octane-image-depth
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_direct_pipeline.py"
+        --label "octane45-image-depth-direct"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --model-id "carsonkatri/stable-diffusion-2-depth-diffusers"
+        --conditioning-mode image_depth
+        --timeout-seconds 120
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_IMAGE_DEPTH_DIRECT_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_IMAGE_DEPTH_DIRECT_VERIFY_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_IMAGE_DEPTH_DIRECT_VERIFY_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying image+depth-conditioned Dream Textures -> Blackhole disk pipeline inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(run-dream-textures-conditioning-sweep-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_dream_textures_conditioning_sweep.py"
+        --label "octane45-conditioning-sweep"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Dream Textures conditioning sweep inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-conditioning-sweep-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_sweep.py"
+        --report "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_JSON}"
+        --expect-scene-profile baseline
+        --json-out "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_VERIFY_MD}"
+      DEPENDS run-dream-textures-conditioning-sweep-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures conditioning sweep inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(run-dream-textures-harsh-conditioning-sweep-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_dream_textures_conditioning_sweep.py"
+        --label "octane45-harsh-conditioning-sweep"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --scene-profile harsh_lighting
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Dream Textures harsh-lighting conditioning sweep inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-harsh-conditioning-sweep-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_sweep.py"
+        --report "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_JSON}"
+        --expect-scene-profile harsh_lighting
+        --json-out "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_VERIFY_MD}"
+      DEPENDS run-dream-textures-harsh-conditioning-sweep-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures harsh-lighting conditioning sweep inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-conditioning-policy-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_policy.py"
+        --report "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --host-label "octane45"
+        --scene-profile baseline
+        --json-out "${DREAM_TEXTURES_OCTANE_CONDITIONING_POLICY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_CONDITIONING_POLICY_MD}"
+      DEPENDS verify-dream-textures-conditioning-sweep-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Deriving Dream Textures conditioning policy for Octane baseline scene"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-harsh-conditioning-policy-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_policy.py"
+        --report "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --host-label "octane45"
+        --scene-profile harsh_lighting
+        --json-out "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_POLICY_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_POLICY_MD}"
+      DEPENDS verify-dream-textures-harsh-conditioning-sweep-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Deriving Dream Textures conditioning policy for Octane harsh-lighting scene"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-generation-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_policy_generation.py"
+        --label "octane45-policy-generation"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --slot disk
+        --intent interactive
+        --scene-profile baseline
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_POLICY_GENERATION_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_POLICY_GENERATION_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_POLICY_GENERATION_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures policy generation and warm-cache reuse inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-background-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_policy_generation.py"
+        --label "octane45-policy-background"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --slot background
+        --intent production
+        --scene-profile baseline
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_POLICY_BACKGROUND_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_POLICY_BACKGROUND_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_POLICY_BACKGROUND_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures background policy preparation inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-production-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_policy_generation.py"
+        --label "octane45-policy-production"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --slot disk
+        --intent production
+        --scene-profile baseline
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_POLICY_PRODUCTION_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_POLICY_PRODUCTION_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_POLICY_PRODUCTION_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures production image-depth policy preparation inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-stale-refresh-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_policy_generation.py"
+        --label "octane45-policy-stale-refresh"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --user-scripts "$ENV{HOME}/.config/blender/4.5/scripts"
+        --slot disk
+        --intent interactive
+        --scene-profile baseline
+        --mutate-inclination-deg 34.0
+        --mutate-observer-distance 24.0
+        --sanitize-ocio
+        --json-out "${DREAM_TEXTURES_OCTANE_POLICY_STALE_REFRESH_JSON}"
+        --md-out "${DREAM_TEXTURES_OCTANE_POLICY_STALE_REFRESH_MD}"
+        --log-out "${DREAM_TEXTURES_OCTANE_POLICY_STALE_REFRESH_LOG}"
+      DEPENDS install-dream-textures-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures policy stale-refresh behavior inside OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(render-blackhole-showcase-octane
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/assemble_blackhole_showcase.py"
+        --label "octane45-showcase"
+        --host-label "octane45"
+        --baseline-report "${OCTANE_INTERACTIVE_BENCHMARK_VERIFY_JSON}"
+        --harsh-report "${OCTANE_HARSH_BENCHMARK_VERIFY_JSON}"
+        --artifact-dir "${OCTANE_SHOWCASE_RENDER_ARTIFACT_DIR}"
+        --json-out "${OCTANE_SHOWCASE_RENDER_JSON}"
+        --md-out "${OCTANE_SHOWCASE_RENDER_MD}"
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Assembling Blackhole showcase gallery for OctaneBlender"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-conditioning-parity
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_host_parity.py"
+        --blender-report "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --octane-report "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --json-out "${DREAM_TEXTURES_CONDITIONING_BASELINE_PARITY_JSON}"
+        --md-out "${DREAM_TEXTURES_CONDITIONING_BASELINE_PARITY_MD}"
+      DEPENDS verify-dream-textures-conditioning-sweep-blender verify-dream-textures-conditioning-sweep-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures conditioning host parity for baseline scene"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-harsh-conditioning-parity
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_dream_textures_conditioning_host_parity.py"
+        --blender-report "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --octane-report "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --json-out "${DREAM_TEXTURES_CONDITIONING_HARSH_PARITY_JSON}"
+        --md-out "${DREAM_TEXTURES_CONDITIONING_HARSH_PARITY_MD}"
+      DEPENDS verify-dream-textures-harsh-conditioning-sweep-blender verify-dream-textures-harsh-conditioning-sweep-octane
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying Dream Textures conditioning host parity for harsh-lighting scene"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-conditioning-trends
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/summarize_dream_textures_conditioning_trends.py"
+        --baseline-blender-report "${DREAM_TEXTURES_BLENDER_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --baseline-octane-report "${DREAM_TEXTURES_OCTANE_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --harsh-blender-report "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --harsh-octane-report "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_SWEEP_VERIFY_JSON}"
+        --baseline-parity-report "${DREAM_TEXTURES_CONDITIONING_BASELINE_PARITY_JSON}"
+        --harsh-parity-report "${DREAM_TEXTURES_CONDITIONING_HARSH_PARITY_JSON}"
+        --baseline-blender-policy "${DREAM_TEXTURES_BLENDER_CONDITIONING_POLICY_JSON}"
+        --baseline-octane-policy "${DREAM_TEXTURES_OCTANE_CONDITIONING_POLICY_JSON}"
+        --harsh-blender-policy "${DREAM_TEXTURES_BLENDER_HARSH_CONDITIONING_POLICY_JSON}"
+        --harsh-octane-policy "${DREAM_TEXTURES_OCTANE_HARSH_CONDITIONING_POLICY_JSON}"
+        --json-out "${DREAM_TEXTURES_CONDITIONING_TRENDS_JSON}"
+        --md-out "${DREAM_TEXTURES_CONDITIONING_TRENDS_MD}"
+      DEPENDS
+        verify-dream-textures-conditioning-policy-blender
+        verify-dream-textures-conditioning-policy-octane
+        verify-dream-textures-harsh-conditioning-policy-blender
+        verify-dream-textures-harsh-conditioning-policy-octane
+        verify-dream-textures-conditioning-parity
+        verify-dream-textures-harsh-conditioning-parity
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Summarizing scene-aware Dream Textures conditioning trends"
+      VERBATIM
+    )
+
+    add_custom_target(verify-dream-textures-policy-generation
+      DEPENDS
+        verify-dream-textures-policy-generation-blender
+        verify-dream-textures-policy-generation-octane
+        verify-dream-textures-policy-stale-refresh-blender
+        verify-dream-textures-policy-stale-refresh-octane
+    )
+
+    add_custom_target(probe-octane-readiness
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_octane_readiness_probe.py"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --addon-zip "${BLENDER_ADDON_PACKAGE}"
+        --bridge-lib "$<TARGET_FILE:blackhole_bridge>"
+        --timeout-seconds 45
+        --json-out "${OCTANE_READINESS_JSON}"
+        --log-out "${OCTANE_READINESS_LOG}"
+      DEPENDS package-blender-addon verify-blender-addon-package verify-blender-bridge-abi blackhole_bridge
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Probing Octane render readiness"
+      VERBATIM
+    )
+
+    add_custom_target(octane-addon-smoke
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_blender_addon_smoke.py"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --addon-zip "${BLENDER_ADDON_PACKAGE}"
+        --bridge-lib "$<TARGET_FILE:blackhole_bridge>"
+        --label "octane"
+        --expect-engine octane
+        --json-out "${OCTANE_SMOKE_JSON}"
+        --log-out "${OCTANE_SMOKE_LOG}"
+      DEPENDS package-blender-addon verify-blender-addon-package verify-blender-bridge-abi blackhole_bridge
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running OctaneBlender addon smoke test"
+      VERBATIM
+    )
+
+    add_custom_target(verify-octane-smoke-report
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_blender_smoke_report.py"
+        --report "${OCTANE_SMOKE_JSON}"
+        --expect-engine octane
+        --json-out "${OCTANE_SMOKE_VERIFY_JSON}"
+        --md-out "${OCTANE_SMOKE_VERIFY_MD}"
+      DEPENDS octane-addon-smoke
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying generated Octane smoke report"
+      VERBATIM
+    )
+
+    add_custom_target(benchmark-octane-interactive
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_blender_interactive_benchmark.py"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --addon-zip "${BLENDER_ADDON_PACKAGE}"
+        --bridge-lib "$<TARGET_FILE:blackhole_bridge>"
+        --label "octane-interactive"
+        --expect-engine octane
+        --quality-tier balanced
+        --octane-readiness-report "${OCTANE_READINESS_JSON}"
+        --width 640
+        --height 360
+        --measured-frames 4
+        --warmup-frames 1
+        --scenario all
+        --json-out "${OCTANE_INTERACTIVE_BENCHMARK_JSON}"
+        --log-out "${OCTANE_INTERACTIVE_BENCHMARK_LOG}"
+      DEPENDS probe-octane-readiness
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Octane interactive benchmark lane"
+      VERBATIM
+    )
+
+    add_custom_target(verify-octane-interactive-benchmark
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_blender_benchmark_report.py"
+        --report "${OCTANE_INTERACTIVE_BENCHMARK_JSON}"
+        --expect-engine octane
+        --json-out "${OCTANE_INTERACTIVE_BENCHMARK_VERIFY_JSON}"
+        --md-out "${OCTANE_INTERACTIVE_BENCHMARK_VERIFY_MD}"
+      DEPENDS benchmark-octane-interactive
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying generated Octane interactive benchmark report"
+      VERBATIM
+    )
+
+    add_custom_target(benchmark-octane-harsh-scene
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_blender_interactive_benchmark.py"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --addon-zip "${BLENDER_ADDON_PACKAGE}"
+        --bridge-lib "$<TARGET_FILE:blackhole_bridge>"
+        --label "octane-harsh"
+        --expect-engine octane
+        --quality-tier balanced
+        --scene-profile harsh_lighting
+        --octane-readiness-report "${OCTANE_READINESS_JSON}"
+        --width 640
+        --height 360
+        --measured-frames 2
+        --warmup-frames 1
+        --scenario all
+        --json-out "${OCTANE_HARSH_BENCHMARK_JSON}"
+        --log-out "${OCTANE_HARSH_BENCHMARK_LOG}"
+      DEPENDS probe-octane-readiness
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Octane harsh-lighting benchmark lane"
+      VERBATIM
+    )
+
+    add_custom_target(verify-octane-harsh-scene
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_blender_benchmark_report.py"
+        --report "${OCTANE_HARSH_BENCHMARK_JSON}"
+        --expect-engine octane
+        --json-out "${OCTANE_HARSH_BENCHMARK_VERIFY_JSON}"
+        --md-out "${OCTANE_HARSH_BENCHMARK_VERIFY_MD}"
+      DEPENDS benchmark-octane-harsh-scene
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying generated Octane harsh-lighting benchmark report"
+      VERBATIM
+    )
+
+    add_custom_target(benchmark-octane-quality-sweep
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/run_octane_quality_sweep.py"
+        --blender-executable "${OCTANEBLENDER_EXECUTABLE}"
+        --source-dir "${PROJECT_SOURCE_DIR}"
+        --addon-zip "${BLENDER_ADDON_PACKAGE}"
+        --bridge-lib "$<TARGET_FILE:blackhole_bridge>"
+        --octane-readiness-report "${OCTANE_READINESS_JSON}"
+        --width 640
+        --height 360
+        --measured-frames 2
+        --warmup-frames 1
+        --json-out "${OCTANE_QUALITY_SWEEP_JSON}"
+        --md-out "${OCTANE_QUALITY_SWEEP_MD}"
+        --log-out "${OCTANE_QUALITY_SWEEP_LOG}"
+      DEPENDS probe-octane-readiness
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Running Octane quality-tier sweep"
+      VERBATIM
+    )
+
+    add_custom_target(verify-octane-quality-sweep
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/scripts/verify_octane_quality_sweep.py"
+        --report "${OCTANE_QUALITY_SWEEP_JSON}"
+        --json-out "${OCTANE_QUALITY_SWEEP_VERIFY_JSON}"
+        --md-out "${OCTANE_QUALITY_SWEEP_VERIFY_MD}"
+      DEPENDS benchmark-octane-quality-sweep
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      COMMENT "Verifying generated Octane quality sweep report"
+      VERBATIM
+    )
+  endif()
 else()
   message(STATUS "python3 not found - GLSL shader generation disabled")
 endif()
@@ -1667,6 +2887,568 @@ if(BUILD_TESTING)
   set(SANITIZER_TEST_ENV "")
   if(ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN)
     list(APPEND SANITIZER_TEST_ENV "LD_PRELOAD=")
+  endif()
+
+  if(TARGET repo-truth)
+    add_test(
+      NAME repo_truth_generation
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target repo-truth
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(repo_truth_generation PROPERTIES
+      LABELS "docs;meta"
+      TIMEOUT 120
+    )
+  endif()
+  if(TARGET verify-physics-claims)
+    add_test(
+      NAME physics_claims_matrix
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-physics-claims
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(physics_claims_matrix PROPERTIES
+      LABELS "docs;physics;meta"
+      TIMEOUT 30
+    )
+  endif()
+  if(TARGET verify-blender-addon-package)
+    add_test(
+      NAME blender_addon_package
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-blender-addon-package
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_addon_package PROPERTIES
+      LABELS "blender;meta"
+      TIMEOUT 30
+    )
+  endif()
+  if(TARGET stage-blender-addon)
+    add_test(
+      NAME blender_addon_stage
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target stage-blender-addon
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_addon_stage PROPERTIES
+      LABELS "blender;meta"
+      TIMEOUT 30
+    )
+  endif()
+  if(TARGET verify-blender-bridge-abi)
+    add_test(
+      NAME blender_bridge_abi
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-blender-bridge-abi
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_bridge_abi PROPERTIES
+      LABELS "blender;meta"
+      TIMEOUT 30
+    )
+  endif()
+  if(TARGET verify-dream-textures-blender)
+    add_test(
+      NAME dream_textures_blender
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender PROPERTIES
+      LABELS "blender;dream_textures;integration"
+      TIMEOUT 300
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-blender)
+    add_test(
+      NAME dream_textures_blender_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_direct PROPERTIES
+      LABELS "blender;dream_textures;integration;direct_pipeline"
+      TIMEOUT 300
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-blender-background)
+    add_test(
+      NAME dream_textures_blender_background_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-blender-background
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_background_direct PROPERTIES
+      LABELS "blender;dream_textures;integration;direct_pipeline;background"
+      TIMEOUT 300
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-blender-conditioned)
+    add_test(
+      NAME dream_textures_blender_conditioned_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-blender-conditioned
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_conditioned_direct PROPERTIES
+      LABELS "blender;dream_textures;integration;direct_pipeline;conditioning"
+      TIMEOUT 360
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-blender-depth)
+    add_test(
+      NAME dream_textures_blender_depth_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-blender-depth
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_depth_direct PROPERTIES
+      LABELS "blender;dream_textures;integration;direct_pipeline;conditioning;depth"
+      TIMEOUT 480
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-blender-image-depth)
+    add_test(
+      NAME dream_textures_blender_image_depth_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-blender-image-depth
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_image_depth_direct PROPERTIES
+      LABELS "blender;dream_textures;integration;direct_pipeline;conditioning;depth;image_depth"
+      TIMEOUT 480
+    )
+  endif()
+  if(TARGET verify-dream-textures-conditioning-sweep-blender)
+    add_test(
+      NAME dream_textures_blender_conditioning_sweep
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-conditioning-sweep-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_conditioning_sweep PROPERTIES
+      LABELS "blender;dream_textures;integration;conditioning;sweep"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-harsh-conditioning-sweep-blender)
+    add_test(
+      NAME dream_textures_blender_harsh_conditioning_sweep
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-harsh-conditioning-sweep-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_harsh_conditioning_sweep PROPERTIES
+      LABELS "blender;dream_textures;integration;conditioning;sweep;harsh_lighting"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-conditioning-policy-blender)
+    add_test(
+      NAME dream_textures_blender_conditioning_policy
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-conditioning-policy-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_conditioning_policy PROPERTIES
+      LABELS "blender;dream_textures;integration;conditioning;policy"
+      TIMEOUT 1200
+    )
+  endif()
+  if(TARGET verify-dream-textures-harsh-conditioning-policy-blender)
+    add_test(
+      NAME dream_textures_blender_harsh_conditioning_policy
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-harsh-conditioning-policy-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_harsh_conditioning_policy PROPERTIES
+      LABELS "blender;dream_textures;integration;conditioning;policy;harsh_lighting"
+      TIMEOUT 1200
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-generation-blender)
+    add_test(
+      NAME dream_textures_blender_policy_generation
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-generation-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_policy_generation PROPERTIES
+      LABELS "blender;dream_textures;integration;conditioning;policy_generation"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-background-blender)
+    add_test(
+      NAME dream_textures_blender_policy_background
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-background-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_policy_background PROPERTIES
+      LABELS "blender;dream_textures;integration;conditioning;policy_generation;background"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-production-blender)
+    add_test(
+      NAME dream_textures_blender_policy_production
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-production-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_policy_production PROPERTIES
+      LABELS "blender;dream_textures;integration;conditioning;policy_generation;production"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-stale-refresh-blender)
+    add_test(
+      NAME dream_textures_blender_policy_stale_refresh
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-stale-refresh-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_blender_policy_stale_refresh PROPERTIES
+      LABELS "blender;dream_textures;integration;conditioning;policy_generation;stale_refresh"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET blender-addon-smoke)
+    add_test(
+      NAME blender_addon_smoke
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target blender-addon-smoke
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_addon_smoke PROPERTIES
+      LABELS "blender;integration"
+      TIMEOUT 120
+    )
+  endif()
+  if(TARGET verify-blender-smoke-report)
+    add_test(
+      NAME blender_smoke_report
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-blender-smoke-report
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_smoke_report PROPERTIES
+      LABELS "blender;integration;meta"
+      TIMEOUT 120
+    )
+  endif()
+  if(TARGET benchmark-blender-interactive)
+    add_test(
+      NAME blender_interactive_benchmark
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target benchmark-blender-interactive
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_interactive_benchmark PROPERTIES
+      LABELS "blender;benchmark;integration"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET verify-blender-interactive-benchmark)
+    add_test(
+      NAME blender_interactive_benchmark_report
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-blender-interactive-benchmark
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_interactive_benchmark_report PROPERTIES
+      LABELS "blender;benchmark;integration;meta"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET verify-blender-harsh-scene)
+    add_test(
+      NAME blender_harsh_scene_report
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-blender-harsh-scene
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_harsh_scene_report PROPERTIES
+      LABELS "blender;benchmark;integration;meta"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET render-blackhole-showcase-blender)
+    add_test(
+      NAME blender_showcase_render
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target render-blackhole-showcase-blender
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(blender_showcase_render PROPERTIES
+      LABELS "blender;benchmark;integration;meta"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET verify-dream-textures-octane)
+    add_test(
+      NAME dream_textures_octane
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane PROPERTIES
+      LABELS "blender;octane;dream_textures;integration"
+      TIMEOUT 300
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-octane)
+    add_test(
+      NAME dream_textures_octane_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_direct PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;direct_pipeline"
+      TIMEOUT 300
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-octane-background)
+    add_test(
+      NAME dream_textures_octane_background_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-octane-background
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_background_direct PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;direct_pipeline;background"
+      TIMEOUT 300
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-octane-conditioned)
+    add_test(
+      NAME dream_textures_octane_conditioned_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-octane-conditioned
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_conditioned_direct PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning"
+      TIMEOUT 360
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-octane-depth)
+    add_test(
+      NAME dream_textures_octane_depth_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-octane-depth
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_depth_direct PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning;depth"
+      TIMEOUT 480
+    )
+  endif()
+  if(TARGET verify-dream-textures-direct-octane-image-depth)
+    add_test(
+      NAME dream_textures_octane_image_depth_direct
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-direct-octane-image-depth
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_image_depth_direct PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning;depth;image_depth"
+      TIMEOUT 480
+    )
+  endif()
+  if(TARGET verify-dream-textures-conditioning-sweep-octane)
+    add_test(
+      NAME dream_textures_octane_conditioning_sweep
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-conditioning-sweep-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_conditioning_sweep PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;sweep"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-harsh-conditioning-sweep-octane)
+    add_test(
+      NAME dream_textures_octane_harsh_conditioning_sweep
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-harsh-conditioning-sweep-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_harsh_conditioning_sweep PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;sweep;harsh_lighting"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-conditioning-policy-octane)
+    add_test(
+      NAME dream_textures_octane_conditioning_policy
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-conditioning-policy-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_conditioning_policy PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;policy"
+      TIMEOUT 1200
+    )
+  endif()
+  if(TARGET verify-dream-textures-harsh-conditioning-policy-octane)
+    add_test(
+      NAME dream_textures_octane_harsh_conditioning_policy
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-harsh-conditioning-policy-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_harsh_conditioning_policy PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;policy;harsh_lighting"
+      TIMEOUT 1200
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-generation-octane)
+    add_test(
+      NAME dream_textures_octane_policy_generation
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-generation-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_policy_generation PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-background-octane)
+    add_test(
+      NAME dream_textures_octane_policy_background
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-background-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_policy_background PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;background"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-production-octane)
+    add_test(
+      NAME dream_textures_octane_policy_production
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-production-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_policy_production PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;production"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-stale-refresh-octane)
+    add_test(
+      NAME dream_textures_octane_policy_stale_refresh
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-stale-refresh-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_octane_policy_stale_refresh PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;stale_refresh"
+      TIMEOUT 900
+    )
+  endif()
+  if(TARGET verify-dream-textures-conditioning-parity)
+    add_test(
+      NAME dream_textures_conditioning_host_parity
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-conditioning-parity
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_conditioning_host_parity PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;sweep;meta"
+      TIMEOUT 1200
+    )
+  endif()
+  if(TARGET verify-dream-textures-conditioning-trends)
+    add_test(
+      NAME dream_textures_conditioning_trends
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-conditioning-trends
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_conditioning_trends PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;policy;meta"
+      TIMEOUT 1800
+    )
+  endif()
+  if(TARGET verify-dream-textures-policy-generation)
+    add_test(
+      NAME dream_textures_policy_generation
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-policy-generation
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_policy_generation PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;meta"
+      TIMEOUT 1500
+    )
+  endif()
+  if(TARGET verify-dream-textures-harsh-conditioning-parity)
+    add_test(
+      NAME dream_textures_harsh_conditioning_host_parity
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-dream-textures-harsh-conditioning-parity
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(dream_textures_harsh_conditioning_host_parity PROPERTIES
+      LABELS "blender;octane;dream_textures;integration;conditioning;sweep;meta;harsh_lighting"
+      TIMEOUT 1200
+    )
+  endif()
+  if(TARGET octane-addon-smoke)
+    add_test(
+      NAME octane_addon_smoke
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target octane-addon-smoke
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(octane_addon_smoke PROPERTIES
+      LABELS "blender;octane;integration"
+      TIMEOUT 120
+    )
+  endif()
+  if(TARGET probe-octane-readiness)
+    add_test(
+      NAME octane_readiness
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target probe-octane-readiness
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(octane_readiness PROPERTIES
+      LABELS "blender;octane;integration"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET verify-octane-smoke-report)
+    add_test(
+      NAME octane_smoke_report
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-octane-smoke-report
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(octane_smoke_report PROPERTIES
+      LABELS "blender;octane;integration;meta"
+      TIMEOUT 120
+    )
+  endif()
+  if(TARGET benchmark-octane-interactive)
+    add_test(
+      NAME octane_interactive_benchmark
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target benchmark-octane-interactive
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(octane_interactive_benchmark PROPERTIES
+      LABELS "blender;octane;benchmark;integration"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET verify-octane-interactive-benchmark)
+    add_test(
+      NAME octane_interactive_benchmark_report
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-octane-interactive-benchmark
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(octane_interactive_benchmark_report PROPERTIES
+      LABELS "blender;octane;benchmark;integration;meta"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET verify-octane-harsh-scene)
+    add_test(
+      NAME octane_harsh_scene_report
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-octane-harsh-scene
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(octane_harsh_scene_report PROPERTIES
+      LABELS "blender;octane;benchmark;integration;meta"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET render-blackhole-showcase-octane)
+    add_test(
+      NAME octane_showcase_render
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target render-blackhole-showcase-octane
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(octane_showcase_render PROPERTIES
+      LABELS "blender;octane;benchmark;integration;meta"
+      TIMEOUT 180
+    )
+  endif()
+  if(TARGET verify-octane-quality-sweep)
+    add_test(
+      NAME octane_quality_sweep_report
+      COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target verify-octane-quality-sweep
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    )
+    set_tests_properties(octane_quality_sweep_report PROPERTIES
+      LABELS "blender;octane;benchmark;integration;meta"
+      TIMEOUT 600
+    )
   endif()
   if(ENABLE_ASAN)
     list(APPEND SANITIZER_TEST_ENV "ASAN_OPTIONS=detect_leaks=0")
@@ -1719,7 +3501,7 @@ if(BUILD_TESTING)
     endif()
   endif()
 
-  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_pack_test.cpp")
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_pack_test.cpp" AND TARGET nubhlight_pack)
     add_executable(grmhd_pack_test
       "${PROJECT_SOURCE_DIR}/tests/grmhd_pack_test.cpp"
       "${PROJECT_SOURCE_DIR}/src/grmhd_packed_loader.cpp"
@@ -1757,6 +3539,8 @@ if(BUILD_TESTING)
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
+  elseif(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_pack_test.cpp")
+    message(STATUS "Skipping grmhd_pack_test because nubhlight_pack is not enabled")
   endif()
 
   # GRMHD PBO uploader headless state-machine test

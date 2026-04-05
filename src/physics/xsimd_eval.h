@@ -32,9 +32,7 @@
 #include "constants.h"
 
 #if BLACKHOLE_ENABLE_XSIMD
-#include <xsimd/config/xsimd_arch.hpp> // NOLINT(misc-include-cleaner) -- explicit include for xsimd::default_arch
-#include <xsimd/types/xsimd_api.hpp>
-#include <xsimd/types/xsimd_batch.hpp> // NOLINT(misc-include-cleaner) -- explicit include for xsimd::batch
+#include <xsimd/xsimd.hpp> // NOLINT(misc-include-cleaner) -- xsimd 14 requires the umbrella header for stable public API macros/types
 #endif
 
 namespace physics::xsimd_eval {

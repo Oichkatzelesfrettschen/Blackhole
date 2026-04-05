@@ -1,6 +1,10 @@
 # Comprehensive Physics Architecture: Blackhole + openuniverse Ecosystem
 **As of 2025-12-29** | Analysis by Claude Code
 
+This file is a historical synthesis note, not the authoritative checked claim
+inventory for the current repository. For locally validated claims tied to
+tests and code, use [Claims And Evidence](claims-evidence.md).
+
 ---
 
 ## EXECUTIVE SUMMARY

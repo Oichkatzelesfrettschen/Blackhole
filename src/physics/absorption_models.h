@@ -15,6 +15,7 @@
 #ifndef ABSORPTION_MODELS_H
 #define ABSORPTION_MODELS_H
 
+#include "constants.h"
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -22,26 +23,25 @@
 namespace physics {
 
 // ============================================================================
-// Physical Constants (CGS units)
+// Physical Constants (CGS units) -- aliases for self-contained readability
 // ============================================================================
 
 /// Speed of light [cm/s]
-constexpr double SPEED_OF_LIGHT = 2.99792458e10;
+inline constexpr double SPEED_OF_LIGHT = C;
 
 /// Planck constant [erg*s]
-constexpr double PLANCK = 6.62607015e-27;
+inline constexpr double PLANCK = 6.62607015e-27;
 
 /// Electron mass [g]
-constexpr double ELECTRON_MASS = 9.1093837015e-28;
+inline constexpr double ELECTRON_MASS = 9.1093837015e-28;
 
 /// Electron charge [esu]
-constexpr double ELECTRON_CHARGE = 4.80320425e-10;
+inline constexpr double ELECTRON_CHARGE = 4.80320425e-10;
 
-/// Thomson cross-section [cm^2]
-constexpr double SIGMA_THOMSON = 6.6524587321e-25;
+// SIGMA_THOMSON from constants.h (inline constexpr double SIGMA_THOMSON)
 
 /// Boltzmann constant [erg/K]
-constexpr double BOLTZMANN = 1.380649e-16;
+inline constexpr double BOLTZMANN = K_B;
 
 // ============================================================================
 // Synchrotron Self-Absorption (SSA)
@@ -142,7 +142,8 @@ constexpr double BOLTZMANN = 1.380649e-16;
  * @param theta Dimensionless temperature (k*T / (m_e*c^2)) [dimensionless]
  * @return Absorption coefficient [cm^-1]
  */
-[[nodiscard]] inline double comptonAbsorption(double nu, double nE, double /* theta */) {
+[[nodiscard]] inline double comptonAbsorption(double nu, double nE, double theta) {
+  static_cast<void>(theta);
   // Photon energy [erg]
   const double hNu = PLANCK * nu;
 

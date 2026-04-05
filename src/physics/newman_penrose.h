@@ -78,37 +78,13 @@ struct NPWeylPsi2 {
     double im = 0.0; /**< Im(Psi_2) = -M_geo a c (3 r^2 - a^2 c^2) / Sigma^3 */
 };
 
-/**
- * @brief Kerr-BL Sigma function.
- *
- * Sigma = r^2 + a^2 cos^2(theta) = |r - i a cos(theta)|^2
- *
- * WHY: Sigma is the denominator of most Kerr metric components.  Returning it
- * separately allows callers to guard against the ring singularity (Sigma = 0
- * at r = 0, theta = pi/2 when a != 0) before computing derived quantities.
- *
- * @param r         Boyer-Lindquist radial coordinate [cm]
- * @param cosTheta  cos(theta); equatorial plane: 0, north pole: +1
- * @param a         Spin parameter [cm] (a = a_star * M_geo)
- * @return Sigma = r^2 + a^2 cos^2 theta [cm^2]; always >= 0
- */
+// Local cos(theta)-form helper for Newman-Penrose curvature invariants.
 [[nodiscard]] inline double kerrSigma(double r, double cosTheta, double a) noexcept {
     const double c = cosTheta;
     return (r * r) + (a * a * c * c);
 }
 
-/**
- * @brief Kerr-BL Delta function.
- *
- * Delta = r^2 - r_s r + a^2 = r^2 - 2 M_geo r + a^2
- *
- * Delta = 0 at the inner (r_-) and outer (r_+) horizons.
- *
- * @param r     Boyer-Lindquist radial coordinate [cm]
- * @param mGeo  Geometric mass G M / c^2 [cm]
- * @param a     Spin parameter [cm]
- * @return Delta [cm^2]; zero at both horizons
- */
+// Local geometric-mass form helper for Newman-Penrose curvature invariants.
 [[nodiscard]] inline double kerrDelta(double r, double mGeo, double a) noexcept {
     return (r * r) - (2.0 * mGeo * r) + (a * a);
 }

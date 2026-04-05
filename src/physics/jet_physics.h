@@ -63,8 +63,8 @@ struct JetParams {
  *
  * Based on EHT observations (Jan 2026).
  *
- * @param a_star Dimensionless spin (~0.9 from EHT)
- * @param mdot_edd Accretion rate in Eddington units (~0.001)
+ * @param aStar Dimensionless spin (~0.9 from EHT)
+ * @param mdotEdd Accretion rate in Eddington units (~0.001)
  * @return JetParams
  */
 inline JetParams m87Jet(double aStar = 0.9, double mdotEdd = 0.001) {
@@ -99,8 +99,8 @@ inline JetParams m87Jet(double aStar = 0.9, double mdotEdd = 0.001) {
 /**
  * @brief Create jet parameters for Sgr A*.
  *
- * @param a_star Dimensionless spin (0.94 from EHT-GRMHD)
- * @param mdot_edd Accretion rate (~10^-5 for Sgr A*)
+ * @param aStar Dimensionless spin (0.94 from EHT-GRMHD)
+ * @param mdotEdd Accretion rate (~10^-5 for Sgr A*)
  * @return JetParams
  */
 inline JetParams sgrAStarJet(double aStar = 0.94, double mdotEdd = 1e-5) {
@@ -325,7 +325,7 @@ inline double jetLorentzFactorAtRadius(double r, const JetParams &jet) {
  *
  * β = sqrt(1 - 1/Γ²)
  *
- * @param Gamma Lorentz factor
+ * @param gamma Lorentz factor
  * @return Velocity in units of c
  */
 inline double lorentzToBeta(double gamma) {
@@ -340,8 +340,8 @@ inline double lorentzToBeta(double gamma) {
  *
  * δ = 1 / (Γ(1 - β cos θ_obs))
  *
- * @param Gamma Lorentz factor
- * @param theta_obs Viewing angle [rad]
+ * @param gamma Lorentz factor
+ * @param thetaObs Viewing angle [rad]
  * @return Doppler factor
  */
 inline double jetDopplerFactor(double gamma, double thetaObs) {
@@ -402,7 +402,7 @@ inline double jetSynchrotronEmissivity(double r, double theta, double nu, const 
  *
  * @param r Radius [cm]
  * @param theta Polar angle [rad]
- * @param theta_obs Viewing angle [rad]
+ * @param thetaObs Viewing angle [rad]
  * @param nu Frequency [Hz]
  * @param jet Jet parameters
  * @return Observed flux
@@ -447,7 +447,7 @@ struct JetStructurePoint {
  * @brief Generate jet structure profile along axis.
  *
  * @param jet Jet parameters
- * @param n_points Number of points
+ * @param nPoints Number of points
  * @return Vector of structure points
  */
 inline std::vector<JetStructurePoint> jetStructureProfile(const JetParams &jet, int nPoints = 100) {

@@ -340,7 +340,7 @@ inline double ellipticEIncomplete(double phi, double k) {
  * Uses elliptic integral representation for accuracy.
  *
  * @param b Impact parameter [cm]
- * @param r_s Schwarzschild radius [cm]
+ * @param rS Schwarzschild radius [cm]
  * @return Deflection angle [rad], or infinity if b ≤ b_crit
  */
 inline double deflectionAngleSchwarzschild(double b, double rS) {
@@ -408,7 +408,7 @@ inline double deflectionAngleSchwarzschild(double b, double rS) {
  * In the strong-field limit (b → bM):
  * α(b) = -ā log(b/bM - 1) + b̄ + O(b - bM)
  *
- * @param r_s Schwarzschild radius [cm]
+ * @param rS Schwarzschild radius [cm]
  * @param aBar Output: logarithmic coefficient ā
  * @param bBar Output: constant term b̄
  * @param bM Output: critical impact parameter bM [cm]
@@ -435,7 +435,7 @@ inline void strongFieldCoefficientsSchwarzschild(double rS, double &aBar, double
  * @brief Compute deflection using strong-field expansion.
  *
  * @param b Impact parameter [cm]
- * @param r_s Schwarzschild radius [cm]
+ * @param rS Schwarzschild radius [cm]
  * @return Deflection angle [rad]
  */
 inline double deflectionStrongField(double b, double rS) {
@@ -461,15 +461,18 @@ inline double deflectionStrongField(double b, double rS) {
  *
  * @param beta Source angle [rad]
  * @param n Image order (1 = outermost)
- * @param D_L Distance to lens [cm]
- * @param D_S Distance to source [cm]
- * @param D_LS Lens-source distance [cm]
- * @param r_s Schwarzschild radius [cm]
+ * @param dL Distance to lens [cm]
+ * @param dS Distance to source [cm]
+ * @param dLs Lens-source distance [cm]
+ * @param rS Schwarzschild radius [cm]
  * @return Image angle θ_n [rad]
  */
-inline double relativisticImagePosition(double /*beta*/, int n, double dL,
-                                        double /*dS*/, double /*dLs*/,
+inline double relativisticImagePosition(double beta, int n, double dL,
+                                        double dS, double dLs,
                                         double rS) {
+  static_cast<void>(beta);
+  static_cast<void>(dS);
+  static_cast<void>(dLs);
   double aBar;
   double bBar;
   double bM;
@@ -497,10 +500,10 @@ inline double relativisticImagePosition(double /*beta*/, int n, double dL,
  *
  * @param beta Source angle [rad]
  * @param n Image order
- * @param D_L Distance to lens [cm]
- * @param D_S Distance to source [cm]
- * @param D_LS Lens-source distance [cm]
- * @param r_s Schwarzschild radius [cm]
+ * @param dL Distance to lens [cm]
+ * @param dS Distance to source [cm]
+ * @param dLs Lens-source distance [cm]
+ * @param rS Schwarzschild radius [cm]
  * @return Magnification |μ_n|
  */
 inline double relativisticImageMagnification(double beta, int n, double dL, double dS, double dLs,
@@ -532,7 +535,7 @@ inline double relativisticImageMagnification(double beta, int n, double dL, doub
  * For equatorial photon orbits in Kerr:
  * b_crit = ±(r_ph² + a²) / (r_ph - M) - a
  *
- * @param r_s Schwarzschild radius [cm]
+ * @param rS Schwarzschild radius [cm]
  * @param a Spin parameter [cm]
  * @param prograde True for prograde photons
  * @return Critical impact parameter [cm]
