@@ -62,11 +62,11 @@ inline constexpr double BOLTZMANN = K_B;
  * @param tempK Electron temperature [K] (for relativistic correction)
  * @return Absorption coefficient [cm^-1]
  */
-[[nodiscard]] inline double synchrotronSelfAbsorption(double nu, double bField,
-                                                       double nE, double tempK) {
+[[nodiscard]] inline double synchrotronSelfAbsorption(double nu, double bField, double nE,
+                                                      double tempK) {
   // Cyclotron frequency
-  const double nuC = (ELECTRON_CHARGE * bField) /
-                     (2.0 * std::numbers::pi * ELECTRON_MASS * SPEED_OF_LIGHT);
+  const double nuC =
+      (ELECTRON_CHARGE * bField) / (2.0 * std::numbers::pi * ELECTRON_MASS * SPEED_OF_LIGHT);
 
   // Synchrotron self-absorption (non-relativistic formula)
   // alpha_ssa = (n_e * sigma_T / 2) * (nu_c / nu)^2
@@ -74,8 +74,7 @@ inline constexpr double BOLTZMANN = K_B;
 
   // Relativistic correction factor: increases absorption for high-energy electrons
   // theta = k*T / (m_e * c^2)
-  const double theta =
-      (BOLTZMANN * tempK) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
+  const double theta = (BOLTZMANN * tempK) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
   const double relativisticFactor = 1.0 + (2.4 * theta);
 
   return alphaSsa * relativisticFactor;
@@ -106,11 +105,11 @@ inline constexpr double BOLTZMANN = K_B;
   // Simplifies to: alpha_ff = K_ff * n_e^2 * g_ff / (T^(3/2) * nu^2)
 
   // Prefactor in CGS (includes Gaunt factor ~1 for radio to X-ray)
-  const double kFf = 3.68e8;  // [cm^5 / K^(3/2) / s^2]
+  const double kFf = 3.68e8; // [cm^5 / K^(3/2) / s^2]
 
   // Debye length [cm]
-  const double lambdaD = std::sqrt((BOLTZMANN * tempK) /
-      (4.0 * std::numbers::pi * nE * ELECTRON_CHARGE * ELECTRON_CHARGE));
+  const double lambdaD = std::sqrt(
+      (BOLTZMANN * tempK) / (4.0 * std::numbers::pi * nE * ELECTRON_CHARGE * ELECTRON_CHARGE));
 
   // Approximate Gaunt factor: g_ff ~ ln(lambda_D * 2 * pi / lambda_c)
   // where lambda_c ~ h / (m_e * c) = Compton wavelength ~ 2.4e-10 cm
@@ -191,11 +190,10 @@ inline constexpr double BOLTZMANN = K_B;
  * @param tempK Electron temperature [K]
  * @return Total absorption coefficient [cm^-1]
  */
-[[nodiscard]] inline double totalAbsorptionCoefficient(double nu, double bField,
-                                                        double nE, double tempK) {
+[[nodiscard]] inline double totalAbsorptionCoefficient(double nu, double bField, double nE,
+                                                       double tempK) {
   // Dimensionless temperature
-  const double theta =
-      (BOLTZMANN * tempK) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
+  const double theta = (BOLTZMANN * tempK) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
 
   // Individual components
   const double alphaSsa = synchrotronSelfAbsorption(nu, bField, nE, tempK);
@@ -221,17 +219,19 @@ inline constexpr double BOLTZMANN = K_B;
  * @param tempK Electron temperature [K]
  * @return Dominant absorption mode (0=SSA, 1=free-free, 2=Compton)
  */
-[[nodiscard]] inline int dominantAbsorptionMode(double nu, double bField,
-                                                 double nE, double tempK) {
-  const double theta =
-      (BOLTZMANN * tempK) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
+[[nodiscard]] inline int dominantAbsorptionMode(double nu, double bField, double nE, double tempK) {
+  const double theta = (BOLTZMANN * tempK) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
 
   const double alphaSsa = synchrotronSelfAbsorption(nu, bField, nE, tempK);
   const double alphaFf = freeFreeAbsorption(nu, nE, tempK);
   const double alphaComp = comptonAbsorption(nu, nE, theta);
 
-  if (alphaSsa >= alphaFf && alphaSsa >= alphaComp) { return 0; }
-  if (alphaFf >= alphaSsa && alphaFf >= alphaComp) { return 1; }
+  if (alphaSsa >= alphaFf && alphaSsa >= alphaComp) {
+    return 0;
+  }
+  if (alphaFf >= alphaSsa && alphaFf >= alphaComp) {
+    return 1;
+  }
   return 2;
 }
 
@@ -247,9 +247,8 @@ inline constexpr double BOLTZMANN = K_B;
  * @param mode Absorption mode to use (0=SSA, 1=free-free, 2=Compton)
  * @return Threshold frequency [Hz]
  */
-[[nodiscard]] inline double opticalDepthThresholdFrequency(double bField, double nE,
-                                                            double tempK,
-                                                            double pathLength, int mode) {
+[[nodiscard]] inline double opticalDepthThresholdFrequency(double bField, double nE, double tempK,
+                                                           double pathLength, int mode) {
   // Binary search for frequency where tau = 1
   double nuLow = 1e8;   // 100 MHz
   double nuHigh = 1e20; // 100 EeV
@@ -263,23 +262,22 @@ inline constexpr double BOLTZMANN = K_B;
     } else if (mode == 1) {
       alpha = freeFreeAbsorption(nuMid, nE, tempK);
     } else {
-      const double theta =
-          (BOLTZMANN * tempK) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
+      const double theta = (BOLTZMANN * tempK) / (ELECTRON_MASS * SPEED_OF_LIGHT * SPEED_OF_LIGHT);
       alpha = comptonAbsorption(nuMid, nE, theta);
     }
 
     const double tau = alpha * pathLength;
 
     if (tau > 1.0) {
-      nuHigh = nuMid;  // Decrease frequency
+      nuHigh = nuMid; // Decrease frequency
     } else {
-      nuLow = nuMid;   // Increase frequency
+      nuLow = nuMid; // Increase frequency
     }
   }
 
   return std::sqrt(nuLow * nuHigh);
 }
 
-}  // namespace physics
+} // namespace physics
 
-#endif  // ABSORPTION_MODELS_H
+#endif // ABSORPTION_MODELS_H

@@ -35,18 +35,18 @@ namespace DepthPrepass {
 
 /// Configuration for depth pre-pass behavior
 struct Config {
-    bool enabled = false;           ///< Master toggle for depth pre-pass
-    bool useEarlyZ = true;          ///< Use GL_EQUAL in main pass (requires pre-pass)
-    bool clearDepth = true;         ///< Clear depth buffer before pre-pass
-    float clearDepthValue = 1.0f;   ///< Depth clear value
+  bool enabled = false;         ///< Master toggle for depth pre-pass
+  bool useEarlyZ = true;        ///< Use GL_EQUAL in main pass (requires pre-pass)
+  bool clearDepth = true;       ///< Clear depth buffer before pre-pass
+  float clearDepthValue = 1.0f; ///< Depth clear value
 };
 
 /**
  * @brief Global configuration instance.
  */
-inline Config& config() {
-    static Config cfg;
-    return cfg;
+inline Config &config() {
+  static Config cfg;
+  return cfg;
 }
 
 /**
@@ -56,19 +56,19 @@ inline Config& config() {
  * Call drawOpaqueGeometry() with depth-only shader after this.
  */
 inline void begin() {
-    // Disable color writes
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+  // Disable color writes
+  glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-    // Enable depth test and writes
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS);
+  // Enable depth test and writes
+  glEnable(GL_DEPTH_TEST);
+  glDepthMask(GL_TRUE);
+  glDepthFunc(GL_LESS);
 
-    // Optionally clear depth
-    if (config().clearDepth) {
-        glClearDepthf(config().clearDepthValue);
-        glClear(GL_DEPTH_BUFFER_BIT);
-    }
+  // Optionally clear depth
+  if (config().clearDepth) {
+    glClearDepthf(config().clearDepthValue);
+    glClear(GL_DEPTH_BUFFER_BIT);
+  }
 }
 
 /**
@@ -77,7 +77,7 @@ inline void begin() {
  * Re-enables color writes. Depth buffer now contains closest surfaces.
  */
 inline void end() {
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 }
 
 /**
@@ -87,18 +87,18 @@ inline void end() {
  * matching the pre-pass depth are shaded (zero overdraw for opaque geometry).
  */
 inline void beginMainPass() {
-    glEnable(GL_DEPTH_TEST);
+  glEnable(GL_DEPTH_TEST);
 
-    if (config().useEarlyZ) {
-        // Only shade fragments that exactly match pre-pass depth
-        glDepthFunc(GL_EQUAL);
-        // Disable depth writes (already written in pre-pass)
-        glDepthMask(GL_FALSE);
-    } else {
-        // Standard depth testing
-        glDepthFunc(GL_LESS);
-        glDepthMask(GL_TRUE);
-    }
+  if (config().useEarlyZ) {
+    // Only shade fragments that exactly match pre-pass depth
+    glDepthFunc(GL_EQUAL);
+    // Disable depth writes (already written in pre-pass)
+    glDepthMask(GL_FALSE);
+  } else {
+    // Standard depth testing
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+  }
 }
 
 /**
@@ -107,8 +107,8 @@ inline void beginMainPass() {
  * Restores default depth state.
  */
 inline void endMainPass() {
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
+  glDepthFunc(GL_LESS);
+  glDepthMask(GL_TRUE);
 }
 
 /**
@@ -117,7 +117,7 @@ inline void endMainPass() {
  * Returns true if enabled and we have geometry that benefits from it.
  */
 inline bool shouldUse() {
-    return config().enabled;
+  return config().enabled;
 }
 
 /**
@@ -125,21 +125,21 @@ inline bool shouldUse() {
  */
 class ScopedPrepass {
 public:
-    ScopedPrepass() {
-        if (shouldUse()) {
-            begin();
-            active_ = true;
-        }
+  ScopedPrepass() {
+    if (shouldUse()) {
+      begin();
+      active_ = true;
     }
-    ~ScopedPrepass() {
-        if (active_) {
-            end();
-        }
+  }
+  ~ScopedPrepass() {
+    if (active_) {
+      end();
     }
-    explicit operator bool() const { return active_; }
+  }
+  explicit operator bool() const { return active_; }
 
 private:
-    bool active_ = false;
+  bool active_ = false;
 };
 
 /**
@@ -147,21 +147,21 @@ private:
  */
 class ScopedMainPass {
 public:
-    ScopedMainPass() {
-        if (shouldUse()) {
-            beginMainPass();
-            active_ = true;
-        }
+  ScopedMainPass() {
+    if (shouldUse()) {
+      beginMainPass();
+      active_ = true;
     }
-    ~ScopedMainPass() {
-        if (active_) {
-            endMainPass();
-        }
+  }
+  ~ScopedMainPass() {
+    if (active_) {
+      endMainPass();
     }
-    explicit operator bool() const { return active_; }
+  }
+  explicit operator bool() const { return active_; }
 
 private:
-    bool active_ = false;
+  bool active_ = false;
 };
 
 } // namespace DepthPrepass

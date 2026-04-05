@@ -11,8 +11,7 @@
 namespace verified {
 
 // Kerr metric parameter (spin parameter a = J/M)
-template<typename Real = double>
-concept KerrScalar = std::floating_point<Real>;
+template <typename Real = double> concept KerrScalar = std::floating_point<Real>;
 
 // Kerr helper: Sigma function (encodes radial-angular coupling)
 // Sigma(r, theta, a) = r^2 + a^2 * cos^2(theta)
@@ -195,4 +194,4 @@ template <KerrScalar Real> [[nodiscard]] inline Real bindingEnergyIsco(Real m, R
   return 1.0 - std::sqrt(1.0 - (2.0 * m / rIsco));
 }
 
-}  // namespace verified
+} // namespace verified

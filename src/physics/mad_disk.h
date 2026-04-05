@@ -52,9 +52,9 @@ constexpr double M_PROTON = 1.67262192369e-24;
  * @brief Accretion disk state classification.
  */
 enum class AccretionState {
-  SANE,           ///< Standard and Normal Evolution (weak magnetic field)
-  MAD,            ///< Magnetically Arrested Disk (strong magnetic field)
-  INTERMEDIATE    ///< Transitional state between SANE and MAD
+  SANE,        ///< Standard and Normal Evolution (weak magnetic field)
+  MAD,         ///< Magnetically Arrested Disk (strong magnetic field)
+  INTERMEDIATE ///< Transitional state between SANE and MAD
 };
 
 /**
@@ -62,10 +62,14 @@ enum class AccretionState {
  */
 inline const char *accretionStateName(AccretionState state) {
   switch (state) {
-    case AccretionState::SANE: return "SANE";
-    case AccretionState::MAD: return "MAD";
-    case AccretionState::INTERMEDIATE: return "Intermediate";
-    default: return "Unknown";
+  case AccretionState::SANE:
+    return "SANE";
+  case AccretionState::MAD:
+    return "MAD";
+  case AccretionState::INTERMEDIATE:
+    return "Intermediate";
+  default:
+    return "Unknown";
   }
 }
 
@@ -84,8 +88,8 @@ struct MADDiskParams : public DiskParams {
   double magneticFlux = 0.0;            ///< Dimensionless magnetic flux Φ_BH
 
   // Time-dependent parameters
-  double time = 0.0;                       ///< Simulation time [s]
-  double fluxEruptionPeriod = 6.0;         ///< Eruption timescale [hours] (~orbital period at ISCO)
+  double time = 0.0;               ///< Simulation time [s]
+  double fluxEruptionPeriod = 6.0; ///< Eruption timescale [hours] (~orbital period at ISCO)
 
   // Jet parameters
   double jetEfficiency = 0.0; ///< Jet power / accretion power
@@ -117,7 +121,7 @@ inline MADDiskParams sgrAStarMadDisk(double aStar = 0.94, double mDotEdd = 1e-5)
   disk.mDot = mDotEdd * lEdd / (eta * C2);
 
   // ISCO for highly spinning black hole
-  disk.rIn  = kerrIscoRadius(disk.mass, disk.a, true);  // Prograde
+  disk.rIn = kerrIscoRadius(disk.mass, disk.a, true); // Prograde
   disk.rOut = 1000.0 * mGeo;
   disk.inclination = 0.0;
 
@@ -268,7 +272,7 @@ inline double madJetPower(const MADDiskParams &disk) {
  */
 inline double madJetLorentzFactor(const MADDiskParams &disk) {
   if (disk.state == AccretionState::SANE) {
-    return 2.0;  // Mildly relativistic
+    return 2.0; // Mildly relativistic
   }
 
   // MAD jets: Γ ~ 5-15 for Sgr A*, up to ~50 for blazars
@@ -295,7 +299,7 @@ inline double madJetLorentzFactor(const MADDiskParams &disk) {
  */
 inline double madFluxVariability(const MADDiskParams &disk) {
   if (disk.state == AccretionState::SANE) {
-    return 1.0;  // Steady
+    return 1.0; // Steady
   }
 
   // Variability timescale: orbital period at ISCO
@@ -309,7 +313,7 @@ inline double madFluxVariability(const MADDiskParams &disk) {
   // Amplitude: 30% for MAD (from GRMHD simulations)
   double amplitude = 0.3;
   if (isFluxEruptionActive(disk)) {
-    amplitude = 0.5;  // Larger during eruptions
+    amplitude = 0.5; // Larger during eruptions
   }
 
   // Sinusoidal + noise approximation

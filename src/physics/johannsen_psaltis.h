@@ -144,9 +144,8 @@ struct JPParams {
  * @param params JP deviation parameters
  * @return {g_tt, g_rr, g_thth, g_phph, g_tph}
  */
-[[nodiscard]] inline std::array<double, 5> jpMetric(double r, double theta,
-                                                     double mGeo, double a,
-                                                     const JPParams& params) {
+[[nodiscard]] inline std::array<double, 5> jpMetric(double r, double theta, double mGeo, double a,
+                                                    const JPParams &params) {
   const double cosTh = std::cos(theta);
   const double sinTh = std::sin(theta);
   const double sin2 = sinTh * sinTh;
@@ -193,8 +192,7 @@ struct JPParams {
  * @param alpha13 Leading deviation parameter
  * @return Fractional shadow radius change
  */
-[[nodiscard]] inline double jpShadowFractionalShift(double mGeo, double a,
-                                                    double alpha13) {
+[[nodiscard]] inline double jpShadowFractionalShift(double mGeo, double a, double alpha13) {
   // Photon orbit in Kerr (prograde, equatorial)
   // For Schwarzschild: r_ph = 3M, for Kerr: r_ph depends on spin
   // Use Schwarzschild approximation for small spin
@@ -202,8 +200,7 @@ struct JPParams {
   if (std::abs(a) > (0.01 * mGeo)) {
     // Bardeen formula for prograde photon orbit
     const double aStar = a / mGeo;
-    rPh = 2.0 * mGeo * (1.0 + std::cos((2.0 / 3.0) *
-           std::acos(-std::abs(aStar))));
+    rPh = 2.0 * mGeo * (1.0 + std::cos((2.0 / 3.0) * std::acos(-std::abs(aStar))));
   }
 
   const double mRatio = mGeo / rPh;
@@ -219,10 +216,9 @@ struct JPParams {
  * @param params JP deviation parameters
  * @return true if within typical EHT bounds
  */
-[[nodiscard]] inline bool jpWithinEhtBounds(const JPParams& params) {
+[[nodiscard]] inline bool jpWithinEhtBounds(const JPParams &params) {
   // Conservative bounds from EHT M87* analysis
-  return (std::abs(params.alpha13) < 2.0) &&
-         (std::abs(params.alpha22) < 5.0);
+  return (std::abs(params.alpha13) < 2.0) && (std::abs(params.alpha22) < 5.0);
 }
 
 /**
@@ -235,9 +231,8 @@ struct JPParams {
  * @param tol Tolerance for comparison
  * @return true if JP(alpha=0) == Kerr within tolerance
  */
-[[nodiscard]] inline bool jpKerrLimitCheck(double r, double theta,
-                                            double mGeo, double a,
-                                            double tol = 1e-14) {
+[[nodiscard]] inline bool jpKerrLimitCheck(double r, double theta, double mGeo, double a,
+                                           double tol = 1e-14) {
   const JPParams zeroParams; // all zeros by default
 
   const auto jp = jpMetric(r, theta, mGeo, a, zeroParams);
@@ -254,10 +249,8 @@ struct JPParams {
   const double gPhphKerr = ((r * r) + (a * a) + ((rS * r * a * a * sin2) / sigma)) * sin2;
   const double gTphKerr = -((rS * r * a * sin2) / sigma);
 
-  return (std::abs(jp.at(0) - gTtKerr) < tol) &&
-         (std::abs(jp.at(1) - gRrKerr) < tol) &&
-         (std::abs(jp.at(2) - sigma) < tol) &&
-         (std::abs(jp.at(3) - gPhphKerr) < tol) &&
+  return (std::abs(jp.at(0) - gTtKerr) < tol) && (std::abs(jp.at(1) - gRrKerr) < tol) &&
+         (std::abs(jp.at(2) - sigma) < tol) && (std::abs(jp.at(3) - gPhphKerr) < tol) &&
          (std::abs(jp.at(4) - gTphKerr) < tol);
 }
 

@@ -27,10 +27,11 @@
 #ifndef PHYSICS_PENROSE_H
 #define PHYSICS_PENROSE_H
 
+#include <cmath>
+
 #include "constants.h"
 #include "kerr.h"
 #include "safe_limits.h"
-#include <cmath>
 
 namespace physics {
 
@@ -64,9 +65,8 @@ struct PenroseResult {
  * @param lIn Input particle angular momentum
  * @return PenroseResult with extraction details
  */
-[[nodiscard]] inline PenroseResult penroseProcessEnergyExtraction(const Kerr &kerr,
-                                                                   double eIn,
-                                                                   [[maybe_unused]] double lIn) {
+[[nodiscard]] inline PenroseResult penroseProcessEnergyExtraction(const Kerr &kerr, double eIn,
+                                                                  [[maybe_unused]] double lIn) {
   PenroseResult result;
   result.eIn = eIn;
   result.successful = false;
@@ -279,8 +279,8 @@ struct PenroseResult {
  * @param aStar Dimensionless spin
  * @return Amplification factor (1 = no amplification)
  */
-[[nodiscard]] inline double superradiantAmplification(double omega, int m,
-                                                      double mass, double aStar) {
+[[nodiscard]] inline double superradiantAmplification(double omega, int m, double mass,
+                                                      double aStar) {
   aStar = std::clamp(std::abs(aStar), 0.0, 0.998);
 
   const double mGeo = G * mass / C2;

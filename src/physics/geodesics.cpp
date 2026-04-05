@@ -4,12 +4,13 @@
  */
 
 #include "geodesics.h"
-#include "constants.h"
-#include "schwarzschild.h"
 
 #include <cmath>
 #include <limits>
 #include <numbers>
+
+#include "constants.h"
+#include "schwarzschild.h"
 
 namespace physics {
 
@@ -86,8 +87,7 @@ double photonTurningPoint(double impactParam, double mass) {
   double rTurn = impactParam;
   for (int i = 0; i < 10; ++i) {
     const double r3 = rTurn * rTurn * rTurn;
-    const double f = (r3 - (impactParam * impactParam * rTurn)) +
-                     (impactParam * impactParam * rS);
+    const double f = (r3 - (impactParam * impactParam * rTurn)) + (impactParam * impactParam * rS);
     const double df = (3.0 * rTurn * rTurn) - (impactParam * impactParam);
     if (std::abs(df) < 1e-20) {
       break;
@@ -105,16 +105,14 @@ double photonTurningPoint(double impactParam, double mass) {
 // Coordinate Transformations
 // ============================================================================
 
-void schwarzschildToCartesian(double r, double theta, double phi, double &x,
-                              double &y, double &z) {
+void schwarzschildToCartesian(double r, double theta, double phi, double &x, double &y, double &z) {
   const double sinTheta = std::sin(theta);
   x = r * sinTheta * std::cos(phi);
   y = r * sinTheta * std::sin(phi);
   z = r * std::cos(theta);
 }
 
-void cartesianToSchwarzschild(double x, double y, double z, double &r,
-                              double &theta, double &phi) {
+void cartesianToSchwarzschild(double x, double y, double z, double &r, double &theta, double &phi) {
   r = std::sqrt((x * x) + (y * y) + (z * z));
   if (r < 1e-20) {
     theta = 0.0;

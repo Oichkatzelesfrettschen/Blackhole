@@ -14,13 +14,14 @@
 #ifndef PHYSICS_PARALLEL_LUT_H
 #define PHYSICS_PARALLEL_LUT_H
 
+#include <algorithm>
+#include <cstddef>
+#include <vector>
+
 #include "constants.h"
 #include "kerr.h"
 #include "lut.h"
 #include "schwarzschild.h"
-#include <algorithm>
-#include <cstddef>
-#include <vector>
 
 #if BLACKHOLE_ENABLE_TASKFLOW
 #include <taskflow/taskflow.hpp>
@@ -40,34 +41,29 @@ namespace physics::parallel {
  * @param prograde Prograde orbit flag
  * @return Vector of LUTs, one per spin value
  */
-inline std::vector<Lut1D> generateEmissivityLutSweep(
-    int size,
-    double massSolar,
-    const std::vector<double>& spins,
-    double mdotEdd,
-    bool prograde = true) {
+inline std::vector<Lut1D> generateEmissivityLutSweep(int size, double massSolar,
+                                                     const std::vector<double> &spins,
+                                                     double mdotEdd, bool prograde = true) {
 
-    std::vector<Lut1D> results(spins.size());
+  std::vector<Lut1D> results(spins.size());
 
 #if BLACKHOLE_ENABLE_TASKFLOW
-    tf::Executor executor;
-    tf::Taskflow taskflow;
+  tf::Executor executor;
+  tf::Taskflow taskflow;
 
-    taskflow.for_each_index(std::size_t{0}, spins.size(), std::size_t{1},
-        [&](std::size_t i) {
-            results.at(i) = generateEmissivityLut(size, massSolar, spins.at(i), mdotEdd, prograde);
-        }
-    );
+  taskflow.for_each_index(std::size_t{0}, spins.size(), std::size_t{1}, [&](std::size_t i) {
+    results.at(i) = generateEmissivityLut(size, massSolar, spins.at(i), mdotEdd, prograde);
+  });
 
-    executor.run(taskflow).wait();
+  executor.run(taskflow).wait();
 #else
-    // Fallback to serial execution
-    for (std::size_t i = 0; i < spins.size(); ++i) {
-        results.at(i) = generateEmissivityLut(size, massSolar, spins.at(i), mdotEdd, prograde);
-    }
+  // Fallback to serial execution
+  for (std::size_t i = 0; i < spins.size(); ++i) {
+    results.at(i) = generateEmissivityLut(size, massSolar, spins.at(i), mdotEdd, prograde);
+  }
 #endif
 
-    return results;
+  return results;
 }
 
 /**
@@ -79,32 +75,28 @@ inline std::vector<Lut1D> generateEmissivityLutSweep(
  * @param theta Viewing angle in radians
  * @return Vector of LUTs
  */
-inline std::vector<Lut1D> generateRedshiftLutSweep(
-    int size,
-    double massSolar,
-    const std::vector<double>& spins,
-    double theta = 0.5 * PI) {
+inline std::vector<Lut1D> generateRedshiftLutSweep(int size, double massSolar,
+                                                   const std::vector<double> &spins,
+                                                   double theta = 0.5 * PI) {
 
-    std::vector<Lut1D> results(spins.size());
+  std::vector<Lut1D> results(spins.size());
 
 #if BLACKHOLE_ENABLE_TASKFLOW
-    tf::Executor executor;
-    tf::Taskflow taskflow;
+  tf::Executor executor;
+  tf::Taskflow taskflow;
 
-    taskflow.for_each_index(std::size_t{0}, spins.size(), std::size_t{1},
-        [&](std::size_t i) {
-            results.at(i) = generateRedshiftLut(size, massSolar, spins.at(i), theta);
-        }
-    );
+  taskflow.for_each_index(std::size_t{0}, spins.size(), std::size_t{1}, [&](std::size_t i) {
+    results.at(i) = generateRedshiftLut(size, massSolar, spins.at(i), theta);
+  });
 
-    executor.run(taskflow).wait();
+  executor.run(taskflow).wait();
 #else
-    for (std::size_t i = 0; i < spins.size(); ++i) {
-        results.at(i) = generateRedshiftLut(size, massSolar, spins.at(i), theta);
-    }
+  for (std::size_t i = 0; i < spins.size(); ++i) {
+    results.at(i) = generateRedshiftLut(size, massSolar, spins.at(i), theta);
+  }
 #endif
 
-    return results;
+  return results;
 }
 
 /**
@@ -118,70 +110,64 @@ inline std::vector<Lut1D> generateRedshiftLutSweep(
  * @param spinMax Maximum spin value (-0.99 to 0.99)
  * @return SpinRadiiLut with parallel-computed values
  */
-inline SpinRadiiLut generateSpinRadiiLutParallel(
-    int size,
-    double massSolar,
-    double spinMin = -0.99,
-    double spinMax = 0.99) {
+inline SpinRadiiLut generateSpinRadiiLutParallel(int size, double massSolar, double spinMin = -0.99,
+                                                 double spinMax = 0.99) {
 
-    SpinRadiiLut lut;
-    if (size <= 1) {
-        return lut;
-    }
+  SpinRadiiLut lut;
+  if (size <= 1) {
+    return lut;
+  }
 
-    spinMin = std::clamp(spinMin, -0.99, 0.99);
-    spinMax = std::clamp(spinMax, -0.99, 0.99);
-    if (spinMax <= spinMin) {
-        spinMax = std::min(spinMin + 0.01, 0.99);
-    }
+  spinMin = std::clamp(spinMin, -0.99, 0.99);
+  spinMax = std::clamp(spinMax, -0.99, 0.99);
+  if (spinMax <= spinMin) {
+    spinMax = std::min(spinMin + 0.01, 0.99);
+  }
 
-    const double mass = massSolar * M_SUN;
-    const double rS = schwarzschildRadius(mass);
-    const double rG = G * mass / C2;
+  const double mass = massSolar * M_SUN;
+  const double rS = schwarzschildRadius(mass);
+  const double rG = G * mass / C2;
 
-    lut.spins.resize(static_cast<std::size_t>(size));
-    lut.rIscoOverRs.resize(static_cast<std::size_t>(size));
-    lut.rPhOverRs.resize(static_cast<std::size_t>(size));
+  lut.spins.resize(static_cast<std::size_t>(size));
+  lut.rIscoOverRs.resize(static_cast<std::size_t>(size));
+  lut.rPhOverRs.resize(static_cast<std::size_t>(size));
 
 #if BLACKHOLE_ENABLE_TASKFLOW
-    tf::Executor executor;
-    tf::Taskflow taskflow;
+  tf::Executor executor;
+  tf::Taskflow taskflow;
 
-    taskflow.for_each_index(0, size, 1,
-        [&](int i) {
-            double u = static_cast<double>(i) / (size - 1);
-            double spin = spinMin + u * (spinMax - spinMin);
-            double a = spin * rG;
-            bool prograde = spin >= 0.0;
-            double rIsco = kerrIscoRadius(mass, a, prograde);
-            double rPh = prograde ? kerrPhotonOrbitPrograde(mass, a)
-                                   : kerrPhotonOrbitRetrograde(mass, a);
+  taskflow.for_each_index(0, size, 1, [&](int i) {
+    double u = static_cast<double>(i) / (size - 1);
+    double spin = spinMin + u * (spinMax - spinMin);
+    double a = spin * rG;
+    bool prograde = spin >= 0.0;
+    double rIsco = kerrIscoRadius(mass, a, prograde);
+    double rPh = prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
 
-            lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
-            lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);
-            lut.rPhOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rPh / rS);
-        }
-    );
+    lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
+    lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);
+    lut.rPhOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rPh / rS);
+  });
 
-    executor.run(taskflow).wait();
+  executor.run(taskflow).wait();
 #else
-    // Fallback to serial (same as generateSpinRadiiLut)
-    for (int i = 0; i < size; ++i) {
-      double const u = static_cast<double>(i) / (size - 1);
-      double const spin = spinMin + (u * (spinMax - spinMin));
-      double const a = spin * rG;
-      bool const prograde = spin >= 0.0;
-      double const rIsco = kerrIscoRadius(mass, a, prograde);
-      double const rPh =
-          prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
+  // Fallback to serial (same as generateSpinRadiiLut)
+  for (int i = 0; i < size; ++i) {
+    double const u = static_cast<double>(i) / (size - 1);
+    double const spin = spinMin + (u * (spinMax - spinMin));
+    double const a = spin * rG;
+    bool const prograde = spin >= 0.0;
+    double const rIsco = kerrIscoRadius(mass, a, prograde);
+    double const rPh =
+        prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
 
-      lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
-      lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);
-      lut.rPhOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rPh / rS);
-    }
+    lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
+    lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);
+    lut.rPhOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rPh / rS);
+  }
 #endif
 
-    return lut;
+  return lut;
 }
 
 /**
@@ -192,21 +178,20 @@ inline SpinRadiiLut generateSpinRadiiLutParallel(
  * @tparam F Callable type
  * @param tasks Vector of tasks to execute
  */
-template <typename F>
-inline void parallelExecute(const std::vector<F>& tasks) {
+template <typename F> inline void parallelExecute(const std::vector<F> &tasks) {
 #if BLACKHOLE_ENABLE_TASKFLOW
-    tf::Executor executor;
-    tf::Taskflow taskflow;
+  tf::Executor executor;
+  tf::Taskflow taskflow;
 
-    for (const auto& task : tasks) {
-        taskflow.emplace(task);
-    }
+  for (const auto &task : tasks) {
+    taskflow.emplace(task);
+  }
 
-    executor.run(taskflow).wait();
+  executor.run(taskflow).wait();
 #else
-    for (const auto& task : tasks) {
-        task();
-    }
+  for (const auto &task : tasks) {
+    task();
+  }
 #endif
 }
 
@@ -215,9 +200,9 @@ inline void parallelExecute(const std::vector<F>& tasks) {
  */
 inline bool isAvailable() {
 #if BLACKHOLE_ENABLE_TASKFLOW
-    return true;
+  return true;
 #else
-    return false;
+  return false;
 #endif
 }
 
@@ -226,9 +211,9 @@ inline bool isAvailable() {
  */
 inline unsigned int workerCount() {
 #if BLACKHOLE_ENABLE_TASKFLOW
-    return std::thread::hardware_concurrency();
+  return std::thread::hardware_concurrency();
 #else
-    return 1;
+  return 1;
 #endif
 }
 

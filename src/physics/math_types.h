@@ -98,7 +98,7 @@ inline const Float *dataPtr(const Vec2 &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
 #else
-  return glm::value_ptr(v);  // NOLINT(misc-include-cleaner)
+  return glm::value_ptr(v); // NOLINT(misc-include-cleaner)
 #endif
 }
 
@@ -107,7 +107,7 @@ inline const Float *dataPtr(const Vec3 &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
 #else
-  return glm::value_ptr(v);  // NOLINT(misc-include-cleaner)
+  return glm::value_ptr(v); // NOLINT(misc-include-cleaner)
 #endif
 }
 
@@ -116,7 +116,7 @@ inline const Float *dataPtr(const Vec4 &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
 #else
-  return glm::value_ptr(v);  // NOLINT(misc-include-cleaner)
+  return glm::value_ptr(v); // NOLINT(misc-include-cleaner)
 #endif
 }
 
@@ -125,7 +125,7 @@ inline const Float *dataPtr(const Mat4 &m) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return m.data();
 #else
-  return glm::value_ptr(m);  // NOLINT(misc-include-cleaner)
+  return glm::value_ptr(m); // NOLINT(misc-include-cleaner)
 #endif
 }
 
@@ -135,7 +135,7 @@ inline const Double *dataPtrd(const Vec3d &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
 #else
-  return glm::value_ptr(v);  // NOLINT(misc-include-cleaner)
+  return glm::value_ptr(v); // NOLINT(misc-include-cleaner)
 #endif
 }
 
@@ -144,7 +144,7 @@ inline const Double *dataPtrd(const Vec4d &v) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return v.data();
 #else
-  return glm::value_ptr(v);  // NOLINT(misc-include-cleaner)
+  return glm::value_ptr(v); // NOLINT(misc-include-cleaner)
 #endif
 }
 
@@ -153,7 +153,7 @@ inline const Double *dataPtrd(const Mat4d &m) {
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
   return m.data();
 #else
-  return glm::value_ptr(m);  // NOLINT(misc-include-cleaner)
+  return glm::value_ptr(m); // NOLINT(misc-include-cleaner)
 #endif
 }
 

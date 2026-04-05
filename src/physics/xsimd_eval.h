@@ -44,12 +44,12 @@ namespace physics::xsimd_eval {
 /**
  * @brief Get the xsimd architecture name if available.
  */
-[[nodiscard]] inline const char* getArchitectureName() {
+[[nodiscard]] inline const char *getArchitectureName() {
 #if BLACKHOLE_ENABLE_XSIMD
-    using arch = xsimd::default_arch;
-    return arch::name();
+  using arch = xsimd::default_arch;
+  return arch::name();
 #else
-    return "disabled";
+  return "disabled";
 #endif
 }
 
@@ -58,10 +58,10 @@ namespace physics::xsimd_eval {
  */
 [[nodiscard]] inline std::size_t getSimdWidth() {
 #if BLACKHOLE_ENABLE_XSIMD
-    using batch_type = xsimd::batch<double>;
-    return batch_type::size;
+  using batch_type = xsimd::batch<double>;
+  return batch_type::size;
 #else
-    return 1;
+  return 1;
 #endif
 }
 
@@ -70,9 +70,9 @@ namespace physics::xsimd_eval {
  */
 [[nodiscard]] inline bool isAvailable() {
 #if BLACKHOLE_ENABLE_XSIMD
-    return true;
+  return true;
 #else
-    return false;
+  return false;
 #endif
 }
 
@@ -85,47 +85,39 @@ namespace physics::xsimd_eval {
  *
  * Scalar reference implementation.
  */
-inline void schwarzschildFScalar(
-    const double* radii,
-    double rS,
-    double* out,
-    std::size_t count) {
+inline void schwarzschildFScalar(const double *radii, double rS, double *out, std::size_t count) {
 
-    for (std::size_t i = 0; i < count; ++i) {
-        out[i] = 1.0 - (rS / radii[i]);
-    }
+  for (std::size_t i = 0; i < count; ++i) {
+    out[i] = 1.0 - (rS / radii[i]);
+  }
 }
 
 /**
  * @brief Compute Schwarzschild metric component using xsimd explicit vectorization.
  */
-inline void schwarzschildFXsimd(
-    const double* radii,
-    double rS,
-    double* out,
-    std::size_t count) {
+inline void schwarzschildFXsimd(const double *radii, double rS, double *out, std::size_t count) {
 
 #if BLACKHOLE_ENABLE_XSIMD
-    using batch_type = xsimd::batch<double>;
-    constexpr std::size_t simdSize = batch_type::size;
+  using batch_type = xsimd::batch<double>;
+  constexpr std::size_t simdSize = batch_type::size;
 
-    const batch_type one(1.0);
-    const batch_type rs(rS);
+  const batch_type one(1.0);
+  const batch_type rs(rS);
 
-    // Vectorized loop
-    std::size_t i = 0;
-    for (; (i + simdSize) <= count; i += simdSize) {
-        const batch_type rVec = xsimd::load_unaligned(&radii[i]);
-        const batch_type fVec = one - (rs / rVec);
-        xsimd::store_unaligned(&out[i], fVec);
-    }
+  // Vectorized loop
+  std::size_t i = 0;
+  for (; (i + simdSize) <= count; i += simdSize) {
+    const batch_type rVec = xsimd::load_unaligned(&radii[i]);
+    const batch_type fVec = one - (rs / rVec);
+    xsimd::store_unaligned(&out[i], fVec);
+  }
 
-    // Scalar tail
-    for (; i < count; ++i) {
-        out[i] = 1.0 - (rS / radii[i]);
-    }
+  // Scalar tail
+  for (; i < count; ++i) {
+    out[i] = 1.0 - (rS / radii[i]);
+  }
 #else
-    schwarzschildFScalar(radii, rS, out, count);
+  schwarzschildFScalar(radii, rS, out, count);
 #endif
 }
 
@@ -138,56 +130,48 @@ inline void schwarzschildFXsimd(
  *
  * Simplified redshift: g = sqrt(1 - r_s/r) for equatorial plane.
  */
-inline void redshiftBatchScalar(
-    const double* radii,
-    double rS,
-    double* out,
-    std::size_t count) {
+inline void redshiftBatchScalar(const double *radii, double rS, double *out, std::size_t count) {
 
-    for (std::size_t i = 0; i < count; ++i) {
-        const double r = radii[i];
-        const double f = 1.0 - (rS / r);
-        out[i] = (f > 0.0) ? std::sqrt(f) : 0.0;
-    }
+  for (std::size_t i = 0; i < count; ++i) {
+    const double r = radii[i];
+    const double f = 1.0 - (rS / r);
+    out[i] = (f > 0.0) ? std::sqrt(f) : 0.0;
+  }
 }
 
 /**
  * @brief Compute Kerr redshift batch using xsimd explicit vectorization.
  */
-inline void redshiftBatchXsimd(
-    const double* radii,
-    double rS,
-    double* out,
-    std::size_t count) {
+inline void redshiftBatchXsimd(const double *radii, double rS, double *out, std::size_t count) {
 
 #if BLACKHOLE_ENABLE_XSIMD
-    using batch_type = xsimd::batch<double>;
-    constexpr std::size_t simdSize = batch_type::size;
+  using batch_type = xsimd::batch<double>;
+  constexpr std::size_t simdSize = batch_type::size;
 
-    const batch_type one(1.0);
-    const batch_type zero(0.0);
-    const batch_type rs(rS);
+  const batch_type one(1.0);
+  const batch_type zero(0.0);
+  const batch_type rs(rS);
 
-    std::size_t i = 0;
-    for (; (i + simdSize) <= count; i += simdSize) {
-        const batch_type rVec   = xsimd::load_unaligned(&radii[i]);
-        const batch_type fVec   = one - (rs / rVec);
+  std::size_t i = 0;
+  for (; (i + simdSize) <= count; i += simdSize) {
+    const batch_type rVec = xsimd::load_unaligned(&radii[i]);
+    const batch_type fVec = one - (rs / rVec);
 
-        // Conditional: sqrt if f > 0, else 0
-        const auto mask         = fVec > zero;
-        const batch_type result = xsimd::select(mask, xsimd::sqrt(fVec), zero);
+    // Conditional: sqrt if f > 0, else 0
+    const auto mask = fVec > zero;
+    const batch_type result = xsimd::select(mask, xsimd::sqrt(fVec), zero);
 
-        xsimd::store_unaligned(&out[i], result);
-    }
+    xsimd::store_unaligned(&out[i], result);
+  }
 
-    // Scalar tail
-    for (; i < count; ++i) {
-        const double r = radii[i];
-        const double f = 1.0 - (rS / r);
-        out[i] = (f > 0.0) ? std::sqrt(f) : 0.0;
-    }
+  // Scalar tail
+  for (; i < count; ++i) {
+    const double r = radii[i];
+    const double f = 1.0 - (rS / r);
+    out[i] = (f > 0.0) ? std::sqrt(f) : 0.0;
+  }
 #else
-    redshiftBatchScalar(radii, rS, out, count);
+  redshiftBatchScalar(radii, rS, out, count);
 #endif
 }
 
@@ -200,111 +184,93 @@ inline void redshiftBatchXsimd(
  *
  * Scalar reference implementation.
  */
-inline void christoffelAccelScalar(
-    const double* rArr,
-    const double* drArr,
-    const double* dthetaArr,
-    const double* dphiArr,
-    const double* thetaArr,
-    double rS,
-    double* accelOut,
-    std::size_t count) {
+inline void christoffelAccelScalar(const double *rArr, const double *drArr, const double *dthetaArr,
+                                   const double *dphiArr, const double *thetaArr, double rS,
+                                   double *accelOut, std::size_t count) {
 
-    for (std::size_t i = 0; i < count; ++i) {
-        const double rI   = rArr[i];
-        const double drI  = drArr[i];
-        const double dthI = dthetaArr[i];
-        const double dphI = dphiArr[i];
-        const double thI  = thetaArr[i];
+  for (std::size_t i = 0; i < count; ++i) {
+    const double rI = rArr[i];
+    const double drI = drArr[i];
+    const double dthI = dthetaArr[i];
+    const double dphI = dphiArr[i];
+    const double thI = thetaArr[i];
 
-        const double f        = 1.0 - (rS / rI);
-        const double sinTh    = std::sin(thI);
+    const double f = 1.0 - (rS / rI);
+    const double sinTh = std::sin(thI);
 
-        const double gammaRTt   = (rS * f) / (2.0 * rI * rI);
-        const double gammaRRr   = -(rS / (2.0 * rI * rI * f));
-        const double gammaRThth = -(rI * f);
-        const double gammaRPhph = -(rI * f * sinTh * sinTh);
-        const double dtDl       = 1.0 / f;
+    const double gammaRTt = (rS * f) / (2.0 * rI * rI);
+    const double gammaRRr = -(rS / (2.0 * rI * rI * f));
+    const double gammaRThth = -(rI * f);
+    const double gammaRPhph = -(rI * f * sinTh * sinTh);
+    const double dtDl = 1.0 / f;
 
-        accelOut[i] = -(gammaRTt   * dtDl * dtDl)
-                      - (gammaRRr   * drI  * drI)
-                      - (gammaRThth * dthI * dthI)
-                      - (gammaRPhph * dphI * dphI);
-    }
+    accelOut[i] = -(gammaRTt * dtDl * dtDl) - (gammaRRr * drI * drI) - (gammaRThth * dthI * dthI) -
+                  (gammaRPhph * dphI * dphI);
+  }
 }
 
 /**
  * @brief Compute Christoffel-based radial acceleration using xsimd.
  */
-inline void christoffelAccelXsimd(
-    const double* rArr,
-    const double* drArr,
-    const double* dthetaArr,
-    const double* dphiArr,
-    const double* thetaArr,
-    double rS,
-    double* accelOut,
-    std::size_t count) {
+inline void christoffelAccelXsimd(const double *rArr, const double *drArr, const double *dthetaArr,
+                                  const double *dphiArr, const double *thetaArr, double rS,
+                                  double *accelOut, std::size_t count) {
 
 #if BLACKHOLE_ENABLE_XSIMD
-    using batch_type = xsimd::batch<double>;
-    constexpr std::size_t simdSize = batch_type::size;
+  using batch_type = xsimd::batch<double>;
+  constexpr std::size_t simdSize = batch_type::size;
 
-    const batch_type one(1.0);
-    const batch_type two(2.0);
-    const batch_type rs(rS);
-    const batch_type negRs(-rS);
+  const batch_type one(1.0);
+  const batch_type two(2.0);
+  const batch_type rs(rS);
+  const batch_type negRs(-rS);
 
-    std::size_t i = 0;
-    for (; i + simdSize <= count; i += simdSize) {
-        const batch_type rV   = xsimd::load_unaligned(&rArr[i]);
-        const batch_type drV  = xsimd::load_unaligned(&drArr[i]);
-        const batch_type dthV = xsimd::load_unaligned(&dthetaArr[i]);
-        const batch_type dphV = xsimd::load_unaligned(&dphiArr[i]);
-        const batch_type thV  = xsimd::load_unaligned(&thetaArr[i]);
+  std::size_t i = 0;
+  for (; i + simdSize <= count; i += simdSize) {
+    const batch_type rV = xsimd::load_unaligned(&rArr[i]);
+    const batch_type drV = xsimd::load_unaligned(&drArr[i]);
+    const batch_type dthV = xsimd::load_unaligned(&dthetaArr[i]);
+    const batch_type dphV = xsimd::load_unaligned(&dphiArr[i]);
+    const batch_type thV = xsimd::load_unaligned(&thetaArr[i]);
 
-        const batch_type f       = one - (rs / rV);
-        const batch_type sinTh   = xsimd::sin(thV);
-        const batch_type r2      = rV * rV;
+    const batch_type f = one - (rs / rV);
+    const batch_type sinTh = xsimd::sin(thV);
+    const batch_type r2 = rV * rV;
 
-        const batch_type gammaRTt   = (rs * f) / (two * r2);
-        const batch_type gammaRRr   = negRs / (two * r2 * f);
-        const batch_type gammaRThth = -rV * f;
-        const batch_type gammaRPhph = gammaRThth * sinTh * sinTh;
-        const batch_type dtDl       = one / f;
+    const batch_type gammaRTt = (rs * f) / (two * r2);
+    const batch_type gammaRRr = negRs / (two * r2 * f);
+    const batch_type gammaRThth = -rV * f;
+    const batch_type gammaRPhph = gammaRThth * sinTh * sinTh;
+    const batch_type dtDl = one / f;
 
-        const batch_type accel = -(gammaRTt   * dtDl * dtDl)
-                                 - (gammaRRr   * drV  * drV)
-                                 - (gammaRThth * dthV * dthV)
-                                 - (gammaRPhph * dphV * dphV);
+    const batch_type accel = -(gammaRTt * dtDl * dtDl) - (gammaRRr * drV * drV) -
+                             (gammaRThth * dthV * dthV) - (gammaRPhph * dphV * dphV);
 
-        xsimd::store_unaligned(&accelOut[i], accel);
-    }
+    xsimd::store_unaligned(&accelOut[i], accel);
+  }
 
-    // Scalar tail
-    for (; i < count; ++i) {
-        const double rI   = rArr[i];
-        const double drI  = drArr[i];
-        const double dthI = dthetaArr[i];
-        const double dphI = dphiArr[i];
-        const double thI  = thetaArr[i];
+  // Scalar tail
+  for (; i < count; ++i) {
+    const double rI = rArr[i];
+    const double drI = drArr[i];
+    const double dthI = dthetaArr[i];
+    const double dphI = dphiArr[i];
+    const double thI = thetaArr[i];
 
-        const double f        = 1.0 - (rS / rI);
-        const double sinTh    = std::sin(thI);
+    const double f = 1.0 - (rS / rI);
+    const double sinTh = std::sin(thI);
 
-        const double gammaRTt   = (rS * f) / (2.0 * rI * rI);
-        const double gammaRRr   = -(rS / (2.0 * rI * rI * f));
-        const double gammaRThth = -(rI * f);
-        const double gammaRPhph = -(rI * f * sinTh * sinTh);
-        const double dtDl       = 1.0 / f;
+    const double gammaRTt = (rS * f) / (2.0 * rI * rI);
+    const double gammaRRr = -(rS / (2.0 * rI * rI * f));
+    const double gammaRThth = -(rI * f);
+    const double gammaRPhph = -(rI * f * sinTh * sinTh);
+    const double dtDl = 1.0 / f;
 
-        accelOut[i] = -(gammaRTt   * dtDl * dtDl)
-                      - (gammaRRr   * drI  * drI)
-                      - (gammaRThth * dthI * dthI)
-                      - (gammaRPhph * dphI * dphI);
-    }
+    accelOut[i] = -(gammaRTt * dtDl * dtDl) - (gammaRRr * drI * drI) - (gammaRThth * dthI * dthI) -
+                  (gammaRPhph * dphI * dphI);
+  }
 #else
-    christoffelAccelScalar(rArr, drArr, dthetaArr, dphiArr, thetaArr, rS, accelOut, count);
+  christoffelAccelScalar(rArr, drArr, dthetaArr, dphiArr, thetaArr, rS, accelOut, count);
 #endif
 }
 
@@ -316,84 +282,90 @@ inline void christoffelAccelXsimd(
  * @brief Result of a single benchmark run.
  */
 struct BenchResult {
-    const char* name     = nullptr;
-    double scalarMs      = 0.0;
-    double xsimdMs       = 0.0;
-    double speedup       = 0.0;
-    std::size_t elements = 0;
+  const char *name = nullptr;
+  double scalarMs = 0.0;
+  double xsimdMs = 0.0;
+  double speedup = 0.0;
+  std::size_t elements = 0;
 };
 
 /**
  * @brief Run comparison benchmark for Schwarzschild f computation.
  */
 [[nodiscard]] inline BenchResult benchSchwarzschildF(std::size_t count, int iterations) {
-    std::vector<double> radii(count);
-    std::vector<double> outScalar(count);
-    std::vector<double> outXsimd(count);
+  std::vector<double> radii(count);
+  std::vector<double> outScalar(count);
+  std::vector<double> outXsimd(count);
 
-    // Initialize with reasonable radii (3 to 100 r_s)
-    const double rS = 2.0;
-    for (std::size_t i = 0; i < count; ++i) {
-        radii[i] = (3.0 * rS) + (97.0 * rS * static_cast<double>(i) / static_cast<double>(count));
-    }
+  // Initialize with reasonable radii (3 to 100 r_s)
+  const double rS = 2.0;
+  for (std::size_t i = 0; i < count; ++i) {
+    radii[i] = (3.0 * rS) + (97.0 * rS * static_cast<double>(i) / static_cast<double>(count));
+  }
 
-    // Warmup
+  // Warmup
+  schwarzschildFScalar(radii.data(), rS, outScalar.data(), count);
+  schwarzschildFXsimd(radii.data(), rS, outXsimd.data(), count);
+
+  // Benchmark scalar
+  auto start = std::chrono::high_resolution_clock::now();
+  for (int iter = 0; iter < iterations; ++iter) {
     schwarzschildFScalar(radii.data(), rS, outScalar.data(), count);
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  const double scalarMs = std::chrono::duration<double, std::milli>(end - start).count();
+
+  // Benchmark xsimd
+  start = std::chrono::high_resolution_clock::now();
+  for (int iter = 0; iter < iterations; ++iter) {
     schwarzschildFXsimd(radii.data(), rS, outXsimd.data(), count);
+  }
+  end = std::chrono::high_resolution_clock::now();
+  const double xsimdMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-    // Benchmark scalar
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < iterations; ++iter) {
-        schwarzschildFScalar(radii.data(), rS, outScalar.data(), count);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    const double scalarMs = std::chrono::duration<double, std::milli>(end - start).count();
-
-    // Benchmark xsimd
-    start = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < iterations; ++iter) {
-        schwarzschildFXsimd(radii.data(), rS, outXsimd.data(), count);
-    }
-    end = std::chrono::high_resolution_clock::now();
-    const double xsimdMs = std::chrono::duration<double, std::milli>(end - start).count();
-
-    return {.name = "schwarzschild_f", .scalarMs = scalarMs, .xsimdMs = xsimdMs,
-            .speedup = scalarMs / xsimdMs, .elements = count};
+  return {.name = "schwarzschild_f",
+          .scalarMs = scalarMs,
+          .xsimdMs = xsimdMs,
+          .speedup = scalarMs / xsimdMs,
+          .elements = count};
 }
 
 /**
  * @brief Run comparison benchmark for redshift computation.
  */
 [[nodiscard]] inline BenchResult benchRedshift(std::size_t count, int iterations) {
-    std::vector<double> radii(count);
-    std::vector<double> outScalar(count);
-    std::vector<double> outXsimd(count);
+  std::vector<double> radii(count);
+  std::vector<double> outScalar(count);
+  std::vector<double> outXsimd(count);
 
-    const double rS = 2.0;
-    for (std::size_t i = 0; i < count; ++i) {
-        radii[i] = (3.0 * rS) + (97.0 * rS * static_cast<double>(i) / static_cast<double>(count));
-    }
+  const double rS = 2.0;
+  for (std::size_t i = 0; i < count; ++i) {
+    radii[i] = (3.0 * rS) + (97.0 * rS * static_cast<double>(i) / static_cast<double>(count));
+  }
 
-    // Warmup
+  // Warmup
+  redshiftBatchScalar(radii.data(), rS, outScalar.data(), count);
+  redshiftBatchXsimd(radii.data(), rS, outXsimd.data(), count);
+
+  auto start = std::chrono::high_resolution_clock::now();
+  for (int iter = 0; iter < iterations; ++iter) {
     redshiftBatchScalar(radii.data(), rS, outScalar.data(), count);
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  const double scalarMs = std::chrono::duration<double, std::milli>(end - start).count();
+
+  start = std::chrono::high_resolution_clock::now();
+  for (int iter = 0; iter < iterations; ++iter) {
     redshiftBatchXsimd(radii.data(), rS, outXsimd.data(), count);
+  }
+  end = std::chrono::high_resolution_clock::now();
+  const double xsimdMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < iterations; ++iter) {
-        redshiftBatchScalar(radii.data(), rS, outScalar.data(), count);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    const double scalarMs = std::chrono::duration<double, std::milli>(end - start).count();
-
-    start = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < iterations; ++iter) {
-        redshiftBatchXsimd(radii.data(), rS, outXsimd.data(), count);
-    }
-    end = std::chrono::high_resolution_clock::now();
-    const double xsimdMs = std::chrono::duration<double, std::milli>(end - start).count();
-
-    return {.name = "redshift_batch", .scalarMs = scalarMs, .xsimdMs = xsimdMs,
-            .speedup = scalarMs / xsimdMs, .elements = count};
+  return {.name = "redshift_batch",
+          .scalarMs = scalarMs,
+          .xsimdMs = xsimdMs,
+          .speedup = scalarMs / xsimdMs,
+          .elements = count};
 }
 
 /**
@@ -418,30 +390,33 @@ struct BenchResult {
     thetaVec[i] = PI * 0.5;
   }
 
-    // Warmup
+  // Warmup
+  christoffelAccelScalar(rVec.data(), drVec.data(), dthetaVec.data(), dphiVec.data(),
+                         thetaVec.data(), rS, outScalar.data(), count);
+  christoffelAccelXsimd(rVec.data(), drVec.data(), dthetaVec.data(), dphiVec.data(),
+                        thetaVec.data(), rS, outXsimd.data(), count);
+
+  auto start = std::chrono::high_resolution_clock::now();
+  for (int iter = 0; iter < iterations; ++iter) {
     christoffelAccelScalar(rVec.data(), drVec.data(), dthetaVec.data(), dphiVec.data(),
                            thetaVec.data(), rS, outScalar.data(), count);
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  const double scalarMs = std::chrono::duration<double, std::milli>(end - start).count();
+
+  start = std::chrono::high_resolution_clock::now();
+  for (int iter = 0; iter < iterations; ++iter) {
     christoffelAccelXsimd(rVec.data(), drVec.data(), dthetaVec.data(), dphiVec.data(),
                           thetaVec.data(), rS, outXsimd.data(), count);
+  }
+  end = std::chrono::high_resolution_clock::now();
+  const double xsimdMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < iterations; ++iter) {
-        christoffelAccelScalar(rVec.data(), drVec.data(), dthetaVec.data(), dphiVec.data(),
-                               thetaVec.data(), rS, outScalar.data(), count);
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    const double scalarMs = std::chrono::duration<double, std::milli>(end - start).count();
-
-    start = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < iterations; ++iter) {
-        christoffelAccelXsimd(rVec.data(), drVec.data(), dthetaVec.data(), dphiVec.data(),
-                              thetaVec.data(), rS, outXsimd.data(), count);
-    }
-    end = std::chrono::high_resolution_clock::now();
-    const double xsimdMs = std::chrono::duration<double, std::milli>(end - start).count();
-
-    return {.name = "christoffel_accel", .scalarMs = scalarMs, .xsimdMs = xsimdMs,
-            .speedup = scalarMs / xsimdMs, .elements = count};
+  return {.name = "christoffel_accel",
+          .scalarMs = scalarMs,
+          .xsimdMs = xsimdMs,
+          .speedup = scalarMs / xsimdMs,
+          .elements = count};
 }
 
 } // namespace physics::xsimd_eval

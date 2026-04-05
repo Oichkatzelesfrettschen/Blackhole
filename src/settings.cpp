@@ -41,9 +41,13 @@ bool parseBool(const std::string &value) {
   return value == "true" || value == "1";
 }
 
-int parseInt(const std::string &value) { return std::stoi(value); }
+int parseInt(const std::string &value) {
+  return std::stoi(value);
+}
 
-float parseFloat(const std::string &value) { return std::stof(value); }
+float parseFloat(const std::string &value) {
+  return std::stof(value);
+}
 
 } // namespace
 
@@ -52,7 +56,9 @@ SettingsManager &SettingsManager::instance() {
   return instance;
 }
 
-bool SettingsManager::load(const std::string &filepath) {  // NOLINT(readability-function-cognitive-complexity) -- INI parser inherently has many branches
+bool SettingsManager::load(
+    const std::string &filepath) { // NOLINT(readability-function-cognitive-complexity) -- INI
+                                   // parser inherently has many branches
   lastFilepath_ = filepath;
 
   std::ifstream file(filepath);
@@ -495,8 +501,7 @@ bool SettingsManager::save(const std::string &filepath) {
   file << "  \"backgroundEnabled\": " << writeBool(settings_.backgroundEnabled) << ",\n";
   file << R"(  "backgroundId": ")" << settings_.backgroundId << "\",\n";
   file << "  \"backgroundIntensity\": " << settings_.backgroundIntensity << ",\n";
-  file << "  \"backgroundParallaxStrength\": " << settings_.backgroundParallaxStrength
-       << ",\n";
+  file << "  \"backgroundParallaxStrength\": " << settings_.backgroundParallaxStrength << ",\n";
   file << "  \"backgroundDriftStrength\": " << settings_.backgroundDriftStrength << ",\n";
 
   // Camera
@@ -526,4 +531,6 @@ bool SettingsManager::save(const std::string &filepath) {
   return true;
 }
 
-void SettingsManager::resetToDefaults() { settings_ = Settings(); }
+void SettingsManager::resetToDefaults() {
+  settings_ = Settings();
+}

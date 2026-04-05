@@ -19,7 +19,7 @@ struct Settings {
   int windowWidth = 1920;
   int windowHeight = 1080;
   bool fullscreen = false;
-  int swapInterval = 1;         // 0=off, 1=vsync, 2=triple (driver dependent)
+  int swapInterval = 1; // 0=off, 1=vsync, 2=triple (driver dependent)
   float renderScale = 1.0f;
   float gamma = 2.5f;
 
@@ -67,15 +67,15 @@ struct Settings {
   bool gamepadInvertY = false;
   bool gamepadInvertRoll = false;
   bool gamepadInvertZoom = false;
-  int gamepadYawAxis = 2;         // GLFW_GAMEPAD_AXIS_RIGHT_X
-  int gamepadPitchAxis = 3;       // GLFW_GAMEPAD_AXIS_RIGHT_Y
-  int gamepadRollAxis = 0;        // GLFW_GAMEPAD_AXIS_LEFT_X
-  int gamepadZoomAxis = 1;        // GLFW_GAMEPAD_AXIS_LEFT_Y
-  int gamepadZoomInAxis = 5;      // GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER
-  int gamepadZoomOutAxis = 4;     // GLFW_GAMEPAD_AXIS_LEFT_TRIGGER
-  int gamepadResetButton = 3;     // GLFW_GAMEPAD_BUTTON_Y
-  int gamepadPauseButton = 7;     // GLFW_GAMEPAD_BUTTON_START
-  int gamepadToggleUIButton = 6;  // GLFW_GAMEPAD_BUTTON_BACK
+  int gamepadYawAxis = 2;        // GLFW_GAMEPAD_AXIS_RIGHT_X
+  int gamepadPitchAxis = 3;      // GLFW_GAMEPAD_AXIS_RIGHT_Y
+  int gamepadRollAxis = 0;       // GLFW_GAMEPAD_AXIS_LEFT_X
+  int gamepadZoomAxis = 1;       // GLFW_GAMEPAD_AXIS_LEFT_Y
+  int gamepadZoomInAxis = 5;     // GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER
+  int gamepadZoomOutAxis = 4;    // GLFW_GAMEPAD_AXIS_LEFT_TRIGGER
+  int gamepadResetButton = 3;    // GLFW_GAMEPAD_BUTTON_Y
+  int gamepadPauseButton = 7;    // GLFW_GAMEPAD_BUTTON_START
+  int gamepadToggleUIButton = 6; // GLFW_GAMEPAD_BUTTON_BACK
 
   // === RENDERING ===
   bool tonemappingEnabled = true;
@@ -94,9 +94,9 @@ struct Settings {
   float cameraPitch = 0.0f;
   float cameraRoll = 0.0f;
   float cameraDistance = 15.0f;
-  int cameraMode = 0;          // 0=Input, 1=Front, 2=Top, 3=Orbit
+  int cameraMode = 0; // 0=Input, 1=Front, 2=Top, 3=Orbit
   float orbitRadius = 15.0f;
-  float orbitSpeed = 6.0f;     // Degrees per second
+  float orbitSpeed = 6.0f; // Degrees per second
 
   // === BLACK HOLE PARAMETERS ===
   bool gravitationalLensing = true;

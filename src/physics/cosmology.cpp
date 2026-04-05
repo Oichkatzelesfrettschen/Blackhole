@@ -4,9 +4,10 @@
  */
 
 #include "cosmology.h"
-#include "constants.h"
 
 #include <cmath>
+
+#include "constants.h"
 
 namespace physics {
 
@@ -116,9 +117,7 @@ double lookbackTime(double z, double h0, double omegaM) {
   double integral = 0.0;
 
   // Trapezoidal integration
-  auto integrand = [omegaM](double zp) {
-    return 1.0 / ((1.0 + zp) * hubbleE(zp, omegaM));
-  };
+  auto integrand = [omegaM](double zp) { return 1.0 / ((1.0 + zp) * hubbleE(zp, omegaM)); };
 
   integral += 0.5 * integrand(0.0);
   integral += 0.5 * integrand(z);

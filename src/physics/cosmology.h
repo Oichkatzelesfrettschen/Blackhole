@@ -57,8 +57,7 @@ double hubbleParameter(double z, double h0 = 67.4, double omegaM = 0.315);
  * @param nSteps Integration steps
  * @return Comoving distance [Mpc]
  */
-double comovingDistance(double z, double h0 = 67.4, double omegaM = 0.315,
-                        int nSteps = 1000);
+double comovingDistance(double z, double h0 = 67.4, double omegaM = 0.315, int nSteps = 1000);
 
 /**
  * @brief Compute luminosity distance in Mpc.
@@ -82,8 +81,7 @@ double luminosityDistance(double z, double h0 = 67.4, double omegaM = 0.315);
  * @param omegaM Matter density parameter
  * @return Angular diameter distance [Mpc]
  */
-double angularDiameterDistance(double z, double h0 = 67.4,
-                               double omegaM = 0.315);
+double angularDiameterDistance(double z, double h0 = 67.4, double omegaM = 0.315);
 
 /**
  * @brief Compute distance modulus mu = m - M.

@@ -60,8 +60,7 @@ NoiseVolume generateNoiseVolume(int size, std::uint32_t seed) {
   NoiseVolume volume;
   size = std::clamp(size, 4, 128);
   volume.size = size;
-  const std::size_t count = static_cast<std::size_t>(size) *
-                            static_cast<std::size_t>(size) *
+  const std::size_t count = static_cast<std::size_t>(size) * static_cast<std::size_t>(size) *
                             static_cast<std::size_t>(size);
   volume.values.resize(count);
 
@@ -73,11 +72,10 @@ NoiseVolume generateNoiseVolume(int size, std::uint32_t seed) {
         h ^= static_cast<std::uint32_t>(y) * 0x85ebca77u;
         h ^= static_cast<std::uint32_t>(z) * 0xc2b2ae3du;
         h = mix(h);
-        const std::size_t index =
-            (static_cast<std::size_t>(z) * static_cast<std::size_t>(size) *
-             static_cast<std::size_t>(size)) +
-            (static_cast<std::size_t>(y) * static_cast<std::size_t>(size)) +
-            static_cast<std::size_t>(x);
+        const std::size_t index = (static_cast<std::size_t>(z) * static_cast<std::size_t>(size) *
+                                   static_cast<std::size_t>(size)) +
+                                  (static_cast<std::size_t>(y) * static_cast<std::size_t>(size)) +
+                                  static_cast<std::size_t>(x);
         volume.values.at(index) = toUnitFloat(h);
       }
     }

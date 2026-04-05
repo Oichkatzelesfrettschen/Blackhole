@@ -40,17 +40,18 @@
 #ifndef PHYSICS_ANALYTIC_KERR_GEODESIC_H
 #define PHYSICS_ANALYTIC_KERR_GEODESIC_H
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
-#include <algorithm>
 
 #ifdef __has_include
-#  if __has_include(<boost/math/special_functions/jacobi_elliptic.hpp>)
-#    include <boost/math/special_functions/jacobi_elliptic.hpp>
-#    include <boost/math/special_functions/ellint_1.hpp>
-#define PHYSICS_HAS_BOOST_JACOBI 1 // NOLINT(cppcoreguidelines-macro-usage) -- feature-detection flag, not a constant
-#  endif
+#if __has_include(<boost/math/special_functions/jacobi_elliptic.hpp>)
+#include <boost/math/special_functions/ellint_1.hpp>
+#include <boost/math/special_functions/jacobi_elliptic.hpp>
+#define PHYSICS_HAS_BOOST_JACOBI                                                                   \
+  1 // NOLINT(cppcoreguidelines-macro-usage) -- feature-detection flag, not a constant
+#endif
 #endif
 
 namespace physics {
@@ -63,11 +64,11 @@ namespace physics {
  * @brief Type of radial geodesic motion.
  */
 enum class RadialMotionType {
-  Transit,   // Ray passes through: two real turning points
-  Plunge,    // Ray falls into the black hole: no outer turning point
-  Scatter,   // Ray scatters off the potential barrier
-  Orbit,     // Ray orbits at the photon sphere (unstable)
-  Invalid    // Unphysical parameters
+  Transit, // Ray passes through: two real turning points
+  Plunge,  // Ray falls into the black hole: no outer turning point
+  Scatter, // Ray scatters off the potential barrier
+  Orbit,   // Ray orbits at the photon sphere (unstable)
+  Invalid  // Unphysical parameters
 };
 
 /**
@@ -80,7 +81,7 @@ enum class RadialMotionType {
  * determine the geodesic trajectory.
  */
 struct ImpactParams {
-  double xi  = 0.0; // L/E
+  double xi = 0.0;  // L/E
   double eta = 0.0; // Q/E^2
 };
 
@@ -94,7 +95,7 @@ struct ImpactParams {
  */
 struct RadialRoots {
   std::array<std::complex<double>, 4> roots{};
-  int nReal            = 0;                     // Number of real roots
+  int nReal = 0; // Number of real roots
   RadialMotionType type = RadialMotionType::Invalid;
 };
 
@@ -116,9 +117,9 @@ struct RadialRoots {
  * @return R(r) value
  */
 [[nodiscard]] inline double radialPotential(double r, double a, double xi, double eta) {
-  const double r2   = r * r;
-  const double a2   = a * a;
-  const double xiA  = xi - a;
+  const double r2 = r * r;
+  const double a2 = a * a;
+  const double xiA = xi - a;
   const double delta = (r2 - (2.0 * r)) + a2; // M=1
 
   const double term1 = (r2 + a2) - (a * xi);
@@ -151,10 +152,10 @@ struct QuarticCoeffs {
 };
 
 [[nodiscard]] inline QuarticCoeffs radialQuarticCoeffs(double a, double xi, double eta) {
-  const double a2   = a * a;
-  const double xiA  = xi - a;
+  const double a2 = a * a;
+  const double xiA = xi - a;
   const double xiA2 = xiA * xiA;
-  const double aXi  = a2 - (a * xi);
+  const double aXi = a2 - (a * xi);
 
   QuarticCoeffs c;
   c.c2 = (2.0 * aXi) - eta - xiA2;
@@ -176,14 +177,14 @@ struct QuarticCoeffs {
  * @param c Quartic coefficients
  * @return RadialRoots with up to 4 roots
  */
-[[nodiscard]] inline RadialRoots findRadialRoots(const QuarticCoeffs& c) {
+[[nodiscard]] inline RadialRoots findRadialRoots(const QuarticCoeffs &c) {
   RadialRoots result;
 
   // Ferrari's resolvent cubic: y^3 - c2*y^2 - 4*c0*y + (4*c2*c0 - c1^2) = 0
   // Substituting y = t + c2/3 to get depressed cubic t^3 + pt + q = 0
   const double pCoeff = (-(c.c2 * c.c2) / 3.0) - (4.0 * c.c0);
-  const double qCoeff = ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0)
-                      + ((4.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
+  const double qCoeff =
+      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((4.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
 
   // Cardano's formula for the resolvent cubic
   const double disc = ((qCoeff * qCoeff) / 4.0) + ((pCoeff * pCoeff * pCoeff) / 27.0);
@@ -191,13 +192,13 @@ struct QuarticCoeffs {
   double y1 = 0.0;
   if (disc >= 0.0) {
     const double sq = std::sqrt(disc);
-    const double u  = std::cbrt((-qCoeff / 2.0) + sq);
-    const double v  = std::cbrt((-qCoeff / 2.0) - sq);
+    const double u = std::cbrt((-qCoeff / 2.0) + sq);
+    const double v = std::cbrt((-qCoeff / 2.0) - sq);
     y1 = u + v + (c.c2 / 3.0);
   } else {
     // Three real roots; use trigonometric form
     const double rVal = std::sqrt(-(pCoeff * pCoeff * pCoeff) / 27.0);
-    const double phi  = std::acos(-qCoeff / (2.0 * rVal));
+    const double phi = std::acos(-qCoeff / (2.0 * rVal));
     y1 = (2.0 * std::cbrt(rVal) * std::cos(phi / 3.0)) + (c.c2 / 3.0);
   }
 
@@ -207,7 +208,7 @@ struct QuarticCoeffs {
   if (a < 0.0) {
     // alpha is imaginary; all roots come in complex conjugate pairs
     result.nReal = 0;
-    result.type  = RadialMotionType::Plunge;
+    result.type = RadialMotionType::Plunge;
     return result;
   }
 
@@ -217,14 +218,14 @@ struct QuarticCoeffs {
 
   if (std::abs(alpha) > 1e-15) {
     // Quadratic 1: r^2 + alpha*r + beta = 0; use robust relations
-    beta  = (y1 / 2.0) - (c.c1 / (2.0 * alpha));
+    beta = (y1 / 2.0) - (c.c1 / (2.0 * alpha));
     gamma = (y1 / 2.0) + (c.c1 / (2.0 * alpha));
   } else {
     // alpha ~ 0: degenerate case
     const double disc1 = -4.0 * c.c0;
     if (disc1 < 0.0) {
       result.nReal = 0;
-      result.type  = RadialMotionType::Plunge;
+      result.type = RadialMotionType::Plunge;
       return result;
     }
     const double sq = std::sqrt(disc1);
@@ -233,7 +234,7 @@ struct QuarticCoeffs {
     result.roots.at(2) = result.roots.at(0);
     result.roots.at(3) = result.roots.at(1);
     result.nReal = 2;
-    result.type  = RadialMotionType::Transit;
+    result.type = RadialMotionType::Transit;
     return result;
   }
 
@@ -249,7 +250,7 @@ struct QuarticCoeffs {
     result.nReal += 2;
   } else {
     const double sq1 = std::sqrt(-disc1);
-    result.roots.at(0) = std::complex<double>(-alpha / 2.0,  sq1 / 2.0);
+    result.roots.at(0) = std::complex<double>(-alpha / 2.0, sq1 / 2.0);
     result.roots.at(1) = std::complex<double>(-alpha / 2.0, -sq1 / 2.0);
   }
 
@@ -260,7 +261,7 @@ struct QuarticCoeffs {
     result.nReal += 2;
   } else {
     const double sq2 = std::sqrt(-disc2);
-    result.roots.at(2) = std::complex<double>(alpha / 2.0,  sq2 / 2.0);
+    result.roots.at(2) = std::complex<double>(alpha / 2.0, sq2 / 2.0);
     result.roots.at(3) = std::complex<double>(alpha / 2.0, -sq2 / 2.0);
   }
 
@@ -310,8 +311,8 @@ struct QuarticCoeffs {
  * @param lambda0 Initial affine parameter offset
  * @return Radial coordinate r
  */
-[[nodiscard]] inline double rAnalytic(double lambda, const RadialRoots& roots,
-                                       double lambda0 = 0.0) {
+[[nodiscard]] inline double rAnalytic(double lambda, const RadialRoots &roots,
+                                      double lambda0 = 0.0) {
   if (roots.nReal < 4) {
     return -1.0; // Not a transit orbit; analytic formula requires 4 real roots
   }
@@ -324,23 +325,27 @@ struct QuarticCoeffs {
   // Elliptic modulus
   const double num = (r2 - r3) * (r1 - r4);
   const double den = (r1 - r3) * (r2 - r4);
-  if (std::abs(den) < 1e-30) { return r3; }
+  if (std::abs(den) < 1e-30) {
+    return r3;
+  }
   const double m = num / den;
 
   // Argument
   const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
-  const double u     = scale * (lambda - lambda0);
+  const double u = scale * (lambda - lambda0);
 
   // Jacobi elliptic function sn(u | k) where k = sqrt(m)
-  const double k     = std::sqrt(std::clamp(m, 0.0, 1.0));
+  const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
   const double snVal = boost::math::jacobi_sn(k, u);
   (void)boost::math::jacobi_cn(k, u); // unused but kept for symmetry
 
-  const double sn2    = snVal * snVal;
+  const double sn2 = snVal * snVal;
   const double aCoeff = (r3 * (r1 - r4)) - (r4 * (r1 - r3) * sn2);
   const double bCoeff = (r1 - r4) - ((r1 - r3) * sn2);
 
-  if (std::abs(bCoeff) < 1e-30) { return r1; } // At turning point
+  if (std::abs(bCoeff) < 1e-30) {
+    return r1;
+  } // At turning point
   return aCoeff / bCoeff;
 }
 
@@ -353,8 +358,10 @@ struct QuarticCoeffs {
  * @param roots Radial roots
  * @return Half-period in affine parameter
  */
-[[nodiscard]] inline double radialHalfPeriod(const RadialRoots& roots) {
-  if (roots.nReal < 4) { return 0.0; }
+[[nodiscard]] inline double radialHalfPeriod(const RadialRoots &roots) {
+  if (roots.nReal < 4) {
+    return 0.0;
+  }
 
   const double r1 = roots.roots.at(0).real();
   const double r2 = roots.roots.at(1).real();
@@ -363,11 +370,15 @@ struct QuarticCoeffs {
 
   const double num = (r2 - r3) * (r1 - r4);
   const double den = (r1 - r3) * (r2 - r4);
-  if (std::abs(den) < 1e-30) { return 0.0; }
+  if (std::abs(den) < 1e-30) {
+    return 0.0;
+  }
   const double m = num / den;
 
   const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
-  if (scale < 1e-30) { return 0.0; }
+  if (scale < 1e-30) {
+    return 0.0;
+  }
 
   const double k         = std::sqrt(std::clamp(m, 0.0, 1.0));
   const double kComplete = boost::math::ellint_1(k);
@@ -397,22 +408,22 @@ struct QuarticCoeffs {
  * @return Impact parameters {xi, eta}
  */
 [[nodiscard]] inline ImpactParams criticalImpactParams(double rPh, double a) {
-  const double r2         = rPh * rPh;
-  const double a2         = a * a;
-  const double delta      = (r2 - (2.0 * rPh)) + a2;
+  const double r2 = rPh * rPh;
+  const double a2 = a * a;
+  const double delta = (r2 - (2.0 * rPh)) + a2;
   const double deltaPrime = (2.0 * rPh) - 2.0; // d(Delta)/dr
 
   ImpactParams ip;
 
   if (std::abs(a) < 1e-15) {
     // Schwarzschild: xi = 0 (by symmetry), eta = 27 at r=3 for M=1
-    ip.xi  = 0.0;
+    ip.xi = 0.0;
     ip.eta = 27.0;
     return ip;
   }
 
   if (std::abs(deltaPrime) < 1e-15) {
-    ip.xi  = 0.0;
+    ip.xi = 0.0;
     ip.eta = 0.0;
     return ip;
   }

@@ -54,8 +54,9 @@
 #ifndef PHYSICS_UNIT_SYSTEM_H
 #define PHYSICS_UNIT_SYSTEM_H
 
-#include "constants.h"
 #include <cmath>
+
+#include "constants.h"
 
 namespace physics::units {
 

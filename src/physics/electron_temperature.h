@@ -35,9 +35,10 @@
 #ifndef PHYSICS_ELECTRON_TEMPERATURE_H
 #define PHYSICS_ELECTRON_TEMPERATURE_H
 
-#include "constants.h"
 #include <cmath>
 #include <numbers>
+
+#include "constants.h"
 
 namespace physics {
 
@@ -107,7 +108,9 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  * @return Gas temperature [K]
  */
 [[nodiscard]] inline double gasTemperature(double rho, double pGas, double mu = 0.5) {
-  if (rho <= 0.0) { return 0.0; }
+  if (rho <= 0.0) {
+    return 0.0;
+  }
   return (pGas * mu * M_PROTON) / (rho * K_B);
 }
 
@@ -124,7 +127,9 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  * @return Plasma beta (dimensionless)
  */
 [[nodiscard]] inline double plasmaBeta(double pGas, double bSq) {
-  if (bSq <= 0.0) { return 1e10; } // Unmagnetized limit
+  if (bSq <= 0.0) {
+    return 1e10;
+  } // Unmagnetized limit
   return (2.0 * pGas) / bSq;
 }
 
@@ -182,12 +187,14 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  * @param b Magnetic field strength [Gauss]
  * @return Emissivity j_nu [erg/s/cm^3/Hz/sr]
  */
-[[nodiscard]] inline double thermalSynchrotronEmissivity(double nu, double nE,
-                                                          double thetaElec, double b) {
-  if (thetaElec <= 0.0 || b <= 0.0 || nu <= 0.0) { return 0.0; }
+[[nodiscard]] inline double thermalSynchrotronEmissivity(double nu, double nE, double thetaElec,
+                                                         double b) {
+  if (thetaElec <= 0.0 || b <= 0.0 || nu <= 0.0) {
+    return 0.0;
+  }
 
   constexpr double eCharge = 4.80320425e-10; // [esu]
-  constexpr double massE = 9.1093837015e-28;    // [g]
+  constexpr double massE = 9.1093837015e-28; // [g]
 
   // Cyclotron frequency
   const double nuC = (eCharge * std::abs(b)) / (TWO_PI * massE * C);
@@ -195,20 +202,21 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
   // Synchrotron peak frequency for thermal electrons
   const double nuS = (2.0 / 9.0) * nuC * thetaElec * thetaElec;
 
-  if (nuS <= 0.0) { return 0.0; }
+  if (nuS <= 0.0) {
+    return 0.0;
+  }
 
   const double xM = nu / nuS;
 
   // Fitting formula from Leung+ 2011, Eq. 24
   // Valid for thetaElec > 1 (relativistic regime)
   const double xM13 = std::cbrt(xM);
-  const double prefactor = (nE * eCharge * eCharge * nu) /
-                     (std::numbers::sqrt3 * C * thetaElec * thetaElec);
+  const double prefactor =
+      (nE * eCharge * eCharge * nu) / (std::numbers::sqrt3 * C * thetaElec * thetaElec);
 
   // Approximate spectral shape
-  const double shape = (4.0505 / xM13) *
-                 (1.0 + (0.40 / std::sqrt(xM13)) + (0.5316 / xM13)) *
-                 std::exp(-1.8899 * xM13);
+  const double shape = (4.0505 / xM13) * (1.0 + (0.40 / std::sqrt(xM13)) + (0.5316 / xM13)) *
+                       std::exp(-1.8899 * xM13);
 
   return prefactor * shape;
 }
@@ -229,14 +237,18 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  * @return Absorption coefficient [cm^-1]
  */
 [[nodiscard]] inline double thermalSynchrotronAbsorptivity(double jNu, double nu,
-                                                            double thetaElec) {
-  if (nu <= 0.0 || thetaElec <= 0.0 || jNu <= 0.0) { return 0.0; }
+                                                           double thetaElec) {
+  if (nu <= 0.0 || thetaElec <= 0.0 || jNu <= 0.0) {
+    return 0.0;
+  }
 
   // Relativistic Planck function (Rayleigh-Jeans limit for kT >> hv)
   constexpr double massE = 9.1093837015e-28;
   const double bNu = (2.0 * nu * nu * massE * C * thetaElec) / (C * C);
 
-  if (bNu <= 0.0) { return 0.0; }
+  if (bNu <= 0.0) {
+    return 0.0;
+  }
 
   return jNu / bNu;
 }

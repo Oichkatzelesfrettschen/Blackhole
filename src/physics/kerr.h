@@ -30,12 +30,13 @@
 #ifndef PHYSICS_KERR_H
 #define PHYSICS_KERR_H
 
-#include "constants.h"
-#include "safe_limits.h"
-#include "schwarzschild.h"
 #include <cmath>
 #include <limits>
 #include <utility>
+
+#include "constants.h"
+#include "safe_limits.h"
+#include "schwarzschild.h"
 
 namespace physics {
 
@@ -66,7 +67,7 @@ namespace physics {
  * @return Dimensionless spin a* (unitless)
  */
 [[nodiscard]] inline double dimensionlessSpin(double a, double mass) {
-  const double mGeom = G * mass / C2;  // Geometric mass in cm
+  const double mGeom = G * mass / C2; // Geometric mass in cm
   return a / mGeom;
 }
 
@@ -80,7 +81,7 @@ namespace physics {
  * @return Spin parameter a [cm]
  */
 [[nodiscard]] inline double spinFromDimensionless(double mass, double aStar) {
-  const double mGeom = G * mass / C2;  // Geometric mass in cm
+  const double mGeom = G * mass / C2; // Geometric mass in cm
   return aStar * mGeom;
 }
 
@@ -129,10 +130,10 @@ namespace physics {
  * @return Outer horizon radius [cm], NaN if a > M (naked singularity)
  */
 [[nodiscard]] inline double kerrOuterHorizon(double mass, double a) {
-  const double mGeom = G * mass / C2;  // Geometric mass
+  const double mGeom = G * mass / C2; // Geometric mass
   const double discriminant = (mGeom * mGeom) - (a * a);
   if (discriminant < 0) {
-    return std::numeric_limits<double>::quiet_NaN();  // Naked singularity
+    return std::numeric_limits<double>::quiet_NaN(); // Naked singularity
   }
   return mGeom + std::sqrt(discriminant);
 }
@@ -215,8 +216,8 @@ namespace physics {
  * @return ISCO radius [cm]
  */
 [[nodiscard]] inline double kerrIscoRadius(double mass, double a, bool prograde = true) {
-  const double mGeom = G * mass / C2;  // Geometric mass in cm
-  const double aStar = a / mGeom;      // Dimensionless spin
+  const double mGeom = G * mass / C2; // Geometric mass in cm
+  const double aStar = a / mGeom;     // Dimensionless spin
 
   if (std::abs(aStar) > 1.0) {
     return std::numeric_limits<double>::quiet_NaN();
@@ -292,8 +293,7 @@ namespace physics {
  * @return Photon orbit radius [cm]
  */
 [[nodiscard]] inline double kerrPhotonOrbit(double mass, double a, bool prograde = true) {
-  return prograde ? kerrPhotonOrbitPrograde(mass, a)
-                  : kerrPhotonOrbitRetrograde(mass, a);
+  return prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
 }
 
 // ============================================================================
@@ -313,8 +313,7 @@ namespace physics {
  * @param a Spin parameter [cm]
  * @return Frame-dragging angular velocity [rad/s]
  */
-[[nodiscard]] inline double frameDraggingOmega(double r, double theta,
-                                               double mass, double a) {
+[[nodiscard]] inline double frameDraggingOmega(double r, double theta, double mass, double a) {
   const double mGeom = G * mass / C2;
   const double sigma = kerrSigma(r, a, theta);
   const double sinTheta = std::sin(theta);
@@ -346,14 +345,13 @@ namespace physics {
  * @param a Spin parameter [cm]
  * @return Time dilation factor dtau/dt
  */
-[[nodiscard]] inline double kerrTimeDilation(double r, double theta,
-                                             double mass, double a) {
+[[nodiscard]] inline double kerrTimeDilation(double r, double theta, double mass, double a) {
   const double rS = schwarzschildRadius(mass);
   const double sigma = kerrSigma(r, a, theta);
   const double delta = kerrDelta(r, a, rS);
 
   if ((delta <= 0) || (sigma <= 0)) {
-    return 0.0;  // Inside horizon
+    return 0.0; // Inside horizon
   }
 
   // g_tt component
@@ -396,9 +394,9 @@ namespace physics {
 // ============================================================================
 
 struct KerrGeodesicConsts {
-  double e;   // Energy per unit mass
-  double lz;  // Angular momentum
-  double q;   // Carter constant
+  double e;  // Energy per unit mass
+  double lz; // Angular momentum
+  double q;  // Carter constant
 };
 
 /**
@@ -406,8 +404,8 @@ struct KerrGeodesicConsts {
  *
  * Impact parameter b = lz / e in geometric units.
  */
-[[nodiscard]] inline KerrGeodesicConsts kerrEquatorialConsts(
-    double impactParam, double energy = 1.0) {
+[[nodiscard]] inline KerrGeodesicConsts kerrEquatorialConsts(double impactParam,
+                                                             double energy = 1.0) {
   KerrGeodesicConsts c{};
   c.e = energy;
   c.lz = impactParam * energy;
@@ -420,15 +418,14 @@ struct KerrGeodesicState {
   double theta;
   double phi;
   double t;
-  double signR;      // +1 or -1
-  double signTheta;  // +1 or -1
+  double signR;     // +1 or -1
+  double signTheta; // +1 or -1
 };
 
 /**
  * @brief Initialize equatorial state with sign conventions.
  */
-[[nodiscard]] inline KerrGeodesicState kerrEquatorialState(
-    double r, double phi, double signR) {
+[[nodiscard]] inline KerrGeodesicState kerrEquatorialState(double r, double phi, double signR) {
   KerrGeodesicState s{};
   s.r = r;
   s.theta = 0.5 * PI;
@@ -447,11 +444,10 @@ struct KerrPotentials {
 };
 
 [[nodiscard]] KerrPotentials kerrPotentials(double r, double theta, double mass, double a,
-                                            const KerrGeodesicConsts& c);
+                                            const KerrGeodesicConsts &c);
 
-[[nodiscard]] KerrGeodesicState kerrStepMino(const KerrGeodesicState& state, double mass,
-                                             double a, const KerrGeodesicConsts& c,
-                                             double dlam);
+[[nodiscard]] KerrGeodesicState kerrStepMino(const KerrGeodesicState &state, double mass, double a,
+                                             const KerrGeodesicConsts &c, double dlam);
 
 // ============================================================================
 // Convenience Class
@@ -471,13 +467,11 @@ public:
    * @param spinParam Spin parameter a [cm]
    */
   explicit Kerr(double mass, double spinParam = 0.0)
-      : mass_(mass), a_(spinParam),
-        mGeom_(G * mass / C2),
-        rS_(schwarzschildRadius(mass)),
+      : mass_(mass), a_(spinParam), mGeom_(G * mass / C2), rS_(schwarzschildRadius(mass)),
         aStar_(spinParam / (G * mass / C2)) {
     // Clamp to valid spin
     if (std::abs(aStar_) > 1.0) {
-      aStar_ = (aStar_ > 0) ? 0.998 : -0.998;  // Thorne limit
+      aStar_ = (aStar_ > 0) ? 0.998 : -0.998; // Thorne limit
       a_ = aStar_ * mGeom_;
     }
 
@@ -509,13 +503,9 @@ public:
   [[nodiscard]] double photonOrbitRetrograde() const { return rPhRet_; }
 
   // Metric functions at point
-  [[nodiscard]] double sigma(double r, double theta) const {
-    return kerrSigma(r, a_, theta);
-  }
+  [[nodiscard]] double sigma(double r, double theta) const { return kerrSigma(r, a_, theta); }
   [[nodiscard]] double delta(double r) const { return kerrDelta(r, a_, rS_); }
-  [[nodiscard]] double ergosphere(double theta) const {
-    return ergosphereRadius(mass_, a_, theta);
-  }
+  [[nodiscard]] double ergosphere(double theta) const { return ergosphereRadius(mass_, a_, theta); }
   [[nodiscard]] double frameDragging(double r, double theta) const {
     return frameDraggingOmega(r, theta, mass_, a_);
   }
@@ -524,13 +514,12 @@ public:
   }
 
   [[nodiscard]] KerrPotentials potentials(double r, double theta,
-                                          const KerrGeodesicConsts& c) const {
+                                          const KerrGeodesicConsts &c) const {
     return kerrPotentials(r, theta, mass_, a_, c);
   }
 
-  [[nodiscard]] KerrGeodesicState stepMino(const KerrGeodesicState& state,
-                                           const KerrGeodesicConsts& c,
-                                           double dlam) const {
+  [[nodiscard]] KerrGeodesicState stepMino(const KerrGeodesicState &state,
+                                           const KerrGeodesicConsts &c, double dlam) const {
     return kerrStepMino(state, mass_, a_, c, dlam);
   }
 
@@ -543,11 +532,11 @@ public:
   }
 
 private:
-  double mass_;     // Mass [g]
-  double a_;        // Spin parameter [cm]
-  double mGeom_;    // Geometric mass [cm]
-  double rS_;       // Schwarzschild radius [cm]
-  double aStar_;    // Dimensionless spin
+  double mass_;           // Mass [g]
+  double a_;              // Spin parameter [cm]
+  double mGeom_;          // Geometric mass [cm]
+  double rS_;             // Schwarzschild radius [cm]
+  double aStar_;          // Dimensionless spin
   double rPlus_ = 0.0;    // Outer horizon [cm]
   double rMinus_ = 0.0;   // Inner horizon [cm]
   double rIscoPro_ = 0.0; // Prograde ISCO [cm]

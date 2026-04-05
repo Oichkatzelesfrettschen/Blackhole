@@ -12,8 +12,7 @@
 
 namespace verified {
 
-template<typename Real = double>
-concept GeodesicScalar = std::floating_point<Real>;
+template <typename Real = double> concept GeodesicScalar = std::floating_point<Real>;
 
 // Schwarzschild geodesic right-hand side (equations of motion)
 // For photons (null geodesics) in Schwarzschild spacetime
@@ -78,10 +77,10 @@ template <GeodesicScalar Real>
   // Complex Kerr geometry - use Christoffel symbols
   // This is a simplified implementation
   Real d2tDl2 = (2.0 * m * a * r / rho2) * drDl * dphiDl;
-  Real d2rDl2 = ((m * delta / (rho2 * rho2)) * (dtDl * dtDl)) -
-                ((delta / rho2) * (drDl * drDl)) - (rho2 * (dthetaDl * dthetaDl));
-  Real d2thetaDl2 = (-(2.0 * r / rho2) * drDl * dthetaDl) -
-                    ((a * a * sinTheta * cosTheta / rho2) * dtDl * dtDl);
+  Real d2rDl2 = ((m * delta / (rho2 * rho2)) * (dtDl * dtDl)) - ((delta / rho2) * (drDl * drDl)) -
+                (rho2 * (dthetaDl * dthetaDl));
+  Real d2thetaDl2 =
+      (-(2.0 * r / rho2) * drDl * dthetaDl) - ((a * a * sinTheta * cosTheta / rho2) * dtDl * dtDl);
   Real d2phiDl2 = (2.0 * (r - m) / (r * delta)) * drDl * dphiDl;
 
   // Return StateVector with velocities as positions and accelerations as velocities
@@ -204,4 +203,4 @@ template <GeodesicScalar Real>
   return impact_parameter(e, l);
 }
 
-}  // namespace verified
+} // namespace verified

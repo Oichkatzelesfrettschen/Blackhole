@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include <string>
-#include <filesystem>
 #include <cstdint>
+#include <filesystem>
+#include <string>
 
 #include "gl_loader.h"
 
@@ -67,4 +67,3 @@ inline GLuint loadCubemap(const std::filesystem::path &cubemapDir) {
  * @return Generated GL texture name or 0 on error.
  */
 GLuint createSolidCubemap1x1(std::uint8_t r, std::uint8_t g, std::uint8_t b);
-

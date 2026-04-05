@@ -5,9 +5,9 @@
 #include "hud_overlay.h"
 
 #include <algorithm>
-#include <cstddef>   // std::size_t
-#include <string>    // std::string (include-cleaner: direct use in append_text signature)
-#include <vector>    // std::vector (include-cleaner: direct use in append_text signature)
+#include <cstddef> // std::size_t
+#include <string>  // std::string (include-cleaner: direct use in append_text signature)
+#include <vector>  // std::vector (include-cleaner: direct use in append_text signature)
 
 // NOLINTBEGIN(misc-include-cleaner)
 // glbinding/gl/gl.h is the conventional umbrella header; include-cleaner
@@ -15,11 +15,11 @@
 #include <glbinding/gl/gl.h>
 // NOLINTEND(misc-include-cleaner)
 
+#include <stb_easy_font.h>
+
 #include "physics/safe_limits.h"
 #include "shader.h"
 #include "tracy_support.h"
-
-#include <stb_easy_font.h>
 
 using namespace gl;
 
@@ -75,11 +75,10 @@ void appendText(std::vector<float> &out, std::vector<unsigned char> &scratch, fl
   const int estimated = static_cast<int>((text.size() * 270) + 16);
   scratch.assign(static_cast<std::size_t>(estimated), 0);
 
-  unsigned char rgba[4] = {
-      static_cast<unsigned char>(std::clamp(color.r, 0.0f, 1.0f) * 255.0f),
-      static_cast<unsigned char>(std::clamp(color.g, 0.0f, 1.0f) * 255.0f),
-      static_cast<unsigned char>(std::clamp(color.b, 0.0f, 1.0f) * 255.0f),
-      static_cast<unsigned char>(std::clamp(color.a, 0.0f, 1.0f) * 255.0f)};
+  unsigned char rgba[4] = {static_cast<unsigned char>(std::clamp(color.r, 0.0f, 1.0f) * 255.0f),
+                           static_cast<unsigned char>(std::clamp(color.g, 0.0f, 1.0f) * 255.0f),
+                           static_cast<unsigned char>(std::clamp(color.b, 0.0f, 1.0f) * 255.0f),
+                           static_cast<unsigned char>(std::clamp(color.a, 0.0f, 1.0f) * 255.0f)};
 
   // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
   // WHY: stb_easy_font_print takes char* (not const char*); no const version exists.
@@ -107,7 +106,7 @@ void appendText(std::vector<float> &out, std::vector<unsigned char> &scratch, fl
   }
 }
 
-}  // namespace
+} // namespace
 
 void HudOverlay::init() {
   BH_ZONE();
@@ -131,8 +130,12 @@ void HudOverlay::init() {
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, nullptr);
   glEnableVertexAttribArray(1);
   // WHY: glVertexAttribPointer offset is passed as a void* cast from byte offset.
-  glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, stride,
-                        reinterpret_cast<void *>(2 * sizeof(float)));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr)
+  glVertexAttribPointer(
+      1, 4, GL_FLOAT, GL_FALSE, stride,
+      reinterpret_cast<void *>(
+          2 *
+          sizeof(
+              float))); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr)
 
   glBindVertexArray(0);
   stb_easy_font_spacing(1.0f);
@@ -159,21 +162,29 @@ HudOverlay::~HudOverlay() {
   shutdown();
 }
 
-bool HudOverlay::isInitialized() const { return program_ != 0 && vao_ != 0 && vbo_ != 0; }
+bool HudOverlay::isInitialized() const {
+  return program_ != 0 && vao_ != 0 && vbo_ != 0;
+}
 
 void HudOverlay::setOptions(const HudOverlayOptions &opts) {
   options_ = opts;
 }
 
-const HudOverlayOptions &HudOverlay::options() const { return options_; }
+const HudOverlayOptions &HudOverlay::options() const {
+  return options_;
+}
 
 void HudOverlay::setLines(const std::vector<HudOverlayLine> &lines) {
   lines_ = lines;
 }
 
-void HudOverlay::addLine(const HudOverlayLine &line) { lines_.push_back(line); }
+void HudOverlay::addLine(const HudOverlayLine &line) {
+  lines_.push_back(line);
+}
 
-void HudOverlay::clearLines() { lines_.clear(); }
+void HudOverlay::clearLines() {
+  lines_.clear();
+}
 
 // Measure text by invoking stb_easy_font and scanning vertex extents.
 glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
@@ -211,7 +222,7 @@ glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
     }
   }
 
-  const float width  = (maxx - minx) * scale;
+  const float width = (maxx - minx) * scale;
   const float height = (maxy - miny) * scale;
   return {width, height};
 }
@@ -223,7 +234,7 @@ void HudOverlay::rebuildVertices(int width, int height) {
     return;
   }
 
-  const float scale    = std::max(options_.scale, 0.25f);
+  const float scale = std::max(options_.scale, 0.25f);
   const float baseLine = lineHeight(scale);
   const float lineStep = baseLine * options_.lineSpacing;
 
@@ -246,7 +257,7 @@ void HudOverlay::rebuildVertices(int width, int height) {
       x = options_.margin;
     } else if (options_.align == HudOverlayOptions::Align::Center) {
       x = (static_cast<float>(width) * 0.5f) - (extents.x * 0.5f);
-    } else {  // Right
+    } else { // Right
       x = static_cast<float>(width) - options_.margin - extents.x;
     }
 
@@ -307,8 +318,7 @@ void HudOverlay::render(int width, int height) {
 
   glBindVertexArray(vao_);
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-  glBufferData(GL_ARRAY_BUFFER,
-               static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
+  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
                vertices_.data(), GL_DYNAMIC_DRAW);
 
   glDisable(GL_DEPTH_TEST);
@@ -354,8 +364,7 @@ void HudOverlay::render(int width, int height, float scale, float margin,
 
   glBindVertexArray(vao_);
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-  glBufferData(GL_ARRAY_BUFFER,
-               static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
+  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
                vertices_.data(), GL_DYNAMIC_DRAW);
 
   glDisable(GL_DEPTH_TEST);

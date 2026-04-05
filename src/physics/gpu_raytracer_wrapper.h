@@ -33,15 +33,15 @@ namespace physics::gpu {
  * Can be transferred to GPU device memory via CUDA/HIP memcpy or used for CPU testing.
  */
 struct GPURayBatch {
-    std::vector<GPUGeodesicState> rays;
-    std::vector<int> rayIds;       ///< Original ray IDs for output mapping
-    std::vector<float> energies;   ///< Conserved energy per ray
-    std::vector<float> angularMomentum; ///< Conserved L per ray
+  std::vector<GPUGeodesicState> rays;
+  std::vector<int> rayIds;            ///< Original ray IDs for output mapping
+  std::vector<float> energies;        ///< Conserved energy per ray
+  std::vector<float> angularMomentum; ///< Conserved L per ray
 
-    explicit GPURayBatch(std::size_t batchSize = KernelConfig::BLOCK_SIZE)
-        : rays(batchSize), rayIds(batchSize), energies(batchSize), angularMomentum(batchSize) {}
+  explicit GPURayBatch(std::size_t batchSize = KernelConfig::BLOCK_SIZE)
+      : rays(batchSize), rayIds(batchSize), energies(batchSize), angularMomentum(batchSize) {}
 
-    [[nodiscard]] std::size_t size() const { return rays.size(); }
+  [[nodiscard]] std::size_t size() const { return rays.size(); }
 };
 
 /**
@@ -79,7 +79,8 @@ struct GPURayBatch {
     // Pre-compute conserved quantities
     const auto g = computeMetric(rays.at(i), m, a);
     batch.energies.at(i) = static_cast<float>(verified::compute_energy(g, rays.at(i)));
-    batch.angularMomentum.at(i) = static_cast<float>(verified::compute_angular_momentum(g, rays.at(i)));
+    batch.angularMomentum.at(i) =
+        static_cast<float>(verified::compute_angular_momentum(g, rays.at(i)));
   }
 
   return batch;
@@ -119,4 +120,4 @@ inline int traceBatchCpu(const GPURayBatch &batch, double m, double a, double h,
 
 } // namespace physics::gpu
 
-#endif  // PHYSICS_GPU_RAYTRACER_WRAPPER_H
+#endif // PHYSICS_GPU_RAYTRACER_WRAPPER_H

@@ -264,9 +264,11 @@ void InputManager::update(float deltaTime) {
 
   // Hold-to-toggle handling for camera actions
   if (holdToToggleCamera_) {
-    handleHoldToToggle(KeyAction::CameraMoveForward, isActionJustPressed(KeyAction::CameraMoveForward),
+    handleHoldToToggle(KeyAction::CameraMoveForward,
+                       isActionJustPressed(KeyAction::CameraMoveForward),
                        isActionJustPressed(KeyAction::CameraMoveForward));
-    handleHoldToToggle(KeyAction::CameraMoveBackward, isActionJustPressed(KeyAction::CameraMoveBackward),
+    handleHoldToToggle(KeyAction::CameraMoveBackward,
+                       isActionJustPressed(KeyAction::CameraMoveBackward),
                        isActionJustPressed(KeyAction::CameraMoveBackward));
     handleHoldToToggle(KeyAction::CameraMoveLeft, isActionJustPressed(KeyAction::CameraMoveLeft),
                        isActionJustPressed(KeyAction::CameraMoveLeft));
@@ -578,7 +580,9 @@ void InputManager::updateGamepad(float deltaTime) {
   }
 }
 
-void InputManager::shutdown() { window_ = nullptr; }
+void InputManager::shutdown() {
+  window_ = nullptr;
+}
 
 bool InputManager::isKeyPressed(int key) const {
   if (key < 0 || key > GLFW_KEY_LAST) {
@@ -639,7 +643,9 @@ int InputManager::getKeyForAction(KeyAction action) const {
   return it->second;
 }
 
-void InputManager::setKeyForAction(KeyAction action, int key) { keyBindings_[action] = key; }
+void InputManager::setKeyForAction(KeyAction action, int key) {
+  keyBindings_[action] = key;
+}
 
 std::string InputManager::getKeyName(int key) {
   const char *name = glfwGetKeyName(key, 0);

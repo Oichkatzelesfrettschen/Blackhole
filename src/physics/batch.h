@@ -11,27 +11,28 @@
 #define PHYSICS_BATCH_H
 
 // Verified physics kernels (Phase 6 - extracted from Rocq proofs)
-#include "verified/schwarzschild.h"
 #include "verified/kerr.h"
+#include "verified/schwarzschild.h"
 
 // Legacy headers (kept for compatibility)
-#include "kerr.h"
-#include "safe_limits.h"
-#include "schwarzschild.h"
-#include "thin_disk.h"
-#include "math_types.h"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
+#include "kerr.h"
+#include "math_types.h"
+#include "safe_limits.h"
+#include "schwarzschild.h"
+#include "thin_disk.h"
+
 #if BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)
 #include <Eigen/Dense>
 #endif
 
 #if BLACKHOLE_ENABLE_XSIMD
-#include <xsimd/xsimd.hpp>  // NOLINT(misc-include-cleaner) -- conditional include, used in #if block
+#include <xsimd/xsimd.hpp> // NOLINT(misc-include-cleaner) -- conditional include, used in #if block
 #endif
 
 #if BLACKHOLE_ENABLE_SLEEF
@@ -40,7 +41,6 @@
 #include <immintrin.h>
 #endif
 #endif
-
 
 namespace physics {
 
@@ -51,12 +51,7 @@ namespace physics {
 /**
  * @brief Result status for batch-traced rays.
  */
-enum class BatchRayStatus : uint8_t {
-  PROPAGATING = 0,
-  ESCAPED = 1,
-  CAPTURED = 2,
-  MaxSteps = 3
-};
+enum class BatchRayStatus : uint8_t { PROPAGATING = 0, ESCAPED = 1, CAPTURED = 2, MaxSteps = 3 };
 
 /**
  * @brief Batch of ray states for vectorized geodesic integration.
@@ -65,14 +60,14 @@ enum class BatchRayStatus : uint8_t {
  * Each array element corresponds to one ray in the batch.
  */
 struct BatchRayState {
-  std::vector<double> r;       ///< Radial position [N]
-  std::vector<double> theta;   ///< Polar angle [N]
-  std::vector<double> phi;     ///< Azimuthal angle [N]
-  std::vector<double> dr;      ///< dr/dlambda [N]
-  std::vector<double> dtheta;  ///< dtheta/dlambda [N]
-  std::vector<double> dphi;    ///< dphi/dlambda [N]
+  std::vector<double> r;              ///< Radial position [N]
+  std::vector<double> theta;          ///< Polar angle [N]
+  std::vector<double> phi;            ///< Azimuthal angle [N]
+  std::vector<double> dr;             ///< dr/dlambda [N]
+  std::vector<double> dtheta;         ///< dtheta/dlambda [N]
+  std::vector<double> dphi;           ///< dphi/dlambda [N]
   std::vector<BatchRayStatus> status; ///< Status for each ray [N]
-  std::vector<int> steps;      ///< Steps taken per ray [N]
+  std::vector<int> steps;             ///< Steps taken per ray [N]
 
   void resize(std::size_t n) {
     r.resize(n);
@@ -151,10 +146,8 @@ inline double kerrIscoProgradeVerified(double m, double a) noexcept {
  * Computes d²r/dλ² using verified Christoffel symbols from Rocq proofs.
  * This is the core computation for geodesic integration.
  */
-inline double radialAccelerationVerified(
-    double r, double m, double theta,
-    double drDlambda, double dthetaDlambda, double dphiDlambda) noexcept
-{
+inline double radialAccelerationVerified(double r, double m, double theta, double drDlambda,
+                                         double dthetaDlambda, double dphiDlambda) noexcept {
   return verified::radialAcceleration(r, m, theta, drDlambda, dthetaDlambda, dphiDlambda);
 }
 
@@ -178,71 +171,65 @@ inline double radialAccelerationVerified(
  * @param accelOut Output accelerations [count]
  * @param count  Number of rays
  */
-inline void christoffelAccelBatchXsimd(
-    const double* r,
-    const double* dr,
-    const double* dtheta,
-    const double* dphi,
-    const double* theta,
-    double rS,
-    double* accelOut,
-    std::size_t count) {
+inline void christoffelAccelBatchXsimd(const double *r, const double *dr, const double *dtheta,
+                                       const double *dphi, const double *theta, double rS,
+                                       double *accelOut, std::size_t count) {
 
-    using batch_type = xsimd::batch<double>;  // NOLINT(misc-include-cleaner)
-    constexpr std::size_t simdSize = batch_type::size;
+  using batch_type = xsimd::batch<double>; // NOLINT(misc-include-cleaner)
+  constexpr std::size_t simdSize = batch_type::size;
 
-    const batch_type one(1.0);
-    const batch_type two(2.0);
-    const batch_type rs(rS);
-    const batch_type negRs(-rS);
+  const batch_type one(1.0);
+  const batch_type two(2.0);
+  const batch_type rs(rS);
+  const batch_type negRs(-rS);
 
-    std::size_t i = 0;
-    // Main SIMD loop - process 4 rays at a time (AVX2)
-    for (; i + simdSize <= count; i += simdSize) {
-      batch_type const rV = xsimd::load_unaligned(&r[i]);  // NOLINT(misc-include-cleaner)
-      batch_type const drV = xsimd::load_unaligned(&dr[i]);
-      batch_type const dthV = xsimd::load_unaligned(&dtheta[i]);
-      batch_type const dphV = xsimd::load_unaligned(&dphi[i]);
-      batch_type const thV = xsimd::load_unaligned(&theta[i]);
+  std::size_t i = 0;
+  // Main SIMD loop - process 4 rays at a time (AVX2)
+  for (; i + simdSize <= count; i += simdSize) {
+    batch_type const rV = xsimd::load_unaligned(&r[i]); // NOLINT(misc-include-cleaner)
+    batch_type const drV = xsimd::load_unaligned(&dr[i]);
+    batch_type const dthV = xsimd::load_unaligned(&dtheta[i]);
+    batch_type const dphV = xsimd::load_unaligned(&dphi[i]);
+    batch_type const thV = xsimd::load_unaligned(&theta[i]);
 
-      batch_type const f = one - rs / rV;
-      batch_type const sinTh = xsimd::sin(thV);  // NOLINT(misc-include-cleaner)
-      batch_type const r2 = rV * rV;
+    batch_type const f = one - rs / rV;
+    batch_type const sinTh = xsimd::sin(thV); // NOLINT(misc-include-cleaner)
+    batch_type const r2 = rV * rV;
 
-      batch_type const gammaRTt = rs * f / (two * r2);
-      batch_type const gammaRRr = negRs / (two * r2 * f);
-      batch_type const gammaRThth = -rV * f;
-      batch_type const gammaRPhph = gammaRThth * sinTh * sinTh;
-      batch_type const dtDl = one / f;
+    batch_type const gammaRTt = rs * f / (two * r2);
+    batch_type const gammaRRr = negRs / (two * r2 * f);
+    batch_type const gammaRThth = -rV * f;
+    batch_type const gammaRPhph = gammaRThth * sinTh * sinTh;
+    batch_type const dtDl = one / f;
 
-      batch_type const accel = -gammaRTt * dtDl * dtDl - gammaRRr * drV * drV -
-                               gammaRThth * dthV * dthV - gammaRPhph * dphV * dphV;
+    batch_type const accel = -gammaRTt * dtDl * dtDl - gammaRRr * drV * drV -
+                             gammaRThth * dthV * dthV - gammaRPhph * dphV * dphV;
 
-      xsimd::store_unaligned(&accelOut[i], accel);  // NOLINT(misc-include-cleaner)
-    }
+    xsimd::store_unaligned(&accelOut[i], accel); // NOLINT(misc-include-cleaner)
+  }
 
-    // Scalar tail for remaining elements
-    for (; i < count; ++i) {
-      double const rI = r[i];
-      double const drI = dr[i];
-      double const dthI = dtheta[i];
-      double const dphI = dphi[i];
-      double const thI = theta[i];
+  // Scalar tail for remaining elements
+  for (; i < count; ++i) {
+    double const rI = r[i];
+    double const drI = dr[i];
+    double const dthI = dtheta[i];
+    double const dphI = dphi[i];
+    double const thI = theta[i];
 
-      double const f = 1.0 - (rS / rI);
-      double const sinTh = std::sin(thI);
+    double const f = 1.0 - (rS / rI);
+    double const sinTh = std::sin(thI);
 
-      double const gammaRTt = rS * f / (2.0 * rI * rI);
-      double const gammaRRr = -rS / (2.0 * rI * rI * f);
-      double const gammaRThth = -rI * f;
-      double const gammaRPhph = -rI * f * sinTh * sinTh;
-      double const dtDl = 1.0 / f;
+    double const gammaRTt = rS * f / (2.0 * rI * rI);
+    double const gammaRRr = -rS / (2.0 * rI * rI * f);
+    double const gammaRThth = -rI * f;
+    double const gammaRPhph = -rI * f * sinTh * sinTh;
+    double const dtDl = 1.0 / f;
 
-      accelOut[i] = (-gammaRTt * dtDl * dtDl) - (gammaRRr * drI * drI) -
-                    (gammaRThth * dthI * dthI) - (gammaRPhph * dphI * dphI);
-    }
+    accelOut[i] = (-gammaRTt * dtDl * dtDl) - (gammaRRr * drI * drI) - (gammaRThth * dthI * dthI) -
+                  (gammaRPhph * dphI * dphI);
+  }
 }
-#endif  // BLACKHOLE_ENABLE_XSIMD
+#endif // BLACKHOLE_ENABLE_XSIMD
 
 // ============================================================================
 // SLEEF-Accelerated Christoffel Kernel (AVX2+FMA)
@@ -258,89 +245,85 @@ inline void christoffelAccelBatchXsimd(
  * Performance note: SLEEF sin may be slightly slower than xsimd::sin but
  * provides better numerical accuracy for physics simulations.
  */
-inline void christoffelAccelBatchSleef(
-    const double* __restrict r,
-    const double* __restrict dr,
-    const double* __restrict dtheta,
-    const double* __restrict dphi,
-    const double* __restrict theta,
-    double rS,
-    double* __restrict accelOut,
-    std::size_t count) {
+inline void christoffelAccelBatchSleef(const double *__restrict r, const double *__restrict dr,
+                                       const double *__restrict dtheta,
+                                       const double *__restrict dphi,
+                                       const double *__restrict theta, double rS,
+                                       double *__restrict accelOut, std::size_t count) {
 
-    constexpr std::size_t simdSize = 4;  // AVX2 = 4 doubles
+  constexpr std::size_t simdSize = 4; // AVX2 = 4 doubles
 
-    const __m256d one = _mm256_set1_pd(1.0);
-    const __m256d two = _mm256_set1_pd(2.0);
-    const __m256d rs = _mm256_set1_pd(rS);
-    const __m256d negRs = _mm256_set1_pd(-rS);
+  const __m256d one = _mm256_set1_pd(1.0);
+  const __m256d two = _mm256_set1_pd(2.0);
+  const __m256d rs = _mm256_set1_pd(rS);
+  const __m256d negRs = _mm256_set1_pd(-rS);
 
-    std::size_t i = 0;
-    for (; i + simdSize <= count; i += simdSize) {
-      __m256d const rV = _mm256_loadu_pd(&r[i]);
-      __m256d const drV = _mm256_loadu_pd(&dr[i]);
-      __m256d const dthV = _mm256_loadu_pd(&dtheta[i]);
-      __m256d const dphV = _mm256_loadu_pd(&dphi[i]);
-      __m256d const thV = _mm256_loadu_pd(&theta[i]);
+  std::size_t i = 0;
+  for (; i + simdSize <= count; i += simdSize) {
+    __m256d const rV = _mm256_loadu_pd(&r[i]);
+    __m256d const drV = _mm256_loadu_pd(&dr[i]);
+    __m256d const dthV = _mm256_loadu_pd(&dtheta[i]);
+    __m256d const dphV = _mm256_loadu_pd(&dphi[i]);
+    __m256d const thV = _mm256_loadu_pd(&theta[i]);
 
-      // f = 1 - rS / r
-      __m256d const f = _mm256_sub_pd(one, _mm256_div_pd(rs, rV));
+    // f = 1 - rS / r
+    __m256d const f = _mm256_sub_pd(one, _mm256_div_pd(rs, rV));
 
-      // SLEEF vectorized sin with 1.0 ULP accuracy
-      __m256d const sinTh = Sleef_sind4_u10avx2(thV);
+    // SLEEF vectorized sin with 1.0 ULP accuracy
+    __m256d const sinTh = Sleef_sind4_u10avx2(thV);
 
-      __m256d const r2 = _mm256_mul_pd(rV, rV);
+    __m256d const r2 = _mm256_mul_pd(rV, rV);
 
-      // Christoffel symbols using FMA where beneficial
-      // gammaRTt = rS * f / (2 * r^2)
-      __m256d const denom = _mm256_mul_pd(two, r2);
-      __m256d const gammaRTt = _mm256_div_pd(_mm256_mul_pd(rs, f), denom);
+    // Christoffel symbols using FMA where beneficial
+    // gammaRTt = rS * f / (2 * r^2)
+    __m256d const denom = _mm256_mul_pd(two, r2);
+    __m256d const gammaRTt = _mm256_div_pd(_mm256_mul_pd(rs, f), denom);
 
-      // gammaRRr = -rS / (2 * r^2 * f)
-      __m256d const gammaRRr = _mm256_div_pd(negRs, _mm256_mul_pd(denom, f));
+    // gammaRRr = -rS / (2 * r^2 * f)
+    __m256d const gammaRRr = _mm256_div_pd(negRs, _mm256_mul_pd(denom, f));
 
-      // gammaRThth = -r * f
-      __m256d const gammaRThth = _mm256_mul_pd(_mm256_sub_pd(_mm256_setzero_pd(), rV), f);
+    // gammaRThth = -r * f
+    __m256d const gammaRThth = _mm256_mul_pd(_mm256_sub_pd(_mm256_setzero_pd(), rV), f);
 
-      // gammaRPhph = gammaRThth * sin^2(theta)
-      __m256d const sin2 = _mm256_mul_pd(sinTh, sinTh);
-      __m256d const gammaRPhph = _mm256_mul_pd(gammaRThth, sin2);
+    // gammaRPhph = gammaRThth * sin^2(theta)
+    __m256d const sin2 = _mm256_mul_pd(sinTh, sinTh);
+    __m256d const gammaRPhph = _mm256_mul_pd(gammaRThth, sin2);
 
-      // dt/dlambda = 1/f
-      __m256d const dtDl = _mm256_div_pd(one, f);
+    // dt/dlambda = 1/f
+    __m256d const dtDl = _mm256_div_pd(one, f);
 
-      // Compute acceleration: -Gamma_tt * (dt/dl)^2 - Gamma_rr * dr^2 - ...
-      __m256d const dtDl2 = _mm256_mul_pd(dtDl, dtDl);
-      __m256d const dr2 = _mm256_mul_pd(drV, drV);
-      __m256d const dth2 = _mm256_mul_pd(dthV, dthV);
-      __m256d const dph2 = _mm256_mul_pd(dphV, dphV);
+    // Compute acceleration: -Gamma_tt * (dt/dl)^2 - Gamma_rr * dr^2 - ...
+    __m256d const dtDl2 = _mm256_mul_pd(dtDl, dtDl);
+    __m256d const dr2 = _mm256_mul_pd(drV, drV);
+    __m256d const dth2 = _mm256_mul_pd(dthV, dthV);
+    __m256d const dph2 = _mm256_mul_pd(dphV, dphV);
 
-      __m256d accel = _mm256_sub_pd(_mm256_setzero_pd(), _mm256_mul_pd(gammaRTt, dtDl2));
-      accel = _mm256_fnmadd_pd(gammaRRr, dr2, accel);    // accel -= Gamma_rr * dr^2
-      accel = _mm256_fnmadd_pd(gammaRThth, dth2, accel); // accel -= Gamma_thth * dth^2
-      accel = _mm256_fnmadd_pd(gammaRPhph, dph2, accel); // accel -= Gamma_phph * dph^2
+    __m256d accel = _mm256_sub_pd(_mm256_setzero_pd(), _mm256_mul_pd(gammaRTt, dtDl2));
+    accel = _mm256_fnmadd_pd(gammaRRr, dr2, accel);    // accel -= Gamma_rr * dr^2
+    accel = _mm256_fnmadd_pd(gammaRThth, dth2, accel); // accel -= Gamma_thth * dth^2
+    accel = _mm256_fnmadd_pd(gammaRPhph, dph2, accel); // accel -= Gamma_phph * dph^2
 
-      _mm256_storeu_pd(&accelOut[i], accel);
-    }
+    _mm256_storeu_pd(&accelOut[i], accel);
+  }
 
-    // Scalar tail
-    for (; i < count; ++i) {
-      double const rI = r[i];
-      double const f = 1.0 - (rS / rI);
-      double const sinTh = Sleef_sin_u10(theta[i]);
-      double const r2I = rI * rI;
+  // Scalar tail
+  for (; i < count; ++i) {
+    double const rI = r[i];
+    double const f = 1.0 - (rS / rI);
+    double const sinTh = Sleef_sin_u10(theta[i]);
+    double const r2I = rI * rI;
 
-      double const gammaRTt = rS * f / (2.0 * r2I);
-      double const gammaRRr = -rS / (2.0 * r2I * f);
-      double const gammaRThth = -rI * f;
-      double const gammaRPhph = gammaRThth * sinTh * sinTh;
-      double const dtDl = 1.0 / f;
+    double const gammaRTt = rS * f / (2.0 * r2I);
+    double const gammaRRr = -rS / (2.0 * r2I * f);
+    double const gammaRThth = -rI * f;
+    double const gammaRPhph = gammaRThth * sinTh * sinTh;
+    double const dtDl = 1.0 / f;
 
-      accelOut[i] = (-gammaRTt * dtDl * dtDl) - (gammaRRr * dr[i] * dr[i]) -
-                    (gammaRThth * dtheta[i] * dtheta[i]) - (gammaRPhph * dphi[i] * dphi[i]);
-    }
+    accelOut[i] = (-gammaRTt * dtDl * dtDl) - (gammaRRr * dr[i] * dr[i]) -
+                  (gammaRThth * dtheta[i] * dtheta[i]) - (gammaRPhph * dphi[i] * dphi[i]);
+  }
 }
-#endif  // BLACKHOLE_ENABLE_SLEEF && BLACKHOLE_ENABLE_XSIMD && __AVX2__
+#endif // BLACKHOLE_ENABLE_SLEEF && BLACKHOLE_ENABLE_XSIMD && __AVX2__
 
 // ============================================================================
 // SSE2 Fallback Christoffel Kernel (Legacy Machines)
@@ -353,67 +336,62 @@ inline void christoffelAccelBatchSleef(
  * Processes 2 doubles at a time (128-bit registers).
  * Uses xsimd with explicit SSE2 architecture selection.
  */
-template<typename Arch = xsimd::sse2>  // NOLINT(misc-include-cleaner)
-inline void christoffelAccelBatchSse2(
-    const double* __restrict r,
-    const double* __restrict dr,
-    const double* __restrict dtheta,
-    const double* __restrict dphi,
-    const double* __restrict theta,
-    double rS,
-    double* __restrict accelOut,
-    std::size_t count) {
+template <typename Arch = xsimd::sse2> // NOLINT(misc-include-cleaner)
+inline void christoffelAccelBatchSse2(const double *__restrict r, const double *__restrict dr,
+                                      const double *__restrict dtheta,
+                                      const double *__restrict dphi, const double *__restrict theta,
+                                      double rS, double *__restrict accelOut, std::size_t count) {
 
-    using batch_type = xsimd::batch<double, Arch>;  // NOLINT(misc-include-cleaner)
-    constexpr std::size_t simdSize = batch_type::size;  // 2 for SSE2
+  using batch_type = xsimd::batch<double, Arch>;     // NOLINT(misc-include-cleaner)
+  constexpr std::size_t simdSize = batch_type::size; // 2 for SSE2
 
-    const batch_type one(1.0);
-    const batch_type two(2.0);
-    const batch_type rs(rS);
-    const batch_type negRs(-rS);
+  const batch_type one(1.0);
+  const batch_type two(2.0);
+  const batch_type rs(rS);
+  const batch_type negRs(-rS);
 
-    std::size_t i = 0;
-    for (; i + simdSize <= count; i += simdSize) {
-        batch_type rV = batch_type::load_unaligned(&r[i]);
-        batch_type drV = batch_type::load_unaligned(&dr[i]);
-        batch_type dthV = batch_type::load_unaligned(&dtheta[i]);
-        batch_type dphV = batch_type::load_unaligned(&dphi[i]);
-        batch_type thV = batch_type::load_unaligned(&theta[i]);
+  std::size_t i = 0;
+  for (; i + simdSize <= count; i += simdSize) {
+    batch_type rV = batch_type::load_unaligned(&r[i]);
+    batch_type drV = batch_type::load_unaligned(&dr[i]);
+    batch_type dthV = batch_type::load_unaligned(&dtheta[i]);
+    batch_type dphV = batch_type::load_unaligned(&dphi[i]);
+    batch_type thV = batch_type::load_unaligned(&theta[i]);
 
-        batch_type f = one - (rs / rV);
-        batch_type sinTh = xsimd::sin(thV);
-        batch_type r2 = rV * rV;
+    batch_type f = one - (rs / rV);
+    batch_type sinTh = xsimd::sin(thV);
+    batch_type r2 = rV * rV;
 
-        batch_type gammaRTt = rs * f / (two * r2);
-        batch_type gammaRRr = negRs / (two * r2 * f);
-        batch_type gammaRThth = -rV * f;
-        batch_type gammaRPhph = gammaRThth * sinTh * sinTh;
-        batch_type dtDl = one / f;
+    batch_type gammaRTt = rs * f / (two * r2);
+    batch_type gammaRRr = negRs / (two * r2 * f);
+    batch_type gammaRThth = -rV * f;
+    batch_type gammaRPhph = gammaRThth * sinTh * sinTh;
+    batch_type dtDl = one / f;
 
-        batch_type accel = (-gammaRTt * dtDl * dtDl) - (gammaRRr * drV * drV) -
-                           (gammaRThth * dthV * dthV) - (gammaRPhph * dphV * dphV);
+    batch_type accel = (-gammaRTt * dtDl * dtDl) - (gammaRRr * drV * drV) -
+                       (gammaRThth * dthV * dthV) - (gammaRPhph * dphV * dphV);
 
-        accel.store_unaligned(&accelOut[i]);
-    }
+    accel.store_unaligned(&accelOut[i]);
+  }
 
-    // Scalar tail
-    for (; i < count; ++i) {
-      double const rI = r[i];
-      double const f = 1.0 - (rS / rI);
-      double const sinTh = std::sin(theta[i]);
-      double const r2I = rI * rI;
+  // Scalar tail
+  for (; i < count; ++i) {
+    double const rI = r[i];
+    double const f = 1.0 - (rS / rI);
+    double const sinTh = std::sin(theta[i]);
+    double const r2I = rI * rI;
 
-      double const gammaRTt = rS * f / (2.0 * r2I);
-      double const gammaRRr = -rS / (2.0 * r2I * f);
-      double const gammaRThth = -rI * f;
-      double const gammaRPhph = gammaRThth * sinTh * sinTh;
-      double const dtDl = 1.0 / f;
+    double const gammaRTt = rS * f / (2.0 * r2I);
+    double const gammaRRr = -rS / (2.0 * r2I * f);
+    double const gammaRThth = -rI * f;
+    double const gammaRPhph = gammaRThth * sinTh * sinTh;
+    double const dtDl = 1.0 / f;
 
-      accelOut[i] = (-gammaRTt * dtDl * dtDl) - (gammaRRr * dr[i] * dr[i]) -
-                    (gammaRThth * dtheta[i] * dtheta[i]) - (gammaRPhph * dphi[i] * dphi[i]);
-    }
+    accelOut[i] = (-gammaRTt * dtDl * dtDl) - (gammaRRr * dr[i] * dr[i]) -
+                  (gammaRThth * dtheta[i] * dtheta[i]) - (gammaRPhph * dphi[i] * dphi[i]);
+  }
 }
-#endif  // BLACKHOLE_ENABLE_XSIMD
+#endif // BLACKHOLE_ENABLE_XSIMD
 
 // ============================================================================
 // Runtime Dispatch: Select Best Implementation
@@ -430,65 +408,52 @@ inline void christoffelAccelBatchSse2(
  */
 
 // Forward declaration for scalar fallback
-inline void christoffelAccelBatchScalar(
-    const double* r, const double* dr, const double* dtheta,
-    const double* dphi, const double* theta, double rS,
-    double* accelOut, std::size_t count);
+inline void christoffelAccelBatchScalar(const double *r, const double *dr, const double *dtheta,
+                                        const double *dphi, const double *theta, double rS,
+                                        double *accelOut, std::size_t count);
 
-inline void christoffelAccelDispatch(
-    const double* r,
-    const double* dr,
-    const double* dtheta,
-    const double* dphi,
-    const double* theta,
-    double rS,
-    double* accelOut,
-    std::size_t count) {
+inline void christoffelAccelDispatch(const double *r, const double *dr, const double *dtheta,
+                                     const double *dphi, const double *theta, double rS,
+                                     double *accelOut, std::size_t count) {
 
 #if BLACKHOLE_ENABLE_SLEEF && BLACKHOLE_ENABLE_XSIMD && defined(__AVX2__)
-    // Best path: SLEEF with 1-ULP sin accuracy + FMA
-    christoffelAccelBatchSleef(r, dr, dtheta, dphi, theta, rS, accelOut, count);
+  // Best path: SLEEF with 1-ULP sin accuracy + FMA
+  christoffelAccelBatchSleef(r, dr, dtheta, dphi, theta, rS, accelOut, count);
 #elif BLACKHOLE_ENABLE_XSIMD
-    // xsimd path (AVX2 or fallback based on compile flags)
-    christoffelAccelBatchXsimd(r, dr, dtheta, dphi, theta, rS, accelOut, count);
+  // xsimd path (AVX2 or fallback based on compile flags)
+  christoffelAccelBatchXsimd(r, dr, dtheta, dphi, theta, rS, accelOut, count);
 #else
-    // Scalar fallback
-    christoffelAccelBatchScalar(r, dr, dtheta, dphi, theta, rS, accelOut, count);
+  // Scalar fallback
+  christoffelAccelBatchScalar(r, dr, dtheta, dphi, theta, rS, accelOut, count);
 #endif
 }
 
 /**
  * @brief Scalar fallback for Christoffel acceleration.
  */
-inline void christoffelAccelBatchScalar(
-    const double* r,
-    const double* dr,
-    const double* dtheta,
-    const double* dphi,
-    const double* theta,
-    double rS,
-    double* accelOut,
-    std::size_t count) {
+inline void christoffelAccelBatchScalar(const double *r, const double *dr, const double *dtheta,
+                                        const double *dphi, const double *theta, double rS,
+                                        double *accelOut, std::size_t count) {
 
-    for (std::size_t i = 0; i < count; ++i) {
-      double const rI = r[i];
-      double const drI = dr[i];
-      double const dthI = dtheta[i];
-      double const dphI = dphi[i];
-      double const thI = theta[i];
+  for (std::size_t i = 0; i < count; ++i) {
+    double const rI = r[i];
+    double const drI = dr[i];
+    double const dthI = dtheta[i];
+    double const dphI = dphi[i];
+    double const thI = theta[i];
 
-      double const f = 1.0 - (rS / rI);
-      double const sinTh = std::sin(thI);
+    double const f = 1.0 - (rS / rI);
+    double const sinTh = std::sin(thI);
 
-      double const gammaRTt = rS * f / (2.0 * rI * rI);
-      double const gammaRRr = -rS / (2.0 * rI * rI * f);
-      double const gammaRThth = -rI * f;
-      double const gammaRPhph = -rI * f * sinTh * sinTh;
-      double const dtDl = 1.0 / f;
+    double const gammaRTt = rS * f / (2.0 * rI * rI);
+    double const gammaRRr = -rS / (2.0 * rI * rI * f);
+    double const gammaRThth = -rI * f;
+    double const gammaRPhph = -rI * f * sinTh * sinTh;
+    double const dtDl = 1.0 / f;
 
-      accelOut[i] = (-gammaRTt * dtDl * dtDl) - (gammaRRr * drI * drI) -
-                    (gammaRThth * dthI * dthI) - (gammaRPhph * dphI * dphI);
-    }
+    accelOut[i] = (-gammaRTt * dtDl * dtDl) - (gammaRRr * drI * drI) - (gammaRThth * dthI * dthI) -
+                  (gammaRPhph * dphI * dphI);
+  }
 }
 
 // ============================================================================
@@ -508,12 +473,8 @@ inline void christoffelAccelBatchScalar(
  * @param escapeRadius Radius at which rays are considered escaped
  * @return BatchTraceResult with final states for all rays
  */
-inline BatchTraceResult traceGeodesicBatch(
-    const BatchRayState& initial,
-    double mass,
-    double stepSize,
-    int maxSteps,
-    double escapeRadius) {
+inline BatchTraceResult traceGeodesicBatch(const BatchRayState &initial, double mass,
+                                           double stepSize, int maxSteps, double escapeRadius) {
 
   const std::size_t n = initial.size();
   const double rS = schwarzschildRadius(mass);
@@ -551,7 +512,8 @@ inline BatchTraceResult traceGeodesicBatch(
   for (int step = 0; step < maxSteps && activeCount > 0; ++step) {
     // Check termination conditions
     for (std::size_t i = 0; i < n; ++i) {
-      if (!active[i]) continue;
+      if (!active[i])
+        continue;
 
       if (rVec[static_cast<Eigen::Index>(i)] <= rCapture) {
         state.status[i] = BatchRayStatus::CAPTURED;
@@ -567,7 +529,8 @@ inline BatchTraceResult traceGeodesicBatch(
       }
     }
 
-    if (activeCount == 0) break;
+    if (activeCount == 0)
+      break;
 
     // =========================================================================
     // RK4 Step with xsimd-accelerated Christoffel computation (5x speedup)
@@ -578,13 +541,11 @@ inline BatchTraceResult traceGeodesicBatch(
     // k1 = f(state): k1R = dr, k1Dr = christoffel_accel(state)
     std::copy(state.dr.begin(), state.dr.end(), k1R.begin());
 #if BLACKHOLE_ENABLE_XSIMD
-    christoffelAccelBatchXsimd(
-        state.r.data(), state.dr.data(), state.dtheta.data(),
-        state.dphi.data(), state.theta.data(), rS, k1Dr.data(), n);
+    christoffelAccelBatchXsimd(state.r.data(), state.dr.data(), state.dtheta.data(),
+                               state.dphi.data(), state.theta.data(), rS, k1Dr.data(), n);
 #else
-    christoffelAccelBatchScalar(
-        state.r.data(), state.dr.data(), state.dtheta.data(),
-        state.dphi.data(), state.theta.data(), rS, k1Dr.data(), n);
+    christoffelAccelBatchScalar(state.r.data(), state.dr.data(), state.dtheta.data(),
+                                state.dphi.data(), state.theta.data(), rS, k1Dr.data(), n);
 #endif
 
     // k2 = f(state + h/2 * k1): compute intermediate state, then acceleration
@@ -592,61 +553,62 @@ inline BatchTraceResult traceGeodesicBatch(
       tmpR[i] = state.r[i] + 0.5 * stepSize * k1R[i];
       tmpDr[i] = state.dr[i] + 0.5 * stepSize * k1Dr[i];
       // Clamp to avoid singularity
-      if (tmpR[i] <= rS) { tmpR[i] = rS * 1.001; }
+      if (tmpR[i] <= rS) {
+        tmpR[i] = rS * 1.001;
+      }
     }
     std::copy(tmpDr.begin(), tmpDr.end(), k2R.begin());
 #if BLACKHOLE_ENABLE_XSIMD
-    christoffelAccelBatchXsimd(
-        tmpR.data(), tmpDr.data(), state.dtheta.data(),
-        state.dphi.data(), state.theta.data(), rS, k2Dr.data(), n);
+    christoffelAccelBatchXsimd(tmpR.data(), tmpDr.data(), state.dtheta.data(), state.dphi.data(),
+                               state.theta.data(), rS, k2Dr.data(), n);
 #else
-    christoffelAccelBatchScalar(
-        tmpR.data(), tmpDr.data(), state.dtheta.data(),
-        state.dphi.data(), state.theta.data(), rS, k2Dr.data(), n);
+    christoffelAccelBatchScalar(tmpR.data(), tmpDr.data(), state.dtheta.data(), state.dphi.data(),
+                                state.theta.data(), rS, k2Dr.data(), n);
 #endif
 
     // k3 = f(state + h/2 * k2)
     for (std::size_t i = 0; i < n; ++i) {
       tmpR[i] = state.r[i] + 0.5 * stepSize * k2R[i];
       tmpDr[i] = state.dr[i] + 0.5 * stepSize * k2Dr[i];
-      if (tmpR[i] <= rS) { tmpR[i] = rS * 1.001; }
+      if (tmpR[i] <= rS) {
+        tmpR[i] = rS * 1.001;
+      }
     }
     std::copy(tmpDr.begin(), tmpDr.end(), k3R.begin());
 #if BLACKHOLE_ENABLE_XSIMD
-    christoffelAccelBatchXsimd(
-        tmpR.data(), tmpDr.data(), state.dtheta.data(),
-        state.dphi.data(), state.theta.data(), rS, k3Dr.data(), n);
+    christoffelAccelBatchXsimd(tmpR.data(), tmpDr.data(), state.dtheta.data(), state.dphi.data(),
+                               state.theta.data(), rS, k3Dr.data(), n);
 #else
-    christoffelAccelBatchScalar(
-        tmpR.data(), tmpDr.data(), state.dtheta.data(),
-        state.dphi.data(), state.theta.data(), rS, k3Dr.data(), n);
+    christoffelAccelBatchScalar(tmpR.data(), tmpDr.data(), state.dtheta.data(), state.dphi.data(),
+                                state.theta.data(), rS, k3Dr.data(), n);
 #endif
 
     // k4 = f(state + h * k3)
     for (std::size_t i = 0; i < n; ++i) {
       tmpR[i] = state.r[i] + stepSize * k3R[i];
       tmpDr[i] = state.dr[i] + stepSize * k3Dr[i];
-      if (tmpR[i] <= rS) { tmpR[i] = rS * 1.001; }
+      if (tmpR[i] <= rS) {
+        tmpR[i] = rS * 1.001;
+      }
     }
     std::copy(tmpDr.begin(), tmpDr.end(), k4R.begin());
 #if BLACKHOLE_ENABLE_XSIMD
-    christoffelAccelBatchXsimd(
-        tmpR.data(), tmpDr.data(), state.dtheta.data(),
-        state.dphi.data(), state.theta.data(), rS, k4Dr.data(), n);
+    christoffelAccelBatchXsimd(tmpR.data(), tmpDr.data(), state.dtheta.data(), state.dphi.data(),
+                               state.theta.data(), rS, k4Dr.data(), n);
 #else
-    christoffelAccelBatchScalar(
-        tmpR.data(), tmpDr.data(), state.dtheta.data(),
-        state.dphi.data(), state.theta.data(), rS, k4Dr.data(), n);
+    christoffelAccelBatchScalar(tmpR.data(), tmpDr.data(), state.dtheta.data(), state.dphi.data(),
+                                state.theta.data(), rS, k4Dr.data(), n);
 #endif
 
     // Update state: state += h/6 * (k1 + 2*k2 + 2*k3 + k4)
     // Only update active rays to preserve terminated ray states
     for (std::size_t i = 0; i < n; ++i) {
-      if (!active[i]) continue;
+      if (!active[i])
+        continue;
       Eigen::Index idx = static_cast<Eigen::Index>(i);
 
-      rVec[idx] += stepSize * (k1R[i] + 2.0*k2R[i] + 2.0*k3R[i] + k4R[i]) / 6.0;
-      drVec[idx] += stepSize * (k1Dr[i] + 2.0*k2Dr[i] + 2.0*k3Dr[i] + k4Dr[i]) / 6.0;
+      rVec[idx] += stepSize * (k1R[i] + 2.0 * k2R[i] + 2.0 * k3R[i] + k4R[i]) / 6.0;
+      drVec[idx] += stepSize * (k1Dr[i] + 2.0 * k2Dr[i] + 2.0 * k3Dr[i] + k4Dr[i]) / 6.0;
 
       // Update phi (simplified: dphi/dr integration)
       phiVec[idx] += stepSize * dphiVec[idx];
@@ -749,7 +711,7 @@ inline void fillLinspace(std::vector<double> &out, double start, double end) {
 }
 
 inline void diskFluxBatch(const std::vector<double> &radii, const DiskParams &disk,
-                            std::vector<float> &out) {
+                          std::vector<float> &out) {
   out.resize(radii.size());
   for (std::size_t i = 0; i < radii.size(); ++i) {
     double flux = diskFlux(radii.at(i), disk);
@@ -760,8 +722,8 @@ inline void diskFluxBatch(const std::vector<double> &radii, const DiskParams &di
   }
 }
 
-inline void kerrRedshiftBatch(const std::vector<double> &radii, double theta, double mass,
-                                double a, std::vector<float> &out) {
+inline void kerrRedshiftBatch(const std::vector<double> &radii, double theta, double mass, double a,
+                              std::vector<float> &out) {
   out.resize(radii.size());
   for (std::size_t i = 0; i < radii.size(); ++i) {
     double z = kerrRedshift(radii.at(i), theta, mass, a);

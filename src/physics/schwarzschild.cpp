@@ -4,11 +4,12 @@
  */
 
 #include "schwarzschild.h"
-#include "constants.h"
-#include "safe_limits.h"
 
 #include <cmath>
 #include <limits>
+
+#include "constants.h"
+#include "safe_limits.h"
 
 namespace physics {
 
@@ -182,8 +183,8 @@ double surfaceGravity(double r, double mass) {
 // ============================================================================
 
 Schwarzschild::Schwarzschild(double mass)
-    : mass_(mass), r_s_(schwarzschildRadius(mass)),
-      r_ph_(photonSphereRadius(mass)), r_isco_(iscoRadius(mass)) {}
+    : mass_(mass), r_s_(schwarzschildRadius(mass)), r_ph_(photonSphereRadius(mass)),
+      r_isco_(iscoRadius(mass)) {}
 
 double Schwarzschild::gTt(double r) const {
   return schwarzschildGTt(r, mass_);

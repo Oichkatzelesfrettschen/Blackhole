@@ -304,7 +304,8 @@ inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, d
 
   double maxFlux230 = 0.0;
   for (int i = 0; i < size; ++i) {
-    double const flux = diskFluxAtFrequency(radii.at(static_cast<std::size_t>(i)), disk, FREQ_230_GHZ);
+    double const flux =
+        diskFluxAtFrequency(radii.at(static_cast<std::size_t>(i)), disk, FREQ_230_GHZ);
     lut.lut230ghz.values.at(static_cast<std::size_t>(i)) = static_cast<float>(flux);
     maxFlux230 = std::max(maxFlux230, flux);
   }
@@ -323,7 +324,8 @@ inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, d
 
   double maxFlux345 = 0.0;
   for (int i = 0; i < size; ++i) {
-    double const flux = diskFluxAtFrequency(radii.at(static_cast<std::size_t>(i)), disk, FREQ_345_GHZ);
+    double const flux =
+        diskFluxAtFrequency(radii.at(static_cast<std::size_t>(i)), disk, FREQ_345_GHZ);
     lut.lut345ghz.values.at(static_cast<std::size_t>(i)) = static_cast<float>(flux);
     maxFlux345 = std::max(maxFlux345, flux);
   }
@@ -368,7 +370,7 @@ inline double ehtAngularResolution(ObservingFrequency frequency) {
  * @return Resolution ratio (345/230 = 1.5, i.e., 50% better)
  */
 inline double resolutionImprovement345ghz() {
-  return FREQ_345_GHZ / FREQ_230_GHZ;  // = 1.5
+  return FREQ_345_GHZ / FREQ_230_GHZ; // = 1.5
 }
 
 } // namespace physics

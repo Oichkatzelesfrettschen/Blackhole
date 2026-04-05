@@ -10,8 +10,7 @@
 namespace verified {
 
 // Schwarzschild spacetime parameter
-template<typename Real = double>
-concept Scalar = std::floating_point<Real>;
+template <typename Real = double> concept Scalar = std::floating_point<Real>;
 
 // Schwarzschild horizon radius (event horizon)
 // r_s = 2M in geometric units (G = c = 1)
@@ -145,4 +144,4 @@ template <Scalar Real>
          (cRPhph * dphiDlambdaSq);
 }
 
-}  // namespace verified
+} // namespace verified

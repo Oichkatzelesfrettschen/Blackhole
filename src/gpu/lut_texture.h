@@ -67,16 +67,16 @@ struct LutTexture1D {
   LutTexture1D() = default;
 
   // Non-copyable, movable
-  LutTexture1D(const LutTexture1D&) = delete;
-  LutTexture1D& operator=(const LutTexture1D&) = delete;
+  LutTexture1D(const LutTexture1D &) = delete;
+  LutTexture1D &operator=(const LutTexture1D &) = delete;
 
-  LutTexture1D(LutTexture1D&& other) noexcept
+  LutTexture1D(LutTexture1D &&other) noexcept
       : texture_id(other.texture_id), size(other.size), valid(other.valid) {
     other.texture_id = 0;
     other.valid = false;
   }
 
-  LutTexture1D& operator=(LutTexture1D&& other) noexcept {
+  LutTexture1D &operator=(LutTexture1D &&other) noexcept {
     if (this != &other) {
       destroy();
       texture_id = other.texture_id;
@@ -102,12 +102,12 @@ struct LutTexture1D {
    * Requires OpenGL context to be current. Caller must include
    * their GL loader before calling this.
    */
-  void create(const float* data, GLsizei n);
+  void create(const float *data, GLsizei n);
 
   /**
    * @brief Update existing texture with new data (same size).
    */
-  void update(const float* data, GLsizei n);
+  void update(const float *data, GLsizei n);
 
   /**
    * @brief Bind this texture to a texture unit.
@@ -141,8 +141,10 @@ struct LutDomain {
    * @return Log-mapped texture coordinate.
    */
   [[nodiscard]] float to_texcoord(float x) const {
-    if (x <= x_min) return 0.0f;
-    if (x >= x_max) return 1.0f;
+    if (x <= x_min)
+      return 0.0f;
+    if (x >= x_max)
+      return 1.0f;
     float log_ratio = std::log(x_max / x_min);
     return std::log(x / x_min) / log_ratio;
   }
@@ -183,15 +185,15 @@ inline constexpr LutDomain SYNCH_G_DOMAIN = {0.001f, 30.0f, 256};
 
 namespace gpu {
 
-void LutTexture1D::create(const float* data, GLsizei n) {
-  if (valid) destroy();
+void LutTexture1D::create(const float *data, GLsizei n) {
+  if (valid)
+    destroy();
 
   glGenTextures(1, &texture_id);
   glBindTexture(GL_TEXTURE_1D, texture_id);
 
   // Upload data as single-channel float32
-  glTexImage1D(GL_TEXTURE_1D, 0, static_cast<GLint>(GL_R32F),
-               n, 0, GL_RED, GL_FLOAT, data);
+  glTexImage1D(GL_TEXTURE_1D, 0, static_cast<GLint>(GL_R32F), n, 0, GL_RED, GL_FLOAT, data);
 
   // Hardware linear interpolation (the key optimization from arXiv:2505.08855)
   glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_LINEAR));
@@ -206,7 +208,7 @@ void LutTexture1D::create(const float* data, GLsizei n) {
   valid = true;
 }
 
-void LutTexture1D::update(const float* data, GLsizei n) {
+void LutTexture1D::update(const float *data, GLsizei n) {
   if (!valid || n != size) {
     create(data, n);
     return;
@@ -217,7 +219,8 @@ void LutTexture1D::update(const float* data, GLsizei n) {
 }
 
 void LutTexture1D::bind(int unit) const {
-  if (!valid) return;
+  if (!valid)
+    return;
   glActiveTexture(static_cast<GLenum>(0x84C0 + unit)); // GL_TEXTURE0 + unit
   glBindTexture(GL_TEXTURE_1D, texture_id);
 }

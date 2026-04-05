@@ -135,8 +135,7 @@ namespace physics {
  * @param[out] y Y coordinate [cm]
  * @param[out] z Z coordinate [cm]
  */
-void schwarzschildToCartesian(double r, double theta, double phi, double &x,
-                              double &y, double &z);
+void schwarzschildToCartesian(double r, double theta, double phi, double &x, double &y, double &z);
 
 /**
  * @brief Convert Cartesian to Schwarzschild coordinates.
@@ -148,8 +147,7 @@ void schwarzschildToCartesian(double r, double theta, double phi, double &x,
  * @param[out] theta Polar angle [rad]
  * @param[out] phi Azimuthal angle [rad]
  */
-void cartesianToSchwarzschild(double x, double y, double z, double &r,
-                              double &theta, double &phi);
+void cartesianToSchwarzschild(double x, double y, double z, double &r, double &theta, double &phi);
 
 } // namespace physics
 

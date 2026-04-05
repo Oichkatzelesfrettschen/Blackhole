@@ -27,42 +27,42 @@ namespace physics {
 // ============================================================================
 
 enum class PlaybackMode {
-    Stopped,      // Not playing
-    Forward,      // Playing forward
-    Reverse,      // Playing backward
-    PausedForward,  // Paused while in forward mode
-    PausedReverse   // Paused while in reverse mode
+  Stopped,       // Not playing
+  Forward,       // Playing forward
+  Reverse,       // Playing backward
+  PausedForward, // Paused while in forward mode
+  PausedReverse  // Paused while in reverse mode
 };
 
 /**
  * @brief Extended playback state with advanced features
  */
 struct AdvancedPlaybackState {
-    // Core timeline state
-    double tCurrent{};          // Current playback time
-    double tTarget{};           // Target time for seeking (ease to target)
-    PlaybackMode mode{};        // Current playback mode
+  // Core timeline state
+  double tCurrent{};   // Current playback time
+  double tTarget{};    // Target time for seeking (ease to target)
+  PlaybackMode mode{}; // Current playback mode
 
-    // Playback control
-    double playbackSpeed{};     // Speed multiplier (1.0 = real-time)
-    double reverseSpeed{};      // Reverse speed multiplier (separate from forward)
-    bool loop{};                // Loop when reaching end
-    bool reverseAtEnds{};       // Reverse direction at boundaries instead of wrapping
+  // Playback control
+  double playbackSpeed{}; // Speed multiplier (1.0 = real-time)
+  double reverseSpeed{};  // Reverse speed multiplier (separate from forward)
+  bool loop{};            // Loop when reaching end
+  bool reverseAtEnds{};   // Reverse direction at boundaries instead of wrapping
 
-    // Frame tracking
-    uint32_t frameNumber{};     // Frame counter (counts all frames, not reset on wrap)
-    uint32_t frameCount{};      // Total frames rendered (for performance)
-    double frameTimeMs{};       // Time to render last frame (milliseconds)
+  // Frame tracking
+  uint32_t frameNumber{}; // Frame counter (counts all frames, not reset on wrap)
+  uint32_t frameCount{};  // Total frames rendered (for performance)
+  double frameTimeMs{};   // Time to render last frame (milliseconds)
 
-    // Timeline markers
-    uint32_t nMarkers{};             // Number of timeline markers
-    std::vector<double> markers;     // Marker times
-    uint32_t currentMarker{};        // Index of nearest marker
+  // Timeline markers
+  uint32_t nMarkers{};         // Number of timeline markers
+  std::vector<double> markers; // Marker times
+  uint32_t currentMarker{};    // Index of nearest marker
 
-    // Performance metrics
-    double avgInterpolationTime{};   // Average interpolation cost (microseconds)
-    double peakInterpolationTime{};  // Peak interpolation cost
-    uint32_t interpolationCalls{};   // Total interpolation function calls
+  // Performance metrics
+  double avgInterpolationTime{};  // Average interpolation cost (microseconds)
+  double peakInterpolationTime{}; // Peak interpolation cost
+  uint32_t interpolationCalls{};  // Total interpolation function calls
 };
 
 // ============================================================================
@@ -78,23 +78,21 @@ struct AdvancedPlaybackState {
  * @param easeFrames Number of frames to ease to target (smooth seeking)
  * @return Whether seek was successful
  */
-[[nodiscard]] inline bool seekTimeline(AdvancedPlaybackState& state,
-                                        const TimeSeriesMetadata& ts,
-                                        double tSeek,
-                                        uint32_t easeFrames = 0) {
-    if ((tSeek < ts.tStart) || (tSeek > ts.tEnd)) {
-        return false;  // Out of bounds
-    }
+[[nodiscard]] inline bool seekTimeline(AdvancedPlaybackState &state, const TimeSeriesMetadata &ts,
+                                       double tSeek, uint32_t easeFrames = 0) {
+  if ((tSeek < ts.tStart) || (tSeek > ts.tEnd)) {
+    return false; // Out of bounds
+  }
 
-    if (easeFrames == 0) {
-        // Immediate seek
-        state.tCurrent = tSeek;
-    } else {
-        // Eased seek (gradual transition)
-        state.tTarget = tSeek;
-    }
+  if (easeFrames == 0) {
+    // Immediate seek
+    state.tCurrent = tSeek;
+  } else {
+    // Eased seek (gradual transition)
+    state.tTarget = tSeek;
+  }
 
-    return true;
+  return true;
 }
 
 /**
@@ -105,18 +103,17 @@ struct AdvancedPlaybackState {
  * @param frameIndex Target frame (0-based)
  * @return Whether seek was successful
  */
-[[nodiscard]] inline bool seekToFrame(AdvancedPlaybackState& state,
-                                       const TimeSeriesMetadata& ts,
-                                       uint32_t frameIndex) {
-    if (ts.nDumps < 2) {
-        return false;
-    }
+[[nodiscard]] inline bool seekToFrame(AdvancedPlaybackState &state, const TimeSeriesMetadata &ts,
+                                      uint32_t frameIndex) {
+  if (ts.nDumps < 2) {
+    return false;
+  }
 
-    // Assume uniform frame spacing in time range
-    const double dtPerFrame = (ts.tEnd - ts.tStart) / (ts.nDumps - 1);
-    const double tSeek = ts.tStart + (frameIndex * dtPerFrame);
+  // Assume uniform frame spacing in time range
+  const double dtPerFrame = (ts.tEnd - ts.tStart) / (ts.nDumps - 1);
+  const double tSeek = ts.tStart + (frameIndex * dtPerFrame);
 
-    return seekTimeline(state, ts, tSeek, 0);
+  return seekTimeline(state, ts, tSeek, 0);
 }
 
 /**
@@ -127,38 +124,37 @@ struct AdvancedPlaybackState {
  * @param forward If true, seek to next marker; if false, seek to previous
  * @return Whether seek was successful
  */
-[[nodiscard]] inline bool seekToMarker(AdvancedPlaybackState& state,
-                                        const TimeSeriesMetadata& ts,
-                                        bool forward) {
-    if (state.nMarkers == 0) {
-        return false;
+[[nodiscard]] inline bool seekToMarker(AdvancedPlaybackState &state, const TimeSeriesMetadata &ts,
+                                       bool forward) {
+  if (state.nMarkers == 0) {
+    return false;
+  }
+
+  double nearestMarker = state.markers.at(0);
+  uint32_t nearestIdx = 0;
+
+  if (forward) {
+    // Find next marker after current time
+    for (uint32_t i = 0; i < state.nMarkers; i++) {
+      if (state.markers.at(i) > state.tCurrent) {
+        nearestMarker = state.markers.at(i);
+        nearestIdx = i;
+        break;
+      }
     }
-
-    double nearestMarker = state.markers.at(0);
-    uint32_t nearestIdx = 0;
-
-    if (forward) {
-        // Find next marker after current time
-        for (uint32_t i = 0; i < state.nMarkers; i++) {
-            if (state.markers.at(i) > state.tCurrent) {
-                nearestMarker = state.markers.at(i);
-                nearestIdx = i;
-                break;
-            }
-        }
-    } else {
-        // Find previous marker before current time
-        for (uint32_t i = state.nMarkers; i > 0; i--) {
-            if (state.markers.at(i - 1) < state.tCurrent) {
-                nearestMarker = state.markers.at(i - 1);
-                nearestIdx = i - 1;
-                break;
-            }
-        }
+  } else {
+    // Find previous marker before current time
+    for (uint32_t i = state.nMarkers; i > 0; i--) {
+      if (state.markers.at(i - 1) < state.tCurrent) {
+        nearestMarker = state.markers.at(i - 1);
+        nearestIdx = i - 1;
+        break;
+      }
     }
+  }
 
-    state.currentMarker = nearestIdx;
-    return seekTimeline(state, ts, nearestMarker, 0);
+  state.currentMarker = nearestIdx;
+  return seekTimeline(state, ts, nearestMarker, 0);
 }
 
 // ============================================================================
@@ -171,8 +167,8 @@ struct AdvancedPlaybackState {
  * @param state Playback state (modified in place)
  * @param mode New playback mode
  */
-inline void setPlaybackMode(AdvancedPlaybackState& state, PlaybackMode mode) {
-    state.mode = mode;
+inline void setPlaybackMode(AdvancedPlaybackState &state, PlaybackMode mode) {
+  state.mode = mode;
 }
 
 /**
@@ -180,16 +176,16 @@ inline void setPlaybackMode(AdvancedPlaybackState& state, PlaybackMode mode) {
  *
  * @param state Playback state (modified in place)
  */
-inline void togglePause(AdvancedPlaybackState& state) {
-    if (state.mode == PlaybackMode::Forward) {
-        state.mode = PlaybackMode::PausedForward;
-    } else if (state.mode == PlaybackMode::Reverse) {
-        state.mode = PlaybackMode::PausedReverse;
-    } else if (state.mode == PlaybackMode::PausedForward) {
-        state.mode = PlaybackMode::Forward;
-    } else if (state.mode == PlaybackMode::PausedReverse) {
-        state.mode = PlaybackMode::Reverse;
-    }
+inline void togglePause(AdvancedPlaybackState &state) {
+  if (state.mode == PlaybackMode::Forward) {
+    state.mode = PlaybackMode::PausedForward;
+  } else if (state.mode == PlaybackMode::Reverse) {
+    state.mode = PlaybackMode::PausedReverse;
+  } else if (state.mode == PlaybackMode::PausedForward) {
+    state.mode = PlaybackMode::Forward;
+  } else if (state.mode == PlaybackMode::PausedReverse) {
+    state.mode = PlaybackMode::Reverse;
+  }
 }
 
 /**
@@ -197,16 +193,16 @@ inline void togglePause(AdvancedPlaybackState& state) {
  *
  * @param state Playback state (modified in place)
  */
-inline void reversePlaybackDirection(AdvancedPlaybackState& state) {
-    if (state.mode == PlaybackMode::Forward) {
-        state.mode = PlaybackMode::Reverse;
-    } else if (state.mode == PlaybackMode::Reverse) {
-        state.mode = PlaybackMode::Forward;
-    } else if (state.mode == PlaybackMode::PausedForward) {
-        state.mode = PlaybackMode::PausedReverse;
-    } else if (state.mode == PlaybackMode::PausedReverse) {
-        state.mode = PlaybackMode::PausedForward;
-    }
+inline void reversePlaybackDirection(AdvancedPlaybackState &state) {
+  if (state.mode == PlaybackMode::Forward) {
+    state.mode = PlaybackMode::Reverse;
+  } else if (state.mode == PlaybackMode::Reverse) {
+    state.mode = PlaybackMode::Forward;
+  } else if (state.mode == PlaybackMode::PausedForward) {
+    state.mode = PlaybackMode::PausedReverse;
+  } else if (state.mode == PlaybackMode::PausedReverse) {
+    state.mode = PlaybackMode::PausedForward;
+  }
 }
 
 // ============================================================================
@@ -219,15 +215,14 @@ inline void reversePlaybackDirection(AdvancedPlaybackState& state) {
  * @param state Playback state (modified in place)
  * @param ts Time series metadata
  */
-inline void stepFrameForward(AdvancedPlaybackState& state,
-                              const TimeSeriesMetadata& ts) {
-    if (ts.nDumps < 2) {
-        return;
-    }
+inline void stepFrameForward(AdvancedPlaybackState &state, const TimeSeriesMetadata &ts) {
+  if (ts.nDumps < 2) {
+    return;
+  }
 
-    const double dtPerFrame = (ts.tEnd - ts.tStart) / (ts.nDumps - 1);
-    state.tCurrent = advanceTime(ts, state.tCurrent, dtPerFrame, state.loop);
-    state.frameNumber++;
+  const double dtPerFrame = (ts.tEnd - ts.tStart) / (ts.nDumps - 1);
+  state.tCurrent = advanceTime(ts, state.tCurrent, dtPerFrame, state.loop);
+  state.frameNumber++;
 }
 
 /**
@@ -236,25 +231,24 @@ inline void stepFrameForward(AdvancedPlaybackState& state,
  * @param state Playback state (modified in place)
  * @param ts Time series metadata
  */
-inline void stepFrameBackward(AdvancedPlaybackState& state,
-                               const TimeSeriesMetadata& ts) {
-    if (ts.nDumps < 2) {
-        return;
+inline void stepFrameBackward(AdvancedPlaybackState &state, const TimeSeriesMetadata &ts) {
+  if (ts.nDumps < 2) {
+    return;
+  }
+
+  const double dtPerFrame = (ts.tEnd - ts.tStart) / (ts.nDumps - 1);
+  double tPrev = state.tCurrent - dtPerFrame;
+
+  if (tPrev < ts.tStart) {
+    if (state.loop) {
+      tPrev = ts.tEnd + (tPrev - ts.tStart);
+    } else {
+      tPrev = ts.tStart;
     }
+  }
 
-    const double dtPerFrame = (ts.tEnd - ts.tStart) / (ts.nDumps - 1);
-    double tPrev = state.tCurrent - dtPerFrame;
-
-    if (tPrev < ts.tStart) {
-        if (state.loop) {
-            tPrev = ts.tEnd + (tPrev - ts.tStart);
-        } else {
-            tPrev = ts.tStart;
-        }
-    }
-
-    state.tCurrent = tPrev;
-    state.frameNumber++;
+  state.tCurrent = tPrev;
+  state.frameNumber++;
 }
 
 // ============================================================================
@@ -269,83 +263,78 @@ inline void stepFrameBackward(AdvancedPlaybackState& state,
  * @param dtFrame Wall clock frame time in seconds
  * @param interpTimeUs Time spent in interpolation (microseconds)
  */
-inline void updateAdvancedPlayback(AdvancedPlaybackState& state,
-                                    const TimeSeriesMetadata& ts,
-                                    double dtFrame,
-                                    double interpTimeUs = 0.0) {
-    // Update performance metrics
-    state.frameTimeMs = dtFrame * 1000.0;
-    state.interpolationCalls++;
+inline void updateAdvancedPlayback(AdvancedPlaybackState &state, const TimeSeriesMetadata &ts,
+                                   double dtFrame, double interpTimeUs = 0.0) {
+  // Update performance metrics
+  state.frameTimeMs = dtFrame * 1000.0;
+  state.interpolationCalls++;
 
-    if (interpTimeUs > 0.0) {
-        // Update interpolation statistics
-        if (state.interpolationCalls == 1) {
-            state.avgInterpolationTime = interpTimeUs;
-        } else {
-            // Moving average
-            const uint32_t n = state.interpolationCalls;
-            state.avgInterpolationTime =
-                ((state.avgInterpolationTime * (n - 1)) + interpTimeUs) / n;
-        }
-
-        state.peakInterpolationTime = std::max(state.peakInterpolationTime, interpTimeUs);
-    }
-
-    // Handle paused states
-    if ((state.mode == PlaybackMode::PausedForward) ||
-        (state.mode == PlaybackMode::PausedReverse) ||
-        (state.mode == PlaybackMode::Stopped)) {
-        return;  // No time advancement when paused
-    }
-
-    // Determine effective playback speed and direction
-    double speed = state.playbackSpeed;
-    if (state.mode == PlaybackMode::Reverse) {
-        speed = -(state.reverseSpeed);
-    }
-
-    // Handle target seeking (eased seek)
-    if (std::abs(state.tTarget - state.tCurrent) > 1e-10) {
-        // Smoothly ease to target time
-        const double dtSim = dtFrame * speed;
-        const double newT  = state.tCurrent + dtSim;
-
-        if (((speed > 0) && (newT >= state.tTarget)) ||
-            ((speed < 0) && (newT <= state.tTarget))) {
-            state.tCurrent = state.tTarget;
-        } else {
-            state.tCurrent = newT;
-        }
+  if (interpTimeUs > 0.0) {
+    // Update interpolation statistics
+    if (state.interpolationCalls == 1) {
+      state.avgInterpolationTime = interpTimeUs;
     } else {
-        // Normal playback
-        const double dtSim = dtFrame * speed;
-
-        if (state.mode == PlaybackMode::Forward) {
-            state.tCurrent = advanceTime(ts, state.tCurrent, dtSim, state.loop);
-
-            // Reverse at boundaries if enabled
-            if (state.reverseAtEnds && (state.tCurrent >= ts.tEnd)) {
-                state.mode = PlaybackMode::Reverse;
-            }
-        } else if (state.mode == PlaybackMode::Reverse) {
-            double tPrev = state.tCurrent + dtSim;  // dtSim is negative
-
-            if (tPrev < ts.tStart) {
-                if (state.loop) {
-                    tPrev = ts.tEnd + (tPrev - ts.tStart);
-                } else if (state.reverseAtEnds) {
-                    state.mode = PlaybackMode::Forward;
-                    tPrev = ts.tStart;
-                } else {
-                    tPrev = ts.tStart;
-                }
-            }
-
-            state.tCurrent = tPrev;
-        }
+      // Moving average
+      const uint32_t n = state.interpolationCalls;
+      state.avgInterpolationTime = ((state.avgInterpolationTime * (n - 1)) + interpTimeUs) / n;
     }
 
-    state.frameNumber++;
+    state.peakInterpolationTime = std::max(state.peakInterpolationTime, interpTimeUs);
+  }
+
+  // Handle paused states
+  if ((state.mode == PlaybackMode::PausedForward) || (state.mode == PlaybackMode::PausedReverse) ||
+      (state.mode == PlaybackMode::Stopped)) {
+    return; // No time advancement when paused
+  }
+
+  // Determine effective playback speed and direction
+  double speed = state.playbackSpeed;
+  if (state.mode == PlaybackMode::Reverse) {
+    speed = -(state.reverseSpeed);
+  }
+
+  // Handle target seeking (eased seek)
+  if (std::abs(state.tTarget - state.tCurrent) > 1e-10) {
+    // Smoothly ease to target time
+    const double dtSim = dtFrame * speed;
+    const double newT = state.tCurrent + dtSim;
+
+    if (((speed > 0) && (newT >= state.tTarget)) || ((speed < 0) && (newT <= state.tTarget))) {
+      state.tCurrent = state.tTarget;
+    } else {
+      state.tCurrent = newT;
+    }
+  } else {
+    // Normal playback
+    const double dtSim = dtFrame * speed;
+
+    if (state.mode == PlaybackMode::Forward) {
+      state.tCurrent = advanceTime(ts, state.tCurrent, dtSim, state.loop);
+
+      // Reverse at boundaries if enabled
+      if (state.reverseAtEnds && (state.tCurrent >= ts.tEnd)) {
+        state.mode = PlaybackMode::Reverse;
+      }
+    } else if (state.mode == PlaybackMode::Reverse) {
+      double tPrev = state.tCurrent + dtSim; // dtSim is negative
+
+      if (tPrev < ts.tStart) {
+        if (state.loop) {
+          tPrev = ts.tEnd + (tPrev - ts.tStart);
+        } else if (state.reverseAtEnds) {
+          state.mode = PlaybackMode::Forward;
+          tPrev = ts.tStart;
+        } else {
+          tPrev = ts.tStart;
+        }
+      }
+
+      state.tCurrent = tPrev;
+    }
+  }
+
+  state.frameNumber++;
 }
 
 // ============================================================================
@@ -360,20 +349,19 @@ inline void updateAdvancedPlayback(AdvancedPlaybackState& state,
  * @param ts Time series metadata (for bounds checking)
  * @return Whether marker was added (false if out of bounds)
  */
-[[nodiscard]] inline bool addTimelineMarker(AdvancedPlaybackState& state,
-                                             double tMarker,
-                                             const TimeSeriesMetadata& ts) {
-    if ((tMarker < ts.tStart) || (tMarker > ts.tEnd)) {
-        return false;  // Out of bounds
-    }
+[[nodiscard]] inline bool addTimelineMarker(AdvancedPlaybackState &state, double tMarker,
+                                            const TimeSeriesMetadata &ts) {
+  if ((tMarker < ts.tStart) || (tMarker > ts.tEnd)) {
+    return false; // Out of bounds
+  }
 
-    state.markers.push_back(tMarker);
-    state.nMarkers++;
+  state.markers.push_back(tMarker);
+  state.nMarkers++;
 
-    // Keep markers sorted
-    std::ranges::sort(state.markers);
+  // Keep markers sorted
+  std::ranges::sort(state.markers);
 
-    return true;
+  return true;
 }
 
 /**
@@ -381,10 +369,10 @@ inline void updateAdvancedPlayback(AdvancedPlaybackState& state,
  *
  * @param state Playback state (modified in place)
  */
-inline void clearTimelineMarkers(AdvancedPlaybackState& state) {
-    state.markers.clear();
-    state.nMarkers = 0;
-    state.currentMarker = 0;
+inline void clearTimelineMarkers(AdvancedPlaybackState &state) {
+  state.markers.clear();
+  state.nMarkers = 0;
+  state.currentMarker = 0;
 }
 
 /**
@@ -394,26 +382,26 @@ inline void clearTimelineMarkers(AdvancedPlaybackState& state) {
  * @param forward If true, distance to next marker; if false, to previous
  * @return Distance in time units (negative if no marker exists in direction)
  */
-[[nodiscard]] inline double timeToMarker(const AdvancedPlaybackState& state, bool forward) {
-    if (state.nMarkers == 0) {
-        return -1.0;
-    }
+[[nodiscard]] inline double timeToMarker(const AdvancedPlaybackState &state, bool forward) {
+  if (state.nMarkers == 0) {
+    return -1.0;
+  }
 
-    if (forward) {
-        for (uint32_t i = 0; i < state.nMarkers; i++) {
-            if (state.markers.at(i) > state.tCurrent) {
-                return state.markers.at(i) - state.tCurrent;
-            }
-        }
-        return -1.0;  // No marker ahead
+  if (forward) {
+    for (uint32_t i = 0; i < state.nMarkers; i++) {
+      if (state.markers.at(i) > state.tCurrent) {
+        return state.markers.at(i) - state.tCurrent;
+      }
     }
+    return -1.0; // No marker ahead
+  }
 
-    for (uint32_t i = state.nMarkers; i > 0; i--) {
-        if (state.markers.at(i - 1) < state.tCurrent) {
-            return state.tCurrent - state.markers.at(i - 1);
-        }
+  for (uint32_t i = state.nMarkers; i > 0; i--) {
+    if (state.markers.at(i - 1) < state.tCurrent) {
+      return state.tCurrent - state.markers.at(i - 1);
     }
-    return -1.0;  // No marker behind
+  }
+  return -1.0; // No marker behind
 }
 
 // ============================================================================
@@ -427,28 +415,27 @@ inline void clearTimelineMarkers(AdvancedPlaybackState& state) {
  * @param speed Initial playback speed
  * @return New AdvancedPlaybackState
  */
-[[nodiscard]] inline AdvancedPlaybackState createAdvancedPlaybackState(
-    const TimeSeriesMetadata& ts,
-    double speed = 1.0) {
-    AdvancedPlaybackState state;
-    state.tCurrent              = ts.tStart;
-    state.tTarget               = ts.tStart;
-    state.mode                  = PlaybackMode::Stopped;
-    state.playbackSpeed         = speed;
-    state.reverseSpeed          = speed;
-    state.loop                  = true;
-    state.reverseAtEnds         = false;
-    state.frameNumber           = 0;
-    state.frameCount            = 0;
-    state.frameTimeMs           = 0.0;
-    state.nMarkers              = 0;
-    state.currentMarker         = 0;
-    state.avgInterpolationTime  = 0.0;
-    state.peakInterpolationTime = 0.0;
-    state.interpolationCalls    = 0;
-    return state;
+[[nodiscard]] inline AdvancedPlaybackState createAdvancedPlaybackState(const TimeSeriesMetadata &ts,
+                                                                       double speed = 1.0) {
+  AdvancedPlaybackState state;
+  state.tCurrent = ts.tStart;
+  state.tTarget = ts.tStart;
+  state.mode = PlaybackMode::Stopped;
+  state.playbackSpeed = speed;
+  state.reverseSpeed = speed;
+  state.loop = true;
+  state.reverseAtEnds = false;
+  state.frameNumber = 0;
+  state.frameCount = 0;
+  state.frameTimeMs = 0.0;
+  state.nMarkers = 0;
+  state.currentMarker = 0;
+  state.avgInterpolationTime = 0.0;
+  state.peakInterpolationTime = 0.0;
+  state.interpolationCalls = 0;
+  return state;
 }
 
-}  // namespace physics
+} // namespace physics
 
-#endif  // PLAYBACK_CONTROL_H
+#endif // PLAYBACK_CONTROL_H

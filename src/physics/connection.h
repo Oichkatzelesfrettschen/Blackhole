@@ -241,14 +241,12 @@ using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
 
   // Gamma^t_rphi = Gamma^t_phir
   const double gammaTRphi =
-      -((a * rsR * sin2 * (r2 - (a2 * cos2))) / (sigma2 * delta)) -
-      ((a * rS * sin2) / sigma);
+      -((a * rsR * sin2 * (r2 - (a2 * cos2))) / (sigma2 * delta)) - ((a * rS * sin2) / sigma);
   conn.at(0).at(1).at(3) = gammaTRphi;
   conn.at(0).at(3).at(1) = gammaTRphi;
 
   // Gamma^t_thetaphi = Gamma^t_phitheta
-  const double gammaTThetaphi =
-      (2.0 * a * rsR * (r2 + a2) * sinTheta * cosTheta) / sigma2;
+  const double gammaTThetaphi = (2.0 * a * rsR * (r2 + a2) * sinTheta * cosTheta) / sigma2;
   conn.at(0).at(2).at(3) = gammaTThetaphi;
   conn.at(0).at(3).at(2) = gammaTThetaphi;
 
@@ -260,8 +258,7 @@ using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
   conn.at(1).at(0).at(0) = (delta * rsR * (r2 - (a2 * cos2))) / sigma3;
 
   // Gamma^r_tphi = Gamma^r_phit
-  const double gammaRTphi =
-      -((a * delta * rsR * sin2 * (r2 - (a2 * cos2))) / sigma3);
+  const double gammaRTphi = -((a * delta * rsR * sin2 * (r2 - (a2 * cos2))) / sigma3);
   conn.at(1).at(0).at(3) = gammaRTphi;
   conn.at(1).at(3).at(0) = gammaRTphi;
 
@@ -277,9 +274,9 @@ using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
   conn.at(1).at(2).at(2) = -((r * delta) / sigma);
 
   // Gamma^r_phiphi
-  conn.at(1).at(3).at(3) = ((-delta * r * sin2) -
-                   ((delta * a2 * sin2 * sin2 * rsR * (r2 - (a2 * cos2))) / sigma2)) /
-                  sigma;
+  conn.at(1).at(3).at(3) =
+      ((-delta * r * sin2) - ((delta * a2 * sin2 * sin2 * rsR * (r2 - (a2 * cos2))) / sigma2)) /
+      sigma;
 
   // ============================================================
   // Gamma^theta components
@@ -289,8 +286,7 @@ using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
   conn.at(2).at(0).at(0) = -((rsR * a2 * sinTheta * cosTheta) / sigma3);
 
   // Gamma^theta_tphi = Gamma^theta_phit
-  const double gammaThetaTphi =
-      (a * rsR * (r2 + a2) * sinTheta * cosTheta) / sigma3;
+  const double gammaThetaTphi = (a * rsR * (r2 + a2) * sinTheta * cosTheta) / sigma3;
   conn.at(2).at(0).at(3) = gammaThetaTphi;
   conn.at(2).at(3).at(0) = gammaThetaTphi;
 
@@ -308,9 +304,8 @@ using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
   // Gamma^theta_phiphi
   const double sinCos = sinTheta * cosTheta;
   const double aTerm = (r2PlusA2 * r2PlusA2) + (a2 * delta * sin2);
-  conn.at(2).at(3).at(3) = -(sinCos *
-                    ((aTerm / sigma) + ((2.0 * a2 * rsR * sin2) / sigma2))) /
-                  sigma;
+  conn.at(2).at(3).at(3) =
+      -(sinCos * ((aTerm / sigma) + ((2.0 * a2 * rsR * sin2) / sigma2))) / sigma;
 
   // ============================================================
   // Gamma^phi components
@@ -336,8 +331,7 @@ using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
 
   // Gamma^phi_thetaphi = Gamma^phi_phitheta
   const double gammaPhiThetaphi =
-      (cosTheta / sinTheta) +
-      ((a2 * rsR * sinTheta * cosTheta) / sigma2);
+      (cosTheta / sinTheta) + ((a2 * rsR * sinTheta * cosTheta) / sigma2);
   if (std::abs(sinTheta) > 1e-10) {
     conn.at(3).at(2).at(3) = gammaPhiThetaphi;
     conn.at(3).at(3).at(2) = gammaPhiThetaphi;
@@ -441,8 +435,8 @@ using Connection4 = std::array<std::array<std::array<double, 4>, 4>, 4>;
  * @param conn Connection coefficients
  * @return 4-acceleration a^alpha
  */
-[[nodiscard]] inline std::array<double, 4> geodesicAcceleration(
-    const std::array<double, 4> &ucon, const Connection4 &conn) {
+[[nodiscard]] inline std::array<double, 4> geodesicAcceleration(const std::array<double, 4> &ucon,
+                                                                const Connection4 &conn) {
   std::array<double, 4> acc{};
   for (size_t alpha = 0; alpha < 4; ++alpha) {
     for (size_t mu = 0; mu < 4; ++mu) {

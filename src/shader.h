@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include <string>
 #include <filesystem>
+#include <string>
 
 #include "gl_loader.h"
 
@@ -56,10 +56,11 @@ inline GLuint createComputeProgram(const std::filesystem::path &comp) {
  * This is useful when working with custom shader layouts or unit tests.
  */
 void setShaderBaseDir(const std::string &baseDir);
-inline void setShaderBaseDir(const std::filesystem::path &p) { setShaderBaseDir(p.string()); }
+inline void setShaderBaseDir(const std::filesystem::path &p) {
+  setShaderBaseDir(p.string());
+}
 
 /**
  * Get the current shader base directory used for resolving relative includes.
  */
 const std::string &getShaderBaseDir();
-

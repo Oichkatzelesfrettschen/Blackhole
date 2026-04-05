@@ -23,10 +23,11 @@
 #ifndef PHYSICS_COORDINATES_H
 #define PHYSICS_COORDINATES_H
 
-#include "constants.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
+
+#include "constants.h"
 
 namespace physics {
 
@@ -44,10 +45,10 @@ namespace physics {
  * Derefining (hslope != 0) concentrates resolution near the equator.
  */
 struct MKSParams {
-  double r0 = 1.0;         // Radial scale factor
-  double hslope = 0.0;     // Theta derefining parameter (0 = uniform)
-  double polyXt = 0.0;     // Polynomial derefine exponent
-  double mksSmooth = 0.0;  // Smoothing parameter for inner boundary
+  double r0 = 1.0;        // Radial scale factor
+  double hslope = 0.0;    // Theta derefining parameter (0 = uniform)
+  double polyXt = 0.0;    // Polynomial derefine exponent
+  double mksSmooth = 0.0; // Smoothing parameter for inner boundary
 };
 
 // ============================================================================
@@ -58,9 +59,9 @@ struct MKSParams {
  * @brief Boyer-Lindquist coordinates (r, theta, phi).
  */
 struct BLCoord {
-  double r;      // Radial coordinate
-  double theta;  // Polar angle [0, pi]
-  double phi;    // Azimuthal angle [0, 2*pi]
+  double r;     // Radial coordinate
+  double theta; // Polar angle [0, pi]
+  double phi;   // Azimuthal angle [0, 2*pi]
 };
 
 /**
@@ -78,7 +79,7 @@ struct BLCoord {
  * @return Boyer-Lindquist coordinates
  */
 [[nodiscard]] inline BLCoord blCoord(double x1, double x2, double x3,
-                                     const MKSParams& params = MKSParams{}) {
+                                     const MKSParams &params = MKSParams{}) {
   BLCoord bl{};
 
   // Radial: logarithmic mapping
@@ -212,17 +213,17 @@ struct BLCoord {
  * @param phi Azimuthal angle [0, 2*pi]
  * @return Cartesian coordinates {x, y, z}
  */
-[[nodiscard]] inline std::array<double, 3> sphericalToCartesian(
-    double r, double theta, double phi) {
+[[nodiscard]] inline std::array<double, 3> sphericalToCartesian(double r, double theta,
+                                                                double phi) {
   const double sinTheta = std::sin(theta);
   const double cosTheta = std::cos(theta);
   const double sinPhi = std::sin(phi);
   const double cosPhi = std::cos(phi);
 
   return {
-    r * sinTheta * cosPhi,  // x
-    r * sinTheta * sinPhi,  // y
-    r * cosTheta            // z
+      r * sinTheta * cosPhi, // x
+      r * sinTheta * sinPhi, // y
+      r * cosTheta           // z
   };
 }
 
@@ -296,10 +297,10 @@ struct BLCoord {
  *   z = r cos(theta)
  */
 struct KSCoord {
-  double t;      // KS time
-  double r;      // Radial (same as BL r)
-  double theta;  // Polar (same as BL theta)
-  double phi;    // KS azimuthal (differs from BL phi)
+  double t;     // KS time
+  double r;     // Radial (same as BL r)
+  double theta; // Polar (same as BL theta)
+  double phi;   // KS azimuthal (differs from BL phi)
 };
 
 /**
@@ -317,9 +318,10 @@ struct KSCoord {
  * the BL transformation; the numerator reduces to -Delta*Sigma^2
  * which cancels exactly with Sigma/Delta from g_rr^BL).
  */
-[[nodiscard]] inline std::array<double, 4> ksOutgoingNullVector(
-    [[maybe_unused]] double r, [[maybe_unused]] double theta,
-    [[maybe_unused]] double a, [[maybe_unused]] double rS) {
+[[nodiscard]] inline std::array<double, 4> ksOutgoingNullVector([[maybe_unused]] double r,
+                                                                [[maybe_unused]] double theta,
+                                                                [[maybe_unused]] double a,
+                                                                [[maybe_unused]] double rS) {
   return {1.0, 1.0, 0.0, 0.0};
 }
 
@@ -336,7 +338,9 @@ struct KSCoord {
  */
 [[nodiscard]] inline double ksF(double r, double theta, double mGeom, double a) {
   const double sigma = (r * r) + (a * a * std::cos(theta) * std::cos(theta));
-  if (sigma < 1e-30) { return 0.0; }
+  if (sigma < 1e-30) {
+    return 0.0;
+  }
   return (2.0 * mGeom * r) / sigma;
 }
 
@@ -360,8 +364,8 @@ struct KSCoord {
  * @param a Spin parameter [geometric units]
  * @return 10 independent metric components (lower indices)
  */
-[[nodiscard]] inline std::array<double, 10> ksOutgoingMetric(
-    double r, double theta, double mGeom, double a) {
+[[nodiscard]] inline std::array<double, 10> ksOutgoingMetric(double r, double theta, double mGeom,
+                                                             double a) {
   const double cosTh = std::cos(theta);
   const double sinTh = std::sin(theta);
   const double sin2 = sinTh * sinTh;
@@ -385,8 +389,8 @@ struct KSCoord {
   const double gTr = (blTt * alpha) + (blTph * beta);
   const double gTth = 0.0;
   const double gTph = blTph;
-  const double gRr = (blTt * alpha * alpha) + (2.0 * blTph * alpha * beta)
-                   + blRr + (blPhph * beta * beta);
+  const double gRr =
+      (blTt * alpha * alpha) + (2.0 * blTph * alpha * beta) + blRr + (blPhph * beta * beta);
   const double gRth = 0.0;
   const double gRph = (blTph * alpha) + (blPhph * beta);
   const double gThth = blThth;
@@ -404,8 +408,8 @@ struct KSCoord {
  * gives n^t = (g_tr +/- sqrt(g_tr^2 - g_tt*g_rr)) / g_tt.
  * We choose the branch with larger |n^t| (the one representing ingoing rays).
  */
-[[nodiscard]] inline std::array<double, 4> ksIngoingNullVector(
-    double r, double theta, double a, double rS) {
+[[nodiscard]] inline std::array<double, 4> ksIngoingNullVector(double r, double theta, double a,
+                                                               double rS) {
   const auto g = ksOutgoingMetric(r, theta, rS / 2.0, a);
   const double gtt = std::get<0>(g);
   const double gtr = std::get<1>(g);
@@ -438,7 +442,9 @@ struct KSCoord {
  */
 [[nodiscard]] inline double blToKsDtDr(double r, double mGeom, double a) {
   const double delta = (r * r) - (2.0 * mGeom * r) + (a * a);
-  if (std::abs(delta) < 1e-30) { return 0.0; }  // At horizon
+  if (std::abs(delta) < 1e-30) {
+    return 0.0;
+  } // At horizon
   return (2.0 * mGeom * r) / delta;
 }
 
@@ -454,7 +460,9 @@ struct KSCoord {
  */
 [[nodiscard]] inline double blToKsDphiDr(double r, double mGeom, double a) {
   const double delta = (r * r) - (2.0 * mGeom * r) + (a * a);
-  if (std::abs(delta) < 1e-30) { return 0.0; }
+  if (std::abs(delta) < 1e-30) {
+    return 0.0;
+  }
   return a / delta;
 }
 
@@ -473,18 +481,13 @@ struct KSCoord {
  * @param a Spin parameter [geometric units]
  * @return KS 4-velocity {u^t, u^r, u^theta, u^phi}
  */
-[[nodiscard]] inline std::array<double, 4> blToKsVelocity(
-    const std::array<double, 4>& uBl,
-    double r, double mGeom, double a) {
+[[nodiscard]] inline std::array<double, 4> blToKsVelocity(const std::array<double, 4> &uBl,
+                                                          double r, double mGeom, double a) {
   const double delta = (r * r) - (2.0 * mGeom * r) + (a * a);
   const double correction = (std::abs(delta) > 1e-30) ? 1.0 / delta : 0.0;
 
-  return {
-    std::get<0>(uBl) + (2.0 * mGeom * r * correction * std::get<1>(uBl)),
-    std::get<1>(uBl),
-    std::get<2>(uBl),
-    std::get<3>(uBl) + (a * correction * std::get<1>(uBl))
-  };
+  return {std::get<0>(uBl) + (2.0 * mGeom * r * correction * std::get<1>(uBl)), std::get<1>(uBl),
+          std::get<2>(uBl), std::get<3>(uBl) + (a * correction * std::get<1>(uBl))};
 }
 
 /**
@@ -496,18 +499,13 @@ struct KSCoord {
  *   u^theta_BL = u^theta_KS
  *   u^phi_BL = u^phi_KS - (a/Delta) u^r_KS
  */
-[[nodiscard]] inline std::array<double, 4> ksToBlVelocity(
-    const std::array<double, 4>& uKs,
-    double r, double mGeom, double a) {
+[[nodiscard]] inline std::array<double, 4> ksToBlVelocity(const std::array<double, 4> &uKs,
+                                                          double r, double mGeom, double a) {
   const double delta = (r * r) - (2.0 * mGeom * r) + (a * a);
   const double correction = (std::abs(delta) > 1e-30) ? 1.0 / delta : 0.0;
 
-  return {
-    std::get<0>(uKs) - (2.0 * mGeom * r * correction * std::get<1>(uKs)),
-    std::get<1>(uKs),
-    std::get<2>(uKs),
-    std::get<3>(uKs) - (a * correction * std::get<1>(uKs))
-  };
+  return {std::get<0>(uKs) - (2.0 * mGeom * r * correction * std::get<1>(uKs)), std::get<1>(uKs),
+          std::get<2>(uKs), std::get<3>(uKs) - (a * correction * std::get<1>(uKs))};
 }
 
 /**
@@ -517,13 +515,11 @@ struct KSCoord {
  * ring singularity (r=0, theta=pi/2). Returns true if all metric
  * components are finite.
  */
-[[nodiscard]] inline bool ksMetricIsRegular(double r, double theta,
-                                            double mGeom, double a) {
+[[nodiscard]] inline bool ksMetricIsRegular(double r, double theta, double mGeom, double a) {
   const auto g = ksOutgoingMetric(r, theta, mGeom, a);
   // Use builtin comparisons to work with -ffast-math (which assumes no inf/nan)
-  return std::ranges::all_of(g, [](const double val) {
-    return (val == val) && (val <= 1e30) && (val >= -1e30);
-  });
+  return std::ranges::all_of(
+      g, [](const double val) { return (val == val) && (val <= 1e30) && (val >= -1e30); });
 }
 
 /**
@@ -541,26 +537,33 @@ struct KSCoord {
  * @param a Spin parameter [geometric units]
  * @return BL phi coordinate (approximate for finite-r observers)
  */
-[[nodiscard]] inline double ksToBlPhi(double r, double phiKs,
-                                      double mGeom, double a) {
-  if (std::abs(a) < 1e-15) { return phiKs; }  // Schwarzschild: no correction
+[[nodiscard]] inline double ksToBlPhi(double r, double phiKs, double mGeom, double a) {
+  if (std::abs(a) < 1e-15) {
+    return phiKs;
+  } // Schwarzschild: no correction
 
   const double disc = (mGeom * mGeom) - (a * a);
-  if (disc <= 0.0) { return phiKs; }  // Extremal or super-extremal
+  if (disc <= 0.0) {
+    return phiKs;
+  } // Extremal or super-extremal
 
   const double sqrtDisc = std::sqrt(disc);
   const double rPlus = mGeom + sqrtDisc;
   const double rMinus = mGeom - sqrtDisc;
   const double dr = rPlus - rMinus;
 
-  if (std::abs(dr) < 1e-15) { return phiKs; }
+  if (std::abs(dr) < 1e-15) {
+    return phiKs;
+  }
 
   // Integrated correction from infinity to r
   // phi_BL = phi_KS - (a / (r_+ - r_-)) * ln|(r - r_+) / (r - r_-)|
   const double argPlus = std::abs(r - rPlus);
   const double argMinus = std::abs(r - rMinus);
 
-  if ((argPlus < 1e-15) || (argMinus < 1e-15)) { return phiKs; }
+  if ((argPlus < 1e-15) || (argMinus < 1e-15)) {
+    return phiKs;
+  }
 
   return phiKs - ((a / dr) * std::log(argPlus / argMinus));
 }

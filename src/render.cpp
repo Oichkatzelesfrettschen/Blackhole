@@ -90,8 +90,7 @@ GLuint createFloatTexture3D(int width, int height, int depth, const std::vector<
 
   glBindTexture(GL_TEXTURE_3D, texture);
 
-  const std::size_t expected = static_cast<std::size_t>(width) *
-                               static_cast<std::size_t>(height) *
+  const std::size_t expected = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
                                static_cast<std::size_t>(depth);
   const float *pixels = data.size() >= expected ? data.data() : nullptr;
 
@@ -111,8 +110,7 @@ GLuint createRGBA32FTexture3D(int width, int height, int depth, const std::vecto
 
   glBindTexture(GL_TEXTURE_3D, texture);
 
-  const std::size_t expected = static_cast<std::size_t>(width) *
-                               static_cast<std::size_t>(height) *
+  const std::size_t expected = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
                                static_cast<std::size_t>(depth) * 4;
   const float *pixels = data.size() >= expected ? data.data() : nullptr;
 
@@ -176,8 +174,7 @@ GLuint createQuadVAO() {
   GLuint vbo;
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER,
-               static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
+  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(glm::vec3)),
                vertices.data(), GL_STATIC_DRAW);
 
   // 1st attribute buffer: positions
@@ -188,7 +185,7 @@ GLuint createQuadVAO() {
                         GL_FLOAT, // type
                         GL_FALSE, // normalized?
                         0,        // stride
-                        nullptr // array buffer offset
+                        nullptr   // array buffer offset
   );
 
   glBindVertexArray(0);
@@ -204,7 +201,8 @@ std::map<std::string, GLuint> shaderProgramMap;
  * We populate this alongside shaderProgramMap on first use and read it on reload. */
 std::map<std::string, std::string> shaderVertMap;
 
-// PERFORMANCE FIX: Cache uniform locations to avoid expensive glGetUniformLocation calls every frame
+// PERFORMANCE FIX: Cache uniform locations to avoid expensive glGetUniformLocation calls every
+// frame
 std::unordered_map<GLuint, std::unordered_map<std::string, GLint>> uniformLocationCache;
 
 // Helper function to get cached uniform location
@@ -212,7 +210,7 @@ GLint getCachedUniformLocation(GLuint program, const std::string &name) {
   auto &cache = uniformLocationCache[program];
   auto it = cache.find(name);
   if (it != cache.end()) {
-    return it->second;  // Cache hit - fast hash lookup
+    return it->second; // Cache hit - fast hash lookup
   }
 
   // Cache miss - query driver once and store result
@@ -221,9 +219,9 @@ GLint getCachedUniformLocation(GLuint program, const std::string &name) {
   return loc;
 }
 
-bool bindToTextureUnit(GLuint program, const std::string &name, GLenum textureType,
-                       GLuint texture, int textureUnitIndex) {
-  const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+bool bindToTextureUnit(GLuint program, const std::string &name, GLenum textureType, GLuint texture,
+                       int textureUnitIndex) {
+  const GLint loc = getCachedUniformLocation(program, name); // PERF FIX: Use cached location
   if (loc != -1) {
     glUniform1i(loc, textureUnitIndex);
 
@@ -248,7 +246,7 @@ void clearRenderToTextureCache() {
     glDeleteFramebuffers(1, &framebuffer);
   }
   textureFramebufferMap.clear();
-  uniformLocationCache.clear();  // Clear uniform location cache too
+  uniformLocationCache.clear(); // Clear uniform location cache too
 }
 
 void reloadAllRenderShaders() {
@@ -322,16 +320,14 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
     // Set up the uniforms.
     {
       // PERF FIX: Use cached uniform locations
-      glUniform2f(getCachedUniformLocation(program, "resolution"),
-                  static_cast<float>(rtti.width),
+      glUniform2f(getCachedUniformLocation(program, "resolution"), static_cast<float>(rtti.width),
                   static_cast<float>(rtti.height));
 
-      glUniform1f(getCachedUniformLocation(program, "time"),
-                  static_cast<float>(glfwGetTime()));
+      glUniform1f(getCachedUniformLocation(program, "time"), static_cast<float>(glfwGetTime()));
 
       // Update float uniforms
       for (auto const &[name, val] : rtti.floatUniforms) {
-        const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+        const GLint loc = getCachedUniformLocation(program, name); // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform1f(loc, val);
         } else {
@@ -346,7 +342,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update vec3 uniforms
       for (auto const &[name, val] : rtti.vec3Uniforms) {
-        const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+        const GLint loc = getCachedUniformLocation(program, name); // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform3f(loc, val.x, val.y, val.z);
         } else {
@@ -361,7 +357,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update vec4 uniforms
       for (auto const &[name, val] : rtti.vec4Uniforms) {
-        const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+        const GLint loc = getCachedUniformLocation(program, name); // PERF FIX: Use cached location
         if (loc != -1) {
           glUniform4f(loc, val.x, val.y, val.z, val.w);
         } else {
@@ -376,7 +372,7 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
 
       // Update mat3 uniforms
       for (auto const &[name, val] : rtti.mat3Uniforms) {
-        const GLint loc = getCachedUniformLocation(program, name);  // PERF FIX: Use cached location
+        const GLint loc = getCachedUniformLocation(program, name); // PERF FIX: Use cached location
         if (loc != -1) {
           glUniformMatrix3fv(loc, 1, GL_FALSE, glm::value_ptr(val));
         } else {

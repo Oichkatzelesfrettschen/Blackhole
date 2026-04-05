@@ -23,11 +23,12 @@
 #ifndef PHYSICS_HAWKING_H
 #define PHYSICS_HAWKING_H
 
+#include <algorithm>
+#include <cmath>
+
 #include "constants.h"
 #include "safe_limits.h"
 #include "schwarzschild.h"
-#include <algorithm>
-#include <cmath>
 
 namespace physics {
 
@@ -63,7 +64,9 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
  * @return Hawking temperature [K]
  */
 [[nodiscard]] inline double hawkingTemperature(double mass) {
-  if (mass <= 0) { return safeInfinity<double>(); }
+  if (mass <= 0) {
+    return safeInfinity<double>();
+  }
   return (HBAR * C * C * C) / (8.0 * PI * G * mass * K_B);
 }
 
@@ -84,11 +87,11 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
 [[nodiscard]] inline double hawkingTemperatureKerr(double mass, double aStar) {
   const double aStarC = std::clamp(std::abs(aStar), 0.0, 0.9999);
 
-  const double mGeo       = (G * mass) / C2;
+  const double mGeo = (G * mass) / C2;
   const double sqrtFactor = std::sqrt(1.0 - (aStarC * aStarC));
-  const double rPlus  = mGeo * (1.0 + sqrtFactor);
+  const double rPlus = mGeo * (1.0 + sqrtFactor);
   const double rMinus = mGeo * (1.0 - sqrtFactor);
-  const double aSpin  = aStarC * mGeo;
+  const double aSpin = aStarC * mGeo;
 
   // Surface gravity
   double kappa = (rPlus - rMinus) / (2.0 * ((rPlus * rPlus) + (aSpin * aSpin)));
@@ -114,7 +117,9 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
  * @return Luminosity [erg/s]
  */
 [[nodiscard]] inline double hawkingLuminosity(double mass) {
-  if (mass <= 0) { return safeInfinity<double>(); }
+  if (mass <= 0) {
+    return safeInfinity<double>();
+  }
   return (HBAR * std::pow(C, 6)) / (15360.0 * PI * G * G * mass * mass);
 }
 
@@ -130,7 +135,9 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
  * @return Evaporation time [s]
  */
 [[nodiscard]] inline double hawkingEvaporationTime(double mass) {
-  if (mass <= 0) { return 0.0; }
+  if (mass <= 0) {
+    return 0.0;
+  }
   return (5120.0 * PI * G * G * mass * mass * mass) / (HBAR * std::pow(C, 4));
 }
 
@@ -143,7 +150,9 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
  * @return Mass [g]
  */
 [[nodiscard]] inline double evaporatingMass(double t) {
-  if (t <= 0) { return 0.0; }
+  if (t <= 0) {
+    return 0.0;
+  }
   return std::cbrt((HBAR * std::pow(C, 4) * t) / (5120.0 * PI * G * G));
 }
 
@@ -211,18 +220,21 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
  */
 [[nodiscard]] inline double hawkingSpectrum(double nu, double mass) {
   const double tempK = hawkingTemperature(mass);
-  if ((tempK <= 0) || (nu <= 0)) { return 0.0; }
+  if ((tempK <= 0) || (nu <= 0)) {
+    return 0.0;
+  }
 
   const double x = (TWO_PI * HBAR * nu) / (K_B * tempK);
-  if (x > 700) { return 0.0; } // Avoid overflow
+  if (x > 700) {
+    return 0.0;
+  } // Avoid overflow
 
   // Planck distribution
-  const double rS   = schwarzschildRadius(mass);
+  const double rS = schwarzschildRadius(mass);
   const double area = 4.0 * PI * rS * rS;
 
   // B_nu = 2*h*nu^3/c^2 * 1/(exp(h*nu/k*T) - 1)
-  const double bNu = (2.0 * TWO_PI * HBAR * nu * nu * nu) /
-                     ((C * C) * (std::exp(x) - 1.0));
+  const double bNu = (2.0 * TWO_PI * HBAR * nu * nu * nu) / ((C * C) * (std::exp(x) - 1.0));
 
   return area * PI * bNu;
 }
@@ -244,7 +256,7 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
  * @return Entropy [erg/K]
  */
 [[nodiscard]] inline double bekensteinHawkingEntropy(double mass) {
-  const double rS   = schwarzschildRadius(mass);
+  const double rS = schwarzschildRadius(mass);
   const double area = 4.0 * PI * rS * rS;
   return (K_B * C * C * C * area) / (4.0 * G * HBAR);
 }
@@ -258,7 +270,7 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
  * @return Dimensionless entropy
  */
 [[nodiscard]] inline double entropyDimensionless(double mass) {
-  const double rS   = schwarzschildRadius(mass);
+  const double rS = schwarzschildRadius(mass);
   const double area = 4.0 * PI * rS * rS;
   return area / (4.0 * L_PLANCK * L_PLANCK);
 }
@@ -275,11 +287,11 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
  * @return Entropy [erg/K]
  */
 [[nodiscard]] inline double bekensteinHawkingEntropyKerr(double mass, double aStar) {
-  const double aStarC     = std::clamp(std::abs(aStar), 0.0, 0.9999);
-  const double mGeo       = (G * mass) / C2;
+  const double aStarC = std::clamp(std::abs(aStar), 0.0, 0.9999);
+  const double mGeo = (G * mass) / C2;
   const double sqrtFactor = std::sqrt(1.0 - (aStarC * aStarC));
-  const double rPlus      = mGeo * (1.0 + sqrtFactor);
-  const double aSpin      = aStarC * mGeo;
+  const double rPlus = mGeo * (1.0 + sqrtFactor);
+  const double aSpin = aStarC * mGeo;
 
   const double area = 4.0 * PI * ((rPlus * rPlus) + (aSpin * aSpin));
   return (K_B * C * C * C * area) / (4.0 * G * HBAR);

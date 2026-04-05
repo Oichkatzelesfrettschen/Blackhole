@@ -23,19 +23,20 @@
 #ifndef PHYSICS_SYNCHROTRON_H
 #define PHYSICS_SYNCHROTRON_H
 
-#include "constants.h"
-#include "safe_limits.h"
 #include <algorithm>
 #include <cmath>
+
+#include "constants.h"
+#include "safe_limits.h"
 #ifdef __has_include
-#  if __has_include(<boost/math/special_functions/bessel.hpp>)
-#    include <boost/math/special_functions/bessel.hpp>
+#if __has_include(<boost/math/special_functions/bessel.hpp>)
+#include <boost/math/special_functions/bessel.hpp>
 // NOLINTBEGIN(cppcoreguidelines-macro-usage)
 // WHY: PHYSICS_HAS_BOOST_BESSEL guards #ifdef/#else paths; constexpr cannot
 // replace a preprocessor symbol used in conditional compilation directives.
-#    define PHYSICS_HAS_BOOST_BESSEL 1
+#define PHYSICS_HAS_BOOST_BESSEL 1
 // NOLINTEND(cppcoreguidelines-macro-usage)
-#  endif
+#endif
 #endif
 
 namespace physics {
@@ -60,8 +61,7 @@ inline constexpr double ALPHA_FINE = 7.2973525693e-3;
 
 /// Synchrotron constant: 3e/(4*pi * m_e^3 * c^5) for critical frequency
 inline constexpr double SYNCHROTRON_CONST =
-    3.0 * E_CHARGE /
-    (4.0 * PI * M_ELECTRON * M_ELECTRON * M_ELECTRON * C * C * C * C * C);
+    3.0 * E_CHARGE / (4.0 * PI * M_ELECTRON * M_ELECTRON * M_ELECTRON * C * C * C * C * C);
 
 // ============================================================================
 // Electron Gyration
@@ -116,12 +116,11 @@ inline constexpr double SYNCHROTRON_CONST =
  * @param pitchAngle Pitch angle [rad], default pi/2
  * @return Critical frequency [Hz]
  */
-[[nodiscard]] inline double synchrotronFrequencyCritical(double gamma,
-                                                          double bField,
-                                                          double pitchAngle = PI / 2.0) {
+[[nodiscard]] inline double synchrotronFrequencyCritical(double gamma, double bField,
+                                                         double pitchAngle = PI / 2.0) {
   const double sinAlpha = std::sin(pitchAngle);
-  return (3.0 / (4.0 * PI)) * (E_CHARGE * std::abs(bField)) / (M_ELECTRON * C) *
-         gamma * gamma * sinAlpha;
+  return (3.0 / (4.0 * PI)) * (E_CHARGE * std::abs(bField)) / (M_ELECTRON * C) * gamma * gamma *
+         sinAlpha;
 }
 
 /**
@@ -218,7 +217,9 @@ inline constexpr double SYNCHROTRON_CONST =
  * @return F(x) synchrotron function value
  */
 [[nodiscard]] inline double synchrotronF(double x) {
-  if (x <= 0) { return 0.0; }
+  if (x <= 0) {
+    return 0.0;
+  }
 
   // Low frequency asymptote: F(x) ~= 1.8084 * x^(1/3)  [Rybicki-Lightman 6.36]
   if (x < 0.01) {
@@ -240,34 +241,26 @@ inline constexpr double SYNCHROTRON_CONST =
   //
   // Gauss-Legendre nodes and weights for n=16 on [-1,1]
   static const double glNodes[16] = {
-    -0.9894009349916499, -0.9445750230732326,
-    -0.8656312023341783, -0.7554044083550030,
-    -0.6178762444026438, -0.4580167776572274,
-    -0.2816035507792589, -0.0950125098360623,
-     0.0950125098360623,  0.2816035507792589,
-     0.4580167776572274,  0.6178762444026438,
-     0.7554044083550030,  0.8656312023341783,
-     0.9445750230732326,  0.9894009349916499
-  };
+      -0.9894009349916499, -0.9445750230732326, -0.8656312023341783, -0.7554044083550030,
+      -0.6178762444026438, -0.4580167776572274, -0.2816035507792589, -0.0950125098360623,
+      0.0950125098360623,  0.2816035507792589,  0.4580167776572274,  0.6178762444026438,
+      0.7554044083550030,  0.8656312023341783,  0.9445750230732326,  0.9894009349916499};
   static const double glWeights[16] = {
-    0.0271524594117541, 0.0622535239386479,
-    0.0951585116824928, 0.1246289512509922,
-    0.1495959888165767, 0.1691565193950025,
-    0.1826034150449236, 0.1894506104550685,
-    0.1894506104550685, 0.1826034150449236,
-    0.1691565193950025, 0.1495959888165767,
-    0.1246289512509922, 0.0951585116824928,
-    0.0622535239386479, 0.0271524594117541
-  };
+      0.0271524594117541, 0.0622535239386479, 0.0951585116824928, 0.1246289512509922,
+      0.1495959888165767, 0.1691565193950025, 0.1826034150449236, 0.1894506104550685,
+      0.1894506104550685, 0.1826034150449236, 0.1691565193950025, 0.1495959888165767,
+      0.1246289512509922, 0.0951585116824928, 0.0622535239386479, 0.0271524594117541};
 
   // Helper lambda: GL integral over [a, b]
   auto glIntegral = [&](double a, double b) -> double {
-    const double hr  = 0.5 * (b - a);
+    const double hr = 0.5 * (b - a);
     const double mid = 0.5 * (b + a);
     double sum = 0.0;
     for (int i = 0; i < 16; ++i) {
       const double xi = mid + (hr * glNodes[i]);
-      if (xi <= 0.0) { continue; }
+      if (xi <= 0.0) {
+        continue;
+      }
       sum += glWeights[i] * boost::math::cyl_bessel_k(5.0 / 3.0, xi);
     }
     return sum * hr;
@@ -286,10 +279,8 @@ inline constexpr double SYNCHROTRON_CONST =
   return x * integral;
 #else
   // Fallback: Fouka & Ouichaoui (2013) polynomial fit, ~1% accuracy
-  return 1.8084 * std::pow(x, 1.0 / 3.0) *
-         std::exp(-x) *
-         (1.0 + 0.884 * std::pow(x, 2.0 / 3.0) +
-          0.471 * std::pow(x, 4.0 / 3.0));
+  return 1.8084 * std::pow(x, 1.0 / 3.0) * std::exp(-x) *
+         (1.0 + 0.884 * std::pow(x, 2.0 / 3.0) + 0.471 * std::pow(x, 4.0 / 3.0));
 #endif
 }
 
@@ -304,7 +295,9 @@ inline constexpr double SYNCHROTRON_CONST =
  * @return G(x) function value
  */
 [[nodiscard]] inline double synchrotronG(double x) {
-  if (x <= 0) { return 0.0; }
+  if (x <= 0) {
+    return 0.0;
+  }
 
   // Small-x asymptote: K_{2/3}(x) ~ Gamma(2/3)/2 * (2/x)^(2/3)
   // => G(x) = x * K_{2/3}(x) ~ 1.3541 * x^(1/3)  [R&L 1979 Appendix]
@@ -326,8 +319,7 @@ inline constexpr double SYNCHROTRON_CONST =
   return x * boost::math::cyl_bessel_k(2.0 / 3.0, x);
 #else
   // Polynomial fallback (~10% error for x~1-10; Boost not available)
-  return 1.3541 * std::pow(x, 1.0 / 3.0) * std::exp(-x) *
-         (1.0 + 0.6 * std::pow(x, 2.0 / 3.0));
+  return 1.3541 * std::pow(x, 1.0 / 3.0) * std::exp(-x) * (1.0 + 0.6 * std::pow(x, 2.0 / 3.0));
 #endif
 }
 
@@ -345,7 +337,9 @@ inline constexpr double SYNCHROTRON_CONST =
 [[nodiscard]] inline double synchrotronPolarization(double x) {
   const double fVal = synchrotronF(x);
   const double gVal = synchrotronG(x);
-  if (fVal < 1e-50) { return 0.0; }
+  if (fVal < 1e-50) {
+    return 0.0;
+  }
   return gVal / fVal;
 }
 
@@ -366,15 +360,15 @@ inline constexpr double SYNCHROTRON_CONST =
  * @param p Power-law index (typically 2-3)
  * @return Relative spectral power (normalized)
  */
-[[nodiscard]] inline double synchrotronSpectrumPowerLaw(double nu, double bField,
-                                                         double gammaMin,
-                                                         double gammaMax,
-                                                         double p) {
+[[nodiscard]] inline double synchrotronSpectrumPowerLaw(double nu, double bField, double gammaMin,
+                                                        double gammaMax, double p) {
   // Characteristic frequencies
   const double nuMin = synchrotronFrequencyCritical(gammaMin, bField);
   const double nuMax = synchrotronFrequencyCritical(gammaMax, bField);
 
-  if (nu <= 0) { return 0.0; }
+  if (nu <= 0) {
+    return 0.0;
+  }
 
   // Spectral index for optically thin synchrotron
   const double alpha = -(p - 1.0) / 2.0;
@@ -434,9 +428,8 @@ inline constexpr double SYNCHROTRON_CONST =
  * @param p Electron power-law index
  * @return Absorption coefficient [cm^-1]
  */
-[[nodiscard]] inline double synchrotronAbsorptionCoefficient(double nu, double bField,
-                                                              double nE,
-                                                              double p) {
+[[nodiscard]] inline double synchrotronAbsorptionCoefficient(double nu, double bField, double nE,
+                                                             double p) {
   // Simplified formula (order of magnitude)
   const double nuB = gyrofrequency(bField);
   const double prefactor = 0.02 * E_CHARGE * nE / (M_ELECTRON * C);
@@ -457,8 +450,7 @@ inline constexpr double SYNCHROTRON_CONST =
  * @return Self-absorption frequency [Hz]
  */
 [[nodiscard]] inline double synchrotronSelfAbsorptionFrequency(double bField, double nE,
-                                                                double rSize,
-                                                                double p) {
+                                                               double rSize, double p) {
   // Approximation: nu_a where tau = alpha_nu * R = 1
   const double nuB = gyrofrequency(bField);
 
@@ -486,8 +478,7 @@ inline constexpr double SYNCHROTRON_CONST =
  * @param xMin      Minimum x value (0.001 recommended)
  * @param xMax      Maximum x value (30.0 recommended -- G(30) ~ 1e-13)
  */
-inline void synchrotronGGenerateLut(float* lut, int nEntries,
-                                    double xMin = 0.001,
+inline void synchrotronGGenerateLut(float *lut, int nEntries, double xMin = 0.001,
                                     double xMax = 30.0) {
   const double logRatio = std::log(xMax / xMin);
   for (int i = 0; i < nEntries; ++i) {

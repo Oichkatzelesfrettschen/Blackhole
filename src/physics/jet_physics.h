@@ -46,11 +46,11 @@ namespace physics {
  * @brief Jet configuration parameters.
  */
 struct JetParams {
-  double mass;              ///< Black hole mass [g]
-  double a;                 ///< Spin parameter [cm]
-  double mdot;              ///< Accretion rate [g/s]
-  AccretionState state;     ///< Accretion state (affects jet power)
-  double magneticFlux;      ///< Dimensionless magnetic flux Φ_BH
+  double mass;          ///< Black hole mass [g]
+  double a;             ///< Spin parameter [cm]
+  double mdot;          ///< Accretion rate [g/s]
+  AccretionState state; ///< Accretion state (affects jet power)
+  double magneticFlux;  ///< Dimensionless magnetic flux Φ_BH
 
   // Jet properties
   double lorentzFactor; ///< Bulk Lorentz factor Γ
@@ -265,9 +265,9 @@ inline double jetOpeningAngle(const JetParams &jet) {
 
   // MAD jets are more collimated
   if (jet.state == AccretionState::MAD) {
-    theta *= 0.7;  // 30% narrower
+    theta *= 0.7; // 30% narrower
   } else if (jet.state == AccretionState::SANE) {
-    theta *= 1.3;  // 30% wider
+    theta *= 1.3; // 30% wider
   }
 
   return theta;
@@ -435,12 +435,12 @@ inline double jetObservedFlux(double r, double theta, double thetaObs, double nu
  * @brief Jet structure point for visualization.
  */
 struct JetStructurePoint {
-  double r;              ///< Distance from BH [cm]
-  double theta;          ///< Polar angle [rad]
-  double lorentzFactor;  ///< Local Γ
-  double beta;           ///< Local β = v/c
-  double emissivity;     ///< Synchrotron emissivity
-  double bField;         ///< Magnetic field [Gauss]
+  double r;             ///< Distance from BH [cm]
+  double theta;         ///< Polar angle [rad]
+  double lorentzFactor; ///< Local Γ
+  double beta;          ///< Local β = v/c
+  double emissivity;    ///< Synchrotron emissivity
+  double bField;        ///< Magnetic field [Gauss]
 };
 
 /**
@@ -465,7 +465,7 @@ inline std::vector<JetStructurePoint> jetStructureProfile(const JetParams &jet, 
   for (int i = 0; i < nPoints; ++i) {
     JetStructurePoint pt{};
     pt.r = std::exp(logRMin + (i * dLogR));
-    pt.theta = 0.0;  // Along axis
+    pt.theta = 0.0; // Along axis
 
     pt.lorentzFactor = jetLorentzFactorAtRadius(pt.r, jet);
     pt.beta = lorentzToBeta(pt.lorentzFactor);

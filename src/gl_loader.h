@@ -10,8 +10,8 @@
 #ifndef GL_LOADER_H
 #define GL_LOADER_H
 
-#include <glbinding/glbinding.h>
 #include <glbinding/gl/gl.h>
+#include <glbinding/glbinding.h>
 
 using namespace gl;
 

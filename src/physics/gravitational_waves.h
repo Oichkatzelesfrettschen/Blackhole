@@ -110,7 +110,9 @@ struct BinarySystem {
  * @return Dimensionless strain amplitude
  */
 [[nodiscard]] inline double gwStrainAmplitude(double mc, double f, double d) {
-  if ((d <= 0) || (f <= 0)) { return 0.0; }
+  if ((d <= 0) || (f <= 0)) {
+    return 0.0;
+  }
 
   const double gmcOverC2 = (G * mc) / C2;
   const double factor1 = std::pow(gmcOverC2, 5.0 / 3.0);
@@ -131,12 +133,12 @@ struct BinarySystem {
  * @param hPlus Output: plus polarization
  * @param hCross Output: cross polarization
  */
-inline void gwPolarizations(double h0, double inclination, double phase,
-                            double &hPlus, double &hCross) {
+inline void gwPolarizations(double h0, double inclination, double phase, double &hPlus,
+                            double &hCross) {
   const double cosI = std::cos(inclination);
   const double cosI2 = cosI * cosI;
 
-  hPlus  = h0 * ((1.0 + cosI2) / 2.0) * std::cos(2.0 * phase);
+  hPlus = h0 * ((1.0 + cosI2) / 2.0) * std::cos(2.0 * phase);
   hCross = h0 * cosI * std::sin(2.0 * phase);
 }
 
@@ -154,7 +156,7 @@ inline void gwPolarizations(double h0, double inclination, double phase,
  * @return Frequency derivative [Hz/s]
  */
 [[nodiscard]] inline double frequencyDerivative(double mc, double f) {
-  const double mcGeo  = chirpMassGeometric(mc);
+  const double mcGeo = chirpMassGeometric(mc);
   const double factor1 = std::pow(mcGeo, 5.0 / 3.0);
   const double factor2 = std::pow(physics::PI, 8.0 / 3.0);
   const double factor3 = std::pow(f, 11.0 / 3.0);
@@ -172,9 +174,11 @@ inline void gwPolarizations(double h0, double inclination, double phase,
  * @return Time to merger [s]
  */
 [[nodiscard]] inline double timeToCoalescence(double mc, double f) {
-  if (f <= 0) { return safeInfinity<double>(); }
+  if (f <= 0) {
+    return safeInfinity<double>();
+  }
 
-  const double mcGeo   = chirpMassGeometric(mc);
+  const double mcGeo = chirpMassGeometric(mc);
   const double factor1 = std::pow(mcGeo, -5.0 / 3.0);
   const double factor2 = std::pow(physics::PI * f, -8.0 / 3.0);
 
@@ -192,10 +196,12 @@ inline void gwPolarizations(double h0, double inclination, double phase,
  * @return Orbital separation [cm]
  */
 [[nodiscard]] inline double orbitalSeparation(double mTotal, double f) {
-  if (f <= 0) { return safeInfinity<double>(); }
+  if (f <= 0) {
+    return safeInfinity<double>();
+  }
 
-  const double fOrb    = f / 2.0;
-  const double aCubed  = (G * mTotal) / (4.0 * physics::PI * physics::PI * fOrb * fOrb);
+  const double fOrb = f / 2.0;
+  const double aCubed = (G * mTotal) / (4.0 * physics::PI * physics::PI * fOrb * fOrb);
 
   return std::cbrt(aCubed);
 }
@@ -236,10 +242,10 @@ inline void gwPolarizations(double h0, double inclination, double phase,
  * @return 1PN-corrected strain amplitude
  */
 [[nodiscard]] inline double gwStrain1pn(double mc, double etaVal, double f, double d) {
-  const double h0     = gwStrainAmplitude(mc, f, d);
-  const double mTot   = mc / std::pow(etaVal, 0.6);
-  const double mGeo   = (G * mTot) / (C * C * C);
-  const double x      = std::pow(physics::PI * mGeo * f, 2.0 / 3.0);
+  const double h0 = gwStrainAmplitude(mc, f, d);
+  const double mTot = mc / std::pow(etaVal, 0.6);
+  const double mGeo = (G * mTot) / (C * C * C);
+  const double x = std::pow(physics::PI * mGeo * f, 2.0 / 3.0);
   const double pnCorr = 1.0 + (((55.0 / 48.0) - (55.0 * etaVal / 16.0)) * x);
 
   return h0 * pnCorr;
@@ -276,85 +282,77 @@ inline void gwPolarizations(double h0, double inclination, double phase,
  * @param chi2    Dimensionless spin of secondary (default 0)
  * @return GW phase [rad]
  */
-[[nodiscard]] inline double gwPhase3p5pn(double mc, double etaVal, double f,
-                                         double tC = 0.0, double phiC = 0.0,
-                                         double chiEff = 0.0,
-                                         double chi1 = 0.0, double chi2 = 0.0) {
-  const double mTot  = mc / std::pow(etaVal, 0.6);
-  const double mGeo  = (G * mTot) / (C * C * C);
+[[nodiscard]] inline double gwPhase3p5pn(double mc, double etaVal, double f, double tC = 0.0,
+                                         double phiC = 0.0, double chiEff = 0.0, double chi1 = 0.0,
+                                         double chi2 = 0.0) {
+  const double mTot = mc / std::pow(etaVal, 0.6);
+  const double mGeo = (G * mTot) / (C * C * C);
 
-  const double v    = std::cbrt(physics::PI * mGeo * f);
-  const double v2   = v * v;
-  const double v3   = v2 * v;
-  const double v4   = v3 * v;
-  const double v5   = v4 * v;
-  const double v6   = v5 * v;
-  const double v7   = v6 * v;
+  const double v = std::cbrt(physics::PI * mGeo * f);
+  const double v2 = v * v;
+  const double v3 = v2 * v;
+  const double v4 = v3 * v;
+  const double v5 = v4 * v;
+  const double v6 = v5 * v;
+  const double v7 = v6 * v;
   const double logV = std::log(v);
 
   const double eta2 = etaVal * etaVal;
   const double eta3 = eta2 * etaVal;
 
-  const double chiS  = 0.5 * (chi1 + chi2);
-  const double chiA  = 0.5 * (chi1 - chi2);
+  const double chiS = 0.5 * (chi1 + chi2);
+  const double chiA = 0.5 * (chi1 - chi2);
   const double delta = std::sqrt(std::max(1.0 - (4.0 * etaVal), 0.0));
 
   // Non-spin PN coefficients (Blanchet 2014 LRR, Eqs. 234-241)
   const double psiN = 1.0;
   const double psi1PN = ((3715.0 / 756.0) + (55.0 * etaVal / 9.0)) * v2;
   const double psi15PNpm = -16.0 * physics::PI * v3;
-  const double psi2PNpm = ((15293365.0 / 508032.0) + (27145.0 * etaVal / 504.0) +
-                           (3085.0 * eta2 / 72.0)) * v4;
-  const double psi25PNpm = physics::PI * ((38645.0 / 756.0) - (65.0 * etaVal / 9.0)) *
-                           (1.0 + (3.0 * logV)) * v5;
+  const double psi2PNpm =
+      ((15293365.0 / 508032.0) + (27145.0 * etaVal / 504.0) + (3085.0 * eta2 / 72.0)) * v4;
+  const double psi25PNpm =
+      physics::PI * ((38645.0 / 756.0) - (65.0 * etaVal / 9.0)) * (1.0 + (3.0 * logV)) * v5;
 
   // 3PN (Blanchet 2014 Eq. 238, Euler-Mascheroni constant)
-  const double psi3PNpm = ((11583231236531.0 / 4694215680.0)
-                           - (640.0 * physics::PI * physics::PI / 3.0)
-                           - (6848.0 * std::numbers::egamma / 21.0)
-                           + (etaVal * ((-15737765635.0 / 3048192.0)
-                                        + (2255.0 * physics::PI * physics::PI / 12.0)))
-                           + (76055.0 * eta2 / 1728.0)
-                           - (127825.0 * eta3 / 1296.0)
-                           - (6848.0 * std::log(4.0 * v) / 21.0)) * v6;
+  const double psi3PNpm =
+      ((11583231236531.0 / 4694215680.0) - (640.0 * physics::PI * physics::PI / 3.0) -
+       (6848.0 * std::numbers::egamma / 21.0) +
+       (etaVal * ((-15737765635.0 / 3048192.0) + (2255.0 * physics::PI * physics::PI / 12.0))) +
+       (76055.0 * eta2 / 1728.0) - (127825.0 * eta3 / 1296.0) -
+       (6848.0 * std::log(4.0 * v) / 21.0)) *
+      v6;
 
-  const double psi35PNpm = physics::PI * ((77096675.0 / 254016.0)
-                                   + (378515.0 * etaVal / 1512.0)
-                                   - (74045.0 * eta2 / 756.0)) * v7;
+  const double psi35PNpm =
+      physics::PI *
+      ((77096675.0 / 254016.0) + (378515.0 * etaVal / 1512.0) - (74045.0 * eta2 / 756.0)) * v7;
 
   // Spin-orbit corrections
   const double psi15PNSO = ((113.0 / 12.0) + (25.0 * etaVal / 4.0)) * chiEff * v3;
-  const double psi2PNSS  = -(25.0 / 2.0) * etaVal *
-                            ((chi1 * chi1) + (chi2 * chi2) + (2.0 * chi1 * chi2)) * v4;
-  const double psi25PNSO = physics::PI * (
-    (((- 4159.0 / 672.0) - (189.0 * etaVal / 8.0)) * chiS)
-    + (delta * (((-4159.0 / 672.0) + (189.0 * etaVal / 8.0)) * chiA))
-  ) * v5;
-  const double psi3PNSO  = (
-    (((14585.0 / 8.0) - (215.0 * etaVal / 2.0) - (15.0 * eta2 / 2.0)) * chiS)
-    + (delta * (((14585.0 / 8.0) - (475.0 * etaVal / 6.0)) * chiA))
-  ) * v6;
+  const double psi2PNSS =
+      -(25.0 / 2.0) * etaVal * ((chi1 * chi1) + (chi2 * chi2) + (2.0 * chi1 * chi2)) * v4;
+  const double psi25PNSO = physics::PI *
+                           ((((-4159.0 / 672.0) - (189.0 * etaVal / 8.0)) * chiS) +
+                            (delta * (((-4159.0 / 672.0) + (189.0 * etaVal / 8.0)) * chiA))) *
+                           v5;
+  const double psi3PNSO =
+      ((((14585.0 / 8.0) - (215.0 * etaVal / 2.0) - (15.0 * eta2 / 2.0)) * chiS) +
+       (delta * (((14585.0 / 8.0) - (475.0 * etaVal / 6.0)) * chiA))) *
+      v6;
 
   const double chiS2 = chiS * chiS;
   const double chiA2 = chiA * chiA;
-  const double psi3PNSS = (
-    (((5.0 / 2.0) + (40.0 * etaVal / 3.0)) * chiS2)
-    + (5.0 * delta * chiS * chiA)
-    + (((5.0 / 2.0) - (10.0 * etaVal)) * chiA2)
-  ) * v6;
+  const double psi3PNSS =
+      ((((5.0 / 2.0) + (40.0 * etaVal / 3.0)) * chiS2) + (5.0 * delta * chiS * chiA) +
+       (((5.0 / 2.0) - (10.0 * etaVal)) * chiA2)) *
+      v6;
 
-  const double psi35PNSO = physics::PI * (
-    (((732985.0 / 2268.0) - (140.0 * etaVal / 9.0)) * chiS)
-    + (delta * (((732985.0 / 2268.0) - (24260.0 * etaVal / 81.0)) * chiA))
-  ) * v7;
+  const double psi35PNSO = physics::PI *
+                           ((((732985.0 / 2268.0) - (140.0 * etaVal / 9.0)) * chiS) +
+                            (delta * (((732985.0 / 2268.0) - (24260.0 * etaVal / 81.0)) * chiA))) *
+                           v7;
 
-  const double pnSum = psiN
-                     + psi1PN
-                     + psi15PNpm + psi15PNSO
-                     + psi2PNpm  + psi2PNSS
-                     + psi25PNpm + psi25PNSO
-                     + psi3PNpm  + psi3PNSO + psi3PNSS
-                     + psi35PNpm + psi35PNSO;
+  const double pnSum = psiN + psi1PN + psi15PNpm + psi15PNSO + psi2PNpm + psi2PNSS + psi25PNpm +
+                       psi25PNSO + psi3PNpm + psi3PNSO + psi3PNSS + psi35PNpm + psi35PNSO;
 
   const double psiLeading = 3.0 / (128.0 * etaVal * v5);
 
@@ -390,100 +388,90 @@ inline void gwPolarizations(double h0, double inclination, double phase,
  * @return GW phase [rad]
  */
 [[nodiscard]] inline double gwPhase4p5pn(double f, double mChirp, double etaVal,
-                                         double chiEff = 0.0,
-                                         double chi1 = 0.0, double chi2 = 0.0,
+                                         double chiEff = 0.0, double chi1 = 0.0, double chi2 = 0.0,
                                          double tC = 0.0, double phiC = 0.0) {
   const double mTot = mChirp / std::pow(etaVal, 0.6);
   const double mGeo = (G * mTot) / (C * C * C);
 
-  const double v    = std::cbrt(physics::PI * mGeo * f);
-  const double v2   = v * v;
-  const double v3   = v2 * v;
-  const double v4   = v3 * v;
-  const double v5   = v4 * v;
-  const double v6   = v5 * v;
-  const double v7   = v6 * v;
-  const double v8   = v7 * v;
-  const double v9   = v8 * v;
+  const double v = std::cbrt(physics::PI * mGeo * f);
+  const double v2 = v * v;
+  const double v3 = v2 * v;
+  const double v4 = v3 * v;
+  const double v5 = v4 * v;
+  const double v6 = v5 * v;
+  const double v7 = v6 * v;
+  const double v8 = v7 * v;
+  const double v9 = v8 * v;
   const double logV = std::log(v);
 
   const double eta2 = etaVal * etaVal;
   const double eta3 = eta2 * etaVal;
 
-  const double chiS  = 0.5 * (chi1 + chi2);
-  const double chiA  = 0.5 * (chi1 - chi2);
+  const double chiS = 0.5 * (chi1 + chi2);
+  const double chiA = 0.5 * (chi1 - chi2);
   const double delta = std::sqrt(std::max(1.0 - (4.0 * etaVal), 0.0));
 
   // Non-spin PN coefficients (Blanchet 2014 LRR, Eqs. 234-241)
   const double psiN = 1.0;
   const double psi1PN = ((3715.0 / 756.0) + (55.0 * etaVal / 9.0)) * v2;
   const double psi15PNpm = -16.0 * physics::PI * v3;
-  const double psi2PNpm = ((15293365.0 / 508032.0) + (27145.0 * etaVal / 504.0) +
-                           (3085.0 * eta2 / 72.0)) * v4;
-  const double psi25PNpm = physics::PI * ((38645.0 / 756.0) - (65.0 * etaVal / 9.0)) *
-                           (1.0 + (3.0 * logV)) * v5;
+  const double psi2PNpm =
+      ((15293365.0 / 508032.0) + (27145.0 * etaVal / 504.0) + (3085.0 * eta2 / 72.0)) * v4;
+  const double psi25PNpm =
+      physics::PI * ((38645.0 / 756.0) - (65.0 * etaVal / 9.0)) * (1.0 + (3.0 * logV)) * v5;
 
   // 3PN (Euler-Mascheroni constant)
-  const double psi3PNpm = ((11583231236531.0 / 4694215680.0)
-                           - (640.0 * physics::PI * physics::PI / 3.0)
-                           - (6848.0 * std::numbers::egamma / 21.0)
-                           + (etaVal * ((-15737765635.0 / 3048192.0)
-                                        + (2255.0 * physics::PI * physics::PI / 12.0)))
-                           + (76055.0 * eta2 / 1728.0)
-                           - (127825.0 * eta3 / 1296.0)
-                           - (6848.0 * std::log(4.0 * v) / 21.0)) * v6;
+  const double psi3PNpm =
+      ((11583231236531.0 / 4694215680.0) - (640.0 * physics::PI * physics::PI / 3.0) -
+       (6848.0 * std::numbers::egamma / 21.0) +
+       (etaVal * ((-15737765635.0 / 3048192.0) + (2255.0 * physics::PI * physics::PI / 12.0))) +
+       (76055.0 * eta2 / 1728.0) - (127825.0 * eta3 / 1296.0) -
+       (6848.0 * std::log(4.0 * v) / 21.0)) *
+      v6;
 
-  const double psi35PNpm = physics::PI * ((77096675.0 / 254016.0)
-                                   + (378515.0 * etaVal / 1512.0)
-                                   - (74045.0 * eta2 / 756.0)) * v7;
+  const double psi35PNpm =
+      physics::PI *
+      ((77096675.0 / 254016.0) + (378515.0 * etaVal / 1512.0) - (74045.0 * eta2 / 756.0)) * v7;
 
   // 4PN point-mass (Blanchet+ 2023 arXiv:2304.11185)
-  const double psi4PNnonlog = ((3058673.0 / 7056.0)
-                               + (5429.0 * etaVal / 7.0)
-                               + (617.0 * eta2 / 72.0)) * v8;
+  const double psi4PNnonlog =
+      ((3058673.0 / 7056.0) + (5429.0 * etaVal / 7.0) + (617.0 * eta2 / 72.0)) * v8;
   const double psi4PNlog = (-6848.0 / 21.0) * (std::numbers::egamma + std::log(4.0 * v)) * v8;
-  const double psi4PNpm  = psi4PNnonlog + psi4PNlog;
+  const double psi4PNpm = psi4PNnonlog + psi4PNlog;
 
   // 4.5PN point-mass -- vLso = 1/sqrt(6) for Schwarzschild ISCO
   constexpr double vLso = 1.0 / 2.44948974278317809819; // 1/sqrt(6)
-  const double psi45PNpm = physics::PI * ((38645.0 / 756.0) - (65.0 * etaVal / 9.0))
-                           * (1.0 + (3.0 * std::log(v / vLso))) * v9;
+  const double psi45PNpm = physics::PI * ((38645.0 / 756.0) - (65.0 * etaVal / 9.0)) *
+                           (1.0 + (3.0 * std::log(v / vLso))) * v9;
 
   // Spin-orbit corrections (aligned-spin TaylorF2 phasing)
   const double psi15PNSO = ((113.0 / 12.0) + (25.0 * etaVal / 4.0)) * chiEff * v3;
-  const double psi2PNSS  = -(25.0 / 2.0) * etaVal *
-                            ((chi1 * chi1) + (chi2 * chi2) + (2.0 * chi1 * chi2)) * v4;
-  const double psi25PNSO = physics::PI * (
-    (((-4159.0 / 672.0) - (189.0 * etaVal / 8.0)) * chiS)
-    + (delta * (((-4159.0 / 672.0) + (189.0 * etaVal / 8.0)) * chiA))
-  ) * v5;
-  const double psi3PNSO  = (
-    (((14585.0 / 8.0) - (215.0 * etaVal / 2.0) - (15.0 * eta2 / 2.0)) * chiS)
-    + (delta * (((14585.0 / 8.0) - (475.0 * etaVal / 6.0)) * chiA))
-  ) * v6;
+  const double psi2PNSS =
+      -(25.0 / 2.0) * etaVal * ((chi1 * chi1) + (chi2 * chi2) + (2.0 * chi1 * chi2)) * v4;
+  const double psi25PNSO = physics::PI *
+                           ((((-4159.0 / 672.0) - (189.0 * etaVal / 8.0)) * chiS) +
+                            (delta * (((-4159.0 / 672.0) + (189.0 * etaVal / 8.0)) * chiA))) *
+                           v5;
+  const double psi3PNSO =
+      ((((14585.0 / 8.0) - (215.0 * etaVal / 2.0) - (15.0 * eta2 / 2.0)) * chiS) +
+       (delta * (((14585.0 / 8.0) - (475.0 * etaVal / 6.0)) * chiA))) *
+      v6;
 
   const double chiS2 = chiS * chiS;
   const double chiA2 = chiA * chiA;
-  const double psi3PNSS = (
-    (((5.0 / 2.0) + (40.0 * etaVal / 3.0)) * chiS2)
-    + (5.0 * delta * chiS * chiA)
-    + (((5.0 / 2.0) - (10.0 * etaVal)) * chiA2)
-  ) * v6;
+  const double psi3PNSS =
+      ((((5.0 / 2.0) + (40.0 * etaVal / 3.0)) * chiS2) + (5.0 * delta * chiS * chiA) +
+       (((5.0 / 2.0) - (10.0 * etaVal)) * chiA2)) *
+      v6;
 
-  const double psi35PNSO = physics::PI * (
-    (((732985.0 / 2268.0) - (140.0 * etaVal / 9.0)) * chiS)
-    + (delta * (((732985.0 / 2268.0) - (24260.0 * etaVal / 81.0)) * chiA))
-  ) * v7;
+  const double psi35PNSO = physics::PI *
+                           ((((732985.0 / 2268.0) - (140.0 * etaVal / 9.0)) * chiS) +
+                            (delta * (((732985.0 / 2268.0) - (24260.0 * etaVal / 81.0)) * chiA))) *
+                           v7;
 
-  const double pnSum = psiN
-                     + psi1PN
-                     + psi15PNpm + psi15PNSO
-                     + psi2PNpm  + psi2PNSS
-                     + psi25PNpm + psi25PNSO
-                     + psi3PNpm  + psi3PNSO + psi3PNSS
-                     + psi35PNpm + psi35PNSO
-                     + psi4PNpm
-                     + psi45PNpm;
+  const double pnSum = psiN + psi1PN + psi15PNpm + psi15PNSO + psi2PNpm + psi2PNSS + psi25PNpm +
+                       psi25PNSO + psi3PNpm + psi3PNSO + psi3PNSS + psi35PNpm + psi35PNSO +
+                       psi4PNpm + psi45PNpm;
 
   const double psiLeading = 3.0 / (128.0 * etaVal * v5);
 
@@ -517,8 +505,8 @@ struct WaveformPoint {
  * @return Effective aligned spin (-1 <= chiEff <= 1)
  */
 [[nodiscard]] inline double chiEffFromBinary(const BinarySystem &binary) {
-  const double m1Geo  = (G * binary.m1) / C2;
-  const double m2Geo  = (G * binary.m2) / C2;
+  const double m1Geo = (G * binary.m1) / C2;
+  const double m2Geo = (G * binary.m2) / C2;
   const double a1Star = (m1Geo > 0) ? (binary.a1 / m1Geo) : 0.0;
   const double a2Star = (m2Geo > 0) ? (binary.a2 / m2Geo) : 0.0;
   return ((binary.m1 * a1Star) + (binary.m2 * a2Star)) / binary.mTotal();
@@ -538,38 +526,38 @@ struct WaveformPoint {
  * @param dt Time step [s]
  * @return Vector of waveform points
  */
-[[nodiscard]] inline std::vector<WaveformPoint> generateInspiralWaveform(
-    const BinarySystem &binary, double fLow, double fHigh, double dt) {
+[[nodiscard]] inline std::vector<WaveformPoint>
+generateInspiralWaveform(const BinarySystem &binary, double fLow, double fHigh, double dt) {
 
   std::vector<WaveformPoint> waveform;
   waveform.reserve(static_cast<size_t>((fHigh - fLow) / (fLow * 1e-4)));
 
-  const double mc      = chirpMass(binary.m1, binary.m2);
-  const double etaVal  = binary.eta();
+  const double mc = chirpMass(binary.m1, binary.m2);
+  const double etaVal = binary.eta();
 
-  const double m1Geo  = (G * binary.m1) / C2;
-  const double m2Geo  = (G * binary.m2) / C2;
+  const double m1Geo = (G * binary.m1) / C2;
+  const double m2Geo = (G * binary.m2) / C2;
   const double a1Star = (m1Geo > 0) ? (binary.a1 / m1Geo) : 0.0;
   const double a2Star = (m2Geo > 0) ? (binary.a2 / m2Geo) : 0.0;
   const double chiEff = chiEffFromBinary(binary);
 
-  double f     = fLow;
-  double t     = 0.0;
+  double f = fLow;
+  double t = 0.0;
   double phase = 0.0;
 
   while ((f < fHigh) && (f > 0)) {
     const double h0 = gwStrain1pn(mc, etaVal, f, binary.distance);
 
-    double hPlus  = 0.0;
+    double hPlus = 0.0;
     double hCross = 0.0;
     gwPolarizations(h0, binary.inclination, phase, hPlus, hCross);
 
     WaveformPoint pt{};
-    pt.t      = t;
-    pt.f      = f;
-    pt.hPlus  = hPlus;
+    pt.t = t;
+    pt.f = f;
+    pt.hPlus = hPlus;
     pt.hCross = hCross;
-    pt.phase  = phase;
+    pt.phase = phase;
     waveform.push_back(pt);
 
     const double dfDt = frequencyDerivative(mc, f);
@@ -578,7 +566,9 @@ struct WaveformPoint {
     phase = gwPhase3p5pn(mc, etaVal, f, t, 0.0, chiEff, a1Star, a2Star);
     t += dt;
 
-    if (waveform.size() > 10000000) { break; }
+    if (waveform.size() > 10000000) {
+      break;
+    }
   }
 
   return waveform;
@@ -818,11 +808,13 @@ inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
  * @return QNM frequency [Hz]
  */
 [[nodiscard]] inline double qnmFrequencyKerr(double mFinal, double aStar) {
-  if (aStar <= 0.0) { return qnmFrequencySchwarzschild(mFinal); }
+  if (aStar <= 0.0) {
+    return qnmFrequencySchwarzschild(mFinal);
+  }
   const double aStarClamped = std::min(aStar, 0.9999);
 
   const double mGeo = (G * mFinal) / (C * C * C);
-  const double f1   = 1.5251 - (1.1568 * std::pow(1.0 - aStarClamped, 0.1292));
+  const double f1 = 1.5251 - (1.1568 * std::pow(1.0 - aStarClamped, 0.1292));
 
   return f1 / (2.0 * physics::PI * mGeo);
 }
@@ -848,12 +840,14 @@ inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
  * @return Damping time [s]
  */
 [[nodiscard]] inline double qnmDampingTimeKerr(double mFinal, double aStar) {
-  if (aStar <= 0.0) { return qnmDampingTimeSchwarzschild(mFinal); }
+  if (aStar <= 0.0) {
+    return qnmDampingTimeSchwarzschild(mFinal);
+  }
   const double aStarClamped = std::min(aStar, 0.9999);
 
-  const double mGeo   = (G * mFinal) / (C * C * C);
-  const double qFit   = 0.7000 + (1.4187 * std::pow(1.0 - aStarClamped, -0.4990));
-  const double f1     = 1.5251 - (1.1568 * std::pow(1.0 - aStarClamped, 0.1292));
+  const double mGeo = (G * mFinal) / (C * C * C);
+  const double qFit = 0.7000 + (1.4187 * std::pow(1.0 - aStarClamped, -0.4990));
+  const double f1 = 1.5251 - (1.1568 * std::pow(1.0 - aStarClamped, 0.1292));
   const double omegaR = f1 / mGeo;
 
   return (2.0 * qFit) / omegaR;
@@ -871,9 +865,11 @@ inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
  * @param phi     Initial phase [rad]
  * @return Strain at time t
  */
-[[nodiscard]] inline double ringdownStrain(double amp, double omegaQnm, double tau,
-                                           double t, double phi = 0.0) {
-  if (t < 0) { return 0.0; }
+[[nodiscard]] inline double ringdownStrain(double amp, double omegaQnm, double tau, double t,
+                                           double phi = 0.0) {
+  if (t < 0) {
+    return 0.0;
+  }
   return amp * std::exp(-t / tau) * std::cos((omegaQnm * t) + phi);
 }
 
@@ -892,8 +888,8 @@ inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
  * @return GW luminosity [erg/s]
  */
 [[nodiscard]] inline double gwLuminosity(double mTotal, double etaVal, double f) {
-  const double mGeo   = (G * mTotal) / (C * C * C);
-  const double omega  = physics::PI * f;
+  const double mGeo = (G * mTotal) / (C * C * C);
+  const double omega = physics::PI * f;
   const double mOmega = mGeo * omega;
   const double factor = std::pow(mOmega, 10.0 / 3.0);
 
@@ -937,7 +933,7 @@ inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
   binary.m2 = m2Solar * M_SUN;
   binary.a1 = 0.0;
   binary.a2 = 0.0;
-  binary.distance   = dMpc * 1e6 * PARSEC;
+  binary.distance = dMpc * 1e6 * PARSEC;
   binary.inclination = 0.0;
   return binary;
 }
@@ -952,8 +948,8 @@ inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
  * @param dMpc Distance in Mpc
  * @return BinarySystem
  */
-[[nodiscard]] inline BinarySystem bbhSystem(double m1Solar, double m2Solar,
-                                             double a1Star, double a2Star, double dMpc) {
+[[nodiscard]] inline BinarySystem bbhSystem(double m1Solar, double m2Solar, double a1Star,
+                                            double a2Star, double dMpc) {
   BinarySystem binary{};
   binary.m1 = m1Solar * M_SUN;
   binary.m2 = m2Solar * M_SUN;
@@ -963,7 +959,7 @@ inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
   binary.a1 = a1Star * m1Geo;
   binary.a2 = a2Star * m2Geo;
 
-  binary.distance    = dMpc * 1e6 * PARSEC;
+  binary.distance = dMpc * 1e6 * PARSEC;
   binary.inclination = 0.0;
   return binary;
 }
@@ -979,8 +975,8 @@ inline void gwInspiralStrainMultimode(double mc, double mTotal, double etaVal,
  * @return Characteristic strain
  */
 [[nodiscard]] inline double characteristicStrain(double mc, double f, double d) {
-  const double h0      = gwStrainAmplitude(mc, f, d);
-  const double tau     = timeToCoalescence(mc, f);
+  const double h0 = gwStrainAmplitude(mc, f, d);
+  const double tau = timeToCoalescence(mc, f);
   const double nCycles = f * tau;
 
   return h0 * std::sqrt(nCycles);

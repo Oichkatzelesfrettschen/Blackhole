@@ -9,8 +9,7 @@
 
 namespace verified {
 
-template<typename Real = double>
-concept CosmologyScalar = std::floating_point<Real>;
+template <typename Real = double> concept CosmologyScalar = std::floating_point<Real>;
 
 // Axiodilaton coupling parameter
 template <CosmologyScalar Real> [[nodiscard]] constexpr Real omegaAxiodilaton() noexcept {
@@ -139,6 +138,6 @@ template <CosmologyScalar Real> [[nodiscard]] constexpr Real h0Axiodilaton() noe
   return 69.22; // km/s/Mpc
 }
 
-}  // namespace planck2018
+} // namespace planck2018
 
-}  // namespace verified
+} // namespace verified

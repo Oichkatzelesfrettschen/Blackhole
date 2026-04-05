@@ -29,8 +29,9 @@
 #ifndef PHYSICS_FITS_WRITER_H
 #define PHYSICS_FITS_WRITER_H
 
-#include "constants.h"
 #include <cstring>
+
+#include "constants.h"
 // NOLINTBEGIN(misc-include-cleaner)
 // WHY: cfitsio declares its C API symbols (fits_*) across internal sub-headers
 // (fitsio2.h, longnam.h) that are transitively included by <fitsio.h>.
@@ -56,25 +57,25 @@ namespace physics {
  * on the source, with angular offsets in microarcseconds.
  */
 struct WCSParams {
-  double crpix1 = 0.0;  // Reference pixel X (1-indexed; 0 = auto-center)
-  double crpix2 = 0.0;  // Reference pixel Y (1-indexed; 0 = auto-center)
-  double crval1 = 0.0;  // Reference RA [deg]
-  double crval2 = 0.0;  // Reference Dec [deg]
-  double cdelt1 = 0.0;  // Pixel scale X [deg/pixel] (negative = East-left)
-  double cdelt2 = 0.0;  // Pixel scale Y [deg/pixel]
+  double crpix1 = 0.0; // Reference pixel X (1-indexed; 0 = auto-center)
+  double crpix2 = 0.0; // Reference pixel Y (1-indexed; 0 = auto-center)
+  double crval1 = 0.0; // Reference RA [deg]
+  double crval2 = 0.0; // Reference Dec [deg]
+  double cdelt1 = 0.0; // Pixel scale X [deg/pixel] (negative = East-left)
+  double cdelt2 = 0.0; // Pixel scale Y [deg/pixel]
 };
 
 /**
  * @brief Source and observation metadata for FITS header.
  */
 struct FitsSourceInfo {
-  std::string object;            // Source name (e.g., "M87*", "Sgr A*")
-  double massMsun = 0.0;        // Black hole mass [solar masses]
-  double spin = 0.0;            // Dimensionless spin a* [0, 1)
-  double distanceCm = 0.0;      // Distance to source [cm]
-  double inclinationDeg = 0.0;  // Observer inclination [degrees]
-  double freqHz = 0.0;          // Observing frequency [Hz]
-  double fovUas = 0.0;          // Field of view [microarcseconds]
+  std::string object;          // Source name (e.g., "M87*", "Sgr A*")
+  double massMsun = 0.0;       // Black hole mass [solar masses]
+  double spin = 0.0;           // Dimensionless spin a* [0, 1)
+  double distanceCm = 0.0;     // Distance to source [cm]
+  double inclinationDeg = 0.0; // Observer inclination [degrees]
+  double freqHz = 0.0;         // Observing frequency [Hz]
+  double fovUas = 0.0;         // Field of view [microarcseconds]
 };
 
 /**
@@ -106,19 +107,20 @@ struct FitsHeader {
  */
 class FitsError : public std::runtime_error {
 public:
-  explicit FitsError(const std::string& msg, int cfitsioStatus = 0)
-      : std::runtime_error(formatMessage(msg, cfitsioStatus)),
-        status_(cfitsioStatus) {}
+  explicit FitsError(const std::string &msg, int cfitsioStatus = 0)
+      : std::runtime_error(formatMessage(msg, cfitsioStatus)), status_(cfitsioStatus) {}
 
   [[nodiscard]] int cfitsioStatus() const noexcept { return status_; }
 
 private:
   int status_;
 
-  static std::string formatMessage(const std::string& msg, int status) {
-    if (status == 0) { return msg; }
+  static std::string formatMessage(const std::string &msg, int status) {
+    if (status == 0) {
+      return msg;
+    }
     char errmsg[FLEN_ERRMSG];
-    fits_get_errstatus(status, errmsg);  // NOLINT(misc-include-cleaner)
+    fits_get_errstatus(status, errmsg); // NOLINT(misc-include-cleaner)
     return msg + ": " + std::string(errmsg) + " (status=" + std::to_string(status) + ")";
   }
 };
@@ -132,56 +134,55 @@ namespace detail {
 /// RAII wrapper for fitsfile* that closes on destruction.
 class FitsFileGuard {
 public:
-  explicit FitsFileGuard(fitsfile* fp) : fp_(fp) {}
+  explicit FitsFileGuard(fitsfile *fp) : fp_(fp) {}
   ~FitsFileGuard() {
     if (fp_ != nullptr) {
       int status = 0;
-      fits_close_file(fp_, &status);  // NOLINT(misc-include-cleaner)
+      fits_close_file(fp_, &status); // NOLINT(misc-include-cleaner)
     }
   }
-  FitsFileGuard(const FitsFileGuard&) = delete;
-  FitsFileGuard& operator=(const FitsFileGuard&) = delete;
-  FitsFileGuard(FitsFileGuard&& o) noexcept : fp_(o.fp_) { o.fp_ = nullptr; }
-  FitsFileGuard& operator=(FitsFileGuard&&) = delete;
+  FitsFileGuard(const FitsFileGuard &) = delete;
+  FitsFileGuard &operator=(const FitsFileGuard &) = delete;
+  FitsFileGuard(FitsFileGuard &&o) noexcept : fp_(o.fp_) { o.fp_ = nullptr; }
+  FitsFileGuard &operator=(FitsFileGuard &&) = delete;
 
-  fitsfile* get() noexcept { return fp_; }
+  fitsfile *get() noexcept { return fp_; }
 
 private:
-  fitsfile* fp_;
+  fitsfile *fp_;
 };
 
 /// Write a string keyword, truncating to FITS 68-char limit.
-inline void writeKeyStr(fitsfile* fp, const char* key, const std::string& val,
-                        const char* comment = nullptr) {
+inline void writeKeyStr(fitsfile *fp, const char *key, const std::string &val,
+                        const char *comment = nullptr) {
   int status = 0;
-  fits_update_key_str(fp, key, val.c_str(), comment, &status);  // NOLINT(misc-include-cleaner)
+  fits_update_key_str(fp, key, val.c_str(), comment, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError(std::string("Failed to write keyword ") + key, status);
   }
 }
 
 /// Write a double keyword.
-inline void writeKeyDbl(fitsfile* fp, const char* key, double val,
-                        int decimals = 15, const char* comment = nullptr) {
+inline void writeKeyDbl(fitsfile *fp, const char *key, double val, int decimals = 15,
+                        const char *comment = nullptr) {
   int status = 0;
-  fits_update_key_dbl(fp, key, val, decimals, comment, &status);  // NOLINT(misc-include-cleaner)
+  fits_update_key_dbl(fp, key, val, decimals, comment, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError(std::string("Failed to write keyword ") + key, status);
   }
 }
 
 /// Write a long keyword.
-inline void writeKeyLng(fitsfile* fp, const char* key, long val,
-                        const char* comment = nullptr) {
+inline void writeKeyLng(fitsfile *fp, const char *key, long val, const char *comment = nullptr) {
   int status = 0;
-  fits_update_key_lng(fp, key, val, comment, &status);  // NOLINT(misc-include-cleaner)
+  fits_update_key_lng(fp, key, val, comment, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError(std::string("Failed to write keyword ") + key, status);
   }
 }
 
 /// Write WCS keywords for a 2D sky-plane image.
-inline void writeWcs(fitsfile* fp, const WCSParams& wcs, int nx, int ny) {
+inline void writeWcs(fitsfile *fp, const WCSParams &wcs, int nx, int ny) {
   const double crpix1 = (wcs.crpix1 > 0.0) ? wcs.crpix1 : (static_cast<double>(nx) + 1.0) / 2.0;
   const double crpix2 = (wcs.crpix2 > 0.0) ? wcs.crpix2 : (static_cast<double>(ny) + 1.0) / 2.0;
 
@@ -203,7 +204,7 @@ inline void writeWcs(fitsfile* fp, const WCSParams& wcs, int nx, int ny) {
 }
 
 /// Write source metadata keywords.
-inline void writeSourceInfo(fitsfile* fp, const FitsSourceInfo& src) {
+inline void writeSourceInfo(fitsfile *fp, const FitsSourceInfo &src) {
   if (!src.object.empty()) {
     writeKeyStr(fp, "OBJECT", src.object, "Source name");
   }
@@ -229,7 +230,7 @@ inline void writeSourceInfo(fitsfile* fp, const FitsSourceInfo& src) {
 }
 
 /// Write provenance keywords.
-inline void writeProvenance(fitsfile* fp, const FitsProvenance& prov) {
+inline void writeProvenance(fitsfile *fp, const FitsProvenance &prov) {
   writeKeyStr(fp, "ORIGIN", prov.codeName, "Software that created this file");
   if (!prov.codeVersion.empty()) {
     writeKeyStr(fp, "VERSION", prov.codeVersion, "Code version");
@@ -281,8 +282,7 @@ inline void writeProvenance(fitsfile* fp, const FitsProvenance& prov) {
  * @param nRg Number of gravitational radii across half the FOV
  * @return Field of view [microarcseconds]
  */
-[[nodiscard]] inline double fovFromSource(double massMsun, double distanceCm,
-                                          double nRg = 20.0) {
+[[nodiscard]] inline double fovFromSource(double massMsun, double distanceCm, double nRg = 20.0) {
   const double rG = G * massMsun * M_SUN / (C * C); // Gravitational radius [cm]
   const double fovRad = 2.0 * nRg * rG / distanceCm;
   // Convert radians to microarcseconds: 1 rad = 206265 arcsec = 206265e6 uas
@@ -305,15 +305,14 @@ inline void writeProvenance(fitsfile* fp, const FitsProvenance& prov) {
  * @param header FITS header metadata
  * @throws FitsError on cfitsio failure
  */
-inline void writeFitsImage(const std::string& filename,
-                           const float* data, int nx, int ny,
-                           const FitsHeader& header = FitsHeader{}) {
+inline void writeFitsImage(const std::string &filename, const float *data, int nx, int ny,
+                           const FitsHeader &header = FitsHeader{}) {
   int status = 0;
-  fitsfile* fp = nullptr;
+  fitsfile *fp = nullptr;
 
   // cfitsio requires '!' prefix to overwrite existing files
   const std::string path = "!" + filename;
-  fits_create_file(&fp, path.c_str(), &status);  // NOLINT(misc-include-cleaner)
+  fits_create_file(&fp, path.c_str(), &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to create FITS file: " + filename, status);
   }
@@ -322,15 +321,16 @@ inline void writeFitsImage(const std::string& filename,
 
   // Create 2D image HDU (FLOAT_IMG = -32 in cfitsio)
   long naxes[2] = {static_cast<long>(nx), static_cast<long>(ny)};
-  fits_create_img(fp, FLOAT_IMG, 2, naxes, &status);  // NOLINT(misc-include-cleaner)
+  fits_create_img(fp, FLOAT_IMG, 2, naxes, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to create image HDU", status);
   }
 
   // Write pixel data (cfitsio expects non-const void* but does not modify data)
   const long npixels = static_cast<long>(nx) * static_cast<long>(ny);
-  fits_write_img(fp, TFLOAT, 1, npixels,                   // NOLINT(misc-include-cleaner)
-                 const_cast<float*>(data), &status);       // NOLINT(cppcoreguidelines-pro-type-const-cast)
+  fits_write_img(fp, TFLOAT, 1, npixels, // NOLINT(misc-include-cleaner)
+                 const_cast<float *>(data),
+                 &status); // NOLINT(cppcoreguidelines-pro-type-const-cast)
   if (status != 0) {
     throw FitsError("Failed to write pixel data", status);
   }
@@ -350,14 +350,13 @@ inline void writeFitsImage(const std::string& filename,
  * Same as writeFitsImage(float*) but for double-precision data.
  * Uses DOUBLE_IMG (-64) FITS type.
  */
-inline void writeFitsImage(const std::string& filename,
-                           const double* data, int nx, int ny,
-                           const FitsHeader& header = FitsHeader{}) {
+inline void writeFitsImage(const std::string &filename, const double *data, int nx, int ny,
+                           const FitsHeader &header = FitsHeader{}) {
   int status = 0;
-  fitsfile* fp = nullptr;
+  fitsfile *fp = nullptr;
 
   const std::string path = "!" + filename;
-  fits_create_file(&fp, path.c_str(), &status);  // NOLINT(misc-include-cleaner)
+  fits_create_file(&fp, path.c_str(), &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to create FITS file: " + filename, status);
   }
@@ -365,14 +364,15 @@ inline void writeFitsImage(const std::string& filename,
   const detail::FitsFileGuard guard(fp);
 
   long naxes[2] = {static_cast<long>(nx), static_cast<long>(ny)};
-  fits_create_img(fp, DOUBLE_IMG, 2, naxes, &status);  // NOLINT(misc-include-cleaner)
+  fits_create_img(fp, DOUBLE_IMG, 2, naxes, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to create image HDU", status);
   }
 
   const long npixels = static_cast<long>(nx) * static_cast<long>(ny);
-  fits_write_img(fp, TDOUBLE, 1, npixels,                    // NOLINT(misc-include-cleaner)
-                 const_cast<double*>(data), &status);        // NOLINT(cppcoreguidelines-pro-type-const-cast)
+  fits_write_img(fp, TDOUBLE, 1, npixels, // NOLINT(misc-include-cleaner)
+                 const_cast<double *>(data),
+                 &status); // NOLINT(cppcoreguidelines-pro-type-const-cast)
   if (status != 0) {
     throw FitsError("Failed to write pixel data", status);
   }
@@ -396,12 +396,12 @@ inline void writeFitsImage(const std::string& filename,
  * @return Pixel data (nx * ny floats, row-major)
  * @throws FitsError on cfitsio failure
  */
-[[nodiscard]] inline std::vector<float> readFitsImage(const std::string& filename,
-                                                       int& nx, int& ny) {
+[[nodiscard]] inline std::vector<float> readFitsImage(const std::string &filename, int &nx,
+                                                      int &ny) {
   int status = 0;
-  fitsfile* fp = nullptr;
+  fitsfile *fp = nullptr;
 
-  fits_open_file(&fp, filename.c_str(), READONLY, &status);  // NOLINT(misc-include-cleaner)
+  fits_open_file(&fp, filename.c_str(), READONLY, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to open FITS file: " + filename, status);
   }
@@ -410,13 +410,13 @@ inline void writeFitsImage(const std::string& filename,
 
   // Get image dimensions
   int naxis = 0;
-  fits_get_img_dim(fp, &naxis, &status);  // NOLINT(misc-include-cleaner)
+  fits_get_img_dim(fp, &naxis, &status); // NOLINT(misc-include-cleaner)
   if (status != 0 || naxis != 2) {
     throw FitsError("Expected 2D image, got " + std::to_string(naxis) + "D", status);
   }
 
   long naxes[2] = {0, 0};
-  fits_get_img_size(fp, 2, naxes, &status);  // NOLINT(misc-include-cleaner)
+  fits_get_img_size(fp, 2, naxes, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to get image size", status);
   }
@@ -429,7 +429,8 @@ inline void writeFitsImage(const std::string& filename,
 
   int anynull = 0;
   float nullval = 0.0f;
-  fits_read_img(fp, TFLOAT, 1, npixels, &nullval, data.data(), &anynull, &status);  // NOLINT(misc-include-cleaner)
+  fits_read_img(fp, TFLOAT, 1, npixels, &nullval, data.data(), &anynull,
+                &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to read pixel data", status);
   }
@@ -445,12 +446,12 @@ inline void writeFitsImage(const std::string& filename,
  * @return Keyword value string
  * @throws FitsError if keyword not found or file cannot be opened
  */
-[[nodiscard]] inline std::string readFitsKeyword(const std::string& filename,
-                                                  const std::string& keyword) {
+[[nodiscard]] inline std::string readFitsKeyword(const std::string &filename,
+                                                 const std::string &keyword) {
   int status = 0;
-  fitsfile* fp = nullptr;
+  fitsfile *fp = nullptr;
 
-  fits_open_file(&fp, filename.c_str(), READONLY, &status);  // NOLINT(misc-include-cleaner)
+  fits_open_file(&fp, filename.c_str(), READONLY, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to open FITS file: " + filename, status);
   }
@@ -458,7 +459,7 @@ inline void writeFitsImage(const std::string& filename,
   const detail::FitsFileGuard guard(fp);
 
   char value[FLEN_VALUE];
-  fits_read_key_str(fp, keyword.c_str(), value, nullptr, &status);  // NOLINT(misc-include-cleaner)
+  fits_read_key_str(fp, keyword.c_str(), value, nullptr, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Keyword not found: " + keyword, status);
   }
@@ -469,12 +470,12 @@ inline void writeFitsImage(const std::string& filename,
 /**
  * @brief Read a double keyword from a FITS file.
  */
-[[nodiscard]] inline double readFitsKeywordDbl(const std::string& filename,
-                                               const std::string& keyword) {
+[[nodiscard]] inline double readFitsKeywordDbl(const std::string &filename,
+                                               const std::string &keyword) {
   int status = 0;
-  fitsfile* fp = nullptr;
+  fitsfile *fp = nullptr;
 
-  fits_open_file(&fp, filename.c_str(), READONLY, &status);  // NOLINT(misc-include-cleaner)
+  fits_open_file(&fp, filename.c_str(), READONLY, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to open FITS file: " + filename, status);
   }
@@ -482,7 +483,7 @@ inline void writeFitsImage(const std::string& filename,
   const detail::FitsFileGuard guard(fp);
 
   double value = 0.0;
-  fits_read_key_dbl(fp, keyword.c_str(), &value, nullptr, &status);  // NOLINT(misc-include-cleaner)
+  fits_read_key_dbl(fp, keyword.c_str(), &value, nullptr, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Keyword not found: " + keyword, status);
   }

@@ -23,13 +23,14 @@
 #ifndef PHYSICS_TOV_H
 #define PHYSICS_TOV_H
 
-#include "constants.h"
-#include "safe_limits.h"
 #include <algorithm>
 #include <cmath>
 #include <functional>
 #include <numbers>
 #include <vector>
+
+#include "constants.h"
+#include "safe_limits.h"
 
 namespace physics {
 
@@ -148,8 +149,8 @@ struct TOVProfile {
   }
 
   const double gOverC2 = G / C2;
-  const double rhoEff = rho + (press / C2);                                        // Effective density
-  const double mEff = m + ((4.0 * std::numbers::pi * r * r * r * press) / C2);    // Effective mass
+  const double rhoEff = rho + (press / C2);                                    // Effective density
+  const double mEff = m + ((4.0 * std::numbers::pi * r * r * r * press) / C2); // Effective mass
 
   const double numerator = gOverC2 * rhoEff * mEff;
   const double denominator = r * (r - rS);
@@ -224,20 +225,22 @@ struct TOVProfile {
 
     const double rho2 = inversePolytrope(press + (0.5 * dr * k1P), k, gamma);
     const double k2M = tovDmdr(r + (0.5 * dr), rho2);
-    const double k2P = tovDPdr(r + (0.5 * dr), m + (0.5 * dr * k1M), press + (0.5 * dr * k1P), rho2);
+    const double k2P =
+        tovDPdr(r + (0.5 * dr), m + (0.5 * dr * k1M), press + (0.5 * dr * k1P), rho2);
 
     const double rho3 = inversePolytrope(press + (0.5 * dr * k2P), k, gamma);
     const double k3M = tovDmdr(r + (0.5 * dr), rho3);
-    const double k3P = tovDPdr(r + (0.5 * dr), m + (0.5 * dr * k2M), press + (0.5 * dr * k2P), rho3);
+    const double k3P =
+        tovDPdr(r + (0.5 * dr), m + (0.5 * dr * k2M), press + (0.5 * dr * k2P), rho3);
 
     const double rho4 = inversePolytrope(press + (dr * k3P), k, gamma);
     const double k4M = tovDmdr(r + dr, rho4);
     const double k4P = tovDPdr(r + dr, m + (dr * k3M), press + (dr * k3P), rho4);
 
     // Update
-    m     += (dr / 6.0) * (k1M + (2.0 * k2M) + (2.0 * k3M) + k4M);
+    m += (dr / 6.0) * (k1M + (2.0 * k2M) + (2.0 * k3M) + k4M);
     press += (dr / 6.0) * (k1P + (2.0 * k2P) + (2.0 * k3P) + k4P);
-    r     += dr;
+    r += dr;
 
     // Pressure must decrease monotonically
     if (press < 0) {

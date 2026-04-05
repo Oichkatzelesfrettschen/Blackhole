@@ -23,9 +23,10 @@
 #ifndef PHYSICS_DOPPLER_H
 #define PHYSICS_DOPPLER_H
 
-#include "safe_limits.h"
 #include <algorithm>
 #include <cmath>
+
+#include "safe_limits.h"
 // NOLINTBEGIN(misc-include-cleaner)
 // WHY: M_PI is provided by <cmath> on most platforms but is technically
 // a POSIX extension; some toolchains require the include to be visible.
@@ -47,7 +48,9 @@ namespace physics {
  * @return Lorentz factor >= 1
  */
 [[nodiscard]] inline double lorentzFactor(double beta) {
-  if (beta < 0.0) { beta = -beta; }
+  if (beta < 0.0) {
+    beta = -beta;
+  }
   if (beta >= 1.0) {
     return safeInfinity<double>();
   }
@@ -198,8 +201,8 @@ namespace physics {
  * @param alpha Spectral index, use 0 for blackbody
  * @return Observed intensity
  */
-[[nodiscard]] inline double relativisticBeamingIntensity(double iEmit, double beta,
-                                                          double theta, double alpha) {
+[[nodiscard]] inline double relativisticBeamingIntensity(double iEmit, double beta, double theta,
+                                                         double alpha) {
   const double delta = dopplerFactor(beta, theta);
   return iEmit * std::pow(delta, 3.0 + alpha);
 }
@@ -215,8 +218,8 @@ namespace physics {
  * @param alpha Spectral index
  * @return Observed flux density
  */
-[[nodiscard]] inline double relativisticBeamingFlux(double fEmit, double beta,
-                                                     double theta, double alpha) {
+[[nodiscard]] inline double relativisticBeamingFlux(double fEmit, double beta, double theta,
+                                                    double alpha) {
   const double delta = dopplerFactor(beta, theta);
   return fEmit * std::pow(delta, 3.0 + alpha);
 }
@@ -374,11 +377,11 @@ namespace physics {
  * @param alpha Spectral index, use 0 for blackbody
  * @return Doppler boost factor (1 = no boost)
  */
-[[nodiscard]] inline double diskDopplerBoost(double r, double aStar, double phi,
-                                              double inclination, double alpha = 0.0) {
+[[nodiscard]] inline double diskDopplerBoost(double r, double aStar, double phi, double inclination,
+                                             double alpha = 0.0) {
   // Clamp inputs
   aStar = std::clamp(aStar, -0.9999, 0.9999);
-  r = std::max(r, 1.1);  // Minimum radius to avoid singularities
+  r = std::max(r, 1.1); // Minimum radius to avoid singularities
 
   // Keplerian velocity for circular orbit
   // v_phi/c = sqrt(1/(r - 2 + aStar*sqrt(1/r)))
@@ -388,7 +391,7 @@ namespace physics {
   }
 
   const double vOrbital = std::sqrt(1.0 / discriminant);
-  const double beta = std::min(vOrbital, 0.99);  // Cap at 0.99c
+  const double beta = std::min(vOrbital, 0.99); // Cap at 0.99c
 
   // Line-of-sight velocity component:
   // For disk in x-y plane, observer at inclination i:

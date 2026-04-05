@@ -39,10 +39,10 @@ namespace physics {
  *       (Carter constant, where mu^2 = -g_mu_nu u^mu u^nu = 0 for photons)
  */
 struct ConservedQuantities {
-  double e = 0.0;    // Energy
-  double lz = 0.0;   // Angular momentum (z-component)
-  double q = 0.0;    // Carter constant
-  double mu2 = 0.0;  // Rest mass invariant (0 for photons, -1 for massive)
+  double e = 0.0;   // Energy
+  double lz = 0.0;  // Angular momentum (z-component)
+  double q = 0.0;   // Carter constant
+  double mu2 = 0.0; // Rest mass invariant (0 for photons, -1 for massive)
 };
 
 /**
@@ -61,10 +61,9 @@ struct ConservedQuantities {
  * @param a Spin parameter [geometric units]
  * @return ConservedQuantities
  */
-[[nodiscard]] inline ConservedQuantities computeConserved(
-    double r, double theta,
-    double ut, double ur, double utheta, double uphi,
-    double mGeom, double a) {
+[[nodiscard]] inline ConservedQuantities computeConserved(double r, double theta, double ut,
+                                                          double ur, double utheta, double uphi,
+                                                          double mGeom, double a) {
 
   const double cosTh = std::cos(theta);
   const double sinTh = std::sin(theta);
@@ -76,10 +75,10 @@ struct ConservedQuantities {
   const double delta = ((r * r) - (rS * r)) + (a * a);
 
   // BL metric components
-  const double gTt  = -(1.0 - ((rS * r) / sigma));
+  const double gTt = -(1.0 - ((rS * r) / sigma));
   const double gTph = -((rS * r * a * sin2) / sigma);
   const double gPhph = ((r * r) + (a * a) + ((rS * r * a * a * sin2) / sigma)) * sin2;
-  const double gRr   = sigma / delta;
+  const double gRr = sigma / delta;
   const double gThth = sigma;
 
   ConservedQuantities cq;
@@ -91,14 +90,12 @@ struct ConservedQuantities {
   cq.lz = (gTph * ut) + (gPhph * uphi);
 
   // mu^2 = -g_mu_nu u^mu u^nu (should be 0 for photons)
-  cq.mu2 = -((gTt * ut * ut) + (2.0 * gTph * ut * uphi)
-           + (gRr * ur * ur) + (gThth * utheta * utheta)
-           + (gPhph * uphi * uphi));
+  cq.mu2 = -((gTt * ut * ut) + (2.0 * gTph * ut * uphi) + (gRr * ur * ur) +
+             (gThth * utheta * utheta) + (gPhph * uphi * uphi));
 
   // Carter constant Q
   const double uTheta = gThth * utheta; // covariant theta component
-  cq.q = (uTheta * uTheta) + (cos2 * ((a * a * (cq.mu2 - (cq.e * cq.e)))
-         + (cq.lz * cq.lz / sin2)));
+  cq.q = (uTheta * uTheta) + (cos2 * ((a * a * (cq.mu2 - (cq.e * cq.e))) + (cq.lz * cq.lz / sin2)));
 
   return cq;
 }
@@ -120,7 +117,7 @@ struct GeodesicConservationMonitor {
   /**
    * @brief Initialize with the first state.
    */
-  void init(const ConservedQuantities& cq) {
+  void init(const ConservedQuantities &cq) {
     initial = cq;
     initialized = true;
     maxEDrift = 0.0;
@@ -136,7 +133,7 @@ struct GeodesicConservationMonitor {
    * @param current Current conserved quantities
    * @return Maximum relative drift across all quantities
    */
-  [[nodiscard]] double update(const ConservedQuantities& current) {
+  [[nodiscard]] double update(const ConservedQuantities &current) {
     if (!initialized) {
       init(current);
       return 0.0;
@@ -149,14 +146,14 @@ struct GeodesicConservationMonitor {
       return std::abs(v1 - v0) / scale;
     };
 
-    const double dE   = relDrift(initial.e,  current.e);
-    const double dLz  = relDrift(initial.lz, current.lz);
-    const double dQ   = relDrift(initial.q,  current.q);
+    const double dE = relDrift(initial.e, current.e);
+    const double dLz = relDrift(initial.lz, current.lz);
+    const double dQ = relDrift(initial.q, current.q);
     const double dmu2 = std::abs(current.mu2 - initial.mu2);
 
-    maxEDrift   = std::max(maxEDrift,   dE);
-    maxLzDrift  = std::max(maxLzDrift,  dLz);
-    maxQDrift   = std::max(maxQDrift,   dQ);
+    maxEDrift = std::max(maxEDrift, dE);
+    maxLzDrift = std::max(maxLzDrift, dLz);
+    maxQDrift = std::max(maxQDrift, dQ);
     maxMu2Drift = std::max(maxMu2Drift, dmu2);
 
     return std::max({dE, dLz, dQ, dmu2});
@@ -169,9 +166,7 @@ struct GeodesicConservationMonitor {
    * @return true if any quantity exceeds threshold
    */
   [[nodiscard]] bool violated(double threshold = 1e-8) const {
-    return maxEDrift > threshold ||
-           maxLzDrift > threshold ||
-           maxQDrift > threshold ||
+    return maxEDrift > threshold || maxLzDrift > threshold || maxQDrift > threshold ||
            maxMu2Drift > threshold;
   }
 

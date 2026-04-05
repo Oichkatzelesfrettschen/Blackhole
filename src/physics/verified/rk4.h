@@ -4,63 +4,57 @@
 
 #pragma once
 
-#include <concepts>
 #include <cmath>
+#include <concepts>
 
 namespace verified {
 
-template<typename Real = double>
-concept IntegratorScalar = std::floating_point<Real>;
+template <typename Real = double> concept IntegratorScalar = std::floating_point<Real>;
 
 // State vector: 8D phase space in Boyer-Lindquist coordinates
 // Position: (t, r, theta, phi)
 // Velocity: (dt/dlambda, dr/dlambda, dtheta/dlambda, dphi/dlambda)
-template<IntegratorScalar Real>
-struct StateVector {
-    Real x0, x1, x2, x3;      // Position (t, r, theta, phi)
-    Real v0, v1, v2, v3;      // Velocity (dt/λ, dr/λ, dθ/λ, dφ/λ)
+template <IntegratorScalar Real> struct StateVector {
+  Real x0, x1, x2, x3; // Position (t, r, theta, phi)
+  Real v0, v1, v2, v3; // Velocity (dt/λ, dr/λ, dθ/λ, dφ/λ)
 
-    // Vector addition
-    [[nodiscard]] constexpr StateVector operator+(const StateVector& other) const noexcept {
-        return {
-            x0 + other.x0, x1 + other.x1, x2 + other.x2, x3 + other.x3,
-            v0 + other.v0, v1 + other.v1, v2 + other.v2, v3 + other.v3
-        };
-    }
+  // Vector addition
+  [[nodiscard]] constexpr StateVector operator+(const StateVector &other) const noexcept {
+    return {x0 + other.x0, x1 + other.x1, x2 + other.x2, x3 + other.x3,
+            v0 + other.v0, v1 + other.v1, v2 + other.v2, v3 + other.v3};
+  }
 
-    // Scalar multiplication
-    [[nodiscard]] constexpr StateVector operator*(Real scalar) const noexcept {
-        return {
-            scalar * x0, scalar * x1, scalar * x2, scalar * x3,
-            scalar * v0, scalar * v1, scalar * v2, scalar * v3
-        };
-    }
+  // Scalar multiplication
+  [[nodiscard]] constexpr StateVector operator*(Real scalar) const noexcept {
+    return {scalar * x0, scalar * x1, scalar * x2, scalar * x3,
+            scalar * v0, scalar * v1, scalar * v2, scalar * v3};
+  }
 
-    // In-place scalar multiplication
-    StateVector &scaleInplace(Real scalar) noexcept {
-      x0 *= scalar;
-      x1 *= scalar;
-      x2 *= scalar;
-      x3 *= scalar;
-      v0 *= scalar;
-      v1 *= scalar;
-      v2 *= scalar;
-      v3 *= scalar;
-      return *this;
-    }
+  // In-place scalar multiplication
+  StateVector &scaleInplace(Real scalar) noexcept {
+    x0 *= scalar;
+    x1 *= scalar;
+    x2 *= scalar;
+    x3 *= scalar;
+    v0 *= scalar;
+    v1 *= scalar;
+    v2 *= scalar;
+    v3 *= scalar;
+    return *this;
+  }
 
-    // Euclidean norm (for error estimation)
-    [[nodiscard]] Real norm() const noexcept {
-      return std::sqrt((x0 * x0) + (x1 * x1) + (x2 * x2) + (x3 * x3) + (v0 * v0) + (v1 * v1) +
-                       (v2 * v2) + (v3 * v3));
-    }
+  // Euclidean norm (for error estimation)
+  [[nodiscard]] Real norm() const noexcept {
+    return std::sqrt((x0 * x0) + (x1 * x1) + (x2 * x2) + (x3 * x3) + (v0 * v0) + (v1 * v1) +
+                     (v2 * v2) + (v3 * v3));
+  }
 };
 
 // Right-hand side of geodesic equations
 // dy/dλ = f(λ, y) where y = (position, velocity)
 // Returns acceleration components (velocity is already in state)
-template<IntegratorScalar Real>
-using GeodesicRHS = StateVector<Real>(*)(const StateVector<Real>&, Real, Real, Real);
+template <IntegratorScalar Real>
+using GeodesicRHS = StateVector<Real> (*)(const StateVector<Real> &, Real, Real, Real);
 
 // RK4 stage 1: k1 = h * f(λ, y)
 template <IntegratorScalar Real>
@@ -142,11 +136,10 @@ template <IntegratorScalar Real>
 }
 
 // RK4 step with error estimation
-template<IntegratorScalar Real>
-struct RK4StepResult {
-    StateVector<Real> state;    // Updated state at λ + h
-    Real error;                  // Local truncation error estimate
-    Real stepSize;               // Actual step size used
+template <IntegratorScalar Real> struct RK4StepResult {
+  StateVector<Real> state; // Updated state at λ + h
+  Real error;              // Local truncation error estimate
+  Real stepSize;           // Actual step size used
 };
 
 template <IntegratorScalar Real>
@@ -186,9 +179,8 @@ template <IntegratorScalar Real>
 // ============================================================================
 
 // DP45 stage coefficients (nodes c2..c6)
-template<IntegratorScalar Real>
-struct DP45Stages {
-    StateVector<Real> k1, k2, k3, k4, k5, k6, k7;
+template <IntegratorScalar Real> struct DP45Stages {
+  StateVector<Real> k1, k2, k3, k4, k5, k6, k7;
 };
 
 template <IntegratorScalar Real>
@@ -231,11 +223,10 @@ template <IntegratorScalar Real>
 }
 
 // Dormand-Prince step: returns 5th-order solution and embedded error estimate
-template<IntegratorScalar Real>
-struct DP45Result {
-    StateVector<Real> y5;    // 5th-order propagated state
-    Real error;               // Embedded error norm (||y5 - y4||_inf)
-    Real h;                   // Step size used
+template <IntegratorScalar Real> struct DP45Result {
+  StateVector<Real> y5; // 5th-order propagated state
+  Real error;           // Embedded error norm (||y5 - y4||_inf)
+  Real h;               // Step size used
 };
 
 template <IntegratorScalar Real>
@@ -318,4 +309,4 @@ template <IntegratorScalar Real>
   return r < rPlus;
 }
 
-}  // namespace verified
+} // namespace verified

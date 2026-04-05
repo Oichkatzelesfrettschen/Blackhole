@@ -41,9 +41,8 @@ bool supportsAnisotropy() {
   for (GLint i = 0; i < count; ++i) {
     const char *ext =
         reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(i)));
-    if (ext != nullptr &&
-        (std::string(ext) == "GL_EXT_texture_filter_anisotropic" ||
-         std::string(ext) == "GL_ARB_texture_filter_anisotropic")) {
+    if (ext != nullptr && (std::string(ext) == "GL_EXT_texture_filter_anisotropic" ||
+                           std::string(ext) == "GL_ARB_texture_filter_anisotropic")) {
       hasExt = true;
       break;
     }
@@ -158,8 +157,8 @@ GLuint createSolidCubemap1x1(unsigned char r, unsigned char g, unsigned char b) 
 
   unsigned char pixel[3] = {r, g, b};
   for (GLuint i = 0; i < 6; ++i) {
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_SRGB, 1, 1, 0, GL_RGB,
-                 GL_UNSIGNED_BYTE, pixel);
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_SRGB, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE,
+                 pixel);
   }
 
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

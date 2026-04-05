@@ -13,7 +13,8 @@
 
 #pragma once
 
-// NOLINTBEGIN(cppcoreguidelines-macro-usage) -- Tracy profiler macros capture source location via __LINE__/__FUNCTION__; cannot be replaced with constexpr
+// NOLINTBEGIN(cppcoreguidelines-macro-usage) -- Tracy profiler macros capture source location via
+// __LINE__/__FUNCTION__; cannot be replaced with constexpr
 #ifdef TRACY_ENABLE
 // Import the full Tracy API when enabled.
 #include <tracy/Tracy.hpp>
@@ -86,8 +87,7 @@
 
 // Convenience wrappers for plots/messages/allocs
 #define BH_PLOT(name, value) TracyPlot(name, value)
-#define BH_PLOT_CFG(name, type, step, fill, color) \
-    TracyPlotConfig(name, type, step, fill, color)
+#define BH_PLOT_CFG(name, type, step, fill, color) TracyPlotConfig(name, type, step, fill, color)
 
 #define BH_MSG(text) TracyMessage(text)
 #define BH_MSG_LEN(text, len) TracyMessageL(text, len)

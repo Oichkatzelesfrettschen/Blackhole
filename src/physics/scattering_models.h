@@ -299,6 +299,6 @@ inline double totalScatteringOpacity(double nu, double nE, double grainRadius,
   return kappaT + kappaR + kappaMie;
 }
 
-}  // namespace physics
+} // namespace physics
 
-#endif  // SCATTERING_MODELS_H
+#endif // SCATTERING_MODELS_H

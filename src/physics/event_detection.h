@@ -26,8 +26,9 @@
 #ifndef PHYSICS_EVENT_DETECTION_H
 #define PHYSICS_EVENT_DETECTION_H
 
-#include "constants.h"
 #include <cmath>
+
+#include "constants.h"
 
 namespace physics {
 
@@ -49,10 +50,10 @@ enum class EventType {
  */
 struct EventResult {
   EventType type = EventType::None;
-  double lambda = 0.0;       // Affine parameter at crossing
-  double r = 0.0;            // Radial coordinate at crossing
-  double theta = 0.0;        // Polar angle at crossing
-  int nBisections = 0;       // Number of bisection iterations used
+  double lambda = 0.0; // Affine parameter at crossing
+  double r = 0.0;      // Radial coordinate at crossing
+  double theta = 0.0;  // Polar angle at crossing
+  int nBisections = 0; // Number of bisection iterations used
   bool detected = false;
 };
 
@@ -123,13 +124,9 @@ inline bool crossedEquator(double theta0, double theta1) {
  * @return EventResult with crossing location
  */
 template <typename State, typename Stepper>
-EventResult bisectRadialCrossing(
-    double lambda0, double lambda1,
-    const State& state0,
-    double rTarget,
-    const Stepper& stepper,
-    double tolR = 1e-10,
-    int maxIter = 50) {
+EventResult bisectRadialCrossing(double lambda0, double lambda1, const State &state0,
+                                 double rTarget, const Stepper &stepper, double tolR = 1e-10,
+                                 int maxIter = 50) {
 
   EventResult result;
   result.type = EventType::RadialThreshold;
@@ -184,12 +181,8 @@ EventResult bisectRadialCrossing(
  * @tparam Stepper Callable: State(lambda_start, lambda_end, State)
  */
 template <typename State, typename Stepper>
-EventResult bisectTurningPoint(
-    double lambda0, double lambda1,
-    const State& state0,
-    const Stepper& stepper,
-    double tolVr = 1e-12,
-    int maxIter = 50) {
+EventResult bisectTurningPoint(double lambda0, double lambda1, const State &state0,
+                               const Stepper &stepper, double tolVr = 1e-12, int maxIter = 50) {
 
   EventResult result;
   result.type = EventType::TurningPoint;

@@ -39,23 +39,21 @@ using ManifestEntry = std::pair<std::string, std::string>;
 struct ReproducibilityManifest {
   std::vector<ManifestEntry> entries;
 
-  void add(const std::string& key, const std::string& value) {
-    entries.emplace_back(key, value);
-  }
+  void add(const std::string &key, const std::string &value) { entries.emplace_back(key, value); }
 
-  void add(const std::string& key, double value) {
+  void add(const std::string &key, double value) {
     std::ostringstream oss;
     oss << std::setprecision(15) << value;
     entries.emplace_back(key, oss.str());
   }
 
-  void add(const std::string& key, int value) {
-    entries.emplace_back(key, std::to_string(value));
-  }
+  void add(const std::string &key, int value) { entries.emplace_back(key, std::to_string(value)); }
 
-  [[nodiscard]] std::string get(const std::string& key) const {
-    for (const auto& [k, v] : entries) {
-      if (k == key) { return v; }
+  [[nodiscard]] std::string get(const std::string &key) const {
+    for (const auto &[k, v] : entries) {
+      if (k == key) {
+        return v;
+      }
     }
     return "";
   }
@@ -67,9 +65,10 @@ struct ReproducibilityManifest {
     std::ostringstream oss;
     oss << "{\n";
     for (std::size_t i = 0; i < entries.size(); ++i) {
-      oss << "  \"" << entries.at(i).first << "\": \""
-          << entries.at(i).second << "\"";
-      if (i + 1 < entries.size()) { oss << ","; }
+      oss << "  \"" << entries.at(i).first << "\": \"" << entries.at(i).second << "\"";
+      if (i + 1 < entries.size()) {
+        oss << ",";
+      }
       oss << "\n";
     }
     oss << "}";
@@ -96,12 +95,11 @@ inline ReproducibilityManifest buildManifest() {
   // Compiler identification
 #ifdef __clang__
   m.add("compiler", "Clang " + std::to_string(__clang_major__) + "." +
-        std::to_string(__clang_minor__) + "." +
-        std::to_string(__clang_patchlevel__));
+                        std::to_string(__clang_minor__) + "." +
+                        std::to_string(__clang_patchlevel__));
 #elifdef __GNUC__
-  m.add("compiler", "GCC " + std::to_string(__GNUC__) + "." +
-        std::to_string(__GNUC_MINOR__) + "." +
-        std::to_string(__GNUC_PATCHLEVEL__));
+  m.add("compiler", "GCC " + std::to_string(__GNUC__) + "." + std::to_string(__GNUC_MINOR__) + "." +
+                        std::to_string(__GNUC_PATCHLEVEL__));
 #else
   m.add("compiler", "unknown");
 #endif
@@ -169,12 +167,8 @@ inline ReproducibilityManifest buildManifest() {
  * @param ny Image height [pixels]
  * @param fovUas Field of view [microarcseconds]
  */
-inline void addPhysicsParams(ReproducibilityManifest& m,
-                              double massMsun, double spin,
-                              double inclinationDeg,
-                              double freqHz,
-                              int nx, int ny,
-                              double fovUas) {
+inline void addPhysicsParams(ReproducibilityManifest &m, double massMsun, double spin,
+                             double inclinationDeg, double freqHz, int nx, int ny, double fovUas) {
   m.add("bh_mass_msun", massMsun);
   m.add("bh_spin", spin);
   m.add("inclination_deg", inclinationDeg);

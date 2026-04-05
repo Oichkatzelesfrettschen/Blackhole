@@ -24,26 +24,25 @@ namespace grmhd {
 // TileCache Implementation
 // ============================================================================
 
-TileCache::TileCache(uint32_t maxTiles)
-    : maxTiles_(maxTiles) {}
+TileCache::TileCache(uint32_t maxTiles) : maxTiles_(maxTiles) {}
 
 TileCache::~TileCache() = default;
 
-std::optional<std::shared_ptr<GRMHDTile>>
-TileCache::getTile(uint32_t x, uint32_t y, uint32_t dumpIdx) {
-    auto key = std::make_tuple(x, y, dumpIdx);
-    auto it = tiles_.find(key);
+std::optional<std::shared_ptr<GRMHDTile>> TileCache::getTile(uint32_t x, uint32_t y,
+                                                             uint32_t dumpIdx) {
+  auto key = std::make_tuple(x, y, dumpIdx);
+  auto it = tiles_.find(key);
 
-    if (it != tiles_.end()) {
-        // Cache hit: update LRU and return
-        it->second->accessTime = std::chrono::high_resolution_clock::now();
-        hitCount_++;
-        return it->second;
-    }
+  if (it != tiles_.end()) {
+    // Cache hit: update LRU and return
+    it->second->accessTime = std::chrono::high_resolution_clock::now();
+    hitCount_++;
+    return it->second;
+  }
 
-    // Cache miss
-    missCount_++;
-    return std::nullopt;
+  // Cache miss
+  missCount_++;
+  return std::nullopt;
 }
 
 void TileCache::insertTile(const std::shared_ptr<GRMHDTile> &tile) {
@@ -66,25 +65,25 @@ void TileCache::evictLRU() {
     return;
   }
 
-    // Find least recently used tile
-    auto minTime = std::chrono::high_resolution_clock::now();
-    size_t minIdx = 0;
+  // Find least recently used tile
+  auto minTime = std::chrono::high_resolution_clock::now();
+  size_t minIdx = 0;
 
-    for (size_t i = 0; i < lruOrder_.size(); ++i) {
-        const auto& key = lruOrder_.at(i);
-        auto it = tiles_.find(key);
-        if (it != tiles_.end() && it->second->accessTime < minTime) {
-            minTime = it->second->accessTime;
-            minIdx = i;
-        }
+  for (size_t i = 0; i < lruOrder_.size(); ++i) {
+    const auto &key = lruOrder_.at(i);
+    auto it = tiles_.find(key);
+    if (it != tiles_.end() && it->second->accessTime < minTime) {
+      minTime = it->second->accessTime;
+      minIdx = i;
     }
+  }
 
-    // Evict the LRU tile
-    if (minIdx < lruOrder_.size()) {
-        const auto& lruKey = lruOrder_.at(minIdx);
-        tiles_.erase(lruKey);
-        lruOrder_.erase(lruOrder_.begin() + static_cast<std::ptrdiff_t>(minIdx));
-    }
+  // Evict the LRU tile
+  if (minIdx < lruOrder_.size()) {
+    const auto &lruKey = lruOrder_.at(minIdx);
+    tiles_.erase(lruKey);
+    lruOrder_.erase(lruOrder_.begin() + static_cast<std::ptrdiff_t>(minIdx));
+  }
 }
 
 // ============================================================================
@@ -95,18 +94,18 @@ GRMHDReader::GRMHDReader(std::string metadataPath) : basePath_(std::move(metadat
 
 GRMHDReader::~GRMHDReader() = default;
 
-bool GRMHDReader::loadSequenceMetadata(const std::string& jsonPath) {
-    std::ifstream file(jsonPath);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open metadata file: " << jsonPath << "\n";
-        return false;
-    }
+bool GRMHDReader::loadSequenceMetadata(const std::string &jsonPath) {
+  std::ifstream file(jsonPath);
+  if (!file.is_open()) {
+    std::cerr << "Failed to open metadata file: " << jsonPath << "\n";
+    return false;
+  }
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    std::string const jsonContent = buffer.str();
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+  std::string const jsonContent = buffer.str();
 
-    return parseJsonMetadata(jsonContent);
+  return parseJsonMetadata(jsonContent);
 }
 
 bool GRMHDReader::parseJsonMetadata(const std::string & /*jsonContent*/) {
@@ -150,41 +149,39 @@ DumpMetadata GRMHDReader::parseDumpEntry(const std::string & /*jsonEntry*/) {
   return dump;
 }
 
-std::optional<DumpMetadata>
-GRMHDReader::getDumpMetadata(size_t dumpIndex) const {
-    if (dumpIndex >= sequence_.dumps.size()) {
-        return std::nullopt;
-    }
-    return sequence_.dumps.at(dumpIndex);
+std::optional<DumpMetadata> GRMHDReader::getDumpMetadata(size_t dumpIndex) const {
+  if (dumpIndex >= sequence_.dumps.size()) {
+    return std::nullopt;
+  }
+  return sequence_.dumps.at(dumpIndex);
 }
 
-std::optional<DumpMetadata>
-GRMHDReader::getDumpAtTime(double time) const {
-    auto it = sequence_.timeIndex.find(time);
-    if (it == sequence_.timeIndex.end()) {
-        return std::nullopt;
-    }
-    return sequence_.dumps.at(it->second);
+std::optional<DumpMetadata> GRMHDReader::getDumpAtTime(double time) const {
+  auto it = sequence_.timeIndex.find(time);
+  if (it == sequence_.timeIndex.end()) {
+    return std::nullopt;
+  }
+  return sequence_.dumps.at(it->second);
 }
 
-bool GRMHDReader::readHDF5Dump(size_t dumpIndex, std::vector<float>& buffer) {
-    // Placeholder: HDF5 file reading
-    // Phase 6.2a extended will integrate highfive library:
-    // 1. Open HDF5 file from dumps[dumpIndex].filepath
-    // 2. Read dataset at dumps[dumpIndex].datasetName
-    // 3. Populate buffer with float array
+bool GRMHDReader::readHDF5Dump(size_t dumpIndex, std::vector<float> &buffer) {
+  // Placeholder: HDF5 file reading
+  // Phase 6.2a extended will integrate highfive library:
+  // 1. Open HDF5 file from dumps[dumpIndex].filepath
+  // 2. Read dataset at dumps[dumpIndex].datasetName
+  // 3. Populate buffer with float array
 
-    if (dumpIndex >= sequence_.dumps.size()) {
-        return false;
-    }
+  if (dumpIndex >= sequence_.dumps.size()) {
+    return false;
+  }
 
-    // Allocate buffer based on grid dimensions
-    const auto& dump = sequence_.dumps.at(dumpIndex);
-    auto const totalCells = static_cast<size_t>(dump.grid.nx) * dump.grid.ny * dump.grid.nz;
-    auto const varsPerCell = static_cast<size_t>(dump.variables.varCount);
-    buffer.resize(totalCells * varsPerCell, 0.0f);
+  // Allocate buffer based on grid dimensions
+  const auto &dump = sequence_.dumps.at(dumpIndex);
+  auto const totalCells = static_cast<size_t>(dump.grid.nx) * dump.grid.ny * dump.grid.nz;
+  auto const varsPerCell = static_cast<size_t>(dump.variables.varCount);
+  buffer.resize(totalCells * varsPerCell, 0.0f);
 
-    return true;  // Placeholder: success
+  return true; // Placeholder: success
 }
 
 bool GRMHDReader::readHDF5Variable(size_t dumpIndex, const std::string & /*varName*/,
@@ -221,14 +218,13 @@ void GRMHDPipeline::queueTileUpload(const std::shared_ptr<GRMHDTile> &tile) {
 }
 
 void GRMHDPipeline::waitForCompletion() {
-    // Placeholder: GPU fence synchronization
-    // Phase 6.2b extended will:
-    // 1. Poll GPU fence for each pending tile
-    // 2. Mark tile as gpuResident when transfer complete
-    // 3. Clear pendingUploads_ on completion
+  // Placeholder: GPU fence synchronization
+  // Phase 6.2b extended will:
+  // 1. Poll GPU fence for each pending tile
+  // 2. Mark tile as gpuResident when transfer complete
+  // 3. Clear pendingUploads_ on completion
 
-    pendingUploads_.clear();
+  pendingUploads_.clear();
 }
 
 } // namespace grmhd
-
