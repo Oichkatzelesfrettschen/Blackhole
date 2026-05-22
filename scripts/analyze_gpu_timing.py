@@ -17,8 +17,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from statistics import mean, median, stdev, quantiles
-from typing import Optional
+from statistics import mean, median, quantiles, stdev
 
 
 @dataclass
@@ -124,7 +123,7 @@ def compute_stats(name: str, values: list, indices: list, iqr_threshold: float =
     return stats
 
 
-def parse_gpu_timing_csv(csv_path: str, iqr_threshold: float = 1.5) -> Optional[GpuTimingReport]:
+def parse_gpu_timing_csv(csv_path: str, iqr_threshold: float = 1.5) -> GpuTimingReport | None:
     """Parse gpu_timing.csv and compute statistics."""
     if not os.path.exists(csv_path):
         return None
@@ -149,7 +148,7 @@ def parse_gpu_timing_csv(csv_path: str, iqr_threshold: float = 1.5) -> Optional[
     kerr_spins = []
     metric_values = {col: [] for col in metric_columns}
 
-    with open(csv_path, "r", newline="") as f:
+    with open(csv_path, newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             try:
@@ -281,7 +280,7 @@ def main():
     if report is None:
         print(f"Error: Could not parse {args.csv_path}", file=sys.stderr)
         if not os.path.exists(args.csv_path):
-            print(f"File does not exist. Generate with: BLACKHOLE_GPU_TIMING_LOG=1 ./build/Release/Blackhole", file=sys.stderr)
+            print("File does not exist. Generate with: BLACKHOLE_GPU_TIMING_LOG=1 ./build/Release/Blackhole", file=sys.stderr)
         sys.exit(1)
 
     if args.json:

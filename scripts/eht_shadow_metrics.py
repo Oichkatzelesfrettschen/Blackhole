@@ -16,13 +16,14 @@ References:
     - Event Horizon Telescope Collaboration (2022) ApJ 930, L12 (Sgr A*)
 """
 
-import sys
 import argparse
+import sys
+
+import matplotlib
 import numpy as np
 from scipy import ndimage
-import matplotlib
+
 matplotlib.use('Agg')  # Non-interactive backend
-import matplotlib.pyplot as plt
 
 # ============================================================================
 # EHT Shadow Analysis Functions
@@ -228,7 +229,7 @@ def main():
         error_m87 = abs(diameter - m87_expected) / m87_expected * 100.0
         error_sgra = abs(diameter - sgra_expected) / sgra_expected * 100.0
 
-        print(f"\nComparison with observations:")
+        print("\nComparison with observations:")
         print(f"  M87* (42.0 μas):   Error = {error_m87:.1f}%")
         print(f"  Sgr A* (52.0 μas): Error = {error_sgra:.1f}%")
 
@@ -245,7 +246,7 @@ def main():
     # Measure asymmetry
     asymmetry = analyzer.compute_asymmetry(shadow_result['shadow_mask'])
     if asymmetry:
-        print(f"\nBrightness Asymmetry:")
+        print("\nBrightness Asymmetry:")
         print(f"  Vertical:   {asymmetry['vertical']:.3f}")
         print(f"  Horizontal: {asymmetry['horizontal']:.3f}")
         print(f"  Total:      {asymmetry['total']:.3f}")

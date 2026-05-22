@@ -21,12 +21,11 @@ Output format:
 
 import argparse
 import json
-import struct
 import sys
 from pathlib import Path
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def isco_radius(a_star):
@@ -107,7 +106,7 @@ def generate_lut(resolution_r=256, resolution_a=64, r_min=1.0, r_max=50.0):
         lut: Array of shape [resolution_r, resolution_a, 2]
         metadata: Dict with grid parameters and statistics
     """
-    print(f"Generating Novikov-Thorne LUT...")
+    print("Generating Novikov-Thorne LUT...")
     print(f"  Resolution: {resolution_r} × {resolution_a}")
     print(f"  Radius range: [{r_min}, {r_max}] M")
 
@@ -169,19 +168,19 @@ def generate_lut(resolution_r=256, resolution_a=64, r_min=1.0, r_max=50.0):
     }
 
     # Statistics
-    print(f"\n  Temperature statistics:")
+    print("\n  Temperature statistics:")
     print(f"    Max (normalized): {T_max:.6f}")
     print(f"    Non-zero pixels: {np.sum(T > 0)} / {T.size}")
 
-    print(f"\n  Flux statistics:")
+    print("\n  Flux statistics:")
     print(f"    Max (normalized): {F_max:.6f}")
     print(f"    Non-zero pixels: {np.sum(F > 0)} / {F.size}")
 
-    print(f"\n  ISCO validation:")
+    print("\n  ISCO validation:")
     print(f"    Schwarzschild (a=0): r_ISCO = {isco_radius(0.0):.6f} M (expect 6.0)")
     print(f"    Kerr (a=0.998): r_ISCO = {isco_radius(0.998):.6f} M (expect ~1.24)")
 
-    print(f"\n  Radiative efficiency:")
+    print("\n  Radiative efficiency:")
     print(f"    Schwarzschild (a=0): η = {radiative_efficiency(0.0):.6f} (expect 0.0572)")
     print(f"    Kerr (a=0.998): η = {radiative_efficiency(0.998):.6f} (expect ~0.42)")
 
@@ -201,7 +200,7 @@ def write_binary(lut, output_path):
     size_mb = len(data) / (1024 * 1024)
     print(f"  Size: {size_mb:.2f} MB")
     print(f"  Shape: {lut.shape}")
-    print(f"  Dtype: float32")
+    print("  Dtype: float32")
 
 
 def write_metadata(metadata, output_path):
@@ -215,7 +214,7 @@ def write_metadata(metadata, output_path):
 
 def visualize(lut, metadata, output_path):
     """Generate visualization plots"""
-    print(f"\nGenerating visualization...")
+    print("\nGenerating visualization...")
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
@@ -330,11 +329,11 @@ def main():
 
     # Validate parameters
     if args.resolution < 8 or args.resolution > 4096:
-        print(f"ERROR: Resolution must be in range [8, 4096]", file=sys.stderr)
+        print("ERROR: Resolution must be in range [8, 4096]", file=sys.stderr)
         return 1
 
     if args.resolution_spin < 8 or args.resolution_spin > 512:
-        print(f"ERROR: Spin resolution must be in range [8, 512]", file=sys.stderr)
+        print("ERROR: Spin resolution must be in range [8, 512]", file=sys.stderr)
         return 1
 
     if args.r_min <= 0 or args.r_max <= args.r_min:
@@ -365,14 +364,14 @@ def main():
         visualize(lut, metadata, vis_path)
 
     print("\n✓ LUT generation complete!")
-    print(f"\nUsage in C++:")
-    print(f"  // Load binary LUT")
+    print("\nUsage in C++:")
+    print("  // Load binary LUT")
     print(f'  std::ifstream f("{args.output}", std::ios::binary);')
     print(f"  std::vector<float> lut_data({args.resolution * args.resolution_spin * 2});")
-    print(f"  f.read(reinterpret_cast<char*>(lut_data.data()), lut_data.size() * sizeof(float));")
-    print(f"\nUsage in GLSL:")
-    print(f"  // Upload to GL_TEXTURE_2D_ARRAY or GL_TEXTURE_3D")
-    print(f"  // Sample: vec2 temp_flux = texture(nt_lut, vec2(r_normalized, a_normalized)).rg;")
+    print("  f.read(reinterpret_cast<char*>(lut_data.data()), lut_data.size() * sizeof(float));")
+    print("\nUsage in GLSL:")
+    print("  // Upload to GL_TEXTURE_2D_ARRAY or GL_TEXTURE_3D")
+    print("  // Sample: vec2 temp_flux = texture(nt_lut, vec2(r_normalized, a_normalized)).rg;")
 
     return 0
 

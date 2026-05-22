@@ -30,10 +30,9 @@ Returns:
   2 if solver returns UNKNOWN
 """
 
-import sys
 import argparse
+import sys
 import time
-from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
 try:
@@ -153,7 +152,7 @@ class ISCOVerifier:
         self.config = config
         self.solver = z3.Solver()
         self.solver.set("timeout", config.timeout_ms)
-        self.results: Dict[str, Tuple[str, float]] = {}
+        self.results: dict[str, tuple[str, float]] = {}
 
     def verify(self, goal: ProofGoal) -> bool:
         """Verify a single proof goal"""
@@ -192,7 +191,7 @@ class ISCOVerifier:
                 print(f"  ? UNKNOWN in {elapsed:.3f}s (solver timeout or incomplete)")
             return False
 
-    def verify_all(self, goals: List[ProofGoal]) -> Tuple[int, int, int]:
+    def verify_all(self, goals: list[ProofGoal]) -> tuple[int, int, int]:
         """Verify all goals"""
         passed = 0
         failed = 0
@@ -236,7 +235,7 @@ class ISCOVerifier:
 # ISCO Proof Goals
 # ============================================================================
 
-def create_isco_proof_goals() -> List[ProofGoal]:
+def create_isco_proof_goals() -> list[ProofGoal]:
     """Create proof goals for ISCO verification"""
 
     M = z3.Real("M")
@@ -374,7 +373,7 @@ def main():
     # Print summary
     total = len(goals)
     if args.verbose >= 1:
-        print(f"\n=== Summary ===")
+        print("\n=== Summary ===")
         print(f"Total:   {total}")
         print(f"Passed:  {passed}")
         print(f"Failed:  {failed}")

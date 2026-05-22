@@ -32,9 +32,8 @@ PHASE 9.0.1 ENHANCEMENTS (Lovelace SM_89 Optimization):
 
 import re
 import sys
-from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Tuple, Set
+from pathlib import Path
 
 
 @dataclass
@@ -60,13 +59,13 @@ class Function:
     """Represents a C++ function to be transpiled."""
     name: str
     return_type: str
-    params: List[Tuple[str, str]]  # [(type, name), ...]
+    params: list[tuple[str, str]]  # [(type, name), ...]
     body: str
     comment: str
-    rocq_derivation: Optional[str]
-    rocq_reference: Optional[RocqReference] = None
-    lovelace_optimization: Optional[LovelaceOptimization] = None
-    dependencies: Set[str] = None  # Names of functions this depends on
+    rocq_derivation: str | None
+    rocq_reference: RocqReference | None = None
+    lovelace_optimization: LovelaceOptimization | None = None
+    dependencies: set[str] = None  # Names of functions this depends on
 
     def __post_init__(self):
         if self.dependencies is None:
@@ -77,7 +76,7 @@ class Function:
 class Struct:
     """Represents a C++ struct to be transpiled."""
     name: str
-    fields: List[Tuple[str, str]]  # [(type, name), ...]
+    fields: list[tuple[str, str]]  # [(type, name), ...]
     comment: str
     layout_qualifier: str = "std140"  # GLSL buffer layout (std140, std430, etc.)
 
@@ -91,11 +90,11 @@ class CPPParser:
     def __init__(self, filepath: Path):
         self.filepath = filepath
         self.source = filepath.read_text()
-        self.functions: List[Function] = []
-        self.structs: List[Struct] = []
-        self.constants: Dict[str, str] = {}
+        self.functions: list[Function] = []
+        self.structs: list[Struct] = []
+        self.constants: dict[str, str] = {}
         self.header_comment = ""
-        self.function_names: Set[str] = set()  # For dependency analysis
+        self.function_names: set[str] = set()  # For dependency analysis
 
     def parse(self):
         """Extract all transformable elements from C++ header."""
@@ -131,7 +130,7 @@ class CPPParser:
                 comment=comment.strip() if comment else ""
             ))
 
-    def _parse_struct_fields(self, body: str) -> List[Tuple[str, str]]:
+    def _parse_struct_fields(self, body: str) -> list[tuple[str, str]]:
         """Parse struct field declarations."""
         fields = []
         # Pattern: type name(, name)*;
@@ -188,7 +187,7 @@ class CPPParser:
             )
             self.functions.append(func)
 
-    def _parse_params(self, params_str: str) -> List[Tuple[str, str]]:
+    def _parse_params(self, params_str: str) -> list[tuple[str, str]]:
         """Parse function parameter list."""
         params = []
         if not params_str.strip():
@@ -219,7 +218,7 @@ class CPPParser:
 
         return params
 
-    def _extract_rocq_note(self, comment: str) -> Optional[str]:
+    def _extract_rocq_note(self, comment: str) -> str | None:
         """Extract Rocq derivation reference from comment."""
         if not comment:
             return None
@@ -228,7 +227,7 @@ class CPPParser:
             return "Derived from Rocq:" + match.group(1).strip()
         return None
 
-    def _extract_rocq_reference(self, comment: str) -> Optional[RocqReference]:
+    def _extract_rocq_reference(self, comment: str) -> RocqReference | None:
         """Extract detailed Rocq reference (theorem name, file, line)."""
         if not comment:
             return None
@@ -243,7 +242,7 @@ class CPPParser:
             )
         return None
 
-    def _extract_lovelace_optimization(self, comment: str) -> Optional[LovelaceOptimization]:
+    def _extract_lovelace_optimization(self, comment: str) -> LovelaceOptimization | None:
         """Extract Lovelace-specific optimization hints."""
         if not comment:
             return None
@@ -266,7 +265,7 @@ class CPPParser:
 
         return opt if opt.optimization_notes or opt.l2_cache_friendly else None
 
-    def _extract_dependencies(self, body: str, all_function_names: Set[str]) -> Set[str]:
+    def _extract_dependencies(self, body: str, all_function_names: set[str]) -> set[str]:
         """Extract function dependencies from function body."""
         deps = set()
         # Match function calls: word followed by (
@@ -431,7 +430,7 @@ class GLSLGenerator:
 
         return '\n\n'.join(lines)
 
-    def _topological_sort_functions(self) -> List:
+    def _topological_sort_functions(self) -> list:
         """Sort functions by dependencies (topological sort)."""
         # Build dependency graph
         visited = set()
@@ -473,7 +472,7 @@ class GLSLGenerator:
 
         # Rocq derivation
         if func.rocq_derivation:
-            lines.append(f" *")
+            lines.append(" *")
             lines.append(f" * Rocq Derivation: {func.rocq_derivation[:100]}...")
 
         # Detailed Rocq reference
@@ -485,17 +484,17 @@ class GLSLGenerator:
         # Lovelace optimization hints
         if func.lovelace_optimization:
             opt = func.lovelace_optimization
-            lines.append(f" *")
-            lines.append(f" * LOVELACE OPTIMIZATION:")
+            lines.append(" *")
+            lines.append(" * LOVELACE OPTIMIZATION:")
             lines.append(f" * - Register pressure: {opt.register_pressure} regs/thread")
             if opt.l2_cache_friendly:
-                lines.append(f" * - L2 cache friendly (5 TB/s memory pattern)")
+                lines.append(" * - L2 cache friendly (5 TB/s memory pattern)")
             if opt.optimization_notes:
                 lines.append(f" * - {opt.optimization_notes}")
 
         # Dependencies
         if func.dependencies:
-            lines.append(f" *")
+            lines.append(" *")
             lines.append(f" * Depends on: {', '.join(sorted(func.dependencies))}")
 
         lines.append(" */")

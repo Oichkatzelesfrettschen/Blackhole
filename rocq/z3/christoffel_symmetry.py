@@ -13,6 +13,7 @@ Key Results:
 """
 
 import sys
+
 try:
     import z3
 except ImportError:
@@ -53,7 +54,7 @@ def create_christoffel_proofs():
     solver.add(Gamma_t_tr != Gamma_t_rt)
     
     result1 = solver.check()
-    print(f"  Statement: Γᵗ_tr = Γᵗ_rt for all r > r_s")
+    print("  Statement: Γᵗ_tr = Γᵗ_rt for all r > r_s")
     print(f"  Result: {'✓ PROVEN' if result1 == z3.unsat else '✗ COUNTEREXAMPLE'}")
     if result1 == z3.sat:
         print(f"  Model: {solver.model()}")
@@ -69,7 +70,7 @@ def create_christoffel_proofs():
     solver.add(Gamma_t_tr <= 0)
     
     result2 = solver.check()
-    print(f"  Statement: Γᵗ_tr > 0 for r > r_s")
+    print("  Statement: Γᵗ_tr > 0 for r > r_s")
     print(f"  Result: {'✓ PROVEN' if result2 == z3.unsat else '✗ COUNTEREXAMPLE'}")
     if result2 == z3.sat:
         print(f"  Model: {solver.model()}")
@@ -93,7 +94,7 @@ def create_christoffel_proofs():
     solver.add(z3.And(accel_r > -1e10, accel_r < 1e10))
     
     result3 = solver.check()
-    print(f"  Statement: Radial acceleration is well-defined")
+    print("  Statement: Radial acceleration is well-defined")
     print(f"  Result: {'✓ PROVEN' if result3 == z3.unsat else '✓ SATISFIABLE'}")
     print()
     
@@ -129,8 +130,8 @@ def create_isco_proofs():
     solver.add(r_isco <= r_s)
     
     result1 = solver.check()
-    print(f"  Statement: r_isco = 6M > r_s = 2M")
-    print(f"  Proof: 6M > 2M ⟺ 6 > 2 ✓")
+    print("  Statement: r_isco = 6M > r_s = 2M")
+    print("  Proof: 6M > 2M ⟺ 6 > 2 ✓")
     print(f"  Z3 Verification: {'✓ PROVEN' if result1 == z3.unsat else '✗ FAILED'}")
     print()
     
@@ -143,8 +144,8 @@ def create_isco_proofs():
     solver.add(r_photon <= r_s)
     
     result2 = solver.check()
-    print(f"  Statement: r_photon = 3M > r_s = 2M")
-    print(f"  Proof: 3M > 2M ⟺ 3 > 2 ✓")
+    print("  Statement: r_photon = 3M > r_s = 2M")
+    print("  Proof: 3M > 2M ⟺ 3 > 2 ✓")
     print(f"  Z3 Verification: {'✓ PROVEN' if result2 == z3.unsat else '✗ FAILED'}")
     print()
     
@@ -157,8 +158,8 @@ def create_isco_proofs():
     solver.add(r_isco <= r_photon)
     
     result3 = solver.check()
-    print(f"  Statement: r_isco = 6M > r_photon = 3M")
-    print(f"  Proof: 6M > 3M ⟺ 6 > 3 ✓")
+    print("  Statement: r_isco = 6M > r_photon = 3M")
+    print("  Proof: 6M > 3M ⟺ 6 > 3 ✓")
     print(f"  Z3 Verification: {'✓ PROVEN' if result3 == z3.unsat else '✗ FAILED'}")
     print()
     
@@ -175,8 +176,8 @@ def create_isco_proofs():
     solver.add(z3.And(E_isco > 0.5, E_isco < 0.6))
     
     result4 = solver.check()
-    print(f"  Statement: Energy at ISCO: E_isco = √(1/3) ≈ 0.577")
-    print(f"  Bound: 0.5 < E_isco < 0.6")
+    print("  Statement: Energy at ISCO: E_isco = √(1/3) ≈ 0.577")
+    print("  Bound: 0.5 < E_isco < 0.6")
     print(f"  Z3 Verification: {'✓ SATISFIABLE' if result4 == z3.sat else '✗ UNSATISFIABLE'}")
     if result4 == z3.sat:
         model = solver.model()
@@ -217,8 +218,8 @@ def create_kerr_isco_proofs():
     # At a=0: r_isco should equal 6M (Schwarzschild limit)
     
     # This is complex; we'll verify the Schwarzschild limit separately
-    print(f"  Schwarzschild limit: r_isco = 6M when a = 0")
-    print(f"  Explanation: BPT formula simplifies to Schwarzschild at a=0 ✓")
+    print("  Schwarzschild limit: r_isco = 6M when a = 0")
+    print("  Explanation: BPT formula simplifies to Schwarzschild at a=0 ✓")
     print()
     
     print("Proof 2: ISCO validity for maximally spinning case (a=M)")
@@ -230,9 +231,9 @@ def create_kerr_isco_proofs():
     
     # At a=M: r_isco ≈ M (much closer to horizon than Schwarzschild)
     # The exact value requires numerical evaluation
-    print(f"  Maximally spinning limit: a = M")
-    print(f"  Expected: r_isco ≈ M (close to extremal horizon)")
-    print(f"  Note: Exact value requires numerical evaluation (Z3 symbolic limit)")
+    print("  Maximally spinning limit: a = M")
+    print("  Expected: r_isco ≈ M (close to extremal horizon)")
+    print("  Note: Exact value requires numerical evaluation (Z3 symbolic limit)")
     print()
     
     return True
