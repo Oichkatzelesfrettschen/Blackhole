@@ -15,8 +15,9 @@ References:
     Physical Review, 174(5), 1559-1571.
 """
 
+
 from z3 import *
-import math
+
 
 class KirrConstraintSolver:
     """Solver for Kerr spacetime constraints using Z3 SMT."""

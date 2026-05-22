@@ -12,9 +12,9 @@ import csv
 import json
 import math
 import os
+from collections.abc import Callable
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
-from typing import Callable
 
 # Physical constants (cgs)
 G = 6.67430e-8
@@ -68,7 +68,10 @@ def kerr_photon_orbit_cleanroom(mass: float, spin_param: float, prograde: bool =
 
 def compact_common_refs() -> dict[str, object] | None:
     try:
-        from compact_common.spacetime import kerr_isco, kerr_photon_orbit  # type: ignore
+        from compact_common.spacetime import (  # type: ignore
+            kerr_isco,
+            kerr_photon_orbit,
+        )
 
         try:
             cc_version = version("compact-common")

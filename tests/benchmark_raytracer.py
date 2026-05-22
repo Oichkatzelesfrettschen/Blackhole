@@ -31,15 +31,14 @@ Usage:
   python3 tests/benchmark_raytracer.py --sweep-steps --gpu RTX4090
 """
 
-import sys
-import time
 import argparse
-import numpy as np
-from pathlib import Path
-from dataclasses import dataclass
-from typing import List, Tuple, Optional, Dict
 import json
+import sys
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+
+import numpy as np
 
 # ============================================================================
 # Configuration
@@ -95,7 +94,7 @@ GPU_SPECS = {
 @dataclass
 class BenchmarkConfig:
     """Benchmark configuration parameters"""
-    resolution: Tuple[int, int]
+    resolution: tuple[int, int]
     max_steps: int
     step_size: float
     black_hole_mass: float
@@ -206,7 +205,7 @@ class PerformanceBenchmark:
     def __init__(self, gpu_name: str = "RTX4090"):
         self.gpu_name = gpu_name
         self.gpu_specs = GPU_SPECS.get(gpu_name, GPU_SPECS["RTX4090"])
-        self.context: Optional[BenchmarkContext] = None
+        self.context: BenchmarkContext | None = None
 
     def calculate_mray_per_second(self, fps: float, width: int, height: int) -> float:
         """
@@ -292,7 +291,7 @@ class PerformanceBenchmark:
         self.context.cleanup()
         return result
 
-    def run_resolution_sweep(self, max_steps: int = 1000, verbose: bool = False) -> List[BenchmarkResult]:
+    def run_resolution_sweep(self, max_steps: int = 1000, verbose: bool = False) -> list[BenchmarkResult]:
         """
         Benchmark across multiple resolutions
 
@@ -322,7 +321,7 @@ class PerformanceBenchmark:
 
         return results
 
-    def run_step_sweep(self, resolution: str = "1080p", verbose: bool = False) -> List[BenchmarkResult]:
+    def run_step_sweep(self, resolution: str = "1080p", verbose: bool = False) -> list[BenchmarkResult]:
         """
         Benchmark with varying integration step counts
 
@@ -356,7 +355,7 @@ class PerformanceBenchmark:
 
     def print_result(self, result: BenchmarkResult):
         """Print benchmark result with formatting"""
-        print(f"\nResults:")
+        print("\nResults:")
         print(f"  FPS:              {result.fps:.2f}")
         print(f"  Frame Time:       {result.frame_time_ms:.2f} ms")
         print(f"  Rays/Frame:       {result.rays_per_frame:,}")
@@ -369,7 +368,7 @@ class PerformanceBenchmark:
         status = "PASS ✓" if result.mray_per_second >= target_mray else "BELOW TARGET"
         print(f"  Target Status:    {status} (target: {target_mray} Mray/s)")
 
-    def save_results(self, results: List[BenchmarkResult], filename: str):
+    def save_results(self, results: list[BenchmarkResult], filename: str):
         """Save benchmark results to JSON file"""
         output_path = RESULTS_DIR / filename
 
@@ -433,7 +432,7 @@ class GPUProfiler:
     @staticmethod
     def print_profiling_data(data: ProfilingData):
         """Print profiling metrics"""
-        print(f"\nGPU Profiling Results:")
+        print("\nGPU Profiling Results:")
         print(f"  Registers/Thread:    {data.register_usage}/256 ({data.register_usage/256*100:.1f}%)")
         print(f"  Shared Memory:       {data.shared_memory_kb:.2f} KB/block")
         print(f"  Memory Bandwidth:    {data.memory_bandwidth_used_gbs:.1f} GB/s")
@@ -442,9 +441,9 @@ class GPUProfiler:
 
         # Validate register budget
         if data.register_usage <= 24:
-            print(f"  Register Budget:     PASS ✓ (target: <24 regs/thread)")
+            print("  Register Budget:     PASS ✓ (target: <24 regs/thread)")
         else:
-            print(f"  Register Budget:     FAIL ✗ (exceeds 24 regs/thread)")
+            print("  Register Budget:     FAIL ✗ (exceeds 24 regs/thread)")
 
 
 # ============================================================================
@@ -473,7 +472,7 @@ def main():
     print("Phase 9.0.6: Ray-Tracing Performance Benchmark")
     print("=" * 70)
     print(f"GPU: {args.gpu}")
-    print(f"Target: 100+ Mray/s @ 1080p")
+    print("Target: 100+ Mray/s @ 1080p")
     print("=" * 70)
 
     benchmark = PerformanceBenchmark(gpu_name=args.gpu)

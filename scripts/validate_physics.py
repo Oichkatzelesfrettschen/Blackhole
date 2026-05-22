@@ -7,9 +7,8 @@ Version: 2026.1
 Date: 2026-01-31
 """
 
-import sys
 import math
-from typing import Tuple, List
+import sys
 
 # Physical constants (CGS)
 C = 2.99792458e10          # Speed of light [cm/s]
@@ -302,13 +301,13 @@ def run_all_tests():
 
     if passed == total:
         print(f"\n{GREEN}{'='*60}")
-        print(f"ALL VALIDATIONS PASSED ✓")
-        print(f"Physics implementation correct as of 2026-01-31")
+        print("ALL VALIDATIONS PASSED ✓")
+        print("Physics implementation correct as of 2026-01-31")
         print(f"{'='*60}{RESET}\n")
         return 0
     else:
         print(f"\n{RED}{'='*60}")
-        print(f"SOME VALIDATIONS FAILED ✗")
+        print("SOME VALIDATIONS FAILED ✗")
         print(f"{total - passed} test(s) need attention")
         print(f"{'='*60}{RESET}\n")
         return 1

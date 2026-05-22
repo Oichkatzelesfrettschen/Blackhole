@@ -18,13 +18,14 @@ References:
     - LIGO-Virgo-KAGRA Gravitational Wave Transient Catalog O4
 """
 
-import sys
 import argparse
-import numpy as np
-from scipy import signal, fft
+import sys
+
 import matplotlib
+import numpy as np
+from scipy import signal
+
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 # ============================================================================
 # LIGO Reference Events (published parameters)

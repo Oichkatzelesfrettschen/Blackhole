@@ -26,10 +26,9 @@ Returns:
   2 if solver returns UNKNOWN for fallback to numerical methods
 """
 
-import sys
 import argparse
+import sys
 import time
-from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
 try:
@@ -117,7 +116,7 @@ class ConstraintVerifier:
         self.config = config
         self.solver = z3.Solver()
         self.solver.set("timeout", config.timeout_ms)
-        self.results: Dict[str, Tuple[str, float]] = {}  # name -> (status, time)
+        self.results: dict[str, tuple[str, float]] = {}  # name -> (status, time)
     
     def verify(self, goal: ProofGoal) -> bool:
         """
@@ -154,7 +153,7 @@ class ConstraintVerifier:
                 print(f"  ? UNKNOWN (timeout or too complex) in {elapsed:.3f}s")
             return False
     
-    def verify_all(self, goals: List[ProofGoal]) -> Tuple[int, int, int]:
+    def verify_all(self, goals: list[ProofGoal]) -> tuple[int, int, int]:
         """
         Verify all goals.
         
@@ -186,7 +185,7 @@ class ConstraintVerifier:
 # Proof Suite
 # ============================================================================
 
-def create_schwarzschild_proof_goals() -> List[ProofGoal]:
+def create_schwarzschild_proof_goals() -> list[ProofGoal]:
     """Create proof goals for Schwarzschild metric verification"""
     
     M = z3.Real("M")
@@ -260,7 +259,7 @@ def create_schwarzschild_proof_goals() -> List[ProofGoal]:
     return goals
 
 
-def create_rk4_proof_goals() -> List[ProofGoal]:
+def create_rk4_proof_goals() -> list[ProofGoal]:
     """Create proof goals for RK4 integration error bounds"""
     
     h = z3.Real("h")
@@ -301,7 +300,7 @@ def create_rk4_proof_goals() -> List[ProofGoal]:
     return goals
 
 
-def create_conservation_law_goals() -> List[ProofGoal]:
+def create_conservation_law_goals() -> list[ProofGoal]:
     """Create proof goals for conservation law verification"""
     
     M = z3.Real("M")
@@ -387,7 +386,7 @@ def main():
     # Print summary
     total = len(all_goals)
     if args.verbose >= 1:
-        print(f"\n=== Summary ===")
+        print("\n=== Summary ===")
         print(f"Total: {total}")
         print(f"Passed: {passed}")
         print(f"Failed: {failed}")

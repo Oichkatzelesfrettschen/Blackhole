@@ -15,10 +15,11 @@ Physical formulas from hawking.h:
 Phase 10.1: Quick path implementation for Hawking thermal glow
 """
 
-import numpy as np
 import csv
 import json
 from pathlib import Path
+
+import numpy as np
 
 # ============================================================================
 # Physical Constants (CGS units to match C++ implementation)

@@ -34,13 +34,8 @@ Usage:
 """
 
 import sys
-import numpy as np
-import subprocess
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
-import struct
-import json
+from pathlib import Path
 
 # ============================================================================
 # Configuration and Constants
@@ -94,7 +89,7 @@ class TestCase:
     name: str
     description: str
     black_hole: BlackHoleParams
-    pixels_to_test: List[PixelTest]
+    pixels_to_test: list[PixelTest]
     enable_energy_conservation: bool = True
     enable_redshift: bool = True
     max_steps: int = 1000
@@ -105,7 +100,7 @@ class TestCase:
 # Test Cases Definition
 # ============================================================================
 
-TEST_CASES: List[TestCase] = [
+TEST_CASES: list[TestCase] = [
     TestCase(
         name="SCHWARZSCHILD",
         description="Non-rotating black hole (a=0)",
@@ -204,7 +199,7 @@ class GPUContext:
         print(f"[GPU] Stub: Rendering with a={params.spin:.3f}M")
         return True
 
-    def read_pixel(self, x: int, y: int) -> Tuple[float, float, float, float]:
+    def read_pixel(self, x: int, y: int) -> tuple[float, float, float, float]:
         """
         Read RGBA pixel value from framebuffer
 
@@ -234,7 +229,7 @@ class CPUReference:
     """
 
     @staticmethod
-    def compute_expected_pixel(params: BlackHoleParams, x: int, y: int) -> Tuple[float, float, float]:
+    def compute_expected_pixel(params: BlackHoleParams, x: int, y: int) -> tuple[float, float, float]:
         """
         Compute expected pixel value using C++23 reference implementation
 
@@ -262,9 +257,9 @@ class CPUReference:
 # Test Validation
 # ============================================================================
 
-def compare_pixels(gpu_rgb: Tuple[float, float, float],
-                   cpu_rgb: Tuple[float, float, float],
-                   tolerance: float = PARITY_TOLERANCE) -> Tuple[bool, float]:
+def compare_pixels(gpu_rgb: tuple[float, float, float],
+                   cpu_rgb: tuple[float, float, float],
+                   tolerance: float = PARITY_TOLERANCE) -> tuple[bool, float]:
     """
     Compare GPU and CPU pixel values with tolerance
 
@@ -340,7 +335,7 @@ class TestRunner:
 
         return all_passed
 
-    def run_all(self, filter_name: Optional[str] = None) -> int:
+    def run_all(self, filter_name: str | None = None) -> int:
         """Run all test cases, optionally filtered"""
         passed_count = 0
         failed_count = 0

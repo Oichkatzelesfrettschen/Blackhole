@@ -14,6 +14,7 @@ Key Results:
 """
 
 import sys
+
 try:
     import z3
 except ImportError:
@@ -58,10 +59,10 @@ def create_conservation_proofs():
     
     # Conserved quantity: ∂E/∂λ = 0 (conservation statement)
     # This is a statement about the structure of the metric, not the solver proof
-    print(f"  Statement: Energy E = -g_tt·v^t is conserved")
-    print(f"  Proof: ∂E/∂λ = -∂g_tt/∂λ·v^t - g_tt·∂v^t/∂λ")
-    print(f"         = 0 + 0 = 0  (metric time-independent, geodesic eq)")
-    print(f"  Result: ✓ CONSERVED")
+    print("  Statement: Energy E = -g_tt·v^t is conserved")
+    print("  Proof: ∂E/∂λ = -∂g_tt/∂λ·v^t - g_tt·∂v^t/∂λ")
+    print("         = 0 + 0 = 0  (metric time-independent, geodesic eq)")
+    print("  Result: ✓ CONSERVED")
     print()
     
     # Angular momentum conservation
@@ -75,10 +76,10 @@ def create_conservation_proofs():
     solver.add(r > 2*M)
     solver.add(g_phph > 0)
     
-    print(f"  Statement: Angular momentum L = g_φφ·v^φ is conserved")
-    print(f"  Proof: ∂L/∂λ = ∂g_φφ/∂λ·v^φ + g_φφ·∂v^φ/∂λ")
-    print(f"         = 0 + g_φφ·Γ^φ = 0  (metric independent of φ)")
-    print(f"  Result: ✓ CONSERVED")
+    print("  Statement: Angular momentum L = g_φφ·v^φ is conserved")
+    print("  Proof: ∂L/∂λ = ∂g_φφ/∂λ·v^φ + g_φφ·∂v^φ/∂λ")
+    print("         = 0 + g_φφ·Γ^φ = 0  (metric independent of φ)")
+    print("  Result: ✓ CONSERVED")
     print()
     
     # Proof 3: Relativistic energy positivity
@@ -93,8 +94,8 @@ def create_conservation_proofs():
     solver.add(E <= 0)
     
     result3 = solver.check()
-    print(f"  Statement: E = -g_tt·v^t > 0 for timelike observers")
-    print(f"  Proof: g_tt < 0 and v^t > 0 ⟹ E > 0")
+    print("  Statement: E = -g_tt·v^t > 0 for timelike observers")
+    print("  Proof: g_tt < 0 and v^t > 0 ⟹ E > 0")
     print(f"  Z3 Verification: {'✓ PROVEN' if result3 == z3.unsat else '✗ FAILED'}")
     print()
     
@@ -138,8 +139,8 @@ def create_null_constraint_proofs():
     
     # This is satisfiable; we're verifying it's achievable
     result1 = solver.check()
-    print(f"  Statement: g_μν·v^μ·v^ν = 0 for null geodesics")
-    print(f"  Proof: Can be satisfied by appropriate choice of velocities")
+    print("  Statement: g_μν·v^μ·v^ν = 0 for null geodesics")
+    print("  Proof: Can be satisfied by appropriate choice of velocities")
     print(f"  Z3 Verification: {'✓ SATISFIABLE' if result1 == z3.sat else '✗ UNSATISFIABLE'}")
     if result1 == z3.sat:
         model = solver.model()
@@ -166,8 +167,8 @@ def create_null_constraint_proofs():
     solver.add(drift_bound < tolerance)
     
     result2 = solver.check()
-    print(f"  Statement: |drift| <= C·h^4 per RK4 step")
-    print(f"  Step size h = 0.01: drift <= 10^-8")
+    print("  Statement: |drift| <= C·h^4 per RK4 step")
+    print("  Step size h = 0.01: drift <= 10^-8")
     print(f"  Z3 Verification: {'✓ SATISFIABLE' if result2 == z3.sat else '✗ UNSATISFIABLE'}")
     print()
     
@@ -183,8 +184,8 @@ def create_null_constraint_proofs():
     solver.add(z3.And(total_drift > 0, total_drift < 1e-2))
     
     result3 = solver.check()
-    print(f"  Statement: After N steps, |total_drift| <= N·C·h^4")
-    print(f"  Example: N=1000, h=0.1: drift <= 1e-2")
+    print("  Statement: After N steps, |total_drift| <= N·C·h^4")
+    print("  Example: N=1000, h=0.1: drift <= 1e-2")
     print(f"  Z3 Verification: {'✓ SATISFIABLE' if result3 == z3.sat else '✗ UNSATISFIABLE'}")
     print()
     
@@ -240,10 +241,10 @@ def create_renormalization_proofs():
     # After renormalization: new norm should be ±1 (then rescale to 0)
     norm_new = g_tt * v_t_new * v_t_new + g_rr * v_r_new * v_r_new + g_phph * v_phi_new * v_phi_new
     
-    print(f"  Statement: Renormalization v^μ → v^μ/√|λ| restores null condition")
-    print(f"  Mechanism: scale = √|g_μν·v^μ·v^ν|")
-    print(f"             v^μ_new = v^μ / scale")
-    print(f"  Result: Achieves near-zero constraint at moderate cost")
+    print("  Statement: Renormalization v^μ → v^μ/√|λ| restores null condition")
+    print("  Mechanism: scale = √|g_μν·v^μ·v^ν|")
+    print("             v^μ_new = v^μ / scale")
+    print("  Result: Achieves near-zero constraint at moderate cost")
     print()
     
     # Effectiveness: how much renormalization needed
@@ -265,9 +266,9 @@ def create_renormalization_proofs():
     solver.add(z3.And(total_drift > 1e-8, total_drift < 1e-6))
     
     result = solver.check()
-    print(f"  Drift per step: ~1e-7 (RK4 + float32)")
-    print(f"  Renormalize after: ~10 steps")
-    print(f"  Cost: One norm computation + one rescaling per 10 steps (~1% overhead)")
+    print("  Drift per step: ~1e-7 (RK4 + float32)")
+    print("  Renormalize after: ~10 steps")
+    print("  Cost: One norm computation + one rescaling per 10 steps (~1% overhead)")
     print()
     
     return True
