@@ -1,0 +1,4 @@
+* master                                              a50957dcc3 [origin/master: ahead 32, behind 221] Squashed commit of the following:
+  remotes/origin/HEAD                                 -> origin/master
+  remotes/origin/feat/mathematical-kernel-foundations 06d9c8bf1c Okay, I've made some significant progress on the mathematical kernel foundations. Here's a summary of the updates:
+  remotes/origin/master                               c9a4d1a581 tests

@@ -1,0 +1,12 @@
+## default...origin/default
+ M Makefile
+ M h/em_table_lib.lua
+ M modules/src/data/warnings.h
+ M util/LLgen/src/Lpars.h
+ M util/LLgen/src/extern.h
+ M util/cmisc/tabgen.c
+?? .ninja_log
+?? .obj/
+?? compile_commands.json
+?? mach/v7x86/
+?? plat/v7x86/

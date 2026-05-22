@@ -1,0 +1,136 @@
+diff --git a/Makefile b/Makefile
+index 2624d43..486d439 100644
+--- a/Makefile
++++ b/Makefile
+@@ -5,12 +5,12 @@
+ 
+ # What platform to build for by default?
+ 
+-DEFAULT_PLATFORM ?= pc86
++DEFAULT_PLATFORM ?= v7x86
+ 
+ # Which architectures should get built?
+ 
+ $(if $(PLATS), $(error Don't set PLATS on the command line, because reasons. Edit the Makefile instead.))
+-PLATS = all
++PLATS = v7x86
+ # PLATS = linux386 linuxppc linuxmips
+ 
+ # Where should the ACK put its temporary files?
+diff --git a/h/em_table_lib.lua b/h/em_table_lib.lua
+index b5d1596..9136c00 100644
+--- a/h/em_table_lib.lua
++++ b/h/em_table_lib.lua
+@@ -4,8 +4,8 @@ end
+ 
+ function load_table()
+ 	local specs = {}
+-	for line in io.lines() do
+-		line = strip(line)
++	for raw_line in io.lines() do
++		local line = strip(raw_line)
+ 		if line == "" then
+ 			break
+ 		end
+@@ -27,8 +27,8 @@ function load_table()
+ 
+ 	local pseudos = {}
+ 	local pseudo_count = 0
+-	for line in io.lines() do
+-		line = strip(line)
++	for raw_line in io.lines() do
++		local line = strip(raw_line)
+ 		if line == "" then
+ 			break
+ 		end
+@@ -48,8 +48,8 @@ function load_table()
+ 
+ 	local mnems = {}
+ 	local mnem_count = 0
+-	for line in io.lines() do
+-		line = strip(line)
++	for raw_line in io.lines() do
++		local line = strip(raw_line)
+ 		if line == "" then
+ 			break
+ 		end
+diff --git a/modules/src/data/warnings.h b/modules/src/data/warnings.h
+index f320b9f..6ecaf56 100644
+--- a/modules/src/data/warnings.h
++++ b/modules/src/data/warnings.h
+@@ -1,6 +1,16 @@
+ #ifndef DIAGNOSTICS_H
+ #define DIAGNOSTICS_H
+ 
++/* NORETURN: function-attribute marker for functions that never return.
++ * Modern GCC/clang have __attribute__; older toolchains get an empty stub. */
++#ifndef NORETURN
++#if defined(__GNUC__) || defined(__clang__)
++#define NORETURN __attribute__((noreturn))
++#else
++#define NORETURN
++#endif
++#endif
++
+ extern const char* program_name;
+ 
+ extern void warning(const char* fmt, ...);
+diff --git a/util/LLgen/src/Lpars.h b/util/LLgen/src/Lpars.h
+index d7ee159..016e2e1 100644
+--- a/util/LLgen/src/Lpars.h
++++ b/util/LLgen/src/Lpars.h
+@@ -1,4 +1,15 @@
+ /* LLgen generated code from source . */
++
++/* UNREACHABLE_CODE: marker for code paths the compiler must trust are dead.
++ * Modern GCC/clang have a builtin; older toolchains get an empty stmt. */
++#ifndef UNREACHABLE_CODE
++#if defined(__GNUC__) || defined(__clang__)
++#define UNREACHABLE_CODE __builtin_unreachable()
++#else
++#define UNREACHABLE_CODE do { } while (0)
++#endif
++#endif
++
+ #define EOFILE 256
+ #define LLILLEGAL 257
+ #define C_IDENT 258
+diff --git a/util/LLgen/src/extern.h b/util/LLgen/src/extern.h
+index ab6736b..3939ef8 100644
+--- a/util/LLgen/src/extern.h
++++ b/util/LLgen/src/extern.h
+@@ -5,6 +5,14 @@
+ #ifndef EXTERN_H_
+ #define EXTERN_H_
+ 
++/* UNREACHABLE_CODE: marker for paths the compiler must trust are dead.
++ * Modern GCC/clang have a builtin; older toolchains get an empty stmt. */
++#if defined(__GNUC__) || defined(__clang__)
++#define UNREACHABLE_CODE __builtin_unreachable()
++#else
++#define UNREACHABLE_CODE do { } while (0)
++#endif
++
+ /*
+  *  L L G E N
+  *
+diff --git a/util/cmisc/tabgen.c b/util/cmisc/tabgen.c
+index 9382f9b..457a9e7 100644
+--- a/util/cmisc/tabgen.c
++++ b/util/cmisc/tabgen.c
+@@ -9,6 +9,15 @@
+     Many mods by Ceriel Jacobs
+ */
+ 
++/* UNREACHABLE_CODE: marker for dead code paths after exhaustive switches. */
++#ifndef UNREACHABLE_CODE
++#if defined(__GNUC__) || defined(__clang__)
++#define UNREACHABLE_CODE __builtin_unreachable()
++#else
++#define UNREACHABLE_CODE do { } while (0)
++#endif
++#endif
++
+ #include <ctype.h>
+ #include <stdio.h>
+ #include <stdlib.h>
