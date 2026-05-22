@@ -338,7 +338,8 @@ ctest --test-dir build/Release -R "tool_z3"
 - Z3 SMT solver 4.12+
 
 **Optional:**
-- gcovr (code coverage for tools/)
+- gcovr on PATH (code coverage for tools/; archived vendored provenance is
+  kept in `tools/gcovr/`)
 
 ---
 

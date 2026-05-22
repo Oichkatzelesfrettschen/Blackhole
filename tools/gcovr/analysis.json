@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "name": "gcovr-python-vendored-source",
+  "classification": "archived-vendored-python-tooling",
+  "source": {
+    "repository": "Blackhole",
+    "path_before_archival": "tools/gcovr",
+    "source_commit": "f96f2eda18510a361730c78c1a693025a3dadf64"
+  },
+  "archive": {
+    "path": "tools/gcovr/gcovr-python-8.4-vendored-source.tar.gz",
+    "root": "gcovr-python-8.4-vendored-source/tools/gcovr",
+    "format": "tar.gz",
+    "sha256": "edca5615e829ffd7719df567a5ebd2203b9c88fdf32012ffc19c501098f040ce",
+    "bytes": 1880711,
+    "created_by": "git archive --format=tar --prefix=gcovr-python-8.4-vendored-source/ origin/main tools/gcovr | gzip -n"
+  },
+  "tracked_payload": {
+    "file_count": 670,
+    "uncompressed_bytes": 8613855,
+    "entrypoints": [
+      "tools/gcovr/bin/gcovr",
+      "tools/gcovr/bin/pygmentize"
+    ],
+    "file_classes": {
+      "python_files": 452,
+      "dist_info_files": 39,
+      "c_files": 1,
+      "header_files": 79,
+      "cython_related_files": 44,
+      "template_doc_files": 54
+    }
+  },
+  "python_distributions": [
+    {
+      "name": "gcovr",
+      "version": "8.4",
+      "summary": "Generate C/C++ code coverage reports with gcov"
+    },
+    {
+      "name": "colorlog",
+      "version": "6.10.1",
+      "summary": "Add colours to the output of Python's logging module."
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "summary": "A very fast and expressive template engine."
+    },
+    {
+      "name": "lxml",
+      "version": "6.0.2",
+      "summary": "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3",
+      "summary": "Safely add untrusted strings to HTML/XML markup."
+    },
+    {
+      "name": "Pygments",
+      "version": "2.19.2",
+      "summary": "Pygments is a syntax highlighting package written in Python."
+    }
+  ],
+  "runtime_decision": {
+    "executable_source": "developer PATH",
+    "cmake_lookup": "find_program(GCOVR_EXE NAMES \"gcovr\")",
+    "archive_is_runtime_environment": false,
+    "reason": "The vendored tree records the coverage tooling payload, but lxml and MarkupSafe include native-extension source surfaces that should be resolved by a target-native Python installation when gcovr is executed."
+  }
+}
