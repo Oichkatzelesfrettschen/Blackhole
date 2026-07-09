@@ -35,8 +35,9 @@ never compile, including the only shader-output correctness tests
 (`tests/glsl_parity_test.cpp`, `tests/gpu_cpu_parity_test.cpp`).
 
 **Generator: copy-then-diverge.** Facts and files are duplicated, then one
-copy rots: `blender_addon/` is a byte-identical LFS-verified duplicate of
-`blender/addon`; `src/grmhd/grmhd_streaming.cpp` is a stale 6.5KB skeleton of
+copy rots: `blender_addon/` is the abandoned fork ancestor of
+`blender/addon` (161 stale-only lines, every one superseded by a rewrite
+on the canonical side); `src/grmhd/grmhd_streaming.cpp` is a stale 6.5KB skeleton of
 the real, built `src/grmhd_streaming.cpp` (13KB, nlohmann/json); the backlog
 issue table is duplicated divergently in `roadmap.md:459-476`; two phase
 taxonomies coexist (CHANGELOG "Phase 10.1" vs roadmap "Phase 6 COMPLETE");
@@ -167,8 +168,11 @@ three docs and disagree.
 
 - ORG-1 (HIGH) infer-out/ commits SQLite WAL/SHM transients while
   .gitignore:79 ignores the dir -- the rule is a no-op for tracked files.
-- ORG-2 (HIGH) blender_addon/ duplicates blender/addon byte-for-byte
-  (identical file lists and LFS hashes); pyproject references only blender/.
+- ORG-2 (HIGH) blender_addon/ is the abandoned ancestor of a fork whose
+  successor is blender/addon: identical file lists and LFS blob hashes,
+  but 9 Python files diverge with 161 stale-only lines, all superseded by
+  canonical-side rewrites (verified hunk-by-hunk 2026-07-09); pyproject
+  references only blender/. RESOLVED 2026-07-09: tree removed.
 - ORG-3 (HIGH) rocq/ tracks ~60 compiled proof artifacts (.vo/.vos/.vok/
   .glob/.aux, Makefile.coq*) alongside legitimate .v sources.
 - ORG-4 (MED) Three dated dirs at repo root are unrelated hygiene archives
@@ -281,8 +285,11 @@ brackets.
 - DETOX-2 `git rm --cached` the ~60 rocq build artifacts; add *.vo *.vos
   *.vok *.glob *.aux .*.cache Makefile.coq* to .gitignore (keep .v/.ml
   sources). [rocq/ tracked files are sources only]
-- DETOX-3 Delete blender_addon/ from tracking after diffing against
-  blender/addon one final time. [single addon tree; pyproject still green]
+- DETOX-3 DONE 2026-07-09. The final diff falsified the byte-identical
+  claim: 161 stale-only lines across 9 files, each verified as the
+  pre-rewrite ancestor of a canonical-side successor (quality tiers,
+  Dream Textures modal flow, material variant purge). Tree deleted;
+  git history retains the ancestor. [single addon tree; pyproject green]
 - DETOX-4 Move openmach-*/, v7x86-*/, repo-hygiene-sweep-*/ to a
   hygiene-archive branch; remove from main tracking; drop their
   .gitattributes -diff rules. [repo root contains only renderer-related
