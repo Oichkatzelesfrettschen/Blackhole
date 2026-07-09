@@ -392,7 +392,7 @@
 - `loadTile()`: seeks to per-frame byteOffset in binary, reads RGBA32F voxel slab.
 
 **Physics Math Lacunae Reference**
-- `docs/PHYSICS_MATH_LACUNAE.md` (written 2026-02-27): structured analysis of remaining
+- `docs/physics/lacunae.md` (written 2026-02-27): structured analysis of remaining
   physics/math/perf gaps covering GRMHD, RTE, 4D slicing, GW, integrator, NP formalism,
   float32 horizon precision, and Conan library mapping.
 

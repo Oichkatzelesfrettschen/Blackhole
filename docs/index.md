@@ -22,6 +22,7 @@ GLSL and CUDA lanes, and Blender bridge integration.
 - [Octane Requirements](requirements/octane.md) -- optional Octane-backed Blender lane
 - [Roadmap](developer-guide/roadmap.md) -- master development roadmap
 - [Backlog](developer-guide/backlog.md) -- bug fixes and TODO items
+- [Debt Ledger](developer-guide/debt-ledger.md) -- audited debt taxonomy and remediation roadmap
 - [Build Optimization](developer-guide/build-optimization.md) -- compile-time optimization
 - [SIMD](developer-guide/simd.md) -- SIMD vectorization guide
 - [GLSL Build](developer-guide/glsl-build.md) -- shader compilation workflow

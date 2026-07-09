@@ -1,0 +1,494 @@
+# Debt Ledger and Remediation Roadmap
+
+**Last Updated:** 2026-07-09
+**Baseline:** commit c1a1118 (main, clean tree)
+**Owner docs:** `backlog.md` (issue table), `status.md` (current state),
+`repo-truth.md` (generated counts). This ledger owns debt classification and
+the remediation ordering; when an item ships, it moves to `status.md` history.
+
+This ledger records every debt class found by a full-repo audit (five scoped
+sweeps: deferred-work markers, build/package/workspace, tests/verification,
+docs/organization, structure/architecture) plus an instrumented capture
+(cscope cross-reference, lizard complexity, scc metrics; see Appendix A).
+Every finding carries file:line evidence gathered at the baseline commit.
+
+Naming: findings are keyed by debt class (STRUCT-, TEST-, BUILD-, ORG-,
+DOC-, PHYS-, METHOD-); remediation tasks are keyed by their tranche's
+mechanism name (DETOX-, ABSENCE-, CANON-, FACTS-, STATE-, VERIFY-,
+FIDELITY-, BLENDER-). No key needs a glossary.
+
+---
+
+## 1. Root-cause generators
+
+Nearly every finding below is an instance of one of three generators. Fixing
+generator instances without the generator reproduces the debt.
+
+**Generator: silent-absence -- absence is not an error.** The build treats
+missing things as silently fine: ~55 `if(EXISTS tests/...)` guards vanish a
+renamed test with no diagnostic (CMakeLists.txt:3459, 3504, 3547, ...);
+`find_program` silently disables coverage (gcovr, CMakeLists.txt:1722),
+shader validation (glslangValidator, :1577), and Z3 verification (:4689);
+dependency-gated tests (`TARGET nubhlight_pack`, :3543) skip with a STATUS
+message CI never reads. Direct product: seven orphaned test sources that
+never compile, including the only shader-output correctness tests
+(`tests/glsl_parity_test.cpp`, `tests/gpu_cpu_parity_test.cpp`).
+
+**Generator: copy-then-diverge.** Facts and files are duplicated, then one
+copy rots: `blender_addon/` is a byte-identical LFS-verified duplicate of
+`blender/addon`; `src/grmhd/grmhd_streaming.cpp` is a stale 6.5KB skeleton of
+the real, built `src/grmhd_streaming.cpp` (13KB, nlohmann/json); the backlog
+issue table is duplicated divergently in `roadmap.md:459-476`; two phase
+taxonomies coexist (CHANGELOG "Phase 10.1" vs roadmap "Phase 6 COMPLETE");
+GLSL/CUDA share verbatim-copied comments that already drift
+(kerr.glsl:64 vs device_physics.cuh:306).
+
+**Generator: fanned-facts -- one fact hand-edited in N places.** A
+CUDA-visible uniform touches 5-6 sites (InteropUniforms struct
+src/main.cpp:1041-1078, applyInteropUniforms :1112-1153, inline
+rtti.*Uniforms block :4999-5104, applyInteropComputeUniforms :1158-1207,
+BH_LaunchParams src/cuda/kernel_launch.h:28, cp.* fill :5106-5193, plus
+`__constant__` decls in device_physics.cuh); the synchrotron LUT domain
+X_MIN/X_MAX is a literal in four files (synchrotron.h,
+synchrotron_emission.glsl:88-89, device_physics.cuh:32-33, lut_texture.h)
+with a comment saying "change all three together"; the 20-target
+-fno-fast-math list is maintained by hand; test counts are hand-written into
+three docs and disagree.
+
+---
+
+## 2. Debt taxonomy and findings
+
+### 2.1 Structural debt
+
+- STRUCT-1 (CRITICAL) `main()` at src/main.cpp:2627 is 3,046 NLOC,
+  cyclomatic complexity 675, calls 871 unique functions (cscope). The
+  blocker for any decomposition is the block of 233 function-local statics
+  at src/main.cpp:2804-3440 -- no struct owns the render state, so every
+  panel and dispatch site takes references into `main()`'s frame.
+- STRUCT-2 (HIGH) Uniform plumbing fans one uniform across 5-6 hand-edited
+  sites (generator: fanned-facts); string-keyed `rtti.floatUniforms["name"]`
+  maps fail silently at runtime on typos.
+- STRUCT-3 (HIGH) Physics triplication across three unit conventions: C++
+  CGS (constants.h:58), GLSL r_s=1 uniform-driven (physics_constants.glsl:6),
+  CUDA d_rs=2M (device_physics.cuh:27,44). `unit_system.h` is the only
+  bridge; the synchrotron LUT domain is a 4-site literal (generator:
+  fanned-facts).
+- STRUCT-4 (HIGH) Kerr-Schild coordinates exist only in GLSL
+  (shader/include/kerr_schild.glsl); no C++ oracle, no CUDA port. The GLSL
+  tests validate against C++ tests of formulas the shader re-derives, not
+  against a shared source.
+- STRUCT-5 (MED) Duplicate module: src/grmhd/grmhd_streaming.{cpp,h} is a
+  stale skeleton; CMake builds only src/grmhd_streaming.cpp
+  (CMakeLists.txt:1130). src/gpu reaches upward via `../grmhd_streaming.h`
+  includes.
+- STRUCT-6 (MED) Vendored code inside src/: imgui_impl_glfw.cpp,
+  imgui_impl_opengl3.cpp carry all 13 FIXME and all 14 XXX markers in the
+  repo and pollute first-party complexity metrics (CCN-120 function).
+- STRUCT-7 (MED) src/physics/physics_test.cpp is a test living in src/;
+  gravitational_waves.h is a 1,478-line all-inline header (compile cost);
+  stokes_transport.h 749L, batch.h 740L template-heavy.
+- STRUCT-8 (LOW) Layering is otherwise clean: physics and cuda are leaves,
+  no include cycles; blender_bridge depends one-way on core (8 physics
+  headers + kernel_launch.h via fragile `../` relative paths); core never
+  includes blender_bridge.
+
+### 2.2 Test and verification debt
+
+- TEST-1 (HIGH) Seven orphaned test sources never build:
+  glsl_parity_test.cpp, gpu_cpu_parity_test.cpp,
+  gpu_raytracer_kernel_test.cpp, kerr_geodesic_test.cpp,
+  verified_physics_test.cpp, verify_headers_compile.cpp,
+  metric_parity_test.cpp (the last registered only by the orphan standalone
+  tests/CMakeLists.txt, which root CMake never add_subdirectory's).
+  noise_math_audit.cpp likewise unreferenced.
+- TEST-2 (HIGH) Verification theater risk: the "verified physics" layer
+  exists in four systems and none is enforced -- verified_physics_test.cpp
+  orphaned; rocq/ proofs never referenced by any build file;
+  z3_verification_test skipped when Z3 absent (CMakeLists.txt:4689); the
+  GLSL verified/ modules stub their integrators because GLSL lacks function
+  pointers (energy_conserving_geodesic.glsl:178,
+  null_constraint.glsl:420,599 -- steps return unstepped state).
+- TEST-3 (HIGH) CI (.github/workflows/ci.yml) is single-OS single-config
+  Release; ENABLE_CUDA defaults OFF (CMakeLists.txt:341) so all 8 CUDA tests
+  never run in CI; no sanitizer, coverage, fuzz, or benchmark job despite
+  all options existing; fuzzers additionally require clang while CI uses gcc
+  (CMakeLists.txt:5450).
+- TEST-4 (HIGH) No golden-image or render-regression test exists for GL or
+  CUDA output; the only shader gate is syntax-only glslangValidator
+  (CMakeLists.txt:1566). scripts/compare_raw_texblackhole.py is unwired.
+- TEST-5 (HIGH) safe_limits.h -- the site of the documented fast-math
+  infinity()=0 workaround -- has no test; a regression silently reintroduces
+  the bug class.
+- TEST-6 (MED) Coverage is dead: ENABLE_COVERAGE off in CI, gcovr archived
+  (commit f54f355), coverage-report target silently self-disables
+  (CMakeLists.txt:1722). No measured number exists.
+- TEST-7 (MED) bench/README.md documents bench/ci_bench.sh and
+  scripts/check_bench_regression.py; neither file exists.
+- TEST-8 (MED) Core metric/geodesic .cpp (kerr.cpp, geodesics.cpp,
+  schwarzschild.cpp) have no dedicated registered unit test (only the
+  physics_test runner plus orphaned dedicated files). Untested headers
+  include batch.h, conservation_monitor.h, event_detection.h, lut.h,
+  simd_dispatch.h, thin_disk.h, unit_system.h; src/gpu/lut_texture.h;
+  render/noise_texture_cache.
+- TEST-9 (MED) Test/benchmark Python harnesses are stubs that never touch
+  GL: tests/gpu_parity_harness.py:142ff, tests/benchmark_raytracer.py:157ff
+  return constants.
+- TEST-10 (LOW) tests use -Werror with a hand -Wno-stack-usage escape
+  (CMakeLists.txt:3474); brittle across compiler upgrades.
+
+### 2.3 Build, package, and reproducibility debt
+
+- BUILD-1 (HIGH) No conan.lock exists; conanfile.py pins direct versions
+  with 9 override=True forces (conanfile.py:49-130) but transitive
+  resolution is unreproducible over time.
+- BUILD-2 (MED) validate() checks C++23 only when cppstd is set
+  (conanfile.py:141-146); unset cppstd skips the check.
+- BUILD-3 (MED) ENABLE_FAST_MATH defaults ON (CMakeLists.txt:669) while 20
+  test targets hand-carry -fno-fast-math overrides and a Rocq proof tree
+  checks the same numerics under IEEE semantics. The _FORTIFY_SOURCE=3
+  interaction (CMakeLists.txt:1003) that motivated the pattern is
+  documented only partially (status.md Phase 1.2.7 note; no CMake comment
+  ties membership of the 20-target list to the root cause).
+- BUILD-4 (MED) ENABLE_NATIVE_ARCH defaults ON -> -march=native binaries
+  (CMakeLists.txt:427); non-portable artifacts by default.
+- BUILD-5 (MED) scripts/fetch_implot.sh:4 pins vendored ImPlot to `master`;
+  FetchContent deps pin tags, not SHAs (imnodes :299, autodiff :309,
+  amrex :327). cfitsio is system-only via pkg-config with the conan/system
+  split undocumented (CMakeLists.txt:85-100).
+- BUILD-6 (MED) Hardcoded /home/eirikr paths in generate_grb_luts.py:54
+  (points outside the repo), run_glsl_showcase_sweep.py:46-57,
+  run_glsl_headless.py:22-27, askpass-unified.sh:13-15.
+- BUILD-7 (LOW) conan/recipes carries unused tracy/0.12.2 and rmlui/4.4
+  trees (conanfile requires 0.13.1 and 6.1); 5-branch elseif(EXISTS)
+  toolchain probe (CMakeLists.txt:25-31).
+
+### 2.4 Organizational / workspace debt
+
+- ORG-1 (HIGH) infer-out/ commits SQLite WAL/SHM transients while
+  .gitignore:79 ignores the dir -- the rule is a no-op for tracked files.
+- ORG-2 (HIGH) blender_addon/ duplicates blender/addon byte-for-byte
+  (identical file lists and LFS hashes); pyproject references only blender/.
+- ORG-3 (HIGH) rocq/ tracks ~60 compiled proof artifacts (.vo/.vos/.vok/
+  .glob/.aux, Makefile.coq*) alongside legitimate .v sources.
+- ORG-4 (MED) Three dated dirs at repo root are unrelated hygiene archives
+  (openmach-lites-header-stubs-20260521/, v7x86-32-vendor-subprojects-
+  20260521/, repo-hygiene-sweep-20260521/) containing .tar.gz blobs tracked
+  in plain git (no LFS rule for *.tar.gz); .gitattributes:9-11 already
+  marks them -diff. tools/gcovr carries a vendored tarball.
+- ORG-5 (HIGH) The "Blender is a separate project" boundary holds
+  structurally (one-way includes) but not in the build: 516 Blender
+  references in CMakeLists.txt, find_program(BLENDER_EXECUTABLE) and ~40
+  BLENDER_*/DREAM_TEXTURES_* vars configured unconditionally (:1733,
+  :1738-1770) ignoring ENABLE_BLENDER_BRIDGE=OFF (:379); 34 of 78 scripts/
+  files are Blender/Octane/Dream-Textures integration.
+
+### 2.5 Documentation / canon debt
+
+- DOC-1 (HIGH) Two phase taxonomies: CHANGELOG.md:321-322 ("Phase 10.1
+  complete, next Phase 11") vs roadmap.md:393 ("Phase 6 COMPLETE");
+  status.md uses both (:349 vs :541).
+- DOC-2 (HIGH) Test counts disagree: roadmap.md:65 ("5 tests"),
+  status.md:269 ("70/70"), status.md:324 ("34/36"), roadmap.md:370
+  ("53/53"); repo-truth.md:48-53 already names the generated report as
+  truth.
+- DOC-3 (HIGH) AGENTS.md:15 points to a root requirements.md that no longer
+  exists (moved to developer-guide/dependencies.md); status.md:413 same.
+- DOC-4 (MED) roadmap.md referenced five dead flat-name docs (:406,:455
+  PHYSICS_MATH_LACUNAE.md -- fixed 2026-07-09; :482 DEPENDENCY_MATRIX.md;
+  :560-562 CLEANROOM_PORT_MAP.md, EIGEN_REFACTOR_PLAN.md,
+  IMAGE_SOURCES.md); status.md:395 lacunae dead path fixed 2026-07-09;
+  CHANGELOG.md:260 MASTER_ROADMAP.md fixed 2026-07-09. gemini.md still
+  points to missing root STATUS.md.
+- DOC-5 (MED) backlog issue table duplicated divergently in
+  roadmap.md:459-476 (ISSUE-007/-008/-012 statuses disagree); ISSUE-009
+  residual figure stated three ways (roadmap.md:73 "2/12", backlog.md
+  ISSUE-009 "preset 0 only", lacunae.md:481 "11/12 pass").
+- DOC-6 (MED) Orphan docs: docs/raw_cuda_glsl_parity_postmortem.md,
+  docs/physics/BLACKHOLE_RENDERING_NEXT_42_STEPS.md,
+  docs/physics/BLACKHOLE_RENDERING_RESEARCH_2026-03-29.md (the latter two
+  also violate mechanism-first naming, as does docs/plans/phases-5-6.md and
+  docs/validation/phase-1.md).
+- DOC-7 (MED) Superseded plans not archived: phases-5-6.md ("READY TO
+  BEGIN" vs Phase 6 COMPLETE), eigen-refactor.md (all items Done), halide/
+  z3 plans. CHANGELOG.md stalls at 2026-01-15. Shader-count claims disagree
+  (21 vs 43 vs 26 on-disk).
+- DOC-8 (LOW) Build-entry drift: README includes fetch_implot.sh step;
+  AGENTS.md/building.md omit it; ctest invocation style differs. Archive
+  promotion/retention policy is one sentence (index.md:84-86).
+- DOC-9 (LOW) Non-ASCII characters (en-dashes, arrows, checkmarks) persist
+  in older doc lines (backlog.md:19, status.md:434,449, roadmap.md:80,194,
+  CHANGELOG.md:13,33, others) against the ASCII-only policy; sweep with a
+  verifier so CI holds the line.
+
+### 2.6 Physics-fidelity debt (code-level, from marker sweep)
+
+- PHYS-1 (MED) shader/integrator.glsl:55-58: the Kerr branch of
+  geodesic_rhs() falls back to Schwarzschild ("For now, return
+  placeholder"). Included only by shader/raytracer.frag (non-production;
+  live path is blackhole_main.frag per src/main.cpp:4299), but the path
+  exists, claims Kerr, and silently drops frame-dragging.
+  geodesic_trace.comp:10 claims the stub was replaced -- true only for the
+  compute path.
+- PHYS-2 (MED) GLSL verified/ modules stub stepping because GLSL lacks
+  function pointers: energy_conserving_geodesic.glsl:178 (never advances
+  state), null_constraint.glsl:420 (constraint-after-step evaluates
+  pre-step state), :599 (null-preserving RK4 returns input). Fix family:
+  inline the RK4 stages as geodesic_trace_optimized.comp already does.
+- PHYS-3 (MED) Approximations flagged in-source as incomplete:
+  kerr_de_sitter.hpp:303 drops Lambda from the ergosphere (result equals
+  pure Kerr; mirrored kerr_de_sitter.glsl:163); axiodilaton.h:24 linear
+  1+z truncation; stokes_transport.h:604,642 Faraday coefficients use the
+  no-Boost fallback fit with growing error at Theta_e ~ 1-3;
+  gravitational_waves.h:1072 QNM table lacks modes beyond 22/21/33/44;
+  generate_tardis_lut_stub.py emits a Gaussian mock spectrum consumed as
+  rt_spectrum_lut.csv.
+- PHYS-4 (MED) src/gpu/async_compute_pipeline.* is scaffolding:
+  submitToGPU()/beginAsyncReadback() issue no GL calls (cpp:7),
+  recordBufferCopy is a stub (h:137), telemetry returns hardcoded
+  16.67ms/75% (cpp:17).
+- PHYS-5 (LOW) bhbCudaTraceGeodesics returns -1 (CPU fallback) pending a
+  per-ray path-storage kernel (blender_bridge.cpp:706); FastNoise2 cellular
+  texture disabled on an upstream heap bug (noise_texture_cache.cpp:139);
+  depth pre-pass UI force-disabled awaiting mesh geometry (main.cpp:2545);
+  multi-viewport commented out on Wayland artifacts (main.cpp:1555).
+
+### 2.7 Methodology debt
+
+- METHOD-1 The marker vocabulary is misleading: zero real TODOs exist; all
+  FIXME/XXX are vendored ImGui. Real deferred work hides in prose ("For
+  now", "not yet", "stub", "placeholder") -- greps for standard markers
+  under-report by construction.
+- METHOD-2 The three generators (section 1) are process patterns, not
+  one-off mistakes; the roadmap below fixes generators before instances.
+- METHOD-3 cflow is not a usable call-graph oracle for this C++23 codebase
+  (GNU cflow parses C; it resolves one function in main.cpp). The retained
+  cscope database and -L2/-L3 queries are the working substitute
+  (Appendix A).
+
+---
+
+## 3. Remediation roadmap
+
+Tranches are mechanism-named and dependency-ordered. Within a tranche,
+tasks are atomic (each independently verifiable). Acceptance criterion in
+brackets.
+
+### Tranche workspace-tracking-detox  (independent; do first, all mechanical)
+
+- DETOX-1 `git rm -r --cached infer-out/` and verify .gitignore:79 now
+  takes effect. [git status clean after a fresh infer run]
+- DETOX-2 `git rm --cached` the ~60 rocq build artifacts; add *.vo *.vos
+  *.vok *.glob *.aux .*.cache Makefile.coq* to .gitignore (keep .v/.ml
+  sources). [rocq/ tracked files are sources only]
+- DETOX-3 Delete blender_addon/ from tracking after diffing against
+  blender/addon one final time. [single addon tree; pyproject still green]
+- DETOX-4 Move openmach-*/, v7x86-*/, repo-hygiene-sweep-*/ to a
+  hygiene-archive branch; remove from main tracking; drop their
+  .gitattributes -diff rules. [repo root contains only renderer-related
+  dirs]
+- DETOX-5 Delete stale skeleton src/grmhd/grmhd_streaming.{cpp,h}; if
+  src/grmhd/ becomes the intended home, move the real files there and
+  update the three CMake references plus src/gpu `../` includes in the
+  same commit. [one grmhd_streaming module; build green]
+- DETOX-6 Relocate vendored imgui_impl_*.{cpp,h} and
+  GLDebugMessageCallback.cc to external/ (or src/vendor/) and exclude from
+  first-party lint/metrics. [lizard/clang-tidy scope excludes vendored
+  code]
+- DETOX-7 Move src/physics/physics_test.cpp to tests/. [target still
+  registered]
+- DETOX-8 Delete unused conan/recipes/tracy/0.12.2 and rmlui/4.4. [conan
+  install green]
+- DETOX-9 Add *.tar.gz to LFS or remove remaining tarballs (tools/gcovr
+  tarball: replace with a pinned dependency note). [no plain-git tarballs]
+
+### Tranche silent-absence-hardening  (kills generator silent-absence)
+
+- ABSENCE-1 Replace ~55 if(EXISTS) test guards with an explicit manifest
+  list + a configure-time assertion that every listed file exists and every
+  tests/*.cpp is either listed or explicitly excluded. [renaming a test
+  breaks configure]
+- ABSENCE-2 Register the orphaned tests: kerr_geodesic_test,
+  metric_parity_test, verify_headers_compile, verified_physics_test
+  (unconditional); gpu_cpu_parity_test, glsl_parity_test,
+  gpu_raytracer_kernel_test (GL-gated but present in the manifest with a
+  REQUIRES_GL label). Delete the vestigial tests/CMakeLists.txt standalone
+  project. [ctest -N lists them]
+- ABSENCE-3 Convert find_program silent-disables into tri-state: ON
+  requires the tool, AUTO warns loudly, OFF is explicit -- for gcovr,
+  glslangValidator, Z3, Doxygen. [CI configure log shows an explicit
+  decision per tool]
+- ABSENCE-4 Commit conan.lock; add a CI step that fails when the lockfile
+  drifts from conanfile.py. [two clean-room installs resolve identically]
+- ABSENCE-5 Make conanfile.validate() enforce cppstd>=23 unconditionally.
+  [configure fails without cppstd]
+- ABSENCE-6 Pin fetch_implot.sh to a release tag + sha256; pin FetchContent
+  tags to commit SHAs. [re-fetch is byte-stable]
+- ABSENCE-7 Either implement bench/ci_bench.sh +
+  scripts/check_bench_regression.py or delete their README contract. [no
+  documented-but-missing files]
+- ABSENCE-8 Fix hardcoded /home/eirikr paths (BUILD-6 list) to derive from
+  repo root or env. [scripts run for any checkout path]
+
+### Tranche canon-doc-reconciliation  (kills the DOC- class; mostly editorial)
+
+- CANON-1 Declare one phase taxonomy in repo-truth.md (release-history
+  numbering lives only in CHANGELOG; workstream numbering only in roadmap)
+  or renumber; fix status.md to one scheme. [a reader can date "Phase 6"]
+- CANON-2 Remove hand-written test/shader counts from roadmap.md and
+  status.md; reference the repo-truth generated report. [zero hardcoded
+  counts]
+- CANON-3 Delete the duplicated issue table from roadmap.md:459-476;
+  backlog.md is the owner. [one issue table]
+- CANON-4 Fix remaining dead references: AGENTS.md:15 requirements.md ->
+  developer-guide/dependencies.md; roadmap.md:482,:560-562 dead flat
+  names; gemini.md STATUS.md pointer. Add a link-check script to CI.
+  [zero dead intra-repo links]
+- CANON-5 Archive superseded plans (phases-5-6.md, eigen-refactor.md,
+  halide, z3) under docs/archive/ with the stated policy; write the
+  1-paragraph archive promotion/retention policy into index.md. [plans/
+  contains only live plans]
+- CANON-6 Rename phase/date-named docs mechanism-first:
+  BLACKHOLE_RENDERING_NEXT_42_STEPS.md -> renderer-fidelity-tranche.md;
+  BLACKHOLE_RENDERING_RESEARCH_2026-03-29.md -> archive;
+  plans/phases-5-6.md -> archive; validation/phase-1.md ->
+  openuniverse-import-validation.md. Link the three orphan docs from
+  index.md or archive them. [index.md reaches every live doc]
+- CANON-7 Harmonize build entry points (fetch_implot step, ctest style)
+  across README/AGENTS/building.md. [verbatim-identical core sequence]
+- CANON-8 Reconcile the ISSUE-009 residual figure to one statement
+  (backlog owns it); update lacunae.md:481 and roadmap.md:73 to point at
+  it. [single stated figure]
+- CANON-9 ASCII-only sweep of docs/ (DOC-9) plus a CI verifier rejecting
+  non-ASCII in md/source outside docs/archive/.
+  [grep -P '[^\x00-\x7F]' clean]
+
+### Tranche single-source-fact-tables  (kills generator fanned-facts; prerequisite for render-state-reification)
+
+- FACTS-1 Uniform registry: one declarative table (name, type, default,
+  which paths: frag/compute/cuda) that generates or drives the
+  InteropUniforms struct, both apply functions, the rtti map keys,
+  BH_LaunchParams fields, and the cudaMemcpyToSymbol setters. Start as a
+  checked table (static assert on field counts) before full codegen.
+  [adding a uniform = one table row + shader usage; typo fails at compile
+  time]
+- FACTS-2 Physics-constants table: single source for r_s/M conventions and
+  the synchrotron LUT domain, emitted to C++ header, GLSL include, and
+  CUDA header (build step). Kill the 4-site X_MIN/X_MAX literals. [one
+  edit site; parity test asserts equality across the three emitted forms]
+- FACTS-3 Document the three unit conventions in physics/unit-system.md
+  with the conversion sites named, until FACTS-2 eliminates the divergence
+  surface. [conventions stated where a porter looks]
+
+### Tranche render-state-reification  (unblocks main.cpp decomposition)
+
+- STATE-1 Reify the 233 static locals (src/main.cpp:2804-3440) into a
+  RenderState struct (grouped substructs: camera, disk, grmhd, stokes,
+  wiregrid, background, post). Mechanical move, no behavior change.
+  [main.cpp statics block deleted; frame renders identically]
+- STATE-2 Extract self-contained blocks in dependency order: crash
+  handlers -> src/platform/crash_handler.*; resource-root ->
+  src/platform/resource_paths.*; compare harness ->
+  src/tools/compare_harness.*; PostProcessPass/GpuTimer ->
+  src/render/post_process.* / gpu_timing.*. [main.cpp under 4,000 lines;
+  no block owns hidden statics]
+- STATE-3 Extract ImGui panels to src/ui/*.cpp taking RenderState&.
+  [main.cpp under 2,500 lines]
+- STATE-4 Extract uniform dispatch sites (frag/compute/cuda fill) into
+  src/render/uniform_binding.* consuming the FACTS-1 registry. [main.cpp
+  under 1,500 lines; cscope callee count of main under 300]
+- STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
+  partitioned headers; measure compile-time delta. [recorded before/after
+  timing in perf-tooling.md]
+
+### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
+
+- VERIFY-1 CI matrix: add jobs for (a) Debug+ASAN/UBSAN, (b) coverage with
+  gcovr restored as a pinned dep and a recorded baseline percentage, (c)
+  clang build so ENABLE_FUZZING compiles (smoke-run each fuzzer 60s), (d)
+  a CUDA compile-only job (no GPU runner) so cuda_* targets at least
+  build. [four green jobs; coverage number exists]
+- VERIFY-2 Offscreen GL in CI (EGL/xvfb) so the GL-gated tests and the
+  revived parity tests run headless. [gpu_cpu_parity_test green in CI]
+- VERIFY-3 Golden-image harness: render N presets, compare SSIM against
+  committed goldens with stated tolerance; wire
+  scripts/compare_raw_texblackhole.py or replace it. [render regression
+  fails CI]
+- VERIFY-4 Add safe_limits_test covering the infinity()/fast-math
+  boundary; add a CMake comment at the -fno-fast-math list tying
+  membership to the _FORTIFY_SOURCE=3 + -ffinite-math-only root cause.
+  [test exists; list self-documents]
+- VERIFY-5 Invert fast-math polarity: ENABLE_FAST_MATH=OFF default, opt IN
+  the measured-hot targets, delete the 20-target override list. Benchmark
+  before/after with physics_bench to keep the perf claim honest.
+  [IEEE-by-default; recorded perf delta]
+- VERIFY-6 Wire one rocq proof target and the Z3 verification into an
+  optional CI job so "verified" is enforced somewhere. [verification job
+  exists]
+- VERIFY-7 Implement real GL context in tests/gpu_parity_harness.py and
+  benchmark_raytracer.py or delete them in favor of the C++ parity tests.
+  [no stub harnesses that pretend to measure]
+
+### Tranche physics-fidelity-completion  (depends on single-source-fact-tables and verification-enforcement for parity gates)
+
+- FIDELITY-1 Wire verified::kerr_geodesic_rhs into shader/integrator.glsl's
+  Kerr branch (or delete the raytracer.frag path if blackhole_main.frag is
+  the only supported entry -- decide and record in gpu/scope.md). [no
+  silent Schwarzschild fallback for a!=0]
+- FIDELITY-2 Inline RK4 stages in the GLSL verified/ modules
+  (energy_conserving_geodesic.glsl, null_constraint.glsl x2) following the
+  geodesic_trace_optimized.comp pattern. [steps advance state; constraint
+  drift measured post-step]
+- FIDELITY-3 Add C++ Kerr-Schild oracle (src/physics/kerr_schild.h
+  mirroring shader/include/kerr_schild.glsl) and extend kerr_schild_test
+  to compare both. [GLSL-only mechanism gains a CPU reference]
+- FIDELITY-4 Kerr-de-Sitter ergosphere: solve the full Lambda-dependent
+  condition in kds_ergosphere_radius (kerr_de_sitter.hpp:303 + .glsl
+  mirror). [Lambda!=0 changes the result; test added]
+- FIDELITY-5 Stokes Faraday coefficients: gate exact Boost Bessel
+  evaluation as the default path, keep the 1/(1+Theta_e^2) fit only for
+  no-Boost builds (stokes_transport.h:604). [documented accuracy domain]
+- FIDELITY-6 Extend QNM table (gravitational_waves.h:1072) with remaining
+  Berti 2009 Table VIII modes actually requested by callers. [no
+  valid=false for supported l<=4 modes]
+- FIDELITY-7 Async compute pipeline: either implement
+  submitToGPU/beginAsyncReadback GL calls + GL_TIME_ELAPSED telemetry, or
+  excise the scaffold module until the render path needs it
+  (src/gpu/async_compute_pipeline.*). [no hardcoded 16.67ms/75% telemetry
+  in tree]
+- FIDELITY-8 Replace the TARDIS mock spectrum LUT or label the output file
+  itself as mock (column header), so downstream cannot mistake it
+  (generate_tardis_lut_stub.py). [provenance travels with the CSV]
+
+### Tranche blender-boundary-enforcement  (independent; policy decision first)
+
+- BLENDER-1 Decide: enforce separation or retract the claim. If enforcing:
+  gate the ~40 unconditional BLENDER_*/DREAM_TEXTURES_* CMake vars and
+  find_program(BLENDER_EXECUTABLE) behind ENABLE_BLENDER_BRIDGE; move the
+  34 Blender/Octane scripts under blender/scripts/; give the subproject
+  its own CMakeLists consuming installed core headers instead of
+  `../physics/` relative includes. [default configure mentions Blender
+  zero times]
+- BLENDER-2 If retracting: update the project-scope memory/doc to "in-tree
+  optional target", and keep BLENDER-1's include-path cleanup only.
+  [claim and build agree]
+
+---
+
+## Appendix A -- instrumented capture provenance (2026-07-09)
+
+Tools: cscope 15.9 (kernel-mode xref over src/+tests/, 1.8MB db), GNU cflow
+1.8 (finding METHOD-3: parses C only -- resolves 1 function in main.cpp; not
+a C++ oracle), lizard (function metrics), scc (LOC/complexity).
+
+Headline numbers at c1a1118: 66,351 code lines (C++ 28,937; headers 14,242;
+GLSL 5,406; CUDA 3,985; Python 11,415; shell 1,898). main() = 3,046 NLOC,
+CCN 675, 871 unique callees. 24 functions exceed CCN 15; first-party worst
+after main: SettingsManager::load (90), renderControlsSettingsPanel (68),
+runTests in src/physics/physics_test.cpp (68), InputManager::updateCamera
+(37), physics::traceGeodesicBatch (31), loadGrmhdPackedTexture (30).
+applyInteropComputeUniforms has exactly one caller (main, src/main.cpp:5237).
+
+Capture commands are re-runnable:
+`cscope -b -q -k -i <filelist>`; `lizard src --CCN 15 -w`; `scc --no-cocomo
+src shader tests scripts`.

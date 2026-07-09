@@ -257,7 +257,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Roadmap Forward
 
-See `docs/MASTER_ROADMAP.md` for detailed future phases:
+See `docs/developer-guide/roadmap.md` for detailed future phases:
 
 ### Phase 11: SPIR-V Backend (Q2 2026)
 - Vulkan 1.3 compute shader integration

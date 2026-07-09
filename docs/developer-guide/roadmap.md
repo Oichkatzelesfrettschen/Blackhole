@@ -403,7 +403,7 @@ This roadmap consolidates all planning into a single source of truth.
 | G. Dormand-Prince RK45 step control | COMPLETE | Replaces heuristic; Hairer 1993 |
 | B. GRMHD async tile streaming | COMPLETE | 9 TODOs filled; JSON+binary+LRU+thread |
 
-See `docs/PHYSICS_MATH_LACUNAE.md` for the full gap analysis driving Phase 6 work.
+See `docs/physics/lacunae.md` for the full gap analysis driving Phase 6 work.
 
 ### 6.1 GPU Compute Raytracer
 
@@ -430,7 +430,7 @@ See `docs/PHYSICS_MATH_LACUNAE.md` for the full gap analysis driving Phase 6 wor
 
 **Target:** 60fps @ 1080p with multi-frame interpolation, >90% cache hit rate
 
-### 6.3 Remaining Physics Gaps (from PHYSICS_MATH_LACUNAE.md)
+### 6.3 Remaining Physics Gaps (from physics/lacunae.md)
 
 | Task | Status | Notes |
 |------|--------|-------|
@@ -452,7 +452,7 @@ See `docs/PHYSICS_MATH_LACUNAE.md` for the full gap analysis driving Phase 6 wor
 | 6.4.4 Rationalized KS integrator (GLSL + CUDA) | **COMPLETE** | kerrStep() + d_kerr_step(): ingoing branch uses Q_eff/(A+sqrtR) -- no Delta in denominator, exact float32 regularity at r_+; outgoing uses guarded KS form; 70/70 tests pass |
 | 6.4.5 Exact Kerr Carter constants (GLSL + CUDA) | **COMPLETE** | kerrInitConsts(pos,dir,r_s,a) + d_kerr_init_consts(pos,dir,rs,a): solves null condition for k^t, reads E/Lz from metric, Q = Sigma^2*(k^theta)^2 - a^2*cos^2 + Lz^2/sin^2; replaces flat-space L^2-Lz^2 approx; 70/70 tests pass |
 
-**Reference:** `docs/PHYSICS_MATH_LACUNAE.md` (written 2026-02-27)
+**Reference:** `docs/physics/lacunae.md` (written 2026-02-27)
 
 ---
 
