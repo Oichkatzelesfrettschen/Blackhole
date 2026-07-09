@@ -143,3 +143,15 @@ imgui.ini
 # repo-hygiene-sweep-* instead of storing raw multi-hundred-megabyte Git bundles
 # or full cached diffs here.
 minix318-active-merge-state-20260521/
+
+# Rocq/Coq compiled proof artifacts (sources .v/.ml stay tracked)
+rocq/**/*.vo
+rocq/**/*.vos
+rocq/**/*.vok
+rocq/**/*.glob
+rocq/**/*.aux
+rocq/**/.*.aux
+rocq/**/.*.cache
+rocq/**/.*.d
+rocq/Makefile.coq
+rocq/Makefile.coq.conf
