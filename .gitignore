@@ -139,10 +139,6 @@ settings.json
 imgui.ini
 .cache/
 
-# Local oversized hygiene captures. Commit compact reproducibility recipes under
-# repo-hygiene-sweep-* instead of storing raw multi-hundred-megabyte Git bundles
-# or full cached diffs here.
-minix318-active-merge-state-20260521/
 
 # Rocq/Coq compiled proof artifacts (sources .v/.ml stay tracked)
 rocq/**/*.vo
@@ -155,3 +151,6 @@ rocq/**/.*.cache
 rocq/**/.*.d
 rocq/Makefile.coq
 rocq/Makefile.coq.conf
+
+# Multi-repo hygiene captures live on the hygiene-archive branch, not main.
+minix318-active-merge-state-20260521/
