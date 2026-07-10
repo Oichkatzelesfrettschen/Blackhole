@@ -14,8 +14,25 @@
 #include "physics/hawking_renderer.h"
 #include "render.h"
 #include "render/interop_uniforms.h"
+#include "render/render_state.h"
 
 namespace blackhole {
+
+/**
+ * @brief Per-frame derived render inputs the uniform binders read alongside the
+ *        persistent RenderState. These are transients recomputed every frame
+ *        (compare-baseline gating, LUT readiness, precomputed record frame
+ *        shift); they are deliberately not stored in RenderState.
+ */
+struct FrameBindingInputs {
+  bool adiskEnabledEffective = false;      ///< adiskEnabled AND not compare-baseline frame.
+  bool enableRedshiftEffective = false;    ///< enableRedshift AND not compare-baseline frame.
+  bool backgroundEnabledEffective = false; ///< backgroundEnabled AND not compare-baseline frame.
+  bool enablePhotonSphereEffective = false;///< enablePhotonSphere AND not compare-baseline frame.
+  float backgroundIntensity = 0.0f;        ///< settings.backgroundIntensity for this frame.
+  float frameShiftX = 0.0f;                ///< Record-mode showcase-orbit horizontal frame offset.
+  float frameShiftY = 0.0f;                ///< Record-mode showcase-orbit vertical frame offset.
+};
 
 /**
  * @brief Fills the fragment-path float and typed uniforms on @p rtti from the
@@ -38,6 +55,16 @@ void applyInteropComputeUniforms(gl::GLuint program, const InteropUniforms &inte
  */
 void applyHawkingUniforms(gl::GLuint program, const physics::HawkingRenderer &renderer, bool enabled,
                           float tempScale, float intensity, bool useLUTs, double blackHoleMass);
+
+#if BLACKHOLE_HAS_CUDA
+/**
+ * @brief Fills a BH_LaunchParams for the CUDA raytracer lane from @p interop,
+ *        persistent @p rs, and the per-frame @p in transients. The caller owns
+ *        the dispatch seam (ensureInit/registration/renderFrame).
+ */
+void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
+                          const InteropUniforms &interop, const FrameBindingInputs &in);
+#endif
 
 } // namespace blackhole
 
