@@ -2405,6 +2405,325 @@ struct TimingHistory {
   }
 };
 
+// Reified render/application state: every value that was a function-local
+// static in main() lives here, grouped by subsystem. One instance is
+// constructed in main() after window and ImGui initialization; the
+// grouped substructs let UI panels and dispatch paths take exactly the
+// state they touch (debt-ledger.md tranche render-state-reification).
+constexpr int kMaxBloomIterations = 8;
+
+struct RenderState {
+  struct CameraGroup {
+    int cameraModeIndex = static_cast<int>(CameraMode::Input);
+    float orbitTime = 0.0f;
+    float orbitRadius = 15.0f;
+    float orbitSpeed = 6.0f;
+    bool gizmoEnabled = false;
+    ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
+    ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
+    glm::mat4 gizmoTransform = glm::mat4(1.0f);
+    bool cameraSettingsLoaded = false;
+  } camera;
+
+  struct DisplayGroup {
+    float depthFar = 100.0f;
+    bool displaySettingsLoaded = false;
+    int swapInterval = 1;
+    float renderScale = 1.0f;
+  } display;
+
+  struct OverlaysGroup {
+    OverlayCurve2D curveOverlay;
+    bool curveOverlayLoaded = false;
+    HudOverlay controlsOverlay;
+    bool controlsOverlayReady = false;
+    bool controlsOverlayConfigInit = false;
+    bool controlsOverlayEnabled = true;
+    float controlsOverlayScale = 1.1f;
+    HudOverlay perfOverlay;
+    bool const perfOverlayReady = false;
+    bool perfOverlayConfigInit = false;
+    [[maybe_unused]] bool perfOverlayEnabled = true;
+    [[maybe_unused]] float perfOverlayScale = 1.0f;
+    ui::RmlUiOverlay rmluiOverlay;
+    bool rmluiEnabled = false;
+    bool rmluiReady = false;
+    int rmluiWidth = 0;
+    int rmluiHeight = 0;
+      // curveOverlay and curveOverlayLoaded are declared earlier near curve TSV loading
+    bool curveOverlayEnabled = true;
+    bool curveOverlayWindowOpen = true;
+  } overlays;
+
+  struct PostGroup {
+    bool bloomSettingsLoaded = false;
+    int bloomIterations = kMaxBloomIterations;
+    bool postProcessingSettingsLoaded = false;
+    float bloomStrength = 0.1f;
+    float bloomThreshold = 0.4f;  // A2: was hardcoded 1.0 in shader (killed disk bloom)
+    float bloomKnee = 0.15f;      // A3: soft knee half-width (was binary sign())
+    float bloomTone = 1.0f;       // A6: scene weight in bloom composite (was never dispatched)
+    bool tonemappingEnabled = true;
+    float toneExposure = 1.0f;
+    float gamma = 2.5f;
+  } post;
+
+  struct DiskGroup {
+    bool gravitationalLensing = true;
+    bool renderBlackHole = true;
+    bool adiskEnabled = true;
+    bool adiskParticle = true;
+    float adiskDensityV = 2.0f;
+    float adiskDensityH = 4.0f;
+    float adiskHeight = 0.55f;
+    float adiskLit = 0.25f;
+    float adiskNoiseLOD = 5.0f;
+    float adiskNoiseScale = 0.8f;
+    bool useNoiseTexture = true;
+    float noiseTextureScale = 0.25f;
+    [[maybe_unused]] int const noiseTextureSize = 32;
+    float adiskSpeed = 0.5f;
+    float dopplerStrength = 1.0f;
+    float photonSphereGlowStrength = 1.0f;
+    GLuint texNoiseVolume = 0;
+    bool noiseTextureReady = false;
+    blackhole::NoiseTextureCache noiseCache;
+  } disk;
+
+  struct RteGroup {
+      // D2: volumetric RTE
+    bool  rteVolumetricEnabled = false;
+    float rteOpacityScale      = 0.5f;
+  } rte;
+
+  struct StokesGroup {
+      // D4: polarized Stokes IQUV
+    bool  stokesEnabled        = false;
+    float stokesBFieldAngle    = 0.0f;   // EVPA of projected B field [rad]
+    float stokesNeScale        = 0.0f;   // Faraday rotation strength (0 = off)
+  } stokes;
+
+  struct PhysicsCoreGroup {
+    float blackHoleMass = 1.0f;
+    float kerrSpin = 0.0f;
+    bool enablePhotonSphere = false;
+    bool enableRedshift = false;
+  } physicsCore;
+
+  struct HawkingGroup {
+    bool hawkingGlowEnabled = false;
+    float hawkingTempScale = 1.0f;
+    float hawkingGlowIntensity = 1.0f;
+    bool hawkingUseLUTs = true;
+    int hawkingPreset = 0; // 0=Physical, 1=Primordial, 2=Extreme
+    physics::HawkingRenderer hawkingRenderer;
+    bool hawkingLutsLoaded = false;
+  } hawking;
+
+  struct GrmhdGroup {
+    bool useGrmhd = false;
+    bool grmhdLoaded = false;
+    GrmhdPackedTexture grmhdTexture;
+    std::string grmhdLoadError;
+    std::array<char, 256> grmhdPathBuffer{};
+    bool grmhdPathInit = false;
+    glm::vec3 grmhdBoundsMin = glm::vec3(-10.0f, -2.0f, -10.0f);
+    glm::vec3 grmhdBoundsMax = glm::vec3(10.0f, 2.0f, 10.0f);
+    bool grmhdSliceEnabled = false;
+    int grmhdSliceAxis = 2;
+    int grmhdSliceChannel = 0;
+    float grmhdSliceCoord = 0.5f;
+    bool grmhdSliceUseColorMap = true;
+    bool grmhdSliceAutoRange = true;
+    float grmhdSliceMin = 0.0f;
+    float grmhdSliceMax = 1.0f;
+    int grmhdSliceSize = 256;
+    int grmhdSliceSizeCached = 0;
+      // GRMHD Time-Series Playback (Phase 4.3 - streaming infrastructure)
+    bool grmhdTimeSeriesEnabled = false;
+    std::array<char, 256> grmhdTimeSeriesJsonBuffer{};
+    std::array<char, 256> grmhdTimeSeriesBinBuffer{};
+    bool grmhdTimeSeriesLoaded = false;
+    int grmhdCurrentFrame = 0;
+    int grmhdMaxFrame = 0;
+    bool grmhdPlaying = false;
+    float grmhdPlaybackSpeed = 1.0f;
+    double grmhdCacheHitRate = 0.0;
+    int grmhdQueueDepth = 0;
+    std::unique_ptr<blackhole::GRMHDStreamer> grmhdStreamer;
+      /* PBO uploader for streaming time-series tiles.  Initialized once when the
+       * streamer loads a dataset and shut down when the dataset is unloaded.
+       * Its texture() replaces grmhdTexture.texture for the time-series path. */
+    blackhole::GrmhdPBOUploader grmhdPboUploader;
+      /* C1d: second PBO uploader for the adjacent (next) GRMHD frame.
+       * Holds frame N+1; blended with grmhdPboUploader (frame N) using grmhdFrameAlpha. */
+    blackhole::GrmhdPBOUploader grmhdPboUploaderRight;
+      /* Sub-frame blend factor [0,1): fraction of current inter-frame interval elapsed. */
+    float grmhdFrameAlpha = 0.0f;
+    GLuint texGrmhdSlice = 0;
+  } grmhd;
+
+  struct LutsGroup {
+    bool lutAssetsTried = false;
+    bool lutAssetsLoaded = false;
+    bool lutFromAssets = false;
+    bool lutAssetOnly = false;
+    bool lutAssetOnlyWarned = false;
+    bool lutAssetConfigInit = false;
+    float lutAssetSpin = 0.0f;
+    physics::Lut1D lutAssetEmissivity;
+    physics::Lut1D lutAssetRedshift;
+    bool spectralLutTried = false;
+    bool spectralLutLoaded = false;
+    bool synchGLutCreated = false;
+    bool useSpectralLut = false;
+    float spectralWavelengthMin = 0.0f;
+    float spectralWavelengthMax = 0.0f;
+    float spectralRadiusMin = 0.0f;
+    float spectralRadiusMax = 0.0f;
+    bool grbModulationTried = false;
+    bool grbModulationLoaded = false;
+    bool useGrbModulation = false;
+    bool grbTimeManual = false;
+    float grbTimeManualValue = 0.0f;
+    float grbTimeMin = 0.0f;
+    float grbTimeMax = 1.0f;
+    std::vector<float> grbModulationValues;
+    GLuint texGrbModulationLUT = 0;
+    std::vector<float> spectralLutValues;
+    bool lutInitialized = false;
+    float lutSpin = 0.0f;
+    float lutRadiusMin = 0.0f;
+    float lutRadiusMax = 0.0f;
+    float redshiftRadiusMin = 0.0f;
+    float redshiftRadiusMax = 0.0f;
+    GLuint texEmissivityLUT = 0;
+    GLuint texRedshiftLUT = 0;
+    GLuint texPhotonGlowLUT = 0;  // Phase 8.2: Photon sphere glow effect LUT
+    GLuint texDiskDensityLUT = 0; // Phase 8.2: Accretion disk density profile LUT
+    GLuint texSpectralLUT = 0;
+    GLuint texSynchGLut = 0;   /**< @brief Synchrotron G(x) LUT (GL_TEXTURE_2D, height=1). */
+    float lutAdiskDensityV = 0.0f;
+  } luts;
+
+  struct TargetsGroup {
+    GLuint texBlackhole = 0;
+    GLuint texBlackholeCompare = 0;
+    GLuint texBrightness = 0;
+    GLuint texBloomFinal = 0;
+    GLuint texTonemapped = 0;
+    GLuint texDepthEffects = 0;
+    std::array<GLuint, kMaxBloomIterations> texDownsampled = {};
+    std::array<GLuint, kMaxBloomIterations> texUpsampled = {};
+    int renderWidth = 0;
+    int renderHeight = 0;
+  } targets;
+
+  struct RecordingGroup {
+      // --record-frames: cinematic recording state
+    bool         recordInitDone    = false;
+    int          recordFrameIndex  = 0; // assigned from recordStartFrame after construction
+    int          recordWarmup      = 0;
+    float        recordCinematic   = 0.0f; // assigned from recordStartFrame after construction
+    CinematicPath recordPath;
+    CamKeyframe  recordCurrentKf   = K_CINEMATIC_KEYFRAMES[0];
+    float        recordCurRs       = 2.0f;
+    float        recordCurIsco     = 1.0f;
+  } recording;
+
+  struct DispatchGroup {
+    bool useComputeRaytracer = false;
+#if BLACKHOLE_HAS_CUDA
+    CudaRenderManager cudaManager;
+    bool cudaVariantEnvApplied = false;
+#endif
+    int computeMaxSteps = 300;
+    float computeStepSize = 0.1f;
+    bool computeTiled = false;
+    int computeTileSize = 256;
+  } dispatch;
+
+  struct CompareGroup {
+    bool compareComputeFragment = false;
+    int compareSampleSize = 16;
+    int compareFrameStride = 1;
+    DiffStats compareStats;
+    DiffStats compareFullStats;
+    bool compareWriteOutputs = false;
+    bool compareWriteDiff = true;
+    bool compareWriteSummary = true;
+    float compareDiffScale = 8.0f;
+    float compareThreshold = 0.02f;
+    int compareMaxOutliers = 10000;       // Enable outlier gating by default
+    float compareMaxOutlierFrac = 0.006f; // 0.6% tolerance for Kerr divergence
+    bool compareOverridesEnabled = false;
+    int compareMaxStepsOverride = 0;
+    float compareStepSizeOverride = 0.0f;
+    bool compareBaselineEnabled = false;
+    int integratorDebugFlags = 0;
+    bool integratorDebugConfigInit = false;
+    int compareFailureCount = 0;
+    bool compareLastExceeded = false;
+    int compareLastOutliers = 0;
+    int compareLastOutlierLimit = 0;
+    int compareSnapshotIndex = 0;
+    bool compareAutoCapture = false;
+    int compareAutoCount = static_cast<int>(K_COMPARE_PRESETS.size());
+    int compareAutoStride = 30;
+    int compareAutoRemaining = 0;
+    int compareAutoStrideCounter = 0;
+    bool comparePresetSweep = false;
+    bool comparePresetSaved = false;
+    bool compareRestorePending = false;
+    int comparePresetIndex = 0;
+    int comparePresetFrameCounter = 0;
+    int comparePresetSettleFrames = 2;
+    CameraState comparePresetSavedCamera{};
+    int comparePresetSavedMode = 0;
+    float comparePresetSavedOrbitRadius = 0.0f;
+    float comparePresetSavedOrbitSpeed = 0.0f;
+    float comparePresetSavedOrbitTime = 0.0f;
+    float comparePresetSavedKerrSpin = 0.0f;
+    bool captureCompareSnapshot = false;
+    int compareFrameCounter = 0;
+    bool compareAutoInit = false;
+    bool forceInteropFragmentEnvApplied = false;
+  } compare;
+
+  struct ProbesGroup {
+    bool drawIdProbeEnabled = false;
+    bool drawIdProbeConfigInit = false;
+    bool drawIdProbeSupported = false;
+    bool multiDrawMainEnabled = false;
+    bool multiDrawMainConfigInit = false;
+    bool multiDrawIndirectCount = false;
+    bool multiDrawSupported = false;
+    bool multiDrawCountSupported = false;
+    [[maybe_unused]] bool multiDrawOverlayEnabled = true;
+    [[maybe_unused]] int const multiDrawInstanceCount = 2;
+    [[maybe_unused]] GLuint const multiDrawProgram = 0;
+    [[maybe_unused]] GLuint const multiDrawInstanceBuffer = 0;
+    [[maybe_unused]] GLuint const multiDrawCommandBuffer = 0;
+    [[maybe_unused]] GLuint const multiDrawCountBuffer = 0;
+    [[maybe_unused]] GLuint const multiDrawComputeProgram = 0;
+    [[maybe_unused]] bool depthPrepassEnabled =
+        false; // For future mesh-based disk rendering
+  } probes;
+
+  struct TimingGroup {
+    bool gpuTimingEnabled = false;
+    bool gpuTimingLogInit = false;
+    bool gpuTimingLogEnabled = false;
+    int gpuTimingLogStride = 60;
+    int gpuTimingLogCounter = 0;
+    int gpuTimingLogIndex = 0;
+    GpuTimerSet gpuTimers;
+    TimingHistory timingHistory;
+  } timing;
+
+};
+
+
 std::string gpuTimingPath() {
   std::filesystem::create_directories("logs/perf");
   return "logs/perf/gpu_timing.csv";
@@ -2727,15 +3046,17 @@ int main(int argc, char **argv) {
     initializeImGui(window);
 
     // Curve overlay for plotting (e.g., critical curves)
-    static OverlayCurve2D curveOverlay;
-    static bool curveOverlayLoaded = false;
+    RenderState rs;
+    rs.recording.recordFrameIndex = recordStartFrame;
+    rs.recording.recordCinematic =
+        static_cast<float>(recordStartFrame) / static_cast<float>(K_CINEMATIC_FPS);
 
     if (!curveTsvPath.empty()) {
-      curveOverlayLoaded = curveOverlay.loadFromTsv(curveTsvPath);
-      if (!curveOverlayLoaded) {
+      rs.overlays.curveOverlayLoaded = rs.overlays.curveOverlay.loadFromTsv(curveTsvPath);
+      if (!rs.overlays.curveOverlayLoaded) {
         std::fprintf(stderr, "curve overlay load failed: %s\n", // NOLINT(cert-err33-c) --
                                                                 // diagnostic output, return unused
-                     curveOverlay.lastError.c_str());
+                     rs.overlays.curveOverlay.lastError.c_str());
       }
     }
 
@@ -2748,380 +3069,122 @@ int main(int argc, char **argv) {
 
     double lastTime = glfwGetTime();
 
-    static constexpr int kMaxBloomIterations = 8;
-    static float depthFar = 100.0f;
-    static int cameraModeIndex = static_cast<int>(CameraMode::Input);
-    static float orbitTime = 0.0f;
-    static float orbitRadius = 15.0f;
-    static float orbitSpeed = 6.0f;
-    static bool gizmoEnabled = false;
-    static ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
-    static ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
-    static glm::mat4 gizmoTransform(1.0f);
-    static bool cameraSettingsLoaded = false;
-    static bool displaySettingsLoaded = false;
-    static int swapInterval = 1;
-    static float renderScale = 1.0f;
-    static bool bloomSettingsLoaded = false;
-    static int bloomIterations = kMaxBloomIterations;
-    static bool postProcessingSettingsLoaded = false;
-    static float bloomStrength = 0.1f;
-    static float bloomThreshold = 0.4f;  // A2: was hardcoded 1.0 in shader (killed disk bloom)
-    static float bloomKnee = 0.15f;      // A3: soft knee half-width (was binary sign())
-    static float bloomTone = 1.0f;       // A6: scene weight in bloom composite (was never dispatched)
-    static bool tonemappingEnabled = true;
-    static float toneExposure = 1.0f;
-    static float gamma = 2.5f;
-    static bool gravitationalLensing = true;
-    static bool renderBlackHole = true;
-    static bool adiskEnabled = true;
-    static bool adiskParticle = true;
-    // D2: volumetric RTE
-    static bool  rteVolumetricEnabled = false;
-    static float rteOpacityScale      = 0.5f;
-    // D4: polarized Stokes IQUV
-    static bool  stokesEnabled        = false;
-    static float stokesBFieldAngle    = 0.0f;   // EVPA of projected B field [rad]
-    static float stokesNeScale        = 0.0f;   // Faraday rotation strength (0 = off)
-    static float adiskDensityV = 2.0f;
-    static float adiskDensityH = 4.0f;
-    static float adiskHeight = 0.55f;
-    static float adiskLit = 0.25f;
-    static float adiskNoiseLOD = 5.0f;
-    static float adiskNoiseScale = 0.8f;
-    static bool useNoiseTexture = true;
-    static float noiseTextureScale = 0.25f;
-    [[maybe_unused]] static int const noiseTextureSize = 32;
-    static float adiskSpeed = 0.5f;
-    static float dopplerStrength = 1.0f;
-    static float photonSphereGlowStrength = 1.0f;
-    static bool useGrmhd = false;
-    static bool grmhdLoaded = false;
-    static GrmhdPackedTexture grmhdTexture;
-    static std::string grmhdLoadError;
-    static std::array<char, 256> grmhdPathBuffer{};
-    static bool grmhdPathInit = false;
-    static glm::vec3 grmhdBoundsMin(-10.0f, -2.0f, -10.0f);
-    static glm::vec3 grmhdBoundsMax(10.0f, 2.0f, 10.0f);
-    static bool grmhdSliceEnabled = false;
-    static int grmhdSliceAxis = 2;
-    static int grmhdSliceChannel = 0;
-    static float grmhdSliceCoord = 0.5f;
-    static bool grmhdSliceUseColorMap = true;
-    static bool grmhdSliceAutoRange = true;
-    static float grmhdSliceMin = 0.0f;
-    static float grmhdSliceMax = 1.0f;
-    static int grmhdSliceSize = 256;
-    static int grmhdSliceSizeCached = 0;
-
-    // GRMHD Time-Series Playback (Phase 4.3 - streaming infrastructure)
-    static bool grmhdTimeSeriesEnabled = false;
-    static std::array<char, 256> grmhdTimeSeriesJsonBuffer{};
-    static std::array<char, 256> grmhdTimeSeriesBinBuffer{};
-    static bool grmhdTimeSeriesLoaded = false;
-    static int grmhdCurrentFrame = 0;
-    static int grmhdMaxFrame = 0;
-    static bool grmhdPlaying = false;
-    static float grmhdPlaybackSpeed = 1.0f;
-    static double grmhdCacheHitRate = 0.0;
-    static int grmhdQueueDepth = 0;
-    static std::unique_ptr<blackhole::GRMHDStreamer> grmhdStreamer;
-    /* PBO uploader for streaming time-series tiles.  Initialized once when the
-     * streamer loads a dataset and shut down when the dataset is unloaded.
-     * Its texture() replaces grmhdTexture.texture for the time-series path. */
-    static blackhole::GrmhdPBOUploader grmhdPboUploader;
-    /* C1d: second PBO uploader for the adjacent (next) GRMHD frame.
-     * Holds frame N+1; blended with grmhdPboUploader (frame N) using grmhdFrameAlpha. */
-    static blackhole::GrmhdPBOUploader grmhdPboUploaderRight;
-    /* Sub-frame blend factor [0,1): fraction of current inter-frame interval elapsed. */
-    static float grmhdFrameAlpha = 0.0f;
-
-    // --record-frames: cinematic recording state
-    static bool         recordInitDone    = false;
-    static int          recordFrameIndex  = recordStartFrame;
-    static int          recordWarmup      = 0;
-    static float        recordCinematic   = static_cast<float>(recordStartFrame) / static_cast<float>(K_CINEMATIC_FPS);
-    static CinematicPath recordPath;
-    static CamKeyframe  recordCurrentKf   = K_CINEMATIC_KEYFRAMES[0];
-    static float        recordCurRs       = 2.0f;
-    static float        recordCurIsco     = 1.0f;
-
-    static float blackHoleMass = 1.0f;
-    static float kerrSpin = 0.0f;
-    static bool enablePhotonSphere = false;
-    static bool enableRedshift = false;
-    static bool hawkingGlowEnabled = false;
-    static float hawkingTempScale = 1.0f;
-    static float hawkingGlowIntensity = 1.0f;
-    static bool hawkingUseLUTs = true;
-    static int hawkingPreset = 0; // 0=Physical, 1=Primordial, 2=Extreme
-    static physics::HawkingRenderer hawkingRenderer;
-    static bool hawkingLutsLoaded = false;
-    static bool useComputeRaytracer = false;
-#if BLACKHOLE_HAS_CUDA
-    static CudaRenderManager cudaManager;
-    static bool cudaVariantEnvApplied = false;
-#endif
-    static bool compareComputeFragment = false;
-    static int compareSampleSize = 16;
-    static int compareFrameStride = 1;
-    static DiffStats compareStats;
-    static DiffStats compareFullStats;
-    static bool compareWriteOutputs = false;
-    static bool compareWriteDiff = true;
-    static bool compareWriteSummary = true;
-    static float compareDiffScale = 8.0f;
-    static float compareThreshold = 0.02f;
-    static int compareMaxOutliers = 10000;       // Enable outlier gating by default
-    static float compareMaxOutlierFrac = 0.006f; // 0.6% tolerance for Kerr divergence
-    static bool compareOverridesEnabled = false;
-    static int compareMaxStepsOverride = 0;
-    static float compareStepSizeOverride = 0.0f;
-    static bool compareBaselineEnabled = false;
-    static int integratorDebugFlags = 0;
-    static bool integratorDebugConfigInit = false;
-    static int compareFailureCount = 0;
-    static bool compareLastExceeded = false;
-    static int compareLastOutliers = 0;
-    static int compareLastOutlierLimit = 0;
-    static int compareSnapshotIndex = 0;
-    static bool compareAutoCapture = false;
-    static int compareAutoCount = static_cast<int>(K_COMPARE_PRESETS.size());
-    static int compareAutoStride = 30;
-    static int compareAutoRemaining = 0;
-    static int compareAutoStrideCounter = 0;
-    static bool comparePresetSweep = false;
-    static bool comparePresetSaved = false;
-    static bool compareRestorePending = false;
-    static int comparePresetIndex = 0;
-    static int comparePresetFrameCounter = 0;
-    static int comparePresetSettleFrames = 2;
-    static CameraState comparePresetSavedCamera{};
-    static int comparePresetSavedMode = 0;
-    static float comparePresetSavedOrbitRadius = 0.0f;
-    static float comparePresetSavedOrbitSpeed = 0.0f;
-    static float comparePresetSavedOrbitTime = 0.0f;
-    static float comparePresetSavedKerrSpin = 0.0f;
-    static bool captureCompareSnapshot = false;
-    static int compareFrameCounter = 0;
-    static bool compareAutoInit = false;
-    static bool forceInteropFragmentEnvApplied = false;
-    static bool drawIdProbeEnabled = false;
-    static bool drawIdProbeConfigInit = false;
-    static bool drawIdProbeSupported = false;
-    static bool multiDrawMainEnabled = false;
-    static bool multiDrawMainConfigInit = false;
-    static bool multiDrawIndirectCount = false;
-    static bool multiDrawSupported = false;
-    static bool multiDrawCountSupported = false;
-    [[maybe_unused]] static bool multiDrawOverlayEnabled = true;
-    [[maybe_unused]] static int const multiDrawInstanceCount = 2;
-    [[maybe_unused]] static GLuint const multiDrawProgram = 0;
-    [[maybe_unused]] static GLuint const multiDrawInstanceBuffer = 0;
-    [[maybe_unused]] static GLuint const multiDrawCommandBuffer = 0;
-    [[maybe_unused]] static GLuint const multiDrawCountBuffer = 0;
-    [[maybe_unused]] static GLuint const multiDrawComputeProgram = 0;
-    static bool gpuTimingEnabled = false;
-    static bool gpuTimingLogInit = false;
-    static bool gpuTimingLogEnabled = false;
-    static int gpuTimingLogStride = 60;
-    static int gpuTimingLogCounter = 0;
-    static int gpuTimingLogIndex = 0;
-    static GpuTimerSet gpuTimers;
-    static TimingHistory timingHistory;
-    static HudOverlay controlsOverlay;
-    static bool controlsOverlayReady = false;
-    static bool controlsOverlayConfigInit = false;
-    static bool controlsOverlayEnabled = true;
-    static float controlsOverlayScale = 1.1f;
-    static HudOverlay perfOverlay;
-    static bool const perfOverlayReady = false;
-    static bool perfOverlayConfigInit = false;
-    [[maybe_unused]] static bool perfOverlayEnabled = true;
-    [[maybe_unused]] static float perfOverlayScale = 1.0f;
-    [[maybe_unused]] static bool depthPrepassEnabled =
-        false; // For future mesh-based disk rendering
-    static ui::RmlUiOverlay rmluiOverlay;
-    static bool rmluiEnabled = false;
-    static bool rmluiReady = false;
-    static int rmluiWidth = 0;
-    static int rmluiHeight = 0;
-    // curveOverlay and curveOverlayLoaded are declared earlier near curve TSV loading
-    static bool curveOverlayEnabled = true;
-    static bool curveOverlayWindowOpen = true;
-    static int computeMaxSteps = 300;
-    static float computeStepSize = 0.1f;
-    static bool computeTiled = false;
-    static int computeTileSize = 256;
-    static bool lutAssetsTried = false;
-    static bool lutAssetsLoaded = false;
-    static bool lutFromAssets = false;
-    static bool lutAssetOnly = false;
-    static bool lutAssetOnlyWarned = false;
-    static bool lutAssetConfigInit = false;
-    static float lutAssetSpin = 0.0f;
-    static physics::Lut1D lutAssetEmissivity;
-    static physics::Lut1D lutAssetRedshift;
-    static bool spectralLutTried = false;
-    static bool spectralLutLoaded = false;
-    static bool synchGLutCreated = false;
-    static bool useSpectralLut = false;
-    static float spectralWavelengthMin = 0.0f;
-    static float spectralWavelengthMax = 0.0f;
-    static float spectralRadiusMin = 0.0f;
-    static float spectralRadiusMax = 0.0f;
-    static bool grbModulationTried = false;
-    static bool grbModulationLoaded = false;
-    static bool useGrbModulation = false;
-    static bool grbTimeManual = false;
-    static float grbTimeManualValue = 0.0f;
-    static float grbTimeMin = 0.0f;
-    static float grbTimeMax = 1.0f;
-    static std::vector<float> grbModulationValues;
-    static GLuint texGrbModulationLUT = 0;
-    static std::vector<float> spectralLutValues;
-    static bool lutInitialized = false;
-    static float lutSpin = 0.0f;
-    static float lutRadiusMin = 0.0f;
-    static float lutRadiusMax = 0.0f;
-    static float redshiftRadiusMin = 0.0f;
-    static float redshiftRadiusMax = 0.0f;
-    static GLuint texEmissivityLUT = 0;
-    static GLuint texRedshiftLUT = 0;
-    static GLuint texPhotonGlowLUT = 0;  // Phase 8.2: Photon sphere glow effect LUT
-    static GLuint texDiskDensityLUT = 0; // Phase 8.2: Accretion disk density profile LUT
-    static GLuint texSpectralLUT = 0;
-    static GLuint texSynchGLut = 0;   /**< @brief Synchrotron G(x) LUT (GL_TEXTURE_2D, height=1). */
-    static GLuint texNoiseVolume = 0;
-    static GLuint texGrmhdSlice = 0;
-    static GLuint texBlackhole = 0;
-    static GLuint texBlackholeCompare = 0;
-    static GLuint texBrightness = 0;
-    static GLuint texBloomFinal = 0;
-    static GLuint texTonemapped = 0;
-    static GLuint texDepthEffects = 0;
-    static std::array<GLuint, kMaxBloomIterations> texDownsampled = {};
-    static std::array<GLuint, kMaxBloomIterations> texUpsampled = {};
-    static int renderWidth = 0;
-    static int renderHeight = 0;
-    static bool noiseTextureReady = false;
-    static blackhole::NoiseTextureCache noiseCache;
 
     auto loadGrmhdPacked = [&](const std::string &path) {
       std::string error;
-      if (!loadGrmhdPackedTexture(path, grmhdTexture, error, true, true)) {
-        grmhdLoadError = error;
-        grmhdLoaded = false;
+      if (!loadGrmhdPackedTexture(path, rs.grmhd.grmhdTexture, error, true, true)) {
+        rs.grmhd.grmhdLoadError = error;
+        rs.grmhd.grmhdLoaded = false;
         return false;
       }
-      grmhdLoadError.clear();
-      grmhdLoaded = true;
+      rs.grmhd.grmhdLoadError.clear();
+      rs.grmhd.grmhdLoaded = true;
       /* Wire BL radial extent from grid header into the Cartesian bounds uniforms.
        * The grid is spherical so the conservative bounding box is [-rMax, rMax]^3. */
-      const float r = grmhdTexture.rMax;
-      grmhdBoundsMin = glm::vec3(-r, -r, -r);
-      grmhdBoundsMax = glm::vec3( r,  r,  r);
+      const float r = rs.grmhd.grmhdTexture.rMax;
+      rs.grmhd.grmhdBoundsMin = glm::vec3(-r, -r, -r);
+      rs.grmhd.grmhdBoundsMax = glm::vec3( r,  r,  r);
       /* Register GRMHD volume as CUDA texture object (slot 5 = BhLutGrmhd).
        * Registration is non-fatal: CUDA kernel falls back to no GRMHD sampling
        * if the backend is not active or registration fails. */
 #if BLACKHOLE_HAS_CUDA
-      if (grmhdTexture.texture != 0) {
-        cudaManager.registerLut(5 /*BhLutGrmhd*/, grmhdTexture.texture,
+      if (rs.grmhd.grmhdTexture.texture != 0) {
+        rs.dispatch.cudaManager.registerLut(5 /*BhLutGrmhd*/, rs.grmhd.grmhdTexture.texture,
                                 static_cast<unsigned int>(GL_TEXTURE_3D));
       }
 #endif
       return true;
     };
 
-    if (!grmhdPathInit) {
+    if (!rs.grmhd.grmhdPathInit) {
       std::snprintf(
-          grmhdPathBuffer.data(),
-          grmhdPathBuffer.size(), // NOLINT(cert-err33-c) -- diagnostic output, return unused
+          rs.grmhd.grmhdPathBuffer.data(),
+          rs.grmhd.grmhdPathBuffer.size(), // NOLINT(cert-err33-c) -- diagnostic output, return unused
           "%s", resourcePath("assets/grmhd/grmhd_pack.json").c_str());
-      grmhdPathInit = true;
+      rs.grmhd.grmhdPathInit = true;
     }
 
-    if (!compareAutoInit) {
+    if (!rs.compare.compareAutoInit) {
       const char *sweepEnv = std::getenv("BLACKHOLE_COMPARE_SWEEP");
       if (sweepEnv != nullptr && std::string(sweepEnv) == "1") {
-        useComputeRaytracer = true;
-        compareComputeFragment = true;
-        comparePresetSweep = true;
-        compareWriteSummary = true;
-        compareWriteOutputs = false;
-        compareWriteDiff = false;
-        compareAutoCapture = true;
-        compareAutoCount = static_cast<int>(K_COMPARE_PRESETS.size());
-        compareAutoRemaining = compareAutoCount;
-        compareAutoStrideCounter = 0;
-        compareAutoStride = comparePresetSettleFrames;
-        compareRestorePending = false;
+        rs.dispatch.useComputeRaytracer = true;
+        rs.compare.compareComputeFragment = true;
+        rs.compare.comparePresetSweep = true;
+        rs.compare.compareWriteSummary = true;
+        rs.compare.compareWriteOutputs = false;
+        rs.compare.compareWriteDiff = false;
+        rs.compare.compareAutoCapture = true;
+        rs.compare.compareAutoCount = static_cast<int>(K_COMPARE_PRESETS.size());
+        rs.compare.compareAutoRemaining = rs.compare.compareAutoCount;
+        rs.compare.compareAutoStrideCounter = 0;
+        rs.compare.compareAutoStride = rs.compare.comparePresetSettleFrames;
+        rs.compare.compareRestorePending = false;
         const char *writeDiffEnv = std::getenv("BLACKHOLE_COMPARE_WRITE_DIFF");
         if (writeDiffEnv != nullptr && std::string(writeDiffEnv) == "1") {
-          compareWriteDiff = true;
+          rs.compare.compareWriteDiff = true;
         }
         const char *writeOutputsEnv = std::getenv("BLACKHOLE_COMPARE_WRITE_OUTPUTS");
         if (writeOutputsEnv != nullptr && std::string(writeOutputsEnv) == "1") {
-          compareWriteOutputs = true;
+          rs.compare.compareWriteOutputs = true;
         }
         const char *writeSummaryEnv = std::getenv("BLACKHOLE_COMPARE_WRITE_SUMMARY");
         if (writeSummaryEnv != nullptr && std::string(writeSummaryEnv) == "0") {
-          compareWriteSummary = false;
+          rs.compare.compareWriteSummary = false;
         }
         const char *outlierCountEnv = std::getenv("BLACKHOLE_COMPARE_OUTLIER_COUNT");
         if (outlierCountEnv != nullptr) {
-          compareMaxOutliers =
+          rs.compare.compareMaxOutliers =
               std::max(0, std::atoi(outlierCountEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
                                                        // -- env var, invalid input defaults to 0
         }
         const char *outlierFracEnv = std::getenv("BLACKHOLE_COMPARE_OUTLIER_FRAC");
         if (outlierFracEnv != nullptr) {
-          compareMaxOutlierFrac =
+          rs.compare.compareMaxOutlierFrac =
               std::max(0.0f, static_cast<float>(std::atof(
                                  outlierFracEnv))); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
                                                     // -- env var, invalid input defaults to 0
         }
         const char *maxStepsEnv = std::getenv("BLACKHOLE_COMPARE_MAX_STEPS");
         if (maxStepsEnv != nullptr) {
-          compareMaxStepsOverride =
+          rs.compare.compareMaxStepsOverride =
               std::max(0, std::atoi(maxStepsEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
                                                    // -- env var, invalid input defaults to 0
-          if (compareMaxStepsOverride > 0) {
-            compareOverridesEnabled = true;
+          if (rs.compare.compareMaxStepsOverride > 0) {
+            rs.compare.compareOverridesEnabled = true;
           }
         }
         const char *stepSizeEnv = std::getenv("BLACKHOLE_COMPARE_STEP_SIZE");
         if (stepSizeEnv != nullptr) {
-          compareStepSizeOverride =
+          rs.compare.compareStepSizeOverride =
               static_cast<float>(std::atof(stepSizeEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
                                                           // -- env var, invalid input defaults to 0
-          if (compareStepSizeOverride > 0.0f) {
-            compareOverridesEnabled = true;
+          if (rs.compare.compareStepSizeOverride > 0.0f) {
+            rs.compare.compareOverridesEnabled = true;
           }
         }
         const char *baselineEnv = std::getenv("BLACKHOLE_COMPARE_BASELINE");
         if (baselineEnv != nullptr && std::string(baselineEnv) == "1") {
-          compareBaselineEnabled = true;
+          rs.compare.compareBaselineEnabled = true;
         }
       }
-      compareAutoInit = true;
+      rs.compare.compareAutoInit = true;
     }
-    if (!forceInteropFragmentEnvApplied) {
+    if (!rs.compare.forceInteropFragmentEnvApplied) {
       const char *interopEnv = std::getenv("BLACKHOLE_FORCE_INTEROP_FRAGMENT");
       if (interopEnv != nullptr && std::string(interopEnv) == "1") {
-        compareComputeFragment = true;
-        useComputeRaytracer = false;
+        rs.compare.compareComputeFragment = true;
+        rs.dispatch.useComputeRaytracer = false;
 #if BLACKHOLE_HAS_CUDA
         if (!kAppVariantCudaOnly) {
-          cudaManager.setEnabled(false);
+          rs.dispatch.cudaManager.setEnabled(false);
         }
 #endif
       }
-      forceInteropFragmentEnvApplied = true;
+      rs.compare.forceInteropFragmentEnvApplied = true;
     }
 
 #if BLACKHOLE_HAS_CUDA
-    if (!cudaVariantEnvApplied) {
+    if (!rs.dispatch.cudaVariantEnvApplied) {
       if (const char *variantEnv = std::getenv("BLACKHOLE_CUDA_KERNEL_VARIANT")) {
         int requestedVariant = std::atoi(variantEnv);
         if (requestedVariant < -1 || requestedVariant >= BH_KERNEL_COUNT) {
@@ -3129,114 +3192,114 @@ int main(int argc, char **argv) {
                        "Ignoring BLACKHOLE_CUDA_KERNEL_VARIANT=%s (expected -1..%d)\n",
                        variantEnv, BH_KERNEL_COUNT - 1);
         } else {
-          cudaManager.setKernelVariant(requestedVariant);
+          rs.dispatch.cudaManager.setKernelVariant(requestedVariant);
           std::printf("CUDA kernel variant override: %d\n", requestedVariant);
         }
       }
-      cudaVariantEnvApplied = true;
+      rs.dispatch.cudaVariantEnvApplied = true;
     }
 #endif
 
-    if (!gpuTimingLogInit) {
+    if (!rs.timing.gpuTimingLogInit) {
       const char *logEnv = std::getenv("BLACKHOLE_GPU_TIMING_LOG");
       if (logEnv != nullptr && std::string(logEnv) == "1") {
-        gpuTimingLogEnabled = true;
-        gpuTimingEnabled = true;
+        rs.timing.gpuTimingLogEnabled = true;
+        rs.timing.gpuTimingEnabled = true;
         const char *strideEnv = std::getenv("BLACKHOLE_GPU_TIMING_LOG_STRIDE");
         if (strideEnv != nullptr) {
           int const stride = std::atoi(strideEnv); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
                                                    // -- env var, invalid input defaults to 0
-          gpuTimingLogStride = std::max(1, stride);
+          rs.timing.gpuTimingLogStride = std::max(1, stride);
         }
       }
-      gpuTimingLogInit = true;
+      rs.timing.gpuTimingLogInit = true;
     }
 
-    if (!drawIdProbeConfigInit) {
+    if (!rs.probes.drawIdProbeConfigInit) {
       const char *probeEnv = std::getenv("BLACKHOLE_DRAWID_PROBE");
       if (probeEnv != nullptr && std::string(probeEnv) == "1") {
-        drawIdProbeEnabled = true;
+        rs.probes.drawIdProbeEnabled = true;
       }
-      drawIdProbeSupported = supportsDrawId() && supportsMultiDrawIndirect();
-      if (drawIdProbeEnabled && !drawIdProbeSupported) {
+      rs.probes.drawIdProbeSupported = supportsDrawId() && supportsMultiDrawIndirect();
+      if (rs.probes.drawIdProbeEnabled && !rs.probes.drawIdProbeSupported) {
         std::cout << "DrawID probe requested but not supported by the driver.\n";
-        drawIdProbeEnabled = false;
+        rs.probes.drawIdProbeEnabled = false;
       }
-      drawIdProbeConfigInit = true;
+      rs.probes.drawIdProbeConfigInit = true;
     }
 
-    if (!multiDrawMainConfigInit) {
+    if (!rs.probes.multiDrawMainConfigInit) {
       const char *multiDrawEnv = std::getenv("BLACKHOLE_MULTIDRAW_MAIN");
       if (multiDrawEnv != nullptr && std::string(multiDrawEnv) == "1") {
-        multiDrawMainEnabled = true;
+        rs.probes.multiDrawMainEnabled = true;
       }
       const char *overlayEnv = std::getenv("BLACKHOLE_MULTIDRAW_OVERLAY");
       if (overlayEnv != nullptr && std::string(overlayEnv) == "0") {
-        multiDrawOverlayEnabled = false;
+        rs.probes.multiDrawOverlayEnabled = false;
       }
       const char *countEnv = std::getenv("BLACKHOLE_MULTIDRAW_INDIRECT_COUNT");
       if (countEnv != nullptr && std::string(countEnv) == "1") {
-        multiDrawIndirectCount = true;
+        rs.probes.multiDrawIndirectCount = true;
       }
-      multiDrawSupported = supportsDrawId() && supportsMultiDrawIndirect();
-      multiDrawCountSupported = supportsIndirectCount();
-      if (multiDrawMainEnabled && !multiDrawSupported) {
+      rs.probes.multiDrawSupported = supportsDrawId() && supportsMultiDrawIndirect();
+      rs.probes.multiDrawCountSupported = supportsIndirectCount();
+      if (rs.probes.multiDrawMainEnabled && !rs.probes.multiDrawSupported) {
         std::cout << "Multi-draw main path requested but not supported.\n";
-        multiDrawMainEnabled = false;
+        rs.probes.multiDrawMainEnabled = false;
       }
-      if (multiDrawIndirectCount && !multiDrawCountSupported) {
+      if (rs.probes.multiDrawIndirectCount && !rs.probes.multiDrawCountSupported) {
         std::cout << "Indirect count requested but not supported.\n";
-        multiDrawIndirectCount = false;
+        rs.probes.multiDrawIndirectCount = false;
       }
-      multiDrawMainConfigInit = true;
+      rs.probes.multiDrawMainConfigInit = true;
     }
 
-    if (!lutAssetConfigInit) {
+    if (!rs.luts.lutAssetConfigInit) {
       const char *assetOnlyEnv = std::getenv("BLACKHOLE_LUT_ASSET_ONLY");
       if (assetOnlyEnv != nullptr && std::string(assetOnlyEnv) == "1") {
-        lutAssetOnly = true;
+        rs.luts.lutAssetOnly = true;
       }
-      lutAssetConfigInit = true;
+      rs.luts.lutAssetConfigInit = true;
     }
 
-    if (!controlsOverlayConfigInit) {
+    if (!rs.overlays.controlsOverlayConfigInit) {
       const char *overlayEnv = std::getenv("BLACKHOLE_OPENGL_CONTROLS");
       if (overlayEnv != nullptr && std::string(overlayEnv) == "0") {
-        controlsOverlayEnabled = false;
+        rs.overlays.controlsOverlayEnabled = false;
       }
       const char *scaleEnv = std::getenv("BLACKHOLE_OPENGL_CONTROLS_SCALE");
       if (scaleEnv != nullptr) {
         auto const scale =
             static_cast<float>(std::atof(scaleEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
                                                      // -- env var, invalid input defaults to 0
-        controlsOverlayScale = std::max(scale, 0.5f);
+        rs.overlays.controlsOverlayScale = std::max(scale, 0.5f);
       }
-      controlsOverlayConfigInit = true;
+      rs.overlays.controlsOverlayConfigInit = true;
     }
 
-    if (!perfOverlayConfigInit) {
+    if (!rs.overlays.perfOverlayConfigInit) {
       const char *overlayEnv = std::getenv("BLACKHOLE_PERF_HUD");
       if (overlayEnv != nullptr && std::string(overlayEnv) == "0") {
-        perfOverlayEnabled = false;
+        rs.overlays.perfOverlayEnabled = false;
       }
       const char *scaleEnv = std::getenv("BLACKHOLE_PERF_HUD_SCALE");
       if (scaleEnv != nullptr) {
         auto const scale =
             static_cast<float>(std::atof(scaleEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
                                                      // -- env var, invalid input defaults to 0
-        perfOverlayScale = std::max(scale, 0.5f);
+        rs.overlays.perfOverlayScale = std::max(scale, 0.5f);
       }
-      perfOverlayConfigInit = true;
+      rs.overlays.perfOverlayConfigInit = true;
     }
 
-    if (!integratorDebugConfigInit) {
+    if (!rs.compare.integratorDebugConfigInit) {
       const char *debugEnv = std::getenv("BLACKHOLE_INTEGRATOR_DEBUG_FLAGS");
       if (debugEnv != nullptr) {
-        integratorDebugFlags =
+        rs.compare.integratorDebugFlags =
             std::max(0, std::atoi(debugEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
                                               // -- env var, invalid input defaults to 0
       }
-      integratorDebugConfigInit = true;
+      rs.compare.integratorDebugConfigInit = true;
     }
 
     auto recreateRenderTargets = [&](int newWidth, int newHeight) {
@@ -3248,25 +3311,25 @@ int main(int argc, char **argv) {
       };
 
       clearRenderToTextureCache();
-      deleteTexture(texBlackhole);
-      deleteTexture(texBlackholeCompare);
-      deleteTexture(texBrightness);
-      deleteTexture(texBloomFinal);
-      deleteTexture(texTonemapped);
-      deleteTexture(texDepthEffects);
-      for (auto &texture : texDownsampled) {
+      deleteTexture(rs.targets.texBlackhole);
+      deleteTexture(rs.targets.texBlackholeCompare);
+      deleteTexture(rs.targets.texBrightness);
+      deleteTexture(rs.targets.texBloomFinal);
+      deleteTexture(rs.targets.texTonemapped);
+      deleteTexture(rs.targets.texDepthEffects);
+      for (auto &texture : rs.targets.texDownsampled) {
         deleteTexture(texture);
       }
-      for (auto &texture : texUpsampled) {
+      for (auto &texture : rs.targets.texUpsampled) {
         deleteTexture(texture);
       }
 
-      texBlackhole = createColorTexture32f(newWidth, newHeight);
-      texBlackholeCompare = createColorTexture32f(newWidth, newHeight);
-      texBrightness = createColorTexture(newWidth, newHeight);
-      texBloomFinal = createColorTexture(newWidth, newHeight);
-      texTonemapped = createColorTexture(newWidth, newHeight);
-      texDepthEffects = createColorTexture(newWidth, newHeight);
+      rs.targets.texBlackhole = createColorTexture32f(newWidth, newHeight);
+      rs.targets.texBlackholeCompare = createColorTexture32f(newWidth, newHeight);
+      rs.targets.texBrightness = createColorTexture(newWidth, newHeight);
+      rs.targets.texBloomFinal = createColorTexture(newWidth, newHeight);
+      rs.targets.texTonemapped = createColorTexture(newWidth, newHeight);
+      rs.targets.texDepthEffects = createColorTexture(newWidth, newHeight);
 
       for (int i = 0; i < kMaxBloomIterations; ++i) {
         auto const index = static_cast<std::size_t>(i);
@@ -3274,111 +3337,110 @@ int main(int argc, char **argv) {
         int const downHeight = std::max(1, newHeight >> (i + 1));
         int const upWidth = std::max(1, newWidth >> i);
         int const upHeight = std::max(1, newHeight >> i);
-        texDownsampled.at(index) = createColorTexture(downWidth, downHeight);
-        texUpsampled.at(index) = createColorTexture(upWidth, upHeight);
+        rs.targets.texDownsampled.at(index) = createColorTexture(downWidth, downHeight);
+        rs.targets.texUpsampled.at(index) = createColorTexture(upWidth, upHeight);
       }
 
-      renderWidth = newWidth;
-      renderHeight = newHeight;
+      rs.targets.renderWidth = newWidth;
+      rs.targets.renderHeight = newHeight;
 
 #if BLACKHOLE_HAS_CUDA
-      cudaManager.resize(texBlackhole, newWidth, newHeight);
+      rs.dispatch.cudaManager.resize(rs.targets.texBlackhole, newWidth, newHeight);
 #endif
     };
 
-    static float lutAdiskDensityV = 0.0f;
 
     auto updateLuts = [&](float spin, float densityV) {
       spin = std::clamp(spin, -0.99f, 0.99f);
-      if (!lutAssetsTried) {
-        lutAssetsTried = true;
-        lutAssetsLoaded = loadLutAssets(lutAssetEmissivity, lutAssetRedshift, lutAssetSpin);
+      if (!rs.luts.lutAssetsTried) {
+        rs.luts.lutAssetsTried = true;
+        rs.luts.lutAssetsLoaded = loadLutAssets(rs.luts.lutAssetEmissivity, rs.luts.lutAssetRedshift, rs.luts.lutAssetSpin);
       }
 
-      bool const useAssetLuts = lutAssetsLoaded && std::abs(spin - lutAssetSpin) <= 1e-3f &&
-                                !lutAssetEmissivity.values.empty() &&
-                                !lutAssetRedshift.values.empty();
+      bool const useAssetLuts = rs.luts.lutAssetsLoaded && std::abs(spin - rs.luts.lutAssetSpin) <= 1e-3f &&
+                                !rs.luts.lutAssetEmissivity.values.empty() &&
+                                !rs.luts.lutAssetRedshift.values.empty();
       if (useAssetLuts) {
-        if (!lutInitialized || !lutFromAssets) {
-          if (texEmissivityLUT != 0) {
-            glDeleteTextures(1, &texEmissivityLUT);
-            texEmissivityLUT = 0;
+        if (!rs.luts.lutInitialized || !rs.luts.lutFromAssets) {
+          if (rs.luts.texEmissivityLUT != 0) {
+            glDeleteTextures(1, &rs.luts.texEmissivityLUT);
+            rs.luts.texEmissivityLUT = 0;
           }
-          if (texRedshiftLUT != 0) {
-            glDeleteTextures(1, &texRedshiftLUT);
-            texRedshiftLUT = 0;
+          if (rs.luts.texRedshiftLUT != 0) {
+            glDeleteTextures(1, &rs.luts.texRedshiftLUT);
+            rs.luts.texRedshiftLUT = 0;
           }
-          if (texPhotonGlowLUT != 0) {
-            glDeleteTextures(1, &texPhotonGlowLUT);
-            texPhotonGlowLUT = 0;
+          if (rs.luts.texPhotonGlowLUT != 0) {
+            glDeleteTextures(1, &rs.luts.texPhotonGlowLUT);
+            rs.luts.texPhotonGlowLUT = 0;
           }
-          if (texDiskDensityLUT != 0) {
-            glDeleteTextures(1, &texDiskDensityLUT);
-            texDiskDensityLUT = 0;
+          if (rs.luts.texDiskDensityLUT != 0) {
+            glDeleteTextures(1, &rs.luts.texDiskDensityLUT);
+            rs.luts.texDiskDensityLUT = 0;
           }
 
-          int const lutSize = static_cast<int>(lutAssetEmissivity.values.size());
-          texEmissivityLUT = createFloatTexture2D(lutSize, 1, lutAssetEmissivity.values);
-          texRedshiftLUT = createFloatTexture2D(lutSize, 1, lutAssetRedshift.values);
+          int const lutSize = static_cast<int>(rs.luts.lutAssetEmissivity.values.size());
+          rs.luts.texEmissivityLUT = createFloatTexture2D(lutSize, 1, rs.luts.lutAssetEmissivity.values);
+          rs.luts.texRedshiftLUT = createFloatTexture2D(lutSize, 1, rs.luts.lutAssetRedshift.values);
 
 #if BLACKHOLE_HAS_CUDA
           /* Share asset LUTs with CUDA backend (slot 0=emissivity, 1=redshift) */
-          cudaManager.registerLut(0, texEmissivityLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
-          cudaManager.registerLut(1, texRedshiftLUT,   static_cast<unsigned int>(GL_TEXTURE_2D));
+          rs.dispatch.cudaManager.registerLut(0, rs.luts.texEmissivityLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
+          rs.dispatch.cudaManager.registerLut(1, rs.luts.texRedshiftLUT,   static_cast<unsigned int>(GL_TEXTURE_2D));
 #endif
 
-          lutRadiusMin = lutAssetEmissivity.rMin;
-          lutRadiusMax = lutAssetEmissivity.rMax;
-          redshiftRadiusMin = lutAssetRedshift.rMin;
-          redshiftRadiusMax = lutAssetRedshift.rMax;
-          lutSpin = lutAssetSpin;
-          lutFromAssets = true;
-          lutInitialized = true;
+          rs.luts.lutRadiusMin = rs.luts.lutAssetEmissivity.rMin;
+          rs.luts.lutRadiusMax = rs.luts.lutAssetEmissivity.rMax;
+          rs.luts.redshiftRadiusMin = rs.luts.lutAssetRedshift.rMin;
+          rs.luts.redshiftRadiusMax = rs.luts.lutAssetRedshift.rMax;
+          rs.luts.lutSpin = rs.luts.lutAssetSpin;
+          rs.luts.lutFromAssets = true;
+          rs.luts.lutInitialized = true;
         }
         return;
       }
 
-      if (lutAssetOnly) {
-        if (!lutAssetOnlyWarned) {
+      if (rs.luts.lutAssetOnly) {
+        if (!rs.luts.lutAssetOnlyWarned) {
           std::cout << "LUT asset-only mode active; skipping generated LUT fallback.\n";
-          lutAssetOnlyWarned = true;
+          rs.luts.lutAssetOnlyWarned = true;
         }
-        if (texEmissivityLUT != 0) {
-          glDeleteTextures(1, &texEmissivityLUT);
-          texEmissivityLUT = 0;
+        if (rs.luts.texEmissivityLUT != 0) {
+          glDeleteTextures(1, &rs.luts.texEmissivityLUT);
+          rs.luts.texEmissivityLUT = 0;
         }
-        if (texRedshiftLUT != 0) {
-          glDeleteTextures(1, &texRedshiftLUT);
-          texRedshiftLUT = 0;
+        if (rs.luts.texRedshiftLUT != 0) {
+          glDeleteTextures(1, &rs.luts.texRedshiftLUT);
+          rs.luts.texRedshiftLUT = 0;
         }
-        if (texPhotonGlowLUT != 0) {
-          glDeleteTextures(1, &texPhotonGlowLUT);
-          texPhotonGlowLUT = 0;
+        if (rs.luts.texPhotonGlowLUT != 0) {
+          glDeleteTextures(1, &rs.luts.texPhotonGlowLUT);
+          rs.luts.texPhotonGlowLUT = 0;
         }
-        lutInitialized = false;
-        lutFromAssets = false;
+        rs.luts.lutInitialized = false;
+        rs.luts.lutFromAssets = false;
         return;
       }
 
       // Only regenerate if parameters changed or not initialized
-      if (!lutInitialized || std::abs(spin - lutSpin) > 1e-3f ||
-          std::abs(densityV - lutAdiskDensityV) > 1e-3f || lutFromAssets) {
+      if (!rs.luts.lutInitialized || std::abs(spin - rs.luts.lutSpin) > 1e-3f ||
+          std::abs(densityV - rs.luts.lutAdiskDensityV) > 1e-3f || rs.luts.lutFromAssets) {
         // Cleanup existing textures
-        if (texEmissivityLUT != 0) {
-          glDeleteTextures(1, &texEmissivityLUT);
-          texEmissivityLUT = 0;
+        if (rs.luts.texEmissivityLUT != 0) {
+          glDeleteTextures(1, &rs.luts.texEmissivityLUT);
+          rs.luts.texEmissivityLUT = 0;
         }
-        if (texRedshiftLUT != 0) {
-          glDeleteTextures(1, &texRedshiftLUT);
-          texRedshiftLUT = 0;
+        if (rs.luts.texRedshiftLUT != 0) {
+          glDeleteTextures(1, &rs.luts.texRedshiftLUT);
+          rs.luts.texRedshiftLUT = 0;
         }
-        if (texPhotonGlowLUT != 0) {
-          glDeleteTextures(1, &texPhotonGlowLUT);
-          texPhotonGlowLUT = 0;
+        if (rs.luts.texPhotonGlowLUT != 0) {
+          glDeleteTextures(1, &rs.luts.texPhotonGlowLUT);
+          rs.luts.texPhotonGlowLUT = 0;
         }
-        if (texDiskDensityLUT != 0) {
-          glDeleteTextures(1, &texDiskDensityLUT);
-          texDiskDensityLUT = 0;
+        if (rs.luts.texDiskDensityLUT != 0) {
+          glDeleteTextures(1, &rs.luts.texDiskDensityLUT);
+          rs.luts.texDiskDensityLUT = 0;
         }
 
         constexpr int kLutSize = 256;
@@ -3390,32 +3452,32 @@ int main(int argc, char **argv) {
         auto redshiftLut =
             physics::generateRedshiftLut(kLutSize, kMassSolar, static_cast<double>(spin));
 
-        texEmissivityLUT = createFloatTexture2D(kLutSize, 1, emissivityLut.values);
-        texRedshiftLUT = createFloatTexture2D(kLutSize, 1, redshiftLut.values);
+        rs.luts.texEmissivityLUT = createFloatTexture2D(kLutSize, 1, emissivityLut.values);
+        rs.luts.texRedshiftLUT = createFloatTexture2D(kLutSize, 1, redshiftLut.values);
 
 #if BLACKHOLE_HAS_CUDA
         /* Share generated LUTs with CUDA backend (slot 0=emissivity, 1=redshift) */
-        cudaManager.registerLut(0, texEmissivityLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
-        cudaManager.registerLut(1, texRedshiftLUT,   static_cast<unsigned int>(GL_TEXTURE_2D));
+        rs.dispatch.cudaManager.registerLut(0, rs.luts.texEmissivityLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
+        rs.dispatch.cudaManager.registerLut(1, rs.luts.texRedshiftLUT,   static_cast<unsigned int>(GL_TEXTURE_2D));
 #endif
 
         auto photonGlowLut = physics::generatePhotonGlowLut(256);
-        texPhotonGlowLUT = createFloatTexture2D(256, 1, photonGlowLut.values);
+        rs.luts.texPhotonGlowLUT = createFloatTexture2D(256, 1, photonGlowLut.values);
 
         // Connect adiskDensityV to LUT generation
         // Use densityV as the exponent or scale factor for the density profile
         double const densityScale = static_cast<double>(std::max(0.1f, densityV));
         auto diskDensityLut = physics::generateDiskDensityLut(256, densityScale);
-        texDiskDensityLUT = createFloatTexture2D(256, 1, diskDensityLut.values);
+        rs.luts.texDiskDensityLUT = createFloatTexture2D(256, 1, diskDensityLut.values);
 
-        lutRadiusMin = emissivityLut.rMin;
-        lutRadiusMax = emissivityLut.rMax;
-        redshiftRadiusMin = redshiftLut.rMin;
-        redshiftRadiusMax = redshiftLut.rMax;
-        lutSpin = spin;
-        lutAdiskDensityV = densityV;
-        lutFromAssets = false;
-        lutInitialized = true;
+        rs.luts.lutRadiusMin = emissivityLut.rMin;
+        rs.luts.lutRadiusMax = emissivityLut.rMax;
+        rs.luts.redshiftRadiusMin = redshiftLut.rMin;
+        rs.luts.redshiftRadiusMax = redshiftLut.rMax;
+        rs.luts.lutSpin = spin;
+        rs.luts.lutAdiskDensityV = densityV;
+        rs.luts.lutFromAssets = false;
+        rs.luts.lutInitialized = true;
         std::cout << "LUTs regenerated. Spin: " << spin << ", DensityV: " << densityV << '\n';
       }
     };
@@ -3473,27 +3535,27 @@ int main(int argc, char **argv) {
       InputManager::instance().update(deltaTime);
       auto &input = InputManager::instance();
 
-      if (gpuTimingEnabled && !gpuTimers.initialized) {
-        gpuTimers.init();
-      } else if (!gpuTimingEnabled && gpuTimers.initialized) {
-        gpuTimers.shutdown();
+      if (rs.timing.gpuTimingEnabled && !rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimers.init();
+      } else if (!rs.timing.gpuTimingEnabled && rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimers.shutdown();
       }
-      if (gpuTimers.initialized) {
-        gpuTimers.resolve();
+      if (rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimers.resolve();
       }
-      timingHistory.push(cpuFrameMs, gpuTimers);
+      rs.timing.timingHistory.push(cpuFrameMs, rs.timing.gpuTimers);
       TRACY_PLOT("cpu_frame_ms", cpuFrameMs);
-      if (gpuTimers.initialized) {
-        TRACY_PLOT("gpu_fragment_ms", gpuTimers.blackholeFragment.lastMs);
-        TRACY_PLOT("gpu_compute_ms", gpuTimers.blackholeCompute.lastMs);
-        TRACY_PLOT("gpu_bloom_ms", gpuTimers.bloom.lastMs);
-        TRACY_PLOT("gpu_tonemap_ms", gpuTimers.tonemap.lastMs);
-        TRACY_PLOT("gpu_depth_ms", gpuTimers.depth.lastMs);
-        TRACY_PLOT("gpu_grmhd_slice_ms", gpuTimers.grmhdSlice.lastMs);
+      if (rs.timing.gpuTimers.initialized) {
+        TRACY_PLOT("gpu_fragment_ms", rs.timing.gpuTimers.blackholeFragment.lastMs);
+        TRACY_PLOT("gpu_compute_ms", rs.timing.gpuTimers.blackholeCompute.lastMs);
+        TRACY_PLOT("gpu_bloom_ms", rs.timing.gpuTimers.bloom.lastMs);
+        TRACY_PLOT("gpu_tonemap_ms", rs.timing.gpuTimers.tonemap.lastMs);
+        TRACY_PLOT("gpu_depth_ms", rs.timing.gpuTimers.depth.lastMs);
+        TRACY_PLOT("gpu_grmhd_slice_ms", rs.timing.gpuTimers.grmhdSlice.lastMs);
       }
 
       // --record-frames: one-time initialization (cinematic quality, 1920x1080, no vsync)
-      if (!recordFramesDir.empty() && !recordInitDone) {
+      if (!recordFramesDir.empty() && !rs.recording.recordInitDone) {
         std::error_code recordDirEc;
         std::filesystem::create_directories(recordFramesDir, recordDirEc);
         if (recordDirEc) {
@@ -3501,7 +3563,7 @@ int main(int argc, char **argv) {
                        recordFramesDir.c_str(), recordDirEc.message().c_str());
           return 1;
         }
-        recordInitDone     = true;
+        rs.recording.recordInitDone     = true;
         int recordWidth = 1920;
         int recordHeight = 1080;
         if (char const *const envWidth = std::getenv("BLACKHOLE_RECORD_WIDTH")) {
@@ -3518,67 +3580,67 @@ int main(int argc, char **argv) {
         }
         glfwSetWindowSize(window, recordWidth, recordHeight);
         glfwSwapInterval(0);
-        swapInterval       = 0;
+        rs.display.swapInterval       = 0;
         if (recordProfile == "compare-orbit-near") {
-          adiskEnabled       = false;
-          adiskParticle      = false;
-          enableRedshift     = false;
-          enablePhotonSphere = false;
-          hawkingGlowEnabled = false;
-          rteVolumetricEnabled = false;
-          stokesEnabled      = false;
-          useNoiseTexture    = false;
-          noiseTextureReady  = true;
-          adiskNoiseLOD      = 3.0f;
-          adiskNoiseScale    = 0.5f;
-          adiskDensityV      = 2.0f;
-          adiskLit           = 0.25f;
-          dopplerStrength    = 1.0f;
-          photonSphereGlowStrength = 1.0f;
-          bloomIterations    = 4;
-          bloomStrength      = 0.08f;
-          tonemappingEnabled = true;
-          toneExposure       = 6.0f;
-          gamma              = 2.35f;
-          computeMaxSteps    = 1000;
-          computeStepSize    = 0.02f;
-          depthFar           = 154.367004f;
-          kerrSpin           = 0.0f;
+          rs.disk.adiskEnabled       = false;
+          rs.disk.adiskParticle      = false;
+          rs.physicsCore.enableRedshift     = false;
+          rs.physicsCore.enablePhotonSphere = false;
+          rs.hawking.hawkingGlowEnabled = false;
+          rs.rte.rteVolumetricEnabled = false;
+          rs.stokes.stokesEnabled      = false;
+          rs.disk.useNoiseTexture    = false;
+          rs.disk.noiseTextureReady  = true;
+          rs.disk.adiskNoiseLOD      = 3.0f;
+          rs.disk.adiskNoiseScale    = 0.5f;
+          rs.disk.adiskDensityV      = 2.0f;
+          rs.disk.adiskLit           = 0.25f;
+          rs.disk.dopplerStrength    = 1.0f;
+          rs.disk.photonSphereGlowStrength = 1.0f;
+          rs.post.bloomIterations    = 4;
+          rs.post.bloomStrength      = 0.08f;
+          rs.post.tonemappingEnabled = true;
+          rs.post.toneExposure       = 6.0f;
+          rs.post.gamma              = 2.35f;
+          rs.dispatch.computeMaxSteps    = 1000;
+          rs.dispatch.computeStepSize    = 0.02f;
+          rs.display.depthFar           = 154.367004f;
+          rs.physicsCore.kerrSpin           = 0.0f;
           SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
           SettingsManager::instance().get().backgroundEnabled = true;
           SettingsManager::instance().get().backgroundIntensity = 0.8f;
           CameraState &camMutable = input.camera();
           camMutable = CameraState{.yaw = -90.0f, .pitch = 0.0f, .roll = 0.0f, .distance = 10.0f, .fov = 90.0f};
-          cameraModeIndex = static_cast<int>(CameraMode::Input);
+          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
         } else if (recordProfile == "showcase-orbit") {
           const ShowcaseOrbitComposition *const composition =
               findShowcaseOrbitComposition(recordComposition);
-          adiskEnabled       = true;
-          adiskParticle      = false;
-          enableRedshift     = true;
-          enablePhotonSphere = true;
-          hawkingGlowEnabled = false;
-          rteVolumetricEnabled = false;
-          stokesEnabled      = false;
-          useNoiseTexture    = false;
-          noiseTextureReady  = true;
-          adiskNoiseLOD      = 3.0f;
-          adiskNoiseScale    = 0.35f;
-          adiskDensityV      = 1.6f;
-          adiskDensityH      = 2.1f;
-          adiskHeight        = 0.42f;
-          adiskLit           = 0.24f;
-          dopplerStrength    = 1.15f;
-          photonSphereGlowStrength = 1.15f;
-          bloomIterations    = 5;
-          bloomStrength      = 0.055f;
-          tonemappingEnabled = true;
-          toneExposure       = 1.0f;
-          gamma              = 2.35f;
-          computeMaxSteps    = 1000;
-          computeStepSize    = 0.016f;
-          depthFar           = 154.367004f;
-          kerrSpin           = 0.62f;
+          rs.disk.adiskEnabled       = true;
+          rs.disk.adiskParticle      = false;
+          rs.physicsCore.enableRedshift     = true;
+          rs.physicsCore.enablePhotonSphere = true;
+          rs.hawking.hawkingGlowEnabled = false;
+          rs.rte.rteVolumetricEnabled = false;
+          rs.stokes.stokesEnabled      = false;
+          rs.disk.useNoiseTexture    = false;
+          rs.disk.noiseTextureReady  = true;
+          rs.disk.adiskNoiseLOD      = 3.0f;
+          rs.disk.adiskNoiseScale    = 0.35f;
+          rs.disk.adiskDensityV      = 1.6f;
+          rs.disk.adiskDensityH      = 2.1f;
+          rs.disk.adiskHeight        = 0.42f;
+          rs.disk.adiskLit           = 0.24f;
+          rs.disk.dopplerStrength    = 1.15f;
+          rs.disk.photonSphereGlowStrength = 1.15f;
+          rs.post.bloomIterations    = 5;
+          rs.post.bloomStrength      = 0.055f;
+          rs.post.tonemappingEnabled = true;
+          rs.post.toneExposure       = 1.0f;
+          rs.post.gamma              = 2.35f;
+          rs.dispatch.computeMaxSteps    = 1000;
+          rs.dispatch.computeStepSize    = 0.016f;
+          rs.display.depthFar           = 154.367004f;
+          rs.physicsCore.kerrSpin           = 0.62f;
           SettingsManager::instance().get().backgroundId =
               hasRecordBackgroundId
                   ? recordBackgroundId
@@ -3599,44 +3661,44 @@ int main(int argc, char **argv) {
               .fov = hasRecordFov ? recordFovDeg
                                   : (composition != nullptr ? composition->fovDeg : 68.0f)};
           if (hasRecordExposure) {
-            toneExposure = recordExposure;
+            rs.post.toneExposure = recordExposure;
           } else if (composition != nullptr) {
-            toneExposure = composition->exposure;
+            rs.post.toneExposure = composition->exposure;
           }
-          cameraModeIndex = static_cast<int>(CameraMode::Input);
+          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
         } else {
           // Physics: on, but not everything -- avoids noise pileup / fuzz
-          adiskEnabled       = true;
-          adiskParticle      = false;  // particle mode adds visual noise
-          enableRedshift     = true;
-          enablePhotonSphere = true;
-          hawkingGlowEnabled = false;  // haze effect competes with disk shading
-          rteVolumetricEnabled = false; // volumetric fog washes out fine detail
-          stokesEnabled      = false;
+          rs.disk.adiskEnabled       = true;
+          rs.disk.adiskParticle      = false;  // particle mode adds visual noise
+          rs.physicsCore.enableRedshift     = true;
+          rs.physicsCore.enablePhotonSphere = true;
+          rs.hawking.hawkingGlowEnabled = false;  // haze effect competes with disk shading
+          rs.rte.rteVolumetricEnabled = false; // volumetric fog washes out fine detail
+          rs.stokes.stokesEnabled      = false;
           // Skip noise texture LUT generation in record mode: FastNoise2
           // SIMD code has a heap double-free at >= 128^3 on this system.
           // The disk looks clean without it.
-          useNoiseTexture    = false;
-          noiseTextureReady  = true;   // mark done so we never call initialize()
-          adiskNoiseLOD      = 3.0f;
-          adiskNoiseScale    = 0.5f;
-          adiskDensityV      = 1.4f;
-          adiskLit           = 0.08f;
-          dopplerStrength    = 1.0f;
-          photonSphereGlowStrength = 1.0f;
+          rs.disk.useNoiseTexture    = false;
+          rs.disk.noiseTextureReady  = true;   // mark done so we never call initialize()
+          rs.disk.adiskNoiseLOD      = 3.0f;
+          rs.disk.adiskNoiseScale    = 0.5f;
+          rs.disk.adiskDensityV      = 1.4f;
+          rs.disk.adiskLit           = 0.08f;
+          rs.disk.dopplerStrength    = 1.0f;
+          rs.disk.photonSphereGlowStrength = 1.0f;
           // Post-processing: preserve ring detail instead of washing it out
-          bloomIterations    = 3;
-          bloomStrength      = 0.03f;
-          tonemappingEnabled = true;
-          toneExposure       = 0.02f;
-          gamma              = 2.25f;
+          rs.post.bloomIterations    = 3;
+          rs.post.bloomStrength      = 0.03f;
+          rs.post.tonemappingEnabled = true;
+          rs.post.toneExposure       = 0.02f;
+          rs.post.gamma              = 2.25f;
           // Integration quality
-          computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
-          computeStepSize    = 0.08f;
+          rs.dispatch.computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
+          rs.dispatch.computeStepSize    = 0.08f;
           // Escape radius must exceed the maximum camera distance (380 rs).
           // depthFar is passed as interop.depthFar and used as the ray max_dist.
-          depthFar           = 500.0f;
-          kerrSpin           = K_CINEMATIC_KEYFRAMES[0].kerrSpin;
+          rs.display.depthFar           = 500.0f;
+          rs.physicsCore.kerrSpin           = K_CINEMATIC_KEYFRAMES[0].kerrSpin;
           // Background: override to the ESO Milky Way panorama which ships as a real
           // JPEG (not a Git LFS pointer) -- the default "nasa_pia22085" is LFS-tracked.
           SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
@@ -3651,11 +3713,11 @@ int main(int argc, char **argv) {
           // via the ImGui "Use CUDA Raytracer" checkbox; record mode must set it directly.
           // useComputeRaytracer alone is insufficient -- it only controls the GLSL compute
           // path, not the CUDA path.
-          cudaManager.setEnabled(true);
+          rs.dispatch.cudaManager.setEnabled(true);
         } else {
-          cudaManager.setEnabled(false);
-          useComputeRaytracer = false;
-          compareComputeFragment = false;
+          rs.dispatch.cudaManager.setEnabled(false);
+          rs.dispatch.useComputeRaytracer = false;
+          rs.compare.compareComputeFragment = false;
         }
 #endif
         std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
@@ -3698,25 +3760,25 @@ int main(int argc, char **argv) {
 
       // Resize render targets to match viewport
       if (viewportSize.x > 0 && viewportSize.y > 0 &&
-          (static_cast<int>(viewportSize.x) != renderWidth ||
-           static_cast<int>(viewportSize.y) != renderHeight)) {
+          (static_cast<int>(viewportSize.x) != rs.targets.renderWidth ||
+           static_cast<int>(viewportSize.y) != rs.targets.renderHeight)) {
         recreateRenderTargets(static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
       }
       ImGui::End();
       ImGui::PopStyleVar();
 
-      if (rmluiEnabled) {
-        if (!rmluiReady) {
-          rmluiReady = rmluiOverlay.init(window, windowWidth, windowHeight);
+      if (rs.overlays.rmluiEnabled) {
+        if (!rs.overlays.rmluiReady) {
+          rs.overlays.rmluiReady = rs.overlays.rmluiOverlay.init(window, windowWidth, windowHeight);
         }
-        if (rmluiReady && (windowWidth != rmluiWidth || windowHeight != rmluiHeight)) {
-          rmluiOverlay.resize(windowWidth, windowHeight);
-          rmluiWidth = windowWidth;
-          rmluiHeight = windowHeight;
+        if (rs.overlays.rmluiReady && (windowWidth != rs.overlays.rmluiWidth || windowHeight != rs.overlays.rmluiHeight)) {
+          rs.overlays.rmluiOverlay.resize(windowWidth, windowHeight);
+          rs.overlays.rmluiWidth = windowWidth;
+          rs.overlays.rmluiHeight = windowHeight;
         }
-      } else if (rmluiReady) {
-        rmluiOverlay.shutdown();
-        rmluiReady = false;
+      } else if (rs.overlays.rmluiReady) {
+        rs.overlays.rmluiOverlay.shutdown();
+        rs.overlays.rmluiReady = false;
       }
 
       static GLuint galaxy = loadCubemap(resourcePath("assets/skybox_nebula_dark"));
@@ -3892,108 +3954,108 @@ int main(int argc, char **argv) {
       }
       GLuint const backgroundFallback = backgroundBase != 0 ? backgroundBase : fallback2D;
       backgroundTextures.fill(backgroundFallback);
-      if (!noiseTextureReady) {
-        bool const noiseOk = noiseCache.initialize();
-        noiseTextureReady = true;  // don't retry regardless; FastNoise2 may be disabled
+      if (!rs.disk.noiseTextureReady) {
+        bool const noiseOk = rs.disk.noiseCache.initialize();
+        rs.disk.noiseTextureReady = true;  // don't retry regardless; FastNoise2 may be disabled
         if (noiseOk) {
-          texNoiseVolume = noiseCache.getTurbulenceTexture();
+          rs.disk.texNoiseVolume = rs.disk.noiseCache.getTurbulenceTexture();
         }
       }
 
-      if (!cameraSettingsLoaded) {
-        cameraModeIndex = settings.cameraMode;
-        orbitRadius = settings.orbitRadius;
-        orbitSpeed = settings.orbitSpeed;
-        cameraSettingsLoaded = true;
+      if (!rs.camera.cameraSettingsLoaded) {
+        rs.camera.cameraModeIndex = settings.cameraMode;
+        rs.camera.orbitRadius = settings.orbitRadius;
+        rs.camera.orbitSpeed = settings.orbitSpeed;
+        rs.camera.cameraSettingsLoaded = true;
       }
 
-      if (!displaySettingsLoaded) {
-        renderScale = settings.renderScale;
-        swapInterval = settings.swapInterval;
-        displaySettingsLoaded = true;
+      if (!rs.display.displaySettingsLoaded) {
+        rs.display.renderScale = settings.renderScale;
+        rs.display.swapInterval = settings.swapInterval;
+        rs.display.displaySettingsLoaded = true;
       }
-      if (!postProcessingSettingsLoaded) {
-        bloomStrength = settings.bloomStrength;
-        tonemappingEnabled = settings.tonemappingEnabled;
-        toneExposure = 1.0f;
-        gamma = settings.gamma;
-        postProcessingSettingsLoaded = true;
+      if (!rs.post.postProcessingSettingsLoaded) {
+        rs.post.bloomStrength = settings.bloomStrength;
+        rs.post.tonemappingEnabled = settings.tonemappingEnabled;
+        rs.post.toneExposure = 1.0f;
+        rs.post.gamma = settings.gamma;
+        rs.post.postProcessingSettingsLoaded = true;
       }
       if (!recordFramesDir.empty()) {
         const ShowcaseOrbitComposition *const composition =
             recordProfile == "showcase-orbit" ? findShowcaseOrbitComposition(recordComposition)
                                               : nullptr;
         if (hasRecordExposure) {
-          toneExposure = recordExposure;
+          rs.post.toneExposure = recordExposure;
         } else if (recordProfile == "showcase-orbit") {
-          toneExposure = composition != nullptr ? composition->exposure : 3.4f;
+          rs.post.toneExposure = composition != nullptr ? composition->exposure : 3.4f;
         }
       }
-      if (!bloomSettingsLoaded) {
-        bloomIterations = std::clamp(settings.bloomIterations, 1, kMaxBloomIterations);
-        bloomSettingsLoaded = true;
+      if (!rs.post.bloomSettingsLoaded) {
+        rs.post.bloomIterations = std::clamp(settings.bloomIterations, 1, kMaxBloomIterations);
+        rs.post.bloomSettingsLoaded = true;
       }
 
-      renderScale = std::clamp(renderScale, 0.25f, 1.5f);
+      rs.display.renderScale = std::clamp(rs.display.renderScale, 0.25f, 1.5f);
       // Legacy resize logic disabled in favor of Viewport-based sizing
       /*
       int targetWidth =
-          std::max(1, static_cast<int>(static_cast<float>(windowWidth) * renderScale));
+          std::max(1, static_cast<int>(static_cast<float>(windowWidth) * rs.display.renderScale));
       int targetHeight =
-          std::max(1, static_cast<int>(static_cast<float>(windowHeight) * renderScale));
-      if (targetWidth != renderWidth || targetHeight != renderHeight) {
+          std::max(1, static_cast<int>(static_cast<float>(windowHeight) * rs.display.renderScale));
+      if (targetWidth != rs.targets.renderWidth || targetHeight != rs.targets.renderHeight) {
         recreateRenderTargets(targetWidth, targetHeight);
       }
       */
       settings.fullscreen = input.isFullscreen();
-      settings.swapInterval = swapInterval;
-      settings.renderScale = renderScale;
-      settings.bloomStrength = bloomStrength;
-      settings.tonemappingEnabled = tonemappingEnabled;
-      settings.gamma = gamma;
-      settings.bloomIterations = bloomIterations;
+      settings.swapInterval = rs.display.swapInterval;
+      settings.renderScale = rs.display.renderScale;
+      settings.bloomStrength = rs.post.bloomStrength;
+      settings.tonemappingEnabled = rs.post.tonemappingEnabled;
+      settings.gamma = rs.post.gamma;
+      settings.bloomIterations = rs.post.bloomIterations;
 
-      comparePresetSettleFrames = std::clamp(comparePresetSettleFrames, 1, 10);
+      rs.compare.comparePresetSettleFrames = std::clamp(rs.compare.comparePresetSettleFrames, 1, 10);
       bool const compareSweepAllowed =
-          compareComputeFragment && ShaderManager::instance().canUseComputeShaders();
-      if (comparePresetSweep && !compareSweepAllowed) {
-        comparePresetSweep = false;
-        if (comparePresetSaved) {
-          compareRestorePending = true;
+          rs.compare.compareComputeFragment && ShaderManager::instance().canUseComputeShaders();
+      if (rs.compare.comparePresetSweep && !compareSweepAllowed) {
+        rs.compare.comparePresetSweep = false;
+        if (rs.compare.comparePresetSaved) {
+          rs.compare.compareRestorePending = true;
         }
       }
-      if (comparePresetSweep) {
-        if (!comparePresetSaved) {
-          comparePresetSavedCamera = input.camera();
-          comparePresetSavedMode = cameraModeIndex;
-          comparePresetSavedOrbitRadius = orbitRadius;
-          comparePresetSavedOrbitSpeed = orbitSpeed;
-          comparePresetSavedOrbitTime = orbitTime;
-          comparePresetSavedKerrSpin = kerrSpin;
-          comparePresetSaved = true;
+      if (rs.compare.comparePresetSweep) {
+        if (!rs.compare.comparePresetSaved) {
+          rs.compare.comparePresetSavedCamera = input.camera();
+          rs.compare.comparePresetSavedMode = rs.camera.cameraModeIndex;
+          rs.compare.comparePresetSavedOrbitRadius = rs.camera.orbitRadius;
+          rs.compare.comparePresetSavedOrbitSpeed = rs.camera.orbitSpeed;
+          rs.compare.comparePresetSavedOrbitTime = rs.camera.orbitTime;
+          rs.compare.comparePresetSavedKerrSpin = rs.physicsCore.kerrSpin;
+          rs.compare.comparePresetSaved = true;
         }
         int const presetCount = static_cast<int>(K_COMPARE_PRESETS.size());
-        comparePresetIndex = std::clamp(comparePresetIndex, 0, presetCount);
-        if (comparePresetIndex >= presetCount) {
-          comparePresetSweep = false;
-          compareRestorePending = true;
+        rs.compare.comparePresetIndex = std::clamp(rs.compare.comparePresetIndex, 0, presetCount);
+        if (rs.compare.comparePresetIndex >= presetCount) {
+          rs.compare.comparePresetSweep = false;
+          rs.compare.compareRestorePending = true;
         } else {
-          const auto &preset = K_COMPARE_PRESETS.at(static_cast<std::size_t>(comparePresetIndex));
+          const auto &preset = K_COMPARE_PRESETS.at(static_cast<std::size_t>(rs.compare.comparePresetIndex));
           CameraState &camMutable = input.camera();
           camMutable = preset.camera;
-          cameraModeIndex = static_cast<int>(preset.mode);
-          orbitRadius = preset.orbitRadius;
-          orbitSpeed = preset.orbitSpeed;
-          orbitTime = 0.0f;
-          kerrSpin = preset.kerrSpin;
-          comparePresetFrameCounter++;
-          if (comparePresetFrameCounter >= comparePresetSettleFrames) {
-            captureCompareSnapshot = true;
-            comparePresetFrameCounter = 0;
-            comparePresetIndex++;
-            if (comparePresetIndex >= presetCount) {
-              comparePresetSweep = false;
-              compareRestorePending = true;
+          rs.camera.cameraModeIndex = static_cast<int>(preset.mode);
+          rs.camera.orbitRadius = preset.orbitRadius;
+          rs.camera.orbitSpeed = preset.orbitSpeed;
+          rs.camera.orbitTime = 0.0f;
+          rs.physicsCore.kerrSpin = preset.kerrSpin;
+          rs.compare.comparePresetFrameCounter++;
+          if (rs.compare.comparePresetFrameCounter >= rs.compare.comparePresetSettleFrames) {
+            rs.compare.captureCompareSnapshot = true;
+            rs.compare.comparePresetFrameCounter = 0;
+            rs.compare.comparePresetIndex++;
+            if (rs.compare.comparePresetIndex >= presetCount) {
+              rs.compare.comparePresetSweep = false;
+              rs.compare.compareRestorePending = true;
             }
           }
         }
@@ -4004,21 +4066,21 @@ int main(int argc, char **argv) {
         if (recordProfile == "compare-orbit-near") {
           float const denom = static_cast<float>(std::max(recordFramesTotal - 1, 1));
           float const progress =
-              static_cast<float>(recordFrameIndex - recordStartFrame) / denom;
+              static_cast<float>(rs.recording.recordFrameIndex - recordStartFrame) / denom;
           CameraState &camMutable = input.camera();
           camMutable.yaw = -90.0f + progress * 18.0f;
           camMutable.pitch = 0.0f;
           camMutable.roll = 0.0f;
           camMutable.distance = 10.0f;
           camMutable.fov = 90.0f;
-          cameraModeIndex = static_cast<int>(CameraMode::Input);
-          kerrSpin = 0.0f;
+          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
+          rs.physicsCore.kerrSpin = 0.0f;
         } else if (recordProfile == "showcase-orbit") {
           const ShowcaseOrbitComposition *const composition =
               findShowcaseOrbitComposition(recordComposition);
           float const denom = static_cast<float>(std::max(recordFramesTotal - 1, 1));
           float const progress =
-              static_cast<float>(recordFrameIndex - recordStartFrame) / denom;
+              static_cast<float>(rs.recording.recordFrameIndex - recordStartFrame) / denom;
           float const baseYaw = hasRecordYaw ? recordYawDeg : -90.0f;
           float const sweepDeg =
               hasRecordSweep ? recordSweepDeg
@@ -4035,37 +4097,37 @@ int main(int argc, char **argv) {
                                                          : 14.0f);
           camMutable.fov = hasRecordFov ? recordFovDeg
                                         : (composition != nullptr ? composition->fovDeg : 68.0f);
-          cameraModeIndex = static_cast<int>(CameraMode::Input);
-          kerrSpin = 0.0f;
-          recordCurrentKf = CamKeyframe{
-              .t_sec = static_cast<float>(recordFrameIndex - recordStartFrame) /
+          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
+          rs.physicsCore.kerrSpin = 0.0f;
+          rs.recording.recordCurrentKf = CamKeyframe{
+              .t_sec = static_cast<float>(rs.recording.recordFrameIndex - recordStartFrame) /
                        static_cast<float>(K_CINEMATIC_FPS),
               .cam = camMutable,
-              .kerrSpin = kerrSpin,
+              .kerrSpin = rs.physicsCore.kerrSpin,
               .caption = "Showcase orbit",
           };
         } else {
-          recordCurrentKf = recordPath.evaluate(recordCinematic);
+          rs.recording.recordCurrentKf = rs.recording.recordPath.evaluate(rs.recording.recordCinematic);
           CameraState &camMutable = input.camera();
-          camMutable   = recordCurrentKf.cam;
-          cameraModeIndex = static_cast<int>(CameraMode::Input);
-          kerrSpin     = recordCurrentKf.kerrSpin;
+          camMutable   = rs.recording.recordCurrentKf.cam;
+          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
+          rs.physicsCore.kerrSpin     = rs.recording.recordCurrentKf.kerrSpin;
         }
       }
 
       // Get camera state for shader
       const auto &cam = input.camera();
-      cameraModeIndex = std::clamp(cameraModeIndex, 0, 3);
-      orbitRadius = std::max(orbitRadius, 2.0f);
-      orbitSpeed = std::max(orbitSpeed, 0.0f);
+      rs.camera.cameraModeIndex = std::clamp(rs.camera.cameraModeIndex, 0, 3);
+      rs.camera.orbitRadius = std::max(rs.camera.orbitRadius, 2.0f);
+      rs.camera.orbitSpeed = std::max(rs.camera.orbitSpeed, 0.0f);
 
       glm::vec3 const focusTarget =
-          gizmoEnabled ? glm::vec3(gizmoTransform[3]) : glm::vec3(0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+          rs.camera.gizmoEnabled ? glm::vec3(rs.camera.gizmoTransform[3]) : glm::vec3(0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
                                                                          // -- glm::mat has no .at()
 
-      orbitTime += input.getEffectiveDeltaTime(deltaTime);
+      rs.camera.orbitTime += input.getEffectiveDeltaTime(deltaTime);
       glm::vec3 cameraPos;
-      auto const cameraMode = static_cast<CameraMode>(cameraModeIndex);
+      auto const cameraMode = static_cast<CameraMode>(rs.camera.cameraModeIndex);
       switch (cameraMode) {
       case CameraMode::Front:
         cameraPos = focusTarget + glm::vec3(10.0f, 1.0f, 10.0f);
@@ -4074,10 +4136,10 @@ int main(int argc, char **argv) {
         cameraPos = focusTarget + glm::vec3(15.0f, 15.0f, 0.0f);
         break;
       case CameraMode::Orbit: {
-        float const angle = orbitTime * glm::radians(orbitSpeed);
+        float const angle = rs.camera.orbitTime * glm::radians(rs.camera.orbitSpeed);
         cameraPos =
-            focusTarget + glm::vec3(-std::cos(angle) * orbitRadius, std::sin(angle) * orbitRadius,
-                                    std::sin(angle) * orbitRadius);
+            focusTarget + glm::vec3(-std::cos(angle) * rs.camera.orbitRadius, std::sin(angle) * rs.camera.orbitRadius,
+                                    std::sin(angle) * rs.camera.orbitRadius);
         break;
       }
       case CameraMode::Input:
@@ -4100,8 +4162,8 @@ int main(int argc, char **argv) {
           glm::mat3 const baseBasis = buildCameraBasis(cameraPos, focusTarget, cam.roll);
           float const halfHeight = std::tan(glm::radians(cam.fov) * 0.5f) * cam.distance;
           float const aspect =
-              static_cast<float>(std::max(renderWidth, 1)) /
-              static_cast<float>(std::max(renderHeight, 1));
+              static_cast<float>(std::max(rs.targets.renderWidth, 1)) /
+              static_cast<float>(std::max(rs.targets.renderHeight, 1));
           float const halfWidth = halfHeight * aspect;
           aimTarget = focusTarget + baseBasis[0] * (frameX * halfWidth) +
                       baseBasis[1] * (frameY * halfHeight);
@@ -4130,8 +4192,8 @@ int main(int argc, char **argv) {
                       backgroundLayerIntensity.at(i));
       }
       glm::mat4 projectionMatrix = glm::perspective(
-          glm::radians(cam.fov), static_cast<float>(renderWidth) / static_cast<float>(renderHeight),
-          0.1f, depthFar);
+          glm::radians(cam.fov), static_cast<float>(rs.targets.renderWidth) / static_cast<float>(rs.targets.renderHeight),
+          0.1f, rs.display.depthFar);
       glm::mat4 gizmoViewMatrix =
           glm::lookAt(cameraPos, aimTarget, cameraBasis[1]); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
                                                                // -- glm::mat has no .at()
@@ -4140,123 +4202,123 @@ int main(int argc, char **argv) {
       /* Per-frame streaming tile upload: when GRMHDStreamer is running and the
        * PBOUploader is initialized, obtain the current frame tile and upload.
        * getTile() is non-blocking; on a cache miss it enqueues the request. */
-      if (grmhdStreamer && grmhdPboUploader.texture() != 0) {
-        auto tile = grmhdStreamer->getTile(0, 0, 0, 0);
+      if (rs.grmhd.grmhdStreamer && rs.grmhd.grmhdPboUploader.texture() != 0) {
+        auto tile = rs.grmhd.grmhdStreamer->getTile(0, 0, 0, 0);
         if (tile && tile->ready()) {
-          grmhdPboUploader.upload(tile->data.data(), tile->data.size());
+          rs.grmhd.grmhdPboUploader.upload(tile->data.data(), tile->data.size());
         }
       }
       /* C1d: upload adjacent (next) frame into the right PBO uploader for
        * temporal interpolation.  getAdjacentTile() returns nullptr at the last
        * frame or on a cache miss (seekFrame prefetch keeps it warm).
-       * grmhdFrameAlpha is the sub-frame blend fraction; sub-frame position is
+       * rs.grmhd.grmhdFrameAlpha is the sub-frame blend fraction; sub-frame position is
        * approximated as the fractional part of (current_frame + time_bias). */
-      grmhdFrameAlpha = 0.0f;
-      if (grmhdStreamer && grmhdPboUploaderRight.texture() != 0) {
-        auto rightTile = grmhdStreamer->getAdjacentTile(0, 0, 0, 0);
+      rs.grmhd.grmhdFrameAlpha = 0.0f;
+      if (rs.grmhd.grmhdStreamer && rs.grmhd.grmhdPboUploaderRight.texture() != 0) {
+        auto rightTile = rs.grmhd.grmhdStreamer->getAdjacentTile(0, 0, 0, 0);
         if (rightTile && rightTile->ready()) {
-          grmhdPboUploaderRight.upload(rightTile->data.data(), rightTile->data.size());
+          rs.grmhd.grmhdPboUploaderRight.upload(rightTile->data.data(), rightTile->data.size());
         }
         /* Advance CUDA slot 7 registration when the right PBO first becomes ready */
 #if BLACKHOLE_HAS_CUDA
-        if (grmhdPboUploaderRight.ready()) {
+        if (rs.grmhd.grmhdPboUploaderRight.ready()) {
           static GLuint registeredRightTex = 0;
-          if (registeredRightTex != grmhdPboUploaderRight.texture()) {
-            registeredRightTex = grmhdPboUploaderRight.texture();
-            cudaManager.registerLut(7 /*BhLutGrmhdRight*/, registeredRightTex,
+          if (registeredRightTex != rs.grmhd.grmhdPboUploaderRight.texture()) {
+            registeredRightTex = rs.grmhd.grmhdPboUploaderRight.texture();
+            rs.dispatch.cudaManager.registerLut(7 /*BhLutGrmhdRight*/, registeredRightTex,
                                     static_cast<unsigned int>(GL_TEXTURE_3D));
           }
         }
 #endif
-        if (grmhdPboUploaderRight.ready()) {
+        if (rs.grmhd.grmhdPboUploaderRight.ready()) {
           /* Sub-frame alpha: fraction of inter-frame interval elapsed.
-           * grmhdPlaybackSpeed controls simulation-time advance per real second. */
-          grmhdFrameAlpha = std::fmod(
-              static_cast<float>(grmhdCurrentFrame) * grmhdPlaybackSpeed, 1.0f);
-          grmhdFrameAlpha = std::max(0.0f, std::min(1.0f, grmhdFrameAlpha));
+           * rs.grmhd.grmhdPlaybackSpeed controls simulation-time advance per real second. */
+          rs.grmhd.grmhdFrameAlpha = std::fmod(
+              static_cast<float>(rs.grmhd.grmhdCurrentFrame) * rs.grmhd.grmhdPlaybackSpeed, 1.0f);
+          rs.grmhd.grmhdFrameAlpha = std::max(0.0f, std::min(1.0f, rs.grmhd.grmhdFrameAlpha));
         }
       }
 
       /* grmhdReady: true when packed texture OR PBO streaming path is valid. */
-      bool const grmhdReady = (grmhdLoaded && grmhdTexture.texture != 0) ||
-                              (grmhdTimeSeriesLoaded && grmhdPboUploader.ready());
-      bool grmhdEnabled = useGrmhd && grmhdReady;
+      bool const grmhdReady = (rs.grmhd.grmhdLoaded && rs.grmhd.grmhdTexture.texture != 0) ||
+                              (rs.grmhd.grmhdTimeSeriesLoaded && rs.grmhd.grmhdPboUploader.ready());
+      bool grmhdEnabled = rs.grmhd.useGrmhd && grmhdReady;
       /* grmhdTexId: prefer PBO streaming texture when the streamer is running;
        * fall back to the packed static texture otherwise. */
       GLuint const grmhdTexId =
-          (grmhdTimeSeriesLoaded && grmhdPboUploader.ready())
-              ? grmhdPboUploader.texture()
-              : grmhdTexture.texture;
-      bool const spectralReady = spectralLutLoaded && texSpectralLUT != 0;
-      bool spectralEnabled = useSpectralLut && spectralReady;
-      spectralRadiusMin = std::max(0.0f, spectralRadiusMin);
-      spectralRadiusMax = std::max(spectralRadiusMax, spectralRadiusMin + 0.001f);
+          (rs.grmhd.grmhdTimeSeriesLoaded && rs.grmhd.grmhdPboUploader.ready())
+              ? rs.grmhd.grmhdPboUploader.texture()
+              : rs.grmhd.grmhdTexture.texture;
+      bool const spectralReady = rs.luts.spectralLutLoaded && rs.luts.texSpectralLUT != 0;
+      bool spectralEnabled = rs.luts.useSpectralLut && spectralReady;
+      rs.luts.spectralRadiusMin = std::max(0.0f, rs.luts.spectralRadiusMin);
+      rs.luts.spectralRadiusMax = std::max(rs.luts.spectralRadiusMax, rs.luts.spectralRadiusMin + 0.001f);
 
-      if (!grbModulationTried) {
-        grbModulationTried = true;
-        grbModulationLoaded =
-            loadGrbModulationLutAssets(grbModulationValues, grbTimeMin, grbTimeMax);
-        if (grbModulationLoaded) {
-          if (texGrbModulationLUT != 0) {
-            glDeleteTextures(1, &texGrbModulationLUT);
-            texGrbModulationLUT = 0;
+      if (!rs.luts.grbModulationTried) {
+        rs.luts.grbModulationTried = true;
+        rs.luts.grbModulationLoaded =
+            loadGrbModulationLutAssets(rs.luts.grbModulationValues, rs.luts.grbTimeMin, rs.luts.grbTimeMax);
+        if (rs.luts.grbModulationLoaded) {
+          if (rs.luts.texGrbModulationLUT != 0) {
+            glDeleteTextures(1, &rs.luts.texGrbModulationLUT);
+            rs.luts.texGrbModulationLUT = 0;
           }
-          int const lutSize = static_cast<int>(grbModulationValues.size());
-          texGrbModulationLUT = createFloatTexture2D(lutSize, 1, grbModulationValues);
-          grbTimeManualValue = grbTimeMin;
+          int const lutSize = static_cast<int>(rs.luts.grbModulationValues.size());
+          rs.luts.texGrbModulationLUT = createFloatTexture2D(lutSize, 1, rs.luts.grbModulationValues);
+          rs.luts.grbTimeManualValue = rs.luts.grbTimeMin;
         }
       }
-      bool const grbModulationReady = grbModulationLoaded && texGrbModulationLUT != 0;
+      bool const grbModulationReady = rs.luts.grbModulationLoaded && rs.luts.texGrbModulationLUT != 0;
       bool grbModulationEnabled = false;
-      float const grbSpan = std::max(grbTimeMax - grbTimeMin, 0.001f);
+      float const grbSpan = std::max(rs.luts.grbTimeMax - rs.luts.grbTimeMin, 0.001f);
       float grbTimeSeconds = 0.0f;
       if (grbModulationReady) {
-        if (grbTimeManual) {
-          grbTimeSeconds = std::clamp(grbTimeManualValue, grbTimeMin, grbTimeMax);
+        if (rs.luts.grbTimeManual) {
+          grbTimeSeconds = std::clamp(rs.luts.grbTimeManualValue, rs.luts.grbTimeMin, rs.luts.grbTimeMax);
         } else {
-          grbTimeSeconds = grbTimeMin + std::fmod(static_cast<float>(currentTime), grbSpan);
+          grbTimeSeconds = rs.luts.grbTimeMin + std::fmod(static_cast<float>(currentTime), grbSpan);
         }
       }
 
-      bool const lutReady = texEmissivityLUT != 0 && texRedshiftLUT != 0;
+      bool const lutReady = rs.luts.texEmissivityLUT != 0 && rs.luts.texRedshiftLUT != 0;
 
       {
         RenderToTextureInfo rtti;
         rtti.fragShader = "shader/blackhole_main.frag";
         rtti.cubemapUniforms["galaxy"] = galaxy != 0 ? galaxy : fallbackCubemap;
         rtti.textureUniforms["colorMap"] = colorMap != 0 ? colorMap : fallback2D;
-        rtti.textureUniforms["emissivityLUT"] = lutReady ? texEmissivityLUT : fallback2D;
-        rtti.textureUniforms["redshiftLUT"] = lutReady ? texRedshiftLUT : fallback2D;
+        rtti.textureUniforms["emissivityLUT"] = lutReady ? rs.luts.texEmissivityLUT : fallback2D;
+        rtti.textureUniforms["redshiftLUT"] = lutReady ? rs.luts.texRedshiftLUT : fallback2D;
         rtti.textureUniforms["photonGlowLUT"] =
-            texPhotonGlowLUT != 0 ? texPhotonGlowLUT : fallback2D; // Phase 8.2
+            rs.luts.texPhotonGlowLUT != 0 ? rs.luts.texPhotonGlowLUT : fallback2D; // Phase 8.2
         rtti.textureUniforms["diskDensityLUT"] =
-            texDiskDensityLUT != 0 ? texDiskDensityLUT : fallback2D; // Phase 8.2 P2
-        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
+            rs.luts.texDiskDensityLUT != 0 ? rs.luts.texDiskDensityLUT : fallback2D; // Phase 8.2 P2
+        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? rs.luts.texSpectralLUT : fallback2D;
         rtti.textureUniforms["grbModulationLUT"] =
-            grbModulationReady ? texGrbModulationLUT : fallback2D;
+            grbModulationReady ? rs.luts.texGrbModulationLUT : fallback2D;
         rtti.textureUniforms["hawkingTempLUT"] =
-            hawkingLutsLoaded ? hawkingRenderer.getTempLUTTexture() : fallback2D;
+            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : fallback2D;
         rtti.textureUniforms["hawkingSpectrumLUT"] =
-            hawkingLutsLoaded ? hawkingRenderer.getSpectrumLUTTexture() : fallback2D;
+            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : fallback2D;
         for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
           const std::string name = "backgroundLayers[" + std::to_string(i) + "]";
           rtti.textureUniforms[name] = backgroundTextures.at(static_cast<std::size_t>(i));
         }
-        noiseTextureScale = std::max(noiseTextureScale, 0.01f);
-        bool noiseReady = useNoiseTexture && texNoiseVolume != 0;
-        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? texNoiseVolume : fallback3D;
+        rs.disk.noiseTextureScale = std::max(rs.disk.noiseTextureScale, 0.01f);
+        bool noiseReady = rs.disk.useNoiseTexture && rs.disk.texNoiseVolume != 0;
+        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? rs.disk.texNoiseVolume : fallback3D;
         rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : fallback3D;
 
         rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
         rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["noiseTextureScale"] = noiseTextureScale;
+        rtti.floatUniforms["noiseTextureScale"] = rs.disk.noiseTextureScale;
         rtti.floatUniforms["backgroundEnabled"] = settings.backgroundEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["backgroundIntensity"] = settings.backgroundIntensity;
         rtti.floatUniforms["backgroundYawRad"] = backgroundYawRad;
         rtti.floatUniforms["backgroundPitchRad"] = backgroundPitchRad;
         rtti.floatUniforms["time"] = frameTime;
-        rtti.vec3Uniforms["grmhdBoundsMin"] = grmhdBoundsMin;
-        rtti.vec3Uniforms["grmhdBoundsMax"] = grmhdBoundsMax;
+        rtti.vec3Uniforms["grmhdBoundsMin"] = rs.grmhd.grmhdBoundsMin;
+        rtti.vec3Uniforms["grmhdBoundsMax"] = rs.grmhd.grmhdBoundsMax;
         for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
           const std::string name = "backgroundLayerParams[" + std::to_string(i) + "]";
           rtti.vec4Uniforms[name] = backgroundLayerParams.at(static_cast<std::size_t>(i));
@@ -4267,9 +4329,9 @@ int main(int argc, char **argv) {
               std::max(backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
         }
 
-        rtti.targetTexture = texBlackhole;
-        rtti.width = renderWidth;
-        rtti.height = renderHeight;
+        rtti.targetTexture = rs.targets.texBlackhole;
+        rtti.width = rs.targets.renderWidth;
+        rtti.height = rs.targets.renderHeight;
 
         // Render UI controls only if visible
         if (input.isUIVisible()) {
@@ -4277,83 +4339,83 @@ int main(int argc, char **argv) {
           ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoCollapse);
           if (ImGui::BeginTabBar("MainTabs")) {
             if (ImGui::BeginTabItem("Visuals")) {
-              ImGui::Checkbox("gravitationalLensing", &gravitationalLensing);
-              ImGui::SliderInt("Bloom Iterations", &bloomIterations, 1, kMaxBloomIterations);
-              settings.bloomIterations = bloomIterations;
-              ImGui::Checkbox("renderBlackHole", &renderBlackHole);
-              ImGui::Checkbox("adiskEnabled", &adiskEnabled);
-              ImGui::Checkbox("adiskParticle", &adiskParticle);
-              ImGui::SliderFloat("adiskDensityV", &adiskDensityV, 0.0f, 10.0f);
-              ImGui::SliderFloat("adiskDensityH", &adiskDensityH, 0.0f, 10.0f);
-              ImGui::SliderFloat("adiskHeight", &adiskHeight, 0.0f, 1.0f);
-              ImGui::SliderFloat("adiskLit", &adiskLit, 0.0f, 4.0f);
-              ImGui::SliderFloat("adiskNoiseLOD", &adiskNoiseLOD, 1.0f, 12.0f);
-              ImGui::SliderFloat("adiskNoiseScale", &adiskNoiseScale, 0.0f, 10.0f);
-              ImGui::Checkbox("Noise Texture", &useNoiseTexture);
-              ImGui::SliderFloat("Noise Tex Scale", &noiseTextureScale, 0.05f, 2.0f);
-              ImGui::SliderFloat("adiskSpeed", &adiskSpeed, 0.0f, 1.0f);
-              ImGui::SliderFloat("dopplerStrength", &dopplerStrength, 0.0f, 5.0f);
+              ImGui::Checkbox("gravitationalLensing", &rs.disk.gravitationalLensing);
+              ImGui::SliderInt("Bloom Iterations", &rs.post.bloomIterations, 1, kMaxBloomIterations);
+              settings.bloomIterations = rs.post.bloomIterations;
+              ImGui::Checkbox("renderBlackHole", &rs.disk.renderBlackHole);
+              ImGui::Checkbox("adiskEnabled", &rs.disk.adiskEnabled);
+              ImGui::Checkbox("adiskParticle", &rs.disk.adiskParticle);
+              ImGui::SliderFloat("adiskDensityV", &rs.disk.adiskDensityV, 0.0f, 10.0f);
+              ImGui::SliderFloat("adiskDensityH", &rs.disk.adiskDensityH, 0.0f, 10.0f);
+              ImGui::SliderFloat("adiskHeight", &rs.disk.adiskHeight, 0.0f, 1.0f);
+              ImGui::SliderFloat("adiskLit", &rs.disk.adiskLit, 0.0f, 4.0f);
+              ImGui::SliderFloat("adiskNoiseLOD", &rs.disk.adiskNoiseLOD, 1.0f, 12.0f);
+              ImGui::SliderFloat("adiskNoiseScale", &rs.disk.adiskNoiseScale, 0.0f, 10.0f);
+              ImGui::Checkbox("Noise Texture", &rs.disk.useNoiseTexture);
+              ImGui::SliderFloat("Noise Tex Scale", &rs.disk.noiseTextureScale, 0.05f, 2.0f);
+              ImGui::SliderFloat("adiskSpeed", &rs.disk.adiskSpeed, 0.0f, 1.0f);
+              ImGui::SliderFloat("dopplerStrength", &rs.disk.dopplerStrength, 0.0f, 5.0f);
 
               ImGui::Separator();
               ImGui::Text("Volumetric RTE (D2)");
-              ImGui::Checkbox("Volumetric RTE", &rteVolumetricEnabled);
-              if (rteVolumetricEnabled) {
-                ImGui::SliderFloat("RTE Opacity Scale", &rteOpacityScale, 0.0f, 5.0f);
+              ImGui::Checkbox("Volumetric RTE", &rs.rte.rteVolumetricEnabled);
+              if (rs.rte.rteVolumetricEnabled) {
+                ImGui::SliderFloat("RTE Opacity Scale", &rs.rte.rteOpacityScale, 0.0f, 5.0f);
               }
 
               ImGui::Separator();
               ImGui::Text("Polarized Stokes IQUV (D4)");
-              ImGui::Checkbox("Stokes Transport", &stokesEnabled);
-              if (stokesEnabled) {
-                ImGui::SliderFloat("B Field Angle (rad)", &stokesBFieldAngle, -3.14159f, 3.14159f);
-                ImGui::SliderFloat("Faraday Ne Scale",   &stokesNeScale,     0.0f, 5.0f);
+              ImGui::Checkbox("Stokes Transport", &rs.stokes.stokesEnabled);
+              if (rs.stokes.stokesEnabled) {
+                ImGui::SliderFloat("B Field Angle (rad)", &rs.stokes.stokesBFieldAngle, -3.14159f, 3.14159f);
+                ImGui::SliderFloat("Faraday Ne Scale",   &rs.stokes.stokesNeScale,     0.0f, 5.0f);
               }
 
               ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("GRMHD")) {
               ImGui::Text("GRMHD Packed");
-              ImGui::Checkbox("Use GRMHD Field", &useGrmhd);
-              ImGui::InputText("GRMHD Meta", grmhdPathBuffer.data(), grmhdPathBuffer.size());
+              ImGui::Checkbox("Use GRMHD Field", &rs.grmhd.useGrmhd);
+              ImGui::InputText("GRMHD Meta", rs.grmhd.grmhdPathBuffer.data(), rs.grmhd.grmhdPathBuffer.size());
               if (ImGui::Button("Load GRMHD")) {
-                loadGrmhdPacked(grmhdPathBuffer.data());
+                loadGrmhdPacked(rs.grmhd.grmhdPathBuffer.data());
               }
               ImGui::SameLine();
               if (ImGui::Button("Unload GRMHD")) {
-                destroyGrmhdPackedTexture(grmhdTexture);
-                grmhdLoaded = false;
-                grmhdLoadError.clear();
+                destroyGrmhdPackedTexture(rs.grmhd.grmhdTexture);
+                rs.grmhd.grmhdLoaded = false;
+                rs.grmhd.grmhdLoadError.clear();
               }
-              if (!grmhdLoadError.empty()) {
-                ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", grmhdLoadError.c_str());
+              if (!rs.grmhd.grmhdLoadError.empty()) {
+                ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", rs.grmhd.grmhdLoadError.c_str());
               }
-              if (grmhdLoaded) {
-                ImGui::Text("GRMHD grid: %d x %d x %d", grmhdTexture.width, grmhdTexture.height,
-                            grmhdTexture.depth);
+              if (rs.grmhd.grmhdLoaded) {
+                ImGui::Text("GRMHD grid: %d x %d x %d", rs.grmhd.grmhdTexture.width, rs.grmhd.grmhdTexture.height,
+                            rs.grmhd.grmhdTexture.depth);
               }
-              ImGui::SliderFloat3("GRMHD Bounds Min", &grmhdBoundsMin.x, -50.0f, 50.0f);
-              ImGui::SliderFloat3("GRMHD Bounds Max", &grmhdBoundsMax.x, -50.0f, 50.0f);
-              ImGui::BeginDisabled(!grmhdLoaded);
-              ImGui::Checkbox("Show GRMHD Slice", &grmhdSliceEnabled);
+              ImGui::SliderFloat3("GRMHD Bounds Min", &rs.grmhd.grmhdBoundsMin.x, -50.0f, 50.0f);
+              ImGui::SliderFloat3("GRMHD Bounds Max", &rs.grmhd.grmhdBoundsMax.x, -50.0f, 50.0f);
+              ImGui::BeginDisabled(!rs.grmhd.grmhdLoaded);
+              ImGui::Checkbox("Show GRMHD Slice", &rs.grmhd.grmhdSliceEnabled);
               const char *const axisLabels[] = {"X", "Y", "Z"};
-              ImGui::Combo("Slice Axis", &grmhdSliceAxis, axisLabels, 3);
-              ImGui::SliderFloat("Slice Coord", &grmhdSliceCoord, 0.0f, 1.0f);
-              ImGui::SliderInt("Slice Channel", &grmhdSliceChannel, 0, 3);
-              if (grmhdLoaded && grmhdSliceChannel >= 0 &&
-                  static_cast<std::size_t>(grmhdSliceChannel) < grmhdTexture.channels.size()) {
-                auto const channelIndex = static_cast<std::size_t>(grmhdSliceChannel);
-                ImGui::Text("Channel: %s", grmhdTexture.channels.at(channelIndex).c_str());
+              ImGui::Combo("Slice Axis", &rs.grmhd.grmhdSliceAxis, axisLabels, 3);
+              ImGui::SliderFloat("Slice Coord", &rs.grmhd.grmhdSliceCoord, 0.0f, 1.0f);
+              ImGui::SliderInt("Slice Channel", &rs.grmhd.grmhdSliceChannel, 0, 3);
+              if (rs.grmhd.grmhdLoaded && rs.grmhd.grmhdSliceChannel >= 0 &&
+                  static_cast<std::size_t>(rs.grmhd.grmhdSliceChannel) < rs.grmhd.grmhdTexture.channels.size()) {
+                auto const channelIndex = static_cast<std::size_t>(rs.grmhd.grmhdSliceChannel);
+                ImGui::Text("Channel: %s", rs.grmhd.grmhdTexture.channels.at(channelIndex).c_str());
               }
-              ImGui::Checkbox("Slice Auto Range", &grmhdSliceAutoRange);
-              if (!grmhdSliceAutoRange) {
-                ImGui::InputFloat("Slice Min", &grmhdSliceMin);
-                ImGui::InputFloat("Slice Max", &grmhdSliceMax);
+              ImGui::Checkbox("Slice Auto Range", &rs.grmhd.grmhdSliceAutoRange);
+              if (!rs.grmhd.grmhdSliceAutoRange) {
+                ImGui::InputFloat("Slice Min", &rs.grmhd.grmhdSliceMin);
+                ImGui::InputFloat("Slice Max", &rs.grmhd.grmhdSliceMax);
               }
-              ImGui::Checkbox("Slice Color Map", &grmhdSliceUseColorMap);
-              ImGui::SliderInt("Slice Size", &grmhdSliceSize, 64, 1024);
-              if (texGrmhdSlice != 0) {
+              ImGui::Checkbox("Slice Color Map", &rs.grmhd.grmhdSliceUseColorMap);
+              ImGui::SliderInt("Slice Size", &rs.grmhd.grmhdSliceSize, 64, 1024);
+              if (rs.grmhd.texGrmhdSlice != 0) {
                 auto const sliceId =
-                    static_cast<ImTextureID>(static_cast<uintptr_t>(texGrmhdSlice));
+                    static_cast<ImTextureID>(static_cast<uintptr_t>(rs.grmhd.texGrmhdSlice));
                 ImGui::Image(sliceId, ImVec2(192.0f, 192.0f));
               }
               ImGui::EndDisabled();
@@ -4361,124 +4423,124 @@ int main(int argc, char **argv) {
               // GRMHD Time-Series Playback (Phase 4.3)
               ImGui::Separator();
               ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.9f, 1.0f), "GRMHD Time-Series");
-              ImGui::Checkbox("Enable Time-Series Playback", &grmhdTimeSeriesEnabled);
+              ImGui::Checkbox("Enable Time-Series Playback", &rs.grmhd.grmhdTimeSeriesEnabled);
 
-              ImGui::BeginDisabled(!grmhdTimeSeriesEnabled);
+              ImGui::BeginDisabled(!rs.grmhd.grmhdTimeSeriesEnabled);
 
               // File paths
-              ImGui::InputText("JSON Metadata", grmhdTimeSeriesJsonBuffer.data(),
-                               grmhdTimeSeriesJsonBuffer.size());
-              ImGui::InputText("Binary Data", grmhdTimeSeriesBinBuffer.data(),
-                               grmhdTimeSeriesBinBuffer.size());
+              ImGui::InputText("JSON Metadata", rs.grmhd.grmhdTimeSeriesJsonBuffer.data(),
+                               rs.grmhd.grmhdTimeSeriesJsonBuffer.size());
+              ImGui::InputText("Binary Data", rs.grmhd.grmhdTimeSeriesBinBuffer.data(),
+                               rs.grmhd.grmhdTimeSeriesBinBuffer.size());
 
               // Load/Unload buttons
               if (ImGui::Button("Load Time-Series")) {
                 /* Shut down any previously loaded dataset */
-                if (grmhdStreamer) {
-                  grmhdStreamer->shutdown();
-                  grmhdStreamer.reset();
-                  grmhdTimeSeriesLoaded = false;
+                if (rs.grmhd.grmhdStreamer) {
+                  rs.grmhd.grmhdStreamer->shutdown();
+                  rs.grmhd.grmhdStreamer.reset();
+                  rs.grmhd.grmhdTimeSeriesLoaded = false;
                 }
-                std::string const jsonPath(grmhdTimeSeriesJsonBuffer.data());
-                std::string const binPath(grmhdTimeSeriesBinBuffer.data());
+                std::string const jsonPath(rs.grmhd.grmhdTimeSeriesJsonBuffer.data());
+                std::string const binPath(rs.grmhd.grmhdTimeSeriesBinBuffer.data());
                 if (!jsonPath.empty()) {
-                  grmhdStreamer = std::make_unique<blackhole::GRMHDStreamer>(jsonPath, binPath);
-                  if (grmhdStreamer->init()) {
-                    grmhdTimeSeriesLoaded = true;
-                    grmhdMaxFrame = static_cast<int>(grmhdStreamer->metadata().frameCount) - 1;
-                    grmhdCurrentFrame = 0;
-                    grmhdStreamer->seekFrame(0);
+                  rs.grmhd.grmhdStreamer = std::make_unique<blackhole::GRMHDStreamer>(jsonPath, binPath);
+                  if (rs.grmhd.grmhdStreamer->init()) {
+                    rs.grmhd.grmhdTimeSeriesLoaded = true;
+                    rs.grmhd.grmhdMaxFrame = static_cast<int>(rs.grmhd.grmhdStreamer->metadata().frameCount) - 1;
+                    rs.grmhd.grmhdCurrentFrame = 0;
+                    rs.grmhd.grmhdStreamer->seekFrame(0);
                     /* Initialize PBOUploader with the grid dimensions from metadata.
                      * Shuts down any previous allocation first. */
-                    const auto &meta = grmhdStreamer->metadata();
-                    if (grmhdPboUploader.texture() != 0) {
-                      grmhdPboUploader.shutdown();
+                    const auto &meta = rs.grmhd.grmhdStreamer->metadata();
+                    if (rs.grmhd.grmhdPboUploader.texture() != 0) {
+                      rs.grmhd.grmhdPboUploader.shutdown();
                     }
-                    grmhdPboUploader.init(static_cast<int>(meta.gridX),
+                    rs.grmhd.grmhdPboUploader.init(static_cast<int>(meta.gridX),
                                          static_cast<int>(meta.gridY),
                                          static_cast<int>(meta.gridZ));
                     /* C1d: initialize right-frame uploader with same dimensions */
-                    if (grmhdPboUploaderRight.texture() != 0) {
-                      grmhdPboUploaderRight.shutdown();
+                    if (rs.grmhd.grmhdPboUploaderRight.texture() != 0) {
+                      rs.grmhd.grmhdPboUploaderRight.shutdown();
                     }
-                    grmhdPboUploaderRight.init(static_cast<int>(meta.gridX),
+                    rs.grmhd.grmhdPboUploaderRight.init(static_cast<int>(meta.gridX),
                                               static_cast<int>(meta.gridY),
                                               static_cast<int>(meta.gridZ));
                   } else {
-                    grmhdStreamer.reset();
+                    rs.grmhd.grmhdStreamer.reset();
                   }
                 }
               }
               ImGui::SameLine();
               if (ImGui::Button("Unload Time-Series")) {
-                if (grmhdStreamer) {
-                  grmhdStreamer->shutdown();
-                  grmhdStreamer.reset();
+                if (rs.grmhd.grmhdStreamer) {
+                  rs.grmhd.grmhdStreamer->shutdown();
+                  rs.grmhd.grmhdStreamer.reset();
                 }
-                grmhdPboUploader.shutdown();
-                grmhdPboUploaderRight.shutdown();  /* C1d: tear down right-frame uploader */
-                grmhdFrameAlpha = 0.0f;
-                grmhdTimeSeriesLoaded = false;
-                grmhdCurrentFrame = 0;
-                grmhdMaxFrame = 0;
-                grmhdPlaying = false;
-                grmhdCacheHitRate = 0.0;
-                grmhdQueueDepth = 0;
+                rs.grmhd.grmhdPboUploader.shutdown();
+                rs.grmhd.grmhdPboUploaderRight.shutdown();  /* C1d: tear down right-frame uploader */
+                rs.grmhd.grmhdFrameAlpha = 0.0f;
+                rs.grmhd.grmhdTimeSeriesLoaded = false;
+                rs.grmhd.grmhdCurrentFrame = 0;
+                rs.grmhd.grmhdMaxFrame = 0;
+                rs.grmhd.grmhdPlaying = false;
+                rs.grmhd.grmhdCacheHitRate = 0.0;
+                rs.grmhd.grmhdQueueDepth = 0;
               }
 
-              ImGui::BeginDisabled(!grmhdTimeSeriesLoaded);
+              ImGui::BeginDisabled(!rs.grmhd.grmhdTimeSeriesLoaded);
 
               // Frame control
               ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Playback");
-              if (ImGui::SliderInt("Frame", &grmhdCurrentFrame, 0, grmhdMaxFrame)) {
-                if (grmhdStreamer) {
-                  grmhdStreamer->seekFrame(static_cast<uint32_t>(grmhdCurrentFrame));
+              if (ImGui::SliderInt("Frame", &rs.grmhd.grmhdCurrentFrame, 0, rs.grmhd.grmhdMaxFrame)) {
+                if (rs.grmhd.grmhdStreamer) {
+                  rs.grmhd.grmhdStreamer->seekFrame(static_cast<uint32_t>(rs.grmhd.grmhdCurrentFrame));
                 }
               }
-              ImGui::Text("Time: %.2f s", static_cast<double>(grmhdCurrentFrame) / 30.0);
+              ImGui::Text("Time: %.2f s", static_cast<double>(rs.grmhd.grmhdCurrentFrame) / 30.0);
 
               // Play/Pause button
-              if (grmhdPlaying) {
+              if (rs.grmhd.grmhdPlaying) {
                 if (ImGui::Button("Pause")) {
-                  grmhdPlaying = false;
-                  if (grmhdStreamer) { grmhdStreamer->pause(); }
+                  rs.grmhd.grmhdPlaying = false;
+                  if (rs.grmhd.grmhdStreamer) { rs.grmhd.grmhdStreamer->pause(); }
                 }
               } else {
                 if (ImGui::Button("Play")) {
-                  grmhdPlaying = true;
-                  if (grmhdStreamer) { grmhdStreamer->play(); }
+                  rs.grmhd.grmhdPlaying = true;
+                  if (rs.grmhd.grmhdStreamer) { rs.grmhd.grmhdStreamer->play(); }
                 }
               }
               ImGui::SameLine();
               if (ImGui::Button("Reset")) {
-                grmhdCurrentFrame = 0;
-                if (grmhdStreamer) { grmhdStreamer->seekFrame(0); }
+                rs.grmhd.grmhdCurrentFrame = 0;
+                if (rs.grmhd.grmhdStreamer) { rs.grmhd.grmhdStreamer->seekFrame(0); }
               }
 
               // Playback speed
-              if (ImGui::SliderFloat("Playback Speed", &grmhdPlaybackSpeed, 0.1f, 4.0f)) {
-                if (grmhdStreamer) {
-                  grmhdStreamer->setPlaybackSpeed(static_cast<double>(grmhdPlaybackSpeed));
+              if (ImGui::SliderFloat("Playback Speed", &rs.grmhd.grmhdPlaybackSpeed, 0.1f, 4.0f)) {
+                if (rs.grmhd.grmhdStreamer) {
+                  rs.grmhd.grmhdStreamer->setPlaybackSpeed(static_cast<double>(rs.grmhd.grmhdPlaybackSpeed));
                 }
               }
 
               // Cache statistics
               /* Refresh cache stats from live streamer each frame */
-              if (grmhdStreamer) {
-                grmhdCacheHitRate = grmhdStreamer->cacheHitRate();
-                grmhdQueueDepth = static_cast<int>(grmhdStreamer->queueDepth());
+              if (rs.grmhd.grmhdStreamer) {
+                rs.grmhd.grmhdCacheHitRate = rs.grmhd.grmhdStreamer->cacheHitRate();
+                rs.grmhd.grmhdQueueDepth = static_cast<int>(rs.grmhd.grmhdStreamer->queueDepth());
                 /* Mirror current frame from streamer (updated by background thread) */
-                grmhdCurrentFrame = static_cast<int>(grmhdStreamer->currentFrame());
+                rs.grmhd.grmhdCurrentFrame = static_cast<int>(rs.grmhd.grmhdStreamer->currentFrame());
               }
 
               ImGui::Separator();
               ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.9f, 1.0f), "Cache Statistics");
-              ImGui::Text("Hit Rate: %.1f%%", grmhdCacheHitRate * 100.0);
-              ImGui::Text("Queue Depth: %d", grmhdQueueDepth);
+              ImGui::Text("Hit Rate: %.1f%%", rs.grmhd.grmhdCacheHitRate * 100.0);
+              ImGui::Text("Queue Depth: %d", rs.grmhd.grmhdQueueDepth);
 
               // Progress indicator for queue
-              if (grmhdQueueDepth > 0) {
-                ImGui::ProgressBar(static_cast<float>(grmhdQueueDepth) / 10.0f, ImVec2(-1.0f, 0.0f),
+              if (rs.grmhd.grmhdQueueDepth > 0) {
+                ImGui::ProgressBar(static_cast<float>(rs.grmhd.grmhdQueueDepth) / 10.0f, ImVec2(-1.0f, 0.0f),
                                    nullptr);
               }
 
@@ -4498,38 +4560,38 @@ int main(int argc, char **argv) {
               ImGui::Text("Physics Parameters");
 
               // Black hole mass in solar masses (scaled for visualization)
-              ImGui::SliderFloat("blackHoleMass", &blackHoleMass, 0.1f, 10.0f);
+              ImGui::SliderFloat("blackHoleMass", &rs.physicsCore.blackHoleMass, 0.1f, 10.0f);
               // Kerr spin parameter a (|a|<M)
-              ImGui::SliderFloat("kerrSpin(a/M)", &kerrSpin, -0.99f, 0.99f);
+              ImGui::SliderFloat("kerrSpin(a/M)", &rs.physicsCore.kerrSpin, -0.99f, 0.99f);
 
               // Physics visualization toggles
-              ImGui::Checkbox("enablePhotonSphere", &enablePhotonSphere);
-              ImGui::Checkbox("enableRedshift", &enableRedshift);
+              ImGui::Checkbox("enablePhotonSphere", &rs.physicsCore.enablePhotonSphere);
+              ImGui::Checkbox("enableRedshift", &rs.physicsCore.enableRedshift);
 
               ImGui::Separator();
               ImGui::Text("Hawking Radiation Glow");
-              ImGui::Checkbox("Enable Hawking Glow", &hawkingGlowEnabled);
+              ImGui::Checkbox("Enable Hawking Glow", &rs.hawking.hawkingGlowEnabled);
 
-              if (hawkingGlowEnabled) {
+              if (rs.hawking.hawkingGlowEnabled) {
                 // Preset buttons
                 const char *const presetLabels[] = {"Physical", "Primordial", "Extreme"};
-                if (ImGui::Combo("Preset", &hawkingPreset, presetLabels, 3)) {
+                if (ImGui::Combo("Preset", &rs.hawking.hawkingPreset, presetLabels, 3)) {
                   // Apply preset
-                  auto const preset = static_cast<physics::HawkingPreset>(hawkingPreset);
+                  auto const preset = static_cast<physics::HawkingPreset>(rs.hawking.hawkingPreset);
                   physics::HawkingGlowParams const params =
                       physics::HawkingRenderer::applyPreset(preset);
-                  hawkingTempScale = params.tempScale;
-                  hawkingGlowIntensity = params.intensity;
+                  rs.hawking.hawkingTempScale = params.tempScale;
+                  rs.hawking.hawkingGlowIntensity = params.intensity;
                 }
 
                 // Manual controls
-                ImGui::SliderFloat("Temp Scale", &hawkingTempScale, 1.0f, 1e9f, "%.1e",
+                ImGui::SliderFloat("Temp Scale", &rs.hawking.hawkingTempScale, 1.0f, 1e9f, "%.1e",
                                    ImGuiSliderFlags_Logarithmic);
                 ImGui::TextDisabled("1=physical, 1e6=primordial, 1e9=extreme");
-                ImGui::SliderFloat("Glow Intensity", &hawkingGlowIntensity, 0.0f, 5.0f);
-                ImGui::Checkbox("Use LUTs", &hawkingUseLUTs);
+                ImGui::SliderFloat("Glow Intensity", &rs.hawking.hawkingGlowIntensity, 0.0f, 5.0f);
+                ImGui::Checkbox("Use LUTs", &rs.hawking.hawkingUseLUTs);
 
-                if (hawkingLutsLoaded) {
+                if (rs.hawking.hawkingLutsLoaded) {
                   ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "LUTs loaded");
                 } else {
                   ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "LUTs not loaded");
@@ -4538,55 +4600,55 @@ int main(int argc, char **argv) {
 
               ImGui::Separator();
               ImGui::Text("Spectral LUT");
-              ImGui::Checkbox("Use Spectral LUT", &useSpectralLut);
-              if (spectralLutLoaded) {
-                ImGui::Text("Wavelength: %.0f - %.0f A", static_cast<double>(spectralWavelengthMin),
-                            static_cast<double>(spectralWavelengthMax));
+              ImGui::Checkbox("Use Spectral LUT", &rs.luts.useSpectralLut);
+              if (rs.luts.spectralLutLoaded) {
+                ImGui::Text("Wavelength: %.0f - %.0f A", static_cast<double>(rs.luts.spectralWavelengthMin),
+                            static_cast<double>(rs.luts.spectralWavelengthMax));
               } else {
                 ImGui::TextDisabled("rt_spectrum_lut.csv not loaded");
               }
               if (ImGui::Button("Reload Spectral LUT")) {
-                spectralLutTried = false;
-                spectralLutLoaded = false;
-                spectralLutValues.clear();
-                if (texSpectralLUT != 0) {
-                  glDeleteTextures(1, &texSpectralLUT);
-                  texSpectralLUT = 0;
+                rs.luts.spectralLutTried = false;
+                rs.luts.spectralLutLoaded = false;
+                rs.luts.spectralLutValues.clear();
+                if (rs.luts.texSpectralLUT != 0) {
+                  glDeleteTextures(1, &rs.luts.texSpectralLUT);
+                  rs.luts.texSpectralLUT = 0;
                 }
               }
 
               ImGui::Separator();
               ImGui::Text("GRB Modulation");
-              ImGui::Checkbox("Use GRB Modulation", &useGrbModulation);
-              if (grbModulationLoaded) {
-                ImGui::Text("Time: %.2f - %.2f s", static_cast<double>(grbTimeMin),
-                            static_cast<double>(grbTimeMax));
+              ImGui::Checkbox("Use GRB Modulation", &rs.luts.useGrbModulation);
+              if (rs.luts.grbModulationLoaded) {
+                ImGui::Text("Time: %.2f - %.2f s", static_cast<double>(rs.luts.grbTimeMin),
+                            static_cast<double>(rs.luts.grbTimeMax));
               } else {
                 ImGui::TextDisabled("grb_modulation_lut.csv not loaded");
               }
-              ImGui::BeginDisabled(!grbModulationLoaded);
-              ImGui::Checkbox("Manual GRB Time", &grbTimeManual);
-              if (grbTimeManual) {
-                ImGui::SliderFloat("GRB Time", &grbTimeManualValue, grbTimeMin, grbTimeMax);
+              ImGui::BeginDisabled(!rs.luts.grbModulationLoaded);
+              ImGui::Checkbox("Manual GRB Time", &rs.luts.grbTimeManual);
+              if (rs.luts.grbTimeManual) {
+                ImGui::SliderFloat("GRB Time", &rs.luts.grbTimeManualValue, rs.luts.grbTimeMin, rs.luts.grbTimeMax);
               }
               ImGui::EndDisabled();
               if (ImGui::Button("Reload GRB LUT")) {
-                grbModulationTried = false;
-                grbModulationLoaded = false;
-                grbModulationValues.clear();
-                if (texGrbModulationLUT != 0) {
-                  glDeleteTextures(1, &texGrbModulationLUT);
-                  texGrbModulationLUT = 0;
+                rs.luts.grbModulationTried = false;
+                rs.luts.grbModulationLoaded = false;
+                rs.luts.grbModulationValues.clear();
+                if (rs.luts.texGrbModulationLUT != 0) {
+                  glDeleteTextures(1, &rs.luts.texGrbModulationLUT);
+                  rs.luts.texGrbModulationLUT = 0;
                 }
               }
-              ImGui::SliderFloat("Spectral Radius Min", &spectralRadiusMin, 0.0f, 50.0f);
-              ImGui::SliderFloat("Spectral Radius Max", &spectralRadiusMax, 0.0f, 50.0f);
+              ImGui::SliderFloat("Spectral Radius Min", &rs.luts.spectralRadiusMin, 0.0f, 50.0f);
+              ImGui::SliderFloat("Spectral Radius Max", &rs.luts.spectralRadiusMax, 0.0f, 50.0f);
 
               const double referenceMass = physics::M_SUN;
               const double referenceRs = physics::schwarzschildRadius(referenceMass);
               const double referenceRg = physics::G * referenceMass / physics::C2;
-              const double referenceA = static_cast<double>(kerrSpin) * referenceRg;
-              const bool progradeSpin = kerrSpin >= 0.0f;
+              const double referenceA = static_cast<double>(rs.physicsCore.kerrSpin) * referenceRg;
+              const bool progradeSpin = rs.physicsCore.kerrSpin >= 0.0f;
               const double iscoRatio =
                   physics::kerrIscoRadius(referenceMass, referenceA, progradeSpin) / referenceRs;
               const double photonRatio =
@@ -4594,7 +4656,7 @@ int main(int argc, char **argv) {
                                 : physics::kerrPhotonOrbitRetrograde)(referenceMass, referenceA) /
                   referenceRs;
 
-              float const schwarzschildRadius = 2.0f * blackHoleMass;
+              float const schwarzschildRadius = 2.0f * rs.physicsCore.blackHoleMass;
               float const photonSphereRadius =
                   static_cast<float>(photonRatio) * schwarzschildRadius;
               float const iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;
@@ -4609,47 +4671,47 @@ int main(int argc, char **argv) {
               bool const computeAvailable = ShaderManager::instance().canUseComputeShaders();
               if (!computeAvailable) {
                 ImGui::TextDisabled("Compute shaders unavailable");
-                useComputeRaytracer = false;
-                compareComputeFragment = false;
+                rs.dispatch.useComputeRaytracer = false;
+                rs.compare.compareComputeFragment = false;
               }
               if (kAppVariantCudaOnly) {
-                useComputeRaytracer = false;
-                compareComputeFragment = false;
+                rs.dispatch.useComputeRaytracer = false;
+                rs.compare.compareComputeFragment = false;
                 ImGui::TextDisabled("Compute/fragment comparison is disabled in BlackholeCUDA.");
               } else {
-                ImGui::Checkbox("Use Compute Raytracer", &useComputeRaytracer);
+                ImGui::Checkbox("Use Compute Raytracer", &rs.dispatch.useComputeRaytracer);
               }
-              if (useComputeRaytracer && !kAppVariantCudaOnly) {
-                ImGui::SliderInt("Compute Steps", &computeMaxSteps, 50, 600);
-                ImGui::SliderFloat("Compute Step Size", &computeStepSize, 0.01f, 1.0f);
-                ImGui::Checkbox("Compute Tiled", &computeTiled);
-                if (computeTiled) {
-                  ImGui::SliderInt("Compute Tile Size", &computeTileSize, 64, 1024);
+              if (rs.dispatch.useComputeRaytracer && !kAppVariantCudaOnly) {
+                ImGui::SliderInt("Compute Steps", &rs.dispatch.computeMaxSteps, 50, 600);
+                ImGui::SliderFloat("Compute Step Size", &rs.dispatch.computeStepSize, 0.01f, 1.0f);
+                ImGui::Checkbox("Compute Tiled", &rs.dispatch.computeTiled);
+                if (rs.dispatch.computeTiled) {
+                  ImGui::SliderInt("Compute Tile Size", &rs.dispatch.computeTileSize, 64, 1024);
                 }
               }
 #if BLACKHOLE_HAS_CUDA
               ImGui::Separator();
               ImGui::Text("CUDA Backend");
               {
-                bool cudaEnabled = cudaManager.isEnabled();
+                bool cudaEnabled = rs.dispatch.cudaManager.isEnabled();
                 if (ImGui::Checkbox("Use CUDA Raytracer", &cudaEnabled)) {
-                  cudaManager.setEnabled(cudaEnabled);
+                  rs.dispatch.cudaManager.setEnabled(cudaEnabled);
                 }
               }
-              if (cudaManager.isEnabled()) {
+              if (rs.dispatch.cudaManager.isEnabled()) {
                 const char *const variantNames[] = {"FP32 Baseline",
                                                     "FP32 Coarsened (2 ray/thread)", "FP16 Storage",
                                                     "FP16 H2 ILP (2 ray/thread)", "Auto"};
-                int variantUI = cudaManager.kernelVariant() < 0 ? 4 : cudaManager.kernelVariant();
+                int variantUI = rs.dispatch.cudaManager.kernelVariant() < 0 ? 4 : rs.dispatch.cudaManager.kernelVariant();
                 if (ImGui::Combo("Kernel Variant", &variantUI, variantNames, 5)) {
-                  cudaManager.setKernelVariant((variantUI >= 4) ? -1 : variantUI);
+                  rs.dispatch.cudaManager.setKernelVariant((variantUI >= 4) ? -1 : variantUI);
                 }
-                if (cudaManager.isReady()) {
-                  int const actual = cudaManager.activeVariant();
+                if (rs.dispatch.cudaManager.isReady()) {
+                  int const actual = rs.dispatch.cudaManager.activeVariant();
                   if (actual >= 0 && actual < BH_KERNEL_COUNT) {
                     ImGui::TextDisabled("Active: %s", variantNames[actual]);
                   }
-                } else if (cudaManager.wasInitAttempted()) {
+                } else if (rs.dispatch.cudaManager.wasInitAttempted()) {
                   ImGui::TextColored(ImVec4(1.f, 0.4f, 0.4f, 1.f),
                                      "Init failed -- toggle checkbox to retry");
                 } else {
@@ -4659,93 +4721,93 @@ int main(int argc, char **argv) {
               ImGui::Separator();
 #endif
               if (!kAppVariantCudaOnly) {
-                ImGui::Checkbox("Compare Compute vs Fragment", &compareComputeFragment);
+                ImGui::Checkbox("Compare Compute vs Fragment", &rs.compare.compareComputeFragment);
               }
-              if (compareComputeFragment && !kAppVariantCudaOnly) {
-                ImGui::SliderInt("Compare Sample Size", &compareSampleSize, 4, 64);
-                ImGui::SliderInt("Compare Frame Stride", &compareFrameStride, 1, 60);
-                if (compareStats.valid) {
-                  ImGui::Text("Diff mean=%.6f max=%.6f", static_cast<double>(compareStats.meanAbs),
-                              static_cast<double>(compareStats.maxAbs));
+              if (rs.compare.compareComputeFragment && !kAppVariantCudaOnly) {
+                ImGui::SliderInt("Compare Sample Size", &rs.compare.compareSampleSize, 4, 64);
+                ImGui::SliderInt("Compare Frame Stride", &rs.compare.compareFrameStride, 1, 60);
+                if (rs.compare.compareStats.valid) {
+                  ImGui::Text("Diff mean=%.6f max=%.6f", static_cast<double>(rs.compare.compareStats.meanAbs),
+                              static_cast<double>(rs.compare.compareStats.maxAbs));
                 } else {
                   ImGui::TextDisabled("Diff metrics unavailable");
                 }
-                if (compareFullStats.valid) {
+                if (rs.compare.compareFullStats.valid) {
                   ImGui::Text("Full diff mean=%.6f rms=%.6f max=%.6f",
-                              static_cast<double>(compareFullStats.meanAbs),
-                              static_cast<double>(compareFullStats.rms),
-                              static_cast<double>(compareFullStats.maxAbs));
+                              static_cast<double>(rs.compare.compareFullStats.meanAbs),
+                              static_cast<double>(rs.compare.compareFullStats.rms),
+                              static_cast<double>(rs.compare.compareFullStats.maxAbs));
                 }
-                ImGui::Checkbox("Write Snapshot PPMs", &compareWriteOutputs);
-                ImGui::Checkbox("Write Diff PPM", &compareWriteDiff);
-                ImGui::Checkbox("Write Summary CSV", &compareWriteSummary);
-                ImGui::SliderFloat("Diff Scale", &compareDiffScale, 0.1f, 32.0f);
-                ImGui::SliderFloat("Max Diff Threshold", &compareThreshold, 0.0f, 0.5f);
-                compareThreshold = std::max(compareThreshold, 0.0f);
-                ImGui::SliderInt("Allowed Outliers", &compareMaxOutliers, 0, 50000);
-                ImGui::SliderFloat("Allowed Outlier Frac", &compareMaxOutlierFrac, 0.0f, 0.01f,
+                ImGui::Checkbox("Write Snapshot PPMs", &rs.compare.compareWriteOutputs);
+                ImGui::Checkbox("Write Diff PPM", &rs.compare.compareWriteDiff);
+                ImGui::Checkbox("Write Summary CSV", &rs.compare.compareWriteSummary);
+                ImGui::SliderFloat("Diff Scale", &rs.compare.compareDiffScale, 0.1f, 32.0f);
+                ImGui::SliderFloat("Max Diff Threshold", &rs.compare.compareThreshold, 0.0f, 0.5f);
+                rs.compare.compareThreshold = std::max(rs.compare.compareThreshold, 0.0f);
+                ImGui::SliderInt("Allowed Outliers", &rs.compare.compareMaxOutliers, 0, 50000);
+                ImGui::SliderFloat("Allowed Outlier Frac", &rs.compare.compareMaxOutlierFrac, 0.0f, 0.01f,
                                    "%.5f");
-                compareMaxOutlierFrac = std::max(compareMaxOutlierFrac, 0.0f);
-                ImGui::Checkbox("Compare Baseline (disable extras)", &compareBaselineEnabled);
-                if (ImGui::Checkbox("Compare Overrides", &compareOverridesEnabled)) {
-                  if (compareOverridesEnabled) {
-                    if (compareMaxStepsOverride <= 0) {
-                      compareMaxStepsOverride = computeMaxSteps;
+                rs.compare.compareMaxOutlierFrac = std::max(rs.compare.compareMaxOutlierFrac, 0.0f);
+                ImGui::Checkbox("Compare Baseline (disable extras)", &rs.compare.compareBaselineEnabled);
+                if (ImGui::Checkbox("Compare Overrides", &rs.compare.compareOverridesEnabled)) {
+                  if (rs.compare.compareOverridesEnabled) {
+                    if (rs.compare.compareMaxStepsOverride <= 0) {
+                      rs.compare.compareMaxStepsOverride = rs.dispatch.computeMaxSteps;
                     }
-                    if (compareStepSizeOverride <= 0.0f) {
-                      compareStepSizeOverride = computeStepSize;
+                    if (rs.compare.compareStepSizeOverride <= 0.0f) {
+                      rs.compare.compareStepSizeOverride = rs.dispatch.computeStepSize;
                     }
                   }
                 }
-                ImGui::BeginDisabled(!compareOverridesEnabled);
-                ImGui::SliderInt("Compare Max Steps Override", &compareMaxStepsOverride, 0, 1000);
-                ImGui::SliderFloat("Compare Step Size Override", &compareStepSizeOverride, 0.0f,
+                ImGui::BeginDisabled(!rs.compare.compareOverridesEnabled);
+                ImGui::SliderInt("Compare Max Steps Override", &rs.compare.compareMaxStepsOverride, 0, 1000);
+                ImGui::SliderFloat("Compare Step Size Override", &rs.compare.compareStepSizeOverride, 0.0f,
                                    2.0f);
                 ImGui::EndDisabled();
                 ImGui::Separator();
                 ImGui::Text("Integrator Debug");
-                bool debugNan = (integratorDebugFlags & K_INTEGRATOR_DEBUG_NAN_FLAG) != 0;
-                bool debugRange = (integratorDebugFlags & K_INTEGRATOR_DEBUG_RANGE_FLAG) != 0;
+                bool debugNan = (rs.compare.integratorDebugFlags & K_INTEGRATOR_DEBUG_NAN_FLAG) != 0;
+                bool debugRange = (rs.compare.integratorDebugFlags & K_INTEGRATOR_DEBUG_RANGE_FLAG) != 0;
                 ImGui::Checkbox("Flag NaN/Inf", &debugNan);
                 ImGui::SameLine();
                 ImGui::Checkbox("Flag Out-of-Range", &debugRange);
-                integratorDebugFlags = (debugNan ? K_INTEGRATOR_DEBUG_NAN_FLAG : 0) |
+                rs.compare.integratorDebugFlags = (debugNan ? K_INTEGRATOR_DEBUG_NAN_FLAG : 0) |
                                        (debugRange ? K_INTEGRATOR_DEBUG_RANGE_FLAG : 0);
-                ImGui::Text("Threshold failures: %d", compareFailureCount);
-                if (compareFullStats.valid) {
-                  ImGui::Text("Last capture: %s", compareLastExceeded ? "FAIL" : "PASS");
-                  ImGui::Text("Outliers: %d (limit %d)", compareLastOutliers,
-                              compareLastOutlierLimit);
+                ImGui::Text("Threshold failures: %d", rs.compare.compareFailureCount);
+                if (rs.compare.compareFullStats.valid) {
+                  ImGui::Text("Last capture: %s", rs.compare.compareLastExceeded ? "FAIL" : "PASS");
+                  ImGui::Text("Outliers: %d (limit %d)", rs.compare.compareLastOutliers,
+                              rs.compare.compareLastOutlierLimit);
                 }
-                if (ImGui::Checkbox("Auto Capture", &compareAutoCapture)) {
-                  compareAutoRemaining = compareAutoCapture ? std::max(compareAutoCount, 1) : 0;
-                  compareAutoStrideCounter = 0;
+                if (ImGui::Checkbox("Auto Capture", &rs.compare.compareAutoCapture)) {
+                  rs.compare.compareAutoRemaining = rs.compare.compareAutoCapture ? std::max(rs.compare.compareAutoCount, 1) : 0;
+                  rs.compare.compareAutoStrideCounter = 0;
                 }
-                ImGui::SliderInt("Auto Capture Count", &compareAutoCount, 1, 120);
-                ImGui::SliderInt("Auto Capture Stride", &compareAutoStride, 1, 600);
-                if (compareAutoCapture) {
-                  ImGui::Text("Auto remaining: %d", compareAutoRemaining);
+                ImGui::SliderInt("Auto Capture Count", &rs.compare.compareAutoCount, 1, 120);
+                ImGui::SliderInt("Auto Capture Stride", &rs.compare.compareAutoStride, 1, 600);
+                if (rs.compare.compareAutoCapture) {
+                  ImGui::Text("Auto remaining: %d", rs.compare.compareAutoRemaining);
                 }
                 if (ImGui::Button("Capture Preset Sweep")) {
-                  comparePresetSweep = true;
-                  comparePresetIndex = 0;
-                  comparePresetFrameCounter = 0;
-                  compareAutoCapture = false;
-                  compareAutoRemaining = 0;
-                  compareRestorePending = false;
+                  rs.compare.comparePresetSweep = true;
+                  rs.compare.comparePresetIndex = 0;
+                  rs.compare.comparePresetFrameCounter = 0;
+                  rs.compare.compareAutoCapture = false;
+                  rs.compare.compareAutoRemaining = 0;
+                  rs.compare.compareRestorePending = false;
                 }
-                ImGui::SliderInt("Preset Settle Frames", &comparePresetSettleFrames, 1, 10);
-                if (comparePresetSweep) {
+                ImGui::SliderInt("Preset Settle Frames", &rs.compare.comparePresetSettleFrames, 1, 10);
+                if (rs.compare.comparePresetSweep) {
                   std::size_t const presetCount = K_COMPARE_PRESETS.size();
                   int const displayIndex =
-                      std::clamp(comparePresetIndex + 1, 1, static_cast<int>(presetCount));
+                      std::clamp(rs.compare.comparePresetIndex + 1, 1, static_cast<int>(presetCount));
                   auto const labelIndex = static_cast<std::size_t>(displayIndex - 1);
                   const char *label = K_COMPARE_PRESETS.at(labelIndex).label;
                   ImGui::Text("Preset sweep: %s (%d/%d)", label, displayIndex,
                               static_cast<int>(presetCount));
                 }
                 if (ImGui::Button("Capture A/B Snapshot")) {
-                  captureCompareSnapshot = true;
+                  rs.compare.captureCompareSnapshot = true;
                 }
               }
               ImGui::EndTabItem();
@@ -4755,11 +4817,11 @@ int main(int argc, char **argv) {
           ImGui::End();
         }
 
-        if (curveOverlayWindowOpen) {
-          ImGui::Begin("Curve Overlay", &curveOverlayWindowOpen);
-          ImGui::Checkbox("Enabled", &curveOverlayEnabled);
+        if (rs.overlays.curveOverlayWindowOpen) {
+          ImGui::Begin("Curve Overlay", &rs.overlays.curveOverlayWindowOpen);
+          ImGui::Checkbox("Enabled", &rs.overlays.curveOverlayEnabled);
           if (ImGui::Button("Reload") && !curveTsvPath.empty()) {
-            curveOverlayLoaded = curveOverlay.loadFromTsv(curveTsvPath);
+            rs.overlays.curveOverlayLoaded = rs.overlays.curveOverlay.loadFromTsv(curveTsvPath);
           }
           if (!curveTsvPath.empty()) {
             ImGui::SameLine();
@@ -4768,38 +4830,38 @@ int main(int argc, char **argv) {
 
           if (curveTsvPath.empty()) {
             ImGui::Text("Pass --curve-tsv <path> to plot a 2-column TSV.");
-          } else if (!curveOverlayLoaded) {
-            ImGui::Text("Load error: %s", curveOverlay.lastError.c_str());
-          } else if (curveOverlayEnabled) {
+          } else if (!rs.overlays.curveOverlayLoaded) {
+            ImGui::Text("Load error: %s", rs.overlays.curveOverlay.lastError.c_str());
+          } else if (rs.overlays.curveOverlayEnabled) {
             ImVec2 plotSize = ImGui::GetContentRegionAvail();
             plotSize.y = std::max(plotSize.y, 220.0f);
-            drawCurvePlot(curveOverlay, plotSize);
+            drawCurvePlot(rs.overlays.curveOverlay, plotSize);
           }
 
           ImGui::End();
         }
 
-        updateLuts(kerrSpin, adiskDensityV);
-        if (!spectralLutTried) {
-          spectralLutTried = true;
-          spectralLutLoaded = loadSpectralLutAssets(spectralLutValues, spectralWavelengthMin,
-                                                    spectralWavelengthMax);
-          if (spectralLutLoaded && !spectralLutValues.empty()) {
-            if (texSpectralLUT != 0) {
-              glDeleteTextures(1, &texSpectralLUT);
-              texSpectralLUT = 0;
+        updateLuts(rs.physicsCore.kerrSpin, rs.disk.adiskDensityV);
+        if (!rs.luts.spectralLutTried) {
+          rs.luts.spectralLutTried = true;
+          rs.luts.spectralLutLoaded = loadSpectralLutAssets(rs.luts.spectralLutValues, rs.luts.spectralWavelengthMin,
+                                                    rs.luts.spectralWavelengthMax);
+          if (rs.luts.spectralLutLoaded && !rs.luts.spectralLutValues.empty()) {
+            if (rs.luts.texSpectralLUT != 0) {
+              glDeleteTextures(1, &rs.luts.texSpectralLUT);
+              rs.luts.texSpectralLUT = 0;
             }
-            int const lutSize = static_cast<int>(spectralLutValues.size());
-            texSpectralLUT = createFloatTexture2D(lutSize, 1, spectralLutValues);
+            int const lutSize = static_cast<int>(rs.luts.spectralLutValues.size());
+            rs.luts.texSpectralLUT = createFloatTexture2D(lutSize, 1, rs.luts.spectralLutValues);
 #if BLACKHOLE_HAS_CUDA
             /* Share spectral LUT with CUDA backend (slot 2=spectral) */
-            cudaManager.registerLut(2, texSpectralLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
+            rs.dispatch.cudaManager.registerLut(2, rs.luts.texSpectralLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
 #endif
-            spectralRadiusMin = lutRadiusMin;
-            spectralRadiusMax = lutRadiusMax;
-            if (spectralRadiusMax <= spectralRadiusMin) {
-              spectralRadiusMin = 0.0f;
-              spectralRadiusMax = 1.0f;
+            rs.luts.spectralRadiusMin = rs.luts.lutRadiusMin;
+            rs.luts.spectralRadiusMax = rs.luts.lutRadiusMax;
+            if (rs.luts.spectralRadiusMax <= rs.luts.spectralRadiusMin) {
+              rs.luts.spectralRadiusMin = 0.0f;
+              rs.luts.spectralRadiusMax = 1.0f;
             }
           }
         }
@@ -4809,33 +4871,33 @@ int main(int argc, char **argv) {
          * can be registered for CUDA-GL interop via cudaGraphicsGLRegisterImage,
          * which does not support GL_TEXTURE_1D.  The GLSL path samples it
          * via sampler2D with y=0.5; the CUDA path uses tex2D at v=0.5. */
-        if (!synchGLutCreated) {
+        if (!rs.luts.synchGLutCreated) {
           // The G(x) domain is single-sourced across C++, CUDA, and GLSL via
           // shader/include/synchrotron_lut_domain.h; every consumer reads the
           // same macros, so no cross-file pinning asserts are needed here.
-          synchGLutCreated = true;
+          rs.luts.synchGLutCreated = true;
           constexpr int kSynchGLutSize = SYNCH_G_LUT_DOMAIN_ENTRIES;
           std::vector<float> synchGData(static_cast<std::size_t>(kSynchGLutSize));
           physics::synchrotronGGenerateLut(synchGData.data(), kSynchGLutSize,
                                            static_cast<double>(physics::SYNCH_G_LUT_X_MIN),
                                            static_cast<double>(physics::SYNCH_G_LUT_X_MAX));
-          if (texSynchGLut != 0) {
-            glDeleteTextures(1, &texSynchGLut);
-            texSynchGLut = 0;
+          if (rs.luts.texSynchGLut != 0) {
+            glDeleteTextures(1, &rs.luts.texSynchGLut);
+            rs.luts.texSynchGLut = 0;
           }
-          texSynchGLut = createFloatTexture2D(kSynchGLutSize, 1, synchGData);
+          rs.luts.texSynchGLut = createFloatTexture2D(kSynchGLutSize, 1, synchGData);
 #if BLACKHOLE_HAS_CUDA
-          cudaManager.registerLut(6 /*BhLutSynchG*/, texSynchGLut,
+          rs.dispatch.cudaManager.registerLut(6 /*BhLutSynchG*/, rs.luts.texSynchGLut,
                                   static_cast<unsigned int>(GL_TEXTURE_2D));
 #endif
         }
 
         // Load Hawking radiation LUTs
-        if (!hawkingLutsLoaded) {
+        if (!rs.hawking.hawkingLutsLoaded) {
           std::filesystem::path const lutPath = resourcePath("assets/luts");
           if (std::filesystem::exists(lutPath)) {
-            hawkingLutsLoaded = hawkingRenderer.loadLUTs(lutPath);
-            if (hawkingLutsLoaded) {
+            rs.hawking.hawkingLutsLoaded = rs.hawking.hawkingRenderer.loadLUTs(lutPath);
+            if (rs.hawking.hawkingLutsLoaded) {
               std::cout << "Hawking radiation LUTs loaded successfully" << '\n';
             } else {
               std::cerr << "Failed to load Hawking radiation LUTs" << '\n';
@@ -4846,78 +4908,78 @@ int main(int argc, char **argv) {
         const double referenceMass = physics::M_SUN;
         const double referenceRs = physics::schwarzschildRadius(referenceMass);
         const double referenceRg = physics::G * referenceMass / physics::C2;
-        const double referenceA = static_cast<double>(kerrSpin) * referenceRg;
-        const bool progradeSpin = kerrSpin >= 0.0f;
+        const double referenceA = static_cast<double>(rs.physicsCore.kerrSpin) * referenceRg;
+        const bool progradeSpin = rs.physicsCore.kerrSpin >= 0.0f;
         const double iscoRatio =
             physics::kerrIscoRadius(referenceMass, referenceA, progradeSpin) / referenceRs;
 
-        float const schwarzschildRadius = 2.0f * blackHoleMass;
+        float const schwarzschildRadius = 2.0f * rs.physicsCore.blackHoleMass;
         float const iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;
         // Keep record-mode copies accessible outside this inner block
-        recordCurRs   = schwarzschildRadius;
-        recordCurIsco = iscoRadius;
+        rs.recording.recordCurRs   = schwarzschildRadius;
+        rs.recording.recordCurIsco = iscoRadius;
 #if BLACKHOLE_HAS_CUDA
         if (kAppVariantCudaOnly) {
-          cudaManager.setEnabled(true);
-          useComputeRaytracer = false;
-          compareComputeFragment = false;
+          rs.dispatch.cudaManager.setEnabled(true);
+          rs.dispatch.useComputeRaytracer = false;
+          rs.compare.compareComputeFragment = false;
         }
 #endif
         bool const computeSupported = ShaderManager::instance().canUseComputeShaders();
-        bool const computeActive = useComputeRaytracer && computeSupported;
+        bool const computeActive = rs.dispatch.useComputeRaytracer && computeSupported;
         bool const compareActive =
-            compareComputeFragment && computeSupported && !kAppVariantCudaOnly;
-        bool const compareBaselineActive = compareBaselineEnabled && compareActive;
-        bool const adiskEnabledEffective = adiskEnabled && !compareBaselineActive;
-        bool const adiskParticleEffective = adiskParticle && !compareBaselineActive;
-        bool const enableRedshiftEffective = enableRedshift && !compareBaselineActive;
-        bool const useNoiseTextureEffective = useNoiseTexture && !compareBaselineActive;
-        bool const useGrmhdEffective = useGrmhd && !compareBaselineActive;
-        bool const useSpectralLutEffective = useSpectralLut && !compareBaselineActive;
-        bool const useGrbModulationEffective = useGrbModulation && !compareBaselineActive;
-        bool const enablePhotonSphereEffective = enablePhotonSphere && !compareBaselineActive;
+            rs.compare.compareComputeFragment && computeSupported && !kAppVariantCudaOnly;
+        bool const compareBaselineActive = rs.compare.compareBaselineEnabled && compareActive;
+        bool const adiskEnabledEffective = rs.disk.adiskEnabled && !compareBaselineActive;
+        bool const adiskParticleEffective = rs.disk.adiskParticle && !compareBaselineActive;
+        bool const enableRedshiftEffective = rs.physicsCore.enableRedshift && !compareBaselineActive;
+        bool const useNoiseTextureEffective = rs.disk.useNoiseTexture && !compareBaselineActive;
+        bool const useGrmhdEffective = rs.grmhd.useGrmhd && !compareBaselineActive;
+        bool const useSpectralLutEffective = rs.luts.useSpectralLut && !compareBaselineActive;
+        bool const useGrbModulationEffective = rs.luts.useGrbModulation && !compareBaselineActive;
+        bool const enablePhotonSphereEffective = rs.physicsCore.enablePhotonSphere && !compareBaselineActive;
         bool const backgroundEnabledEffective =
             settings.backgroundEnabled && !compareBaselineActive;
         computeActiveForLog = computeActive;
-        compareSampleSize = std::clamp(compareSampleSize, 4, 64);
-        compareFrameStride = std::max(compareFrameStride, 1);
-        compareAutoCount = std::max(compareAutoCount, 1);
-        compareAutoStride = std::max(compareAutoStride, 1);
+        rs.compare.compareSampleSize = std::clamp(rs.compare.compareSampleSize, 4, 64);
+        rs.compare.compareFrameStride = std::max(rs.compare.compareFrameStride, 1);
+        rs.compare.compareAutoCount = std::max(rs.compare.compareAutoCount, 1);
+        rs.compare.compareAutoStride = std::max(rs.compare.compareAutoStride, 1);
         if (!compareActive) {
-          compareAutoCapture = false;
-          compareAutoRemaining = 0;
-          compareAutoStrideCounter = 0;
+          rs.compare.compareAutoCapture = false;
+          rs.compare.compareAutoRemaining = 0;
+          rs.compare.compareAutoStrideCounter = 0;
         }
-        computeMaxSteps = std::clamp(computeMaxSteps, 10, 1000);
-        computeStepSize = std::clamp(computeStepSize, 0.001f, 2.0f);
-        int compareSteps = computeMaxSteps;
-        float compareStepSize = computeStepSize;
-        if (compareOverridesEnabled) {
-          if (compareMaxStepsOverride > 0) {
-            compareSteps = compareMaxStepsOverride;
+        rs.dispatch.computeMaxSteps = std::clamp(rs.dispatch.computeMaxSteps, 10, 1000);
+        rs.dispatch.computeStepSize = std::clamp(rs.dispatch.computeStepSize, 0.001f, 2.0f);
+        int compareSteps = rs.dispatch.computeMaxSteps;
+        float compareStepSize = rs.dispatch.computeStepSize;
+        if (rs.compare.compareOverridesEnabled) {
+          if (rs.compare.compareMaxStepsOverride > 0) {
+            compareSteps = rs.compare.compareMaxStepsOverride;
           }
-          if (compareStepSizeOverride > 0.0f) {
-            compareStepSize = compareStepSizeOverride;
+          if (rs.compare.compareStepSizeOverride > 0.0f) {
+            compareStepSize = rs.compare.compareStepSizeOverride;
           }
         }
 
         grmhdEnabled = useGrmhdEffective && grmhdReady;
         spectralEnabled = useSpectralLutEffective && spectralReady;
         grbModulationEnabled = useGrbModulationEffective && grbModulationReady;
-        noiseReady = useNoiseTextureEffective && texNoiseVolume != 0;
-        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? texNoiseVolume : fallback3D;
+        noiseReady = useNoiseTextureEffective && rs.disk.texNoiseVolume != 0;
+        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? rs.disk.texNoiseVolume : fallback3D;
         rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : fallback3D;
-        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? texSpectralLUT : fallback2D;
+        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? rs.luts.texSpectralLUT : fallback2D;
         rtti.textureUniforms["grbModulationLUT"] =
-            grbModulationEnabled ? texGrbModulationLUT : fallback2D;
+            grbModulationEnabled ? rs.luts.texGrbModulationLUT : fallback2D;
         rtti.textureUniforms["hawkingTempLUT"] =
-            hawkingLutsLoaded ? hawkingRenderer.getTempLUTTexture() : fallback2D;
+            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : fallback2D;
         rtti.textureUniforms["hawkingSpectrumLUT"] =
-            hawkingLutsLoaded ? hawkingRenderer.getSpectrumLUTTexture() : fallback2D;
+            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : fallback2D;
         rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
         rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["backgroundEnabled"] = backgroundEnabledEffective ? 1.0f : 0.0f;
-        rtti.floatUniforms["bhDebugFlags"] = static_cast<float>(integratorDebugFlags);
+        rtti.floatUniforms["bhDebugFlags"] = static_cast<float>(rs.compare.integratorDebugFlags);
 
         InteropUniforms interop;
         interop.cameraPos = cameraPos;
@@ -4926,32 +4988,32 @@ int main(int argc, char **argv) {
         interop.timeSec = frameTime;
         interop.schwarzschildRadius = schwarzschildRadius;
         interop.iscoRadius = iscoRadius;
-        interop.kerrSpin = kerrSpin;
-        interop.depthFar = depthFar;
+        interop.kerrSpin = rs.physicsCore.kerrSpin;
+        interop.depthFar = rs.display.depthFar;
         if (compareActive) {
           interop.maxSteps = compareSteps;
           interop.stepSize = compareStepSize;
         } else {
-          interop.maxSteps = computeMaxSteps;
-          interop.stepSize = computeStepSize;
+          interop.maxSteps = rs.dispatch.computeMaxSteps;
+          interop.stepSize = rs.dispatch.computeStepSize;
         }
         interop.adiskEnabled = adiskEnabledEffective ? 1.0f : 0.0f;
         interop.enableRedshift = enableRedshiftEffective ? 1.0f : 0.0f;
         interop.useLUTs = lutReady ? 1.0f : 0.0f;
         interop.useSpectralLUT = spectralEnabled ? 1.0f : 0.0f;
         interop.useGrbModulation = grbModulationEnabled ? 1.0f : 0.0f;
-        interop.lutRadiusMin = lutRadiusMin;
-        interop.lutRadiusMax = lutRadiusMax;
-        interop.redshiftRadiusMin = redshiftRadiusMin;
-        interop.redshiftRadiusMax = redshiftRadiusMax;
-        interop.spectralRadiusMin = spectralRadiusMin;
-        interop.spectralRadiusMax = spectralRadiusMax;
+        interop.lutRadiusMin = rs.luts.lutRadiusMin;
+        interop.lutRadiusMax = rs.luts.lutRadiusMax;
+        interop.redshiftRadiusMin = rs.luts.redshiftRadiusMin;
+        interop.redshiftRadiusMax = rs.luts.redshiftRadiusMax;
+        interop.spectralRadiusMin = rs.luts.spectralRadiusMin;
+        interop.spectralRadiusMax = rs.luts.spectralRadiusMax;
         interop.grbTime = grbTimeSeconds;
-        interop.grbTimeMin = grbTimeMin;
-        interop.grbTimeMax = grbTimeMax;
+        interop.grbTimeMin = rs.luts.grbTimeMin;
+        interop.grbTimeMax = rs.luts.grbTimeMax;
         // D2: volumetric RTE
-        interop.rteEnabled      = rteVolumetricEnabled ? 1.0f : 0.0f;
-        interop.rteOpacityScale = rteOpacityScale;
+        interop.rteEnabled      = rs.rte.rteVolumetricEnabled ? 1.0f : 0.0f;
+        interop.rteOpacityScale = rs.rte.rteOpacityScale;
         interop.debugPreRedshiftBackground = debugPreRedshiftBackground ? 1.0f : 0.0f;
         interop.debugPreShapingBackground = debugPreShapingBackground ? 1.0f : 0.0f;
         interop.debugPostShapingBackground = debugPostShapingBackground ? 1.0f : 0.0f;
@@ -4962,9 +5024,9 @@ int main(int argc, char **argv) {
         interop.debugEscapedDirection = debugEscapedDirection ? 1.0f : 0.0f;
 
         // Convert black hole mass to grams (CGS units for Hawking calculation)
-        double const bhMassGrams = static_cast<double>(blackHoleMass) * physics::M_SUN;
-        applyInteropUniforms(rtti, interop, compareActive, hawkingGlowEnabled, hawkingTempScale,
-                             hawkingGlowIntensity, hawkingUseLUTs, bhMassGrams);
+        double const bhMassGrams = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
+        applyInteropUniforms(rtti, interop, compareActive, rs.hawking.hawkingGlowEnabled, rs.hawking.hawkingTempScale,
+                             rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMassGrams);
 
         rtti.floatUniforms["wiregridEnabled"]   = wiregridEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["wiregridShowErgo"]  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
@@ -4975,52 +5037,52 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["wiregridScenePreserve"] = wiregridParams.scenePreserve;
         rtti.vec4Uniforms["wiregridColor"] = wiregridColor;
         // D4: polarized Stokes IQUV
-        rtti.floatUniforms["stokesEnabled"]     = stokesEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["stokesBFieldAngle"] = stokesBFieldAngle;
-        rtti.floatUniforms["stokesNeScale"]     = stokesNeScale;
-        rtti.floatUniforms["gravitationalLensing"] = gravitationalLensing ? 1.0f : 0.0f;
-        rtti.floatUniforms["renderBlackHole"] = renderBlackHole ? 1.0f : 0.0f;
+        rtti.floatUniforms["stokesEnabled"]     = rs.stokes.stokesEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["stokesBFieldAngle"] = rs.stokes.stokesBFieldAngle;
+        rtti.floatUniforms["stokesNeScale"]     = rs.stokes.stokesNeScale;
+        rtti.floatUniforms["gravitationalLensing"] = rs.disk.gravitationalLensing ? 1.0f : 0.0f;
+        rtti.floatUniforms["renderBlackHole"] = rs.disk.renderBlackHole ? 1.0f : 0.0f;
         rtti.floatUniforms["adiskParticle"] = adiskParticleEffective ? 1.0f : 0.0f;
         // rtti.floatUniforms["adiskDensityV"] = adiskDensityV; // Removed: consumed by LUT
         // generation
-        rtti.floatUniforms["adiskDensityH"] = adiskDensityH;
-        rtti.floatUniforms["adiskHeight"] = adiskHeight;
-        rtti.floatUniforms["adiskLit"] = adiskLit;
-        rtti.floatUniforms["adiskNoiseLOD"] = adiskNoiseLOD;
-        rtti.floatUniforms["adiskNoiseScale"] = adiskNoiseScale;
-        rtti.floatUniforms["adiskSpeed"] = adiskSpeed;
-        rtti.floatUniforms["dopplerStrength"] = dopplerStrength;
-        rtti.floatUniforms["photonSphereGlowStrength"] = photonSphereGlowStrength;
+        rtti.floatUniforms["adiskDensityH"] = rs.disk.adiskDensityH;
+        rtti.floatUniforms["adiskHeight"] = rs.disk.adiskHeight;
+        rtti.floatUniforms["adiskLit"] = rs.disk.adiskLit;
+        rtti.floatUniforms["adiskNoiseLOD"] = rs.disk.adiskNoiseLOD;
+        rtti.floatUniforms["adiskNoiseScale"] = rs.disk.adiskNoiseScale;
+        rtti.floatUniforms["adiskSpeed"] = rs.disk.adiskSpeed;
+        rtti.floatUniforms["dopplerStrength"] = rs.disk.dopplerStrength;
+        rtti.floatUniforms["photonSphereGlowStrength"] = rs.disk.photonSphereGlowStrength;
         rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphereEffective ? 1.0f : 0.0f;
 
 #if BLACKHOLE_HAS_CUDA
         /* CUDA dispatch path: bypasses both fragment and compute GLSL paths */
-        if (cudaManager.isEnabled()) {
+        if (rs.dispatch.cudaManager.isEnabled()) {
           ZONE_SCOPED_N("Blackhole CUDA");
 
           /* Lazy init on first use or after resize.
            * Track pre-call state to detect the single frame where init succeeds. */
-          bool const wasReady = cudaManager.isReady();
-          cudaManager.ensureInit(texBlackhole, renderWidth, renderHeight);
-          if (!wasReady && cudaManager.isReady()) {
+          bool const wasReady = rs.dispatch.cudaManager.isReady();
+          rs.dispatch.cudaManager.ensureInit(rs.targets.texBlackhole, rs.targets.renderWidth, rs.targets.renderHeight);
+          if (!wasReady && rs.dispatch.cudaManager.isReady()) {
             /* Register galaxy cubemap as CUDA texture object (slot 4 = BhLutGalaxy).
              * Done exactly once on the frame that init first succeeds.
              * Registration failure is non-fatal: kernels fall back to no background. */
             GLuint const galaxyTexForCuda = (galaxy != 0) ? galaxy : fallbackCubemap;
             if (galaxyTexForCuda != 0) {
-              cudaManager.registerLut(4, galaxyTexForCuda,
+              rs.dispatch.cudaManager.registerLut(4, galaxyTexForCuda,
                                       static_cast<unsigned int>(GL_TEXTURE_CUBE_MAP));
             }
             /* Register the layered desktop background equirect texture so the CUDA
              * lane samples the same 2D scene asset class as the GLSL desktop lane. */
             GLuint const backgroundTexForCuda = (backgroundBase != 0) ? backgroundBase : fallback2D;
             if (backgroundTexForCuda != 0) {
-              bhCudaRegisterBackgroundTexture(cudaManager.backend(), backgroundTexForCuda,
+              bhCudaRegisterBackgroundTexture(rs.dispatch.cudaManager.backend(), backgroundTexForCuda,
                                               static_cast<unsigned int>(GL_TEXTURE_2D));
             }
           }
 
-          if (cudaManager.isReady()) {
+          if (rs.dispatch.cudaManager.isReady()) {
             BH_LaunchParams cp = {};
             cp.rs = interop.schwarzschildRadius;
             cp.spin = interop.kerrSpin;
@@ -5034,8 +5096,8 @@ int main(int argc, char **argv) {
             /* glm mat3 is column-major, same layout as our flat array */
             std::memcpy(cp.cam_basis, glm::value_ptr(interop.cameraBasis), 9 * sizeof(float));
             cp.max_steps = interop.maxSteps;
-            cp.width = renderWidth;
-            cp.height = renderHeight;
+            cp.width = rs.targets.renderWidth;
+            cp.height = rs.targets.renderHeight;
             cp.adisk_enabled = adiskEnabledEffective ? 1 : 0;
             cp.redshift_enabled = enableRedshiftEffective ? 1 : 0;
             cp.kerr_enabled = (fabsf(interop.kerrSpin) > 1e-6f) ? 1 : 0;
@@ -5047,10 +5109,10 @@ int main(int argc, char **argv) {
             cp.spectral_radius_min = interop.spectralRadiusMin;
             cp.spectral_radius_max = interop.spectralRadiusMax;
             cp.time_sec = interop.timeSec;
-            cp.doppler_strength = dopplerStrength;
+            cp.doppler_strength = rs.disk.dopplerStrength;
             cp.background_intensity = settings.backgroundIntensity;
             cp.background_enabled = backgroundEnabledEffective ? 1 : 0;
-            cp.photon_glow_strength = enablePhotonSphereEffective ? photonSphereGlowStrength : 0.0f;
+            cp.photon_glow_strength = enablePhotonSphereEffective ? rs.disk.photonSphereGlowStrength : 0.0f;
             cp.debug_pre_redshift_background = debugPreRedshiftBackground ? 1 : 0;
             cp.debug_pre_shaping_background = debugPreShapingBackground ? 1 : 0;
             cp.debug_post_shaping_background = debugPostShapingBackground ? 1 : 0;
@@ -5097,20 +5159,20 @@ int main(int argc, char **argv) {
             cp.wiregrid_color[2] = wiregridColor.b;
             cp.wiregrid_color[3] = wiregridColor.a;
             // GRMHD volume radial bounds (task C1l) + temporal blend (C1d)
-            cp.grmhd_r_min  = grmhdTexture.rMin;
-            cp.grmhd_r_max  = grmhdTexture.rMax;
-            cp.grmhd_alpha  = grmhdFrameAlpha;
+            cp.grmhd_r_min  = rs.grmhd.grmhdTexture.rMin;
+            cp.grmhd_r_max  = rs.grmhd.grmhdTexture.rMax;
+            cp.grmhd_alpha  = rs.grmhd.grmhdFrameAlpha;
             // Volumetric RTE (D3): mirrors GLSL rteEnabled path
             cp.rte_enabled       = (interop.rteEnabled > 0.5f) ? 1 : 0;
             cp.rte_opacity_scale = interop.rteOpacityScale;
             // D4: polarized Stokes IQUV
-            cp.stokes_enabled     = stokesEnabled ? 1 : 0;
-            cp.stokes_b_field_angle = stokesBFieldAngle;
-            cp.stokes_ne_scale    = stokesNeScale;
+            cp.stokes_enabled     = rs.stokes.stokesEnabled ? 1 : 0;
+            cp.stokes_b_field_angle = rs.stokes.stokesBFieldAngle;
+            cp.stokes_ne_scale    = rs.stokes.stokesNeScale;
             // Disk brightness: matches adiskLit GLSL uniform (record mode sets 0.35)
-            cp.adisk_lit = adiskLit;
+            cp.adisk_lit = rs.disk.adiskLit;
 
-            cudaManager.renderFrame(&cp);
+            rs.dispatch.cudaManager.renderFrame(&cp);
           }
         } else
 #endif
@@ -5119,18 +5181,18 @@ int main(int argc, char **argv) {
 
           GLuint fragmentTarget = 0;
           if (computeActive) {
-            fragmentTarget = compareActive ? texBlackholeCompare : 0;
+            fragmentTarget = compareActive ? rs.targets.texBlackholeCompare : 0;
           } else {
-            fragmentTarget = texBlackhole;
+            fragmentTarget = rs.targets.texBlackhole;
           }
           GLuint computeTarget = 0;
           if (computeActive) {
-            computeTarget = texBlackhole;
+            computeTarget = rs.targets.texBlackhole;
           } else {
-            computeTarget = compareActive ? texBlackholeCompare : 0;
+            computeTarget = compareActive ? rs.targets.texBlackholeCompare : 0;
           }
-          if (gpuTimers.initialized && fragmentTarget != 0) {
-            gpuTimers.blackholeFragment.begin();
+          if (rs.timing.gpuTimers.initialized && fragmentTarget != 0) {
+            rs.timing.gpuTimers.blackholeFragment.begin();
           }
           if (fragmentTarget != 0) {
             ZONE_SCOPED_N("Blackhole Fragment");
@@ -5138,12 +5200,12 @@ int main(int argc, char **argv) {
             // std::cout << "Rendering to texture..." << std::endl;
             renderToTexture(rtti);
           }
-          if (gpuTimers.initialized && fragmentTarget != 0) {
-            gpuTimers.blackholeFragment.end();
+          if (rs.timing.gpuTimers.initialized && fragmentTarget != 0) {
+            rs.timing.gpuTimers.blackholeFragment.end();
           }
 
-          if (gpuTimers.initialized && computeTarget != 0) {
-            gpuTimers.blackholeCompute.begin();
+          if (rs.timing.gpuTimers.initialized && computeTarget != 0) {
+            rs.timing.gpuTimers.blackholeCompute.begin();
           }
           if (computeTarget != 0) {
             ZONE_SCOPED_N("Blackhole Compute");
@@ -5152,12 +5214,12 @@ int main(int argc, char **argv) {
             }
 
             glUseProgram(computeProgram);
-            applyInteropComputeUniforms(computeProgram, interop, renderWidth, renderHeight);
+            applyInteropComputeUniforms(computeProgram, interop, rs.targets.renderWidth, rs.targets.renderHeight);
 
             // Apply Hawking radiation uniforms
-            double const bhMass = static_cast<double>(blackHoleMass) * physics::M_SUN;
-            applyHawkingUniforms(computeProgram, hawkingRenderer, hawkingGlowEnabled,
-                                 hawkingTempScale, hawkingGlowIntensity, hawkingUseLUTs, bhMass);
+            double const bhMass = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
+            applyHawkingUniforms(computeProgram, rs.hawking.hawkingRenderer, rs.hawking.hawkingGlowEnabled,
+                                 rs.hawking.hawkingTempScale, rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMass);
 
             // Wiregrid BL-coord overlay (parity with fragment path)
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridEnabled"),
@@ -5179,27 +5241,27 @@ int main(int argc, char **argv) {
 
             // D4: polarized Stokes IQUV (parity with fragment path)
             glUniform1f(glGetUniformLocation(computeProgram, "stokesEnabled"),
-                        stokesEnabled ? 1.0f : 0.0f);
+                        rs.stokes.stokesEnabled ? 1.0f : 0.0f);
             glUniform1f(glGetUniformLocation(computeProgram, "stokesBFieldAngle"),
-                        stokesBFieldAngle);
+                        rs.stokes.stokesBFieldAngle);
             glUniform1f(glGetUniformLocation(computeProgram, "stokesNeScale"),
-                        stokesNeScale);
+                        rs.stokes.stokesNeScale);
 
             GLint texUnit = 0;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, lutReady ? texEmissivityLUT : fallback2D);
+            glBindTexture(GL_TEXTURE_2D, lutReady ? rs.luts.texEmissivityLUT : fallback2D);
             glUniform1i(glGetUniformLocation(computeProgram, "emissivityLUT"), texUnit);
             texUnit++;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, lutReady ? texRedshiftLUT : fallback2D);
+            glBindTexture(GL_TEXTURE_2D, lutReady ? rs.luts.texRedshiftLUT : fallback2D);
             glUniform1i(glGetUniformLocation(computeProgram, "redshiftLUT"), texUnit);
             texUnit++;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, spectralEnabled ? texSpectralLUT : fallback2D);
+            glBindTexture(GL_TEXTURE_2D, spectralEnabled ? rs.luts.texSpectralLUT : fallback2D);
             glUniform1i(glGetUniformLocation(computeProgram, "spectralLUT"), texUnit);
             texUnit++;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, grbModulationEnabled ? texGrbModulationLUT : fallback2D);
+            glBindTexture(GL_TEXTURE_2D, grbModulationEnabled ? rs.luts.texGrbModulationLUT : fallback2D);
             glUniform1i(glGetUniformLocation(computeProgram, "grbModulationLUT"), texUnit);
             texUnit++;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
@@ -5216,7 +5278,7 @@ int main(int argc, char **argv) {
             glUniform1f(glGetUniformLocation(computeProgram, "backgroundEnabled"),
                         backgroundEnabledEffective ? 1.0f : 0.0f);
             glUniform1f(glGetUniformLocation(computeProgram, "bhDebugFlags"),
-                        static_cast<float>(integratorDebugFlags));
+                        static_cast<float>(rs.compare.integratorDebugFlags));
             glUniform1f(glGetUniformLocation(computeProgram, "backgroundIntensity"),
                         settings.backgroundIntensity);
             for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
@@ -5235,12 +5297,12 @@ int main(int argc, char **argv) {
             glBindImageTexture(0, computeTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
             GLint const tileOffsetLoc = glGetUniformLocation(computeProgram, "tileOffset");
             constexpr int kGroupSize = 16;
-            if (computeTiled) {
-              computeTileSize = std::clamp(computeTileSize, kGroupSize, 2048);
-              for (int y = 0; y < renderHeight; y += computeTileSize) {
-                for (int x = 0; x < renderWidth; x += computeTileSize) {
-                  int const tileWidth = std::min(computeTileSize, renderWidth - x);
-                  int const tileHeight = std::min(computeTileSize, renderHeight - y);
+            if (rs.dispatch.computeTiled) {
+              rs.dispatch.computeTileSize = std::clamp(rs.dispatch.computeTileSize, kGroupSize, 2048);
+              for (int y = 0; y < rs.targets.renderHeight; y += rs.dispatch.computeTileSize) {
+                for (int x = 0; x < rs.targets.renderWidth; x += rs.dispatch.computeTileSize) {
+                  int const tileWidth = std::min(rs.dispatch.computeTileSize, rs.targets.renderWidth - x);
+                  int const tileHeight = std::min(rs.dispatch.computeTileSize, rs.targets.renderHeight - y);
                   if (tileOffsetLoc != -1) {
                     glUniform2i(tileOffsetLoc, x, y);
                   }
@@ -5256,148 +5318,148 @@ int main(int argc, char **argv) {
               if (tileOffsetLoc != -1) {
                 glUniform2i(tileOffsetLoc, 0, 0);
               }
-              auto const groupsX = static_cast<GLuint>((renderWidth + kGroupSize - 1) / kGroupSize);
+              auto const groupsX = static_cast<GLuint>((rs.targets.renderWidth + kGroupSize - 1) / kGroupSize);
               auto const groupsY =
-                  static_cast<GLuint>((renderHeight + kGroupSize - 1) / kGroupSize);
+                  static_cast<GLuint>((rs.targets.renderHeight + kGroupSize - 1) / kGroupSize);
               glDispatchCompute(groupsX, groupsY, 1);
               glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
             }
             glUseProgram(0);
           }
-          if (gpuTimers.initialized && computeTarget != 0) {
-            gpuTimers.blackholeCompute.end();
+          if (rs.timing.gpuTimers.initialized && computeTarget != 0) {
+            rs.timing.gpuTimers.blackholeCompute.end();
           }
 
           if (compareActive && fragmentTarget != 0 && computeTarget != 0) {
-            if (compareAutoCapture && compareAutoRemaining > 0) {
-              compareAutoStrideCounter++;
-              if (compareAutoStrideCounter >= compareAutoStride) {
-                captureCompareSnapshot = true;
-                compareAutoStrideCounter = 0;
-                compareAutoRemaining--;
-                if (compareAutoRemaining <= 0) {
-                  compareAutoCapture = false;
+            if (rs.compare.compareAutoCapture && rs.compare.compareAutoRemaining > 0) {
+              rs.compare.compareAutoStrideCounter++;
+              if (rs.compare.compareAutoStrideCounter >= rs.compare.compareAutoStride) {
+                rs.compare.captureCompareSnapshot = true;
+                rs.compare.compareAutoStrideCounter = 0;
+                rs.compare.compareAutoRemaining--;
+                if (rs.compare.compareAutoRemaining <= 0) {
+                  rs.compare.compareAutoCapture = false;
                 }
               }
             }
 
-            if (++compareFrameCounter >= compareFrameStride) {
-              compareStats =
-                  sampleTextureDiff(texBlackhole, texBlackholeCompare, renderWidth,
-                                    renderHeight, // NOLINT(readability-suspicious-call-argument) --
+            if (++rs.compare.compareFrameCounter >= rs.compare.compareFrameStride) {
+              rs.compare.compareStats =
+                  sampleTextureDiff(rs.targets.texBlackhole, rs.targets.texBlackholeCompare, rs.targets.renderWidth,
+                                    rs.targets.renderHeight, // NOLINT(readability-suspicious-call-argument) --
                                                   // order is correct: primary then compare
-                                    compareSampleSize);
-              compareFrameCounter = 0;
+                                    rs.compare.compareSampleSize);
+              rs.compare.compareFrameCounter = 0;
             }
 
-            if (captureCompareSnapshot) {
+            if (rs.compare.captureCompareSnapshot) {
               std::vector<float> primary;
               std::vector<float> secondary;
-              if (readTextureRGBA(texBlackhole, renderWidth, renderHeight, primary) &&
-                  readTextureRGBA(texBlackholeCompare, renderWidth, renderHeight, secondary)) {
-                compareFullStats = computeDiffStats(primary, secondary);
+              if (readTextureRGBA(rs.targets.texBlackhole, rs.targets.renderWidth, rs.targets.renderHeight, primary) &&
+                  readTextureRGBA(rs.targets.texBlackholeCompare, rs.targets.renderWidth, rs.targets.renderHeight, secondary)) {
+                rs.compare.compareFullStats = computeDiffStats(primary, secondary);
                 std::size_t const outlierCount =
-                    countDiffOutliers(primary, secondary, compareThreshold);
+                    countDiffOutliers(primary, secondary, rs.compare.compareThreshold);
                 std::size_t const totalPixels = primary.size() / 4;
                 std::size_t limitFromFrac = 0;
-                if (compareMaxOutlierFrac > 0.0f && totalPixels > 0) {
+                if (rs.compare.compareMaxOutlierFrac > 0.0f && totalPixels > 0) {
                   limitFromFrac =
-                      static_cast<std::size_t>(static_cast<double>(compareMaxOutlierFrac) *
+                      static_cast<std::size_t>(static_cast<double>(rs.compare.compareMaxOutlierFrac) *
                                                static_cast<double>(totalPixels));
                 }
                 std::size_t const limitFromCount =
-                    static_cast<std::size_t>(std::max(compareMaxOutliers, 0));
+                    static_cast<std::size_t>(std::max(rs.compare.compareMaxOutliers, 0));
                 std::size_t const outlierLimit = std::max(limitFromCount, limitFromFrac);
-                compareLastOutliers = static_cast<int>(outlierCount);
-                compareLastOutlierLimit = static_cast<int>(outlierLimit);
+                rs.compare.compareLastOutliers = static_cast<int>(outlierCount);
+                rs.compare.compareLastOutlierLimit = static_cast<int>(outlierLimit);
                 float const outlierFrac = totalPixels > 0 ? static_cast<float>(outlierCount) /
                                                                 static_cast<float>(totalPixels)
                                                           : 0.0f;
                 bool const outlierGateEnabled =
-                    (compareMaxOutliers > 0) || (compareMaxOutlierFrac > 0.0f);
-                compareLastExceeded = compareFullStats.valid &&
-                                      compareFullStats.maxAbs > compareThreshold &&
+                    (rs.compare.compareMaxOutliers > 0) || (rs.compare.compareMaxOutlierFrac > 0.0f);
+                rs.compare.compareLastExceeded = rs.compare.compareFullStats.valid &&
+                                      rs.compare.compareFullStats.maxAbs > rs.compare.compareThreshold &&
                                       (!outlierGateEnabled || outlierCount > outlierLimit);
-                if (compareLastExceeded) {
-                  ++compareFailureCount;
+                if (rs.compare.compareLastExceeded) {
+                  ++rs.compare.compareFailureCount;
                 }
 
-                const bool computeIsPrimary = (computeTarget == texBlackhole);
+                const bool computeIsPrimary = (computeTarget == rs.targets.texBlackhole);
                 const std::string primaryTag = computeIsPrimary ? "compute" : "fragment";
                 const std::string secondaryTag = computeIsPrimary ? "fragment" : "compute";
                 std::string presetLabel = "custom";
-                if (compareSnapshotIndex >= 0 &&
-                    std::cmp_less(compareSnapshotIndex, K_COMPARE_PRESETS.size())) {
+                if (rs.compare.compareSnapshotIndex >= 0 &&
+                    std::cmp_less(rs.compare.compareSnapshotIndex, K_COMPARE_PRESETS.size())) {
                   presetLabel =
-                      K_COMPARE_PRESETS.at(static_cast<std::size_t>(compareSnapshotIndex)).label;
+                      K_COMPARE_PRESETS.at(static_cast<std::size_t>(rs.compare.compareSnapshotIndex)).label;
                 }
 
-                if (compareWriteOutputs) {
-                  writePpm(compareSnapshotPath(compareSnapshotIndex, primaryTag), primary,
-                           renderWidth, renderHeight, 1.0f);
-                  writePpm(compareSnapshotPath(compareSnapshotIndex, secondaryTag), secondary,
-                           renderWidth, renderHeight, 1.0f);
+                if (rs.compare.compareWriteOutputs) {
+                  writePpm(compareSnapshotPath(rs.compare.compareSnapshotIndex, primaryTag), primary,
+                           rs.targets.renderWidth, rs.targets.renderHeight, 1.0f);
+                  writePpm(compareSnapshotPath(rs.compare.compareSnapshotIndex, secondaryTag), secondary,
+                           rs.targets.renderWidth, rs.targets.renderHeight, 1.0f);
                 }
-                if (compareWriteDiff) {
-                  writeDiffPpm(compareSnapshotPath(compareSnapshotIndex, "diff"), primary,
-                               secondary, renderWidth, renderHeight, compareDiffScale);
+                if (rs.compare.compareWriteDiff) {
+                  writeDiffPpm(compareSnapshotPath(rs.compare.compareSnapshotIndex, "diff"), primary,
+                               secondary, rs.targets.renderWidth, rs.targets.renderHeight, rs.compare.compareDiffScale);
                 }
-                if (compareWriteSummary) {
-                  appendCompareSummary(compareSummaryPath(), compareSnapshotIndex, primaryTag,
-                                       secondaryTag, renderWidth, renderHeight, compareFullStats,
-                                       compareDiffScale, compareWriteOutputs, compareWriteDiff,
-                                       compareThreshold, compareLastExceeded, glfwGetTime(),
-                                       kerrSpin, grbModulationEnabled, grbTimeSeconds,
-                                       compareLastOutliers, compareLastOutlierLimit, outlierFrac);
-                  appendCompareUniforms(compareUniformsPath(), compareSnapshotIndex, presetLabel,
-                                        interop, compareBaselineActive, compareOverridesEnabled,
+                if (rs.compare.compareWriteSummary) {
+                  appendCompareSummary(compareSummaryPath(), rs.compare.compareSnapshotIndex, primaryTag,
+                                       secondaryTag, rs.targets.renderWidth, rs.targets.renderHeight, rs.compare.compareFullStats,
+                                       rs.compare.compareDiffScale, rs.compare.compareWriteOutputs, rs.compare.compareWriteDiff,
+                                       rs.compare.compareThreshold, rs.compare.compareLastExceeded, glfwGetTime(),
+                                       rs.physicsCore.kerrSpin, grbModulationEnabled, grbTimeSeconds,
+                                       rs.compare.compareLastOutliers, rs.compare.compareLastOutlierLimit, outlierFrac);
+                  appendCompareUniforms(compareUniformsPath(), rs.compare.compareSnapshotIndex, presetLabel,
+                                        interop, compareBaselineActive, rs.compare.compareOverridesEnabled,
                                         backgroundEnabledEffective, noiseReady, grmhdEnabled,
                                         spectralEnabled, grbModulationEnabled,
                                         enablePhotonSphereEffective);
                 }
-                compareSnapshotIndex++;
+                rs.compare.compareSnapshotIndex++;
               } else {
-                compareFullStats.valid = false;
-                compareLastExceeded = false;
+                rs.compare.compareFullStats.valid = false;
+                rs.compare.compareLastExceeded = false;
               }
-              captureCompareSnapshot = false;
+              rs.compare.captureCompareSnapshot = false;
             }
           } else {
-            compareStats.valid = false;
-            compareFullStats.valid = false;
-            captureCompareSnapshot = false;
-            compareLastExceeded = false;
-            compareLastOutliers = 0;
-            compareLastOutlierLimit = 0;
+            rs.compare.compareStats.valid = false;
+            rs.compare.compareFullStats.valid = false;
+            rs.compare.captureCompareSnapshot = false;
+            rs.compare.compareLastExceeded = false;
+            rs.compare.compareLastOutliers = 0;
+            rs.compare.compareLastOutlierLimit = 0;
           }
         } /* end of GLSL fragment/compute else block */
       }
-      if (compareRestorePending && !comparePresetSweep && comparePresetSaved &&
-          !captureCompareSnapshot) {
+      if (rs.compare.compareRestorePending && !rs.compare.comparePresetSweep && rs.compare.comparePresetSaved &&
+          !rs.compare.captureCompareSnapshot) {
         CameraState &camMutable = input.camera();
-        camMutable = comparePresetSavedCamera;
-        cameraModeIndex = comparePresetSavedMode;
-        orbitRadius = comparePresetSavedOrbitRadius;
-        orbitSpeed = comparePresetSavedOrbitSpeed;
-        orbitTime = comparePresetSavedOrbitTime;
-        kerrSpin = comparePresetSavedKerrSpin;
-        comparePresetSaved = false;
-        compareRestorePending = false;
+        camMutable = rs.compare.comparePresetSavedCamera;
+        rs.camera.cameraModeIndex = rs.compare.comparePresetSavedMode;
+        rs.camera.orbitRadius = rs.compare.comparePresetSavedOrbitRadius;
+        rs.camera.orbitSpeed = rs.compare.comparePresetSavedOrbitSpeed;
+        rs.camera.orbitTime = rs.compare.comparePresetSavedOrbitTime;
+        rs.physicsCore.kerrSpin = rs.compare.comparePresetSavedKerrSpin;
+        rs.compare.comparePresetSaved = false;
+        rs.compare.compareRestorePending = false;
       }
 
-      if (gpuTimers.initialized) {
-        gpuTimers.bloom.begin();
+      if (rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimers.bloom.begin();
       }
       {
         ZONE_SCOPED_N("Bloom Brightness");
         RenderToTextureInfo rtti;
         rtti.fragShader = "shader/bloom_brightness_pass.frag";
-        rtti.textureUniforms["texture0"] = texBlackhole;
-        rtti.targetTexture = texBrightness;
-        rtti.width = renderWidth;
-        rtti.height = renderHeight;
-        rtti.floatUniforms["brightPassThreshold"] = bloomThreshold;
-        rtti.floatUniforms["brightPassKnee"]      = bloomKnee;
+        rtti.textureUniforms["texture0"] = rs.targets.texBlackhole;
+        rtti.targetTexture = rs.targets.texBrightness;
+        rtti.width = rs.targets.renderWidth;
+        rtti.height = rs.targets.renderHeight;
+        rtti.floatUniforms["brightPassThreshold"] = rs.post.bloomThreshold;
+        rtti.floatUniforms["brightPassKnee"]      = rs.post.bloomKnee;
         renderToTexture(rtti);
       }
 
@@ -5405,15 +5467,15 @@ int main(int argc, char **argv) {
 
       {
         ZONE_SCOPED_N("Bloom Downsample");
-        for (int level = 0; level < bloomIterations; level++) {
+        for (int level = 0; level < rs.post.bloomIterations; level++) {
           auto const levelIndex = static_cast<std::size_t>(level);
           RenderToTextureInfo rtti;
           rtti.fragShader = "shader/bloom_downsample.frag";
           rtti.textureUniforms["texture0"] =
-              level == 0 ? texBrightness : texDownsampled.at(static_cast<std::size_t>(level - 1));
-          rtti.targetTexture = texDownsampled.at(levelIndex);
-          int const downWidth = std::max(1, renderWidth >> (level + 1));
-          int const downHeight = std::max(1, renderHeight >> (level + 1));
+              level == 0 ? rs.targets.texBrightness : rs.targets.texDownsampled.at(static_cast<std::size_t>(level - 1));
+          rtti.targetTexture = rs.targets.texDownsampled.at(levelIndex);
+          int const downWidth = std::max(1, rs.targets.renderWidth >> (level + 1));
+          int const downHeight = std::max(1, rs.targets.renderHeight >> (level + 1));
           rtti.width = downWidth;
           rtti.height = downHeight;
           renderToTexture(rtti);
@@ -5422,18 +5484,18 @@ int main(int argc, char **argv) {
 
       {
         ZONE_SCOPED_N("Bloom Upsample");
-        for (int level = bloomIterations - 1; level >= 0; level--) {
+        for (int level = rs.post.bloomIterations - 1; level >= 0; level--) {
           auto const levelIndex = static_cast<std::size_t>(level);
           RenderToTextureInfo rtti;
           rtti.fragShader = "shader/bloom_upsample.frag";
           rtti.textureUniforms["texture0"] =
-              level == bloomIterations - 1 ? texDownsampled.at(levelIndex)
-                                           : texUpsampled.at(static_cast<std::size_t>(level) + 1);
+              level == rs.post.bloomIterations - 1 ? rs.targets.texDownsampled.at(levelIndex)
+                                           : rs.targets.texUpsampled.at(static_cast<std::size_t>(level) + 1);
           rtti.textureUniforms["texture1"] =
-              level == 0 ? texBrightness : texDownsampled.at(static_cast<std::size_t>(level - 1));
-          rtti.targetTexture = texUpsampled.at(levelIndex);
-          int const upWidth = std::max(1, renderWidth >> level);
-          int const upHeight = std::max(1, renderHeight >> level);
+              level == 0 ? rs.targets.texBrightness : rs.targets.texDownsampled.at(static_cast<std::size_t>(level - 1));
+          rtti.targetTexture = rs.targets.texUpsampled.at(levelIndex);
+          int const upWidth = std::max(1, rs.targets.renderWidth >> level);
+          int const upHeight = std::max(1, rs.targets.renderHeight >> level);
           rtti.width = upWidth;
           rtti.height = upHeight;
           renderToTexture(rtti);
@@ -5444,62 +5506,62 @@ int main(int argc, char **argv) {
         ZONE_SCOPED_N("Bloom Composite");
         RenderToTextureInfo rtti;
         rtti.fragShader = "shader/bloom_composite.frag";
-        rtti.textureUniforms["texture0"] = texBlackhole;
-        rtti.textureUniforms["texture1"] = texUpsampled.at(0);
-        rtti.targetTexture = texBloomFinal;
-        rtti.width = renderWidth;
-        rtti.height = renderHeight;
+        rtti.textureUniforms["texture0"] = rs.targets.texBlackhole;
+        rtti.textureUniforms["texture1"] = rs.targets.texUpsampled.at(0);
+        rtti.targetTexture = rs.targets.texBloomFinal;
+        rtti.width = rs.targets.renderWidth;
+        rtti.height = rs.targets.renderHeight;
 
         if (input.isUIVisible()) {
           ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
-          ImGui::SliderFloat("bloomStrength",  &bloomStrength, 0.0f, 1.0f);
-          ImGui::SliderFloat("bloomThreshold", &bloomThreshold, 0.0f, 2.0f);
-          ImGui::SliderFloat("bloomKnee",      &bloomKnee, 0.0f, 0.5f);
-          ImGui::SliderFloat("bloomTone",      &bloomTone, 0.0f, 2.0f);
-          settings.bloomStrength = bloomStrength;
+          ImGui::SliderFloat("bloomStrength",  &rs.post.bloomStrength, 0.0f, 1.0f);
+          ImGui::SliderFloat("bloomThreshold", &rs.post.bloomThreshold, 0.0f, 2.0f);
+          ImGui::SliderFloat("bloomKnee",      &rs.post.bloomKnee, 0.0f, 0.5f);
+          ImGui::SliderFloat("bloomTone",      &rs.post.bloomTone, 0.0f, 2.0f);
+          settings.bloomStrength = rs.post.bloomStrength;
           ImGui::End();
         }
-        rtti.floatUniforms["bloomStrength"] = bloomStrength;
-        rtti.floatUniforms["tone"]          = bloomTone;
+        rtti.floatUniforms["bloomStrength"] = rs.post.bloomStrength;
+        rtti.floatUniforms["tone"]          = rs.post.bloomTone;
 
         renderToTexture(rtti);
       }
-      if (gpuTimers.initialized) {
-        gpuTimers.bloom.end();
+      if (rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimers.bloom.end();
       }
 
-      if (gpuTimers.initialized) {
-        gpuTimers.tonemap.begin();
+      if (rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimers.tonemap.begin();
       }
       {
         ZONE_SCOPED_N("Tonemap");
         RenderToTextureInfo rtti;
         rtti.fragShader = "shader/tonemapping.frag";
-        rtti.textureUniforms["texture0"] = texBloomFinal;
-        rtti.targetTexture = texTonemapped;
-        rtti.width = renderWidth;
-        rtti.height = renderHeight;
+        rtti.textureUniforms["texture0"] = rs.targets.texBloomFinal;
+        rtti.targetTexture = rs.targets.texTonemapped;
+        rtti.width = rs.targets.renderWidth;
+        rtti.height = rs.targets.renderHeight;
 
         if (input.isUIVisible()) {
           ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
-          ImGui::Checkbox("tonemappingEnabled", &tonemappingEnabled);
-          ImGui::SliderFloat("exposure", &toneExposure, 0.01f, 2.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
-          ImGui::SliderFloat("gamma", &gamma, 1.0f, 4.0f);
-          settings.tonemappingEnabled = tonemappingEnabled;
-          settings.gamma = gamma;
+          ImGui::Checkbox("tonemappingEnabled", &rs.post.tonemappingEnabled);
+          ImGui::SliderFloat("exposure", &rs.post.toneExposure, 0.01f, 2.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+          ImGui::SliderFloat("gamma", &rs.post.gamma, 1.0f, 4.0f);
+          settings.tonemappingEnabled = rs.post.tonemappingEnabled;
+          settings.gamma = rs.post.gamma;
           ImGui::End();
         }
-        rtti.floatUniforms["tonemappingEnabled"] = tonemappingEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["exposure"] = toneExposure;
-        rtti.floatUniforms["gamma"] = gamma;
+        rtti.floatUniforms["tonemappingEnabled"] = rs.post.tonemappingEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["exposure"] = rs.post.toneExposure;
+        rtti.floatUniforms["gamma"] = rs.post.gamma;
         rtti.floatUniforms["chromaticAberrationStrength"] = tonemapChromaticAberrationStrength;
         rtti.floatUniforms["vignetteStrength"] = tonemapVignetteStrength;
         rtti.floatUniforms["filmGrainStrength"] = tonemapFilmGrainStrength;
 
         renderToTexture(rtti);
       }
-      if (gpuTimers.initialized) {
-        gpuTimers.tonemap.end();
+      if (rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimers.tonemap.end();
       }
 
       static bool depthEffectsEnabled = true;
@@ -5525,7 +5587,7 @@ int main(int argc, char **argv) {
       if (input.isUIVisible()) {
         ImGui::Begin("Depth Effects", nullptr, ImGuiWindowFlags_NoCollapse);
         ImGui::Checkbox("Enable Depth Effects", &depthEffectsEnabled);
-        ImGui::SliderFloat("Depth Far", &depthFar, 10.0f, 200.0f);
+        ImGui::SliderFloat("Depth Far", &rs.display.depthFar, 10.0f, 200.0f);
         if (ImGui::Button("Preset: Subtle")) {
           depthEffectsEnabled = true;
           fogEnabled = true;
@@ -5547,7 +5609,7 @@ int main(int argc, char **argv) {
           dofFocusFar = 0.9f;
           dofMaxRadius = 2.0f;
           depthCurve = 1.0f;
-          depthFar = 100.0f;
+          rs.display.depthFar = 100.0f;
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset: Cinematic")) {
@@ -5571,7 +5633,7 @@ int main(int argc, char **argv) {
           dofFocusFar = 0.75f;
           dofMaxRadius = 5.0f;
           depthCurve = 0.95f;
-          depthFar = 100.0f;
+          rs.display.depthFar = 100.0f;
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset: Clarity")) {
@@ -5595,7 +5657,7 @@ int main(int argc, char **argv) {
           dofFocusFar = 0.95f;
           dofMaxRadius = 2.5f;
           depthCurve = 1.15f;
-          depthFar = 100.0f;
+          rs.display.depthFar = 100.0f;
         }
         ImGui::Separator();
 
@@ -5628,19 +5690,19 @@ int main(int argc, char **argv) {
         ImGui::End();
       }
 
-      GLuint finalTexture = texTonemapped;
+      GLuint finalTexture = rs.targets.texTonemapped;
       if (depthEffectsEnabled) {
         ZONE_SCOPED_N("Depth Cues");
-        if (gpuTimers.initialized) {
-          gpuTimers.depth.begin();
+        if (rs.timing.gpuTimers.initialized) {
+          rs.timing.gpuTimers.depth.begin();
         }
         RenderToTextureInfo rtti;
         rtti.fragShader = "shader/depth_cues.frag";
-        rtti.textureUniforms["texture0"] = texTonemapped;
-        rtti.textureUniforms["depthTexture"] = texBlackhole;
-        rtti.targetTexture = texDepthEffects;
-        rtti.width = renderWidth;
-        rtti.height = renderHeight;
+        rtti.textureUniforms["texture0"] = rs.targets.texTonemapped;
+        rtti.textureUniforms["depthTexture"] = rs.targets.texBlackhole;
+        rtti.targetTexture = rs.targets.texDepthEffects;
+        rtti.width = rs.targets.renderWidth;
+        rtti.height = rs.targets.renderHeight;
         rtti.floatUniforms["depthEffectsEnabled"] = 1.0f;
         rtti.floatUniforms["fogEnabled"] = fogEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["fogDensity"] = fogDensity;
@@ -5665,9 +5727,9 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["dofMaxRadius"] = dofMaxRadius;
         rtti.floatUniforms["depthCurve"] = depthCurve;
         renderToTexture(rtti);
-        finalTexture = texDepthEffects;
-        if (gpuTimers.initialized) {
-          gpuTimers.depth.end();
+        finalTexture = rs.targets.texDepthEffects;
+        if (rs.timing.gpuTimers.initialized) {
+          rs.timing.gpuTimers.depth.end();
         }
       }
 
@@ -5690,59 +5752,59 @@ int main(int argc, char **argv) {
         glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, finalTexture,
                                0);
-        glViewport(0, 0, renderWidth, renderHeight);
+        glViewport(0, 0, rs.targets.renderWidth, rs.targets.renderHeight);
 
         // 1. Wiregrid BL-coord overlay -- implemented in task A2 (fragment shader)
 
         // 2. GRMHD Slice
-        if (grmhdSliceEnabled && grmhdReady) {
+        if (rs.grmhd.grmhdSliceEnabled && grmhdReady) {
           ZONE_SCOPED_N("GRMHD Slice");
-          grmhdSliceAxis = std::clamp(grmhdSliceAxis, 0, 2);
-          grmhdSliceChannel = std::clamp(grmhdSliceChannel, 0, 3);
-          grmhdSliceCoord = std::clamp(grmhdSliceCoord, 0.0f, 1.0f);
-          grmhdSliceSize = std::clamp(grmhdSliceSize, 64, 1024);
+          rs.grmhd.grmhdSliceAxis = std::clamp(rs.grmhd.grmhdSliceAxis, 0, 2);
+          rs.grmhd.grmhdSliceChannel = std::clamp(rs.grmhd.grmhdSliceChannel, 0, 3);
+          rs.grmhd.grmhdSliceCoord = std::clamp(rs.grmhd.grmhdSliceCoord, 0.0f, 1.0f);
+          rs.grmhd.grmhdSliceSize = std::clamp(rs.grmhd.grmhdSliceSize, 64, 1024);
 
-          const auto channelIndex = static_cast<std::size_t>(grmhdSliceChannel);
-          if (grmhdSliceAutoRange && channelIndex < grmhdTexture.minValues.size() &&
-              channelIndex < grmhdTexture.maxValues.size()) {
-            grmhdSliceMin = grmhdTexture.minValues.at(channelIndex);
-            grmhdSliceMax = grmhdTexture.maxValues.at(channelIndex);
+          const auto channelIndex = static_cast<std::size_t>(rs.grmhd.grmhdSliceChannel);
+          if (rs.grmhd.grmhdSliceAutoRange && channelIndex < rs.grmhd.grmhdTexture.minValues.size() &&
+              channelIndex < rs.grmhd.grmhdTexture.maxValues.size()) {
+            rs.grmhd.grmhdSliceMin = rs.grmhd.grmhdTexture.minValues.at(channelIndex);
+            rs.grmhd.grmhdSliceMax = rs.grmhd.grmhdTexture.maxValues.at(channelIndex);
           }
-          if (grmhdSliceMax <= grmhdSliceMin) {
-            grmhdSliceMax = grmhdSliceMin + 1.0f;
+          if (rs.grmhd.grmhdSliceMax <= rs.grmhd.grmhdSliceMin) {
+            rs.grmhd.grmhdSliceMax = rs.grmhd.grmhdSliceMin + 1.0f;
           }
 
-          if (texGrmhdSlice == 0 || grmhdSliceSizeCached != grmhdSliceSize) {
-            if (texGrmhdSlice != 0) {
-              glDeleteTextures(1, &texGrmhdSlice);
-              texGrmhdSlice = 0;
+          if (rs.grmhd.texGrmhdSlice == 0 || rs.grmhd.grmhdSliceSizeCached != rs.grmhd.grmhdSliceSize) {
+            if (rs.grmhd.texGrmhdSlice != 0) {
+              glDeleteTextures(1, &rs.grmhd.texGrmhdSlice);
+              rs.grmhd.texGrmhdSlice = 0;
             }
-            texGrmhdSlice = createColorTexture32f(grmhdSliceSize, grmhdSliceSize);
-            grmhdSliceSizeCached = grmhdSliceSize;
+            rs.grmhd.texGrmhdSlice = createColorTexture32f(rs.grmhd.grmhdSliceSize, rs.grmhd.grmhdSliceSize);
+            rs.grmhd.grmhdSliceSizeCached = rs.grmhd.grmhdSliceSize;
           }
 
           RenderToTextureInfo sliceRtti;
           sliceRtti.fragShader = "shader/grmhd_slice.frag";
           sliceRtti.texture3DUniforms["grmhdTexture"] =
-              (grmhdTimeSeriesLoaded && grmhdPboUploader.ready())
-                  ? grmhdPboUploader.texture()
-                  : grmhdTexture.texture;
+              (rs.grmhd.grmhdTimeSeriesLoaded && rs.grmhd.grmhdPboUploader.ready())
+                  ? rs.grmhd.grmhdPboUploader.texture()
+                  : rs.grmhd.grmhdTexture.texture;
           sliceRtti.textureUniforms["colorMap"] = colorMap;
-          sliceRtti.floatUniforms["sliceAxis"] = static_cast<float>(grmhdSliceAxis);
-          sliceRtti.floatUniforms["sliceCoord"] = grmhdSliceCoord;
-          sliceRtti.floatUniforms["sliceChannel"] = static_cast<float>(grmhdSliceChannel);
-          sliceRtti.floatUniforms["sliceMin"] = grmhdSliceMin;
-          sliceRtti.floatUniforms["sliceMax"] = grmhdSliceMax;
-          sliceRtti.floatUniforms["useColorMap"] = grmhdSliceUseColorMap ? 1.0f : 0.0f;
-          sliceRtti.targetTexture = texGrmhdSlice;
-          sliceRtti.width = grmhdSliceSize;
-          sliceRtti.height = grmhdSliceSize;
-          if (gpuTimers.initialized) {
-            gpuTimers.grmhdSlice.begin();
+          sliceRtti.floatUniforms["sliceAxis"] = static_cast<float>(rs.grmhd.grmhdSliceAxis);
+          sliceRtti.floatUniforms["sliceCoord"] = rs.grmhd.grmhdSliceCoord;
+          sliceRtti.floatUniforms["sliceChannel"] = static_cast<float>(rs.grmhd.grmhdSliceChannel);
+          sliceRtti.floatUniforms["sliceMin"] = rs.grmhd.grmhdSliceMin;
+          sliceRtti.floatUniforms["sliceMax"] = rs.grmhd.grmhdSliceMax;
+          sliceRtti.floatUniforms["useColorMap"] = rs.grmhd.grmhdSliceUseColorMap ? 1.0f : 0.0f;
+          sliceRtti.targetTexture = rs.grmhd.texGrmhdSlice;
+          sliceRtti.width = rs.grmhd.grmhdSliceSize;
+          sliceRtti.height = rs.grmhd.grmhdSliceSize;
+          if (rs.timing.gpuTimers.initialized) {
+            rs.timing.gpuTimers.grmhdSlice.begin();
           }
           renderToTexture(sliceRtti); // Note: renderToTexture manages its own FBO binding
-          if (gpuTimers.initialized) {
-            gpuTimers.grmhdSlice.end();
+          if (rs.timing.gpuTimers.initialized) {
+            rs.timing.gpuTimers.grmhdSlice.end();
           }
 
           // Re-bind Scene FBO to draw the slice texture on top?
@@ -5757,27 +5819,27 @@ int main(int argc, char **argv) {
         }
 
         // 3. RmlUi Overlay
-        if (rmluiReady) {
-          rmluiOverlay.render();
+        if (rs.overlays.rmluiReady) {
+          rs.overlays.rmluiOverlay.render();
         }
 
         // 4. HUD Overlays (Perf/Controls)
         // Note: These renderers assume default framebuffer dimensions.
         // We set viewport to renderWidth/Height, which matches our FBO.
-        if (controlsOverlayEnabled && !input.isUIVisible()) {
-          if (!controlsOverlayReady) {
+        if (rs.overlays.controlsOverlayEnabled && !input.isUIVisible()) {
+          if (!rs.overlays.controlsOverlayReady) {
             HudOverlayOptions opts;
-            opts.scale = controlsOverlayScale;
+            opts.scale = rs.overlays.controlsOverlayScale;
             opts.margin = 16.0f;
             opts.align = HudOverlayOptions::Align::Left;
-            controlsOverlay.setOptions(opts);
-            controlsOverlayReady = true;
+            rs.overlays.controlsOverlay.setOptions(opts);
+            rs.overlays.controlsOverlayReady = true;
           }
-          if (controlsOverlayReady) {
-            controlsOverlay.render(renderWidth, renderHeight);
+          if (rs.overlays.controlsOverlayReady) {
+            rs.overlays.controlsOverlay.render(rs.targets.renderWidth, rs.targets.renderHeight);
           }
-          if (perfOverlayReady) {
-            perfOverlay.render(renderWidth, renderHeight);
+          if (rs.overlays.perfOverlayReady) {
+            rs.overlays.perfOverlay.render(rs.targets.renderWidth, rs.targets.renderHeight);
           }
         }
 
@@ -5796,12 +5858,12 @@ int main(int argc, char **argv) {
       InputManager::instance().setIgnoreGuiCapture(isViewportHovered);
 
       // Gizmo
-      if (gizmoEnabled) {
+      if (rs.camera.gizmoEnabled) {
         ImGuizmo::SetDrawlist();
         ImVec2 const windowPos = ImGui::GetWindowPos();
         ImGuizmo::SetRect(windowPos.x, windowPos.y, viewportSize.x, viewportSize.y);
         ImGuizmo::Manipulate(glm::value_ptr(gizmoViewMatrix), glm::value_ptr(projectionMatrix),
-                             gizmoOperation, gizmoMode, glm::value_ptr(gizmoTransform));
+                             rs.camera.gizmoOperation, rs.camera.gizmoMode, glm::value_ptr(rs.camera.gizmoTransform));
       }
 
       ImGui::End();         // End Viewport
@@ -5810,31 +5872,31 @@ int main(int argc, char **argv) {
       // Normal UI panels are hidden in record mode so they don't appear in the video.
       if (input.isUIVisible() && recordFramesDir.empty()) {
         renderControlsHelpPanel();
-        renderControlsSettingsPanel(cameraModeIndex, orbitRadius, orbitSpeed);
-        renderDisplaySettingsPanel(window, swapInterval, renderScale, windowWidth, windowHeight);
+        renderControlsSettingsPanel(rs.camera.cameraModeIndex, rs.camera.orbitRadius, rs.camera.orbitSpeed);
+        renderDisplaySettingsPanel(window, rs.display.swapInterval, rs.display.renderScale, windowWidth, windowHeight);
         renderBackgroundPanel(backgroundAssets, backgroundIndex,
                               settings.backgroundParallaxStrength, settings.backgroundDriftStrength,
                               backgroundLayerDepth, backgroundLayerScale, backgroundLayerIntensity,
                               backgroundLayerLodBias);
         renderWiregridPanel(wiregridEnabled, wiregridParams, wiregridColor);
-        renderRmlUiPanel(rmluiEnabled);
-        renderGizmoPanel(gizmoEnabled, gizmoOperation, gizmoMode, gizmoTransform);
-        renderPerformancePanel(gpuTimingEnabled, gpuTimers, timingHistory, cpuFrameMs,
-                               perfOverlayEnabled, perfOverlayScale, depthPrepassEnabled);
+        renderRmlUiPanel(rs.overlays.rmluiEnabled);
+        renderGizmoPanel(rs.camera.gizmoEnabled, rs.camera.gizmoOperation, rs.camera.gizmoMode, rs.camera.gizmoTransform);
+        renderPerformancePanel(rs.timing.gpuTimingEnabled, rs.timing.gpuTimers, rs.timing.timingHistory, cpuFrameMs,
+                               rs.overlays.perfOverlayEnabled, rs.overlays.perfOverlayScale, rs.probes.depthPrepassEnabled);
       }
 
       /* --export-frame / --export-raw-frame: export textures before ImGui. */
       if (!exportFramePath.empty() || !exportRawFramePath.empty()) {
         static int exportWarmup = 0;
         static bool exportPerformed = false;
-        if (++exportWarmup >= 5 && !exportPerformed && renderWidth > 0 && renderHeight > 0) {
-          if (!exportFramePath.empty() && texTonemapped != 0) {
-            glBindTexture(GL_TEXTURE_2D, texTonemapped);
+        if (++exportWarmup >= 5 && !exportPerformed && rs.targets.renderWidth > 0 && rs.targets.renderHeight > 0) {
+          if (!exportFramePath.empty() && rs.targets.texTonemapped != 0) {
+            glBindTexture(GL_TEXTURE_2D, rs.targets.texTonemapped);
             GLint texW = 0, texH = 0;
             glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
             glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
-            int const w = (texW > 0) ? texW : renderWidth;
-            int const h = (texH > 0) ? texH : renderHeight;
+            int const w = (texW > 0) ? texW : rs.targets.renderWidth;
+            int const h = (texH > 0) ? texH : rs.targets.renderHeight;
             std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
             glPixelStorei(GL_PACK_ALIGNMENT, 1);
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
@@ -5852,17 +5914,17 @@ int main(int argc, char **argv) {
             std::printf("Exported frame: %s (%dx%d)\n", exportFramePath.c_str(), w, h);
           }
 
-          if (!exportRawFramePath.empty() && texBlackhole != 0) {
+          if (!exportRawFramePath.empty() && rs.targets.texBlackhole != 0) {
             GLint texW = 0;
             GLint texH = 0;
-            glBindTexture(GL_TEXTURE_2D, texBlackhole);
+            glBindTexture(GL_TEXTURE_2D, rs.targets.texBlackhole);
             glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
             glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
             glBindTexture(GL_TEXTURE_2D, 0);
-            int const w = (texW > 0) ? texW : renderWidth;
-            int const h = (texH > 0) ? texH : renderHeight;
+            int const w = (texW > 0) ? texW : rs.targets.renderWidth;
+            int const h = (texH > 0) ? texH : rs.targets.renderHeight;
             std::vector<float> raw;
-            if (readTextureRGBA(texBlackhole, w, h, raw) &&
+            if (readTextureRGBA(rs.targets.texBlackhole, w, h, raw) &&
                 writePfmRgb(exportRawFramePath, raw, w, h)) {
               std::printf("Exported raw frame: %s (%dx%d)\n", exportRawFramePath.c_str(), w, h);
             } else {
@@ -5879,13 +5941,13 @@ int main(int argc, char **argv) {
        * before ImGui::Render().  The overlay is composited over the scene by the
        * ImGui backend when RenderDrawData() runs below. */
       if (!recordFramesDir.empty()) {
-        ++recordWarmup;
+        ++rs.recording.recordWarmup;
       }
-      if (!recordFramesDir.empty() && recordProfile == "cinematic" && recordWarmup >= 15) {
-        renderCinematicOverlay(recordCinematic, recordCurrentKf,
+      if (!recordFramesDir.empty() && recordProfile == "cinematic" && rs.recording.recordWarmup >= 15) {
+        renderCinematicOverlay(rs.recording.recordCinematic, rs.recording.recordCurrentKf,
                                glm::length(cameraPos),
-                               recordCurRs, recordCurIsco,
-                               recordFrameIndex, recordFramesTotal);
+                               rs.recording.recordCurRs, rs.recording.recordCurIsco,
+                               rs.recording.recordFrameIndex, recordFramesTotal);
       }
 
       // ImGui Render
@@ -5894,8 +5956,8 @@ int main(int argc, char **argv) {
 
       /* --record-frames: capture the tonemapped scene texture via glGetTexImage.
        * WHY: glReadPixels(0) reads the window's default framebuffer which is
-       * mostly ImGui chrome (black panels).  texTonemapped holds the full
-       * rendered scene at renderWidth x renderHeight, identical to the
+       * mostly ImGui chrome (black panels).  rs.targets.texTonemapped holds the full
+       * rendered scene at rs.targets.renderWidth x rs.targets.renderHeight, identical to the
        * --export-frame path that is known to work.  The cinematic HUD overlay
        * drawn via GetForegroundDrawList() is composited by ffmpeg drawtext later;
        * the overlay is still drawn above in the ImGui frame for live preview. */
@@ -5904,9 +5966,9 @@ int main(int argc, char **argv) {
        * render targets settle at the requested size before starting capture.
        * If the WM caps the window smaller (e.g., in a desktop session), we accept
        * whatever size the window settled at after the warmup period. */
-      if (!recordFramesDir.empty() && recordWarmup >= 15
-          && texTonemapped != 0 && renderWidth > 0 && renderHeight > 0) {
-        glBindTexture(GL_TEXTURE_2D, texTonemapped);
+      if (!recordFramesDir.empty() && rs.recording.recordWarmup >= 15
+          && rs.targets.texTonemapped != 0 && rs.targets.renderWidth > 0 && rs.targets.renderHeight > 0) {
+        glBindTexture(GL_TEXTURE_2D, rs.targets.texTonemapped);
         // Query actual stored texture dimensions -- these may differ from
         // renderWidth/renderHeight if the texture was created at a different
         // resolution (e.g. before the window settled to its current size).
@@ -5915,8 +5977,8 @@ int main(int argc, char **argv) {
         GLint texW = 0, texH = 0;
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
-        int const w = (texW > 0) ? texW : renderWidth;
-        int const h = (texH > 0) ? texH : renderHeight;
+        int const w = (texW > 0) ? texW : rs.targets.renderWidth;
+        int const h = (texH > 0) ? texH : rs.targets.renderHeight;
         std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
         // GL_PACK_ALIGNMENT defaults to 4: each row is padded to a 4-byte boundary.
         // For widths like 1343, row bytes = 1343*3=4029 which rounds up to 4032,
@@ -5937,15 +5999,15 @@ int main(int argc, char **argv) {
         }
         char framePath[1024];
         std::snprintf(framePath, sizeof(framePath), "%s/frame_%06d.png",
-                      recordFramesDir.c_str(), recordFrameIndex);
+                      recordFramesDir.c_str(), rs.recording.recordFrameIndex);
         stbi_write_png(framePath, w, h, 3, flipped.data(), w * 3);
-        if (recordFrameIndex % K_CINEMATIC_FPS == 0) {
+        if (rs.recording.recordFrameIndex % K_CINEMATIC_FPS == 0) {
           std::printf("Record: frame %d / %d  (t = %.1f s)  [%dx%d]\n",
-                      recordFrameIndex, recordFramesTotal,
-                      static_cast<double>(recordCinematic), w, h);
+                      rs.recording.recordFrameIndex, recordFramesTotal,
+                      static_cast<double>(rs.recording.recordCinematic), w, h);
         }
-        ++recordFrameIndex;
-        recordCinematic = static_cast<float>(recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS);
+        ++rs.recording.recordFrameIndex;
+        rs.recording.recordCinematic = static_cast<float>(rs.recording.recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS);
       }
 
       // Update Platform Windows (Docking)
@@ -5956,18 +6018,18 @@ int main(int argc, char **argv) {
         glfwMakeContextCurrent(backupCurrentContext);
       }
 
-      if (gpuTimingLogEnabled && gpuTimers.initialized) {
-        gpuTimingLogCounter++;
-        if (gpuTimingLogCounter >= gpuTimingLogStride) {
-          appendGpuTimingSample(gpuTimingPath(), gpuTimingLogIndex++, renderWidth, renderHeight,
-                                cpuFrameMs, gpuTimers, computeActiveForLog, kerrSpin,
+      if (rs.timing.gpuTimingLogEnabled && rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimingLogCounter++;
+        if (rs.timing.gpuTimingLogCounter >= rs.timing.gpuTimingLogStride) {
+          appendGpuTimingSample(gpuTimingPath(), rs.timing.gpuTimingLogIndex++, rs.targets.renderWidth, rs.targets.renderHeight,
+                                cpuFrameMs, rs.timing.gpuTimers, computeActiveForLog, rs.physicsCore.kerrSpin,
                                 glfwGetTime());
-          gpuTimingLogCounter = 0;
+          rs.timing.gpuTimingLogCounter = 0;
         }
       }
 
-      if (gpuTimers.initialized) {
-        gpuTimers.swap();
+      if (rs.timing.gpuTimers.initialized) {
+        rs.timing.gpuTimers.swap();
       }
       FRAME_MARK;
       glfwSwapBuffers(window);
@@ -5981,11 +6043,11 @@ int main(int argc, char **argv) {
       }
 
       /* --record-frames: break when all requested frames have been captured.
-       * recordFrameIndex starts at recordStartFrame; terminate when we have
+       * rs.recording.recordFrameIndex starts at recordStartFrame; terminate when we have
        * written recordFramesTotal frames (i.e. reached recordStartFrame+total). */
       if (!recordFramesDir.empty()
-          && recordFrameIndex >= recordStartFrame + recordFramesTotal) {
-        int const written = recordFrameIndex - recordStartFrame;
+          && rs.recording.recordFrameIndex >= recordStartFrame + recordFramesTotal) {
+        int const written = rs.recording.recordFrameIndex - recordStartFrame;
         std::printf("Record complete: %d frames written to %s\n",
                     written, recordFramesDir.c_str());
         break;
@@ -6001,29 +6063,29 @@ int main(int argc, char **argv) {
         settings.windowHeight = finalWindowHeight;
       }
       settings.fullscreen = InputManager::instance().isFullscreen();
-      settings.swapInterval = swapInterval;
-      settings.renderScale = renderScale;
-      settings.cameraMode = cameraModeIndex;
-      settings.orbitRadius = orbitRadius;
-      settings.orbitSpeed = orbitSpeed;
+      settings.swapInterval = rs.display.swapInterval;
+      settings.renderScale = rs.display.renderScale;
+      settings.cameraMode = rs.camera.cameraModeIndex;
+      settings.orbitRadius = rs.camera.orbitRadius;
+      settings.orbitSpeed = rs.camera.orbitSpeed;
     }
 
-    if (controlsOverlayReady) {
-      controlsOverlay.shutdown();
+    if (rs.overlays.controlsOverlayReady) {
+      rs.overlays.controlsOverlay.shutdown();
     }
-    if (rmluiReady) {
-      rmluiOverlay.shutdown();
+    if (rs.overlays.rmluiReady) {
+      rs.overlays.rmluiOverlay.shutdown();
     }
 
     // Explicitly clean up static resources before GL context destruction
-    noiseCache.cleanup();
-    hawkingRenderer.cleanup();
-    if (grmhdTexture.texture != 0) {
-      destroyGrmhdPackedTexture(grmhdTexture);
+    rs.disk.noiseCache.cleanup();
+    rs.hawking.hawkingRenderer.cleanup();
+    if (rs.grmhd.grmhdTexture.texture != 0) {
+      destroyGrmhdPackedTexture(rs.grmhd.grmhdTexture);
     }
 
 #if BLACKHOLE_HAS_CUDA
-    cudaManager.shutdown();
+    rs.dispatch.cudaManager.shutdown();
 #endif
     cleanup(window);
     return 0;
