@@ -93,6 +93,20 @@ three docs and disagree.
   no include cycles; blender_bridge depends one-way on core (8 physics
   headers + kernel_launch.h via fragile `../` relative paths); core never
   includes blender_bridge.
+- STRUCT-9 (HIGH, found 2026-07-09 while resurrecting orphaned tests)
+  src/physics/verified/ carries parallel .h and .hpp forks of the same
+  four headers (kerr, schwarzschild, rk4, geodesic) plus kerr_extended.h
+  -- a copy-then-diverge instance that incubated real physics bugs: the
+  .h fork's bptZ1 carried a spurious /2 (prograde ISCO 3.48M instead of
+  6M at a=0, LIVE in the shipped batch tracer via batch.h:140),
+  kerr_extended.h did not compile at all and additionally had a wrong
+  bptZ2 radicand (6.87M ISCO) and a retrograde ISCO returning the
+  prograde radius (Z1/Z2 are even in a, so its -a trick selected
+  nothing). All fixed 2026-07-09 and pinned by kerr_geodesic_test and
+  verify_headers_compile value checks. OPEN: merge the forks into one
+  header set; until then kerr.h also leans on kerr.hpp's kerr_Sigma/
+  kerr_A by undocumented include-order coupling and calls three names
+  (surface_gravity, bpt_Z1, bpt_Z2) no header declares.
 
 ### 2.2 Test and verification debt
 
@@ -261,11 +275,23 @@ three docs and disagree.
   latent poison in fast-math TUs under clang. RESOLVED 2026-07-09 for
   (a): classifiers rewritten to byte-level inspection via memcpy behind
   reference parameters, validated by safe_limits_test across
-  gcc/clang x fast-math/IEEE. OPEN for (c): migrate the 27 sentinel
-  sites to the divergentResult()/isEffectivelyInfinite() pair (or land
-  VERIFY-5 fast-math inversion first, which shrinks the exposure to
-  the explicitly fast-math-opted targets); safeInfinity() docs now
-  state the IEEE-TU-only constraint.
+  gcc/clang x fast-math/IEEE. RESOLVED for (c) 2026-07-09 by consumer
+  analysis + the fast-math default inversion, with the originally
+  proposed migration REJECTED: tracing all 27 sites found zero
+  consumers that classify the sentinel (no safeIsinf, no std::isinf,
+  no comparisons) -- 9 sites propagate it arithmetically and 18 are
+  never read. Under IEEE semantics (the default since the inversion)
+  arithmetic propagation of a true infinity is the correct physics
+  (infinite cooling time -> zero mass-loss rate; 1/inf = 0), so
+  safeInfinity + propagation is the right design as-is. Migrating to
+  the finite divergentResult() would silently corrupt that downstream
+  arithmetic -- a regression, not a fix. Residual exposure: the five
+  app-reachable arithmetic consumers (synchrotron.h:170,
+  schwarzschild.cpp:139, doppler.h:55,:95,
+  gravitational_waves.h:178) are unsound only under explicit
+  -DENABLE_FAST_MATH=ON, which the option text now documents as
+  non-IEEE. The 18 never-read sentinel producers are dead API surface
+  (inventory kept in the audit record).
 
 - PHYS-1 (MED) shader/integrator.glsl:55-58: the Kerr branch of
   geodesic_rhs() falls back to Schwarzschild ("For now, return
