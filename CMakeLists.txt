@@ -665,13 +665,22 @@ endif()
 
 message(STATUS "=== SIMD Configuration Complete ===")
 
-# Fast math for non-critical paths (can be disabled for precision)
-option(ENABLE_FAST_MATH "Enable fast math optimizations" ON)
+# IEEE floating-point semantics are the default. -ffinite-math-only (part
+# of -ffast-math) folds inf/NaN classification to no-ops, poisons
+# non-finite values crossing by-value boundaries on clang 22 (nofpclass),
+# and made the analytic Kerr integrator terminate rays instantly through
+# broken safeInfinity sentinels -- its benchmark ran 2000x "faster" by
+# computing nothing. Measured cost of IEEE on correct CPU paths:
+# Schwarzschild raytracer 571->737 ms, SIMD batch geodesic 0.32->0.42 ms
+# (physics_bench, clang 22, 2026-07-09); SIMD-dispatched hot paths are
+# within noise. Opt in per build only with a correctness review; the
+# per-target -fno-fast-math test overrides below protect that mode.
+option(ENABLE_FAST_MATH "Trade IEEE inf/NaN semantics for ~1.3x on scalar CPU paths" OFF)
 if(ENABLE_FAST_MATH)
   add_compile_options(-ffast-math)
-  # Note: infinity/NaN usage is handled via safe_limits.h which uses compiler
-  # builtins (__builtin_huge_val) that work correctly with -ffast-math.
-  message(STATUS "Fast math optimizations enabled")
+  message(STATUS "Fast math enabled: inf/NaN semantics are NOT IEEE; "
+                 "safe_limits.h classifiers remain valid for data-origin "
+                 "values only")
 endif()
 
 # ============================================================================
@@ -1509,7 +1518,29 @@ endif()
 # GLSL Shader Validation Target
 # ============================================================================
 
-option(ENABLE_SHADER_VALIDATION "Enable GLSL shader validation" ON)
+# Tool-gate discipline: a feature option explicitly set ON hard-requires
+# its tool; AUTO enables when the tool exists and warns loudly when it
+# does not; OFF is the only silent state. find_program silent-disables
+# once cost this repo its coverage target, its Z3 proofs, and (in CI
+# configs without the tool) shader validation -- absence must never
+# read as success.
+function(bh_tool_gate option_name tool_description)
+  set(_val "${${option_name}}")
+  if(_val STREQUAL "AUTO")
+    message(WARNING
+      "${option_name}=AUTO: ${tool_description} not found -- feature "
+      "disabled. Install the tool, or set ${option_name}=OFF to accept "
+      "this silently.")
+  else()
+    message(FATAL_ERROR
+      "${option_name}=${_val} requires ${tool_description}, which was "
+      "not found. Install it, or set ${option_name}=OFF (or AUTO to "
+      "downgrade a missing tool to a warning).")
+  endif()
+endfunction()
+
+set(ENABLE_SHADER_VALIDATION "AUTO" CACHE STRING
+  "GLSL shader validation: ON requires glslangValidator, AUTO warns when missing, OFF disables")
 
 if(ENABLE_SHADER_VALIDATION)
   find_program(GLSLANG_VALIDATOR NAMES "glslangValidator" "glslang")
@@ -1578,7 +1609,7 @@ if(ENABLE_SHADER_VALIDATION)
       )
     endif()
   else()
-    message(STATUS "glslangValidator not found - shader validation disabled")
+    bh_tool_gate(ENABLE_SHADER_VALIDATION "glslangValidator (glslang-tools)")
   endif()
 endif()
 
@@ -1628,7 +1659,7 @@ if(ENABLE_DOXYGEN)
       set(ENABLE_DOXYGEN OFF)
     endif()
   else()
-    message(STATUS "Doxygen not found - API documentation disabled")
+    bh_tool_gate(ENABLE_DOXYGEN "doxygen")
     set(ENABLE_DOXYGEN OFF)
   endif()
 endif()
@@ -1723,7 +1754,7 @@ if(ENABLE_COVERAGE)
       VERBATIM
     )
   else()
-    message(STATUS "gcovr not found - coverage-report target disabled")
+    bh_tool_gate(ENABLE_COVERAGE "gcovr (coverage-report generation)")
   endif()
 endif()
 
@@ -3776,6 +3807,73 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Formerly-orphaned test sources (ledger TEST-1): these existed on disk
+  # but no target compiled them, so the shader-parity and verified-physics
+  # claims ran on zero executed tests. Registered 2026-07-09.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_geodesic_test.cpp")
+    add_executable(kerr_geodesic_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_geodesic_test.cpp"
+    )
+    target_include_directories(kerr_geodesic_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_geodesic_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME kerr_geodesic_validation COMMAND kerr_geodesic_test)
+    set_tests_properties(kerr_geodesic_validation PROPERTIES
+      LABELS "physics;kerr;geodesic"
+      TIMEOUT 30
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp")
+    add_executable(verified_physics_test
+      "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp"
+    )
+    target_include_directories(verified_physics_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(verified_physics_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME verified_physics_validation COMMAND verified_physics_test)
+    set_tests_properties(verified_physics_validation PROPERTIES
+      LABELS "physics;verified;rocq"
+      TIMEOUT 60
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/metric_parity_test.cpp")
+    add_executable(metric_parity_test
+      "${PROJECT_SOURCE_DIR}/tests/metric_parity_test.cpp"
+    )
+    target_include_directories(metric_parity_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(metric_parity_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME metric_parity_validation COMMAND metric_parity_test)
+    set_tests_properties(metric_parity_validation PROPERTIES
+      LABELS "physics;parity;glsl"
+      TIMEOUT 60
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/glsl_parity_test.cpp")
+    add_executable(glsl_parity_test
+      "${PROJECT_SOURCE_DIR}/tests/glsl_parity_test.cpp"
+    )
+    target_include_directories(glsl_parity_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(glsl_parity_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME glsl_parity_validation COMMAND glsl_parity_test)
+    set_tests_properties(glsl_parity_validation PROPERTIES
+      LABELS "physics;parity;glsl"
+      TIMEOUT 60
+    )
+  endif()
+
   # Connection coefficient validation tests (Phase 1.4.6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/connection_test.cpp")
     add_executable(connection_test
@@ -4663,7 +4761,8 @@ if(BUILD_TESTING)
   # ========================================================================
 
   # Z3 verification test - coupled GPU/Z3 constraint verification
-  option(ENABLE_Z3_VERIFICATION "Enable Z3 constraint verification tests (Phase 4)" ON)
+  set(ENABLE_Z3_VERIFICATION "AUTO" CACHE STRING
+    "Z3 constraint verification tests: ON requires Z3, AUTO warns when missing, OFF disables")
 
   if(ENABLE_Z3_VERIFICATION AND EXISTS "${PROJECT_SOURCE_DIR}/tests/z3_verification_test.cpp")
     # Find Z3 library (optional for build, required for runtime)
@@ -4721,7 +4820,7 @@ if(BUILD_TESTING)
       target_compile_definitions(z3_verification_test PRIVATE BLACKHOLE_Z3_AVAILABLE=1)
       message(STATUS "Z3 library found: Z3 constraint proofs enabled")
     else()
-      message(STATUS "Z3 not found: Z3 constraint proofs will be skipped (fallback to numerical verification)")
+      bh_tool_gate(ENABLE_Z3_VERIFICATION "the Z3 solver (conan z3 package)")
     endif()
 
     # Register with CTest
@@ -5588,3 +5687,76 @@ message(STATUS "  ENABLE_DOXYGEN:           ${ENABLE_DOXYGEN}")
 message(STATUS "  ENABLE_KTX:               ${ENABLE_KTX}")
 message(STATUS "  ENABLE_OPENIMAGEIO:       ${ENABLE_OPENIMAGEIO}")
 message(STATUS "")
+
+# ============================================================================
+# Test-source completeness gate (silent-absence hardening)
+# ============================================================================
+# Every tests/*.cpp and tests/*.cu on disk must be a source of some target
+# or carry an explicit quarantine entry with a reason. A renamed or newly
+# orphaned test file is a configure error, never a silent coverage loss --
+# seven test sources (including the only shader-parity tests) once sat
+# unbuilt for months because nothing enforced this.
+if(BUILD_TESTING)
+  file(GLOB _bh_test_sources_on_disk RELATIVE "${PROJECT_SOURCE_DIR}"
+    "${PROJECT_SOURCE_DIR}/tests/*.cpp"
+    "${PROJECT_SOURCE_DIR}/tests/*.cu"
+  )
+
+  set(_bh_test_sources_quarantined "")
+  if(NOT ENABLE_PRECISION_TESTS)
+    # Registered only under -DENABLE_PRECISION_TESTS=ON (long-running).
+    list(APPEND _bh_test_sources_quarantined "tests/precision_regression_test.cpp")
+  endif()
+  # Blocked on the verified/ .h-vs-.hpp header fork (debt-ledger.md
+  # STRUCT-9): these three depend on fork headers that do not compile
+  # (schwarzschild.h/geodesic.h rot, gpu_raytracer_kernel.hpp dead
+  # blocks, glbinding/GLFW hint-type clash). Un-quarantine them as part
+  # of the fork merge; do not add new entries without a ledger finding.
+  list(APPEND _bh_test_sources_quarantined
+    "tests/gpu_raytracer_kernel_test.cpp"
+    "tests/verify_headers_compile.cpp"
+    "tests/gpu_cpu_parity_test.cpp"
+  )
+  if(NOT ENABLE_CUDA)
+    # CUDA test sources compile only with -DENABLE_CUDA=ON; without it they
+    # are intentionally absent from the build, not orphaned.
+    foreach(_bh_f IN LISTS _bh_test_sources_on_disk)
+      if(_bh_f MATCHES "^tests/cuda_.*\\.(cu|cpp)$")
+        list(APPEND _bh_test_sources_quarantined "${_bh_f}")
+      endif()
+    endforeach()
+  endif()
+
+  get_property(_bh_all_targets DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    PROPERTY BUILDSYSTEM_TARGETS)
+  set(_bh_registered_test_sources "")
+  foreach(_bh_tgt IN LISTS _bh_all_targets)
+    get_target_property(_bh_srcs "${_bh_tgt}" SOURCES)
+    if(_bh_srcs)
+      foreach(_bh_src IN LISTS _bh_srcs)
+        cmake_path(IS_RELATIVE _bh_src _bh_src_is_rel)
+        if(_bh_src_is_rel)
+          set(_bh_src "${CMAKE_CURRENT_SOURCE_DIR}/${_bh_src}")
+        endif()
+        cmake_path(RELATIVE_PATH _bh_src BASE_DIRECTORY "${PROJECT_SOURCE_DIR}"
+          OUTPUT_VARIABLE _bh_rel)
+        list(APPEND _bh_registered_test_sources "${_bh_rel}")
+      endforeach()
+    endif()
+  endforeach()
+
+  set(_bh_orphans "")
+  foreach(_bh_f IN LISTS _bh_test_sources_on_disk)
+    if(NOT _bh_f IN_LIST _bh_registered_test_sources AND
+       NOT _bh_f IN_LIST _bh_test_sources_quarantined)
+      list(APPEND _bh_orphans "${_bh_f}")
+    endif()
+  endforeach()
+  if(_bh_orphans)
+    message(FATAL_ERROR "Orphaned test sources (no target compiles them): "
+      "${_bh_orphans}. Register each in CMakeLists.txt or add it to the "
+      "quarantine list beside this check with a reason.")
+  endif()
+  list(LENGTH _bh_test_sources_on_disk _bh_test_count)
+  message(STATUS "Test-source completeness: ${_bh_test_count} files on disk, all accounted for")
+endif()
