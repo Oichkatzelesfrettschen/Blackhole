@@ -98,6 +98,10 @@
 #include "render.h"
 #include "render/noise_texture_cache.h"
 #include "render/interop_uniform_registry.h"
+#include "platform/crash_handler.h"
+#include "platform/resource_paths.h"
+#include "render/gpu_timing.h"
+#include "render/post_process.h"
 #include "rmlui_overlay.h"
 #include "settings.h"
 #include "shader.h"
@@ -138,186 +142,17 @@ constexpr const char *kWindowTitle = kAppVariantCudaOnly
                                          ? "BlackholeCUDA"
                                          : (kAppVariantGlslOnly ? "BlackholeGLSL" : "Blackhole");
 
-#if BLACKHOLE_HAS_CPPTRACE
-namespace {
-constexpr std::size_t K_TRACE_MAX_FRAMES = 64;
-volatile sig_atomic_t gHandlingSignal = 0;
-bool gCanSignalSafeUnwind = false;
-bool gCanSafeObjectInfo = false;
+// Extracted modules keep their call sites unqualified (STATE-2 extraction).
+using platform::resourcePath;
+using blackhole::PostProcessPass;
+using blackhole::GpuTimer;
+using blackhole::GpuTimerSet;
+using blackhole::TimingHistory;
+using blackhole::gpuTimingPath;
+using blackhole::appendGpuTimingSample;
+using blackhole::writeTimingHistoryCsv;
 
-std::size_t cstrLength(const char *str) {
-  std::size_t length = 0;
-  while (str[length] != '\0') {
-    ++length;
-  }
-  return length;
-}
 
-void writeStderr(const char *str) {
-  ssize_t const rc = write(STDERR_FILENO, str, cstrLength(str));
-  (void)rc;
-}
-
-void writeDec(std::size_t value) {
-  char buf[32];
-  std::size_t i = 0;
-  do { // NOLINT(cppcoreguidelines-avoid-do-while) -- digit extraction requires do-while
-    buf[i++] = static_cast<char>('0' + (value % 10));
-    value /= 10;
-  } while (value != 0 && i < sizeof(buf));
-  for (std::size_t j = 0; j < i / 2; ++j) {
-    char const tmp = buf[j];
-    buf[j] = buf[i - 1 - j];
-    buf[i - 1 - j] = tmp;
-  }
-  ssize_t const rc = write(STDERR_FILENO, buf, i);
-  (void)rc;
-}
-
-void writeHex(uintptr_t value) {
-  static constexpr char kHex[] = "0123456789abcdef";
-  char buf[2 + (sizeof(uintptr_t) * 2)];
-  buf[0] = '0';
-  buf[1] = 'x';
-  for (std::size_t i = 0; i < sizeof(uintptr_t) * 2; ++i) {
-    buf[2 + (sizeof(uintptr_t) * 2) - 1 - i] = kHex[value & 0xF];
-    value >>= 4;
-  }
-  ssize_t const rc = write(STDERR_FILENO, buf, sizeof(buf));
-  (void)rc;
-}
-
-const char *signalName(int sig) {
-  switch (sig) {
-  case SIGSEGV:
-    return "SIGSEGV";
-  case SIGABRT:
-    return "SIGABRT";
-  case SIGFPE:
-    return "SIGFPE";
-  case SIGILL:
-    return "SIGILL";
-  case SIGBUS: // NOLINT(misc-include-cleaner) -- SIGBUS is POSIX, provided via <csignal> on
-               // Linux/glibc
-    return "SIGBUS";
-  case SIGTERM:
-    return "SIGTERM";
-  default:
-    return "SIGNAL";
-  }
-}
-
-void crashSignalHandler(int sig) {
-  if (gHandlingSignal != 0) {
-    _Exit(128 + sig);
-  }
-  gHandlingSignal = 1;
-
-  writeStderr("\n==== Blackhole crash signal: ");
-  writeStderr(signalName(sig));
-  writeStderr(" ====\n");
-
-  if (!gCanSignalSafeUnwind) {
-    writeStderr("cpptrace: signal-safe unwind unavailable\n");
-    std::signal(sig, SIG_DFL); // NOLINT(cert-err33-c) -- signal handler, cannot check return
-    std::raise(sig);           // NOLINT(cert-err33-c) -- signal handler, cannot check return
-    _Exit(128 + sig);
-  }
-
-  cpptrace::frame_ptr frames[K_TRACE_MAX_FRAMES];
-  std::size_t const count = cpptrace::safe_generate_raw_trace(frames, K_TRACE_MAX_FRAMES, 1);
-  for (std::size_t i = 0; i < count; ++i) {
-    writeStderr("#");
-    writeDec(i);
-    writeStderr(" ");
-    writeHex(reinterpret_cast<uintptr_t>(frames[i]));
-    if (gCanSafeObjectInfo) {
-      cpptrace::safe_object_frame objectFrame{};
-      cpptrace::get_safe_object_frame(frames[i], &objectFrame);
-      if (objectFrame.object_path[0] != '\0') {
-        writeStderr(" ");
-        writeStderr(objectFrame.object_path);
-        writeStderr(" +");
-        writeHex(reinterpret_cast<uintptr_t>(objectFrame.address_relative_to_object_start));
-      }
-    }
-    writeStderr("\n");
-  }
-
-  std::signal(sig, SIG_DFL); // NOLINT(cert-err33-c) -- signal handler, cannot check return
-  std::raise(sig);           // NOLINT(cert-err33-c) -- signal handler, cannot check return
-  _Exit(128 + sig);
-}
-
-void installCrashHandlers() {
-  cpptrace::use_default_stderr_logger();
-  cpptrace::register_terminate_handler();
-  gCanSignalSafeUnwind = cpptrace::can_signal_safe_unwind();
-  gCanSafeObjectInfo = cpptrace::can_get_safe_object_frame();
-  if (!gCanSignalSafeUnwind) {
-    std::fprintf(stderr, // NOLINT(cert-err33-c) -- informational message, return unused
-                 "cpptrace: signal-safe unwinding unavailable; signal crashes will be limited\n");
-  }
-
-  std::signal(SIGSEGV,
-              crashSignalHandler); // NOLINT(cert-err33-c) -- signal handler, cannot check return
-  std::signal(SIGABRT,
-              crashSignalHandler); // NOLINT(cert-err33-c) -- signal handler, cannot check return
-  std::signal(SIGFPE,
-              crashSignalHandler); // NOLINT(cert-err33-c) -- signal handler, cannot check return
-  std::signal(SIGILL,
-              crashSignalHandler); // NOLINT(cert-err33-c) -- signal handler, cannot check return
-  std::signal(SIGBUS,
-              crashSignalHandler); // NOLINT(cert-err33-c) -- signal handler, cannot check return
-  std::signal(SIGTERM,
-              crashSignalHandler); // NOLINT(cert-err33-c) -- signal handler, cannot check return
-}
-} // namespace
-#else
-static void installCrashHandlers() {}
-#endif
-
-namespace {
-std::filesystem::path gResourceRoot = ".";
-
-bool isValidResourceRoot(const std::filesystem::path &root) {
-  std::error_code ec;
-  return std::filesystem::exists(root / "shader" / "simple.vert", ec) &&
-         std::filesystem::exists(root / "assets" / "backgrounds" / "manifest.json", ec) &&
-         std::filesystem::exists(root / "src" / "main.cpp", ec);
-}
-
-std::filesystem::path detectResourceRoot(const char *argv0) {
-  std::error_code ec;
-  std::vector<std::filesystem::path> seeds;
-  seeds.push_back(std::filesystem::current_path(ec));
-  if (argv0 != nullptr && argv0[0] != '\0') {
-    std::filesystem::path const exePath = std::filesystem::absolute(argv0, ec);
-    if (!ec) {
-      seeds.push_back(exePath.parent_path());
-    }
-  }
-
-  for (const auto &seed : seeds) {
-    std::filesystem::path probe = seed;
-    while (!probe.empty()) {
-      if (isValidResourceRoot(probe)) {
-        return probe;
-      }
-      std::filesystem::path const parent = probe.parent_path();
-      if (parent == probe) {
-        break;
-      }
-      probe = parent;
-    }
-  }
-  return std::filesystem::current_path(ec);
-}
-
-std::string resourcePath(std::string_view relativePath) {
-  return (gResourceRoot / std::filesystem::path(relativePath)).string();
-}
-} // namespace
 
 /**
  * @brief Convert spherical yaw/pitch angles to a Cartesian camera position.
@@ -2186,224 +2021,6 @@ void cleanup(GLFWwindow *window) {
   glfwTerminate();
 }
 
-class PostProcessPass {
-private:
-  GLuint program_;
-
-public:
-  explicit PostProcessPass(const std::string &fragShader) {
-    this->program_ = createShaderProgram(std::string("shader/simple.vert"), fragShader);
-
-    glUseProgram(this->program_);
-    glUniform1i(glGetUniformLocation(program_, "texture0"), 0);
-    glUseProgram(0);
-  }
-
-  void render(GLuint inputColorTexture, int width, int height, GLuint destFramebuffer = 0) const {
-    static GLuint quadVao = 0;
-    if (quadVao == 0) {
-      quadVao = createQuadVAO();
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, destFramebuffer);
-
-    glDisable(GL_DEPTH_TEST);
-
-    glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glUseProgram(this->program_);
-    glBindVertexArray(quadVao);
-
-    glUniform2f(glGetUniformLocation(this->program_, "resolution"), static_cast<float>(width),
-                static_cast<float>(height));
-
-    glUniform1f(glGetUniformLocation(this->program_, "time"), static_cast<float>(glfwGetTime()));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, inputColorTexture);
-
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-
-    glUseProgram(0);
-  }
-};
-
-struct GpuTimer {
-  GLuint queries[2] = {0, 0};
-  bool issued[2] = {false, false};
-  int index = 0;
-  double lastMs = 0.0;
-  bool active = false;
-
-  bool ensureQueries() {
-    if (queries[0] != 0 && queries[1] != 0) {
-      return true;
-    }
-    if (queries[0] != 0 || queries[1] != 0) {
-      glDeleteQueries(2, queries);
-    }
-    glGenQueries(2, queries);
-    issued[0] = false;
-    issued[1] = false;
-    active = false;
-    return (queries[0] != 0 && queries[1] != 0);
-  }
-
-  bool init() {
-    glGenQueries(2, queries);
-    if (queries[0] == 0 || queries[1] == 0) {
-      queries[0] = 0;
-      queries[1] = 0;
-      issued[0] = false;
-      issued[1] = false;
-      active = false;
-      return false;
-    }
-    issued[0] = false;
-    issued[1] = false;
-    return true;
-  }
-  void shutdown() {
-    if (queries[0] != 0 || queries[1] != 0) {
-      glDeleteQueries(2, queries);
-    }
-    queries[0] = 0;
-    queries[1] = 0;
-    issued[0] = false;
-    issued[1] = false;
-    active = false;
-  }
-  void begin() {
-    if (active) {
-      return;
-    }
-    if (!ensureQueries()) {
-      return;
-    }
-    glBeginQuery(GL_TIME_ELAPSED, queries[index]);
-    issued[index] = true;
-    active = true;
-  }
-  void end() {
-    if (!active) {
-      return;
-    }
-    glEndQuery(GL_TIME_ELAPSED);
-    active = false;
-  }
-  void resolve() {
-    if (!ensureQueries()) {
-      return;
-    }
-    int const prev = 1 - index;
-    if (queries[prev] == 0 || !issued[prev]) {
-      return;
-    }
-    GLuint available = 0;
-    glGetQueryObjectuiv(queries[prev], GL_QUERY_RESULT_AVAILABLE, &available);
-    if (available != 0u) {
-      GLuint64 timeNs = 0;
-      glGetQueryObjectui64v(queries[prev], GL_QUERY_RESULT, &timeNs);
-      lastMs = static_cast<double>(timeNs) / 1.0e6;
-      issued[prev] = false;
-    }
-  }
-  void swap() {
-    index = 1 - index;
-    active = false;
-  }
-};
-
-struct GpuTimerSet {
-  bool initialized = false;
-  GpuTimer blackholeFragment;
-  GpuTimer blackholeCompute;
-  GpuTimer bloom;
-  GpuTimer tonemap;
-  GpuTimer depth;
-  GpuTimer grmhdSlice;
-
-  void init() {
-    bool ok = true;
-    ok &= blackholeFragment.init();
-    ok &= blackholeCompute.init();
-    ok &= bloom.init();
-    ok &= tonemap.init();
-    ok &= depth.init();
-    ok &= grmhdSlice.init();
-    initialized = ok;
-    if (!ok) {
-      shutdown();
-    }
-  }
-
-  void shutdown() {
-    blackholeFragment.shutdown();
-    blackholeCompute.shutdown();
-    bloom.shutdown();
-    tonemap.shutdown();
-    depth.shutdown();
-    grmhdSlice.shutdown();
-    initialized = false;
-  }
-
-  void resolve() {
-    blackholeFragment.resolve();
-    blackholeCompute.resolve();
-    bloom.resolve();
-    tonemap.resolve();
-    depth.resolve();
-    grmhdSlice.resolve();
-  }
-
-  void swap() {
-    blackholeFragment.swap();
-    blackholeCompute.swap();
-    bloom.swap();
-    tonemap.swap();
-    depth.swap();
-    grmhdSlice.swap();
-  }
-};
-
-struct TimingHistory {
-  static constexpr int K_CAPACITY = 240;
-  std::array<float, K_CAPACITY> cpuMs{};
-  std::array<float, K_CAPACITY> gpuFragmentMs{};
-  std::array<float, K_CAPACITY> gpuComputeMs{};
-  std::array<float, K_CAPACITY> gpuBloomMs{};
-  std::array<float, K_CAPACITY> gpuTonemapMs{};
-  std::array<float, K_CAPACITY> gpuDepthMs{};
-  std::array<float, K_CAPACITY> gpuGrmhdSliceMs{};
-  int offset = 0;
-  int count = 0;
-
-  void push(float cpuMsSample, const GpuTimerSet &timers) {
-    const auto index = static_cast<std::size_t>(offset);
-    cpuMs.at(index) = cpuMsSample;
-    if (timers.initialized) {
-      gpuFragmentMs.at(index) = static_cast<float>(timers.blackholeFragment.lastMs);
-      gpuComputeMs.at(index) = static_cast<float>(timers.blackholeCompute.lastMs);
-      gpuBloomMs.at(index) = static_cast<float>(timers.bloom.lastMs);
-      gpuTonemapMs.at(index) = static_cast<float>(timers.tonemap.lastMs);
-      gpuDepthMs.at(index) = static_cast<float>(timers.depth.lastMs);
-      gpuGrmhdSliceMs.at(index) = static_cast<float>(timers.grmhdSlice.lastMs);
-    } else {
-      const float nan = std::numeric_limits<float>::quiet_NaN();
-      gpuFragmentMs.at(index) = nan;
-      gpuComputeMs.at(index) = nan;
-      gpuBloomMs.at(index) = nan;
-      gpuTonemapMs.at(index) = nan;
-      gpuDepthMs.at(index) = nan;
-      gpuGrmhdSliceMs.at(index) = nan;
-    }
-    offset = (offset + 1) % K_CAPACITY;
-    if (count < K_CAPACITY) {
-      ++count;
-    }
-  }
-};
 
 // Reified render/application state: every value that was a function-local
 // static in main() lives here, grouped by subsystem. One instance is
@@ -2800,54 +2417,6 @@ struct RenderState {
 };
 
 
-std::string gpuTimingPath() {
-  std::filesystem::create_directories("logs/perf");
-  return "logs/perf/gpu_timing.csv";
-}
-
-void appendGpuTimingSample(const std::string &path, int index, int width, int height,
-                           float cpuFrameMs, const GpuTimerSet &timers, bool computeActive,
-                           float kerrSpin, double timeSec) {
-  const bool exists = std::filesystem::exists(path);
-  std::ofstream out(path, std::ios::app);
-  if (!out) {
-    return;
-  }
-  if (!exists) {
-    out << "index,time_sec,width,height,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,"
-           "gpu_tonemap_ms,gpu_depth_ms,gpu_grmhd_slice_ms,compute_active,kerr_spin\n";
-  }
-  out << std::fixed << std::setprecision(6);
-  out << index << "," << timeSec << "," << width << "," << height << "," << cpuFrameMs << ","
-      << timers.blackholeFragment.lastMs << "," << timers.blackholeCompute.lastMs << ","
-      << timers.bloom.lastMs << "," << timers.tonemap.lastMs << "," << timers.depth.lastMs << ","
-      << timers.grmhdSlice.lastMs << "," << (computeActive ? 1 : 0) << "," << kerrSpin << "\n";
-}
-
-void writeTimingHistoryCsv(const TimingHistory &history, const std::string &path) {
-  std::filesystem::create_directories("logs/perf");
-  std::ofstream out(path);
-  if (!out) {
-    return;
-  }
-  out << "index,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,gpu_tonemap_ms,gpu_depth_ms,"
-         "gpu_grmhd_slice_ms\n";
-  out << std::fixed << std::setprecision(6);
-
-  int const count = history.count;
-  int start = history.offset - count;
-  if (start < 0) {
-    start += TimingHistory::K_CAPACITY;
-  }
-  for (int i = 0; i < count; ++i) {
-    int const rawIndex = (start + i) % TimingHistory::K_CAPACITY;
-    auto const idx = static_cast<std::size_t>(rawIndex);
-    out << i << "," << history.cpuMs.at(idx) << "," << history.gpuFragmentMs.at(idx) << ","
-        << history.gpuComputeMs.at(idx) << "," << history.gpuBloomMs.at(idx) << ","
-        << history.gpuTonemapMs.at(idx) << "," << history.gpuDepthMs.at(idx) << ","
-        << history.gpuGrmhdSliceMs.at(idx) << "\n";
-  }
-}
 
 void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &timers,
                             const TimingHistory &history, float cpuFrameMs,
@@ -2946,7 +2515,7 @@ void resetLayout(ImGuiID dockspaceId) {
 // NOLINTNEXTLINE(readability-function-cognitive-complexity,readability-function-size) --
 // application main loop
 int main(int argc, char **argv) {
-  installCrashHandlers();
+  platform::installCrashHandlers();
   try {
     std::string curveTsvPath;
     std::string exportFramePath;
@@ -3088,8 +2657,8 @@ int main(int argc, char **argv) {
       return 2;
     }
 
-    gResourceRoot = detectResourceRoot(argv[0]);
-    setShaderBaseDir(gResourceRoot.string() + "/");
+    platform::initResourceRoot(argv[0]);
+    setShaderBaseDir(platform::resourceRoot().string() + "/");
 
     // Load settings first
     SettingsManager::instance().load();
