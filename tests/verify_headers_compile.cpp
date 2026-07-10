@@ -61,6 +61,15 @@ int main() {
   checkNear("kerr_isco_retrograde(1, 0)", verified::kerr_isco_retrograde(m, 0.0), 6.0, 1e-9);
   checkNear("kerr_isco_prograde(1, 0.9)", verified::kerr_isco_prograde(m, a), 2.3209, 1e-3);
   checkNear("kerr_isco_retrograde(1, 0.9)", verified::kerr_isco_retrograde(m, a), 8.7173, 1e-3);
+  // Mass scaling: r_isco(2M, 2a) = 2 * r_isco(M, a). Every retired
+  // re-derivation of BPT fed the raw spin into M = 1 helpers, which
+  // unit-mass pins cannot see; this one fails on that bug class.
+  checkNear("kerr_isco_prograde mass scaling",
+            verified::kerr_isco_prograde(2.0 * m, 2.0 * a),
+            2.0 * verified::kerr_isco_prograde(m, a), 1e-9);
+  checkNear("kerrIscoPrograde mass scaling",
+            verified::kerrIscoPrograde(2.0 * m, 2.0 * a),
+            2.0 * verified::kerrIscoPrograde(m, a), 1e-9);
 
   // Kerr extended constexpr surface (kerr_extended.h) pins the same physics
   checkNear("kerrIscoPrograde(1, 0)", verified::kerrIscoPrograde(m, 0.0), 6.0, 1e-9);

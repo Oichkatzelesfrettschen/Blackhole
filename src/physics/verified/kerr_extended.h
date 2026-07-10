@@ -15,6 +15,11 @@
  * All functions are extracted from proven Rocq theories and validated
  * against Z3 constraint solver for physical consistency.
  *
+ * Formulas shared with kerr.hpp (Sigma, Delta, A, metric components,
+ * horizons, ergosphere, BPT ISCO) delegate to that header; this file
+ * adds the range-checked camelCase surface plus energy, angular
+ * momentum, four-norm, and validity predicates kerr.hpp does not carry.
+ *
  * Geometric units: c = G = M_sun = 1
  *
  * References:
@@ -31,6 +36,8 @@
 #include <cassert>
 #include <cmath>
 #include <numbers>
+
+#include "kerr.hpp"
 
 namespace verified {
 
@@ -54,9 +61,8 @@ namespace verified {
  * Combines radial and polar geometry
  * Sigma > 0 everywhere except ring singularity (r=0, theta=pi/2, a!=0)
  */
-[[nodiscard]] constexpr double kerrSigma(double r, double theta, double a) noexcept {
-  double const cosTheta = std::cos(theta);
-  return (r * r) + (a * a * cosTheta * cosTheta);
+[[nodiscard]] inline double kerrSigma(double r, double theta, double a) noexcept {
+  return kerr_Sigma(r, theta, a);
 }
 
 /**
@@ -66,7 +72,7 @@ namespace verified {
  * Delta(r_-) = 0 for Cauchy horizon
  */
 [[nodiscard]] constexpr double kerrDelta(double r, double m, double a) noexcept {
-  return (r * r) - (2.0 * m * r) + (a * a);
+  return kerr_Delta(r, m, a);
 }
 
 /**
@@ -74,13 +80,8 @@ namespace verified {
  * Appears in g_phi_phi component
  * Encodes frame-dragging geometry
  */
-[[nodiscard]] constexpr double kerrA(double r, double theta, double m, double a) noexcept {
-  double const r2 = r * r;
-  double const a2 = a * a;
-  double const sinTheta = std::sin(theta);
-  double const r2A2Sq = (r2 + a2) * (r2 + a2);
-  double const delta = kerrDelta(r, m, a);
-  return r2A2Sq - (a2 * delta * sinTheta * sinTheta);
+[[nodiscard]] inline double kerrA(double r, double theta, double m, double a) noexcept {
+  return kerr_A(r, theta, m, a);
 }
 
 /**
@@ -90,9 +91,8 @@ namespace verified {
  * Zero at horizon (null/lightlike)
  * Positive inside horizon (spacelike inside)
  */
-[[nodiscard]] constexpr double kerrGTt(double r, double theta, double m, double a) noexcept {
-  double const sigma = kerrSigma(r, theta, a);
-  return -(1.0 - (2.0 * m * r / sigma));
+[[nodiscard]] inline double kerrGTt(double r, double theta, double m, double a) noexcept {
+  return kerr_g_tt(r, theta, m, a);
 }
 
 /**
@@ -101,11 +101,9 @@ namespace verified {
  * Singular at horizons (Delta = 0)
  * Coordinate singularity (not physical singularity)
  */
-[[nodiscard]] constexpr double kerrGRr(double r, double theta, double m, double a) noexcept {
-  double const sigma = kerrSigma(r, theta, a);
-  double const delta = kerrDelta(r, m, a);
-  assert(delta != 0.0 && "g_rr singular at horizon");
-  return sigma / delta;
+[[nodiscard]] inline double kerrGRr(double r, double theta, double m, double a) noexcept {
+  assert(kerr_Delta(r, m, a) != 0.0 && "g_rr singular at horizon");
+  return kerr_g_rr(r, theta, m, a);
 }
 
 /**
@@ -113,8 +111,8 @@ namespace verified {
  * g_theta_theta = Sigma
  * Always positive away from ring singularity
  */
-[[nodiscard]] constexpr double kerrGThetaTheta(double r, double theta, double a) noexcept {
-  return kerrSigma(r, theta, a);
+[[nodiscard]] inline double kerrGThetaTheta(double r, double theta, double a) noexcept {
+  return kerr_g_thth(r, theta, a);
 }
 
 /**
@@ -122,11 +120,8 @@ namespace verified {
  * g_phi_phi = A sin^2(theta) / Sigma
  * Includes frame-dragging effect
  */
-[[nodiscard]] constexpr double kerrGPhiPhi(double r, double theta, double m, double a) noexcept {
-  double const sigma = kerrSigma(r, theta, a);
-  double const bigA = kerrA(r, theta, m, a);
-  double const sinTheta = std::sin(theta);
-  return bigA * sinTheta * sinTheta / sigma;
+[[nodiscard]] inline double kerrGPhiPhi(double r, double theta, double m, double a) noexcept {
+  return kerr_g_phph(r, theta, m, a);
 }
 
 /**
@@ -135,10 +130,8 @@ namespace verified {
  * Frame-dragging effect: couples time and rotation
  * Zero for Schwarzschild (a = 0)
  */
-[[nodiscard]] constexpr double kerrGTPhi(double r, double theta, double m, double a) noexcept {
-  double const sigma = kerrSigma(r, theta, a);
-  double const sinTheta = std::sin(theta);
-  return -2.0 * m * r * a * sinTheta * sinTheta / sigma;
+[[nodiscard]] inline double kerrGTPhi(double r, double theta, double m, double a) noexcept {
+  return kerr_g_tph(r, theta, m, a);
 }
 
 /**
@@ -151,12 +144,10 @@ namespace verified {
  * Only exists for sub-extremal black holes: a < M
  * Light cone singularity: information barrier from exterior perspective
  */
-[[nodiscard]] constexpr double kerrOuterHorizon(double m, double a) noexcept {
+[[nodiscard]] inline double kerrOuterHorizon(double m, double a) noexcept {
   assert(a < m && "Naked singularity: a >= m");
   assert(m > 0 && "Invalid mass");
-  double const discriminant = (m * m) - (a * a);
-  assert(discriminant >= 0 && "Non-physical spin parameter");
-  return m + std::sqrt(discriminant);
+  return outer_horizon(m, a);
 }
 
 /**
@@ -165,11 +156,10 @@ namespace verified {
  * Separates black hole interior from white hole region
  * Unstable to perturbations in physical black holes
  */
-[[nodiscard]] constexpr double kerrInnerHorizon(double m, double a) noexcept {
+[[nodiscard]] inline double kerrInnerHorizon(double m, double a) noexcept {
   assert(a < m && "Naked singularity: a >= m");
   assert(m > 0 && "Invalid mass");
-  double const discriminant = (m * m) - (a * a);
-  return m - std::sqrt(discriminant);
+  return inner_horizon(m, a);
 }
 
 /**
@@ -178,12 +168,10 @@ namespace verified {
  * Region where g_tt > 0 (metric signature changes)
  * Extends beyond event horizon except at poles
  */
-[[nodiscard]] constexpr double kerrErgosphereRadius(double theta, double m, double a) noexcept {
-  double const cosTheta = std::cos(theta);
-  double const a2Cos2 = a * a * cosTheta * cosTheta;
-  double const discriminant = (m * m) - a2Cos2;
-  assert(discriminant >= 0 && "Invalid ergosphere calculation");
-  return m + std::sqrt(discriminant);
+[[nodiscard]] inline double kerrErgosphereRadius(double theta, double m, double a) noexcept {
+  assert((m * m) - (a * a * std::cos(theta) * std::cos(theta)) >= 0 &&
+         "Invalid ergosphere calculation");
+  return ergosphere_radius(theta, m, a);
 }
 
 /**
@@ -191,70 +179,41 @@ namespace verified {
  */
 
 /**
- * Helper function Z1 from Bardeen-Press-Teukolsky formula
- * Z1(a) = 1 + (1 - a^2)^(1/3) * ((1 + a)^(1/3) + (1 - a)^(1/3))
+ * Helper function Z1 from Bardeen-Press-Teukolsky formula, in the M = 1
+ * convention: Z1(a) = kerr_Z1(1, a). The general-mass form lives in
+ * kerr.hpp, which normalizes the spin as a/M (BPT 1972 eq. 2.21).
  */
-[[nodiscard]] constexpr double bptZ1(double a) noexcept {
-  double const a2 = a * a;
-  double const term1 = std::cbrt(1.0 - a2);
-  double const term2 = std::cbrt(1.0 + a) + std::cbrt(1.0 - a);
-  return 1.0 + (term1 * term2);
-}
+[[nodiscard]] inline double bptZ1(double a) noexcept { return kerr_Z1(1.0, a); }
 
 /**
- * Helper function Z2 from Bardeen-Press-Teukolsky formula
- * Z2(a) = sqrt(3*a^2 + Z1(a)^2)
- * Bardeen, Press & Teukolsky (1972) eq. 2.21. At a=0: Z1=3, Z2=3, and
- * the prograde ISCO lands on the Schwarzschild 6M. A different (wrong)
- * radicand Z1*(Z1+2*cbrt(1-a^2)) shipped here unnoticed because no
- * target ever compiled this file; it gives Z2=sqrt(15) and 6.87M.
+ * Helper function Z2 from Bardeen-Press-Teukolsky formula, in the M = 1
+ * convention: Z2(a) = kerr_Z2(1, a) = sqrt(3*a^2 + Z1(a)^2).
  */
-[[nodiscard]] constexpr double bptZ2(double a) noexcept {
-  double const z1 = bptZ1(a);
-  double const arg = (3.0 * a * a) + (z1 * z1);
-  assert(arg >= 0 && "Invalid ISCO calculation");
-  return std::sqrt(arg);
-}
+[[nodiscard]] inline double bptZ2(double a) noexcept { return kerr_Z2(1.0, a); }
 
 /**
  * ISCO radius for prograde orbits (co-rotating with black hole)
  * r_isco_prograde = M * (3 + Z2 - sqrt((3 - Z1) * (3 + Z1 + 2*Z2)))
- * This is the Bardeen-Press-Teukolsky formula
  * For a = 0 (Schwarzschild): r_isco = 6M
  * For a = M (extremal): r_isco = M
+ * Delegates to kerr_isco_prograde, whose Z1/Z2 normalize the spin as
+ * a/M; a re-derivation here once fed raw a into the M = 1 helpers,
+ * which is wrong for any mass except 1 and invisible to unit-mass tests.
  */
-[[nodiscard]] constexpr double kerrIscoPrograde(double m, double a) noexcept {
+[[nodiscard]] inline double kerrIscoPrograde(double m, double a) noexcept {
   assert(m > 0 && "Invalid mass");
   assert(a >= 0 && a < m && "Invalid spin parameter");
-
-  double const z1 = bptZ1(a);
-  double const z2 = bptZ2(a);
-
-  double const discriminant = (3.0 - z1) * (3.0 + z1 + (2.0 * z2));
-  assert(discriminant >= 0 && "Invalid ISCO discriminant");
-
-  return m * (3.0 + z2 - std::sqrt(discriminant));
+  return kerr_isco_prograde(m, a);
 }
 
 /**
- * ISCO radius for retrograde orbits (counter-rotating)
- * Uses same formula but with a -> -a
+ * ISCO radius for retrograde orbits (counter-rotating): the + sign on
+ * the square root selects the retrograde branch (Z1/Z2 are even in a).
  */
-[[nodiscard]] constexpr double kerrIscoRetrograde(double m, double a) noexcept {
+[[nodiscard]] inline double kerrIscoRetrograde(double m, double a) noexcept {
   assert(m > 0 && "Invalid mass");
   assert(a >= 0 && a < m && "Invalid spin parameter");
-
-  // Z1 and Z2 are even in a, so the retrograde branch is selected by the
-  // + sign on the square root, not by negating the spin: r_retro =
-  // M*(3 + Z2 + sqrt((3-Z1)(3+Z1+2Z2))) (BPT 1972). The prograde minus
-  // sign shipped here, silently returning the prograde radius.
-  double const z1 = bptZ1(a);
-  double const z2 = bptZ2(a);
-
-  double const discriminant = (3.0 - z1) * (3.0 + z1 + (2.0 * z2));
-  assert(discriminant >= 0 && "Invalid retrograde ISCO discriminant");
-
-  return m * (3.0 + z2 + std::sqrt(discriminant));
+  return kerr_isco_retrograde(m, a);
 }
 
 /**

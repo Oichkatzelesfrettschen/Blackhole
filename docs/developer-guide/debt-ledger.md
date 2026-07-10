@@ -119,9 +119,13 @@ three docs and disagree.
   from batch.h. verify_headers_compile.cpp is rewritten as a
   compile-and-value gate over all twelve remaining verified headers and
   un-quarantined (target verify_headers_compile, test
-  verified_headers_gate). RESIDUAL: kerr_extended.h re-derives the
-  Sigma/Delta/horizon/BPT formulas that kerr.hpp also carries (constexpr
-  camelCase vs inline snake_case); collapsing that pair is a follow-up.
+  verified_headers_gate). kerr_extended.h's re-derived
+  Sigma/Delta/horizon/BPT formulas now delegate to kerr.hpp (its
+  kerrIscoPrograde had also fed raw a into M=1 helpers -- the same
+  normalization bug class, invisible to unit-mass pins; the gate now
+  checks r_isco(2M, 2a) = 2*r_isco(M, a)), keeping only its
+  range-checked wrappers plus the energy/angular-momentum/four-norm/
+  validity surface kerr.hpp lacks. RESIDUAL:
   gpu_raytracer_kernel_test and gpu_cpu_parity_test stay quarantined on
   the unrelated glbinding/GLFW clash and gpu_raytracer_kernel.hpp dead
   blocks.
