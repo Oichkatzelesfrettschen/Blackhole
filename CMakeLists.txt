@@ -1134,14 +1134,14 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/stb_image_write_impl.cpp"
   "${PROJECT_SOURCE_DIR}/src/input.cpp"
   "${PROJECT_SOURCE_DIR}/src/settings.cpp"
-  "${PROJECT_SOURCE_DIR}/src/GLDebugMessageCallback.cc"
+  "${PROJECT_SOURCE_DIR}/external/gl_debug_callback/GLDebugMessageCallback.cc"
   "${PROJECT_SOURCE_DIR}/src/physics/hawking_renderer.cpp"  # OpenGL-dependent physics renderer
   ${PHYSICS_SRC_FILES}
 )
 
 set(THIRDPARTY_SRC_FILES
-  "${PROJECT_SOURCE_DIR}/src/imgui_impl_glfw.cpp"
-  "${PROJECT_SOURCE_DIR}/src/imgui_impl_opengl3.cpp"
+  "${PROJECT_SOURCE_DIR}/external/imgui_backends/imgui_impl_glfw.cpp"
+  "${PROJECT_SOURCE_DIR}/external/imgui_backends/imgui_impl_opengl3.cpp"
 )
 
 # Collect all header files including physics and render subdirectories
@@ -1252,6 +1252,10 @@ function(add_blackhole_desktop_target target_name)
   target_include_directories(${target_name} PRIVATE
     "${PROJECT_SOURCE_DIR}/src"
     "${PROJECT_SOURCE_DIR}/src/physics"
+  )
+  target_include_directories(${target_name} SYSTEM PRIVATE
+    "${PROJECT_SOURCE_DIR}/external/imgui_backends"
+    "${PROJECT_SOURCE_DIR}/external/gl_debug_callback"
   )
   target_compile_options(${target_name} PRIVATE ${PROJECT_WARNINGS})
 
@@ -3456,9 +3460,9 @@ if(BUILD_TESTING)
   endif()
 
   # Physics library validation tests
-  if(EXISTS "${PROJECT_SOURCE_DIR}/src/physics/physics_test.cpp")
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp")
     add_executable(physics_test
-      "${PROJECT_SOURCE_DIR}/src/physics/physics_test.cpp"
+      "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp"
       ${PHYSICS_SRC_FILES}
     )
     target_include_directories(physics_test PRIVATE
