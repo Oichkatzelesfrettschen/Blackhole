@@ -26,6 +26,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "../../shader/include/synchrotron_lut_domain.h"
+
 // Forward-declare GL types to avoid pulling in the full GL header here.
 // The implementation file (or user code) must include the GL loader.
 // These match the OpenGL spec exactly.
@@ -160,8 +162,13 @@ struct LutDomain {
   }
 };
 
-/** @brief Standard log-spaced domain for the synchrotron G(x) emission LUT. */
-inline constexpr LutDomain SYNCH_G_DOMAIN = {0.001f, 30.0f, 256};
+/** @brief Standard log-spaced domain for the synchrotron G(x) emission LUT.
+ *  Single-sourced with the GLSL and CUDA consumers via
+ *  shader/include/synchrotron_lut_domain.h. */
+inline constexpr LutDomain SYNCH_G_DOMAIN = {
+    static_cast<float>(SYNCH_G_LUT_DOMAIN_X_MIN),
+    static_cast<float>(SYNCH_G_LUT_DOMAIN_X_MAX),
+    SYNCH_G_LUT_DOMAIN_ENTRIES};
 
 } // namespace gpu
 

@@ -27,12 +27,18 @@
 #define D_PHOTON_SPHERE 1.5f                    /**< @brief Photon sphere radius in units of rs (= 3M/2M = 1.5). */
 #define D_ISCO_RATIO    3.0f                    /**< @brief ISCO radius ratio (Schwarzschild: r_ISCO = 3*rs). */
 
-/* Synchrotron G(x) LUT domain -- must match physics::SYNCH_G_LUT_X_MIN/XMAX in synchrotron.h
- * and gpu::SYNCH_G_DOMAIN in lut_texture.h.  Change all three together. */
-#define D_SYNCH_G_X_MIN     0.001f   /**< @brief Minimum x for G(x) LUT (log-space lower bound). */
-#define D_SYNCH_G_X_MAX     30.0f    /**< @brief Maximum x for G(x) LUT (log-space upper bound). */
-/* log(D_SYNCH_G_X_MAX / D_SYNCH_G_X_MIN) = log(30 / 0.001) = log(30000) */
+/* Synchrotron G(x) LUT domain -- single-sourced with the C++ and GLSL
+ * consumers via shader/include/synchrotron_lut_domain.h. */
+#include "../../shader/include/synchrotron_lut_domain.h"
+#define D_SYNCH_G_X_MIN ((float)SYNCH_G_LUT_DOMAIN_X_MIN) /**< @brief Minimum x for G(x) LUT (log-space lower bound). */
+#define D_SYNCH_G_X_MAX ((float)SYNCH_G_LUT_DOMAIN_X_MAX) /**< @brief Maximum x for G(x) LUT (log-space upper bound). */
+/* log(X_MAX / X_MIN) = log(30 / 0.001) = log(30000), precomputed because
+ * logf is not a constant expression; the static check below guards the
+ * literal against a domain change in the shared header. */
 #define D_SYNCH_G_LOG_RATIO 10.30895f /**< @brief log(x_max/x_min) precomputed for LUT address. */
+static_assert(SYNCH_G_LUT_DOMAIN_X_MAX / SYNCH_G_LUT_DOMAIN_X_MIN == 30000.0,
+              "D_SYNCH_G_LOG_RATIO literal is log(30000); recompute it when "
+              "the domain in synchrotron_lut_domain.h changes");
 
 /* ========================================================================
  * Constant memory (filled by host before kernel launch)

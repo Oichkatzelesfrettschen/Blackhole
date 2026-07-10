@@ -4884,19 +4884,11 @@ int main(int argc, char **argv) {
          * which does not support GL_TEXTURE_1D.  The GLSL path samples it
          * via sampler2D with y=0.5; the CUDA path uses tex2D at v=0.5. */
         if (!synchGLutCreated) {
-          // P2: Compile-time guard -- the CUDA device sampler in device_physics.cuh
-          // encodes D_SYNCH_G_X_MIN and D_SYNCH_G_LOG_RATIO as plain macros (CUDA
-          // device code cannot include synchrotron.h).  If these physics:: constants
-          // change, update D_SYNCH_G_X_MIN, D_SYNCH_G_X_MAX, and D_SYNCH_G_LOG_RATIO
-          // in device_physics.cuh, and x_min/x_max in gpu::SYNCH_G_DOMAIN (lut_texture.h).
-          static_assert(physics::SYNCH_G_LUT_X_MIN == 0.001f,
-              "SYNCH_G LUT x_min changed: update D_SYNCH_G_X_MIN and D_SYNCH_G_LOG_RATIO "
-              "in device_physics.cuh and gpu::SYNCH_G_DOMAIN in lut_texture.h");
-          static_assert(physics::SYNCH_G_LUT_X_MAX == 30.0f,
-              "SYNCH_G LUT x_max changed: update D_SYNCH_G_X_MAX and D_SYNCH_G_LOG_RATIO "
-              "in device_physics.cuh and gpu::SYNCH_G_DOMAIN in lut_texture.h");
+          // The G(x) domain is single-sourced across C++, CUDA, and GLSL via
+          // shader/include/synchrotron_lut_domain.h; every consumer reads the
+          // same macros, so no cross-file pinning asserts are needed here.
           synchGLutCreated = true;
-          constexpr int kSynchGLutSize = 256;
+          constexpr int kSynchGLutSize = SYNCH_G_LUT_DOMAIN_ENTRIES;
           std::vector<float> synchGData(static_cast<std::size_t>(kSynchGLutSize));
           physics::synchrotronGGenerateLut(synchGData.data(), kSynchGLutSize,
                                            static_cast<double>(physics::SYNCH_G_LUT_X_MIN),
