@@ -82,7 +82,8 @@ three docs and disagree.
 - STRUCT-5 (MED) Duplicate module: src/grmhd/grmhd_streaming.{cpp,h} is a
   stale skeleton; CMake builds only src/grmhd_streaming.cpp
   (CMakeLists.txt:1130). src/gpu reaches upward via `../grmhd_streaming.h`
-  includes.
+  includes. DONE 2026-07-09: src/grmhd/ no longer exists in the tree;
+  src/grmhd_streaming.{cpp,h} is the single module.
 - STRUCT-6 (MED) Vendored code inside src/: imgui_impl_glfw.cpp,
   imgui_impl_opengl3.cpp carry all 13 FIXME and all 14 XXX markers in the
   repo and pollute first-party complexity metrics (CCN-120 function).
