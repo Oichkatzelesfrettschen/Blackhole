@@ -3845,6 +3845,34 @@ if(BUILD_TESTING)
     )
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gpu_cpu_parity_test.cpp")
+    # CPU (verified/*.hpp) vs GPU (shader/include/verified/*.glsl) parity
+    # in a compute dispatch. Skips when no GL 4.6 context is available;
+    # fails on shader compile errors once a context exists.
+    add_executable(gpu_cpu_parity_test
+      "${PROJECT_SOURCE_DIR}/tests/gpu_cpu_parity_test.cpp"
+    )
+    target_include_directories(gpu_cpu_parity_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_definitions(gpu_cpu_parity_test PRIVATE
+      GLFW_INCLUDE_NONE
+      BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+    )
+    target_compile_options(gpu_cpu_parity_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(gpu_cpu_parity_test PRIVATE
+      glfw
+      glbinding::glbinding
+      GTest::gtest
+      GTest::gtest_main
+    )
+    add_test(NAME gpu_cpu_parity COMMAND gpu_cpu_parity_test)
+    set_tests_properties(gpu_cpu_parity PROPERTIES
+      LABELS "physics;gpu;parity"
+      TIMEOUT 60
+    )
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp")
     add_executable(verified_physics_test
       "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp"
@@ -5726,13 +5754,6 @@ if(BUILD_TESTING)
     # Registered only under -DENABLE_PRECISION_TESTS=ON (long-running).
     list(APPEND _bh_test_sources_quarantined "tests/precision_regression_test.cpp")
   endif()
-  # Blocked on gpu_raytracer_kernel.hpp dead blocks and the
-  # glbinding-vs-system-GL/GLFW hint-type clash (debt-ledger.md STRUCT-9
-  # residual). Do not add new entries without a ledger finding.
-  list(APPEND _bh_test_sources_quarantined
-    "tests/gpu_raytracer_kernel_test.cpp"
-    "tests/gpu_cpu_parity_test.cpp"
-  )
   if(NOT ENABLE_CUDA)
     # CUDA test sources compile only with -DENABLE_CUDA=ON; without it they
     # are intentionally absent from the build, not orphaned.

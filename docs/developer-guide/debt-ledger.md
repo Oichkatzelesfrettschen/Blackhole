@@ -125,10 +125,24 @@ three docs and disagree.
   normalization bug class, invisible to unit-mass pins; the gate now
   checks r_isco(2M, 2a) = 2*r_isco(M, a)), keeping only its
   range-checked wrappers plus the energy/angular-momentum/four-norm/
-  validity surface kerr.hpp lacks. RESIDUAL:
-  gpu_raytracer_kernel_test and gpu_cpu_parity_test stay quarantined on
-  the unrelated glbinding/GLFW clash and gpu_raytracer_kernel.hpp dead
-  blocks.
+  validity surface kerr.hpp lacks. RESIDUAL CLOSED 2026-07-09:
+  src/physics/gpu_raytracer_kernel.hpp and gpu_raytracer_wrapper.h were
+  a CPU prototype of a GPU kernel with zero production consumers,
+  superseded by src/cuda/; their geodesic RHS computed accelerations
+  and returned the input state unchanged (a no-op integrator), so the
+  pair and their test are deleted rather than resurrected.
+  gpu_cpu_parity_test is rewritten and registered (target
+  gpu_cpu_parity_test, test gpu_cpu_parity): it inlines the
+  shader/include/verified GLSL modules via an include expander, skips
+  without a GL 4.6 context, and fails on shader compile errors. Its
+  first run caught real transpiler bit-rot in the auto-generated GLSL:
+  eos.glsl and cosmology.glsl declared uniform-block instances where
+  struct types were needed, carried `double`, bare prose lines inside
+  struct bodies, static_cast/std::size_t/std::log10/std::numbers leaks,
+  C++ brace-init, and a call to a nonexistent E_z(FlatLCDM) overload --
+  all fixed and validated by glslangValidator plus 6/6 parity passes on
+  live GL. The quarantine list now holds only the conditional entries
+  (precision tests, CUDA-off).
 
 ### 2.2 Test and verification debt
 

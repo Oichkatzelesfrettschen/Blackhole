@@ -90,13 +90,12 @@ const float sound_horizon_Planck18 = 147.09;
 // Derived from Rocq: Record FlatLCDM := mkFlatLCDM {
 // H0 : R; Omega_m : R; Omega_b : R; T_CMB : R
 // }.
-layout(std140) uniform struct_FlatLCDM {
-    float H0;
-    Mpc double Omega_m;
-    float Omega_b;
-    Baryon density parameter
-    double T_CMB;
-} FlatLCDM;
+struct FlatLCDM {
+    float H0;      // Hubble constant [km/s/Mpc]
+    float Omega_m; // matter density parameter
+    float Omega_b; // baryon density parameter
+    float T_CMB;   // CMB temperature [K]
+};
 
 // @brief Planck 2018 cosmology instance
 // Derived from Rocq: Definition Planck18 : FlatLCDM :=
@@ -279,7 +278,7 @@ layout(std140) uniform struct_FlatLCDM {
 // @param D_L_Mpc Luminosity distance in Mpc
 // @return Distance modulus in magnitudes
 // [[nodiscard]] inline double distance_modulus(double D_L_Mpc) noexcept {
-// return 5.0 * std::log10(D_L_Mpc) + 25.0;
+// return 5.0 * (log(D_L_Mpc) / log(10.0)) + 25.0;
 // }
 // @brief Comoving volume: V_C(z) = (4*pi/3) * D_C(z)^3
 // Derived from Rocq: Definition comoving_volume (cosmo : FlatLCDM) (z : R) : R :=
@@ -292,7 +291,7 @@ layout(std140) uniform struct_FlatLCDM {
 // const FlatLCDM& cosmo, double z, std::size_t n = 1000) noexcept
 // {
 // const double D_C = comoving_distance(cosmo, z, n);
-// return (4.0 * std::numbers::pi / 3.0) * D_C * D_C * D_C;
+// return (4.0 * 3.14159265358979 / 3.0) * D_C * D_C * D_C;
 // }
 // // ============================================================================
 // // Axiodilaton Extension (from Rocq: 2025 Research Integration)
@@ -305,13 +304,11 @@ layout(std140) uniform struct_FlatLCDM {
 // - Raises H0 to ~69.2 km/s/Mpc
 // - Reduces Hubble tension to < 3 sigma
 // - Requires coupling |g| ~ 10^-2 to 10^-1
-layout(std140) uniform struct_AxiodilatonParams {
-    float Omega_m;
-    Matter density parameter
-    double Omega_ad;
-    Axiodilaton contribution
-    double coupling;
-} AxiodilatonParams;
+struct AxiodilatonParams {
+    float Omega_m;  // matter density parameter
+    float Omega_ad; // axiodilaton contribution
+    float coupling; // scalar field coupling strength
+};
 
 // Function definitions (verified from Rocq proofs)
 
@@ -412,14 +409,14 @@ float comoving_distance_linear(float H0, float z) {
 float comoving_distance(FlatLCDM cosmo, float z, uint n) {
     if (z <= 0.0) return 0.0;
     float D_H = hubble_length(cosmo.H0);
-    float dz = z / static_cast<float>(n);
+    float dz = z / float(n);
     // Trapezoidal rule: sum of 1/E(z') from z'=0 to z'=z
-    float sum = 0.5 / E_z(cosmo, 0.0);  // First endpoint
-    for (std::size_t i = 1; i < n; ++i) {
-    float z_i = static_cast<float>(i) * dz;
-    sum += 1.0 / E_z(cosmo, z_i);
+    float sum = 0.5 / E_z(cosmo.Omega_m, 0.0);  // First endpoint
+    for (uint i = 1u; i < n; ++i) {
+        float z_i = float(i) * dz;
+        sum += 1.0 / E_z(cosmo.Omega_m, z_i);
     }
-    sum += 0.5 / E_z(cosmo, z);  // Last endpoint
+    sum += 0.5 / E_z(cosmo.Omega_m, z);  // Last endpoint
     return D_H * sum * dz;
 }
 
@@ -463,7 +460,7 @@ bool verify_distance_duality(float D_L, float D_A, float z, float tol) {
  * Rocq Derivation: Derived from Rocq:Definition distance_modulus (D_L_Mpc : R) : R :=...
  */
 float distance_modulus(float D_L_Mpc) {
-    return 5.0 * std::log10(D_L_Mpc) + 25.0;
+    return 5.0 * (log(D_L_Mpc) / log(10.0)) + 25.0;
 }
 
 /**
@@ -475,7 +472,7 @@ float distance_modulus(float D_L_Mpc) {
  */
 float comoving_volume(FlatLCDM cosmo, float z, uint n) {
     float D_C = comoving_distance(cosmo, z, n);
-    return (4.0 * std::numbers::pi / 3.0) * D_C * D_C * D_C;
+    return (4.0 * 3.14159265358979 / 3.0) * D_C * D_C * D_C;
 }
 
 /**
@@ -556,7 +553,7 @@ float compute_Omega_Lambda(float Omega_m) {
  * Depends on: luminosity_distance
  */
 float compute_luminosity_distance(float H0, float Omega_m, float z, uint n) {
-    FlatLCDM cosmo{H0, Omega_m, 0.0, 0.0};
+    FlatLCDM cosmo = FlatLCDM(H0, Omega_m, 0.0, 0.0);
     return luminosity_distance(cosmo, z, n);
 }
 
@@ -566,7 +563,7 @@ float compute_luminosity_distance(float H0, float Omega_m, float z, uint n) {
  * Depends on: angular_diameter_distance
  */
 float compute_angular_diameter_distance(float H0, float Omega_m, float z, uint n) {
-    FlatLCDM cosmo{H0, Omega_m, 0.0, 0.0};
+    FlatLCDM cosmo = FlatLCDM(H0, Omega_m, 0.0, 0.0);
     return angular_diameter_distance(cosmo, z, n);
 }
 
@@ -585,7 +582,7 @@ float compute_distance_modulus(float D_L_Mpc) {
  * Depends on: comoving_volume
  */
 float compute_comoving_volume(float H0, float Omega_m, float z, uint n) {
-    FlatLCDM cosmo{H0, Omega_m, 0.0, 0.0};
+    FlatLCDM cosmo = FlatLCDM(H0, Omega_m, 0.0, 0.0);
     return comoving_volume(cosmo, z, n);
 }
 
