@@ -3826,6 +3826,25 @@ if(BUILD_TESTING)
     )
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/verify_headers_compile.cpp")
+    # Compile-and-value gate over every src/physics/verified/ header: a
+    # header that stops compiling fails the build, a formula regression
+    # fails the run (ledger STRUCT-9 fork-merge deliverable).
+    add_executable(verify_headers_compile
+      "${PROJECT_SOURCE_DIR}/tests/verify_headers_compile.cpp"
+    )
+    target_include_directories(verify_headers_compile PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(verify_headers_compile PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME verified_headers_gate COMMAND verify_headers_compile)
+    set_tests_properties(verified_headers_gate PROPERTIES
+      LABELS "physics;verified"
+      TIMEOUT 30
+    )
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp")
     add_executable(verified_physics_test
       "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp"
@@ -5707,14 +5726,11 @@ if(BUILD_TESTING)
     # Registered only under -DENABLE_PRECISION_TESTS=ON (long-running).
     list(APPEND _bh_test_sources_quarantined "tests/precision_regression_test.cpp")
   endif()
-  # Blocked on the verified/ .h-vs-.hpp header fork (debt-ledger.md
-  # STRUCT-9): these three depend on fork headers that do not compile
-  # (schwarzschild.h/geodesic.h rot, gpu_raytracer_kernel.hpp dead
-  # blocks, glbinding/GLFW hint-type clash). Un-quarantine them as part
-  # of the fork merge; do not add new entries without a ledger finding.
+  # Blocked on gpu_raytracer_kernel.hpp dead blocks and the
+  # glbinding-vs-system-GL/GLFW hint-type clash (debt-ledger.md STRUCT-9
+  # residual). Do not add new entries without a ledger finding.
   list(APPEND _bh_test_sources_quarantined
     "tests/gpu_raytracer_kernel_test.cpp"
-    "tests/verify_headers_compile.cpp"
     "tests/gpu_cpu_parity_test.cpp"
   )
   if(NOT ENABLE_CUDA)

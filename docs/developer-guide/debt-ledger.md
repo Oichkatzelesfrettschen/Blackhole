@@ -103,10 +103,28 @@ three docs and disagree.
   bptZ2 radicand (6.87M ISCO) and a retrograde ISCO returning the
   prograde radius (Z1/Z2 are even in a, so its -a trick selected
   nothing). All fixed 2026-07-09 and pinned by kerr_geodesic_test and
-  verify_headers_compile value checks. OPEN: merge the forks into one
-  header set; until then kerr.h also leans on kerr.hpp's kerr_Sigma/
-  kerr_A by undocumented include-order coupling and calls three names
-  (surface_gravity, bpt_Z1, bpt_Z2) no header declares.
+  verify_headers_compile value checks. MERGED 2026-07-09: the .h fork
+  (kerr.h, schwarzschild.h, rk4.h, geodesic.h) is deleted; the snake_case
+  .hpp Rocq-extraction set plus kerr_extended.h and axiodilaton.h are the
+  canonical surface. A full diff before deletion found four more .h-fork
+  defects that never reached a build: radialAcceleration used +Gamma^r_tt
+  where the geodesic equation needs -Gamma^r_tt, geodesic.h energy()
+  shadowed its own parameter `a` in a self-referential initializer,
+  iscoRadiusPrograde(m, a) skipped the a/M normalization (wrong for any
+  m != 1), and seven functions called snake_case names defined nowhere
+  (rk4Step, integrate, carterConstant, the compute* wrappers). CLAIM
+  CORRECTED: the batch.h *Verified wrappers over the buggy ISCO had zero
+  callers, so the 3.48M ISCO was latent in shipped headers, not live in
+  rendered output; the wrappers and both verified/ includes are removed
+  from batch.h. verify_headers_compile.cpp is rewritten as a
+  compile-and-value gate over all twelve remaining verified headers and
+  un-quarantined (target verify_headers_compile, test
+  verified_headers_gate). RESIDUAL: kerr_extended.h re-derives the
+  Sigma/Delta/horizon/BPT formulas that kerr.hpp also carries (constexpr
+  camelCase vs inline snake_case); collapsing that pair is a follow-up.
+  gpu_raytracer_kernel_test and gpu_cpu_parity_test stay quarantined on
+  the unrelated glbinding/GLFW clash and gpu_raytracer_kernel.hpp dead
+  blocks.
 
 ### 2.2 Test and verification debt
 

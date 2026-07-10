@@ -22,42 +22,13 @@
 #include <numbers>
 #include <string>
 
-// Include verified Kerr physics headers.
-// kerr_extended.h does not compile (kerrGRr asserts on undeclared Delta;
-// its g_phi_phi component redeclares parameter a).  The current compilable
-// Kerr API is the templated kerr.h layered over the snake_case kerr.hpp
-// and geodesic.hpp.
-//
-// kerr.h resolves kerr_Sigma and kerr_A by ordinary lookup at its template
-// definition point, so kerr.hpp must be included first.  Three names kerr.h
-// calls have no declaration in any header (surface_gravity, bpt_Z1, bpt_Z2);
-// declare forwarding shims before including kerr.h so the templates bind to
-// them, and define the shims afterwards in terms of the kerr.h functions
-// surfaceGravity, bptZ1, and bptZ2.
-#include <concepts>
-#include "../src/physics/verified/kerr.hpp"     // NOLINT(misc-include-cleaner)
-#include "../src/physics/verified/geodesic.hpp" // NOLINT(misc-include-cleaner)
-
-namespace verified {
-// NOLINTBEGIN(readability-identifier-naming,misc-use-internal-linkage)
-template <std::floating_point Real> Real surface_gravity(Real m, Real a) noexcept;
-template <std::floating_point Real> Real bpt_Z1(Real a) noexcept;
-template <std::floating_point Real> Real bpt_Z2(Real a) noexcept;
-// NOLINTEND(readability-identifier-naming,misc-use-internal-linkage)
-} // namespace verified
-
-#include "../src/physics/verified/kerr.h"
+// Verified Kerr physics: kerr.hpp carries the snake_case Rocq-extraction
+// surface (kerr_isco_prograde/retrograde and metric helpers);
+// kerr_extended.h carries the constexpr camelCase extended surface
+// (horizons, ergosphere, surface gravity, four-norm predicates).
+#include "../src/physics/verified/geodesic.hpp"
+#include "../src/physics/verified/kerr.hpp"
 #include "../src/physics/verified/kerr_extended.h"
-
-namespace verified {
-// NOLINTBEGIN(readability-identifier-naming,misc-use-internal-linkage)
-template <std::floating_point Real> Real surface_gravity(Real m, Real a) noexcept {
-  return surfaceGravity(m, a);
-}
-template <std::floating_point Real> Real bpt_Z1(Real a) noexcept { return bptZ1(a); }
-template <std::floating_point Real> Real bpt_Z2(Real a) noexcept { return bptZ2(a); }
-// NOLINTEND(readability-identifier-naming,misc-use-internal-linkage)
-} // namespace verified
 
 using namespace verified;
 
@@ -103,12 +74,13 @@ void expectTrue(bool condition, const std::string& what) { report(condition, wha
 void expectFalse(bool condition, const std::string& what) { report(!condition, what); }
 
 // Four-norm g_ab v^a v^b in Boyer-Lindquist coordinates, assembled from the
-// kerr.h metric components through the geodesic.hpp four_norm evaluator.
+// kerr_extended.h metric components through the geodesic.hpp four_norm
+// evaluator.
 [[nodiscard]] double kerrFourNorm(double r, double theta, double m, double a, double vT, double vR,
                                   double vTheta, double vPhi) noexcept {
   MetricComponents const g{kerrGTt(r, theta, m, a), kerrGRr(r, theta, m, a),
-                           kerrGThth(r, theta, a), kerrGPhph(r, theta, m, a),
-                           kerrGTph(r, theta, m, a)};
+                           kerrGThetaTheta(r, theta, a), kerrGPhiPhi(r, theta, m, a),
+                           kerrGTPhi(r, theta, m, a)};
   StateVector const s{0.0, r, theta, 0.0, vT, vR, vTheta, vPhi};
   return four_norm(g, s);
 }
@@ -133,7 +105,7 @@ void testSchwarzschildLimit() {
  * For M = 1, a = 0.5: r_+ = 1 + sqrt(1 - 0.25) = 1 + sqrt(0.75) ~= 1.866
  */
 void testOuterHorizonComputation() {
-  double const rPlus = outerHorizon(kMass, kASlow);
+  double const rPlus = kerrOuterHorizon(kMass, kASlow);
 
   // Expected: M + sqrt(M^2 - a^2) = 1 + sqrt(0.75)
   double const expected = 1.0 + std::sqrt(0.75);
@@ -146,7 +118,7 @@ void testOuterHorizonComputation() {
  * For M = 1, a = 0.5: r_- = 1 - sqrt(0.75) ~= 0.134
  */
 void testInnerHorizonComputation() {
-  double const rMinus = innerHorizon(kMass, kASlow);
+  double const rMinus = kerrInnerHorizon(kMass, kASlow);
 
   // Expected: M - sqrt(M^2 - a^2) = 1 - sqrt(0.75)
   double const expected = 1.0 - std::sqrt(0.75);
@@ -159,8 +131,8 @@ void testInnerHorizonComputation() {
  * Physical requirement: r_+ > r_- > 0
  */
 void testHorizonOrdering() {
-  double const rPlus = outerHorizon(kMass, kAFast);
-  double const rMinus = innerHorizon(kMass, kAFast);
+  double const rPlus = kerrOuterHorizon(kMass, kAFast);
+  double const rMinus = kerrInnerHorizon(kMass, kAFast);
 
   expectGt(rPlus, rMinus, "Event horizon should be outside Cauchy horizon");
   expectGt(rMinus, 0.0, "Cauchy horizon should be positive");
@@ -204,7 +176,7 @@ void testIscoMonotonic() {
  */
 void testIscoOutsideHorizon() {
   double const rIsco = kerr_isco_prograde(kMass, kAFast);
-  double const rPlus = outerHorizon(kMass, kAFast);
+  double const rPlus = kerrOuterHorizon(kMass, kAFast);
 
   expectGt(rIsco, rPlus, "ISCO must be outside event horizon");
 }
@@ -226,9 +198,9 @@ void testRetrogradeIscoFarther() {
  * At equator (theta = pi/2): r_ergo > r_+ (maximum)
  */
 void testErgosphereLatitudeVariation() {
-  double const rPlus = outerHorizon(kMass, kAFast);
-  double const rErgoPole = ergosphereOuterRadius(0.0, kMass, kAFast);
-  double const rErgoEquator = ergosphereOuterRadius(std::numbers::pi / 2.0, kMass, kAFast);
+  double const rPlus = kerrOuterHorizon(kMass, kAFast);
+  double const rErgoPole = kerrErgosphereRadius(0.0, kMass, kAFast);
+  double const rErgoEquator = kerrErgosphereRadius(std::numbers::pi / 2.0, kMass, kAFast);
 
   // At poles, ergosphere coincides with horizon
   expectNear(rErgoPole, rPlus, kTolerance, "Ergosphere at pole should equal horizon");
@@ -243,12 +215,12 @@ void testErgosphereLatitudeVariation() {
  * Positive for sub-extremal
  */
 void testSurfaceGravity() {
-  double const kappa = surfaceGravity(kMass, kASlow);
+  double const kappa = kerrSurfaceGravity(kMass, kASlow);
 
   expectGt(kappa, 0.0, "Surface gravity should be positive for sub-extremal BH");
 
   // For slower rotation, surface gravity should be larger
-  double const kappaSlower = surfaceGravity(kMass, 0.1);
+  double const kappaSlower = kerrSurfaceGravity(kMass, 0.1);
   expectGt(kappaSlower, kappa, "Surface gravity decreases with increasing spin");
 }
 
@@ -258,11 +230,11 @@ void testSurfaceGravity() {
  * Zero for extremal black holes
  */
 void testHawkingTemperature() {
-  double const tH = hawkingTemperature(kMass, kASlow);
+  double const tH = kerrHawkingTemperature(kMass, kASlow);
 
   expectGt(tH, 0.0, "Hawking temperature should be positive");
 
-  double const kappa = surfaceGravity(kMass, kASlow);
+  double const kappa = kerrSurfaceGravity(kMass, kASlow);
   double const expectedT = kappa / (2.0 * std::numbers::pi);
 
   expectNear(tH, expectedT, kTolerance, "Hawking temperature = kappa / (2 pi)");
@@ -278,8 +250,8 @@ void testExteriorMetricSignature() {
 
   double const gTt = kerrGTt(r, theta, kMass, kASlow);
   double const gRr = kerrGRr(r, theta, kMass, kASlow);
-  double const gThetaTheta = kerrGThth(r, theta, kASlow);
-  double const gPhiPhi = kerrGPhph(r, theta, kMass, kASlow);
+  double const gThetaTheta = kerrGThetaTheta(r, theta, kASlow);
+  double const gPhiPhi = kerrGPhiPhi(r, theta, kMass, kASlow);
 
   expectLt(gTt, 0.0, "g_tt negative in exterior");
   expectGt(gRr, 0.0, "g_rr positive in exterior");
@@ -296,7 +268,7 @@ void testNoFrameDraggingSchwarzschildLimit() {
   double const r = 10.0 * kMass;
   double const theta = std::numbers::pi / 4;
 
-  double const gTPhi = kerrGTph(r, theta, kMass, a);
+  double const gTPhi = kerrGTPhi(r, theta, kMass, a);
 
   expectNear(gTPhi, 0.0, kTolerance, "Frame-dragging vanishes when a = 0");
 }
@@ -309,8 +281,8 @@ void testFrameDraggingIncreases() {
   double const r = 10.0 * kMass;
   double const theta = std::numbers::pi / 2; // Equator (maximum frame-dragging)
 
-  double const gTPhiSlow = std::abs(kerrGTph(r, theta, kMass, 0.1));
-  double const gTPhiFast = std::abs(kerrGTph(r, theta, kMass, 0.9));
+  double const gTPhiSlow = std::abs(kerrGTPhi(r, theta, kMass, 0.1));
+  double const gTPhiFast = std::abs(kerrGTPhi(r, theta, kMass, 0.9));
 
   expectGt(gTPhiFast, gTPhiSlow, "Frame-dragging increases with spin");
 }
@@ -354,19 +326,21 @@ void testSubextremalValidation() {
  * This ensures verified functions maintain efficiency
  */
 /**
- * Test: the kerr.h ISCO templates consumed by src/physics/batch.h.
- * Pins two fixed bugs: bptZ1 carried a spurious /2 inside its cube root
- * (prograde ISCO 3.48M instead of 6M at a=0, live in the batch tracer),
- * and iscoRadiusRetrograde used the prograde minus sign (Z1/Z2 are even
- * in a, so negating the spin selected nothing).
+ * Test: the Bardeen-Press-Teukolsky ISCO in both verified surfaces.
+ * kerr.hpp normalizes the spin as a/M inside kerr_Z1/kerr_Z2 (BPT 1972
+ * eq. 2.21), so the formula holds for any mass, not only M=1. Pins two
+ * bugs fixed in the retired .h fork: a spurious /2 inside the Z1 cube
+ * root (prograde ISCO 3.48M instead of 6M at a=0) and a retrograde
+ * branch that reused the prograde minus sign (Z1/Z2 are even in a, so
+ * negating the spin selected nothing).
  */
-void testIscoBatchConsumedTemplates() {
-  expectNear(verified::iscoRadiusPrograde(kMass, 0.0), 6.0 * kMass, kTolerance,
+void testIscoBptBothSurfaces() {
+  expectNear(verified::kerr_isco_prograde(kMass, 0.0), 6.0 * kMass, kTolerance,
              "batch-path prograde ISCO must be 6M at a=0 (BPT 1972)");
-  expectNear(verified::iscoRadiusRetrograde(kMass, 0.0), 6.0 * kMass, kTolerance,
+  expectNear(verified::kerr_isco_retrograde(kMass, 0.0), 6.0 * kMass, kTolerance,
              "batch-path retrograde ISCO must be 6M at a=0");
-  double const pro = verified::iscoRadiusPrograde(kMass, 0.5);
-  double const retro = verified::iscoRadiusRetrograde(kMass, 0.5);
+  double const pro = verified::kerr_isco_prograde(kMass, 0.5);
+  double const retro = verified::kerr_isco_retrograde(kMass, 0.5);
   expectGt(6.0 * kMass, pro, "prograde ISCO moves inward with spin");
   expectGt(retro, 6.0 * kMass, "retrograde ISCO moves outward with spin");
 
@@ -418,7 +392,7 @@ int main() {
   testInnerHorizonComputation();
   testHorizonOrdering();
   testIscoSchwarzschildLimit();
-  testIscoBatchConsumedTemplates();
+  testIscoBptBothSurfaces();
   testIscoMonotonic();
   testIscoOutsideHorizon();
   testRetrogradeIscoFarther();

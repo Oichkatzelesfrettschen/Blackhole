@@ -2,19 +2,13 @@
  * @file batch.h
  * @brief Batch ray state and SIMD-accelerated geodesic integration utilities.
  *
- * Provides Structure-of-Arrays ray batches for vectorized geodesic tracing,
- * wrappers around Rocq-extracted verified physics kernels, and xsimd/SLEEF
- * Christoffel acceleration kernels for the render hot-path.
+ * Provides Structure-of-Arrays ray batches for vectorized geodesic tracing
+ * and xsimd/SLEEF Christoffel acceleration kernels for the render hot-path.
  */
 
 #ifndef PHYSICS_BATCH_H
 #define PHYSICS_BATCH_H
 
-// Verified physics kernels (Phase 6 - extracted from Rocq proofs)
-#include "verified/kerr.h"
-#include "verified/schwarzschild.h"
-
-// Legacy headers (kept for compatibility)
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -94,62 +88,6 @@ struct BatchTraceResult {
   std::vector<BatchRayStatus> status;
   std::vector<int> stepsTaken;
 };
-
-// ============================================================================
-// Verified Physics Kernel Wrappers (Phase 6 - from Rocq extraction)
-// ============================================================================
-
-/**
- * @brief Wrapper for verified Schwarzschild Christoffel symbols
- *
- * Uses verified:: namespace functions that are extracted from Rocq proofs.
- * These provide mathematical guarantees about correctness.
- */
-inline double christoffelTTrVerified(double r, double m) noexcept {
-  return verified::christoffelTTr(r, m);
-}
-
-inline double christoffelRTtVerified(double r, double m) noexcept {
-  return verified::christoffelRTt(r, m);
-}
-
-inline double christoffelRRrVerified(double r, double m) noexcept {
-  return verified::christoffelRRr(r, m);
-}
-
-inline double christoffelRThthVerified(double r, double m) noexcept {
-  return verified::christoffelRThth(r, m);
-}
-
-inline double christoffelRPhphVerified(double r, double m, double theta) noexcept {
-  return verified::christoffelRPhph(r, m, theta);
-}
-
-/**
- * @brief Wrapper for verified Kerr metric computations
- */
-inline double kerrGTtVerified(double r, double theta, double m, double a) noexcept {
-  return verified::kerrGTt(r, theta, m, a);
-}
-
-inline double kerrGRrVerified(double r, double theta, double m, double a) noexcept {
-  return verified::kerrGRr(r, theta, m, a);
-}
-
-inline double kerrIscoProgradeVerified(double m, double a) noexcept {
-  return verified::iscoRadiusPrograde(m, a);
-}
-
-/**
- * @brief Verified radial acceleration computation
- *
- * Computes d²r/dλ² using verified Christoffel symbols from Rocq proofs.
- * This is the core computation for geodesic integration.
- */
-inline double radialAccelerationVerified(double r, double m, double theta, double drDlambda,
-                                         double dthetaDlambda, double dphiDlambda) noexcept {
-  return verified::radialAcceleration(r, m, theta, drDlambda, dthetaDlambda, dphiDlambda);
-}
 
 // ============================================================================
 // SIMD Christoffel Acceleration (xsimd vectorized)
