@@ -1133,6 +1133,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/render/gpu_timing.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/post_process.cpp"
   "${PROJECT_SOURCE_DIR}/src/tools/compare_harness.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
