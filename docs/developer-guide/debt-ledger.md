@@ -381,23 +381,23 @@ brackets.
 
 ### Tranche silent-absence-hardening  (kills generator silent-absence)
 
-- ABSENCE-1 Replace ~55 if(EXISTS) test guards with an explicit manifest
+- ABSENCE-1 DONE 2026-07-09 (as a configure-time completeness gate rather than a manifest rewrite: every tests/*.cpp|.cu must be a source of some target or carry a quarantine entry with a reason; fired correctly on first run). Original task: Replace ~55 if(EXISTS) test guards with an explicit manifest
   list + a configure-time assertion that every listed file exists and every
   tests/*.cpp is either listed or explicitly excluded. [renaming a test
   breaks configure]
-- ABSENCE-2 Register the orphaned tests: kerr_geodesic_test,
+- ABSENCE-2 DONE 2026-07-09 for five of eight (kerr_geodesic, verified_physics, metric_parity, glsl_parity, plus safe_limits new); three quarantined against the STRUCT-9 fork merge (gpu_raytracer_kernel, verify_headers_compile, gpu_cpu_parity). Resurrection exposed the STRUCT-9 physics bugs. Original task: Register the orphaned tests: kerr_geodesic_test,
   metric_parity_test, verify_headers_compile, verified_physics_test
   (unconditional); gpu_cpu_parity_test, glsl_parity_test,
   gpu_raytracer_kernel_test (GL-gated but present in the manifest with a
   REQUIRES_GL label). Delete the vestigial tests/CMakeLists.txt standalone
   project. [ctest -N lists them]
-- ABSENCE-3 Convert find_program silent-disables into tri-state: ON
+- ABSENCE-3 DONE 2026-07-09 (bh_tool_gate: AUTO warns, ON hard-requires, OFF silent; glslang/gcovr/Doxygen/Z3; both branches script-verified). Original task: Convert find_program silent-disables into tri-state: ON
   requires the tool, AUTO warns loudly, OFF is explicit -- for gcovr,
   glslangValidator, Z3, Doxygen. [CI configure log shows an explicit
   decision per tool]
-- ABSENCE-4 Commit conan.lock; add a CI step that fails when the lockfile
+- ABSENCE-4 DONE 2026-07-09 (conan.lock, 38 pinned revisions; lockfile-aware install script; CI drift gate). Original task: Commit conan.lock; add a CI step that fails when the lockfile
   drifts from conanfile.py. [two clean-room installs resolve identically]
-- ABSENCE-5 Make conanfile.validate() enforce cppstd>=23 unconditionally.
+- ABSENCE-5 DONE 2026-07-09. Original task: Make conanfile.validate() enforce cppstd>=23 unconditionally.
   [configure fails without cppstd]
 - ABSENCE-6 DONE 2026-07-09 (pinned to commit d65a2bef + sha256 log; FetchContent SHA pins remain open). Original task: Pin fetch_implot.sh to a release tag + sha256; pin FetchContent
   tags to commit SHAs. [re-fetch is byte-stable]
@@ -449,7 +449,7 @@ brackets.
   checked table (static assert on field counts) before full codegen.
   [adding a uniform = one table row + shader usage; typo fails at compile
   time]
-- FACTS-2 Physics-constants table: single source for r_s/M conventions and
+- FACTS-2 DONE 2026-07-09 for the LUT domain (six literal sites, not four, now read shader/include/synchrotron_lut_domain.h across C++/CUDA/GLSL); the r_s/M convention table remains open with FACTS-3. Original task: Physics-constants table: single source for r_s/M conventions and
   the synchrotron LUT domain, emitted to C++ header, GLSL include, and
   CUDA header (build step). Kill the 4-site X_MIN/X_MAX literals. [one
   edit site; parity test asserts equality across the three emitted forms]
@@ -491,11 +491,11 @@ brackets.
   committed goldens with stated tolerance; wire
   scripts/compare_raw_texblackhole.py or replace it. [render regression
   fails CI]
-- VERIFY-4 Add safe_limits_test covering the infinity()/fast-math
+- VERIFY-4 DONE 2026-07-09 (test runs deliberately WITH fast-math; drove the PHYS-0 classifier rewrite). Original task: Add safe_limits_test covering the infinity()/fast-math
   boundary; add a CMake comment at the -fno-fast-math list tying
   membership to the _FORTIFY_SOURCE=3 + -ffinite-math-only root cause.
   [test exists; list self-documents]
-- VERIFY-5 Invert fast-math polarity: ENABLE_FAST_MATH=OFF default, opt IN
+- VERIFY-5 DONE 2026-07-09 (IEEE default; measured: Schwarzschild 571->737ms, SIMD batch within noise, and the fast-math Kerr number was fiction -- 2000x faster by computing nothing; per-target override list kept to protect explicit opt-in). Original task: Invert fast-math polarity: ENABLE_FAST_MATH=OFF default, opt IN
   the measured-hot targets, delete the 20-target override list. Benchmark
   before/after with physics_bench to keep the perf claim honest.
   [IEEE-by-default; recorded perf delta]
