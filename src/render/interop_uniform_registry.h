@@ -24,9 +24,6 @@
  *   - The CUDA BH_LaunchParams fill: it applies semantic transforms
  *     (thresholds, bool packing), not mechanical copies, and its ABI is
  *     guarded separately by bh_device_launch_params_abi().
- *
- * Copyright (c) 2026 Terascale Functionalists
- * SPDX-License-Identifier: MIT
  */
 
 #ifndef BLACKHOLE_RENDER_INTEROP_UNIFORM_REGISTRY_H

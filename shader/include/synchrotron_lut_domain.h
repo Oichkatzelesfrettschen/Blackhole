@@ -10,9 +10,6 @@
  * Preprocessor-only on purpose: plain #define is the intersection all
  * three languages accept. Unsuffixed literals parse as float in GLSL
  * and as double in C++/CUDA; each consumer converts to its own type.
- *
- * Copyright (c) 2026 Terascale Functionalists
- * SPDX-License-Identifier: MIT
  */
 #ifndef SYNCHROTRON_LUT_DOMAIN_H
 #define SYNCHROTRON_LUT_DOMAIN_H
