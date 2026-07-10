@@ -97,6 +97,7 @@
 #include "physics/synchrotron.h"
 #include "render.h"
 #include "render/noise_texture_cache.h"
+#include "render/interop_uniform_registry.h"
 #include "rmlui_overlay.h"
 #include "settings.h"
 #include "shader.h"
@@ -1039,41 +1040,19 @@ constexpr std::array<ComparePreset, 12> K_COMPARE_PRESETS = {{
  * the compute/fragment parity comparison (Issue-009).
  */
 struct InteropUniforms {
+  // Typed specials: two paths differ in call shape, so they stay
+  // explicit rather than joining the float registry.
   glm::vec3 cameraPos{};
   glm::mat3 cameraBasis{1.0f};
-  float fovScale = 1.0f;
-  float timeSec = 0.0f;
-  float schwarzschildRadius = 0.0f;
-  float iscoRadius = 0.0f;
-  float kerrSpin = 0.0f;
-  float depthFar = 0.0f;
   int maxSteps = 0;
-  float stepSize = 0.0f;
-  float adiskEnabled = 0.0f;
-  float enableRedshift = 0.0f;
-  float useLUTs = 0.0f;
-  float useSpectralLUT = 0.0f;
-  float useGrbModulation = 0.0f;
-  float lutRadiusMin = 0.0f;
-  float lutRadiusMax = 1.0f;
-  float redshiftRadiusMin = 0.0f;
-  float redshiftRadiusMax = 1.0f;
-  float spectralRadiusMin = 0.0f;
-  float spectralRadiusMax = 1.0f;
-  float grbTime = 0.0f;
-  float grbTimeMin = 0.0f;
-  float grbTimeMax = 1.0f;
-  // D2: volumetric RTE
-  float rteEnabled      = 0.0f;
-  float rteOpacityScale = 0.5f;
-  float debugPreRedshiftBackground = 0.0f;
-  float debugPreShapingBackground = 0.0f;
-  float debugPostShapingBackground = 0.0f;
-  float debugShaperInputs = 0.0f;
-  float debugClosestApproachState = 0.0f;
-  float debugClosestApproachTimeline = 0.0f;
-  float debugClosestApproachDirection = 0.0f;
-  float debugEscapedDirection = 0.0f;
+  // Carried for the compare CSV and the CUDA fill; never a GL uniform.
+  float iscoRadius = 0.0f;
+  // Every shared float uniform, generated from the registry: one table
+  // row expands into this field, the fragment map write, and the
+  // compute glUniform1f call (src/render/interop_uniform_registry.h).
+#define BH_X(field, glslName, defaultValue) float field = defaultValue;
+  BH_INTEROP_UNIFORM_FLOATS(BH_X)
+#undef BH_X
 };
 
 void appendCompareUniforms(const std::string &path, int index, const std::string &label,
@@ -1109,38 +1088,19 @@ void appendCompareUniforms(const std::string &path, int index, const std::string
 void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &interop,
                           bool parityMode, bool hawkingEnabled, float hawkingTempScale,
                           float hawkingIntensity, bool hawkingUseLUTs, double blackHoleMass) {
+  // Registry-driven float uniforms: one row in
+  // interop_uniform_registry.h writes the struct field, this map entry,
+  // and the compute-path call below.
+#define BH_X(field, glslName, defaultValue)                                  \
+  rtti.floatUniforms[glslName] = interop.field;
+  BH_INTEROP_UNIFORM_FLOATS(BH_X)
+#undef BH_X
+
+  // Typed specials and per-call extras.
   rtti.vec3Uniforms["cameraPos"] = interop.cameraPos;
   rtti.mat3Uniforms["cameraBasis"] = interop.cameraBasis;
-  rtti.floatUniforms["fovScale"] = interop.fovScale;
-  rtti.floatUniforms["time"] = interop.timeSec;
-  rtti.floatUniforms["depthFar"] = interop.depthFar;
-  rtti.floatUniforms["schwarzschildRadius"] = interop.schwarzschildRadius;
-  rtti.floatUniforms["kerrSpin"] = interop.kerrSpin;
-  rtti.floatUniforms["adiskEnabled"] = interop.adiskEnabled;
-  rtti.floatUniforms["enableRedshift"] = interop.enableRedshift;
-  rtti.floatUniforms["useLUTs"] = interop.useLUTs;
-  rtti.floatUniforms["useSpectralLUT"] = interop.useSpectralLUT;
-  rtti.floatUniforms["useGrbModulation"] = interop.useGrbModulation;
-  rtti.floatUniforms["lutRadiusMin"] = interop.lutRadiusMin;
-  rtti.floatUniforms["lutRadiusMax"] = interop.lutRadiusMax;
-  rtti.floatUniforms["redshiftRadiusMin"] = interop.redshiftRadiusMin;
-  rtti.floatUniforms["redshiftRadiusMax"] = interop.redshiftRadiusMax;
-  rtti.floatUniforms["spectralRadiusMin"] = interop.spectralRadiusMin;
-  rtti.floatUniforms["spectralRadiusMax"] = interop.spectralRadiusMax;
-  rtti.floatUniforms["grbTime"] = interop.grbTime;
-  rtti.floatUniforms["grbTimeMin"] = interop.grbTimeMin;
-  rtti.floatUniforms["grbTimeMax"] = interop.grbTimeMax;
-  rtti.floatUniforms["interopParityMode"] = parityMode ? 1.0f : 0.0f;
   rtti.floatUniforms["interopMaxSteps"] = static_cast<float>(interop.maxSteps);
-  rtti.floatUniforms["interopStepSize"] = interop.stepSize;
-  rtti.floatUniforms["debugPreRedshiftBackground"] = interop.debugPreRedshiftBackground;
-  rtti.floatUniforms["debugPreShapingBackground"] = interop.debugPreShapingBackground;
-  rtti.floatUniforms["debugPostShapingBackground"] = interop.debugPostShapingBackground;
-  rtti.floatUniforms["debugShaperInputs"] = interop.debugShaperInputs;
-  rtti.floatUniforms["debugClosestApproachState"] = interop.debugClosestApproachState;
-  rtti.floatUniforms["debugClosestApproachTimeline"] = interop.debugClosestApproachTimeline;
-  rtti.floatUniforms["debugClosestApproachDirection"] = interop.debugClosestApproachDirection;
-  rtti.floatUniforms["debugEscapedDirection"] = interop.debugEscapedDirection;
+  rtti.floatUniforms["interopParityMode"] = parityMode ? 1.0f : 0.0f;
 
   // Hawking radiation uniforms
   rtti.floatUniforms["hawkingGlowEnabled"] = hawkingEnabled ? 1.0f : 0.0f;
@@ -1148,61 +1108,27 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   rtti.floatUniforms["hawkingGlowIntensity"] = hawkingIntensity;
   rtti.floatUniforms["useHawkingLUTs"] = hawkingUseLUTs ? 1.0f : 0.0f;
   rtti.floatUniforms["blackHoleMass"] = static_cast<float>(blackHoleMass);
-  // D2: volumetric RTE
-  rtti.floatUniforms["rteEnabled"]      = interop.rteEnabled;
-  rtti.floatUniforms["rteOpacityScale"] = interop.rteOpacityScale;
   // Wiregrid BL-coord overlay (task A2) -- filled by caller via wiregridEnabled flag
   // (wiregridEnabled/ShowErgo/GridScale are set in the render loop after this call)
 }
 
 void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop, int width,
                                  int height) {
+  // Registry-driven float uniforms: same table rows as the fragment
+  // path, so the two paths cannot drift on which uniforms exist.
+#define BH_X(field, glslName, defaultValue)                                  \
+  glUniform1f(glGetUniformLocation(program, glslName), interop.field);
+  BH_INTEROP_UNIFORM_FLOATS(BH_X)
+#undef BH_X
+
+  // Typed specials.
   glUniform2f(glGetUniformLocation(program, "resolution"), static_cast<float>(width),
               static_cast<float>(height));
   glUniformMatrix3fv(glGetUniformLocation(program, "cameraBasis"), 1, GL_FALSE,
                      glm::value_ptr(interop.cameraBasis));
-  glUniform1f(glGetUniformLocation(program, "fovScale"), interop.fovScale);
-  glUniform1f(glGetUniformLocation(program, "time"), interop.timeSec);
   glUniform3f(glGetUniformLocation(program, "cameraPos"), interop.cameraPos.x, interop.cameraPos.y,
               interop.cameraPos.z);
-  glUniform1f(glGetUniformLocation(program, "schwarzschildRadius"), interop.schwarzschildRadius);
-  glUniform1f(glGetUniformLocation(program, "kerrSpin"), interop.kerrSpin);
   glUniform1i(glGetUniformLocation(program, "interopMaxSteps"), interop.maxSteps);
-  glUniform1f(glGetUniformLocation(program, "interopStepSize"), interop.stepSize);
-  glUniform1f(glGetUniformLocation(program, "depthFar"), interop.depthFar);
-  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), interop.adiskEnabled);
-  glUniform1f(glGetUniformLocation(program, "enableRedshift"), interop.enableRedshift);
-  glUniform1f(glGetUniformLocation(program, "useLUTs"), interop.useLUTs);
-  glUniform1f(glGetUniformLocation(program, "useSpectralLUT"), interop.useSpectralLUT);
-  glUniform1f(glGetUniformLocation(program, "useGrbModulation"), interop.useGrbModulation);
-  glUniform1f(glGetUniformLocation(program, "lutRadiusMin"), interop.lutRadiusMin);
-  glUniform1f(glGetUniformLocation(program, "lutRadiusMax"), interop.lutRadiusMax);
-  glUniform1f(glGetUniformLocation(program, "redshiftRadiusMin"), interop.redshiftRadiusMin);
-  glUniform1f(glGetUniformLocation(program, "redshiftRadiusMax"), interop.redshiftRadiusMax);
-  glUniform1f(glGetUniformLocation(program, "spectralRadiusMin"), interop.spectralRadiusMin);
-  glUniform1f(glGetUniformLocation(program, "spectralRadiusMax"), interop.spectralRadiusMax);
-  glUniform1f(glGetUniformLocation(program, "grbTime"), interop.grbTime);
-  glUniform1f(glGetUniformLocation(program, "grbTimeMin"), interop.grbTimeMin);
-  glUniform1f(glGetUniformLocation(program, "grbTimeMax"), interop.grbTimeMax);
-  glUniform1f(glGetUniformLocation(program, "debugPreRedshiftBackground"),
-              interop.debugPreRedshiftBackground);
-  glUniform1f(glGetUniformLocation(program, "debugPreShapingBackground"),
-              interop.debugPreShapingBackground);
-  glUniform1f(glGetUniformLocation(program, "debugPostShapingBackground"),
-              interop.debugPostShapingBackground);
-  glUniform1f(glGetUniformLocation(program, "debugShaperInputs"),
-              interop.debugShaperInputs);
-  glUniform1f(glGetUniformLocation(program, "debugClosestApproachState"),
-              interop.debugClosestApproachState);
-  glUniform1f(glGetUniformLocation(program, "debugClosestApproachTimeline"),
-              interop.debugClosestApproachTimeline);
-  glUniform1f(glGetUniformLocation(program, "debugClosestApproachDirection"),
-              interop.debugClosestApproachDirection);
-  glUniform1f(glGetUniformLocation(program, "debugEscapedDirection"),
-              interop.debugEscapedDirection);
-  // D2: volumetric RTE -- same source as fragment path
-  glUniform1f(glGetUniformLocation(program, "rteEnabled"),      interop.rteEnabled);
-  glUniform1f(glGetUniformLocation(program, "rteOpacityScale"), interop.rteOpacityScale);
 }
 
 void applyHawkingUniforms(GLuint program, const physics::HawkingRenderer &renderer, bool enabled,
