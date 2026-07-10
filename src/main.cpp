@@ -2453,6 +2453,7 @@ struct RenderState {
       // curveOverlay and curveOverlayLoaded are declared earlier near curve TSV loading
     bool curveOverlayEnabled = true;
     bool curveOverlayWindowOpen = true;
+    bool firstLayout = true;
   } overlays;
 
   struct PostGroup {
@@ -2466,6 +2467,9 @@ struct RenderState {
     bool tonemappingEnabled = true;
     float toneExposure = 1.0f;
     float gamma = 2.5f;
+    float tonemapChromaticAberrationStrength = 0.002f;
+    float tonemapVignetteStrength = 1.0f;
+    float tonemapFilmGrainStrength = 0.005f;
   } post;
 
   struct DiskGroup {
@@ -2561,6 +2565,7 @@ struct RenderState {
       /* Sub-frame blend factor [0,1): fraction of current inter-frame interval elapsed. */
     float grmhdFrameAlpha = 0.0f;
     GLuint texGrmhdSlice = 0;
+    GLuint registeredRightTex = 0;
   } grmhd;
 
   struct LutsGroup {
@@ -2617,6 +2622,7 @@ struct RenderState {
     std::array<GLuint, kMaxBloomIterations> texUpsampled = {};
     int renderWidth = 0;
     int renderHeight = 0;
+    GLuint sceneFbo = 0;
   } targets;
 
   struct RecordingGroup {
@@ -2720,6 +2726,76 @@ struct RenderState {
     GpuTimerSet gpuTimers;
     TimingHistory timingHistory;
   } timing;
+
+  struct BackgroundGroup {
+    GLuint galaxy = 0;
+    GLuint colorMap = 0;
+    bool baseTexturesLoaded = false;
+    std::vector<BackgroundAsset> backgroundAssets;
+    int backgroundIndex = 0;
+    std::string backgroundLoadedId;
+    std::string skyboxLoadedDir;
+    GLuint backgroundBase = 0;
+    std::array<GLuint, K_BACKGROUND_LAYERS> backgroundTextures = {};
+    std::array<glm::vec4, K_BACKGROUND_LAYERS> backgroundLayerParams = {};
+    std::array<float, K_BACKGROUND_LAYERS> backgroundLayerDepth = {0.2f, 0.5f, 0.9f};
+    std::array<float, K_BACKGROUND_LAYERS> backgroundLayerScale = {1.0f, 1.08f, 1.16f};
+    std::array<float, K_BACKGROUND_LAYERS> backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
+    std::array<float, K_BACKGROUND_LAYERS> backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
+    glm::vec2 backgroundLayerGlobalOffset = glm::vec2(0.0f);
+    float backgroundYawRad = 0.0f;
+    float backgroundPitchRad = 0.0f;
+    GLuint fallback2D = 0;
+    GLuint fallback3D = 0;
+    GLuint fallbackCubemap = 0;
+  } background;
+
+  struct WiregridGroup {
+    bool wiregridEnabled = false;
+    WiregridParams wiregridParams;
+    glm::vec4 wiregridColor = glm::vec4(0.21f, 0.62f, 0.92f, 0.16f);
+    bool wiregridEnvApplied = false;
+  } wiregrid;
+
+  struct DebugGroup {
+    bool debugPreRedshiftBackground = false;
+    bool debugPreShapingBackground = false;
+    bool debugPostShapingBackground = false;
+    bool debugShaperInputs = false;
+    bool debugClosestApproachState = false;
+    bool debugClosestApproachTimeline = false;
+    bool debugClosestApproachDirection = false;
+    bool debugEscapedDirection = false;
+    bool debugPreShapingBackgroundEnvApplied = false;
+  } debug;
+
+  struct ExportingGroup {
+    int exportWarmup = 0;
+    bool exportPerformed = false;
+    int exportDone = 0;
+  } exporting;
+
+  struct DepthFxGroup {
+    bool depthEffectsEnabled = true;
+    bool fogEnabled = true;
+    float fogDensity = 0.08f;
+    float fogStart = 0.6f;
+    float fogEnd = 0.98f;
+    float fogColor[3] = {0.06f, 0.06f, 0.10f};
+    bool edgeOutlinesEnabled = false;
+    float edgeThreshold = 0.5f;
+    float edgeWidth = 1.0f;
+    float edgeColor[3] = {1.0f, 1.0f, 1.0f};
+    bool depthDesatEnabled = true;
+    float desatStrength = 0.10f;
+    bool chromaDepthEnabled = false;
+    bool motionParallaxHint = false;
+    bool dofEnabled = false;
+    float dofFocusNear = 0.3f;
+    float dofFocusFar = 0.9f;
+    float dofMaxRadius = 2.0f;
+    float depthCurve = 1.0f;
+  } depthFx;
 
 };
 
@@ -3743,13 +3819,12 @@ int main(int argc, char **argv) {
       // ---------------------------------------------------------
       // DOCKING & VIEWPORT SETUP (EARLY)
       // ---------------------------------------------------------
-      static bool firstLayout = true;
       ImGuiID const dockspaceId = ImGui::GetID("MyDockSpace");
       ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
 
-      if (firstLayout) {
+      if (rs.overlays.firstLayout) {
         resetLayout(dockspaceId);
-        firstLayout = false;
+        rs.overlays.firstLayout = false;
       }
 
       ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -3781,93 +3856,66 @@ int main(int argc, char **argv) {
         rs.overlays.rmluiReady = false;
       }
 
-      static GLuint galaxy = loadCubemap(resourcePath("assets/skybox_nebula_dark"));
-      static GLuint const colorMap = loadTexture2D(resourcePath("assets/color_map.png"));
-      static std::vector<BackgroundAsset> backgroundAssets;
-      static int backgroundIndex = 0;
-      static std::string backgroundLoadedId;
-      static std::string skyboxLoadedDir;
-      static GLuint backgroundBase = 0;
-      static std::array<GLuint, K_BACKGROUND_LAYERS> backgroundTextures = {};
-      static std::array<glm::vec4, K_BACKGROUND_LAYERS> backgroundLayerParams = {};
-      static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerDepth = {0.2f, 0.5f, 0.9f};
-      static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerScale = {1.0f, 1.08f, 1.16f};
-      static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
-      static std::array<float, K_BACKGROUND_LAYERS> backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
-      static glm::vec2 backgroundLayerGlobalOffset = glm::vec2(0.0f);
-      static float backgroundYawRad = 0.0f;
-      static float backgroundPitchRad = 0.0f;
-      static float tonemapChromaticAberrationStrength = 0.002f;
-      static float tonemapVignetteStrength = 1.0f;
-      static float tonemapFilmGrainStrength = 0.005f;
+      if (!rs.background.baseTexturesLoaded) {
+        rs.background.galaxy = loadCubemap(resourcePath("assets/skybox_nebula_dark"));
+        rs.background.colorMap = loadTexture2D(resourcePath("assets/color_map.png"));
+        rs.background.baseTexturesLoaded = true;
+      }
       if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
         const ShowcaseOrbitComposition *const composition =
             findShowcaseOrbitComposition(recordComposition);
-        backgroundLayerScale = {1.0f, 1.18f, 1.42f};
-        backgroundLayerIntensity = {1.0f, 0.94f, 0.72f};
-        backgroundLayerLodBias = {0.45f, 1.2f, 1.9f};
-        backgroundLayerGlobalOffset =
+        rs.background.backgroundLayerScale = {1.0f, 1.18f, 1.42f};
+        rs.background.backgroundLayerIntensity = {1.0f, 0.94f, 0.72f};
+        rs.background.backgroundLayerLodBias = {0.45f, 1.2f, 1.9f};
+        rs.background.backgroundLayerGlobalOffset =
             composition != nullptr
                 ? glm::vec2(composition->backgroundOffsetX, composition->backgroundOffsetY)
                 : glm::vec2(0.0f);
-        backgroundYawRad = glm::radians(hasRecordBackgroundYaw
+        rs.background.backgroundYawRad = glm::radians(hasRecordBackgroundYaw
                                             ? recordBackgroundYawDeg
                                             : (composition != nullptr ? composition->backgroundYawDeg
                                                                       : 0.0f));
-        backgroundPitchRad = glm::radians(hasRecordBackgroundPitch
+        rs.background.backgroundPitchRad = glm::radians(hasRecordBackgroundPitch
                                               ? recordBackgroundPitchDeg
                                               : (composition != nullptr
                                                      ? composition->backgroundPitchDeg
                                                      : 0.0f));
-        tonemapChromaticAberrationStrength = 0.00015f;
-        tonemapVignetteStrength = 0.05f;
-        tonemapFilmGrainStrength = 0.0f;
+        rs.post.tonemapChromaticAberrationStrength = 0.00015f;
+        rs.post.tonemapVignetteStrength = 0.05f;
+        rs.post.tonemapFilmGrainStrength = 0.0f;
       } else {
-        backgroundLayerScale = {1.0f, 1.08f, 1.16f};
-        backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
-        backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
-        backgroundLayerGlobalOffset = glm::vec2(0.0f);
-        backgroundYawRad = 0.0f;
-        backgroundPitchRad = 0.0f;
-        tonemapChromaticAberrationStrength = 0.002f;
-        tonemapVignetteStrength = 1.0f;
-        tonemapFilmGrainStrength = 0.005f;
+        rs.background.backgroundLayerScale = {1.0f, 1.08f, 1.16f};
+        rs.background.backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
+        rs.background.backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
+        rs.background.backgroundLayerGlobalOffset = glm::vec2(0.0f);
+        rs.background.backgroundYawRad = 0.0f;
+        rs.background.backgroundPitchRad = 0.0f;
+        rs.post.tonemapChromaticAberrationStrength = 0.002f;
+        rs.post.tonemapVignetteStrength = 1.0f;
+        rs.post.tonemapFilmGrainStrength = 0.005f;
       }
-      static bool wiregridEnabled = false;
-      static WiregridParams wiregridParams;
-      static glm::vec4 wiregridColor = glm::vec4(0.21f, 0.62f, 0.92f, 0.16f);
-      static bool debugPreRedshiftBackground = false;
-      static bool debugPreShapingBackground = false;
-      static bool debugPostShapingBackground = false;
-      static bool debugShaperInputs = false;
-      static bool debugClosestApproachState = false;
-      static bool debugClosestApproachTimeline = false;
-      static bool debugClosestApproachDirection = false;
-      static bool debugEscapedDirection = false;
-      static bool debugPreShapingBackgroundEnvApplied = false;
-      static bool wiregridEnvApplied = false;
-      if (!debugPreShapingBackgroundEnvApplied) {
+      if (!rs.debug.debugPreShapingBackgroundEnvApplied) {
         if (const char *stage = std::getenv("BLACKHOLE_EXPORT_RAW_STAGE")) {
-          debugPreRedshiftBackground =
+          rs.debug.debugPreRedshiftBackground =
               (std::strcmp(stage, "pre-redshift-background") == 0);
-          debugPreShapingBackground =
+          rs.debug.debugPreShapingBackground =
               (std::strcmp(stage, "pre-shaping-background") == 0);
-          debugPostShapingBackground =
+          rs.debug.debugPostShapingBackground =
               (std::strcmp(stage, "post-shaping-background") == 0);
-          debugShaperInputs =
+          rs.debug.debugShaperInputs =
               (std::strcmp(stage, "shaper-inputs") == 0);
-          debugClosestApproachState =
+          rs.debug.debugClosestApproachState =
               (std::strcmp(stage, "closest-approach-state") == 0);
-          debugClosestApproachTimeline =
+          rs.debug.debugClosestApproachTimeline =
               (std::strcmp(stage, "closest-approach-timeline") == 0);
-          debugClosestApproachDirection =
+          rs.debug.debugClosestApproachDirection =
               (std::strcmp(stage, "closest-approach-direction") == 0);
-          debugEscapedDirection =
+          rs.debug.debugEscapedDirection =
               (std::strcmp(stage, "escaped-direction") == 0);
         }
-        debugPreShapingBackgroundEnvApplied = true;
+        rs.debug.debugPreShapingBackgroundEnvApplied = true;
       }
-      if (!wiregridEnvApplied) {
+      if (!rs.wiregrid.wiregridEnvApplied) {
         auto parseEnvFloat = [](const char *name, float &out) {
           if (const char *value = std::getenv(name)) {
             char *end = nullptr;
@@ -3878,82 +3926,79 @@ int main(int argc, char **argv) {
           }
         };
         if (const char *enabled = std::getenv("BLACKHOLE_WIREGRID_ENABLED")) {
-          wiregridEnabled = (std::strcmp(enabled, "0") != 0);
+          rs.wiregrid.wiregridEnabled = (std::strcmp(enabled, "0") != 0);
         }
-        applyWiregridModeProfile(WiregridParams::Mode::Beauty, wiregridParams, wiregridColor);
+        applyWiregridModeProfile(WiregridParams::Mode::Beauty, rs.wiregrid.wiregridParams, rs.wiregrid.wiregridColor);
         if (const char *mode = std::getenv("BLACKHOLE_WIREGRID_MODE")) {
           if (std::strcmp(mode, "diagnostic") == 0) {
-            applyWiregridModeProfile(WiregridParams::Mode::Diagnostic, wiregridParams,
-                                     wiregridColor);
+            applyWiregridModeProfile(WiregridParams::Mode::Diagnostic, rs.wiregrid.wiregridParams,
+                                     rs.wiregrid.wiregridColor);
           } else if (std::strcmp(mode, "beauty") == 0) {
-            applyWiregridModeProfile(WiregridParams::Mode::Beauty, wiregridParams,
-                                     wiregridColor);
+            applyWiregridModeProfile(WiregridParams::Mode::Beauty, rs.wiregrid.wiregridParams,
+                                     rs.wiregrid.wiregridColor);
           }
         }
         if (const char *showErgo = std::getenv("BLACKHOLE_WIREGRID_SHOW_ERGO")) {
-          wiregridParams.showErgosphere = (std::strcmp(showErgo, "0") != 0);
+          rs.wiregrid.wiregridParams.showErgosphere = (std::strcmp(showErgo, "0") != 0);
         }
-        parseEnvFloat("BLACKHOLE_WIREGRID_GRID_SCALE", wiregridParams.gridScale);
-        parseEnvFloat("BLACKHOLE_WIREGRID_MOTION_SCALE", wiregridParams.motionScale);
-        parseEnvFloat("BLACKHOLE_WIREGRID_INFALL_SCALE", wiregridParams.infallScale);
-        parseEnvFloat("BLACKHOLE_WIREGRID_STRENGTH", wiregridParams.strength);
-        parseEnvFloat("BLACKHOLE_WIREGRID_SCENE_PRESERVE", wiregridParams.scenePreserve);
-        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_R", wiregridColor.r);
-        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_G", wiregridColor.g);
-        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_B", wiregridColor.b);
-        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_A", wiregridColor.a);
-        wiregridEnvApplied = true;
+        parseEnvFloat("BLACKHOLE_WIREGRID_GRID_SCALE", rs.wiregrid.wiregridParams.gridScale);
+        parseEnvFloat("BLACKHOLE_WIREGRID_MOTION_SCALE", rs.wiregrid.wiregridParams.motionScale);
+        parseEnvFloat("BLACKHOLE_WIREGRID_INFALL_SCALE", rs.wiregrid.wiregridParams.infallScale);
+        parseEnvFloat("BLACKHOLE_WIREGRID_STRENGTH", rs.wiregrid.wiregridParams.strength);
+        parseEnvFloat("BLACKHOLE_WIREGRID_SCENE_PRESERVE", rs.wiregrid.wiregridParams.scenePreserve);
+        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_R", rs.wiregrid.wiregridColor.r);
+        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_G", rs.wiregrid.wiregridColor.g);
+        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_B", rs.wiregrid.wiregridColor.b);
+        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_A", rs.wiregrid.wiregridColor.a);
+        rs.wiregrid.wiregridEnvApplied = true;
       }
       if (!recordFramesDir.empty() && recordProfile == "showcase-orbit" &&
-          wiregridEnabled && wiregridParams.mode == WiregridParams::Mode::Beauty) {
-        applyShowcaseBeautyWiregridTuning(recordComposition, wiregridParams, wiregridColor);
+          rs.wiregrid.wiregridEnabled && rs.wiregrid.wiregridParams.mode == WiregridParams::Mode::Beauty) {
+        applyShowcaseBeautyWiregridTuning(recordComposition, rs.wiregrid.wiregridParams, rs.wiregrid.wiregridColor);
       }
-      static GLuint fallback2D = 0;
-      static GLuint fallback3D = 0;
-      static GLuint fallbackCubemap = 0;
-      if (fallback2D == 0) {
-        fallback2D = createColorTexture(1, 1, false);
+      if (rs.background.fallback2D == 0) {
+        rs.background.fallback2D = createColorTexture(1, 1, false);
       }
-      if (fallback3D == 0) {
-        fallback3D = createFloatTexture3D(1, 1, 1, std::vector<float>{0.0f});
+      if (rs.background.fallback3D == 0) {
+        rs.background.fallback3D = createFloatTexture3D(1, 1, 1, std::vector<float>{0.0f});
       }
-      if (fallbackCubemap == 0) {
-        fallbackCubemap = createSolidCubemap1x1(0, 0, 0);
+      if (rs.background.fallbackCubemap == 0) {
+        rs.background.fallbackCubemap = createSolidCubemap1x1(0, 0, 0);
       }
-      if (backgroundAssets.empty()) {
-        backgroundAssets = loadBackgroundAssets();
+      if (rs.background.backgroundAssets.empty()) {
+        rs.background.backgroundAssets = loadBackgroundAssets();
       }
-      if (!backgroundAssets.empty()) {
-        backgroundIndex = findBackgroundIndex(backgroundAssets, settings.backgroundId);
-        if (backgroundIndex < 0 ||
-            std::cmp_greater_equal(backgroundIndex, backgroundAssets.size())) {
-          backgroundIndex = 0;
+      if (!rs.background.backgroundAssets.empty()) {
+        rs.background.backgroundIndex = findBackgroundIndex(rs.background.backgroundAssets, settings.backgroundId);
+        if (rs.background.backgroundIndex < 0 ||
+            std::cmp_greater_equal(rs.background.backgroundIndex, rs.background.backgroundAssets.size())) {
+          rs.background.backgroundIndex = 0;
         }
-        const auto &asset = backgroundAssets.at(static_cast<std::size_t>(backgroundIndex));
-        if (backgroundLoadedId != asset.id) {
+        const auto &asset = rs.background.backgroundAssets.at(static_cast<std::size_t>(rs.background.backgroundIndex));
+        if (rs.background.backgroundLoadedId != asset.id) {
           GLuint const nextTexture = loadTexture2D(asset.path, true);
           if (nextTexture != 0) {
-            if (backgroundBase != 0) {
-              glDeleteTextures(1, &backgroundBase);
+            if (rs.background.backgroundBase != 0) {
+              glDeleteTextures(1, &rs.background.backgroundBase);
             }
-            backgroundBase = nextTexture;
-            backgroundLoadedId = asset.id;
+            rs.background.backgroundBase = nextTexture;
+            rs.background.backgroundLoadedId = asset.id;
           }
           // Swap cubemap skybox if the asset specifies one.
-          if (!asset.skyboxDir.empty() && skyboxLoadedDir != asset.skyboxDir) {
+          if (!asset.skyboxDir.empty() && rs.background.skyboxLoadedDir != asset.skyboxDir) {
             GLuint const nextCubemap = loadCubemap(asset.skyboxDir);
             if (nextCubemap != 0) {
-              if (galaxy != 0) {
-                glDeleteTextures(1, &galaxy);
+              if (rs.background.galaxy != 0) {
+                glDeleteTextures(1, &rs.background.galaxy);
               }
-              galaxy = nextCubemap;
-              skyboxLoadedDir = asset.skyboxDir;
+              rs.background.galaxy = nextCubemap;
+              rs.background.skyboxLoadedDir = asset.skyboxDir;
             }
           }
         }
       }
-      GLuint const backgroundFallback = backgroundBase != 0 ? backgroundBase : fallback2D;
-      backgroundTextures.fill(backgroundFallback);
+      GLuint const backgroundFallback = rs.background.backgroundBase != 0 ? rs.background.backgroundBase : rs.background.fallback2D;
+      rs.background.backgroundTextures.fill(backgroundFallback);
       if (!rs.disk.noiseTextureReady) {
         bool const noiseOk = rs.disk.noiseCache.initialize();
         rs.disk.noiseTextureReady = true;  // don't retry regardless; FastNoise2 may be disabled
@@ -4186,10 +4231,10 @@ int main(int argc, char **argv) {
                                         std::sin(static_cast<float>(currentTime) * 0.02f)) *
                               settings.backgroundDriftStrength;
       for (std::size_t i = 0; i < static_cast<std::size_t>(K_BACKGROUND_LAYERS); ++i) {
-        glm::vec2 const offset = drift + parallaxBase * backgroundLayerDepth.at(i);
-        backgroundLayerParams.at(i) =
-            glm::vec4(offset + backgroundLayerGlobalOffset, backgroundLayerScale.at(i),
-                      backgroundLayerIntensity.at(i));
+        glm::vec2 const offset = drift + parallaxBase * rs.background.backgroundLayerDepth.at(i);
+        rs.background.backgroundLayerParams.at(i) =
+            glm::vec4(offset + rs.background.backgroundLayerGlobalOffset, rs.background.backgroundLayerScale.at(i),
+                      rs.background.backgroundLayerIntensity.at(i));
       }
       glm::mat4 projectionMatrix = glm::perspective(
           glm::radians(cam.fov), static_cast<float>(rs.targets.renderWidth) / static_cast<float>(rs.targets.renderHeight),
@@ -4222,10 +4267,9 @@ int main(int argc, char **argv) {
         /* Advance CUDA slot 7 registration when the right PBO first becomes ready */
 #if BLACKHOLE_HAS_CUDA
         if (rs.grmhd.grmhdPboUploaderRight.ready()) {
-          static GLuint registeredRightTex = 0;
-          if (registeredRightTex != rs.grmhd.grmhdPboUploaderRight.texture()) {
-            registeredRightTex = rs.grmhd.grmhdPboUploaderRight.texture();
-            rs.dispatch.cudaManager.registerLut(7 /*BhLutGrmhdRight*/, registeredRightTex,
+          if (rs.grmhd.registeredRightTex != rs.grmhd.grmhdPboUploaderRight.texture()) {
+            rs.grmhd.registeredRightTex = rs.grmhd.grmhdPboUploaderRight.texture();
+            rs.dispatch.cudaManager.registerLut(7 /*BhLutGrmhdRight*/, rs.grmhd.registeredRightTex,
                                     static_cast<unsigned int>(GL_TEXTURE_3D));
           }
         }
@@ -4285,48 +4329,48 @@ int main(int argc, char **argv) {
       {
         RenderToTextureInfo rtti;
         rtti.fragShader = "shader/blackhole_main.frag";
-        rtti.cubemapUniforms["galaxy"] = galaxy != 0 ? galaxy : fallbackCubemap;
-        rtti.textureUniforms["colorMap"] = colorMap != 0 ? colorMap : fallback2D;
-        rtti.textureUniforms["emissivityLUT"] = lutReady ? rs.luts.texEmissivityLUT : fallback2D;
-        rtti.textureUniforms["redshiftLUT"] = lutReady ? rs.luts.texRedshiftLUT : fallback2D;
+        rtti.cubemapUniforms["galaxy"] = rs.background.galaxy != 0 ? rs.background.galaxy : rs.background.fallbackCubemap;
+        rtti.textureUniforms["colorMap"] = rs.background.colorMap != 0 ? rs.background.colorMap : rs.background.fallback2D;
+        rtti.textureUniforms["emissivityLUT"] = lutReady ? rs.luts.texEmissivityLUT : rs.background.fallback2D;
+        rtti.textureUniforms["redshiftLUT"] = lutReady ? rs.luts.texRedshiftLUT : rs.background.fallback2D;
         rtti.textureUniforms["photonGlowLUT"] =
-            rs.luts.texPhotonGlowLUT != 0 ? rs.luts.texPhotonGlowLUT : fallback2D; // Phase 8.2
+            rs.luts.texPhotonGlowLUT != 0 ? rs.luts.texPhotonGlowLUT : rs.background.fallback2D; // Phase 8.2
         rtti.textureUniforms["diskDensityLUT"] =
-            rs.luts.texDiskDensityLUT != 0 ? rs.luts.texDiskDensityLUT : fallback2D; // Phase 8.2 P2
-        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? rs.luts.texSpectralLUT : fallback2D;
+            rs.luts.texDiskDensityLUT != 0 ? rs.luts.texDiskDensityLUT : rs.background.fallback2D; // Phase 8.2 P2
+        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D;
         rtti.textureUniforms["grbModulationLUT"] =
-            grbModulationReady ? rs.luts.texGrbModulationLUT : fallback2D;
+            grbModulationReady ? rs.luts.texGrbModulationLUT : rs.background.fallback2D;
         rtti.textureUniforms["hawkingTempLUT"] =
-            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : fallback2D;
+            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : rs.background.fallback2D;
         rtti.textureUniforms["hawkingSpectrumLUT"] =
-            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : fallback2D;
+            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : rs.background.fallback2D;
         for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
           const std::string name = "backgroundLayers[" + std::to_string(i) + "]";
-          rtti.textureUniforms[name] = backgroundTextures.at(static_cast<std::size_t>(i));
+          rtti.textureUniforms[name] = rs.background.backgroundTextures.at(static_cast<std::size_t>(i));
         }
         rs.disk.noiseTextureScale = std::max(rs.disk.noiseTextureScale, 0.01f);
         bool noiseReady = rs.disk.useNoiseTexture && rs.disk.texNoiseVolume != 0;
-        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? rs.disk.texNoiseVolume : fallback3D;
-        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : fallback3D;
+        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? rs.disk.texNoiseVolume : rs.background.fallback3D;
+        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : rs.background.fallback3D;
 
         rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
         rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["noiseTextureScale"] = rs.disk.noiseTextureScale;
         rtti.floatUniforms["backgroundEnabled"] = settings.backgroundEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["backgroundIntensity"] = settings.backgroundIntensity;
-        rtti.floatUniforms["backgroundYawRad"] = backgroundYawRad;
-        rtti.floatUniforms["backgroundPitchRad"] = backgroundPitchRad;
+        rtti.floatUniforms["backgroundYawRad"] = rs.background.backgroundYawRad;
+        rtti.floatUniforms["backgroundPitchRad"] = rs.background.backgroundPitchRad;
         rtti.floatUniforms["time"] = frameTime;
         rtti.vec3Uniforms["grmhdBoundsMin"] = rs.grmhd.grmhdBoundsMin;
         rtti.vec3Uniforms["grmhdBoundsMax"] = rs.grmhd.grmhdBoundsMax;
         for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
           const std::string name = "backgroundLayerParams[" + std::to_string(i) + "]";
-          rtti.vec4Uniforms[name] = backgroundLayerParams.at(static_cast<std::size_t>(i));
+          rtti.vec4Uniforms[name] = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
         }
         for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
           const std::string name = "backgroundLayerLodBias[" + std::to_string(i) + "]";
           rtti.floatUniforms[name] =
-              std::max(backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
+              std::max(rs.background.backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
         }
 
         rtti.targetTexture = rs.targets.texBlackhole;
@@ -4967,15 +5011,15 @@ int main(int argc, char **argv) {
         spectralEnabled = useSpectralLutEffective && spectralReady;
         grbModulationEnabled = useGrbModulationEffective && grbModulationReady;
         noiseReady = useNoiseTextureEffective && rs.disk.texNoiseVolume != 0;
-        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? rs.disk.texNoiseVolume : fallback3D;
-        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : fallback3D;
-        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? rs.luts.texSpectralLUT : fallback2D;
+        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? rs.disk.texNoiseVolume : rs.background.fallback3D;
+        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : rs.background.fallback3D;
+        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D;
         rtti.textureUniforms["grbModulationLUT"] =
-            grbModulationEnabled ? rs.luts.texGrbModulationLUT : fallback2D;
+            grbModulationEnabled ? rs.luts.texGrbModulationLUT : rs.background.fallback2D;
         rtti.textureUniforms["hawkingTempLUT"] =
-            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : fallback2D;
+            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : rs.background.fallback2D;
         rtti.textureUniforms["hawkingSpectrumLUT"] =
-            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : fallback2D;
+            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : rs.background.fallback2D;
         rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
         rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["backgroundEnabled"] = backgroundEnabledEffective ? 1.0f : 0.0f;
@@ -5014,28 +5058,28 @@ int main(int argc, char **argv) {
         // D2: volumetric RTE
         interop.rteEnabled      = rs.rte.rteVolumetricEnabled ? 1.0f : 0.0f;
         interop.rteOpacityScale = rs.rte.rteOpacityScale;
-        interop.debugPreRedshiftBackground = debugPreRedshiftBackground ? 1.0f : 0.0f;
-        interop.debugPreShapingBackground = debugPreShapingBackground ? 1.0f : 0.0f;
-        interop.debugPostShapingBackground = debugPostShapingBackground ? 1.0f : 0.0f;
-        interop.debugShaperInputs = debugShaperInputs ? 1.0f : 0.0f;
-        interop.debugClosestApproachState = debugClosestApproachState ? 1.0f : 0.0f;
-        interop.debugClosestApproachTimeline = debugClosestApproachTimeline ? 1.0f : 0.0f;
-        interop.debugClosestApproachDirection = debugClosestApproachDirection ? 1.0f : 0.0f;
-        interop.debugEscapedDirection = debugEscapedDirection ? 1.0f : 0.0f;
+        interop.debugPreRedshiftBackground = rs.debug.debugPreRedshiftBackground ? 1.0f : 0.0f;
+        interop.debugPreShapingBackground = rs.debug.debugPreShapingBackground ? 1.0f : 0.0f;
+        interop.debugPostShapingBackground = rs.debug.debugPostShapingBackground ? 1.0f : 0.0f;
+        interop.debugShaperInputs = rs.debug.debugShaperInputs ? 1.0f : 0.0f;
+        interop.debugClosestApproachState = rs.debug.debugClosestApproachState ? 1.0f : 0.0f;
+        interop.debugClosestApproachTimeline = rs.debug.debugClosestApproachTimeline ? 1.0f : 0.0f;
+        interop.debugClosestApproachDirection = rs.debug.debugClosestApproachDirection ? 1.0f : 0.0f;
+        interop.debugEscapedDirection = rs.debug.debugEscapedDirection ? 1.0f : 0.0f;
 
         // Convert black hole mass to grams (CGS units for Hawking calculation)
         double const bhMassGrams = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
         applyInteropUniforms(rtti, interop, compareActive, rs.hawking.hawkingGlowEnabled, rs.hawking.hawkingTempScale,
                              rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMassGrams);
 
-        rtti.floatUniforms["wiregridEnabled"]   = wiregridEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["wiregridShowErgo"]  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
-        rtti.floatUniforms["wiregridGridScale"] = wiregridParams.gridScale;
-        rtti.floatUniforms["wiregridMotionScale"] = wiregridParams.motionScale;
-        rtti.floatUniforms["wiregridInfallScale"] = wiregridParams.infallScale;
-        rtti.floatUniforms["wiregridStrength"] = wiregridParams.strength;
-        rtti.floatUniforms["wiregridScenePreserve"] = wiregridParams.scenePreserve;
-        rtti.vec4Uniforms["wiregridColor"] = wiregridColor;
+        rtti.floatUniforms["wiregridEnabled"]   = rs.wiregrid.wiregridEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["wiregridShowErgo"]  = rs.wiregrid.wiregridParams.showErgosphere ? 1.0f : 0.0f;
+        rtti.floatUniforms["wiregridGridScale"] = rs.wiregrid.wiregridParams.gridScale;
+        rtti.floatUniforms["wiregridMotionScale"] = rs.wiregrid.wiregridParams.motionScale;
+        rtti.floatUniforms["wiregridInfallScale"] = rs.wiregrid.wiregridParams.infallScale;
+        rtti.floatUniforms["wiregridStrength"] = rs.wiregrid.wiregridParams.strength;
+        rtti.floatUniforms["wiregridScenePreserve"] = rs.wiregrid.wiregridParams.scenePreserve;
+        rtti.vec4Uniforms["wiregridColor"] = rs.wiregrid.wiregridColor;
         // D4: polarized Stokes IQUV
         rtti.floatUniforms["stokesEnabled"]     = rs.stokes.stokesEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["stokesBFieldAngle"] = rs.stokes.stokesBFieldAngle;
@@ -5065,17 +5109,17 @@ int main(int argc, char **argv) {
           bool const wasReady = rs.dispatch.cudaManager.isReady();
           rs.dispatch.cudaManager.ensureInit(rs.targets.texBlackhole, rs.targets.renderWidth, rs.targets.renderHeight);
           if (!wasReady && rs.dispatch.cudaManager.isReady()) {
-            /* Register galaxy cubemap as CUDA texture object (slot 4 = BhLutGalaxy).
+            /* Register rs.background.galaxy cubemap as CUDA texture object (slot 4 = BhLutGalaxy).
              * Done exactly once on the frame that init first succeeds.
              * Registration failure is non-fatal: kernels fall back to no background. */
-            GLuint const galaxyTexForCuda = (galaxy != 0) ? galaxy : fallbackCubemap;
+            GLuint const galaxyTexForCuda = (rs.background.galaxy != 0) ? rs.background.galaxy : rs.background.fallbackCubemap;
             if (galaxyTexForCuda != 0) {
               rs.dispatch.cudaManager.registerLut(4, galaxyTexForCuda,
                                       static_cast<unsigned int>(GL_TEXTURE_CUBE_MAP));
             }
             /* Register the layered desktop background equirect texture so the CUDA
              * lane samples the same 2D scene asset class as the GLSL desktop lane. */
-            GLuint const backgroundTexForCuda = (backgroundBase != 0) ? backgroundBase : fallback2D;
+            GLuint const backgroundTexForCuda = (rs.background.backgroundBase != 0) ? rs.background.backgroundBase : rs.background.fallback2D;
             if (backgroundTexForCuda != 0) {
               bhCudaRegisterBackgroundTexture(rs.dispatch.cudaManager.backend(), backgroundTexForCuda,
                                               static_cast<unsigned int>(GL_TEXTURE_2D));
@@ -5113,16 +5157,16 @@ int main(int argc, char **argv) {
             cp.background_intensity = settings.backgroundIntensity;
             cp.background_enabled = backgroundEnabledEffective ? 1 : 0;
             cp.photon_glow_strength = enablePhotonSphereEffective ? rs.disk.photonSphereGlowStrength : 0.0f;
-            cp.debug_pre_redshift_background = debugPreRedshiftBackground ? 1 : 0;
-            cp.debug_pre_shaping_background = debugPreShapingBackground ? 1 : 0;
-            cp.debug_post_shaping_background = debugPostShapingBackground ? 1 : 0;
-            cp.debug_shaper_inputs = debugShaperInputs ? 1 : 0;
-            cp.debug_closest_approach_state = debugClosestApproachState ? 1 : 0;
-            cp.debug_closest_approach_timeline = debugClosestApproachTimeline ? 1 : 0;
-            cp.debug_closest_approach_direction = debugClosestApproachDirection ? 1 : 0;
-            cp.debug_escaped_direction = debugEscapedDirection ? 1 : 0;
-            cp.background_yaw_rad = backgroundYawRad;
-            cp.background_pitch_rad = backgroundPitchRad;
+            cp.debug_pre_redshift_background = rs.debug.debugPreRedshiftBackground ? 1 : 0;
+            cp.debug_pre_shaping_background = rs.debug.debugPreShapingBackground ? 1 : 0;
+            cp.debug_post_shaping_background = rs.debug.debugPostShapingBackground ? 1 : 0;
+            cp.debug_shaper_inputs = rs.debug.debugShaperInputs ? 1 : 0;
+            cp.debug_closest_approach_state = rs.debug.debugClosestApproachState ? 1 : 0;
+            cp.debug_closest_approach_timeline = rs.debug.debugClosestApproachTimeline ? 1 : 0;
+            cp.debug_closest_approach_direction = rs.debug.debugClosestApproachDirection ? 1 : 0;
+            cp.debug_escaped_direction = rs.debug.debugEscapedDirection ? 1 : 0;
+            cp.background_yaw_rad = rs.background.backgroundYawRad;
+            cp.background_pitch_rad = rs.background.backgroundPitchRad;
             cp.background_filter_radius = 0.0f;
             if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
               const ShowcaseOrbitComposition *const composition =
@@ -5138,26 +5182,26 @@ int main(int argc, char **argv) {
               cp.frame_shift_y = 0.0f;
             }
             for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
-              auto const &params = backgroundLayerParams.at(static_cast<std::size_t>(i));
+              auto const &params = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
               cp.background_layer_params[i * 4 + 0] = params.x;
               cp.background_layer_params[i * 4 + 1] = params.y;
               cp.background_layer_params[i * 4 + 2] = params.z;
               cp.background_layer_params[i * 4 + 3] = params.w;
               cp.background_layer_lod_bias[i] =
-                  std::max(backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
+                  std::max(rs.background.backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
             }
             // Wiregrid BL-coord overlay (task A4)
-            cp.wiregrid_enabled    = wiregridEnabled ? 1 : 0;
-            cp.wiregrid_show_ergo  = wiregridParams.showErgosphere ? 1.0f : 0.0f;
-            cp.wiregrid_grid_scale = wiregridParams.gridScale;
-            cp.wiregrid_motion_scale = wiregridParams.motionScale;
-            cp.wiregrid_infall_scale = wiregridParams.infallScale;
-            cp.wiregrid_strength = wiregridParams.strength;
-            cp.wiregrid_scene_preserve = wiregridParams.scenePreserve;
-            cp.wiregrid_color[0] = wiregridColor.r;
-            cp.wiregrid_color[1] = wiregridColor.g;
-            cp.wiregrid_color[2] = wiregridColor.b;
-            cp.wiregrid_color[3] = wiregridColor.a;
+            cp.wiregrid_enabled    = rs.wiregrid.wiregridEnabled ? 1 : 0;
+            cp.wiregrid_show_ergo  = rs.wiregrid.wiregridParams.showErgosphere ? 1.0f : 0.0f;
+            cp.wiregrid_grid_scale = rs.wiregrid.wiregridParams.gridScale;
+            cp.wiregrid_motion_scale = rs.wiregrid.wiregridParams.motionScale;
+            cp.wiregrid_infall_scale = rs.wiregrid.wiregridParams.infallScale;
+            cp.wiregrid_strength = rs.wiregrid.wiregridParams.strength;
+            cp.wiregrid_scene_preserve = rs.wiregrid.wiregridParams.scenePreserve;
+            cp.wiregrid_color[0] = rs.wiregrid.wiregridColor.r;
+            cp.wiregrid_color[1] = rs.wiregrid.wiregridColor.g;
+            cp.wiregrid_color[2] = rs.wiregrid.wiregridColor.b;
+            cp.wiregrid_color[3] = rs.wiregrid.wiregridColor.a;
             // GRMHD volume radial bounds (task C1l) + temporal blend (C1d)
             cp.grmhd_r_min  = rs.grmhd.grmhdTexture.rMin;
             cp.grmhd_r_max  = rs.grmhd.grmhdTexture.rMax;
@@ -5223,21 +5267,21 @@ int main(int argc, char **argv) {
 
             // Wiregrid BL-coord overlay (parity with fragment path)
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridEnabled"),
-                        wiregridEnabled ? 1.0f : 0.0f);
+                        rs.wiregrid.wiregridEnabled ? 1.0f : 0.0f);
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridShowErgo"),
-                        wiregridParams.showErgosphere ? 1.0f : 0.0f);
+                        rs.wiregrid.wiregridParams.showErgosphere ? 1.0f : 0.0f);
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridGridScale"),
-                        wiregridParams.gridScale);
+                        rs.wiregrid.wiregridParams.gridScale);
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridMotionScale"),
-                        wiregridParams.motionScale);
+                        rs.wiregrid.wiregridParams.motionScale);
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridInfallScale"),
-                        wiregridParams.infallScale);
+                        rs.wiregrid.wiregridParams.infallScale);
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridStrength"),
-                        wiregridParams.strength);
+                        rs.wiregrid.wiregridParams.strength);
             glUniform1f(glGetUniformLocation(computeProgram, "wiregridScenePreserve"),
-                        wiregridParams.scenePreserve);
+                        rs.wiregrid.wiregridParams.scenePreserve);
             glUniform4f(glGetUniformLocation(computeProgram, "wiregridColor"),
-                        wiregridColor.r, wiregridColor.g, wiregridColor.b, wiregridColor.a);
+                        rs.wiregrid.wiregridColor.r, rs.wiregrid.wiregridColor.g, rs.wiregrid.wiregridColor.b, rs.wiregrid.wiregridColor.a);
 
             // D4: polarized Stokes IQUV (parity with fragment path)
             glUniform1f(glGetUniformLocation(computeProgram, "stokesEnabled"),
@@ -5249,28 +5293,28 @@ int main(int argc, char **argv) {
 
             GLint texUnit = 0;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, lutReady ? rs.luts.texEmissivityLUT : fallback2D);
+            glBindTexture(GL_TEXTURE_2D, lutReady ? rs.luts.texEmissivityLUT : rs.background.fallback2D);
             glUniform1i(glGetUniformLocation(computeProgram, "emissivityLUT"), texUnit);
             texUnit++;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, lutReady ? rs.luts.texRedshiftLUT : fallback2D);
+            glBindTexture(GL_TEXTURE_2D, lutReady ? rs.luts.texRedshiftLUT : rs.background.fallback2D);
             glUniform1i(glGetUniformLocation(computeProgram, "redshiftLUT"), texUnit);
             texUnit++;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, spectralEnabled ? rs.luts.texSpectralLUT : fallback2D);
+            glBindTexture(GL_TEXTURE_2D, spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D);
             glUniform1i(glGetUniformLocation(computeProgram, "spectralLUT"), texUnit);
             texUnit++;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, grbModulationEnabled ? rs.luts.texGrbModulationLUT : fallback2D);
+            glBindTexture(GL_TEXTURE_2D, grbModulationEnabled ? rs.luts.texGrbModulationLUT : rs.background.fallback2D);
             glUniform1i(glGetUniformLocation(computeProgram, "grbModulationLUT"), texUnit);
             texUnit++;
             glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_CUBE_MAP, galaxy != 0 ? galaxy : fallbackCubemap);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, rs.background.galaxy != 0 ? rs.background.galaxy : rs.background.fallbackCubemap);
             glUniform1i(glGetUniformLocation(computeProgram, "galaxy"), texUnit);
             texUnit++;
             for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
               glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-              glBindTexture(GL_TEXTURE_2D, backgroundTextures.at(static_cast<std::size_t>(i)));
+              glBindTexture(GL_TEXTURE_2D, rs.background.backgroundTextures.at(static_cast<std::size_t>(i)));
               std::string const name = "backgroundLayers[" + std::to_string(i) + "]";
               glUniform1i(glGetUniformLocation(computeProgram, name.c_str()), texUnit);
               texUnit++;
@@ -5283,14 +5327,14 @@ int main(int argc, char **argv) {
                         settings.backgroundIntensity);
             for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
               std::string const name = "backgroundLayerParams[" + std::to_string(i) + "]";
-              const auto &params = backgroundLayerParams.at(static_cast<std::size_t>(i));
+              const auto &params = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
               glUniform4f(glGetUniformLocation(computeProgram, name.c_str()), params.x, params.y,
                           params.z, params.w);
             }
             for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
               std::string const name = "backgroundLayerLodBias[" + std::to_string(i) + "]";
               float const bias =
-                  std::max(backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
+                  std::max(rs.background.backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
               glUniform1f(glGetUniformLocation(computeProgram, name.c_str()), bias);
             }
 
@@ -5554,9 +5598,9 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["tonemappingEnabled"] = rs.post.tonemappingEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["exposure"] = rs.post.toneExposure;
         rtti.floatUniforms["gamma"] = rs.post.gamma;
-        rtti.floatUniforms["chromaticAberrationStrength"] = tonemapChromaticAberrationStrength;
-        rtti.floatUniforms["vignetteStrength"] = tonemapVignetteStrength;
-        rtti.floatUniforms["filmGrainStrength"] = tonemapFilmGrainStrength;
+        rtti.floatUniforms["chromaticAberrationStrength"] = rs.post.tonemapChromaticAberrationStrength;
+        rtti.floatUniforms["vignetteStrength"] = rs.post.tonemapVignetteStrength;
+        rtti.floatUniforms["filmGrainStrength"] = rs.post.tonemapFilmGrainStrength;
 
         renderToTexture(rtti);
       }
@@ -5564,134 +5608,115 @@ int main(int argc, char **argv) {
         rs.timing.gpuTimers.tonemap.end();
       }
 
-      static bool depthEffectsEnabled = true;
-      static bool fogEnabled = true;
-      static float fogDensity = 0.08f;
-      static float fogStart = 0.6f;
-      static float fogEnd = 0.98f;
-      static float fogColor[3] = {0.06f, 0.06f, 0.10f};
-      static bool edgeOutlinesEnabled = false;
-      static float edgeThreshold = 0.5f;
-      static float edgeWidth = 1.0f;
-      static float edgeColor[3] = {1.0f, 1.0f, 1.0f};
-      static bool depthDesatEnabled = true;
-      static float desatStrength = 0.10f;
-      static bool chromaDepthEnabled = false;
-      static bool motionParallaxHint = false;
-      static bool dofEnabled = false;
-      static float dofFocusNear = 0.3f;
-      static float dofFocusFar = 0.9f;
-      static float dofMaxRadius = 2.0f;
-      static float depthCurve = 1.0f;
 
       if (input.isUIVisible()) {
         ImGui::Begin("Depth Effects", nullptr, ImGuiWindowFlags_NoCollapse);
-        ImGui::Checkbox("Enable Depth Effects", &depthEffectsEnabled);
+        ImGui::Checkbox("Enable Depth Effects", &rs.depthFx.depthEffectsEnabled);
         ImGui::SliderFloat("Depth Far", &rs.display.depthFar, 10.0f, 200.0f);
         if (ImGui::Button("Preset: Subtle")) {
-          depthEffectsEnabled = true;
-          fogEnabled = true;
-          fogDensity = 0.08f;
-          fogStart = 0.6f;
-          fogEnd = 0.98f;
-          fogColor[0] = 0.06f;
-          fogColor[1] = 0.06f;
-          fogColor[2] = 0.10f;
-          edgeOutlinesEnabled = false;
-          edgeThreshold = 0.5f;
-          edgeWidth = 1.0f;
-          depthDesatEnabled = true;
-          desatStrength = 0.10f;
-          chromaDepthEnabled = false;
-          motionParallaxHint = false;
-          dofEnabled = false;
-          dofFocusNear = 0.3f;
-          dofFocusFar = 0.9f;
-          dofMaxRadius = 2.0f;
-          depthCurve = 1.0f;
+          rs.depthFx.depthEffectsEnabled = true;
+          rs.depthFx.fogEnabled = true;
+          rs.depthFx.fogDensity = 0.08f;
+          rs.depthFx.fogStart = 0.6f;
+          rs.depthFx.fogEnd = 0.98f;
+          rs.depthFx.fogColor[0] = 0.06f;
+          rs.depthFx.fogColor[1] = 0.06f;
+          rs.depthFx.fogColor[2] = 0.10f;
+          rs.depthFx.edgeOutlinesEnabled = false;
+          rs.depthFx.edgeThreshold = 0.5f;
+          rs.depthFx.edgeWidth = 1.0f;
+          rs.depthFx.depthDesatEnabled = true;
+          rs.depthFx.desatStrength = 0.10f;
+          rs.depthFx.chromaDepthEnabled = false;
+          rs.depthFx.motionParallaxHint = false;
+          rs.depthFx.dofEnabled = false;
+          rs.depthFx.dofFocusNear = 0.3f;
+          rs.depthFx.dofFocusFar = 0.9f;
+          rs.depthFx.dofMaxRadius = 2.0f;
+          rs.depthFx.depthCurve = 1.0f;
           rs.display.depthFar = 100.0f;
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset: Cinematic")) {
-          depthEffectsEnabled = true;
-          fogEnabled = true;
-          fogDensity = 0.3f;
-          fogStart = 0.25f;
-          fogEnd = 0.85f;
-          fogColor[0] = 0.08f;
-          fogColor[1] = 0.08f;
-          fogColor[2] = 0.12f;
-          edgeOutlinesEnabled = true;
-          edgeThreshold = 0.5f;
-          edgeWidth = 1.2f;
-          depthDesatEnabled = true;
-          desatStrength = 0.35f;
-          chromaDepthEnabled = true;
-          motionParallaxHint = false;
-          dofEnabled = true;
-          dofFocusNear = 0.25f;
-          dofFocusFar = 0.75f;
-          dofMaxRadius = 5.0f;
-          depthCurve = 0.95f;
+          rs.depthFx.depthEffectsEnabled = true;
+          rs.depthFx.fogEnabled = true;
+          rs.depthFx.fogDensity = 0.3f;
+          rs.depthFx.fogStart = 0.25f;
+          rs.depthFx.fogEnd = 0.85f;
+          rs.depthFx.fogColor[0] = 0.08f;
+          rs.depthFx.fogColor[1] = 0.08f;
+          rs.depthFx.fogColor[2] = 0.12f;
+          rs.depthFx.edgeOutlinesEnabled = true;
+          rs.depthFx.edgeThreshold = 0.5f;
+          rs.depthFx.edgeWidth = 1.2f;
+          rs.depthFx.depthDesatEnabled = true;
+          rs.depthFx.desatStrength = 0.35f;
+          rs.depthFx.chromaDepthEnabled = true;
+          rs.depthFx.motionParallaxHint = false;
+          rs.depthFx.dofEnabled = true;
+          rs.depthFx.dofFocusNear = 0.25f;
+          rs.depthFx.dofFocusFar = 0.75f;
+          rs.depthFx.dofMaxRadius = 5.0f;
+          rs.depthFx.depthCurve = 0.95f;
           rs.display.depthFar = 100.0f;
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset: Clarity")) {
-          depthEffectsEnabled = true;
-          fogEnabled = true;
-          fogDensity = 0.12f;
-          fogStart = 0.45f;
-          fogEnd = 0.95f;
-          fogColor[0] = 0.05f;
-          fogColor[1] = 0.05f;
-          fogColor[2] = 0.08f;
-          edgeOutlinesEnabled = true;
-          edgeThreshold = 0.42f;
-          edgeWidth = 1.4f;
-          depthDesatEnabled = true;
-          desatStrength = 0.15f;
-          chromaDepthEnabled = false;
-          motionParallaxHint = false;
-          dofEnabled = false;
-          dofFocusNear = 0.35f;
-          dofFocusFar = 0.95f;
-          dofMaxRadius = 2.5f;
-          depthCurve = 1.15f;
+          rs.depthFx.depthEffectsEnabled = true;
+          rs.depthFx.fogEnabled = true;
+          rs.depthFx.fogDensity = 0.12f;
+          rs.depthFx.fogStart = 0.45f;
+          rs.depthFx.fogEnd = 0.95f;
+          rs.depthFx.fogColor[0] = 0.05f;
+          rs.depthFx.fogColor[1] = 0.05f;
+          rs.depthFx.fogColor[2] = 0.08f;
+          rs.depthFx.edgeOutlinesEnabled = true;
+          rs.depthFx.edgeThreshold = 0.42f;
+          rs.depthFx.edgeWidth = 1.4f;
+          rs.depthFx.depthDesatEnabled = true;
+          rs.depthFx.desatStrength = 0.15f;
+          rs.depthFx.chromaDepthEnabled = false;
+          rs.depthFx.motionParallaxHint = false;
+          rs.depthFx.dofEnabled = false;
+          rs.depthFx.dofFocusNear = 0.35f;
+          rs.depthFx.dofFocusFar = 0.95f;
+          rs.depthFx.dofMaxRadius = 2.5f;
+          rs.depthFx.depthCurve = 1.15f;
           rs.display.depthFar = 100.0f;
         }
         ImGui::Separator();
 
-        ImGui::Checkbox("Fog", &fogEnabled);
-        ImGui::SliderFloat("Fog Density", &fogDensity, 0.0f, 1.0f);
-        ImGui::SliderFloat("Fog Start", &fogStart, 0.0f, 1.0f);
-        ImGui::SliderFloat("Fog End", &fogEnd, 0.0f, 1.0f);
-        fogStart = std::min(fogStart, fogEnd);
-        ImGui::ColorEdit3("Fog Color", fogColor);
+        ImGui::Checkbox("Fog", &rs.depthFx.fogEnabled);
+        ImGui::SliderFloat("Fog Density", &rs.depthFx.fogDensity, 0.0f, 1.0f);
+        ImGui::SliderFloat("Fog Start", &rs.depthFx.fogStart, 0.0f, 1.0f);
+        ImGui::SliderFloat("Fog End", &rs.depthFx.fogEnd, 0.0f, 1.0f);
+        rs.depthFx.fogStart = std::min(rs.depthFx.fogStart, rs.depthFx.fogEnd);
+        ImGui::ColorEdit3("Fog Color", rs.depthFx.fogColor);
 
         ImGui::Separator();
-        ImGui::Checkbox("Edge Outlines", &edgeOutlinesEnabled);
-        ImGui::SliderFloat("Edge Threshold", &edgeThreshold, 0.0f, 1.0f);
-        ImGui::SliderFloat("Edge Width", &edgeWidth, 0.5f, 3.0f);
-        ImGui::ColorEdit3("Edge Color", edgeColor);
+        ImGui::Checkbox("Edge Outlines", &rs.depthFx.edgeOutlinesEnabled);
+        ImGui::SliderFloat("Edge Threshold", &rs.depthFx.edgeThreshold, 0.0f, 1.0f);
+        ImGui::SliderFloat("Edge Width", &rs.depthFx.edgeWidth, 0.5f, 3.0f);
+        ImGui::ColorEdit3("Edge Color", rs.depthFx.edgeColor);
 
         ImGui::Separator();
-        ImGui::Checkbox("Depth Desaturation", &depthDesatEnabled);
-        ImGui::SliderFloat("Desaturation", &desatStrength, 0.0f, 1.0f);
-        ImGui::Checkbox("Chroma Depth", &chromaDepthEnabled);
-        ImGui::Checkbox("Motion Parallax Hint", &motionParallaxHint);
+        ImGui::Checkbox("Depth Desaturation", &rs.depthFx.depthDesatEnabled);
+        ImGui::SliderFloat("Desaturation", &rs.depthFx.desatStrength, 0.0f, 1.0f);
+        ImGui::Checkbox("Chroma Depth", &rs.depthFx.chromaDepthEnabled);
+        ImGui::Checkbox("Motion Parallax Hint", &rs.depthFx.motionParallaxHint);
 
         ImGui::Separator();
-        ImGui::Checkbox("Depth of Field", &dofEnabled);
-        ImGui::SliderFloat("DoF Focus Near", &dofFocusNear, 0.0f, 1.0f);
-        ImGui::SliderFloat("DoF Focus Far", &dofFocusFar, 0.0f, 1.0f);
-        dofFocusNear = std::min(dofFocusNear, dofFocusFar);
-        ImGui::SliderFloat("DoF Max Radius", &dofMaxRadius, 0.0f, 12.0f);
-        ImGui::SliderFloat("Depth Curve", &depthCurve, 0.5f, 2.0f);
+        ImGui::Checkbox("Depth of Field", &rs.depthFx.dofEnabled);
+        ImGui::SliderFloat("DoF Focus Near", &rs.depthFx.dofFocusNear, 0.0f, 1.0f);
+        ImGui::SliderFloat("DoF Focus Far", &rs.depthFx.dofFocusFar, 0.0f, 1.0f);
+        rs.depthFx.dofFocusNear = std::min(rs.depthFx.dofFocusNear, rs.depthFx.dofFocusFar);
+        ImGui::SliderFloat("DoF Max Radius", &rs.depthFx.dofMaxRadius, 0.0f, 12.0f);
+        ImGui::SliderFloat("Depth Curve", &rs.depthFx.depthCurve, 0.5f, 2.0f);
         ImGui::End();
       }
 
       GLuint finalTexture = rs.targets.texTonemapped;
-      if (depthEffectsEnabled) {
+      if (rs.depthFx.depthEffectsEnabled) {
         ZONE_SCOPED_N("Depth Cues");
         if (rs.timing.gpuTimers.initialized) {
           rs.timing.gpuTimers.depth.begin();
@@ -5704,28 +5729,28 @@ int main(int argc, char **argv) {
         rtti.width = rs.targets.renderWidth;
         rtti.height = rs.targets.renderHeight;
         rtti.floatUniforms["depthEffectsEnabled"] = 1.0f;
-        rtti.floatUniforms["fogEnabled"] = fogEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["fogDensity"] = fogDensity;
-        rtti.floatUniforms["fogStart"] = fogStart;
-        rtti.floatUniforms["fogEnd"] = fogEnd;
-        rtti.floatUniforms["fogColorR"] = fogColor[0];
-        rtti.floatUniforms["fogColorG"] = fogColor[1];
-        rtti.floatUniforms["fogColorB"] = fogColor[2];
-        rtti.floatUniforms["edgeOutlinesEnabled"] = edgeOutlinesEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["edgeThreshold"] = edgeThreshold;
-        rtti.floatUniforms["edgeWidth"] = edgeWidth;
-        rtti.floatUniforms["edgeColorR"] = edgeColor[0];
-        rtti.floatUniforms["edgeColorG"] = edgeColor[1];
-        rtti.floatUniforms["edgeColorB"] = edgeColor[2];
-        rtti.floatUniforms["depthDesatEnabled"] = depthDesatEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["desatStrength"] = desatStrength;
-        rtti.floatUniforms["chromaDepthEnabled"] = chromaDepthEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["motionParallaxHint"] = motionParallaxHint ? 1.0f : 0.0f;
-        rtti.floatUniforms["dofEnabled"] = dofEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["dofFocusNear"] = dofFocusNear;
-        rtti.floatUniforms["dofFocusFar"] = dofFocusFar;
-        rtti.floatUniforms["dofMaxRadius"] = dofMaxRadius;
-        rtti.floatUniforms["depthCurve"] = depthCurve;
+        rtti.floatUniforms["fogEnabled"] = rs.depthFx.fogEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["fogDensity"] = rs.depthFx.fogDensity;
+        rtti.floatUniforms["fogStart"] = rs.depthFx.fogStart;
+        rtti.floatUniforms["fogEnd"] = rs.depthFx.fogEnd;
+        rtti.floatUniforms["fogColorR"] = rs.depthFx.fogColor[0];
+        rtti.floatUniforms["fogColorG"] = rs.depthFx.fogColor[1];
+        rtti.floatUniforms["fogColorB"] = rs.depthFx.fogColor[2];
+        rtti.floatUniforms["edgeOutlinesEnabled"] = rs.depthFx.edgeOutlinesEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["edgeThreshold"] = rs.depthFx.edgeThreshold;
+        rtti.floatUniforms["edgeWidth"] = rs.depthFx.edgeWidth;
+        rtti.floatUniforms["edgeColorR"] = rs.depthFx.edgeColor[0];
+        rtti.floatUniforms["edgeColorG"] = rs.depthFx.edgeColor[1];
+        rtti.floatUniforms["edgeColorB"] = rs.depthFx.edgeColor[2];
+        rtti.floatUniforms["depthDesatEnabled"] = rs.depthFx.depthDesatEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["desatStrength"] = rs.depthFx.desatStrength;
+        rtti.floatUniforms["chromaDepthEnabled"] = rs.depthFx.chromaDepthEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["motionParallaxHint"] = rs.depthFx.motionParallaxHint ? 1.0f : 0.0f;
+        rtti.floatUniforms["dofEnabled"] = rs.depthFx.dofEnabled ? 1.0f : 0.0f;
+        rtti.floatUniforms["dofFocusNear"] = rs.depthFx.dofFocusNear;
+        rtti.floatUniforms["dofFocusFar"] = rs.depthFx.dofFocusFar;
+        rtti.floatUniforms["dofMaxRadius"] = rs.depthFx.dofMaxRadius;
+        rtti.floatUniforms["depthCurve"] = rs.depthFx.depthCurve;
         renderToTexture(rtti);
         finalTexture = rs.targets.texDepthEffects;
         if (rs.timing.gpuTimers.initialized) {
@@ -5745,11 +5770,10 @@ int main(int argc, char **argv) {
       // ---------------------------------------------------------
       // Render wiregrid and overlays into the final texture before display
       {
-        static GLuint sceneFbo = 0;
-        if (sceneFbo == 0) {
-          glGenFramebuffers(1, &sceneFbo);
+        if (rs.targets.sceneFbo == 0) {
+          glGenFramebuffers(1, &rs.targets.sceneFbo);
         }
-        glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, rs.targets.sceneFbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, finalTexture,
                                0);
         glViewport(0, 0, rs.targets.renderWidth, rs.targets.renderHeight);
@@ -5789,7 +5813,7 @@ int main(int argc, char **argv) {
               (rs.grmhd.grmhdTimeSeriesLoaded && rs.grmhd.grmhdPboUploader.ready())
                   ? rs.grmhd.grmhdPboUploader.texture()
                   : rs.grmhd.grmhdTexture.texture;
-          sliceRtti.textureUniforms["colorMap"] = colorMap;
+          sliceRtti.textureUniforms["colorMap"] = rs.background.colorMap;
           sliceRtti.floatUniforms["sliceAxis"] = static_cast<float>(rs.grmhd.grmhdSliceAxis);
           sliceRtti.floatUniforms["sliceCoord"] = rs.grmhd.grmhdSliceCoord;
           sliceRtti.floatUniforms["sliceChannel"] = static_cast<float>(rs.grmhd.grmhdSliceChannel);
@@ -5815,7 +5839,7 @@ int main(int argc, char **argv) {
           // here.
 
           // Restore FBO for subsequent passes if any
-          glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo);
+          glBindFramebuffer(GL_FRAMEBUFFER, rs.targets.sceneFbo);
         }
 
         // 3. RmlUi Overlay
@@ -5874,11 +5898,11 @@ int main(int argc, char **argv) {
         renderControlsHelpPanel();
         renderControlsSettingsPanel(rs.camera.cameraModeIndex, rs.camera.orbitRadius, rs.camera.orbitSpeed);
         renderDisplaySettingsPanel(window, rs.display.swapInterval, rs.display.renderScale, windowWidth, windowHeight);
-        renderBackgroundPanel(backgroundAssets, backgroundIndex,
+        renderBackgroundPanel(rs.background.backgroundAssets, rs.background.backgroundIndex,
                               settings.backgroundParallaxStrength, settings.backgroundDriftStrength,
-                              backgroundLayerDepth, backgroundLayerScale, backgroundLayerIntensity,
-                              backgroundLayerLodBias);
-        renderWiregridPanel(wiregridEnabled, wiregridParams, wiregridColor);
+                              rs.background.backgroundLayerDepth, rs.background.backgroundLayerScale, rs.background.backgroundLayerIntensity,
+                              rs.background.backgroundLayerLodBias);
+        renderWiregridPanel(rs.wiregrid.wiregridEnabled, rs.wiregrid.wiregridParams, rs.wiregrid.wiregridColor);
         renderRmlUiPanel(rs.overlays.rmluiEnabled);
         renderGizmoPanel(rs.camera.gizmoEnabled, rs.camera.gizmoOperation, rs.camera.gizmoMode, rs.camera.gizmoTransform);
         renderPerformancePanel(rs.timing.gpuTimingEnabled, rs.timing.gpuTimers, rs.timing.timingHistory, cpuFrameMs,
@@ -5887,9 +5911,7 @@ int main(int argc, char **argv) {
 
       /* --export-frame / --export-raw-frame: export textures before ImGui. */
       if (!exportFramePath.empty() || !exportRawFramePath.empty()) {
-        static int exportWarmup = 0;
-        static bool exportPerformed = false;
-        if (++exportWarmup >= 5 && !exportPerformed && rs.targets.renderWidth > 0 && rs.targets.renderHeight > 0) {
+        if (++rs.exporting.exportWarmup >= 5 && !rs.exporting.exportPerformed && rs.targets.renderWidth > 0 && rs.targets.renderHeight > 0) {
           if (!exportFramePath.empty() && rs.targets.texTonemapped != 0) {
             glBindTexture(GL_TEXTURE_2D, rs.targets.texTonemapped);
             GLint texW = 0, texH = 0;
@@ -5932,7 +5954,7 @@ int main(int argc, char **argv) {
                            exportRawFramePath.c_str());
             }
           }
-          exportPerformed = true;
+          rs.exporting.exportPerformed = true;
         }
       }
 
@@ -6036,8 +6058,7 @@ int main(int argc, char **argv) {
 
       /* --export-frame / --export-raw-frame: break after the export frame above. */
       if (!exportFramePath.empty() || !exportRawFramePath.empty()) {
-        static int exportDone = 0;
-        if (++exportDone >= 6) { /* 5 warmup + 1 export frame */
+        if (++rs.exporting.exportDone >= 6) { /* 5 warmup + 1 export frame */
           break;
         }
       }
