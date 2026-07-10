@@ -1,12 +1,26 @@
+#include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <iomanip>
 
 // Test compilation of all verified headers
 #include "../src/physics/verified/schwarzschild.h"
 #include "../src/physics/verified/kerr.h"
+#include "../src/physics/verified/kerr_extended.h"
 #include "../src/physics/verified/rk4.h"
 #include "../src/physics/verified/geodesic.h"
 #include "../src/physics/verified/axiodilaton.h"
+
+namespace {
+int valueFailures = 0;
+void checkNear(const char *what, double actual, double expected, double tol) {
+  if (std::abs(actual - expected) > tol) {
+    std::cout << "  [FAIL] " << what << ": got " << actual << ", expected "
+              << expected << "\n";
+    ++valueFailures;
+  }
+}
+} // namespace
 
 int main() {
     std::cout << "Verified Physics Headers Compilation Test\n";
@@ -51,7 +65,19 @@ int main() {
     double const iscoPro = verified::iscoRadiusPrograde(m, a);
     double const iscoRet = verified::iscoRadiusRetrograde(m, a);
     std::cout << "  isco_prograde(M=1.0, a=0.9) = " << iscoPro << " (expected ~2.321)\n";
-    std::cout << "  isco_retrograde(M=1.0, a=0.9) = " << iscoRet << " (expected ~8.77)\n";
+    std::cout << "  isco_retrograde(M=1.0, a=0.9) = " << iscoRet << " (expected ~8.717)\n";
+    // Value checks, not just prints: this file compiled-and-printed for
+    // months while iscoRadiusPrograde returned 3.48M at a=0 (bptZ1 bug).
+    // BPT 1972 values at a=0.9: prograde 2.3209, retrograde 8.7173.
+    checkNear("iscoRadiusPrograde(1, 0)", verified::iscoRadiusPrograde(m, 0.0), 6.0, 1e-9);
+    checkNear("iscoRadiusRetrograde(1, 0)", verified::iscoRadiusRetrograde(m, 0.0), 6.0, 1e-9);
+    checkNear("iscoRadiusPrograde(1, 0.9)", iscoPro, 2.3209, 1e-3);
+    checkNear("iscoRadiusRetrograde(1, 0.9)", iscoRet, 8.7173, 1e-3);
+    // kerr_extended.h duplicates of the same physics (fixed together):
+    checkNear("kerrIscoPrograde(1, 0)", verified::kerrIscoPrograde(m, 0.0), 6.0, 1e-9);
+    checkNear("kerrIscoRetrograde(1, 0.9)", verified::kerrIscoRetrograde(m, 0.9), 8.7173, 1e-3);
+    checkNear("kerrOuterHorizon(1, 0.9)", verified::kerrOuterHorizon(m, 0.9),
+              1.0 + std::sqrt(1.0 - 0.81), 1e-9);
 
     // Test 6: RK4 StateVector operations
     std::cout << "\nTest 6: RK4 State Vector Operations\n";
@@ -111,7 +137,11 @@ int main() {
               << "\n";
 
     std::cout << "\n==========================================\n";
-    std::cout << "All verified header compilations successful!\n";
+    if (valueFailures != 0) {
+      std::cout << valueFailures << " value check(s) failed\n";
+      return EXIT_FAILURE;
+    }
+    std::cout << "All verified header compilations and value checks passed\n";
 
     return 0;
 }

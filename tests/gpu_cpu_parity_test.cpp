@@ -3,8 +3,6 @@
 #include <stdexcept>
 #include <string>
 
-#include <GL/gl.h>
-#include <GL/glext.h>
 #include <GLFW/glfw3.h>
 #include <glbinding/gl/gl.h>
 #include <glbinding/glbinding.h>

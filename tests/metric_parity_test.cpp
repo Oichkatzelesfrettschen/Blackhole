@@ -64,11 +64,11 @@ public:
       passed_tests_++;
     }
 
-    results_.push_back({.test_name = name,
+    results_.push_back({.testName = name,
                         .passed = passed,
                         .expected = expected,
                         .actual = actual,
-                        .relative_error = relError});
+                        .relativeError = relError});
 
     if (!passed) {
       std::cout << "[FAIL] " << name << "\n";
