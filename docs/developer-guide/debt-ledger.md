@@ -500,6 +500,16 @@ brackets.
   RenderState struct (grouped substructs: camera, disk, grmhd, stokes,
   wiregrid, background, post). Mechanical move, no behavior change.
   [main.cpp statics block deleted; frame renders identically]
+  DONE 2026-07-10 (eb52f5c + e820d66): 231 pre-loop + 60 in-loop statics
+  now live in RenderState with 22 subsystem groups; member names kept
+  verbatim, uses qualified as rs.group.name inside main() only. The two
+  first-frame GL loads keep lazy timing behind an explicit
+  baseTexturesLoaded guard. Verified by 81/81 suite, identical live-run
+  log message classes vs pre-change baseline, and zero unknown-uniform
+  warnings (an earlier transform draft that rewrote uniform string
+  literals was caught by exactly that check). Remaining statics: two
+  constexpr constants, the display panel presetIndex (STATE-3), and
+  PostProcessPass quadVao (STATE-2).
 - STATE-2 Extract self-contained blocks in dependency order: crash
   handlers -> src/platform/crash_handler.*; resource-root ->
   src/platform/resource_paths.*; compare harness ->
