@@ -3745,6 +3745,37 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Fast-math-safe numeric classification tests. This target keeps the
+  # global -ffast-math flags on purpose: safe_limits.h exists to classify
+  # inf/NaN correctly under -ffinite-math-only, so the test must run under
+  # exactly those flags. Do NOT add the -fno-fast-math override here.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/safe_limits_test.cpp")
+    add_executable(safe_limits_test
+      "${PROJECT_SOURCE_DIR}/tests/safe_limits_test.cpp"
+    )
+    target_include_directories(safe_limits_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(safe_limits_test PRIVATE ${PROJECT_WARNINGS})
+    # _FORTIFY_SOURCE=3 combined with -ffinite-math-only corrupts the stack
+    # in glibc's *_chk stdio paths (the same interaction that forced the
+    # -fno-fast-math override onto 20 physics test targets). This target
+    # must keep fast-math -- it validates classification under exactly those
+    # flags -- so hardening yields instead of the flag under test.
+    target_compile_options(safe_limits_test PRIVATE -U_FORTIFY_SOURCE)
+    add_test(NAME safe_limits_validation COMMAND safe_limits_test)
+    set_tests_properties(safe_limits_validation PROPERTIES
+      LABELS "physics;numerics;fast-math"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(safe_limits_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Connection coefficient validation tests (Phase 1.4.6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/connection_test.cpp")
     add_executable(connection_test
