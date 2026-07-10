@@ -10,7 +10,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <string>
 
+#include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -68,6 +70,81 @@ void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
   glUniform3f(glGetUniformLocation(program, "cameraPos"), interop.cameraPos.x, interop.cameraPos.y,
               interop.cameraPos.z);
   glUniform1i(glGetUniformLocation(program, "interopMaxSteps"), interop.maxSteps);
+}
+
+void bindComputeUniforms(GLuint program, const RenderState &rs, const FrameBindingInputs &in) {
+  // Wiregrid BL-coord overlay (parity with fragment path)
+  glUniform1f(glGetUniformLocation(program, "wiregridEnabled"),
+              rs.wiregrid.wiregridEnabled ? 1.0f : 0.0f);
+  glUniform1f(glGetUniformLocation(program, "wiregridShowErgo"),
+              rs.wiregrid.wiregridParams.showErgosphere ? 1.0f : 0.0f);
+  glUniform1f(glGetUniformLocation(program, "wiregridGridScale"),
+              rs.wiregrid.wiregridParams.gridScale);
+  glUniform1f(glGetUniformLocation(program, "wiregridMotionScale"),
+              rs.wiregrid.wiregridParams.motionScale);
+  glUniform1f(glGetUniformLocation(program, "wiregridInfallScale"),
+              rs.wiregrid.wiregridParams.infallScale);
+  glUniform1f(glGetUniformLocation(program, "wiregridStrength"),
+              rs.wiregrid.wiregridParams.strength);
+  glUniform1f(glGetUniformLocation(program, "wiregridScenePreserve"),
+              rs.wiregrid.wiregridParams.scenePreserve);
+  glUniform4f(glGetUniformLocation(program, "wiregridColor"),
+              rs.wiregrid.wiregridColor.r, rs.wiregrid.wiregridColor.g, rs.wiregrid.wiregridColor.b, rs.wiregrid.wiregridColor.a);
+
+  // D4: polarized Stokes IQUV (parity with fragment path)
+  glUniform1f(glGetUniformLocation(program, "stokesEnabled"),
+              rs.stokes.stokesEnabled ? 1.0f : 0.0f);
+  glUniform1f(glGetUniformLocation(program, "stokesBFieldAngle"),
+              rs.stokes.stokesBFieldAngle);
+  glUniform1f(glGetUniformLocation(program, "stokesNeScale"),
+              rs.stokes.stokesNeScale);
+
+  GLint texUnit = 0;
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+  glBindTexture(GL_TEXTURE_2D, in.lutReady ? rs.luts.texEmissivityLUT : rs.background.fallback2D);
+  glUniform1i(glGetUniformLocation(program, "emissivityLUT"), texUnit);
+  texUnit++;
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+  glBindTexture(GL_TEXTURE_2D, in.lutReady ? rs.luts.texRedshiftLUT : rs.background.fallback2D);
+  glUniform1i(glGetUniformLocation(program, "redshiftLUT"), texUnit);
+  texUnit++;
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+  glBindTexture(GL_TEXTURE_2D, in.spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D);
+  glUniform1i(glGetUniformLocation(program, "spectralLUT"), texUnit);
+  texUnit++;
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+  glBindTexture(GL_TEXTURE_2D, in.grbModulationEnabled ? rs.luts.texGrbModulationLUT : rs.background.fallback2D);
+  glUniform1i(glGetUniformLocation(program, "grbModulationLUT"), texUnit);
+  texUnit++;
+  glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+  glBindTexture(GL_TEXTURE_CUBE_MAP, rs.background.galaxy != 0 ? rs.background.galaxy : rs.background.fallbackCubemap);
+  glUniform1i(glGetUniformLocation(program, "galaxy"), texUnit);
+  texUnit++;
+  for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
+    glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
+    glBindTexture(GL_TEXTURE_2D, rs.background.backgroundTextures.at(static_cast<std::size_t>(i)));
+    std::string const name = "backgroundLayers[" + std::to_string(i) + "]";
+    glUniform1i(glGetUniformLocation(program, name.c_str()), texUnit);
+    texUnit++;
+  }
+  glUniform1f(glGetUniformLocation(program, "backgroundEnabled"),
+              in.backgroundEnabledEffective ? 1.0f : 0.0f);
+  glUniform1f(glGetUniformLocation(program, "bhDebugFlags"),
+              static_cast<float>(rs.compare.integratorDebugFlags));
+  glUniform1f(glGetUniformLocation(program, "backgroundIntensity"),
+              in.backgroundIntensity);
+  for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
+    std::string const name = "backgroundLayerParams[" + std::to_string(i) + "]";
+    const auto &params = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
+    glUniform4f(glGetUniformLocation(program, name.c_str()), params.x, params.y,
+                params.z, params.w);
+  }
+  for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
+    std::string const name = "backgroundLayerLodBias[" + std::to_string(i) + "]";
+    float const bias =
+        std::max(rs.background.backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
+    glUniform1f(glGetUniformLocation(program, name.c_str()), bias);
+  }
 }
 
 void applyHawkingUniforms(GLuint program, const physics::HawkingRenderer &renderer, bool enabled,

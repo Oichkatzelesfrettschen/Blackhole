@@ -32,6 +32,9 @@ struct FrameBindingInputs {
   float backgroundIntensity = 0.0f;        ///< settings.backgroundIntensity for this frame.
   float frameShiftX = 0.0f;                ///< Record-mode showcase-orbit horizontal frame offset.
   float frameShiftY = 0.0f;                ///< Record-mode showcase-orbit vertical frame offset.
+  bool lutReady = false;                   ///< Emissivity + redshift LUT textures both present.
+  bool spectralEnabled = false;            ///< Spectral LUT selected AND ready this frame.
+  bool grbModulationEnabled = false;       ///< GRB modulation LUT selected AND ready this frame.
 };
 
 /**
@@ -48,6 +51,13 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
  */
 void applyInteropComputeUniforms(gl::GLuint program, const InteropUniforms &interop, int width,
                                  int height);
+
+/**
+ * @brief Binds the compute-path wiregrid, Stokes, LUT/cubemap/background-layer
+ *        textures and background scalars on @p program, in parity with the
+ *        fragment path. Texture units are assigned sequentially from 0.
+ */
+void bindComputeUniforms(gl::GLuint program, const RenderState &rs, const FrameBindingInputs &in);
 
 /**
  * @brief Forwards Hawking-glow parameters to @p program via

@@ -483,6 +483,7 @@ using blackhole::appendCompareUniforms;
 using blackhole::applyInteropUniforms;
 using blackhole::applyInteropComputeUniforms;
 using blackhole::applyHawkingUniforms;
+using blackhole::bindComputeUniforms;
 using blackhole::FrameBindingInputs;
 #if BLACKHOLE_HAS_CUDA
 using blackhole::bindCudaLaunchParams;
@@ -2398,6 +2399,31 @@ int main(int argc, char **argv) {
         rtti.floatUniforms["photonSphereGlowStrength"] = rs.disk.photonSphereGlowStrength;
         rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphereEffective ? 1.0f : 0.0f;
 
+        // Per-frame derived transients shared by the CUDA and compute uniform
+        // binders (compare-baseline gating, LUT readiness, precomputed record
+        // frame shift); see FrameBindingInputs.
+        FrameBindingInputs frameInputs;
+        frameInputs.adiskEnabledEffective = adiskEnabledEffective;
+        frameInputs.enableRedshiftEffective = enableRedshiftEffective;
+        frameInputs.backgroundEnabledEffective = backgroundEnabledEffective;
+        frameInputs.enablePhotonSphereEffective = enablePhotonSphereEffective;
+        frameInputs.backgroundIntensity = settings.backgroundIntensity;
+        frameInputs.lutReady = lutReady;
+        frameInputs.spectralEnabled = spectralEnabled;
+        frameInputs.grbModulationEnabled = grbModulationEnabled;
+        /* Record-mode showcase-orbit frame offset; defaults (0,0) cover the
+         * non-record path via FrameBindingInputs member initializers. */
+        if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
+          const ShowcaseOrbitComposition *const composition =
+              findShowcaseOrbitComposition(recordComposition);
+          frameInputs.frameShiftX =
+              hasRecordFrameX ? recordFrameX
+                              : (composition != nullptr ? composition->frameOffsetX : 0.0f);
+          frameInputs.frameShiftY =
+              hasRecordFrameY ? recordFrameY
+                              : (composition != nullptr ? composition->frameOffsetY : 0.0f);
+        }
+
 #if BLACKHOLE_HAS_CUDA
         /* CUDA dispatch path: bypasses both fragment and compute GLSL paths */
         if (rs.dispatch.cudaManager.isEnabled()) {
@@ -2427,25 +2453,7 @@ int main(int argc, char **argv) {
 
           if (rs.dispatch.cudaManager.isReady()) {
             BH_LaunchParams cp = {};
-            FrameBindingInputs cudaInputs;
-            cudaInputs.adiskEnabledEffective = adiskEnabledEffective;
-            cudaInputs.enableRedshiftEffective = enableRedshiftEffective;
-            cudaInputs.backgroundEnabledEffective = backgroundEnabledEffective;
-            cudaInputs.enablePhotonSphereEffective = enablePhotonSphereEffective;
-            cudaInputs.backgroundIntensity = settings.backgroundIntensity;
-            /* Record-mode showcase-orbit frame offset; defaults (0,0) cover the
-             * non-record path via FrameBindingInputs member initializers. */
-            if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
-              const ShowcaseOrbitComposition *const composition =
-                  findShowcaseOrbitComposition(recordComposition);
-              cudaInputs.frameShiftX =
-                  hasRecordFrameX ? recordFrameX
-                                  : (composition != nullptr ? composition->frameOffsetX : 0.0f);
-              cudaInputs.frameShiftY =
-                  hasRecordFrameY ? recordFrameY
-                                  : (composition != nullptr ? composition->frameOffsetY : 0.0f);
-            }
-            bindCudaLaunchParams(cp, rs, interop, cudaInputs);
+            bindCudaLaunchParams(cp, rs, interop, frameInputs);
 
             rs.dispatch.cudaManager.renderFrame(&cp);
           }
@@ -2496,78 +2504,7 @@ int main(int argc, char **argv) {
             applyHawkingUniforms(computeProgram, rs.hawking.hawkingRenderer, rs.hawking.hawkingGlowEnabled,
                                  rs.hawking.hawkingTempScale, rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMass);
 
-            // Wiregrid BL-coord overlay (parity with fragment path)
-            glUniform1f(glGetUniformLocation(computeProgram, "wiregridEnabled"),
-                        rs.wiregrid.wiregridEnabled ? 1.0f : 0.0f);
-            glUniform1f(glGetUniformLocation(computeProgram, "wiregridShowErgo"),
-                        rs.wiregrid.wiregridParams.showErgosphere ? 1.0f : 0.0f);
-            glUniform1f(glGetUniformLocation(computeProgram, "wiregridGridScale"),
-                        rs.wiregrid.wiregridParams.gridScale);
-            glUniform1f(glGetUniformLocation(computeProgram, "wiregridMotionScale"),
-                        rs.wiregrid.wiregridParams.motionScale);
-            glUniform1f(glGetUniformLocation(computeProgram, "wiregridInfallScale"),
-                        rs.wiregrid.wiregridParams.infallScale);
-            glUniform1f(glGetUniformLocation(computeProgram, "wiregridStrength"),
-                        rs.wiregrid.wiregridParams.strength);
-            glUniform1f(glGetUniformLocation(computeProgram, "wiregridScenePreserve"),
-                        rs.wiregrid.wiregridParams.scenePreserve);
-            glUniform4f(glGetUniformLocation(computeProgram, "wiregridColor"),
-                        rs.wiregrid.wiregridColor.r, rs.wiregrid.wiregridColor.g, rs.wiregrid.wiregridColor.b, rs.wiregrid.wiregridColor.a);
-
-            // D4: polarized Stokes IQUV (parity with fragment path)
-            glUniform1f(glGetUniformLocation(computeProgram, "stokesEnabled"),
-                        rs.stokes.stokesEnabled ? 1.0f : 0.0f);
-            glUniform1f(glGetUniformLocation(computeProgram, "stokesBFieldAngle"),
-                        rs.stokes.stokesBFieldAngle);
-            glUniform1f(glGetUniformLocation(computeProgram, "stokesNeScale"),
-                        rs.stokes.stokesNeScale);
-
-            GLint texUnit = 0;
-            glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, lutReady ? rs.luts.texEmissivityLUT : rs.background.fallback2D);
-            glUniform1i(glGetUniformLocation(computeProgram, "emissivityLUT"), texUnit);
-            texUnit++;
-            glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, lutReady ? rs.luts.texRedshiftLUT : rs.background.fallback2D);
-            glUniform1i(glGetUniformLocation(computeProgram, "redshiftLUT"), texUnit);
-            texUnit++;
-            glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D);
-            glUniform1i(glGetUniformLocation(computeProgram, "spectralLUT"), texUnit);
-            texUnit++;
-            glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_2D, grbModulationEnabled ? rs.luts.texGrbModulationLUT : rs.background.fallback2D);
-            glUniform1i(glGetUniformLocation(computeProgram, "grbModulationLUT"), texUnit);
-            texUnit++;
-            glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-            glBindTexture(GL_TEXTURE_CUBE_MAP, rs.background.galaxy != 0 ? rs.background.galaxy : rs.background.fallbackCubemap);
-            glUniform1i(glGetUniformLocation(computeProgram, "galaxy"), texUnit);
-            texUnit++;
-            for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
-              glActiveTexture(GL_TEXTURE0 + static_cast<unsigned>(texUnit));
-              glBindTexture(GL_TEXTURE_2D, rs.background.backgroundTextures.at(static_cast<std::size_t>(i)));
-              std::string const name = "backgroundLayers[" + std::to_string(i) + "]";
-              glUniform1i(glGetUniformLocation(computeProgram, name.c_str()), texUnit);
-              texUnit++;
-            }
-            glUniform1f(glGetUniformLocation(computeProgram, "backgroundEnabled"),
-                        backgroundEnabledEffective ? 1.0f : 0.0f);
-            glUniform1f(glGetUniformLocation(computeProgram, "bhDebugFlags"),
-                        static_cast<float>(rs.compare.integratorDebugFlags));
-            glUniform1f(glGetUniformLocation(computeProgram, "backgroundIntensity"),
-                        settings.backgroundIntensity);
-            for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
-              std::string const name = "backgroundLayerParams[" + std::to_string(i) + "]";
-              const auto &params = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
-              glUniform4f(glGetUniformLocation(computeProgram, name.c_str()), params.x, params.y,
-                          params.z, params.w);
-            }
-            for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
-              std::string const name = "backgroundLayerLodBias[" + std::to_string(i) + "]";
-              float const bias =
-                  std::max(rs.background.backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
-              glUniform1f(glGetUniformLocation(computeProgram, name.c_str()), bias);
-            }
+            bindComputeUniforms(computeProgram, rs, frameInputs);
 
             glBindImageTexture(0, computeTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
             GLint const tileOffsetLoc = glGetUniformLocation(computeProgram, "tileOffset");
