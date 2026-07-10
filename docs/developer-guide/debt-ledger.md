@@ -545,6 +545,29 @@ brackets.
 - STATE-4 Extract uniform dispatch sites (frag/compute/cuda fill) into
   src/render/uniform_binding.* consuming the FACTS-1 registry. [main.cpp
   under 1,500 lines; cscope callee count of main under 300]
+  FILL EXTRACTION DONE 2026-07-10 (61f1ed7 + 1739f63 + 59e8617 + 79fa39d):
+  src/render/uniform_binding.* (blackhole::) now owns applyInteropUniforms,
+  applyInteropComputeUniforms, applyHawkingUniforms (seed move), plus the
+  three fill surfaces -- bindCudaLaunchParams (#if BLACKHOLE_HAS_CUDA),
+  bindComputeUniforms, bindFragmentUniforms. All three read persistent state
+  from RenderState and per-frame transients from one hoisted
+  FrameBindingInputs (the *Effective compare-baseline gates, LUT readiness,
+  grmhdTexId, precomputed record frame shift), populated once per frame and
+  shared by all lanes. bindFragmentUniforms deletes the preliminary rtti
+  writes its post-derivation pass overwrote; it deliberately LEAVES
+  emissivity/redshift/photonGlow/diskDensity at the first-pass site because
+  updateLuts reassigns those handles between the passes (moving them is a
+  first-frame behavior change, out of scope for a mechanical move). main.cpp
+  3374 -> 3146. Each commit verified by clean -Werror build, 81/81 ctest, an
+  8s live-run log-class diff, zero unknown-uniform warnings, and -- for the
+  compute/fragment fills -- a 12-preset BLACKHOLE_COMPARE_SWEEP=1 parity CSV
+  byte-identical to the pre-STATE-4 baseline (every preset exceeded=0). The
+  CUDA fill was runtime-exercised via a --record-profile cinematic run.
+  REMAINING to hit the 1,500-line target (separate extractions, not fill
+  work): harmonize the standalone panels to take RenderState&; move the
+  residual main-loop glue (LUT load/create side effects at the top of the
+  render block, GRMHD streaming, recording). Also open: the updateLuts
+  emissivity-staleness fix as its own behavior-change commit.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
