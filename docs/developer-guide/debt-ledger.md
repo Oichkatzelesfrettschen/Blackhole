@@ -280,20 +280,19 @@ brackets.
 
 ### Tranche workspace-tracking-detox  (independent; do first, all mechanical)
 
-- DETOX-1 `git rm -r --cached infer-out/` and verify .gitignore:79 now
-  takes effect. [git status clean after a fresh infer run]
-- DETOX-2 `git rm --cached` the ~60 rocq build artifacts; add *.vo *.vos
-  *.vok *.glob *.aux .*.cache Makefile.coq* to .gitignore (keep .v/.ml
-  sources). [rocq/ tracked files are sources only]
+- DETOX-1 DONE 2026-07-09. infer-out/ untracked; the pre-existing ignore
+  rule now takes effect. [git status clean after a fresh infer run]
+- DETOX-2 DONE 2026-07-09. 96 rocq build artifacts untracked; ignore
+  rules added; 57 source/doc files remain tracked. [rocq/ tracked files
+  are sources only]
 - DETOX-3 DONE 2026-07-09. The final diff falsified the byte-identical
   claim: 161 stale-only lines across 9 files, each verified as the
   pre-rewrite ancestor of a canonical-side successor (quality tiers,
   Dream Textures modal flow, material variant purge). Tree deleted;
   git history retains the ancestor. [single addon tree; pyproject green]
-- DETOX-4 Move openmach-*/, v7x86-*/, repo-hygiene-sweep-*/ to a
-  hygiene-archive branch; remove from main tracking; drop their
-  .gitattributes -diff rules. [repo root contains only renderer-related
-  dirs]
+- DETOX-4 DONE 2026-07-09. hygiene-archive branch retains the three
+  dated dirs; main drops the trees, their -diff rules, and rewords the
+  ignore note. [repo root contains only renderer-related dirs]
 - DETOX-5 Delete stale skeleton src/grmhd/grmhd_streaming.{cpp,h}; if
   src/grmhd/ becomes the intended home, move the real files there and
   update the three CMake references plus src/gpu `../` includes in the
@@ -304,10 +303,15 @@ brackets.
   code]
 - DETOX-7 Move src/physics/physics_test.cpp to tests/. [target still
   registered]
-- DETOX-8 Delete unused conan/recipes/tracy/0.12.2 and rmlui/4.4. [conan
+- DETOX-8 DONE 2026-07-09. Unused tracy/0.12.2 and rmlui/4.4 recipe
+  trees deleted; the export script names only 0.13.1 and 6.1. [conan
   install green]
-- DETOX-9 Add *.tar.gz to LFS or remove remaining tarballs (tools/gcovr
-  tarball: replace with a pinned dependency note). [no plain-git tarballs]
+- DETOX-9 DONE 2026-07-09. gcovr provenance tarball converted to an LFS
+  pointer; the other tarballs left with the hygiene archives. Finding
+  along the way: git-lfs was never `git lfs install`ed in this clone, so
+  attribute-driven conversion silently committed a raw blob on the first
+  attempt (a silent-absence instance) -- fixed with `git lfs install
+  --local` and verified via `git show :path`. [no plain-git tarballs]
 
 ### Tranche silent-absence-hardening  (kills generator silent-absence)
 
@@ -329,44 +333,44 @@ brackets.
   drifts from conanfile.py. [two clean-room installs resolve identically]
 - ABSENCE-5 Make conanfile.validate() enforce cppstd>=23 unconditionally.
   [configure fails without cppstd]
-- ABSENCE-6 Pin fetch_implot.sh to a release tag + sha256; pin FetchContent
+- ABSENCE-6 DONE 2026-07-09 (pinned to commit d65a2bef + sha256 log; FetchContent SHA pins remain open). Original task: Pin fetch_implot.sh to a release tag + sha256; pin FetchContent
   tags to commit SHAs. [re-fetch is byte-stable]
-- ABSENCE-7 Either implement bench/ci_bench.sh +
+- ABSENCE-7 DONE 2026-07-09 (both files implemented against the real physics_bench JSON schema; behavior-tested). Original task: Either implement bench/ci_bench.sh +
   scripts/check_bench_regression.py or delete their README contract. [no
   documented-but-missing files]
-- ABSENCE-8 Fix hardcoded /home/eirikr paths (BUILD-6 list) to derive from
+- ABSENCE-8 DONE 2026-07-09. Original task: Fix hardcoded /home/eirikr paths (BUILD-6 list) to derive from
   repo root or env. [scripts run for any checkout path]
 
-### Tranche canon-doc-reconciliation  (kills the DOC- class; mostly editorial)
+### Tranche canon-doc-reconciliation  (kills the DOC- class; COMPLETE 2026-07-09)
 
-- CANON-1 Declare one phase taxonomy in repo-truth.md (release-history
+- CANON-1 DONE 2026-07-09. Declared in repo-truth.md. Original task: Declare one phase taxonomy in repo-truth.md (release-history
   numbering lives only in CHANGELOG; workstream numbering only in roadmap)
   or renumber; fix status.md to one scheme. [a reader can date "Phase 6"]
-- CANON-2 Remove hand-written test/shader counts from roadmap.md and
+- CANON-2 DONE 2026-07-09 (roadmap current-state counts removed; dated history entries keep their numbers as records). Original task: Remove hand-written test/shader counts from roadmap.md and
   status.md; reference the repo-truth generated report. [zero hardcoded
   counts]
-- CANON-3 Delete the duplicated issue table from roadmap.md:459-476;
+- CANON-3 DONE 2026-07-09. Original task: Delete the duplicated issue table from roadmap.md:459-476;
   backlog.md is the owner. [one issue table]
-- CANON-4 Fix remaining dead references: AGENTS.md:15 requirements.md ->
+- CANON-4 DONE 2026-07-09 (link-check CI script remains open under VERIFY). Fixed: AGENTS.md:15 requirements.md ->
   developer-guide/dependencies.md; roadmap.md:482,:560-562 dead flat
   names; gemini.md STATUS.md pointer. Add a link-check script to CI.
   [zero dead intra-repo links]
-- CANON-5 Archive superseded plans (phases-5-6.md, eigen-refactor.md,
+- CANON-5 DONE 2026-07-09. Original task: Archive superseded plans (phases-5-6.md, eigen-refactor.md,
   halide, z3) under docs/archive/ with the stated policy; write the
   1-paragraph archive promotion/retention policy into index.md. [plans/
   contains only live plans]
-- CANON-6 Rename phase/date-named docs mechanism-first:
+- CANON-6 DONE 2026-07-09 (RESEARCH doc archived as rendering-research-notes.md; postmortem moved to gpu/). Original task: Rename phase/date-named docs mechanism-first:
   BLACKHOLE_RENDERING_NEXT_42_STEPS.md -> renderer-fidelity-tranche.md;
   BLACKHOLE_RENDERING_RESEARCH_2026-03-29.md -> archive;
   plans/phases-5-6.md -> archive; validation/phase-1.md ->
   openuniverse-import-validation.md. Link the three orphan docs from
   index.md or archive them. [index.md reaches every live doc]
-- CANON-7 Harmonize build entry points (fetch_implot step, ctest style)
+- CANON-7 DONE 2026-07-09 (fetch_implot step added to AGENTS.md and building.md, matching README and the ImPlot FATAL_ERROR gate). Original task: Harmonize build entry points (fetch_implot step, ctest style)
   across README/AGENTS/building.md. [verbatim-identical core sequence]
-- CANON-8 Reconcile the ISSUE-009 residual figure to one statement
+- CANON-8 DONE 2026-07-09. Original task: Reconcile the ISSUE-009 residual figure to one statement
   (backlog owns it); update lacunae.md:481 and roadmap.md:73 to point at
   it. [single stated figure]
-- CANON-9 ASCII-only sweep of docs/ (DOC-9) plus a CI verifier rejecting
+- CANON-9 DONE 2026-07-09 (scripts/ascii_sweep.py is sweeper and verifier; verifier green; CI wiring open under VERIFY). Original task: ASCII-only sweep of docs/ (DOC-9) plus a CI verifier rejecting
   non-ASCII in md/source outside docs/archive/.
   [grep -P '[^\x00-\x7F]' clean]
 
