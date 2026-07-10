@@ -516,14 +516,32 @@ brackets.
   src/tools/compare_harness.*; PostProcessPass/GpuTimer ->
   src/render/post_process.* / gpu_timing.*. [main.cpp under 4,000 lines;
   no block owns hidden statics]
-  PARTIAL 2026-07-10 (365b307): crash handler (platform::), resource
-  paths (platform::), GpuTimer/GpuTimerSet/TimingHistory + CSV writers
-  (blackhole::), and PostProcessPass (blackhole::, quad VAO now a lazy
-  member, not a static) extracted; main.cpp 6118 -> 5708. Crash handler
-  verified live via SIGTERM trace. REMAINING: compare harness ->
-  src/tools/compare_harness.* (goes with the compare statics group).
+  DONE 2026-07-10 (365b307 + 93383f9): crash handler (platform::),
+  resource paths (platform::), GpuTimer/GpuTimerSet/TimingHistory + CSV
+  writers (blackhole::), and PostProcessPass (blackhole::, quad VAO now
+  a lazy member, not a static) extracted; main.cpp 6118 -> 5708. Crash
+  handler verified live via SIGTERM trace. Compare harness (DiffStats,
+  readback/PPM/PFM writers, compare CSVs, 12-entry ComparePreset table)
+  -> src/tools/compare_harness.* (blackhole::); CameraMode -> input.h;
+  InteropUniforms -> src/render/interop_uniforms.h beside its registry;
+  main.cpp 5708 -> 5334. Verified by a full BLACKHOLE_COMPARE_SWEEP=1
+  12-preset sweep writing both CSVs through the extracted module with
+  zero threshold exceedances.
 - STATE-3 Extract ImGui panels to src/ui/*.cpp taking RenderState&.
   [main.cpp under 2,500 lines]
+  MOSTLY DONE 2026-07-10 (6413c66 + 4c4f6e5): RenderState +
+  BackgroundAsset + WiregridParams -> src/render/render_state.h
+  (blackhole::); the eight standalone panels + setupImGuiStyle +
+  initializeImGui + resetLayout + applyWiregridModeProfile ->
+  src/ui/panels.* (ui::); the Settings tab-bar window (Visuals/GRMHD/
+  Physics/Compute) + curve overlay + bloom + tonemap + depth-effects
+  panels + drawCurvePlot + loadGrmhdPacked helper ->
+  src/ui/settings_window.* taking RenderState&. Integrator debug bit
+  constants moved into RenderState::CompareGroup. main.cpp 5334 ->
+  3374. REMAINING to hit the 2,500-line target: the standalone panels
+  still take field references, not RenderState& (harmonize when STATE-4
+  moves their call sites); residual main-loop blocks (LUT loading,
+  GRMHD streaming glue, recording) are STATE-4 territory.
 - STATE-4 Extract uniform dispatch sites (frag/compute/cuda fill) into
   src/render/uniform_binding.* consuming the FACTS-1 registry. [main.cpp
   under 1,500 lines; cscope callee count of main under 300]
