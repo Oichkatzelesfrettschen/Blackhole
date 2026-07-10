@@ -44,6 +44,9 @@ enum class KeyAction {
   COUNT
 };
 
+/** @brief Camera positioning modes selectable in the UI and the compare presets. */
+enum class CameraMode { Input = 0, Front, Top, Orbit };
+
 /**
  * @brief Spherical-coordinate camera pose around the black hole origin.
  *
