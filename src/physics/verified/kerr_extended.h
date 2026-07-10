@@ -104,7 +104,7 @@ namespace verified {
 [[nodiscard]] constexpr double kerrGRr(double r, double theta, double m, double a) noexcept {
   double const sigma = kerrSigma(r, theta, a);
   double const delta = kerrDelta(r, m, a);
-  assert(Delta != 0.0 && "g_rr singular at horizon");
+  assert(delta != 0.0 && "g_rr singular at horizon");
   return sigma / delta;
 }
 
@@ -124,9 +124,9 @@ namespace verified {
  */
 [[nodiscard]] constexpr double kerrGPhiPhi(double r, double theta, double m, double a) noexcept {
   double const sigma = kerrSigma(r, theta, a);
-  double const a = kerrA(r, theta, m, a);
+  double const bigA = kerrA(r, theta, m, a);
   double const sinTheta = std::sin(theta);
-  return a * sinTheta * sinTheta / sigma;
+  return bigA * sinTheta * sinTheta / sigma;
 }
 
 /**
@@ -152,8 +152,8 @@ namespace verified {
  * Light cone singularity: information barrier from exterior perspective
  */
 [[nodiscard]] constexpr double kerrOuterHorizon(double m, double a) noexcept {
-  assert(a < M && "Naked singularity: a >= M");
-  assert(M > 0 && "Invalid mass");
+  assert(a < m && "Naked singularity: a >= m");
+  assert(m > 0 && "Invalid mass");
   double const discriminant = (m * m) - (a * a);
   assert(discriminant >= 0 && "Non-physical spin parameter");
   return m + std::sqrt(discriminant);
@@ -166,8 +166,8 @@ namespace verified {
  * Unstable to perturbations in physical black holes
  */
 [[nodiscard]] constexpr double kerrInnerHorizon(double m, double a) noexcept {
-  assert(a < M && "Naked singularity: a >= M");
-  assert(M > 0 && "Invalid mass");
+  assert(a < m && "Naked singularity: a >= m");
+  assert(m > 0 && "Invalid mass");
   double const discriminant = (m * m) - (a * a);
   return m - std::sqrt(discriminant);
 }
@@ -203,12 +203,15 @@ namespace verified {
 
 /**
  * Helper function Z2 from Bardeen-Press-Teukolsky formula
- * Z2(a) = sqrt(Z1(a) * (Z1(a) + 2*cbrt(1 - a^2)))
+ * Z2(a) = sqrt(3*a^2 + Z1(a)^2)
+ * Bardeen, Press & Teukolsky (1972) eq. 2.21. At a=0: Z1=3, Z2=3, and
+ * the prograde ISCO lands on the Schwarzschild 6M. A different (wrong)
+ * radicand Z1*(Z1+2*cbrt(1-a^2)) shipped here unnoticed because no
+ * target ever compiled this file; it gives Z2=sqrt(15) and 6.87M.
  */
 [[nodiscard]] constexpr double bptZ2(double a) noexcept {
   double const z1 = bptZ1(a);
-  double const cbrtTerm = std::cbrt(1.0 - (a * a));
-  double const arg = z1 * (z1 + (2.0 * cbrtTerm));
+  double const arg = (3.0 * a * a) + (z1 * z1);
   assert(arg >= 0 && "Invalid ISCO calculation");
   return std::sqrt(arg);
 }
@@ -221,8 +224,8 @@ namespace verified {
  * For a = M (extremal): r_isco = M
  */
 [[nodiscard]] constexpr double kerrIscoPrograde(double m, double a) noexcept {
-  assert(M > 0 && "Invalid mass");
-  assert(a >= 0 && a < M && "Invalid spin parameter");
+  assert(m > 0 && "Invalid mass");
+  assert(a >= 0 && a < m && "Invalid spin parameter");
 
   double const z1 = bptZ1(a);
   double const z2 = bptZ2(a);
@@ -238,16 +241,20 @@ namespace verified {
  * Uses same formula but with a -> -a
  */
 [[nodiscard]] constexpr double kerrIscoRetrograde(double m, double a) noexcept {
-  assert(M > 0 && "Invalid mass");
-  assert(a >= 0 && a < M && "Invalid spin parameter");
+  assert(m > 0 && "Invalid mass");
+  assert(a >= 0 && a < m && "Invalid spin parameter");
 
-  double const z1 = bptZ1(-a);
-  double const z2 = bptZ2(-a);
+  // Z1 and Z2 are even in a, so the retrograde branch is selected by the
+  // + sign on the square root, not by negating the spin: r_retro =
+  // M*(3 + Z2 + sqrt((3-Z1)(3+Z1+2Z2))) (BPT 1972). The prograde minus
+  // sign shipped here, silently returning the prograde radius.
+  double const z1 = bptZ1(a);
+  double const z2 = bptZ2(a);
 
   double const discriminant = (3.0 - z1) * (3.0 + z1 + (2.0 * z2));
   assert(discriminant >= 0 && "Invalid retrograde ISCO discriminant");
 
-  return m * (3.0 + z2 - std::sqrt(discriminant));
+  return m * (3.0 + z2 + std::sqrt(discriminant));
 }
 
 /**
@@ -260,8 +267,8 @@ namespace verified {
  * Proportional to Hawking temperature
  */
 [[nodiscard]] constexpr double kerrSurfaceGravity(double m, double a) noexcept {
-  assert(M > 0 && "Invalid mass");
-  assert(a >= 0 && a < M && "Invalid spin parameter");
+  assert(m > 0 && "Invalid mass");
+  assert(a >= 0 && a < m && "Invalid spin parameter");
 
   double const rPlus = kerrOuterHorizon(m, a);
   double const rMinus = kerrInnerHorizon(m, a);

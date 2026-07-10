@@ -242,7 +242,6 @@ inline verified::StateVector gpu_optimized_rk4_step(
         // Kerr Christoffel accelerations (optimized for single-precision fallback)
         // These are derived from Rocq: verified::kerr_christoffel_*
         const double r2_m_a2 = r * r - a * a;
-        const double r_plus_a2_sq = (r * r + a * a) * (r * r + a * a);
 
         double accel_r = (Delta / (Sigma * Sigma)) *
                         (r2_m_a2 * s.v1 * s.v1 + (r * r - a * a * cos2) * s.v2 * s.v2 -

@@ -127,18 +127,23 @@ template <KerrScalar Real> [[nodiscard]] inline Real surfaceGravity(Real m, Real
 // Hawking temperature
 // T = (hbar * kappa) / (2 * pi * k_B)  (in natural units, = hbar * kappa / (2 * pi))
 template <KerrScalar Real> [[nodiscard]] inline Real hawkingTemperature(Real m, Real a) noexcept {
-  return surface_gravity(m, a) / (2.0 * std::numbers::pi); // pi in denominator
+  return surfaceGravity(m, a) / (2.0 * std::numbers::pi); // pi in denominator
 }
 
 // Bardeen-Press-Teukolsky ISCO formula: helper Z1
 template <KerrScalar Real> [[nodiscard]] inline Real bptZ1(Real a) noexcept {
   const Real a2 = a * a;
-  // Z1 = 1 + cbrt((1 - a^2)/(2)) * (cbrt(1 + a) + cbrt(1 - a))
+  // Z1 = 1 + (1 - a^2)^(1/3) * ((1 + a)^(1/3) + (1 - a)^(1/3))
+  // Bardeen, Press & Teukolsky (1972) eq. 2.21. At a=0: Z1 = 3, which
+  // drives iscoRadiusPrograde to the Schwarzschild 6M. A spurious /2
+  // inside the first cube root shipped here for months (giving 3.48M
+  // at a=0) because the only test instantiating this template was an
+  // orphaned source no target compiled.
   const Real oneMinusA2 = 1.0 - a2;
-  const Real cbrtHalfOneMinusA2 = std::cbrt(oneMinusA2 / 2.0);
+  const Real cbrtOneMinusA2 = std::cbrt(oneMinusA2);
   const Real cbrt1PlusA = std::cbrt(1.0 + a);
   const Real cbrt1MinusA = std::cbrt(1.0 - a);
-  return 1.0 + (cbrtHalfOneMinusA2 * (cbrt1PlusA + cbrt1MinusA));
+  return 1.0 + (cbrtOneMinusA2 * (cbrt1PlusA + cbrt1MinusA));
 }
 
 // Bardeen-Press-Teukolsky ISCO formula: helper Z2
@@ -166,8 +171,8 @@ template <KerrScalar Real> [[nodiscard]] inline Real iscoRadiusPrograde(Real m, 
 // ISCO radius (retrograde orbits)
 // r_isco_retro = M * (3 + Z2 + sqrt((3 - Z1) * (3 + Z1 + 2*Z2)))
 template <KerrScalar Real> [[nodiscard]] inline Real iscoRadiusRetrograde(Real m, Real a) noexcept {
-  const Real z1 = bpt_Z1(a);
-  const Real z2 = bpt_Z2(a);
+  const Real z1 = bptZ1(a);
+  const Real z2 = bptZ2(a);
   const Real factor = (3.0 - z1) * (3.0 + z1 + (2.0 * z2));
   if (factor < 0.0) {
     return 6.0 * m; // Default to Schwarzschild
