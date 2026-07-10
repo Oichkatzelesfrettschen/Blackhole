@@ -38,26 +38,26 @@ This document tracks all background astronomical images used in the Blackhole vi
 ### nasa_pia22085 - Black Hole With Jet (Artist's Concept)
 - **Source**: NASA/JPL-Caltech
 - **Original URL**: http://images-assets.nasa.gov/image/PIA22085/PIA22085~orig.jpg
-- **Resolution**: 5120 × 2880 pixels
+- **Resolution**: 5120 x 2880 pixels
 - **File Size**: ~1.3 MB (JPEG)
 - **Credit Line**: NASA/JPL-Caltech
 
 ### nasa_pia15415 - Cygnus Loop Nebula
 - **Source**: NASA/JPL-Caltech
 - **Original URL**: http://images-assets.nasa.gov/image/PIA15415/PIA15415~orig.jpg
-- **Resolution**: 6000 × 6000 pixels
+- **Resolution**: 6000 x 6000 pixels
 - **File Size**: ~5.3 MB (JPEG)
 
 ### esa_heic1509a - Westerlund 2 Cluster
 - **Source**: ESA/Hubble
 - **Original URL**: https://cdn.esahubble.org/archives/images/publicationjpg/heic1509a.jpg
-- **Resolution**: 4K: 4000 × 2997 (~3.4 MB), Large: 8919 × 6683 (~19 MB)
+- **Resolution**: 4K: 4000 x 2997 (~3.4 MB), Large: 8919 x 6683 (~19 MB)
 - **Credit**: NASA, ESA, the Hubble Heritage Team (STScI/AURA), A. Nota (ESA/STScI)
 
 ### esa_heic1402a - Horsehead Nebula
 - **Source**: ESA/Hubble
 - **Original URL**: https://cdn.esahubble.org/archives/images/publicationjpg/heic1402a.jpg
-- **Resolution**: 4K: 4000 × 3596 (~15 MB), Large: 16617 × 14939 (~218 MB)
+- **Resolution**: 4K: 4000 x 3596 (~15 MB), Large: 16617 x 14939 (~218 MB)
 - **Credit**: NASA, ESA, E. Sabbi (STScI)
 
 ## Technical Specifications
@@ -76,8 +76,8 @@ This document tracks all background astronomical images used in the Blackhole vi
 5. Benefits: Faster loading, reduced memory, embedded mipmaps
 
 ### Resolution Targets
-- Minimum: 4K (3840 × 2160) for full-screen backgrounds
-- Optimal: 8K (7680 × 4320) for parallax layers with zoom
+- Minimum: 4K (3840 x 2160) for full-screen backgrounds
+- Optimal: 8K (7680 x 4320) for parallax layers with zoom
 - Ultra: 16K+ for archive-quality sources
 
 ## Attribution Requirements

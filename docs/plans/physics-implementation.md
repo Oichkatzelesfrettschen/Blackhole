@@ -45,8 +45,8 @@ namespace physics {
 ```
 
 **Validation:**
-- Test ISCO calculations for a* = 0.94: r_ISCO ≈ 1.236 r_s (prograde)
-- Test ergosphere for a* = 0.94: r_erg(θ=π/2) ≈ 1.27 r_s
+- Test ISCO calculations for a* = 0.94: r_ISCO ~= 1.236 r_s (prograde)
+- Test ergosphere for a* = 0.94: r_erg(theta=pi/2) ~= 1.27 r_s
 - Verify frame dragging calculations
 
 **Files to Update:**
@@ -64,7 +64,7 @@ namespace physics {
 **File:** `src/physics/kerr.cpp`
 
 **Current Limitation:**
-Most implementations only support prograde spins (a* ≥ 0).
+Most implementations only support prograde spins (a* >= 0).
 
 **Required Changes:**
 
@@ -134,13 +134,13 @@ TEST(KerrRetrogradeTest, FrameDragOppositeDirection) {
 
 **Current State:**
 ```cpp
-// May have upper limit around 100 M☉
+// May have upper limit around 100 Msun
 constexpr double MAX_BLACK_HOLE_MASS_SOLAR = 100.0;
 ```
 
 **Required Changes:**
 ```cpp
-// Updated based on LIGO GW231123 detection (225 M☉)
+// Updated based on LIGO GW231123 detection (225 Msun)
 namespace physics {
     constexpr double MIN_BLACK_HOLE_MASS_SOLAR = 1.0;
     constexpr double MAX_BLACK_HOLE_MASS_SOLAR = 250.0;  // Conservative upper limit
@@ -153,8 +153,8 @@ namespace physics {
 ```
 
 **Validation:**
-- Test Schwarzschild radius for 225 M☉: r_s ≈ 663 km
-- Test Hawking temperature for 225 M☉: T_H ≈ 2.74×10⁻¹⁰ K
+- Test Schwarzschild radius for 225 Msun: r_s ~= 663 km
+- Test Hawking temperature for 225 Msun: T_H ~= 2.74x10^-10 K
 - Verify gravitational wave energy calculations
 
 **Estimated Time:** 15 minutes
@@ -185,9 +185,9 @@ enum class AccretionState {
 };
 
 struct AccretionDiskConfig {
-    double mass;                    // Black hole mass (M☉)
+    double mass;                    // Black hole mass (Msun)
     double spin;                    // Kerr parameter a*
-    double accretion_rate;          // Eddington ratio (Ṁ/Ṁ_Edd)
+    double accretion_rate;          // Eddington ratio (Mdot/Mdot_Edd)
     AccretionState state;           // SANE/MAD/Intermediate
     double magnetic_flux;           // Dimensionless magnetic flux
 
@@ -239,15 +239,15 @@ double AccretionDisk::magnetic_field_strength(double r) const {
     }
 
     // MAD: Strong magnetic field near ISCO
-    // B ∝ sqrt(ρ) in equipartition
+    // B ~ sqrt(rho) in equipartition
     double r_isco = inner_radius_;
     double rho = surface_density(r);
 
-    // Magnetic pressure ratio β = P_gas / P_mag
-    // For MAD: β ~ 1 (equipartition)
+    // Magnetic pressure ratio beta = P_gas / P_mag
+    // For MAD: beta ~ 1 (equipartition)
     double beta = 1.0 / config_.magnetic_pressure_ratio;
 
-    // B = sqrt(8π P_mag) = sqrt(8π P_gas / β)
+    // B = sqrt(8pi P_mag) = sqrt(8pi P_gas / beta)
     double P_gas = constants::BOLTZMANN * rho * temperature(r);
     double B = std::sqrt(8.0 * constants::PI * P_gas / beta);
 
@@ -277,7 +277,7 @@ double AccretionDisk::jet_power() const {
     }
 
     // MAD: Blandford-Znajek mechanism
-    // P_jet ∝ a*² Φ_BH² (spin and magnetic flux)
+    // P_jet ~ a*^2 Phi_BH^2 (spin and magnetic flux)
     double a2 = config_.spin * config_.spin;
     double flux2 = config_.magnetic_flux * config_.magnetic_flux;
 
@@ -498,7 +498,7 @@ namespace physics {
 struct JetConfig {
     double base_distance_light_years;  // Distance from horizon to jet base
     double opening_angle_deg;          // Jet opening angle
-    double lorentz_factor;             // Bulk Lorentz factor γ
+    double lorentz_factor;             // Bulk Lorentz factor gamma
     double power_erg_per_sec;          // Jet luminosity
     double magnetic_flux;              // Poloidal field strength
 };
@@ -569,7 +569,7 @@ float jet_emissivity(vec3 pos, Jet jet, float frequency) {
         return 0.0;
     }
 
-    // Synchrotron emissivity ∝ B^2 n_e ν^(-0.7)
+    // Synchrotron emissivity ~ B^2 n_e nu^(-0.7)
     // Simplified model: decreases with distance from base
     float r = length(pos);
     float distance_factor = jet.base_distance / r;
@@ -684,7 +684,7 @@ TEST(Physics2026, NextGenEHTFrequency) {
     // Wavelength relationship
     double wavelength_ratio = freq_345.wavelength_cm / freq_230.wavelength_cm;
     double freq_ratio = freq_230.frequency_hz / freq_345.frequency_hz;
-    EXPECT_NEAR(wavelength_ratio, freq_ratio, 0.01) << "λ ∝ 1/ν";
+    EXPECT_NEAR(wavelength_ratio, freq_ratio, 0.01) << "lambda ~ 1/nu";
 }
 
 // Test 6: M87 jet base position
@@ -780,7 +780,7 @@ constexpr BlackHolePreset M87_STAR_2026 = {
 // GW231123 - Most massive merger
 constexpr BlackHolePreset GW231123_REMNANT = {
     .name = "GW231123 Remnant",
-    .description = "Most massive black hole merger (225 M☉)",
+    .description = "Most massive black hole merger (225 Msun)",
     .mass_solar = 225.0,
     .spin = 0.7,  // Post-merger spin (estimate)
     .disk = {
@@ -808,8 +808,8 @@ static const char* preset_names[] = {
     "Sgr A* (EHT 2025-2026)",
     "M87* (EHT Jan 2026)",
     "GW231123 Remnant",
-    "Stellar Mass (10 M☉)",
-    "Intermediate Mass (1000 M☉)"
+    "Stellar Mass (10 Msun)",
+    "Intermediate Mass (1000 Msun)"
 };
 
 static int current_preset = 0;
@@ -854,7 +854,7 @@ Before considering implementation complete:
 - [ ] All physics_validation_2026 tests pass
 - [ ] Sgr A* preset renders with a* = 0.94
 - [ ] Retrograde spins work correctly (negative frame dragging)
-- [ ] GW231123 mass (225 M☉) within supported range
+- [ ] GW231123 mass (225 Msun) within supported range
 - [ ] MAD accretion state shows flux eruptions
 - [ ] 345 GHz frequency available in UI
 - [ ] M87 preset shows jet base at 0.09 ly
@@ -872,7 +872,7 @@ All changes are based on:
 
 1. **EHT Sgr A* GRMHD:** arXiv:2510.03602 (a* = 0.94)
 2. **EHT M87 Jet Base:** EHT Jan 2026 announcement (0.09 ly)
-3. **LIGO GW231123:** Most massive merger (225 M☉)
+3. **LIGO GW231123:** Most massive merger (225 Msun)
 4. **LIGO GW241110:** First retrograde binary detection
 5. **GRMHD Dynamo:** arXiv:2512.02129 (MAD jet physics)
 

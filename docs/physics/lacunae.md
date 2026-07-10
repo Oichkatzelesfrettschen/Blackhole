@@ -477,8 +477,11 @@ Section 2.6d).
 ### 3.3 Compute Raytracer Parity (Issue-008, ACTIVE)
 
 The compute path has FP arithmetic differences from the fragment path due to
-FMA (fused multiply-add) contraction ordering. Only 11/12 presets pass at current
-tolerance. Root cause is documented but not eliminated. The fix requires either
+FMA (fused multiply-add) contraction ordering. One preset (preset 0,
+horizon-grazing rays) fails the default tolerance with 2-4 outlier pixels of
+2M; the strict sweep (1000 steps, 0.02) passes 12/12 -- `backlog.md`
+ISSUE-009 owns the residual figure. Root cause is documented but not
+eliminated. The fix requires either
 disabling FMA contraction (`-ffp-contract=off` or `precise` GLSL pragma) uniformly,
 or tightening the tolerance accounting for FMA-induced divergence.
 

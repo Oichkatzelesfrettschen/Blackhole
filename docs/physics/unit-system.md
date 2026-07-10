@@ -5,7 +5,7 @@ code paths and the validation assets used to keep them consistent.
 
 ## Goals
 - Single authoritative unit system for physics constants and inputs.
-- Explicit CGS ↔ geometric conversion boundaries.
+- Explicit CGS <-> geometric conversion boundaries.
 - Validation curves that fail fast when unit drift appears.
 
 ## CPU (C++) Units

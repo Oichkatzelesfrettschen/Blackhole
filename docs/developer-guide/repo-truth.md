@@ -3,6 +3,14 @@
 The repository now exposes a generated, measured build inventory so the docs do
 not need to guess what a configured tree contains.
 
+## Phase numbering
+
+Two phase numbering systems exist in the history and both are valid in their
+own domain: `CHANGELOG.md` uses release-history numbering (Phase 0-15,
+chronological), while `roadmap.md` uses workstream numbering (Phase 1-6,
+per-subsystem). A phase number is meaningless without naming its document.
+New work references mechanism names, not phase numbers.
+
 ## Generate the report
 
 ```bash

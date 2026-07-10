@@ -219,7 +219,7 @@ xcosm | pyproject.toml, Makefile | redshift tools
 ## GRB module notes (cleanroom targets)
 - grb-common: CGS constants + cosmology distance relations + extinction curves; use for offline LUT
   generation and validation inputs (no runtime dependency).
-- boxfit: afterglow hydrodynamics in precomputed HDF5 “box” files; use only as a data schema
+- boxfit: afterglow hydrodynamics in precomputed HDF5 "box" files; use only as a data schema
   source for LUT generation and interpolation ranges. HDF5 outputs use datasets like `F`, `t_obs`,
   `z`, `dL`, `ur_min/max`, `uphi_min/max`, `R_50/75/95/99/100`, `I`, `ur`, `uphi`.
 - JetFit: relies on `Table.h5` spectral function table; use as a spectral LUT input reference only.
@@ -232,7 +232,7 @@ xcosm | pyproject.toml, Makefile | redshift tools
   synchrotron + SSC + SSA + gamma-gamma; use as equation/feature checklist for LUTs only.
 - ASGARD includes WENO5 and implicit solvers plus Compton cooling; use for algorithm checklist
   and regression curve generation (offline only).
-- boxfit: compressed 2D jet simulations (RAM RHD) stored as HDF5 “box” data files; interpolation
+- boxfit: compressed 2D jet simulations (RAM RHD) stored as HDF5 "box" data files; interpolation
   over explosion/observer parameters for light-curve synthesis. Requires external box datasets.
 - JetFit: structured jet model with spectral function `Table.h5`; interpolates over axes in
   `Axis` (tau, Eta0, GammaB, theta_obs) and tables `f_peak`, `f_nu_c`, `f_nu_m`; use as

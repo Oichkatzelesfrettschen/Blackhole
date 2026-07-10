@@ -16,7 +16,7 @@ active plans, see `status.md`.
 | ISSUE-003: Camera system unification | LOW | Done | Optional presets follow-up |
 | ISSUE-004: Physics integration incomplete | LOW | Scoped | Kerr path, Doppler, frame-dragging improvements |
 | ISSUE-005: Legacy settings cleanup | LOW | Scoped | Optional versioning/migration |
-| ISSUE-006: Display scaling + vsync + fullscreen | MEDIUM | Implemented (validation deferred) | Validate 720p–4K and fullscreen |
+| ISSUE-006: Display scaling + vsync + fullscreen | MEDIUM | Implemented (validation deferred) | Validate 720p-4K and fullscreen |
 | ISSUE-007: OpenUniverse cleanroom integration | HIGH | Scoped | Audit + cleanroom ports |
 | ISSUE-008: Compute raytracer path | MEDIUM | Implemented (experimental) | Kerr + LUT parity checks pending |
 | ISSUE-009: Compute vs fragment compare sweep threshold failures | LOW | Root-caused | **Root cause:** RK4 integrator FP arithmetic differences (FMA contraction) between compute/fragment pipelines. Only preset 0 (Schwarzschild "Input Near" at ~4 r_s) fails with 2-4 outlier pixels out of 2M (0.0002%). Error is at rays grazing event horizon where tiny FP differences cause divergent capture/escape outcomes. **Resolution:** Expected driver behavior; adjust tolerance threshold or use strict sweep (1000 steps, 0.02 step) which passes 12/12. |

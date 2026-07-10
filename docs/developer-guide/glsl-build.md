@@ -3,7 +3,7 @@
 **Phase 9.D.1 Documentation**
 **Date:** 2026-01-02
 **Status:** Production Ready
-**Pipeline:** Rocq 9.1+ → OCaml → C++23 → GLSL 4.60
+**Pipeline:** Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
 
 ---
 
@@ -32,16 +32,16 @@ This guide documents the complete build process for verified physics shaders use
 
 | Shader Module | Lines | Functions | Rocq Theory | Status |
 |--------------|-------|-----------|-------------|---------|
-| `schwarzschild.glsl` | 180 | 12 | `Schwarzschild.v` | ✅ Verified |
-| `kerr.glsl` | 220 | 15 | `Kerr.v` | ✅ Verified |
-| `kerr_newman.glsl` | 240 | 18 | `KerrNewman.v` | ✅ Verified |
-| `kerr_de_sitter.glsl` | 260 | 21 | `KerrDeSitter.v` | ✅ Verified |
-| `rk4.glsl` | 150 | 8 | `Geodesics/RK4.v` | ✅ Verified |
-| `eos.glsl` | 270 | 25 | `Compact/EOS.v` | ✅ Verified |
-| `tov.glsl` | 180 | 10 | `Compact/TOV.v` | ✅ Verified |
-| `cosmology.glsl` | 320 | 28 | `Cosmology/*.v` | ✅ Verified |
-| `spectral.glsl` | 290 | 22 | `Spectral/Forcing.v` | ✅ Verified |
-| `ray.glsl` | 200 | 12 | `Geodesics/NullGeodesic.v` | ✅ Verified |
+| `schwarzschild.glsl` | 180 | 12 | `Schwarzschild.v` | [done] Verified |
+| `kerr.glsl` | 220 | 15 | `Kerr.v` | [done] Verified |
+| `kerr_newman.glsl` | 240 | 18 | `KerrNewman.v` | [done] Verified |
+| `kerr_de_sitter.glsl` | 260 | 21 | `KerrDeSitter.v` | [done] Verified |
+| `rk4.glsl` | 150 | 8 | `Geodesics/RK4.v` | [done] Verified |
+| `eos.glsl` | 270 | 25 | `Compact/EOS.v` | [done] Verified |
+| `tov.glsl` | 180 | 10 | `Compact/TOV.v` | [done] Verified |
+| `cosmology.glsl` | 320 | 28 | `Cosmology/*.v` | [done] Verified |
+| `spectral.glsl` | 290 | 22 | `Spectral/Forcing.v` | [done] Verified |
+| `ray.glsl` | 200 | 12 | `Geodesics/NullGeodesic.v` | [done] Verified |
 | **TOTAL** | **2,310** | **191** | **10 Rocq modules** | **Phase 9 Complete** |
 
 ---
@@ -51,27 +51,27 @@ This guide documents the complete build process for verified physics shaders use
 ### Three-Stage Verification Pipeline
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Rocq 9.1+   │────▶│   OCaml      │────▶│   C++23      │────▶│  GLSL 4.60   │
-│  Theories    │     │  Extraction  │     │  Reference   │     │  GPU Shaders │
-│  (.v files)  │     │              │     │  (.hpp)      │     │  (.glsl)     │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-      ▲                     │                     │                     │
-      │                     │                     │                     ▼
-      │                     │                     │              ┌──────────────┐
-      │                     │                     │              │   Vulkan     │
-      │                     │                     │              │   Pipeline   │
-      │                     │                     │              │   (GPU RT)   │
-      │                     │                     ▼              └──────────────┘
-      │                     │              ┌──────────────┐
-      │                     │              │   C++ Test   │
-      │                     │              │   Suite      │
-      │                     ▼              │  (Parity)    │
-      │              ┌──────────────┐     └──────────────┘
-      │              │  Extracted   │
-      │              │  OCaml Code  │
-      │              │ (debugging)  │
-      └──────────────┴──────────────┘
++--------------+     +--------------+     +--------------+     +--------------+
+|  Rocq 9.1+   |---->|   OCaml      |---->|   C++23      |---->|  GLSL 4.60   |
+|  Theories    |     |  Extraction  |     |  Reference   |     |  GPU Shaders |
+|  (.v files)  |     |              |     |  (.hpp)      |     |  (.glsl)     |
++--------------+     +--------------+     +--------------+     +--------------+
+      ^                     |                     |                     |
+      |                     |                     |                     v
+      |                     |                     |              +--------------+
+      |                     |                     |              |   Vulkan     |
+      |                     |                     |              |   Pipeline   |
+      |                     |                     |              |   (GPU RT)   |
+      |                     |                     v              +--------------+
+      |                     |              +--------------+
+      |                     |              |   C++ Test   |
+      |                     |              |   Suite      |
+      |                     v              |  (Parity)    |
+      |              +--------------+     +--------------+
+      |              |  Extracted   |
+      |              |  OCaml Code  |
+      |              | (debugging)  |
+      +--------------+--------------+
                  Feedback Loop
 ```
 
@@ -111,47 +111,47 @@ vulkaninfo --summary
 
 ```
 Blackhole/
-├── rocq/
-│   ├── theories/
-│   │   ├── Metrics/
-│   │   │   ├── Schwarzschild.v
-│   │   │   ├── Kerr.v
-│   │   │   ├── KerrNewman.v
-│   │   │   └── KerrDeSitter.v
-│   │   ├── Geodesics/
-│   │   ├── Compact/
-│   │   ├── Cosmology/
-│   │   └── Spectral/
-│   ├── extraction/
-│   │   └── Extract.v
-│   └── Makefile
-├── src/
-│   └── physics/
-│       └── verified/
-│           ├── schwarzschild.hpp
-│           ├── kerr.hpp
-│           ├── kerr_newman.hpp
-│           ├── kerr_de_sitter.hpp
-│           ├── eos.hpp
-│           ├── tov.hpp
-│           ├── rk4.hpp
-│           └── cosmology.hpp
-├── shader/
-│   └── include/
-│       └── verified/
-│           ├── schwarzschild.glsl
-│           ├── kerr.glsl
-│           ├── kerr_newman.glsl
-│           ├── kerr_de_sitter.glsl
-│           ├── eos.glsl
-│           ├── tov.glsl
-│           ├── rk4.glsl
-│           └── cosmology.glsl
-├── scripts/
-│   └── cpp_to_glsl.py
-└── tests/
-    ├── metric_parity_test.cpp
-    └── CMakeLists.txt
++-- rocq/
+|   +-- theories/
+|   |   +-- Metrics/
+|   |   |   +-- Schwarzschild.v
+|   |   |   +-- Kerr.v
+|   |   |   +-- KerrNewman.v
+|   |   |   +-- KerrDeSitter.v
+|   |   +-- Geodesics/
+|   |   +-- Compact/
+|   |   +-- Cosmology/
+|   |   +-- Spectral/
+|   +-- extraction/
+|   |   +-- Extract.v
+|   +-- Makefile
++-- src/
+|   +-- physics/
+|       +-- verified/
+|           +-- schwarzschild.hpp
+|           +-- kerr.hpp
+|           +-- kerr_newman.hpp
+|           +-- kerr_de_sitter.hpp
+|           +-- eos.hpp
+|           +-- tov.hpp
+|           +-- rk4.hpp
+|           +-- cosmology.hpp
++-- shader/
+|   +-- include/
+|       +-- verified/
+|           +-- schwarzschild.glsl
+|           +-- kerr.glsl
+|           +-- kerr_newman.glsl
+|           +-- kerr_de_sitter.glsl
+|           +-- eos.glsl
+|           +-- tov.glsl
+|           +-- rk4.glsl
+|           +-- cosmology.glsl
++-- scripts/
+|   +-- cpp_to_glsl.py
++-- tests/
+    +-- metric_parity_test.cpp
+    +-- CMakeLists.txt
 ```
 
 ---
@@ -302,7 +302,7 @@ cmake .. && cmake --build .
 
 ## Transpilation Process
 
-### Stage 4: C++23 → GLSL 4.60 Automatic Conversion
+### Stage 4: C++23 -> GLSL 4.60 Automatic Conversion
 
 **Tool**: `scripts/cpp_to_glsl.py`
 
@@ -356,16 +356,16 @@ python3 scripts/cpp_to_glsl.py
 ```
 Processing 10 verified physics files...
 
-schwarzschild.hpp → schwarzschild.glsl  (12 functions, 180 lines)
-kerr.hpp → kerr.glsl  (15 functions, 220 lines)
-kerr_newman.hpp → kerr_newman.glsl  (18 functions, 240 lines)
-kerr_de_sitter.hpp → kerr_de_sitter.glsl  (21 functions, 260 lines)
-rk4.hpp → rk4.glsl  (8 functions, 150 lines)
-eos.hpp → eos.glsl  (25 functions, 270 lines)
-tov.hpp → tov.glsl  (10 functions, 180 lines)
-cosmology.hpp → cosmology.glsl  (28 functions, 320 lines)
-spectral.hpp → spectral.glsl  (22 functions, 290 lines)
-ray.hpp → ray.glsl  (12 functions, 200 lines)
+schwarzschild.hpp -> schwarzschild.glsl  (12 functions, 180 lines)
+kerr.hpp -> kerr.glsl  (15 functions, 220 lines)
+kerr_newman.hpp -> kerr_newman.glsl  (18 functions, 240 lines)
+kerr_de_sitter.hpp -> kerr_de_sitter.glsl  (21 functions, 260 lines)
+rk4.hpp -> rk4.glsl  (8 functions, 150 lines)
+eos.hpp -> eos.glsl  (25 functions, 270 lines)
+tov.hpp -> tov.glsl  (10 functions, 180 lines)
+cosmology.hpp -> cosmology.glsl  (28 functions, 320 lines)
+spectral.hpp -> spectral.glsl  (22 functions, 290 lines)
+ray.hpp -> ray.glsl  (12 functions, 200 lines)
 
 Total: 191 functions transpiled across 2,310 lines
 Transpilation complete!
@@ -720,9 +720,9 @@ Pass rate:    100.00%
 | Schwarzschild | 13 | f, g_tt, g_rr, horizons, photon sphere, ISCO |
 | Kerr | 16 | Sigma, Delta, horizons, frame dragging (4 spins) |
 | Kerr-Newman | 12 | Charged metric, EM potential (4 charges) |
-| Kerr-de Sitter | 10 | Triple horizons, cosmological constant (4 Λ) |
-| Reductions | 4 | Kerr→Schwarzschild, KN→Kerr, KdS→Kerr, KN→Schw |
-| Validity | 4 | Physical constraints (a<M, a²+Q²≤M², Λ>0) |
+| Kerr-de Sitter | 10 | Triple horizons, cosmological constant (4 Lambda) |
+| Reductions | 4 | Kerr->Schwarzschild, KN->Kerr, KdS->Kerr, KN->Schw |
+| Validity | 4 | Physical constraints (a<M, a^2+Q^2<=M^2, Lambda>0) |
 | **TOTAL** | **59** | Float32 tolerance: 1e-5 relative error |
 
 ### Individual Metric Tests
@@ -761,12 +761,12 @@ void test_schwarzschild(TestSuite& suite) {
 
 | Type | Precision | Range | Use Case |
 |------|-----------|-------|----------|
-| `double` (C++) | 15-17 digits | ±10⁻³⁰⁸ to ±10³⁰⁸ | Reference validation |
-| `float` (GLSL) | 6-9 digits | ±10⁻³⁸ to ±10³⁸ | GPU real-time rendering |
+| `double` (C++) | 15-17 digits | +/-10^-308 to +/-10^308 | Reference validation |
+| `float` (GLSL) | 6-9 digits | +/-10^-38 to +/-10^38 | GPU real-time rendering |
 
 **Bounded Error Guarantee:**
 
-All GLSL transpilations guarantee relative error ≤ 1e-6 for:
+All GLSL transpilations guarantee relative error <= 1e-6 for:
 - Metric function evaluations (f, Delta, Sigma)
 - Horizon calculations
 - Geodesic integration steps
@@ -776,7 +776,7 @@ All GLSL transpilations guarantee relative error ≤ 1e-6 for:
 
 #### 1. **Cosmological Constant Underflow**
 
-**Problem**: Observed Λ ≈ 1.1×10⁻⁵² underflows in float32 (subnormal minimum ≈ 1.4×10⁻⁴⁵)
+**Problem**: Observed Lambda ~= 1.1x10^-52 underflows in float32 (subnormal minimum ~= 1.4x10^-45)
 
 **Solution**:
 ```glsl
@@ -792,7 +792,7 @@ const float Lambda_cosmological = Lambda * r_cosmological^2;  // Dimensionless
 
 #### 2. **Large Mass Ratios**
 
-**Problem**: M_BH / M_sun ≈ 10⁶ to 10⁹ causes precision loss in some calculations
+**Problem**: M_BH / M_sun ~= 10^6 to 10^9 causes precision loss in some calculations
 
 **Solution**:
 ```glsl
@@ -803,7 +803,7 @@ const float r_observer = r_SI / r_schwarzschild;  // Normalize distances
 
 #### 3. **Near-Horizon Calculations**
 
-**Problem**: f → 0 near horizon causes division instabilities
+**Problem**: f -> 0 near horizon causes division instabilities
 
 **Solution**:
 ```glsl
@@ -819,9 +819,9 @@ float g_rr = Sigma / max(Delta, epsilon);
 2. **Transpiled Execution** (GLSL float32)
 3. **Relative Error Check**: `|actual - expected| / |expected| < 1e-5`
 4. **Special Case Handling**:
-   - Division by zero → add epsilon
-   - Underflow/overflow → rescale units
-   - Catastrophic cancellation → use alternate formula
+   - Division by zero -> add epsilon
+   - Underflow/overflow -> rescale units
+   - Catastrophic cancellation -> use alternate formula
 
 ---
 

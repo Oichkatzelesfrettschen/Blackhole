@@ -6,15 +6,15 @@
 ## One-Click Presets
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ "Sgr A* (MAD, a*=0.94)" Button                     │
-├─────────────────────────────────────────────────────┤
-│ Mass:  4.3 × 10⁶ M☉  (EHT measured)                │
-│ Spin:  0.94          (EHT-GRMHD constrained)       │
-│ State: MAD           (magnetic equipartition)       │
-│ Beta:  1.0           (P_gas ~ P_mag)                │
-│ Flux:  50            (strong magnetic flux)         │
-└─────────────────────────────────────────────────────┘
++-----------------------------------------------------+
+| "Sgr A* (MAD, a*=0.94)" Button                     |
++-----------------------------------------------------+
+| Mass:  4.3 x 10^6 Msun  (EHT measured)                |
+| Spin:  0.94          (EHT-GRMHD constrained)       |
+| State: MAD           (magnetic equipartition)       |
+| Beta:  1.0           (P_gas ~ P_mag)                |
+| Flux:  50            (strong magnetic flux)         |
++-----------------------------------------------------+
 ```
 
 ---
@@ -23,28 +23,28 @@
 
 ### Black Hole Mass (M)
 ```
-Range: 0.1 to 250 M☉
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Stellar:        3-100 M☉
-Sgr A*:         4.3 × 10⁶ M☉
-M87:            6.5 × 10⁹ M☉
-GW231123 max:   225 M☉ (LIGO record)
+Range: 0.1 to 250 Msun
+===========================================
+Stellar:        3-100 Msun
+Sgr A*:         4.3 x 10^6 Msun
+M87:            6.5 x 10^9 Msun
+GW231123 max:   225 Msun (LIGO record)
 ```
 
 ### Kerr Spin (a*)
 ```
 Range: -0.998 to +0.998
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+===========================================
 Schwarzschild:  0.0   (non-rotating)
 Sgr A*:         0.94  (EHT-constrained)
 Near-extremal:  0.998 (maximum rotation)
 Retrograde:     <0    (counter-rotating)
 
 ISCO Scaling:
-  a* = +0.998 → ISCO = 1.237 M  (near-extremal prograde)
-  a* = +0.94  → ISCO = 2.024 M  (Sgr A*)
-  a* = 0.0    → ISCO = 6.0 M    (Schwarzschild)
-  a* = -0.998 → ISCO = 8.994 M  (near-extremal retrograde)
+  a* = +0.998 -> ISCO = 1.237 M  (near-extremal prograde)
+  a* = +0.94  -> ISCO = 2.024 M  (Sgr A*)
+  a* = 0.0    -> ISCO = 6.0 M    (Schwarzschild)
+  a* = -0.998 -> ISCO = 8.994 M  (near-extremal retrograde)
 ```
 
 ---
@@ -52,16 +52,16 @@ ISCO Scaling:
 ## Accretion States
 
 ```
-┌──────────────┬──────────┬─────────┬──────────┐
-│ State        │ Beta (β) │ Jet η   │ Variable │
-├──────────────┼──────────┼─────────┼──────────┤
-│ SANE         │ ~100     │ ~1%     │ No       │
-│ MAD          │ ~1       │ 10-40%  │ Yes      │
-│ Intermediate │ ~10      │ 5-15%   │ Moderate │
-└──────────────┴──────────┴─────────┴──────────┘
++--------------+----------+---------+----------+
+| State        | Beta (beta) | Jet eta   | Variable |
++--------------+----------+---------+----------+
+| SANE         | ~100     | ~1%     | No       |
+| MAD          | ~1       | 10-40%  | Yes      |
+| Intermediate | ~10      | 5-15%   | Moderate |
++--------------+----------+---------+----------+
 
-β = P_gas / P_mag (magnetic pressure ratio)
-η = P_jet / (Ṁc²)  (jet efficiency)
+beta = P_gas / P_mag (magnetic pressure ratio)
+eta = P_jet / (Mdotc^2)  (jet efficiency)
 ```
 
 ---
@@ -69,36 +69,36 @@ ISCO Scaling:
 ## Observing Frequencies
 
 ```
-┌─────────────┬────────┬──────────────┬────────────┐
-│ Frequency   │ λ (mm) │ Resolution   │ Status     │
-├─────────────┼────────┼──────────────┼────────────┤
-│ 230 GHz     │ 1.3    │ ~20 μas      │ Standard   │
-│ 345 GHz     │ 0.87   │ ~13 μas      │ Next-gen!  │
-│ Dual        │ Both   │ Multi-color  │ Combined   │
-└─────────────┴────────┴──────────────┴────────────┘
++-------------+--------+--------------+------------+
+| Frequency   | lambda (mm) | Resolution   | Status     |
++-------------+--------+--------------+------------+
+| 230 GHz     | 1.3    | ~20 muas      | Standard   |
+| 345 GHz     | 0.87   | ~13 muas      | Next-gen!  |
+| Dual        | Both   | Multi-color  | Combined   |
++-------------+--------+--------------+------------+
 
-Resolution improvement: 345/230 = 1.5× (50% better)
+Resolution improvement: 345/230 = 1.5x (50% better)
 ```
 
 ---
 
 ## Jet Physics
 
-### Lorentz Factors (Γ)
+### Lorentz Factors (Gamma)
 ```
-Γ = 2      Mildly relativistic  (β = 0.87)
-Γ = 5-15   Sgr A* typical
-Γ = 10-20  M87 typical
-Γ = 30-50  Blazars (extreme)
+Gamma = 2      Mildly relativistic  (beta = 0.87)
+Gamma = 5-15   Sgr A* typical
+Gamma = 10-20  M87 typical
+Gamma = 30-50  Blazars (extreme)
 
-Velocity: β = √(1 - 1/Γ²)
+Velocity: beta = sqrt(1 - 1/Gamma^2)
 ```
 
 ### Opening Angles
 ```
-5-10°   Narrow (MAD collimation)
-15-30°  Moderate
-45-60°  Wide (SANE, weak field)
+5-10 deg   Narrow (MAD collimation)
+15-30 deg  Moderate
+45-60 deg  Wide (SANE, weak field)
 ```
 
 ### Jet Base Distance
@@ -115,7 +115,7 @@ M87:    ~0.09 ly  (EHT measured, Jan 2026)
 ```
 Set: a* = 0.0
 Expected: ISCO = 6.0 M
-Visual: Disk inner edge at 3× Schwarzschild radius
+Visual: Disk inner edge at 3x Schwarzschild radius
 ```
 
 ### Test 2: Near-Extremal Kerr
@@ -138,19 +138,19 @@ Visual: Orange "Retrograde" label, larger disk
 
 ```
 Schwarzschild radius:
-  r_s = 2.95 km × (M/M☉)
+  r_s = 2.95 km x (M/Msun)
 
 Gravitational radius:
-  r_g = GM/c² = 1.48 km × (M/M☉)
+  r_g = GM/c^2 = 1.48 km x (M/Msun)
 
 Hawking temperature:
-  T_H = 6.17×10⁻⁸ K × (M☉/M)
+  T_H = 6.17x10^-8 K x (Msun/M)
 
 Speed of light:
   c = 299,792 km/s
 
 Solar mass:
-  M☉ = 1.989 × 10³⁰ kg
+  Msun = 1.989 x 10^30 kg
 ```
 
 ---
@@ -159,16 +159,16 @@ Solar mass:
 
 ```
 Sgr A*:
-├─ Spin: a* = 0.94 ± 0.05  (arXiv:2510.03602)
-├─ State: MAD favored
-├─ Magnetic field: ~10% accuracy
-└─ Variability: Hours timescale
++- Spin: a* = 0.94 +/- 0.05  (arXiv:2510.03602)
++- State: MAD favored
++- Magnetic field: ~10% accuracy
++- Variability: Hours timescale
 
 M87:
-├─ Jet base: 0.09 ly  (Jan 2026 detection)
-├─ Frequency: 230 GHz, 345 GHz
-├─ Opening angle: ~10°
-└─ Lorentz factor: Γ ~ 10-20
++- Jet base: 0.09 ly  (Jan 2026 detection)
++- Frequency: 230 GHz, 345 GHz
++- Opening angle: ~10 deg
++- Lorentz factor: Gamma ~ 10-20
 ```
 
 ---
@@ -179,16 +179,16 @@ M87:
 Total events: 250 merger detections
 
 Record masses:
-├─ GW231123: 225 M☉ final  (Nov 2023)
-└─ Components: 140 M☉ + 100 M☉
++- GW231123: 225 Msun final  (Nov 2023)
++- Components: 140 Msun + 100 Msun
 
 Extreme spins:
-├─ GW241011: Fastest rotating BH observed
-└─ GW241110: First retrograde binary  (Oct 2024)
++- GW241011: Fastest rotating BH observed
++- GW241110: First retrograde binary  (Oct 2024)
 
 Validated range:
-├─ Mass: 3 M☉ to 225 M☉
-└─ Spin: -0.998 to +0.998
++- Mass: 3 Msun to 225 Msun
++- Spin: -0.998 to +0.998
 ```
 
 ---
@@ -197,23 +197,23 @@ Validated range:
 
 ```
 Low FPS:
-  □ Disable magnetic field lines
-  □ Disable jet visualization
-  □ Reduce resolution
+  [ ] Disable magnetic field lines
+  [ ] Disable jet visualization
+  [ ] Reduce resolution
 
 Wrong ISCO:
-  □ Check spin sign (+ vs -)
-  □ Prograde: small ISCO
-  □ Retrograde: large ISCO
+  [ ] Check spin sign (+ vs -)
+  [ ] Prograde: small ISCO
+  [ ] Retrograde: large ISCO
 
 No magnetic effect:
-  □ State must be MAD or Intermediate
-  □ SANE ignores β and Φ parameters
+  [ ] State must be MAD or Intermediate
+  [ ] SANE ignores beta and Phi parameters
 
 Jet not visible:
-  □ Check "Enable Jet Visualization"
-  □ Increase Lorentz factor
-  □ Adjust opening angle
+  [ ] Check "Enable Jet Visualization"
+  [ ] Increase Lorentz factor
+  [ ] Adjust opening angle
 ```
 
 ---
@@ -254,7 +254,7 @@ Window:
     "GRMHD modelling of Sgr A* constrained by EHT"
 
 [2] LIGO-Virgo-KAGRA (2025). GW231123
-    "Most massive black hole merger (225 M☉)"
+    "Most massive black hole merger (225 Msun)"
 
 [3] Blandford & Znajek (1977). MNRAS 179, 433
     "Electromagnetic extraction from Kerr black holes"

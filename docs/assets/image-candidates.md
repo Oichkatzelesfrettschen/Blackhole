@@ -15,7 +15,7 @@ Use the `~orig.jpg` links to retain full resolution.
 ## ESA/Hubble (esahubble.org)
 Large JPEGs are very high resolution; Publication JPEGs are labeled 4K.
 
-- heic1509a "Westerlund 2 — Hubble’s 25th anniversary image"
+- heic1509a "Westerlund 2 -- Hubble's 25th anniversary image"
   - Large JPEG: https://cdn.esahubble.org/archives/images/large/heic1509a.jpg
   - Publication JPEG (4K): https://cdn.esahubble.org/archives/images/publicationjpg/heic1509a.jpg
 - heic1402a "Horsehead Nebula"

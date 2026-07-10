@@ -410,7 +410,7 @@ The black hole simulation renders correctly with:
 - GPU timing panel with fragment/compute split (GL_TIME_ELAPSED queries)
 - Runtime shader compile/link logs are emitted (warnings non-fatal)
 - OpenGL-native controls overlay (stb_easy_font) renders when UI is hidden (env: `BLACKHOLE_OPENGL_CONTROLS=0`)
-- Conan update candidates documented in `requirements.md` (Dec 30 2025 review)
+- Conan update candidates documented in `dependencies.md` (Dec 30 2025 review)
 - Latest dependency bump validated: `ctest` (physics_validation + grmhd_pack_fixture) passed; Release build + validate-shaders succeeded; z3 built with GCC 15 warnings (kept non-fatal)
 
 **Current Focus:** See **Active Plans** below for prioritized execution.
@@ -431,7 +431,7 @@ The simulation is fully operational with the core rendering pipeline:
 
 ## Recent Changes
 
-### UI/UX & Wireframe Alignment (2026-02-06 23:05) ✅ COMPLETE
+### UI/UX & Wireframe Alignment (2026-02-06 23:05) [done] COMPLETE
 
 **Achievement**: Refactored chaotic UI into a cohesive "Settings" panel and aligned geometry.
 - **Wireframe Alignment**:
@@ -446,7 +446,7 @@ The simulation is fully operational with the core rendering pipeline:
   - Disabled Multi-Viewports to resolve Linux/Wayland transparency artifacts.
   - Fixed aspect ratio stretching by syncing render target size to the Viewport window dimensions.
 
-### Visual Fidelity & Stability Fixes (2026-02-06 22:45) ✅ COMPLETE
+### Visual Fidelity & Stability Fixes (2026-02-06 22:45) [done] COMPLETE
 
 **Achievement**: Addressed "crappy" visuals and log noise.
 - **Log Noise Fix**: Modified `HawkingRenderer::parseCSV` to silently skip non-numeric tokens (headers/comments), eliminating hundreds of `Failed to parse value` errors.
@@ -456,7 +456,7 @@ The simulation is fully operational with the core rendering pipeline:
   - **Tonemapping**: Reduced film grain (0.015) and chromatic aberration (0.002) for a cleaner, high-fidelity image.
   - **UI**: Verified dark theme application.
 
-### Visual Fidelity Overhaul (2026-02-06) ✅ COMPLETE
+### Visual Fidelity Overhaul (2026-02-06) [done] COMPLETE
 
 **Achievement**: Implemented "full, correct and proper" visual upgrades across UI, topology, and post-processing.
 - **Wiregrid Topology Upgrade**:
@@ -468,7 +468,7 @@ The simulation is fully operational with the core rendering pipeline:
 - **UI Refinement**:
   - Implemented `setupImGuiStyle()` with a polished "Blackhole" dark theme (rounded corners, dark grey/blue palette) replacing the default Dear ImGui style.
 
-### Stability & Functionality Restoration (2026-02-06) ✅ COMPLETE
+### Stability & Functionality Restoration (2026-02-06) [done] COMPLETE
 
 **Achievement**: Fixed startup/shutdown crashes and restored disconnected functionality.
 - **Crash Resolution**: Added explicit cleanup for static singletons (`NoiseTextureCache`, `HawkingRenderer`, `GrmhdPackedTexture`) before OpenGL context destruction, fixing `SIGSEGV` on shutdown.
@@ -486,7 +486,7 @@ The simulation is fully operational with the core rendering pipeline:
 
 ---
 
-### Shader Validation & Transpilation Fixes (2026-01-15) ✅ COMPLETE
+### Shader Validation & Transpilation Fixes (2026-01-15) [done] COMPLETE
 
 **Achievement**: All 21 shaders now compile without errors (100% validation success)
 - **Fragment Shaders**: 14 validated (blackhole_main, raytracer, bloom chain, tonemapping, etc.)
@@ -495,10 +495,10 @@ The simulation is fully operational with the core rendering pipeline:
 
 **Major Fixes**:
 1. **C++23 to GLSL Transpilation** - Systematic pattern fixes across all verified modules:
-   - Aggregate initialization: `Type{...}` → `Type(...)`
-   - Type casts: `static_cast<T>()` → `T()`
-   - STL functions: `std::max()` → `max()`
-   - Type inference: `const auto` → explicit types
+   - Aggregate initialization: `Type{...}` -> `Type(...)`
+   - Type casts: `static_cast<T>()` -> `T()`
+   - STL functions: `std::max()` -> `max()`
+   - Type inference: `const auto` -> explicit types
    - Enum classes: Replaced with int constants
    - Lambdas: Commented out (not supported in GLSL)
 
@@ -508,7 +508,7 @@ The simulation is fully operational with the core rendering pipeline:
 
 3. **Include Order Dependencies** (2 shaders):
    - `raytracer.frag`: Moved `integrator.glsl` include after RayState definition
-   - `geodesic_trace.comp`: Reordered to `rk4.glsl` → `geodesic.glsl` (StateVector dependency)
+   - `geodesic_trace.comp`: Reordered to `rk4.glsl` -> `geodesic.glsl` (StateVector dependency)
 
 4. **Legacy/Verified Module Coexistence** (`geodesic_trace.comp`):
    - Include both `include/kerr.glsl` (legacy helpers) and `include/verified/kerr.glsl`
@@ -523,22 +523,22 @@ The simulation is fully operational with the core rendering pipeline:
    - Fixed double-promotion warnings with explicit `static_cast<double>()`
 
 **Documentation**:
-- Created `shader/README.md` - Comprehensive C++23→GLSL transpilation guide (500+ lines)
+- Created `shader/README.md` - Comprehensive C++23->GLSL transpilation guide (500+ lines)
 - Created `CHANGELOG.md` - Complete version history from Phase 0 to Phase 10.1+
 - Documented all transpilation patterns, reserved keywords, include order rules
 
 **Build Status**:
-- Main `Blackhole` executable: ✅ Builds successfully
-- Shader validation: ✅ 21/21 shaders pass
+- Main `Blackhole` executable: [done] Builds successfully
+- Shader validation: [done] 21/21 shaders pass
 - Known issue: `z3_verification_test` has googletest linker error (tracked separately)
 
 **Verification Pipeline**:
-- Rocq 9.1+ → OCaml → C++23 → GLSL 4.60 pipeline fully operational
+- Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60 pipeline fully operational
 - All verified physics modules (`rk4`, `geodesic`, `kerr`, `energy_conserving_geodesic`, `null_constraint`) compile
 
 ---
 
-### Phase 10.1: Hawking Radiation Thermal Glow (2026-01-02) ✅ COMPLETE
+### Phase 10.1: Hawking Radiation Thermal Glow (2026-01-02) [done] COMPLETE
 
 **Implementation**: GPU-accelerated Hawking radiation thermal glow visualization
 - **New Files**: 10 source files (1,673 lines total)
@@ -555,10 +555,10 @@ The simulation is fully operational with the core rendering pipeline:
 - `tests/hawking_spectrum_test.cpp` - Spectrum validation (270 lines)
 
 **Physics Validation**:
-- Solar mass temperature: 6.17×10⁻⁸ K (±0.4% accuracy) ✓
-- Inverse mass law: T_H ∝ 1/M (exact) ✓
-- Wien's displacement: λ_peak × T = 0.2898 cm·K (exact) ✓
-- Stefan-Boltzmann: L ∝ T⁴ (0.001% accuracy) ✓
+- Solar mass temperature: 6.17x10^-8 K (+/-0.4% accuracy) yes
+- Inverse mass law: T_H ~ 1/M (exact) yes
+- Wien's displacement: lambda_peak x T = 0.2898 cm*K (exact) yes
+- Stefan-Boltzmann: L ~ T^4 (0.001% accuracy) yes
 
 **Visualization Presets**:
 1. Physical (T_scale=1.0) - Realistic but invisible for solar mass
@@ -568,8 +568,8 @@ The simulation is fully operational with the core rendering pipeline:
 **UI Integration**: ImGui controls in `src/main.cpp`
 - Enable/disable checkbox
 - Preset selector (Physical/Primordial/Extreme)
-- Temperature scale slider (logarithmic, 1.0–1×10⁹)
-- Intensity slider (0.0–5.0)
+- Temperature scale slider (logarithmic, 1.0-1x10^9)
+- Intensity slider (0.0-5.0)
 - LUT toggle (precomputed vs direct calculation)
 
 **Build System**: CMakeLists.txt updated with test targets
@@ -581,7 +581,7 @@ The simulation is fully operational with the core rendering pipeline:
 - `docs/PHASE10_TESTING_GUIDE.md` - Manual testing procedures
 - `docs/PHASE10.1_COMPLETE.md` - Implementation completion summary
 
-**Status**: ✅ All implementation complete, ready for visual testing
+**Status**: [done] All implementation complete, ready for visual testing
 **Next**: Visual validation with 3 presets + GPU performance benchmarking
 
 ---
@@ -592,8 +592,8 @@ The simulation is fully operational with the core rendering pipeline:
 - Created `docs/DEPENDENCY_MATRIX.md` for centralized version tracking of 34 Conan packages.
 - Archived superseded planning docs to `docs/archive/2026Q1/`.
 - **ISSUE-009 (Compute/Fragment Parity):** Updated default outlier tolerance in `src/main.cpp`:
-  - `compareMaxOutliers`: 0 → 10000 (enables gating by default)
-  - `compareMaxOutlierFrac`: 0.0 → 0.006 (0.6% tolerance for Kerr divergence)
+  - `compareMaxOutliers`: 0 -> 10000 (enables gating by default)
+  - `compareMaxOutlierFrac`: 0.0 -> 0.006 (0.6% tolerance for Kerr divergence)
   - UI slider ranges expanded to accommodate new defaults
   - All 5 tests pass, 20/20 shaders validated with new tolerances.
 - Updated MASTER_ROADMAP.md task 1.1.5 to Done status.
@@ -901,7 +901,7 @@ The simulation is fully operational with the core rendering pipeline:
 ## Active Plans (Merged + Refactored)
 
 - **Performance + math migration:** extend `physics_bench` for new modules; enforce LUT-only emissivity/redshift (move disk noise + emissivity out of shaders into LUTs with a debug fallback); keep compute-vs-fragment A/B; evaluate Eigen/xsimd for SIMD and parallel LUT generation (see `docs/EIGEN_REFACTOR_PLAN.md`).
-- **Rendering scaling:** validate window resize in fragment + compute paths; add 720p–4K ultrawide presets; persist fullscreen/vsync/renderScale and gamma/tonemap/bloom.
+- **Rendering scaling:** validate window resize in fragment + compute paths; add 720p-4K ultrawide presets; persist fullscreen/vsync/renderScale and gamma/tonemap/bloom.
 - **Controls & input ergonomics:** validate keyboard/mouse vs time scale; refine gamepad bindings + deadzone tools; add remap presets; persist inversion/sensitivity/hold-to-toggle.
 - **Cleanroom audit:** deep scan OpenUniverse + local repos; map reusable physics/math/data schemas; define pure C++23/GLSL460 ports.
 - **GRMHD ingestion:** document nubhlight HDF5 schema, build offline converter, add dataset loader + checksum validation.
@@ -1047,7 +1047,7 @@ Option 1 (do nothing) - the current load/save cycle naturally cleans up old fiel
 - Render resolution is shown in UI for verification.
 
 #### Gaps
-- Needs validation at 720p–4K ultrawide and fullscreen/windowed modes.
+- Needs validation at 720p-4K ultrawide and fullscreen/windowed modes.
 - No adaptive scaling or FPS-based auto-scaling yet.
 
 #### Next Steps

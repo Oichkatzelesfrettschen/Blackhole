@@ -56,13 +56,9 @@ This roadmap consolidates all planning into a single source of truth.
 
 ### Core Subsystems
 
-| Subsystem | Files | Status | Coverage |
-|-----------|-------|--------|----------|
-| Rendering | 11 | Stable | 95% |
-| Physics | 26 | 80% complete | 85% |
-| Shaders | 43 | Stable | 100% |
-| Tools | 5 | Stable | 100% |
-| Tests | 5 | Comprehensive | 90% |
+File, test, and shader counts are generated -- see `repo-truth.md` and the
+`repo_truth.py` report it describes. Hand-written counts in this document
+drifted (5 vs 70 test files at one point) and are intentionally removed.
 
 ---
 
@@ -70,14 +66,16 @@ This roadmap consolidates all planning into a single source of truth.
 
 ### 1.1 Compute/Fragment Parity (ISSUE-009)
 
-**Problem:** 2/12 presets exceed threshold; strict sweep passes 0/12.
+**Problem:** One preset (preset 0, horizon-grazing rays) exceeds the default
+tolerance with 2-4 outlier pixels of 2M; the strict sweep (1000 steps, 0.02)
+passes 12/12. `backlog.md` ISSUE-009 owns the residual figure.
 **Root Cause:** RK4 integrator FP arithmetic differences (FMA contraction).
 
 | Task | Status | Owner | Notes |
 |------|--------|-------|-------|
 | 1.1.1 Run diff capture for presets 0,4 | Done | - | `BLACKHOLE_COMPARE_WRITE_DIFF=1` |
 | 1.1.2 Add per-pixel step count heatmap | Done (previous) | - | `BH_DEBUG_FLAG_STEP_COUNT` |
-| 1.1.3 Disable fastmath in compute shader | Done | - | `SPIRV_SKIP_OPT_COMPUTE=1`; geodesic_trace 52k→27k (-48%) with opt |
+| 1.1.3 Disable fastmath in compute shader | Done | - | `SPIRV_SKIP_OPT_COMPUTE=1`; geodesic_trace 52k->27k (-48%) with opt |
 | 1.1.4 Cross-validate kerrStep vs nubhlight | Done | - | Documented in CLEANROOM_IMPORTS.md |
 | 1.1.5 Adjust default outlier tolerance | Done | - | Set: 0.006 frac, 10000 count (covers Kerr divergence) |
 
@@ -191,7 +189,7 @@ This roadmap consolidates all planning into a single source of truth.
 | Task | Status | Notes |
 |------|--------|-------|
 | 2.3.1 SLEEF library integration | Done | sleef/3.9.0 via Conan; 1-ULP vectorized transcendentals |
-| 2.3.2 Runtime architecture detection | Done | `simd_dispatch.h` with CPUID-based SSE2→AVX-512 tier detection |
+| 2.3.2 Runtime architecture detection | Done | `simd_dispatch.h` with CPUID-based SSE2->AVX-512 tier detection |
 | 2.3.3 SLEEF-accelerated Christoffel kernel | Done | `christoffel_accel_batch_sleef()` using Sleef_sind4_u10avx2 |
 | 2.3.4 SSE2 fallback implementation | Done | Template-based `christoffel_accel_batch_sse2<>()` for legacy |
 | 2.3.5 Unified dispatch function | Done | `christoffel_accel_dispatch()` auto-selects best path |
@@ -206,7 +204,7 @@ This roadmap consolidates all planning into a single source of truth.
 **Tiered SIMD Dispatch Summary (Phase 2.3.2-2.3.5):**
 - New header: `src/physics/simd_dispatch.h`
 - Runtime detection via CPUID + XGETBV for actual CPU capabilities
-- Tier enumeration: SCALAR → SSE2 → SSE3 → SSSE3 → SSE4.1 → SSE4.2 → AVX → AVX+FMA → AVX2 → AVX2+FMA → AVX-512
+- Tier enumeration: SCALAR -> SSE2 -> SSE3 -> SSSE3 -> SSE4.1 -> SSE4.2 -> AVX -> AVX+FMA -> AVX2 -> AVX2+FMA -> AVX-512
 - FMA variant detection: FMA3 (Intel/AMD) vs FMA4 (AMD Bulldozer)
 - Dispatch priority:
   1. SLEEF + AVX2 + FMA (best accuracy + FMA speedup)
@@ -249,7 +247,7 @@ This roadmap consolidates all planning into a single source of truth.
 
 ## Phase 4: Physics Extensions (Weeks 13-20)
 
-**Status:** ✅ COMPLETE (2026-01-29)
+**Status:** [done] COMPLETE (2026-01-29)
 **Progress:** Infrastructure 100%, Physics Implementation 100%, GRMHD Stub Architecture 100%
 
 ### 4.0 Infrastructure & Documentation (COMPLETE)
@@ -368,11 +366,11 @@ This roadmap consolidates all planning into a single source of truth.
 ### PHASE 5 TEST SUMMARY
 
 **Total Test Count:** 53/53 tests passing
-- synchrotron_spectrum_validation: 9/9 ✓
-- radiative_transfer_validation: 12/12 ✓
-- eht_shadow_validation: 12/12 ✓
-- gw_waveform_validation: 10/10 ✓
-- phase5_multiwavelength_validation: 10/10 ✓
+- synchrotron_spectrum_validation: 9/9 yes
+- radiative_transfer_validation: 12/12 yes
+- eht_shadow_validation: 12/12 yes
+- gw_waveform_validation: 10/10 yes
+- phase5_multiwavelength_validation: 10/10 yes
 
 **Code Metrics:**
 - Total lines of code: 1,380 (physics + tools + tests)
@@ -456,30 +454,16 @@ See `docs/physics/lacunae.md` for the full gap analysis driving Phase 6 work.
 
 ---
 
-## Issue Tracker Summary
+## Issue Tracker
 
-| ID | Title | Priority | Status |
-|----|-------|----------|--------|
-| ISSUE-001 | Depth effects tuning | MEDIUM | Implemented |
-| ISSUE-002 | Gamepad mapping | LOW | Implemented |
-| ISSUE-003 | Camera unification | LOW | Done |
-| ISSUE-004 | Physics integration | LOW | Scoped |
-| ISSUE-005 | Legacy settings | LOW | Scoped |
-| ISSUE-006 | Display scaling | MEDIUM | Implemented |
-| ISSUE-007 | OpenUniverse cleanroom | HIGH | In Progress |
-| ISSUE-008 | Compute raytracer | MEDIUM | **RESOLVED** (6.1.1) |
-| ISSUE-009 | Compare sweep parity | LOW | Root-caused |
-| ISSUE-010 | LD_PRELOAD cleanup | LOW | Mitigated |
-| ISSUE-011 | Background parallax | LOW | Implemented |
-| ISSUE-012 | TSAN warnings | MEDIUM | Mitigated |
-| ISSUE-013 | spirv_bake warnings | LOW | Scoped |
-| ISSUE-014 | External dep warnings | LOW | Scoped |
+`backlog.md` owns the issue table. A copy formerly duplicated here drifted
+out of sync with the owner (three status mismatches) and is removed.
 
 ---
 
 ## Dependency Matrix
 
-See `docs/DEPENDENCY_MATRIX.md` for version tracking.
+See `dependencies.md` for version tracking.
 
 ### Core Dependencies (Conan 2.x)
 
@@ -557,10 +541,9 @@ export BLACKHOLE_PERF_HUD=1
 | ../physics/architecture.md | Physics deep dive | Reference |
 | ../physics/lacunae.md | Gap analysis: physics/math/perf gaps for Phase 6+ | Active |
 | ../physics/cleanroom.md | Provenance tracking | Active |
-| CLEANROOM_PORT_MAP.md | Module mapping | Reference |
-| EIGEN_REFACTOR_PLAN.md | Math migration | Active |
-| IMAGE_SOURCES.md | Asset licensing | Active |
-| DEPENDENCY_MATRIX.md | Version tracking | Active |
+| ../archive/2026Q1/eigen-refactor-plan.md | Math migration | Complete (archived) |
+| ../assets/image-sources.md | Asset licensing | Active |
+| dependencies.md | Version tracking | Active |
 
 ---
 

@@ -68,7 +68,7 @@ struct DiskSettings {
 
     bool enable_doppler = true;
     bool show_doppler_colorshift = false;
-    float spectral_index = 0.0f;  // α for F_ν ∝ ν^α
+    float spectral_index = 0.0f;  // alpha for F_nu ~ nu^alpha
 };
 
 // In renderUI() function, Disk panel
@@ -86,7 +86,7 @@ if (disk.enable_doppler) {
         shader.setUniform("u_show_doppler_colorshift", disk.show_doppler_colorshift);
     }
 
-    if (ImGui::SliderFloat("Spectral Index (α)", &disk.spectral_index, -1.0f, 2.0f, "%.2f")) {
+    if (ImGui::SliderFloat("Spectral Index (alpha)", &disk.spectral_index, -1.0f, 2.0f, "%.2f")) {
         shader.setUniform("u_spectral_index", disk.spectral_index);
     }
 
@@ -162,7 +162,7 @@ if (disk.use_novikov_thorne) {
 
     ImGui::Separator();
     ImGui::Text("Computed Properties:");
-    ImGui::Text("Efficiency (η): %.4f", eta);
+    ImGui::Text("Efficiency (eta): %.4f", eta);
     ImGui::Text("L_Edd: %.2e erg/s", L_edd);
     ImGui::Text("Luminosity: %.2e erg/s", eta * disk.mdot_eddington * L_edd);
 }
