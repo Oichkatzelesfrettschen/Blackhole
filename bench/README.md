@@ -269,52 +269,24 @@ GPU Fragment (1024x1024),18.1,19.7,21.4,1.2,53300000,N/A
 
 ## Continuous Integration
 
-**CI Benchmark Script (ci_bench.sh):**
+`bench/ci_bench.sh` builds the riced preset, runs the CPU benchmark
+(plus GPU when a display exists), and gates on the recorded baseline via
+`scripts/check_bench_regression.py`. The checker reads the actual
+physics_bench JSON schema (top-level `results` array keyed by `name`
+with `avg_ms`) and fails on any entry more than 5% slower than the
+baseline.
+
 ```bash
-#!/bin/sh
-# Run benchmarks on every commit, track performance over time
+# run the full gate
+./bench/ci_bench.sh
 
-set -eu
-
-# Build optimized binary
-cmake --preset riced
-cmake --build --preset riced
-
-# Run CPU benchmark
-./build/Riced/physics_bench \
-    --rays 4000 --steps 2000 --iterations 10 \
-    --json bench_cpu.json
-
-# Run GPU benchmark (if available)
-if [ -n "${DISPLAY:-}" ]; then
-    ./build/Riced/physics_bench --gpu \
-        --gpu-width 1024 --gpu-height 1024 \
-        --gpu-iterations 20 \
-        --json bench_gpu.json
-fi
-
-# Check for regressions
-python3 scripts/check_bench_regression.py bench_cpu.json bench_gpu.json
+# record a new baseline after an accepted performance change
+python3 scripts/check_bench_regression.py --record bench_cpu.json
 ```
 
-**Regression Check (scripts/check_bench_regression.py):**
-```python
-import json, sys
-
-baseline = json.load(open("bench_baseline.json"))
-current = json.load(open(sys.argv[1]))
-
-for bench in current["cpu_benchmarks"]:
-    name = bench["name"]
-    baseline_bench = next((b for b in baseline["cpu_benchmarks"] if b["name"] == name), None)
-    if baseline_bench:
-        ratio = bench["avg_ms"] / baseline_bench["avg_ms"]
-        if ratio > 1.05:  # 5% slowdown threshold
-            print(f"REGRESSION: {name} is {(ratio-1)*100:.1f}% slower")
-            sys.exit(1)
-
-print("All benchmarks within acceptable range")
-```
+A missing baseline is an explicit condition: the checker exits 2 unless
+invoked with `--allow-missing` (which ci_bench.sh passes so the
+first-ever run stays green while printing the record instruction).
 
 ---
 
@@ -329,7 +301,8 @@ print("All benchmarks within acceptable range")
 - GPU Compute: 59.0 Mrays/s (+3.0% improvement)
 
 **Tracking:**
-See `docs/PERFORMANCE_HISTORY.md` for full historical data.
+See `docs/developer-guide/perf-tooling.md` and `docs/archive/performance/`
+for historical data.
 
 ---
 

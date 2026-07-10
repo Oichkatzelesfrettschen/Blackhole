@@ -8,6 +8,7 @@ metadata so the runtime can consume a consistent HDF5 layout.
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -51,7 +52,7 @@ def main() -> int:
     parser.add_argument(
         "--jetfit-table",
         type=Path,
-        default=Path("/home/eirikr/Github/openuniverse/JetFit/Table.h5"),
+        default=Path(os.environ.get("OPENUNIVERSE_ROOT", Path.home() / "Github" / "openuniverse")) / "JetFit" / "Table.h5",
         help="Path to JetFit Table.h5",
     )
     parser.add_argument(

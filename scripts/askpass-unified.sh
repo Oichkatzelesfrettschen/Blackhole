@@ -10,9 +10,9 @@ if [ -n "${SSH_ASKPASS:-}" ] && [ -x "${SSH_ASKPASS}" ]; then
 fi
 
 for candidate in \
-  /home/eirikr/.local/bin/sudo-askpass-mate \
+  "${HOME}"/.local/bin/sudo-askpass-mate \
   /usr/bin/eirikr-askpass \
-  /home/eirikr/.codex/bin/askpass.sh \
+  "${HOME}"/.codex/bin/askpass.sh \
   ; do
   if [ -x "${candidate}" ]; then
     exec "${candidate}" "$@"
