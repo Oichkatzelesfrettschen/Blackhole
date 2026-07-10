@@ -16,6 +16,7 @@
 #include <glbinding/gl/functions.h>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "physics/constants.h"
 #include "render/interop_uniform_registry.h"
 
 #if BLACKHOLE_HAS_CUDA
@@ -160,6 +161,55 @@ void applyHawkingUniforms(GLuint program, const physics::HawkingRenderer &render
   params.useLUTs = useLUTs;
 
   renderer.setShaderUniforms(program, blackHoleMass, params);
+}
+
+void bindFragmentUniforms(RenderToTextureInfo &rtti, const RenderState &rs,
+                          const InteropUniforms &interop, const FrameBindingInputs &in) {
+  // Post-derivation texture/scalar re-writes (final readiness values).
+  rtti.texture3DUniforms["noiseTexture"] = in.noiseReady ? rs.disk.texNoiseVolume : rs.background.fallback3D;
+  rtti.texture3DUniforms["grmhdTexture"] = in.grmhdEnabled ? in.grmhdTexId : rs.background.fallback3D;
+  rtti.textureUniforms["spectralLUT"] = in.spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D;
+  rtti.textureUniforms["grbModulationLUT"] =
+      in.grbModulationEnabled ? rs.luts.texGrbModulationLUT : rs.background.fallback2D;
+  rtti.textureUniforms["hawkingTempLUT"] =
+      rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : rs.background.fallback2D;
+  rtti.textureUniforms["hawkingSpectrumLUT"] =
+      rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : rs.background.fallback2D;
+  rtti.floatUniforms["useNoiseTexture"] = in.noiseReady ? 1.0f : 0.0f;
+  rtti.floatUniforms["useGrmhd"] = in.grmhdEnabled ? 1.0f : 0.0f;
+  rtti.floatUniforms["backgroundEnabled"] = in.backgroundEnabledEffective ? 1.0f : 0.0f;
+  rtti.floatUniforms["bhDebugFlags"] = static_cast<float>(rs.compare.integratorDebugFlags);
+
+  // Convert black hole mass to grams (CGS units for Hawking calculation)
+  double const bhMassGrams = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
+  applyInteropUniforms(rtti, interop, in.compareActive, rs.hawking.hawkingGlowEnabled, rs.hawking.hawkingTempScale,
+                       rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMassGrams);
+
+  rtti.floatUniforms["wiregridEnabled"]   = rs.wiregrid.wiregridEnabled ? 1.0f : 0.0f;
+  rtti.floatUniforms["wiregridShowErgo"]  = rs.wiregrid.wiregridParams.showErgosphere ? 1.0f : 0.0f;
+  rtti.floatUniforms["wiregridGridScale"] = rs.wiregrid.wiregridParams.gridScale;
+  rtti.floatUniforms["wiregridMotionScale"] = rs.wiregrid.wiregridParams.motionScale;
+  rtti.floatUniforms["wiregridInfallScale"] = rs.wiregrid.wiregridParams.infallScale;
+  rtti.floatUniforms["wiregridStrength"] = rs.wiregrid.wiregridParams.strength;
+  rtti.floatUniforms["wiregridScenePreserve"] = rs.wiregrid.wiregridParams.scenePreserve;
+  rtti.vec4Uniforms["wiregridColor"] = rs.wiregrid.wiregridColor;
+  // D4: polarized Stokes IQUV
+  rtti.floatUniforms["stokesEnabled"]     = rs.stokes.stokesEnabled ? 1.0f : 0.0f;
+  rtti.floatUniforms["stokesBFieldAngle"] = rs.stokes.stokesBFieldAngle;
+  rtti.floatUniforms["stokesNeScale"]     = rs.stokes.stokesNeScale;
+  rtti.floatUniforms["gravitationalLensing"] = rs.disk.gravitationalLensing ? 1.0f : 0.0f;
+  rtti.floatUniforms["renderBlackHole"] = rs.disk.renderBlackHole ? 1.0f : 0.0f;
+  rtti.floatUniforms["adiskParticle"] = in.adiskParticleEffective ? 1.0f : 0.0f;
+  // adiskDensityV removed: consumed by LUT generation.
+  rtti.floatUniforms["adiskDensityH"] = rs.disk.adiskDensityH;
+  rtti.floatUniforms["adiskHeight"] = rs.disk.adiskHeight;
+  rtti.floatUniforms["adiskLit"] = rs.disk.adiskLit;
+  rtti.floatUniforms["adiskNoiseLOD"] = rs.disk.adiskNoiseLOD;
+  rtti.floatUniforms["adiskNoiseScale"] = rs.disk.adiskNoiseScale;
+  rtti.floatUniforms["adiskSpeed"] = rs.disk.adiskSpeed;
+  rtti.floatUniforms["dopplerStrength"] = rs.disk.dopplerStrength;
+  rtti.floatUniforms["photonSphereGlowStrength"] = rs.disk.photonSphereGlowStrength;
+  rtti.floatUniforms["enablePhotonSphere"] = in.enablePhotonSphereEffective ? 1.0f : 0.0f;
 }
 
 #if BLACKHOLE_HAS_CUDA

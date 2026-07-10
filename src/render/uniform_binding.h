@@ -35,6 +35,11 @@ struct FrameBindingInputs {
   bool lutReady = false;                   ///< Emissivity + redshift LUT textures both present.
   bool spectralEnabled = false;            ///< Spectral LUT selected AND ready this frame.
   bool grbModulationEnabled = false;       ///< GRB modulation LUT selected AND ready this frame.
+  bool noiseReady = false;                 ///< Disk noise volume selected AND present this frame.
+  bool grmhdEnabled = false;               ///< GRMHD volume selected AND ready this frame.
+  bool adiskParticleEffective = false;     ///< adiskParticle AND not compare-baseline frame.
+  bool compareActive = false;              ///< Compute/fragment parity capture active (interop parity mode).
+  gl::GLuint grmhdTexId = 0;               ///< GRMHD 3D texture to bind (streaming or packed).
 };
 
 /**
@@ -58,6 +63,17 @@ void applyInteropComputeUniforms(gl::GLuint program, const InteropUniforms &inte
  *        fragment path. Texture units are assigned sequentially from 0.
  */
 void bindComputeUniforms(gl::GLuint program, const RenderState &rs, const FrameBindingInputs &in);
+
+/**
+ * @brief Fills the load-order-independent fragment-path uniforms on @p rtti:
+ *        the post-derivation texture/scalar re-writes, the registry+Hawking
+ *        floats via applyInteropUniforms, and the wiregrid/Stokes/disk floats.
+ *        The emissivity-family LUT bindings stay at the caller's first-pass
+ *        site because they are coupled to the between-passes updateLuts handle
+ *        reassignment.
+ */
+void bindFragmentUniforms(RenderToTextureInfo &rtti, const RenderState &rs,
+                          const InteropUniforms &interop, const FrameBindingInputs &in);
 
 /**
  * @brief Forwards Hawking-glow parameters to @p program via

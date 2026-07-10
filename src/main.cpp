@@ -480,10 +480,10 @@ using blackhole::appendCompareUniforms;
 
 // Shared raytracer uniform binders live in src/render/uniform_binding.*
 // (registry-driven fragment/compute float fills + Hawking forwarder).
-using blackhole::applyInteropUniforms;
 using blackhole::applyInteropComputeUniforms;
 using blackhole::applyHawkingUniforms;
 using blackhole::bindComputeUniforms;
+using blackhole::bindFragmentUniforms;
 using blackhole::FrameBindingInputs;
 #if BLACKHOLE_HAS_CUDA
 using blackhole::bindCudaLaunchParams;
@@ -2138,30 +2138,19 @@ int main(int argc, char **argv) {
             rs.luts.texPhotonGlowLUT != 0 ? rs.luts.texPhotonGlowLUT : rs.background.fallback2D; // Phase 8.2
         rtti.textureUniforms["diskDensityLUT"] =
             rs.luts.texDiskDensityLUT != 0 ? rs.luts.texDiskDensityLUT : rs.background.fallback2D; // Phase 8.2 P2
-        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D;
-        rtti.textureUniforms["grbModulationLUT"] =
-            grbModulationReady ? rs.luts.texGrbModulationLUT : rs.background.fallback2D;
-        rtti.textureUniforms["hawkingTempLUT"] =
-            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : rs.background.fallback2D;
-        rtti.textureUniforms["hawkingSpectrumLUT"] =
-            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : rs.background.fallback2D;
+        // spectralLUT, grbModulationLUT, and the Hawking LUTs are bound in
+        // bindFragmentUniforms after the between-passes LUT loads settle.
         for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
           const std::string name = "backgroundLayers[" + std::to_string(i) + "]";
           rtti.textureUniforms[name] = rs.background.backgroundTextures.at(static_cast<std::size_t>(i));
         }
         rs.disk.noiseTextureScale = std::max(rs.disk.noiseTextureScale, 0.01f);
-        bool noiseReady = rs.disk.useNoiseTexture && rs.disk.texNoiseVolume != 0;
-        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? rs.disk.texNoiseVolume : rs.background.fallback3D;
-        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : rs.background.fallback3D;
-
-        rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
-        rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
+        // noiseTexture/grmhdTexture and useNoiseTexture/useGrmhd/backgroundEnabled/
+        // time are set in bindFragmentUniforms from post-derivation readiness.
         rtti.floatUniforms["noiseTextureScale"] = rs.disk.noiseTextureScale;
-        rtti.floatUniforms["backgroundEnabled"] = settings.backgroundEnabled ? 1.0f : 0.0f;
         rtti.floatUniforms["backgroundIntensity"] = settings.backgroundIntensity;
         rtti.floatUniforms["backgroundYawRad"] = rs.background.backgroundYawRad;
         rtti.floatUniforms["backgroundPitchRad"] = rs.background.backgroundPitchRad;
-        rtti.floatUniforms["time"] = frameTime;
         rtti.vec3Uniforms["grmhdBoundsMin"] = rs.grmhd.grmhdBoundsMin;
         rtti.vec3Uniforms["grmhdBoundsMax"] = rs.grmhd.grmhdBoundsMax;
         for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
@@ -2310,20 +2299,7 @@ int main(int argc, char **argv) {
         grmhdEnabled = useGrmhdEffective && grmhdReady;
         spectralEnabled = useSpectralLutEffective && spectralReady;
         grbModulationEnabled = useGrbModulationEffective && grbModulationReady;
-        noiseReady = useNoiseTextureEffective && rs.disk.texNoiseVolume != 0;
-        rtti.texture3DUniforms["noiseTexture"] = noiseReady ? rs.disk.texNoiseVolume : rs.background.fallback3D;
-        rtti.texture3DUniforms["grmhdTexture"] = grmhdEnabled ? grmhdTexId : rs.background.fallback3D;
-        rtti.textureUniforms["spectralLUT"] = spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D;
-        rtti.textureUniforms["grbModulationLUT"] =
-            grbModulationEnabled ? rs.luts.texGrbModulationLUT : rs.background.fallback2D;
-        rtti.textureUniforms["hawkingTempLUT"] =
-            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getTempLUTTexture() : rs.background.fallback2D;
-        rtti.textureUniforms["hawkingSpectrumLUT"] =
-            rs.hawking.hawkingLutsLoaded ? rs.hawking.hawkingRenderer.getSpectrumLUTTexture() : rs.background.fallback2D;
-        rtti.floatUniforms["useNoiseTexture"] = noiseReady ? 1.0f : 0.0f;
-        rtti.floatUniforms["useGrmhd"] = grmhdEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["backgroundEnabled"] = backgroundEnabledEffective ? 1.0f : 0.0f;
-        rtti.floatUniforms["bhDebugFlags"] = static_cast<float>(rs.compare.integratorDebugFlags);
+        bool const noiseReady = useNoiseTextureEffective && rs.disk.texNoiseVolume != 0;
 
         InteropUniforms interop;
         interop.cameraPos = cameraPos;
@@ -2367,41 +2343,9 @@ int main(int argc, char **argv) {
         interop.debugClosestApproachDirection = rs.debug.debugClosestApproachDirection ? 1.0f : 0.0f;
         interop.debugEscapedDirection = rs.debug.debugEscapedDirection ? 1.0f : 0.0f;
 
-        // Convert black hole mass to grams (CGS units for Hawking calculation)
-        double const bhMassGrams = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
-        applyInteropUniforms(rtti, interop, compareActive, rs.hawking.hawkingGlowEnabled, rs.hawking.hawkingTempScale,
-                             rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMassGrams);
-
-        rtti.floatUniforms["wiregridEnabled"]   = rs.wiregrid.wiregridEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["wiregridShowErgo"]  = rs.wiregrid.wiregridParams.showErgosphere ? 1.0f : 0.0f;
-        rtti.floatUniforms["wiregridGridScale"] = rs.wiregrid.wiregridParams.gridScale;
-        rtti.floatUniforms["wiregridMotionScale"] = rs.wiregrid.wiregridParams.motionScale;
-        rtti.floatUniforms["wiregridInfallScale"] = rs.wiregrid.wiregridParams.infallScale;
-        rtti.floatUniforms["wiregridStrength"] = rs.wiregrid.wiregridParams.strength;
-        rtti.floatUniforms["wiregridScenePreserve"] = rs.wiregrid.wiregridParams.scenePreserve;
-        rtti.vec4Uniforms["wiregridColor"] = rs.wiregrid.wiregridColor;
-        // D4: polarized Stokes IQUV
-        rtti.floatUniforms["stokesEnabled"]     = rs.stokes.stokesEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["stokesBFieldAngle"] = rs.stokes.stokesBFieldAngle;
-        rtti.floatUniforms["stokesNeScale"]     = rs.stokes.stokesNeScale;
-        rtti.floatUniforms["gravitationalLensing"] = rs.disk.gravitationalLensing ? 1.0f : 0.0f;
-        rtti.floatUniforms["renderBlackHole"] = rs.disk.renderBlackHole ? 1.0f : 0.0f;
-        rtti.floatUniforms["adiskParticle"] = adiskParticleEffective ? 1.0f : 0.0f;
-        // rtti.floatUniforms["adiskDensityV"] = adiskDensityV; // Removed: consumed by LUT
-        // generation
-        rtti.floatUniforms["adiskDensityH"] = rs.disk.adiskDensityH;
-        rtti.floatUniforms["adiskHeight"] = rs.disk.adiskHeight;
-        rtti.floatUniforms["adiskLit"] = rs.disk.adiskLit;
-        rtti.floatUniforms["adiskNoiseLOD"] = rs.disk.adiskNoiseLOD;
-        rtti.floatUniforms["adiskNoiseScale"] = rs.disk.adiskNoiseScale;
-        rtti.floatUniforms["adiskSpeed"] = rs.disk.adiskSpeed;
-        rtti.floatUniforms["dopplerStrength"] = rs.disk.dopplerStrength;
-        rtti.floatUniforms["photonSphereGlowStrength"] = rs.disk.photonSphereGlowStrength;
-        rtti.floatUniforms["enablePhotonSphere"] = enablePhotonSphereEffective ? 1.0f : 0.0f;
-
-        // Per-frame derived transients shared by the CUDA and compute uniform
-        // binders (compare-baseline gating, LUT readiness, precomputed record
-        // frame shift); see FrameBindingInputs.
+        // Per-frame derived transients shared by the fragment, CUDA, and
+        // compute uniform binders (compare-baseline gating, LUT readiness,
+        // precomputed record frame shift); see FrameBindingInputs.
         FrameBindingInputs frameInputs;
         frameInputs.adiskEnabledEffective = adiskEnabledEffective;
         frameInputs.enableRedshiftEffective = enableRedshiftEffective;
@@ -2411,6 +2355,11 @@ int main(int argc, char **argv) {
         frameInputs.lutReady = lutReady;
         frameInputs.spectralEnabled = spectralEnabled;
         frameInputs.grbModulationEnabled = grbModulationEnabled;
+        frameInputs.noiseReady = noiseReady;
+        frameInputs.grmhdEnabled = grmhdEnabled;
+        frameInputs.adiskParticleEffective = adiskParticleEffective;
+        frameInputs.compareActive = compareActive;
+        frameInputs.grmhdTexId = grmhdTexId;
         /* Record-mode showcase-orbit frame offset; defaults (0,0) cover the
          * non-record path via FrameBindingInputs member initializers. */
         if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
@@ -2423,6 +2372,10 @@ int main(int argc, char **argv) {
               hasRecordFrameY ? recordFrameY
                               : (composition != nullptr ? composition->frameOffsetY : 0.0f);
         }
+
+        // Load-order-independent fragment uniforms (the emissivity-family LUT
+        // bindings stay above, before updateLuts reassigns their handles).
+        bindFragmentUniforms(rtti, rs, interop, frameInputs);
 
 #if BLACKHOLE_HAS_CUDA
         /* CUDA dispatch path: bypasses both fragment and compute GLSL paths */
