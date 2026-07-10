@@ -77,6 +77,17 @@
 | watcher | 0.14.1 | File watching | ENABLE_SHADER_WATCHER |
 | benchmark | 1.9.4 | Microbenchmark harness | ENABLE_GOOGLE_BENCHMARK |
 | mimalloc | 2.2.4 | Allocator experiment lane | ENABLE_MIMALLOC |
+| rmlui | 6.1 | HUD overlay | ENABLE_RMLUI |
+| tracy | 0.13.1 | CPU/GPU profiling | ENABLE_TRACY |
+
+Every optional package pairs a conan option with a CMake option, and the
+two defaults must agree: pass BOTH `-o enable_<pkg>=True` to conan and
+`-DENABLE_<PKG>=ON` to CMake to turn a feature on. A conan-side require
+without its CMake consumer builds a library the binary never links (the
+default install once built rmlui and tracy for nothing); a CMake ON
+without the conan package fails at find_package. Exception: z3 is
+required unconditionally because ENABLE_Z3_VERIFICATION (default ON)
+consumes it for z3_verification_test.
 
 ---
 

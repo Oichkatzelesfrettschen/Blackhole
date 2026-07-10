@@ -162,7 +162,25 @@ three docs and disagree.
   run_glsl_headless.py:22-27, askpass-unified.sh:13-15.
 - BUILD-7 (LOW) conan/recipes carries unused tracy/0.12.2 and rmlui/4.4
   trees (conanfile requires 0.13.1 and 6.1); 5-branch elseif(EXISTS)
-  toolchain probe (CMakeLists.txt:25-31).
+  toolchain probe (CMakeLists.txt:25-31). RESOLVED 2026-07-09 (recipe
+  trees deleted under DETOX-8; toolchain probe remains).
+- BUILD-8 (MED, found 2026-07-09 during the detox build gate) The conan
+  and CMake feature gates disagree: conanfile.py required rmlui and
+  tracy unconditionally while ENABLE_RMLUI and ENABLE_TRACY default OFF,
+  so every default install built libraries the binary never links --
+  and the rmlui build BROKE the gate when clang 22 + GCC 16 libstdc++
+  rejected its bundled robin_hood.h (missing <cstdint> include).
+  RESOLVED for rmlui/tracy 2026-07-09: enable_rmlui/enable_tracy conan
+  options default False, matching CMake. z3 audited: its unconditional
+  require is legitimately consumed by the default config --
+  ENABLE_Z3_VERIFICATION defaults ON and finds the conan z3 via
+  find_package(Z3 CONFIG QUIET) for z3_verification_test. OPEN:
+  document the conan-option/CMake-option pairing in dependencies.md.
+  Toolchain
+  drift corroborated twice in one gate: highway/1.3.0 vqsort fails
+  under clang 22 target-feature checks (fixed by 1.4.0), rmlui/6.1
+  robin_hood under GCC 16 headers -- both are BUILD-1 lockfile-absence
+  consequences.
 
 ### 2.4 Organizational / workspace debt
 
@@ -226,6 +244,28 @@ three docs and disagree.
   verifier so CI holds the line.
 
 ### 2.6 Physics-fidelity debt (code-level, from marker sweep)
+
+- PHYS-0 (HIGH, found 2026-07-09 while building the safe_limits gate)
+  The fast-math-safety layer was itself unsound on current compilers,
+  in three layers: (a) safeIsfinite/safeIsnan/safeIsinf used
+  __builtin_is* predicates that GCC 16 and clang 22 constant-fold to
+  no-ops under -ffinite-math-only -- the NaN guards in batch.h:718,:730
+  and raytracer.h:314 compiled to nothing in the shipped build; (b)
+  clang 22 annotates by-value float parameters AND returns with
+  nofpclass(inf nan), so any non-finite crossing a by-value boundary is
+  poison -- empirically confirmed when a test helper returning NaN by
+  value made clang thinLTO collapse main() into a jump to address zero;
+  (c) 27 production sites return safeInfinity<double>() by value as a
+  "no solution" sentinel (elliptic_integrals.h x6, doppler.h x4,
+  hawking.h x3, newman_penrose.h x4, synchrotron.h x3, others) -- all
+  latent poison in fast-math TUs under clang. RESOLVED 2026-07-09 for
+  (a): classifiers rewritten to byte-level inspection via memcpy behind
+  reference parameters, validated by safe_limits_test across
+  gcc/clang x fast-math/IEEE. OPEN for (c): migrate the 27 sentinel
+  sites to the divergentResult()/isEffectivelyInfinite() pair (or land
+  VERIFY-5 fast-math inversion first, which shrinks the exposure to
+  the explicitly fast-math-opted targets); safeInfinity() docs now
+  state the IEEE-TU-only constraint.
 
 - PHYS-1 (MED) shader/integrator.glsl:55-58: the Kerr branch of
   geodesic_rhs() falls back to Schwarzschild ("For now, return
