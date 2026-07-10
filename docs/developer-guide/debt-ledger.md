@@ -516,6 +516,12 @@ brackets.
   src/tools/compare_harness.*; PostProcessPass/GpuTimer ->
   src/render/post_process.* / gpu_timing.*. [main.cpp under 4,000 lines;
   no block owns hidden statics]
+  PARTIAL 2026-07-10 (365b307): crash handler (platform::), resource
+  paths (platform::), GpuTimer/GpuTimerSet/TimingHistory + CSV writers
+  (blackhole::), and PostProcessPass (blackhole::, quad VAO now a lazy
+  member, not a static) extracted; main.cpp 6118 -> 5708. Crash handler
+  verified live via SIGTERM trace. REMAINING: compare harness ->
+  src/tools/compare_harness.* (goes with the compare statics group).
 - STATE-3 Extract ImGui panels to src/ui/*.cpp taking RenderState&.
   [main.cpp under 2,500 lines]
 - STATE-4 Extract uniform dispatch sites (frag/compute/cuda fill) into
