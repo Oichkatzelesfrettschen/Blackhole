@@ -442,7 +442,7 @@ brackets.
 
 ### Tranche single-source-fact-tables  (kills generator fanned-facts; prerequisite for render-state-reification)
 
-- FACTS-1 Uniform registry: one declarative table (name, type, default,
+- FACTS-1 DONE 2026-07-09 for the mechanical fan-out (struct + fragment map + compute call generated from one X-macro row in src/render/interop_uniform_registry.h, 30 uniforms; emitted name sets proven identical to the hand-written code). The CUDA fill stays deliberately explicit (semantic transforms, ABI-guarded separately); the inline rtti block at the render loop remains a candidate for a later row-migration pass. Original task: Uniform registry: one declarative table (name, type, default,
   which paths: frag/compute/cuda) that generates or drives the
   InteropUniforms struct, both apply functions, the rtti map keys,
   BH_LaunchParams fields, and the cudaMemcpyToSymbol setters. Start as a
