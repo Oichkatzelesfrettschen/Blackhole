@@ -8,9 +8,10 @@
  *      at the C++ side: struct size, field offsets, and enum values are stable
  *      and match what the device side expects.
  *
- * WHAT: sizeof/offsetof assertions on BH_LaunchParams; enum value checks;
- *       registry metadata table sanity; bh_select_kernel_variant() returns
- *       a value in [0, BH_KERNEL_COUNT).
+ * WHAT: host-vs-nvcc ABI agreement on BH_LaunchParams (sizeof + probed
+ *       offsetof via bh_device_launch_params_abi); POD contract; enum value
+ *       checks; registry metadata table sanity; bh_select_kernel_variant()
+ *       returns a value in [0, BH_KERNEL_COUNT).
  *
  * HOW: Compiled as C++23, linked against blackhole_cuda_rt + CUDA::cudart.
  *      No OpenGL context required. No CUDA device required for layout tests.
@@ -20,6 +21,7 @@
 #include <gtest/gtest.h>
 #include <cuda_runtime.h>   // NOLINT(misc-include-cleaner) -- umbrella header
 #include <cstddef>
+#include <type_traits>
 
 /* POD-only firewall header -- must not pull in any C++23 types */
 #include "cuda/kernel_launch.h"
@@ -29,75 +31,37 @@
  * 1. Struct layout
  * ======================================================================== */
 
-TEST(CudaKernelLaunch, LaunchParamsSize) {
-    /* 6 floats (rs..max_dist=24) + cam_pos[3](12) + cam_basis[9](36) = 72
-     * + 3 ints (max_steps, width, height = 12) = 84
-     * + 4 ints (adisk..use_luts = 16) = 100
-     * + 6 floats (lut bounds = 24) = 124
-     * + 3 floats (time_sec, doppler, bg_intensity = 12) = 136
-     * + 1 int (background_enabled = 4) = 140
-     * + 1 int (wiregrid_enabled = 4) = 144
-     * + 2 floats (wiregrid_show_ergo, wiregrid_grid_scale = 8) = 152
-     * + 2 floats (grmhd_r_min, grmhd_r_max = 8) = 160
-     * + 1 int (rte_enabled = 4) = 164
-     * + 1 float (rte_opacity_scale = 4) = 168
-     * + 1 float (grmhd_alpha = 4) = 172   [C1d]
-     * + 1 int (stokes_enabled = 4) = 176  [D4]
-     * + 2 floats (stokes_b_field_angle, stokes_ne_scale = 8) = 184  [D4]
-     * + 1 float (adisk_lit = 4) = 188
-     * All fields 4-byte, naturally aligned => no padding expected.
-     */
-    EXPECT_EQ(sizeof(BH_LaunchParams), static_cast<std::size_t>(188))
-        << "BH_LaunchParams size changed -- verify device_physics.cuh offsets"; // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
+/* The hazard is host-compiler/nvcc layout divergence: BH_LaunchParams is
+ * one header, but each toolchain computes its layout independently, and a
+ * packing or alignment flag mismatch corrupts every kernel parameter
+ * silently. bh_device_launch_params_abi() reports sizeof/offsetof as nvcc
+ * compiled them; comparing against the host compiler's own values tests
+ * the real hazard with zero hand-maintained literals. The previous
+ * literal-pinned variant rotted unseen while ENABLE_CUDA stayed OFF in CI
+ * (expected 188 bytes; the struct had grown to 336). */
+TEST(CudaKernelLaunch, LaunchParamsHostDeviceAbiAgreement) {
+    const BH_LaunchParamsAbi deviceAbi = bh_device_launch_params_abi();
+
+    EXPECT_EQ(deviceAbi.size, sizeof(BH_LaunchParams))
+        << "host compiler and nvcc disagree on sizeof(BH_LaunchParams)";
+
+    std::size_t index = 0;
+#define BH_ABI_CHECK(field)                                                  \
+    EXPECT_EQ(deviceAbi.offsets[index++], offsetof(BH_LaunchParams, field))  \
+        << "host/nvcc offsetof divergence at field: " #field;
+    BH_LAUNCH_PARAMS_ABI_FIELDS(BH_ABI_CHECK)
+#undef BH_ABI_CHECK
+    EXPECT_EQ(index, sizeof(deviceAbi.offsets) / sizeof(deviceAbi.offsets[0]))
+        << "ABI field list length drifted from BH_LaunchParamsAbi.offsets";
 }
 
-TEST(CudaKernelLaunch, LaunchParamsFieldOffsets) {
-    /* Scalars before arrays */
-    EXPECT_EQ(offsetof(BH_LaunchParams, rs),              static_cast<std::size_t>(0));
-    EXPECT_EQ(offsetof(BH_LaunchParams, spin),            static_cast<std::size_t>(4));
-    EXPECT_EQ(offsetof(BH_LaunchParams, isco),            static_cast<std::size_t>(8));
-    EXPECT_EQ(offsetof(BH_LaunchParams, step_size),       static_cast<std::size_t>(12));
-    EXPECT_EQ(offsetof(BH_LaunchParams, fov_scale),       static_cast<std::size_t>(16));
-    EXPECT_EQ(offsetof(BH_LaunchParams, max_dist),        static_cast<std::size_t>(20));
-
-    /* Arrays */
-    EXPECT_EQ(offsetof(BH_LaunchParams, cam_pos),         static_cast<std::size_t>(24));
-    EXPECT_EQ(offsetof(BH_LaunchParams, cam_basis),       static_cast<std::size_t>(36));
-
-    /* Int flags */
-    EXPECT_EQ(offsetof(BH_LaunchParams, max_steps),       static_cast<std::size_t>(72));
-    EXPECT_EQ(offsetof(BH_LaunchParams, width),           static_cast<std::size_t>(76));
-    EXPECT_EQ(offsetof(BH_LaunchParams, height),          static_cast<std::size_t>(80));
-    EXPECT_EQ(offsetof(BH_LaunchParams, adisk_enabled),   static_cast<std::size_t>(84));
-    EXPECT_EQ(offsetof(BH_LaunchParams, redshift_enabled),static_cast<std::size_t>(88));
-    EXPECT_EQ(offsetof(BH_LaunchParams, kerr_enabled),    static_cast<std::size_t>(92));
-    EXPECT_EQ(offsetof(BH_LaunchParams, use_luts),        static_cast<std::size_t>(96));
-
-    /* LUT domain bounds */
-    EXPECT_EQ(offsetof(BH_LaunchParams, lut_radius_min),       static_cast<std::size_t>(100));
-    EXPECT_EQ(offsetof(BH_LaunchParams, lut_radius_max),       static_cast<std::size_t>(104));
-    EXPECT_EQ(offsetof(BH_LaunchParams, redshift_radius_min),  static_cast<std::size_t>(108));
-    EXPECT_EQ(offsetof(BH_LaunchParams, redshift_radius_max),  static_cast<std::size_t>(112));
-    EXPECT_EQ(offsetof(BH_LaunchParams, spectral_radius_min),  static_cast<std::size_t>(116));
-    EXPECT_EQ(offsetof(BH_LaunchParams, spectral_radius_max),  static_cast<std::size_t>(120));
-
-    /* Physics misc */
-    EXPECT_EQ(offsetof(BH_LaunchParams, time_sec),             static_cast<std::size_t>(124));
-    EXPECT_EQ(offsetof(BH_LaunchParams, doppler_strength),     static_cast<std::size_t>(128));
-    EXPECT_EQ(offsetof(BH_LaunchParams, background_intensity), static_cast<std::size_t>(132));
-    EXPECT_EQ(offsetof(BH_LaunchParams, background_enabled),   static_cast<std::size_t>(136));
-
-    /* C1d: GRMHD temporal interpolation */
-    EXPECT_EQ(offsetof(BH_LaunchParams, grmhd_alpha),          static_cast<std::size_t>(168)); // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
-
-    /* D4: polarized Stokes IQUV */
-    EXPECT_EQ(offsetof(BH_LaunchParams, stokes_enabled),       static_cast<std::size_t>(172));
-    EXPECT_EQ(offsetof(BH_LaunchParams, stokes_b_field_angle), static_cast<std::size_t>(176));
-    EXPECT_EQ(offsetof(BH_LaunchParams, stokes_ne_scale),      static_cast<std::size_t>(180));
-
-    /* Disk brightness */
-    EXPECT_EQ(offsetof(BH_LaunchParams, adisk_lit),            static_cast<std::size_t>(184)); // NOLINT(readability-implicit-bool-conversion) -- GoogleTest macro expansion
+TEST(CudaKernelLaunch, LaunchParamsPodContract) {
+    /* The C firewall requires a standard-layout, trivially-copyable POD;
+     * cudaMemcpyToSymbol of the whole struct depends on it. */
+    EXPECT_TRUE(std::is_standard_layout_v<BH_LaunchParams>);
+    EXPECT_TRUE(std::is_trivially_copyable_v<BH_LaunchParams>);
 }
+
 
 /* ========================================================================
  * 2. Enum values
