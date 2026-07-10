@@ -21,6 +21,8 @@ class BlackholeConan(ConanFile):
         "enable_cuda": [True, False],
         "enable_google_benchmark": [True, False],
         "enable_mimalloc": [True, False],
+        "enable_rmlui": [True, False],
+        "enable_tracy": [True, False],
     }
 
     default_options = {
@@ -38,6 +40,10 @@ class BlackholeConan(ConanFile):
         "enable_cuda": False,
         "enable_google_benchmark": False,
         "enable_mimalloc": False,
+        # Match the CMake defaults: ENABLE_RMLUI and ENABLE_TRACY are OFF,
+        # so the default install must not build these libraries at all.
+        "enable_rmlui": False,
+        "enable_tracy": False,
     }
 
     def requirements(self):
@@ -64,7 +70,8 @@ class BlackholeConan(ConanFile):
         # UI & Rendering
         self.requires("imgui/1.92.5-docking", override=True)  # Latest docking branch
         self.requires("imguizmo/cci.20231114")       # Latest
-        self.requires("rmlui/6.1")                   # Latest
+        if self.options.enable_rmlui:
+            self.requires("rmlui/6.1")               # Latest; needs -o enable_rmlui=True + -DENABLE_RMLUI=ON
 
         # Serialization
         self.requires("flatbuffers/25.9.23")         # Latest
@@ -79,7 +86,8 @@ class BlackholeConan(ConanFile):
         self.requires("fmt/12.1.0", override=True)   # Latest
 
         # Profiling & Debugging
-        self.requires("tracy/0.13.1")                # Latest
+        if self.options.enable_tracy:
+            self.requires("tracy/0.13.1")            # Latest; needs -o enable_tracy=True + -DENABLE_TRACY=ON
 
         # CLI & Configuration
         self.requires("cli11/2.6.0")                 # Latest
@@ -111,7 +119,7 @@ class BlackholeConan(ConanFile):
             self.requires("fastnoise2/0.10.0-alpha") # Only version
 
         if self.options.enable_highway:
-            self.requires("highway/1.3.0")           # UPGRADED: 1.2.0 → 1.3.0
+            self.requires("highway/1.4.0")           # 1.3.0 vqsort fails under clang 22 target-feature checks
 
         if self.options.enable_ktx:
             self.requires("ktx/4.3.2")               # Latest
@@ -141,6 +149,12 @@ class BlackholeConan(ConanFile):
     def validate(self):
         """Conan 2.x: Validate configuration"""
         # C++23 minimum requirement (concepts, ranges, set::contains, etc.)
-        if self.settings.compiler.get_safe("cppstd"):
-            if int(str(self.settings.compiler.cppstd)) < 23:
-                raise ConanInvalidConfiguration("Blackhole requires C++23 or later")
+        # An unset cppstd is an error, not a bypass: the guard used to be
+        # skipped entirely when the profile omitted compiler.cppstd.
+        cppstd = self.settings.compiler.get_safe("cppstd")
+        if cppstd is None:
+            raise ConanInvalidConfiguration(
+                "Blackhole requires compiler.cppstd to be set (>= 23); "
+                "pass -s compiler.cppstd=23 or use scripts/conan_install.sh")
+        if int(str(cppstd).removeprefix("gnu")) < 23:
+            raise ConanInvalidConfiguration("Blackhole requires C++23 or later")
