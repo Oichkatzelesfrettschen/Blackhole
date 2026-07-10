@@ -28,9 +28,24 @@ jobs:
         conan profile detect --force
         conan remote update conancenter --url="https://center2.conan.io"
 
+    - name: Check lockfile drift
+      run: |
+        # conanfile.py edits must land together with a regenerated
+        # conan.lock; unpinned transitive resolution is how two builds
+        # of one commit diverge.
+        conan lock create . --lockfile=conan.lock --lockfile-out=/tmp/conan.lock.regen \
+          -s build_type=Release \
+          -s compiler.cppstd=23
+        if ! diff -u conan.lock /tmp/conan.lock.regen; then
+          echo "conan.lock does not cover conanfile.py; regenerate with:"
+          echo "  conan lock create . -s build_type=Release -s compiler.cppstd=23 --lockfile-out=conan.lock"
+          exit 1
+        fi
+
     - name: Conan install
       run: |
         conan install . --output-folder=build --build=missing \
+          --lockfile=conan.lock \
           -s build_type=Release \
           -s compiler.cppstd=23
 
