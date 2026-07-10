@@ -22,6 +22,7 @@
 #include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
+#include <imgui.h>
 #include <ImGuizmo.h>
 
 #include "cinematic.h"
@@ -337,6 +338,9 @@ struct RenderState {
     int compareMaxStepsOverride = 0;
     float compareStepSizeOverride = 0.0f;
     bool compareBaselineEnabled = false;
+    // Bit meanings for integratorDebugFlags (bhDebugFlags shader uniform).
+    static constexpr int K_INTEGRATOR_DEBUG_NAN_FLAG = 1;
+    static constexpr int K_INTEGRATOR_DEBUG_RANGE_FLAG = 2;
     int integratorDebugFlags = 0;
     bool integratorDebugConfigInit = false;
     int compareFailureCount = 0;
