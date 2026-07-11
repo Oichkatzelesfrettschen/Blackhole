@@ -100,6 +100,7 @@
 #include "render/interop_uniform_registry.h"
 #include "render/interop_uniforms.h"
 #include "render/lut_manager.h"
+#include "render/record_mode.h"
 #include "render/uniform_binding.h"
 #include "tools/compare_harness.h"
 #include "render/render_state.h"
@@ -208,40 +209,6 @@ glm::mat3 buildCameraBasis(const glm::vec3 &cameraPos, const glm::vec3 &target, 
   return {right, up, forward};
 }
 
-struct ShowcaseOrbitComposition {
-  const char *name;
-  const char *backgroundId;
-  float frameOffsetX;
-  float frameOffsetY;
-  float pitchDeg;
-  float distance;
-  float fovDeg;
-  float exposure;
-  float backgroundIntensity;
-  float backgroundYawDeg;
-  float backgroundPitchDeg;
-  float backgroundOffsetX;
-  float backgroundOffsetY;
-  float sweepDeg;
-};
-
-constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 60.0f, 3.05f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
-    {"left-third", "nasa_deep_starmap", 0.18f, 0.03f, -8.0f, 23.0f, 58.0f, 2.95f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
-    {"right-third", "nasa_deep_starmap_galactic", -0.18f, 0.03f, -8.0f, 23.0f, 58.0f, 2.95f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
-    {"wide-left", "eso_milkyway_brunier", 0.12f, -0.02f, -7.0f, 27.5f, 54.0f, 2.75f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
-    {"wide-right", "nasa_deep_starmap_galactic", -0.12f, -0.02f, -7.0f, 27.5f, 54.0f, 2.9f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
-}};
-
-const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
-  for (const auto &composition : K_SHOWCASE_ORBIT_COMPOSITIONS) {
-    if (name == composition.name) {
-      return &composition;
-    }
-  }
-  return nullptr;
-}
-
 bool hasExtension(const char *name) {
   GLint count = 0;
   glGetIntegerv(GL_NUM_EXTENSIONS, &count);
@@ -331,40 +298,6 @@ using ui::renderBloomPanel;
 using ui::renderTonemapPanel;
 using ui::renderDepthEffectsPanel;
 
-void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, WiregridParams &params,
-                                       glm::vec4 &color) {
-  if (params.mode != WiregridParams::Mode::Beauty) {
-    return;
-  }
-
-  if (compositionName == "wide-right") {
-    params.gridScale = 0.78f;
-    params.motionScale = 0.48f;
-    params.infallScale = 0.16f;
-    params.strength = 0.48f;
-    params.scenePreserve = 1.0f;
-    color = glm::vec4(0.19f, 0.58f, 0.90f, 0.11f);
-    return;
-  }
-  if (compositionName == "right-third") {
-    params.gridScale = 0.84f;
-    params.motionScale = 0.54f;
-    params.infallScale = 0.20f;
-    params.strength = 0.56f;
-    params.scenePreserve = 1.0f;
-    color = glm::vec4(0.20f, 0.60f, 0.91f, 0.12f);
-    return;
-  }
-  if (compositionName == "wide-left") {
-    params.gridScale = 0.82f;
-    params.motionScale = 0.50f;
-    params.infallScale = 0.18f;
-    params.strength = 0.52f;
-    params.scenePreserve = 1.0f;
-    color = glm::vec4(0.19f, 0.58f, 0.89f, 0.11f);
-  }
-}
-
 std::vector<BackgroundAsset> loadBackgroundAssets() {
   std::vector<BackgroundAsset> assets;
   std::string text;
@@ -435,6 +368,11 @@ using blackhole::FrameBindingInputs;
 using blackhole::loadGrbModulationLutAssets;
 using blackhole::loadSpectralLutAssets;
 using blackhole::updateLuts;
+
+// Showcase-orbit record framing lives in src/render/record_mode.*.
+using blackhole::applyShowcaseBeautyWiregridTuning;
+using blackhole::findShowcaseOrbitComposition;
+using blackhole::ShowcaseOrbitComposition;
 #if BLACKHOLE_HAS_CUDA
 using blackhole::bindCudaLaunchParams;
 #endif
