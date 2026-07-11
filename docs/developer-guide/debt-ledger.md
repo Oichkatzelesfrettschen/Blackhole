@@ -773,10 +773,41 @@ brackets.
     [1, kMaxBloomIterations], and the write-back. Suite 83 -> 84. Gate: -Werror
     (three targets) + 84/84 + showcase-orbit headless capture byte-identical A/B
     versus rebuilt parent (sha256 0cf736a3 across all three frames). main.cpp
-    2000 -> 1977. Remaining clusters: post-processing bloom/tonemap/curve (~140L),
-    scene composition + overlays (~104L), GRMHD per-frame streaming (~83L),
-    per-frame LUT loads (~200L), background asset load (~87L); compare-sweep
-    Region 2 snapshot capture wants a context struct.
+    2000 -> 1977.
+  FIVE-CLUSTER BATCH (well-lit A/B + dark verbatim-diff): the remaining live-loop
+  clusters, gated per the advisor split -- showcase A/B is decisive only for code
+  the showcase runs; dark blocks lean on the verbatim git-diff (extracted body
+  character-identical to the original range modulo indentation, no hoisted
+  params). Showcase A/B must PIN imgui.ini: the gitignored imgui.ini persists the
+  docked viewport width, so when it drifts (1343 vs 1535) the captured image
+  dimensions change and the sha256 differs on pixel-identical content.
+  - 0bcfc01: bloom/tonemap/depth post chain into src/render/post_pipeline.*
+    (runPostProcessPipeline -> the display texture). Well-lit; showcase A/B
+    byte-identical (0cf736a3). main.cpp 1977 -> 1830.
+  - 4a32c26: background manifest load + texture/skybox swap into
+    src/render/background_loader.* (updateActiveBackground; loadBackgroundAssets +
+    findBackgroundIndex move into the TU anon namespace). Well-lit; A/B 0cf736a3.
+    main.cpp 1830 -> 1766.
+  - 5ad773e: per-frame GRMHD PBO tile upload into src/render/grmhd_tile_upload.*
+    (uploadGrmhdStreamingTiles, incl #if BLACKHOLE_HAS_CUDA slot-7). NAMED
+    grmhd_tile_upload not grmhd_streaming: render_state.h in src/render includes
+    "grmhd_streaming.h" (the GRMHDStreamer class header in src/), and a sibling
+    src/render/grmhd_streaming.h shadows it -- the build caught this. Dark block;
+    gate = verbatim diff + CUDA-target -Werror. main.cpp 1766 -> 1733.
+  - 992b652: scene-composition overlays into src/render/scene_overlays.*
+    (composeSceneOverlays: sceneFbo bind + GRMHD slice + RmlUi + HUD, default FBO
+    on return). GRMHD-slice/RmlUi dark; gate = verbatim diff, lit blit A/B
+    0cf736a3 with imgui.ini pinned. main.cpp 1733 -> 1638.
+  - a8c44ff: per-frame LUT uploads into lut_manager.* (loadGrbModulationLut +
+    loadSpectralSynchHawkingLuts). Only the if(!tried/created){load+createTexture}
+    sub-blocks move; the enable-flag computation (spectralEnabled/
+    grbModulationEnabled/grbTimeSeconds -> downstream uniforms) stays in main and
+    updateLuts is untouched (deferred emissivity-staleness unchanged). Verbatim
+    diff; A/B 0cf736a3 pinned. main.cpp 1638 -> 1566.
+  NET main.cpp 1977 -> 1566 across the batch (84/84 throughout). Remaining toward
+  the 1500 target: compare-sweep Region 2 snapshot capture (~102L, wants a context
+  struct); STAYS IN MAIN per the ledger split = GLSL fragment/compute dispatch
+  (~99L, Issue-009) and frame-end ImGui/gpu-timing/swap/term (~113L).
   INCLUDE-GRAPH DEBT (render_state.h heavy include surface) DECOMPOSED, resolution
   deferred: the header pulls glbinding (GLuint handles), imgui+ImGuizmo
   (ImGuizmo::OPERATION/MODE gizmo enums held BY VALUE at render_state.h:94-95),
