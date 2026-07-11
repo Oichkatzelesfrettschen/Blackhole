@@ -1136,6 +1136,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/render/settings_sync.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/post_pipeline.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/background_loader.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/grmhd_tile_upload.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/env_config.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/gl_capabilities.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/gpu_timing.cpp"
