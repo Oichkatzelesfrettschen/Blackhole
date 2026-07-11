@@ -647,6 +647,43 @@ brackets.
   own behavior-change commit. main.cpp at 2385 is still above the 1,500-line
   STATE-4 target; the remaining mass is the non-record render-loop body (dispatch
   setup, compare sweep, GPU timing, the draw sequence) rather than record glue.
+  NON-RECORD RENDER-LOOP SCOPE 2026-07-10 (planned, not executed): the render
+  loop (main 925-2385, ~1460L) decomposes into cohesive clusters, most with an
+  existing subsystem TU as their home. Sizes are cluster-lines; each extraction
+  nets roughly that minus a residual call site + gate, so eight clusters land
+  main around 1,500-1,540 with little margin -- name a ninth buffer cluster or
+  accept ~1,520 rather than claiming "reaches 1,500". Unlike the record tranche,
+  these are on the LIVE render path (every frame), so they are materially higher
+  risk; do the highest-value/lowest-risk first and let the depth (grind to 1,500
+  vs. the 3-4 safest pieces) be a deliberate choice.
+  DETERMINISTIC GATES for the live path: the showcase-orbit record capture runs
+  the full GLSL render -> post -> composite deterministically (byte-identical),
+  so it catches post-processing and scene-composition regressions; the
+  BLACKHOLE_COMPARE_SWEEP CSV gives byte-exact compute/fragment parity for
+  dispatch-adjacent work; 81/81 ctest covers the LUT/GRMHD units. Any cluster
+  whose only exercise is the CUDA path has NO deterministic gate -> defer or
+  flag higher-risk.
+  CLUSTERS, tightest-gate-first (recommended order):
+  - Compare/parity sweep driving (~116L) -> compare_harness.* [gate: COMPARE_SWEEP
+    CSV byte-identical -- the exact gate; only active in compare mode].
+  - Camera state -> cameraPos/basis/aim math (~84L) -> a camera helper [pure
+    computation; gate: showcase capture + smoke].
+  - Settings <-> RenderState load/sync (~65L) -> settings/render_state [low drama].
+  - Post-processing bloom/tonemap/curve (~140L) -> post_process.* (exists) [gate:
+    showcase capture byte-identical].
+  - Scene composition + overlays wiregrid/grmhd-slice (~104L) -> post_process or a
+    new overlay_passes.* [gate: showcase capture].
+  - GRMHD per-frame streaming tile upload (~83L) -> grmhd_streaming.* (exists)
+    [gate: grmhd_streamer_e2e + hdf5 tests; CUDA-slot bits are the risk].
+  - Per-frame LUT loads spectral/synchG/hawking/grb (~200L) -> lut_manager.*
+    (exists) [biggest single; gate: 81/81 units + showcase]. Front-load blast
+    radius only when fresh, not deepest into a session.
+  - Background asset load + texture swap (~87L) -> a background helper.
+  STAYS IN MAIN: GLSL fragment/compute raytrace dispatch (~99L, Issue-009 core,
+  no cheap gate) and frame-end ImGui/platform/gpu-timing/swap/term (~113L, mixed).
+  SAFER ALTERNATIVE LINE SOURCE: the ~366L of pre-loop setup (window/GL init,
+  recreateRenderTargets) is also non-record and off the hot path -- lower risk
+  than live-loop clusters if the goal is distance from the render path.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
