@@ -196,6 +196,8 @@ using blackhole::recreateRenderTargets;
 
 // Compare-sweep advance/restore state machine lives in src/render/compare_sweep.*.
 using blackhole::advanceComparePresetSweep;
+using blackhole::captureCompareParity;
+using blackhole::CompareParityInputs;
 using blackhole::restoreCompareSweepState;
 
 // GL feature queries live in src/render/gl_capabilities.*.
@@ -257,25 +259,14 @@ using ui::renderDepthEffectsPanel;
 // src/render/background_loader.*.
 using blackhole::updateActiveBackground;
 
-// Compare/parity harness (DiffStats, snapshot + CSV writers, preset
-// table) lives in src/tools/compare_harness.*; InteropUniforms in
-// src/render/interop_uniforms.h. Unqualified call sites below.
+// Compare/parity harness (DiffStats, preset table) lives in
+// src/tools/compare_harness.*; InteropUniforms in
+// src/render/interop_uniforms.h. The snapshot + CSV writers are reached
+// through captureCompareParity in render/compare_sweep.*.
 using blackhole::DiffStats;
 using blackhole::InteropUniforms;
 using blackhole::ComparePreset;
-using blackhole::K_COMPARE_PRESETS;
-using blackhole::sampleTextureDiff;
-using blackhole::readTextureRGBA;
 using blackhole::writePfmRgb;
-using blackhole::computeDiffStats;
-using blackhole::countDiffOutliers;
-using blackhole::writePpm;
-using blackhole::writeDiffPpm;
-using blackhole::compareSnapshotPath;
-using blackhole::compareSummaryPath;
-using blackhole::compareUniformsPath;
-using blackhole::appendCompareSummary;
-using blackhole::appendCompareUniforms;
 
 // Shared raytracer uniform binders live in src/render/uniform_binding.*
 // (registry-driven fragment/compute float fills + Hawking forwarder).
@@ -1277,108 +1268,21 @@ int main(int argc, char **argv) {
             rs.timing.gpuTimers.blackholeCompute.end();
           }
 
-          if (compareActive && fragmentTarget != 0 && computeTarget != 0) {
-            if (rs.compare.compareAutoCapture && rs.compare.compareAutoRemaining > 0) {
-              rs.compare.compareAutoStrideCounter++;
-              if (rs.compare.compareAutoStrideCounter >= rs.compare.compareAutoStride) {
-                rs.compare.captureCompareSnapshot = true;
-                rs.compare.compareAutoStrideCounter = 0;
-                rs.compare.compareAutoRemaining--;
-                if (rs.compare.compareAutoRemaining <= 0) {
-                  rs.compare.compareAutoCapture = false;
-                }
-              }
-            }
-
-            if (++rs.compare.compareFrameCounter >= rs.compare.compareFrameStride) {
-              rs.compare.compareStats =
-                  sampleTextureDiff(rs.targets.texBlackhole, rs.targets.texBlackholeCompare, rs.targets.renderWidth,
-                                    rs.targets.renderHeight, // NOLINT(readability-suspicious-call-argument) --
-                                                  // order is correct: primary then compare
-                                    rs.compare.compareSampleSize);
-              rs.compare.compareFrameCounter = 0;
-            }
-
-            if (rs.compare.captureCompareSnapshot) {
-              std::vector<float> primary;
-              std::vector<float> secondary;
-              if (readTextureRGBA(rs.targets.texBlackhole, rs.targets.renderWidth, rs.targets.renderHeight, primary) &&
-                  readTextureRGBA(rs.targets.texBlackholeCompare, rs.targets.renderWidth, rs.targets.renderHeight, secondary)) {
-                rs.compare.compareFullStats = computeDiffStats(primary, secondary);
-                std::size_t const outlierCount =
-                    countDiffOutliers(primary, secondary, rs.compare.compareThreshold);
-                std::size_t const totalPixels = primary.size() / 4;
-                std::size_t limitFromFrac = 0;
-                if (rs.compare.compareMaxOutlierFrac > 0.0f && totalPixels > 0) {
-                  limitFromFrac =
-                      static_cast<std::size_t>(static_cast<double>(rs.compare.compareMaxOutlierFrac) *
-                                               static_cast<double>(totalPixels));
-                }
-                std::size_t const limitFromCount =
-                    static_cast<std::size_t>(std::max(rs.compare.compareMaxOutliers, 0));
-                std::size_t const outlierLimit = std::max(limitFromCount, limitFromFrac);
-                rs.compare.compareLastOutliers = static_cast<int>(outlierCount);
-                rs.compare.compareLastOutlierLimit = static_cast<int>(outlierLimit);
-                float const outlierFrac = totalPixels > 0 ? static_cast<float>(outlierCount) /
-                                                                static_cast<float>(totalPixels)
-                                                          : 0.0f;
-                bool const outlierGateEnabled =
-                    (rs.compare.compareMaxOutliers > 0) || (rs.compare.compareMaxOutlierFrac > 0.0f);
-                rs.compare.compareLastExceeded = rs.compare.compareFullStats.valid &&
-                                      rs.compare.compareFullStats.maxAbs > rs.compare.compareThreshold &&
-                                      (!outlierGateEnabled || outlierCount > outlierLimit);
-                if (rs.compare.compareLastExceeded) {
-                  ++rs.compare.compareFailureCount;
-                }
-
-                const bool computeIsPrimary = (computeTarget == rs.targets.texBlackhole);
-                const std::string primaryTag = computeIsPrimary ? "compute" : "fragment";
-                const std::string secondaryTag = computeIsPrimary ? "fragment" : "compute";
-                std::string presetLabel = "custom";
-                if (rs.compare.compareSnapshotIndex >= 0 &&
-                    std::cmp_less(rs.compare.compareSnapshotIndex, K_COMPARE_PRESETS.size())) {
-                  presetLabel =
-                      K_COMPARE_PRESETS.at(static_cast<std::size_t>(rs.compare.compareSnapshotIndex)).label;
-                }
-
-                if (rs.compare.compareWriteOutputs) {
-                  writePpm(compareSnapshotPath(rs.compare.compareSnapshotIndex, primaryTag), primary,
-                           rs.targets.renderWidth, rs.targets.renderHeight, 1.0f);
-                  writePpm(compareSnapshotPath(rs.compare.compareSnapshotIndex, secondaryTag), secondary,
-                           rs.targets.renderWidth, rs.targets.renderHeight, 1.0f);
-                }
-                if (rs.compare.compareWriteDiff) {
-                  writeDiffPpm(compareSnapshotPath(rs.compare.compareSnapshotIndex, "diff"), primary,
-                               secondary, rs.targets.renderWidth, rs.targets.renderHeight, rs.compare.compareDiffScale);
-                }
-                if (rs.compare.compareWriteSummary) {
-                  appendCompareSummary(compareSummaryPath(), rs.compare.compareSnapshotIndex, primaryTag,
-                                       secondaryTag, rs.targets.renderWidth, rs.targets.renderHeight, rs.compare.compareFullStats,
-                                       rs.compare.compareDiffScale, rs.compare.compareWriteOutputs, rs.compare.compareWriteDiff,
-                                       rs.compare.compareThreshold, rs.compare.compareLastExceeded, glfwGetTime(),
-                                       rs.physicsCore.kerrSpin, grbModulationEnabled, grbTimeSeconds,
-                                       rs.compare.compareLastOutliers, rs.compare.compareLastOutlierLimit, outlierFrac);
-                  appendCompareUniforms(compareUniformsPath(), rs.compare.compareSnapshotIndex, presetLabel,
-                                        interop, compareBaselineActive, rs.compare.compareOverridesEnabled,
-                                        backgroundEnabledEffective, noiseReady, grmhdEnabled,
-                                        spectralEnabled, grbModulationEnabled,
-                                        enablePhotonSphereEffective);
-                }
-                rs.compare.compareSnapshotIndex++;
-              } else {
-                rs.compare.compareFullStats.valid = false;
-                rs.compare.compareLastExceeded = false;
-              }
-              rs.compare.captureCompareSnapshot = false;
-            }
-          } else {
-            rs.compare.compareStats.valid = false;
-            rs.compare.compareFullStats.valid = false;
-            rs.compare.captureCompareSnapshot = false;
-            rs.compare.compareLastExceeded = false;
-            rs.compare.compareLastOutliers = 0;
-            rs.compare.compareLastOutlierLimit = 0;
-          }
+          CompareParityInputs parityInputs;
+          parityInputs.fragmentTarget = fragmentTarget;
+          parityInputs.computeTarget = computeTarget;
+          parityInputs.compareActive = compareActive;
+          parityInputs.compareBaselineActive = compareBaselineActive;
+          parityInputs.backgroundEnabledEffective = backgroundEnabledEffective;
+          parityInputs.noiseReady = noiseReady;
+          parityInputs.grmhdEnabled = grmhdEnabled;
+          parityInputs.spectralEnabled = spectralEnabled;
+          parityInputs.grbModulationEnabled = grbModulationEnabled;
+          parityInputs.enablePhotonSphereEffective = enablePhotonSphereEffective;
+          parityInputs.grbTimeSeconds = grbTimeSeconds;
+          parityInputs.timeSec = glfwGetTime();
+          parityInputs.interop = interop;
+          captureCompareParity(rs, parityInputs);
         } /* end of GLSL fragment/compute else block */
       }
       restoreCompareSweepState(rs, input);
