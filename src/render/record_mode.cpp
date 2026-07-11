@@ -8,19 +8,62 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <system_error>
+#include <vector>
 
 #include <GLFW/glfw3.h>
+#include <stb_image_write.h>
 
 #include "cinematic.h"           // K_CINEMATIC_KEYFRAMES / DURATION / FPS
+#include "gl_loader.h"           // gl:: readback entry points
 #include "input.h"               // InputManager, CameraState, CameraMode
 #include "platform/cli_options.h"
 #include "render/render_state.h" // RenderState, WiregridParams
 #include "settings.h"            // SettingsManager
+#include "tools/compare_harness.h" // readTextureRGBA, writePfmRgb
 
 namespace blackhole {
 namespace {
+
+/**
+ * @brief Downloads a tonemapped RGB texture into a top-to-bottom byte buffer.
+ *
+ * Queries the texture's stored dimensions (falling back to the render size) and
+ * reads GL_RGB/GL_UNSIGNED_BYTE with GL_PACK_ALIGNMENT set to 1: the default
+ * alignment of 4 pads each row to a 4-byte boundary, so for a width like 1343
+ * the row stride would be 4032 rather than 4029 and glGetTexImage would write
+ * past the tightly-sized buffer, corrupting the next heap chunk. glGetTexImage
+ * returns rows bottom-to-top, so the copy flips them for image output. Returns
+ * false when the texture is unset.
+ */
+bool readTonemappedRgb(gl::GLuint texTonemapped, int fallbackWidth, int fallbackHeight,
+                       std::vector<unsigned char> &flipped, int &outWidth, int &outHeight) {
+  if (texTonemapped == 0) {
+    return false;
+  }
+  glBindTexture(GL_TEXTURE_2D, texTonemapped);
+  GLint texW = 0, texH = 0;
+  glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
+  glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
+  int const w = (texW > 0) ? texW : fallbackWidth;
+  int const h = (texH > 0) ? texH : fallbackHeight;
+  std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
+  glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+  glPixelStorei(GL_PACK_ALIGNMENT, 4);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  flipped.assign(px.size(), 0);
+  for (int row = 0; row < h; ++row) {
+    std::memcpy(flipped.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 3,
+                px.data() + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3,
+                static_cast<size_t>(w) * 3);
+  }
+  outWidth = w;
+  outHeight = h;
+  return true;
+}
 
 constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
     {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 60.0f, 3.05f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
@@ -302,6 +345,78 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin     = rs.recording.recordCurrentKf.kerrSpin;
   }
+}
+
+void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
+  // glfwSetWindowSize() is asynchronous; the resize callback fires in
+  // glfwPollEvents(). Wait 15 warmup frames (~250ms) for the window and render
+  // targets to settle at the requested size before capturing. If the WM caps
+  // the window smaller, accept whatever size it settled at.
+  if (cli.recordFramesDir.empty() || rs.recording.recordWarmup < 15 ||
+      rs.targets.texTonemapped == 0 || rs.targets.renderWidth <= 0 || rs.targets.renderHeight <= 0) {
+    return;
+  }
+  // Capture the tonemapped scene texture rather than the default framebuffer,
+  // which is mostly ImGui chrome. The cinematic HUD is composited later by
+  // ffmpeg drawtext; it is drawn in the ImGui frame for live preview only.
+  std::vector<unsigned char> flipped;
+  int w = 0;
+  int h = 0;
+  if (!readTonemappedRgb(rs.targets.texTonemapped, rs.targets.renderWidth, rs.targets.renderHeight,
+                         flipped, w, h)) {
+    return;
+  }
+  char framePath[1024];
+  std::snprintf(framePath, sizeof(framePath), "%s/frame_%06d.png",
+                cli.recordFramesDir.c_str(), rs.recording.recordFrameIndex);
+  stbi_write_png(framePath, w, h, 3, flipped.data(), w * 3);
+  if (rs.recording.recordFrameIndex % K_CINEMATIC_FPS == 0) {
+    std::printf("Record: frame %d / %d  (t = %.1f s)  [%dx%d]\n",
+                rs.recording.recordFrameIndex, cli.recordFramesTotal,
+                static_cast<double>(rs.recording.recordCinematic), w, h);
+  }
+  ++rs.recording.recordFrameIndex;
+  rs.recording.recordCinematic = static_cast<float>(rs.recording.recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS);
+}
+
+void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
+  if (cli.exportFramePath.empty() && cli.exportRawFramePath.empty()) {
+    return;
+  }
+  // Warm up 5 frames so the scene has settled, then export once.
+  if (++rs.exporting.exportWarmup < 5 || rs.exporting.exportPerformed ||
+      rs.targets.renderWidth <= 0 || rs.targets.renderHeight <= 0) {
+    return;
+  }
+  if (!cli.exportFramePath.empty()) {
+    std::vector<unsigned char> flipped;
+    int w = 0;
+    int h = 0;
+    if (readTonemappedRgb(rs.targets.texTonemapped, rs.targets.renderWidth, rs.targets.renderHeight,
+                          flipped, w, h)) {
+      stbi_write_png(cli.exportFramePath.c_str(), w, h, 3, flipped.data(), w * 3);
+      std::printf("Exported frame: %s (%dx%d)\n", cli.exportFramePath.c_str(), w, h);
+    }
+  }
+
+  if (!cli.exportRawFramePath.empty() && rs.targets.texBlackhole != 0) {
+    GLint texW = 0;
+    GLint texH = 0;
+    glBindTexture(GL_TEXTURE_2D, rs.targets.texBlackhole);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    int const w = (texW > 0) ? texW : rs.targets.renderWidth;
+    int const h = (texH > 0) ? texH : rs.targets.renderHeight;
+    std::vector<float> raw;
+    if (readTextureRGBA(rs.targets.texBlackhole, w, h, raw) &&
+        writePfmRgb(cli.exportRawFramePath, raw, w, h)) {
+      std::printf("Exported raw frame: %s (%dx%d)\n", cli.exportRawFramePath.c_str(), w, h);
+    } else {
+      std::fprintf(stderr, "Failed to export raw frame: %s\n", cli.exportRawFramePath.c_str());
+    }
+  }
+  rs.exporting.exportPerformed = true;
 }
 
 } // namespace blackhole

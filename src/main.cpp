@@ -372,6 +372,8 @@ using blackhole::updateLuts;
 // Showcase-orbit record framing lives in src/render/record_mode.*.
 using blackhole::applyRecordCameraPath;
 using blackhole::applyRecordProfileSetup;
+using blackhole::captureRecordFrame;
+using blackhole::exportFrameOnce;
 using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::findShowcaseOrbitComposition;
 using blackhole::ShowcaseOrbitComposition;
@@ -2251,53 +2253,7 @@ int main(int argc, char **argv) {
       }
 
       /* --export-frame / --export-raw-frame: export textures before ImGui. */
-      if (!exportFramePath.empty() || !exportRawFramePath.empty()) {
-        if (++rs.exporting.exportWarmup >= 5 && !rs.exporting.exportPerformed && rs.targets.renderWidth > 0 && rs.targets.renderHeight > 0) {
-          if (!exportFramePath.empty() && rs.targets.texTonemapped != 0) {
-            glBindTexture(GL_TEXTURE_2D, rs.targets.texTonemapped);
-            GLint texW = 0, texH = 0;
-            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
-            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
-            int const w = (texW > 0) ? texW : rs.targets.renderWidth;
-            int const h = (texH > 0) ? texH : rs.targets.renderHeight;
-            std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
-            glPixelStorei(GL_PACK_ALIGNMENT, 1);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
-            glPixelStorei(GL_PACK_ALIGNMENT, 4);
-            glBindTexture(GL_TEXTURE_2D, 0);
-            /* glGetTexImage gives bottom-to-top; flip for PNG. */
-            std::vector<unsigned char> flipped(px.size());
-            for (int row = 0; row < h; ++row) {
-              std::memcpy(
-                  flipped.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 3,
-                  px.data() + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3,
-                  static_cast<size_t>(w) * 3);
-            }
-            stbi_write_png(exportFramePath.c_str(), w, h, 3, flipped.data(), w * 3);
-            std::printf("Exported frame: %s (%dx%d)\n", exportFramePath.c_str(), w, h);
-          }
-
-          if (!exportRawFramePath.empty() && rs.targets.texBlackhole != 0) {
-            GLint texW = 0;
-            GLint texH = 0;
-            glBindTexture(GL_TEXTURE_2D, rs.targets.texBlackhole);
-            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
-            glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
-            glBindTexture(GL_TEXTURE_2D, 0);
-            int const w = (texW > 0) ? texW : rs.targets.renderWidth;
-            int const h = (texH > 0) ? texH : rs.targets.renderHeight;
-            std::vector<float> raw;
-            if (readTextureRGBA(rs.targets.texBlackhole, w, h, raw) &&
-                writePfmRgb(exportRawFramePath, raw, w, h)) {
-              std::printf("Exported raw frame: %s (%dx%d)\n", exportRawFramePath.c_str(), w, h);
-            } else {
-              std::fprintf(stderr, "Failed to export raw frame: %s\n",
-                           exportRawFramePath.c_str());
-            }
-          }
-          rs.exporting.exportPerformed = true;
-        }
-      }
+      exportFrameOnce(rs, cli);
 
       /* --record-frames: draw cinematic physics HUD via foreground draw list.
        * GetForegroundDrawList() adds to ImGui's draw list, so this must be called
@@ -2317,61 +2273,10 @@ int main(int argc, char **argv) {
       ImGui::Render();
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-      /* --record-frames: capture the tonemapped scene texture via glGetTexImage.
-       * WHY: glReadPixels(0) reads the window's default framebuffer which is
-       * mostly ImGui chrome (black panels).  rs.targets.texTonemapped holds the full
-       * rendered scene at rs.targets.renderWidth x rs.targets.renderHeight, identical to the
-       * --export-frame path that is known to work.  The cinematic HUD overlay
-       * drawn via GetForegroundDrawList() is composited by ffmpeg drawtext later;
-       * the overlay is still drawn above in the ImGui frame for live preview. */
-      /* WHY: glfwSetWindowSize() is asynchronous; the resize callback fires in
-       * glfwPollEvents().  Wait 15 warmup frames (~250ms) to let the window and
-       * render targets settle at the requested size before starting capture.
-       * If the WM caps the window smaller (e.g., in a desktop session), we accept
-       * whatever size the window settled at after the warmup period. */
-      if (!recordFramesDir.empty() && rs.recording.recordWarmup >= 15
-          && rs.targets.texTonemapped != 0 && rs.targets.renderWidth > 0 && rs.targets.renderHeight > 0) {
-        glBindTexture(GL_TEXTURE_2D, rs.targets.texTonemapped);
-        // Query actual stored texture dimensions -- these may differ from
-        // renderWidth/renderHeight if the texture was created at a different
-        // resolution (e.g. before the window settled to its current size).
-        // glGetTexImage writes texW*texH*channels bytes; a size mismatch would
-        // corrupt the heap metadata of the next allocation.
-        GLint texW = 0, texH = 0;
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
-        int const w = (texW > 0) ? texW : rs.targets.renderWidth;
-        int const h = (texH > 0) ? texH : rs.targets.renderHeight;
-        std::vector<unsigned char> px(static_cast<size_t>(w) * static_cast<size_t>(h) * 3);
-        // GL_PACK_ALIGNMENT defaults to 4: each row is padded to a 4-byte boundary.
-        // For widths like 1343, row bytes = 1343*3=4029 which rounds up to 4032,
-        // overflowing our tightly-sized buffer by (4032-4029)*h = 3177 bytes and
-        // corrupting the next heap chunk's malloc header (SIGABRT on free).
-        // Setting alignment to 1 disables row padding for the download.
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
-        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, px.data());
-        glPixelStorei(GL_PACK_ALIGNMENT, 4);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        /* glGetTexImage is bottom-to-top; flip vertically for correct PNG. */
-        std::vector<unsigned char> flipped(px.size());
-        for (int row = 0; row < h; ++row) {
-          std::memcpy(
-              flipped.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 3,
-              px.data() + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3,
-              static_cast<size_t>(w) * 3);
-        }
-        char framePath[1024];
-        std::snprintf(framePath, sizeof(framePath), "%s/frame_%06d.png",
-                      recordFramesDir.c_str(), rs.recording.recordFrameIndex);
-        stbi_write_png(framePath, w, h, 3, flipped.data(), w * 3);
-        if (rs.recording.recordFrameIndex % K_CINEMATIC_FPS == 0) {
-          std::printf("Record: frame %d / %d  (t = %.1f s)  [%dx%d]\n",
-                      rs.recording.recordFrameIndex, recordFramesTotal,
-                      static_cast<double>(rs.recording.recordCinematic), w, h);
-        }
-        ++rs.recording.recordFrameIndex;
-        rs.recording.recordCinematic = static_cast<float>(rs.recording.recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS);
-      }
+      /* --record-frames: capture the tonemapped scene texture and advance the
+       * frame index. The cinematic HUD drawn above is composited later by ffmpeg;
+       * here we grab the clean scene texture, not the ImGui-chrome framebuffer. */
+      captureRecordFrame(rs, cli);
 
       // Update Platform Windows (Docking)
       if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0) {

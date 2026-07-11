@@ -1,12 +1,14 @@
 /**
  * @file record_mode.h
- * @brief Offline record-mode framing data and helpers.
+ * @brief Offline record-mode and frame-export framing, setup, and output.
  *
  * ShowcaseOrbitComposition is the per-composition framing table the
  * showcase-orbit record profile draws from (camera pitch/distance/fov,
  * background asset and orientation, sweep and frame offsets). The lookup and
  * the beauty-wiregrid tuning are shared by the CLI validation in main and the
- * record-mode clusters in the render loop.
+ * record-mode clusters in the render loop. The setup, per-frame camera drive,
+ * frame capture, and one-shot export functions consume the parsed CliOptions
+ * and drive the render loop's offline-output paths.
  */
 
 #ifndef BLACKHOLE_RENDER_RECORD_MODE_H
@@ -65,6 +67,17 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
 /** @brief Drives the record camera and spin from the selected profile's path for
  *         the current frame index. No-op when recordFramesDir is empty. */
 void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, InputManager &input);
+
+/** @brief Captures the tonemapped scene texture to frame_NNNNNN.png and advances
+ *         the record frame index. No-op until the record warmup has elapsed and
+ *         the render targets are valid. */
+void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli);
+
+/** @brief One-shot --export-frame (PNG from the tonemapped texture) and
+ *         --export-raw-frame (PFM from the HDR blackhole texture) after a short
+ *         warmup; sets exportPerformed so it runs once. No-op when neither export
+ *         path is set. */
+void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli);
 
 } // namespace blackhole
 
