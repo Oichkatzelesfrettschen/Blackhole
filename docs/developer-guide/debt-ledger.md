@@ -732,15 +732,34 @@ brackets.
     hoisted compareSweepAllowed line) -- the diff IS the gate because the sweep
     has no runnable end-to-end gate here. Plus -Werror (GLSL+CUDA), 81/81,
     showcase byte-identical, COMPARE_SWEEP=1 crash-free. main.cpp 2116 -> 2066.
-  DEBT owed: a GL-free compare_sweep unit test (drive the state machine: preset
-  advance, settle-boundary capture flag, compute-unavailable disable, post-sweep
-  restore). Blocked on a RenderState test-construction seam -- constructing
-  RenderState in a test pulls the conan glbinding/imgui/cuda include world (no
-  core library; no existing test constructs RenderState). The seam (a lightweight
-  RenderState-for-tests, or a core static lib tests can link) is its own scoped
-  item; once it exists, advanceComparePresetSweep/restoreCompareSweepState are
-  pure functions ready to test. Region 2 extraction is the natural place to add
-  it (it forces the context-struct that would also help construction).
+  DEBT owed -> PAID (c0d96ba): the RenderState-for-tests seam is
+  blackhole_testcore -- a test-only STATIC library compiling the desktop app
+  sources (minus main.cpp) once with a fixed BLACKHOLE_HAS_CUDA=0 layout, PUBLIC
+  include dirs/defines/packages so a test linking it inherits the compile
+  environment and can construct RenderState GL-free. It is NOT linked by the
+  shipping executables: RenderState's layout is per-variant (cudaManager under
+  HAS_CUDA=1 only), so a shared-across-variants core lib would be an ODR/layout
+  mismatch that builds green and corrupts at runtime -- the reason the seam is
+  test-only and the desktop-target function is untouched (purely additive CMake).
+  compare_sweep_test drives the state machine (compute-unavailable disable,
+  save-on-entry, settle-boundary capture, post-sweep restore); suite 81 -> 82.
+  Every later RenderState-consuming live-loop cluster now has a real unit gate,
+  not diff-only.
+  INCLUDE-GRAPH DEBT (render_state.h heavy include surface) DECOMPOSED, resolution
+  deferred: the header pulls glbinding (GLuint handles), imgui+ImGuizmo
+  (ImGuizmo::OPERATION/MODE gizmo enums held BY VALUE at render_state.h:94-95),
+  and cuda_render_manager.h (cudaManager by value, HAS_CUDA only). Nearly every
+  heavy member is by-value (OverlayCurve2D, HudOverlay x2, RmlUiOverlay,
+  NoiseTextureCache, HawkingRenderer, GrmhdPackedTexture, GrmhdPBOUploader x2,
+  Lut1D x2, CinematicPath, CamKeyframe, CudaRenderManager, GpuTimerSet,
+  TimingHistory); only grmhdStreamer is unique_ptr. Slimming the header means
+  pimpl-ing those members (unique_ptr) and forward-declaring their headers --
+  invasive: it changes RenderState layout AND every access site (rs.x.method()
+  -> rs.x->method()) across main + the fill binders. No cheap partial win (the
+  gizmo enums and GLuint handles resist forward-decl). The seam already RESOLVES
+  the debt's load-bearing symptom (untestable RenderState); the remaining
+  include-heaviness is a COMPILE-TIME cost, lower priority, and is its own pimpl
+  tranche -- do it member-by-member behind the seam's tests, not as a big-bang.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
