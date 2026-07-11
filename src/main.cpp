@@ -2903,17 +2903,13 @@ int main(int argc, char **argv) {
       // Normal UI panels are hidden in record mode so they don't appear in the video.
       if (input.isUIVisible() && recordFramesDir.empty()) {
         renderControlsHelpPanel();
-        renderControlsSettingsPanel(rs.camera.cameraModeIndex, rs.camera.orbitRadius, rs.camera.orbitSpeed);
-        renderDisplaySettingsPanel(window, rs.display.swapInterval, rs.display.renderScale, windowWidth, windowHeight);
-        renderBackgroundPanel(rs.background.backgroundAssets, rs.background.backgroundIndex,
-                              settings.backgroundParallaxStrength, settings.backgroundDriftStrength,
-                              rs.background.backgroundLayerDepth, rs.background.backgroundLayerScale, rs.background.backgroundLayerIntensity,
-                              rs.background.backgroundLayerLodBias);
-        renderWiregridPanel(rs.wiregrid.wiregridEnabled, rs.wiregrid.wiregridParams, rs.wiregrid.wiregridColor);
-        renderRmlUiPanel(rs.overlays.rmluiEnabled);
-        renderGizmoPanel(rs.camera.gizmoEnabled, rs.camera.gizmoOperation, rs.camera.gizmoMode, rs.camera.gizmoTransform);
-        renderPerformancePanel(rs.timing.gpuTimingEnabled, rs.timing.gpuTimers, rs.timing.timingHistory, cpuFrameMs,
-                               rs.overlays.perfOverlayEnabled, rs.overlays.perfOverlayScale, rs.probes.depthPrepassEnabled);
+        renderControlsSettingsPanel(rs);
+        renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
+        renderBackgroundPanel(rs);
+        renderWiregridPanel(rs);
+        renderRmlUiPanel(rs);
+        renderGizmoPanel(rs);
+        renderPerformancePanel(rs, cpuFrameMs);
       }
 
       /* --export-frame / --export-raw-frame: export textures before ImGui. */

@@ -33,6 +33,7 @@ namespace ui {
 using blackhole::BackgroundAsset;
 using blackhole::GpuTimerSet;
 using blackhole::K_BACKGROUND_LAYERS;
+using blackhole::RenderState;
 using blackhole::TimingHistory;
 using blackhole::WiregridParams;
 
@@ -209,7 +210,10 @@ void renderControlsHelpPanel() {
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity) -- ImGui panel has many controls
-void renderControlsSettingsPanel(int &cameraModeIndex, float &orbitRadius, float &orbitSpeed) {
+void renderControlsSettingsPanel(RenderState &rs) {
+  int &cameraModeIndex = rs.camera.cameraModeIndex;
+  float &orbitRadius = rs.camera.orbitRadius;
+  float &orbitSpeed = rs.camera.orbitSpeed;
   auto &input = InputManager::instance();
 
   // Stack on the right side
@@ -588,8 +592,11 @@ void renderControlsSettingsPanel(int &cameraModeIndex, float &orbitRadius, float
   ImGui::End();
 }
 
-void renderGizmoPanel(bool &gizmoEnabled, ImGuizmo::OPERATION &operation, ImGuizmo::MODE &mode,
-                      glm::mat4 &gizmoTransform) {
+void renderGizmoPanel(RenderState &rs) {
+  bool &gizmoEnabled = rs.camera.gizmoEnabled;
+  ImGuizmo::OPERATION &operation = rs.camera.gizmoOperation;
+  ImGuizmo::MODE &mode = rs.camera.gizmoMode;
+  glm::mat4 &gizmoTransform = rs.camera.gizmoTransform;
   ImGui::SetNextWindowPos(ImVec2(1020, 220), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 220), ImGuiCond_FirstUseEver);
 
@@ -642,8 +649,10 @@ void renderGizmoPanel(bool &gizmoEnabled, ImGuizmo::OPERATION &operation, ImGuiz
   ImGui::End();
 }
 
-void renderDisplaySettingsPanel(GLFWwindow *window, int &swapInterval, float &renderScale,
-                                int windowWidth, int windowHeight) {
+void renderDisplaySettingsPanel(RenderState &rs, GLFWwindow *window, int windowWidth,
+                                int windowHeight) {
+  int &swapInterval = rs.display.swapInterval;
+  float &renderScale = rs.display.renderScale;
   auto &input = InputManager::instance();
   auto &settings = SettingsManager::instance().get();
 
@@ -732,13 +741,16 @@ void renderDisplaySettingsPanel(GLFWwindow *window, int &swapInterval, float &re
   ImGui::End();
 }
 
-void renderBackgroundPanel(const std::vector<BackgroundAsset> &assets, int &backgroundIndex,
-                           float &parallaxStrength, float &driftStrength,
-                           std::array<float, K_BACKGROUND_LAYERS> &layerDepth,
-                           std::array<float, K_BACKGROUND_LAYERS> &layerScale,
-                           std::array<float, K_BACKGROUND_LAYERS> &layerIntensity,
-                           std::array<float, K_BACKGROUND_LAYERS> &layerLodBias) {
+void renderBackgroundPanel(RenderState &rs) {
   auto &settings = SettingsManager::instance().get();
+  const std::vector<BackgroundAsset> &assets = rs.background.backgroundAssets;
+  int &backgroundIndex = rs.background.backgroundIndex;
+  float &parallaxStrength = settings.backgroundParallaxStrength;
+  float &driftStrength = settings.backgroundDriftStrength;
+  std::array<float, K_BACKGROUND_LAYERS> &layerDepth = rs.background.backgroundLayerDepth;
+  std::array<float, K_BACKGROUND_LAYERS> &layerScale = rs.background.backgroundLayerScale;
+  std::array<float, K_BACKGROUND_LAYERS> &layerIntensity = rs.background.backgroundLayerIntensity;
+  std::array<float, K_BACKGROUND_LAYERS> &layerLodBias = rs.background.backgroundLayerLodBias;
 
   // Stack on the left side
   ImGui::SetNextWindowPos(ImVec2(10, 300), ImGuiCond_FirstUseEver);
@@ -789,7 +801,10 @@ void renderBackgroundPanel(const std::vector<BackgroundAsset> &assets, int &back
   ImGui::End();
 }
 
-void renderWiregridPanel(bool &wiregridEnabled, WiregridParams &params, glm::vec4 &color) {
+void renderWiregridPanel(RenderState &rs) {
+  bool &wiregridEnabled = rs.wiregrid.wiregridEnabled;
+  WiregridParams &params = rs.wiregrid.wiregridParams;
+  glm::vec4 &color = rs.wiregrid.wiregridColor;
   ImGui::SetNextWindowPos(ImVec2(10, 570), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(320, 290), ImGuiCond_FirstUseEver);
 
@@ -818,7 +833,8 @@ void renderWiregridPanel(bool &wiregridEnabled, WiregridParams &params, glm::vec
   ImGui::End();
 }
 
-void renderRmlUiPanel(bool &rmluiEnabled) {
+void renderRmlUiPanel(RenderState &rs) {
+  bool &rmluiEnabled = rs.overlays.rmluiEnabled;
   ImGui::SetNextWindowPos(ImVec2(1020, 450), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 140), ImGuiCond_FirstUseEver);
 
@@ -829,10 +845,13 @@ void renderRmlUiPanel(bool &rmluiEnabled) {
   ImGui::End();
 }
 
-void renderPerformancePanel(bool &gpuTimingEnabled, const GpuTimerSet &timers,
-                            const TimingHistory &history, float cpuFrameMs,
-                            bool &perfOverlayEnabled, float &perfOverlayScale,
-                            bool &depthPrepassEnabled) {
+void renderPerformancePanel(RenderState &rs, float cpuFrameMs) {
+  bool &gpuTimingEnabled = rs.timing.gpuTimingEnabled;
+  const GpuTimerSet &timers = rs.timing.gpuTimers;
+  const TimingHistory &history = rs.timing.timingHistory;
+  bool &perfOverlayEnabled = rs.overlays.perfOverlayEnabled;
+  float &perfOverlayScale = rs.overlays.perfOverlayScale;
+  bool &depthPrepassEnabled = rs.probes.depthPrepassEnabled;
   // Stack below Wiregrid
   ImGui::SetNextWindowPos(ImVec2(10, 800), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
