@@ -1133,6 +1133,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/platform/resource_paths.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/compare_sweep.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/camera_math.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/settings_sync.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/env_config.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/gl_capabilities.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/gpu_timing.cpp"
@@ -3639,6 +3640,17 @@ if(BUILD_TESTING)
     set_tests_properties(camera_math PROPERTIES LABELS "render;unit" TIMEOUT 30)
     if(SANITIZER_TEST_ENV)
       set_tests_properties(camera_math PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
+    add_executable(settings_sync_test "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
+    target_link_libraries(settings_sync_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(settings_sync_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME settings_sync COMMAND settings_sync_test)
+    set_tests_properties(settings_sync PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(settings_sync PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
     endif()
   endif()
 

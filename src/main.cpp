@@ -106,6 +106,7 @@
 #include "render/lut_manager.h"
 #include "render/record_mode.h"
 #include "render/render_targets.h"
+#include "render/settings_sync.h"
 #include "render/uniform_binding.h"
 #include "tools/compare_harness.h"
 #include "render/render_state.h"
@@ -169,6 +170,10 @@ using blackhole::writeTimingHistoryCsv;
 using blackhole::buildCameraBasis;
 using blackhole::cameraPositionFromYawPitch;
 using blackhole::selectCameraPosition;
+
+// Settings <-> RenderState load-once and write-back live in src/render/settings_sync.*.
+using blackhole::loadSettingsIntoRenderState;
+using blackhole::syncRenderStateToSettings;
 
 // Startup env-var configuration lives in src/render/env_config.*.
 using blackhole::applyEnvironmentConfig;
@@ -892,25 +897,7 @@ int main(int argc, char **argv) {
         }
       }
 
-      if (!rs.camera.cameraSettingsLoaded) {
-        rs.camera.cameraModeIndex = settings.cameraMode;
-        rs.camera.orbitRadius = settings.orbitRadius;
-        rs.camera.orbitSpeed = settings.orbitSpeed;
-        rs.camera.cameraSettingsLoaded = true;
-      }
-
-      if (!rs.display.displaySettingsLoaded) {
-        rs.display.renderScale = settings.renderScale;
-        rs.display.swapInterval = settings.swapInterval;
-        rs.display.displaySettingsLoaded = true;
-      }
-      if (!rs.post.postProcessingSettingsLoaded) {
-        rs.post.bloomStrength = settings.bloomStrength;
-        rs.post.tonemappingEnabled = settings.tonemappingEnabled;
-        rs.post.toneExposure = 1.0f;
-        rs.post.gamma = settings.gamma;
-        rs.post.postProcessingSettingsLoaded = true;
-      }
+      loadSettingsIntoRenderState(rs, settings);
       if (!recordFramesDir.empty()) {
         const ShowcaseOrbitComposition *const composition =
             recordProfile == "showcase-orbit" ? findShowcaseOrbitComposition(recordComposition)
@@ -920,10 +907,6 @@ int main(int argc, char **argv) {
         } else if (recordProfile == "showcase-orbit") {
           rs.post.toneExposure = composition != nullptr ? composition->exposure : 3.4f;
         }
-      }
-      if (!rs.post.bloomSettingsLoaded) {
-        rs.post.bloomIterations = std::clamp(settings.bloomIterations, 1, kMaxBloomIterations);
-        rs.post.bloomSettingsLoaded = true;
       }
 
       rs.display.renderScale = std::clamp(rs.display.renderScale, 0.25f, 1.5f);
@@ -937,13 +920,7 @@ int main(int argc, char **argv) {
         recreateRenderTargets(rs, targetWidth, targetHeight);
       }
       */
-      settings.fullscreen = input.isFullscreen();
-      settings.swapInterval = rs.display.swapInterval;
-      settings.renderScale = rs.display.renderScale;
-      settings.bloomStrength = rs.post.bloomStrength;
-      settings.tonemappingEnabled = rs.post.tonemappingEnabled;
-      settings.gamma = rs.post.gamma;
-      settings.bloomIterations = rs.post.bloomIterations;
+      syncRenderStateToSettings(rs, settings, input);
 
       advanceComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
 
