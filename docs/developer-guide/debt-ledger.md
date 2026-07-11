@@ -759,6 +759,24 @@ brackets.
     rather than a verbatim diff. Suite 82 -> 83. Gate: -Werror (three targets) +
     83/83 + showcase-orbit headless capture byte-identical to parent (sha256
     956ed7aa across all three frames on both builds). main.cpp 2066 -> 2000.
+  - b0c2f32: settings load/sync into src/render/settings_sync.* (blackhole::).
+    loadSettingsIntoRenderState hydrates the camera/display/post/bloom groups the
+    first frame each *SettingsLoaded latch is clear then latches;
+    syncRenderStateToSettings writes the live display/post values plus
+    input.isFullscreen() back into Settings. The record-exposure override
+    (record-CLI coupled via findShowcaseOrbitComposition) and the renderScale
+    clamp stay inline in main. The bloom-iteration hydration moves ahead of the
+    record-exposure override -- bloom writes only bloomIterations, the override
+    only toneExposure, no data dependency, so the frame is unchanged.
+    settings_sync_test links blackhole_testcore and drives first-frame
+    hydration, the anti-clobber latch, the bloomIterations clamp into
+    [1, kMaxBloomIterations], and the write-back. Suite 83 -> 84. Gate: -Werror
+    (three targets) + 84/84 + showcase-orbit headless capture byte-identical A/B
+    versus rebuilt parent (sha256 0cf736a3 across all three frames). main.cpp
+    2000 -> 1977. Remaining clusters: post-processing bloom/tonemap/curve (~140L),
+    scene composition + overlays (~104L), GRMHD per-frame streaming (~83L),
+    per-frame LUT loads (~200L), background asset load (~87L); compare-sweep
+    Region 2 snapshot capture wants a context struct.
   INCLUDE-GRAPH DEBT (render_state.h heavy include surface) DECOMPOSED, resolution
   deferred: the header pulls glbinding (GLuint handles), imgui+ImGuizmo
   (ImGuizmo::OPERATION/MODE gizmo enums held BY VALUE at render_state.h:94-95),
