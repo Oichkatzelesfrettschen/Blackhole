@@ -538,10 +538,9 @@ brackets.
   panels + drawCurvePlot + loadGrmhdPacked helper ->
   src/ui/settings_window.* taking RenderState&. Integrator debug bit
   constants moved into RenderState::CompareGroup. main.cpp 5334 ->
-  3374. REMAINING to hit the 2,500-line target: the standalone panels
-  still take field references, not RenderState& (harmonize when STATE-4
-  moves their call sites); residual main-loop blocks (LUT loading,
-  GRMHD streaming glue, recording) are STATE-4 territory.
+  3374. The panels-take-RenderState& goal is met (2231ebe, under STATE-4);
+  residual main-loop blocks (LUT loading, GRMHD streaming glue, recording)
+  are STATE-4 territory.
 - STATE-4 Extract uniform dispatch sites (frag/compute/cuda fill) into
   src/render/uniform_binding.* consuming the FACTS-1 registry. [main.cpp
   under 1,500 lines; cscope callee count of main under 300]
@@ -563,11 +562,20 @@ brackets.
   compute/fragment fills -- a 12-preset BLACKHOLE_COMPARE_SWEEP=1 parity CSV
   byte-identical to the pre-STATE-4 baseline (every preset exceeded=0). The
   CUDA fill was runtime-exercised via a --record-profile cinematic run.
-  REMAINING to hit the 1,500-line target (separate extractions, not fill
-  work): harmonize the standalone panels to take RenderState&; move the
-  residual main-loop glue (LUT load/create side effects at the top of the
-  render block, GRMHD streaming, recording). Also open: the updateLuts
-  emissivity-staleness fix as its own behavior-change commit.
+  PANEL HARMONIZATION DONE 2026-07-10 (2231ebe): the seven standalone panels
+  (controls-settings, gizmo, display, background, wiregrid, RmlUi,
+  performance) now take blackhole::RenderState& plus their genuine per-frame
+  transients (GLFWwindow + extents for display, cpuFrameMs for performance),
+  matching the settings_window.cpp family. Mechanical reference-alias move
+  (int &cameraModeIndex = rs.camera.cameraModeIndex; ...) keeps every body
+  byte-identical; eight call sites collapse from ~20 enumerated field
+  references to one rs each. Verified by clean -Werror build, 81/81 ctest,
+  8s live-run log-class match, zero uniform warnings (no compare-sweep:
+  never touches the GPU fill path). main.cpp 3146 -> 3142.
+  REMAINING to hit the 1,500-line target: move the residual main-loop glue
+  (LUT load/create side effects at the top of the render block, GRMHD
+  streaming, recording). Also open: the updateLuts emissivity-staleness fix
+  as its own behavior-change commit.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
