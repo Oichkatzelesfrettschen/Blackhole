@@ -804,10 +804,26 @@ brackets.
     grbModulationEnabled/grbTimeSeconds -> downstream uniforms) stays in main and
     updateLuts is untouched (deferred emissivity-staleness unchanged). Verbatim
     diff; A/B 0cf736a3 pinned. main.cpp 1638 -> 1566.
-  NET main.cpp 1977 -> 1566 across the batch (84/84 throughout). Remaining toward
-  the 1500 target: compare-sweep Region 2 snapshot capture (~102L, wants a context
-  struct); STAYS IN MAIN per the ledger split = GLSL fragment/compute dispatch
-  (~99L, Issue-009) and frame-end ImGui/gpu-timing/swap/term (~113L).
+  NET main.cpp 1977 -> 1566 across the batch (84/84 throughout).
+  COMPARE-PARITY REGION 2 (93fab30): the compute-vs-fragment parity diff +
+  snapshot capture (auto-capture stride, sampleTextureDiff, the readTextureRGBA
+  diff, outlier gate, PPM/summary/uniform CSV writers) moved from the dispatch
+  site into captureCompareParity(rs, CompareParityInputs) in compare_sweep.*.
+  compare_sweep.h already documented the capture "lives at the dispatch site";
+  this closes that. CompareParityInputs is the anticipated context struct: two
+  parity targets, the effective feature flags the frame rendered with, the
+  interop uniforms both paths received, GRB phase time, and timeSec (passed in so
+  the TU stays glfw-free). DARK block (compare sweep is UI/env-triggered, not the
+  showcase orbit) -> gate is the behavioral CSV diff, NOT verbatim-skim: the
+  extraction renames bare locals to in.<field> on every ref, and
+  appendCompareUniforms takes eight parity bools in a row where a swap compiles
+  clean. BLACKHOLE_COMPARE_SWEEP=1 over all twelve presets before/after produced
+  byte-identical compare_uniforms.csv (the discriminating artifact -- it records
+  the eight bools) and compare_summary.csv, modulo the wall-clock time_sec/grb_time
+  columns. main.cpp 1566 -> 1481, crossing 1500; twelve now-orphaned
+  compare-harness writer usings dropped. 84/84, -Werror all three desktop
+  variants incl CUDA. STAYS IN MAIN per the ledger split = GLSL fragment/compute
+  dispatch (~99L, Issue-009) and frame-end ImGui/gpu-timing/swap/term (~113L).
   INCLUDE-GRAPH DEBT (render_state.h heavy include surface) DECOMPOSED, resolution
   deferred: the header pulls glbinding (GLuint handles), imgui+ImGuizmo
   (ImGuizmo::OPERATION/MODE gizmo enums held BY VALUE at render_state.h:94-95),
