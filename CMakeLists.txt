@@ -1132,6 +1132,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/platform/crash_handler.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/resource_paths.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/compare_sweep.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/camera_math.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/env_config.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/gl_capabilities.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/gpu_timing.cpp"
@@ -3627,6 +3628,17 @@ if(BUILD_TESTING)
     set_tests_properties(compare_sweep_state PROPERTIES LABELS "render;unit" TIMEOUT 30)
     if(SANITIZER_TEST_ENV)
       set_tests_properties(compare_sweep_state PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/camera_math_test.cpp")
+    add_executable(camera_math_test "${PROJECT_SOURCE_DIR}/tests/camera_math_test.cpp")
+    target_link_libraries(camera_math_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(camera_math_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME camera_math COMMAND camera_math_test)
+    set_tests_properties(camera_math PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(camera_math PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
     endif()
   endif()
 

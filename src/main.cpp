@@ -99,6 +99,7 @@
 #include "render/noise_texture_cache.h"
 #include "render/interop_uniform_registry.h"
 #include "render/interop_uniforms.h"
+#include "render/camera_math.h"
 #include "render/compare_sweep.h"
 #include "render/env_config.h"
 #include "render/gl_capabilities.h"
@@ -164,54 +165,10 @@ using blackhole::writeTimingHistoryCsv;
 
 
 
-/**
- * @brief Convert spherical yaw/pitch angles to a Cartesian camera position.
- *
- * @param yawDeg   Horizontal rotation in degrees (0 = +Z axis).
- * @param pitchDeg Vertical elevation in degrees (positive = above equator).
- * @param radius   Distance from origin in world units.
- * @return World-space camera position on the sphere of the given radius.
- */
-glm::vec3 cameraPositionFromYawPitch(float yawDeg, float pitchDeg, float radius) {
-  float const yawRad = glm::radians(yawDeg);
-  float const pitchRad = glm::radians(pitchDeg);
-  return {radius * std::cos(pitchRad) * std::sin(yawRad), radius * std::sin(pitchRad),
-          radius * std::cos(pitchRad) * std::cos(yawRad)};
-}
-
-/**
- * @brief Build an orthonormal camera basis (right, up, forward) from a look-at pair plus roll.
- *
- * Handles the degenerate case where forward is nearly parallel to world-up by
- * falling back to the +Z world axis as the up reference.
- *
- * @param cameraPos World-space camera origin.
- * @param target    World-space look-at point.
- * @param rollDeg   Camera roll in degrees applied after the standard basis is constructed.
- * @return Column-major mat3 with columns [right, up, forward].
- */
-glm::mat3 buildCameraBasis(const glm::vec3 &cameraPos, const glm::vec3 &target, float rollDeg) {
-  glm::vec3 const forward = glm::normalize(target - cameraPos);
-  glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
-  if (std::abs(glm::dot(forward, worldUp)) > 0.99f) {
-    worldUp = glm::vec3(0.0f, 0.0f, 1.0f);
-  }
-
-  glm::vec3 right = glm::normalize(glm::cross(forward, worldUp));
-  glm::vec3 up = glm::normalize(glm::cross(right, forward));
-
-  if (std::abs(rollDeg) > 0.001f) {
-    float const rollRad = glm::radians(rollDeg);
-    float const cosRoll = std::cos(rollRad);
-    float const sinRoll = std::sin(rollRad);
-    glm::vec3 const rolledRight = right * cosRoll + up * sinRoll;
-    glm::vec3 const rolledUp = -right * sinRoll + up * cosRoll;
-    right = rolledRight;
-    up = rolledUp;
-  }
-
-  return {right, up, forward};
-}
+// Camera pose math lives in src/render/camera_math.*.
+using blackhole::buildCameraBasis;
+using blackhole::cameraPositionFromYawPitch;
+using blackhole::selectCameraPosition;
 
 // Startup env-var configuration lives in src/render/env_config.*.
 using blackhole::applyEnvironmentConfig;
@@ -995,36 +952,13 @@ int main(int argc, char **argv) {
 
       // Get camera state for shader
       const auto &cam = input.camera();
-      rs.camera.cameraModeIndex = std::clamp(rs.camera.cameraModeIndex, 0, 3);
-      rs.camera.orbitRadius = std::max(rs.camera.orbitRadius, 2.0f);
-      rs.camera.orbitSpeed = std::max(rs.camera.orbitSpeed, 0.0f);
 
       glm::vec3 const focusTarget =
           rs.camera.gizmoEnabled ? glm::vec3(rs.camera.gizmoTransform[3]) : glm::vec3(0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
                                                                          // -- glm::mat has no .at()
 
       rs.camera.orbitTime += input.getEffectiveDeltaTime(deltaTime);
-      glm::vec3 cameraPos;
-      auto const cameraMode = static_cast<CameraMode>(rs.camera.cameraModeIndex);
-      switch (cameraMode) {
-      case CameraMode::Front:
-        cameraPos = focusTarget + glm::vec3(10.0f, 1.0f, 10.0f);
-        break;
-      case CameraMode::Top:
-        cameraPos = focusTarget + glm::vec3(15.0f, 15.0f, 0.0f);
-        break;
-      case CameraMode::Orbit: {
-        float const angle = rs.camera.orbitTime * glm::radians(rs.camera.orbitSpeed);
-        cameraPos =
-            focusTarget + glm::vec3(-std::cos(angle) * rs.camera.orbitRadius, std::sin(angle) * rs.camera.orbitRadius,
-                                    std::sin(angle) * rs.camera.orbitRadius);
-        break;
-      }
-      case CameraMode::Input:
-      default:
-        cameraPos = focusTarget + cameraPositionFromYawPitch(cam.yaw, cam.pitch, cam.distance);
-        break;
-      }
+      glm::vec3 cameraPos = selectCameraPosition(rs, cam, focusTarget);
 
       glm::vec3 aimTarget = focusTarget;
       if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
