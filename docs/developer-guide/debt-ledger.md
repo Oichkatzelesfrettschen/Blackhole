@@ -665,7 +665,12 @@ brackets.
   flag higher-risk.
   CLUSTERS, tightest-gate-first (recommended order):
   - Compare/parity sweep driving (~116L) -> compare_harness.* [gate: COMPARE_SWEEP
-    CSV byte-identical -- the exact gate; only active in compare mode].
+    CSV byte-identical -- the exact gate; only active in compare mode. CAVEAT
+    proven 2026-07-10: the sweep self-disables in this headless sandbox
+    (compareSweepAllowed = compareComputeFragment && canUseComputeShaders(), and
+    it needs a focused window to advance presets), so the CSV does not regenerate
+    here -- lean on showcase capture + -Werror + A/B-vs-parent instead, as the
+    env_config extraction did].
   - Camera state -> cameraPos/basis/aim math (~84L) -> a camera helper [pure
     computation; gate: showcase capture + smoke].
   - Settings <-> RenderState load/sync (~65L) -> settings/render_state [low drama].
@@ -684,6 +689,26 @@ brackets.
   SAFER ALTERNATIVE LINE SOURCE: the ~366L of pre-loop setup (window/GL init,
   recreateRenderTargets) is also non-record and off the hot path -- lower risk
   than live-loop clusters if the goal is distance from the render path.
+  PRE-LOOP SETUP EXTRACTED 2026-07-10 (chosen path -- off hot path first):
+  - 574bf85: gl_capabilities.* (hasExtension + supportsDrawId/MultiDrawIndirect/
+    IndirectCount) -- runtime GL feature queries shared by parallel-shader-compile
+    setup and the draw probes; unblocks env_config. main.cpp 2385 -> 2352.
+  - 2a362fc: env_config.* applyEnvironmentConfig(RenderState&) -- the ~197L of
+    one-time BLACKHOLE_* env-var parsing (compare sweep, force-interop, CUDA
+    variant, GPU timing, drawId/multidraw probes, LUT asset-only, overlay/perf
+    HUD, integrator debug). kAppVariantCudaOnly + its fallback macro guarded by
+    BLACKHOLE_HAS_CUDA to keep the GLSL-only target -Wunused-macros-clean.
+    main.cpp 2352 -> 2160. The compare-sweep path was A/B-checked against the
+    pre-change binary (both leave the summary CSV untouched in this headless
+    sandbox -> behavior-neutral there, not a sweep regression); showcase-orbit
+    capture byte-identical confirms the default no-op env path does not perturb
+    rendering. Gate for both: -Werror (GLSL + CUDA targets) + 81/81 + smoke +
+    showcase byte-identity.
+  REMAINING pre-loop: recreateRenderTargets lambda (~46L) -> a render-targets
+  helper; more hot-path-coupled (allocates the per-frame targets, called on
+  viewport resize), gate is the record captures (record mode resizes the window).
+  After that, distance from the hot path is exhausted and the live-loop clusters
+  (tightest-gate-first order above) are the remaining path to 1,500.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
