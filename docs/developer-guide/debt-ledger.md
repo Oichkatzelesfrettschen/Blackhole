@@ -572,9 +572,27 @@ brackets.
   references to one rs each. Verified by clean -Werror build, 81/81 ctest,
   8s live-run log-class match, zero uniform warnings (no compare-sweep:
   never touches the GPU fill path). main.cpp 3146 -> 3142.
-  REMAINING to hit the 1,500-line target: move the residual main-loop glue
-  (LUT load/create side effects at the top of the render block, GRMHD
-  streaming, recording). Also open: the updateLuts emissivity-staleness fix
+  LUT LIFECYCLE EXTRACTED 2026-07-10 (78df3bb): the radiative-transfer LUT
+  machinery moved into src/render/lut_manager.* (blackhole::) -- updateLuts as
+  a free function taking RenderState& plus spin/density, the spectral and
+  GRB-modulation loaders, and the lut_manager-internal loadLutCsv /
+  loadLutAssets / JSON-scalar parser. readTextFile moved to
+  platform::resource_paths as the file-slurp primitive the background-manifest
+  and LUT loaders share. Behavior-neutral: every updateLuts branch, the CUDA
+  LUT sharing, and the frame-loop call sites are unchanged; the deferred
+  emissivity-family staleness fix stays a separate commit, now isolated in the
+  new file. main.cpp 2876. The cscope callee-count gate is already met and was
+  before this move: distinct callees of main 247 -> 222, both under 300 (the
+  four generate*Lut calls reachable only through the moved lambda left main's
+  span; the surrounding delta is cscope's attribution instability across line
+  renumbering, not a call-graph change). The binding STATE-4 constraint is now
+  solely the 1,500-line target.
+  REMAINING to hit the 1,500-line target: the recording glue is the mass --
+  156 record* references threaded from arg-parse (~780) through the entire
+  render loop to output (~3076), an interleaved stateful untangle worth its own
+  decomposed multi-commit tranche, not a mechanical move. GRMHD streaming glue
+  is low yield (the streamer is already owned by rs.grmhd; the frame loop holds
+  only ~4 tile-fetch sites). Also open: the updateLuts emissivity-staleness fix
   as its own behavior-change commit.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
