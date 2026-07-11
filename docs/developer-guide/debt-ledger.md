@@ -704,11 +704,20 @@ brackets.
     capture byte-identical confirms the default no-op env path does not perturb
     rendering. Gate for both: -Werror (GLSL + CUDA targets) + 81/81 + smoke +
     showcase byte-identity.
-  REMAINING pre-loop: recreateRenderTargets lambda (~46L) -> a render-targets
-  helper; more hot-path-coupled (allocates the per-frame targets, called on
-  viewport resize), gate is the record captures (record mode resizes the window).
-  After that, distance from the hot path is exhausted and the live-loop clusters
-  (tightest-gate-first order above) are the remaining path to 1,500.
+  - d844f53: render_targets.* recreateRenderTargets(RenderState&, int, int) --
+    the ~46L target (re)allocation lambda (HDR scene + compare copy, brightness/
+    bloom/tonemap/depth targets, bloom mip pyramids, CUDA resize); inner
+    deleteTexture becomes a TU-local helper. Sits above render.h primitives and
+    consumes RenderState, so render.cpp stays free of the RenderState aggregate.
+    Gate: record + export captures recreate targets on resize -- showcase-orbit
+    byte-identical, cinematic sub-percent, export PNG within 0.1% + PFM identical.
+    main.cpp 2160 -> 2116.
+  PRE-LOOP EXHAUSTED: main.cpp 2385 -> 2116 across gl_capabilities + env_config +
+  render_targets, all off (or adjacent to) the hot path. The remaining path to
+  1,500 is the live-loop clusters (tightest-gate-first order above), which run
+  every frame and are materially higher risk; the compare-sweep cluster's CSV
+  gate does not regenerate in this sandbox (see its caveat) so it leans on
+  showcase capture + A/B-vs-parent like the pre-loop work did.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
