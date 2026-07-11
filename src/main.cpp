@@ -103,6 +103,7 @@
 #include "render/gl_capabilities.h"
 #include "render/lut_manager.h"
 #include "render/record_mode.h"
+#include "render/render_targets.h"
 #include "render/uniform_binding.h"
 #include "tools/compare_harness.h"
 #include "render/render_state.h"
@@ -213,6 +214,9 @@ glm::mat3 buildCameraBasis(const glm::vec3 &cameraPos, const glm::vec3 &target, 
 
 // Startup env-var configuration lives in src/render/env_config.*.
 using blackhole::applyEnvironmentConfig;
+
+// Render-target lifecycle lives in src/render/render_targets.*.
+using blackhole::recreateRenderTargets;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
@@ -644,54 +648,6 @@ int main(int argc, char **argv) {
 
     applyEnvironmentConfig(rs);
 
-    auto recreateRenderTargets = [&](int newWidth, int newHeight) {
-      auto deleteTexture = [](GLuint &texture) {
-        if (texture != 0) {
-          glDeleteTextures(1, &texture);
-          texture = 0;
-        }
-      };
-
-      clearRenderToTextureCache();
-      deleteTexture(rs.targets.texBlackhole);
-      deleteTexture(rs.targets.texBlackholeCompare);
-      deleteTexture(rs.targets.texBrightness);
-      deleteTexture(rs.targets.texBloomFinal);
-      deleteTexture(rs.targets.texTonemapped);
-      deleteTexture(rs.targets.texDepthEffects);
-      for (auto &texture : rs.targets.texDownsampled) {
-        deleteTexture(texture);
-      }
-      for (auto &texture : rs.targets.texUpsampled) {
-        deleteTexture(texture);
-      }
-
-      rs.targets.texBlackhole = createColorTexture32f(newWidth, newHeight);
-      rs.targets.texBlackholeCompare = createColorTexture32f(newWidth, newHeight);
-      rs.targets.texBrightness = createColorTexture(newWidth, newHeight);
-      rs.targets.texBloomFinal = createColorTexture(newWidth, newHeight);
-      rs.targets.texTonemapped = createColorTexture(newWidth, newHeight);
-      rs.targets.texDepthEffects = createColorTexture(newWidth, newHeight);
-
-      for (int i = 0; i < kMaxBloomIterations; ++i) {
-        auto const index = static_cast<std::size_t>(i);
-        int const downWidth = std::max(1, newWidth >> (i + 1));
-        int const downHeight = std::max(1, newHeight >> (i + 1));
-        int const upWidth = std::max(1, newWidth >> i);
-        int const upHeight = std::max(1, newHeight >> i);
-        rs.targets.texDownsampled.at(index) = createColorTexture(downWidth, downHeight);
-        rs.targets.texUpsampled.at(index) = createColorTexture(upWidth, upHeight);
-      }
-
-      rs.targets.renderWidth = newWidth;
-      rs.targets.renderHeight = newHeight;
-
-#if BLACKHOLE_HAS_CUDA
-      rs.dispatch.cudaManager.resize(rs.targets.texBlackhole, newWidth, newHeight);
-#endif
-    };
-
-
     /* WHY: computeProgram is hoisted here (rather than a static local inside the
      * frame loop) so the hot-reload handler at the top of each frame can delete
      * and reset it to 0, triggering lazy re-creation on the next iteration. */
@@ -804,7 +760,7 @@ int main(int argc, char **argv) {
       if (viewportSize.x > 0 && viewportSize.y > 0 &&
           (static_cast<int>(viewportSize.x) != rs.targets.renderWidth ||
            static_cast<int>(viewportSize.y) != rs.targets.renderHeight)) {
-        recreateRenderTargets(static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
+        recreateRenderTargets(rs, static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
       }
       ImGui::End();
       ImGui::PopStyleVar();
@@ -1016,7 +972,7 @@ int main(int argc, char **argv) {
       int targetHeight =
           std::max(1, static_cast<int>(static_cast<float>(windowHeight) * rs.display.renderScale));
       if (targetWidth != rs.targets.renderWidth || targetHeight != rs.targets.renderHeight) {
-        recreateRenderTargets(targetWidth, targetHeight);
+        recreateRenderTargets(rs, targetWidth, targetHeight);
       }
       */
       settings.fullscreen = input.isFullscreen();
