@@ -605,14 +605,39 @@ brackets.
   line-based call attribution, so it is not a reliable per-tranche metric; the
   binding STATE-4 constraint is the 1,500-line target, and only main-loop
   reduction moves it.
-  REMAINING to hit the 1,500-line target: the recording glue is the mass --
-  ~156 record* references threaded from the render loop (~1434) to output
-  (~3076), an interleaved stateful untangle worth its own decomposed
-  multi-commit tranche, not a mechanical move; the cli_options config object is
-  now in place for it to consume. GRMHD streaming glue is low yield (the
-  streamer is already owned by rs.grmhd; the frame loop holds only ~4 tile-fetch
-  sites). Also open: the updateLuts emissivity-staleness fix as its own
-  behavior-change commit.
+  RECORD MODE EXTRACTED (in progress) 2026-07-10: the recording glue moves into
+  src/render/record_mode.* (blackhole::) as a decomposed multi-commit tranche,
+  each verified against a pre-established record-output baseline (3-frame capture
+  per profile; showcase-orbit byte-identical is the decisive gross-diff gate,
+  since the no-arg smoke exercises zero record code). The showcase gate is
+  byte-exact because applyRecordProfileSetup puts showcase-orbit on the
+  deterministic GLSL path (cudaManager.setEnabled(false)); cinematic and
+  compare-orbit-near run CUDA and wobble sub-percent from Issue-009 FMA
+  nondeterminism, so they are checked only to PNG-file-size resolution. If a
+  future change moves showcase-orbit onto the CUDA path, this gate loses its
+  teeth and needs a new deterministic reference.
+  - afe2770: ShowcaseOrbitComposition + K_SHOWCASE_ORBIT_COMPOSITIONS +
+    findShowcaseOrbitComposition + applyShowcaseBeautyWiregridTuning (the
+    unblocker -- every record cluster calls the lookup). main.cpp 2768 -> 2706.
+  - 66fa5b6: applyRecordProfileSetup -- the ~170-line one-time profile init
+    (dir create, window resize, per-profile disk/post/camera/background/CUDA
+    state). Returns false before recordInitDone on dir-create failure. main.cpp
+    2706 -> 2540.
+  - 5e56c3f: applyRecordCameraPath -- the per-frame camera/spin drive; self-gates
+    on empty recordFramesDir. Ten per-axis override aliases pruned. main.cpp
+    2540 -> 2480.
+  REMAINING (Commit 4, scoped): frame capture (glGetTexImage -> frame_NNNNNN.png,
+  ~42L with GL_PACK_ALIGNMENT heap-safety caveats) + the --export-frame /
+  --export-raw-frame one-shot (~46L). The export path needs its own baseline
+  (--export-frame PNG + --export-raw-frame PFM) established before the move. The
+  cinematic HUD call and the break/termination checks stay thin call sites in
+  main (the breaks read rs.recording/rs.exporting and cannot move into a callee).
+  Smaller interleaved record snippets (showcase background per-frame setup,
+  exposure override, frame-shift for aim-target and FrameBindingInputs) remain in
+  main; a recordFrameOffset(cli, composition)->vec2 helper would de-duplicate the
+  two frame-shift sites. GRMHD streaming glue is low yield (the streamer is
+  already owned by rs.grmhd; the frame loop holds only ~4 tile-fetch sites). Also
+  open: the updateLuts emissivity-staleness fix as its own behavior-change commit.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
