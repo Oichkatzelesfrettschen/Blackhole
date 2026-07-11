@@ -587,13 +587,32 @@ brackets.
   span; the surrounding delta is cscope's attribution instability across line
   renumbering, not a call-graph change). The binding STATE-4 constraint is now
   solely the 1,500-line target.
+  CLI OPTIONS EXTRACTED 2026-07-10 (1022a35): the argv sweep and its 30
+  record/export fields moved into src/platform/cli_options.* (platform::).
+  CliOptions owns the parsed values; parseCliOptions returns a CliParseOutcome
+  the entry point switches on instead of returning process codes mid-loop;
+  printUsage became public printCliUsage. Domain split: parseCliOptions handles
+  argv syntax, the profile/showcase-composition validation stays in main where
+  findShowcaseOrbitComposition lives. The parsed options alias back to the
+  render loop's names so the record-mode consumption sites stay byte-identical;
+  cli is the config object the recording extraction will consume. main.cpp
+  2876 -> 2768. Verified by clean -Werror build, 81/81 ctest, --help exit 0 +
+  unknown-flag exit 2 through the new outcomes, and an 8s run byte-identical in
+  error-class set to the prior smoke.
+  NOTE the cscope callee gate (main under 300) was already met before any of
+  these tranches (247 at the STATE-4 fill-extraction baseline) and stays met
+  (222 after LUT, 238 after CLI). The absolute number drifts with cscope's
+  line-based call attribution, so it is not a reliable per-tranche metric; the
+  binding STATE-4 constraint is the 1,500-line target, and only main-loop
+  reduction moves it.
   REMAINING to hit the 1,500-line target: the recording glue is the mass --
-  156 record* references threaded from arg-parse (~780) through the entire
-  render loop to output (~3076), an interleaved stateful untangle worth its own
-  decomposed multi-commit tranche, not a mechanical move. GRMHD streaming glue
-  is low yield (the streamer is already owned by rs.grmhd; the frame loop holds
-  only ~4 tile-fetch sites). Also open: the updateLuts emissivity-staleness fix
-  as its own behavior-change commit.
+  ~156 record* references threaded from the render loop (~1434) to output
+  (~3076), an interleaved stateful untangle worth its own decomposed
+  multi-commit tranche, not a mechanical move; the cli_options config object is
+  now in place for it to consume. GRMHD streaming glue is low yield (the
+  streamer is already owned by rs.grmhd; the frame loop holds only ~4 tile-fetch
+  sites). Also open: the updateLuts emissivity-staleness fix as its own
+  behavior-change commit.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
