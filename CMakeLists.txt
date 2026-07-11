@@ -3551,6 +3551,85 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Test-only support library: the desktop app sources (minus main.cpp) built
+  # once with a fixed BLACKHOLE_HAS_CUDA=0 layout so unit tests can construct
+  # RenderState and link the extracted render-loop logic without an app
+  # executable. It is NOT linked by the shipping executables -- their RenderState
+  # layout is per-variant (cudaManager exists only under HAS_CUDA=1), so sharing
+  # one library across variants would be an ODR/layout mismatch. HAS_CUDA=0 is
+  # the lightest valid layout and faithful for CUDA-free logic under test.
+  if(NOT TARGET blackhole_testcore)
+    set(BH_TESTCORE_SRC ${PROJECT_SRC_FILES})
+    list(REMOVE_ITEM BH_TESTCORE_SRC "${PROJECT_SOURCE_DIR}/src/main.cpp")
+    add_library(blackhole_testcore STATIC ${BH_TESTCORE_SRC} ${THIRDPARTY_SRC_FILES})
+    target_include_directories(blackhole_testcore PUBLIC
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_include_directories(blackhole_testcore SYSTEM PUBLIC
+      "${PROJECT_SOURCE_DIR}/external/imgui_backends"
+      "${PROJECT_SOURCE_DIR}/external/gl_debug_callback"
+    )
+    target_link_libraries(blackhole_testcore PUBLIC
+      HighFive::HighFive
+      imgui::imgui
+      imguizmo::imguizmo
+      implot::implot
+      glfw
+      glbinding::glbinding
+      glm::glm
+      nlohmann_json::nlohmann_json
+      stb::stb
+    )
+    target_compile_definitions(blackhole_testcore PUBLIC
+      GLFW_INCLUDE_NONE
+      IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+      BLACKHOLE_HAS_CUDA=0
+      BLACKHOLE_HAS_CPPTRACE=0
+      BLACKHOLE_ENABLE_RMLUI=$<BOOL:${ENABLE_RMLUI}>
+      BLACKHOLE_ENABLE_MESHOPTIMIZER=$<BOOL:${ENABLE_MESHOPTIMIZER}>
+      BLACKHOLE_ENABLE_TASKFLOW=$<BOOL:${ENABLE_TASKFLOW}>
+      BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
+      BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
+      BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
+    )
+    if(ENABLE_RMLUI)
+      target_link_libraries(blackhole_testcore PUBLIC rmlui::rmlui)
+    endif()
+    if(ENABLE_SHADER_WATCHER)
+      target_link_libraries(blackhole_testcore PUBLIC watcher::watcher)
+    endif()
+    if(ENABLE_FASTNOISE2)
+      target_link_libraries(blackhole_testcore PUBLIC FastNoise2::FastNoise)
+    endif()
+    if(ENABLE_MESHOPTIMIZER)
+      target_link_libraries(blackhole_testcore PUBLIC meshoptimizer::meshoptimizer)
+    endif()
+    if(ENABLE_TASKFLOW)
+      target_link_libraries(blackhole_testcore PUBLIC Taskflow::Taskflow)
+    endif()
+    if(ENABLE_XSIMD)
+      target_link_libraries(blackhole_testcore PUBLIC xsimd)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(blackhole_testcore PUBLIC hwy::hwy)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(blackhole_testcore PUBLIC sleef::sleef)
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/compare_sweep_test.cpp")
+    add_executable(compare_sweep_test "${PROJECT_SOURCE_DIR}/tests/compare_sweep_test.cpp")
+    target_link_libraries(compare_sweep_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(compare_sweep_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME compare_sweep_state COMMAND compare_sweep_test)
+    set_tests_properties(compare_sweep_state PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(compare_sweep_state PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/grmhd_pack_test.cpp" AND TARGET nubhlight_pack)
     add_executable(grmhd_pack_test
       "${PROJECT_SOURCE_DIR}/tests/grmhd_pack_test.cpp"
