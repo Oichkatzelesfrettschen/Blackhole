@@ -1131,6 +1131,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/platform/cli_options.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/crash_handler.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/resource_paths.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/compare_sweep.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/env_config.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/gl_capabilities.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/gpu_timing.cpp"

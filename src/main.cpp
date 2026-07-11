@@ -99,6 +99,7 @@
 #include "render/noise_texture_cache.h"
 #include "render/interop_uniform_registry.h"
 #include "render/interop_uniforms.h"
+#include "render/compare_sweep.h"
 #include "render/env_config.h"
 #include "render/gl_capabilities.h"
 #include "render/lut_manager.h"
@@ -217,6 +218,10 @@ using blackhole::applyEnvironmentConfig;
 
 // Render-target lifecycle lives in src/render/render_targets.*.
 using blackhole::recreateRenderTargets;
+
+// Compare-sweep advance/restore state machine lives in src/render/compare_sweep.*.
+using blackhole::advanceComparePresetSweep;
+using blackhole::restoreCompareSweepState;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
@@ -983,51 +988,7 @@ int main(int argc, char **argv) {
       settings.gamma = rs.post.gamma;
       settings.bloomIterations = rs.post.bloomIterations;
 
-      rs.compare.comparePresetSettleFrames = std::clamp(rs.compare.comparePresetSettleFrames, 1, 10);
-      bool const compareSweepAllowed =
-          rs.compare.compareComputeFragment && ShaderManager::instance().canUseComputeShaders();
-      if (rs.compare.comparePresetSweep && !compareSweepAllowed) {
-        rs.compare.comparePresetSweep = false;
-        if (rs.compare.comparePresetSaved) {
-          rs.compare.compareRestorePending = true;
-        }
-      }
-      if (rs.compare.comparePresetSweep) {
-        if (!rs.compare.comparePresetSaved) {
-          rs.compare.comparePresetSavedCamera = input.camera();
-          rs.compare.comparePresetSavedMode = rs.camera.cameraModeIndex;
-          rs.compare.comparePresetSavedOrbitRadius = rs.camera.orbitRadius;
-          rs.compare.comparePresetSavedOrbitSpeed = rs.camera.orbitSpeed;
-          rs.compare.comparePresetSavedOrbitTime = rs.camera.orbitTime;
-          rs.compare.comparePresetSavedKerrSpin = rs.physicsCore.kerrSpin;
-          rs.compare.comparePresetSaved = true;
-        }
-        int const presetCount = static_cast<int>(K_COMPARE_PRESETS.size());
-        rs.compare.comparePresetIndex = std::clamp(rs.compare.comparePresetIndex, 0, presetCount);
-        if (rs.compare.comparePresetIndex >= presetCount) {
-          rs.compare.comparePresetSweep = false;
-          rs.compare.compareRestorePending = true;
-        } else {
-          const auto &preset = K_COMPARE_PRESETS.at(static_cast<std::size_t>(rs.compare.comparePresetIndex));
-          CameraState &camMutable = input.camera();
-          camMutable = preset.camera;
-          rs.camera.cameraModeIndex = static_cast<int>(preset.mode);
-          rs.camera.orbitRadius = preset.orbitRadius;
-          rs.camera.orbitSpeed = preset.orbitSpeed;
-          rs.camera.orbitTime = 0.0f;
-          rs.physicsCore.kerrSpin = preset.kerrSpin;
-          rs.compare.comparePresetFrameCounter++;
-          if (rs.compare.comparePresetFrameCounter >= rs.compare.comparePresetSettleFrames) {
-            rs.compare.captureCompareSnapshot = true;
-            rs.compare.comparePresetFrameCounter = 0;
-            rs.compare.comparePresetIndex++;
-            if (rs.compare.comparePresetIndex >= presetCount) {
-              rs.compare.comparePresetSweep = false;
-              rs.compare.compareRestorePending = true;
-            }
-          }
-        }
-      }
+      advanceComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
 
       // --record-frames: drive camera and spin from the selected record path
       applyRecordCameraPath(rs, cli, input);
@@ -1670,18 +1631,7 @@ int main(int argc, char **argv) {
           }
         } /* end of GLSL fragment/compute else block */
       }
-      if (rs.compare.compareRestorePending && !rs.compare.comparePresetSweep && rs.compare.comparePresetSaved &&
-          !rs.compare.captureCompareSnapshot) {
-        CameraState &camMutable = input.camera();
-        camMutable = rs.compare.comparePresetSavedCamera;
-        rs.camera.cameraModeIndex = rs.compare.comparePresetSavedMode;
-        rs.camera.orbitRadius = rs.compare.comparePresetSavedOrbitRadius;
-        rs.camera.orbitSpeed = rs.compare.comparePresetSavedOrbitSpeed;
-        rs.camera.orbitTime = rs.compare.comparePresetSavedOrbitTime;
-        rs.physicsCore.kerrSpin = rs.compare.comparePresetSavedKerrSpin;
-        rs.compare.comparePresetSaved = false;
-        rs.compare.compareRestorePending = false;
-      }
+      restoreCompareSweepState(rs, input);
 
       if (rs.timing.gpuTimers.initialized) {
         rs.timing.gpuTimers.bloom.begin();
