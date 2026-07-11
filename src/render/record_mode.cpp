@@ -248,4 +248,60 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   return true;
 }
 
+void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, InputManager &input) {
+  if (cli.recordFramesDir.empty()) {
+    return;
+  }
+  if (cli.recordProfile == "compare-orbit-near") {
+    float const denom = static_cast<float>(std::max(cli.recordFramesTotal - 1, 1));
+    float const progress =
+        static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) / denom;
+    CameraState &camMutable = input.camera();
+    camMutable.yaw = -90.0f + progress * 18.0f;
+    camMutable.pitch = 0.0f;
+    camMutable.roll = 0.0f;
+    camMutable.distance = 10.0f;
+    camMutable.fov = 90.0f;
+    rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
+    rs.physicsCore.kerrSpin = 0.0f;
+  } else if (cli.recordProfile == "showcase-orbit") {
+    const ShowcaseOrbitComposition *const composition =
+        findShowcaseOrbitComposition(cli.recordComposition);
+    float const denom = static_cast<float>(std::max(cli.recordFramesTotal - 1, 1));
+    float const progress =
+        static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) / denom;
+    float const baseYaw = cli.hasRecordYaw ? cli.recordYawDeg : -90.0f;
+    float const sweepDeg =
+        cli.hasRecordSweep ? cli.recordSweepDeg
+                           : (composition != nullptr ? composition->sweepDeg : 10.0f);
+    CameraState &camMutable = input.camera();
+    camMutable.yaw = baseYaw + progress * sweepDeg;
+    camMutable.pitch = cli.hasRecordPitch ? cli.recordPitchDeg
+                                          : (composition != nullptr ? composition->pitchDeg
+                                                                    : -6.0f);
+    camMutable.roll = 0.0f;
+    camMutable.distance = cli.hasRecordDistance ? cli.recordDistance
+                                                : (composition != nullptr
+                                                       ? composition->distance
+                                                       : 14.0f);
+    camMutable.fov = cli.hasRecordFov ? cli.recordFovDeg
+                                      : (composition != nullptr ? composition->fovDeg : 68.0f);
+    rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
+    rs.physicsCore.kerrSpin = 0.0f;
+    rs.recording.recordCurrentKf = CamKeyframe{
+        .t_sec = static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) /
+                 static_cast<float>(K_CINEMATIC_FPS),
+        .cam = camMutable,
+        .kerrSpin = rs.physicsCore.kerrSpin,
+        .caption = "Showcase orbit",
+    };
+  } else {
+    rs.recording.recordCurrentKf = rs.recording.recordPath.evaluate(rs.recording.recordCinematic);
+    CameraState &camMutable = input.camera();
+    camMutable   = rs.recording.recordCurrentKf.cam;
+    rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
+    rs.physicsCore.kerrSpin     = rs.recording.recordCurrentKf.kerrSpin;
+  }
+}
+
 } // namespace blackhole

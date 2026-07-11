@@ -62,6 +62,10 @@ void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, Wiregri
 bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, InputManager &input,
                              GLFWwindow *window);
 
+/** @brief Drives the record camera and spin from the selected profile's path for
+ *         the current frame index. No-op when recordFramesDir is empty. */
+void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, InputManager &input);
+
 } // namespace blackhole
 
 #endif // BLACKHOLE_RENDER_RECORD_MODE_H

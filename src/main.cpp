@@ -370,6 +370,7 @@ using blackhole::loadSpectralLutAssets;
 using blackhole::updateLuts;
 
 // Showcase-orbit record framing lives in src/render/record_mode.*.
+using blackhole::applyRecordCameraPath;
 using blackhole::applyRecordProfileSetup;
 using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::findShowcaseOrbitComposition;
@@ -576,18 +577,8 @@ int main(int argc, char **argv) {
     auto &recordComposition = cli.recordComposition;
     auto &recordFramesTotal = cli.recordFramesTotal;
     auto &recordStartFrame = cli.recordStartFrame;
-    auto &recordYawDeg = cli.recordYawDeg;
-    auto &hasRecordYaw = cli.hasRecordYaw;
-    auto &recordPitchDeg = cli.recordPitchDeg;
-    auto &hasRecordPitch = cli.hasRecordPitch;
-    auto &recordDistance = cli.recordDistance;
-    auto &hasRecordDistance = cli.hasRecordDistance;
-    auto &recordFovDeg = cli.recordFovDeg;
-    auto &hasRecordFov = cli.hasRecordFov;
     auto &recordExposure = cli.recordExposure;
     auto &hasRecordExposure = cli.hasRecordExposure;
-    auto &recordSweepDeg = cli.recordSweepDeg;
-    auto &hasRecordSweep = cli.hasRecordSweep;
     auto &recordFrameX = cli.recordFrameX;
     auto &hasRecordFrameX = cli.hasRecordFrameX;
     auto &recordFrameY = cli.recordFrameY;
@@ -1306,58 +1297,7 @@ int main(int argc, char **argv) {
       }
 
       // --record-frames: drive camera and spin from the selected record path
-      if (!recordFramesDir.empty()) {
-        if (recordProfile == "compare-orbit-near") {
-          float const denom = static_cast<float>(std::max(recordFramesTotal - 1, 1));
-          float const progress =
-              static_cast<float>(rs.recording.recordFrameIndex - recordStartFrame) / denom;
-          CameraState &camMutable = input.camera();
-          camMutable.yaw = -90.0f + progress * 18.0f;
-          camMutable.pitch = 0.0f;
-          camMutable.roll = 0.0f;
-          camMutable.distance = 10.0f;
-          camMutable.fov = 90.0f;
-          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
-          rs.physicsCore.kerrSpin = 0.0f;
-        } else if (recordProfile == "showcase-orbit") {
-          const ShowcaseOrbitComposition *const composition =
-              findShowcaseOrbitComposition(recordComposition);
-          float const denom = static_cast<float>(std::max(recordFramesTotal - 1, 1));
-          float const progress =
-              static_cast<float>(rs.recording.recordFrameIndex - recordStartFrame) / denom;
-          float const baseYaw = hasRecordYaw ? recordYawDeg : -90.0f;
-          float const sweepDeg =
-              hasRecordSweep ? recordSweepDeg
-                             : (composition != nullptr ? composition->sweepDeg : 10.0f);
-          CameraState &camMutable = input.camera();
-          camMutable.yaw = baseYaw + progress * sweepDeg;
-          camMutable.pitch = hasRecordPitch ? recordPitchDeg
-                                            : (composition != nullptr ? composition->pitchDeg
-                                                                      : -6.0f);
-          camMutable.roll = 0.0f;
-          camMutable.distance = hasRecordDistance ? recordDistance
-                                                  : (composition != nullptr
-                                                         ? composition->distance
-                                                         : 14.0f);
-          camMutable.fov = hasRecordFov ? recordFovDeg
-                                        : (composition != nullptr ? composition->fovDeg : 68.0f);
-          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
-          rs.physicsCore.kerrSpin = 0.0f;
-          rs.recording.recordCurrentKf = CamKeyframe{
-              .t_sec = static_cast<float>(rs.recording.recordFrameIndex - recordStartFrame) /
-                       static_cast<float>(K_CINEMATIC_FPS),
-              .cam = camMutable,
-              .kerrSpin = rs.physicsCore.kerrSpin,
-              .caption = "Showcase orbit",
-          };
-        } else {
-          rs.recording.recordCurrentKf = rs.recording.recordPath.evaluate(rs.recording.recordCinematic);
-          CameraState &camMutable = input.camera();
-          camMutable   = rs.recording.recordCurrentKf.cam;
-          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
-          rs.physicsCore.kerrSpin     = rs.recording.recordCurrentKf.kerrSpin;
-        }
-      }
+      applyRecordCameraPath(rs, cli, input);
 
       // Get camera state for shader
       const auto &cam = input.camera();
