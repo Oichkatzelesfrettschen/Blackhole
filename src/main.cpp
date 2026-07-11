@@ -104,6 +104,7 @@
 #include "render/env_config.h"
 #include "render/gl_capabilities.h"
 #include "render/lut_manager.h"
+#include "render/post_pipeline.h"
 #include "render/record_mode.h"
 #include "render/render_targets.h"
 #include "render/settings_sync.h"
@@ -174,6 +175,9 @@ using blackhole::selectCameraPosition;
 // Settings <-> RenderState load-once and write-back live in src/render/settings_sync.*.
 using blackhole::loadSettingsIntoRenderState;
 using blackhole::syncRenderStateToSettings;
+
+// Bloom/tonemap/depth post chain lives in src/render/post_pipeline.*.
+using blackhole::runPostProcessPipeline;
 
 // Startup env-var configuration lives in src/render/env_config.*.
 using blackhole::applyEnvironmentConfig;
@@ -1544,158 +1548,7 @@ int main(int argc, char **argv) {
       }
       restoreCompareSweepState(rs, input);
 
-      if (rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimers.bloom.begin();
-      }
-      {
-        ZONE_SCOPED_N("Bloom Brightness");
-        RenderToTextureInfo rtti;
-        rtti.fragShader = "shader/bloom_brightness_pass.frag";
-        rtti.textureUniforms["texture0"] = rs.targets.texBlackhole;
-        rtti.targetTexture = rs.targets.texBrightness;
-        rtti.width = rs.targets.renderWidth;
-        rtti.height = rs.targets.renderHeight;
-        rtti.floatUniforms["brightPassThreshold"] = rs.post.bloomThreshold;
-        rtti.floatUniforms["brightPassKnee"]      = rs.post.bloomKnee;
-        renderToTexture(rtti);
-      }
-
-      // Post Processing panel moved to Main Settings
-
-      {
-        ZONE_SCOPED_N("Bloom Downsample");
-        for (int level = 0; level < rs.post.bloomIterations; level++) {
-          auto const levelIndex = static_cast<std::size_t>(level);
-          RenderToTextureInfo rtti;
-          rtti.fragShader = "shader/bloom_downsample.frag";
-          rtti.textureUniforms["texture0"] =
-              level == 0 ? rs.targets.texBrightness : rs.targets.texDownsampled.at(static_cast<std::size_t>(level - 1));
-          rtti.targetTexture = rs.targets.texDownsampled.at(levelIndex);
-          int const downWidth = std::max(1, rs.targets.renderWidth >> (level + 1));
-          int const downHeight = std::max(1, rs.targets.renderHeight >> (level + 1));
-          rtti.width = downWidth;
-          rtti.height = downHeight;
-          renderToTexture(rtti);
-        }
-      }
-
-      {
-        ZONE_SCOPED_N("Bloom Upsample");
-        for (int level = rs.post.bloomIterations - 1; level >= 0; level--) {
-          auto const levelIndex = static_cast<std::size_t>(level);
-          RenderToTextureInfo rtti;
-          rtti.fragShader = "shader/bloom_upsample.frag";
-          rtti.textureUniforms["texture0"] =
-              level == rs.post.bloomIterations - 1 ? rs.targets.texDownsampled.at(levelIndex)
-                                           : rs.targets.texUpsampled.at(static_cast<std::size_t>(level) + 1);
-          rtti.textureUniforms["texture1"] =
-              level == 0 ? rs.targets.texBrightness : rs.targets.texDownsampled.at(static_cast<std::size_t>(level - 1));
-          rtti.targetTexture = rs.targets.texUpsampled.at(levelIndex);
-          int const upWidth = std::max(1, rs.targets.renderWidth >> level);
-          int const upHeight = std::max(1, rs.targets.renderHeight >> level);
-          rtti.width = upWidth;
-          rtti.height = upHeight;
-          renderToTexture(rtti);
-        }
-      }
-
-      {
-        ZONE_SCOPED_N("Bloom Composite");
-        RenderToTextureInfo rtti;
-        rtti.fragShader = "shader/bloom_composite.frag";
-        rtti.textureUniforms["texture0"] = rs.targets.texBlackhole;
-        rtti.textureUniforms["texture1"] = rs.targets.texUpsampled.at(0);
-        rtti.targetTexture = rs.targets.texBloomFinal;
-        rtti.width = rs.targets.renderWidth;
-        rtti.height = rs.targets.renderHeight;
-
-        if (input.isUIVisible()) {
-          renderBloomPanel(rs);
-        }
-        rtti.floatUniforms["bloomStrength"] = rs.post.bloomStrength;
-        rtti.floatUniforms["tone"]          = rs.post.bloomTone;
-
-        renderToTexture(rtti);
-      }
-      if (rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimers.bloom.end();
-      }
-
-      if (rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimers.tonemap.begin();
-      }
-      {
-        ZONE_SCOPED_N("Tonemap");
-        RenderToTextureInfo rtti;
-        rtti.fragShader = "shader/tonemapping.frag";
-        rtti.textureUniforms["texture0"] = rs.targets.texBloomFinal;
-        rtti.targetTexture = rs.targets.texTonemapped;
-        rtti.width = rs.targets.renderWidth;
-        rtti.height = rs.targets.renderHeight;
-
-        if (input.isUIVisible()) {
-          renderTonemapPanel(rs);
-        }
-        rtti.floatUniforms["tonemappingEnabled"] = rs.post.tonemappingEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["exposure"] = rs.post.toneExposure;
-        rtti.floatUniforms["gamma"] = rs.post.gamma;
-        rtti.floatUniforms["chromaticAberrationStrength"] = rs.post.tonemapChromaticAberrationStrength;
-        rtti.floatUniforms["vignetteStrength"] = rs.post.tonemapVignetteStrength;
-        rtti.floatUniforms["filmGrainStrength"] = rs.post.tonemapFilmGrainStrength;
-
-        renderToTexture(rtti);
-      }
-      if (rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimers.tonemap.end();
-      }
-
-
-      if (input.isUIVisible()) {
-        renderDepthEffectsPanel(rs);
-      }
-
-      GLuint finalTexture = rs.targets.texTonemapped;
-      if (rs.depthFx.depthEffectsEnabled) {
-        ZONE_SCOPED_N("Depth Cues");
-        if (rs.timing.gpuTimers.initialized) {
-          rs.timing.gpuTimers.depth.begin();
-        }
-        RenderToTextureInfo rtti;
-        rtti.fragShader = "shader/depth_cues.frag";
-        rtti.textureUniforms["texture0"] = rs.targets.texTonemapped;
-        rtti.textureUniforms["depthTexture"] = rs.targets.texBlackhole;
-        rtti.targetTexture = rs.targets.texDepthEffects;
-        rtti.width = rs.targets.renderWidth;
-        rtti.height = rs.targets.renderHeight;
-        rtti.floatUniforms["depthEffectsEnabled"] = 1.0f;
-        rtti.floatUniforms["fogEnabled"] = rs.depthFx.fogEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["fogDensity"] = rs.depthFx.fogDensity;
-        rtti.floatUniforms["fogStart"] = rs.depthFx.fogStart;
-        rtti.floatUniforms["fogEnd"] = rs.depthFx.fogEnd;
-        rtti.floatUniforms["fogColorR"] = rs.depthFx.fogColor[0];
-        rtti.floatUniforms["fogColorG"] = rs.depthFx.fogColor[1];
-        rtti.floatUniforms["fogColorB"] = rs.depthFx.fogColor[2];
-        rtti.floatUniforms["edgeOutlinesEnabled"] = rs.depthFx.edgeOutlinesEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["edgeThreshold"] = rs.depthFx.edgeThreshold;
-        rtti.floatUniforms["edgeWidth"] = rs.depthFx.edgeWidth;
-        rtti.floatUniforms["edgeColorR"] = rs.depthFx.edgeColor[0];
-        rtti.floatUniforms["edgeColorG"] = rs.depthFx.edgeColor[1];
-        rtti.floatUniforms["edgeColorB"] = rs.depthFx.edgeColor[2];
-        rtti.floatUniforms["depthDesatEnabled"] = rs.depthFx.depthDesatEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["desatStrength"] = rs.depthFx.desatStrength;
-        rtti.floatUniforms["chromaDepthEnabled"] = rs.depthFx.chromaDepthEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["motionParallaxHint"] = rs.depthFx.motionParallaxHint ? 1.0f : 0.0f;
-        rtti.floatUniforms["dofEnabled"] = rs.depthFx.dofEnabled ? 1.0f : 0.0f;
-        rtti.floatUniforms["dofFocusNear"] = rs.depthFx.dofFocusNear;
-        rtti.floatUniforms["dofFocusFar"] = rs.depthFx.dofFocusFar;
-        rtti.floatUniforms["dofMaxRadius"] = rs.depthFx.dofMaxRadius;
-        rtti.floatUniforms["depthCurve"] = rs.depthFx.depthCurve;
-        renderToTexture(rtti);
-        finalTexture = rs.targets.texDepthEffects;
-        if (rs.timing.gpuTimers.initialized) {
-          rs.timing.gpuTimers.depth.end();
-        }
-      }
+      GLuint const finalTexture = runPostProcessPipeline(rs, input);
 
       // Re-open Viewport to render the scene image
       ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
