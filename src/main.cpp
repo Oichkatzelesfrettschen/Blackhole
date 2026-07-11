@@ -99,6 +99,7 @@
 #include "render/noise_texture_cache.h"
 #include "render/interop_uniform_registry.h"
 #include "render/interop_uniforms.h"
+#include "render/background_loader.h"
 #include "render/camera_math.h"
 #include "render/compare_sweep.h"
 #include "render/env_config.h"
@@ -244,43 +245,9 @@ using ui::renderBloomPanel;
 using ui::renderTonemapPanel;
 using ui::renderDepthEffectsPanel;
 
-std::vector<BackgroundAsset> loadBackgroundAssets() {
-  std::vector<BackgroundAsset> assets;
-  std::string text;
-  if (!readTextFile(resourcePath("assets/backgrounds/manifest.json"), text)) {
-    return assets;
-  }
-  auto json = nlohmann::json::parse(text, nullptr, false);
-  if (json.is_discarded() || !json.contains("assets") || !json.at("assets").is_array()) {
-    return assets;
-  }
-  for (const auto &entry : json.at("assets")) {
-    BackgroundAsset asset;
-    asset.id = entry.value("id", "");
-    asset.title = entry.value("title", asset.id);
-    asset.path = entry.value("path", "");
-    asset.skyboxDir = entry.value("skyboxDir", "");
-    if (!asset.path.empty() && !std::filesystem::path(asset.path).is_absolute()) {
-      asset.path = resourcePath(asset.path);
-    }
-    if (!asset.skyboxDir.empty() && !std::filesystem::path(asset.skyboxDir).is_absolute()) {
-      asset.skyboxDir = resourcePath(asset.skyboxDir);
-    }
-    if (!asset.id.empty() && !asset.path.empty()) {
-      assets.push_back(std::move(asset));
-    }
-  }
-  return assets;
-}
-
-int findBackgroundIndex(const std::vector<BackgroundAsset> &assets, const std::string &id) {
-  for (std::size_t i = 0; i < assets.size(); ++i) {
-    if (assets.at(i).id == id) {
-      return static_cast<int>(i);
-    }
-  }
-  return 0;
-}
+// Background manifest parsing + active-texture swap lives in
+// src/render/background_loader.*.
+using blackhole::updateActiveBackground;
 
 // Compare/parity harness (DiffStats, snapshot + CSV writers, preset
 // table) lives in src/tools/compare_harness.*; InteropUniforms in
@@ -859,38 +826,7 @@ int main(int argc, char **argv) {
       if (rs.background.fallbackCubemap == 0) {
         rs.background.fallbackCubemap = createSolidCubemap1x1(0, 0, 0);
       }
-      if (rs.background.backgroundAssets.empty()) {
-        rs.background.backgroundAssets = loadBackgroundAssets();
-      }
-      if (!rs.background.backgroundAssets.empty()) {
-        rs.background.backgroundIndex = findBackgroundIndex(rs.background.backgroundAssets, settings.backgroundId);
-        if (rs.background.backgroundIndex < 0 ||
-            std::cmp_greater_equal(rs.background.backgroundIndex, rs.background.backgroundAssets.size())) {
-          rs.background.backgroundIndex = 0;
-        }
-        const auto &asset = rs.background.backgroundAssets.at(static_cast<std::size_t>(rs.background.backgroundIndex));
-        if (rs.background.backgroundLoadedId != asset.id) {
-          GLuint const nextTexture = loadTexture2D(asset.path, true);
-          if (nextTexture != 0) {
-            if (rs.background.backgroundBase != 0) {
-              glDeleteTextures(1, &rs.background.backgroundBase);
-            }
-            rs.background.backgroundBase = nextTexture;
-            rs.background.backgroundLoadedId = asset.id;
-          }
-          // Swap cubemap skybox if the asset specifies one.
-          if (!asset.skyboxDir.empty() && rs.background.skyboxLoadedDir != asset.skyboxDir) {
-            GLuint const nextCubemap = loadCubemap(asset.skyboxDir);
-            if (nextCubemap != 0) {
-              if (rs.background.galaxy != 0) {
-                glDeleteTextures(1, &rs.background.galaxy);
-              }
-              rs.background.galaxy = nextCubemap;
-              rs.background.skyboxLoadedDir = asset.skyboxDir;
-            }
-          }
-        }
-      }
+      updateActiveBackground(rs, settings.backgroundId);
       GLuint const backgroundFallback = rs.background.backgroundBase != 0 ? rs.background.backgroundBase : rs.background.fallback2D;
       rs.background.backgroundTextures.fill(backgroundFallback);
       if (!rs.disk.noiseTextureReady) {
