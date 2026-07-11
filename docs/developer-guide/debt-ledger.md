@@ -605,7 +605,7 @@ brackets.
   line-based call attribution, so it is not a reliable per-tranche metric; the
   binding STATE-4 constraint is the 1,500-line target, and only main-loop
   reduction moves it.
-  RECORD MODE EXTRACTED (in progress) 2026-07-10: the recording glue moves into
+  RECORD MODE EXTRACTED 2026-07-10: the recording glue moved into
   src/render/record_mode.* (blackhole::) as a decomposed multi-commit tranche,
   each verified against a pre-established record-output baseline (3-frame capture
   per profile; showcase-orbit byte-identical is the decisive gross-diff gate,
@@ -626,18 +626,27 @@ brackets.
   - 5e56c3f: applyRecordCameraPath -- the per-frame camera/spin drive; self-gates
     on empty recordFramesDir. Ten per-axis override aliases pruned. main.cpp
     2540 -> 2480.
-  REMAINING (Commit 4, scoped): frame capture (glGetTexImage -> frame_NNNNNN.png,
-  ~42L with GL_PACK_ALIGNMENT heap-safety caveats) + the --export-frame /
-  --export-raw-frame one-shot (~46L). The export path needs its own baseline
-  (--export-frame PNG + --export-raw-frame PFM) established before the move. The
-  cinematic HUD call and the break/termination checks stay thin call sites in
-  main (the breaks read rs.recording/rs.exporting and cannot move into a callee).
-  Smaller interleaved record snippets (showcase background per-frame setup,
-  exposure override, frame-shift for aim-target and FrameBindingInputs) remain in
-  main; a recordFrameOffset(cli, composition)->vec2 helper would de-duplicate the
-  two frame-shift sites. GRMHD streaming glue is low yield (the streamer is
-  already owned by rs.grmhd; the frame loop holds only ~4 tile-fetch sites). Also
-  open: the updateLuts emissivity-staleness fix as its own behavior-change commit.
+  - 064e6c2: captureRecordFrame + exportFrameOnce, sharing one record_mode-
+    internal readTonemappedRgb readback (the glGetTexImage + GL_PACK_ALIGNMENT=1
+    heap-safety guard + bottom-to-top flip, previously duplicated across capture
+    and --export-frame). exportFrameOnce keeps the PFM path on
+    readTextureRGBA/writePfmRgb. The cinematic HUD draw and warmup increment stay
+    in main (they run before ImGui::Render()); the export/record termination
+    breaks stay in main (they read exporting/recording state to leave the loop).
+    Verified against a fresh export baseline (PNG within 0.1%, PFM byte-identical)
+    plus the three record baselines. main.cpp 2480 -> 2385.
+  Net: main.cpp 2768 -> 2385 across the record_mode tranche; record_mode.* now
+  owns the showcase table, profile setup, camera path, frame capture, and export.
+  REMAINING interleaved record snippets stay in main (they sit inside general
+  loop logic, not a cohesive block): showcase background per-frame layer setup,
+  the record exposure override, and the frame-shift for aim-target and
+  FrameBindingInputs -- a recordFrameOffset(cli, composition)->glm::vec2 helper
+  would de-duplicate the two frame-shift sites if pursued. GRMHD streaming glue is
+  low yield (the streamer is already owned by rs.grmhd; the frame loop holds only
+  ~4 tile-fetch sites). Also open: the updateLuts emissivity-staleness fix as its
+  own behavior-change commit. main.cpp at 2385 is still above the 1,500-line
+  STATE-4 target; the remaining mass is the non-record render-loop body (dispatch
+  setup, compare sweep, GPU timing, the draw sequence) rather than record glue.
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
