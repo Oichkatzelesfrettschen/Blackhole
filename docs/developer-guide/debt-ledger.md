@@ -718,6 +718,29 @@ brackets.
   every frame and are materially higher risk; the compare-sweep cluster's CSV
   gate does not regenerate in this sandbox (see its caveat) so it leans on
   showcase capture + A/B-vs-parent like the pre-loop work did.
+  LIVE-LOOP CLUSTERS (first commit):
+  - 5e68034: compare-sweep advance/restore into src/render/compare_sweep.*
+    (blackhole::, layered above compare_harness). The cluster is three
+    interleaved regions, not one block: advanceComparePresetSweep (preset
+    cycling/settle, before render) + restoreCompareSweepState (after render) are
+    the low-coupling halves extracted here; the snapshot-capture Region 2
+    (~102L, embedded in the GLSL dispatch else-block) stays in main -- it needs
+    the render targets + interop + ~7 effective transients and wants a context
+    struct. The sole GL dep (canUseComputeShaders) is hoisted to a parameter.
+    GATE: strict-verbatim proven by diffing the extracted bodies against the
+    original main ranges (restore byte-identical; advance differs only in the
+    hoisted compareSweepAllowed line) -- the diff IS the gate because the sweep
+    has no runnable end-to-end gate here. Plus -Werror (GLSL+CUDA), 81/81,
+    showcase byte-identical, COMPARE_SWEEP=1 crash-free. main.cpp 2116 -> 2066.
+  DEBT owed: a GL-free compare_sweep unit test (drive the state machine: preset
+  advance, settle-boundary capture flag, compute-unavailable disable, post-sweep
+  restore). Blocked on a RenderState test-construction seam -- constructing
+  RenderState in a test pulls the conan glbinding/imgui/cuda include world (no
+  core library; no existing test constructs RenderState). The seam (a lightweight
+  RenderState-for-tests, or a core static lib tests can link) is its own scoped
+  item; once it exists, advanceComparePresetSweep/restoreCompareSweepState are
+  pure functions ready to test. Region 2 extraction is the natural place to add
+  it (it forces the context-struct that would also help construction).
 - STATE-5 Split gravitational_waves.h (1,478L) into interface + .cpp or
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
