@@ -745,6 +745,20 @@ brackets.
   save-on-entry, settle-boundary capture, post-sweep restore); suite 81 -> 82.
   Every later RenderState-consuming live-loop cluster now has a real unit gate,
   not diff-only.
+  LIVE-LOOP CLUSTER (seam's first payoff):
+  - 75f041a: camera pose math into src/render/camera_math.* (blackhole::).
+    cameraPositionFromYawPitch + buildCameraBasis stay pure functions of their
+    args; selectCameraPosition clamps the RenderState mode/orbit fields and
+    returns the position for the active CameraMode about a focus target (caller
+    keeps the orbitTime advance + gizmo-dependent focus target). The clamp order
+    moves after the orbitTime advance -- no data dependency on the clamped
+    fields, so the result is unchanged. camera_math_test links blackhole_testcore
+    and drives every surface: spherical-placement identities, orthonormal basis
+    with world-up degeneracy fallback + roll, each CameraMode branch, and the
+    mode/orbit clamps -- the first cluster to carry a real unit gate on the seam
+    rather than a verbatim diff. Suite 82 -> 83. Gate: -Werror (three targets) +
+    83/83 + showcase-orbit headless capture byte-identical to parent (sha256
+    956ed7aa across all three frames on both builds). main.cpp 2066 -> 2000.
   INCLUDE-GRAPH DEBT (render_state.h heavy include surface) DECOMPOSED, resolution
   deferred: the header pulls glbinding (GLuint handles), imgui+ImGuizmo
   (ImGuizmo::OPERATION/MODE gizmo enums held BY VALUE at render_state.h:94-95),
