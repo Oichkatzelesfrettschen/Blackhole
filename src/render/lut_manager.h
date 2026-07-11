@@ -37,6 +37,16 @@ void updateLuts(RenderState &rs, float spin, float densityV);
 [[nodiscard]] bool loadGrbModulationLutAssets(std::vector<float> &values, float &timeMin,
                                               float &timeMax);
 
+/** @brief First-use GRB-modulation texture upload: on the try latch, loads the
+ *         GRB modulation LUT assets and, on success, uploads the modulation
+ *         texture and seeds the manual-time value. */
+void loadGrbModulationLut(RenderState &rs);
+
+/** @brief First-use uploads for the spectral ray-tracing LUT, the synchrotron
+ *         G(x) LUT, and the Hawking LUTs, each guarded by its own latch and
+ *         sharing the spectral/synchG textures with the CUDA backend. */
+void loadSpectralSynchHawkingLuts(RenderState &rs);
+
 } // namespace blackhole
 
 #endif // BLACKHOLE_RENDER_LUT_MANAGER_H

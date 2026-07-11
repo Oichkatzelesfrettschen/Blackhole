@@ -9,13 +9,22 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <vector>
+
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
 
 #include "physics/lut.h"
+#include "physics/synchrotron.h"
 #include "platform/resource_paths.h"
 #include "render.h"
 #include "render/render_state.h"
+
+using namespace gl;
+using platform::resourcePath;
 
 namespace blackhole {
 namespace {
@@ -285,6 +294,88 @@ void updateLuts(RenderState &rs, float spin, float densityV) {
     rs.luts.lutFromAssets = false;
     rs.luts.lutInitialized = true;
     std::cout << "LUTs regenerated. Spin: " << spin << ", DensityV: " << densityV << '\n';
+  }
+}
+
+void loadGrbModulationLut(RenderState &rs) {
+  if (!rs.luts.grbModulationTried) {
+    rs.luts.grbModulationTried = true;
+    rs.luts.grbModulationLoaded =
+        loadGrbModulationLutAssets(rs.luts.grbModulationValues, rs.luts.grbTimeMin, rs.luts.grbTimeMax);
+    if (rs.luts.grbModulationLoaded) {
+      if (rs.luts.texGrbModulationLUT != 0) {
+        glDeleteTextures(1, &rs.luts.texGrbModulationLUT);
+        rs.luts.texGrbModulationLUT = 0;
+      }
+      int const lutSize = static_cast<int>(rs.luts.grbModulationValues.size());
+      rs.luts.texGrbModulationLUT = createFloatTexture2D(lutSize, 1, rs.luts.grbModulationValues);
+      rs.luts.grbTimeManualValue = rs.luts.grbTimeMin;
+    }
+  }
+}
+
+void loadSpectralSynchHawkingLuts(RenderState &rs) {
+  if (!rs.luts.spectralLutTried) {
+    rs.luts.spectralLutTried = true;
+    rs.luts.spectralLutLoaded = loadSpectralLutAssets(rs.luts.spectralLutValues, rs.luts.spectralWavelengthMin,
+                                              rs.luts.spectralWavelengthMax);
+    if (rs.luts.spectralLutLoaded && !rs.luts.spectralLutValues.empty()) {
+      if (rs.luts.texSpectralLUT != 0) {
+        glDeleteTextures(1, &rs.luts.texSpectralLUT);
+        rs.luts.texSpectralLUT = 0;
+      }
+      int const lutSize = static_cast<int>(rs.luts.spectralLutValues.size());
+      rs.luts.texSpectralLUT = createFloatTexture2D(lutSize, 1, rs.luts.spectralLutValues);
+#if BLACKHOLE_HAS_CUDA
+      /* Share spectral LUT with CUDA backend (slot 2=spectral) */
+      rs.dispatch.cudaManager.registerLut(2, rs.luts.texSpectralLUT, static_cast<unsigned int>(GL_TEXTURE_2D));
+#endif
+      rs.luts.spectralRadiusMin = rs.luts.lutRadiusMin;
+      rs.luts.spectralRadiusMax = rs.luts.lutRadiusMax;
+      if (rs.luts.spectralRadiusMax <= rs.luts.spectralRadiusMin) {
+        rs.luts.spectralRadiusMin = 0.0f;
+        rs.luts.spectralRadiusMax = 1.0f;
+      }
+    }
+  }
+
+  /* Generate synchrotron G(x)=x*K_{2/3}(x) LUT once (task E5).
+   * Stored as GL_TEXTURE_2D (width=256, height=1) so the same handle
+   * can be registered for CUDA-GL interop via cudaGraphicsGLRegisterImage,
+   * which does not support GL_TEXTURE_1D.  The GLSL path samples it
+   * via sampler2D with y=0.5; the CUDA path uses tex2D at v=0.5. */
+  if (!rs.luts.synchGLutCreated) {
+    // The G(x) domain is single-sourced across C++, CUDA, and GLSL via
+    // shader/include/synchrotron_lut_domain.h; every consumer reads the
+    // same macros, so no cross-file pinning asserts are needed here.
+    rs.luts.synchGLutCreated = true;
+    constexpr int kSynchGLutSize = SYNCH_G_LUT_DOMAIN_ENTRIES;
+    std::vector<float> synchGData(static_cast<std::size_t>(kSynchGLutSize));
+    physics::synchrotronGGenerateLut(synchGData.data(), kSynchGLutSize,
+                                     static_cast<double>(physics::SYNCH_G_LUT_X_MIN),
+                                     static_cast<double>(physics::SYNCH_G_LUT_X_MAX));
+    if (rs.luts.texSynchGLut != 0) {
+      glDeleteTextures(1, &rs.luts.texSynchGLut);
+      rs.luts.texSynchGLut = 0;
+    }
+    rs.luts.texSynchGLut = createFloatTexture2D(kSynchGLutSize, 1, synchGData);
+#if BLACKHOLE_HAS_CUDA
+    rs.dispatch.cudaManager.registerLut(6 /*BhLutSynchG*/, rs.luts.texSynchGLut,
+                            static_cast<unsigned int>(GL_TEXTURE_2D));
+#endif
+  }
+
+  // Load Hawking radiation LUTs
+  if (!rs.hawking.hawkingLutsLoaded) {
+    std::filesystem::path const lutPath = resourcePath("assets/luts");
+    if (std::filesystem::exists(lutPath)) {
+      rs.hawking.hawkingLutsLoaded = rs.hawking.hawkingRenderer.loadLUTs(lutPath);
+      if (rs.hawking.hawkingLutsLoaded) {
+        std::cout << "Hawking radiation LUTs loaded successfully" << '\n';
+      } else {
+        std::cerr << "Failed to load Hawking radiation LUTs" << '\n';
+      }
+    }
   }
 }
 
