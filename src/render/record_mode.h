@@ -16,9 +16,17 @@
 
 #include <glm/ext/vector_float4.hpp>
 
+struct GLFWwindow;
+class InputManager;
+
+namespace platform {
+struct CliOptions;
+} // namespace platform
+
 namespace blackhole {
 
 struct WiregridParams;
+struct RenderState;
 
 /** @brief Framing preset for one named showcase-orbit composition. */
 struct ShowcaseOrbitComposition {
@@ -45,6 +53,14 @@ const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view na
  *         in Beauty mode. */
 void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, WiregridParams &params,
                                        glm::vec4 &color);
+
+/** @brief One-time record-mode setup: creates the output directory, resizes the
+ *         window to the record resolution, and applies the selected profile's
+ *         render/camera/background state. Returns false if the output directory
+ *         cannot be created (the caller should abort); the caller invokes this
+ *         once, gated on an empty recordFramesDir and recordInitDone. */
+bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, InputManager &input,
+                             GLFWwindow *window);
 
 } // namespace blackhole
 

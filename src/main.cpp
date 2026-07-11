@@ -370,6 +370,7 @@ using blackhole::loadSpectralLutAssets;
 using blackhole::updateLuts;
 
 // Showcase-orbit record framing lives in src/render/record_mode.*.
+using blackhole::applyRecordProfileSetup;
 using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::findShowcaseOrbitComposition;
 using blackhole::ShowcaseOrbitComposition;
@@ -573,7 +574,6 @@ int main(int argc, char **argv) {
     auto &recordFramesDir = cli.recordFramesDir;
     auto &recordProfile = cli.recordProfile;
     auto &recordComposition = cli.recordComposition;
-    auto &recordBackgroundId = cli.recordBackgroundId;
     auto &recordFramesTotal = cli.recordFramesTotal;
     auto &recordStartFrame = cli.recordStartFrame;
     auto &recordYawDeg = cli.recordYawDeg;
@@ -592,7 +592,6 @@ int main(int argc, char **argv) {
     auto &hasRecordFrameX = cli.hasRecordFrameX;
     auto &recordFrameY = cli.recordFrameY;
     auto &hasRecordFrameY = cli.hasRecordFrameY;
-    auto &hasRecordBackgroundId = cli.hasRecordBackgroundId;
     auto &recordBackgroundYawDeg = cli.recordBackgroundYawDeg;
     auto &hasRecordBackgroundYaw = cli.hasRecordBackgroundYaw;
     auto &recordBackgroundPitchDeg = cli.recordBackgroundPitchDeg;
@@ -997,174 +996,9 @@ int main(int argc, char **argv) {
 
       // --record-frames: one-time initialization (cinematic quality, 1920x1080, no vsync)
       if (!recordFramesDir.empty() && !rs.recording.recordInitDone) {
-        std::error_code recordDirEc;
-        std::filesystem::create_directories(recordFramesDir, recordDirEc);
-        if (recordDirEc) {
-          std::fprintf(stderr, "record output directory create failed: %s (%s)\n",
-                       recordFramesDir.c_str(), recordDirEc.message().c_str());
+        if (!applyRecordProfileSetup(rs, cli, input, window)) {
           return 1;
         }
-        rs.recording.recordInitDone     = true;
-        int recordWidth = 1920;
-        int recordHeight = 1080;
-        if (char const *const envWidth = std::getenv("BLACKHOLE_RECORD_WIDTH")) {
-          int const parsed = std::atoi(envWidth);
-          if (parsed > 0) {
-            recordWidth = parsed;
-          }
-        }
-        if (char const *const envHeight = std::getenv("BLACKHOLE_RECORD_HEIGHT")) {
-          int const parsed = std::atoi(envHeight);
-          if (parsed > 0) {
-            recordHeight = parsed;
-          }
-        }
-        glfwSetWindowSize(window, recordWidth, recordHeight);
-        glfwSwapInterval(0);
-        rs.display.swapInterval       = 0;
-        if (recordProfile == "compare-orbit-near") {
-          rs.disk.adiskEnabled       = false;
-          rs.disk.adiskParticle      = false;
-          rs.physicsCore.enableRedshift     = false;
-          rs.physicsCore.enablePhotonSphere = false;
-          rs.hawking.hawkingGlowEnabled = false;
-          rs.rte.rteVolumetricEnabled = false;
-          rs.stokes.stokesEnabled      = false;
-          rs.disk.useNoiseTexture    = false;
-          rs.disk.noiseTextureReady  = true;
-          rs.disk.adiskNoiseLOD      = 3.0f;
-          rs.disk.adiskNoiseScale    = 0.5f;
-          rs.disk.adiskDensityV      = 2.0f;
-          rs.disk.adiskLit           = 0.25f;
-          rs.disk.dopplerStrength    = 1.0f;
-          rs.disk.photonSphereGlowStrength = 1.0f;
-          rs.post.bloomIterations    = 4;
-          rs.post.bloomStrength      = 0.08f;
-          rs.post.tonemappingEnabled = true;
-          rs.post.toneExposure       = 6.0f;
-          rs.post.gamma              = 2.35f;
-          rs.dispatch.computeMaxSteps    = 1000;
-          rs.dispatch.computeStepSize    = 0.02f;
-          rs.display.depthFar           = 154.367004f;
-          rs.physicsCore.kerrSpin           = 0.0f;
-          SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
-          SettingsManager::instance().get().backgroundEnabled = true;
-          SettingsManager::instance().get().backgroundIntensity = 0.8f;
-          CameraState &camMutable = input.camera();
-          camMutable = CameraState{.yaw = -90.0f, .pitch = 0.0f, .roll = 0.0f, .distance = 10.0f, .fov = 90.0f};
-          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
-        } else if (recordProfile == "showcase-orbit") {
-          const ShowcaseOrbitComposition *const composition =
-              findShowcaseOrbitComposition(recordComposition);
-          rs.disk.adiskEnabled       = true;
-          rs.disk.adiskParticle      = false;
-          rs.physicsCore.enableRedshift     = true;
-          rs.physicsCore.enablePhotonSphere = true;
-          rs.hawking.hawkingGlowEnabled = false;
-          rs.rte.rteVolumetricEnabled = false;
-          rs.stokes.stokesEnabled      = false;
-          rs.disk.useNoiseTexture    = false;
-          rs.disk.noiseTextureReady  = true;
-          rs.disk.adiskNoiseLOD      = 3.0f;
-          rs.disk.adiskNoiseScale    = 0.35f;
-          rs.disk.adiskDensityV      = 1.6f;
-          rs.disk.adiskDensityH      = 2.1f;
-          rs.disk.adiskHeight        = 0.42f;
-          rs.disk.adiskLit           = 0.24f;
-          rs.disk.dopplerStrength    = 1.15f;
-          rs.disk.photonSphereGlowStrength = 1.15f;
-          rs.post.bloomIterations    = 5;
-          rs.post.bloomStrength      = 0.055f;
-          rs.post.tonemappingEnabled = true;
-          rs.post.toneExposure       = 1.0f;
-          rs.post.gamma              = 2.35f;
-          rs.dispatch.computeMaxSteps    = 1000;
-          rs.dispatch.computeStepSize    = 0.016f;
-          rs.display.depthFar           = 154.367004f;
-          rs.physicsCore.kerrSpin           = 0.62f;
-          SettingsManager::instance().get().backgroundId =
-              hasRecordBackgroundId
-                  ? recordBackgroundId
-                  : (composition != nullptr ? composition->backgroundId
-                                            : "nasa_deep_starmap_galactic");
-          SettingsManager::instance().get().backgroundEnabled = true;
-          SettingsManager::instance().get().backgroundIntensity =
-              composition != nullptr ? composition->backgroundIntensity : 0.72f;
-          CameraState &camMutable = input.camera();
-          camMutable = CameraState{
-              .yaw = hasRecordYaw ? recordYawDeg : -90.0f,
-              .pitch = hasRecordPitch ? recordPitchDeg
-                                      : (composition != nullptr ? composition->pitchDeg : -6.0f),
-              .roll = 0.0f,
-              .distance = hasRecordDistance ? recordDistance
-                                            : (composition != nullptr ? composition->distance
-                                                                      : 14.0f),
-              .fov = hasRecordFov ? recordFovDeg
-                                  : (composition != nullptr ? composition->fovDeg : 68.0f)};
-          if (hasRecordExposure) {
-            rs.post.toneExposure = recordExposure;
-          } else if (composition != nullptr) {
-            rs.post.toneExposure = composition->exposure;
-          }
-          rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
-        } else {
-          // Physics: on, but not everything -- avoids noise pileup / fuzz
-          rs.disk.adiskEnabled       = true;
-          rs.disk.adiskParticle      = false;  // particle mode adds visual noise
-          rs.physicsCore.enableRedshift     = true;
-          rs.physicsCore.enablePhotonSphere = true;
-          rs.hawking.hawkingGlowEnabled = false;  // haze effect competes with disk shading
-          rs.rte.rteVolumetricEnabled = false; // volumetric fog washes out fine detail
-          rs.stokes.stokesEnabled      = false;
-          // Skip noise texture LUT generation in record mode: FastNoise2
-          // SIMD code has a heap double-free at >= 128^3 on this system.
-          // The disk looks clean without it.
-          rs.disk.useNoiseTexture    = false;
-          rs.disk.noiseTextureReady  = true;   // mark done so we never call initialize()
-          rs.disk.adiskNoiseLOD      = 3.0f;
-          rs.disk.adiskNoiseScale    = 0.5f;
-          rs.disk.adiskDensityV      = 1.4f;
-          rs.disk.adiskLit           = 0.08f;
-          rs.disk.dopplerStrength    = 1.0f;
-          rs.disk.photonSphereGlowStrength = 1.0f;
-          // Post-processing: preserve ring detail instead of washing it out
-          rs.post.bloomIterations    = 3;
-          rs.post.bloomStrength      = 0.03f;
-          rs.post.tonemappingEnabled = true;
-          rs.post.toneExposure       = 0.02f;
-          rs.post.gamma              = 2.25f;
-          // Integration quality
-          rs.dispatch.computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
-          rs.dispatch.computeStepSize    = 0.08f;
-          // Escape radius must exceed the maximum camera distance (380 rs).
-          // depthFar is passed as interop.depthFar and used as the ray max_dist.
-          rs.display.depthFar           = 500.0f;
-          rs.physicsCore.kerrSpin           = K_CINEMATIC_KEYFRAMES[0].kerrSpin;
-          // Background: override to the ESO Milky Way panorama which ships as a real
-          // JPEG (not a Git LFS pointer) -- the default "nasa_pia22085" is LFS-tracked.
-          SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
-          SettingsManager::instance().get().backgroundEnabled = true;
-          SettingsManager::instance().get().backgroundIntensity = 0.8f;
-        }
-#if BLACKHOLE_HAS_CUDA
-        // Keep legacy record profiles on the CUDA path in the hybrid app, but let
-        // showcase-orbit remain a true GLSL lane for apples-to-apples captures.
-        if (recordProfile != "showcase-orbit") {
-          // isEnabled() gates the CUDA dispatch path (line ~4295). It is normally set
-          // via the ImGui "Use CUDA Raytracer" checkbox; record mode must set it directly.
-          // useComputeRaytracer alone is insufficient -- it only controls the GLSL compute
-          // path, not the CUDA path.
-          rs.dispatch.cudaManager.setEnabled(true);
-        } else {
-          rs.dispatch.cudaManager.setEnabled(false);
-          rs.dispatch.useComputeRaytracer = false;
-          rs.compare.compareComputeFragment = false;
-        }
-#endif
-        std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
-                    recordFramesDir.c_str(), recordFramesTotal,
-                    static_cast<double>(K_CINEMATIC_DURATION_S), K_CINEMATIC_FPS);
-        std::printf("Record profile: %s\n", recordProfile.c_str());
       }
 
       ImGui_ImplOpenGL3_NewFrame();
