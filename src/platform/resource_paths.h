@@ -24,6 +24,11 @@ void initResourceRoot(const char *argv0);
 [[nodiscard]] const std::filesystem::path &resourceRoot();
 [[nodiscard]] std::string resourcePath(std::string_view relativePath);
 
+/** @brief Reads a whole text file into out; returns false if it cannot be
+ *         opened or is empty. Shared by the background-manifest and LUT
+ *         asset loaders, which both resolve their paths through resourcePath. */
+[[nodiscard]] bool readTextFile(const std::string &path, std::string &out);
+
 } // namespace platform
 
 #endif // BLACKHOLE_PLATFORM_RESOURCE_PATHS_H

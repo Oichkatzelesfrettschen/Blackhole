@@ -5,6 +5,8 @@
 
 #include "resource_paths.h"
 
+#include <fstream>
+#include <sstream>
 #include <system_error>
 #include <vector>
 
@@ -55,6 +57,17 @@ const std::filesystem::path &resourceRoot() { return gResourceRoot; }
 
 std::string resourcePath(std::string_view relativePath) {
   return (gResourceRoot / std::filesystem::path(relativePath)).string();
+}
+
+bool readTextFile(const std::string &path, std::string &out) {
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return false;
+  }
+  std::ostringstream buffer;
+  buffer << file.rdbuf();
+  out = buffer.str();
+  return !out.empty();
 }
 
 } // namespace platform
