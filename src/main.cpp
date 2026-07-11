@@ -105,6 +105,7 @@
 #include "render/render_state.h"
 #include "ui/panels.h"
 #include "ui/settings_window.h"
+#include "platform/cli_options.h"
 #include "platform/crash_handler.h"
 #include "platform/resource_paths.h"
 #include "render/gpu_timing.h"
@@ -240,33 +241,6 @@ const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view na
   }
   return nullptr;
 }
-
-void printUsage(const char *argv0) {
-  std::printf("Usage: %s [--curve-tsv <path>] [--export-frame <path.png>]"
-              " [--export-raw-frame <path.pfm>]"
-              " [--record-frames <dir> <N>] [--record-profile <name>]\n", argv0);
-  std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
-  std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
-  std::printf("  --export-raw-frame <path> Export raw texBlackhole HDR RGB as PFM, then exit.\n");
-  std::printf("  --record-frames <dir> N  Record N profile-driven frames as PNG into <dir>.\n");
-  std::printf("                           N defaults to %d (3 min @ 60 fps).\n",
-              K_CINEMATIC_FRAMES);
-  std::printf("  --record-profile <name>  Recording profile: cinematic | compare-orbit-near | showcase-orbit.\n");
-  std::printf("  --start-frame N          Start recording from frame N (default: 0).\n");
-  std::printf("  --record-yaw <deg>       Override record camera yaw.\n");
-  std::printf("  --record-pitch <deg>     Override record camera pitch.\n");
-  std::printf("  --record-distance <r>    Override record camera distance.\n");
-  std::printf("  --record-fov <deg>       Override record camera field of view.\n");
-  std::printf("  --record-exposure <x>    Override record tone-map exposure.\n");
-  std::printf("  --record-sweep-deg <x>   Override orbit sweep degrees across frames.\n");
-  std::printf("  --record-composition <n> Showcase framing: centered | left-third | right-third | wide-left | wide-right.\n");
-  std::printf("  --record-frame-x <n>     Override horizontal framing offset in half-frame units.\n");
-  std::printf("  --record-frame-y <n>     Override vertical framing offset in half-frame units.\n");
-  std::printf("  --record-background-id <id>  Override showcase background asset id.\n");
-  std::printf("  --record-bg-yaw <deg>    Override showcase background yaw.\n");
-  std::printf("  --record-bg-pitch <deg>  Override showcase background pitch.\n");
-}
-
 
 bool hasExtension(const char *name) {
   GLint count = 0;
@@ -642,143 +616,61 @@ void cleanup(GLFWwindow *window) {
 int main(int argc, char **argv) {
   platform::installCrashHandlers();
   try {
-    std::string curveTsvPath;
-    std::string exportFramePath;
-    std::string exportRawFramePath;
-    std::string recordFramesDir;
-    std::string recordProfile = "cinematic";
-    std::string recordComposition = "wide-right";
-    std::string recordBackgroundId;
-    int         recordFramesTotal = K_CINEMATIC_FRAMES;
-    int         recordStartFrame  = 0;
-    float       recordYawDeg = 0.0f;
-    bool        hasRecordYaw = false;
-    float       recordPitchDeg = 0.0f;
-    bool        hasRecordPitch = false;
-    float       recordDistance = 0.0f;
-    bool        hasRecordDistance = false;
-    float       recordFovDeg = 0.0f;
-    bool        hasRecordFov = false;
-    float       recordExposure = 0.0f;
-    bool        hasRecordExposure = false;
-    float       recordSweepDeg = 0.0f;
-    bool        hasRecordSweep = false;
-    float       recordFrameX = 0.0f;
-    bool        hasRecordFrameX = false;
-    float       recordFrameY = 0.0f;
-    bool        hasRecordFrameY = false;
-    bool        hasRecordBackgroundId = false;
-    float       recordBackgroundYawDeg = 0.0f;
-    bool        hasRecordBackgroundYaw = false;
-    float       recordBackgroundPitchDeg = 0.0f;
-    bool        hasRecordBackgroundPitch = false;
-    for (int i = 1; i < argc; ++i) {
-      std::string const arg = argv[i];
-      if (arg == "--help" || arg == "-h") {
-        printUsage(argv[0]);
-        return 0;
-      }
-      if (arg == "--curve-tsv" && i + 1 < argc) {
-        curveTsvPath = argv[++i];
-        continue;
-      }
-      if (arg == "--export-frame" && i + 1 < argc) {
-        exportFramePath = argv[++i];
-        continue;
-      }
-      if (arg == "--export-raw-frame" && i + 1 < argc) {
-        exportRawFramePath = argv[++i];
-        continue;
-      }
-      if (arg == "--record-frames" && i + 1 < argc) {
-        recordFramesDir = argv[++i];
-        if (i + 1 < argc && argv[i + 1][0] != '-') {
-          recordFramesTotal = std::atoi(argv[++i]);
-        }
-        continue;
-      }
-      if (arg == "--start-frame" && i + 1 < argc) {
-        recordStartFrame = std::atoi(argv[++i]);
-        continue;
-      }
-      if (arg == "--record-profile" && i + 1 < argc) {
-        recordProfile = argv[++i];
-        continue;
-      }
-      if (arg == "--record-composition" && i + 1 < argc) {
-        recordComposition = argv[++i];
-        continue;
-      }
-      if (arg == "--record-yaw" && i + 1 < argc) {
-        recordYawDeg = std::strtof(argv[++i], nullptr);
-        hasRecordYaw = true;
-        continue;
-      }
-      if (arg == "--record-pitch" && i + 1 < argc) {
-        recordPitchDeg = std::strtof(argv[++i], nullptr);
-        hasRecordPitch = true;
-        continue;
-      }
-      if (arg == "--record-distance" && i + 1 < argc) {
-        recordDistance = std::strtof(argv[++i], nullptr);
-        hasRecordDistance = true;
-        continue;
-      }
-      if (arg == "--record-fov" && i + 1 < argc) {
-        recordFovDeg = std::strtof(argv[++i], nullptr);
-        hasRecordFov = true;
-        continue;
-      }
-      if (arg == "--record-exposure" && i + 1 < argc) {
-        recordExposure = std::strtof(argv[++i], nullptr);
-        hasRecordExposure = true;
-        continue;
-      }
-      if (arg == "--record-sweep-deg" && i + 1 < argc) {
-        recordSweepDeg = std::strtof(argv[++i], nullptr);
-        hasRecordSweep = true;
-        continue;
-      }
-      if (arg == "--record-frame-x" && i + 1 < argc) {
-        recordFrameX = std::strtof(argv[++i], nullptr);
-        hasRecordFrameX = true;
-        continue;
-      }
-      if (arg == "--record-frame-y" && i + 1 < argc) {
-        recordFrameY = std::strtof(argv[++i], nullptr);
-        hasRecordFrameY = true;
-        continue;
-      }
-      if (arg == "--record-background-id" && i + 1 < argc) {
-        recordBackgroundId = argv[++i];
-        hasRecordBackgroundId = true;
-        continue;
-      }
-      if (arg == "--record-bg-yaw" && i + 1 < argc) {
-        recordBackgroundYawDeg = std::strtof(argv[++i], nullptr);
-        hasRecordBackgroundYaw = true;
-        continue;
-      }
-      if (arg == "--record-bg-pitch" && i + 1 < argc) {
-        recordBackgroundPitchDeg = std::strtof(argv[++i], nullptr);
-        hasRecordBackgroundPitch = true;
-        continue;
-      }
-      std::printf("Unknown argument: %s\n", arg.c_str());
-      printUsage(argv[0]);
+    platform::CliOptions cli;
+    switch (platform::parseCliOptions(argc, argv, cli)) {
+    case platform::CliParseOutcome::ExitSuccess:
+      return 0;
+    case platform::CliParseOutcome::ExitFailure:
       return 2;
+    case platform::CliParseOutcome::Run:
+      break;
     }
 
+    // Alias the parsed options back to the names the render loop reads. The
+    // record-mode consumption sites stay byte-identical; cli is the config
+    // object the eventual recording extraction consumes.
+    auto &curveTsvPath = cli.curveTsvPath;
+    auto &exportFramePath = cli.exportFramePath;
+    auto &exportRawFramePath = cli.exportRawFramePath;
+    auto &recordFramesDir = cli.recordFramesDir;
+    auto &recordProfile = cli.recordProfile;
+    auto &recordComposition = cli.recordComposition;
+    auto &recordBackgroundId = cli.recordBackgroundId;
+    auto &recordFramesTotal = cli.recordFramesTotal;
+    auto &recordStartFrame = cli.recordStartFrame;
+    auto &recordYawDeg = cli.recordYawDeg;
+    auto &hasRecordYaw = cli.hasRecordYaw;
+    auto &recordPitchDeg = cli.recordPitchDeg;
+    auto &hasRecordPitch = cli.hasRecordPitch;
+    auto &recordDistance = cli.recordDistance;
+    auto &hasRecordDistance = cli.hasRecordDistance;
+    auto &recordFovDeg = cli.recordFovDeg;
+    auto &hasRecordFov = cli.hasRecordFov;
+    auto &recordExposure = cli.recordExposure;
+    auto &hasRecordExposure = cli.hasRecordExposure;
+    auto &recordSweepDeg = cli.recordSweepDeg;
+    auto &hasRecordSweep = cli.hasRecordSweep;
+    auto &recordFrameX = cli.recordFrameX;
+    auto &hasRecordFrameX = cli.hasRecordFrameX;
+    auto &recordFrameY = cli.recordFrameY;
+    auto &hasRecordFrameY = cli.hasRecordFrameY;
+    auto &hasRecordBackgroundId = cli.hasRecordBackgroundId;
+    auto &recordBackgroundYawDeg = cli.recordBackgroundYawDeg;
+    auto &hasRecordBackgroundYaw = cli.hasRecordBackgroundYaw;
+    auto &recordBackgroundPitchDeg = cli.recordBackgroundPitchDeg;
+    auto &hasRecordBackgroundPitch = cli.hasRecordBackgroundPitch;
+
+    // Semantic validation lives here, where the showcase-orbit table is defined.
     if (recordProfile != "cinematic" && recordProfile != "compare-orbit-near" &&
         recordProfile != "showcase-orbit") {
       std::printf("Unknown record profile: %s\n", recordProfile.c_str());
-      printUsage(argv[0]);
+      platform::printCliUsage(argv[0]);
       return 2;
     }
     if (recordProfile == "showcase-orbit" &&
         findShowcaseOrbitComposition(recordComposition) == nullptr) {
       std::printf("Unknown showcase composition: %s\n", recordComposition.c_str());
-      printUsage(argv[0]);
+      platform::printCliUsage(argv[0]);
       return 2;
     }
 

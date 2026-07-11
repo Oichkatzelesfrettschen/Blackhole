@@ -1,0 +1,70 @@
+/**
+ * @file cli_options.h
+ * @brief Command-line record/export options and their argv parser.
+ *
+ * CliOptions holds every value the argv sweep can set: the export and
+ * record-frame paths, the record profile and showcase composition, and the
+ * per-axis camera/framing/background overrides (each paired with a has-flag so
+ * the render loop can tell an explicit override from a default). parseCliOptions
+ * fills one from argv and reports whether main should run or exit; the semantic
+ * profile/composition validation stays with main, where the showcase-orbit
+ * table lives.
+ */
+
+#ifndef BLACKHOLE_PLATFORM_CLI_OPTIONS_H
+#define BLACKHOLE_PLATFORM_CLI_OPTIONS_H
+
+#include <string>
+
+namespace platform {
+
+struct CliOptions {
+  std::string curveTsvPath;
+  std::string exportFramePath;
+  std::string exportRawFramePath;
+  std::string recordFramesDir;
+  std::string recordProfile = "cinematic";
+  std::string recordComposition = "wide-right";
+  std::string recordBackgroundId;
+  int         recordFramesTotal = 0; ///< Seeded to K_CINEMATIC_FRAMES by parseCliOptions.
+  int         recordStartFrame  = 0;
+  float       recordYawDeg = 0.0f;
+  bool        hasRecordYaw = false;
+  float       recordPitchDeg = 0.0f;
+  bool        hasRecordPitch = false;
+  float       recordDistance = 0.0f;
+  bool        hasRecordDistance = false;
+  float       recordFovDeg = 0.0f;
+  bool        hasRecordFov = false;
+  float       recordExposure = 0.0f;
+  bool        hasRecordExposure = false;
+  float       recordSweepDeg = 0.0f;
+  bool        hasRecordSweep = false;
+  float       recordFrameX = 0.0f;
+  bool        hasRecordFrameX = false;
+  float       recordFrameY = 0.0f;
+  bool        hasRecordFrameY = false;
+  bool        hasRecordBackgroundId = false;
+  float       recordBackgroundYawDeg = 0.0f;
+  bool        hasRecordBackgroundYaw = false;
+  float       recordBackgroundPitchDeg = 0.0f;
+  bool        hasRecordBackgroundPitch = false;
+};
+
+/** @brief Whether main should proceed or exit after argv parsing. */
+enum class CliParseOutcome {
+  Run,         ///< Options parsed; continue startup.
+  ExitSuccess, ///< --help was handled; exit 0.
+  ExitFailure, ///< Unknown or malformed argument; exit non-zero.
+};
+
+/** @brief Prints the usage banner (options, defaults, record profiles) to stdout. */
+void printCliUsage(const char *argv0);
+
+/** @brief Parses argv into out, printing usage on --help and on bad arguments.
+ *         Returns Run when startup should continue. */
+CliParseOutcome parseCliOptions(int argc, char **argv, CliOptions &out);
+
+} // namespace platform
+
+#endif // BLACKHOLE_PLATFORM_CLI_OPTIONS_H
