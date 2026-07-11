@@ -99,6 +99,7 @@
 #include "render/noise_texture_cache.h"
 #include "render/interop_uniform_registry.h"
 #include "render/interop_uniforms.h"
+#include "render/gl_capabilities.h"
 #include "render/lut_manager.h"
 #include "render/record_mode.h"
 #include "render/uniform_binding.h"
@@ -209,45 +210,11 @@ glm::mat3 buildCameraBasis(const glm::vec3 &cameraPos, const glm::vec3 &target, 
   return {right, up, forward};
 }
 
-bool hasExtension(const char *name) {
-  GLint count = 0;
-  glGetIntegerv(GL_NUM_EXTENSIONS, &count);
-  for (GLint i = 0; i < count; ++i) {
-    const char *ext =
-        reinterpret_cast<const char *>(glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(i)));
-    if (ext != nullptr && std::string(ext) == name) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool supportsDrawId() {
-  GLint major = 0;
-  GLint minor = 0;
-  glGetIntegerv(GL_MAJOR_VERSION, &major);
-  glGetIntegerv(GL_MINOR_VERSION, &minor);
-  bool const versionIs46 = (major > 4) || (major == 4 && minor >= 6);
-  return versionIs46 || hasExtension("GL_ARB_shader_draw_parameters");
-}
-
-bool supportsMultiDrawIndirect() {
-  GLint major = 0;
-  GLint minor = 0;
-  glGetIntegerv(GL_MAJOR_VERSION, &major);
-  glGetIntegerv(GL_MINOR_VERSION, &minor);
-  bool const versionIs43 = (major > 4) || (major == 4 && minor >= 3);
-  return versionIs43 || hasExtension("GL_ARB_multi_draw_indirect");
-}
-
-bool supportsIndirectCount() {
-  GLint major = 0;
-  GLint minor = 0;
-  glGetIntegerv(GL_MAJOR_VERSION, &major);
-  glGetIntegerv(GL_MINOR_VERSION, &minor);
-  bool const versionIs46 = (major > 4) || (major == 4 && minor >= 6);
-  return versionIs46 || hasExtension("GL_ARB_indirect_parameters");
-}
+// GL feature queries live in src/render/gl_capabilities.*.
+using blackhole::hasExtension;
+using blackhole::supportsDrawId;
+using blackhole::supportsIndirectCount;
+using blackhole::supportsMultiDrawIndirect;
 
 // BackgroundAsset, WiregridParams, K_BACKGROUND_LAYERS, kMaxBloomIterations,
 // and RenderState live in src/render/render_state.h.
