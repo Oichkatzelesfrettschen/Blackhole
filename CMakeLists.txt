@@ -4039,6 +4039,30 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp")
+    add_executable(campaign_capabilities_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp"
+    )
+    target_include_directories(campaign_capabilities_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_capabilities_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_capabilities_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_capabilities_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_capabilities_validation COMMAND campaign_capabilities_test)
+    set_tests_properties(campaign_capabilities_validation PROPERTIES
+      LABELS "campaign;capabilities;economy"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_capabilities_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_economy_test.cpp")
     add_executable(campaign_economy_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_economy_test.cpp"

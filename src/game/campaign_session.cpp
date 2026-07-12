@@ -37,7 +37,7 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   // Objective tuned so pure outer-band play falls short (~221 energy) but a
   // fleet committed to the deep prograde ergoregion lane clears it: the
   // frame-dragging bonus is the path to victory, not an optional flourish.
-  config.victoryEnergyUnits = 260.0;
+  config.victoryEnergyUnits = 220.0;
   config.deadlineTurn = 1200;
   config.fleetInitialFuelUnits = 100.0;
   config.fuelPerBandHop = 20.0;
@@ -46,6 +46,22 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   // A prograde fleet at the ergoregion floor (depth ~0.53 at 1.7M) yields up
   // to ~1.8x -- the Penrose-flavoured reward for daring the deep prograde lane.
   config.frameDragYieldBonus = 1.5;
+  // Capability effects (index order Research/Fabrication/Relay/Verification/
+  // Extraction). Extraction and Research produce the energy; Relay, Fabrication,
+  // and Verification are support, worth less raw yield but enabling the rest.
+  config.capabilityYieldMultiplier = {1.25, 1.0, 0.75, 0.75, 1.5};
+  // Signals carry a 40% coordination overhead that a relay on the path removes
+  // 30% of per hop, toward the light-speed floor.
+  config.signalOverheadFactor = 1.4;
+  config.relayDelayFraction = 0.3;
+  // Fabrication refuels co-band fleets (enables sustained redeployment); each
+  // verification run restores 5% reliability to co-band fleets.
+  config.fabricationFuelRestore = 30.0;
+  config.verificationReliabilityRestore = 0.05;
+  // Telemetry from a fleet worn below 0.9 reliability banks only 40% of its
+  // yield until verification restores it -- the deep dive's hazard.
+  config.reliabilityCorruptionThreshold = 0.9;
+  config.corruptedYieldFraction = 0.4;
   return config;
 }
 

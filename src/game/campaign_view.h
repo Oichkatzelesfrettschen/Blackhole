@@ -52,6 +52,8 @@ struct FleetView {
   double properTimeRate = 0.0;  ///< Current dtau/dt (the fleet's band rate).
   double fuelUnits = 0.0;       ///< Remaining redeployment budget.
   OrbitLane lane = OrbitLane::Prograde; ///< Orbital direction.
+  double yieldMultiplier = 1.0;  ///< Capability yield multiplier.
+  bool telemetryCorrupted = false; ///< Reliability below the corruption threshold.
   std::uint32_t pendingTasks = 0;
   std::uint32_t activeTasks = 0;
   std::uint32_t completedTasks = 0;
@@ -82,6 +84,7 @@ struct IntelView {
   TaskId task = K_INVALID_TASK_ID;
   FleetId fleet = K_INVALID_FLEET_ID;
   double yieldUnits = 0.0;
+  bool corrupted = false; ///< Yield was discounted for unreliable telemetry.
 };
 
 struct CampaignViewSnapshot {
@@ -94,6 +97,7 @@ struct CampaignViewSnapshot {
   std::int64_t deadlineTurn = 0;   ///< Loss turn; zero disables the deadline.
   double ergosphereRadiusCm = 0.0; ///< Static limit; equals the horizon without spin.
   double spinDimensionless = 0.0;  ///< Black-hole spin a/M (0 for Schwarzschild).
+  double reliabilityCorruptionThreshold = 0.0; ///< Below this a fleet's reports corrupt; 0 = off.
   double authorityRadiusCm = 0.0;
   double authorityProperTimeRate = 0.0;
   double innerBoundaryRadiusCm = 0.0; ///< Horizon radius; zero for fields without one.

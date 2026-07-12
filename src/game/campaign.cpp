@@ -89,6 +89,34 @@ double CampaignState::redeployFuelCost(int fromBand, int toBand) const {
   return config_.fuelPerBandHop * std::abs(toBand - fromBand);
 }
 
+double CampaignState::capabilityYieldMultiplier(FleetCapability capability) const {
+  return config_.capabilityYieldMultiplier.at(static_cast<std::size_t>(capability));
+}
+
+double CampaignState::effectiveSignalDelaySec(double fromRadiusCm, double toRadiusCm) const {
+  const double geodesicSec = field_->signalDelaySec(fromRadiusCm, toRadiusCm);
+  double overhead = std::max(1.0, config_.signalOverheadFactor);
+  if (config_.relayDelayFraction > 0.0 && overhead > 1.0) {
+    // Relay fleets whose band radius lies between the two endpoints improve the
+    // link: each removes a fraction of the coordination overhead. The overhead
+    // floors at 1.0 -- the geodesic delay itself -- so a signal never beats
+    // light.
+    const double innerCm = std::fmin(fromRadiusCm, toRadiusCm);
+    const double outerCm = std::fmax(fromRadiusCm, toRadiusCm);
+    for (const Fleet &fleet : fleets_) {
+      if (fleet.capability != FleetCapability::Relay) {
+        continue;
+      }
+      const double relayCm = bandRadiusCm(fleet.bandIndex);
+      if (relayCm > innerCm && relayCm < outerCm) {
+        overhead *= (1.0 - config_.relayDelayFraction);
+      }
+    }
+    overhead = std::max(1.0, overhead);
+  }
+  return geodesicSec * overhead;
+}
+
 bool CampaignState::laneAllowedAtBand(OrbitLane lane, int bandIndex) const {
   if (lane != OrbitLane::Retrograde) {
     return true;
@@ -178,7 +206,7 @@ bool CampaignState::issueCommand(const Command &command) {
   // delay from the authority station to the fleet's CURRENT band, quantized
   // once to whole turns (ceil -- an order never lands early).
   const double delaySec =
-      field_->signalDelaySec(config_.authorityRadiusCm, bandRadiusCm(fleet->bandIndex));
+      effectiveSignalDelaySec(config_.authorityRadiusCm, bandRadiusCm(fleet->bandIndex));
   LoggedCommand logged;
   logged.command = command;
   logged.issueTurn = clock_.turn();
@@ -251,6 +279,7 @@ void CampaignState::deliverDue() {
       report.task = delivery.task;
       report.fleet = delivery.fleet;
       report.yieldUnits = delivery.yieldUnits;
+      report.corrupted = delivery.corrupted;
       intelLog_.push_back(report);
       // Energy is banked HERE, on arrival: the authority cannot spend value
       // it has not yet heard about.
@@ -269,6 +298,10 @@ void CampaignState::advanceTurn() {
   clock_.advance();
   deliverDue();
   taskGraph_.activateEligible();
+  // Capability side effects are collected here and applied AFTER the fleet loop
+  // so they never depend on iteration order: a fabrication refuel must hit every
+  // co-band fleet identically, whether processed before or after the fabricator.
+  std::vector<CapabilityCompletion> completions;
   for (Fleet &fleet : fleets_) {
     const double rate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex));
     accrueProperTime(fleet, rate, clock_.secondsPerTurn());
@@ -282,11 +315,22 @@ void CampaignState::advanceTurn() {
                                    fleet.reliability -
                                        (config_.reliabilityWearPerProperDay * wornDays));
     }
+    // Corruption is judged on the post-wear reliability AT completion, before
+    // any verification restore this turn: verification protects future work,
+    // not a report already emitted.
+    const bool corrupted = config_.reliabilityCorruptionThreshold > 0.0 &&
+                           fleet.reliability < config_.reliabilityCorruptionThreshold;
     for (const TaskId taskId : advanced.completed) {
       // Telemetry rides the same causal queue as orders, outbound this time:
       // the authority learns of near-horizon completions late.
       const double reportDelaySec =
-          field_->signalDelaySec(bandRadiusCm(fleet.bandIndex), config_.authorityRadiusCm);
+          effectiveSignalDelaySec(bandRadiusCm(fleet.bandIndex), config_.authorityRadiusCm);
+      double yieldUnits = taskYieldUnits(*taskGraph_.find(taskId), rate, fleet.reliability) *
+                          frameDragYieldFactor(fleet) *
+                          capabilityYieldMultiplier(fleet.capability);
+      if (corrupted) {
+        yieldUnits *= config_.corruptedYieldFraction;
+      }
       Delivery delivery;
       delivery.kind = DeliveryKind::CompletionReport;
       delivery.effectTurn = clock_.turn() + clock_.ceilTurns(reportDelaySec);
@@ -294,13 +338,40 @@ void CampaignState::advanceTurn() {
       delivery.completedTurn = clock_.turn();
       delivery.task = taskId;
       delivery.fleet = fleet.id;
-      delivery.yieldUnits =
-          taskYieldUnits(*taskGraph_.find(taskId), rate, fleet.reliability) *
-          frameDragYieldFactor(fleet);
+      delivery.yieldUnits = yieldUnits;
+      delivery.corrupted = corrupted;
       deliveryQueue_.push_back(delivery);
+      completions.push_back({fleet.capability, fleet.bandIndex});
     }
   }
+  applyCapabilityEffects(completions);
   evaluateOutcome();
+}
+
+void CampaignState::applyCapabilityEffects(const std::vector<CapabilityCompletion> &completions) {
+  for (const CapabilityCompletion &completion : completions) {
+    if (completion.capability == FleetCapability::Fabrication &&
+        config_.fabricationFuelRestore > 0.0) {
+      // Band-local logistics: a fabrication run refuels every fleet sharing its
+      // band, capped at the starting budget.
+      for (Fleet &fleet : fleets_) {
+        if (fleet.bandIndex == completion.bandIndex) {
+          fleet.fuelUnits = std::min(config_.fleetInitialFuelUnits,
+                                     fleet.fuelUnits + config_.fabricationFuelRestore);
+        }
+      }
+    } else if (completion.capability == FleetCapability::Verification &&
+               config_.verificationReliabilityRestore > 0.0) {
+      // Band-local maintenance: verification restores reliability to co-band
+      // fleets, keeping their telemetry above the corruption threshold.
+      for (Fleet &fleet : fleets_) {
+        if (fleet.bandIndex == completion.bandIndex) {
+          fleet.reliability =
+              std::min(1.0, fleet.reliability + config_.verificationReliabilityRestore);
+        }
+      }
+    }
+  }
 }
 
 void CampaignState::evaluateOutcome() {
@@ -334,6 +405,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
   view.deadlineTurn = config_.deadlineTurn;
   view.ergosphereRadiusCm = field_->ergosphereRadiusCm();
   view.spinDimensionless = field_->spinDimensionless();
+  view.reliabilityCorruptionThreshold = config_.reliabilityCorruptionThreshold;
   view.authorityRadiusCm = config_.authorityRadiusCm;
   view.authorityProperTimeRate =
       valid_ ? field_->properTimeRate(config_.authorityRadiusCm) : 0.0;
@@ -348,7 +420,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     band.insideErgosphere = band.validStation && band.radiusCm < field_->ergosphereRadiusCm();
     if (band.validStation) {
       band.properTimeRate = field_->properTimeRate(band.radiusCm);
-      band.delayToAuthoritySec = field_->signalDelaySec(band.radiusCm, config_.authorityRadiusCm);
+      band.delayToAuthoritySec = effectiveSignalDelaySec(band.radiusCm, config_.authorityRadiusCm);
       band.frameDragRateRadPerSec = field_->frameDragRateRadPerSec(band.radiusCm);
     }
     view.bands.push_back(band);
@@ -365,6 +437,9 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     fleetView.properTimeRate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex));
     fleetView.fuelUnits = fleet.fuelUnits;
     fleetView.lane = fleet.lane;
+    fleetView.yieldMultiplier = capabilityYieldMultiplier(fleet.capability);
+    fleetView.telemetryCorrupted = config_.reliabilityCorruptionThreshold > 0.0 &&
+                                   fleet.reliability < config_.reliabilityCorruptionThreshold;
     for (const TaskId taskId : fleet.assignedTasks) {
       const TaskContract *contract = taskGraph_.find(taskId);
       if (contract == nullptr) {
@@ -417,6 +492,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     intelView.task = report.task;
     intelView.fleet = report.fleet;
     intelView.yieldUnits = report.yieldUnits;
+    intelView.corrupted = report.corrupted;
     view.intel.push_back(intelView);
   }
   return view;
@@ -438,6 +514,15 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   appendF64(out, config_.reliabilityWearPerProperDay);
   appendF64(out, config_.reliabilityFloor);
   appendF64(out, config_.frameDragYieldBonus);
+  for (const double multiplier : config_.capabilityYieldMultiplier) {
+    appendF64(out, multiplier);
+  }
+  appendF64(out, config_.signalOverheadFactor);
+  appendF64(out, config_.relayDelayFraction);
+  appendF64(out, config_.fabricationFuelRestore);
+  appendF64(out, config_.verificationReliabilityRestore);
+  appendF64(out, config_.reliabilityCorruptionThreshold);
+  appendF64(out, config_.corruptedYieldFraction);
   appendI64(out, clock_.turn());
   appendF64(out, energyUnits_);
   appendU8(out, static_cast<std::uint8_t>(status_));
@@ -487,6 +572,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, delivery.task);
     appendU32(out, delivery.fleet);
     appendF64(out, delivery.yieldUnits);
+    appendU8(out, delivery.corrupted ? 1U : 0U);
   }
   appendU32(out, static_cast<std::uint32_t>(intelLog_.size()));
   for (const IntelReport &report : intelLog_) {
@@ -495,6 +581,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, report.task);
     appendU32(out, report.fleet);
     appendF64(out, report.yieldUnits);
+    appendU8(out, report.corrupted ? 1U : 0U);
   }
   appendU32(out, nextFleetId_);
   appendU32(out, nextSequence_);

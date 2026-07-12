@@ -19,6 +19,7 @@
 #ifndef BLACKHOLE_GAME_CAMPAIGN_H
 #define BLACKHOLE_GAME_CAMPAIGN_H
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -44,6 +45,7 @@ struct IntelReport {
   TaskId task = K_INVALID_TASK_ID;
   FleetId fleet = K_INVALID_FLEET_ID;
   double yieldUnits = 0.0; ///< Energy banked when this report arrived.
+  bool corrupted = false;  ///< Yield was discounted: the source's telemetry was unreliable.
 };
 
 struct CampaignConfig {
@@ -67,6 +69,20 @@ struct CampaignConfig {
   // 1 + frameDragYieldBonus * ergoregionDepth, where depth runs 0 at the
   // static limit to 1 at the horizon. Retrograde or non-rotating: no bonus.
   double frameDragYieldBonus = 0.0;        ///< Prograde ergoregion yield coefficient; 0 = off.
+
+  // Capability effects (CAMPAIGN-5). Every fleet does the same work; its
+  // capability decides what that work is WORTH and what side effect it has.
+  // Defaults are no-ops so a config that leaves them unset behaves exactly like
+  // the pre-capability economy. Fabrication and Verification act BAND-LOCALLY:
+  // they touch only fleets sharing the completing fleet's band, so protecting a
+  // deep dive fleet means co-locating support in the same band.
+  std::array<double, 5> capabilityYieldMultiplier = {1.0, 1.0, 1.0, 1.0, 1.0};
+  double signalOverheadFactor = 1.0;            ///< Coordination latency on base geodesic delay (>= 1).
+  double relayDelayFraction = 0.0;              ///< Overhead each covering relay removes, toward the 1.0 floor.
+  double fabricationFuelRestore = 0.0;          ///< Fuel a fabrication completion restores to co-band fleets.
+  double verificationReliabilityRestore = 0.0;  ///< Reliability a verification completion restores to co-band fleets.
+  double reliabilityCorruptionThreshold = 0.0;  ///< Below this reliability at completion, the report is corrupted.
+  double corruptedYieldFraction = 1.0;          ///< Fraction of yield banked from a corrupted report.
 };
 
 class CampaignState {
@@ -135,10 +151,17 @@ private:
     TaskId task = K_INVALID_TASK_ID;
     FleetId fleet = K_INVALID_FLEET_ID;
     double yieldUnits = 0.0; ///< Fixed at completion (band + reliability then).
+    bool corrupted = false;  ///< Source reliability was below the corruption threshold.
   };
 
   void evaluateOutcome();
   [[nodiscard]] double redeployFuelCost(int fromBand, int toBand) const;
+  /** @brief Base geodesic delay scaled by coordination overhead, which relay
+   *         fleets covering the path reduce toward the geodesic floor (never
+   *         below it). */
+  [[nodiscard]] double effectiveSignalDelaySec(double fromRadiusCm, double toRadiusCm) const;
+  /** @brief Yield multiplier for a fleet's capability (1.0 by default). */
+  [[nodiscard]] double capabilityYieldMultiplier(FleetCapability capability) const;
   /** @brief True when a lane can be held at a band: retrograde is refused at or
    *         inside the ergosphere, where frame dragging forbids counter-rotation. */
   [[nodiscard]] bool laneAllowedAtBand(OrbitLane lane, int bandIndex) const;
@@ -146,10 +169,18 @@ private:
    *         for retrograde fleets, or when the bonus is disabled. */
   [[nodiscard]] double frameDragYieldFactor(const Fleet &fleet) const;
 
+  /** @brief A capability task finished this turn: what it was and where, so its
+   *         band-local side effect can be applied after the fleet loop. */
+  struct CapabilityCompletion {
+    FleetCapability capability = FleetCapability::Research;
+    int bandIndex = 0;
+  };
+
   [[nodiscard]] Fleet *findFleet(FleetId fleetId);
   [[nodiscard]] double bandRadiusCm(int bandIndex) const;
   void deliverDue();
   void applyCommand(const LoggedCommand &logged);
+  void applyCapabilityEffects(const std::vector<CapabilityCompletion> &completions);
 
   CampaignConfig config_;
   const TimeField *field_; ///< Never null; the field outlives the campaign.

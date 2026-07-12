@@ -73,6 +73,22 @@ ImVec2 lerp(const ImVec2 &a, const ImVec2 &b, float t) {
   return {a.x + ((b.x - a.x) * t), a.y + ((b.y - a.y) * t)};
 }
 
+// Frame-dragging sense: a short counter-clockwise arc with a dot at its head,
+// drawn near the core, showing which way inertial frames are swept (prograde).
+void drawFrameDragArc(ImDrawList *drawList, const ImVec2 &center, float corePx) {
+  const float arcPx = corePx * 1.5f;
+  const int segments = 24;
+  ImVec2 previous = {center.x + arcPx, center.y};
+  for (int step = 1; step <= segments; ++step) {
+    const float angle = -1.4f * (static_cast<float>(step) / static_cast<float>(segments));
+    const ImVec2 point = {center.x + (arcPx * std::cos(angle)),
+                          center.y + (arcPx * std::sin(angle))};
+    drawList->AddLine(previous, point, IM_COL32(120, 200, 255, 200), 2.0f);
+    previous = point;
+  }
+  drawList->AddCircleFilled(previous, 3.0f, IM_COL32(120, 200, 255, 255), 8);
+}
+
 char capabilityGlyph(game::FleetCapability capability) {
   switch (capability) {
   case game::FleetCapability::Research:
@@ -137,21 +153,8 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     const float corePx = scale.maxRadiusPx * K_CORE_FRACTION;
     drawList->AddCircleFilled(scale.center, corePx, IM_COL32(8, 8, 12, 255), 64);
     drawList->AddCircle(scale.center, corePx, IM_COL32(200, 40, 40, 255), 64, 2.0f);
-    // Frame-dragging sense: a short arc with an arrowhead near the core shows
-    // which way inertial frames (and everything inside the ergosphere) are
-    // swept. Prograde is counter-clockwise in this projection.
     if (view.spinDimensionless > 0.0) {
-      const float arcPx = corePx * 1.5f;
-      const int segments = 24;
-      ImVec2 previous = {scale.center.x + arcPx, scale.center.y};
-      for (int step = 1; step <= segments; ++step) {
-        const float angle = -1.4f * (static_cast<float>(step) / static_cast<float>(segments));
-        const ImVec2 point = {scale.center.x + (arcPx * std::cos(angle)),
-                              scale.center.y + (arcPx * std::sin(angle))};
-        drawList->AddLine(previous, point, IM_COL32(120, 200, 255, 200), 2.0f);
-        previous = point;
-      }
-      drawList->AddCircleFilled(previous, 3.0f, IM_COL32(120, 200, 255, 255), 8);
+      drawFrameDragArc(drawList, scale.center, corePx);
     }
   }
 
@@ -207,6 +210,14 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     drawList->AddCircle(pos, selected ? 9.0f : 6.5f,
                         selected ? IM_COL32(255, 220, 80, 255) : IM_COL32(230, 230, 235, 200), 20,
                         selected ? 2.5f : 1.0f);
+    // Relay fleets carry a cyan halo (they shorten signals crossing their band);
+    // corrupted fleets a red one (their telemetry is discounted until verified).
+    if (fleet.capability == game::FleetCapability::Relay) {
+      drawList->AddCircle(pos, 11.0f, IM_COL32(90, 200, 255, 200), 20, 1.5f);
+    }
+    if (fleet.telemetryCorrupted) {
+      drawList->AddCircle(pos, 12.5f, IM_COL32(255, 80, 80, 220), 20, 1.5f);
+    }
     // Distinct glyph per capability: Research and Relay both start with 'R',
     // so Relay takes 'L' to keep map markers unambiguous.
     const char glyph = capabilityGlyph(fleet.capability);

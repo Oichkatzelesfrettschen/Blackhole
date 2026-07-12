@@ -26,6 +26,22 @@ constexpr double K_SECONDS_PER_DAY = 86400.0;
 
 double days(double seconds) { return seconds / K_SECONDS_PER_DAY; }
 
+const char *capabilityEffectText(game::FleetCapability capability) {
+  switch (capability) {
+  case game::FleetCapability::Research:
+    return "high yield";
+  case game::FleetCapability::Fabrication:
+    return "refuels band";
+  case game::FleetCapability::Relay:
+    return "cuts delay";
+  case game::FleetCapability::Verification:
+    return "restores band";
+  case game::FleetCapability::Extraction:
+    return "top yield";
+  }
+  return "";
+}
+
 void renderTimeLedger(const game::CampaignViewSnapshot &view) {
   ImGui::Text("turn %lld  |  t_coordinate %.1f d  |  authority dtau/dt %.4f  |  spin a* %.2f",
               static_cast<long long>(view.turn), days(view.coordinateTimeSec),
@@ -53,7 +69,7 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view) {
 }
 
 void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
-  if (!ImGui::BeginTable("fleet_roster", 8,
+  if (!ImGui::BeginTable("fleet_roster", 9,
                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                              ImGuiTableFlags_SizingStretchProp)) {
     return;
@@ -66,6 +82,7 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
   ImGui::TableSetupColumn("fuel");
   ImGui::TableSetupColumn("reliability");
   ImGui::TableSetupColumn("lane");
+  ImGui::TableSetupColumn("effect");
   ImGui::TableHeadersRow();
   for (const game::FleetView &fleet : view.fleets) {
     ImGui::TableNextRow();
@@ -90,9 +107,17 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
     ImGui::TableNextColumn();
     ImGui::Text("%.0f", fleet.fuelUnits);
     ImGui::TableNextColumn();
-    ImGui::Text("%.2f", fleet.reliability);
+    // Reliability turns red once the fleet's telemetry corrupts, and carries a
+    // marker so the player sees which fleets need verification.
+    if (fleet.telemetryCorrupted) {
+      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%.2f !", fleet.reliability);
+    } else {
+      ImGui::Text("%.2f", fleet.reliability);
+    }
     ImGui::TableNextColumn();
     ImGui::Text("%s", game::laneName(fleet.lane));
+    ImGui::TableNextColumn();
+    ImGui::Text("%s x%.2f", capabilityEffectText(fleet.capability), fleet.yieldMultiplier);
   }
   ImGui::EndTable();
 }
@@ -185,10 +210,14 @@ void renderIntelWindow(const game::CampaignViewSnapshot &view) {
   }
   // Latest first: the newest arrival is what the player acts on.
   for (const game::IntelView &report : std::ranges::reverse_view(view.intel)) {
-    ImGui::Text("t%lld: fleet %u completed task %u at t%lld (+%.1f energy, %lld turns stale)",
-                static_cast<long long>(report.receivedTurn), report.fleet, report.task,
-                static_cast<long long>(report.completedTurn), report.yieldUnits,
-                static_cast<long long>(report.receivedTurn - report.completedTurn));
+    const ImVec4 color = report.corrupted ? ImVec4(1.0f, 0.6f, 0.4f, 1.0f)
+                                          : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+    ImGui::TextColored(
+        color, "t%lld: fleet %u completed task %u at t%lld (+%.1f energy%s, %lld turns stale)",
+        static_cast<long long>(report.receivedTurn), report.fleet, report.task,
+        static_cast<long long>(report.completedTurn), report.yieldUnits,
+        report.corrupted ? " CORRUPTED" : "",
+        static_cast<long long>(report.receivedTurn - report.completedTurn));
   }
   ImGui::End();
 }
