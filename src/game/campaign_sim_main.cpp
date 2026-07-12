@@ -65,11 +65,13 @@ int main(int argc, char **argv) {
     }
   }
 
-  // Mid-campaign redeployment: pull the outer survey fleet inward, then
-  // contract it for a near-horizon observation run.
+  // Mid-campaign gamble: send the outer survey fleet into the ergoregion band
+  // (index 0) on the prograde lane, then contract a deep observation run that
+  // banks the frame-dragging yield bonus.
+  const int ergoBand = 0;
   const std::int64_t redeployTurn = turns / 2;
   campaign.advanceTurns(redeployTurn);
-  if (session.issuePlaceFleet(surveyFleet, 0)) {
+  if (session.issuePlaceFleet(surveyFleet, ergoBand, game::OrbitLane::Prograde)) {
     static_cast<void>(session.issueAssignTask(surveyFleet, 10.0));
   }
   campaign.advanceTurns(turns - redeployTurn);

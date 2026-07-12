@@ -33,6 +33,29 @@ public:
   }
 };
 
+/** @brief A fake with a rotating field bolted on: a static limit at radius 970
+ *         (so band 960 sits inside the ergoregion, band 995 outside) and a
+ *         frame-drag rate that rises inward. Lets the lane gate and the
+ *         prograde ergoregion bonus be reasoned about with round numbers. */
+class FakeSpinningField final : public game::TimeField {
+public:
+  [[nodiscard]] double properTimeRate(double radiusCm) const override {
+    return radiusCm < 970.0 ? 0.1 : 1.0;
+  }
+  [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override {
+    return std::fabs(toRadiusCm - fromRadiusCm);
+  }
+  [[nodiscard]] bool isValidStationRadius(double radiusCm) const override {
+    return std::isfinite(radiusCm) && radiusCm > 950.0; // horizon at 950
+  }
+  [[nodiscard]] double innerBoundaryRadiusCm() const override { return 950.0; }
+  [[nodiscard]] double ergosphereRadiusCm() const override { return 970.0; }
+  [[nodiscard]] double frameDragRateRadPerSec(double radiusCm) const override {
+    return radiusCm > 950.0 ? 1.0 / (radiusCm - 950.0) : 0.0;
+  }
+  [[nodiscard]] double spinDimensionless() const override { return 0.9; }
+};
+
 inline game::CampaignConfig fakeConfig() {
   game::CampaignConfig config;
   config.seed = 11;

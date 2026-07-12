@@ -62,6 +62,11 @@ struct CampaignConfig {
   double fuelPerBandHop = 20.0;            ///< Redeploy cost per band of separation.
   double reliabilityWearPerProperDay = 0.0;///< Reliability lost per local day worked.
   double reliabilityFloor = 0.5;           ///< Wear never degrades a fleet below this.
+  // Frame dragging (Kerr fields only). A prograde fleet working inside the
+  // ergosphere taps the hole's rotational energy: yield is scaled by
+  // 1 + frameDragYieldBonus * ergoregionDepth, where depth runs 0 at the
+  // static limit to 1 at the horizon. Retrograde or non-rotating: no bonus.
+  double frameDragYieldBonus = 0.0;        ///< Prograde ergoregion yield coefficient; 0 = off.
 };
 
 class CampaignState {
@@ -74,8 +79,10 @@ public:
   [[nodiscard]] bool valid() const { return valid_; }
 
   /** @brief Setup-phase fleet creation at the authority's direction; returns
-   *         K_INVALID_FLEET_ID when bandIndex is out of range. */
-  FleetId addFleet(FleetCapability capability, int bandIndex);
+   *         K_INVALID_FLEET_ID when bandIndex is out of range or the lane is
+   *         retrograde inside the ergosphere. */
+  FleetId addFleet(FleetCapability capability, int bandIndex,
+                   OrbitLane lane = OrbitLane::Prograde);
 
   /** @brief Validates and enqueues a command. Returns false and leaves ALL
    *         state untouched (log included) when validation fails -- an invalid
@@ -132,6 +139,12 @@ private:
 
   void evaluateOutcome();
   [[nodiscard]] double redeployFuelCost(int fromBand, int toBand) const;
+  /** @brief True when a lane can be held at a band: retrograde is refused at or
+   *         inside the ergosphere, where frame dragging forbids counter-rotation. */
+  [[nodiscard]] bool laneAllowedAtBand(OrbitLane lane, int bandIndex) const;
+  /** @brief Prograde ergoregion yield multiplier (>= 1); 1 outside the ergosphere,
+   *         for retrograde fleets, or when the bonus is disabled. */
+  [[nodiscard]] double frameDragYieldFactor(const Fleet &fleet) const;
 
   [[nodiscard]] Fleet *findFleet(FleetId fleetId);
   [[nodiscard]] double bandRadiusCm(int bandIndex) const;

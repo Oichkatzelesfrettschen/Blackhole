@@ -20,8 +20,9 @@ enum class CommandType : std::uint8_t {
 struct Command {
   CommandType type = CommandType::PlaceFleet;
   FleetId fleet = K_INVALID_FLEET_ID;
-  int targetBand = 0;             ///< PlaceFleet: destination band index.
-  double properTimeCostSec = 0.0; ///< AssignTask: local proper-time cost.
+  int targetBand = 0;                   ///< PlaceFleet: destination band index.
+  OrbitLane lane = OrbitLane::Prograde; ///< PlaceFleet: orbital direction to adopt.
+  double properTimeCostSec = 0.0;       ///< AssignTask: local proper-time cost.
 };
 
 } // namespace game

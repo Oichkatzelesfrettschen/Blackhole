@@ -25,6 +25,16 @@ const char *capabilityName(FleetCapability capability) {
   return "unknown";
 }
 
+const char *laneName(OrbitLane lane) {
+  switch (lane) {
+  case OrbitLane::Prograde:
+    return "prograde";
+  case OrbitLane::Retrograde:
+    return "retrograde";
+  }
+  return "unknown";
+}
+
 void accrueProperTime(Fleet &fleet, double properTimeRate, double secondsPerTurn) {
   fleet.properTimeSec += properDeltaSec(properTimeRate, secondsPerTurn);
 }

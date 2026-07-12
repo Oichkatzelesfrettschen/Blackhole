@@ -37,8 +37,10 @@ struct BandView {
   int index = 0;
   double radiusCm = 0.0;
   bool validStation = false;
-  double properTimeRate = 0.0;       ///< dtau/dt on this band.
-  double delayToAuthoritySec = 0.0;  ///< One-way signal delay to the authority station.
+  bool insideErgosphere = false;        ///< Inside the static limit: retrograde forbidden.
+  double properTimeRate = 0.0;          ///< dtau/dt on this band.
+  double delayToAuthoritySec = 0.0;     ///< One-way signal delay to the authority station.
+  double frameDragRateRadPerSec = 0.0;  ///< Frame-dragging angular velocity (0 without spin).
 };
 
 struct FleetView {
@@ -49,6 +51,7 @@ struct FleetView {
   double properTimeSec = 0.0;   ///< Accumulated local proper time tau.
   double properTimeRate = 0.0;  ///< Current dtau/dt (the fleet's band rate).
   double fuelUnits = 0.0;       ///< Remaining redeployment budget.
+  OrbitLane lane = OrbitLane::Prograde; ///< Orbital direction.
   std::uint32_t pendingTasks = 0;
   std::uint32_t activeTasks = 0;
   std::uint32_t completedTasks = 0;
@@ -89,6 +92,8 @@ struct CampaignViewSnapshot {
   double energyUnits = 0.0;        ///< Banked yield (credited on report arrival).
   double victoryEnergyUnits = 0.0; ///< Win target; zero disables the objective.
   std::int64_t deadlineTurn = 0;   ///< Loss turn; zero disables the deadline.
+  double ergosphereRadiusCm = 0.0; ///< Static limit; equals the horizon without spin.
+  double spinDimensionless = 0.0;  ///< Black-hole spin a/M (0 for Schwarzschild).
   double authorityRadiusCm = 0.0;
   double authorityProperTimeRate = 0.0;
   double innerBoundaryRadiusCm = 0.0; ///< Horizon radius; zero for fields without one.

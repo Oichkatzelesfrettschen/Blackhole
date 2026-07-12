@@ -27,9 +27,9 @@ constexpr double K_SECONDS_PER_DAY = 86400.0;
 double days(double seconds) { return seconds / K_SECONDS_PER_DAY; }
 
 void renderTimeLedger(const game::CampaignViewSnapshot &view) {
-  ImGui::Text("turn %lld  |  t_coordinate %.1f d  |  authority dtau/dt %.4f",
+  ImGui::Text("turn %lld  |  t_coordinate %.1f d  |  authority dtau/dt %.4f  |  spin a* %.2f",
               static_cast<long long>(view.turn), days(view.coordinateTimeSec),
-              view.authorityProperTimeRate);
+              view.authorityProperTimeRate, view.spinDimensionless);
   ImGui::TextDisabled("orders in flight: %zu   reports in flight: %zu   intel: %zu",
                       view.ordersInFlight.size(), view.reportsInFlight.size(),
                       view.intel.size());
@@ -53,7 +53,7 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view) {
 }
 
 void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
-  if (!ImGui::BeginTable("fleet_roster", 7,
+  if (!ImGui::BeginTable("fleet_roster", 8,
                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                              ImGuiTableFlags_SizingStretchProp)) {
     return;
@@ -65,6 +65,7 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
   ImGui::TableSetupColumn("tasks p/a/c");
   ImGui::TableSetupColumn("fuel");
   ImGui::TableSetupColumn("reliability");
+  ImGui::TableSetupColumn("lane");
   ImGui::TableHeadersRow();
   for (const game::FleetView &fleet : view.fleets) {
     ImGui::TableNextRow();
@@ -90,6 +91,8 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
     ImGui::Text("%.0f", fleet.fuelUnits);
     ImGui::TableNextColumn();
     ImGui::Text("%.2f", fleet.reliability);
+    ImGui::TableNextColumn();
+    ImGui::Text("%s", game::laneName(fleet.lane));
   }
   ImGui::EndTable();
 }
@@ -125,9 +128,18 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
     }
     ImGui::EndCombo();
   }
+  // Lane selector: retrograde is offered but the campaign rejects it inside the
+  // ergosphere, surfacing the frame-dragging rule as a failed order.
+  int laneChoice = uiState.composerLane == game::OrbitLane::Retrograde ? 1 : 0;
+  ImGui::TextUnformatted("lane");
+  ImGui::SameLine();
+  ImGui::RadioButton("prograde", &laneChoice, 0);
+  ImGui::SameLine();
+  ImGui::RadioButton("retrograde", &laneChoice, 1);
+  uiState.composerLane = laneChoice == 1 ? game::OrbitLane::Retrograde : game::OrbitLane::Prograde;
   if (ImGui::Button("Redeploy fleet")) {
-    uiState.lastCommandAccepted =
-        session.issuePlaceFleet(uiState.selectedFleet, uiState.composerTargetBand);
+    uiState.lastCommandAccepted = session.issuePlaceFleet(
+        uiState.selectedFleet, uiState.composerTargetBand, uiState.composerLane);
     uiState.lastCommandValid = true;
   }
 
@@ -142,7 +154,7 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
 
   if (uiState.lastCommandValid && !uiState.lastCommandAccepted) {
     ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
-                       "order rejected (invalid target -- horizon gate or bad band)");
+                       "order rejected (horizon, retrograde-in-ergosphere, or out of fuel)");
   }
 }
 

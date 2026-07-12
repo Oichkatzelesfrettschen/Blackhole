@@ -1495,6 +1495,7 @@ endif()
 # construction: no glbinding, imgui, or glfw anywhere in this link set.
 add_library(blackhole_campaign STATIC
   "${PROJECT_SOURCE_DIR}/src/game/blackhole_time_field.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/kerr_time_field.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/temporal_clock.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/fleet.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/task_graph.cpp"
@@ -4012,6 +4013,27 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(campaign_task_graph_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_time_field_test.cpp")
+    add_executable(kerr_time_field_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_time_field_test.cpp"
+    )
+    target_compile_options(kerr_time_field_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_time_field_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_time_field_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME kerr_time_field_validation COMMAND kerr_time_field_test)
+    set_tests_properties(kerr_time_field_validation PROPERTIES
+      LABELS "campaign;physics;frame-dragging"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_time_field_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()

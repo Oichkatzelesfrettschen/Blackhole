@@ -105,18 +105,51 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   scale.rMinCm = view.innerBoundaryRadiusCm > 0.0 ? view.innerBoundaryRadiusCm : rMax / 1000.0;
   scale.rMaxCm = rMax * 1.15;
 
+  // Ergosphere shell: the static limit. Drawn as a filled amber band between
+  // the horizon and r_ergo so the forbidden-retrograde zone reads at a glance.
+  // Only meaningful with spin (without it r_ergo coincides with the horizon).
+  if (view.spinDimensionless != 0.0 && view.ergosphereRadiusCm > view.innerBoundaryRadiusCm) {
+    const float ergoPx = scale.pixelRadius(view.ergosphereRadiusCm);
+    drawList->AddCircleFilled(scale.center, ergoPx, IM_COL32(70, 45, 15, 90), 96);
+    drawList->AddCircle(scale.center, ergoPx, IM_COL32(210, 150, 60, 200), 96, 1.5f);
+    drawList->AddText({scale.center.x + (ergoPx * 0.7071f) + 4.0f,
+                       scale.center.y + (ergoPx * 0.7071f) + 4.0f},
+                      IM_COL32(210, 150, 60, 220), "ergosphere");
+  }
+
   // Horizon core: the forbidden zone every other radius is measured from.
   if (view.innerBoundaryRadiusCm > 0.0) {
     const float corePx = scale.maxRadiusPx * K_CORE_FRACTION;
     drawList->AddCircleFilled(scale.center, corePx, IM_COL32(8, 8, 12, 255), 64);
     drawList->AddCircle(scale.center, corePx, IM_COL32(200, 40, 40, 255), 64, 2.0f);
+    // Frame-dragging sense: a short arc with an arrowhead near the core shows
+    // which way inertial frames (and everything inside the ergosphere) are
+    // swept. Prograde is counter-clockwise in this projection.
+    if (view.spinDimensionless > 0.0) {
+      const float arcPx = corePx * 1.5f;
+      const int segments = 24;
+      ImVec2 previous = {scale.center.x + arcPx, scale.center.y};
+      for (int step = 1; step <= segments; ++step) {
+        const float angle = -1.4f * (static_cast<float>(step) / static_cast<float>(segments));
+        const ImVec2 point = {scale.center.x + (arcPx * std::cos(angle)),
+                              scale.center.y + (arcPx * std::sin(angle))};
+        drawList->AddLine(previous, point, IM_COL32(120, 200, 255, 200), 2.0f);
+        previous = point;
+      }
+      drawList->AddCircleFilled(previous, 3.0f, IM_COL32(120, 200, 255, 255), 8);
+    }
   }
 
   // Orbital bands, colored by proper-time rate; invalid bands draw as hazard.
   char label[96];
   for (const game::BandView &band : view.bands) {
     const float bandPx = scale.pixelRadius(band.radiusCm);
-    if (band.validStation) {
+    if (band.validStation && band.insideErgosphere) {
+      drawList->AddCircle(scale.center, bandPx, IM_COL32(210, 150, 60, 230), 96, 2.0f);
+      static_cast<void>(std::snprintf(
+          label, sizeof(label), "band %d  dtau/dt %.3f  omega %.2e  PROGRADE ONLY", band.index,
+          band.properTimeRate, band.frameDragRateRadPerSec));
+    } else if (band.validStation) {
       drawList->AddCircle(scale.center, bandPx, rateColor(band.properTimeRate), 96, 1.5f);
       static_cast<void>(std::snprintf(label, sizeof(label), "band %d  dtau/dt %.3f  delay %.1f d", band.index,
                     band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY));
@@ -161,8 +194,11 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
                         selected ? 2.5f : 1.0f);
     const char initial = static_cast<char>(
         std::toupper(static_cast<unsigned char>(game::capabilityName(fleet.capability)[0])));
-    const char initialText[2] = {initial, '\0'};
-    drawList->AddText({pos.x + 8.0f, pos.y - 7.0f}, IM_COL32(235, 235, 240, 255), initialText);
+    // Lane tag: '+' prograde, '-' retrograde, so orbital direction reads on the
+    // marker without a legend.
+    const char laneTag = fleet.lane == game::OrbitLane::Retrograde ? '-' : '+';
+    const char markerText[4] = {initial, laneTag, '\0', '\0'};
+    drawList->AddText({pos.x + 8.0f, pos.y - 7.0f}, IM_COL32(235, 235, 240, 255), markerText);
   }
 
   const auto markerFor = [&markers](game::FleetId fleetId) -> const Marker * {

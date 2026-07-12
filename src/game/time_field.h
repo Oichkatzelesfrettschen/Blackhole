@@ -35,6 +35,19 @@ public:
    *         hole field). Zero for fields without an inner boundary; the map
    *         draws it as the forbidden core. */
   [[nodiscard]] virtual double innerBoundaryRadiusCm() const { return 0.0; }
+
+  /** @brief Angular velocity (rad/s) at which local inertial frames are
+   *         dragged around the axis at radiusCm. Zero for a non-rotating
+   *         field; positive and rising toward the horizon for a Kerr field. */
+  [[nodiscard]] virtual double frameDragRateRadPerSec(double /*radiusCm*/) const { return 0.0; }
+
+  /** @brief Radius of the static limit (ergosphere). Inside it no observer can
+   *         hold a fixed angular position; retrograde holds are impossible.
+   *         Coincides with the inner boundary when the field does not rotate. */
+  [[nodiscard]] virtual double ergosphereRadiusCm() const { return innerBoundaryRadiusCm(); }
+
+  /** @brief Dimensionless spin a/M in [-1, 1]; zero for a non-rotating field. */
+  [[nodiscard]] virtual double spinDimensionless() const { return 0.0; }
 };
 
 } // namespace game

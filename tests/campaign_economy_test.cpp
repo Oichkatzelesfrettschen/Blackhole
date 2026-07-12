@@ -18,6 +18,7 @@
 
 namespace {
 
+using campaign_test::FakeSpinningField;
 using campaign_test::FakeTimeField;
 using campaign_test::fakeConfig;
 
@@ -35,6 +36,22 @@ game::Command placeFleet(game::FleetId fleet, int targetBand) {
   command.fleet = fleet;
   command.targetBand = targetBand;
   return command;
+}
+
+game::Command placeFleetLane(game::FleetId fleet, int targetBand, game::OrbitLane lane) {
+  game::Command command = placeFleet(fleet, targetBand);
+  command.lane = lane;
+  return command;
+}
+
+// Two bands: 960 (inside the ergoregion, rate 0.1) and 995 (outside, rate 1.0).
+game::CampaignConfig spinningConfig() {
+  game::CampaignConfig config;
+  config.seed = 5;
+  config.secondsPerTurn = 1.0;
+  config.authorityRadiusCm = 1000.0;
+  config.bandRadiusCm = {960.0, 995.0};
+  return config;
 }
 
 } // namespace
@@ -172,4 +189,68 @@ TEST(CampaignEconomy, ReplayStaysByteIdenticalWithEconomyActive) {
   const std::vector<std::uint8_t> firstRun = runCampaign();
   const std::vector<std::uint8_t> secondRun = runCampaign();
   EXPECT_EQ(firstRun, secondRun);
+}
+
+TEST(CampaignFrameDragging, RetrogradeIsRefusedInsideTheErgosphere) {
+  const FakeSpinningField field;
+  game::CampaignState campaign(spinningConfig(), field);
+  ASSERT_TRUE(campaign.valid());
+  // Band 0 (960) is inside the ergosphere: retrograde placement is impossible.
+  EXPECT_EQ(campaign.addFleet(game::FleetCapability::Extraction, 0, game::OrbitLane::Retrograde),
+            game::K_INVALID_FLEET_ID);
+  // Prograde there is fine, and retrograde on the outer band (995) is fine.
+  EXPECT_NE(campaign.addFleet(game::FleetCapability::Extraction, 0, game::OrbitLane::Prograde),
+            game::K_INVALID_FLEET_ID);
+  const game::FleetId outer =
+      campaign.addFleet(game::FleetCapability::Relay, 1, game::OrbitLane::Retrograde);
+  ASSERT_NE(outer, game::K_INVALID_FLEET_ID);
+  // An order that would send the outer retrograde fleet into the ergoregion is
+  // rejected at issue time.
+  EXPECT_FALSE(campaign.issueCommand(placeFleetLane(outer, 0, game::OrbitLane::Retrograde)));
+  // The same destination on the prograde lane is accepted.
+  EXPECT_TRUE(campaign.issueCommand(placeFleetLane(outer, 0, game::OrbitLane::Prograde)));
+}
+
+TEST(CampaignFrameDragging, ProgradeErgoregionWorkBanksThePenroseBonus) {
+  const FakeSpinningField field;
+  auto bankedYield = [&field](double bonus) {
+    game::CampaignConfig config = spinningConfig();
+    config.frameDragYieldBonus = bonus;
+    game::CampaignState campaign(config, field);
+    const game::FleetId fleet =
+        campaign.addFleet(game::FleetCapability::Extraction, 0, game::OrbitLane::Prograde);
+    EXPECT_NE(fleet, game::K_INVALID_FLEET_ID);
+    EXPECT_TRUE(campaign.issueCommand(assignTask(fleet, 0.5)));
+    campaign.advanceTurns(200); // deep band: slow proper time + long delays
+    return campaign.energyUnits();
+  };
+  const double plainYield = bankedYield(0.0);
+  const double bonusYield = bankedYield(2.0);
+  ASSERT_GT(plainYield, 0.0);
+  // Band 960 depth = (970 - 960)/(970 - 950) = 0.5, so bonus factor = 1 + 2*0.5
+  // = 2.0: the prograde ergoregion fleet banks exactly twice the plain yield.
+  EXPECT_NEAR(bonusYield, 2.0 * plainYield, 1e-9 * bonusYield);
+}
+
+TEST(CampaignFrameDragging, RetrogradeAndOuterBandsGetNoBonus) {
+  const FakeSpinningField field;
+  game::CampaignConfig config = spinningConfig();
+  config.frameDragYieldBonus = 2.0;
+  // Outer band fleet (995, outside the ergosphere) earns no frame-drag bonus.
+  game::CampaignState outerCampaign(config, field);
+  const game::FleetId outerFleet =
+      outerCampaign.addFleet(game::FleetCapability::Extraction, 1, game::OrbitLane::Prograde);
+  EXPECT_TRUE(outerCampaign.issueCommand(assignTask(outerFleet, 0.5)));
+  outerCampaign.advanceTurns(200);
+
+  game::CampaignConfig noBonus = spinningConfig();
+  noBonus.frameDragYieldBonus = 0.0;
+  game::CampaignState controlCampaign(noBonus, field);
+  const game::FleetId controlFleet =
+      controlCampaign.addFleet(game::FleetCapability::Extraction, 1, game::OrbitLane::Prograde);
+  EXPECT_TRUE(controlCampaign.issueCommand(assignTask(controlFleet, 0.5)));
+  controlCampaign.advanceTurns(200);
+
+  EXPECT_DOUBLE_EQ(outerCampaign.energyUnits(), controlCampaign.energyUnits())
+      << "outside the ergosphere the bonus coefficient is irrelevant";
 }
