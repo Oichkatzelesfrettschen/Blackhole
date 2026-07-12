@@ -83,6 +83,26 @@ struct CampaignConfig {
   double verificationReliabilityRestore = 0.0;  ///< Reliability a verification completion restores to co-band fleets.
   double reliabilityCorruptionThreshold = 0.0;  ///< Below this reliability at completion, the report is corrupted.
   double corruptedYieldFraction = 1.0;          ///< Fraction of yield banked from a corrupted report.
+
+  // Instability and containment (CAMPAIGN-6). The singularity destabilizes over
+  // the campaign: instability rises each turn and erodes ALL yield through a
+  // smooth saturating factor 1 / (1 + instability * instabilityYieldPenaltyPerUnit),
+  // so pure outer-band play still functions, only more slowly as the disturbance
+  // grows -- it is escalating pressure, not a death gate. A prograde fleet
+  // working INSIDE the ergosphere produces containment (the ergosphere mission
+  // beyond extraction), suppressing instability in proportion to the proper time
+  // it works, scaled by ergoregion depth. The outcome is a vector the player
+  // weights -- banked energy, stabilization achieved, fleet integrity preserved,
+  // turns to clear -- so the deep dive buys a faster clear and stabilization at
+  // an integrity cost rather than being mandatory. Defaults are no-ops.
+  double instabilityPerTurn = 0.0;             ///< Instability rise per coordinate turn; 0 = mechanic off.
+  double instabilityYieldPenaltyPerUnit = 0.0; ///< Yield erosion coefficient; factor = 1/(1+instability*this).
+  double ergoContainmentPerProperDay = 0.0;    ///< Instability suppressed per proper-day of prograde ergoregion work.
+  // Deep prograde near-horizon work is hazardous beyond ordinary wear: tidal and
+  // frame-dragging stress degrades a fleet in proportion to ergoregion depth.
+  // This is the integrity the deep lane spends -- the cost side of the stabilize/
+  // clear-fast payoff, which co-located verification only partly offsets.
+  double ergoHazardWearPerProperDay = 0.0;     ///< Extra reliability wear per proper-day, scaled by ergoregion depth.
 };
 
 class CampaignState {
@@ -118,6 +138,10 @@ public:
   [[nodiscard]] std::int64_t turn() const { return clock_.turn(); }
   [[nodiscard]] CampaignStatus status() const { return status_; }
   [[nodiscard]] double energyUnits() const { return energyUnits_; }
+  [[nodiscard]] double instability() const { return instability_; }
+  [[nodiscard]] double stabilization() const { return stabilization_; }
+  /** @brief Coordinate turn the victory energy was first reached; 0 until won. */
+  [[nodiscard]] std::int64_t clearedTurn() const { return clearedTurn_; }
   [[nodiscard]] const std::vector<Fleet> &fleets() const { return fleets_; }
   [[nodiscard]] const TaskGraph &taskGraph() const { return taskGraph_; }
   [[nodiscard]] const std::vector<LoggedCommand> &commandLog() const { return commandLog_; }
@@ -168,6 +192,11 @@ private:
   /** @brief Prograde ergoregion yield multiplier (>= 1); 1 outside the ergosphere,
    *         for retrograde fleets, or when the bonus is disabled. */
   [[nodiscard]] double frameDragYieldFactor(const Fleet &fleet) const;
+  /** @brief Ergoregion depth in [0,1] for a prograde fleet -- 0 at the static
+   *         limit, 1 at the horizon; 0 outside the ergosphere, for retrograde
+   *         fleets, or a non-rotating field. Drives both the frame-drag yield
+   *         bonus and containment production. */
+  [[nodiscard]] double ergoregionDepth(const Fleet &fleet) const;
 
   /** @brief A capability task finished this turn: what it was and where, so its
    *         band-local side effect can be applied after the fleet loop. */
@@ -194,6 +223,9 @@ private:
   FleetId nextFleetId_ = 1;
   std::uint32_t nextSequence_ = 0;
   double energyUnits_ = 0.0;
+  double instability_ = 0.0;     ///< Rises each turn, suppressed by containment; erodes yield.
+  double stabilization_ = 0.0;   ///< Cumulative containment produced -- the stabilization score axis.
+  std::int64_t clearedTurn_ = 0; ///< Turn the victory energy was first reached; 0 until then.
   CampaignStatus status_ = CampaignStatus::Ongoing;
 };
 
