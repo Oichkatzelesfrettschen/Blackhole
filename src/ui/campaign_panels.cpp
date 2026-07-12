@@ -254,6 +254,39 @@ void renderBackdropPicker(const CampaignBackdrop *backdrops, int backdropCount,
     }
     ImGui::EndCombo();
   }
+
+  // Thumbnail swatches: a clickable preview per backdrop, the selected one framed.
+  // A backdrop with no texture (the procedural starfield) shows a dark swatch. The
+  // preview reuses the same textures the map draws, so this costs no extra load.
+  const ImVec2 thumb(48.0f, 27.0f); // 16:9-ish preview
+  for (int index = 0; index < backdropCount; ++index) {
+    if (index > 0) {
+      ImGui::SameLine();
+    }
+    ImGui::PushID(index);
+    const bool selected = index == uiState.selectedBackdrop;
+    if (selected) {
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.75f, 1.0f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.45f, 0.85f, 1.0f, 1.0f));
+    }
+    bool clicked = false;
+    if (backdrops[index].textureId != 0) {
+      clicked = ImGui::ImageButton("thumb", static_cast<ImTextureID>(backdrops[index].textureId),
+                                   thumb);
+    } else {
+      clicked = ImGui::Button("stars", ImVec2(thumb.x + 8.0f, thumb.y + 8.0f));
+    }
+    if (selected) {
+      ImGui::PopStyleColor(2);
+    }
+    if (clicked) {
+      uiState.selectedBackdrop = index;
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("%s", backdrops[index].name);
+    }
+    ImGui::PopID();
+  }
 }
 
 } // namespace

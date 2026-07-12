@@ -1079,11 +1079,18 @@ glow). Named font: Spline Sans Mono, vendored separately from the system copy.
   3840x3335 4K source; manifest.json provenance added. Backdrop picker grows to 6
   (Crab is now resolution-aware alongside Cosmic Cliffs); count derives from
   campaignBackdrops.size(). shellcheck clean; all desktop variants build; 91/91.
-- ART-8 Next (undefined, pick the small obvious thing or ask): backdrop-picker
-  thumbnails (small preview swatches in the combo, using the already-loaded
-  textures); OR ladder the remaining repo 2K nebulae once their LFS objects are
-  available (blocked today by the exhausted budget); OR a map attribution that
-  names the specific object, not just the agency.
+- ART-8 DONE: backdrop-picker thumbnails. renderBackdropPicker (campaign_panels.cpp)
+  draws a clickable preview swatch per backdrop under the combo -- the selected one
+  framed blue, a hover tooltip naming it -- reusing the textures the map already
+  loaded (no extra load). A backdrop with texture 0 (procedural, or a source whose
+  LFS object is absent locally) shows a "stars" swatch. ImageButton takes
+  static_cast<ImTextureID>(textureId), matching the map's AddImage cast. VERIFIED
+  by Xvfb screenshot: Cosmic Cliffs (selected) and Crab show real thumbnails; the
+  LFS-pointer 2K nebulae fall back to stars swatches (objects unsmudged locally).
+- ART leftover (not scoped): ladder the remaining repo 2K nebulae (tarantula/
+  southern-ring/orion-bar) once their LFS objects are available -- blocked today by
+  the exhausted budget; a per-object map attribution (name the nebula, not just the
+  agency); more sources through the now-generalized pipeline.
 
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
