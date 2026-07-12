@@ -935,10 +935,32 @@ exe).
   CAMPAIGN-5. Rename to Temporal Disturbance is display-only (toggle label + file
   headers); mechanism names (game::, campaign_*, BLACKHOLE_CAMPAIGN) unchanged.
   89/89; fast-math digest == IEEE.
-- CAMPAIGN-5 Next: verification fleets that restore reliability and validate
-  corrupted telemetry (the design doc's verification role, still cosmetic);
-  per-capability task multipliers; ergosphere missions beyond extraction.
-  [each fleet capability does something distinct]
+- CAMPAIGN-5 DONE (61e04ea). Capability is no longer cosmetic. Config knobs
+  (all no-op by default, so existing configs/tests unchanged): capability yield
+  multipliers (Extraction 1.5 / Research 1.25 produce energy); Fabrication
+  refuels co-band fleets on completion; Verification restores co-band
+  reliability on completion; Relay removes signalOverheadFactor from signals
+  crossing its band, multiplying overhead toward 1.0 = the geodesic floor,
+  NEVER below (no FTL); reliability corruption cliff (a fleet worn below
+  reliabilityCorruptionThreshold banks only corruptedYieldFraction, and
+  band-local verification is what keeps it above the cliff). Fabrication +
+  Verification are BAND-LOCAL and collected during the fleet loop, applied in a
+  post-loop phase (order-independent, per advisor). campaign_capabilities_test
+  covers all five plus the corruption interlock and post-loop order
+  independence; 90/90; fast-math digest == IEEE.
+  ERGO DIVE now OPTIONAL: with the multipliers, outer-only play banks 233.9 and
+  clears the retuned 220 objective (campaign_sim --no-dive), where CAMPAIGN-4
+  outer lost and the dive was mandatory. HONEST LIMIT (advisor): under one
+  scalar objective + deadline, the dive's higher ceiling (322) is surplus with
+  no payoff once the target is met, so this is "outer viable, dive optional,"
+  NOT a non-dominated risk/reward -- a deterministic scalar model cannot produce
+  one. The interlocks (deep fleet corrupts without co-located verification,
+  needs fabrication fuel + relay delay) make executing a dive a multi-fleet
+  commitment.
+- CAMPAIGN-6 Next: escalating or multi-objective structure so surplus energy /
+  a faster clear has real payoff (the only way to make the dive a genuine
+  non-dominated decision); ergosphere missions beyond extraction; a UI legend
+  for the map halos/glyphs.
 
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
