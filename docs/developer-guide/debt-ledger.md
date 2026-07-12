@@ -962,6 +962,34 @@ exe).
   non-dominated decision); ergosphere missions beyond extraction; a UI legend
   for the map halos/glyphs.
 
+### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
+
+User direction (2026-07-12): procedural base plus a few vendored assets; license
+CC0/CC-BY OK plus public-domain NASA/space-agency imagery (downscaled, RAM-light);
+wants all four upgrades (starfield/nebula, capability icons, sci-fi/mono font,
+glow). Named font: Spline Sans Mono, vendored separately from the system copy.
+
+- ART-1 DONE (572ec6a). Spline Sans Mono vendored under
+  assets/fonts/spline-sans-mono/ (Regular + Medium + OFL.txt + PROVENANCE.md;
+  SIL OFL 1.1, from Arch pkg ttf-spline-sans-mono 1.002-1, unmodified so the
+  reserved name is preserved; ~74 KB each, regular git not LFS). initializeImGui
+  loads it via platform::resourcePath at 16px with an AddFontDefault fallback so
+  a stripped install never renders an empty atlas (which crashes).
+- ART-2 DONE (45023ef). Procedural strategic-map backdrop: deterministic
+  integer-hash starfield (stable across frames/runs, no texture, no RAM), two
+  nebula washes, additive halo glow on fleet markers. Self-authored, no license
+  surface. Helpers file-local to keep renderStrategicMap under the tidy
+  cognitive-complexity limit.
+- ART-3 Next: procedural per-capability icons (vector via ImDrawList) replacing
+  the E/R/F/L/V + lane-tag glyphs (extraction drill, research lens, relay dish,
+  fabrication frame, verification check); a map legend for the halos/glyphs.
+- ART-4 Next: a downscaled NASA/ESA public-domain nebula backdrop as an optional
+  vendored texture (loaded via the existing loadTexture2D + resourcePath path,
+  LFS + provenance manifest like assets/backgrounds/manifest.json, downscaled to
+  ~1-2K to stay RAM-light) behind the ImGui map canvas; keep the procedural
+  starfield as the no-asset fallback. Heaviest item (download + LFS + texture
+  wiring), deferred deliberately.
+
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
 - VERIFY-1 CI matrix: add jobs for (a) Debug+ASAN/UBSAN, (b) coverage with
