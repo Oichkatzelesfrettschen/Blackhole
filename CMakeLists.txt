@@ -1347,19 +1347,23 @@ if(ENABLE_DESKTOP_APP)
     VERBATIM)
   add_custom_target(blackhole_font DEPENDS "${BH_FONT_TTF}")
 
-  # Campaign strategic-map backdrop: downscale the full-res LFS NASA source to a
-  # RAM-light runtime texture with ImageMagick. Unlike the font, the backdrop is
-  # OPTIONAL -- the map falls back to a procedural starfield -- so a missing
-  # ImageMagick is a status note, not a fatal error.
+  # Campaign strategic-map backdrop: the full-res 4K NASA source (LFS) is
+  # downscaled into a resolution ladder (2K, 2K ultrawide, 1080, 720, 1024, 512)
+  # by scripts/generate_nebula_ladder.sh with ImageMagick; the map loads the
+  # 1024 rendition. Unlike the font, the backdrop is OPTIONAL -- the map falls
+  # back to a procedural starfield -- so a missing ImageMagick is a status note,
+  # not a fatal error.
   find_program(MAGICK_EXECUTABLE NAMES magick convert)
-  set(BH_NEBULA_SRC "${PROJECT_SOURCE_DIR}/assets/backgrounds/source/carina-cosmic-cliffs-2k.jpg")
-  set(BH_NEBULA_TEX "${PROJECT_SOURCE_DIR}/assets/backgrounds/campaign_nebula.jpg")
+  set(BH_NEBULA_SRC "${PROJECT_SOURCE_DIR}/assets/backgrounds/source/carina-cosmic-cliffs-4k.jpg")
+  set(BH_NEBULA_DIR "${PROJECT_SOURCE_DIR}/assets/backgrounds/generated")
+  set(BH_NEBULA_TEX "${BH_NEBULA_DIR}/carina-cosmic-cliffs-1024.jpg")
+  set(BH_NEBULA_SCRIPT "${PROJECT_SOURCE_DIR}/scripts/generate_nebula_ladder.sh")
   if(MAGICK_EXECUTABLE AND EXISTS "${BH_NEBULA_SRC}")
     add_custom_command(
       OUTPUT "${BH_NEBULA_TEX}"
-      COMMAND "${MAGICK_EXECUTABLE}" "${BH_NEBULA_SRC}" -resize 1024x -quality 88 "${BH_NEBULA_TEX}"
-      DEPENDS "${BH_NEBULA_SRC}"
-      COMMENT "Downscaling the campaign nebula backdrop from the NASA source"
+      COMMAND sh "${BH_NEBULA_SCRIPT}" "${BH_NEBULA_SRC}" "${BH_NEBULA_DIR}" "${MAGICK_EXECUTABLE}"
+      DEPENDS "${BH_NEBULA_SRC}" "${BH_NEBULA_SCRIPT}"
+      COMMENT "Generating the campaign nebula resolution ladder (2K, 2K ultrawide, 1080, 720, 1024, 512)"
       VERBATIM)
     add_custom_target(blackhole_campaign_backdrop DEPENDS "${BH_NEBULA_TEX}")
   else()
