@@ -5,6 +5,7 @@
 
 #include "ui/campaign_panels.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -222,6 +223,22 @@ void renderIntelWindow(const game::CampaignViewSnapshot &view) {
   ImGui::End();
 }
 
+void renderBackdropPicker(const CampaignBackdrop *backdrops, int backdropCount,
+                          CampaignUiState &uiState) {
+  if (backdrops == nullptr || backdropCount <= 0) {
+    return;
+  }
+  uiState.selectedBackdrop = std::clamp(uiState.selectedBackdrop, 0, backdropCount - 1);
+  if (ImGui::BeginCombo("map backdrop", backdrops[uiState.selectedBackdrop].name)) {
+    for (int index = 0; index < backdropCount; ++index) {
+      if (ImGui::Selectable(backdrops[index].name, index == uiState.selectedBackdrop)) {
+        uiState.selectedBackdrop = index;
+      }
+    }
+    ImGui::EndCombo();
+  }
+}
+
 } // namespace
 
 void initCampaignUiFromEnv(CampaignUiState &uiState) {
@@ -231,7 +248,7 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
 }
 
 void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiState,
-                           unsigned int backdropTextureId) {
+                           const CampaignBackdrop *backdrops, int backdropCount) {
   ImGui::SetNextWindowPos(ImVec2(420.0f, 40.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(540.0f, 420.0f), ImGuiCond_FirstUseEver);
   if (ImGui::Begin("Campaign", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -250,6 +267,7 @@ void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiSt
       if (ImGui::Button("Advance 25")) {
         session.state().advanceTurns(25);
       }
+      renderBackdropPicker(backdrops, backdropCount, uiState);
       ImGui::SeparatorText("Fleet roster");
       renderFleetRoster(view, uiState);
       renderOrderComposer(session, view, uiState);
@@ -262,6 +280,11 @@ void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiSt
   if (uiState.windowsOpen) {
     // A fresh snapshot after any button above mutated the campaign this frame.
     const game::CampaignViewSnapshot view = session.state().renderSnapshot();
+    unsigned int backdropTextureId = 0;
+    if (backdrops != nullptr && backdropCount > 0) {
+      backdropTextureId =
+          backdrops[std::clamp(uiState.selectedBackdrop, 0, backdropCount - 1)].textureId;
+    }
     renderStrategicMap(view, uiState, backdropTextureId);
     renderIntelWindow(view);
   }

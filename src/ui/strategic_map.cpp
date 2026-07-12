@@ -178,6 +178,69 @@ void drawCapabilityIcon(ImDrawList *drawList, const ImVec2 &center, game::FleetC
   }
 }
 
+// Orbital band rings coloured by proper-time rate with a soft glow; invalid
+// bands draw as hazard without glow, ergoregion bands amber and prograde-only.
+void drawOrbitalBands(ImDrawList *drawList, const MapScale &scale,
+                      const game::CampaignViewSnapshot &view) {
+  char label[96];
+  for (const game::BandView &band : view.bands) {
+    const float bandPx = scale.pixelRadius(band.radiusCm);
+    ImU32 ringColor = IM_COL32(120, 30, 30, 180);
+    float thickness = 1.0f;
+    if (band.validStation && band.insideErgosphere) {
+      ringColor = IM_COL32(210, 150, 60, 230);
+      thickness = 2.0f;
+      static_cast<void>(std::snprintf(
+          label, sizeof(label), "band %d  dtau/dt %.3f  omega %.2e  PROGRADE ONLY", band.index,
+          band.properTimeRate, band.frameDragRateRadPerSec));
+    } else if (band.validStation) {
+      ringColor = rateColor(band.properTimeRate);
+      thickness = 1.5f;
+      static_cast<void>(std::snprintf(label, sizeof(label), "band %d  dtau/dt %.3f  delay %.1f d",
+                                      band.index, band.properTimeRate,
+                                      band.delayToAuthoritySec / K_SECONDS_PER_DAY));
+    } else {
+      static_cast<void>(std::snprintf(label, sizeof(label), "band %d  FORBIDDEN", band.index));
+    }
+    if (band.validStation) {
+      drawGlow(drawList, scale.center, bandPx, ringColor);
+    }
+    drawList->AddCircle(scale.center, bandPx, ringColor, 96, thickness);
+    drawList->AddText({scale.center.x + (bandPx * 0.7071f) + 6.0f,
+                       scale.center.y - (bandPx * 0.7071f) - 6.0f},
+                      IM_COL32(200, 200, 210, 255), label);
+  }
+}
+
+// A compact always-visible legend in the map's bottom-left corner: each
+// capability icon beside its name, on a translucent panel.
+void drawMapLegend(ImDrawList *drawList, const ImVec2 &canvasOrigin, const ImVec2 &canvasSize) {
+  struct Entry {
+    game::FleetCapability capability;
+    const char *label;
+  };
+  const Entry entries[] = {
+      {.capability = game::FleetCapability::Extraction, .label = "extraction"},
+      {.capability = game::FleetCapability::Research, .label = "research"},
+      {.capability = game::FleetCapability::Fabrication, .label = "fabrication"},
+      {.capability = game::FleetCapability::Relay, .label = "relay"},
+      {.capability = game::FleetCapability::Verification, .label = "verification"},
+  };
+  const float rowH = 15.0f;
+  const float boxH = (rowH * 5.0f) + 8.0f;
+  const ImVec2 boxMin = {canvasOrigin.x + 6.0f, canvasOrigin.y + canvasSize.y - boxH - 6.0f};
+  const ImVec2 boxMax = {boxMin.x + 118.0f, boxMin.y + boxH};
+  drawList->AddRectFilled(boxMin, boxMax, IM_COL32(6, 8, 16, 190), 3.0f);
+  drawList->AddRect(boxMin, boxMax, IM_COL32(80, 90, 110, 180), 3.0f);
+  float rowY = boxMin.y + 4.0f + (rowH * 0.5f);
+  for (const Entry &entry : entries) {
+    drawCapabilityIcon(drawList, {boxMin.x + 12.0f, rowY}, entry.capability,
+                       IM_COL32(220, 220, 230, 255));
+    drawList->AddText({boxMin.x + 24.0f, rowY - 7.0f}, IM_COL32(210, 210, 220, 255), entry.label);
+    rowY += rowH;
+  }
+}
+
 } // namespace
 
 void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState,
@@ -187,13 +250,6 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   if (!ImGui::Begin("Strategic Map", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::End();
     return;
-  }
-
-  ImGui::TextDisabled("(icon legend)");
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("triangle = extraction   lens = research   square = fabrication\n"
-                      "dish = relay   check = verification\n"
-                      "+/- = prograde/retrograde   cyan halo = relay   red halo = corrupted");
   }
 
   const ImVec2 canvasOrigin = ImGui::GetCursorScreenPos();
@@ -224,6 +280,7 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   if (view.spinDimensionless != 0.0 && view.ergosphereRadiusCm > view.innerBoundaryRadiusCm) {
     const float ergoPx = scale.pixelRadius(view.ergosphereRadiusCm);
     drawList->AddCircleFilled(scale.center, ergoPx, IM_COL32(70, 45, 15, 90), 96);
+    drawGlow(drawList, scale.center, ergoPx, IM_COL32(210, 150, 60, 255));
     drawList->AddCircle(scale.center, ergoPx, IM_COL32(210, 150, 60, 200), 96, 1.5f);
     drawList->AddText({scale.center.x + (ergoPx * 0.7071f) + 4.0f,
                        scale.center.y + (ergoPx * 0.7071f) + 4.0f},
@@ -240,32 +297,13 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     }
   }
 
-  // Orbital bands, colored by proper-time rate; invalid bands draw as hazard.
-  char label[96];
-  for (const game::BandView &band : view.bands) {
-    const float bandPx = scale.pixelRadius(band.radiusCm);
-    if (band.validStation && band.insideErgosphere) {
-      drawList->AddCircle(scale.center, bandPx, IM_COL32(210, 150, 60, 230), 96, 2.0f);
-      static_cast<void>(std::snprintf(
-          label, sizeof(label), "band %d  dtau/dt %.3f  omega %.2e  PROGRADE ONLY", band.index,
-          band.properTimeRate, band.frameDragRateRadPerSec));
-    } else if (band.validStation) {
-      drawList->AddCircle(scale.center, bandPx, rateColor(band.properTimeRate), 96, 1.5f);
-      static_cast<void>(std::snprintf(label, sizeof(label), "band %d  dtau/dt %.3f  delay %.1f d", band.index,
-                    band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY));
-    } else {
-      drawList->AddCircle(scale.center, bandPx, IM_COL32(120, 30, 30, 180), 96, 1.0f);
-      static_cast<void>(std::snprintf(label, sizeof(label), "band %d  FORBIDDEN", band.index));
-    }
-    drawList->AddText({scale.center.x + (bandPx * 0.7071f) + 6.0f,
-                       scale.center.y - (bandPx * 0.7071f) - 6.0f},
-                      IM_COL32(200, 200, 210, 255), label);
-  }
+  drawOrbitalBands(drawList, scale, view);
 
   // Authority station: command origin, drawn at the top of its ring.
   const ImVec2 authorityPos = ringPoint(scale, view.authorityRadiusCm, -1.5707963f);
   drawList->AddCircle(scale.center, scale.pixelRadius(view.authorityRadiusCm),
                       IM_COL32(120, 140, 220, 140), 96, 1.0f);
+  drawGlow(drawList, authorityPos, 7.0f, IM_COL32(120, 140, 220, 255));
   drawList->AddCircleFilled(authorityPos, 6.0f, IM_COL32(120, 140, 220, 255), 24);
   drawList->AddText({authorityPos.x + 8.0f, authorityPos.y - 8.0f},
                     IM_COL32(150, 170, 240, 255), "authority");
@@ -353,6 +391,9 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
       }
     }
   }
+
+  // Drawn last so the legend sits above the map and stays readable.
+  drawMapLegend(drawList, canvasOrigin, canvasSize);
 
   ImGui::End();
 }

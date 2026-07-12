@@ -562,11 +562,23 @@ int main(int argc, char **argv) {
     game::CampaignSession campaignSession;
     ui::CampaignUiState campaignUi;
     ui::initCampaignUiFromEnv(campaignUi);
-    // Optional NASA nebula backdrop for the strategic map (1024 rendition from
-    // the build-generated resolution ladder); 0 when absent, in which case the
-    // map falls back to its procedural starfield.
-    const GLuint campaignBackdropTex = loadTexture2D(
-        resourcePath("assets/backgrounds/generated/carina-cosmic-cliffs-1024.jpg"));
+    // Selectable NASA nebula backdrops for the strategic map. Each entry's
+    // texture is 0 when its asset is absent, in which case the map draws its
+    // procedural starfield for that choice. Loaded once; the Campaign panel
+    // picks which one the map uses.
+    const std::array<ui::CampaignBackdrop, 5> campaignBackdrops = {{
+        {"Cosmic Cliffs (Carina)",
+         static_cast<unsigned int>(loadTexture2D(
+             resourcePath("assets/backgrounds/generated/carina-cosmic-cliffs-1024.jpg")))},
+        {"Tarantula Nebula", static_cast<unsigned int>(loadTexture2D(
+                                 resourcePath("assets/backgrounds/source/tarantula-nebula-2k.jpg")))},
+        {"Southern Ring Nebula",
+         static_cast<unsigned int>(loadTexture2D(
+             resourcePath("assets/backgrounds/source/southern-ring-nebula-2k.jpg")))},
+        {"Orion Bar", static_cast<unsigned int>(loadTexture2D(
+                          resourcePath("assets/backgrounds/source/orion-bar-2k.jpg")))},
+        {"Starfield (procedural)", 0U},
+    }};
     rs.recording.recordFrameIndex = recordStartFrame;
     rs.recording.recordCinematic =
         static_cast<float>(recordStartFrame) / static_cast<float>(K_CINEMATIC_FPS);
@@ -1349,8 +1361,8 @@ int main(int argc, char **argv) {
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
         renderPerformancePanel(rs, cpuFrameMs);
-        ui::renderCampaignWindows(campaignSession, campaignUi,
-                                  static_cast<unsigned int>(campaignBackdropTex));
+        ui::renderCampaignWindows(campaignSession, campaignUi, campaignBackdrops.data(),
+                                  static_cast<int>(campaignBackdrops.size()));
       }
 
       /* --export-frame / --export-raw-frame: export textures before ImGui. */
