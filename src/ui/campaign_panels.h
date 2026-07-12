@@ -1,6 +1,6 @@
 /**
  * @file campaign_panels.h
- * @brief Horizon Command windows: campaign control, order composer, intel log,
+ * @brief Temporal Disturbance windows: campaign control, order composer, intel log,
  *        and the strategic-map host call.
  *
  * The panels read the campaign exclusively through

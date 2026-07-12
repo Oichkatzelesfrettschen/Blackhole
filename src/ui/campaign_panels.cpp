@@ -1,6 +1,6 @@
 /**
  * @file campaign_panels.cpp
- * @brief Horizon Command campaign windows implementation.
+ * @brief Temporal Disturbance campaign windows implementation.
  */
 
 #include "ui/campaign_panels.h"
@@ -205,7 +205,7 @@ void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiSt
   ImGui::SetNextWindowPos(ImVec2(420.0f, 40.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(540.0f, 420.0f), ImGuiCond_FirstUseEver);
   if (ImGui::Begin("Campaign", nullptr, ImGuiWindowFlags_NoCollapse)) {
-    ImGui::Checkbox("Horizon Command", &uiState.windowsOpen);
+    ImGui::Checkbox("Temporal Disturbance", &uiState.windowsOpen);
     if (uiState.windowsOpen) {
       const game::CampaignViewSnapshot view = session.state().renderSnapshot();
       renderTimeLedger(view);
