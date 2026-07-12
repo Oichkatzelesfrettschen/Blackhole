@@ -973,18 +973,28 @@ exe).
   the time-ledger panel; NOT collapsed to one winner.
   MEASURED (campaign_sim --compare, 1200 turns, shipped scenario, victory retuned
   220 -> 1400 for sustained play): outer clears t617 stab 0 integrity 0.958;
-  solo t551 stab 1.21 integrity 0.500; pod t463 stab 3.06 integrity 0.550. outer
-  and pod are mutually non-dominated (outer wins integrity, pod wins speed +
-  stabilization) -- the genuine non-dominated decision C5 could not produce under
-  a scalar objective; solo is dominated by pod (partial commitment worse than
-  full, honestly reported). campaign_sim gained --pod/--compare and a 3-line
-  Pareto probe with sustained re-tasking. All knobs default no-op (scenarios
-  that leave them unset are byte-identical bar the new serialized fields);
-  campaign lib stays IEEE under ENABLE_FAST_MATH; campaign_instability_test 6
-  gates (rise/containment/erosion/hazard/no-op/determinism); 91/91.
-- CAMPAIGN-6 leftover: the map UI legend for halos/glyphs was folded into ART-5's
-  drawMapLegend; ergosphere missions beyond extraction is now containment. Next
-  campaign ideas (not scoped): faction AI, save/load format, multi-hole scenarios.
+  solo t551 stab 1.21 integrity 0.500; pod t463 stab 3.06 integrity 0.550.
+- CAMPAIGN-6 HONEST LIMIT (advisor caught, corrected here -- the earlier
+  "genuine non-dominated decision" claim was WRONG and is retracted): the pod
+  banks the MOST energy (3297 > outer 2643), stabilizes most (3.06), AND clears
+  fastest (463) -- it wins three of four axes; integrity (0.958 vs 0.550) is the
+  only axis outer wins, and NOTHING reads stabilization/clearedTurn/integrity to
+  affect the outcome (evaluateOutcome checks only energy >= threshold, else
+  deadline). So a win-maximizing player dives every time: the dive is DOMINANT,
+  not non-dominated -- worse than C5's honest "dive optional." Root cause: the
+  deep lane produces energy AND stabilization from the SAME proper time
+  (frame-drag bonus + containment both help), so diving is pure profit, not a
+  trade. What CAMPAIGN-6 truly delivered: escalating instability + a
+  containment/hazard/stabilization subsystem, deterministic and no-op-gated.
+  Genuine non-dominance remains OPEN.
+- CAMPAIGN-7 = make it real (advisor acceptance test: find a tuning where the
+  high-stabilization line banks FEWER energy units than pure-outer). Fix: make
+  stabilization a RIVAL use of the deep lane, not a joint output -- deep work
+  extracts energy OR stabilizes (mutually exclusive proper time / containment
+  suppresses the containing fleet's own yield), and/or tighten victory so the
+  deadline actually bites (outer clears near ~1100, not 617) so speed/margin is
+  worth something. The map UI legend leftover was folded into ART-5's
+  drawMapLegend.
 
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 
