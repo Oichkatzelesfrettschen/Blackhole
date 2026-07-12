@@ -95,6 +95,14 @@ struct CampaignViewSnapshot {
   double energyUnits = 0.0;        ///< Banked yield (credited on report arrival).
   double victoryEnergyUnits = 0.0; ///< Win target; zero disables the objective.
   std::int64_t deadlineTurn = 0;   ///< Loss turn; zero disables the deadline.
+  // Outcome vector the player weights (CAMPAIGN-6): energy above, plus the
+  // singularity's instability and the stabilization/integrity/speed a deep
+  // prograde lane buys against it. All zero when the mechanic is disabled.
+  double instability = 0.0;        ///< Current disturbance level; erodes all yield.
+  double stabilization = 0.0;      ///< Cumulative containment produced by ergoregion work.
+  double victoryStabilizationUnits = 0.0; ///< Alternate win: tame the singularity; 0 = off.
+  double fleetIntegrity = 1.0;     ///< Lowest fleet reliability -- the cost the dive pays.
+  std::int64_t clearedTurn = 0;    ///< Turn a victory was reached; 0 until won.
   double ergosphereRadiusCm = 0.0; ///< Static limit; equals the horizon without spin.
   double spinDimensionless = 0.0;  ///< Black-hole spin a/M (0 for Schwarzschild).
   double reliabilityCorruptionThreshold = 0.0; ///< Below this a fleet's reports corrupt; 0 = off.

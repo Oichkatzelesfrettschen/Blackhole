@@ -34,10 +34,11 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   config.secondsPerTurn = K_SECONDS_PER_DAY;
   config.authorityRadiusCm = 200.0 * rS;
   config.bandRadiusCm = {0.85 * rS, 3.0 * rS, 10.0 * rS, 50.0 * rS};
-  // Objective tuned so pure outer-band play falls short (~221 energy) but a
-  // fleet committed to the deep prograde ergoregion lane clears it: the
-  // frame-dragging bonus is the path to victory, not an optional flourish.
-  config.victoryEnergyUnits = 220.0;
+  // Objective sized for sustained play across the full deadline: uncontained
+  // outer work still clears it, but only near the deadline as instability erodes
+  // throughput; a deep prograde lane that holds instability down clears far
+  // sooner. Neither is strictly better -- see the instability block below.
+  config.victoryEnergyUnits = 1400.0;
   config.deadlineTurn = 1200;
   config.fleetInitialFuelUnits = 100.0;
   config.fuelPerBandHop = 20.0;
@@ -62,6 +63,25 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   // yield until verification restores it -- the deep dive's hazard.
   config.reliabilityCorruptionThreshold = 0.9;
   config.corruptedYieldFraction = 0.4;
+  // Instability (CAMPAIGN-6): the singularity destabilizes over the campaign,
+  // eroding all yield. Uncontained outer play still clears the objective (it
+  // survives to the deadline) but slows as the disturbance grows; a sustained
+  // prograde ergoregion presence produces containment that holds instability
+  // down, clearing sooner and banking a stabilization score -- bought by wearing
+  // the deep fleet's integrity. No single line dominates: outer keeps its fleets
+  // whole, the dive clears fast and stabilizes. Tuned against campaign_sim.
+  config.instabilityPerTurn = 0.02;
+  config.instabilityYieldPenaltyPerUnit = 0.04;
+  config.ergoContainmentPerProperDay = 0.12;
+  config.ergoHazardWearPerProperDay = 0.15;
+  // Stabilization is a sacrifice: a deep prograde fleet keeps only a tenth of its
+  // yield, so the stabilizing line banks less raw energy than pure outer play --
+  // it is a rival objective, not a bonus. Reaching 8 units of cumulative
+  // stabilization is an ALTERNATE victory (tame the singularity), a path only a
+  // fleet-wide commitment reaches and only by forgoing the energy win. Two ends,
+  // one choice. See CAMPAIGN-7 in the debt ledger.
+  config.containmentYieldRetention = 0.1;
+  config.victoryStabilizationUnits = 8.0;
   return config;
 }
 

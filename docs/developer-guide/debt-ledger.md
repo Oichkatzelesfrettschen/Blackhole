@@ -957,10 +957,63 @@ exe).
   one. The interlocks (deep fleet corrupts without co-located verification,
   needs fabrication fuel + relay delay) make executing a dive a multi-fleet
   commitment.
-- CAMPAIGN-6 Next: escalating or multi-objective structure so surplus energy /
-  a faster clear has real payoff (the only way to make the dive a genuine
-  non-dominated decision); ergosphere missions beyond extraction; a UI legend
-  for the map halos/glyphs.
+- CAMPAIGN-6 DONE (07a15c0). Instability mechanic + multi-objective outcome
+  vector. Instability rises instabilityPerTurn each turn and erodes ALL yield
+  through a saturating factor 1/(1 + instability*instabilityYieldPenaltyPerUnit)
+  -- uncontained outer play still clears the objective (survives) but slows, so
+  it is escalating pressure, not a death gate. A prograde ergoregion fleet
+  produces containment (ergoContainmentPerProperDay, scaled by depth via the
+  shared ergoregionDepth helper) that suppresses instability, protecting
+  throughput; deep prograde work carries a depth-scaled hazard
+  (ergoHazardWearPerProperDay) that wears integrity faster. Containment acts at
+  the work site this turn (physical suppression); yield still banks on delayed
+  report arrival -- commented at the site so the asymmetry does not read as a
+  causality bug. Outcome is a VECTOR the player weights (energy, stabilization,
+  fleetIntegrity=min reliability, clearedTurn), surfaced in renderSnapshot and
+  the time-ledger panel; NOT collapsed to one winner.
+  MEASURED (campaign_sim --compare, 1200 turns, shipped scenario, victory retuned
+  220 -> 1400 for sustained play): outer clears t617 stab 0 integrity 0.958;
+  solo t551 stab 1.21 integrity 0.500; pod t463 stab 3.06 integrity 0.550.
+- CAMPAIGN-6 HONEST LIMIT (advisor caught, corrected here -- the earlier
+  "genuine non-dominated decision" claim was WRONG and is retracted): the pod
+  banks the MOST energy (3297 > outer 2643), stabilizes most (3.06), AND clears
+  fastest (463) -- it wins three of four axes; integrity (0.958 vs 0.550) is the
+  only axis outer wins, and NOTHING reads stabilization/clearedTurn/integrity to
+  affect the outcome (evaluateOutcome checks only energy >= threshold, else
+  deadline). So a win-maximizing player dives every time: the dive is DOMINANT,
+  not non-dominated -- worse than C5's honest "dive optional." Root cause: the
+  deep lane produces energy AND stabilization from the SAME proper time
+  (frame-drag bonus + containment both help), so diving is pure profit, not a
+  trade. What CAMPAIGN-6 truly delivered: escalating instability + a
+  containment/hazard/stabilization subsystem, deterministic and no-op-gated.
+  Genuine non-dominance remains OPEN.
+- CAMPAIGN-7 DONE (make it real): stabilization is now a RIVAL use of the deep
+  lane, not a joint output. containmentYieldRetention (scenario 0.1) scales the
+  yield of any prograde ergoregion fleet while containment is on, so a stabilizing
+  fleet keeps a tenth of its yield -- taming the disturbance costs energy. Payoff:
+  victoryStabilizationUnits (scenario 8.0) is an ALTERNATE victory (tame the
+  singularity), so stabilization is rewarded, not just displayed; evaluateOutcome
+  latches Won on energy >= target OR stabilization >= target. MEASURED
+  (campaign_sim --compare, 1200 turns, now 4 lines with a --stabilize/Stabilize
+  commit = all fleets deep): outer energy 2643 stab 0 wins-energy t617; solo 2478
+  stab 1.47 t673; pod 2188 stab 4.98 t751 (all win the ENERGY objective); stab
+  energy 617 stab 10.72 wins-STABILIZATION t819. ACCEPTANCE TEST PASSES: the
+  high-stabilization line banks 617 << outer 2643 -- stabilization genuinely costs
+  energy. Two victory paths (bank energy vs tame the singularity); pursuing
+  stabilization forgoes the energy win, so which end to chase is a real choice of
+  OBJECTIVE. HONEST CAVEAT: outer's energy win is faster (t617 < t819), so the
+  non-dominance is over victory-TYPE preference (like a science-vs-domination win
+  in 4X), NOT raw speed -- a pure fastest-win player still takes the energy path.
+  All CAMPAIGN-6/7 knobs default no-op; 2 new gates in campaign_instability_test
+  (retention costs energy, stabilization victory latches); UI shows a second
+  objective bar. campaign lib IEEE under ENABLE_FAST_MATH; determinism holds.
+  The map UI legend leftover was folded into ART-5's drawMapLegend.
+- CAMPAIGN-8 Next (future tuning, NOT scoped -- do not build without intent): the
+  deadline never bites (both wins land t617-819 of 1200), so clearedTurn has no
+  stakes and the choice reads as "which victory flavor" not "a tense race".
+  Tightening victoryEnergyUnits so the outer line clears near ~1100 would make
+  speed/margin matter and turn a flavor-victory into a tense one. Deferred to
+  avoid a balance rabbit hole; the subsystem is honestly done as is.
 
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 

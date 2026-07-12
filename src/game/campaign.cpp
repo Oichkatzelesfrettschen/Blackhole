@@ -126,20 +126,26 @@ bool CampaignState::laneAllowedAtBand(OrbitLane lane, int bandIndex) const {
   return bandRadiusCm(bandIndex) >= field_->ergosphereRadiusCm();
 }
 
-double CampaignState::frameDragYieldFactor(const Fleet &fleet) const {
-  if (config_.frameDragYieldBonus <= 0.0 || fleet.lane != OrbitLane::Prograde) {
-    return 1.0;
+double CampaignState::ergoregionDepth(const Fleet &fleet) const {
+  if (fleet.lane != OrbitLane::Prograde) {
+    return 0.0;
   }
   const double radiusCm = bandRadiusCm(fleet.bandIndex);
   const double ergoCm = field_->ergosphereRadiusCm();
   const double horizonCm = field_->innerBoundaryRadiusCm();
   if (radiusCm >= ergoCm || ergoCm <= horizonCm) {
-    return 1.0; // outside the ergoregion, or a non-rotating field (ergo == horizon)
+    return 0.0; // outside the ergoregion, or a non-rotating field (ergo == horizon)
   }
   // Depth runs 0 at the static limit to 1 at the horizon: deeper prograde work
   // taps more of the hole's rotational energy.
-  const double depth = std::clamp((ergoCm - radiusCm) / (ergoCm - horizonCm), 0.0, 1.0);
-  return 1.0 + (config_.frameDragYieldBonus * depth);
+  return std::clamp((ergoCm - radiusCm) / (ergoCm - horizonCm), 0.0, 1.0);
+}
+
+double CampaignState::frameDragYieldFactor(const Fleet &fleet) const {
+  if (config_.frameDragYieldBonus <= 0.0) {
+    return 1.0;
+  }
+  return 1.0 + (config_.frameDragYieldBonus * ergoregionDepth(fleet));
 }
 
 double CampaignState::bandRadiusCm(int bandIndex) const {
@@ -298,22 +304,48 @@ void CampaignState::advanceTurn() {
   clock_.advance();
   deliverDue();
   taskGraph_.activateEligible();
+  // Yield this turn is eroded by the instability ENTERING the turn: the
+  // disturbance suppresses productive work before this turn's containment lands,
+  // so containment protects the next turn's throughput. The factor saturates in
+  // (0,1], never negative, so outer play slows but never dies.
+  const double yieldFactor =
+      1.0 / (1.0 + (instability_ * config_.instabilityYieldPenaltyPerUnit));
   // Capability side effects are collected here and applied AFTER the fleet loop
   // so they never depend on iteration order: a fabrication refuel must hit every
   // co-band fleet identically, whether processed before or after the fabricator.
   std::vector<CapabilityCompletion> completions;
+  double containmentThisTurn = 0.0;
   for (Fleet &fleet : fleets_) {
     const double rate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex));
     accrueProperTime(fleet, rate, clock_.secondsPerTurn());
     const double budgetSec = properDeltaSec(rate, clock_.secondsPerTurn());
     const TaskGraph::FleetAdvanceResult advanced = taskGraph_.advanceFleetTasks(fleet.id, budgetSec);
-    // Wear: reliability degrades with local proper time actually worked,
-    // never below the floor. Idle fleets do not wear.
-    if (advanced.properTimeSpentSec > 0.0 && config_.reliabilityWearPerProperDay > 0.0) {
+    // Wear: reliability degrades with local proper time actually worked, never
+    // below the floor. Idle fleets do not wear. A prograde ergoregion fleet
+    // wears faster -- deep near-horizon work carries a tidal/frame-drag hazard
+    // scaled by depth -- so the deep lane spends integrity for its stabilization.
+    if (advanced.properTimeSpentSec > 0.0) {
       const double wornDays = advanced.properTimeSpentSec / 86400.0;
-      fleet.reliability = std::max(config_.reliabilityFloor,
-                                   fleet.reliability -
-                                       (config_.reliabilityWearPerProperDay * wornDays));
+      const double wearRate =
+          config_.reliabilityWearPerProperDay +
+          (config_.ergoHazardWearPerProperDay * ergoregionDepth(fleet));
+      if (wearRate > 0.0) {
+        fleet.reliability =
+            std::max(config_.reliabilityFloor, fleet.reliability - (wearRate * wornDays));
+      }
+    }
+    // Containment: a prograde ergoregion fleet suppresses instability in
+    // proportion to the proper time it actually works, scaled by ergoregion
+    // depth. This is the ergosphere mission beyond extraction. It acts at the
+    // work site (physical suppression of the source), not through the report
+    // queue that only carries what the authority KNOWS -- hence it lands this
+    // turn while yield banks on delayed arrival.
+    if (advanced.properTimeSpentSec > 0.0 && config_.ergoContainmentPerProperDay > 0.0) {
+      const double depth = ergoregionDepth(fleet);
+      if (depth > 0.0) {
+        const double workedDays = advanced.properTimeSpentSec / 86400.0;
+        containmentThisTurn += workedDays * config_.ergoContainmentPerProperDay * depth;
+      }
     }
     // Corruption is judged on the post-wear reliability AT completion, before
     // any verification restore this turn: verification protects future work,
@@ -327,9 +359,15 @@ void CampaignState::advanceTurn() {
           effectiveSignalDelaySec(bandRadiusCm(fleet.bandIndex), config_.authorityRadiusCm);
       double yieldUnits = taskYieldUnits(*taskGraph_.find(taskId), rate, fleet.reliability) *
                           frameDragYieldFactor(fleet) *
-                          capabilityYieldMultiplier(fleet.capability);
+                          capabilityYieldMultiplier(fleet.capability) * yieldFactor;
       if (corrupted) {
         yieldUnits *= config_.corruptedYieldFraction;
+      }
+      // Stabilization rivals extraction: a fleet whose deep prograde work is
+      // taming the disturbance keeps only a fraction of its yield, so pursuing
+      // stabilization genuinely costs energy rather than adding to it.
+      if (config_.ergoContainmentPerProperDay > 0.0 && ergoregionDepth(fleet) > 0.0) {
+        yieldUnits *= config_.containmentYieldRetention;
       }
       Delivery delivery;
       delivery.kind = DeliveryKind::CompletionReport;
@@ -341,10 +379,17 @@ void CampaignState::advanceTurn() {
       delivery.yieldUnits = yieldUnits;
       delivery.corrupted = corrupted;
       deliveryQueue_.push_back(delivery);
-      completions.push_back({fleet.capability, fleet.bandIndex});
+      completions.push_back({.capability = fleet.capability, .bandIndex = fleet.bandIndex});
     }
   }
   applyCapabilityEffects(completions);
+  // Instability evolves after the work: this turn's rise, less this turn's
+  // containment, floored at zero. Stabilization accumulates the containment
+  // produced -- the ergosphere mission's scored output, a monotone record of
+  // how much the deep lane held the singularity together.
+  stabilization_ += containmentThisTurn;
+  instability_ =
+      std::max(0.0, instability_ + config_.instabilityPerTurn - containmentThisTurn);
   evaluateOutcome();
 }
 
@@ -378,7 +423,16 @@ void CampaignState::evaluateOutcome() {
   if (status_ != CampaignStatus::Ongoing) {
     return;
   }
-  if (config_.victoryEnergyUnits > 0.0 && energyUnits_ >= config_.victoryEnergyUnits) {
+  // Two ends: bank the energy target, or tame the singularity. Either latches a
+  // win and records the turn it cleared. Neither dominates -- the stabilization
+  // path costs energy (containmentYieldRetention), the energy path leaves the
+  // disturbance to grow -- so which to pursue is a genuine choice.
+  const bool energyWin =
+      config_.victoryEnergyUnits > 0.0 && energyUnits_ >= config_.victoryEnergyUnits;
+  const bool stabilizationWin =
+      config_.victoryStabilizationUnits > 0.0 && stabilization_ >= config_.victoryStabilizationUnits;
+  if (energyWin || stabilizationWin) {
+    clearedTurn_ = clock_.turn(); // turns-to-clear: the speed axis of the outcome vector.
     status_ = CampaignStatus::Won;
     return;
   }
@@ -403,6 +457,17 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
   view.energyUnits = energyUnits_;
   view.victoryEnergyUnits = config_.victoryEnergyUnits;
   view.deadlineTurn = config_.deadlineTurn;
+  view.instability = instability_;
+  view.stabilization = stabilization_;
+  view.victoryStabilizationUnits = config_.victoryStabilizationUnits;
+  view.clearedTurn = clearedTurn_;
+  // Integrity is the weakest fleet: the deep dive's wear shows up as the axis the
+  // player trades stabilization and speed against.
+  double integrity = fleets_.empty() ? 1.0 : fleets_.front().reliability;
+  for (const Fleet &fleet : fleets_) {
+    integrity = std::min(integrity, fleet.reliability);
+  }
+  view.fleetIntegrity = integrity;
   view.ergosphereRadiusCm = field_->ergosphereRadiusCm();
   view.spinDimensionless = field_->spinDimensionless();
   view.reliabilityCorruptionThreshold = config_.reliabilityCorruptionThreshold;
@@ -523,8 +588,17 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   appendF64(out, config_.verificationReliabilityRestore);
   appendF64(out, config_.reliabilityCorruptionThreshold);
   appendF64(out, config_.corruptedYieldFraction);
+  appendF64(out, config_.instabilityPerTurn);
+  appendF64(out, config_.instabilityYieldPenaltyPerUnit);
+  appendF64(out, config_.ergoContainmentPerProperDay);
+  appendF64(out, config_.ergoHazardWearPerProperDay);
+  appendF64(out, config_.containmentYieldRetention);
+  appendF64(out, config_.victoryStabilizationUnits);
   appendI64(out, clock_.turn());
   appendF64(out, energyUnits_);
+  appendF64(out, instability_);
+  appendF64(out, stabilization_);
+  appendI64(out, clearedTurn_);
   appendU8(out, static_cast<std::uint8_t>(status_));
   appendU32(out, static_cast<std::uint32_t>(fleets_.size()));
   for (const Fleet &fleet : fleets_) {
