@@ -868,23 +868,41 @@ target carries the -fno-fast-math override, exes included -- the
 _FORTIFY_SOURCE=3 + -ffinite-math-only *_chk interaction applies to any gtest
 exe).
 
-- CAMPAIGN-1 Migrate the ~15 physics test targets from recompiling
-  PHYSICS_SRC_FILES to linking blackhole_physics. HAZARD: until then two
-  flag-divergent compiled copies of the physics TUs coexist under
-  ENABLE_FAST_MATH=ON (the lib is always IEEE, per-test copies choose their
-  own flags); safe today because no binary links both, but any future target
-  that links blackhole_physics AND compiles a PHYSICS_SRC_FILES file directly
-  is an ODR trap. Migration must preserve each test's -fno-fast-math choice,
-  which the shared lib satisfies only if the test needs IEEE (it always does
-  -- the fast-math-keeping target is safe_limits_test, which does not compile
-  physics TUs). [one compiled copy of src/physics/*.cpp in the tree]
-- CAMPAIGN-2 UI slice (next): src/ui/campaign_panels.* + strategic_map.*
-  consuming a new immutable renderSnapshot()/CampaignViewSnapshot (name
-  reserved, NOT the serializeState() determinism artifact); ImDrawList orbital
-  map over the existing viewport; alpha channel untouched. Kerr lanes via
-  frameDraggingOmega come after (kerrTimeDilation documents ZAMO but implements
-  static-observer -- do not use for moving ships). [campaign playable against
-  the live renderer]
+- CAMPAIGN-1 DONE (78395b0). Twelve gtest targets link blackhole_physics
+  instead of recompiling PHYSICS_SRC_FILES; the five physics TUs carry zero
+  preprocessor conditionals, so no per-target compile definition reached them.
+  Deliberately NOT migrated: fuzz_physics/fuzz_headers (they need
+  -fsanitize=fuzzer,address,undefined instrumentation INSIDE the physics TUs;
+  the uninstrumented lib would blind the fuzzer) and the desktop exes +
+  blackhole_testcore (PROJECT_SRC_FILES keeps renderer physics flags
+  target-owned). RESIDUAL ODR NOTE: the desktop exes now link
+  blackhole_campaign (whose archive carries physics members) while compiling
+  PHYSICS_SRC_FILES themselves; the linker resolves physics symbols from the
+  exe objects and never pulls the archive's physics members, so one definition
+  wins -- but under ENABLE_FAST_MATH=ON the IN-APP campaign computes through
+  fast-math physics. Campaign determinism claims hold for campaign_sim and the
+  tests (always IEEE); the in-app campaign is determinism-grade only in IEEE
+  builds (the default).
+- CAMPAIGN-2 DONE (c352730 + a84125a). renderSnapshot()/CampaignViewSnapshot
+  (src/game/campaign_view.h) is the view contract, distinct from
+  serializeState(); CommandType/Command moved to src/game/command.h;
+  TimeField gained innerBoundaryRadiusCm(). ui::renderCampaignWindows
+  (campaign_panels.*) + ui::renderStrategicMap (strategic_map.*) draw
+  Campaign/Strategic Map/Campaign Intel inside the dockspace, default-closed,
+  BLACKHOLE_CAMPAIGN=1 opens at startup; game::CampaignSession owns
+  field+state+canonical scenario (M87*, one-day turns, authority 200 r_s,
+  bands 3/10/50 r_s, six fleets). Map = log-radius rings colored by dtau/dt,
+  rimmed horizon core, golden-angle fleet markers, signals in flight at causal
+  progress fraction; an InvisibleButton owns canvas clicks (map click never
+  rotates the camera). Panels sit in the UI-visible non-record block, so
+  record/showcase captures never see them. Verified live: band rates on the
+  map match sqrt(1 - r_s/r) analytically (0.8165/0.9487/0.9899 at 3/10/50
+  r_s); off-vs-on smoke runs produce identical log classes.
+- CAMPAIGN-3 Next: victory/loss conditions and the resource economy (task
+  yields, fuel, reliability decay) on top of the task graph; Kerr lanes via
+  frameDraggingOmega after that (kerrTimeDilation documents ZAMO but
+  implements static-observer -- do not use for moving ships). [a winnable
+  scenario]
 
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
