@@ -203,8 +203,10 @@ void CampaignState::applyCommand(const LoggedCommand &logged) {
     // in flight may have moved it or spent its fuel. An unaffordable move
     // fizzles -- the fleet stays put and keeps its fuel.
     const double fuelCost = redeployFuelCost(fleet->bandIndex, logged.command.targetBand);
-    // Re-check the lane gate at effect time: an earlier order may have opened
-    // or closed the ergosphere for this fleet's target.
+    // Fuel is the effect-time gate that can actually change: an earlier order
+    // in flight may have spent this fleet's budget since issue. The lane gate
+    // is re-checked for consistency but cannot differ -- the ergosphere radius
+    // is fixed -- so an unaffordable move is the only way this fizzles.
     if (fuelCost <= fleet->fuelUnits &&
         laneAllowedAtBand(logged.command.lane, logged.command.targetBand)) {
       fleet->fuelUnits -= fuelCost;

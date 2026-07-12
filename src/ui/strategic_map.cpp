@@ -6,7 +6,6 @@
 #include "ui/strategic_map.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -72,6 +71,22 @@ float signalProgress(std::int64_t nowTurn, std::int64_t fromTurn, std::int64_t u
 
 ImVec2 lerp(const ImVec2 &a, const ImVec2 &b, float t) {
   return {a.x + ((b.x - a.x) * t), a.y + ((b.y - a.y) * t)};
+}
+
+char capabilityGlyph(game::FleetCapability capability) {
+  switch (capability) {
+  case game::FleetCapability::Research:
+    return 'R';
+  case game::FleetCapability::Fabrication:
+    return 'F';
+  case game::FleetCapability::Relay:
+    return 'L';
+  case game::FleetCapability::Verification:
+    return 'V';
+  case game::FleetCapability::Extraction:
+    return 'E';
+  }
+  return '?';
 }
 
 } // namespace
@@ -192,12 +207,13 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     drawList->AddCircle(pos, selected ? 9.0f : 6.5f,
                         selected ? IM_COL32(255, 220, 80, 255) : IM_COL32(230, 230, 235, 200), 20,
                         selected ? 2.5f : 1.0f);
-    const char initial = static_cast<char>(
-        std::toupper(static_cast<unsigned char>(game::capabilityName(fleet.capability)[0])));
+    // Distinct glyph per capability: Research and Relay both start with 'R',
+    // so Relay takes 'L' to keep map markers unambiguous.
+    const char glyph = capabilityGlyph(fleet.capability);
     // Lane tag: '+' prograde, '-' retrograde, so orbital direction reads on the
     // marker without a legend.
     const char laneTag = fleet.lane == game::OrbitLane::Retrograde ? '-' : '+';
-    const char markerText[4] = {initial, laneTag, '\0', '\0'};
+    const char markerText[4] = {glyph, laneTag, '\0', '\0'};
     drawList->AddText({pos.x + 8.0f, pos.y - 7.0f}, IM_COL32(235, 235, 240, 255), markerText);
   }
 

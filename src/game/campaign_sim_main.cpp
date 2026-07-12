@@ -23,11 +23,14 @@
 int main(int argc, char **argv) {
   std::uint64_t seed = 42;
   std::int64_t turns = 400;
-  for (int argIndex = 1; argIndex + 1 < argc; argIndex += 2) {
-    if (std::strcmp(argv[argIndex], "--seed") == 0) {
-      seed = std::strtoull(argv[argIndex + 1], nullptr, 10);
-    } else if (std::strcmp(argv[argIndex], "--turns") == 0) {
-      turns = std::strtoll(argv[argIndex + 1], nullptr, 10);
+  bool ergoDive = true; // --no-dive keeps every fleet on the outer bands.
+  for (int argIndex = 1; argIndex < argc; ++argIndex) {
+    if (std::strcmp(argv[argIndex], "--no-dive") == 0) {
+      ergoDive = false;
+    } else if (std::strcmp(argv[argIndex], "--seed") == 0 && argIndex + 1 < argc) {
+      seed = std::strtoull(argv[++argIndex], nullptr, 10);
+    } else if (std::strcmp(argv[argIndex], "--turns") == 0 && argIndex + 1 < argc) {
+      turns = std::strtoll(argv[++argIndex], nullptr, 10);
     }
   }
 
@@ -65,13 +68,14 @@ int main(int argc, char **argv) {
     }
   }
 
-  // Mid-campaign gamble: send the outer survey fleet into the ergoregion band
-  // (index 0) on the prograde lane, then contract a deep observation run that
-  // banks the frame-dragging yield bonus.
+  // Mid-campaign gamble (unless --no-dive): send the outer survey fleet into
+  // the ergoregion band (index 0) on the prograde lane, then contract a deep
+  // observation run that banks the frame-dragging yield bonus. --no-dive
+  // measures the outer-only line the objective is tuned to fall short of.
   const int ergoBand = 0;
   const std::int64_t redeployTurn = turns / 2;
   campaign.advanceTurns(redeployTurn);
-  if (session.issuePlaceFleet(surveyFleet, ergoBand, game::OrbitLane::Prograde)) {
+  if (ergoDive && session.issuePlaceFleet(surveyFleet, ergoBand, game::OrbitLane::Prograde)) {
     static_cast<void>(session.issueAssignTask(surveyFleet, 10.0));
   }
   campaign.advanceTurns(turns - redeployTurn);
