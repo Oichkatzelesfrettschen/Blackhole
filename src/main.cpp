@@ -567,15 +567,16 @@ int main(int argc, char **argv) {
     // procedural starfield for that choice. Loaded once; the Campaign panel
     // picks which one the map uses, and the map draws its credit.
     //
-    // The Cosmic Cliffs has a build-generated resolution ladder, so its
-    // rendition is chosen to match the window: an ultrawide framebuffer takes a
-    // 21:9 crop, otherwise the nearest width tier -- crisp on large displays,
-    // light on small ones.
+    // Sources with a build-generated resolution ladder pick the rendition that
+    // matches the window: an ultrawide framebuffer takes a 21:9 crop, otherwise
+    // the nearest width tier -- crisp on large displays, light on small ones.
+    // The selector is keyed by the source base name, so every laddered backdrop
+    // shares it.
     int campaignFbW = 0;
     int campaignFbH = 0;
     glfwGetFramebufferSize(window, &campaignFbW, &campaignFbH);
-    const std::string cosmicCliffsRendition = [campaignFbW, campaignFbH]() -> std::string {
-      const std::string dir = "assets/backgrounds/generated/carina-cosmic-cliffs-";
+    const auto ladderRendition = [campaignFbW, campaignFbH](const char *basename) -> std::string {
+      const std::string dir = std::string("assets/backgrounds/generated/") + basename + "-";
       const double aspect = campaignFbH > 0 ? static_cast<double>(campaignFbW) / campaignFbH : 1.78;
       if (aspect > 2.1) {
         return dir + (campaignFbH >= 1200 ? "ultrawide-3440x1440.jpg" : "ultrawide-2560x1080.jpg");
@@ -587,11 +588,16 @@ int main(int argc, char **argv) {
         return dir + "1024.jpg";
       }
       return dir + "512.jpg";
-    }();
+    };
     const char *const nasaCredit = "NASA, ESA, CSA, STScI";
-    const std::array<ui::CampaignBackdrop, 5> campaignBackdrops = {{
+    const std::array<ui::CampaignBackdrop, 6> campaignBackdrops = {{
         {"Cosmic Cliffs (Carina)",
-         static_cast<unsigned int>(loadTexture2D(resourcePath(cosmicCliffsRendition))), nasaCredit},
+         static_cast<unsigned int>(
+             loadTexture2D(resourcePath(ladderRendition("carina-cosmic-cliffs")))),
+         nasaCredit},
+        {"Crab Nebula",
+         static_cast<unsigned int>(loadTexture2D(resourcePath(ladderRendition("crab-nebula")))),
+         nasaCredit},
         {"Tarantula Nebula",
          static_cast<unsigned int>(
              loadTexture2D(resourcePath("assets/backgrounds/source/tarantula-nebula-2k.jpg"))),

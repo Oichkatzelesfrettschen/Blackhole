@@ -17,6 +17,20 @@
       "tags": ["jwst", "nebula", "carina", "campaign-backdrop", "resolution-ladder"]
     },
     {
+      "id": "jwst_crab_nebula",
+      "title": "Crab Nebula (Messier 1)",
+      "source": "NASA/ESA/CSA/STScI",
+      "sourceUrl": "https://esawebb.org/images/weic2417a/",
+      "license": "Public Domain",
+      "licenseUrl": "https://webbtelescope.org/copyright",
+      "credit": "NASA, ESA, CSA, STScI",
+      "resolution": { "width": 3840, "height": 3335 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/crab-nebula-4k.jpg",
+      "usage": "Singularity: GOROROBA strategic-map backdrop; scripts/generate_nebula_ladder.sh downscales this 4K source to a ladder (2K, both 2K ultrawides, 1080, 720, 1024, 512) under assets/backgrounds/generated/ at build. Downscaled from the ESA/Webb weic2417a release; committed as a plain git blob (not LFS) because the account LFS budget is exhausted",
+      "tags": ["jwst", "nebula", "crab", "messier-1", "campaign-backdrop", "resolution-ladder"]
+    },
+    {
       "id": "jwst_deep_field_smacs0723",
       "title": "Webb's First Deep Field (SMACS 0723)",
       "source": "NASA/ESA/CSA/STScI",
