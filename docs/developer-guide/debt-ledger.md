@@ -898,11 +898,24 @@ exe).
   record/showcase captures never see them. Verified live: band rates on the
   map match sqrt(1 - r_s/r) analytically (0.8165/0.9487/0.9899 at 3/10/50
   r_s); off-vs-on smoke runs produce identical log classes.
-- CAMPAIGN-3 Next: victory/loss conditions and the resource economy (task
-  yields, fuel, reliability decay) on top of the task graph; Kerr lanes via
-  frameDraggingOmega after that (kerrTimeDilation documents ZAMO but
-  implements static-observer -- do not use for moving ships). [a winnable
-  scenario]
+- CAMPAIGN-3 DONE (57642ea). Energy economy priced by causality: yield fixed
+  at completion (properHours * 1/dtau_dt * reliability) but banked only when
+  the report ARRIVES at the authority. Reliability wears with proper time
+  actually worked (advanceFleetTasks returns FleetAdvanceResult), clamped at
+  a floor; fuel charged per band hop at EFFECT time (issue-gated, fizzles if
+  earlier in-flight orders spent it). victoryEnergyUnits/deadlineTurn latch
+  Won/Lost at end of turn; a decided campaign rejects commands while time
+  keeps flowing. CampaignSession(seed) owns the one canonical scenario
+  (300 energy by t1200); campaign_sim replays over the session (second
+  scenario copy deleted) and prints energy/status. campaign_economy_test +
+  shared tests/campaign_test_field.h fake cover arrival-crediting, 10x deep
+  yield, wear, effect-time fuel + fizzle, latched outcomes, byte-identical
+  replay; 88/88; fast-math build digest == IEEE digest.
+- CAMPAIGN-4 Next: Kerr frame-dragging lanes via frameDraggingOmega
+  (kerrTimeDilation documents ZAMO but implements static-observer -- do not
+  use for moving ships); candidate mechanics before that: verification
+  fleets restoring reliability, corrupted-telemetry checks, per-capability
+  task multipliers. [orbital direction matters]
 
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
