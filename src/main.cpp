@@ -556,7 +556,7 @@ int main(int argc, char **argv) {
     // Curve overlay for plotting (e.g., critical curves)
     RenderState rs;
 
-    // Temporal Disturbance campaign: pure game state beside (never inside) the
+    // Singularity: GOROROBA campaign: pure game state beside (never inside) the
     // renderer's RenderState. Windows stay closed unless toggled in the
     // Campaign panel or opened via BLACKHOLE_CAMPAIGN=1.
     game::CampaignSession campaignSession;

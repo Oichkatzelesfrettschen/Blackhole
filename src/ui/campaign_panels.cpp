@@ -1,6 +1,6 @@
 /**
  * @file campaign_panels.cpp
- * @brief Temporal Disturbance campaign windows implementation.
+ * @brief Singularity: GOROROBA campaign windows implementation.
  */
 
 #include "ui/campaign_panels.h"
@@ -252,7 +252,7 @@ void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiSt
   ImGui::SetNextWindowPos(ImVec2(420.0f, 40.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(540.0f, 420.0f), ImGuiCond_FirstUseEver);
   if (ImGui::Begin("Campaign", nullptr, ImGuiWindowFlags_NoCollapse)) {
-    ImGui::Checkbox("Temporal Disturbance", &uiState.windowsOpen);
+    ImGui::Checkbox("Singularity: GOROROBA", &uiState.windowsOpen);
     if (uiState.windowsOpen) {
       const game::CampaignViewSnapshot view = session.state().renderSnapshot();
       renderTimeLedger(view);
@@ -272,7 +272,7 @@ void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiSt
       renderFleetRoster(view, uiState);
       renderOrderComposer(session, view, uiState);
     } else {
-      ImGui::TextDisabled("enable to command fleets around the black hole");
+      ImGui::TextDisabled("enable to command fleets around Gororoba, the singularity");
     }
   }
   ImGui::End();
