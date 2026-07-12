@@ -1347,28 +1347,38 @@ if(ENABLE_DESKTOP_APP)
     VERBATIM)
   add_custom_target(blackhole_font DEPENDS "${BH_FONT_TTF}")
 
-  # Campaign strategic-map backdrop: the full-res 4K NASA source (LFS) is
-  # downscaled into a resolution ladder (2K, 2K ultrawide, 1080, 720, 1024, 512)
-  # by scripts/generate_nebula_ladder.sh with ImageMagick; the map loads the
-  # 1024 rendition. Unlike the font, the backdrop is OPTIONAL -- the map falls
-  # back to a procedural starfield -- so a missing ImageMagick is a status note,
-  # not a fatal error.
+  # Campaign strategic-map backdrops: each full-res 4K NASA source is downscaled
+  # into a resolution ladder (2K, 2K ultrawide, 1080, 720, 1024, 512) by
+  # scripts/generate_nebula_ladder.sh with ImageMagick; the map picks the
+  # rendition matching the window. Unlike the font, the backdrops are OPTIONAL --
+  # the map falls back to a procedural starfield -- so a missing ImageMagick is a
+  # status note, not a fatal error. Add a source basename here to give it a
+  # ladder; the script derives every rendition name from the file name.
   find_program(MAGICK_EXECUTABLE NAMES magick convert)
-  set(BH_NEBULA_SRC "${PROJECT_SOURCE_DIR}/assets/backgrounds/source/carina-cosmic-cliffs-4k.jpg")
   set(BH_NEBULA_DIR "${PROJECT_SOURCE_DIR}/assets/backgrounds/generated")
-  set(BH_NEBULA_TEX "${BH_NEBULA_DIR}/carina-cosmic-cliffs-1024.jpg")
   set(BH_NEBULA_SCRIPT "${PROJECT_SOURCE_DIR}/scripts/generate_nebula_ladder.sh")
-  if(MAGICK_EXECUTABLE AND EXISTS "${BH_NEBULA_SRC}")
-    add_custom_command(
-      OUTPUT "${BH_NEBULA_TEX}"
-      COMMAND sh "${BH_NEBULA_SCRIPT}" "${BH_NEBULA_SRC}" "${BH_NEBULA_DIR}" "${MAGICK_EXECUTABLE}"
-      DEPENDS "${BH_NEBULA_SRC}" "${BH_NEBULA_SCRIPT}"
-      COMMENT "Generating the campaign nebula resolution ladder (2K, 2K ultrawide, 1080, 720, 1024, 512)"
-      VERBATIM)
-    add_custom_target(blackhole_campaign_backdrop DEPENDS "${BH_NEBULA_TEX}")
+  set(BH_NEBULA_BASENAMES carina-cosmic-cliffs crab-nebula)
+  if(MAGICK_EXECUTABLE)
+    set(BH_NEBULA_LADDER_OUTPUTS "")
+    foreach(basename IN LISTS BH_NEBULA_BASENAMES)
+      set(nebula_src "${PROJECT_SOURCE_DIR}/assets/backgrounds/source/${basename}-4k.jpg")
+      set(nebula_tex "${BH_NEBULA_DIR}/${basename}-1024.jpg")
+      if(EXISTS "${nebula_src}")
+        add_custom_command(
+          OUTPUT "${nebula_tex}"
+          COMMAND sh "${BH_NEBULA_SCRIPT}" "${nebula_src}" "${BH_NEBULA_DIR}" "${MAGICK_EXECUTABLE}"
+          DEPENDS "${nebula_src}" "${BH_NEBULA_SCRIPT}"
+          COMMENT "Generating the ${basename} nebula resolution ladder"
+          VERBATIM)
+        list(APPEND BH_NEBULA_LADDER_OUTPUTS "${nebula_tex}")
+      endif()
+    endforeach()
+    if(BH_NEBULA_LADDER_OUTPUTS)
+      add_custom_target(blackhole_campaign_backdrop DEPENDS ${BH_NEBULA_LADDER_OUTPUTS})
+    endif()
   else()
-    message(STATUS "ImageMagick not found (or nebula source absent): the campaign map "
-                   "uses its procedural starfield backdrop.")
+    message(STATUS "ImageMagick not found: the campaign map uses its procedural "
+                   "starfield backdrop.")
   endif()
 
   add_blackhole_desktop_target(${CMAKE_PROJECT_NAME})

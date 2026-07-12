@@ -8,5 +8,6 @@ assets/skybox_*/*.jpg filter=lfs diff=lfs merge=lfs -text
 *.blend filter=lfs diff=lfs merge=lfs -text
 tools/gcovr/*.tar.gz filter=lfs diff=lfs merge=lfs -text
 assets/backgrounds/source/carina-cosmic-cliffs-4k.jpg !text !filter !merge !diff
+assets/backgrounds/source/crab-nebula-4k.jpg !text !filter !merge !diff
 assets/backgrounds/source/carina-cosmic-cliffs-2k.jpg !text !filter !merge !diff
 tools/gcovr/gcovr-python-8.4-vendored-source.tar.gz !text !filter !merge !diff

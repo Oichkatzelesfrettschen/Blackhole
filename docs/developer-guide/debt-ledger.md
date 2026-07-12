@@ -1062,9 +1062,28 @@ glow). Named font: Spline Sans Mono, vendored separately from the system copy.
   on PATH), not a sandbox venv; CMake find_program(FONTMAKE_EXECUTABLE) resolves
   it with no -D override. ImageMagick (system /usr/bin/magick) drives the nebula
   ladder. Both build steps use system tools.
-- ART-6 Next: a runtime resolution-picker that selects the backdrop rendition
-  from the ladder by display/window size; agency attribution overlay on the map;
-  more nebula sources through the same ladder pipeline.
+- ART-6 DONE (42090bb, merged PR #4): resolution-aware backdrop selection (the
+  map loads the ladder rendition matching the window -- ultrawide 21:9 crop else
+  nearest width tier) plus an agency attribution overlay (NASA/ESA/CSA/STScI drawn
+  over the nebula, skipped for the procedural starfield). CampaignBackdrop gained
+  a credit field.
+- ART-7 DONE: more nebula sources through a generalized ladder pipeline.
+  generate_nebula_ladder.sh now derives its output base name from the source file
+  name (strips dir/-4k/.jpg), so one script serves every source; CMake loops a
+  BH_NEBULA_BASENAMES list (carina-cosmic-cliffs, crab-nebula) building each
+  ladder, still OPTIONAL (procedural fallback). main.cpp's rendition selector is
+  now a ladderRendition(basename) lambda shared by every laddered backdrop. NEW
+  source: JWST Crab Nebula (Messier 1, ESA/Webb weic2417a) added as a de-LFS'd
+  PLAIN git blob (2.6 MB, .gitattributes !filter exclusion like carina, since the
+  account LFS budget is exhausted) -- fetched from the ESA CDN, DCT-decoded to a
+  3840x3335 4K source; manifest.json provenance added. Backdrop picker grows to 6
+  (Crab is now resolution-aware alongside Cosmic Cliffs); count derives from
+  campaignBackdrops.size(). shellcheck clean; all desktop variants build; 91/91.
+- ART-8 Next (undefined, pick the small obvious thing or ask): backdrop-picker
+  thumbnails (small preview swatches in the combo, using the already-loaded
+  textures); OR ladder the remaining repo 2K nebulae once their LFS objects are
+  available (blocked today by the exhausted budget); OR a map attribution that
+  names the specific object, not just the agency.
 
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
