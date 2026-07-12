@@ -12,6 +12,8 @@
 #ifndef BLACKHOLE_GAME_CAMPAIGN_SESSION_H
 #define BLACKHOLE_GAME_CAMPAIGN_SESSION_H
 
+#include <cstdint>
+
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
 #include "game/fleet.h"
@@ -22,8 +24,10 @@ class CampaignSession {
 public:
   /** @brief Canonical vertical-slice scenario: M87*-scale hole, one-day turns,
    *         authority station at 200 r_s, three orbital bands (3/10/50 r_s),
-   *         six specialist fleets, no tasks contracted yet -- the player's move. */
-  CampaignSession();
+   *         six specialist fleets, a 300-energy objective on a 1200-turn
+   *         deadline, no tasks contracted yet -- the player's move. The seed
+   *         is recorded in the campaign state and serialization. */
+  explicit CampaignSession(std::uint64_t seed = 1);
 
   [[nodiscard]] CampaignState &state() { return state_; }
   [[nodiscard]] const CampaignState &state() const { return state_; }

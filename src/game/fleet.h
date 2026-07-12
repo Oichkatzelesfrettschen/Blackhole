@@ -35,8 +35,9 @@ struct Fleet {
   FleetId id = K_INVALID_FLEET_ID;
   FleetCapability capability = FleetCapability::Research;
   int bandIndex = 0;            ///< Index into the campaign's orbital band table.
-  double reliability = 1.0;     ///< Fraction of reported results that are trustworthy.
+  double reliability = 1.0;     ///< Degrades with proper time worked; scales task yield.
   double properTimeSec = 0.0;   ///< Accumulated local proper time tau.
+  double fuelUnits = 0.0;       ///< Redeployment budget; charged per band hop at effect time.
   std::vector<TaskId> assignedTasks;
 };
 

@@ -9,47 +9,24 @@
 
 #include <gtest/gtest.h>
 
-#include <cmath>
 #include <cstdint>
 #include <vector>
 
+#include "campaign_test_field.h"
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
 #include "game/campaign_view.h"
 #include "game/command.h"
 #include "game/fleet.h"
 #include "game/task_graph.h"
-#include "game/time_field.h"
 
 namespace {
 
 constexpr double K_SOLAR_MASS_G = 1.989e33;
 constexpr double K_M87_MASS_G = 6.5e9 * K_SOLAR_MASS_G;
 
-// Programmable field: delay is the plain radial separation in seconds, the
-// proper-time rate is 0.1 below radius 970 and 1.0 above it. With one second
-// per turn every arrival turn in these tests is exact by construction.
-class FakeTimeField final : public game::TimeField {
-public:
-  [[nodiscard]] double properTimeRate(double radiusCm) const override {
-    return radiusCm < 970.0 ? 0.1 : 1.0;
-  }
-  [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override {
-    return std::fabs(toRadiusCm - fromRadiusCm);
-  }
-  [[nodiscard]] bool isValidStationRadius(double radiusCm) const override {
-    return std::isfinite(radiusCm) && radiusCm > 1.0;
-  }
-};
-
-game::CampaignConfig fakeConfig() {
-  game::CampaignConfig config;
-  config.seed = 11;
-  config.secondsPerTurn = 1.0;
-  config.authorityRadiusCm = 1000.0; // rate 1.0 at the authority station
-  config.bandRadiusCm = {960.0, 995.0}; // near: delay 40, rate 0.1; far: delay 5, rate 1.0
-  return config;
-}
+using campaign_test::FakeTimeField;
+using campaign_test::fakeConfig;
 
 } // namespace
 
@@ -270,12 +247,13 @@ TEST(TaskGraph, PrerequisitesGateActivation) {
   EXPECT_EQ(graph.find(second)->state, game::TaskState::Pending)
       << "a task must wait for its prerequisites";
   // A large budget cannot leak into a still-pending successor.
-  const std::vector<game::TaskId> completedFirst = graph.advanceFleetTasks(1, 10.0);
-  ASSERT_EQ(completedFirst.size(), 1U);
-  EXPECT_EQ(completedFirst.front(), first);
+  const game::TaskGraph::FleetAdvanceResult firstPass = graph.advanceFleetTasks(1, 10.0);
+  ASSERT_EQ(firstPass.completed.size(), 1U);
+  EXPECT_EQ(firstPass.completed.front(), first);
+  EXPECT_DOUBLE_EQ(firstPass.properTimeSpentSec, 1.0);
   EXPECT_EQ(graph.find(second)->state, game::TaskState::Pending);
   graph.activateEligible();
-  const std::vector<game::TaskId> completedSecond = graph.advanceFleetTasks(1, 10.0);
-  ASSERT_EQ(completedSecond.size(), 1U);
-  EXPECT_EQ(completedSecond.front(), second);
+  const game::TaskGraph::FleetAdvanceResult secondPass = graph.advanceFleetTasks(1, 10.0);
+  ASSERT_EQ(secondPass.completed.size(), 1U);
+  EXPECT_EQ(secondPass.completed.front(), second);
 }

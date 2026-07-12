@@ -58,6 +58,13 @@ void appendF64(std::vector<std::uint8_t> &out, double value) {
   appendU64(out, bits);
 }
 
+double taskYieldUnits(const TaskContract &contract, double properTimeRate, double reliability) {
+  // properHours * (1/dtau_dt) * reliability: an hour of local work deep in
+  // the well is scarce, so it is worth more coordinate-side.
+  const double properHours = contract.properTimeCostSec / 3600.0;
+  return properTimeRate > 0.0 ? (properHours / properTimeRate) * reliability : 0.0;
+}
+
 } // namespace
 
 CampaignState::CampaignState(CampaignConfig config, const TimeField &field)
@@ -78,6 +85,10 @@ Fleet *CampaignState::findFleet(FleetId fleetId) {
   return nullptr;
 }
 
+double CampaignState::redeployFuelCost(int fromBand, int toBand) const {
+  return config_.fuelPerBandHop * std::abs(toBand - fromBand);
+}
+
 double CampaignState::bandRadiusCm(int bandIndex) const {
   assert(bandIndex >= 0 && static_cast<std::size_t>(bandIndex) < config_.bandRadiusCm.size());
   return config_.bandRadiusCm.at(static_cast<std::size_t>(bandIndex));
@@ -93,12 +104,14 @@ FleetId CampaignState::addFleet(FleetCapability capability, int bandIndex) {
   fleet.id = nextFleetId_++;
   fleet.capability = capability;
   fleet.bandIndex = bandIndex;
+  fleet.fuelUnits = config_.fleetInitialFuelUnits;
   fleets_.push_back(std::move(fleet));
   return fleets_.back().id;
 }
 
 bool CampaignState::issueCommand(const Command &command) {
-  if (!valid_) {
+  // A decided campaign takes no further orders: the outcome is latched.
+  if (!valid_ || status_ != CampaignStatus::Ongoing) {
     return false;
   }
   const Fleet *fleet = findFleet(command.fleet);
@@ -113,6 +126,11 @@ bool CampaignState::issueCommand(const Command &command) {
         static_cast<std::size_t>(command.targetBand) >= config_.bandRadiusCm.size() ||
         !field_->isValidStationRadius(
             config_.bandRadiusCm.at(static_cast<std::size_t>(command.targetBand)))) {
+      return false;
+    }
+    // Fuel gate at issue time against the fleet's current position; the
+    // charge itself lands at effect time from wherever the fleet then is.
+    if (redeployFuelCost(fleet->bandIndex, command.targetBand) > fleet->fuelUnits) {
       return false;
     }
     break;
@@ -149,9 +167,17 @@ void CampaignState::applyCommand(const LoggedCommand &logged) {
   Fleet *fleet = findFleet(logged.command.fleet);
   assert(fleet != nullptr);
   switch (logged.command.type) {
-  case CommandType::PlaceFleet:
-    fleet->bandIndex = logged.command.targetBand;
+  case CommandType::PlaceFleet: {
+    // Recharged against the fleet's position at EFFECT time: earlier orders
+    // in flight may have moved it or spent its fuel. An unaffordable move
+    // fizzles -- the fleet stays put and keeps its fuel.
+    const double fuelCost = redeployFuelCost(fleet->bandIndex, logged.command.targetBand);
+    if (fuelCost <= fleet->fuelUnits) {
+      fleet->fuelUnits -= fuelCost;
+      fleet->bandIndex = logged.command.targetBand;
+    }
     break;
+  }
   case CommandType::AssignTask: {
     const TaskId taskId = taskGraph_.addTask(fleet->id, logged.command.properTimeCostSec);
     fleet->assignedTasks.push_back(taskId);
@@ -187,7 +213,11 @@ void CampaignState::deliverDue() {
       report.completedTurn = delivery.completedTurn;
       report.task = delivery.task;
       report.fleet = delivery.fleet;
+      report.yieldUnits = delivery.yieldUnits;
       intelLog_.push_back(report);
+      // Energy is banked HERE, on arrival: the authority cannot spend value
+      // it has not yet heard about.
+      energyUnits_ += delivery.yieldUnits;
       break;
     }
     }
@@ -206,8 +236,16 @@ void CampaignState::advanceTurn() {
     const double rate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex));
     accrueProperTime(fleet, rate, clock_.secondsPerTurn());
     const double budgetSec = properDeltaSec(rate, clock_.secondsPerTurn());
-    const std::vector<TaskId> completed = taskGraph_.advanceFleetTasks(fleet.id, budgetSec);
-    for (const TaskId taskId : completed) {
+    const TaskGraph::FleetAdvanceResult advanced = taskGraph_.advanceFleetTasks(fleet.id, budgetSec);
+    // Wear: reliability degrades with local proper time actually worked,
+    // never below the floor. Idle fleets do not wear.
+    if (advanced.properTimeSpentSec > 0.0 && config_.reliabilityWearPerProperDay > 0.0) {
+      const double wornDays = advanced.properTimeSpentSec / 86400.0;
+      fleet.reliability = std::max(config_.reliabilityFloor,
+                                   fleet.reliability -
+                                       (config_.reliabilityWearPerProperDay * wornDays));
+    }
+    for (const TaskId taskId : advanced.completed) {
       // Telemetry rides the same causal queue as orders, outbound this time:
       // the authority learns of near-horizon completions late.
       const double reportDelaySec =
@@ -219,8 +257,23 @@ void CampaignState::advanceTurn() {
       delivery.completedTurn = clock_.turn();
       delivery.task = taskId;
       delivery.fleet = fleet.id;
+      delivery.yieldUnits = taskYieldUnits(*taskGraph_.find(taskId), rate, fleet.reliability);
       deliveryQueue_.push_back(delivery);
     }
+  }
+  evaluateOutcome();
+}
+
+void CampaignState::evaluateOutcome() {
+  if (status_ != CampaignStatus::Ongoing) {
+    return;
+  }
+  if (config_.victoryEnergyUnits > 0.0 && energyUnits_ >= config_.victoryEnergyUnits) {
+    status_ = CampaignStatus::Won;
+    return;
+  }
+  if (config_.deadlineTurn > 0 && clock_.turn() >= config_.deadlineTurn) {
+    status_ = CampaignStatus::Lost;
   }
 }
 
@@ -236,6 +289,10 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
   view.turn = clock_.turn();
   view.secondsPerTurn = clock_.secondsPerTurn();
   view.coordinateTimeSec = clock_.coordinateTimeSec();
+  view.status = status_;
+  view.energyUnits = energyUnits_;
+  view.victoryEnergyUnits = config_.victoryEnergyUnits;
+  view.deadlineTurn = config_.deadlineTurn;
   view.authorityRadiusCm = config_.authorityRadiusCm;
   view.authorityProperTimeRate =
       valid_ ? field_->properTimeRate(config_.authorityRadiusCm) : 0.0;
@@ -263,6 +320,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     fleetView.reliability = fleet.reliability;
     fleetView.properTimeSec = fleet.properTimeSec;
     fleetView.properTimeRate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex));
+    fleetView.fuelUnits = fleet.fuelUnits;
     for (const TaskId taskId : fleet.assignedTasks) {
       const TaskContract *contract = taskGraph_.find(taskId);
       if (contract == nullptr) {
@@ -314,6 +372,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     intelView.completedTurn = report.completedTurn;
     intelView.task = report.task;
     intelView.fleet = report.fleet;
+    intelView.yieldUnits = report.yieldUnits;
     view.intel.push_back(intelView);
   }
   return view;
@@ -328,7 +387,15 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   for (const double radiusCm : config_.bandRadiusCm) {
     appendF64(out, radiusCm);
   }
+  appendF64(out, config_.victoryEnergyUnits);
+  appendI64(out, config_.deadlineTurn);
+  appendF64(out, config_.fleetInitialFuelUnits);
+  appendF64(out, config_.fuelPerBandHop);
+  appendF64(out, config_.reliabilityWearPerProperDay);
+  appendF64(out, config_.reliabilityFloor);
   appendI64(out, clock_.turn());
+  appendF64(out, energyUnits_);
+  appendU8(out, static_cast<std::uint8_t>(status_));
   appendU32(out, static_cast<std::uint32_t>(fleets_.size()));
   for (const Fleet &fleet : fleets_) {
     appendU32(out, fleet.id);
@@ -336,6 +403,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendI32(out, fleet.bandIndex);
     appendF64(out, fleet.reliability);
     appendF64(out, fleet.properTimeSec);
+    appendF64(out, fleet.fuelUnits);
     appendU32(out, static_cast<std::uint32_t>(fleet.assignedTasks.size()));
     for (const TaskId taskId : fleet.assignedTasks) {
       appendU32(out, taskId);
@@ -371,6 +439,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendI64(out, delivery.completedTurn);
     appendU32(out, delivery.task);
     appendU32(out, delivery.fleet);
+    appendF64(out, delivery.yieldUnits);
   }
   appendU32(out, static_cast<std::uint32_t>(intelLog_.size()));
   for (const IntelReport &report : intelLog_) {
@@ -378,6 +447,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendI64(out, report.completedTurn);
     appendU32(out, report.task);
     appendU32(out, report.fleet);
+    appendF64(out, report.yieldUnits);
   }
   appendU32(out, nextFleetId_);
   appendU32(out, nextSequence_);

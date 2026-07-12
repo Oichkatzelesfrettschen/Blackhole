@@ -5,6 +5,8 @@
 
 #include "game/campaign_session.h"
 
+#include <cstdint>
+
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
 #include "game/command.h"
@@ -19,20 +21,28 @@ constexpr double K_M87_MASS_G = 6.5e9 * K_SOLAR_MASS_G;
 constexpr double K_SECONDS_PER_DAY = 86400.0;
 constexpr double K_SECONDS_PER_HOUR = 3600.0;
 
-CampaignConfig defaultConfig(const BlackholeTimeField &field) {
+CampaignConfig defaultConfig(const BlackholeTimeField &field, std::uint64_t seed) {
   const double horizonCm = field.horizonRadiusCm();
   CampaignConfig config;
-  config.seed = 1;
+  config.seed = seed;
   config.secondsPerTurn = K_SECONDS_PER_DAY;
   config.authorityRadiusCm = 200.0 * horizonCm;
   config.bandRadiusCm = {3.0 * horizonCm, 10.0 * horizonCm, 50.0 * horizonCm};
+  // Objective sized for roughly three order->work->report round trips (each
+  // ~300 one-day turns at this scale): reach the target before the deadline.
+  config.victoryEnergyUnits = 300.0;
+  config.deadlineTurn = 1200;
+  config.fleetInitialFuelUnits = 100.0;
+  config.fuelPerBandHop = 20.0;
+  config.reliabilityWearPerProperDay = 0.002;
+  config.reliabilityFloor = 0.5;
   return config;
 }
 
 } // namespace
 
-CampaignSession::CampaignSession()
-    : field_(K_M87_MASS_G), state_(defaultConfig(field_), field_) {
+CampaignSession::CampaignSession(std::uint64_t seed)
+    : field_(K_M87_MASS_G), state_(defaultConfig(field_, seed), field_) {
   state_.addFleet(FleetCapability::Extraction, 0);
   state_.addFleet(FleetCapability::Research, 0);
   state_.addFleet(FleetCapability::Fabrication, 1);

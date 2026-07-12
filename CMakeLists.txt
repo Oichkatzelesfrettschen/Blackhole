@@ -3997,6 +3997,9 @@ if(BUILD_TESTING)
     add_executable(campaign_task_graph_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"
     )
+    target_include_directories(campaign_task_graph_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
     target_compile_options(campaign_task_graph_test PRIVATE ${PROJECT_WARNINGS})
     if(ENABLE_FAST_MATH)
       target_compile_options(campaign_task_graph_test PRIVATE -fno-fast-math)
@@ -4009,6 +4012,30 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(campaign_task_graph_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_economy_test.cpp")
+    add_executable(campaign_economy_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_economy_test.cpp"
+    )
+    target_include_directories(campaign_economy_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_economy_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_economy_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_economy_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_economy_validation COMMAND campaign_economy_test)
+    set_tests_properties(campaign_economy_validation PROPERTIES
+      LABELS "campaign;economy;victory"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_economy_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()

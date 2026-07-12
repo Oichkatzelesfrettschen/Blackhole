@@ -45,10 +45,14 @@ public:
    *         to Active, in insertion order. */
   void activateEligible();
 
+  struct FleetAdvanceResult {
+    std::vector<TaskId> completed;    ///< Ids completed this call, insertion order.
+    double properTimeSpentSec = 0.0;  ///< Local proper time actually consumed (wear input).
+  };
+
   /** @brief Spends properDeltaSec of the fleet's local proper time across its
-   *         Active tasks in insertion order; returns the ids completed this
-   *         call, in that same order. */
-  std::vector<TaskId> advanceFleetTasks(FleetId fleet, double properDeltaSec);
+   *         Active tasks in insertion order. */
+  FleetAdvanceResult advanceFleetTasks(FleetId fleet, double properDeltaSec);
 
   [[nodiscard]] const std::vector<TaskContract> &tasks() const { return tasks_; }
 

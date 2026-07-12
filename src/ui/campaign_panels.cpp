@@ -33,10 +33,27 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view) {
   ImGui::TextDisabled("orders in flight: %zu   reports in flight: %zu   intel: %zu",
                       view.ordersInFlight.size(), view.reportsInFlight.size(),
                       view.intel.size());
+  if (view.status == game::CampaignStatus::Won) {
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "VICTORY -- objective banked on turn %lld",
+                       static_cast<long long>(view.turn));
+  } else if (view.status == game::CampaignStatus::Lost) {
+    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "DEFEAT -- deadline t%lld passed",
+                       static_cast<long long>(view.deadlineTurn));
+  } else if (view.victoryEnergyUnits > 0.0) {
+    const auto fraction = static_cast<float>(view.energyUnits / view.victoryEnergyUnits);
+    char objective[96];
+    static_cast<void>(std::snprintf(objective, sizeof(objective),
+                                    "energy %.1f / %.0f  (deadline t%lld)", view.energyUnits,
+                                    view.victoryEnergyUnits,
+                                    static_cast<long long>(view.deadlineTurn)));
+    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective);
+  } else {
+    ImGui::TextDisabled("energy banked: %.1f (no objective set)", view.energyUnits);
+  }
 }
 
 void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
-  if (!ImGui::BeginTable("fleet_roster", 6,
+  if (!ImGui::BeginTable("fleet_roster", 7,
                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                              ImGuiTableFlags_SizingStretchProp)) {
     return;
@@ -46,6 +63,7 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
   ImGui::TableSetupColumn("dtau/dt");
   ImGui::TableSetupColumn("tau (d)");
   ImGui::TableSetupColumn("tasks p/a/c");
+  ImGui::TableSetupColumn("fuel");
   ImGui::TableSetupColumn("reliability");
   ImGui::TableHeadersRow();
   for (const game::FleetView &fleet : view.fleets) {
@@ -69,6 +87,8 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
     ImGui::TableNextColumn();
     ImGui::Text("%u/%u/%u", fleet.pendingTasks, fleet.activeTasks, fleet.completedTasks);
     ImGui::TableNextColumn();
+    ImGui::Text("%.0f", fleet.fuelUnits);
+    ImGui::TableNextColumn();
     ImGui::Text("%.2f", fleet.reliability);
   }
   ImGui::EndTable();
@@ -77,6 +97,10 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
 void renderOrderComposer(game::CampaignSession &session, const game::CampaignViewSnapshot &view,
                          CampaignUiState &uiState) {
   ImGui::SeparatorText("Order composer");
+  if (view.status != game::CampaignStatus::Ongoing) {
+    ImGui::TextDisabled("campaign decided -- no further orders");
+    return;
+  }
   if (uiState.selectedFleet == game::K_INVALID_FLEET_ID) {
     ImGui::TextDisabled("select a fleet (roster row or map marker)");
     return;
@@ -149,9 +173,9 @@ void renderIntelWindow(const game::CampaignViewSnapshot &view) {
   }
   // Latest first: the newest arrival is what the player acts on.
   for (const game::IntelView &report : std::ranges::reverse_view(view.intel)) {
-    ImGui::Text("t%lld: fleet %u completed task %u at t%lld (%lld turns stale)",
+    ImGui::Text("t%lld: fleet %u completed task %u at t%lld (+%.1f energy, %lld turns stale)",
                 static_cast<long long>(report.receivedTurn), report.fleet, report.task,
-                static_cast<long long>(report.completedTurn),
+                static_cast<long long>(report.completedTurn), report.yieldUnits,
                 static_cast<long long>(report.receivedTurn - report.completedTurn));
   }
   ImGui::End();

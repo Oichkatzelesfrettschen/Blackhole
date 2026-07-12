@@ -22,6 +22,14 @@
 
 namespace game {
 
+/** @brief Terminal outcomes latch: the first Won/Lost evaluation sticks even
+ *         though coordinate time keeps flowing afterwards. */
+enum class CampaignStatus : std::uint8_t {
+  Ongoing = 0,
+  Won = 1,  ///< Banked energy reached the victory target by the deadline.
+  Lost = 2, ///< The deadline passed first.
+};
+
 /** @brief One orbital band as the map draws it. rate/delay are filled only
  *         when the band is a valid station radius; an invalid band (at or
  *         inside the horizon) renders as a forbidden zone. */
@@ -40,6 +48,7 @@ struct FleetView {
   double reliability = 1.0;
   double properTimeSec = 0.0;   ///< Accumulated local proper time tau.
   double properTimeRate = 0.0;  ///< Current dtau/dt (the fleet's band rate).
+  double fuelUnits = 0.0;       ///< Remaining redeployment budget.
   std::uint32_t pendingTasks = 0;
   std::uint32_t activeTasks = 0;
   std::uint32_t completedTasks = 0;
@@ -62,18 +71,24 @@ struct ReportInFlightView {
   std::int64_t effectTurn = 0;
 };
 
-/** @brief What the authority station has learned so far. */
+/** @brief What the authority station has learned so far. Yield appears here
+ *         and nowhere earlier: energy is banked on arrival, not completion. */
 struct IntelView {
   std::int64_t receivedTurn = 0;
   std::int64_t completedTurn = 0;
   TaskId task = K_INVALID_TASK_ID;
   FleetId fleet = K_INVALID_FLEET_ID;
+  double yieldUnits = 0.0;
 };
 
 struct CampaignViewSnapshot {
   std::int64_t turn = 0;
   double secondsPerTurn = 0.0;
   double coordinateTimeSec = 0.0;
+  CampaignStatus status = CampaignStatus::Ongoing;
+  double energyUnits = 0.0;        ///< Banked yield (credited on report arrival).
+  double victoryEnergyUnits = 0.0; ///< Win target; zero disables the objective.
+  std::int64_t deadlineTurn = 0;   ///< Loss turn; zero disables the deadline.
   double authorityRadiusCm = 0.0;
   double authorityProperTimeRate = 0.0;
   double innerBoundaryRadiusCm = 0.0; ///< Horizon radius; zero for fields without one.

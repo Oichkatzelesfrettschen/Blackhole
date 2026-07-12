@@ -43,6 +43,7 @@ struct IntelReport {
   std::int64_t completedTurn = 0; ///< Coordinate turn the task actually finished.
   TaskId task = K_INVALID_TASK_ID;
   FleetId fleet = K_INVALID_FLEET_ID;
+  double yieldUnits = 0.0; ///< Energy banked when this report arrived.
 };
 
 struct CampaignConfig {
@@ -50,6 +51,17 @@ struct CampaignConfig {
   double secondsPerTurn = 3600.0;
   double authorityRadiusCm = 0.0;   ///< Command origin (human authority station).
   std::vector<double> bandRadiusCm; ///< Orbital bands, any order, indexed by bandIndex.
+
+  // Economy. Yield per task = properHours * (1/dtau_dt at completion band) *
+  // reliability at completion: deep work is worth more per local hour exactly
+  // because local hours are scarce there. Energy is banked when the report
+  // ARRIVES at the authority, never at completion.
+  double victoryEnergyUnits = 0.0;         ///< Win when banked energy reaches this; 0 = off.
+  std::int64_t deadlineTurn = 0;           ///< Lose when the clock reaches this; 0 = off.
+  double fleetInitialFuelUnits = 100.0;    ///< Starting redeployment budget per fleet.
+  double fuelPerBandHop = 20.0;            ///< Redeploy cost per band of separation.
+  double reliabilityWearPerProperDay = 0.0;///< Reliability lost per local day worked.
+  double reliabilityFloor = 0.5;           ///< Wear never degrades a fleet below this.
 };
 
 class CampaignState {
@@ -81,6 +93,8 @@ public:
   void advanceTurns(std::int64_t turnCount);
 
   [[nodiscard]] std::int64_t turn() const { return clock_.turn(); }
+  [[nodiscard]] CampaignStatus status() const { return status_; }
+  [[nodiscard]] double energyUnits() const { return energyUnits_; }
   [[nodiscard]] const std::vector<Fleet> &fleets() const { return fleets_; }
   [[nodiscard]] const TaskGraph &taskGraph() const { return taskGraph_; }
   [[nodiscard]] const std::vector<LoggedCommand> &commandLog() const { return commandLog_; }
@@ -113,7 +127,11 @@ private:
     std::int64_t completedTurn = 0;
     TaskId task = K_INVALID_TASK_ID;
     FleetId fleet = K_INVALID_FLEET_ID;
+    double yieldUnits = 0.0; ///< Fixed at completion (band + reliability then).
   };
+
+  void evaluateOutcome();
+  [[nodiscard]] double redeployFuelCost(int fromBand, int toBand) const;
 
   [[nodiscard]] Fleet *findFleet(FleetId fleetId);
   [[nodiscard]] double bandRadiusCm(int bandIndex) const;
@@ -131,6 +149,8 @@ private:
   std::vector<IntelReport> intelLog_;
   FleetId nextFleetId_ = 1;
   std::uint32_t nextSequence_ = 0;
+  double energyUnits_ = 0.0;
+  CampaignStatus status_ = CampaignStatus::Ongoing;
 };
 
 } // namespace game

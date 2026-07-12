@@ -54,9 +54,9 @@ void TaskGraph::activateEligible() {
   }
 }
 
-std::vector<TaskId> TaskGraph::advanceFleetTasks(FleetId fleet, double properDeltaSec) {
+TaskGraph::FleetAdvanceResult TaskGraph::advanceFleetTasks(FleetId fleet, double properDeltaSec) {
   assert(std::isfinite(properDeltaSec) && properDeltaSec >= 0.0);
-  std::vector<TaskId> completed;
+  FleetAdvanceResult result;
   // The fleet spends one local-time budget per turn, worked task by task in
   // insertion order; leftover budget rolls into the next Active task.
   double remainingBudgetSec = properDeltaSec;
@@ -71,14 +71,16 @@ std::vector<TaskId> TaskGraph::advanceFleetTasks(FleetId fleet, double properDel
     if (remainingBudgetSec >= neededSec) {
       contract.progressSec = contract.properTimeCostSec;
       contract.state = TaskState::Complete;
-      completed.push_back(contract.id);
+      result.completed.push_back(contract.id);
+      result.properTimeSpentSec += neededSec;
       remainingBudgetSec -= neededSec;
     } else {
       contract.progressSec += remainingBudgetSec;
+      result.properTimeSpentSec += remainingBudgetSec;
       remainingBudgetSec = 0.0;
     }
   }
-  return completed;
+  return result;
 }
 
 } // namespace game
