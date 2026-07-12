@@ -843,6 +843,49 @@ brackets.
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
 
+### Tranche campaign-core-seam  (Horizon Command; seam landed 2026-07-11, one deferral owed)
+
+The campaign core is the first consumer of a real physics library target.
+blackhole_physics STATIC wraps the five GL-free PHYSICS_SRC_FILES translation
+units (zero external deps -- noise.cpp is pure, FastNoise2 lives in
+src/render/); blackhole_campaign STATIC (src/game/, namespace game::) links it
+PUBLIC and holds the deterministic turn-based campaign state: integer-turn
+clocks (coordinate time derived, never accumulated), per-fleet proper time via
+physics::timeDilationFactor, causal delivery of both inbound orders and
+outbound completion reports with arrival turns quantized once via ceil, and a
+field-by-field byte serialization (+FNV-1a digest) as the determinism artifact.
+Signal delay is the exact radial Schwarzschild coordinate-time integral
+(r2-r1)/c + (r_s/c)*ln((r2-r_s)/(r1-r_s)) computed in the adapter --
+physics::shapiroDelay is a radar-echo grazing-chord formula whose impact
+parameter is undefined for two stations given by radius alone and whose b->0
+limit is +inf, so the campaign never calls it. Gates: 87/87 (3 new campaign
+tests: clock range/monotonicity + batch-vs-step byte equality, adapter closed
+form + horizon rejection + divergence, causality/replay/horizon-ordering);
+campaign_sim digest byte-identical across runs; src/game/ greps clean of
+glbinding/imgui/glfw; zero diff under src/render, src/ui, shader, main.cpp;
+campaign stack builds and passes under -DENABLE_FAST_MATH=ON (every campaign
+target carries the -fno-fast-math override, exes included -- the
+_FORTIFY_SOURCE=3 + -ffinite-math-only *_chk interaction applies to any gtest
+exe).
+
+- CAMPAIGN-1 Migrate the ~15 physics test targets from recompiling
+  PHYSICS_SRC_FILES to linking blackhole_physics. HAZARD: until then two
+  flag-divergent compiled copies of the physics TUs coexist under
+  ENABLE_FAST_MATH=ON (the lib is always IEEE, per-test copies choose their
+  own flags); safe today because no binary links both, but any future target
+  that links blackhole_physics AND compiles a PHYSICS_SRC_FILES file directly
+  is an ODR trap. Migration must preserve each test's -fno-fast-math choice,
+  which the shared lib satisfies only if the test needs IEEE (it always does
+  -- the fast-math-keeping target is safe_limits_test, which does not compile
+  physics TUs). [one compiled copy of src/physics/*.cpp in the tree]
+- CAMPAIGN-2 UI slice (next): src/ui/campaign_panels.* + strategic_map.*
+  consuming a new immutable renderSnapshot()/CampaignViewSnapshot (name
+  reserved, NOT the serializeState() determinism artifact); ImDrawList orbital
+  map over the existing viewport; alpha channel untouched. Kerr lanes via
+  frameDraggingOmega come after (kerrTimeDilation documents ZAMO but implements
+  static-observer -- do not use for moving ships). [campaign playable against
+  the live renderer]
+
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
 - VERIFY-1 CI matrix: add jobs for (a) Debug+ASAN/UBSAN, (b) coverage with
