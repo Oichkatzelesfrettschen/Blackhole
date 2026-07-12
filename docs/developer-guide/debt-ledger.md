@@ -927,10 +927,14 @@ exe).
   at horizon). Default scenario now a* = 0.9; bands anchored to r_s keep the
   CAMPAIGN-3 outer economics, ergo band inserted at index 0 (0.85 r_s) with
   index = physical order so per-hop fuel scales with distance. Objective tuned
-  260: outer-only play (~221) loses, the deep prograde dive wins (sim: won by
-  t700 with the dive). Rename to Temporal Disturbance is display-only (toggle
-  label + file headers); mechanism names (game::, campaign_*, BLACKHOLE_CAMPAIGN)
-  unchanged. 89/89; fast-math digest == IEEE.
+  260 so the deep prograde dive is the MANDATORY winning line: MEASURED on the
+  a*=0.9 scenario, campaign_sim --no-dive (outer-only) banks 208.4 and loses at
+  the deadline while the scripted dive wins by t800. This is a teach-the-mechanic
+  objective, not a balanced trade-off -- one winning move, not a decision;
+  pricing the dive against a viable outer strategy (fuel/wear/delay tension) is
+  CAMPAIGN-5. Rename to Temporal Disturbance is display-only (toggle label + file
+  headers); mechanism names (game::, campaign_*, BLACKHOLE_CAMPAIGN) unchanged.
+  89/89; fast-math digest == IEEE.
 - CAMPAIGN-5 Next: verification fleets that restore reliability and validate
   corrupted telemetry (the design doc's verification role, still cosmetic);
   per-capability task multipliers; ergosphere missions beyond extraction.
