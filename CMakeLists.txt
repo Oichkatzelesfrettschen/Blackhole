@@ -1149,6 +1149,8 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/tools/compare_harness.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/campaign_panels.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/strategic_map.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
@@ -1206,6 +1208,7 @@ function(add_blackhole_desktop_target target_name)
   add_executable(${target_name} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
 
   target_link_libraries(${target_name} PRIVATE
+    blackhole_campaign
     HighFive::HighFive
     imgui::imgui
     imguizmo::imguizmo
@@ -1496,6 +1499,7 @@ add_library(blackhole_campaign STATIC
   "${PROJECT_SOURCE_DIR}/src/game/fleet.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/task_graph.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/campaign.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/campaign_session.cpp"
 )
 target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
 target_compile_options(blackhole_campaign PRIVATE ${PROJECT_WARNINGS})
@@ -3622,6 +3626,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/external/gl_debug_callback"
     )
     target_link_libraries(blackhole_testcore PUBLIC
+      blackhole_campaign
       HighFive::HighFive
       imgui::imgui
       imguizmo::imguizmo

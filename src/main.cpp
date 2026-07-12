@@ -114,6 +114,8 @@
 #include "render/uniform_binding.h"
 #include "tools/compare_harness.h"
 #include "render/render_state.h"
+#include "game/campaign_session.h"
+#include "ui/campaign_panels.h"
 #include "ui/panels.h"
 #include "ui/settings_window.h"
 #include "platform/cli_options.h"
@@ -553,6 +555,13 @@ int main(int argc, char **argv) {
 
     // Curve overlay for plotting (e.g., critical curves)
     RenderState rs;
+
+    // Horizon Command campaign: pure game state beside (never inside) the
+    // renderer's RenderState. Windows stay closed unless toggled in the
+    // Campaign panel or opened via BLACKHOLE_CAMPAIGN=1.
+    game::CampaignSession campaignSession;
+    ui::CampaignUiState campaignUi;
+    ui::initCampaignUiFromEnv(campaignUi);
     rs.recording.recordFrameIndex = recordStartFrame;
     rs.recording.recordCinematic =
         static_cast<float>(recordStartFrame) / static_cast<float>(K_CINEMATIC_FPS);
@@ -1335,6 +1344,7 @@ int main(int argc, char **argv) {
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
         renderPerformancePanel(rs, cpuFrameMs);
+        ui::renderCampaignWindows(campaignSession, campaignUi);
       }
 
       /* --export-frame / --export-raw-frame: export textures before ImGui. */
