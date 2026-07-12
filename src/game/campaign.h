@@ -70,7 +70,7 @@ struct CampaignConfig {
   // static limit to 1 at the horizon. Retrograde or non-rotating: no bonus.
   double frameDragYieldBonus = 0.0;        ///< Prograde ergoregion yield coefficient; 0 = off.
 
-  // Capability effects (CAMPAIGN-5). Every fleet does the same work; its
+  // Capability effects. Every fleet does the same work; its
   // capability decides what that work is WORTH and what side effect it has.
   // Defaults are no-ops so a config that leaves them unset behaves exactly like
   // the pre-capability economy. Fabrication and Verification act BAND-LOCALLY:
@@ -84,7 +84,7 @@ struct CampaignConfig {
   double reliabilityCorruptionThreshold = 0.0;  ///< Below this reliability at completion, the report is corrupted.
   double corruptedYieldFraction = 1.0;          ///< Fraction of yield banked from a corrupted report.
 
-  // Instability and containment (CAMPAIGN-6). The singularity destabilizes over
+  // Instability and containment. The singularity destabilizes over
   // the campaign: instability rises each turn and erodes ALL yield through a
   // smooth saturating factor 1 / (1 + instability * instabilityYieldPenaltyPerUnit),
   // so pure outer-band play still functions, only more slowly as the disturbance
@@ -103,13 +103,13 @@ struct CampaignConfig {
   // This is the integrity the deep lane spends -- the cost side of the stabilize/
   // clear-fast payoff, which co-located verification only partly offsets.
   double ergoHazardWearPerProperDay = 0.0;     ///< Extra reliability wear per proper-day, scaled by ergoregion depth.
-  // Stabilization RIVALS extraction (CAMPAIGN-7). A prograde ergoregion fleet
+  // Stabilization rivals extraction. A prograde ergoregion fleet
   // spends its proper time either taming the disturbance or harvesting energy,
   // not both: while the containment mechanic is on, such a fleet banks only this
   // fraction of its yield. Below 1.0 the deep lane sacrifices energy for
   // stabilization, so the high-stabilization line banks FEWER energy units than
   // pure outer play -- the two are genuine rival objectives the player weights,
-  // not joint outputs of one dive. Default 1.0 keeps the CAMPAIGN-6 behaviour.
+  // not joint outputs of one dive. Default 1.0 leaves yield unpenalized.
   double containmentYieldRetention = 1.0;      ///< Yield a stabilizing (deep prograde) fleet keeps; < 1 makes it a sacrifice.
   // The payoff that makes stabilization worth its energy cost: reaching this much
   // cumulative stabilization is an ALTERNATE victory, so the campaign offers two
@@ -168,7 +168,12 @@ public:
 
   /** @brief Deterministic field-by-field byte serialization of the full
    *         campaign state (explicit widths, -0.0 canonicalized, every double
-   *         finite). Determinism artifact, not a versioned save format. */
+   *         finite). Determinism artifact, not a versioned save format: it
+   *         captures the config and the mutable runtime state, but not the
+   *         TimeField (mass/spin) nor the task graph's next-id counter, which are
+   *         fixed by the scenario. Two runs of the same scenario on the same
+   *         field compare equal; comparing across different fields is out of
+   *         scope. */
   [[nodiscard]] std::vector<std::uint8_t> serializeState() const;
 
   /** @brief FNV-1a 64 over serializeState() -- a cheap comparison aid. */
