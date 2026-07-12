@@ -1207,6 +1207,12 @@ function(add_blackhole_desktop_target target_name)
 
   add_executable(${target_name} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
 
+  # The UI font is compiled from its Glyphs source; the desktop app cannot run
+  # without it, so it must exist before the executable is considered built.
+  if(TARGET blackhole_font)
+    add_dependencies(${target_name} blackhole_font)
+  endif()
+
   target_link_libraries(${target_name} PRIVATE
     blackhole_campaign
     HighFive::HighFive
@@ -1309,6 +1315,33 @@ endfunction()
 find_library(CPPTRACE_LIBRARY cpptrace)
 
 if(ENABLE_DESKTOP_APP)
+  # UI font: built from its Glyphs design source at configure/build time, so no
+  # font binary is committed. fontmake (a Python tool) compiles the Regular
+  # instance into the gitignored assets/fonts/spline-sans-mono/*.ttf that ImGui
+  # loads. Install with `pip install fontmake`, or point FONTMAKE_EXECUTABLE at
+  # one (e.g. a virtualenv's fontmake). Tests and campaign_sim do not need it.
+  find_program(FONTMAKE_EXECUTABLE NAMES fontmake)
+  set(BH_FONT_DIR "${PROJECT_SOURCE_DIR}/assets/fonts/spline-sans-mono")
+  set(BH_FONT_SRC "${BH_FONT_DIR}/src/SplineSansMono.glyphs")
+  set(BH_FONT_TTF "${BH_FONT_DIR}/SplineSansMono-Regular.ttf")
+  if(NOT FONTMAKE_EXECUTABLE)
+    message(FATAL_ERROR
+      "fontmake not found. The desktop UI font is built from source "
+      "(${BH_FONT_SRC}); install it with 'pip install fontmake' and put it on "
+      "PATH, pass -DFONTMAKE_EXECUTABLE=/path/to/fontmake, or configure with "
+      "-DENABLE_DESKTOP_APP=OFF.")
+  endif()
+  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/fontbuild")
+  add_custom_command(
+    OUTPUT "${BH_FONT_TTF}"
+    COMMAND "${FONTMAKE_EXECUTABLE}" -g "${BH_FONT_SRC}"
+            -i "Spline Sans Mono Regular" -o ttf --output-dir "${BH_FONT_DIR}"
+    DEPENDS "${BH_FONT_SRC}"
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/fontbuild"
+    COMMENT "Building Spline Sans Mono (Regular) from source with fontmake"
+    VERBATIM)
+  add_custom_target(blackhole_font DEPENDS "${BH_FONT_TTF}")
+
   add_blackhole_desktop_target(${CMAKE_PROJECT_NAME})
   if(ENABLE_DESKTOP_VARIANTS)
     add_blackhole_desktop_target(BlackholeGLSL GLSL_ONLY)
