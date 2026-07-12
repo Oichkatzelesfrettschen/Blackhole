@@ -1019,9 +1019,20 @@ exe).
   CONSEQUENCE (honest): pod/solo now LOSE -- a light dive drops throughput below
   the 3150 energy line AND falls short of the 8.0 stabilization line (pod reaches
   6.70/8.0, close enough to show the gradient). The two winning lines are
-  full-outer (energy, t1097) or all-in dive (stabilization, t819); half-measures
-  lose, so the fork is now sharp and the deadline tense. Determinism holds;
-  tests use their own configs so 91/91 unaffected.
+  full-outer (energy, t1097) or all-in dive (stabilization, t819).
+- CAMPAIGN-8 HONEST LIMIT (advisor caught, corrected here -- the "sharp fork /
+  genuine decision" claim in commit cdba046 was WRONG and is retracted): the
+  deadline bite is real (energy clears t1097 not t617), but tightening only moved
+  WHICH line is fastest. The all-in stabilization win lands at t819, EARLIER than
+  the energy win at t1097 -- the C7 "energy win is faster" caveat inverted. And
+  nothing reads integrity/clearedTurn/surplus after Won latches (evaluateOutcome:
+  energy>=T OR stab>=T -> Won, else deadline -> Lost), so both wins are equal and
+  all-in reaches Won sooner with no offset: all-in WEAKLY DOMINATES. "Half-measures
+  lose" is a signpost pointing at all-in, not a fork. Genuine non-dominance still
+  needs the off-axes (integrity, surplus energy/stabilization, speed) to carry
+  MECHANICAL payoff -- a score, or integrity/energy persisting past the campaign --
+  which is future work (a real CAMPAIGN-9), NOT another tuning pass. Determinism
+  holds; tests use their own configs so 91/91 unaffected.
 
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 
