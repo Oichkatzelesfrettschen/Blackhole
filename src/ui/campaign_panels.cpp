@@ -230,7 +230,8 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
   }
 }
 
-void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiState) {
+void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiState,
+                           unsigned int backdropTextureId) {
   ImGui::SetNextWindowPos(ImVec2(420.0f, 40.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(540.0f, 420.0f), ImGuiCond_FirstUseEver);
   if (ImGui::Begin("Campaign", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -261,7 +262,7 @@ void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiSt
   if (uiState.windowsOpen) {
     // A fresh snapshot after any button above mutated the campaign this frame.
     const game::CampaignViewSnapshot view = session.state().renderSnapshot();
-    renderStrategicMap(view, uiState);
+    renderStrategicMap(view, uiState, backdropTextureId);
     renderIntelWindow(view);
   }
 }

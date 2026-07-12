@@ -2,6 +2,20 @@
   "version": 2,
   "assets": [
     {
+      "id": "jwst_carina_cosmic_cliffs",
+      "title": "Cosmic Cliffs in the Carina Nebula (NGC 3324)",
+      "source": "NASA/ESA/CSA/STScI",
+      "sourceUrl": "https://images.nasa.gov/details-carina_nebula",
+      "license": "Public Domain",
+      "licenseUrl": "https://webbtelescope.org/copyright",
+      "credit": "NASA, ESA, CSA, STScI",
+      "resolution": { "width": 1920, "height": 1111 },
+      "format": "jpg",
+      "path": "assets/backgrounds/source/carina-cosmic-cliffs-2k.jpg",
+      "usage": "Temporal Disturbance strategic-map backdrop; downscaled to campaign_nebula.jpg at build",
+      "tags": ["jwst", "nebula", "carina", "campaign-backdrop"]
+    },
+    {
       "id": "jwst_deep_field_smacs0723",
       "title": "Webb's First Deep Field (SMACS 0723)",
       "source": "NASA/ESA/CSA/STScI",

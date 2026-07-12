@@ -562,6 +562,10 @@ int main(int argc, char **argv) {
     game::CampaignSession campaignSession;
     ui::CampaignUiState campaignUi;
     ui::initCampaignUiFromEnv(campaignUi);
+    // Optional NASA nebula backdrop for the strategic map; 0 when the asset is
+    // absent, in which case the map falls back to its procedural starfield.
+    const GLuint campaignBackdropTex =
+        loadTexture2D(resourcePath("assets/backgrounds/campaign_nebula.jpg"));
     rs.recording.recordFrameIndex = recordStartFrame;
     rs.recording.recordCinematic =
         static_cast<float>(recordStartFrame) / static_cast<float>(K_CINEMATIC_FPS);
@@ -1344,7 +1348,8 @@ int main(int argc, char **argv) {
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
         renderPerformancePanel(rs, cpuFrameMs);
-        ui::renderCampaignWindows(campaignSession, campaignUi);
+        ui::renderCampaignWindows(campaignSession, campaignUi,
+                                  static_cast<unsigned int>(campaignBackdropTex));
       }
 
       /* --export-frame / --export-raw-frame: export textures before ImGui. */

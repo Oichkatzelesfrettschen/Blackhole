@@ -1208,9 +1208,14 @@ function(add_blackhole_desktop_target target_name)
   add_executable(${target_name} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
 
   # The UI font is compiled from its Glyphs source; the desktop app cannot run
-  # without it, so it must exist before the executable is considered built.
+  # without it, so it must exist before the executable is considered built. The
+  # campaign backdrop is optional (procedural fallback) and only a dependency
+  # when ImageMagick was found.
   if(TARGET blackhole_font)
     add_dependencies(${target_name} blackhole_font)
+  endif()
+  if(TARGET blackhole_campaign_backdrop)
+    add_dependencies(${target_name} blackhole_campaign_backdrop)
   endif()
 
   target_link_libraries(${target_name} PRIVATE
@@ -1341,6 +1346,26 @@ if(ENABLE_DESKTOP_APP)
     COMMENT "Building Spline Sans Mono (Regular) from source with fontmake"
     VERBATIM)
   add_custom_target(blackhole_font DEPENDS "${BH_FONT_TTF}")
+
+  # Campaign strategic-map backdrop: downscale the full-res LFS NASA source to a
+  # RAM-light runtime texture with ImageMagick. Unlike the font, the backdrop is
+  # OPTIONAL -- the map falls back to a procedural starfield -- so a missing
+  # ImageMagick is a status note, not a fatal error.
+  find_program(MAGICK_EXECUTABLE NAMES magick convert)
+  set(BH_NEBULA_SRC "${PROJECT_SOURCE_DIR}/assets/backgrounds/source/carina-cosmic-cliffs-2k.jpg")
+  set(BH_NEBULA_TEX "${PROJECT_SOURCE_DIR}/assets/backgrounds/campaign_nebula.jpg")
+  if(MAGICK_EXECUTABLE AND EXISTS "${BH_NEBULA_SRC}")
+    add_custom_command(
+      OUTPUT "${BH_NEBULA_TEX}"
+      COMMAND "${MAGICK_EXECUTABLE}" "${BH_NEBULA_SRC}" -resize 1024x -quality 88 "${BH_NEBULA_TEX}"
+      DEPENDS "${BH_NEBULA_SRC}"
+      COMMENT "Downscaling the campaign nebula backdrop from the NASA source"
+      VERBATIM)
+    add_custom_target(blackhole_campaign_backdrop DEPENDS "${BH_NEBULA_TEX}")
+  else()
+    message(STATUS "ImageMagick not found (or nebula source absent): the campaign map "
+                   "uses its procedural starfield backdrop.")
+  endif()
 
   add_blackhole_desktop_target(${CMAKE_PROJECT_NAME})
   if(ENABLE_DESKTOP_VARIANTS)

@@ -15,8 +15,11 @@ struct CampaignUiState;
 
 /** @brief Draws the Strategic Map window from the view snapshot. Clicking a
  *         fleet marker selects it into uiState.selectedFleet; the click is
- *         consumed by an ImGui invisible button, never by the scene camera. */
-void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState);
+ *         consumed by an ImGui invisible button, never by the scene camera.
+ *         backdropTextureId is a GL texture (0 = none) drawn behind the map;
+ *         when absent the procedural starfield is used instead. */
+void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState,
+                        unsigned int backdropTextureId = 0);
 
 } // namespace ui
 

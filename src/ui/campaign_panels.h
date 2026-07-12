@@ -35,8 +35,10 @@ struct CampaignUiState {
 void initCampaignUiFromEnv(CampaignUiState &uiState);
 
 /** @brief Draws the Campaign window (always, it hosts the enable toggle) and,
- *         when enabled, the Strategic Map and Intel windows. */
-void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiState);
+ *         when enabled, the Strategic Map and Intel windows. backdropTextureId
+ *         (0 = none) is a GL texture drawn behind the strategic map. */
+void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiState,
+                           unsigned int backdropTextureId = 0);
 
 } // namespace ui
 

@@ -103,6 +103,20 @@ void drawStarfield(ImDrawList *drawList, const ImVec2 &origin, const ImVec2 &siz
   }
 }
 
+// The map background: a vendored NASA nebula texture when present (darkened by
+// a translucent overlay so rings and labels stay legible), the procedural
+// starfield otherwise.
+void drawMapBackdrop(ImDrawList *drawList, const ImVec2 &origin, const ImVec2 &size,
+                     unsigned int backdropTextureId) {
+  if (backdropTextureId == 0) {
+    drawStarfield(drawList, origin, size);
+    return;
+  }
+  const ImVec2 canvasEnd = {origin.x + size.x, origin.y + size.y};
+  drawList->AddImage(static_cast<ImTextureID>(backdropTextureId), origin, canvasEnd);
+  drawList->AddRectFilled(origin, canvasEnd, IM_COL32(4, 6, 12, 150));
+}
+
 // A soft additive halo: concentric translucent circles fading outward fake the
 // bloom the vector map cannot get from the renderer's post pipeline.
 void drawGlow(ImDrawList *drawList, const ImVec2 &center, float radiusPx, ImU32 color) {
@@ -166,7 +180,8 @@ void drawCapabilityIcon(ImDrawList *drawList, const ImVec2 &center, game::FleetC
 
 } // namespace
 
-void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
+void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState,
+                        unsigned int backdropTextureId) {
   ImGui::SetNextWindowPos(ImVec2(420.0f, 470.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(520.0f, 420.0f), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Strategic Map", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -191,7 +206,7 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   const bool canvasClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
 
   ImDrawList *drawList = ImGui::GetWindowDrawList();
-  drawStarfield(drawList, canvasOrigin, canvasSize);
+  drawMapBackdrop(drawList, canvasOrigin, canvasSize, backdropTextureId);
   MapScale scale;
   scale.center = {canvasOrigin.x + (canvasSize.x * 0.5f), canvasOrigin.y + (canvasSize.y * 0.5f)};
   scale.maxRadiusPx = (0.5f * std::min(canvasSize.x, canvasSize.y)) - 8.0f;
