@@ -984,14 +984,18 @@ glow). Named font: Spline Sans Mono, vendored separately from the system copy.
 - ART-3 DONE (f938cd0). Procedural per-capability vector icons (ImDrawList:
   extraction triangle, research lens, fabrication frame, relay dish,
   verification check) replacing the letter glyphs; an (icon legend) tooltip.
-- ART-4 DONE (deebeaa). JWST Cosmic Cliffs (Carina, NGC 3324) backdrop behind
-  the map: full-res NASA source in assets/backgrounds/source/ (LFS + manifest.json
-  provenance, NASA/ESA/CSA/STScI public domain); CMake downscales it to a 1024px
-  runtime texture (campaign_nebula.jpg, gitignored) with ImageMagick. OPTIONAL --
-  procedural starfield fallback when the texture is absent, so magick is a status
-  note not a hard dep. main threads the GL texture id (0=none) into the GL-free
-  campaign UI as an unsigned int, cast to ImTextureID only at AddImage; a
-  translucent overlay keeps rings/icons/labels legible.
+- ART-4 DONE (deebeaa; 4K ladder f64dbfa). JWST Cosmic Cliffs (Carina, NGC 3324)
+  backdrop behind the map. Source of truth = 4K (3840x2225) in
+  assets/backgrounds/source/carina-cosmic-cliffs-4k.jpg (LFS; downscaled from the
+  ESA/Webb 14575x8441 original via libjpeg size hint to fit memory; manifest.json
+  provenance, NASA/ESA/CSA/STScI public domain). scripts/generate_nebula_ladder.sh
+  derives the runtime ladder with ImageMagick -- 2K, 2K ultrawide (3440x1440 21:9
+  crop), 1080, 720, 1024, 512 -- into gitignored assets/backgrounds/generated/;
+  the CMake step runs the script, map loads the 1024. OPTIONAL (procedural
+  starfield fallback; magick = STATUS not FATAL). main threads the GL texture id
+  (0=none) into the GL-free campaign UI as an unsigned int, cast to ImTextureID
+  only at AddImage; a translucent overlay keeps rings/icons/labels legible. One
+  image committed, seven reproducible from it.
 - ART-5 Next: legend as a persistent on-canvas panel (not just a tooltip);
   per-band/authority glow; optional additional agency backdrops selectable in
   the campaign panel.
