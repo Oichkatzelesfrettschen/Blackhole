@@ -996,9 +996,22 @@ glow). Named font: Spline Sans Mono, vendored separately from the system copy.
   (0=none) into the GL-free campaign UI as an unsigned int, cast to ImTextureID
   only at AddImage; a translucent overlay keeps rings/icons/labels legible. One
   image committed, seven reproducible from it.
-- ART-5 Next: legend as a persistent on-canvas panel (not just a tooltip);
-  per-band/authority glow; optional additional agency backdrops selectable in
-  the campaign panel.
+- ART-5 DONE (c23bbd5; both ultrawides 4ec6050). Persistent on-canvas legend
+  (bottom-left, icon+name per capability) replacing the tooltip; additive glow on
+  band rings + ergosphere + authority marker (drawOrbitalBands helper keeps
+  renderStrategicMap under the tidy cognitive-complexity limit); backdrop picker
+  combo in the Campaign panel over several NASA nebulae (build-generated Cosmic
+  Cliffs + repo Tarantula/Southern Ring/Orion Bar sources + procedural starfield),
+  main loads a CampaignBackdrop array (texture 0 = procedural) and passes it
+  through the GL-free UI. The nebula ladder gained both 2K ultrawides
+  (3440x1440 UWQHD + 2560x1080 UW-FHD).
+- TOOLING (2026-07-12): fontmake is now a SYSTEM install (pipx -> ~/.local/bin,
+  on PATH), not a sandbox venv; CMake find_program(FONTMAKE_EXECUTABLE) resolves
+  it with no -D override. ImageMagick (system /usr/bin/magick) drives the nebula
+  ladder. Both build steps use system tools.
+- ART-6 Next: a runtime resolution-picker that selects the backdrop rendition
+  from the ladder by display/window size; agency attribution overlay on the map;
+  more nebula sources through the same ladder pipeline.
 
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
