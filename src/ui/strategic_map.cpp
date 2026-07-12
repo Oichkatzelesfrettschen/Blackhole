@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <numbers>
 #include <vector>
 
 #include <imgui.h>
@@ -129,20 +130,38 @@ void drawFrameDragArc(ImDrawList *drawList, const ImVec2 &center, float corePx) 
   drawList->AddCircleFilled(previous, 3.0f, IM_COL32(120, 200, 255, 255), 8);
 }
 
-char capabilityGlyph(game::FleetCapability capability) {
+// A small vector icon per capability, drawn at the marker instead of a letter:
+// extraction a downward drill triangle, research a lens, fabrication a frame,
+// relay a dish, verification a check. All ImDrawList primitives -- procedural,
+// no sprite sheet.
+void drawCapabilityIcon(ImDrawList *drawList, const ImVec2 &center, game::FleetCapability capability,
+                        ImU32 color) {
+  const float s = 4.5f;
   switch (capability) {
-  case game::FleetCapability::Research:
-    return 'R';
-  case game::FleetCapability::Fabrication:
-    return 'F';
-  case game::FleetCapability::Relay:
-    return 'L';
-  case game::FleetCapability::Verification:
-    return 'V';
   case game::FleetCapability::Extraction:
-    return 'E';
+    drawList->AddTriangleFilled({center.x - s, center.y - s}, {center.x + s, center.y - s},
+                                {center.x, center.y + s}, color);
+    break;
+  case game::FleetCapability::Research:
+    drawList->AddCircle({center.x - 1.0f, center.y - 1.0f}, s * 0.8f, color, 12, 1.5f);
+    drawList->AddLine({center.x + (s * 0.3f), center.y + (s * 0.3f)}, {center.x + s, center.y + s},
+                      color, 1.5f);
+    break;
+  case game::FleetCapability::Fabrication:
+    drawList->AddRect({center.x - s, center.y - s}, {center.x + s, center.y + s}, color, 0.0f, 0,
+                      1.5f);
+    break;
+  case game::FleetCapability::Relay:
+    drawList->PathArcTo(center, s, 0.0f, std::numbers::pi_v<float>, 12);
+    drawList->PathStroke(color, 0, 1.5f);
+    drawList->AddCircleFilled(center, 1.3f, color, 6);
+    break;
+  case game::FleetCapability::Verification:
+    drawList->AddLine({center.x - s, center.y}, {center.x - (s * 0.2f), center.y + s}, color, 1.5f);
+    drawList->AddLine({center.x - (s * 0.2f), center.y + s}, {center.x + s, center.y - s}, color,
+                      1.5f);
+    break;
   }
-  return '?';
 }
 
 } // namespace
@@ -153,6 +172,13 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   if (!ImGui::Begin("Strategic Map", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::End();
     return;
+  }
+
+  ImGui::TextDisabled("(icon legend)");
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("triangle = extraction   lens = research   square = fabrication\n"
+                      "dish = relay   check = verification\n"
+                      "+/- = prograde/retrograde   cyan halo = relay   red halo = corrupted");
   }
 
   const ImVec2 canvasOrigin = ImGui::GetCursorScreenPos();
@@ -260,14 +286,12 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     if (fleet.telemetryCorrupted) {
       drawList->AddCircle(pos, 12.5f, IM_COL32(255, 80, 80, 220), 20, 1.5f);
     }
-    // Distinct glyph per capability: Research and Relay both start with 'R',
-    // so Relay takes 'L' to keep map markers unambiguous.
-    const char glyph = capabilityGlyph(fleet.capability);
-    // Lane tag: '+' prograde, '-' retrograde, so orbital direction reads on the
-    // marker without a legend.
-    const char laneTag = fleet.lane == game::OrbitLane::Retrograde ? '-' : '+';
-    const char markerText[4] = {glyph, laneTag, '\0', '\0'};
-    drawList->AddText({pos.x + 8.0f, pos.y - 7.0f}, IM_COL32(235, 235, 240, 255), markerText);
+    // A per-capability vector icon beside the marker, plus a small +/- lane tag
+    // so orbital direction still reads at a glance.
+    drawCapabilityIcon(drawList, {pos.x + 12.0f, pos.y}, fleet.capability,
+                       IM_COL32(235, 235, 240, 255));
+    const char laneText[2] = {fleet.lane == game::OrbitLane::Retrograde ? '-' : '+', '\0'};
+    drawList->AddText({pos.x + 18.0f, pos.y - 7.0f}, IM_COL32(200, 200, 210, 255), laneText);
   }
 
   const auto markerFor = [&markers](game::FleetId fleetId) -> const Marker * {
