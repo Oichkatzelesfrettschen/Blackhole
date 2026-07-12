@@ -45,20 +45,6 @@
       "tags": ["jwst", "deep-field", "gravitational-lensing", "galaxy-cluster"]
     },
     {
-      "id": "jwst_tarantula_nebula",
-      "title": "Tarantula Nebula (30 Doradus)",
-      "source": "NASA/ESA/CSA/STScI",
-      "sourceUrl": "https://webbtelescope.org/contents/media/images/2022/041/01GA76MYFN0FMKNRHGCR1RXCPK",
-      "license": "Public Domain",
-      "licenseUrl": "https://webbtelescope.org/copyright",
-      "credit": "NASA, ESA, CSA, STScI, Webb ERO Production Team",
-      "resolution": { "width": 2048, "height": 1536 },
-      "format": "jpg",
-      "path": "assets/backgrounds/source/tarantula-nebula-2k.jpg",
-      "skyboxDir": "assets/skybox_jwst_tarantula",
-      "tags": ["jwst", "nebula", "star-forming"]
-    },
-    {
       "id": "jwst_pillars_of_creation",
       "title": "Pillars of Creation (NIRCam)",
       "source": "NASA/ESA/CSA/STScI",
@@ -99,20 +85,6 @@
       "tags": ["jwst", "planetary-nebula"]
     },
     {
-      "id": "jwst_stephans_quintet",
-      "title": "Stephan's Quintet",
-      "source": "NASA/ESA/CSA/STScI",
-      "sourceUrl": "https://webbtelescope.org/contents/media/images/2022/034/01G7DA5ADA2WDSK1JJPQ0PTG4A",
-      "license": "Public Domain",
-      "licenseUrl": "https://webbtelescope.org/copyright",
-      "credit": "NASA, ESA, CSA, STScI",
-      "resolution": { "width": 2048, "height": 1536 },
-      "format": "jpg",
-      "path": "assets/backgrounds/source/stephans-quintet-2k.jpg",
-      "skyboxDir": "assets/skybox_jwst_stephans_quintet",
-      "tags": ["jwst", "galaxy-group", "interaction"]
-    },
-    {
       "id": "jwst_cartwheel_galaxy",
       "title": "Cartwheel Galaxy",
       "source": "NASA/ESA/CSA/STScI",
@@ -127,17 +99,18 @@
       "tags": ["jwst", "galaxy", "ring-galaxy"]
     },
     {
-      "id": "jwst_orion_bar",
-      "title": "Orion Bar",
+      "id": "jwst_comet_238p_read",
+      "title": "Comet 238P/Read (Main-Belt Comet, Artist's Concept)",
       "source": "NASA/ESA/CSA/STScI",
-      "sourceUrl": "https://webbtelescope.org/contents/media/images/2023/028/01H4MT71AK2V72VV5P5MZM1VKQ",
+      "sourceUrl": "https://esawebb.org/images/weic2308a/",
       "license": "Public Domain",
       "licenseUrl": "https://webbtelescope.org/copyright",
       "credit": "NASA, ESA, CSA, STScI",
       "resolution": { "width": 2048, "height": 1536 },
       "format": "jpg",
-      "path": "assets/backgrounds/source/orion-bar-2k.jpg",
-      "tags": ["jwst", "nebula", "orion", "PDR"]
+      "path": "assets/backgrounds/source/comet-238p-read-2k.jpg",
+      "verifiedContent": "EXIF ImageDescription: artist's concept of Comet 238P/Read sublimating its water ice",
+      "tags": ["jwst", "comet", "main-belt-comet", "artist-concept"]
     },
     {
       "id": "jwst_jupiter_auroras",
@@ -298,7 +271,8 @@
     },
     {
       "id": "esa_heic1402a_4k",
-      "title": "Horsehead Nebula",
+      "title": "Tarantula Nebula (Hubble infrared)",
+      "verifiedContent": "EXIF ImageDescription: Hubble infrared image of the Tarantula Nebula; credit E. Sabbi matches the 30 Doradus mosaic",
       "source": "ESA/Hubble",
       "sourceUrl": "https://cdn.esahubble.org/archives/images/publicationjpg/heic1402a.jpg",
       "license": "CC BY 4.0",
@@ -311,7 +285,8 @@
     },
     {
       "id": "nasa_pia15416",
-      "title": "NASA/JPL Image PIA15416",
+      "title": "GALEX Ultraviolet Field (PIA15416)",
+      "verifiedContent": "EXIF ImageDescription: hot stars in ultraviolet from NASA's Galaxy Evolution Explorer (GALEX)",
       "source": "NASA/JPL-Caltech",
       "sourceUrl": "http://images-assets.nasa.gov/image/PIA15416/PIA15416~orig.jpg",
       "license": "NASA Images and Media Usage Guidelines",
@@ -324,7 +299,8 @@
     },
     {
       "id": "nasa_pia08506",
-      "title": "NASA/JPL Image PIA08506",
+      "title": "Andromeda Galaxy (M31, PIA08506)",
+      "verifiedContent": "EXIF ImageDescription: the Andromeda galaxy in visible light (National Optical Astronomy Observatory)",
       "source": "NASA/JPL-Caltech",
       "sourceUrl": "http://images-assets.nasa.gov/image/PIA08506/PIA08506~orig.jpg",
       "license": "NASA Images and Media Usage Guidelines",
@@ -350,7 +326,8 @@
     },
     {
       "id": "esa_heic1402a_large",
-      "title": "Horsehead Nebula (large)",
+      "title": "Tarantula Nebula (Hubble infrared, large)",
+      "verifiedContent": "EXIF ImageDescription: Hubble infrared image of the Tarantula Nebula; credit E. Sabbi matches the 30 Doradus mosaic",
       "source": "ESA/Hubble",
       "sourceUrl": "https://cdn.esahubble.org/archives/images/large/heic1402a.jpg",
       "license": "CC BY 4.0",
