@@ -969,26 +969,32 @@ CC0/CC-BY OK plus public-domain NASA/space-agency imagery (downscaled, RAM-light
 wants all four upgrades (starfield/nebula, capability icons, sci-fi/mono font,
 glow). Named font: Spline Sans Mono, vendored separately from the system copy.
 
-- ART-1 DONE (572ec6a). Spline Sans Mono vendored under
-  assets/fonts/spline-sans-mono/ (Regular + Medium + OFL.txt + PROVENANCE.md;
-  SIL OFL 1.1, from Arch pkg ttf-spline-sans-mono 1.002-1, unmodified so the
-  reserved name is preserved; ~74 KB each, regular git not LFS). initializeImGui
-  loads it via platform::resourcePath at 16px with an AddFontDefault fallback so
-  a stripped install never renders an empty atlas (which crashes).
+- ART-1 DONE (572ec6a, then 120eef8 converted to source-build). User (2026-07-12)
+  flagged the committed .ttf binary and asked for build-from-source. NOW: the
+  Glyphs design source (assets/fonts/spline-sans-mono/src/SplineSansMono.glyphs,
+  upstream-unmodified so the reserved name is preserved) is vendored and the
+  desktop CMake build compiles the Regular instance with fontmake
+  (FONTMAKE_EXECUTABLE, overridable) into the gitignored .ttf ImGui loads;
+  desktop targets depend on it, missing fontmake is a clear configure FATAL with
+  the fix. No font binary is committed. OFL.txt + PROVENANCE.md stay. fontmake
+  verified: pip-installable venv builds a valid 47KB Regular TTF from source.
 - ART-2 DONE (45023ef). Procedural strategic-map backdrop: deterministic
-  integer-hash starfield (stable across frames/runs, no texture, no RAM), two
-  nebula washes, additive halo glow on fleet markers. Self-authored, no license
-  surface. Helpers file-local to keep renderStrategicMap under the tidy
-  cognitive-complexity limit.
-- ART-3 Next: procedural per-capability icons (vector via ImDrawList) replacing
-  the E/R/F/L/V + lane-tag glyphs (extraction drill, research lens, relay dish,
-  fabrication frame, verification check); a map legend for the halos/glyphs.
-- ART-4 Next: a downscaled NASA/ESA public-domain nebula backdrop as an optional
-  vendored texture (loaded via the existing loadTexture2D + resourcePath path,
-  LFS + provenance manifest like assets/backgrounds/manifest.json, downscaled to
-  ~1-2K to stay RAM-light) behind the ImGui map canvas; keep the procedural
-  starfield as the no-asset fallback. Heaviest item (download + LFS + texture
-  wiring), deferred deliberately.
+  integer-hash starfield, nebula washes, additive halo glow on markers. Helpers
+  file-local for the tidy cognitive-complexity limit.
+- ART-3 DONE (f938cd0). Procedural per-capability vector icons (ImDrawList:
+  extraction triangle, research lens, fabrication frame, relay dish,
+  verification check) replacing the letter glyphs; an (icon legend) tooltip.
+- ART-4 DONE (deebeaa). JWST Cosmic Cliffs (Carina, NGC 3324) backdrop behind
+  the map: full-res NASA source in assets/backgrounds/source/ (LFS + manifest.json
+  provenance, NASA/ESA/CSA/STScI public domain); CMake downscales it to a 1024px
+  runtime texture (campaign_nebula.jpg, gitignored) with ImageMagick. OPTIONAL --
+  procedural starfield fallback when the texture is absent, so magick is a status
+  note not a hard dep. main threads the GL texture id (0=none) into the GL-free
+  campaign UI as an unsigned int, cast to ImTextureID only at AddImage; a
+  translucent overlay keeps rings/icons/labels legible.
+- ART-5 Next: legend as a persistent on-canvas panel (not just a tooltip);
+  per-band/authority glow; optional additional agency backdrops selectable in
+  the campaign panel.
 
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
