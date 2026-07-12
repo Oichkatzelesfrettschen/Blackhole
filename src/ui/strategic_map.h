@@ -19,7 +19,7 @@ struct CampaignUiState;
  *         backdropTextureId is a GL texture (0 = none) drawn behind the map;
  *         when absent the procedural starfield is used instead. */
 void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState,
-                        unsigned int backdropTextureId = 0);
+                        unsigned int backdropTextureId = 0, const char *backdropCredit = nullptr);
 
 } // namespace ui
 

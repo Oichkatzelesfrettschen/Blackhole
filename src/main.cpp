@@ -565,19 +565,46 @@ int main(int argc, char **argv) {
     // Selectable NASA nebula backdrops for the strategic map. Each entry's
     // texture is 0 when its asset is absent, in which case the map draws its
     // procedural starfield for that choice. Loaded once; the Campaign panel
-    // picks which one the map uses.
+    // picks which one the map uses, and the map draws its credit.
+    //
+    // The Cosmic Cliffs has a build-generated resolution ladder, so its
+    // rendition is chosen to match the window: an ultrawide framebuffer takes a
+    // 21:9 crop, otherwise the nearest width tier -- crisp on large displays,
+    // light on small ones.
+    int campaignFbW = 0;
+    int campaignFbH = 0;
+    glfwGetFramebufferSize(window, &campaignFbW, &campaignFbH);
+    const std::string cosmicCliffsRendition = [campaignFbW, campaignFbH]() -> std::string {
+      const std::string dir = "assets/backgrounds/generated/carina-cosmic-cliffs-";
+      const double aspect = campaignFbH > 0 ? static_cast<double>(campaignFbW) / campaignFbH : 1.78;
+      if (aspect > 2.1) {
+        return dir + (campaignFbH >= 1200 ? "ultrawide-3440x1440.jpg" : "ultrawide-2560x1080.jpg");
+      }
+      if (campaignFbW >= 2000) {
+        return dir + "2k.jpg";
+      }
+      if (campaignFbW >= 1000) {
+        return dir + "1024.jpg";
+      }
+      return dir + "512.jpg";
+    }();
+    const char *const nasaCredit = "NASA, ESA, CSA, STScI";
     const std::array<ui::CampaignBackdrop, 5> campaignBackdrops = {{
         {"Cosmic Cliffs (Carina)",
-         static_cast<unsigned int>(loadTexture2D(
-             resourcePath("assets/backgrounds/generated/carina-cosmic-cliffs-1024.jpg")))},
-        {"Tarantula Nebula", static_cast<unsigned int>(loadTexture2D(
-                                 resourcePath("assets/backgrounds/source/tarantula-nebula-2k.jpg")))},
+         static_cast<unsigned int>(loadTexture2D(resourcePath(cosmicCliffsRendition))), nasaCredit},
+        {"Tarantula Nebula",
+         static_cast<unsigned int>(
+             loadTexture2D(resourcePath("assets/backgrounds/source/tarantula-nebula-2k.jpg"))),
+         nasaCredit},
         {"Southern Ring Nebula",
-         static_cast<unsigned int>(loadTexture2D(
-             resourcePath("assets/backgrounds/source/southern-ring-nebula-2k.jpg")))},
-        {"Orion Bar", static_cast<unsigned int>(loadTexture2D(
-                          resourcePath("assets/backgrounds/source/orion-bar-2k.jpg")))},
-        {"Starfield (procedural)", 0U},
+         static_cast<unsigned int>(
+             loadTexture2D(resourcePath("assets/backgrounds/source/southern-ring-nebula-2k.jpg"))),
+         nasaCredit},
+        {"Orion Bar",
+         static_cast<unsigned int>(
+             loadTexture2D(resourcePath("assets/backgrounds/source/orion-bar-2k.jpg"))),
+         nasaCredit},
+        {"Starfield (procedural)", 0U, ""},
     }};
     rs.recording.recordFrameIndex = recordStartFrame;
     rs.recording.recordCinematic =

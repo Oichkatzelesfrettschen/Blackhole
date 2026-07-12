@@ -281,11 +281,14 @@ void renderCampaignWindows(game::CampaignSession &session, CampaignUiState &uiSt
     // A fresh snapshot after any button above mutated the campaign this frame.
     const game::CampaignViewSnapshot view = session.state().renderSnapshot();
     unsigned int backdropTextureId = 0;
+    const char *backdropCredit = nullptr;
     if (backdrops != nullptr && backdropCount > 0) {
-      backdropTextureId =
-          backdrops[std::clamp(uiState.selectedBackdrop, 0, backdropCount - 1)].textureId;
+      const CampaignBackdrop &chosen =
+          backdrops[std::clamp(uiState.selectedBackdrop, 0, backdropCount - 1)];
+      backdropTextureId = chosen.textureId;
+      backdropCredit = chosen.credit;
     }
-    renderStrategicMap(view, uiState, backdropTextureId);
+    renderStrategicMap(view, uiState, backdropTextureId, backdropCredit);
     renderIntelWindow(view);
   }
 }

@@ -21,11 +21,13 @@ namespace ui {
 
 /** @brief Panel-local UI state: window visibility, map selection, and the
  *         order composer's staged values. Owned by main beside the session. */
-/** @brief A selectable strategic-map backdrop: a name and its GL texture (0 =
- *         the procedural starfield). Built by main from loaded textures. */
+/** @brief A selectable strategic-map backdrop: a name, its GL texture (0 =
+ *         the procedural starfield), and the credit line drawn over it. Built
+ *         by main from loaded textures. */
 struct CampaignBackdrop {
   const char *name = "";
   unsigned int textureId = 0;
+  const char *credit = "";
 };
 
 struct CampaignUiState {

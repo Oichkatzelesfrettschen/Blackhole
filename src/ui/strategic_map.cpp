@@ -244,7 +244,7 @@ void drawMapLegend(ImDrawList *drawList, const ImVec2 &canvasOrigin, const ImVec
 } // namespace
 
 void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState,
-                        unsigned int backdropTextureId) {
+                        unsigned int backdropTextureId, const char *backdropCredit) {
   ImGui::SetNextWindowPos(ImVec2(420.0f, 470.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(520.0f, 420.0f), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Strategic Map", nullptr, ImGuiWindowFlags_NoCollapse)) {
@@ -390,6 +390,18 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
         break;
       }
     }
+  }
+
+  // Attribution for an image backdrop, bottom-right (required credit for the
+  // NASA/agency public-domain imagery). Skipped for the procedural starfield.
+  if (backdropTextureId != 0 && backdropCredit != nullptr && backdropCredit[0] != '\0') {
+    const ImVec2 textSize = ImGui::CalcTextSize(backdropCredit);
+    const ImVec2 creditPos = {canvasOrigin.x + canvasSize.x - textSize.x - 6.0f,
+                              canvasOrigin.y + canvasSize.y - textSize.y - 5.0f};
+    drawList->AddRectFilled({creditPos.x - 3.0f, creditPos.y - 2.0f},
+                            {creditPos.x + textSize.x + 3.0f, creditPos.y + textSize.y + 2.0f},
+                            IM_COL32(6, 8, 16, 150));
+    drawList->AddText(creditPos, IM_COL32(190, 195, 210, 220), backdropCredit);
   }
 
   // Drawn last so the legend sits above the map and stays readable.
