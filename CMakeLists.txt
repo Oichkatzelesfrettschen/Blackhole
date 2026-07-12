@@ -3560,8 +3560,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp")
     add_executable(physics_test
       "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(physics_test PRIVATE blackhole_physics)
     target_include_directories(physics_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -3910,8 +3910,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_schild_test.cpp")
     add_executable(kerr_schild_test
       "${PROJECT_SOURCE_DIR}/tests/kerr_schild_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(kerr_schild_test PRIVATE blackhole_physics)
     target_include_directories(kerr_schild_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5066,8 +5066,8 @@ if(BUILD_TESTING)
 
     add_executable(z3_verification_test
       "${PROJECT_SOURCE_DIR}/tests/z3_verification_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(z3_verification_test PRIVATE blackhole_physics)
 
     # Z3 verification requires OpenGL 4.6 and GLFW
     target_include_directories(z3_verification_test PRIVATE
@@ -5155,8 +5155,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/johannsen_psaltis_test.cpp")
     add_executable(johannsen_psaltis_test
       "${PROJECT_SOURCE_DIR}/tests/johannsen_psaltis_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(johannsen_psaltis_test PRIVATE blackhole_physics)
     target_include_directories(johannsen_psaltis_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5192,8 +5192,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_newman_test.cpp")
     add_executable(kerr_newman_test
       "${PROJECT_SOURCE_DIR}/tests/kerr_newman_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(kerr_newman_test PRIVATE blackhole_physics)
     target_include_directories(kerr_newman_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5229,8 +5229,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp")
     add_executable(lqg_kerr_test
       "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(lqg_kerr_test PRIVATE blackhole_physics)
     target_include_directories(lqg_kerr_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5266,8 +5266,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/iron_kline_test.cpp")
     add_executable(iron_kline_test
       "${PROJECT_SOURCE_DIR}/tests/iron_kline_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(iron_kline_test PRIVATE blackhole_physics)
     target_include_directories(iron_kline_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5355,8 +5355,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/penrose_tov_test.cpp")
     add_executable(penrose_tov_test
       "${PROJECT_SOURCE_DIR}/tests/penrose_tov_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(penrose_tov_test PRIVATE blackhole_physics)
     target_include_directories(penrose_tov_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5438,8 +5438,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp")
     add_executable(symplectic_integrator_test
       "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(symplectic_integrator_test PRIVATE blackhole_physics)
     target_include_directories(symplectic_integrator_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5475,8 +5475,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/electron_temperature_test.cpp")
     add_executable(electron_temperature_test
       "${PROJECT_SOURCE_DIR}/tests/electron_temperature_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(electron_temperature_test PRIVATE blackhole_physics)
     target_include_directories(electron_temperature_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5512,8 +5512,8 @@ if(BUILD_TESTING)
   if(CFITSIO_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/tests/fits_writer_test.cpp")
     add_executable(fits_writer_test
       "${PROJECT_SOURCE_DIR}/tests/fits_writer_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(fits_writer_test PRIVATE blackhole_physics)
     target_include_directories(fits_writer_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5554,8 +5554,8 @@ if(BUILD_TESTING)
     find_package(mpfr CONFIG REQUIRED)
     add_executable(precision_regression_test
       "${PROJECT_SOURCE_DIR}/tests/precision_regression_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(precision_regression_test PRIVATE blackhole_physics)
     target_include_directories(precision_regression_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
