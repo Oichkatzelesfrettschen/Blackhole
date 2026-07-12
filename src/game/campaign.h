@@ -22,24 +22,14 @@
 #include <cstdint>
 #include <vector>
 
+#include "game/campaign_view.h"
+#include "game/command.h"
 #include "game/fleet.h"
 #include "game/task_graph.h"
 #include "game/temporal_clock.h"
 #include "game/time_field.h"
 
 namespace game {
-
-enum class CommandType : std::uint8_t {
-  PlaceFleet = 0, ///< Move a fleet to another orbital band.
-  AssignTask = 1, ///< Contract a new task to a fleet.
-};
-
-struct Command {
-  CommandType type = CommandType::PlaceFleet;
-  FleetId fleet = K_INVALID_FLEET_ID;
-  int targetBand = 0;             ///< PlaceFleet: destination band index.
-  double properTimeCostSec = 0.0; ///< AssignTask: local proper-time cost.
-};
 
 struct LoggedCommand {
   Command command;
@@ -95,6 +85,11 @@ public:
   [[nodiscard]] const TaskGraph &taskGraph() const { return taskGraph_; }
   [[nodiscard]] const std::vector<LoggedCommand> &commandLog() const { return commandLog_; }
   [[nodiscard]] const std::vector<IntelReport> &intelLog() const { return intelLog_; }
+
+  /** @brief Immutable render-facing view for the UI layer: plain values, no
+   *         pointers into campaign storage. The VIEW contract; grows per UI
+   *         slice independently of serializeState(). */
+  [[nodiscard]] CampaignViewSnapshot renderSnapshot() const;
 
   /** @brief Deterministic field-by-field byte serialization of the full
    *         campaign state (explicit widths, -0.0 canonicalized, every double

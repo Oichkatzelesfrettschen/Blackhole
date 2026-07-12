@@ -30,6 +30,11 @@ public:
   /** @brief True when a station can exist at radiusCm. A rejected radius must
    *         never reach properTimeRate or signalDelaySec. */
   [[nodiscard]] virtual bool isValidStationRadius(double radiusCm) const = 0;
+
+  /** @brief Radius below which no station can exist (the horizon for a black
+   *         hole field). Zero for fields without an inner boundary; the map
+   *         draws it as the forbidden core. */
+  [[nodiscard]] virtual double innerBoundaryRadiusCm() const { return 0.0; }
 };
 
 } // namespace game

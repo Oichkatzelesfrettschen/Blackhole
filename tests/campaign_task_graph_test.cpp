@@ -15,6 +15,8 @@
 
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
+#include "game/campaign_view.h"
+#include "game/command.h"
 #include "game/fleet.h"
 #include "game/task_graph.h"
 #include "game/time_field.h"
@@ -190,6 +192,73 @@ TEST(CampaignHorizonGate, FleetCannotBeStationedInsideTheHorizonAtSetup) {
   ASSERT_TRUE(campaign.valid());
   EXPECT_EQ(campaign.addFleet(game::FleetCapability::Research, 0), game::K_INVALID_FLEET_ID);
   EXPECT_TRUE(campaign.fleets().empty());
+}
+
+TEST(CampaignView, RenderSnapshotTracksSignalsWithoutLeakingEarlyState) {
+  const FakeTimeField field;
+  game::CampaignState campaign(fakeConfig(), field);
+  ASSERT_TRUE(campaign.valid());
+  const game::FleetId farFleet = campaign.addFleet(game::FleetCapability::Research, 1);
+  ASSERT_NE(farFleet, game::K_INVALID_FLEET_ID);
+
+  game::Command assign;
+  assign.type = game::CommandType::AssignTask;
+  assign.fleet = farFleet;
+  assign.properTimeCostSec = 0.5;
+  ASSERT_TRUE(campaign.issueCommand(assign)); // effect turn 5, report lands turn 10
+
+  // While the order is in flight the view shows the signal, not its effect.
+  campaign.advanceTurns(3);
+  const game::CampaignViewSnapshot inFlight = campaign.renderSnapshot();
+  EXPECT_EQ(inFlight.turn, 3);
+  ASSERT_EQ(inFlight.ordersInFlight.size(), 1U);
+  EXPECT_EQ(inFlight.ordersInFlight.front().fleet, farFleet);
+  EXPECT_EQ(inFlight.ordersInFlight.front().effectTurn, 5);
+  EXPECT_TRUE(inFlight.reportsInFlight.empty());
+  ASSERT_EQ(inFlight.fleets.size(), 1U);
+  EXPECT_EQ(inFlight.fleets.front().activeTasks + inFlight.fleets.front().pendingTasks, 0U);
+
+  // After the order lands and the task completes, the report is the signal.
+  campaign.advanceTurns(3); // turn 6
+  const game::CampaignViewSnapshot reporting = campaign.renderSnapshot();
+  EXPECT_TRUE(reporting.ordersInFlight.empty());
+  ASSERT_EQ(reporting.reportsInFlight.size(), 1U);
+  EXPECT_EQ(reporting.reportsInFlight.front().effectTurn, 10);
+  EXPECT_EQ(reporting.fleets.front().completedTasks, 1U);
+  EXPECT_TRUE(reporting.intel.empty());
+
+  campaign.advanceTurns(4); // turn 10
+  const game::CampaignViewSnapshot arrived = campaign.renderSnapshot();
+  EXPECT_TRUE(arrived.reportsInFlight.empty());
+  ASSERT_EQ(arrived.intel.size(), 1U);
+  EXPECT_EQ(arrived.intel.front().receivedTurn, 10);
+
+  // Band views carry the field the map draws: rates, delays, validity.
+  ASSERT_EQ(arrived.bands.size(), 2U);
+  EXPECT_TRUE(arrived.bands.at(0).validStation);
+  EXPECT_DOUBLE_EQ(arrived.bands.at(0).properTimeRate, 0.1);
+  EXPECT_DOUBLE_EQ(arrived.bands.at(0).delayToAuthoritySec, 40.0);
+  EXPECT_DOUBLE_EQ(arrived.bands.at(1).properTimeRate, 1.0);
+  EXPECT_DOUBLE_EQ(arrived.fleets.front().properTimeRate, 1.0);
+  EXPECT_DOUBLE_EQ(arrived.coordinateTimeSec, 10.0);
+}
+
+TEST(CampaignView, InvalidBandRendersAsForbiddenZone) {
+  const game::BlackholeTimeField field(K_M87_MASS_G);
+  const double horizonCm = field.horizonRadiusCm();
+  game::CampaignConfig config;
+  config.secondsPerTurn = 3600.0;
+  config.authorityRadiusCm = 100.0 * horizonCm;
+  config.bandRadiusCm = {0.5 * horizonCm, 10.0 * horizonCm};
+  const game::CampaignState campaign(config, field);
+  ASSERT_TRUE(campaign.valid());
+  const game::CampaignViewSnapshot view = campaign.renderSnapshot();
+  EXPECT_DOUBLE_EQ(view.innerBoundaryRadiusCm, horizonCm);
+  ASSERT_EQ(view.bands.size(), 2U);
+  EXPECT_FALSE(view.bands.at(0).validStation);
+  EXPECT_DOUBLE_EQ(view.bands.at(0).properTimeRate, 0.0);
+  EXPECT_TRUE(view.bands.at(1).validStation);
+  EXPECT_GT(view.authorityProperTimeRate, 0.99);
 }
 
 TEST(TaskGraph, PrerequisitesGateActivation) {

@@ -33,6 +33,8 @@ public:
   [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override;
   [[nodiscard]] bool isValidStationRadius(double radiusCm) const override;
 
+  [[nodiscard]] double innerBoundaryRadiusCm() const override { return horizonRadiusCm_; }
+
   [[nodiscard]] double horizonRadiusCm() const { return horizonRadiusCm_; }
 
 private:

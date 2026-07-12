@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "game/campaign_view.h"
+#include "game/command.h"
 #include "game/fleet.h"
 #include "game/task_graph.h"
 #include "game/temporal_clock.h"
@@ -227,6 +229,94 @@ void CampaignState::advanceTurns(std::int64_t turnCount) {
   for (std::int64_t step = 0; step < turnCount; ++step) {
     advanceTurn();
   }
+}
+
+CampaignViewSnapshot CampaignState::renderSnapshot() const {
+  CampaignViewSnapshot view;
+  view.turn = clock_.turn();
+  view.secondsPerTurn = clock_.secondsPerTurn();
+  view.coordinateTimeSec = clock_.coordinateTimeSec();
+  view.authorityRadiusCm = config_.authorityRadiusCm;
+  view.authorityProperTimeRate =
+      valid_ ? field_->properTimeRate(config_.authorityRadiusCm) : 0.0;
+  view.innerBoundaryRadiusCm = field_->innerBoundaryRadiusCm();
+
+  view.bands.reserve(config_.bandRadiusCm.size());
+  for (std::size_t bandIndex = 0; bandIndex < config_.bandRadiusCm.size(); ++bandIndex) {
+    BandView band;
+    band.index = static_cast<int>(bandIndex);
+    band.radiusCm = config_.bandRadiusCm.at(bandIndex);
+    band.validStation = field_->isValidStationRadius(band.radiusCm);
+    if (band.validStation) {
+      band.properTimeRate = field_->properTimeRate(band.radiusCm);
+      band.delayToAuthoritySec = field_->signalDelaySec(band.radiusCm, config_.authorityRadiusCm);
+    }
+    view.bands.push_back(band);
+  }
+
+  view.fleets.reserve(fleets_.size());
+  for (const Fleet &fleet : fleets_) {
+    FleetView fleetView;
+    fleetView.id = fleet.id;
+    fleetView.capability = fleet.capability;
+    fleetView.bandIndex = fleet.bandIndex;
+    fleetView.reliability = fleet.reliability;
+    fleetView.properTimeSec = fleet.properTimeSec;
+    fleetView.properTimeRate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex));
+    for (const TaskId taskId : fleet.assignedTasks) {
+      const TaskContract *contract = taskGraph_.find(taskId);
+      if (contract == nullptr) {
+        continue;
+      }
+      switch (contract->state) {
+      case TaskState::Pending:
+        ++fleetView.pendingTasks;
+        break;
+      case TaskState::Active:
+        ++fleetView.activeTasks;
+        break;
+      case TaskState::Complete:
+        ++fleetView.completedTasks;
+        break;
+      }
+    }
+    view.fleets.push_back(fleetView);
+  }
+
+  for (const Delivery &delivery : deliveryQueue_) {
+    switch (delivery.kind) {
+    case DeliveryKind::Command: {
+      const LoggedCommand &logged = commandLog_.at(delivery.commandIndex);
+      OrderInFlightView order;
+      order.type = logged.command.type;
+      order.fleet = logged.command.fleet;
+      order.issueTurn = logged.issueTurn;
+      order.effectTurn = logged.effectTurn;
+      view.ordersInFlight.push_back(order);
+      break;
+    }
+    case DeliveryKind::CompletionReport: {
+      ReportInFlightView report;
+      report.task = delivery.task;
+      report.fleet = delivery.fleet;
+      report.completedTurn = delivery.completedTurn;
+      report.effectTurn = delivery.effectTurn;
+      view.reportsInFlight.push_back(report);
+      break;
+    }
+    }
+  }
+
+  view.intel.reserve(intelLog_.size());
+  for (const IntelReport &report : intelLog_) {
+    IntelView intelView;
+    intelView.receivedTurn = report.receivedTurn;
+    intelView.completedTurn = report.completedTurn;
+    intelView.task = report.task;
+    intelView.fleet = report.fleet;
+    view.intel.push_back(intelView);
+  }
+  return view;
 }
 
 std::vector<std::uint8_t> CampaignState::serializeState() const {

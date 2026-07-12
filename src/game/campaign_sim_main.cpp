@@ -18,6 +18,7 @@
 
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
+#include "game/command.h"
 #include "game/fleet.h"
 
 namespace {
