@@ -1008,6 +1008,12 @@ exe).
   (retention costs energy, stabilization victory latches); UI shows a second
   objective bar. campaign lib IEEE under ENABLE_FAST_MATH; determinism holds.
   The map UI legend leftover was folded into ART-5's drawMapLegend.
+- CAMPAIGN-8 Next (future tuning, NOT scoped -- do not build without intent): the
+  deadline never bites (both wins land t617-819 of 1200), so clearedTurn has no
+  stakes and the choice reads as "which victory flavor" not "a tense race".
+  Tightening victoryEnergyUnits so the outer line clears near ~1100 would make
+  speed/margin matter and turn a flavor-victory into a tense one. Deferred to
+  avoid a balance rabbit hole; the subsystem is honestly done as is.
 
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 
