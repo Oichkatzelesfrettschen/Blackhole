@@ -957,10 +957,34 @@ exe).
   one. The interlocks (deep fleet corrupts without co-located verification,
   needs fabrication fuel + relay delay) make executing a dive a multi-fleet
   commitment.
-- CAMPAIGN-6 Next: escalating or multi-objective structure so surplus energy /
-  a faster clear has real payoff (the only way to make the dive a genuine
-  non-dominated decision); ergosphere missions beyond extraction; a UI legend
-  for the map halos/glyphs.
+- CAMPAIGN-6 DONE (07a15c0). Instability mechanic + multi-objective outcome
+  vector. Instability rises instabilityPerTurn each turn and erodes ALL yield
+  through a saturating factor 1/(1 + instability*instabilityYieldPenaltyPerUnit)
+  -- uncontained outer play still clears the objective (survives) but slows, so
+  it is escalating pressure, not a death gate. A prograde ergoregion fleet
+  produces containment (ergoContainmentPerProperDay, scaled by depth via the
+  shared ergoregionDepth helper) that suppresses instability, protecting
+  throughput; deep prograde work carries a depth-scaled hazard
+  (ergoHazardWearPerProperDay) that wears integrity faster. Containment acts at
+  the work site this turn (physical suppression); yield still banks on delayed
+  report arrival -- commented at the site so the asymmetry does not read as a
+  causality bug. Outcome is a VECTOR the player weights (energy, stabilization,
+  fleetIntegrity=min reliability, clearedTurn), surfaced in renderSnapshot and
+  the time-ledger panel; NOT collapsed to one winner.
+  MEASURED (campaign_sim --compare, 1200 turns, shipped scenario, victory retuned
+  220 -> 1400 for sustained play): outer clears t617 stab 0 integrity 0.958;
+  solo t551 stab 1.21 integrity 0.500; pod t463 stab 3.06 integrity 0.550. outer
+  and pod are mutually non-dominated (outer wins integrity, pod wins speed +
+  stabilization) -- the genuine non-dominated decision C5 could not produce under
+  a scalar objective; solo is dominated by pod (partial commitment worse than
+  full, honestly reported). campaign_sim gained --pod/--compare and a 3-line
+  Pareto probe with sustained re-tasking. All knobs default no-op (scenarios
+  that leave them unset are byte-identical bar the new serialized fields);
+  campaign lib stays IEEE under ENABLE_FAST_MATH; campaign_instability_test 6
+  gates (rise/containment/erosion/hazard/no-op/determinism); 91/91.
+- CAMPAIGN-6 leftover: the map UI legend for halos/glyphs was folded into ART-5's
+  drawMapLegend; ergosphere missions beyond extraction is now containment. Next
+  campaign ideas (not scoped): faction AI, save/load format, multi-hole scenarios.
 
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 
