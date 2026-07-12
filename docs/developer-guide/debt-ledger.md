@@ -1008,12 +1008,20 @@ exe).
   (retention costs energy, stabilization victory latches); UI shows a second
   objective bar. campaign lib IEEE under ENABLE_FAST_MATH; determinism holds.
   The map UI legend leftover was folded into ART-5's drawMapLegend.
-- CAMPAIGN-8 Next (future tuning, NOT scoped -- do not build without intent): the
-  deadline never bites (both wins land t617-819 of 1200), so clearedTurn has no
-  stakes and the choice reads as "which victory flavor" not "a tense race".
-  Tightening victoryEnergyUnits so the outer line clears near ~1100 would make
-  speed/margin matter and turn a flavor-victory into a tense one. Deferred to
-  avoid a balance rabbit hole; the subsystem is honestly done as is.
+- CAMPAIGN-8 DONE: the deadline now bites. victoryEnergyUnits retuned 1400 -> 3150.
+  KEY FINDING while tuning: winning FREEZES the economy -- issueCommand rejects
+  orders once decided (status != Ongoing), so campaign_sim's re-task loop stops
+  and energy plateaus; the old "outer banks 2643" was post-win coasting, not
+  steady state. Measured the TRUE sustained trajectory with wins disabled
+  (victory thresholds set to 1e6): outer 3164@t1100 / 3444@t1200, solo 2990@1200,
+  pod 2420@1200, stab 617@1200. Set victoryEnergyUnits=3150 so full-outer clears
+  energy at t1097 (91% of the 1200 deadline, was t617) -- speed/margin now matter.
+  CONSEQUENCE (honest): pod/solo now LOSE -- a light dive drops throughput below
+  the 3150 energy line AND falls short of the 8.0 stabilization line (pod reaches
+  6.70/8.0, close enough to show the gradient). The two winning lines are
+  full-outer (energy, t1097) or all-in dive (stabilization, t819); half-measures
+  lose, so the fork is now sharp and the deadline tense. Determinism holds;
+  tests use their own configs so 91/91 unaffected.
 
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 

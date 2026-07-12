@@ -34,11 +34,14 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   config.secondsPerTurn = K_SECONDS_PER_DAY;
   config.authorityRadiusCm = 200.0 * rS;
   config.bandRadiusCm = {0.85 * rS, 3.0 * rS, 10.0 * rS, 50.0 * rS};
-  // Objective sized for sustained play across the full deadline: uncontained
-  // outer work still clears it, but only near the deadline as instability erodes
-  // throughput; a deep prograde lane that holds instability down clears far
-  // sooner. Neither is strictly better -- see the instability block below.
-  config.victoryEnergyUnits = 1400.0;
+  // Objective sized so the deadline bites (CAMPAIGN-8): full outer commitment
+  // clears it only near turn 1100 of 1200, so the energy race is tense and any
+  // dive that drops throughput forfeits it. There is no half-measure -- a fleet
+  // or two sent deep banks neither enough energy to win the race nor enough
+  // stabilization to take the alternate victory (see the instability block); the
+  // two winning lines are full-outer for energy or an all-in dive for
+  // stabilization. Measured against campaign_sim --compare.
+  config.victoryEnergyUnits = 3150.0;
   config.deadlineTurn = 1200;
   config.fleetInitialFuelUnits = 100.0;
   config.fuelPerBandHop = 20.0;
