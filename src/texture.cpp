@@ -11,6 +11,7 @@
 
 // C++ system headers
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -64,6 +65,17 @@ void applyAnisotropy(GLenum target) {
   GLfloat const aniso = std::min(maxAniso, kDefaultAniso);
   glTexParameterf(target, GL_TEXTURE_MAX_ANISOTROPY, aniso);
 }
+
+// A Git-LFS pointer file opens with the spec line "version https://git-lfs...".
+bool isGitLfsPointer(const std::string &file) {
+  std::ifstream stream(file, std::ios::binary);
+  if (!stream) {
+    return false;
+  }
+  std::string firstLine;
+  std::getline(stream, firstLine);
+  return firstLine.rfind("version https://git-lfs", 0) == 0;
+}
 } // namespace
 
 GLuint loadTexture2D(const std::string &file, bool repeat) {
@@ -75,11 +87,18 @@ GLuint loadTexture2D(const std::string &file, bool repeat) {
   int comp;
   unsigned char *data = stbi_load(file.c_str(), &width, &height, &comp, 0);
   if (data != nullptr) {
+    // stb_image returns the file's native channel count (desired_channels = 0),
+    // so a two-channel grey+alpha image must map to GL_RG; without this branch it
+    // would fall through to GL_RGB and read three bytes per texel from a
+    // two-byte-per-texel buffer.
     GLenum format = GL_RGB;
     GLenum internalFormat = GL_RGB;
     if (comp == 1) {
       format = GL_RED;
       internalFormat = GL_RED;
+    } else if (comp == 2) {
+      format = GL_RG;
+      internalFormat = GL_RG;
     } else if (comp == 3) {
       format = GL_RGB;
       internalFormat = GL_SRGB;
@@ -101,7 +120,14 @@ GLuint loadTexture2D(const std::string &file, bool repeat) {
 
     stbi_image_free(data);
   } else {
-    std::cout << "ERROR: Failed to load texture at: " << file << '\n';
+    // A Git-LFS-tracked asset that has not been fetched is a text pointer file,
+    // not an image; name that case so the fix (git lfs pull) is obvious rather
+    // than a bare decode failure.
+    std::cerr << "ERROR: Failed to load texture at: " << file;
+    if (isGitLfsPointer(file)) {
+      std::cerr << " (Git-LFS pointer -- run 'git lfs pull' to fetch the image)";
+    }
+    std::cerr << '\n';
     stbi_image_free(data);
     glDeleteTextures(1, &textureID);
     textureID = 0;

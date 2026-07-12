@@ -74,12 +74,15 @@ void updateActiveBackground(RenderState &rs, const std::string &backgroundId) {
     const auto &asset = rs.background.backgroundAssets.at(static_cast<std::size_t>(rs.background.backgroundIndex));
     if (rs.background.backgroundLoadedId != asset.id) {
       GLuint const nextTexture = loadTexture2D(asset.path, true);
+      // Mark this id attempted whether or not the load succeeded, so a missing
+      // asset is tried once per selection rather than re-decoded (and re-logged)
+      // every frame. A failed load keeps the previous background base.
+      rs.background.backgroundLoadedId = asset.id;
       if (nextTexture != 0) {
         if (rs.background.backgroundBase != 0) {
           glDeleteTextures(1, &rs.background.backgroundBase);
         }
         rs.background.backgroundBase = nextTexture;
-        rs.background.backgroundLoadedId = asset.id;
       }
       // Swap cubemap skybox if the asset specifies one.
       if (!asset.skyboxDir.empty() && rs.background.skyboxLoadedDir != asset.skyboxDir) {

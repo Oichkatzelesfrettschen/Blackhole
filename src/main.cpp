@@ -590,7 +590,7 @@ int main(int argc, char **argv) {
       return dir + "512.jpg";
     };
     const char *const nasaCredit = "NASA, ESA, CSA, STScI";
-    const std::array<ui::CampaignBackdrop, 6> campaignBackdrops = {{
+    const std::array<ui::CampaignBackdrop, 5> campaignBackdrops = {{
         {"Cosmic Cliffs (Carina)",
          static_cast<unsigned int>(
              loadTexture2D(resourcePath(ladderRendition("carina-cosmic-cliffs")))),
@@ -598,17 +598,13 @@ int main(int argc, char **argv) {
         {"Crab Nebula",
          static_cast<unsigned int>(loadTexture2D(resourcePath(ladderRendition("crab-nebula")))),
          nasaCredit},
-        {"Tarantula Nebula",
-         static_cast<unsigned int>(
-             loadTexture2D(resourcePath("assets/backgrounds/source/tarantula-nebula-2k.jpg"))),
-         nasaCredit},
         {"Southern Ring Nebula",
          static_cast<unsigned int>(
              loadTexture2D(resourcePath("assets/backgrounds/source/southern-ring-nebula-2k.jpg"))),
          nasaCredit},
-        {"Orion Bar",
+        {"Cartwheel Galaxy",
          static_cast<unsigned int>(
-             loadTexture2D(resourcePath("assets/backgrounds/source/orion-bar-2k.jpg"))),
+             loadTexture2D(resourcePath("assets/backgrounds/source/cartwheel-galaxy-2k.jpg"))),
          nasaCredit},
         {"Starfield (procedural)", 0U, ""},
     }};
