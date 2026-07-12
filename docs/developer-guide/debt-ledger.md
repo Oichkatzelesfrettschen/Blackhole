@@ -843,7 +843,7 @@ brackets.
   partitioned headers; measure compile-time delta. [recorded before/after
   timing in perf-tooling.md]
 
-### Tranche campaign-core-seam  (Horizon Command; seam landed 2026-07-11, one deferral owed)
+### Tranche campaign-core-seam  (Temporal Disturbance, formerly "Horizon Command"; seam landed 2026-07-11)
 
 The campaign core is the first consumer of a real physics library target.
 blackhole_physics STATIC wraps the five GL-free PHYSICS_SRC_FILES translation
@@ -911,11 +911,30 @@ exe).
   shared tests/campaign_test_field.h fake cover arrival-crediting, 10x deep
   yield, wear, effect-time fuel + fizzle, latched outcomes, byte-identical
   replay; 88/88; fast-math build digest == IEEE digest.
-- CAMPAIGN-4 Next: Kerr frame-dragging lanes via frameDraggingOmega
-  (kerrTimeDilation documents ZAMO but implements static-observer -- do not
-  use for moving ships); candidate mechanics before that: verification
-  fleets restoring reliability, corrupted-telemetry checks, per-capability
-  task multipliers. [orbital direction matters]
+- CAMPAIGN-4 DONE (2fd91a0 feature, 3ff046f rename). KerrTimeField
+  (src/game/kerr_time_field.*) models every fleet as a ZAMO: properTimeRate is
+  the equatorial ZAMO lapse sqrt(Sigma*Delta/A), valid into the ergoregion
+  where sqrt(-g_tt) goes imaginary. kerrTimeDilation was NOT used (its body
+  returns sqrt(-g_tt), the static-observer form its docstring warns against,
+  kerr.h:360). signalDelaySec integrates the principal null congruence
+  (r^2+a^2)/Delta in closed form. Both lapse and delay reduce EXACTLY to
+  BlackholeTimeField at a=0 (kerr_time_field_test cross-checks a sweep); spin
+  clamped a* <= 0.998 so r_+ - r_- stays conditioned. TimeField gained
+  frameDragRateRadPerSec / ergosphereRadiusCm / spinDimensionless (non-rotating
+  defaults, Schwarzschild unchanged). Mechanics: retrograde refused at/inside
+  the ergosphere (issue + effect gate); prograde ergoregion work banks a
+  Penrose bonus 1 + frameDragYieldBonus * depth (depth 0 at static limit to 1
+  at horizon). Default scenario now a* = 0.9; bands anchored to r_s keep the
+  CAMPAIGN-3 outer economics, ergo band inserted at index 0 (0.85 r_s) with
+  index = physical order so per-hop fuel scales with distance. Objective tuned
+  260: outer-only play (~221) loses, the deep prograde dive wins (sim: won by
+  t700 with the dive). Rename to Temporal Disturbance is display-only (toggle
+  label + file headers); mechanism names (game::, campaign_*, BLACKHOLE_CAMPAIGN)
+  unchanged. 89/89; fast-math digest == IEEE.
+- CAMPAIGN-5 Next: verification fleets that restore reliability and validate
+  corrupted telemetry (the design doc's verification role, still cosmetic);
+  per-capability task multipliers; ergosphere missions beyond extraction.
+  [each fleet capability does something distinct]
 
 ### Tranche verification-enforcement  (depends on silent-absence-hardening; kills the TEST- class)
 
