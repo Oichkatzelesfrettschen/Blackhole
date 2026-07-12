@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,7 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "input.h"
+#include "platform/resource_paths.h"
 #include "render/render_state.h"
 #include "settings.h"
 
@@ -144,6 +146,17 @@ void initializeImGui(GLFWwindow *window) {
   // artifacts on Wayland)
   ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
   ImGuizmo::SetOrthographic(false);
+
+  // Load the vendored Spline Sans Mono as the primary UI font. If the asset is
+  // missing (a stripped install), fall back to the built-in font so the atlas
+  // is never empty -- an empty atlas crashes at first render.
+  const std::string fontPath =
+      platform::resourcePath("assets/fonts/spline-sans-mono/SplineSansMono-Regular.ttf");
+  if (std::filesystem::exists(fontPath)) {
+    io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 16.0f);
+  } else {
+    io.Fonts->AddFontDefault();
+  }
 
   setupImGuiStyle();
 
