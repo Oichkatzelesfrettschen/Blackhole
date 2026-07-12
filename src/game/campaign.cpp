@@ -363,6 +363,12 @@ void CampaignState::advanceTurn() {
       if (corrupted) {
         yieldUnits *= config_.corruptedYieldFraction;
       }
+      // Stabilization rivals extraction: a fleet whose deep prograde work is
+      // taming the disturbance keeps only a fraction of its yield, so pursuing
+      // stabilization genuinely costs energy rather than adding to it.
+      if (config_.ergoContainmentPerProperDay > 0.0 && ergoregionDepth(fleet) > 0.0) {
+        yieldUnits *= config_.containmentYieldRetention;
+      }
       Delivery delivery;
       delivery.kind = DeliveryKind::CompletionReport;
       delivery.effectTurn = clock_.turn() + clock_.ceilTurns(reportDelaySec);
@@ -417,7 +423,15 @@ void CampaignState::evaluateOutcome() {
   if (status_ != CampaignStatus::Ongoing) {
     return;
   }
-  if (config_.victoryEnergyUnits > 0.0 && energyUnits_ >= config_.victoryEnergyUnits) {
+  // Two ends: bank the energy target, or tame the singularity. Either latches a
+  // win and records the turn it cleared. Neither dominates -- the stabilization
+  // path costs energy (containmentYieldRetention), the energy path leaves the
+  // disturbance to grow -- so which to pursue is a genuine choice.
+  const bool energyWin =
+      config_.victoryEnergyUnits > 0.0 && energyUnits_ >= config_.victoryEnergyUnits;
+  const bool stabilizationWin =
+      config_.victoryStabilizationUnits > 0.0 && stabilization_ >= config_.victoryStabilizationUnits;
+  if (energyWin || stabilizationWin) {
     clearedTurn_ = clock_.turn(); // turns-to-clear: the speed axis of the outcome vector.
     status_ = CampaignStatus::Won;
     return;
@@ -445,6 +459,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
   view.deadlineTurn = config_.deadlineTurn;
   view.instability = instability_;
   view.stabilization = stabilization_;
+  view.victoryStabilizationUnits = config_.victoryStabilizationUnits;
   view.clearedTurn = clearedTurn_;
   // Integrity is the weakest fleet: the deep dive's wear shows up as the axis the
   // player trades stabilization and speed against.
@@ -577,6 +592,8 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   appendF64(out, config_.instabilityYieldPenaltyPerUnit);
   appendF64(out, config_.ergoContainmentPerProperDay);
   appendF64(out, config_.ergoHazardWearPerProperDay);
+  appendF64(out, config_.containmentYieldRetention);
+  appendF64(out, config_.victoryStabilizationUnits);
   appendI64(out, clock_.turn());
   appendF64(out, energyUnits_);
   appendF64(out, instability_);

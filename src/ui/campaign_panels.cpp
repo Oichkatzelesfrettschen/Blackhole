@@ -75,6 +75,15 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view) {
   } else {
     ImGui::TextDisabled("energy banked: %.1f (no objective set)", view.energyUnits);
   }
+  // The alternate victory: tame the singularity. Pursuing it sacrifices energy,
+  // so the two bars are rival ends the player chooses between.
+  if (view.status == game::CampaignStatus::Ongoing && view.victoryStabilizationUnits > 0.0) {
+    const auto fraction = static_cast<float>(view.stabilization / view.victoryStabilizationUnits);
+    char objective[96];
+    static_cast<void>(std::snprintf(objective, sizeof(objective), "stabilization %.2f / %.0f",
+                                    view.stabilization, view.victoryStabilizationUnits));
+    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective);
+  }
 }
 
 void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {

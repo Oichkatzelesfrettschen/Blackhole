@@ -74,6 +74,14 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   config.instabilityYieldPenaltyPerUnit = 0.04;
   config.ergoContainmentPerProperDay = 0.12;
   config.ergoHazardWearPerProperDay = 0.15;
+  // Stabilization is a sacrifice: a deep prograde fleet keeps only a tenth of its
+  // yield, so the stabilizing line banks less raw energy than pure outer play --
+  // it is a rival objective, not a bonus. Reaching 8 units of cumulative
+  // stabilization is an ALTERNATE victory (tame the singularity), a path only a
+  // fleet-wide commitment reaches and only by forgoing the energy win. Two ends,
+  // one choice. See CAMPAIGN-7 in the debt ledger.
+  config.containmentYieldRetention = 0.1;
+  config.victoryStabilizationUnits = 8.0;
   return config;
 }
 

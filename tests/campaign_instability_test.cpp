@@ -171,6 +171,56 @@ TEST(CampaignInstability, DisabledByDefaultIsInert) {
   EXPECT_DOUBLE_EQ(campaign.stabilization(), 0.0);
 }
 
+// Stabilization rivals extraction: a deep prograde fleet keeps only its
+// retention fraction of yield, so it banks less than the same fleet would with
+// retention at the default 1.0. This is the energy cost of stabilizing.
+TEST(CampaignInstability, ContainmentYieldRetentionCostsEnergy) {
+  const FakeSpinningField field;
+  game::CampaignConfig base = instabilityConfig();
+  base.ergoContainmentPerProperDay = 4.0; // containment on, so retention applies
+
+  game::CampaignConfig full = base; // retention stays 1.0
+  game::CampaignState keepsAll(full, field);
+  const game::FleetId a =
+      keepsAll.addFleet(game::FleetCapability::Extraction, K_ERGO_BAND, game::OrbitLane::Prograde);
+  ASSERT_NE(a, game::K_INVALID_FLEET_ID);
+  ASSERT_TRUE(keepsAll.issueCommand(assignTask(a, 0.5 * K_DAY)));
+  keepsAll.advanceTurns(20);
+
+  game::CampaignConfig sacrifice = base;
+  sacrifice.containmentYieldRetention = 0.1;
+  game::CampaignState gives(sacrifice, field);
+  const game::FleetId b =
+      gives.addFleet(game::FleetCapability::Extraction, K_ERGO_BAND, game::OrbitLane::Prograde);
+  ASSERT_NE(b, game::K_INVALID_FLEET_ID);
+  ASSERT_TRUE(gives.issueCommand(assignTask(b, 0.5 * K_DAY)));
+  gives.advanceTurns(20);
+
+  EXPECT_GT(keepsAll.energyUnits(), 0.0);
+  EXPECT_GT(gives.energyUnits(), 0.0);
+  EXPECT_LT(gives.energyUnits(), keepsAll.energyUnits());
+}
+
+// Reaching the stabilization target is an alternate victory, independent of the
+// energy objective: a deep prograde fleet that tames the disturbance wins.
+TEST(CampaignInstability, StabilizationVictoryLatchesWin) {
+  const FakeSpinningField field;
+  game::CampaignConfig config = instabilityConfig();
+  config.ergoContainmentPerProperDay = 4.0; // 0.2 stabilization per working turn
+  config.victoryStabilizationUnits = 0.5;   // reached in a handful of turns
+  config.victoryEnergyUnits = 0.0;          // energy path off: only stabilization can win
+  game::CampaignState campaign(config, field);
+  const game::FleetId deep =
+      campaign.addFleet(game::FleetCapability::Research, K_ERGO_BAND, game::OrbitLane::Prograde);
+  ASSERT_NE(deep, game::K_INVALID_FLEET_ID);
+  ASSERT_TRUE(campaign.issueCommand(assignTask(deep, 1.0e9)));
+  campaign.advanceTurns(10);
+
+  EXPECT_EQ(campaign.status(), game::CampaignStatus::Won);
+  EXPECT_GT(campaign.clearedTurn(), 0);
+  EXPECT_GE(campaign.stabilization(), 0.5);
+}
+
 // The mechanic is deterministic: two independently built campaigns with the
 // same instability config and command log serialize to identical bytes.
 TEST(CampaignInstability, DeterministicUnderContainment) {
@@ -180,6 +230,8 @@ TEST(CampaignInstability, DeterministicUnderContainment) {
   config.instabilityYieldPenaltyPerUnit = 0.1;
   config.ergoContainmentPerProperDay = 4.0;
   config.ergoHazardWearPerProperDay = 0.2;
+  config.containmentYieldRetention = 0.1;
+  config.victoryStabilizationUnits = 6.0;
 
   const auto play = [&](game::CampaignState &campaign) {
     const game::FleetId deep =

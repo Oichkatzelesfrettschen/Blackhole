@@ -103,6 +103,20 @@ struct CampaignConfig {
   // This is the integrity the deep lane spends -- the cost side of the stabilize/
   // clear-fast payoff, which co-located verification only partly offsets.
   double ergoHazardWearPerProperDay = 0.0;     ///< Extra reliability wear per proper-day, scaled by ergoregion depth.
+  // Stabilization RIVALS extraction (CAMPAIGN-7). A prograde ergoregion fleet
+  // spends its proper time either taming the disturbance or harvesting energy,
+  // not both: while the containment mechanic is on, such a fleet banks only this
+  // fraction of its yield. Below 1.0 the deep lane sacrifices energy for
+  // stabilization, so the high-stabilization line banks FEWER energy units than
+  // pure outer play -- the two are genuine rival objectives the player weights,
+  // not joint outputs of one dive. Default 1.0 keeps the CAMPAIGN-6 behaviour.
+  double containmentYieldRetention = 1.0;      ///< Yield a stabilizing (deep prograde) fleet keeps; < 1 makes it a sacrifice.
+  // The payoff that makes stabilization worth its energy cost: reaching this much
+  // cumulative stabilization is an ALTERNATE victory, so the campaign offers two
+  // ends -- bank the energy target, or tame the singularity. Pursuing the second
+  // sacrifices energy (containmentYieldRetention), so which to chase is a genuine
+  // choice of objective, not a dominated afterthought. Zero disables the path.
+  double victoryStabilizationUnits = 0.0;      ///< Stabilization that wins the campaign outright; 0 = off.
 };
 
 class CampaignState {

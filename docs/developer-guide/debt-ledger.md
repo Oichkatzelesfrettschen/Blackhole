@@ -987,14 +987,27 @@ exe).
   trade. What CAMPAIGN-6 truly delivered: escalating instability + a
   containment/hazard/stabilization subsystem, deterministic and no-op-gated.
   Genuine non-dominance remains OPEN.
-- CAMPAIGN-7 = make it real (advisor acceptance test: find a tuning where the
-  high-stabilization line banks FEWER energy units than pure-outer). Fix: make
-  stabilization a RIVAL use of the deep lane, not a joint output -- deep work
-  extracts energy OR stabilizes (mutually exclusive proper time / containment
-  suppresses the containing fleet's own yield), and/or tighten victory so the
-  deadline actually bites (outer clears near ~1100, not 617) so speed/margin is
-  worth something. The map UI legend leftover was folded into ART-5's
-  drawMapLegend.
+- CAMPAIGN-7 DONE (make it real): stabilization is now a RIVAL use of the deep
+  lane, not a joint output. containmentYieldRetention (scenario 0.1) scales the
+  yield of any prograde ergoregion fleet while containment is on, so a stabilizing
+  fleet keeps a tenth of its yield -- taming the disturbance costs energy. Payoff:
+  victoryStabilizationUnits (scenario 8.0) is an ALTERNATE victory (tame the
+  singularity), so stabilization is rewarded, not just displayed; evaluateOutcome
+  latches Won on energy >= target OR stabilization >= target. MEASURED
+  (campaign_sim --compare, 1200 turns, now 4 lines with a --stabilize/Stabilize
+  commit = all fleets deep): outer energy 2643 stab 0 wins-energy t617; solo 2478
+  stab 1.47 t673; pod 2188 stab 4.98 t751 (all win the ENERGY objective); stab
+  energy 617 stab 10.72 wins-STABILIZATION t819. ACCEPTANCE TEST PASSES: the
+  high-stabilization line banks 617 << outer 2643 -- stabilization genuinely costs
+  energy. Two victory paths (bank energy vs tame the singularity); pursuing
+  stabilization forgoes the energy win, so which end to chase is a real choice of
+  OBJECTIVE. HONEST CAVEAT: outer's energy win is faster (t617 < t819), so the
+  non-dominance is over victory-TYPE preference (like a science-vs-domination win
+  in 4X), NOT raw speed -- a pure fastest-win player still takes the energy path.
+  All CAMPAIGN-6/7 knobs default no-op; 2 new gates in campaign_instability_test
+  (retention costs energy, stabilization victory latches); UI shows a second
+  objective bar. campaign lib IEEE under ENABLE_FAST_MATH; determinism holds.
+  The map UI legend leftover was folded into ART-5's drawMapLegend.
 
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 

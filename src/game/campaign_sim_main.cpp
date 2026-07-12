@@ -10,12 +10,14 @@
  * invocation on the same binary and host print identical digests; the process
  * links only the campaign and physics libraries, proving the seam is GL-free.
  *
- * The outcome is deliberately reported as a VECTOR, not a single winner. A
- * --commit level chooses how many fleets are sent into the deep prograde
- * ergoregion lane (none / solo / a self-sustaining pod). Comparing the three
- * lines shows the Pareto structure the balance targets: the deep lane clears
- * sooner and banks more stabilization, the outer line keeps its fleets whole,
- * and neither dominates on every axis.
+ * The outcome is reported as a VECTOR, not a single winner. Commitment levels
+ * send progressively more fleets into the deep prograde ergoregion lane
+ * (outer / solo / pod / stabilize=every fleet). Because a stabilizing fleet
+ * keeps only a fraction of its yield, deeper commitment banks LESS energy but
+ * more stabilization -- a genuine trade. --compare prints all four: the outer,
+ * solo, and pod lines win on the energy objective; the stabilize line forgoes
+ * the energy win and instead reaches the alternate stabilization victory,
+ * banking far fewer energy units. Which end to pursue is a real choice.
  */
 
 #include <cinttypes>
@@ -47,9 +49,10 @@ constexpr double K_REISSUE_HOURS = 24.0; ///< Uniform contract size for the sust
 constexpr std::int64_t K_REISSUE_EVERY = 30; ///< Re-task every fleet this often to keep work (and containment) flowing.
 
 enum class Commit {
-  Outer, ///< No deep lane: every fleet stays on the outer bands.
-  Solo,  ///< One survey fleet holds the deep prograde ergoregion lane.
-  Pod,   ///< Survey plus co-located verification and fabrication sustain the dive.
+  Outer,     ///< No deep lane: every fleet stays on the outer bands (energy objective).
+  Solo,      ///< One survey fleet holds the deep prograde ergoregion lane.
+  Pod,       ///< Survey plus co-located verification and fabrication sustain the dive.
+  Stabilize, ///< Every fleet dives: the dedicated stabilization line, chasing the alternate win.
 };
 
 /** @brief Fleets sent into the ergoregion band for a commitment level. The pod
@@ -61,6 +64,8 @@ std::vector<game::FleetId> deepFleets(Commit commit) {
       return {K_SURVEY};
     case Commit::Pod:
       return {K_SURVEY, K_VERIFICATION, K_FABRICATION};
+    case Commit::Stabilize:
+      return {K_EXTRACTION, K_RESEARCH, K_FABRICATION, K_RELAY, K_VERIFICATION, K_SURVEY};
     case Commit::Outer:
     default:
       return {};
@@ -106,6 +111,8 @@ const char *commitLabel(Commit commit) {
       return "outer";
     case Commit::Pod:
       return "pod";
+    case Commit::Stabilize:
+      return "stab";
     case Commit::Solo:
     default:
       return "solo";
@@ -145,6 +152,8 @@ int main(int argc, char **argv) {
       commit = Commit::Outer;
     } else if (std::strcmp(argv[argIndex], "--pod") == 0) {
       commit = Commit::Pod;
+    } else if (std::strcmp(argv[argIndex], "--stabilize") == 0) {
+      commit = Commit::Stabilize;
     } else if (std::strcmp(argv[argIndex], "--compare") == 0) {
       compareAll = true;
     } else if (std::strcmp(argv[argIndex], "--seed") == 0 && argIndex + 1 < argc) {
@@ -159,6 +168,7 @@ int main(int argc, char **argv) {
     printLine("outer", runLine(seed, turns, Commit::Outer));
     printLine("solo", runLine(seed, turns, Commit::Solo));
     printLine("pod", runLine(seed, turns, Commit::Pod));
+    printLine("stab", runLine(seed, turns, Commit::Stabilize));
     return EXIT_SUCCESS;
   }
 
