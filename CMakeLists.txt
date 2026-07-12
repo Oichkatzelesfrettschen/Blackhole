@@ -1469,6 +1469,51 @@ if(ENABLE_CLANG_TIDY)
   endif()
 endif()
 
+# ============================================================================
+# Campaign core (Horizon Command seam)
+# ============================================================================
+
+# Pure physics library: the five GL-free physics translation units behind a
+# linkable target. Existing consumers keep compiling PHYSICS_SRC_FILES into
+# their own targets -- their per-target fast-math overrides depend on owning
+# the compile flags -- so only the campaign stack links this library.
+add_library(blackhole_physics STATIC ${PHYSICS_SRC_FILES})
+target_include_directories(blackhole_physics PUBLIC
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/src/physics"
+)
+target_compile_options(blackhole_physics PRIVATE ${PROJECT_WARNINGS})
+if(ENABLE_FAST_MATH)
+  # The campaign determinism gate needs IEEE semantics end to end.
+  target_compile_options(blackhole_physics PRIVATE -fno-fast-math)
+endif()
+
+# Deterministic turn-based campaign state (src/game/). GL-free by
+# construction: no glbinding, imgui, or glfw anywhere in this link set.
+add_library(blackhole_campaign STATIC
+  "${PROJECT_SOURCE_DIR}/src/game/blackhole_time_field.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/temporal_clock.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/fleet.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/task_graph.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/campaign.cpp"
+)
+target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
+target_compile_options(blackhole_campaign PRIVATE ${PROJECT_WARNINGS})
+if(ENABLE_FAST_MATH)
+  target_compile_options(blackhole_campaign PRIVATE -fno-fast-math)
+endif()
+
+# Headless determinism probe: replays a scripted command log and prints the
+# state digest; the same invocation twice must print identical digests.
+add_executable(campaign_sim
+  "${PROJECT_SOURCE_DIR}/src/game/campaign_sim_main.cpp"
+)
+target_link_libraries(campaign_sim PRIVATE blackhole_campaign)
+target_compile_options(campaign_sim PRIVATE ${PROJECT_WARNINGS})
+if(ENABLE_FAST_MATH)
+  target_compile_options(campaign_sim PRIVATE -fno-fast-math)
+endif()
+
 # --------------------------------------------------------------------------
 # cppcheck Integration
 # --------------------------------------------------------------------------
@@ -3893,6 +3938,72 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(kerr_schild_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Campaign core (Horizon Command seam) tests: pure game logic against the
+  # Schwarzschild time field, no GL context. IEEE flags match the campaign
+  # libraries so the determinism gates hold under ENABLE_FAST_MATH too.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_clock_test.cpp")
+    add_executable(campaign_clock_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_clock_test.cpp"
+    )
+    target_compile_options(campaign_clock_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_clock_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_clock_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_clock_validation COMMAND campaign_clock_test)
+    set_tests_properties(campaign_clock_validation PROPERTIES
+      LABELS "campaign;determinism;time-dilation"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_clock_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/blackhole_time_field_test.cpp")
+    add_executable(blackhole_time_field_test
+      "${PROJECT_SOURCE_DIR}/tests/blackhole_time_field_test.cpp"
+    )
+    target_compile_options(blackhole_time_field_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(blackhole_time_field_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(blackhole_time_field_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME blackhole_time_field_validation COMMAND blackhole_time_field_test)
+    set_tests_properties(blackhole_time_field_validation PROPERTIES
+      LABELS "campaign;physics;signal-delay"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(blackhole_time_field_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
+    add_executable(campaign_task_graph_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"
+    )
+    target_compile_options(campaign_task_graph_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_task_graph_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_task_graph_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_task_graph_validation COMMAND campaign_task_graph_test)
+    set_tests_properties(campaign_task_graph_validation PROPERTIES
+      LABELS "campaign;causality;determinism"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_task_graph_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
