@@ -73,6 +73,46 @@ ImVec2 lerp(const ImVec2 &a, const ImVec2 &b, float t) {
   return {a.x + ((b.x - a.x) * t), a.y + ((b.y - a.y) * t)};
 }
 
+// A deterministic starfield behind the map: star positions and brightness are
+// pure functions of the star index (an integer hash), so the field is stable
+// across frames and runs without storing anything. A couple of dim nebula
+// washes tint the dark. This is procedural art -- no texture, no RAM cost.
+void drawStarfield(ImDrawList *drawList, const ImVec2 &origin, const ImVec2 &size) {
+  drawList->AddRectFilled(origin, {origin.x + size.x, origin.y + size.y},
+                          IM_COL32(6, 8, 16, 255));
+  // Two broad nebula washes (layered translucent fills approximate a glow).
+  const ImVec2 nebulaA = {origin.x + (size.x * 0.30f), origin.y + (size.y * 0.28f)};
+  const ImVec2 nebulaB = {origin.x + (size.x * 0.72f), origin.y + (size.y * 0.70f)};
+  const float nebulaR = std::min(size.x, size.y) * 0.45f;
+  for (int layer = 0; layer < 4; ++layer) {
+    const float radius = nebulaR * (1.0f - (0.18f * static_cast<float>(layer)));
+    drawList->AddCircleFilled(nebulaA, radius, IM_COL32(40, 30, 80, 10), 48);
+    drawList->AddCircleFilled(nebulaB, radius, IM_COL32(20, 45, 70, 9), 48);
+  }
+  for (int star = 0; star < 170; ++star) {
+    const std::uint32_t hx = (static_cast<std::uint32_t>(star) * 2654435761U) ^ 0x9E3779B9U;
+    const std::uint32_t hy = (static_cast<std::uint32_t>(star) * 40503U) ^ 0x85EBCA6BU;
+    const std::uint32_t hb = (static_cast<std::uint32_t>(star) * 2246822519U) ^ 0xC2B2AE35U;
+    const float x = origin.x + ((static_cast<float>(hx % 1000U) / 1000.0f) * size.x);
+    const float y = origin.y + ((static_cast<float>(hy % 1000U) / 1000.0f) * size.y);
+    const int brightness = 90 + static_cast<int>(hb % 150U);
+    const float radius = (hb % 17U) == 0U ? 1.6f : 0.8f; // a few brighter stars
+    drawList->AddCircleFilled({x, y}, radius, IM_COL32(brightness, brightness, brightness + 20, 255),
+                              6);
+  }
+}
+
+// A soft additive halo: concentric translucent circles fading outward fake the
+// bloom the vector map cannot get from the renderer's post pipeline.
+void drawGlow(ImDrawList *drawList, const ImVec2 &center, float radiusPx, ImU32 color) {
+  for (int ring = 0; ring < 3; ++ring) {
+    const float radius = radiusPx + (2.0f * static_cast<float>(ring));
+    const int alpha = 60 - (18 * ring);
+    drawList->AddCircle(center, radius, (color & 0x00FFFFFFU) | (static_cast<ImU32>(alpha) << 24),
+                        24, 2.0f);
+  }
+}
+
 // Frame-dragging sense: a short counter-clockwise arc with a dot at its head,
 // drawn near the core, showing which way inertial frames are swept (prograde).
 void drawFrameDragArc(ImDrawList *drawList, const ImVec2 &center, float corePx) {
@@ -125,6 +165,7 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   const bool canvasClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
 
   ImDrawList *drawList = ImGui::GetWindowDrawList();
+  drawStarfield(drawList, canvasOrigin, canvasSize);
   MapScale scale;
   scale.center = {canvasOrigin.x + (canvasSize.x * 0.5f), canvasOrigin.y + (canvasSize.y * 0.5f)};
   scale.maxRadiusPx = (0.5f * std::min(canvasSize.x, canvasSize.y)) - 8.0f;
@@ -206,6 +247,7 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     const ImVec2 pos = ringPoint(scale, bandRadiusCm, fleetAngleRad(fleet.id));
     markers.push_back({.fleet = fleet.id, .pos = pos});
     const bool selected = fleet.id == uiState.selectedFleet;
+    drawGlow(drawList, pos, 7.0f, rateColor(fleet.properTimeRate));
     drawList->AddCircleFilled(pos, 5.0f, rateColor(fleet.properTimeRate), 20);
     drawList->AddCircle(pos, selected ? 9.0f : 6.5f,
                         selected ? IM_COL32(255, 220, 80, 255) : IM_COL32(230, 230, 235, 200), 20,
