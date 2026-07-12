@@ -45,10 +45,10 @@ The application opens with a real-time black hole renderer and control panel.
 ### Control Panel
 
 #### Black Hole Parameters
-- **blackHoleMass**: Mass in solar masses (0.1 to 250 M☉)
-  - Default: 1.0 M☉
-  - Sgr A*: 4.3 × 10⁶ M☉
-  - M87: 6.5 × 10⁹ M☉
+- **blackHoleMass**: Mass in solar masses (0.1 to 250 Msun)
+  - Default: 1.0 Msun
+  - Sgr A*: 4.3 x 10^6 Msun
+  - M87: 6.5 x 10^9 Msun
 
 - **kerrSpin(a/M)**: Dimensionless spin parameter (-0.998 to +0.998)
   - 0.0 = Non-rotating (Schwarzschild)
@@ -59,18 +59,18 @@ The application opens with a real-time black hole renderer and control panel.
 
 #### Accretion State
 - **SANE (Weak B-field)**: Standard accretion, weak magnetic fields
-  - β (P_gas/P_mag) ~ 100
+  - beta (P_gas/P_mag) ~ 100
   - Weak jets (~1% efficiency)
   - Steady emission
 
 - **MAD (Strong B-field)**: Magnetically Arrested Disk
-  - β ~ 1 (magnetic equipartition)
+  - beta ~ 1 (magnetic equipartition)
   - Powerful jets (up to 40% efficiency)
   - Variable emission (30-50%)
   - Preferred state for Sgr A* (EHT observations)
 
 - **Intermediate**: Transitional state
-  - β ~ 10
+  - beta ~ 10
   - Moderate jet power
   - Some variability
 
@@ -80,7 +80,7 @@ The application opens with a real-time black hole renderer and control panel.
   - 1.0 = Equipartition (MAD)
   - 100.0 = Weak field (SANE)
 
-- **Magnetic Flux**: Dimensionless flux Φ_BH threading horizon
+- **Magnetic Flux**: Dimensionless flux Phi_BH threading horizon
   - Affects jet power
   - 50 = Strong (typical MAD)
   - 5 = Weak (typical SANE)
@@ -104,15 +104,15 @@ The application opens with a real-time black hole renderer and control panel.
 - **Enable Jet Visualization**: Toggle jet rendering
 
 - **Lorentz Factor (Gamma)**: Bulk jet velocity
-  - 2.0 = Mildly relativistic (β ~ 0.87)
+  - 2.0 = Mildly relativistic (beta ~ 0.87)
   - 10.0 = Sgr A* typical
   - 15.0 = M87 typical
   - 50.0 = Blazar (extreme)
 
 - **Opening Angle (deg)**: Jet cone half-angle
-  - 10° = Narrow (MAD collimation)
-  - 30° = Moderate
-  - 60° = Wide (SANE, weak collimation)
+  - 10 deg = Narrow (MAD collimation)
+  - 30 deg = Moderate
+  - 60 deg = Wide (SANE, weak collimation)
 
 - **Jet Base (ly)**: Distance from horizon
   - 0.09 ly = M87 (EHT measured, Jan 2026)
@@ -136,7 +136,7 @@ The application opens with a real-time black hole renderer and control panel.
 **Steps:**
 1. Click "Sgr A* (MAD, a*=0.94)" preset button
 2. Verify parameters:
-   - Mass: 4,300,000 M☉
+   - Mass: 4,300,000 Msun
    - Spin: 0.94 (near-extremal)
    - State: MAD
    - Beta: 1.0 (equipartition)
@@ -152,10 +152,10 @@ The application opens with a real-time black hole renderer and control panel.
    - Time variability (if MAD flux eruptions active)
 
 **Physics Notes:**
-- Sgr A* is highly sub-Eddington (accretion rate ~ 10⁻⁵ Ṁ_Edd)
+- Sgr A* is highly sub-Eddington (accretion rate ~ 10^-5 Mdot_Edd)
 - MAD state explains EHT magnetic field measurements
 - 230 GHz observations from 2017-2022
-- Spin constraint: a* = 0.94 ± 0.05 (arXiv:2510.03602)
+- Spin constraint: a* = 0.94 +/- 0.05 (arXiv:2510.03602)
 
 ---
 
@@ -165,7 +165,7 @@ The application opens with a real-time black hole renderer and control panel.
 
 **Steps:**
 1. Set parameters manually:
-   - Mass: 6,500,000,000 M☉ (6.5 billion)
+   - Mass: 6,500,000,000 Msun (6.5 billion)
    - Spin: 0.9 (high spin from EHT)
    - State: MAD
    - Beta: 1.0
@@ -174,7 +174,7 @@ The application opens with a real-time black hole renderer and control panel.
 2. Enable jet visualization:
    - Check "Enable Jet Visualization"
    - Lorentz Factor: 15.0
-   - Opening Angle: 10° (narrow, MAD collimated)
+   - Opening Angle: 10 deg (narrow, MAD collimated)
    - Jet Base: 0.09 ly (EHT measured, Jan 2026!)
 
 3. Set frequency:
@@ -189,7 +189,7 @@ The application opens with a real-time black hole renderer and control panel.
 **Physics Notes:**
 - M87 jet base detected by EHT (Jan 2026)
 - Jet extends 5000+ light-years
-- Lorentz factor Γ ~ 10-20 inferred
+- Lorentz factor Gamma ~ 10-20 inferred
 - MAD state drives powerful jets via BZ mechanism
 
 ---
@@ -228,19 +228,19 @@ The application opens with a real-time black hole renderer and control panel.
 
 **Steps:**
 1. Set parameters:
-   - Mass: 225 M☉ (final mass from GW231123)
+   - Mass: 225 Msun (final mass from GW231123)
    - Spin: 0.7 (estimated remnant spin)
    - State: SANE (stellar-mass typically SANE)
 
 2. Observe scaling:
-   - Event horizon: ~663 km (vs ~3 km for 1 M☉)
-   - Hawking temperature: ~10⁻¹⁰ K (extremely cold)
+   - Event horizon: ~663 km (vs ~3 km for 1 Msun)
+   - Hawking temperature: ~10^-10 K (extremely cold)
    - Physics identical but scaled by mass
 
 **Physics Notes:**
 - Detected: Nov 23, 2023 (published July 2025)
-- Primary: ~140 M☉, Secondary: ~100 M☉
-- Final: ~225 M☉ (15 M☉ radiated as gravitational waves)
+- Primary: ~140 Msun, Secondary: ~100 Msun
+- Final: ~225 Msun (15 Msun radiated as gravitational waves)
 - Most massive black hole merger to date
 
 ---
@@ -268,8 +268,8 @@ The application opens with a real-time black hole renderer and control panel.
    - Multi-color visualization
 
 **Physics Notes:**
-- Resolution θ = λ / D_baseline
-- 345 GHz has shorter wavelength → better resolution
+- Resolution theta = lambda / D_baseline
+- 345 GHz has shorter wavelength -> better resolution
 - EHT achieved 345 GHz observations in Jan 2026
 - Probes different optical depths in accretion flow
 
@@ -278,18 +278,18 @@ The application opens with a real-time black hole renderer and control panel.
 ## Parameter Reference
 
 ### Mass (M)
-**Range:** 0.1 to 250 M☉
+**Range:** 0.1 to 250 Msun
 
 **Physical Scaling:**
-- Schwarzschild radius: r_s = 2GM/c² = 2.95 km × (M/M☉)
-- ISCO radius (Schwarzschild): r_ISCO = 6 GM/c²
-- Orbital period at ISCO: P ∝ M
-- Hawking temperature: T_H ∝ 1/M
+- Schwarzschild radius: r_s = 2GM/c^2 = 2.95 km x (M/Msun)
+- ISCO radius (Schwarzschild): r_ISCO = 6 GM/c^2
+- Orbital period at ISCO: P ~ M
+- Hawking temperature: T_H ~ 1/M
 
 **Examples:**
-- Stellar-mass: 3-100 M☉
-- Intermediate-mass: 100-10⁵ M☉
-- Supermassive: 10⁶-10¹⁰ M☉
+- Stellar-mass: 3-100 Msun
+- Intermediate-mass: 100-10^5 Msun
+- Supermassive: 10^6-10^10 Msun
 
 ### Spin (a*)
 **Range:** -0.998 to +0.998
@@ -301,9 +301,9 @@ The application opens with a real-time black hole renderer and control panel.
   - a* = 0.0: r_ISCO = 6.0 M (Schwarzschild)
   - a* = -0.998: r_ISCO = 8.994 M (near-extremal retrograde)
 
-- **Frame dragging:** Ω_ZAMO ∝ a*
+- **Frame dragging:** Omega_ZAMO ~ a*
 - **Ergosphere:** Larger for higher |a*|
-- **Jet power:** P_BZ ∝ a*² Φ_BH²
+- **Jet power:** P_BZ ~ a*^2 Phi_BH^2
 
 **Sign Convention:**
 - Positive: Prograde (disk co-rotating with BH)
@@ -312,48 +312,48 @@ The application opens with a real-time black hole renderer and control panel.
 ### Accretion State
 
 **SANE (Standard and Normal Evolution):**
-- Weak magnetic field (β ~ 100)
+- Weak magnetic field (beta ~ 100)
 - Steady accretion
-- Weak jets (η_jet ~ 1%)
+- Weak jets (eta_jet ~ 1%)
 - Lower variability
 
 **MAD (Magnetically Arrested Disk):**
-- Strong magnetic field (β ~ 1)
+- Strong magnetic field (beta ~ 1)
 - Magnetic pressure ~ gas pressure
-- Powerful jets (η_jet up to 40%)
+- Powerful jets (eta_jet up to 40%)
 - Episodic flux eruptions
 - 30-50% variability
 - Preferred for Sgr A* (EHT observations)
 
 **Intermediate:**
-- Transitional state (β ~ 10)
+- Transitional state (beta ~ 10)
 - Moderate magnetic support
 - Moderate jets
 - Some variability
 
-### Beta (β = P_gas/P_mag)
+### Beta (beta = P_gas/P_mag)
 **Range:** 0.1 to 100 (logarithmic)
 
 **Values:**
-- β = 1: Magnetic equipartition (MAD)
-- β = 10: Intermediate
-- β = 100: Weak magnetic field (SANE)
+- beta = 1: Magnetic equipartition (MAD)
+- beta = 10: Intermediate
+- beta = 100: Weak magnetic field (SANE)
 
 **Physics:**
-- Lower β → stronger magnetic field
-- Stronger B → more collimated jets
-- Stronger B → higher synchrotron emission
+- Lower beta -> stronger magnetic field
+- Stronger B -> more collimated jets
+- Stronger B -> higher synchrotron emission
 
-### Magnetic Flux (Φ_BH)
+### Magnetic Flux (Phi_BH)
 **Range:** 1 to 100
 
 **Values:**
-- Φ = 50: Typical MAD (strong flux)
-- Φ = 20: Intermediate
-- Φ = 5: Typical SANE (weak flux)
+- Phi = 50: Typical MAD (strong flux)
+- Phi = 20: Intermediate
+- Phi = 5: Typical SANE (weak flux)
 
 **Physics:**
-- Higher Φ → more jet power (P_BZ ∝ Φ²)
+- Higher Phi -> more jet power (P_BZ ~ Phi^2)
 - Affects BZ extraction efficiency
 
 ---
@@ -401,10 +401,10 @@ intel_gpu_top  # For Intel GPUs
   - For a* < 0: ISCO should be large (> 6 M)
 
 **Expected values:**
-- a* = +0.998: ISCO = 1.237 M ✓
-- a* = +0.94: ISCO = 2.024 M ✓
-- a* = 0.0: ISCO = 6.0 M ✓
-- a* = -0.998: ISCO = 8.994 M ✓
+- a* = +0.998: ISCO = 1.237 M yes
+- a* = +0.94: ISCO = 2.024 M yes
+- a* = 0.0: ISCO = 6.0 M yes
+- a* = -0.998: ISCO = 8.994 M yes
 
 ### Issue: Magnetic field parameters have no effect
 
@@ -469,7 +469,7 @@ EHT Collaboration et al. (2025). "GRMHD modelling of accretion flow
 around Sagittarius A* constrained by EHT." arXiv:2510.03602
 
 LIGO-Virgo-KAGRA Collaboration (2025). "Observation of Gravitational Waves
-from the Coalescence of a 140 M☉ and 100 M☉ Black Hole Binary."
+from the Coalescence of a 140 Msun and 100 Msun Black Hole Binary."
 Physical Review Letters (GW231123)
 
 Blandford, R. D., & Znajek, R. L. (1977). "Electromagnetic extraction
@@ -494,9 +494,9 @@ of energy from Kerr black holes." MNRAS, 179, 433
 - Verify opposite directions
 
 **Test 4: Mass Scaling**
-- Double the mass: All lengths scale by 2×
-- Halve the mass: All lengths scale by 0.5×
-- Schwarzschild radius r_s ∝ M
+- Double the mass: All lengths scale by 2x
+- Halve the mass: All lengths scale by 0.5x
+- Schwarzschild radius r_s ~ M
 
 ---
 
@@ -513,7 +513,7 @@ MAD states exhibit quasi-periodic flux eruptions:
 1. Set state to MAD
 2. Enable time evolution (if available)
 3. Watch for brightness variations
-4. Period ∝ M (hours for Sgr A*, days for M87)
+4. Period ~ M (hours for Sgr A*, days for M87)
 
 ### Blandford-Znajek Jet Power
 
@@ -521,14 +521,14 @@ Electromagnetic energy extraction:
 
 **Formula:**
 ```
-P_BZ ~ (B_H² r_+² c / 4π) Ω_H² f(a*)
-η_BZ = P_BZ / (Ṁ c²)
+P_BZ ~ (B_H^2 r_+^2 c / 4pi) Omega_H^2 f(a*)
+eta_BZ = P_BZ / (Mdot c^2)
 ```
 
 **Efficiency:**
-- SANE: η ~ 1%
-- MAD: η ~ 10-40%
-- Depends on: a*², Φ_BH²
+- SANE: eta ~ 1%
+- MAD: eta ~ 10-40%
+- Depends on: a*^2, Phi_BH^2
 
 **Observing jet power:**
 1. Enable jet visualization
@@ -540,8 +540,8 @@ P_BZ ~ (B_H² r_+² c / 4π) Ω_H² f(a*)
 
 **Spectral shape:**
 ```
-F_ν ∝ ν^(-α)  (optically thin)
-τ_ν ∝ ν^(-2.1) (self-absorption)
+F_nu ~ nu^(-alpha)  (optically thin)
+tau_nu ~ nu^(-2.1) (self-absorption)
 ```
 
 **Observing frequency dependence:**
@@ -605,36 +605,36 @@ F_ν ∝ ν^(-α)  (optically thin)
 
 **Prograde:**
 ```
-r_ISCO/M = 3 + Z2 - √((3 - Z1)(3 + Z1 + 2Z2))
+r_ISCO/M = 3 + Z2 - sqrt((3 - Z1)(3 + Z1 + 2Z2))
 ```
 
 **Retrograde:**
 ```
-r_ISCO/M = 3 + Z2 + √((3 - Z1)(3 + Z1 + 2Z2))
+r_ISCO/M = 3 + Z2 + sqrt((3 - Z1)(3 + Z1 + 2Z2))
 ```
 
 **Where:**
 ```
-Z1 = 1 + (1 - a*²)^(1/3) [(1 + a*)^(1/3) + (1 - a*)^(1/3)]
-Z2 = √(3a*² + Z1²)
+Z1 = 1 + (1 - a*^2)^(1/3) [(1 + a*)^(1/3) + (1 - a*)^(1/3)]
+Z2 = sqrt(3a*^2 + Z1^2)
 ```
 
 ### Schwarzschild Radius
 ```
-r_s = 2GM/c² = 2.95 km × (M/M☉)
+r_s = 2GM/c^2 = 2.95 km x (M/Msun)
 ```
 
 ### Hawking Temperature
 ```
-T_H = ℏc³/(8πGMk_B) = 6.17×10⁻⁸ K × (M☉/M)
+T_H = hbarc^3/(8piGMk_B) = 6.17x10^-8 K x (Msun/M)
 ```
 
 ### Blandford-Znajek Power
 ```
-P_BZ = κ (B_H² r_+² c / 4π) Ω_H² a*²
+P_BZ = kappa (B_H^2 r_+^2 c / 4pi) Omega_H^2 a*^2
 ```
 
-Where κ is a dimensionless efficiency factor.
+Where kappa is a dimensionless efficiency factor.
 
 ---
 

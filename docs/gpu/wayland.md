@@ -16,10 +16,10 @@
 
 | Optimization | Result | FPS | Notes |
 |--------------|--------|-----|-------|
-| Baseline | ❌ | 2.66 | XWayland overhead confirmed |
-| MESA_GLTHREAD=true | ❌ | 2.65 | No change - not CPU bound |
-| GPU frequency boost | ⚠️ | N/A | Controls not accessible |
-| System GLFW (Wayland) | ❌ | N/A | Not used by binary (Conan GLFW) |
+| Baseline | [fail] | 2.66 | XWayland overhead confirmed |
+| MESA_GLTHREAD=true | [fail] | 2.65 | No change - not CPU bound |
+| GPU frequency boost | [warn] | N/A | Controls not accessible |
+| System GLFW (Wayland) | [fail] | N/A | Not used by binary (Conan GLFW) |
 
 ---
 
@@ -29,17 +29,17 @@
 From `perf` analysis (see FINAL_SUMMARY_AND_ACTIONS.md):
 ```
 67.5% of CPU time spent in:
-├─ 40.3% GPU driver kernel waits
-├─ 15.4% ioctl syscalls
-├─ 7.7% xcb_wait_for_reply64 (XWayland)
-└─ 4.4% xcb_writev (X11 protocol)
++- 40.3% GPU driver kernel waits
++- 15.4% ioctl syscalls
++- 7.7% xcb_wait_for_reply64 (XWayland)
++- 4.4% xcb_writev (X11 protocol)
 ```
 
 ### The XWayland Problem
 ```
-Application → GLFW (X11) → XWayland → Wayland Compositor → GPU
+Application -> GLFW (X11) -> XWayland -> Wayland Compositor -> GPU
      vs.
-Application → GLFW (Wayland) → Wayland Compositor → GPU
+Application -> GLFW (Wayland) -> Wayland Compositor -> GPU
 ```
 
 **Impact:** Extra layer adds latency and protocol overhead.
@@ -104,9 +104,9 @@ Based on profiling data:
 | Change | Expected FPS | Improvement |
 |--------|-------------|-------------|
 | Current (XWayland) | 2.6 | Baseline |
-| Native Wayland | 5-12 | **2-4x** ✨ |
-| + GPU optimizations | 8-15 | **3-5x** ✨ |
-| + Render pass reduction | 12-25 | **4-10x** ✨ |
+| Native Wayland | 5-12 | **2-4x** * |
+| + GPU optimizations | 8-15 | **3-5x** * |
+| + Render pass reduction | 12-25 | **4-10x** * |
 
 **Target:** 25-40 FPS on Intel HD 4400
 
@@ -131,9 +131,9 @@ Based on profiling data:
 ## Recommendations
 
 ### Immediate (Already Done)
-- ✅ Created `BUILD.md` documentation
-- ✅ Created `scripts/build-quick.sh` unified build script
-- ✅ Installed system GLFW with Wayland support
+- [done] Created `BUILD.md` documentation
+- [done] Created `scripts/build-quick.sh` unified build script
+- [done] Installed system GLFW with Wayland support
 
 ### Short-term (Next Steps)
 1. **Modify Conan profile** to build GLFW with Wayland (1-2 hours)

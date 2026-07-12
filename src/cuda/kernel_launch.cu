@@ -4,6 +4,7 @@
  *        the selected kernel variant.
  */
 
+#include <cstddef>
 #include <cstdio>
 
 #include <cuda_runtime.h>
@@ -313,4 +314,14 @@ extern "C" void bh_upload_lut_textures(unsigned long long emissivity,
 extern "C" void bh_upload_bridge_background_texture(unsigned long long background_equirect) {
   (void)cudaMemcpyToSymbol(d_tex_background_equirect, &background_equirect,
                            sizeof(background_equirect));
+}
+
+extern "C" struct BH_LaunchParamsAbi bh_device_launch_params_abi(void) {
+  struct BH_LaunchParamsAbi abi;
+  abi.size = sizeof(BH_LaunchParams);
+  unsigned long long *out = abi.offsets;
+#define BH_ABI_EMIT(field) *out++ = offsetof(BH_LaunchParams, field);
+  BH_LAUNCH_PARAMS_ABI_FIELDS(BH_ABI_EMIT)
+#undef BH_ABI_EMIT
+  return abi;
 }

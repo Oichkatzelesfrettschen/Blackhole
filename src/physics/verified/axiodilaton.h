@@ -31,7 +31,7 @@ template <CosmologyScalar Real>
                                                      Real omegaLambda, Real h0) noexcept {
   const Real aInv = 1.0 + z; // Inverse scale factor
   const Real termM = omegaM * aInv * aInv * aInv;
-  const Real termAd = omegaAd * axiodilaton_function(z);
+  const Real termAd = omegaAd * axiodilatonFunction(z);
   const Real termLambda = omegaLambda;
   return h0 * std::sqrt(termM + termAd + termLambda);
 }
@@ -41,7 +41,7 @@ template <CosmologyScalar Real>
 template <CosmologyScalar Real>
 [[nodiscard]] inline Real axiodilatonHubbleNormalized(Real z, Real omegaM, Real omegaAd,
                                                       Real omegaLambda, Real h0) noexcept {
-  return axiodilaton_hubble_parameter(z, omegaM, omegaAd, omegaLambda, h0) / h0;
+  return axiodilatonHubbleParameter(z, omegaM, omegaAd, omegaLambda, h0) / h0;
 }
 
 // Hubble tension prediction
@@ -66,9 +66,9 @@ template <CosmologyScalar Real>
     const Real zNext = (i + 1) * dz;
     const Real zMid = (zI + zNext) / 2.0;
 
-    const Real eI = axiodilaton_hubble_normalized(zI, omegaM, omegaAd, omegaLambda, h0);
-    const Real eNext = axiodilaton_hubble_normalized(zNext, omegaM, omegaAd, omegaLambda, h0);
-    const Real eMid = axiodilaton_hubble_normalized(zMid, omegaM, omegaAd, omegaLambda, h0);
+    const Real eI = axiodilatonHubbleNormalized(zI, omegaM, omegaAd, omegaLambda, h0);
+    const Real eNext = axiodilatonHubbleNormalized(zNext, omegaM, omegaAd, omegaLambda, h0);
+    const Real eMid = axiodilatonHubbleNormalized(zMid, omegaM, omegaAd, omegaLambda, h0);
 
     // Simpson's rule contribution
     integral += (dz / 6.0) * ((1.0 / eI) + (4.0 / eMid) + (1.0 / eNext));
@@ -82,7 +82,7 @@ template <CosmologyScalar Real>
 template <CosmologyScalar Real>
 [[nodiscard]] inline Real axiodilatonLuminosityDistance(Real z, Real omegaM, Real omegaAd,
                                                         Real omegaLambda, Real h0) noexcept {
-  const Real dC = axiodilaton_comoving_distance(z, omegaM, omegaAd, omegaLambda, h0);
+  const Real dC = axiodilatonComovingDistance(z, omegaM, omegaAd, omegaLambda, h0);
   return (1.0 + z) * dC;
 }
 
@@ -91,7 +91,7 @@ template <CosmologyScalar Real>
 template <CosmologyScalar Real>
 [[nodiscard]] inline Real axiodilatonAngularDiameterDistance(Real z, Real omegaM, Real omegaAd,
                                                              Real omegaLambda, Real h0) noexcept {
-  const Real dC = axiodilaton_comoving_distance(z, omegaM, omegaAd, omegaLambda, h0);
+  const Real dC = axiodilatonComovingDistance(z, omegaM, omegaAd, omegaLambda, h0);
   return dC / (1.0 + z);
 }
 
@@ -130,7 +130,7 @@ template <CosmologyScalar Real> [[nodiscard]] constexpr Real omegaAd() noexcept 
 
 // Dark energy (cosmological constant) density
 template <CosmologyScalar Real> [[nodiscard]] constexpr Real omegaLambdaPlanck() noexcept {
-  return 1.0 - Omega_m_planck<Real>() - Omega_ad<Real>();
+  return 1.0 - omegaMPlanck<Real>() - omegaAd<Real>();
 }
 
 // Hubble constant (Axiodilaton prediction)

@@ -19,12 +19,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source-dir",
         type=Path,
-        default=Path("/home/eirikr/Github/Blackhole"),
+        default=Path(__file__).resolve().parent.parent,
     )
     parser.add_argument(
         "--binary",
         type=Path,
-        default=Path("/home/eirikr/Github/Blackhole/build/Release/BlackholeGLSL"),
+        default=Path(__file__).resolve().parent.parent / "build" / "Release" / "BlackholeGLSL",
     )
     parser.add_argument("--display", type=int, default=99)
     parser.add_argument(

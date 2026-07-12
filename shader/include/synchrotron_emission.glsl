@@ -84,9 +84,10 @@ float synchrotron_F(float x) {
 uniform sampler2D synchGLut;
 uniform int synchGLutAvailable;
 
-// LUT domain constants (must match synchrotron.h SYNCH_G_LUT_X_MIN/X_MAX)
-const float SYNCH_G_LUT_X_MIN = 0.001;
-const float SYNCH_G_LUT_X_MAX = 30.0;
+// LUT domain constants, single-sourced with the C++ and CUDA consumers.
+#include "synchrotron_lut_domain.h"
+const float SYNCH_G_LUT_X_MIN = SYNCH_G_LUT_DOMAIN_X_MIN;
+const float SYNCH_G_LUT_X_MAX = SYNCH_G_LUT_DOMAIN_X_MAX;
 
 /**
  * G(x) = x * K_2/3(x) for polarized emission.

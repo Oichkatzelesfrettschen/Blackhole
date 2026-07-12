@@ -665,13 +665,22 @@ endif()
 
 message(STATUS "=== SIMD Configuration Complete ===")
 
-# Fast math for non-critical paths (can be disabled for precision)
-option(ENABLE_FAST_MATH "Enable fast math optimizations" ON)
+# IEEE floating-point semantics are the default. -ffinite-math-only (part
+# of -ffast-math) folds inf/NaN classification to no-ops, poisons
+# non-finite values crossing by-value boundaries on clang 22 (nofpclass),
+# and made the analytic Kerr integrator terminate rays instantly through
+# broken safeInfinity sentinels -- its benchmark ran 2000x "faster" by
+# computing nothing. Measured cost of IEEE on correct CPU paths:
+# Schwarzschild raytracer 571->737 ms, SIMD batch geodesic 0.32->0.42 ms
+# (physics_bench, clang 22, 2026-07-09); SIMD-dispatched hot paths are
+# within noise. Opt in per build only with a correctness review; the
+# per-target -fno-fast-math test overrides below protect that mode.
+option(ENABLE_FAST_MATH "Trade IEEE inf/NaN semantics for ~1.3x on scalar CPU paths" OFF)
 if(ENABLE_FAST_MATH)
   add_compile_options(-ffast-math)
-  # Note: infinity/NaN usage is handled via safe_limits.h which uses compiler
-  # builtins (__builtin_huge_val) that work correctly with -ffast-math.
-  message(STATUS "Fast math optimizations enabled")
+  message(STATUS "Fast math enabled: inf/NaN semantics are NOT IEEE; "
+                 "safe_limits.h classifiers remain valid for data-origin "
+                 "values only")
 endif()
 
 # ============================================================================
@@ -1119,6 +1128,29 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/rmlui_overlay.cpp"
   "${PROJECT_SOURCE_DIR}/src/overlay.cpp"
   "${PROJECT_SOURCE_DIR}/src/render.cpp"
+  "${PROJECT_SOURCE_DIR}/src/platform/cli_options.cpp"
+  "${PROJECT_SOURCE_DIR}/src/platform/crash_handler.cpp"
+  "${PROJECT_SOURCE_DIR}/src/platform/resource_paths.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/compare_sweep.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/camera_math.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/settings_sync.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/post_pipeline.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/background_loader.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/grmhd_tile_upload.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/scene_overlays.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/env_config.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/gl_capabilities.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/gpu_timing.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/post_process.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/lut_manager.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/record_mode.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/render_targets.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/uniform_binding.cpp"
+  "${PROJECT_SOURCE_DIR}/src/tools/compare_harness.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/campaign_panels.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/strategic_map.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
@@ -1134,14 +1166,14 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/stb_image_write_impl.cpp"
   "${PROJECT_SOURCE_DIR}/src/input.cpp"
   "${PROJECT_SOURCE_DIR}/src/settings.cpp"
-  "${PROJECT_SOURCE_DIR}/src/GLDebugMessageCallback.cc"
+  "${PROJECT_SOURCE_DIR}/external/gl_debug_callback/GLDebugMessageCallback.cc"
   "${PROJECT_SOURCE_DIR}/src/physics/hawking_renderer.cpp"  # OpenGL-dependent physics renderer
   ${PHYSICS_SRC_FILES}
 )
 
 set(THIRDPARTY_SRC_FILES
-  "${PROJECT_SOURCE_DIR}/src/imgui_impl_glfw.cpp"
-  "${PROJECT_SOURCE_DIR}/src/imgui_impl_opengl3.cpp"
+  "${PROJECT_SOURCE_DIR}/external/imgui_backends/imgui_impl_glfw.cpp"
+  "${PROJECT_SOURCE_DIR}/external/imgui_backends/imgui_impl_opengl3.cpp"
 )
 
 # Collect all header files including physics and render subdirectories
@@ -1175,7 +1207,19 @@ function(add_blackhole_desktop_target target_name)
 
   add_executable(${target_name} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
 
+  # The UI font is compiled from its Glyphs source; the desktop app cannot run
+  # without it, so it must exist before the executable is considered built. The
+  # campaign backdrop is optional (procedural fallback) and only a dependency
+  # when ImageMagick was found.
+  if(TARGET blackhole_font)
+    add_dependencies(${target_name} blackhole_font)
+  endif()
+  if(TARGET blackhole_campaign_backdrop)
+    add_dependencies(${target_name} blackhole_campaign_backdrop)
+  endif()
+
   target_link_libraries(${target_name} PRIVATE
+    blackhole_campaign
     HighFive::HighFive
     imgui::imgui
     imguizmo::imguizmo
@@ -1253,6 +1297,10 @@ function(add_blackhole_desktop_target target_name)
     "${PROJECT_SOURCE_DIR}/src"
     "${PROJECT_SOURCE_DIR}/src/physics"
   )
+  target_include_directories(${target_name} SYSTEM PRIVATE
+    "${PROJECT_SOURCE_DIR}/external/imgui_backends"
+    "${PROJECT_SOURCE_DIR}/external/gl_debug_callback"
+  )
   target_compile_options(${target_name} PRIVATE ${PROJECT_WARNINGS})
 
   add_custom_command(
@@ -1272,6 +1320,57 @@ endfunction()
 find_library(CPPTRACE_LIBRARY cpptrace)
 
 if(ENABLE_DESKTOP_APP)
+  # UI font: built from its Glyphs design source at configure/build time, so no
+  # font binary is committed. fontmake (a Python tool) compiles the Regular
+  # instance into the gitignored assets/fonts/spline-sans-mono/*.ttf that ImGui
+  # loads. Install with `pip install fontmake`, or point FONTMAKE_EXECUTABLE at
+  # one (e.g. a virtualenv's fontmake). Tests and campaign_sim do not need it.
+  find_program(FONTMAKE_EXECUTABLE NAMES fontmake)
+  set(BH_FONT_DIR "${PROJECT_SOURCE_DIR}/assets/fonts/spline-sans-mono")
+  set(BH_FONT_SRC "${BH_FONT_DIR}/src/SplineSansMono.glyphs")
+  set(BH_FONT_TTF "${BH_FONT_DIR}/SplineSansMono-Regular.ttf")
+  if(NOT FONTMAKE_EXECUTABLE)
+    message(FATAL_ERROR
+      "fontmake not found. The desktop UI font is built from source "
+      "(${BH_FONT_SRC}); install it with 'pip install fontmake' and put it on "
+      "PATH, pass -DFONTMAKE_EXECUTABLE=/path/to/fontmake, or configure with "
+      "-DENABLE_DESKTOP_APP=OFF.")
+  endif()
+  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/fontbuild")
+  add_custom_command(
+    OUTPUT "${BH_FONT_TTF}"
+    COMMAND "${FONTMAKE_EXECUTABLE}" -g "${BH_FONT_SRC}"
+            -i "Spline Sans Mono Regular" -o ttf --output-dir "${BH_FONT_DIR}"
+    DEPENDS "${BH_FONT_SRC}"
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/fontbuild"
+    COMMENT "Building Spline Sans Mono (Regular) from source with fontmake"
+    VERBATIM)
+  add_custom_target(blackhole_font DEPENDS "${BH_FONT_TTF}")
+
+  # Campaign strategic-map backdrop: the full-res 4K NASA source (LFS) is
+  # downscaled into a resolution ladder (2K, 2K ultrawide, 1080, 720, 1024, 512)
+  # by scripts/generate_nebula_ladder.sh with ImageMagick; the map loads the
+  # 1024 rendition. Unlike the font, the backdrop is OPTIONAL -- the map falls
+  # back to a procedural starfield -- so a missing ImageMagick is a status note,
+  # not a fatal error.
+  find_program(MAGICK_EXECUTABLE NAMES magick convert)
+  set(BH_NEBULA_SRC "${PROJECT_SOURCE_DIR}/assets/backgrounds/source/carina-cosmic-cliffs-4k.jpg")
+  set(BH_NEBULA_DIR "${PROJECT_SOURCE_DIR}/assets/backgrounds/generated")
+  set(BH_NEBULA_TEX "${BH_NEBULA_DIR}/carina-cosmic-cliffs-1024.jpg")
+  set(BH_NEBULA_SCRIPT "${PROJECT_SOURCE_DIR}/scripts/generate_nebula_ladder.sh")
+  if(MAGICK_EXECUTABLE AND EXISTS "${BH_NEBULA_SRC}")
+    add_custom_command(
+      OUTPUT "${BH_NEBULA_TEX}"
+      COMMAND sh "${BH_NEBULA_SCRIPT}" "${BH_NEBULA_SRC}" "${BH_NEBULA_DIR}" "${MAGICK_EXECUTABLE}"
+      DEPENDS "${BH_NEBULA_SRC}" "${BH_NEBULA_SCRIPT}"
+      COMMENT "Generating the campaign nebula resolution ladder (2K, 2K ultrawide, 1080, 720, 1024, 512)"
+      VERBATIM)
+    add_custom_target(blackhole_campaign_backdrop DEPENDS "${BH_NEBULA_TEX}")
+  else()
+    message(STATUS "ImageMagick not found (or nebula source absent): the campaign map "
+                   "uses its procedural starfield backdrop.")
+  endif()
+
   add_blackhole_desktop_target(${CMAKE_PROJECT_NAME})
   if(ENABLE_DESKTOP_VARIANTS)
     add_blackhole_desktop_target(BlackholeGLSL GLSL_ONLY)
@@ -1435,6 +1534,53 @@ if(ENABLE_CLANG_TIDY)
   endif()
 endif()
 
+# ============================================================================
+# Campaign core (Horizon Command seam)
+# ============================================================================
+
+# Pure physics library: the five GL-free physics translation units behind a
+# linkable target. Existing consumers keep compiling PHYSICS_SRC_FILES into
+# their own targets -- their per-target fast-math overrides depend on owning
+# the compile flags -- so only the campaign stack links this library.
+add_library(blackhole_physics STATIC ${PHYSICS_SRC_FILES})
+target_include_directories(blackhole_physics PUBLIC
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/src/physics"
+)
+target_compile_options(blackhole_physics PRIVATE ${PROJECT_WARNINGS})
+if(ENABLE_FAST_MATH)
+  # The campaign determinism gate needs IEEE semantics end to end.
+  target_compile_options(blackhole_physics PRIVATE -fno-fast-math)
+endif()
+
+# Deterministic turn-based campaign state (src/game/). GL-free by
+# construction: no glbinding, imgui, or glfw anywhere in this link set.
+add_library(blackhole_campaign STATIC
+  "${PROJECT_SOURCE_DIR}/src/game/blackhole_time_field.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/kerr_time_field.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/temporal_clock.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/fleet.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/task_graph.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/campaign.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/campaign_session.cpp"
+)
+target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
+target_compile_options(blackhole_campaign PRIVATE ${PROJECT_WARNINGS})
+if(ENABLE_FAST_MATH)
+  target_compile_options(blackhole_campaign PRIVATE -fno-fast-math)
+endif()
+
+# Headless determinism probe: replays a scripted command log and prints the
+# state digest; the same invocation twice must print identical digests.
+add_executable(campaign_sim
+  "${PROJECT_SOURCE_DIR}/src/game/campaign_sim_main.cpp"
+)
+target_link_libraries(campaign_sim PRIVATE blackhole_campaign)
+target_compile_options(campaign_sim PRIVATE ${PROJECT_WARNINGS})
+if(ENABLE_FAST_MATH)
+  target_compile_options(campaign_sim PRIVATE -fno-fast-math)
+endif()
+
 # --------------------------------------------------------------------------
 # cppcheck Integration
 # --------------------------------------------------------------------------
@@ -1505,7 +1651,29 @@ endif()
 # GLSL Shader Validation Target
 # ============================================================================
 
-option(ENABLE_SHADER_VALIDATION "Enable GLSL shader validation" ON)
+# Tool-gate discipline: a feature option explicitly set ON hard-requires
+# its tool; AUTO enables when the tool exists and warns loudly when it
+# does not; OFF is the only silent state. find_program silent-disables
+# once cost this repo its coverage target, its Z3 proofs, and (in CI
+# configs without the tool) shader validation -- absence must never
+# read as success.
+function(bh_tool_gate option_name tool_description)
+  set(_val "${${option_name}}")
+  if(_val STREQUAL "AUTO")
+    message(WARNING
+      "${option_name}=AUTO: ${tool_description} not found -- feature "
+      "disabled. Install the tool, or set ${option_name}=OFF to accept "
+      "this silently.")
+  else()
+    message(FATAL_ERROR
+      "${option_name}=${_val} requires ${tool_description}, which was "
+      "not found. Install it, or set ${option_name}=OFF (or AUTO to "
+      "downgrade a missing tool to a warning).")
+  endif()
+endfunction()
+
+set(ENABLE_SHADER_VALIDATION "AUTO" CACHE STRING
+  "GLSL shader validation: ON requires glslangValidator, AUTO warns when missing, OFF disables")
 
 if(ENABLE_SHADER_VALIDATION)
   find_program(GLSLANG_VALIDATOR NAMES "glslangValidator" "glslang")
@@ -1574,7 +1742,7 @@ if(ENABLE_SHADER_VALIDATION)
       )
     endif()
   else()
-    message(STATUS "glslangValidator not found - shader validation disabled")
+    bh_tool_gate(ENABLE_SHADER_VALIDATION "glslangValidator (glslang-tools)")
   endif()
 endif()
 
@@ -1624,7 +1792,7 @@ if(ENABLE_DOXYGEN)
       set(ENABLE_DOXYGEN OFF)
     endif()
   else()
-    message(STATUS "Doxygen not found - API documentation disabled")
+    bh_tool_gate(ENABLE_DOXYGEN "doxygen")
     set(ENABLE_DOXYGEN OFF)
   endif()
 endif()
@@ -1719,7 +1887,7 @@ if(ENABLE_COVERAGE)
       VERBATIM
     )
   else()
-    message(STATUS "gcovr not found - coverage-report target disabled")
+    bh_tool_gate(ENABLE_COVERAGE "gcovr (coverage-report generation)")
   endif()
 endif()
 
@@ -3456,11 +3624,11 @@ if(BUILD_TESTING)
   endif()
 
   # Physics library validation tests
-  if(EXISTS "${PROJECT_SOURCE_DIR}/src/physics/physics_test.cpp")
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp")
     add_executable(physics_test
-      "${PROJECT_SOURCE_DIR}/src/physics/physics_test.cpp"
-      ${PHYSICS_SRC_FILES}
+      "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp"
     )
+    target_link_libraries(physics_test PRIVATE blackhole_physics)
     target_include_directories(physics_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -3498,6 +3666,108 @@ if(BUILD_TESTING)
       set_tests_properties(physics_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
+    endif()
+  endif()
+
+  # Test-only support library: the desktop app sources (minus main.cpp) built
+  # once with a fixed BLACKHOLE_HAS_CUDA=0 layout so unit tests can construct
+  # RenderState and link the extracted render-loop logic without an app
+  # executable. It is NOT linked by the shipping executables -- their RenderState
+  # layout is per-variant (cudaManager exists only under HAS_CUDA=1), so sharing
+  # one library across variants would be an ODR/layout mismatch. HAS_CUDA=0 is
+  # the lightest valid layout and faithful for CUDA-free logic under test.
+  if(NOT TARGET blackhole_testcore)
+    set(BH_TESTCORE_SRC ${PROJECT_SRC_FILES})
+    list(REMOVE_ITEM BH_TESTCORE_SRC "${PROJECT_SOURCE_DIR}/src/main.cpp")
+    add_library(blackhole_testcore STATIC ${BH_TESTCORE_SRC} ${THIRDPARTY_SRC_FILES})
+    target_include_directories(blackhole_testcore PUBLIC
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_include_directories(blackhole_testcore SYSTEM PUBLIC
+      "${PROJECT_SOURCE_DIR}/external/imgui_backends"
+      "${PROJECT_SOURCE_DIR}/external/gl_debug_callback"
+    )
+    target_link_libraries(blackhole_testcore PUBLIC
+      blackhole_campaign
+      HighFive::HighFive
+      imgui::imgui
+      imguizmo::imguizmo
+      implot::implot
+      glfw
+      glbinding::glbinding
+      glm::glm
+      nlohmann_json::nlohmann_json
+      stb::stb
+    )
+    target_compile_definitions(blackhole_testcore PUBLIC
+      GLFW_INCLUDE_NONE
+      IMGUI_IMPL_OPENGL_LOADER_CUSTOM
+      BLACKHOLE_HAS_CUDA=0
+      BLACKHOLE_HAS_CPPTRACE=0
+      BLACKHOLE_ENABLE_RMLUI=$<BOOL:${ENABLE_RMLUI}>
+      BLACKHOLE_ENABLE_MESHOPTIMIZER=$<BOOL:${ENABLE_MESHOPTIMIZER}>
+      BLACKHOLE_ENABLE_TASKFLOW=$<BOOL:${ENABLE_TASKFLOW}>
+      BLACKHOLE_ENABLE_XSIMD=$<BOOL:${ENABLE_XSIMD}>
+      BLACKHOLE_ENABLE_HIGHWAY=$<BOOL:${ENABLE_HIGHWAY}>
+      BLACKHOLE_ENABLE_SLEEF=$<BOOL:${ENABLE_SLEEF}>
+    )
+    if(ENABLE_RMLUI)
+      target_link_libraries(blackhole_testcore PUBLIC rmlui::rmlui)
+    endif()
+    if(ENABLE_SHADER_WATCHER)
+      target_link_libraries(blackhole_testcore PUBLIC watcher::watcher)
+    endif()
+    if(ENABLE_FASTNOISE2)
+      target_link_libraries(blackhole_testcore PUBLIC FastNoise2::FastNoise)
+    endif()
+    if(ENABLE_MESHOPTIMIZER)
+      target_link_libraries(blackhole_testcore PUBLIC meshoptimizer::meshoptimizer)
+    endif()
+    if(ENABLE_TASKFLOW)
+      target_link_libraries(blackhole_testcore PUBLIC Taskflow::Taskflow)
+    endif()
+    if(ENABLE_XSIMD)
+      target_link_libraries(blackhole_testcore PUBLIC xsimd)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(blackhole_testcore PUBLIC hwy::hwy)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(blackhole_testcore PUBLIC sleef::sleef)
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/compare_sweep_test.cpp")
+    add_executable(compare_sweep_test "${PROJECT_SOURCE_DIR}/tests/compare_sweep_test.cpp")
+    target_link_libraries(compare_sweep_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(compare_sweep_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME compare_sweep_state COMMAND compare_sweep_test)
+    set_tests_properties(compare_sweep_state PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(compare_sweep_state PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/camera_math_test.cpp")
+    add_executable(camera_math_test "${PROJECT_SOURCE_DIR}/tests/camera_math_test.cpp")
+    target_link_libraries(camera_math_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(camera_math_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME camera_math COMMAND camera_math_test)
+    set_tests_properties(camera_math PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(camera_math PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
+    add_executable(settings_sync_test "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
+    target_link_libraries(settings_sync_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(settings_sync_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME settings_sync COMMAND settings_sync_test)
+    set_tests_properties(settings_sync PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(settings_sync PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
     endif()
   endif()
 
@@ -3708,8 +3978,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_schild_test.cpp")
     add_executable(kerr_schild_test
       "${PROJECT_SOURCE_DIR}/tests/kerr_schild_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(kerr_schild_test PRIVATE blackhole_physics)
     target_include_directories(kerr_schild_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -3739,6 +4009,289 @@ if(BUILD_TESTING)
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
+  endif()
+
+  # Campaign core (Horizon Command seam) tests: pure game logic against the
+  # Schwarzschild time field, no GL context. IEEE flags match the campaign
+  # libraries so the determinism gates hold under ENABLE_FAST_MATH too.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_clock_test.cpp")
+    add_executable(campaign_clock_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_clock_test.cpp"
+    )
+    target_compile_options(campaign_clock_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_clock_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_clock_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_clock_validation COMMAND campaign_clock_test)
+    set_tests_properties(campaign_clock_validation PROPERTIES
+      LABELS "campaign;determinism;time-dilation"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_clock_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/blackhole_time_field_test.cpp")
+    add_executable(blackhole_time_field_test
+      "${PROJECT_SOURCE_DIR}/tests/blackhole_time_field_test.cpp"
+    )
+    target_compile_options(blackhole_time_field_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(blackhole_time_field_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(blackhole_time_field_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME blackhole_time_field_validation COMMAND blackhole_time_field_test)
+    set_tests_properties(blackhole_time_field_validation PROPERTIES
+      LABELS "campaign;physics;signal-delay"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(blackhole_time_field_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
+    add_executable(campaign_task_graph_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"
+    )
+    target_include_directories(campaign_task_graph_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_task_graph_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_task_graph_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_task_graph_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_task_graph_validation COMMAND campaign_task_graph_test)
+    set_tests_properties(campaign_task_graph_validation PROPERTIES
+      LABELS "campaign;causality;determinism"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_task_graph_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_time_field_test.cpp")
+    add_executable(kerr_time_field_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_time_field_test.cpp"
+    )
+    target_compile_options(kerr_time_field_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_time_field_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_time_field_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME kerr_time_field_validation COMMAND kerr_time_field_test)
+    set_tests_properties(kerr_time_field_validation PROPERTIES
+      LABELS "campaign;physics;frame-dragging"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_time_field_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp")
+    add_executable(campaign_capabilities_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp"
+    )
+    target_include_directories(campaign_capabilities_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_capabilities_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_capabilities_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_capabilities_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_capabilities_validation COMMAND campaign_capabilities_test)
+    set_tests_properties(campaign_capabilities_validation PROPERTIES
+      LABELS "campaign;capabilities;economy"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_capabilities_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_economy_test.cpp")
+    add_executable(campaign_economy_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_economy_test.cpp"
+    )
+    target_include_directories(campaign_economy_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_economy_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_economy_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_economy_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_economy_validation COMMAND campaign_economy_test)
+    set_tests_properties(campaign_economy_validation PROPERTIES
+      LABELS "campaign;economy;victory"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_economy_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Fast-math-safe numeric classification tests. This target keeps the
+  # global -ffast-math flags on purpose: safe_limits.h exists to classify
+  # inf/NaN correctly under -ffinite-math-only, so the test must run under
+  # exactly those flags. Do NOT add the -fno-fast-math override here.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/safe_limits_test.cpp")
+    add_executable(safe_limits_test
+      "${PROJECT_SOURCE_DIR}/tests/safe_limits_test.cpp"
+    )
+    target_include_directories(safe_limits_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(safe_limits_test PRIVATE ${PROJECT_WARNINGS})
+    # _FORTIFY_SOURCE=3 combined with -ffinite-math-only corrupts the stack
+    # in glibc's *_chk stdio paths (the same interaction that forced the
+    # -fno-fast-math override onto 20 physics test targets). This target
+    # must keep fast-math -- it validates classification under exactly those
+    # flags -- so hardening yields instead of the flag under test.
+    target_compile_options(safe_limits_test PRIVATE -U_FORTIFY_SOURCE)
+    add_test(NAME safe_limits_validation COMMAND safe_limits_test)
+    set_tests_properties(safe_limits_validation PROPERTIES
+      LABELS "physics;numerics;fast-math"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(safe_limits_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Formerly-orphaned test sources (ledger TEST-1): these existed on disk
+  # but no target compiled them, so the shader-parity and verified-physics
+  # claims ran on zero executed tests. Registered 2026-07-09.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_geodesic_test.cpp")
+    add_executable(kerr_geodesic_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_geodesic_test.cpp"
+    )
+    target_include_directories(kerr_geodesic_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_geodesic_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME kerr_geodesic_validation COMMAND kerr_geodesic_test)
+    set_tests_properties(kerr_geodesic_validation PROPERTIES
+      LABELS "physics;kerr;geodesic"
+      TIMEOUT 30
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/verify_headers_compile.cpp")
+    # Compile-and-value gate over every src/physics/verified/ header: a
+    # header that stops compiling fails the build, a formula regression
+    # fails the run (ledger STRUCT-9 fork-merge deliverable).
+    add_executable(verify_headers_compile
+      "${PROJECT_SOURCE_DIR}/tests/verify_headers_compile.cpp"
+    )
+    target_include_directories(verify_headers_compile PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(verify_headers_compile PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME verified_headers_gate COMMAND verify_headers_compile)
+    set_tests_properties(verified_headers_gate PROPERTIES
+      LABELS "physics;verified"
+      TIMEOUT 30
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gpu_cpu_parity_test.cpp")
+    # CPU (verified/*.hpp) vs GPU (shader/include/verified/*.glsl) parity
+    # in a compute dispatch. Skips when no GL 4.6 context is available;
+    # fails on shader compile errors once a context exists.
+    add_executable(gpu_cpu_parity_test
+      "${PROJECT_SOURCE_DIR}/tests/gpu_cpu_parity_test.cpp"
+    )
+    target_include_directories(gpu_cpu_parity_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_definitions(gpu_cpu_parity_test PRIVATE
+      GLFW_INCLUDE_NONE
+      BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+    )
+    target_compile_options(gpu_cpu_parity_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(gpu_cpu_parity_test PRIVATE
+      glfw
+      glbinding::glbinding
+      GTest::gtest
+      GTest::gtest_main
+    )
+    add_test(NAME gpu_cpu_parity COMMAND gpu_cpu_parity_test)
+    set_tests_properties(gpu_cpu_parity PROPERTIES
+      LABELS "physics;gpu;parity"
+      TIMEOUT 60
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp")
+    add_executable(verified_physics_test
+      "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp"
+    )
+    target_include_directories(verified_physics_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(verified_physics_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME verified_physics_validation COMMAND verified_physics_test)
+    set_tests_properties(verified_physics_validation PROPERTIES
+      LABELS "physics;verified;rocq"
+      TIMEOUT 60
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/metric_parity_test.cpp")
+    add_executable(metric_parity_test
+      "${PROJECT_SOURCE_DIR}/tests/metric_parity_test.cpp"
+    )
+    target_include_directories(metric_parity_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(metric_parity_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME metric_parity_validation COMMAND metric_parity_test)
+    set_tests_properties(metric_parity_validation PROPERTIES
+      LABELS "physics;parity;glsl"
+      TIMEOUT 60
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/glsl_parity_test.cpp")
+    add_executable(glsl_parity_test
+      "${PROJECT_SOURCE_DIR}/tests/glsl_parity_test.cpp"
+    )
+    target_include_directories(glsl_parity_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(glsl_parity_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME glsl_parity_validation COMMAND glsl_parity_test)
+    set_tests_properties(glsl_parity_validation PROPERTIES
+      LABELS "physics;parity;glsl"
+      TIMEOUT 60
+    )
   endif()
 
   # Connection coefficient validation tests (Phase 1.4.6)
@@ -4628,7 +5181,8 @@ if(BUILD_TESTING)
   # ========================================================================
 
   # Z3 verification test - coupled GPU/Z3 constraint verification
-  option(ENABLE_Z3_VERIFICATION "Enable Z3 constraint verification tests (Phase 4)" ON)
+  set(ENABLE_Z3_VERIFICATION "AUTO" CACHE STRING
+    "Z3 constraint verification tests: ON requires Z3, AUTO warns when missing, OFF disables")
 
   if(ENABLE_Z3_VERIFICATION AND EXISTS "${PROJECT_SOURCE_DIR}/tests/z3_verification_test.cpp")
     # Find Z3 library (optional for build, required for runtime)
@@ -4652,8 +5206,8 @@ if(BUILD_TESTING)
 
     add_executable(z3_verification_test
       "${PROJECT_SOURCE_DIR}/tests/z3_verification_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(z3_verification_test PRIVATE blackhole_physics)
 
     # Z3 verification requires OpenGL 4.6 and GLFW
     target_include_directories(z3_verification_test PRIVATE
@@ -4686,7 +5240,7 @@ if(BUILD_TESTING)
       target_compile_definitions(z3_verification_test PRIVATE BLACKHOLE_Z3_AVAILABLE=1)
       message(STATUS "Z3 library found: Z3 constraint proofs enabled")
     else()
-      message(STATUS "Z3 not found: Z3 constraint proofs will be skipped (fallback to numerical verification)")
+      bh_tool_gate(ENABLE_Z3_VERIFICATION "the Z3 solver (conan z3 package)")
     endif()
 
     # Register with CTest
@@ -4741,8 +5295,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/johannsen_psaltis_test.cpp")
     add_executable(johannsen_psaltis_test
       "${PROJECT_SOURCE_DIR}/tests/johannsen_psaltis_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(johannsen_psaltis_test PRIVATE blackhole_physics)
     target_include_directories(johannsen_psaltis_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -4778,8 +5332,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_newman_test.cpp")
     add_executable(kerr_newman_test
       "${PROJECT_SOURCE_DIR}/tests/kerr_newman_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(kerr_newman_test PRIVATE blackhole_physics)
     target_include_directories(kerr_newman_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -4815,8 +5369,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp")
     add_executable(lqg_kerr_test
       "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(lqg_kerr_test PRIVATE blackhole_physics)
     target_include_directories(lqg_kerr_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -4852,8 +5406,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/iron_kline_test.cpp")
     add_executable(iron_kline_test
       "${PROJECT_SOURCE_DIR}/tests/iron_kline_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(iron_kline_test PRIVATE blackhole_physics)
     target_include_directories(iron_kline_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -4941,8 +5495,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/penrose_tov_test.cpp")
     add_executable(penrose_tov_test
       "${PROJECT_SOURCE_DIR}/tests/penrose_tov_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(penrose_tov_test PRIVATE blackhole_physics)
     target_include_directories(penrose_tov_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5024,8 +5578,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp")
     add_executable(symplectic_integrator_test
       "${PROJECT_SOURCE_DIR}/tests/symplectic_integrator_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(symplectic_integrator_test PRIVATE blackhole_physics)
     target_include_directories(symplectic_integrator_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5061,8 +5615,8 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/electron_temperature_test.cpp")
     add_executable(electron_temperature_test
       "${PROJECT_SOURCE_DIR}/tests/electron_temperature_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(electron_temperature_test PRIVATE blackhole_physics)
     target_include_directories(electron_temperature_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5098,8 +5652,8 @@ if(BUILD_TESTING)
   if(CFITSIO_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/tests/fits_writer_test.cpp")
     add_executable(fits_writer_test
       "${PROJECT_SOURCE_DIR}/tests/fits_writer_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(fits_writer_test PRIVATE blackhole_physics)
     target_include_directories(fits_writer_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5140,8 +5694,8 @@ if(BUILD_TESTING)
     find_package(mpfr CONFIG REQUIRED)
     add_executable(precision_regression_test
       "${PROJECT_SOURCE_DIR}/tests/precision_regression_test.cpp"
-      ${PHYSICS_SRC_FILES}
     )
+    target_link_libraries(precision_regression_test PRIVATE blackhole_physics)
     target_include_directories(precision_regression_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -5553,3 +6107,66 @@ message(STATUS "  ENABLE_DOXYGEN:           ${ENABLE_DOXYGEN}")
 message(STATUS "  ENABLE_KTX:               ${ENABLE_KTX}")
 message(STATUS "  ENABLE_OPENIMAGEIO:       ${ENABLE_OPENIMAGEIO}")
 message(STATUS "")
+
+# ============================================================================
+# Test-source completeness gate (silent-absence hardening)
+# ============================================================================
+# Every tests/*.cpp and tests/*.cu on disk must be a source of some target
+# or carry an explicit quarantine entry with a reason. A renamed or newly
+# orphaned test file is a configure error, never a silent coverage loss --
+# seven test sources (including the only shader-parity tests) once sat
+# unbuilt for months because nothing enforced this.
+if(BUILD_TESTING)
+  file(GLOB _bh_test_sources_on_disk RELATIVE "${PROJECT_SOURCE_DIR}"
+    "${PROJECT_SOURCE_DIR}/tests/*.cpp"
+    "${PROJECT_SOURCE_DIR}/tests/*.cu"
+  )
+
+  set(_bh_test_sources_quarantined "")
+  if(NOT ENABLE_PRECISION_TESTS)
+    # Registered only under -DENABLE_PRECISION_TESTS=ON (long-running).
+    list(APPEND _bh_test_sources_quarantined "tests/precision_regression_test.cpp")
+  endif()
+  if(NOT ENABLE_CUDA)
+    # CUDA test sources compile only with -DENABLE_CUDA=ON; without it they
+    # are intentionally absent from the build, not orphaned.
+    foreach(_bh_f IN LISTS _bh_test_sources_on_disk)
+      if(_bh_f MATCHES "^tests/cuda_.*\\.(cu|cpp)$")
+        list(APPEND _bh_test_sources_quarantined "${_bh_f}")
+      endif()
+    endforeach()
+  endif()
+
+  get_property(_bh_all_targets DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    PROPERTY BUILDSYSTEM_TARGETS)
+  set(_bh_registered_test_sources "")
+  foreach(_bh_tgt IN LISTS _bh_all_targets)
+    get_target_property(_bh_srcs "${_bh_tgt}" SOURCES)
+    if(_bh_srcs)
+      foreach(_bh_src IN LISTS _bh_srcs)
+        cmake_path(IS_RELATIVE _bh_src _bh_src_is_rel)
+        if(_bh_src_is_rel)
+          set(_bh_src "${CMAKE_CURRENT_SOURCE_DIR}/${_bh_src}")
+        endif()
+        cmake_path(RELATIVE_PATH _bh_src BASE_DIRECTORY "${PROJECT_SOURCE_DIR}"
+          OUTPUT_VARIABLE _bh_rel)
+        list(APPEND _bh_registered_test_sources "${_bh_rel}")
+      endforeach()
+    endif()
+  endforeach()
+
+  set(_bh_orphans "")
+  foreach(_bh_f IN LISTS _bh_test_sources_on_disk)
+    if(NOT _bh_f IN_LIST _bh_registered_test_sources AND
+       NOT _bh_f IN_LIST _bh_test_sources_quarantined)
+      list(APPEND _bh_orphans "${_bh_f}")
+    endif()
+  endforeach()
+  if(_bh_orphans)
+    message(FATAL_ERROR "Orphaned test sources (no target compiles them): "
+      "${_bh_orphans}. Register each in CMakeLists.txt or add it to the "
+      "quarantine list beside this check with a reason.")
+  endif()
+  list(LENGTH _bh_test_sources_on_disk _bh_test_count)
+  message(STATUS "Test-source completeness: ${_bh_test_count} files on disk, all accounted for")
+endif()

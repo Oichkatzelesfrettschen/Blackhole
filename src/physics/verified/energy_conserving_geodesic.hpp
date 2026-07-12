@@ -146,7 +146,8 @@ struct ConservedQuantities {
  */
 [[nodiscard]] inline double compute_carter_constant(const MetricComponents& g,
                                                      const StateVector& state,
-                                                     double M, double a) noexcept {
+                                                     [[maybe_unused]] double M,
+                                                     double a) noexcept {
     const double sin_theta = std::sin(state.x2);
     const double cos_theta = std::cos(state.x2);
     const double cos2 = cos_theta * cos_theta;
@@ -272,7 +273,7 @@ requires std::invocable<F, StateVector>
 [[nodiscard]] inline StateVector energy_conserving_step(
     F&& f, double h, const StateVector& state,
     const MetricComponents& g, double M, double a,
-    int geodesic_type = 0) noexcept {
+    [[maybe_unused]] int geodesic_type = 0) noexcept {
 
     // 1. Extract initial conserved quantities
     const auto initial_q = extract_conserved_quantities(g, state, M, a);

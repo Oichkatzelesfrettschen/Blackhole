@@ -26,7 +26,7 @@ for your CPU, achieving 2-10x speedup over scalar code for geodesic integration.
 
 ## Performance Characteristics
 
-**Schwarzschild Metric (4000 rays × 2000 steps):**
+**Schwarzschild Metric (4000 rays x 2000 steps):**
 
 | SIMD Tier | Time (ms) | Mrays/s | Speedup | Availability |
 |-----------|-----------|---------|---------|--------------|

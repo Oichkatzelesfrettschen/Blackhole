@@ -1,0 +1,64 @@
+{
+    "version": "0.5",
+    "requires": [
+        "zlib/1.3.2#1cb806da49011867778ffb6ac7190fcb%1777558780.503",
+        "z3/4.15.4#9783fbda3fd4ed1b439949eb12225a3e%1769159700.835",
+        "xtl/0.7.5#4e184038ca5defc4f607fbdabc442c3f%1747056142.823",
+        "xtensor/0.24.7#e45b10d028705a7bada2a38b4f60cf94%1783090450.36",
+        "xsimd/14.0.0#0925747d035b2fd3385bf7940c77c5dd%1768210938.771",
+        "xorg/system#87ea3cbfa907ff490f4ece2f5fa3dbb9%1781197504.821",
+        "taskflow/3.10.0#5e64e911dc5aae9e266b5d04d3ed7a26%1774353946.964",
+        "stb/cci.20240531#ede183dce303916dab0c1b835df3926a%1720366012.336",
+        "spdlog/1.17.0#bcbaaf7147bda6ad24ffbd1ac3d7142c%1767636069.964",
+        "sleef/3.9.0#ec959dbbec0f86e44daa4a8e385cf79e%1766052574.907",
+        "pcg-cpp/cci.20220409#b3c4e07c6ef6c2b5ddf2886f8a637bc7%1684081990.962",
+        "opengl/system#cfcf523b9d2bad75cbf377f56562634c%1762526044.744",
+        "nlohmann_json/3.12.0#2d634ab0ec8d9f56353e5ccef6d6612c%1744735883.94",
+        "mpfr/4.2.2#b355e4654d6aefb35ce6bc8ce10acfce%1758013187.243",
+        "meshoptimizer/1.0#7f529e7abd38fe6534c9ad45ce661d18%1767371646.698",
+        "libbacktrace/cci.20210118#a7691bfccd8caaf66309df196790a5a1%1722218217.276",
+        "imguizmo/cci.20231114#b8abc8af92e265de79496b2f6be82dbb%1713690619.279",
+        "imgui/1.92.5-docking#76d333f46f1b8b67a4818b0c38ebdcdd%1783643052.580131",
+        "highway/1.4.0#96e316cc0703d31a89fa299e24228050%1777987748.939",
+        "highfive/3.1.1#d0c724526ebc8ce396ffa1bf7f3c7b64%1756911041.2",
+        "hdf5/1.14.6#df3b3e098da82f5582509e960eb5d1d3%1769103005.646",
+        "gtest/1.17.0#5224b3b3ff3b4ce1133cbdd27d53ee7d%1755784855.585",
+        "gmp/6.3.0#187de23af494e24e69bf9dfc1966a60d%1762267612.152",
+        "glm/1.0.1#c0f71fade2e9abf19fba94615b2243ae%1781764384.671",
+        "glfw/3.4#41cc24c744dc4c80571f5dd10dcd9cda%1732635892.515",
+        "glbinding/3.5.0#4f21507c2ff2e592eb55d4139835bfb6%1762981643.39",
+        "fmt/12.1.0#50abab23274d56bb8f42c94b3b9a40c7%1761885265.231",
+        "flatbuffers/25.9.23#f7756a957848ee87fc4f5c8b5c14fd90%1762419197.476",
+        "fastnoise2/0.10.0-alpha#374cc77e411cea41630c9989a2d70cec%1696769067.492",
+        "entt/3.16.0#d7b346642d082951acb5e274a5de1e3c%1767613828.865",
+        "eigen/3.4.1#3c917c53a3a43fe6ecaa5a985f5900c8%1782832370.398",
+        "cli11/2.6.0#41e625280f9c960e9970c1dc7d2c97b8%1761229555.551",
+        "bzip2/1.0.8#c470882369c2d95c5c77e970c0c7e321%1762886692.465",
+        "boost/1.90.0#cd8d6667856c182d561afc841f1a8252%1783338727.082"
+    ],
+    "build_requires": [
+        "m4/1.4.19#34c4bbc3eeebe98ca6edf2f52d602e7d%1777282960.259",
+        "cmake/4.3.3#840cf00ea09777e05c2050a50a82c722%1781521538.233",
+        "cmake/3.31.12#173a926abc2b77f03c826b6fd6539426%1779785723.158",
+        "b2/5.5.1#64d533c0c55f96a91011f77fd2900b45%1783557339.429"
+    ],
+    "python_requires": [],
+    "overrides": {
+        "imgui/1.90.5": [
+            "imgui/1.92.5-docking"
+        ],
+        "hdf5/1.14.3": [
+            "hdf5/1.14.6"
+        ],
+        "nlohmann_json/3.11.3": [
+            "nlohmann_json/3.12.0"
+        ],
+        "xsimd/13.0.0": [
+            "xsimd/14.0.0"
+        ],
+        "fmt/12.1.0": [
+            "fmt/12.1.0"
+        ]
+    },
+    "config_requires": []
+}

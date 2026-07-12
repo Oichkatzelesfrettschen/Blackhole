@@ -10,7 +10,7 @@
 #ifndef BLACKHOLE_CUDA_KERNEL_LAUNCH_H
 #define BLACKHOLE_CUDA_KERNEL_LAUNCH_H
 
-/* NOLINTBEGIN(readability-identifier-naming,cppcoreguidelines-use-enum-class,modernize-redundant-void-arg)
+/* NOLINTBEGIN(readability-identifier-naming,cppcoreguidelines-use-enum-class,modernize-redundant-void-arg,cppcoreguidelines-macro-usage)
  * WHY: This is a C-compatible POD firewall header. All naming follows C
  * conventions intentionally (BH_ prefix, snake_case members, plain enum).
  * nvcc C++17 cannot see C++23 STL; no std:: types, no enum class, no (). */
@@ -111,9 +111,52 @@ struct BH_LaunchParams {
 
     /* Disk brightness (matches GLSL adiskLit uniform).
      * WHY: GLSL interop_trace.glsl uses flux*2.0 as base; adisk_lit multiplies that.
+     * ABI note: BH_LaunchParams crosses the host-compiler/nvcc boundary by
+     * value; bh_device_launch_params_abi() exports the nvcc-side layout so
+     * cuda_kernel_launch_test can assert both compilers agree. Fields probed
+     * for offset agreement are listed in BH_LAUNCH_PARAMS_ABI_FIELDS below.
      * 1.0 = GLSL default brightness (flux*2.0). 0.35 = cinematic record setting. */
     float adisk_lit;
 };
+
+/**
+ * @brief Field list probed for host/device ABI agreement.
+ *
+ * BH_LaunchParams is defined once in this header, but the host compiler
+ * and nvcc each compute its layout independently; a flag divergence
+ * (packing, alignment) would corrupt every kernel parameter silently.
+ * bh_device_launch_params_abi() fills offsets for this list as nvcc
+ * sees them, and the host-side test compares against its own offsetof.
+ * The list carries no hand-written offsets, so adding struct fields
+ * never rots it; extend it when adding a field starts a new alignment
+ * category. Order here defines the array order in BH_LaunchParamsAbi.
+ */
+#define BH_LAUNCH_PARAMS_ABI_FIELDS(X)                                       \
+    X(rs)                                                                    \
+    X(cam_pos)                                                               \
+    X(cam_basis)                                                             \
+    X(frame_shift_x)                                                        \
+    X(max_steps)                                                             \
+    X(use_luts)                                                              \
+    X(time_sec)                                                              \
+    X(grmhd_alpha)                                                           \
+    X(stokes_enabled)                                                        \
+    X(adisk_lit)
+
+/** @brief nvcc-side layout report for BH_LaunchParams. */
+struct BH_LaunchParamsAbi {
+    unsigned long long size;        /**< @brief sizeof as nvcc computes it. */
+    unsigned long long offsets[10]; /**< @brief offsetof per ABI field, list order. */
+};
+
+/**
+ * @brief Report sizeof/offsetof of BH_LaunchParams as compiled by nvcc.
+ *
+ * Implemented in kernel_launch.cu so the values come from the device
+ * toolchain; host code comparing against its own offsetof detects any
+ * cross-compiler layout divergence.
+ */
+struct BH_LaunchParamsAbi bh_device_launch_params_abi(void);
 
 /**
  * @brief Kernel variant selection.
@@ -193,6 +236,6 @@ void bh_upload_bridge_background_texture(unsigned long long background_equirect)
 }
 #endif
 
-// NOLINTEND(readability-identifier-naming,cppcoreguidelines-use-enum-class,modernize-redundant-void-arg)
+// NOLINTEND(readability-identifier-naming,cppcoreguidelines-use-enum-class,modernize-redundant-void-arg,cppcoreguidelines-macro-usage)
 
 #endif /* BLACKHOLE_CUDA_KERNEL_LAUNCH_H */

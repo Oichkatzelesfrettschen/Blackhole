@@ -6,6 +6,7 @@ assets/backgrounds/jwst/*.jpg filter=lfs diff=lfs merge=lfs -text
 assets/skybox_*/*.png filter=lfs diff=lfs merge=lfs -text
 assets/skybox_*/*.jpg filter=lfs diff=lfs merge=lfs -text
 *.blend filter=lfs diff=lfs merge=lfs -text
-minix318-active-merge-state-20260521/** -diff
-openmach-lites-header-stubs-20260521/** -diff
-v7x86-32-vendor-subprojects-20260521/** -diff
+tools/gcovr/*.tar.gz filter=lfs diff=lfs merge=lfs -text
+assets/backgrounds/source/carina-cosmic-cliffs-4k.jpg !text !filter !merge !diff
+assets/backgrounds/source/carina-cosmic-cliffs-2k.jpg !text !filter !merge !diff
+tools/gcovr/gcovr-python-8.4-vendored-source.tar.gz !text !filter !merge !diff

@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Comprehensive `shader/README.md` documenting C++23 to GLSL transpilation patterns
 - Complete shader validation infrastructure (21 shaders: 14 fragment, 5 vertex, 2 compute)
-- Documentation of reserved keyword issues (`lambda` → `affine_param`)
+- Documentation of reserved keyword issues (`lambda` -> `affine_param`)
 - Include order dependency guidelines for verified physics modules
 
 ### Fixed
@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clang -Werror compatibility: All compilation warnings resolved
 
 ### Changed
-- Consolidated shader validation todos (11 items → 2 final items)
+- Consolidated shader validation todos (11 items -> 2 final items)
 - Updated todo list structure for Phase 10.1+ work
 
 ### Known Issues
@@ -58,8 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI Integration**: ImGui controls
   - Enable/disable checkbox
   - Preset selector (Physical/Primordial/Extreme)
-  - Temperature scale slider (logarithmic, 1.0–1×10⁹)
-  - Intensity slider (0.0–5.0)
+  - Temperature scale slider (logarithmic, 1.0-1x10^9)
+  - Intensity slider (0.0-5.0)
   - LUT toggle (precomputed vs direct calculation)
 
 ### Fixed
@@ -67,10 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validated
 - **Physics Accuracy**:
-  - Solar mass temperature: 6.17×10⁻⁸ K (±0.4% accuracy) ✓
-  - Inverse mass law: T_H ∝ 1/M (exact) ✓
-  - Wien's displacement: λ_peak × T = 0.2898 cm·K (exact) ✓
-  - Stefan-Boltzmann: L ∝ T⁴ (0.001% accuracy) ✓
+  - Solar mass temperature: 6.17x10^-8 K (+/-0.4% accuracy) yes
+  - Inverse mass law: T_H ~ 1/M (exact) yes
+  - Wien's displacement: lambda_peak x T = 0.2898 cm*K (exact) yes
+  - Stefan-Boltzmann: L ~ T^4 (0.001% accuracy) yes
 - **Test Coverage**: 13 unit tests (100% pass rate)
   - `hawking_glow_test`: 5/5 tests PASSED
   - `hawking_spectrum_test`: 8/8 tests PASSED
@@ -116,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Phase 6] - 2025-11 - C++23 Verified Physics Extraction
 
 ### Added
-- **Rocq Pipeline**: Rocq 9.1+ → OCaml → C++23 → GLSL 4.60
+- **Rocq Pipeline**: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
 - Verified physics modules in `src/physics/verified/`:
   - `rk4.hpp` - 4th-order Runge-Kutta integration
   - `geodesic.hpp` - Geodesic equation RHS from Christoffel symbols
@@ -140,7 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - SLEEF integration for vectorized transcendental functions (commit 57d97df)
-- Tiered SIMD dispatch (AVX512 → AVX2 → SSE4.2 → scalar fallback)
+- Tiered SIMD dispatch (AVX512 -> AVX2 -> SSE4.2 -> scalar fallback)
 - Physics benchmarking with SIMD variants
 
 ### Features
@@ -241,23 +241,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Phase | Date | Description | Status |
 |-------|------|-------------|--------|
-| **Unreleased** | 2026-01-15 | Shader validation + transpilation docs | ✅ Complete |
-| **Phase 10.1** | 2026-01-02 | Hawking radiation thermal glow | ✅ Complete |
-| **Phase 8.2** | 2025-12 | GPU shader optimizations | ✅ Complete |
-| **Phase 7** | 2025-11 | TLA+/Z3 verification | ✅ Complete |
-| **Phase 6** | 2025-11 | Verified physics extraction (Rocq) | ✅ Complete |
-| **Phase 5** | 2025-10 | SIMD integration (SLEEF) | ✅ Complete |
-| **Phase 4** | 2025-09 | Visual enhancements | ✅ Complete |
-| **Phase 3** | 2025-08 | Asset pipeline | ✅ Complete |
-| **Phase 2** | 2025-07 | Rendering pipeline (bloom, tonemapping) | ✅ Complete |
-| **Phase 1** | 2025-06 | Core geodesic ray tracing | ✅ Complete |
-| **Phase 0** | 2025-05 | Project bootstrap | ✅ Complete |
+| **Unreleased** | 2026-01-15 | Shader validation + transpilation docs | [done] Complete |
+| **Phase 10.1** | 2026-01-02 | Hawking radiation thermal glow | [done] Complete |
+| **Phase 8.2** | 2025-12 | GPU shader optimizations | [done] Complete |
+| **Phase 7** | 2025-11 | TLA+/Z3 verification | [done] Complete |
+| **Phase 6** | 2025-11 | Verified physics extraction (Rocq) | [done] Complete |
+| **Phase 5** | 2025-10 | SIMD integration (SLEEF) | [done] Complete |
+| **Phase 4** | 2025-09 | Visual enhancements | [done] Complete |
+| **Phase 3** | 2025-08 | Asset pipeline | [done] Complete |
+| **Phase 2** | 2025-07 | Rendering pipeline (bloom, tonemapping) | [done] Complete |
+| **Phase 1** | 2025-06 | Core geodesic ray tracing | [done] Complete |
+| **Phase 0** | 2025-05 | Project bootstrap | [done] Complete |
 
 ---
 
 ## Roadmap Forward
 
-See `docs/MASTER_ROADMAP.md` for detailed future phases:
+See `docs/developer-guide/roadmap.md` for detailed future phases:
 
 ### Phase 11: SPIR-V Backend (Q2 2026)
 - Vulkan 1.3 compute shader integration
@@ -266,7 +266,7 @@ See `docs/MASTER_ROADMAP.md` for detailed future phases:
 
 ### Phase 12: Adaptive Stepping (Q2 2026)
 - Dynamic step size control based on Hamiltonian drift
-- Maintain O(h⁴) accuracy with fewer steps in flat regions
+- Maintain O(h^4) accuracy with fewer steps in flat regions
 
 ### Phase 13: Kerr-Newman (Q3 2026)
 - Charged rotating black hole visualization

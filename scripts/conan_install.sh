@@ -128,9 +128,18 @@ fi
 
 if (( CONAN_MAJOR >= 2 )); then
   echo "Using Conan ${CONAN_VER_STR} (2.x+) -- installing in ${OUTPUT_DIR_REL}"
+  LOCKFILE_ARGS=()
+  if [[ -f "${ROOT}/conan.lock" && -z "${CONAN_INSTALL_NO_LOCKFILE:-}" ]]; then
+    # Pin transitive revisions so two installs of one commit resolve
+    # identically; export CONAN_INSTALL_NO_LOCKFILE=1 to bypass while
+    # deliberately changing dependencies (then regenerate conan.lock).
+    LOCKFILE_ARGS=(--lockfile="${ROOT}/conan.lock")
+    echo "Using conan.lock (CONAN_INSTALL_NO_LOCKFILE=1 bypasses)"
+  fi
   conan install "${ROOT}" \
     --output-folder="${OUTPUT_DIR}" \
     --build="${BUILD_POLICY}" \
+    "${LOCKFILE_ARGS[@]}" \
     -s build_type="${BUILD_TYPE}" \
     -s compiler.cppstd=23 \
     -s:b build_type="${BUILD_TYPE}" \

@@ -12,13 +12,15 @@ post-processing, and LUT-backed validation assets.
 ## Project Structure & Module Organization
 - `src/` (runtime + physics), `shader/` (GLSL 460), `assets/` (LUTs/validation).
 - `bench/`, `tests/`, `tools/`: perf harness, test binaries, data utilities.
-- `docs/`: integration plans and research notes; `requirements.md` is dependency truth.
+- `docs/`: integration plans and research notes; `docs/developer-guide/dependencies.md` is dependency truth.
 - `conan/recipes/` + `scripts/`: local Conan recipes and helper scripts.
+- `external/`: vendored third-party sources (ImPlot via `scripts/fetch_implot.sh`, ImGui backends, GL debug callback).
 
 ## Build, Test, and Development Commands
 Use repo-local Conan state (`.conan/`) for reproducible builds:
 ```bash
 ./scripts/conan_install.sh Release build
+./scripts/fetch_implot.sh
 cmake --preset release
 cmake --build --preset release
 ctest --test-dir build/Release --output-on-failure

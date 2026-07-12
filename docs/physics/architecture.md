@@ -15,12 +15,12 @@ tests and code, use [Claims And Evidence](claims-evidence.md).
 - **openuniverse:** Modular physics engine with TOV stellar structure, EOS flexibility, Monte Carlo transport, and 31 specialized submodules
 
 **Primary Physics Lacunae** (both systems):
-1. General Relativistic Magnetohydrodynamics (GRMHD) ← **Critical gap**
+1. General Relativistic Magnetohydrodynamics (GRMHD) <- **Critical gap**
 2. Full radiative transfer with absorption/scattering
 3. Gravitational wave generation and propagation
 4. Quantum gravity corrections (loop quantum gravity, semi-classical effects)
 5. Particle acceleration mechanisms (shock heating, magnetic reconnection)
-6. Coupled thermodynamic feedback (accretion rate → BH mass evolution)
+6. Coupled thermodynamic feedback (accretion rate -> BH mass evolution)
 
 **Integration Opportunity:** Use openuniverse's TOV/EOS infrastructure as foundation for Blackhole's accretion physics while leveraging Blackhole's GPU geodesic code for openuniverse's visualization layer.
 
@@ -41,17 +41,17 @@ The 2024 EHT observations of M87* and Sgr A* + 2015-2024 LIGO detections (GW1509
 - EHT Collaboration (2025): "Strong lensing by quantum-corrected black holes constrained by EHT observations"
 
 **What Works:**
-✓ Schwarzschild metric (non-rotating BHs) — exact, verified to < 5% precision in shadows
-✓ Kerr metric (rotating BHs) — tested via spin measurements from GW waveforms (spins 0.2-0.7)
-✓ Photon sphere & critical impact parameter — visible as bright "photon ring"
-✓ Relativistic Doppler beaming — explains jets, accretion flares
-✓ Gravitational redshift — measurable in disk spectra
+yes Schwarzschild metric (non-rotating BHs) -- exact, verified to < 5% precision in shadows
+yes Kerr metric (rotating BHs) -- tested via spin measurements from GW waveforms (spins 0.2-0.7)
+yes Photon sphere & critical impact parameter -- visible as bright "photon ring"
+yes Relativistic Doppler beaming -- explains jets, accretion flares
+yes Gravitational redshift -- measurable in disk spectra
 
 **What's Uncertain/Incomplete:**
-✗ Quantum corrections near r ~ l_P (Planck scale) — inaccessible at astrophysical scales
-✗ Hawking radiation — undetected (expected T_H ~ 10⁻⁸ K for solar mass BHs)
-✗ Information paradox — **still open** despite recent AdS/CFT progress
-✗ Black hole thermodynamics — S = A/(4l_P²) tested only on micro BHs (lab analogues)
+no Quantum corrections near r ~ l_P (Planck scale) -- inaccessible at astrophysical scales
+no Hawking radiation -- undetected (expected T_H ~ 10^-8 K for solar mass BHs)
+no Information paradox -- **still open** despite recent AdS/CFT progress
+no Black hole thermodynamics -- S = A/(4l_P^2) tested only on micro BHs (lab analogues)
 
 ---
 
@@ -59,9 +59,9 @@ The 2024 EHT observations of M87* and Sgr A* + 2015-2024 LIGO detections (GW1509
 
 **Implemented (openuniverse/Blackhole):**
 - Novikov-Thorne thin disk (Page & Thorne 1974)
-  - Radiative flux F(r) ∝ Ṁ(1 - √(r_ISCO/r))
-  - Temperature profile T(r) ∝ (Ṁ/r³)^(1/4)
-  - Radiative efficiency η(a*) from 5.7% (Schwarzschild) to 42% (extremal Kerr)
+  - Radiative flux F(r) ~ Mdot(1 - sqrt(r_ISCO/r))
+  - Temperature profile T(r) ~ (Mdot/r^3)^(1/4)
+  - Radiative efficiency eta(a*) from 5.7% (Schwarzschild) to 42% (extremal Kerr)
 - Optically thick assumptions (blackbody emission)
 - Doppler + gravitational redshift factors applied
 
@@ -69,13 +69,13 @@ The 2024 EHT observations of M87* and Sgr A* + 2015-2024 LIGO detections (GW1509
 
 | Gap | Impact | Why Missing |
 |-----|--------|------------|
-| **GRMHD coupling** | Very High | Requires full 3D MHD solver (GRMHD codes: GENOS, HARM3D, KORAL — 100k+ LOC) |
-| **Magnetorotational instability (MRI)** | High | Turbulence, viscosity α ≈ 0.1, angular momentum transport — needs simulation |
+| **GRMHD coupling** | Very High | Requires full 3D MHD solver (GRMHD codes: GENOS, HARM3D, KORAL -- 100k+ LOC) |
+| **Magnetorotational instability (MRI)** | High | Turbulence, viscosity alpha ~= 0.1, angular momentum transport -- needs simulation |
 | **Radiative transfer equation** | High | Non-local opacity, angle-dependent, strongly scattered photons |
-| **Thermal/dynamical instabilities** | Medium | Disk heating/cooling cycles → truncation, outbursts (accretion instability) |
+| **Thermal/dynamical instabilities** | Medium | Disk heating/cooling cycles -> truncation, outbursts (accretion instability) |
 | **Compton scattering** | Medium | Hot corona above disk, inverse-Compton flux hardening |
 | **Dust grain physics** | Low | Mie scattering, sublimation at T > 1500 K, extinction curves |
-| **Relativistic radiation pressure** | Medium | Accretion becomes radiation-dominated at high Ṁ; P_rad ∝ T⁴ feedback |
+| **Relativistic radiation pressure** | Medium | Accretion becomes radiation-dominated at high Mdot; P_rad ~ T^4 feedback |
 
 **State-of-art (Recent Papers 2024-2025):**
 
@@ -92,27 +92,27 @@ The 2024 EHT observations of M87* and Sgr A* + 2015-2024 LIGO detections (GW1509
 **Current Understanding (2025):**
 
 **Hawking Radiation:**
-- Temperature: T_H = (ℏc³)/(8πGMk_B) ~ 6.2×10⁻⁸ K (1 M_☉)
-- Luminosity: L_H = ℏc⁶/(15360πG²M²) ~ 10⁻²⁷ erg/s (1 M_☉)
-- Evaporation time: t_evap ~ 10⁶⁷ years (1 M_☉) >> age of universe
-- **Verdict:** Undetectable for astrophysical BHs; observable only for primordial BHs (M ~ 10¹⁵ g)
+- Temperature: T_H = (hbarc^3)/(8piGMk_B) ~ 6.2x10^-8 K (1 M_sun)
+- Luminosity: L_H = hbarc^6/(15360piG^2M^2) ~ 10^-27 erg/s (1 M_sun)
+- Evaporation time: t_evap ~ 10^67 years (1 M_sun) >> age of universe
+- **Verdict:** Undetectable for astrophysical BHs; observable only for primordial BHs (M ~ 10^15 g)
 
-**Information Paradox — Recent Progress (2024-2025):**
+**Information Paradox -- Recent Progress (2024-2025):**
 
 [The Information Loss Problem and Hawking Radiation as Tunneling (2024)](https://pmc.ncbi.nlm.nih.gov/articles/PMC11854280/): Tunneling interpretation (WKB methods) shows Hawking radiation carries detailed information about interior via quantum correlations; entropy follows Page curve in AdS/CFT.
 
 **Key References:**
-- Almheiri et al. (2020): Islands in evaporating black holes → Page curve recovery
-- Penington (2020): Gravitational subsystems → entropy calculations
-- Miranda Trindade (2025): "Modifications to Hawking Radiation: Scalar Field Effects" — quantum fields modify T_H by ~10-30% depending on spin
+- Almheiri et al. (2020): Islands in evaporating black holes -> Page curve recovery
+- Penington (2020): Gravitational subsystems -> entropy calculations
+- Miranda Trindade (2025): "Modifications to Hawking Radiation: Scalar Field Effects" -- quantum fields modify T_H by ~10-30% depending on spin
 
 **What's Unclear:**
-✗ Primordial black hole population (never definitively detected)
-✗ Planck-scale physics (expected at T_H ~ 10³² K for 10¹⁶ g BH)
-✗ Quantum hair / no-hair theorem loopholes
+no Primordial black hole population (never definitively detected)
+no Planck-scale physics (expected at T_H ~ 10^32 K for 10^16 g BH)
+no Quantum hair / no-hair theorem loopholes
 
 **Practical Implementation Status:**
-- Blackhole has `hawking.h` header with all formulas → **not integrated into rendering**
+- Blackhole has `hawking.h` header with all formulas -> **not integrated into rendering**
 - openuniverse-compact has no Hawking module
 - Temperature profile exists but decoupled from thermodynamic feedback
 
@@ -126,12 +126,12 @@ Recent papers ([LQG lensing constraints](https://arxiv.org/html/2511.17975v1), [
 
 **Models Tested:**
 1. **Frolov regular black hole** (singularity-free, GUP-inspired)
-   - Metric: ds² = -(1-r_s/r)f(r)c²dt² + ...
-   - Parameter space: f(r) correction → shadow size constrained by EHT
+   - Metric: ds^2 = -(1-r_s/r)f(r)c^2dt^2 + ...
+   - Parameter space: f(r) correction -> shadow size constrained by EHT
 
 2. **Loop quantum gravity (LQG) corrections**
    - Discretized spacetime at l_P
-   - Effective metric: g_μν → g_μν + δg_μν(l_P)
+   - Effective metric: g_munu -> g_munu + deltag_munu(l_P)
    - Shadow size, photon orbit radius modified by ~ 1-5%
 
 3. **String theory black holes** (7D Kaluza-Klein compactification)
@@ -150,11 +150,11 @@ Recent papers ([LQG lensing constraints](https://arxiv.org/html/2511.17975v1), [
 
 ### A. CRITICAL PHYSICS LACUNAE (Both Systems)
 
-#### **1. General Relativistic Magnetohydrodynamics (GRMHD) [⭐⭐⭐ CRITICAL]**
+#### **1. General Relativistic Magnetohydrodynamics (GRMHD) [*** CRITICAL]**
 
 **Why It Matters:**
 - Accretion disks are **magnetized plasmas** (B-field coupling)
-- MRI (magnetorotational instability) drives turbulent viscosity α ~ 0.1
+- MRI (magnetorotational instability) drives turbulent viscosity alpha ~ 0.1
 - Large-scale dynamo generates jets (Blandford-Znajek mechanism)
 - Without GRMHD: all accretion models are **unphysical approximations**
 
@@ -169,7 +169,7 @@ Recent papers ([LQG lensing constraints](https://arxiv.org/html/2511.17975v1), [
 - **Timeline:** 2-4 weeks for prototype; months for production
 
 **Research State:**
-- [Dynamo and Jet Interconnections in GRMHD](https://arxiv.org/html/2512.02129): Latest understanding of how toroidal B → poloidal B (jet launching)
+- [Dynamo and Jet Interconnections in GRMHD](https://arxiv.org/html/2512.02129): Latest understanding of how toroidal B -> poloidal B (jet launching)
 - GRMHD codes mature (GENOS/HARM3D > 10 years development)
 - Cloud HPC cost: ~$5k-10k per full 3D parameter space exploration
 
@@ -177,8 +177,8 @@ Recent papers ([LQG lensing constraints](https://arxiv.org/html/2511.17975v1), [
 ```cpp
 // Hypothetical integration point
 namespace openuniverse::grmhd {
-  class ConservativeVars { // {ρ, u^μ, b^μ, e}
-    double rho, utμ[4], btμ[4], energy;
+  class ConservativeVars { // {rho, u^mu, b^mu, e}
+    double rho, utmu[4], btmu[4], energy;
   };
 
   class GRMHDSolver {
@@ -195,23 +195,23 @@ namespace openuniverse::grmhd {
 
 ---
 
-#### **2. Radiative Transfer & Absorption [⭐⭐⭐ HIGH]**
+#### **2. Radiative Transfer & Absorption [*** HIGH]**
 
 **Why It Matters:**
-- 70% of gravitational binding energy → radiation (not kinetic)
+- 70% of gravitational binding energy -> radiation (not kinetic)
 - X-ray/UV absorption shapes observed spectra
-- Line formation (Fe Kα @ 6.4 keV) crucial for diagnostics
+- Line formation (Fe Kalpha @ 6.4 keV) crucial for diagnostics
 - Compton scattering (corona) hardens low-energy photons
 
 **Current Implementation:**
 - Blackhole: **None** (accretion disk uses blackbody temperature; no photon paths)
-- openuniverse: Skeleton via `tardis` adapter (supernova radiative transfer) — **not wired to compact domain**
+- openuniverse: Skeleton via `tardis` adapter (supernova radiative transfer) -- **not wired to compact domain**
 
 **Missing:**
-✗ Radiative transfer equation: ∂I_ν/∂τ_ν + μ ∂I_ν/∂z = (j_ν - α_ν I_ν)
-✗ Opacity tables (absorption + scattering cross-sections)
-✗ Line formation (Stark broadening, natural width, Doppler shift)
-✗ Angle-dependent radiative pressure feedback
+no Radiative transfer equation: dI_nu/dtau_nu + mu dI_nu/dz = (j_nu - alpha_nu I_nu)
+no Opacity tables (absorption + scattering cross-sections)
+no Line formation (Stark broadening, natural width, Doppler shift)
+no Angle-dependent radiative pressure feedback
 
 **Research State:**
 - TARDIS (supernova context) solves this via Monte Carlo
@@ -222,23 +222,23 @@ namespace openuniverse::grmhd {
 
 ---
 
-#### **3. Gravitational Wave Emission [⭐⭐⭐ HIGH]**
+#### **3. Gravitational Wave Emission [*** HIGH]**
 
 **Why It Matters:**
-- Binary black holes → 10% energy loss via GW (LIGO signature)
-- Single BH accretion → low-frequency GW (LISA target, 2030s)
-- Tidal disruption events (TDE) → GW bursts
+- Binary black holes -> 10% energy loss via GW (LIGO signature)
+- Single BH accretion -> low-frequency GW (LISA target, 2030s)
+- Tidal disruption events (TDE) -> GW bursts
 - LIGO/Virgo/LISA provide independent mass/spin constraints
 
 **Current Implementation:**
-- Blackhole: **Stub header** (`gravitational_waves.h`) — **not implemented**
+- Blackhole: **Stub header** (`gravitational_waves.h`) -- **not implemented**
 - openuniverse: **None**
 
 **What Would Be Needed:**
-✗ Quadrupole formula (Einstein 1918): h_ij = (2G/c⁴r) d²Q_ij/dt²
-✗ Binary BH inspiral waveforms (PN vs numerical relativity)
-✗ Ringdown (QNM) after merger
-✗ Spin effects (final BH spin from merger remnant)
+no Quadrupole formula (Einstein 1918): h_ij = (2G/c^4r) d^2Q_ij/dt^2
+no Binary BH inspiral waveforms (PN vs numerical relativity)
+no Ringdown (QNM) after merger
+no Spin effects (final BH spin from merger remnant)
 
 **Production Codes:** SpEC (Caltech), GRMHD + GRAGE (wave extraction)
 
@@ -246,23 +246,23 @@ namespace openuniverse::grmhd {
 
 ---
 
-#### **4. Particle Acceleration & Jet Physics [⭐⭐⭐ HIGH]**
+#### **4. Particle Acceleration & Jet Physics [*** HIGH]**
 
 **Why It Matters:**
-- Jets reach v ~ 0.99c, emit 10⁴⁵-10⁴⁶ erg/s (outshine entire galaxy)
-- Synchrotron radiation is primary high-energy channel (X-ray → γ-ray)
+- Jets reach v ~ 0.99c, emit 10^45-10^46 erg/s (outshine entire galaxy)
+- Synchrotron radiation is primary high-energy channel (X-ray -> gamma-ray)
 - Magnetic reconnection accelerates electrons to 1 GeV+
 - GRBs & AGN jets trace accretion state
 
 **Current Implementation:**
-- Blackhole: Has `synchrotron.h` with spectrum formulas — **not wired to GPU raytracer**
+- Blackhole: Has `synchrotron.h` with spectrum formulas -- **not wired to GPU raytracer**
 - openuniverse: Has GRB models (ASGARD, boxfit); **no jet MHD coupling**
 
 **Missing:**
-✗ Magnetic reconnection algorithm (plasmoid instability)
-✗ Stochastic acceleration (turbulent diffusion in E-space)
-✗ Shock heating (Fermi mechanism)
-✗ Feedback on accretion state
+no Magnetic reconnection algorithm (plasmoid instability)
+no Stochastic acceleration (turbulent diffusion in E-space)
+no Shock heating (Fermi mechanism)
+no Feedback on accretion state
 
 **Research State:**
 - Zhdankin et al. (2018+): Relativistic reconnection simulations (PLUTO code)
@@ -273,17 +273,17 @@ namespace openuniverse::grmhd {
 
 ---
 
-#### **5. Equation of State: Nuclear Matter [⭐⭐ MEDIUM]**
+#### **5. Equation of State: Nuclear Matter [** MEDIUM]**
 
 **Current State:**
 - openuniverse-compact has **flexible EOS framework** (Polytrope, Fermi, SigmaOmega, Tabulated)
 - Blackhole **ignores** neutron star physics (focuses on BH)
 
 **What's Missing:**
-✗ Modern EOS tables (SLy4, APR4, DD2) → openuniverse as reference
-✗ Phase transitions (quark matter at high density)
-✗ Thermal effects (T > 0) in TOV equations
-✗ Hyperons (Λ, Σ) and strangeness softening puzzle
+no Modern EOS tables (SLy4, APR4, DD2) -> openuniverse as reference
+no Phase transitions (quark matter at high density)
+no Thermal effects (T > 0) in TOV equations
+no Hyperons (Lambda, Sigma) and strangeness softening puzzle
 
 **Integration Opportunity:**
 - Reuse openuniverse-compact EOS infrastructure in Blackhole for neutron star disk accretion scenarios
@@ -295,16 +295,16 @@ namespace openuniverse::grmhd {
 
 | File | Complete? | Issue | Priority |
 |------|-----------|-------|----------|
-| **Schwarzschild** | ✓ 100% | None — validated against EHT | ✓ Ready |
-| **Kerr** | ✓ 95% | GPU integration incomplete; CPU 100% | Medium |
-| **Geodesics** | ✓ 95% | CPU RK4 works; GPU Euler sufficient for viz | Ready |
-| **Accretion Disk** | ✓ 50% | Procedural noise only; no radiative transfer | High |
-| **Synchrotron** | ✓ 30% | Header formulas present; not called in main | Medium |
-| **Hawking Radiation** | ✓ 30% | Formulas complete; no thermodynamic coupling | Low (astro scales) |
-| **Relativistic Jets** | ✗ 0% | No jet physics; no MHD | Critical |
-| **GRMHD** | ✗ 0% | Absent entirely | Critical |
-| **Radiative Transfer** | ✗ 0% | Absent entirely | Critical |
-| **Gravitational Waves** | ✗ 0% | Stub only | High (LIGO era) |
+| **Schwarzschild** | yes 100% | None -- validated against EHT | yes Ready |
+| **Kerr** | yes 95% | GPU integration incomplete; CPU 100% | Medium |
+| **Geodesics** | yes 95% | CPU RK4 works; GPU Euler sufficient for viz | Ready |
+| **Accretion Disk** | yes 50% | Procedural noise only; no radiative transfer | High |
+| **Synchrotron** | yes 30% | Header formulas present; not called in main | Medium |
+| **Hawking Radiation** | yes 30% | Formulas complete; no thermodynamic coupling | Low (astro scales) |
+| **Relativistic Jets** | no 0% | No jet physics; no MHD | Critical |
+| **GRMHD** | no 0% | Absent entirely | Critical |
+| **Radiative Transfer** | no 0% | Absent entirely | Critical |
+| **Gravitational Waves** | no 0% | Stub only | High (LIGO era) |
 
 ---
 
@@ -355,23 +355,23 @@ public:
 
 | Topic | Author | Year | DOI/arXiv | Key Equation |
 |-------|--------|------|-----------|--------------|
-| **Schwarzschild Metric** | Schwarzschild | 1916 | Classic | ds² = -(1-r_s/r)c²dt² + ... |
+| **Schwarzschild Metric** | Schwarzschild | 1916 | Classic | ds^2 = -(1-r_s/r)c^2dt^2 + ... |
 | **Kerr Metric** | Kerr | 1963 | *Phys. Rev. Lett.* 11(5) | Full rotating BH solution |
 | **Null Geodesics** | Darwin | 1959 | *Proc. R. Soc.* 249 | Impact parameter formalism |
-| **Novikov-Thorne Disk** | Novikov & Thorne | 1973 | "Black Holes" (Dewitt ed.) | F(r) = 3GMṀ/(8πr³) [1-√(...)] |
-| **Accretion Instability** | Shakura & Sunyaev | 1973 | *Astron. Astrophys.* 24 | α-viscosity model |
-| **Synchrotron Radiation** | Rybicki & Lightman | 1979 | *Radiative Processes* (Wiley) | P(ν) via Bessel K functions |
-| **Hawking Radiation** | Hawking | 1974 | *Nature* 248, 30-31 | T_H = ℏc³/(8πGMk_B) |
-| **Bekenstein Entropy** | Bekenstein | 1973 | *Phys. Rev. D* 7, 2333 | S = A/(4l_P²) |
+| **Novikov-Thorne Disk** | Novikov & Thorne | 1973 | "Black Holes" (Dewitt ed.) | F(r) = 3GMMdot/(8pir^3) [1-sqrt(...)] |
+| **Accretion Instability** | Shakura & Sunyaev | 1973 | *Astron. Astrophys.* 24 | alpha-viscosity model |
+| **Synchrotron Radiation** | Rybicki & Lightman | 1979 | *Radiative Processes* (Wiley) | P(nu) via Bessel K functions |
+| **Hawking Radiation** | Hawking | 1974 | *Nature* 248, 30-31 | T_H = hbarc^3/(8piGMk_B) |
+| **Bekenstein Entropy** | Bekenstein | 1973 | *Phys. Rev. D* 7, 2333 | S = A/(4l_P^2) |
 | **Strong Lensing** | Bozza | 2002 | arXiv:gr-qc/0202066 | Deflection angle near sphere |
-| **Radiative Transfer** | Mihalas & Weibel-Mihalas | 1984 | "Foundations of Radiation Hydrodynamics" | ∂I_ν/∂s + α_ν I_ν = j_ν |
+| **Radiative Transfer** | Mihalas & Weibel-Mihalas | 1984 | "Foundations of Radiation Hydrodynamics" | dI_nu/ds + alpha_nu I_nu = j_nu |
 
 ### B. RECENT OBSERVATIONAL CONSTRAINTS (2023-2025)
 
 | Source | Year | Finding | Reference |
 |--------|------|---------|-----------|
 | **Event Horizon Telescope** | 2024 | M87* & Sgr A* shadow constraints on quantum gravity | Frolov et al. 2025 *Eur. Phys. J. Plus* |
-| **LIGO/Virgo** | 2024 | GW detections → spin measurements → Kerr tests | GWTC-3 (arXiv:2111.03606) |
+| **LIGO/Virgo** | 2024 | GW detections -> spin measurements -> Kerr tests | GWTC-3 (arXiv:2111.03606) |
 | **GRMHD Simulations** | 2025 | Dynamo action generates large-scale B-fields | [arXiv:2512.02129](https://arxiv.org/html/2512.02129) |
 | **QPE GRMHD** | 2024 | Quasi-periodic eruptions from disk truncation cycles | A&A 48635-23 (2024) |
 | **Hawking Info** | 2024 | Tunneling interpretation recovers Page curve | PMC11854280 |
@@ -406,7 +406,7 @@ public:
 **For Quantum Gravity:**
 - Almheiri et al. (2020): "Islands outside the horizon" *JHEP* 07, 062
 - Penington (2020): "Entanglement wedge reconstruction using the Petz map" *JHEP* 01, 113
-- Misner, Thorne, Wheeler (1973): "Gravitation" (MTW) — definitive GR reference
+- Misner, Thorne, Wheeler (1973): "Gravitation" (MTW) -- definitive GR reference
 
 ---
 
@@ -431,20 +431,20 @@ public:
 **Milestones:**
 1. Replace procedural disk texture with tabulated Novikov-Thorne model
 2. Implement Monte Carlo radiative transfer (openuniverse simulation domain + Blackhole)
-3. Add thermal feedback loop (accretion rate ↔ disk temperature)
+3. Add thermal feedback loop (accretion rate <-> disk temperature)
 4. Implement disk truncation models (magnetic pressure, radiation pressure)
 
 **Deliverables:**
 - Physically-motivated accretion disk rendering
 - Radiative transfer layer (separate from geodesics)
 - Temperature-dependent disk emissivity
-- Real-time parameter sweeps (Ṁ, spin a*, BH mass)
+- Real-time parameter sweeps (Mdot, spin a*, BH mass)
 
 ### Phase 3: Magnetohydrodynamics (Weeks 13-24)
 
 **Milestones:**
 1. Prototype reduced-order GRMHD solver (2D, conservative formulation)
-2. Implement MRI turbulence α-viscosity model
+2. Implement MRI turbulence alpha-viscosity model
 3. Add large-scale dynamo field generation
 4. Implement Blandford-Znajek jet launching
 
@@ -457,7 +457,7 @@ public:
 
 **Milestones:**
 1. Add relativistic Compton scattering (corona model)
-2. Implement line formation (Fe Kα, H-α)
+2. Implement line formation (Fe Kalpha, H-alpha)
 3. Generate synthetic X-ray spectra (convolved with instrument response)
 4. LIGO GW waveform extraction from GRMHD
 
@@ -485,10 +485,10 @@ public:
 
 | Uncertainty | Observable Impact | Current Knowledge |
 |---|---|---|
-| **BH spin distribution** | Jet power ∝ a²; efficiency η(a*) | Measured from GW + X-rays; range 0-0.98 |
-| **Magnetic field strength** | Jet collimation; synchrotron brightness | B ~ 10⁴ G (estimated from flares); poorly constrained |
-| **Accretion state transitions** | SANE ↔ MAD; radiatively efficient ↔ inefficient | Observed in binaries; mechanism unclear |
-| **Tidal disruption rates** | TDE frequency ~ 10⁻⁴ galaxy⁻¹ yr⁻¹ | Measured; event rates match predictions |
+| **BH spin distribution** | Jet power ~ a^2; efficiency eta(a*) | Measured from GW + X-rays; range 0-0.98 |
+| **Magnetic field strength** | Jet collimation; synchrotron brightness | B ~ 10^4 G (estimated from flares); poorly constrained |
+| **Accretion state transitions** | SANE <-> MAD; radiatively efficient <-> inefficient | Observed in binaries; mechanism unclear |
+| **Tidal disruption rates** | TDE frequency ~ 10^-4 galaxy^-1 yr^-1 | Measured; event rates match predictions |
 | **Outflow/wind launching** | 10-50% of accretion goes to wind | Observed (UV/X-ray); poorly modeled |
 
 ### Computational Challenges
@@ -510,14 +510,14 @@ public:
    - Blackhole excels at real-time geodesic visualization; weak on thermodynamics
    - openuniverse excels at modular physics; weak on visualization
 
-2. **Most critical gap: GRMHD** ← Blocks realistic accretion, jets, turbulence
+2. **Most critical gap: GRMHD** <- Blocks realistic accretion, jets, turbulence
    - Solution: Either build from scratch (expensive) or wrap existing code (spacecase-HARM3D)
 
-3. **EHT 2024-2025 observations confirm GR to < 5%** → Schwarzschild/Kerr sufficient for render fidelity
+3. **EHT 2024-2025 observations confirm GR to < 5%** -> Schwarzschild/Kerr sufficient for render fidelity
    - Quantum corrections negligible at astrophysical scales
    - Future ngEHT (2030s) may probe modified gravity
 
-4. **Hawking radiation undetectable at astrophysical scales** → Low priority for visualization
+4. **Hawking radiation undetectable at astrophysical scales** -> Low priority for visualization
    - Reserved for primordial BH scenarios (speculative)
 
 5. **Integration opportunity:** Use openuniverse-compact's EOS/TOV as reference for Blackhole's neutron star physics
@@ -545,26 +545,26 @@ public:
 
 **CGS + Geometrized Units (Blackhole codebase):**
 ```cpp
-G = 6.67430e-8 cm³/(g·s²)
+G = 6.67430e-8 cm^3/(g*s^2)
 c = 2.99792458e10 cm/s
-ℏ = 1.054571817e-27 erg·s
+hbar = 1.054571817e-27 erg*s
 k_B = 1.380649e-16 erg/K
 
 // Schwarzschild radius (normalized: r_s = 1)
-r_s(M) = 2GM/c² = 1.485e-28 × (M/M_☉) cm = 2.95 km × (M/M_☉)
+r_s(M) = 2GM/c^2 = 1.485e-28 x (M/M_sun) cm = 2.95 km x (M/M_sun)
 
-// Planck units (where G = c = ℏ = 1):
-l_P = √(ℏG/c³) ≈ 1.616e-33 cm
-t_P = √(ℏG/c⁵) ≈ 5.391e-44 s
-M_P = √(ℏc/G) ≈ 2.176e-5 g ≈ 2.18e16 GeV/c²
-T_P = √(ℏc⁵/Gk_B²) ≈ 1.417e32 K
+// Planck units (where G = c = hbar = 1):
+l_P = sqrt(hbarG/c^3) ~= 1.616e-33 cm
+t_P = sqrt(hbarG/c^5) ~= 5.391e-44 s
+M_P = sqrt(hbarc/G) ~= 2.176e-5 g ~= 2.18e16 GeV/c^2
+T_P = sqrt(hbarc^5/Gk_B^2) ~= 1.417e32 K
 ```
 
 **Key Astronomical Scales:**
 ```
-1 M_☉ → r_s = 2.95 km, T_H ≈ 6.2e-8 K, L_H ≈ 9e-27 erg/s
-10 M_☉ → r_s = 29.5 km, T_H ≈ 6.2e-9 K, L_H ≈ 9e-29 erg/s
-4e6 M_☉ (Sgr A*) → r_s ≈ 12 million km ≈ 0.08 AU
+1 M_sun -> r_s = 2.95 km, T_H ~= 6.2e-8 K, L_H ~= 9e-27 erg/s
+10 M_sun -> r_s = 29.5 km, T_H ~= 6.2e-9 K, L_H ~= 9e-29 erg/s
+4e6 M_sun (Sgr A*) -> r_s ~= 12 million km ~= 0.08 AU
 ```
 
 ---

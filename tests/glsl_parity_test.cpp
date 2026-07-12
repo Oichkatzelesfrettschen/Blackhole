@@ -17,8 +17,7 @@
  * Tolerance: 1e-5 relative error (float32 precision loss)
  *
  * Compilation:
- *   g++ -std=c++23 -O2 -I. tests/glsl_parity_test.cpp \
- *       src/physics/verified/*.cpp -o build/glsl_parity_test
+ *   g++ -std=c++23 -O2 -I. tests/glsl_parity_test.cpp -o build/glsl_parity_test
  *
  * Usage:
  *   ./build/glsl_parity_test [filter] [verbose]
@@ -104,6 +103,8 @@ public:
     std::cout << std::string(70, '=') << "\n";
   }
 
+  [[nodiscard]] int failedCount() const { return stats_.failed; }
+
 private:
   std::string suite_name_;
   std::vector<TestResult> results_;
@@ -114,10 +115,8 @@ private:
 // Test Tolerance Configuration
 // ============================================================================
 
-const float FLOAT32_EPSILON = 1.19209290e-7f;  // Machine epsilon for float32
-const float PARITY_TOLERANCE = 1e-5f;          // 1e-5 relative error tolerance
-const float HAMILTONIAN_TOLERANCE = 1e-6f;     // Constraint tolerance
-const float ESCAPE_RADIUS = 100.0f;            // Ray escape threshold
+const double PARITY_TOLERANCE = 1e-5;      // 1e-5 relative error tolerance (float32 loss)
+const double HAMILTONIAN_TOLERANCE = 1e-6; // Constraint tolerance
 
 // ============================================================================
 // Helper Functions
@@ -133,7 +132,7 @@ const float ESCAPE_RADIUS = 100.0f;            // Ray escape threshold
  * @param abs_error Output: absolute error
  * @return True if within tolerance
  */
-bool compareValues(double cpu, double gpu, float tolerance, double &relError,
+bool compareValues(double cpu, double gpu, double tolerance, double &relError,
                           double &absError) {
   absError = std::abs(cpu - gpu);
 
@@ -151,8 +150,8 @@ bool compareValues(double cpu, double gpu, float tolerance, double &relError,
  * Simulate GLSL 4.60 float precision
  * Converts double to float and back (simulates shader computation)
  */
-float glslPrecision(double value) {
-  return static_cast<float>(static_cast<double>(static_cast<float>(value)));
+double glslPrecision(double value) {
+  return static_cast<double>(static_cast<float>(value));
 }
 
 // ============================================================================
@@ -169,12 +168,12 @@ struct SchwarzschildMetric {
   double sigma;
   double a; // r-dependent term in frame-dragging
 
-  static SchwarzschildMetric compute(double r, double m) {
-    SchwarzschildMetric m{};
-    m.sigma = r * r;
-    m.delta = m.sigma - (2.0 * m * r);
-    m.a = m.sigma * m.sigma; // For simplicity in Schwarzschild
-    return m;
+  static SchwarzschildMetric compute(double r, double mass) {
+    SchwarzschildMetric metric{};
+    metric.sigma = r * r;
+    metric.delta = metric.sigma - (2.0 * mass * r);
+    metric.a = metric.sigma * metric.sigma; // For simplicity in Schwarzschild
+    return metric;
   }
 };
 
@@ -189,18 +188,18 @@ struct KerrMetric {
   double delta;
   double a;
 
-  static KerrMetric compute(double r, double theta, double m, double a) {
-    KerrMetric m{};
+  static KerrMetric compute(double r, double theta, double mass, double spin) {
+    KerrMetric metric{};
     double const cosTheta = std::cos(theta);
     double const sinTheta = std::sin(theta);
-    double const a2 = a * a;
+    double const a2 = spin * spin;
     double const r2 = r * r;
 
-    m.sigma = r2 + (a2 * cosTheta * cosTheta);
-    m.delta = r2 - (2.0 * m * r) + a2;
-    m.a = ((r2 + a2) * (r2 + a2)) - (a2 * m.delta * sinTheta * sinTheta);
+    metric.sigma = r2 + (a2 * cosTheta * cosTheta);
+    metric.delta = r2 - (2.0 * mass * r) + a2;
+    metric.a = ((r2 + a2) * (r2 + a2)) - (a2 * metric.delta * sinTheta * sinTheta);
 
-    return m;
+    return metric;
   }
 };
 
@@ -214,12 +213,13 @@ struct KerrMetric {
  */
 double computeHamiltonian(double r, double theta, double m, double a, double dt, double dr,
                                  double dtheta, double dphi) {
-  KerrMetric const m = KerrMetric::compute(r, theta, m, a);
+  KerrMetric const metric = KerrMetric::compute(r, theta, m, a);
   double const sinTheta = std::sin(theta);
   double const sin2Theta = sinTheta * sinTheta;
 
-  double const h = (-(m.delta / m.sigma) * dt * dt) + ((m.sigma / m.delta) * dr * dr) +
-                   (m.sigma * dtheta * dtheta) + ((m.a / (m.sigma * sin2Theta)) * dphi * dphi);
+  double const h =
+      (-(metric.delta / metric.sigma) * dt * dt) + ((metric.sigma / metric.delta) * dr * dr) +
+      (metric.sigma * dtheta * dtheta) + ((metric.a / (metric.sigma * sin2Theta)) * dphi * dphi);
 
   return h;
 }
@@ -233,54 +233,76 @@ struct RayState {
     double dt, dr, dtheta, dphi;
     double lambda;
 
-    // Geodesic RHS (simplified Schwarzschild/Kerr)
+    // Schwarzschild geodesic RHS from the exact Christoffel symbols
+    // (MTW ch. 25; f = 1 - 2M/r):
+    //   d2t     = -(2M / (r^2 f)) dt dr
+    //   d2r     = -(M f / r^2) dt^2 + (M / (r^2 f)) dr^2
+    //             + r f (dtheta^2 + sin^2(theta) dphi^2)
+    //   d2theta = -(2/r) dr dtheta + sin(theta) cos(theta) dphi^2
+    //   d2phi   = -(2/r) dr dphi - 2 cot(theta) dtheta dphi
+    // The historical "simplified" RHS had the d2t sign flipped and
+    // dropped every 1/f factor, so Hamiltonian drift was guaranteed
+    // regardless of integrator quality.
     static std::array<double, 4> rhs(const RayState &state, double m, double /*a*/) {
-      // Simplified RHS for Schwarzschild (a ≈ 0)
-      double const r2 = state.r * state.r;
-      double const d2t = (2.0 * m / (r2 * state.r)) * state.dr * state.dt;
-      double const d2r = -(m / r2) * ((state.dt * state.dt) - (state.dr * state.dr) -
-                                      (r2 * state.dphi * state.dphi));
-      double const d2theta = -2.0 * (state.dr / state.r) * state.dtheta;
-      double const d2phi = -2.0 * (state.dr / state.r) * state.dphi / std::sin(state.theta);
+      double const r = state.r;
+      double const r2 = r * r;
+      double const f = 1.0 - (2.0 * m / r);
+      double const sinTheta = std::sin(state.theta);
+      double const cosTheta = std::cos(state.theta);
+
+      double const d2t = -(2.0 * m / (r2 * f)) * state.dt * state.dr;
+      double const d2r = (-(m * f / r2) * state.dt * state.dt) +
+                         ((m / (r2 * f)) * state.dr * state.dr) +
+                         ((r * f) * ((state.dtheta * state.dtheta) +
+                                     (sinTheta * sinTheta * state.dphi * state.dphi)));
+      double const d2theta = (-(2.0 / r) * state.dr * state.dtheta) +
+                             (sinTheta * cosTheta * state.dphi * state.dphi);
+      double const d2phi = (-(2.0 / r) * state.dr * state.dphi) -
+                           (2.0 * (cosTheta / sinTheta) * state.dtheta * state.dphi);
 
       return {d2t, d2r, d2theta, d2phi};
     }
 
-    // RK4 integration step
+    // Classic RK4 over the full 8-component state (4 positions + 4
+    // velocities). Each intermediate stage advances positions with the
+    // STAGE velocities and velocities with the stage accelerations; the
+    // historical version added accelerations to positions, advanced r
+    // with the t-velocity, and never updated intermediate velocities,
+    // so its "drift" measured its own indexing bugs.
+    static RayState advanced(const RayState &base, const RayState &vel,
+                             const std::array<double, 4> &acc, double h) {
+      RayState out = base;
+      out.t += vel.dt * h;
+      out.r += vel.dr * h;
+      out.theta += vel.dtheta * h;
+      out.phi += vel.dphi * h;
+      out.dt += acc[0] * h;
+      out.dr += acc[1] * h;
+      out.dtheta += acc[2] * h;
+      out.dphi += acc[3] * h;
+      return out;
+    }
+
     static RayState step(RayState state, double h, double m, double a) {
-      // k1
-      auto k1 = rhs(state, m, a);
+      auto const k1 = rhs(state, m, a);
+      RayState const s2 = advanced(state, state, k1, h * 0.5);
+      auto const k2 = rhs(s2, m, a);
+      RayState const s3 = advanced(state, s2, k2, h * 0.5);
+      auto const k3 = rhs(s3, m, a);
+      RayState const s4 = advanced(state, s3, k3, h);
+      auto const k4 = rhs(s4, m, a);
 
-      // k2
-      RayState s2 = state;
-      s2.t += k1[0] * h * 0.5;
-      s2.r += state.dt * h * 0.5;
-      s2.theta += state.dtheta * h * 0.5;
-      s2.phi += state.dphi * h * 0.5;
-      auto k2 = rhs(s2, m, a);
-
-      // k3
-      RayState s3 = state;
-      s3.t += k2[0] * h * 0.5;
-      s3.r += state.dt * h * 0.5;
-      s3.theta += state.dtheta * h * 0.5;
-      s3.phi += state.dphi * h * 0.5;
-      auto k3 = rhs(s3, m, a);
-
-      // k4
-      RayState s4 = state;
-      s4.t += k3[0] * h;
-      s4.r += state.dt * h;
-      s4.theta += state.dtheta * h;
-      s4.phi += state.dphi * h;
-      auto k4 = rhs(s4, m, a);
-
-      // Update
-      const double oneSixth = 1.0 / 6.0;
-      state.dt += (k1[0] + (2.0 * k2[0]) + (2.0 * k3[0]) + k4[0]) * h * oneSixth;
-      state.dr += (state.dt + state.dt) * h * 0.5; // Simplified
-      state.dtheta += (k1[2] + (2.0 * k2[2]) + (2.0 * k3[2]) + k4[2]) * h * oneSixth;
-      state.dphi += (k1[3] + (2.0 * k2[3]) + (2.0 * k3[3]) + k4[3]) * h * oneSixth;
+      const double oneSixth = h / 6.0;
+      state.t += (state.dt + (2.0 * s2.dt) + (2.0 * s3.dt) + s4.dt) * oneSixth;
+      state.r += (state.dr + (2.0 * s2.dr) + (2.0 * s3.dr) + s4.dr) * oneSixth;
+      state.theta +=
+          (state.dtheta + (2.0 * s2.dtheta) + (2.0 * s3.dtheta) + s4.dtheta) * oneSixth;
+      state.phi +=
+          (state.dphi + (2.0 * s2.dphi) + (2.0 * s3.dphi) + s4.dphi) * oneSixth;
+      state.dt += (k1[0] + (2.0 * k2[0]) + (2.0 * k3[0]) + k4[0]) * oneSixth;
+      state.dr += (k1[1] + (2.0 * k2[1]) + (2.0 * k3[1]) + k4[1]) * oneSixth;
+      state.dtheta += (k1[2] + (2.0 * k2[2]) + (2.0 * k3[2]) + k4[2]) * oneSixth;
+      state.dphi += (k1[3] + (2.0 * k2[3]) + (2.0 * k3[3]) + k4[3]) * oneSixth;
       state.lambda += h;
 
       return state;
@@ -292,24 +314,9 @@ struct RayState {
 // ============================================================================
 
 TestSuite schwarzschildTests("Schwarzschild Metric (a=0)");
-{
-    // Tests will be added via add_result()
-};
-
 TestSuite kerrTests("Kerr Metric (a > 0)");
-{
-    // Tests will be added via add_result()
-};
-
 TestSuite hamiltonianTests("Hamiltonian Constraint Preservation");
-{
-    // Tests will be added via add_result()
-};
-
 TestSuite rk4Tests("RK4 Integration");
-{
-    // Tests will be added via add_result()
-};
 
 // ============================================================================
 // Test Execution
@@ -324,7 +331,7 @@ void runSchwarzschildTests() {
   // Test 1: Metric components at r=10
   {
     double const r = 10.0;
-    auto m = SchwarzschildMetric::compute(r, m);
+    auto metric = SchwarzschildMetric::compute(r, m);
 
     double const expectedSigma = 100.0;
     double const expectedDelta = 80.0; // r^2 - 2Mr = 100 - 20 = 80
@@ -332,13 +339,21 @@ void runSchwarzschildTests() {
     TestResult res;
     res.name = "Schwarzschild Metric at r=10";
 
-    double const cpuSigma = m.sigma;
+    double const cpuSigma = metric.sigma;
     double const gpuSigma = glslPrecision(cpuSigma);
-    double const cpuDelta = m.delta;
+    double const cpuDelta = metric.delta;
     double const gpuDelta = glslPrecision(cpuDelta);
 
+    // Exactness of the double reference plus float32 parity of the
+    // simulated GPU values.
+    double sigmaRelErr = 0.0;
+    double sigmaAbsErr = 0.0;
+    double deltaRelErr = 0.0;
+    double deltaAbsErr = 0.0;
     res.passed = (std::abs(cpuSigma - expectedSigma) < 1e-10) &&
-                 (std::abs(cpuDelta - expectedDelta) < 1e-10);
+                 (std::abs(cpuDelta - expectedDelta) < 1e-10) &&
+                 compareValues(cpuSigma, gpuSigma, PARITY_TOLERANCE, sigmaRelErr, sigmaAbsErr) &&
+                 compareValues(cpuDelta, gpuDelta, PARITY_TOLERANCE, deltaRelErr, deltaAbsErr);
 
     res.relativeError = std::max(std::abs(cpuSigma - expectedSigma) / expectedSigma,
                                  std::abs(cpuDelta - expectedDelta) / expectedDelta);
@@ -348,14 +363,22 @@ void runSchwarzschildTests() {
     schwarzschildTests.addResult(res);
   }
 
-  // Test 2: Hamiltonian constraint for photon at infinity
+  // Test 2: Hamiltonian constraint for a null (photon) vector
   {
     double const r = 10.0;
     double const theta = std::numbers::pi / 2.0; // Equatorial plane
-    double const dt = 1.0;
     double const dr = 0.5;
     double const dtheta = 0.0;
     double const dphi = 0.5;
+    // Solve the Schwarzschild null condition for dt from the closed-form
+    // metric: f dt^2 = dr^2/f + r^2 dphi^2 with f = 1 - 2M/r. Evaluating
+    // the ported Hamiltonian on this vector cross-checks its g^{mu nu}
+    // assembly against the analytic line element. The historical vector
+    // (dt = 1) was not null, so H != 0 was the correct answer to a wrong
+    // question.
+    double const f = 1.0 - (2.0 * m / r);
+    double const dt =
+        std::sqrt(((dr * dr / f) + (r * r * dphi * dphi)) / f);
 
     double const h = computeHamiltonian(r, theta, m, a, dt, dr, dtheta, dphi);
 
@@ -381,11 +404,11 @@ void runKerrTests() {
     double const r = 10.0;
     double const theta = std::numbers::pi / 2.0;
 
-    auto m = KerrMetric::compute(r, theta, m, a);
+    auto metric = KerrMetric::compute(r, theta, m, a);
 
     TestResult res;
     res.name = "Kerr Metric at r=10, a=" + std::to_string(a);
-    res.passed = (m.sigma > 0.0) && (std::abs(m.delta) > 0.0);
+    res.passed = (metric.sigma > 0.0) && (std::abs(metric.delta) > 0.0);
     res.relativeError = 0.0; // Placeholder
     res.absoluteError = 0.0;
 
@@ -396,8 +419,14 @@ void runKerrTests() {
 void runHamiltonianPreservationTests() {
   std::cout << "\n[Running Hamiltonian Preservation Tests]\n";
 
+  // The RayState RHS integrates Schwarzschild geodesics (exact
+  // Christoffels for a = 0), so conservation is measured against the
+  // a = 0 Hamiltonian. The historical run stepped Schwarzschild
+  // trajectories while measuring a Kerr (a = 0.5) Hamiltonian, a
+  // quantity those trajectories do not conserve even in exact
+  // arithmetic.
   double const m = 1.0;
-  double const a = 0.5;
+  double const a = 0.0;
   int const numSteps = 100;
   double const h = 0.01;
 
@@ -423,7 +452,7 @@ void runHamiltonianPreservationTests() {
       computeHamiltonian(ray.r, ray.theta, m, a, ray.dt, ray.dr, ray.dtheta, ray.dphi);
 
   TestResult res;
-  res.name = "Hamiltonian preservation over 100 steps (a=0.5)";
+  res.name = "Hamiltonian preservation over 100 steps (Schwarzschild)";
   res.relativeError = std::abs(finalH - initialH) / std::max(std::abs(initialH), 1e-10);
   res.absoluteError = std::abs(finalH - initialH);
   res.passed = res.relativeError < 1e-3; // Allow some growth over 100 steps
@@ -499,5 +528,7 @@ int main(int argc, char** argv) {
     rk4Tests.printSummary(verbose);
   }
 
-    return 0;
+  int const totalFailed = schwarzschildTests.failedCount() + kerrTests.failedCount() +
+                          hamiltonianTests.failedCount() + rk4Tests.failedCount();
+  return (totalFailed == 0) ? 0 : 1;
 }

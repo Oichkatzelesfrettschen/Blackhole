@@ -78,11 +78,10 @@ const float gamma_radiation = 4.0 / 3.0;
 // A polytropic EOS is characterized by:
 // - K: polytropic constant (units depend on gamma)
 // - gamma: adiabatic index (must be > 1)
-layout(std140) uniform struct_PolytropeParams {
-    float K;
-    Polytropic constant
-    double gamma;
-} PolytropeParams;
+struct PolytropeParams {
+    float K;     // polytropic constant
+    float gamma; // adiabatic index (> 1)
+};
 
 // Function definitions (verified from Rocq proofs)
 

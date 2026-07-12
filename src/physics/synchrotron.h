@@ -28,6 +28,7 @@
 
 #include "constants.h"
 #include "safe_limits.h"
+#include "../../shader/include/synchrotron_lut_domain.h"
 #ifdef __has_include
 #if __has_include(<boost/math/special_functions/bessel.hpp>)
 #include <boost/math/special_functions/bessel.hpp>
@@ -489,9 +490,9 @@ inline void synchrotronGGenerateLut(float *lut, int nEntries, double xMin = 0.00
 }
 
 /// LUT range constants matching the generation defaults above.
-/// Shaders must use these same values for the log-space mapping.
-constexpr float SYNCH_G_LUT_X_MIN = 0.001f;
-constexpr float SYNCH_G_LUT_X_MAX = 30.0f;
+/// Shaders read the same single-source values via the shared header.
+constexpr float SYNCH_G_LUT_X_MIN = static_cast<float>(SYNCH_G_LUT_DOMAIN_X_MIN);
+constexpr float SYNCH_G_LUT_X_MAX = static_cast<float>(SYNCH_G_LUT_DOMAIN_X_MAX);
 
 } // namespace physics
 

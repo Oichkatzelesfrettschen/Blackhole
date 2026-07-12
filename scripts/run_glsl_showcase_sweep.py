@@ -43,18 +43,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source-dir",
         type=Path,
-        default=Path("/home/eirikr/Github/Blackhole"),
+        default=Path(__file__).resolve().parent.parent,
     )
     parser.add_argument(
         "--runner",
         type=Path,
-        default=Path("/home/eirikr/Github/Blackhole/scripts/run_glsl_headless.py"),
+        default=Path(__file__).resolve().parent / "run_glsl_headless.py",
     )
     parser.add_argument("--backend", choices=("hidden", "xvfb"), default="hidden")
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("/home/eirikr/Github/Blackhole/.cache/showcase_glsl_sweep"),
+        default=Path(__file__).resolve().parent.parent / ".cache" / "showcase_glsl_sweep",
     )
     parser.add_argument("--width", type=int, default=2560)
     parser.add_argument("--height", type=int, default=1004)

@@ -216,9 +216,9 @@ cmake -DENABLE_LTO=OFF
 - Optimizes for specific cache sizes and pipeline characteristics
 
 **Trade-off:**
-- ✅ Maximum performance on build machine
-- ❌ Binary won't run on CPUs without same features
-- ❌ Not suitable for distribution
+- [done] Maximum performance on build machine
+- [fail] Binary won't run on CPUs without same features
+- [fail] Not suitable for distribution
 
 **For your CPU:**
 ```bash
@@ -247,9 +247,9 @@ cmake -DENABLE_NATIVE_ARCH=OFF -DSIMD_TIER=SSE4
 - Enables vectorization of FP operations
 
 **Trade-offs:**
-- ✅ 5-10% performance in FP-heavy code
-- ❌ Non-IEEE 754 compliant
-- ❌ Can cause issues with infinity/NaN checking
+- [done] 5-10% performance in FP-heavy code
+- [fail] Non-IEEE 754 compliant
+- [fail] Can cause issues with infinity/NaN checking
 
 **Safe in Blackhole because:**
 - Physics code uses `safe_limits.h` with compiler builtins
@@ -425,34 +425,34 @@ heaptrack ./Blackhole
 
 ```
 CMakeLists.txt
-├── Conan Integration (dependencies)
-├── C++23 Standard Setup
-├── SIMD Detection & Configuration
-│   ├── CPU feature detection (CPUID)
-│   ├── Compiler flag selection
-│   └── -march=native (if enabled)
-├── Optimization Configuration ← NEW
-│   ├── Build type defaults
-│   ├── -O3 enforcement
-│   ├── LTO/IPO setup
-│   ├── PGO configuration
-│   └── Profiling tool support
-├── Warning System (5 levels)
-├── Hardening Flags (FORTIFY, stack protection)
-├── Sanitizers (ASan, UBSan, TSan)
-├── Source Files Organization
-└── Target Configuration
++-- Conan Integration (dependencies)
++-- C++23 Standard Setup
++-- SIMD Detection & Configuration
+|   +-- CPU feature detection (CPUID)
+|   +-- Compiler flag selection
+|   +-- -march=native (if enabled)
++-- Optimization Configuration <- NEW
+|   +-- Build type defaults
+|   +-- -O3 enforcement
+|   +-- LTO/IPO setup
+|   +-- PGO configuration
+|   +-- Profiling tool support
++-- Warning System (5 levels)
++-- Hardening Flags (FORTIFY, stack protection)
++-- Sanitizers (ASan, UBSan, TSan)
++-- Source Files Organization
++-- Target Configuration
 ```
 
 ### Build Scripts
 
 ```
 scripts/
-├── build-master.sh          ← Master orchestration (interactive)
-├── build-optimized.sh       ← Release/Debug/PGO builds
-├── build-profiling.sh       ← Profiling-ready builds
-├── build-quick.sh           ← Legacy quick build
-└── conan_install.sh         ← Dependency management
++-- build-master.sh          <- Master orchestration (interactive)
++-- build-optimized.sh       <- Release/Debug/PGO builds
++-- build-profiling.sh       <- Profiling-ready builds
++-- build-quick.sh           <- Legacy quick build
++-- conan_install.sh         <- Dependency management
 ```
 
 ## Advanced Usage
