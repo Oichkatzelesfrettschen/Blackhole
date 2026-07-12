@@ -21,6 +21,9 @@ mkdir -p "$OUT"
 "$MAGICK" "$SRC" -resize 1024x -quality 88 "$OUT/carina-cosmic-cliffs-1024.jpg"
 "$MAGICK" "$SRC" -resize 512x -quality 85 "$OUT/carina-cosmic-cliffs-512.jpg"
 
-# 21:9 ultrawide: fill the width then centre-crop the height.
+# 21:9 ultrawide renditions: fill the width then centre-crop the height. Both
+# common "2K ultrawide" sizes -- UWQHD (3440x1440) and UW-FHD (2560x1080).
 "$MAGICK" "$SRC" -resize 3440x -gravity center -extent 3440x1440 -quality 90 \
-  "$OUT/carina-cosmic-cliffs-2k-ultrawide.jpg"
+  "$OUT/carina-cosmic-cliffs-ultrawide-3440x1440.jpg"
+"$MAGICK" "$SRC" -resize 2560x -gravity center -extent 2560x1080 -quality 90 \
+  "$OUT/carina-cosmic-cliffs-ultrawide-2560x1080.jpg"
