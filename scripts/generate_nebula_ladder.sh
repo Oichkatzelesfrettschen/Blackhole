@@ -15,11 +15,28 @@ SRC="$1"
 OUT="$2"
 MAGICK="${3:-magick}"
 
-# Base name = source file name without directory, extension, or trailing -4k.
+if [ ! -f "$SRC" ]; then
+  echo "generate_nebula_ladder.sh: source not found: $SRC" >&2
+  exit 1
+fi
+if ! command -v "$MAGICK" >/dev/null 2>&1; then
+  echo "generate_nebula_ladder.sh: ImageMagick not found: $MAGICK" >&2
+  exit 1
+fi
+
+# Base name = source file name without directory, extension, or trailing -4k. The
+# source is the high-resolution master (a -4k file); a source already at a ladder
+# tier would produce a double-suffixed name, so reject anything but a -4k master.
 BASE=$(basename "$SRC")
 BASE=${BASE%.jpg}
 BASE=${BASE%.jpeg}
-BASE=${BASE%-4k}
+case "$BASE" in
+  *-4k) BASE=${BASE%-4k} ;;
+  *)
+    echo "generate_nebula_ladder.sh: source must be a -4k master, got: $SRC" >&2
+    exit 1
+    ;;
+esac
 
 mkdir -p "$OUT"
 

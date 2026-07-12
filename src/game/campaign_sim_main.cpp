@@ -4,7 +4,7 @@
  *
  * Replays scripted command logs over the canonical CampaignSession scenario
  * (the same one the desktop client plays) and prints the final state digest
- * plus the CAMPAIGN-6 outcome vector -- banked energy, the singularity's
+ * plus the outcome vector -- banked energy, the singularity's
  * instability, the stabilization a deep prograde lane achieved, the surviving
  * fleet integrity, and the turn the objective cleared. Two runs of the same
  * invocation on the same binary and host print identical digests; the process

@@ -50,17 +50,23 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view) {
   ImGui::TextDisabled("orders in flight: %zu   reports in flight: %zu   intel: %zu",
                       view.ordersInFlight.size(), view.reportsInFlight.size(),
                       view.intel.size());
-  // The CAMPAIGN-6 outcome vector: the singularity's disturbance and what a deep
+  // The outcome vector: the singularity's disturbance and what a deep
   // prograde lane buys against it. Shown only once the mechanic is engaged.
   if (view.instability > 0.0 || view.stabilization > 0.0) {
-    const auto threat = static_cast<float>(std::min(1.0, view.instability / 24.0));
+    // Full red at the instability an uncontained campaign reaches by the deadline
+    // (rise per turn times deadline turns); the label reddens as the disturbance
+    // grows toward that ceiling.
+    constexpr double kInstabilityFullScale = 24.0;
+    const auto threat = static_cast<float>(std::min(1.0, view.instability / kInstabilityFullScale));
     ImGui::TextColored(ImVec4(0.6f + (0.4f * threat), 1.0f - (0.6f * threat), 0.4f, 1.0f),
                        "Gororoba instability %.2f   stabilization %.2f   fleet integrity %.2f",
                        view.instability, view.stabilization, view.fleetIntegrity);
   }
   if (view.status == game::CampaignStatus::Won) {
-    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "VICTORY -- objective banked on turn %lld",
-                       static_cast<long long>(view.turn));
+    // The victory turn is the turn the objective cleared, not the current turn,
+    // which keeps flowing as in-flight reports arrive after the decision latches.
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "VICTORY -- objective cleared on turn %lld",
+                       static_cast<long long>(view.clearedTurn));
   } else if (view.status == game::CampaignStatus::Lost) {
     ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "DEFEAT -- deadline t%lld passed",
                        static_cast<long long>(view.deadlineTurn));

@@ -34,13 +34,12 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   config.secondsPerTurn = K_SECONDS_PER_DAY;
   config.authorityRadiusCm = 200.0 * rS;
   config.bandRadiusCm = {0.85 * rS, 3.0 * rS, 10.0 * rS, 50.0 * rS};
-  // Objective sized so the deadline bites (CAMPAIGN-8): full outer commitment
-  // clears it only near turn 1100 of 1200, so the energy race is tense and any
-  // dive that drops throughput forfeits it. There is no half-measure -- a fleet
-  // or two sent deep banks neither enough energy to win the race nor enough
-  // stabilization to take the alternate victory (see the instability block); the
-  // two winning lines are full-outer for energy or an all-in dive for
-  // stabilization. Measured against campaign_sim --compare.
+  // The objective is sized so the deadline bites: full outer commitment clears
+  // it only near turn 1100 of 1200, so the energy race is tense and any dive that
+  // drops throughput forfeits it. There is no half-measure -- a fleet or two sent
+  // deep banks neither enough energy to win the race nor enough stabilization to
+  // take the alternate victory (see the instability block); the two winning lines
+  // are full-outer for energy or an all-in dive for stabilization.
   config.victoryEnergyUnits = 3150.0;
   config.deadlineTurn = 1200;
   config.fleetInitialFuelUnits = 100.0;
@@ -66,7 +65,7 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   // yield until verification restores it -- the deep dive's hazard.
   config.reliabilityCorruptionThreshold = 0.9;
   config.corruptedYieldFraction = 0.4;
-  // Instability (CAMPAIGN-6): the singularity destabilizes over the campaign,
+  // Instability: the singularity destabilizes over the campaign,
   // eroding all yield. Uncontained outer play still clears the objective (it
   // survives to the deadline) but slows as the disturbance grows; a sustained
   // prograde ergoregion presence produces containment that holds instability
@@ -82,7 +81,7 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   // it is a rival objective, not a bonus. Reaching 8 units of cumulative
   // stabilization is an ALTERNATE victory (tame the singularity), a path only a
   // fleet-wide commitment reaches and only by forgoing the energy win. Two ends,
-  // one choice. See CAMPAIGN-7 in the debt ledger.
+  // one choice.
   config.containmentYieldRetention = 0.1;
   config.victoryStabilizationUnits = 8.0;
   return config;

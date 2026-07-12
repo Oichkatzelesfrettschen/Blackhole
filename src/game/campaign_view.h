@@ -95,7 +95,7 @@ struct CampaignViewSnapshot {
   double energyUnits = 0.0;        ///< Banked yield (credited on report arrival).
   double victoryEnergyUnits = 0.0; ///< Win target; zero disables the objective.
   std::int64_t deadlineTurn = 0;   ///< Loss turn; zero disables the deadline.
-  // Outcome vector the player weights (CAMPAIGN-6): energy above, plus the
+  // Outcome vector the player weights: energy above, plus the
   // singularity's instability and the stabilization/integrity/speed a deep
   // prograde lane buys against it. All zero when the mechanic is disabled.
   double instability = 0.0;        ///< Current disturbance level; erodes all yield.
