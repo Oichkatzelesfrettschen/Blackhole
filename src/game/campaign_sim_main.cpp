@@ -2,22 +2,22 @@
  * @file campaign_sim_main.cpp
  * @brief Headless campaign determinism probe and balance harness.
  *
- * Replays scripted command logs over the canonical CampaignSession scenario
- * (the same one the desktop client plays) and prints the final state digest
- * plus the outcome vector -- banked energy, the singularity's
- * instability, the stabilization a deep prograde lane achieved, the surviving
- * fleet integrity, and the turn the objective cleared. Two runs of the same
- * invocation on the same binary and host print identical digests; the process
- * links only the campaign and physics libraries, proving the seam is GL-free.
+ * Replays scripted commitment lines over the canonical CampaignSession scenario
+ * (the same one the desktop client plays) and prints each line's outcome vector
+ * -- banked energy, the singularity's instability, the stabilization a deep
+ * prograde lane achieved, the surviving fleet integrity, the turn a victory
+ * cleared -- plus the determinism digest. Two runs of the same invocation on the
+ * same binary and host print identical digests; the process links only the
+ * campaign and physics libraries, proving the seam is GL-free.
  *
- * The outcome is reported as a VECTOR, not a single winner. Commitment levels
- * send progressively more fleets into the deep prograde ergoregion lane
- * (outer / solo / pod / stabilize=every fleet). Because a stabilizing fleet
- * keeps only a fraction of its yield, deeper commitment banks LESS energy but
- * more stabilization -- a genuine trade. --compare prints all four: the outer,
- * solo, and pod lines win on the energy objective; the stabilize line forgoes
- * the energy win and instead reaches the alternate stabilization victory,
- * banking far fewer energy units. Which end to pursue is a real choice.
+ * The default scenario has two winning lines and no viable middle. The outer
+ * line wins the energy objective near the deadline; the all-in stabilize line
+ * (every fleet deep) forgoes the energy race and instead reaches the alternate
+ * stabilization victory, sooner but banking far less energy. The intermediate
+ * solo and pod lines lose both races -- they are traps, not a gradient. This is
+ * a deliberate "commit fully to one victory type" shape, pinned by
+ * campaign_balance_invariant_test so the harness and the scenario cannot drift
+ * apart again.
  */
 
 #include <cinttypes>
@@ -25,99 +25,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <vector>
 
 #include "game/campaign.h"
 #include "game/campaign_session.h"
+#include "game/campaign_sim_lines.h"
 #include "game/campaign_view.h"
-#include "game/fleet.h"
 
 namespace {
 
-// The canonical scenario creates six fleets with stable ids 1..6: extraction
-// and research on the inner outer band, fabrication and relay on the middle,
-// verification and survey research on the outer.
-constexpr game::FleetId K_EXTRACTION = 1;
-constexpr game::FleetId K_RESEARCH = 2;
-constexpr game::FleetId K_FABRICATION = 3;
-constexpr game::FleetId K_RELAY = 4;
-constexpr game::FleetId K_VERIFICATION = 5;
-constexpr game::FleetId K_SURVEY = 6;
-
-constexpr int K_ERGO_BAND = 0;
-constexpr double K_REISSUE_HOURS = 24.0; ///< Uniform contract size for the sustaining cadence.
-constexpr std::int64_t K_REISSUE_EVERY = 30; ///< Re-task every fleet this often to keep work (and containment) flowing.
-
-enum class Commit {
-  Outer,     ///< No deep lane: every fleet stays on the outer bands (energy objective).
-  Solo,      ///< One survey fleet holds the deep prograde ergoregion lane.
-  Pod,       ///< Survey plus co-located verification and fabrication sustain the dive.
-  Stabilize, ///< Every fleet dives: the dedicated stabilization line, chasing the alternate win.
-};
-
-/** @brief Fleets sent into the ergoregion band for a commitment level. The pod
- *         co-locates verification (holds telemetry above the corruption cliff)
- *         and fabrication (refuels the lane) so the deep line is sustainable. */
-std::vector<game::FleetId> deepFleets(Commit commit) {
-  switch (commit) {
-    case Commit::Solo:
-      return {K_SURVEY};
-    case Commit::Pod:
-      return {K_SURVEY, K_VERIFICATION, K_FABRICATION};
-    case Commit::Stabilize:
-      return {K_EXTRACTION, K_RESEARCH, K_FABRICATION, K_RELAY, K_VERIFICATION, K_SURVEY};
-    case Commit::Outer:
-    default:
-      return {};
-  }
-}
-
-/** @brief One commitment line's outcome: the render vector plus the played
- *         campaign's determinism digest. */
-struct LineResult {
-  game::CampaignViewSnapshot view;
-  std::uint64_t digest = 0;
-};
-
-/** @brief Runs one commitment line to completion and reports its outcome
- *         vector. Every fleet is re-tasked on a fixed cadence so work -- and
- *         the deep lane's containment -- is sustained across the campaign. */
-LineResult runLine(std::uint64_t seed, std::int64_t turns, Commit commit) {
-  game::CampaignSession session(seed);
-  game::CampaignState &campaign = session.state();
-
-  // Deep pod redeploys prograde into the ergoregion band before work begins, so
-  // its containment covers the whole campaign.
-  for (const game::FleetId fleet : deepFleets(commit)) {
-    static_cast<void>(session.issuePlaceFleet(fleet, K_ERGO_BAND, game::OrbitLane::Prograde));
-  }
-
-  const std::vector<game::FleetId> allFleets = {K_EXTRACTION, K_RESEARCH,     K_FABRICATION,
-                                                K_RELAY,      K_VERIFICATION, K_SURVEY};
-  for (std::int64_t elapsed = 0; elapsed < turns; ++elapsed) {
-    if (elapsed % K_REISSUE_EVERY == 0) {
-      for (const game::FleetId fleet : allFleets) {
-        static_cast<void>(session.issueAssignTask(fleet, K_REISSUE_HOURS));
-      }
-    }
-    campaign.advanceTurn();
-  }
-  return LineResult{.view = campaign.renderSnapshot(), .digest = campaign.stateDigest()};
-}
-
-const char *commitLabel(Commit commit) {
-  switch (commit) {
-    case Commit::Outer:
-      return "outer";
-    case Commit::Pod:
-      return "pod";
-    case Commit::Stabilize:
-      return "stab";
-    case Commit::Solo:
-    default:
-      return "solo";
-  }
-}
+using campaign_sim::Commit;
+using campaign_sim::commitLabel;
+using campaign_sim::LineResult;
+using campaign_sim::runLine;
 
 const char *statusName(game::CampaignStatus status) {
   switch (status) {
@@ -164,7 +83,6 @@ int main(int argc, char **argv) {
   }
 
   if (compareAll) {
-    // The three-line Pareto probe: no single line dominates on every axis.
     printLine("outer", runLine(seed, turns, Commit::Outer));
     printLine("solo", runLine(seed, turns, Commit::Solo));
     printLine("pod", runLine(seed, turns, Commit::Pod));

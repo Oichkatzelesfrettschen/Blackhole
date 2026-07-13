@@ -4183,6 +4183,30 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_balance_invariant_test.cpp")
+    add_executable(campaign_balance_invariant_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_balance_invariant_test.cpp"
+    )
+    target_include_directories(campaign_balance_invariant_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_balance_invariant_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_balance_invariant_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_balance_invariant_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_balance_invariant_validation COMMAND campaign_balance_invariant_test)
+    set_tests_properties(campaign_balance_invariant_validation PROPERTIES
+      LABELS "campaign;balance;victory"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_balance_invariant_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Fast-math-safe numeric classification tests. This target keeps the
   # global -ffast-math flags on purpose: safe_limits.h exists to classify
   # inf/NaN correctly under -ffinite-math-only, so the test must run under
