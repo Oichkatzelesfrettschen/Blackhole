@@ -1056,6 +1056,73 @@ exe).
   the middle its own axis. Each needs a new campaign_balance_invariant assertion
   proving the target line is non-dominated before the claim is made.
 
+### Tranche constellation-faction-core  (multi-system, multi-faction 4X; core seam landed 2026-07-12)
+
+User direction (2026-07-12): "design the orbital-systems/factions layer from
+scratch and implement." AskUserQuestion answers: factions are rival deterministic
+competitors contesting bands (not player archetypes or neutral bodies); scope is
+multiple linked systems (not a single hole). Built as a fresh Constellation layer
+ABOVE the frozen single-hole CampaignState, not a rewrite of it -- the locked
+campaign_balance_invariant stays green (92/92 -> 93/93 with the new suite).
+
+- SHARED-KERNEL EXTRACTION (2a7384f, test-guarded refactor): the little-endian
+  byte writers + FNV-1a moved to src/game/serialize_bytes.h (game::serial), the
+  scalar economy atoms (taskYieldUnits, ergoregionDepth, instabilityYieldFactor,
+  frameDragYieldFactor) to src/game/economy.h (game::economy). BOTH cores call
+  them so the byte format and every yield agree primitive-for-primitive; the whole
+  suite incl the digest-based campaign gates passed unchanged, proving byte
+  identity. This is the convergence seam: it is what lets CampaignState become the
+  1-faction/1-system degenerate case in a later slice rather than a parallel copy.
+- CONSTELLATION ENGINE (src/game/constellation{_types,_view,}.h/.cpp): SystemId/
+  FactionId, OrbitalSystem (KerrTimeField by value + band table + per-system
+  instability), FactionState (energy/stabilization/control per faction), its own
+  ConstellationFleet (game::Fleet UNTOUCHED per the frozen-path guardrail), an
+  inter-system link graph. INTER-SYSTEM DELAY = radial Schwarzschild signal delay
+  within a system + flat authority-to-authority D/c across the link (endpoints are
+  the authorities; NO invented escape/boundary radius; NEVER physics::shapiroDelay
+  per the standing invariant). Fleet transit occupies ceil(D/v/spt) whole turns.
+- DELAYED INTEL is the causality thesis in the multi-system layer: per-faction
+  perceived-controller table updated by control-change observations delivered with
+  the inter-authority light delay, so a faction learns of a remote band flip tens
+  of turns late; the deterministic AI reads this stale view. Chose delayed-intel
+  over omniscient deliberately -- omniscient would betray the whole project's
+  causality invariant. RemoteIntelLagsThenCatchesUp pins it.
+- DETERMINISM LAW (stricter than the single hole): all state in ascending-id
+  vectors, every touch in canonical SystemId -> FactionId -> FleetId order,
+  delivery sequence stamped in that order, AI comparators tie-break on stable id.
+  The determinism test exercises >=2 factions AND >=2 systems with AI active -- a
+  trivial case cannot catch an ordering divergence. serializeState covers systems/
+  factions/fleets/queue/perceived/lastEmitted; FNV-1a digest; no golden constants.
+- CONTROL = the competitive axis, rewards BREADTH (holding many uncontested bands
+  across systems), which a concentrated line structurally cannot do. This is the
+  advisor's correction to the first design (deep-band-weighted control would have
+  let all-in dominate control too -- the C6 trap a third time). CoLocationDenies
+  Control pins the denial mechanism: a rival co-located on your band makes it
+  contested -> zero points to both.
+- CLAIM, STATED HONESTLY (advisor-reviewed to avoid a third overclaim): the
+  factions mechanic does NOT deliver the CAMPAIGN-9 "menu non-dominance" (several
+  lines coexist, none dominated). It delivers the INVERSE and defensible shape --
+  FORCED CONTEST: against the Expansionist rival, pure concentration LOSES (outer
+  energy-race falls to domination at t786, all-in stabilization at t584) and only
+  a fortress line that holds all four home bands both denies the rival (stalls it
+  below the control threshold) and wins itself (t1325). Concentration is the fast
+  way to lose; the spread is the only survivable shape, forced by the rival rather
+  than by a displayed metric. constellation_test ConcentratedLinesLoseToDomination
+  FortressWins pins it; the mechanism asserts (rival >= threshold when ignored, <
+  threshold when contested) are structural/host-independent, the Won/Lost status
+  the softer check kept off the deadline cliff by a ~75-turn margin.
+- OPEN (scoped, NOT claimed done): (a) the shape is proven against the Expansionist
+  policy specifically, which over-extends into the player's system (fans canonical-
+  order-first into system 0, abandoning its own uncontested bands); a hold-home
+  rival that never leaves would change the picture -- robustness to smarter rival
+  policies is a balancing pass, needing its own invariant. (b) a fuel economy (fuel
+  is generous now so time is the only cost of spreading). (c) galaxy-map UI slice
+  (systems as nodes, links, per-band control coloring; renderer stays a
+  visualization client). (d) convergence: express CampaignState as a 1-faction/
+  1-system Constellation and retire the duplication (the shared kernel is the
+  enabler). (e) save/replay format (serializeState is determinism-only). Each new
+  win-shape claim needs a constellation balance assertion before it is made.
+
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 
 User direction (2026-07-12): procedural base plus a few vendored assets; license
