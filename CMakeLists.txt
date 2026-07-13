@@ -1573,6 +1573,8 @@ add_library(blackhole_campaign STATIC
   "${PROJECT_SOURCE_DIR}/src/game/task_graph.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/campaign.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/campaign_session.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/constellation.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/constellation_session.cpp"
 )
 target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
 target_compile_options(blackhole_campaign PRIVATE ${PROJECT_WARNINGS})
@@ -1589,6 +1591,17 @@ target_link_libraries(campaign_sim PRIVATE blackhole_campaign)
 target_compile_options(campaign_sim PRIVATE ${PROJECT_WARNINGS})
 if(ENABLE_FAST_MATH)
   target_compile_options(campaign_sim PRIVATE -fno-fast-math)
+endif()
+
+# Headless constellation balance harness: replays the player commitment lines
+# against the Expansionist rival and prints each line's outcome and digest.
+add_executable(constellation_sim
+  "${PROJECT_SOURCE_DIR}/src/game/constellation_sim_main.cpp"
+)
+target_link_libraries(constellation_sim PRIVATE blackhole_campaign)
+target_compile_options(constellation_sim PRIVATE ${PROJECT_WARNINGS})
+if(ENABLE_FAST_MATH)
+  target_compile_options(constellation_sim PRIVATE -fno-fast-math)
 endif()
 
 # --------------------------------------------------------------------------
@@ -4202,6 +4215,30 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(campaign_balance_invariant_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp")
+    add_executable(constellation_test
+      "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp"
+    )
+    target_include_directories(constellation_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(constellation_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(constellation_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(constellation_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME constellation_validation COMMAND constellation_test)
+    set_tests_properties(constellation_validation PROPERTIES
+      LABELS "campaign;constellation;balance"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(constellation_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
