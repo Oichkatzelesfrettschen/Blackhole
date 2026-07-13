@@ -1033,6 +1033,28 @@ exe).
   MECHANICAL payoff -- a score, or integrity/energy persisting past the campaign --
   which is future work (a real CAMPAIGN-9), NOT another tuning pass. Determinism
   holds; tests use their own configs so 91/91 unaffected.
+- CAMPAIGN-8 LOCKED (accept-and-lock, user decision): the two-victory-type shape
+  is accepted as intentional ("commit fully to one victory type"), the stale
+  harness prose corrected, and campaign_balance_invariant_test pins it by status +
+  clearedTurn (outer wins energy t1097; stab wins stabilization t819; solo/pod
+  lose) so the harness cannot silently contradict the scenario again. The
+  commitment lines moved to the shared src/game/campaign_sim_lines.h so the sim
+  and the test read one playthrough. 92/92.
+- CAMPAIGN-9 SCOPED (make solo/pod viable -- a DESIGN change, not tuning; not
+  started). Acceptance test: solo and pod each become non-dominated -- each best on
+  at least one axis the player values, none a strict trap. The blocker is the same
+  one behind the C6/C8 retractions: an outcome axis only creates a decision if it
+  carries MECHANICAL payoff, and today only energy>=T / stabilization>=T decide
+  Won; integrity, surplus, and clearedTurn are displayed, not rewarded. Candidate
+  mechanisms (pick one, then tune): (a) a graded score at campaign end over the
+  outcome vector, so a faster clear / higher integrity / surplus ranks winners --
+  turns "win/lose" into "how well"; (b) STATE PERSISTENCE across a campaign chain
+  (integrity, fuel, surplus energy carry into the next scenario), so preserving
+  fleets has downstream value -- this pairs naturally with the save/replay format
+  (also deferred); (c) a distinct third objective only a mid-commitment pod can
+  reach (e.g. an intel/exploration win keyed to co-located verification), giving
+  the middle its own axis. Each needs a new campaign_balance_invariant assertion
+  proving the target line is non-dominated before the claim is made.
 
 ### Tranche campaign-ui-art  (Temporal Disturbance visual polish; direction: procedural base + a few vendored assets)
 
