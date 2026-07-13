@@ -8,64 +8,28 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <utility>
 #include <vector>
 
 #include "game/campaign_view.h"
 #include "game/command.h"
+#include "game/economy.h"
 #include "game/fleet.h"
+#include "game/serialize_bytes.h"
 #include "game/task_graph.h"
 #include "game/temporal_clock.h"
 #include "game/time_field.h"
 
 namespace game {
 
-namespace {
-
-// Field-by-field little-endian writers. Whole-struct memcpy would serialize
-// padding bytes; these never do.
-void appendU8(std::vector<std::uint8_t> &out, std::uint8_t value) { out.push_back(value); }
-
-void appendU32(std::vector<std::uint8_t> &out, std::uint32_t value) {
-  for (int byteIndex = 0; byteIndex < 4; ++byteIndex) {
-    out.push_back(static_cast<std::uint8_t>((value >> (8 * byteIndex)) & 0xFFU));
-  }
-}
-
-void appendU64(std::vector<std::uint8_t> &out, std::uint64_t value) {
-  for (int byteIndex = 0; byteIndex < 8; ++byteIndex) {
-    out.push_back(static_cast<std::uint8_t>((value >> (8 * byteIndex)) & 0xFFU));
-  }
-}
-
-void appendI64(std::vector<std::uint8_t> &out, std::int64_t value) {
-  appendU64(out, static_cast<std::uint64_t>(value));
-}
-
-void appendI32(std::vector<std::uint8_t> &out, std::int32_t value) {
-  appendU32(out, static_cast<std::uint32_t>(value));
-}
-
-void appendF64(std::vector<std::uint8_t> &out, double value) {
-  assert(std::isfinite(value));
-  if (value == 0.0) {
-    value = 0.0; // Canonicalize -0.0: equal states must hash equal.
-  }
-  std::uint64_t bits = 0;
-  std::memcpy(&bits, &value, sizeof(bits));
-  appendU64(out, bits);
-}
-
-double taskYieldUnits(const TaskContract &contract, double properTimeRate, double reliability) {
-  // properHours * (1/dtau_dt) * reliability: an hour of local work deep in
-  // the well is scarce, so it is worth more coordinate-side.
-  const double properHours = contract.properTimeCostSec / 3600.0;
-  return properTimeRate > 0.0 ? (properHours / properTimeRate) * reliability : 0.0;
-}
-
-} // namespace
+using serial::appendF64;
+using serial::appendI32;
+using serial::appendI64;
+using serial::appendU32;
+using serial::appendU64;
+using serial::appendU8;
 
 CampaignState::CampaignState(CampaignConfig config, const TimeField &field)
     : config_(std::move(config)), field_(&field),
@@ -127,25 +91,13 @@ bool CampaignState::laneAllowedAtBand(OrbitLane lane, int bandIndex) const {
 }
 
 double CampaignState::ergoregionDepth(const Fleet &fleet) const {
-  if (fleet.lane != OrbitLane::Prograde) {
-    return 0.0;
-  }
-  const double radiusCm = bandRadiusCm(fleet.bandIndex);
-  const double ergoCm = field_->ergosphereRadiusCm();
-  const double horizonCm = field_->innerBoundaryRadiusCm();
-  if (radiusCm >= ergoCm || ergoCm <= horizonCm) {
-    return 0.0; // outside the ergoregion, or a non-rotating field (ergo == horizon)
-  }
-  // Depth runs 0 at the static limit to 1 at the horizon: deeper prograde work
-  // taps more of the hole's rotational energy.
-  return std::clamp((ergoCm - radiusCm) / (ergoCm - horizonCm), 0.0, 1.0);
+  return economy::ergoregionDepth(bandRadiusCm(fleet.bandIndex), field_->ergosphereRadiusCm(),
+                                  field_->innerBoundaryRadiusCm(),
+                                  fleet.lane == OrbitLane::Prograde);
 }
 
 double CampaignState::frameDragYieldFactor(const Fleet &fleet) const {
-  if (config_.frameDragYieldBonus <= 0.0) {
-    return 1.0;
-  }
-  return 1.0 + (config_.frameDragYieldBonus * ergoregionDepth(fleet));
+  return economy::frameDragYieldFactor(config_.frameDragYieldBonus, ergoregionDepth(fleet));
 }
 
 double CampaignState::bandRadiusCm(int bandIndex) const {
@@ -309,7 +261,7 @@ void CampaignState::advanceTurn() {
   // so containment protects the next turn's throughput. The factor saturates in
   // (0,1], never negative, so outer play slows but never dies.
   const double yieldFactor =
-      1.0 / (1.0 + (instability_ * config_.instabilityYieldPenaltyPerUnit));
+      economy::instabilityYieldFactor(instability_, config_.instabilityYieldPenaltyPerUnit);
   // Capability side effects are collected here and applied AFTER the fleet loop
   // so they never depend on iteration order: a fabrication refuel must hit every
   // co-band fleet identically, whether processed before or after the fabricator.
@@ -357,9 +309,10 @@ void CampaignState::advanceTurn() {
       // the authority learns of near-horizon completions late.
       const double reportDelaySec =
           effectiveSignalDelaySec(bandRadiusCm(fleet.bandIndex), config_.authorityRadiusCm);
-      double yieldUnits = taskYieldUnits(*taskGraph_.find(taskId), rate, fleet.reliability) *
-                          frameDragYieldFactor(fleet) *
-                          capabilityYieldMultiplier(fleet.capability) * yieldFactor;
+      double yieldUnits =
+          economy::taskYieldUnits(taskGraph_.find(taskId)->properTimeCostSec, rate,
+                                  fleet.reliability) *
+          frameDragYieldFactor(fleet) * capabilityYieldMultiplier(fleet.capability) * yieldFactor;
       if (corrupted) {
         yieldUnits *= config_.corruptedYieldFraction;
       }
@@ -662,16 +615,6 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   return out;
 }
 
-std::uint64_t CampaignState::stateDigest() const {
-  // FNV-1a 64-bit: a cheap comparison aid over the full serialization, not a
-  // security or sole-equality mechanism.
-  const std::vector<std::uint8_t> bytes = serializeState();
-  std::uint64_t hash = 14695981039346656037ULL;
-  for (std::uint8_t byte : bytes) {
-    hash ^= byte;
-    hash *= 1099511628211ULL;
-  }
-  return hash;
-}
+std::uint64_t CampaignState::stateDigest() const { return serial::fnv1a64(serializeState()); }
 
 } // namespace game
