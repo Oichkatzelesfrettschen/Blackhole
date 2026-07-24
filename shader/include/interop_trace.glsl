@@ -14,8 +14,10 @@ const int BH_DEBUG_FLAG_RANGE = 2;
 // Set when the integrator returns because it exhausted its step budget rather
 // than because the ray reached maxDistance. A true escape (r > maxDistance)
 // leaves this clear; budget exhaustion sets it, so the two terminal states stay
-// distinct instead of both reading as escaped. Surfaced as a debug color in
-// bhShadeHit under the debug mask; the default (mask 0) path is unaffected.
+// distinct instead of both reading as escaped. Classification is unconditional;
+// bhShadeHit masks debugFlags by the enabled debug bits, so the flag surfaces as
+// a color only when its bit is enabled and the default (mask 0) path is
+// unaffected.
 const int BH_DEBUG_FLAG_MAXSTEPS = 4;
 
 uniform float bhDebugFlags = 0.0;
@@ -300,9 +302,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
       }
     }
 
-    if ((bhDebugMask() & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
-      result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
-    }
+    result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
     result.escaped = true;
     result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
     result.escapedDir = normalize(result.hitPoint - oldPos);
@@ -347,9 +347,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     }
   }
 
-  if ((bhDebugMask() & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
-    result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
-  }
+  result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
   result.escaped = true;
   result.hitPoint = ray.position;
   result.escapedDir = normalize(ray.position - oldPos);
@@ -485,15 +483,20 @@ vec4 bhBackgroundColorFromDir(vec3 dir, float minRadius, float r_s) {
 }
 
 vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
-  if (bhDebugMask() != 0 && hit.debugFlags != 0) {
+  // Show only the debug conditions the mask enables. Masking debugFlags here
+  // (rather than gating each flag's assignment) lets the integrator classify
+  // unconditionally while an exhausted ray under an unrelated mask bit still
+  // falls through to normal shading instead of being swallowed to black.
+  int displayFlags = hit.debugFlags & bhDebugMask();
+  if (displayFlags != 0) {
     vec3 debugColor = vec3(0.0);
-    if ((hit.debugFlags & BH_DEBUG_FLAG_NAN) != 0) {
+    if ((displayFlags & BH_DEBUG_FLAG_NAN) != 0) {
       debugColor += vec3(1.0, 0.0, 1.0);
     }
-    if ((hit.debugFlags & BH_DEBUG_FLAG_RANGE) != 0) {
+    if ((displayFlags & BH_DEBUG_FLAG_RANGE) != 0) {
       debugColor += vec3(1.0, 1.0, 0.0);
     }
-    if ((hit.debugFlags & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
+    if ((displayFlags & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
       debugColor += vec3(0.0, 1.0, 1.0);
     }
     return vec4(clamp(debugColor, 0.0, 1.0), 1.0);

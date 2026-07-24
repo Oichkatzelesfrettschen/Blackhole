@@ -341,6 +341,7 @@ struct RenderState {
     // Bit meanings for integratorDebugFlags (bhDebugFlags shader uniform).
     static constexpr int K_INTEGRATOR_DEBUG_NAN_FLAG = 1;
     static constexpr int K_INTEGRATOR_DEBUG_RANGE_FLAG = 2;
+    static constexpr int K_INTEGRATOR_DEBUG_MAXSTEPS_FLAG = 4;
     int integratorDebugFlags = 0;
     bool integratorDebugConfigInit = false;
     int compareFailureCount = 0;
