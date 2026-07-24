@@ -10,6 +10,12 @@ const float BH_EPSILON = 1e-6;
 const float BH_DEBUG_MAX_RADIUS_MULT = 4.0;
 const int BH_DEBUG_FLAG_NAN = 1;
 const int BH_DEBUG_FLAG_RANGE = 2;
+// Set when the integrator returns because it exhausted its step budget rather
+// than because the ray reached maxDistance. A true escape (r > maxDistance)
+// leaves this clear; budget exhaustion sets it, so the two terminal states stay
+// distinct instead of both reading as escaped. Surfaced as a debug color in
+// bhShadeHit under the debug mask; the default (mask 0) path is unaffected.
+const int BH_DEBUG_FLAG_MAXSTEPS = 4;
 
 uniform float bhDebugFlags = 0.0;
 
@@ -283,6 +289,9 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
       }
     }
 
+    if ((bhDebugMask() & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
+      result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
+    }
     result.escaped = true;
     result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
     result.escapedDir = normalize(result.hitPoint - oldPos);
@@ -327,6 +336,9 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     }
   }
 
+  if ((bhDebugMask() & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
+    result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
+  }
   result.escaped = true;
   result.hitPoint = ray.position;
   result.escapedDir = normalize(ray.position - oldPos);
@@ -469,6 +481,9 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
     }
     if ((hit.debugFlags & BH_DEBUG_FLAG_RANGE) != 0) {
       debugColor += vec3(1.0, 1.0, 0.0);
+    }
+    if ((hit.debugFlags & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
+      debugColor += vec3(0.0, 1.0, 1.0);
     }
     return vec4(clamp(debugColor, 0.0, 1.0), 1.0);
   }
