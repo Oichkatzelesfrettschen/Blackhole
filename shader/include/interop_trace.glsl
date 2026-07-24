@@ -226,9 +226,11 @@ vec3 bhPackClosestApproachTimeline(int firstStep, int lastStep, int updateCount,
 // the value in the shader's r_s-scaled coordinates is 0.5 * isco_radius(a_star)
 // * r_s. At a_star = 0 this is 3 r_s, so the Schwarzschild disk is unchanged;
 // prograde spin (a_star > 0) draws the inner edge inward, retrograde spin pushes
-// it outward. The dimensionless spin a_star is the kerrSpin uniform.
-float bhDiskInnerRadius() {
-  return 0.5 * isco_radius(kerrSpin) * schwarzschildRadius;
+// it outward. The dimensionless spin a_star is the kerrSpin uniform; r_s comes
+// from the caller so the disk edge tracks the same Schwarzschild radius the
+// geodesic integrates, with no hidden global dependency.
+float bhDiskInnerRadius(float r_s) {
+  return 0.5 * isco_radius(kerrSpin) * r_s;
 }
 
 HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
@@ -255,7 +257,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
       r_horizon = r_s;
     }
 
-    float r_disk_in = bhDiskInnerRadius();
+    float r_disk_in = bhDiskInnerRadius(r_s);
     float r_disk_out = 100.0 * r_s;
 
     KerrConsts c = kerrInitConsts(ray.position, ray.velocity, r_s, a);
@@ -309,7 +311,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     return result;
   }
 
-  float r_disk_in = bhDiskInnerRadius();
+  float r_disk_in = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
 
   vec3 oldPos;
@@ -368,7 +370,7 @@ vec4 bhDiskColorFromHit(HitResult hit, float r_s) {
     float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
     flux = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
   } else {
-    float r_in = bhDiskInnerRadius();
+    float r_in = bhDiskInnerRadius(r_s);
     float x = r_in / r;
     flux = pow(x, 3.0) * (1.0 - sqrt(x));
     flux = max(0.0, flux);
@@ -554,7 +556,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
-  float r_disk_in  = bhDiskInnerRadius();
+  float r_disk_in  = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
   // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
   float h_disk = max(0.1 * r_s, BH_EPSILON);
@@ -687,7 +689,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
-  float r_disk_in  = bhDiskInnerRadius();
+  float r_disk_in  = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
   float h_disk     = max(0.1 * r_s, BH_EPSILON);
 
