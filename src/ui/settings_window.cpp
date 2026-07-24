@@ -554,11 +554,15 @@ void renderSettingsWindow(RenderState &rs) {
         ImGui::Text("Integrator Debug");
         bool debugNan = (rs.compare.integratorDebugFlags & RenderState::CompareGroup::K_INTEGRATOR_DEBUG_NAN_FLAG) != 0;
         bool debugRange = (rs.compare.integratorDebugFlags & RenderState::CompareGroup::K_INTEGRATOR_DEBUG_RANGE_FLAG) != 0;
+        bool debugMaxSteps = (rs.compare.integratorDebugFlags & RenderState::CompareGroup::K_INTEGRATOR_DEBUG_MAXSTEPS_FLAG) != 0;
         ImGui::Checkbox("Flag NaN/Inf", &debugNan);
         ImGui::SameLine();
         ImGui::Checkbox("Flag Out-of-Range", &debugRange);
+        ImGui::SameLine();
+        ImGui::Checkbox("Flag Max-Step Exhaustion", &debugMaxSteps);
         rs.compare.integratorDebugFlags = (debugNan ? RenderState::CompareGroup::K_INTEGRATOR_DEBUG_NAN_FLAG : 0) |
-                               (debugRange ? RenderState::CompareGroup::K_INTEGRATOR_DEBUG_RANGE_FLAG : 0);
+                               (debugRange ? RenderState::CompareGroup::K_INTEGRATOR_DEBUG_RANGE_FLAG : 0) |
+                               (debugMaxSteps ? RenderState::CompareGroup::K_INTEGRATOR_DEBUG_MAXSTEPS_FLAG : 0);
         ImGui::Text("Threshold failures: %d", rs.compare.compareFailureCount);
         if (rs.compare.compareFullStats.valid) {
           ImGui::Text("Last capture: %s", rs.compare.compareLastExceeded ? "FAIL" : "PASS");

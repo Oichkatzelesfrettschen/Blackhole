@@ -5,11 +5,20 @@
 #include "include/physics_constants.glsl"
 #include "include/rte_step.glsl"
 #include "include/stokes_transport.glsl"
+#include "include/disk_profile.glsl"
 
 const float BH_EPSILON = 1e-6;
 const float BH_DEBUG_MAX_RADIUS_MULT = 4.0;
 const int BH_DEBUG_FLAG_NAN = 1;
 const int BH_DEBUG_FLAG_RANGE = 2;
+// Set when the integrator returns because it exhausted its step budget rather
+// than because the ray reached maxDistance. A true escape (r > maxDistance)
+// leaves this clear; budget exhaustion sets it, so the two terminal states stay
+// distinct instead of both reading as escaped. Classification is unconditional;
+// bhShadeHit masks debugFlags by the enabled debug bits, so the flag surfaces as
+// a color only when its bit is enabled and the default (mask 0) path is
+// unaffected.
+const int BH_DEBUG_FLAG_MAXSTEPS = 4;
 
 uniform float bhDebugFlags = 0.0;
 
@@ -212,6 +221,18 @@ vec3 bhPackClosestApproachTimeline(int firstStep, int lastStep, int updateCount,
   return vec3(firstNorm, lastNorm, countNorm);
 }
 
+// Accretion-disk inner edge at the spin-dependent ISCO. isco_radius() returns
+// the innermost stable circular orbit in units of M (BPT 1972); with r_s = 2 M
+// the value in the shader's r_s-scaled coordinates is 0.5 * isco_radius(a_star)
+// * r_s. At a_star = 0 this is 3 r_s, so the Schwarzschild disk is unchanged;
+// prograde spin (a_star > 0) draws the inner edge inward, retrograde spin pushes
+// it outward. The dimensionless spin a_star is the kerrSpin uniform; r_s comes
+// from the caller so the disk edge tracks the same Schwarzschild radius the
+// geodesic integrates, with no hidden global dependency.
+float bhDiskInnerRadius(float r_s) {
+  return 0.5 * isco_radius(kerrSpin) * r_s;
+}
+
 HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
                           float stepSize) {
   HitResult result;
@@ -236,7 +257,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
       r_horizon = r_s;
     }
 
-    float r_disk_in = iscoRadius;
+    float r_disk_in = bhDiskInnerRadius(r_s);
     float r_disk_out = 100.0 * r_s;
 
     KerrConsts c = kerrInitConsts(ray.position, ray.velocity, r_s, a);
@@ -283,13 +304,14 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
       }
     }
 
+    result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
     result.escaped = true;
     result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
     result.escapedDir = normalize(result.hitPoint - oldPos);
     return result;
   }
 
-  float r_disk_in = iscoRadius;
+  float r_disk_in = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
 
   vec3 oldPos;
@@ -327,6 +349,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     }
   }
 
+  result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
   result.escaped = true;
   result.hitPoint = ray.position;
   result.escapedDir = normalize(ray.position - oldPos);
@@ -347,7 +370,7 @@ vec4 bhDiskColorFromHit(HitResult hit, float r_s) {
     float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
     flux = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
   } else {
-    float r_in = iscoRadius;
+    float r_in = bhDiskInnerRadius(r_s);
     float x = r_in / r;
     flux = pow(x, 3.0) * (1.0 - sqrt(x));
     flux = max(0.0, flux);
@@ -462,13 +485,21 @@ vec4 bhBackgroundColorFromDir(vec3 dir, float minRadius, float r_s) {
 }
 
 vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
-  if (bhDebugMask() != 0 && hit.debugFlags != 0) {
+  // Show only the debug conditions the mask enables. Masking debugFlags here
+  // (rather than gating each flag's assignment) lets the integrator classify
+  // unconditionally while an exhausted ray under an unrelated mask bit still
+  // falls through to normal shading instead of being swallowed to black.
+  int displayFlags = hit.debugFlags & bhDebugMask();
+  if (displayFlags != 0) {
     vec3 debugColor = vec3(0.0);
-    if ((hit.debugFlags & BH_DEBUG_FLAG_NAN) != 0) {
+    if ((displayFlags & BH_DEBUG_FLAG_NAN) != 0) {
       debugColor += vec3(1.0, 0.0, 1.0);
     }
-    if ((hit.debugFlags & BH_DEBUG_FLAG_RANGE) != 0) {
+    if ((displayFlags & BH_DEBUG_FLAG_RANGE) != 0) {
       debugColor += vec3(1.0, 1.0, 0.0);
+    }
+    if ((displayFlags & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
+      debugColor += vec3(0.0, 1.0, 1.0);
     }
     return vec4(clamp(debugColor, 0.0, 1.0), 1.0);
   }
@@ -525,7 +556,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
-  float r_disk_in  = iscoRadius;
+  float r_disk_in  = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
   // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
   float h_disk = max(0.1 * r_s, BH_EPSILON);
@@ -658,7 +689,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
-  float r_disk_in  = iscoRadius;
+  float r_disk_in  = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
   float h_disk     = max(0.1 * r_s, BH_EPSILON);
 

@@ -58,7 +58,7 @@
     },
     {
       "id": "eht_observables",
-      "claim": "The repository computes EHT-facing shadow and visibility observables and checks them with local tests.",
+      "claim": "The repository computes EHT-facing visibility observables and checks the analytic Schwarzschild shadow angular size (critical impact parameter b_c = 3 sqrt(3) M) against its closed form and for consistency with the EHT-measured M87*/Sgr A* ring diameters, which are set by but not identical to the shadow's b_c critical curve, with local tests. Rendered-image shadow validation (photon-ring brightness, Kerr asymmetry) is not covered by these tests.",
       "status": "local-validation",
       "files": [
         "src/physics/eht_visibility.h",
