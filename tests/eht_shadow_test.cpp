@@ -18,8 +18,11 @@
  * 1.5 r_s (= 3 M) as the shadow radius instead of b_c, halved an angular radius
  * a second time as if it were a diameter, and painted the shadow interior bright
  * -- producing ~18 uas for M87* and then accepting a 10-25 uas band. Using b_c
- * the same parameters give ~40 uas (M87*) and ~51 uas (Sgr A*), matching the
- * observed sizes.
+ * the same parameters give ~40 uas (M87*) and ~51 uas (Sgr A*), consistent with
+ * the EHT-measured ring diameters. The bright emission ring the EHT resolves is
+ * set by, but not identical to, the b_c critical curve, so these checks assert
+ * the analytic shadow scale and its proximity to the ring diameters, not an
+ * exact match to a measured geometric shadow.
  *
  * References:
  * - Event Horizon Telescope Collaboration (2019) ApJ 875, L1 (M87* shadow ~42 uas).
@@ -44,16 +47,17 @@ constexpr double MPC = 3.086e22;          // [m]
 // Radians to microarcseconds.
 constexpr double RAD_TO_UAS = (180.0 * 3600.0 / std::numbers::pi) * 1e6;
 
-// Source parameters and observed shadow sizes. The observed value is context
+// Source parameters and EHT-measured ring diameters. The ring value is context
 // for the size tests; those gate on the closed form and check proximity to the
-// observation with a loose astrophysical tolerance.
+// ring diameter with a loose astrophysical tolerance, since the emission ring is
+// set by, but not identical to, the b_c critical curve.
 constexpr double M87_MASS = 6.5e9;        // [Msun]
 constexpr double M87_DISTANCE = 16.8;     // [Mpc]
-constexpr double M87_OBSERVED_UAS = 42.0; // EHT 2019
+constexpr double M87_RING_UAS = 42.0;     // EHT 2019 ring diameter
 
 constexpr double SGRA_MASS = 4.1e6;       // [Msun]
 constexpr double SGRA_DISTANCE = 0.0082;  // [Mpc] (8.2 kpc)
-constexpr double SGRA_OBSERVED_UAS = 52.0; // EHT 2022
+constexpr double SGRA_RING_UAS = 52.0;    // EHT 2022 ring diameter
 
 // Geometric mass length M = GM/c^2 [m]. The Schwarzschild radius is 2 M.
 double geometricMassLength(double massSolar) {
@@ -100,34 +104,35 @@ bool testCriticalImpactParameterIdentity() {
   return pass;
 }
 
-// Test 2: M87* shadow diameter from b_c matches the closed form and lands near
-// the EHT-observed 42 uas.
+// Test 2: M87* shadow diameter from b_c matches the closed form and is
+// consistent with the EHT ring diameter of ~42 uas.
 bool testM87ShadowDiameter() {
   double const diameter = shadowAngularDiameterUas(M87_MASS, M87_DISTANCE);
   double const bc = criticalImpactParameter(M87_MASS);
   double const closedForm = 2.0 * std::atan(bc / (M87_DISTANCE * MPC)) * RAD_TO_UAS;
 
   bool const selfConsistent = approxEqual(diameter, closedForm, 1e-12);
-  bool const nearObserved = approxEqual(diameter, M87_OBSERVED_UAS, 0.15);
-  bool const pass = selfConsistent && nearObserved;
+  bool const nearRing = approxEqual(diameter, M87_RING_UAS, 0.15);
+  bool const pass = selfConsistent && nearRing;
 
   std::cout << "Test 2: M87* shadow angular diameter\n"
-            << "  b_c closed form: " << std::fixed << std::setprecision(2) << diameter << " uas\n"
-            << "  EHT observed:    " << M87_OBSERVED_UAS << " uas\n"
+            << "  b_c closed form:  " << std::fixed << std::setprecision(2) << diameter << " uas\n"
+            << "  EHT ring diameter: " << M87_RING_UAS << " uas\n"
             << "  Status: " << (pass ? "PASS" : "FAIL") << "\n\n";
   return pass;
 }
 
-// Test 3: Sgr A* shadow diameter from b_c lands near the EHT-observed 52 uas.
+// Test 3: Sgr A* shadow diameter from b_c is consistent with the EHT ring
+// diameter of ~52 uas.
 bool testSgrAShadowDiameter() {
   double const diameter = shadowAngularDiameterUas(SGRA_MASS, SGRA_DISTANCE);
-  bool const nearObserved = approxEqual(diameter, SGRA_OBSERVED_UAS, 0.15);
+  bool const nearRing = approxEqual(diameter, SGRA_RING_UAS, 0.15);
 
   std::cout << "Test 3: Sgr A* shadow angular diameter\n"
-            << "  b_c closed form: " << std::fixed << std::setprecision(2) << diameter << " uas\n"
-            << "  EHT observed:    " << SGRA_OBSERVED_UAS << " uas\n"
-            << "  Status: " << (nearObserved ? "PASS" : "FAIL") << "\n\n";
-  return nearObserved;
+            << "  b_c closed form:  " << std::fixed << std::setprecision(2) << diameter << " uas\n"
+            << "  EHT ring diameter: " << SGRA_RING_UAS << " uas\n"
+            << "  Status: " << (nearRing ? "PASS" : "FAIL") << "\n\n";
+  return nearRing;
 }
 
 // Test 4: shadow diameter scales linearly with mass (b_c ~ M).
