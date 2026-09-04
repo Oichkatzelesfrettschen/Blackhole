@@ -1,5 +1,9 @@
 # Repository Guidelines
 
+## Instruction source
+
+`AGENTS.md` is the root instruction file for Blackhole and owns its rules. Every agent and contributor reads it directly. `CLAUDE.md` is a tracked, repository-relative symbolic link to `AGENTS.md`, so Claude Code receives the canonical rules through the same bytes and the body lives in one place. A tool that requires a differently named loader references this file rather than copying doctrine that can drift.
+
 ## Architecture Overview
 The core pipeline is C++23 + OpenGL 4.6 with a fragment/compute ray integrator,
 post-processing, and LUT-backed validation assets.
@@ -46,3 +50,12 @@ Run: `./build/Release/Blackhole` or `./build/Release/physics_bench`.
 - Backlog only: [`docs/developer-guide/backlog.md`](docs/developer-guide/backlog.md).
 - Deep design references live in `docs/` (GRMHD, LUT pipeline, cleanroom ports).
 - Full documentation index: [`docs/index.md`](docs/index.md).
+
+## Claude Code notes
+
+These notes came from the retired standalone `CLAUDE.md` loader and hold the Claude Code specifics that a tool-generic guide leaves out. A rule that applies to every agent lives in the sections above.
+
+This repository now centralizes contributor guidance, architecture notes,
+and progress references in `AGENTS.md`.
+
+Please read `AGENTS.md` and `docs/developer-guide/status.md` for current information.
