@@ -4523,8 +4523,8 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(synchrotron_spectrum_test PRIVATE ${PROJECT_WARNINGS})
-    if(Boost_FOUND OR TARGET boost::boost)
-      target_link_libraries(synchrotron_spectrum_test PRIVATE boost::boost)
+    if(TARGET Boost::math)
+      target_link_libraries(synchrotron_spectrum_test PRIVATE Boost::math)
     endif()
     add_test(NAME synchrotron_spectrum_validation COMMAND synchrotron_spectrum_test)
     set_tests_properties(synchrotron_spectrum_validation PROPERTIES
