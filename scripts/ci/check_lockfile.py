@@ -5,7 +5,6 @@ import difflib
 import json
 from pathlib import Path
 
-
 REFERENCE_FIELDS = ("requires", "build_requires", "python_requires", "config_requires")
 
 
@@ -28,10 +27,17 @@ def main() -> int:
     resolved = normalized_lock(arguments.resolved)
     if committed == resolved:
         return 0
-    print("".join(difflib.unified_diff(
-        committed.splitlines(keepends=True), resolved.splitlines(keepends=True),
-        fromfile=str(arguments.committed), tofile=str(arguments.resolved),
-    )), end="")
+    print(
+        "".join(
+            difflib.unified_diff(
+                committed.splitlines(keepends=True),
+                resolved.splitlines(keepends=True),
+                fromfile=str(arguments.committed),
+                tofile=str(arguments.resolved),
+            )
+        ),
+        end="",
+    )
     return 1
 
 

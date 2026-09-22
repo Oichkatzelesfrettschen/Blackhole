@@ -74,7 +74,8 @@ jobs:
             libxcb-randr0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-xfixes0-dev \
             libxcb-xinerama0-dev libxcb-dri3-dev libxcb-cursor-dev \
             libxcb-icccm4-dev libxcb-util-dev libxcb-util0-dev libxcb-xkb-dev \
-            glslang-tools libcfitsio-dev
+            glslang-tools libcfitsio-dev libxcb-glx0-dev uuid-dev libxcb-dri2-0-dev \
+            libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev libxcb-res0-dev
           if [ "$CI_PRESET" = ci-analysis ]; then
             sudo apt-get install -y clang-tidy-18 cppcheck
             echo 'CLANG_TIDY=/usr/bin/clang-tidy-18' >> "$GITHUB_ENV"
@@ -92,6 +93,12 @@ jobs:
           path: .ccache
           key: ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}
           restore-keys: ccache-ubuntu24-gcc14-${{ matrix.preset }}-
+      - name: Validate CI helpers
+        run: |
+          "$PYTHON" scripts/ci/test_check_lockfile.py
+          shellcheck -S error scripts/build.sh scripts/ci/run_stage.sh
+          "$PYTHON" -m ruff check scripts/ci/
+          "$PYTHON" -m ruff format --check scripts/ci/
       - name: Export locked local recipes
         run: scripts/conan_export_local_recipes.sh
       - name: Check lockfile coverage

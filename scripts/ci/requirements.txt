@@ -5,3 +5,4 @@ numpy==2.2.6
 scipy==1.15.3
 h5py==3.13.0
 matplotlib==3.10.3
+ruff==0.14.11
