@@ -81,11 +81,13 @@ jobs:
           fi
       - name: Install pinned build tools
         run: scripts/ci/run_stage.sh tooling "$PYTHON" -m pip install -r scripts/ci/requirements.txt
-      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        id: conan-cache
         with:
           path: .conan
           key: conan-ubuntu24-gcc14-v1-${{ hashFiles('conan.lock', 'conanfile.py', 'conan/recipes/**', 'conan/profiles/ci', 'scripts/ci/requirements.txt') }}
-      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        id: compiler-cache
         with:
           path: .ccache
           key: ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}
@@ -96,18 +98,29 @@ jobs:
         run: |
           scripts/ci/run_stage.sh lockfile conan lock create . --lockfile=conan.lock \
             --lockfile-out=build/ci-reports/conan.lock -pr:a conan/profiles/ci
-          diff -u conan.lock build/ci-reports/conan.lock
+          "$PYTHON" scripts/ci/test_check_lockfile.py
+          "$PYTHON" scripts/ci/check_lockfile.py conan.lock build/ci-reports/conan.lock
       - name: Install dependencies using all CPUs
         run: |
           scripts/ci/run_stage.sh dependencies conan install . --output-folder=build/CI-deps \
             --lockfile=conan.lock --build=missing -pr:a conan/profiles/ci \
             -c:a tools.build:jobs="$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Compact reusable dependency packages
+        if: steps.conan-cache.outputs.cache-hit != 'true'
+        run: conan cache clean '*' --source --build --download --temp
+      - name: Save dependencies before compiling project sources
+        if: steps.conan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .conan
+          key: ${{ steps.conan-cache.outputs.cache-primary-key }}
       - name: Configure
         run: |
           scripts/ci/run_stage.sh configure cmake --preset "$CI_PRESET" \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DPYTHON3_EXECUTABLE="$PYTHON" \
             ${CLANG_TIDY:+-DCLANG_TIDY_EXE="$CLANG_TIDY"}
       - name: Build using all CPUs
+        id: compile
         run: scripts/ci/run_stage.sh build cmake --build --preset "$CI_PRESET" --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
       - name: Test using all CPUs
         run: |
@@ -119,6 +132,12 @@ jobs:
           scripts/ci/run_stage.sh tests ctest --test-dir "$build_dir" \
             --output-on-failure --no-tests=error --parallel "$CTEST_PARALLEL_LEVEL" \
             --output-junit "$GITHUB_WORKSPACE/build/ci-reports/tests.xml"
+      - name: Save compiled objects after build failures too
+        if: always() && steps.compile.outcome != 'skipped' && steps.compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .ccache
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
       - name: Record compiler cache statistics
         if: always()
         run: command -v ccache && ccache --show-stats
