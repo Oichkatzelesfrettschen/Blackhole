@@ -50,6 +50,9 @@ set(BLACKHOLE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD ${BLACKHOLE_CXX_STANDARD})
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Project translation units use headers; module dependency flags are unnecessary
+# and GCC's scanner flags are incompatible with the Clang analysis frontend.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 add_compile_definitions(
   BLACKHOLE_CXX_STANDARD=${BLACKHOLE_CXX_STANDARD}
@@ -3653,7 +3656,7 @@ if(BUILD_TESTING)
     add_executable(physics_test
       "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp"
     )
-    target_link_libraries(physics_test PRIVATE blackhole_physics)
+    target_link_libraries(physics_test PRIVATE blackhole_physics glm::glm)
     target_include_directories(physics_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -3913,7 +3916,7 @@ if(BUILD_TESTING)
     )
     target_compile_options(hud_overlay_compile_test PRIVATE ${PROJECT_WARNINGS})
     target_compile_definitions(hud_overlay_compile_test PRIVATE GLM_FORCE_PURE)
-    target_link_libraries(hud_overlay_compile_test PRIVATE glbinding::glbinding stb::stb)
+    target_link_libraries(hud_overlay_compile_test PRIVATE glbinding::glbinding stb::stb glm::glm)
     add_test(NAME hud_overlay_compile COMMAND hud_overlay_compile_test)
     set_tests_properties(hud_overlay_compile PROPERTIES
       LABELS "hud;compile"
@@ -3937,6 +3940,7 @@ if(BUILD_TESTING)
     )
     target_compile_options(math_types_compile_test PRIVATE ${PROJECT_WARNINGS})
     target_compile_definitions(math_types_compile_test PRIVATE GLM_FORCE_PURE)
+    target_link_libraries(math_types_compile_test PRIVATE glm::glm)
     add_test(NAME math_types_compile COMMAND math_types_compile_test)
     set_tests_properties(math_types_compile PROPERTIES
       LABELS "math;compile"
@@ -4959,6 +4963,7 @@ if(BUILD_TESTING)
     target_compile_options(grmhd_hdf5_loader_test PRIVATE ${PROJECT_WARNINGS})
     target_link_libraries(grmhd_hdf5_loader_test PRIVATE
       HighFive::HighFive
+      nlohmann_json::nlohmann_json
     )
     add_test(NAME grmhd_hdf5_loader COMMAND grmhd_hdf5_loader_test)
     set_tests_properties(grmhd_hdf5_loader PROPERTIES
@@ -6280,6 +6285,9 @@ function(blackhole_apply_analysis directory_path)
   endforeach()
 endfunction()
 
-# Imported ImGui backends and the GL debug callback retain upstream ownership.
-set_source_files_properties(${THIRDPARTY_SRC_FILES} PROPERTIES SKIP_LINTING ON)
+# Imported ImGui, GL callback, and STB implementations retain upstream ownership.
+set_source_files_properties(${THIRDPARTY_SRC_FILES}
+  external/gl_debug_callback/GLDebugMessageCallback.cc
+  src/stb_image.cpp src/stb_image_write_impl.cpp
+  PROPERTIES SKIP_LINTING ON)
 blackhole_apply_analysis("${PROJECT_SOURCE_DIR}")

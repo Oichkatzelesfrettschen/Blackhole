@@ -44,13 +44,14 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <cstddef>
 
 #ifdef __has_include
 #if __has_include(<boost/math/special_functions/jacobi_elliptic.hpp>)
 #include <boost/math/special_functions/ellint_1.hpp>
 #include <boost/math/special_functions/jacobi_elliptic.hpp>
-#define PHYSICS_HAS_BOOST_JACOBI                                                                   \
-  1 // NOLINT(cppcoreguidelines-macro-usage) -- feature-detection flag, not a constant
+// Conditional compilation requires a macro to select the Boost Jacobi path.
+#define PHYSICS_HAS_BOOST_JACOBI 1 // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 #endif
 

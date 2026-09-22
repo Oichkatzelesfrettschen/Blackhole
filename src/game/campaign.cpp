@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numeric>
 #include <utility>
 #include <vector>
 
@@ -41,12 +42,8 @@ CampaignState::CampaignState(CampaignConfig config, const TimeField &field)
       clock_(valid_ ? config_.secondsPerTurn : 1.0) {}
 
 Fleet *CampaignState::findFleet(FleetId fleetId) {
-  for (Fleet &fleet : fleets_) {
-    if (fleet.id == fleetId) {
-      return &fleet;
-    }
-  }
-  return nullptr;
+  const auto fleet = std::ranges::find(fleets_, fleetId, &Fleet::id);
+  return fleet == fleets_.end() ? nullptr : &*fleet;
 }
 
 double CampaignState::redeployFuelCost(int fromBand, int toBand) const {
@@ -416,11 +413,9 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
   view.clearedTurn = clearedTurn_;
   // Integrity is the weakest fleet: the deep dive's wear shows up as the axis the
   // player trades stabilization and speed against.
-  double integrity = fleets_.empty() ? 1.0 : fleets_.front().reliability;
-  for (const Fleet &fleet : fleets_) {
-    integrity = std::min(integrity, fleet.reliability);
-  }
-  view.fleetIntegrity = integrity;
+  view.fleetIntegrity = std::accumulate(
+      fleets_.begin(), fleets_.end(), fleets_.empty() ? 1.0 : fleets_.front().reliability,
+      [](double integrity, const Fleet &fleet) { return std::min(integrity, fleet.reliability); });
   view.ergosphereRadiusCm = field_->ergosphereRadiusCm();
   view.spinDimensionless = field_->spinDimensionless();
   view.reliabilityCorruptionThreshold = config_.reliabilityCorruptionThreshold;

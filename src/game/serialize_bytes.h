@@ -14,10 +14,10 @@
 #ifndef BLACKHOLE_GAME_SERIALIZE_BYTES_H
 #define BLACKHOLE_GAME_SERIALIZE_BYTES_H
 
+#include <bit>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <vector>
 
 namespace game::serial {
@@ -47,11 +47,11 @@ inline void appendI32(std::vector<std::uint8_t> &out, std::int32_t value) {
 inline void appendF64(std::vector<std::uint8_t> &out, double value) {
   assert(std::isfinite(value));
   if (value == 0.0) {
-    value = 0.0; // Canonicalize -0.0: equal states must hash equal.
+    // Canonicalize both zero signs to the positive-zero encoding.
+    appendU64(out, 0);
+    return;
   }
-  std::uint64_t bits = 0;
-  std::memcpy(&bits, &value, sizeof(bits));
-  appendU64(out, bits);
+  appendU64(out, std::bit_cast<std::uint64_t>(value));
 }
 
 /** @brief FNV-1a 64-bit over a byte serialization -- a cheap comparison aid,

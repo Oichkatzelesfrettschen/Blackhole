@@ -5,6 +5,7 @@
 
 #include "game/task_graph.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath> // IWYU pragma: keep -- std::isfinite inside assert, compiled out under NDEBUG
 #include <utility>
@@ -27,12 +28,8 @@ TaskId TaskGraph::addTask(FleetId assignedFleet, double properTimeCostSec,
 }
 
 const TaskContract *TaskGraph::find(TaskId taskId) const {
-  for (const TaskContract &contract : tasks_) {
-    if (contract.id == taskId) {
-      return &contract;
-    }
-  }
-  return nullptr;
+  const auto contract = std::ranges::find(tasks_, taskId, &TaskContract::id);
+  return contract == tasks_.end() ? nullptr : &*contract;
 }
 
 void TaskGraph::activateEligible() {

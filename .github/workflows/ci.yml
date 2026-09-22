@@ -129,7 +129,7 @@ jobs:
           key: ${{ steps.conan-cache.outputs.cache-primary-key }}
       - name: Export packages for local diagnosis
         if: inputs.export_dependencies
-        run: conan cache save '*' --file=build/ci-reports/conan-packages.tgz
+        run: conan cache save '*:*' --file=build/ci-reports/conan-packages.tgz
       - name: Configure
         run: |
           scripts/ci/run_stage.sh configure cmake --preset "$CI_PRESET" \
