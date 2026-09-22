@@ -194,7 +194,7 @@ bool testOpticallyThickLimit() {
   std::cout << "\n[TEST 4] Optically Thick Limit\n";
   std::cout << "===============================\n";
 
-  double const jNu = 1e-8;     // Emissivity
+  double const jNu = 2e-8;     // Emissivity
   double const alphaNu = 1e-8; // Strong absorption
   double const ds = 1e18;      // Very large path (tau >> 1)
 

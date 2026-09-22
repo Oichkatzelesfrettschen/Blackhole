@@ -6,10 +6,11 @@
  *        reliability corruption cliff plus its verification interlock.
  */
 
-#include <gtest/gtest.h>
-
+#include <algorithm>
 #include <cstdint>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "campaign_test_field.h"
 #include "game/campaign.h"
@@ -50,12 +51,9 @@ game::Command placeFleet(game::FleetId fleet, int targetBand) {
 }
 
 const game::IntelView *findIntel(const game::CampaignViewSnapshot &view, game::FleetId fleet) {
-  for (const game::IntelView &report : view.intel) {
-    if (report.fleet == fleet) {
-      return &report;
-    }
-  }
-  return nullptr;
+  const auto report = std::ranges::find_if(
+      view.intel, [fleet](const game::IntelView &candidate) { return candidate.fleet == fleet; });
+  return report == view.intel.end() ? nullptr : &*report;
 }
 
 } // namespace

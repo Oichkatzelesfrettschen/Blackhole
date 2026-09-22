@@ -336,7 +336,6 @@ bool testFourPNNonlogPositive() {
 
 } // namespace
 
-// NOLINTNEXTLINE(bugprone-exception-escape)
 int main() try {
   std::cout << "\n================================================\n"
             << "GW PHASE 4.5PN VALIDATION\n"

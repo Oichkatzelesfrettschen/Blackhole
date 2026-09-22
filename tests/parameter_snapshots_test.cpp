@@ -231,27 +231,22 @@ bool testCompleteSnapshotWorkflow() {
   SnapshotHistory history = createSnapshotHistory(10.0); // Max 10 seconds
   ParameterAdjustmentState state = createParameterAdjustmentState();
 
-  uint32_t snapCount = 0;
 
   // Simulate interactive session: adjust parameters and save snapshots
   setGlobalDensityScale(state, 1.0);
   (void)createSnapshot(history, state, 0.0, 0);
-  snapCount++;
 
   // Double density
   setGlobalDensityScale(state, 2.0);
   (void)createSnapshot(history, state, 1.0, 30);
-  snapCount++;
 
   // Increase temperature
   setGlobalTemperatureScale(state, 1.5);
   (void)createSnapshot(history, state, 2.0, 60);
-  snapCount++;
 
   // Triple density
   setGlobalDensityScale(state, 3.0);
   (void)createSnapshot(history, state, 3.0, 90);
-  snapCount++;
 
   // Navigation: go to snap 1, then forward to snap 2
   (void)restoreSnapshot(history, 1, state);
@@ -265,7 +260,7 @@ bool testCompleteSnapshotWorkflow() {
   (void)getInterpolatedStateAtTime(history, 1.5, atMid);
 
   bool const workflowOk =
-      (snapCount == 4) && (std::abs(scaleAt1 - 2.0) < 1e-10) &&
+      (getSnapshotCount(history) == 4) && (std::abs(scaleAt1 - 2.0) < 1e-10) &&
       (std::abs(scaleAt2 - 2.0) < 1e-10) &&
       (std::abs(atMid.densityScale - 2.0) < 1e-10 ||
        std::abs(atMid.densityScale - 2.5) < 1e-10); // Either 2.0 or interpolated

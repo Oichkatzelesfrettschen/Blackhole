@@ -426,7 +426,7 @@ int main() {
       for (const auto &r : results) {
         if (!r.passed) {
           std::cout << "  - " << r.name << ": expected " << r.expected << ", got " << r.actual
-                    << "\n";
+                    << ", tolerance " << r.tolerance << "\n";
         }
       }
       return 1;

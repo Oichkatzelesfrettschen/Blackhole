@@ -70,11 +70,12 @@ public:
                         .actual = actual,
                         .relativeError = relError});
 
-    if (!passed) {
-      std::cout << "[FAIL] " << name << "\n";
-      std::cout << "  Expected: " << std::setprecision(12) << expected << "\n";
-      std::cout << "  Actual:   " << std::setprecision(12) << actual << "\n";
-      std::cout << "  Rel Err:  " << std::scientific << relError << "\n\n";
+    const auto &result = results_.back();
+    if (!result.passed) {
+      std::cout << "[FAIL] " << result.testName << "\n";
+      std::cout << "  Expected: " << std::setprecision(12) << result.expected << "\n";
+      std::cout << "  Actual:   " << std::setprecision(12) << result.actual << "\n";
+      std::cout << "  Rel Err:  " << std::scientific << result.relativeError << "\n\n";
     }
   }
 
@@ -318,12 +319,10 @@ void testValidityConstraints(TestSuite &suite) {
     suite.runTest("Kerr-Newman validity (a²+Q²≤M²)", 1.0, valid ? 1.0 : 0.0);
   }
 
-  // Valid Kerr-de Sitter: Λ > 0
-  {
-    double const lambda = 1e-5;
-    bool const valid = (lambda > 0);
-    suite.runTest("Kerr-de Sitter validity (Λ>0)", 1.0, valid ? 1.0 : 0.0);
-  }
+  // The constexpr validity predicate admits only a positive cosmological constant.
+  static_assert(is_physical_kds_black_hole(1.0, 0.5, 1e-5));
+  static_assert(!is_physical_kds_black_hole(1.0, 0.5, 0.0));
+  static_assert(!is_physical_kds_black_hole(1.0, 0.5, -1e-5));
 }
 
 // ============================================================================

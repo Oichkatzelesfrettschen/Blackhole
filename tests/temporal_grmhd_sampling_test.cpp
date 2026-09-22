@@ -5,11 +5,13 @@
  * Validates sampling of GRMHD fields at arbitrary times by interpolating between dumps
  */
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <vector>
 
 #include "../src/physics/timeseries_interpolation.h"
@@ -93,9 +95,9 @@ bool testFineTimescaleSampling() {
   std::vector<double> samples;
 
   samples.reserve(sampleTimes.size());
-  for (double const t : sampleTimes) {
-    samples.push_back(interpolateField(ts, bField.data(), t, false));
-  }
+  std::ranges::transform(sampleTimes, std::back_inserter(samples), [&ts, &bField](double time) {
+    return interpolateField(ts, bField.data(), time, false);
+  });
 
   // All samples should be between min and max
   bool fineOk = true;

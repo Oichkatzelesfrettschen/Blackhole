@@ -30,6 +30,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <exception>
@@ -368,13 +369,13 @@ void testCurvatureBoost() {
 // ---------------------------------------------------------------------------
 
 /**
- * @brief Verify wiregridOverlay RGBA.a is in [0, 1] for all input combinations.
+ * @brief Verify every wiregridOverlay channel is in [0, 1] for all input combinations.
  *
- * WHY: The alpha channel is used for over-compositing; values outside [0,1]
+ * WHY: The color and alpha channels are used for over-compositing; values outside [0,1]
  *      would produce visible artifacts (white overdrive or negative subtraction).
  */
 void testOpacityBounds() {
-  std::cout << "Test 10: overlay opacity in [0, 1] for diverse inputs\n";
+  std::cout << "Test 10: overlay RGBA channels in [0, 1] for diverse inputs\n";
   const double rVals[] = {1.5, 2.0, 3.0, 5.0, 20.0, 100.0};
   const double thetaVals[] = {0.01, PI / 6, PI / 3, PI / 2, PI - 0.01};
   const double phiVals[] = {0.0, PI / 12, PI / 6, PI / 2, PI, 2 * PI - 0.01};
@@ -386,11 +387,14 @@ void testOpacityBounds() {
       for (double const phi : phiVals) {
         for (double const a : aVals) {
           RGBA const ov = wgOverlay(r, theta, phi, a, true, 1.0);
-          if (ov.a < 0.0 || ov.a > 1.0001) {
-            const std::string buf =
-                std::format("r={:.1f} theta={:.3f} phi={:.3f} a={:.3f} -> alpha={:.6f}", r, theta,
-                            phi, a, ov.a);
-            std::cout << "  [FAIL] alpha out of [0,1]: " << buf << "\n";
+          const std::array channels{ov.r, ov.g, ov.b, ov.a};
+          const bool bounded = std::ranges::all_of(
+              channels, [](double channel) { return channel >= 0.0 && channel <= 1.0001; });
+          if (!bounded) {
+            const std::string buf = std::format(
+                "r={:.1f} theta={:.3f} phi={:.3f} a={:.3f} -> RGBA=({:.6f},{:.6f},{:.6f},{:.6f})",
+                r, theta, phi, a, ov.r, ov.g, ov.b, ov.a);
+            std::cout << "  [FAIL] RGBA out of [0,1]: " << buf << "\n";
             ++failCount;
             gAllPass = false;
           }
@@ -399,7 +403,7 @@ void testOpacityBounds() {
     }
   }
   if (failCount == 0) {
-    std::cout << "  [PASS] all " << (6 * 5 * 6 * 4) << " samples have alpha in [0,1]\n";
+    std::cout << "  [PASS] all " << (6 * 5 * 6 * 4) << " samples have RGBA in [0,1]\n";
   }
 }
 

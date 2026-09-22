@@ -204,7 +204,6 @@ bool testSpectrumAbsorption() {
       1e18, // 1 EHz (X-ray)
   };
 
-  std::vector<const char *> const names = {"Radio", "Microwave", "Infrared", "X-ray"};
 
   std::cout << "  Absorption coefficients across spectrum:\n";
   std::cout << "  Freq Range    | Alpha Total  | Dominant Mode\n";

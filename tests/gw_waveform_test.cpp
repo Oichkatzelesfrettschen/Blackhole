@@ -20,6 +20,7 @@
 #include <iomanip>
 #include <iostream>
 #include <numbers>
+#include <numeric>
 #include <vector>
 
 // ============================================================================
@@ -67,7 +68,7 @@ public:
         times.at(i) = t;
 
         double const tau = tMerger - t;
-        if (tau <= 0.0 || tau < 1e-6) {
+        if (tau < 1e-6) {
           strain.at(i) = 0.0;
           continue;
         }
@@ -86,10 +87,7 @@ public:
     }
 
     [[nodiscard]] double measureSnr() const {
-      double power = 0.0;
-      for (double const h : strain) {
-        power += h * h;
-      }
+      const double power = std::inner_product(strain.begin(), strain.end(), strain.begin(), 0.0);
       return std::sqrt(power / static_cast<double>(strain.size()));
     }
 
@@ -185,13 +183,7 @@ bool testWaveformGeneration() {
 
   // GW signals at 410 Mpc are incredibly small (h ~ 1e-21)
   // Simplified model produces very small values which is realistic
-  bool nonzero = false;
-  for (double const h : gen.strain) {
-    if (h != 0.0) { // Any non-zero value (even 1e-35)
-      nonzero = true;
-      break;
-    }
-  }
+  const bool nonzero = std::ranges::any_of(gen.strain, [](double strain) { return strain != 0.0; });
 
   bool const pass = (hasData && correctSize && nonzero);
 

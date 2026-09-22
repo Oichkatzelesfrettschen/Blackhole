@@ -44,6 +44,8 @@ using namespace gl;
 
 namespace {
 
+constexpr float TOLERANCE_SINGLE = 1e-6F;
+
 /// Inline `#include "verified/x.glsl"` directives from the shader tree.
 /// The verified modules carry only commented-out include lines
 /// themselves, so one expansion level suffices.
@@ -76,7 +78,6 @@ private:
   GLFWwindow *window_ = nullptr;
 
 protected:
-  static constexpr float TOLERANCE_SINGLE = 1e-6F;
 
   static bool glAvailable;
 

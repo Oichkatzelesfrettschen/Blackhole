@@ -86,6 +86,10 @@ struct TestStats {
 // ============================================================================
 
 // NOLINTNEXTLINE(misc-use-internal-linkage) -- gtest fixture referenced by TEST_F from outside TU
+namespace {
+constexpr int LARGE_BATCH = 1000;
+}
+
 class Z3VerificationTest : public ::testing::Test {
 protected:
     // Constants for test configuration
@@ -95,7 +99,6 @@ protected:
     static constexpr double TOLERANCE_ENERGY = 1e-4;
     static constexpr double TOLERANCE_HORIZON = 1e-3;
     static constexpr int NUM_TEST_RAYS = 100;  // Batch size for random tests
-    static constexpr int LARGE_BATCH = 1000;   // Batch size for statistical tests
 
     /* WHY: gtest fixture members must be protected for SetUp/TearDown + TEST_F access. */
     // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
@@ -315,7 +318,6 @@ TEST_F(Z3VerificationTest, BatchRandomRays) {
 
     std::vector<RayTrace> rays;
     TestStats stats{};
-    stats.totalRays = Z3VerificationTest::NUM_TEST_RAYS;
 
     for (int i = 0; i < Z3VerificationTest::NUM_TEST_RAYS; i++) {
         const double rStart = rDist(rng);
@@ -326,14 +328,14 @@ TEST_F(Z3VerificationTest, BatchRandomRays) {
         double energyInitial = 0.0;
         double energyFinal = 0.0;
         
-        auto startTime = std::chrono::high_resolution_clock::now();
+        auto startTime = std::chrono::steady_clock::now();
         
         const verified::StateVector finalState = integrateSingleRay(
             rStart, vR, vPhi, 0.01, 10000,
             constraintDrift, energyInitial, energyFinal
         );
         
-        auto endTime = std::chrono::high_resolution_clock::now();
+        auto endTime = std::chrono::steady_clock::now();
         auto z3Time = std::chrono::duration<double, std::milli>(endTime - startTime).count();
         
         RayTrace ray{};
@@ -373,12 +375,19 @@ TEST_F(Z3VerificationTest, BatchRandomRays) {
         stats.maxConstraintDrift = std::max(stats.maxConstraintDrift, constraintDrift);
         stats.avgZ3CheckTime += z3Time;
     }
-    
+
+    stats.totalRays = static_cast<int>(rays.size());
+    EXPECT_EQ(stats.totalRays, Z3VerificationTest::NUM_TEST_RAYS);
+
     // Finalize statistics
     stats.avgConstraintDrift /= Z3VerificationTest::NUM_TEST_RAYS;
     stats.avgZ3CheckTime /= Z3VerificationTest::NUM_TEST_RAYS;
     stats.passRate = static_cast<double>(stats.z3Verified) / Z3VerificationTest::NUM_TEST_RAYS;
-    
+
+    EXPECT_LE(stats.avgConstraintDrift, TOLERANCE_CONSTRAINT * 10);
+    EXPECT_GE(stats.avgZ3CheckTime, 0.0);
+    EXPECT_TRUE(std::isfinite(stats.avgZ3CheckTime));
+
     // Write results
     writeResultsCSV(rays, "/tmp/z3_verification_results.csv");
     

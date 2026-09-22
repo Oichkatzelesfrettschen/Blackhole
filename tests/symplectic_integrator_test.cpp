@@ -27,10 +27,13 @@
  * -- well within the regime where the shadow Hamiltonian bound applies.
  */
 
-#include <gtest/gtest.h>
-#include "physics/symplectic_integrator.h"
 #include <cmath>
+#include <cstddef>
 #include <numbers>
+
+#include <gtest/gtest.h>
+
+#include "physics/symplectic_integrator.h"
 
 // ============================================================================
 // Shared fixtures and helpers
@@ -49,20 +52,20 @@ namespace {
  * value satisfies the equatorial circular-orbit energy equation to O(1e-4).
  */
 [[nodiscard]] inline physics::GeodesicState makeCircularState() noexcept {
-    physics::GeodesicState s{};
-    s.q = {0.0, 10.0, std::numbers::pi / 2.0, 0.0};
-    s.p = {-1.0, 0.0, 0.0, 4.878};
-    return s;
+  physics::GeodesicState s{};
+  s.q = {0.0, 10.0, std::numbers::pi / 2.0, 0.0};
+  s.p = {-1.0, 0.0, 0.0, 4.878};
+  return s;
 }
 
 /** @brief Standard Kerr parameters: M = 1, a = 0.5. rS = 2 M. */
 [[nodiscard]] inline physics::KerrParams makeKerrParams() noexcept {
-    return {.a = 0.5, .rS = 2.0};
+  return {.a = 0.5, .rS = 2.0};
 }
 
-constexpr int    kNSteps    = 1000;    ///< Integration step count
-constexpr double kStepSize  = 0.01;   ///< Affine-parameter step size h
-constexpr double kDLambda   = kNSteps * kStepSize; ///< Total span = 10 M
+constexpr int K_STEP_COUNT = 1000;                        ///< Integration step count
+constexpr double K_STEP_SIZE = 0.01;                      ///< Affine-parameter step size h
+constexpr double K_D_LAMBDA = K_STEP_COUNT * K_STEP_SIZE; ///< Total span = 10 M
 
 } // namespace
 
@@ -78,13 +81,13 @@ constexpr double kDLambda   = kNSteps * kStepSize; ///< Total span = 10 M
  * handcrafted covariant metric contraction.
  */
 TEST(SymplecticIntegrator, InitialHamiltonianNearMinusHalf) {
-    const auto s      = makeCircularState();
-    const auto params = makeKerrParams();
-    const double H0   = physics::kerrHamiltonian(s, params);
+  const auto s = makeCircularState();
+  const auto params = makeKerrParams();
+  const double initialHamiltonian = physics::kerrHamiltonian(s, params);
 
-    EXPECT_NEAR(H0, -0.5, 5.0e-3)
-        << "H_0 deviates from -1/2 by more than 0.5% -- initial state is wrong";
-    EXPECT_LT(H0, 0.0) << "H > 0 would mean spacelike, not timelike geodesic";
+  EXPECT_NEAR(initialHamiltonian, -0.5, 5.0e-3)
+      << "H_0 deviates from -1/2 by more than 0.5% -- initial state is wrong";
+  EXPECT_LT(initialHamiltonian, 0.0) << "H > 0 would mean spacelike, not timelike geodesic";
 }
 
 // ============================================================================
@@ -110,16 +113,16 @@ TEST(SymplecticIntegrator, InitialHamiltonianNearMinusHalf) {
  * span (10 M) tested here the distinction does not affect the test outcome.
  */
 TEST(SymplecticIntegrator, HamiltonianConservedOver1000Steps) {
-    auto s            = makeCircularState();
-    const auto params = makeKerrParams();
-    const double H0   = physics::kerrHamiltonian(s, params);
+  auto s = makeCircularState();
+  const auto params = makeKerrParams();
+  const double initialHamiltonian = physics::kerrHamiltonian(s, params);
 
-    physics::integrateGeodesic(s, kDLambda, kNSteps, params);
-    const double HN = physics::kerrHamiltonian(s, params);
+  physics::integrateGeodesic(s, K_D_LAMBDA, K_STEP_COUNT, params);
+  const double finalHamiltonian = physics::kerrHamiltonian(s, params);
 
-    EXPECT_LT(std::abs(HN - H0), 1.0e-6)
-        << "Hamiltonian drift |H_N - H_0| = " << std::abs(HN - H0)
-        << " exceeds 1e-6; symplectic conservation broken";
+  EXPECT_LT(std::abs(finalHamiltonian - initialHamiltonian), 1.0e-6)
+      << "Hamiltonian drift |H_N - H_0| = " << std::abs(finalHamiltonian - initialHamiltonian)
+      << " exceeds 1e-6; symplectic conservation broken";
 }
 
 // ============================================================================
@@ -136,15 +139,15 @@ TEST(SymplecticIntegrator, HamiltonianConservedOver1000Steps) {
  * expected drift ~1000 * 0.01 * 1e-16 ~ 1e-15 -- far below the 1e-10 guard.
  */
 TEST(SymplecticIntegrator, KillingEnergyConserved) {
-    auto s            = makeCircularState();
-    const auto params = makeKerrParams();
-    const double pt0  = s.p[0];
+  auto s = makeCircularState();
+  const auto params = makeKerrParams();
+  const double pt0 = s.p[0];
 
-    physics::integrateGeodesic(s, kDLambda, kNSteps, params);
+  physics::integrateGeodesic(s, K_D_LAMBDA, K_STEP_COUNT, params);
 
-    EXPECT_LT(std::abs(s.p[0] - pt0), 1.0e-10)
-        << "Killing energy p_t drifted by " << std::abs(s.p[0] - pt0)
-        << " over 1000 steps; stationarity symmetry broken";
+  EXPECT_LT(std::abs(s.p[0] - pt0), 1.0e-10)
+      << "Killing energy p_t drifted by " << std::abs(s.p[0] - pt0)
+      << " over 1000 steps; stationarity symmetry broken";
 }
 
 // ============================================================================
@@ -158,15 +161,15 @@ TEST(SymplecticIntegrator, KillingEnergyConserved) {
  * identically.  Same cancellation argument as for p_t.
  */
 TEST(SymplecticIntegrator, KillingAngularMomentumConserved) {
-    auto s            = makeCircularState();
-    const auto params = makeKerrParams();
-    const double pp0  = s.p[3];
+  auto s = makeCircularState();
+  const auto params = makeKerrParams();
+  const double pp0 = s.p[3];
 
-    physics::integrateGeodesic(s, kDLambda, kNSteps, params);
+  physics::integrateGeodesic(s, K_D_LAMBDA, K_STEP_COUNT, params);
 
-    EXPECT_LT(std::abs(s.p[3] - pp0), 1.0e-10)
-        << "Killing angular momentum p_phi drifted by " << std::abs(s.p[3] - pp0)
-        << " over 1000 steps; axisymmetry broken";
+  EXPECT_LT(std::abs(s.p[3] - pp0), 1.0e-10)
+      << "Killing angular momentum p_phi drifted by " << std::abs(s.p[3] - pp0)
+      << " over 1000 steps; axisymmetry broken";
 }
 
 // ============================================================================
@@ -191,25 +194,25 @@ TEST(SymplecticIntegrator, KillingAngularMomentumConserved) {
  * and remains < 1e-14.
  */
 TEST(SymplecticIntegrator, TimeReversibility) {
-    auto s            = makeCircularState();
-    const auto params = makeKerrParams();
+  auto s = makeCircularState();
+  const auto params = makeKerrParams();
 
-    constexpr int    kHalf     = kNSteps / 2;
-    constexpr double kHalfSpan = kHalf * kStepSize;
+  constexpr int kHalf = K_STEP_COUNT / 2;
+  constexpr double kHalfSpan = kHalf * K_STEP_SIZE;
 
-    // Record initial state.
-    const auto q0 = s.q;
-    const auto p0 = s.p;
+  // Record initial state.
+  const auto q0 = s.q;
+  const auto p0 = s.p;
 
-    // Forward 500 steps.
-    physics::integrateGeodesic(s, kHalfSpan, kHalf, params);
-    // Backward 500 steps (negative span reverses direction).
-    physics::integrateGeodesic(s, -kHalfSpan, kHalf, params);
+  // Forward 500 steps.
+  physics::integrateGeodesic(s, kHalfSpan, kHalf, params);
+  // Backward 500 steps (negative span reverses direction).
+  physics::integrateGeodesic(s, -kHalfSpan, kHalf, params);
 
-    for (std::size_t mu = 0; mu < 4; ++mu) {
-        EXPECT_LT(std::abs(s.q[mu] - q0[mu]), 1.0e-4)
-            << "q[" << mu << "] not recovered after forward+backward integration";
-        EXPECT_LT(std::abs(s.p[mu] - p0[mu]), 1.0e-4)
-            << "p[" << mu << "] not recovered after forward+backward integration";
-    }
+  for (std::size_t mu = 0; mu < 4; ++mu) {
+    EXPECT_LT(std::abs(s.q[mu] - q0[mu]), 1.0e-4)
+        << "q[" << mu << "] not recovered after forward+backward integration";
+    EXPECT_LT(std::abs(s.p[mu] - p0[mu]), 1.0e-4)
+        << "p[" << mu << "] not recovered after forward+backward integration";
+  }
 }

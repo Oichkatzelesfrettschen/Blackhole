@@ -1,14 +1,17 @@
 /**
  * @file grmhd_composite_raytracer_test.cpp
- * @brief Phase 6.3: GRMHD composite raytracer validation
+ * @brief CPU GRMHD interpolation and composite arithmetic fixtures.
  */
 
 #include <algorithm>
-#include <cassert>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <vector>
+
+#include "physics/timeseries_interpolation.h"
 
 // Test 1: Ray + GRMHD field blending
 namespace {
@@ -16,7 +19,7 @@ namespace {
 bool testCompositeBlending() {
   std::cout << "Test 1: Ray and GRMHD Field Blending\n";
 
-  // Ray color (from Phase 6.1a GPU geodesics)
+  // Synthetic ray color for the CPU blending fixture.
   struct RayColor {
     float r, g, b, a;
   } const ray = {.r = 0.5f, .g = 0.4f, .b = 0.3f, .a = 1.0f};
@@ -83,13 +86,15 @@ bool testOutputBufferLayout() {
   std::cout << "Test 3: Composite Output Buffer Layout\n";
 
   // Frame: 1920x1080
-  uint32_t const width = 1920;
-  uint32_t const height = 1080;
-  uint32_t const pixelCount = width * height; // 2,073,600
+  constexpr uint32_t width = 1920;
+  constexpr uint32_t height = 1080;
+  constexpr uint32_t pixelCount = width * height; // 2,073,600
 
   // RGBA float32 output: 4 floats per pixel
-  uint32_t const bytesPerPixel = 4 * sizeof(float);       // 16 bytes
-  uint32_t const bufferSize = pixelCount * bytesPerPixel; // 33.2MB
+  constexpr uint32_t bytesPerPixel = 4 * sizeof(float);       // 16 bytes
+  constexpr uint32_t bufferSize = pixelCount * bytesPerPixel; // 33.2MB
+  static_assert(bytesPerPixel == 16);
+  static_assert(bufferSize == 33177600);
 
   // Simulate output buffer
   std::vector<float> compositeBuffer(static_cast<std::size_t>(pixelCount) * 4U, 0.0f);
@@ -102,7 +107,15 @@ bool testOutputBufferLayout() {
     compositeBuffer.at((i * 4) + 3) = 1.0f; // A
   }
 
-  bool const layoutOk = (compositeBuffer.size() == static_cast<std::size_t>(pixelCount) * 4U && bufferSize == 33177600);
+  const std::array<float, 4> expectedPixel{0.5f, 0.4f, 0.3f, 1.0f};
+  bool layoutOk = true;
+  for (std::size_t pixel = 0; pixel < 100; ++pixel) {
+    for (std::size_t channel = 0; channel < expectedPixel.size(); ++channel) {
+      layoutOk = (compositeBuffer.at(pixel * 4 + channel) == expectedPixel.at(channel)) && layoutOk;
+    }
+  }
+  layoutOk = std::all_of(compositeBuffer.begin() + 400, compositeBuffer.end(),
+                         [](float value) { return value == 0.0f; }) && layoutOk;
 
   std::cout << "  Display: " << width << "x" << height << "\n"
             << "  Pixels: " << pixelCount << "\n"
@@ -140,9 +153,9 @@ bool testDepthBasedSampling() {
   return decisionsOk;
 }
 
-// Test 5: Synchrotron energy conservation
-bool testEnergyConservation() {
-  std::cout << "Test 5: Synchrotron Energy Conservation\n";
+// Test 5: Bounds of the simplified magnetic-intensity fixture.
+bool testIntensityBounds() {
+  std::cout << "Test 5: Simplified Intensity Bounds\n";
 
   // Synchrotron power: P ~ B^2 * n * (E/E_c)^((p-1)/2) where p is spectral index
   // Simplified: intensity ~ B^2 * density
@@ -153,67 +166,55 @@ bool testEnergyConservation() {
   // Intensity proportional to B^2 * rho
   float const intensity = b * b * rho;
 
-  // Check conservation: intensity > 0, scales correctly
+  // Bound the fixture intensity; the bound alone does not prove conservation.
   bool const conservationOk = (intensity > 0.0f && intensity < 1e6f);
 
   std::cout << "  B field: " << b << " Gauss\n"
             << "  Density: " << rho << " cgs\n"
             << "  Synchrotron intensity: " << intensity << "\n"
-            << "  Energy conservation: " << (conservationOk ? "true" : "false") << "\n"
+            << "  Intensity within fixture bounds: " << (conservationOk ? "true" : "false") << "\n"
             << "  Status: " << (conservationOk ? "PASS" : "FAIL") << "\n\n";
 
   return conservationOk;
 }
 
-// Test 6: Doppler boosting in composite
-bool testDopplerInComposite() {
-  std::cout << "Test 6: Doppler Boosting Integration in Composite\n";
+// Test 6: Weighted blending of two synthetic intensity samples.
+bool testWeightedBlend() {
+  std::cout << "Test 6: Weighted Intensity Blend\n";
 
-  // Ray color is already Doppler-boosted by Phase 6.1a
-  float const rayColor = 0.5f; // Arbitrary: blue-shifted from infalling disk
+  float const rayColor = 0.5f;
 
   // GRMHD field contributes local synchrotron (not Doppler-dependent)
   float const grmhdColor = 0.3f;
 
-  // Composite should preserve Doppler boost from rays
+  // A positive ray weight raises the result above the dimmer GRMHD sample.
   float const composite = (0.7f * rayColor) + (0.3f * grmhdColor);
 
   // Check: composite brightness > GRMHD alone
   bool const dopplerOk = (composite > grmhdColor);
 
-  std::cout << "  Ray (Doppler-boosted): " << rayColor << "\n"
+  std::cout << "  Synthetic ray: " << rayColor << "\n"
             << "  GRMHD (local): " << grmhdColor << "\n"
             << "  Composite: " << composite << "\n"
-            << "  Preserves Doppler: " << (dopplerOk ? "true" : "false") << "\n"
+            << "  Exceeds dimmer sample: " << (dopplerOk ? "true" : "false") << "\n"
             << "  Status: " << (dopplerOk ? "PASS" : "FAIL") << "\n\n";
 
   return dopplerOk;
 }
 
-// Test 7: Full pipeline integration
+// Test 7: CPU temporal interpolation feeding composite arithmetic.
 bool testPipelineIntegration() {
-  std::cout << "Test 7: Full Phase 6 Pipeline Integration\n";
-
-  // Phase 6.1a: 2M rays traced
-  uint32_t const rayCount = 1920 * 1080; // 2,073,600
-
-  // Phase 6.2a: 10 GRMHD dumps loaded
-  uint32_t const dumpCount = 10;
-
-  // Phase 6.2b: 2040 tiles cached (1 per 30 pixels)
-  uint32_t const tileCount = 60 * 34; // 2040
-
-  // Phase 6.3: composite output
-  uint32_t const pixelCount = rayCount;
-
-  bool const integrationOk =
-      (rayCount == 1920 * 1080 && dumpCount == 10 && tileCount == 2040 && pixelCount == rayCount);
-
-  std::cout << "  Phase 6.1a rays: " << rayCount << "\n"
-            << "  Phase 6.2a dumps: " << dumpCount << "\n"
-            << "  Phase 6.2b tiles: " << tileCount << "\n"
-            << "  Phase 6.3 output: " << pixelCount << " pixels\n"
-            << "  Pipeline valid: " << (integrationOk ? "true" : "false") << "\n"
+  std::cout << "Test 7: CPU Temporal Interpolation and Composite Arithmetic\n";
+  const std::array<double, 3> times{0.0, 1.0, 2.0};
+  const std::array<double, 3> density{0.1, 0.3, 0.5};
+  const auto metadata = physics::buildTimeseriesMetadata(times.data(), 3);
+  const double interpolated = physics::interpolateField(metadata, density.data(), 0.5, false);
+  const double composite = 0.7 * 0.5 + 0.3 * interpolated;
+  // Density is linear in code time; the blend has an independent decimal oracle.
+  const bool integrationOk = std::abs(interpolated - 0.2) < 1e-12 &&
+                             std::abs(composite - 0.41) < 1e-12;
+  std::cout << "  Interpolated density: " << interpolated << '\n'
+            << "  Composite intensity: " << composite << '\n'
             << "  Status: " << (integrationOk ? "PASS" : "FAIL") << "\n\n";
 
   return integrationOk;
@@ -227,8 +228,8 @@ bool testPipelineIntegration() {
 
 int main() {
     std::cout << "\n====================================================\n"
-              << "GRMHD COMPOSITE RAYTRACER VALIDATION\n"
-              << "Phase 6.3 Integration Tests\n"
+              << "CPU GRMHD COMPOSITE FIXTURES\n"
+              << "GPU rendering and physical conservation remain unqualified.\n"
               << "====================================================\n\n";
 
     int passed = 0;
@@ -246,10 +247,10 @@ int main() {
     if (testDepthBasedSampling()) {
       passed++;
     }
-    if (testEnergyConservation()) {
+    if (testIntensityBounds()) {
       passed++;
     }
-    if (testDopplerInComposite()) {
+    if (testWeightedBlend()) {
       passed++;
     }
     if (testPipelineIntegration()) {
