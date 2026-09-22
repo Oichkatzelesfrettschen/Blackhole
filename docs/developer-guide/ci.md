@@ -23,7 +23,8 @@ Conan and CMake use GCC 14 through `conan/profiles/ci`. Python build tools have
 explicit versions in `scripts/ci/requirements.txt`; `conan.lock` pins dependency
 recipe revisions. Local recipes are exported before resolving the lock.
 Conan dependencies use a cache keyed by the lock, recipe, profile, and tool
-inputs. ccache stores compiler output separately for each lane. Each compiler
+inputs. Successful dependency installation saves that cache before project
+compilation; compiled objects are also retained when a later build fails. ccache stores compiler output separately for each lane. Each compiler
 invocation still checks its source, headers, compiler, and flags. CMake build
 directories stay fresh on hosted jobs.
 
@@ -39,7 +40,18 @@ count to Conan `tools.build:jobs`, CMake `--parallel`, and CTest `--parallel`.
 The count belongs to the assigned runner, not the developer workstation.
 CTest respects each registered test's own timeout and dependency properties.
 
-For an existing local configure, use:
+For local iteration with the repository's Clang profile, use the separate
+`dev` tree. The installer records the actual Clang major version; Conan must
+support that version instead of assigning another compiler's package identity.
+
+```sh
+./scripts/conan_install.sh --preset dev
+cmake --preset dev
+./scripts/build.sh dev
+ctest --test-dir build/Dev/Release --output-on-failure --parallel "$(nproc)"
+```
+
+For an existing Release configure, use:
 
 ```sh
 ./scripts/build.sh release
@@ -94,6 +106,11 @@ Makefiles attached clang-tidy to 88 targets and cppcheck to 84 targets. Every
 build preset omitted a job count. The documented plain CMake build command
 therefore used Make's serial default unless the environment supplied jobs.
 The inspected commit/push hooks invoked Git LFS; the pre-commit hook was absent.
+The generated Release compile commands reference repository-local `.conan/p/`
+packages, while the referenced package directories and default profile were absent
+from the inspected cache. Existing build metadata therefore does not establish a reusable
+installed dependency cache. The native Boost probe used the separate global
+`~/.conan2` source cache and establishes only its five tested consumers.
 
 Repeated compilation, attached analysis, and linking explain mechanisms that
 increase local iteration cost. Historical evidence does not establish a measured
@@ -104,5 +121,6 @@ would require a separate numerical and layout audit.
 Boost uses `header_only=True`: the five numerical test consumers link
 `Boost::headers` and assert their Bessel/Jacobi feature macros at compile time.
 The locked recipe omits `Boost::math` in header-only mode, so changing the Conan
-option alone would have weakened those tests. Existing desktop and bridge
-numerical paths retain their own dependency declarations.
+option alone would have weakened those tests. The recipe retains `Boost::boost` as an alias requiring `Boost::headers`,
+which preserves the bridge dependency. Existing desktop and bridge numerical
+paths retain their own dependency declarations.

@@ -14,6 +14,7 @@
 #include <numbers>
 #include <cassert>
 #include <cmath>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -382,7 +383,7 @@ bool testSynchrotronFRybickiLightmanTable() {
  */
 } // namespace
 
-int main() {
+int main() try {
     std::cout << "\n"
               << "====================================================\n"
               << "SYNCHROTRON SPECTRUM VALIDATION TEST SUITE\n"
@@ -426,4 +427,7 @@ int main() {
               << "====================================================\n";
 
     return (passed == total) ? 0 : 1;
+} catch (const std::exception &error) {
+    std::cerr << "Synchrotron validation failed: " << error.what() << '\n';
+    return 1;
 }

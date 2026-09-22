@@ -40,6 +40,10 @@ if [[ -n "${CMAKE_PRESET}" ]]; then
       PRESET_BUILD_TYPE="Release"
       PRESET_OUTPUT_DIR_REL="build"
       ;;
+    dev)
+      PRESET_BUILD_TYPE="Release"
+      PRESET_OUTPUT_DIR_REL="build/Dev"
+      ;;
     debug)
       PRESET_BUILD_TYPE="Debug"
       PRESET_OUTPUT_DIR_REL="build"
@@ -172,7 +176,8 @@ echo ""
 echo "Next steps:"
 if [[ -n "${CMAKE_PRESET}" ]]; then
   echo "  cmake --preset ${CMAKE_PRESET}"
+  echo "  ./scripts/build.sh ${CMAKE_PRESET}"
 else
-  echo "  cmake --preset release   # or: cmake -B ${OUTPUT_DIR_REL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
+  echo "  cmake --preset release   # or: cmake -B ${OUTPUT_DIR_REL}/${BUILD_TYPE} -DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
+  echo "  cmake --build ${OUTPUT_DIR_REL}/${BUILD_TYPE} --parallel $(nproc)"
 fi
-echo "  cmake --build ${OUTPUT_DIR_REL}"

@@ -11,6 +11,10 @@ on:
         type: choice
         options: [ci, ci-analysis, ci-release]
         default: ci
+      export_dependencies:
+        description: Retain portable dependency packages for local diagnosis
+        type: boolean
+        default: false
   schedule:
     - cron: '23 4 * * 1'
 
@@ -73,7 +77,7 @@ jobs:
             libxcb-render-util0-dev libxcb-image0-dev libxcb-keysyms1-dev \
             libxcb-randr0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-xfixes0-dev \
             libxcb-xinerama0-dev libxcb-dri3-dev libxcb-cursor-dev \
-            libxcb-icccm4-dev libxcb-util-dev libxcb-util0-dev libxcb-xkb-dev \
+            libxcb-icccm4-dev libxcb-util-dev libxcb-xkb-dev \
             glslang-tools libcfitsio-dev libxcb-glx0-dev uuid-dev libxcb-dri2-0-dev \
             libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev libxcb-res0-dev
           if [ "$CI_PRESET" = ci-analysis ]; then
@@ -91,12 +95,14 @@ jobs:
         id: compiler-cache
         with:
           path: .ccache
-          key: ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: ccache-ubuntu24-gcc14-${{ matrix.preset }}-
+          key: ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}-
+            ccache-ubuntu24-gcc14-${{ matrix.preset }}-
       - name: Validate CI helpers
         run: |
           "$PYTHON" scripts/ci/test_check_lockfile.py
-          shellcheck -S error scripts/build.sh scripts/ci/run_stage.sh
+          shellcheck -S error scripts/build.sh scripts/ci/run_stage.sh scripts/conan_init.sh scripts/conan_install.sh
           "$PYTHON" -m ruff check scripts/ci/
           "$PYTHON" -m ruff format --check scripts/ci/
       - name: Export locked local recipes
@@ -121,6 +127,9 @@ jobs:
         with:
           path: .conan
           key: ${{ steps.conan-cache.outputs.cache-primary-key }}
+      - name: Export packages for local diagnosis
+        if: inputs.export_dependencies
+        run: conan cache save '*' --file=build/ci-reports/conan-packages.tgz
       - name: Configure
         run: |
           scripts/ci/run_stage.sh configure cmake --preset "$CI_PRESET" \
@@ -157,4 +166,5 @@ jobs:
             build/ci-reports/
             build/CI*/Testing/Temporary/
             build/CI*/CMakeFiles/CMakeConfigureLog.yaml
+            build/CI*/compile_commands.json
           retention-days: 14

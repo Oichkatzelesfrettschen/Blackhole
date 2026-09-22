@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.31)
 
 project(Blackhole
   VERSION 1.0.0
@@ -190,13 +190,9 @@ endif()
 
 option(ENABLE_HIGHWAY "Enable Highway for performance-portable SIMD" ON)
 if(ENABLE_HIGHWAY)
-  find_package(hwy CONFIG QUIET)
-  if(hwy_FOUND)
-    message(STATUS "Highway found: performance-portable SIMD available")
-  else()
-    message(STATUS "Highway not found: SIMD functionality limited to xsimd/Eigen")
-    set(ENABLE_HIGHWAY OFF)
-  endif()
+  find_package(highway CONFIG REQUIRED)
+  add_library(hwy::hwy ALIAS highway::hwy)
+  message(STATUS "Highway found: performance-portable SIMD available")
 endif()
 
 # ============================================================================
@@ -6261,3 +6257,29 @@ if(BUILD_TESTING)
   list(LENGTH _bh_test_sources_on_disk _bh_test_count)
   message(STATUS "Test-source completeness: ${_bh_test_count} files on disk, all accounted for")
 endif()
+
+# Target creation precedes analyzer discovery for desktop and bridge targets.
+# Apply the configured checks after collecting every project directory.
+function(blackhole_apply_analysis directory_path)
+  get_property(directory_targets DIRECTORY "${directory_path}" PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(project_target IN LISTS directory_targets)
+    get_target_property(target_type "${project_target}" TYPE)
+    if(target_type MATCHES "^(EXECUTABLE|STATIC_LIBRARY|SHARED_LIBRARY|MODULE_LIBRARY|OBJECT_LIBRARY)$"
+       AND NOT project_target STREQUAL "implot")
+      if(ENABLE_CLANG_TIDY)
+        set_property(TARGET "${project_target}" PROPERTY CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY}")
+      endif()
+      if(ENABLE_CPPCHECK)
+        set_property(TARGET "${project_target}" PROPERTY CXX_CPPCHECK "${CMAKE_CXX_CPPCHECK}")
+      endif()
+    endif()
+  endforeach()
+  get_property(child_directories DIRECTORY "${directory_path}" PROPERTY SUBDIRECTORIES)
+  foreach(child_directory IN LISTS child_directories)
+    blackhole_apply_analysis("${child_directory}")
+  endforeach()
+endfunction()
+
+# Imported ImGui backends and the GL debug callback retain upstream ownership.
+set_source_files_properties(${THIRDPARTY_SRC_FILES} PROPERTIES SKIP_LINTING ON)
+blackhole_apply_analysis("${PROJECT_SOURCE_DIR}")

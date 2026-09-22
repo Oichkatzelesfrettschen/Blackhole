@@ -2,7 +2,7 @@
   "version": 6,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 21,
+    "minor": 31,
     "patch": 0
   },
   "configurePresets": [
@@ -374,7 +374,8 @@
         "ENABLE_BLENDER_BRIDGE": "OFF",
         "ENABLE_DESKTOP_APP": "ON",
         "BUILD_TESTING": "ON",
-        "ENABLE_SHADER_VALIDATION": "ON"
+        "ENABLE_SHADER_VALIDATION": "ON",
+        "SIMD_TIER": "SSE2"
       },
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/CI"
@@ -457,6 +458,17 @@
         "ENABLE_LTO": "ON",
         "ENABLE_FAT_LTO": "ON",
         "ENABLE_FAST_MATH": "ON"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Iterative local development",
+      "description": "Ninja build with strict warnings and IEEE math; analysis and LTO use dedicated validation lanes",
+      "inherits": "ci",
+      "binaryDir": "${sourceDir}/build/Dev/Release",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/Dev/Release/generators/conan_toolchain.cmake",
+        "SIMD_TIER": "AUTO"
       }
     }
   ],
@@ -560,6 +572,10 @@
     {
       "name": "ci-release",
       "configurePreset": "ci-release"
+    },
+    {
+      "name": "dev",
+      "configurePreset": "dev"
     }
   ],
   "testPresets": [

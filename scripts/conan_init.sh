@@ -14,12 +14,6 @@ if [[ -z "${CLANG_VERSION_RAW}" ]]; then
   exit 2
 fi
 CLANG_VERSION_MAJOR="${CLANG_VERSION_RAW%%.*}"
-CONAN_MAX_CLANG_VERSION=21
-PROFILE_CLANG_VERSION="${CLANG_VERSION_MAJOR}"
-if (( CLANG_VERSION_MAJOR > CONAN_MAX_CLANG_VERSION )); then
-  echo "WARN: Conan settings only recognize clang ${CONAN_MAX_CLANG_VERSION} in this repo-local home; local clang is ${CLANG_VERSION_RAW}. Using compiler.version=${CONAN_MAX_CLANG_VERSION} for profile compatibility." >&2
-  PROFILE_CLANG_VERSION="${CONAN_MAX_CLANG_VERSION}"
-fi
 
 # Enforce clang + C++23 in the repo-local default profile.
 PROFILE_PATH="${CONAN_HOME}/profiles/default"
@@ -30,7 +24,7 @@ build_type=Release
 compiler=clang
 compiler.cppstd=23
 compiler.libcxx=libstdc++11
-compiler.version=${PROFILE_CLANG_VERSION}
+compiler.version=${CLANG_VERSION_MAJOR}
 os=Linux
 [conf]
 tools.build:compiler_executables={"c":"clang","cpp":"clang++"}
