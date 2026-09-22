@@ -1,6 +1,9 @@
 #include "render/post_pipeline.h"
 
 #include <algorithm>
+#include <cstddef>
+
+#include <glbinding/gl/types.h>
 
 #include "input.h"
 #include "render.h"
@@ -16,7 +19,9 @@ using ui::renderTonemapPanel;
 
 namespace blackhole {
 
-GLuint runPostProcessPipeline(RenderState &rs, InputManager &input) {
+GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input) {
+  // Bound texture indexing and mip-level shifts for every caller.
+  const int bloomIterations = std::clamp(rs.post.bloomIterations, 1, K_MAX_BLOOM_ITERATIONS);
   if (rs.timing.gpuTimers.initialized) {
     rs.timing.gpuTimers.bloom.begin();
   }
@@ -37,7 +42,7 @@ GLuint runPostProcessPipeline(RenderState &rs, InputManager &input) {
 
   {
     ZONE_SCOPED_N("Bloom Downsample");
-    for (int level = 0; level < rs.post.bloomIterations; level++) {
+    for (int level = 0; level < bloomIterations; level++) {
       auto const levelIndex = static_cast<std::size_t>(level);
       RenderToTextureInfo rtti;
       rtti.fragShader = "shader/bloom_downsample.frag";
@@ -54,13 +59,14 @@ GLuint runPostProcessPipeline(RenderState &rs, InputManager &input) {
 
   {
     ZONE_SCOPED_N("Bloom Upsample");
-    for (int level = rs.post.bloomIterations - 1; level >= 0; level--) {
+    for (int level = bloomIterations - 1; level >= 0; level--) {
       auto const levelIndex = static_cast<std::size_t>(level);
       RenderToTextureInfo rtti;
       rtti.fragShader = "shader/bloom_upsample.frag";
       rtti.textureUniforms["texture0"] =
-          level == rs.post.bloomIterations - 1 ? rs.targets.texDownsampled.at(levelIndex)
-                                       : rs.targets.texUpsampled.at(static_cast<std::size_t>(level) + 1);
+          level == bloomIterations - 1
+              ? rs.targets.texDownsampled.at(levelIndex)
+              : rs.targets.texUpsampled.at(static_cast<std::size_t>(level) + 1);
       rtti.textureUniforms["texture1"] =
           level == 0 ? rs.targets.texBrightness : rs.targets.texDownsampled.at(static_cast<std::size_t>(level - 1));
       rtti.targetTexture = rs.targets.texUpsampled.at(levelIndex);

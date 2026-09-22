@@ -9,24 +9,28 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdio>
+#include <cstddef>
 #include <filesystem>
+#include <format>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <GLFW/glfw3.h>
+#include <ImGuizmo.h>
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <ImGuizmo.h>
 #include <implot.h>
+
 #include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "input.h"
 #include "platform/resource_paths.h"
+#include "render/gpu_timing.h"
 #include "render/render_state.h"
 #include "settings.h"
 
@@ -573,10 +577,8 @@ void renderControlsSettingsPanel(RenderState &rs) {
             ImGui::TableNextColumn();
 
             ImGui::PushID(i);
-            char buttonLabel[64];
-            std::snprintf(buttonLabel, sizeof(buttonLabel), "[%s]##%d", keyName.c_str(),
-                          i); // NOLINT(cert-err33-c) -- diagnostic output, return unused
-            if (ImGui::Button(buttonLabel)) {
+            const std::string buttonLabel = std::format("[{}]##{}", keyName, i);
+            if (ImGui::Button(buttonLabel.c_str())) {
               input.startKeyRemapping(action);
             }
             ImGui::PopID();
@@ -610,14 +612,14 @@ void renderControlsSettingsPanel(RenderState &rs) {
 }
 
 void renderGizmoPanel(RenderState &rs) {
-  bool &gizmoEnabled = rs.camera.gizmoEnabled;
-  ImGuizmo::OPERATION &operation = rs.camera.gizmoOperation;
-  ImGuizmo::MODE &mode = rs.camera.gizmoMode;
-  glm::mat4 &gizmoTransform = rs.camera.gizmoTransform;
   ImGui::SetNextWindowPos(ImVec2(1020, 220), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(300, 220), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Gizmo", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    bool &gizmoEnabled = rs.camera.gizmoEnabled;
+    ImGuizmo::OPERATION &operation = rs.camera.gizmoOperation;
+    ImGuizmo::MODE &mode = rs.camera.gizmoMode;
+    glm::mat4 &gizmoTransform = rs.camera.gizmoTransform;
     ImGui::Checkbox("Enable Gizmo Target", &gizmoEnabled);
 
     const char *const operationLabels[] = {"Translate", "Rotate", "Scale"};
@@ -668,7 +670,6 @@ void renderGizmoPanel(RenderState &rs) {
 
 void renderDisplaySettingsPanel(RenderState &rs, GLFWwindow *window, int windowWidth,
                                 int windowHeight) {
-  int &swapInterval = rs.display.swapInterval;
   float &renderScale = rs.display.renderScale;
   auto &input = InputManager::instance();
   auto &settings = SettingsManager::instance().get();
@@ -678,6 +679,7 @@ void renderDisplaySettingsPanel(RenderState &rs, GLFWwindow *window, int windowW
   ImGui::SetNextWindowSize(ImVec2(360, 220), ImGuiCond_FirstUseEver);
 
   if (ImGui::Begin("Display", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    int &swapInterval = rs.display.swapInterval;
     bool fullscreen = input.isFullscreen();
     if (ImGui::Checkbox("Fullscreen", &fullscreen)) {
       input.toggleFullscreen();

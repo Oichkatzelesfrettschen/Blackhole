@@ -62,14 +62,14 @@ namespace physics {
  * The crossover radius where the LQG correction is O(1) is r ~ (2 l^2 M)^{1/3}.
  *
  * @param r Boyer-Lindquist radial coordinate [geometric units].
- * @param M Geometric mass [geometric units].
+ * @param mass Geometric mass [geometric units].
  * @param l LQG polymer length [geometric units]; l = 0 recovers Kerr.
  * @return M_eff(r) [geometric units].
  */
-[[nodiscard]] constexpr double lqgEffectiveMass(double r, double M, double l) noexcept {
-    const double r3    = r * r * r;
-    const double denom = r3 + 2.0 * l * l * M;
-    return M * r3 / denom;
+[[nodiscard]] constexpr double lqgEffectiveMass(double r, double mass, double l) noexcept {
+  const double r3 = r * r * r;
+  const double denom = r3 + 2.0 * l * l * mass;
+  return mass * r3 / denom;
 }
 
 /**
@@ -79,14 +79,14 @@ namespace physics {
  * radius r.  Peaks at r = 0 (correction = 1) and falls off as (l/r)^2.
  *
  * @param r Boyer-Lindquist r [geometric units].
- * @param M Geometric mass [geometric units].
+ * @param mass Geometric mass [geometric units].
  * @param l LQG polymer length [geometric units].
  * @return Fractional correction epsilon in [0, 1].
  */
-[[nodiscard]] constexpr double lqgCorrection(double r, double M, double l) noexcept {
-    const double r3    = r * r * r;
-    const double denom = r3 + 2.0 * l * l * M;
-    return 2.0 * l * l * M / denom;
+[[nodiscard]] constexpr double lqgCorrection(double r, double mass, double l) noexcept {
+  const double r3 = r * r * r;
+  const double denom = r3 + 2.0 * l * l * mass;
+  return 2.0 * l * l * mass / denom;
 }
 
 // ============================================================================
@@ -102,14 +102,14 @@ namespace physics {
  * (super-extremal regime) there may be no horizon (regular particle).
  *
  * @param r Boyer-Lindquist r [geometric units].
- * @param M Geometric mass [geometric units].
+ * @param mass Geometric mass [geometric units].
  * @param a Spin parameter J/M [geometric units].
  * @param l LQG polymer length [geometric units].
  * @return Delta_LQG [length^2].
  */
-[[nodiscard]] inline double lqgDelta(double r, double M, double a, double l) noexcept {
-    const double mEff = lqgEffectiveMass(r, M, l);
-    return r * r - 2.0 * mEff * r + a * a;
+[[nodiscard]] inline double lqgDelta(double r, double mass, double a, double l) noexcept {
+  const double mEff = lqgEffectiveMass(r, mass, l);
+  return r * r - 2.0 * mEff * r + a * a;
 }
 
 // ============================================================================
@@ -137,17 +137,16 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
  * @param l     LQG polymer length [geometric units].
  * @return A [length^4].
  */
-[[nodiscard]] inline double lqgA(double r, double theta,
-                                 double M, double a, double l) noexcept {
-    const double r2a2  = r * r + a * a;
-    const double s     = std::sin(theta);
-    const double Delta = lqgDelta(r, M, a, l);
-    return r2a2 * r2a2 - a * a * Delta * s * s;
+[[nodiscard]] inline double lqgA(double r, double theta, double mass, double a, double l) noexcept {
+  const double r2a2 = r * r + a * a;
+  const double s = std::sin(theta);
+  const double delta = lqgDelta(r, mass, a, l);
+  return r2a2 * r2a2 - a * a * delta * s * s;
 }
 
 /**
@@ -158,17 +157,17 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
  * @param l     LQG polymer length [geometric units].
  * @return g_tt.
  */
-[[nodiscard]] inline double lqgGtt(double r, double theta,
-                                   double M, double a, double l) noexcept {
-    const double Sigma = lqgSigma(r, a, theta);
-    const double Delta = lqgDelta(r, M, a, l);
-    const double s     = std::sin(theta);
-    return -(Delta - a * a * s * s) / Sigma;
+[[nodiscard]] inline double lqgGtt(double r, double theta, double mass, double a,
+                                   double l) noexcept {
+  const double sigma = lqgSigma(r, a, theta);
+  const double delta = lqgDelta(r, mass, a, l);
+  const double s = std::sin(theta);
+  return -(delta - a * a * s * s) / sigma;
 }
 
 /**
@@ -178,16 +177,18 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
  * @param l     LQG polymer length [geometric units].
  * @return g_rr.
  */
-[[nodiscard]] inline double lqgGrr(double r, double theta,
-                                   double M, double a, double l) noexcept {
-    const double Delta = lqgDelta(r, M, a, l);
-    if (std::abs(Delta) < 1.0e-30) return std::numeric_limits<double>::infinity();
-    return lqgSigma(r, a, theta) / Delta;
+[[nodiscard]] inline double lqgGrr(double r, double theta, double mass, double a,
+                                   double l) noexcept {
+  const double delta = lqgDelta(r, mass, a, l);
+  if (std::abs(delta) < 1.0e-30) {
+    return std::numeric_limits<double>::infinity();
+  }
+  return lqgSigma(r, a, theta) / delta;
 }
 
 /**
@@ -207,17 +208,17 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
  * @param l     LQG polymer length [geometric units].
  * @return g_phph [length^2].
  */
-[[nodiscard]] inline double lqgGphph(double r, double theta,
-                                     double M, double a, double l) noexcept {
-    const double Sigma = lqgSigma(r, a, theta);
-    const double A     = lqgA(r, theta, M, a, l);
-    const double s     = std::sin(theta);
-    return A * s * s / Sigma;
+[[nodiscard]] inline double lqgGphph(double r, double theta, double mass, double a,
+                                     double l) noexcept {
+  const double sigma = lqgSigma(r, a, theta);
+  const double metricA = lqgA(r, theta, mass, a, l);
+  const double s = std::sin(theta);
+  return metricA * s * s / sigma;
 }
 
 /**
@@ -229,17 +230,17 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
  * @param l     LQG polymer length [geometric units].
  * @return g_tph [length^2].
  */
-[[nodiscard]] inline double lqgGtph(double r, double theta,
-                                    double M, double a, double l) noexcept {
-    const double Sigma = lqgSigma(r, a, theta);
-    const double mEff  = lqgEffectiveMass(r, M, l);
-    const double s     = std::sin(theta);
-    return -2.0 * mEff * r * a * s * s / Sigma;
+[[nodiscard]] inline double lqgGtph(double r, double theta, double mass, double a,
+                                    double l) noexcept {
+  const double sigma = lqgSigma(r, a, theta);
+  const double mEff = lqgEffectiveMass(r, mass, l);
+  const double s = std::sin(theta);
+  return -2.0 * mEff * r * a * s * s / sigma;
 }
 
 // ============================================================================
@@ -256,47 +257,51 @@ namespace physics {
  *
  * Returns NaN when no horizon is found (e.g. super-extremal l).
  *
- * @param M         Geometric mass [geometric units].
+ * @param mass         Geometric mass [geometric units].
  * @param a         Spin parameter [geometric units].
  * @param l         LQG polymer length [geometric units].
  * @param tolerance Bisection convergence tolerance [geometric units].
  * @return Outer horizon radius, or NaN if not found.
  */
-[[nodiscard]] inline double lqgOuterHorizon(double M, double a, double l,
+[[nodiscard]] inline double lqgOuterHorizon(double mass, double a, double l,
                                             double tolerance = 1.0e-12) noexcept {
-    // For l = 0 use the exact Kerr formula.
-    if (l == 0.0) {
-        const double disc = M * M - a * a;
-        if (disc < 0.0) return std::numeric_limits<double>::quiet_NaN();
-        return M + std::sqrt(disc);
+  // For l = 0 use the exact Kerr formula.
+  if (l == 0.0) {
+    const double disc = mass * mass - a * a;
+    if (disc < 0.0) {
+      return std::numeric_limits<double>::quiet_NaN();
     }
+    return mass + std::sqrt(disc);
+  }
 
-    // Bracket the outer horizon r_+.
-    //
-    // Delta_LQG(r) = (r - r_+)(r - r_-) for sub-extremal BH.
-    //   r < r_-  : Delta > 0
-    //   r_- < r < r_+  : Delta < 0  (between horizons)
-    //   r > r_+  : Delta > 0
-    //
-    // Bisection for the outer horizon: find root where Delta crosses from
-    // negative to positive.  Use r_lo = M (always between horizons for
-    // sub-extremal parameters) and r_hi = 3*M + a + 1 (always outside).
-    const double r_lo = M;
-    const double r_hi = 3.0 * M + a + 1.0;
+  // Bracket the outer horizon r_+.
+  //
+  // Delta_LQG(r) = (r - r_+)(r - r_-) for sub-extremal BH.
+  //   r < r_-  : Delta > 0
+  //   r_- < r < r_+  : Delta < 0  (between horizons)
+  //   r > r_+  : Delta > 0
+  //
+  // Bisection for the outer horizon: find root where Delta crosses from
+  // negative to positive.  Use r_lo = M (always between horizons for
+  // sub-extremal parameters) and r_hi = 3*M + a + 1 (always outside).
+  const double lowerRadius = mass;
+  const double upperRadius = 3.0 * mass + a + 1.0;
 
-    if (lqgDelta(r_lo, M, a, l) >= 0.0 || lqgDelta(r_hi, M, a, l) <= 0.0) {
-        return std::numeric_limits<double>::quiet_NaN();
+  if (lqgDelta(lowerRadius, mass, a, l) >= 0.0 || lqgDelta(upperRadius, mass, a, l) <= 0.0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+
+  double lo = lowerRadius;
+  double hi = upperRadius;
+  for (int i = 0; i < 128 && (hi - lo) > tolerance; ++i) {
+    const double mid = 0.5 * (lo + hi);
+    if (lqgDelta(mid, mass, a, l) < 0.0) { // between horizons
+      lo = mid;
+    } else { // at or outside outer horizon
+      hi = mid;
     }
-
-    double lo = r_lo, hi = r_hi;
-    for (int i = 0; i < 128 && (hi - lo) > tolerance; ++i) {
-        const double mid = 0.5 * (lo + hi);
-        if (lqgDelta(mid, M, a, l) < 0.0)  // still between horizons
-            lo = mid;
-        else                                // at or outside outer horizon
-            hi = mid;
-    }
-    return 0.5 * (lo + hi);
+  }
+  return 0.5 * (lo + hi);
 }
 
 // ============================================================================
@@ -312,23 +317,22 @@ namespace physics {
  * first-order Newton step from the Kerr value r_ph = 2M(1 + cos(2/3 arccos(-a*)))
  * to obtain a quick estimate; exact solutions require root finding.
  *
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
  * @param l     LQG polymer length [geometric units].
  * @return Approximate prograde photon sphere radius [geometric units].
  */
-[[nodiscard]] inline double lqgPhotonSphereApprox(double M, double a,
-                                                  double l) noexcept {
-    // Kerr prograde photon sphere as starting point.
-    const double aStar = (M > 0.0) ? a / M : 0.0;
-    const double r_ph_kerr = 2.0 * M * (1.0 + std::cos((2.0 / 3.0) * std::acos(-aStar)));
+[[nodiscard]] inline double lqgPhotonSphereApprox(double mass, double a, double l) noexcept {
+  // Kerr prograde photon sphere as starting point.
+  const double aStar = (mass > 0.0) ? a / mass : 0.0;
+  const double kerrPhotonRadius = 2.0 * mass * (1.0 + std::cos((2.0 / 3.0) * std::acos(-aStar)));
 
-    // First-order LQG correction: d(M_eff)/dl evaluated at r_ph_kerr.
-    // DeltaM = M - M_eff(r_ph) = 2 l^2 M / (r^3 + 2 l^2 M)
-    const double r3   = r_ph_kerr * r_ph_kerr * r_ph_kerr;
-    const double corr = 2.0 * l * l * M / (r3 + 2.0 * l * l * M);
-    // Shadow shifts inward by ~ corr * M (rough linear estimate).
-    return r_ph_kerr * (1.0 - 0.5 * corr);
+  // First-order LQG correction: d(M_eff)/dl evaluated at r_ph_kerr.
+  // DeltaM = M - M_eff(r_ph) = 2 l^2 M / (r^3 + 2 l^2 M)
+  const double r3 = kerrPhotonRadius * kerrPhotonRadius * kerrPhotonRadius;
+  const double corr = 2.0 * l * l * mass / (r3 + 2.0 * l * l * mass);
+  // Shadow shifts inward by ~ corr * M (rough linear estimate).
+  return kerrPhotonRadius * (1.0 - 0.5 * corr);
 }
 
 } // namespace physics

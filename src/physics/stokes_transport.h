@@ -413,10 +413,9 @@ struct FaradayPropagation {
  * @param initial    Initial Stokes state (background; default zero)
  * @return Stokes vector at end of path (closest to observer)
  */
-[[nodiscard]] inline StokesVector integrateStokesPath(
-    const std::vector<StokesEmission>&    emissions,
-    const std::vector<FaradayPropagation>& props,
-    StokesVector initial = {}) noexcept {
+[[nodiscard]] inline StokesVector integrateStokesPath(const std::vector<StokesEmission> &emissions,
+                                                      const std::vector<FaradayPropagation> &props,
+                                                      const StokesVector &initial = {}) noexcept {
 
   StokesVector state = initial;
   for (const auto& [emission, propagation] : std::views::zip(emissions, props)) {
@@ -485,7 +484,7 @@ struct FaradayPropagation {
     if (thetaE <= 0.0) { return 0.0; }
     // p_eff ~ 3 for thermal synchrotron (near peak), slightly increasing for
     // large Theta_e as the emission shifts to higher x_M
-    const double pEff = 3.0 + (0.5 * std::log(1.0 + thetaE)); // soft correction
+    const double pEff = 3.0 + (0.5 * std::log1p(thetaE)); // soft correction
     return (pEff + 1.0) / (pEff + (7.0 / 3.0));
 }
 

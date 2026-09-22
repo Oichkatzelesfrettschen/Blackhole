@@ -61,13 +61,14 @@
 #ifndef PHYSICS_RTE_INTEGRATOR_H
 #define PHYSICS_RTE_INTEGRATOR_H
 
-#include "constants.h"
-#include "synchrotron.h"
-
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <numeric>
 #include <vector>
+
+#include "constants.h"
+#include "synchrotron.h"
 
 #ifdef __has_include
 #  if __has_include(<boost/math/special_functions/bessel.hpp>)
@@ -185,13 +186,12 @@ struct RteSample {
  * @param initial Initial RteState (background intensity); default is zero.
  * @return RteState at the end of the path (closest to observer).
  */
-[[nodiscard]] inline RteState integrateRtePath(const std::vector<RteSample>& path,
-                                                RteState initial = {}) noexcept {
-    RteState state = initial;
-    for (const auto& sample : path) {
-        state = rteStep(state, sample.jNu, sample.alphaNu, sample.dsCm);
-    }
-    return state;
+[[nodiscard]] inline RteState integrateRtePath(const std::vector<RteSample> &path,
+                                               const RteState &initial = {}) noexcept {
+  return std::accumulate(path.begin(), path.end(), initial,
+                         [](const RteState &state, const RteSample &sample) {
+                           return rteStep(state, sample.jNu, sample.alphaNu, sample.dsCm);
+                         });
 }
 
 // ============================================================================
@@ -534,15 +534,9 @@ struct RteSample {
  * @param g         Redshift factor nu_obs / nu_emit
  * @return Updated RteState
  */
-[[nodiscard]] inline RteState rteStepGR(RteState state,
-                                         double jEmit,
-                                         double alphaEmit,
-                                         double dsCm,
-                                         double g) noexcept {
-    return rteStep(state,
-                   grTransformEmission(jEmit, g),
-                   grTransformAbsorption(alphaEmit, g),
-                   dsCm);
+[[nodiscard]] inline RteState rteStepGR(const RteState &state, double jEmit, double alphaEmit,
+                                        double dsCm, double g) noexcept {
+  return rteStep(state, grTransformEmission(jEmit, g), grTransformAbsorption(alphaEmit, g), dsCm);
 }
 
 } // namespace physics

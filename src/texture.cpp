@@ -74,7 +74,7 @@ bool isGitLfsPointer(const std::string &file) {
   }
   std::string firstLine;
   std::getline(stream, firstLine);
-  return firstLine.rfind("version https://git-lfs", 0) == 0;
+  return firstLine.starts_with("version https://git-lfs");
 }
 } // namespace
 

@@ -12,11 +12,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string>
+#include <utility>
 #include <vector>
 
-#include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 
+#include "../../shader/include/synchrotron_lut_domain.h"
 #include "physics/lut.h"
 #include "physics/synchrotron.h"
 #include "platform/resource_paths.h"

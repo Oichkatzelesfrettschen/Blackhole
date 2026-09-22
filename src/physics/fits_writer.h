@@ -328,9 +328,10 @@ inline void writeFitsImage(const std::string &filename, const float *data, int n
 
   // Write pixel data (cfitsio expects non-const void* but does not modify data)
   const long npixels = static_cast<long>(nx) * static_cast<long>(ny);
-  fits_write_img(fp, TFLOAT, 1, npixels, // NOLINT(misc-include-cleaner)
-                 const_cast<float *>(data),
-                 &status); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+  // CFITSIO reads the array through its legacy mutable-pointer API.
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+  auto *pixels = const_cast<float *>(data);
+  fits_write_img(fp, TFLOAT, 1, npixels, pixels, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to write pixel data", status);
   }
@@ -370,9 +371,10 @@ inline void writeFitsImage(const std::string &filename, const double *data, int 
   }
 
   const long npixels = static_cast<long>(nx) * static_cast<long>(ny);
-  fits_write_img(fp, TDOUBLE, 1, npixels, // NOLINT(misc-include-cleaner)
-                 const_cast<double *>(data),
-                 &status); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+  // CFITSIO reads the array through its legacy mutable-pointer API.
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+  auto *pixels = const_cast<double *>(data);
+  fits_write_img(fp, TDOUBLE, 1, npixels, pixels, &status); // NOLINT(misc-include-cleaner)
   if (status != 0) {
     throw FitsError("Failed to write pixel data", status);
   }

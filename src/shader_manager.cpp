@@ -5,18 +5,21 @@
  */
 
 #include "shader_manager.h"
-#include "shader.h"
 
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <string>
+#include <system_error>
 #include <vector>
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
+
+#include "shader.h"
 
 namespace {
 std::filesystem::path resolveShaderPath(const std::string &basePath) {

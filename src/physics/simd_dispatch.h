@@ -147,10 +147,9 @@ enum class FmaVariant : uint8_t {
 
 namespace detail {
 
-inline void
-cpuid(int info[4], int leaf,
-      int subleaf =
-          0) { // NOLINT(readability-non-const-parameter) -- info is written to via __cpuid_count
+// __cpuid_count writes all four output slots through inline assembly operands.
+// NOLINTNEXTLINE(readability-non-const-parameter)
+inline void cpuid(int info[4], int leaf, int subleaf = 0) {
 #ifdef _MSC_VER
   __cpuidex(info, leaf, subleaf);
 #else

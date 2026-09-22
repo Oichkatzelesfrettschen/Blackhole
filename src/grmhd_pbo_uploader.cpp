@@ -32,10 +32,15 @@
 
 // NOLINTBEGIN(misc-include-cleaner)
 // glbinding/gl/gl.h is the conventional umbrella header.
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions-patches.h>
+#include <glbinding/gl/functions.h>
 #include <glbinding/gl/gl.h>
+#include <glbinding/gl/types.h>
 // NOLINTEND(misc-include-cleaner)
 
 #include <cstring>
+#include <utility>
 
 #include "grmhd_pbo_uploader.h"
 
@@ -89,8 +94,8 @@ bool GrmhdPBOUploader::init(int width, int height, int depth) {
 
   // 2. Pre-allocate both PBOs with GL_STREAM_DRAW (CPU-write, GPU-read once).
   glGenBuffers(2, pbos_);
-  for (int i = 0; i < 2; ++i) {
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos_[i]);
+  for (const unsigned int pbo : pbos_) {
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
     glBufferData(GL_PIXEL_UNPACK_BUFFER,
                  static_cast<GLsizeiptr>(byteSize),
                  nullptr, GL_STREAM_DRAW);
@@ -137,7 +142,7 @@ bool GrmhdPBOUploader::upload(const float *data, std::size_t nFloats) {
                  static_cast<GLsizeiptr>(byteSize),
                  nullptr, GL_STREAM_DRAW); // orphan
     void *ptr = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-    if (ptr) {
+    if (ptr != nullptr) {
       std::memcpy(ptr, data, byteSize);
       glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
     }
@@ -162,7 +167,7 @@ bool GrmhdPBOUploader::upload(const float *data, std::size_t nFloats) {
                static_cast<GLsizeiptr>(byteSize),
                nullptr, GL_STREAM_DRAW); // orphan -- new allocation, no stall
   void *ptr = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-  if (ptr) {
+  if (ptr != nullptr) {
     std::memcpy(ptr, data, byteSize);
     glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
   }

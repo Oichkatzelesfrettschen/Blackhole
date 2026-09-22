@@ -34,7 +34,11 @@ namespace {
 struct EasyFontVertex {
   float x;
   float y;
+  // stb_easy_font_print writes the complete vertex ABI, including unused depth.
+  // cppcheck-suppress unusedStructMember
   [[maybe_unused]] float z;
+  // The four color bytes preserve stb_easy_font_print's 16-byte vertex stride.
+  // cppcheck-suppress unusedStructMember
   [[maybe_unused]] unsigned char color[4];
 };
 

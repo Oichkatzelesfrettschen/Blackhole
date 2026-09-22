@@ -76,13 +76,13 @@ namespace physics {
  * both horizons inward relative to uncharged Kerr.
  *
  * @param r Boyer-Lindquist r [geometric units].
- * @param M Geometric mass [geometric units].
+ * @param mass Geometric mass [geometric units].
  * @param a Spin parameter [geometric units].
- * @param Q Electric charge [geometric units].
+ * @param charge Electric charge [geometric units].
  * @return Delta [length^2].
  */
-[[nodiscard]] constexpr double knDelta(double r, double M, double a, double Q) noexcept {
-    return r * r - 2.0 * M * r + a * a + Q * Q;
+[[nodiscard]] constexpr double knDelta(double r, double mass, double a, double charge) noexcept {
+  return r * r - 2.0 * mass * r + a * a + charge * charge;
 }
 
 /**
@@ -92,17 +92,17 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
- * @param Q     Electric charge [geometric units].
+ * @param charge     Electric charge [geometric units].
  * @return A [length^4].
  */
-[[nodiscard]] inline double knA(double r, double theta,
-                                double M, double a, double Q) noexcept {
-    const double r2a2  = r * r + a * a;
-    const double s     = std::sin(theta);
-    const double Delta = knDelta(r, M, a, Q);
-    return r2a2 * r2a2 - a * a * Delta * s * s;
+[[nodiscard]] inline double knA(double r, double theta, double mass, double a,
+                                double charge) noexcept {
+  const double r2a2 = r * r + a * a;
+  const double s = std::sin(theta);
+  const double delta = knDelta(r, mass, a, charge);
+  return r2a2 * r2a2 - a * a * delta * s * s;
 }
 
 // ============================================================================
@@ -117,17 +117,17 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
- * @param Q     Electric charge [geometric units].
+ * @param charge     Electric charge [geometric units].
  * @return g_tt (dimensionless in geometric units).
  */
-[[nodiscard]] inline double knGtt(double r, double theta,
-                                  double M, double a, double Q) noexcept {
-    const double Sigma = knSigma(r, a, theta);
-    const double Delta = knDelta(r, M, a, Q);
-    const double s     = std::sin(theta);
-    return -(Delta - a * a * s * s) / Sigma;
+[[nodiscard]] inline double knGtt(double r, double theta, double mass, double a,
+                                  double charge) noexcept {
+  const double sigma = knSigma(r, a, theta);
+  const double delta = knDelta(r, mass, a, charge);
+  const double s = std::sin(theta);
+  return -(delta - a * a * s * s) / sigma;
 }
 
 /**
@@ -138,16 +138,18 @@ namespace physics {
  *
  * @param r Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M Geometric mass [geometric units].
+ * @param mass Geometric mass [geometric units].
  * @param a Spin parameter [geometric units].
- * @param Q Electric charge [geometric units].
+ * @param charge Electric charge [geometric units].
  * @return g_rr [dimensionless in geometric units].
  */
-[[nodiscard]] inline double knGrr(double r, double theta,
-                                  double M, double a, double Q) noexcept {
-    const double Delta = knDelta(r, M, a, Q);
-    if (std::abs(Delta) < 1.0e-30) return std::numeric_limits<double>::infinity();
-    return knSigma(r, a, theta) / Delta;
+[[nodiscard]] inline double knGrr(double r, double theta, double mass, double a,
+                                  double charge) noexcept {
+  const double delta = knDelta(r, mass, a, charge);
+  if (std::abs(delta) < 1.0e-30) {
+    return std::numeric_limits<double>::infinity();
+  }
+  return knSigma(r, a, theta) / delta;
 }
 
 /**
@@ -169,17 +171,17 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
- * @param Q     Electric charge [geometric units].
+ * @param charge     Electric charge [geometric units].
  * @return g_phph [length^2 in geometric units].
  */
-[[nodiscard]] inline double knGphph(double r, double theta,
-                                    double M, double a, double Q) noexcept {
-    const double Sigma = knSigma(r, a, theta);
-    const double A     = knA(r, theta, M, a, Q);
-    const double s     = std::sin(theta);
-    return A * s * s / Sigma;
+[[nodiscard]] inline double knGphph(double r, double theta, double mass, double a,
+                                    double charge) noexcept {
+  const double sigma = knSigma(r, a, theta);
+  const double metricA = knA(r, theta, mass, a, charge);
+  const double s = std::sin(theta);
+  return metricA * s * s / sigma;
 }
 
 /**
@@ -192,15 +194,14 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
  * @return g_tph [length^2 in geometric units].
  */
-[[nodiscard]] inline double knGtph(double r, double theta,
-                                   double M, double a) noexcept {
-    const double Sigma = knSigma(r, a, theta);
-    const double s     = std::sin(theta);
-    return -2.0 * M * r * a * s * s / Sigma;
+[[nodiscard]] inline double knGtph(double r, double theta, double mass, double a) noexcept {
+  const double sigma = knSigma(r, a, theta);
+  const double s = std::sin(theta);
+  return -2.0 * mass * r * a * s * s / sigma;
 }
 
 // ============================================================================
@@ -213,15 +214,17 @@ namespace physics {
  * Returns NaN when M^2 < a^2 + Q^2 (super-extremal -- naked singularity).
  * At extremality (M^2 = a^2 + Q^2) the two horizons merge at r = M.
  *
- * @param M Geometric mass [geometric units].
+ * @param mass Geometric mass [geometric units].
  * @param a Spin parameter [geometric units].
- * @param Q Electric charge [geometric units].
+ * @param charge Electric charge [geometric units].
  * @return r_+ [geometric units], or NaN for naked singularity.
  */
-[[nodiscard]] inline double knOuterHorizon(double M, double a, double Q) noexcept {
-    const double disc = M * M - a * a - Q * Q;
-    if (disc < 0.0) return std::numeric_limits<double>::quiet_NaN();
-    return M + std::sqrt(disc);
+[[nodiscard]] inline double knOuterHorizon(double mass, double a, double charge) noexcept {
+  const double disc = mass * mass - a * a - charge * charge;
+  if (disc < 0.0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return mass + std::sqrt(disc);
 }
 
 /**
@@ -231,15 +234,17 @@ namespace physics {
  * (strong cosmic censorship conjecture).  Uncharged Kerr has a Cauchy horizon;
  * Reissner-Nordstrom also has one for Q < M.
  *
- * @param M Geometric mass [geometric units].
+ * @param mass Geometric mass [geometric units].
  * @param a Spin parameter [geometric units].
- * @param Q Electric charge [geometric units].
+ * @param charge Electric charge [geometric units].
  * @return r_- [geometric units], or NaN for naked singularity.
  */
-[[nodiscard]] inline double knInnerHorizon(double M, double a, double Q) noexcept {
-    const double disc = M * M - a * a - Q * Q;
-    if (disc < 0.0) return std::numeric_limits<double>::quiet_NaN();
-    return M - std::sqrt(disc);
+[[nodiscard]] inline double knInnerHorizon(double mass, double a, double charge) noexcept {
+  const double disc = mass * mass - a * a - charge * charge;
+  if (disc < 0.0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return mass - std::sqrt(disc);
 }
 
 // ============================================================================
@@ -254,17 +259,19 @@ namespace physics {
  * At the poles (theta = 0, pi) the ergosphere touches the outer horizon.
  *
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
- * @param Q     Electric charge [geometric units].
+ * @param charge     Electric charge [geometric units].
  * @return Ergosphere boundary radius [geometric units].
  */
-[[nodiscard]] inline double knErgosphereRadius(double theta,
-                                               double M, double a, double Q) noexcept {
-    const double c    = std::cos(theta);
-    const double disc = M * M - a * a * c * c - Q * Q;
-    if (disc < 0.0) return std::numeric_limits<double>::quiet_NaN();
-    return M + std::sqrt(disc);
+[[nodiscard]] inline double knErgosphereRadius(double theta, double mass, double a,
+                                               double charge) noexcept {
+  const double c = std::cos(theta);
+  const double disc = mass * mass - a * a * c * c - charge * charge;
+  if (disc < 0.0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return mass + std::sqrt(disc);
 }
 
 // ============================================================================
@@ -281,13 +288,13 @@ namespace physics {
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
  * @param a     Spin parameter [geometric units].
- * @param Q     Electric charge [geometric units].
+ * @param charge     Electric charge [geometric units].
  * @return A_t [geometric units].
  */
-[[nodiscard]] inline double knElectricPotentialAt(double r, double theta,
-                                                  double a, double Q) noexcept {
-    const double Sigma = knSigma(r, a, theta);
-    return -Q * r / Sigma;
+[[nodiscard]] inline double knElectricPotentialAt(double r, double theta, double a,
+                                                  double charge) noexcept {
+  const double sigma = knSigma(r, a, theta);
+  return -charge * r / sigma;
 }
 
 /**
@@ -298,14 +305,14 @@ namespace physics {
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
  * @param a     Spin parameter [geometric units].
- * @param Q     Electric charge [geometric units].
+ * @param charge     Electric charge [geometric units].
  * @return A_phi [geometric units].
  */
-[[nodiscard]] inline double knMagneticPotentialPhi(double r, double theta,
-                                                   double a, double Q) noexcept {
-    const double Sigma = knSigma(r, a, theta);
-    const double s     = std::sin(theta);
-    return Q * r * a * s * s / Sigma;
+[[nodiscard]] inline double knMagneticPotentialPhi(double r, double theta, double a,
+                                                   double charge) noexcept {
+  const double sigma = knSigma(r, a, theta);
+  const double s = std::sin(theta);
+  return charge * r * a * s * s / sigma;
 }
 
 // ============================================================================
@@ -318,13 +325,13 @@ namespace physics {
  * Violations produce a naked singularity -- unphysical under the Cosmic
  * Censorship Conjecture.
  *
- * @param M Geometric mass [geometric units].
+ * @param mass Geometric mass [geometric units].
  * @param a Spin parameter [geometric units].
- * @param Q Electric charge [geometric units].
+ * @param charge Electric charge [geometric units].
  * @return true if a physical black hole exists.
  */
-[[nodiscard]] constexpr bool knSubExtremal(double M, double a, double Q) noexcept {
-    return M * M >= a * a + Q * Q;
+[[nodiscard]] constexpr bool knSubExtremal(double mass, double a, double charge) noexcept {
+  return mass * mass >= a * a + charge * charge;
 }
 
 /**
@@ -335,16 +342,18 @@ namespace physics {
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
- * @param M     Geometric mass [geometric units].
+ * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
- * @param Q     Electric charge [geometric units].
+ * @param charge     Electric charge [geometric units].
  * @return Omega_ZAMO [1/length in geometric units].
  */
-[[nodiscard]] inline double knFrameDragging(double r, double theta,
-                                            double M, double a, double Q) noexcept {
-    const double A     = knA(r, theta, M, a, Q);
-    if (std::abs(A) < 1.0e-30) return 0.0;
-    return 2.0 * M * r * a / A;
+[[nodiscard]] inline double knFrameDragging(double r, double theta, double mass, double a,
+                                            double charge) noexcept {
+  const double metricA = knA(r, theta, mass, a, charge);
+  if (std::abs(metricA) < 1.0e-30) {
+    return 0.0;
+  }
+  return 2.0 * mass * r * a / metricA;
 }
 
 } // namespace physics

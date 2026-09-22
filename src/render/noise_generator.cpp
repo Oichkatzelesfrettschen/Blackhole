@@ -7,6 +7,7 @@
 
 #include "noise_generator.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -170,9 +171,9 @@ std::vector<float> NoiseGenerator::generate2D(uint32_t width, uint32_t height,
                                config_.seed);
 
   // Remap output range
-  for (auto &value : data) {
-    value = config_.outputMin + ((value + 1.0f) * 0.5f * (config_.outputMax - config_.outputMin));
-  }
+  std::ranges::transform(data, data.begin(), [this](float value) {
+    return config_.outputMin + ((value + 1.0f) * 0.5f * (config_.outputMax - config_.outputMin));
+  });
 
   return data;
 }
@@ -182,9 +183,8 @@ void NoiseGenerator::remapOutput(NoiseVolume &volume) const {
   const float scale = (config_.outputMax - config_.outputMin) * 0.5f;
   const float offset = config_.outputMin + scale;
 
-  for (auto &value : volume.data) {
-    value = offset + (value * scale);
-  }
+  std::ranges::transform(volume.data, volume.data.begin(),
+                         [offset, scale](float value) { return offset + (value * scale); });
 }
 
 std::string NoiseGenerator::version() {

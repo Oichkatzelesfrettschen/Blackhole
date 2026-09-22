@@ -42,6 +42,7 @@
 #include <cassert>
 #include <cmath>
 #include <numbers>
+#include <numeric>
 #include <utility>
 #include <vector>
 
@@ -210,11 +211,7 @@ ironKLineProfile(const IronKLineParams &params) {
     }
 
     // Normalize so integral = 1 (sum over bins * dg = 1)
-    double integral = 0.0;
-    for (const double f : flux) {
-        integral += f;
-    }
-    integral *= dg;
+    const double integral = std::accumulate(flux.begin(), flux.end(), 0.0) * dg;
 
     if (integral <= 0.0) {
         return {};

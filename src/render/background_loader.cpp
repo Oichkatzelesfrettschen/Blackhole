@@ -2,12 +2,15 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
+
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include "platform/resource_paths.h"
 #include "render/render_state.h"

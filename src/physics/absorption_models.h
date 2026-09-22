@@ -114,7 +114,7 @@ inline constexpr double BOLTZMANN = K_B;
   // Approximate Gaunt factor: g_ff ~ ln(lambda_D * 2 * pi / lambda_c)
   // where lambda_c ~ h / (m_e * c) = Compton wavelength ~ 2.4e-10 cm
   const double lambdaC = 2.426e-10;
-  const double gauntFactor = std::log((lambdaD / lambdaC) + 1.0);
+  const double gauntFactor = std::log1p(lambdaD / lambdaC);
 
   // Free-free absorption coefficient
   const double t32 = std::pow(tempK, 1.5);
@@ -153,7 +153,7 @@ inline constexpr double BOLTZMANN = K_B;
   const double x = hNu / mEc2;
 
   // Thomson scattering cross-section for low-energy photons
-  double sigma = SIGMA_THOMSON;
+  double sigma;
 
   // Klein-Nishina correction factor
   // sigma_KN = sigma_T * (1 + x) / ((1 + 2*x)^2) * [...] (approx)

@@ -76,7 +76,7 @@ void InputManager::initDefaultBindings() {
 }
 
 void InputManager::syncFromSettings() {
-  auto &settings = SettingsManager::instance().get();
+  const auto &settings = SettingsManager::instance().get();
 
   // Key bindings
   keyBindings_[KeyAction::Quit] = settings.keyQuit;

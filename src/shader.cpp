@@ -17,6 +17,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 // Third-party library headers (glbinding sub-headers: clang-tidy misc-include-cleaner
