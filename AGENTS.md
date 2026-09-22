@@ -26,7 +26,7 @@ Use repo-local Conan state (`.conan/`) for reproducible builds:
 ./scripts/conan_install.sh Release build
 ./scripts/fetch_implot.sh
 cmake --preset release
-cmake --build --preset release
+./scripts/build.sh release
 ctest --test-dir build/Release --output-on-failure
 cmake --build --preset release --target validate-shaders
 ```

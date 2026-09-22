@@ -1,0 +1,7 @@
+conan==2.32.0
+cmake==3.31.6
+fontmake==3.11.1
+numpy==2.2.6
+scipy==1.15.3
+h5py==3.13.0
+matplotlib==3.10.3

@@ -356,14 +356,28 @@
     },
     {
       "name": "ci",
-      "displayName": "CI Build",
-      "description": "Continuous integration build",
-      "inherits": "release",
+      "displayName": "Iterative CPU CI",
+      "description": "Ninja build with strict warnings, CPU tests and shader validation",
+      "inherits": "base",
       "cacheVariables": {
-        "ENABLE_CLANG_TIDY": "ON",
-        "ENABLE_CPPCHECK": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/CI-deps/Release/generators/conan_toolchain.cmake",
+        "ENABLE_NATIVE_ARCH": "OFF",
+        "ENABLE_LTO": "OFF",
+        "ENABLE_FAT_LTO": "OFF",
+        "ENABLE_FAST_MATH": "OFF",
+        "ENABLE_CLANG_TIDY": "OFF",
+        "ENABLE_CPPCHECK": "OFF",
+        "ENABLE_WERROR": "ON",
+        "WARNING_LEVEL": "5",
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_BLENDER_BRIDGE": "OFF",
+        "ENABLE_DESKTOP_APP": "ON",
+        "BUILD_TESTING": "ON",
         "ENABLE_SHADER_VALIDATION": "ON"
-      }
+      },
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/CI"
     },
     {
       "name": "profiling",
@@ -422,6 +436,27 @@
         "ENABLE_WERROR": "ON",
         "WARNING_LEVEL": "5",
         "PGO_PROFILE_DIR": "${sourceDir}/build/PGO-Gen/pgo-profiles"
+      }
+    },
+    {
+      "name": "ci-analysis",
+      "inherits": "ci",
+      "displayName": "CPU CI with static analysis",
+      "binaryDir": "${sourceDir}/build/CI-Analysis",
+      "cacheVariables": {
+        "ENABLE_CLANG_TIDY": "ON",
+        "ENABLE_CPPCHECK": "ON"
+      }
+    },
+    {
+      "name": "ci-release",
+      "inherits": "ci",
+      "displayName": "CPU CI with release optimization",
+      "binaryDir": "${sourceDir}/build/CI-Release",
+      "cacheVariables": {
+        "ENABLE_LTO": "ON",
+        "ENABLE_FAT_LTO": "ON",
+        "ENABLE_FAST_MATH": "ON"
       }
     }
   ],
@@ -517,6 +552,14 @@
     {
       "name": "pgo-use",
       "configurePreset": "pgo-use"
+    },
+    {
+      "name": "ci-analysis",
+      "configurePreset": "ci-analysis"
+    },
+    {
+      "name": "ci-release",
+      "configurePreset": "ci-release"
     }
   ],
   "testPresets": [

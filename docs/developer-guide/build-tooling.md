@@ -99,3 +99,5 @@ these separate from the headless campaign analysis, which links no GL.
   a `lizard` complexity check.
 - **On a determinism failure:** `rr record`/`replay` on `campaign_sim`.
 - **On a perf regression:** `perf` + `hotspot`, or `callgrind` for exact counts.
+
+Hosted execution and iteration costs: [CI guide](ci.md).
