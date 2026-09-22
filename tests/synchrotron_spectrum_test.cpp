@@ -20,6 +20,8 @@
 
 #include "../src/physics/synchrotron.h"
 
+static_assert(PHYSICS_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
+
 using namespace physics;
 
 // Test tolerance

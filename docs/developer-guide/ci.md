@@ -100,3 +100,9 @@ increase local iteration cost. Historical evidence does not establish a measured
 hours-long GitHub C++ build. Some repeated physics compilation preserves distinct
 floating-point flags and ABI variants; replacing every copy with one library
 would require a separate numerical and layout audit.
+
+Boost uses `header_only=True`: the five numerical test consumers link
+`Boost::headers` and assert their Bessel/Jacobi feature macros at compile time.
+The locked recipe omits `Boost::math` in header-only mode, so changing the Conan
+option alone would have weakened those tests. Existing desktop and bridge
+numerical paths retain their own dependency declarations.

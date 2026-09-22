@@ -29,7 +29,7 @@ class BlackholeConan(ConanFile):
         "hdf5/*:shared": True,
         "spdlog/*:shared": True,
         "fmt/*:shared": True,
-        "boost/*:without_cobalt": True,
+        "boost/*:header_only": True,
         "enable_ktx": False,
         "enable_openimageio": False,
         "enable_meshoptimizer": True,

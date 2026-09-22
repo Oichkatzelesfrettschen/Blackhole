@@ -38,6 +38,8 @@
 #include "../src/physics/analytic_kerr_geodesic.h"
 #include "../src/physics/reproducibility.h"
 
+static_assert(PHYSICS_HAS_BOOST_JACOBI == 1, "Validation requires the Boost numerical path");
+
 using namespace physics;
 
 namespace {

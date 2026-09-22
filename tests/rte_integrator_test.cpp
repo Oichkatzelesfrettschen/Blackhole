@@ -57,6 +57,9 @@
 
 #include "../src/physics/rte_integrator.h"
 
+static_assert(PHYSICS_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
+static_assert(PHYSICS_RTE_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
+
 using namespace physics;
 
 // ---------------------------------------------------------------------------

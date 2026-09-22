@@ -80,7 +80,7 @@ find_package(HighFive REQUIRED)
 find_package(CLI11 REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
-find_package(Boost CONFIG QUIET)
+find_package(Boost CONFIG REQUIRED COMPONENTS headers)
 
 # cfitsio for FITS image output (scientific data products)
 find_package(PkgConfig QUIET)
@@ -4529,9 +4529,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(synchrotron_spectrum_test PRIVATE ${PROJECT_WARNINGS})
-    if(TARGET Boost::math)
-      target_link_libraries(synchrotron_spectrum_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(synchrotron_spectrum_test PRIVATE Boost::headers)
     add_test(NAME synchrotron_spectrum_validation COMMAND synchrotron_spectrum_test)
     set_tests_properties(synchrotron_spectrum_validation PROPERTIES
       LABELS "physics;synchrotron;emission;phase5"
@@ -4755,9 +4753,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(rte_integrator_test PRIVATE ${PROJECT_WARNINGS})
-    if(TARGET Boost::math)
-      target_link_libraries(rte_integrator_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(rte_integrator_test PRIVATE Boost::headers)
     add_test(NAME rte_integrator_validation COMMAND rte_integrator_test)
     set_tests_properties(rte_integrator_validation PROPERTIES
       LABELS "physics;rte;radiative_transfer"
@@ -4780,9 +4776,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(stokes_transport_test PRIVATE ${PROJECT_WARNINGS})
-    if(TARGET Boost::math)
-      target_link_libraries(stokes_transport_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(stokes_transport_test PRIVATE Boost::headers)
     add_test(NAME stokes_transport_validation COMMAND stokes_transport_test)
     set_tests_properties(stokes_transport_validation PROPERTIES
       LABELS "physics;polarization;stokes"
@@ -4805,9 +4799,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(stokes_invariants_test PRIVATE ${PROJECT_WARNINGS})
-    if(TARGET Boost::math)
-      target_link_libraries(stokes_invariants_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(stokes_invariants_test PRIVATE Boost::headers)
     add_test(NAME stokes_invariants_validation COMMAND stokes_invariants_test)
     set_tests_properties(stokes_invariants_validation PROPERTIES
       LABELS "physics;polarization;stokes;invariants"
@@ -5632,9 +5624,7 @@ if(BUILD_TESTING)
     if(ENABLE_FAST_MATH)
       target_compile_options(analytic_geodesic_reproducibility_test PRIVATE -fno-fast-math)
     endif()
-    if(TARGET Boost::math)
-      target_link_libraries(analytic_geodesic_reproducibility_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(analytic_geodesic_reproducibility_test PRIVATE Boost::headers)
 
     add_test(NAME analytic_geodesic_reproducibility_validation
              COMMAND analytic_geodesic_reproducibility_test)
