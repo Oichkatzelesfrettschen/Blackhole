@@ -43,6 +43,7 @@
 #include <cstddef>
 #include <limits>
 #include <numbers>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -61,27 +62,27 @@ namespace physics {
  * interferometer whose baseline vector has projected length (u,v).
  */
 struct ComplexVis {
-    double re = 0.0;  ///< Real part
-    double im = 0.0;  ///< Imaginary part
+  double re = 0.0; ///< Real part
+  double im = 0.0; ///< Imaginary part
 
-    /// Visibility amplitude |V|.
-    [[nodiscard]] double amplitude() const noexcept { return std::hypot(re, im); }
+  /// Visibility amplitude |V|.
+  [[nodiscard]] double amplitude() const noexcept { return std::hypot(re, im); }
 
-    /// Visibility phase arg(V) in (-pi, pi].
-    [[nodiscard]] double phase() const noexcept { return std::atan2(im, re); }
+  /// Visibility phase arg(V) in (-pi, pi].
+  [[nodiscard]] double phase() const noexcept { return std::atan2(im, re); }
 
-    /// Complex conjugate: V* = Re - i Im.  Flipping the baseline sign gives V*.
-    [[nodiscard]] ComplexVis conjugate() const noexcept { return {re, -im}; }
+  /// Complex conjugate: V* = Re - i Im.  Flipping the baseline sign gives V*.
+  [[nodiscard]] ComplexVis conjugate() const noexcept { return {re, -im}; }
 
-    /// Complex multiplication (used for bispectrum products).
-    [[nodiscard]] ComplexVis operator*(const ComplexVis& o) const noexcept {
-        return {re * o.re - im * o.im, re * o.im + im * o.re};
-    }
+  /// Complex multiplication (used for bispectrum products).
+  [[nodiscard]] ComplexVis operator*(const ComplexVis &o) const noexcept {
+    return {re * o.re - im * o.im, re * o.im + im * o.re};
+  }
 
-    /// Complex addition (used for superposition).
-    [[nodiscard]] ComplexVis operator+(const ComplexVis& o) const noexcept {
-        return {re + o.re, im + o.im};
-    }
+  /// Complex addition (used for superposition).
+  [[nodiscard]] ComplexVis operator+(const ComplexVis &o) const noexcept {
+    return {re + o.re, im + o.im};
+  }
 };
 
 // ============================================================================
@@ -96,11 +97,11 @@ struct ComplexVis {
  * pole, Y completing the right-handed system.
  */
 struct TelescopeStation {
-    const char* name;   ///< Abbreviated station name (e.g., "ALMA")
-    double X;           ///< ECEF X [m]
-    double Y;           ///< ECEF Y [m]
-    double Z;           ///< ECEF Z [m] (rotational axis, positive North)
-    double diameter;    ///< Effective aperture diameter [m]
+  const char *name; ///< Abbreviated station name (e.g., "ALMA")
+  double x;         ///< ECEF X [m]
+  double y;         ///< ECEF Y [m]
+  double z;         ///< ECEF Z [m] (rotational axis, positive North)
+  double diameter;  ///< Effective aperture diameter [m]
 };
 
 // ============================================================================
@@ -114,9 +115,9 @@ struct TelescopeStation {
  * wide-field imaging but not for narrow-field visibility evaluation.
  */
 struct UVW {
-    double u;   ///< East-West spatial frequency [wavelengths]
-    double v;   ///< North-South spatial frequency [wavelengths]
-    double w;   ///< Line-of-sight delay [wavelengths]
+  double u; ///< East-West spatial frequency [wavelengths]
+  double v; ///< North-South spatial frequency [wavelengths]
+  double w; ///< Line-of-sight delay [wavelengths]
 };
 
 /**
@@ -139,7 +140,7 @@ struct UVW {
  * LIMITS:
  *   - H = 0 (source on meridian): u = dY/lambda, v = -dX sin d/lambda + dZ cos d/lambda
  *   - d = 0 (equatorial source): v = dZ / lambda (independent of H)
- *   - d = +/-pi/2 (polar source): u = v = 0 (no projected baseline)
+ *   - d = +/-pi/2 (polar source): w = +/-dZ/lambda; u and v trace the equatorial baseline.
  *
  * References:
  *   - Thompson, Moran & Swenson (2017), Eq. 4.1
@@ -152,25 +153,23 @@ struct UVW {
  * @param wavelength  Observing wavelength [m]
  * @return UVW coordinates in wavelengths
  */
-[[nodiscard]] inline UVW uvwCoordinates(const TelescopeStation& s1,
-                                         const TelescopeStation& s2,
-                                         double hourAngle,
-                                         double declination,
-                                         double wavelength) noexcept {
-    const double dX = s2.X - s1.X;
-    const double dY = s2.Y - s1.Y;
-    const double dZ = s2.Z - s1.Z;
+[[nodiscard]] inline UVW uvwCoordinates(const TelescopeStation &s1, const TelescopeStation &s2,
+                                        double hourAngle, double declination,
+                                        double wavelength) noexcept {
+  const double dX = s2.x - s1.x;
+  const double dY = s2.y - s1.y;
+  const double dZ = s2.z - s1.z;
 
-    const double sinH   = std::sin(hourAngle);
-    const double cosH   = std::cos(hourAngle);
-    const double sinD   = std::sin(declination);
-    const double cosD   = std::cos(declination);
+  const double sinH = std::sin(hourAngle);
+  const double cosH = std::cos(hourAngle);
+  const double sinD = std::sin(declination);
+  const double cosD = std::cos(declination);
 
-    return {
-        (dX * sinH + dY * cosH) / wavelength,
-        (-dX * sinD * cosH + dY * sinD * sinH + dZ * cosD) / wavelength,
-        ( dX * cosD * cosH - dY * cosD * sinH + dZ * sinD) / wavelength,
-    };
+  return {
+      (dX * sinH + dY * cosH) / wavelength,
+      (-dX * sinD * cosH + dY * sinD * sinH + dZ * cosD) / wavelength,
+      (dX * cosD * cosH - dY * cosD * sinH + dZ * sinD) / wavelength,
+  };
 }
 
 /**
@@ -189,20 +188,18 @@ struct UVW {
  * @param nPoints     Number of points to sample
  * @return Vector of (u, v) coordinate pairs in wavelengths
  */
-[[nodiscard]] inline std::vector<std::pair<double, double>> uvTrack(
-    const TelescopeStation& s1, const TelescopeStation& s2,
-    double haBeg, double haEnd,
-    double declination, double wavelength,
-    std::size_t nPoints = 64) {
-    std::vector<std::pair<double, double>> track;
-    track.reserve(nPoints);
-    const std::size_t denom = (nPoints > 1) ? nPoints - 1 : 1;
-    for (std::size_t k = 0; k < nPoints; ++k) {
-        const double ha  = haBeg + (haEnd - haBeg) * static_cast<double>(k) / static_cast<double>(denom);
-        const auto   uvw = uvwCoordinates(s1, s2, ha, declination, wavelength);
-        track.emplace_back(uvw.u, uvw.v);
-    }
-    return track;
+[[nodiscard]] inline std::vector<std::pair<double, double>>
+uvTrack(const TelescopeStation &s1, const TelescopeStation &s2, double haBeg, double haEnd,
+        double declination, double wavelength, std::size_t nPoints = 64) {
+  std::vector<std::pair<double, double>> track;
+  track.reserve(nPoints);
+  const std::size_t denom = (nPoints > 1) ? nPoints - 1 : 1;
+  for (std::size_t k = 0; k < nPoints; ++k) {
+    const double ha = haBeg + (haEnd - haBeg) * static_cast<double>(k) / static_cast<double>(denom);
+    const auto uvw = uvwCoordinates(s1, s2, ha, declination, wavelength);
+    track.emplace_back(uvw.u, uvw.v);
+  }
+  return track;
 }
 
 // ============================================================================
@@ -219,7 +216,7 @@ struct UVW {
  *   V(u,v) = integral I(x,y) * exp(-2 pi i (u x + v y)) dx dy
  *
  * This function evaluates the DFT sum directly for a discretised image.
- * For large images use an FFT; this is O(N^4) per (u,v) point.
+ * For large images use an FFT; the direct sum is O(N^2) per (u,v) point.
  *
  * WHAT: Pixel (row, col) maps to angular position
  *   x = (col - N/2) * pixelSizeRad   [East offset, positive right]
@@ -230,35 +227,39 @@ struct UVW {
  * The normalised visibility V_norm = V / V(0,0) has |V_norm| in [0, 1].
  *
  * @param image        Flattened N*N intensity image (row-major, non-negative)
- * @param N            Image side length [pixels]
+ * @param imageSide    Image side length [pixels]
  * @param pixelSizeRad Angular pixel size [rad]
  * @param u            East-West spatial frequency [wavelengths]
  * @param v            North-South spatial frequency [wavelengths]
  * @return Complex visibility [same units as image * sr]
  */
-[[nodiscard]] inline ComplexVis complexVisibility(const std::vector<double>& image,
-                                                   std::size_t N,
-                                                   double pixelSizeRad,
-                                                   double u, double v) noexcept {
-    if (image.size() < N * N || N == 0) { return {}; }
+[[nodiscard]] inline ComplexVis complexVisibility(const std::vector<double> &image,
+                                                  std::size_t imageSide, double pixelSizeRad,
+                                                  double u, double v) noexcept {
+  if (imageSide == 0 || imageSide > image.size() / imageSide) {
+    return {};
+  }
 
-    const double dOmega  = pixelSizeRad * pixelSizeRad;
-    const double twoPi   = 2.0 * std::numbers::pi;
-    const double halfN   = 0.5 * static_cast<double>(N);
+  const double dOmega = pixelSizeRad * pixelSizeRad;
+  const double twoPi = 2.0 * std::numbers::pi;
+  const double halfN = 0.5 * static_cast<double>(imageSide);
 
-    double re = 0.0, im = 0.0;
-    for (std::size_t row = 0; row < N; ++row) {
-        const double y = (static_cast<double>(row) - halfN) * pixelSizeRad;
-        for (std::size_t col = 0; col < N; ++col) {
-            const double flux = image[row * N + col];
-            if (flux == 0.0) { continue; }
-            const double x     = (static_cast<double>(col) - halfN) * pixelSizeRad;
-            const double phase = twoPi * (u * x + v * y);
-            re += flux * std::cos(phase);
-            im -= flux * std::sin(phase);  // convention: -2 pi i
-        }
+  double re = 0.0;
+  double im = 0.0;
+  for (std::size_t row = 0; row < imageSide; ++row) {
+    const double y = (static_cast<double>(row) - halfN) * pixelSizeRad;
+    for (std::size_t col = 0; col < imageSide; ++col) {
+      const double flux = image[row * imageSide + col];
+      if (flux == 0.0) {
+        continue;
+      }
+      const double x = (static_cast<double>(col) - halfN) * pixelSizeRad;
+      const double phase = twoPi * (u * x + v * y);
+      re += flux * std::cos(phase);
+      im -= flux * std::sin(phase); // convention: -2 pi i
     }
-    return {re * dOmega, im * dOmega};
+  }
+  return {re * dOmega, im * dOmega};
 }
 
 /**
@@ -267,22 +268,23 @@ struct UVW {
  * |V_norm| = 1 for a point source.  |V_norm| < 1 for an extended source.
  * Returns {0, 0} if the total flux is zero.
  *
- * @param image        N*N intensity image (row-major)
- * @param N            Image side length
+ * @param image        imageSide*imageSide intensity image (row-major)
+ * @param imageSide            Image side length
  * @param pixelSizeRad Angular pixel size [rad]
  * @param u            Spatial frequency u [wavelengths]
  * @param v            Spatial frequency v [wavelengths]
  * @return Normalised visibility; amplitude in [0, 1]
  */
-[[nodiscard]] inline ComplexVis normalisedVisibility(const std::vector<double>& image,
-                                                      std::size_t N,
-                                                      double pixelSizeRad,
-                                                      double u, double v) noexcept {
-    const ComplexVis v00 = complexVisibility(image, N, pixelSizeRad, 0.0, 0.0);
-    const double     a00 = v00.amplitude();
-    if (a00 < 1.0e-30) { return {}; }
-    const ComplexVis vuv = complexVisibility(image, N, pixelSizeRad, u, v);
-    return {vuv.re / a00, vuv.im / a00};
+[[nodiscard]] inline ComplexVis normalisedVisibility(const std::vector<double> &image,
+                                                     std::size_t imageSide, double pixelSizeRad,
+                                                     double u, double v) noexcept {
+  const ComplexVis v00 = complexVisibility(image, imageSide, pixelSizeRad, 0.0, 0.0);
+  const double a00 = v00.amplitude();
+  if (a00 < 1.0e-30) {
+    return {};
+  }
+  const ComplexVis vuv = complexVisibility(image, imageSide, pixelSizeRad, u, v);
+  return {vuv.re / a00, vuv.im / a00};
 }
 
 // ============================================================================
@@ -316,11 +318,10 @@ struct UVW {
  * @param v31 Visibility on baseline 3->1  (= conj(v13))
  * @return Closure phase [rad] in (-pi, pi]
  */
-[[nodiscard]] inline double closurePhase(const ComplexVis& v12,
-                                          const ComplexVis& v23,
-                                          const ComplexVis& v31) noexcept {
-    const ComplexVis bispectrum = v12 * v23 * v31;
-    return std::atan2(bispectrum.im, bispectrum.re);
+[[nodiscard]] inline double closurePhase(const ComplexVis &v12, const ComplexVis &v23,
+                                         const ComplexVis &v31) noexcept {
+  const ComplexVis bispectrum = v12 * v23 * v31;
+  return std::atan2(bispectrum.im, bispectrum.re);
 }
 
 /**
@@ -344,13 +345,14 @@ struct UVW {
  * @param v24 Visibility on baseline 2-4
  * @return Closure amplitude; NaN if denominator is zero.
  */
-[[nodiscard]] inline double closureAmplitude(const ComplexVis& v12,
-                                              const ComplexVis& v34,
-                                              const ComplexVis& v13,
-                                              const ComplexVis& v24) noexcept {
-    const double denom = v13.amplitude() * v24.amplitude();
-    if (denom < 1.0e-30) { return std::numeric_limits<double>::quiet_NaN(); }
-    return (v12.amplitude() * v34.amplitude()) / denom;
+[[nodiscard]] inline double closureAmplitude(const ComplexVis &v12, const ComplexVis &v34,
+                                             const ComplexVis &v13,
+                                             const ComplexVis &v24) noexcept {
+  const double denom = v13.amplitude() * v24.amplitude();
+  if (denom == 0.0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return (v12.amplitude() * v34.amplitude()) / denom;
 }
 
 // ============================================================================
@@ -381,10 +383,9 @@ struct UVW {
  * @param q           Baseline length [wavelengths] (q = sqrt(u^2+v^2))
  * @return Real visibility [same units as totalFlux]; J_0 oscillates around 0.
  */
-[[nodiscard]] inline double analyticalRingVisibility(double ringRadius,
-                                                      double totalFlux,
-                                                      double q) noexcept {
-    return totalFlux * std::cyl_bessel_j(0, 2.0 * std::numbers::pi * ringRadius * q);
+[[nodiscard]] inline double analyticalRingVisibility(double ringRadius, double totalFlux,
+                                                     double q) {
+  return totalFlux * std::cyl_bessel_j(0, 2.0 * std::numbers::pi * ringRadius * q);
 }
 
 /**
@@ -397,10 +398,12 @@ struct UVW {
  * @return Baseline length [wavelengths] at first visibility null
  */
 [[nodiscard]] inline double ringVisibilityFirstNull(double ringRadius) noexcept {
-    if (ringRadius <= 0.0) { return 0.0; }
-    // First zero of J_0: x_0 = 2.404825557695773
-    constexpr double kJ0FirstZero = 2.404825557695773;
-    return kJ0FirstZero / (2.0 * std::numbers::pi * ringRadius);
+  if (ringRadius <= 0.0) {
+    return 0.0;
+  }
+  // First zero of J_0: x_0 = 2.404825557695773
+  constexpr double kJ0FirstZero = 2.404825557695773;
+  return kJ0FirstZero / (2.0 * std::numbers::pi * ringRadius);
 }
 
 // ============================================================================
@@ -414,14 +417,14 @@ struct UVW {
  * resolved images of M87* (EHT Collaboration 2019) and Sgr A* (2022).
  */
 enum class EhtStation : int {
-    ALMA  = 0,   ///< Atacama Large Millimeter Array, Chile
-    SPT   = 1,   ///< South Pole Telescope, Antarctica
-    JCMT  = 2,   ///< James Clerk Maxwell Telescope, Hawaii
-    SMA   = 3,   ///< Submillimeter Array, Hawaii (co-located with JCMT)
-    SMT   = 4,   ///< Submillimeter Telescope, Arizona
-    IRAM  = 5,   ///< IRAM 30m Telescope, Spain
-    LMT   = 6,   ///< Large Millimeter Telescope, Mexico
-    COUNT = 7
+  ALMA = 0, ///< Atacama Large Millimeter Array, Chile
+  SPT = 1,  ///< South Pole Telescope, Antarctica
+  JCMT = 2, ///< James Clerk Maxwell Telescope, Hawaii
+  SMA = 3,  ///< Submillimeter Array, Hawaii (co-located with JCMT)
+  SMT = 4,  ///< Submillimeter Telescope, Arizona
+  IRAM = 5, ///< IRAM 30m Telescope, Spain
+  LMT = 6,  ///< Large Millimeter Telescope, Mexico
+  COUNT = 7
 };
 
 /**
@@ -436,33 +439,37 @@ enum class EhtStation : int {
  * @param id  EhtStation enumerator
  * @return TelescopeStation with ECEF coordinates and aperture diameter
  */
-[[nodiscard]] inline TelescopeStation ehtStation(EhtStation id) noexcept {
-    static constexpr std::array<TelescopeStation, 7> kStations = {{
-        {"ALMA",  2225144.2, -5441197.6, -2479303.4,  73.0},  // Chile
-        {"SPT",         0.0,       0.0,  -6359587.3,  10.0},  // South Pole
-        {"JCMT", -5464075.2, -2493028.4,  2150612.2,  15.0},  // Hawaii
-        {"SMA",  -5464075.2, -2493028.4,  2150612.2,   8.0},  // Hawaii (co-located)
-        {"SMT",  -1828796.2, -5054406.8,  3427865.2,  10.0},  // Arizona
-        {"IRAM",  5088967.9,  -301681.2,  3825012.3,  30.0},  // Spain
-        {"LMT",   -768715.6, -5988507.1,  2063353.0,  50.0},  // Mexico
-    }};
-    return kStations.at(static_cast<std::size_t>(id));
+[[nodiscard]] inline TelescopeStation ehtStation(EhtStation id) {
+  static constexpr std::array<TelescopeStation, 7> kStations = {{
+      {"ALMA", 2225144.2, -5441197.6, -2479303.4, 73.0}, // Chile
+      {"SPT", 0.0, 0.0, -6359587.3, 10.0},               // South Pole
+      {"JCMT", -5464075.2, -2493028.4, 2150612.2, 15.0}, // Hawaii
+      {"SMA", -5464075.2, -2493028.4, 2150612.2, 8.0},   // Hawaii (co-located)
+      {"SMT", -1828796.2, -5054406.8, 3427865.2, 10.0},  // Arizona
+      {"IRAM", 5088967.9, -301681.2, 3825012.3, 30.0},   // Spain
+      {"LMT", -768715.6, -5988507.1, 2063353.0, 50.0},   // Mexico
+  }};
+  const auto index = static_cast<std::size_t>(id);
+  if (index >= kStations.size()) {
+    throw std::out_of_range("EHT station identifier is outside the array");
+  }
+  return kStations.at(index);
 }
 
 /// EHT standard observing wavelength: 1.3 mm (230 GHz).
-inline constexpr double kEhtWavelength = 1.3e-3;    // [m]
+inline constexpr double EHT_WAVELENGTH = 1.3e-3; // [m]
 
 /// EHT observing frequency: 230 GHz.
-inline constexpr double kEhtFrequency  = 230.0e9;   // [Hz]
+inline constexpr double EHT_FREQUENCY = 230.0e9; // [Hz]
 
 /// M87* declination in radians (J2000, +12.391 deg).
-inline constexpr double kM87DecRad = 12.391 * std::numbers::pi / 180.0;
+inline constexpr double M87_DEC_RAD = 12.391 * std::numbers::pi / 180.0;
 
 /// Sgr A* declination in radians (J2000, -29.008 deg).
-inline constexpr double kSgrADecRad = -29.008 * std::numbers::pi / 180.0;
+inline constexpr double SGR_A_DEC_RAD = -29.008 * std::numbers::pi / 180.0;
 
 /// 1 microarcsecond in radians.
-inline constexpr double kMicroarcsecRad = std::numbers::pi / (180.0 * 3600.0 * 1.0e6);
+inline constexpr double MICROARCSEC_RAD = std::numbers::pi / (180.0 * 3600.0 * 1.0e6);
 
 } // namespace physics
 
