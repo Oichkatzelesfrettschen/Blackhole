@@ -27,7 +27,15 @@ CUDA device execution, desktop OpenGL rendering, and Blender/Octane runtime
 qualification require their corresponding hardware and environments.
 
 All three jobs run independently. The quick `ci` result provides early compiler
-and CPU-test feedback while analysis and release validation continue. Requested
+and CPU-test feedback while analysis and release validation continue.
+Desktop variants share one `blackhole_runtime_assets` producer. The producer
+waits for generated fonts and backdrops, then copies changed assets and shaders
+once before the desktop targets link. Separate post-link copies raced on the
+same destination during a parallel build; the shared dependency removes that
+race without reducing compiler parallelism.
+Ninja release builds allow one LTO link at a time because each link can spawn
+an all-CPU worker pool. Compiler jobs remain parallel; serializing whole-program
+links bounds the nested worker pools instead of stacking several per runner. Requested
 analyzers must be installed; configuration fails when either executable is absent.
 Imported ImGui, STB, and GL callback implementation files retain upstream lint
 ownership; project translation units and project headers retain strict analysis.
@@ -45,6 +53,20 @@ Only main pushes and pull requests trigger automatic per-change builds, avoiding
 a second branch-push run for every PR commit. A newer PR revision cancels its
 superseded run. Main pushes retain their own validation. Each job has a 90-minute
 upper bound; a timeout is a failed gate, never validation evidence.
+
+## Strict source validation
+
+Every enabled clang-tidy diagnostic is an error. The cleanup preserves the
+configured diagnostic set and fixes compiler, clang-tidy, and cppcheck findings
+in project sources, tests, and tools. Renderer helper extraction preserves the
+checked render-call ordering; settings persistence tests exercise serialized
+values and legacy alias precedence. HDF5 tool tests cover malformed metadata,
+argument handling, and native fixture round trips through CTest dependencies.
+
+CPU fixtures identify their evidence boundary explicitly. Fixed layout facts
+use compile-time assertions; runtime checks exercise buffer contents, temporal
+interpolation, and numerical helpers. A CPU fixture does not establish shader
+execution, occupancy, asynchronous device behavior, or GPU timing.
 
 ## Measured dependency costs
 

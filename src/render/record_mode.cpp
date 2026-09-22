@@ -94,10 +94,10 @@ constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS 
 } // namespace
 
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
-  const auto composition =
+  const auto *const composition =
       std::ranges::find_if(K_SHOWCASE_ORBIT_COMPOSITIONS,
                            [name](const auto &candidate) { return name == candidate.name; });
-  return composition == K_SHOWCASE_ORBIT_COMPOSITIONS.end() ? nullptr : &*composition;
+  return composition == K_SHOWCASE_ORBIT_COMPOSITIONS.end() ? nullptr : composition;
 }
 
 void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, WiregridParams &params,

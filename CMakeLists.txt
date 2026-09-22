@@ -735,6 +735,13 @@ if(ENABLE_LTO)
     # Enable IPO for all targets
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
+    # Each LTO link can use every CPU. Serialize links under Ninja so several
+    # linkers cannot each create an independent all-CPU worker pool.
+    if(CMAKE_GENERATOR MATCHES "Ninja")
+      set_property(GLOBAL APPEND PROPERTY JOB_POOLS blackhole_lto_link=1)
+      set(CMAKE_JOB_POOL_LINK blackhole_lto_link)
+    endif()
+
     if(ENABLE_FAT_LTO)
       # Fat LTO: maximum optimization, parallel LTO
       if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -1302,18 +1309,7 @@ function(add_blackhole_desktop_target target_name)
   )
   target_compile_options(${target_name} PRIVATE ${PROJECT_WARNINGS})
 
-  add_custom_command(
-    TARGET ${target_name}
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets"
-            "$<TARGET_FILE_DIR:${target_name}>/assets"
-  )
-  add_custom_command(
-    TARGET ${target_name}
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/shader/"
-            "$<TARGET_FILE_DIR:${target_name}>/shader"
-  )
+  add_dependencies(${target_name} blackhole_runtime_assets)
 endfunction()
 
 find_library(CPPTRACE_LIBRARY cpptrace)
@@ -1378,6 +1374,20 @@ if(ENABLE_DESKTOP_APP)
   else()
     message(STATUS "ImageMagick not found: the campaign map uses its procedural "
                    "starfield backdrop.")
+  endif()
+
+  # Desktop variants share an output directory. A single producer prevents
+  # parallel links from racing while copying the same runtime files.
+  add_custom_target(blackhole_runtime_assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "${PROJECT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/assets"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "${PROJECT_SOURCE_DIR}/shader"
+            "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/shader"
+    COMMENT "Synchronizing desktop runtime assets"
+    VERBATIM)
+  add_dependencies(blackhole_runtime_assets blackhole_font)
+  if(TARGET blackhole_campaign_backdrop)
+    add_dependencies(blackhole_runtime_assets blackhole_campaign_backdrop)
   endif()
 
   add_blackhole_desktop_target(${CMAKE_PROJECT_NAME})
@@ -3106,6 +3116,12 @@ if(BUILD_TESTING)
       LABELS "docs;physics;meta"
       TIMEOUT 30
     )
+    add_test(NAME physics_claims_verifier
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/tests/verify_claims_matrix_test.py")
+    set_tests_properties(physics_claims_verifier PROPERTIES
+      LABELS "docs;physics;meta;unit"
+      TIMEOUT 30
+    )
   endif()
   if(TARGET verify-blender-addon-package)
     add_test(
@@ -3651,6 +3667,28 @@ if(BUILD_TESTING)
     list(APPEND SANITIZER_TEST_ENV "LSAN_OPTIONS=detect_leaks=0")
   endif()
 
+  if(TARGET nubhlight_pack AND PYTHON3_EXECUTABLE)
+    add_test(NAME nubhlight_pack_validation
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/nubhlight_pack_test.py"
+        --packer $<TARGET_FILE:nubhlight_pack>)
+    set_tests_properties(nubhlight_pack_validation PROPERTIES
+      LABELS "grmhd;hdf5;tools" TIMEOUT 30)
+  endif()
+  if(TARGET nubhlight_inspect AND PYTHON3_EXECUTABLE)
+    add_test(NAME nubhlight_inspect_validation
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/nubhlight_inspect_test.py"
+        --inspector $<TARGET_FILE:nubhlight_inspect>)
+    set_tests_properties(nubhlight_inspect_validation PROPERTIES
+      LABELS "grmhd;hdf5;tools" TIMEOUT 30)
+  endif()
+
+  add_executable(settings_persistence_test tests/settings_persistence_test.cpp src/settings.cpp)
+  target_include_directories(settings_persistence_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_compile_options(settings_persistence_test PRIVATE ${PROJECT_WARNINGS})
+  target_link_libraries(settings_persistence_test PRIVATE GTest::gtest_main)
+  add_test(NAME settings_persistence COMMAND settings_persistence_test)
+  set_tests_properties(settings_persistence PROPERTIES TIMEOUT 30)
+
   # Physics library validation tests
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp")
     add_executable(physics_test
@@ -3827,13 +3865,35 @@ if(BUILD_TESTING)
       glm::glm
     )
 
-    add_test(NAME grmhd_pack_fixture COMMAND grmhd_pack_test)
-    set_tests_properties(grmhd_pack_fixture PROPERTIES
+    set(GRMHD_PACK_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/grmhd-pack-fixture")
+    add_test(NAME grmhd_pack_fixture_prepare
+      COMMAND grmhd_pack_test --prepare-fixture "${GRMHD_PACK_FIXTURE_DIR}")
+    set_tests_properties(grmhd_pack_fixture_prepare PROPERTIES FIXTURES_SETUP grmhd_pack_input)
+    add_test(NAME grmhd_pack_fixture_pack
+      COMMAND nubhlight_pack
+        -i "${GRMHD_PACK_FIXTURE_DIR}/grmhd_fixture.h5"
+        -d /dump/P --fields RHO,UU,U1,U2
+        -o "${GRMHD_PACK_FIXTURE_DIR}/grmhd_pack.json")
+    set_tests_properties(grmhd_pack_fixture_pack PROPERTIES
+      FIXTURES_REQUIRED grmhd_pack_input FIXTURES_SETUP grmhd_pack_output)
+    add_test(NAME grmhd_pack_fixture
+      COMMAND grmhd_pack_test --validate-fixture "${GRMHD_PACK_FIXTURE_DIR}")
+    set_tests_properties(grmhd_pack_fixture PROPERTIES FIXTURES_REQUIRED grmhd_pack_output)
+    add_test(NAME grmhd_pack_fixture_cleanup
+      COMMAND "${CMAKE_COMMAND}" -E rm -f
+        "${GRMHD_PACK_FIXTURE_DIR}/grmhd_fixture.h5"
+        "${GRMHD_PACK_FIXTURE_DIR}/grmhd_pack.json"
+        "${GRMHD_PACK_FIXTURE_DIR}/grmhd_pack.bin")
+    set_tests_properties(grmhd_pack_fixture_cleanup PROPERTIES
+      FIXTURES_CLEANUP "grmhd_pack_input;grmhd_pack_output")
+    set_tests_properties(grmhd_pack_fixture_prepare grmhd_pack_fixture_pack
+      grmhd_pack_fixture grmhd_pack_fixture_cleanup PROPERTIES
       LABELS "grmhd;io"
       TIMEOUT 60
     )
     if(SANITIZER_TEST_ENV)
-      set_tests_properties(grmhd_pack_fixture PROPERTIES
+      set_tests_properties(grmhd_pack_fixture_prepare grmhd_pack_fixture_pack
+        grmhd_pack_fixture grmhd_pack_fixture_cleanup PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
@@ -6279,6 +6339,12 @@ function(blackhole_apply_analysis directory_path)
       endif()
       if(ENABLE_CPPCHECK)
         set_property(TARGET "${project_target}" PROPERTY CXX_CPPCHECK "${CMAKE_CXX_CPPCHECK}")
+        get_target_property(target_libraries "${project_target}" LINK_LIBRARIES)
+        if(target_libraries MATCHES "GTest::")
+          # Model assertion and fixture macros instead of parsing unknown syntax.
+          set_property(TARGET "${project_target}" APPEND PROPERTY CXX_CPPCHECK
+            "--library=googletest")
+        endif()
       endif()
     endif()
   endforeach()

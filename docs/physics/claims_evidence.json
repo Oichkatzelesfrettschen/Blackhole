@@ -53,7 +53,12 @@
         "rte_integrator_validation",
         "stokes_transport_validation",
         "stokes_invariants_validation",
-        "cuda_stokes"
+        {
+          "name": "cuda_stokes",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        }
       ]
     },
     {
@@ -101,14 +106,54 @@
         "src/cuda/device_physics.cuh"
       ],
       "tests": [
-        "cuda_kernel_launch_layout",
-        "cuda_device_physics_validation",
-        "cuda_variants_consistency",
-        "cuda_grmhd_lut",
-        "cuda_analytic_kerr",
-        "cuda_geodesic_orbit",
-        "cuda_rte",
-        "cuda_stokes"
+        {
+          "name": "cuda_kernel_launch_layout",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        },
+        {
+          "name": "cuda_device_physics_validation",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        },
+        {
+          "name": "cuda_variants_consistency",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        },
+        {
+          "name": "cuda_grmhd_lut",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        },
+        {
+          "name": "cuda_analytic_kerr",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        },
+        {
+          "name": "cuda_geodesic_orbit",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        },
+        {
+          "name": "cuda_rte",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        },
+        {
+          "name": "cuda_stokes",
+          "requires": [
+            "ENABLE_CUDA"
+          ]
+        }
       ]
     }
   ]
