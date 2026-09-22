@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: ${{ fromJSON(github.event_name == 'schedule' && '["ci-analysis","ci-release"]' || format('["{0}"]', inputs.preset || 'ci')) }}
+        preset: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.preset || 'ci') || '["ci","ci-analysis","ci-release"]') }}
     env:
       CONAN_HOME: ${{ github.workspace }}/.conan
       CCACHE_DIR: ${{ github.workspace }}/.ccache

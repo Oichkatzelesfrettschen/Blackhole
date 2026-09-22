@@ -1542,7 +1542,7 @@ if(ENABLE_CLANG_TIDY)
       list(APPEND CMAKE_CXX_CLANG_TIDY "--warnings-as-errors=*")
     endif()
   else()
-    message(WARNING "clang-tidy requested but not found")
+    message(FATAL_ERROR "clang-tidy requested but not found")
   endif()
 endif()
 
@@ -1629,7 +1629,7 @@ if(ENABLE_CPPCHECK)
       list(APPEND CMAKE_CXX_CPPCHECK "--error-exitcode=1")
     endif()
   else()
-    message(WARNING "cppcheck requested but not found")
+    message(FATAL_ERROR "cppcheck requested but not found")
   endif()
 endif()
 
@@ -6266,6 +6266,9 @@ endif()
 # Target creation precedes analyzer discovery for desktop and bridge targets.
 # Apply the configured checks after collecting every project directory.
 function(blackhole_apply_analysis directory_path)
+  # Source properties belong to each consumer's directory scope.
+  set_source_files_properties(${BLACKHOLE_IMPORTED_IMPLEMENTATIONS}
+    DIRECTORY "${directory_path}" PROPERTIES SKIP_LINTING ON)
   get_property(directory_targets DIRECTORY "${directory_path}" PROPERTY BUILDSYSTEM_TARGETS)
   foreach(project_target IN LISTS directory_targets)
     get_target_property(target_type "${project_target}" TYPE)
@@ -6286,8 +6289,8 @@ function(blackhole_apply_analysis directory_path)
 endfunction()
 
 # Imported ImGui, GL callback, and STB implementations retain upstream ownership.
-set_source_files_properties(${THIRDPARTY_SRC_FILES}
-  external/gl_debug_callback/GLDebugMessageCallback.cc
-  src/stb_image.cpp src/stb_image_write_impl.cpp
-  PROPERTIES SKIP_LINTING ON)
+set(BLACKHOLE_IMPORTED_IMPLEMENTATIONS ${THIRDPARTY_SRC_FILES}
+  "${PROJECT_SOURCE_DIR}/external/gl_debug_callback/GLDebugMessageCallback.cc"
+  "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
+  "${PROJECT_SOURCE_DIR}/src/stb_image_write_impl.cpp")
 blackhole_apply_analysis("${PROJECT_SOURCE_DIR}")

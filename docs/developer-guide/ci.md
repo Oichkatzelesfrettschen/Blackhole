@@ -6,18 +6,31 @@ tests, and replay scripts. GitHub settings own Actions enablement, repository
 visibility, and branch protection. Public visibility alone establishes neither
 successful validation nor an enforced merge gate.
 
+The `main` branch requires passing `ci`, `ci-analysis`, and `ci-release` checks
+against an up-to-date PR branch, resolved review conversations, and PR-based
+integration. The protection applies to administrators. Force pushes and branch
+deletion are disabled. GitHub stores those settings outside the Git tree; inspect
+them with `gh api repos/Oichkatzelesfrettschen/Blackhole/branches/main/protection`.
+
 ## Execution lanes
 
 | Trigger | Preset | Coverage |
 | --- | --- | --- |
 | Pull request and main push | `ci` | Desktop compilation, CPU tests, GLSL validation; strict warnings and IEEE math |
-| Weekly schedule | `ci-analysis` | CPU build/tests with clang-tidy and cppcheck |
-| Weekly schedule | `ci-release` | CPU build/tests with LTO and fast-math, including per-target IEEE overrides |
+| Pull request and main push | `ci-analysis` | CPU build/tests with every enabled clang-tidy and cppcheck diagnostic enforced |
+| Pull request and main push | `ci-release` | CPU build/tests with LTO and fast-math, including per-target IEEE overrides |
+| Weekly schedule | All three presets | Revalidate the default branch |
 | Manual dispatch | Selected preset | Replay any lane against a selected ref |
 
 The hosted CPU lanes establish compilation and executable CPU validation.
 CUDA device execution, desktop OpenGL rendering, and Blender/Octane runtime
 qualification require their corresponding hardware and environments.
+
+All three jobs run independently. The quick `ci` result provides early compiler
+and CPU-test feedback while analysis and release validation continue. Requested
+analyzers must be installed; configuration fails when either executable is absent.
+Imported ImGui, STB, and GL callback implementation files retain upstream lint
+ownership; project translation units and project headers retain strict analysis.
 
 Conan and CMake use GCC 14 through `conan/profiles/ci`. Python build tools have
 explicit versions in `scripts/ci/requirements.txt`; `conan.lock` pins dependency
@@ -32,6 +45,26 @@ Only main pushes and pull requests trigger automatic per-change builds, avoiding
 a second branch-push run for every PR commit. A newer PR revision cancels its
 superseded run. Main pushes retain their own validation. Each job has a 90-minute
 upper bound; a timeout is a failed gate, never validation evidence.
+
+## Measured dependency costs
+
+Hosted Ubuntu runs on September 22, 2026 reported four logical CPUs. Cold Conan
+installation used 365-372% CPU, demonstrating roughly 3.7 active cores during
+the dependency stage. The restored dependency graph completed in 2.94 seconds;
+GitHub cache download and extraction are separate steps.
+
+| Observation | Wall time | Evidence run |
+| --- | --- | --- |
+| Cold release dependencies | 19 min 9.78 s | `35696550322` |
+| Cold analysis dependencies | 25 min 24.97 s | `35696547660` |
+| Cached analysis dependencies | 2.94 s | `35699075120` |
+
+The cold release log attributes 722.1 seconds to Z3, 108.0 to Highway, 67.8 to
+glbinding, 51.0 to FlatBuffers, 40.7 to HDF5, 29.7 to GMP, 27.1 to SLEEF, and
+17.4 to MPFR. These package times identify dependency compilation as the largest
+observed cold-start cost. The reusable compressed dependency cache is about
+170 MB. The measurements cover dependencies; project build and test completion
+must be assessed from their separate retained stage records.
 
 ## Processor allocation and replay
 

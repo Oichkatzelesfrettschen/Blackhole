@@ -9,7 +9,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <format>
 #include <ranges>
+#include <string>
 
 #include <imgui.h>
 
@@ -72,12 +74,10 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view) {
                        static_cast<long long>(view.deadlineTurn));
   } else if (view.victoryEnergyUnits > 0.0) {
     const auto fraction = static_cast<float>(view.energyUnits / view.victoryEnergyUnits);
-    char objective[96];
-    static_cast<void>(std::snprintf(objective, sizeof(objective),
-                                    "energy %.1f / %.0f  (deadline t%lld)", view.energyUnits,
-                                    view.victoryEnergyUnits,
-                                    static_cast<long long>(view.deadlineTurn)));
-    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective);
+    const std::string objective = std::format("energy {:.1f} / {:.0f}  (deadline t{})",
+                                              view.energyUnits, view.victoryEnergyUnits,
+                                              view.deadlineTurn);
+    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective.c_str());
   } else {
     ImGui::TextDisabled("energy banked: %.1f (no objective set)", view.energyUnits);
   }
@@ -85,10 +85,9 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view) {
   // so the two bars are rival ends the player chooses between.
   if (view.status == game::CampaignStatus::Ongoing && view.victoryStabilizationUnits > 0.0) {
     const auto fraction = static_cast<float>(view.stabilization / view.victoryStabilizationUnits);
-    char objective[96];
-    static_cast<void>(std::snprintf(objective, sizeof(objective), "stabilization %.2f / %.0f",
-                                    view.stabilization, view.victoryStabilizationUnits));
-    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective);
+    const std::string objective = std::format("stabilization {:.2f} / {:.0f}",
+                                              view.stabilization, view.victoryStabilizationUnits);
+    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective.c_str());
   }
 }
 
@@ -163,15 +162,14 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
   static_cast<void>(std::snprintf(bandPreview, sizeof(bandPreview), "band %d", uiState.composerTargetBand));
   if (ImGui::BeginCombo("target band", bandPreview)) {
     for (const game::BandView &band : view.bands) {
-      char bandLabel[96];
+      std::string bandLabel;
       if (band.validStation) {
-        static_cast<void>(std::snprintf(bandLabel, sizeof(bandLabel), "band %d  (dtau/dt %.3f, delay %.1f d)",
-                      band.index, band.properTimeRate,
-                      band.delayToAuthoritySec / K_SECONDS_PER_DAY));
+        bandLabel = std::format("band {}  (dtau/dt {:.3f}, delay {:.1f} d)", band.index,
+                                band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY);
       } else {
-        static_cast<void>(std::snprintf(bandLabel, sizeof(bandLabel), "band %d  (FORBIDDEN)", band.index));
+        bandLabel = std::format("band {}  (FORBIDDEN)", band.index);
       }
-      if (ImGui::Selectable(bandLabel, band.index == uiState.composerTargetBand)) {
+      if (ImGui::Selectable(bandLabel.c_str(), band.index == uiState.composerTargetBand)) {
         uiState.composerTargetBand = band.index;
       }
     }

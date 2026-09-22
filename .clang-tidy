@@ -39,13 +39,8 @@ Checks: >
   -readability-uppercase-literal-suffix,
   -performance-enum-size,
 
-# Treat critical bugs as errors
-WarningsAsErrors: >
-  bugprone-use-after-move,
-  bugprone-dangling-handle,
-  clang-analyzer-core.NullDereference,
-  clang-analyzer-core.DivideZero,
-  clang-analyzer-cplusplus.NewDeleteLeaks,
+# Every enabled diagnostic participates in the source quality gate.
+WarningsAsErrors: '*'
 
 # Only analyze project headers
 HeaderFilterRegex: 'src/.*\.h$'

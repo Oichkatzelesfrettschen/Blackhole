@@ -61,6 +61,8 @@ void applyWiregridModeProfile(WiregridParams::Mode mode, WiregridParams &params,
   color = glm::vec4(0.21f, 0.62f, 0.92f, 0.16f);
 }
 
+namespace {
+
 void setupImGuiStyle() {
   ImGuiStyle &style = ImGui::GetStyle();
   ImVec4 *colors = style.Colors;
@@ -131,6 +133,8 @@ void setupImGuiStyle() {
   colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
   colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.75f);
 }
+
+} // namespace
 
 // Initialize ImGui context and backends
 void initializeImGui(GLFWwindow *window) {

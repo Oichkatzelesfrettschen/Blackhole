@@ -43,6 +43,8 @@ using blackhole::K_COMPARE_PRESETS;
 using blackhole::RenderState;
 using blackhole::kMaxBloomIterations;
 
+namespace {
+
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   ImVec2 const p0 = ImGui::GetCursorScreenPos();
@@ -87,8 +89,6 @@ void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
               static_cast<double>(curve.max.x), static_cast<double>(curve.min.y),
               static_cast<double>(curve.max.y), static_cast<int>(curve.points.size()));
 }
-
-namespace {
 
 /** @brief Loads a packed GRMHD dataset into rs.grmhd and registers the CUDA LUT. */
 bool loadGrmhdPacked(RenderState &rs, const std::string &path) {
