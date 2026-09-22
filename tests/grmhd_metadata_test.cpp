@@ -11,8 +11,6 @@
 #include <string>
 #include <vector>
 
-#include <unistd.h>
-
 // Mock GRMHD streaming interface (minimal to avoid linking to full HDF5 stack)
 namespace {
 
@@ -302,4 +300,3 @@ int main() {
 
     return (passed == total) ? 0 : 1;
 }
-

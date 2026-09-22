@@ -30,12 +30,13 @@
  */
 
 #include <cmath>
-#include <cstddef>
 #include <cstdio>
 #include <exception>
+#include <format>
 #include <iostream>
 #include <numbers>
 #include <string>
+#include <string_view>
 
 #include "../src/physics/analytic_kerr_geodesic.h"
 #include "../src/physics/reproducibility.h"
@@ -48,12 +49,12 @@ namespace {
 
 bool gAllPass = true;
 
-void check(bool cond, const char *label, const char *detail = "") {
+void check(bool cond, const char *label, std::string_view detail = {}) {
   if (cond) {
     std::cout << "  [PASS] " << label << "\n";
   } else {
     std::cout << "  [FAIL] " << label;
-    if (detail[0] != '\0') {
+    if (!detail.empty()) {
       std::cout << "  -- " << detail;
     }
     std::cout << "\n";
@@ -72,11 +73,7 @@ void testRadialPotentialSchwarzschildPhotonSphere() {
   // Convention: xi=L/E=0 (equatorial, azimuthal symmetry broken) + eta=b^2=27
   // => R(3) = (9)^2 - (9-6)*(27) = 81 - 81 = 0.
   const double rVal = radialPotential(3.0, 0.0, 0.0, 27.0);
-  char detailBuffer[128] = {};
-  const int formattingResult =
-      std::snprintf(detailBuffer, sizeof(detailBuffer), "R(3, 0, 0, 27) = %.6e (expected 0)", rVal);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("R(3, 0, 0, 27) = {:.6e} (expected 0)", rVal);
   check(std::abs(rVal) < 1.0e-10, "R(r_ph, a=0, xi=0, eta=27) = 0", detailBuffer);
 }
 
@@ -84,12 +81,8 @@ void testCriticalImpactParamsSchwarzschild() {
   std::cout << "Test 2: criticalImpactParams(r=3, a=0) == {xi=0, eta=27}\n";
 
   const ImpactParams ip = criticalImpactParams(3.0, 0.0);
-  char detailBuffer[128] = {};
-  const int formattingResult =
-      std::snprintf(detailBuffer, sizeof(detailBuffer),
-                    "xi=%.4f, eta=%.4f  (expected xi=0, eta=27)", ip.xi, ip.eta);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer =
+      std::format("xi={:.4f}, eta={:.4f}  (expected xi=0, eta=27)", ip.xi, ip.eta);
   check(std::abs(ip.xi) < 1.0e-12 && std::abs(ip.eta - 27.0) < 1.0e-10,
         "criticalImpactParams(r=3, a=0) = {0, 27}", detailBuffer);
 }
@@ -103,11 +96,7 @@ void testCriticalImpactParamsKerrSelfConsistency() {
   const ImpactParams ip = criticalImpactParams(rPh, a);
   const double rVal = radialPotential(rPh, a, ip.xi, ip.eta);
 
-  char detailBuffer[128] = {};
-  const int formattingResult =
-      std::snprintf(detailBuffer, sizeof(detailBuffer), "r_ph=%.6f, R(r_ph)=%.4e", rPh, rVal);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("r_ph={:.6f}, R(r_ph)={:.4e}", rPh, rVal);
   check(std::abs(rVal) < 1.0e-8, "R(r_ph, a=0.5, xi_c, eta_c) = 0  (self-consistency)",
         detailBuffer);
 }
@@ -118,11 +107,8 @@ void testRadialPotentialPositiveOffPhotonSphere() {
   // For Schwarzschild, R(r) = r(r-3)^2(r+6) >= 0 for r>0.  Check r=2 and r=5.
   const double rIn = radialPotential(2.0, 0.0, 0.0, 27.0);
   const double rOut = radialPotential(5.0, 0.0, 0.0, 27.0);
-  char detailBuffer[128] = {};
-  const int formattingResult = std::snprintf(
-      detailBuffer, sizeof(detailBuffer), "R(2)=%.4f, R(5)=%.4f  (both expected > 0)", rIn, rOut);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer =
+      std::format("R(2)={:.4f}, R(5)={:.4f}  (both expected > 0)", rIn, rOut);
   check(rIn > 0.0 && rOut > 0.0, "R(2) > 0 and R(5) > 0 for Schwarzschild critical orbit",
         detailBuffer);
 }
@@ -135,11 +121,7 @@ void testProgradePhotonOrbitSchwarzschild() {
   std::cout << "Test 5: progradePhotonOrbit(0.0) == 3.0  (Schwarzschild limit)\n";
 
   const double r = progradePhotonOrbit(0.0);
-  char detailBuffer[128] = {};
-  const int formattingResult =
-      std::snprintf(detailBuffer, sizeof(detailBuffer), "r_ph(a=0) = %.12f  (expected 3.0)", r);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("r_ph(a=0) = {:.12f}  (expected 3.0)", r);
   check(std::abs(r - 3.0) < 1.0e-12, "progradePhotonOrbit(0) = 3", detailBuffer);
 }
 
@@ -147,11 +129,7 @@ void testRetrogradePhotonOrbitSchwarzschild() {
   std::cout << "Test 6: retrogradePhotonOrbit(0.0) == 3.0  (Schwarzschild limit)\n";
 
   const double r = retrogradePhotonOrbit(0.0);
-  char detailBuffer[128] = {};
-  const int formattingResult = std::snprintf(detailBuffer, sizeof(detailBuffer),
-                                             "r_ph_retro(a=0) = %.12f  (expected 3.0)", r);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("r_ph_retro(a=0) = {:.12f}  (expected 3.0)", r);
   check(std::abs(r - 3.0) < 1.0e-12, "retrogradePhotonOrbit(0) = 3", detailBuffer);
 }
 
@@ -160,11 +138,7 @@ void testProgradePhotonOrbitExtremal() {
 
   // r_ph = 2*(1 + cos(2/3*acos(-1))) = 2*(1 + cos(2pi/3)) = 2*(1 - 1/2) = 1
   const double r = progradePhotonOrbit(1.0);
-  char detailBuffer[128] = {};
-  const int formattingResult =
-      std::snprintf(detailBuffer, sizeof(detailBuffer), "r_ph(a=1) = %.12f  (expected 1.0)", r);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("r_ph(a=1) = {:.12f}  (expected 1.0)", r);
   check(std::abs(r - 1.0) < 1.0e-12, "progradePhotonOrbit(1) = 1", detailBuffer);
 }
 
@@ -173,11 +147,7 @@ void testRetrogradePhotonOrbitExtremal() {
 
   // r_ph = 2*(1 + cos(2/3*acos(1))) = 2*(1 + cos(0)) = 2*(1 + 1) = 4
   const double r = retrogradePhotonOrbit(1.0);
-  char detailBuffer[128] = {};
-  const int formattingResult = std::snprintf(detailBuffer, sizeof(detailBuffer),
-                                             "r_ph_retro(a=1) = %.12f  (expected 4.0)", r);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("r_ph_retro(a=1) = {:.12f}  (expected 4.0)", r);
   check(std::abs(r - 4.0) < 1.0e-12, "retrogradePhotonOrbit(1) = 4", detailBuffer);
 }
 
@@ -194,12 +164,9 @@ void testPhotonOrbitMonotonicity() {
   const double rRet1 = retrogradePhotonOrbit(1.0);
   const bool proDecr = (rPro0 > rPro5) && (rPro5 > rPro1);
   const bool retIncr = (rRet0 < rRet5) && (rRet5 < rRet1);
-  char detailBuffer[256] = {};
-  const int formattingResult = std::snprintf(detailBuffer, sizeof(detailBuffer),
-                                             "pro: %.3f>%.3f>%.3f  retro: %.3f<%.3f<%.3f", rPro0,
-                                             rPro5, rPro1, rRet0, rRet5, rRet1);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer =
+      std::format("pro: {:.3f}>{:.3f}>{:.3f}  retro: {:.3f}<{:.3f}<{:.3f}", rPro0, rPro5, rPro1,
+                  rRet0, rRet5, rRet1);
   check(proDecr && retIncr, "prograde decreasing, retrograde increasing with spin", detailBuffer);
 }
 
@@ -219,11 +186,7 @@ void testManifestCodeKey() {
 
   const ReproducibilityManifest m = buildManifest();
   const std::string code = m.get("code");
-  char detailBuffer[128] = {};
-  const int formattingResult = std::snprintf(detailBuffer, sizeof(detailBuffer),
-                                             R"(code="%s" (expected "Blackhole"))", code.c_str());
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format(R"(code="{}" (expected "Blackhole"))", code);
   check(code == "Blackhole", R"(get("code") = "Blackhole")", detailBuffer);
 }
 
@@ -233,11 +196,7 @@ void testManifestBuildType() {
   const ReproducibilityManifest m = buildManifest();
   const std::string bt = m.get("build_type");
   const bool valid = (bt == "Release") || (bt == "Debug");
-  char detailBuffer[128] = {};
-  const int formattingResult =
-      std::snprintf(detailBuffer, sizeof(detailBuffer), "build_type=\"%s\"", bt.c_str());
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("build_type=\"{}\"", bt);
   check(valid, "build_type is Release or Debug", detailBuffer);
 }
 
@@ -250,12 +209,8 @@ void testManifestAddDoubleRoundTrip() {
   const std::string stored = m.get("pi_test");
   // setprecision(15) gives ~15 significant digits; reconstruct and compare.
   const double recovered = std::stod(stored);
-  char detailBuffer[128] = {};
-  const int formattingResult =
-      std::snprintf(detailBuffer, sizeof(detailBuffer), "stored=\"%s\", recovered=%.15f",
-                    stored.c_str(), recovered);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer =
+      std::format("stored=\"{}\", recovered={:.15f}", stored, recovered);
   check(std::abs(recovered - val) / val < 1.0e-14, "add/get double round-trip to within 1e-14",
         detailBuffer);
 }
@@ -267,11 +222,7 @@ void testManifestAddIntRoundTrip() {
   m.add("nx_test", 1920);
   const std::string stored = m.get("nx_test");
   const int recovered = std::stoi(stored);
-  char detailBuffer[128] = {};
-  const int formattingResult = std::snprintf(detailBuffer, sizeof(detailBuffer),
-                                             "stored=\"%s\" -> %d", stored.c_str(), recovered);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("stored=\"{}\" -> {:d}", stored, recovered);
   check(recovered == 1920, "add/get int round-trip for 1920", detailBuffer);
 }
 
@@ -282,11 +233,7 @@ void testManifestAddPhysicsParams() {
   addPhysicsParams(m, 6.5e9, 0.9375, 17.0, 230.0e9, 1024, 1024, 160.0);
   const double mass = std::stod(m.get("bh_mass_msun"));
   const double spin = std::stod(m.get("bh_spin"));
-  char detailBuffer[128] = {};
-  const int formattingResult =
-      std::snprintf(detailBuffer, sizeof(detailBuffer), "mass=%.4e, spin=%.4f", mass, spin);
-  check(formattingResult >= 0 && static_cast<std::size_t>(formattingResult) < sizeof(detailBuffer),
-        "diagnostic formatting fits the buffer");
+  const std::string detailBuffer = std::format("mass={:.4e}, spin={:.4f}", mass, spin);
   check(std::abs(mass - 6.5e9) / 6.5e9 < 1.0e-12 && std::abs(spin - 0.9375) < 1.0e-12,
         "addPhysicsParams: mass=6.5e9 Msun, spin=0.9375 recovered", detailBuffer);
 }

@@ -15,6 +15,7 @@
 #include <iostream>
 #include <numbers>
 #include <random>
+#include <vector>
 
 #include "constants.h"
 #include "physics/constants.h"

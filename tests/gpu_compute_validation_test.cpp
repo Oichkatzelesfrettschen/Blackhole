@@ -35,7 +35,7 @@ bool testMemoryLayout() {
   // Expected buffer sizes
   size_t const physicsParamsSize = 32;       // binding 0
   size_t const cameraParamsSize = 128;       // binding 1
-  size_t const rayOutputSize = 2073600 * 16; // 1920x1080 * 4 vec4
+  size_t const rayOutputSize = std::size_t{2073600} * 16; // 1920x1080 * 4 vec4
 
   bool const physicsOk = (physicsParamsSize == 32);
   bool const cameraOk = (cameraParamsSize == 128);
@@ -87,15 +87,19 @@ bool testAsyncPipeline() {
   bool const recordingOk = (state == State::RECORDING);
 
   state = State::SUBMITTED;
+  bool const submittedOk = (state == State::SUBMITTED);
   state = State::EXECUTING;
+  bool const executingOk = (state == State::EXECUTING);
   state = State::COMPLETE;
   bool const completeOk = (state == State::COMPLETE);
 
   std::cout << "  IDLE->RECORDING: " << (idleOk && recordingOk ? "PASS" : "FAIL") << "\n"
             << "  EXECUTING->COMPLETE: " << (completeOk ? "PASS" : "FAIL") << "\n"
-            << "  Status: " << (idleOk && recordingOk && completeOk ? "PASS" : "FAIL") << "\n\n";
+            << "  Status: "
+            << (idleOk && recordingOk && submittedOk && executingOk && completeOk ? "PASS" : "FAIL")
+            << "\n\n";
 
-  return idleOk && recordingOk && completeOk;
+  return idleOk && recordingOk && submittedOk && executingOk && completeOk;
 }
 
 // Test 5: Tile dispatch validation

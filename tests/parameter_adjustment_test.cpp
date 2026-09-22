@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <vector>
 
 #include "../src/physics/parameter_adjustment.h"
 #include "physics/playback_control.h"

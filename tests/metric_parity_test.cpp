@@ -52,7 +52,7 @@ private:
   std::vector<TestResult> results_;
   int total_tests_ = 0;
   int passed_tests_ = 0;
-  const double TOLERANCE = 1e-5; // Float32 precision tolerance
+  static constexpr double TOLERANCE = 1e-5; // Float32 precision tolerance
 
 public:
   void runTest(const std::string &name, double expected, double actual) {

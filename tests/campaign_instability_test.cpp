@@ -15,6 +15,7 @@
 
 #include "campaign_test_field.h"
 #include "game/campaign.h"
+#include "game/campaign_view.h"
 #include "game/command.h"
 #include "game/fleet.h"
 
@@ -179,7 +180,7 @@ TEST(CampaignInstability, ContainmentYieldRetentionCostsEnergy) {
   game::CampaignConfig base = instabilityConfig();
   base.ergoContainmentPerProperDay = 4.0; // containment on, so retention applies
 
-  game::CampaignConfig full = base; // retention stays 1.0
+  const game::CampaignConfig full = base; // retention stays 1.0
   game::CampaignState keepsAll(full, field);
   const game::FleetId a =
       keepsAll.addFleet(game::FleetCapability::Extraction, K_ERGO_BAND, game::OrbitLane::Prograde);

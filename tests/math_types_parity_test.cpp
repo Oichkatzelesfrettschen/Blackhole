@@ -5,7 +5,9 @@
 #include "physics/math_interop.h"
 #include "physics/safe_limits.h"
 
-[[maybe_unused]] static bool approxEq(float a, float b, float tol = 1e-5f) {
+namespace {
+
+[[maybe_unused]] bool approxEq(float a, float b, float tol = 1e-5f) {
   if (physics::safeIsnan(a) && physics::safeIsnan(b)) {
     return true;
   }
@@ -14,6 +16,8 @@
   }
   return std::abs(a - b) <= tol * std::max(1.0f, std::abs(b));
 }
+
+} // namespace
 
 int main() {
 #if defined(BLACKHOLE_HAS_EIGEN) && BLACKHOLE_HAS_EIGEN && defined(BLACKHOLE_USE_EIGEN)

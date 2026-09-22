@@ -25,7 +25,10 @@
 #include <vector>
 
 #include <GLFW/glfw3.h>
-#include <glbinding/gl/gl.h>
+#include <glbinding/gl/bitfield.h>
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 #include <glbinding/glbinding.h>
 #include <gtest/gtest.h>
 
@@ -53,7 +56,7 @@ std::string expandIncludes(const std::string &source) {
   for (; it != end; ++it) {
     out.append(source, last, static_cast<std::size_t>(it->position()) - last);
     const std::string path = std::string(BH_SHADER_INCLUDE_DIR) + "/" + (*it)[1].str();
-    std::ifstream file(path);
+    const std::ifstream file(path);
     if (!file) {
       throw std::runtime_error("cannot open GLSL include: " + path);
     }
@@ -62,18 +65,20 @@ std::string expandIncludes(const std::string &source) {
     out += content.str();
     last = static_cast<std::size_t>(it->position() + it->length());
   }
-  out.append(source, last, std::string::npos);
+  out.append(source, last);
   return out;
 }
 
 } // namespace
 
 class GPUCPUParityTest : public ::testing::Test {
+private:
+  GLFWwindow *window_ = nullptr;
+
 protected:
   static constexpr float TOLERANCE_SINGLE = 1e-6F;
 
   static bool glAvailable;
-  GLFWwindow *window = nullptr;
 
   static void SetUpTestSuite() {
     glAvailable = false;
@@ -109,15 +114,15 @@ protected:
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    window = glfwCreateWindow(1, 1, "GPU Parity Test", nullptr, nullptr);
-    ASSERT_NE(window, nullptr);
-    glfwMakeContextCurrent(window);
+    window_ = glfwCreateWindow(1, 1, "GPU Parity Test", nullptr, nullptr);
+    ASSERT_NE(window_, nullptr);
+    glfwMakeContextCurrent(window_);
   }
 
   void TearDown() override {
-    if (window != nullptr) {
-      glfwDestroyWindow(window);
-      window = nullptr;
+    if (window_ != nullptr) {
+      glfwDestroyWindow(window_);
+      window_ = nullptr;
     }
   }
 
