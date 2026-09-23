@@ -14,6 +14,9 @@
 #ifndef SYNCHROTRON_LUT_DOMAIN_H
 #define SYNCHROTRON_LUT_DOMAIN_H
 
+/* GLSL shares the LUT domain definitions with C++/CUDA and requires preprocessor
+ * constants instead of C++ constexpr variables or enum declarations. */
+// NOLINTBEGIN(cppcoreguidelines-macro-usage,cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 /* Log-spaced domain bounds for the G(x) = x*K_{2/3}(x) lookup table.
  * Below X_MIN the small-x asymptote 1.3541*x^(1/3) is exact enough;
  * above X_MAX the large-x asymptote sqrt(pi/2)*sqrt(x)*exp(-x) is. */
@@ -22,5 +25,6 @@
 
 /* Entry count of the 1D LUT texture (log-spaced R32F). */
 #define SYNCH_G_LUT_DOMAIN_ENTRIES 256
+// NOLINTEND(cppcoreguidelines-macro-usage,cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 
 #endif /* SYNCHROTRON_LUT_DOMAIN_H */

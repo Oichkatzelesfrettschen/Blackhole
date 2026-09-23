@@ -8,15 +8,17 @@
 #ifndef PHYSICS_LUT_H
 #define PHYSICS_LUT_H
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <numeric>
+#include <vector>
+
 #include "batch.h"
 #include "constants.h"
 #include "kerr.h"
 #include "schwarzschild.h"
 #include "thin_disk.h"
-#include <algorithm>
-#include <cmath>
-#include <cstddef>
-#include <vector>
 
 namespace physics {
 
@@ -71,15 +73,15 @@ inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
   fillLinspace(radii, rIn, rOut);
   diskFluxBatch(radii, disk, lut.values);
 
-  double maxFlux = 0.0;
-  for (float const v : lut.values) {
-    maxFlux = std::max(maxFlux, static_cast<double>(v));
-  }
+  const double maxFlux =
+      std::accumulate(lut.values.begin(), lut.values.end(), 0.0, [](double maximum, float value) {
+        return std::max(maximum, static_cast<double>(value));
+      });
 
   if (maxFlux > 0.0) {
-    for (auto &v : lut.values) {
-      v = static_cast<float>(static_cast<double>(v) / maxFlux);
-    }
+    std::ranges::transform(lut.values, lut.values.begin(), [maxFlux](float value) {
+      return static_cast<float>(static_cast<double>(value) / maxFlux);
+    });
   }
 
   return lut;

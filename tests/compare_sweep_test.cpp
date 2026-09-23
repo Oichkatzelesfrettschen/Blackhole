@@ -13,6 +13,8 @@
  * executables.
  */
 
+#include <memory>
+
 #include <gtest/gtest.h>
 
 #include "input.h"
@@ -30,7 +32,8 @@ namespace {
 // Puts rs into an armed sweep with a known live camera and returns the frame
 // count of the preset table.
 int armSweep(RenderState &rs, InputManager &input) {
-  input.camera() = CameraState{.yaw = 12.0f, .pitch = 34.0f, .roll = 5.0f, .distance = 42.0f, .fov = 55.0f};
+  input.camera() =
+      CameraState{.yaw = 12.0f, .pitch = 34.0f, .roll = 5.0f, .distance = 42.0f, .fov = 55.0f};
   rs.camera.cameraModeIndex = 2;
   rs.camera.orbitRadius = 9.0f;
   rs.camera.orbitSpeed = 3.0f;
@@ -51,7 +54,8 @@ int armSweep(RenderState &rs, InputManager &input) {
 // Compute shaders unavailable: an armed sweep is disabled and, once a camera was
 // saved, a restore is requested rather than the sweep silently proceeding.
 TEST(CompareSweep, DisablesWhenComputeUnavailable) {
-  RenderState rs;
+  const auto stateStorage = std::make_unique<RenderState>();
+  RenderState &rs = *stateStorage;
   InputManager &input = InputManager::instance();
   armSweep(rs, input);
   rs.compare.comparePresetSaved = true; // a prior frame already saved the camera
@@ -64,7 +68,8 @@ TEST(CompareSweep, DisablesWhenComputeUnavailable) {
 
 // First advance saves the live camera exactly once and applies preset 0.
 TEST(CompareSweep, SavesLiveCameraOnEntry) {
-  RenderState rs;
+  const auto stateStorage = std::make_unique<RenderState>();
+  RenderState &rs = *stateStorage;
   InputManager &input = InputManager::instance();
   armSweep(rs, input);
 
@@ -83,7 +88,8 @@ TEST(CompareSweep, SavesLiveCameraOnEntry) {
 // The snapshot flag fires exactly at the settle boundary and the preset index
 // advances only then.
 TEST(CompareSweep, CapturesAtSettleBoundary) {
-  RenderState rs;
+  const auto stateStorage = std::make_unique<RenderState>();
+  RenderState &rs = *stateStorage;
   InputManager &input = InputManager::instance();
   armSweep(rs, input);
   rs.compare.comparePresetSettleFrames = 3;
@@ -104,7 +110,8 @@ TEST(CompareSweep, CapturesAtSettleBoundary) {
 // restore; restoreCompareSweepState then returns the saved camera once the final
 // snapshot has been consumed.
 TEST(CompareSweep, CompletesAndRestores) {
-  RenderState rs;
+  const auto stateStorage = std::make_unique<RenderState>();
+  RenderState &rs = *stateStorage;
   InputManager &input = InputManager::instance();
   int const presetCount = armSweep(rs, input);
   rs.compare.comparePresetSettleFrames = 1;

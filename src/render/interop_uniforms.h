@@ -29,6 +29,8 @@ struct InteropUniforms {
   // Every shared float uniform, generated from the registry: one table
   // row expands into this field, the fragment map write, and the
   // compute glUniform1f call (src/render/interop_uniform_registry.h).
+// Macro expansion declares fields from the shared uniform registry.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define BH_X(field, glslName, defaultValue) float field = defaultValue;
   BH_INTEROP_UNIFORM_FLOATS(BH_X)
 #undef BH_X

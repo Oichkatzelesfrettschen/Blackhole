@@ -2,7 +2,7 @@
  * @file verified/kerr_de_sitter.hpp
  * @brief Verified Kerr-de Sitter metric - rotating black hole with cosmological constant
  *
- * This file is generated from proven Rocq theory rocq/theories/Metrics/KerrDeSitter.v
+ * Maintained C++ reference for rocq/theories/Metrics/KerrDeSitter.v
  *
  * The Kerr-de Sitter solution describes a rotating black hole in an asymptotically
  * de Sitter (expanding) universe with cosmological constant Λ.
@@ -23,7 +23,9 @@
  * - Carter (1973): Black hole equilibrium states with cosmological constant
  * - Observed cosmological constant: Λ ≈ 1.1 × 10⁻⁵² m⁻²
  *
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
+ * The maintained C++ is an input to scripts/cpp_to_glsl.py.
+ * Rocq definitions document the mathematical source; floating-point
+ * implementations are checked by tests rather than a proved extraction chain.
  *
  * @note Uses geometric units where c = G = 1
  * @note All functions use double precision for numerical stability
@@ -55,9 +57,9 @@ namespace verified {
  * @param a Spin parameter (0 ≤ a ≤ M)
  * @return Sigma value
  */
-[[nodiscard]] constexpr double kds_Sigma(double r, double theta, double a) noexcept {
-    double cos_theta = std::cos(theta);
-    return r * r + a * a * cos_theta * cos_theta;
+[[nodiscard]] constexpr double kdsSigma(double r, double theta, double a) noexcept {
+  double const cosTheta = std::cos(theta);
+  return r * r + a * a * cosTheta * cosTheta;
 }
 
 /**
@@ -71,13 +73,13 @@ namespace verified {
  * This is the key difference from standard Kerr metric.
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant (Λ > 0 for de Sitter)
+ * @param lambda Cosmological constant (Λ > 0 for de Sitter)
  * @return Delta value
  */
-[[nodiscard]] constexpr double kds_Delta(double r, double M, double a, double Lambda) noexcept {
-    return r * r - 2.0 * M * r + a * a - Lambda * r * r / 3.0;
+[[nodiscard]] constexpr double kdsDelta(double r, double m, double a, double lambda) noexcept {
+  return r * r - 2.0 * m * r + a * a - lambda * r * r / 3.0;
 }
 
 /**
@@ -91,16 +93,17 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return A value
  */
-[[nodiscard]] inline double kds_A(double r, double theta, double M, double a, double Lambda) noexcept {
-    double r2_plus_a2 = r * r + a * a;
-    double sin_theta = std::sin(theta);
-    double Delta = kds_Delta(r, M, a, Lambda);
-    return r2_plus_a2 * r2_plus_a2 - a * a * Delta * sin_theta * sin_theta;
+[[nodiscard]] inline double kdsA(double r, double theta, double m, double a,
+                                 double lambda) noexcept {
+  double const r2PlusA2 = r * r + a * a;
+  double const sinTheta = std::sin(theta);
+  double const delta = kdsDelta(r, m, a, lambda);
+  return r2PlusA2 * r2PlusA2 - a * a * delta * sinTheta * sinTheta;
 }
 
 // ============================================================================
@@ -119,15 +122,16 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return g_tt component
  */
-[[nodiscard]] inline double kds_g_tt(double r, double theta, double M, double a, double Lambda) noexcept {
-    double Sigma = kds_Sigma(r, theta, a);
-    double sin_theta = std::sin(theta);
-    return -(1.0 - 2.0 * M * r / Sigma + Lambda * r * r * sin_theta * sin_theta / 3.0);
+[[nodiscard]] inline double kdsGTt(double r, double theta, double m, double a,
+                                   double lambda) noexcept {
+  double const sigma = kdsSigma(r, theta, a);
+  double const sinTheta = std::sin(theta);
+  return -(1.0 - 2.0 * m * r / sigma + lambda * r * r * sinTheta * sinTheta / 3.0);
 }
 
 /**
@@ -141,13 +145,14 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return g_rr component
  */
-[[nodiscard]] inline double kds_g_rr(double r, double theta, double M, double a, double Lambda) noexcept {
-    return kds_Sigma(r, theta, a) / kds_Delta(r, M, a, Lambda);
+[[nodiscard]] inline double kdsGRr(double r, double theta, double m, double a,
+                                   double lambda) noexcept {
+  return kdsSigma(r, theta, a) / kdsDelta(r, m, a, lambda);
 }
 
 /**
@@ -164,8 +169,8 @@ namespace verified {
  * @param a Spin parameter
  * @return g_θθ component
  */
-[[nodiscard]] constexpr double kds_g_thth(double r, double theta, double a) noexcept {
-    return kds_Sigma(r, theta, a);
+[[nodiscard]] constexpr double kdsGThth(double r, double theta, double a) noexcept {
+  return kdsSigma(r, theta, a);
 }
 
 /**
@@ -182,17 +187,19 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return g_φφ component
  */
-[[nodiscard]] inline double kds_g_phph(double r, double theta, double M, double a, double Lambda) noexcept {
-    double Sigma = kds_Sigma(r, theta, a);
-    double sin_theta = std::sin(theta);
-    double sin2 = sin_theta * sin_theta;
-    return (r * r + a * a + 2.0 * M * r * a * a * sin2 / Sigma
-            - Lambda * r * r * r * r * sin2 / 3.0) * sin2;
+[[nodiscard]] inline double kdsGPhph(double r, double theta, double m, double a,
+                                     double lambda) noexcept {
+  double const sigma = kdsSigma(r, theta, a);
+  double const sinTheta = std::sin(theta);
+  double const sin2 = sinTheta * sinTheta;
+  return (r * r + a * a + 2.0 * m * r * a * a * sin2 / sigma -
+          lambda * r * r * r * r * sin2 / 3.0) *
+         sin2;
 }
 
 /**
@@ -207,14 +214,14 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
  * @return g_tφ component
  */
-[[nodiscard]] inline double kds_g_tph(double r, double theta, double M, double a) noexcept {
-    double Sigma = kds_Sigma(r, theta, a);
-    double sin_theta = std::sin(theta);
-    return -2.0 * M * r * a * sin_theta * sin_theta / Sigma;
+[[nodiscard]] inline double kdsGTph(double r, double theta, double m, double a) noexcept {
+  double const sigma = kdsSigma(r, theta, a);
+  double const sinTheta = std::sin(theta);
+  return -2.0 * m * r * a * sinTheta * sinTheta / sigma;
 }
 
 // ============================================================================
@@ -232,15 +239,15 @@ namespace verified {
  *
  * r₋ ≈ M - √(M² - a²) - Λ(M - √(M² - a²))³/3
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return Inner horizon radius
  */
-[[nodiscard]] inline double kds_inner_horizon(double M, double a, double Lambda) noexcept {
-    double delta = std::sqrt(M * M - a * a);
-    double r_kerr = M - delta;
-    return r_kerr - Lambda * r_kerr * r_kerr * r_kerr / 3.0;
+[[nodiscard]] inline double kdsInnerHorizon(double m, double a, double lambda) noexcept {
+  double const delta = std::sqrt(m * m - a * a);
+  double const rKerr = m - delta;
+  return rKerr - lambda * rKerr * rKerr * rKerr / 3.0;
 }
 
 /**
@@ -254,15 +261,15 @@ namespace verified {
  *
  * r₊ ≈ M + √(M² - a²) + Λ(M + √(M² - a²))³/3
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return Event horizon radius
  */
-[[nodiscard]] inline double kds_event_horizon(double M, double a, double Lambda) noexcept {
-    double delta = std::sqrt(M * M - a * a);
-    double r_kerr = M + delta;
-    return r_kerr + Lambda * r_kerr * r_kerr * r_kerr / 3.0;
+[[nodiscard]] inline double kdsEventHorizon(double m, double a, double lambda) noexcept {
+  double const delta = std::sqrt(m * m - a * a);
+  double const rKerr = m + delta;
+  return rKerr + lambda * rKerr * rKerr * rKerr / 3.0;
 }
 
 /**
@@ -277,11 +284,11 @@ namespace verified {
  *
  * This is the de Sitter cosmological horizon radius.
  *
- * @param Lambda Cosmological constant (must be > 0)
+ * @param lambda Cosmological constant (must be > 0)
  * @return Cosmological horizon radius
  */
-[[nodiscard]] inline double kds_cosmological_horizon(double Lambda) noexcept {
-    return std::sqrt(3.0 / Lambda);
+[[nodiscard]] inline double kdsCosmologicalHorizon(double lambda) noexcept {
+  return std::sqrt(3.0 / lambda);
 }
 
 /**
@@ -298,15 +305,16 @@ namespace verified {
  * r_ergo ≈ M + √(M² - a²cos²θ)
  *
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant (currently unused in approximation)
+ * @param lambda Cosmological constant (currently unused in approximation)
  * @return Ergosphere radius at angle theta
  */
-[[nodiscard]] inline double kds_ergosphere_radius(double theta, double M, double a, double Lambda) noexcept {
-    (void)Lambda;  // Unused in this approximation
-    double cos_theta = std::cos(theta);
-    return M + std::sqrt(M * M - a * a * cos_theta * cos_theta);
+[[nodiscard]] inline double kdsErgosphereRadius(double theta, double m, double a,
+                                                double lambda) noexcept {
+  (void)lambda; // Unused in this approximation
+  double const cosTheta = std::cos(theta);
+  return m + std::sqrt(m * m - a * a * cosTheta * cosTheta);
 }
 
 // ============================================================================
@@ -326,15 +334,16 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return Frame dragging angular velocity
  */
-[[nodiscard]] inline double kds_frame_dragging_omega(double r, double theta, double M, double a, double Lambda) noexcept {
-    double g_tph = kds_g_tph(r, theta, M, a);
-    double g_phph = kds_g_phph(r, theta, M, a, Lambda);
-    return -g_tph / g_phph;
+[[nodiscard]] inline double kdsFrameDraggingOmega(double r, double theta, double m, double a,
+                                                  double lambda) noexcept {
+  double const gTph = kdsGTph(r, theta, m, a);
+  double const gPhph = kdsGPhph(r, theta, m, a, lambda);
+  return -gTph / gPhph;
 }
 
 // ============================================================================
@@ -354,13 +363,13 @@ namespace verified {
  * - M² ≥ a² (sub-extremal, ensures real horizons)
  * - Horizons exist and are ordered: r₋ < r₊ < r_c
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return true if parameters are physical
  */
-[[nodiscard]] constexpr bool is_physical_kds_black_hole(double M, double a, double Lambda) noexcept {
-    return M > 0.0 && Lambda > 0.0 && M * M >= a * a;
+[[nodiscard]] constexpr bool isPhysicalKdsBlackHole(double m, double a, double lambda) noexcept {
+  return m > 0.0 && lambda > 0.0 && m * m >= a * a;
 }
 
 /**
@@ -375,15 +384,15 @@ namespace verified {
  * This is the exterior region where stable orbits exist.
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return true if in exterior region
  */
-[[nodiscard]] inline bool is_exterior_region(double r, double M, double a, double Lambda) noexcept {
-    double r_plus = kds_event_horizon(M, a, Lambda);
-    double r_cosmo = kds_cosmological_horizon(Lambda);
-    return r > r_plus && r < r_cosmo;
+[[nodiscard]] inline bool isExteriorRegion(double r, double m, double a, double lambda) noexcept {
+  double const rPlus = kdsEventHorizon(m, a, lambda);
+  double const rCosmo = kdsCosmologicalHorizon(lambda);
+  return r > rPlus && r < rCosmo;
 }
 
 /**
@@ -397,13 +406,14 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return true if in ergosphere
  */
-[[nodiscard]] inline bool is_in_ergosphere(double r, double theta, double M, double a, double Lambda) noexcept {
-    return kds_g_tt(r, theta, M, a, Lambda) > 0.0;
+[[nodiscard]] inline bool isInErgosphere(double r, double theta, double m, double a,
+                                         double lambda) noexcept {
+  return kdsGTt(r, theta, m, a, lambda) > 0.0;
 }
 
 // ============================================================================
@@ -415,19 +425,19 @@ namespace verified {
  *
  * For physical Kerr-de Sitter black holes, horizons must satisfy this ordering.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @return true if horizon ordering is correct
  */
-[[nodiscard]] inline bool verify_horizon_ordering(double M, double a, double Lambda) noexcept {
-    if (!is_physical_kds_black_hole(M, a, Lambda)) {
-        return false;
-    }
-    double r_minus = kds_inner_horizon(M, a, Lambda);
-    double r_plus = kds_event_horizon(M, a, Lambda);
-    double r_cosmo = kds_cosmological_horizon(Lambda);
-    return r_minus < r_plus && r_plus < r_cosmo;
+[[nodiscard]] inline bool verifyHorizonOrdering(double m, double a, double lambda) noexcept {
+  if (!isPhysicalKdsBlackHole(m, a, lambda)) {
+    return false;
+  }
+  double const rMinus = kdsInnerHorizon(m, a, lambda);
+  double const rPlus = kdsEventHorizon(m, a, lambda);
+  double const rCosmo = kdsCosmologicalHorizon(lambda);
+  return rMinus < rPlus && rPlus < rCosmo;
 }
 
 // ============================================================================
@@ -439,12 +449,12 @@ namespace verified {
  *
  * When Lambda is negligible, Kerr-de Sitter reduces to standard Kerr metric.
  *
- * @param Lambda Cosmological constant
+ * @param lambda Cosmological constant
  * @param tolerance Tolerance for Lambda (default: 1e-10)
  * @return true if in Kerr limit
  */
-[[nodiscard]] constexpr bool is_kerr_limit(double Lambda, double tolerance = 1e-10) noexcept {
-    return std::abs(Lambda) < tolerance;
+[[nodiscard]] constexpr bool isKerrLimit(double lambda, double tolerance = 1e-10) noexcept {
+  return std::abs(lambda) < tolerance;
 }
 
 /**
@@ -452,13 +462,14 @@ namespace verified {
  *
  * When mass and spin are negligible, Kerr-de Sitter reduces to pure de Sitter spacetime.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
  * @param tolerance Tolerance for M and a (default: 1e-10)
  * @return true if in de Sitter limit
  */
-[[nodiscard]] constexpr bool is_de_sitter_limit(double M, double a, double tolerance = 1e-10) noexcept {
-    return std::abs(M) < tolerance && std::abs(a) < tolerance;
+[[nodiscard]] constexpr bool isDeSitterLimit(double m, double a,
+                                             double tolerance = 1e-10) noexcept {
+  return std::abs(m) < tolerance && std::abs(a) < tolerance;
 }
 
 // ============================================================================
@@ -472,14 +483,14 @@ namespace verified {
  *
  * Observed value: Λ_SI ≈ 1.1 × 10⁻⁵² m⁻²
  *
- * @param Lambda_SI Cosmological constant in SI units (m⁻²)
+ * @param LambdaSI Cosmological constant in SI units (m⁻²)
  * @return Cosmological constant in geometric units
  */
-[[nodiscard]] constexpr double lambda_si_to_geometric(double Lambda_SI) noexcept {
-    // c²/G ≈ 1.346e27 m/kg in SI units
-    // In geometric units where c = G = 1, this is just Lambda_SI
-    // but we include this function for dimensional clarity
-    return Lambda_SI;
+[[nodiscard]] constexpr double lambdaSiToGeometric(double lambdaSi) noexcept {
+  // c²/G ≈ 1.346e27 m/kg in SI units
+  // In geometric units where c = G = 1, this is just Lambda_SI
+  // but we include this function for dimensional clarity
+  return lambdaSi;
 }
 
 /**
@@ -489,8 +500,8 @@ namespace verified {
  *
  * @return Observed Lambda in geometric units
  */
-[[nodiscard]] constexpr double observed_lambda() noexcept {
-    return 1.1e-52;  // m⁻² in geometric units
+[[nodiscard]] constexpr double observedLambda() noexcept {
+  return 1.1e-52; // m⁻² in geometric units
 }
 
 // ============================================================================
@@ -498,13 +509,10 @@ namespace verified {
 // ============================================================================
 
 /**
- * This C++23 implementation provides the computational foundation for:
- * - Phase 9.3.3: GLSL transpilation (kerr_de_sitter.glsl)
+ * The maintained C++ functions supply the GLSL transpiler input for
+ * kerr_de_sitter.glsl. C++ tests check selected analytic limits.
  *
- * All functions are designed for verified extraction from Rocq and
- * transpilation to GLSL 4.60 for GPU ray-tracing.
- *
- * Pipeline: Rocq 9.1+ → OCaml → C++23 → GLSL 4.60
+ * GLSL translation: scripts/cpp_to_glsl.py
  *
  * Function Count: 20 functions
  * - 3 metric helpers (Sigma, Delta, A)

@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <vector>
 
 #include "kerr.h"
@@ -418,13 +419,14 @@ inline BatchTraceResult traceGeodesicBatch(const BatchRayState &initial, double 
   const double rS = schwarzschildRadius(mass);
   const double rCapture = rS * 1.01;
 
-  BatchTraceResult result;
-  result.finalR.resize(n);
-  result.finalTheta.resize(n);
-  result.finalPhi.resize(n);
-  result.redshift.resize(n, 1.0);
-  result.status.resize(n);
-  result.stepsTaken.resize(n);
+  BatchTraceResult result{
+      .finalR = std::vector<double>(n, 0.0),
+      .finalTheta = std::vector<double>(n, 0.0),
+      .finalPhi = std::vector<double>(n, 0.0),
+      .redshift = std::vector<double>(n, 1.0),
+      .status = std::vector<BatchRayStatus>(n),
+      .stepsTaken = std::vector<int>(n, 0),
+  };
 
   // Working state (copy of initial)
   BatchRayState state = initial;
@@ -650,27 +652,28 @@ inline void fillLinspace(std::vector<double> &out, double start, double end) {
 
 inline void diskFluxBatch(const std::vector<double> &radii, const DiskParams &disk,
                           std::vector<float> &out) {
-  out.resize(radii.size());
-  for (std::size_t i = 0; i < radii.size(); ++i) {
-    double flux = diskFlux(radii.at(i), disk);
+  out.clear();
+  out.reserve(radii.size());
+  std::ranges::transform(radii, std::back_inserter(out), [&disk](double radius) {
+    double flux = diskFlux(radius, disk);
     if (!safeIsfinite(flux) || flux < 0.0) {
       flux = 0.0;
     }
-    out.at(i) = static_cast<float>(flux);
-  }
+    return static_cast<float>(flux);
+  });
 }
 
 inline void kerrRedshiftBatch(const std::vector<double> &radii, double theta, double mass, double a,
                               std::vector<float> &out) {
-  out.resize(radii.size());
-  for (std::size_t i = 0; i < radii.size(); ++i) {
-    double z = kerrRedshift(radii.at(i), theta, mass, a);
+  out.clear();
+  out.reserve(radii.size());
+  std::ranges::transform(radii, std::back_inserter(out), [theta, mass, a](double radius) {
+    double z = kerrRedshift(radius, theta, mass, a);
     if (!safeIsfinite(z) || z < 0.0) {
       z = 0.0;
     }
-    z = std::min(z, 10.0);
-    out.at(i) = static_cast<float>(z);
-  }
+    return static_cast<float>(std::min(z, 10.0));
+  });
 }
 
 } // namespace physics

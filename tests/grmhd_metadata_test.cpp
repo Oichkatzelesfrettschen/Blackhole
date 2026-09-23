@@ -3,7 +3,6 @@
  * @brief Phase 6.2a: GRMHD metadata parsing and tile caching validation
  */
 
-#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -11,21 +10,8 @@
 #include <string>
 #include <vector>
 
-#include <unistd.h>
-
 // Mock GRMHD streaming interface (minimal to avoid linking to full HDF5 stack)
 namespace {
-
-struct DumpMetadata {
-    double time;
-    std::string filepath;
-    struct GridInfo {
-        uint32_t nx, ny, nz;
-    } grid;
-    struct Variables {
-        uint32_t varCount;
-    } variables;
-};
 
 struct GRMHDTile {
     uint32_t tileX, tileY;
@@ -108,15 +94,14 @@ bool testTileCacheCreation() {
   std::cout << "Test 1: Tile Cache Creation and Capacity\n";
 
   TileCache const cache(256);
-  assert(cache.getCurrentSize() == 0);
-  assert(cache.getHitCount() == 0);
-  assert(cache.getMissCount() == 0);
+  const bool empty =
+      cache.getCurrentSize() == 0 && cache.getHitCount() == 0 && cache.getMissCount() == 0;
 
   std::cout << "  Initial cache size: " << cache.getCurrentSize() << " (expected 0)\n"
             << "  Max capacity: 256 tiles\n"
-            << "  Status: PASS\n\n";
+            << "  Status: " << (empty ? "PASS" : "FAIL") << "\n\n";
 
-  return true;
+  return empty;
 }
 
 // Test 2: Tile insertion and LRU eviction
@@ -150,12 +135,13 @@ bool testTileRetrieval() {
 
   TileCache cache(256);
 
-  // Simulate tile accesses
+  bool tilesMatch = true;
   for (uint32_t i = 0; i < 10; ++i) {
-    cache.getTile(i, 0);
+    const auto tile = cache.getTile(i, 0);
+    tilesMatch = tilesMatch && tile && tile->tileX == i && tile->tileY == 0 && !tile->gpuResident;
   }
 
-  bool const trackingOk = cache.getHitCount() == 10;
+  bool const trackingOk = tilesMatch && cache.getHitCount() == 10;
 
   std::cout << "  Tile accesses: 10\n"
             << "  Cache hits: " << cache.getHitCount() << "\n"
@@ -205,29 +191,27 @@ bool testHdf5DumpReading() {
 }
 
 // Test 6: Tile grid calculation
-bool testTileGridCalculation() {
+void testTileGridCalculation() {
   std::cout << "Test 6: Tile Grid Calculation for 1920x1080\n";
 
   // Display resolution: 1920x1080 pixels
   // Tile size: 32x32 pixels
-  uint32_t const displayWidth = 1920;
-  uint32_t const displayHeight = 1080;
-  uint32_t const tileSize = 32;
+  constexpr uint32_t displayWidth = 1920;
+  constexpr uint32_t displayHeight = 1080;
+  constexpr uint32_t tileSize = 32;
 
-  uint32_t const tilesX = (displayWidth + tileSize - 1) / tileSize;  // 60
-  uint32_t const tilesY = (displayHeight + tileSize - 1) / tileSize; // 34
-  uint32_t const totalTiles = tilesX * tilesY;                       // 2040
+  constexpr uint32_t tilesX = (displayWidth + tileSize - 1) / tileSize;  // 60
+  constexpr uint32_t tilesY = (displayHeight + tileSize - 1) / tileSize; // 34
+  constexpr uint32_t totalTiles = tilesX * tilesY;                       // 2040
 
-  bool const gridOk = (tilesX == 60 && tilesY == 34 && totalTiles == 2040);
+  static_assert(tilesX == 60 && tilesY == 34 && totalTiles == 2040);
 
   std::cout << "  Display: " << displayWidth << "x" << displayHeight << "\n"
             << "  Tile size: " << tileSize << "x" << tileSize << "\n"
             << "  Tile grid: " << tilesX << "x" << tilesY << "\n"
             << "  Total tiles: " << totalTiles << " (expected 2040)\n"
             << "  Bytes per tile (32x32 * 8 vars * 4 bytes): " << (32 * 32 * 8 * 4) << " = 32KB\n"
-            << "  Status: " << (gridOk ? "PASS" : "FAIL") << "\n\n";
-
-  return gridOk;
+            << "  Status: PASS (compile-time tile layout)\n\n";
 }
 
 // Test 7: Multi-dump time series validation
@@ -289,9 +273,8 @@ int main() {
     if (testHdf5DumpReading()) {
       passed++;
     }
-    if (testTileGridCalculation()) {
-      passed++;
-    }
+    testTileGridCalculation();
+    ++passed;
     if (testMultidumpSequence()) {
       passed++;
     }
@@ -302,4 +285,3 @@ int main() {
 
     return (passed == total) ? 0 : 1;
 }
-

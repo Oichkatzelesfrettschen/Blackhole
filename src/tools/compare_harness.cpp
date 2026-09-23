@@ -1,10 +1,11 @@
+#include <iostream>
+
+#include "render/interop_uniforms.h"
 /**
  * @file compare_harness.cpp
  * @brief Diff statistics, texture readback, snapshot writers, and CSV
  *        summaries for the compute/fragment parity harness.
  */
-
-#include "compare_harness.h"
 
 #include <algorithm>
 #include <cmath>
@@ -14,11 +15,15 @@
 #include <fstream>
 #include <iomanip>
 #include <ios>
+#include <string>
 #include <system_error>
 #include <vector>
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
+
+#include "compare_harness.h"
 
 using namespace gl;
 
@@ -96,8 +101,8 @@ bool writePfmRgb(const std::string &path, const std::vector<float> &rgba, int wi
   if (outPath.has_parent_path()) {
     std::filesystem::create_directories(outPath.parent_path(), dirEc);
     if (dirEc) {
-      std::fprintf(stderr, "Failed to create directory for raw export %s: %s\n",
-                   outPath.string().c_str(), dirEc.message().c_str());
+      std::cerr << "Failed to create directory for raw export " << outPath.string() << ": "
+                << dirEc.message() << '\n';
       return false;
     }
   }
@@ -144,9 +149,8 @@ DiffStats computeDiffStats(const std::vector<float> &a, const std::vector<float>
     }
   }
 
-  const auto denom = static_cast<double>(
-      (a.size() / 4) *
-      3); // NOLINT(bugprone-integer-division) -- intentional: pixel count * 3 channels
+  const std::size_t pixelCount = a.size() / 4;
+  const auto denom = static_cast<double>(pixelCount * 3);
   if (denom > 0.0) {
     stats.meanAbs = static_cast<float>(total / denom);
     stats.rms = static_cast<float>(std::sqrt(totalSq / denom));
@@ -188,8 +192,8 @@ bool writePpm(const std::string &path, const std::vector<float> &rgba, int width
       float const scaled = std::clamp(v * scale, 0.0f, 1.0f);
       return static_cast<unsigned char>(scaled * 255.0f);
     };
-    unsigned char rgb[3] = {clampChannel(rgba.at(i)), clampChannel(rgba.at(i + 1)),
-                            clampChannel(rgba.at(i + 2))};
+    const unsigned char rgb[3] = {clampChannel(rgba.at(i)), clampChannel(rgba.at(i + 1)),
+                                  clampChannel(rgba.at(i + 2))};
     out.write(reinterpret_cast<const char *>(rgb), 3);
   }
   return true;
@@ -213,7 +217,7 @@ bool writeDiffPpm(const std::string &path, const std::vector<float> &a, const st
     float const dr = std::abs(a.at(i) - b.at(i));
     float const dg = std::abs(a.at(i + 1) - b.at(i + 1));
     float const db = std::abs(a.at(i + 2) - b.at(i + 2));
-    unsigned char rgb[3] = {clampChannel(dr), clampChannel(dg), clampChannel(db)};
+    const unsigned char rgb[3] = {clampChannel(dr), clampChannel(dg), clampChannel(db)};
     out.write(reinterpret_cast<const char *>(rgb), 3);
   }
   return true;

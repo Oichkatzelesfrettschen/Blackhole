@@ -2,8 +2,8 @@
  * @file verified/kerr_newman.hpp
  * @brief Verified Kerr-Newman metric functions - derived from Rocq formalization
  *
- * This file is generated from proven Rocq theories in rocq/theories/Metrics/KerrNewman.v
- * All formulas verified against Newman et al. (1965) analytical results.
+ * Maintained C++ reference for rocq/theories/Metrics/KerrNewman.v
+ * Analytical reference: Newman et al. (1965).
  *
  * The Kerr-Newman solution describes a rotating, electrically charged black hole.
  * It is the unique axially symmetric, stationary solution to the Einstein-Maxwell equations.
@@ -28,7 +28,9 @@
  * Electromagnetic 4-potential:
  *   A_μ = (-Qr / Sigma, 0, 0, -Qra sin^2 theta / Sigma)
  *
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
+ * The maintained C++ is an input to scripts/cpp_to_glsl.py.
+ * Rocq definitions document the mathematical source; floating-point
+ * implementations are checked by tests rather than a proved extraction chain.
  *
  * @note All functions are constexpr where possible
  * @note Uses geometric units where c = G = 1
@@ -62,9 +64,9 @@ namespace verified {
  * @param a Spin parameter (J/M)
  * @return Sigma
  */
-[[nodiscard]] inline double kn_Sigma(double r, double theta, double a) noexcept {
-    const double cos_theta = std::cos(theta);
-    return r * r + a * a * cos_theta * cos_theta;
+[[nodiscard]] inline double knSigma(double r, double theta, double a) noexcept {
+  const double cosTheta = std::cos(theta);
+  return r * r + a * a * cosTheta * cosTheta;
 }
 
 /**
@@ -74,13 +76,13 @@ namespace verified {
  *   r^2 - 2 * M * r + a^2 + Q^2.
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter (J/M)
- * @param Q Electric charge (geometric units)
+ * @param q Electric charge (geometric units)
  * @return Delta
  */
-[[nodiscard]] constexpr double kn_Delta(double r, double M, double a, double Q) noexcept {
-    return r * r - 2.0 * M * r + a * a + Q * Q;
+[[nodiscard]] constexpr double knDelta(double r, double m, double a, double q) noexcept {
+  return r * r - 2.0 * m * r + a * a + q * q;
 }
 
 /**
@@ -91,16 +93,16 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return A
  */
-[[nodiscard]] inline double kn_A(double r, double theta, double M, double a, double Q) noexcept {
-    const double r2_plus_a2 = r * r + a * a;
-    const double sin_theta = std::sin(theta);
-    const double Delta = kn_Delta(r, M, a, Q);
-    return r2_plus_a2 * r2_plus_a2 - a * a * Delta * sin_theta * sin_theta;
+[[nodiscard]] inline double knA(double r, double theta, double m, double a, double q) noexcept {
+  const double r2PlusA2 = r * r + a * a;
+  const double sinTheta = std::sin(theta);
+  const double delta = knDelta(r, m, a, q);
+  return r2PlusA2 * r2PlusA2 - a * a * delta * sinTheta * sinTheta;
 }
 
 // ============================================================================
@@ -115,13 +117,13 @@ namespace verified {
  *
  * For a physical black hole, M^2 >= a^2 + Q^2 must hold (sub-extremal condition).
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter (|a| <= M for horizon to exist)
- * @param Q Electric charge
+ * @param q Electric charge
  * @return r_+ outer horizon radius
  */
-[[nodiscard]] inline double kn_outer_horizon(double M, double a, double Q) noexcept {
-    return M + std::sqrt(M * M - a * a - Q * Q);
+[[nodiscard]] inline double knOuterHorizon(double m, double a, double q) noexcept {
+  return m + std::sqrt(m * m - a * a - q * q);
 }
 
 /**
@@ -130,13 +132,13 @@ namespace verified {
  * Derived from Rocq: Definition kn_inner_horizon (M a Q : R) : R :=
  *   M - sqrt (M^2 - a^2 - Q^2).
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return r_- inner horizon radius
  */
-[[nodiscard]] inline double kn_inner_horizon(double M, double a, double Q) noexcept {
-    return M - std::sqrt(M * M - a * a - Q * Q);
+[[nodiscard]] inline double knInnerHorizon(double m, double a, double q) noexcept {
+  return m - std::sqrt(m * m - a * a - q * q);
 }
 
 // ============================================================================
@@ -152,12 +154,12 @@ namespace verified {
  * @param r Radial coordinate
  * @param theta Polar angle
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return A_t
  */
-[[nodiscard]] inline double kn_potential_t(double r, double theta, double a, double Q) noexcept {
-    const double Sigma = kn_Sigma(r, theta, a);
-    return -Q * r / Sigma;
+[[nodiscard]] inline double knPotentialT(double r, double theta, double a, double q) noexcept {
+  const double sigma = knSigma(r, theta, a);
+  return -q * r / sigma;
 }
 
 /**
@@ -169,13 +171,13 @@ namespace verified {
  * @param r Radial coordinate
  * @param theta Polar angle
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return A_phi
  */
-[[nodiscard]] inline double kn_potential_phi(double r, double theta, double a, double Q) noexcept {
-    const double Sigma = kn_Sigma(r, theta, a);
-    const double sin_theta = std::sin(theta);
-    return -Q * r * a * sin_theta * sin_theta / Sigma;
+[[nodiscard]] inline double knPotentialPhi(double r, double theta, double a, double q) noexcept {
+  const double sigma = knSigma(r, theta, a);
+  const double sinTheta = std::sin(theta);
+  return -q * r * a * sinTheta * sinTheta / sigma;
 }
 
 /**
@@ -185,8 +187,8 @@ namespace verified {
  *
  * @return 0.0
  */
-[[nodiscard]] constexpr double kn_potential_r() noexcept {
-    return 0.0;
+[[nodiscard]] constexpr double knPotentialR() noexcept {
+  return 0.0;
 }
 
 /**
@@ -196,8 +198,8 @@ namespace verified {
  *
  * @return 0.0
  */
-[[nodiscard]] constexpr double kn_potential_theta() noexcept {
-    return 0.0;
+[[nodiscard]] constexpr double knPotentialTheta() noexcept {
+  return 0.0;
 }
 
 // ============================================================================
@@ -214,13 +216,13 @@ namespace verified {
  * @param r Radial coordinate
  * @param theta Polar angle
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return E_r
  */
-[[nodiscard]] inline double kn_electric_field_r(double r, double theta, double a, double Q) noexcept {
-    const double Sigma = kn_Sigma(r, theta, a);
-    const double Sigma2 = Sigma * Sigma;
-    return -Q * (Sigma - 2.0 * r * r) / Sigma2;
+[[nodiscard]] inline double knElectricFieldR(double r, double theta, double a, double q) noexcept {
+  const double sigma = knSigma(r, theta, a);
+  const double sigma2 = sigma * sigma;
+  return -q * (sigma - 2.0 * r * r) / sigma2;
 }
 
 /**
@@ -232,14 +234,14 @@ namespace verified {
  * @param r Radial coordinate
  * @param theta Polar angle
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return B (magnetic field component)
  */
-[[nodiscard]] inline double kn_magnetic_field(double r, double theta, double a, double Q) noexcept {
-    const double Sigma = kn_Sigma(r, theta, a);
-    const double Sigma2 = Sigma * Sigma;
-    const double cos_theta = std::cos(theta);
-    return Q * a * cos_theta / Sigma2;
+[[nodiscard]] inline double knMagneticField(double r, double theta, double a, double q) noexcept {
+  const double sigma = knSigma(r, theta, a);
+  const double sigma2 = sigma * sigma;
+  const double cosTheta = std::cos(theta);
+  return q * a * cosTheta / sigma2;
 }
 
 // ============================================================================
@@ -256,14 +258,15 @@ namespace verified {
  * Charge Q affects the ergosphere boundary.
  *
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return Ergosphere radius at angle theta
  */
-[[nodiscard]] inline double kn_ergosphere_radius(double theta, double M, double a, double Q) noexcept {
-    const double cos_theta = std::cos(theta);
-    return M + std::sqrt(M * M - a * a * cos_theta * cos_theta - Q * Q);
+[[nodiscard]] inline double knErgosphereRadius(double theta, double m, double a,
+                                               double q) noexcept {
+  const double cosTheta = std::cos(theta);
+  return m + std::sqrt(m * m - a * a * cosTheta * cosTheta - q * q);
 }
 
 // ============================================================================
@@ -281,14 +284,15 @@ namespace verified {
  *
  * @param r Radial coordinate
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return Frame dragging angular velocity
  */
-[[nodiscard]] inline double kn_frame_dragging_omega(double r, double theta, double M, double a, double Q) noexcept {
-    const double A = kn_A(r, theta, M, a, Q);
-    return 2.0 * M * r * a / A;
+[[nodiscard]] inline double knFrameDraggingOmega(double r, double theta, double m, double a,
+                                                 double q) noexcept {
+  const double metricFactor = knA(r, theta, m, a, q);
+  return 2.0 * m * r * a / metricFactor;
 }
 
 // ============================================================================
@@ -305,14 +309,14 @@ namespace verified {
  * For Kerr-Newman, photon sphere is more complex due to charge.
  * This is the approximate equatorial value.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return Approximate equatorial photon sphere radius
  */
-[[nodiscard]] inline double kn_photon_sphere_equator(double M, double a, double Q) noexcept {
-    (void)Q;  // Charge appears in discriminant, simplified formula uses only a/M
-    return 2.0 * M * (1.0 + std::cos(std::acos(a / M) / 3.0));
+[[nodiscard]] inline double knPhotonSphereEquator(double m, double a, double q) noexcept {
+  (void)q; // Charge appears in discriminant, simplified formula uses only a/M
+  return 2.0 * m * (1.0 + std::cos(std::acos(a / m) / 3.0));
 }
 
 // ============================================================================
@@ -330,22 +334,22 @@ namespace verified {
  *
  * For Q << M, ISCO ≈ Kerr ISCO with first-order charge correction.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter (positive for prograde)
- * @param Q Electric charge
+ * @param q Electric charge
  * @return Prograde ISCO radius
  */
-[[nodiscard]] inline double kn_isco_radius_prograde(double M, double a, double Q) noexcept {
-    const double a_over_M = a / M;
-    const double one_minus_a2_M2 = 1.0 - a_over_M * a_over_M;
-    const double cbrt_factor = std::cbrt(one_minus_a2_M2);
-    const double cbrt_plus = std::cbrt(1.0 + a_over_M);
-    const double cbrt_minus = std::cbrt(1.0 - a_over_M);
-    const double Z1 = 1.0 + cbrt_factor * (cbrt_plus + cbrt_minus);
-    const double Z2 = std::sqrt(3.0 * a_over_M * a_over_M + Z1 * Z1);
-    const double sqrt_term = std::sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
-    const double correction = Q * Q / (2.0 * M * M);
-    return M * (3.0 + Z2 - sqrt_term) + correction;
+[[nodiscard]] inline double knIscoRadiusPrograde(double m, double a, double q) noexcept {
+  const double aOverM = a / m;
+  const double oneMinusA2M2 = 1.0 - aOverM * aOverM;
+  const double cbrtFactor = std::cbrt(oneMinusA2M2);
+  const double cbrtPlus = std::cbrt(1.0 + aOverM);
+  const double cbrtMinus = std::cbrt(1.0 - aOverM);
+  const double z1 = 1.0 + cbrtFactor * (cbrtPlus + cbrtMinus);
+  const double z2 = std::sqrt(3.0 * aOverM * aOverM + z1 * z1);
+  const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
+  const double correction = q * q / (2.0 * m * m);
+  return m * (3.0 + z2 - sqrtTerm) + correction;
 }
 
 /**
@@ -357,22 +361,22 @@ namespace verified {
  *   let correction := Q^2 / (2 * M^2) in
  *   M * (3 + Z2 + sqrt ((3 - Z1) * (3 + Z1 + 2 * Z2))) + correction.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return Retrograde ISCO radius
  */
-[[nodiscard]] inline double kn_isco_radius_retrograde(double M, double a, double Q) noexcept {
-    const double a_over_M = a / M;
-    const double one_minus_a2_M2 = 1.0 - a_over_M * a_over_M;
-    const double cbrt_factor = std::cbrt(one_minus_a2_M2);
-    const double cbrt_plus = std::cbrt(1.0 + a_over_M);
-    const double cbrt_minus = std::cbrt(1.0 - a_over_M);
-    const double Z1 = 1.0 + cbrt_factor * (cbrt_plus + cbrt_minus);
-    const double Z2 = std::sqrt(3.0 * a_over_M * a_over_M + Z1 * Z1);
-    const double sqrt_term = std::sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
-    const double correction = Q * Q / (2.0 * M * M);
-    return M * (3.0 + Z2 + sqrt_term) + correction;
+[[nodiscard]] inline double knIscoRadiusRetrograde(double m, double a, double q) noexcept {
+  const double aOverM = a / m;
+  const double oneMinusA2M2 = 1.0 - aOverM * aOverM;
+  const double cbrtFactor = std::cbrt(oneMinusA2M2);
+  const double cbrtPlus = std::cbrt(1.0 + aOverM);
+  const double cbrtMinus = std::cbrt(1.0 - aOverM);
+  const double z1 = 1.0 + cbrtFactor * (cbrtPlus + cbrtMinus);
+  const double z2 = std::sqrt(3.0 * aOverM * aOverM + z1 * z1);
+  const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
+  const double correction = q * q / (2.0 * m * m);
+  return m * (3.0 + z2 + sqrtTerm) + correction;
 }
 
 // ============================================================================
@@ -384,9 +388,9 @@ namespace verified {
  *
  * Derived from Rocq: kerr_newman_metric returns mkMetric(-(1 - (2 * M * r - Q^2) / Sigma)...)
  */
-[[nodiscard]] inline double kn_g_tt(double r, double theta, double M, double a, double Q) noexcept {
-    const double Sigma = kn_Sigma(r, theta, a);
-    return -(1.0 - (2.0 * M * r - Q * Q) / Sigma);
+[[nodiscard]] inline double knGTt(double r, double theta, double m, double a, double q) noexcept {
+  const double sigma = knSigma(r, theta, a);
+  return -(1.0 - (2.0 * m * r - q * q) / sigma);
 }
 
 /**
@@ -394,10 +398,10 @@ namespace verified {
  *
  * Derived from Rocq: g_rr := Sigma / Delta
  */
-[[nodiscard]] inline double kn_g_rr(double r, double theta, double M, double a, double Q) noexcept {
-    const double Sigma = kn_Sigma(r, theta, a);
-    const double Delta = kn_Delta(r, M, a, Q);
-    return Sigma / Delta;
+[[nodiscard]] inline double knGRr(double r, double theta, double m, double a, double q) noexcept {
+  const double sigma = knSigma(r, theta, a);
+  const double delta = knDelta(r, m, a, q);
+  return sigma / delta;
 }
 
 /**
@@ -405,8 +409,8 @@ namespace verified {
  *
  * Derived from Rocq: g_thth := Sigma
  */
-[[nodiscard]] inline double kn_g_thth(double r, double theta, double a) noexcept {
-    return kn_Sigma(r, theta, a);
+[[nodiscard]] inline double knGThth(double r, double theta, double a) noexcept {
+  return knSigma(r, theta, a);
 }
 
 /**
@@ -414,11 +418,11 @@ namespace verified {
  *
  * Derived from Rocq: g_phph := A * sin2 / Sigma
  */
-[[nodiscard]] inline double kn_g_phph(double r, double theta, double M, double a, double Q) noexcept {
-    const double Sigma = kn_Sigma(r, theta, a);
-    const double A = kn_A(r, theta, M, a, Q);
-    const double sin_theta = std::sin(theta);
-    return A * sin_theta * sin_theta / Sigma;
+[[nodiscard]] inline double knGPhph(double r, double theta, double m, double a, double q) noexcept {
+  const double sigma = knSigma(r, theta, a);
+  const double metricFactor = knA(r, theta, m, a, q);
+  const double sinTheta = std::sin(theta);
+  return metricFactor * sinTheta * sinTheta / sigma;
 }
 
 /**
@@ -427,10 +431,10 @@ namespace verified {
  * Derived from Rocq: g_tph := - 2 * M * r * a * sin2 / Sigma
  * This is the frame dragging term (unchanged from Kerr).
  */
-[[nodiscard]] inline double kn_g_tph(double r, double theta, double M, double a) noexcept {
-    const double Sigma = kn_Sigma(r, theta, a);
-    const double sin_theta = std::sin(theta);
-    return -2.0 * M * r * a * sin_theta * sin_theta / Sigma;
+[[nodiscard]] inline double knGTph(double r, double theta, double m, double a) noexcept {
+  const double sigma = knSigma(r, theta, a);
+  const double sinTheta = std::sin(theta);
+  return -2.0 * m * r * a * sinTheta * sinTheta / sigma;
 }
 
 // ============================================================================
@@ -443,13 +447,13 @@ namespace verified {
  * Derived from Rocq: Definition is_sub_extremal (M a Q : R) : Prop :=
  *   M^2 > a^2 + Q^2.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return true if sub-extremal
  */
-[[nodiscard]] constexpr bool is_sub_extremal(double M, double a, double Q) noexcept {
-    return M * M > a * a + Q * Q;
+[[nodiscard]] constexpr bool isSubExtremal(double m, double a, double q) noexcept {
+  return m * m > a * a + q * q;
 }
 
 /**
@@ -458,13 +462,13 @@ namespace verified {
  * Derived from Rocq: Definition is_extremal (M a Q : R) : Prop :=
  *   M^2 = a^2 + Q^2.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return true if extremal
  */
-[[nodiscard]] constexpr bool is_extremal(double M, double a, double Q) noexcept {
-    return M * M == a * a + Q * Q;
+[[nodiscard]] constexpr bool isExtremal(double m, double a, double q) noexcept {
+  return m * m == a * a + q * q;
 }
 
 /**
@@ -473,13 +477,13 @@ namespace verified {
  * Derived from Rocq: Definition is_super_extremal (M a Q : R) : Prop :=
  *   M^2 < a^2 + Q^2.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return true if super-extremal (naked singularity)
  */
-[[nodiscard]] constexpr bool is_super_extremal(double M, double a, double Q) noexcept {
-    return M * M < a * a + Q * Q;
+[[nodiscard]] constexpr bool isSuperExtremal(double m, double a, double q) noexcept {
+  return m * m < a * a + q * q;
 }
 
 /**
@@ -488,13 +492,13 @@ namespace verified {
  * Derived from Rocq: Definition is_physical_black_hole (M a Q : R) : Prop :=
  *   M > 0 /\ M^2 >= a^2 + Q^2.
  *
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param Q Electric charge
+ * @param q Electric charge
  * @return true if physical black hole
  */
-[[nodiscard]] constexpr bool is_physical_black_hole(double M, double a, double Q) noexcept {
-    return M > 0.0 && M * M >= a * a + Q * Q;
+[[nodiscard]] constexpr bool isPhysicalBlackHole(double m, double a, double q) noexcept {
+  return m > 0.0 && m * m >= a * a + q * q;
 }
 
 // ============================================================================
@@ -504,15 +508,16 @@ namespace verified {
 /**
  * @brief Check if point is outside the outer horizon
  */
-[[nodiscard]] inline bool outside_outer_horizon(double r, double M, double a, double Q) noexcept {
-    return r > kn_outer_horizon(M, a, Q);
+[[nodiscard]] inline bool outsideOuterHorizon(double r, double m, double a, double q) noexcept {
+  return r > knOuterHorizon(m, a, q);
 }
 
 /**
  * @brief Check if point is inside the ergosphere but outside the horizon
  */
-[[nodiscard]] inline bool in_ergosphere(double r, double theta, double M, double a, double Q) noexcept {
-    return r > kn_outer_horizon(M, a, Q) && r < kn_ergosphere_radius(theta, M, a, Q);
+[[nodiscard]] inline bool inErgosphere(double r, double theta, double m, double a,
+                                       double q) noexcept {
+  return r > knOuterHorizon(m, a, q) && r < knErgosphereRadius(theta, m, a, q);
 }
 
 /**
@@ -520,8 +525,8 @@ namespace verified {
  *
  * Proven in Rocq: Theorem kn_reduces_to_kerr
  */
-[[nodiscard]] constexpr bool is_kerr_limit(double Q) noexcept {
-    return Q == 0.0;
+[[nodiscard]] constexpr bool isKerrLimit(double q) noexcept {
+  return q == 0.0;
 }
 
 /**
@@ -529,8 +534,8 @@ namespace verified {
  *
  * Proven in Rocq: Theorem kn_reduces_to_schwarzschild
  */
-[[nodiscard]] constexpr bool is_schwarzschild_limit(double a, double Q) noexcept {
-    return a == 0.0 && Q == 0.0;
+[[nodiscard]] constexpr bool isSchwarzschildLimit(double a, double q) noexcept {
+  return a == 0.0 && q == 0.0;
 }
 
 } // namespace verified

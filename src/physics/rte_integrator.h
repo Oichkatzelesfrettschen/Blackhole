@@ -61,13 +61,14 @@
 #ifndef PHYSICS_RTE_INTEGRATOR_H
 #define PHYSICS_RTE_INTEGRATOR_H
 
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+#include <numeric>
+#include <vector>
+
 #include "constants.h"
 #include "synchrotron.h"
-
-#include <cmath>
-#include <cstddef>
-#include <numbers>
-#include <vector>
 
 #ifdef __has_include
 #  if __has_include(<boost/math/special_functions/bessel.hpp>)
@@ -147,19 +148,18 @@ struct RteSample {
     double deltaI = 0.0;
     if (tau < 1.0e-4) {
         // Optically thin: (1 - exp(-tau)) ~ tau - tau^2/2 -> exact at second order
-        const double oneMexpTau = tau * (1.0 - 0.5 * tau);
+        const double oneMexpTau = tau * (1.0 - (0.5 * tau));
         if (alphaNu > 0.0) {
-            deltaI = (jNu / alphaNu) * oneMexpTau - state.iNu * tau;
+          deltaI = ((jNu / alphaNu) * oneMexpTau) - (state.iNu * tau);
         } else {
             deltaI = jNu * dsCm;  // pure emission, no absorption
         }
     } else {
         const double expNegTau = std::exp(-tau);
         if (alphaNu > 0.0) {
-            deltaI = (jNu / alphaNu) * (1.0 - expNegTau) - state.iNu * (1.0 - expNegTau);
-            // Equivalently: I_new = I_old * expNegTau + S_nu * (1 - expNegTau)
-            // Rewritten as delta to avoid precision loss on the I_old term for large tau:
-            state.iNu = state.iNu * expNegTau + (jNu / alphaNu) * (1.0 - expNegTau);
+            // Evaluate the attenuated state directly to avoid cancellation
+            // between state.iNu and its nearly equal absorbed contribution.
+            state.iNu = (state.iNu * expNegTau) + ((jNu / alphaNu) * (1.0 - expNegTau));
             state.tau  += tau;
             state.sCm  += dsCm;
             return state;
@@ -186,13 +186,12 @@ struct RteSample {
  * @param initial Initial RteState (background intensity); default is zero.
  * @return RteState at the end of the path (closest to observer).
  */
-[[nodiscard]] inline RteState integrateRtePath(const std::vector<RteSample>& path,
-                                                RteState initial = {}) noexcept {
-    RteState state = initial;
-    for (const auto& sample : path) {
-        state = rteStep(state, sample.jNu, sample.alphaNu, sample.dsCm);
-    }
-    return state;
+[[nodiscard]] inline RteState integrateRtePath(const std::vector<RteSample> &path,
+                                               const RteState &initial = {}) noexcept {
+  return std::accumulate(path.begin(), path.end(), initial,
+                         [](const RteState &state, const RteSample &sample) {
+                           return rteStep(state, sample.jNu, sample.alphaNu, sample.dsCm);
+                         });
 }
 
 // ============================================================================
@@ -287,11 +286,12 @@ struct RteSample {
  * @param nE      Electron number density [cm^-3]
  * @param thetaE  Dimensionless electron temperature k_B T_e / (m_e c^2) > 0
  * @return j_nu [erg / (cm^3 s Hz sr)]
+ * @throws std::exception if Boost cannot evaluate the Bessel partition function.
  */
 [[nodiscard]] inline double synchrotronThermalEmissivity(double nu,
                                                           double bField,
                                                           double nE,
-                                                          double thetaE) noexcept {
+                                                          double thetaE) {
     if (nu <= 0.0 || bField <= 0.0 || nE <= 0.0 || thetaE <= 0.0) { return 0.0; }
 
     const double nuB  = gyrofrequency(bField);         // e*B / (2*pi*m_e*c) [Hz]
@@ -305,8 +305,8 @@ struct RteSample {
     const double xm16  = std::pow(xM, -1.0 / 6.0);  // x^{-1/6}
     const double xm14  = std::pow(xM, -1.0 / 4.0);  // x^{-1/4}
     const double xm12  = std::pow(xM, -1.0 / 2.0);  // x^{-1/2}
-    const double im    = 4.0505 * xm16 * (1.0 + 0.40 * xm14 + 0.5316 * xm12)
-                         * std::exp(-1.8899 * std::pow(xM, 1.0 / 3.0));
+    const double im = 4.0505 * xm16 * (1.0 + (0.40 * xm14) + (0.5316 * xm12)) *
+                      std::exp(-1.8899 * std::pow(xM, 1.0 / 3.0));
 
     // Modified Bessel K_2(1/Theta_e): partition function of Maxwell-Juttner distribution
     double k2 = 0.0;
@@ -320,9 +320,8 @@ struct RteSample {
 
     // Prefactor: sqrt(3) * e^3 * n_e * nu_B / (m_e * c^2)
     // Using CGS constants from synchrotron.h (E_CHARGE, M_ELECTRON, C, PI):
-    const double prefactor = std::sqrt(3.0) * E_CHARGE * E_CHARGE * E_CHARGE
-                             * nE * nuB
-                             / (M_ELECTRON * C * C);
+    const double prefactor =
+        std::numbers::sqrt3 * E_CHARGE * E_CHARGE * E_CHARGE * nE * nuB / (M_ELECTRON * C * C);
 
     return (prefactor / k2) * thetaE * thetaE * im;
 }
@@ -344,11 +343,12 @@ struct RteSample {
  * @param nE      Electron density [cm^-3]
  * @param thetaE  Dimensionless electron temperature k_B T_e / (m_e c^2)
  * @return alpha_nu [cm^-1]
+ * @throws std::exception if the thermal emissivity cannot be evaluated.
  */
 [[nodiscard]] inline double synchrotronThermalAbsorption(double nu,
                                                           double bField,
                                                           double nE,
-                                                          double thetaE) noexcept {
+                                                          double thetaE) {
     if (thetaE <= 0.0 || nu <= 0.0) { return 0.0; }
     const double tempK = thetaE * M_ELECTRON * C * C / K_B;
     const double bNu   = planckFunction(nu, tempK);
@@ -395,8 +395,9 @@ struct RteSample {
     const double logArg  = kToverH / nu;
     double gff = 1.0;
     if (logArg > 1.0) {
-        gff = std::clamp(std::sqrt(3.0) / std::numbers::pi * std::log(kGauntPrefactor * kToverH / nu),
-                         1.0, 10.0);
+      gff = std::clamp(std::numbers::sqrt3 / std::numbers::pi *
+                           std::log(kGauntPrefactor * kToverH / nu),
+                       1.0, 10.0);
     }
 
     const double expFactor = std::exp(-2.0 * std::numbers::pi * HBAR * nu / (K_B * tempK));
@@ -533,15 +534,9 @@ struct RteSample {
  * @param g         Redshift factor nu_obs / nu_emit
  * @return Updated RteState
  */
-[[nodiscard]] inline RteState rteStepGR(RteState state,
-                                         double jEmit,
-                                         double alphaEmit,
-                                         double dsCm,
-                                         double g) noexcept {
-    return rteStep(state,
-                   grTransformEmission(jEmit, g),
-                   grTransformAbsorption(alphaEmit, g),
-                   dsCm);
+[[nodiscard]] inline RteState rteStepGR(const RteState &state, double jEmit, double alphaEmit,
+                                        double dsCm, double g) noexcept {
+  return rteStep(state, grTransformEmission(jEmit, g), grTransformAbsorption(alphaEmit, g), dsCm);
 }
 
 } // namespace physics

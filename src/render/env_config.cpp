@@ -6,9 +6,11 @@
 #include "render/env_config.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 
 #include "render/gl_capabilities.h"
@@ -33,7 +35,19 @@ constexpr bool kAppVariantCudaOnly = BLACKHOLE_APP_VARIANT_CUDA_ONLY != 0;
 } // namespace
 #endif
 
-void applyEnvironmentConfig(RenderState &rs) {
+namespace {
+
+float parseEnvironmentFloat(const char *value) {
+  char *end = nullptr;
+  const double parsed = std::strtod(value, &end);
+  if (end == value || !std::isfinite(parsed) ||
+      std::abs(parsed) > static_cast<double>(std::numeric_limits<float>::max())) {
+    return 0.0f;
+  }
+  return static_cast<float>(parsed);
+}
+
+void applyCompareEnvironment(RenderState &rs) {
   if (!rs.compare.compareAutoInit) {
     const char *sweepEnv = std::getenv("BLACKHOLE_COMPARE_SWEEP");
     if (sweepEnv != nullptr && std::string(sweepEnv) == "1") {
@@ -69,10 +83,11 @@ void applyEnvironmentConfig(RenderState &rs) {
       }
       const char *outlierFracEnv = std::getenv("BLACKHOLE_COMPARE_OUTLIER_FRAC");
       if (outlierFracEnv != nullptr) {
-        rs.compare.compareMaxOutlierFrac =
-            std::max(0.0f, static_cast<float>(std::atof(
-                               outlierFracEnv))); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
-                                                  // -- env var, invalid input defaults to 0
+        rs.compare.compareMaxOutlierFrac = std::max(
+            0.0f,
+            parseEnvironmentFloat(
+                outlierFracEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
+                                  // -- env var, invalid input defaults to 0
       }
       const char *maxStepsEnv = std::getenv("BLACKHOLE_COMPARE_MAX_STEPS");
       if (maxStepsEnv != nullptr) {
@@ -85,9 +100,9 @@ void applyEnvironmentConfig(RenderState &rs) {
       }
       const char *stepSizeEnv = std::getenv("BLACKHOLE_COMPARE_STEP_SIZE");
       if (stepSizeEnv != nullptr) {
-        rs.compare.compareStepSizeOverride =
-            static_cast<float>(std::atof(stepSizeEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
-                                                        // -- env var, invalid input defaults to 0
+        rs.compare.compareStepSizeOverride = parseEnvironmentFloat(
+            stepSizeEnv); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
+                          // -- env var, invalid input defaults to 0
         if (rs.compare.compareStepSizeOverride > 0.0f) {
           rs.compare.compareOverridesEnabled = true;
         }
@@ -112,6 +127,9 @@ void applyEnvironmentConfig(RenderState &rs) {
     }
     rs.compare.forceInteropFragmentEnvApplied = true;
   }
+}
+
+void applyProbeEnvironment(RenderState &rs) {
 
 #if BLACKHOLE_HAS_CUDA
   if (!rs.dispatch.cudaVariantEnvApplied) {
@@ -183,7 +201,9 @@ void applyEnvironmentConfig(RenderState &rs) {
     }
     rs.probes.multiDrawMainConfigInit = true;
   }
+}
 
+void applyOverlayEnvironment(RenderState &rs) {
   if (!rs.luts.lutAssetConfigInit) {
     const char *assetOnlyEnv = std::getenv("BLACKHOLE_LUT_ASSET_ONLY");
     if (assetOnlyEnv != nullptr && std::string(assetOnlyEnv) == "1") {
@@ -199,9 +219,9 @@ void applyEnvironmentConfig(RenderState &rs) {
     }
     const char *scaleEnv = std::getenv("BLACKHOLE_OPENGL_CONTROLS_SCALE");
     if (scaleEnv != nullptr) {
-      auto const scale =
-          static_cast<float>(std::atof(scaleEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
-                                                   // -- env var, invalid input defaults to 0
+      auto const scale = parseEnvironmentFloat(
+          scaleEnv); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
+                     // -- env var, invalid input defaults to 0
       rs.overlays.controlsOverlayScale = std::max(scale, 0.5f);
     }
     rs.overlays.controlsOverlayConfigInit = true;
@@ -214,9 +234,9 @@ void applyEnvironmentConfig(RenderState &rs) {
     }
     const char *scaleEnv = std::getenv("BLACKHOLE_PERF_HUD_SCALE");
     if (scaleEnv != nullptr) {
-      auto const scale =
-          static_cast<float>(std::atof(scaleEnv)); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
-                                                   // -- env var, invalid input defaults to 0
+      auto const scale = parseEnvironmentFloat(
+          scaleEnv); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
+                     // -- env var, invalid input defaults to 0
       rs.overlays.perfOverlayScale = std::max(scale, 0.5f);
     }
     rs.overlays.perfOverlayConfigInit = true;
@@ -231,6 +251,14 @@ void applyEnvironmentConfig(RenderState &rs) {
     }
     rs.compare.integratorDebugConfigInit = true;
   }
+}
+
+} // namespace
+
+void applyEnvironmentConfig(RenderState &rs) {
+  applyCompareEnvironment(rs);
+  applyProbeEnvironment(rs);
+  applyOverlayEnvironment(rs);
 }
 
 } // namespace blackhole

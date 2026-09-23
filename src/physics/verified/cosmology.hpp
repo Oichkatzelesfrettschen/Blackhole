@@ -2,7 +2,7 @@
  * @file verified/cosmology.hpp
  * @brief Verified FLRW cosmology functions - derived from Rocq formalization
  *
- * This file is generated from proven Rocq theories:
+ * Maintained C++ references for the Rocq theories:
  *   - rocq/theories/Cosmology/FLRW.v
  *   - rocq/theories/Cosmology/Distances.v
  *
@@ -18,7 +18,9 @@
  *   - Hogg, "Distance measures in cosmology" (arXiv:astro-ph/9905116)
  *   - Parnovsky 2025, Axiodilaton cosmology (arXiv:2512.13544)
  *
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
+ * The maintained C++ is an input to scripts/cpp_to_glsl.py.
+ * Rocq definitions document the mathematical source; floating-point
+ * implementations are checked by tests rather than a proved extraction chain.
  *
  * @note All functions use SI/cosmological units unless noted
  * @note Distances in Mpc, H0 in km/s/Mpc
@@ -41,12 +43,12 @@ namespace verified {
  *
  * Derived from Rocq: Definition c_km_s : R := 299792.458.
  */
-inline constexpr double c_km_s = 299792.458;
+inline constexpr double C_KM_S = 299792.458;
 
 /**
  * @brief Speed of light in m/s
  */
-inline constexpr double c_m_s = 299792458.0;
+inline constexpr double C_M_S = 299792458.0;
 
 // ============================================================================
 // Planck 2018 Cosmological Parameters (from Rocq: FLRW.v)
@@ -57,35 +59,35 @@ inline constexpr double c_m_s = 299792458.0;
  *
  * Derived from Rocq: Definition H0_Planck18 : R := 67.36.
  */
-inline constexpr double H0_Planck18 = 67.36;
+inline constexpr double H0_PLANCK18 = 67.36;
 
 /**
  * @brief Planck 2018 total matter density parameter: Omega_m = 0.3153
  *
  * Derived from Rocq: Definition Omega_m_Planck18 : R := 0.3153.
  */
-inline constexpr double Omega_m_Planck18 = 0.3153;
+inline constexpr double OMEGA_M_PLANCK18 = 0.3153;
 
 /**
  * @brief Planck 2018 baryon density parameter: Omega_b = 0.0493
  *
  * Derived from Rocq: Definition Omega_b_Planck18 : R := 0.0493.
  */
-inline constexpr double Omega_b_Planck18 = 0.0493;
+inline constexpr double OMEGA_B_PLANCK18 = 0.0493;
 
 /**
  * @brief Planck 2018 CMB temperature: T_CMB = 2.7255 K
  *
  * Derived from Rocq: Definition T_CMB_Planck18 : R := 2.7255.
  */
-inline constexpr double T_CMB_Planck18 = 2.7255;
+inline constexpr double T_CMB_PLANCK18 = 2.7255;
 
 /**
  * @brief Planck 2018 sound horizon at recombination: r_s = 147.09 Mpc
  *
  * Derived from Rocq: Definition sound_horizon_Planck18 : R := 147.09.
  */
-inline constexpr double sound_horizon_Planck18 = 147.09;
+inline constexpr double SOUND_HORIZON_PLANCK18 = 147.09;
 
 // ============================================================================
 // Flat LambdaCDM Cosmology (from Rocq: FlatLCDM record)
@@ -99,23 +101,22 @@ inline constexpr double sound_horizon_Planck18 = 147.09;
  * }.
  */
 struct FlatLCDM {
-    double H0;       ///< Hubble constant in km/s/Mpc
-    double Omega_m;  ///< Matter density parameter (CDM + baryons)
-    double Omega_b;  ///< Baryon density parameter
-    double T_CMB;    ///< CMB temperature in Kelvin
+  double h0;     ///< Hubble constant in km/s/Mpc
+  double omegaM; ///< Matter density parameter (CDM + baryons)
+  double omegaB; ///< Baryon density parameter
+  double tCmb;   ///< CMB temperature in Kelvin
 
-    /**
-     * @brief Default constructor: Planck 2018 cosmology
-     */
-    constexpr FlatLCDM() noexcept
-        : H0(H0_Planck18), Omega_m(Omega_m_Planck18),
-          Omega_b(Omega_b_Planck18), T_CMB(T_CMB_Planck18) {}
+  /**
+   * @brief Default constructor: Planck 2018 cosmology
+   */
+  constexpr FlatLCDM() noexcept
+      : h0(H0_PLANCK18), omegaM(OMEGA_M_PLANCK18), omegaB(OMEGA_B_PLANCK18), tCmb(T_CMB_PLANCK18) {}
 
-    /**
-     * @brief Custom cosmology constructor
-     */
-    constexpr FlatLCDM(double h0, double om, double ob, double tcmb) noexcept
-        : H0(h0), Omega_m(om), Omega_b(ob), T_CMB(tcmb) {}
+  /**
+   * @brief Custom cosmology constructor
+   */
+  constexpr FlatLCDM(double hubbleConstant, double om, double ob, double tcmb) noexcept
+      : h0(hubbleConstant), omegaM(om), omegaB(ob), tCmb(tcmb) {}
 };
 
 /**
@@ -124,7 +125,7 @@ struct FlatLCDM {
  * Derived from Rocq: Definition Planck18 : FlatLCDM :=
  *   mkFlatLCDM H0_Planck18 Omega_m_Planck18 Omega_b_Planck18 T_CMB_Planck18.
  */
-inline constexpr FlatLCDM Planck18{};
+inline constexpr FlatLCDM PLANCK18{};
 
 // ============================================================================
 // Derived Quantities (from Rocq: FLRW.v)
@@ -135,11 +136,11 @@ inline constexpr FlatLCDM Planck18{};
  *
  * Derived from Rocq: Definition Omega_Lambda (cosmo : FlatLCDM) : R := 1 - cosmo.(Omega_m).
  *
- * @param Omega_m Matter density parameter
+ * @param omegaM Matter density parameter
  * @return Omega_Lambda = 1 - Omega_m
  */
-[[nodiscard]] constexpr double Omega_Lambda(double Omega_m) noexcept {
-    return 1.0 - Omega_m;
+[[nodiscard]] constexpr double omegaLambda(double omegaM) noexcept {
+  return 1.0 - omegaM;
 }
 
 /**
@@ -147,11 +148,11 @@ inline constexpr FlatLCDM Planck18{};
  *
  * Derived from Rocq: Definition hubble_time (H0 : R) : R := 1 / H0.
  *
- * @param H0 Hubble constant in km/s/Mpc
+ * @param h0 Hubble constant in km/s/Mpc
  * @return Hubble time in Mpc/(km/s) units (~14.4 Gyr for H0=67.36)
  */
-[[nodiscard]] constexpr double hubble_time(double H0) noexcept {
-    return 1.0 / H0;
+[[nodiscard]] constexpr double hubbleTime(double h0) noexcept {
+  return 1.0 / h0;
 }
 
 /**
@@ -159,11 +160,11 @@ inline constexpr FlatLCDM Planck18{};
  *
  * Derived from Rocq: Definition hubble_length (H0 : R) : R := c_km_s / H0.
  *
- * @param H0 Hubble constant in km/s/Mpc
+ * @param h0 Hubble constant in km/s/Mpc
  * @return Hubble length in Mpc (~4450 Mpc for H0=67.36)
  */
-[[nodiscard]] constexpr double hubble_length(double H0) noexcept {
-    return c_km_s / H0;
+[[nodiscard]] constexpr double hubbleLength(double h0) noexcept {
+  return C_KM_S / h0;
 }
 
 // ============================================================================
@@ -180,22 +181,22 @@ inline constexpr FlatLCDM Planck18{};
  *
  * Theorem E_at_z0: E(0) = 1 for properly normalized cosmology.
  *
- * @param Omega_m Matter density parameter
+ * @param omegaM Matter density parameter
  * @param z Redshift
  * @return E(z) = H(z)/H0
  */
-[[nodiscard]] inline double E_z(double Omega_m, double z) noexcept {
-    const double one_plus_z = 1.0 + z;
-    const double one_plus_z_cubed = one_plus_z * one_plus_z * one_plus_z;
-    const double OL = Omega_Lambda(Omega_m);
-    return std::sqrt(Omega_m * one_plus_z_cubed + OL);
+[[nodiscard]] inline double eZ(double omegaM, double z) noexcept {
+  const double onePlusZ = 1.0 + z;
+  const double onePlusZCubed = onePlusZ * onePlusZ * onePlusZ;
+  const double ol = omegaLambda(omegaM);
+  return std::sqrt(omegaM * onePlusZCubed + ol);
 }
 
 /**
  * @brief E(z) with cosmology struct
  */
-[[nodiscard]] inline double E_z(const FlatLCDM& cosmo, double z) noexcept {
-    return E_z(cosmo.Omega_m, z);
+[[nodiscard]] inline double eZ(const FlatLCDM &cosmo, double z) noexcept {
+  return eZ(cosmo.omegaM, z);
 }
 
 /**
@@ -204,20 +205,20 @@ inline constexpr FlatLCDM Planck18{};
  * Derived from Rocq: Definition hubble_parameter (cosmo : FlatLCDM) (z : R) : R :=
  *   cosmo.(H0) * E_z cosmo z.
  *
- * @param H0 Hubble constant in km/s/Mpc
- * @param Omega_m Matter density parameter
+ * @param h0 Hubble constant in km/s/Mpc
+ * @param omegaM Matter density parameter
  * @param z Redshift
  * @return H(z) in km/s/Mpc
  */
-[[nodiscard]] inline double hubble_parameter(double H0, double Omega_m, double z) noexcept {
-    return H0 * E_z(Omega_m, z);
+[[nodiscard]] inline double hubbleParameter(double h0, double omegaM, double z) noexcept {
+  return h0 * eZ(omegaM, z);
 }
 
 /**
  * @brief H(z) with cosmology struct
  */
-[[nodiscard]] inline double hubble_parameter(const FlatLCDM& cosmo, double z) noexcept {
-    return cosmo.H0 * E_z(cosmo, z);
+[[nodiscard]] inline double hubbleParameter(const FlatLCDM &cosmo, double z) noexcept {
+  return cosmo.h0 * eZ(cosmo, z);
 }
 
 // ============================================================================
@@ -235,18 +236,18 @@ inline constexpr FlatLCDM Planck18{};
  * q < 0 indicates accelerating expansion
  * For Planck18: z_acc ~ 0.67 (transition redshift)
  *
- * @param Omega_m Matter density parameter
+ * @param omegaM Matter density parameter
  * @param z Redshift
  * @return q(z), negative for acceleration
  */
-[[nodiscard]] inline double deceleration_parameter(double Omega_m, double z) noexcept {
-    const double one_plus_z = 1.0 + z;
-    const double E = E_z(Omega_m, z);
+[[nodiscard]] inline double decelerationParameter(double omegaM, double z) noexcept {
+  const double onePlusZ = 1.0 + z;
+  const double e = eZ(omegaM, z);
 
-    // dE/dz = (3/2) * Omega_m * (1+z)^2 / (2*E)
-    const double dEdz = 1.5 * Omega_m * one_plus_z * one_plus_z / (2.0 * E);
+  // dE/dz = (3/2) * Omega_m * (1+z)^2 / (2*E)
+  const double dEdz = 1.5 * omegaM * onePlusZ * onePlusZ / (2.0 * e);
 
-    return -1.0 + one_plus_z * dEdz / E;
+  return -1.0 + onePlusZ * dEdz / e;
 }
 
 // ============================================================================
@@ -261,12 +262,12 @@ inline constexpr FlatLCDM Planck18{};
  *
  * For Planck18: z_eq ~ 3400
  *
- * @param Omega_m Matter density parameter
- * @param Omega_r Radiation density parameter
+ * @param omegaM Matter density parameter
+ * @param OmegaR Radiation density parameter
  * @return z_eq
  */
-[[nodiscard]] constexpr double z_equality(double Omega_m, double Omega_r) noexcept {
-    return Omega_m / Omega_r - 1.0;
+[[nodiscard]] constexpr double zEquality(double omegaM, double omegaR) noexcept {
+  return omegaM / omegaR - 1.0;
 }
 
 // ============================================================================
@@ -281,12 +282,12 @@ inline constexpr FlatLCDM Planck18{};
  *
  * For z << 1: D_C(z) ~ (c/H0) * z
  *
- * @param H0 Hubble constant
+ * @param h0 Hubble constant
  * @param z Redshift (should be << 1)
  * @return Approximate comoving distance in Mpc
  */
-[[nodiscard]] constexpr double comoving_distance_linear(double H0, double z) noexcept {
-    return hubble_length(H0) * z;
+[[nodiscard]] constexpr double comovingDistanceLinear(double h0, double z) noexcept {
+  return hubbleLength(h0) * z;
 }
 
 /**
@@ -301,23 +302,24 @@ inline constexpr FlatLCDM Planck18{};
  * @param n Number of integration steps (default 1000)
  * @return Comoving distance in Mpc
  */
-[[nodiscard]] inline double comoving_distance(
-    const FlatLCDM& cosmo, double z, std::size_t n = 1000) noexcept
-{
-    if (z <= 0.0) return 0.0;
+[[nodiscard]] inline double comovingDistance(const FlatLCDM &cosmo, double z,
+                                             std::size_t n = 1000) noexcept {
+  if (z <= 0.0) {
+    return 0.0;
+  }
 
-    const double D_H = hubble_length(cosmo.H0);
-    const double dz = z / static_cast<double>(n);
+  const double dH = hubbleLength(cosmo.h0);
+  const double dz = z / static_cast<double>(n);
 
-    // Trapezoidal rule: sum of 1/E(z') from z'=0 to z'=z
-    double sum = 0.5 / E_z(cosmo, 0.0);  // First endpoint
-    for (std::size_t i = 1; i < n; ++i) {
-        const double z_i = static_cast<double>(i) * dz;
-        sum += 1.0 / E_z(cosmo, z_i);
-    }
-    sum += 0.5 / E_z(cosmo, z);  // Last endpoint
+  // Trapezoidal rule: sum of 1/E(z') from z'=0 to z'=z
+  double sum = 0.5 / eZ(cosmo, 0.0); // First endpoint
+  for (std::size_t i = 1; i < n; ++i) {
+    const double zI = static_cast<double>(i) * dz;
+    sum += 1.0 / eZ(cosmo, zI);
+  }
+  sum += 0.5 / eZ(cosmo, z); // Last endpoint
 
-    return D_H * sum * dz;
+  return dH * sum * dz;
 }
 
 /**
@@ -333,10 +335,9 @@ inline constexpr FlatLCDM Planck18{};
  * @param n Integration steps
  * @return Luminosity distance in Mpc
  */
-[[nodiscard]] inline double luminosity_distance(
-    const FlatLCDM& cosmo, double z, std::size_t n = 1000) noexcept
-{
-    return (1.0 + z) * comoving_distance(cosmo, z, n);
+[[nodiscard]] inline double luminosityDistance(const FlatLCDM &cosmo, double z,
+                                               std::size_t n = 1000) noexcept {
+  return (1.0 + z) * comovingDistance(cosmo, z, n);
 }
 
 /**
@@ -352,10 +353,9 @@ inline constexpr FlatLCDM Planck18{};
  * @param n Integration steps
  * @return Angular diameter distance in Mpc
  */
-[[nodiscard]] inline double angular_diameter_distance(
-    const FlatLCDM& cosmo, double z, std::size_t n = 1000) noexcept
-{
-    return comoving_distance(cosmo, z, n) / (1.0 + z);
+[[nodiscard]] inline double angularDiameterDistance(const FlatLCDM &cosmo, double z,
+                                                    std::size_t n = 1000) noexcept {
+  return comovingDistance(cosmo, z, n) / (1.0 + z);
 }
 
 /**
@@ -366,19 +366,20 @@ inline constexpr FlatLCDM Planck18{};
  *
  * Also known as Etherington reciprocity theorem.
  *
- * @param D_L Luminosity distance
- * @param D_A Angular diameter distance
+ * @param DL Luminosity distance
+ * @param DA Angular diameter distance
  * @param z Redshift
  * @param tol Tolerance for verification
  * @return true if duality holds within tolerance
  */
-[[nodiscard]] inline bool verify_distance_duality(
-    double D_L, double D_A, double z, double tol = 1e-6) noexcept
-{
-    if (z <= 0.0) return true;
-    const double one_plus_z = 1.0 + z;
-    const double ratio = D_L / (one_plus_z * one_plus_z * D_A);
-    return std::abs(ratio - 1.0) < tol;
+[[nodiscard]] inline bool verifyDistanceDuality(double dL, double dA, double z,
+                                                double tol = 1e-6) noexcept {
+  if (z <= 0.0) {
+    return true;
+  }
+  const double onePlusZ = 1.0 + z;
+  const double ratio = dL / (onePlusZ * onePlusZ * dA);
+  return std::abs(ratio - 1.0) < tol;
 }
 
 /**
@@ -389,11 +390,11 @@ inline constexpr FlatLCDM Planck18{};
  *
  * Used for comparing apparent and absolute magnitudes: m - M = mu
  *
- * @param D_L_Mpc Luminosity distance in Mpc
+ * @param DLMpc Luminosity distance in Mpc
  * @return Distance modulus in magnitudes
  */
-[[nodiscard]] inline double distance_modulus(double D_L_Mpc) noexcept {
-    return 5.0 * std::log10(D_L_Mpc) + 25.0;
+[[nodiscard]] inline double distanceModulus(double dLMpc) noexcept {
+  return 5.0 * std::log10(dLMpc) + 25.0;
 }
 
 /**
@@ -407,11 +408,10 @@ inline constexpr FlatLCDM Planck18{};
  * @param n Integration steps
  * @return Comoving volume in Mpc^3
  */
-[[nodiscard]] inline double comoving_volume(
-    const FlatLCDM& cosmo, double z, std::size_t n = 1000) noexcept
-{
-    const double D_C = comoving_distance(cosmo, z, n);
-    return (4.0 * std::numbers::pi / 3.0) * D_C * D_C * D_C;
+[[nodiscard]] inline double comovingVolume(const FlatLCDM &cosmo, double z,
+                                           std::size_t n = 1000) noexcept {
+  const double dC = comovingDistance(cosmo, z, n);
+  return (4.0 * std::numbers::pi / 3.0) * dC * dC * dC;
 }
 
 // ============================================================================
@@ -431,12 +431,12 @@ inline constexpr FlatLCDM Planck18{};
  *   - Requires coupling |g| ~ 10^-2 to 10^-1
  */
 struct AxiodilatonParams {
-    double Omega_m;    ///< Matter density parameter
-    double Omega_ad;   ///< Axiodilaton contribution
-    double coupling;   ///< Dilaton-matter coupling |g|
+  double omegaM;   ///< Matter density parameter
+  double omegaAd;  ///< Axiodilaton contribution
+  double coupling; ///< Dilaton-matter coupling |g|
 
-    constexpr AxiodilatonParams(double om, double oad, double g) noexcept
-        : Omega_m(om), Omega_ad(oad), coupling(g) {}
+  constexpr AxiodilatonParams(double om, double oad, double g) noexcept
+      : omegaM(om), omegaAd(oad), coupling(g) {}
 };
 
 /**
@@ -452,9 +452,9 @@ struct AxiodilatonParams {
  * @param ad Axiodilaton parameters
  * @return Axiodilaton contribution to E(z)^2
  */
-[[nodiscard]] inline double f_axiodilaton(double z, const AxiodilatonParams& ad) noexcept {
-    const double one_plus_z = 1.0 + z;
-    return ad.Omega_ad * one_plus_z * one_plus_z;
+[[nodiscard]] inline double fAxiodilaton(double z, const AxiodilatonParams &ad) noexcept {
+  const double onePlusZ = 1.0 + z;
+  return ad.omegaAd * onePlusZ * onePlusZ;
 }
 
 /**
@@ -466,23 +466,18 @@ struct AxiodilatonParams {
  *
  * Predicted: H0 = 69.22 +/- 0.28 km/s/Mpc (resolves Hubble tension)
  *
- * @param H0 Base Hubble constant
+ * @param h0 Base Hubble constant
  * @param ad Axiodilaton parameters
  * @param z Redshift
  * @return H(z) in km/s/Mpc
  */
-[[nodiscard]] inline double hubble_axiodilaton(
-    double H0, const AxiodilatonParams& ad, double z) noexcept
-{
-    const double one_plus_z = 1.0 + z;
-    const double one_plus_z_cubed = one_plus_z * one_plus_z * one_plus_z;
-    const double OL = 1.0 - ad.Omega_m - ad.Omega_ad;
+[[nodiscard]] inline double hubbleAxiodilaton(double h0, const AxiodilatonParams &ad,
+                                              double z) noexcept {
+  const double onePlusZ = 1.0 + z;
+  const double onePlusZCubed = onePlusZ * onePlusZ * onePlusZ;
+  const double ol = 1.0 - ad.omegaM - ad.omegaAd;
 
-    return H0 * std::sqrt(
-        ad.Omega_m * one_plus_z_cubed +
-        f_axiodilaton(z, ad) +
-        OL
-    );
+  return h0 * std::sqrt(ad.omegaM * onePlusZCubed + fAxiodilaton(z, ad) + ol);
 }
 
 // ============================================================================
@@ -495,8 +490,8 @@ struct AxiodilatonParams {
  * Derived from Rocq: Definition compute_E_z (Omega_m z : R) : R :=
  *   sqrt (Omega_m * (1 + z)^3 + (1 - Omega_m)).
  */
-[[nodiscard]] inline double compute_E_z(double Omega_m, double z) noexcept {
-    return E_z(Omega_m, z);
+[[nodiscard]] inline double computeEZ(double omegaM, double z) noexcept {
+  return eZ(omegaM, z);
 }
 
 /**
@@ -505,8 +500,8 @@ struct AxiodilatonParams {
  * Derived from Rocq: Definition compute_hubble (H0 Omega_m z : R) : R :=
  *   H0 * compute_E_z Omega_m z.
  */
-[[nodiscard]] inline double compute_hubble(double H0, double Omega_m, double z) noexcept {
-    return hubble_parameter(H0, Omega_m, z);
+[[nodiscard]] inline double computeHubble(double h0, double omegaM, double z) noexcept {
+  return hubbleParameter(h0, omegaM, z);
 }
 
 /**
@@ -514,8 +509,8 @@ struct AxiodilatonParams {
  *
  * Derived from Rocq: Definition compute_hubble_length (H0 : R) : R := c_km_s / H0.
  */
-[[nodiscard]] constexpr double compute_hubble_length(double H0) noexcept {
-    return hubble_length(H0);
+[[nodiscard]] constexpr double computeHubbleLength(double h0) noexcept {
+  return hubbleLength(h0);
 }
 
 /**
@@ -523,52 +518,49 @@ struct AxiodilatonParams {
  *
  * Derived from Rocq: Definition compute_Omega_Lambda (Omega_m : R) : R := 1 - Omega_m.
  */
-[[nodiscard]] constexpr double compute_Omega_Lambda(double Omega_m) noexcept {
-    return Omega_Lambda(Omega_m);
+[[nodiscard]] constexpr double computeOmegaLambda(double omegaM) noexcept {
+  return omegaLambda(omegaM);
 }
 
 /**
  * @brief Compute luminosity distance (extraction interface)
  */
-[[nodiscard]] inline double compute_luminosity_distance(
-    double H0, double Omega_m, double z, std::size_t n = 1000) noexcept
-{
-    FlatLCDM cosmo{H0, Omega_m, 0.0, 0.0};
-    return luminosity_distance(cosmo, z, n);
+[[nodiscard]] inline double computeLuminosityDistance(double h0, double omegaM, double z,
+                                                      std::size_t n = 1000) noexcept {
+  FlatLCDM const cosmo{h0, omegaM, 0.0, 0.0};
+  return luminosityDistance(cosmo, z, n);
 }
 
 /**
  * @brief Compute angular diameter distance (extraction interface)
  */
-[[nodiscard]] inline double compute_angular_diameter_distance(
-    double H0, double Omega_m, double z, std::size_t n = 1000) noexcept
-{
-    FlatLCDM cosmo{H0, Omega_m, 0.0, 0.0};
-    return angular_diameter_distance(cosmo, z, n);
+[[nodiscard]] inline double computeAngularDiameterDistance(double h0, double omegaM, double z,
+                                                           std::size_t n = 1000) noexcept {
+  FlatLCDM const cosmo{h0, omegaM, 0.0, 0.0};
+  return angularDiameterDistance(cosmo, z, n);
 }
 
 /**
  * @brief Compute distance modulus (extraction interface)
  */
-[[nodiscard]] inline double compute_distance_modulus(double D_L_Mpc) noexcept {
-    return distance_modulus(D_L_Mpc);
+[[nodiscard]] inline double computeDistanceModulus(double dLMpc) noexcept {
+  return distanceModulus(dLMpc);
 }
 
 /**
  * @brief Compute comoving volume (extraction interface)
  */
-[[nodiscard]] inline double compute_comoving_volume(
-    double H0, double Omega_m, double z, std::size_t n = 1000) noexcept
-{
-    FlatLCDM cosmo{H0, Omega_m, 0.0, 0.0};
-    return comoving_volume(cosmo, z, n);
+[[nodiscard]] inline double computeComovingVolume(double h0, double omegaM, double z,
+                                                  std::size_t n = 1000) noexcept {
+  FlatLCDM const cosmo{h0, omegaM, 0.0, 0.0};
+  return comovingVolume(cosmo, z, n);
 }
 
 /**
  * @brief Linear comoving distance approximation (extraction interface)
  */
-[[nodiscard]] constexpr double compute_comoving_distance_linear(double H0, double z) noexcept {
-    return comoving_distance_linear(H0, z);
+[[nodiscard]] constexpr double computeComovingDistanceLinear(double h0, double z) noexcept {
+  return comovingDistanceLinear(h0, z);
 }
 
 } // namespace verified

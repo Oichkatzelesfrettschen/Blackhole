@@ -7,7 +7,11 @@
 
 #include <string>
 
-#include "gl_loader.h" // gl:: queries, using namespace gl
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
+
+using namespace gl;
 
 namespace blackhole {
 

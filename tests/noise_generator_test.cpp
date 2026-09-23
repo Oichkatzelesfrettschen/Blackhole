@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <string>
 
 #ifdef BLACKHOLE_ENABLE_FASTNOISE2
 

@@ -14,11 +14,14 @@
 #include <numbers>
 #include <cassert>
 #include <cmath>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 #include <vector>
 
 #include "../src/physics/synchrotron.h"
+
+static_assert(PHYSICS_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
 
 using namespace physics;
 
@@ -380,7 +383,7 @@ bool testSynchrotronFRybickiLightmanTable() {
  */
 } // namespace
 
-int main() {
+int main() try {
     std::cout << "\n"
               << "====================================================\n"
               << "SYNCHROTRON SPECTRUM VALIDATION TEST SUITE\n"
@@ -424,4 +427,7 @@ int main() {
               << "====================================================\n";
 
     return (passed == total) ? 0 : 1;
+} catch (const std::exception &error) {
+    std::cerr << "Synchrotron validation failed: " << error.what() << '\n';
+    return 1;
 }

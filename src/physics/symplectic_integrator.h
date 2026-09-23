@@ -123,11 +123,13 @@ struct GeodesicState {
 [[nodiscard]] inline double kerrHamiltonian(const GeodesicState& s,
                                             const KerrParams& params) noexcept {
     const Metric4 gcon = kerrGcon(s.q[1], s.q[2], params.a, params.rS);
-    double H = 0.0;
-    for (std::size_t mu = 0; mu < 4; ++mu)
-        for (std::size_t nu = 0; nu < 4; ++nu)
-            H += gcon.at(mu).at(nu) * s.p[mu] * s.p[nu];
-    return 0.5 * H;
+    double hamiltonian = 0.0;
+    for (std::size_t mu = 0; mu < 4; ++mu) {
+      for (std::size_t nu = 0; nu < 4; ++nu) {
+        hamiltonian += gcon.at(mu).at(nu) * s.p[mu] * s.p[nu];
+      }
+    }
+    return 0.5 * hamiltonian;
 }
 
 /**
@@ -144,9 +146,11 @@ struct GeodesicState {
     const GeodesicState& s, const KerrParams& params) noexcept {
     const Metric4 gcon = kerrGcon(s.q[1], s.q[2], params.a, params.rS);
     std::array<double, 4> vel{};
-    for (std::size_t mu = 0; mu < 4; ++mu)
-        for (std::size_t nu = 0; nu < 4; ++nu)
-            vel[mu] += gcon.at(mu).at(nu) * s.p[nu];
+    for (std::size_t mu = 0; mu < 4; ++mu) {
+      for (std::size_t nu = 0; nu < 4; ++nu) {
+        vel[mu] += gcon.at(mu).at(nu) * s.p[nu];
+      }
+    }
     return vel;
 }
 
@@ -229,8 +233,9 @@ struct GeodesicState {
 inline void applyDrift(GeodesicState& s, double h,
                        const KerrParams& params) noexcept {
     const auto vel = kerrVelocity(s, params);
-    for (std::size_t mu = 0; mu < 4; ++mu)
-        s.q[mu] += h * vel[mu];
+    for (std::size_t mu = 0; mu < 4; ++mu) {
+      s.q[mu] += h * vel[mu];
+    }
 }
 
 /**
@@ -243,8 +248,9 @@ inline void applyDrift(GeodesicState& s, double h,
 inline void applyKick(GeodesicState& s, double h,
                       const KerrParams& params) noexcept {
     const auto rate = kerrForce(s, params);
-    for (std::size_t mu = 0; mu < 4; ++mu)
-        s.p[mu] += h * rate[mu];
+    for (std::size_t mu = 0; mu < 4; ++mu) {
+      s.p[mu] += h * rate[mu];
+    }
 }
 
 // ============================================================================
@@ -323,10 +329,13 @@ inline void yoshida4Step(GeodesicState& s, double h,
 inline void integrateGeodesic(GeodesicState& s,
                                double dLambda, int nSteps,
                                const KerrParams& params) noexcept {
-    if (nSteps <= 0) return;
+  if (nSteps <= 0) {
+    return;
+  }
     const double h = dLambda / static_cast<double>(nSteps);
-    for (int k = 0; k < nSteps; ++k)
-        yoshida4Step(s, h, params);
+    for (int k = 0; k < nSteps; ++k) {
+      yoshida4Step(s, h, params);
+    }
 }
 
 } // namespace physics

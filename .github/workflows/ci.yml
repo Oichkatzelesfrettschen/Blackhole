@@ -1,68 +1,170 @@
 name: C++ CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      preset:
+        description: Validation lane
+        type: choice
+        options: [ci, ci-analysis, ci-release]
+        default: ci
+      export_dependencies:
+        description: Retain portable dependency packages for local diagnosis
+        type: boolean
+        default: false
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpp-ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.preset || 'default' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.preset }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.preset || 'ci') || '["ci","ci-analysis","ci-release"]') }}
+    env:
+      CONAN_HOME: ${{ github.workspace }}/.conan
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 1G
+      CI_PRESET: ${{ matrix.preset }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-      with:
-        python-version: "3.10"
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libgl1-mesa-dev \
-          libxrandr-dev \
-          libxinerama-dev \
-          libxcursor-dev \
-          libxi-dev \
-          glslang-tools
-
-    - name: Install Conan
-      run: |
-        pip install conan
-        conan profile detect --force
-        conan remote update conancenter --url="https://center2.conan.io"
-
-    - name: Check lockfile drift
-      run: |
-        # conanfile.py edits must land together with a regenerated
-        # conan.lock; unpinned transitive resolution is how two builds
-        # of one commit diverge.
-        conan lock create . --lockfile=conan.lock --lockfile-out=/tmp/conan.lock.regen \
-          -s build_type=Release \
-          -s compiler.cppstd=23
-        if ! diff -u conan.lock /tmp/conan.lock.regen; then
-          echo "conan.lock does not cover conanfile.py; regenerate with:"
-          echo "  conan lock create . -s build_type=Release -s compiler.cppstd=23 --lockfile-out=conan.lock"
-          exit 1
-        fi
-
-    - name: Conan install
-      run: |
-        conan install . --output-folder=build --build=missing \
-          --lockfile=conan.lock \
-          -s build_type=Release \
-          -s compiler.cppstd=23
-
-    - name: Configure CMake
-      run: |
-        cmake -S . -B build/build/Release \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_TOOLCHAIN_FILE=build/build/Release/generators/conan_toolchain.cmake \
-          -DENABLE_SHADER_VALIDATION=ON
-
-    - name: Build
-      run: cmake --build build/build/Release --parallel
-
-    - name: Validate GLSL Shaders
-      run: cmake --build build/build/Release --target validate-shaders
-
-    - name: Run Tests
-      run: |
-        cd build/build/Release
-        ctest --output-on-failure --parallel 4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          lfs: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        id: python
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/ci/requirements.txt
+      - name: Record resources and select all available CPUs
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          jobs="$(nproc)"
+          {
+            echo "CMAKE_BUILD_PARALLEL_LEVEL=$jobs"
+            echo "CTEST_PARALLEL_LEVEL=$jobs"
+            echo "PYTHON=$PYTHON"
+          } >> "$GITHUB_ENV"
+          mkdir -p build/ci-reports
+          { nproc; lscpu; free -h; } > build/ci-reports/resources.txt
+          cat build/ci-reports/resources.txt
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 g++-14 ninja-build ccache pkg-config \
+            libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontenc-dev \
+            libice-dev libsm-dev libxaw7-dev libxcomposite-dev libxdamage-dev \
+            libxfixes-dev libxkbfile-dev libxmuu-dev libxpm-dev libxres-dev \
+            libxss-dev libxt-dev libxtst-dev libxv-dev libxxf86vm-dev \
+            libxcb-render-util0-dev libxcb-image0-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-xfixes0-dev \
+            libxcb-xinerama0-dev libxcb-dri3-dev libxcb-cursor-dev \
+            libxcb-icccm4-dev libxcb-util-dev libxcb-xkb-dev \
+            glslang-tools libcfitsio-dev libxcb-glx0-dev uuid-dev libxcb-dri2-0-dev \
+            libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev libxcb-res0-dev
+          if [ "$CI_PRESET" = ci-analysis ]; then
+            sudo apt-get install -y clang-tidy-18 cppcheck
+            echo 'CLANG_TIDY=/usr/bin/clang-tidy-18' >> "$GITHUB_ENV"
+          fi
+      - name: Install pinned build tools
+        run: scripts/ci/run_stage.sh tooling "$PYTHON" -m pip install -r scripts/ci/requirements.txt
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        id: conan-cache
+        with:
+          path: .conan
+          key: conan-ubuntu24-gcc14-v1-${{ hashFiles('conan.lock', 'conanfile.py', 'conan/recipes/**', 'conan/profiles/ci', 'scripts/ci/requirements.txt') }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        id: compiler-cache
+        with:
+          path: .ccache
+          key: ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}-
+            ccache-ubuntu24-gcc14-${{ matrix.preset }}-
+      - name: Validate CI helpers
+        run: |
+          "$PYTHON" scripts/ci/test_check_lockfile.py
+          shellcheck -S error scripts/build.sh scripts/ci/run_stage.sh scripts/conan_init.sh scripts/conan_install.sh
+          "$PYTHON" -m ruff check scripts/ci/
+          "$PYTHON" -m ruff format --check scripts/ci/
+      - name: Export locked local recipes
+        run: scripts/conan_export_local_recipes.sh
+      - name: Check lockfile coverage
+        run: |
+          scripts/ci/run_stage.sh lockfile conan lock create . --lockfile=conan.lock \
+            --lockfile-out=build/ci-reports/conan.lock -pr:a conan/profiles/ci
+          "$PYTHON" scripts/ci/test_check_lockfile.py
+          "$PYTHON" scripts/ci/check_lockfile.py conan.lock build/ci-reports/conan.lock
+      - name: Install dependencies using all CPUs
+        run: |
+          scripts/ci/run_stage.sh dependencies conan install . --output-folder=build/CI-deps \
+            --lockfile=conan.lock --build=missing -pr:a conan/profiles/ci \
+            -c:a tools.build:jobs="$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Compact reusable dependency packages
+        if: steps.conan-cache.outputs.cache-hit != 'true'
+        run: conan cache clean '*' --source --build --download --temp
+      - name: Save dependencies before compiling project sources
+        if: steps.conan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .conan
+          key: ${{ steps.conan-cache.outputs.cache-primary-key }}
+      - name: Export packages for local diagnosis
+        if: inputs.export_dependencies
+        run: conan cache save '*:*' --file=build/ci-reports/conan-packages.tgz
+      - name: Configure
+        run: |
+          scripts/ci/run_stage.sh configure cmake --preset "$CI_PRESET" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DPYTHON3_EXECUTABLE="$PYTHON" \
+            ${CLANG_TIDY:+-DCLANG_TIDY_EXE="$CLANG_TIDY"}
+      - name: Build using all CPUs
+        id: compile
+        run: scripts/ci/run_stage.sh build cmake --build --preset "$CI_PRESET" --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Test using all CPUs
+        run: |
+          case "$CI_PRESET" in
+            ci) build_dir=build/CI ;;
+            ci-analysis) build_dir=build/CI-Analysis ;;
+            ci-release) build_dir=build/CI-Release ;;
+          esac
+          scripts/ci/run_stage.sh tests ctest --test-dir "$build_dir" \
+            --output-on-failure --no-tests=error --parallel "$CTEST_PARALLEL_LEVEL" \
+            --output-junit "$GITHUB_WORKSPACE/build/ci-reports/tests.xml"
+      - name: Save compiled objects after build failures too
+        if: always() && steps.compile.outcome != 'skipped' && steps.compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .ccache
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+      - name: Record compiler cache statistics
+        if: always()
+        run: command -v ccache && ccache --show-stats
+      - name: Retain timings and failure evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ${{ matrix.preset }}-${{ github.run_attempt }}
+          path: |
+            build/ci-reports/
+            build/CI*/Testing/Temporary/
+            build/CI*/CMakeFiles/CMakeConfigureLog.yaml
+            build/CI*/compile_commands.json
+          retention-days: 14

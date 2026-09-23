@@ -29,12 +29,13 @@ void loadSettingsIntoRenderState(RenderState &rs, const Settings &settings) {
     rs.post.postProcessingSettingsLoaded = true;
   }
   if (!rs.post.bloomSettingsLoaded) {
-    rs.post.bloomIterations = std::clamp(settings.bloomIterations, 1, kMaxBloomIterations);
+    rs.post.bloomIterations = std::clamp(settings.bloomIterations, 1, K_MAX_BLOOM_ITERATIONS);
     rs.post.bloomSettingsLoaded = true;
   }
 }
 
-void syncRenderStateToSettings(const RenderState &rs, Settings &settings, InputManager &input) {
+void syncRenderStateToSettings(const RenderState &rs, Settings &settings,
+                               const InputManager &input) {
   settings.fullscreen = input.isFullscreen();
   settings.swapInterval = rs.display.swapInterval;
   settings.renderScale = rs.display.renderScale;

@@ -16,32 +16,47 @@
  * Results can be saved to JSON (--json) and/or CSV (--csv) for regression tracking.
  */
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
+#include <numbers>
+#include <numeric>
+#include <ratio>
 #include <string>
 #include <vector>
 
-#include "gl_loader.h"
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
+#include <glbinding/gl/bitfield.h>
+#include <glbinding/gl/boolean.h>
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions-patches.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
+#include <glbinding/glbinding.h>
+
+#include <glm/ext/matrix_float4x4.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "physics/batch.h"
 #include "physics/constants.h"
+#include "physics/highway_eval.h"
 #include "physics/kerr.h"
 #include "physics/lut.h"
 #include "physics/raytracer.h"
 #include "physics/schwarzschild.h"
 #include "physics/xsimd_eval.h"
-#include "physics/highway_eval.h"
-#include "physics/simd_dispatch.h"
 #include "shader.h"
 
 /** @brief All tunable parameters for a benchmark run, populated from argv. */
+namespace {
+
 struct BenchConfig {
   int rays = 2000;
   int steps = 2000;
@@ -71,7 +86,7 @@ struct BenchConfig {
  * @param argv Argument vector from main().
  * @return Populated BenchConfig with validated, clamped values.
  */
-static BenchConfig parseArgs(int argc, char **argv) {
+BenchConfig parseArgs(int argc, char **argv) {
   BenchConfig cfg;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--rays") == 0 && i + 1 < argc) {
@@ -110,7 +125,7 @@ static BenchConfig parseArgs(int argc, char **argv) {
   }
   cfg.rays = std::max(cfg.rays, 1);
   cfg.steps = std::max(cfg.steps, 1);
-  cfg.iterations = std::max(cfg.iterations, 1);
+  cfg.iterations = std::clamp(cfg.iterations, 1, std::numeric_limits<int>::max() / 10);
   cfg.warmup = std::max(cfg.warmup, 0);
   cfg.lutSize = std::max(cfg.lutSize, 8);
   cfg.spin = std::clamp(cfg.spin, -0.99, 0.99);
@@ -147,8 +162,8 @@ struct BenchResult {
  * @return BenchResult with avg/min/max milliseconds and work units per second.
  */
 template <typename Fn>
-static BenchResult runBench(const std::string &label, int iterations, int warmup,
-                            double workUnits, Fn fn) {
+BenchResult runBench(const std::string &label, int iterations, int warmup, double workUnits,
+                     Fn fn) {
   using clock = std::chrono::high_resolution_clock;
   for (int i = 0; i < warmup; ++i) {
     fn();
@@ -161,14 +176,14 @@ static BenchResult runBench(const std::string &label, int iterations, int warmup
     auto start = clock::now();
     fn();
     auto end = clock::now();
-    double ms = std::chrono::duration<double, std::milli>(end - start).count();
+    double const ms = std::chrono::duration<double, std::milli>(end - start).count();
     minMs = std::min(minMs, ms);
     maxMs = std::max(maxMs, ms);
     totalMs += ms;
   }
 
-  double avgMs = totalMs / static_cast<double>(iterations);
-  double unitsPerSec = avgMs > 0.0 ? workUnits / (avgMs / 1000.0) : 0.0;
+  double const avgMs = totalMs / static_cast<double>(iterations);
+  double const unitsPerSec = avgMs > 0.0 ? workUnits / (avgMs / 1000.0) : 0.0;
   std::cout << std::fixed << std::setprecision(3);
   std::cout << label << " avg=" << avgMs << " ms"
             << " (min=" << minMs << ", max=" << maxMs << ")"
@@ -202,7 +217,7 @@ struct GpuBenchContext {
  *
  * @param ctx Context to tear down (all handles set to 0 / nullptr on return).
  */
-static void shutdownGpuBench(GpuBenchContext &ctx) {
+void shutdownGpuBench(GpuBenchContext &ctx) {
   if (ctx.query != 0) {
     glDeleteQueries(1, &ctx.query);
     ctx.query = 0;
@@ -232,8 +247,8 @@ static void shutdownGpuBench(GpuBenchContext &ctx) {
  * @param error  Human-readable error message on failure; untouched on success.
  * @return true on success, false if any step fails (ctx is cleaned up before return).
  */
-static bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::string &error) {
-  if (!glfwInit()) {
+bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::string &error) {
+  if (glfwInit() == 0) {
     error = "Failed to initialize GLFW";
     return false;
   }
@@ -243,7 +258,7 @@ static bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::strin
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
   ctx.window = glfwCreateWindow(width, height, "Blackhole GPU Bench", nullptr, nullptr);
-  if (!ctx.window) {
+  if (ctx.window == nullptr) {
     error = "Failed to create GLFW window";
     glfwTerminate();
     return false;
@@ -283,7 +298,7 @@ static bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::strin
  * @param error         Set to a descriptive message on failure; empty on success.
  * @return BenchResult with GPU timing statistics, or a zeroed result on failure.
  */
-static BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::string &error) {
+BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::string &error) {
   GpuBenchContext ctx;
   if (!initGpuBench(ctx, cfg.gpuWidth, cfg.gpuHeight, error)) {
     return {"GPU geodesic compute", 0.0, 0.0, 0.0, 0.0, 0.0, 0};
@@ -316,8 +331,8 @@ static BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std
   glUniform1f(glGetUniformLocation(ctx.program, "spectralRadiusMin"), 0.0f);
   glUniform1f(glGetUniformLocation(ctx.program, "spectralRadiusMax"), 1.0f);
 
-  const GLuint groupsX = static_cast<GLuint>((ctx.width + 15) / 16);
-  const GLuint groupsY = static_cast<GLuint>((ctx.height + 15) / 16);
+  const auto groupsX = static_cast<GLuint>((ctx.width + 15) / 16);
+  const auto groupsY = static_cast<GLuint>((ctx.height + 15) / 16);
 
   auto dispatch = [&]() {
     glDispatchCompute(groupsX, groupsY, 1);
@@ -339,16 +354,16 @@ static BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std
     glEndQuery(GL_TIME_ELAPSED);
     GLuint64 elapsedNs = 0;
     glGetQueryObjectui64v(ctx.query, GL_QUERY_RESULT, &elapsedNs);
-    double ms = static_cast<double>(elapsedNs) / 1.0e6;
+    double const ms = static_cast<double>(elapsedNs) / 1.0e6;
     minMs = std::min(minMs, ms);
     maxMs = std::max(maxMs, ms);
     totalMs += ms;
     gpuElapsedNs += static_cast<double>(elapsedNs);
   }
 
-  double avgMs = totalMs / static_cast<double>(cfg.gpuIterations);
-  double workUnits = static_cast<double>(ctx.width) * static_cast<double>(ctx.height);
-  double unitsPerSec = avgMs > 0.0 ? workUnits / (avgMs / 1000.0) : 0.0;
+  double const avgMs = totalMs / static_cast<double>(cfg.gpuIterations);
+  double const workUnits = static_cast<double>(ctx.width) * static_cast<double>(ctx.height);
+  double const unitsPerSec = avgMs > 0.0 ? workUnits / (avgMs / 1000.0) : 0.0;
 
   shutdownGpuBench(ctx);
 
@@ -375,9 +390,8 @@ static BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std
  * @param cpuAccum     Final value of the CPU accumulator (prevents dead-code elimination).
  * @param gpuElapsedNs Total GPU nanoseconds (0 if GPU benchmarking was not enabled).
  */
-static void writeCsv(const std::string &path, const BenchConfig &cfg,
-                     const std::vector<BenchResult> &results, double cpuAccum,
-                     double gpuElapsedNs) {
+void writeCsv(const std::string &path, const BenchConfig &cfg,
+              const std::vector<BenchResult> &results, double cpuAccum, double gpuElapsedNs) {
   std::ofstream out(path);
   if (!out) {
     std::cerr << "Failed to write CSV: " << path << "\n";
@@ -388,7 +402,7 @@ static void writeCsv(const std::string &path, const BenchConfig &cfg,
          "cpu_accum,gpu_elapsed_ns,accum\n";
   out << std::fixed << std::setprecision(6);
   for (const auto &result : results) {
-    double totalAccum = cpuAccum + gpuElapsedNs;
+    double const totalAccum = cpuAccum + gpuElapsedNs;
     out << result.name << "," << result.avgMs << "," << result.minMs << "," << result.maxMs << ","
         << result.workUnits << "," << result.unitsPerSec << "," << result.iterations << ","
         << cfg.warmup << "," << cfg.rays << "," << cfg.steps << "," << cfg.lutSize << ","
@@ -411,9 +425,8 @@ static void writeCsv(const std::string &path, const BenchConfig &cfg,
  * @param cpuAccum     Final value of the CPU accumulator.
  * @param gpuElapsedNs Total GPU nanoseconds (0 if GPU benchmarking was not enabled).
  */
-static void writeJson(const std::string &path, const BenchConfig &cfg,
-                      const std::vector<BenchResult> &results, double cpuAccum,
-                      double gpuElapsedNs) {
+void writeJson(const std::string &path, const BenchConfig &cfg,
+               const std::vector<BenchResult> &results, double cpuAccum, double gpuElapsedNs) {
   std::ofstream out(path);
   if (!out) {
     std::cerr << "Failed to write JSON: " << path << "\n";
@@ -441,7 +454,7 @@ static void writeJson(const std::string &path, const BenchConfig &cfg,
   for (size_t i = 0; i < results.size(); ++i) {
     const auto &result = results[i];
   out << "    {\n";
-  out << "      \"name\": \"" << result.name << "\",\n";
+  out << R"(      "name": ")" << result.name << "\",\n";
   out << "      \"avg_ms\": " << result.avgMs << ",\n";
   out << "      \"min_ms\": " << result.minMs << ",\n";
   out << "      \"max_ms\": " << result.maxMs << ",\n";
@@ -457,7 +470,9 @@ static void writeJson(const std::string &path, const BenchConfig &cfg,
   out << "}\n";
 }
 
-int main(int argc, char **argv) {
+} // namespace
+
+int main(int argc, char **argv) try {
   BenchConfig cfg = parseArgs(argc, argv);
 
   std::cout << "=== Blackhole Physics Bench ===\n";
@@ -479,15 +494,15 @@ int main(int argc, char **argv) {
   results.push_back(runBench("Schwarzschild raytracer", cfg.iterations, cfg.warmup,
                              static_cast<double>(cfg.rays), [&]() {
     const double mass = cfg.massSolar * physics::M_SUN;
-    const double r_s = physics::schwarzschildRadius(mass);
+    const double rS = physics::schwarzschildRadius(mass);
     physics::SchwarzschildRaytracer tracer(mass);
-    tracer.setStepSize(0.02 * r_s);
+    tracer.setStepSize(0.02 * rS);
     tracer.setMaxSteps(cfg.steps);
 
     for (int i = 0; i < cfg.rays; ++i) {
-      double angle = (static_cast<double>(i) / cfg.rays) * (physics::PI * 0.9);
+      double const angle = (static_cast<double>(i) / cfg.rays) * (physics::PI * 0.9);
       physics::PhotonRay ray{};
-      ray.position        = {30.0 * r_s, physics::PI * 0.5, 0.0};
+      ray.position = {30.0 * rS, physics::PI * 0.5, 0.0};
       ray.direction       = {std::cos(angle), std::sin(angle), 0.0};
       ray.frequency       = 1.0;
       ray.status          = physics::RayStatus::PROPAGATING;
@@ -501,38 +516,38 @@ int main(int argc, char **argv) {
   }));
 
   results.push_back(runBench("Kerr potential eval", cfg.iterations, cfg.warmup,
-                             static_cast<double>(cfg.rays * 10), [&]() {
-    const double mass = cfg.massSolar * physics::M_SUN;
-    const double r_g = physics::G * mass / physics::C2;
-    const double a = cfg.spin * r_g;
-    physics::KerrGeodesicConsts c{1.0, 2.0, 3.0};
+                             static_cast<double>(cfg.rays) * 10.0, [&]() {
+                               const double mass = cfg.massSolar * physics::M_SUN;
+                               const double rG = physics::G * mass / physics::C2;
+                               const double a = cfg.spin * rG;
+                               physics::KerrGeodesicConsts const c{1.0, 2.0, 3.0};
 
-    for (int i = 0; i < cfg.rays * 10; ++i) {
-      double u = static_cast<double>(i) / (cfg.rays * 10);
-      double r = (6.0 + 20.0 * u) * r_g;
-      double theta = physics::PI * (0.25 + 0.5 * u);
-      auto p = physics::kerrPotentials(r, theta, mass, a, c);
-      cpuAccum += p.rPot + p.thetaPot + p.dRdr + p.dThetadtheta;
-    }
-  }));
+                               for (int i = 0; i < cfg.rays * 10; ++i) {
+                                 double const u = static_cast<double>(i) / (cfg.rays * 10);
+                                 double const r = (6.0 + 20.0 * u) * rG;
+                                 double const theta = physics::PI * (0.25 + 0.5 * u);
+                                 auto p = physics::kerrPotentials(r, theta, mass, a, c);
+                                 cpuAccum += p.rPot + p.thetaPot + p.dRdr + p.dThetadtheta;
+                               }
+                             }));
 
   results.push_back(runBench("Kerr raytracer (mino)", cfg.iterations, cfg.warmup,
                              static_cast<double>(cfg.rays), [&]() {
     const double mass = cfg.massSolar * physics::M_SUN;
-    const double r_s = physics::schwarzschildRadius(mass);
-    const double r_g = physics::G * mass / physics::C2;
-    const double a = cfg.spin * r_g;
+    const double rS = physics::schwarzschildRadius(mass);
+    const double rG = physics::G * mass / physics::C2;
+    const double a = cfg.spin * rG;
 
     physics::KerrRaytracer tracer(mass, a);
-    tracer.setStepSize(0.02 * r_s);
+    tracer.setStepSize(0.02 * rS);
     tracer.setMaxSteps(cfg.steps);
 
-    double impact = 3.0 * std::sqrt(3.0) * r_g;
+    double const impact = 3.0 * std::numbers::sqrt3 * rG;
     auto c = physics::kerrEquatorialConsts(impact, 1.0);
 
     for (int i = 0; i < cfg.rays; ++i) {
-      double phi = (static_cast<double>(i) / cfg.rays) * physics::TWO_PI;
-      auto state = physics::kerrEquatorialState(12.0 * r_s, phi, -1.0);
+      double const phi = (static_cast<double>(i) / cfg.rays) * physics::TWO_PI;
+      auto state = physics::kerrEquatorialState(12.0 * rS, phi, -1.0);
       auto result = tracer.trace(state, c);
       cpuAccum += result.totalDistance + result.redshift + result.stepsTaken;
     }
@@ -543,32 +558,28 @@ int main(int argc, char **argv) {
     auto emissivity = physics::generateEmissivityLut(cfg.lutSize, cfg.massSolar, cfg.spin,
                                                        cfg.mdotEdd, true);
     auto redshift = physics::generateRedshiftLut(cfg.lutSize, cfg.massSolar, cfg.spin);
-    for (float v : emissivity.values) {
-      cpuAccum += static_cast<double>(v);
-    }
-    for (float v : redshift.values) {
-      cpuAccum += static_cast<double>(v);
-    }
+    cpuAccum = std::accumulate(emissivity.values.begin(), emissivity.values.end(), cpuAccum);
+    cpuAccum = std::accumulate(redshift.values.begin(), redshift.values.end(), cpuAccum);
   }));
 
   // Batch geodesic benchmark: SIMD-accelerated batch tracing vs scalar Schwarzschild
   results.push_back(runBench("Batch geodesic (SIMD)", cfg.iterations, cfg.warmup,
                              static_cast<double>(cfg.rays), [&]() {
     const double mass = cfg.massSolar * physics::M_SUN;
-    const double r_s = physics::schwarzschildRadius(mass);
-    const double step_size = 0.02 * r_s;
-    const double escape_radius = 100.0 * r_s;
+    const double rS = physics::schwarzschildRadius(mass);
+    const double stepSize = 0.02 * rS;
+    const double escapeRadius = 100.0 * rS;
 
     // Initialize batch state with SoA layout
     physics::BatchRayState initial;
     initial.resize(static_cast<std::size_t>(cfg.rays));
 
     for (int i = 0; i < cfg.rays; ++i) {
-      double angle = (static_cast<double>(i) / cfg.rays) * (physics::PI * 0.9);
+      double const angle = (static_cast<double>(i) / cfg.rays) * (physics::PI * 0.9);
       auto idx = static_cast<std::size_t>(i);
 
       // Starting position: 30 r_s, equatorial plane
-      initial.r[idx] = 30.0 * r_s;
+      initial.r[idx] = 30.0 * rS;
       initial.theta[idx] = physics::PI * 0.5;
       initial.phi[idx] = 0.0;
 
@@ -581,7 +592,7 @@ int main(int argc, char **argv) {
     }
 
     // Trace batch with SIMD-accelerated integration
-    auto result = physics::traceGeodesicBatch(initial, mass, step_size, cfg.steps, escape_radius);
+    auto result = physics::traceGeodesicBatch(initial, mass, stepSize, cfg.steps, escapeRadius);
 
     // Accumulate results to prevent optimization
     for (std::size_t i = 0; i < result.finalR.size(); ++i) {
@@ -596,20 +607,20 @@ int main(int argc, char **argv) {
 
   {
     const auto xb = physics::xsimd_eval::benchSchwarzschildF(
-        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+        static_cast<std::size_t>(cfg.rays) * 10, cfg.iterations * 10);
     std::cout << std::fixed << std::setprecision(3);
     std::cout << xb.name << ": scalar=" << xb.scalarMs << " ms, xsimd=" << xb.xsimdMs
               << " ms, speedup=" << xb.speedup << "x\n";
   }
   {
-    const auto xb = physics::xsimd_eval::benchRedshift(
-        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+    const auto xb = physics::xsimd_eval::benchRedshift(static_cast<std::size_t>(cfg.rays) * 10,
+                                                       cfg.iterations * 10);
     std::cout << xb.name << ": scalar=" << xb.scalarMs << " ms, xsimd=" << xb.xsimdMs
               << " ms, speedup=" << xb.speedup << "x\n";
   }
   {
     const auto xb = physics::xsimd_eval::benchChristoffelAccel(
-        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+        static_cast<std::size_t>(cfg.rays) * 10, cfg.iterations * 10);
     std::cout << xb.name << ": scalar=" << xb.scalarMs << " ms, xsimd=" << xb.xsimdMs
               << " ms, speedup=" << xb.speedup << "x\n";
   }
@@ -621,26 +632,26 @@ int main(int argc, char **argv) {
 
   {
     const auto hb = physics::highway_eval::benchSchwarzschildF(
-        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+        static_cast<std::size_t>(cfg.rays) * 10, cfg.iterations * 10);
     std::cout << hb.name << ": scalar=" << hb.scalarMs << " ms, highway=" << hb.highwayMs
               << " ms, speedup=" << hb.speedup << "x\n";
   }
   {
-    const auto hb = physics::highway_eval::benchRedshift(
-        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+    const auto hb = physics::highway_eval::benchRedshift(static_cast<std::size_t>(cfg.rays) * 10,
+                                                         cfg.iterations * 10);
     std::cout << hb.name << ": scalar=" << hb.scalarMs << " ms, highway=" << hb.highwayMs
               << " ms, speedup=" << hb.speedup << "x\n";
   }
   {
     const auto hb = physics::highway_eval::benchChristoffelAccel(
-        static_cast<std::size_t>(cfg.rays * 10), cfg.iterations * 10);
+        static_cast<std::size_t>(cfg.rays) * 10, cfg.iterations * 10);
     std::cout << hb.name << ": scalar=" << hb.scalarMs << " ms, highway=" << hb.highwayMs
               << " ms, speedup=" << hb.speedup << "x\n";
   }
 
   if (cfg.gpuEnabled) {
     std::string gpuError;
-    BenchResult gpuResult = runGpuBench(cfg, gpuElapsedNs, gpuError);
+    BenchResult const gpuResult = runGpuBench(cfg, gpuElapsedNs, gpuError);
     if (!gpuError.empty()) {
       std::cerr << "[GPU] " << gpuError << "\n";
     } else {
@@ -652,7 +663,7 @@ int main(int argc, char **argv) {
     results.push_back(gpuResult);
   }
 
-  double totalAccum = cpuAccum + gpuElapsedNs;
+  double const totalAccum = cpuAccum + gpuElapsedNs;
   std::cout << "\nAccumulator: " << std::setprecision(6) << totalAccum << "\n";
 
   if (!cfg.csvPath.empty()) {
@@ -662,4 +673,8 @@ int main(int argc, char **argv) {
     writeJson(cfg.jsonPath, cfg, results, cpuAccum, gpuElapsedNs);
   }
   return 0;
+} catch (const std::exception &error) {
+  return std::fprintf(stderr, "Benchmark failed: %s\n", error.what()) < 0 ? 2 : 1;
+} catch (...) {
+  return std::fprintf(stderr, "Benchmark failed with a nonstandard exception\n") < 0 ? 2 : 1;
 }

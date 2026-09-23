@@ -32,7 +32,6 @@
 #include <fstream>
 #include <iomanip>
 #include <ios>
-#include <iterator>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -113,9 +112,15 @@ bool loadGrmhdPackedTexture(const std::string &metadataPath, GrmhdPackedTexture 
     return false;
   }
 
-  std::ifstream metaFile(metaFsPath);
-  const std::string text((std::istreambuf_iterator<char>(metaFile)), std::istreambuf_iterator<char>());
-  
+  const std::ifstream metaFile(metaFsPath);
+  if (!metaFile) {
+    error = "Cannot open metadata file: " + metadataPath;
+    return false;
+  }
+  std::ostringstream contents;
+  contents << metaFile.rdbuf();
+  const std::string text = contents.str();
+
   if (text.empty()) {
     error = "Empty metadata file";
     return false;

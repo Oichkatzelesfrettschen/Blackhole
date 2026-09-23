@@ -2,28 +2,23 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <iostream>
 #include <limits>
-#include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include <highfive/H5Attribute.hpp>
+#include <highfive/H5DataSet.hpp>
 #include <highfive/H5DataSpace.hpp>
 #include <highfive/H5File.hpp>
 
 #include "grmhd_packed_loader.h"
 
 namespace {
-
-std::string quote(const std::filesystem::path &path) {
-  std::ostringstream out;
-  out << "\"" << path.string() << "\"";
-  return out.str();
-}
 
 bool approxEqual(float a, float b, float tol = 1e-4f) {
   float const scale = std::max({1.0f, std::abs(a), std::abs(b)});
@@ -32,9 +27,18 @@ bool approxEqual(float a, float b, float tol = 1e-4f) {
 
 } // namespace
 
-int main(int argc, char **argv) {
-  std::filesystem::path const outDir = std::filesystem::current_path() / "logs" / "perf";
-  std::filesystem::create_directories(outDir);
+int main(int argc, char **argv) try {
+  if (argc != 3) {
+    std::cerr << "Usage: grmhd_pack_test --prepare-fixture|--validate-fixture DIRECTORY\n";
+    return 2;
+  }
+  const std::string_view mode(argv[1]);
+  const bool prepare = mode == "--prepare-fixture";
+  if (!prepare && mode != "--validate-fixture") {
+    std::cerr << "[FAIL] Unknown fixture mode: " << mode << '\n';
+    return 2;
+  }
+  const std::filesystem::path outDir(argv[2]);
 
   std::filesystem::path const h5Path = outDir / "grmhd_fixture.h5";
   std::filesystem::path const metaPath = outDir / "grmhd_pack.json";
@@ -54,36 +58,16 @@ int main(int argc, char **argv) {
     }
   }
 
-  try {
+  if (prepare) {
+    std::filesystem::create_directories(outDir);
     HighFive::File file(h5Path.string(), HighFive::File::Overwrite);
     auto space = HighFive::DataSpace({dims[0], dims[1], dims[2], dims[3]});
     auto dataset = file.createDataSet<float>("/dump/P", space);
     dataset.write_raw(data.data());
     std::vector<std::string> const vnams = {"RHO", "UU", "U1", "U2"};
     dataset.createAttribute<std::string>("vnams", HighFive::DataSpace::From(vnams)).write(vnams);
-  } catch (const std::exception &ex) {
-    std::cerr << "[FAIL] Failed to write fixture: " << ex.what() << "\n";
-    return 1;
-  }
-
-  if (argc < 1) {
-    std::cerr << "[FAIL] Missing argv[0]\n";
-    return 1;
-  }
-  std::filesystem::path const exeDir = std::filesystem::path(argv[0]).parent_path();
-  std::filesystem::path const packExe = exeDir / "nubhlight_pack";
-  if (!std::filesystem::exists(packExe)) {
-    std::cerr << "[FAIL] nubhlight_pack not found at " << packExe << "\n";
-    return 1;
-  }
-
-  std::ostringstream cmd;
-  cmd << quote(packExe) << " -i " << quote(h5Path)
-      << " -d /dump/P --fields RHO,UU,U1,U2 -o " << quote(metaPath);
-  int const rc = std::system(cmd.str().c_str());
-  if (rc != 0) {
-    std::cerr << "[FAIL] nubhlight_pack failed with code " << rc << "\n";
-    return 1;
+    std::cout << "[PASS] GRMHD input fixture prepared\n";
+    return 0;
   }
 
   GrmhdPackedTexture texture;
@@ -127,4 +111,10 @@ int main(int argc, char **argv) {
 
   std::cout << "[PASS] GRMHD pack fixture validated\n";
   return 0;
+} catch (const std::exception &error) {
+  std::cerr << "[FAIL] GRMHD fixture operation failed: " << error.what() << '\n';
+  return 1;
+} catch (...) {
+  std::cerr << "[FAIL] GRMHD fixture operation failed with an unknown exception\n";
+  return 1;
 }

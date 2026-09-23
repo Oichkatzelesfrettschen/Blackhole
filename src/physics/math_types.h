@@ -27,8 +27,8 @@
 #if __has_include(<Eigen/Core>)
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 // WHY: BLACKHOLE_HAS_EIGEN is a preprocessor token used in #if guards; must be a macro.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define BLACKHOLE_HAS_EIGEN 1
 #else
 // NOLINTNEXTLINE(cppcoreguidelines-macro-usage)

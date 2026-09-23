@@ -147,11 +147,13 @@ template <typename T>
   if constexpr (std::is_same_v<T, float>) {
     std::uint32_t bits = 0;
     std::memcpy(&bits, &x, sizeof(bits));
-    return static_cast<std::uint32_t>(bits & 0x7fffffffU);
+    bits &= 0x7fffffffU;
+    return bits;
   } else {
     std::uint64_t bits = 0;
     std::memcpy(&bits, &x, sizeof(bits));
-    return static_cast<std::uint64_t>(bits & 0x7fffffffffffffffULL);
+    bits &= 0x7fffffffffffffffULL;
+    return bits;
   }
 }
 

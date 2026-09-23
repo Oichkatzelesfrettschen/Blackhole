@@ -204,7 +204,6 @@ bool testSpectrumAbsorption() {
       1e18, // 1 EHz (X-ray)
   };
 
-  std::vector<const char *> const names = {"Radio", "Microwave", "Infrared", "X-ray"};
 
   std::cout << "  Absorption coefficients across spectrum:\n";
   std::cout << "  Freq Range    | Alpha Total  | Dominant Mode\n";
@@ -214,7 +213,12 @@ bool testSpectrumAbsorption() {
   for (double const nu : frequencies) {
     double const alphaTotal = totalAbsorptionCoefficient(nu, b, nE, t);
     int const mode = dominantAbsorptionMode(nu, b, nE, t);
-    const char *modeName = (mode == 0) ? "SSA" : (mode == 1) ? "FF" : "Compton";
+    const char *modeName = "Compton";
+    if (mode == 0) {
+      modeName = "SSA";
+    } else if (mode == 1) {
+      modeName = "FF";
+    }
 
     std::cout << std::scientific << std::setprecision(2);
     std::cout << "  " << nu << " Hz | " << alphaTotal << " | " << modeName << "\n";

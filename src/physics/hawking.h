@@ -234,7 +234,7 @@ inline const double TEMP_PLANCK = std::sqrt((HBAR * C * C * C * C * C) / (G * K_
   const double area = 4.0 * PI * rS * rS;
 
   // B_nu = 2*h*nu^3/c^2 * 1/(exp(h*nu/k*T) - 1)
-  const double bNu = (2.0 * TWO_PI * HBAR * nu * nu * nu) / ((C * C) * (std::exp(x) - 1.0));
+  const double bNu = (2.0 * TWO_PI * HBAR * nu * nu * nu) / ((C * C) * std::expm1(x));
 
   return area * PI * bNu;
 }

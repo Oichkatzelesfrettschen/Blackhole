@@ -88,21 +88,13 @@ std::size_t Constellation::factionIndex(FactionId faction) const {
 }
 
 ConstellationFleet *Constellation::findFleet(FleetId fleetId) {
-  for (ConstellationFleet &fleet : fleets_) {
-    if (fleet.id == fleetId) {
-      return &fleet;
-    }
-  }
-  return nullptr;
+  const auto fleet = std::ranges::find(fleets_, fleetId, &ConstellationFleet::id);
+  return fleet == fleets_.end() ? nullptr : &*fleet;
 }
 
 const ConstellationFleet *Constellation::findFleet(FleetId fleetId) const {
-  for (const ConstellationFleet &fleet : fleets_) {
-    if (fleet.id == fleetId) {
-      return &fleet;
-    }
-  }
-  return nullptr;
+  const auto fleet = std::ranges::find(fleets_, fleetId, &ConstellationFleet::id);
+  return fleet == fleets_.end() ? nullptr : &*fleet;
 }
 
 double Constellation::bandRadiusCm(SystemId system, int bandIndex) const {
@@ -126,12 +118,10 @@ bool Constellation::laneAllowedAtBand(SystemId system, OrbitLane lane, int bandI
 }
 
 double Constellation::linkSeparationCm(SystemId a, SystemId b) const {
-  for (const InterSystemLink &link : config_.links) {
-    if ((link.a == a && link.b == b) || (link.a == b && link.b == a)) {
-      return link.separationCm;
-    }
-  }
-  return -1.0;
+  const auto link = std::ranges::find_if(config_.links, [a, b](const InterSystemLink &candidate) {
+    return (candidate.a == a && candidate.b == b) || (candidate.a == b && candidate.b == a);
+  });
+  return link == config_.links.end() ? -1.0 : link->separationCm;
 }
 
 double Constellation::interAuthorityDelaySec(SystemId a, SystemId b) const {
@@ -486,13 +476,12 @@ void Constellation::evaluateOutcomes() {
   }
   // The lowest-id faction that just cleared is the winner: a fixed tie-break so a
   // simultaneous clear resolves identically on every run.
-  for (const FactionState &faction : factions_) {
-    if (faction.status == CampaignStatus::Won) {
-      decided_ = true;
-      winner_ = faction.id;
-      overallStatus_ = faction.id == playerFaction_ ? CampaignStatus::Won : CampaignStatus::Lost;
-      return;
-    }
+  const auto winningFaction = std::ranges::find(factions_, CampaignStatus::Won, &FactionState::status);
+  if (winningFaction != factions_.end()) {
+    decided_ = true;
+    winner_ = winningFaction->id;
+    overallStatus_ = winningFaction->id == playerFaction_ ? CampaignStatus::Won : CampaignStatus::Lost;
+    return;
   }
   if (config_.deadlineTurn > 0 && clock_.turn() >= config_.deadlineTurn) {
     decided_ = true;
@@ -550,8 +539,7 @@ Constellation::expansionistOrders(const FactionState &faction) const {
       const std::size_t bandCount = systems_.at(systemIndex).bandRadiusCm.size();
       for (std::size_t bandIndex = 0; bandIndex < bandCount; ++bandIndex) {
         const int band = static_cast<int>(bandIndex);
-        if (validBand(system, band) && laneAllowedAtBand(system, OrbitLane::Prograde, band) &&
-            !factionOccupies(faction.id, system, band)) {
+        if (validBand(system, band) && !factionOccupies(faction.id, system, band)) {
           return {{.fleet = fleet.id,
                    .targetSystem = system,
                    .targetBand = band,
@@ -571,7 +559,7 @@ Constellation::extractorOrders(const FactionState &faction) const {
   int deepestBand = -1;
   for (std::size_t bandIndex = 0; bandIndex < systems_.at(home).bandRadiusCm.size(); ++bandIndex) {
     const int band = static_cast<int>(bandIndex);
-    if (validBand(home, band) && laneAllowedAtBand(home, OrbitLane::Prograde, band) &&
+    if (validBand(home, band) &&
         (deepestBand < 0 || bandRadiusCm(home, band) < bandRadiusCm(home, deepestBand))) {
       deepestBand = band;
     }
@@ -624,18 +612,18 @@ Constellation::contesterOrders(const FactionState &faction) const {
     for (std::size_t bandIndex = 0; bandIndex < belief.at(systemIndex).size(); ++bandIndex) {
       const int band = static_cast<int>(bandIndex);
       if (belief.at(systemIndex).at(bandIndex) != leader ||
-          factionOccupies(faction.id, system, band) || !validBand(system, band) ||
-          !laneAllowedAtBand(system, OrbitLane::Prograde, band)) {
+          factionOccupies(faction.id, system, band) || !validBand(system, band)) {
         continue;
       }
-      for (const ConstellationFleet &fleet : fleets_) {
-        if (fleet.faction == faction.id && fleetAvailable(fleet.id) &&
-            systemReachableFrom(fleet.system, system)) {
-          return {{.fleet = fleet.id,
-                   .targetSystem = system,
-                   .targetBand = band,
-                   .lane = OrbitLane::Prograde}};
-        }
+      const auto fleet = std::ranges::find_if(fleets_, [&](const ConstellationFleet &candidate) {
+        return candidate.faction == faction.id && fleetAvailable(candidate.id) &&
+               systemReachableFrom(candidate.system, system);
+      });
+      if (fleet != fleets_.end()) {
+        return {{.fleet = fleet->id,
+                 .targetSystem = system,
+                 .targetBand = band,
+                 .lane = OrbitLane::Prograde}};
       }
     }
   }

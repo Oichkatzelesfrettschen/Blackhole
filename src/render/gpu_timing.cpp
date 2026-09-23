@@ -9,10 +9,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <ios>
 #include <limits>
+#include <string>
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 
 using namespace gl;
 

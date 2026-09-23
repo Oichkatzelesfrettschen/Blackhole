@@ -90,16 +90,14 @@
 #ifndef PHYSICS_STOKES_TRANSPORT_H
 #define PHYSICS_STOKES_TRANSPORT_H
 
-#include "constants.h"
-#include "rte_integrator.h"
-#include "synchrotron.h"
-
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstddef>
 #include <numbers>
+#include <ranges>
 #include <vector>
+
+#include "constants.h"
+#include "synchrotron.h"
 
 #ifdef __has_include
 #  if __has_include(<boost/math/special_functions/bessel.hpp>)
@@ -149,7 +147,7 @@ struct StokesVector {
     /// Total fractional polarization sqrt(Q^2+U^2+V^2)/I (0 if I=0).
     [[nodiscard]] double totalPolFrac() const noexcept {
         if (i <= 0.0) { return 0.0; }
-        return std::sqrt(q * q + u * u + v * v) / i;
+        return std::sqrt((q * q) + (u * u) + (v * v)) / i;
     }
 
     /// Electric vector position angle [rad] in (-pi/2, pi/2]; 0 if unpolarized.
@@ -161,17 +159,17 @@ struct StokesVector {
     [[nodiscard]] StokesVector rotateEvpa(double deltaChi) const noexcept {
         const double cos2 = std::cos(2.0 * deltaChi);
         const double sin2 = std::sin(2.0 * deltaChi);
-        return {i, q * cos2 - u * sin2, q * sin2 + u * cos2, v};
+        return {.i = i, .q = (q * cos2) - (u * sin2), .u = (q * sin2) + (u * cos2), .v = v};
     }
 
     /// Component-wise addition.
     [[nodiscard]] StokesVector operator+(const StokesVector& o) const noexcept {
-        return {i + o.i, q + o.q, u + o.u, v + o.v};
+      return {.i = i + o.i, .q = q + o.q, .u = u + o.u, .v = v + o.v};
     }
 
     /// Scale all components by a scalar.
     [[nodiscard]] StokesVector operator*(double s) const noexcept {
-        return {i * s, q * s, u * s, v * s};
+      return {.i = i * s, .q = q * s, .u = u * s, .v = v * s};
     }
 };
 
@@ -264,24 +262,24 @@ struct FaradayPropagation {
                                               double dsCm) noexcept {
     if (dsCm <= 0.0) { return s; }
 
-    const double A = (alphaI > 0.0) ? alphaI : 0.0;
-    const double R = rhoV;  // Faraday rotation rate [rad/cm]
-    const double L = dsCm;
+    const double a = (alphaI > 0.0) ? alphaI : 0.0;
+    const double r = rhoV; // Faraday rotation rate [rad/cm]
+    const double l = dsCm;
 
-    const double tauL = A * L;
-    const double E    = (tauL < 700.0) ? std::exp(-tauL) : 0.0;  // exp(-alpha*ds)
-    const double phi  = R * L;                                      // Faraday rotation angle [rad]
-    const double Cphi = std::cos(phi);
-    const double Sphi = std::sin(phi);
+    const double tauL = a * l;
+    const double e = (tauL < 700.0) ? std::exp(-tauL) : 0.0; // exp(-alpha*ds)
+    const double phi = r * l;                                // Faraday rotation angle [rad]
+    const double cphi = std::cos(phi);
+    const double sphi = std::sin(phi);
 
     // ---------------------------------------------------------------------------
     // I channel: standard scalar RTE (rte_integrator.h rteStep equivalent)
     // ---------------------------------------------------------------------------
     double iNew = 0.0;
     if (tauL < 1.0e-4) {
-        iNew = s.i * (1.0 - tauL) + em.jI * L;  // 1st-order Taylor (includes decay)
+      iNew = (s.i * (1.0 - tauL)) + (em.jI * l); // 1st-order Taylor (includes decay)
     } else {
-        iNew = s.i * E + (em.jI / A) * (1.0 - E);
+      iNew = (s.i * e) + ((em.jI / a) * (1.0 - e));
     }
 
     // ---------------------------------------------------------------------------
@@ -289,9 +287,9 @@ struct FaradayPropagation {
     // ---------------------------------------------------------------------------
     double vNew = 0.0;
     if (tauL < 1.0e-4) {
-        vNew = s.v * (1.0 - tauL) + em.jV * L;  // 1st-order Taylor (includes decay)
+      vNew = (s.v * (1.0 - tauL)) + (em.jV * l); // 1st-order Taylor (includes decay)
     } else {
-        vNew = s.v * E + (em.jV / A) * (1.0 - E);
+      vNew = (s.v * e) + ((em.jV / a) * (1.0 - e));
     }
 
     // ---------------------------------------------------------------------------
@@ -310,38 +308,38 @@ struct FaradayPropagation {
     //   Q_emit = jQ * Ic - jU * Is
     //   U_emit = jQ * Is + jU * Ic
     // ---------------------------------------------------------------------------
-    const double qHom = E * (s.q * Cphi - s.u * Sphi);
-    const double uHom = E * (s.q * Sphi + s.u * Cphi);
+    const double qHom = e * ((s.q * cphi) - (s.u * sphi));
+    const double uHom = e * ((s.q * sphi) + (s.u * cphi));
 
     double qNew = 0.0;
     double uNew = 0.0;
 
-    const double D = A * A + R * R;
-    if (D < 1.0e-60) {
-        // Neither absorption nor rotation: pure emission
-        qNew = s.q + em.jQ * L;
-        uNew = s.u + em.jU * L;
-    } else if (A < 1.0e-15 * std::abs(R)) {
-        // Rotation-dominated (A ~ 0): Ic = sin(phi)/R, Is = (1-cos(phi))/R
-        const double ic = Sphi / R;
-        const double is_ = (1.0 - Cphi) / R;
-        qNew = qHom + em.jQ * ic - em.jU * is_;
-        uNew = uHom + em.jQ * is_ + em.jU * ic;
-    } else if (std::abs(R) < 1.0e-15 * A) {
-        // Absorption-dominated (R ~ 0): Ic = (1-exp(-A*L))/A, Is = 0
-        const double oneME = (tauL < 1.0e-4) ? L - 0.5 * tauL * L : (1.0 - E) / A;
-        qNew = qHom + em.jQ * oneME;
-        uNew = uHom + em.jU * oneME;
+    const double d = (a * a) + (r * r);
+    if (d < 1.0e-60) {
+      // Neither absorption nor rotation: pure emission
+      qNew = s.q + (em.jQ * l);
+      uNew = s.u + (em.jU * l);
+    } else if (a < 1.0e-15 * std::abs(r)) {
+      // Rotation-dominated (A ~ 0): Ic = sin(phi)/R, Is = (1-cos(phi))/R
+      const double ic = sphi / r;
+      const double is = (1.0 - cphi) / r;
+      qNew = qHom + (em.jQ * ic) - (em.jU * is);
+      uNew = uHom + (em.jQ * is) + (em.jU * ic);
+    } else if (std::abs(r) < 1.0e-15 * a) {
+      // Absorption-dominated (R ~ 0): Ic = (1-exp(-A*L))/A, Is = 0
+      const double oneME = (tauL < 1.0e-4) ? l - (0.5 * tauL * l) : (1.0 - e) / a;
+      qNew = qHom + (em.jQ * oneME);
+      uNew = uHom + (em.jU * oneME);
     } else {
-        const double ec = E * Cphi;
-        const double es = E * Sphi;
-        const double ic  = (A * (1.0 - ec) + R * es) / D;
-        const double is_ = (R * (1.0 - ec) - A * es) / D;
-        qNew = qHom + em.jQ * ic - em.jU * is_;
-        uNew = uHom + em.jQ * is_ + em.jU * ic;
+      const double ec = e * cphi;
+      const double es = e * sphi;
+      const double ic = ((a * (1.0 - ec)) + (r * es)) / d;
+      const double is = ((r * (1.0 - ec)) - (a * es)) / d;
+      qNew = qHom + (em.jQ * ic) - (em.jU * is);
+      uNew = uHom + (em.jQ * is) + (em.jU * ic);
     }
 
-    return {iNew, qNew, uNew, vNew};
+    return {.i = iNew, .q = qNew, .u = uNew, .v = vNew};
 }
 
 // ============================================================================
@@ -376,12 +374,12 @@ struct FaradayPropagation {
     const double ds = k.dsCm;
 
     // dS/ds = J - K*S
-    auto deriv = [&](const StokesVector& x) -> StokesVector {
-        const double dI = em.jI - (k.alphaI * x.i + k.alphaQ * x.q + k.alphaV * x.v);
-        const double dQ = em.jQ - (k.alphaQ * x.i + k.alphaI * x.q + k.rhoV  * x.u);
-        const double dU = em.jU - (k.alphaI * x.u - k.rhoV  * x.q + k.rhoQ  * x.v);
-        const double dV = em.jV - (k.alphaV * x.i + k.alphaI * x.v - k.rhoQ * x.u);
-        return {dI, dQ, dU, dV};
+    auto deriv = [&](const StokesVector &x) -> StokesVector {
+      const double dI = em.jI - ((k.alphaI * x.i) + (k.alphaQ * x.q) + (k.alphaV * x.v));
+      const double dQ = em.jQ - ((k.alphaQ * x.i) + (k.alphaI * x.q) + (k.rhoV * x.u));
+      const double dU = em.jU - ((k.alphaI * x.u) - (k.rhoV * x.q) + (k.rhoQ * x.v));
+      const double dV = em.jV - ((k.alphaV * x.i) + (k.alphaI * x.v) - (k.rhoQ * x.u));
+      return {.i = dI, .q = dQ, .u = dU, .v = dV};
     };
 
     // RK4 coefficients
@@ -392,10 +390,10 @@ struct FaradayPropagation {
 
     const double sixth = 1.0 / 6.0;
     return {
-        s.i + ds * sixth * (k1.i + 2.0 * k2.i + 2.0 * k3.i + k4.i),
-        s.q + ds * sixth * (k1.q + 2.0 * k2.q + 2.0 * k3.q + k4.q),
-        s.u + ds * sixth * (k1.u + 2.0 * k2.u + 2.0 * k3.u + k4.u),
-        s.v + ds * sixth * (k1.v + 2.0 * k2.v + 2.0 * k3.v + k4.v),
+        .i = s.i + (ds * sixth * (k1.i + (2.0 * k2.i) + (2.0 * k3.i) + k4.i)),
+        .q = s.q + (ds * sixth * (k1.q + (2.0 * k2.q) + (2.0 * k3.q) + k4.q)),
+        .u = s.u + (ds * sixth * (k1.u + (2.0 * k2.u) + (2.0 * k3.u) + k4.u)),
+        .v = s.v + (ds * sixth * (k1.v + (2.0 * k2.v) + (2.0 * k3.v) + k4.v)),
     };
 }
 
@@ -408,22 +406,21 @@ struct FaradayPropagation {
  *
  * Applies stokesStep() (simplified K: alpha_I + rho_V only) sequentially
  * for each sample in the path, ordered from the far end toward the observer.
+ * Paired samples stop at the shorter input; surplus segments are ignored.
  *
  * @param emissions  Per-segment emission vectors (jI, jQ, jU, jV)
  * @param props      Per-segment propagation coefficients (alphaI, rhoV, dsCm)
  * @param initial    Initial Stokes state (background; default zero)
  * @return Stokes vector at end of path (closest to observer)
  */
-[[nodiscard]] inline StokesVector integrateStokesPath(
-    const std::vector<StokesEmission>&    emissions,
-    const std::vector<FaradayPropagation>& props,
-    StokesVector initial = {}) noexcept {
+[[nodiscard]] inline StokesVector integrateStokesPath(const std::vector<StokesEmission> &emissions,
+                                                      const std::vector<FaradayPropagation> &props,
+                                                      const StokesVector &initial = {}) noexcept {
 
-    const std::size_t N = std::min(emissions.size(), props.size());
-    StokesVector state = initial;
-    for (std::size_t k = 0; k < N; ++k) {
-        state = stokesStep(state, emissions[k], props[k].alphaI, props[k].rhoV, props[k].dsCm);
-    }
+  StokesVector state = initial;
+  for (const auto& [emission, propagation] : std::views::zip(emissions, props)) {
+    state = stokesStep(state, emission, propagation.alphaI, propagation.rhoV, propagation.dsCm);
+  }
     return state;
 }
 
@@ -440,8 +437,8 @@ struct FaradayPropagation {
  */
 [[nodiscard]] inline bool stokesPolarizationBound(const StokesVector& s,
                                                    double tol = 1.0e-10) noexcept {
-    const double pol2 = s.q * s.q + s.u * s.u + s.v * s.v;
-    return (s.i * s.i + tol) >= pol2;
+  const double pol2 = (s.q * s.q) + (s.u * s.u) + (s.v * s.v);
+  return ((s.i * s.i) + tol) >= pol2;
 }
 
 // ============================================================================
@@ -463,7 +460,7 @@ struct FaradayPropagation {
  */
 [[nodiscard]] inline double synchrotronLinearPolarFrac(double p) noexcept {
     if (p <= 0.0) { return 0.0; }
-    return (p + 1.0) / (p + 7.0 / 3.0);
+    return (p + 1.0) / (p + (7.0 / 3.0));
 }
 
 /**
@@ -487,8 +484,8 @@ struct FaradayPropagation {
     if (thetaE <= 0.0) { return 0.0; }
     // p_eff ~ 3 for thermal synchrotron (near peak), slightly increasing for
     // large Theta_e as the emission shifts to higher x_M
-    const double pEff = 3.0 + 0.5 * std::log(1.0 + thetaE);  // soft correction
-    return (pEff + 1.0) / (pEff + 7.0 / 3.0);
+    const double pEff = 3.0 + (0.5 * std::log1p(thetaE)); // soft correction
+    return (pEff + 1.0) / (pEff + (7.0 / 3.0));
 }
 
 /**
@@ -521,7 +518,7 @@ struct FaradayPropagation {
                                                                    double chiBRad) noexcept {
     const double cos2chi = std::cos(2.0 * chiBRad);
     const double sin2chi = std::sin(2.0 * chiBRad);
-    return {jI, -jI * piLin * cos2chi, -jI * piLin * sin2chi, 0.0};
+    return {.jI = jI, .jQ = -jI * piLin * cos2chi, .jU = -jI * piLin * sin2chi, .jV = 0.0};
 }
 
 // ============================================================================
@@ -585,11 +582,12 @@ struct FaradayPropagation {
  * @param bParallel   B_parallel [Gauss]
  * @param thetaE      Dimensionless electron temperature
  * @return rho_V [rad/cm], suppressed for hot plasma
+ * @throws std::exception if Boost cannot evaluate the thermal Bessel functions.
  */
 [[nodiscard]] inline double faradayRotationCoeffRelativistic(double nu,
                                                               double nE,
                                                               double bParallel,
-                                                              double thetaE) noexcept {
+                                                              double thetaE) {
     if (thetaE <= 0.0) { return faradayRotationCoeff(nu, nE, bParallel); }
 
     double frm = 0.0;
@@ -625,11 +623,12 @@ struct FaradayPropagation {
  * @param bPerp       B_perp = B * sin(theta_B) [Gauss]
  * @param thetaE      Dimensionless electron temperature
  * @return rho_Q [rad/cm]
+ * @throws std::exception if Boost cannot evaluate the thermal Bessel functions.
  */
 [[nodiscard]] inline double faradayConversionCoeff(double nu,
                                                     double nE,
                                                     double bPerp,
-                                                    double thetaE) noexcept {
+                                                    double thetaE) {
     if (nu <= 0.0 || nE <= 0.0 || thetaE <= 0.0) { return 0.0; }
 
     double fconv = 0.0;
@@ -641,7 +640,7 @@ struct FaradayPropagation {
         // K_1/(Theta_e*K_2) - 1/(2*Theta_e^2) can go slightly negative at moderate
         // Theta_e (~1-3) due to approximation error.  Physical conversion vanishes
         // rather than flipping sign -- clamp to zero.
-        fconv = std::max(0.0, k1 / (thetaE * k2) - 1.0 / (2.0 * thetaE * thetaE));
+        fconv = std::max(0.0, (k1 / (thetaE * k2)) - (1.0 / (2.0 * thetaE * thetaE)));
     }
 #else
     // Approximation for Theta_e >> 1: f_conv ~ 1/(2*Theta_e^2)
@@ -666,17 +665,19 @@ struct FaradayPropagation {
  * In VLBI, RM is measured in rad/m^2 and the EVPA rotates as:
  *   Delta_chi = RM * lambda^2
  *
+ * Paired samples stop at the shorter input; surplus coefficients or lengths
+ * are ignored.
+ *
  * @param rhoVPerStep  Faraday rotation coefficient [rad/cm] at each step
  * @param dsPerStep    Path element [cm] at each step
  * @return RM [rad/cm] (multiply by (lambda[cm])^2 for rotation in rad)
  */
 [[nodiscard]] inline double accumulatedRM(const std::vector<double>& rhoVPerStep,
                                            const std::vector<double>& dsPerStep) noexcept {
-    const std::size_t N = std::min(rhoVPerStep.size(), dsPerStep.size());
-    double rm = 0.0;
-    for (std::size_t k = 0; k < N; ++k) {
-        rm += rhoVPerStep[k] * dsPerStep[k];
-    }
+  double rm = 0.0;
+  for (const auto& [rotationCoefficient, pathLength] : std::views::zip(rhoVPerStep, dsPerStep)) {
+    rm += rotationCoefficient * pathLength;
+  }
     return rm;
 }
 
@@ -720,7 +721,7 @@ struct FaradayPropagation {
                                                      double g) noexcept {
     if (g <= 0.0) { return {}; }
     const double g3 = g * g * g;
-    return {s.i * g3, s.q * g3, s.u * g3, s.v * g3};
+    return {.i = s.i * g3, .q = s.q * g3, .u = s.u * g3, .v = s.v * g3};
 }
 
 /**

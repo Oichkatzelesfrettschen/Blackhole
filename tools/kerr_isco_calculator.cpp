@@ -58,7 +58,7 @@ public:
      * @return r_isco for prograde orbits (increasing angular momentum)
      */
     [[nodiscard]] double isco_prograde() const noexcept {
-        return verified::kerr_isco_prograde(M_, a_);
+        return verified::kerrIscoPrograde(M_, a_);
     }
 
     /**
@@ -67,7 +67,7 @@ public:
      * @return r_isco for retrograde orbits (decreasing angular momentum)
      */
     [[nodiscard]] double isco_retrograde() const noexcept {
-        return verified::kerr_isco_retrograde(M_, a_);
+        return verified::kerrIscoRetrograde(M_, a_);
     }
 
     /**
@@ -91,7 +91,7 @@ public:
      * @return r_photon for prograde photons
      */
     [[nodiscard]] double photon_sphere_prograde() const noexcept {
-        return verified::photon_orbit_prograde(M_, a_);
+        return verified::photonOrbitPrograde(M_, a_);
     }
 
     /**
@@ -102,7 +102,7 @@ public:
      * @return r_photon for retrograde photons
      */
     [[nodiscard]] double photon_sphere_retrograde() const noexcept {
-        return verified::photon_orbit_retrograde(M_, a_);
+        return verified::photonOrbitRetrograde(M_, a_);
     }
 
     // ========================================================================
@@ -115,7 +115,7 @@ public:
      * @return r_+ = M + sqrt(M² - a²)
      */
     [[nodiscard]] double outer_horizon() const noexcept {
-        return verified::outer_horizon(M_, a_);
+        return verified::outerHorizon(M_, a_);
     }
 
     /**
@@ -124,7 +124,7 @@ public:
      * @return r_- = M - sqrt(M² - a²)
      */
     [[nodiscard]] double inner_horizon() const noexcept {
-        return verified::inner_horizon(M_, a_);
+        return verified::innerHorizon(M_, a_);
     }
 
     /**

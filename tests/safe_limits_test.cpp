@@ -57,48 +57,43 @@ template <typename T, typename Bits> void fromBits(Bits bits, T &out) {
 
 template <typename T> struct Pattern;
 template <> struct Pattern<float> {
-  static constexpr std::uint32_t inf = 0x7f800000U;
-  static constexpr std::uint32_t nan = 0x7fc00000U;
+  static constexpr std::uint32_t INF = 0x7f800000U;
+  static constexpr std::uint32_t NAN = 0x7fc00000U;
 };
 template <> struct Pattern<double> {
-  static constexpr std::uint64_t inf = 0x7ff0000000000000ULL;
-  static constexpr std::uint64_t nan = 0x7ff8000000000000ULL;
+  static constexpr std::uint64_t INF = 0x7ff0000000000000ULL;
+  static constexpr std::uint64_t NAN = 0x7ff8000000000000ULL;
 };
 
 template <typename T> void testType(const char *name) {
   std::cout << "Testing " << name << "...\n";
 
   T inf;
-  fromBits(Pattern<T>::inf, inf);
+  fromBits(Pattern<T>::INF, inf);
   expect(physics::safeIsinf(inf), "bit-pattern inf is classified infinite");
   expect(!physics::safeIsfinite(inf), "bit-pattern inf is not finite");
   expect(!physics::safeIsnan(inf), "bit-pattern inf is not NaN");
 
   T nan;
-  fromBits(Pattern<T>::nan, nan);
+  fromBits(Pattern<T>::NAN, nan);
   expect(physics::safeIsnan(nan), "bit-pattern NaN is classified NaN");
   expect(!physics::safeIsfinite(nan), "NaN is not finite");
   expect(!physics::safeIsinf(nan), "NaN is not infinite");
 
   // sign bit set on the inf pattern = negative infinity
-  const auto signBit = decltype(Pattern<T>::inf){1}
-                       << (sizeof(T) * 8 - 1);
+  const auto signBit = decltype(Pattern<T>::INF){1} << (sizeof(T) * 8 - 1);
   T negInf;
-  fromBits(static_cast<decltype(Pattern<T>::inf)>(Pattern<T>::inf | signBit),
-           negInf);
+  fromBits(static_cast<decltype(Pattern<T>::INF)>(Pattern<T>::INF | signBit), negInf);
   expect(physics::safeIsinf(negInf), "negative inf is classified infinite");
 
   expect(physics::safeIsfinite(T(0)), "zero is finite");
-  expect(physics::safeIsfinite(std::numeric_limits<T>::max()),
-         "max is finite");
+  expect(physics::safeIsfinite(std::numeric_limits<T>::max()), "max is finite");
   expect(!physics::safeIsnan(T(1)), "one is not NaN");
 
-  expect(physics::safeMax<T>() == std::numeric_limits<T>::max(),
-         "safeMax equals numeric max");
+  expect(physics::safeMax<T>() == std::numeric_limits<T>::max(), "safeMax equals numeric max");
   expect(physics::safeLowest<T>() == std::numeric_limits<T>::lowest(),
          "safeLowest equals numeric lowest");
-  expect(physics::safeLowest<T>() < physics::safeMax<T>(),
-         "lowest < max ordering");
+  expect(physics::safeLowest<T>() < physics::safeMax<T>(), "lowest < max ordering");
 
   const T divergent = physics::divergentResult<T>();
   expect(physics::safeIsfinite(divergent), "divergentResult is finite");
@@ -106,8 +101,7 @@ template <typename T> void testType(const char *name) {
          "divergentResult below the effective-infinity threshold");
   expect(physics::isEffectivelyInfinite(std::numeric_limits<T>::max()),
          "max is effectively infinite");
-  expect(!physics::isEffectivelyInfinite(T(1)),
-         "ordinary value is not effectively infinite");
+  expect(!physics::isEffectivelyInfinite(T(1)), "ordinary value is not effectively infinite");
 }
 
 } // namespace

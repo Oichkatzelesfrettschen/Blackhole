@@ -8,6 +8,11 @@
 #include <algorithm>
 #include <cmath>
 
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
+
 #include "input.h"               // CameraState, CameraMode
 #include "render/render_state.h" // RenderState
 

@@ -12,11 +12,14 @@
 // C system headers
 #include <algorithm>
 #include <cassert>
+#include <charconv>
 #include <cmath>
 #include <csignal>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <string_view>
+#include <system_error>
 
 #include <glbinding/gl/bitfield.h>
 #include <glbinding/gl/boolean.h>
@@ -24,13 +27,7 @@
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
 #include <glbinding/glbinding.h>
-#include <sys/types.h>
-#include <unistd.h>
 
-#include <cpptrace/basic.hpp>
-#include <cpptrace/exceptions.hpp>
-#include <cpptrace/forward.hpp>
-#include <cpptrace/utils.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
@@ -39,25 +36,17 @@
 #include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 // C++ system headers
 #include <array>
-#include <cstdint>
-#include <cstdlib>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <ios>
 #include <iostream>
-#include <limits>
 #include <map>
 #include <ostream>
-#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
-#include <utility>
 #include <vector>
 
 // Third-party library headers
@@ -66,80 +55,84 @@
 #include "schwarzschild.h"
 #ifndef BLACKHOLE_HAS_CPPTRACE
 #if __has_include(<cpptrace/cpptrace.hpp>)
-#define BLACKHOLE_HAS_CPPTRACE 1
+// Preprocessor guards select declarations and code for the configured build.
+#define BLACKHOLE_HAS_CPPTRACE 1 // NOLINT(cppcoreguidelines-macro-usage)
 #else
-#define BLACKHOLE_HAS_CPPTRACE 0
+// Preprocessor guards select declarations and code for the configured build.
+#define BLACKHOLE_HAS_CPPTRACE 0 // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 #endif
 #if BLACKHOLE_HAS_CPPTRACE
+#include <cpptrace/basic.hpp>
+#include <cpptrace/exceptions.hpp>
+#include <cpptrace/forward.hpp>
+#include <cpptrace/utils.hpp>
 #endif
 #include <GLFW/glfw3.h>
 #include <imgui.h>
-#include <imgui_internal.h>
+
+// ImGuizmo declarations require the ImGui types above.
 #include <ImGuizmo.h>
 #include <implot.h>
 
 #include <glm/gtc/type_ptr.hpp>
-#include <nlohmann/json.hpp>
 
 // Local headers
+#include <stb_image_write.h>
+
 #include "GLDebugMessageCallback.h"
+#include "cinematic.h"
+#include "game/campaign_session.h"
 #include "grmhd_packed_loader.h"
 #include "grmhd_pbo_uploader.h"
-#include "grmhd_streaming.h"
 #include "hud_overlay.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "input.h"
 #include "overlay.h"
 #include "physics/hawking_renderer.h"
-#include "physics/lut.h"
-#include "physics/synchrotron.h"
+#include "platform/cli_options.h"
+#include "platform/crash_handler.h"
+#include "platform/resource_paths.h"
 #include "render.h"
-#include "render/noise_texture_cache.h"
-#include "render/interop_uniform_registry.h"
-#include "render/interop_uniforms.h"
 #include "render/background_loader.h"
 #include "render/camera_math.h"
 #include "render/compare_sweep.h"
 #include "render/env_config.h"
 #include "render/gl_capabilities.h"
+#include "render/gpu_timing.h"
 #include "render/grmhd_tile_upload.h"
+#include "render/interop_uniforms.h"
 #include "render/lut_manager.h"
+#include "render/noise_texture_cache.h"
 #include "render/post_pipeline.h"
+#include "render/post_process.h"
 #include "render/record_mode.h"
+#include "render/render_state.h"
 #include "render/render_targets.h"
 #include "render/scene_overlays.h"
 #include "render/settings_sync.h"
 #include "render/uniform_binding.h"
-#include "tools/compare_harness.h"
-#include "render/render_state.h"
-#include "game/campaign_session.h"
-#include "ui/campaign_panels.h"
-#include "ui/panels.h"
-#include "ui/settings_window.h"
-#include "platform/cli_options.h"
-#include "platform/crash_handler.h"
-#include "platform/resource_paths.h"
-#include "render/gpu_timing.h"
-#include "render/post_process.h"
 #include "rmlui_overlay.h"
 #include "settings.h"
 #include "shader.h"
 #include "shader_manager.h"
 #include "texture.h"
-#include <stb_image_write.h>
-#include "cinematic.h"
 #include "tracy_support.h"
+#include "ui/campaign_panels.h"
+#include "ui/panels.h"
+#include "ui/settings_window.h"
 
 #ifndef BLACKHOLE_HAS_CUDA
 #define BLACKHOLE_HAS_CUDA 0
 #endif
 #ifndef BLACKHOLE_APP_VARIANT_GLSL_ONLY
-#define BLACKHOLE_APP_VARIANT_GLSL_ONLY 0
+// Preprocessor guards select declarations and code for the configured build.
+#define BLACKHOLE_APP_VARIANT_GLSL_ONLY 0 // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 #ifndef BLACKHOLE_APP_VARIANT_CUDA_ONLY
-#define BLACKHOLE_APP_VARIANT_CUDA_ONLY 0
+// Preprocessor guards select declarations and code for the configured build.
+#define BLACKHOLE_APP_VARIANT_CUDA_ONLY 0 // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 #if BLACKHOLE_APP_VARIANT_GLSL_ONLY && BLACKHOLE_APP_VARIANT_CUDA_ONLY
 #error "Blackhole desktop variant cannot be both GLSL-only and CUDA-only"
@@ -151,30 +144,25 @@
 #include "cuda/cuda_render_manager.h"
 #endif
 
-namespace { // NOLINT(misc-use-anonymous-namespace) -- file-scope helpers
+namespace {
 
-constexpr bool kAppVariantGlslOnly = BLACKHOLE_APP_VARIANT_GLSL_ONLY != 0;
-constexpr bool kAppVariantCudaOnly = BLACKHOLE_APP_VARIANT_CUDA_ONLY != 0;
-constexpr const char *kWindowTitle = kAppVariantCudaOnly
-                                         ? "BlackholeCUDA"
-                                         : (kAppVariantGlslOnly ? "BlackholeGLSL" : "Blackhole");
+constexpr bool K_APP_VARIANT_GLSL_ONLY = BLACKHOLE_APP_VARIANT_GLSL_ONLY != 0;
+constexpr bool K_APP_VARIANT_CUDA_ONLY = BLACKHOLE_APP_VARIANT_CUDA_ONLY != 0;
+constexpr const char *windowTitle() {
+  if (K_APP_VARIANT_CUDA_ONLY) {
+    return "BlackholeCUDA";
+  }
+  return K_APP_VARIANT_GLSL_ONLY ? "BlackholeGLSL" : "Blackhole";
+}
 
-// Extracted modules keep their call sites unqualified (STATE-2 extraction).
-using platform::readTextFile;
-using platform::resourcePath;
-using blackhole::PostProcessPass;
-using blackhole::GpuTimer;
-using blackhole::GpuTimerSet;
-using blackhole::TimingHistory;
-using blackhole::gpuTimingPath;
+// Module imports name the lifecycle operations used by the application loop.
 using blackhole::appendGpuTimingSample;
-using blackhole::writeTimingHistoryCsv;
-
-
+using blackhole::gpuTimingPath;
+using blackhole::PostProcessPass;
+using platform::resourcePath;
 
 // Camera pose math lives in src/render/camera_math.*.
 using blackhole::buildCameraBasis;
-using blackhole::cameraPositionFromYawPitch;
 using blackhole::selectCameraPosition;
 
 // Settings <-> RenderState load-once and write-back live in src/render/settings_sync.*.
@@ -204,17 +192,12 @@ using blackhole::restoreCompareSweepState;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
-using blackhole::supportsDrawId;
-using blackhole::supportsIndirectCount;
-using blackhole::supportsMultiDrawIndirect;
 
-// BackgroundAsset, WiregridParams, K_BACKGROUND_LAYERS, kMaxBloomIterations,
+// BackgroundAsset, WiregridParams, K_BACKGROUND_LAYERS, K_MAX_BLOOM_ITERATIONS,
 // and RenderState live in src/render/render_state.h.
-using blackhole::BackgroundAsset;
-using blackhole::WiregridParams;
 using blackhole::K_BACKGROUND_LAYERS;
-using blackhole::kMaxBloomIterations;
 using blackhole::RenderState;
+using blackhole::WiregridParams;
 
 /**
  * @brief GPU-side draw command for glMultiDrawArraysIndirect.
@@ -242,20 +225,17 @@ struct DrawInstanceGpu {
 // ImGui panels + style/context/init/dock helpers live in src/ui/panels.*.
 using ui::applyWiregridModeProfile;
 using ui::initializeImGui;
+using ui::renderBackgroundPanel;
 using ui::renderControlsHelpPanel;
 using ui::renderControlsSettingsPanel;
-using ui::renderGizmoPanel;
-using ui::renderDisplaySettingsPanel;
-using ui::renderBackgroundPanel;
-using ui::renderWiregridPanel;
-using ui::renderRmlUiPanel;
-using ui::renderPerformancePanel;
-using ui::resetLayout;
-using ui::renderSettingsWindow;
 using ui::renderCurveOverlayWindow;
-using ui::renderBloomPanel;
-using ui::renderTonemapPanel;
-using ui::renderDepthEffectsPanel;
+using ui::renderDisplaySettingsPanel;
+using ui::renderGizmoPanel;
+using ui::renderPerformancePanel;
+using ui::renderRmlUiPanel;
+using ui::renderSettingsWindow;
+using ui::renderWiregridPanel;
+using ui::resetLayout;
 
 // Background manifest parsing + active-texture swap lives in
 // src/render/background_loader.*.
@@ -265,42 +245,36 @@ using blackhole::updateActiveBackground;
 // src/tools/compare_harness.*; InteropUniforms in
 // src/render/interop_uniforms.h. The snapshot + CSV writers are reached
 // through captureCompareParity in render/compare_sweep.*.
-using blackhole::DiffStats;
 using blackhole::InteropUniforms;
-using blackhole::ComparePreset;
-using blackhole::writePfmRgb;
 
 // Shared raytracer uniform binders live in src/render/uniform_binding.*
 // (registry-driven fragment/compute float fills + Hawking forwarder).
-using blackhole::applyInteropComputeUniforms;
 using blackhole::applyHawkingUniforms;
+using blackhole::applyInteropComputeUniforms;
 using blackhole::bindComputeUniforms;
 using blackhole::bindFragmentUniforms;
 using blackhole::FrameBindingInputs;
 
 // Radiative-transfer LUT lifecycle lives in src/render/lut_manager.*.
 using blackhole::loadGrbModulationLut;
-using blackhole::loadGrbModulationLutAssets;
-using blackhole::loadSpectralLutAssets;
 using blackhole::loadSpectralSynchHawkingLuts;
 using blackhole::updateLuts;
 
 // Showcase-orbit record framing lives in src/render/record_mode.*.
 using blackhole::applyRecordCameraPath;
 using blackhole::applyRecordProfileSetup;
+using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::captureRecordFrame;
 using blackhole::exportFrameOnce;
-using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::findShowcaseOrbitComposition;
 using blackhole::ShowcaseOrbitComposition;
 #if BLACKHOLE_HAS_CUDA
 using blackhole::bindCudaLaunchParams;
 #endif
 
-
 void glfwErrorCallback(int error, const char *description) {
-  fprintf(stderr, "Glfw Error %d: %s\n", error,
-          description); // NOLINT(cert-err33-c) -- diagnostic output, return unused
+  (void)std::fprintf(stderr, "Glfw Error %d: %s\n", error,
+                     description); // NOLINT(cert-err33-c) -- diagnostic output, return unused
 }
 
 // GLFW callbacks that delegate to InputManager
@@ -367,9 +341,17 @@ void configureParallelShaderCompile() {
   }
   const char *threadEnv = std::getenv("BLACKHOLE_SHADER_COMPILE_THREADS");
   if (threadEnv != nullptr) {
-    threads = static_cast<unsigned int>(
-        std::max(1, std::atoi(threadEnv))); // NOLINT(bugprone-unchecked-string-to-number-conversion,cert-err34-c)
-                                            // -- env var, invalid input defaults to 0
+    const std::string_view configuredThreads(threadEnv);
+    unsigned int requestedThreads = 0;
+    const auto result =
+        std::from_chars(configuredThreads.data(),
+                        configuredThreads.data() + configuredThreads.size(), requestedThreads);
+    if (result.ec != std::errc{} ||
+        result.ptr != configuredThreads.data() + configuredThreads.size() ||
+        requestedThreads == 0) {
+      throw std::invalid_argument("BLACKHOLE_SHADER_COMPILE_THREADS requires a positive integer");
+    }
+    threads = requestedThreads;
   }
   glMaxShaderCompilerThreadsKHR(static_cast<GLuint>(threads));
   std::cout << "Parallel shader compile enabled (" << threads << " threads).\n";
@@ -405,7 +387,7 @@ GLFWwindow *initializeWindow(int width, int height) {
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 #endif
 
-  GLFWwindow *window = glfwCreateWindow(width, height, kWindowTitle, nullptr, nullptr);
+  GLFWwindow *window = glfwCreateWindow(width, height, windowTitle(), nullptr, nullptr);
   if (window == nullptr) {
     return nullptr;
   }
@@ -427,8 +409,8 @@ GLFWwindow *initializeWindow(int width, int height) {
   glGetIntegerv(GL_MAJOR_VERSION, &glMajor);
   glGetIntegerv(GL_MINOR_VERSION, &glMinor);
   if (glMajor < 4 || (glMajor == 4 && glMinor < 6)) {
-    std::fprintf(stderr, "OpenGL 4.6 required, found %d.%d\n", glMajor,
-                 glMinor); // NOLINT(cert-err33-c) -- diagnostic output, return unused
+    (void)std::fprintf(stderr, "OpenGL 4.6 required, found %d.%d\n", glMajor,
+                       glMinor); // NOLINT(cert-err33-c) -- diagnostic output, return unused
     glfwDestroyWindow(window);
     return nullptr;
   }
@@ -441,7 +423,6 @@ GLFWwindow *initializeWindow(int width, int height) {
 }
 
 // Configure custom ImGui style for "Blackhole" theme (16-bit Voxel Aesthetic)
-
 
 // Cleanup resources
 void cleanup(GLFWwindow *window) {
@@ -461,16 +442,835 @@ void cleanup(GLFWwindow *window) {
   glfwTerminate();
 }
 
+float recordOverride(bool hasValue, float value, float defaultValue) {
+  return hasValue ? value : defaultValue;
+}
 
+std::array<ui::CampaignBackdrop, 5> loadCampaignBackdrops(GLFWwindow *window) {
+  int campaignFbW = 0;
+  int campaignFbH = 0;
+  glfwGetFramebufferSize(window, &campaignFbW, &campaignFbH);
+  const auto ladderRendition = [campaignFbW, campaignFbH](const char *basename) -> std::string {
+    const std::string dir = std::string("assets/backgrounds/generated/") + basename + "-";
+    const double aspect = campaignFbH > 0 ? static_cast<double>(campaignFbW) / campaignFbH : 1.78;
+    if (aspect > 2.1) {
+      return dir + (campaignFbH >= 1200 ? "ultrawide-3440x1440.jpg" : "ultrawide-2560x1080.jpg");
+    }
+    if (campaignFbW >= 2000) {
+      return dir + "2k.jpg";
+    }
+    if (campaignFbW >= 1000) {
+      return dir + "1024.jpg";
+    }
+    return dir + "512.jpg";
+  };
+  const char *const nasaCredit = "NASA, ESA, CSA, STScI";
+  const std::array<ui::CampaignBackdrop, 5> campaignBackdrops = {{
+      {"Cosmic Cliffs (Carina)",
+       loadTexture2D(resourcePath(ladderRendition("carina-cosmic-cliffs"))), nasaCredit},
+      {"Crab Nebula", loadTexture2D(resourcePath(ladderRendition("crab-nebula"))), nasaCredit},
+      {"Southern Ring Nebula",
+       loadTexture2D(resourcePath("assets/backgrounds/source/southern-ring-nebula-2k.jpg")),
+       nasaCredit},
+      {"Cartwheel Galaxy",
+       loadTexture2D(resourcePath("assets/backgrounds/source/cartwheel-galaxy-2k.jpg")),
+       nasaCredit},
+      {"Starfield (procedural)", 0U, ""},
+  }};
+  return campaignBackdrops;
+}
 
+void updateFrameTiming(RenderState &rs, float cpuFrameMs) {
+  if (rs.timing.gpuTimingEnabled && !rs.timing.gpuTimers.initialized) {
+    rs.timing.gpuTimers.init();
+  } else if (!rs.timing.gpuTimingEnabled && rs.timing.gpuTimers.initialized) {
+    rs.timing.gpuTimers.shutdown();
+  }
+  if (rs.timing.gpuTimers.initialized) {
+    rs.timing.gpuTimers.resolve();
+  }
+  rs.timing.timingHistory.push(cpuFrameMs, rs.timing.gpuTimers);
+  TRACY_PLOT("cpu_frame_ms", cpuFrameMs);
+  if (rs.timing.gpuTimers.initialized) {
+    TRACY_PLOT("gpu_fragment_ms", rs.timing.gpuTimers.blackholeFragment.lastMs);
+    TRACY_PLOT("gpu_compute_ms", rs.timing.gpuTimers.blackholeCompute.lastMs);
+    TRACY_PLOT("gpu_bloom_ms", rs.timing.gpuTimers.bloom.lastMs);
+    TRACY_PLOT("gpu_tonemap_ms", rs.timing.gpuTimers.tonemap.lastMs);
+    TRACY_PLOT("gpu_depth_ms", rs.timing.gpuTimers.depth.lastMs);
+    TRACY_PLOT("gpu_grmhd_slice_ms", rs.timing.gpuTimers.grmhdSlice.lastMs);
+  }
+}
 
+void updateRmlUiOverlay(RenderState &rs, GLFWwindow *window, int windowWidth, int windowHeight) {
+  if (rs.overlays.rmluiEnabled) {
+    if (!rs.overlays.rmluiReady) {
+      rs.overlays.rmluiReady = rs.overlays.rmluiOverlay.init(window, windowWidth, windowHeight);
+    }
+    if (rs.overlays.rmluiReady &&
+        (windowWidth != rs.overlays.rmluiWidth || windowHeight != rs.overlays.rmluiHeight)) {
+      rs.overlays.rmluiOverlay.resize(windowWidth, windowHeight);
+      rs.overlays.rmluiWidth = windowWidth;
+      rs.overlays.rmluiHeight = windowHeight;
+    }
+  } else if (rs.overlays.rmluiReady) {
+    rs.overlays.rmluiOverlay.shutdown();
+    rs.overlays.rmluiReady = false;
+  }
+}
 
+void configureFrameBackground(RenderState &rs, const platform::CliOptions &cli) {
+  if (!rs.background.baseTexturesLoaded) {
+    rs.background.galaxy = loadCubemap(resourcePath("assets/skybox_nebula_dark"));
+    rs.background.colorMap = loadTexture2D(resourcePath("assets/color_map.png"));
+    rs.background.baseTexturesLoaded = true;
+  }
+  if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit") {
+    const ShowcaseOrbitComposition *const composition =
+        findShowcaseOrbitComposition(cli.recordComposition);
+    rs.background.backgroundLayerScale = {1.0f, 1.18f, 1.42f};
+    rs.background.backgroundLayerIntensity = {1.0f, 0.94f, 0.72f};
+    rs.background.backgroundLayerLodBias = {0.45f, 1.2f, 1.9f};
+    rs.background.backgroundLayerGlobalOffset =
+        composition != nullptr
+            ? glm::vec2(composition->backgroundOffsetX, composition->backgroundOffsetY)
+            : glm::vec2(0.0f);
+    rs.background.backgroundYawRad =
+        glm::radians(recordOverride(cli.hasRecordBackgroundYaw, cli.recordBackgroundYawDeg,
+                                    composition != nullptr ? composition->backgroundYawDeg : 0.0f));
+    rs.background.backgroundPitchRad = glm::radians(
+        recordOverride(cli.hasRecordBackgroundPitch, cli.recordBackgroundPitchDeg,
+                       composition != nullptr ? composition->backgroundPitchDeg : 0.0f));
+    rs.post.tonemapChromaticAberrationStrength = 0.00015f;
+    rs.post.tonemapVignetteStrength = 0.05f;
+    rs.post.tonemapFilmGrainStrength = 0.0f;
+  } else {
+    rs.background.backgroundLayerScale = {1.0f, 1.08f, 1.16f};
+    rs.background.backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
+    rs.background.backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
+    rs.background.backgroundLayerGlobalOffset = glm::vec2(0.0f);
+    rs.background.backgroundYawRad = 0.0f;
+    rs.background.backgroundPitchRad = 0.0f;
+    rs.post.tonemapChromaticAberrationStrength = 0.002f;
+    rs.post.tonemapVignetteStrength = 1.0f;
+    rs.post.tonemapFilmGrainStrength = 0.005f;
+  }
+}
 
+void initializeExportDebugStage(RenderState &rs) {
+  if (!rs.debug.debugPreShapingBackgroundEnvApplied) {
+    if (const char *stage = std::getenv("BLACKHOLE_EXPORT_RAW_STAGE")) {
+      rs.debug.debugPreRedshiftBackground = (std::strcmp(stage, "pre-redshift-background") == 0);
+      rs.debug.debugPreShapingBackground = (std::strcmp(stage, "pre-shaping-background") == 0);
+      rs.debug.debugPostShapingBackground = (std::strcmp(stage, "post-shaping-background") == 0);
+      rs.debug.debugShaperInputs = (std::strcmp(stage, "shaper-inputs") == 0);
+      rs.debug.debugClosestApproachState = (std::strcmp(stage, "closest-approach-state") == 0);
+      rs.debug.debugClosestApproachTimeline =
+          (std::strcmp(stage, "closest-approach-timeline") == 0);
+      rs.debug.debugClosestApproachDirection =
+          (std::strcmp(stage, "closest-approach-direction") == 0);
+      rs.debug.debugEscapedDirection = (std::strcmp(stage, "escaped-direction") == 0);
+    }
+    rs.debug.debugPreShapingBackgroundEnvApplied = true;
+  }
+}
+
+void initializeWiregridEnvironment(RenderState &rs) {
+  if (!rs.wiregrid.wiregridEnvApplied) {
+    auto parseEnvFloat = [](const char *name, float &out) {
+      if (const char *value = std::getenv(name)) {
+        char *end = nullptr;
+        const float parsed = std::strtof(value, &end);
+        if (end != value) {
+          out = parsed;
+        }
+      }
+    };
+    if (const char *enabled = std::getenv("BLACKHOLE_WIREGRID_ENABLED")) {
+      rs.wiregrid.wiregridEnabled = (std::strcmp(enabled, "0") != 0);
+    }
+    applyWiregridModeProfile(WiregridParams::Mode::Beauty, rs.wiregrid.wiregridParams,
+                             rs.wiregrid.wiregridColor);
+    if (const char *mode = std::getenv("BLACKHOLE_WIREGRID_MODE")) {
+      if (std::strcmp(mode, "diagnostic") == 0) {
+        applyWiregridModeProfile(WiregridParams::Mode::Diagnostic, rs.wiregrid.wiregridParams,
+                                 rs.wiregrid.wiregridColor);
+      } else if (std::strcmp(mode, "beauty") == 0) {
+        applyWiregridModeProfile(WiregridParams::Mode::Beauty, rs.wiregrid.wiregridParams,
+                                 rs.wiregrid.wiregridColor);
+      }
+    }
+    if (const char *showErgo = std::getenv("BLACKHOLE_WIREGRID_SHOW_ERGO")) {
+      rs.wiregrid.wiregridParams.showErgosphere = (std::strcmp(showErgo, "0") != 0);
+    }
+    parseEnvFloat("BLACKHOLE_WIREGRID_GRID_SCALE", rs.wiregrid.wiregridParams.gridScale);
+    parseEnvFloat("BLACKHOLE_WIREGRID_MOTION_SCALE", rs.wiregrid.wiregridParams.motionScale);
+    parseEnvFloat("BLACKHOLE_WIREGRID_INFALL_SCALE", rs.wiregrid.wiregridParams.infallScale);
+    parseEnvFloat("BLACKHOLE_WIREGRID_STRENGTH", rs.wiregrid.wiregridParams.strength);
+    parseEnvFloat("BLACKHOLE_WIREGRID_SCENE_PRESERVE", rs.wiregrid.wiregridParams.scenePreserve);
+    parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_R", rs.wiregrid.wiregridColor.r);
+    parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_G", rs.wiregrid.wiregridColor.g);
+    parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_B", rs.wiregrid.wiregridColor.b);
+    parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_A", rs.wiregrid.wiregridColor.a);
+    rs.wiregrid.wiregridEnvApplied = true;
+  }
+}
+
+void dispatchComputeFrame(RenderState &rs, GLuint computeTarget, GLuint &computeProgram,
+                          const InteropUniforms &interop, const FrameBindingInputs &frameInputs) {
+  if (computeProgram == 0) {
+    computeProgram = createComputeProgram(std::string("shader/geodesic_trace.comp"));
+  }
+
+  glUseProgram(computeProgram);
+  applyInteropComputeUniforms(computeProgram, interop, rs.targets.renderWidth,
+                              rs.targets.renderHeight);
+
+  // Apply Hawking radiation uniforms
+  double const bhMass = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
+  applyHawkingUniforms(computeProgram, rs.hawking.hawkingRenderer, rs.hawking.hawkingGlowEnabled,
+                       rs.hawking.hawkingTempScale, rs.hawking.hawkingGlowIntensity,
+                       rs.hawking.hawkingUseLUTs, bhMass);
+
+  bindComputeUniforms(computeProgram, rs, frameInputs);
+
+  glBindImageTexture(0, computeTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+  GLint const tileOffsetLoc = glGetUniformLocation(computeProgram, "tileOffset");
+  constexpr int kGroupSize = 16;
+  if (rs.dispatch.computeTiled) {
+    rs.dispatch.computeTileSize = std::clamp(rs.dispatch.computeTileSize, kGroupSize, 2048);
+    for (int y = 0; y < rs.targets.renderHeight; y += rs.dispatch.computeTileSize) {
+      for (int x = 0; x < rs.targets.renderWidth; x += rs.dispatch.computeTileSize) {
+        int const tileWidth = std::min(rs.dispatch.computeTileSize, rs.targets.renderWidth - x);
+        int const tileHeight = std::min(rs.dispatch.computeTileSize, rs.targets.renderHeight - y);
+        if (tileOffsetLoc != -1) {
+          glUniform2i(tileOffsetLoc, x, y);
+        }
+        auto const groupsX = static_cast<GLuint>((tileWidth + kGroupSize - 1) / kGroupSize);
+        auto const groupsY = static_cast<GLuint>((tileHeight + kGroupSize - 1) / kGroupSize);
+        glDispatchCompute(groupsX, groupsY, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+      }
+    }
+  } else {
+    if (tileOffsetLoc != -1) {
+      glUniform2i(tileOffsetLoc, 0, 0);
+    }
+    auto const groupsX =
+        static_cast<GLuint>((rs.targets.renderWidth + kGroupSize - 1) / kGroupSize);
+    auto const groupsY =
+        static_cast<GLuint>((rs.targets.renderHeight + kGroupSize - 1) / kGroupSize);
+    glDispatchCompute(groupsX, groupsY, 1);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+  }
+  glUseProgram(0);
+}
+
+void renderGlslFrame(RenderState &rs, RenderToTextureInfo &rtti, GLuint &computeProgram,
+                     const InteropUniforms &interop, const FrameBindingInputs &frameInputs,
+                     bool computeActive, bool compareBaselineActive, float grbTimeSeconds) {
+  const bool compareActive = frameInputs.compareActive;
+  const bool backgroundEnabledEffective = frameInputs.backgroundEnabledEffective;
+  const bool noiseReady = frameInputs.noiseReady;
+  const bool grmhdEnabled = frameInputs.grmhdEnabled;
+  const bool spectralEnabled = frameInputs.spectralEnabled;
+  const bool grbModulationEnabled = frameInputs.grbModulationEnabled;
+  const bool enablePhotonSphereEffective = frameInputs.enablePhotonSphereEffective;
+  GLuint fragmentTarget = 0;
+  if (computeActive) {
+    fragmentTarget = compareActive ? rs.targets.texBlackholeCompare : 0;
+  } else {
+    fragmentTarget = rs.targets.texBlackhole;
+  }
+  GLuint computeTarget = 0;
+  if (computeActive) {
+    computeTarget = rs.targets.texBlackhole;
+  } else {
+    computeTarget = compareActive ? rs.targets.texBlackholeCompare : 0;
+  }
+  if (rs.timing.gpuTimers.initialized && fragmentTarget != 0) {
+    rs.timing.gpuTimers.blackholeFragment.begin();
+  }
+  if (fragmentTarget != 0) {
+    ZONE_SCOPED_N("Blackhole Fragment");
+    rtti.targetTexture = fragmentTarget;
+    // std::cout << "Rendering to texture..." << std::endl;
+    renderToTexture(rtti);
+  }
+  if (rs.timing.gpuTimers.initialized && fragmentTarget != 0) {
+    rs.timing.gpuTimers.blackholeFragment.end();
+  }
+
+  if (rs.timing.gpuTimers.initialized && computeTarget != 0) {
+    rs.timing.gpuTimers.blackholeCompute.begin();
+  }
+  if (computeTarget != 0) {
+    ZONE_SCOPED_N("Blackhole Compute");
+    dispatchComputeFrame(rs, computeTarget, computeProgram, interop, frameInputs);
+  }
+  if (rs.timing.gpuTimers.initialized && computeTarget != 0) {
+    rs.timing.gpuTimers.blackholeCompute.end();
+  }
+
+  CompareParityInputs parityInputs;
+  parityInputs.fragmentTarget = fragmentTarget;
+  parityInputs.computeTarget = computeTarget;
+  parityInputs.compareActive = compareActive;
+  parityInputs.compareBaselineActive = compareBaselineActive;
+  parityInputs.backgroundEnabledEffective = backgroundEnabledEffective;
+  parityInputs.noiseReady = noiseReady;
+  parityInputs.grmhdEnabled = grmhdEnabled;
+  parityInputs.spectralEnabled = spectralEnabled;
+  parityInputs.grbModulationEnabled = grbModulationEnabled;
+  parityInputs.enablePhotonSphereEffective = enablePhotonSphereEffective;
+  parityInputs.grbTimeSeconds = grbTimeSeconds;
+  parityInputs.timeSec = glfwGetTime();
+  parityInputs.interop = interop;
+  captureCompareParity(rs, parityInputs);
+}
+
+struct RenderDispatchOptions {
+  bool computeActive;
+  bool compareActive;
+  bool compareBaselineActive;
+  bool adiskEnabledEffective;
+  bool adiskParticleEffective;
+  bool enableRedshiftEffective;
+  bool useNoiseTextureEffective;
+  bool useGrmhdEffective;
+  bool useSpectralLutEffective;
+  bool useGrbModulationEffective;
+  bool enablePhotonSphereEffective;
+  bool backgroundEnabledEffective;
+  int compareSteps;
+  float compareStepSize;
+};
+RenderDispatchOptions deriveRenderDispatch(RenderState &rs, const Settings &settings) {
+  bool const computeSupported = ShaderManager::instance().canUseComputeShaders();
+  bool const computeActive = rs.dispatch.useComputeRaytracer && computeSupported;
+  bool const compareActive =
+      rs.compare.compareComputeFragment && computeSupported && !K_APP_VARIANT_CUDA_ONLY;
+  bool const compareBaselineActive = rs.compare.compareBaselineEnabled && compareActive;
+  bool const adiskEnabledEffective = rs.disk.adiskEnabled && !compareBaselineActive;
+  bool const adiskParticleEffective = rs.disk.adiskParticle && !compareBaselineActive;
+  bool const enableRedshiftEffective = rs.physicsCore.enableRedshift && !compareBaselineActive;
+  bool const useNoiseTextureEffective = rs.disk.useNoiseTexture && !compareBaselineActive;
+  bool const useGrmhdEffective = rs.grmhd.useGrmhd && !compareBaselineActive;
+  bool const useSpectralLutEffective = rs.luts.useSpectralLut && !compareBaselineActive;
+  bool const useGrbModulationEffective = rs.luts.useGrbModulation && !compareBaselineActive;
+  bool const enablePhotonSphereEffective =
+      rs.physicsCore.enablePhotonSphere && !compareBaselineActive;
+  bool const backgroundEnabledEffective = settings.backgroundEnabled && !compareBaselineActive;
+
+  rs.compare.compareSampleSize = std::clamp(rs.compare.compareSampleSize, 4, 64);
+  rs.compare.compareFrameStride = std::max(rs.compare.compareFrameStride, 1);
+  rs.compare.compareAutoCount = std::max(rs.compare.compareAutoCount, 1);
+  rs.compare.compareAutoStride = std::max(rs.compare.compareAutoStride, 1);
+  if (!compareActive) {
+    rs.compare.compareAutoCapture = false;
+    rs.compare.compareAutoRemaining = 0;
+    rs.compare.compareAutoStrideCounter = 0;
+  }
+  rs.dispatch.computeMaxSteps = std::clamp(rs.dispatch.computeMaxSteps, 10, 1000);
+  rs.dispatch.computeStepSize = std::clamp(rs.dispatch.computeStepSize, 0.001f, 2.0f);
+  int compareSteps = rs.dispatch.computeMaxSteps;
+  float compareStepSize = rs.dispatch.computeStepSize;
+  if (rs.compare.compareOverridesEnabled) {
+    if (rs.compare.compareMaxStepsOverride > 0) {
+      compareSteps = rs.compare.compareMaxStepsOverride;
+    }
+    if (rs.compare.compareStepSizeOverride > 0.0f) {
+      compareStepSize = rs.compare.compareStepSizeOverride;
+    }
+  }
+
+  return {.computeActive = computeActive,
+          .compareActive = compareActive,
+          .compareBaselineActive = compareBaselineActive,
+          .adiskEnabledEffective = adiskEnabledEffective,
+          .adiskParticleEffective = adiskParticleEffective,
+          .enableRedshiftEffective = enableRedshiftEffective,
+          .useNoiseTextureEffective = useNoiseTextureEffective,
+          .useGrmhdEffective = useGrmhdEffective,
+          .useSpectralLutEffective = useSpectralLutEffective,
+          .useGrbModulationEffective = useGrbModulationEffective,
+          .enablePhotonSphereEffective = enablePhotonSphereEffective,
+          .backgroundEnabledEffective = backgroundEnabledEffective,
+          .compareSteps = compareSteps,
+          .compareStepSize = compareStepSize};
+}
+
+struct BlackholeFrameResult {
+  bool grmhdReady = false;
+  bool computeActiveForLog = false;
+};
+
+BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOptions &cli,
+                                          const Settings &settings, const InputManager &input,
+                                          const glm::vec3 &cameraPos, const glm::mat3 &cameraBasis,
+                                          float fovScale, float frameTime, double currentTime,
+                                          GLuint &computeProgram) {
+  bool computeActiveForLog = false;
+  uploadGrmhdStreamingTiles(rs);
+
+  /* grmhdReady: true when packed texture OR PBO streaming path is valid. */
+  bool const grmhdReady = (rs.grmhd.grmhdLoaded && rs.grmhd.grmhdTexture.texture != 0) ||
+                          (rs.grmhd.grmhdTimeSeriesLoaded && rs.grmhd.grmhdPboUploader.ready());
+  /* grmhdTexId: prefer PBO streaming texture when the streamer is running;
+   * fall back to the packed static texture otherwise. */
+  GLuint const grmhdTexId = (rs.grmhd.grmhdTimeSeriesLoaded && rs.grmhd.grmhdPboUploader.ready())
+                                ? rs.grmhd.grmhdPboUploader.texture()
+                                : rs.grmhd.grmhdTexture.texture;
+  bool const spectralReady = rs.luts.spectralLutLoaded && rs.luts.texSpectralLUT != 0;
+  rs.luts.spectralRadiusMin = std::max(0.0f, rs.luts.spectralRadiusMin);
+  rs.luts.spectralRadiusMax =
+      std::max(rs.luts.spectralRadiusMax, rs.luts.spectralRadiusMin + 0.001f);
+
+  loadGrbModulationLut(rs);
+  bool const grbModulationReady = rs.luts.grbModulationLoaded && rs.luts.texGrbModulationLUT != 0;
+  float const grbSpan = std::max(rs.luts.grbTimeMax - rs.luts.grbTimeMin, 0.001f);
+  float grbTimeSeconds = 0.0f;
+  if (grbModulationReady) {
+    if (rs.luts.grbTimeManual) {
+      grbTimeSeconds =
+          std::clamp(rs.luts.grbTimeManualValue, rs.luts.grbTimeMin, rs.luts.grbTimeMax);
+    } else {
+      grbTimeSeconds = rs.luts.grbTimeMin + std::fmod(static_cast<float>(currentTime), grbSpan);
+    }
+  }
+
+  bool const lutReady = rs.luts.texEmissivityLUT != 0 && rs.luts.texRedshiftLUT != 0;
+
+  {
+    RenderToTextureInfo rtti;
+    rtti.fragShader = "shader/blackhole_main.frag";
+    rtti.cubemapUniforms["galaxy"] =
+        rs.background.galaxy != 0 ? rs.background.galaxy : rs.background.fallbackCubemap;
+    rtti.textureUniforms["colorMap"] =
+        rs.background.colorMap != 0 ? rs.background.colorMap : rs.background.fallback2D;
+    rtti.textureUniforms["emissivityLUT"] =
+        lutReady ? rs.luts.texEmissivityLUT : rs.background.fallback2D;
+    rtti.textureUniforms["redshiftLUT"] =
+        lutReady ? rs.luts.texRedshiftLUT : rs.background.fallback2D;
+    rtti.textureUniforms["photonGlowLUT"] =
+        rs.luts.texPhotonGlowLUT != 0 ? rs.luts.texPhotonGlowLUT : rs.background.fallback2D;
+    rtti.textureUniforms["diskDensityLUT"] =
+        rs.luts.texDiskDensityLUT != 0 ? rs.luts.texDiskDensityLUT : rs.background.fallback2D;
+    // spectralLUT, grbModulationLUT, and the Hawking LUTs are bound in
+    // bindFragmentUniforms after the between-passes LUT loads settle.
+    for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
+      const std::string name = "backgroundLayers[" + std::to_string(i) + "]";
+      rtti.textureUniforms[name] = rs.background.backgroundTextures.at(static_cast<std::size_t>(i));
+    }
+    rs.disk.noiseTextureScale = std::max(rs.disk.noiseTextureScale, 0.01f);
+    // noiseTexture/grmhdTexture and useNoiseTexture/useGrmhd/backgroundEnabled/
+    // time are set in bindFragmentUniforms from post-derivation readiness.
+    rtti.floatUniforms["noiseTextureScale"] = rs.disk.noiseTextureScale;
+    rtti.floatUniforms["backgroundIntensity"] = settings.backgroundIntensity;
+    rtti.floatUniforms["backgroundYawRad"] = rs.background.backgroundYawRad;
+    rtti.floatUniforms["backgroundPitchRad"] = rs.background.backgroundPitchRad;
+    rtti.vec3Uniforms["grmhdBoundsMin"] = rs.grmhd.grmhdBoundsMin;
+    rtti.vec3Uniforms["grmhdBoundsMax"] = rs.grmhd.grmhdBoundsMax;
+    for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
+      const std::string name = "backgroundLayerParams[" + std::to_string(i) + "]";
+      rtti.vec4Uniforms[name] = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
+    }
+    for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
+      const std::string name = "backgroundLayerLodBias[" + std::to_string(i) + "]";
+      rtti.floatUniforms[name] =
+          std::max(rs.background.backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
+    }
+
+    rtti.targetTexture = rs.targets.texBlackhole;
+    rtti.width = rs.targets.renderWidth;
+    rtti.height = rs.targets.renderHeight;
+
+    // Render UI controls only if visible
+    if (input.isUIVisible()) {
+      renderSettingsWindow(rs);
+    }
+
+    renderCurveOverlayWindow(rs, cli.curveTsvPath);
+
+    updateLuts(rs, rs.physicsCore.kerrSpin, rs.disk.adiskDensityV);
+    loadSpectralSynchHawkingLuts(rs);
+
+    const double referenceMass = physics::M_SUN;
+    const double referenceRs = physics::schwarzschildRadius(referenceMass);
+    const double referenceRg = physics::G * referenceMass / physics::C2;
+    const double referenceA = static_cast<double>(rs.physicsCore.kerrSpin) * referenceRg;
+    const bool progradeSpin = rs.physicsCore.kerrSpin >= 0.0f;
+    const double iscoRatio =
+        physics::kerrIscoRadius(referenceMass, referenceA, progradeSpin) / referenceRs;
+
+    float const schwarzschildRadius = 2.0f * rs.physicsCore.blackHoleMass;
+    float const iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;
+    // Keep record-mode copies accessible outside this inner block
+    rs.recording.recordCurRs = schwarzschildRadius;
+    rs.recording.recordCurIsco = iscoRadius;
+#if BLACKHOLE_HAS_CUDA
+    if (K_APP_VARIANT_CUDA_ONLY) {
+      rs.dispatch.cudaManager.setEnabled(true);
+      rs.dispatch.useComputeRaytracer = false;
+      rs.compare.compareComputeFragment = false;
+    }
+#endif
+    const auto dispatch = deriveRenderDispatch(rs, settings);
+    const auto computeActive = dispatch.computeActive;
+    const auto compareActive = dispatch.compareActive;
+    const auto compareBaselineActive = dispatch.compareBaselineActive;
+    const auto adiskEnabledEffective = dispatch.adiskEnabledEffective;
+    const auto adiskParticleEffective = dispatch.adiskParticleEffective;
+    const auto enableRedshiftEffective = dispatch.enableRedshiftEffective;
+    const auto useNoiseTextureEffective = dispatch.useNoiseTextureEffective;
+    const auto useGrmhdEffective = dispatch.useGrmhdEffective;
+    const auto useSpectralLutEffective = dispatch.useSpectralLutEffective;
+    const auto useGrbModulationEffective = dispatch.useGrbModulationEffective;
+    const auto enablePhotonSphereEffective = dispatch.enablePhotonSphereEffective;
+    const auto backgroundEnabledEffective = dispatch.backgroundEnabledEffective;
+    const auto compareSteps = dispatch.compareSteps;
+    const auto compareStepSize = dispatch.compareStepSize;
+    computeActiveForLog = computeActive;
+
+    const bool grmhdEnabled = useGrmhdEffective && grmhdReady;
+    const bool spectralEnabled = useSpectralLutEffective && spectralReady;
+    const bool grbModulationEnabled = useGrbModulationEffective && grbModulationReady;
+    bool const noiseReady = useNoiseTextureEffective && rs.disk.texNoiseVolume != 0;
+
+    InteropUniforms interop;
+    interop.cameraPos = cameraPos;
+    interop.cameraBasis = cameraBasis;
+    interop.fovScale = fovScale;
+    interop.timeSec = frameTime;
+    interop.schwarzschildRadius = schwarzschildRadius;
+    interop.iscoRadius = iscoRadius;
+    interop.kerrSpin = rs.physicsCore.kerrSpin;
+    interop.depthFar = rs.display.depthFar;
+    if (compareActive) {
+      interop.maxSteps = compareSteps;
+      interop.stepSize = compareStepSize;
+    } else {
+      interop.maxSteps = rs.dispatch.computeMaxSteps;
+      interop.stepSize = rs.dispatch.computeStepSize;
+    }
+    interop.adiskEnabled = adiskEnabledEffective ? 1.0f : 0.0f;
+    interop.enableRedshift = enableRedshiftEffective ? 1.0f : 0.0f;
+    interop.useLUTs = lutReady ? 1.0f : 0.0f;
+    interop.useSpectralLUT = spectralEnabled ? 1.0f : 0.0f;
+    interop.useGrbModulation = grbModulationEnabled ? 1.0f : 0.0f;
+    interop.lutRadiusMin = rs.luts.lutRadiusMin;
+    interop.lutRadiusMax = rs.luts.lutRadiusMax;
+    interop.redshiftRadiusMin = rs.luts.redshiftRadiusMin;
+    interop.redshiftRadiusMax = rs.luts.redshiftRadiusMax;
+    interop.spectralRadiusMin = rs.luts.spectralRadiusMin;
+    interop.spectralRadiusMax = rs.luts.spectralRadiusMax;
+    interop.grbTime = grbTimeSeconds;
+    interop.grbTimeMin = rs.luts.grbTimeMin;
+    interop.grbTimeMax = rs.luts.grbTimeMax;
+    // Volumetric radiative transfer
+    interop.rteEnabled = rs.rte.rteVolumetricEnabled ? 1.0f : 0.0f;
+    interop.rteOpacityScale = rs.rte.rteOpacityScale;
+    interop.debugPreRedshiftBackground = rs.debug.debugPreRedshiftBackground ? 1.0f : 0.0f;
+    interop.debugPreShapingBackground = rs.debug.debugPreShapingBackground ? 1.0f : 0.0f;
+    interop.debugPostShapingBackground = rs.debug.debugPostShapingBackground ? 1.0f : 0.0f;
+    interop.debugShaperInputs = rs.debug.debugShaperInputs ? 1.0f : 0.0f;
+    interop.debugClosestApproachState = rs.debug.debugClosestApproachState ? 1.0f : 0.0f;
+    interop.debugClosestApproachTimeline = rs.debug.debugClosestApproachTimeline ? 1.0f : 0.0f;
+    interop.debugClosestApproachDirection = rs.debug.debugClosestApproachDirection ? 1.0f : 0.0f;
+    interop.debugEscapedDirection = rs.debug.debugEscapedDirection ? 1.0f : 0.0f;
+
+    // Per-frame derived transients shared by the fragment, CUDA, and
+    // compute uniform binders (compare-baseline gating, LUT readiness,
+    // precomputed record frame shift); see FrameBindingInputs.
+    FrameBindingInputs frameInputs;
+    frameInputs.adiskEnabledEffective = adiskEnabledEffective;
+    frameInputs.enableRedshiftEffective = enableRedshiftEffective;
+    frameInputs.backgroundEnabledEffective = backgroundEnabledEffective;
+    frameInputs.enablePhotonSphereEffective = enablePhotonSphereEffective;
+    frameInputs.backgroundIntensity = settings.backgroundIntensity;
+    frameInputs.lutReady = lutReady;
+    frameInputs.spectralEnabled = spectralEnabled;
+    frameInputs.grbModulationEnabled = grbModulationEnabled;
+    frameInputs.noiseReady = noiseReady;
+    frameInputs.grmhdEnabled = grmhdEnabled;
+    frameInputs.adiskParticleEffective = adiskParticleEffective;
+    frameInputs.compareActive = compareActive;
+    frameInputs.grmhdTexId = grmhdTexId;
+    /* Record-mode showcase-orbit frame offset; defaults (0,0) cover the
+     * non-record path via FrameBindingInputs member initializers. */
+    if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit") {
+      const ShowcaseOrbitComposition *const composition =
+          findShowcaseOrbitComposition(cli.recordComposition);
+      frameInputs.frameShiftX =
+          recordOverride(cli.hasRecordFrameX, cli.recordFrameX,
+                         composition != nullptr ? composition->frameOffsetX : 0.0f);
+      frameInputs.frameShiftY =
+          recordOverride(cli.hasRecordFrameY, cli.recordFrameY,
+                         composition != nullptr ? composition->frameOffsetY : 0.0f);
+    }
+
+    // Load-order-independent fragment uniforms (the emissivity-family LUT
+    // bindings stay above, before updateLuts reassigns their handles).
+    bindFragmentUniforms(rtti, rs, interop, frameInputs);
+
+#if BLACKHOLE_HAS_CUDA
+    /* CUDA dispatch path: bypasses both fragment and compute GLSL paths */
+    if (rs.dispatch.cudaManager.isEnabled()) {
+      ZONE_SCOPED_N("Blackhole CUDA");
+
+      /* Lazy init on first use or after resize.
+       * Track pre-call state to detect the single frame where init succeeds. */
+      bool const wasReady = rs.dispatch.cudaManager.isReady();
+      rs.dispatch.cudaManager.ensureInit(rs.targets.texBlackhole, rs.targets.renderWidth,
+                                         rs.targets.renderHeight);
+      if (!wasReady && rs.dispatch.cudaManager.isReady()) {
+        /* Register rs.background.galaxy cubemap as CUDA texture object (slot 4 = BhLutGalaxy).
+         * Done exactly once on the frame that init first succeeds.
+         * Registration failure is non-fatal: kernels fall back to no background. */
+        GLuint const galaxyTexForCuda =
+            (rs.background.galaxy != 0) ? rs.background.galaxy : rs.background.fallbackCubemap;
+        if (galaxyTexForCuda != 0) {
+          rs.dispatch.cudaManager.registerLut(4, galaxyTexForCuda,
+                                              static_cast<unsigned int>(GL_TEXTURE_CUBE_MAP));
+        }
+        /* Register the layered desktop background equirect texture so the CUDA
+         * lane samples the same 2D scene asset class as the GLSL desktop lane. */
+        GLuint const backgroundTexForCuda = (rs.background.backgroundBase != 0)
+                                                ? rs.background.backgroundBase
+                                                : rs.background.fallback2D;
+        if (backgroundTexForCuda != 0) {
+          bhCudaRegisterBackgroundTexture(rs.dispatch.cudaManager.backend(), backgroundTexForCuda,
+                                          static_cast<unsigned int>(GL_TEXTURE_2D));
+        }
+      }
+
+      if (rs.dispatch.cudaManager.isReady()) {
+        BH_LaunchParams cp = {};
+        bindCudaLaunchParams(cp, rs, interop, frameInputs);
+
+        rs.dispatch.cudaManager.renderFrame(&cp);
+      }
+    } else
+#endif
+    {
+      /* Original GLSL fragment/compute paths */
+
+      renderGlslFrame(rs, rtti, computeProgram, interop, frameInputs, computeActive,
+                      compareBaselineActive, grbTimeSeconds);
+    } /* end of GLSL fragment/compute else block */
+  }
+  return {.grmhdReady = grmhdReady, .computeActiveForLog = computeActiveForLog};
+}
+
+#ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
+void reloadChangedShaders(GLuint &computeProgram) {
+  // Check for shader file changes and recompile all affected programs.
+  if (ShaderWatcher::instance().hasPendingReloads()) {
+    auto changedShaders = ShaderWatcher::instance().pollChangedShaders();
+    for (const auto &path : changedShaders) {
+      std::cout << "[HotReload] Shader changed: " << path << "\n";
+    }
+    ShaderWatcher::instance().clearPendingReloads();
+
+    /* WHY: reloadAllRenderShaders() recompiles every render-to-texture
+     * program cached in render.cpp's shaderProgramMap.  This covers
+     * blackhole_main.frag, all bloom stages, tonemapping.frag, and
+     * depth_cues.frag -- any shader routed through renderToTexture().
+     * The compute shader (computeProgram) is managed here in main.cpp;
+     * resetting it to 0 triggers lazy re-creation on the next frame. */
+    reloadAllRenderShaders();
+
+    if (computeProgram != 0) {
+      glDeleteProgram(computeProgram);
+      computeProgram = 0;
+      std::cout << "[HotReload] Queued recompile: shader/geodesic_trace.comp\n";
+    }
+  }
+}
+#endif
+
+struct FrameCamera {
+  glm::vec3 position;
+  glm::mat3 basis;
+  float fovScale;
+  glm::mat4 projection;
+  glm::mat4 gizmoView;
+};
+
+FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platform::CliOptions &cli,
+                              const Settings &settings, float deltaTime, double currentTime) {
+  // Get camera state for shader
+  const auto &cam = input.camera();
+
+  glm::vec3 const focusTarget =
+      rs.camera.gizmoEnabled
+          ? glm::vec3(rs.camera.gizmoTransform[3])
+          : glm::vec3(
+                0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+                       // -- glm::mat has no .at()
+
+  rs.camera.orbitTime += input.getEffectiveDeltaTime(deltaTime);
+  const glm::vec3 cameraPos = selectCameraPosition(rs, cam, focusTarget);
+
+  glm::vec3 aimTarget = focusTarget;
+  if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit") {
+    const ShowcaseOrbitComposition *const composition =
+        findShowcaseOrbitComposition(cli.recordComposition);
+    float const frameX = recordOverride(cli.hasRecordFrameX, cli.recordFrameX,
+                                        composition != nullptr ? composition->frameOffsetX : 0.0f);
+    float const frameY = recordOverride(cli.hasRecordFrameY, cli.recordFrameY,
+                                        composition != nullptr ? composition->frameOffsetY : 0.0f);
+    if (std::abs(frameX) > 0.0001f || std::abs(frameY) > 0.0001f) {
+      glm::mat3 const baseBasis = buildCameraBasis(cameraPos, focusTarget, cam.roll);
+      float const halfHeight = std::tan(glm::radians(cam.fov) * 0.5f) * cam.distance;
+      float const aspect = static_cast<float>(std::max(rs.targets.renderWidth, 1)) /
+                           static_cast<float>(std::max(rs.targets.renderHeight, 1));
+      float const halfWidth = halfHeight * aspect;
+      aimTarget =
+          focusTarget + baseBasis[0] * (frameX * halfWidth) + baseBasis[1] * (frameY * halfHeight);
+    }
+  }
+
+  glm::mat3 cameraBasis = buildCameraBasis(cameraPos, aimTarget, cam.roll);
+  float const fovScale = std::tan(glm::radians(cam.fov) * 0.5f);
+  glm::vec2 const parallaxBase =
+      glm::vec2(cameraPos.x, cameraPos.y) * settings.backgroundParallaxStrength;
+  glm::vec2 const drift = glm::vec2(std::cos(static_cast<float>(currentTime) * 0.02f),
+                                    std::sin(static_cast<float>(currentTime) * 0.02f)) *
+                          settings.backgroundDriftStrength;
+  for (std::size_t i = 0; i < static_cast<std::size_t>(K_BACKGROUND_LAYERS); ++i) {
+    glm::vec2 const offset = drift + parallaxBase * rs.background.backgroundLayerDepth.at(i);
+    rs.background.backgroundLayerParams.at(i) = glm::vec4(
+        offset + rs.background.backgroundLayerGlobalOffset,
+        rs.background.backgroundLayerScale.at(i), rs.background.backgroundLayerIntensity.at(i));
+  }
+  const glm::mat4 projectionMatrix = glm::perspective(
+      glm::radians(cam.fov),
+      static_cast<float>(rs.targets.renderWidth) / static_cast<float>(rs.targets.renderHeight),
+      0.1f, rs.display.depthFar);
+  const glm::mat4 gizmoViewMatrix = glm::lookAt(
+      cameraPos, aimTarget,
+      cameraBasis[1]); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+                       // -- glm::mat has no .at()
+  return {.position = cameraPos,
+          .basis = cameraBasis,
+          .fovScale = fovScale,
+          .projection = projectionMatrix,
+          .gizmoView = gizmoViewMatrix};
+}
+
+bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
+                   const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog) {
+  /* --record-frames: draw cinematic physics HUD via foreground draw list.
+   * GetForegroundDrawList() adds to ImGui's draw list, so this must be called
+   * before ImGui::Render().  The overlay is composited over the scene by the
+   * ImGui backend when RenderDrawData() runs below. */
+  if (!cli.recordFramesDir.empty()) {
+    ++rs.recording.recordWarmup;
+  }
+  if (!cli.recordFramesDir.empty() && cli.recordProfile == "cinematic" &&
+      rs.recording.recordWarmup >= 15) {
+    renderCinematicOverlay(rs.recording.recordCinematic, rs.recording.recordCurrentKf,
+                           glm::length(cameraPos), rs.recording.recordCurRs,
+                           rs.recording.recordCurIsco, rs.recording.recordFrameIndex,
+                           cli.recordFramesTotal);
+  }
+
+  // ImGui Render
+  ImGui::Render();
+  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+  /* --record-frames: capture the tonemapped scene texture and advance the
+   * frame index. The cinematic HUD drawn above is composited later by ffmpeg;
+   * here we grab the clean scene texture, not the ImGui-chrome framebuffer. */
+  captureRecordFrame(rs, cli);
+
+  // Update Platform Windows (Docking)
+  if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0) {
+    GLFWwindow *backupCurrentContext = glfwGetCurrentContext();
+    ImGui::UpdatePlatformWindows();
+    ImGui::RenderPlatformWindowsDefault();
+    glfwMakeContextCurrent(backupCurrentContext);
+  }
+
+  if (rs.timing.gpuTimingLogEnabled && rs.timing.gpuTimers.initialized) {
+    rs.timing.gpuTimingLogCounter++;
+    if (rs.timing.gpuTimingLogCounter >= rs.timing.gpuTimingLogStride) {
+      appendGpuTimingSample(gpuTimingPath(), rs.timing.gpuTimingLogIndex++, rs.targets.renderWidth,
+                            rs.targets.renderHeight, cpuFrameMs, rs.timing.gpuTimers,
+                            computeActiveForLog, rs.physicsCore.kerrSpin, glfwGetTime());
+      rs.timing.gpuTimingLogCounter = 0;
+    }
+  }
+
+  if (rs.timing.gpuTimers.initialized) {
+    rs.timing.gpuTimers.swap();
+  }
+  FRAME_MARK;
+  glfwSwapBuffers(window);
+
+  /* --export-frame / --export-raw-frame: break after the export frame above. */
+  if (!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()) {
+    if (++rs.exporting.exportDone >= 6) { /* 5 warmup + 1 export frame */
+      return true;
+    }
+  }
+
+  /* --record-frames: break when all requested frames have been captured.
+   * rs.recording.recordFrameIndex starts at cli.recordStartFrame; terminate when we have
+   * written cli.recordFramesTotal frames (i.e. reached cli.recordStartFrame+total). */
+  if (!cli.recordFramesDir.empty() &&
+      rs.recording.recordFrameIndex >= cli.recordStartFrame + cli.recordFramesTotal) {
+    int const written = rs.recording.recordFrameIndex - cli.recordStartFrame;
+    std::printf("Record complete: %d frames written to %s\n", written, cli.recordFramesDir.c_str());
+    return true;
+  }
+  return false;
+}
+
+void prepareFrameTexturesAndExposure(RenderState &rs, const platform::CliOptions &cli,
+                                     const Settings &settings) {
+  if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit" &&
+      rs.wiregrid.wiregridEnabled &&
+      rs.wiregrid.wiregridParams.mode == WiregridParams::Mode::Beauty) {
+    applyShowcaseBeautyWiregridTuning(cli.recordComposition, rs.wiregrid.wiregridParams,
+                                      rs.wiregrid.wiregridColor);
+  }
+  if (rs.background.fallback2D == 0) {
+    rs.background.fallback2D = createColorTexture(1, 1, false);
+  }
+  if (rs.background.fallback3D == 0) {
+    rs.background.fallback3D = createFloatTexture3D(1, 1, 1, std::vector<float>{0.0f});
+  }
+  if (rs.background.fallbackCubemap == 0) {
+    rs.background.fallbackCubemap = createSolidCubemap1x1(0, 0, 0);
+  }
+  updateActiveBackground(rs, settings.backgroundId);
+  GLuint const backgroundFallback =
+      rs.background.backgroundBase != 0 ? rs.background.backgroundBase : rs.background.fallback2D;
+  rs.background.backgroundTextures.fill(backgroundFallback);
+  if (!rs.disk.noiseTextureReady) {
+    bool const noiseOk = rs.disk.noiseCache.initialize();
+    rs.disk.noiseTextureReady = true; // don't retry regardless; FastNoise2 may be disabled
+    if (noiseOk) {
+      rs.disk.texNoiseVolume = rs.disk.noiseCache.getTurbulenceTexture();
+    }
+  }
+
+  loadSettingsIntoRenderState(rs, settings);
+  if (!cli.recordFramesDir.empty()) {
+    const ShowcaseOrbitComposition *const composition =
+        cli.recordProfile == "showcase-orbit" ? findShowcaseOrbitComposition(cli.recordComposition)
+                                              : nullptr;
+    if (cli.hasRecordExposure) {
+      rs.post.toneExposure = cli.recordExposure;
+    } else if (cli.recordProfile == "showcase-orbit") {
+      rs.post.toneExposure = composition != nullptr ? composition->exposure : 3.4f;
+    }
+  }
+}
 
 } // anonymous namespace
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity,readability-function-size) --
-// application main loop
 int main(int argc, char **argv) {
   platform::installCrashHandlers();
   try {
@@ -484,38 +1284,16 @@ int main(int argc, char **argv) {
       break;
     }
 
-    // Alias the parsed options back to the names the render loop reads. The
-    // record-mode consumption sites stay byte-identical; cli is the config
-    // object the eventual recording extraction consumes.
-    auto &curveTsvPath = cli.curveTsvPath;
-    auto &exportFramePath = cli.exportFramePath;
-    auto &exportRawFramePath = cli.exportRawFramePath;
-    auto &recordFramesDir = cli.recordFramesDir;
-    auto &recordProfile = cli.recordProfile;
-    auto &recordComposition = cli.recordComposition;
-    auto &recordFramesTotal = cli.recordFramesTotal;
-    auto &recordStartFrame = cli.recordStartFrame;
-    auto &recordExposure = cli.recordExposure;
-    auto &hasRecordExposure = cli.hasRecordExposure;
-    auto &recordFrameX = cli.recordFrameX;
-    auto &hasRecordFrameX = cli.hasRecordFrameX;
-    auto &recordFrameY = cli.recordFrameY;
-    auto &hasRecordFrameY = cli.hasRecordFrameY;
-    auto &recordBackgroundYawDeg = cli.recordBackgroundYawDeg;
-    auto &hasRecordBackgroundYaw = cli.hasRecordBackgroundYaw;
-    auto &recordBackgroundPitchDeg = cli.recordBackgroundPitchDeg;
-    auto &hasRecordBackgroundPitch = cli.hasRecordBackgroundPitch;
-
     // Semantic validation lives here, where the showcase-orbit table is defined.
-    if (recordProfile != "cinematic" && recordProfile != "compare-orbit-near" &&
-        recordProfile != "showcase-orbit") {
-      std::printf("Unknown record profile: %s\n", recordProfile.c_str());
+    if (cli.recordProfile != "cinematic" && cli.recordProfile != "compare-orbit-near" &&
+        cli.recordProfile != "showcase-orbit") {
+      std::printf("Unknown record profile: %s\n", cli.recordProfile.c_str());
       platform::printCliUsage(argv[0]);
       return 2;
     }
-    if (recordProfile == "showcase-orbit" &&
-        findShowcaseOrbitComposition(recordComposition) == nullptr) {
-      std::printf("Unknown showcase composition: %s\n", recordComposition.c_str());
+    if (cli.recordProfile == "showcase-orbit" &&
+        findShowcaseOrbitComposition(cli.recordComposition) == nullptr) {
+      std::printf("Unknown showcase composition: %s\n", cli.recordComposition.c_str());
       platform::printCliUsage(argv[0]);
       return 2;
     }
@@ -540,7 +1318,8 @@ int main(int argc, char **argv) {
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
     // Initialize shader hot-reload watcher
-    ShaderWatcher::instance().start((std::filesystem::path(getShaderBaseDir()) / "shader").string());
+    ShaderWatcher::instance().start(
+        (std::filesystem::path(getShaderBaseDir()) / "shader").string());
 #endif
 
     // Initialize input manager and sync with settings
@@ -572,52 +1351,18 @@ int main(int argc, char **argv) {
     // the nearest width tier -- crisp on large displays, light on small ones.
     // The selector is keyed by the source base name, so every laddered backdrop
     // shares it.
-    int campaignFbW = 0;
-    int campaignFbH = 0;
-    glfwGetFramebufferSize(window, &campaignFbW, &campaignFbH);
-    const auto ladderRendition = [campaignFbW, campaignFbH](const char *basename) -> std::string {
-      const std::string dir = std::string("assets/backgrounds/generated/") + basename + "-";
-      const double aspect = campaignFbH > 0 ? static_cast<double>(campaignFbW) / campaignFbH : 1.78;
-      if (aspect > 2.1) {
-        return dir + (campaignFbH >= 1200 ? "ultrawide-3440x1440.jpg" : "ultrawide-2560x1080.jpg");
-      }
-      if (campaignFbW >= 2000) {
-        return dir + "2k.jpg";
-      }
-      if (campaignFbW >= 1000) {
-        return dir + "1024.jpg";
-      }
-      return dir + "512.jpg";
-    };
-    const char *const nasaCredit = "NASA, ESA, CSA, STScI";
-    const std::array<ui::CampaignBackdrop, 5> campaignBackdrops = {{
-        {"Cosmic Cliffs (Carina)",
-         static_cast<unsigned int>(
-             loadTexture2D(resourcePath(ladderRendition("carina-cosmic-cliffs")))),
-         nasaCredit},
-        {"Crab Nebula",
-         static_cast<unsigned int>(loadTexture2D(resourcePath(ladderRendition("crab-nebula")))),
-         nasaCredit},
-        {"Southern Ring Nebula",
-         static_cast<unsigned int>(
-             loadTexture2D(resourcePath("assets/backgrounds/source/southern-ring-nebula-2k.jpg"))),
-         nasaCredit},
-        {"Cartwheel Galaxy",
-         static_cast<unsigned int>(
-             loadTexture2D(resourcePath("assets/backgrounds/source/cartwheel-galaxy-2k.jpg"))),
-         nasaCredit},
-        {"Starfield (procedural)", 0U, ""},
-    }};
-    rs.recording.recordFrameIndex = recordStartFrame;
+    const auto campaignBackdrops = loadCampaignBackdrops(window);
+    rs.recording.recordFrameIndex = cli.recordStartFrame;
     rs.recording.recordCinematic =
-        static_cast<float>(recordStartFrame) / static_cast<float>(K_CINEMATIC_FPS);
+        static_cast<float>(cli.recordStartFrame) / static_cast<float>(K_CINEMATIC_FPS);
 
-    if (!curveTsvPath.empty()) {
-      rs.overlays.curveOverlayLoaded = rs.overlays.curveOverlay.loadFromTsv(curveTsvPath);
+    if (!cli.curveTsvPath.empty()) {
+      rs.overlays.curveOverlayLoaded = rs.overlays.curveOverlay.loadFromTsv(cli.curveTsvPath);
       if (!rs.overlays.curveOverlayLoaded) {
-        std::fprintf(stderr, "curve overlay load failed: %s\n", // NOLINT(cert-err33-c) --
-                                                                // diagnostic output, return unused
-                     rs.overlays.curveOverlay.lastError.c_str());
+        (void)std::fprintf(stderr,
+                           "curve overlay load failed: %s\n", // NOLINT(cert-err33-c) --
+                                                              // diagnostic output, return unused
+                           rs.overlays.curveOverlay.lastError.c_str());
       }
     }
 
@@ -630,13 +1375,13 @@ int main(int argc, char **argv) {
 
     double lastTime = glfwGetTime();
 
-
-
     if (!rs.grmhd.grmhdPathInit) {
-      std::snprintf(
-          rs.grmhd.grmhdPathBuffer.data(),
-          rs.grmhd.grmhdPathBuffer.size(), // NOLINT(cert-err33-c) -- diagnostic output, return unused
-          "%s", resourcePath("assets/grmhd/grmhd_pack.json").c_str());
+      const std::string packedPath = resourcePath("assets/grmhd/grmhd_pack.json");
+      if (packedPath.size() >= rs.grmhd.grmhdPathBuffer.size()) {
+        throw std::length_error("GRMHD metadata path exceeds the input buffer");
+      }
+      std::ranges::copy(packedPath, rs.grmhd.grmhdPathBuffer.begin());
+      rs.grmhd.grmhdPathBuffer.at(packedPath.size()) = '\0';
       rs.grmhd.grmhdPathInit = true;
     }
 
@@ -665,55 +1410,15 @@ int main(int argc, char **argv) {
       glfwPollEvents();
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
-      // Check for shader file changes and recompile all affected programs.
-      if (ShaderWatcher::instance().hasPendingReloads()) {
-        auto changedShaders = ShaderWatcher::instance().pollChangedShaders();
-        for (const auto &path : changedShaders) {
-          std::cout << "[HotReload] Shader changed: " << path << "\n";
-        }
-        ShaderWatcher::instance().clearPendingReloads();
-
-        /* WHY: reloadAllRenderShaders() recompiles every render-to-texture
-         * program cached in render.cpp's shaderProgramMap.  This covers
-         * blackhole_main.frag, all bloom stages, tonemapping.frag, and
-         * depth_cues.frag -- any shader routed through renderToTexture().
-         * The compute shader (computeProgram) is managed here in main.cpp;
-         * resetting it to 0 triggers lazy re-creation on the next frame. */
-        reloadAllRenderShaders();
-
-        if (computeProgram != 0) {
-          glDeleteProgram(computeProgram);
-          computeProgram = 0;
-          std::cout << "[HotReload] Queued recompile: shader/geodesic_trace.comp\n";
-        }
-      }
+      reloadChangedShaders(computeProgram);
 #endif
-
       // Update input manager
       InputManager::instance().update(deltaTime);
       auto &input = InputManager::instance();
 
-      if (rs.timing.gpuTimingEnabled && !rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimers.init();
-      } else if (!rs.timing.gpuTimingEnabled && rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimers.shutdown();
-      }
-      if (rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimers.resolve();
-      }
-      rs.timing.timingHistory.push(cpuFrameMs, rs.timing.gpuTimers);
-      TRACY_PLOT("cpu_frame_ms", cpuFrameMs);
-      if (rs.timing.gpuTimers.initialized) {
-        TRACY_PLOT("gpu_fragment_ms", rs.timing.gpuTimers.blackholeFragment.lastMs);
-        TRACY_PLOT("gpu_compute_ms", rs.timing.gpuTimers.blackholeCompute.lastMs);
-        TRACY_PLOT("gpu_bloom_ms", rs.timing.gpuTimers.bloom.lastMs);
-        TRACY_PLOT("gpu_tonemap_ms", rs.timing.gpuTimers.tonemap.lastMs);
-        TRACY_PLOT("gpu_depth_ms", rs.timing.gpuTimers.depth.lastMs);
-        TRACY_PLOT("gpu_grmhd_slice_ms", rs.timing.gpuTimers.grmhdSlice.lastMs);
-      }
-
+      updateFrameTiming(rs, cpuFrameMs);
       // --record-frames: one-time initialization (cinematic quality, 1920x1080, no vsync)
-      if (!recordFramesDir.empty() && !rs.recording.recordInitDone) {
+      if (!cli.recordFramesDir.empty() && !rs.recording.recordInitDone) {
         if (!applyRecordProfileSetup(rs, cli, input, window)) {
           return 1;
         }
@@ -754,156 +1459,17 @@ int main(int argc, char **argv) {
       if (viewportSize.x > 0 && viewportSize.y > 0 &&
           (static_cast<int>(viewportSize.x) != rs.targets.renderWidth ||
            static_cast<int>(viewportSize.y) != rs.targets.renderHeight)) {
-        recreateRenderTargets(rs, static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
+        recreateRenderTargets(rs, static_cast<int>(viewportSize.x),
+                              static_cast<int>(viewportSize.y));
       }
       ImGui::End();
       ImGui::PopStyleVar();
 
-      if (rs.overlays.rmluiEnabled) {
-        if (!rs.overlays.rmluiReady) {
-          rs.overlays.rmluiReady = rs.overlays.rmluiOverlay.init(window, windowWidth, windowHeight);
-        }
-        if (rs.overlays.rmluiReady && (windowWidth != rs.overlays.rmluiWidth || windowHeight != rs.overlays.rmluiHeight)) {
-          rs.overlays.rmluiOverlay.resize(windowWidth, windowHeight);
-          rs.overlays.rmluiWidth = windowWidth;
-          rs.overlays.rmluiHeight = windowHeight;
-        }
-      } else if (rs.overlays.rmluiReady) {
-        rs.overlays.rmluiOverlay.shutdown();
-        rs.overlays.rmluiReady = false;
-      }
-
-      if (!rs.background.baseTexturesLoaded) {
-        rs.background.galaxy = loadCubemap(resourcePath("assets/skybox_nebula_dark"));
-        rs.background.colorMap = loadTexture2D(resourcePath("assets/color_map.png"));
-        rs.background.baseTexturesLoaded = true;
-      }
-      if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
-        const ShowcaseOrbitComposition *const composition =
-            findShowcaseOrbitComposition(recordComposition);
-        rs.background.backgroundLayerScale = {1.0f, 1.18f, 1.42f};
-        rs.background.backgroundLayerIntensity = {1.0f, 0.94f, 0.72f};
-        rs.background.backgroundLayerLodBias = {0.45f, 1.2f, 1.9f};
-        rs.background.backgroundLayerGlobalOffset =
-            composition != nullptr
-                ? glm::vec2(composition->backgroundOffsetX, composition->backgroundOffsetY)
-                : glm::vec2(0.0f);
-        rs.background.backgroundYawRad = glm::radians(hasRecordBackgroundYaw
-                                            ? recordBackgroundYawDeg
-                                            : (composition != nullptr ? composition->backgroundYawDeg
-                                                                      : 0.0f));
-        rs.background.backgroundPitchRad = glm::radians(hasRecordBackgroundPitch
-                                              ? recordBackgroundPitchDeg
-                                              : (composition != nullptr
-                                                     ? composition->backgroundPitchDeg
-                                                     : 0.0f));
-        rs.post.tonemapChromaticAberrationStrength = 0.00015f;
-        rs.post.tonemapVignetteStrength = 0.05f;
-        rs.post.tonemapFilmGrainStrength = 0.0f;
-      } else {
-        rs.background.backgroundLayerScale = {1.0f, 1.08f, 1.16f};
-        rs.background.backgroundLayerIntensity = {1.0f, 0.6f, 0.35f};
-        rs.background.backgroundLayerLodBias = {0.0f, 1.0f, 2.0f};
-        rs.background.backgroundLayerGlobalOffset = glm::vec2(0.0f);
-        rs.background.backgroundYawRad = 0.0f;
-        rs.background.backgroundPitchRad = 0.0f;
-        rs.post.tonemapChromaticAberrationStrength = 0.002f;
-        rs.post.tonemapVignetteStrength = 1.0f;
-        rs.post.tonemapFilmGrainStrength = 0.005f;
-      }
-      if (!rs.debug.debugPreShapingBackgroundEnvApplied) {
-        if (const char *stage = std::getenv("BLACKHOLE_EXPORT_RAW_STAGE")) {
-          rs.debug.debugPreRedshiftBackground =
-              (std::strcmp(stage, "pre-redshift-background") == 0);
-          rs.debug.debugPreShapingBackground =
-              (std::strcmp(stage, "pre-shaping-background") == 0);
-          rs.debug.debugPostShapingBackground =
-              (std::strcmp(stage, "post-shaping-background") == 0);
-          rs.debug.debugShaperInputs =
-              (std::strcmp(stage, "shaper-inputs") == 0);
-          rs.debug.debugClosestApproachState =
-              (std::strcmp(stage, "closest-approach-state") == 0);
-          rs.debug.debugClosestApproachTimeline =
-              (std::strcmp(stage, "closest-approach-timeline") == 0);
-          rs.debug.debugClosestApproachDirection =
-              (std::strcmp(stage, "closest-approach-direction") == 0);
-          rs.debug.debugEscapedDirection =
-              (std::strcmp(stage, "escaped-direction") == 0);
-        }
-        rs.debug.debugPreShapingBackgroundEnvApplied = true;
-      }
-      if (!rs.wiregrid.wiregridEnvApplied) {
-        auto parseEnvFloat = [](const char *name, float &out) {
-          if (const char *value = std::getenv(name)) {
-            char *end = nullptr;
-            float parsed = std::strtof(value, &end);
-            if (end != value) {
-              out = parsed;
-            }
-          }
-        };
-        if (const char *enabled = std::getenv("BLACKHOLE_WIREGRID_ENABLED")) {
-          rs.wiregrid.wiregridEnabled = (std::strcmp(enabled, "0") != 0);
-        }
-        applyWiregridModeProfile(WiregridParams::Mode::Beauty, rs.wiregrid.wiregridParams, rs.wiregrid.wiregridColor);
-        if (const char *mode = std::getenv("BLACKHOLE_WIREGRID_MODE")) {
-          if (std::strcmp(mode, "diagnostic") == 0) {
-            applyWiregridModeProfile(WiregridParams::Mode::Diagnostic, rs.wiregrid.wiregridParams,
-                                     rs.wiregrid.wiregridColor);
-          } else if (std::strcmp(mode, "beauty") == 0) {
-            applyWiregridModeProfile(WiregridParams::Mode::Beauty, rs.wiregrid.wiregridParams,
-                                     rs.wiregrid.wiregridColor);
-          }
-        }
-        if (const char *showErgo = std::getenv("BLACKHOLE_WIREGRID_SHOW_ERGO")) {
-          rs.wiregrid.wiregridParams.showErgosphere = (std::strcmp(showErgo, "0") != 0);
-        }
-        parseEnvFloat("BLACKHOLE_WIREGRID_GRID_SCALE", rs.wiregrid.wiregridParams.gridScale);
-        parseEnvFloat("BLACKHOLE_WIREGRID_MOTION_SCALE", rs.wiregrid.wiregridParams.motionScale);
-        parseEnvFloat("BLACKHOLE_WIREGRID_INFALL_SCALE", rs.wiregrid.wiregridParams.infallScale);
-        parseEnvFloat("BLACKHOLE_WIREGRID_STRENGTH", rs.wiregrid.wiregridParams.strength);
-        parseEnvFloat("BLACKHOLE_WIREGRID_SCENE_PRESERVE", rs.wiregrid.wiregridParams.scenePreserve);
-        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_R", rs.wiregrid.wiregridColor.r);
-        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_G", rs.wiregrid.wiregridColor.g);
-        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_B", rs.wiregrid.wiregridColor.b);
-        parseEnvFloat("BLACKHOLE_WIREGRID_COLOR_A", rs.wiregrid.wiregridColor.a);
-        rs.wiregrid.wiregridEnvApplied = true;
-      }
-      if (!recordFramesDir.empty() && recordProfile == "showcase-orbit" &&
-          rs.wiregrid.wiregridEnabled && rs.wiregrid.wiregridParams.mode == WiregridParams::Mode::Beauty) {
-        applyShowcaseBeautyWiregridTuning(recordComposition, rs.wiregrid.wiregridParams, rs.wiregrid.wiregridColor);
-      }
-      if (rs.background.fallback2D == 0) {
-        rs.background.fallback2D = createColorTexture(1, 1, false);
-      }
-      if (rs.background.fallback3D == 0) {
-        rs.background.fallback3D = createFloatTexture3D(1, 1, 1, std::vector<float>{0.0f});
-      }
-      if (rs.background.fallbackCubemap == 0) {
-        rs.background.fallbackCubemap = createSolidCubemap1x1(0, 0, 0);
-      }
-      updateActiveBackground(rs, settings.backgroundId);
-      GLuint const backgroundFallback = rs.background.backgroundBase != 0 ? rs.background.backgroundBase : rs.background.fallback2D;
-      rs.background.backgroundTextures.fill(backgroundFallback);
-      if (!rs.disk.noiseTextureReady) {
-        bool const noiseOk = rs.disk.noiseCache.initialize();
-        rs.disk.noiseTextureReady = true;  // don't retry regardless; FastNoise2 may be disabled
-        if (noiseOk) {
-          rs.disk.texNoiseVolume = rs.disk.noiseCache.getTurbulenceTexture();
-        }
-      }
-
-      loadSettingsIntoRenderState(rs, settings);
-      if (!recordFramesDir.empty()) {
-        const ShowcaseOrbitComposition *const composition =
-            recordProfile == "showcase-orbit" ? findShowcaseOrbitComposition(recordComposition)
-                                              : nullptr;
-        if (hasRecordExposure) {
-          rs.post.toneExposure = recordExposure;
-        } else if (recordProfile == "showcase-orbit") {
-          rs.post.toneExposure = composition != nullptr ? composition->exposure : 3.4f;
-        }
-      }
+      updateRmlUiOverlay(rs, window, windowWidth, windowHeight);
+      configureFrameBackground(rs, cli);
+      initializeExportDebugStage(rs);
+      initializeWiregridEnvironment(rs);
+      prepareFrameTexturesAndExposure(rs, cli, settings);
 
       rs.display.renderScale = std::clamp(rs.display.renderScale, 0.25f, 1.5f);
       // Legacy resize logic disabled in favor of Viewport-based sizing
@@ -923,423 +1489,17 @@ int main(int argc, char **argv) {
       // --record-frames: drive camera and spin from the selected record path
       applyRecordCameraPath(rs, cli, input);
 
-      // Get camera state for shader
-      const auto &cam = input.camera();
-
-      glm::vec3 const focusTarget =
-          rs.camera.gizmoEnabled ? glm::vec3(rs.camera.gizmoTransform[3]) : glm::vec3(0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-                                                                         // -- glm::mat has no .at()
-
-      rs.camera.orbitTime += input.getEffectiveDeltaTime(deltaTime);
-      glm::vec3 cameraPos = selectCameraPosition(rs, cam, focusTarget);
-
-      glm::vec3 aimTarget = focusTarget;
-      if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
-        const ShowcaseOrbitComposition *const composition =
-            findShowcaseOrbitComposition(recordComposition);
-        float const frameX =
-            hasRecordFrameX ? recordFrameX
-                            : (composition != nullptr ? composition->frameOffsetX : 0.0f);
-        float const frameY =
-            hasRecordFrameY ? recordFrameY
-                            : (composition != nullptr ? composition->frameOffsetY : 0.0f);
-        if (std::abs(frameX) > 0.0001f || std::abs(frameY) > 0.0001f) {
-          glm::mat3 const baseBasis = buildCameraBasis(cameraPos, focusTarget, cam.roll);
-          float const halfHeight = std::tan(glm::radians(cam.fov) * 0.5f) * cam.distance;
-          float const aspect =
-              static_cast<float>(std::max(rs.targets.renderWidth, 1)) /
-              static_cast<float>(std::max(rs.targets.renderHeight, 1));
-          float const halfWidth = halfHeight * aspect;
-          aimTarget = focusTarget + baseBasis[0] * (frameX * halfWidth) +
-                      baseBasis[1] * (frameY * halfHeight);
-        }
-      }
-
-      glm::mat3 cameraBasis = buildCameraBasis(cameraPos, aimTarget, cam.roll);
-      float const fovScale = std::tan(glm::radians(cam.fov) * 0.5f);
-      glm::mat4 viewRotation(1.0f);
-      viewRotation[0] = glm::vec4(cameraBasis[0], 0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-                                                         // -- glm::mat has no .at()
-      viewRotation[1] = glm::vec4(cameraBasis[1], 0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-                                                         // -- glm::mat has no .at()
-      viewRotation[2] = glm::vec4(cameraBasis[2], 0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-                                                         // -- glm::mat has no .at()
-
-      glm::vec2 const parallaxBase =
-          glm::vec2(cameraPos.x, cameraPos.y) * settings.backgroundParallaxStrength;
-      glm::vec2 const drift = glm::vec2(std::cos(static_cast<float>(currentTime) * 0.02f),
-                                        std::sin(static_cast<float>(currentTime) * 0.02f)) *
-                              settings.backgroundDriftStrength;
-      for (std::size_t i = 0; i < static_cast<std::size_t>(K_BACKGROUND_LAYERS); ++i) {
-        glm::vec2 const offset = drift + parallaxBase * rs.background.backgroundLayerDepth.at(i);
-        rs.background.backgroundLayerParams.at(i) =
-            glm::vec4(offset + rs.background.backgroundLayerGlobalOffset, rs.background.backgroundLayerScale.at(i),
-                      rs.background.backgroundLayerIntensity.at(i));
-      }
-      glm::mat4 projectionMatrix = glm::perspective(
-          glm::radians(cam.fov), static_cast<float>(rs.targets.renderWidth) / static_cast<float>(rs.targets.renderHeight),
-          0.1f, rs.display.depthFar);
-      glm::mat4 gizmoViewMatrix =
-          glm::lookAt(cameraPos, aimTarget, cameraBasis[1]); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-                                                               // -- glm::mat has no .at()
-      bool computeActiveForLog = false;
-
-      uploadGrmhdStreamingTiles(rs);
-
-      /* grmhdReady: true when packed texture OR PBO streaming path is valid. */
-      bool const grmhdReady = (rs.grmhd.grmhdLoaded && rs.grmhd.grmhdTexture.texture != 0) ||
-                              (rs.grmhd.grmhdTimeSeriesLoaded && rs.grmhd.grmhdPboUploader.ready());
-      bool grmhdEnabled = rs.grmhd.useGrmhd && grmhdReady;
-      /* grmhdTexId: prefer PBO streaming texture when the streamer is running;
-       * fall back to the packed static texture otherwise. */
-      GLuint const grmhdTexId =
-          (rs.grmhd.grmhdTimeSeriesLoaded && rs.grmhd.grmhdPboUploader.ready())
-              ? rs.grmhd.grmhdPboUploader.texture()
-              : rs.grmhd.grmhdTexture.texture;
-      bool const spectralReady = rs.luts.spectralLutLoaded && rs.luts.texSpectralLUT != 0;
-      bool spectralEnabled = rs.luts.useSpectralLut && spectralReady;
-      rs.luts.spectralRadiusMin = std::max(0.0f, rs.luts.spectralRadiusMin);
-      rs.luts.spectralRadiusMax = std::max(rs.luts.spectralRadiusMax, rs.luts.spectralRadiusMin + 0.001f);
-
-      loadGrbModulationLut(rs);
-      bool const grbModulationReady = rs.luts.grbModulationLoaded && rs.luts.texGrbModulationLUT != 0;
-      bool grbModulationEnabled = false;
-      float const grbSpan = std::max(rs.luts.grbTimeMax - rs.luts.grbTimeMin, 0.001f);
-      float grbTimeSeconds = 0.0f;
-      if (grbModulationReady) {
-        if (rs.luts.grbTimeManual) {
-          grbTimeSeconds = std::clamp(rs.luts.grbTimeManualValue, rs.luts.grbTimeMin, rs.luts.grbTimeMax);
-        } else {
-          grbTimeSeconds = rs.luts.grbTimeMin + std::fmod(static_cast<float>(currentTime), grbSpan);
-        }
-      }
-
-      bool const lutReady = rs.luts.texEmissivityLUT != 0 && rs.luts.texRedshiftLUT != 0;
-
-      {
-        RenderToTextureInfo rtti;
-        rtti.fragShader = "shader/blackhole_main.frag";
-        rtti.cubemapUniforms["galaxy"] = rs.background.galaxy != 0 ? rs.background.galaxy : rs.background.fallbackCubemap;
-        rtti.textureUniforms["colorMap"] = rs.background.colorMap != 0 ? rs.background.colorMap : rs.background.fallback2D;
-        rtti.textureUniforms["emissivityLUT"] = lutReady ? rs.luts.texEmissivityLUT : rs.background.fallback2D;
-        rtti.textureUniforms["redshiftLUT"] = lutReady ? rs.luts.texRedshiftLUT : rs.background.fallback2D;
-        rtti.textureUniforms["photonGlowLUT"] =
-            rs.luts.texPhotonGlowLUT != 0 ? rs.luts.texPhotonGlowLUT : rs.background.fallback2D; // Phase 8.2
-        rtti.textureUniforms["diskDensityLUT"] =
-            rs.luts.texDiskDensityLUT != 0 ? rs.luts.texDiskDensityLUT : rs.background.fallback2D; // Phase 8.2 P2
-        // spectralLUT, grbModulationLUT, and the Hawking LUTs are bound in
-        // bindFragmentUniforms after the between-passes LUT loads settle.
-        for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
-          const std::string name = "backgroundLayers[" + std::to_string(i) + "]";
-          rtti.textureUniforms[name] = rs.background.backgroundTextures.at(static_cast<std::size_t>(i));
-        }
-        rs.disk.noiseTextureScale = std::max(rs.disk.noiseTextureScale, 0.01f);
-        // noiseTexture/grmhdTexture and useNoiseTexture/useGrmhd/backgroundEnabled/
-        // time are set in bindFragmentUniforms from post-derivation readiness.
-        rtti.floatUniforms["noiseTextureScale"] = rs.disk.noiseTextureScale;
-        rtti.floatUniforms["backgroundIntensity"] = settings.backgroundIntensity;
-        rtti.floatUniforms["backgroundYawRad"] = rs.background.backgroundYawRad;
-        rtti.floatUniforms["backgroundPitchRad"] = rs.background.backgroundPitchRad;
-        rtti.vec3Uniforms["grmhdBoundsMin"] = rs.grmhd.grmhdBoundsMin;
-        rtti.vec3Uniforms["grmhdBoundsMax"] = rs.grmhd.grmhdBoundsMax;
-        for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
-          const std::string name = "backgroundLayerParams[" + std::to_string(i) + "]";
-          rtti.vec4Uniforms[name] = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
-        }
-        for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
-          const std::string name = "backgroundLayerLodBias[" + std::to_string(i) + "]";
-          rtti.floatUniforms[name] =
-              std::max(rs.background.backgroundLayerLodBias.at(static_cast<std::size_t>(i)), 0.0f);
-        }
-
-        rtti.targetTexture = rs.targets.texBlackhole;
-        rtti.width = rs.targets.renderWidth;
-        rtti.height = rs.targets.renderHeight;
-
-        // Render UI controls only if visible
-        if (input.isUIVisible()) {
-          renderSettingsWindow(rs);
-        }
-
-        renderCurveOverlayWindow(rs, curveTsvPath);
-
-        updateLuts(rs, rs.physicsCore.kerrSpin, rs.disk.adiskDensityV);
-        loadSpectralSynchHawkingLuts(rs);
-
-        const double referenceMass = physics::M_SUN;
-        const double referenceRs = physics::schwarzschildRadius(referenceMass);
-        const double referenceRg = physics::G * referenceMass / physics::C2;
-        const double referenceA = static_cast<double>(rs.physicsCore.kerrSpin) * referenceRg;
-        const bool progradeSpin = rs.physicsCore.kerrSpin >= 0.0f;
-        const double iscoRatio =
-            physics::kerrIscoRadius(referenceMass, referenceA, progradeSpin) / referenceRs;
-
-        float const schwarzschildRadius = 2.0f * rs.physicsCore.blackHoleMass;
-        float const iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;
-        // Keep record-mode copies accessible outside this inner block
-        rs.recording.recordCurRs   = schwarzschildRadius;
-        rs.recording.recordCurIsco = iscoRadius;
-#if BLACKHOLE_HAS_CUDA
-        if (kAppVariantCudaOnly) {
-          rs.dispatch.cudaManager.setEnabled(true);
-          rs.dispatch.useComputeRaytracer = false;
-          rs.compare.compareComputeFragment = false;
-        }
-#endif
-        bool const computeSupported = ShaderManager::instance().canUseComputeShaders();
-        bool const computeActive = rs.dispatch.useComputeRaytracer && computeSupported;
-        bool const compareActive =
-            rs.compare.compareComputeFragment && computeSupported && !kAppVariantCudaOnly;
-        bool const compareBaselineActive = rs.compare.compareBaselineEnabled && compareActive;
-        bool const adiskEnabledEffective = rs.disk.adiskEnabled && !compareBaselineActive;
-        bool const adiskParticleEffective = rs.disk.adiskParticle && !compareBaselineActive;
-        bool const enableRedshiftEffective = rs.physicsCore.enableRedshift && !compareBaselineActive;
-        bool const useNoiseTextureEffective = rs.disk.useNoiseTexture && !compareBaselineActive;
-        bool const useGrmhdEffective = rs.grmhd.useGrmhd && !compareBaselineActive;
-        bool const useSpectralLutEffective = rs.luts.useSpectralLut && !compareBaselineActive;
-        bool const useGrbModulationEffective = rs.luts.useGrbModulation && !compareBaselineActive;
-        bool const enablePhotonSphereEffective = rs.physicsCore.enablePhotonSphere && !compareBaselineActive;
-        bool const backgroundEnabledEffective =
-            settings.backgroundEnabled && !compareBaselineActive;
-        computeActiveForLog = computeActive;
-        rs.compare.compareSampleSize = std::clamp(rs.compare.compareSampleSize, 4, 64);
-        rs.compare.compareFrameStride = std::max(rs.compare.compareFrameStride, 1);
-        rs.compare.compareAutoCount = std::max(rs.compare.compareAutoCount, 1);
-        rs.compare.compareAutoStride = std::max(rs.compare.compareAutoStride, 1);
-        if (!compareActive) {
-          rs.compare.compareAutoCapture = false;
-          rs.compare.compareAutoRemaining = 0;
-          rs.compare.compareAutoStrideCounter = 0;
-        }
-        rs.dispatch.computeMaxSteps = std::clamp(rs.dispatch.computeMaxSteps, 10, 1000);
-        rs.dispatch.computeStepSize = std::clamp(rs.dispatch.computeStepSize, 0.001f, 2.0f);
-        int compareSteps = rs.dispatch.computeMaxSteps;
-        float compareStepSize = rs.dispatch.computeStepSize;
-        if (rs.compare.compareOverridesEnabled) {
-          if (rs.compare.compareMaxStepsOverride > 0) {
-            compareSteps = rs.compare.compareMaxStepsOverride;
-          }
-          if (rs.compare.compareStepSizeOverride > 0.0f) {
-            compareStepSize = rs.compare.compareStepSizeOverride;
-          }
-        }
-
-        grmhdEnabled = useGrmhdEffective && grmhdReady;
-        spectralEnabled = useSpectralLutEffective && spectralReady;
-        grbModulationEnabled = useGrbModulationEffective && grbModulationReady;
-        bool const noiseReady = useNoiseTextureEffective && rs.disk.texNoiseVolume != 0;
-
-        InteropUniforms interop;
-        interop.cameraPos = cameraPos;
-        interop.cameraBasis = cameraBasis;
-        interop.fovScale = fovScale;
-        interop.timeSec = frameTime;
-        interop.schwarzschildRadius = schwarzschildRadius;
-        interop.iscoRadius = iscoRadius;
-        interop.kerrSpin = rs.physicsCore.kerrSpin;
-        interop.depthFar = rs.display.depthFar;
-        if (compareActive) {
-          interop.maxSteps = compareSteps;
-          interop.stepSize = compareStepSize;
-        } else {
-          interop.maxSteps = rs.dispatch.computeMaxSteps;
-          interop.stepSize = rs.dispatch.computeStepSize;
-        }
-        interop.adiskEnabled = adiskEnabledEffective ? 1.0f : 0.0f;
-        interop.enableRedshift = enableRedshiftEffective ? 1.0f : 0.0f;
-        interop.useLUTs = lutReady ? 1.0f : 0.0f;
-        interop.useSpectralLUT = spectralEnabled ? 1.0f : 0.0f;
-        interop.useGrbModulation = grbModulationEnabled ? 1.0f : 0.0f;
-        interop.lutRadiusMin = rs.luts.lutRadiusMin;
-        interop.lutRadiusMax = rs.luts.lutRadiusMax;
-        interop.redshiftRadiusMin = rs.luts.redshiftRadiusMin;
-        interop.redshiftRadiusMax = rs.luts.redshiftRadiusMax;
-        interop.spectralRadiusMin = rs.luts.spectralRadiusMin;
-        interop.spectralRadiusMax = rs.luts.spectralRadiusMax;
-        interop.grbTime = grbTimeSeconds;
-        interop.grbTimeMin = rs.luts.grbTimeMin;
-        interop.grbTimeMax = rs.luts.grbTimeMax;
-        // D2: volumetric RTE
-        interop.rteEnabled      = rs.rte.rteVolumetricEnabled ? 1.0f : 0.0f;
-        interop.rteOpacityScale = rs.rte.rteOpacityScale;
-        interop.debugPreRedshiftBackground = rs.debug.debugPreRedshiftBackground ? 1.0f : 0.0f;
-        interop.debugPreShapingBackground = rs.debug.debugPreShapingBackground ? 1.0f : 0.0f;
-        interop.debugPostShapingBackground = rs.debug.debugPostShapingBackground ? 1.0f : 0.0f;
-        interop.debugShaperInputs = rs.debug.debugShaperInputs ? 1.0f : 0.0f;
-        interop.debugClosestApproachState = rs.debug.debugClosestApproachState ? 1.0f : 0.0f;
-        interop.debugClosestApproachTimeline = rs.debug.debugClosestApproachTimeline ? 1.0f : 0.0f;
-        interop.debugClosestApproachDirection = rs.debug.debugClosestApproachDirection ? 1.0f : 0.0f;
-        interop.debugEscapedDirection = rs.debug.debugEscapedDirection ? 1.0f : 0.0f;
-
-        // Per-frame derived transients shared by the fragment, CUDA, and
-        // compute uniform binders (compare-baseline gating, LUT readiness,
-        // precomputed record frame shift); see FrameBindingInputs.
-        FrameBindingInputs frameInputs;
-        frameInputs.adiskEnabledEffective = adiskEnabledEffective;
-        frameInputs.enableRedshiftEffective = enableRedshiftEffective;
-        frameInputs.backgroundEnabledEffective = backgroundEnabledEffective;
-        frameInputs.enablePhotonSphereEffective = enablePhotonSphereEffective;
-        frameInputs.backgroundIntensity = settings.backgroundIntensity;
-        frameInputs.lutReady = lutReady;
-        frameInputs.spectralEnabled = spectralEnabled;
-        frameInputs.grbModulationEnabled = grbModulationEnabled;
-        frameInputs.noiseReady = noiseReady;
-        frameInputs.grmhdEnabled = grmhdEnabled;
-        frameInputs.adiskParticleEffective = adiskParticleEffective;
-        frameInputs.compareActive = compareActive;
-        frameInputs.grmhdTexId = grmhdTexId;
-        /* Record-mode showcase-orbit frame offset; defaults (0,0) cover the
-         * non-record path via FrameBindingInputs member initializers. */
-        if (!recordFramesDir.empty() && recordProfile == "showcase-orbit") {
-          const ShowcaseOrbitComposition *const composition =
-              findShowcaseOrbitComposition(recordComposition);
-          frameInputs.frameShiftX =
-              hasRecordFrameX ? recordFrameX
-                              : (composition != nullptr ? composition->frameOffsetX : 0.0f);
-          frameInputs.frameShiftY =
-              hasRecordFrameY ? recordFrameY
-                              : (composition != nullptr ? composition->frameOffsetY : 0.0f);
-        }
-
-        // Load-order-independent fragment uniforms (the emissivity-family LUT
-        // bindings stay above, before updateLuts reassigns their handles).
-        bindFragmentUniforms(rtti, rs, interop, frameInputs);
-
-#if BLACKHOLE_HAS_CUDA
-        /* CUDA dispatch path: bypasses both fragment and compute GLSL paths */
-        if (rs.dispatch.cudaManager.isEnabled()) {
-          ZONE_SCOPED_N("Blackhole CUDA");
-
-          /* Lazy init on first use or after resize.
-           * Track pre-call state to detect the single frame where init succeeds. */
-          bool const wasReady = rs.dispatch.cudaManager.isReady();
-          rs.dispatch.cudaManager.ensureInit(rs.targets.texBlackhole, rs.targets.renderWidth, rs.targets.renderHeight);
-          if (!wasReady && rs.dispatch.cudaManager.isReady()) {
-            /* Register rs.background.galaxy cubemap as CUDA texture object (slot 4 = BhLutGalaxy).
-             * Done exactly once on the frame that init first succeeds.
-             * Registration failure is non-fatal: kernels fall back to no background. */
-            GLuint const galaxyTexForCuda = (rs.background.galaxy != 0) ? rs.background.galaxy : rs.background.fallbackCubemap;
-            if (galaxyTexForCuda != 0) {
-              rs.dispatch.cudaManager.registerLut(4, galaxyTexForCuda,
-                                      static_cast<unsigned int>(GL_TEXTURE_CUBE_MAP));
-            }
-            /* Register the layered desktop background equirect texture so the CUDA
-             * lane samples the same 2D scene asset class as the GLSL desktop lane. */
-            GLuint const backgroundTexForCuda = (rs.background.backgroundBase != 0) ? rs.background.backgroundBase : rs.background.fallback2D;
-            if (backgroundTexForCuda != 0) {
-              bhCudaRegisterBackgroundTexture(rs.dispatch.cudaManager.backend(), backgroundTexForCuda,
-                                              static_cast<unsigned int>(GL_TEXTURE_2D));
-            }
-          }
-
-          if (rs.dispatch.cudaManager.isReady()) {
-            BH_LaunchParams cp = {};
-            bindCudaLaunchParams(cp, rs, interop, frameInputs);
-
-            rs.dispatch.cudaManager.renderFrame(&cp);
-          }
-        } else
-#endif
-        {
-          /* Original GLSL fragment/compute paths */
-
-          GLuint fragmentTarget = 0;
-          if (computeActive) {
-            fragmentTarget = compareActive ? rs.targets.texBlackholeCompare : 0;
-          } else {
-            fragmentTarget = rs.targets.texBlackhole;
-          }
-          GLuint computeTarget = 0;
-          if (computeActive) {
-            computeTarget = rs.targets.texBlackhole;
-          } else {
-            computeTarget = compareActive ? rs.targets.texBlackholeCompare : 0;
-          }
-          if (rs.timing.gpuTimers.initialized && fragmentTarget != 0) {
-            rs.timing.gpuTimers.blackholeFragment.begin();
-          }
-          if (fragmentTarget != 0) {
-            ZONE_SCOPED_N("Blackhole Fragment");
-            rtti.targetTexture = fragmentTarget;
-            // std::cout << "Rendering to texture..." << std::endl;
-            renderToTexture(rtti);
-          }
-          if (rs.timing.gpuTimers.initialized && fragmentTarget != 0) {
-            rs.timing.gpuTimers.blackholeFragment.end();
-          }
-
-          if (rs.timing.gpuTimers.initialized && computeTarget != 0) {
-            rs.timing.gpuTimers.blackholeCompute.begin();
-          }
-          if (computeTarget != 0) {
-            ZONE_SCOPED_N("Blackhole Compute");
-            if (computeProgram == 0) {
-              computeProgram = createComputeProgram(std::string("shader/geodesic_trace.comp"));
-            }
-
-            glUseProgram(computeProgram);
-            applyInteropComputeUniforms(computeProgram, interop, rs.targets.renderWidth, rs.targets.renderHeight);
-
-            // Apply Hawking radiation uniforms
-            double const bhMass = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
-            applyHawkingUniforms(computeProgram, rs.hawking.hawkingRenderer, rs.hawking.hawkingGlowEnabled,
-                                 rs.hawking.hawkingTempScale, rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMass);
-
-            bindComputeUniforms(computeProgram, rs, frameInputs);
-
-            glBindImageTexture(0, computeTarget, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-            GLint const tileOffsetLoc = glGetUniformLocation(computeProgram, "tileOffset");
-            constexpr int kGroupSize = 16;
-            if (rs.dispatch.computeTiled) {
-              rs.dispatch.computeTileSize = std::clamp(rs.dispatch.computeTileSize, kGroupSize, 2048);
-              for (int y = 0; y < rs.targets.renderHeight; y += rs.dispatch.computeTileSize) {
-                for (int x = 0; x < rs.targets.renderWidth; x += rs.dispatch.computeTileSize) {
-                  int const tileWidth = std::min(rs.dispatch.computeTileSize, rs.targets.renderWidth - x);
-                  int const tileHeight = std::min(rs.dispatch.computeTileSize, rs.targets.renderHeight - y);
-                  if (tileOffsetLoc != -1) {
-                    glUniform2i(tileOffsetLoc, x, y);
-                  }
-                  auto const groupsX =
-                      static_cast<GLuint>((tileWidth + kGroupSize - 1) / kGroupSize);
-                  auto const groupsY =
-                      static_cast<GLuint>((tileHeight + kGroupSize - 1) / kGroupSize);
-                  glDispatchCompute(groupsX, groupsY, 1);
-                  glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-                }
-              }
-            } else {
-              if (tileOffsetLoc != -1) {
-                glUniform2i(tileOffsetLoc, 0, 0);
-              }
-              auto const groupsX = static_cast<GLuint>((rs.targets.renderWidth + kGroupSize - 1) / kGroupSize);
-              auto const groupsY =
-                  static_cast<GLuint>((rs.targets.renderHeight + kGroupSize - 1) / kGroupSize);
-              glDispatchCompute(groupsX, groupsY, 1);
-              glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-            }
-            glUseProgram(0);
-          }
-          if (rs.timing.gpuTimers.initialized && computeTarget != 0) {
-            rs.timing.gpuTimers.blackholeCompute.end();
-          }
-
-          CompareParityInputs parityInputs;
-          parityInputs.fragmentTarget = fragmentTarget;
-          parityInputs.computeTarget = computeTarget;
-          parityInputs.compareActive = compareActive;
-          parityInputs.compareBaselineActive = compareBaselineActive;
-          parityInputs.backgroundEnabledEffective = backgroundEnabledEffective;
-          parityInputs.noiseReady = noiseReady;
-          parityInputs.grmhdEnabled = grmhdEnabled;
-          parityInputs.spectralEnabled = spectralEnabled;
-          parityInputs.grbModulationEnabled = grbModulationEnabled;
-          parityInputs.enablePhotonSphereEffective = enablePhotonSphereEffective;
-          parityInputs.grbTimeSeconds = grbTimeSeconds;
-          parityInputs.timeSec = glfwGetTime();
-          parityInputs.interop = interop;
-          captureCompareParity(rs, parityInputs);
-        } /* end of GLSL fragment/compute else block */
-      }
+      const auto frameCamera = updateFrameCamera(rs, input, cli, settings, deltaTime, currentTime);
+      const auto &cameraPos = frameCamera.position;
+      const auto &cameraBasis = frameCamera.basis;
+      const float fovScale = frameCamera.fovScale;
+      auto projectionMatrix = frameCamera.projection;
+      auto gizmoViewMatrix = frameCamera.gizmoView;
+      const auto blackholeFrame =
+          renderBlackholeFrame(rs, cli, settings, input, cameraPos, cameraBasis, fovScale,
+                               frameTime, currentTime, computeProgram);
+      const bool grmhdReady = blackholeFrame.grmhdReady;
+      const bool computeActiveForLog = blackholeFrame.computeActiveForLog;
       restoreCompareSweepState(rs, input);
 
       GLuint const finalTexture = runPostProcessPipeline(rs, input);
@@ -1358,11 +1518,8 @@ int main(int argc, char **argv) {
       composeSceneOverlays(rs, input, finalTexture, grmhdReady);
 
       // Draw Final Texture to Viewport
-      ImGui::Image(
-          reinterpret_cast<void *>(static_cast<intptr_t>(finalTexture)), viewportSize, ImVec2(0, 1),
-          ImVec2(
-              1,
-              0)); // NOLINT(performance-no-int-to-ptr) -- ImGui API requires void* for texture IDs
+      ImGui::Image(static_cast<ImTextureID>(finalTexture), viewportSize, ImVec2(0, 1),
+                   ImVec2(1, 0));
 
       // Enable mouse/keyboard interaction when hovering the viewport
       bool const isViewportHovered = ImGui::IsItemHovered();
@@ -1374,14 +1531,15 @@ int main(int argc, char **argv) {
         ImVec2 const windowPos = ImGui::GetWindowPos();
         ImGuizmo::SetRect(windowPos.x, windowPos.y, viewportSize.x, viewportSize.y);
         ImGuizmo::Manipulate(glm::value_ptr(gizmoViewMatrix), glm::value_ptr(projectionMatrix),
-                             rs.camera.gizmoOperation, rs.camera.gizmoMode, glm::value_ptr(rs.camera.gizmoTransform));
+                             rs.camera.gizmoOperation, rs.camera.gizmoMode,
+                             glm::value_ptr(rs.camera.gizmoTransform));
       }
 
       ImGui::End();         // End Viewport
       ImGui::PopStyleVar(); // WindowPadding
 
       // Normal UI panels are hidden in record mode so they don't appear in the video.
-      if (input.isUIVisible() && recordFramesDir.empty()) {
+      if (input.isUIVisible() && cli.recordFramesDir.empty()) {
         renderControlsHelpPanel();
         renderControlsSettingsPanel(rs);
         renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
@@ -1397,68 +1555,7 @@ int main(int argc, char **argv) {
       /* --export-frame / --export-raw-frame: export textures before ImGui. */
       exportFrameOnce(rs, cli);
 
-      /* --record-frames: draw cinematic physics HUD via foreground draw list.
-       * GetForegroundDrawList() adds to ImGui's draw list, so this must be called
-       * before ImGui::Render().  The overlay is composited over the scene by the
-       * ImGui backend when RenderDrawData() runs below. */
-      if (!recordFramesDir.empty()) {
-        ++rs.recording.recordWarmup;
-      }
-      if (!recordFramesDir.empty() && recordProfile == "cinematic" && rs.recording.recordWarmup >= 15) {
-        renderCinematicOverlay(rs.recording.recordCinematic, rs.recording.recordCurrentKf,
-                               glm::length(cameraPos),
-                               rs.recording.recordCurRs, rs.recording.recordCurIsco,
-                               rs.recording.recordFrameIndex, recordFramesTotal);
-      }
-
-      // ImGui Render
-      ImGui::Render();
-      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-      /* --record-frames: capture the tonemapped scene texture and advance the
-       * frame index. The cinematic HUD drawn above is composited later by ffmpeg;
-       * here we grab the clean scene texture, not the ImGui-chrome framebuffer. */
-      captureRecordFrame(rs, cli);
-
-      // Update Platform Windows (Docking)
-      if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0) {
-        GLFWwindow *backupCurrentContext = glfwGetCurrentContext();
-        ImGui::UpdatePlatformWindows();
-        ImGui::RenderPlatformWindowsDefault();
-        glfwMakeContextCurrent(backupCurrentContext);
-      }
-
-      if (rs.timing.gpuTimingLogEnabled && rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimingLogCounter++;
-        if (rs.timing.gpuTimingLogCounter >= rs.timing.gpuTimingLogStride) {
-          appendGpuTimingSample(gpuTimingPath(), rs.timing.gpuTimingLogIndex++, rs.targets.renderWidth, rs.targets.renderHeight,
-                                cpuFrameMs, rs.timing.gpuTimers, computeActiveForLog, rs.physicsCore.kerrSpin,
-                                glfwGetTime());
-          rs.timing.gpuTimingLogCounter = 0;
-        }
-      }
-
-      if (rs.timing.gpuTimers.initialized) {
-        rs.timing.gpuTimers.swap();
-      }
-      FRAME_MARK;
-      glfwSwapBuffers(window);
-
-      /* --export-frame / --export-raw-frame: break after the export frame above. */
-      if (!exportFramePath.empty() || !exportRawFramePath.empty()) {
-        if (++rs.exporting.exportDone >= 6) { /* 5 warmup + 1 export frame */
-          break;
-        }
-      }
-
-      /* --record-frames: break when all requested frames have been captured.
-       * rs.recording.recordFrameIndex starts at recordStartFrame; terminate when we have
-       * written recordFramesTotal frames (i.e. reached recordStartFrame+total). */
-      if (!recordFramesDir.empty()
-          && rs.recording.recordFrameIndex >= recordStartFrame + recordFramesTotal) {
-        int const written = rs.recording.recordFrameIndex - recordStartFrame;
-        std::printf("Record complete: %d frames written to %s\n",
-                    written, recordFramesDir.c_str());
+      if (completeFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog)) {
         break;
       }
     }
@@ -1500,27 +1597,28 @@ int main(int argc, char **argv) {
     return 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {
-    std::fprintf(stderr, "Unhandled cpptrace exception: %s\n",
-                 err.what()); // NOLINT(cert-err33-c) -- diagnostic output, return unused
+    (void)std::fprintf(stderr, "Unhandled cpptrace exception: %s\n",
+                       err.what()); // NOLINT(cert-err33-c) -- diagnostic output, return unused
     err.trace().print();
     return 1;
   } catch (const std::exception &err) {
-    std::fprintf(stderr, "Unhandled std::exception: %s\n",
-                 err.what()); // NOLINT(cert-err33-c) -- diagnostic output, return unused
+    (void)std::fprintf(stderr, "Unhandled std::exception: %s\n",
+                       err.what()); // NOLINT(cert-err33-c) -- diagnostic output, return unused
     cpptrace::generate_trace(1).print();
     return 1;
   } catch (...) {
-    std::fprintf(stderr, "Unhandled non-standard exception\n"); // NOLINT(cert-err33-c) --
-                                                                // diagnostic output, return unused
+    (void)std::fprintf(stderr,
+                       "Unhandled non-standard exception\n"); // NOLINT(cert-err33-c) --
+                                                              // diagnostic output, return unused
     cpptrace::generate_trace(1).print();
     return 1;
   }
 #else
   } catch (const std::exception &err) {
-    std::fprintf(stderr, "Unhandled std::exception: %s\n", err.what());
+    (void)std::fprintf(stderr, "Unhandled std::exception: %s\n", err.what());
     return 1;
   } catch (...) {
-    std::fprintf(stderr, "Unhandled non-standard exception\n");
+    (void)std::fprintf(stderr, "Unhandled non-standard exception\n");
     return 1;
   }
 #endif

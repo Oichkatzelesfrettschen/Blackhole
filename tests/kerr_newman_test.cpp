@@ -23,10 +23,12 @@
  * No external data or GPU required.
  */
 
-#include <gtest/gtest.h>
-#include "physics/kerr_newman.h"
 #include <cmath>
 #include <numbers>
+
+#include <gtest/gtest.h>
+
+#include "physics/kerr_newman.h"
 
 // ============================================================================
 // Utility: Kerr reference formulas (geometric units, G=c=1)
@@ -36,52 +38,107 @@ namespace {
 
 /** @brief Kerr Sigma = r^2 + a^2 cos^2(theta). */
 double kerrSigmaRef(double r, double a, double theta) {
-    const double c = std::cos(theta);
-    return r * r + a * a * c * c;
+  const double c = std::cos(theta);
+  return r * r + a * a * c * c;
 }
 
 /** @brief Kerr Delta = r^2 - 2 M r + a^2 (no charge). */
-double kerrDeltaRef(double r, double M, double a) {
-    return r * r - 2.0 * M * r + a * a;
+double kerrDeltaRef(double r, double m, double a) {
+  return r * r - 2.0 * m * r + a * a;
 }
 
 /** @brief Kerr g_tt = -(Delta - a^2 sin^2 theta) / Sigma. */
-double kerrGttRef(double r, double theta, double M, double a) {
-    const double Sigma = kerrSigmaRef(r, a, theta);
-    const double Delta = kerrDeltaRef(r, M, a);
-    const double s     = std::sin(theta);
-    return -(Delta - a * a * s * s) / Sigma;
+double kerrGttRef(double r, double theta, double m, double a) {
+  const double sigma = kerrSigmaRef(r, a, theta);
+  const double delta = kerrDeltaRef(r, m, a);
+  const double s = std::sin(theta);
+  return -(delta - a * a * s * s) / sigma;
 }
 
 /** @brief Kerr g_rr = Sigma / Delta. */
-double kerrGrrRef(double r, double theta, double M, double a) {
-    return kerrSigmaRef(r, a, theta) / kerrDeltaRef(r, M, a);
+double kerrGrrRef(double r, double theta, double m, double a) {
+  return kerrSigmaRef(r, a, theta) / kerrDeltaRef(r, m, a);
 }
 
 /** @brief Kerr g_phph = A sin^2 theta / Sigma,  A = (r^2+a^2)^2 - a^2 Delta sin^2 theta. */
-double kerrGphphRef(double r, double theta, double M, double a) {
-    const double r2a2  = r * r + a * a;
-    const double s     = std::sin(theta);
-    const double Delta = kerrDeltaRef(r, M, a);
-    const double A     = r2a2 * r2a2 - a * a * Delta * s * s;
-    return A * s * s / kerrSigmaRef(r, a, theta);
+double kerrGphphRef(double r, double theta, double m, double a) {
+  const double r2a2 = r * r + a * a;
+  const double s = std::sin(theta);
+  const double delta = kerrDeltaRef(r, m, a);
+  const double metricFactor = r2a2 * r2a2 - a * a * delta * s * s;
+  return metricFactor * s * s / kerrSigmaRef(r, a, theta);
 }
 
 /** @brief Kerr g_tph = -2 M r a sin^2 theta / Sigma. */
-double kerrGtphRef(double r, double theta, double M, double a) {
-    const double s = std::sin(theta);
-    return -2.0 * M * r * a * s * s / kerrSigmaRef(r, a, theta);
+double kerrGtphRef(double r, double theta, double m, double a) {
+  const double s = std::sin(theta);
+  return -2.0 * m * r * a * s * s / kerrSigmaRef(r, a, theta);
 }
 
 /** @brief Kerr outer horizon r+ = M + sqrt(M^2 - a^2). */
-double kerrRplusRef(double M, double a) {
-    return M + std::sqrt(M * M - a * a);
+double kerrRplusRef(double m, double a) {
+  return m + std::sqrt(m * m - a * a);
 }
 
 /** @brief Kerr ergosphere r_ergo = M + sqrt(M^2 - a^2 cos^2 theta). */
-double kerrErgoRef(double theta, double M, double a) {
-    const double c = std::cos(theta);
-    return M + std::sqrt(M * M - a * a * c * c);
+double kerrErgoRef(double theta, double m, double a) {
+  const double c = std::cos(theta);
+  return m + std::sqrt(m * m - a * a * c * c);
+}
+
+void checkKerrMetricComponents(double r, double theta, double m, double a, double q, double tol) {
+  // g_tt
+  EXPECT_NEAR(physics::knGtt(r, theta, m, a, q), kerrGttRef(r, theta, m, a), tol)
+      << "g_tt mismatch at a=" << a << " r=" << r;
+
+  // g_rr
+  EXPECT_NEAR(physics::knGrr(r, theta, m, a, q), kerrGrrRef(r, theta, m, a), tol)
+      << "g_rr mismatch at a=" << a << " r=" << r;
+
+  // g_thth = Sigma
+  EXPECT_NEAR(physics::knGthth(r, a, theta), kerrSigmaRef(r, a, theta), tol)
+      << "g_thth mismatch at a=" << a << " r=" << r;
+
+  // g_phph
+  EXPECT_NEAR(physics::knGphph(r, theta, m, a, q), kerrGphphRef(r, theta, m, a), tol)
+      << "g_phph mismatch at a=" << a << " r=" << r;
+
+  // g_tph
+  EXPECT_NEAR(physics::knGtph(r, theta, m, a), kerrGtphRef(r, theta, m, a), tol)
+      << "g_tph mismatch at a=" << a << " r=" << r;
+
+  // Frame dragging
+  EXPECT_NEAR(physics::knFrameDragging(r, theta, m, a, q),
+              2.0 * m * r * a / physics::knA(r, theta, m, a, q), tol)
+      << "frame dragging mismatch at a=" << a << " r=" << r;
+}
+
+void checkReissnerNordstromMetric(double r, double theta, double m, double a, double q,
+                                  double deltaRn, double tol) {
+  const double s = std::sin(theta);
+
+  // g_tph must vanish: no spin means no frame dragging
+  EXPECT_NEAR(physics::knGtph(r, theta, m, a), 0.0, tol) << "g_tph != 0 at Q=" << q << " r=" << r;
+
+  // g_tt = -Delta_RN / r^2  (Sigma = r^2 when a = 0)
+  EXPECT_NEAR(physics::knGtt(r, theta, m, a, q), -deltaRn / (r * r), tol)
+      << "g_tt RN mismatch at Q=" << q << " r=" << r;
+
+  // g_rr = r^2 / Delta_RN
+  if (std::abs(deltaRn) > 1.0e-10) {
+    EXPECT_NEAR(physics::knGrr(r, theta, m, a, q), r * r / deltaRn, tol)
+        << "g_rr RN mismatch at Q=" << q << " r=" << r;
+  }
+
+  // g_thth = r^2  (Sigma = r^2 when a = 0)
+  EXPECT_NEAR(physics::knGthth(r, a, theta), r * r, tol)
+      << "g_thth RN mismatch at Q=" << q << " r=" << r;
+
+  // g_phph = r^2 sin^2 theta.
+  // WHY 1e-12 not 1e-14: at r=50, the magnitude is ~1875;
+  // machine epsilon for doubles at that scale is ~2e-13.
+  EXPECT_NEAR(physics::knGphph(r, theta, m, a, q), r * r * s * s, 1.0e-12)
+      << "g_phph RN mismatch at Q=" << q << " r=" << r;
 }
 
 } // namespace
@@ -97,66 +154,36 @@ double kerrErgoRef(double theta, double M, double a) {
  * frame dragging at four spin values and two radii.
  */
 TEST(KerrNewman, ReducesToKerr) {
-    constexpr double M = 1.0;
-    constexpr double Q = 0.0;
-    constexpr double theta = std::numbers::pi / 4.0;
-    constexpr double tol   = 1.0e-14;
+  constexpr double m = 1.0;
+  constexpr double q = 0.0;
+  constexpr double theta = std::numbers::pi / 4.0;
+  constexpr double tol = 1.0e-14;
 
-    const double spins[]  = {0.0, 0.3, 0.7, 0.95};
-    const double radii[]  = {6.0, 20.0};
+  const double spins[] = {0.0, 0.3, 0.7, 0.95};
+  const double radii[] = {6.0, 20.0};
 
-    for (double a : spins) {
-        for (double r : radii) {
-            // g_tt
-            EXPECT_NEAR(physics::knGtt(r, theta, M, a, Q),
-                        kerrGttRef(r, theta, M, a), tol)
-                << "g_tt mismatch at a=" << a << " r=" << r;
-
-            // g_rr
-            EXPECT_NEAR(physics::knGrr(r, theta, M, a, Q),
-                        kerrGrrRef(r, theta, M, a), tol)
-                << "g_rr mismatch at a=" << a << " r=" << r;
-
-            // g_thth = Sigma
-            EXPECT_NEAR(physics::knGthth(r, a, theta),
-                        kerrSigmaRef(r, a, theta), tol)
-                << "g_thth mismatch at a=" << a << " r=" << r;
-
-            // g_phph
-            EXPECT_NEAR(physics::knGphph(r, theta, M, a, Q),
-                        kerrGphphRef(r, theta, M, a), tol)
-                << "g_phph mismatch at a=" << a << " r=" << r;
-
-            // g_tph
-            EXPECT_NEAR(physics::knGtph(r, theta, M, a),
-                        kerrGtphRef(r, theta, M, a), tol)
-                << "g_tph mismatch at a=" << a << " r=" << r;
-
-            // Frame dragging
-            EXPECT_NEAR(physics::knFrameDragging(r, theta, M, a, Q),
-                        2.0 * M * r * a / physics::knA(r, theta, M, a, Q), tol)
-                << "frame dragging mismatch at a=" << a << " r=" << r;
-        }
-
-        // Horizon
-        EXPECT_NEAR(physics::knOuterHorizon(M, a, Q),
-                    kerrRplusRef(M, a), tol)
-            << "r_+ mismatch at a=" << a;
-
-        // Inner horizon (a > 0 gives distinct r-)
-        if (a > 0.0) {
-            const double rMinus = physics::knInnerHorizon(M, a, Q);
-            const double rPlus  = physics::knOuterHorizon(M, a, Q);
-            EXPECT_GT(rPlus, rMinus) << "r_+ > r_- violated at a=" << a;
-        }
-
-        // Ergosphere at equator and pole
-        for (double th : {std::numbers::pi / 2.0, std::numbers::pi / 6.0}) {
-            EXPECT_NEAR(physics::knErgosphereRadius(th, M, a, Q),
-                        kerrErgoRef(th, M, a), tol)
-                << "ergosphere mismatch at a=" << a << " theta=" << th;
-        }
+  for (double const a : spins) {
+    for (double const r : radii) {
+      checkKerrMetricComponents(r, theta, m, a, q, tol);
     }
+
+    // Horizon
+    EXPECT_NEAR(physics::knOuterHorizon(m, a, q), kerrRplusRef(m, a), tol)
+        << "r_+ mismatch at a=" << a;
+
+    // Inner horizon (a > 0 gives distinct r-)
+    if (a > 0.0) {
+      const double rMinus = physics::knInnerHorizon(m, a, q);
+      const double rPlus = physics::knOuterHorizon(m, a, q);
+      EXPECT_GT(rPlus, rMinus) << "r_+ > r_- violated at a=" << a;
+    }
+
+    // Ergosphere at equator and pole
+    for (double const th : {std::numbers::pi / 2.0, std::numbers::pi / 6.0}) {
+      EXPECT_NEAR(physics::knErgosphereRadius(th, m, a, q), kerrErgoRef(th, m, a), tol)
+          << "ergosphere mismatch at a=" << a << " theta=" << th;
+    }
+  }
 }
 
 // ============================================================================
@@ -176,59 +203,30 @@ TEST(KerrNewman, ReducesToKerr) {
  *   - r_+_RN = M + sqrt(M^2 - Q^2)
  */
 TEST(KerrNewman, ReducesToReissnerNordstrom) {
-    constexpr double M   = 1.0;
-    constexpr double a   = 0.0;
-    constexpr double tol = 1.0e-14;
+  constexpr double m = 1.0;
+  constexpr double a = 0.0;
+  constexpr double tol = 1.0e-14;
 
-    const double charges[] = {0.0, 0.3, 0.6, 0.8};
-    const double radii[]   = {5.0, 15.0, 50.0};
-    const double thetas[]  = {std::numbers::pi / 6.0,
-                               std::numbers::pi / 2.0,
-                               2.0 * std::numbers::pi / 3.0};
+  const double charges[] = {0.0, 0.3, 0.6, 0.8};
+  const double radii[] = {5.0, 15.0, 50.0};
+  const double thetas[] = {std::numbers::pi / 6.0, std::numbers::pi / 2.0,
+                           2.0 * std::numbers::pi / 3.0};
 
-    for (double Q : charges) {
-        for (double r : radii) {
-            const double DeltaRN = r * r - 2.0 * M * r + Q * Q;
+  for (double const q : charges) {
+    for (double const r : radii) {
+      const double deltaRn = r * r - 2.0 * m * r + q * q;
 
-            for (double theta : thetas) {
-                const double s = std::sin(theta);
+      for (double const theta : thetas) {
+        checkReissnerNordstromMetric(r, theta, m, a, q, deltaRn, tol);
+      }
 
-                // g_tph must vanish: no spin means no frame dragging
-                EXPECT_NEAR(physics::knGtph(r, theta, M, a), 0.0, tol)
-                    << "g_tph != 0 at Q=" << Q << " r=" << r;
-
-                // g_tt = -Delta_RN / r^2  (Sigma = r^2 when a = 0)
-                EXPECT_NEAR(physics::knGtt(r, theta, M, a, Q),
-                            -DeltaRN / (r * r), tol)
-                    << "g_tt RN mismatch at Q=" << Q << " r=" << r;
-
-                // g_rr = r^2 / Delta_RN
-                if (std::abs(DeltaRN) > 1.0e-10) {
-                    EXPECT_NEAR(physics::knGrr(r, theta, M, a, Q),
-                                r * r / DeltaRN, tol)
-                        << "g_rr RN mismatch at Q=" << Q << " r=" << r;
-                }
-
-                // g_thth = r^2  (Sigma = r^2 when a = 0)
-                EXPECT_NEAR(physics::knGthth(r, a, theta), r * r, tol)
-                    << "g_thth RN mismatch at Q=" << Q << " r=" << r;
-
-                // g_phph = r^2 sin^2 theta.
-                // WHY 1e-12 not 1e-14: at r=50, the magnitude is ~1875;
-                // machine epsilon for doubles at that scale is ~2e-13.
-                EXPECT_NEAR(physics::knGphph(r, theta, M, a, Q),
-                            r * r * s * s, 1.0e-12)
-                    << "g_phph RN mismatch at Q=" << Q << " r=" << r;
-            }
-
-            // Outer horizon: r_+ = M + sqrt(M^2 - Q^2)
-            if (Q < M) {
-                const double rPlusRN = M + std::sqrt(M * M - Q * Q);
-                EXPECT_NEAR(physics::knOuterHorizon(M, a, Q), rPlusRN, tol)
-                    << "r_+ RN mismatch at Q=" << Q;
-            }
-        }
+      // Outer horizon: r_+ = M + sqrt(M^2 - Q^2)
+      if (q < m) {
+        const double rPlusRN = m + std::sqrt(m * m - q * q);
+        EXPECT_NEAR(physics::knOuterHorizon(m, a, q), rPlusRN, tol) << "r_+ RN mismatch at Q=" << q;
+      }
     }
+  }
 }
 
 // ============================================================================
@@ -243,27 +241,26 @@ TEST(KerrNewman, ReducesToReissnerNordstrom) {
  * at the extremal limit M^2 = a^2 + Q^2.
  */
 TEST(KerrNewman, ChargeSplitsHorizons) {
-    constexpr double M = 1.0;
-    constexpr double a = 0.3;
+  constexpr double m = 1.0;
+  constexpr double a = 0.3;
 
-    double prevRplus = physics::knOuterHorizon(M, a, 0.0);
+  double prevRplus = physics::knOuterHorizon(m, a, 0.0);
 
-    const double charges[] = {0.1, 0.3, 0.5, 0.7, 0.9};
-    for (double Q : charges) {
-        if (!physics::knSubExtremal(M, a, Q)) break;
-
-        const double rPlus  = physics::knOuterHorizon(M, a, Q);
-        const double rMinus = physics::knInnerHorizon(M, a, Q);
-
-        EXPECT_LT(rPlus, prevRplus)
-            << "r_+ should decrease as Q grows; Q=" << Q;
-        EXPECT_GT(rPlus, rMinus)
-            << "r_+ > r_- required; Q=" << Q;
-        EXPECT_GT(rMinus, 0.0)
-            << "r_- > 0 for sub-extremal KN; Q=" << Q;
-
-        prevRplus = rPlus;
+  const double charges[] = {0.1, 0.3, 0.5, 0.7, 0.9};
+  for (double const q : charges) {
+    if (!physics::knSubExtremal(m, a, q)) {
+      break;
     }
+
+    const double rPlus = physics::knOuterHorizon(m, a, q);
+    const double rMinus = physics::knInnerHorizon(m, a, q);
+
+    EXPECT_LT(rPlus, prevRplus) << "r_+ should decrease as Q grows; Q=" << q;
+    EXPECT_GT(rPlus, rMinus) << "r_+ > r_- required; Q=" << q;
+    EXPECT_GT(rMinus, 0.0) << "r_- > 0 for sub-extremal KN; Q=" << q;
+
+    prevRplus = rPlus;
+  }
 }
 
 // ============================================================================
@@ -274,22 +271,22 @@ TEST(KerrNewman, ChargeSplitsHorizons) {
  * @brief knSubExtremal correctly partitions physical and unphysical parameters.
  */
 TEST(KerrNewman, SubExtremalCondition) {
-    constexpr double M = 1.0;
+  constexpr double m = 1.0;
 
-    // Physical cases: a^2 + Q^2 < M^2
-    EXPECT_TRUE(physics::knSubExtremal(M, 0.0, 0.0));   // Schwarzschild
-    EXPECT_TRUE(physics::knSubExtremal(M, 0.5, 0.0));   // Kerr, a < M
-    EXPECT_TRUE(physics::knSubExtremal(M, 0.0, 0.5));   // RN, Q < M
-    EXPECT_TRUE(physics::knSubExtremal(M, 0.6, 0.6));   // a^2+Q^2 = 0.72 < 1
+  // Physical cases: a^2 + Q^2 < M^2
+  EXPECT_TRUE(physics::knSubExtremal(m, 0.0, 0.0)); // Schwarzschild
+  EXPECT_TRUE(physics::knSubExtremal(m, 0.5, 0.0)); // Kerr, a < M
+  EXPECT_TRUE(physics::knSubExtremal(m, 0.0, 0.5)); // RN, Q < M
+  EXPECT_TRUE(physics::knSubExtremal(m, 0.6, 0.6)); // a^2+Q^2 = 0.72 < 1
 
-    // Extremal (boundary, should be allowed)
-    EXPECT_TRUE(physics::knSubExtremal(M, M, 0.0));     // extremal Kerr
-    EXPECT_TRUE(physics::knSubExtremal(M, 0.0, M));     // extremal RN
+  // Extremal (boundary, should be allowed)
+  EXPECT_TRUE(physics::knSubExtremal(m, m, 0.0)); // extremal Kerr
+  EXPECT_TRUE(physics::knSubExtremal(m, 0.0, m)); // extremal RN
 
-    // Super-extremal: naked singularity
-    EXPECT_FALSE(physics::knSubExtremal(M, 0.8, 0.8)); // a^2+Q^2 = 1.28 > 1
-    EXPECT_FALSE(physics::knSubExtremal(M, M + 0.1, 0.0));
-    EXPECT_FALSE(physics::knSubExtremal(M, 0.0, M + 0.1));
+  // Super-extremal: naked singularity
+  EXPECT_FALSE(physics::knSubExtremal(m, 0.8, 0.8)); // a^2+Q^2 = 1.28 > 1
+  EXPECT_FALSE(physics::knSubExtremal(m, m + 0.1, 0.0));
+  EXPECT_FALSE(physics::knSubExtremal(m, 0.0, m + 0.1));
 }
 
 // ============================================================================
@@ -303,23 +300,21 @@ TEST(KerrNewman, SubExtremalCondition) {
  * contributions to the geodesic equation in the uncharged limit.
  */
 TEST(KerrNewman, ElectricPotentialVanishesAtQZero) {
-    constexpr double tol = 1.0e-30;
-    const double radii[]  = {2.0, 5.0, 10.0, 100.0};
-    const double thetas[] = {0.1, std::numbers::pi / 4.0, std::numbers::pi / 2.0};
-    const double spins[]  = {0.0, 0.5, 0.9};
+  constexpr double tol = 1.0e-30;
+  const double radii[] = {2.0, 5.0, 10.0, 100.0};
+  const double thetas[] = {0.1, std::numbers::pi / 4.0, std::numbers::pi / 2.0};
+  const double spins[] = {0.0, 0.5, 0.9};
 
-    for (double a : spins) {
-        for (double r : radii) {
-            for (double theta : thetas) {
-                EXPECT_NEAR(physics::knElectricPotentialAt(r, theta, a, 0.0),
-                            0.0, tol)
-                    << "A_t != 0 at Q=0, a=" << a << " r=" << r;
-                EXPECT_NEAR(physics::knMagneticPotentialPhi(r, theta, a, 0.0),
-                            0.0, tol)
-                    << "A_phi != 0 at Q=0, a=" << a << " r=" << r;
-            }
-        }
+  for (double const a : spins) {
+    for (double const r : radii) {
+      for (double const theta : thetas) {
+        EXPECT_NEAR(physics::knElectricPotentialAt(r, theta, a, 0.0), 0.0, tol)
+            << "A_t != 0 at Q=0, a=" << a << " r=" << r;
+        EXPECT_NEAR(physics::knMagneticPotentialPhi(r, theta, a, 0.0), 0.0, tol)
+            << "A_phi != 0 at Q=0, a=" << a << " r=" << r;
+      }
     }
+  }
 }
 
 // ============================================================================
@@ -333,36 +328,36 @@ TEST(KerrNewman, ElectricPotentialVanishesAtQZero) {
  * merge into a single degenerate horizon at r = M.
  */
 TEST(KerrNewman, ExtremeLimit) {
-    constexpr double M   = 1.0;
-    constexpr double tol = 1.0e-14;
+  constexpr double m = 1.0;
+  constexpr double tol = 1.0e-14;
 
-    // Case A: extremal Kerr (Q = 0, a = M)
-    {
-        const double rPlus  = physics::knOuterHorizon(M, M, 0.0);
-        const double rMinus = physics::knInnerHorizon(M, M, 0.0);
-        EXPECT_NEAR(rPlus,  M, tol) << "extremal Kerr r_+ != M";
-        EXPECT_NEAR(rMinus, M, tol) << "extremal Kerr r_- != M";
-    }
+  // Case A: extremal Kerr (Q = 0, a = M)
+  {
+    const double rPlus = physics::knOuterHorizon(m, m, 0.0);
+    const double rMinus = physics::knInnerHorizon(m, m, 0.0);
+    EXPECT_NEAR(rPlus, m, tol) << "extremal Kerr r_+ != M";
+    EXPECT_NEAR(rMinus, m, tol) << "extremal Kerr r_- != M";
+  }
 
-    // Case B: extremal RN (a = 0, Q = M)
-    {
-        const double rPlus  = physics::knOuterHorizon(M, 0.0, M);
-        const double rMinus = physics::knInnerHorizon(M, 0.0, M);
-        EXPECT_NEAR(rPlus,  M, tol) << "extremal RN r_+ != M";
-        EXPECT_NEAR(rMinus, M, tol) << "extremal RN r_- != M";
-    }
+  // Case B: extremal RN (a = 0, Q = M)
+  {
+    const double rPlus = physics::knOuterHorizon(m, 0.0, m);
+    const double rMinus = physics::knInnerHorizon(m, 0.0, m);
+    EXPECT_NEAR(rPlus, m, tol) << "extremal RN r_+ != M";
+    EXPECT_NEAR(rMinus, m, tol) << "extremal RN r_- != M";
+  }
 
-    // Case C: mixed extremal a^2 + Q^2 = M^2, a = Q = M/sqrt(2).
-    // WHY looser tolerance: M/sqrt(2) is irrational; its IEEE 754 square
-    // differs from M^2/2 by ~7e-17, so sqrt(disc) ~ 1.4e-8 rather than 0.
-    // We check that both horizons coincide (r_+ == r_-) rather than
-    // pinning them to M exactly.
-    {
-        const double aq    = M / std::sqrt(2.0);
-        const double rPlus  = physics::knOuterHorizon(M, aq, aq);
-        const double rMinus = physics::knInnerHorizon(M, aq, aq);
-        EXPECT_NEAR(rPlus,  M, 2.0e-7) << "mixed extremal r_+ ~ M";
-        EXPECT_NEAR(rMinus, M, 2.0e-7) << "mixed extremal r_- ~ M";
-        EXPECT_NEAR(rPlus, rMinus, 3.0e-8) << "mixed extremal horizons coincide";
-    }
+  // Case C: mixed extremal a^2 + Q^2 = M^2, a = Q = M/sqrt(2).
+  // WHY looser tolerance: M/sqrt(2) is irrational; its IEEE 754 square
+  // differs from M^2/2 by ~7e-17, so sqrt(disc) ~ 1.4e-8 rather than 0.
+  // We check that both horizons coincide (r_+ == r_-) rather than
+  // pinning them to M exactly.
+  {
+    const double aq = m / std::numbers::sqrt2;
+    const double rPlus = physics::knOuterHorizon(m, aq, aq);
+    const double rMinus = physics::knInnerHorizon(m, aq, aq);
+    EXPECT_NEAR(rPlus, m, 2.0e-7) << "mixed extremal r_+ ~ M";
+    EXPECT_NEAR(rMinus, m, 2.0e-7) << "mixed extremal r_- ~ M";
+    EXPECT_NEAR(rPlus, rMinus, 3.0e-8) << "mixed extremal horizons coincide";
+  }
 }

@@ -2,8 +2,7 @@
  * kerr_extended.h
  *
  * Verified Kerr Black Hole Physics (Spinning Black Holes)
- * Extracted from Rocq formalization via OCaml transpilation
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23
+ * Maintained C++ references for the Kerr formulas in rocq/theories/Metrics/Kerr.v
  *
  * This header provides complete Kerr spacetime computations:
  * - Metric tensor components in Boyer-Lindquist coordinates
@@ -12,12 +11,12 @@
  * - Surface gravity and Hawking temperature
  * - Geodesic analysis and null constraints
  *
- * All functions are extracted from proven Rocq theories and validated
- * against Z3 constraint solver for physical consistency.
+ * C++ value tests exercise selected analytic limits and parity checks.
+ * Rocq references describe the mathematics rather than floating-point proof equivalence.
  *
  * Formulas shared with kerr.hpp (Sigma, Delta, A, metric components,
  * horizons, ergosphere, BPT ISCO) delegate to that header; this file
- * adds the range-checked camelCase surface plus energy, angular
+ * adds the assertion-checked surface plus energy, angular
  * momentum, four-norm, and validity predicates kerr.hpp does not carry.
  *
  * Geometric units: c = G = M_sun = 1
@@ -57,53 +56,14 @@ namespace verified {
  */
 
 /**
- * Compute Sigma = r^2 + a^2 cos^2(theta)
- * Combines radial and polar geometry
- * Sigma > 0 everywhere except ring singularity (r=0, theta=pi/2, a!=0)
- */
-[[nodiscard]] inline double kerrSigma(double r, double theta, double a) noexcept {
-  return kerr_Sigma(r, theta, a);
-}
-
-/**
- * Compute Delta = r^2 - 2Mr + a^2
- * Controls horizon locations; Delta = 0 at horizons
- * Delta(r_+) = 0 for event horizon
- * Delta(r_-) = 0 for Cauchy horizon
- */
-[[nodiscard]] constexpr double kerrDelta(double r, double m, double a) noexcept {
-  return kerr_Delta(r, m, a);
-}
-
-/**
- * Compute A = (r^2 + a^2)^2 - a^2 Delta sin^2(theta)
- * Appears in g_phi_phi component
- * Encodes frame-dragging geometry
- */
-[[nodiscard]] inline double kerrA(double r, double theta, double m, double a) noexcept {
-  return kerr_A(r, theta, m, a);
-}
-
-/**
- * Kerr metric component g_tt (temporal-temporal)
- * g_tt = -(1 - 2Mr/Sigma)
- * Negative in exterior (timelike at infinity)
- * Zero at horizon (null/lightlike)
- * Positive inside horizon (spacelike inside)
- */
-[[nodiscard]] inline double kerrGTt(double r, double theta, double m, double a) noexcept {
-  return kerr_g_tt(r, theta, m, a);
-}
-
-/**
  * Kerr metric component g_rr (radial-radial)
  * g_rr = Sigma / Delta
  * Singular at horizons (Delta = 0)
  * Coordinate singularity (not physical singularity)
  */
-[[nodiscard]] inline double kerrGRr(double r, double theta, double m, double a) noexcept {
-  assert(kerr_Delta(r, m, a) != 0.0 && "g_rr singular at horizon");
-  return kerr_g_rr(r, theta, m, a);
+[[nodiscard]] inline double kerrGRrChecked(double r, double theta, double m, double a) noexcept {
+  assert(kerrDelta(r, m, a) != 0.0 && "g_rr singular at horizon");
+  return kerrGRr(r, theta, m, a);
 }
 
 /**
@@ -112,7 +72,7 @@ namespace verified {
  * Always positive away from ring singularity
  */
 [[nodiscard]] inline double kerrGThetaTheta(double r, double theta, double a) noexcept {
-  return kerr_g_thth(r, theta, a);
+  return kerrGThth(r, theta, a);
 }
 
 /**
@@ -121,7 +81,7 @@ namespace verified {
  * Includes frame-dragging effect
  */
 [[nodiscard]] inline double kerrGPhiPhi(double r, double theta, double m, double a) noexcept {
-  return kerr_g_phph(r, theta, m, a);
+  return kerrGPhph(r, theta, m, a);
 }
 
 /**
@@ -131,7 +91,7 @@ namespace verified {
  * Zero for Schwarzschild (a = 0)
  */
 [[nodiscard]] inline double kerrGTPhi(double r, double theta, double m, double a) noexcept {
-  return kerr_g_tph(r, theta, m, a);
+  return kerrGTph(r, theta, m, a);
 }
 
 /**
@@ -147,7 +107,7 @@ namespace verified {
 [[nodiscard]] inline double kerrOuterHorizon(double m, double a) noexcept {
   assert(a < m && "Naked singularity: a >= m");
   assert(m > 0 && "Invalid mass");
-  return outer_horizon(m, a);
+  return outerHorizon(m, a);
 }
 
 /**
@@ -159,7 +119,7 @@ namespace verified {
 [[nodiscard]] inline double kerrInnerHorizon(double m, double a) noexcept {
   assert(a < m && "Naked singularity: a >= m");
   assert(m > 0 && "Invalid mass");
-  return inner_horizon(m, a);
+  return innerHorizon(m, a);
 }
 
 /**
@@ -171,7 +131,7 @@ namespace verified {
 [[nodiscard]] inline double kerrErgosphereRadius(double theta, double m, double a) noexcept {
   assert((m * m) - (a * a * std::cos(theta) * std::cos(theta)) >= 0 &&
          "Invalid ergosphere calculation");
-  return ergosphere_radius(theta, m, a);
+  return ergosphereRadius(theta, m, a);
 }
 
 /**
@@ -183,13 +143,17 @@ namespace verified {
  * convention: Z1(a) = kerr_Z1(1, a). The general-mass form lives in
  * kerr.hpp, which normalizes the spin as a/M (BPT 1972 eq. 2.21).
  */
-[[nodiscard]] inline double bptZ1(double a) noexcept { return kerr_Z1(1.0, a); }
+[[nodiscard]] inline double bptZ1(double a) noexcept {
+  return kerrZ1(1.0, a);
+}
 
 /**
  * Helper function Z2 from Bardeen-Press-Teukolsky formula, in the M = 1
  * convention: Z2(a) = kerr_Z2(1, a) = sqrt(3*a^2 + Z1(a)^2).
  */
-[[nodiscard]] inline double bptZ2(double a) noexcept { return kerr_Z2(1.0, a); }
+[[nodiscard]] inline double bptZ2(double a) noexcept {
+  return kerrZ2(1.0, a);
+}
 
 /**
  * ISCO radius for prograde orbits (co-rotating with black hole)
@@ -200,20 +164,20 @@ namespace verified {
  * a/M; a re-derivation here once fed raw a into the M = 1 helpers,
  * which is wrong for any mass except 1 and invisible to unit-mass tests.
  */
-[[nodiscard]] inline double kerrIscoPrograde(double m, double a) noexcept {
+[[nodiscard]] inline double kerrIscoProgradeChecked(double m, double a) noexcept {
   assert(m > 0 && "Invalid mass");
   assert(a >= 0 && a < m && "Invalid spin parameter");
-  return kerr_isco_prograde(m, a);
+  return kerrIscoPrograde(m, a);
 }
 
 /**
  * ISCO radius for retrograde orbits (counter-rotating): the + sign on
  * the square root selects the retrograde branch (Z1/Z2 are even in a).
  */
-[[nodiscard]] inline double kerrIscoRetrograde(double m, double a) noexcept {
+[[nodiscard]] inline double kerrIscoRetrogradeChecked(double m, double a) noexcept {
   assert(m > 0 && "Invalid mass");
   assert(a >= 0 && a < m && "Invalid spin parameter");
-  return kerr_isco_retrograde(m, a);
+  return kerrIscoRetrograde(m, a);
 }
 
 /**
@@ -287,7 +251,7 @@ namespace verified {
 [[nodiscard]] constexpr double kerrFourNorm(double r, double theta, double m, double a, double vT,
                                             double vR, double vTheta, double vPhi) noexcept {
   double const gTt = kerrGTt(r, theta, m, a);
-  double const gRr = kerrGRr(r, theta, m, a);
+  double const gRr = kerrGRrChecked(r, theta, m, a);
   double const gThetaTheta = kerrGThetaTheta(r, theta, a);
   double const gPhiPhi = kerrGPhiPhi(r, theta, m, a);
   double const gTPhi = kerrGTPhi(r, theta, m, a);
@@ -341,7 +305,7 @@ namespace verified {
     return false;
   }
 
-  double const rIsco = kerrIscoPrograde(m, a);
+  double const rIsco = kerrIscoProgradeChecked(m, a);
   double const rPlus = kerrOuterHorizon(m, a);
   double const rErgo = kerrErgosphereRadius(0.0, m, a); // At equator
 
@@ -365,7 +329,7 @@ namespace verified {
   }
 
   double const gTt = kerrGTt(r, theta, m, a);
-  double const gRr = kerrGRr(r, theta, m, a);
+  double const gRr = kerrGRrChecked(r, theta, m, a);
   double const gThetaTheta = kerrGThetaTheta(r, theta, a);
   double const gPhiPhi = kerrGPhiPhi(r, theta, m, a);
 
@@ -374,8 +338,7 @@ namespace verified {
 }
 
 /**
- * Bind extraction functions for OCaml/C++ interop
- * These expose the verified functions to the rest of the physics pipeline
+ * Function-pointer interface for C++ metric consumers.
  */
 
 using KirrMetricFunc = double (*)(double, double, double, double);

@@ -8,8 +8,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
+#include <format>
 #include <numbers>
+#include <numeric>
+#include <string>
 #include <vector>
 
 #include <imgui.h>
@@ -182,33 +184,31 @@ void drawCapabilityIcon(ImDrawList *drawList, const ImVec2 &center, game::FleetC
 // bands draw as hazard without glow, ergoregion bands amber and prograde-only.
 void drawOrbitalBands(ImDrawList *drawList, const MapScale &scale,
                       const game::CampaignViewSnapshot &view) {
-  char label[96];
   for (const game::BandView &band : view.bands) {
+    std::string label;
     const float bandPx = scale.pixelRadius(band.radiusCm);
     ImU32 ringColor = IM_COL32(120, 30, 30, 180);
     float thickness = 1.0f;
     if (band.validStation && band.insideErgosphere) {
       ringColor = IM_COL32(210, 150, 60, 230);
       thickness = 2.0f;
-      static_cast<void>(std::snprintf(
-          label, sizeof(label), "band %d  dtau/dt %.3f  omega %.2e  PROGRADE ONLY", band.index,
-          band.properTimeRate, band.frameDragRateRadPerSec));
+      label = std::format("band {}  dtau/dt {:.3f}  omega {:.2e}  PROGRADE ONLY", band.index,
+                          band.properTimeRate, band.frameDragRateRadPerSec);
     } else if (band.validStation) {
       ringColor = rateColor(band.properTimeRate);
       thickness = 1.5f;
-      static_cast<void>(std::snprintf(label, sizeof(label), "band %d  dtau/dt %.3f  delay %.1f d",
-                                      band.index, band.properTimeRate,
-                                      band.delayToAuthoritySec / K_SECONDS_PER_DAY));
+      label = std::format("band {}  dtau/dt {:.3f}  delay {:.1f} d", band.index,
+                          band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY);
     } else {
-      static_cast<void>(std::snprintf(label, sizeof(label), "band %d  FORBIDDEN", band.index));
+      label = std::format("band {}  FORBIDDEN", band.index);
     }
     if (band.validStation) {
       drawGlow(drawList, scale.center, bandPx, ringColor);
     }
     drawList->AddCircle(scale.center, bandPx, ringColor, 96, thickness);
-    drawList->AddText({scale.center.x + (bandPx * 0.7071f) + 6.0f,
-                       scale.center.y - (bandPx * 0.7071f) - 6.0f},
-                      IM_COL32(200, 200, 210, 255), label);
+    drawList->AddText(
+        {scale.center.x + (bandPx * 0.7071f) + 6.0f, scale.center.y - (bandPx * 0.7071f) - 6.0f},
+        IM_COL32(200, 200, 210, 255), label.c_str());
   }
 }
 
@@ -267,10 +267,10 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   scale.center = {canvasOrigin.x + (canvasSize.x * 0.5f), canvasOrigin.y + (canvasSize.y * 0.5f)};
   scale.maxRadiusPx = (0.5f * std::min(canvasSize.x, canvasSize.y)) - 8.0f;
 
-  double rMax = view.authorityRadiusCm;
-  for (const game::BandView &band : view.bands) {
-    rMax = std::max(rMax, band.radiusCm);
-  }
+  const double rMax = std::accumulate(view.bands.begin(), view.bands.end(), view.authorityRadiusCm,
+                                      [](double radiusCm, const game::BandView &band) {
+                                        return std::max(radiusCm, band.radiusCm);
+                                      });
   scale.rMinCm = view.innerBoundaryRadiusCm > 0.0 ? view.innerBoundaryRadiusCm : rMax / 1000.0;
   scale.rMaxCm = rMax * 1.15;
 
@@ -316,13 +316,8 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   std::vector<Marker> markers;
   markers.reserve(view.fleets.size());
   for (const game::FleetView &fleet : view.fleets) {
-    double bandRadiusCm = view.authorityRadiusCm;
-    for (const game::BandView &band : view.bands) {
-      if (band.index == fleet.bandIndex) {
-        bandRadiusCm = band.radiusCm;
-        break;
-      }
-    }
+    const auto band = std::ranges::find(view.bands, fleet.bandIndex, &game::BandView::index);
+    const double bandRadiusCm = band == view.bands.end() ? view.authorityRadiusCm : band->radiusCm;
     const ImVec2 pos = ringPoint(scale, bandRadiusCm, fleetAngleRad(fleet.id));
     markers.push_back({.fleet = fleet.id, .pos = pos});
     const bool selected = fleet.id == uiState.selectedFleet;
@@ -348,12 +343,8 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   }
 
   const auto markerFor = [&markers](game::FleetId fleetId) -> const Marker * {
-    for (const Marker &marker : markers) {
-      if (marker.fleet == fleetId) {
-        return &marker;
-      }
-    }
-    return nullptr;
+    const auto marker = std::ranges::find(markers, fleetId, &Marker::fleet);
+    return marker == markers.end() ? nullptr : &*marker;
   };
 
   // Orders in flight: authority -> fleet, dot at the causal progress fraction.

@@ -253,7 +253,10 @@ bool testNormalizedFluxPeak() {
   double maxFlux = 0.0;
   double rAtMax = 0.0;
 
-  for (double r = rIsco; r <= 10.0; r += 0.01) {
+  const double radialStep = 0.01;
+  const int radialIntervals = static_cast<int>((10.0 - rIsco) / radialStep);
+  for (int sampleIndex = 0; sampleIndex <= radialIntervals; ++sampleIndex) {
+    const double r = rIsco + (static_cast<double>(sampleIndex) * radialStep);
     const double flux = NovikovThorneDisk::normalizedFlux(r, aStar);
     if (flux > maxFlux) {
       maxFlux = flux;

@@ -25,7 +25,10 @@
 #include <vector>
 
 #include <GLFW/glfw3.h>
-#include <glbinding/gl/gl.h>
+#include <glbinding/gl/bitfield.h>
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 #include <glbinding/glbinding.h>
 #include <gtest/gtest.h>
 
@@ -41,6 +44,8 @@ using namespace gl;
 
 namespace {
 
+constexpr float TOLERANCE_SINGLE = 1e-6F;
+
 /// Inline `#include "verified/x.glsl"` directives from the shader tree.
 /// The verified modules carry only commented-out include lines
 /// themselves, so one expansion level suffices.
@@ -53,7 +58,7 @@ std::string expandIncludes(const std::string &source) {
   for (; it != end; ++it) {
     out.append(source, last, static_cast<std::size_t>(it->position()) - last);
     const std::string path = std::string(BH_SHADER_INCLUDE_DIR) + "/" + (*it)[1].str();
-    std::ifstream file(path);
+    const std::ifstream file(path);
     if (!file) {
       throw std::runtime_error("cannot open GLSL include: " + path);
     }
@@ -62,18 +67,19 @@ std::string expandIncludes(const std::string &source) {
     out += content.str();
     last = static_cast<std::size_t>(it->position() + it->length());
   }
-  out.append(source, last, std::string::npos);
+  out.append(source, last);
   return out;
 }
 
 } // namespace
 
 class GPUCPUParityTest : public ::testing::Test {
+private:
+  GLFWwindow *window_ = nullptr;
+
 protected:
-  static constexpr float TOLERANCE_SINGLE = 1e-6F;
 
   static bool glAvailable;
-  GLFWwindow *window = nullptr;
 
   static void SetUpTestSuite() {
     glAvailable = false;
@@ -109,15 +115,15 @@ protected:
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    window = glfwCreateWindow(1, 1, "GPU Parity Test", nullptr, nullptr);
-    ASSERT_NE(window, nullptr);
-    glfwMakeContextCurrent(window);
+    window_ = glfwCreateWindow(1, 1, "GPU Parity Test", nullptr, nullptr);
+    ASSERT_NE(window_, nullptr);
+    glfwMakeContextCurrent(window_);
   }
 
   void TearDown() override {
-    if (window != nullptr) {
-      glfwDestroyWindow(window);
-      window = nullptr;
+    if (window_ != nullptr) {
+      glfwDestroyWindow(window_);
+      window_ = nullptr;
     }
   }
 
@@ -195,7 +201,7 @@ bool GPUCPUParityTest::glAvailable = false;
 // ============================================================================
 
 TEST_F(GPUCPUParityTest, SchwarzschildGTT) {
-  double const cpuResult = verified::schwarzschild_g_tt(10.0, 1.0);
+  double const cpuResult = verified::schwarzschildGTt(10.0, 1.0);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;
@@ -212,7 +218,7 @@ TEST_F(GPUCPUParityTest, SchwarzschildGTT) {
 }
 
 TEST_F(GPUCPUParityTest, SchwarzschildGRR) {
-  double const cpuResult = verified::schwarzschild_g_rr(10.0, 1.0);
+  double const cpuResult = verified::schwarzschildGRr(10.0, 1.0);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;
@@ -229,7 +235,7 @@ TEST_F(GPUCPUParityTest, SchwarzschildGRR) {
 }
 
 TEST_F(GPUCPUParityTest, SchwarzschildChristoffelTTR) {
-  double const cpuResult = verified::christoffel_t_tr(10.0, 1.0);
+  double const cpuResult = verified::christoffelTTr(10.0, 1.0);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;
@@ -250,7 +256,7 @@ TEST_F(GPUCPUParityTest, SchwarzschildChristoffelTTR) {
 
 TEST_F(GPUCPUParityTest, PolytropePressure) {
   verified::PolytropeParams const p{1.0, 2.0}; // K = 1, gamma = 2
-  double const cpuResult = verified::polytrope_pressure(p, 1.5);
+  double const cpuResult = verified::polytropePressure(p, 1.5);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;
@@ -275,7 +281,7 @@ TEST_F(GPUCPUParityTest, PolytropePressure) {
 
 TEST_F(GPUCPUParityTest, HubbleParameter) {
   // Planck 2018 flat LCDM at z = 0.1
-  double const cpuResult = verified::hubble_parameter(67.36, 0.3153, 0.1);
+  double const cpuResult = verified::hubbleParameter(67.36, 0.3153, 0.1);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;

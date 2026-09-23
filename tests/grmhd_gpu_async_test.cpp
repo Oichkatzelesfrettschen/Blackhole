@@ -3,12 +3,13 @@
  * @brief Phase 6.2b: Async GPU tile upload and PBO pipeline validation
  */
 
-#include <iostream>
+#include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <vector>
-#include <chrono>
 
 // Mock GPU resource structures
 namespace {
@@ -75,15 +76,15 @@ public:
      * @return true if transfer complete
      */
     bool pollCompletion(uint64_t fenceId) {
-        for (auto& pbo : pendingUploads_) { // NOLINT(readability-use-anyofallof) -- loop has side effects
-            if (pbo && pbo->fence && pbo->fence->gpuTimestamp == fenceId) {
-                // Simulate GPU completion after polling (for testing)
-                pbo->gpuResident = true;
-                pbo->fence->signaled = true;
-                return true;
-            }
-        }
+      const auto pending = std::ranges::find_if(pendingUploads_, [fenceId](const auto &pbo) {
+        return pbo && pbo->fence && pbo->fence->gpuTimestamp == fenceId;
+      });
+      if (pending == pendingUploads_.end()) {
         return false;
+      }
+      (*pending)->gpuResident = true;
+      (*pending)->fence->signaled = true;
+      return true;
     }
 
     /**
@@ -91,12 +92,12 @@ public:
      */
     void waitForCompletion() {
         // Mark all pending as complete (immediate for mock)
-        for (auto& pbo : pendingUploads_) {
-            if (pbo && pbo->fence) {
-                pbo->gpuResident = true;
-                pbo->fence->signaled = true;
-                completionCount_++;
-            }
+        for (const auto &pbo : pendingUploads_) {
+          if (pbo && pbo->fence) {
+            pbo->gpuResident = true;
+            pbo->fence->signaled = true;
+            completionCount_++;
+          }
         }
         pendingUploads_.clear();
     }
@@ -132,11 +133,14 @@ bool testPboCreation() {
   pbo->sizeBytes = 32768; // 32KB per 32x32 tile * 8 variables
   pbo->gpuResident = false;
 
-  bool const creationOk = (pbo->id == 1 && pbo->sizeBytes == 32768);
+  AsyncUploadPipeline pipeline(1);
+  const auto fenceId = pipeline.queuePBOUpload(pbo);
+  bool const creationOk =
+      fenceId != 0 && pipeline.getPendingCount() == 1 && pbo->fence && !pbo->fence->signaled;
 
   std::cout << "  Created PBO id: " << pbo->id << "\n"
             << "  Buffer size: " << pbo->sizeBytes << " bytes (32KB per 32x32 tile)\n"
-            << "  GPU resident: " << (pbo->gpuResident ? "true" : "false") << "\n"
+            << "  GPU resident: " << std::boolalpha << pbo->gpuResident << "\n"
             << "  Status: " << (creationOk ? "PASS" : "FAIL") << "\n\n";
 
   return creationOk;
@@ -254,30 +258,29 @@ bool testPboBandwidth() {
 }
 
 // Test 6: Octree SSBO layout validation
-bool testOctreeSsboLayout() {
+void testOctreeSsboLayout() {
   std::cout << "Test 6: Octree SSBO Layout Validation\n";
 
   // OctreeNode: 8 floats = 32 bytes
-  uint32_t const nodeSize = 8 * sizeof(float);
+  constexpr uint32_t nodeSize = 8 * sizeof(float);
 
   // Grid: 128x128x128 root, 8 variables per cell
-  uint32_t const gridDims = 128;
-  uint32_t const totalCells = gridDims * gridDims * gridDims; // 2M cells
-  uint32_t const ssboSize = totalCells * nodeSize;            // 64MB
+  constexpr uint32_t gridDims = 128;
+  constexpr uint32_t totalCells = gridDims * gridDims * gridDims; // 2M cells
+  constexpr uint32_t ssboSize = totalCells * nodeSize;            // 64MB
 
   // Assume GPU VRAM: 12GB RTX 4080
-  uint64_t const gpuVram = 12ULL * 1024ULL * 1024ULL * 1024ULL; // 12GB
-  bool const vramOk = (ssboSize < gpuVram / 4);                 // Use <25% for other data
+  constexpr uint64_t gpuVram = 12ULL * 1024ULL * 1024ULL * 1024ULL; // 12GB
+  static_assert(ssboSize < gpuVram / 4);                            // Use <25% for other data
 
   std::cout << "  OctreeNode size: " << nodeSize << " bytes\n"
             << "  Grid dimensions: " << gridDims << "^3\n"
             << "  Total cells: " << totalCells << " (2M)\n"
             << "  SSBO size: " << (ssboSize / 1024 / 1024) << " MB\n"
             << "  GPU VRAM available: " << (gpuVram / 1024 / 1024 / 1024) << " GB\n"
-            << "  Occupancy: " << ((static_cast<uint64_t>(ssboSize) * 100U) / gpuVram) << "% of VRAM\n"
-            << "  Status: " << (vramOk ? "PASS" : "FAIL") << "\n\n";
-
-  return vramOk;
+            << "  Occupancy: " << ((static_cast<uint64_t>(ssboSize) * 100U) / gpuVram)
+            << "% of VRAM\n"
+            << "  Status: PASS (compile-time memory budget)\n\n";
 }
 
 // Test 7: Async pipeline throughput
@@ -346,9 +349,8 @@ int main() {
     if (testPboBandwidth()) {
       passed++;
     }
-    if (testOctreeSsboLayout()) {
-      passed++;
-    }
+    testOctreeSsboLayout();
+    ++passed;
     if (testAsyncThroughput()) {
       passed++;
     }

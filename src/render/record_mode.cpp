@@ -5,27 +5,44 @@
 
 #include "render/record_mode.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <format>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
 #include <GLFW/glfw3.h>
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 #include <stb_image_write.h>
 
-#include "cinematic.h"           // K_CINEMATIC_KEYFRAMES / DURATION / FPS
-#include "gl_loader.h"           // gl:: readback entry points
-#include "input.h"               // InputManager, CameraState, CameraMode
+#include <glm/ext/vector_float4.hpp>
+
+#include "cinematic.h" // K_CINEMATIC_KEYFRAMES / DURATION / FPS
+#include "input.h"     // InputManager, CameraState, CameraMode
 #include "platform/cli_options.h"
-#include "render/render_state.h" // RenderState, WiregridParams
-#include "settings.h"            // SettingsManager
+#include "render/render_state.h"   // RenderState, WiregridParams
+#include "settings.h"              // SettingsManager
 #include "tools/compare_harness.h" // readTextureRGBA, writePfmRgb
+
+using namespace gl;
 
 namespace blackhole {
 namespace {
+
+float compositionValue(const ShowcaseOrbitComposition *composition,
+                       float ShowcaseOrbitComposition::*member, float defaultValue) {
+  return composition == nullptr ? defaultValue : composition->*member;
+}
 
 /**
  * @brief Downloads a tonemapped RGB texture into a top-to-bottom byte buffer.
@@ -44,7 +61,8 @@ bool readTonemappedRgb(gl::GLuint texTonemapped, int fallbackWidth, int fallback
     return false;
   }
   glBindTexture(GL_TEXTURE_2D, texTonemapped);
-  GLint texW = 0, texH = 0;
+  GLint texW = 0;
+  GLint texH = 0;
   glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &texW);
   glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &texH);
   int const w = (texW > 0) ? texW : fallbackWidth;
@@ -76,12 +94,10 @@ constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS 
 } // namespace
 
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
-  for (const auto &composition : K_SHOWCASE_ORBIT_COMPOSITIONS) {
-    if (name == composition.name) {
-      return &composition;
-    }
-  }
-  return nullptr;
+  const auto *const composition =
+      std::ranges::find_if(K_SHOWCASE_ORBIT_COMPOSITIONS,
+                           [name](const auto &candidate) { return name == candidate.name; });
+  return composition == K_SHOWCASE_ORBIT_COMPOSITIONS.end() ? nullptr : composition;
 }
 
 void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, WiregridParams &params,
@@ -123,8 +139,8 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   std::error_code recordDirEc;
   std::filesystem::create_directories(cli.recordFramesDir, recordDirEc);
   if (recordDirEc) {
-    std::fprintf(stderr, "record output directory create failed: %s (%s)\n",
-                 cli.recordFramesDir.c_str(), recordDirEc.message().c_str());
+    std::cerr << "record output directory create failed: " << cli.recordFramesDir << " ("
+              << recordDirEc.message() << ")\n";
     return false;
   }
   rs.recording.recordInitDone     = true;
@@ -205,25 +221,26 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.dispatch.computeStepSize    = 0.016f;
     rs.display.depthFar           = 154.367004f;
     rs.physicsCore.kerrSpin           = 0.62f;
+    const char *defaultBackground =
+        composition != nullptr ? composition->backgroundId : "nasa_deep_starmap_galactic";
     SettingsManager::instance().get().backgroundId =
-        cli.hasRecordBackgroundId
-            ? cli.recordBackgroundId
-            : (composition != nullptr ? composition->backgroundId
-                                      : "nasa_deep_starmap_galactic");
+        cli.hasRecordBackgroundId ? cli.recordBackgroundId : defaultBackground;
     SettingsManager::instance().get().backgroundEnabled = true;
     SettingsManager::instance().get().backgroundIntensity =
         composition != nullptr ? composition->backgroundIntensity : 0.72f;
     CameraState &camMutable = input.camera();
     camMutable = CameraState{
         .yaw = cli.hasRecordYaw ? cli.recordYawDeg : -90.0f,
-        .pitch = cli.hasRecordPitch ? cli.recordPitchDeg
-                                    : (composition != nullptr ? composition->pitchDeg : -6.0f),
+        .pitch = cli.hasRecordPitch
+                     ? cli.recordPitchDeg
+                     : compositionValue(composition, &ShowcaseOrbitComposition::pitchDeg, -6.0f),
         .roll = 0.0f,
-        .distance = cli.hasRecordDistance ? cli.recordDistance
-                                          : (composition != nullptr ? composition->distance
-                                                                    : 14.0f),
-        .fov = cli.hasRecordFov ? cli.recordFovDeg
-                                : (composition != nullptr ? composition->fovDeg : 68.0f)};
+        .distance = cli.hasRecordDistance
+                        ? cli.recordDistance
+                        : compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f),
+        .fov = cli.hasRecordFov
+                   ? cli.recordFovDeg
+                   : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f)};
     if (cli.hasRecordExposure) {
       rs.post.toneExposure = cli.recordExposure;
     } else if (composition != nullptr) {
@@ -315,31 +332,34 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
         static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) / denom;
     float const baseYaw = cli.hasRecordYaw ? cli.recordYawDeg : -90.0f;
     float const sweepDeg =
-        cli.hasRecordSweep ? cli.recordSweepDeg
-                           : (composition != nullptr ? composition->sweepDeg : 10.0f);
+        cli.hasRecordSweep
+            ? cli.recordSweepDeg
+            : compositionValue(composition, &ShowcaseOrbitComposition::sweepDeg, 10.0f);
     CameraState &camMutable = input.camera();
     camMutable.yaw = baseYaw + progress * sweepDeg;
-    camMutable.pitch = cli.hasRecordPitch ? cli.recordPitchDeg
-                                          : (composition != nullptr ? composition->pitchDeg
-                                                                    : -6.0f);
+    camMutable.pitch =
+        cli.hasRecordPitch
+            ? cli.recordPitchDeg
+            : compositionValue(composition, &ShowcaseOrbitComposition::pitchDeg, -6.0f);
     camMutable.roll = 0.0f;
-    camMutable.distance = cli.hasRecordDistance ? cli.recordDistance
-                                                : (composition != nullptr
-                                                       ? composition->distance
-                                                       : 14.0f);
-    camMutable.fov = cli.hasRecordFov ? cli.recordFovDeg
-                                      : (composition != nullptr ? composition->fovDeg : 68.0f);
+    camMutable.distance =
+        cli.hasRecordDistance
+            ? cli.recordDistance
+            : compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f);
+    camMutable.fov = cli.hasRecordFov
+                         ? cli.recordFovDeg
+                         : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f);
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin = 0.0f;
     rs.recording.recordCurrentKf = CamKeyframe{
-        .t_sec = static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) /
-                 static_cast<float>(K_CINEMATIC_FPS),
+        .timeSec = static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) /
+                   static_cast<float>(K_CINEMATIC_FPS),
         .cam = camMutable,
         .kerrSpin = rs.physicsCore.kerrSpin,
         .caption = "Showcase orbit",
     };
   } else {
-    rs.recording.recordCurrentKf = rs.recording.recordPath.evaluate(rs.recording.recordCinematic);
+    rs.recording.recordCurrentKf = CinematicPath::evaluate(rs.recording.recordCinematic);
     CameraState &camMutable = input.camera();
     camMutable   = rs.recording.recordCurrentKf.cam;
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
@@ -366,10 +386,11 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
                          flipped, w, h)) {
     return;
   }
-  char framePath[1024];
-  std::snprintf(framePath, sizeof(framePath), "%s/frame_%06d.png",
-                cli.recordFramesDir.c_str(), rs.recording.recordFrameIndex);
-  stbi_write_png(framePath, w, h, 3, flipped.data(), w * 3);
+  const std::string framePath =
+      std::format("{}/frame_{:06d}.png", cli.recordFramesDir, rs.recording.recordFrameIndex);
+  if (stbi_write_png(framePath.c_str(), w, h, 3, flipped.data(), w * 3) == 0) {
+    throw std::runtime_error("Failed to write recorded frame: " + framePath);
+  }
   if (rs.recording.recordFrameIndex % K_CINEMATIC_FPS == 0) {
     std::printf("Record: frame %d / %d  (t = %.1f s)  [%dx%d]\n",
                 rs.recording.recordFrameIndex, cli.recordFramesTotal,
@@ -413,7 +434,7 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
         writePfmRgb(cli.exportRawFramePath, raw, w, h)) {
       std::printf("Exported raw frame: %s (%dx%d)\n", cli.exportRawFramePath.c_str(), w, h);
     } else {
-      std::fprintf(stderr, "Failed to export raw frame: %s\n", cli.exportRawFramePath.c_str());
+      std::cerr << "Failed to export raw frame: " << cli.exportRawFramePath << '\n';
     }
   }
   rs.exporting.exportPerformed = true;

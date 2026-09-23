@@ -136,11 +136,11 @@ EventResult bisectRadialCrossing(double lambda0, double lambda1, const State &st
   State sa = state0;
 
   for (int i = 0; i < maxIter; ++i) {
-    double lm = 0.5 * (la + lb);
+    const double lm = 0.5 * (la + lb);
     State sm = stepper(la, lm, sa);
 
-    double rA = sa.x1;
-    double rM = sm.x1;
+    const double rA = sa.x1;
+    const double rM = sm.x1;
 
     if (std::abs(rM - rTarget) < tolR) {
       result.detected = true;
@@ -162,7 +162,7 @@ EventResult bisectRadialCrossing(double lambda0, double lambda1, const State &st
   }
 
   // Did not converge to tolerance, return best estimate
-  double lm = 0.5 * (la + lb);
+  const double lm = 0.5 * (la + lb);
   State sm = stepper(la, lm, sa);
   result.detected = true;
   result.lambda = lm;
@@ -192,7 +192,7 @@ EventResult bisectTurningPoint(double lambda0, double lambda1, const State &stat
   State sa = state0;
 
   for (int i = 0; i < maxIter; ++i) {
-    double lm = 0.5 * (la + lb);
+    const double lm = 0.5 * (la + lb);
     State sm = stepper(la, lm, sa);
 
     if (std::abs(sm.v1) < tolVr) {
@@ -212,7 +212,7 @@ EventResult bisectTurningPoint(double lambda0, double lambda1, const State &stat
     }
   }
 
-  double lm = 0.5 * (la + lb);
+  const double lm = 0.5 * (la + lb);
   State sm = stepper(la, lm, sa);
   result.detected = true;
   result.lambda = lm;

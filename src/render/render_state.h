@@ -40,6 +40,8 @@
 #include "tools/compare_harness.h"
 
 #ifndef BLACKHOLE_HAS_CUDA
+// The build variant selects CUDA declarations through preprocessor guards.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define BLACKHOLE_HAS_CUDA 0
 #endif
 
@@ -53,7 +55,7 @@ namespace blackhole {
 constexpr int K_BACKGROUND_LAYERS = 3;
 
 /** @brief Upper bound on bloom downsample/upsample chain length and texture arrays. */
-constexpr int kMaxBloomIterations = 8;
+constexpr int K_MAX_BLOOM_ITERATIONS = 8;
 
 /** @brief Metadata for a single background skybox asset loaded from manifest.json. */
 struct BackgroundAsset {
@@ -113,7 +115,7 @@ struct RenderState {
     bool controlsOverlayEnabled = true;
     float controlsOverlayScale = 1.1f;
     HudOverlay perfOverlay;
-    bool const perfOverlayReady = false;
+    bool perfOverlayReady = false;
     bool perfOverlayConfigInit = false;
     [[maybe_unused]] bool perfOverlayEnabled = true;
     [[maybe_unused]] float perfOverlayScale = 1.0f;
@@ -130,7 +132,7 @@ struct RenderState {
 
   struct PostGroup {
     bool bloomSettingsLoaded = false;
-    int bloomIterations = kMaxBloomIterations;
+    int bloomIterations = K_MAX_BLOOM_ITERATIONS;
     bool postProcessingSettingsLoaded = false;
     float bloomStrength = 0.1f;
     float bloomThreshold = 0.4f;  // A2: was hardcoded 1.0 in shader (killed disk bloom)
@@ -157,7 +159,7 @@ struct RenderState {
     float adiskNoiseScale = 0.8f;
     bool useNoiseTexture = true;
     float noiseTextureScale = 0.25f;
-    [[maybe_unused]] int const noiseTextureSize = 32;
+    [[maybe_unused]] int noiseTextureSize = 32;
     float adiskSpeed = 0.5f;
     float dopplerStrength = 1.0f;
     float photonSphereGlowStrength = 1.0f;
@@ -290,8 +292,8 @@ struct RenderState {
     gl::GLuint texBloomFinal = 0;
     gl::GLuint texTonemapped = 0;
     gl::GLuint texDepthEffects = 0;
-    std::array<gl::GLuint, kMaxBloomIterations> texDownsampled = {};
-    std::array<gl::GLuint, kMaxBloomIterations> texUpsampled = {};
+    std::array<gl::GLuint, K_MAX_BLOOM_ITERATIONS> texDownsampled = {};
+    std::array<gl::GLuint, K_MAX_BLOOM_ITERATIONS> texUpsampled = {};
     int renderWidth = 0;
     int renderHeight = 0;
     gl::GLuint sceneFbo = 0;
@@ -302,8 +304,7 @@ struct RenderState {
     bool         recordInitDone    = false;
     int          recordFrameIndex  = 0; // assigned from recordStartFrame after construction
     int          recordWarmup      = 0;
-    float        recordCinematic   = 0.0f; // assigned from recordStartFrame after construction
-    CinematicPath recordPath;
+    float recordCinematic = 0.0f; // assigned from recordStartFrame after construction
     CamKeyframe  recordCurrentKf   = K_CINEMATIC_KEYFRAMES[0];
     float        recordCurRs       = 2.0f;
     float        recordCurIsco     = 1.0f;
@@ -382,12 +383,12 @@ struct RenderState {
     bool multiDrawSupported = false;
     bool multiDrawCountSupported = false;
     [[maybe_unused]] bool multiDrawOverlayEnabled = true;
-    [[maybe_unused]] int const multiDrawInstanceCount = 2;
-    [[maybe_unused]] gl::GLuint const multiDrawProgram = 0;
-    [[maybe_unused]] gl::GLuint const multiDrawInstanceBuffer = 0;
-    [[maybe_unused]] gl::GLuint const multiDrawCommandBuffer = 0;
-    [[maybe_unused]] gl::GLuint const multiDrawCountBuffer = 0;
-    [[maybe_unused]] gl::GLuint const multiDrawComputeProgram = 0;
+    [[maybe_unused]] int multiDrawInstanceCount = 2;
+    [[maybe_unused]] gl::GLuint multiDrawProgram = 0;
+    [[maybe_unused]] gl::GLuint multiDrawInstanceBuffer = 0;
+    [[maybe_unused]] gl::GLuint multiDrawCommandBuffer = 0;
+    [[maybe_unused]] gl::GLuint multiDrawCountBuffer = 0;
+    [[maybe_unused]] gl::GLuint multiDrawComputeProgram = 0;
     [[maybe_unused]] bool depthPrepassEnabled =
         false; // For future mesh-based disk rendering
   } probes;

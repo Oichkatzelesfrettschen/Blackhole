@@ -18,7 +18,9 @@
  * 3. Apply constraint-preserving correction
  * 4. Rescale velocities to restore null/timelike constraint
  *
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
+ * The maintained C++ is an input to scripts/cpp_to_glsl.py.
+ * Rocq definitions document the mathematical source; floating-point
+ * implementations are checked by tests rather than a proved extraction chain.
  *
  * @note All functions use geometric units where c = G = 1
  * @note Requires verified/kerr.hpp for metric components
@@ -28,12 +30,14 @@
 #ifndef PHYSICS_VERIFIED_ENERGY_CONSERVING_GEODESIC_HPP
 #define PHYSICS_VERIFIED_ENERGY_CONSERVING_GEODESIC_HPP
 
-#include "rk4.hpp"
-#include "kerr.hpp"
-#include "geodesic.hpp"
+#include <algorithm>
 #include <cmath>
 #include <functional>
-#include <algorithm>
+#include <utility>
+
+#include "geodesic.hpp"
+#include "kerr.hpp"
+#include "rk4.hpp"
 
 namespace verified {
 
@@ -52,15 +56,15 @@ namespace verified {
  */
 struct ConservedQuantities {
     double energy;           ///< E = -g_μν ξ^μ (dx^ν/dλ), ξ = ∂/∂t
-    double angular_momentum; ///< L = g_μν χ^μ (dx^ν/dλ), χ = ∂/∂φ
-    double carter_constant;  ///< Q = Carter constant from separability
-    double mass_squared;     ///< m² = -g_μν (dx^μ/dλ)(dx^ν/dλ) at initial state
+    double angularMomentum;  ///< L = g_μν χ^μ (dx^ν/dλ), χ = ∂/∂φ
+    double carterConstant;   ///< Q = Carter constant from separability
+    double massSquared;      ///< m² = -g_μν (dx^μ/dλ)(dx^ν/dλ) at initial state
 
     constexpr ConservedQuantities() noexcept
-        : energy(0.0), angular_momentum(0.0), carter_constant(0.0), mass_squared(0.0) {}
+        : energy(0.0), angularMomentum(0.0), carterConstant(0.0), massSquared(0.0) {}
 
-    constexpr ConservedQuantities(double E, double L, double Q, double m2) noexcept
-        : energy(E), angular_momentum(L), carter_constant(Q), mass_squared(m2) {}
+    constexpr ConservedQuantities(double e, double l, double q, double m2) noexcept
+        : energy(e), angularMomentum(l), carterConstant(q), massSquared(m2) {}
 };
 
 /**
@@ -75,10 +79,10 @@ struct ConservedQuantities {
  * @param state Current geodesic state
  * @return Conserved energy
  */
-[[nodiscard]] inline double compute_energy(const MetricComponents& g,
-                                           const StateVector& state) noexcept {
-    // E = -(g_tt * v_t + g_tφ * v_φ)
-    return -(g.g_tt * state.v0 + g.g_tph * state.v3);
+[[nodiscard]] inline double computeEnergy(const MetricComponents &g,
+                                          const StateVector &state) noexcept {
+  // E = -(g_tt * v_t + g_tφ * v_φ)
+  return -(g.gTt * state.v0 + g.gTph * state.v3);
 }
 
 /**
@@ -93,10 +97,10 @@ struct ConservedQuantities {
  * @param state Current geodesic state
  * @return Conserved angular momentum
  */
-[[nodiscard]] inline double compute_angular_momentum(const MetricComponents& g,
-                                                      const StateVector& state) noexcept {
-    // L = g_φφ * v_φ + g_tφ * v_t
-    return g.g_phph * state.v3 + g.g_tph * state.v0;
+[[nodiscard]] inline double computeAngularMomentum(const MetricComponents &g,
+                                                   const StateVector &state) noexcept {
+  // L = g_φφ * v_φ + g_tφ * v_t
+  return g.gPhph * state.v3 + g.gTph * state.v0;
 }
 
 /**
@@ -113,15 +117,13 @@ struct ConservedQuantities {
  * @param state Current geodesic state
  * @return Norm squared of four-velocity
  */
-[[nodiscard]] inline double compute_metric_norm(const MetricComponents& g,
-                                                const StateVector& state) noexcept {
-    // m² = g_tt*v_t² + 2*g_tφ*v_t*v_φ + g_rr*v_r² + g_θθ*v_θ² + g_φφ*v_φ²
-    double result = g.g_tt * state.v0 * state.v0
-                  + 2.0 * g.g_tph * state.v0 * state.v3
-                  + g.g_rr * state.v1 * state.v1
-                  + g.g_thth * state.v2 * state.v2
-                  + g.g_phph * state.v3 * state.v3;
-    return result;
+[[nodiscard]] inline double computeMetricNorm(const MetricComponents &g,
+                                              const StateVector &state) noexcept {
+  // m² = g_tt*v_t² + 2*g_tφ*v_t*v_φ + g_rr*v_r² + g_θθ*v_θ² + g_φφ*v_φ²
+  double const result = g.gTt * state.v0 * state.v0 + 2.0 * g.gTph * state.v0 * state.v3 +
+                        g.gRr * state.v1 * state.v1 + g.gThth * state.v2 * state.v2 +
+                        g.gPhph * state.v3 * state.v3;
+  return result;
 }
 
 /**
@@ -140,37 +142,37 @@ struct ConservedQuantities {
  *
  * @param g Metric components
  * @param state Current geodesic state
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
  * @return Carter constant (Q ≥ 0 for physical orbits)
  */
-[[nodiscard]] inline double compute_carter_constant(const MetricComponents& g,
-                                                     const StateVector& state,
-                                                     [[maybe_unused]] double M,
-                                                     double a) noexcept {
-    const double sin_theta = std::sin(state.x2);
-    const double cos_theta = std::cos(state.x2);
-    const double cos2 = cos_theta * cos_theta;
-    const double sin2 = sin_theta * sin_theta;
+[[nodiscard]] inline double computeCarterConstant(const MetricComponents &g,
+                                                  const StateVector &state,
+                                                  [[maybe_unused]] double m, double a) noexcept {
+  const double sinTheta = std::sin(state.x2);
+  const double cosTheta = std::cos(state.x2);
+  const double cos2 = cosTheta * cosTheta;
+  const double sin2 = sinTheta * sinTheta;
 
-    // Avoid division by zero near poles
-    if (sin2 < 1e-10) return 0.0;
+  // Avoid division by zero near poles
+  if (sin2 < 1e-10) {
+    return 0.0;
+  }
 
-    // p_θ = g_θθ * v_θ
-    double p_theta = g.g_thth * state.v2;
+  // p_θ = g_θθ * v_θ
+  double const pTheta = g.gThth * state.v2;
 
-    // E and L from Killing vectors
-    double E = compute_energy(g, state);
-    double L = compute_angular_momentum(g, state);
+  // E and L from Killing vectors
+  double const e = computeEnergy(g, state);
+  double const l = computeAngularMomentum(g, state);
 
-    // m² from metric norm
-    double m2 = compute_metric_norm(g, state);
+  // m² from metric norm
+  double const m2 = computeMetricNorm(g, state);
 
-    // Q = p_θ² + cos²(θ) * (a²(m² - E²) + L²/sin²(θ))
-    double Q = p_theta * p_theta
-             + cos2 * (a * a * (m2 - E * E) + L * L / sin2);
+  // Q = p_θ² + cos²(θ) * (a²(m² - E²) + L²/sin²(θ))
+  double const q = pTheta * pTheta + cos2 * (a * a * (m2 - e * e) + l * l / sin2);
 
-    return std::max(0.0, Q);  // Enforce Q ≥ 0
+  return std::max(0.0, q); // Enforce Q ≥ 0
 }
 
 /**
@@ -178,19 +180,15 @@ struct ConservedQuantities {
  *
  * @param g Metric components
  * @param state Current geodesic state
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
  * @return Container with E, L, Q, m²
  */
-[[nodiscard]] inline ConservedQuantities extract_conserved_quantities(
-    const MetricComponents& g, const StateVector& state,
-    double M, double a) noexcept {
-    return ConservedQuantities{
-        compute_energy(g, state),
-        compute_angular_momentum(g, state),
-        compute_carter_constant(g, state, M, a),
-        compute_metric_norm(g, state)
-    };
+[[nodiscard]] inline ConservedQuantities extractConservedQuantities(const MetricComponents &g,
+                                                                    const StateVector &state,
+                                                                    double m, double a) noexcept {
+  return ConservedQuantities{computeEnergy(g, state), computeAngularMomentum(g, state),
+                             computeCarterConstant(g, state, m, a), computeMetricNorm(g, state)};
 }
 
 // ============================================================================
@@ -213,29 +211,34 @@ struct ConservedQuantities {
  *
  * @param g Metric components
  * @param state State with potentially drifted velocities
- * @param target_m2 Target value for metric norm (usually -1 for timelike, 0 for null)
+ * @param targetM2 Target value for metric norm (usually -1 for timelike, 0 for null)
  * @return Corrected state with constraint restored
  */
-[[nodiscard]] inline StateVector apply_constraint_correction(
-    const MetricComponents& g, const StateVector& state,
-    double target_m2) noexcept {
-    const double current_norm = compute_metric_norm(g, state);
+[[nodiscard]] inline StateVector applyConstraintCorrection(const MetricComponents &g,
+                                                           const StateVector &state,
+                                                           double targetM2) noexcept {
+  const double currentNorm = computeMetricNorm(g, state);
 
-    // Avoid division by zero
-    if (std::abs(current_norm) < 1e-10) return state;
+  // Avoid division by zero
+  if (std::abs(currentNorm) < 1e-10) {
+    return state;
+  }
 
-    // Rescaling factor to achieve target_m2
-    double rescale_factor = std::sqrt(std::abs(target_m2 / current_norm));
+  // Rescaling factor to achieve target_m2
+  double const rescaleFactor = std::sqrt(std::abs(targetM2 / currentNorm));
 
-    // Rescale only spatial velocities (r, θ components)
-    // Keep temporal components to preserve E and L
-    return StateVector{
-        state.x0, state.x1, state.x2, state.x3,
-        state.v0,                              // Keep v_t
-        rescale_factor * state.v1,             // Rescale v_r
-        rescale_factor * state.v2,             // Rescale v_θ
-        state.v3                               // Keep v_φ
-    };
+  // Rescale only spatial velocities (r, θ components)
+  // Keep temporal components to preserve E and L
+  return StateVector{
+      state.x0,
+      state.x1,
+      state.x2,
+      state.x3,
+      state.v0,                 // Keep v_t
+      rescaleFactor * state.v1, // Rescale v_r
+      rescaleFactor * state.v2, // Rescale v_θ
+      state.v3                  // Keep v_φ
+  };
 }
 
 // ============================================================================
@@ -263,29 +266,29 @@ struct ConservedQuantities {
  * @param h Integration step size
  * @param state Current state
  * @param g Metric components (function of r, θ, M, a)
- * @param M Black hole mass
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param geodesic_type -1 for timelike, 0 for null geodesics
+ * @param geodesicType -1 for timelike, 0 for null geodesics
  * @return Corrected state after one energy-conserving step
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] inline StateVector energy_conserving_step(
-    F&& f, double h, const StateVector& state,
-    const MetricComponents& g, double M, double a,
-    [[maybe_unused]] int geodesic_type = 0) noexcept {
+template <typename F>
+requires std::invocable<F &, StateVector> [[nodiscard]] inline StateVector
+energyConservingStep(F &&f, double h, const StateVector &state, const MetricComponents &g, double m,
+                     double a, [[maybe_unused]] int geodesicType = 0) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
 
-    // 1. Extract initial conserved quantities
-    const auto initial_q = extract_conserved_quantities(g, state, M, a);
-    const double target_m2 = initial_q.mass_squared;
+  // 1. Extract initial conserved quantities
+  const auto initialQ = extractConservedQuantities(g, state, m, a);
+  const double targetM2 = initialQ.massSquared;
 
-    // 2. Perform RK4 step
-    const auto rk4_result = rk4_step(f, h, state);
+  // 2. Perform RK4 step
+  const auto rk4Result = rk4Step(rhsFunction, h, state);
 
-    // 3. Apply constraint correction to restore geodesic constraint
-    const auto corrected = apply_constraint_correction(g, rk4_result, target_m2);
+  // 3. Apply constraint correction to restore geodesic constraint
+  const auto corrected = applyConstraintCorrection(g, rk4Result, targetM2);
 
-    return corrected;
+  return corrected;
 }
 
 /**
@@ -296,69 +299,69 @@ requires std::invocable<F, StateVector>
  *
  * @tparam F Type of RHS function
  * @param f Right-hand side function
- * @param initial_h Initial step size
- * @param final_lambda Final affine parameter value
+ * @param initialH Initial step size
+ * @param finalLambda Final affine parameter value
  * @param state Current state (modified in place)
- * @param g_func Function to compute metric components: g_func(state, M, a) → MetricComponents
- * @param M Black hole mass
+ * @param gFunc Function to compute metric components: g_func(state, M, a) → MetricComponents
+ * @param m Black hole mass
  * @param a Spin parameter
- * @param constraint_tol Tolerance for constraint violation (default: 1e-8)
+ * @param constraintTol Tolerance for constraint violation (default: 1e-8)
  * @return Number of steps taken
  */
-template<typename F, typename GFunc>
-requires std::invocable<F, StateVector> &&
-         std::invocable<GFunc, StateVector, double, double>
-inline std::size_t integrate_with_energy_conservation(
-    F&& f, double initial_h, double final_lambda,
-    StateVector& state,
-    GFunc&& g_func,
-    double M, double a,
-    double constraint_tol = 1e-8) noexcept {
+template <typename F, typename GFunc>
+requires std::invocable<F &, StateVector> &&
+    std::invocable<GFunc &, StateVector, double, double> inline std::size_t
+    integrateWithEnergyConservation(F &&f, double initialH, double finalLambda, StateVector &state,
+                                    GFunc &&gFunc, double m, double a,
+                                    double constraintTol = 1e-8) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  auto &&metricFunction = std::forward<GFunc>(gFunc);
 
-    std::size_t step_count = 0;
-    double current_lambda = state.x0;
-    double h = initial_h;
+  std::size_t stepCount = 0;
+  double currentLambda = state.x0;
+  double h = initialH;
 
-    while (current_lambda < final_lambda) {
-        // Compute metric at current position
-        const auto g = g_func(state, M, a);
+  while (currentLambda < finalLambda) {
+    // Compute metric at current position
+    const auto g = metricFunction(state, m, a);
 
-        // Ensure we don't overshoot final_lambda
-        if (current_lambda + h > final_lambda) {
-            h = final_lambda - current_lambda;
-        }
-
-        // Extract conserved quantities before step
-        const auto q_before = extract_conserved_quantities(g, state, M, a);
-
-        // Perform energy-conserving step
-        state = energy_conserving_step(f, h, state, g, M, a);
-        current_lambda += h;
-        step_count++;
-
-        // Extract conserved quantities after step
-        const auto g_new = g_func(state, M, a);
-        const auto q_after = extract_conserved_quantities(g_new, state, M, a);
-
-        // Check energy conservation
-        double energy_drift = std::abs(q_after.energy - q_before.energy)
-                            / (std::abs(q_before.energy) + 1e-10);
-
-        // Adaptive step size: reduce if drift too large
-        if (energy_drift > constraint_tol) {
-            h *= 0.9;  // Reduce step size by 10%
-            current_lambda -= h;  // Back up
-            step_count--;
-            continue;
-        }
-
-        // Increase step size slightly if drift is very small
-        if (energy_drift < 0.1 * constraint_tol && step_count % 10 == 0) {
-            h *= 1.05;  // Increase step size by 5%
-        }
+    // Ensure we don't overshoot final_lambda
+    if (currentLambda + h > finalLambda) {
+      h = finalLambda - currentLambda;
     }
 
-    return step_count;
+    // Extract conserved quantities before step
+    const auto qBefore = extractConservedQuantities(g, state, m, a);
+
+    // Perform energy-conserving step
+    state = energyConservingStep(rhsFunction, h, state, g, m, a);
+    currentLambda += h;
+    stepCount++;
+
+    // Extract conserved quantities after step
+    const auto gNew = metricFunction(state, m, a);
+    const auto qAfter = extractConservedQuantities(gNew, state, m, a);
+
+    // Check energy conservation
+    const double energyDrift =
+        std::abs(qAfter.energy - qBefore.energy) / (std::abs(qBefore.energy) + 1e-10);
+
+    // Adaptive step size: reduce if drift too large
+    if (energyDrift > constraintTol) {
+      h *= 0.9;           // Reduce step size by 10%
+      currentLambda -= h; // Back up
+      stepCount--;
+      continue;
+    }
+
+    // Increase step size slightly if drift is very small
+    if (energyDrift < 0.1 * constraintTol && stepCount % 10 == 0) {
+      h *= 1.05; // Increase step size by 5%
+    }
+  }
+
+  return stepCount;
 }
 
 }  // namespace verified

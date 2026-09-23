@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include <glbinding/gl/enum.h>
-
 #include "render/render_state.h"
 
 using namespace gl;

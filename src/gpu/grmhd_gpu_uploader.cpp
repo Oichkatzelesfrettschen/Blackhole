@@ -30,14 +30,18 @@
 
 // Include the GL loader before the project header so gl:: types are defined.
 // NOLINTBEGIN(misc-include-cleaner)
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
+
 #include "../gl_loader.h"
+#include "grmhd_streaming.h"
 // NOLINTEND(misc-include-cleaner)
 
-#include "grmhd_gpu_uploader.h"
-
-#include <algorithm>
 #include <cmath>
 #include <cstring>
+
+#include "grmhd_gpu_uploader.h"
 
 namespace gpu {
 
@@ -57,7 +61,9 @@ GRMHDGpuUploader::~GRMHDGpuUploader() {
 // ============================================================================
 
 bool GRMHDGpuUploader::init(int width, int height, int depth) {
-    if (initialized_) shutdown();
+  if (initialized_) {
+    shutdown();
+  }
 
     texWidth_  = width;
     texHeight_ = height;
@@ -77,7 +83,9 @@ bool GRMHDGpuUploader::init(int width, int height, int depth) {
 // ============================================================================
 
 void GRMHDGpuUploader::shutdown() {
-    if (!initialized_) return;
+  if (!initialized_) {
+    return;
+  }
     pboUploader_.shutdown();
     stagingBuf_.clear();
     stagingBuf_.shrink_to_fit();
@@ -90,10 +98,14 @@ void GRMHDGpuUploader::shutdown() {
 // ============================================================================
 
 int GRMHDGpuUploader::uploadPendingTiles(int maxPerFrame) {
-    if (!initialized_) return 0;
+  if (!initialized_) {
+    return 0;
+  }
 
     const auto& meta = streamer_.metadata();
-    if (meta.frameCount == 0) return 0;
+    if (meta.frameCount == 0) {
+      return 0;
+    }
 
     int uploaded = 0;
 
@@ -112,7 +124,9 @@ int GRMHDGpuUploader::uploadPendingTiles(int maxPerFrame) {
 
         const std::size_t nVoxels =
             tile->width * tile->height * tile->depth;
-        if (nVoxels == 0) break;
+        if (nVoxels == 0) {
+          break;
+        }
 
         const bool isFullFrame =
             (static_cast<int>(tile->width)  == texWidth_  &&
@@ -187,7 +201,9 @@ void GRMHDGpuUploader::packRGBA(const blackhole::GRMHDTile& tile,
     const float* src = tile.data.data();
     const std::size_t srcTotal = tile.data.size();
 
-    if (srcTotal == 0 || nVoxels == 0) return;
+    if (srcTotal == 0 || nVoxels == 0) {
+      return;
+    }
 
     const std::size_t srcChannels = srcTotal / nVoxels;
 
@@ -206,17 +222,17 @@ void GRMHDGpuUploader::packRGBA(const blackhole::GRMHDTile& tile,
         const float u1  = (srcChannels > 2) ? vx[2] : 0.0f;
         const float u2  = (srcChannels > 3) ? vx[3] : 0.0f;
         const float u3  = (srcChannels > 4) ? vx[4] : 0.0f;
-        const float B1  = (srcChannels > 5) ? vx[5] : 0.0f;
-        const float B2  = (srcChannels > 6) ? vx[6] : 0.0f;
-        const float B3  = (srcChannels > 7) ? vx[7] : 0.0f;
+        const float b1 = (srcChannels > 5) ? vx[5] : 0.0f;
+        const float b2 = (srcChannels > 6) ? vx[6] : 0.0f;
+        const float b3 = (srcChannels > 7) ? vx[7] : 0.0f;
 
-        const float Bmag = std::sqrt(B1*B1 + B2*B2 + B3*B3);
+        const float bmag = std::sqrt(b1 * b1 + b2 * b2 + b3 * b3);
         const float umag = std::sqrt(u1*u1 + u2*u2 + u3*u3);
 
         float* out = dst + v * 4;
         out[0] = rho;
         out[1] = uu;
-        out[2] = Bmag;
+        out[2] = bmag;
         out[3] = umag;
     }
 }

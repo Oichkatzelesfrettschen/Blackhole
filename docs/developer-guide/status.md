@@ -1,12 +1,30 @@
 # Blackhole Simulation - Development Status
 
-**Last Updated:** 2026-03-23
+**Last Updated:** 2026-09-22
 **Status:** Active Development - desktop split, Blender/Octane smoke lanes, addon staging, interactive Blender benchmarking, Octane auto-launch readiness, Octane tier sweeps, Dream Textures runtime plus direct and image-conditioned addon-pipeline verification, and bridge/package/report verifiers are green locally; release-tree test count is tracked in repo truth
 **Roadmap:** See `roadmap.md` for the consolidated execution plan
 
 ---
 
 ## Recent Changes
+
+### Public CI and strict source validation (2026-09-22)
+
+GitHub Actions runs the required `ci`, `ci-analysis`, and `ci-release` lanes on
+pull requests and main pushes. The public repository retains workflow definitions,
+pinned build inputs, executable tests, and replay commands. Branch protection
+requires all three checks and resolved review conversations.
+
+The build uses all runner CPUs, caches Conan packages and compiled objects,
+shares desktop asset synchronization, and bounds concurrent LTO links. Source
+cleanup enforces every enabled compiler, clang-tidy, cppcheck, and shader diagnostic,
+including maintained `.hpp` reference headers. CPU fixtures state their measured
+scope; CUDA and desktop rendering still require their corresponding device runs.
+
+[CI architecture and measured costs](ci.md) records the cold/cache comparison.
+[PR 24 checks](https://github.com/Oichkatzelesfrettschen/Blackhole/pull/24/checks)
+record hosted validation for each submitted revision.
+
 
 ### Blender / Octane Verification Hardening (2026-03-22)
 

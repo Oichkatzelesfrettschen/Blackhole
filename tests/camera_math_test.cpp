@@ -11,9 +11,13 @@
  */
 
 #include <cmath>
+#include <memory>
 
-#include <glm/glm.hpp>
 #include <gtest/gtest.h>
+
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
 
 #include "input.h"
 #include "render/camera_math.h"
@@ -26,9 +30,9 @@ using blackhole::selectCameraPosition;
 
 namespace {
 
-constexpr float kTol = 1e-4f;
+constexpr float K_TOL = 1e-4f;
 
-void expectVecNear(const glm::vec3 &actual, const glm::vec3 &expected, float tol = kTol) {
+void expectVecNear(const glm::vec3 &actual, const glm::vec3 &expected, float tol = K_TOL) {
   EXPECT_NEAR(actual.x, expected.x, tol);
   EXPECT_NEAR(actual.y, expected.y, tol);
   EXPECT_NEAR(actual.z, expected.z, tol);
@@ -44,7 +48,7 @@ TEST(CameraMath, YawPitchPlacement) {
   expectVecNear(cameraPositionFromYawPitch(0.0f, 90.0f, 5.0f), glm::vec3(0.0f, 5.0f, 0.0f));
   // Radius is the norm of the returned vector for any angle.
   glm::vec3 const p = cameraPositionFromYawPitch(37.0f, -21.0f, 8.0f);
-  EXPECT_NEAR(glm::length(p), 8.0f, kTol);
+  EXPECT_NEAR(glm::length(p), 8.0f, K_TOL);
 }
 
 // The basis columns are unit length, mutually orthogonal, and forward points
@@ -54,12 +58,12 @@ TEST(CameraMath, BasisOrthonormal) {
   glm::vec3 const right = basis[0];
   glm::vec3 const up = basis[1];
   glm::vec3 const forward = basis[2];
-  EXPECT_NEAR(glm::length(right), 1.0f, kTol);
-  EXPECT_NEAR(glm::length(up), 1.0f, kTol);
-  EXPECT_NEAR(glm::length(forward), 1.0f, kTol);
-  EXPECT_NEAR(glm::dot(right, up), 0.0f, kTol);
-  EXPECT_NEAR(glm::dot(right, forward), 0.0f, kTol);
-  EXPECT_NEAR(glm::dot(up, forward), 0.0f, kTol);
+  EXPECT_NEAR(glm::length(right), 1.0f, K_TOL);
+  EXPECT_NEAR(glm::length(up), 1.0f, K_TOL);
+  EXPECT_NEAR(glm::length(forward), 1.0f, K_TOL);
+  EXPECT_NEAR(glm::dot(right, up), 0.0f, K_TOL);
+  EXPECT_NEAR(glm::dot(right, forward), 0.0f, K_TOL);
+  EXPECT_NEAR(glm::dot(up, forward), 0.0f, K_TOL);
   expectVecNear(forward, glm::vec3(0.0f, 0.0f, -1.0f));
 }
 
@@ -67,9 +71,9 @@ TEST(CameraMath, BasisOrthonormal) {
 // orthonormal basis via the +Z world-axis fallback.
 TEST(CameraMath, BasisWorldUpDegeneracy) {
   glm::mat3 const basis = buildCameraBasis(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f), 0.0f);
-  EXPECT_NEAR(glm::length(basis[0]), 1.0f, kTol);
-  EXPECT_NEAR(glm::length(basis[1]), 1.0f, kTol);
-  EXPECT_NEAR(glm::dot(basis[0], basis[1]), 0.0f, kTol);
+  EXPECT_NEAR(glm::length(basis[0]), 1.0f, K_TOL);
+  EXPECT_NEAR(glm::length(basis[1]), 1.0f, K_TOL);
+  EXPECT_NEAR(glm::dot(basis[0], basis[1]), 0.0f, K_TOL);
   expectVecNear(basis[2], glm::vec3(0.0f, -1.0f, 0.0f));
 }
 
@@ -83,7 +87,8 @@ TEST(CameraMath, BasisRoll) {
 
 // Input mode places the camera at the yaw/pitch offset from the focus target.
 TEST(CameraMath, SelectInputMode) {
-  RenderState rs;
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
   rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
   CameraState const cam{.yaw = 90.0f, .pitch = 0.0f, .roll = 0.0f, .distance = 5.0f, .fov = 45.0f};
   glm::vec3 const focus(1.0f, 2.0f, 3.0f);
@@ -92,7 +97,8 @@ TEST(CameraMath, SelectInputMode) {
 
 // Front and Top are fixed offsets from the focus target.
 TEST(CameraMath, SelectFixedModes) {
-  RenderState rs;
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
   CameraState const cam{};
   glm::vec3 const focus(0.0f, 0.0f, 0.0f);
 
@@ -105,7 +111,8 @@ TEST(CameraMath, SelectFixedModes) {
 
 // Orbit at time 0 sits at radius on -X (cos 0 = 1) with y and z zero (sin 0 = 0).
 TEST(CameraMath, SelectOrbitMode) {
-  RenderState rs;
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
   rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Orbit);
   rs.camera.orbitRadius = 9.0f;
   rs.camera.orbitSpeed = 3.0f;
@@ -116,10 +123,11 @@ TEST(CameraMath, SelectOrbitMode) {
 
 // Out-of-range mode and sub-floor orbit fields are clamped in place.
 TEST(CameraMath, SelectClampsFields) {
-  RenderState rs;
-  rs.camera.cameraModeIndex = 99;   // clamps to 3 (Orbit)
-  rs.camera.orbitRadius = 0.5f;     // clamps to 2.0
-  rs.camera.orbitSpeed = -4.0f;     // clamps to 0.0
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
+  rs.camera.cameraModeIndex = 99; // clamps to 3 (Orbit)
+  rs.camera.orbitRadius = 0.5f;   // clamps to 2.0
+  rs.camera.orbitSpeed = -4.0f;   // clamps to 0.0
   rs.camera.orbitTime = 0.0f;
   CameraState const cam{};
 

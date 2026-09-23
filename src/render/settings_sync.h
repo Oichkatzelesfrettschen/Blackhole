@@ -15,7 +15,8 @@ void loadSettingsIntoRenderState(RenderState &rs, const Settings &settings);
 
 // Write-back: the live RenderState display/post values plus the window fullscreen
 // state flow into Settings so SettingsManager::save() persists the session.
-void syncRenderStateToSettings(const RenderState &rs, Settings &settings, InputManager &input);
+void syncRenderStateToSettings(const RenderState &rs, Settings &settings,
+                               const InputManager &input);
 
 } // namespace blackhole
 

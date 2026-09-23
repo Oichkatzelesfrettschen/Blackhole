@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.31)
 
 project(Blackhole
   VERSION 1.0.0
@@ -50,6 +50,9 @@ set(BLACKHOLE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD ${BLACKHOLE_CXX_STANDARD})
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Project translation units use headers; module dependency flags are unnecessary
+# and GCC's scanner flags are incompatible with the Clang analysis frontend.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 add_compile_definitions(
   BLACKHOLE_CXX_STANDARD=${BLACKHOLE_CXX_STANDARD}
@@ -80,7 +83,7 @@ find_package(HighFive REQUIRED)
 find_package(CLI11 REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json REQUIRED)
-find_package(Boost CONFIG QUIET)
+find_package(Boost CONFIG REQUIRED COMPONENTS headers)
 
 # cfitsio for FITS image output (scientific data products)
 find_package(PkgConfig QUIET)
@@ -190,13 +193,9 @@ endif()
 
 option(ENABLE_HIGHWAY "Enable Highway for performance-portable SIMD" ON)
 if(ENABLE_HIGHWAY)
-  find_package(hwy CONFIG QUIET)
-  if(hwy_FOUND)
-    message(STATUS "Highway found: performance-portable SIMD available")
-  else()
-    message(STATUS "Highway not found: SIMD functionality limited to xsimd/Eigen")
-    set(ENABLE_HIGHWAY OFF)
-  endif()
+  find_package(highway CONFIG REQUIRED)
+  add_library(hwy::hwy ALIAS highway::hwy)
+  message(STATUS "Highway found: performance-portable SIMD available")
 endif()
 
 # ============================================================================
@@ -735,6 +734,13 @@ if(ENABLE_LTO)
 
     # Enable IPO for all targets
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+    # Each LTO link can use every CPU. Serialize links under Ninja so several
+    # linkers cannot each create an independent all-CPU worker pool.
+    if(CMAKE_GENERATOR MATCHES "Ninja")
+      set_property(GLOBAL APPEND PROPERTY JOB_POOLS blackhole_lto_link=1)
+      set(CMAKE_JOB_POOL_LINK blackhole_lto_link)
+    endif()
 
     if(ENABLE_FAT_LTO)
       # Fat LTO: maximum optimization, parallel LTO
@@ -1303,18 +1309,7 @@ function(add_blackhole_desktop_target target_name)
   )
   target_compile_options(${target_name} PRIVATE ${PROJECT_WARNINGS})
 
-  add_custom_command(
-    TARGET ${target_name}
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets"
-            "$<TARGET_FILE_DIR:${target_name}>/assets"
-  )
-  add_custom_command(
-    TARGET ${target_name}
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/shader/"
-            "$<TARGET_FILE_DIR:${target_name}>/shader"
-  )
+  add_dependencies(${target_name} blackhole_runtime_assets)
 endfunction()
 
 find_library(CPPTRACE_LIBRARY cpptrace)
@@ -1379,6 +1374,20 @@ if(ENABLE_DESKTOP_APP)
   else()
     message(STATUS "ImageMagick not found: the campaign map uses its procedural "
                    "starfield backdrop.")
+  endif()
+
+  # Desktop variants share an output directory. A single producer prevents
+  # parallel links from racing while copying the same runtime files.
+  add_custom_target(blackhole_runtime_assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "${PROJECT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/assets"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "${PROJECT_SOURCE_DIR}/shader"
+            "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/shader"
+    COMMENT "Synchronizing desktop runtime assets"
+    VERBATIM)
+  add_dependencies(blackhole_runtime_assets blackhole_font)
+  if(TARGET blackhole_campaign_backdrop)
+    add_dependencies(blackhole_runtime_assets blackhole_campaign_backdrop)
   endif()
 
   add_blackhole_desktop_target(${CMAKE_PROJECT_NAME})
@@ -1539,8 +1548,11 @@ if(ENABLE_CLANG_TIDY)
         "-warnings-as-errors=bugprone-*,cert-*"
       )
     endif()
+    if(ENABLE_WERROR)
+      list(APPEND CMAKE_CXX_CLANG_TIDY "--warnings-as-errors=*")
+    endif()
   else()
-    message(WARNING "clang-tidy requested but not found")
+    message(FATAL_ERROR "clang-tidy requested but not found")
   endif()
 endif()
 
@@ -1623,8 +1635,11 @@ if(ENABLE_CPPCHECK)
       "-I${PROJECT_SOURCE_DIR}/src"
       "-I${PROJECT_SOURCE_DIR}/src/physics"
     )
+    if(ENABLE_WERROR)
+      list(APPEND CMAKE_CXX_CPPCHECK "--error-exitcode=1")
+    endif()
   else()
-    message(WARNING "cppcheck requested but not found")
+    message(FATAL_ERROR "cppcheck requested but not found")
   endif()
 endif()
 
@@ -3101,6 +3116,12 @@ if(BUILD_TESTING)
       LABELS "docs;physics;meta"
       TIMEOUT 30
     )
+    add_test(NAME physics_claims_verifier
+      COMMAND ${PYTHON3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/tests/verify_claims_matrix_test.py")
+    set_tests_properties(physics_claims_verifier PROPERTIES
+      LABELS "docs;physics;meta;unit"
+      TIMEOUT 30
+    )
   endif()
   if(TARGET verify-blender-addon-package)
     add_test(
@@ -3646,12 +3667,48 @@ if(BUILD_TESTING)
     list(APPEND SANITIZER_TEST_ENV "LSAN_OPTIONS=detect_leaks=0")
   endif()
 
+  if(TARGET nubhlight_pack AND PYTHON3_EXECUTABLE)
+    add_test(NAME nubhlight_pack_validation
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/nubhlight_pack_test.py"
+        --packer $<TARGET_FILE:nubhlight_pack>)
+    set_tests_properties(nubhlight_pack_validation PROPERTIES
+      LABELS "grmhd;hdf5;tools" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(nubhlight_pack_validation PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+  if(TARGET nubhlight_inspect AND PYTHON3_EXECUTABLE)
+    add_test(NAME nubhlight_inspect_validation
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/nubhlight_inspect_test.py"
+        --inspector $<TARGET_FILE:nubhlight_inspect>)
+    set_tests_properties(nubhlight_inspect_validation PROPERTIES
+      LABELS "grmhd;hdf5;tools" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(nubhlight_inspect_validation PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  add_executable(settings_persistence_test tests/settings_persistence_test.cpp src/settings.cpp)
+  target_include_directories(settings_persistence_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_compile_options(settings_persistence_test PRIVATE ${PROJECT_WARNINGS})
+  target_link_libraries(settings_persistence_test PRIVATE GTest::gtest_main)
+  add_test(NAME settings_persistence COMMAND settings_persistence_test)
+  set_tests_properties(settings_persistence PROPERTIES TIMEOUT 30)
+  if(SANITIZER_TEST_ENV)
+    set_tests_properties(settings_persistence PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+  endif()
+  if(PYTHON3_EXECUTABLE)
+    add_test(NAME glsl_interface_adapter
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/cpp_to_glsl_test.py")
+    set_tests_properties(glsl_interface_adapter PROPERTIES TIMEOUT 30 LABELS "shaders;tools")
+  endif()
+
   # Physics library validation tests
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp")
     add_executable(physics_test
       "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp"
     )
-    target_link_libraries(physics_test PRIVATE blackhole_physics)
+    target_link_libraries(physics_test PRIVATE blackhole_physics glm::glm)
     target_include_directories(physics_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -3822,13 +3879,35 @@ if(BUILD_TESTING)
       glm::glm
     )
 
-    add_test(NAME grmhd_pack_fixture COMMAND grmhd_pack_test)
-    set_tests_properties(grmhd_pack_fixture PROPERTIES
+    set(GRMHD_PACK_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/grmhd-pack-fixture")
+    add_test(NAME grmhd_pack_fixture_prepare
+      COMMAND grmhd_pack_test --prepare-fixture "${GRMHD_PACK_FIXTURE_DIR}")
+    set_tests_properties(grmhd_pack_fixture_prepare PROPERTIES FIXTURES_SETUP grmhd_pack_input)
+    add_test(NAME grmhd_pack_fixture_pack
+      COMMAND nubhlight_pack
+        -i "${GRMHD_PACK_FIXTURE_DIR}/grmhd_fixture.h5"
+        -d /dump/P --fields RHO,UU,U1,U2
+        -o "${GRMHD_PACK_FIXTURE_DIR}/grmhd_pack.json")
+    set_tests_properties(grmhd_pack_fixture_pack PROPERTIES
+      FIXTURES_REQUIRED grmhd_pack_input FIXTURES_SETUP grmhd_pack_output)
+    add_test(NAME grmhd_pack_fixture
+      COMMAND grmhd_pack_test --validate-fixture "${GRMHD_PACK_FIXTURE_DIR}")
+    set_tests_properties(grmhd_pack_fixture PROPERTIES FIXTURES_REQUIRED grmhd_pack_output)
+    add_test(NAME grmhd_pack_fixture_cleanup
+      COMMAND "${CMAKE_COMMAND}" -E rm -f
+        "${GRMHD_PACK_FIXTURE_DIR}/grmhd_fixture.h5"
+        "${GRMHD_PACK_FIXTURE_DIR}/grmhd_pack.json"
+        "${GRMHD_PACK_FIXTURE_DIR}/grmhd_pack.bin")
+    set_tests_properties(grmhd_pack_fixture_cleanup PROPERTIES
+      FIXTURES_CLEANUP "grmhd_pack_input;grmhd_pack_output")
+    set_tests_properties(grmhd_pack_fixture_prepare grmhd_pack_fixture_pack
+      grmhd_pack_fixture grmhd_pack_fixture_cleanup PROPERTIES
       LABELS "grmhd;io"
       TIMEOUT 60
     )
     if(SANITIZER_TEST_ENV)
-      set_tests_properties(grmhd_pack_fixture PROPERTIES
+      set_tests_properties(grmhd_pack_fixture_prepare grmhd_pack_fixture_pack
+        grmhd_pack_fixture grmhd_pack_fixture_cleanup PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
@@ -3911,7 +3990,7 @@ if(BUILD_TESTING)
     )
     target_compile_options(hud_overlay_compile_test PRIVATE ${PROJECT_WARNINGS})
     target_compile_definitions(hud_overlay_compile_test PRIVATE GLM_FORCE_PURE)
-    target_link_libraries(hud_overlay_compile_test PRIVATE glbinding::glbinding stb::stb)
+    target_link_libraries(hud_overlay_compile_test PRIVATE glbinding::glbinding stb::stb glm::glm)
     add_test(NAME hud_overlay_compile COMMAND hud_overlay_compile_test)
     set_tests_properties(hud_overlay_compile PROPERTIES
       LABELS "hud;compile"
@@ -3935,6 +4014,7 @@ if(BUILD_TESTING)
     )
     target_compile_options(math_types_compile_test PRIVATE ${PROJECT_WARNINGS})
     target_compile_definitions(math_types_compile_test PRIVATE GLM_FORCE_PURE)
+    target_link_libraries(math_types_compile_test PRIVATE glm::glm)
     add_test(NAME math_types_compile COMMAND math_types_compile_test)
     set_tests_properties(math_types_compile PROPERTIES
       LABELS "math;compile"
@@ -4523,9 +4603,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(synchrotron_spectrum_test PRIVATE ${PROJECT_WARNINGS})
-    if(TARGET Boost::math)
-      target_link_libraries(synchrotron_spectrum_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(synchrotron_spectrum_test PRIVATE Boost::headers)
     add_test(NAME synchrotron_spectrum_validation COMMAND synchrotron_spectrum_test)
     set_tests_properties(synchrotron_spectrum_validation PROPERTIES
       LABELS "physics;synchrotron;emission;phase5"
@@ -4749,9 +4827,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(rte_integrator_test PRIVATE ${PROJECT_WARNINGS})
-    if(TARGET Boost::math)
-      target_link_libraries(rte_integrator_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(rte_integrator_test PRIVATE Boost::headers)
     add_test(NAME rte_integrator_validation COMMAND rte_integrator_test)
     set_tests_properties(rte_integrator_validation PROPERTIES
       LABELS "physics;rte;radiative_transfer"
@@ -4774,9 +4850,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(stokes_transport_test PRIVATE ${PROJECT_WARNINGS})
-    if(TARGET Boost::math)
-      target_link_libraries(stokes_transport_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(stokes_transport_test PRIVATE Boost::headers)
     add_test(NAME stokes_transport_validation COMMAND stokes_transport_test)
     set_tests_properties(stokes_transport_validation PROPERTIES
       LABELS "physics;polarization;stokes"
@@ -4799,9 +4873,7 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(stokes_invariants_test PRIVATE ${PROJECT_WARNINGS})
-    if(TARGET Boost::math)
-      target_link_libraries(stokes_invariants_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(stokes_invariants_test PRIVATE Boost::headers)
     add_test(NAME stokes_invariants_validation COMMAND stokes_invariants_test)
     set_tests_properties(stokes_invariants_validation PROPERTIES
       LABELS "physics;polarization;stokes;invariants"
@@ -4824,6 +4896,10 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(eht_visibility_test PRIVATE ${PROJECT_WARNINGS})
+    # The zero-denominator contract returns NaN; finite-math-only folds its test away.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(eht_visibility_test PRIVATE -fno-fast-math)
+    endif()
     add_test(NAME eht_visibility_validation COMMAND eht_visibility_test)
     set_tests_properties(eht_visibility_validation PROPERTIES
       LABELS "physics;eht;visibility"
@@ -4965,6 +5041,7 @@ if(BUILD_TESTING)
     target_compile_options(grmhd_hdf5_loader_test PRIVATE ${PROJECT_WARNINGS})
     target_link_libraries(grmhd_hdf5_loader_test PRIVATE
       HighFive::HighFive
+      nlohmann_json::nlohmann_json
     )
     add_test(NAME grmhd_hdf5_loader COMMAND grmhd_hdf5_loader_test)
     set_tests_properties(grmhd_hdf5_loader PROPERTIES
@@ -5626,9 +5703,7 @@ if(BUILD_TESTING)
     if(ENABLE_FAST_MATH)
       target_compile_options(analytic_geodesic_reproducibility_test PRIVATE -fno-fast-math)
     endif()
-    if(TARGET Boost::math)
-      target_link_libraries(analytic_geodesic_reproducibility_test PRIVATE Boost::math)
-    endif()
+    target_link_libraries(analytic_geodesic_reproducibility_test PRIVATE Boost::headers)
 
     add_test(NAME analytic_geodesic_reproducibility_validation
              COMMAND analytic_geodesic_reproducibility_test)
@@ -6265,3 +6340,58 @@ if(BUILD_TESTING)
   list(LENGTH _bh_test_sources_on_disk _bh_test_count)
   message(STATUS "Test-source completeness: ${_bh_test_count} files on disk, all accounted for")
 endif()
+
+# Target creation precedes analyzer discovery for desktop and bridge targets.
+# Apply the configured checks after collecting every project directory.
+function(blackhole_apply_analysis directory_path)
+  # Source properties belong to each consumer's directory scope.
+  set_source_files_properties(${BLACKHOLE_IMPORTED_IMPLEMENTATIONS}
+    DIRECTORY "${directory_path}" PROPERTIES SKIP_LINTING ON)
+  get_property(directory_targets DIRECTORY "${directory_path}" PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(project_target IN LISTS directory_targets)
+    get_target_property(target_type "${project_target}" TYPE)
+    if(target_type MATCHES "^(EXECUTABLE|STATIC_LIBRARY|SHARED_LIBRARY|MODULE_LIBRARY|OBJECT_LIBRARY)$"
+       AND NOT project_target STREQUAL "implot")
+      if(ENABLE_CLANG_TIDY)
+        set_property(TARGET "${project_target}" PROPERTY CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY}")
+        get_target_property(analysis_sources "${project_target}" SOURCES)
+        foreach(analysis_source IN LISTS analysis_sources)
+          if(analysis_source MATCHES "\\.(cpp|cc|cxx)$")
+            cmake_path(ABSOLUTE_PATH analysis_source BASE_DIRECTORY "${directory_path}" NORMALIZE)
+            get_source_file_property(skip_analysis "${analysis_source}"
+              DIRECTORY "${directory_path}" SKIP_LINTING)
+            if(NOT skip_analysis)
+              # Re-run attached analysis after a policy edit in an existing tree.
+              get_source_file_property(analysis_dependencies "${analysis_source}"
+                DIRECTORY "${directory_path}" OBJECT_DEPENDS)
+              if(NOT "${PROJECT_SOURCE_DIR}/.clang-tidy" IN_LIST analysis_dependencies)
+                set_property(SOURCE "${analysis_source}" DIRECTORY "${directory_path}"
+                  APPEND PROPERTY OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/.clang-tidy")
+              endif()
+            endif()
+          endif()
+        endforeach()
+      endif()
+      if(ENABLE_CPPCHECK)
+        set_property(TARGET "${project_target}" PROPERTY CXX_CPPCHECK "${CMAKE_CXX_CPPCHECK}")
+        get_target_property(target_libraries "${project_target}" LINK_LIBRARIES)
+        if(target_libraries MATCHES "GTest::")
+          # Model assertion and fixture macros instead of parsing unknown syntax.
+          set_property(TARGET "${project_target}" APPEND PROPERTY CXX_CPPCHECK
+            "--library=googletest")
+        endif()
+      endif()
+    endif()
+  endforeach()
+  get_property(child_directories DIRECTORY "${directory_path}" PROPERTY SUBDIRECTORIES)
+  foreach(child_directory IN LISTS child_directories)
+    blackhole_apply_analysis("${child_directory}")
+  endforeach()
+endfunction()
+
+# Imported ImGui, GL callback, and STB implementations retain upstream ownership.
+set(BLACKHOLE_IMPORTED_IMPLEMENTATIONS ${THIRDPARTY_SRC_FILES}
+  "${PROJECT_SOURCE_DIR}/external/gl_debug_callback/GLDebugMessageCallback.cc"
+  "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
+  "${PROJECT_SOURCE_DIR}/src/stb_image_write_impl.cpp")
+blackhole_apply_analysis("${PROJECT_SOURCE_DIR}")

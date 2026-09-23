@@ -1,8 +1,8 @@
 /**
  * @file rt_grmhd_composite_test.cpp
- * @brief Phase 7.1c: Radiative Transfer + GRMHD Integration Validation
+ * @brief CPU opacity integration and radiative-transfer arithmetic fixtures.
  *
- * Tests the complete RT-GRMHD composite pipeline:
+ * Exercises CPU coefficients with synthetic medium parameters:
  * 1. Absorption models with GRMHD fields
  * 2. Scattering effects on radiation
  * 3. Multi-wavelength radiative transfer
@@ -12,10 +12,9 @@
  * 7. Full pipeline integration
  */
 
-#include <cassert>
+#include <array>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -258,30 +257,23 @@ bool testEmissionBlending() {
   return lowFreqOk && highFreqOk;
 }
 
-// Test 7: Full pipeline validation
+// Test 7: Compose the production CPU absorption and scattering coefficients.
 bool testPipelineIntegration() {
-  std::cout << "Test 7: Full Pipeline Integration\n";
-
-  // Phase 6.3 inputs: 2M rays, 2040 GRMHD tiles
-  uint32_t const rayCount = 1920 * 1080;
-  uint32_t const tileCount = 60 * 34;
-
-  // Phase 7 processing per ray:
-  // 1. Sample GRMHD field (implicit in shader)
-  // 2. Compute absorption for 3 wavelength channels
-  // 3. Compute scattering opacities
-  // 4. Solve RT equation for each channel
-  // 5. Composite output
-
-  bool const pipelineOk = (rayCount == 1920 * 1080) && (tileCount == 2040);
-
-  std::cout << "  Phase 6.3 rays: " << rayCount << "\n"
-            << "  Phase 6.2b tiles: " << tileCount << "\n"
-            << "  Wavelength channels: 3 (radio/optical/X-ray)\n"
-            << "  Absorption mechanisms: 3 (SSA/FF/Compton)\n"
-            << "  Scattering mechanisms: 3 (Thomson/Rayleigh/Mie)\n"
-            << "  Status: " << (pipelineOk ? "PASS" : "FAIL") << "\n\n";
-
+  std::cout << "Test 7: CPU Absorption and Scattering Composition\n";
+  const std::array<double, 3> frequencies{1e10, 5e14, 1e18};
+  bool pipelineOk = true;
+  for (const double frequency : frequencies) {
+    const double absorption = totalAbsorptionCoefficient(frequency, 100.0, 1e3, 1e7);
+    const double scattering = totalScatteringOpacity(frequency, 1e3, 1e-4, 1e-12);
+    const double albedo = singleScatteringAlbedo(scattering, absorption);
+    const double absorbedFraction = singleScatteringAlbedo(absorption, scattering);
+    // Complementary fractions partition the same positive extinction coefficient.
+    pipelineOk = std::isfinite(albedo) && albedo >= 0.0 && albedo <= 1.0 &&
+                 std::abs(albedo + absorbedFraction - 1.0) < 1e-12 &&
+                 std::abs(albedo * (absorption + scattering) - scattering) <=
+                     1e-12 * scattering && pipelineOk;
+  }
+  std::cout << "  Status: " << (pipelineOk ? "PASS" : "FAIL") << "\n\n";
   return pipelineOk;
 }
 
@@ -293,8 +285,8 @@ bool testPipelineIntegration() {
 
 int main() {
     std::cout << "\n====================================================\n"
-              << "RT-GRMHD COMPOSITE VALIDATION\n"
-              << "Phase 7.1c: Radiative Transfer Integration\n"
+              << "CPU RT-GRMHD COEFFICIENT AND ARITHMETIC FIXTURES\n"
+              << "GPU rendering and physical conservation remain unqualified.\n"
               << "====================================================\n";
 
     int passed = 0;

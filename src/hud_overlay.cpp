@@ -34,7 +34,11 @@ namespace {
 struct EasyFontVertex {
   float x;
   float y;
+  // stb_easy_font_print writes the complete vertex ABI, including unused depth.
+  // cppcheck-suppress unusedStructMember
   [[maybe_unused]] float z;
+  // The four color bytes preserve stb_easy_font_print's 16-byte vertex stride.
+  // cppcheck-suppress unusedStructMember
   [[maybe_unused]] unsigned char color[4];
 };
 
@@ -129,13 +133,10 @@ void HudOverlay::init() {
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, nullptr);
   glEnableVertexAttribArray(1);
-  // WHY: glVertexAttribPointer offset is passed as a void* cast from byte offset.
-  glVertexAttribPointer(
-      1, 4, GL_FLOAT, GL_FALSE, stride,
-      reinterpret_cast<void *>(
-          2 *
-          sizeof(
-              float))); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr)
+  // OpenGL interprets the pointer argument as a byte offset in the bound VBO.
+  // NOLINTNEXTLINE(performance-no-int-to-ptr)
+  const auto *colorOffset = reinterpret_cast<void *>(2 * sizeof(float));
+  glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, stride, colorOffset);
 
   glBindVertexArray(0);
   stb_easy_font_spacing(1.0f);

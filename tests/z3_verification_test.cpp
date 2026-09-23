@@ -86,6 +86,10 @@ struct TestStats {
 // ============================================================================
 
 // NOLINTNEXTLINE(misc-use-internal-linkage) -- gtest fixture referenced by TEST_F from outside TU
+namespace {
+constexpr int LARGE_BATCH = 1000;
+}
+
 class Z3VerificationTest : public ::testing::Test {
 protected:
     // Constants for test configuration
@@ -95,7 +99,6 @@ protected:
     static constexpr double TOLERANCE_ENERGY = 1e-4;
     static constexpr double TOLERANCE_HORIZON = 1e-3;
     static constexpr int NUM_TEST_RAYS = 100;  // Batch size for random tests
-    static constexpr int LARGE_BATCH = 1000;   // Batch size for statistical tests
 
     /* WHY: gtest fixture members must be protected for SetUp/TearDown + TEST_F access. */
     // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
@@ -143,16 +146,15 @@ protected:
         double& energyFinal
     ) {
         verified::MetricComponents g{};
-        g.g_tt = verified::schwarzschild_g_tt(rStart, M_BH);
-        g.g_rr = verified::schwarzschild_g_rr(rStart, M_BH);
-        g.g_thth = rStart * rStart;
-        g.g_phph = rStart * rStart;
-        g.g_tph = 0.0;  // No frame dragging in Schwarzschild
+        g.gTt = verified::schwarzschildGTt(rStart, M_BH);
+        g.gRr = verified::schwarzschildGRr(rStart, M_BH);
+        g.gThth = rStart * rStart;
+        g.gPhph = rStart * rStart;
+        g.gTph = 0.0; // No frame dragging in Schwarzschild
 
         // Initialize null geodesic; init_null_geodesic_EL gives |v_r|, apply vR sign.
-        verified::StateVector state = verified::init_null_geodesic_EL(
-            rStart, std::numbers::pi / 2.0, 1.0, vPhi, g
-        );
+        verified::StateVector state =
+            verified::initNullGeodesicEl(rStart, std::numbers::pi / 2.0, 1.0, vPhi, g);
         if (vR < 0.0) {
             state.v1 = -std::abs(state.v1);  // Ingoing ray
         }
@@ -173,30 +175,26 @@ protected:
         /* WHY: make_schwarzschild_christoffel returns acceleration functions that
          * internally evaluate at the current StateVector position (s.x1, s.x2),
          * so a single Christoffel object is reusable across integration steps. */
-        const auto christoffel = verified::make_schwarzschild_christoffel(M_BH);
-        const auto rhs = verified::make_geodesic_rhs(christoffel);
+        const auto christoffel = verified::makeSchwarzschildChristoffel(M_BH);
+        const auto rhs = verified::makeGeodesicRhs(christoffel);
 
         for (int step = 0; step < maxSteps; step++) {
             // Check termination
             if (state.x1 <= R_S + 0.01) { break; }  // Captured
             if (state.x1 >= 200.0) { break; }        // Escaped
 
-            state = verified::rk4_step(rhs, h, state);
+            state = verified::rk4Step(rhs, h, state);
 
             /* Measure constraint and energy only in the well-conditioned region
              * (outside the photon sphere). theta=pi/2 throughout (equatorial,
              * no theta kick), so g_phph = r^2. */
             if (state.x1 > 3.0 * M_BH) {
-                const verified::MetricComponents gNow{
-                    verified::schwarzschild_g_tt(state.x1, M_BH),
-                    verified::schwarzschild_g_rr(state.x1, M_BH),
-                    state.x1 * state.x1,
-                    state.x1 * state.x1,
-                    0.0
-                };
-                const double constraint = verified::four_norm(gNow, state);
-                constraintDriftMax = std::max(constraintDriftMax, std::abs(constraint));
-                energyLastGood = verified::energy(gNow, state);
+              const verified::MetricComponents gNow{verified::schwarzschildGTt(state.x1, M_BH),
+                                                    verified::schwarzschildGRr(state.x1, M_BH),
+                                                    state.x1 * state.x1, state.x1 * state.x1, 0.0};
+              const double constraint = verified::fourNorm(gNow, state);
+              constraintDriftMax = std::max(constraintDriftMax, std::abs(constraint));
+              energyLastGood = verified::energy(gNow, state);
             }
         }
 
@@ -315,7 +313,6 @@ TEST_F(Z3VerificationTest, BatchRandomRays) {
 
     std::vector<RayTrace> rays;
     TestStats stats{};
-    stats.totalRays = Z3VerificationTest::NUM_TEST_RAYS;
 
     for (int i = 0; i < Z3VerificationTest::NUM_TEST_RAYS; i++) {
         const double rStart = rDist(rng);
@@ -326,14 +323,14 @@ TEST_F(Z3VerificationTest, BatchRandomRays) {
         double energyInitial = 0.0;
         double energyFinal = 0.0;
         
-        auto startTime = std::chrono::high_resolution_clock::now();
+        auto startTime = std::chrono::steady_clock::now();
         
         const verified::StateVector finalState = integrateSingleRay(
             rStart, vR, vPhi, 0.01, 10000,
             constraintDrift, energyInitial, energyFinal
         );
         
-        auto endTime = std::chrono::high_resolution_clock::now();
+        auto endTime = std::chrono::steady_clock::now();
         auto z3Time = std::chrono::duration<double, std::milli>(endTime - startTime).count();
         
         RayTrace ray{};
@@ -373,12 +370,19 @@ TEST_F(Z3VerificationTest, BatchRandomRays) {
         stats.maxConstraintDrift = std::max(stats.maxConstraintDrift, constraintDrift);
         stats.avgZ3CheckTime += z3Time;
     }
-    
+
+    stats.totalRays = static_cast<int>(rays.size());
+    EXPECT_EQ(stats.totalRays, Z3VerificationTest::NUM_TEST_RAYS);
+
     // Finalize statistics
     stats.avgConstraintDrift /= Z3VerificationTest::NUM_TEST_RAYS;
     stats.avgZ3CheckTime /= Z3VerificationTest::NUM_TEST_RAYS;
     stats.passRate = static_cast<double>(stats.z3Verified) / Z3VerificationTest::NUM_TEST_RAYS;
-    
+
+    EXPECT_LE(stats.avgConstraintDrift, TOLERANCE_CONSTRAINT * 10);
+    EXPECT_GE(stats.avgZ3CheckTime, 0.0);
+    EXPECT_TRUE(std::isfinite(stats.avgZ3CheckTime));
+
     // Write results
     writeResultsCSV(rays, "/tmp/z3_verification_results.csv");
     

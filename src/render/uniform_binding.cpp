@@ -1,10 +1,12 @@
+#include "physics/hawking_renderer.h"
+#include "render.h"
+#include "render/interop_uniforms.h"
+#include "render/render_state.h"
 /**
  * @file uniform_binding.cpp
  * @brief Implementations of the shared raytracer uniform binders declared in
  *        uniform_binding.h.
  */
-
-#include "render/uniform_binding.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,12 +14,16 @@
 #include <cstring>
 #include <string>
 
+#include <glbinding/gl/boolean.h>
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
+
 #include <glm/gtc/type_ptr.hpp>
 
 #include "physics/constants.h"
 #include "render/interop_uniform_registry.h"
+#include "render/uniform_binding.h"
 
 #if BLACKHOLE_HAS_CUDA
 #include "cuda/kernel_launch.h"
@@ -33,6 +39,8 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   // Registry-driven float uniforms: one row in
   // interop_uniform_registry.h writes the struct field, this map entry,
   // and the compute-path call below.
+// Expand each shared registry entry into its corresponding uniform operation.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define BH_X(field, glslName, defaultValue)                                  \
   rtti.floatUniforms[glslName] = interop.field;
   BH_INTEROP_UNIFORM_FLOATS(BH_X)
@@ -58,6 +66,8 @@ void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
                                  int height) {
   // Registry-driven float uniforms: same table rows as the fragment
   // path, so the two paths cannot drift on which uniforms exist.
+// Expand each shared registry entry into its corresponding uniform operation.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define BH_X(field, glslName, defaultValue)                                  \
   glUniform1f(glGetUniformLocation(program, glslName), interop.field);
   BH_INTEROP_UNIFORM_FLOATS(BH_X)

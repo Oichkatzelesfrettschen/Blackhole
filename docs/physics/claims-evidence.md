@@ -22,14 +22,37 @@ ctest --preset docs -R physics_claims_matrix --output-on-failure
 The verifier checks that:
 
 - each referenced file exists
-- each referenced CTest name is present in the configured build
+- each required CTest name is present in the configured build
+- conditional test requirements match explicit BOOL values in `CMakeCache.txt`
 - a report is written under `build/*/reports/physics_claims.md`
+
+The report establishes file presence and test registration. Test execution,
+numerical accuracy, rendered-image validation, and CUDA device execution require
+their own test results. A CPU configuration records CUDA obligations as
+`not-applicable`; the report preserves their names and the `ENABLE_CUDA=OFF`
+evidence. A CUDA configuration requires every declared CUDA test registration.
+
+An unconditional test is a string. A conditional test declares its required
+CMake BOOL options explicitly:
+
+```json
+{"name": "cuda_stokes", "requires": ["ENABLE_CUDA"]}
+```
+
+All named options must be enabled for that test to apply. Missing options,
+unrecognized BOOL values, malformed requirements, and failed CTest discovery
+fail verification. Source files remain mandatory in every configuration. The
+report records manifest and CMake-cache SHA-256 hashes, and replaces a previous
+success report with an error report when discovery fails.
+
+Run the applicability and failure-path regressions with
+`ctest --preset docs -R physics_claims_verifier --output-on-failure`.
 
 ## Current inventory
 
 The canonical machine-readable manifest is:
 
-- [claims_evidence.json](/home/eirikr/Github/Blackhole/docs/physics/claims_evidence.json)
+- [claims_evidence.json](claims_evidence.json)
 
 The initial inventory focuses on claims already backed by local code/tests:
 

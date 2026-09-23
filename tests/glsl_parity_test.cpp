@@ -64,7 +64,7 @@ struct TestStats {
 
 class TestSuite {
 public:
-  TestSuite(std::string name) : suite_name_(std::move(name)) {}
+  explicit TestSuite(std::string name) : suite_name_(std::move(name)) {}
 
   void addResult(const TestResult &result) {
     results_.push_back(result);

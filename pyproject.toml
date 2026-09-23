@@ -75,8 +75,6 @@ exclude = [
 # SIM: flake8-simplify  TID: flake8-tidy-imports  RUF: Ruff-native
 select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "SIM", "TID", "RUF"]
 ignore = [
-    "ANN101",   # self annotation -- not idiomatic Python
-    "ANN102",   # cls annotation
     "ANN401",   # Any is occasionally needed for bpy interop
     "B008",     # do not perform function calls in default args (bpy.props pattern)
     "N802",     # function name should be lowercase (Blender uses CamelCase operators)

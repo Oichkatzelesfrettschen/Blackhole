@@ -4,17 +4,13 @@
  * @file geodesic_trace_optimized.comp
  * @brief Optimized GPU compute shader with register reuse and memory coalescing
  *
- * Phase 6.1b: Memory and register optimization for maximum throughput
+ * Memory and register optimization for maximum throughput
  * - Reduce register pressure (target: <128 regs/thread)
  * - Coalesce global memory access
  * - Maximize shared memory utilization
  * - Optimize instruction latency hiding
  */
 
-#extension GL_ARB_compute_shader : require
-#extension GL_ARB_shader_storage_buffer_object : require
-#extension GL_ARB_gpu_shader5 : require
-#extension GL_EXT_scalar_block_layout : require
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 

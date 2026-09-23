@@ -32,32 +32,30 @@ using namespace physics;
 // Test 1: Phase 6.3 inputs (rays + GRMHD)
 namespace {
 
-bool testPhase63Inputs() {
+void testPhase63Inputs() {
   std::cout << "Test 1: Phase 6.3 Inputs (Rays + GRMHD)\n";
 
   // Phase 6.1a: GPU rays
-  uint32_t const width = 1920;
-  uint32_t const height = 1080;
-  uint32_t const rayCount = width * height;
+  constexpr uint32_t width = 1920;
+  constexpr uint32_t height = 1080;
+  constexpr uint32_t rayCount = width * height;
 
   // Phase 6.2a: GRMHD metadata
-  uint32_t const dumpCount = 10; // Multi-dump time series
+  constexpr uint32_t dumpCount = 10; // Multi-dump time series
 
   // Phase 6.2b: Tile cache
-  uint32_t const tileWidth = 32;
-  uint32_t const tileHeight = 32; // pixels per tile
-  uint32_t const tilesX = (width + tileWidth - 1) / tileWidth;
-  uint32_t const tilesY = (height + tileHeight - 1) / tileHeight;
-  uint32_t const totalTiles = tilesX * tilesY;
+  constexpr uint32_t tileWidth = 32;
+  constexpr uint32_t tileHeight = 32; // pixels per tile
+  constexpr uint32_t tilesX = (width + tileWidth - 1) / tileWidth;
+  constexpr uint32_t tilesY = (height + tileHeight - 1) / tileHeight;
+  constexpr uint32_t totalTiles = tilesX * tilesY;
 
-  bool const inputsOk = (rayCount == 2073600) && (totalTiles == 2040) && (dumpCount == 10);
+  static_assert((rayCount == 2073600) && (totalTiles == 2040) && (dumpCount == 10));
 
   std::cout << "  Rays: " << rayCount << " (1920x1080)\n"
             << "  GRMHD dumps: " << dumpCount << "\n"
             << "  Tiles: " << totalTiles << " (" << tilesX << "x" << tilesY << ")\n"
-            << "  Status: " << (inputsOk ? "PASS" : "FAIL") << "\n\n";
-
-  return inputsOk;
+            << "  Status: PASS (compile-time fixture contract)\n\n";
 }
 
 // Test 2: Absorption model coverage
@@ -229,23 +227,27 @@ bool testPerformanceCharacteristics() {
 }
 
 // Test 7: Complete Phase 7 integration
-bool testCompletePipelineIntegration() {
+void testCompletePipelineIntegration() {
   std::cout << "Test 7: Complete Phase 7 Integration\n";
 
   // Summary of all components
-  uint32_t const rayCount = 1920 * 1080;
-  uint32_t const tileCount = 2040;
-  uint32_t const dumpCount = 10;
-  uint32_t const absorptionMechanisms = 3; // SSA, FF, Compton
-  uint32_t const scatteringMechanisms = 3; // Thomson, Rayleigh, Mie
-  uint32_t const wavelengthChannels = 3;   // Radio, Optical, X-ray
+  constexpr uint32_t rayCount = 1920 * 1080;
+  constexpr uint32_t tileCount = 2040;
+  constexpr uint32_t dumpCount = 10;
+  constexpr uint32_t absorptionMechanisms = 3; // SSA, FF, Compton
+  constexpr uint32_t scatteringMechanisms = 3; // Thomson, Rayleigh, Mie
+  constexpr uint32_t wavelengthChannels = 3;   // Radio, Optical, X-ray
 
   // Test count across all sub-phases
-  uint32_t const totalTests = 7 + 7 + 7 + 7; // 7.1a + 7.1b + 7.1c + 7.1d
+  constexpr uint32_t totalTests = 7 + 7 + 7 + 7; // 7.1a + 7.1b + 7.1c + 7.1d
 
-  bool const integrationOk = (rayCount == 2073600) && (tileCount == 2040) && (dumpCount == 10) &&
-                             (absorptionMechanisms == 3) && (scatteringMechanisms == 3) &&
-                             (wavelengthChannels == 3) && (totalTests == 28);
+  static_assert(rayCount == 2073600);
+  static_assert(tileCount == 2040);
+  static_assert(dumpCount == 10);
+  static_assert(absorptionMechanisms == 3);
+  static_assert(scatteringMechanisms == 3);
+  static_assert(wavelengthChannels == 3);
+  static_assert(totalTests == 28);
 
   std::cout << "  Phase 7 Architecture:\n"
             << "    Phase 6.1a Rays: " << rayCount << "\n"
@@ -260,9 +262,7 @@ bool testCompletePipelineIntegration() {
             << "    7.1c RT-GRMHD: 7 tests\n"
             << "    7.1d Pipeline: 7 tests\n"
             << "    Total: " << totalTests << " tests\n"
-            << "\n  Status: " << (integrationOk ? "PASS" : "FAIL") << "\n\n";
-
-  return integrationOk;
+            << "\n  Status: PASS (compile-time fixture contract)\n\n";
 }
 
 // ============================================================================
@@ -280,9 +280,8 @@ int main() {
     int passed = 0;
     int const total = 7;
 
-    if (testPhase63Inputs()) {
-      passed++;
-    }
+    testPhase63Inputs();
+    ++passed;
     if (testAbsorptionModelCoverage()) {
       passed++;
     }
@@ -298,9 +297,8 @@ int main() {
     if (testPerformanceCharacteristics()) {
       passed++;
     }
-    if (testCompletePipelineIntegration()) {
-      passed++;
-    }
+    testCompletePipelineIntegration();
+    ++passed;
 
     std::cout << "====================================================\n"
               << "RESULTS: " << passed << "/" << total << " tests passed\n"

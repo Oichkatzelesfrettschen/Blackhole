@@ -5,6 +5,7 @@
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 
 #include "hud_overlay.h"
 #include "input.h"
@@ -16,7 +17,7 @@ using namespace gl;
 
 namespace blackhole {
 
-void composeSceneOverlays(RenderState &rs, InputManager &input, GLuint finalTexture,
+void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint finalTexture,
                           bool grmhdReady) {
   if (rs.targets.sceneFbo == 0) {
     glGenFramebuffers(1, &rs.targets.sceneFbo);

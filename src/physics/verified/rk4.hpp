@@ -2,8 +2,8 @@
  * @file verified/rk4.hpp
  * @brief Verified RK4 integration - derived from Rocq formalization
  *
- * This file is generated from proven Rocq theories in rocq/theories/Geodesics/RK4.v
- * All algorithms verified with formal proofs:
+ * Maintained C++ reference for rocq/theories/Geodesics/RK4.v
+ * Mathematical properties described by the Rocq development:
  *   - Local truncation error is O(h^5)
  *   - Null geodesic constraint preserved up to O(h^4) drift
  *   - Energy conservation for Killing vectors
@@ -11,7 +11,9 @@
  * The 8-dimensional state vector represents geodesic state:
  *   (t, r, theta, phi, dt/dlambda, dr/dlambda, dtheta/dlambda, dphi/dlambda)
  *
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
+ * The maintained C++ is an input to scripts/cpp_to_glsl.py.
+ * Rocq definitions document the mathematical source; floating-point
+ * implementations are checked by tests rather than a proved extraction chain.
  *
  * @note All functions are constexpr where possible for compile-time evaluation
  * @note Uses geometric units where c = G = 1
@@ -22,8 +24,9 @@
 
 #include <cmath>
 #include <concepts>
-#include <functional>
 #include <cstdint>
+#include <functional>
+#include <utility>
 
 namespace verified {
 
@@ -99,12 +102,9 @@ struct StateVector {
  *          (a.(v0) + b.(v0)) (a.(v1) + b.(v1))
  *          (a.(v2) + b.(v2)) (a.(v3) + b.(v3)).
  */
-[[nodiscard]] constexpr StateVector sv_add(const StateVector& a,
-                                            const StateVector& b) noexcept {
-    return StateVector{
-        a.x0 + b.x0, a.x1 + b.x1, a.x2 + b.x2, a.x3 + b.x3,
-        a.v0 + b.v0, a.v1 + b.v1, a.v2 + b.v2, a.v3 + b.v3
-    };
+[[nodiscard]] constexpr StateVector svAdd(const StateVector &a, const StateVector &b) noexcept {
+  return StateVector{a.x0 + b.x0, a.x1 + b.x1, a.x2 + b.x2, a.x3 + b.x3,
+                     a.v0 + b.v0, a.v1 + b.v1, a.v2 + b.v2, a.v3 + b.v3};
 }
 
 /**
@@ -117,12 +117,9 @@ struct StateVector {
  *          (c * a.(v0)) (c * a.(v1))
  *          (c * a.(v2)) (c * a.(v3)).
  */
-[[nodiscard]] constexpr StateVector sv_scale(double c,
-                                              const StateVector& a) noexcept {
-    return StateVector{
-        c * a.x0, c * a.x1, c * a.x2, c * a.x3,
-        c * a.v0, c * a.v1, c * a.v2, c * a.v3
-    };
+[[nodiscard]] constexpr StateVector svScale(double c, const StateVector &a) noexcept {
+  return StateVector{c * a.x0, c * a.x1, c * a.x2, c * a.x3,
+                     c * a.v0, c * a.v1, c * a.v2, c * a.v3};
 }
 
 /**
@@ -130,7 +127,7 @@ struct StateVector {
  */
 [[nodiscard]] constexpr StateVector operator+(const StateVector& a,
                                                const StateVector& b) noexcept {
-    return sv_add(a, b);
+  return svAdd(a, b);
 }
 
 /**
@@ -138,7 +135,7 @@ struct StateVector {
  */
 [[nodiscard]] constexpr StateVector operator*(double c,
                                                const StateVector& a) noexcept {
-    return sv_scale(c, a);
+  return svScale(c, a);
 }
 
 // ============================================================================
@@ -152,10 +149,12 @@ struct StateVector {
  *   Definition rk4_k1 (f : StateVector -> StateVector) (y : StateVector) :=
  *     f y.
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] constexpr StateVector rk4_k1(F&& f, const StateVector& y) noexcept {
-    return f(y);
+template <typename F>
+requires std::invocable<F &, StateVector> [[nodiscard]] constexpr StateVector
+rk4K1(F &&f, const StateVector &y) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  return rhsFunction(y);
 }
 
 /**
@@ -165,12 +164,12 @@ requires std::invocable<F, StateVector>
  *   Definition rk4_k2 (f : StateVector -> StateVector) (h : R) (y k1 : StateVector) :=
  *     f (sv_add y (sv_scale (h/2) k1)).
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] constexpr StateVector rk4_k2(F&& f, double h,
-                                            const StateVector& y,
-                                            const StateVector& k1) noexcept {
-    return f(sv_add(y, sv_scale(h / 2.0, k1)));
+template <typename F>
+requires std::invocable<F &, StateVector> [[nodiscard]] constexpr StateVector
+rk4K2(F &&f, double h, const StateVector &y, const StateVector &k1) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  return rhsFunction(svAdd(y, svScale(h / 2.0, k1)));
 }
 
 /**
@@ -180,12 +179,12 @@ requires std::invocable<F, StateVector>
  *   Definition rk4_k3 (f : StateVector -> StateVector) (h : R) (y k2 : StateVector) :=
  *     f (sv_add y (sv_scale (h/2) k2)).
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] constexpr StateVector rk4_k3(F&& f, double h,
-                                            const StateVector& y,
-                                            const StateVector& k2) noexcept {
-    return f(sv_add(y, sv_scale(h / 2.0, k2)));
+template <typename F>
+requires std::invocable<F &, StateVector> [[nodiscard]] constexpr StateVector
+rk4K3(F &&f, double h, const StateVector &y, const StateVector &k2) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  return rhsFunction(svAdd(y, svScale(h / 2.0, k2)));
 }
 
 /**
@@ -195,12 +194,12 @@ requires std::invocable<F, StateVector>
  *   Definition rk4_k4 (f : StateVector -> StateVector) (h : R) (y k3 : StateVector) :=
  *     f (sv_add y (sv_scale h k3)).
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] constexpr StateVector rk4_k4(F&& f, double h,
-                                            const StateVector& y,
-                                            const StateVector& k3) noexcept {
-    return f(sv_add(y, sv_scale(h, k3)));
+template <typename F>
+requires std::invocable<F &, StateVector> [[nodiscard]] constexpr StateVector
+rk4K4(F &&f, double h, const StateVector &y, const StateVector &k3) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  return rhsFunction(svAdd(y, svScale(h, k3)));
 }
 
 /**
@@ -213,16 +212,12 @@ requires std::invocable<F, StateVector>
  *         (sv_add (sv_scale 2 k2)
  *           (sv_add (sv_scale 2 k3) k4)))).
  */
-[[nodiscard]] constexpr StateVector rk4_combine(double h,
-                                                 const StateVector& y,
-                                                 const StateVector& k1,
-                                                 const StateVector& k2,
-                                                 const StateVector& k3,
-                                                 const StateVector& k4) noexcept {
-    return sv_add(y, sv_scale(h / 6.0,
-        sv_add(k1,
-            sv_add(sv_scale(2.0, k2),
-                sv_add(sv_scale(2.0, k3), k4)))));
+[[nodiscard]] constexpr StateVector rk4Combine(double h, const StateVector &y,
+                                               const StateVector &k1, const StateVector &k2,
+                                               const StateVector &k3,
+                                               const StateVector &k4) noexcept {
+  return svAdd(y,
+               svScale(h / 6.0, svAdd(k1, svAdd(svScale(2.0, k2), svAdd(svScale(2.0, k3), k4)))));
 }
 
 /**
@@ -244,19 +239,18 @@ requires std::invocable<F, StateVector>
  * @param y Current state
  * @return Next state after one RK4 step
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] constexpr StateVector rk4_step(F&& f, double h,
-                                              const StateVector& y) noexcept {
-    const auto k1 = f(y);
-    const auto k2 = f(sv_add(y, sv_scale(h / 2.0, k1)));
-    const auto k3 = f(sv_add(y, sv_scale(h / 2.0, k2)));
-    const auto k4 = f(sv_add(y, sv_scale(h, k3)));
+template <typename F>
+requires std::invocable<F &, StateVector> [[nodiscard]] constexpr StateVector
+rk4Step(F &&f, double h, const StateVector &y) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  const auto k1 = rhsFunction(y);
+  const auto k2 = rhsFunction(svAdd(y, svScale(h / 2.0, k1)));
+  const auto k3 = rhsFunction(svAdd(y, svScale(h / 2.0, k2)));
+  const auto k4 = rhsFunction(svAdd(y, svScale(h, k3)));
 
-    return sv_add(y, sv_scale(h / 6.0,
-        sv_add(k1,
-            sv_add(sv_scale(2.0, k2),
-                sv_add(sv_scale(2.0, k3), k4)))));
+  return svAdd(y,
+               svScale(h / 6.0, svAdd(k1, svAdd(svScale(2.0, k2), svAdd(svScale(2.0, k3), k4)))));
 }
 
 // ============================================================================
@@ -272,14 +266,14 @@ requires std::invocable<F, StateVector>
  * Theorem rk4_order: forall C h, h > 0 -> C > 0 ->
  *   local_error_bound C h = C * h^5.
  *
- * @param C Bound on 5th derivative
+ * @param c Bound on 5th derivative
  * @param h Step size
  * @return Upper bound on local error
  */
-[[nodiscard]] inline double local_error_bound(double C, double h) noexcept {
-    const double h2 = h * h;
-    const double h4 = h2 * h2;
-    return C * h4 * h;  // C * h^5
+[[nodiscard]] inline double localErrorBound(double c, double h) noexcept {
+  const double h2 = h * h;
+  const double h4 = h2 * h2;
+  return c * h4 * h; // C * h^5
 }
 
 /**
@@ -290,13 +284,13 @@ requires std::invocable<F, StateVector>
  *
  * Global error accumulates as O(h^4) over N = 1/h steps.
  *
- * @param C Bound constant
+ * @param c Bound constant
  * @param h Step size
  * @return Upper bound on global error
  */
-[[nodiscard]] inline double global_error_bound(double C, double h) noexcept {
-    const double h2 = h * h;
-    return C * h2 * h2;  // C * h^4
+[[nodiscard]] inline double globalErrorBound(double c, double h) noexcept {
+  const double h2 = h * h;
+  return c * h2 * h2; // C * h^4
 }
 
 /**
@@ -307,14 +301,14 @@ requires std::invocable<F, StateVector>
  *
  * Note: RK4 is not symplectic, so volume is not exactly preserved.
  *
- * @param N Number of steps
+ * @param n Number of steps
  * @param h Step size
  * @return Estimated volume drift
  */
-[[nodiscard]] inline double phase_space_volume_drift(std::size_t N, double h) noexcept {
-    const double h2 = h * h;
-    const double h4 = h2 * h2;
-    return static_cast<double>(N) * h4 * h;
+[[nodiscard]] inline double phaseSpaceVolumeDrift(std::size_t n, double h) noexcept {
+  const double h2 = h * h;
+  const double h4 = h2 * h2;
+  return static_cast<double>(n) * h4 * h;
 }
 
 // ============================================================================
@@ -350,29 +344,25 @@ enum class GeodesicStatus {
  *     else Propagating.
  *
  * @param s Current state
- * @param r_horizon Event horizon radius
- * @param r_escape Escape radius (far field)
+ * @param rHorizon Event horizon radius
+ * @param rEscape Escape radius (far field)
  * @param step Current step number
- * @param max_steps Maximum allowed steps
+ * @param maxSteps Maximum allowed steps
  * @return Geodesic status
  */
-[[nodiscard]] constexpr GeodesicStatus check_termination(
-    const StateVector& s,
-    double r_horizon,
-    double r_escape,
-    std::size_t step,
-    std::size_t max_steps) noexcept
-{
-    if (s.x1 < r_horizon) {
-        return GeodesicStatus::Captured;
-    }
-    if (s.x1 > r_escape) {
-        return GeodesicStatus::Escaped;
-    }
-    if (step >= max_steps) {
-        return GeodesicStatus::MaxSteps;
-    }
-    return GeodesicStatus::Propagating;
+[[nodiscard]] constexpr GeodesicStatus checkTermination(const StateVector &s, double rHorizon,
+                                                        double rEscape, std::size_t step,
+                                                        std::size_t maxSteps) noexcept {
+  if (s.x1 < rHorizon) {
+    return GeodesicStatus::Captured;
+  }
+  if (s.x1 > rEscape) {
+    return GeodesicStatus::Escaped;
+  }
+  if (step >= maxSteps) {
+    return GeodesicStatus::MaxSteps;
+  }
+  return GeodesicStatus::Propagating;
 }
 
 // ============================================================================
@@ -395,15 +385,15 @@ enum class GeodesicStatus {
  * @param n Number of steps
  * @return Final state after n steps
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] constexpr StateVector integrate(F&& f, double h,
-                                               StateVector s,
-                                               std::size_t n) noexcept {
-    for (std::size_t i = 0; i < n; ++i) {
-        s = rk4_step(f, h, s);
-    }
-    return s;
+template <typename F>
+requires std::invocable<F &, StateVector> [[nodiscard]] constexpr StateVector
+integrate(F &&f, double h, StateVector s, std::size_t n) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  for (std::size_t i = 0; i < n; ++i) {
+    s = rk4Step(rhsFunction, h, s);
+  }
+  return s;
 }
 
 /**
@@ -414,26 +404,26 @@ requires std::invocable<F, StateVector>
  * @param f Right-hand side function
  * @param h Step size
  * @param s Initial state
- * @param r_horizon Event horizon radius
- * @param r_escape Escape radius
- * @param max_steps Maximum steps
+ * @param rHorizon Event horizon radius
+ * @param rEscape Escape radius
+ * @param maxSteps Maximum steps
  * @return Pair of (final state, status)
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] constexpr std::pair<StateVector, GeodesicStatus> integrate_with_termination(
-    F&& f, double h, StateVector s,
-    double r_horizon, double r_escape,
-    std::size_t max_steps) noexcept
-{
-    for (std::size_t step = 0; step < max_steps; ++step) {
-        auto status = check_termination(s, r_horizon, r_escape, step, max_steps);
-        if (status != GeodesicStatus::Propagating) {
-            return {s, status};
-        }
-        s = rk4_step(f, h, s);
+template <typename F>
+requires
+    std::invocable<F &, StateVector> [[nodiscard]] constexpr std::pair<StateVector, GeodesicStatus>
+    integrateWithTermination(F &&f, double h, StateVector s, double rHorizon, double rEscape,
+                             std::size_t maxSteps) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  for (std::size_t step = 0; step < maxSteps; ++step) {
+    auto status = checkTermination(s, rHorizon, rEscape, step, maxSteps);
+    if (status != GeodesicStatus::Propagating) {
+      return {s, status};
     }
-    return {s, GeodesicStatus::MaxSteps};
+    s = rk4Step(rhsFunction, h, s);
+  }
+  return {s, GeodesicStatus::MaxSteps};
 }
 
 // ============================================================================
@@ -458,16 +448,17 @@ requires std::invocable<F, StateVector>
  * @param y Current state
  * @return Estimated local error
  */
-template<typename F>
-requires std::invocable<F, StateVector>
-[[nodiscard]] inline double rk4_error_estimate(F&& f, double h,
-                                                const StateVector& y) noexcept {
-    const auto y1 = rk4_step(f, h, y);
-    const auto y_half = rk4_step(f, h / 2.0, y);
-    const auto y2 = rk4_step(f, h / 2.0, y_half);
+template <typename F>
+requires std::invocable<F &, StateVector> [[nodiscard]] inline double
+rk4ErrorEstimate(F &&f, double h, const StateVector &y) noexcept {
+  // Named references preserve repeated lvalue invocation of stateful callbacks.
+  auto &&rhsFunction = std::forward<F>(f);
+  const auto y1 = rk4Step(rhsFunction, h, y);
+  const auto yHalf = rk4Step(rhsFunction, h / 2.0, y);
+  const auto y2 = rk4Step(rhsFunction, h / 2.0, yHalf);
 
-    // Richardson extrapolation: error ~ |y1 - y2| / 30
-    return std::abs(y1.x1 - y2.x1) / 30.0;
+  // Richardson extrapolation: error ~ |y1 - y2| / 30
+  return std::abs(y1.x1 - y2.x1) / 30.0;
 }
 
 /**
@@ -482,12 +473,12 @@ requires std::invocable<F, StateVector>
  * @param tol Tolerance
  * @return Optimal next step size
  */
-[[nodiscard]] inline double optimal_step(double h, double err, double tol) noexcept {
-    if (err <= 0.0) {
-        return h;  // Avoid division by zero
-    }
-    // h_new = 0.9 * h * (tol/err)^(1/5)
-    return 0.9 * h * std::pow(tol / err, 0.2);
+[[nodiscard]] inline double optimalStep(double h, double err, double tol) noexcept {
+  if (err <= 0.0) {
+    return h; // Avoid division by zero
+  }
+  // h_new = 0.9 * h * (tol/err)^(1/5)
+  return 0.9 * h * std::pow(tol / err, 0.2);
 }
 
 // ============================================================================
@@ -506,11 +497,11 @@ requires std::invocable<F, StateVector>
  * @param s Current state
  * @return State with position derivatives
  */
-[[nodiscard]] constexpr StateVector position_derivatives(const StateVector& s) noexcept {
-    return StateVector{
-        s.v0, s.v1, s.v2, s.v3,  // Positions get velocity values
-        0.0, 0.0, 0.0, 0.0       // Velocities get zero (no acceleration here)
-    };
+[[nodiscard]] constexpr StateVector positionDerivatives(const StateVector &s) noexcept {
+  return StateVector{
+      s.v0, s.v1, s.v2, s.v3, // Positions get velocity values
+      0.0,  0.0,  0.0,  0.0   // Velocities get zero (no acceleration here)
+  };
 }
 
 // ============================================================================
@@ -527,18 +518,18 @@ requires std::invocable<F, StateVector>
  *
  * This is a compile-time verification function.
  *
- * @param C Error constant
+ * @param c Error constant
  * @param h Step size
  * @return true if refinement property holds within tolerance
  */
-[[nodiscard]] constexpr bool verify_refinement_property(double C, double h) noexcept {
-    const double full_error = local_error_bound(C, h);
-    const double half_error = local_error_bound(C, h / 2.0);
-    const double expected = full_error / 32.0;
+[[nodiscard]] constexpr bool verifyRefinementProperty(double c, double h) noexcept {
+  const double fullError = localErrorBound(c, h);
+  const double halfError = localErrorBound(c, h / 2.0);
+  const double expected = fullError / 32.0;
 
-    // Allow for floating-point tolerance
-    const double diff = half_error > expected ? half_error - expected : expected - half_error;
-    return diff < 1e-15 * expected;
+  // Allow for floating-point tolerance
+  const double diff = halfError > expected ? halfError - expected : expected - halfError;
+  return diff < 1e-15 * expected;
 }
 
 } // namespace verified

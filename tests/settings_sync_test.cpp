@@ -12,6 +12,8 @@
  * executables.
  */
 
+#include <memory>
+
 #include <gtest/gtest.h>
 
 #include "input.h"
@@ -19,7 +21,7 @@
 #include "render/settings_sync.h"
 #include "settings.h"
 
-using blackhole::kMaxBloomIterations;
+using blackhole::K_MAX_BLOOM_ITERATIONS;
 using blackhole::loadSettingsIntoRenderState;
 using blackhole::RenderState;
 using blackhole::syncRenderStateToSettings;
@@ -47,8 +49,9 @@ Settings distinctSettings() {
 // First frame with clear latches copies every synced group from Settings and
 // latches so a subsequent load with different Settings is ignored.
 TEST(SettingsSync, HydratesOnceThenLatches) {
-  RenderState rs;
-  Settings settings = distinctSettings();
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
+  const Settings settings = distinctSettings();
 
   loadSettingsIntoRenderState(rs, settings);
 
@@ -76,15 +79,17 @@ TEST(SettingsSync, HydratesOnceThenLatches) {
   EXPECT_FLOAT_EQ(rs.camera.orbitRadius, 99.0f);
 }
 
-// bloomIterations is clamped into [1, kMaxBloomIterations] on hydration.
+// bloomIterations is clamped into [1, K_MAX_BLOOM_ITERATIONS] on hydration.
 TEST(SettingsSync, ClampsBloomIterations) {
-  RenderState high;
+  const auto highStorage = std::make_unique<RenderState>();
+  RenderState &high = *highStorage;
   Settings tooMany = distinctSettings();
   tooMany.bloomIterations = 999;
   loadSettingsIntoRenderState(high, tooMany);
-  EXPECT_EQ(high.post.bloomIterations, kMaxBloomIterations);
+  EXPECT_EQ(high.post.bloomIterations, K_MAX_BLOOM_ITERATIONS);
 
-  RenderState low;
+  const auto lowStorage = std::make_unique<RenderState>();
+  RenderState &low = *lowStorage;
   Settings tooFew = distinctSettings();
   tooFew.bloomIterations = -3;
   loadSettingsIntoRenderState(low, tooFew);
@@ -94,7 +99,8 @@ TEST(SettingsSync, ClampsBloomIterations) {
 // The write-back copies live display/post values and the window fullscreen
 // state into Settings.
 TEST(SettingsSync, WritesBackLiveState) {
-  RenderState rs;
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
   rs.display.swapInterval = 0;
   rs.display.renderScale = 0.75f;
   rs.post.bloomStrength = 0.42f;

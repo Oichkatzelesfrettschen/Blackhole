@@ -244,7 +244,6 @@ struct TOVProfile {
 
     // Pressure must decrease monotonically
     if (press < 0) {
-      press = 0; // NOLINT(clang-analyzer-deadcode.DeadStores) -- clamp before break for clarity
       break;
     }
 

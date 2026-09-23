@@ -14,13 +14,17 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <utility>
 #include <iomanip>
 #include <iostream>
-#include <map>
 #include <numeric>
 #include <vector>
 
 #ifdef BLACKHOLE_ENABLE_FASTNOISE2
+
+namespace {
 
 // Statistical measures
 struct Statistics {
@@ -36,7 +40,7 @@ struct Statistics {
     float kurtosis;   // Tail heaviness: 3 = normal distribution
 };
 
-static Statistics computeStatistics(const std::vector<float> &data) {
+Statistics computeStatistics(const std::vector<float> &data) {
   Statistics stats{};
 
   // Basic stats
@@ -75,7 +79,6 @@ static Statistics computeStatistics(const std::vector<float> &data) {
 }
 
 // Compute spatial autocorrelation at distance d
-namespace {
 
 float spatialAutocorrelation(const blackhole::NoiseVolume &vol, int d) {
   if (std::cmp_less_equal(vol.width, d)) {
@@ -104,7 +107,7 @@ float spatialAutocorrelation(const blackhole::NoiseVolume &vol, int d) {
 }
 
 // Histogram binning
-static std::vector<int> histogram(const std::vector<float> &data, int bins) {
+std::vector<int> histogram(const std::vector<float> &data, int bins) {
   auto [min, max] = std::ranges::minmax_element(data);
   float const range = *max - *min;
   float const binWidth = range / static_cast<float>(bins);

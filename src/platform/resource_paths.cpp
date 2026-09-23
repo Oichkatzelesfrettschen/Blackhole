@@ -5,8 +5,11 @@
 
 #include "resource_paths.h"
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 

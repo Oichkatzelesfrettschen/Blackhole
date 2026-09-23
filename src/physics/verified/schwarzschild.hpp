@@ -2,8 +2,8 @@
  * @file verified/schwarzschild.hpp
  * @brief Verified Schwarzschild metric functions - derived from Rocq formalization
  *
- * This file is generated from proven Rocq theories in rocq/theories/Metrics/Schwarzschild.v
- * All formulas verified against theoretical values:
+ * Maintained C++ reference for rocq/theories/Metrics/Schwarzschild.v
+ * Analytical values exercised by the C++ tests:
  *   - r_s = 2M (Schwarzschild radius)
  *   - r_ISCO = 6M (ISCO in geometric units)
  *   - r_ph = 3M (photon sphere = 1.5 r_s)
@@ -11,7 +11,9 @@
  * Metric in Boyer-Lindquist coordinates (c = G = 1, geometric units):
  *   ds^2 = -(1 - 2M/r) dt^2 + (1 - 2M/r)^(-1) dr^2 + r^2 dOmega^2
  *
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
+ * The maintained C++ is an input to scripts/cpp_to_glsl.py.
+ * Rocq definitions document the mathematical source; floating-point
+ * implementations are checked by tests rather than a proved extraction chain.
  *
  * @note All functions are constexpr for compile-time evaluation
  * @note Uses geometric units where c = G = 1
@@ -34,11 +36,11 @@ namespace verified {
  *
  * Derived from Rocq: Definition schwarzschild_radius (M : R) : R := 2 * M.
  *
- * @param M Black hole mass in geometric units
+ * @param m Black hole mass in geometric units
  * @return r_s = 2M
  */
-[[nodiscard]] constexpr double schwarzschild_radius(double M) noexcept {
-    return 2.0 * M;
+[[nodiscard]] constexpr double schwarzschildRadius(double m) noexcept {
+  return 2.0 * m;
 }
 
 /**
@@ -47,11 +49,11 @@ namespace verified {
  * Derived from Rocq: Definition schwarzschild_isco (M : R) : R := 6 * M.
  * Theorem schwarzschild_isco_radius: r_isco = 6 * M.
  *
- * @param M Black hole mass in geometric units
+ * @param m Black hole mass in geometric units
  * @return r_ISCO = 6M
  */
-[[nodiscard]] constexpr double schwarzschild_isco(double M) noexcept {
-    return 6.0 * M;
+[[nodiscard]] constexpr double schwarzschildIsco(double m) noexcept {
+  return 6.0 * m;
 }
 
 /**
@@ -60,11 +62,11 @@ namespace verified {
  * Derived from Rocq: Definition photon_sphere_radius (M : R) : R := 3 * M / 2 * 2 = 3M.
  * Unstable circular photon orbits exist at r = 3M.
  *
- * @param M Black hole mass in geometric units
+ * @param m Black hole mass in geometric units
  * @return r_ph = 3M
  */
-[[nodiscard]] constexpr double photon_sphere_radius(double M) noexcept {
-    return 3.0 * M;
+[[nodiscard]] constexpr double photonSphereRadius(double m) noexcept {
+  return 3.0 * m;
 }
 
 // ============================================================================
@@ -77,11 +79,11 @@ namespace verified {
  * Derived from Rocq: Definition f_schwarzschild (r M : R) : R := 1 - (2 * M) / r.
  *
  * @param r Radial coordinate (geometric units)
- * @param M Black hole mass (geometric units)
+ * @param m Black hole mass (geometric units)
  * @return f = 1 - 2M/r
  */
-[[nodiscard]] constexpr double f_schwarzschild(double r, double M) noexcept {
-    return 1.0 - (2.0 * M) / r;
+[[nodiscard]] constexpr double fSchwarzschild(double r, double m) noexcept {
+  return 1.0 - (2.0 * m) / r;
 }
 
 // ============================================================================
@@ -94,11 +96,11 @@ namespace verified {
  * Derived from Rocq: schwarzschild_metric returns mkMetric(- f)... for g_tt
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @return g_tt = -(1 - 2M/r)
  */
-[[nodiscard]] constexpr double schwarzschild_g_tt(double r, double M) noexcept {
-    return -f_schwarzschild(r, M);
+[[nodiscard]] constexpr double schwarzschildGTt(double r, double m) noexcept {
+  return -fSchwarzschild(r, m);
 }
 
 /**
@@ -107,11 +109,11 @@ namespace verified {
  * Derived from Rocq: schwarzschild_metric returns mkMetric(..., 1/f, ...) for g_rr
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @return g_rr = 1/(1 - 2M/r)
  */
-[[nodiscard]] constexpr double schwarzschild_g_rr(double r, double M) noexcept {
-    return 1.0 / f_schwarzschild(r, M);
+[[nodiscard]] constexpr double schwarzschildGRr(double r, double m) noexcept {
+  return 1.0 / fSchwarzschild(r, m);
 }
 
 /**
@@ -122,8 +124,8 @@ namespace verified {
  * @param r Radial coordinate
  * @return g_thth = r^2
  */
-[[nodiscard]] constexpr double schwarzschild_g_thth(double r) noexcept {
-    return r * r;
+[[nodiscard]] constexpr double schwarzschildGThth(double r) noexcept {
+  return r * r;
 }
 
 /**
@@ -135,9 +137,9 @@ namespace verified {
  * @param theta Polar angle
  * @return g_phph = r^2 sin^2(theta)
  */
-[[nodiscard]] inline double schwarzschild_g_phph(double r, double theta) noexcept {
-    const double sin_theta = std::sin(theta);
-    return r * r * sin_theta * sin_theta;
+[[nodiscard]] inline double schwarzschildGPhph(double r, double theta) noexcept {
+  const double sinTheta = std::sin(theta);
+  return r * r * sinTheta * sinTheta;
 }
 
 // ============================================================================
@@ -150,8 +152,8 @@ namespace verified {
  * Derived from Rocq: Definition christoffel_t_tr (r M : R) : R :=
  *   M / (r * (r - 2 * M)).
  */
-[[nodiscard]] constexpr double christoffel_t_tr(double r, double M) noexcept {
-    return M / (r * (r - 2.0 * M));
+[[nodiscard]] constexpr double christoffelTTr(double r, double m) noexcept {
+  return m / (r * (r - 2.0 * m));
 }
 
 /**
@@ -160,9 +162,9 @@ namespace verified {
  * Derived from Rocq: Definition christoffel_r_tt (r M : R) : R :=
  *   M * (r - 2 * M) / r^3.
  */
-[[nodiscard]] constexpr double christoffel_r_tt(double r, double M) noexcept {
-    const double r3 = r * r * r;
-    return M * (r - 2.0 * M) / r3;
+[[nodiscard]] constexpr double christoffelRTt(double r, double m) noexcept {
+  const double r3 = r * r * r;
+  return m * (r - 2.0 * m) / r3;
 }
 
 /**
@@ -171,8 +173,8 @@ namespace verified {
  * Derived from Rocq: Definition christoffel_r_rr (r M : R) : R :=
  *   - M / (r * (r - 2 * M)).
  */
-[[nodiscard]] constexpr double christoffel_r_rr(double r, double M) noexcept {
-    return -M / (r * (r - 2.0 * M));
+[[nodiscard]] constexpr double christoffelRRr(double r, double m) noexcept {
+  return -m / (r * (r - 2.0 * m));
 }
 
 /**
@@ -180,8 +182,8 @@ namespace verified {
  *
  * Derived from Rocq: Definition christoffel_r_thth (r M : R) : R := -(r - 2 * M).
  */
-[[nodiscard]] constexpr double christoffel_r_thth(double r, double M) noexcept {
-    return -(r - 2.0 * M);
+[[nodiscard]] constexpr double christoffelRThth(double r, double m) noexcept {
+  return -(r - 2.0 * m);
 }
 
 /**
@@ -190,9 +192,9 @@ namespace verified {
  * Derived from Rocq: Definition christoffel_r_phph (r theta M : R) : R :=
  *   -(r - 2 * M) * (sin theta)^2.
  */
-[[nodiscard]] inline double christoffel_r_phph(double r, double theta, double M) noexcept {
-    const double sin_theta = std::sin(theta);
-    return -(r - 2.0 * M) * sin_theta * sin_theta;
+[[nodiscard]] inline double christoffelRPhph(double r, double theta, double m) noexcept {
+  const double sinTheta = std::sin(theta);
+  return -(r - 2.0 * m) * sinTheta * sinTheta;
 }
 
 /**
@@ -200,8 +202,8 @@ namespace verified {
  *
  * Derived from Rocq: Definition christoffel_th_rth (r : R) : R := 1 / r.
  */
-[[nodiscard]] constexpr double christoffel_th_rth(double r) noexcept {
-    return 1.0 / r;
+[[nodiscard]] constexpr double christoffelThRth(double r) noexcept {
+  return 1.0 / r;
 }
 
 /**
@@ -210,8 +212,8 @@ namespace verified {
  * Derived from Rocq: Definition christoffel_th_phph (theta : R) : R :=
  *   - sin theta * cos theta.
  */
-[[nodiscard]] inline double christoffel_th_phph(double theta) noexcept {
-    return -std::sin(theta) * std::cos(theta);
+[[nodiscard]] inline double christoffelThPhph(double theta) noexcept {
+  return -std::sin(theta) * std::cos(theta);
 }
 
 /**
@@ -219,8 +221,8 @@ namespace verified {
  *
  * Derived from Rocq: Definition christoffel_ph_rph (r : R) : R := 1 / r.
  */
-[[nodiscard]] constexpr double christoffel_ph_rph(double r) noexcept {
-    return 1.0 / r;
+[[nodiscard]] constexpr double christoffelPhRph(double r) noexcept {
+  return 1.0 / r;
 }
 
 /**
@@ -229,8 +231,8 @@ namespace verified {
  * Derived from Rocq: Definition christoffel_ph_thph (theta : R) : R :=
  *   cos theta / sin theta.
  */
-[[nodiscard]] inline double christoffel_ph_thph(double theta) noexcept {
-    return std::cos(theta) / std::sin(theta);
+[[nodiscard]] inline double christoffelPhThph(double theta) noexcept {
+  return std::cos(theta) / std::sin(theta);
 }
 
 // ============================================================================
@@ -251,18 +253,14 @@ namespace verified {
  * @param dtheta dtheta/dlambda
  * @param dphi dphi/dlambda
  * @param theta Polar angle
- * @param M Black hole mass
+ * @param m Black hole mass
  * @return Radial acceleration d^2r/dlambda^2
  */
-[[nodiscard]] inline double radial_acceleration(
-    double r, double dr, double dtheta, double dphi,
-    double theta, double M) noexcept
-{
-    // Note: dt/dlambda is normalized to 1 in the original definition
-    return -christoffel_r_tt(r, M)
-           - christoffel_r_rr(r, M) * dr * dr
-           - christoffel_r_thth(r, M) * dtheta * dtheta
-           - christoffel_r_phph(r, theta, M) * dphi * dphi;
+[[nodiscard]] inline double radialAcceleration(double r, double dr, double dtheta, double dphi,
+                                               double theta, double m) noexcept {
+  // Note: dt/dlambda is normalized to 1 in the original definition
+  return -christoffelRTt(r, m) - christoffelRRr(r, m) * dr * dr -
+         christoffelRThth(r, m) * dtheta * dtheta - christoffelRPhph(r, theta, m) * dphi * dphi;
 }
 
 // ============================================================================
@@ -278,12 +276,12 @@ namespace verified {
  * This is a curvature invariant that diverges at r = 0 (true singularity).
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @return Kretschmann scalar
  */
-[[nodiscard]] constexpr double kretschmann_schwarzschild(double r, double M) noexcept {
-    const double r6 = r * r * r * r * r * r;
-    return 48.0 * M * M / r6;
+[[nodiscard]] constexpr double kretschmannSchwarzschild(double r, double m) noexcept {
+  const double r6 = r * r * r * r * r * r;
+  return 48.0 * m * m / r6;
 }
 
 // ============================================================================
@@ -294,33 +292,33 @@ namespace verified {
  * @brief Check if point is outside the event horizon
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @return true if r > 2M (outside horizon)
  */
-[[nodiscard]] constexpr bool outside_horizon(double r, double M) noexcept {
-    return r > schwarzschild_radius(M);
+[[nodiscard]] constexpr bool outsideHorizon(double r, double m) noexcept {
+  return r > schwarzschildRadius(m);
 }
 
 /**
  * @brief Check if point is outside the photon sphere
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @return true if r > 3M (outside photon sphere)
  */
-[[nodiscard]] constexpr bool outside_photon_sphere(double r, double M) noexcept {
-    return r > photon_sphere_radius(M);
+[[nodiscard]] constexpr bool outsidePhotonSphere(double r, double m) noexcept {
+  return r > photonSphereRadius(m);
 }
 
 /**
  * @brief Check if point is outside the ISCO
  *
  * @param r Radial coordinate
- * @param M Black hole mass
+ * @param m Black hole mass
  * @return true if r > 6M (outside ISCO)
  */
-[[nodiscard]] constexpr bool outside_isco(double r, double M) noexcept {
-    return r > schwarzschild_isco(M);
+[[nodiscard]] constexpr bool outsideIsco(double r, double m) noexcept {
+  return r > schwarzschildIsco(m);
 }
 
 } // namespace verified

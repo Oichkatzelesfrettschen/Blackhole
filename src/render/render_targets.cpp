@@ -8,9 +8,13 @@
 #include <algorithm>
 #include <cstddef>
 
-#include "gl_loader.h"           // gl:: texture deletion, using namespace gl
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
+
 #include "render.h"              // createColorTexture*, clearRenderToTextureCache
-#include "render/render_state.h" // RenderState, kMaxBloomIterations
+#include "render/render_state.h" // RenderState, K_MAX_BLOOM_ITERATIONS
+
+using namespace gl;
 
 namespace blackhole {
 namespace {
@@ -46,7 +50,7 @@ void recreateRenderTargets(RenderState &rs, int newWidth, int newHeight) {
   rs.targets.texTonemapped = createColorTexture(newWidth, newHeight);
   rs.targets.texDepthEffects = createColorTexture(newWidth, newHeight);
 
-  for (int i = 0; i < kMaxBloomIterations; ++i) {
+  for (int i = 0; i < K_MAX_BLOOM_ITERATIONS; ++i) {
     auto const index = static_cast<std::size_t>(i);
     int const downWidth = std::max(1, newWidth >> (i + 1));
     int const downHeight = std::max(1, newHeight >> (i + 1));

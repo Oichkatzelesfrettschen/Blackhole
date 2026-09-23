@@ -5,10 +5,14 @@
 
 #include "settings.h"
 
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <string_view>
+#include <type_traits>
 
 namespace {
 
@@ -49,6 +53,114 @@ float parseFloat(const std::string &value) {
   return std::stof(value);
 }
 
+struct SettingBinding {
+  std::string_view key;
+  void (*assign)(Settings &, const std::string &);
+};
+
+template <auto Member> void assignSetting(Settings &settings, const std::string &value) {
+  using FieldType = std::remove_cvref_t<decltype(settings.*Member)>;
+  if constexpr (std::is_same_v<FieldType, bool>) {
+    settings.*Member = parseBool(value);
+  } else if constexpr (std::is_same_v<FieldType, int>) {
+    settings.*Member = parseInt(value);
+  } else if constexpr (std::is_same_v<FieldType, float>) {
+    settings.*Member = parseFloat(value);
+  } else {
+    settings.*Member = value;
+  }
+}
+
+void assignLegacyVsync(Settings &settings, const std::string &value) {
+  settings.swapInterval = parseBool(value) ? 1 : 0;
+}
+
+// Preserve file-order matching and the legacy vsync alias while binding each
+// persisted key to the type of its Settings member.
+constexpr std::array<SettingBinding, 81> K_SETTING_BINDINGS{{
+    {"\"windowWidth\"", assignSetting<&Settings::windowWidth>},
+    {"\"windowHeight\"", assignSetting<&Settings::windowHeight>},
+    {"\"fullscreen\"", assignSetting<&Settings::fullscreen>},
+    {"\"swapInterval\"", assignSetting<&Settings::swapInterval>},
+    {"\"vsync\"", assignLegacyVsync},
+    {"\"renderScale\"", assignSetting<&Settings::renderScale>},
+    {"\"gamma\"", assignSetting<&Settings::gamma>},
+    {"\"mouseSensitivity\"", assignSetting<&Settings::mouseSensitivity>},
+    {"\"keyboardSensitivity\"", assignSetting<&Settings::keyboardSensitivity>},
+    {"\"scrollSensitivity\"", assignSetting<&Settings::scrollSensitivity>},
+    {"\"invertMouseX\"", assignSetting<&Settings::invertMouseX>},
+    {"\"invertMouseY\"", assignSetting<&Settings::invertMouseY>},
+    {"\"invertKeyboardX\"", assignSetting<&Settings::invertKeyboardX>},
+    {"\"invertKeyboardY\"", assignSetting<&Settings::invertKeyboardY>},
+    {"\"holdToToggleCamera\"", assignSetting<&Settings::holdToToggleCamera>},
+    {"\"timeScale\"", assignSetting<&Settings::timeScale>},
+    {"\"keyQuit\"", assignSetting<&Settings::keyQuit>},
+    {"\"keyToggleUI\"", assignSetting<&Settings::keyToggleUI>},
+    {"\"keyToggleFullscreen\"", assignSetting<&Settings::keyToggleFullscreen>},
+    {"\"keyResetCamera\"", assignSetting<&Settings::keyResetCamera>},
+    {"\"keyResetSettings\"", assignSetting<&Settings::keyResetSettings>},
+    {"\"keyPause\"", assignSetting<&Settings::keyPause>},
+    {"\"keyCameraForward\"", assignSetting<&Settings::keyCameraForward>},
+    {"\"keyCameraBackward\"", assignSetting<&Settings::keyCameraBackward>},
+    {"\"keyCameraLeft\"", assignSetting<&Settings::keyCameraLeft>},
+    {"\"keyCameraRight\"", assignSetting<&Settings::keyCameraRight>},
+    {"\"keyCameraUp\"", assignSetting<&Settings::keyCameraUp>},
+    {"\"keyCameraDown\"", assignSetting<&Settings::keyCameraDown>},
+    {"\"keyCameraRollLeft\"", assignSetting<&Settings::keyCameraRollLeft>},
+    {"\"keyCameraRollRight\"", assignSetting<&Settings::keyCameraRollRight>},
+    {"\"keyZoomIn\"", assignSetting<&Settings::keyZoomIn>},
+    {"\"keyZoomOut\"", assignSetting<&Settings::keyZoomOut>},
+    {"\"keyIncreaseFontSize\"", assignSetting<&Settings::keyIncreaseFontSize>},
+    {"\"keyDecreaseFontSize\"", assignSetting<&Settings::keyDecreaseFontSize>},
+    {"\"keyIncreaseTimeScale\"", assignSetting<&Settings::keyIncreaseTimeScale>},
+    {"\"keyDecreaseTimeScale\"", assignSetting<&Settings::keyDecreaseTimeScale>},
+    {"\"gamepadEnabled\"", assignSetting<&Settings::gamepadEnabled>},
+    {"\"gamepadDeadzone\"", assignSetting<&Settings::gamepadDeadzone>},
+    {"\"gamepadLookSensitivity\"", assignSetting<&Settings::gamepadLookSensitivity>},
+    {"\"gamepadRollSensitivity\"", assignSetting<&Settings::gamepadRollSensitivity>},
+    {"\"gamepadZoomSensitivity\"", assignSetting<&Settings::gamepadZoomSensitivity>},
+    {"\"gamepadTriggerZoomSensitivity\"", assignSetting<&Settings::gamepadTriggerZoomSensitivity>},
+    {"\"gamepadInvertX\"", assignSetting<&Settings::gamepadInvertX>},
+    {"\"gamepadInvertY\"", assignSetting<&Settings::gamepadInvertY>},
+    {"\"gamepadInvertRoll\"", assignSetting<&Settings::gamepadInvertRoll>},
+    {"\"gamepadInvertZoom\"", assignSetting<&Settings::gamepadInvertZoom>},
+    {"\"gamepadYawAxis\"", assignSetting<&Settings::gamepadYawAxis>},
+    {"\"gamepadPitchAxis\"", assignSetting<&Settings::gamepadPitchAxis>},
+    {"\"gamepadRollAxis\"", assignSetting<&Settings::gamepadRollAxis>},
+    {"\"gamepadZoomAxis\"", assignSetting<&Settings::gamepadZoomAxis>},
+    {"\"gamepadZoomInAxis\"", assignSetting<&Settings::gamepadZoomInAxis>},
+    {"\"gamepadZoomOutAxis\"", assignSetting<&Settings::gamepadZoomOutAxis>},
+    {"\"gamepadResetButton\"", assignSetting<&Settings::gamepadResetButton>},
+    {"\"gamepadPauseButton\"", assignSetting<&Settings::gamepadPauseButton>},
+    {"\"gamepadToggleUIButton\"", assignSetting<&Settings::gamepadToggleUIButton>},
+    {"\"tonemappingEnabled\"", assignSetting<&Settings::tonemappingEnabled>},
+    {"\"bloomStrength\"", assignSetting<&Settings::bloomStrength>},
+    {"\"bloomIterations\"", assignSetting<&Settings::bloomIterations>},
+    {"\"backgroundEnabled\"", assignSetting<&Settings::backgroundEnabled>},
+    {"\"backgroundId\"", assignSetting<&Settings::backgroundId>},
+    {"\"backgroundIntensity\"", assignSetting<&Settings::backgroundIntensity>},
+    {"\"backgroundParallaxStrength\"", assignSetting<&Settings::backgroundParallaxStrength>},
+    {"\"backgroundDriftStrength\"", assignSetting<&Settings::backgroundDriftStrength>},
+    {"\"cameraYaw\"", assignSetting<&Settings::cameraYaw>},
+    {"\"cameraPitch\"", assignSetting<&Settings::cameraPitch>},
+    {"\"cameraRoll\"", assignSetting<&Settings::cameraRoll>},
+    {"\"cameraDistance\"", assignSetting<&Settings::cameraDistance>},
+    {"\"cameraMode\"", assignSetting<&Settings::cameraMode>},
+    {"\"orbitRadius\"", assignSetting<&Settings::orbitRadius>},
+    {"\"orbitSpeed\"", assignSetting<&Settings::orbitSpeed>},
+    {"\"gravitationalLensing\"", assignSetting<&Settings::gravitationalLensing>},
+    {"\"renderBlackHole\"", assignSetting<&Settings::renderBlackHole>},
+    {"\"adiskEnabled\"", assignSetting<&Settings::adiskEnabled>},
+    {"\"adiskParticle\"", assignSetting<&Settings::adiskParticle>},
+    {"\"adiskDensityV\"", assignSetting<&Settings::adiskDensityV>},
+    {"\"adiskDensityH\"", assignSetting<&Settings::adiskDensityH>},
+    {"\"adiskHeight\"", assignSetting<&Settings::adiskHeight>},
+    {"\"adiskLit\"", assignSetting<&Settings::adiskLit>},
+    {"\"adiskNoiseLOD\"", assignSetting<&Settings::adiskNoiseLOD>},
+    {"\"adiskNoiseScale\"", assignSetting<&Settings::adiskNoiseScale>},
+    {"\"adiskSpeed\"", assignSetting<&Settings::adiskSpeed>},
+}};
+
 } // namespace
 
 SettingsManager &SettingsManager::instance() {
@@ -56,9 +168,7 @@ SettingsManager &SettingsManager::instance() {
   return instance;
 }
 
-bool SettingsManager::load(
-    const std::string &filepath) { // NOLINT(readability-function-cognitive-complexity) -- INI
-                                   // parser inherently has many branches
+bool SettingsManager::load(const std::string &filepath) {
   lastFilepath_ = filepath;
 
   std::ifstream file(filepath);
@@ -79,340 +189,14 @@ bool SettingsManager::load(
       continue;
     }
 
-    // Display settings
-    if (line.contains("\"windowWidth\"")) {
-      {
-        settings_.windowWidth = parseInt(value);
-      }
-    } else if (line.contains("\"windowHeight\"")) {
-      {
-        settings_.windowHeight = parseInt(value);
-      }
-    } else if (line.contains("\"fullscreen\"")) {
-      {
-        settings_.fullscreen = parseBool(value);
-      }
-    } else if (line.contains("\"swapInterval\"")) {
-      settings_.swapInterval = parseInt(value);
-      swapIntervalParsed = true;
-    } else if (line.contains("\"vsync\"") && !swapIntervalParsed) {
-      settings_.swapInterval = parseBool(value) ? 1 : 0;
-    } else if (line.contains("\"renderScale\"")) {
-      {
-        settings_.renderScale = parseFloat(value);
-      }
-    } else if (line.contains("\"gamma\"")) {
-      {
-        settings_.gamma = parseFloat(value);
-
-        // Controls
-      }
-    } else if (line.contains("\"mouseSensitivity\"")) {
-      {
-        settings_.mouseSensitivity = parseFloat(value);
-      }
-    } else if (line.contains("\"keyboardSensitivity\"")) {
-      {
-        settings_.keyboardSensitivity = parseFloat(value);
-      }
-    } else if (line.contains("\"scrollSensitivity\"")) {
-      {
-        settings_.scrollSensitivity = parseFloat(value);
-      }
-    } else if (line.contains("\"invertMouseX\"")) {
-      {
-        settings_.invertMouseX = parseBool(value);
-      }
-    } else if (line.contains("\"invertMouseY\"")) {
-      {
-        settings_.invertMouseY = parseBool(value);
-      }
-    } else if (line.contains("\"invertKeyboardX\"")) {
-      {
-        settings_.invertKeyboardX = parseBool(value);
-      }
-    } else if (line.contains("\"invertKeyboardY\"")) {
-      {
-        settings_.invertKeyboardY = parseBool(value);
-      }
-    } else if (line.contains("\"holdToToggleCamera\"")) {
-      {
-        settings_.holdToToggleCamera = parseBool(value);
-      }
-    } else if (line.contains("\"timeScale\"")) {
-      {
-        settings_.timeScale = parseFloat(value);
-
-        // Key bindings
-      }
-    } else if (line.contains("\"keyQuit\"")) {
-      {
-        settings_.keyQuit = parseInt(value);
-      }
-    } else if (line.contains("\"keyToggleUI\"")) {
-      {
-        settings_.keyToggleUI = parseInt(value);
-      }
-    } else if (line.contains("\"keyToggleFullscreen\"")) {
-      {
-        settings_.keyToggleFullscreen = parseInt(value);
-      }
-    } else if (line.contains("\"keyResetCamera\"")) {
-      {
-        settings_.keyResetCamera = parseInt(value);
-      }
-    } else if (line.contains("\"keyResetSettings\"")) {
-      {
-        settings_.keyResetSettings = parseInt(value);
-      }
-    } else if (line.contains("\"keyPause\"")) {
-      {
-        settings_.keyPause = parseInt(value);
-      }
-    } else if (line.contains("\"keyCameraForward\"")) {
-      {
-        settings_.keyCameraForward = parseInt(value);
-      }
-    } else if (line.contains("\"keyCameraBackward\"")) {
-      {
-        settings_.keyCameraBackward = parseInt(value);
-      }
-    } else if (line.contains("\"keyCameraLeft\"")) {
-      {
-        settings_.keyCameraLeft = parseInt(value);
-      }
-    } else if (line.contains("\"keyCameraRight\"")) {
-      {
-        settings_.keyCameraRight = parseInt(value);
-      }
-    } else if (line.contains("\"keyCameraUp\"")) {
-      {
-        settings_.keyCameraUp = parseInt(value);
-      }
-    } else if (line.contains("\"keyCameraDown\"")) {
-      {
-        settings_.keyCameraDown = parseInt(value);
-      }
-    } else if (line.contains("\"keyCameraRollLeft\"")) {
-      {
-        settings_.keyCameraRollLeft = parseInt(value);
-      }
-    } else if (line.contains("\"keyCameraRollRight\"")) {
-      {
-        settings_.keyCameraRollRight = parseInt(value);
-      }
-    } else if (line.contains("\"keyZoomIn\"")) {
-      {
-        settings_.keyZoomIn = parseInt(value);
-      }
-    } else if (line.contains("\"keyZoomOut\"")) {
-      {
-        settings_.keyZoomOut = parseInt(value);
-      }
-    } else if (line.contains("\"keyIncreaseFontSize\"")) {
-      {
-        settings_.keyIncreaseFontSize = parseInt(value);
-      }
-    } else if (line.contains("\"keyDecreaseFontSize\"")) {
-      {
-        settings_.keyDecreaseFontSize = parseInt(value);
-      }
-    } else if (line.contains("\"keyIncreaseTimeScale\"")) {
-      {
-        settings_.keyIncreaseTimeScale = parseInt(value);
-      }
-    } else if (line.contains("\"keyDecreaseTimeScale\"")) {
-      {
-        settings_.keyDecreaseTimeScale = parseInt(value);
-
-        // Gamepad
-      }
-    } else if (line.contains("\"gamepadEnabled\"")) {
-      {
-        settings_.gamepadEnabled = parseBool(value);
-      }
-    } else if (line.contains("\"gamepadDeadzone\"")) {
-      {
-        settings_.gamepadDeadzone = parseFloat(value);
-      }
-    } else if (line.contains("\"gamepadLookSensitivity\"")) {
-      {
-        settings_.gamepadLookSensitivity = parseFloat(value);
-      }
-    } else if (line.contains("\"gamepadRollSensitivity\"")) {
-      {
-        settings_.gamepadRollSensitivity = parseFloat(value);
-      }
-    } else if (line.contains("\"gamepadZoomSensitivity\"")) {
-      {
-        settings_.gamepadZoomSensitivity = parseFloat(value);
-      }
-    } else if (line.contains("\"gamepadTriggerZoomSensitivity\"")) {
-      {
-        settings_.gamepadTriggerZoomSensitivity = parseFloat(value);
-      }
-    } else if (line.contains("\"gamepadInvertX\"")) {
-      {
-        settings_.gamepadInvertX = parseBool(value);
-      }
-    } else if (line.contains("\"gamepadInvertY\"")) {
-      {
-        settings_.gamepadInvertY = parseBool(value);
-      }
-    } else if (line.contains("\"gamepadInvertRoll\"")) {
-      {
-        settings_.gamepadInvertRoll = parseBool(value);
-      }
-    } else if (line.contains("\"gamepadInvertZoom\"")) {
-      {
-        settings_.gamepadInvertZoom = parseBool(value);
-      }
-    } else if (line.contains("\"gamepadYawAxis\"")) {
-      {
-        settings_.gamepadYawAxis = parseInt(value);
-      }
-    } else if (line.contains("\"gamepadPitchAxis\"")) {
-      {
-        settings_.gamepadPitchAxis = parseInt(value);
-      }
-    } else if (line.contains("\"gamepadRollAxis\"")) {
-      {
-        settings_.gamepadRollAxis = parseInt(value);
-      }
-    } else if (line.contains("\"gamepadZoomAxis\"")) {
-      {
-        settings_.gamepadZoomAxis = parseInt(value);
-      }
-    } else if (line.contains("\"gamepadZoomInAxis\"")) {
-      {
-        settings_.gamepadZoomInAxis = parseInt(value);
-      }
-    } else if (line.contains("\"gamepadZoomOutAxis\"")) {
-      {
-        settings_.gamepadZoomOutAxis = parseInt(value);
-      }
-    } else if (line.contains("\"gamepadResetButton\"")) {
-      {
-        settings_.gamepadResetButton = parseInt(value);
-      }
-    } else if (line.contains("\"gamepadPauseButton\"")) {
-      {
-        settings_.gamepadPauseButton = parseInt(value);
-      }
-    } else if (line.contains("\"gamepadToggleUIButton\"")) {
-      {
-        settings_.gamepadToggleUIButton = parseInt(value);
-
-        // Rendering
-      }
-    } else if (line.contains("\"tonemappingEnabled\"")) {
-      {
-        settings_.tonemappingEnabled = parseBool(value);
-      }
-    } else if (line.contains("\"bloomStrength\"")) {
-      {
-        settings_.bloomStrength = parseFloat(value);
-      }
-    } else if (line.contains("\"bloomIterations\"")) {
-      {
-        settings_.bloomIterations = parseInt(value);
-      }
-    } else if (line.contains("\"backgroundEnabled\"")) {
-      {
-        settings_.backgroundEnabled = parseBool(value);
-      }
-    } else if (line.contains("\"backgroundId\"")) {
-      {
-        settings_.backgroundId = value;
-      }
-    } else if (line.contains("\"backgroundIntensity\"")) {
-      {
-        settings_.backgroundIntensity = parseFloat(value);
-      }
-    } else if (line.contains("\"backgroundParallaxStrength\"")) {
-      {
-        settings_.backgroundParallaxStrength = parseFloat(value);
-      }
-    } else if (line.contains("\"backgroundDriftStrength\"")) {
-      {
-        settings_.backgroundDriftStrength = parseFloat(value);
-
-        // Camera
-      }
-    } else if (line.contains("\"cameraYaw\"")) {
-      {
-        settings_.cameraYaw = parseFloat(value);
-      }
-    } else if (line.contains("\"cameraPitch\"")) {
-      {
-        settings_.cameraPitch = parseFloat(value);
-      }
-    } else if (line.contains("\"cameraRoll\"")) {
-      {
-        settings_.cameraRoll = parseFloat(value);
-      }
-    } else if (line.contains("\"cameraDistance\"")) {
-      {
-        settings_.cameraDistance = parseFloat(value);
-      }
-    } else if (line.contains("\"cameraMode\"")) {
-      {
-        settings_.cameraMode = parseInt(value);
-      }
-    } else if (line.contains("\"orbitRadius\"")) {
-      {
-        settings_.orbitRadius = parseFloat(value);
-      }
-    } else if (line.contains("\"orbitSpeed\"")) {
-      {
-        settings_.orbitSpeed = parseFloat(value);
-
-        // Black hole parameters
-      }
-    } else if (line.contains("\"gravitationalLensing\"")) {
-      {
-        settings_.gravitationalLensing = parseBool(value);
-      }
-    } else if (line.contains("\"renderBlackHole\"")) {
-      {
-        settings_.renderBlackHole = parseBool(value);
-      }
-    } else if (line.contains("\"adiskEnabled\"")) {
-      {
-        settings_.adiskEnabled = parseBool(value);
-      }
-    } else if (line.contains("\"adiskParticle\"")) {
-      {
-        settings_.adiskParticle = parseBool(value);
-      }
-    } else if (line.contains("\"adiskDensityV\"")) {
-      {
-        settings_.adiskDensityV = parseFloat(value);
-      }
-    } else if (line.contains("\"adiskDensityH\"")) {
-      {
-        settings_.adiskDensityH = parseFloat(value);
-      }
-    } else if (line.contains("\"adiskHeight\"")) {
-      {
-        settings_.adiskHeight = parseFloat(value);
-      }
-    } else if (line.contains("\"adiskLit\"")) {
-      {
-        settings_.adiskLit = parseFloat(value);
-      }
-    } else if (line.contains("\"adiskNoiseLOD\"")) {
-      {
-        settings_.adiskNoiseLOD = parseFloat(value);
-      }
-    } else if (line.contains("\"adiskNoiseScale\"")) {
-      {
-        settings_.adiskNoiseScale = parseFloat(value);
-      }
-    } else if (line.contains("\"adiskSpeed\"")) {
-      {
-        settings_.adiskSpeed = parseFloat(value);
-      }
+    const auto *binding =
+        std::ranges::find_if(K_SETTING_BINDINGS, [&](const SettingBinding &candidate) {
+          return line.contains(candidate.key) &&
+                 (candidate.key != "\"vsync\"" || !swapIntervalParsed);
+        });
+    if (binding != K_SETTING_BINDINGS.end()) {
+      binding->assign(settings_, value);
+      swapIntervalParsed = swapIntervalParsed || binding->key == "\"swapInterval\"";
     }
   }
 

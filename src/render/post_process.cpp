@@ -5,11 +5,13 @@
 
 #include "post_process.h"
 
+#include <string>
+
+#include <GLFW/glfw3.h>
 #include <glbinding/gl/bitfield.h>
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
-
-#include <GLFW/glfw3.h>
+#include <glbinding/gl/types.h>
 
 #include "../render.h"
 #include "../shader.h"

@@ -6,7 +6,7 @@
  * field sampling, and advanced playback control working together
  */
 
-#include <cassert>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -142,9 +142,18 @@ bool testMultiratePlayback() {
   bool const t2xFaster = (state2x.tCurrent > state1x.tCurrent);
   bool const t05xSlower = (state05x.tCurrent < state1x.tCurrent);
 
+  // The linear field rises by 10 units per second at every playback rate.
+  const double sample1x = interpolateField(ts, field.data(), state1x.tCurrent, false);
+  const double sample2x = interpolateField(ts, field.data(), state2x.tCurrent, false);
+  const double sample05x = interpolateField(ts, field.data(), state05x.tCurrent, false);
+  const bool samplesOk = std::abs(sample1x - 10.0 * dtFrame) < 1e-12 &&
+                         std::abs(sample2x - 20.0 * dtFrame) < 1e-12 &&
+                         std::abs(sample05x - 5.0 * dtFrame) < 1e-12;
+
   bool const multirateOk = (state1x.mode == PlaybackMode::Forward) &&
                            (state2x.mode == PlaybackMode::Forward) &&
-                           (state05x.mode == PlaybackMode::Forward) && t2xFaster && t05xSlower;
+                           (state05x.mode == PlaybackMode::Forward) && t2xFaster && t05xSlower &&
+                           samplesOk;
 
   std::cout << "  1x speed: t = " << std::fixed << std::setprecision(4) << state1x.tCurrent << "\n"
             << "  2x speed: t = " << state2x.tCurrent << " (faster)\n"
@@ -233,13 +242,9 @@ bool testFrameSteppingIntegration() {
   }
 
   // Verify samples are in reasonable range
-  bool allPositive = true;
-  for (double const densitiesAtFrame : densitiesAtFrames) {
-    if (densitiesAtFrame <= 0.0 || densitiesAtFrame > 3.0) {
-      allPositive = false;
-      break;
-    }
-  }
+  const bool allPositive = std::ranges::all_of(densitiesAtFrames, [](double densityAtFrame) {
+    return std::isfinite(densityAtFrame) && densityAtFrame > 0.0 && densityAtFrame <= 3.0;
+  });
 
   bool const steppingOk = (densitiesAtFrames.size() > 5) && (state.frameNumber > 5) && allPositive;
 

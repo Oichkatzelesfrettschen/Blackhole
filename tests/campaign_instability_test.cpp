@@ -11,10 +11,13 @@
  * 0.1 proper-day per turn; at the outer band (995, rate 1.0) it logs 1.0.
  */
 
+#include <algorithm>
+
 #include <gtest/gtest.h>
 
 #include "campaign_test_field.h"
 #include "game/campaign.h"
+#include "game/campaign_view.h"
 #include "game/command.h"
 #include "game/fleet.h"
 
@@ -45,12 +48,9 @@ game::Command assignTask(game::FleetId fleet, double costSec) {
 }
 
 double fleetReliability(const game::CampaignState &campaign, game::FleetId fleet) {
-  for (const game::Fleet &candidate : campaign.fleets()) {
-    if (candidate.id == fleet) {
-      return candidate.reliability;
-    }
-  }
-  return -1.0;
+  const auto candidate = std::ranges::find_if(
+      campaign.fleets(), [fleet](const game::Fleet &entry) { return entry.id == fleet; });
+  return candidate == campaign.fleets().end() ? -1.0 : candidate->reliability;
 }
 
 } // namespace
@@ -179,7 +179,7 @@ TEST(CampaignInstability, ContainmentYieldRetentionCostsEnergy) {
   game::CampaignConfig base = instabilityConfig();
   base.ergoContainmentPerProperDay = 4.0; // containment on, so retention applies
 
-  game::CampaignConfig full = base; // retention stays 1.0
+  const game::CampaignConfig full = base; // retention stays 1.0
   game::CampaignState keepsAll(full, field);
   const game::FleetId a =
       keepsAll.addFleet(game::FleetCapability::Extraction, K_ERGO_BAND, game::OrbitLane::Prograde);

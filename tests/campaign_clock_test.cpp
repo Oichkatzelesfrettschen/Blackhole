@@ -8,11 +8,14 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
+#include "game/command.h"
 #include "game/fleet.h"
+#include "game/serialize_bytes.h"
 #include "game/temporal_clock.h"
 
 namespace {
@@ -83,6 +86,31 @@ TEST(CampaignClock, CeilTurnsNeverDeliversEarly) {
 TEST(CampaignClock, ProperDeltaIsRateTimesTurnLength) {
   EXPECT_DOUBLE_EQ(game::properDeltaSec(0.25, 3600.0), 900.0);
   EXPECT_DOUBLE_EQ(game::properDeltaSec(1.0, 3600.0), 3600.0);
+}
+
+TEST(CampaignSerialization, BothZeroSignsUsePositiveZeroBytes) {
+  std::vector<std::uint8_t> positiveZero;
+  std::vector<std::uint8_t> negativeZero;
+  game::serial::appendF64(positiveZero, 0.0);
+  game::serial::appendF64(negativeZero, -0.0);
+  const std::vector<std::uint8_t> expected(8, 0);
+  EXPECT_EQ(positiveZero, expected);
+  EXPECT_EQ(negativeZero, expected);
+}
+
+TEST(CampaignSerialization, FiniteValuesAppendLittleEndianIeeeBytes) {
+  std::vector<std::uint8_t> bytes{0xA5};
+  game::serial::appendF64(bytes, 1.0);
+  game::serial::appendF64(bytes, -2.5);
+  game::serial::appendF64(bytes, std::numeric_limits<double>::denorm_min());
+  game::serial::appendF64(bytes, std::numeric_limits<double>::max());
+  const std::vector<std::uint8_t> expected{
+      0xA5,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0xC0,
+      0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F};
+  EXPECT_EQ(bytes, expected);
 }
 
 TEST(CampaignClock, BatchAdvanceMatchesSingleStepAdvanceByteForByte) {
