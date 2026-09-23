@@ -43,7 +43,7 @@ Checks: >
 WarningsAsErrors: '*'
 
 # Only analyze project headers
-HeaderFilterRegex: 'src/.*\.h$'
+HeaderFilterRegex: 'src/.*\.(h|hh|hpp|hxx|cuh)$'
 
 # Format options for fixes
 FormatStyle: 'file'

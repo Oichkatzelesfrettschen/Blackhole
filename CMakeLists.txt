@@ -3673,6 +3673,9 @@ if(BUILD_TESTING)
         --packer $<TARGET_FILE:nubhlight_pack>)
     set_tests_properties(nubhlight_pack_validation PROPERTIES
       LABELS "grmhd;hdf5;tools" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(nubhlight_pack_validation PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
   endif()
   if(TARGET nubhlight_inspect AND PYTHON3_EXECUTABLE)
     add_test(NAME nubhlight_inspect_validation
@@ -3680,6 +3683,9 @@ if(BUILD_TESTING)
         --inspector $<TARGET_FILE:nubhlight_inspect>)
     set_tests_properties(nubhlight_inspect_validation PROPERTIES
       LABELS "grmhd;hdf5;tools" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(nubhlight_inspect_validation PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
   endif()
 
   add_executable(settings_persistence_test tests/settings_persistence_test.cpp src/settings.cpp)
@@ -3688,6 +3694,14 @@ if(BUILD_TESTING)
   target_link_libraries(settings_persistence_test PRIVATE GTest::gtest_main)
   add_test(NAME settings_persistence COMMAND settings_persistence_test)
   set_tests_properties(settings_persistence PROPERTIES TIMEOUT 30)
+  if(SANITIZER_TEST_ENV)
+    set_tests_properties(settings_persistence PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+  endif()
+  if(PYTHON3_EXECUTABLE)
+    add_test(NAME glsl_interface_adapter
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/cpp_to_glsl_test.py")
+    set_tests_properties(glsl_interface_adapter PROPERTIES TIMEOUT 30 LABELS "shaders;tools")
+  endif()
 
   # Physics library validation tests
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/physics_test.cpp")
@@ -4882,6 +4896,10 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(eht_visibility_test PRIVATE ${PROJECT_WARNINGS})
+    # The zero-denominator contract returns NaN; finite-math-only folds its test away.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(eht_visibility_test PRIVATE -fno-fast-math)
+    endif()
     add_test(NAME eht_visibility_validation COMMAND eht_visibility_test)
     set_tests_properties(eht_visibility_validation PROPERTIES
       LABELS "physics;eht;visibility"
@@ -6336,6 +6354,23 @@ function(blackhole_apply_analysis directory_path)
        AND NOT project_target STREQUAL "implot")
       if(ENABLE_CLANG_TIDY)
         set_property(TARGET "${project_target}" PROPERTY CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY}")
+        get_target_property(analysis_sources "${project_target}" SOURCES)
+        foreach(analysis_source IN LISTS analysis_sources)
+          if(analysis_source MATCHES "\\.(cpp|cc|cxx)$")
+            cmake_path(ABSOLUTE_PATH analysis_source BASE_DIRECTORY "${directory_path}" NORMALIZE)
+            get_source_file_property(skip_analysis "${analysis_source}"
+              DIRECTORY "${directory_path}" SKIP_LINTING)
+            if(NOT skip_analysis)
+              # Re-run attached analysis after a policy edit in an existing tree.
+              get_source_file_property(analysis_dependencies "${analysis_source}"
+                DIRECTORY "${directory_path}" OBJECT_DEPENDS)
+              if(NOT "${PROJECT_SOURCE_DIR}/.clang-tidy" IN_LIST analysis_dependencies)
+                set_property(SOURCE "${analysis_source}" DIRECTORY "${directory_path}"
+                  APPEND PROPERTY OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/.clang-tidy")
+              endif()
+            endif()
+          endif()
+        endforeach()
       endif()
       if(ENABLE_CPPCHECK)
         set_property(TARGET "${project_target}" PROPERTY CXX_CPPCHECK "${CMAKE_CXX_CPPCHECK}")

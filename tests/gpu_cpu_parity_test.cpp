@@ -201,7 +201,7 @@ bool GPUCPUParityTest::glAvailable = false;
 // ============================================================================
 
 TEST_F(GPUCPUParityTest, SchwarzschildGTT) {
-  double const cpuResult = verified::schwarzschild_g_tt(10.0, 1.0);
+  double const cpuResult = verified::schwarzschildGTt(10.0, 1.0);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;
@@ -218,7 +218,7 @@ TEST_F(GPUCPUParityTest, SchwarzschildGTT) {
 }
 
 TEST_F(GPUCPUParityTest, SchwarzschildGRR) {
-  double const cpuResult = verified::schwarzschild_g_rr(10.0, 1.0);
+  double const cpuResult = verified::schwarzschildGRr(10.0, 1.0);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;
@@ -235,7 +235,7 @@ TEST_F(GPUCPUParityTest, SchwarzschildGRR) {
 }
 
 TEST_F(GPUCPUParityTest, SchwarzschildChristoffelTTR) {
-  double const cpuResult = verified::christoffel_t_tr(10.0, 1.0);
+  double const cpuResult = verified::christoffelTTr(10.0, 1.0);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;
@@ -256,7 +256,7 @@ TEST_F(GPUCPUParityTest, SchwarzschildChristoffelTTR) {
 
 TEST_F(GPUCPUParityTest, PolytropePressure) {
   verified::PolytropeParams const p{1.0, 2.0}; // K = 1, gamma = 2
-  double const cpuResult = verified::polytrope_pressure(p, 1.5);
+  double const cpuResult = verified::polytropePressure(p, 1.5);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;
@@ -281,7 +281,7 @@ TEST_F(GPUCPUParityTest, PolytropePressure) {
 
 TEST_F(GPUCPUParityTest, HubbleParameter) {
   // Planck 2018 flat LCDM at z = 0.1
-  double const cpuResult = verified::hubble_parameter(67.36, 0.3153, 0.1);
+  double const cpuResult = verified::hubbleParameter(67.36, 0.3153, 0.1);
   float const gpuResult = evalScalarShader(R"(
         #version 460 core
         layout(local_size_x = 1) in;

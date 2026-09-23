@@ -137,8 +137,8 @@ int testHorizonOrdering() {
   for (size_t i = 0; i < 50; ++i) {
     double const a = distA(rng);
 
-    double const rPlus = verified::outer_horizon(m, a);
-    double const rMinus = verified::inner_horizon(m, a);
+    double const rPlus = verified::outerHorizon(m, a);
+    double const rMinus = verified::innerHorizon(m, a);
 
     // Check ordering: r₊ > r₋ > 0
     if (rPlus <= rMinus || rMinus < 0.0) {
@@ -150,8 +150,8 @@ int testHorizonOrdering() {
 
   // Test extremal case: a → M → r₊ → r₋
   double const aExtremal = 0.999;
-  double const rPlusExt = verified::outer_horizon(m, aExtremal);
-  double const rMinusExt = verified::inner_horizon(m, aExtremal);
+  double const rPlusExt = verified::outerHorizon(m, aExtremal);
+  double const rMinusExt = verified::innerHorizon(m, aExtremal);
 
   if (!approxEqRelative(rPlusExt, rMinusExt, 0.01)) {
     std::cerr << "  WARN: Near-extremal horizons not converging\n";
@@ -171,9 +171,9 @@ int testIscoMonotonicity() {
   double const m = 1.0;
 
   // Prograde ISCO should decrease with spin (move closer to horizon)
-  double const rIsco0Pro = verified::kerr_isco_prograde(m, 0.0);
-  double const rIsco5Pro = verified::kerr_isco_prograde(m, 0.5);
-  double const rIsco9Pro = verified::kerr_isco_prograde(m, 0.9);
+  double const rIsco0Pro = verified::kerrIscoPrograde(m, 0.0);
+  double const rIsco5Pro = verified::kerrIscoPrograde(m, 0.5);
+  double const rIsco9Pro = verified::kerrIscoPrograde(m, 0.9);
 
   if (rIsco0Pro <= rIsco5Pro || rIsco5Pro <= rIsco9Pro) {
     std::cerr << "  FAIL: Prograde ISCO not monotonic decreasing with spin\n";
@@ -184,9 +184,9 @@ int testIscoMonotonicity() {
   }
 
   // Retrograde ISCO should increase with spin (move farther from horizon)
-  double const rIsco0Ret = verified::kerr_isco_retrograde(m, 0.0);
-  double const rIsco5Ret = verified::kerr_isco_retrograde(m, 0.5);
-  double const rIsco9Ret = verified::kerr_isco_retrograde(m, 0.9);
+  double const rIsco0Ret = verified::kerrIscoRetrograde(m, 0.0);
+  double const rIsco5Ret = verified::kerrIscoRetrograde(m, 0.5);
+  double const rIsco9Ret = verified::kerrIscoRetrograde(m, 0.9);
 
   if (rIsco0Ret > rIsco5Ret || rIsco5Ret >= rIsco9Ret) {
     std::cerr << "  FAIL: Retrograde ISCO not monotonic increasing with spin\n";
@@ -205,8 +205,8 @@ int testIscoMonotonicity() {
   // For non-zero spin, retrograde >= prograde (equality only at a=0)
   for (int ia = 1; ia <= 9; ++ia) {
     double const a = 0.1 * static_cast<double>(ia);
-    double const rPro = verified::kerr_isco_prograde(m, a);
-    double const rRet = verified::kerr_isco_retrograde(m, a);
+    double const rPro = verified::kerrIscoPrograde(m, a);
+    double const rRet = verified::kerrIscoRetrograde(m, a);
     if (rRet < rPro) {
       std::cerr << "  FAIL: Retrograde ISCO < prograde at a=" << a << "\n";
       return 1;
@@ -228,15 +228,15 @@ int testIscoOutsideHorizon() {
 
   for (int ia = 0; ia <= 9; ++ia) {
       double const a = 0.1 * static_cast<double>(ia);
-    double const rPlus = verified::outer_horizon(m, a);
-    double const rIscoPro = verified::kerr_isco_prograde(m, a);
-    double const rIscoRet = verified::kerr_isco_retrograde(m, a);
+      double const rPlus = verified::outerHorizon(m, a);
+      double const rIscoPro = verified::kerrIscoPrograde(m, a);
+      double const rIscoRet = verified::kerrIscoRetrograde(m, a);
 
-    if (rIscoPro <= rPlus || rIscoRet <= rPlus) {
-      std::cerr << "  FAIL: ISCO <= horizon at a=" << a << " (r₊=" << rPlus
-                << ", r_isco_pro=" << rIscoPro << ", r_isco_ret=" << rIscoRet << ")\n";
-      return 1;
-    }
+      if (rIscoPro <= rPlus || rIscoRet <= rPlus) {
+        std::cerr << "  FAIL: ISCO <= horizon at a=" << a << " (r₊=" << rPlus
+                  << ", r_isco_pro=" << rIscoPro << ", r_isco_ret=" << rIscoRet << ")\n";
+        return 1;
+      }
   }
 
   std::cout << "  PASS: ISCO outside horizon for all spins\n";
@@ -258,7 +258,7 @@ int testErgosphereExtent() {
   // Minimum at equator (θ=π/2): r_ergo(π/2) = M
 
   double const rErgoPole = m + std::sqrt((m * m) - (a * a));
-  double const rPlus = verified::outer_horizon(m, a);
+  double const rPlus = verified::outerHorizon(m, a);
 
   // Ergosphere at poles should equal outer horizon
   if (!approxEq(rErgoPole, rPlus, TOLERANCE)) {
@@ -282,8 +282,8 @@ int testSchwarzschildLimit() {
 
   // Schwarzschild: single horizon at r_s = 2M
   // Note: In Schwarzschild limit (a=0), inner horizon degenerates to r=0 (singularity)
-  double const rPlus = verified::outer_horizon(m, a);
-  double const rMinus = verified::inner_horizon(m, a);
+  double const rPlus = verified::outerHorizon(m, a);
+  double const rMinus = verified::innerHorizon(m, a);
 
   // Outer horizon should equal Schwarzschild radius
   double const rS = 2.0 * m;
@@ -300,7 +300,7 @@ int testSchwarzschildLimit() {
   }
 
   // ISCO in Schwarzschild should be exactly 6M
-  double const rIsco = verified::kerr_isco_prograde(m, a);
+  double const rIsco = verified::kerrIscoPrograde(m, a);
   if (!approxEq(rIsco, 6.0 * m, TOLERANCE)) {
     std::cerr << "  FAIL: ISCO != 6M in Schwarzschild limit (got " << rIsco << ")\n";
     return 1;
@@ -322,15 +322,15 @@ int testPhotonOrbitsExist() {
   // Photon orbits should exist for all sub-extremal spins
   for (int ia = 0; ia <= 9; ++ia) {
       double const a = 0.1 * static_cast<double>(ia);
-    double const rPhPro = verified::photon_orbit_prograde(m, a);
-    double const rPhRet = verified::photon_orbit_retrograde(m, a);
-    [[maybe_unused]] double const rIscoPro = verified::kerr_isco_prograde(m, a);
+      double const rPhPro = verified::photonOrbitPrograde(m, a);
+      double const rPhRet = verified::photonOrbitRetrograde(m, a);
+      [[maybe_unused]] double const rIscoPro = verified::kerrIscoPrograde(m, a);
 
-    // Basic sanity: photon orbits should be finite and positive
-    if (safeIsnan(rPhPro) || safeIsinf(rPhPro) || rPhPro <= 0.0) {
-      std::cerr << "  FAIL: Prograde photon orbit invalid at a=" << a << "\n";
-      return 1;
-    }
+      // Basic sanity: photon orbits should be finite and positive
+      if (safeIsnan(rPhPro) || safeIsinf(rPhPro) || rPhPro <= 0.0) {
+        std::cerr << "  FAIL: Prograde photon orbit invalid at a=" << a << "\n";
+        return 1;
+      }
 
     if (safeIsnan(rPhRet) || safeIsinf(rPhRet) || rPhRet <= 0.0) {
       std::cerr << "  FAIL: Retrograde photon orbit invalid at a=" << a << "\n";
@@ -365,7 +365,7 @@ int testSurfaceGravityMonotonicity() {
   double prevKappa = -1.0;
 
   for (double const a : aValues) {
-    double const rPlus = verified::outer_horizon(m, a);
+    double const rPlus = verified::outerHorizon(m, a);
 
     // κ = Δ'/(2(r₊² + a²)) where Δ' = 2(r-M)
     double const aPlus = ((rPlus * rPlus) + (a * a));
@@ -395,11 +395,11 @@ int testThermodynamicProperties() {
 
   for (int ia = 0; ia <= 9; ++ia) {
       double const a = 0.1 * static_cast<double>(ia);
-    double const rPlus = verified::outer_horizon(m, a);
-    if (rPlus <= 0.0 || safeIsnan(rPlus)) {
-      std::cerr << "  FAIL: Invalid outer horizon at a=" << a << "\n";
-      return 1;
-    }
+      double const rPlus = verified::outerHorizon(m, a);
+      if (rPlus <= 0.0 || safeIsnan(rPlus)) {
+        std::cerr << "  FAIL: Invalid outer horizon at a=" << a << "\n";
+        return 1;
+      }
 
     // Compute surface gravity using our helper function
     double const kappa = surfaceGravity(m, a, rPlus);
@@ -482,8 +482,8 @@ int testExtremalLimits() {
   double const aNearExt = 0.9999;
 
   // Near extremal: horizons should converge
-  double const rPlus = verified::outer_horizon(m, aNearExt);
-  double const rMinus = verified::inner_horizon(m, aNearExt);
+  double const rPlus = verified::outerHorizon(m, aNearExt);
+  double const rMinus = verified::innerHorizon(m, aNearExt);
 
   // For near-extremal, r₊ - r₋ should be very small
   if ((rPlus - rMinus) > 0.1) {
@@ -512,7 +512,7 @@ int testIscoSpinLimits() {
   double const m = 1.0;
 
   // Prograde ISCO for near-extremal spin
-  double const rIscoExt = verified::kerr_isco_prograde(m, 0.9999);
+  double const rIscoExt = verified::kerrIscoPrograde(m, 0.9999);
 
   // Should be well-defined and reasonable
   if (rIscoExt <= 0.0 || safeIsnan(rIscoExt) || safeIsinf(rIscoExt)) {

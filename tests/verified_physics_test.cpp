@@ -93,48 +93,48 @@ void testSchwarzschild() {
   using namespace verified;
 
   // Schwarzschild radius: r_s = 2M
-  checkExact("schwarzschild_radius(1.0)", 2.0, schwarzschild_radius(1.0));
-  checkExact("schwarzschild_radius(2.5)", 5.0, schwarzschild_radius(2.5));
-  checkExact("schwarzschild_radius(10.0)", 20.0, schwarzschild_radius(10.0));
+  checkExact("schwarzschild_radius(1.0)", 2.0, schwarzschildRadius(1.0));
+  checkExact("schwarzschild_radius(2.5)", 5.0, schwarzschildRadius(2.5));
+  checkExact("schwarzschild_radius(10.0)", 20.0, schwarzschildRadius(10.0));
 
   // ISCO radius: r_isco = 6M
-  checkExact("schwarzschild_isco(1.0)", 6.0, schwarzschild_isco(1.0));
-  checkExact("schwarzschild_isco(2.0)", 12.0, schwarzschild_isco(2.0));
+  checkExact("schwarzschild_isco(1.0)", 6.0, schwarzschildIsco(1.0));
+  checkExact("schwarzschild_isco(2.0)", 12.0, schwarzschildIsco(2.0));
 
   // Photon sphere: r_ph = 3M = 1.5 r_s
-  checkExact("photon_sphere_radius(1.0)", 3.0, photon_sphere_radius(1.0));
-  checkExact("photon_sphere_radius(2.0)", 6.0, photon_sphere_radius(2.0));
+  checkExact("photon_sphere_radius(1.0)", 3.0, photonSphereRadius(1.0));
+  checkExact("photon_sphere_radius(2.0)", 6.0, photonSphereRadius(2.0));
 
   // Metric factor: f = 1 - 2M/r
-  check("f_schwarzschild(10, 1)", 0.8, f_schwarzschild(10.0, 1.0), 1e-15);
-  check("f_schwarzschild(4, 1)", 0.5, f_schwarzschild(4.0, 1.0), 1e-15);
-  check("f_schwarzschild(2, 1)", 0.0, f_schwarzschild(2.0, 1.0), 1e-15); // At horizon
+  check("f_schwarzschild(10, 1)", 0.8, fSchwarzschild(10.0, 1.0), 1e-15);
+  check("f_schwarzschild(4, 1)", 0.5, fSchwarzschild(4.0, 1.0), 1e-15);
+  check("f_schwarzschild(2, 1)", 0.0, fSchwarzschild(2.0, 1.0), 1e-15); // At horizon
 
   // Metric components
-  check("schwarzschild_g_tt(10, 1)", -0.8, schwarzschild_g_tt(10.0, 1.0), 1e-15);
-  check("schwarzschild_g_rr(10, 1)", 1.25, schwarzschild_g_rr(10.0, 1.0), 1e-15);
-  check("schwarzschild_g_thth(10)", 100.0, schwarzschild_g_thth(10.0), 1e-15);
+  check("schwarzschild_g_tt(10, 1)", -0.8, schwarzschildGTt(10.0, 1.0), 1e-15);
+  check("schwarzschild_g_rr(10, 1)", 1.25, schwarzschildGRr(10.0, 1.0), 1e-15);
+  check("schwarzschild_g_thth(10)", 100.0, schwarzschildGThth(10.0), 1e-15);
 
   // Christoffel symbols: Gamma^t_{tr} = M / (r(r - 2M))
   // At r=10, M=1: Gamma = 1 / (10 * 8) = 0.0125
-  check("christoffel_t_tr(10, 1)", 0.0125, christoffel_t_tr(10.0, 1.0), 1e-15);
+  check("christoffel_t_tr(10, 1)", 0.0125, christoffelTTr(10.0, 1.0), 1e-15);
 
   // Gamma^r_{tt} = M(r - 2M) / r^3
   // At r=10, M=1: Gamma = 1 * 8 / 1000 = 0.008
-  check("christoffel_r_tt(10, 1)", 0.008, christoffel_r_tt(10.0, 1.0), 1e-15);
+  check("christoffel_r_tt(10, 1)", 0.008, christoffelRTt(10.0, 1.0), 1e-15);
 
   // Gamma^r_{rr} = -M / (r(r - 2M))
-  check("christoffel_r_rr(10, 1)", -0.0125, christoffel_r_rr(10.0, 1.0), 1e-15);
+  check("christoffel_r_rr(10, 1)", -0.0125, christoffelRRr(10.0, 1.0), 1e-15);
 
   // Kretschmann scalar: K = 48 M^2 / r^6
   // At r=10, M=1: K = 48 / 1e6 = 4.8e-5
-  check("kretschmann_schwarzschild(10, 1)", 4.8e-5, kretschmann_schwarzschild(10.0, 1.0), 1e-20);
+  check("kretschmann_schwarzschild(10, 1)", 4.8e-5, kretschmannSchwarzschild(10.0, 1.0), 1e-20);
 
   // Boundary checks
-  check("outside_horizon(3, 1)", 1.0, outside_horizon(3.0, 1.0) ? 1.0 : 0.0, 0.0);
-  check("outside_horizon(1.5, 1)", 0.0, outside_horizon(1.5, 1.0) ? 1.0 : 0.0, 0.0);
-  check("outside_isco(7, 1)", 1.0, outside_isco(7.0, 1.0) ? 1.0 : 0.0, 0.0);
-  check("outside_isco(5, 1)", 0.0, outside_isco(5.0, 1.0) ? 1.0 : 0.0, 0.0);
+  check("outside_horizon(3, 1)", 1.0, outsideHorizon(3.0, 1.0) ? 1.0 : 0.0, 0.0);
+  check("outside_horizon(1.5, 1)", 0.0, outsideHorizon(1.5, 1.0) ? 1.0 : 0.0, 0.0);
+  check("outside_isco(7, 1)", 1.0, outsideIsco(7.0, 1.0) ? 1.0 : 0.0, 0.0);
+  check("outside_isco(5, 1)", 0.0, outsideIsco(5.0, 1.0) ? 1.0 : 0.0, 0.0);
 }
 
 // ============================================================================
@@ -155,43 +155,43 @@ void testKerr() {
   // Kerr-Schild coordinates functions
   // Sigma = r^2 + a^2 cos^2(theta)
   // At equator (theta = pi/2): Sigma = r^2
-  check("kerr_Sigma(10, pi/2, 0.5)", 100.0, kerr_Sigma(10.0, theta, aSlow), 1e-10);
+  check("kerr_Sigma(10, pi/2, 0.5)", 100.0, kerrSigma(10.0, theta, aSlow), 1e-10);
 
   // Delta = r^2 - 2Mr + a^2
   // At r=10, M=1, a=0.5: Delta = 100 - 20 + 0.25 = 80.25
-  check("kerr_Delta(10, 1, 0.5)", 80.25, kerr_Delta(10.0, m, aSlow), 1e-10);
+  check("kerr_Delta(10, 1, 0.5)", 80.25, kerrDelta(10.0, m, aSlow), 1e-10);
 
   // Outer horizon: r+ = M + sqrt(M^2 - a^2)
   // M=1, a=0.9: r+ = 1 + sqrt(1 - 0.81) = 1 + sqrt(0.19) = 1.4359
   const double expectedRPlus = 1.0 + std::sqrt(1.0 - 0.81);
-  check("kerr_outer_horizon(1, 0.9)", expectedRPlus, outer_horizon(m, aFast), 1e-4);
+  check("kerr_outer_horizon(1, 0.9)", expectedRPlus, outerHorizon(m, aFast), 1e-4);
 
   // Inner horizon: r- = M - sqrt(M^2 - a^2)
   const double expectedRMinus = 1.0 - std::sqrt(1.0 - 0.81);
-  check("kerr_inner_horizon(1, 0.9)", expectedRMinus, inner_horizon(m, aFast), 1e-4);
+  check("kerr_inner_horizon(1, 0.9)", expectedRMinus, innerHorizon(m, aFast), 1e-4);
 
   // Schwarzschild limit (a = 0)
-  check("kerr_outer_horizon(1, 0) = 2M", 2.0, outer_horizon(m, 0.0), 1e-10);
-  check("kerr_inner_horizon(1, 0) = 0", 0.0, inner_horizon(m, 0.0), 1e-10);
+  check("kerr_outer_horizon(1, 0) = 2M", 2.0, outerHorizon(m, 0.0), 1e-10);
+  check("kerr_inner_horizon(1, 0) = 0", 0.0, innerHorizon(m, 0.0), 1e-10);
 
   // Ergosphere at equator: r_ergo = M + sqrt(M^2 - a^2 cos^2(theta)) = 2M at equator
-  check("kerr_ergosphere_radius(pi/2, 1, 0.9)", 2.0, ergosphere_radius(theta, m, aFast), 1e-10);
+  check("kerr_ergosphere_radius(pi/2, 1, 0.9)", 2.0, ergosphereRadius(theta, m, aFast), 1e-10);
 
   // ISCO prograde (Bardeen-Press-Teukolsky formula)
   // For a = 0.9: r_isco ~ 2.32M
-  check("kerr_isco_prograde(1, 0.9)", 2.321, kerr_isco_prograde(m, aFast), 1e-2);
+  check("kerr_isco_prograde(1, 0.9)", 2.321, kerrIscoPrograde(m, aFast), 1e-2);
 
   // Schwarzschild limit for ISCO
-  check("kerr_isco_prograde(1, 0) = 6M", 6.0, kerr_isco_prograde(m, 0.0), 1e-6);
+  check("kerr_isco_prograde(1, 0) = 6M", 6.0, kerrIscoPrograde(m, 0.0), 1e-6);
 
   // ISCO retrograde (larger than prograde)
-  const double rIscoRetro = kerr_isco_retrograde(m, aFast);
+  const double rIscoRetro = kerrIscoRetrograde(m, aFast);
   check("kerr_isco_retrograde > prograde", 1.0,
-        (rIscoRetro > kerr_isco_prograde(m, aFast)) ? 1.0 : 0.0, 0.0);
+        (rIscoRetro > kerrIscoPrograde(m, aFast)) ? 1.0 : 0.0, 0.0);
 
   // Frame dragging: omega = -g_tphi / g_phiphi
   // At large r, omega -> 2Ma/r^3 (slow rotation approximation)
-  const double omega10 = frame_dragging_omega(10.0, theta, m, aSlow);
+  const double omega10 = frameDraggingOmega(10.0, theta, m, aSlow);
   check("frame_dragging_omega(10, pi/2, 1, 0.5) > 0", 1.0, (omega10 > 0.0) ? 1.0 : 0.0, 0.0);
 }
 
@@ -208,11 +208,11 @@ void testRk4() {
   StateVector const a{0.0, 1.0, 2.0, 3.0, 0.1, 0.2, 0.3, 0.4};
   StateVector const b{0.0, 0.5, 1.0, 1.5, 0.05, 0.1, 0.15, 0.2};
 
-  auto sum = sv_add(a, b);
+  auto sum = svAdd(a, b);
   check("sv_add.x1", 1.5, sum.x1, 1e-15);
   check("sv_add.v0", 0.15, sum.v0, 1e-15);
 
-  auto scaled = sv_scale(2.0, a);
+  auto scaled = svScale(2.0, a);
   check("sv_scale.x2", 4.0, scaled.x2, 1e-15);
   check("sv_scale.v3", 0.8, scaled.v3, 1e-15);
 
@@ -224,7 +224,7 @@ void testRk4() {
 
   StateVector const y0{0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0};
   double const h = 0.1;
-  auto y1 = rk4_step(expRhs, h, y0);
+  auto y1 = rk4Step(expRhs, h, y0);
 
   // After one step of h=0.1, v0 should be approximately exp(0.1) = 1.10517...
   // RK4's own local truncation error for y'=y is h^5/120 * exp(xi) with
@@ -234,8 +234,8 @@ void testRk4() {
   check("rk4_step exponential", std::exp(0.1), y1.v0, 2e-7);
 
   // Local error bound: C * h^5; global error bound: C * h^4
-  check("local_error_bound(1, 0.1)", 1e-5, local_error_bound(1.0, 0.1), 1e-15);
-  check("global_error_bound(1, 0.1)", 1e-4, global_error_bound(1.0, 0.1), 1e-15);
+  check("local_error_bound(1, 0.1)", 1e-5, localErrorBound(1.0, 0.1), 1e-15);
+  check("global_error_bound(1, 0.1)", 1e-4, globalErrorBound(1.0, 0.1), 1e-15);
 }
 
 // ============================================================================
@@ -253,15 +253,15 @@ void testGeodesic() {
   const double m = 1.0;
 
   MetricComponents const g{
-      schwarzschild_g_tt(r, m),       // g_tt = -0.8
-      schwarzschild_g_rr(r, m),       // g_rr = 1.25
-      schwarzschild_g_thth(r),        // g_thth = 100
-      schwarzschild_g_phph(r, theta), // g_phph = 100
-      0.0                             // g_tph = 0 for Schwarzschild
+      schwarzschildGTt(r, m),       // g_tt = -0.8
+      schwarzschildGRr(r, m),       // g_rr = 1.25
+      schwarzschildGThth(r),        // g_thth = 100
+      schwarzschildGPhph(r, theta), // g_phph = 100
+      0.0                           // g_tph = 0 for Schwarzschild
   };
 
-  check("metric g_tt", -0.8, g.g_tt, 1e-15);
-  check("metric g_rr", 1.25, g.g_rr, 1e-15);
+  check("metric g_tt", -0.8, g.gTt, 1e-15);
+  check("metric g_rr", 1.25, g.gRr, 1e-15);
 
   // Create a null geodesic state
   // For null: g_tt*v0^2 + g_rr*v1^2 + g_thth*v2^2 + g_phph*v3^2 = 0
@@ -273,26 +273,26 @@ void testGeodesic() {
   StateVector const s{0.0, r, theta, 0.0, v0, v1, 0.0, 0.0};
 
   // Check null constraint
-  const double constraint = null_constraint_function(g, s);
+  const double constraint = nullConstraintFunction(g, s);
   check("null_constraint initial", 0.0, constraint, 1e-10);
 
   // Test is_null
-  check("is_null", 1.0, is_null(g, s) ? 1.0 : 0.0, 0.0);
+  check("is_null", 1.0, isNull(g, s) ? 1.0 : 0.0, 0.0);
 
   // Test renormalization (should preserve null condition)
-  auto sRenorm = renormalize_null(g, s);
-  const double constraintRenorm = null_constraint_function(g, sRenorm);
+  auto sRenorm = renormalizeNull(g, s);
+  const double constraintRenorm = nullConstraintFunction(g, sRenorm);
   check("null_constraint after renormalize", 0.0, constraintRenorm, 1e-10);
 
   // Test constants of motion
   double const e = energy(g, s);
-  double const l = angular_momentum(g, s);
+  double const l = angularMomentum(g, s);
   check("energy > 0", 1.0, (e > 0.0) ? 1.0 : 0.0, 0.0);
   check("angular_momentum = 0 (radial)", 0.0, l, 1e-15);
 
   // Test Schwarzschild Christoffel builder
-  auto christoffel = make_schwarzschild_christoffel(m);
-  check("christoffel.accel_t callable", 1.0, (std::abs(christoffel.accel_t(s)) < 1.0) ? 1.0 : 0.0,
+  auto christoffel = makeSchwarzschildChristoffel(m);
+  check("christoffel.accel_t callable", 1.0, (std::abs(christoffel.accelT(s)) < 1.0) ? 1.0 : 0.0,
         0.0);
 }
 
@@ -306,42 +306,42 @@ void testCosmology() {
   using namespace verified;
 
   // Planck 2018 parameters
-  check("H0_Planck18", 67.36, H0_Planck18, 1e-10);
-  check("Omega_m_Planck18", 0.3153, Omega_m_Planck18, 1e-10);
+  check("H0_Planck18", 67.36, H0_PLANCK18, 1e-10);
+  check("Omega_m_Planck18", 0.3153, OMEGA_M_PLANCK18, 1e-10);
 
   // E(z) at z=0 should be 1
-  check("E_z(Planck18, 0)", 1.0, E_z(Planck18, 0.0), 1e-15);
+  check("E_z(Planck18, 0)", 1.0, eZ(PLANCK18, 0.0), 1e-15);
 
   // E(z) at z=1 for matter-dominated with Omega_Lambda
   // E(1)^2 = Omega_m * 8 + Omega_Lambda = 0.3153 * 8 + 0.6847 = 3.207
   // E(1) ~ 1.79
-  const double eAt1 = E_z(Planck18, 1.0);
+  const double eAt1 = eZ(PLANCK18, 1.0);
   check("E_z(Planck18, 1) ~ 1.79", 1.79, eAt1, 0.05);
 
   // Hubble parameter
-  check("hubble_parameter(Planck18, 0)", 67.36, hubble_parameter(Planck18, 0.0), 1e-10);
+  check("hubble_parameter(Planck18, 0)", 67.36, hubbleParameter(PLANCK18, 0.0), 1e-10);
 
   // Hubble length: D_H = c/H0 ~ 4450 Mpc
-  check("hubble_length(67.36) ~ 4450 Mpc", 4450.0, hubble_length(67.36), 10.0);
+  check("hubble_length(67.36) ~ 4450 Mpc", 4450.0, hubbleLength(67.36), 10.0);
 
   // Omega_Lambda for flat universe
-  check("Omega_Lambda(0.3153)", 0.6847, Omega_Lambda(0.3153), 1e-10);
+  check("Omega_Lambda(0.3153)", 0.6847, omegaLambda(0.3153), 1e-10);
 
   // Comoving distance at z=0 should be 0
-  check("comoving_distance(Planck18, 0)", 0.0, comoving_distance(Planck18, 0.0), 1e-10);
+  check("comoving_distance(Planck18, 0)", 0.0, comovingDistance(PLANCK18, 0.0), 1e-10);
 
   // Distance duality check
   const double zTest = 0.5;
-  const double dL = luminosity_distance(Planck18, zTest);
-  const double dA = angular_diameter_distance(Planck18, zTest);
-  check("distance_duality(z=0.5)", 1.0, verify_distance_duality(dL, dA, zTest) ? 1.0 : 0.0, 0.0);
+  const double dL = luminosityDistance(PLANCK18, zTest);
+  const double dA = angularDiameterDistance(PLANCK18, zTest);
+  check("distance_duality(z=0.5)", 1.0, verifyDistanceDuality(dL, dA, zTest) ? 1.0 : 0.0, 0.0);
 
   // Distance modulus: 10 Mpc -> mu = 30
-  check("distance_modulus(10 Mpc)", 30.0, distance_modulus(10.0), 1e-10);
+  check("distance_modulus(10 Mpc)", 30.0, distanceModulus(10.0), 1e-10);
 
   // Axiodilaton cosmology (Hubble tension resolution)
   AxiodilatonParams const ad{0.30, 0.015, 0.05}; // Approximate parameters
-  const double hAd = hubble_axiodilaton(68.0, ad, 0.0);
+  const double hAd = hubbleAxiodilaton(68.0, ad, 0.0);
   // Should be slightly higher than base H0
   check("H_axiodilaton(68, ad, 0) > 68", 1.0, (hAd >= 68.0) ? 1.0 : 0.0, 0.0);
 }
@@ -356,42 +356,42 @@ void testEos() {
   using namespace verified;
 
   // Test gamma values
-  check("gamma_nonrel_degenerate", 5.0 / 3.0, gamma_nonrel_degenerate, 1e-15);
-  check("gamma_ultrarel_degenerate", 4.0 / 3.0, gamma_ultrarel_degenerate, 1e-15);
-  check("gamma_stiff", 2.0, gamma_stiff, 1e-15);
+  check("gamma_nonrel_degenerate", 5.0 / 3.0, GAMMA_NONREL_DEGENERATE, 1e-15);
+  check("gamma_ultrarel_degenerate", 4.0 / 3.0, GAMMA_ULTRAREL_DEGENERATE, 1e-15);
+  check("gamma_stiff", 2.0, GAMMA_STIFF, 1e-15);
 
   // Polytrope parameters
   PolytropeParams const p{1.0, 2.0}; // K=1, gamma=2 (stiff)
-  check("valid_polytrope(K=1, gamma=2)", 1.0, valid_polytrope(p) ? 1.0 : 0.0, 0.0);
+  check("valid_polytrope(K=1, gamma=2)", 1.0, validPolytrope(p) ? 1.0 : 0.0, 0.0);
 
   // Pressure: P = K * rho^gamma = 1 * 0.1^2 = 0.01
   const double rho = 0.1;
-  check("polytrope_pressure(K=1, gamma=2, rho=0.1)", 0.01, polytrope_pressure(p, rho), 1e-15);
+  check("polytrope_pressure(K=1, gamma=2, rho=0.1)", 0.01, polytropePressure(p, rho), 1e-15);
 
   // Energy density: epsilon = rho + P/(gamma-1) = 0.1 + 0.01/1 = 0.11
-  check("polytrope_energy_density", 0.11, polytrope_energy_density(p, rho), 1e-15);
+  check("polytrope_energy_density", 0.11, polytropeEnergyDensity(p, rho), 1e-15);
 
   // Sound speed squared: c_s^2 = gamma * P / (epsilon + P)
   // = 2 * 0.01 / (0.11 + 0.01) = 0.02 / 0.12 = 1/6
-  check("polytrope_sound_speed_sq", 1.0 / 6.0, polytrope_sound_speed_sq(p, rho), 1e-15);
+  check("polytrope_sound_speed_sq", 1.0 / 6.0, polytropeSoundSpeedSq(p, rho), 1e-15);
 
   // Causality check (gamma=2 should be causal)
-  check("is_causal(stiff EOS)", 1.0, is_causal(p, rho) ? 1.0 : 0.0, 0.0);
-  check("is_globally_causal(gamma=2)", 1.0, is_globally_causal(p) ? 1.0 : 0.0, 0.0);
+  check("is_causal(stiff EOS)", 1.0, isCausal(p, rho) ? 1.0 : 0.0, 0.0);
+  check("is_globally_causal(gamma=2)", 1.0, isGloballyCausal(p) ? 1.0 : 0.0, 0.0);
 
   // Polytropic index: n = 1/(gamma-1)
-  check("polytropic_index(gamma=5/3)", 1.5, polytropic_index(5.0 / 3.0), 1e-15);
-  check("polytropic_index(gamma=2)", 1.0, polytropic_index(2.0), 1e-15);
+  check("polytropic_index(gamma=5/3)", 1.5, polytropicIndex(5.0 / 3.0), 1e-15);
+  check("polytropic_index(gamma=2)", 1.0, polytropicIndex(2.0), 1e-15);
 
   // Inverse: gamma_from_index
-  check("gamma_from_index(n=1)", 2.0, gamma_from_index(1.0), 1e-15);
-  check("gamma_from_index(n=1.5)", 5.0 / 3.0, gamma_from_index(1.5), 1e-15);
+  check("gamma_from_index(n=1)", 2.0, gammaFromIndex(1.0), 1e-15);
+  check("gamma_from_index(n=1.5)", 5.0 / 3.0, gammaFromIndex(1.5), 1e-15);
 
   // Enthalpy: h = (epsilon + P) / rho = (0.11 + 0.01) / 0.1 = 1.2
-  check("polytrope_enthalpy", 1.2, polytrope_enthalpy(p, rho), 1e-15);
+  check("polytrope_enthalpy", 1.2, polytropeEnthalpy(p, rho), 1e-15);
 
   // Inverse relations
-  check("density_from_pressure", rho, density_from_pressure(p, polytrope_pressure(p, rho)), 1e-10);
+  check("density_from_pressure", rho, densityFromPressure(p, polytropePressure(p, rho)), 1e-10);
 }
 
 // ============================================================================

@@ -79,11 +79,11 @@ void expectFalse(bool condition, const std::string& what) { report(!condition, w
 // evaluator.
 [[nodiscard]] double kerrFourNorm(double r, double theta, double m, double a, double vT, double vR,
                                   double vTheta, double vPhi) noexcept {
-  MetricComponents const g{kerrGTt(r, theta, m, a), kerrGRr(r, theta, m, a),
+  MetricComponents const g{kerrGTt(r, theta, m, a), kerrGRrChecked(r, theta, m, a),
                            kerrGThetaTheta(r, theta, a), kerrGPhiPhi(r, theta, m, a),
                            kerrGTPhi(r, theta, m, a)};
   StateVector const s{0.0, r, theta, 0.0, vT, vR, vTheta, vPhi};
-  return four_norm(g, s);
+  return fourNorm(g, s);
 }
 
 /**
@@ -150,7 +150,7 @@ void testHorizonOrdering() {
  */
 void testIscoSchwarzschildLimit() {
   double const a = 0.0;
-  double const rIsco = kerr_isco_prograde(K_MASS, a);
+  double const rIsco = kerrIscoPrograde(K_MASS, a);
 
   // Expected: 6M for Schwarzschild
   double const expected = 6.0 * K_MASS;
@@ -163,9 +163,9 @@ void testIscoSchwarzschildLimit() {
  * As a increases (more rotation), ISCO moves inward (smaller r)
  */
 void testIscoMonotonic() {
-  double const rIsco1 = kerr_isco_prograde(K_MASS, 0.1);
-  double const rIsco2 = kerr_isco_prograde(K_MASS, 0.5);
-  double const rIsco3 = kerr_isco_prograde(K_MASS, 0.9);
+  double const rIsco1 = kerrIscoPrograde(K_MASS, 0.1);
+  double const rIsco2 = kerrIscoPrograde(K_MASS, 0.5);
+  double const rIsco3 = kerrIscoPrograde(K_MASS, 0.9);
 
   expectGt(rIsco1, rIsco2, "ISCO should move inward as spin increases (a1 -> a2)");
   expectGt(rIsco2, rIsco3, "ISCO should move inward as spin increases (a2 -> a3)");
@@ -176,7 +176,7 @@ void testIscoMonotonic() {
  * Physical requirement: must be in exterior region
  */
 void testIscoOutsideHorizon() {
-  double const rIsco = kerr_isco_prograde(K_MASS, K_A_FAST);
+  double const rIsco = kerrIscoPrograde(K_MASS, K_A_FAST);
   double const rPlus = kerrOuterHorizon(K_MASS, K_A_FAST);
 
   expectGt(rIsco, rPlus, "ISCO must be outside event horizon");
@@ -187,8 +187,8 @@ void testIscoOutsideHorizon() {
  * Frame-dragging pulls co-rotating orbits inward
  */
 void testRetrogradeIscoFarther() {
-  double const rIscoPro = kerr_isco_prograde(K_MASS, K_A_FAST);
-  double const rIscoRetro = kerr_isco_retrograde(K_MASS, K_A_FAST);
+  double const rIscoPro = kerrIscoPrograde(K_MASS, K_A_FAST);
+  double const rIscoRetro = kerrIscoRetrograde(K_MASS, K_A_FAST);
 
   expectGt(rIscoRetro, rIscoPro, "Retrograde ISCO should be farther than prograde");
 }
@@ -250,7 +250,7 @@ void testExteriorMetricSignature() {
   double const theta = std::numbers::pi / 4;
 
   double const gTt = kerrGTt(r, theta, K_MASS, K_A_SLOW);
-  double const gRr = kerrGRr(r, theta, K_MASS, K_A_SLOW);
+  double const gRr = kerrGRrChecked(r, theta, K_MASS, K_A_SLOW);
   double const gThetaTheta = kerrGThetaTheta(r, theta, K_A_SLOW);
   double const gPhiPhi = kerrGPhiPhi(r, theta, K_MASS, K_A_SLOW);
 
@@ -316,10 +316,10 @@ void testNullGeodesicConstraint() {
  * Test: Validation constraint - sub-extremal condition
  */
 void testSubextremalValidation() {
-  expectTrue(is_subextremal(K_MASS, K_A_SLOW), "a = 0.5 is sub-extremal");
-  expectTrue(is_subextremal(K_MASS, K_A_FAST), "a = 0.9 is sub-extremal");
-  expectFalse(is_subextremal(K_MASS, K_MASS), "a = M is not sub-extremal");
-  expectFalse(is_subextremal(K_MASS, 1.1 * K_MASS), "a > M is not sub-extremal");
+  expectTrue(isSubextremal(K_MASS, K_A_SLOW), "a = 0.5 is sub-extremal");
+  expectTrue(isSubextremal(K_MASS, K_A_FAST), "a = 0.9 is sub-extremal");
+  expectFalse(isSubextremal(K_MASS, K_MASS), "a = M is not sub-extremal");
+  expectFalse(isSubextremal(K_MASS, 1.1 * K_MASS), "a > M is not sub-extremal");
 }
 
 /**
@@ -336,23 +336,23 @@ void testSubextremalValidation() {
  * negating the spin selected nothing).
  */
 void testIscoBptBothSurfaces() {
-  expectNear(verified::kerr_isco_prograde(K_MASS, 0.0), 6.0 * K_MASS, K_TOLERANCE,
+  expectNear(verified::kerrIscoPrograde(K_MASS, 0.0), 6.0 * K_MASS, K_TOLERANCE,
              "batch-path prograde ISCO must be 6M at a=0 (BPT 1972)");
-  expectNear(verified::kerr_isco_retrograde(K_MASS, 0.0), 6.0 * K_MASS, K_TOLERANCE,
+  expectNear(verified::kerrIscoRetrograde(K_MASS, 0.0), 6.0 * K_MASS, K_TOLERANCE,
              "batch-path retrograde ISCO must be 6M at a=0");
-  double const pro = verified::kerr_isco_prograde(K_MASS, 0.5);
-  double const retro = verified::kerr_isco_retrograde(K_MASS, 0.5);
+  double const pro = verified::kerrIscoPrograde(K_MASS, 0.5);
+  double const retro = verified::kerrIscoRetrograde(K_MASS, 0.5);
   expectGt(6.0 * K_MASS, pro, "prograde ISCO moves inward with spin");
   expectGt(retro, 6.0 * K_MASS, "retrograde ISCO moves outward with spin");
 
   // kerr_extended.h duplicates of the same physics (fixed together:
   // wrong bptZ2 radicand gave 6.87M at a=0; retrograde carried the
   // prograde sign). BPT 1972 at a=0.9: prograde 2.3209, retro 8.7173.
-  expectNear(verified::kerrIscoPrograde(K_MASS, 0.0), 6.0 * K_MASS, K_TOLERANCE,
+  expectNear(verified::kerrIscoProgradeChecked(K_MASS, 0.0), 6.0 * K_MASS, K_TOLERANCE,
              "kerr_extended prograde ISCO must be 6M at a=0");
-  expectNear(verified::kerrIscoPrograde(K_MASS, 0.9), 2.3209, 1e-3,
+  expectNear(verified::kerrIscoProgradeChecked(K_MASS, 0.9), 2.3209, 1e-3,
              "kerr_extended prograde ISCO at a=0.9 (BPT 1972)");
-  expectNear(verified::kerrIscoRetrograde(K_MASS, 0.9), 8.7173, 1e-3,
+  expectNear(verified::kerrIscoRetrogradeChecked(K_MASS, 0.9), 8.7173, 1e-3,
              "kerr_extended retrograde ISCO at a=0.9 (BPT 1972)");
 }
 
@@ -365,7 +365,7 @@ void testPerformanceBenchmark() {
 
   for (int i = 0; i < iterations; ++i) {
     volatile double const gTt = kerrGTt(r, theta, K_MASS, K_A_SLOW);
-    volatile double const gRr = kerrGRr(r, theta, K_MASS, K_A_SLOW);
+    volatile double const gRr = kerrGRrChecked(r, theta, K_MASS, K_A_SLOW);
     volatile double const norm = kerrFourNorm(r, theta, K_MASS, K_A_SLOW, 1.0, 0.1, 0.05, 0.2);
     (void)gTt;
     (void)gRr;

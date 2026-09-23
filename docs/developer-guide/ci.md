@@ -56,10 +56,18 @@ upper bound; a timeout is a failed gate, never validation evidence.
 
 ## Strict source validation
 
-Every enabled clang-tidy diagnostic is an error. The cleanup preserves the
-configured diagnostic set and fixes compiler, clang-tidy, and cppcheck findings
-in project sources, tests, and tools. Renderer helper extraction preserves the
-checked render-call ordering; settings persistence tests exercise serialized
+Every enabled clang-tidy diagnostic is an error.
+The header filter covers maintained C++ headers, including `.hpp` reference
+implementations. Analysis objects depend on `.clang-tidy`, so an incremental
+build also reruns analysis after a policy edit.
+The C++ reference APIs follow repository naming rules; an explicit
+[GLSL interface adapter](verified-glsl-generation.md) preserves maintained shader
+names. Shader validation uses the checked-in shader sources; the generator's
+separate lowering limitations remain documented in that guide. The cleanup
+preserves the configured diagnostic set and fixes compiler, clang-tidy, and
+cppcheck findings in project sources, tests, and tools. Renderer helper
+extraction preserves the checked render-call ordering; settings persistence
+tests exercise serialized
 values and legacy alias precedence. HDF5 tool tests cover malformed metadata,
 argument handling, and native fixture round trips through CTest dependencies.
 

@@ -146,16 +146,15 @@ protected:
         double& energyFinal
     ) {
         verified::MetricComponents g{};
-        g.g_tt = verified::schwarzschild_g_tt(rStart, M_BH);
-        g.g_rr = verified::schwarzschild_g_rr(rStart, M_BH);
-        g.g_thth = rStart * rStart;
-        g.g_phph = rStart * rStart;
-        g.g_tph = 0.0;  // No frame dragging in Schwarzschild
+        g.gTt = verified::schwarzschildGTt(rStart, M_BH);
+        g.gRr = verified::schwarzschildGRr(rStart, M_BH);
+        g.gThth = rStart * rStart;
+        g.gPhph = rStart * rStart;
+        g.gTph = 0.0; // No frame dragging in Schwarzschild
 
         // Initialize null geodesic; init_null_geodesic_EL gives |v_r|, apply vR sign.
-        verified::StateVector state = verified::init_null_geodesic_EL(
-            rStart, std::numbers::pi / 2.0, 1.0, vPhi, g
-        );
+        verified::StateVector state =
+            verified::initNullGeodesicEl(rStart, std::numbers::pi / 2.0, 1.0, vPhi, g);
         if (vR < 0.0) {
             state.v1 = -std::abs(state.v1);  // Ingoing ray
         }
@@ -176,30 +175,26 @@ protected:
         /* WHY: make_schwarzschild_christoffel returns acceleration functions that
          * internally evaluate at the current StateVector position (s.x1, s.x2),
          * so a single Christoffel object is reusable across integration steps. */
-        const auto christoffel = verified::make_schwarzschild_christoffel(M_BH);
-        const auto rhs = verified::make_geodesic_rhs(christoffel);
+        const auto christoffel = verified::makeSchwarzschildChristoffel(M_BH);
+        const auto rhs = verified::makeGeodesicRhs(christoffel);
 
         for (int step = 0; step < maxSteps; step++) {
             // Check termination
             if (state.x1 <= R_S + 0.01) { break; }  // Captured
             if (state.x1 >= 200.0) { break; }        // Escaped
 
-            state = verified::rk4_step(rhs, h, state);
+            state = verified::rk4Step(rhs, h, state);
 
             /* Measure constraint and energy only in the well-conditioned region
              * (outside the photon sphere). theta=pi/2 throughout (equatorial,
              * no theta kick), so g_phph = r^2. */
             if (state.x1 > 3.0 * M_BH) {
-                const verified::MetricComponents gNow{
-                    verified::schwarzschild_g_tt(state.x1, M_BH),
-                    verified::schwarzschild_g_rr(state.x1, M_BH),
-                    state.x1 * state.x1,
-                    state.x1 * state.x1,
-                    0.0
-                };
-                const double constraint = verified::four_norm(gNow, state);
-                constraintDriftMax = std::max(constraintDriftMax, std::abs(constraint));
-                energyLastGood = verified::energy(gNow, state);
+              const verified::MetricComponents gNow{verified::schwarzschildGTt(state.x1, M_BH),
+                                                    verified::schwarzschildGRr(state.x1, M_BH),
+                                                    state.x1 * state.x1, state.x1 * state.x1, 0.0};
+              const double constraint = verified::fourNorm(gNow, state);
+              constraintDriftMax = std::max(constraintDriftMax, std::abs(constraint));
+              energyLastGood = verified::energy(gNow, state);
             }
         }
 

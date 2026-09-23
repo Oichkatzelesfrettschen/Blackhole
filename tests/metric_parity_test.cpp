@@ -108,29 +108,29 @@ void testSchwarzschild(TestSuite &suite) {
 
   for (double const r : rValues) {
     // f = 1 - 2M/r
-    double const f = f_schwarzschild(r, m);
+    double const f = fSchwarzschild(r, m);
     suite.runTest("f_schwarzschild(r=" + std::to_string(r) + ")", 1.0 - (2.0 * m / r), f);
 
     // g_tt metric component
-    double const gTt = schwarzschild_g_tt(r, m);
+    double const gTt = schwarzschildGTt(r, m);
     suite.runTest("schwarzschild_g_tt(r=" + std::to_string(r) + ")", -(1.0 - (2.0 * m / r)), gTt);
 
     // g_rr metric component
-    double const gRr = schwarzschild_g_rr(r, m);
+    double const gRr = schwarzschildGRr(r, m);
     suite.runTest("schwarzschild_g_rr(r=" + std::to_string(r) + ")", 1.0 / (1.0 - (2.0 * m / r)),
                   gRr);
   }
 
   // Event horizon
-  double const rHorizon = schwarzschild_radius(m);
+  double const rHorizon = schwarzschildRadius(m);
   suite.runTest("schwarzschild_radius(M=1)", 2.0 * m, rHorizon);
 
   // Photon sphere
-  double const rPhoton = photon_sphere_radius(m);
+  double const rPhoton = photonSphereRadius(m);
   suite.runTest("photon_sphere_radius(M=1)", 3.0 * m, rPhoton);
 
   // ISCO
-  double const rIsco = schwarzschild_isco(m);
+  double const rIsco = schwarzschildIsco(m);
   suite.runTest("schwarzschild_isco(M=1)", 6.0 * m, rIsco);
 }
 
@@ -148,22 +148,22 @@ void testKerr(TestSuite &suite) {
 
   for (double const a : aValues) {
     // Sigma
-    double const sigma = kerr_Sigma(r, theta, a);
+    double const sigma = kerrSigma(r, theta, a);
     double const expectedSigma = (r * r) + (a * a * std::cos(theta) * std::cos(theta));
     suite.runTest("kerr_Sigma(a=" + std::to_string(a) + ")", expectedSigma, sigma);
 
     // Delta
-    double const delta = kerr_Delta(r, m, a);
+    double const delta = kerrDelta(r, m, a);
     double const expectedDelta = (r * r) - (2 * m * r) + (a * a);
     suite.runTest("kerr_Delta(a=" + std::to_string(a) + ")", expectedDelta, delta);
 
     // Event horizon
-    double const rPlus = outer_horizon(m, a);
+    double const rPlus = outerHorizon(m, a);
     double const expectedRPlus = m + std::sqrt((m * m) - (a * a));
     suite.runTest("outer_horizon(a=" + std::to_string(a) + ")", expectedRPlus, rPlus);
 
     // Frame dragging
-    double const omega = frame_dragging_omega(r, theta, m, a);
+    double const omega = frameDraggingOmega(r, theta, m, a);
     // Just verify it's finite and reasonable
     suite.runTest("frame_dragging_omega(a=" + std::to_string(a) + ")", omega,
                   omega); // Self-consistency check
@@ -185,17 +185,17 @@ void testKerrNewman(TestSuite &suite) {
 
   for (double const q : qValues) {
     // Delta (modified by charge)
-    double const delta = kn_Delta(r, m, a, q);
+    double const delta = knDelta(r, m, a, q);
     double const expectedDelta = (r * r) - (2 * m * r) + (a * a) + (q * q);
     suite.runTest("kn_Delta(Q=" + std::to_string(q) + ")", expectedDelta, delta);
 
     // Event horizon
-    double const rPlus = kn_outer_horizon(m, a, q);
+    double const rPlus = knOuterHorizon(m, a, q);
     double const expectedRPlus = m + std::sqrt((m * m) - (a * a) - (q * q));
     suite.runTest("kn_outer_horizon(Q=" + std::to_string(q) + ")", expectedRPlus, rPlus);
 
     // Electromagnetic potential
-    double const phiT = kn_potential_t(r, theta, a, q);
+    double const phiT = knPotentialT(r, theta, a, q);
     // Verify it's finite
     suite.runTest("kn_potential_t(Q=" + std::to_string(q) + ")", phiT, phiT);
   }
@@ -215,12 +215,12 @@ void testKerrDeSitter(TestSuite &suite) {
 
   for (double const lambda : lambdaValues) {
     // Delta (modified by cosmological constant)
-    double const delta = kds_Delta(r, m, a, lambda);
+    double const delta = kdsDelta(r, m, a, lambda);
     double const expectedDelta = (r * r) - (2 * m * r) + (a * a) - (lambda * r * r / 3.0);
     suite.runTest("kds_Delta(Λ=" + std::to_string(lambda) + ")", expectedDelta, delta);
 
     // Event horizon
-    double const rPlus = kds_event_horizon(m, a, lambda);
+    double const rPlus = kdsEventHorizon(m, a, lambda);
     // For Lambda=0, should reduce to Kerr
     if (lambda < 1e-12) {
       double const expectedRPlus = m + std::sqrt((m * m) - (a * a));
@@ -229,7 +229,7 @@ void testKerrDeSitter(TestSuite &suite) {
 
     // Cosmological horizon
     if (lambda > 1e-12) {
-      double const rC = kds_cosmological_horizon(lambda);
+      double const rC = kdsCosmologicalHorizon(lambda);
       double const expectedRC = std::sqrt(3.0 / lambda);
       suite.runTest("kds_cosmological_horizon(Λ=" + std::to_string(lambda) + ")", expectedRC, rC);
     }
@@ -240,9 +240,9 @@ void testKerrDeSitter(TestSuite &suite) {
   const double aTest = 0.5;
   const double lambdaTest = 1e-5;
 
-  double const rMinus = kds_inner_horizon(mTest, aTest, lambdaTest);
-  double const rPlus = kds_event_horizon(mTest, aTest, lambdaTest);
-  double const rCosmo = kds_cosmological_horizon(lambdaTest);
+  double const rMinus = kdsInnerHorizon(mTest, aTest, lambdaTest);
+  double const rPlus = kdsEventHorizon(mTest, aTest, lambdaTest);
+  double const rCosmo = kdsCosmologicalHorizon(lambdaTest);
 
   bool const orderingCorrect = (rMinus < rPlus) && (rPlus < rCosmo);
   suite.runTest("horizon_ordering(r- < r+ < rc)", 1.0, orderingCorrect ? 1.0 : 0.0);
@@ -261,36 +261,36 @@ void testReductions(TestSuite &suite) {
   // Kerr → Schwarzschild (a → 0)
   {
     double const a = 1e-10;
-    double const kerrDelta = kerr_Delta(r, m, a);
+    double const kerrDeltaValue = kerrDelta(r, m, a);
     double const expectedDelta = (r * r) - (2 * m * r); // Schwarzschild Delta
-    suite.runTest("Kerr→Schwarzschild (a→0)", expectedDelta, kerrDelta);
+    suite.runTest("Kerr→Schwarzschild (a→0)", expectedDelta, kerrDeltaValue);
   }
 
   // Kerr-Newman → Kerr (Q → 0)
   {
     double const a = 0.5;
     double const q = 1e-10;
-    double const knDelta = kn_Delta(r, m, a, q);
-    double const kerrDelta = kerr_Delta(r, m, a);
-    suite.runTest("Kerr-Newman→Kerr (Q→0)", kerrDelta, knDelta);
+    double const knDeltaValue = knDelta(r, m, a, q);
+    double const kerrDeltaValue = kerrDelta(r, m, a);
+    suite.runTest("Kerr-Newman→Kerr (Q→0)", kerrDeltaValue, knDeltaValue);
   }
 
   // Kerr-de Sitter → Kerr (Λ → 0)
   {
     double const a = 0.5;
     double const lambda = 1e-12;
-    double const kdsDelta = kds_Delta(r, m, a, lambda);
-    double const kerrDelta = kerr_Delta(r, m, a);
-    suite.runTest("Kerr-de Sitter→Kerr (Λ→0)", kerrDelta, kdsDelta);
+    double const kdsDeltaValue = kdsDelta(r, m, a, lambda);
+    double const kerrDeltaValue = kerrDelta(r, m, a);
+    suite.runTest("Kerr-de Sitter→Kerr (Λ→0)", kerrDeltaValue, kdsDeltaValue);
   }
 
   // Kerr-Newman → Schwarzschild (a→0, Q→0)
   {
     double const a = 1e-10;
     double const q = 1e-10;
-    double const knDelta = kn_Delta(r, m, a, q);
+    double const knDeltaValue = knDelta(r, m, a, q);
     double const expectedDelta = (r * r) - (2 * m * r); // Schwarzschild Delta
-    suite.runTest("Kerr-Newman→Schwarzschild (a,Q→0)", expectedDelta, knDelta);
+    suite.runTest("Kerr-Newman→Schwarzschild (a,Q→0)", expectedDelta, knDeltaValue);
   }
 }
 
@@ -320,9 +320,9 @@ void testValidityConstraints(TestSuite &suite) {
   }
 
   // The constexpr validity predicate admits only a positive cosmological constant.
-  static_assert(is_physical_kds_black_hole(1.0, 0.5, 1e-5));
-  static_assert(!is_physical_kds_black_hole(1.0, 0.5, 0.0));
-  static_assert(!is_physical_kds_black_hole(1.0, 0.5, -1e-5));
+  static_assert(isPhysicalKdsBlackHole(1.0, 0.5, 1e-5));
+  static_assert(!isPhysicalKdsBlackHole(1.0, 0.5, 0.0));
+  static_assert(!isPhysicalKdsBlackHole(1.0, 0.5, -1e-5));
 }
 
 // ============================================================================

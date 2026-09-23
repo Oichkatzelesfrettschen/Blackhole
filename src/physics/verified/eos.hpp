@@ -2,7 +2,7 @@
  * @file verified/eos.hpp
  * @brief Verified Equation of State functions - derived from Rocq formalization
  *
- * This file is generated from proven Rocq theory rocq/theories/Compact/EOS.v
+ * Maintained C++ reference for rocq/theories/Compact/EOS.v
  *
  * Key equations (polytropic EOS):
  *   - Pressure: P = K * rho^gamma
@@ -13,7 +13,9 @@
  *   - Shapiro & Teukolsky, "Black Holes, White Dwarfs, and Neutron Stars"
  *   - Oppenheimer & Volkoff (1939), Tolman (1939)
  *
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60
+ * The maintained C++ is an input to scripts/cpp_to_glsl.py.
+ * Rocq definitions document the mathematical source; floating-point
+ * implementations are checked by tests rather than a proved extraction chain.
  *
  * @note Uses geometric units where c = G = 1
  * @note Sound speed must be subluminal: c_s < 1
@@ -38,7 +40,7 @@ namespace verified {
  *
  * Used for: White dwarf cores, low-density neutron star crust
  */
-inline constexpr double gamma_nonrel_degenerate = 5.0 / 3.0;
+inline constexpr double GAMMA_NONREL_DEGENERATE = 5.0 / 3.0;
 
 /**
  * @brief Ultra-relativistic degenerate electrons: gamma = 4/3
@@ -47,7 +49,7 @@ inline constexpr double gamma_nonrel_degenerate = 5.0 / 3.0;
  *
  * Used for: Massive white dwarfs near Chandrasekhar limit
  */
-inline constexpr double gamma_ultrarel_degenerate = 4.0 / 3.0;
+inline constexpr double GAMMA_ULTRAREL_DEGENERATE = 4.0 / 3.0;
 
 /**
  * @brief Stiff equation of state: gamma = 2
@@ -56,7 +58,7 @@ inline constexpr double gamma_ultrarel_degenerate = 4.0 / 3.0;
  *
  * Used for: Maximum stiffness consistent with causality
  */
-inline constexpr double gamma_stiff = 2.0;
+inline constexpr double GAMMA_STIFF = 2.0;
 
 /**
  * @brief Radiation-dominated: gamma = 4/3
@@ -65,7 +67,7 @@ inline constexpr double gamma_stiff = 2.0;
  *
  * Used for: Relativistic gas, radiation pressure
  */
-inline constexpr double gamma_radiation = 4.0 / 3.0;
+inline constexpr double GAMMA_RADIATION = 4.0 / 3.0;
 
 // ============================================================================
 // Polytropic Equation of State (from Rocq: PolytropeParams, polytrope_*)
@@ -83,39 +85,37 @@ inline constexpr double gamma_radiation = 4.0 / 3.0;
  *   - gamma: adiabatic index (must be > 1)
  */
 struct PolytropeParams {
-    double K;      ///< Polytropic constant
-    double gamma;  ///< Adiabatic index (must be > 1)
+  double k;     ///< Polytropic constant
+  double gamma; ///< Adiabatic index (must be > 1)
 
-    /**
-     * @brief Constructor with validation
-     * @throws std::invalid_argument if parameters are unphysical
-     */
-    constexpr PolytropeParams(double k, double g)
-        : K(k), gamma(g)
-    {
-        // Validation (in constexpr context, throws are allowed since C++14)
-        // For runtime: check K > 0 and gamma > 1
-    }
+  /**
+   * @brief Constructor with validation
+   * @throws std::invalid_argument if parameters are unphysical
+   */
+  constexpr PolytropeParams(double polytropicConstant, double g) : k(polytropicConstant), gamma(g) {
+    // Validation (in constexpr context, throws are allowed since C++14)
+    // For runtime: check K > 0 and gamma > 1
+  }
 
     /**
      * @brief Non-relativistic degenerate electron gas
      */
-    static constexpr PolytropeParams nonrel_degenerate(double K) noexcept {
-        return PolytropeParams{K, gamma_nonrel_degenerate};
+    static constexpr PolytropeParams nonrelDegenerate(double k) noexcept {
+      return PolytropeParams{k, GAMMA_NONREL_DEGENERATE};
     }
 
     /**
      * @brief Ultra-relativistic degenerate electron gas
      */
-    static constexpr PolytropeParams ultrarel_degenerate(double K) noexcept {
-        return PolytropeParams{K, gamma_ultrarel_degenerate};
+    static constexpr PolytropeParams ultrarelDegenerate(double k) noexcept {
+      return PolytropeParams{k, GAMMA_ULTRAREL_DEGENERATE};
     }
 
     /**
      * @brief Stiff EOS (maximum causality-respecting stiffness)
      */
-    static constexpr PolytropeParams stiff(double K) noexcept {
-        return PolytropeParams{K, gamma_stiff};
+    static constexpr PolytropeParams stiff(double k) noexcept {
+      return PolytropeParams{k, GAMMA_STIFF};
     }
 };
 
@@ -128,8 +128,8 @@ struct PolytropeParams {
  * @param p Polytrope parameters
  * @return true if K > 0 and gamma > 1
  */
-[[nodiscard]] constexpr bool valid_polytrope(const PolytropeParams& p) noexcept {
-    return p.K > 0.0 && p.gamma > 1.0;
+[[nodiscard]] constexpr bool validPolytrope(const PolytropeParams &p) noexcept {
+  return p.k > 0.0 && p.gamma > 1.0;
 }
 
 /**
@@ -145,10 +145,8 @@ struct PolytropeParams {
  * @param rho Rest mass density (geometric units)
  * @return Pressure P = K * rho^gamma
  */
-[[nodiscard]] inline double polytrope_pressure(
-    const PolytropeParams& p, double rho) noexcept
-{
-    return p.K * std::pow(rho, p.gamma);
+[[nodiscard]] inline double polytropePressure(const PolytropeParams &p, double rho) noexcept {
+  return p.k * std::pow(rho, p.gamma);
 }
 
 /**
@@ -167,11 +165,9 @@ struct PolytropeParams {
  * @param rho Rest mass density
  * @return Energy density epsilon
  */
-[[nodiscard]] inline double polytrope_energy_density(
-    const PolytropeParams& p, double rho) noexcept
-{
-    const double P = polytrope_pressure(p, rho);
-    return rho + P / (p.gamma - 1.0);
+[[nodiscard]] inline double polytropeEnergyDensity(const PolytropeParams &p, double rho) noexcept {
+  const double pressure = polytropePressure(p, rho);
+  return rho + pressure / (p.gamma - 1.0);
 }
 
 /**
@@ -191,12 +187,10 @@ struct PolytropeParams {
  * @param rho Rest mass density
  * @return Sound speed squared (must be < 1 for causality)
  */
-[[nodiscard]] inline double polytrope_sound_speed_sq(
-    const PolytropeParams& p, double rho) noexcept
-{
-    const double P = polytrope_pressure(p, rho);
-    const double eps = polytrope_energy_density(p, rho);
-    return p.gamma * P / (eps + P);
+[[nodiscard]] inline double polytropeSoundSpeedSq(const PolytropeParams &p, double rho) noexcept {
+  const double pressure = polytropePressure(p, rho);
+  const double eps = polytropeEnergyDensity(p, rho);
+  return p.gamma * pressure / (eps + pressure);
 }
 
 /**
@@ -206,10 +200,8 @@ struct PolytropeParams {
  * @param rho Rest mass density
  * @return Sound speed (must be < 1 for causality)
  */
-[[nodiscard]] inline double polytrope_sound_speed(
-    const PolytropeParams& p, double rho) noexcept
-{
-    return std::sqrt(polytrope_sound_speed_sq(p, rho));
+[[nodiscard]] inline double polytropeSoundSpeed(const PolytropeParams &p, double rho) noexcept {
+  return std::sqrt(polytropeSoundSpeedSq(p, rho));
 }
 
 // ============================================================================
@@ -232,8 +224,8 @@ struct PolytropeParams {
  * @param gamma Adiabatic index
  * @return Polytropic index n
  */
-[[nodiscard]] constexpr double polytropic_index(double gamma) noexcept {
-    return 1.0 / (gamma - 1.0);
+[[nodiscard]] constexpr double polytropicIndex(double gamma) noexcept {
+  return 1.0 / (gamma - 1.0);
 }
 
 /**
@@ -242,8 +234,8 @@ struct PolytropeParams {
  * @param n Polytropic index
  * @return Adiabatic index gamma
  */
-[[nodiscard]] constexpr double gamma_from_index(double n) noexcept {
-    return 1.0 + 1.0 / n;
+[[nodiscard]] constexpr double gammaFromIndex(double n) noexcept {
+  return 1.0 + 1.0 / n;
 }
 
 // ============================================================================
@@ -264,12 +256,10 @@ struct PolytropeParams {
  * @param rho Rest mass density
  * @return Specific enthalpy h
  */
-[[nodiscard]] inline double polytrope_enthalpy(
-    const PolytropeParams& p, double rho) noexcept
-{
-    const double P = polytrope_pressure(p, rho);
-    const double eps = polytrope_energy_density(p, rho);
-    return (eps + P) / rho;
+[[nodiscard]] inline double polytropeEnthalpy(const PolytropeParams &p, double rho) noexcept {
+  const double pressure = polytropePressure(p, rho);
+  const double eps = polytropeEnergyDensity(p, rho);
+  return (eps + pressure) / rho;
 }
 
 /**
@@ -284,10 +274,8 @@ struct PolytropeParams {
  * @param rho Rest mass density
  * @return Log-enthalpy H = ln(h)
  */
-[[nodiscard]] inline double polytrope_log_enthalpy(
-    const PolytropeParams& p, double rho) noexcept
-{
-    return std::log(polytrope_enthalpy(p, rho));
+[[nodiscard]] inline double polytropeLogEnthalpy(const PolytropeParams &p, double rho) noexcept {
+  return std::log(polytropeEnthalpy(p, rho));
 }
 
 /**
@@ -301,8 +289,8 @@ struct PolytropeParams {
  * @param p Polytrope parameters
  * @return Adiabatic index = gamma
  */
-[[nodiscard]] constexpr double adiabatic_index(const PolytropeParams& p) noexcept {
-    return p.gamma;
+[[nodiscard]] constexpr double adiabaticIndex(const PolytropeParams &p) noexcept {
+  return p.gamma;
 }
 
 // ============================================================================
@@ -315,13 +303,12 @@ struct PolytropeParams {
  * Inverse of P = K * rho^gamma
  *
  * @param p Polytrope parameters
- * @param P Pressure
+ * @param pressure Pressure
  * @return Rest mass density rho
  */
-[[nodiscard]] inline double density_from_pressure(
-    const PolytropeParams& p, double P) noexcept
-{
-    return std::pow(P / p.K, 1.0 / p.gamma);
+[[nodiscard]] inline double densityFromPressure(const PolytropeParams &p,
+                                                double pressure) noexcept {
+  return std::pow(pressure / p.k, 1.0 / p.gamma);
 }
 
 /**
@@ -334,14 +321,12 @@ struct PolytropeParams {
  * @param h Specific enthalpy
  * @return Rest mass density rho
  */
-[[nodiscard]] inline double density_from_enthalpy(
-    const PolytropeParams& p, double h) noexcept
-{
-    // For polytrope: h = 1 + gamma/(gamma-1) * K * rho^(gamma-1)
-    // Therefore: (h-1) = gamma/(gamma-1) * K * rho^(gamma-1)
-    // rho = ((h-1) * (gamma-1) / (gamma * K))^(1/(gamma-1))
-    const double factor = (h - 1.0) * (p.gamma - 1.0) / (p.gamma * p.K);
-    return std::pow(factor, 1.0 / (p.gamma - 1.0));
+[[nodiscard]] inline double densityFromEnthalpy(const PolytropeParams &p, double h) noexcept {
+  // For polytrope: h = 1 + gamma/(gamma-1) * K * rho^(gamma-1)
+  // Therefore: (h-1) = gamma/(gamma-1) * K * rho^(gamma-1)
+  // rho = ((h-1) * (gamma-1) / (gamma * K))^(1/(gamma-1))
+  const double factor = (h - 1.0) * (p.gamma - 1.0) / (p.gamma * p.k);
+  return std::pow(factor, 1.0 / (p.gamma - 1.0));
 }
 
 // ============================================================================
@@ -357,10 +342,8 @@ struct PolytropeParams {
  * @param rho Rest mass density
  * @return true if sound speed is subluminal
  */
-[[nodiscard]] inline bool is_causal(
-    const PolytropeParams& p, double rho) noexcept
-{
-    return polytrope_sound_speed_sq(p, rho) <= 1.0;
+[[nodiscard]] inline bool isCausal(const PolytropeParams &p, double rho) noexcept {
+  return polytropeSoundSpeedSq(p, rho) <= 1.0;
 }
 
 /**
@@ -371,8 +354,8 @@ struct PolytropeParams {
  * @param p Polytrope parameters
  * @return true if gamma <= 2
  */
-[[nodiscard]] constexpr bool is_globally_causal(const PolytropeParams& p) noexcept {
-    return p.gamma <= 2.0;
+[[nodiscard]] constexpr bool isGloballyCausal(const PolytropeParams &p) noexcept {
+  return p.gamma <= 2.0;
 }
 
 // ============================================================================
@@ -385,10 +368,8 @@ struct PolytropeParams {
  * Derived from Rocq: Definition compute_pressure (K gamma rho : R) : R :=
  *   K * Rpower rho gamma.
  */
-[[nodiscard]] inline double compute_pressure(
-    double K, double gamma, double rho) noexcept
-{
-    return K * std::pow(rho, gamma);
+[[nodiscard]] inline double computePressure(double k, double gamma, double rho) noexcept {
+  return k * std::pow(rho, gamma);
 }
 
 /**
@@ -398,11 +379,9 @@ struct PolytropeParams {
  *   let P := K * Rpower rho gamma in
  *   rho + P / (gamma - 1).
  */
-[[nodiscard]] inline double compute_energy_density(
-    double K, double gamma, double rho) noexcept
-{
-    const double P = K * std::pow(rho, gamma);
-    return rho + P / (gamma - 1.0);
+[[nodiscard]] inline double computeEnergyDensity(double k, double gamma, double rho) noexcept {
+  const double p = k * std::pow(rho, gamma);
+  return rho + p / (gamma - 1.0);
 }
 
 /**
@@ -413,12 +392,10 @@ struct PolytropeParams {
  *   let eps := rho + P / (gamma - 1) in
  *   gamma * P / (eps + P).
  */
-[[nodiscard]] inline double compute_sound_speed_sq(
-    double K, double gamma, double rho) noexcept
-{
-    const double P = K * std::pow(rho, gamma);
-    const double eps = rho + P / (gamma - 1.0);
-    return gamma * P / (eps + P);
+[[nodiscard]] inline double computeSoundSpeedSq(double k, double gamma, double rho) noexcept {
+  const double p = k * std::pow(rho, gamma);
+  const double eps = rho + p / (gamma - 1.0);
+  return gamma * p / (eps + p);
 }
 
 /**
@@ -429,12 +406,10 @@ struct PolytropeParams {
  *   let eps := rho + P / (gamma - 1) in
  *   (eps + P) / rho.
  */
-[[nodiscard]] inline double compute_enthalpy(
-    double K, double gamma, double rho) noexcept
-{
-    const double P = K * std::pow(rho, gamma);
-    const double eps = rho + P / (gamma - 1.0);
-    return (eps + P) / rho;
+[[nodiscard]] inline double computeEnthalpy(double k, double gamma, double rho) noexcept {
+  const double p = k * std::pow(rho, gamma);
+  const double eps = rho + p / (gamma - 1.0);
+  return (eps + p) / rho;
 }
 
 } // namespace verified
