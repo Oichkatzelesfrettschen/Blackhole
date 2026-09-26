@@ -80,6 +80,7 @@ GLSL and CUDA lanes, and Blender bridge integration.
 ## Validation
 
 - [OpenUniverse Import Validation](validation/openuniverse-import-validation.md) -- deep research and OpenUniverse import validation results
+- [Physics, Numerics, and Game-Engine Audit](audits/physics-and-game-engine/00-summary.md) -- ranked defects in Kerr tracing, disk emission, library physics, game clocks, and open_gororoba numerics adoptions
 
 ## Archive
 
