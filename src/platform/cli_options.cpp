@@ -27,7 +27,8 @@ void printCliUsage(const char *argv0) {
   std::printf("  --start-frame N          Start recording from frame N (default: 0).\n");
   std::printf("  --record-yaw <deg>       Showcase-orbit base yaw.\n");
   std::printf("  --record-pitch <deg>     Showcase-orbit pitch.\n");
-  std::printf("  --record-distance <r>    Override record camera distance (every profile).\n");
+  std::printf("  --record-distance <r>    Override the black-hole record camera distance (every profile);\n"
+              "                           the tesseract scene keeps its fixed fill.\n");
   std::printf("  --record-fov <deg>       Override record camera field of view (every profile).\n");
   std::printf("  --record-exposure <x>    Override record tone-map exposure.\n");
   std::printf("  --record-spin <a>        Override the Kerr spin a/M every recorded frame.\n");
