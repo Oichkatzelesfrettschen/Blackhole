@@ -381,7 +381,8 @@ void renderPhysicsSettings(RenderState &rs) {
   ImGui::Combo("Disk transfer", &rs.disk.diskTransferMode, diskTransferLabels, 2);
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip("Physical: Doppler, gravitational and transverse shifts of an orbiting\n"
-                      "disk, T_obs = g T_emit and intensity ~ g^4.\n"
+                      "disk seen from infinity: bolometric beaming g^4 F / F_peak, with the\n"
+                      "chroma of a blackbody at g T_emit.\n"
                       "Interstellar: g = 1 with lensing kept, the unshifted disk James et al.\n"
                       "(2015, arXiv:1502.03808 sec. 4.2) describe for Gargantua.");
   }

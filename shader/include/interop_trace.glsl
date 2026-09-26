@@ -338,9 +338,12 @@ vec4 bhHorizonColor() {
 // Page-Thorne flux, normalized to its peak diskFluxPeak (both in M = 1 units,
 // host-computed peak from physics::pageThorneFluxPeak), sets the emitted
 // blackbody temperature T_emit = diskPeakTemperature * flux_norm^(1/4). The
-// orbiting-emitter shift g (dtDiskTransferG) maps it to T_obs = g T_emit and
-// the bolometric intensity to g^4 flux_norm, the Liouville invariance of
-// I_nu / nu^3. chroma is the unit-luminance blackbody color at T_obs.
+// orbiting-emitter shift g (dtDiskTransferG, E_obs / E_emit for an observer
+// at rest at infinity) maps it to T_obs = g T_emit and the bolometric
+// intensity to g^4 flux_norm, the Liouville invariance of I_nu / nu^3.
+// chroma is the unit-luminance blackbody color at T_obs, so the displayed
+// luminance is the bolometric g^4 flux_norm, not the visible-band luminance
+// of the shifted blackbody.
 // diskTransferMode 1 (Interstellar) forces g = 1, the film's unshifted disk
 // (James et al. 2015 sec. 4.2; physics/disk_transfer.h); lensing is unchanged.
 void bhDiskEmission(float r, float photonLambda, float r_s, out vec3 chroma,
@@ -413,8 +416,11 @@ vec3 bhSampleBackgroundLayers(vec3 dir, out float weight) {
 }
 
 // dir is a physics-frame direction; the sky textures are world-frame. Light
-// from infinity that escapes back to a distant camera has E_obs = E_emit, so
-// the sky carries no net frequency shift; lensing alone moves it.
+// from infinity reaching an observer at rest at infinity has E_obs = E_emit,
+// so the sky carries no net frequency shift; lensing alone moves it. The
+// camera stands for that observer at every distance: a static camera at
+// finite r would see the whole sky blueshifted by the uniform factor
+// 1 / sqrt(-g_tt) (physics/disk_transfer.h).
 vec4 bhBackgroundColorFromDir(vec3 dir) {
   vec3 n = normalize(bhPhysicsToWorld(dir));
   vec3 skyDir = bhRotateY(n, time);

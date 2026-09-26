@@ -2,7 +2,11 @@
 #define DISK_TRANSFER_GLSL
 
 // Page-Thorne disk flux, orbiting-emitter energy shift and blackbody chroma,
-// all in M = 1 units with the disk orbiting in +phi (signed spin a).
+// all in M = 1 units with the disk orbiting in +phi (signed spin a). The
+// shift g is E_obs / E_emit for an observer at rest at infinity, and the
+// renderer draws the disk as bolometric g^4 F / F_peak times the
+// unit-luminance chroma at g T_emit rather than the visible-band luminance of
+// the shifted blackbody (physics/disk_transfer.h).
 // Float twins of src/physics/page_thorne.h and src/physics/disk_transfer.h;
 // tests/disk_transfer_shader_test.cpp holds these functions to the C++.
 

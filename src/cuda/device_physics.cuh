@@ -1139,9 +1139,11 @@ __device__ __forceinline__ float d_synchrotron_G(float x) {
  *
  * The Page-Thorne flux normalized to d_disk_flux_peak sets the emitted
  * blackbody temperature T_emit = d_disk_peak_temperature * flux_norm^(1/4);
- * the orbiting-emitter shift g maps it to T_obs = g T_emit and the bolometric
- * intensity to g^4 flux_norm (I_nu / nu^3 invariant). chroma is the
- * unit-luminance blackbody color at T_obs. d_disk_transfer_mode 1
+ * the orbiting-emitter shift g (E_obs / E_emit for an observer at rest at
+ * infinity) maps it to T_obs = g T_emit and the bolometric intensity to
+ * g^4 flux_norm (I_nu / nu^3 invariant). chroma is the unit-luminance
+ * blackbody color at T_obs, so the displayed luminance is the bolometric
+ * g^4 flux_norm, not the visible-band luminance of the shifted blackbody. d_disk_transfer_mode 1
  * (Interstellar) forces g = 1, the film's unshifted disk (James et al. 2015
  * sec. 4.2; physics/disk_transfer.h).
  */
@@ -1614,8 +1616,11 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         return sky;
     }
 
-    /* Light from infinity escaping to a distant camera has E_obs = E_emit:
-     * the sky carries no net frequency shift, only lensing. */
+    /* Light from infinity reaching an observer at rest at infinity has
+     * E_obs = E_emit: the sky carries no net frequency shift, only lensing.
+     * The camera stands for that observer at every distance; a static camera
+     * at finite r would add the uniform factor 1 / sqrt(-g_tt)
+     * (physics/disk_transfer.h). */
 
     if (d_debug_pre_shaping_background != 0) {
         return sky;

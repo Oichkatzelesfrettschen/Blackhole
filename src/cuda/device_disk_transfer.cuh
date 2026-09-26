@@ -3,9 +3,12 @@
  * @brief CUDA twins of the Page-Thorne flux, orbiting-emitter shift and
  *        blackbody chroma (shader/include/disk_transfer.glsl).
  *
- * M = 1 units, signed spin a with the disk orbiting in +phi. Pure functions of
- * their arguments with no __constant__ state, so tests/cuda_disk_transfer_test.cu
- * can call them directly and compare against the double-precision C++ in
+ * M = 1 units, signed spin a with the disk orbiting in +phi; g is
+ * E_obs / E_emit for an observer at rest at infinity, and the renderer draws
+ * bolometric g^4 F / F_peak times the unit-luminance chroma at g T_emit
+ * (physics/disk_transfer.h). Pure functions of their arguments with no
+ * __constant__ state, so tests/cuda_disk_transfer_test.cu can call them
+ * directly and compare against the double-precision C++ in
  * src/physics/page_thorne.h and src/physics/disk_transfer.h.
  *
  * FIREWALL: includes only <cuda_runtime.h> and <math.h>, like device_physics.cuh.

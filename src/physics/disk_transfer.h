@@ -14,11 +14,26 @@
  *
  *   g = E_obs / E_emit = 1 / (u^t (1 - Omega lambda)),   lambda = Lz / E.
  *
+ * E_obs = E holds for an observer at rest at infinity, the observer the
+ * renderer's camera stands for at every distance. A static camera at finite
+ * (r, theta) would measure E / sqrt(-g_tt) = E / sqrt(1 - 2 M r / Sigma)
+ * (1 / sqrt(1 - 2M/r) at a = 0) for every photon, a factor uniform over the
+ * disk and the sky that the renderer omits; with it the sky would appear
+ * blueshifted by that factor rather than unshifted.
+ *
  * lambda comes from the traced ray (the physical photon's Lz = -c.Lz of the
  * time-reversed trace in kerr.glsl), so light bending and frame dragging
  * enter g through the photon's constants. Liouville's theorem keeps I_nu/nu^3
  * invariant, so a blackbody of temperature T appears as a blackbody of
  * temperature g T with bolometric intensity scaled by g^4.
+ *
+ * The renderer's Physical disk transfer mode draws each disk point with the
+ * bolometric intensity g^4 F(r) / F_peak times the unit-luminance chroma of a
+ * blackbody at g T_emit (blackbodyChromaLinearSrgb): the radial profile is the
+ * bolometric Page-Thorne flux and the temperature sets hue only. That is not
+ * the visible-band luminance Y of the shifted blackbody B_nu(g T_emit), which
+ * grows faster than g^4 while the band sits on the Wien side of the spectrum
+ * and slower (toward g^1) once g T_emit puts it on the Rayleigh-Jeans side.
  *
  * The renderer's Interstellar disk transfer mode forces g = 1 for both color
  * and intensity and keeps the lensing. James, von Tunzelmann, Franklin &
