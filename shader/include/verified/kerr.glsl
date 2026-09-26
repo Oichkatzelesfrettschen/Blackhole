@@ -135,10 +135,11 @@ float kerr_Z2(float M, float a) {
  * Depends on: kerr_Z1, kerr_Z2
  */
 float kerr_isco_prograde(float M, float a) {
+    // Signed spin: angular momentum along +z; counter-rotating when a < 0.
     float z1 = kerr_Z1(M, a);
     float z2 = kerr_Z2(M, a);
     float sqrt_term = sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
-    return M * (3.0 + z2 - sqrt_term);
+    return (a >= 0.0) ? M * (3.0 + z2 - sqrt_term) : M * (3.0 + z2 + sqrt_term);
 }
 
 /**
@@ -149,10 +150,8 @@ float kerr_isco_prograde(float M, float a) {
  * Depends on: kerr_Z1, kerr_Z2
  */
 float kerr_isco_retrograde(float M, float a) {
-    float z1 = kerr_Z1(M, a);
-    float z2 = kerr_Z2(M, a);
-    float sqrt_term = sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
-    return M * (3.0 + z2 + sqrt_term);
+    // Angular momentum along -z: the prograde ISCO at -a.
+    return kerr_isco_prograde(M, -a);
 }
 
 /**

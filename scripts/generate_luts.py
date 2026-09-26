@@ -33,7 +33,10 @@ def kerr_isco_cleanroom(mass: float, spin_param: float, prograde: bool = True) -
     )
     z2 = math.sqrt(3.0 * a_star * a_star + z1 * z1)
     sqrt_term = math.sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2))
-    r_isco = m_geom * (3.0 + z2 - sqrt_term if prograde else 3.0 + z2 + sqrt_term)
+    # Signed spin (src/physics/kerr.h kerrIscoRadius): prograde means angular
+    # momentum along +z; the orbit co-rotates when a_star and L_z share a sign.
+    co_rotating = a_star >= 0.0 if prograde else a_star <= 0.0
+    r_isco = m_geom * (3.0 + z2 - sqrt_term if co_rotating else 3.0 + z2 + sqrt_term)
     return r_isco
 
 
@@ -221,9 +224,10 @@ def main() -> int:
             u = i / (spin_points - 1)
             spin_val = spin_min + u * (spin_max - spin_min)
             a_val = spin_val * r_g
-            prograde = spin_val >= 0.0
-            r_isco_spin, _ = resolve_isco(mass, a_val, prograde, refs)
-            r_ph_spin = resolve_photon_orbit(mass, a_val, prograde, refs)
+            # The disk orbits along +z; the signed spin selects co- or
+            # counter-rotation for both radii.
+            r_isco_spin, _ = resolve_isco(mass, a_val, True, refs)
+            r_ph_spin = resolve_photon_orbit(mass, a_val, True, refs)
             spin_rows.append([spin_val, r_isco_spin / r_s, r_ph_spin / r_s])
         write_spin_csv(os.path.join(lut_dir, "spin_radii_lut.csv"), spin_rows)
         meta["spin_curve_points"] = spin_points

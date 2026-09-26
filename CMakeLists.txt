@@ -5629,6 +5629,34 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # One signed-spin convention for Kerr ISCO and photon-orbit radii.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_orbit_convention_test.cpp")
+    add_executable(kerr_orbit_convention_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_orbit_convention_test.cpp"
+    )
+    target_link_libraries(kerr_orbit_convention_test PRIVATE blackhole_physics)
+    target_include_directories(kerr_orbit_convention_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_orbit_convention_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_orbit_convention_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_orbit_convention_test PRIVATE GTest::gtest_main)
+
+    add_test(NAME kerr_orbit_convention_validation COMMAND kerr_orbit_convention_test)
+    set_tests_properties(kerr_orbit_convention_validation PROPERTIES
+      LABELS "physics;kerr;isco"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_orbit_convention_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # LQG-modified Kerr metric test (D6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp")
     add_executable(lqg_kerr_test

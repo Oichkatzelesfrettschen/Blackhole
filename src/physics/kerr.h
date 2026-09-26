@@ -209,11 +209,16 @@ namespace physics {
  *   Z1 = 1 + (1 - a*^2)^(1/3) * ((1 + a*)^(1/3) + (1 - a*)^(1/3))
  *   Z2 = sqrt(3 a*^2 + Z1^2)
  *
- * Minus sign for prograde (co-rotating), plus for retrograde.
+ * Signed-spin convention, shared with kerrPhotonOrbitPrograde/Retrograde and
+ * novikov_thorne::iscoRadius: a > 0 rotates about +z, a < 0 about -z, and
+ * "prograde" names an orbit with angular momentum along +z. The minus sign
+ * applies when the orbit co-rotates with the hole (a * L_z > 0), the plus sign
+ * when it counter-rotates, so kerrIscoRadius(m, -a, true) ==
+ * kerrIscoRadius(m, a, false). At a* = -0.9 the prograde ISCO is 8.7174 M.
  *
  * @param mass Black hole mass [g]
- * @param a Spin parameter [cm]
- * @param prograde true for prograde orbit, false for retrograde
+ * @param a Signed spin parameter [cm]
+ * @param prograde true for angular momentum along +z, false along -z
  * @return ISCO radius [cm]
  */
 [[nodiscard]] inline double kerrIscoRadius(double mass, double a, bool prograde = true) {
@@ -235,8 +240,10 @@ namespace physics {
 
   const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + (2.0 * z2)));
 
-  // Prograde: minus sign; Retrograde: plus sign
-  const double rIscoOverM = prograde ? (3.0 + z2 - sqrtTerm) : (3.0 + z2 + sqrtTerm);
+  // Co-rotating orbit: minus sign; counter-rotating: plus sign. At a* = 0 the
+  // square-root term vanishes and both give 6M.
+  const bool coRotating = prograde ? (aStar >= 0.0) : (aStar <= 0.0);
+  const double rIscoOverM = coRotating ? (3.0 + z2 - sqrtTerm) : (3.0 + z2 + sqrtTerm);
 
   return rIscoOverM * mGeom;
 }
@@ -246,9 +253,12 @@ namespace physics {
 // ============================================================================
 
 /**
- * @brief Compute prograde photon orbit radius.
+ * @brief Compute prograde photon orbit radius (angular momentum along +z).
  *
  * r_ph = 2M(1 + cos(2/3 * arccos(-a*)))
+ *
+ * Signed spin as in kerrIscoRadius: at a* < 0 the +z orbit counter-rotates
+ * (3.9103 M at a* = -0.9).
  *
  * @param mass Black hole mass [g]
  * @param a Spin parameter [cm]
@@ -266,9 +276,11 @@ namespace physics {
 }
 
 /**
- * @brief Compute retrograde photon orbit radius.
+ * @brief Compute retrograde photon orbit radius (angular momentum along -z).
  *
  * r_ph = 2M(1 + cos(2/3 * arccos(a*)))
+ *
+ * Signed spin as in kerrIscoRadius: at a* < 0 the -z orbit co-rotates.
  *
  * @param mass Black hole mass [g]
  * @param a Spin parameter [cm]

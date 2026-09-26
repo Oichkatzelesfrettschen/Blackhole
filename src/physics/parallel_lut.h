@@ -140,9 +140,9 @@ inline SpinRadiiLut generateSpinRadiiLutParallel(int size, double massSolar, dou
     double u = static_cast<double>(i) / (size - 1);
     double spin = spinMin + u * (spinMax - spinMin);
     double a = spin * rG;
-    bool prograde = spin >= 0.0;
-    double rIsco = kerrIscoRadius(mass, a, prograde);
-    double rPh = prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
+    // Disk along +z; signed spin selects co- or counter-rotation (kerrIscoRadius).
+    double rIsco = kerrIscoRadius(mass, a, true);
+    double rPh = kerrPhotonOrbitPrograde(mass, a);
 
     lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
     lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);
@@ -156,10 +156,9 @@ inline SpinRadiiLut generateSpinRadiiLutParallel(int size, double massSolar, dou
     double const u = static_cast<double>(i) / (size - 1);
     double const spin = spinMin + (u * (spinMax - spinMin));
     double const a = spin * rG;
-    bool const prograde = spin >= 0.0;
-    double const rIsco = kerrIscoRadius(mass, a, prograde);
-    double const rPh =
-        prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
+    // Disk along +z; signed spin selects co- or counter-rotation (kerrIscoRadius).
+    double const rIsco = kerrIscoRadius(mass, a, true);
+    double const rPh = kerrPhotonOrbitPrograde(mass, a);
 
     lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
     lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);

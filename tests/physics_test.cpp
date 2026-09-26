@@ -801,10 +801,8 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       const double expectedRs = physics::schwarzschildRadius(mass);
       const double rG = physics::G * mass / physics::C2;
       const double a = spin * rG;
-      const bool prograde = spin >= 0.0;
-      const double expectedIsco = physics::kerrIscoRadius(mass, a, prograde);
-      const double expectedPh = prograde ? physics::kerrPhotonOrbitPrograde(mass, a)
-                                         : physics::kerrPhotonOrbitRetrograde(mass, a);
+      const double expectedIsco = physics::kerrIscoRadius(mass, a, true);
+      const double expectedPh = physics::kerrPhotonOrbitPrograde(mass, a);
 
       TestResult const rsResult{.name = "Validation r_s",
                                 .expected = expectedRs,
@@ -869,10 +867,8 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       for (std::size_t i = 0; i < spins.size(); ++i) {
         double const spin = spins.at(i);
         double const a = spin * rG;
-        bool const prograde = spin >= 0.0;
-        double const expectedIsco = physics::kerrIscoRadius(mass, a, prograde) / rS;
-        double const expectedPh = prograde ? physics::kerrPhotonOrbitPrograde(mass, a) / rS
-                                           : physics::kerrPhotonOrbitRetrograde(mass, a) / rS;
+        double const expectedIsco = physics::kerrIscoRadius(mass, a, true) / rS;
+        double const expectedPh = physics::kerrPhotonOrbitPrograde(mass, a) / rS;
         maxIscoDiff = std::max(maxIscoDiff, std::abs(expectedIsco - iscoOverRs.at(i)));
         maxPhDiff = std::max(maxPhDiff, std::abs(expectedPh - phOverRs.at(i)));
       }
