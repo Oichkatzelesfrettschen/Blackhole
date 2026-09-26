@@ -110,6 +110,12 @@ struct SkyRay {
   int steps = 0;
 };
 
+/** @brief Revision of the ray integration, termination, and per-texel
+ *         products (traceSkyRay, traceImage, sourceSpans, findPeakBlueshift).
+ *         Any change to what they compute for the same inputs increments it;
+ *         lutHash folds it, so cached bundles of an older tracer are rebuilt. */
+inline constexpr std::uint32_t K_TRACER_VERSION = 1;
+
 /** @brief Traces the photon received along `look` backward from the observer. */
 [[nodiscard]] SkyRay traceSkyRay(const Tetrad &tetrad, const Vec3 &look,
                                  const TraceSettings &settings);

@@ -24,8 +24,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
+#include <fstream>
+#include <ios>
+#include <iterator>
 #include <numbers>
 #include <optional>
+#include <random>
+#include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -78,6 +85,51 @@ double fateEdge(const sky::Tetrad &tetrad, double low, double high, double latit
     (escapes(tetrad, middle, latitude) == lowEscapes ? low : high) = middle;
   }
   return 0.5 * (low + high);
+}
+
+/** @brief A fresh directory under the system temporary path, removed with
+ *         its contents when the scope ends (including an early ASSERT return). */
+class ScratchDirectory {
+public:
+  ScratchDirectory() {
+    std::random_device device;
+    constexpr int attempts = 16;
+    for (int attempt = 0; attempt < attempts && path_.empty(); ++attempt) {
+      const std::filesystem::path candidate =
+          std::filesystem::temp_directory_path() /
+          std::format("observer_sky_map_test_{:08x}{:08x}", device(), device());
+      std::error_code error;
+      if (std::filesystem::create_directory(candidate, error)) {
+        path_ = candidate;
+      }
+    }
+  }
+  ScratchDirectory(const ScratchDirectory &) = delete;
+  ScratchDirectory &operator=(const ScratchDirectory &) = delete;
+  ScratchDirectory(ScratchDirectory &&) = delete;
+  ScratchDirectory &operator=(ScratchDirectory &&) = delete;
+  ~ScratchDirectory() {
+    if (!path_.empty()) {
+      std::error_code error;
+      std::filesystem::remove_all(path_, error);
+    }
+  }
+  [[nodiscard]] const std::filesystem::path &path() const { return path_; }
+
+private:
+  std::filesystem::path path_;
+};
+
+/** @brief Sorted file names in `directory`. */
+std::vector<std::string> fileNames(const std::filesystem::path &directory) {
+  std::vector<std::string> names;
+  std::transform(std::filesystem::directory_iterator(directory),
+                 std::filesystem::directory_iterator(), std::back_inserter(names),
+                 [](const std::filesystem::directory_entry &entry) {
+                   return entry.path().filename().string();
+                 });
+  std::ranges::sort(names);
+  return names;
 }
 
 sky::ObserverKey orbiting(double epsilon, double x) {
@@ -430,8 +482,9 @@ TEST(ObserverSkyMap, LutRoundTripsThroughTheCache) {
   const sky::ObserverKey key = orbiting(0.1, 3.0);
   const sky::LutDimensions dimensions{.width = 32, .height = 16, .tileRadial = 8, .tileAzimuth = 8};
   const sky::ObserverSkyLut built = sky::buildObserverSkyLut(key, dimensions, defaultSettings(), 2);
-  const std::filesystem::path directory =
-      std::filesystem::temp_directory_path() / "observer_sky_map_test";
+  const ScratchDirectory scratch;
+  const std::filesystem::path &directory = scratch.path();
+  ASSERT_FALSE(directory.empty()) << "no scratch directory";
   ASSERT_TRUE(sky::writeObserverSkyLut(built, directory));
   const std::uint64_t hash = sky::lutHash(key, dimensions, defaultSettings());
   const std::filesystem::path file = directory / (sky::lutStem(hash) + ".bin");
@@ -454,6 +507,37 @@ TEST(ObserverSkyMap, LutRoundTripsThroughTheCache) {
   // A rebuild with a different thread count is bit-identical.
   EXPECT_EQ(sky::buildObserverSkyLut(key, dimensions, defaultSettings(), 1).sky.rgba,
             built.sky.rgba);
+}
+
+/** @brief Publishing twice leaves only the bundle and its sidecar, and one
+ *         flipped bit in the texel payload fails the bundle's checksum. */
+TEST(ObserverSkyMap, PublishedBundleIsWholeAndChecksummed) {
+  const sky::ObserverKey key = orbiting(0.1, 3.0);
+  const sky::LutDimensions dimensions{.width = 32, .height = 16, .tileRadial = 8, .tileAzimuth = 8};
+  const sky::ObserverSkyLut built = sky::buildObserverSkyLut(key, dimensions, defaultSettings(), 2);
+  const ScratchDirectory scratch;
+  ASSERT_FALSE(scratch.path().empty()) << "no scratch directory";
+  ASSERT_TRUE(sky::writeObserverSkyLut(built, scratch.path()));
+  // Publishing over an existing bundle replaces it.
+  ASSERT_TRUE(sky::writeObserverSkyLut(built, scratch.path()));
+  const std::uint64_t hash = sky::lutHash(key, dimensions, defaultSettings());
+  const std::string stem = sky::lutStem(hash);
+  EXPECT_EQ(fileNames(scratch.path()), (std::vector<std::string>{stem + ".bin", stem + ".json"}))
+      << "a temporary file survived the write";
+  const std::filesystem::path file = scratch.path() / (stem + ".bin");
+  ASSERT_TRUE(sky::readObserverSkyLut(file, hash).has_value()) << "the intact bundle";
+  std::vector<char> bytes;
+  {
+    std::ifstream in(file, std::ios::binary);
+    bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+  ASSERT_GT(bytes.size(), std::size_t{64});
+  bytes.at(bytes.size() / 2) = static_cast<char>(bytes.at(bytes.size() / 2) ^ 0x01);
+  {
+    std::ofstream out(file, std::ios::binary | std::ios::trunc);
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  }
+  EXPECT_FALSE(sky::readObserverSkyLut(file, hash).has_value());
 }
 
 } // namespace

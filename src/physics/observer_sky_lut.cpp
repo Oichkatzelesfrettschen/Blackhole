@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -17,7 +18,9 @@
 #include <ios>
 #include <iterator>
 #include <numbers>
+#include <numeric>
 #include <optional>
+#include <random>
 #include <span>
 #include <string>
 #include <string_view>
@@ -32,6 +35,19 @@ namespace physics::observer_sky {
 namespace {
 
 constexpr std::array<char, 8> K_MAGIC{'B', 'H', 'O', 'S', 'K', 'Y', '0', '1'};
+
+constexpr std::uint64_t K_FNV_OFFSET = 0xcbf29ce484222325ULL;
+constexpr std::uint64_t K_FNV_PRIME = 0x100000001b3ULL;
+
+/** @brief Bytes of the trailing payload checksum. */
+constexpr std::size_t K_CHECKSUM_BYTES = 8;
+
+/** @brief FNV-1a 64 over `bytes`. */
+std::uint64_t fnv1a(std::span<const std::uint8_t> bytes) {
+  return std::accumulate(
+      bytes.begin(), bytes.end(), K_FNV_OFFSET,
+      [](std::uint64_t hash, std::uint8_t value) { return (hash ^ value) * K_FNV_PRIME; });
+}
 
 /** @brief Little-endian byte sink with FNV-1a folding of everything written. */
 class ByteWriter {
@@ -51,14 +67,14 @@ public:
   void size(std::size_t value) { u64(static_cast<std::uint64_t>(value)); }
   void byte(std::uint8_t value) {
     bytes_.push_back(value);
-    hash_ = (hash_ ^ value) * 0x100000001b3ULL;
+    hash_ = (hash_ ^ value) * K_FNV_PRIME;
   }
   [[nodiscard]] const std::vector<std::uint8_t> &bytes() const { return bytes_; }
   [[nodiscard]] std::uint64_t hash() const { return hash_; }
 
 private:
   std::vector<std::uint8_t> bytes_;
-  std::uint64_t hash_ = 0xcbf29ce484222325ULL;
+  std::uint64_t hash_ = K_FNV_OFFSET;
 };
 
 class ByteReader {
@@ -123,6 +139,7 @@ private:
 void writeInputs(ByteWriter &out, const ObserverKey &key, const LutDimensions &dimensions,
                  const TraceSettings &settings) {
   out.u32(K_LUT_FORMAT_VERSION);
+  out.u32(K_TRACER_VERSION);
   out.f64(key.epsilon);
   out.f64(key.x);
   out.f64(key.velocity);
@@ -142,16 +159,17 @@ void writeInputs(ByteWriter &out, const ObserverKey &key, const LutDimensions &d
 bool readInputs(ByteReader &in, ObserverKey &key, LutDimensions &dimensions,
                 TraceSettings &settings) {
   std::uint32_t version = 0;
+  std::uint32_t tracerVersion = 0;
   std::uint32_t maxSteps = 0;
-  const bool ok = in.u32(version) && in.f64(key.epsilon) && in.f64(key.x) && in.f64(key.velocity) &&
-                  in.size(dimensions.width) && in.size(dimensions.height) &&
-                  in.size(dimensions.tileRadial) && in.size(dimensions.tileAzimuth) &&
-                  in.f64(dimensions.tileRhoMin) && in.f64(dimensions.tileRhoMax) &&
-                  in.f64(settings.stepFraction) && in.f64(settings.escapeRadius) &&
-                  in.f64(settings.captureFraction) && in.f64(settings.captureFloor) &&
-                  in.u32(maxSteps);
+  const bool ok = in.u32(version) && in.u32(tracerVersion) && in.f64(key.epsilon) &&
+                  in.f64(key.x) && in.f64(key.velocity) && in.size(dimensions.width) &&
+                  in.size(dimensions.height) && in.size(dimensions.tileRadial) &&
+                  in.size(dimensions.tileAzimuth) && in.f64(dimensions.tileRhoMin) &&
+                  in.f64(dimensions.tileRhoMax) && in.f64(settings.stepFraction) &&
+                  in.f64(settings.escapeRadius) && in.f64(settings.captureFraction) &&
+                  in.f64(settings.captureFloor) && in.u32(maxSteps);
   settings.maxSteps = static_cast<int>(maxSteps);
-  return ok && version == K_LUT_FORMAT_VERSION;
+  return ok && version == K_LUT_FORMAT_VERSION && tracerVersion == K_TRACER_VERSION;
 }
 
 void writeVec3(ByteWriter &out, const Vec3 &v) {
@@ -258,7 +276,54 @@ std::vector<std::uint8_t> serialize(const ObserverSkyLut &lut) {
   out.u64(statistics.connectivityDisagreements);
   writeImage(out, lut.sky);
   writeImage(out, lut.tileImage);
+  const std::uint64_t checksum = out.hash();
+  out.u64(checksum);
   return out.bytes();
+}
+
+/** @brief A name no other writer in this or another process picks: a
+ *         per-process random token and a per-process counter. */
+std::string uniqueSuffix() {
+  static const std::uint64_t token = [] {
+    std::random_device device;
+    return (static_cast<std::uint64_t>(device()) << 32U) ^ static_cast<std::uint64_t>(device());
+  }();
+  static std::atomic<std::uint64_t> counter{0};
+  std::array<char, 48> text{};
+  (void)std::snprintf(text.data(), text.size(), ".%016llx.%llu.partial",
+                      static_cast<unsigned long long>(token),
+                      static_cast<unsigned long long>(counter.fetch_add(1)));
+  return text.data();
+}
+
+/**
+ * @brief Writes `bytes` to `target` through a temporary file in the same
+ *        directory, created exclusively (std::ios::noreplace), then renamed
+ *        over `target`. Concurrent writers of one target each publish a whole
+ *        file; the temporary is removed on any failure.
+ */
+bool publishFile(const std::filesystem::path &target, std::span<const char> bytes) {
+  constexpr int attempts = 8;
+  for (int attempt = 0; attempt < attempts; ++attempt) {
+    std::filesystem::path partial = target;
+    partial += uniqueSuffix();
+    std::ofstream file(partial, std::ios::binary | std::ios::out | std::ios::noreplace);
+    if (!file) {
+      continue; // The name exists, or the directory refuses the write.
+    }
+    file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    file.close();
+    std::error_code error;
+    if (file) {
+      std::filesystem::rename(partial, target, error);
+      if (!error) {
+        return true;
+      }
+    }
+    std::filesystem::remove(partial, error);
+    return false;
+  }
+  return false;
 }
 
 std::string formatDouble(double value) {
@@ -425,26 +490,12 @@ bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path 
   }
   const std::string stem = lutStem(lutHash(lut.key, lut.dimensions, lut.settings));
   const std::vector<std::uint8_t> bytes = serialize(lut);
-  // Write to a temporary name and rename, so a reader never sees a partial file.
-  const std::filesystem::path binary = directory / (stem + ".bin");
-  const std::filesystem::path partial = directory / (stem + ".bin.partial");
-  {
-    std::ofstream file(partial, std::ios::binary | std::ios::trunc);
-    std::vector<char> chars(bytes.size());
-    std::ranges::transform(bytes, chars.begin(),
-                           [](std::uint8_t b) { return std::bit_cast<char>(b); });
-    file.write(chars.data(), static_cast<std::streamsize>(chars.size()));
-    if (!file) {
-      return false;
-    }
-  }
-  std::filesystem::rename(partial, binary, error);
-  if (error) {
-    return false;
-  }
-  std::ofstream sidecar(directory / (stem + ".json"), std::ios::trunc);
-  sidecar << lutSidecarJson(lut);
-  return static_cast<bool>(sidecar);
+  std::vector<char> chars(bytes.size());
+  std::ranges::transform(bytes, chars.begin(),
+                         [](std::uint8_t b) { return std::bit_cast<char>(b); });
+  const std::string sidecar = lutSidecarJson(lut);
+  return publishFile(directory / (stem + ".bin"), chars) &&
+         publishFile(directory / (stem + ".json"), sidecar);
 }
 
 std::optional<ObserverSkyLut> readObserverSkyLut(const std::filesystem::path &file,
@@ -457,7 +508,16 @@ std::optional<ObserverSkyLut> readObserverSkyLut(const std::filesystem::path &fi
   std::ranges::transform(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>(),
                          std::back_inserter(bytes),
                          [](char c) { return std::bit_cast<std::uint8_t>(c); });
-  ByteReader in(bytes);
+  if (bytes.size() < K_CHECKSUM_BYTES) {
+    return std::nullopt;
+  }
+  const std::span<const std::uint8_t> payload(bytes.data(), bytes.size() - K_CHECKSUM_BYTES);
+  std::uint64_t storedChecksum = 0;
+  ByteReader trailer(std::span<const std::uint8_t>(bytes).last(K_CHECKSUM_BYTES));
+  if (!trailer.u64(storedChecksum) || storedChecksum != fnv1a(payload)) {
+    return std::nullopt;
+  }
+  ByteReader in(payload);
   ObserverSkyLut lut;
   if (!in.magic() || !readInputs(in, lut.key, lut.dimensions, lut.settings) ||
       lutHash(lut.key, lut.dimensions, lut.settings) != expectedHash) {

@@ -5,14 +5,16 @@
  *        content-addressed binary cache with a JSON sidecar.
  *
  * The bundle is keyed only by the observer (epsilon, x, v), the map
- * dimensions, and the trace settings; lutHash folds exactly those inputs, so
- * a file whose name carries the hash can be reused without re-tracing. The
- * binary is little-endian: an 8-byte magic, the format version, the key,
- * dimensions and settings, the tile frame, the statistics, then the two
- * images row-major (equirectangular first), each as RGBA32F texels followed by
- * RG32F source spans. Every double is written
- * through its bit pattern, so a read reproduces the build bit for bit on the
- * same host.
+ * dimensions, the trace settings, and the tracer revision K_TRACER_VERSION;
+ * lutHash folds exactly those inputs, so a file whose name carries the hash
+ * can be reused without re-tracing. The binary is little-endian: an 8-byte
+ * magic, the format and tracer versions, the key, dimensions and settings, the
+ * tile frame, the statistics, then the two images row-major (equirectangular
+ * first), each as RGBA32F texels followed by RG32F source spans, and last the
+ * FNV-1a 64 checksum of every preceding byte. Every double is written through
+ * its bit pattern, so a read reproduces the build bit for bit on the same
+ * host. Both files are written under a process-unique temporary name and
+ * renamed into place, so a reader sees a whole file or none.
  */
 
 #ifndef BLACKHOLE_PHYSICS_OBSERVER_SKY_LUT_H
@@ -69,10 +71,12 @@ struct ObserverSkyLut {
   SkyImage tileImage; ///< tileAzimuth x tileRadial log-polar.
 };
 
-/** @brief Increments whenever the binary layout or the traced content changes. */
-inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 2;
+/** @brief Increments whenever the binary layout changes; K_TRACER_VERSION
+ *         covers the traced content. */
+inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 3;
 
-/** @brief FNV-1a over the format version and every input that shapes the bundle. */
+/** @brief FNV-1a over the format and tracer versions and every input that
+ *         shapes the bundle. */
 [[nodiscard]] std::uint64_t lutHash(const ObserverKey &key, const LutDimensions &dimensions,
                                     const TraceSettings &settings);
 
@@ -90,8 +94,9 @@ inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 2;
 /** @brief Writes <dir>/<stem>.bin and <dir>/<stem>.json; false on any I/O error. */
 bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path &directory);
 
-/** @brief Reads a bundle; nothing when the file is missing, truncated, of
- *         another format version, or its stored inputs do not hash to `expectedHash`. */
+/** @brief Reads a bundle; nothing when the file is missing, truncated, fails
+ *         its checksum, is of another format or tracer version, or its stored
+ *         inputs do not hash to `expectedHash`. */
 [[nodiscard]] std::optional<ObserverSkyLut> readObserverSkyLut(const std::filesystem::path &file,
                                                                std::uint64_t expectedHash);
 
