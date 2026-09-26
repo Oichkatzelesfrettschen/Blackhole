@@ -23,7 +23,6 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
@@ -354,7 +353,14 @@ TEST(So4Upload, ColumnMajorCopyMatchesGlmMatrixVectorProduct) {
   const auto qR = tess::normalized(tess::Quat<double>{.w = 0.6, .x = 0.6, .y = 0.1, .z = -0.5});
   const tess::Mat4<double> m = tess::so4FromPair(qL, qR);
   const std::array<float, 16> packed = tess::toColumnMajor(m);
-  const glm::mat4 uploaded = glm::make_mat4(packed.data());
+  // Column by column, as GLSL reads the uniform: column c holds packed[4c..4c+3].
+  // glm::make_mat4 memcpys through the first column's vec4 subobject, which
+  // GCC -Warray-bounds=2 rejects.
+  const auto column = [&packed](std::size_t c) {
+    return glm::vec4(packed.at(4 * c), packed.at((4 * c) + 1), packed.at((4 * c) + 2),
+                     packed.at((4 * c) + 3));
+  };
+  const glm::mat4 uploaded(column(0), column(1), column(2), column(3));
   const tess::Vec4<double> v = {0.25, -1.0, 0.5, 0.75};
   const tess::Vec4<double> expected = tess::applyMatrix(m, v);
   const glm::vec4 actual = uploaded * glm::vec4(0.25f, -1.0f, 0.5f, 0.75f);
