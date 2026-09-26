@@ -96,10 +96,17 @@ def main() -> int:
 
     baseline = load_results(baseline_path)
     failures = 0
+    seen = set()
     for current_file in args.current:
         current = load_results(current_file)
+        seen.update(current)
         for name, entry in sorted(current.items()):
             base = baseline.get(name)
+            if not isinstance(entry.get("avg_ms"), (int, float)):
+                # physics_bench writes null for a non-finite timing.
+                print(f"INVALID: {name} has no finite avg_ms in {current_file}")
+                failures += 1
+                continue
             if base is None:
                 print(f"NEW: {name} has no baseline entry ({entry['avg_ms']:.3f} ms)")
                 continue
@@ -112,8 +119,15 @@ def main() -> int:
                 failures += 1
             else:
                 print(f"ok: {name} {(ratio - 1) * 100:+.1f}%")
+    # A benchmark that stops reporting is a lost measurement, not a pass.
+    for name in sorted(set(baseline) - seen):
+        print(f"MISSING: {name} is in {baseline_path} but absent from this run")
+        failures += 1
     if failures:
-        print(f"{failures} regression(s) beyond {args.threshold * 100:.0f}% threshold")
+        print(
+            f"{failures} failure(s): regressions beyond {args.threshold * 100:.0f}%, "
+            "invalid timings, or missing benchmarks"
+        )
         return 1
     print("all benchmarks within threshold")
     return 0

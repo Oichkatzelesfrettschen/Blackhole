@@ -50,6 +50,7 @@
 #include "physics/kerr.h"
 #include "physics/lut.h"
 #include "physics/raytracer.h"
+#include "physics/safe_limits.h"
 #include "physics/schwarzschild.h"
 #include "physics/xsimd_eval.h"
 #include "shader.h"
@@ -414,10 +415,28 @@ void writeCsv(const std::string &path, const BenchConfig &cfg,
 }
 
 /**
+ * @brief Write one JSON number, or null when the value is not finite.
+ *
+ * JSON has no infinity or NaN literal; iostream prints "inf" and "nan", which
+ * no JSON parser accepts. The value is classified by its bytes through
+ * physics::safeIsfinite. The classification is sound in an IEEE build, which
+ * the ci preset and the bench workflow use; under -ffast-math a non-finite sum
+ * formed in this translation unit is already poison when it is produced.
+ */
+void writeJsonNumber(std::ostream &out, const double &value) {
+  if (physics::safeIsfinite(value)) {
+    out << value;
+  } else {
+    out << "null";
+  }
+}
+
+/**
  * @brief Write benchmark results to a JSON file for regression tracking.
  *
  * Emits a top-level object with "config", "results" array, and accumulator
- * fields so the file is self-contained and machine-parseable.
+ * fields so the file is self-contained and machine-parseable; a non-finite
+ * timing or accumulator is written as null.
  *
  * @param path         Output file path.
  * @param cfg          Benchmark configuration used for the run.
@@ -455,18 +474,29 @@ void writeJson(const std::string &path, const BenchConfig &cfg,
     const auto &result = results[i];
   out << "    {\n";
   out << R"(      "name": ")" << result.name << "\",\n";
-  out << "      \"avg_ms\": " << result.avgMs << ",\n";
-  out << "      \"min_ms\": " << result.minMs << ",\n";
-  out << "      \"max_ms\": " << result.maxMs << ",\n";
-  out << "      \"work_units\": " << result.workUnits << ",\n";
-  out << "      \"units_per_sec\": " << result.unitsPerSec << ",\n";
+  out << "      \"avg_ms\": ";
+  writeJsonNumber(out, result.avgMs);
+  out << ",\n      \"min_ms\": ";
+  writeJsonNumber(out, result.minMs);
+  out << ",\n      \"max_ms\": ";
+  writeJsonNumber(out, result.maxMs);
+  out << ",\n      \"work_units\": ";
+  writeJsonNumber(out, result.workUnits);
+  out << ",\n      \"units_per_sec\": ";
+  writeJsonNumber(out, result.unitsPerSec);
+  out << ",\n";
   out << "      \"iterations\": " << result.iterations << "\n";
   out << "    }" << (i + 1 < results.size() ? "," : "") << "\n";
   }
   out << "  ],\n";
-  out << "  \"cpu_accum\": " << cpuAccum << ",\n";
-  out << "  \"gpu_elapsed_ns\": " << gpuElapsedNs << ",\n";
-  out << "  \"accumulator\": " << (cpuAccum + gpuElapsedNs) << "\n";
+  const double accumulator = cpuAccum + gpuElapsedNs;
+  out << "  \"cpu_accum\": ";
+  writeJsonNumber(out, cpuAccum);
+  out << ",\n  \"gpu_elapsed_ns\": ";
+  writeJsonNumber(out, gpuElapsedNs);
+  out << ",\n  \"accumulator\": ";
+  writeJsonNumber(out, accumulator);
+  out << "\n";
   out << "}\n";
 }
 
