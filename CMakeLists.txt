@@ -4114,6 +4114,33 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Kerr null geodesics against analytic oracles (Carter consistency,
+  # Bardeen capture edges, Ferrari roots)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_null_geodesic_test.cpp")
+    add_executable(kerr_null_geodesic_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_null_geodesic_test.cpp"
+    )
+    target_link_libraries(kerr_null_geodesic_test PRIVATE blackhole_physics GTest::gtest_main)
+    target_include_directories(kerr_null_geodesic_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_null_geodesic_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_null_geodesic_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME kerr_null_geodesic_validation COMMAND kerr_null_geodesic_test)
+    set_tests_properties(kerr_null_geodesic_validation PROPERTIES
+      LABELS "physics;kerr;geodesic"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_null_geodesic_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Campaign core (Horizon Command seam) tests: pure game logic against the
   # Schwarzschild time field, no GL context. IEEE flags match the campaign
   # libraries so the determinism gates hold under ENABLE_FAST_MATH too.

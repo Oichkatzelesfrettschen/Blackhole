@@ -128,23 +128,13 @@ struct RadialRoots {
 }
 
 /**
- * @brief Coefficients of the quartic R(r) = r^4 + c3*r^3 + c2*r^2 + c1*r + c0.
+ * @brief Coefficients of the depressed quartic R(r) = r^4 + c2 r^2 + c1 r + c0 (M = 1).
  *
- * Expanding R(r) in standard form (with M=1):
- *   c3 = 0 (no cubic term in Kerr)
- *   ... actually R(r) expanded gives:
- *   R(r) = r^4 + (a^2 - xi^2 - eta)*r^2 + 2*(eta + (xi-a)^2)*r - a^2*eta
- *
- * Wait: let me be more careful. R(r) = (r^2+a^2-a*xi)^2 - (r^2-2r+a^2)(eta+(xi-a)^2)
- * Expanding:
- *   (r^2+a^2-a*xi)^2 = r^4 + 2r^2(a^2-a*xi) + (a^2-a*xi)^2
- *   (r^2-2r+a^2)(eta+(xi-a)^2) = (eta+xi_a^2)*r^2 - 2(eta+xi_a^2)*r + a^2(eta+xi_a^2)
- *
- * So: R = r^4 + [2(a^2-a*xi) - eta - xi_a^2]*r^2
- *       + 2(eta+xi_a^2)*r
- *       + [(a^2-a*xi)^2 - a^2(eta+xi_a^2)]
- *
- * Note: c3 = 0 (no r^3 term), which is correct.
+ * Expanding R(r) = (r^2 + a^2 - a xi)^2 - (r^2 - 2r + a^2)(eta + (xi - a)^2):
+ *   c2 = 2(a^2 - a xi) - eta - (xi - a)^2
+ *   c1 = 2(eta + (xi - a)^2)
+ *   c0 = (a^2 - a xi)^2 - a^2 (eta + (xi - a)^2)
+ * There is no r^3 term.
  */
 struct QuarticCoeffs {
   double c0 = 0.0; // constant term
@@ -181,11 +171,14 @@ struct QuarticCoeffs {
 [[nodiscard]] inline RadialRoots findRadialRoots(const QuarticCoeffs &c) {
   RadialRoots result;
 
-  // Ferrari's resolvent cubic: y^3 - c2*y^2 - 4*c0*y + (4*c2*c0 - c1^2) = 0
-  // Substituting y = t + c2/3 to get depressed cubic t^3 + pt + q = 0
+  // Ferrari's resolvent cubic: y^3 - c2*y^2 - 4*c0*y + (4*c2*c0 - c1^2) = 0,
+  // where y = beta + gamma of the factorization below. Substituting
+  // y = t + c2/3 gives the depressed cubic t^3 + p t + q = 0 with
+  //   p = -c2^2/3 - 4 c0,
+  //   q = -2 c2^3/27 + (4/3) c2 c0 + 4 c2 c0 - c1^2 = -2 c2^3/27 + (8/3) c2 c0 - c1^2.
   const double pCoeff = (-(c.c2 * c.c2) / 3.0) - (4.0 * c.c0);
   const double qCoeff =
-      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((4.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
+      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((8.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
 
   // Cardano's formula for the resolvent cubic
   const double disc = ((qCoeff * qCoeff) / 4.0) + ((pCoeff * pCoeff * pCoeff) / 27.0);
@@ -199,12 +192,16 @@ struct QuarticCoeffs {
   } else {
     // Three real roots; use trigonometric form
     const double rVal = std::sqrt(-(pCoeff * pCoeff * pCoeff) / 27.0);
-    const double phi = std::acos(-qCoeff / (2.0 * rVal));
+    // k = 0 branch: the largest resolvent root, which keeps y1 - c2 >= 0
+    // (a real alpha) for every real quartic.
+    const double phi = std::acos(std::clamp(-qCoeff / (2.0 * rVal), -1.0, 1.0));
     y1 = (2.0 * std::cbrt(rVal) * std::cos(phi / 3.0)) + (c.c2 / 3.0);
   }
 
-  // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma)
-  const double a = y1 + c.c2;
+  // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma).
+  // Matching the r^2 coefficient gives beta + gamma - alpha^2 = c2, so
+  // alpha^2 = y1 - c2.
+  const double a = y1 - c.c2;
 
   if (a < 0.0) {
     // alpha is imaginary; all roots come in complex conjugate pairs

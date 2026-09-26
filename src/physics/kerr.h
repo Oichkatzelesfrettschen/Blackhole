@@ -30,6 +30,7 @@
 #ifndef PHYSICS_KERR_H
 #define PHYSICS_KERR_H
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -393,6 +394,15 @@ namespace physics {
 // Kerr Geodesics (Null) - Potentials + Mino-time stepping
 // ============================================================================
 
+/**
+ * @brief Conserved quantities of a Kerr null geodesic.
+ *
+ * q is Carter's constant in the separation of Carter (1968) and Gralla &
+ * Lupsasca, PRD 101, 044032 (2020): Theta(theta) = q + a^2 e^2 cos^2(theta)
+ * - lz^2 cot^2(theta) and R(r) = (e(r^2+a^2) - a lz)^2 - Delta (q + (lz - a e)^2).
+ * The same q enters both potentials, so R(r0) = (Sigma dr/dtau)^2 and
+ * Theta(theta0) = (Sigma dtheta/dtau)^2 hold at the initial point.
+ */
 struct KerrGeodesicConsts {
   double e;  // Energy per unit mass
   double lz; // Angular momentum
@@ -413,6 +423,15 @@ struct KerrGeodesicConsts {
   return c;
 }
 
+/**
+ * @brief Kerr geodesic state in Mino time.
+ *
+ * vr = dr/dlambda and vtheta = dtheta/dlambda are integrated through the
+ * second-order equations d^2r/dlambda^2 = R'(r)/2 and d^2theta/dlambda^2 =
+ * Theta'(theta)/2, so turning points need no sign bookkeeping. signR and
+ * signTheta seed the velocities (kerrInitMinoVelocities) and afterwards track
+ * sign(vr) and sign(vtheta).
+ */
 struct KerrGeodesicState {
   double r;
   double theta;
@@ -420,6 +439,8 @@ struct KerrGeodesicState {
   double t;
   double signR;     // +1 or -1
   double signTheta; // +1 or -1
+  double vr{0.0};     // dr/dlambda
+  double vtheta{0.0}; // dtheta/dlambda
 };
 
 /**
@@ -446,6 +467,86 @@ struct KerrPotentials {
 [[nodiscard]] KerrPotentials kerrPotentials(double r, double theta, double mass, double a,
                                             const KerrGeodesicConsts &c);
 
+/**
+ * @brief Null geodesic (constants plus Mino state) through a point with a given BL direction.
+ *
+ * kr, ktheta, kphi are the contravariant Boyer-Lindquist spatial components of
+ * the photon direction at (r, theta), in any overall scale. The null condition
+ * fixes k^t (future root); E = -k_t and lz = k_phi follow, and the result is
+ * normalized to E = 1. q is Carter's constant, p_theta^2 - a^2 cos^2 +
+ * lz^2 cot^2 with p_theta = Sigma k^theta / E, so that R(r) = vr^2 and
+ * Theta(theta) = vtheta^2 hold at the start with vr = Sigma k^r / E. The GPU
+ * initializers (kerrInitGeodesic, d_kerr_init_geodesic) compute the same quantities.
+ */
+struct KerrNullGeodesic {
+  KerrGeodesicConsts consts;
+  KerrGeodesicState state;
+};
+
+[[nodiscard]] inline KerrNullGeodesic kerrNullGeodesicFromBL(double r, double theta, double phi,
+                                                            double kr, double ktheta, double kphi,
+                                                            double mass, double a) {
+  const double mGeom = G * mass / C2;
+  const double sinT = std::sin(theta);
+  const double cosT = std::cos(theta);
+  const double sin2 = sinT * sinT;
+  const double cos2 = cosT * cosT;
+  const double sigma = (r * r) + (a * a * cos2);
+  const double delta = (r * r) - (2.0 * mGeom * r) + (a * a);
+  const double f = 2.0 * mGeom * r / sigma;
+  const double gtt = -(1.0 - f);
+  const double gtphi = -f * a * sin2;
+  const double grr = sigma / delta;
+  const double gphph = ((r * r) + (a * a) + (f * a * a * sin2)) * sin2;
+
+  // g_tt kt^2 + 2 g_tphi kphi kt + spatial = 0; outside the ergoregion the
+  // roots have opposite signs and the positive one is future-directed.
+  const double spatial = (grr * kr * kr) + (sigma * ktheta * ktheta) + (gphph * kphi * kphi);
+  const double hb = gtphi * kphi;
+  const double disc = std::max((hb * hb) - (gtt * spatial), 0.0);
+  const double rootA = (-hb + std::sqrt(disc)) / gtt;
+  const double rootB = (-hb - std::sqrt(disc)) / gtt;
+  const double kt = std::max(rootA, rootB);
+
+  const double eRaw = -((gtt * kt) + (gtphi * kphi));
+  const double lzRaw = (gtphi * kt) + (gphph * kphi);
+  const double invE = 1.0 / eRaw;
+
+  KerrNullGeodesic g{};
+  g.consts.e = 1.0;
+  g.consts.lz = lzRaw * invE;
+  const double pTheta = sigma * ktheta * invE;
+  g.consts.q = (pTheta * pTheta) - (a * a * cos2) + (g.consts.lz * g.consts.lz * cos2 / sin2);
+  g.state.r = r;
+  g.state.theta = theta;
+  g.state.phi = phi;
+  g.state.t = 0.0;
+  g.state.vr = sigma * kr * invE;
+  g.state.vtheta = pTheta;
+  g.state.signR = (g.state.vr >= 0.0) ? 1.0 : -1.0;
+  g.state.signTheta = (g.state.vtheta >= 0.0) ? 1.0 : -1.0;
+  return g;
+}
+
+/**
+ * @brief Seed vr = signR sqrt(R) and vtheta = signTheta sqrt(Theta) from the potentials.
+ *
+ * A negative potential at the seed point (a state off the geodesic's allowed
+ * region) seeds zero velocity; the second-order step then moves the state
+ * back into the allowed region along R'(r).
+ */
+[[nodiscard]] KerrGeodesicState kerrInitMinoVelocities(const KerrGeodesicState &state,
+                                                       double mass, double a,
+                                                       const KerrGeodesicConsts &c);
+
+/**
+ * @brief One classical RK4 step of the second-order Mino-time system.
+ *
+ * State (r, theta, vr, vtheta, phi, t) with vr' = R'/2, vtheta' = Theta'/2 and
+ * Boyer-Lindquist phi' and t'. The step passes radial and polar turning points
+ * continuously; a first-order step on +-sqrt(max(R,0)) stalls there because the
+ * clamped root is zero on both sides of the turning point.
+ */
 [[nodiscard]] KerrGeodesicState kerrStepMino(const KerrGeodesicState &state, double mass, double a,
                                              const KerrGeodesicConsts &c, double dlam);
 
@@ -516,6 +617,11 @@ public:
   [[nodiscard]] KerrPotentials potentials(double r, double theta,
                                           const KerrGeodesicConsts &c) const {
     return kerrPotentials(r, theta, mass_, a_, c);
+  }
+
+  [[nodiscard]] KerrGeodesicState initMinoVelocities(const KerrGeodesicState &state,
+                                                     const KerrGeodesicConsts &c) const {
+    return kerrInitMinoVelocities(state, mass_, a_, c);
   }
 
   [[nodiscard]] KerrGeodesicState stepMino(const KerrGeodesicState &state,
