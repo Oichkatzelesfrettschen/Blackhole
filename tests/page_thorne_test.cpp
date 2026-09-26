@@ -141,6 +141,22 @@ TEST(PageThorne, ThinDiskFluxUsesPageThorne) {
   }
 }
 
+TEST(PageThorne, ReusedProfileMatchesPerRadiusFlux) {
+  // A radial sweep (diskFluxBatch) builds one PageThorneProfile per disk;
+  // reusing it returns the same doubles as rebuilding it at every radius,
+  // including a = 0, where the root x2 = 0 carries no term.
+  for (double const aStar : {-0.998, 0.0, 0.9, 0.998}) {
+    physics::DiskParams const disk = physics::kerrDisk(10.0, aStar, 0.1, true);
+    physics::PageThorneProfile const profile = physics::diskPageThorneProfile(disk);
+    EXPECT_EQ(profile.iscoRadius(), physics::pageThorneIscoRadius(aStar)) << "a = " << aStar;
+    for (int i = 0; i <= 64; ++i) {
+      double const r = disk.rIn * (1.0 + (3.0 * i / 64.0));
+      EXPECT_EQ(physics::diskFlux(r, disk, profile), physics::diskFlux(r, disk))
+          << "a = " << aStar << " r / r_in = " << r / disk.rIn;
+    }
+  }
+}
+
 namespace {
 
 // At |aStar| = 1 the roots x1 and x2 coincide; every function evaluates at

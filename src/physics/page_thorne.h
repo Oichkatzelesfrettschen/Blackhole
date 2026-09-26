@@ -113,38 +113,80 @@ struct KerrCircularOrbit {
 }
 
 /**
+ * @brief Spin-only terms of the Page-Thorne flux shape S(r), M = 1.
+ *
+ * The clamped spin, the ISCO radius x0^2, the roots x_i of x^3 - 3x + 2a and
+ * their log coefficients depend on aStar alone. A radial sweep at one spin
+ * (diskFluxBatch, pageThorneFluxPeakRadius) builds the profile once, and
+ * shape(r) then costs one square root and four logarithms per radius instead
+ * of also three cube roots, an arccosine and three cosines. shape(r) runs the
+ * same operations in the same order as pageThorneFluxShape, which delegates
+ * to it, so both return identical doubles.
+ *
+ * A root with |x_i| < 1e-14 carries no term: its term vanishes in the limit
+ * x_i -> 0, which is the root x2 at aStar = 0.
+ */
+class PageThorneProfile {
+public:
+  explicit PageThorneProfile(double aStarIn) noexcept
+      : aStar_(pageThorneSpin(aStarIn)), rIsco_(pageThorneIscoRadius(aStar_)),
+        x0_(std::sqrt(rIsco_)) {
+    double const theta = std::acos(aStar_) / 3.0;
+    constexpr double kThird = 1.047197551196597746154214461093; // pi / 3
+    roots_ = {2.0 * std::cos(theta - kThird), 2.0 * std::cos(theta + kThird),
+              -2.0 * std::cos(theta)};
+    for (std::size_t i = 0; i < roots_.size(); ++i) {
+      double const xi = roots_.at(i);
+      double const xj = roots_.at((i + 1) % 3);
+      double const xk = roots_.at((i + 2) % 3);
+      active_.at(i) = !(std::abs(xi) < 1e-14);
+      coeffs_.at(i) =
+          active_.at(i) ? 3.0 * (xi - aStar_) * (xi - aStar_) / (xi * (xi - xj) * (xi - xk)) : 0.0;
+    }
+  }
+
+  /** @brief Clamped spin the profile evaluates at (pageThorneSpin). */
+  [[nodiscard]] double spin() const noexcept { return aStar_; }
+
+  /** @brief ISCO radius in units of M (pageThorneIscoRadius). */
+  [[nodiscard]] double iscoRadius() const noexcept { return rIsco_; }
+
+  /** @brief S(r) = F(r) * 8 pi / (3 Mdot) at radius r [M]; zero at and inside the ISCO. */
+  [[nodiscard]] double shape(double r) const noexcept {
+    if (!(r > rIsco_)) {
+      return 0.0;
+    }
+    double const x = std::sqrt(r);
+    double bracket = x - x0_ - (1.5 * aStar_ * std::log(x / x0_));
+    for (std::size_t i = 0; i < roots_.size(); ++i) {
+      if (!active_.at(i)) {
+        continue;
+      }
+      double const xi = roots_.at(i);
+      bracket -= coeffs_.at(i) * std::log((x - xi) / (x0_ - xi));
+    }
+    double const x4 = x * x * x * x;
+    double const q = (x * x * x) - (3.0 * x) + (2.0 * aStar_);
+    return bracket / (x4 * q);
+  }
+
+private:
+  double aStar_;
+  double rIsco_;
+  double x0_;
+  std::array<double, 3> roots_{};
+  std::array<double, 3> coeffs_{};
+  std::array<bool, 3> active_{};
+};
+
+/**
  * @brief Page-Thorne flux shape S(r) = F(r) * 8 pi / (3 Mdot), M = 1.
  *
- * Zero at and inside the ISCO. The i-th root term vanishes in the limit
- * x_i -> 0, which is the root x2 at aStar = 0; the guard takes that limit.
+ * Zero at and inside the ISCO. A sweep over r at one spin reuses a
+ * PageThorneProfile instead.
  */
 [[nodiscard]] inline double pageThorneFluxShape(double r, double aStarIn) noexcept {
-  double const aStar = pageThorneSpin(aStarIn);
-  double const rIsco = pageThorneIscoRadius(aStar);
-  if (!(r > rIsco)) {
-    return 0.0;
-  }
-  double const x = std::sqrt(r);
-  double const x0 = std::sqrt(rIsco);
-  double const theta = std::acos(aStar) / 3.0;
-  constexpr double kThird = 1.047197551196597746154214461093; // pi / 3
-  std::array<double, 3> const roots = {2.0 * std::cos(theta - kThird),
-                                       2.0 * std::cos(theta + kThird), -2.0 * std::cos(theta)};
-
-  double bracket = x - x0 - (1.5 * aStar * std::log(x / x0));
-  for (std::size_t i = 0; i < roots.size(); ++i) {
-    double const xi = roots.at(i);
-    double const xj = roots.at((i + 1) % 3);
-    double const xk = roots.at((i + 2) % 3);
-    if (std::abs(xi) < 1e-14) {
-      continue;
-    }
-    double const coeff = 3.0 * (xi - aStar) * (xi - aStar) / (xi * (xi - xj) * (xi - xk));
-    bracket -= coeff * std::log((x - xi) / (x0 - xi));
-  }
-  double const x4 = x * x * x * x;
-  double const q = (x * x * x) - (3.0 * x) + (2.0 * aStar);
-  return bracket / (x4 * q);
+  return PageThorneProfile(aStarIn).shape(r);
 }
 
 /**
@@ -164,27 +206,28 @@ struct KerrCircularOrbit {
  * 0.998.
  */
 [[nodiscard]] inline double pageThorneFluxPeakRadius(double aStar) noexcept {
+  PageThorneProfile const profile(aStar);
   double const rIsco = pageThorneIscoRadius(aStar);
   double lo = rIsco;
   double hi = 4.0 * rIsco;
   double const invPhi = 0.5 * (std::sqrt(5.0) - 1.0);
   double c = hi - (invPhi * (hi - lo));
   double d = lo + (invPhi * (hi - lo));
-  double fc = pageThorneFluxShape(c, aStar);
-  double fd = pageThorneFluxShape(d, aStar);
+  double fc = profile.shape(c);
+  double fd = profile.shape(d);
   for (int iter = 0; iter < 200 && (hi - lo) > 1e-12 * rIsco; ++iter) {
     if (fc > fd) {
       hi = d;
       d = c;
       fd = fc;
       c = hi - (invPhi * (hi - lo));
-      fc = pageThorneFluxShape(c, aStar);
+      fc = profile.shape(c);
     } else {
       lo = c;
       c = d;
       fc = fd;
       d = lo + (invPhi * (hi - lo));
-      fd = pageThorneFluxShape(d, aStar);
+      fd = profile.shape(d);
     }
   }
   return 0.5 * (lo + hi);
