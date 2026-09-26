@@ -4216,6 +4216,28 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Q48 fixed-point station clock: closed form, quantization bound, and carry.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/colony_clock_test.cpp")
+    add_executable(colony_clock_test
+      "${PROJECT_SOURCE_DIR}/tests/colony_clock_test.cpp"
+    )
+    target_compile_options(colony_clock_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(colony_clock_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(colony_clock_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME colony_clock_validation COMMAND colony_clock_test)
+    set_tests_properties(colony_clock_validation PROPERTIES
+      LABELS "campaign;determinism;time-dilation"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(colony_clock_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
     add_executable(campaign_task_graph_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"
@@ -6555,7 +6577,7 @@ set(_bh_deterministic_fp_targets
   blackhole_physics blackhole_campaign campaign_sim constellation_sim)
 get_property(_bh_all_targets DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
 foreach(_bh_target IN LISTS _bh_all_targets)
-  if(_bh_target MATCHES "^(campaign_.*|constellation|blackhole_time_field|kerr_time_field|kerr_observer|balance_sweep)_test$"
+  if(_bh_target MATCHES "^(campaign_.*|colony_.*|event_.*|constellation|blackhole_time_field|kerr_time_field|kerr_observer|balance_sweep)_test$"
      OR _bh_target MATCHES "^(blackhole_physics|blackhole_campaign|campaign_sim|constellation_sim)_(generic|fma)$")
     list(APPEND _bh_deterministic_fp_targets "${_bh_target}")
   endif()
