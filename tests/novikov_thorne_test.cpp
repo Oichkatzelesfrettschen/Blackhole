@@ -292,10 +292,17 @@ bool testNormalizedFluxPeak() {
 /**
  * @brief Test 9: Temperature scale in CGS
  *
- * Expected: T^4 = 3 G M Mdot f / (8 pi sigma r^3) at r = 9 M, a = 0,
- * Mdot = 0.1 Mdot_Edd, M = 4e6 M_sun, with the Page-Thorne f(9 M) = 0.0822:
- * 1.565e5 K. physics::C is already in cm/s, so an extra factor 100 on c
- * inflates T by 100.
+ * T^4 = 3 G M Mdot f / (8 pi sigma r^3) at r = 9 M, a = 0, Mdot = 0.1
+ * Mdot_Edd (L_Edd = 1.26e38 erg/s per M_sun, eta = 1 - sqrt(8/9)),
+ * M = 4e6 M_sun, with the Schwarzschild Page-Thorne factor
+ * f(9 M) = 0.0822227 is 156495.3 K. The literal comes from a 40-digit mpmath
+ * evaluation of the Schwarzschild closed form
+ * f = [1 - sqrt(6/r) + sqrt(3/(4r)) ln((sqrt(r) + sqrt3)(sqrt6 - sqrt3) /
+ * ((sqrt(r) - sqrt3)(sqrt6 + sqrt3)))] / (1 - 3/r), independent of the
+ * cubic-root form in page_thorne.h, with the constants.h values of G, c and
+ * M_sun and the sigma = 5.67e-5 that diskTemperature uses (the CODATA
+ * physics::SIGMA_SB moves T by 1.65e-5 relative). The 1e-6 tolerance admits
+ * double rounding and rejects both that sigma change and any factor on c.
  */
 bool testTemperatureScale() {
   std::cout << "\n[TEST 9] Temperature Scale (CGS)\n";
@@ -305,22 +312,13 @@ bool testTemperatureScale() {
   const double massSolar = 4.0e6;
   const double r = 9.0;
   const double t = NovikovThorneDisk::diskTemperature(r, aStar, 0.1, massSolar);
-
-  const double c = ::physics::C;
-  const double mass = massSolar * ::physics::M_SUN;
-  const double eta = NovikovThorneDisk::radiativeEfficiency(aStar);
-  const double mdot = 0.1 * 1.26e38 * massSolar / (eta * c * c);
-  const double rCgs = r * ::physics::G * mass / (c * c);
-  const double f = ::physics::pageThorneRelativisticFactor(r, aStar);
-  const double expected = std::pow(3.0 * ::physics::G * mass * mdot * f /
-                                       (8.0 * ::physics::PI * 5.67e-5 * rCgs * rCgs * rCgs),
-                                   0.25);
+  const double expected = 156495.305499;
 
   std::cout << std::scientific << std::setprecision(6);
   std::cout << "  Computed: T = " << t << " K\n";
   std::cout << "  Expected: T = " << expected << " K\n";
 
-  const bool passed = std::abs(t / expected - 1.0) < 1e-9 && t > 1.0e5 && t < 1.0e6;
+  const bool passed = std::abs(t / expected - 1.0) < 1e-6;
   std::cout << "  Status:   " << (passed ? "PASS" : "FAIL") << "\n";
 
   return passed;
