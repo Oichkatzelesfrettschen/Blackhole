@@ -20,9 +20,11 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -42,6 +44,7 @@
 #include "kerr_observer.h"
 #include "observer_sky_lut.h"
 #include "observer_sky_map.h"
+#include "platform/resource_paths.h"
 
 namespace {
 
@@ -120,6 +123,81 @@ public:
 private:
   std::filesystem::path path_;
 };
+
+/** @brief Restores the process environment after cache path assertions. */
+class CacheEnvironment {
+public:
+  CacheEnvironment() {
+    if (const char *value = std::getenv("XDG_CACHE_HOME")) {
+      xdgCacheHome_ = value;
+    }
+    if (const char *value = std::getenv("HOME")) {
+      home_ = value;
+    }
+  }
+  ~CacheEnvironment() {
+    restore("XDG_CACHE_HOME", xdgCacheHome_);
+    restore("HOME", home_);
+  }
+  CacheEnvironment(const CacheEnvironment &) = delete;
+  CacheEnvironment &operator=(const CacheEnvironment &) = delete;
+
+private:
+  static void restore(const char *name, const std::optional<std::string> &value) {
+    if (value) {
+      setenv(name, value->c_str(), 1);
+    } else {
+      unsetenv(name);
+    }
+  }
+  std::optional<std::string> xdgCacheHome_;
+  std::optional<std::string> home_;
+};
+
+TEST(ObserverSkyMap, UserCacheDirectoryUsesAbsoluteXdgOrHome) {
+  const CacheEnvironment environment;
+  const ScratchDirectory scratch;
+  ASSERT_FALSE(scratch.path().empty());
+  const std::string home = scratch.path().string();
+  ASSERT_EQ(setenv("HOME", home.c_str(), 1), 0);
+  const std::string xdgCacheHome = (scratch.path() / "xdg").string();
+  ASSERT_EQ(setenv("XDG_CACHE_HOME", xdgCacheHome.c_str(), 1), 0);
+  EXPECT_EQ(platform::userCacheDirectory(), scratch.path() / "xdg" / "blackhole");
+  ASSERT_EQ(setenv("XDG_CACHE_HOME", "relative-cache", 1), 0);
+  EXPECT_EQ(platform::userCacheDirectory(), scratch.path() / ".cache" / "blackhole");
+  ASSERT_EQ(unsetenv("XDG_CACHE_HOME"), 0);
+  EXPECT_EQ(platform::userCacheDirectory(), scratch.path() / ".cache" / "blackhole");
+  ASSERT_EQ(unsetenv("HOME"), 0);
+  EXPECT_TRUE(platform::userCacheDirectory().empty());
+}
+
+TEST(ObserverSkyMap, EvictionKeepsHashAndRemovesOldestSidecars) {
+  const ScratchDirectory scratch;
+  ASSERT_FALSE(scratch.path().empty());
+  const auto now = std::filesystem::file_time_type::clock::now();
+  const auto writeBundle = [&](std::uint64_t hash, int age) {
+    const auto stem = sky::lutStem(hash);
+    const auto binary = scratch.path() / (stem + ".bin");
+    std::ofstream(binary, std::ios::binary) << "12345678";
+    std::ofstream(scratch.path() / (stem + ".json")) << "{}";
+    std::error_code error;
+    std::filesystem::last_write_time(binary, now - std::chrono::hours(age), error);
+    EXPECT_FALSE(error);
+  };
+  writeBundle(1, 4);
+  writeBundle(2, 3);
+  writeBundle(3, 2);
+  writeBundle(4, 1);
+  sky::evictObserverSkyBundles(scratch.path(), 16, 1);
+  for (std::uint64_t hash : {1ULL, 4ULL}) {
+    EXPECT_TRUE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".bin")));
+    EXPECT_TRUE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".json")));
+  }
+  for (std::uint64_t hash : {2ULL, 3ULL}) {
+    EXPECT_FALSE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".bin")));
+    EXPECT_FALSE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".json")));
+  }
+}
 
 /** @brief Sorted file names in `directory`. */
 std::vector<std::string> fileNames(const std::filesystem::path &directory) {
@@ -253,8 +331,8 @@ TEST(ObserverSkyMap, SchwarzschildIscoMatchesOpatrnyFigure3a) {
   const auto aberrated = [](double staticAngle) {
     return std::acos((std::cos(staticAngle) + 0.5) / (1.0 + (0.5 * std::cos(staticAngle))));
   };
-  const double leadingEdge = 0.5 * K_PI - aberrated(0.25 * K_PI);
-  const double trailingEdge = 0.5 * K_PI - aberrated(0.75 * K_PI);
+  const double leadingEdge = (0.5 * K_PI) - aberrated(0.25 * K_PI);
+  const double trailingEdge = (0.5 * K_PI) - aberrated(0.75 * K_PI);
   EXPECT_NEAR(fateEdge(tetrad, 40.0 * K_DEGREE, 80.0 * K_DEGREE, 0.0), leadingEdge, 2.0e-5);
   EXPECT_NEAR(fateEdge(tetrad, -40.0 * K_DEGREE, 0.0, 0.0), trailingEdge, 2.0e-5);
   // Against the drawn polygon, to its 0.3 deg drawing precision plus margin.

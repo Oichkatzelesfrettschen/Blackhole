@@ -22,6 +22,10 @@ namespace platform {
 
 void initResourceRoot(const char *argv0);
 [[nodiscard]] const std::filesystem::path &resourceRoot();
+/** @brief The per-user cache directory: $XDG_CACHE_HOME/blackhole when that
+ *         variable is absolute, else $HOME/.cache/blackhole; empty when
+ *         neither is usable. The directory is not created. */
+[[nodiscard]] std::filesystem::path userCacheDirectory();
 [[nodiscard]] std::string resourcePath(std::string_view relativePath);
 
 /** @brief Reads a whole text file into out; returns false if it cannot be

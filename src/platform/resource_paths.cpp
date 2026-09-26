@@ -5,6 +5,7 @@
 
 #include "resource_paths.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -57,6 +58,19 @@ std::filesystem::path detectResourceRoot(const char *argv0) {
 void initResourceRoot(const char *argv0) { gResourceRoot = detectResourceRoot(argv0); }
 
 const std::filesystem::path &resourceRoot() { return gResourceRoot; }
+
+std::filesystem::path userCacheDirectory() {
+  const char *xdgCacheHome = std::getenv("XDG_CACHE_HOME");
+  if (xdgCacheHome != nullptr && xdgCacheHome[0] != '\0') {
+    const std::filesystem::path cacheHome(xdgCacheHome);
+    if (cacheHome.is_absolute()) {
+      return cacheHome / "blackhole";
+    }
+  }
+  const char *home = std::getenv("HOME");
+  return home != nullptr && home[0] != '\0' ? std::filesystem::path(home) / ".cache" / "blackhole"
+                                              : std::filesystem::path{};
+}
 
 std::string resourcePath(std::string_view relativePath) {
   return (gResourceRoot / std::filesystem::path(relativePath)).string();

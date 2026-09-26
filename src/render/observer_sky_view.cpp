@@ -129,8 +129,9 @@ std::optional<PreparedObserverSky> prepareObserverSky(const sky::ObserverKey &ke
     if (!lut) {
       return std::nullopt;
     }
-    // A read-only asset tree only costs the cache; the bundle is still usable.
-    (void)sky::writeObserverSkyLut(*lut, cacheDirectory);
+    if (sky::writeObserverSkyLut(*lut, cacheDirectory)) {
+      sky::evictObserverSkyBundles(cacheDirectory, sky::K_OBSERVER_SKY_CACHE_BYTES, bundleHash);
+    }
   }
   PreparedObserverSky prepared{
       .lut = std::move(*lut), .blackbody = std::move(*blackbody), .emission = {}, .ringFlux = {}};
@@ -545,6 +546,23 @@ void ObserverSkyRenderer::releaseSky() {
   emission_ = EmissionSummary{};
 }
 
+/** @brief The bundle cache: <user cache>/observer_sky, created on first use;
+ *         the source tree's LUT directory when no user cache is usable.
+ *         Resolved once per process, so a frame does no filesystem work. */
+static const std::filesystem::path &observerSkyCacheDirectory(const std::filesystem::path &fallback) {
+  static const std::filesystem::path directory = [&fallback] {
+    std::filesystem::path cache = platform::userCacheDirectory();
+    if (cache.empty()) {
+      return fallback;
+    }
+    cache /= "observer_sky";
+    std::error_code error;
+    std::filesystem::create_directories(cache, error);
+    return error ? fallback : cache;
+  }();
+  return directory;
+}
+
 void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
                             const std::optional<ObserverRecordClock> &record) {
   RenderState::ObserverViewGroup &view = rs.observerView;
@@ -552,10 +570,11 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
       view.kind == ObserverKind::Retrograde ? ko::OrbitSense::Retrograde : ko::OrbitSense::Prograde;
   view.x = view.atIsco ? ko::iscoOffset(view.epsilon, sense) : view.x;
   const std::optional<sky::ObserverKey> key = observerKeyFor(view.epsilon, view.x, view.kind);
-  const std::filesystem::path lutDirectory = platform::resourceRoot() / "assets" / "luts";
+  const std::filesystem::path sourceLutDirectory = platform::resourceRoot() / "assets" / "luts";
+  const std::filesystem::path &lutDirectory = observerSkyCacheDirectory(sourceLutDirectory);
   if (key) {
     view.renderer.request(*key, sky::LutDimensions{}, lutDirectory,
-                          lutDirectory / "blackbody_cie_lut.csv", view.cmbTemperature);
+                          sourceLutDirectory / "blackbody_cie_lut.csv", view.cmbTemperature);
   } else {
     view.renderer.invalidate(invalidObserverReason(view.kind, view.epsilon, view.x));
   }
