@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <iostream>
 #include <numeric>
@@ -326,14 +327,24 @@ SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth, int renderHeight)
   return {.lines = wrapped, .scale = SPECULATIVE_LABEL_MIN_SCALE};
 }
 
-TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
+float tesseractBoundingRadius(bool stereographic, float sceneScale, float perspectiveDistance) {
+  if (stereographic) {
+    const float fadeEnd = tesseract::STEREOGRAPHIC_FADE_END;
+    return sceneScale * std::sqrt((2.0f - fadeEnd) / fadeEnd);
+  }
+  const float d = std::max(perspectiveDistance, TESSERACT_MIN_PERSPECTIVE_DISTANCE);
+  return sceneScale * 2.0f * d / std::sqrt((d * d) - 4.0f);
+}
+
+TesseractFraming tesseractFraming(float viewDistance, float fovDeg, float boundingRadius,
                                   const std::optional<TesseractRecordCamera> &record) {
   if (!record.has_value()) {
     return {.viewDistance = viewDistance, .fovDeg = fovDeg};
   }
-  const float scaled = viewDistance * (record->distance / TESSERACT_RECORD_REFERENCE_DISTANCE);
-  return {.viewDistance = std::max(scaled, TESSERACT_MIN_VIEW_DISTANCE),
-          .fovDeg = std::clamp(record->fovDeg, TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG)};
+  const float fov = std::clamp(record->fovDeg, TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG);
+  const float fillTan = TESSERACT_RECORD_FILL * std::tan(glm::radians(fov) * 0.5f);
+  const float distance = boundingRadius * std::sqrt(1.0f + (1.0f / (fillTan * fillTan)));
+  return {.viewDistance = std::max(distance, TESSERACT_MIN_VIEW_DISTANCE), .fovDeg = fov};
 }
 
 float tesseractZoom(float viewDistance, float zoomDelta) {
@@ -407,15 +418,17 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   inputs.targetTexture = rs.targets.texBlackhole;
   inputs.width = rs.targets.renderWidth;
   inputs.height = rs.targets.renderHeight;
+  const bool stereographic =
+      tg.projection == RenderState::TesseractGroup::Projection::Stereographic;
   const TesseractFraming framing = tesseractFraming(
       tg.viewDistance, tg.fovDeg,
+      tesseractBoundingRadius(stereographic, tg.sceneScale, tg.perspectiveDistance),
       record.has_value() ? std::optional<TesseractRecordCamera>(record->camera) : std::nullopt);
   inputs.viewProjection = tesseractViewProjection(cameraBasis, focusDirection, framing.viewDistance,
                                                   framing.fovDeg, aspect);
   inputs.rotation = tesseract::toColumnMajor(rotation);
-  inputs.projectionMode =
-      tg.projection == RenderState::TesseractGroup::Projection::Stereographic ? 1 : 0;
-  inputs.perspectiveDistance = std::max(tg.perspectiveDistance, 2.1f);
+  inputs.projectionMode = stereographic ? 1 : 0;
+  inputs.perspectiveDistance = std::max(tg.perspectiveDistance, TESSERACT_MIN_PERSPECTIVE_DISTANCE);
   inputs.sceneScale = tg.sceneScale;
   inputs.timeSpan = tg.timeSpan;
   inputs.litMoment = tg.litMoment;

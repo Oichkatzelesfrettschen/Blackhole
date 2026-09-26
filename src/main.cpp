@@ -1210,9 +1210,8 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
     std::optional<TesseractRecordFrame> record;
     if (const auto outputSeconds = recordOutputSeconds(cli, rs.recording.recordFrameIndex)) {
       const auto &recordCamera = input.camera();
-      record = TesseractRecordFrame{
-          .outputClockSeconds = *outputSeconds,
-          .camera = {.distance = recordCamera.distance, .fovDeg = recordCamera.fov}};
+      record = TesseractRecordFrame{.outputClockSeconds = *outputSeconds,
+                                    .camera = {.fovDeg = recordCamera.fov}};
     }
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.begin();

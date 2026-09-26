@@ -3,12 +3,12 @@
  * @brief The tesseract view follows the black-hole camera: record distance
  *        and field of view, and the showcase-orbit frame offset.
  *
- * tesseractFraming maps the black-hole record camera distance d to the
- * tesseract view distance viewDistance * d / TESSERACT_RECORD_REFERENCE_DISTANCE
- * with a TESSERACT_MIN_VIEW_DISTANCE floor, and passes the field of view
- * through inside glm::perspective's domain; interactive frames keep the UI
- * values. tesseractView places the eye on the black-hole camera's focus line
- * with that camera's aimed orientation, so a frame offset puts the tesseract
+ * tesseractFraming places a recorded frame's eye so the scene's bounding
+ * sphere fills TESSERACT_RECORD_FILL of the half-height at any record field
+ * of view, which passes through inside glm::perspective's domain; interactive
+ * frames keep the UI values. tesseractBoundingRadius must hold every
+ * projected scene point under any SO(4) rotation. tesseractView places the eye on the black-hole
+ * camera's focus line with that camera's aimed orientation, so a frame offset puts the tesseract
  * where the black hole sits on screen.
  */
 
@@ -32,7 +32,6 @@
 #include <glm/matrix.hpp>
 #include <glm/trigonometric.hpp>
 
-#include "input.h"
 #include "render/camera_math.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
@@ -45,7 +44,7 @@ using blackhole::TESSERACT_MAX_FOV_DEG;
 using blackhole::TESSERACT_MIN_FOV_DEG;
 using blackhole::TESSERACT_MIN_VIEW_DISTANCE;
 using blackhole::TESSERACT_NEAR_PLANE;
-using blackhole::TESSERACT_RECORD_REFERENCE_DISTANCE;
+using blackhole::TESSERACT_RECORD_FILL;
 using blackhole::TesseractFraming;
 using blackhole::tesseractFraming;
 using blackhole::TesseractRecordCamera;
@@ -53,44 +52,62 @@ using blackhole::TesseractRecordCamera;
 constexpr float UI_DISTANCE = 8.0f;
 constexpr float UI_FOV = 50.0f;
 
-TesseractFraming recorded(float distance, float fovDeg) {
-  return tesseractFraming(UI_DISTANCE, UI_FOV,
-                          TesseractRecordCamera{.distance = distance, .fovDeg = fovDeg});
+// Default scene: perspective along w at eye distance 3, scene scale 1.3.
+constexpr float DEFAULT_SCENE_SCALE = 1.3f;
+constexpr float DEFAULT_EYE_W = 3.0f;
+
+float defaultRadius() {
+  return blackhole::tesseractBoundingRadius(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W);
+}
+
+TesseractFraming recorded(float fovDeg) {
+  return tesseractFraming(UI_DISTANCE, UI_FOV, defaultRadius(),
+                          TesseractRecordCamera{.fovDeg = fovDeg});
+}
+
+// NDC half-height of the silhouette of a centered sphere of radius r at d.
+float sphereNdcRadius(float radius, float distance, float fovDeg) {
+  return std::tan(std::asin(radius / distance)) / std::tan(glm::radians(fovDeg) * 0.5f);
 }
 
 TEST(TesseractFraming, InteractiveFramesKeepTheUiValues) {
-  const TesseractFraming framing = tesseractFraming(UI_DISTANCE, UI_FOV, std::nullopt);
+  const TesseractFraming framing =
+      tesseractFraming(UI_DISTANCE, UI_FOV, defaultRadius(), std::nullopt);
   EXPECT_FLOAT_EQ(framing.viewDistance, UI_DISTANCE);
   EXPECT_FLOAT_EQ(framing.fovDeg, UI_FOV);
 }
 
-TEST(TesseractFraming, ReferenceIsTheBlackHoleCameraDefault) {
-  EXPECT_FLOAT_EQ(CameraState{}.distance, TESSERACT_RECORD_REFERENCE_DISTANCE);
-  EXPECT_FLOAT_EQ(recorded(TESSERACT_RECORD_REFERENCE_DISTANCE, UI_FOV).viewDistance, UI_DISTANCE);
+// The showcase telephoto (20), the above-disk and centered compositions'
+// lenses, and the old wide showcase lens (68) all show the bounding sphere at
+// the same size.
+TEST(TesseractFraming, EveryRecordFieldOfViewFillsTheSameFraction) {
+  for (const float fov : {20.0f, 32.2042f, 37.2738f, 45.0f, 68.0f, 90.0f}) {
+    const TesseractFraming framing = recorded(fov);
+    EXPECT_NEAR(sphereNdcRadius(defaultRadius(), framing.viewDistance, framing.fovDeg),
+                TESSERACT_RECORD_FILL, 1e-4f)
+        << fov;
+  }
+  // A narrower lens backs the eye away rather than cropping.
+  EXPECT_GT(recorded(20.0f).viewDistance, recorded(68.0f).viewDistance);
 }
 
-TEST(TesseractFraming, RecordDistanceScalesTheViewByItsRatio) {
-  // The cinematic establishing shot (120) and its closing wide shot (140).
-  EXPECT_FLOAT_EQ(recorded(120.0f, UI_FOV).viewDistance,
-                  UI_DISTANCE * 120.0f / TESSERACT_RECORD_REFERENCE_DISTANCE);
-  EXPECT_FLOAT_EQ(recorded(140.0f, UI_FOV).viewDistance,
-                  UI_DISTANCE * 140.0f / TESSERACT_RECORD_REFERENCE_DISTANCE);
-  EXPECT_FLOAT_EQ(recorded(480.0f, UI_FOV).viewDistance / recorded(240.0f, UI_FOV).viewDistance,
-                  2.0f);
-}
-
-TEST(TesseractFraming, CloseRecordCamerasStopAtTheMinimumDistance) {
-  // The cinematic path's close passes (18 to 40) map below the floor.
-  EXPECT_FLOAT_EQ(recorded(18.0f, UI_FOV).viewDistance, TESSERACT_MIN_VIEW_DISTANCE);
-  EXPECT_FLOAT_EQ(recorded(0.0f, UI_FOV).viewDistance, TESSERACT_MIN_VIEW_DISTANCE);
+TEST(TesseractFraming, BoundingRadiusFollowsTheProjection) {
+  // 2 d / sqrt(d^2 - 4) at the default eye distance 3, times the scale.
+  EXPECT_FLOAT_EQ(defaultRadius(), DEFAULT_SCENE_SCALE * 6.0f / std::sqrt(5.0f));
+  // Eye distances below the clamp use the clamp.
+  EXPECT_FLOAT_EQ(blackhole::tesseractBoundingRadius(false, 1.0f, 1.0f),
+                  blackhole::tesseractBoundingRadius(
+                      false, 1.0f, blackhole::TESSERACT_MIN_PERSPECTIVE_DISTANCE));
+  // The fully lit stereographic image reaches radius 3.
+  EXPECT_FLOAT_EQ(blackhole::tesseractBoundingRadius(true, 2.0f, 3.0f), 6.0f);
 }
 
 TEST(TesseractFraming, RecordFieldOfViewPassesThroughInsideThePerspectiveDomain) {
-  EXPECT_FLOAT_EQ(recorded(15.0f, 68.0f).fovDeg, 68.0f);
+  EXPECT_FLOAT_EQ(recorded(68.0f).fovDeg, 68.0f);
   // Wider than the UI slider still passes: --record-fov 120 frames at 120.
-  EXPECT_FLOAT_EQ(recorded(15.0f, 120.0f).fovDeg, 120.0f);
-  EXPECT_FLOAT_EQ(recorded(15.0f, 200.0f).fovDeg, TESSERACT_MAX_FOV_DEG);
-  EXPECT_FLOAT_EQ(recorded(15.0f, 0.0f).fovDeg, TESSERACT_MIN_FOV_DEG);
+  EXPECT_FLOAT_EQ(recorded(120.0f).fovDeg, 120.0f);
+  EXPECT_FLOAT_EQ(recorded(200.0f).fovDeg, TESSERACT_MAX_FOV_DEG);
+  EXPECT_FLOAT_EQ(recorded(0.0f).fovDeg, TESSERACT_MIN_FOV_DEG);
 }
 
 // A showcase-orbit black-hole camera as updateFrameCamera builds it: the eye
@@ -230,6 +247,69 @@ TEST(TesseractFraming, FarPlaneKeepsEveryProjectedPoint) {
     EXPECT_GT(deepestClipDepth(finiteFar, stereographic), 1.0f)
         << "stereographic " << stereographic;
   }
+}
+
+// Largest |NDC| extent of every scene endpoint under 64 SO(4) rotations,
+// framed by a record camera at @p fovDeg, with the vertical and the
+// aspect-scaled horizontal extents in half-heights. Stereographic points
+// still fading toward the pole are skipped: the bound covers the lit image.
+float largestRecordedExtent(bool stereographic, float sceneScale, float eyeW, float fovDeg) {
+  const float radius = blackhole::tesseractBoundingRadius(stereographic, sceneScale, eyeW);
+  const TesseractFraming framing =
+      tesseractFraming(UI_DISTANCE, UI_FOV, radius, TesseractRecordCamera{.fovDeg = fovDeg});
+  const OffsetCamera cam = offsetCamera(0.0f, 0.0f);
+  const glm::mat4 vp = blackhole::tesseractViewProjection(
+      cam.basis, cam.focusDirection, framing.viewDistance, framing.fovDeg, OFFSET_ASPECT);
+  const std::vector<blackhole::tesseract::SegmentInstance> segments =
+      blackhole::tesseract::buildSceneSegments({});
+  float largest = 0.0f;
+  for (int i = 0; i < 64; ++i) {
+    const auto rotation = blackhole::tesseract::so4FromPair(sampleQuat(i, 0.3), sampleQuat(i, 1.1));
+    for (const auto &seg : segments) {
+      for (const glm::vec4 &p : {seg.a, seg.b}) {
+        const blackhole::tesseract::Vec4<double> r = blackhole::tesseract::applyMatrix(
+            rotation,
+            blackhole::tesseract::Vec4<double>{static_cast<double>(p.x), static_cast<double>(p.y),
+                                               static_cast<double>(p.z), static_cast<double>(p.w)});
+        const glm::vec4 rotated(static_cast<float>(r[0]), static_cast<float>(r[1]),
+                                static_cast<float>(r[2]), static_cast<float>(r[3]));
+        glm::vec3 projected{0.0f};
+        if (stereographic) {
+          const blackhole::tesseract::StereographicPoint point =
+              blackhole::tesseract::projectStereographic(rotated);
+          if (point.fade < 1.0f) {
+            continue;
+          }
+          projected = point.position;
+        } else {
+          projected = blackhole::tesseract::projectPerspective(rotated, eyeW);
+        }
+        const glm::vec4 clip = vp * glm::vec4(projected * sceneScale, 1.0f);
+        largest = std::max(
+            {largest, std::abs(clip.y / clip.w), std::abs(clip.x / clip.w) * OFFSET_ASPECT});
+      }
+    }
+  }
+  return largest;
+}
+
+// The bounding radius holds the rotating scene: at the default and extreme
+// settings, in both projections, no recorded point leaves the fill fraction.
+TEST(TesseractFraming, RecordedSceneStaysInsideTheFill) {
+  for (const float fov : {20.0f, 37.2738f, 68.0f}) {
+    EXPECT_LE(largestRecordedExtent(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, fov),
+              TESSERACT_RECORD_FILL)
+        << fov;
+    EXPECT_LE(largestRecordedExtent(false, EXTREME_SCENE_SCALE, EXTREME_EYE_W, fov),
+              TESSERACT_RECORD_FILL)
+        << fov;
+    EXPECT_LE(largestRecordedExtent(true, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, fov),
+              TESSERACT_RECORD_FILL)
+        << fov;
+  }
+  // The default scene fills most of the fraction, so the bound is not loose.
+  EXPECT_GT(largestRecordedExtent(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, 37.2738f),
+            0.5f * TESSERACT_RECORD_FILL);
 }
 
 } // namespace

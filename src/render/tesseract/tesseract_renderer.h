@@ -25,8 +25,6 @@
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float3.hpp>
 
-#include "settings.h"
-
 namespace blackhole {
 
 struct RenderState;
@@ -159,18 +157,20 @@ inline constexpr float TESSERACT_NEAR_PLANE = 0.05f;
 inline constexpr float TESSERACT_MIN_VIEW_DISTANCE = 3.0f;
 /// Farthest interactive tesseract view distance; the View distance slider shares it.
 inline constexpr float TESSERACT_MAX_VIEW_DISTANCE = 20.0f;
-/// Black-hole camera distance at which a recorded tesseract frame uses the UI
-/// view distance unchanged: the default camera orbit radius.
-inline constexpr float TESSERACT_RECORD_REFERENCE_DISTANCE = K_DEFAULT_CAMERA_DISTANCE;
+/// Smallest eye distance on the w axis the perspective projection uses; the
+/// "Eye w distance" slider stops at 2.2.
+inline constexpr float TESSERACT_MIN_PERSPECTIVE_DISTANCE = 2.1f;
+/// Fraction of the half-height of a recorded frame the tesseract's bounding
+/// sphere fills, below 1 so the sphere, a conservative bound, stays in frame.
+inline constexpr float TESSERACT_RECORD_FILL = 0.85f;
 /// Widest tesseract field of view; glm::perspective needs fovy below 180 deg.
 inline constexpr float TESSERACT_MAX_FOV_DEG = 179.0f;
 /// Narrowest tesseract field of view, which keeps the projection finite.
 inline constexpr float TESSERACT_MIN_FOV_DEG = 1.0f;
 
-/** @brief Pose of the record camera that frames a recorded tesseract frame. */
+/** @brief Record camera lens that frames a recorded tesseract frame. */
 struct TesseractRecordCamera {
-  float distance = TESSERACT_RECORD_REFERENCE_DISTANCE; ///< CameraState::distance.
-  float fovDeg = 45.0f;                                 ///< CameraState::fov.
+  float fovDeg = 45.0f; ///< CameraState::fov.
 };
 
 /** @brief Output clock and camera of one recorded tesseract frame. */
@@ -186,20 +186,36 @@ struct TesseractFraming {
 };
 
 /**
+ * @brief Radius of a sphere about the origin that holds the projected scene.
+ *
+ * Every scene point lies in the norm-2 ball of R^4, and rotations keep it
+ * there. Perspective along w maps that ball inside radius
+ * 2 d / sqrt(d^2 - 4) (reached at w = 4 / d) for the eye distance
+ * d = max(@p perspectiveDistance, TESSERACT_MIN_PERSPECTIVE_DISTANCE).
+ * Stereographic projection has no useful bound (sqrt((2 - m) / m) for the
+ * clamp m = STEREOGRAPHIC_MIN_DENOM is about 9.95), so it uses the radius of
+ * the fully lit image, sqrt((2 - f) / f) = 3 for f = STEREOGRAPHIC_FADE_END;
+ * only tails fading toward the pole reach past it. Both scale by
+ * @p sceneScale.
+ */
+float tesseractBoundingRadius(bool stereographic, float sceneScale, float perspectiveDistance);
+
+/**
  * @brief Framing of the tesseract view for one frame.
  *
  * Without @p record the UI viewDistance and fovDeg frame the scene. A recorded
- * frame follows the record camera, which the record profile path,
- * --record-distance, and --record-fov set: its field of view passes through,
- * clamped to [TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG], and its
- * black-hole distance d maps to viewDistance * d /
- * TESSERACT_RECORD_REFERENCE_DISTANCE. The two scenes share no length unit,
- * so the map is a ratio: the black-hole camera's default distance frames the
- * tesseract as the UI does and a profile dolly scales the tesseract view by
- * the same factor. The distance never falls below
+ * frame takes the record camera's field of view, clamped to
+ * [TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG], and places the eye so the
+ * sphere of @p boundingRadius R fills TESSERACT_RECORD_FILL k of the frame's
+ * half-height: a centered sphere at distance D has silhouette half-height
+ * tan(asin(R / D)) / tan(fov / 2) in NDC, so D = R sqrt(1 + 1 / (k tan(fov /
+ * 2))^2). Every profile then frames the tesseract at the same size whatever
+ * its field of view; the record camera still sets the viewing direction and
+ * frame offset (tesseractView), and its black-hole distance, including
+ * --record-distance, sets no tesseract size. The distance never falls below
  * TESSERACT_MIN_VIEW_DISTANCE.
  */
-TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
+TesseractFraming tesseractFraming(float viewDistance, float fovDeg, float boundingRadius,
                                   const std::optional<TesseractRecordCamera> &record);
 
 /**
