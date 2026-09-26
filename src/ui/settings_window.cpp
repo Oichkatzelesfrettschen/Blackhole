@@ -52,6 +52,18 @@ using blackhole::RenderState;
 
 namespace {
 
+// adiskLit, dopplerStrength and enableRedshift feed only the legacy fragment
+// tracer's disk (adiskColor in blackhole_main.frag); the Kerr tracer on every
+// backend shades the disk from the traced photon's g-factor
+// (bhDiskEmission, d_disk_emission). Each control is disabled while the
+// physical tracer is on and names the path it drives.
+void legacyTracerControlTooltip() {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Legacy fragment tracer only (Physical Kerr ray tracer off).\n"
+                      "The Kerr tracer shades the disk with the orbiting-emitter g-factor.");
+  }
+}
+
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   ImVec2 const p0 = ImGui::GetCursorScreenPos();
@@ -134,13 +146,19 @@ void renderVisualSettings(RenderState &rs, Settings &settings) {
   ImGui::SliderFloat("adiskDensityV", &rs.disk.adiskDensityV, 0.0f, 10.0f);
   ImGui::SliderFloat("adiskDensityH", &rs.disk.adiskDensityH, 0.0f, 10.0f);
   ImGui::SliderFloat("adiskHeight", &rs.disk.adiskHeight, 0.0f, 1.0f);
+  ImGui::BeginDisabled(rs.physicsCore.physicalRayTracer);
   ImGui::SliderFloat("adiskLit", &rs.disk.adiskLit, 0.0f, 4.0f);
+  ImGui::EndDisabled();
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskNoiseLOD", &rs.disk.adiskNoiseLOD, 1.0f, 12.0f);
   ImGui::SliderFloat("adiskNoiseScale", &rs.disk.adiskNoiseScale, 0.0f, 10.0f);
   ImGui::Checkbox("Noise Texture", &rs.disk.useNoiseTexture);
   ImGui::SliderFloat("Noise Tex Scale", &rs.disk.noiseTextureScale, 0.05f, 2.0f);
   ImGui::SliderFloat("adiskSpeed", &rs.disk.adiskSpeed, 0.0f, 1.0f);
+  ImGui::BeginDisabled(rs.physicsCore.physicalRayTracer);
   ImGui::SliderFloat("dopplerStrength", &rs.disk.dopplerStrength, 0.0f, 5.0f);
+  ImGui::EndDisabled();
+  legacyTracerControlTooltip();
 
   ImGui::Separator();
   ImGui::Text("Volumetric RTE (D2)");
@@ -393,7 +411,10 @@ void renderPhysicsSettings(RenderState &rs) {
 
   // Physics visualization toggles
   ImGui::Checkbox("enablePhotonSphere", &rs.physicsCore.enablePhotonSphere);
+  ImGui::BeginDisabled(rs.physicsCore.physicalRayTracer);
   ImGui::Checkbox("enableRedshift", &rs.physicsCore.enableRedshift);
+  ImGui::EndDisabled();
+  legacyTracerControlTooltip();
 
   ImGui::Separator();
   ImGui::Text("Hawking Radiation Glow");
