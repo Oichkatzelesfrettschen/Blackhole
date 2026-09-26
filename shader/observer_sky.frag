@@ -163,8 +163,10 @@ vec3 skyRadiance(vec3 source, float logG, vec2 footprint) {
     float cubeTexelAngle = 0.5 * PI / float(textureSize(galaxy, 0).x);
     float extent = max(footprint.y, turn / float(samples));
     float lod = max(log2(max(extent, 1.0e-12) / cubeTexelAngle), 0.0);
-    // The pixel's azimuth range, centered on its source, trailed by the turn.
-    float start = skyPhiOffset - 0.5 * footprint.x;
+    // The pixel's azimuth range around its source, extended back over the
+    // turn the sky made during the frame (skyPhiOffset is its phase at the
+    // frame's end), so the blur trails the rotation in either sense.
+    float start = skyPhiOffset - 0.5 * footprint.x - max(blurTurn, 0.0);
     vec3 stars = vec3(0.0);
     for (int i = 0; i < samples; ++i) {
       float phi = start + turn * (float(i) + 0.5) / float(samples);

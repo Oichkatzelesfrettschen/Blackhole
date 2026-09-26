@@ -252,11 +252,12 @@ private:
 
 /**
  * @brief Draws the observer-sky scene into rs.targets.texBlackhole: requests
- *        and polls the maps for rs.observerView's observer, advances its clock
- *        by deltaSeconds * skyTimeScale proper seconds, and runs
- *        observer_sky.frag. With followCamera set, cameraBasis (world right,
- *        up, forward) steers the look direction; otherwise the view's look
- *        angles do.
+ *        and polls the maps for rs.observerView's observer (or reports it
+ *        invalid), advances its clock by deltaSeconds * skyTimeScale proper
+ *        seconds while a sky is resident, and runs observer_sky.frag.
+ *        `deltaSeconds` is unscaled wall time, 0 while paused. With
+ *        followCamera set, cameraBasis (world right, up, forward) steers the
+ *        look direction; otherwise the view's look angles do.
  */
 void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds);
 

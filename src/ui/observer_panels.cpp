@@ -82,7 +82,7 @@ void renderClockControls(RenderState::ObserverViewGroup &view) {
   }
   ImGui::SameLine();
   ImGui::Checkbox("Paused", &view.paused);
-  ImGui::Checkbox("Motion blur (4 samples when the sky moves)", &view.motionBlur);
+  ImGui::Checkbox("Motion blur (4 to 16 samples when the sky moves)", &view.motionBlur);
   const blackhole::ObserverClockModel &clock = view.lastClock;
   ImGui::Text("Observer clock: %.6f s", view.properSeconds);
   if (clock.secondsPerM > 0.0) {
@@ -205,8 +205,9 @@ void renderObserverPhysicsNote(const RenderState &rs) {
       "its own frame: the shadow and the blueshift patch are functions of the look direction "
       "alone and never move. Only the source content scrolls -- the whole sky at infinity turns "
       "about the spin axis once per orbit, about ten times a second of the observer's own time at "
-      "Miller's orbit. At sky time scale 1 each frame samples four sub-frame positions (motion "
-      "blur); the default 1e-3 slows the sky a thousandfold so the star field can be followed.");
+      "Miller's orbit. At sky time scale 1 each frame averages 4 to 16 sub-frame positions over "
+      "the turn the sky just made (motion blur); the default 1e-3 slows the sky a thousandfold "
+      "so the star field can be followed.");
   ImGui::End();
 }
 

@@ -519,11 +519,12 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
   view.renderer.poll();
   const std::optional<sky::ObserverSkyLut> &lut = view.renderer.lut();
 
-  // The clock follows the resident sky, so time and image always agree.
+  // The clock follows the resident sky, so time and image always agree, and
+  // it stands still while no sky is resident.
   const ObserverClockModel clock =
       lut ? observerClockModel(lut->key, view.massSolar) : ObserverClockModel{};
   const double properStep =
-      view.paused ? 0.0 : static_cast<double>(deltaSeconds) * view.skyTimeScale;
+      view.paused || !lut ? 0.0 : static_cast<double>(deltaSeconds) * view.skyTimeScale;
   view.properSeconds += properStep;
   const double phase = lut ? skyPhaseRadians(clock, view.properSeconds) : 0.0;
   // Sky rotation during this frame, unwrapped, for the motion blur.
@@ -572,7 +573,8 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
                 glm::vec3(basis.at(2).at(0), basis.at(2).at(1), basis.at(2).at(2)));
   rtti.floatUniforms["tanHalfFov"] = static_cast<float>(tanHalfFov);
   rtti.floatUniforms["skyPhiOffset"] = static_cast<float>(phase);
-  // Four sub-frame samples once the sky moves more than 0.01 rad per frame.
+  // Once the sky turns more than 0.01 rad per frame the shader averages 4 to
+  // 16 sub-frame positions over the turn it made during the frame.
   const bool blur = view.motionBlur && std::fabs(frameTurn) > 0.01;
   rtti.floatUniforms["skyPhiBlurSpan"] = blur ? static_cast<float>(frameTurn) : 0.0F;
   rtti.floatUniforms["blurSamples"] = blur ? 4.0F : 1.0F;

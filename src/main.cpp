@@ -1166,9 +1166,9 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const Settings &settings,
                                       float frameTime, float deltaTime, double currentTime,
                                       GLuint &computeProgram) {
   if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
-    // The observer's clock steps by the effective delta, which pause and the
-    // time scale govern as they do the black-hole orbit clock.
-    renderObserverSkyScene(rs, frameCamera.basis, input.getEffectiveDeltaTime(deltaTime));
+    // The observer's clock runs on wall time, which pause stops; its own sky
+    // time scale replaces the global one, so the panel's rate is the rate.
+    renderObserverSkyScene(rs, frameCamera.basis, input.isPaused() ? 0.0F : deltaTime);
     return {};
   }
   const auto result =
