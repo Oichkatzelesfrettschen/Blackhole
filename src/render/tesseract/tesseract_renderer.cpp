@@ -22,11 +22,14 @@
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
 
+#include <glm/common.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/trigonometric.hpp>
@@ -343,11 +346,20 @@ TesseractFraming tesseractFraming(float viewDistance, float fovDeg, float boundi
     return {.viewDistance = viewDistance, .fovDeg = fovDeg};
   }
   const float fov = std::clamp(record->fovDeg, TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG);
-  // Tangent of the narrower half-extent: the vertical one on a landscape
-  // target, the horizontal one (aspect times it) on a portrait target.
-  const float narrowTan = std::min(1.0f, aspect) * std::tan(glm::radians(fov) * 0.5f);
-  const float fillTan = TESSERACT_RECORD_FILL * narrowTan;
-  const float distance = boundingRadius * std::sqrt(1.0f + (1.0f / (fillTan * fillTan)));
+  const float verticalTan = std::tan(glm::radians(fov) * 0.5f);
+  const glm::vec2 halfTan(aspect * verticalTan, verticalTan);
+  const glm::vec2 center =
+      glm::min(glm::abs(record->focusTangent), TESSERACT_RECORD_FILL * halfTan);
+  const float centerNorm = std::sqrt(1.0f + glm::dot(center, center));
+  // Per axis: the silhouette's outer edge reaches tangent
+  // E = |c| + k (T - |c|) at the distance that axis needs.
+  const auto axisDistance = [&](float c, float t) {
+    const float edge = c + (TESSERACT_RECORD_FILL * (t - c));
+    const float halfAngle = std::atan(edge) - std::atan(c);
+    return boundingRadius / std::sin(halfAngle) * centerNorm / std::sqrt(1.0f + (c * c));
+  };
+  const float distance =
+      std::max(axisDistance(center.x, halfTan.x), axisDistance(center.y, halfTan.y));
   return {.viewDistance = std::max(distance, TESSERACT_MIN_VIEW_DISTANCE), .fovDeg = fov};
 }
 
@@ -362,6 +374,14 @@ glm::mat4 tesseractView(const glm::mat3 &cameraBasis, const glm::vec3 &focusDire
   const glm::vec3 up = glm::column(cameraBasis, 1);
   const glm::vec3 eye = -focusDirection * viewDistance;
   return glm::lookAt(eye, eye + forward, up);
+}
+
+glm::vec2 tesseractFocusTangent(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection) {
+  const float forward =
+      std::max(glm::dot(focusDirection, glm::column(cameraBasis, 2)), TESSERACT_MIN_FOCUS_COSINE);
+  return glm::vec2(glm::dot(focusDirection, glm::column(cameraBasis, 0)),
+                   glm::dot(focusDirection, glm::column(cameraBasis, 1))) /
+         forward;
 }
 
 glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,

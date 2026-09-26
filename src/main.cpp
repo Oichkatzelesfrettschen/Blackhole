@@ -195,6 +195,7 @@ using blackhole::updateComparePresetSweep;
 
 // Speculative tesseract scene pass lives in src/render/tesseract/*.
 using blackhole::renderTesseractScene;
+using blackhole::tesseractFocusTangent;
 using blackhole::TesseractRecordFrame;
 using blackhole::tesseractZoom;
 
@@ -1211,7 +1212,9 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
     if (const auto outputSeconds = recordOutputSeconds(cli, rs.recording.recordFrameIndex)) {
       const auto &recordCamera = input.camera();
       record = TesseractRecordFrame{.outputClockSeconds = *outputSeconds,
-                                    .camera = {.fovDeg = recordCamera.fov}};
+                                    .camera = {.fovDeg = recordCamera.fov,
+                                               .focusTangent = tesseractFocusTangent(
+                                                   frameCamera.basis, frameCamera.focusDirection)}};
     }
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.begin();

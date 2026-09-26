@@ -101,9 +101,9 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
  * applyRecordCameraPath applies it after every profile's path, so the
  * overrides frame the cinematic keyframes, the compare-orbit-near sweep, and
  * the showcase-orbit composition alike. The distance sets the black-hole
- * camera; the tesseract scene takes the field of view but frames the
- * tesseract at TESSERACT_RECORD_FILL whatever the distance
- * (tesseractFraming).
+ * camera; the tesseract scene takes the field of view and the frame
+ * offset's focus position but frames the tesseract at
+ * TESSERACT_RECORD_FILL whatever the distance (tesseractFraming).
  */
 void applyRecordCameraOverrides(const platform::CliOptions &cli, CameraState &cam);
 

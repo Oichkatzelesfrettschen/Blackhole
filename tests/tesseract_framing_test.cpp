@@ -4,15 +4,18 @@
  *        and field of view, and the showcase-orbit frame offset.
  *
  * tesseractFraming places a recorded frame's eye so the scene's bounding
- * sphere fills TESSERACT_RECORD_FILL of the half-height at any record field
- * of view, which passes through inside glm::perspective's domain; interactive
- * frames keep the UI values. tesseractBoundingRadius must hold every
- * projected scene point under any SO(4) rotation. tesseractView places the eye on the black-hole
- * camera's focus line with that camera's aimed orientation, so a frame offset puts the tesseract
- * where the black hole sits on screen.
+ * sphere fills TESSERACT_RECORD_FILL of the room between its center and the
+ * nearer frame edge at any record field of view, which passes through inside
+ * glm::perspective's domain, centered or moved off center by a frame offset;
+ * interactive frames keep the UI values. tesseractBoundingRadius must hold
+ * every projected scene point under any SO(4) rotation. tesseractView places
+ * the eye on the black-hole camera's focus line with that camera's aimed
+ * orientation, so a frame offset puts the tesseract where the black hole sits
+ * on screen.
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 #include <utility>
@@ -20,10 +23,12 @@
 
 #include <gtest/gtest.h>
 
+#include <glm/common.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/scalar_constants.hpp>
 #include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
@@ -45,6 +50,7 @@ using blackhole::TESSERACT_MIN_FOV_DEG;
 using blackhole::TESSERACT_MIN_VIEW_DISTANCE;
 using blackhole::TESSERACT_NEAR_PLANE;
 using blackhole::TESSERACT_RECORD_FILL;
+using blackhole::tesseractFocusTangent;
 using blackhole::TesseractFraming;
 using blackhole::tesseractFraming;
 using blackhole::TesseractRecordCamera;
@@ -135,20 +141,20 @@ struct OffsetCamera {
 constexpr float OFFSET_FOV = 68.0f;
 constexpr float OFFSET_ASPECT = 16.0f / 9.0f;
 
-OffsetCamera offsetCamera(float frameX, float frameY) {
+OffsetCamera offsetCamera(float frameX, float frameY, float fovDeg = OFFSET_FOV,
+                          float aspect = OFFSET_ASPECT) {
   const glm::vec3 focus(0.0f);
   const glm::vec3 cameraPos = glm::vec3(0.35f, -0.24f, -0.9f) * 14.0f;
   const float distance = glm::length(cameraPos - focus);
   const glm::mat3 baseBasis = buildCameraBasis(cameraPos, focus, 0.0f);
-  const float halfHeight = std::tan(glm::radians(OFFSET_FOV) * 0.5f) * distance;
-  const float halfWidth = halfHeight * OFFSET_ASPECT;
+  const float halfHeight = std::tan(glm::radians(fovDeg) * 0.5f) * distance;
+  const float halfWidth = halfHeight * aspect;
   const glm::vec3 aim =
       focus + (baseBasis[0] * (frameX * halfWidth)) + (baseBasis[1] * (frameY * halfHeight));
   OffsetCamera out;
   out.basis = buildCameraBasis(cameraPos, aim, 0.0f);
   out.focusDirection = glm::normalize(focus - cameraPos);
-  const glm::mat4 projection =
-      glm::perspective(glm::radians(OFFSET_FOV), OFFSET_ASPECT, 0.1f, 100.0f);
+  const glm::mat4 projection = glm::perspective(glm::radians(fovDeg), aspect, 0.1f, 100.0f);
   const glm::mat4 view = glm::lookAt(cameraPos, aim, out.basis[1]);
   const glm::vec4 clip = projection * view * glm::vec4(focus, 1.0f);
   out.focusNdc = glm::vec2(clip) / clip.w;
@@ -262,25 +268,14 @@ TEST(TesseractFraming, FarPlaneKeepsEveryProjectedPoint) {
   }
 }
 
-// Largest extent of every scene endpoint under 64 SO(4) rotations, framed by
-// a record camera at @p fovDeg on a target of @p aspect, with each axis in
-// units of the narrower half-extent. Stereographic points still fading toward
-// the pole are skipped: the bound covers the lit image.
-float largestRecordedExtent(bool stereographic, float sceneScale, float eyeW, float fovDeg,
-                            float aspect) {
-  const float radius = blackhole::tesseractBoundingRadius(stereographic, sceneScale, eyeW);
-  const TesseractFraming framing = tesseractFraming(UI_DISTANCE, UI_FOV, radius, aspect,
-                                                    TesseractRecordCamera{.fovDeg = fovDeg});
-  const OffsetCamera cam = offsetCamera(0.0f, 0.0f);
-  const glm::mat4 vp = blackhole::tesseractViewProjection(
-      cam.basis, cam.focusDirection, framing.viewDistance, framing.fovDeg, aspect);
-  // NDC to narrower-half-extent units: the vertical axis scales by
-  // tan(fov/2) / narrow, the horizontal one by aspect tan(fov/2) / narrow.
-  const float yUnits = 1.0f / std::min(1.0f, aspect);
-  const float xUnits = aspect * yUnits;
+// Largest |NDC| on each axis over every scene endpoint under 64 SO(4)
+// rotations seen through @p viewProjection. Stereographic points still
+// fading toward the pole are skipped: the bound covers the lit image.
+glm::vec2 largestSceneNdc(const glm::mat4 &viewProjection, bool stereographic, float sceneScale,
+                          float eyeW) {
   const std::vector<blackhole::tesseract::SegmentInstance> segments =
       blackhole::tesseract::buildSceneSegments({});
-  float largest = 0.0f;
+  glm::vec2 largest{0.0f};
   for (int i = 0; i < 64; ++i) {
     const auto rotation = blackhole::tesseract::so4FromPair(sampleQuat(i, 0.3), sampleQuat(i, 1.1));
     for (const auto &seg : segments) {
@@ -302,13 +297,31 @@ float largestRecordedExtent(bool stereographic, float sceneScale, float eyeW, fl
         } else {
           projected = blackhole::tesseract::projectPerspective(rotated, eyeW);
         }
-        const glm::vec4 clip = vp * glm::vec4(projected * sceneScale, 1.0f);
-        largest = std::max(
-            {largest, std::abs(clip.y / clip.w) * yUnits, std::abs(clip.x / clip.w) * xUnits});
+        const glm::vec4 clip = viewProjection * glm::vec4(projected * sceneScale, 1.0f);
+        largest = glm::max(largest, glm::abs(glm::vec2(clip) / clip.w));
       }
     }
   }
   return largest;
+}
+
+// Largest extent of the scene framed by a centered record camera at
+// @p fovDeg on a target of @p aspect, with each axis in units of the
+// narrower half-extent.
+float largestRecordedExtent(bool stereographic, float sceneScale, float eyeW, float fovDeg,
+                            float aspect) {
+  const float radius = blackhole::tesseractBoundingRadius(stereographic, sceneScale, eyeW);
+  const TesseractFraming framing = tesseractFraming(UI_DISTANCE, UI_FOV, radius, aspect,
+                                                    TesseractRecordCamera{.fovDeg = fovDeg});
+  const OffsetCamera cam = offsetCamera(0.0f, 0.0f);
+  const glm::mat4 vp = blackhole::tesseractViewProjection(
+      cam.basis, cam.focusDirection, framing.viewDistance, framing.fovDeg, aspect);
+  // NDC to narrower-half-extent units: the vertical axis scales by
+  // tan(fov/2) / narrow, the horizontal one by aspect tan(fov/2) / narrow.
+  const float yUnits = 1.0f / std::min(1.0f, aspect);
+  const float xUnits = aspect * yUnits;
+  const glm::vec2 ndc = largestSceneNdc(vp, stereographic, sceneScale, eyeW);
+  return std::max(ndc.x * xUnits, ndc.y * yUnits);
 }
 
 // The bounding radius holds the rotating scene: at the default and extreme
@@ -330,6 +343,109 @@ TEST(TesseractFraming, RecordedSceneStaysInsideTheFill) {
     EXPECT_GT(largestRecordedExtent(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, 37.2738f, aspect),
               0.5f * TESSERACT_RECORD_FILL);
   }
+}
+
+// The showcase-orbit compositions' offsets: left-third, wide-right, and one
+// with both axes large.
+constexpr std::array<std::pair<float, float>, 3> COMPOSITION_OFFSETS = {
+    {{0.36f, 0.06f}, {-0.24f, -0.04f}, {0.3f, -0.3f}}};
+constexpr float LEFT_THIRD_FOV = 30.9819f;
+
+// Largest |NDC| on each axis over the surface of a sphere of @p radius about
+// the origin: 360 x 720 samples resolve the silhouette to about 1e-4.
+glm::vec2 largestSphereNdc(const glm::mat4 &viewProjection, float radius) {
+  constexpr int polarSamples = 360;
+  constexpr int azimuthSamples = 720;
+  glm::vec2 largest{0.0f};
+  for (int i = 0; i <= polarSamples; ++i) {
+    const float theta = glm::pi<float>() * static_cast<float>(i) / static_cast<float>(polarSamples);
+    for (int j = 0; j < azimuthSamples; ++j) {
+      const float phi =
+          2.0f * glm::pi<float>() * static_cast<float>(j) / static_cast<float>(azimuthSamples);
+      const glm::vec3 point = radius * glm::vec3(std::sin(theta) * std::cos(phi),
+                                                 std::sin(theta) * std::sin(phi), std::cos(theta));
+      const glm::vec4 clip = viewProjection * glm::vec4(point, 1.0f);
+      largest = glm::max(largest, glm::abs(glm::vec2(clip) / clip.w));
+    }
+  }
+  return largest;
+}
+
+// The outer edge the fill allows on each axis, in NDC, for a center at
+// @p centerNdc: |c| + k (1 - |c|).
+glm::vec2 fillEdgeNdc(const glm::vec2 &centerNdc) {
+  const glm::vec2 c = glm::abs(centerNdc);
+  return c + (TESSERACT_RECORD_FILL * (glm::vec2(1.0f) - c));
+}
+
+TesseractFraming offsetRecorded(const OffsetCamera &cam, float fovDeg, float aspect, float radius) {
+  return tesseractFraming(
+      UI_DISTANCE, UI_FOV, radius, aspect,
+      TesseractRecordCamera{.fovDeg = fovDeg,
+                            .focusTangent = tesseractFocusTangent(cam.basis, cam.focusDirection)});
+}
+
+TEST(TesseractFraming, FocusTangentPlacesTheCenterWhereTheBlackHoleSits) {
+  const OffsetCamera centered = offsetCamera(0.0f, 0.0f);
+  const glm::vec2 zero = tesseractFocusTangent(centered.basis, centered.focusDirection);
+  EXPECT_NEAR(zero.x, 0.0f, 1e-5f);
+  EXPECT_NEAR(zero.y, 0.0f, 1e-5f);
+  for (const auto &[frameX, frameY] : COMPOSITION_OFFSETS) {
+    const OffsetCamera cam = offsetCamera(frameX, frameY);
+    const float verticalTan = std::tan(glm::radians(OFFSET_FOV) * 0.5f);
+    const glm::vec2 tangent = tesseractFocusTangent(cam.basis, cam.focusDirection);
+    EXPECT_NEAR(std::abs(tangent.x) / (OFFSET_ASPECT * verticalTan), std::abs(cam.focusNdc.x),
+                1e-4f)
+        << frameX << "," << frameY;
+    EXPECT_NEAR(std::abs(tangent.y) / verticalTan, std::abs(cam.focusNdc.y), 1e-4f)
+        << frameX << "," << frameY;
+  }
+}
+
+// Off center, the bounding sphere reaches exactly the fill edge on its
+// tighter axis and stays inside it on the other, at telephoto and wide lenses
+// on landscape and portrait targets.
+TEST(TesseractFraming, OffsetRecordFrameFitsTheSphereInsideTheRemainingRoom) {
+  const float radius = defaultRadius();
+  for (const float aspect : {LANDSCAPE_ASPECT, PORTRAIT_ASPECT}) {
+    for (const float fov : {20.0f, LEFT_THIRD_FOV, 90.0f, 120.0f}) {
+      for (const auto &[frameX, frameY] : COMPOSITION_OFFSETS) {
+        const OffsetCamera cam = offsetCamera(frameX, frameY, fov, aspect);
+        const TesseractFraming framing = offsetRecorded(cam, fov, aspect, radius);
+        const glm::mat4 vp = blackhole::tesseractViewProjection(
+            cam.basis, cam.focusDirection, framing.viewDistance, framing.fovDeg, aspect);
+        const glm::vec2 edge = fillEdgeNdc(originNdc(vp));
+        const glm::vec2 reach = largestSphereNdc(vp, radius);
+        EXPECT_LE(reach.x, edge.x + 1e-3f) << fov << " " << aspect << " " << frameX;
+        EXPECT_LE(reach.y, edge.y + 1e-3f) << fov << " " << aspect << " " << frameY;
+        EXPECT_NEAR(std::max(reach.x - edge.x, reach.y - edge.y), 0.0f, 1e-3f)
+            << fov << " " << aspect << " " << frameX << "," << frameY;
+      }
+    }
+  }
+}
+
+// The portrait left-third capture: the framing that ignores the offset
+// pushes the sphere past the frame edge, and the offset-aware framing keeps
+// the sphere and every rotated scene point inside the fill.
+TEST(TesseractFraming, PortraitLeftThirdKeepsTheTesseractInFrame) {
+  const float radius = defaultRadius();
+  const OffsetCamera cam = offsetCamera(0.36f, 0.06f, LEFT_THIRD_FOV, PORTRAIT_ASPECT);
+  const TesseractFraming centered =
+      tesseractFraming(UI_DISTANCE, UI_FOV, radius, PORTRAIT_ASPECT,
+                       TesseractRecordCamera{.fovDeg = LEFT_THIRD_FOV});
+  const glm::mat4 centeredVp = blackhole::tesseractViewProjection(
+      cam.basis, cam.focusDirection, centered.viewDistance, centered.fovDeg, PORTRAIT_ASPECT);
+  EXPECT_GT(largestSphereNdc(centeredVp, radius).x, 1.0f);
+
+  const TesseractFraming framing = offsetRecorded(cam, LEFT_THIRD_FOV, PORTRAIT_ASPECT, radius);
+  EXPECT_GT(framing.viewDistance, centered.viewDistance);
+  const glm::mat4 vp = blackhole::tesseractViewProjection(
+      cam.basis, cam.focusDirection, framing.viewDistance, framing.fovDeg, PORTRAIT_ASPECT);
+  const glm::vec2 edge = fillEdgeNdc(originNdc(vp));
+  const glm::vec2 scene = largestSceneNdc(vp, false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W);
+  EXPECT_LE(scene.x, edge.x);
+  EXPECT_LE(scene.y, edge.y);
 }
 
 } // namespace

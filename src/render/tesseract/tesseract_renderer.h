@@ -23,6 +23,7 @@
 
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 
 namespace blackhole {
@@ -175,17 +176,23 @@ inline constexpr float TESSERACT_MIN_PERSPECTIVE_DISTANCE = 2.1f;
  * color to 0.059; cinematic's gamma 2.25 maps both slightly higher.
  */
 inline constexpr float TESSERACT_RECORD_EXPOSURE = 0.375f;
-/// Fraction of the half-height of a recorded frame the tesseract's bounding
-/// sphere fills, below 1 so the sphere, a conservative bound, stays in frame.
+/// Fraction of a recorded frame's room between the tesseract's center and the
+/// nearer frame edge that the bounding sphere fills on the tighter axis, below
+/// 1 so the sphere, a conservative bound, stays in frame (tesseractFraming).
 inline constexpr float TESSERACT_RECORD_FILL = 0.85f;
 /// Widest tesseract field of view; glm::perspective needs fovy below 180 deg.
 inline constexpr float TESSERACT_MAX_FOV_DEG = 179.0f;
 /// Narrowest tesseract field of view, which keeps the projection finite.
 inline constexpr float TESSERACT_MIN_FOV_DEG = 1.0f;
+/// Smallest forward cosine tesseractFocusTangent divides by.
+inline constexpr float TESSERACT_MIN_FOCUS_COSINE = 1e-3f;
 
-/** @brief Record camera lens that frames a recorded tesseract frame. */
+/** @brief Record camera lens and focus position that frame a recorded tesseract frame. */
 struct TesseractRecordCamera {
   float fovDeg = 45.0f; ///< CameraState::fov.
+  /// Tangents of the angles from the view axis to the tesseract's center,
+  /// across and up (tesseractFocusTangent); zero on a centered frame.
+  glm::vec2 focusTangent{0.0f};
 };
 
 /** @brief Output clock and camera of one recorded tesseract frame. */
@@ -221,16 +228,25 @@ float tesseractBoundingRadius(bool stereographic, float sceneScale, float perspe
  * Without @p record the UI viewDistance and fovDeg frame the scene. A recorded
  * frame takes the record camera's field of view, clamped to
  * [TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG], and places the eye so the
- * sphere of @p boundingRadius R fills TESSERACT_RECORD_FILL k of the frame's
- * narrower half-extent. The field of view is vertical, so the half-extents
- * subtend tan(fov / 2) up and @p aspect tan(fov / 2) across, and the narrower
- * one is t = min(1, aspect) tan(fov / 2); a centered sphere at distance D has
- * silhouette tan(asin(R / D)), so D = R sqrt(1 + 1 / (k t)^2). Every profile
- * and every landscape or portrait target then frames the whole tesseract at
- * the same size; the record camera still sets the viewing direction and
- * frame offset (tesseractView), and its black-hole distance, including
- * --record-distance, sets no tesseract size. The distance never falls below
- * TESSERACT_MIN_VIEW_DISTANCE.
+ * sphere of @p boundingRadius R fills TESSERACT_RECORD_FILL k of the room
+ * between its center and the nearer frame edge on the tighter axis. The field
+ * of view is vertical, so the half-extents subtend T_y = tan(fov / 2) up and
+ * T_x = @p aspect T_y across. The record camera's focusTangent c places the
+ * center off the view axis when a showcase-orbit frame offset turns the
+ * camera (tesseractView); its magnitude is clamped to k T per axis, so a
+ * center past the frame edge frames as if it sat at k T. Per axis the
+ * silhouette's outer edge must reach no farther than the tangent
+ * E = |c| + k (T - |c|): the planes through the eye that hold the other image
+ * axis and touch the sphere lie asin(R / rho) either side of the center's
+ * angle atan(|c|), where rho = D sqrt(1 + c_axis^2) / sqrt(1 + |c|^2) is the
+ * center's distance from that axis, so
+ * D = R / sin(atan(E) - atan(|c|)) * sqrt(1 + |c|^2) / sqrt(1 + c_axis^2),
+ * and the eye takes the larger of the two axes' distances. A centered sphere
+ * reduces to D = R sqrt(1 + 1 / (k t)^2) with t the narrower half-extent
+ * min(1, aspect) T_y. Every profile, composition, and landscape or portrait
+ * target then frames the whole tesseract; the record camera's black-hole
+ * distance, including --record-distance, sets no tesseract size. The distance
+ * never falls below TESSERACT_MIN_VIEW_DISTANCE.
  */
 TesseractFraming tesseractFraming(float viewDistance, float fovDeg, float boundingRadius,
                                   float aspect, const std::optional<TesseractRecordCamera> &record);
@@ -276,6 +292,20 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 
 /** @brief The view half of tesseractViewProjection: eye placement and orientation. */
 glm::mat4 tesseractView(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,
                         float viewDistance);
+
+/**
+ * @brief Tangents of the angles from the tesseract view axis to its center.
+ *
+ * tesseractView looks along cameraBasis[2] from an eye on the line through
+ * the origin along @p focusDirection, so the center sits at
+ * (dot(f, right), dot(f, up)) / dot(f, forward) in view tangents, with right
+ * cameraBasis[0] and up cameraBasis[1]. Zero when the camera looks at its
+ * focus; a showcase-orbit frame offset makes it about the offset times the
+ * half-extent tangents. The forward component is floored at
+ * TESSERACT_MIN_FOCUS_COSINE, so a focus at or behind the eye plane maps to
+ * a large finite tangent.
+ */
+glm::vec2 tesseractFocusTangent(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection);
 
 /**
  * @brief Advance the tesseract orientation and pulse for this frame.
