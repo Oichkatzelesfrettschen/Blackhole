@@ -304,3 +304,24 @@ TEST(KerrTimeField, HorizonRadiusIsNeverAStation) {
     EXPECT_GT(field.properTimeRate(radiusCm, game::Observer::Hovering), 0.0);
   }
 }
+
+// Falsifier: the field's own published marginally bound radius admitted as an
+// orbit of that sense (at spin 0.99 the cm -> offset round trip lands a few
+// ulp above r_mb, admitting an E = 1 orbit the API defines as unbound), or
+// the first radius the field does admit carrying no orbital clock.
+TEST(KerrTimeField, MarginallyBoundRadiusIsNeverAnOrbit) {
+  for (const double spin : {0.5, 0.9, 0.99, 0.998}) {
+    const game::KerrTimeField field(K_M87_MASS_G, spin);
+    for (const game::Observer orbit :
+         {game::Observer::CircularOrbitPrograde, game::Observer::CircularOrbitRetrograde}) {
+      const double boundaryCm = field.marginallyBoundRadiusCm(orbit);
+      EXPECT_FALSE(field.admitsObserver(boundaryCm, orbit)) << "spin " << spin;
+      double radiusCm = boundaryCm;
+      for (int step = 0; step < 64 && !field.admitsObserver(radiusCm, orbit); ++step) {
+        radiusCm = std::nextafter(radiusCm, 2.0 * radiusCm);
+      }
+      ASSERT_TRUE(field.admitsObserver(radiusCm, orbit));
+      EXPECT_GT(field.properTimeRate(radiusCm, orbit), 0.0);
+    }
+  }
+}

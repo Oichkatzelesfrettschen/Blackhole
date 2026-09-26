@@ -64,7 +64,11 @@ bool KerrTimeField::admitsObserver(double radiusCm, Observer observer) const {
   if (observer == Observer::Hovering) {
     return true;
   }
-  return radialOffset(radiusCm) > ko::marginallyBoundOffset(epsilon_, senseOf(observer));
+  // Strictly outside r_mb in both representations, as for the horizon: the
+  // absolute radius marginallyBoundRadiusCm publishes is itself refused (an
+  // E = 1 orbit is not bound) however the round trip rounds.
+  return radiusCm > marginallyBoundRadiusCm(observer) &&
+         radialOffset(radiusCm) > ko::marginallyBoundOffset(epsilon_, senseOf(observer));
 }
 
 bool KerrTimeField::admitsStableOrbit(double radiusCm, Observer observer) const {
