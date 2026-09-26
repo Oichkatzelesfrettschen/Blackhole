@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 
 #include "game/blackhole_time_field.h"
@@ -280,5 +281,26 @@ TEST(KerrTimeField, SubResolutionDeficitsRaiseToTheFloor) {
     EXPECT_GT(field.properTimeRate(iscoCm, prograde), 0.0);
     EXPECT_LT(field.outerHorizonCm(), field.marginallyBoundRadiusCm(prograde));
     EXPECT_LT(field.marginallyBoundRadiusCm(prograde), iscoCm);
+  }
+}
+
+// Falsifier: the field's own published horizon radius accepted as a station
+// (at spin 0.99 the cm -> offset round trip lands above the horizon offset),
+// or the first representable radius the field does accept carrying a zero
+// lapse -- for spins from 0.5 to the canon deficit.
+TEST(KerrTimeField, HorizonRadiusIsNeverAStation) {
+  const std::array<game::KerrTimeField, 5> fields = {
+      game::KerrTimeField(K_M87_MASS_G, 0.5), game::KerrTimeField(K_M87_MASS_G, 0.9),
+      game::KerrTimeField(K_M87_MASS_G, 0.99), game::KerrTimeField(K_M87_MASS_G, 0.998),
+      game::KerrTimeField(K_M87_MASS_G, game::SpinDeficit{.epsilon = 1.33e-14})};
+  for (const game::KerrTimeField &field : fields) {
+    const double horizonCm = field.outerHorizonCm();
+    EXPECT_FALSE(field.isValidStationRadius(horizonCm)) << "spin " << field.spinDimensionless();
+    double radiusCm = horizonCm;
+    for (int step = 0; step < 64 && !field.isValidStationRadius(radiusCm); ++step) {
+      radiusCm = std::nextafter(radiusCm, 2.0 * radiusCm);
+    }
+    ASSERT_TRUE(field.isValidStationRadius(radiusCm));
+    EXPECT_GT(field.properTimeRate(radiusCm, game::Observer::Hovering), 0.0);
   }
 }

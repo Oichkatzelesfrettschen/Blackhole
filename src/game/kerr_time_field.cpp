@@ -89,7 +89,13 @@ double KerrTimeField::iscoRadiusCm(Observer orbit) const {
 }
 
 bool KerrTimeField::isValidStationRadius(double radiusCm) const {
-  return std::isfinite(radiusCm) && radialOffset(radiusCm) > ko::horizonOffset(epsilon_);
+  // Strictly outside the horizon in both representations: the absolute radius
+  // the field publishes (outerHorizonCm_, so the horizon itself is refused
+  // however the cm -> offset round trip rounds) and the offset the metric
+  // functions read (so an accepted radius always has Delta > 0 and a
+  // nonzero lapse).
+  return std::isfinite(radiusCm) && radiusCm > outerHorizonCm_ &&
+         radialOffset(radiusCm) > ko::horizonOffset(epsilon_);
 }
 
 double KerrTimeField::signalDelaySec(double fromRadiusCm, double toRadiusCm) const {
