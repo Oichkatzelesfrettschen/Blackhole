@@ -157,6 +157,7 @@ GLSL_PUBLIC_NAMES: dict[str, str] = {
     "kdsBisectDelta": "kds_bisect_delta",
     "kdsCosmologicalHorizon": "kds_cosmological_horizon",
     "kdsDelta": "kds_Delta",
+    "kdsDeltaLocalMinimum": "kds_delta_local_minimum",
     "kdsDeltaStationaryRadius": "kds_delta_stationary_radius",
     "kdsDeltaTheta": "kds_Delta_theta",
     "kdsErgosphereRadius": "kds_ergosphere_radius",

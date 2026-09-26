@@ -24,10 +24,12 @@
  * Horizons are the positive roots of the quartic Delta_r. For Lambda > 0 and
  * M > 0 in the black-hole range there are three: r_- (Cauchy) < r_+ (event)
  * < r_c (cosmological). The solver brackets each root between the positive
- * stationary points of Delta_r, which a trigonometric cubic formula gives in
- * closed form, and bisects. This holds for Lambda from 1e-10 (r_c ~ 1.7e5 M)
- * through the Nariai limit, where r_+ and r_c merge and the functions return
- * NaN.
+ * stationary points of Delta_r, which kdsDeltaStationaryRadius gives in closed
+ * form, and bisects. tests/kerr_de_sitter_test.cpp holds all three roots to
+ * 1e-12 relative against mpmath for Lambda M^2 from 1e-44 (r_c ~ 1.7e22 M) to
+ * 0.1, and r_+ to the Kerr value for a solar-mass hole under observedLambda()
+ * (Lambda M^2 ~ 2.4e-46). Beyond the Nariai limit, where r_+ and r_c merge,
+ * the functions return NaN.
  *
  * Signed spin: a > 0 rotates about +z. Every function here depends on a^2 or
  * on a in the frame-dragging terms only.
@@ -63,7 +65,7 @@ namespace verified {
  */
 [[nodiscard]] inline double kdsSigma(double r, double theta, double a) noexcept {
   double const cosTheta = std::cos(theta);
-  return r * r + a * a * cosTheta * cosTheta;
+  return (r * r) + (a * a * cosTheta * cosTheta);
 }
 
 /**
@@ -75,7 +77,7 @@ namespace verified {
  * A quartic in r whose positive roots are the horizons.
  */
 [[nodiscard]] constexpr double kdsDelta(double r, double m, double a, double lambda) noexcept {
-  return (r * r + a * a) * (1.0 - lambda * r * r / 3.0) - 2.0 * m * r;
+  return (((r * r) + (a * a)) * (1.0 - (lambda * r * r / 3.0))) - (2.0 * m * r);
 }
 
 /**
@@ -86,7 +88,7 @@ namespace verified {
  */
 [[nodiscard]] inline double kdsDeltaTheta(double theta, double a, double lambda) noexcept {
   double const cosTheta = std::cos(theta);
-  return 1.0 + lambda * a * a * cosTheta * cosTheta / 3.0;
+  return 1.0 + (lambda * a * a * cosTheta * cosTheta / 3.0);
 }
 
 /**
@@ -95,7 +97,7 @@ namespace verified {
  * Derived from Rocq: Definition kds_Xi (a Lambda : R) : R := 1 + Lambda * a^2 / 3.
  */
 [[nodiscard]] constexpr double kdsXi(double a, double lambda) noexcept {
-  return 1.0 + lambda * a * a / 3.0;
+  return 1.0 + (lambda * a * a / 3.0);
 }
 
 /**
@@ -109,10 +111,10 @@ namespace verified {
  */
 [[nodiscard]] inline double kdsA(double r, double theta, double m, double a,
                                  double lambda) noexcept {
-  double const r2PlusA2 = r * r + a * a;
+  double const r2PlusA2 = (r * r) + (a * a);
   double const sinTheta = std::sin(theta);
-  return kdsDeltaTheta(theta, a, lambda) * r2PlusA2 * r2PlusA2 -
-         kdsDelta(r, m, a, lambda) * a * a * sinTheta * sinTheta;
+  return (kdsDeltaTheta(theta, a, lambda) * r2PlusA2 * r2PlusA2) -
+         (kdsDelta(r, m, a, lambda) * a * a * sinTheta * sinTheta);
 }
 
 // ============================================================================
@@ -133,7 +135,7 @@ namespace verified {
   double const sinTheta = std::sin(theta);
   double const xi = kdsXi(a, lambda);
   return (-kdsDelta(r, m, a, lambda) +
-          kdsDeltaTheta(theta, a, lambda) * a * a * sinTheta * sinTheta) /
+          (kdsDeltaTheta(theta, a, lambda) * a * a * sinTheta * sinTheta)) /
          (xi * xi * kdsSigma(r, theta, a));
 }
 
@@ -185,7 +187,7 @@ namespace verified {
   double const sinTheta = std::sin(theta);
   double const xi = kdsXi(a, lambda);
   return a * sinTheta * sinTheta *
-         (kdsDelta(r, m, a, lambda) - kdsDeltaTheta(theta, a, lambda) * (r * r + a * a)) /
+         (kdsDelta(r, m, a, lambda) - (kdsDeltaTheta(theta, a, lambda) * ((r * r) + (a * a)))) /
          (xi * xi * kdsSigma(r, theta, a));
 }
 
@@ -201,7 +203,14 @@ namespace verified {
  * p = -3 (1 - Lambda a^2 / 3) / (2 Lambda) and q = 3 M / (2 Lambda). When it has
  * three real roots, one is negative and two are positive: the local minimum
  * r_a (upper = false) and the local maximum r_b (upper = true) of Delta_r.
- * Viete's trigonometric form gives them without cancellation at small Lambda.
+ *
+ * Viete's trigonometric form gives r_b = A cos(phi) and the negative root
+ * r_n = A cos(phi + 2 pi / 3) with phi in [0, pi / 3], where both cosines have
+ * magnitude at least 1/2. The same form gives r_a = A cos(phi - 2 pi / 3), whose
+ * cosine tends to zero as Lambda -> 0: r_a ~ M while A ~ sqrt(2 / Lambda), so
+ * that expression cancels every significant digit once Lambda M^2 falls below
+ * ~1e-30. r_a comes instead from the product of the roots,
+ * r_a r_b r_n = -q, which divides well-conditioned quantities.
  *
  * @param m Black hole mass (> 0)
  * @param a Spin parameter
@@ -211,7 +220,7 @@ namespace verified {
  */
 [[nodiscard]] inline double kdsDeltaStationaryRadius(double m, double a, double lambda,
                                                      bool upper) noexcept {
-  double const b = 1.0 - lambda * a * a / 3.0;
+  double const b = 1.0 - (lambda * a * a / 3.0);
   if (!(lambda > 0.0) || !(m > 0.0) || !(b > 0.0)) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -223,8 +232,12 @@ namespace verified {
   }
   double const phi = std::acos(cosArg) / 3.0;
   double const amplitude = 2.0 * std::sqrt(-p / 3.0);
-  double const shift = upper ? 0.0 : 2.0 * std::numbers::pi / 3.0;
-  return amplitude * std::cos(phi - shift);
+  double const rLocalMax = amplitude * std::cos(phi);
+  if (upper) {
+    return rLocalMax;
+  }
+  double const rNegative = amplitude * std::cos(phi + (2.0 * std::numbers::pi / 3.0));
+  return -q / (rLocalMax * rNegative);
 }
 
 /**
@@ -238,7 +251,7 @@ namespace verified {
   bool const loPositive = kdsDelta(lo, m, a, lambda) - offset > 0.0;
   for (int iteration = 0; iteration < 256; ++iteration) {
     double const mid = 0.5 * (lo + hi);
-    if (!(mid > lo && mid < hi)) {
+    if (mid <= lo || mid >= hi) {
       break;
     }
     if ((kdsDelta(mid, m, a, lambda) - offset > 0.0) == loPositive) {
@@ -251,6 +264,26 @@ namespace verified {
 }
 
 /**
+ * @brief Delta_r at its local minimum r_a, with rounding-level values read as zero
+ *
+ * The sign of this minimum classifies the hole: negative for separate r_- and
+ * r_+, zero at extremality where they merge at r_a (a double root), positive
+ * for a naked singularity. At the extremal spin the computed Delta_r(r_a) is
+ * rounding noise of either sign, so a value within 4 epsilon of the magnitude
+ * of its terms, (r^2 + a^2)(1 + Lambda r^2 / 3) + 2 M r, returns as exactly 0.
+ *
+ * @return Delta_r(r_a), 0 within rounding, or NaN when r_a does not exist
+ */
+[[nodiscard]] inline double kdsDeltaLocalMinimum(double m, double a, double lambda) noexcept {
+  double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
+  double const delta = kdsDelta(rMin, m, a, lambda);
+  double const r2PlusA2 = (rMin * rMin) + (a * a);
+  double const termScale = (r2PlusA2 * (1.0 + (lambda * rMin * rMin / 3.0))) + (2.0 * m * rMin);
+  double const roundingBound = 4.0 * std::numeric_limits<double>::epsilon() * termScale;
+  return (std::abs(delta) <= roundingBound) ? 0.0 : delta;
+}
+
+/**
  * @brief Inner (Cauchy) horizon r_-: smallest positive root of Delta_r
  *
  * Derived from Rocq: Definition kds_is_horizon (r M a Lambda : R) : Prop :=
@@ -258,22 +291,28 @@ namespace verified {
  *
  * Delta_r(0) = a^2, so at a = 0 the root sits at the curvature singularity
  * r = 0 and Schwarzschild-de Sitter has no Cauchy horizon; the function
- * returns 0 there. At Lambda = 0 it returns the Kerr value M - sqrt(M^2 - a^2).
+ * returns 0 there. At extremality r_- = r_+ = r_a, the local minimum of
+ * Delta_r (see kdsDeltaLocalMinimum). At Lambda = 0 it returns the Kerr value
+ * M - sqrt(M^2 - a^2).
  *
  * @return r_-, or NaN outside the black-hole parameter range
  */
 [[nodiscard]] inline double kdsInnerHorizon(double m, double a, double lambda) noexcept {
   if (lambda == 0.0) {
-    double const disc = m * m - a * a;
+    double const disc = (m * m) - (a * a);
     return (m > 0.0 && disc >= 0.0) ? m - std::sqrt(disc)
                                     : std::numeric_limits<double>::quiet_NaN();
   }
-  double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
-  if (!(kdsDelta(rMin, m, a, lambda) < 0.0)) {
+  double const deltaMin = kdsDeltaLocalMinimum(m, a, lambda);
+  if (!(deltaMin <= 0.0)) {
     return std::numeric_limits<double>::quiet_NaN();
   }
   if (a == 0.0) {
     return 0.0;
+  }
+  double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
+  if (deltaMin == 0.0) {
+    return rMin;
   }
   return kdsBisectDelta(0.0, rMin, m, a, lambda, 0.0);
 }
@@ -281,21 +320,26 @@ namespace verified {
 /**
  * @brief Event horizon r_+: root of Delta_r between its local minimum and maximum
  *
- * At Lambda = 0 it returns the Kerr value M + sqrt(M^2 - a^2).
+ * At extremality it returns the double root r_a, equal to kdsInnerHorizon. At
+ * Lambda = 0 it returns the Kerr value M + sqrt(M^2 - a^2).
  *
  * @return r_+, or NaN outside the black-hole parameter range (naked
  *         singularity or beyond the Nariai limit)
  */
 [[nodiscard]] inline double kdsEventHorizon(double m, double a, double lambda) noexcept {
   if (lambda == 0.0) {
-    double const disc = m * m - a * a;
+    double const disc = (m * m) - (a * a);
     return (m > 0.0 && disc >= 0.0) ? m + std::sqrt(disc)
                                     : std::numeric_limits<double>::quiet_NaN();
   }
+  double const deltaMin = kdsDeltaLocalMinimum(m, a, lambda);
   double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
   double const rMax = kdsDeltaStationaryRadius(m, a, lambda, true);
-  if (!(kdsDelta(rMin, m, a, lambda) < 0.0) || !(kdsDelta(rMax, m, a, lambda) > 0.0)) {
+  if (!(deltaMin <= 0.0) || !(kdsDelta(rMax, m, a, lambda) > 0.0)) {
     return std::numeric_limits<double>::quiet_NaN();
+  }
+  if (deltaMin == 0.0) {
+    return rMin;
   }
   return kdsBisectDelta(rMin, rMax, m, a, lambda, 0.0);
 }
@@ -314,9 +358,8 @@ namespace verified {
   if (lambda == 0.0) {
     return std::numeric_limits<double>::infinity();
   }
-  double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
   double const rMax = kdsDeltaStationaryRadius(m, a, lambda, true);
-  if (!(kdsDelta(rMin, m, a, lambda) < 0.0) || !(kdsDelta(rMax, m, a, lambda) > 0.0)) {
+  if (!(kdsDeltaLocalMinimum(m, a, lambda) <= 0.0) || !(kdsDelta(rMax, m, a, lambda) > 0.0)) {
     return std::numeric_limits<double>::quiet_NaN();
   }
   double rHigh = std::fmax(rMax, std::sqrt(3.0 / lambda));

@@ -189,18 +189,51 @@ def kerr_newman_section() -> None:
     print(f"closed-form marginal stability matches dE/dr = 0 on {count} (a, Q) points")
 
 
+def kds_delta(r: Real, m: Real, a: Real, lam: Real) -> Real:
+    return (r * r + a * a) * (1 - lam * r * r / 3) - 2 * m * r
+
+
 def kds_horizons(m: Real, a: Real, lam: Real) -> list[Real]:
-    """Positive real roots of Delta_r, ascending."""
+    """Positive real roots of Delta_r, ascending, each polished by findroot.
+
+    At a = 0 Delta_r = r (-(L/3) r^3 + r - 2 M) and the factor r is removed so
+    that the root r = 0 cannot surface as a spurious positive root. The
+    imaginary-part filter is relative to |z| because the roots span from
+    ~1 M to ~sqrt(3 / Lambda).
+    """
     # Delta_r = -(L/3) r^4 + (1 - L a^2 / 3) r^2 - 2 M r + a^2
     coefficients = [-lam / 3, 0, 1 - lam * a * a / 3, -2 * m, a * a]
-    roots = mp.polyroots(coefficients, maxsteps=200, extraprec=200)
-    return sorted(mp.re(z) for z in roots if abs(mp.im(z)) < mp.mpf(10) ** -30 and mp.re(z) > 0)
+    if a == 0:
+        coefficients = coefficients[:-1]
+    roots = mp.polyroots(coefficients, maxsteps=2000, extraprec=2000)
+    real = sorted(
+        mp.re(z) for z in roots if abs(mp.im(z)) < mp.mpf(10) ** -40 * abs(z) and mp.re(z) > 0
+    )
+    expected = 2 if a == 0 else 3
+    assert len(real) == expected, (a, lam, roots)
+    # Delta_r / (r^2 + a^2) is O(1) at every root, so findroot's absolute
+    # tolerance is meaningful from r ~ M to r ~ sqrt(3 / Lambda).
+    # The secant starts from two points 1e-45 apart around each polyroots root,
+    # which keeps it on that root when r_- and r_+ nearly merge (a -> M).
+    step = mp.mpf(10) ** -45
+    polished = [
+        mp.findroot(
+            lambda r: kds_delta(r, m, a, lam) / (r * r + a * a), (x * (1 - step), x * (1 + step))
+        )
+        for x in real
+    ]
+    for x, y in zip(real, polished, strict=True):
+        assert abs(x - y) < mp.mpf(10) ** -40 * y, (a, lam, x, y)
+    return polished
 
 
 def kerr_de_sitter_section() -> None:
     one = mp.mpf(1)
     print("# Kerr-de Sitter (M = 1), positive roots of Delta_r ascending")
-    for a, lam in (("0", "1e-2"), ("0", "1e-4"), ("0.9", "1e-2"), ("0.9", "0.1"), ("0.5", "1e-10")):
+    cases = [("0", "1e-2"), ("0", "1e-4"), ("0.9", "1e-2"), ("0.9", "0.1"), ("0.5", "1e-10")]
+    # Lambda M^2 from M87* (~1e-26) to a stellar-mass hole (~1e-44).
+    cases += [(a, lam) for lam in ("1e-26", "1e-34", "1e-44") for a in ("0", "0.5", "0.999")]
+    for a, lam in cases:
         roots = kds_horizons(one, mp.mpf(a), mp.mpf(lam))
         print(f"a={a} Lambda={lam}: " + ", ".join(fmt(x) for x in roots))
     lam = mp.mpf("1e-2")
