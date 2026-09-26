@@ -465,17 +465,46 @@ TEST(ObserverSkyMap, MillerMapConvergesUnderStepHalving) {
 TEST(ObserverSkyMap, SourceSpansExposeTheWindingThroat) {
   const sky::ObserverKey miller = orbiting(K_PAPER_DEFICIT, K_PAPER_MILLER_X);
   const sky::SkyImage image = sky::traceEquirect(miller, 64, 32, defaultSettings());
-  // Column of longitude -100 deg on the equator row 16.
+  // Column of longitude -100 deg on the equator row 16, where sin(theta) = 1
+  // makes the coordinate and projected azimuthal spans equal.
   const auto column = static_cast<std::size_t>((80.0 / 360.0) * 64.0);
   const std::size_t texel = (std::size_t{16} * 64) + column;
-  EXPECT_GT(image.sourceSpan.at(texel * 2), 2.0 * K_PI) << "azimuthal span, rad";
-  EXPECT_LT(image.sourceSpan.at((texel * 2) + 1), 0.5) << "polar span, rad";
+  EXPECT_GT(image.sourceSpan.at(texel * 3), 2.0 * K_PI) << "coordinate azimuthal span, rad";
+  EXPECT_GT(image.sourceSpan.at((texel * 3) + 1), 2.0 * K_PI) << "projected azimuthal span, rad";
+  EXPECT_LT(image.sourceSpan.at((texel * 3) + 2), 0.5) << "polar span, rad";
 
   const sky::ObserverKey far{.epsilon = 1.0, .x = 1.0e8, .velocity = 0.0};
   const sky::SkyImage flat = sky::traceEquirect(far, 64, 32, defaultSettings());
   const double pitch = 2.0 * K_PI / 64.0;
-  EXPECT_LT(flat.sourceSpan.at(texel * 2), 1.01 * pitch);
-  EXPECT_LT(flat.sourceSpan.at((texel * 2) + 1), 1.01 * pitch);
+  EXPECT_LT(flat.sourceSpan.at(texel * 3), 1.01 * pitch);
+  EXPECT_LT(flat.sourceSpan.at((texel * 3) + 1), 1.01 * pitch);
+  EXPECT_LT(flat.sourceSpan.at((texel * 3) + 2), 1.01 * pitch);
+}
+
+/**
+ * @brief A source footprint at the pole (polar angle 0, sin theta = 0) whose
+ *        unwrapped azimuth winds a full turn between wrapped neighbors:
+ *        physically every azimuth converges at a pole, so the coordinate
+ *        span (feeding skyRadiance's explicit average) must read the full
+ *        turn, while the projected span (weighted by sin theta = 0, feeding
+ *        the LOD) collapses to exactly zero.
+ *
+ * Falsifier: before the fix, sourceSpans stored only the projected value
+ * (delta phi * sin theta) as the sole azimuthal span, so a caller reading it
+ * as the explicit-sampling extent saw 0 at a pole instead of 2 pi and
+ * skyRadiance averaged one direction instead of the whole ring.
+ */
+TEST(ObserverSkyMap, PolarFootprintSpansAFullTurnForExplicitSamplingOnly) {
+  constexpr std::size_t width = 3;
+  const std::vector<double> swept{0.0, 0.0, 2.0 * K_PI};
+  const std::vector<double> polar(width, 0.0); // every texel at the pole
+  const std::vector<float> spans = sky::sourceSpans(swept, polar, width, 1);
+  for (std::size_t column = 0; column < width; ++column) {
+    EXPECT_NEAR(spans.at(column * 3), 2.0 * K_PI, 1.0e-6)
+        << "coordinate span at the pole, column " << column;
+    EXPECT_NEAR(spans.at((column * 3) + 1), 0.0, 1.0e-9)
+        << "projected span at the pole, column " << column;
+  }
 }
 
 /** @brief Write, read back, and reject a mismatched hash. */

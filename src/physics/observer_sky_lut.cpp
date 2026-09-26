@@ -257,7 +257,7 @@ bool readImage(ByteReader &in, SkyImage &image) {
     return false;
   }
   image.rgba.assign(image.width * image.height * 4, 0.0F);
-  image.sourceSpan.assign(image.width * image.height * 2, 0.0F);
+  image.sourceSpan.assign(image.width * image.height * 3, 0.0F);
   const auto read = [&in](float &value) { return in.f32(value); };
   return std::ranges::all_of(image.rgba, read) && std::ranges::all_of(image.sourceSpan, read);
 }
