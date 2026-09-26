@@ -14,13 +14,16 @@
 #include <gtest/gtest.h>
 
 #include "physics/verified/energy_conserving_geodesic.hpp"
+#include "physics/verified/geodesic.hpp"
+#include "physics/verified/kerr.hpp"
+#include "physics/verified/rk4.hpp"
 
 namespace {
 
 struct SchwarzschildNullCase {
   verified::MetricComponents g;
   verified::StateVector drifted;
-  double exactVr;
+  double exactVr = 0.0;
 };
 
 SchwarzschildNullCase driftedNullCase() {

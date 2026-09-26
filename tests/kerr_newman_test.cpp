@@ -386,22 +386,22 @@ TEST(KerrNewman, ExtremeLimit) {
 
 namespace {
 
-constexpr double kIscoA0Q05 = 5.6066434276477041;
-constexpr double kIscoA0Q09 = 4.5137450467151034;
-constexpr double kIscoA05Q05Pro = 3.7320508075688773;
-constexpr double kIscoA05Q05Ret = 7.2051154235083894;
-constexpr double kIscoA09Q03Pro = 1.980407461799196;
-constexpr double kIscoA09Q03Ret = 8.6013892403446616;
-constexpr double kOmegaR3A05Q05 = 0.033948339483394834;
-constexpr double kPhotonA0Q05 = 2.8228756555322953;
-constexpr double kPhotonA05Q05Pro = 2.118828664898468;
-constexpr double kPhotonA05Q05Ret = 3.3756176710888185;
-constexpr double kPhotonA09Q03Pro = 1.3996686888099221;
-constexpr double kPhotonA09Q03Ret = 3.8589114446045108;
+constexpr double K_ISCO_A0_Q05 = 5.6066434276477041;
+constexpr double K_ISCO_A0_Q09 = 4.5137450467151034;
+constexpr double K_ISCO_A05_Q05_PRO = 3.7320508075688773;
+constexpr double K_ISCO_A05_Q05_RET = 7.2051154235083894;
+constexpr double K_ISCO_A09_Q03_PRO = 1.980407461799196;
+constexpr double K_ISCO_A09_Q03_RET = 8.6013892403446616;
+constexpr double K_OMEGA_R3_A05_Q05 = 0.033948339483394834;
+constexpr double K_PHOTON_A0_Q05 = 2.8228756555322953;
+constexpr double K_PHOTON_A05_Q05_PRO = 2.118828664898468;
+constexpr double K_PHOTON_A05_Q05_RET = 3.3756176710888185;
+constexpr double K_PHOTON_A09_Q03_PRO = 1.3996686888099221;
+constexpr double K_PHOTON_A09_Q03_RET = 3.8589114446045108;
 
 // Bisection stops at a 1e-15 M bracket; the closed-form root is
 // well-conditioned there, so 1e-12 bounds the double-precision error.
-constexpr double kIscoTol = 1.0e-12;
+constexpr double K_ISCO_TOL = 1.0e-12;
 
 /** @brief Bardeen-Press-Teukolsky co-rotating (sign = -1) or counter-rotating (+1) ISCO. */
 double bptIsco(double m, double spinMagnitude, double sign) {
@@ -427,8 +427,8 @@ TEST(KerrNewman, FrameDraggingChargeTerm) {
   constexpr double r = 3.0;
   constexpr double halfPi = std::numbers::pi / 2.0;
 
-  EXPECT_NEAR(verified::knFrameDraggingOmega(r, halfPi, m, a, q), kOmegaR3A05Q05, 1.0e-15);
-  EXPECT_NEAR(physics::knFrameDragging(r, halfPi, m, a, q), kOmegaR3A05Q05, 1.0e-15);
+  EXPECT_NEAR(verified::knFrameDraggingOmega(r, halfPi, m, a, q), K_OMEGA_R3_A05_Q05, 1.0e-15);
+  EXPECT_NEAR(physics::knFrameDragging(r, halfPi, m, a, q), K_OMEGA_R3_A05_Q05, 1.0e-15);
 
   for (double const theta : {std::numbers::pi / 5.0, std::numbers::pi / 3.0, halfPi}) {
     const double s2 = std::sin(theta) * std::sin(theta);
@@ -446,21 +446,21 @@ TEST(KerrNewman, FrameDraggingChargeTerm) {
 
 /** @brief a = 0 ISCO is the root of r^3 - 6Mr^2 + 9Q^2 r - 4Q^4/M = 0. */
 TEST(KerrNewman, IscoReissnerNordstromCubic) {
-  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 0.5), kIscoA0Q05, kIscoTol);
-  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.0, 0.5), kIscoA0Q05, kIscoTol);
-  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 0.9), kIscoA0Q09, kIscoTol);
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 0.5), K_ISCO_A0_Q05, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.0, 0.5), K_ISCO_A0_Q05, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 0.9), K_ISCO_A0_Q09, K_ISCO_TOL);
   // Extremal Reissner-Nordstrom: the cubic factors as -(r - M)^2 (r - 4M).
-  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 1.0), 4.0, kIscoTol);
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 1.0), 4.0, K_ISCO_TOL);
   // Charge moves the ISCO inward from 6M.
   EXPECT_LT(verified::knIscoRadiusPrograde(1.0, 0.0, 0.5), 6.0);
 }
 
 /** @brief Spin and charge together, where the a Q^2 cross terms act. */
 TEST(KerrNewman, IscoMixedSpinCharge) {
-  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.5, 0.5), kIscoA05Q05Pro, kIscoTol);
-  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.5, 0.5), kIscoA05Q05Ret, kIscoTol);
-  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.9, 0.3), kIscoA09Q03Pro, kIscoTol);
-  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.9, 0.3), kIscoA09Q03Ret, kIscoTol);
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.5, 0.5), K_ISCO_A05_Q05_PRO, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.5, 0.5), K_ISCO_A05_Q05_RET, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.9, 0.3), K_ISCO_A09_Q03_PRO, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.9, 0.3), K_ISCO_A09_Q03_RET, K_ISCO_TOL);
 }
 
 /** @brief Q = 0 reproduces Bardeen-Press-Teukolsky for signed spin up to a = 0.9999. */
@@ -499,14 +499,14 @@ TEST(KerrNewman, IscoSignAndScaling) {
  * with Omega from the geodesic circularity condition.
  */
 TEST(KerrNewman, PhotonOrbitEquator) {
-  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 0.0), 3.0, kIscoTol);
-  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 0.5), kPhotonA0Q05, kIscoTol);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 0.0), 3.0, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 0.5), K_PHOTON_A0_Q05, K_ISCO_TOL);
   // Extremal Reissner-Nordstrom: (3M + sqrt(9M^2 - 8Q^2)) / 2 = 2M.
-  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 1.0), 2.0, kIscoTol);
-  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.5, 0.5), kPhotonA05Q05Pro, kIscoTol);
-  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, -0.5, 0.5), kPhotonA05Q05Ret, kIscoTol);
-  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.9, 0.3), kPhotonA09Q03Pro, kIscoTol);
-  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, -0.9, 0.3), kPhotonA09Q03Ret, kIscoTol);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 1.0), 2.0, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.5, 0.5), K_PHOTON_A05_Q05_PRO, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, -0.5, 0.5), K_PHOTON_A05_Q05_RET, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.9, 0.3), K_PHOTON_A09_Q03_PRO, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, -0.9, 0.3), K_PHOTON_A09_Q03_RET, K_ISCO_TOL);
   // Q = 0: Bardeen-Press-Teukolsky 2M(1 + cos((2/3) acos(-a/M))).
   for (double const a : {-0.99, -0.5, 0.3, 0.9, 0.99}) {
     const double bpt = 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(-a)));
@@ -551,7 +551,7 @@ using ricci_oracle::Vec4;
 // Residual tolerance for R_mu_nu - 2 (F F - g F^2 / 4). The oracle floor on
 // vacuum Kerr is ~2e-9 (kerr_de_sitter_test KerrVacuumFloor); the Maxwell
 // source adds a fourth-order difference of A at h = 1e-4.
-constexpr double kFieldTol = 1.0e-7;
+constexpr double K_FIELD_TOL = 1.0e-7;
 
 Mat4 knMetric(const Vec4 &x, double m, double a, double q, bool kerrCrossTerm) {
   const double r = x[1];
@@ -610,8 +610,8 @@ TEST(KerrNewman, EinsteinMaxwellFieldEquation) {
   double worst = 0.0;
   for (const Case &c : cases) {
     const FieldResidual residual = einsteinMaxwellResidual(c.a, c.q, c.r, false, 1.0);
-    EXPECT_LT(residual.tensor, kFieldTol) << "a=" << c.a << " Q=" << c.q;
-    EXPECT_LT(residual.scalar, kFieldTol) << "a=" << c.a << " Q=" << c.q;
+    EXPECT_LT(residual.tensor, K_FIELD_TOL) << "a=" << c.a << " Q=" << c.q;
+    EXPECT_LT(residual.scalar, K_FIELD_TOL) << "a=" << c.a << " Q=" << c.q;
     worst = std::fmax(worst, residual.tensor);
   }
   const FieldResidual kerrCross = einsteinMaxwellResidual(0.5, 0.5, 3.0, true, 1.0);
@@ -620,6 +620,6 @@ TEST(KerrNewman, EinsteinMaxwellFieldEquation) {
               worst, kerrCross.tensor, flippedPhi.tPhi);
   // Negative controls: the Kerr cross term -2Mra sin^2 / Sigma and the
   // -Qra sin^2 / Sigma potential both violate the field equation.
-  EXPECT_GT(kerrCross.tensor, 1.0e3 * kFieldTol);
-  EXPECT_GT(flippedPhi.tPhi, 1.0e3 * kFieldTol);
+  EXPECT_GT(kerrCross.tensor, 1.0e3 * K_FIELD_TOL);
+  EXPECT_GT(flippedPhi.tPhi, 1.0e3 * K_FIELD_TOL);
 }
