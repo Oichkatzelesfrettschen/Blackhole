@@ -114,17 +114,65 @@ TEST(TesseractProjection, PerspectiveScalesByEyeDistanceOverDepth) {
   EXPECT_NEAR(outer.x, 1.5f, UNIT_TOL);
 }
 
+TEST(TesseractProjection, PerspectiveClampsAtAndBehindTheEye) {
+  const float d = 3.0f;
+  // d - w = 0 and d - w < 0 both divide by PERSPECTIVE_MIN_DEPTH.
+  const glm::vec3 atEye = tess::projectPerspective(glm::vec4(1.0f, 0.0f, 0.0f, d), d);
+  const glm::vec3 behind = tess::projectPerspective(glm::vec4(1.0f, 0.0f, 0.0f, d + 2.0f), d);
+  const float clamped = d / tess::PERSPECTIVE_MIN_DEPTH;
+  EXPECT_NEAR(atEye.x, clamped, clamped * UNIT_TOL);
+  EXPECT_NEAR(behind.x, clamped, clamped * UNIT_TOL);
+  EXPECT_TRUE(std::isfinite(atEye.x));
+}
+
 TEST(TesseractProjection, StereographicPolesEquatorAndRadius) {
-  const glm::vec3 south = tess::projectStereographic(glm::vec4(0.0f, 0.0f, 0.0f, -1.0f));
-  EXPECT_NEAR(glm::length(south), 0.0f, UNIT_TOL);
-  const glm::vec3 equator = tess::projectStereographic(glm::vec4(0.0f, 1.0f, 0.0f, 0.0f));
-  EXPECT_NEAR(glm::distance(equator, glm::vec3(0.0f, 1.0f, 0.0f)), 0.0f, UNIT_TOL);
-  // |p|^2 = (1 + w) / (1 - w) for any point of S^3.
+  const tess::StereographicPoint south =
+      tess::projectStereographic(glm::vec4(0.0f, 0.0f, 0.0f, -1.0f));
+  EXPECT_NEAR(glm::length(south.position), 0.0f, UNIT_TOL);
+  EXPECT_FLOAT_EQ(south.fade, 1.0f);
+  const tess::StereographicPoint equator =
+      tess::projectStereographic(glm::vec4(0.0f, 1.0f, 0.0f, 0.0f));
+  EXPECT_NEAR(glm::distance(equator.position, glm::vec3(0.0f, 1.0f, 0.0f)), 0.0f, UNIT_TOL);
+  // |p|^2 = (1 + w) / (1 - w) for any point of S^3 away from the clamp.
   const glm::vec4 q = glm::normalize(glm::vec4(0.3f, -0.5f, 0.2f, 0.4f));
-  const glm::vec3 p = tess::projectStereographic(q);
+  const glm::vec3 p = tess::projectStereographic(q).position;
   EXPECT_NEAR(glm::dot(p, p), (1.0f + q.w) / (1.0f - q.w), UNIT_TOL);
   // Direction of xyz is preserved.
   EXPECT_NEAR(glm::dot(glm::normalize(p), glm::normalize(glm::vec3(q))), 1.0f, UNIT_TOL);
+}
+
+TEST(TesseractProjection, StereographicNormalizesOntoTheSphere) {
+  const glm::vec4 onSphere = glm::normalize(glm::vec4(0.3f, -0.5f, 0.2f, 0.4f));
+  const tess::StereographicPoint unit = tess::projectStereographic(onSphere);
+  const tess::StereographicPoint scaled = tess::projectStereographic(onSphere * 2.0f);
+  EXPECT_NEAR(glm::distance(unit.position, scaled.position), 0.0f, UNIT_TOL);
+  EXPECT_FLOAT_EQ(unit.fade, scaled.fade);
+  // A vanishing point goes to the south pole, the origin of the image.
+  const tess::StereographicPoint zero = tess::projectStereographic(glm::vec4(0.0f));
+  EXPECT_EQ(zero.position, glm::vec3(0.0f));
+  EXPECT_FLOAT_EQ(zero.fade, 1.0f);
+}
+
+TEST(TesseractProjection, StereographicGuardsThePole) {
+  // At the pole 1 - w = 0: finite image, divided by the clamp, fully faded.
+  const tess::StereographicPoint pole =
+      tess::projectStereographic(glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+  EXPECT_TRUE(std::isfinite(pole.position.x));
+  EXPECT_EQ(pole.position, glm::vec3(0.0f));
+  EXPECT_FLOAT_EQ(pole.fade, 0.0f);
+  // Just off the pole the divisor stays at STEREOGRAPHIC_MIN_DENOM.
+  const glm::vec4 nearPole = glm::normalize(glm::vec4(0.01f, 0.0f, 0.0f, 1.0f));
+  const tess::StereographicPoint near = tess::projectStereographic(nearPole);
+  EXPECT_NEAR(near.position.x, nearPole.x / tess::STEREOGRAPHIC_MIN_DENOM, 1e-4f);
+  EXPECT_FLOAT_EQ(near.fade, 0.0f);
+  // The fade is a smoothstep between the clamp and STEREOGRAPHIC_FADE_END.
+  const float midDenom = 0.5f * (tess::STEREOGRAPHIC_MIN_DENOM + tess::STEREOGRAPHIC_FADE_END);
+  const float w = 1.0f - midDenom;
+  const glm::vec4 mid(std::sqrt(1.0f - (w * w)), 0.0f, 0.0f, w);
+  EXPECT_NEAR(tess::projectStereographic(mid).fade, 0.5f, 1e-4f);
+  const float wFull = 1.0f - tess::STEREOGRAPHIC_FADE_END;
+  const glm::vec4 full(std::sqrt(1.0f - (wFull * wFull)), 0.0f, 0.0f, wFull);
+  EXPECT_FLOAT_EQ(tess::projectStereographic(full).fade, 1.0f);
 }
 
 TEST(LibraryOfTime, WorldTubeExtrudesAlongW) {
@@ -153,6 +201,9 @@ TEST(LibraryOfTime, LitMomentIsUnitGaussianInLibraryTime) {
   EXPECT_NEAR(tess::litMomentEmission(6.5f, 6.0f, 0.5f), std::exp(-0.5f), UNIT_TOL);
   EXPECT_NEAR(tess::litMomentEmission(5.5f, 6.0f, 0.5f), tess::litMomentEmission(6.5f, 6.0f, 0.5f),
               UNIT_TOL);
+  // A zero width divides by EMISSION_MIN_WIDTH: 1 at the moment, 0 elsewhere.
+  EXPECT_FLOAT_EQ(tess::litMomentEmission(6.0f, 6.0f, 0.0f), 1.0f);
+  EXPECT_EQ(tess::litMomentEmission(6.5f, 6.0f, 0.0f), 0.0f);
 }
 
 TEST(LibraryOfTime, GravityPulseRunsFromNowToPast) {

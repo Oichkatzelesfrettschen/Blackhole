@@ -5,8 +5,8 @@
  *
  * Render-only content (Thorne, The Science of Interstellar ch. 29-31); not
  * physics. Tesseract edges glow a cool blue, world-tube strands a dim amber
- * brightened by the lit-moment Gaussian exp(-(t - litMoment)^2 / (2 w^2))
- * (litMomentEmission in tesseract_geometry.cpp), and the gravity-message
+ * brightened by the lit-moment Gaussian exp(-(t - litMoment)^2 / (2 w^2)),
+ * and the gravity-message
  * pulse adds a travelling Gaussian at library time pulseTime on strand
  * pulseStrand. The profile across each ribbon falls off smoothly so bloom
  * reads the ribbons as light rather than as flat bars. Output is linear HDR
@@ -39,8 +39,12 @@ const vec3 STRAND_COLOR = vec3(0.9, 0.62, 0.28);
 const vec3 SLICE_COLOR = vec3(1.0, 0.82, 0.55);
 const vec3 PULSE_COLOR = vec3(0.65, 0.92, 1.0);
 
+// Mirrors litMomentEmission in src/render/tesseract/tesseract_geometry.cpp
+// (EMISSION_MIN_WIDTH = 1e-4); tests/tesseract_geometry_test.cpp checks it.
+const float EMISSION_MIN_WIDTH = 1e-4;
+
 float gaussian(float x, float center, float width) {
-  float u = (x - center) / max(width, 1e-4);
+  float u = (x - center) / max(width, EMISSION_MIN_WIDTH);
   return exp(-0.5 * u * u);
 }
 

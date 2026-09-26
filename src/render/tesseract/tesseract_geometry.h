@@ -72,21 +72,45 @@ glm::vec4 tesseractVertex(std::size_t index);
 /** @brief Build the full vertex/edge/face/cell complex of the 4-cube. */
 TesseractMesh buildTesseract();
 
+/// Smallest eye distance d - w the perspective projection divides by.
+inline constexpr float PERSPECTIVE_MIN_DEPTH = 0.05f;
+/// Smallest 1 - w the stereographic projection divides by.
+inline constexpr float STEREOGRAPHIC_MIN_DENOM = 0.02f;
+/// 1 - w at which the stereographic pole fade reaches full brightness.
+inline constexpr float STEREOGRAPHIC_FADE_END = 0.2f;
+/// |p| below which the stereographic projection sends p to the south pole.
+inline constexpr float STEREOGRAPHIC_MIN_NORM = 1e-4f;
+/// Smallest Gaussian width litMomentEmission divides by.
+inline constexpr float EMISSION_MIN_WIDTH = 1e-4f;
+
 /**
  * @brief Perspective projection along w from an eye at w = d.
  *
- * p = xyz * d / (d - w). Points nearer the eye (larger w) project larger, so
- * the w = +1 cell of the 4-cube appears as the outer cube.
+ * p = xyz * d / max(d - w, PERSPECTIVE_MIN_DEPTH). Points nearer the eye
+ * (larger w) project larger, so the w = +1 cell of the 4-cube appears as the
+ * outer cube; the clamp bounds points at or behind the eye. Mirrors
+ * projectPerspective in shader/tesseract.vert operation for operation.
  */
 glm::vec3 projectPerspective(const glm::vec4 &p, float eyeDistance);
+
+/** @brief Stereographic image and pole fade of one point. */
+struct StereographicPoint {
+  glm::vec3 position{0.0f};
+  float fade = 1.0f; ///< 0 at the pole w = 1, 1 once 1 - w >= STEREOGRAPHIC_FADE_END.
+};
 
 /**
  * @brief Stereographic projection of S^3 from the pole w = 1.
  *
- * p = xyz / (1 - w) for a unit 4-vector; the south pole maps to the origin,
- * the equator w = 0 to the unit sphere, and |p|^2 = (1 + w) / (1 - w).
+ * The input is first normalized onto S^3 (a point with |p| below
+ * STEREOGRAPHIC_MIN_NORM goes to the south pole), then
+ * p = xyz / max(1 - w, STEREOGRAPHIC_MIN_DENOM) and
+ * fade = smoothstep(STEREOGRAPHIC_MIN_DENOM, STEREOGRAPHIC_FADE_END, 1 - w).
+ * Away from the clamp the south pole maps to the origin, the equator w = 0 to
+ * the unit sphere, and |p|^2 = (1 + w) / (1 - w). Mirrors
+ * projectStereographic in shader/tesseract.vert operation for operation.
  */
-glm::vec3 projectStereographic(const glm::vec4 &p);
+StereographicPoint projectStereographic(const glm::vec4 &p);
 
 /** @brief Bedroom furniture a library strand belongs to. */
 enum class FeatureKind { Shelf, Window, Desk };
@@ -117,8 +141,9 @@ glm::vec4 libraryToTesseract(const glm::vec4 &p, float timeSpan);
 /**
  * @brief Emissive weight of library time @p t for the lit moment.
  *
- * exp(-(t - litMoment)^2 / (2 width^2)): 1 at the lit moment, exp(-1/2) one
- * width away. shader/tesseract.frag evaluates the same expression.
+ * exp(-u^2 / 2) with u = (t - litMoment) / max(width, EMISSION_MIN_WIDTH): 1 at
+ * the lit moment, exp(-1/2) one width away. Mirrors gaussian in
+ * shader/tesseract.frag operation for operation.
  */
 float litMomentEmission(float t, float litMoment, float width);
 

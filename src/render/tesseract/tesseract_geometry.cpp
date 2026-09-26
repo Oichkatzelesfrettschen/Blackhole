@@ -11,8 +11,10 @@
 #include <cstddef>
 #include <vector>
 
+#include <glm/common.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
 
 namespace blackhole::tesseract {
 namespace {
@@ -90,11 +92,18 @@ TesseractMesh buildTesseract() {
 }
 
 glm::vec3 projectPerspective(const glm::vec4 &p, float eyeDistance) {
-  return glm::vec3(p) * (eyeDistance / (eyeDistance - p.w));
+  const float denom = std::max(eyeDistance - p.w, PERSPECTIVE_MIN_DEPTH);
+  return glm::vec3(p) * (eyeDistance / denom);
 }
 
-glm::vec3 projectStereographic(const glm::vec4 &p) {
-  return glm::vec3(p) / (1.0f - p.w);
+StereographicPoint projectStereographic(const glm::vec4 &p) {
+  const float len = glm::length(p);
+  const glm::vec4 s = len > STEREOGRAPHIC_MIN_NORM ? p / len : glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
+  const float denom = 1.0f - s.w;
+  StereographicPoint out;
+  out.fade = glm::smoothstep(STEREOGRAPHIC_MIN_DENOM, STEREOGRAPHIC_FADE_END, denom);
+  out.position = glm::vec3(s) / std::max(denom, STEREOGRAPHIC_MIN_DENOM);
+  return out;
 }
 
 std::vector<LibraryFeature> bedroomFeatures() {
@@ -151,7 +160,7 @@ glm::vec4 libraryToTesseract(const glm::vec4 &p, float timeSpan) {
 }
 
 float litMomentEmission(float t, float litMoment, float width) {
-  const float u = (t - litMoment) / width;
+  const float u = (t - litMoment) / std::max(width, EMISSION_MIN_WIDTH);
   return std::exp(-0.5f * u * u);
 }
 

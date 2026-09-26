@@ -47,20 +47,37 @@ const int KIND_LIT_SLICE = 2;
 const vec2 CORNERS[6] = vec2[6](vec2(0.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0),
                                 vec2(0.0, -1.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
 
-// Rotate p in R^4, project to R^3, and report a fade that falls to zero where
-// the stereographic image diverges near the pole w = 1.
+// projectPerspective and projectStereographic mirror the functions of the
+// same names in src/render/tesseract/tesseract_geometry.cpp, constant for
+// constant (PERSPECTIVE_MIN_DEPTH, STEREOGRAPHIC_MIN_NORM, _MIN_DENOM,
+// _FADE_END); tests/tesseract_geometry_test.cpp checks the CPU copies.
+const float PERSPECTIVE_MIN_DEPTH = 0.05;
+const float STEREOGRAPHIC_MIN_DENOM = 0.02;
+const float STEREOGRAPHIC_FADE_END = 0.2;
+const float STEREOGRAPHIC_MIN_NORM = 1e-4;
+
+vec3 projectPerspective(vec4 p, float eyeDistance) {
+  float denom = max(eyeDistance - p.w, PERSPECTIVE_MIN_DEPTH);
+  return p.xyz * (eyeDistance / denom);
+}
+
+// The fade falls to zero where the image diverges near the pole w = 1.
+vec3 projectStereographic(vec4 p, out float fade) {
+  float len = length(p);
+  vec4 s = len > STEREOGRAPHIC_MIN_NORM ? p / len : vec4(0.0, 0.0, 0.0, -1.0);
+  float denom = 1.0 - s.w;
+  fade = smoothstep(STEREOGRAPHIC_MIN_DENOM, STEREOGRAPHIC_FADE_END, denom);
+  return s.xyz / max(denom, STEREOGRAPHIC_MIN_DENOM);
+}
+
+// Rotate p in R^4, then project to R^3 and scale to world units.
 vec3 project4(vec4 p, out float fade) {
   vec4 r = rotation4 * p;
   fade = 1.0;
   if (projectionMode == 1) {
-    float len = length(r);
-    vec4 s = len > 1e-4 ? r / len : vec4(0.0, 0.0, 0.0, -1.0);
-    float denom = 1.0 - s.w;
-    fade = smoothstep(0.02, 0.2, denom);
-    return sceneScale * s.xyz / max(denom, 0.02);
+    return sceneScale * projectStereographic(r, fade);
   }
-  float denom = max(perspectiveDistance - r.w, 0.05);
-  return sceneScale * r.xyz * (perspectiveDistance / denom);
+  return sceneScale * projectPerspective(r, perspectiveDistance);
 }
 
 void main() {
