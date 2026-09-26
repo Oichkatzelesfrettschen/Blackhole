@@ -113,6 +113,11 @@ endif()
 # Mesh Optimization (meshoptimizer)
 # ============================================================================
 
+# Declared ahead of every target section: shader_validation and the other
+# tests registered before the Testing Support section read BUILD_TESTING, and
+# an undeclared option evaluates false on a fresh configure.
+option(BUILD_TESTING "Build test targets" ON)
+
 option(ENABLE_MESHOPTIMIZER "Enable meshoptimizer for geometry optimization" ON)
 if(ENABLE_MESHOPTIMIZER)
   find_package(meshoptimizer CONFIG QUIET)
@@ -3087,7 +3092,6 @@ endif()
 # Testing Support (CTest)
 # ============================================================================
 
-option(BUILD_TESTING "Build test targets" ON)
 option(ENABLE_PRECISION_TESTS "Enable multiprecision regression tests" OFF)
 
 if(BUILD_TESTING)
