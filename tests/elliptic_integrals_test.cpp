@@ -35,6 +35,9 @@
  *  16.  criticalImpactParameterKerr = 3 sqrt(3) M at a = 0, and the Bardeen
  *       value 3 sqrt(M r_ph) -+ a (= xi of criticalImpactParams at eta = 0)
  *       at a = 0.9 M and a = M, prograde and retrograde.
+ *   Divergent arguments (17):
+ *  17.  R_F with two zero arguments, R_D with z = 0 or x = y = 0, R_J with
+ *       p = 0 or two zeros among x, y, z return +inf.
  */
 
 #include <algorithm>
@@ -369,6 +372,22 @@ bool testCriticalImpactParameterKerr() {
   return true;
 }
 
+// ============================================================================
+// Test 17: divergent Carlson arguments
+// ============================================================================
+
+bool testCarlsonDivergent() {
+  std::cout << "Test 17: Carlson forms at divergent arguments return +inf\n";
+
+  // Compared against 1e300 rather than std::isinf, which -ffinite-math-only folds.
+  const bool ok = carlsonRf(0.0, 0.0, 2.0) > 1.0e300 && carlsonRf(0.0, 3.0, 0.0) > 1.0e300 &&
+                  carlsonRd(0.0, 0.0, 2.0) > 1.0e300 && carlsonRd(1.0, 2.0, 0.0) > 1.0e300 &&
+                  carlsonRj(0.0, 0.0, 2.0, 1.0) > 1.0e300 &&
+                  carlsonRj(1.0, 2.0, 3.0, 0.0) > 1.0e300;
+  check(ok, "R_F, R_D, R_J return +inf where the integral diverges");
+  return true;
+}
+
 } // namespace
 
 int main() try {
@@ -408,6 +427,8 @@ int main() try {
   testCarlsonRcReference();
   std::cout << "\n";
   testCriticalImpactParameterKerr();
+  std::cout << "\n";
+  testCarlsonDivergent();
   std::cout << "\n";
 
   std::cout << "================================================\n"

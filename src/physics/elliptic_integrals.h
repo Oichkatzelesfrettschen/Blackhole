@@ -65,7 +65,8 @@ inline constexpr int CARLSON_MAX_ITER = 600;
  *
  * R_F(x,y,z) = (1/2) ∫₀^∞ dt / √((t+x)(t+y)(t+z))
  *
- * Converges for x,y,z >= 0 with at most one zero. The truncated series is
+ * Converges for x,y,z >= 0 with at most one zero; two zeros return +inf. The
+ * truncated series is
  * DLMF 19.36.1: R_F ~ A^{-1/2} (1 - E2/10 + E3/14 + E2^2/24 - 3 E2 E3/44)
  * with E2 = XY - Z^2, E3 = XYZ and X + Y + Z = 0.
  *
@@ -76,10 +77,12 @@ inline constexpr int CARLSON_MAX_ITER = 600;
  * @return R_F(x,y,z)
  */
 inline double carlsonRf(double x, double y, double z, double relTol = CARLSON_REL_TOL) {
-  const double a0 = (x + y + z) / 3.0;
-  if (!(a0 > 0.0)) {
+  // Two zero arguments make the integral diverge; duplication would never
+  // separate them from zero and would run out of iterations into 0/0.
+  if ((static_cast<int>(x == 0.0) + static_cast<int>(y == 0.0) + static_cast<int>(z == 0.0)) >= 2) {
     return safeInfinity<double>();
   }
+  const double a0 = (x + y + z) / 3.0;
   const double dx0 = a0 - x;
   const double dy0 = a0 - y;
   const double q = std::pow(3.0 * relTol, -1.0 / 6.0) *
@@ -161,13 +164,14 @@ inline double carlsonDjSeries(double e2, double e3, double e4, double e5) {
  * @param y Second argument (≥0)
  * @param z Third argument (>0)
  * @param relTol Relative tolerance r of the stopping rule
- * @return R_D(x,y,z)
+ * @return R_D(x,y,z); +inf for z = 0 or x = y = 0
  */
 inline double carlsonRd(double x, double y, double z, double relTol = CARLSON_REL_TOL) {
-  const double a0 = (x + y + (3.0 * z)) / 5.0;
-  if (!(a0 > 0.0)) {
+  // z = 0, or x = y = 0, makes the integral diverge.
+  if (z == 0.0 || (x == 0.0 && y == 0.0)) {
     return safeInfinity<double>();
   }
+  const double a0 = (x + y + (3.0 * z)) / 5.0;
   const double dx0 = a0 - x;
   const double dy0 = a0 - y;
   const double q = std::pow(0.25 * relTol, -1.0 / 6.0) *
@@ -215,13 +219,15 @@ inline double carlsonRd(double x, double y, double z, double relTol = CARLSON_RE
  * @param z Third argument (>=0); at most one of x, y, z is zero
  * @param p Fourth argument (>0)
  * @param relTol Relative tolerance r of the stopping rule
- * @return R_J(x,y,z,p)
+ * @return R_J(x,y,z,p); +inf for p = 0 or two zeros among x, y, z
  */
 inline double carlsonRj(double x, double y, double z, double p, double relTol = CARLSON_REL_TOL) {
-  const double a0 = (x + y + z + (2.0 * p)) / 5.0;
-  if (!(a0 > 0.0)) {
+  // p = 0, or two zero arguments among x, y, z, makes the integral diverge.
+  if (p == 0.0 ||
+      (static_cast<int>(x == 0.0) + static_cast<int>(y == 0.0) + static_cast<int>(z == 0.0)) >= 2) {
     return safeInfinity<double>();
   }
+  const double a0 = (x + y + z + (2.0 * p)) / 5.0;
   const double dx0 = a0 - x;
   const double dy0 = a0 - y;
   const double dz0 = a0 - z;
