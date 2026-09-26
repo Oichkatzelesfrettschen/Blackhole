@@ -68,7 +68,7 @@ constexpr std::array<RadiiRow, 8> K_RADII{{
     {.epsilon = 0.1, .xIscoPro = 1.3208830417618872468, .xIscoRetro = 7.717352279606489316, .xMbPro = 7.324555320336758664e-1, .xMbRetro = 4.6568097504180443536, .xPhPro = 5.5785462742338280309e-1, .xPhRetro = 2.910267939103036726},
     {.epsilon = 0.4, .xIscoPro = 2.8290694188131495542, .xIscoRetro = 6.8506861853065783143, .xMbPro = 1.6649110640673517328, .xMbRetro = 4.1298221281347034656, .xPhPro = 1.1889140197636331308, .xPhRetro = 2.6298496971319209483},
     {.epsilon = 1.0, .xIscoPro = 5.0, .xIscoRetro = 5.0, .xMbPro = 3.0, .xMbRetro = 3.0, .xPhPro = 2.0, .xPhRetro = 2.0},
-    {.epsilon = 1.9, .xIscoPro = 7.717352279606489316, .xIscoRetro = 1.3208830417618872468, .xMbPro = 4.6568097504180443536, .xMbRetro = 7.324555320336758664e-1, .xPhPro = 2.910267939103036726, .xPhRetro = 5.5785462742338280309e-1},
+    {.epsilon = 1.9, .xIscoPro = 1.3208830417618872468, .xIscoRetro = 7.717352279606489316, .xMbPro = 7.324555320336758664e-1, .xMbRetro = 4.6568097504180443536, .xPhPro = 5.5785462742338280309e-1, .xPhRetro = 2.910267939103036726},
 }};
 // A rate of -1 marks a sense with no timelike circular orbit at that radius.
 constexpr std::array<PointRow, 8> K_POINTS{{
@@ -79,7 +79,7 @@ constexpr std::array<PointRow, 8> K_POINTS{{
     {.epsilon = 1.0, .x = 2.0, .alpha = 5.7735026918962576451e-1, .omega = 0.0, .varpi = 3.0, .ratePro = -1.0, .omegaPro = 0.0, .rateRetro = -1.0, .omegaRetro = 0.0}, // NOLINT(modernize-use-std-numbers) -- generated reference value
     {.epsilon = 1.0, .x = 5.0, .alpha = 8.1649658092772603273e-1, .omega = 0.0, .varpi = 6.0, .ratePro = 7.071067811865475244e-1, .omegaPro = 6.8041381743977169394e-2, .rateRetro = 7.071067811865475244e-1, .omegaRetro = -6.8041381743977169394e-2}, // NOLINT(modernize-use-std-numbers) -- generated reference value
     {.epsilon = 0.002, .x = 5.0e-1, .alpha = 2.3191164750530924223e-1, .omega = 2.9091909738123257e-1, .varpi = 2.1386933705731014243, .ratePro = 1.9056173891204197645e-1, .omegaPro = 3.5271909119955795371e-1, .rateRetro = -1.0, .omegaRetro = 0.0},
-    {.epsilon = 1.9, .x = 9.0, .alpha = 8.9460655096881942211e-1, .omega = -1.7826724240383472646e-3, .varpi = 1.0048482472493048042e+1, .ratePro = 8.2541375464928158576e-1, .omegaPro = 3.2549141406222833815e-2, .rateRetro = 8.4593629853609765265e-1, .omegaRetro = -3.0747682224285464546e-2},
+    {.epsilon = 1.9, .x = 9.0, .alpha = 8.9460655096881942211e-1, .omega = -1.7826724240383472646e-3, .varpi = 1.0048482472493048042e+1, .ratePro = 8.4593629853609765265e-1, .omegaPro = -3.0747682224285464546e-2, .rateRetro = 8.2541375464928158576e-1, .omegaRetro = 3.2549141406222833815e-2},
 }};
 constexpr std::array<DelayRow, 8> K_DELAYS{{
     {.epsilon = 0.1, .x1 = 7.0e-1, .x2 = 3.99e+2, .delayM = 4.1482361145577006912e+2},
@@ -172,7 +172,8 @@ ko::Vec3 latticeDirection(int index, int count) {
 
 // Falsifier: any ISCO, marginally bound, or photon-orbit offset from the
 // deficit algebra differing from the BPT closed form evaluated at 50 digits by
-// more than 1e-12 relative, for either sense, from eps = 1.33e-14 to a = -0.9.
+// more than 1e-12 relative, for either sense, from eps = 1.33e-14 to a = -0.9
+// (senses relative to the hole's rotation, so a = -0.9 mirrors a = 0.9).
 TEST(KerrObserver, CharacteristicRadiiMatchReference) {
   for (const RadiiRow &row : K_RADII) {
     expectRelative(ko::iscoOffset(row.epsilon, OrbitSense::Prograde), row.xIscoPro, 1e-12,
@@ -489,4 +490,30 @@ TEST(KerrObserver, KerrShellsSplitProgradeFromRetrograde) {
   // Outside both shells, at 5M, both tangential photons connect.
   EXPECT_TRUE(zamoPhoton(0.1, 5.0, K_BACKWARD).escapesToInfinity);
   EXPECT_TRUE(zamoPhoton(0.1, 5.0, K_FORWARD).fromInfinity);
+}
+
+// Falsifier: around a = -0.9 (epsilon = 1.9) a prograde orbit -- one that
+// co-rotates with the hole, toward -phi -- differing from the mirror of the
+// a = 0.9 prograde orbit in radius or clock, or sharing its +phi direction:
+// Omega and the ZAMO-frame speed must flip sign, and the orbiter's tetrad
+// must satisfy u^phi / u^t = Omega and stay orthonormal in the a = -0.9 metric.
+TEST(KerrObserver, NegativeSpinProgradeMirrorsPositiveSpin) {
+  for (const OrbitSense sense : {OrbitSense::Prograde, OrbitSense::Retrograde}) {
+    // 2 - 1.9 rounds 1e-16 away from 0.1, so the mirror agrees to rounding.
+    expectRelative(ko::iscoOffset(1.9, sense), ko::iscoOffset(0.1, sense), 1e-12, "isco");
+    expectRelative(ko::marginallyBoundOffset(1.9, sense), ko::marginallyBoundOffset(0.1, sense),
+                   1e-12, "marginally bound");
+    const ko::CircularOrbit mirrored = ko::circularOrbit(1.9, 5.0, sense);
+    const ko::CircularOrbit direct = ko::circularOrbit(0.1, 5.0, sense);
+    ASSERT_TRUE(mirrored.exists);
+    expectRelative(mirrored.properTimeRate, direct.properTimeRate, 1e-12, "mirrored clock");
+    expectRelative(mirrored.angularVelocity, -direct.angularVelocity, 1e-12, "mirrored Omega");
+    expectRelative(mirrored.zamoVelocity, -direct.zamoVelocity, 1e-12, "mirrored ZAMO speed");
+    const ko::Tetrad orbiter = ko::orbitingTetrad(1.9, 5.0, sense);
+    const ko::Vec4 u = ko::legComponents(orbiter, 0);
+    expectRelative(u.at(3) / u.at(0), mirrored.angularVelocity, 1e-12, "tetrad Omega");
+    EXPECT_LT(orthonormalityError(orbiter), 1e-12);
+  }
+  EXPECT_LT(ko::circularOrbit(1.9, 5.0, OrbitSense::Prograde).angularVelocity, 0.0);
+  EXPECT_LT(ko::equatorialFrame(1.9, 5.0).omega, 0.0); // frame dragging toward -phi
 }

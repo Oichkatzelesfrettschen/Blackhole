@@ -8,7 +8,8 @@ src/physics/kerr_observer.h uses, so the table is an independent referee:
 - ZAMO lapse, frame-drag rate, and cylindrical radius from the equatorial
   metric (Bardeen, Press & Teukolsky 1972, eqs. 2.2-2.4).
 - Circular-orbit dtau/dt and Omega from BPT 1972 eq. 2.16 with a -> -a for
-  the retrograde sense.
+  the retrograde sense. Senses are relative to the hole's rotation: the
+  formulas take |a|, and Omega carries the sign of a for a prograde orbit.
 - ISCO from the BPT 1972 closed form (eq. 2.21), marginally bound radius
   2 -+ a + 2 sqrt(1 -+ a), photon orbit 2 (1 + cos(2/3 acos(-+a))).
 - Principal-null coordinate delay by adaptive quadrature of
@@ -34,21 +35,21 @@ def spin(eps: str) -> mpf:
 
 
 def isco(a: mpf, sense: int) -> mpf:
-    """BPT eq. 2.21 is even in a with the sense taken against the hole's
-    rotation; a signed a flips which branch co-rotates with +phi."""
-    spin_sign = 1 if a >= 0 else -1
+    """BPT eq. 2.21, even in a, with the sense taken against the hole's rotation."""
     a = abs(a)
     z1 = 1 + cbrt(1 - a * a) * (cbrt(1 + a) + cbrt(1 - a))
     z2 = sqrt(3 * a * a + z1 * z1)
     root = sqrt((3 - z1) * (3 + z1 + 2 * z2))
-    return 3 + z2 - sense * spin_sign * root
+    return 3 + z2 - sense * root
 
 
 def marginally_bound(a: mpf, sense: int) -> mpf:
+    a = abs(a)
     return 2 - sense * a + 2 * sqrt(1 - sense * a)
 
 
 def photon_orbit(a: mpf, sense: int) -> mpf:
+    a = abs(a)
     return 2 * (1 + cos(mpf(2) / 3 * acos(-sense * a)))
 
 
@@ -62,13 +63,19 @@ def zamo(a: mpf, r: mpf) -> tuple[mpf, mpf, mpf]:
 
 
 def orbit(a: mpf, r: mpf, sense: int) -> tuple[mpf, mpf]:
-    """(dtau/dt, Omega) for a circular equatorial geodesic, or (-1, 0) when none exists."""
+    """(dtau/dt, Omega) for a circular equatorial geodesic, or (-1, 0) when none exists.
+
+    sense is relative to the hole's rotation; Omega is signed along +phi, so
+    a prograde orbit around a < 0 runs toward -phi.
+    """
+    phi_sign = sense if a >= 0 else -sense
+    a = abs(a)
     rm32 = r ** mpf("-1.5")
     radicand = 1 - 3 / r + sense * 2 * a * rm32
     if radicand <= 0:
         return mpf(-1), mpf(0)
     rate = sqrt(radicand) / (1 + sense * a * rm32)
-    omega = sense / (r ** mpf("1.5") + sense * a)
+    omega = phi_sign / (r ** mpf("1.5") + sense * a)
     return rate, omega
 
 

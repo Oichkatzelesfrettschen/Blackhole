@@ -18,9 +18,13 @@
  * clock they combine into is O(1e-5) at the canon orbit: summing them cancels
  * the answer.
  *
- * A retrograde orbit around spin a is a prograde orbit around -a, and a -> -a
- * is epsilon -> 2 - epsilon, so the retrograde branch reuses the prograde
- * algebra with the mirrored deficit and flips the azimuthal sign.
+ * OrbitSense is relative to the hole's rotation: a prograde orbit co-rotates
+ * with the hole whatever the sign of a. The orbit algebra is written for a
+ * hole of spin |a| turning toward +phi, whose deficit is min(epsilon,
+ * 2 - epsilon); a counter-rotating orbit is a co-rotating one around -|a|,
+ * deficit 2 - min(epsilon, 2 - epsilon); and for a < 0 (epsilon > 1) the
+ * mirror phi -> -phi flips every azimuthal sign so the orbit runs with the
+ * hole toward -phi.
  *
  * References: Bardeen, Press & Teukolsky 1972 (ApJ 178, 347) for circular
  * orbits; James, von Tunzelmann, Franklin & Thorne 2015 (arXiv:1502.03808,
@@ -39,16 +43,26 @@
 
 namespace physics::kerr_observer {
 
-/** @brief Orbital sense relative to the hole's rotation. */
+/** @brief Orbital sense relative to the hole's rotation: Prograde
+ *         co-rotates with the hole, toward -phi when a < 0. */
 enum class OrbitSense : std::uint8_t {
   Prograde = 0,
   Retrograde = 1,
 };
 
-/** @brief The deficit whose prograde algebra describes this sense: epsilon
- *         for prograde, 2 - epsilon (spin -a) for retrograde. */
+/** @brief The deficit whose +phi co-rotating algebra describes this sense:
+ *         the deficit of |a|, min(epsilon, 2 - epsilon), for a co-rotating
+ *         orbit and 2 minus that (spin -|a|) for a counter-rotating one. */
 [[nodiscard]] inline double senseDeficit(double epsilon, OrbitSense sense) {
-  return sense == OrbitSense::Prograde ? epsilon : 2.0 - epsilon;
+  const double coRotating = std::fmin(epsilon, 2.0 - epsilon);
+  return sense == OrbitSense::Prograde ? coRotating : 2.0 - coRotating;
+}
+
+/** @brief Sign of the orbit's azimuthal motion along +phi: +1 for an orbit
+ *         along the rotation of a hole with a >= 0, and the mirror for a < 0. */
+[[nodiscard]] inline double senseSign(double epsilon, OrbitSense sense) {
+  const double holeSign = epsilon > 1.0 ? -1.0 : 1.0;
+  return sense == OrbitSense::Prograde ? holeSign : -holeSign;
 }
 
 /** @brief h = sqrt(1 - a^2), the outer-horizon offset r_+ - 1. */
@@ -99,8 +113,8 @@ struct EquatorialFrame {
 struct CircularOrbit {
   bool exists = false;          ///< Timelike: outside the photon orbit of this sense.
   double properTimeRate = 0.0;  ///< dtau/dt = 1 / u^t.
-  /// Omega = dphi/dt, signed: positive along +phi, the rotation sense of a
-  /// spin a = 1 - epsilon > 0 (for epsilon > 1 the hole turns toward -phi).
+  /// Omega = dphi/dt, signed along +phi: a prograde orbit shares the sign of
+  /// a (negative for epsilon > 1), a retrograde one the opposite.
   double angularVelocity = 0.0;
   double zamoVelocity = 0.0;    ///< Azimuthal speed measured by the local ZAMO, signed.
 };
@@ -109,14 +123,16 @@ struct CircularOrbit {
  * @brief Bardeen-Press-Teukolsky circular orbit in deficit form.
  *
  * With s = sqrt(r) = 1 + y (y = x / (1 + sqrt(1 + x))) and the sense's spin
- * a_s = 1 - e, the BPT radicand times r^{3/2} is s^3 - 3s + 2 a_s. The
+ * a_s = 1 - e (e = senseDeficit, so a_s = +|a| co-rotating, -|a| counter), the
+ * BPT radicand times r^{3/2} is s^3 - 3s + 2 a_s. The
  * identity s^3 - 3s + 2 = (s - 1)^2 (s + 2) turns it into
  *   N = y^2 (y + 3) - 2 e,
  * which keeps full precision where s^3 - 3s + 2 a_s would cancel to zero.
  * Then dtau/dt = r^{3/4} sqrt(N) / (r^{3/2} + a_s) and Omega = 1 / (r^{3/2} + a_s).
  * The ZAMO-frame speed (r^2 - 2 a_s sqrt(r) + a_s^2) / (sqrt(Delta) (r^{3/2} + a_s))
  * uses r - a_s = x + e, so its numerator (x + e)^2 + 2 a_s s y is a sum of
- * non-negative terms for the prograde sense.
+ * non-negative terms for the prograde sense. senseSign carries both onto the
+ * +phi coordinate.
  */
 [[nodiscard]] inline CircularOrbit circularOrbit(double epsilon, double x, OrbitSense sense) {
   CircularOrbit orbit;
@@ -132,7 +148,7 @@ struct CircularOrbit {
   }
   const double r32 = r * s;
   const double denominator = r32 + spinSense;
-  const double sign = sense == OrbitSense::Prograde ? 1.0 : -1.0;
+  const double sign = senseSign(epsilon, sense);
   orbit.exists = true;
   orbit.properTimeRate = std::sqrt(r32) * std::sqrt(radicand) / denominator;
   orbit.angularVelocity = sign / denominator;
