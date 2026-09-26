@@ -13,6 +13,7 @@
 
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
+#include "game/campaign_session.h"
 #include "game/command.h"
 #include "game/fleet.h"
 #include "game/observer.h"
@@ -136,4 +137,28 @@ TEST(CampaignClock, BatchAdvanceMatchesSingleStepAdvanceByteForByte) {
   const std::vector<std::uint8_t> steppedBytes = stepped.serializeState();
   EXPECT_EQ(batchedBytes, steppedBytes);
   EXPECT_EQ(batched.stateDigest(), stepped.stateDigest());
+}
+
+// Falsifier: two campaigns identical but for one fleet's station keeping, or
+// for the field's spin deficit, serializing to the same bytes at turn 0 --
+// before any proper time accrues, so only the observer and epsilon fields can
+// tell them apart.
+TEST(CampaignSerialization, DigestCarriesObserverAndSpinDeficit) {
+  game::CampaignSession orbiting(3);
+  game::CampaignSession hovering(3);
+  ASSERT_NE(orbiting.state().addFleet(game::FleetCapability::Research, 2),
+            game::K_INVALID_FLEET_ID);
+  ASSERT_NE(hovering.state().addFleet(game::FleetCapability::Research, 2,
+                                      game::OrbitLane::Prograde, game::StationKeeping::Hover),
+            game::K_INVALID_FLEET_ID);
+  EXPECT_NE(orbiting.state().serializeState(), hovering.state().serializeState());
+
+  const game::CampaignSession spinA(3, 0.9);
+  const game::CampaignSession spinB(3, 0.95);
+  EXPECT_NE(spinA.state().serializeState(), spinB.state().serializeState());
+  EXPECT_DOUBLE_EQ(spinB.state().renderSnapshot().spinDeficit, spinB.field().spinDeficit());
+
+  // Same scenario, same bytes: the new fields are deterministic.
+  EXPECT_EQ(game::CampaignSession(3).state().serializeState(),
+            game::CampaignSession(3).state().serializeState());
 }

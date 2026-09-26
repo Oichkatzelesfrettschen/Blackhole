@@ -53,7 +53,7 @@ public:
   [[nodiscard]] double spinDimensionless() const override { return spinSign_ * (1.0 - epsilon_); }
 
   /** @brief epsilon = 1 - |a|, exact as constructed. */
-  [[nodiscard]] double spinDeficit() const { return epsilon_; }
+  [[nodiscard]] double spinDeficit() const override { return epsilon_; }
   [[nodiscard]] double gravitationalRadiusCm() const { return gravitationalRadiusCm_; }
   [[nodiscard]] double schwarzschildRadiusCm() const { return schwarzschildRadiusCm_; }
   [[nodiscard]] double outerHorizonCm() const { return outerHorizonCm_; }

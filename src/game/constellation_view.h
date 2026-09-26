@@ -40,6 +40,7 @@ struct SystemStanding {
   SystemId id = K_INVALID_SYSTEM_ID;
   double instability = 0.0;
   double spinDimensionless = 0.0;
+  double spinDeficit = 1.0; ///< 1 - |a|, exact near extremal spin.
   std::uint32_t bandCount = 0;
   /// Controller per band as the player's authority last learned it; invalid =
   /// unknown, empty, or contested.

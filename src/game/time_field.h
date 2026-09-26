@@ -13,6 +13,8 @@
 #ifndef BLACKHOLE_GAME_TIME_FIELD_H
 #define BLACKHOLE_GAME_TIME_FIELD_H
 
+#include <cmath>
+
 #include "game/observer.h"
 
 namespace game {
@@ -59,6 +61,11 @@ public:
 
   /** @brief Dimensionless spin a/M in [-1, 1]; zero for a non-rotating field. */
   [[nodiscard]] virtual double spinDimensionless() const { return 0.0; }
+
+  /** @brief Spin deficit epsilon = 1 - |a|, the exact spin parameter a field
+   *         near extremal stores; derived from spinDimensionless unless the
+   *         field keeps it directly. */
+  [[nodiscard]] virtual double spinDeficit() const { return 1.0 - std::fabs(spinDimensionless()); }
 };
 
 } // namespace game

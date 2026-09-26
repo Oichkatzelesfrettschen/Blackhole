@@ -19,6 +19,7 @@
 
 #include "game/command.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 
 namespace game {
 
@@ -109,6 +110,8 @@ struct CampaignViewSnapshot {
   std::int64_t clearedTurn = 0;    ///< Turn a victory was reached; 0 until won.
   double ergosphereRadiusCm = 0.0; ///< Static limit; equals the horizon without spin.
   double spinDimensionless = 0.0;  ///< Black-hole spin a/M (0 for Schwarzschild).
+  double spinDeficit = 1.0;        ///< 1 - |a|, exact near extremal spin.
+  Observer authorityObserver = Observer::Hovering; ///< How the authority holds its radius.
   double reliabilityCorruptionThreshold = 0.0; ///< Below this a fleet's reports corrupt; 0 = off.
   double authorityRadiusCm = 0.0;
   double authorityProperTimeRate = 0.0;

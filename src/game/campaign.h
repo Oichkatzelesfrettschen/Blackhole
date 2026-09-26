@@ -172,9 +172,10 @@ public:
   /** @brief Deterministic field-by-field byte serialization of the full
    *         campaign state (explicit widths, -0.0 canonicalized, every double
    *         finite). Determinism artifact, not a versioned save format: it
-   *         captures the config and the mutable runtime state, but not the
-   *         TimeField (mass/spin) nor the task graph's next-id counter, which are
-   *         fixed by the scenario. Two runs of the same scenario on the same
+   *         captures the config, the field's spin deficit, every station's
+   *         observer, and the mutable runtime state, but not the field's mass
+   *         nor the task graph's next-id counter, which are fixed by the
+   *         scenario. Two runs of the same scenario on the same
    *         field compare equal; comparing across different fields is out of
    *         scope. */
   [[nodiscard]] std::vector<std::uint8_t> serializeState() const;

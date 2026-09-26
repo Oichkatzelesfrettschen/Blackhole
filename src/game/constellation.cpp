@@ -897,6 +897,7 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
     standing.id = static_cast<SystemId>(systemIndex);
     standing.instability = systems_.at(systemIndex).instability;
     standing.spinDimensionless = systems_.at(systemIndex).field.spinDimensionless();
+    standing.spinDeficit = systems_.at(systemIndex).field.spinDeficit();
     const std::size_t bandCount = systems_.at(systemIndex).bandRadiusCm.size();
     standing.bandCount = static_cast<std::uint32_t>(bandCount);
     standing.bandController.reserve(bandCount);
@@ -965,6 +966,8 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
 
   appendU32(out, static_cast<std::uint32_t>(systems_.size()));
   for (const OrbitalSystem &system : systems_) {
+    appendF64(out, system.field.spinDeficit());
+    appendU8(out, static_cast<std::uint8_t>(system.authorityObserver));
     appendF64(out, system.instability);
   }
 
@@ -989,6 +992,7 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendU8(out, static_cast<std::uint8_t>(fleet.capability));
     appendI64(out, fleet.bandIndex);
     appendU8(out, static_cast<std::uint8_t>(fleet.lane));
+    appendU8(out, static_cast<std::uint8_t>(fleet.observer));
     appendF64(out, fleet.reliability);
     appendF64(out, fleet.properTimeSec);
     appendF64(out, fleet.pendingWorkProperSec);
@@ -998,6 +1002,7 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendU32(out, fleet.transitDestSystem);
     appendI64(out, fleet.transitDestBand);
     appendU8(out, static_cast<std::uint8_t>(fleet.transitDestLane));
+    appendU8(out, static_cast<std::uint8_t>(fleet.transitDestObserver));
   }
 
   appendU32(out, static_cast<std::uint32_t>(commandLog_.size()));
@@ -1006,6 +1011,7 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendU32(out, logged.command.targetSystem);
     appendI64(out, logged.command.targetBand);
     appendU8(out, static_cast<std::uint8_t>(logged.command.lane));
+    appendU8(out, static_cast<std::uint8_t>(logged.command.station));
     appendU32(out, logged.faction);
     appendI64(out, logged.issueTurn);
     appendI64(out, logged.effectTurn);

@@ -431,3 +431,20 @@ TEST(Constellation, TransitAgesCrewsRelativisticallyAndArrivesOnArrival) {
   EXPECT_EQ(step.bandIndex, 1);
   EXPECT_EQ(transitTurns, 79); // an 80-turn hop: departure turn plus 79 full coasting turns
 }
+
+// Falsifier: two constellations differing only in one system's spin deficit,
+// or in one fleet's station keeping, serializing to the same bytes.
+TEST(Constellation, DigestCarriesObserverAndSpinDeficit) {
+  const auto build = [](double spin, game::StationKeeping station) {
+    game::ConstellationConfig config = microTwoSystemConfig();
+    config.systems.at(1).spinDimensionless = spin;
+    game::Constellation constellation(config);
+    const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+    constellation.addFleet(alpha, 0, game::FleetCapability::Research, 1, game::OrbitLane::Prograde,
+                           station);
+    return constellation.serializeState();
+  };
+  EXPECT_NE(build(0.0, game::StationKeeping::Orbit), build(0.0, game::StationKeeping::Hover));
+  EXPECT_NE(build(0.0, game::StationKeeping::Orbit), build(0.5, game::StationKeeping::Orbit));
+  EXPECT_EQ(build(0.5, game::StationKeeping::Hover), build(0.5, game::StationKeeping::Hover));
+}

@@ -427,6 +427,8 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       [](double integrity, const Fleet &fleet) { return std::min(integrity, fleet.reliability); });
   view.ergosphereRadiusCm = field_->ergosphereRadiusCm();
   view.spinDimensionless = field_->spinDimensionless();
+  view.spinDeficit = field_->spinDeficit();
+  view.authorityObserver = config_.authorityObserver;
   view.reliabilityCorruptionThreshold = config_.reliabilityCorruptionThreshold;
   view.authorityRadiusCm = config_.authorityRadiusCm;
   view.authorityProperTimeRate =
@@ -530,7 +532,11 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   std::vector<std::uint8_t> out;
   appendU64(out, config_.seed);
   appendF64(out, config_.secondsPerTurn);
+  // The field's spin enters as its deficit, the parameter that stays exact
+  // near extremal spin; mass is fixed by the scenario's band radii.
+  appendF64(out, field_->spinDeficit());
   appendF64(out, config_.authorityRadiusCm);
+  appendU8(out, static_cast<std::uint8_t>(config_.authorityObserver));
   appendU32(out, static_cast<std::uint32_t>(config_.bandRadiusCm.size()));
   for (const double radiusCm : config_.bandRadiusCm) {
     appendF64(out, radiusCm);
@@ -568,6 +574,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, fleet.id);
     appendU8(out, static_cast<std::uint8_t>(fleet.capability));
     appendU8(out, static_cast<std::uint8_t>(fleet.lane));
+    appendU8(out, static_cast<std::uint8_t>(fleet.observer));
     appendI32(out, fleet.bandIndex);
     appendF64(out, fleet.reliability);
     appendF64(out, fleet.properTimeSec);
@@ -595,6 +602,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, logged.command.fleet);
     appendI32(out, logged.command.targetBand);
     appendU8(out, static_cast<std::uint8_t>(logged.command.lane));
+    appendU8(out, static_cast<std::uint8_t>(logged.command.station));
     appendF64(out, logged.command.properTimeCostSec);
     appendI64(out, logged.issueTurn);
     appendI64(out, logged.effectTurn);
