@@ -12,6 +12,7 @@
 
 #include "constants.h"
 #include "game/blackhole_time_field.h"
+#include "game/observer.h"
 
 namespace {
 
@@ -57,7 +58,7 @@ TEST(BlackholeTimeField, ProperTimeRateMatchesAnalyticDilation) {
   for (const double multiple : {1.5, 3.0, 10.0, 100.0}) {
     const double radiusCm = multiple * horizonCm;
     const double expectedRate = std::sqrt(1.0 - (horizonCm / radiusCm));
-    EXPECT_NEAR(field.properTimeRate(radiusCm), expectedRate, 1e-12)
+    EXPECT_NEAR(field.properTimeRate(radiusCm, game::Observer::Hovering), expectedRate, 1e-12)
         << "radius multiple " << multiple;
   }
 }
@@ -106,10 +107,43 @@ TEST(BlackholeTimeField, SignalDelayDivergesTowardTheHorizon) {
   // Unbounded growth is logarithmic in epsilon: each decade closer to the
   // horizon adds (r_s/c) * ln(10) of Shapiro excess over the flat flight
   // time. Eight decades (1e-1 -> 1e-9) must add more than 8 * (r_s/c).
-  const double excessAtWideGapSec =
-      field.signalDelaySec((1.0 + 1e-1) * horizonCm, outerCm) -
-      ((outerCm - ((1.0 + 1e-1) * horizonCm)) / physics::C);
+  const double excessAtWideGapSec = field.signalDelaySec((1.0 + 1e-1) * horizonCm, outerCm) -
+                                    ((outerCm - ((1.0 + 1e-1) * horizonCm)) / physics::C);
   const double excessNearHorizonSec =
       previousDelaySec - ((outerCm - ((1.0 + 1e-9) * horizonCm)) / physics::C);
   EXPECT_GT(excessNearHorizonSec - excessAtWideGapSec, 8.0 * horizonCm / physics::C);
+}
+
+// Falsifier: a circular orbit admitted at or inside 4M = 2 r_s (no bound
+// orbit there), a hovering station refused outside the horizon, or an orbital
+// clock other than sqrt(1 - 3M/r) (1/sqrt(2) at the 6M ISCO).
+TEST(BlackholeTimeField, OrbitsNeedTheMarginallyBoundRadius) {
+  const game::BlackholeTimeField field(K_M87_MASS_G);
+  const double horizonCm = field.horizonRadiusCm();
+  const double massCm = 0.5 * horizonCm;
+  for (const game::Observer orbit :
+       {game::Observer::CircularOrbitPrograde, game::Observer::CircularOrbitRetrograde}) {
+    EXPECT_FALSE(field.admitsObserver(3.9 * massCm, orbit));
+    EXPECT_FALSE(field.admitsObserver(4.0 * massCm, orbit));
+    EXPECT_TRUE(field.admitsObserver(4.1 * massCm, orbit));
+    EXPECT_NEAR(field.properTimeRate(6.0 * massCm, orbit), std::sqrt(0.5), 1e-12);
+  }
+  EXPECT_TRUE(field.admitsObserver(3.9 * massCm, game::Observer::Hovering));
+  EXPECT_FALSE(field.admitsObserver(0.99 * horizonCm, game::Observer::Hovering));
+  EXPECT_NEAR(field.properTimeRate(6.0 * massCm, game::Observer::Hovering), std::sqrt(2.0 / 3.0),
+              1e-12);
+}
+
+// Falsifier: a Schwarzschild orbit between 4M and the 6M ISCO reported
+// stable, or one at or outside 6M reported unstable.
+TEST(BlackholeTimeField, StableOrbitsStartAtSixM) {
+  const game::BlackholeTimeField field(K_M87_MASS_G);
+  const double massCm = 0.5 * field.horizonRadiusCm();
+  const game::Observer orbit = game::Observer::CircularOrbitPrograde;
+  EXPECT_DOUBLE_EQ(field.iscoRadiusCm(orbit), 6.0 * massCm);
+  EXPECT_FALSE(field.admitsStableOrbit(5.0 * massCm, orbit));
+  EXPECT_TRUE(field.admitsObserver(5.0 * massCm, orbit));
+  EXPECT_TRUE(field.admitsStableOrbit(6.0 * massCm, orbit));
+  EXPECT_TRUE(field.admitsStableOrbit(20.0 * massCm, orbit));
+  EXPECT_FALSE(field.admitsStableOrbit(20.0 * massCm, game::Observer::Hovering));
 }

@@ -22,7 +22,10 @@ namespace game {
 
 class ConstellationSession {
 public:
-  explicit ConstellationSession(std::uint64_t seed = 1);
+  /** @brief The default two-system scenario; the rival runs `rivalPolicy`,
+   *         Expansionist unless a caller sweeps rival behavior. */
+  explicit ConstellationSession(std::uint64_t seed = 1,
+                                FactionPolicy rivalPolicy = FactionPolicy::Expansionist);
 
   [[nodiscard]] Constellation &constellation() { return constellation_; }
   [[nodiscard]] const Constellation &constellation() const { return constellation_; }
@@ -30,9 +33,11 @@ public:
   [[nodiscard]] FactionId player() const { return player_; }
   [[nodiscard]] FactionId rival() const { return rival_; }
 
-  /** @brief Order one of the player's fleets, intra-system or interstellar. */
+  /** @brief Order one of the player's fleets, intra-system or interstellar,
+   *         in orbit by default or hovering on thrust. */
   bool movePlayerFleet(FleetId fleet, SystemId targetSystem, int targetBand,
-                       OrbitLane lane = OrbitLane::Prograde);
+                       OrbitLane lane = OrbitLane::Prograde,
+                       StationKeeping station = StationKeeping::Orbit);
 
 private:
   Constellation constellation_;
