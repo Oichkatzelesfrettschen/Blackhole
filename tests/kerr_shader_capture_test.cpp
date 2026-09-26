@@ -37,7 +37,9 @@
 #include <gtest/gtest.h>
 
 #include "physics/constants.h"
+#include "physics/disk_transfer.h"
 #include "physics/kerr.h"
+#include "physics/page_thorne.h"
 #include "support/gl_compute_harness.h"
 
 using namespace gl;
@@ -158,6 +160,47 @@ void main() {
   KerrConsts c;
   KerrRay ray;
   kerrInitGeodesic(pos, dir, r_s, a, c, ray);
+  float P = (ray.r * ray.r + a * a) - a * c.Lz;
+  float Qe = c.Q + (c.Lz - a) * (c.Lz - a);
+  float R = P * P - kerrDelta(ray.r, a, r_s) * Qe;
+  result[3 * i] = abs(R - ray.vr * ray.vr) / max(P * P, 1.0);
+  float scale = max(abs(c.Q) + a * a + c.Lz * c.Lz, 1.0);
+  float w2 = c.Q + c.Lz * c.Lz + a * a * ray.n.z * ray.n.z;
+  result[3 * i + 1] = abs(dot(ray.w, ray.w) - w2) / scale;
+  result[3 * i + 2] = abs(cross(ray.n, ray.w).z - c.Lz) / sqrt(scale);
+}
+)";
+
+// Starts on and next to the equatorial stationary limit r = 2M (a = 0.6):
+// ray i sits at radius index i % 3 (2(1 - 1e-4), 2, 2(1 + 1e-4)) with
+// direction (cos beta, sin beta, 0), beta = 2 pi (i / 3 + 0.5) / 342, so
+// k^phi = sin(beta) / r. Reports the three on-shell residuals of
+// K_ONSHELL_SHADER, or -1 in the first slot for a ray marked captured.
+const char *const K_STATIONARY_LIMIT_SHADER = R"(
+#version 460 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+uniform int rayCount;
+#include "include/kerr.glsl"
+void main() {
+  int i = int(gl_GlobalInvocationID.x);
+  if (i >= rayCount) {
+    return;
+  }
+  float r_s = 2.0;
+  float a = 0.6;
+  int rIdx = i % 3;
+  float r0 = rIdx == 0 ? 2.0 * (1.0 - 1e-4) : (rIdx == 1 ? 2.0 : 2.0 * (1.0 + 1e-4));
+  float beta = 6.28318530718 * (float(i / 3) + 0.5) / 342.0;
+  KerrConsts c;
+  KerrRay ray;
+  kerrInitGeodesic(vec3(r0, 0.0, 0.0), vec3(cos(beta), sin(beta), 0.0), r_s, a, c, ray);
+  if (!(ray.r > 0.0)) {
+    result[3 * i] = -1.0;
+    result[3 * i + 1] = 0.0;
+    result[3 * i + 2] = 0.0;
+    return;
+  }
   float P = (ray.r * ray.r + a * a) - a * c.Lz;
   float Qe = c.Q + (c.Lz - a) * (c.Lz - a);
   float R = P * P - kerrDelta(ray.r, a, r_s) * Qe;
@@ -362,6 +405,48 @@ void main() {
   result[5] = expected.r;
   result[6] = expected.g;
   result[7] = expected.b;
+}
+)";
+}
+
+// A straight ray at inclination `incl` from the disk normal crossing the
+// midplane at (30, 0, 0) from z = 3 to z = -3 (15 scale heights of h = 0.2
+// each side), cut into chords of length segLength starting at an offset of
+// 0.37 segLength, each passed to bhDiskSegment (photon Lz / E = 0) and rteStepVec3 with
+// absorption kappa * jEff, as bhTraceGeodesicRTE does per step. Reports the
+// emission column sum(jEff * length) and the intensity.
+std::string diskSlabShader() {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  return comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+uniform float segLength;
+uniform float incl;
+uniform float kappa;
+void main() {
+  float r_s = 2.0;
+  float h = 0.1 * r_s;
+  vec3 dir = vec3(sin(incl), 0.0, -cos(incl));
+  float total = 6.0 / cos(incl);
+  vec3 start = vec3(30.0, 0.0, 0.0) - 0.5 * total * dir;
+  float column = 0.0;
+  float transmit = 1.0;
+  vec3 accum = vec3(0.0);
+  float s0 = 0.0;
+  float s1 = min(0.37 * segLength, total);
+  for (int k = 0; k < 100000 && s0 < total; ++k) {
+    vec3 emitColor;
+    float jEff;
+    float rho;
+    if (bhDiskSegment(start + s0 * dir, start + s1 * dir, bhDiskInnerRadius(r_s), 100.0 * r_s,
+                      h, r_s, 0.0, emitColor, jEff, rho)) {
+      column += jEff * (s1 - s0);
+      accum += rteStepVec3(vec3(1.0), jEff, kappa * jEff, s1 - s0, transmit);
+    }
+    s0 = s1;
+    s1 = min(s1 + segLength, total);
+  }
+  result[0] = column;
+  result[1] = accum.x;
 }
 )";
 }
@@ -1014,6 +1099,84 @@ TEST_F(KerrShaderCaptureTest, HawkingGlowShadesCapturedRays) {
         << where;
     if (enabled > 0.5F) {
       EXPECT_GT(out.at(5) + out.at(6) + out.at(7), 0.0F) << where;
+    }
+  }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+TEST_F(KerrShaderCaptureTest, StationaryLimitStartIsOnShell) {
+  // On r = 2M (g_tt = 0 in float32 exactly) the null condition is linear in
+  // k^t. A direction with g_tphi k^phi < 0 (sin beta > 0 at a > 0) has the
+  // finite root -spatial / (2 g_tphi k^phi) and must start on shell; one
+  // with g_tphi k^phi > 0 has no finite future root and must be marked
+  // captured. 1e-4 outside (g_tt < 0) every direction starts on shell; 1e-4
+  // inside, a direction is either on shell or captured.
+  const std::vector<float> out = dispatch(K_STATIONARY_LIMIT_SHADER, 0.0F);
+  int onLimit = 0;
+  for (int i = 0; i < K_RAYS; ++i) {
+    const int rIdx = i % 3;
+    const int betaIdx = i / 3;
+    const double sinBeta =
+        std::sin(2.0 * std::numbers::pi * (static_cast<double>(betaIdx) + 0.5) / 342.0);
+    const std::size_t k = static_cast<std::size_t>(3) * static_cast<std::size_t>(i);
+    const bool captured = out.at(k) < 0.0F;
+    const std::string where = "ray " + std::to_string(i) + " r index " + std::to_string(rIdx) +
+                              " sin(beta)=" + std::to_string(sinBeta);
+    if (rIdx == 1 && std::abs(sinBeta) > 0.05) {
+      EXPECT_EQ(captured, sinBeta < 0.0) << where;
+      onLimit += captured ? 0 : 1;
+    }
+    if (rIdx == 2) {
+      EXPECT_FALSE(captured) << where;
+    }
+    if (!captured) {
+      for (std::size_t j = 0; j < 3; ++j) {
+        EXPECT_LT(out.at(k + j), 1e-4F) << where << " check " << j;
+      }
+    }
+  }
+  EXPECT_GT(onLimit, 100);
+}
+
+TEST_F(KerrShaderCaptureTest, DiskSegmentIntegratesTheGaussianColumn) {
+  // The Gaussian disk layer (h = 0.2) crossed at radius 30 M (a = 0) by a
+  // photon with Lz / E = 0 has emission column g^4 (F / F_peak) sqrt(2 pi) h /
+  // cos(i), with the Page-Thorne flux and g = 1 / u^t of the orbiting emitter
+  // (bhDiskEmission at unit brightness), and intensity (1 - exp(-kappa
+  // column)) / kappa. Chords from 0.1 h to 100 h must reproduce both within
+  // 0.5%: the chord integral is exact, and the residual is the variation of
+  // flux across the +-3 h tan(i) the inclined ray sweeps radially (~1e-3). An
+  // end-point sample of the density misses the midplane for chords much
+  // longer than h.
+  const double h = 0.2;
+  const double flux = physics::pageThorneFluxShape(30.0, 0.0) / physics::pageThorneFluxPeak(0.0);
+  const double g = physics::diskTransferG(30.0, 0.0, 0.0);
+  const double kappa = 400.0;
+  const GLuint program = bhtest::createComputeProgram(diskSlabShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 2), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  for (const double incl : {0.0, std::numbers::pi / 3.0}) {
+    const double column =
+        flux * g * g * g * g * std::sqrt(2.0 * std::numbers::pi) * h / std::cos(incl);
+    const double intensity = (1.0 - std::exp(-kappa * column)) / kappa;
+    for (const float segLength : {0.02F, 0.2F, 2.0F, 20.0F}) {
+      glUseProgram(program);
+      glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
+      glUniform1f(glGetUniformLocation(program, "diskFluxPeak"),
+                  static_cast<float>(physics::pageThorneFluxPeak(0.0)));
+      glUniform1f(glGetUniformLocation(program, "diskBrightness"), 1.0F);
+      glUniform1f(glGetUniformLocation(program, "diskTransferMode"), 0.0F);
+      glUniform1f(glGetUniformLocation(program, "segLength"), segLength);
+      glUniform1f(glGetUniformLocation(program, "incl"), static_cast<float>(incl));
+      glUniform1f(glGetUniformLocation(program, "kappa"), static_cast<float>(kappa));
+      const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 2);
+      const std::string where =
+          "incl=" + std::to_string(incl) + " segLength=" + std::to_string(segLength);
+      EXPECT_NEAR(out.at(0), column, 5e-3 * column) << where;
+      EXPECT_NEAR(out.at(1), intensity, 5e-3 * intensity) << where;
     }
   }
   glDeleteBuffers(1, &ssbo);

@@ -15,6 +15,16 @@
  * d_adaptive_step and d_kerr_step, must integrate over the affine path length
  * d_kerr_affine_step returns: it matches the analytic slab solution at two
  * step sizes, where the Mino-time increment would give I ~ 5e-6.
+ *
+ * On the equatorial stationary limit r = 2M the null condition is linear in
+ * k^t: a co-rotating coordinate direction starts on shell, a counter-rotating
+ * one (no finite future root) is marked captured, and 1e-4 outside every
+ * direction starts on shell.
+ *
+ * d_disk_segment integrates the Gaussian disk layer along each step's chord:
+ * a ray crossing it at radius 30 reproduces the emission column of the
+ * orbiting-emitter disk (physics::pageThorneFluxShape, physics::diskTransferG)
+ * for chords from 0.1 h to 100 h.
  * Skips without a CUDA device.
  */
 
@@ -26,11 +36,13 @@
 
 #include "cuda/kernel_launch.h"
 #include "cuda/device_physics.cuh"
+#include "physics/disk_transfer.h"
+#include "physics/page_thorne.h"
 
 namespace {
 
 constexpr double K_PI = 3.14159265358979323846; /* CUDA 17: no std::numbers */
-constexpr int K_INIT_FIELDS = 6; /* Q, Lz, vr, w.x, w.y, w.z */
+constexpr int K_INIT_FIELDS = 7; /* Q, Lz, vr, w.x, w.y, w.z, r */
 
 __global__ void kerr_init_kernel(float3 pos, const float3 *dirs, int count, float a,
                                  float *out) {
@@ -48,6 +60,7 @@ __global__ void kerr_init_kernel(float3 pos, const float3 *dirs, int count, floa
     o[3] = ray.w.x;
     o[4] = ray.w.y;
     o[5] = ray.w.z;
+    o[6] = ray.r;
 }
 
 /* Uniform shell r_near <= r <= r_far, source function 1, absorption alpha,
@@ -78,6 +91,31 @@ __global__ void kerr_slab_kernel(float3 pos, float3 dir, float step_size, float 
     }
     out[0] = accum.x;
     out[1] = transmit;
+}
+
+/* Ray at inclination incl crossing the disk midplane at (30, 0, 0) from
+ * z = 3 to z = -3, cut into chords of seg_length (offset 0.37), each passed
+ * to d_disk_segment (r_in = 6, r_s = 2, h = 0.2) with photon Lz / E = 0.
+ * out[0] = sum(j_eff * len). */
+__global__ void disk_slab_kernel(float seg_length, float incl, float *out) {
+    float3 const dir = make_f3(sinf(incl), 0.0f, -cosf(incl));
+    float const total = 6.0f / cosf(incl);
+    float3 const start = d_sub(make_f3(30.0f, 0.0f, 0.0f), d_scale(dir, 0.5f * total));
+    float column = 0.0f;
+    float s0 = 0.0f;
+    float s1 = fminf(0.37f * seg_length, total);
+    for (int k = 0; k < 100000 && s0 < total; ++k) {
+        float3 emit_color;
+        float j_eff;
+        float rho;
+        if (d_disk_segment(d_add(start, d_scale(dir, s0)), d_add(start, d_scale(dir, s1)), 6.0f,
+                           200.0f, 0.2f, 2.0f, 0.0f, emit_color, j_eff, rho)) {
+            column += j_eff * (s1 - s0);
+        }
+        s0 = s1;
+        s1 = fminf(s1 + seg_length, total);
+    }
+    out[0] = column;
 }
 
 bool cudaAvailable() {
@@ -197,6 +235,87 @@ TEST(CudaKerrGeodesic, RadiativeTransferIntegratesAffinePathLength) {
         cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
         EXPECT_NEAR(out[0], intensity, 0.02 * intensity) << "stepSize=" << stepSize;
         EXPECT_NEAR(out[1], transmit, 0.02 * transmit) << "stepSize=" << stepSize;
+    }
+    cudaFree(dOut);
+}
+
+TEST(CudaKerrGeodesic, StationaryLimitStartIsOnShell) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    float const a = 0.6f;
+    std::vector<float3> dirs;
+    for (int i = 0; i < 128; ++i) {
+        double const beta = 2.0 * K_PI * (i + 0.5) / 128.0;
+        dirs.push_back(make_float3(static_cast<float>(std::cos(beta)),
+                                   static_cast<float>(std::sin(beta)), 0.0f));
+    }
+    for (float const r0 : {2.0f, 2.0f * (1.0f + 1e-4f)}) {
+        std::vector<float> const out = initRays(make_float3(r0, 0.0f, 0.0f), dirs, a);
+        int accepted = 0;
+        for (int i = 0; i < 128; ++i) {
+            auto const k = static_cast<std::size_t>(K_INIT_FIELDS * i);
+            double const sinBeta = std::sin(2.0 * K_PI * (i + 0.5) / 128.0);
+            bool const captured = !(out[k + 6] > 0.0f);
+            if (r0 == 2.0f && std::fabs(sinBeta) > 0.05) {
+                EXPECT_EQ(captured, sinBeta < 0.0) << "r=" << r0 << " ray " << i;
+            }
+            if (r0 > 2.0f) {
+                EXPECT_FALSE(captured) << "r=" << r0 << " ray " << i;
+            }
+            if (captured) {
+                continue;
+            }
+            ++accepted;
+            /* R(r0) = vr^2 (E = 1) and |w|^2 = Q + Lz^2 on the equator. */
+            double const q = out[k], lz = out[k + 1], vr = out[k + 2];
+            double const p = (static_cast<double>(r0) * r0 + a * a) - a * lz;
+            double const delta = static_cast<double>(r0) * r0 - 2.0 * r0 + a * a;
+            double const rPot = p * p - delta * (q + (lz - a) * (lz - a));
+            EXPECT_LT(std::fabs(rPot - vr * vr) / std::fmax(p * p, 1.0), 1e-4)
+                << "r=" << r0 << " ray " << i;
+            double const w2 = static_cast<double>(out[k + 3]) * out[k + 3] +
+                              static_cast<double>(out[k + 4]) * out[k + 4] +
+                              static_cast<double>(out[k + 5]) * out[k + 5];
+            EXPECT_LT(std::fabs(w2 - (q + lz * lz)) / std::fmax(std::fabs(q) + lz * lz + a * a, 1.0),
+                      1e-4)
+                << "r=" << r0 << " ray " << i;
+        }
+        EXPECT_GT(accepted, 50) << "r=" << r0;
+    }
+}
+
+TEST(CudaKerrGeodesic, DiskSegmentIntegratesTheGaussianColumn) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* Column g^4 (F / F_peak) sqrt(2 pi) h / cos(i) at r = 30 M, a = 0, for
+     * a photon with Lz / E = 0 (g = 1 / u^t); 0.5% covers the radial flux
+     * variation the inclined ray sweeps. Unit brightness, Physical transfer. */
+    float const spin = 0.0f;
+    auto const peak = static_cast<float>(physics::pageThorneFluxPeak(0.0));
+    float const temperature = 6500.0f;
+    float const brightness = 1.0f;
+    int const physicalMode = 0;
+    ASSERT_EQ(cudaMemcpyToSymbol(d_spin, &spin, sizeof(float)), cudaSuccess);
+    ASSERT_EQ(cudaMemcpyToSymbol(d_disk_flux_peak, &peak, sizeof(float)), cudaSuccess);
+    ASSERT_EQ(cudaMemcpyToSymbol(d_disk_peak_temperature, &temperature, sizeof(float)),
+              cudaSuccess);
+    ASSERT_EQ(cudaMemcpyToSymbol(d_disk_brightness, &brightness, sizeof(float)), cudaSuccess);
+    ASSERT_EQ(cudaMemcpyToSymbol(d_disk_transfer_mode, &physicalMode, sizeof(int)), cudaSuccess);
+    double const g = physics::diskTransferG(30.0, 0.0, 0.0);
+    double const flux = physics::pageThorneFluxShape(30.0, 0.0) / physics::pageThorneFluxPeak(0.0);
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, sizeof(float));
+    for (double const incl : {0.0, K_PI / 3.0}) {
+        double const column = flux * g * g * g * g * std::sqrt(2.0 * K_PI) * 0.2 / std::cos(incl);
+        for (float const seg : {0.02f, 0.2f, 2.0f, 20.0f}) {
+            disk_slab_kernel<<<1, 1>>>(seg, static_cast<float>(incl), dOut);
+            cudaDeviceSynchronize();
+            float out = 0.0f;
+            cudaMemcpy(&out, dOut, sizeof(float), cudaMemcpyDeviceToHost);
+            EXPECT_NEAR(out, column, 5e-3 * column) << "incl=" << incl << " seg=" << seg;
+        }
     }
     cudaFree(dOut);
 }

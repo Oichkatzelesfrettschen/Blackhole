@@ -16,6 +16,7 @@
 #include <cmath>
 #include <numbers>
 #include <random>
+#include <string>
 #include <vector>
 
 #include "physics/analytic_kerr_geodesic.h"
@@ -150,6 +151,83 @@ TEST(KerrNullGeodesic, ErgoregionStartPrefersPositiveEnergyRoot) {
         physics::kerrPotentials(r, 0.5 * std::numbers::pi, K_UNIT_MASS, a, g.consts);
     EXPECT_NEAR(p.rPot, g.state.vr * g.state.vr, 1e-9 * std::max(1.0, p.rPot)) << "psi=" << psi;
   }
+}
+
+// Null direction k = (1/alpha, kr, 0, kphi) of angle psi in the equatorial
+// zero-angular-momentum frame at radius r (M = 1).
+struct ZamoRay {
+  double kt;
+  double kr;
+  double kphi;
+};
+
+ZamoRay zamoEquatorialRay(double r, double a, double psi) {
+  const double sigma = r * r;
+  const double delta = (r * r) - (2.0 * r) + (a * a);
+  const double bigA = (((r * r) + (a * a)) * ((r * r) + (a * a))) - (a * a * delta);
+  const double alpha = std::sqrt(sigma * delta / bigA);
+  const double omega = 2.0 * a * r / bigA;
+  const double varpi = std::sqrt(bigA / sigma);
+  return {.kt = 1.0 / alpha,
+          .kr = std::cos(psi) * std::sqrt(delta / sigma),
+          .kphi = (omega / alpha) + (std::sin(psi) / varpi)};
+}
+
+// Returns whether the frame vector has E > 0 and was checked.
+bool expectStationaryLimitStart(double r, double a, double psi) {
+  const ZamoRay k = zamoEquatorialRay(r, a, psi);
+  const physics::KerrNullGeodesic g = physics::kerrNullGeodesicFromBL(
+      r, 0.5 * std::numbers::pi, 0.0, k.kr, 0.0, k.kphi, K_UNIT_MASS, a);
+  const std::string where = "r=" + std::to_string(r) + " psi=" + std::to_string(psi);
+  // Equatorial Boyer-Lindquist metric (M = 1): the ZAMO vector's own E and
+  // Lz. Where E > 0 it is the root the initializer must return.
+  const double f = 2.0 / r;
+  const double gtt = -(1.0 - f);
+  const double gtphi = -f * a;
+  const double gphph = (r * r) + (a * a) + (f * a * a);
+  const double energy = -((gtt * k.kt) + (gtphi * k.kphi));
+  const double lz = (gtphi * k.kt) + (gphph * k.kphi);
+  if (energy <= 0.0) {
+    return false;
+  }
+  EXPECT_GT(g.state.r, 0.0) << where;
+  EXPECT_TRUE(std::isfinite(g.consts.lz) && std::isfinite(g.consts.q) &&
+              std::isfinite(g.state.vr))
+      << where;
+  EXPECT_NEAR(g.consts.lz, lz / energy, 1e-9 * std::max(1.0, std::abs(lz / energy))) << where;
+  const physics::KerrPotentials p =
+      physics::kerrPotentials(r, 0.5 * std::numbers::pi, K_UNIT_MASS, a, g.consts);
+  EXPECT_NEAR(p.rPot, g.state.vr * g.state.vr, 1e-9 * std::max(1.0, p.rPot)) << where;
+  return true;
+}
+
+TEST(KerrNullGeodesic, StationaryLimitStartIsOnShell) {
+  // On the equatorial stationary limit r = 2M (a = 0.6) g_tt = 0 and the null
+  // condition is linear in k^t; a quadratic-formula root divides by g_tt
+  // there. Zero-angular-momentum-frame directions at r = 2M and 1e-6 and
+  // 1e-3 to either side must start with the E > 0 root on shell and with
+  // the constants of the frame vector.
+  const double a = 0.6;
+  for (const double r : {2.0 * (1.0 - 1e-3), 2.0 * (1.0 - 1e-6), 2.0, 2.0 * (1.0 + 1e-6),
+                         2.0 * (1.0 + 1e-3)}) {
+    int checked = 0;
+    for (int k = 0; k < 16; ++k) {
+      const double psi = 2.0 * std::numbers::pi * (static_cast<double>(k) + 0.5) / 16.0;
+      checked += expectStationaryLimitStart(r, a, psi) ? 1 : 0;
+    }
+    EXPECT_GE(checked, 12) << "r=" << r;
+  }
+}
+
+TEST(KerrNullGeodesic, StationaryLimitCounterRotatingDirectionIsRejected) {
+  // At g_tt = 0 a coordinate direction with g_tphi k^phi > 0 has no finite
+  // future-directed null completion (its root runs to infinity): the
+  // initializer marks it captured (r = 0) with finite constants instead of
+  // returning Inf or NaN.
+  const physics::KerrNullGeodesic g = physics::kerrNullGeodesicFromBL(
+      2.0, 0.5 * std::numbers::pi, 0.0, 0.3, 0.0, -0.2, K_UNIT_MASS, 0.6);
+  EXPECT_EQ(g.state.r, 0.0);
+  EXPECT_TRUE(std::isfinite(g.consts.lz) && std::isfinite(g.consts.q));
 }
 
 TEST(KerrNullGeodesic, EquatorialRayStaysInEquatorialPlane) {

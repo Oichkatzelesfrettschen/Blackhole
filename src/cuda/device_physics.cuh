@@ -446,26 +446,30 @@ __device__ __forceinline__ void d_kerr_init_geodesic(float3 pos, float3 dir, flo
     float gthth  = sigma;
     float gphph  = fmaf(r * r + a * a, 1.0f, f * a * a * sin2) * sin2;
 
-    /* gtt (k^t)^2 + 2 gtphi kphi k^t + spatial = 0. */
+    /* gtt (k^t)^2 + 2 hb k^t + spatial = 0, hb = gtphi kphi. Conjugate-form
+     * roots k^t(E = +sqrt(D)) = spatial / (sqrt(D) - hb) and
+     * k^t(E = -sqrt(D)) = -spatial / (sqrt(D) + hb) divide by gtt nowhere, so
+     * the stationary limit (gtt = 0, linear equation) needs no special case;
+     * a denominator within rounding of sqrt(D) + |hb| is a root at infinity.
+     * The E > 0 root is preferred (kerrInitGeodesic twin). */
     float spatial = fmaf(grr, kr * kr,
                     fmaf(gthth, ktheta * ktheta, gphph * kphi * kphi));
     float hb      = gtphi * kphi;
     float disc    = fmaf(hb, hb, -gtt * spatial);
-    float kt = 1.0f;
-    if (disc >= 0.0f && fabsf(gtt) > D_EPSILON) {
-        /* Future-directed root (k^t > 0); inside the ergoregion both can be,
-         * and the E > 0 root, which can connect to infinity, is preferred. */
-        float sq_d = sqrtf(disc);
-        float kt_a = (-hb + sq_d) / gtt;
-        float kt_b = (-hb - sq_d) / gtt;
-        float energy_a = fmaf(-gtt, kt_a, -gtphi * kphi);
-        kt = (kt_a > 0.0f && (energy_a > 0.0f || kt_b <= 0.0f)) ? kt_a : kt_b;
-    }
+    float sq_d    = sqrtf(fmaxf(disc, 0.0f));
+    float root_tol = 1e-6f * (sq_d + fabsf(hb));
+    bool finite_pos = disc >= 0.0f && (sq_d - hb) > root_tol;
+    bool finite_neg = disc >= 0.0f && (sq_d + hb) > root_tol;
+    float kt_pos = finite_pos ? spatial / (sq_d - hb) : 0.0f;
+    float kt_neg = finite_neg ? -spatial / (sq_d + hb) : 0.0f;
+    bool use_neg = finite_neg && kt_neg > 0.0f && (!finite_pos || kt_pos <= 0.0f);
+    float kt = use_neg ? kt_neg : kt_pos;
 
-    float E_raw  = fmaf(-gtt, kt, -gtphi * kphi);
+    float E_raw  = use_neg ? -sq_d : sq_d;
     float Lz_raw = fmaf(gtphi, kt,  gphph * kphi);
-    /* E <= 0 photons cannot reach infinity; r = 0 reads as captured. */
-    if (E_raw <= D_EPSILON) {
+    /* No finite null completion, or E <= 0 (cannot reach infinity):
+     * r = 0 reads as captured. */
+    if (!(finite_pos || use_neg) || !(E_raw > D_EPSILON)) {
         ray.r = 0.0f;
         return;
     }
@@ -1988,6 +1992,63 @@ __device__ __forceinline__ float3 d_rte_step(float3 emit_color, float j_eff,
 }
 
 /**
+ * @brief Mean of exp(-z^2 / 2h^2) along a chord whose height runs linearly from z0 to z1.
+ *
+ * h sqrt(pi/2) (erf(z1 / sqrt(2) h) - erf(z0 / sqrt(2) h)) / (z1 - z0); below
+ * |z1 - z0| = 0.01 sqrt(2) h the midpoint value (relative error < 1e-5).
+ * Twin of bhGaussianChordMean in shader/include/interop_trace.glsl.
+ */
+__device__ __forceinline__ float d_gaussian_chord_mean(float z0, float z1, float h) {
+    float const s  = 0.70710678f / h;
+    float const dz = z1 - z0;
+    if (fabsf(dz) * s < 0.01f) {
+        float const zm = 0.5f * (z0 + z1) / h;
+        return expf(-0.5f * zm * zm);
+    }
+    return 1.25331414f * h * (erff(z1 * s) - erff(z0 * s)) / dz;
+}
+
+/**
+ * @brief Disk emission over the chord p0 -> p1 of one integrator step.
+ *
+ * The Gaussian layer (scale height h) is integrated exactly along the chord
+ * and returned as its mean; the emission of the photon with physical
+ * Lz / E = photon_lambda (d_disk_emission: Page-Thorne flux, orbiting-emitter
+ * g^4, blackbody color) is read where the chord's density peaks. With every
+ * coefficient proportional to the density and a constant source function,
+ * the segment's formal solution depends only on the column, so any step size
+ * gives the exact segment. Returns false when the density peak lies outside
+ * [r_in, r_out]. Twin of bhDiskSegment in shader/include/interop_trace.glsl.
+ */
+__device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in, float r_out,
+                                               float h, float rs, float photon_lambda,
+                                               float3 &emit_color, float &j_eff,
+                                               float &rho_mean) {
+    emit_color = make_f3(0.0f, 0.0f, 0.0f);
+    j_eff = 0.0f;
+    rho_mean = 0.0f;
+    /* A chord on one side of the midplane and more than 8 h from it carries
+     * density below exp(-32) ~ 1e-14 everywhere. */
+    if (p0.z * p1.z > 0.0f && fminf(fabsf(p0.z), fabsf(p1.z)) > 8.0f * h) {
+        return false;
+    }
+    float const t_peak = (p0.z * p1.z < 0.0f) ? p0.z / (p0.z - p1.z)
+                                               : (fabsf(p0.z) <= fabsf(p1.z) ? 0.0f : 1.0f);
+    float3 const peak = d_add(p0, d_scale(d_sub(p1, p0), t_peak));
+    float const r_cyl = sqrtf(fmaf(peak.x, peak.x, peak.y * peak.y));
+    if (r_cyl < r_in || r_cyl > r_out) {
+        return false;
+    }
+    float3 chroma;
+    float intensity;
+    d_disk_emission(r_cyl, photon_lambda, rs, chroma, intensity);
+    emit_color = d_scale(chroma, d_disk_brightness);
+    rho_mean = d_gaussian_chord_mean(p0.z, p1.z, h);
+    j_eff = intensity * rho_mean;
+    return true;
+}
+
+/**
  * @brief Trace a Kerr geodesic with front-to-back volumetric RTE compositing.
  *
  * Mirrors bhTraceGeodesicRTE() in shader/include/interop_trace.glsl.
@@ -2062,29 +2123,19 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
          * affine length (d_kerr_affine_step), the unit of j_eff and alpha_nu. */
         float const path_step = d_kerr_affine_step(before, kr, a_trace, step_dt_rte);
 
-        if (d_adisk_enabled) {
-            float const r_cyl = sqrtf(fmaf(new_pos.x, new_pos.x, new_pos.y * new_pos.y));
-            if (r_cyl >= r_disk_in && r_cyl <= r_disk_out) {
-                /* Disk surface emission along this photon (d_disk_emission) */
-                float3 chroma;
-                float emission;
-                d_disk_emission(r_cyl, -c.Lz, rs, chroma, emission);
-                float3 const emit_color = d_scale(chroma, d_disk_brightness);
+        float3 emit_color;
+        float j_eff;
+        float rho_norm;
+        if (d_adisk_enabled &&
+            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, -c.Lz,
+                           emit_color, j_eff, rho_norm)) {
+            float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
+            float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, path_step, transmit);
+            accum_i = d_add(accum_i, contrib);
 
-                /* Gaussian vertical density falloff: rho ~ exp(-z^2 / 2 h^2) */
-                float const z_over_h  = new_pos.z / h_disk;
-                float const rho_norm  = expf(-0.5f * z_over_h * z_over_h);
-
-                float const j_eff   = emission * rho_norm;
-                float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
-
-                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, path_step, transmit);
-                accum_i = d_add(accum_i, contrib);
-
-                if (transmit < 0.005f) {
-                    if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
-                    return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
-                }
+            if (transmit < 0.005f) {
+                if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
+                return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
             }
         }
 
@@ -2335,43 +2386,35 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         /* Affine path length of the Mino step, the unit of alpha_nu and rho_v. */
         float const path_step = d_kerr_affine_step(before, kr, a_trace, step_dt);
 
-        if (d_adisk_enabled) {
-            float const r_cyl = sqrtf(fmaf(new_pos.x, new_pos.x, new_pos.y * new_pos.y));
-            if (r_cyl >= r_disk_in && r_cyl <= r_disk_out) {
-                /* Disk surface emission along this photon (d_disk_emission) */
-                float3 chroma;
-                float emission;
-                d_disk_emission(r_cyl, -c.Lz, rs, chroma, emission);
-                float3 const emit_color = d_scale(chroma, d_disk_brightness);
+        float3 emit_color;
+        float j_eff;
+        float rho_norm;
+        if (d_adisk_enabled &&
+            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, -c.Lz,
+                           emit_color, j_eff, rho_norm)) {
+            float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
 
-                float const z_over_h  = new_pos.z / h_disk;
-                float const rho_norm  = expf(-0.5f * z_over_h * z_over_h);
+            /* Intensity path: same as d_rte_step() */
+            float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu,
+                                               path_step, transmit);
+            accum_i = d_add(accum_i, contrib);
 
-                float const j_eff    = emission * rho_norm;
-                float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
+            /* Polarized emission: j_Q, j_U from B-field EVPA */
+            float const cos2b = cosf(2.0f * b_angle);
+            float const sin2b = sinf(2.0f * b_angle);
+            float const jI_s  = j_eff * (emit_color.x + emit_color.y + emit_color.z)
+                                * 0.33333333f;
+            float const jQ_s  = -jI_s * pi_lin * cos2b;
+            float const jU_s  = -jI_s * pi_lin * sin2b;
 
-                /* Intensity path: same as d_rte_step() */
-                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu,
-                                                   path_step, transmit);
-                accum_i = d_add(accum_i, contrib);
+            /* Faraday rotation: rhoV = ne_scale * <rho> over the chord */
+            float const rho_v = ne_scale * rho_norm;
 
-                /* Polarized emission: j_Q, j_U from B-field EVPA */
-                float const cos2b = cosf(2.0f * b_angle);
-                float const sin2b = sinf(2.0f * b_angle);
-                float const jI_s  = j_eff * (emit_color.x + emit_color.y + emit_color.z)
-                                    * 0.33333333f;
-                float const jQ_s  = -jI_s * pi_lin * cos2b;
-                float const jU_s  = -jI_s * pi_lin * sin2b;
+            /* Stokes step for Q, U, V (I is handled by accum_i above) */
+            stokes = d_stokes_step(stokes, 0.0f, jQ_s, jU_s, 0.0f,
+                                   alpha_nu, rho_v, path_step);
 
-                /* Faraday rotation: rhoV = ne_scale * rho_norm */
-                float const rho_v = ne_scale * rho_norm;
-
-                /* Stokes step for Q, U, V (I is handled by accum_i above) */
-                stokes = d_stokes_step(stokes, 0.0f, jQ_s, jU_s, 0.0f,
-                                       alpha_nu, rho_v, path_step);
-
-                if (transmit < 0.005f) { break; }
-            }
+            if (transmit < 0.005f) { break; }
         }
 
         if (kr.r > escape_r && kr.vr > 0.0f) {

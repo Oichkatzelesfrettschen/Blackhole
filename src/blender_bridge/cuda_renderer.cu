@@ -583,8 +583,19 @@ static void fill_params_from_view(struct BH_LaunchParams *p, float spin, const f
     p->width = width;
     p->height = height;
 
-    std::memcpy(p->cam_pos, cam_pos, sizeof(p->cam_pos));
-    std::memcpy(p->cam_basis, cam_basis, sizeof(p->cam_basis));
+    /* Blender scenes are Z-up with the spin along +z, which is the physics
+     * frame. The kernels take desktop y-up world coordinates and rotate them
+     * into physics with (x, y, z) -> (x, -z, y), so the view enters as the
+     * inverse rotation (x, y, z) -> (x, z, -y), applied to the position and to
+     * each column of the column-major basis. */
+    p->cam_pos[0] = cam_pos[0];
+    p->cam_pos[1] = cam_pos[2];
+    p->cam_pos[2] = -cam_pos[1];
+    for (int col = 0; col < 3; ++col) {
+        p->cam_basis[(3 * col) + 0] = cam_basis[(3 * col) + 0];
+        p->cam_basis[(3 * col) + 1] = cam_basis[(3 * col) + 2];
+        p->cam_basis[(3 * col) + 2] = -cam_basis[(3 * col) + 1];
+    }
     p->frame_shift_x = env_float("BLACKHOLE_BRIDGE_FRAME_SHIFT_X", 0.0f);
     p->frame_shift_y = env_float("BLACKHOLE_BRIDGE_FRAME_SHIFT_Y", 0.0f);
 

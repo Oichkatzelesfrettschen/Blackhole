@@ -185,30 +185,36 @@ void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
   float gthth  = sigma;
   float gphph  = (r * r + a * a + f * a * a * sin2) * sin2;
 
-  // gtt (k^t)^2 + 2 gtphi kphi k^t + spatial = 0. Outside the ergoregion
-  // the roots have opposite signs and the positive one is the future-directed
-  // photon. Inside it both can be future-directed (k^t > 0): a coordinate
-  // direction fixes the physical direction only together with a local
-  // observer frame, and the E > 0 root, the one that can connect to infinity,
-  // is preferred (physics::kerrNullGeodesicFromBL applies the same rule).
+  // gtt (k^t)^2 + 2 hb k^t + spatial = 0 with hb = gtphi kphi. The roots
+  // have E = -(gtt k^t + hb) = +-sqrt(D), D = hb^2 - gtt spatial, and in
+  // conjugate form k^t(E > 0) = spatial / (sqrt(D) - hb) and
+  // k^t(E < 0) = -spatial / (sqrt(D) + hb), which divide by gtt nowhere: on
+  // the stationary limit (gtt = 0) the equation is linear and the first form
+  // is its root -spatial / (2 hb), finite for hb < 0. A denominator within
+  // float rounding of sqrt(D) + |hb| marks a root at infinity. Outside the
+  // ergoregion the E > 0 root is the future-directed one; inside it both can
+  // be future-directed and the E > 0 root, the one that can connect to
+  // infinity, is preferred (physics::kerrNullGeodesicFromBL applies the same
+  // rule). D < 0 has no null completion.
   float spatial = grr * kr * kr + gthth * ktheta * ktheta + gphph * kphi * kphi;
   float hb      = gtphi * kphi;
   float disc    = hb * hb - gtt * spatial;
-  float kt = 1.0;
-  if (disc >= 0.0 && abs(gtt) > KERR_EPSILON) {
-    float sqD = sqrt(disc);
-    float ktA = (-hb + sqD) / gtt;
-    float ktB = (-hb - sqD) / gtt;
-    float energyA = -(gtt * ktA + gtphi * kphi);
-    kt = (ktA > 0.0 && (energyA > 0.0 || ktB <= 0.0)) ? ktA : ktB;
-  }
+  float sqD     = sqrt(max(disc, 0.0));
+  float rootTol = 1e-6 * (sqD + abs(hb));
+  bool finitePos = disc >= 0.0 && (sqD - hb) > rootTol;
+  bool finiteNeg = disc >= 0.0 && (sqD + hb) > rootTol;
+  float ktPos = finitePos ? spatial / (sqD - hb) : 0.0;
+  float ktNeg = finiteNeg ? -spatial / (sqD + hb) : 0.0;
+  bool useNeg = finiteNeg && ktNeg > 0.0 && (!finitePos || ktPos <= 0.0);
+  float kt = useNeg ? ktNeg : ktPos;
 
-  float E_raw  = -(gtt * kt + gtphi * kphi);
+  float E_raw  = useNeg ? -sqD : sqD;
   float Lz_raw = gtphi * kt + gphph * kphi;
-  // A photon with E <= 0 (possible only inside the ergoregion) cannot reach
-  // infinity, so it cannot bring the sky to the camera: start it at r = 0,
-  // which every trace loop treats as captured.
-  if (E_raw <= KERR_EPSILON) {
+  // No finite null completion, or a photon with E <= 0 (possible only inside
+  // the ergoregion), which cannot reach infinity and so cannot bring the sky
+  // to the camera: start it at r = 0, which every trace loop treats as
+  // captured.
+  if (!(finitePos || useNeg) || !(E_raw > KERR_EPSILON)) {
     ray.r = 0.0;
     return;
   }

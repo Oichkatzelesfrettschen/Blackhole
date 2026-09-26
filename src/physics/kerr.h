@@ -501,28 +501,41 @@ struct KerrNullGeodesic {
   const double grr = sigma / delta;
   const double gphph = ((r * r) + (a * a) + (f * a * a * sin2)) * sin2;
 
-  // g_tt kt^2 + 2 g_tphi kphi kt + spatial = 0.
+  // g_tt kt^2 + 2 hb kt + spatial = 0 with hb = g_tphi kphi. The roots have
+  // E = -(g_tt kt + hb) = +-sqrt(D), D = hb^2 - g_tt spatial, and in
+  // conjugate form
+  //   kt(E = +sqrt(D)) = spatial / (sqrt(D) - hb),
+  //   kt(E = -sqrt(D)) = -spatial / (sqrt(D) + hb),
+  // which divide by g_tt nowhere: on the stationary limit (g_tt = 0) the
+  // equation is linear and the first form is its root -spatial / (2 hb),
+  // finite for hb < 0, while the other root runs to infinity. A denominator
+  // at or below the rounding of sqrt(D) + |hb| marks a root at infinity.
+  // Outside the ergoregion (g_tt < 0) the E > 0 root is the future-directed
+  // one. Inside it both roots can be future-directed (k^t > 0): the
+  // coordinate direction then fixes the physical direction only together
+  // with a local observer frame, and the E > 0 root, the one that can
+  // connect to infinity, is preferred. D < 0 (inside the ergoregion, for a
+  // direction too close to constant phi) has no null completion.
   const double spatial = (grr * kr * kr) + (sigma * ktheta * ktheta) + (gphph * kphi * kphi);
   const double hb = gtphi * kphi;
-  const double disc = std::max((hb * hb) - (gtt * spatial), 0.0);
-  // Outside the ergoregion (g_tt < 0) the roots have opposite signs and the
-  // positive one is the future-directed photon. Inside it both roots can be
-  // future-directed (k^t > 0): the coordinate direction then fixes the
-  // physical direction only together with a local observer frame. The root
-  // with E > 0 is the one that can connect to infinity, so it is preferred.
-  const double rootA = (-hb + std::sqrt(disc)) / gtt;
-  const double rootB = (-hb - std::sqrt(disc)) / gtt;
-  const double energyA = -((gtt * rootA) + (gtphi * kphi));
-  const double kt = (rootA > 0.0 && (energyA > 0.0 || rootB <= 0.0)) ? rootA : rootB;
-
-  const double eRaw = -((gtt * kt) + (gtphi * kphi));
+  const double disc = (hb * hb) - (gtt * spatial);
+  const double sqD = std::sqrt(std::max(disc, 0.0));
+  const double rootTol = 1e-12 * (sqD + std::abs(hb));
+  const bool finitePos = disc >= 0.0 && (sqD - hb) > rootTol;
+  const bool finiteNeg = disc >= 0.0 && (sqD + hb) > rootTol;
+  const double ktPos = finitePos ? spatial / (sqD - hb) : 0.0;
+  const double ktNeg = finiteNeg ? -spatial / (sqD + hb) : 0.0;
+  const bool useNeg = finiteNeg && ktNeg > 0.0 && (!finitePos || ktPos <= 0.0);
+  const double kt = useNeg ? ktNeg : ktPos;
+  const double eRaw = useNeg ? -sqD : sqD;
   const double lzRaw = (gtphi * kt) + (gphph * kphi);
 
   KerrNullGeodesic g{};
-  if (eRaw <= 0.0) {
-    // A future-directed photon with E <= 0 exists only inside the ergoregion
-    // and cannot reach infinity; state.r = 0 marks it captured, as the GPU
-    // initializers do.
+  if (!(finitePos || useNeg) || !(eRaw > 0.0)) {
+    // No finite null completion (D < 0, or the only future root at infinity
+    // on the stationary limit), or a future-directed photon with E <= 0,
+    // which exists only inside the ergoregion and cannot reach infinity:
+    // state.r = 0 marks it captured, as the GPU initializers do.
     g.consts.e = 1.0;
     g.state.r = 0.0;
     g.state.theta = theta;
