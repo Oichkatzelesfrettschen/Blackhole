@@ -31,6 +31,7 @@
 #include "game/observer.h"
 #include "game/realtime_driver.h"
 #include "game/station_node.h"
+#include "physics/safe_limits.h"
 #include "platform/resource_paths.h"
 #include "ui/strategic_map.h"
 
@@ -717,7 +718,7 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
   }
   if (const char *realtimeEnv = std::getenv("BLACKHOLE_CAMPAIGN_REALTIME")) {
     const double scale = std::strtod(realtimeEnv, nullptr);
-    if (std::isfinite(scale) && scale >= 1.0 &&
+    if (physics::safeIsfinite(scale) && scale >= 1.0 &&
         scale <= game::K_MAX_LOCAL_SECONDS_PER_WALL_SECOND) {
       uiState.localSecondsPerWallSecond = static_cast<float>(scale);
       game::RealtimeDriverConfig config;

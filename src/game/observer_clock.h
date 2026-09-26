@@ -40,6 +40,8 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+
+#include "physics/safe_limits.h"
 #include <limits>
 #include <optional>
 
@@ -81,14 +83,14 @@ struct WideProduct {
  *         quantizes to 0, a stopped clock: callers building a station reject
  *         rateQ == 0 (CampaignState refuses the config). */
 [[nodiscard]] inline std::uint64_t quantizeClockRate(double rate) {
-  assert(std::isfinite(rate) && rate > 0.0 && rate <= 1.0);
+  assert(physics::safeIsfinite(rate) && rate > 0.0 && rate <= 1.0);
   return static_cast<std::uint64_t>(std::llround(std::ldexp(rate, K_CLOCK_FRACTION_BITS)));
 }
 
 /** @brief True when a turn length is a whole number of seconds the clock can
  *         carry: integral, positive, and below 2^32. */
 [[nodiscard]] inline bool isClockTurnLength(double secondsPerTurn) {
-  return std::isfinite(secondsPerTurn) && secondsPerTurn >= 1.0 &&
+  return physics::safeIsfinite(secondsPerTurn) && secondsPerTurn >= 1.0 &&
          secondsPerTurn < static_cast<double>(K_CLOCK_MAX_SECONDS_PER_TURN) &&
          std::floor(secondsPerTurn) == secondsPerTurn;
 }
