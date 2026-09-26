@@ -12,7 +12,9 @@
  */
 
 #include <cmath>
+#include <filesystem>
 #include <memory>
+#include <system_error>
 
 #include <gtest/gtest.h>
 
@@ -170,4 +172,25 @@ TEST(RecordCameraPath, ShowcaseFramesUseTheProfileSpin) {
   cli.recordSpin = 0.9f;
   blackhole::applyRecordCameraPath(rs, cli, InputManager::instance());
   EXPECT_FLOAT_EQ(rs.physicsCore.kerrSpin, 0.9f);
+}
+
+// depthFar normalizes the traced depth and bounds the gizmo frustum, so every
+// showcase composition's camera distance plus the disk's 200-unit outer radius
+// must fit inside it.
+TEST(RecordProfileSetup, ShowcaseDepthFarHoldsTheCameraAndTheDisk) {
+  const auto frames = std::filesystem::path(testing::TempDir()) / "record-depth-far";
+  for (const char *const name : {"above-disk", "inside-disk", "centered", "left-third",
+                                 "right-third", "wide-left", "wide-right"}) {
+    const auto rsStorage = std::make_unique<RenderState>();
+    RenderState &rs = *rsStorage;
+    platform::CliOptions cli;
+    cli.recordFramesDir = frames.string();
+    cli.recordProfile = "showcase-orbit";
+    cli.recordComposition = name;
+    InputManager &input = InputManager::instance();
+    ASSERT_TRUE(blackhole::applyRecordProfileSetup(rs, cli, input, nullptr)) << name;
+    EXPECT_GT(rs.display.depthFar, input.camera().distance + 200.0f) << name;
+  }
+  std::error_code ignored;
+  std::filesystem::remove_all(frames, ignored);
 }

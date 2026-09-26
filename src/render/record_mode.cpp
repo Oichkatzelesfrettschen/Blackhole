@@ -236,7 +236,10 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.post.gamma              = 2.35f;
     rs.dispatch.computeMaxSteps    = 1000;
     rs.dispatch.computeStepSize    = 0.016f;
-    rs.display.depthFar           = 154.367004f;
+    // Beyond every composition's camera distance plus the disk's 200-unit
+    // outer radius: depth cues normalize a disk hit below 1, and a ray leaving
+    // outward is traced past the disk's outer edge before it escapes.
+    rs.display.depthFar           = K_DEFAULT_DEPTH_FAR;
     rs.physicsCore.kerrSpin           = K_SHOWCASE_ORBIT_SPIN;
     const char *defaultBackground =
         composition != nullptr ? composition->backgroundId : "nasa_deep_starmap_galactic";
