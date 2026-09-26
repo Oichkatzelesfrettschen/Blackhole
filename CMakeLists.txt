@@ -4141,6 +4141,32 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Page-Thorne thin-disk flux against quadrature of its defining integral
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/page_thorne_test.cpp")
+    add_executable(page_thorne_test
+      "${PROJECT_SOURCE_DIR}/tests/page_thorne_test.cpp"
+    )
+    target_link_libraries(page_thorne_test PRIVATE blackhole_physics GTest::gtest_main)
+    target_include_directories(page_thorne_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(page_thorne_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(page_thorne_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME page_thorne_validation COMMAND page_thorne_test)
+    set_tests_properties(page_thorne_validation PROPERTIES
+      LABELS "physics;accretion;disk"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(page_thorne_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Campaign core (Horizon Command seam) tests: pure game logic against the
   # Schwarzschild time field, no GL context. IEEE flags match the campaign
   # libraries so the determinism gates hold under ENABLE_FAST_MATH too.

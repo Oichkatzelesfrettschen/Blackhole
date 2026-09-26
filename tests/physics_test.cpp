@@ -26,6 +26,7 @@
 #include "geodesics.h"
 #include "kerr.h"
 #include "lut.h"
+#include "page_thorne.h"
 #include "raytracer.h"
 #include "schwarzschild.h"
 
@@ -712,17 +713,13 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       const double rIn = rInOverRs * rS;
       const double rOut = rOutOverRs * rS;
 
-      double const lEdd = 1.26e38 * massSolar;
-      double const mdotEdd = lEdd / (0.1 * physics::C2);
-      double mdotCgs = mdot * mdotEdd;
+      // Page-Thorne flux; the LUT is max-normalized, so Mdot and the
+      // 3 G M / 8 pi prefactor cancel and the shape alone is compared.
       auto emissivityModel = [&](double r) {
         if (r < rIn) {
           return 0.0;
         }
-        double const prefactor = 3.0 * physics::G * mass * mdotCgs / (8.0 * physics::PI * r * r * r);
-        double const basic = 1.0 - std::sqrt(rIn / r);
-        double const spinFactor = 1.0 + (0.5 * spin * std::sqrt(rG / r));
-        return prefactor * basic * spinFactor;
+        return physics::pageThorneFluxShape(r / rG, spin);
       };
 
       double maxFlux = 0.0;

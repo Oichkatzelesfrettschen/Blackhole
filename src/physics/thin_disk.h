@@ -13,15 +13,16 @@
  * - Inner edge at ISCO (zero-torque boundary)
  *
  * Radiative flux (Page & Thorne 1974):
- *   F(r) = (3 G M Ṁ)/(8π r³) * (1 - √(r_ISCO/r)) * f(r)
+ *   F(r) = (3 G M Ṁ)/(8π r³) * f(r)
  *
- * where f(r) contains relativistic corrections.
+ * where f(r) is the Page-Thorne relativistic factor of page_thorne.h, zero at
+ * the ISCO and tending to 1 at large r.
  *
  * Temperature profile:
  *   T(r) = [F(r) / σ]^(1/4)
  *
  * Radiative efficiency:
- *   η = 1 - E_ISCO/c² ≈ 0.057 (Schwarzschild) to 0.42 (maximal Kerr)
+ *   η = 1 - E_ISCO/c² = 0.0572 (Schwarzschild) to 0.3210 (a* = 0.998)
  *
  * References:
  * - Novikov & Thorne (1973), in "Black Holes"
@@ -43,6 +44,7 @@
 
 #include "constants.h"
 #include "kerr.h"
+#include "page_thorne.h"
 
 namespace physics {
 
@@ -66,7 +68,7 @@ constexpr double RADIATION_CONSTANT = 4.0 * STEFAN_BOLTZMANN / C;
 struct DiskParams {
   double mass = 0.0;        ///< Black hole mass [g]
   double mDot = 0.0;        ///< Accretion rate [g/s]
-  double a = 0.0;           ///< Spin parameter [cm] (0 for Schwarzschild)
+  double a = 0.0;           ///< Spin parameter [cm]; negative for a retrograde disk
   double rIn = 0.0;         ///< Inner radius [cm] (typically ISCO)
   double rOut = 0.0;        ///< Outer radius [cm]
   double inclination = 0.0; ///< Viewing inclination [rad]
@@ -109,23 +111,23 @@ struct DiskParams {
  * @param aStar Dimensionless spin (-1 to 1)
  * @param mDotEdd Accretion rate in Eddington units
  * @param prograde True for prograde disk
- * @return DiskParams
+ * @return DiskParams; disk.a carries the sign of the disk's orbital sense, so
+ *         a retrograde disk stores a negative spin.
  */
 [[nodiscard]] inline DiskParams kerrDisk(double mSolar, double aStar, double mDotEdd = 0.1,
                                          bool prograde = true) {
   DiskParams disk;
   disk.mass = mSolar * M_SUN;
 
-  // Spin parameter
+  // Spin relative to the disk's orbital sense. kerrIscoRadius depends on |a|
+  // and the prograde flag only, so the disk spin takes the same convention.
   const double mGeo = G * disk.mass / C2;
-  disk.a = aStar * mGeo;
+  const double aDisk = prograde ? std::abs(aStar) : -std::abs(aStar);
+  disk.a = aDisk * mGeo;
 
-  // Eddington rate
+  // Eddington rate at the Novikov-Thorne efficiency 1 - E_isco
   const double lEdd = 1.26e38 * mSolar;
-  double eta = 1.0 - std::sqrt(1.0 - (2.0 / 3.0)); // Approximate
-  if (std::abs(aStar) > 0.9) {
-    eta = 0.3; // Higher for high spin
-  }
+  const double eta = novikovThorneEfficiency(aDisk);
   disk.mDot = mDotEdd * lEdd / (eta * C2);
 
   // ISCO
@@ -197,44 +199,12 @@ struct DiskParams {
 }
 
 /**
- * @brief Compute relativistic correction factor for flux.
- *
- * The Novikov-Thorne flux involves an integral:
- * f(r) = int[rIn to r] (L - L_in) dE/dr dr / (Omega(E - Omega L))
- *
- * For Schwarzschild, this has a closed-form solution.
- *
- * @param r Radius [cm]
- * @param rIn Inner radius [cm]
- * @param mass Black hole mass [g]
- * @return Correction factor (dimensionless)
- */
-[[nodiscard]] inline double novikovThorneFactor(double r, double rIn, double mass) {
-  const double rG = G * mass / C2;
-
-  // Dimensionless radii
-  const double x = std::sqrt(r / rG);
-  const double xIn = std::sqrt(rIn / rG);
-
-  // Page & Thorne (1974) formula
-  // Leading term: 1 - sqrt(rIn/r)
-  const double term1 = 1.0 - std::sqrt(rIn / r);
-
-  // First relativistic correction
-  const double term2 = (3.0 / (2.0 * x * x)) * std::log(x / xIn);
-
-  // Higher-order terms (simplified)
-  const double term3 = -(3.0 * (x - xIn)) / (x * x * xIn);
-
-  return (term1 - term2) + term3;
-}
-
-/**
  * @brief Compute radiative flux from disk surface.
  *
  * F(r) = (3 G M Mdot)/(8pi r^3) * f(r)
  *
- * where f(r) is the relativistic correction.
+ * where f(r) is pageThorneRelativisticFactor at r/r_g and the signed spin
+ * a/r_g, exact for every spin including Schwarzschild.
  *
  * @param r Radius [cm]
  * @param disk Disk parameters
@@ -248,21 +218,8 @@ struct DiskParams {
   // Leading coefficient
   const double prefactor = (3.0 * G * disk.mass * disk.mDot) / (8.0 * std::numbers::pi * r * r * r);
 
-  // Relativistic correction
-  double fR = 0.0;
-  if (std::abs(disk.a) < 1e-10) {
-    // Schwarzschild
-    fR = novikovThorneFactor(r, disk.rIn, disk.mass);
-  } else {
-    // Kerr - simplified approximation
-    const double rG = G * disk.mass / C2;
-    const double basic = 1.0 - std::sqrt(disk.rIn / r);
-    const double aStar = disk.a / rG;
-    const double spinFactor = 1.0 + (0.5 * aStar * std::sqrt(rG / r));
-    fR = basic * spinFactor;
-  }
-
-  return prefactor * fR;
+  const double rG = G * disk.mass / C2;
+  return prefactor * pageThorneRelativisticFactor(r / rG, disk.a / rG);
 }
 
 /**
@@ -295,15 +252,15 @@ struct DiskParams {
 /**
  * @brief Compute peak temperature and its radius.
  *
- * For Schwarzschild: T_max at r ~ 49/12 * r_ISCO
+ * The peak is the Page-Thorne flux maximum (9.55 r_g at a = 0).
  *
  * @param disk Disk parameters
  * @param tMax Output: peak temperature [K]
  * @param rPeak Output: radius of peak [cm]
  */
 inline void diskPeakTemperature(const DiskParams &disk, double &tMax, double &rPeak) {
-  // Peak is roughly at (49/12) * rIn for Schwarzschild
-  rPeak = (49.0 / 12.0) * disk.rIn;
+  const double rG = G * disk.mass / C2;
+  rPeak = std::max(pageThorneFluxPeakRadius(disk.a / rG) * rG, disk.rIn);
 
   // Ensure within disk bounds
   rPeak = std::min(rPeak, disk.rOut);
@@ -377,12 +334,10 @@ inline void diskPeakTemperature(const DiskParams &disk, double &tMax, double &rP
  * @return Luminosity [erg/s]
  */
 [[nodiscard]] inline double diskLuminosity(const DiskParams &disk) {
-  const double rIsco = disk.rIn;
-
-  // Efficiency from ISCO binding energy
-  // E_ISCO/c^2 for Schwarzschild: 1 - sqrt(8/9) ~ 0.0572
-  const double eIsco = specificEnergySchwarzschild(rIsco, disk.mass);
-  const double eta = 1.0 - eIsco;
+  // Efficiency from the ISCO binding energy of the disk's own spin:
+  // 0.0572 at a = 0, 0.3210 at a* = 0.998.
+  const double rG = G * disk.mass / C2;
+  const double eta = novikovThorneEfficiency(disk.a / rG);
 
   return eta * disk.mDot * C2;
 }

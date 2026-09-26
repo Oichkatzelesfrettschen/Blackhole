@@ -13,7 +13,7 @@ import json
 import math
 import os
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 
 # Physical constants (cgs)
@@ -37,13 +37,51 @@ def kerr_isco_cleanroom(mass: float, spin_param: float, prograde: bool = True) -
     return r_isco
 
 
+def page_thorne_isco(a_star: float) -> float:
+    """ISCO radius in units of M for a disk orbiting in +phi (signed spin)."""
+    z1 = 1.0 + (1.0 - a_star * a_star) ** (1.0 / 3.0) * (
+        (1.0 + a_star) ** (1.0 / 3.0) + (1.0 - a_star) ** (1.0 / 3.0)
+    )
+    z2 = math.sqrt(3.0 * a_star * a_star + z1 * z1)
+    root = math.sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2))
+    return 3.0 + z2 - root if a_star >= 0.0 else 3.0 + z2 + root
+
+
+def page_thorne_shape(r: float, a_star: float) -> float:
+    """Page-Thorne flux shape S = F * 8 pi / (3 Mdot) at r in units of M.
+
+    Twin of physics::pageThorneFluxShape (src/physics/page_thorne.h).
+    """
+    r_isco = page_thorne_isco(a_star)
+    if r <= r_isco:
+        return 0.0
+    x = math.sqrt(r)
+    x0 = math.sqrt(r_isco)
+    theta = math.acos(a_star) / 3.0
+    roots = (
+        2.0 * math.cos(theta - math.pi / 3.0),
+        2.0 * math.cos(theta + math.pi / 3.0),
+        -2.0 * math.cos(theta),
+    )
+    bracket = x - x0 - 1.5 * a_star * math.log(x / x0)
+    for i, xi in enumerate(roots):
+        if abs(xi) < 1e-14:
+            continue
+        xj = roots[(i + 1) % 3]
+        xk = roots[(i + 2) % 3]
+        coeff = 3.0 * (xi - a_star) ** 2 / (xi * (xi - xj) * (xi - xk))
+        bracket -= coeff * math.log((x - xi) / (x0 - xi))
+    return bracket / (x**4 * (x**3 - 3.0 * x + 2.0 * a_star))
+
+
 def novikov_thorne_flux(r: float, mass: float, mdot: float, r_in: float, a_star: float) -> float:
+    """Page-Thorne surface flux [erg cm^-2 s^-1] at r [cm]; zero inside r_in."""
     if r < r_in:
         return 0.0
-    prefactor = 3.0 * G * mass * mdot / (8.0 * math.pi * r ** 3)
-    basic = 1.0 - math.sqrt(r_in / r)
-    spin_factor = 1.0 + 0.5 * a_star * math.sqrt((G * mass / C2) / r)
-    return prefactor * basic * spin_factor
+    r_g = G * mass / C2
+    prefactor = 3.0 * G * mass * mdot / (8.0 * math.pi * r**3)
+    r_m = r / r_g
+    return prefactor * r_m**3 * page_thorne_shape(r_m, a_star)
 
 
 def kerr_redshift_equatorial(r: float, mass: float, spin_param: float) -> float:
@@ -106,14 +144,14 @@ def resolve_photon_orbit(mass: float, spin_param: float, prograde: bool,
 
 def write_csv(path: str, rows: list[list[float]]) -> None:
     with open(path, "w", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(["u", "value"])
         writer.writerows(rows)
 
 
 def write_spin_csv(path: str, rows: list[list[float]]) -> None:
     with open(path, "w", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(["spin", "r_isco_over_rs", "r_ph_over_rs"])
         writer.writerows(rows)
 
@@ -193,7 +231,7 @@ def main() -> int:
         "mdot": args.mdot,
         "prograde": True,
         "isco_source": isco_source,
-        "emissivity_model": "novikov-thorne",
+        "emissivity_model": "page-thorne",
         "redshift_model": "equatorial",
         "units": {
             "system": "cgs",
@@ -205,7 +243,7 @@ def main() -> int:
         "r_out_over_rs": r_out / r_s,
         "r_in_cm": r_in,
         "r_out_cm": r_out,
-        "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     if refs:
         meta["compact_common_version"] = refs["version"]
@@ -235,7 +273,7 @@ def main() -> int:
         handle.write("\n")
 
     print("Wrote LUTs to", lut_dir)
-    print("r_in/r_s=%.3f r_out/r_s=%.3f" % (r_in / r_s, r_out / r_s))
+    print(f"r_in/r_s={r_in / r_s:.3f} r_out/r_s={r_out / r_s:.3f}")
     return 0
 
 
