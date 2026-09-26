@@ -315,7 +315,11 @@ the same CPU arguments plus the GPU geodesic benchmark. That file is compared
 only with `bench/baseline-$BENCH_PRESET-gpu.json` (override with
 `BENCH_GPU_BASELINE`). No GPU baseline is committed, so until one is recorded on
 a GPU host the GPU comparison prints a notice and leaves the exit status to the
-CPU comparison; once recorded, a GPU regression fails the run too.
+CPU comparison; once recorded, a GPU regression fails the run too. When
+`--gpu` cannot create its GL context or compile the compute shader,
+`physics_bench` writes the CPU results without a GPU entry and exits 3, and
+`ci_bench.sh` stops there: a display that cannot run the GPU benchmark is a
+failed run, not a zero timing.
 
 `riced` is opt-in: a Debug build with Tracy instrumentation whose binary lands
 in `build/Riced/Debug`. Its dependency graph needs `tracy/0.13.1`, which

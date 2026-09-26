@@ -74,8 +74,13 @@ require_json() {
 require_json "$out/bench_cpu.json"
 gpu=0
 if [ -n "${DISPLAY:-}" ]; then
+  # physics_bench exits 3 when the GL context or compute shader fails.
   "$bin_dir/physics_bench" "$@" --gpu --gpu-width 1024 --gpu-height 1024 \
-    --gpu-iterations 20 --json "$out/bench_gpu.json"
+    --gpu-iterations 20 --json "$out/bench_gpu.json" || {
+    rc=$?
+    echo "ci_bench: GPU benchmark failed (exit $rc) with DISPLAY=$DISPLAY" >&2
+    exit "$rc"
+  }
   require_json "$out/bench_gpu.json"
   gpu=1
 else

@@ -679,18 +679,24 @@ int main(int argc, char **argv) try {
               << " ms, speedup=" << hb.speedup << "x\n";
   }
 
+  // --gpu requests a GPU measurement. When the context or shader cannot be
+  // created, the zeroed placeholder runGpuBench returns is not a timing, so it
+  // stays out of the CSV and JSON; the CPU results are still written, and the
+  // process exits 3 so a caller that asked for the GPU run sees it failed.
+  bool gpuFailed = false;
   if (cfg.gpuEnabled) {
     std::string gpuError;
     BenchResult const gpuResult = runGpuBench(cfg, gpuElapsedNs, gpuError);
     if (!gpuError.empty()) {
       std::cerr << "[GPU] " << gpuError << "\n";
+      gpuFailed = true;
     } else {
       std::cout << std::fixed << std::setprecision(3);
       std::cout << gpuResult.name << " avg=" << gpuResult.avgMs << " ms"
                 << " (min=" << gpuResult.minMs << ", max=" << gpuResult.maxMs << ")"
                 << " units/s=" << gpuResult.unitsPerSec << "\n";
+      results.push_back(gpuResult);
     }
-    results.push_back(gpuResult);
   }
 
   double const totalAccum = cpuAccum + gpuElapsedNs;
@@ -702,7 +708,7 @@ int main(int argc, char **argv) try {
   if (!cfg.jsonPath.empty()) {
     writeJson(cfg.jsonPath, cfg, results, cpuAccum, gpuElapsedNs);
   }
-  return 0;
+  return gpuFailed ? 3 : 0;
 } catch (const std::exception &error) {
   return std::fprintf(stderr, "Benchmark failed: %s\n", error.what()) < 0 ? 2 : 1;
 } catch (...) {

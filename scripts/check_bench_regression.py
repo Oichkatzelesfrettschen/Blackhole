@@ -27,15 +27,23 @@ def load_results(path: str | pathlib.Path) -> dict[str, dict]:
     return {entry["name"]: entry for entry in payload.get("results", [])}
 
 
-def finite_ms(value: object) -> bool:
-    """True for a finite, non-negative number; json.load yields NaN and
-    Infinity as floats and physics_bench writes null for a non-finite timing."""
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        and value >= 0
-    )
+def invalid_reason(entry: dict) -> str | None:
+    """Why an entry is not a measurement, or None when it is one.
+
+    A measurement has a finite, positive avg_ms and a positive iteration
+    count. json.load yields NaN and Infinity as floats, physics_bench writes
+    null for a non-finite timing, and a benchmark that never ran reports zero
+    iterations and a zero time; none of these is a timing to compare.
+    """
+    avg = entry.get("avg_ms")
+    if not isinstance(avg, (int, float)) or isinstance(avg, bool) or not math.isfinite(avg):
+        return "no finite avg_ms"
+    if avg <= 0:
+        return f"avg_ms {avg} is not positive"
+    iterations = entry.get("iterations")
+    if not isinstance(iterations, int) or isinstance(iterations, bool) or iterations <= 0:
+        return f"iterations {iterations!r} is not a positive count"
+    return None
 
 
 def host_cpu_model() -> str:
@@ -109,21 +117,21 @@ def main() -> int:
 
     baseline = load_results(baseline_path)
     failures = 0
-    seen = set()
     for current_file in args.current:
         current = load_results(current_file)
-        seen.update(current)
         for name, entry in sorted(current.items()):
             base = baseline.get(name)
-            if not finite_ms(entry.get("avg_ms")):
-                print(f"INVALID: {name} has no finite avg_ms in {current_file}")
+            reason = invalid_reason(entry)
+            if reason is not None:
+                print(f"INVALID: {name} in {current_file}: {reason}")
                 failures += 1
                 continue
             if base is None:
                 print(f"NEW: {name} has no baseline entry ({entry['avg_ms']:.3f} ms)")
                 continue
-            if not finite_ms(base.get("avg_ms")) or base["avg_ms"] == 0:
-                print(f"INVALID: {name} has no finite, positive avg_ms in {baseline_path}")
+            reason = invalid_reason(base)
+            if reason is not None:
+                print(f"INVALID: {name} in {baseline_path}: {reason}")
                 failures += 1
                 continue
             ratio = entry["avg_ms"] / base["avg_ms"]
@@ -135,10 +143,12 @@ def main() -> int:
                 failures += 1
             else:
                 print(f"ok: {name} {(ratio - 1) * 100:+.1f}%")
-    # A benchmark that stops reporting is a lost measurement, not a pass.
-    for name in sorted(set(baseline) - seen):
-        print(f"MISSING: {name} is in {baseline_path} but absent from this run")
-        failures += 1
+        # Each file is one run compared with the whole baseline, so a baseline
+        # entry absent from this file is a lost measurement even when another
+        # file reports it.
+        for name in sorted(set(baseline) - set(current)):
+            print(f"MISSING: {name} is in {baseline_path} but absent from {current_file}")
+            failures += 1
     if failures:
         print(
             f"{failures} failure(s): regressions beyond {args.threshold * 100:.0f}%, "
