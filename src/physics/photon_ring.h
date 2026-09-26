@@ -66,14 +66,18 @@ inline constexpr double PHOTON_SHELL_EDGE_ULPS = 16.0;
  *
  * @param a Spin, |a| < 1; gamma depends on a^2 and lambda^2 only
  * @param r Orbit radius inside the photon shell of a (r = 3 at a = 0)
- * @return gamma per half orbit; pi for Schwarzschild; divergentResult<double>(),
+ * @return gamma per half orbit; pi for Schwarzschild at r = 3; divergentResult<double>(),
  *         a finite sentinel safe under -ffast-math, when r lies outside the
  *         shell (eta < 0 beyond the rounding of an endpoint radius)
  */
 [[nodiscard]] inline double photonRingLyapunovExponent(double a, double r) noexcept {
   const double a2 = a * a;
   if (a2 == 0.0) {
-    return std::numbers::pi;
+    // The Schwarzschild shell is the single radius r = 3, up to the rounding
+    // an endpoint radius carries.
+    const double u = 0.5 * std::numeric_limits<double>::epsilon();
+    return (std::abs(r - 3.0) <= PHOTON_SHELL_EDGE_ULPS * u * 3.0) ? std::numbers::pi
+                                                                  : divergentResult<double>();
   }
   // Delta, the eta numerator 4 a^2 - r (r - 3)^2 and the lambda numerator
   // r^2 (r - 3) + a^2 (r + 1) each have a form in r and a form in x = r - 1 and

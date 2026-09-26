@@ -3,8 +3,9 @@
  * @brief Kerr photon-orbit Lyapunov exponent against its defining integral.
  *
  * Gates:
- *   1. gamma = pi at a = 0, and within a^2 of pi at a = 1e-3 mid-shell (the
- *      closed form never divides by a^2, so the limit is continuous).
+ *   1. gamma = pi at a = 0 on r = 3 and the sentinel off it, and within a^2
+ *      of pi at a = 1e-3 mid-shell (the closed form never divides by a^2, so
+ *      the limit is continuous).
  *   2. gamma within 1e-14 relative of an mpmath evaluation of
  *      sqrt(R''(r)/2) * integral dtheta / sqrt(Theta) at a = 1e-3, 0.5, 0.9,
  *      0.99 across the shell (tests/photon_ring_reference.inc from
@@ -63,7 +64,13 @@ void check(bool cond, const char *msg) {
 }
 
 void testSchwarzschildLimit() {
-  check(photonRingLyapunovExponent(0.0, 3.0) == std::numbers::pi, "gamma = pi at a = 0");
+  check(photonRingLyapunovExponent(0.0, 3.0) == std::numbers::pi &&
+            photonRingLyapunovExponent(0.0, photonShell(0.0).prograde) == std::numbers::pi &&
+            photonRingLyapunovExponent(0.0, photonShell(0.0).retrograde) == std::numbers::pi,
+        "gamma = pi at a = 0 on the r = 3 shell");
+  check(photonRingLyapunovExponent(0.0, 3.1) == divergentResult<double>() &&
+            photonRingLyapunovExponent(0.0, 2.9) == divergentResult<double>(),
+        "a = 0 radii off r = 3 return the divergent sentinel");
   const double a = 1.0e-3;
   const PhotonShell shell = photonShell(a);
   const double mid = 0.5 * (shell.prograde + shell.retrograde);
