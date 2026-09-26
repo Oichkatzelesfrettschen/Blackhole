@@ -330,4 +330,29 @@ TEST_F(DiskTransferTraceTest, VolumetricTracesBrightenTheApproachingSide) {
   }
 }
 
+// A camera in the disk plane (z = 0) inside the annulus sees the disk
+// edge-on: a step that starts on the plane is not a crossing. A ray leaving
+// the plane away from the hole never crosses it and must report no disk hit;
+// a ray leaving it toward the hole may only hit on a genuine crossing on the
+// far side, not at the camera's own radius at t = 0.
+TEST_F(DiskTransferTraceTest, InPlaneCameraDoesNotHitTheDiskAtItsOwnPosition) {
+  const GLuint program = bhtest::createComputeProgram(traceShader());
+  constexpr double K_CAMERA_R = 15.0; // 7.5 r_s, inside the 3-100 r_s disk
+  bhtest::MirrorPair pair;
+  pair.cam = {K_CAMERA_R, 0.0, 0.0};
+  pair.forward = {-1.0, 0.0, 0.0};
+  const double inv = 1.0 / std::sqrt(2.0);
+  pair.dir = {bhtest::Vec3d{inv, 0.0, inv}, bhtest::Vec3d{-0.96, 0.0, 0.28}};
+  for (const float spin : {0.0F, 0.9F}) {
+    const std::vector<float> out = trace(program, pair, TraceCase{spin, 2.0F}, 0);
+    EXPECT_EQ(out.at(0), 0.0F) << "outward ray reported a disk hit, a=" << spin
+                               << " r_hit=" << out.at(1);
+    if (out.at(K_TRACE_STRIDE) == 1.0F) {
+      EXPECT_GT(std::abs(static_cast<double>(out.at(K_TRACE_STRIDE + 1)) - K_CAMERA_R), 1.0)
+          << "inward ray hit the disk at the camera radius, a=" << spin;
+    }
+  }
+  glDeleteProgram(program);
+}
+
 } // namespace

@@ -295,3 +295,31 @@ TEST(CudaDiskTransfer, VolumetricTracesBrightenTheApproachingSide) {
             << name;
     }
 }
+
+/* A camera in the disk plane (physics z = 0) at r = 15 inside the annulus,
+ * both pixels leaving the plane away from the hole: no ray ever crosses the
+ * plane, so every kernel variant must return the empty (black) sky rather
+ * than the disk at the camera's own radius (d_check_disk counts a step that
+ * starts on the plane as no crossing). */
+TEST(CudaDiskTransfer, InPlaneCameraDoesNotHitTheDiskAtItsOwnPosition) {
+    if (!cudaDeviceAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    int const sm = deviceSm();
+    double const inv = 1.0 / std::sqrt(2.0);
+    bhtest::MirrorPair pair;
+    pair.cam = {15.0, 0.0, 0.0};
+    pair.forward = {inv, 0.0, inv};
+    for (int variant = 0; variant < BH_KERNEL_COUNT; ++variant) {
+        RtKernelInfo const* info = registry_get_info(variant);
+        ASSERT_NE(info, nullptr);
+        if (sm < info->min_sm) {
+            continue;
+        }
+        std::array<float4, 2> const px =
+            renderPair(mirrorLaunchParams(pair, TraceCase{0.0f, 2.0f}, 0), variant);
+        for (std::size_t side = 0; side < 2; ++side) {
+            EXPECT_EQ(luminance(px[side]), 0.0) << info->name << " pixel " << side;
+        }
+    }
+}

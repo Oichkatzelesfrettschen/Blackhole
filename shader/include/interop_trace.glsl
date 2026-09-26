@@ -163,9 +163,18 @@ void bhStepRK4(inout Ray ray, float r_s, float dt) {
   ray.affineParameter += dt;
 }
 
+// A step hits the disk plane only when it starts strictly off the plane and
+// ends on it or across it. A step starting at z = 0 (a camera in the disk
+// plane, or the step after one that landed exactly on it) moves off the plane
+// and is not a crossing, so an in-plane camera sees the disk edge-on instead
+// of hitting it at t = 0 with every ray. Signs are compared directly; the
+// product oldPos.z * newPos.z underflows to zero for tiny |z| on one side.
 bool bhCheckDiskIntersection(vec3 oldPos, vec3 newPos, float r_in, float r_out,
                              out vec3 hitPoint) {
-  if (oldPos.z * newPos.z > 0.0) {
+  hitPoint = vec3(0.0);
+  bool crossesDown = oldPos.z > 0.0 && newPos.z <= 0.0;
+  bool crossesUp = oldPos.z < 0.0 && newPos.z >= 0.0;
+  if (!(crossesDown || crossesUp)) {
     return false;
   }
 

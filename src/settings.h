@@ -14,6 +14,11 @@
  * All fields correspond to JSON keys written and read by SettingsManager.
  * Defaults represent a sensible out-of-the-box experience at 1920x1080.
  */
+/// Default camera pitch in degrees. Pitch 0 puts the camera in the disk plane,
+/// inside the disk annulus at the default distance, where the disk is seen
+/// only edge-on; the showcase-orbit record profile frames it from -6 degrees.
+inline constexpr float K_DEFAULT_CAMERA_PITCH_DEG = -6.0f;
+
 struct Settings {
   // === DISPLAY ===
   int windowWidth = 1920;
@@ -91,7 +96,7 @@ struct Settings {
 
   // === CAMERA ===
   float cameraYaw = 0.0f;
-  float cameraPitch = 0.0f;
+  float cameraPitch = K_DEFAULT_CAMERA_PITCH_DEG;
   float cameraRoll = 0.0f;
   float cameraDistance = 15.0f;
   int cameraMode = 0; // 0=Input, 1=Front, 2=Top, 3=Orbit

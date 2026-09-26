@@ -663,7 +663,12 @@ __device__ __forceinline__ void d_step_rk4(float3& x, float3& v, float rs, float
  */
 __device__ __forceinline__ bool d_check_disk(float3 old_pos, float3 new_pos,
                              float r_in, float r_out, float3& hit) {
-    if (old_pos.z * new_pos.z > 0.0f) return false;
+    /* Twin of bhCheckDiskIntersection: only a step that starts strictly off
+     * the plane and ends on or across it is a crossing, so an in-plane camera
+     * sees the disk edge-on rather than hitting it at t = 0. */
+    bool const crosses_down = old_pos.z > 0.0f && new_pos.z <= 0.0f;
+    bool const crosses_up = old_pos.z < 0.0f && new_pos.z >= 0.0f;
+    if (!(crosses_down || crosses_up)) return false;
     float t = -old_pos.z / (new_pos.z - old_pos.z);
     hit = d_lerp(old_pos, new_pos, t);
     float r = sqrtf(fmaf(hit.x, hit.x, hit.y * hit.y));

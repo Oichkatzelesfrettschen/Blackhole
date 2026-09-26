@@ -11,8 +11,7 @@
 #include <map>
 #include <string>
 
-// Forward declaration
-struct Settings;
+#include "settings.h" // K_DEFAULT_CAMERA_PITCH_DEG
 
 /**
  * @brief Logical key actions that can be rebound by the user.
@@ -55,7 +54,7 @@ enum class CameraMode { Input = 0, Front, Top, Orbit };
  */
 struct CameraState {
   float yaw = 0.0f;
-  float pitch = 0.0f;
+  float pitch = K_DEFAULT_CAMERA_PITCH_DEG;
   float roll = 0.0f;
   float distance = 15.0f;
   float fov = 45.0f;
@@ -63,7 +62,7 @@ struct CameraState {
   /** @brief Resets all camera pose fields to their default values. */
   void reset() {
     yaw = 0.0f;
-    pitch = 0.0f;
+    pitch = K_DEFAULT_CAMERA_PITCH_DEG;
     roll = 0.0f;
     distance = 15.0f;
     fov = 45.0f;
