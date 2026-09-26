@@ -52,6 +52,43 @@ TEST(InputKeyEdges, SinglePressActionFiresOnceAcrossTwoHeldUpdates) {
   ImGui::DestroyContext(context);
 }
 
+// Falsifier: letting the remapping press leave the key's previous state
+// false makes the held key's GLFW_REPEAT read as a fresh press, so the action
+// just bound fires immediately and this fails.
+TEST(InputKeyEdges, RemappingPressDoesNotFireTheNewBinding) {
+  ImGuiContext *const context = ImGui::CreateContext();
+  ImGui::GetIO().WantCaptureKeyboard = false;
+
+  InputManager &input = InputManager::instance();
+  const int savedBinding = input.getKeyForAction(KeyAction::ToggleUI);
+  const bool savedVisible = input.isUIVisible();
+  const bool savedGamepad = input.isGamepadEnabled();
+  input.setGamepadEnabled(false);
+  input.setIgnoreGuiCapture(false);
+  input.setUIVisible(false);
+
+  constexpr int testKey = GLFW_KEY_Y;
+  input.startKeyRemapping(KeyAction::ToggleUI);
+  input.onKey(testKey, 0, GLFW_PRESS, 0);
+  EXPECT_EQ(input.getKeyForAction(KeyAction::ToggleUI), testKey);
+  input.onKey(testKey, 0, GLFW_REPEAT, 0);
+  input.update(1.0f / 60.0f);
+  EXPECT_FALSE(input.isUIVisible()) << "the remapping press must not fire the new binding";
+
+  input.onKey(testKey, 0, GLFW_RELEASE, 0);
+  input.update(1.0f / 60.0f);
+  input.onKey(testKey, 0, GLFW_PRESS, 0);
+  input.update(1.0f / 60.0f);
+  EXPECT_TRUE(input.isUIVisible()) << "a later press fires the new binding";
+
+  input.onKey(testKey, 0, GLFW_RELEASE, 0);
+  input.update(1.0f / 60.0f);
+  input.setUIVisible(savedVisible);
+  input.setKeyForAction(KeyAction::ToggleUI, savedBinding);
+  input.setGamepadEnabled(savedGamepad);
+  ImGui::DestroyContext(context);
+}
+
 // Falsifier: removing the WantCaptureKeyboard gate on the single-press block
 // (or routing it through the ignoreGuiCapture_ bypass) makes the bound
 // action fire while an ImGui field owns the keyboard, and this fails.

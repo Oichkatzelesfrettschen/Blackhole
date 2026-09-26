@@ -788,6 +788,12 @@ void InputManager::onKey(int key, int /*scancode*/, int action, int /*mods*/) {
       keyBindings_[remappingAction_] = key;
     }
     remappingAction_ = KeyAction::COUNT;
+    // The press that picked the key is consumed: record it as already held so
+    // its repeats and the next update() see no fresh edge until release.
+    if (key >= 0 && key <= GLFW_KEY_LAST) {
+      keyState_[key] = true;
+      prevKeyState_[key] = true;
+    }
     return;
   }
 
