@@ -4511,6 +4511,20 @@ if(BUILD_TESTING)
     )
   endif()
 
+  # Double-precision Kerr reference trace for disk-hit rays, shared by the GL
+  # and CUDA disk-transfer tests (tests/support/kerr_disk_reference.h).
+  add_library(blackhole_test_kerr_reference STATIC
+    "${PROJECT_SOURCE_DIR}/tests/support/kerr_disk_reference.cpp"
+  )
+  target_include_directories(blackhole_test_kerr_reference PUBLIC
+    "${PROJECT_SOURCE_DIR}/tests"
+  )
+  target_compile_options(blackhole_test_kerr_reference PRIVATE ${PROJECT_WARNINGS})
+  if(ENABLE_FAST_MATH)
+    target_compile_options(blackhole_test_kerr_reference PRIVATE -fno-fast-math)
+  endif()
+  target_link_libraries(blackhole_test_kerr_reference PUBLIC blackhole_physics)
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_shader_capture_test.cpp")
     # Shipped shader/include/kerr.glsl against Bardeen's equatorial capture
     # edges in a compute dispatch. Skips without a GL 4.6 context.
@@ -4557,6 +4571,8 @@ if(BUILD_TESTING)
     )
     target_compile_options(disk_transfer_shader_test PRIVATE ${PROJECT_WARNINGS})
     target_link_libraries(disk_transfer_shader_test PRIVATE
+      blackhole_test_kerr_reference
+      blackhole_physics
       glfw
       glbinding::glbinding
       GTest::gtest
@@ -6252,13 +6268,18 @@ if(BUILD_TESTING)
       set_target_properties(cuda_disk_transfer_test PROPERTIES
         CUDA_STANDARD 17
         CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
       )
       target_include_directories(cuda_disk_transfer_test PRIVATE
         "${PROJECT_SOURCE_DIR}/src"
         "${PROJECT_SOURCE_DIR}/src/cuda"
+        "${PROJECT_SOURCE_DIR}/tests"
       )
       target_link_libraries(cuda_disk_transfer_test PRIVATE
         GTest::gtest_main
+        blackhole_cuda_rt
+        blackhole_test_kerr_reference
+        blackhole_physics
         CUDA::cudart
       )
       add_test(NAME cuda_disk_transfer COMMAND cuda_disk_transfer_test)
