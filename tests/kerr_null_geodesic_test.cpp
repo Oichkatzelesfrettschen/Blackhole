@@ -97,6 +97,33 @@ TEST(KerrNullGeodesic, AxialStartHasFiniteConstants) {
   EXPECT_NEAR(p.rPot, g.state.vr * g.state.vr, 1e-8 * g.state.vr * g.state.vr);
 }
 
+TEST(KerrNullGeodesic, AxialStartStepsLikeEquatorialTwinAtZeroSpin) {
+  // A transverse ray from the axis (theta = 0, lz = 0) and its equatorial
+  // twin (theta = pi/2, all angular momentum in lz) are one Schwarzschild
+  // orbit in two planes: r agrees and the polar angle swept from the axis
+  // equals the azimuth swept from x. The polar force at theta = 0 carries
+  // lz^2 cos / sin^3, which reads 0 / 0 unless lz = 0 drops the term.
+  const double r0 = 30.0;
+  const double alpha = 0.4;
+  const physics::KerrNullGeodesic axial = physics::kerrNullGeodesicFromBL(
+      r0, 0.0, 0.0, -std::cos(alpha), std::sin(alpha) / r0, 0.0, K_UNIT_MASS, 0.0);
+  const physics::KerrNullGeodesic equatorial = physics::kerrNullGeodesicFromBL(
+      r0, 0.5 * std::numbers::pi, 0.0, -std::cos(alpha), 0.0, std::sin(alpha) / r0, K_UNIT_MASS,
+      0.0);
+  physics::KerrGeodesicState s = axial.state;
+  physics::KerrGeodesicState e = equatorial.state;
+  for (int step = 0; step < 20'000; ++step) {
+    const double dlam = 2e-3 / (1.0 + (s.r * s.r));
+    s = physics::kerrStepMino(s, K_UNIT_MASS, 0.0, axial.consts, dlam);
+    e = physics::kerrStepMino(e, K_UNIT_MASS, 0.0, equatorial.consts, dlam);
+  }
+  ASSERT_TRUE(std::isfinite(s.r) && std::isfinite(s.theta) && std::isfinite(s.phi));
+  EXPECT_NEAR(s.r, e.r, 1e-9 * e.r);
+  EXPECT_NEAR(s.theta, e.phi, 1e-9);
+  EXPECT_NEAR(s.phi, 0.0, 1e-12);
+  EXPECT_GT(s.theta, 0.1);
+}
+
 TEST(KerrNullGeodesic, ErgoregionStartPrefersPositiveEnergyRoot) {
   // Inside the ergoregion (a = 0.9, r = 1.6, equator) d/dt is spacelike and a
   // coordinate direction has two future-directed null completions. Using

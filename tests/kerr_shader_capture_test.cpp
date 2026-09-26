@@ -11,7 +11,9 @@
  * it must be captured.
  *
  * Pole crossings are checked by symmetry at a = 0 and against the double
- * precision CPU integrator at a = 0.9.
+ * precision CPU integrator at a = 0.9. A camera on the spin axis, where the
+ * azimuth is undefined, is checked by axial symmetry of its xz and yz fans,
+ * against the CPU integrator, and against a camera 1e-4 off the axis.
  *
  * Falsifiers: an lz^2/sin^2 polar potential shortens R by Delta lz^2 and
  * moves both edges inward; a first-order step on sqrt(max(R, 0)) stalls
@@ -24,10 +26,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <numbers>
 #include <string>
 #include <vector>
 
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 #include <gtest/gtest.h>
 
 #include "physics/constants.h"
@@ -163,6 +169,59 @@ void main() {
 }
 )";
 
+// A fan of rays from camPos (on or next to the spin axis above the hole) in
+// the xz (`plane` 0) or yz (`plane` 1) plane, from straight down (alpha -> 0)
+// through the transverse direction (alpha = pi/2 at i = rayCount / 2) to
+// straight up. Each ray reports its fate, final direction n, and its initial
+// constants and angular state.
+constexpr int K_POLE_RAYS = 63;
+constexpr int K_POLE_STRIDE = 12;
+constexpr std::size_t K_POLE_FLOATS =
+    static_cast<std::size_t>(K_POLE_STRIDE) * static_cast<std::size_t>(K_POLE_RAYS);
+const char *const K_POLE_SHADER = R"(
+#version 460 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+uniform float physicalSpin;
+uniform int rayCount;
+uniform int plane;
+uniform float escapeR;
+uniform vec3 camPos;
+#include "include/kerr.glsl"
+void main() {
+  int i = int(gl_GlobalInvocationID.x);
+  if (i >= rayCount) {
+    return;
+  }
+  float r_s = 2.0;
+  float a = 0.5 * physicalSpin * r_s;
+  float alpha = 3.14159265358979 * float(i + 1) / float(rayCount + 1);
+  vec3 dir = plane == 0 ? vec3(sin(alpha), 0.0, -cos(alpha)) : vec3(0.0, sin(alpha), -cos(alpha));
+  float aTrace = kerrTraceSpin(a);
+  KerrConsts c;
+  KerrRay ray;
+  kerrInitGeodesic(camPos, dir, r_s, aTrace, c, ray);
+  int o = 12 * i;
+  result[o + 4] = c.Q;
+  result[o + 5] = c.Lz;
+  result[o + 6] = ray.vr;
+  result[o + 7] = ray.w.x;
+  result[o + 8] = ray.w.y;
+  result[o + 9] = ray.w.z;
+  float rHorizon = kerrOuterHorizon(r_s, a);
+  float fate = 0.0;
+  for (int step = 0; step < 2000000; ++step) {
+    if (ray.r <= rHorizon * 1.001) { fate = -1.0; break; }
+    if (ray.r > escapeR && ray.vr > 0.0) { fate = 1.0; break; }
+    kerrStep(ray, r_s, aTrace, c, 2.0e-3 / (1.0 + ray.r * ray.r) * max(1.0, ray.r / 5.0));
+  }
+  result[o] = fate;
+  result[o + 1] = ray.n.x;
+  result[o + 2] = ray.n.y;
+  result[o + 3] = ray.n.z;
+}
+)";
+
 // The production trace, bhTraceGeodesic from interop_trace.glsl with its
 // adaptive step, escape radius, and step budget, driven through the
 // declarations of shader/geodesic_trace.comp (its main() is replaced). The
@@ -225,6 +284,26 @@ protected:
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
     std::vector<float> out =
         bhtest::runComputeProgram(program, ssbo, 4 * K_RAYS, K_RAYS / K_LOCAL);
+    glDeleteBuffers(1, &ssbo);
+    glDeleteProgram(program);
+    return out;
+  }
+
+  static std::vector<float> dispatchPole(float physicalSpin, int plane, float escapeR,
+                                         float camX, float camY) {
+    const GLuint program = bhtest::createComputeProgram(K_POLE_SHADER);
+    glUseProgram(program);
+    glUniform1f(glGetUniformLocation(program, "physicalSpin"), physicalSpin);
+    glUniform1i(glGetUniformLocation(program, "rayCount"), K_POLE_RAYS);
+    glUniform1i(glGetUniformLocation(program, "plane"), plane);
+    glUniform1f(glGetUniformLocation(program, "escapeR"), escapeR);
+    glUniform3f(glGetUniformLocation(program, "camPos"), camX, camY, 30.0F);
+    GLuint ssbo = 0;
+    glCreateBuffers(1, &ssbo);
+    glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * K_POLE_FLOATS), nullptr,
+                      GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+    std::vector<float> out = bhtest::runComputeProgram(program, ssbo, K_POLE_FLOATS, 1);
     glDeleteBuffers(1, &ssbo);
     glDeleteProgram(program);
     return out;
@@ -433,4 +512,175 @@ void main() {
   EXPECT_GT(out[2], 0.0F);
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
+}
+
+namespace {
+
+struct PoleRay {
+  float fate;
+  float nx, ny, nz;
+  float q, lz, vr;
+  float wx, wy, wz;
+};
+
+PoleRay poleRay(const std::vector<float> &out, int i) {
+  const std::size_t o = static_cast<std::size_t>(K_POLE_STRIDE) * static_cast<std::size_t>(i);
+  return {.fate = out.at(o),
+          .nx = out.at(o + 1),
+          .ny = out.at(o + 2),
+          .nz = out.at(o + 3),
+          .q = out.at(o + 4),
+          .lz = out.at(o + 5),
+          .vr = out.at(o + 6),
+          .wx = out.at(o + 7),
+          .wy = out.at(o + 8),
+          .wz = out.at(o + 9)};
+}
+
+double poleAlpha(int i) {
+  return std::numbers::pi * static_cast<double>(i + 1) / static_cast<double>(K_POLE_RAYS + 1);
+}
+
+// Initial state of an xz-fan ray and its yz twin: Lz = 0, equal Carter
+// constants, and |w| = p_theta ~ r sin(alpha) for both.
+void expectAxialInit(const PoleRay &x, const PoleRay &y, double alpha, const std::string &where) {
+  const double transverse = 30.0 * std::sin(alpha);
+  EXPECT_EQ(x.lz, 0.0F) << where;
+  EXPECT_EQ(y.lz, 0.0F) << where;
+  EXPECT_GT(std::hypot(x.wx, x.wy, x.wz), 0.9 * transverse) << where;
+  EXPECT_GT(std::hypot(y.wx, y.wy, y.wz), 0.9 * transverse) << where;
+  EXPECT_NEAR(y.q, x.q, 1e-5F * std::max(1.0F, std::abs(x.q))) << where;
+}
+
+// The yz fan is the xz fan rotated by 90 degrees about z: escaped directions
+// are related by (x, y, z) -> (-y, x, z). Returns the escaped count.
+int expectAxialRotation(const std::vector<float> &xs, const std::vector<float> &ys,
+                        float spin) {
+  int escaped = 0;
+  for (int i = 0; i < K_POLE_RAYS; ++i) {
+    const PoleRay x = poleRay(xs, i);
+    const PoleRay y = poleRay(ys, i);
+    const std::string where = "spin=" + std::to_string(spin) + " ray " + std::to_string(i);
+    expectAxialInit(x, y, poleAlpha(i), where);
+    EXPECT_EQ(y.fate, x.fate) << where;
+    if (x.fate == 1.0F && y.fate == 1.0F) {
+      EXPECT_NEAR(y.nx, -x.ny, 2e-3F) << where;
+      EXPECT_NEAR(y.ny, x.nx, 2e-3F) << where;
+      EXPECT_NEAR(y.nz, x.nz, 2e-3F) << where;
+      ++escaped;
+    }
+  }
+  return escaped;
+}
+
+struct ReferenceRay {
+  double fate{0.0};
+  physics::KerrGeodesicState state{};
+};
+
+// Double-precision trace of the time-reversed ray (spin aTrace) from
+// (r, theta, phi) = (30, 0, phi0) with k^r = -cos(alpha), k^theta =
+// sin(alpha) / r, k^phi = 0, to r = escapeR.
+ReferenceRay tracePoleReference(double alpha, double phi0, double aTrace, double escapeR) {
+  const double mass = physics::C2 / physics::G;
+  const double rPlus = 1.0 + std::sqrt(1.0 - (aTrace * aTrace));
+  const physics::KerrNullGeodesic g = physics::kerrNullGeodesicFromBL(
+      30.0, 0.0, phi0, -std::cos(alpha), std::sin(alpha) / 30.0, 0.0, mass, aTrace);
+  physics::KerrGeodesicState s = g.state;
+  for (int step = 0; step < 20'000'000; ++step) {
+    if (s.r <= rPlus * 1.001) {
+      return {.fate = -1.0, .state = s};
+    }
+    if (s.r > escapeR && s.vr > 0.0) {
+      return {.fate = 1.0, .state = s};
+    }
+    s = physics::kerrStepMino(s, mass, aTrace, g.consts,
+                              2e-4 / (1.0 + (s.r * s.r)) * std::max(1.0, s.r / 5.0));
+  }
+  return {.fate = 0.0, .state = s};
+}
+
+// Compares a GPU pole fan against the reference; returns the escaped count.
+int expectPoleFanMatchesReference(const std::vector<float> &gpu, int plane, double aTrace,
+                                  double escapeR) {
+  const double phi0 = plane == 0 ? 0.0 : 0.5 * std::numbers::pi;
+  int compared = 0;
+  for (int i = 0; i < K_POLE_RAYS; ++i) {
+    const ReferenceRay ref = tracePoleReference(poleAlpha(i), phi0, aTrace, escapeR);
+    const PoleRay p = poleRay(gpu, i);
+    const std::string where = "plane " + std::to_string(plane) + " ray " + std::to_string(i);
+    EXPECT_EQ(static_cast<double>(p.fate), ref.fate) << where;
+    if (ref.fate == 1.0 && p.fate == 1.0F) {
+      const physics::KerrGeodesicState &s = ref.state;
+      EXPECT_NEAR(p.nx, std::sin(s.theta) * std::cos(s.phi), 3e-3) << where;
+      EXPECT_NEAR(p.ny, std::sin(s.theta) * std::sin(s.phi), 3e-3) << where;
+      EXPECT_NEAR(p.nz, std::cos(s.theta), 3e-3) << where;
+      ++compared;
+    }
+  }
+  return compared;
+}
+
+// A camera 1e-4 off the axis tilts e_r by 1e-4 / r, which moves vr and Q
+// (scale r^2) by about 1e-4 r and w (scale r) by about 1e-4, so the
+// tolerances are 1e-4 of each scale at r = 30.
+void expectContinuous(const std::vector<float> &axis, const std::vector<float> &off,
+                      const std::string &label) {
+  constexpr float radius = 30.0F;
+  constexpr float tol = 1e-4F;
+  for (int i = 0; i < K_POLE_RAYS; ++i) {
+    const PoleRay p = poleRay(axis, i);
+    const PoleRay o = poleRay(off, i);
+    const std::string where = label + " ray " + std::to_string(i);
+    EXPECT_NEAR(o.q, p.q, tol * radius * radius) << where;
+    EXPECT_NEAR(o.vr, p.vr, tol * radius * radius) << where;
+    EXPECT_NEAR(o.lz, 0.0F, tol * radius) << where;
+    EXPECT_NEAR(o.wx, p.wx, tol * radius) << where;
+    EXPECT_NEAR(o.wy, p.wy, tol * radius) << where;
+    EXPECT_NEAR(o.wz, p.wz, tol * radius) << where;
+  }
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, PoleCameraFansAreRelatedByAxialRotation) {
+  // A camera exactly on the spin axis: Kerr is axisymmetric, so the yz fan is
+  // the xz fan rotated by 90 degrees about z. A pole start that zeroes w
+  // traces the yz fan radially instead.
+  for (const float spin : {0.0F, 0.9F}) {
+    const std::vector<float> xs = dispatchPole(spin, 0, 200.0F, 0.0F, 0.0F);
+    const std::vector<float> ys = dispatchPole(spin, 1, 200.0F, 0.0F, 0.0F);
+    EXPECT_GT(expectAxialRotation(xs, ys, spin), K_POLE_RAYS / 2) << "spin=" << spin;
+  }
+}
+
+TEST_F(KerrShaderCaptureTest, PoleCameraMatchesDoublePrecisionReference) {
+  // On the axis the Boyer-Lindquist azimuth is free: the reference starts at
+  // theta = 0 with phi chosen so e_theta = (cos phi, sin phi, 0) carries the
+  // transverse direction, and integrates with physics::kerrStepMino in double
+  // to r = 2000, where the Kerr-Schild and Boyer-Lindquist azimuths agree to
+  // about a / r.
+  constexpr float spin = 0.9F;
+  constexpr double escapeR = 2000.0;
+  for (const int plane : {0, 1}) {
+    const std::vector<float> gpu =
+        dispatchPole(spin, plane, static_cast<float>(escapeR), 0.0F, 0.0F);
+    EXPECT_GT(expectPoleFanMatchesReference(gpu, plane, -static_cast<double>(spin), escapeR),
+              K_POLE_RAYS / 2)
+        << "plane " << plane;
+  }
+}
+
+TEST_F(KerrShaderCaptureTest, PoleStartIsContinuousWithOffAxisStart) {
+  // A camera 1e-4 off the axis builds w from p_theta e_theta + (Lz / sin)
+  // e_phi through the generic branch; its constants and angular state must
+  // match the on-axis start.
+  for (const float spin : {0.0F, 0.9F}) {
+    for (const int plane : {0, 1}) {
+      const std::vector<float> axis = dispatchPole(spin, plane, 60.0F, 0.0F, 0.0F);
+      const std::string label = "spin=" + std::to_string(spin) + " plane=" + std::to_string(plane);
+      expectContinuous(axis, dispatchPole(spin, plane, 60.0F, 1e-4F, 0.0F), label + " dx");
+      expectContinuous(axis, dispatchPole(spin, plane, 60.0F, 0.0F, 1e-4F), label + " dy");
+    }
+  }
 }
