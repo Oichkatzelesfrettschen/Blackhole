@@ -739,7 +739,10 @@ void renderTonemapPanel(RenderState &rs) {
   auto &settings = SettingsManager::instance().get();
   ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
   ImGui::Checkbox("tonemappingEnabled", &rs.post.tonemappingEnabled);
-  ImGui::SliderFloat("exposure", &rs.post.toneExposure, 0.01f, 2.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+  // The record exposure rule (record_mode.h) reaches 14.4 for cinematic and
+  // 4.9 for the desktop default camera at diskBrightness 0.25.
+  ImGui::SliderFloat("exposure", &rs.post.toneExposure, 0.01f, 50.0f, "%.2f",
+                     ImGuiSliderFlags_Logarithmic);
   ImGui::SliderFloat("gamma", &rs.post.gamma, 1.0f, 4.0f);
   settings.tonemappingEnabled = rs.post.tonemappingEnabled;
   settings.gamma = rs.post.gamma;
