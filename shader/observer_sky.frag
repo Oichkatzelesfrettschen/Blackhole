@@ -1,3 +1,5 @@
+#version 460 core
+
 /**
  * @file observer_sky.frag
  * @brief The sky seen by an equatorial Kerr observer, from the precomputed
@@ -46,8 +48,6 @@
  * Outputs: fragColor (rgb = display radiance, a = 1: the sky is at the far
  * plane for depth_cues.frag).
  */
-#version 460 core
-
 layout(location = 0) in vec2 uv;
 
 out vec4 fragColor;
