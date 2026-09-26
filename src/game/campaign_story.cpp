@@ -183,7 +183,7 @@ void CampaignState::buildNodes() {
         static_cast<std::size_t>(colony.bandIndex) >= config_.bandRadiusCm.size() ||
         !field_->admitsObserver(bandRadiusCm(colony.bandIndex), colony.observer) ||
         colony.missionProperSec < 0 || !std::isfinite(colony.energyPerTick) ||
-        colony.energyPerTick < 0.0) {
+        colony.energyPerTick < 0.0 || colony.energyPerTick > K_MAX_ENERGY_PER_TICK) {
       valid_ = false;
       return;
     }

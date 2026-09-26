@@ -25,6 +25,14 @@
 
 namespace game {
 
+/**
+ * @brief Largest production a colony may ship per local tick. A turn crosses
+ *        at most secondsPerTurn / localTickSec < 2^32 ticks, so one report is
+ *        below 4.3e21 units and 1e8 turns of reports below 4.3e29 -- far inside
+ *        a double -- so banked energy stays finite and serializable.
+ */
+inline constexpr double K_MAX_ENERGY_PER_TICK = 1e12;
+
 /** @brief A colony's placement and charter. */
 struct ColonyConfig {
   int bandIndex = 0;

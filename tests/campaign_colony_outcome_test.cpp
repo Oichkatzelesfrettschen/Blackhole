@@ -182,3 +182,21 @@ TEST(ColonyOutcome, TechPointsSaturate) {
   EXPECT_EQ(game::saturatingAdd(kMin + 5, -game::K_STORY_INT_LIMIT), kMin);
   EXPECT_EQ(game::saturatingAdd(40, 2), 42);
 }
+
+// Falsifier: a finite but enormous production rate accepted (DBL_MAX makes
+// the first multi-tick report or the second accumulated one overflow to inf),
+// or the documented maximum refused.
+TEST(ColonyOutcome, ProductionRateIsBounded) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config = colonyConfig(R"({})", 0);
+  config.colonies.front().energyPerTick = std::numeric_limits<double>::max();
+  EXPECT_FALSE(game::CampaignState(config, field).valid());
+  config.colonies.front().energyPerTick = game::K_MAX_ENERGY_PER_TICK * 2.0;
+  EXPECT_FALSE(game::CampaignState(config, field).valid());
+  config.colonies.front().energyPerTick = game::K_MAX_ENERGY_PER_TICK;
+  game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  state.advanceTurns(50);
+  EXPECT_TRUE(std::isfinite(state.energyUnits()));
+  EXPECT_FALSE(state.serializeState().empty());
+}
