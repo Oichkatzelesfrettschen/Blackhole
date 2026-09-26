@@ -1219,8 +1219,17 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
                                       float deltaTime, double currentTime, GLuint &computeProgram) {
   if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
     // The observer's clock runs on wall time, which pause stops; its own sky
-    // time scale replaces the global one, so the panel's rate is the rate.
-    renderObserverSkyScene(rs, frameCamera.basis, input.isPaused() ? 0.0F : deltaTime);
+    // time scale replaces the global one, so the panel's rate is the rate. A
+    // recording runs it on the output clock instead, as the tesseract does.
+    std::optional<blackhole::ObserverRecordClock> record;
+    const int frameIndex = rs.recording.recordFrameIndex;
+    if (const auto outputSeconds = recordOutputSeconds(cli, frameIndex)) {
+      record = blackhole::ObserverRecordClock{
+          .outputSeconds = *outputSeconds,
+          .frameSeconds =
+              recordOutputSeconds(cli, frameIndex + 1).value_or(*outputSeconds) - *outputSeconds};
+    }
+    renderObserverSkyScene(rs, frameCamera.basis, input.isPaused() ? 0.0F : deltaTime, record);
     return {};
   }
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
@@ -1659,11 +1668,6 @@ int main(int argc, char **argv) {
       ImGui::Image(static_cast<ImTextureID>(finalTexture), viewportSize, ImVec2(0, 1),
                    ImVec2(1, 0));
 
-      // The observer-sky scene always carries its spin disclosure.
-      if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
-        ui::drawObserverDisclosure(rs, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-      }
-
       // Enable mouse/keyboard interaction when hovering the viewport
       bool const isViewportHovered = ImGui::IsItemHovered();
       InputManager::instance().setIgnoreGuiCapture(isViewportHovered);
@@ -1688,11 +1692,7 @@ int main(int argc, char **argv) {
         renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
         renderBackgroundPanel(rs);
         renderWiregridPanel(rs);
-        if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
-          ui::renderObserverSkyPanel(rs);
-          ui::renderObserverPhysicsNote(rs);
-          ui::renderObserverDistantView(rs);
-        }
+        ui::renderObserverWindows(rs);
         renderTesseractPanel(rs);
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
@@ -1737,6 +1737,7 @@ int main(int argc, char **argv) {
     rs.disk.noiseCache.cleanup();
     rs.hawking.hawkingRenderer.cleanup();
     rs.observerView.renderer.shutdown();
+    rs.observerView.disclosureLabel.shutdown();
     rs.tesseract.renderer.shutdown();
     rs.tesseract.speculativeLabel.shutdown();
     if (rs.grmhd.grmhdTexture.texture != 0) {

@@ -158,6 +158,34 @@ std::string invalidObserverReason(ObserverKind kind, double epsilon, double x) {
   return std::format("No observer at {}.", where);
 }
 
+/**
+ * @brief Advances the observer's clock for one frame and returns the proper
+ *        seconds the frame spans (the motion-blur interval). The clock follows
+ *        the resident sky, so time and image always agree, and stands still
+ *        while no sky is resident. A recording sets it from the output clock:
+ *        the proper time at the first recorded frame's call is the origin and
+ *        frame N shows origin + skyTimeScale * N / fps, so warmup frames, which
+ *        keep N, leave it in place and the frames depend on N alone.
+ */
+double advanceObserverClock(RenderState::ObserverViewGroup &view, bool skyResident,
+                            float deltaSeconds, const std::optional<ObserverRecordClock> &record) {
+  if (!record) {
+    view.recordClockOrigin.reset();
+    const double step =
+        view.paused || !skyResident ? 0.0 : static_cast<double>(deltaSeconds) * view.skyTimeScale;
+    view.properSeconds += step;
+    return step;
+  }
+  if (!view.recordClockOrigin) {
+    view.recordClockOrigin = view.properSeconds;
+  }
+  if (!skyResident) {
+    return 0.0;
+  }
+  view.properSeconds = *view.recordClockOrigin + (record->outputSeconds * view.skyTimeScale);
+  return record->frameSeconds * view.skyTimeScale;
+}
+
 } // namespace
 
 unsigned observerSkyBuildThreads() {
@@ -517,7 +545,8 @@ void ObserverSkyRenderer::releaseSky() {
   emission_ = EmissionSummary{};
 }
 
-void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds) {
+void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
+                            const std::optional<ObserverRecordClock> &record) {
   RenderState::ObserverViewGroup &view = rs.observerView;
   const ko::OrbitSense sense =
       view.kind == ObserverKind::Retrograde ? ko::OrbitSense::Retrograde : ko::OrbitSense::Prograde;
@@ -533,13 +562,9 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
   view.renderer.poll();
   const std::optional<sky::ObserverSkyLut> &lut = view.renderer.lut();
 
-  // The clock follows the resident sky, so time and image always agree, and
-  // it stands still while no sky is resident.
   const ObserverClockModel clock =
       lut ? observerClockModel(lut->key, view.massSolar) : ObserverClockModel{};
-  const double properStep =
-      view.paused || !lut ? 0.0 : static_cast<double>(deltaSeconds) * view.skyTimeScale;
-  view.properSeconds += properStep;
+  const double properStep = advanceObserverClock(view, lut.has_value(), deltaSeconds, record);
   const double phase = lut ? skyPhaseRadians(clock, view.properSeconds) : 0.0;
   // Sky rotation during this frame, unwrapped, for the motion blur.
   const double frameTurn =

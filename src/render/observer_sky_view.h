@@ -271,16 +271,25 @@ private:
   gl::GLuint blackbodyTexture_ = 0;
 };
 
+/** @brief A recorded frame's place on the output clock: frame N at N / fps
+ *         seconds, each frame spanning 1 / fps. */
+struct ObserverRecordClock {
+  double outputSeconds = 0.0;
+  double frameSeconds = 0.0;
+};
+
 /**
  * @brief Draws the observer-sky scene into rs.targets.texBlackhole: requests
  *        and polls the maps for rs.observerView's observer (or reports it
  *        invalid), advances its clock by deltaSeconds * skyTimeScale proper
  *        seconds while a sky is resident, and runs observer_sky.frag.
- *        `deltaSeconds` is unscaled wall time, 0 while paused. With
+ *        `deltaSeconds` is unscaled wall time, 0 while paused; a recording
+ *        passes `record` instead, and the clock follows the output clock. With
  *        followCamera set, cameraBasis (world right, up, forward) steers the
  *        look direction; otherwise the view's look angles do.
  */
-void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds);
+void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
+                            const std::optional<ObserverRecordClock> &record = std::nullopt);
 
 /** @brief Whether a frame of the active scene is fit to capture. */
 enum class SceneCaptureState : std::uint8_t {

@@ -14,6 +14,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -142,6 +143,13 @@ struct RenderState {
     double distantRadius = 400.0;        ///< Distant viewer's radius (M) for the signal delay.
     ObserverClockModel lastClock; ///< Clock of the sky drawn last frame, for the panels.
     ObserverSkyRenderer renderer;
+    /// Proper time at the first recorded frame; frame N shows it plus
+    /// skyTimeScale * N / fps. Empty outside a recording.
+    std::optional<double> recordClockOrigin;
+    HudOverlay disclosureLabel;       ///< Spin disclosure drawn into the presented texture.
+    std::string disclosureLabelText;  ///< Text the label layout was fitted to.
+    int disclosureLabelWidth = 0;     ///< Render width the label layout was fitted to.
+    int disclosureLabelHeight = 0;    ///< Render height the label layout was fitted to.
     float starSkyLuminance = 1.0e-3F; ///< cd/m^2 of a unit-luminance cubemap texel at g = 1.
     float logLuminanceMin = -7.0F;    ///< log10 cd/m^2 mapped to black.
     float logLuminanceMax = 13.5F;    ///< log10 cd/m^2 mapped to displayPeak.

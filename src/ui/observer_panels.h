@@ -1,8 +1,8 @@
 /**
  * @file observer_panels.h
  * @brief ImGui panels of the observer-sky scene: the observer and view
- *        controls with the measured sky statistics, and the spin disclosure
- *        drawn over the viewport.
+ *        controls with the measured sky statistics, and the text of the spin
+ *        disclosure that scene_overlays draws into the presented texture.
  */
 
 #ifndef BLACKHOLE_UI_OBSERVER_PANELS_H
@@ -39,8 +39,12 @@ void renderObserverPhysicsNote(const blackhole::RenderState &rs);
  */
 void renderObserverDistantView(blackhole::RenderState &rs);
 
+/** @brief The observer-sky scene's three windows (controls, physics note,
+ *         distant view); nothing in any other scene. */
+void renderObserverWindows(blackhole::RenderState &rs);
+
 /**
- * @brief The disclosure line drawn on the viewport image in the observer-sky
+ * @brief The disclosure line drawn into the presented image in the observer-sky
  *        scene: the view's physics spin against the black-hole scene's live
  *        render spin. The film itself separated them (James et al. 2015,
  *        arXiv:1502.03808: physics a/M ~= 1, render a/M = 0.6), so a render
@@ -49,7 +53,6 @@ void renderObserverDistantView(blackhole::RenderState &rs);
  *        0.6 as a separate fact.
  */
 [[nodiscard]] std::string observerSpinDisclosure(const blackhole::RenderState &rs);
-void drawObserverDisclosure(const blackhole::RenderState &rs, ImVec2 imageMin, ImVec2 imageMax);
 
 } // namespace ui
 

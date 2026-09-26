@@ -162,18 +162,6 @@ std::string observerSpinDisclosure(const RenderState &rs) {
                      filmSpin ? "(film choice)" : "(the film rendered a = 0.6)");
 }
 
-void drawObserverDisclosure(const RenderState &rs, ImVec2 imageMin, ImVec2 imageMax) {
-  const std::string text = observerSpinDisclosure(rs);
-  ImDrawList *draw = ImGui::GetForegroundDrawList();
-  const ImVec2 size = ImGui::CalcTextSize(text.c_str());
-  const float pad = 6.0F;
-  const ImVec2 origin(imageMin.x + pad, imageMax.y - size.y - (3.0F * pad));
-  draw->AddRectFilled(ImVec2(origin.x - pad, origin.y - pad),
-                      ImVec2(origin.x + size.x + pad, origin.y + size.y + pad),
-                      IM_COL32(0, 0, 0, 170), 4.0F);
-  draw->AddText(origin, IM_COL32(235, 235, 235, 255), text.c_str());
-}
-
 void renderObserverPhysicsNote(const RenderState &rs) {
   const RenderState::ObserverViewGroup &view = rs.observerView;
   const blackhole::ObserverClockModel &clock = view.lastClock;
@@ -331,6 +319,15 @@ void renderObserverSkyPanel(RenderState &rs) {
   renderViewControls(view);
   renderStatistics(view);
   ImGui::End();
+}
+
+void renderObserverWindows(RenderState &rs) {
+  if (rs.scene.mode != RenderState::SceneMode::ObserverSky) {
+    return;
+  }
+  renderObserverSkyPanel(rs);
+  renderObserverPhysicsNote(rs);
+  renderObserverDistantView(rs);
 }
 
 } // namespace ui
