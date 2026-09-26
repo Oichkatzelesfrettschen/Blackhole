@@ -261,9 +261,9 @@ inline double madDiskFluxAtFrequency(double r, const MADDiskParams &disk, double
  *
  * @param size Number of radial points
  * @param massSolar Black hole mass in solar masses
- * @param aStar Dimensionless spin
+ * @param aStar Dimensionless signed spin (kerrDisk convention)
  * @param mdotEdd Accretion rate in Eddington units
- * @param prograde True for prograde orbit
+ * @param prograde True for a disk orbiting along +z
  * @return MultiFreqLut with both frequencies
  */
 inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, double aStar,
@@ -275,13 +275,11 @@ inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, d
 
   const double mass = massSolar * M_SUN;
   const double rS = schwarzschildRadius(mass);
-  const double rG = G * mass / C2;
-  const double a = aStar * rG;
-  const double rIn = kerrIscoRadius(mass, a, prograde);
-  const double rOut = rIn * 4.0;
-
+  // kerrDisk places rIn at the disk's ISCO for the signed spin and orbital
+  // sense, the zero-torque edge of its flux.
   DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd, prograde);
-  disk.rIn = rIn;
+  const double rIn = disk.rIn;
+  const double rOut = rIn * 4.0;
   disk.rOut = rOut;
 
   lut.rMin = static_cast<float>(rIn / rS);
@@ -312,9 +310,10 @@ inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, d
 
   // Normalize
   if (maxFlux230 > 0.0) {
-    for (auto &v : lut.lut230ghz.values) {
-      v = static_cast<float>(static_cast<double>(v) / maxFlux230);
-    }
+    std::ranges::transform(lut.lut230ghz.values, lut.lut230ghz.values.begin(),
+                           [maxFlux230](float v) {
+                             return static_cast<float>(static_cast<double>(v) / maxFlux230);
+                           });
   }
 
   // Generate 345 GHz LUT
@@ -332,9 +331,10 @@ inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, d
 
   // Normalize
   if (maxFlux345 > 0.0) {
-    for (auto &v : lut.lut345ghz.values) {
-      v = static_cast<float>(static_cast<double>(v) / maxFlux345);
-    }
+    std::ranges::transform(lut.lut345ghz.values, lut.lut345ghz.values.begin(),
+                           [maxFlux345](float v) {
+                             return static_cast<float>(static_cast<double>(v) / maxFlux345);
+                           });
   }
 
   return lut;

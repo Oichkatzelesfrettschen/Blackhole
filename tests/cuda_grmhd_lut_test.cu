@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "cuda/kernel_launch.h"
+#include "physics/page_thorne.h"
 
 /* ========================================================================
  * Texture creation helper
@@ -140,6 +141,10 @@ static BH_LaunchParams make_disk_params(int w, int h) {
     p.redshift_enabled = 0;
     p.kerr_enabled     = 0;
     p.use_luts         = 0;  /* will be overridden per test */
+    /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
+    p.disk_peak_temperature = 6500.0f;
+    p.disk_brightness       = 1.0f;
+    p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
     p.doppler_strength = 0.0f; /* disable Doppler for cleaner comparisons */
     p.adisk_lit        = 1.0f; /* non-zero so d_disk_color returns visible brightness */
     p.background_enabled   = 0;
@@ -414,7 +419,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdModulationHalfStrengthDimsOutput) {
  * With a uniform GRMHD texture (rho=uu=1, phi-constant), two pixels
  * hitting the disk at phi~0 (positive x axis) and phi~pi (negative x axis)
  * must receive the same emissivity scale factor (1.0 for uniform texture).
- * With doppler_strength=0, disk colors should match baseline (scale=1).
+ * With Interstellar transfer (g = 1), disk colors depend on r alone.
  * Verifies no phi-seam artifact from REPEAT addressing.
  */
 TEST_F(CudaGrmhdLutTest, GrmhdPhiUniformNoSeam) {
@@ -434,8 +439,12 @@ TEST_F(CudaGrmhdLutTest, GrmhdPhiUniformNoSeam) {
 
     /* Ray set 1: camera at (+25, 20, 0), hits disk at phi~0 (positive x side).
      * Use the fixture's kW x kH framebuffer; pick the center pixel (index kN/2). */
+    /* The two cameras are mirror images, which flips the photon's Lz and so
+     * the physical Doppler shift; Interstellar transfer (g = 1) leaves the
+     * disk color a function of r alone, isolating the phi seam. */
     BH_LaunchParams p1 = make_disk_params(kW, kH);
     p1.use_luts = 1;
+    p1.disk_transfer_mode = 1;
     p1.cam_pos[0] = 25.0f; p1.cam_pos[1] = 20.0f; p1.cam_pos[2] = 0.0f;
     auto pix1 = render(p1);
     ASSERT_EQ(pix1.size(), static_cast<std::size_t>(kN));
@@ -445,6 +454,7 @@ TEST_F(CudaGrmhdLutTest, GrmhdPhiUniformNoSeam) {
      * Flip the x-axis basis column so the ray points toward origin. */
     BH_LaunchParams p2 = make_disk_params(kW, kH);
     p2.use_luts = 1;
+    p2.disk_transfer_mode = 1;
     p2.cam_pos[0] = -25.0f; p2.cam_pos[1] = 20.0f; p2.cam_pos[2] = 0.0f;
     /* Flip right vector (col0) so the camera is mirrored but still valid */
     p2.cam_basis[0] = -1.0f; p2.cam_basis[1] = 0.0f; p2.cam_basis[2] = 0.0f;
@@ -464,8 +474,8 @@ TEST_F(CudaGrmhdLutTest, GrmhdPhiUniformNoSeam) {
     }
 
     if (px1_nonzero && px2_nonzero) {
-        /* Both hit the disk. With uniform GRMHD (scale=1) and no Doppler,
-         * the Novikov-Thorne flux depends only on r (not phi), and both
+        /* Both hit the disk. With uniform GRMHD (scale=1) and g = 1,
+         * the Page-Thorne flux depends only on r (not phi), and both
          * rays hit at approximately the same r. Colors should match closely.
          * Allow tolerance of 0.2 for minor asymmetric geodesic deflection. */
         double dr = std::abs(static_cast<double>(px1.x - px2.x));

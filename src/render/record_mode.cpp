@@ -83,28 +83,38 @@ bool readTonemappedRgb(gl::GLuint texTonemapped, int fallbackWidth, int fallback
   return true;
 }
 
-constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 60.0f, 3.05f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
-    {"left-third", "nasa_deep_starmap", 0.18f, 0.03f, -8.0f, 23.0f, 58.0f, 2.95f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
-    {"right-third", "nasa_deep_starmap_galactic", -0.18f, 0.03f, -8.0f, 23.0f, 58.0f, 2.95f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
-    {"wide-left", "eso_milkyway_brunier", 0.12f, -0.02f, -7.0f, 27.5f, 54.0f, 2.75f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
-    {"wide-right", "nasa_deep_starmap_galactic", -0.12f, -0.02f, -7.0f, 27.5f, 54.0f, 2.9f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
+// above-disk, the default, frames the hole from outside the disk's 100 r_s
+// outer edge, 10 degrees above the plane (the default desktop camera); the
+// other five sit inside the disk's radial extent near the plane, where the
+// disk fills the view.
+constexpr std::array<ShowcaseOrbitComposition, 6> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
+    {"above-disk", "nasa_deep_starmap_galactic", 0.0f, 0.0f, 10.0f, 240.0f, 20.0f, 9.14f, 0.80f, 26.0f, 8.0f, 0.00f, 0.00f, 8.0f},
+    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 32.2042f, 1.23f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
+    {"left-third", "nasa_deep_starmap", 0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 3.60f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
+    {"right-third", "nasa_deep_starmap_galactic", -0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 1.24f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
+    {"wide-left", "eso_milkyway_brunier", 0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 1.73f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
+    {"wide-right", "nasa_deep_starmap_galactic", -0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 1.31f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
 }};
 
 } // namespace
 
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
+  // inside-disk names the in-disk framing wide-right.
+  std::string_view const key = name == "inside-disk" ? std::string_view("wide-right") : name;
   const auto *const composition =
       std::ranges::find_if(K_SHOWCASE_ORBIT_COMPOSITIONS,
-                           [name](const auto &candidate) { return name == candidate.name; });
+                           [key](const auto &candidate) { return key == candidate.name; });
   return composition == K_SHOWCASE_ORBIT_COMPOSITIONS.end() ? nullptr : composition;
 }
 
-void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, WiregridParams &params,
+void applyShowcaseBeautyWiregridTuning(std::string_view compositionArg, WiregridParams &params,
                                        glm::vec4 &color) {
   if (params.mode != WiregridParams::Mode::Beauty) {
     return;
   }
+  const ShowcaseOrbitComposition *const resolved = findShowcaseOrbitComposition(compositionArg);
+  std::string_view const compositionName =
+      resolved != nullptr ? std::string_view(resolved->name) : compositionArg;
 
   if (compositionName == "wide-right") {
     params.gridScale = 0.78f;
@@ -180,7 +190,9 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.post.bloomIterations    = 4;
     rs.post.bloomStrength      = 0.08f;
     rs.post.tonemappingEnabled = true;
-    rs.post.toneExposure       = 6.0f;
+    // The record exposure rule's sky target: the raw sky's 99th-percentile
+    // luminance, 0.0704, reaches display 0.8.
+    rs.post.toneExposure       = 6.6f;
     rs.post.gamma              = 2.35f;
     rs.dispatch.computeMaxSteps    = 1000;
     rs.dispatch.computeStepSize    = 0.02f;
@@ -210,6 +222,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.disk.adiskDensityH      = 2.1f;
     rs.disk.adiskHeight        = 0.42f;
     rs.disk.adiskLit           = 0.24f;
+    // The interactive default: the bloom bright pass thresholds the raw
+    // frame at 0.4, so only g^4 F / F_peak above about 1.6 (the approaching
+    // side's beaming) blooms. The composition exposure, set below, follows
+    // the record exposure rule (record_mode.h).
+    rs.disk.diskBrightness     = 0.25f;
     rs.disk.dopplerStrength    = 1.15f;
     rs.disk.photonSphereGlowStrength = 1.15f;
     rs.post.bloomIterations    = 5;
@@ -219,8 +236,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.post.gamma              = 2.35f;
     rs.dispatch.computeMaxSteps    = 1000;
     rs.dispatch.computeStepSize    = 0.016f;
-    rs.display.depthFar           = 154.367004f;
-    rs.physicsCore.kerrSpin           = 0.62f;
+    // Beyond every composition's camera distance plus the disk's 200-unit
+    // outer radius: depth cues normalize a disk hit below 1, and a ray leaving
+    // outward is traced past the disk's outer edge before it escapes.
+    rs.display.depthFar           = K_DEFAULT_DEPTH_FAR;
+    rs.physicsCore.kerrSpin           = K_SHOWCASE_ORBIT_SPIN;
     const char *defaultBackground =
         composition != nullptr ? composition->backgroundId : "nasa_deep_starmap_galactic";
     SettingsManager::instance().get().backgroundId =
@@ -240,12 +260,9 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
                         : compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f),
         .fov = cli.hasRecordFov
                    ? cli.recordFovDeg
-                   : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f)};
-    if (cli.hasRecordExposure) {
-      rs.post.toneExposure = cli.recordExposure;
-    } else if (composition != nullptr) {
-      rs.post.toneExposure = composition->exposure;
-    }
+                   : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 37.2738f)};
+    rs.post.toneExposure =
+        composition != nullptr ? composition->exposure : K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
   } else {
     // Physics: on, but not everything -- avoids noise pileup / fuzz
@@ -271,7 +288,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.post.bloomIterations    = 3;
     rs.post.bloomStrength      = 0.03f;
     rs.post.tonemappingEnabled = true;
-    rs.post.toneExposure       = 0.02f;
+    // The record exposure rule over the nine keyframes at their spin 0.998
+    // gives 3.1-267 (L99 = 0.30 at 78 s, 0.0035 at 180 s: from far out the
+    // bright annulus near the ISCO covers few pixels); 14.4 is their median.
+    rs.disk.diskBrightness     = 0.25f;
+    rs.post.toneExposure       = 14.4f;
     rs.post.gamma              = 2.25f;
     // Integration quality
     rs.dispatch.computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
@@ -284,7 +305,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     // JPEG (not a Git LFS pointer) -- the default "nasa_pia22085" is LFS-tracked.
     SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
     SettingsManager::instance().get().backgroundEnabled = true;
-    SettingsManager::instance().get().backgroundIntensity = 0.8f;
+    // The record exposure rule's sky target at exposure 14.4 on the
+    // sky-heaviest keyframe (180 s, 20% sky): raw sky L99 0.0332 x 14.4 =
+    // 0.48. The escaped-sky shaping (d_shape_escaped_background) is not
+    // linear in the intensity; 0.8 gave L99 0.191.
+    SettingsManager::instance().get().backgroundIntensity = 0.32f;
   }
 #if BLACKHOLE_HAS_CUDA
   // Keep legacy record profiles on the CUDA path in the hybrid app, but let
@@ -304,6 +329,10 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
               cli.recordFramesDir.c_str(), cli.recordFramesTotal,
               static_cast<double>(K_CINEMATIC_DURATION_S), K_CINEMATIC_FPS);
+  // --record-exposure overrides every profile's exposure.
+  if (cli.hasRecordExposure) {
+    rs.post.toneExposure = cli.recordExposure;
+  }
   std::printf("Record profile: %s\n", cli.recordProfile.c_str());
   return true;
 }
@@ -348,9 +377,9 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
             : compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f);
     camMutable.fov = cli.hasRecordFov
                          ? cli.recordFovDeg
-                         : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f);
+                         : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 37.2738f);
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
-    rs.physicsCore.kerrSpin = 0.0f;
+    rs.physicsCore.kerrSpin = K_SHOWCASE_ORBIT_SPIN;
     rs.recording.recordCurrentKf = CamKeyframe{
         .timeSec = static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) /
                    static_cast<float>(K_CINEMATIC_FPS),
@@ -364,6 +393,11 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
     camMutable   = rs.recording.recordCurrentKf.cam;
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin     = rs.recording.recordCurrentKf.kerrSpin;
+  }
+  // Every profile writes its own spin above; --record-spin overrides it last.
+  if (cli.hasRecordSpin) {
+    rs.physicsCore.kerrSpin = std::clamp(cli.recordSpin, -0.998f, 0.998f);
+    rs.recording.recordCurrentKf.kerrSpin = rs.physicsCore.kerrSpin;
   }
 }
 
@@ -390,6 +424,14 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
       std::format("{}/frame_{:06d}.png", cli.recordFramesDir, rs.recording.recordFrameIndex);
   if (stbi_write_png(framePath.c_str(), w, h, 3, flipped.data(), w * 3) == 0) {
     throw std::runtime_error("Failed to write recorded frame: " + framePath);
+  }
+  if (rs.recording.recordFrameIndex == cli.recordStartFrame) {
+    // The post settings this frame rendered with, so a capture records the
+    // profile it actually used.
+    std::printf("Record post: exposure=%.3f bloom=%.3f x%d gamma=%.2f tonemap=%d\n",
+                static_cast<double>(rs.post.toneExposure), static_cast<double>(rs.post.bloomStrength),
+                rs.post.bloomIterations, static_cast<double>(rs.post.gamma),
+                rs.post.tonemappingEnabled ? 1 : 0);
   }
   if (rs.recording.recordFrameIndex % K_CINEMATIC_FPS == 0) {
     std::printf("Record: frame %d / %d  (t = %.1f s)  [%dx%d]\n",

@@ -272,12 +272,36 @@ void applyOverlayEnvironment(RenderState &rs) {
   }
 }
 
+// Startup disk overrides. BLACKHOLE_PHYSICAL_TRACER=0 selects the legacy
+// fragment tracer and 1 the Kerr tracer, for A/B captures of the two paths;
+// BLACKHOLE_DISK_TRANSFER=interstellar forces g = 1 (the film's disk) and
+// =physical keeps the g-factor.
+void applyDiskEnvironment(RenderState &rs) {
+  if (const char *tracerEnv = std::getenv("BLACKHOLE_PHYSICAL_TRACER")) {
+    rs.physicsCore.physicalRayTracer = std::string(tracerEnv) != "0";
+  }
+  const char *transferEnv = std::getenv("BLACKHOLE_DISK_TRANSFER");
+  if (transferEnv == nullptr) {
+    return;
+  }
+  std::string const mode(transferEnv);
+  if (mode == "interstellar") {
+    rs.disk.diskTransferMode = 1;
+  } else if (mode == "physical") {
+    rs.disk.diskTransferMode = 0;
+  } else {
+    (void)std::fprintf(stderr, "Ignoring BLACKHOLE_DISK_TRANSFER=%s (expected physical|interstellar)\n",
+                       transferEnv);
+  }
+}
+
 } // namespace
 
 void applyEnvironmentConfig(RenderState &rs) {
   applyCompareEnvironment(rs);
   applyProbeEnvironment(rs);
   applyOverlayEnvironment(rs);
+  applyDiskEnvironment(rs);
 }
 
 } // namespace blackhole

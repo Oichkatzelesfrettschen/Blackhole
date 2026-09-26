@@ -92,7 +92,11 @@ __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_sc
 __constant__ int   d_stokes_enabled;       /**< @brief 1 = polarized Stokes IQUV transport (D4). */
 __constant__ float d_stokes_b_angle;       /**< @brief EVPA of projected B field on sky [rad] (D4). */
 __constant__ float d_stokes_ne_scale;      /**< @brief Faraday rotation strength multiplier (D4). */
-__constant__ float d_adisk_lit;            /**< @brief Disk luminosity scale (1.0 = GLSL flux*2 level). */
+__constant__ float d_adisk_lit;            /**< @brief Legacy volumetric disk scale (GLSL adiskLit). */
+__constant__ float d_disk_peak_temperature; /**< @brief Blackbody temperature at the Page-Thorne flux peak [K]. */
+__constant__ float d_disk_brightness;       /**< @brief Display scale on the bolometric disk intensity. */
+__constant__ float d_disk_flux_peak;        /**< @brief Page-Thorne flux-shape peak at d_spin (M = 1). */
+__constant__ int   d_disk_transfer_mode;    /**< @brief 0 = Physical g-factor, 1 = Interstellar (g = 1). */
 
 /* External launch wrappers from each kernel file */
 extern "C" void launchFp32Baseline(float4 *fb, int w, int h, cudaStream_t s);
@@ -189,6 +193,10 @@ int uploadConstants(
   COPY_CONST(d_stokes_b_angle, p->stokes_b_field_angle);
   COPY_CONST(d_stokes_ne_scale, p->stokes_ne_scale);
   COPY_CONST(d_adisk_lit, p->adisk_lit);
+  COPY_CONST(d_disk_peak_temperature, p->disk_peak_temperature);
+  COPY_CONST(d_disk_brightness, p->disk_brightness);
+  COPY_CONST(d_disk_flux_peak, p->disk_flux_peak);
+  COPY_CONST(d_disk_transfer_mode, p->disk_transfer_mode);
 
   /* Array copies */
   cudaError_t const errPos = cudaMemcpyToSymbol(d_cam_pos, p->cam_pos, sizeof(p->cam_pos));

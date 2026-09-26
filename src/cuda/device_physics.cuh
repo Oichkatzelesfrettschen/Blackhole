@@ -14,6 +14,8 @@
 #include <cuda_runtime.h>
 #include <math.h>
 
+#include "device_disk_transfer.cuh"
+
 /* ========================================================================
  * Constants (mirrors physics_constants.glsl)
  * ======================================================================== */
@@ -30,7 +32,6 @@
 /* Synchrotron G(x) LUT domain -- single-sourced with the C++ and GLSL
  * consumers via shader/include/synchrotron_lut_domain.h. */
 #include "../../shader/include/synchrotron_lut_domain.h"
-#include "device_zamo_redshift.cuh"
 #define D_SYNCH_G_X_MIN ((float)SYNCH_G_LUT_DOMAIN_X_MIN) /**< @brief Minimum x for G(x) LUT (log-space lower bound). */
 #define D_SYNCH_G_X_MAX ((float)SYNCH_G_LUT_DOMAIN_X_MAX) /**< @brief Maximum x for G(x) LUT (log-space upper bound). */
 /* log(X_MAX / X_MIN) = log(30 / 0.001) = log(30000), precomputed because
@@ -118,7 +119,11 @@ extern __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opa
 extern __constant__ int   d_stokes_enabled;       /**< @brief 1 = polarized Stokes IQUV transport (D4). */
 extern __constant__ float d_stokes_b_angle;       /**< @brief EVPA of projected B field on sky [rad] (D4). */
 extern __constant__ float d_stokes_ne_scale;      /**< @brief Faraday rotation strength multiplier (D4). */
-extern __constant__ float d_adisk_lit;            /**< @brief Disk luminosity scale (1.0 = GLSL flux*2 level). */
+extern __constant__ float d_adisk_lit;            /**< @brief Legacy volumetric disk scale (GLSL adiskLit); the Kerr disk reads d_disk_brightness. */
+extern __constant__ float d_disk_peak_temperature; /**< @brief Blackbody temperature at the Page-Thorne flux peak [K]. */
+extern __constant__ float d_disk_brightness;       /**< @brief Display scale on the bolometric disk intensity g^4 F / F_peak. */
+extern __constant__ float d_disk_flux_peak;        /**< @brief Page-Thorne flux-shape peak at d_spin (M = 1), the flux normalization. */
+extern __constant__ int   d_disk_transfer_mode;    /**< @brief 0 = Physical g-factor, 1 = Interstellar (g = 1, lensing kept). */
 
 /* ========================================================================
  * Vector helpers (replacing GLSL vec3 operations)
@@ -717,30 +722,18 @@ __device__ __forceinline__ void d_step_rk4(float3& x, float3& v, float rs, float
  */
 __device__ __forceinline__ bool d_check_disk(float3 old_pos, float3 new_pos,
                              float r_in, float r_out, float3& hit) {
-    /* A step that starts on the plane leaves it rather than crossing it: its
-     * start is the observer or the end of a step already counted there
-     * (bhCheckDiskIntersection twin). */
-    if (old_pos.z == 0.0f || old_pos.z * new_pos.z > 0.0f) return false;
+    /* Twin of bhCheckDiskIntersection: a step crosses only when it starts
+     * strictly off the plane and ends on or across it. A step that starts on
+     * the plane leaves it: its start is the observer or the end of a step
+     * already counted there. Signs are compared directly because
+     * old_pos.z * new_pos.z underflows to zero for tiny |z|. */
+    bool const crosses_down = old_pos.z > 0.0f && new_pos.z <= 0.0f;
+    bool const crosses_up = old_pos.z < 0.0f && new_pos.z >= 0.0f;
+    if (!(crosses_down || crosses_up)) return false;
     float t = -old_pos.z / (new_pos.z - old_pos.z);
     hit = d_lerp(old_pos, new_pos, t);
     float r = sqrtf(fmaf(hit.x, hit.x, hit.y * hit.y));
     return r >= r_in && r <= r_out;
-}
-
-/**
- * @brief Compute the analytic Schwarzschild gravitational redshift factor sqrt(1 - rs/r).
- *
- * Returns 0 if r <= rs (inside or at the horizon).
- *
- * @param r  Emission radius.
- * @param rs Schwarzschild radius.
- * @return Redshift factor in [0, 1].
- */
-__device__ __forceinline__ float d_redshift_factor(float r, float rs) {
-    if (r <= rs) return 0.0f;
-    float f = 1.0f - rs / r;
-    if (f <= 0.0f) return 0.0f;
-    return sqrtf(f);
 }
 
 /* ========================================================================
@@ -928,8 +921,9 @@ struct HitResult {
                             so shading falls back to the sky, matching GLSL BH_DEBUG_FLAG_MAXSTEPS. */
     float3 hit_point;  /**< @brief World-space position of the termination event. */
     float3 closest_approach_point; /**< @brief World-space position at minimum radius along the ray. */
-    float phi;         /**< @brief Azimuthal angle at disk hit (for Doppler beaming); 0 otherwise. */
-    float redshift;    /**< @brief Gravitational redshift factor at disk hit; 1 otherwise. */
+    float phi;         /**< @brief Azimuthal angle at disk hit; 0 otherwise. */
+    float photon_lambda; /**< @brief Lz / E of the physical photon reaching the camera (scene units);
+                              the time-reversed Kerr trace carries -Lz (d_kerr_trace_spin). */
     float min_radius;  /**< @brief Minimum radial distance reached along this ray. */
     int closest_approach_update_count; /**< @brief Number of times min_radius was improved after initialization. */
     int first_closest_approach_step;   /**< @brief Step index of the first min-radius improvement, or -1. */
@@ -1012,6 +1006,23 @@ __device__ __forceinline__ float d_adaptive_step(float r, float rs, float r_h,
     return base_dt * fminf(scale_far, fminf(scale_h, scale_ph));
 }
 
+/**
+ * @brief Lz / E of the physical photon for the Schwarzschild RK4 trace.
+ *
+ * d_step_rk4 integrates x'' = -1.5 rs h^2 x / r^5, which conserves
+ * h = x cross v and the energy v^2 / 2 - rs h^2 / (2 r^3); its orbits are
+ * Schwarzschild null geodesics with impact parameter b = |h| / v_inf. The
+ * trace starts at the camera with |v| = 1 along the time-reversed photon, so
+ * the physical photon has Lz / E = -h_z / v_inf.
+ */
+__device__ __forceinline__ float d_schwarzschild_photon_lambda(float3 cam_pos, float3 ray_dir,
+                                                               float rs) {
+    float3 const h = d_cross(cam_pos, ray_dir);
+    float const r0 = d_length(cam_pos);
+    float const v_inf2 = 1.0f - rs * d_dot(h, h) / fmaxf(r0 * r0 * r0, D_EPSILON);
+    return -h.z / sqrtf(fmaxf(v_inf2, D_EPSILON));
+}
+
 /* ========================================================================
  * Full geodesic trace (from bhTraceGeodesic)
  * ======================================================================== */
@@ -1038,7 +1049,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
     result.origin = cam_pos;
     result.closest_approach_point = cam_pos;
     result.phi = 0.0f;
-    result.redshift = 1.0f;
+    result.photon_lambda = 0.0f;
     result.min_radius = d_length(cam_pos);
     result.closest_approach_update_count = 0;
     result.first_closest_approach_step = -1;
@@ -1058,7 +1069,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         float r_horizon = d_kerr_outer_horizon(rs, a);
         if (r_horizon <= D_EPSILON) r_horizon = rs;
         float r_disk_in = d_isco;
-        float r_disk_out = 30.0f * rs;
+        float r_disk_out = 100.0f * rs; /* bhTraceGeodesic and the inline kernels use 100 rs */
 
         float const a_trace = d_kerr_trace_spin(a);
         KerrConsts c;
@@ -1088,7 +1099,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
                     result.hit_disk = true;
                     result.hit_point = disk_hit;
                     result.phi = atan2f(disk_hit.y, disk_hit.x);
-                    result.redshift = d_redshift_factor(d_length(disk_hit), rs);
+                    result.photon_lambda = -c.Lz;
                     return result;
                 }
             }
@@ -1107,7 +1118,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         float3 pos = cam_pos;
         float3 vel = ray_dir;
         float r_disk_in = d_isco;
-        float r_disk_out = 30.0f * rs;
+        float r_disk_out = 100.0f * rs;
 
         for (int step = 0; step < max_steps; ++step) {
             float3 old_pos = pos;
@@ -1128,7 +1139,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
                     result.hit_disk = true;
                     result.hit_point = disk_hit;
                     result.phi = atan2f(disk_hit.y, disk_hit.x);
-                    result.redshift = d_redshift_factor(d_length(disk_hit), rs);
+                    result.photon_lambda = d_schwarzschild_photon_lambda(cam_pos, ray_dir, rs);
                     return result;
                 }
             }
@@ -1194,183 +1205,58 @@ __device__ __forceinline__ float d_synchrotron_G(float x) {
  * ======================================================================== */
 
 /**
- * @brief Compute RGBA color for a disk hit using Novikov-Thorne flux and Doppler beaming.
+ * @brief Disk surface emission at cylindrical radius r along a photon with
+ *        physical Lz / E = photon_lambda (scene units); twin of bhDiskEmission.
  *
- * If d_use_luts and d_tex_emissivity are set, samples the emissivity LUT for
- * flux; otherwise uses the analytic Novikov-Thorne x^3*(1-sqrt(x)) formula.
- * Applies a smooth blackbody color ramp (6 segments), optional spectral LUT
- * modulation, Doppler beaming (intensity ~ doppler^3), Doppler color shift,
- * and optional gravitational redshift (LUT or analytic).
+ * The Page-Thorne flux normalized to d_disk_flux_peak sets the emitted
+ * blackbody temperature T_emit = d_disk_peak_temperature * flux_norm^(1/4);
+ * the orbiting-emitter shift g (E_obs / E_emit for an observer at rest at
+ * infinity) maps it to T_obs = g T_emit and the bolometric intensity to
+ * g^4 flux_norm (I_nu / nu^3 invariant). chroma is the unit-luminance
+ * blackbody color at T_obs, so the displayed luminance is the bolometric
+ * g^4 flux_norm, not the visible-band luminance of the shifted blackbody. d_disk_transfer_mode 1
+ * (Interstellar) forces g = 1, the film's unshifted disk (James et al. 2015
+ * sec. 4.2; physics/disk_transfer.h).
+ */
+__device__ __forceinline__ void d_disk_emission(float r, float photon_lambda, float rs,
+                                                float3& chroma, float& intensity) {
+    float const m = fmaxf(0.5f * rs, D_EPSILON);
+    float const flux_norm = fmaxf(
+        0.0f, fminf(d_dt_page_thorne_shape(r / m, d_spin) / fmaxf(d_disk_flux_peak, 1e-30f), 1.0f));
+    float const t_emit = d_disk_peak_temperature * sqrtf(sqrtf(flux_norm));
+    float const g = d_disk_transfer_mode != 0
+                        ? 1.0f
+                        : d_dt_disk_transfer_g(r / m, d_spin, photon_lambda / m);
+    float const g2 = g * g;
+    chroma = d_dt_blackbody_chroma(g * t_emit);
+    intensity = g2 * g2 * flux_norm;
+}
+
+/**
+ * @brief RGBA color of a disk hit; twin of bhDiskColorFromHit.
+ *
+ * d_disk_emission times the optional spectral LUT and d_disk_brightness.
  *
  * @param hit Result of a disk-terminated geodesic trace.
  * @param rs  Schwarzschild radius.
  * @return RGBA float4 with pre-multiplied intensity.
  */
-__device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_pos, float rs) {
-    float r = sqrtf(fmaf(hit.hit_point.x, hit.hit_point.x,
-                         hit.hit_point.y * hit.hit_point.y));
-    float inner_radius = d_isco;
-    float outer_radius = inner_radius * 4.0f;
-    float radial01 =
-        fmaxf(0.0f, fminf((r - inner_radius) / fmaxf(outer_radius - inner_radius, D_EPSILON), 1.0f));
+__device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
+    float const r = sqrtf(fmaf(hit.hit_point.x, hit.hit_point.x,
+                               hit.hit_point.y * hit.hit_point.y));
+    float3 chroma;
+    float intensity;
+    d_disk_emission(r, hit.photon_lambda, rs, chroma, intensity);
 
-    /* Emissivity flux: LUT or analytic Novikov-Thorne */
-    float flux;
-    if (d_use_luts && d_tex_emissivity) {
-        float rNorm = r / fmaxf(rs, D_EPSILON);
-        float denom = fmaxf(d_lut_radius_max - d_lut_radius_min, 1e-4f);
-        float u = fmaxf(0.0f, fminf(1.0f, (rNorm - d_lut_radius_min) / denom));
-        flux = fmaxf(0.0f, tex2D<float>((cudaTextureObject_t)d_tex_emissivity,
-                                         u, 0.5f));
-    } else {
-        float r_in = d_isco;
-        float x = r_in / fmaxf(r, D_EPSILON);
-        flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
-    }
-
-    /* x^0.25 = sqrtf(sqrtf(x)): 2x MUFU.SQRT ~16 cy vs powf LG2+EX2 ~35 cy. */
-    float T_norm = sqrtf(sqrtf(flux));
-
-    /* Smooth blackbody color ramp with 8 interpolation points.
-     * Deep red -> orange -> golden -> yellow-white -> hot white. */
-    float3 color;
-    if (T_norm > 0.85f) {
-        float t = (T_norm - 0.85f) / 0.15f;
-        color = d_lerp(make_f3(1.0f, 0.90f, 0.60f), make_f3(1.0f, 0.97f, 0.90f), t);
-    } else if (T_norm > 0.65f) {
-        float t = (T_norm - 0.65f) / 0.20f;
-        color = d_lerp(make_f3(1.0f, 0.70f, 0.20f), make_f3(1.0f, 0.90f, 0.60f), t);
-    } else if (T_norm > 0.45f) {
-        float t = (T_norm - 0.45f) / 0.20f;
-        color = d_lerp(make_f3(1.0f, 0.45f, 0.04f), make_f3(1.0f, 0.70f, 0.20f), t);
-    } else if (T_norm > 0.25f) {
-        float t = (T_norm - 0.25f) / 0.20f;
-        color = d_lerp(make_f3(0.90f, 0.15f, 0.00f), make_f3(1.0f, 0.45f, 0.04f), t);
-    } else if (T_norm > 0.10f) {
-        float t = (T_norm - 0.10f) / 0.15f;
-        color = d_lerp(make_f3(0.50f, 0.03f, 0.00f), make_f3(0.90f, 0.15f, 0.00f), t);
-    } else {
-        float t = T_norm / 0.10f;
-        color = d_lerp(make_f3(0.10f, 0.00f, 0.00f), make_f3(0.50f, 0.03f, 0.00f), t);
-    }
-
-    /* Spectral LUT modulation */
-    float spectral = 1.0f;
     if (d_use_luts && d_tex_spectral) {
-        float rNorm = r / fmaxf(rs, D_EPSILON);
-        float denom = fmaxf(d_spectral_radius_max - d_spectral_radius_min, 1e-4f);
-        float u = fmaxf(0.0f, fminf(1.0f,
-                    (rNorm - d_spectral_radius_min) / denom));
-        spectral = fmaxf(0.0f, tex2D<float>((cudaTextureObject_t)d_tex_spectral,
-                                             u, 0.5f));
+        float const r_norm = r / fmaxf(rs, D_EPSILON);
+        float const denom = fmaxf(d_spectral_radius_max - d_spectral_radius_min, 1e-4f);
+        float const u = fmaxf(0.0f, fminf(1.0f, (r_norm - d_spectral_radius_min) / denom));
+        intensity *= fmaxf(0.0f, tex2D<float>((cudaTextureObject_t)d_tex_spectral, u, 0.5f));
     }
 
-    /* Give the inner disk a hotter thermal read and stronger asymmetric structure,
-     * matching the GLSL desktop lane more closely than the old flat ramp. */
-    float3 thermal_inner = make_f3(1.35f, 0.78f, 0.28f);
-    float3 thermal_outer = make_f3(0.92f, 0.86f, 0.78f);
-    float radial_sqrt = sqrtf(radial01);
-    float3 thermal_tint = d_lerp(thermal_inner, thermal_outer, radial_sqrt);
-    color = make_f3(color.x * thermal_tint.x, color.y * thermal_tint.y, color.z * thermal_tint.z);
-
-    float3 ray_dir = d_normalize(d_sub(hit.hit_point, cam_pos));
-    float3 view_dir = d_scale(ray_dir, -1.0f);
-    /* Physics frame: the disk lies in the xy plane with prograde rotation
-     * about +z (d_world_to_physics). */
-    float3 vel_dir = d_normalize(make_f3(-hit.hit_point.y, hit.hit_point.x, 0.0f));
-
-    /* WHY: GLSL interop_trace.glsl uses flux*2.0 as base intensity. d_adisk_lit matches
-     * the adiskLit uniform that record mode sets to 0.35 for cinematic brightness balance. */
-    float intensity = flux * 2.0f * d_adisk_lit * spectral;
-
-    /* Doppler beaming approximation */
-    float v = sqrtf(0.5f * rs / fmaxf(r, D_EPSILON));
-    float view_alignment = d_dot(vel_dir, d_normalize(ray_dir));
-    float doppler = 1.0f + view_alignment * 0.65f * d_doppler_strength;
-    intensity *= doppler * doppler * doppler;
-
-    /* The disk's flow is fixed at every spin sign (its ISCO takes the
-     * counter-rotating branch when d_spin < 0), so the anisotropic boost
-     * follows the Doppler term's approach sense above: flow_dir = -vel_dir,
-     * so dot(flow_dir, view_dir) == dot(vel_dir, ray_dir). */
-    float3 flow_dir = d_scale(vel_dir, -1.0f);
-    float spin_view = 0.5f + 0.5f * d_dot(flow_dir, view_dir);
-    float spin_t = fmaxf(0.0f, fminf((fabsf(d_spin) - 0.05f) / fmaxf(0.85f - 0.05f, D_EPSILON), 1.0f));
-    float spin_weight = spin_t * spin_t * (3.0f - 2.0f * spin_t);
-    float anisotropic_boost = 1.0f + ((0.82f + (1.55f - 0.82f) * spin_view) - 1.0f) * spin_weight;
-    color = d_scale(color, anisotropic_boost);
-
-    /* Keep the disk energy concentrated in a narrow, approaching-side sector.
-     * The GLSL/desktop still wins because it preserves dark negative space and
-     * lets only a small inner crescent survive with high local contrast. */
-    float inner_weight = powf(fmaxf(0.0f, 1.0f - radial01), 0.72f);
-    auto smooth_range = [](float edge0, float edge1, float x) {
-        float t = fmaxf(0.0f, fminf((x - edge0) / fmaxf(edge1 - edge0, D_EPSILON), 1.0f));
-        return t * t * (3.0f - 2.0f * t);
-    };
-    float bright_sector = smooth_range(0.83f, 0.985f, spin_view);
-    float rim_sector = smooth_range(0.91f, 0.997f, spin_view);
-    float counter_sector = smooth_range(0.20f, 0.54f, spin_view);
-    float sector_shadow =
-        1.0f + (0.18f - 1.0f) * inner_weight * (1.0f - bright_sector * 0.94f);
-    float sector_lift =
-        1.0f + inner_weight * (0.92f * bright_sector + 0.22f * rim_sector + 0.04f * counter_sector);
-    intensity *= sector_shadow * sector_lift;
-
-    float grazing = powf(fmaxf(0.0f, fminf(1.0f - fabsf(ray_dir.z), 1.0f)), 1.5f);
-    color = d_scale(color, 1.0f + (1.55f - 1.0f) * grazing);
-
-    float normalized_v = fabsf(hit.hit_point.z) / fmaxf(0.42f, D_EPSILON);
-    float midplane_boost = powf(fmaxf(0.0f, fminf(1.0f - normalized_v, 1.0f)), 0.45f);
-    float crescent_boost = 1.0f + (1.8f - 1.0f) * (midplane_boost * (1.0f - radial01));
-    color = d_scale(color, crescent_boost);
-
-    float disk_luma = 0.2126f * color.x + 0.7152f * color.y + 0.0722f * color.z;
-    float sector_contrast =
-        inner_weight * ((-0.36f) + (0.26f - (-0.36f)) * bright_sector);
-    color = d_add(
-        color,
-        d_scale(color, sector_contrast * fmaxf(fminf(disk_luma - 0.05f, 1.0f), 0.0f)));
-
-    float exclusion = inner_weight * (1.0f - bright_sector) *
-                      smooth_range(0.05f, 0.25f, disk_luma);
-    color = d_scale(color, 1.0f - 0.22f * exclusion);
-
-    /* Doppler color shift: approaching side -> blueshift, receding -> redshift */
-    if (doppler > 1.0f) {
-        /* Blueshift: shift color toward blue-white */
-        float shift = fminf((doppler - 1.0f) * 1.5f, 0.6f);
-        color = d_lerp(color, make_f3(0.7f, 0.85f, 1.0f), shift);
-    } else {
-        /* Redshift: shift color toward deep red */
-        float shift = fminf((1.0f - doppler) * 2.0f, 0.7f);
-        color = d_lerp(color, make_f3(0.6f, 0.05f, 0.0f), shift);
-    }
-
-    /* Gravitational redshift: LUT or analytic */
-    if (d_redshift_enabled) {
-        float z;
-        if (d_use_luts && d_tex_redshift) {
-            float rNorm = r / fmaxf(rs, D_EPSILON);
-            float denom = fmaxf(d_redshift_radius_max - d_redshift_radius_min,
-                                1e-4f);
-            float u = fmaxf(0.0f, fminf(1.0f,
-                        (rNorm - d_redshift_radius_min) / denom));
-            z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
-        } else {
-            /* Same ZAMO-lapse model and cap as the LUT (device_zamo_redshift.cuh). */
-            z = d_zamo_redshift(r, rs, d_spin);
-        }
-        float one_plus_z = 1.0f + z;
-        float dimming = 1.0f / (one_plus_z * one_plus_z * one_plus_z);
-        color = d_scale(color, dimming);
-    }
-
-    float inner_boost = 1.8f + (0.85f - 1.8f) * powf(radial01, 0.65f);
-    intensity *= inner_boost;
-
-    return make_float4(color.x * intensity, color.y * intensity,
-                       color.z * intensity, 1.0f);
+    float const scale = intensity * d_disk_brightness;
+    return make_float4(chroma.x * scale, chroma.y * scale, chroma.z * scale, 1.0f);
 }
 
 /**
@@ -1734,12 +1620,6 @@ __device__ __forceinline__ float d_luminance(float3 color) {
     return 0.2126f * color.x + 0.7152f * color.y + 0.0722f * color.z;
 }
 
-__device__ __forceinline__ float3 d_apply_simple_redshift(float3 color, float z) {
-    float one_plus_z = 1.0f + z;
-    float dimming = 1.0f / fmaxf(one_plus_z * one_plus_z * one_plus_z, D_EPSILON);
-    return d_scale(color, dimming);
-}
-
 __device__ __forceinline__ float d_smoothstep_range(float edge0, float edge1, float x) {
     float t = fmaxf(0.0f, fminf((x - edge0) / fmaxf(edge1 - edge0, D_EPSILON), 1.0f));
     return t * t * (3.0f - 2.0f * t);
@@ -1807,19 +1687,11 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         return sky;
     }
 
-    if (d_redshift_enabled && min_radius < rs * 10.0f) {
-        float z;
-        if (d_use_luts && d_tex_redshift) {
-            float r_norm = min_radius / fmaxf(rs, D_EPSILON);
-            float denom = fmaxf(d_redshift_radius_max - d_redshift_radius_min, 0.0001f);
-            float u = fmaxf(0.0f, fminf((r_norm - d_redshift_radius_min) / denom, 1.0f));
-            z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
-        } else {
-            /* Same ZAMO-lapse model and cap as the LUT (device_zamo_redshift.cuh). */
-            z = d_zamo_redshift(min_radius, rs, spin);
-        }
-        sky = d_apply_simple_redshift(sky, z);
-    }
+    /* Light from infinity reaching an observer at rest at infinity has
+     * E_obs = E_emit: the sky carries no net frequency shift, only lensing.
+     * The camera stands for that observer at every distance; a static camera
+     * at finite r would add the uniform factor 1 / sqrt(-g_tt)
+     * (physics/disk_transfer.h). */
 
     if (d_debug_pre_shaping_background != 0) {
         return sky;
@@ -1846,7 +1718,10 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         return d_encode_unit_vector(closest_pos);
     }
 
-    if (min_radius < rs * 5.0f) {
+    /* Sector shaping is an artistic grade of the Schwarzschild RK4 lane
+     * (d_kerr_enabled = 0). The Kerr tracer shows the lensed sky unmodified,
+     * like bhShadeHit and the GL traces. */
+    if (d_kerr_enabled == 0 && min_radius < rs * 5.0f) {
         float3 closest_n = d_normalize(closest_pos);
         float3 approach_dir = d_normalize(d_sub(cam_pos, closest_pos));
         float spin_sign = spin >= 0.0f ? 1.0f : -1.0f;
@@ -1985,8 +1860,11 @@ __device__ __forceinline__ float4 d_sample_grmhd(float3 pos) {
  * @brief Dispatch shading for a completed HitResult.
  *
  * Returns black for horizon hits, calls d_disk_color() for disk hits, and
- * calls d_background_color() for escaped rays with an added photon ring
- * proximity glow (cubic falloff from the photon sphere at 1.5*rs over 2.5*rs).
+ * calls d_background_color() for escaped rays. The Kerr tracer returns that
+ * lensed sky unmodified, like bhShadeHit; the Schwarzschild RK4 lane
+ * (d_kerr_enabled = 0) adds d_shape_escaped_background's sector grade and a
+ * photon ring proximity glow (cubic falloff from the photon sphere at 1.5*rs
+ * over 2.5*rs, scaled by d_photon_glow_strength).
  *
  * @param hit     Completed HitResult from d_trace_geodesic().
  * @param cam_pos Camera position used to reconstruct the escaped ray direction.
@@ -2006,7 +1884,7 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
             d_debug_escaped_direction != 0) {
             return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
         }
-        float4 disk_col = d_disk_color(hit, cam_pos, d_rs);
+        float4 disk_col = d_disk_color(hit, d_rs);
         /* GRMHD emissivity modulation: j_nu ~ rho * B^2, B^2 ~ u (plasma beta ~ 1).
          * Matches blackhole_main.frag: density *= rho * uu at disk hit point. */
         if (d_use_luts && d_tex_grmhd) {
@@ -2049,7 +1927,11 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         return bg;
     }
 
-    /* Photon ring proximity glow: match the GLSL lane's narrower, more
+    if (d_kerr_enabled != 0) {
+        return bg;
+    }
+
+    /* Photon ring proximity glow of the Schwarzschild RK4 lane: a narrow,
      * anisotropic ring instead of a broad uniform halo. */
     float r_ph = D_PHOTON_SPHERE * d_rs;
     float photon_dist = fabsf(hit.min_radius - r_ph);
@@ -2087,35 +1969,25 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
 /**
  * @brief Generate a world-space ray direction for pixel (px, py).
  *
- * Matches GLSL interop_raygen.glsl::bhRayDirFromUv() exactly:
- *   GLSL: dir = normalize(vec3(-uv.x * fovScale, uv.y * fovScale, 1.0))
- *              then cameraBasis * dir
- *   Convention: basis col2 = forward (toward BH), z=+1 = forward direction.
- *   x is negated to match GLSL image-space orientation (left=+right, right=-right).
- *   v is negated because CUDA py=0 is image-top (like D3D) while GLSL uv.y is
- *   positive at the image-top (gl_FragCoord.y=0 is bottom, so uv.y=top is +0.5).
+ * The CUDA twin of interop_raygen.glsl::bhRayDir. u and v are the pixel's
+ * offsets from the image center in units of the vertical half-height, so with
+ * d_fov_scale = tan(fov / 2) the image subtends the vertical field of view
+ * fov. Framebuffer row py lands in GL texture row py
+ * (cudaMemcpy2DToArrayAsync in cuda_gl_interop.cu), and GL row 0 is the image
+ * bottom, so py counts upward like gl_FragCoord.y and v grows toward +up.
+ * d_cam_basis columns are (right, up, forward) from buildCameraBasis.
  *
- * WHY the previous -1.0f was wrong: with z=-1 and basis[2]=forward, the center
- * ray would map to -forward (looking BACKWARD from the camera), causing the
- * entire render to show the scene behind the camera.
- *
- * @param px Pixel column index (0-based).
- * @param py Pixel row index (0-based).
+ * @param px Pixel column index (0-based, left to right).
+ * @param py Pixel row index (0-based, bottom to top).
  * @return Normalized world-space ray direction.
  */
 __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
     float u = (2.0f * (px + 0.5f) / (float)d_width - 1.0f) * d_fov_scale;
     float v = (2.0f * (py + 0.5f) / (float)d_height - 1.0f) * d_fov_scale;
-    /* Correct for aspect ratio (matches GLSL uv.x *= resolution.x/resolution.y) */
     u *= (float)d_width / (float)d_height;
     u += d_frame_shift_x;
     v += d_frame_shift_y;
-
-    /* +u: basis col0 = right (buildCameraBasis), matching GLSL +uv.x.
-     * -v: py=0 is image-top in CUDA; gl_FragCoord.y=0 is image-bottom in GLSL,
-     *     so GLSL uv.y is positive-at-top, CUDA v is negative-at-top.
-     * +1: basis col2 = forward, so local +z maps to world forward (toward BH). */
-    float3 local_dir = d_normalize(make_f3(u, -v, 1.0f));
+    float3 local_dir = d_normalize(make_f3(u, v, 1.0f));
     return d_mat3_mul(d_cam_basis, local_dir);
 }
 
@@ -2216,29 +2088,18 @@ __device__ __forceinline__ float2 d_chord_inside_radius(float ax, float ay, floa
 }
 
 /**
- * @brief Radial disk factor flux g^3 and band color at cylindrical radius rho,
- *        azimuth phi. Twin of bhDiskRadialEmission.
+ * @brief Radial disk factors at cylindrical radius rho for a photon with
+ *        physical Lz / E = photon_lambda: returns the bolometric intensity
+ *        g^4 F / F_peak and sets the surface color chroma * d_disk_brightness
+ *        (d_disk_emission). Twin of bhDiskRadialEmission.
  */
-__device__ __forceinline__ float d_disk_radial_emission(float rho, float phi, float r_in, float rs,
+__device__ __forceinline__ float d_disk_radial_emission(float rho, float photon_lambda, float rs,
                                                         float3 &emit_color) {
-    /* Novikov-Thorne flux profile */
-    float const x    = r_in / fmaxf(rho, D_EPSILON);
-    float const flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
-
-    /* Temperature-to-color: 3-band ramp */
-    float const t_norm = sqrtf(sqrtf(fmaxf(flux, 0.0f)));
-    if (t_norm > 0.6f) {
-        emit_color = make_f3(1.0f, 0.9f, 0.8f);
-    } else if (t_norm > 0.3f) {
-        emit_color = make_f3(1.0f, 0.6f, 0.2f);
-    } else {
-        emit_color = make_f3(0.8f, 0.2f, 0.1f);
-    }
-
-    /* Keplerian Doppler beaming: v ~ sqrt(rs / 2r), boost ~ (1 + 0.3*v*cos phi)^3 */
-    float const v       = sqrtf(0.5f * rs / fmaxf(rho, D_EPSILON));
-    float const doppler = 1.0f + 0.3f * v * cosf(phi);
-    return flux * doppler * doppler * doppler;
+    float3 chroma;
+    float intensity;
+    d_disk_emission(rho, photon_lambda, rs, chroma, intensity);
+    emit_color = d_scale(chroma, d_disk_brightness);
+    return intensity;
 }
 
 /**
@@ -2247,15 +2108,18 @@ __device__ __forceinline__ float d_disk_radial_emission(float rho, float phi, fl
  * The chord is intersected with the annulus [r_in, r_out] (rho^2 is
  * quadratic along it, so at most two intervals emit); the Gaussian layer
  * (scale height h) is integrated exactly over each interval and the radial
- * factors are read at each interval's density-weighted centroid. With every
+ * factors (d_disk_emission for the photon with physical Lz / E =
+ * photon_lambda: Page-Thorne flux, orbiting-emitter g^4, blackbody color)
+ * are read at each interval's density-weighted centroid. With every
  * coefficient proportional to the density and a constant source function,
  * the segment's formal solution depends only on the column. Returns false
  * when no emitting part carries density; j_eff and rho_mean are means over
  * the whole chord. Twin of bhDiskSegment in shader/include/interop_trace.glsl.
  */
 __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in, float r_out,
-                                               float h, float rs, float3 &emit_color,
-                                               float &j_eff, float &rho_mean) {
+                                               float h, float rs, float photon_lambda,
+                                               float3 &emit_color, float &j_eff,
+                                               float &rho_mean) {
     emit_color = make_f3(0.0f, 0.0f, 0.0f);
     j_eff = 0.0f;
     rho_mean = 0.0f;
@@ -2303,8 +2167,8 @@ __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in,
         float const tw = fmaf(tb - ta, moments.y, ta);
         float3 const w = d_add(p0, d_scale(d_sub(p1, p0), tw));
         float3 color;
-        float const radial = d_disk_radial_emission(sqrtf(fmaf(w.x, w.x, w.y * w.y)),
-                                                    atan2f(w.y, w.x), r_in, rs, color);
+        float const radial =
+            d_disk_radial_emission(sqrtf(fmaf(w.x, w.x, w.y * w.y)), photon_lambda, rs, color);
         rho_mean += column;
         j_eff += radial * column;
         color_sum = d_add(color_sum, d_scale(color, radial * column));
@@ -2312,7 +2176,7 @@ __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in,
     if (!(rho_mean > 0.0f)) {
         return false;
     }
-    emit_color = j_eff > 0.0f ? d_scale(color_sum, 1.0f / j_eff) : make_f3(0.8f, 0.2f, 0.1f);
+    emit_color = j_eff > 0.0f ? d_scale(color_sum, 1.0f / j_eff) : make_f3(0.0f, 0.0f, 0.0f);
     return true;
 }
 
@@ -2324,9 +2188,8 @@ __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in,
  * d_trace_geodesic() + d_shade_hit() (single-scatter, bit-exact parity).
  *
  * Disk emission model at each step inside [r_disk_in, r_disk_out]:
- *   - Novikov-Thorne flux: F ~ (r_in/r)^3 * (1 - sqrt(r_in/r))
- *   - Temperature color: 3-band ramp (matches GLSL bhTraceGeodesicRTE)
- *   - Doppler beaming: g = 1 + 0.3 * sqrt(rs/2r) * cos(phi),  intensity *= g^3
+ *   - d_disk_emission: Page-Thorne flux, blackbody color at T_obs = g T_emit,
+ *     intensity g^4 F / F_peak with g from the ray's own Lz (-c.Lz)
  *   - Gaussian vertical density: rho ~ exp(-z^2 / 2*h_disk^2),  h_disk = 0.1*rs
  *
  * Background is added at escape weighted by surviving transmittance.
@@ -2401,8 +2264,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         float j_eff;
         float rho_norm;
         if (d_adisk_enabled &&
-            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, emit_color,
-                           j_eff, rho_norm)) {
+            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, -c.Lz,
+                           emit_color, j_eff, rho_norm)) {
             float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
             float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, path_step, transmit);
             accum_i = d_add(accum_i, contrib);
@@ -2544,10 +2407,15 @@ __device__ __forceinline__ DStokes d_stokes_step(DStokes s,
     float qNew, uNew;
     float const D = fmaf(A, A, R * R);
 
-    if (D < 1.0e-60f) {
-        /* Pure emission (neither absorption nor rotation) */
-        qNew = s.q + jQ * ds;
-        uNew = s.u + jU * ds;
+    if (tauL < 1.0e-4f && fabsf(phi) < 1.0e-4f) {
+        /* Optically thin and nearly unrotated: second-order Taylor of
+         * Ic = ds (1 - tau/2), Is = phi ds / 2. The closed form below divides
+         * 1 - E cos(phi), which rounds to zero in float, by D, which
+         * underflows to zero once A and R are both below about 1e-19. */
+        float const ic  = ds * (1.0f - 0.5f * tauL);
+        float const is_ = 0.5f * phi * ds;
+        qNew = fmaf(jQ, ic,  fmaf(-jU, is_, qHom));
+        uNew = fmaf(jQ, is_, fmaf( jU, ic,  uHom));
     } else if (A < 1.0e-15f * fabsf(R)) {
         /* Rotation-dominated (A ~ 0) */
         float const ic  =  Sp / R;
@@ -2703,8 +2571,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         float j_eff;
         float rho_norm;
         if (d_adisk_enabled &&
-            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, emit_color,
-                           j_eff, rho_norm)) {
+            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, -c.Lz,
+                           emit_color, j_eff, rho_norm)) {
             float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
 
             /* Intensity path: same as d_rte_step() */

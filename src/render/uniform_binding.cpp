@@ -284,8 +284,10 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.background_yaw_rad = rs.background.backgroundYawRad;
   cp.background_pitch_rad = rs.background.backgroundPitchRad;
   cp.background_filter_radius = 0.0f;
-  cp.frame_shift_x = in.frameShiftX;
-  cp.frame_shift_y = in.frameShiftY;
+  // The showcase frame offset reaches every tracer through the aimed camera
+  // basis (updateFrameCamera); the image-plane shift is the Blender bridge's.
+  cp.frame_shift_x = 0.0f;
+  cp.frame_shift_y = 0.0f;
   for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
     auto const &params = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
     cp.background_layer_params[i * 4 + 0] = params.x;
@@ -318,8 +320,12 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.stokes_enabled     = rs.stokes.stokesEnabled ? 1 : 0;
   cp.stokes_b_field_angle = rs.stokes.stokesBFieldAngle;
   cp.stokes_ne_scale    = rs.stokes.stokesNeScale;
-  // Disk brightness: matches adiskLit GLSL uniform (record mode sets 0.35)
+  // Legacy volumetric disk scale (GLSL adiskLit); the Kerr disk reads disk_brightness.
   cp.adisk_lit = rs.disk.adiskLit;
+  cp.disk_peak_temperature = interop.diskPeakTemperature;
+  cp.disk_brightness = interop.diskBrightness;
+  cp.disk_flux_peak = interop.diskFluxPeak;
+  cp.disk_transfer_mode = rs.disk.diskTransferMode;
 }
 #endif
 

@@ -16,6 +16,7 @@
 
 #include "batch.h"
 #include "constants.h"
+#include "disk_transfer.h"
 #include "kerr.h"
 #include "schwarzschild.h"
 #include "thin_disk.h"
@@ -39,18 +40,19 @@ struct SpinRadiiLut {
 /**
  * @brief Generate a normalized disk emissivity LUT for a Kerr black hole.
  *
- * Computes the Novikov-Thorne flux profile from r_ISCO to 4*r_ISCO,
- * then normalizes to [0, 1] by the peak flux value.
+ * Computes the Page-Thorne flux profile from r_ISCO to 4*r_ISCO, then
+ * normalizes to [0, 1] by the peak flux value. The spin is signed like the
+ * runtime tracer's (isco_radius, bhDiskEmission): the disk orbits in +phi,
+ * so a* < 0 is a retrograde disk whose ISCO and flux take -|a*|.
  *
  * @param size       Number of LUT samples
  * @param massSolar  Black hole mass [solar masses]
- * @param aStar      Dimensionless spin a* in (-1, 1)
+ * @param aStar      Dimensionless spin a* in (-1, 1), signed
  * @param mdotEdd    Eddington-scaled accretion rate
- * @param prograde   True for prograde orbits (default)
  * @return Lut1D with normalized emissivity values
  */
 inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
-                                     double mdotEdd, bool prograde = true) {
+                                     double mdotEdd) {
   Lut1D lut;
   if (size <= 1) {
     return lut;
@@ -60,10 +62,12 @@ inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
   const double rS = schwarzschildRadius(mass);
   const double rG = G * mass / C2;
   const double a = aStar * rG;
-  const double rIn = kerrIscoRadius(mass, a, prograde);
+  // The disk orbits along +z; the signed spin selects co- or counter-rotation
+  // for both the domain (kerrIscoRadius) and the flux (kerrDisk).
+  const double rIn = kerrIscoRadius(mass, a, true);
   const double rOut = rIn * 4.0;
 
-  DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd, prograde);
+  DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd);
   disk.rIn  = rIn;
   disk.rOut = rOut;
 
@@ -88,19 +92,20 @@ inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
 }
 
 /**
- * @brief Generate a gravitational redshift LUT for a Kerr black hole.
+ * @brief Generate the disk-emitter redshift LUT for a Kerr black hole.
  *
- * Samples the Kerr redshift factor from r_ISCO to 4*r_ISCO along
- * a geodesic at inclination angle theta.
+ * Samples z(r) = u^t - 1 of the Keplerian circular emitter orbiting in +phi
+ * (circularEmitterUt), the redshift of disk light reaching a face-on distant
+ * observer (photon Lz = 0), from r_ISCO to 4*r_ISCO. The spin is signed like
+ * generateEmissivityLut's: a* < 0 is a retrograde emitter from its own ISCO.
+ * Values clamp to [0, 10].
  *
  * @param size       Number of LUT samples
  * @param massSolar  Black hole mass [solar masses]
- * @param aStar      Dimensionless spin a* in (-1, 1)
- * @param theta      Observer inclination angle [rad] (default pi/2, equatorial)
+ * @param aStar      Dimensionless spin a* in (-1, 1), signed
  * @return Lut1D with redshift values
  */
-inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar,
-                                   double theta = 0.5 * PI) {
+inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar) {
   Lut1D lut;
   if (size <= 1) {
     return lut;
@@ -117,7 +122,12 @@ inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar,
   lut.rMax = static_cast<float>(rOut / rS);
   std::vector<double> radii(static_cast<std::size_t>(size));
   fillLinspace(radii, rIn, rOut);
-  kerrRedshiftBatch(radii, theta, mass, a, lut.values);
+  lut.values.reserve(radii.size());
+  for (double const radius : radii) {
+    double const ut = circularEmitterUt(radius / rG, aStar);
+    double const z = ut > 0.0 ? ut - 1.0 : 0.0;
+    lut.values.push_back(static_cast<float>(std::clamp(z, 0.0, 10.0)));
+  }
 
   return lut;
 }

@@ -64,7 +64,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--record-composition",
         default="wide-right",
-        choices=("centered", "left-third", "right-third", "wide-left", "wide-right"),
+        choices=(
+            "above-disk",
+            "inside-disk",
+            "centered",
+            "left-third",
+            "right-third",
+            "wide-left",
+            "wide-right",
+        ),
     )
     parser.add_argument("--record-background-id")
     parser.add_argument("--top-k", type=int, default=6)
