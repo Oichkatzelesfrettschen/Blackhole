@@ -23,7 +23,7 @@ advisory, so its red result informs a review without blocking the merge.
 | Pull request and main push | `ci-release` | CPU build/tests with LTO and fast-math, including per-target IEEE overrides |
 | Pull request and main push | `ci-clang` | Advisory: the `ci` configuration compiled by clang 18 over the same GCC 14 packages; strict warnings, CPU tests |
 | Pull request and main push | `ci-clang-fast-math` | Advisory: `ci-clang` with fast-math, where clang's `-Wnan-infinity-disabled` rejects NaN and infinity classification GCC accepts |
-| Pull request and main push | `ci-sanitize` | Advisory: GCC 14 AddressSanitizer and UBSan build, CPU tests except label `gpu` |
+| Pull request and main push | `ci-sanitize` | Advisory: GCC 14 AddressSanitizer and UBSan build; every test except `gpu_cpu_parity` and `kerr_shader_capture` |
 | Weekly schedule | Every preset above | Revalidate the default branch |
 | Weekly schedule and manual dispatch | `bench.yml`, `ci` preset | Advisory `physics_bench` run compared with `bench/baseline-ci.json`; JSON retained 90 days |
 | Manual dispatch | Selected preset | Replay any lane against a selected ref |
@@ -91,9 +91,14 @@ is off because `_FORTIFY_SOURCE` conflicts with the ASan interceptors, and
 (`-Wmaybe-uninitialized`, `-Wstrict-overflow`); the uninstrumented lanes
 enforce those warnings on the same sources. `ENABLE_UBSAN` compiles with
 `-fno-sanitize-recover=undefined`, so a UBSan report aborts the test instead of
-printing and exiting 0. The lane excludes the `gpu` label: those tests open a GL
-context when a display exists, and LeakSanitizer then reports the driver's
-allocations as leaks.
+printing and exiting 0. The lane excludes `gpu_cpu_parity` and
+`kerr_shader_capture` by name: they open a GL context through GLFW when a
+display exists and carry no `detect_leaks=0` environment, so LeakSanitizer
+reports the GL driver's allocations as leaks. The other `gpu`-labeled tests
+run: `grmhd_pbo_state_machine` mocks GL, and `gpu_compute_validation`,
+`grmhd_gpu_async_validation`, and `z3_verification` (which also creates a GLFW
+window when it can) already disable LeakSanitizer through
+`SANITIZER_TEST_ENV`.
 
 `SANITIZER_TEST_ENV` in `CMakeLists.txt` gains `ASAN_OPTIONS=detect_leaks=0`
 partway through test registration, and a test's `ENVIRONMENT` property

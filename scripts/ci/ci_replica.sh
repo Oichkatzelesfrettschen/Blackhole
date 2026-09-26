@@ -8,8 +8,8 @@
 #   CI_REPLICA_RELEASE=1   mirror ci-release: -ffast-math plus fat LTO, in
 #                          build/CiLikeRelease instead of build/CiLike
 #   CI_REPLICA_SANITIZE=1  mirror ci-sanitize: ASan plus UBSan, hardening and
-#                          -Werror off, in build/CiLikeSanitize; tests labeled
-#                          gpu are excluded as in the lane
+#                          -Werror off, in build/CiLikeSanitize; excludes the
+#                          same GL-context tests as the lane
 #   CI_REPLICA_NO_TEST=1   stop after the build
 #   CI_REPLICA_JOBS=N      build and test parallelism (default: nproc)
 #   GCC14 / GXX14          compiler names (default gcc-14 / g++-14)
@@ -35,7 +35,7 @@ lto=OFF
 sanitize=OFF
 hardening=ON
 werror=ON
-label_exclude=
+exclude=
 if [ "${CI_REPLICA_RELEASE:-0}" = 1 ]; then
   bdir=build/CiLikeRelease
   fast_math=ON
@@ -45,7 +45,8 @@ elif [ "${CI_REPLICA_SANITIZE:-0}" = 1 ]; then
   sanitize=ON
   hardening=OFF
   werror=OFF
-  label_exclude=gpu
+  # Keep in step with the ci-sanitize case of the Test step in ci.yml.
+  exclude='^(gpu_cpu_parity|kerr_shader_capture)$'
 fi
 cc=${GCC14:-gcc-14}
 cxx=${GXX14:-g++-14}
@@ -101,7 +102,7 @@ echo "ci_replica: $bdir build ok"
 
 set -- --test-dir "$bdir" --output-on-failure --no-tests=error --parallel "$jobs"
 [ -n "$rx" ] && set -- "$@" -R "$rx"
-[ -n "$label_exclude" ] && set -- "$@" --label-exclude "$label_exclude"
+[ -n "$exclude" ] && set -- "$@" --exclude-regex "$exclude"
 if hide_glm ctest "$@" >build/cilike-ctest.log 2>&1; then
   grep -E "tests passed" build/cilike-ctest.log
 else

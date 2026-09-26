@@ -171,16 +171,18 @@ jobs:
             ci-clang) build_dir=build/CI-Clang ;;
             ci-clang-fast-math) build_dir=build/CI-ClangFastMath ;;
             ci-sanitize)
-              # A gpu-labeled test opens a GL context when a display exists;
-              # LeakSanitizer then reports the driver's allocations.
+              # These two tests open a GL context through GLFW when a display
+              # exists and, unlike the other gpu-labeled tests, carry no
+              # detect_leaks=0 environment, so LeakSanitizer reports the GL
+              # driver's allocations as leaks. Every other test runs.
               build_dir=build/CI-Sanitize
-              exclude=gpu
+              exclude='^(gpu_cpu_parity|kerr_shader_capture)$'
               ;;
             *) echo "no test directory for preset $CI_PRESET" >&2; exit 2 ;;
           esac
           scripts/ci/run_stage.sh tests ctest --test-dir "$build_dir" \
             --output-on-failure --no-tests=error --parallel "$CTEST_PARALLEL_LEVEL" \
-            ${exclude:+--label-exclude "$exclude"} \
+            ${exclude:+--exclude-regex "$exclude"} \
             --output-junit "$GITHUB_WORKSPACE/build/ci-reports/tests.xml"
       - name: Save compiled objects after build failures too
         if: always() && steps.compile.outcome != 'skipped' && steps.compiler-cache.outputs.cache-hit != 'true'
