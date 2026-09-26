@@ -5832,6 +5832,31 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Kerr photon-orbit Lyapunov exponent against its mpmath defining integral
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/photon_ring_test.cpp")
+    add_executable(photon_ring_test
+      "${PROJECT_SOURCE_DIR}/tests/photon_ring_test.cpp"
+    )
+    target_include_directories(photon_ring_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(photon_ring_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(photon_ring_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME photon_ring_validation COMMAND photon_ring_test)
+    set_tests_properties(photon_ring_validation PROPERTIES
+      LABELS "physics;photon-ring;referee"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(photon_ring_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Elliptic integrals validation (Carlson, Jacobi, lensing)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/elliptic_integrals_test.cpp")
     add_executable(elliptic_integrals_test
