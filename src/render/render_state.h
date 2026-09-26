@@ -132,7 +132,6 @@ struct RenderState {
     float logLuminanceMin = -7.0F;    ///< log10 cd/m^2 mapped to black.
     float logLuminanceMax = 13.5F;    ///< log10 cd/m^2 mapped to displayPeak.
     float displayPeak = 4.0F;
-    gl::GLuint galaxyMipmapped = 0; ///< Galaxy cubemap whose mip chain this scene built.
     ObserverKind kind = ObserverKind::Prograde;
     bool atIsco = true; ///< x tracks the ISCO of the orbit's sense.
     bool paused = false;

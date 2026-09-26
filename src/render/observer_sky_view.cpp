@@ -82,6 +82,20 @@ GLuint uploadFloatTexture(int width, int height, const float *pixels, GLenum fil
   return texture;
 }
 
+/** @brief Whether the cubemap bound to GL_TEXTURE_CUBE_MAP has a mip level 1,
+ *         or cannot have one (a base level at most one texel wide). The
+ *         texture object answers for itself, so a name that GL reuses for a
+ *         new cubemap after a background swap reads as unmipmapped; every
+ *         galaxy cubemap is a new object whose level 0 is specified once
+ *         (loadCubemap). */
+bool boundCubemapHasMipChain() {
+  GLint baseWidth = 0;
+  GLint levelOneWidth = 0;
+  glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_TEXTURE_WIDTH, &baseWidth);
+  glGetTexLevelParameteriv(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 1, GL_TEXTURE_WIDTH, &levelOneWidth);
+  return baseWidth <= 1 || levelOneWidth > 0;
+}
+
 void deleteTexture(GLuint &texture) {
   if (texture != 0) {
     glDeleteTextures(1, &texture);
@@ -618,14 +632,13 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
   }
   // The star lookup picks a mip level from each pixel's footprint on the sky
   // at infinity. The shared galaxy cubemap samples its base level only
-  // (GL_LINEAR), so the pass adds the mip chain once and switches the
-  // minification filter to trilinear for its own draw.
+  // (GL_LINEAR), so the pass adds the mip chain when the bound cubemap lacks
+  // one and switches the minification filter to trilinear for its own draw.
   const GLuint galaxy = rs.background.galaxy;
   if (galaxy != 0) {
     glBindTexture(GL_TEXTURE_CUBE_MAP, galaxy);
-    if (view.galaxyMipmapped != galaxy) {
+    if (!boundCubemapHasMipChain()) {
       glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-      view.galaxyMipmapped = galaxy;
     }
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER,
                     static_cast<GLint>(GL_LINEAR_MIPMAP_LINEAR));
