@@ -66,12 +66,17 @@ for tool in "$cc" "$cxx" bwrap cmake ninja ctest; do
   command -v "$tool" >/dev/null 2>&1 || { echo "ci_replica: $tool not found" >&2; exit 2; }
 done
 
-tcdir=build/CiLike/gcc14
+# Each mode keeps its own toolchain copy, so replicas of different modes can
+# run side by side. awk takes the compiler names as data (-v), so a path such
+# as /usr/bin/g++-14 needs no escaping.
+tcdir=$bdir-toolchain
 mkdir -p "$tcdir"
 cp -R "$gen/." "$tcdir/"
-sed -i -e "s/^set(CMAKE_C_COMPILER .*/set(CMAKE_C_COMPILER \"$cc\")/" \
-  -e "s/^set(CMAKE_CXX_COMPILER .*/set(CMAKE_CXX_COMPILER \"$cxx\")/" \
-  -e 's/ -stdlib=libstdc++//' "$tcdir/conan_toolchain.cmake"
+awk -v cc="$cc" -v cxx="$cxx" '
+  /^set\(CMAKE_C_COMPILER / { print "set(CMAKE_C_COMPILER \"" cc "\")"; next }
+  /^set\(CMAKE_CXX_COMPILER / { print "set(CMAKE_CXX_COMPILER \"" cxx "\")"; next }
+  { gsub(/ -stdlib=libstdc\+\+/, ""); print }
+' "$gen/conan_toolchain.cmake" >"$tcdir/conan_toolchain.cmake"
 
 hide_glm() {
   if [ -d /usr/include/glm ]; then
