@@ -21,6 +21,7 @@
 #include <string>
 
 #include "../cuda/kernel_launch.h"
+#include "bridge_disk_isco.h"
 #include "stb_image.h"
 
 namespace {
@@ -431,13 +432,8 @@ static void fill_params(struct BH_LaunchParams *p,
      * All distances are in units of r_s. observer_r is already in r_s units. */
     float rs = 1.0f;
 
-    /* ISCO in units of r_s (not M). r_s = 2M, so ISCO_M * M = ISCO_M * rs/2. */
-    float a = spin;
-    float z1 = 1.0f + powf(1.0f - a * a, 1.0f / 3.0f) *
-               (powf(1.0f + a, 1.0f / 3.0f) + powf(1.0f - a, 1.0f / 3.0f));
-    float z2 = sqrtf(3.0f * a * a + z1 * z1);
-    float isco_M = 3.0f + z2 - sqrtf((3.0f - z1) * (3.0f + z1 + 2.0f * z2));
-    float isco_rs = isco_M * 0.5f;  /* convert from M to r_s units */
+    /* ISCO of the +z disk in units of r_s = 2M; negative spin counter-rotates. */
+    float isco_rs = bridge::diskIscoOverM(spin) * 0.5f;
 
     p->rs = rs;
     p->spin = spin;
@@ -560,12 +556,7 @@ static void fill_params_from_view(struct BH_LaunchParams *p, float spin, const f
     memset(p, 0, sizeof(*p));
 
     float rs = 1.0f;
-    float a = spin;
-    float z1 = 1.0f + powf(1.0f - a * a, 1.0f / 3.0f) *
-               (powf(1.0f + a, 1.0f / 3.0f) + powf(1.0f - a, 1.0f / 3.0f));
-    float z2 = sqrtf(3.0f * a * a + z1 * z1);
-    float isco_M = 3.0f + z2 - sqrtf((3.0f - z1) * (3.0f + z1 + 2.0f * z2));
-    float isco_rs = isco_M * 0.5f;
+    float isco_rs = bridge::diskIscoOverM(spin) * 0.5f;
 
     p->rs = rs;
     p->spin = spin;
@@ -840,7 +831,7 @@ static __device__ void bhb_eq_step(float a, float b_imp, BhbKerrState2D &s, floa
  * @param a_star     Dimensionless spin.
  * @param obs_r      Observer radial coordinate [r_g].
  * @param inc_rad    Observer inclination from spin axis [rad].
- * @param r_isco     Prograde ISCO radius [r_g].
+ * @param r_isco     ISCO of the +z disk [r_g] (bridge::diskIscoOverM).
  * @param r_horizon  Outer horizon radius [r_g].
  */
 __global__ void bhb_lensing_map_kernel(float * __restrict__ out,
@@ -911,7 +902,7 @@ __global__ void bhb_lensing_map_kernel(float * __restrict__ out,
  * @param out       Output: width * height * 4 floats.
  * @param width     Image width (u direction, maps to azimuthal angle phi).
  * @param height    Image height (v direction, maps to r_isco..r_out).
- * @param r_isco    Prograde ISCO [r_g].
+ * @param r_isco    ISCO of the +z disk [r_g] (bridge::diskIscoOverM).
  * @param r_out     Outer disk edge [r_g].
  * @param inc_rad   Observer inclination [rad].
  */
@@ -986,12 +977,8 @@ int bhb_cuda_render_lensing_map(float a_star, float obs_r, float inc_rad,
     /* Kerr horizon and ISCO in r_g = M units */
     float const r_horizon = 1.0f + sqrtf(fmaxf(0.0f, 1.0f - a_star * a_star));
 
-    /* Prograde ISCO (Bardeen 1972 formula) */
-    float const z1 = 1.0f + powf(1.0f - a_star * a_star, 1.0f / 3.0f)
-                              * (powf(1.0f + a_star, 1.0f / 3.0f)
-                                 + powf(1.0f - a_star, 1.0f / 3.0f));
-    float const z2     = sqrtf(3.0f * a_star * a_star + z1 * z1);
-    float const r_isco = 3.0f + z2 - sqrtf((3.0f - z1) * (3.0f + z1 + 2.0f * z2));
+    /* ISCO of the +z disk; negative spin counter-rotates (bridge_disk_isco.h) */
+    float const r_isco = bridge::diskIscoOverM(a_star);
 
     dim3 const block(16, 16);
     dim3 const grid((width + 15) / 16, (height + 15) / 16);
@@ -1013,7 +1000,7 @@ int bhb_cuda_render_lensing_map(float a_star, float obs_r, float inc_rad,
 /**
  * @brief GPU disk texture renderer.
  *
- * @param a_star    Dimensionless spin (used to compute ISCO).
+ * @param a_star    Signed dimensionless spin (used to compute the disk ISCO).
  * @param r_out_rg  Outer disk radius [r_g].
  * @param inc_rad   Observer inclination [rad].
  * @param width     Image width.
@@ -1029,12 +1016,8 @@ int bhb_cuda_render_disk_texture(float a_star, float r_out_rg, float inc_rad,
     float *d_out = nullptr;
     if (cudaMalloc(&d_out, fb_bytes) != cudaSuccess) { return -1; }
 
-    /* Prograde ISCO in r_g units */
-    float const z1 = 1.0f + powf(1.0f - a_star * a_star, 1.0f / 3.0f)
-                              * (powf(1.0f + a_star, 1.0f / 3.0f)
-                                 + powf(1.0f - a_star, 1.0f / 3.0f));
-    float const z2     = sqrtf(3.0f * a_star * a_star + z1 * z1);
-    float const r_isco = 3.0f + z2 - sqrtf((3.0f - z1) * (3.0f + z1 + 2.0f * z2));
+    /* ISCO of the +z disk in r_g units; negative spin counter-rotates */
+    float const r_isco = bridge::diskIscoOverM(a_star);
 
     dim3 const block(16, 16);
     dim3 const grid((width + 15) / 16, (height + 15) / 16);

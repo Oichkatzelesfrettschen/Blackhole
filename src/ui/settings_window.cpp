@@ -447,13 +447,9 @@ void renderPhysicsSettings(RenderState &rs) {
   const double referenceRs = physics::schwarzschildRadius(referenceMass);
   const double referenceRg = physics::G * referenceMass / physics::C2;
   const double referenceA = static_cast<double>(rs.physicsCore.kerrSpin) * referenceRg;
-  const bool progradeSpin = rs.physicsCore.kerrSpin >= 0.0f;
-  const double iscoRatio =
-      physics::kerrIscoRadius(referenceMass, referenceA, progradeSpin) / referenceRs;
-  const double photonRatio =
-      (progradeSpin ? physics::kerrPhotonOrbitPrograde
-                    : physics::kerrPhotonOrbitRetrograde)(referenceMass, referenceA) /
-      referenceRs;
+  // The disk orbits along +z; a negative kerrSpin makes that orbit counter-rotate.
+  const double iscoRatio = physics::kerrIscoRadius(referenceMass, referenceA, true) / referenceRs;
+  const double photonRatio = physics::kerrPhotonOrbitPrograde(referenceMass, referenceA) / referenceRs;
 
   float const schwarzschildRadius = 2.0f * rs.physicsCore.blackHoleMass;
   float const photonSphereRadius = static_cast<float>(photonRatio) * schwarzschildRadius;

@@ -1,36 +1,25 @@
 /**
  * kerr_de_sitter.glsl
  *
- * AUTO-GENERATED from src/physics/verified/kerr_de_sitter.hpp
- * Pipeline: Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60 (Phase 9.0.1)
+ * GLSL twin of src/physics/verified/kerr_de_sitter.hpp (Carter 1968 form).
+ * The C++ header is the reference; tests/kerr_de_sitter_test.cpp checks it
+ * against mpmath horizons and R_mu_nu = Lambda g_mu_nu. This file mirrors it
+ * in float32, so horizons for Lambda below ~1e-6 M^-2 lose the cosmological
+ * root to rounding; no shader entry point includes it.
  *
- * All functions are derived from Rocq-proven theories.
- * Mathematical correctness is preserved across transpilation.
- * Float32 precision loss is bounded to 1e-6 relative error.
- *
- * OPTIMIZATION NOTES:
- * - Target architecture: Lovelace (SM_89) consumer GPUs
- * - Register pressure: <24 regs/thread (RTX 4090/4080/5000 Ada)
- * - Memory strategy: L2 cache blocking (5 TB/s) vs shared memory (100 KB)
- * - Shader execution model: One thread per ray, 128 ray blocks
- *
- * VERIFICATION STATUS:
- * - All kernels extracted from verified Rocq proofs
- * - GPU/CPU parity validated to 1e-6 relative tolerance
- * - Suitable for production ray-tracing at 1080p 60fps
+ *   Sigma       = r^2 + a^2 cos^2 theta
+ *   Delta_r     = (r^2 + a^2)(1 - Lambda r^2 / 3) - 2 M r
+ *   Delta_theta = 1 + Lambda a^2 cos^2 theta / 3
+ *   Xi          = 1 + Lambda a^2 / 3
  */
 
 #ifndef SHADER_VERIFIED_KERR_DE_SITTER_HPP
 #define SHADER_VERIFIED_KERR_DE_SITTER_HPP
 
-// Function definitions (verified from Rocq proofs)
-
-// Functions are ordered by dependency (called functions first)
-
 /**
- * Verified Kerr-de Sitter metric - rotating black hole with cosmological constant
+ * Sigma = r^2 + a^2 cos^2(theta)
  *
- * Rocq Derivation: Derived from Rocq:...
+ * Rocq Derivation: Derived from Rocq:Definition kds_Sigma (r theta a : R) : R :=...
  */
 float kds_Sigma(float r, float theta, float a) {
     float cos_theta = cos(theta);
@@ -38,45 +27,62 @@ float kds_Sigma(float r, float theta, float a) {
 }
 
 /**
- * Delta = r² - 2Mr + a² - Λr²/3
+ * Radial function Delta_r = (r^2 + a^2)(1 - Lambda r^2 / 3) - 2 M r
  *
- * Rocq Derivation: Derived from Rocq:...
+ * Rocq Derivation: Derived from Rocq:Definition kds_Delta (r M a Lambda : R) : R :=...
  */
 float kds_Delta(float r, float M, float a, float Lambda) {
-    return r * r - 2.0 * M * r + a * a - Lambda * r * r / 3.0;
+    return (r * r + a * a) * (1.0 - Lambda * r * r / 3.0) - 2.0 * M * r;
 }
 
 /**
- * A = (r² + a²)² - a²·Δ·sin²(θ)
+ * Polar function Delta_theta = 1 + Lambda a^2 cos^2(theta) / 3
  *
- * Rocq Derivation: Derived from Rocq:...
+ * Rocq Derivation: Derived from Rocq:Definition kds_Delta_theta (theta a Lambda : R) : R :=...
+ */
+float kds_Delta_theta(float theta, float a, float Lambda) {
+    float cos_theta = cos(theta);
+    return 1.0 + Lambda * a * a * cos_theta * cos_theta / 3.0;
+}
+
+/**
+ * Xi = 1 + Lambda a^2 / 3
  *
- * Depends on: kds_Delta
+ * Rocq Derivation: Derived from Rocq:Definition kds_Xi (a Lambda : R) : R :=...
+ */
+float kds_Xi(float a, float Lambda) {
+    return 1.0 + Lambda * a * a / 3.0;
+}
+
+/**
+ * A = Delta_theta (r^2 + a^2)^2 - Delta_r a^2 sin^2(theta)
+ *
+ * Rocq Derivation: Derived from Rocq:Definition kds_A (r theta M a Lambda : R) : R :=...
+ *
+ * Depends on: kds_Delta, kds_Delta_theta
  */
 float kds_A(float r, float theta, float M, float a, float Lambda) {
     float r2_plus_a2 = r * r + a * a;
     float sin_theta = sin(theta);
-    float Delta = kds_Delta(r, M, a, Lambda);
-    return r2_plus_a2 * r2_plus_a2 - a * a * Delta * sin_theta * sin_theta;
+    return kds_Delta_theta(theta, a, Lambda) * r2_plus_a2 * r2_plus_a2
+        - kds_Delta(r, M, a, Lambda) * a * a * sin_theta * sin_theta;
 }
 
 /**
- * g_tt = -(1 - 2Mr/Σ + Λr²sin²θ/3)
+ * g_tt = (-Delta_r + Delta_theta a^2 sin^2 theta) / (Xi^2 Sigma)
  *
- * Rocq Derivation: Derived from Rocq:...
- *
- * Depends on: kds_Sigma
+ * Depends on: kds_Delta, kds_Delta_theta, kds_Sigma, kds_Xi
  */
 float kds_g_tt(float r, float theta, float M, float a, float Lambda) {
-    float Sigma = kds_Sigma(r, theta, a);
     float sin_theta = sin(theta);
-    return -(1.0 - 2.0 * M * r / Sigma + Lambda * r * r * sin_theta * sin_theta / 3.0);
+    float Xi = kds_Xi(a, Lambda);
+    return (-kds_Delta(r, M, a, Lambda)
+            + kds_Delta_theta(theta, a, Lambda) * a * a * sin_theta * sin_theta)
+        / (Xi * Xi * kds_Sigma(r, theta, a));
 }
 
 /**
- * g_rr = Σ / Δ
- *
- * Rocq Derivation: Derived from Rocq:...
+ * g_rr = Sigma / Delta_r
  *
  * Depends on: kds_Delta, kds_Sigma
  */
@@ -85,125 +91,265 @@ float kds_g_rr(float r, float theta, float M, float a, float Lambda) {
 }
 
 /**
- * g_θθ = Σ
+ * g_thth = Sigma / Delta_theta
  *
- * Rocq Derivation: Derived from Rocq:...
- *
- * Depends on: kds_Sigma
+ * Depends on: kds_Delta_theta, kds_Sigma
  */
-float kds_g_thth(float r, float theta, float a) {
-    return kds_Sigma(r, theta, a);
+float kds_g_thth(float r, float theta, float a, float Lambda) {
+    return kds_Sigma(r, theta, a) / kds_Delta_theta(theta, a, Lambda);
 }
 
 /**
- * g_φφ = (r² + a² + 2Mra²sin²θ/Σ - Λr⁴sin²θ/3) sin²θ
+ * g_phph = sin^2 theta A / (Xi^2 Sigma)
  *
- * Rocq Derivation: Derived from Rocq:...
- *
- * Depends on: kds_Sigma
+ * Depends on: kds_A, kds_Sigma, kds_Xi
  */
 float kds_g_phph(float r, float theta, float M, float a, float Lambda) {
-    float Sigma = kds_Sigma(r, theta, a);
     float sin_theta = sin(theta);
-    float sin2 = sin_theta * sin_theta;
-    return (r * r + a * a + 2.0 * M * r * a * a * sin2 / Sigma
-    - Lambda * r * r * r * r * sin2 / 3.0) * sin2;
+    float Xi = kds_Xi(a, Lambda);
+    return sin_theta * sin_theta * kds_A(r, theta, M, a, Lambda) / (Xi * Xi * kds_Sigma(r, theta, a));
 }
 
 /**
- * g_tφ = -2Mra·sin²θ / Σ
+ * g_tph = a sin^2 theta (Delta_r - Delta_theta (r^2 + a^2)) / (Xi^2 Sigma)
  *
- * Rocq Derivation: Derived from Rocq:...
- *
- * Depends on: kds_Sigma
+ * Depends on: kds_Delta, kds_Delta_theta, kds_Sigma, kds_Xi
  */
-float kds_g_tph(float r, float theta, float M, float a) {
-    float Sigma = kds_Sigma(r, theta, a);
+float kds_g_tph(float r, float theta, float M, float a, float Lambda) {
     float sin_theta = sin(theta);
-    return -2.0 * M * r * a * sin_theta * sin_theta / Sigma;
+    float Xi = kds_Xi(a, Lambda);
+    return a * sin_theta * sin_theta
+        * (kds_Delta(r, M, a, Lambda) - kds_Delta_theta(theta, a, Lambda) * (r * r + a * a))
+        / (Xi * Xi * kds_Sigma(r, theta, a));
 }
 
 /**
- * Inner (Cauchy) horizon (approximate for small Λ)
+ * True when Delta_r has a local minimum and maximum at r > 0 (finite checks only).
+ */
+bool kds_has_stationary_points(float M, float a, float Lambda) {
+    float b = 1.0 - Lambda * a * a / 3.0;
+    if (!(Lambda > 0.0) || !(M > 0.0) || !(b > 0.0)) {
+        return false;
+    }
+    float p = -3.0 * b / (2.0 * Lambda);
+    float q = 3.0 * M / (2.0 * Lambda);
+    return (3.0 * q / (2.0 * p)) * sqrt(-3.0 / p) > -1.0;
+}
+
+/**
+ * Positive stationary point of Delta_r (upper: local maximum r_b; else local
+ * minimum r_a). r_b and the negative root r_n come from the trigonometric
+ * roots of the depressed cubic; r_a = -q / (r_b r_n) from the product of the
+ * roots, which avoids the cancellation in the trigonometric r_a at small
+ * Lambda. NaN when Delta_r has no local maximum at r > 0.
+ */
+float kds_delta_stationary_radius(float M, float a, float Lambda, bool upper) {
+    float zero = 0.0;
+    if (!kds_has_stationary_points(M, a, Lambda)) {
+        return zero / zero;
+    }
+    float b = 1.0 - Lambda * a * a / 3.0;
+    float p = -3.0 * b / (2.0 * Lambda);
+    float q = 3.0 * M / (2.0 * Lambda);
+    float cos_arg = (3.0 * q / (2.0 * p)) * sqrt(-3.0 / p);
+    float phi = acos(cos_arg) / 3.0;
+    float amplitude = 2.0 * sqrt(-p / 3.0);
+    float r_local_max = amplitude * cos(phi);
+    if (upper) {
+        return r_local_max;
+    }
+    float r_negative = amplitude * cos(phi + 2.0 * 3.14159265358979 / 3.0);
+    return -q / (r_local_max * r_negative);
+}
+
+/**
+ * Bisect a sign change of Delta_r - offset on [lo, hi].
  *
- * Rocq Derivation: Derived from Rocq:...
+ * Depends on: kds_Delta
+ */
+float kds_bisect_delta(float lo, float hi, float M, float a, float Lambda, float offset) {
+    bool lo_positive = kds_Delta(lo, M, a, Lambda) - offset > 0.0;
+    for (int iteration = 0; iteration < 64; ++iteration) {
+        float mid = 0.5 * (lo + hi);
+        if (mid <= lo || mid >= hi) {
+            break;
+        }
+        if ((kds_Delta(mid, M, a, Lambda) - offset > 0.0) == lo_positive) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return 0.5 * (lo + hi);
+}
+
+/**
+ * Delta_r at its local minimum r_a; a value within 4 float epsilon of the
+ * magnitude of its terms returns as exactly 0 (extremality, r_- = r_+ = r_a).
+ *
+ * Depends on: kds_delta_stationary_radius, kds_Delta
+ */
+float kds_delta_local_minimum(float M, float a, float Lambda) {
+    float r_min = kds_delta_stationary_radius(M, a, Lambda, false);
+    float delta = kds_Delta(r_min, M, a, Lambda);
+    float r2_plus_a2 = r_min * r_min + a * a;
+    float term_scale = r2_plus_a2 * (1.0 + Lambda * r_min * r_min / 3.0) + 2.0 * M * r_min;
+    float rounding_bound = 4.0 * 1.1920929e-7 * term_scale;
+    return (abs(delta) <= rounding_bound) ? 0.0 : delta;
+}
+
+/**
+ * True when the parameters give a black hole with an event horizon; reads only
+ * finite values (Kerr condition at Lambda = 0).
+ *
+ * Depends on: kds_has_stationary_points, kds_delta_local_minimum,
+ * kds_delta_stationary_radius, kds_Delta
+ */
+bool kds_has_horizons(float M, float a, float Lambda) {
+    if (!(M > 0.0)) {
+        return false;
+    }
+    if (Lambda == 0.0) {
+        return M * M - a * a >= 0.0;
+    }
+    if (!kds_has_stationary_points(M, a, Lambda)) {
+        return false;
+    }
+    float r_max = kds_delta_stationary_radius(M, a, Lambda, true);
+    return kds_delta_local_minimum(M, a, Lambda) <= 0.0 && kds_Delta(r_max, M, a, Lambda) > 0.0;
+}
+
+/**
+ * Inner (Cauchy) horizon: smallest positive root of Delta_r; 0 at a = 0.
+ *
+ * Depends on: kds_bisect_delta, kds_delta_local_minimum, kds_delta_stationary_radius
  */
 float kds_inner_horizon(float M, float a, float Lambda) {
-    float delta = sqrt(M * M - a * a);
-    float r_kerr = M - delta;
-    return r_kerr - Lambda * r_kerr * r_kerr * r_kerr / 3.0;
+    float zero = 0.0;
+    if (Lambda == 0.0) {
+        float disc = M * M - a * a;
+        return (M > 0.0 && disc >= 0.0) ? M - sqrt(disc) : zero / zero;
+    }
+    if (!kds_has_horizons(M, a, Lambda)) {
+        return zero / zero;
+    }
+    if (a == 0.0) {
+        return 0.0;
+    }
+    float r_min = kds_delta_stationary_radius(M, a, Lambda, false);
+    if (kds_delta_local_minimum(M, a, Lambda) == 0.0) {
+        return r_min;
+    }
+    return kds_bisect_delta(0.0, r_min, M, a, Lambda, 0.0);
 }
 
 /**
- * Event horizon (approximate for small Λ)
+ * Event horizon: root of Delta_r between its local minimum and maximum.
  *
- * Rocq Derivation: Derived from Rocq:...
+ * Depends on: kds_bisect_delta, kds_delta_local_minimum, kds_delta_stationary_radius,
+ * kds_Delta
  */
 float kds_event_horizon(float M, float a, float Lambda) {
-    float delta = sqrt(M * M - a * a);
-    float r_kerr = M + delta;
-    return r_kerr + Lambda * r_kerr * r_kerr * r_kerr / 3.0;
+    float zero = 0.0;
+    if (Lambda == 0.0) {
+        float disc = M * M - a * a;
+        return (M > 0.0 && disc >= 0.0) ? M + sqrt(disc) : zero / zero;
+    }
+    if (!kds_has_horizons(M, a, Lambda)) {
+        return zero / zero;
+    }
+    float r_min = kds_delta_stationary_radius(M, a, Lambda, false);
+    float r_max = kds_delta_stationary_radius(M, a, Lambda, true);
+    if (kds_delta_local_minimum(M, a, Lambda) == 0.0) {
+        return r_min;
+    }
+    return kds_bisect_delta(r_min, r_max, M, a, Lambda, 0.0);
 }
 
 /**
- * Cosmological horizon (approximate)
+ * Cosmological horizon: largest root of Delta_r; the finite sentinel FLT_MAX
+ * (3.4028235e38) at Lambda = 0, where no cosmological horizon exists.
  *
- * Rocq Derivation: Derived from Rocq:...
+ * Depends on: kds_bisect_delta, kds_delta_local_minimum, kds_delta_stationary_radius,
+ * kds_Delta
  */
-float kds_cosmological_horizon(float Lambda) {
-    return sqrt(3.0 / Lambda);
+float kds_cosmological_horizon(float M, float a, float Lambda) {
+    float zero = 0.0;
+    if (Lambda == 0.0) {
+        return 3.4028235e38;
+    }
+    if (!kds_has_horizons(M, a, Lambda)) {
+        return zero / zero;
+    }
+    float r_max = kds_delta_stationary_radius(M, a, Lambda, true);
+    float r_high = max(r_max, sqrt(3.0 / Lambda));
+    for (int doubling = 0; doubling < 64 && !(kds_Delta(r_high, M, a, Lambda) < 0.0); ++doubling) {
+        r_high *= 2.0;
+    }
+    return kds_bisect_delta(r_max, r_high, M, a, Lambda, 0.0);
 }
 
 /**
- * Ergosphere outer boundary
+ * Black-hole ergosurface: root of g_tt = 0 between r_+ and the Delta_r maximum.
  *
- * Rocq Derivation: Derived from Rocq:...
+ * Depends on: kds_bisect_delta, kds_delta_stationary_radius, kds_Delta,
+ * kds_Delta_theta, kds_event_horizon
  */
 float kds_ergosphere_radius(float theta, float M, float a, float Lambda) {
-    (void)Lambda;  // Unused in this approximation
-    float cos_theta = cos(theta);
-    return M + sqrt(M * M - a * a * cos_theta * cos_theta);
+    float zero = 0.0;
+    float sin_theta = sin(theta);
+    float target = kds_Delta_theta(theta, a, Lambda) * a * a * sin_theta * sin_theta;
+    if (!kds_has_horizons(M, a, Lambda)) {
+        return zero / zero;
+    }
+    float r_plus = kds_event_horizon(M, a, Lambda);
+    if (target == 0.0) {
+        return r_plus;
+    }
+    float r_max = (Lambda == 0.0) ? 4.0 * M : kds_delta_stationary_radius(M, a, Lambda, true);
+    if (!(kds_Delta(r_max, M, a, Lambda) > target)) {
+        return zero / zero;
+    }
+    return kds_bisect_delta(r_plus, r_max, M, a, Lambda, target);
 }
 
 /**
- * Frame dragging angular velocity: ω = -g_tφ / g_φφ
- *
- * Rocq Derivation: Derived from Rocq:...
+ * Frame dragging angular velocity: omega = -g_tph / g_phph
  *
  * Depends on: kds_g_phph, kds_g_tph
  */
 float kds_frame_dragging_omega(float r, float theta, float M, float a, float Lambda) {
-    float g_tph = kds_g_tph(r, theta, M, a);
-    float g_phph = kds_g_phph(r, theta, M, a, Lambda);
-    return -g_tph / g_phph;
+    return -kds_g_tph(r, theta, M, a, Lambda) / kds_g_phph(r, theta, M, a, Lambda);
 }
 
 /**
- * Check if parameters represent a physical Kerr-de Sitter black hole
+ * M > 0, Lambda > 0, and ordered horizons r_- <= r_+ < r_c.
  *
- * Rocq Derivation: Derived from Rocq:...
+ * Depends on: kds_cosmological_horizon, kds_event_horizon, kds_inner_horizon
  */
 bool is_physical_kds_black_hole(float M, float a, float Lambda) {
-    return M > 0.0 && Lambda > 0.0 && M * M >= a * a;
+    if (!(Lambda > 0.0) || !kds_has_horizons(M, a, Lambda)) {
+        return false;
+    }
+    float r_minus = kds_inner_horizon(M, a, Lambda);
+    float r_plus = kds_event_horizon(M, a, Lambda);
+    float r_cosmo = kds_cosmological_horizon(M, a, Lambda);
+    return r_minus <= r_plus && r_plus < r_cosmo;
 }
 
 /**
- * Check if a position is between event and cosmological horizons
- *
- * Rocq Derivation: Derived from Rocq:...
+ * Position between the event and cosmological horizons.
  *
  * Depends on: kds_cosmological_horizon, kds_event_horizon
  */
 bool is_exterior_region(float r, float M, float a, float Lambda) {
-    float r_plus = kds_event_horizon(M, a, Lambda);
-    float r_cosmo = kds_cosmological_horizon(Lambda);
-    return r > r_plus && r < r_cosmo;
+    return kds_has_horizons(M, a, Lambda) && r > kds_event_horizon(M, a, Lambda)
+        && r < kds_cosmological_horizon(M, a, Lambda);
 }
 
 /**
- * Check if a position is in the ergosphere
- *
- * Rocq Derivation: Derived from Rocq:...
+ * d/dt spacelike (g_tt > 0): black-hole ergoregion or beyond the cosmological
+ * ergosurface.
  *
  * Depends on: kds_g_tt
  */
@@ -212,49 +358,41 @@ bool is_in_ergosphere(float r, float theta, float M, float a, float Lambda) {
 }
 
 /**
- * Verify that horizons are properly ordered: r₋ < r₊ < r_c
+ * Horizon ordering r_- <= r_+ < r_c.
  *
- * Depends on: is_physical_kds_black_hole, kds_cosmological_horizon, kds_event_horizon, kds_inner_horizon
+ * Depends on: is_physical_kds_black_hole
  */
 bool verify_horizon_ordering(float M, float a, float Lambda) {
-    if (!is_physical_kds_black_hole(M, a, Lambda)) {
-    return false;
-    }
-    float r_minus = kds_inner_horizon(M, a, Lambda);
-    float r_plus = kds_event_horizon(M, a, Lambda);
-    float r_cosmo = kds_cosmological_horizon(Lambda);
-    return r_minus < r_plus && r_plus < r_cosmo;
+    return is_physical_kds_black_hole(M, a, Lambda);
 }
 
 /**
- * Check if parameters are in Kerr limit (Lambda ≈ 0)
+ * Kerr limit (Lambda ~ 0)
  */
 bool is_kerr_limit(float Lambda, float tolerance) {
     return abs(Lambda) < tolerance;
 }
 
 /**
- * Check if parameters are in de Sitter limit (M ≈ 0, a ≈ 0)
+ * de Sitter limit (M ~ 0, a ~ 0)
  */
 bool is_de_sitter_limit(float M, float a, float tolerance) {
     return abs(M) < tolerance && abs(a) < tolerance;
 }
 
 /**
- * Convert cosmological constant from SI units (m⁻²) to geometric units
+ * Cosmological constant in m^-2; the identity under c = G = 1.
  */
 float lambda_si_to_geometric(float Lambda_SI) {
-    // c²/G ≈ 1.346e27 m/kg in SI units
-    // In geometric units where c = G = 1, this is just Lambda_SI
-    // but we include this function for dimensional clarity
     return Lambda_SI;
 }
 
 /**
- * Observed cosmological constant in geometric units
+ * Observed cosmological constant, 1.1e-52 m^-2 (Planck 2018). The value lies
+ * below the float32 normal range; shader callers work in units of M.
  */
 float observed_lambda() {
-    return 1.1e-52;  // m⁻² in geometric units
+    return 1.1e-52;
 }
 
 #endif // SHADER_VERIFIED_KERR_DE_SITTER_HPP
