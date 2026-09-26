@@ -288,7 +288,11 @@ SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth) {
   while (pos < label.size()) {
     const std::size_t next = std::min(label.find(' ', pos), label.size());
     const std::string word(label.substr(pos, next - pos));
-    const std::string candidate = current.empty() ? word : current + " " + word;
+    std::string candidate = current;
+    if (!candidate.empty()) {
+      candidate += ' ';
+    }
+    candidate += word;
     if (!current.empty() && HudOverlay::measureText(candidate, 1.0f).x > unitBudget) {
       wrapped.push_back(current);
       current = word;
