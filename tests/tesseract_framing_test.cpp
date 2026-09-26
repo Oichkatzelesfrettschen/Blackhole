@@ -12,9 +12,11 @@
  * where the black hole sits on screen.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -32,6 +34,8 @@
 
 #include "input.h"
 #include "render/camera_math.h"
+#include "render/tesseract/so4.h"
+#include "render/tesseract/tesseract_geometry.h"
 #include "render/tesseract/tesseract_renderer.h"
 
 namespace {
@@ -40,6 +44,7 @@ using blackhole::buildCameraBasis;
 using blackhole::TESSERACT_MAX_FOV_DEG;
 using blackhole::TESSERACT_MIN_FOV_DEG;
 using blackhole::TESSERACT_MIN_VIEW_DISTANCE;
+using blackhole::TESSERACT_NEAR_PLANE;
 using blackhole::TESSERACT_RECORD_REFERENCE_DISTANCE;
 using blackhole::TesseractFraming;
 using blackhole::tesseractFraming;
@@ -161,6 +166,68 @@ TEST(TesseractFraming, FrameOffsetKeepsTheBlackHoleViewingDirection) {
   EXPECT_NEAR(glm::length(eye), UI_DISTANCE, 1e-3f);
   // The orientation stays the black-hole camera's aimed basis.
   EXPECT_NEAR(glm::dot(-glm::vec3(glm::row(view, 2)), cam.basis[2]), 1.0f, 1e-5f);
+}
+
+// Unit quaternion from a deterministic sequence of angles.
+blackhole::tesseract::Quat<double> sampleQuat(int i, double phase) {
+  const double a = (0.37 * i) + phase;
+  const double b = (0.91 * i) + (2.0 * phase);
+  const double c = (1.73 * i) + (3.0 * phase);
+  const blackhole::tesseract::Quat<double> q{.w = std::cos(a) * std::cos(b),
+                                             .x = std::sin(a) * std::cos(c),
+                                             .y = std::cos(a) * std::sin(b),
+                                             .z = std::sin(a) * std::sin(c)};
+  const double n = std::sqrt((q.w * q.w) + (q.x * q.x) + (q.y * q.y) + (q.z * q.z));
+  return {.w = q.w / n, .x = q.x / n, .y = q.y / n, .z = q.z / n};
+}
+
+// Largest clip-space z / w over every scene endpoint in front of the eye,
+// under many SO(4) rotations, at the slider extremes that put geometry
+// farthest from the eye: scene scale 3, view distance 3, eye w distance 2.1.
+constexpr float EXTREME_SCENE_SCALE = 3.0f;
+constexpr float EXTREME_EYE_W = 2.1f;
+
+float deepestClipDepth(const glm::mat4 &viewProjection, bool stereographic) {
+  const std::vector<blackhole::tesseract::SegmentInstance> segments =
+      blackhole::tesseract::buildSceneSegments({});
+  float deepest = -1.0f;
+  for (int i = 0; i < 64; ++i) {
+    const auto rotation = blackhole::tesseract::so4FromPair(sampleQuat(i, 0.1), sampleQuat(i, 0.7));
+    for (const auto &seg : segments) {
+      for (const glm::vec4 &p : {seg.a, seg.b}) {
+        const blackhole::tesseract::Vec4<double> r = blackhole::tesseract::applyMatrix(
+            rotation,
+            blackhole::tesseract::Vec4<double>{static_cast<double>(p.x), static_cast<double>(p.y),
+                                               static_cast<double>(p.z), static_cast<double>(p.w)});
+        const glm::vec4 rotated(static_cast<float>(r[0]), static_cast<float>(r[1]),
+                                static_cast<float>(r[2]), static_cast<float>(r[3]));
+        const glm::vec3 projected =
+            stereographic ? blackhole::tesseract::projectStereographic(rotated).position
+                          : blackhole::tesseract::projectPerspective(rotated, EXTREME_EYE_W);
+        const glm::vec4 clip = viewProjection * glm::vec4(projected * EXTREME_SCENE_SCALE, 1.0f);
+        if (clip.w > TESSERACT_NEAR_PLANE) {
+          deepest = std::max(deepest, clip.z / clip.w);
+        }
+      }
+    }
+  }
+  return deepest;
+}
+
+TEST(TesseractFraming, FarPlaneKeepsEveryProjectedPoint) {
+  const OffsetCamera cam = offsetCamera(0.0f, 0.0f);
+  const glm::mat4 vp = blackhole::tesseractViewProjection(
+      cam.basis, cam.focusDirection, TESSERACT_MIN_VIEW_DISTANCE, OFFSET_FOV, OFFSET_ASPECT);
+  // A far plane at four view distances (12) clipped both modes here.
+  const glm::mat4 finiteFar =
+      glm::perspective(glm::radians(OFFSET_FOV), OFFSET_ASPECT, TESSERACT_NEAR_PLANE,
+                       TESSERACT_MIN_VIEW_DISTANCE * 4.0f) *
+      blackhole::tesseractView(cam.basis, cam.focusDirection, TESSERACT_MIN_VIEW_DISTANCE);
+  for (const bool stereographic : {false, true}) {
+    EXPECT_LT(deepestClipDepth(vp, stereographic), 1.0f) << "stereographic " << stereographic;
+    EXPECT_GT(deepestClipDepth(finiteFar, stereographic), 1.0f)
+        << "stereographic " << stereographic;
+  }
 }
 
 } // namespace

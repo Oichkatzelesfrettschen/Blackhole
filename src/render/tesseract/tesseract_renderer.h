@@ -151,6 +151,8 @@ private:
   float builtTimeSpan_ = -1.0f;
 };
 
+/// Near clip plane of the tesseract view, in world units from the eye.
+inline constexpr float TESSERACT_NEAR_PLANE = 0.05f;
 /// Closest tesseract view distance; the View distance slider shares it.
 inline constexpr float TESSERACT_MIN_VIEW_DISTANCE = 3.0f;
 /// Black-hole camera distance at which a recorded tesseract frame uses the UI
@@ -208,6 +210,14 @@ TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
  * screen position the black hole takes at the same field of view. Without an
  * offset the forward axis is the focus direction and the eye looks at the
  * origin.
+ *
+ * The projection has its near plane at TESSERACT_NEAR_PLANE and an infinite
+ * far plane. The pass draws without a depth test, so a far plane would only
+ * clip, and the projected scene reaches far: a rotated 4-cube corner has
+ * norm 2, so perspective along w reaches |p| of about 6.5 * sceneScale at
+ * the 2.1 eye distance, and the stereographic image reaches
+ * sqrt((2 - STEREOGRAPHIC_MIN_DENOM) / STEREOGRAPHIC_MIN_DENOM), about
+ * 9.95 * sceneScale, both beyond any fixed multiple of the view distance.
  */
 glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,
                                   float viewDistance, float fovDeg, float aspect);

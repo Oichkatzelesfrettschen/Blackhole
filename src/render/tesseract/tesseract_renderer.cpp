@@ -347,7 +347,7 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 
                                   float viewDistance, float fovDeg, float aspect) {
   const glm::mat4 view = tesseractView(cameraBasis, focusDirection, viewDistance);
   const glm::mat4 projection =
-      glm::perspective(glm::radians(fovDeg), aspect, 0.05f, viewDistance * 4.0f);
+      glm::infinitePerspective(glm::radians(fovDeg), aspect, TESSERACT_NEAR_PLANE);
   return projection * view;
 }
 
