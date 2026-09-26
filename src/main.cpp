@@ -498,12 +498,21 @@ void updateFrameTiming(RenderState &rs, float cpuFrameMs) {
   rs.timing.timingHistory.push(cpuFrameMs, rs.timing.gpuTimers);
   TRACY_PLOT("cpu_frame_ms", cpuFrameMs);
   if (rs.timing.gpuTimers.initialized) {
-    TRACY_PLOT("gpu_fragment_ms", rs.timing.gpuTimers.blackholeFragment.lastMs);
-    TRACY_PLOT("gpu_compute_ms", rs.timing.gpuTimers.blackholeCompute.lastMs);
-    TRACY_PLOT("gpu_bloom_ms", rs.timing.gpuTimers.bloom.lastMs);
-    TRACY_PLOT("gpu_tonemap_ms", rs.timing.gpuTimers.tonemap.lastMs);
-    TRACY_PLOT("gpu_depth_ms", rs.timing.gpuTimers.depth.lastMs);
-    TRACY_PLOT("gpu_grmhd_slice_ms", rs.timing.gpuTimers.grmhdSlice.lastMs);
+    // A stage the sampled frame skipped plots nothing rather than its last value.
+    // TRACY_PLOT expands to nothing without Tracy, leaving name unread.
+    const auto plot = []([[maybe_unused]] const char *name, const blackhole::GpuTimer &timer) {
+      if (timer.hasSample) {
+        TRACY_PLOT(name, timer.lastMs);
+      }
+    };
+    const blackhole::GpuTimerSet &timers = rs.timing.gpuTimers;
+    plot("gpu_fragment_ms", timers.blackholeFragment);
+    plot("gpu_compute_ms", timers.blackholeCompute);
+    plot("gpu_bloom_ms", timers.bloom);
+    plot("gpu_tonemap_ms", timers.tonemap);
+    plot("gpu_depth_ms", timers.depth);
+    plot("gpu_grmhd_slice_ms", timers.grmhdSlice);
+    plot("gpu_tesseract_ms", timers.tesseract);
   }
 }
 
@@ -1179,7 +1188,13 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
       outputClock =
           static_cast<double>(rs.recording.recordFrameIndex) / static_cast<double>(K_CINEMATIC_FPS);
     }
+    if (rs.timing.gpuTimers.initialized) {
+      rs.timing.gpuTimers.tesseract.begin();
+    }
     renderTesseractScene(rs, frameCamera.basis, deltaTime, outputClock);
+    if (rs.timing.gpuTimers.initialized) {
+      rs.timing.gpuTimers.tesseract.end();
+    }
     return {};
   }
   const auto result =

@@ -40,6 +40,7 @@
 namespace ui {
 
 using blackhole::BackgroundAsset;
+using blackhole::GpuTimer;
 using blackhole::GpuTimerSet;
 using blackhole::K_BACKGROUND_LAYERS;
 using blackhole::RenderState;
@@ -897,12 +898,21 @@ void renderPerformancePanel(RenderState &rs, float cpuFrameMs) {
 
     if (timers.initialized) {
       ImGui::Separator();
-      ImGui::Text("GPU Fragment:  %.2f ms", timers.blackholeFragment.lastMs);
-      ImGui::Text("GPU Compute:   %.2f ms", timers.blackholeCompute.lastMs);
-      ImGui::Text("GPU Bloom:     %.2f ms", timers.bloom.lastMs);
-      ImGui::Text("GPU Tonemap:   %.2f ms", timers.tonemap.lastMs);
-      ImGui::Text("GPU Depth:     %.2f ms", timers.depth.lastMs);
-      ImGui::Text("GPU GRMHD:     %.2f ms", timers.grmhdSlice.lastMs);
+      // A stage the sampled frame skipped reads "not run", never a stale value.
+      const auto stageRow = [](const char *label, const GpuTimer &timer) {
+        if (timer.hasSample) {
+          ImGui::Text("%-14s %.2f ms", label, timer.lastMs);
+        } else {
+          ImGui::TextDisabled("%-14s not run", label);
+        }
+      };
+      stageRow("GPU Fragment:", timers.blackholeFragment);
+      stageRow("GPU Compute:", timers.blackholeCompute);
+      stageRow("GPU Bloom:", timers.bloom);
+      stageRow("GPU Tonemap:", timers.tonemap);
+      stageRow("GPU Depth:", timers.depth);
+      stageRow("GPU GRMHD:", timers.grmhdSlice);
+      stageRow("GPU Tesseract:", timers.tesseract);
     } else {
       ImGui::TextDisabled("GPU timings inactive");
     }
@@ -918,6 +928,8 @@ void renderPerformancePanel(RenderState &rs, float cpuFrameMs) {
       ImPlot::PlotLine("GPU Depth", history.gpuDepthMs.data(), history.count, 1.0, 0.0,
                        ImPlotLineFlags_SkipNaN, history.offset);
       ImPlot::PlotLine("GPU GRMHD", history.gpuGrmhdSliceMs.data(), history.count, 1.0, 0.0,
+                       ImPlotLineFlags_SkipNaN, history.offset);
+      ImPlot::PlotLine("GPU Tesseract", history.gpuTesseractMs.data(), history.count, 1.0, 0.0,
                        ImPlotLineFlags_SkipNaN, history.offset);
       ImPlot::EndPlot();
     }

@@ -3880,6 +3880,22 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gpu_timing_test.cpp")
+    # GL-free per-frame bookkeeping of the GPU stage timers: a stage the
+    # sampled frame skipped publishes NaN or an empty CSV field.
+    add_executable(gpu_timing_test "${PROJECT_SOURCE_DIR}/tests/gpu_timing_test.cpp")
+    target_link_libraries(gpu_timing_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(gpu_timing_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(gpu_timing_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME gpu_timing COMMAND gpu_timing_test)
+    set_tests_properties(gpu_timing PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(gpu_timing PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_gl_state_test.cpp")
     # Live-GL checks of blend/binding hygiene between the tesseract label and
     # pass and the black-hole fullscreen passes. Skips without a GL 4.6 context.

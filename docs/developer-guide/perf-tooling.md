@@ -18,6 +18,10 @@ Output:
 Notes:
 - `BLACKHOLE_GPU_TIMING_LOG_STRIDE` controls sample cadence in frames.
 - Logging auto-enables GPU timers when set.
+- A stage the sampled frame did not run leaves its field empty: the tesseract
+  scene skips the fragment, compute, depth, and GRMHD passes, and the
+  black-hole scene skips the tesseract pass. `gpu_tesseract_ms` is the last
+  column, and the performance panel shows skipped stages as "not run".
 
 ## GPU timing analysis
 

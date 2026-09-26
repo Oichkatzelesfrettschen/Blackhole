@@ -8,6 +8,11 @@
  * on QueryObject readback. GpuTimerSet groups one timer per render stage;
  * TimingHistory keeps the last K_CAPACITY frames for the performance
  * panel plot and CSV export.
+ *
+ * A stage that the frame resolve() reads did not run carries no sample:
+ * hasSample is false, the history stores NaN, the CSV writers leave the
+ * field empty, and the panel shows "not run", so a scene that skips a
+ * stage never republishes that stage's last measurement.
  */
 
 #ifndef BLACKHOLE_RENDER_GPU_TIMING_H
@@ -24,15 +29,26 @@ struct GpuTimer {
   gl::GLuint queries[2] = {0, 0};
   bool issued[2] = {false, false};
   int index = 0;
-  double lastMs = 0.0;
+  double lastMs = 0.0; ///< Last resolved duration; meaningful only while hasSample.
+  bool hasSample = false; ///< lastMs measures a frame that ran this stage.
   bool active = false;
+  bool beganThisFrame = false; ///< begin() opened a query since the last swap().
+  bool ranLastFrame = false;   ///< The frame the last swap() closed ran this stage.
 
   bool ensureQueries();
   bool init();
   void shutdown();
   void begin();
   void end();
+  /**
+   * @brief Read the previous frame's query into lastMs.
+   *
+   * When that frame did not run the stage (ranLastFrame false) the timer
+   * drops its sample and touches no GL state. A pending result keeps the
+   * sample of an earlier frame that ran the stage.
+   */
   void resolve();
+  /** @brief Close the frame: flip the query slot and record whether it ran. */
   void swap();
 };
 
@@ -44,6 +60,7 @@ struct GpuTimerSet {
   GpuTimer tonemap;
   GpuTimer depth;
   GpuTimer grmhdSlice;
+  GpuTimer tesseract; ///< Tesseract scene pass, the black-hole passes' replacement.
 
   void init();
   void shutdown();
@@ -60,11 +77,16 @@ struct TimingHistory {
   std::array<float, K_CAPACITY> gpuTonemapMs{};
   std::array<float, K_CAPACITY> gpuDepthMs{};
   std::array<float, K_CAPACITY> gpuGrmhdSliceMs{};
+  std::array<float, K_CAPACITY> gpuTesseractMs{};
   int offset = 0;
   int count = 0;
 
+  /** @brief Record one frame; a GPU stage without a sample stores NaN. */
   void push(float cpuMsSample, const GpuTimerSet &timers);
 };
+
+/** @brief @p timer's duration in ms, or NaN when it holds no sample. */
+float timerSampleMs(const GpuTimer &timer);
 
 std::string gpuTimingPath();
 void appendGpuTimingSample(const std::string &path, int index, int width, int height,

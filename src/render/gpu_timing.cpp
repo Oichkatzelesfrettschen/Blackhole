@@ -11,11 +11,14 @@
 #include <iomanip>
 #include <ios>
 #include <limits>
+#include <ostream>
 #include <string>
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
+
+#include "physics/safe_limits.h"
 
 using namespace gl;
 
@@ -47,6 +50,9 @@ bool GpuTimer::init() {
   }
   issued[0] = false;
   issued[1] = false;
+  hasSample = false;
+  beganThisFrame = false;
+  ranLastFrame = false;
   return true;
 }
 
@@ -59,6 +65,9 @@ void GpuTimer::shutdown() {
   issued[0] = false;
   issued[1] = false;
   active = false;
+  hasSample = false;
+  beganThisFrame = false;
+  ranLastFrame = false;
 }
 
 void GpuTimer::begin() {
@@ -71,6 +80,7 @@ void GpuTimer::begin() {
   glBeginQuery(GL_TIME_ELAPSED, queries[index]);
   issued[index] = true;
   active = true;
+  beganThisFrame = true;
 }
 
 void GpuTimer::end() {
@@ -82,6 +92,10 @@ void GpuTimer::end() {
 }
 
 void GpuTimer::resolve() {
+  if (!ranLastFrame) {
+    hasSample = false;
+    return;
+  }
   if (!ensureQueries()) {
     return;
   }
@@ -95,6 +109,7 @@ void GpuTimer::resolve() {
     GLuint64 timeNs = 0;
     glGetQueryObjectui64v(queries[prev], GL_QUERY_RESULT, &timeNs);
     lastMs = static_cast<double>(timeNs) / 1.0e6;
+    hasSample = true;
     issued[prev] = false;
   }
 }
@@ -102,6 +117,8 @@ void GpuTimer::resolve() {
 void GpuTimer::swap() {
   index = 1 - index;
   active = false;
+  ranLastFrame = beganThisFrame;
+  beganThisFrame = false;
 }
 
 void GpuTimerSet::init() {
@@ -112,6 +129,7 @@ void GpuTimerSet::init() {
   ok &= tonemap.init();
   ok &= depth.init();
   ok &= grmhdSlice.init();
+  ok &= tesseract.init();
   initialized = ok;
   if (!ok) {
     shutdown();
@@ -125,6 +143,7 @@ void GpuTimerSet::shutdown() {
   tonemap.shutdown();
   depth.shutdown();
   grmhdSlice.shutdown();
+  tesseract.shutdown();
   initialized = false;
 }
 
@@ -135,6 +154,7 @@ void GpuTimerSet::resolve() {
   tonemap.resolve();
   depth.resolve();
   grmhdSlice.resolve();
+  tesseract.resolve();
 }
 
 void GpuTimerSet::swap() {
@@ -144,27 +164,27 @@ void GpuTimerSet::swap() {
   tonemap.swap();
   depth.swap();
   grmhdSlice.swap();
+  tesseract.swap();
+}
+
+float timerSampleMs(const GpuTimer &timer) {
+  return timer.hasSample ? static_cast<float>(timer.lastMs)
+                         : std::numeric_limits<float>::quiet_NaN();
 }
 
 void TimingHistory::push(float cpuMsSample, const GpuTimerSet &timers) {
   const auto index = static_cast<std::size_t>(offset);
   cpuMs.at(index) = cpuMsSample;
-  if (timers.initialized) {
-    gpuFragmentMs.at(index) = static_cast<float>(timers.blackholeFragment.lastMs);
-    gpuComputeMs.at(index) = static_cast<float>(timers.blackholeCompute.lastMs);
-    gpuBloomMs.at(index) = static_cast<float>(timers.bloom.lastMs);
-    gpuTonemapMs.at(index) = static_cast<float>(timers.tonemap.lastMs);
-    gpuDepthMs.at(index) = static_cast<float>(timers.depth.lastMs);
-    gpuGrmhdSliceMs.at(index) = static_cast<float>(timers.grmhdSlice.lastMs);
-  } else {
-    const float nan = std::numeric_limits<float>::quiet_NaN();
-    gpuFragmentMs.at(index) = nan;
-    gpuComputeMs.at(index) = nan;
-    gpuBloomMs.at(index) = nan;
-    gpuTonemapMs.at(index) = nan;
-    gpuDepthMs.at(index) = nan;
-    gpuGrmhdSliceMs.at(index) = nan;
-  }
+  const auto sample = [&timers](const GpuTimer &timer) {
+    return timers.initialized ? timerSampleMs(timer) : std::numeric_limits<float>::quiet_NaN();
+  };
+  gpuFragmentMs.at(index) = sample(timers.blackholeFragment);
+  gpuComputeMs.at(index) = sample(timers.blackholeCompute);
+  gpuBloomMs.at(index) = sample(timers.bloom);
+  gpuTonemapMs.at(index) = sample(timers.tonemap);
+  gpuDepthMs.at(index) = sample(timers.depth);
+  gpuGrmhdSliceMs.at(index) = sample(timers.grmhdSlice);
+  gpuTesseractMs.at(index) = sample(timers.tesseract);
   offset = (offset + 1) % K_CAPACITY;
   if (count < K_CAPACITY) {
     ++count;
@@ -176,6 +196,22 @@ std::string gpuTimingPath() {
   return "logs/perf/gpu_timing.csv";
 }
 
+namespace {
+
+/// Streams a millisecond field, or nothing for a stage without a sample.
+struct MsField {
+  float ms = 0.0f;
+};
+
+std::ostream &operator<<(std::ostream &out, MsField field) {
+  if (!physics::safeIsnan(field.ms)) {
+    out << field.ms;
+  }
+  return out;
+}
+
+} // namespace
+
 void appendGpuTimingSample(const std::string &path, int index, int width, int height,
                            float cpuFrameMs, const GpuTimerSet &timers, bool computeActive,
                            float kerrSpin, double timeSec) {
@@ -184,15 +220,21 @@ void appendGpuTimingSample(const std::string &path, int index, int width, int he
   if (!out) {
     return;
   }
+  // gpu_tesseract_ms trails the row so a file started by a build without it
+  // keeps every named column in place.
   if (!exists) {
     out << "index,time_sec,width,height,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,"
-           "gpu_tonemap_ms,gpu_depth_ms,gpu_grmhd_slice_ms,compute_active,kerr_spin\n";
+           "gpu_tonemap_ms,gpu_depth_ms,gpu_grmhd_slice_ms,compute_active,kerr_spin,"
+           "gpu_tesseract_ms\n";
   }
   out << std::fixed << std::setprecision(6);
   out << index << "," << timeSec << "," << width << "," << height << "," << cpuFrameMs << ","
-      << timers.blackholeFragment.lastMs << "," << timers.blackholeCompute.lastMs << ","
-      << timers.bloom.lastMs << "," << timers.tonemap.lastMs << "," << timers.depth.lastMs << ","
-      << timers.grmhdSlice.lastMs << "," << (computeActive ? 1 : 0) << "," << kerrSpin << "\n";
+      << MsField{timerSampleMs(timers.blackholeFragment)} << ","
+      << MsField{timerSampleMs(timers.blackholeCompute)} << ","
+      << MsField{timerSampleMs(timers.bloom)} << "," << MsField{timerSampleMs(timers.tonemap)}
+      << "," << MsField{timerSampleMs(timers.depth)} << ","
+      << MsField{timerSampleMs(timers.grmhdSlice)} << "," << (computeActive ? 1 : 0) << ","
+      << kerrSpin << "," << MsField{timerSampleMs(timers.tesseract)} << "\n";
 }
 
 void writeTimingHistoryCsv(const TimingHistory &history, const std::string &path) {
@@ -202,7 +244,7 @@ void writeTimingHistoryCsv(const TimingHistory &history, const std::string &path
     return;
   }
   out << "index,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,gpu_tonemap_ms,gpu_depth_ms,"
-         "gpu_grmhd_slice_ms\n";
+         "gpu_grmhd_slice_ms,gpu_tesseract_ms\n";
   out << std::fixed << std::setprecision(6);
 
   int const count = history.count;
@@ -213,10 +255,12 @@ void writeTimingHistoryCsv(const TimingHistory &history, const std::string &path
   for (int i = 0; i < count; ++i) {
     int const rawIndex = (start + i) % TimingHistory::K_CAPACITY;
     auto const idx = static_cast<std::size_t>(rawIndex);
-    out << i << "," << history.cpuMs.at(idx) << "," << history.gpuFragmentMs.at(idx) << ","
-        << history.gpuComputeMs.at(idx) << "," << history.gpuBloomMs.at(idx) << ","
-        << history.gpuTonemapMs.at(idx) << "," << history.gpuDepthMs.at(idx) << ","
-        << history.gpuGrmhdSliceMs.at(idx) << "\n";
+    out << i << "," << history.cpuMs.at(idx) << "," << MsField{history.gpuFragmentMs.at(idx)}
+        << "," << MsField{history.gpuComputeMs.at(idx)} << ","
+        << MsField{history.gpuBloomMs.at(idx)} << "," << MsField{history.gpuTonemapMs.at(idx)}
+        << "," << MsField{history.gpuDepthMs.at(idx)} << ","
+        << MsField{history.gpuGrmhdSliceMs.at(idx)} << ","
+        << MsField{history.gpuTesseractMs.at(idx)} << "\n";
   }
 }
 
