@@ -61,16 +61,16 @@ static BH_LaunchParams make_schwarzschild_params(int w, int h) {
     p.cam_pos[1] = 0.0f;
     p.cam_pos[2] = 10.0f;
 
-    /* Identity basis: local (u, v, -1) maps to world (u, v, -1).
-     * Column-major storage (matching glm): col0 = right, col1 = up, col2 = fwd.
-     *   m[0..2] = col0 = (1, 0, 0)
-     *   m[3..5] = col1 = (0, 1, 0)
-     *   m[6..8] = col2 = (0, 0, 1)
-     * d_mat3_mul: row r, col c -> m[c*3+r]. Identity: m[0]=m[4]=m[8]=1, rest 0.
+    /* Camera looking at the hole: d_ray_dir's local (u, v, 1) maps to
+     * u right + v up + forward. Column-major storage (matching glm):
+     *   m[0..2] = col0 = right   = (1, 0, 0)
+     *   m[3..5] = col1 = up      = (0, 1, 0)
+     *   m[6..8] = col2 = forward = (0, 0, -1)
+     * d_mat3_mul: row r, col c -> m[c*3+r].
      */
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 1.0f; p.cam_basis[5] = 0.0f;
-    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = 1.0f;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = -1.0f;
 
     p.lut_radius_min      = p.isco;
     p.lut_radius_max      = 100.0f;
@@ -138,14 +138,15 @@ protected:
 /* ========================================================================
  * 1. Schwarzschild horizon hit
  *    A 1x1 framebuffer where the single pixel aims at BH center.
- *    Camera at (0, 0, 10), identity basis, fov_scale=1.0:
- *      pixel (0,0): u=(2*0.5/1-1)*1=0, v=0 => local_dir=(0,0,-1) => world (0,0,-1)
+ *    Camera at (0, 0, 10) looking along -z, fov_scale=1.0:
+ *      pixel (0,0): u=(2*0.5/1-1)*1=0, v=0 => local_dir=(0,0,1) => world (0,0,-1)
  *    Angular momentum h = cross((0,0,10),(0,0,-1)) = 0 => no deflection.
  *    Ray falls straight to r=0; hits horizon at r <= rs=2.
  * ======================================================================== */
 
 TEST_F(CudaDevicePhysicsTest, SchwarzschildHorizonHit) {
     BH_LaunchParams p = make_schwarzschild_params(1, 1);
+    p.debug_escaped_direction = 1; /* an escaped ray would encode 0.5 (dir + 1), never black */
 
     int rc = bh_launch_geodesic_kernel(d_fb_1x1, &p, BH_KERNEL_FP32_BASELINE, nullptr);
     ASSERT_EQ(rc, 0) << "bh_launch_geodesic_kernel returned error " << rc;
@@ -164,7 +165,7 @@ TEST_F(CudaDevicePhysicsTest, SchwarzschildHorizonHit) {
 /* ========================================================================
  * 2. Schwarzschild escape
  *    Camera at (0, 0, 10), ray aimed in +Z direction (away from BH).
- *    We flip the camera basis so that local (0,0,-1) maps to world (0,0,+1).
+ *    The camera basis turns local forward (0,0,1) away from the hole.
  *    The ray moves away from BH and should escape (reach max_dist).
  *    Escaped pixels are not the black horizon color.
  * ======================================================================== */
@@ -172,9 +173,8 @@ TEST_F(CudaDevicePhysicsTest, SchwarzschildHorizonHit) {
 TEST_F(CudaDevicePhysicsTest, SchwarzschildEscape) {
     BH_LaunchParams p = make_schwarzschild_params(1, 1);
 
-    /* Rotate camera to look in +Y direction (away from BH, which is at origin).
-     * local (0,0,-1) must map to world (0,1,0), so col2 = (0,-1,0).
-     * col0=(1,0,0) right, col1=(0,0,-1) up, col2=(0,-1,0) forward-storage.
+    /* col0=(1,0,0) right, col1=(0,0,-1) up, col2=(0,-1,0) forward: the
+     * center ray leaves along world -y from (0,0,10), past the hole.
      * Column-major m[c*3+r]: col0 -> m[0..2], col1 -> m[3..5], col2 -> m[6..8]. */
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 0.0f; p.cam_basis[5] =-1.0f;
@@ -209,6 +209,7 @@ TEST_F(CudaDevicePhysicsTest, KerrHorizonHit) {
     BH_LaunchParams p = make_schwarzschild_params(1, 1);
     p.spin         = 0.9f;
     p.kerr_enabled = 1;
+    p.debug_escaped_direction = 1; /* an escaped ray would encode 0.5 (dir + 1), never black */
     /* ISCO for Kerr a=0.9M: approximately 2.32 rs for prograde.
      * Use a conservative value; for this test the exact ISCO does not matter. */
     p.isco = 4.0f;
@@ -240,7 +241,7 @@ TEST_F(CudaDevicePhysicsTest, DiskIntersection) {
 
     /* World frame is y-up (d_world_to_physics): the disk lies in the world
      * y=0 plane. Camera at (25, 20, 0): off-axis and ABOVE the disk plane.
-     * d_ray_dir returns make_f3(-u, -v, 1) in local space; for center pixel
+     * d_ray_dir returns make_f3(u, v, 1) in local space; for center pixel
      * (u=0, v=0) this is (0,0,1).  world_dir = d_mat3_mul(basis, local) = col2.
      * col2 = (0,-1,0) makes the ray fall toward y=0, crossing it at
      * approximately (25, 0, 0): disk_r = 25, between isco=6 and r_out=20*rs=40. */
@@ -390,7 +391,7 @@ TEST_F(CudaDevicePhysicsTest, AdaptiveStepFiniteNearPhotonSphere) {
     p.cam_pos[0] = 0.0f; p.cam_pos[1] = 0.0f; p.cam_pos[2] = 5.0f;
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 1.0f; p.cam_basis[5] = 0.0f;
-    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = 1.0f;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = -1.0f;
     p.lut_radius_min = p.isco; p.lut_radius_max = 100.0f;
     p.redshift_radius_min = p.isco; p.redshift_radius_max = 100.0f;
     p.spectral_radius_min = p.isco; p.spectral_radius_max = 100.0f;
