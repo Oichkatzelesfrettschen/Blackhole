@@ -1744,8 +1744,8 @@ void main() {
   vec3 terminalPos;
   vec3 rte = bhTraceGeodesicRTE(ray, 2.0, 100.0, 100, 0.1, 0.5, terminalPos).rgb;
   vec3 pol = bhTraceGeodesicStokes(ray, 2.0, 100.0, 100, 0.1, 0.5, 0.0, 0.0, terminalPos).rgb;
-  vec3 lastStep = bhBackgroundColorFromDir(normalize(hit.escapedDir), hit.minRadius, 2.0).rgb;
-  vec3 chord = bhBackgroundColorFromDir(normalize(hit.hitPoint - hit.origin), hit.minRadius, 2.0).rgb;
+  vec3 lastStep = bhBackgroundColorFromDir(normalize(hit.escapedDir)).rgb;
+  vec3 chord = bhBackgroundColorFromDir(normalize(hit.hitPoint - hit.origin)).rgb;
   bool exhausted = (hit.debugFlags & BH_DEBUG_FLAG_MAXSTEPS) != 0 && !hit.hitHorizon;
   int o = 13 * i;
   result[o] = exhausted ? 1.0 : 0.0;
