@@ -11,6 +11,7 @@
 #include "game/command.h"
 #include "game/fleet.h"
 #include "game/kerr_time_field.h"
+#include "game/observer.h"
 
 namespace game {
 
@@ -20,6 +21,15 @@ constexpr double K_SOLAR_MASS_G = 1.989e33;
 constexpr double K_M87_MASS_G = 6.5e9 * K_SOLAR_MASS_G;
 constexpr double K_SECONDS_PER_DAY = 86400.0;
 constexpr double K_SECONDS_PER_HOUR = 3600.0;
+constexpr double K_GARGANTUA_MASS_G = 1.0e8 * K_SOLAR_MASS_G;
+constexpr double K_GARGANTUA_SPIN_DEFICIT = 1.33e-14;
+
+KerrTimeField fieldFor(CampaignScenario scenario) {
+  if (scenario == CampaignScenario::GargantuaCanon) {
+    return {K_GARGANTUA_MASS_G, SpinDeficit{.epsilon = K_GARGANTUA_SPIN_DEFICIT}};
+  }
+  return {K_M87_MASS_G, 0.9};
+}
 
 CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   // Bands are anchored to r_s = 2M, a spin-independent length scale, so a
@@ -35,12 +45,16 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   config.authorityRadiusCm = 200.0 * rS;
   config.bandRadiusCm = {0.85 * rS, 3.0 * rS, 10.0 * rS, 50.0 * rS};
   // The objective is sized so the deadline bites: full outer commitment clears
-  // it only near turn 1100 of 1200, so the energy race is tense and any dive that
-  // drops throughput forfeits it. There is no half-measure -- a fleet or two sent
-  // deep banks neither enough energy to win the race nor enough stabilization to
-  // take the alternate victory (see the instability block); the two winning lines
-  // are full-outer for energy or an all-in dive for stabilization.
-  config.victoryEnergyUnits = 3150.0;
+  // it only in the last tenth of the 1200 turns, so the energy race is tense and
+  // any dive that drops throughput forfeits it. There is no half-measure -- a
+  // fleet or two sent deep banks neither enough energy to win the race nor enough
+  // stabilization to take the alternate victory (see the instability block); the
+  // two winning lines are full-outer for energy or an all-in dive for
+  // stabilization. The value is measured against orbiting outer fleets, whose
+  // slower geodesic clocks price each proper hour higher than a hovering clock
+  // would: with wins disabled, outer banks about 9% above it by the deadline and
+  // the solo dive about 4% below.
+  config.victoryEnergyUnits = 3325.0;
   config.deadlineTurn = 1200;
   config.fleetInitialFuelUnits = 100.0;
   config.fuelPerBandHop = 20.0;
@@ -87,19 +101,49 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   return config;
 }
 
+// Six specialist fleets orbiting the three outer bands (1/2/3); the ergoregion
+// band (index 0) starts empty -- the player chooses whether to send a scarce
+// fleet to hover in the deep prograde lane for the frame-dragging bonus.
+void addDefaultFleets(CampaignState &state) {
+  state.addFleet(FleetCapability::Extraction, 1);
+  state.addFleet(FleetCapability::Research, 1);
+  state.addFleet(FleetCapability::Fabrication, 2);
+  state.addFleet(FleetCapability::Relay, 2);
+  state.addFleet(FleetCapability::Verification, 3);
+  state.addFleet(FleetCapability::Research, 3);
+}
+
+CampaignConfig gargantuaConfig(const KerrTimeField &field, std::uint64_t seed) {
+  const double massCm = field.gravitationalRadiusCm();
+  CampaignConfig config;
+  config.seed = seed;
+  config.secondsPerTurn = K_SECONDS_PER_DAY;
+  config.authorityRadiusCm = 400.0 * massCm;
+  config.authorityObserver = Observer::Hovering;
+  // Band 0 is Miller's orbit, the prograde ISCO at r - M = 3.7611e-5 M; band 1
+  // is a far survey orbit at 100M.
+  config.bandRadiusCm = {field.iscoRadiusCm(Observer::CircularOrbitPrograde), 100.0 * massCm};
+  return config;
+}
+
 } // namespace
+
+CampaignSession::CampaignSession(std::uint64_t seed, CampaignScenario scenario)
+    : field_(fieldFor(scenario)),
+      state_(scenario == CampaignScenario::GargantuaCanon ? gargantuaConfig(field_, seed)
+                                                          : defaultConfig(field_, seed),
+             field_) {
+  if (scenario == CampaignScenario::GargantuaCanon) {
+    state_.addFleet(FleetCapability::Research, 0);
+    state_.addFleet(FleetCapability::Research, 1);
+    return;
+  }
+  addDefaultFleets(state_);
+}
 
 CampaignSession::CampaignSession(std::uint64_t seed, double spinDimensionless)
     : field_(K_M87_MASS_G, spinDimensionless), state_(defaultConfig(field_, seed), field_) {
-  // Six specialist fleets across the three outer bands (1/2/3); the ergoregion
-  // band (index 0) starts empty -- the player chooses whether to send a scarce
-  // fleet into the deep prograde lane for the frame-dragging bonus.
-  state_.addFleet(FleetCapability::Extraction, 1);
-  state_.addFleet(FleetCapability::Research, 1);
-  state_.addFleet(FleetCapability::Fabrication, 2);
-  state_.addFleet(FleetCapability::Relay, 2);
-  state_.addFleet(FleetCapability::Verification, 3);
-  state_.addFleet(FleetCapability::Research, 3);
+  addDefaultFleets(state_);
 }
 
 bool CampaignSession::issueAssignTask(FleetId fleet, double costHours) {
@@ -110,12 +154,14 @@ bool CampaignSession::issueAssignTask(FleetId fleet, double costHours) {
   return state_.issueCommand(command);
 }
 
-bool CampaignSession::issuePlaceFleet(FleetId fleet, int targetBand, OrbitLane lane) {
+bool CampaignSession::issuePlaceFleet(FleetId fleet, int targetBand, OrbitLane lane,
+                                      StationKeeping station) {
   Command command;
   command.type = CommandType::PlaceFleet;
   command.fleet = fleet;
   command.targetBand = targetBand;
   command.lane = lane;
+  command.station = station;
   return state_.issueCommand(command);
 }
 

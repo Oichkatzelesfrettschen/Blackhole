@@ -18,6 +18,7 @@
 #include "game/command.h"
 #include "game/economy.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 #include "game/serialize_bytes.h"
 #include "game/task_graph.h"
 #include "game/temporal_clock.h"
@@ -38,7 +39,7 @@ CampaignState::CampaignState(CampaignConfig config, const TimeField &field)
       // where the horizon gate belongs; the authority station and the turn
       // length are structural and gate construction itself.
       valid_(std::isfinite(config_.secondsPerTurn) && config_.secondsPerTurn > 0.0 &&
-             field.isValidStationRadius(config_.authorityRadiusCm)),
+             field.admitsObserver(config_.authorityRadiusCm, config_.authorityObserver)),
       clock_(valid_ ? config_.secondsPerTurn : 1.0) {}
 
 Fleet *CampaignState::findFleet(FleetId fleetId) {
@@ -78,13 +79,17 @@ double CampaignState::effectiveSignalDelaySec(double fromRadiusCm, double toRadi
   return geodesicSec * overhead;
 }
 
-bool CampaignState::laneAllowedAtBand(OrbitLane lane, int bandIndex) const {
-  if (lane != OrbitLane::Retrograde) {
-    return true;
+bool CampaignState::placementAllowed(OrbitLane lane, StationKeeping station, int bandIndex) const {
+  const double radiusCm = bandRadiusCm(bandIndex);
+  if (lane == OrbitLane::Retrograde) {
+    // Inside the static limit, frame dragging drags every observer forward: no
+    // retrograde hold exists. A hovering ZAMO has zero angular momentum and so
+    // no retrograde sense to hold anywhere.
+    if (radiusCm < field_->ergosphereRadiusCm() || station == StationKeeping::Hover) {
+      return false;
+    }
   }
-  // Inside the static limit, frame dragging drags every observer forward: no
-  // retrograde hold exists. The band radius must sit strictly outside it.
-  return bandRadiusCm(bandIndex) >= field_->ergosphereRadiusCm();
+  return field_->admitsObserver(radiusCm, observerFor(lane, station));
 }
 
 double CampaignState::ergoregionDepth(const Fleet &fleet) const {
@@ -102,11 +107,12 @@ double CampaignState::bandRadiusCm(int bandIndex) const {
   return config_.bandRadiusCm.at(static_cast<std::size_t>(bandIndex));
 }
 
-FleetId CampaignState::addFleet(FleetCapability capability, int bandIndex, OrbitLane lane) {
+FleetId CampaignState::addFleet(FleetCapability capability, int bandIndex, OrbitLane lane,
+                               StationKeeping station) {
   if (!valid_ || bandIndex < 0 ||
       static_cast<std::size_t>(bandIndex) >= config_.bandRadiusCm.size() ||
       !field_->isValidStationRadius(config_.bandRadiusCm.at(static_cast<std::size_t>(bandIndex))) ||
-      !laneAllowedAtBand(lane, bandIndex)) {
+      !placementAllowed(lane, station, bandIndex)) {
     return K_INVALID_FLEET_ID;
   }
   Fleet fleet;
@@ -114,6 +120,7 @@ FleetId CampaignState::addFleet(FleetCapability capability, int bandIndex, Orbit
   fleet.capability = capability;
   fleet.bandIndex = bandIndex;
   fleet.lane = lane;
+  fleet.observer = observerFor(lane, station);
   fleet.fuelUnits = config_.fleetInitialFuelUnits;
   fleets_.push_back(std::move(fleet));
   return fleets_.back().id;
@@ -138,8 +145,9 @@ bool CampaignState::issueCommand(const Command &command) {
             config_.bandRadiusCm.at(static_cast<std::size_t>(command.targetBand)))) {
       return false;
     }
-    // Lane gate: retrograde cannot be held inside the ergosphere.
-    if (!laneAllowedAtBand(command.lane, command.targetBand)) {
+    // Placement gate: retrograde cannot be held inside the ergosphere, and an
+    // orbit needs a bound circular orbit at the band. Rejected here, at issue.
+    if (!placementAllowed(command.lane, command.station, command.targetBand)) {
       return false;
     }
     // Fuel gate at issue time against the fleet's current position; the
@@ -187,14 +195,15 @@ void CampaignState::applyCommand(const LoggedCommand &logged) {
     // fizzles -- the fleet stays put and keeps its fuel.
     const double fuelCost = redeployFuelCost(fleet->bandIndex, logged.command.targetBand);
     // Fuel is the effect-time gate that can actually change: an earlier order
-    // in flight may have spent this fleet's budget since issue. The lane gate
-    // is re-checked for consistency but cannot differ -- the ergosphere radius
-    // is fixed -- so an unaffordable move is the only way this fizzles.
+    // in flight may have spent this fleet's budget since issue. The placement
+    // gate is re-checked for consistency but cannot differ -- the field is
+    // fixed -- so an unaffordable move is the only way this fizzles.
     if (fuelCost <= fleet->fuelUnits &&
-        laneAllowedAtBand(logged.command.lane, logged.command.targetBand)) {
+        placementAllowed(logged.command.lane, logged.command.station, logged.command.targetBand)) {
       fleet->fuelUnits -= fuelCost;
       fleet->bandIndex = logged.command.targetBand;
       fleet->lane = logged.command.lane;
+      fleet->observer = observerFor(logged.command.lane, logged.command.station);
     }
     break;
   }
@@ -265,7 +274,7 @@ void CampaignState::advanceTurn() {
   std::vector<CapabilityCompletion> completions;
   double containmentThisTurn = 0.0;
   for (Fleet &fleet : fleets_) {
-    const double rate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex));
+    const double rate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex), fleet.observer);
     accrueProperTime(fleet, rate, clock_.secondsPerTurn());
     const double budgetSec = properDeltaSec(rate, clock_.secondsPerTurn());
     const TaskGraph::FleetAdvanceResult advanced = taskGraph_.advanceFleetTasks(fleet.id, budgetSec);
@@ -418,10 +427,12 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       [](double integrity, const Fleet &fleet) { return std::min(integrity, fleet.reliability); });
   view.ergosphereRadiusCm = field_->ergosphereRadiusCm();
   view.spinDimensionless = field_->spinDimensionless();
+  view.spinDeficit = field_->spinDeficit();
+  view.authorityObserver = config_.authorityObserver;
   view.reliabilityCorruptionThreshold = config_.reliabilityCorruptionThreshold;
   view.authorityRadiusCm = config_.authorityRadiusCm;
   view.authorityProperTimeRate =
-      valid_ ? field_->properTimeRate(config_.authorityRadiusCm) : 0.0;
+      valid_ ? field_->properTimeRate(config_.authorityRadiusCm, config_.authorityObserver) : 0.0;
   view.innerBoundaryRadiusCm = field_->innerBoundaryRadiusCm();
 
   view.bands.reserve(config_.bandRadiusCm.size());
@@ -432,7 +443,24 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     band.validStation = field_->isValidStationRadius(band.radiusCm);
     band.insideErgosphere = band.validStation && band.radiusCm < field_->ergosphereRadiusCm();
     if (band.validStation) {
-      band.properTimeRate = field_->properTimeRate(band.radiusCm);
+      // The rate a fleet placed here by default carries: a prograde orbit where
+      // a bound one exists, a hovering station below the marginally bound radius.
+      band.admitsOrbit = field_->admitsObserver(band.radiusCm, Observer::CircularOrbitPrograde);
+      band.stableOrbit = field_->admitsStableOrbit(band.radiusCm, Observer::CircularOrbitPrograde);
+      band.admitsRetrogradeOrbit =
+          field_->admitsObserver(band.radiusCm, Observer::CircularOrbitRetrograde);
+      band.stableRetrogradeOrbit =
+          field_->admitsStableOrbit(band.radiusCm, Observer::CircularOrbitRetrograde);
+      band.hoverProperTimeRate = field_->properTimeRate(band.radiusCm, Observer::Hovering);
+      band.progradeOrbitProperTimeRate =
+          band.admitsOrbit ? field_->properTimeRate(band.radiusCm, Observer::CircularOrbitPrograde)
+                           : 0.0;
+      band.retrogradeOrbitProperTimeRate =
+          band.admitsRetrogradeOrbit
+              ? field_->properTimeRate(band.radiusCm, Observer::CircularOrbitRetrograde)
+              : 0.0;
+      band.properTimeRate =
+          band.admitsOrbit ? band.progradeOrbitProperTimeRate : band.hoverProperTimeRate;
       band.delayToAuthoritySec = effectiveSignalDelaySec(band.radiusCm, config_.authorityRadiusCm);
       band.frameDragRateRadPerSec = field_->frameDragRateRadPerSec(band.radiusCm);
     }
@@ -447,7 +475,12 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     fleetView.bandIndex = fleet.bandIndex;
     fleetView.reliability = fleet.reliability;
     fleetView.properTimeSec = fleet.properTimeSec;
-    fleetView.properTimeRate = field_->properTimeRate(bandRadiusCm(fleet.bandIndex));
+    fleetView.properTimeRate =
+        field_->properTimeRate(bandRadiusCm(fleet.bandIndex), fleet.observer);
+    fleetView.observer = fleet.observer;
+    fleetView.unstableOrbit =
+        fleet.observer != Observer::Hovering &&
+        !field_->admitsStableOrbit(bandRadiusCm(fleet.bandIndex), fleet.observer);
     fleetView.fuelUnits = fleet.fuelUnits;
     fleetView.lane = fleet.lane;
     fleetView.yieldMultiplier = capabilityYieldMultiplier(fleet.capability);
@@ -515,7 +548,13 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   std::vector<std::uint8_t> out;
   appendU64(out, config_.seed);
   appendF64(out, config_.secondsPerTurn);
+  // The field's spin enters as its deficit 1 - |a|, the parameter that stays
+  // exact near extremal spin, plus the sense of rotation the deficit drops;
+  // mass is fixed by the scenario's band radii.
+  appendF64(out, field_->spinDeficit());
+  appendU8(out, field_->spinDimensionless() < 0.0 ? 1U : 0U);
   appendF64(out, config_.authorityRadiusCm);
+  appendU8(out, static_cast<std::uint8_t>(config_.authorityObserver));
   appendU32(out, static_cast<std::uint32_t>(config_.bandRadiusCm.size()));
   for (const double radiusCm : config_.bandRadiusCm) {
     appendF64(out, radiusCm);
@@ -553,6 +592,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, fleet.id);
     appendU8(out, static_cast<std::uint8_t>(fleet.capability));
     appendU8(out, static_cast<std::uint8_t>(fleet.lane));
+    appendU8(out, static_cast<std::uint8_t>(fleet.observer));
     appendI32(out, fleet.bandIndex);
     appendF64(out, fleet.reliability);
     appendF64(out, fleet.properTimeSec);
@@ -580,6 +620,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, logged.command.fleet);
     appendI32(out, logged.command.targetBand);
     appendU8(out, static_cast<std::uint8_t>(logged.command.lane));
+    appendU8(out, static_cast<std::uint8_t>(logged.command.station));
     appendF64(out, logged.command.properTimeCostSec);
     appendI64(out, logged.issueTurn);
     appendI64(out, logged.effectTurn);

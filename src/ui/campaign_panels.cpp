@@ -19,6 +19,7 @@
 #include "game/campaign_session.h"
 #include "game/campaign_view.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 #include "ui/strategic_map.h"
 
 namespace ui {
@@ -26,6 +27,19 @@ namespace ui {
 namespace {
 
 constexpr double K_SECONDS_PER_DAY = 86400.0;
+
+// What an orbit on this band and lane would be: stable free fall, an unstable
+// circular geodesic held by station-keeping thrust (between the marginally
+// bound radius and the ISCO), or no bound orbit at all.
+const char *orbitLabel(const game::BandView &band, game::OrbitLane lane) {
+  const bool retrograde = lane == game::OrbitLane::Retrograde;
+  const bool admits = retrograde ? band.admitsRetrogradeOrbit : band.admitsOrbit;
+  const bool stable = retrograde ? band.stableRetrogradeOrbit : band.stableOrbit;
+  if (!admits) {
+    return "orbit: none bound here (hover only)";
+  }
+  return stable ? "orbit: stable" : "orbit: unstable (station-keeping)";
+}
 
 double days(double seconds) { return seconds / K_SECONDS_PER_DAY; }
 
@@ -138,7 +152,11 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
       ImGui::Text("%.2f", fleet.reliability);
     }
     ImGui::TableNextColumn();
-    ImGui::Text("%s", game::laneName(fleet.lane));
+    if (fleet.observer == game::Observer::Hovering) {
+      ImGui::TextUnformatted("hover");
+    } else {
+      ImGui::Text("%s%s", game::laneName(fleet.lane), fleet.unstableOrbit ? " (unstable)" : "");
+    }
     ImGui::TableNextColumn();
     ImGui::Text("%s x%.2f", capabilityEffectText(fleet.capability), fleet.yieldMultiplier);
   }
@@ -164,8 +182,12 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
     for (const game::BandView &band : view.bands) {
       std::string bandLabel;
       if (band.validStation) {
-        bandLabel = std::format("band {}  (dtau/dt {:.3f}, delay {:.1f} d)", band.index,
-                                band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY);
+        // The clock of the lane and station keeping selected below; 0 marks a
+        // band where that orbit is not bound.
+        bandLabel = std::format(
+            "band {}  (dtau/dt {:.3f}, delay {:.1f} d)", band.index,
+            game::bandRateFor(band, uiState.composerLane, uiState.composerStation),
+            band.delayToAuthoritySec / K_SECONDS_PER_DAY);
       } else {
         bandLabel = std::format("band {}  (FORBIDDEN)", band.index);
       }
@@ -184,9 +206,31 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
   ImGui::SameLine();
   ImGui::RadioButton("retrograde", &laneChoice, 1);
   uiState.composerLane = laneChoice == 1 ? game::OrbitLane::Retrograde : game::OrbitLane::Prograde;
+  // Station keeping: an orbit is a free-fall geodesic and needs a bound orbit
+  // at the band; hovering on thrust reaches below the marginally bound radius.
+  int stationChoice = uiState.composerStation == game::StationKeeping::Hover ? 1 : 0;
+  ImGui::TextUnformatted("station");
+  ImGui::SameLine();
+  ImGui::RadioButton("orbit", &stationChoice, 0);
+  ImGui::SameLine();
+  ImGui::RadioButton("hover", &stationChoice, 1);
+  uiState.composerStation =
+      stationChoice == 1 ? game::StationKeeping::Hover : game::StationKeeping::Orbit;
+  for (const game::BandView &band : view.bands) {
+    if (band.index == uiState.composerTargetBand && band.validStation) {
+      ImGui::SameLine();
+      if (uiState.composerStation == game::StationKeeping::Hover) {
+        ImGui::Text("hover: dtau/dt %.4f", band.hoverProperTimeRate);
+      } else {
+        ImGui::Text("%s, dtau/dt %.4f", orbitLabel(band, uiState.composerLane),
+                    game::bandRateFor(band, uiState.composerLane, uiState.composerStation));
+      }
+    }
+  }
   if (ImGui::Button("Redeploy fleet")) {
-    uiState.lastCommandAccepted = session.issuePlaceFleet(
-        uiState.selectedFleet, uiState.composerTargetBand, uiState.composerLane);
+    uiState.lastCommandAccepted =
+        session.issuePlaceFleet(uiState.selectedFleet, uiState.composerTargetBand,
+                                uiState.composerLane, uiState.composerStation);
     uiState.lastCommandValid = true;
   }
 

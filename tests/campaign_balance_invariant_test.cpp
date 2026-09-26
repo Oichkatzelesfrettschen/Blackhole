@@ -9,6 +9,13 @@
  * that shape -- which line wins, by which objective, and on which turn -- over
  * the same commitment lines the headless harness prints, so a retune that breaks
  * the invariant fails here instead of silently contradicting the harness prose.
+ *
+ * The shape is pinned at one task cadence only: every fleet re-tasked every
+ * K_REISSUE_EVERY = 30 turns. balance_sweep_test records the other cadences,
+ * and the shape does not hold there: at cadences 26..29 solo wins (t1097 to
+ * t1200) while pod still loses, and at cadences 1..25 every line wins, with
+ * the stabilization line clearing first at every cadence. This test claims
+ * only the cadence-30 shape.
  */
 
 #include <gtest/gtest.h>

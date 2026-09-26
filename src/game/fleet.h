@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "game/observer.h"
+
 namespace game {
 
 using FleetId = std::uint32_t;
@@ -40,11 +42,23 @@ enum class OrbitLane : std::uint8_t {
 [[nodiscard]] const char *capabilityName(FleetCapability capability);
 [[nodiscard]] const char *laneName(OrbitLane lane);
 
+/** @brief The clock a fleet carries: a hovering station is a ZAMO whatever its
+ *         lane; an orbiting fleet follows the circular geodesic of its lane. */
+[[nodiscard]] constexpr Observer observerFor(OrbitLane lane, StationKeeping station) {
+  if (station == StationKeeping::Hover) {
+    return Observer::Hovering;
+  }
+  return lane == OrbitLane::Retrograde ? Observer::CircularOrbitRetrograde
+                                       : Observer::CircularOrbitPrograde;
+}
+
 struct Fleet {
   FleetId id = K_INVALID_FLEET_ID;
   FleetCapability capability = FleetCapability::Research;
   int bandIndex = 0;            ///< Index into the campaign's orbital band table.
   OrbitLane lane = OrbitLane::Prograde; ///< Orbital direction; set at placement.
+  /// Clock-carrying worldline; set at placement.
+  Observer observer = Observer::CircularOrbitPrograde;
   double reliability = 1.0;     ///< Degrades with proper time worked; scales task yield.
   double properTimeSec = 0.0;   ///< Accumulated local proper time tau.
   double fuelUnits = 0.0;       ///< Redeployment budget; charged per band hop at effect time.

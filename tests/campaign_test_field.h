@@ -22,7 +22,7 @@ namespace campaign_test {
 
 class FakeTimeField final : public game::TimeField {
 public:
-  [[nodiscard]] double properTimeRate(double radiusCm) const override {
+  [[nodiscard]] double properTimeRate(double radiusCm, game::Observer /*observer*/) const override {
     return radiusCm < 970.0 ? 0.1 : 1.0;
   }
   [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override {
@@ -39,7 +39,7 @@ public:
  *         prograde ergoregion bonus be reasoned about with round numbers. */
 class FakeSpinningField final : public game::TimeField {
 public:
-  [[nodiscard]] double properTimeRate(double radiusCm) const override {
+  [[nodiscard]] double properTimeRate(double radiusCm, game::Observer /*observer*/) const override {
     return radiusCm < 970.0 ? 0.1 : 1.0;
   }
   [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override {
