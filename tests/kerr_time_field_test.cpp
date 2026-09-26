@@ -233,3 +233,31 @@ TEST(KerrTimeField, StableOrbitsStartAtTheIsco) {
   EXPECT_TRUE(canon.state().renderSnapshot().bands.at(0).stableOrbit); // Miller on the ISCO
   EXPECT_FALSE(canon.state().renderSnapshot().fleets.front().unstableOrbit);
 }
+
+// Falsifier: the band view at 6M around a = 0.9 offering the composer any
+// clock but the selected observer's -- hovering 0.817982, prograde orbit
+// 0.743444, retrograde orbit 0.654512 (mpmath reference) -- or a nonzero
+// orbital clock on the 1.7M band, where no bound orbit exists.
+TEST(KerrTimeField, BandViewCarriesEveryObserversClock) {
+  const game::CampaignSession session(4);
+  const game::CampaignViewSnapshot view = session.state().renderSnapshot();
+  const game::BandView &sixM = view.bands.at(1);
+  const auto rate = [&](game::OrbitLane lane, game::StationKeeping station) {
+    return game::bandRateFor(sixM, lane, station);
+  };
+  EXPECT_NEAR(rate(game::OrbitLane::Prograde, game::StationKeeping::Hover) / 8.179815713894085549e-1,
+              1.0, 1e-12);
+  EXPECT_NEAR(rate(game::OrbitLane::Prograde, game::StationKeeping::Orbit) /
+                  7.4344405871481958781e-1,
+              1.0, 1e-12);
+  EXPECT_NEAR(rate(game::OrbitLane::Retrograde, game::StationKeeping::Orbit) /
+                  6.5451153007973629037e-1,
+              1.0, 1e-12);
+  EXPECT_DOUBLE_EQ(sixM.properTimeRate, sixM.progradeOrbitProperTimeRate);
+
+  const game::BandView &ergo = view.bands.at(0);
+  EXPECT_DOUBLE_EQ(ergo.progradeOrbitProperTimeRate, 0.0);
+  EXPECT_DOUBLE_EQ(ergo.retrogradeOrbitProperTimeRate, 0.0);
+  EXPECT_GT(ergo.hoverProperTimeRate, 0.0);
+  EXPECT_DOUBLE_EQ(ergo.properTimeRate, ergo.hoverProperTimeRate);
+}

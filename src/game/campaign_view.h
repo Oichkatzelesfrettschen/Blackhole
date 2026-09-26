@@ -47,11 +47,25 @@ struct BandView {
   bool admitsRetrogradeOrbit = false;   ///< A bound retrograde circular orbit exists here.
   bool stableRetrogradeOrbit = false;   ///< ...and it is stable (at or outside the retrograde ISCO).
   /// dtau/dt of a prograde orbit here, or of a hovering station where no bound
-  /// orbit exists (below the marginally bound radius).
+  /// orbit exists (below the marginally bound radius): the map's ring color.
   double properTimeRate = 0.0;
+  double hoverProperTimeRate = 0.0;      ///< dtau/dt of a hovering (ZAMO) station here.
+  double progradeOrbitProperTimeRate = 0.0;   ///< dtau/dt of a prograde orbit; 0 when none is bound.
+  double retrogradeOrbitProperTimeRate = 0.0; ///< dtau/dt of a retrograde orbit; 0 when none is bound.
   double delayToAuthoritySec = 0.0;     ///< One-way signal delay to the authority station.
   double frameDragRateRadPerSec = 0.0;  ///< Frame-dragging angular velocity (0 without spin).
 };
+
+/** @brief The clock a fleet placed on `band` with this lane and station
+ *         keeping would carry: the hovering rate, or the orbital rate of the
+ *         lane (0 where no bound orbit of that lane exists). */
+[[nodiscard]] inline double bandRateFor(const BandView &band, OrbitLane lane, StationKeeping station) {
+  if (station == StationKeeping::Hover) {
+    return band.hoverProperTimeRate;
+  }
+  return lane == OrbitLane::Retrograde ? band.retrogradeOrbitProperTimeRate
+                                       : band.progradeOrbitProperTimeRate;
+}
 
 struct FleetView {
   FleetId id = K_INVALID_FLEET_ID;

@@ -500,8 +500,16 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
           field_->admitsObserver(band.radiusCm, Observer::CircularOrbitRetrograde);
       band.stableRetrogradeOrbit =
           field_->admitsStableOrbit(band.radiusCm, Observer::CircularOrbitRetrograde);
-      band.properTimeRate = field_->properTimeRate(
-          band.radiusCm, band.admitsOrbit ? Observer::CircularOrbitPrograde : Observer::Hovering);
+      band.hoverProperTimeRate = field_->properTimeRate(band.radiusCm, Observer::Hovering);
+      band.progradeOrbitProperTimeRate =
+          band.admitsOrbit ? field_->properTimeRate(band.radiusCm, Observer::CircularOrbitPrograde)
+                           : 0.0;
+      band.retrogradeOrbitProperTimeRate =
+          band.admitsRetrogradeOrbit
+              ? field_->properTimeRate(band.radiusCm, Observer::CircularOrbitRetrograde)
+              : 0.0;
+      band.properTimeRate =
+          band.admitsOrbit ? band.progradeOrbitProperTimeRate : band.hoverProperTimeRate;
       band.delayToAuthoritySec = effectiveSignalDelaySec(band.radiusCm, config_.authorityRadiusCm);
       band.frameDragRateRadPerSec = field_->frameDragRateRadPerSec(band.radiusCm);
     }

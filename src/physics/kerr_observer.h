@@ -355,54 +355,86 @@ struct RadialPotential {
   return RadialPotential{.c2 = (2.0 * shift) - q, .c1 = 2.0 * q, .c0 = (shift * shift) - (spin * spin * q)};
 }
 
+/** @brief What stops a photon's radial motion first in one direction. */
+enum class RadialObstacle : std::uint8_t {
+  None = 0,      ///< No zero of R: the photon runs through the interval.
+  Turning = 1,   ///< A simple zero: the photon reaches it and turns back.
+  Asymptote = 2, ///< A double zero (an unstable circular photon orbit): the
+                 ///< photon spirals toward it forever and never turns back.
+};
+
 /**
- * @brief True when R has a turning point strictly inside (lo, hi): some local
- *        minimum of R there sits at or below zero.
+ * @brief The first zero of R the photon meets moving from `from` toward
+ *        `toward`, classified; `from` itself never counts.
  *
- * R is a quartic with positive leading term, so on an interval whose ends
- * satisfy R >= 0 a zero exists exactly when a critical point of R inside the
- * interval has R <= 0; the endpoints themselves never count. The critical
- * points are the roots of the cubic R', which is monotone between the roots
- * of R'' = 12 r^2 + 2 c2 and beyond the Cauchy bound of R'; each monotone
- * piece holds at most one critical point, found by bisection, so no root is
- * missed however close two roots lie.
+ * R is a quartic with positive leading term, and R >= 0 at the photon, so a
+ * zero exists in a direction exactly when some local minimum of R that way
+ * sits at or below zero, and the nearest such minimum marks the first
+ * obstacle. A minimum clearly below zero lies between two simple zeros, the
+ * nearer of which turns the photon; a minimum at zero within roundoff is a
+ * double zero, the separatrix of a circular photon orbit, which the photon
+ * approaches asymptotically. The tolerance is 64 ulp of the largest term of R
+ * at the minimum, far below any physical separation: impact parameters
+ * within 1e-9 of critical still resolve to a turning point or to none. Local
+ * minima are the roots of the cubic R' where it rises through zero; R' is
+ * monotone between the roots of R'' = 12 r^2 + 2 c2 and beyond its Cauchy
+ * bound, so each monotone piece holds at most one, found by bisection.
  */
-[[nodiscard]] inline bool hasTurningPointIn(const RadialPotential &potential, double lo, double hi) {
+[[nodiscard]] inline RadialObstacle firstRadialObstacle(const RadialPotential &potential,
+                                                        double from, double toward) {
+  const double lo = std::fmin(from, toward);
+  const double hi = std::fmax(from, toward);
+  const bool upward = toward > from;
   const double bound = 1.0 + std::fmax(std::fabs(potential.c2) / 2.0, std::fabs(potential.c1) / 4.0);
   // Monotone pieces of R': split at the roots of R'' when it has them.
   const double split = potential.c2 < 0.0 ? std::sqrt(-potential.c2 / 6.0) : 0.0;
   const std::array<double, 4> edges{-bound, -split, split, bound};
-  const std::size_t edgeCount = 4;
-  for (std::size_t piece = 0; piece + 1 < edgeCount; ++piece) {
+  RadialObstacle nearest = RadialObstacle::None;
+  for (std::size_t piece = 0; piece + 1 < edges.size(); ++piece) {
     double left = std::fmax(edges.at(piece), lo);
     double right = std::fmin(edges.at(piece + 1), hi);
     if (!(left < right)) {
       continue;
     }
-    const double slopeLeft = potential.slope(left);
-    const double slopeRight = potential.slope(right);
-    if ((slopeLeft < 0.0) == (slopeRight < 0.0)) {
-      continue; // monotone R' without a sign change: no critical point here
+    // A local minimum of R is where R' rises through zero.
+    const bool risesThroughZero = potential.slope(left) < 0.0 && potential.slope(right) >= 0.0;
+    if (!risesThroughZero) {
+      continue;
     }
-    const bool risingSlope = slopeLeft < 0.0;
     constexpr int bisections = 200;
-    for (int step = 0; step < bisections && left < right; ++step) {
+    for (int step = 0; step < bisections; ++step) {
       const double middle = 0.5 * (left + right);
       if (middle <= left || middle >= right) {
         break;
       }
-      if ((potential.slope(middle) < 0.0) == risingSlope) {
+      if (potential.slope(middle) < 0.0) {
         left = middle;
       } else {
         right = middle;
       }
     }
-    const double critical = 0.5 * (left + right);
-    if (critical > lo && critical < hi && potential.value(critical) <= 0.0) {
-      return true;
+    const double minimum = 0.5 * (left + right);
+    if (minimum <= lo || minimum >= hi) {
+      continue;
     }
+    const double m2 = minimum * minimum;
+    const double scale = (m2 * m2) + (std::fabs(potential.c2) * m2) +
+                         (std::fabs(potential.c1) * std::fabs(minimum)) + std::fabs(potential.c0);
+    const double tolerance = 64.0 * std::numeric_limits<double>::epsilon() * scale;
+    const double depth = potential.value(minimum);
+    if (depth > tolerance) {
+      continue;
+    }
+    const RadialObstacle kind =
+        depth < -tolerance ? RadialObstacle::Turning : RadialObstacle::Asymptote;
+    // Pieces run in ascending r: moving up the first hit wins, moving down
+    // the last one does.
+    if (upward) {
+      return kind;
+    }
+    nearest = kind;
   }
-  return false;
+  return nearest;
 }
 
 /** @brief Conserved quantities of a photon at an observer's event, fixed by
@@ -442,13 +474,17 @@ struct PhotonConstants {
  * E <= 0 happens only inside the ergoregion: such a photon connects to
  * infinity in neither direction.
  *
- * Connectivity comes from the radial potential R: with no turning point in
+ * Connectivity comes from the radial potential R: with no zero of R in
  * (r, inf) the photon, once moving outward, runs to infinity. Moving outward
- * now it escapes; moving inward it escapes only after bouncing off a turning
- * point between the outer horizon and r. At P^r = 0 the photon sits on a
- * turning point: R'(r) > 0 marks a periapsis (it moves outward both ways), R'
- * < 0 an apoapsis inside a potential barrier (trapped both ways), and R' = 0 a
- * circular photon orbit, which escapes in neither direction.
+ * now it escapes; moving inward it escapes only after bouncing off a simple
+ * zero between the outer horizon and r. A double zero -- the separatrix of an
+ * unstable circular photon orbit, as for b = 3 sqrt(3) M around a
+ * Schwarzschild hole -- is approached asymptotically, so a ray heading toward
+ * one neither escapes nor came from infinity in that direction. At P^r = 0
+ * the photon sits on a zero: R'(r) > 0 marks a periapsis (it moves outward
+ * both ways), R' < 0 an apoapsis inside a potential barrier (trapped both
+ * ways), and R' = 0 a circular photon orbit, which escapes in neither
+ * direction.
  */
 [[nodiscard]] inline PhotonConstants photonConstants(const Tetrad &tetrad, const Vec3 &direction) {
   Vec4 zamo{};
@@ -475,8 +511,14 @@ struct PhotonConstants {
   const RadialPotential potential = radialPotential(frame.spin, constants.lambda, constants.eta);
   const double r = frame.r;
   const double outerHorizon = 1.0 + horizonOffset(frame.epsilon);
-  const bool clearAbove = !hasTurningPointIn(potential, r, std::numeric_limits<double>::max());
-  const bool bounceBelow = hasTurningPointIn(potential, outerHorizon, r);
+  // Outward, any obstacle stops the photon for good: it turns back, or it
+  // spirals onto the photon orbit. Inward, only a simple zero above the
+  // horizon sends it back out.
+  const bool clearAbove =
+      firstRadialObstacle(potential, r, std::numeric_limits<double>::max()) ==
+      RadialObstacle::None;
+  const bool bounceBelow =
+      firstRadialObstacle(potential, r, outerHorizon) == RadialObstacle::Turning;
   if (constants.radialMomentum > 0.0) {
     constants.escapesToInfinity = clearAbove;
     constants.fromInfinity = clearAbove && bounceBelow;

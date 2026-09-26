@@ -729,3 +729,28 @@ TEST(Constellation, VictorySiteIsTheCreditThatCrossed) {
   EXPECT_TRUE(constellation.factions().at(1).outcomeKnown);
   EXPECT_TRUE(constellation.factions().front().outcomeKnown); // radial leg only
 }
+
+// Falsifier: a faction whose only band sits at its authority's radius (a
+// zero-delay leg) seeing its known control lag the referee's by a turn, or
+// its outcome latch land in a different turn from the score report that
+// carries the winning point -- the snapshot saying Won while the known
+// score is still below the target.
+TEST(Constellation, ColocatedReportsAndNoticesLandTogether) {
+  game::ConstellationConfig config = microConfig();
+  config.systems.front().bandRadiusCm.front() = config.systems.front().authorityRadiusCm;
+  config.victoryControlScore = 3.0;
+  game::Constellation constellation(config);
+  const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  ASSERT_NE(constellation.addFleet(alpha, 0, game::FleetCapability::Research, 0),
+            game::K_INVALID_FLEET_ID);
+  for (int turn = 1; turn <= 4; ++turn) {
+    constellation.advanceTurn();
+    const game::FactionState &faction = constellation.factions().front();
+    EXPECT_DOUBLE_EQ(faction.knownControlScore, faction.controlScore) << "turn " << turn;
+    const game::ConstellationViewSnapshot view = constellation.renderSnapshot();
+    EXPECT_EQ(view.overallStatus == game::CampaignStatus::Won,
+              view.player.controlScore >= config.victoryControlScore)
+        << "turn " << turn;
+  }
+  EXPECT_EQ(constellation.renderSnapshot().overallStatus, game::CampaignStatus::Won);
+}
