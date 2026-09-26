@@ -5,7 +5,7 @@
  * Following the YSU-engine kernels_fp16_soa_half2.cu pattern:
  * - Thread k processes pixels (2k, 2k+1) in a linearized grid.
  * - Two independent geodesic chains interleave on Ada dual-issue FP32 pipelines.
- * - __half2 packs both rays' bounded fields (r, theta) into
+ * - __half2 packs both rays' bounded radius r into
  *   one 32-bit register each; min_radius is tracked via __hmin2 (one HMNMX2
  *   SASS instruction per step instead of two fminf calls).
  *   phi and t remain FP32 per ray to avoid overflow near the horizon.
@@ -36,25 +36,19 @@ namespace {
 /**
  * @brief Packed __half2 intermediate storage for a pair of Kerr rays.
  *
- * Bounded fields (r, theta) are stored as __half2 pairs to halve register
- * consumption for those values.  phi and t are kept FP32 because they can
- * reach ~1e5 radians/step near the Kerr horizon, exceeding the FP16
- * representable range of 65504. The Mino velocities and carried
- * accelerations stay FP32: vr scales as r^2 and crosses zero at turning
- * points.
+ * The bounded radius is stored as an __half2 pair to halve its register
+ * cost. The Mino velocity and acceleration, coordinate time, and the angular
+ * state (unit direction n and tangent velocity w) stay FP32.
  */
 struct HalfRayPair {
-  __half2 hR;     /**< @brief (kr0.r,          kr1.r)          */
-  __half2 hTheta; /**< @brief (kr0.theta,       kr1.theta)      */
-  float2 vr;       /**< @brief (kr0.vr,        kr1.vr)         */
-  float2 mu;       /**< @brief (kr0.mu,        kr1.mu)         */
-  float2 vmu;      /**< @brief (kr0.vmu,       kr1.vmu)        */
-  float2 accR;     /**< @brief (kr0.acc_r,     kr1.acc_r)      */
-  float2 accMu;    /**< @brief (kr0.acc_mu,    kr1.acc_mu)     */
-  float phi0;     /**< @brief Ray 0 azimuthal angle (FP32). */
-  float phi1;     /**< @brief Ray 1 azimuthal angle (FP32). */
-  float t0;       /**< @brief Ray 0 coordinate time (FP32). */
-  float t1;       /**< @brief Ray 1 coordinate time (FP32). */
+  __half2 hR;      /**< @brief (kr0.r, kr1.r) */
+  float2 vr;       /**< @brief (kr0.vr, kr1.vr) */
+  float2 accR;     /**< @brief (kr0.acc_r, kr1.acc_r) */
+  float2 t;        /**< @brief (kr0.t, kr1.t) */
+  float3 n0;       /**< @brief Ray 0 unit direction. */
+  float3 n1;       /**< @brief Ray 1 unit direction. */
+  float3 w0;       /**< @brief Ray 0 tangent angular velocity. */
+  float3 w1;       /**< @brief Ray 1 tangent angular velocity. */
 };
 
 /**
@@ -62,52 +56,42 @@ struct HalfRayPair {
  *
  * @param a First ray (maps to .x of each __half2 field).
  * @param b Second ray (maps to .y of each __half2 field).
- * @return Packed HalfRayPair with bounded fields in FP16 and phi/t in FP32.
+ * @return Packed HalfRayPair.
  */
 __device__ __forceinline__ HalfRayPair raysToPair(const KerrRay &a, const KerrRay &b) {
   HalfRayPair h{};
   h.hR = __floats2half2_rn(a.r, b.r);
-  h.hTheta = __floats2half2_rn(a.theta, b.theta);
   h.vr = make_float2(a.vr, b.vr);
-  h.mu = make_float2(a.mu, b.mu);
-  h.vmu = make_float2(a.vmu, b.vmu);
   h.accR = make_float2(a.acc_r, b.acc_r);
-  h.accMu = make_float2(a.acc_mu, b.acc_mu);
-  h.phi0 = a.phi;
-  h.phi1 = b.phi;
-  h.t0 = a.t;
-  h.t1 = b.t;
+  h.t = make_float2(a.t, b.t);
+  h.n0 = a.n;
+  h.n1 = b.n;
+  h.w0 = a.w;
+  h.w1 = b.w;
   return h;
 }
 
 /**
  * @brief Unpack a HalfRayPair into two full-precision KerrRay states.
  *
- * @param h   Packed FP16/FP32 ray pair.
+ * @param h   Packed ray pair.
  * @param[out] a  First ray (unpacked from .x fields).
  * @param[out] b  Second ray (unpacked from .y fields).
  */
 __device__ __forceinline__ void pairToRays(const HalfRayPair &h, KerrRay &a, KerrRay &b) {
   float2 const r = __half22float2(h.hR);
-  float2 const th = __half22float2(h.hTheta);
   a.r = r.x;
   b.r = r.y;
-  a.theta = th.x;
-  b.theta = th.y;
   a.vr = h.vr.x;
   b.vr = h.vr.y;
-  a.mu = h.mu.x;
-  b.mu = h.mu.y;
-  a.vmu = h.vmu.x;
-  b.vmu = h.vmu.y;
   a.acc_r = h.accR.x;
   b.acc_r = h.accR.y;
-  a.acc_mu = h.accMu.x;
-  b.acc_mu = h.accMu.y;
-  a.phi = h.phi0;
-  b.phi = h.phi1;
-  a.t = h.t0;
-  b.t = h.t1;
+  a.t = h.t.x;
+  b.t = h.t.y;
+  a.n = h.n0;
+  b.n = h.n1;
+  a.w = h.w0;
+  b.w = h.w1;
 }
 
 } // namespace
@@ -211,9 +195,8 @@ __launch_bounds__(128, 4)
         break;
       }
 
-      /* Promote both rays from packed FP16 to FP32 for this step.
-       * pairToRays unpacks hR, hTheta, hSignr, hSignt and copies
-       * phi/t (already FP32) in a single pass. */
+      /* Promote both rays from packed storage to FP32 for this step:
+       * pairToRays unpacks hR and copies the FP32 fields in one pass. */
       pairToRays(hp, kr0, kr1);
 
       /* Update min-radius pair before any horizon check so the packed
@@ -222,7 +205,7 @@ __launch_bounds__(128, 4)
 
       /* --- Ray 0 step --- */
       if (!done0) {
-        float3 const old0 = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
+        float3 const old0 = d_kerr_ray_position(kr0);
         d_record_closest_approach(hit0, kr0.r, old0, step);
 
         if (kr0.r <= rHorizon) {
@@ -233,7 +216,7 @@ __launch_bounds__(128, 4)
           /* D10: adaptive step near horizon -- matches FP32_COARSENED quality */
           float const sdt0 = d_adaptive_step(kr0.r, rs, rHorizon, dt);
           d_kerr_step(kr0, rs, aTrace, c0, sdt0);
-          float3 const new0 = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
+          float3 const new0 = d_kerr_ray_position(kr0);
 
           if (d_adisk_enabled != 0) {
             float3 dh;
@@ -255,7 +238,7 @@ __launch_bounds__(128, 4)
 
       /* --- Ray 1 step (interleaved for dual-issue ILP) --- */
       if (!done1) {
-        float3 const old1 = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
+        float3 const old1 = d_kerr_ray_position(kr1);
         d_record_closest_approach(hit1, kr1.r, old1, step);
 
         if (kr1.r <= rHorizon) {
@@ -265,7 +248,7 @@ __launch_bounds__(128, 4)
         } else {
           float const sdt1 = d_adaptive_step(kr1.r, rs, rHorizon, dt);
           d_kerr_step(kr1, rs, aTrace, c1, sdt1);
-          float3 const new1 = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
+          float3 const new1 = d_kerr_ray_position(kr1);
 
           if (d_adisk_enabled != 0) {
             float3 dh;
@@ -300,12 +283,12 @@ __launch_bounds__(128, 4)
     if (!done0) {
       hit0.escaped = true;
       hit0.max_steps = true;
-      hit0.hit_point = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
+      hit0.hit_point = d_kerr_ray_position(kr0);
     }
     if (!done1 && hasRay1) {
       hit1.escaped = true;
       hit1.max_steps = true;
-      hit1.hit_point = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
+      hit1.hit_point = d_kerr_ray_position(kr1);
     }
   } else {
     /* Schwarzschild: interleaved RK4 */

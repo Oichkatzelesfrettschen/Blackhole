@@ -4457,6 +4457,8 @@ if(BUILD_TESTING)
     )
     target_include_directories(kerr_shader_capture_test PRIVATE
       "${PROJECT_SOURCE_DIR}/tests"
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_definitions(kerr_shader_capture_test PRIVATE
       GLFW_INCLUDE_NONE
@@ -4464,6 +4466,7 @@ if(BUILD_TESTING)
     )
     target_compile_options(kerr_shader_capture_test PRIVATE ${PROJECT_WARNINGS})
     target_link_libraries(kerr_shader_capture_test PRIVATE
+      blackhole_physics
       glfw
       glbinding::glbinding
       GTest::gtest

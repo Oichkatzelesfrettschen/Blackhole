@@ -188,7 +188,8 @@ vec3 bhPackShaperInputs(float minRadiusReached, vec3 closestApproachPos, vec3 or
   float nearHoleWeight = 0.0;
   if (minRadiusReached < r_s * 5.0) {
     vec3 approachDir = normalize(origin - closestApproachPos);
-    vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
+    // Physics frame: the spin axis is +z (bhWorldToPhysics).
+    vec3 spinAxis = vec3(0.0, 0.0, kerrSpin >= 0.0 ? 1.0 : -1.0);
     vec3 flowDir = normalize(cross(spinAxis, normalize(closestApproachPos)));
     alignedFlow = 0.5 + 0.5 * dot(flowDir, approachDir);
     nearHoleWeight =
@@ -291,7 +292,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   float dt = stepSize;
 
   for (int step = 0; step < maxSteps; ++step) {
-    oldPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+    oldPos = kerrRayPosition(kerrRay);
     bhRecordClosestApproach(result, kerrRay.r, oldPos, step);
 
     if (kerrRay.r <= r_horizon) {
@@ -303,8 +304,8 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     /* D10: AMR step refinement near horizon and photon sphere */
     float stepDt = bhAdaptiveStep(kerrRay.r, r_s, r_horizon, dt);
     kerrStep(kerrRay, r_s, aTrace, c, stepDt);
-    vec3 newPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-    result.debugFlags |= bhDebugEvaluate(newPos, newPos - oldPos, maxDistance);
+    vec3 newPos = kerrRayPosition(kerrRay);
+    result.debugFlags |= bhDebugEvaluate(newPos, newPos - oldPos, escapeRadius);
     if ((bhDebugMask() & BH_DEBUG_FLAG_RANGE) != 0 && kerrRay.r < 0.0) {
       result.debugFlags |= BH_DEBUG_FLAG_RANGE;
     }
@@ -330,7 +331,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
 
   result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
   result.escaped = true;
-  result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+  result.hitPoint = kerrRayPosition(kerrRay);
   result.escapedDir = normalize(result.hitPoint - oldPos);
   return result;
 }
@@ -542,7 +543,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   float minR     = kRay.r;
 
   for (int step = 0; step < maxSteps; ++step) {
-    vec3 curPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    vec3 curPos = kerrRayPosition(kRay);
     minR = min(minR, kRay.r);
 
     if (kRay.r <= r_horizon) {
@@ -554,7 +555,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
     /* D10: AMR step refinement near horizon and photon sphere */
     float rteStepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
     kerrStep(kRay, r_s, aTrace, c, rteStepDt);
-    vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    vec3 newPos = kerrRayPosition(kRay);
 
     if (adiskEnabled > 0.5) {
       float rCyl = length(newPos.xy);
@@ -608,7 +609,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   }
 
   // Max steps exhausted -- treat as escaped toward last known direction
-  vec3 finalPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+  vec3 finalPos = kerrRayPosition(kRay);
   terminalPos = finalPos;
   vec3 escDir   = finalPos - ray.position;
   if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
@@ -672,7 +673,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   float minR     = kRay.r;
 
   for (int step = 0; step < maxSteps; ++step) {
-    vec3 curPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    vec3 curPos = kerrRayPosition(kRay);
     minR = min(minR, kRay.r);
 
     if (kRay.r <= r_horizon) {
@@ -685,7 +686,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     float stepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
     kerrStep(kRay, r_s, aTrace, c, stepDt);
-    vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    vec3 newPos = kerrRayPosition(kRay);
 
     if (adiskEnabled > 0.5) {
       float rCyl = length(newPos.xy);
@@ -748,7 +749,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   }
 
   // Map accumulated Stokes state to display color
-  terminalPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+  terminalPos = kerrRayPosition(kRay);
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
   vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
   return vec4(stokesDisplayColor(stokes, accumI), 1.0);

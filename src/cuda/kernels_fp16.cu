@@ -24,43 +24,36 @@
 namespace {
 
 /**
- * @brief Compact ray state with FP16-compressed bounded fields.
+ * @brief Compact ray state with an FP16-compressed radius.
  *
- * phi and t are kept in FP32 because phi can grow by ~1e5 rad/step near the
- * Kerr horizon (delta -> 0, delta_safe = 1e-6), exceeding FP16 max 65504.
- * The Mino velocities and accelerations stay FP32 as well: vr scales as r^2
- * and passes through zero at turning points, where FP16 would lose the sign
- * of small values. Only r and theta (bounded and slow-varying) use FP16.
+ * Only r (bounded and slow-varying) is stored in FP16. The Mino velocity and
+ * acceleration stay FP32 (vr scales as r^2 and crosses zero at turning
+ * points), and the unit direction n and its tangent velocity w stay FP32
+ * because FP16's 1e-3 resolution on n would shift the traced direction.
  */
 struct HalfRayState {
   __half r;          /**< @brief Radial coordinate stored as FP16. */
-  __half theta;      /**< @brief Polar angle stored as FP16. */
-  float phi;         /**< @brief Azimuthal angle kept FP32 to avoid Inf near horizon. */
-  float t;           /**< @brief Coordinate time kept FP32 to avoid Inf near horizon. */
+  float t;           /**< @brief Coordinate time (FP32). */
   float vr;          /**< @brief dr/dlambda (FP32). */
-  float mu;          /**< @brief cos(theta), the polar state variable (FP32). */
-  float vmu;         /**< @brief dmu/dlambda (FP32). */
   float accR;        /**< @brief R'(r)/2 carried between leapfrog steps (FP32). */
-  float accMu;       /**< @brief Theta_mu'(mu)/2 carried between leapfrog steps (FP32). */
+  float3 n;          /**< @brief Unit direction (FP32). */
+  float3 w;          /**< @brief Tangent angular velocity (FP32). */
 };
 
 /**
  * @brief Compress a full-precision KerrRay into a HalfRayState.
  *
  * @param kr Source FP32 ray state.
- * @return Compressed HalfRayState with r and theta in FP16.
+ * @return Compressed HalfRayState with r in FP16.
  */
 __device__ __forceinline__ HalfRayState kerrRayToHalf(const KerrRay &kr) {
   HalfRayState h{};
   h.r = __float2half(kr.r);
-  h.theta = __float2half(kr.theta);
-  h.phi = kr.phi; /* keep FP32 */
-  h.t = kr.t;     /* keep FP32 */
+  h.t = kr.t;
   h.vr = kr.vr;
-  h.mu = kr.mu;
-  h.vmu = kr.vmu;
   h.accR = kr.acc_r;
-  h.accMu = kr.acc_mu;
+  h.n = kr.n;
+  h.w = kr.w;
   return h;
 }
 
@@ -73,14 +66,11 @@ __device__ __forceinline__ HalfRayState kerrRayToHalf(const KerrRay &kr) {
 __device__ __forceinline__ KerrRay halfToKerrRay(const HalfRayState &h) {
   KerrRay kr{};
   kr.r = __half2float(h.r);
-  kr.theta = __half2float(h.theta);
-  kr.phi = h.phi; /* keep FP32 */
-  kr.t = h.t;     /* keep FP32 */
+  kr.t = h.t;
   kr.vr = h.vr;
-  kr.mu = h.mu;
-  kr.vmu = h.vmu;
   kr.acc_r = h.accR;
-  kr.acc_mu = h.accMu;
+  kr.n = h.n;
+  kr.w = h.w;
   return kr;
 }
 
@@ -155,7 +145,7 @@ __launch_bounds__(256, 4)
       /* Promote to FP32 for computation */
       kr = halfToKerrRay(hs);
 
-      float3 const oldPos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+      float3 const oldPos = d_kerr_ray_position(kr);
       d_record_closest_approach(result, kr.r, oldPos, step);
 
       if (kr.r <= rHorizon) {
@@ -171,7 +161,7 @@ __launch_bounds__(256, 4)
       hs = kerrRayToHalf(kr);
 
       {
-        float3 const newPos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        float3 const newPos = d_kerr_ray_position(kr);
 
         if (d_adisk_enabled != 0) {
           float3 diskHit;
@@ -194,7 +184,7 @@ __launch_bounds__(256, 4)
     result.escaped = true;
     result.max_steps = true;
     kr = halfToKerrRay(hs);
-    result.hit_point = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+    result.hit_point = d_kerr_ray_position(kr);
   } else {
     /* Schwarzschild path */
     float3 pos = cam;

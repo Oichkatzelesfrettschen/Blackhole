@@ -14,23 +14,25 @@ struct KerrConsts {
   float Q;
 };
 
-// Mino-time state. The polar motion runs in mu = cos(theta), where Carter's
-// polar potential is the polynomial
-//   Theta_mu(mu) = (dmu/dlambda)^2 = Q (1 - mu^2) + a^2 E^2 mu^2 (1 - mu^2) - Lz^2 mu^2,
-// free of the Lz^2 cot^2 pole singularity of the theta form. vr = dr/dlambda
-// and vmu = dmu/dlambda follow d^2r/dlambda^2 = R'(r)/2 and d^2mu/dlambda^2 =
-// Theta_mu'(mu)/2; accR and accMu cache those accelerations so each leapfrog
-// step evaluates the forces once. theta = acos(mu) is kept for callers.
+// Mino-time state. The radial motion carries vr = dr/dlambda through
+// d^2r/dlambda^2 = R'(r)/2 (accR caches R'/2). The angular motion carries the
+// unit direction n and its tangent velocity w = dn/dlambda without the frame
+// dragging part: in Mino time Carter's polar equation is a particle on the unit
+// sphere with potential -a^2 E^2 n_z^2 / 2, so
+//   |w|^2 = p_theta^2 + Lz^2 / sin^2 = Q + Lz^2 + a^2 E^2 n_z^2,
+//   (n x w) . z = Lz,
+// and neither contains a 1/sin(theta) factor: the axis is a regular point, so
+// rays with any Lz, including 0, cross it continuously. Frame dragging rotates
+// n and w together about z. Positions are r * n; the azimuth of n is the
+// ingoing Kerr-Schild azimuth, offset at the start so it equals the
+// Boyer-Lindquist azimuth at infinity.
 struct KerrRay {
   float r;
-  float theta;
-  float phi;
   float t;
   float vr;
-  float mu;
-  float vmu;
   float accR;
-  float accMu;
+  vec3 n;
+  vec3 w;
 };
 
 const float KERR_EPSILON = 1e-6;
@@ -59,6 +61,35 @@ vec3 kerrToCartesian(float r, float theta, float phi) {
               r * cos(theta));
 }
 
+vec3 kerrRayPosition(KerrRay ray) {
+  return ray.r * ray.n;
+}
+
+// Rotation of v about +z by angle.
+vec3 kerrRotateZ(vec3 v, float angle) {
+  float c = cos(angle);
+  float s = sin(angle);
+  return vec3(c * v.x - s * v.y, s * v.x + c * v.y, v.z);
+}
+
+// Ingoing Kerr-Schild azimuth offset F(r) = phi_KS - phi_BL along a ray,
+// F(r) = a / (r+ - r-) ln((r - r+)/(r - r-)), with F -> 0 at infinity
+// (r_s = 2M). Zero at a = 0 and inside the outer horizon.
+float kerrKsAzimuthOffset(float r, float r_s, float a) {
+  float M = 0.5 * r_s;
+  float disc = M * M - a * a;
+  if (abs(a) < KERR_EPSILON || disc <= 0.0) {
+    return 0.0;
+  }
+  float root = sqrt(disc);
+  float rPlus = M + root;
+  float rMinus = M - root;
+  if (r <= rPlus) {
+    return 0.0;
+  }
+  return a / (rPlus - rMinus) * log((r - rPlus) / (r - rMinus));
+}
+
 // Spin passed to kerrInitGeodesic and kerrStep. The camera pixel gives the
 // direction the arriving photon travelled from; its past history is the
 // time reverse of its path. Time reversal t -> -t is an isometry from Kerr
@@ -71,21 +102,25 @@ float kerrTraceSpin(float a) {
   return -a;
 }
 
-// Radial and polar accelerations R'(r)/2 and Theta_mu'(mu)/2 of the Mino
-// system: Theta_mu'/2 = -(Q + Lz^2) mu + a^2 E^2 (mu - 2 mu^3).
-void kerrAccelerations(float r, float mu, float r_s, float a, KerrConsts c,
-                       out float accR, out float accMu) {
+// Radial acceleration R'(r)/2 = 2 r E P - (r - r_s/2) Q_eff with
+// P = (r^2 + a^2) E - a Lz and Q_eff = Q + (Lz - aE)^2.
+float kerrRadialAcceleration(float r, float r_s, float a, KerrConsts c) {
   float P = (r * r + a * a) * c.E - a * c.Lz;
   float Lz_minus_aE = c.Lz - a * c.E;
   float Q_eff = c.Q + Lz_minus_aE * Lz_minus_aE;
-  accR = 2.0 * r * c.E * P - (r - 0.5 * r_s) * Q_eff;
-  float a2E2 = a * a * c.E * c.E;
-  accMu = -(c.Q + c.Lz * c.Lz) * mu + a2E2 * (mu - 2.0 * mu * mu * mu);
+  return 2.0 * r * c.E * P - (r - 0.5 * r_s) * Q_eff;
 }
 
-float kerrPolarPotentialMu(float mu, float a, KerrConsts c) {
-  float mu2 = mu * mu;
-  return c.Q * (1.0 - mu2) + a * a * c.E * c.E * mu2 * (1.0 - mu2) - c.Lz * c.Lz * mu2;
+// Tangential acceleration of n on the unit sphere from the potential
+// -a^2 E^2 n_z^2 / 2 (Carter's a^2 E^2 cos^2 term).
+vec3 kerrSphereAcceleration(vec3 n, float a, KerrConsts c) {
+  float k = a * a * c.E * c.E * n.z;
+  return k * (vec3(0.0, 0.0, 1.0) - n.z * n);
+}
+
+// On-shell angular speed |w| = sqrt(Q + Lz^2 + a^2 E^2 n_z^2).
+float kerrAngularSpeed(vec3 n, float a, KerrConsts c) {
+  return sqrt(max(c.Q + c.Lz * c.Lz + a * a * c.E * c.E * n.z * n.z, 0.0));
 }
 
 // Null geodesic through pos with Cartesian direction dir in Kerr spin a
@@ -93,25 +128,25 @@ float kerrPolarPotentialMu(float mu, float a, KerrConsts c) {
 // condition for the future root k^t, reads E = -k_t and Lz = k_phi, and
 // normalizes to E = 1. Q is Carter's constant p_theta^2 - a^2 cos^2 +
 // Lz^2 cot^2 with p_theta = Sigma k^theta / E, so R(r0) = vr^2 and
-// Theta_mu(mu0) = vmu^2 at the start (physics::kerrNullGeodesicFromBL is the
-// CPU twin, pinned by tests/kerr_null_geodesic_test.cpp; the GPU init is
-// pinned by tests/kerr_shader_capture_test.cpp).
+// |w|^2 = p_theta^2 + Lz^2 / sin^2 = Q + Lz^2 + a^2 cos^2 at the start
+// (physics::kerrNullGeodesicFromBL is the CPU twin, pinned by
+// tests/kerr_null_geodesic_test.cpp; the GPU init is pinned by
+// tests/kerr_shader_capture_test.cpp). The state starts rotated by the
+// Kerr-Schild azimuth offset F(r0) so the traced azimuth is Boyer-Lindquist at
+// infinity.
 void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
                       out KerrConsts c, out KerrRay ray) {
   float r = length(pos);
   ray.r = r;
   ray.t = 0.0;
-  ray.phi = atan(pos.y, pos.x);
   c.E = 1.0;
   c.Lz = 0.0;
   c.Q = 0.0;
   ray.vr = 0.0;
-  ray.mu = 0.0;
-  ray.vmu = 0.0;
+  ray.n = vec3(0.0, 0.0, 1.0);
+  ray.w = vec3(0.0);
+  ray.accR = 0.0;
   if (r < KERR_EPSILON) {
-    ray.theta = 0.5 * PI;
-    ray.accR = 0.0;
-    ray.accMu = 0.0;
     return;
   }
 
@@ -119,9 +154,9 @@ void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
   float cosT  = clamp(pos.z * invR, -1.0, 1.0);
   float sinT  = sqrt(max(1.0 - cosT * cosT, 0.0));
   float sin2  = sinT * sinT;
-  float cosP  = cos(ray.phi);
-  float sinP  = sin(ray.phi);
-  ray.theta   = acos(cosT);
+  float phi   = atan(pos.y, pos.x);
+  float cosP  = cos(phi);
+  float sinP  = sin(phi);
 
   vec3 e_r     = vec3(sinT * cosP,  sinT * sinP,  cosT);
   vec3 e_theta = vec3(cosT * cosP,  cosT * sinP, -sinT);
@@ -162,43 +197,57 @@ void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
   c.Q = ptheta * ptheta - a * a * cosT * cosT + c.Lz * c.Lz * cot2;
 
   ray.vr = sigma * kr * invE;
-  ray.mu = cosT;
-  ray.vmu = -sinT * ptheta;  // dmu/dlambda = -sin(theta) dtheta/dlambda
-  kerrAccelerations(ray.r, ray.mu, r_s, a, c, ray.accR, ray.accMu);
+  ray.accR = kerrRadialAcceleration(r, r_s, a, c);
+
+  // Angular state: w = p_theta e_theta + (Lz / sin) e_phi, tangent to the
+  // sphere at n = pos / r, rescaled to the on-shell speed.
+  vec3 n = pos * invR;
+  float lzOverSin = (sinT > KERR_EPSILON) ? c.Lz / sinT : 0.0;
+  vec3 w = ptheta * e_theta + lzOverSin * e_phi;
+  w -= dot(w, n) * n;
+  float wLen = length(w);
+  float speed = kerrAngularSpeed(n, a, c);
+  if (wLen > 0.0) {
+    w *= speed / wLen;
+  }
+  float offset = kerrKsAzimuthOffset(r, r_s, a);
+  ray.n = kerrRotateZ(n, offset);
+  ray.w = kerrRotateZ(w, offset);
 }
 
-// Ingoing Kerr-Schild phi and t rates in Mino time for radial velocity vr:
-//   dphi/dlambda = Lz/sin^2 - aE + a (P + vr)/Delta
-//   dt/dlambda   = ((r^2+a^2) P + r_s r vr)/Delta + a (Lz - aE sin^2)
-// with P = (r^2+a^2)E - a Lz. Both are regular on the future horizon. For an
+// Frame-dragging azimuth rate and coordinate-time rate in Mino time (ingoing
+// Kerr-Schild), without the Lz / sin^2 term that the sphere motion carries:
+//   dphi_drag/dlambda = -aE + a (P + vr)/Delta
+//   dt/dlambda        = ((r^2+a^2) P + r_s r vr)/Delta + a (Lz - aE sin^2)
+// with P = (r^2+a^2)E - a Lz. Both are regular on the future horizon: for an
 // ingoing ray (vr < 0), P + vr = (P^2 - vr^2)/(P - vr) = Delta Q_eff/(P - vr)
 // on shell (vr^2 = R), which removes the 0/0 at Delta -> 0.
-void kerrAngularRates(float r, float theta, float vr, float r_s, float a,
-                      KerrConsts c, out float dphi, out float dt) {
-  float sinTheta = sin(theta);
-  float sin2 = max(sinTheta * sinTheta, 1e-6);
+void kerrDragAndTimeRates(float r, float sin2, float vr, float r_s, float a,
+                          KerrConsts c, out float dphiDrag, out float dt) {
   float P = (r * r + a * a) * c.E - a * c.Lz;
   float Lz_minus_aE = c.Lz - a * c.E;
   float Q_eff = c.Q + Lz_minus_aE * Lz_minus_aE;
   float tail = a * (c.Lz - a * c.E * sin2);
   if (vr < 0.0) {
     float inv = 1.0 / max(P - vr, 1e-30);
-    dphi = (c.Lz / sin2) - a * c.E + a * Q_eff * inv;
-    dt   = P + r_s * r * Q_eff * inv + tail;
+    dphiDrag = -a * c.E + a * Q_eff * inv;
+    dt       = P + r_s * r * Q_eff * inv + tail;
   } else {
-    float invD = 1.0 / max(kerrDelta(r, a, r_s), 1e-6);
-    dphi = (c.Lz / sin2) - a * c.E + a * (P + vr) * invD;
-    dt   = ((r * r + a * a) * P + r_s * r * vr) * invD + tail;
+    // abs(Delta): a step that overshoots r_+ before the horizon check fires
+    // must not flip the sign of the rates (d_kerr_drag_and_time_rates twin).
+    float invD = 1.0 / max(abs(kerrDelta(r, a, r_s)), 1e-6);
+    dphiDrag = -a * c.E + a * (P + vr) * invD;
+    dt       = ((r * r + a * a) * P + r_s * r * vr) * invD + tail;
   }
 }
 
-// Null-constraint projection. The second-order system carries vr^2 = R(r)
-// and vmu^2 = Theta_mu(mu) only as first integrals; in float32 the rounding
-// of |vr| ~ P ~ r^2 far out accumulates over the r^2 dynamic range until a
-// near-radial ray reverses at a few r_s. Away from turning points (potential
-// above 1% of its scale) the magnitude is reset to the exact root; near a
+// Null-constraint projection. The leapfrog carries vr^2 = R(r) only as a first
+// integral; in float32 the rounding of |vr| ~ P ~ r^2 far out accumulates over
+// the r^2 dynamic range until a near-radial ray reverses at a few r_s. Away
+// from turning points (R above 1% of P^2) |vr| is reset to sqrt(R); near a
 // turning point the leapfrog alone carries the sign change, where the
-// magnitudes are small and float32 resolves them.
+// magnitudes are small and float32 resolves them. The angular state is
+// projected onto |n| = 1, w . n = 0, and |w| = sqrt(Q + Lz^2 + a^2 n_z^2).
 void kerrProjectOnShell(inout KerrRay ray, float r_s, float a, KerrConsts c) {
   float P = (ray.r * ray.r + a * a) * c.E - a * c.Lz;
   float Lz_minus_aE = c.Lz - a * c.E;
@@ -206,60 +255,60 @@ void kerrProjectOnShell(inout KerrRay ray, float r_s, float a, KerrConsts c) {
   if (R > 0.01 * P * P) {
     ray.vr = (ray.vr >= 0.0 ? 1.0 : -1.0) * sqrt(R);
   }
-  float thetaMu = kerrPolarPotentialMu(ray.mu, a, c);
-  float muScale = abs(c.Q) + a * a * c.E * c.E + c.Lz * c.Lz;
-  if (muScale > 0.0 && thetaMu > 0.01 * muScale) {
-    ray.vmu = (ray.vmu >= 0.0 ? 1.0 : -1.0) * sqrt(thetaMu);
+  ray.n = normalize(ray.n);
+  ray.w -= dot(ray.w, ray.n) * ray.n;
+  float wLen = length(ray.w);
+  if (wLen > 0.0) {
+    ray.w *= kerrAngularSpeed(ray.n, a, c) / wLen;
   }
 }
 
-// One kick-drift-kick (Stormer-Verlet) step of the second-order Mino system.
-// r and mu decouple in Mino time, each with a separable Hamiltonian
-// v^2/2 - R/2 (resp. Theta_mu/2), so the step is symplectic: the on-shell
-// error stays bounded and the ray passes radial and polar turning points
-// continuously. phi and t advance with midpoint rates. Near the axis
-// dphi/dlambda ~ Lz/sin^2 grows large for small Lz, so the step shrinks to
-// keep each phi increment below 0.25 rad.
-// Cost: one force and one rate evaluation per step (forces carried in ray),
-// plus the on-shell projection.
+// One kick-drift-kick (Stormer-Verlet) step of the Mino-time system. r follows
+// the separable Hamiltonian vr^2/2 - R/2; n moves on the unit sphere as a free
+// great-circle rotation (exact Rodrigues drift) kicked by the a^2 n_z^2
+// potential, and frame dragging rotates n and w about z by the midpoint rate.
+// The step is symplectic in r and in n, conserves Lz = (n x w) . z exactly
+// (kicks point in the (z, n) plane; drift and drag are rotations), and has no
+// coordinate singularity on the spin axis. Cost: one radial force, one sphere
+// force, one rate evaluation, and one sin/cos pair per step.
 void kerrStep(inout KerrRay ray, float r_s, float a, KerrConsts c, float dlam) {
-  float sin2Now = max(1.0 - ray.mu * ray.mu, 1e-8);
-  float phiRate = abs(c.Lz) / sin2Now + abs(a) * (1.0 + abs(c.Lz)) + 1e-6;
-  dlam = sign(dlam) * min(abs(dlam), 0.25 / phiRate);
-
   precise float vrHalf = ray.vr + 0.5 * dlam * ray.accR;
-  precise float vmuHalf = ray.vmu + 0.5 * dlam * ray.accMu;
+  vec3 wHalf = ray.w + 0.5 * dlam * kerrSphereAcceleration(ray.n, a, c);
+  wHalf -= dot(wHalf, ray.n) * ray.n;
 
   float rMid = ray.r + 0.5 * dlam * vrHalf;
-  float muMid = clamp(ray.mu + 0.5 * dlam * vmuHalf, -1.0, 1.0);
-  float dphi;
-  float dt;
-  kerrAngularRates(rMid, acos(muMid), vrHalf, r_s, a, c, dphi, dt);
-
   precise float rNew = ray.r + dlam * vrHalf;
-  precise float muNew = ray.mu + dlam * vmuHalf;
-  ray.phi += dlam * dphi;
+
+  // Frame dragging at the midpoint rate, split in two half rotations about z
+  // around the great-circle drift so the step stays symmetric.
+  float dphiDrag;
+  float dt;
+  kerrDragAndTimeRates(rMid, max(1.0 - ray.n.z * ray.n.z, 0.0), vrHalf, r_s, a, c,
+                       dphiDrag, dt);
+  float halfDrag = 0.5 * dlam * dphiDrag;
+  vec3 nNew = kerrRotateZ(ray.n, halfDrag);
+  vec3 wNew = kerrRotateZ(wHalf, halfDrag);
+
+  // Great-circle drift of (n, w) through angle |w| dlam.
+  float speed = length(wNew);
+  if (speed > 0.0) {
+    vec3 u = wNew / speed;
+    float ang = speed * dlam;
+    float ca = cos(ang);
+    float sa = sin(ang);
+    vec3 nDrift = nNew * ca + u * sa;
+    wNew = speed * (u * ca - nNew * sa);
+    nNew = nDrift;
+  }
+  nNew = kerrRotateZ(nNew, halfDrag);
+  wNew = kerrRotateZ(wNew, halfDrag);
   ray.t += dlam * dt;
 
-  // A ray with Lz = 0 turns in mu exactly at the axis (Theta_mu(+-1) = -Lz^2);
-  // overshooting mu = +-1 is a pass over the pole, which continues the
-  // geodesic on the far side: mu -> +-2 - mu with phi -> phi + pi.
-  if (muNew > 1.0) {
-    muNew = 2.0 - muNew;
-    vmuHalf = -vmuHalf;
-    ray.phi += PI;
-  } else if (muNew < -1.0) {
-    muNew = -2.0 - muNew;
-    vmuHalf = -vmuHalf;
-    ray.phi += PI;
-  }
-
   ray.r = rNew;
-  ray.mu = muNew;
-  ray.theta = acos(clamp(muNew, -1.0, 1.0));
-  kerrAccelerations(ray.r, ray.mu, r_s, a, c, ray.accR, ray.accMu);
+  ray.accR = kerrRadialAcceleration(ray.r, r_s, a, c);
   ray.vr = vrHalf + 0.5 * dlam * ray.accR;
-  ray.vmu = vmuHalf + 0.5 * dlam * ray.accMu;
+  ray.n = normalize(nNew);
+  ray.w = wNew + 0.5 * dlam * kerrSphereAcceleration(ray.n, a, c);
   kerrProjectOnShell(ray, r_s, a, c);
 }
 
