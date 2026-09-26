@@ -4414,16 +4414,24 @@ if(BUILD_TESTING)
   # skipped when a preset pins the tier, so this probe runs unconditionally.
   check_cxx_compiler_flag("-mavx2 -mfma" COMPILER_SUPPORTS_AVX2_FMA)
   if(COMPILER_SUPPORTS_AVX2_FMA AND NOT CMAKE_CROSSCOMPILING)
+    # The probe executes an AVX2 fused multiply-add, so it passes only where
+    # the CPU implements the instructions and the OS enables the YMM state
+    # (XCR0); anywhere else it dies with SIGILL and the probe fails.
+    set(_bh_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
+    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -mfma")
     check_cxx_source_runs("
-      #include <cpuid.h>
+      #include <immintrin.h>
       int main() {
-        unsigned int eax, ebx, ecx, edx;
-        if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) return 1;
-        if (((ecx >> 12) & 1) == 0 || ((ecx >> 28) & 1) == 0 || ((ecx >> 27) & 1) == 0) return 1;
-        if (!__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) return 1;
-        return ((ebx >> 5) & 1) != 0 ? 0 : 1;
+        volatile float in = 1.5f;
+        __m256 a = _mm256_set1_ps(in);
+        __m256 r = _mm256_fmadd_ps(a, a, a);
+        __m256i i = _mm256_add_epi32(_mm256_set1_epi32(2), _mm256_set1_epi32(3));
+        float out[8];
+        _mm256_storeu_ps(out, r);
+        return (out[0] == 3.75f && _mm256_extract_epi32(i, 0) == 5) ? 0 : 1;
       }
     " BH_HOST_RUNS_AVX2_FMA)
+    set(CMAKE_REQUIRED_FLAGS "${_bh_saved_required_flags}")
   endif()
   if(COMPILER_SUPPORTS_AVX2_FMA AND BH_HOST_RUNS_AVX2_FMA)
     bh_add_isa_twin(fma -mavx2 -mfma)
