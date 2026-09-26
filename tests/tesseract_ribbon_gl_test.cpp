@@ -8,7 +8,9 @@
  * double-counts a square of radiance and the edge brightens with the
  * subdivision count. These cases draw one straight edge as 1 and as 12
  * pieces through the real shaders and compare the integrated radiance and the
- * brightest pixel. They skip without a GL 4.6 context (headless CI).
+ * brightest pixel. A segment crossing the near plane must draw its visible
+ * part, as the same segment pre-clipped on the CPU does. They skip without a
+ * GL 4.6 context (headless CI).
  */
 
 #include <algorithm>
@@ -27,7 +29,13 @@
 #include <glbinding/glbinding.h>
 #include <gtest/gtest.h>
 
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/trigonometric.hpp>
 
 #include "render.h"
 #include "render/tesseract/tesseract_geometry.h"
@@ -91,8 +99,10 @@ protected:
     }
   }
 
-  // Red channel of the target after drawing @p segments as tesseract edges.
-  static std::vector<float> drawRed(const std::vector<tess::SegmentInstance> &segments) {
+  // Red channel of the target after drawing @p segments as tesseract edges
+  // through @p viewProjection.
+  static std::vector<float> drawRed(const std::vector<tess::SegmentInstance> &segments,
+                                    const glm::mat4 &viewProjection = glm::mat4(1.0f)) {
     const GLuint target = createColorTexture32f(TARGET_WIDTH, TARGET_HEIGHT);
     const GLuint fbo = createFramebuffer({.colorTexture = target,
                                           .width = TARGET_WIDTH,
@@ -127,7 +137,7 @@ protected:
     glUseProgram(program);
     const auto loc = [](const char *name) { return glGetUniformLocation(program, name); };
     glUniformMatrix4fv(loc("rotation4"), 1, GL_FALSE, IDENTITY_MATRIX.data());
-    glUniformMatrix4fv(loc("viewProjection"), 1, GL_FALSE, IDENTITY_MATRIX.data());
+    glUniformMatrix4fv(loc("viewProjection"), 1, GL_FALSE, glm::value_ptr(viewProjection));
     glUniform2f(loc("resolution"), static_cast<float>(TARGET_WIDTH),
                 static_cast<float>(TARGET_HEIGHT));
     glUniform1i(loc("projectionMode"), 0);
@@ -213,6 +223,44 @@ TEST_F(TesseractRibbonGlTest, JointsAreNoBrighterThanTheLine) {
   const std::vector<float> split = drawRed(straightEdge(12));
   ASSERT_GT(peak(whole), 0.0f);
   EXPECT_LE(peak(split), peak(whole) * 1.02f);
+}
+
+// Near plane of eyeAtOrigin, the TESSERACT_NEAR_PLANE value.
+constexpr float EYE_NEAR_PLANE = 0.05f;
+
+// An eye at the origin looking down -z through an infinite-far perspective,
+// as tesseractViewProjection builds it.
+glm::mat4 eyeAtOrigin() {
+  const float aspect = static_cast<float>(TARGET_WIDTH) / static_cast<float>(TARGET_HEIGHT);
+  return glm::infinitePerspective(glm::radians(60.0f), aspect, EYE_NEAR_PLANE) *
+         glm::lookAt(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+}
+
+// One uncapped edge segment from @p a to @p b.
+std::vector<tess::SegmentInstance> segment(const glm::vec4 &a, const glm::vec4 &b) {
+  tess::SegmentInstance seg;
+  seg.a = a;
+  seg.b = b;
+  seg.meta = glm::vec4(-1.0f, -1.0f,
+                       tess::packSegmentTag(tess::SegmentKind::TesseractEdge, false, false), -1.0f);
+  return {seg};
+}
+
+TEST_F(TesseractRibbonGlTest, SegmentsCrossingTheNearPlaneKeepTheirVisiblePart) {
+  // From behind the eye (z = +0.5) to well in front (z = -4); the near plane
+  // at z = -0.05 cuts it at s = 0.55 / 4.5.
+  const glm::vec4 behind(0.1f, 0.02f, 0.5f, 0.0f);
+  const glm::vec4 ahead(0.1f, 0.02f, -4.0f, 0.0f);
+  const float cut = 0.55f / 4.5f;
+  const std::vector<float> crossing = drawRed(segment(behind, ahead), eyeAtOrigin());
+  const std::vector<float> preclipped =
+      drawRed(segment(behind + ((ahead - behind) * (cut + 1e-4f)), ahead), eyeAtOrigin());
+  const double reference = total(preclipped);
+  ASSERT_GT(reference, 0.0);
+  EXPECT_NEAR(total(crossing) / reference, 1.0, 0.02);
+  // A segment wholly behind the eye draws nothing.
+  EXPECT_EQ(total(drawRed(segment(behind, glm::vec4(0.1f, 0.02f, 2.0f, 0.0f)), eyeAtOrigin())),
+            0.0);
 }
 
 } // namespace

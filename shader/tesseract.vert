@@ -18,8 +18,10 @@
  * p = xyz d / (d - w); 1 is stereographic from S^3, p = xyz / (1 - w) after
  * normalizing the rotated point. Kind 2 (lit-moment room outline) takes its
  * w and library time from litMoment, mapped by t -> 2 t / T - 1 as
- * libraryToTesseract does. A segment with an endpoint behind the camera is
- * culled, since its screen-space direction is undefined there.
+ * libraryToTesseract does. A segment that crosses the near plane z = -w is
+ * clipped to its visible part in clip space before the screen-space
+ * expansion, which needs finite screen positions at both ends; a segment
+ * wholly behind the plane is culled.
  */
 
 layout(location = 0) in vec4 segA;
@@ -60,6 +62,9 @@ const float PERSPECTIVE_MIN_DEPTH = 0.05;
 const float STEREOGRAPHIC_MIN_DENOM = 0.02;
 const float STEREOGRAPHIC_FADE_END = 0.2;
 const float STEREOGRAPHIC_MIN_NORM = 1e-4;
+// Segment-parameter step a clipped endpoint takes past the near plane toward
+// the visible end, so the rasterizer's own near clip never shaves the quad.
+const float NEAR_CLIP_NUDGE = 1e-4;
 
 vec3 projectPerspective(vec4 p, float eyeDistance) {
   float denom = max(eyeDistance - p.w, PERSPECTIVE_MIN_DEPTH);
@@ -106,13 +111,37 @@ void main() {
   vec4 clipA = viewProjection * vec4(project4(a, fadeA), 1.0);
   vec4 clipB = viewProjection * vec4(project4(b, fadeB), 1.0);
 
-  vLibraryTime = mix(tA, tB, corner.x);
-  vAcross = corner.y;
-  vFade = mix(fadeA, fadeB, corner.x);
+  // Signed distance to the near plane z = -w, linear along the segment.
+  float nearA = clipA.z + clipA.w;
+  float nearB = clipB.z + clipB.w;
   vKind = kind;
   vStrand = int(round(segMeta.w));
-
-  if (clipA.w <= 1e-3 || clipB.w <= 1e-3) {
+  vAcross = corner.y;
+  if (nearA <= 0.0 && nearB <= 0.0) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+    vLibraryTime = tA;
+    vFade = 0.0;
+    return;
+  }
+  // Keep the part of [0, 1] in front of the plane; a clipped end is no
+  // polyline endpoint and draws no cap.
+  float sA = 0.0;
+  float sB = 1.0;
+  if (nearA < 0.0) {
+    sA = min(nearA / (nearA - nearB) + NEAR_CLIP_NUDGE, 1.0);
+    tag &= ~SEGMENT_CAP_A;
+  } else if (nearB < 0.0) {
+    sB = max(nearA / (nearA - nearB) - NEAR_CLIP_NUDGE, 0.0);
+    tag &= ~SEGMENT_CAP_B;
+  }
+  vec4 keptA = mix(clipA, clipB, sA);
+  vec4 keptB = mix(clipA, clipB, sB);
+  float s = mix(sA, sB, corner.x);
+  vLibraryTime = mix(tA, tB, s);
+  vFade = mix(fadeA, fadeB, s);
+  clipA = keptA;
+  clipB = keptB;
+  if (clipA.w <= 1e-6 || clipB.w <= 1e-6) {
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
     return;
   }
