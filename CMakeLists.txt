@@ -5565,6 +5565,33 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Additive null/timelike norm projection of the verified energy-conserving
+  # geodesic step (audit 02 F7 case).
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/energy_conserving_geodesic_test.cpp")
+    add_executable(energy_conserving_geodesic_test
+      "${PROJECT_SOURCE_DIR}/tests/energy_conserving_geodesic_test.cpp"
+    )
+    target_include_directories(energy_conserving_geodesic_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(energy_conserving_geodesic_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(energy_conserving_geodesic_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(energy_conserving_geodesic_test PRIVATE GTest::gtest_main)
+
+    add_test(NAME energy_conserving_geodesic_validation COMMAND energy_conserving_geodesic_test)
+    set_tests_properties(energy_conserving_geodesic_validation PROPERTIES
+      LABELS "physics;geodesic;verified"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(energy_conserving_geodesic_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # LQG-modified Kerr metric test (D6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp")
     add_executable(lqg_kerr_test
