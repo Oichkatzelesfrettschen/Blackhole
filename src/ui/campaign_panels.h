@@ -55,7 +55,8 @@ struct CampaignUiState {
   bool realtime = false;
   float localSecondsPerWallSecond = 1.0f; ///< 1 = real time at the focused station.
   game::RealtimeDriver driver;
-  game::Inbox inbox;
+  game::Inbox inbox{game::K_FIRST_COLONY_NODE};    ///< The colony's inbox.
+  game::Inbox hostInbox{game::K_AUTHORITY_NODE};   ///< The host's inbox.
   game::NodeId focusNode = game::K_FIRST_COLONY_NODE;
   game::NodeId commandOrigin = game::K_AUTHORITY_NODE;
   bool lagging = false;

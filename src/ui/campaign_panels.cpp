@@ -80,11 +80,13 @@ const char *nodeName(game::NodeId node) {
   return node == game::K_AUTHORITY_NODE ? "host" : "colony";
 }
 
-/** @brief Advances one turn and feeds the inbox; true when an arrival this
- *         turn is in a pause category. */
-bool stepTurn(game::CampaignSession &session, game::Inbox &inbox) {
+/** @brief Advances one turn and feeds both stations' inboxes; true when an
+ *         arrival this turn at the focused station is in a pause category. */
+bool stepTurn(game::CampaignSession &session, CampaignUiState &uiState) {
   session.state().advanceTurn();
-  return inbox.sync(session.state().arrivals());
+  const bool colonyPause = uiState.inbox.sync(session.state().arrivals());
+  const bool hostPause = uiState.hostInbox.sync(session.state().arrivals());
+  return uiState.focusNode == game::K_AUTHORITY_NODE ? hostPause : colonyPause;
 }
 
 const game::NodeView *findNode(const game::CampaignViewSnapshot &view, game::NodeId id) {
@@ -400,7 +402,16 @@ void startColonyStory(CampaignUiState &uiState, int colonyBand) {
   }
   uiState.storyError.clear();
   uiState.storySession = std::make_unique<game::CampaignSession>(1, loaded.story, colonyBand);
-  uiState.inbox = game::Inbox(game::K_FIRST_COLONY_NODE);
+  // Fresh inboxes for the new session, keeping the player's pause choices.
+  game::Inbox colonyInbox(game::K_FIRST_COLONY_NODE);
+  game::Inbox hostInbox(game::K_AUTHORITY_NODE);
+  for (int index = 0; index < game::K_EVENT_CATEGORY_COUNT; ++index) {
+    const auto category = static_cast<game::EventCategory>(index);
+    colonyInbox.setPauseOn(category, uiState.inbox.pausesOn(category));
+    hostInbox.setPauseOn(category, uiState.inbox.pausesOn(category));
+  }
+  uiState.inbox = colonyInbox;
+  uiState.hostInbox = hostInbox;
   uiState.focusNode = game::K_FIRST_COLONY_NODE;
   uiState.commandOrigin = game::K_FIRST_COLONY_NODE;
   uiState.realtime = false;
@@ -483,6 +494,7 @@ void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiSt
     ImGui::SameLine();
     if (ImGui::Checkbox(game::eventCategoryName(category), &pauseOn)) {
       uiState.inbox.setPauseOn(category, pauseOn);
+      uiState.hostInbox.setPauseOn(category, pauseOn);
     }
   }
 }
@@ -520,13 +532,16 @@ void renderClocks(const game::CampaignViewSnapshot &view, const CampaignUiState 
 void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
   ImGui::SetNextWindowPos(ImVec2(980.0f, 360.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(460.0f, 320.0f), ImGuiCond_FirstUseEver);
-  const std::string title =
-      std::format("Inbox ({} unread)###CampaignInbox", uiState.inbox.unreadCount());
+  // The inbox of the station the player stands at, labeled by that station.
+  game::Inbox &inbox =
+      uiState.focusNode == game::K_AUTHORITY_NODE ? uiState.hostInbox : uiState.inbox;
+  const std::string title = std::format("{} inbox ({} unread)###CampaignInbox",
+                                        nodeName(inbox.owner()), inbox.unreadCount());
   if (!ImGui::Begin(title.c_str(), &uiState.inboxOpen, ImGuiWindowFlags_NoCollapse)) {
     ImGui::End();
     return;
   }
-  const std::vector<game::InboxGroup> groups = uiState.inbox.groups();
+  const std::vector<game::InboxGroup> groups = inbox.groups();
   if (groups.empty()) {
     ImGui::TextDisabled("nothing has arrived");
   }
@@ -538,15 +553,15 @@ void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &
       continue;
     }
     if (ImGui::SmallButton(std::format("mark all read##all{}", group.sender).c_str())) {
-      uiState.inbox.markAllRead(group.sender);
+      inbox.markAllRead(group.sender);
     }
     for (const std::size_t index : group.entries) {
-      const game::InboxEntry &entry = uiState.inbox.entries().at(index);
+      const game::InboxEntry &entry = inbox.entries().at(index);
       const game::ArrivalRecord &arrival = entry.arrival;
       ImVec4 color(1.0f, 1.0f, 1.0f, 1.0f);
       if (entry.read) {
         color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-      } else if (uiState.inbox.pausesOn(arrival.category)) {
+      } else if (inbox.pausesOn(arrival.category)) {
         color = ImVec4(1.0f, 0.75f, 0.4f, 1.0f);
       }
       ImGui::PushStyleColor(ImGuiCol_Text, color);
@@ -555,7 +570,7 @@ void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &
           game::eventCategoryName(arrival.category), arrivalText(view, arrival), arrival.emitTurn,
           formatSpan(static_cast<double>(arrival.senderProperSecAtEmit)), index);
       if (ImGui::Selectable(line.c_str(), false)) {
-        uiState.inbox.markRead(index);
+        inbox.markRead(index);
       }
       ImGui::PopStyleColor();
     }
@@ -674,7 +689,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
         if (ImGui::Button(label.c_str())) {
           // A flagged arrival stops a batch on its own turn, as in real time.
           for (int step = 0; step < count; ++step) {
-            if (stepTurn(session, uiState.inbox)) {
+            if (stepTurn(session, uiState)) {
               uiState.inboxOpen = true;
               break;
             }
@@ -706,7 +721,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
     }
     const game::RealtimePumpResult pumped = uiState.driver.pump(
         static_cast<double>(ImGui::GetIO().DeltaTime),
-        [&session, &uiState]() { return stepTurn(session, uiState.inbox); });
+        [&session, &uiState]() { return stepTurn(session, uiState); });
     uiState.lagging = pumped.lagging;
     if (pumped.pausedByArrival) {
       uiState.inboxOpen = true;
