@@ -482,7 +482,9 @@ Findings:
 - Set C (64 segments, `aI ds` in {0.01, 0.03, 0.1, 0.3}, `tauF` in {10, 1000}) sets the
   branch point. At `tauF = 1000` the split form errs 2.3e-7, 2.1e-8, 8.0e-10, and 4.2e-10
   respectively. The direct form stays at <= 1.6e-11.
-- The direct form is the default. The split form is an optimization for `aI ds >= 0.1`.
+- The direct form is the default and the only form that meets a 1e-10 gate at every
+  measured depth. The split form is an optimization for `aI ds >= 0.1` where the error
+  budget is at least 1e-9 (its 8.0e-10 and 4.2e-10 at `tauF = 1000` fail a 1e-10 gate).
 
 Where it runs today:
 - Full-K transfer (`stokesStepFull`: rhoQ conversion, alphaQ/alphaV dichroism) is called
