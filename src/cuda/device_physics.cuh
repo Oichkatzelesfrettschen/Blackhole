@@ -30,6 +30,7 @@
 /* Synchrotron G(x) LUT domain -- single-sourced with the C++ and GLSL
  * consumers via shader/include/synchrotron_lut_domain.h. */
 #include "../../shader/include/synchrotron_lut_domain.h"
+#include "device_zamo_redshift.cuh"
 #define D_SYNCH_G_X_MIN ((float)SYNCH_G_LUT_DOMAIN_X_MIN) /**< @brief Minimum x for G(x) LUT (log-space lower bound). */
 #define D_SYNCH_G_X_MAX ((float)SYNCH_G_LUT_DOMAIN_X_MAX) /**< @brief Maximum x for G(x) LUT (log-space upper bound). */
 /* log(X_MAX / X_MIN) = log(30 / 0.001) = log(30000), precomputed because
@@ -1233,7 +1234,8 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
                         (rNorm - d_redshift_radius_min) / denom));
             z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
         } else {
-            z = 1.0f / fmaxf(hit.redshift, D_EPSILON) - 1.0f;
+            /* Same ZAMO-lapse model and cap as the LUT (device_zamo_redshift.cuh). */
+            z = d_zamo_redshift(r, rs, d_spin);
         }
         float one_plus_z = 1.0f + z;
         float dimming = 1.0f / (one_plus_z * one_plus_z * one_plus_z);
@@ -1672,7 +1674,8 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
             float u = fmaxf(0.0f, fminf((r_norm - d_redshift_radius_min) / denom, 1.0f));
             z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
         } else {
-            z = 1.0f / fmaxf(d_redshift_factor(min_radius, rs), D_EPSILON) - 1.0f;
+            /* Same ZAMO-lapse model and cap as the LUT (device_zamo_redshift.cuh). */
+            z = d_zamo_redshift(min_radius, rs, spin);
         }
         sky = d_apply_simple_redshift(sky, z);
     }

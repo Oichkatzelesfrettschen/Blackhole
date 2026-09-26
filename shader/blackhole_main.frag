@@ -376,7 +376,8 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
 
   // Apply gravitational redshift to disk emission
   if (enableRedshift > 0.5) {
-    float z = gravitationalRedshift(r, schwarzschildRadius);  // Use cached radius r
+    // No-LUT fallback: the LUT's ZAMO-lapse model and cap (redshift.glsl).
+    float z = zamoRedshiftEquatorial(r, schwarzschildRadius, kerrSpin);
     if (useLUTs > 0.5) {
       float rNorm = r / max(schwarzschildRadius, EPSILON);
       float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
@@ -568,7 +569,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
 
   // Apply gravitational redshift to background light
   if (enableRedshift > 0.5 && minRadiusReached < schwarzschildRadius * 10.0) {
-    float z = gravitationalRedshift(minRadiusReached, schwarzschildRadius);
+    float z = zamoRedshiftEquatorial(minRadiusReached, schwarzschildRadius, kerrSpin);
     if (useLUTs > 0.5) {
       float rNorm = minRadiusReached / max(schwarzschildRadius, EPSILON);
       float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);

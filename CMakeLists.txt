@@ -6340,6 +6340,36 @@ if(BUILD_TESTING)
       endif()
     endif()
 
+    # No-LUT redshift fallback -- device ZAMO lapse vs mpmath
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_zamo_redshift_test.cu")
+      add_executable(cuda_zamo_redshift_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_zamo_redshift_test.cu"
+      )
+      set_target_properties(cuda_zamo_redshift_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+      )
+      target_include_directories(cuda_zamo_redshift_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_zamo_redshift_test PRIVATE
+        GTest::gtest_main
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_zamo_redshift COMMAND cuda_zamo_redshift_test)
+      set_tests_properties(cuda_zamo_redshift PROPERTIES
+        LABELS "cuda;physics;redshift"
+        TIMEOUT 60
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_zamo_redshift PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
     # 6. Geodesic orbit parity -- R(r)>=0 constraint + RK4 vs analytic RMSE
     if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_geodesic_orbit_test.cu")
       add_executable(cuda_geodesic_orbit_test
