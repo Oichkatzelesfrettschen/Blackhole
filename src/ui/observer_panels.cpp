@@ -247,7 +247,7 @@ void drawDistantScreen(double inclination) {
   }
   draw->AddCircle(toScreen(0.0, 0.0), 4.0F, IM_COL32(120, 60, 60, 255));
   draw->AddText(ImVec2(toScreen(0.0, 0.0).x - 40.0F, toScreen(0.0, 0.0).y + 14.0F),
-                IM_COL32(150, 90, 90, 255), "direct image (g = dtau/dt)");
+                IM_COL32(150, 90, 90, 255), "lambda ~ 0 light (g = dtau/dt)");
   draw->AddText(ImVec2(origin.x + 6.0F, origin.y + 4.0F), IM_COL32(200, 200, 200, 255),
                 "schematic: extremal Kerr screen (GLS 2017 Eqs. A.5, A.12), M = 1");
   if (!line) {
@@ -281,14 +281,15 @@ void renderObserverDistantView(RenderState &rs) {
   const blackhole::EmissionSummary &emission = view.renderer.emission();
   const double rate = clock.properTimeRate;
   ImGui::SeparatorText("Redshift of the observer's light, g_emit = (dtau/dt) / (1 - Omega lambda)");
-  ImGui::Text("Direct image, lambda ~ 0: g_emit ~ dtau/dt = %.4g (1/%.0f); g^4 = %.2g", rate,
-              1.0 / rate, rate * rate * rate * rate);
+  ImGui::Text("Zero angular momentum, lambda ~ 0: g_emit ~ dtau/dt = %.4g (1/%.0f); g^4 = %.2g",
+              rate, 1.0 / rate, rate * rate * rate * rate);
   ImGui::Text("NHEKline image, lambda -> 1/Omega: g_emit up to %.4g (GLS bound sqrt(3) = 1.732)",
               emission.gEmitMax);
-  ImGui::Text("Emission sphere: %.1f%% escapes; %.2g%% direct (g_emit < 1e-3), %.1f%% NHEK "
-              "(g_emit > 0.1)",
-              100.0 * emission.escapingFraction, 100.0 * emission.directFraction,
-              100.0 * emission.nhekFraction);
+  ImGui::Text(
+      "Emission sphere: %.1f%% escapes; %.2g%% near lambda = 0 (g_emit < 1e-3), %.1f%% NHEK "
+      "(g_emit > 0.1)",
+      100.0 * emission.escapingFraction, 100.0 * emission.directFraction,
+      100.0 * emission.nhekFraction);
   if (!emission.histogram.empty()) {
     ImGui::PlotHistogram("##gEmit", emission.histogram.data(),
                          static_cast<int>(emission.histogram.size()), 0, nullptr, 0.0F, FLT_MAX,

@@ -21,10 +21,13 @@
  *     temperature is the one with the texel's blue/red ratio (an RGB texel
  *     does not carry a spectrum, so this shift is approximate) and whose
  *     luminance at g = 1 is the texel luminance times starSkyLuminance.
- * Luminance spans about 19 decades (a 1e-4 cd/m^2 starfield to the 1e13
+ * Luminance spans about 17 decades (a 1e-4 cd/m^2 starfield to the 1e13
  * cd/m^2 patch), so the output is a log-luminance exposure: luminance maps to
  * displayPeak * (log10 L - logLuminanceMin) / (logLuminanceMax -
- * logLuminanceMin) with the chromaticity kept, before bloom and ACES.
+ * logLuminanceMin) with the chromaticity kept, before bloom and ACES. The
+ * default range [-7, 13.5] adds three decades below that starfield, so a
+ * cubemap texel at 1e-4 of the 1e-3 cd/m^2 starSkyLuminance stays above
+ * black, and half a decade above the patch.
  *
  * Unresolved patch. Wherever a pixel is wider than the patch, the patch's
  * CMB flux inside rhoSplit of the tile center (tileFluxLut: cumulative
