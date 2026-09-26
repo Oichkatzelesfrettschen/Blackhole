@@ -659,7 +659,7 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
     rPot.passed ? ++passed : ++failed;
   }
 
-  // Test 20: Kerr raytracer produces finite output (a=0)
+  // Test 20: Kerr raytracer steps and produces finite output (a=0)
   {
     double const mass = physics::M_SUN;
     double const rS = physics::schwarzschildRadius(mass);
@@ -673,9 +673,12 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
 
     auto result = tracer.trace(state, c);
     // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): Vec3d subscripts
+    // A step in the wrong units escapes in one step to an r whose lapse
+    // overflows, leaving a finite position beside an infinite redshift.
     bool const finite = std::isfinite(result.finalPosition[0]) && // NOLINT
                         std::isfinite(result.finalPosition[1]) && // NOLINT
-                        std::isfinite(result.finalPosition[2]);   // NOLINT
+                        std::isfinite(result.finalPosition[2]) && // NOLINT
+                        std::isfinite(result.redshift) && result.stepsTaken > 1;
 
     TestResult const r{.name = "Kerr raytracer finite output",
                        .expected = 1.0,

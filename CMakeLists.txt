@@ -4209,7 +4209,7 @@ if(BUILD_TESTING)
     add_executable(kerr_null_geodesic_test
       "${PROJECT_SOURCE_DIR}/tests/kerr_null_geodesic_test.cpp"
     )
-    target_link_libraries(kerr_null_geodesic_test PRIVATE blackhole_physics GTest::gtest_main)
+    target_link_libraries(kerr_null_geodesic_test PRIVATE blackhole_physics glm::glm GTest::gtest_main)
     target_include_directories(kerr_null_geodesic_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
