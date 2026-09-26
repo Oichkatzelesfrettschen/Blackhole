@@ -333,6 +333,24 @@ TEST(CampaignSave, ExcessiveReplayWorkIsRefusedBeforeReplay) {
             "saved commands demand more task-graph replay work than this save allows");
 }
 
+// Falsifier: placement commands charged as task-graph work, so a log of
+// placements at an in-budget turn is refused as excessive replay work though
+// PlaceFleet adds nothing the replay loop scans.
+TEST(CampaignSave, PlacementsAreNotChargedAsTaskReplayWork) {
+  game::CampaignSession m87(42);
+  for (int index = 0; index < 1000; ++index) {
+    static_cast<void>(m87.issuePlaceFleet(static_cast<game::FleetId>((index % 6) + 1), index % 2,
+                                          game::OrbitLane::Prograde, game::StationKeeping::Hover));
+  }
+  std::vector<std::uint8_t> save = game::saveCampaign(m87);
+  const std::int64_t budget = game::saveReplayTurnBudget(m87.state());
+  writeI64(save, turnValueOffset(save), budget);
+  // The digest no longer matches the edited turn, so the load still fails,
+  // but only after replay: never on the task-work ceiling.
+  EXPECT_NE(loadError(save, nullptr),
+            "saved commands demand more task-graph replay work than this save allows");
+}
+
 // Falsifier: an M87 save whose spin has only its sign flipped loading. The
 // session rebuilds from the header's spin, so the header check alone cannot
 // catch it; the replay digest must, because the state carries the sense of

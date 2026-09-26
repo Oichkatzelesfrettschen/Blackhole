@@ -35,13 +35,21 @@ namespace campaign_sim {
 inline constexpr std::int64_t K_COLONY_SIM_MAX_HORIZON = 1000000;
 
 /** @brief The latest turn any TurnAtLeast trigger or Received silence
- *         threshold in the event graph resolves to, over every event
+ *         threshold in the event graph resolves to, plus the longest single
+ *         Schedule delay (so a triggered event's scheduled follow-up still
+ *         lands; a chain of schedules needs --turns), over every event
  *         regardless of source: the graph-generic bound on when the story can
  *         still change something, with no dependence on a parameter's name. */
 [[nodiscard]] inline std::int64_t colonyStoryGraphBound(const game::CampaignState &state) {
   std::int64_t maxTurnAtLeast = 0;
   std::int64_t maxSilentThreshold = 0;
+  std::int64_t maxScheduleDelay = 0;
   for (const game::EventDef &event : state.config().story.events) {
+    for (const game::EventEffect &effect : event.effects) {
+      if (effect.kind == game::EffectKind::Schedule) {
+        maxScheduleDelay = std::max(maxScheduleDelay, state.resolveStoryValue(effect.delayTurns));
+      }
+    }
     for (const game::EventPredicate &predicate : event.triggers) {
       if (predicate.kind == game::PredicateKind::TurnAtLeast) {
         maxTurnAtLeast = std::max(maxTurnAtLeast, state.resolveStoryValue(predicate.value));
@@ -50,7 +58,7 @@ inline constexpr std::int64_t K_COLONY_SIM_MAX_HORIZON = 1000000;
       }
     }
   }
-  return maxTurnAtLeast + maxSilentThreshold +
+  return maxTurnAtLeast + maxSilentThreshold + maxScheduleDelay +
          state.nodeDelayTurns(game::K_AUTHORITY_NODE, game::K_FIRST_COLONY_NODE) + 60;
 }
 
