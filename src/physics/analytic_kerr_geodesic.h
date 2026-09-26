@@ -48,12 +48,13 @@
 
 #ifdef __has_include
 #if __has_include(<boost/math/special_functions/jacobi_elliptic.hpp>)
-#include <boost/math/special_functions/ellint_1.hpp>
 #include <boost/math/special_functions/jacobi_elliptic.hpp>
 // Conditional compilation requires a macro to select the Boost Jacobi path.
 #define PHYSICS_HAS_BOOST_JACOBI 1 // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 #endif
+
+#include "elliptic_integrals.h"
 
 namespace physics {
 
@@ -285,12 +286,36 @@ inline void classifyAndSort(RadialRoots &result) {
 #ifdef PHYSICS_HAS_BOOST_JACOBI
 
 /**
+ * @brief Boost.Math policy for the analytic Kerr elliptic functions.
+ *
+ * Boost's default policy promotes double arguments to long double, which on
+ * x86-64 runs the x87 80-bit unit and costs about 10x in jacobi_elliptic.
+ * Evaluated in double, sn and cn stay within a few ulp of their first-order
+ * error bound while 1 - m >= 1e-4; closer to m = 1 the double evaluation's cn
+ * error grows (27x the bound at 1 - m = 3e-7, 980x at 3e-10), and promoting
+ * the call cannot restore 1 - m once k = sqrt(m) is rounded to double, so
+ * below ANALYTIC_KERR_PROMOTE_BELOW rAnalytic runs the Landen transformation
+ * in long double on 1 - m formed from the roots
+ * (tests/analytic_geodesic_reproducibility_test.cpp). ellint_1 is not used:
+ * radialHalfPeriod takes K from the AGM with 1 - m formed from the roots.
+ * bench/numerics_bench.cpp measures the cost of both policies.
+ */
+using AnalyticKerrPolicy =
+    boost::math::policies::policy<boost::math::policies::promote_double<false>>;
+
+/// 1 - m below which rAnalytic evaluates sn and cn by the long-double Landen transformation.
+inline constexpr double ANALYTIC_KERR_PROMOTE_BELOW = 1.0e-4;
+
+/**
  * @brief Compute r(lambda) analytically using Jacobi elliptic functions.
  *
  * For a transit orbit with four real roots r1 >= r2 >= r3 >= r4,
  * the radial solution is:
  *
  *   r(lambda) = [r3*(r1-r4) - r4*(r1-r3)*sn^2(u|m)] / [(r1-r4) - (r1-r3)*sn^2(u|m)]
+ *             = r3 + (r3-r4)(r1-r3) sn^2 / ((r3-r4) + (r1-r3) cn^2),
+ *
+ * evaluated in the second form, whose terms are all nonnegative.
  *
  * where:
  *   m = (r2-r3)*(r1-r4) / [(r1-r3)*(r2-r4)]   (elliptic modulus squared)
@@ -324,26 +349,54 @@ inline void classifyAndSort(RadialRoots &result) {
   const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
   const double u = scale * (lambda - lambda0);
 
-  // Jacobi elliptic function sn(u | k) where k = sqrt(m)
-  const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double snVal = boost::math::jacobi_sn(k, u);
-  (void)boost::math::jacobi_cn(k, u); // unused but kept for symmetry
+  // sn(u | k) and cn(u | k), k = sqrt(m). Away from m = 1 one double-precision
+  // Boost call; below 1 - m = ANALYTIC_KERR_PROMOTE_BELOW the double call loses
+  // digits in cn, and a double modulus k cannot even represent 1 - m below
+  // eps, so there the Landen transformation runs in long double on
+  // k'^2 = 1 - m formed from the roots.
+  const double kPrime2 = std::clamp(((r1 - r2) * (r3 - r4)) / den, 0.0, 1.0); // 1 - m
+  double snVal = 0.0;
+  double cnVal = 0.0;
+  if (kPrime2 < ANALYTIC_KERR_PROMOTE_BELOW) {
+    const JacobiSnCn<long double> sc = jacobiSnCnFromComplement<long double>(
+        static_cast<long double>(u), static_cast<long double>(std::clamp(m, 0.0, 1.0)),
+        static_cast<long double>(kPrime2));
+    snVal = static_cast<double>(sc.sn);
+    cnVal = static_cast<double>(sc.cn);
+  } else {
+    const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
+    snVal = boost::math::jacobi_elliptic(k, u, &cnVal, static_cast<double *>(nullptr),
+                                         AnalyticKerrPolicy());
+  }
 
-  const double sn2 = snVal * snVal;
-  const double aCoeff = (r3 * (r1 - r4)) - (r4 * (r1 - r3) * sn2);
-  const double bCoeff = (r1 - r4) - ((r1 - r3) * sn2);
-
-  if (std::abs(bCoeff) < 1e-30) {
-    return r1;
-  } // At turning point
-  return aCoeff / bCoeff;
+  // r - r3 = (r3-r4)(r1-r3) sn^2 / ((r3-r4) + (r1-r3) cn^2): with r1 >= r3 >= r4
+  // every term is nonnegative, where the equivalent
+  // (r3(r1-r4) - r4(r1-r3) sn^2) / ((r1-r4) - (r1-r3) sn^2) cancels as sn^2 -> 1.
+  const double d31 = r1 - r3;
+  const double d34 = r3 - r4;
+  const double denomR = d34 + (d31 * cnVal * cnVal);
+  if (!(denomR > 0.0)) {
+    return r3; // only at r3 = r4 with cn = 0, where the numerator vanishes too
+  }
+  return r3 + (d34 * d31 * snVal * snVal / denomR);
 }
+
+#endif // PHYSICS_HAS_BOOST_JACOBI
 
 /**
  * @brief Compute the half-period of radial oscillation.
  *
- * The radial motion has period 2*K(m)/scale in the affine parameter,
- * where K(m) is the complete elliptic integral of the first kind.
+ * The radial motion has half period K(m)/scale in the affine parameter, with
+ * K the complete elliptic integral of the first kind and
+ * scale = sqrt((r1-r3)(r2-r4))/2. K is evaluated by the AGM
+ * (ellipticKFromComplement) from the complementary parameter formed from the
+ * roots,
+ *
+ *   k'^2 = 1 - m = (r1-r2)(r3-r4) / ((r1-r3)(r2-r4)),
+ *
+ * which carries only a few roundings as m -> 1, where forming 1 - m from m
+ * (or from k = sqrt(m) inside a double-precision ellint_1) cancels and loses
+ * digits in proportion to the condition number of K.
  *
  * @param roots Radial roots
  * @return Half-period in affine parameter
@@ -358,24 +411,18 @@ inline void classifyAndSort(RadialRoots &result) {
   const double r3 = roots.roots.at(2).real();
   const double r4 = roots.roots.at(3).real();
 
-  const double num = (r2 - r3) * (r1 - r4);
   const double den = (r1 - r3) * (r2 - r4);
   if (std::abs(den) < 1e-30) {
     return 0.0;
   }
-  const double m = num / den;
-
-  const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
+  const double scale = std::sqrt(std::abs(den)) / 2.0;
   if (scale < 1e-30) {
     return 0.0;
   }
 
-  const double k         = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double kComplete = boost::math::ellint_1(k);
-  return kComplete / scale;
+  const double kPrime2 = std::clamp(((r1 - r2) * (r3 - r4)) / den, 0.0, 1.0);
+  return ellipticKFromComplement(kPrime2) / scale;
 }
-
-#endif // PHYSICS_HAS_BOOST_JACOBI
 
 // ============================================================================
 // Critical Curves (Photon Sphere)
@@ -424,8 +471,8 @@ inline void classifyAndSort(RadialRoots &result) {
   // Note: factor is 4 (not 2) in the xi formula.
   ip.xi = ((r2 + a2) / a) - ((4.0 * rPh * delta) / (a * deltaPrime));
 
-  const double dp2   = deltaPrime * deltaPrime;
-  const double xiA   = ip.xi - a;
+  const double dp2 = deltaPrime * deltaPrime;
+  const double xiA = ip.xi - a;
   ip.eta = ((16.0 * r2 * delta) / dp2) - (xiA * xiA);
 
   return ip;
