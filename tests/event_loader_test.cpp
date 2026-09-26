@@ -381,3 +381,15 @@ TEST(EventPredicates, CoreRejectsStoriesOutsideTheDocumentedRange) {
   negativeTier.techTiers = {{.points = -3, .name = "x"}};
   EXPECT_FALSE(storyBuildsValid(negativeTier));
 }
+
+// Falsifier: two schedule entries naming one event for one turn collapsing
+// into a single occurrence -- each entry must run the event once.
+TEST(EventPredicates, EachScheduledOccurrenceRuns) {
+  const std::unique_ptr<StoryRun> run = runStory(R"({"events": [
+      {"id": 1, "triggers": [{"turn_at_least": 1}],
+       "effects": [{"schedule": {"event": 2, "delay_turns": 3}},
+                   {"schedule": {"event": 2, "delay_turns": 3}}]},
+      {"id": 2, "mode": "scheduled", "effects": [{"emit": {"kind": "notice", "to": "host"}}]}]})",
+                                                 10);
+  EXPECT_EQ(noticeTurns(*run->state, 2, game::K_AUTHORITY_NODE), (std::vector<std::int64_t>{4, 4}));
+}

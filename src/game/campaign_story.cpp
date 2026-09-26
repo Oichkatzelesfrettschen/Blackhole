@@ -510,33 +510,41 @@ void CampaignState::evaluateStory() {
     return;
   }
   const std::int64_t now = clock_.turn();
-  std::vector<std::uint8_t> scheduledNow(events.size(), 0);
+  // Each due schedule entry is one occurrence: an event scheduled twice for
+  // this turn runs twice.
+  std::vector<std::uint32_t> occurrences(events.size(), 0);
   for (const ScheduledEvent &scheduled : scheduledEvents_) {
     if (scheduled.turn <= now) {
-      scheduledNow.at(scheduled.eventIndex) = 1;
+      ++occurrences.at(scheduled.eventIndex);
     }
   }
   std::erase_if(scheduledEvents_,
                 [now](const ScheduledEvent &scheduled) { return scheduled.turn <= now; });
   for (std::size_t index = 0; index < events.size(); ++index) {
     const EventDef &event = events.at(index);
-    StationNode &node = nodes_.at(event.source);
-    const bool due = event.mode == EventMode::Once ? eventFired_.at(index) == 0
-                                                   : scheduledNow.at(index) != 0;
-    if (!due || node.dark()) {
-      continue;
-    }
-    if (!std::ranges::all_of(event.triggers, [&](const EventPredicate &predicate) {
-          return predicateHolds(predicate, node);
-        })) {
-      continue;
-    }
+    std::uint32_t runs = occurrences.at(index);
     if (event.mode == EventMode::Once) {
-      eventFired_.at(index) = 1;
+      runs = eventFired_.at(index) == 0 ? 1U : 0U;
     }
-    for (const EventEffect &effect : event.effects) {
-      applyEffect(effect, event, node);
+    for (std::uint32_t run = 0; run < runs; ++run) {
+      fireIfTriggered(index);
     }
+  }
+}
+
+void CampaignState::fireIfTriggered(std::size_t eventIndex) {
+  const EventDef &event = config_.story.events.at(eventIndex);
+  StationNode &node = nodes_.at(event.source);
+  if (node.dark() || !std::ranges::all_of(event.triggers, [&](const EventPredicate &predicate) {
+        return predicateHolds(predicate, node);
+      })) {
+    return;
+  }
+  if (event.mode == EventMode::Once) {
+    eventFired_.at(eventIndex) = 1;
+  }
+  for (const EventEffect &effect : event.effects) {
+    applyEffect(effect, event, node);
   }
 }
 

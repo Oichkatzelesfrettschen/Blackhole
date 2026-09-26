@@ -20,6 +20,7 @@
 #define BLACKHOLE_GAME_CAMPAIGN_H
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -311,6 +312,9 @@ private:
   /** @brief Advances every node clock one turn and ships colony production. */
   void advanceNodeClocks();
   void evaluateStory();
+  /** @brief One occurrence of an event: fires when its source is live and
+   *         every trigger holds. */
+  void fireIfTriggered(std::size_t eventIndex);
   [[nodiscard]] bool predicateHolds(const EventPredicate &predicate, const StationNode &node) const;
   void applyEffect(const EventEffect &effect, const EventDef &event, StationNode &node);
   void emitNodeDelivery(DeliveryKind kind, const StationNode &sender, NodeId destination,
