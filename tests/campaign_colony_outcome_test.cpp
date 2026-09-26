@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -272,4 +273,17 @@ TEST(ColonyOutcome, VictoryMetAtSetupIsLatchedAtConstruction) {
   order.fleet = fleet;
   order.properTimeCostSec = 3600.0;
   EXPECT_FALSE(state.issueCommand(order));
+}
+
+// Falsifier: a colony or authority station configured with an observer value
+// outside the enum building a valid campaign (a field may read any unknown
+// value as some orbit, and the invalid byte would be serialized).
+TEST(ColonyOutcome, OutOfRangeObserverIsRefused) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config = colonyConfig(R"({})", 0);
+  config.colonies.front().observer = std::bit_cast<game::Observer>(std::uint8_t{9});
+  EXPECT_FALSE(game::CampaignState(config, field).valid());
+  config = colonyConfig(R"({})", 0);
+  config.authorityObserver = std::bit_cast<game::Observer>(std::uint8_t{7});
+  EXPECT_FALSE(game::CampaignState(config, field).valid());
 }

@@ -44,6 +44,7 @@ CampaignState::CampaignState(CampaignConfig config, const TimeField &field)
       // length are structural and gate construction itself.
       // Every node clock is exact integer arithmetic on whole-second turns.
       valid_(isClockTurnLength(config_.secondsPerTurn) &&
+             config_.authorityObserver <= Observer::CircularOrbitRetrograde &&
              field.admitsObserver(config_.authorityRadiusCm, config_.authorityObserver)),
       clock_(valid_ ? config_.secondsPerTurn : 1.0) {
   if (valid_) {

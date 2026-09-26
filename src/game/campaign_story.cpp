@@ -220,6 +220,7 @@ void CampaignState::buildNodes() {
     const ColonyConfig &colony = config_.colonies.at(index);
     if (colony.bandIndex < 0 ||
         static_cast<std::size_t>(colony.bandIndex) >= config_.bandRadiusCm.size() ||
+        colony.observer > Observer::CircularOrbitRetrograde ||
         !field_->admitsObserver(bandRadiusCm(colony.bandIndex), colony.observer) ||
         colony.missionProperSec < 0 || !std::isfinite(colony.energyPerTick) ||
         colony.energyPerTick < 0.0 || colony.energyPerTick > K_MAX_ENERGY_PER_TICK) {
@@ -263,8 +264,22 @@ bool CampaignState::storyWellFormed() const {
       std::ranges::all_of(story.techTiers,
                           [](const TechLevel &level) { return level.points >= 0; }) &&
       std::ranges::is_sorted(story.techTiers, {}, &TechLevel::points);
-  return paramsInRange && paramsSorted && eventsSorted && tiersOk &&
-         story.flags.size() <= K_MAX_STORY_FLAGS;
+  // Flags as the loader lays them out: the reserved dark flag first (the core
+  // treats bit 0 as dark whatever the table says), then non-empty names
+  // sorted strictly, none of them "dark" again.
+  const bool flagsOk =
+      story.flags.size() <= K_MAX_STORY_FLAGS &&
+      (story.flags.empty() ||
+       (story.flags.front() == K_DARK_FLAG_NAME &&
+        std::ranges::none_of(story.flags.begin() + 1, story.flags.end(),
+                             [](const std::string &name) {
+                               return name.empty() || name == K_DARK_FLAG_NAME;
+                             }) &&
+        std::ranges::adjacent_find(story.flags.begin() + 1, story.flags.end(),
+                                   [](const std::string &lhs, const std::string &rhs) {
+                                     return !(lhs < rhs);
+                                   }) == story.flags.end()));
+  return paramsInRange && paramsSorted && eventsSorted && tiersOk && flagsOk;
 }
 
 bool CampaignState::intRefValid(const IntRef &ref) const {
@@ -314,8 +329,12 @@ void CampaignState::resolveStoryParams() {
   const auto predicateOk = [&](const EventPredicate &predicate) {
     const bool flagged =
         predicate.kind == PredicateKind::FlagSet || predicate.kind == PredicateKind::FlagClear;
+    // A silence threshold below zero would fire with no silent interval; the
+    // loader refuses one, and so does the core.
+    const bool silenceOk = predicate.kind != PredicateKind::Received || !predicate.silentFor ||
+                           resolve(predicate.value) >= 0;
     return enumsOk(predicate) && intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
-           (!flagged || flagOk(predicate.flag));
+           (!flagged || flagOk(predicate.flag)) && silenceOk;
   };
   const auto effectOk = [&](const EventEffect &effect) {
     if (!intRefValid(effect.delayTurns)) {

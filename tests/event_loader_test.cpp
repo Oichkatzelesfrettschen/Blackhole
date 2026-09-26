@@ -502,3 +502,36 @@ TEST(EventLoader, BranchingScheduleCyclesRejected) {
   branching.events.front().effects.push_back(branching.events.front().effects.front());
   EXPECT_FALSE(storyBuildsValid(branching));
 }
+
+// Falsifier: a hand-built story the loader could never produce building a
+// valid campaign: a flag table without the reserved dark flag first (bit 0
+// is dark at run time whatever the table says), with unsorted or repeated
+// names, or a Received silence threshold below zero (it would fire with no
+// silent interval at all).
+TEST(EventPredicates, CoreRequiresLoaderShapedFlagsAndThresholds) {
+  game::EventSet flags;
+  flags.flags = {"dark", "alpha", "zeta"};
+  EXPECT_TRUE(storyBuildsValid(flags));
+  flags.flags = {"peace", "dark"};
+  EXPECT_FALSE(storyBuildsValid(flags));
+  flags.flags = {"dark", "zeta", "alpha"};
+  EXPECT_FALSE(storyBuildsValid(flags));
+  flags.flags = {"dark", "alpha", "alpha"};
+  EXPECT_FALSE(storyBuildsValid(flags));
+  flags.flags = {"dark", "dark"};
+  EXPECT_FALSE(storyBuildsValid(flags));
+
+  game::EventSet silence;
+  silence.flags = {game::K_DARK_FLAG_NAME};
+  game::EventDef event;
+  event.id = 1;
+  game::EventPredicate received;
+  received.kind = game::PredicateKind::Received;
+  received.silentFor = true;
+  received.value = {.plus = 0};
+  event.triggers = {received};
+  silence.events = {event};
+  EXPECT_TRUE(storyBuildsValid(silence));
+  silence.events.front().triggers.front().value = {.plus = -5};
+  EXPECT_FALSE(storyBuildsValid(silence));
+}
