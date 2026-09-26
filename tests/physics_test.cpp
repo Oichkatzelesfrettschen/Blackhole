@@ -48,9 +48,9 @@ bool approxEqual(double a, double b, double tol = TOLERANCE) {
 /** @brief Result record for a single named test comparison. */
 struct TestResult {
   std::string name;
-  double expected;
-  double actual;
-  bool passed;
+  double expected = 0.0;
+  double actual = 0.0;
+  bool passed = false;
 };
 
 /**
@@ -75,6 +75,20 @@ void printResult(const TestResult &r) {
  * @param out   Output string (set on success)
  * @return true if the file was read and non-empty, false otherwise
  */
+/**
+ * @brief physics::kerrRedshift at the equator, clamped to the LUT range [0, 10].
+ *
+ * kerrRedshiftBatch and both asset generators store min(max(z, 0), 10) and
+ * map the horizon's infinite redshift to 10, so a stored table is compared
+ * against this clamp rather than against the raw z (32.4 at a* = 0.9,
+ * r = 0.72 r_s, just outside r_+ = 0.718 r_s).
+ */
+double cappedKerrRedshift(double r, double mass, double a) {
+  constexpr double kCap = 10.0;
+  double const z = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
+  return std::isfinite(z) ? std::clamp(z, 0.0, kCap) : kCap;
+}
+
 bool readTextFile(const std::string &path, std::string &out) {
   std::ifstream file(path);
   if (!file.is_open()) {
@@ -747,10 +761,7 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
 
         double const u = static_cast<double>(i) / static_cast<double>(count - 1);
         double const r = rIn + (u * (rOut - rIn));
-        double expectedRedshift = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
-        // kerrRedshiftBatch maps the horizon's infinite redshift to the cap.
-        expectedRedshift = std::isfinite(expectedRedshift) ? std::clamp(expectedRedshift, 0.0, 10.0)
-                                                           : 10.0;
+        double const expectedRedshift = cappedKerrRedshift(r, mass, a);
         auto const actualRedshift = static_cast<double>(redshift.at(i));
         maxRedshiftDiff = std::max(maxRedshiftDiff, std::abs(expectedRedshift - actualRedshift));
       }
@@ -769,6 +780,21 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       printResult(redshiftResult);
       redshiftResult.passed ? ++passed : ++failed;
     }
+  }
+
+  // Test 17a: the stored-table clamp caps a finite near-horizon z at 10
+  {
+    const double mass = 4.0e6 * physics::M_SUN;
+    const double rG = physics::G * mass / physics::C2;
+    const double r = 0.72 * physics::schwarzschildRadius(mass);
+    const double rawZ = physics::kerrRedshift(r, 0.5 * physics::PI, mass, 0.9 * rG);
+    TestResult const clampResult{.name = "Near-horizon redshift clamps to the LUT cap",
+                                 .expected = 10.0,
+                                 .actual = cappedKerrRedshift(r, mass, 0.9 * rG),
+                                 .passed = rawZ > 10.0 && std::isfinite(rawZ) &&
+                                           cappedKerrRedshift(r, mass, 0.9 * rG) == 10.0};
+    printResult(clampResult);
+    clampResult.passed ? ++passed : ++failed;
   }
 
   // Test 17: Validation curve assets (redshift)
@@ -828,8 +854,7 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       double maxRedshiftDiff = 0.0;
       for (std::size_t i = 0; i < rOverRs.size(); ++i) {
         double const r = rOverRs.at(i) * expectedRs;
-        double expectedZ = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
-        expectedZ = std::isfinite(expectedZ) ? std::max(expectedZ, 0.0) : 10.0;
+        double const expectedZ = cappedKerrRedshift(r, mass, a);
         maxRedshiftDiff = std::max(maxRedshiftDiff, std::abs(expectedZ - zValues.at(i)));
       }
 
