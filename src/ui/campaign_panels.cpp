@@ -182,8 +182,12 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
     for (const game::BandView &band : view.bands) {
       std::string bandLabel;
       if (band.validStation) {
-        bandLabel = std::format("band {}  (dtau/dt {:.3f}, delay {:.1f} d)", band.index,
-                                band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY);
+        // The clock of the lane and station keeping selected below; 0 marks a
+        // band where that orbit is not bound.
+        bandLabel = std::format(
+            "band {}  (dtau/dt {:.3f}, delay {:.1f} d)", band.index,
+            game::bandRateFor(band, uiState.composerLane, uiState.composerStation),
+            band.delayToAuthoritySec / K_SECONDS_PER_DAY);
       } else {
         bandLabel = std::format("band {}  (FORBIDDEN)", band.index);
       }
@@ -215,7 +219,12 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
   for (const game::BandView &band : view.bands) {
     if (band.index == uiState.composerTargetBand && band.validStation) {
       ImGui::SameLine();
-      ImGui::TextUnformatted(orbitLabel(band, uiState.composerLane));
+      if (uiState.composerStation == game::StationKeeping::Hover) {
+        ImGui::Text("hover: dtau/dt %.4f", band.hoverProperTimeRate);
+      } else {
+        ImGui::Text("%s, dtau/dt %.4f", orbitLabel(band, uiState.composerLane),
+                    game::bandRateFor(band, uiState.composerLane, uiState.composerStation));
+      }
     }
   }
   if (ImGui::Button("Redeploy fleet")) {
