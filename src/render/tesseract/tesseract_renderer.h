@@ -51,6 +51,8 @@ inline constexpr float SPECULATIVE_LABEL_MAX_SCALE = 2.0f;
 inline constexpr float SPECULATIVE_LABEL_WRAP_SCALE = 1.0f;
 /// Pixel margin between the label background and each side of the target.
 inline constexpr float SPECULATIVE_LABEL_MARGIN = 14.0f;
+/// HudOverlay clamps its scale to this floor, so narrower targets wrap instead.
+inline constexpr float SPECULATIVE_LABEL_MIN_SCALE = 0.25f;
 
 /**
  * @brief Fit TESSERACT_SPECULATIVE_LABEL into @p renderWidth pixels.
@@ -60,7 +62,8 @@ inline constexpr float SPECULATIVE_LABEL_MARGIN = 14.0f;
  * background pad on each side and SPECULATIVE_LABEL_MARGIN on each side,
  * fits at scale >= SPECULATIVE_LABEL_WRAP_SCALE; the scale is the largest
  * that fits, capped at SPECULATIVE_LABEL_MAX_SCALE. Narrower targets keep
- * three lines and shrink the scale to fit, down to HudOverlay's 0.25 floor.
+ * three lines and shrink the scale to fit, down to HudOverlay's 0.25 floor;
+ * below that they wrap word by word at the floor scale.
  * The lines joined with spaces always equal the label.
  */
 SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth);

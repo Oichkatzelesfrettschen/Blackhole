@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -262,10 +263,10 @@ SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth) {
       std::max(static_cast<float>(renderWidth) - (2.0f * SPECULATIVE_LABEL_MARGIN), 1.0f);
   // A line of unit-scale width w occupies (w + 4) * scale with its background pad.
   const auto fitScale = [available](const std::vector<std::string> &lines) {
-    float widest = 0.0f;
-    for (const std::string &line : lines) {
-      widest = std::max(widest, HudOverlay::measureText(line, 1.0f).x);
-    }
+    const float widest = std::accumulate(
+        lines.begin(), lines.end(), 0.0f, [](float acc, const std::string &line) {
+          return std::max(acc, HudOverlay::measureText(line, 1.0f).x);
+        });
     return std::min(available / (widest + 4.0f), SPECULATIVE_LABEL_MAX_SCALE);
   };
   for (const auto &lines : candidates) {
@@ -274,7 +275,32 @@ SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth) {
       return {.lines = lines, .scale = scale};
     }
   }
-  return {.lines = candidates.back(), .scale = std::max(fitScale(candidates.back()), 0.25f)};
+  if (fitScale(candidates.back()) >= SPECULATIVE_LABEL_MIN_SCALE) {
+    return {.lines = candidates.back(), .scale = fitScale(candidates.back())};
+  }
+  // Below the three-line minimum, wrap word by word at HudOverlay's scale
+  // floor so every line fits; only a single word wider than the target
+  // (under ~60 px) can still overflow.
+  const float unitBudget = (available / SPECULATIVE_LABEL_MIN_SCALE) - 4.0f;
+  std::vector<std::string> wrapped;
+  std::string current;
+  std::size_t pos = 0;
+  while (pos < label.size()) {
+    const std::size_t next = std::min(label.find(' ', pos), label.size());
+    const std::string word(label.substr(pos, next - pos));
+    const std::string candidate = current.empty() ? word : current + " " + word;
+    if (!current.empty() && HudOverlay::measureText(candidate, 1.0f).x > unitBudget) {
+      wrapped.push_back(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+    pos = next + 1;
+  }
+  if (!current.empty()) {
+    wrapped.push_back(current);
+  }
+  return {.lines = wrapped, .scale = SPECULATIVE_LABEL_MIN_SCALE};
 }
 
 glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistance, float fovDeg,

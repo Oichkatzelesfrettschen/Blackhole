@@ -45,7 +45,7 @@ TEST(SpeculativeLabel, WideTargetsUseOneLineAtMaximumScale) {
 }
 
 TEST(SpeculativeLabel, EveryWidthFitsWithoutDroppingWords) {
-  for (const int width : {3840, 1343, 900, 810, 640, 480, 360, 240, 160}) {
+  for (const int width : {3840, 1343, 900, 810, 640, 480, 360, 240, 160, 120, 96, 80}) {
     const SpeculativeLabelLayout layout = layoutSpeculativeLabel(width);
     EXPECT_EQ(joined(layout.lines), std::string(TESSERACT_SPECULATIVE_LABEL)) << width;
     const float available = static_cast<float>(width) - (2.0f * SPECULATIVE_LABEL_MARGIN);

@@ -113,13 +113,12 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
       opts.align = HudOverlayOptions::Align::Center;
       opts.drawBackground = true;
       rs.tesseract.speculativeLabel.setOptions(opts);
-      std::vector<HudOverlayLine> lines;
-      lines.reserve(layout.lines.size());
-      for (const std::string &text : layout.lines) {
-        lines.push_back(HudOverlayLine{.text = text,
-                                       .color = glm::vec4(1.0f, 0.86f, 0.55f, 1.0f),
-                                       .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.6f)});
-      }
+      std::vector<HudOverlayLine> lines(layout.lines.size());
+      std::ranges::transform(layout.lines, lines.begin(), [](const std::string &text) {
+        return HudOverlayLine{.text = text,
+                              .color = glm::vec4(1.0f, 0.86f, 0.55f, 1.0f),
+                              .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.6f)};
+      });
       rs.tesseract.speculativeLabel.setLines(lines);
       rs.tesseract.speculativeLabelWidth = rs.targets.renderWidth;
     }
