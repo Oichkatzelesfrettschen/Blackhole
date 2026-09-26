@@ -1,0 +1,113 @@
+/**
+ * @file balance_sweep_test.cpp
+ * @brief Records how the campaign and constellation outcomes respond to the
+ *        cadences and rival behavior the pinned invariants hold fixed.
+ *
+ * The campaign balance invariant pins one task cadence (every 30 turns) and
+ * the constellation invariant pins one rival (Expansionist) and one player
+ * cadence (every turn). This sweep replays every line over cadences 1..30 and,
+ * for the constellation, against two rival policies, and prints the outcome
+ * grid. It asserts only what is independent of balance: every run ends inside
+ * its turn budget with a well-formed outcome, and a replay of any cell
+ * reproduces its digest. It makes no claim about which line should win.
+ */
+
+#include <gtest/gtest.h>
+
+#include <array>
+#include <cstdint>
+#include <cstdio>
+
+#include "game/campaign_sim_lines.h"
+#include "game/campaign_view.h"
+#include "game/constellation_sim_lines.h"
+#include "game/constellation_types.h"
+
+namespace {
+
+constexpr std::uint64_t K_SEED = 42;
+constexpr std::int64_t K_CAMPAIGN_TURNS = 1200;
+constexpr std::int64_t K_CONSTELLATION_TURNS = 1400;
+constexpr std::int64_t K_MAX_CADENCE = 30;
+
+char statusLetter(game::CampaignStatus status) {
+  switch (status) {
+  case game::CampaignStatus::Won:
+    return 'W';
+  case game::CampaignStatus::Lost:
+    return 'L';
+  case game::CampaignStatus::Ongoing:
+  default:
+    return '-';
+  }
+}
+
+} // namespace
+
+// Falsifier: a campaign run at any cadence 1..30 ending outside its 1200-turn
+// budget, reporting a win without a cleared turn, or replaying to a different
+// digest. The printed grid is the record: status and cleared turn per line.
+TEST(BalanceSweep, CampaignLinesAcrossTaskCadence) {
+  using campaign_sim::Commit;
+  constexpr std::array<Commit, 4> lines = {Commit::Outer, Commit::Solo, Commit::Pod,
+                                           Commit::Stabilize};
+  std::printf("campaign cadence sweep (seed %llu, %lld turns): status/clearedTurn\n",
+              static_cast<unsigned long long>(K_SEED), static_cast<long long>(K_CAMPAIGN_TURNS));
+  std::printf("cadence  outer        solo         pod          stab\n");
+  for (std::int64_t cadence = 1; cadence <= K_MAX_CADENCE; ++cadence) {
+    std::printf("%7lld", static_cast<long long>(cadence));
+    for (const Commit commit : lines) {
+      const campaign_sim::LineResult result =
+          campaign_sim::runLine(K_SEED, K_CAMPAIGN_TURNS, commit, cadence);
+      EXPECT_EQ(result.view.turn, K_CAMPAIGN_TURNS);
+      EXPECT_EQ(result.view.status == game::CampaignStatus::Won, result.view.clearedTurn > 0);
+      EXPECT_LE(result.view.clearedTurn, K_CAMPAIGN_TURNS);
+      std::printf("  %c %-9lld", statusLetter(result.view.status),
+                  static_cast<long long>(result.view.clearedTurn));
+    }
+    std::printf("\n");
+  }
+  EXPECT_EQ(campaign_sim::runLine(K_SEED, K_CAMPAIGN_TURNS, Commit::Solo, 7).digest,
+            campaign_sim::runLine(K_SEED, K_CAMPAIGN_TURNS, Commit::Solo, 7).digest);
+}
+
+// Falsifier: a constellation run against either rival policy at any player
+// cadence 1..30 running past its 1400-turn budget, ending undecided, ending
+// without a winner before the deadline, or replaying to a different digest. The grid records the player's
+// status and the deciding turn.
+TEST(BalanceSweep, ConstellationLinesAcrossRivalAndCadence) {
+  using constellation_sim::PlayerLine;
+  constexpr std::array<PlayerLine, 3> lines = {PlayerLine::Outer, PlayerLine::AllIn,
+                                               PlayerLine::Contest};
+  constexpr std::array<game::FactionPolicy, 2> rivals = {game::FactionPolicy::Expansionist,
+                                                         game::FactionPolicy::Contester};
+  for (const game::FactionPolicy rival : rivals) {
+    std::printf("constellation sweep vs %s (seed %llu, %lld turns): player status/decided turn\n",
+                game::factionPolicyName(rival), static_cast<unsigned long long>(K_SEED),
+                static_cast<long long>(K_CONSTELLATION_TURNS));
+    std::printf("cadence  outer        all-in       contest\n");
+    for (std::int64_t cadence = 1; cadence <= K_MAX_CADENCE; ++cadence) {
+      std::printf("%7lld", static_cast<long long>(cadence));
+      for (const PlayerLine line : lines) {
+        const constellation_sim::LineResult result = constellation_sim::runLine(
+            K_SEED, K_CONSTELLATION_TURNS, line, rival, cadence);
+        // The scenario's deadline equals the turn budget, so every run is
+        // decided: by a winner, or by the deadline with none.
+        EXPECT_LE(result.turn, K_CONSTELLATION_TURNS);
+        EXPECT_NE(result.overallStatus, game::CampaignStatus::Ongoing);
+        if (result.winner == game::K_INVALID_FACTION_ID) {
+          EXPECT_EQ(result.turn, K_CONSTELLATION_TURNS);
+        }
+        std::printf("  %c %-9lld", statusLetter(result.overallStatus),
+                    static_cast<long long>(result.turn));
+      }
+      std::printf("\n");
+    }
+  }
+  EXPECT_EQ(constellation_sim::runLine(K_SEED, 600, PlayerLine::Contest,
+                                       game::FactionPolicy::Contester, 5)
+                .digest,
+            constellation_sim::runLine(K_SEED, 600, PlayerLine::Contest,
+                                       game::FactionPolicy::Contester, 5)
+                .digest);
+}

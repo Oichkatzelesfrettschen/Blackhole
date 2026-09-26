@@ -92,12 +92,12 @@ ConstellationConfig defaultConstellationConfig(std::uint64_t seed) {
   return config;
 }
 
-ConstellationSession::ConstellationSession(std::uint64_t seed)
+ConstellationSession::ConstellationSession(std::uint64_t seed, FactionPolicy rivalPolicy)
     : constellation_(defaultConstellationConfig(seed)),
-      // The player holds system 0; an Expansionist rival holds system 1. The
+      // The player holds system 0; the rival (Expansionist by default) holds system 1. The
       // player is registered first, so overallStatus reports the player's fate.
       player_(constellation_.addFaction(FactionPolicy::Scripted, 0)),
-      rival_(constellation_.addFaction(FactionPolicy::Expansionist, 1)) {
+      rival_(constellation_.addFaction(rivalPolicy, 1)) {
   // Four player specialists start on system 0's outer bands (1/2/3), with a spare
   // on band 1 the player can dive or send to contest the rival.
   constellation_.addFleet(player_, 0, FleetCapability::Extraction, 1);

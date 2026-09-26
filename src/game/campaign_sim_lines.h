@@ -71,9 +71,11 @@ struct LineResult {
 
 /** @brief Runs one commitment line to completion. Deep fleets redeploy prograde
  *         into the ergoregion band before work begins, hovering on thrust
- *         because no bound orbit exists there, then every fleet is re-tasked on
- *         the sustaining cadence for the whole campaign. */
-inline LineResult runLine(std::uint64_t seed, std::int64_t turns, Commit commit) {
+ *         because no bound orbit exists there, then every fleet is re-tasked
+ *         every `reissueEvery` turns (K_REISSUE_EVERY for the pinned shape)
+ *         for the whole campaign. */
+inline LineResult runLine(std::uint64_t seed, std::int64_t turns, Commit commit,
+                          std::int64_t reissueEvery = K_REISSUE_EVERY) {
   game::CampaignSession session(seed);
   game::CampaignState &campaign = session.state();
 
@@ -85,7 +87,7 @@ inline LineResult runLine(std::uint64_t seed, std::int64_t turns, Commit commit)
   const std::vector<game::FleetId> allFleets = {K_EXTRACTION, K_RESEARCH,     K_FABRICATION,
                                                 K_RELAY,      K_VERIFICATION, K_SURVEY};
   for (std::int64_t elapsed = 0; elapsed < turns; ++elapsed) {
-    if (elapsed % K_REISSUE_EVERY == 0) {
+    if (elapsed % reissueEvery == 0) {
       for (const game::FleetId fleet : allFleets) {
         static_cast<void>(session.issueAssignTask(fleet, K_REISSUE_HOURS));
       }

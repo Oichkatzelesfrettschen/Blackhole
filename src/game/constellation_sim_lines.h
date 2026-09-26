@@ -108,13 +108,18 @@ inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
 
 } // namespace detail
 
-/** @brief Runs one player line against the Expansionist rival to a decision or
- *         the turn budget, returning the outcome and determinism digest. */
-inline LineResult runLine(std::uint64_t seed, std::int64_t turns, PlayerLine line) {
-  game::ConstellationSession session(seed);
+/** @brief Runs one player line against a rival policy (Expansionist for the
+ *         pinned shape) to a decision or the turn budget, the player acting
+ *         every `playerEvery` turns, and returns the outcome and digest. */
+inline LineResult runLine(std::uint64_t seed, std::int64_t turns, PlayerLine line,
+                          game::FactionPolicy rivalPolicy = game::FactionPolicy::Expansionist,
+                          std::int64_t playerEvery = 1) {
+  game::ConstellationSession session(seed, rivalPolicy);
   game::Constellation &constellation = session.constellation();
   for (std::int64_t elapsed = 0; elapsed < turns; ++elapsed) {
-    detail::playerTurn(session, line);
+    if (elapsed % playerEvery == 0) {
+      detail::playerTurn(session, line);
+    }
     constellation.advanceTurn();
     if (constellation.overallStatus() != game::CampaignStatus::Ongoing) {
       break;

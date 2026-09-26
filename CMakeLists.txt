@@ -4324,6 +4324,29 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Outcome grid over task cadence and rival policy: records the balance
+  # response and gates only termination and replay determinism.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/balance_sweep_test.cpp")
+    add_executable(balance_sweep_test
+      "${PROJECT_SOURCE_DIR}/tests/balance_sweep_test.cpp"
+    )
+    target_compile_options(balance_sweep_test PRIVATE ${PROJECT_WARNINGS} -ffp-contract=off)
+    if(ENABLE_FAST_MATH)
+      target_compile_options(balance_sweep_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(balance_sweep_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME balance_sweep_record COMMAND balance_sweep_test)
+    set_tests_properties(balance_sweep_record PROPERTIES
+      LABELS "campaign;constellation;balance"
+      TIMEOUT 300
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(balance_sweep_record PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp")
     add_executable(constellation_test
       "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp"
