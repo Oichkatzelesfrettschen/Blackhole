@@ -99,7 +99,10 @@ cd Blackhole
 
 # 2. Install dependencies (uses repo-local Conan cache; a linked worktree
 #    reuses the primary checkout's cache via
-#    export BLACKHOLE_CONAN_HOME=/path/to/primary/Blackhole/.conan)
+#    export BLACKHOLE_CONAN_HOME=/path/to/primary/Blackhole/.conan).
+#    The Conan 2 cache does not support concurrent writers, so serialize
+#    installs that share it, e.g.
+#    flock "$BLACKHOLE_CONAN_HOME/install.lock" ./scripts/conan_install.sh Release build
 ./scripts/conan_install.sh Release build
 ./scripts/fetch_implot.sh
 
