@@ -102,6 +102,35 @@ TEST(KerrClockRates, SchwarzschildLimit) {
               0.70710678118654752, 1.0e-14);
 }
 
+/**
+ * @brief No circular orbit at or one ulp inside the directional photon orbit.
+ *
+ * The BPT radicand vanishes at the photon orbit and rounds positive one ulp
+ * inside it (dtau/dt ~ 8.2e-9 at 4e6 M_sun, a* = 0.9), so the function bounds
+ * r by kerrPhotonOrbitPrograde(mass, s a). Just outside, the orbit exists.
+ */
+TEST(KerrClockRates, PhotonOrbitBoundsCircularOrbits) {
+  const double mass = 4.0e6 * physics::M_SUN;
+  const double mGeom = physics::G * mass / physics::C2;
+  for (double const aStar : {-0.99, -0.9, -0.5, 0.0, 0.5, 0.9, 0.99}) {
+    for (bool const prograde : {true, false}) {
+      const double a = aStar * mGeom;
+      const double rPhoton = physics::kerrPhotonOrbitPrograde(mass, prograde ? a : -a);
+      EXPECT_FALSE(
+          physics::kerrCircularOrbitTimeDilation(std::nextafter(rPhoton, 0.0), mass, a, prograde)
+              .has_value())
+          << "a*=" << aStar << " prograde=" << prograde;
+      EXPECT_FALSE(physics::kerrCircularOrbitTimeDilation(rPhoton, mass, a, prograde).has_value())
+          << "a*=" << aStar << " prograde=" << prograde;
+      const double rOutside = rPhoton * (1.0 + 1.0e-6);
+      const double outside =
+          orNan(physics::kerrCircularOrbitTimeDilation(rOutside, mass, a, prograde));
+      EXPECT_GT(outside, 0.0) << "a*=" << aStar << " prograde=" << prograde;
+      EXPECT_LT(outside, 0.05) << "a*=" << aStar << " prograde=" << prograde;
+    }
+  }
+}
+
 /** @brief Signed spin: prograde at -a is retrograde at +a. */
 TEST(KerrClockRates, SignedSpinReflection) {
   const Hole h = solarHole();

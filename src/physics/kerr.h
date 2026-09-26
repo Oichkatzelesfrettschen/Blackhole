@@ -405,7 +405,11 @@ namespace physics {
  * where s = +1 for an orbit with angular momentum along +z (prograde) and
  * s = -1 along -z (retrograde), with a signed about +z. Circular geodesics
  * exist only outside the photon orbit of that direction, where the radicand
- * is positive.
+ * is positive. The radicand vanishes at the photon orbit and its rounding
+ * error there can leave it positive one ulp inside (dtau/dt ~ 8e-9 at
+ * 4e6 M_sun, a = 0.9M), so the function tests r against the directional
+ * photon-orbit radius kerrPhotonOrbitPrograde(mass, s a) rather than the
+ * radicand's sign.
  *
  * @param r Equatorial radius [cm]
  * @param mass Black hole mass [g]
@@ -422,7 +426,8 @@ kerrCircularOrbitTimeDilation(double r, double mass, double a, bool prograde = t
   const double spinTerm = signedA * std::sqrt(mGeom);
   const double radicand = r32 - (3.0 * mGeom * sqrtR) + (2.0 * spinTerm);
   const double numerator = r32 + spinTerm;
-  if (!(r > 0.0) || !(radicand > 0.0) || !(numerator > 0.0)) {
+  const double photonOrbit = kerrPhotonOrbitPrograde(mass, signedA);
+  if (!(r > photonOrbit) || !(radicand > 0.0) || !(numerator > 0.0)) {
     return std::nullopt;
   }
   return std::sqrt(r32) * std::sqrt(radicand) / numerator;
