@@ -24,7 +24,7 @@ struct CliOptions {
   std::string exportRawFramePath;
   std::string recordFramesDir;
   std::string recordProfile = "cinematic";
-  std::string recordComposition = "wide-right";
+  std::string recordComposition = "above-disk";
   std::string recordBackgroundId;
   int         recordFramesTotal = 0; ///< Seeded to K_CINEMATIC_FRAMES by parseCliOptions.
   int         recordStartFrame  = 0;

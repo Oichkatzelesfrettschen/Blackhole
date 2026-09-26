@@ -67,12 +67,13 @@ struct ShowcaseOrbitComposition {
  *         distance 14, fov 37.2738) and the default spin, L99 = 0.256. */
 inline constexpr float K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE = 3.51f;
 
-/** @brief Returns the composition matching name, or nullptr if none matches. */
+/** @brief Returns the composition matching name (inside-disk resolves to
+ *         wide-right), or nullptr if none matches. */
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name);
 
 /** @brief Applies per-composition beauty-wiregrid tuning; no-op unless params is
  *         in Beauty mode. */
-void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, WiregridParams &params,
+void applyShowcaseBeautyWiregridTuning(std::string_view compositionArg, WiregridParams &params,
                                        glm::vec4 &color);
 
 /** @brief One-time record-mode setup: creates the output directory, resizes the

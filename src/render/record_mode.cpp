@@ -83,7 +83,12 @@ bool readTonemappedRgb(gl::GLuint texTonemapped, int fallbackWidth, int fallback
   return true;
 }
 
-constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
+// above-disk, the default, frames the hole from outside the disk's 100 r_s
+// outer edge, 10 degrees above the plane (the default desktop camera); the
+// other five sit inside the disk's radial extent near the plane, where the
+// disk fills the view.
+constexpr std::array<ShowcaseOrbitComposition, 6> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
+    {"above-disk", "nasa_deep_starmap_galactic", 0.0f, 0.0f, 10.0f, 240.0f, 20.0f, 4.29f, 0.80f, 26.0f, 8.0f, 0.00f, 0.00f, 8.0f},
     {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 32.2042f, 2.63f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
     {"left-third", "nasa_deep_starmap", 0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 4.37f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
     {"right-third", "nasa_deep_starmap_galactic", -0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 1.37f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
@@ -94,17 +99,22 @@ constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS 
 } // namespace
 
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name) {
+  // inside-disk names the in-disk framing wide-right.
+  std::string_view const key = name == "inside-disk" ? std::string_view("wide-right") : name;
   const auto *const composition =
       std::ranges::find_if(K_SHOWCASE_ORBIT_COMPOSITIONS,
-                           [name](const auto &candidate) { return name == candidate.name; });
+                           [key](const auto &candidate) { return key == candidate.name; });
   return composition == K_SHOWCASE_ORBIT_COMPOSITIONS.end() ? nullptr : composition;
 }
 
-void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, WiregridParams &params,
+void applyShowcaseBeautyWiregridTuning(std::string_view compositionArg, WiregridParams &params,
                                        glm::vec4 &color) {
   if (params.mode != WiregridParams::Mode::Beauty) {
     return;
   }
+  const ShowcaseOrbitComposition *const resolved = findShowcaseOrbitComposition(compositionArg);
+  std::string_view const compositionName =
+      resolved != nullptr ? std::string_view(resolved->name) : compositionArg;
 
   if (compositionName == "wide-right") {
     params.gridScale = 0.78f;

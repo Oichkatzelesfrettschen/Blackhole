@@ -32,7 +32,7 @@ void printCliUsage(const char *argv0) {
   std::printf("  --record-exposure <x>    Override record tone-map exposure.\n");
   std::printf("  --record-spin <a>        Override the Kerr spin a/M every recorded frame.\n");
   std::printf("  --record-sweep-deg <x>   Override orbit sweep degrees across frames.\n");
-  std::printf("  --record-composition <n> Showcase framing: centered | left-third | right-third | wide-left | wide-right.\n");
+  std::printf("  --record-composition <n> Showcase framing: above-disk (default) | inside-disk (= wide-right) | centered | left-third | right-third | wide-left | wide-right.\n");
   std::printf("  --record-frame-x <n>     Override horizontal framing offset in half-frame units.\n");
   std::printf("  --record-frame-y <n>     Override vertical framing offset in half-frame units.\n");
   std::printf("  --record-background-id <id>  Override showcase background asset id.\n");

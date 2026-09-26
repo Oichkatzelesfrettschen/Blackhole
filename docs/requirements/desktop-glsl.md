@@ -80,6 +80,10 @@ Notes:
 - It sets `BLACKHOLE_RECORD_WIDTH` and `BLACKHOLE_RECORD_HEIGHT` from the
   requested headless resolution.
 - `showcase-orbit` now supports named framing presets:
+  - `above-disk` (the default): 120 r_s out and 10 degrees above the plane,
+    outside the disk's 100 r_s outer edge, so the thin disk band, the lensed
+    far side over the shadow, and the sky all show
+  - `inside-disk`: another name for `wide-right`
   - `centered`
   - `left-third`
   - `right-third`
@@ -90,7 +94,8 @@ Notes:
 - You can also override the framing directly with:
   - `--record-frame-x`
   - `--record-frame-y`
-  These are measured in half-frame units in camera space. Positive `x` pushes
+  These are measured in half-frame units in camera space (half the height of
+  the vertical field of view, half the width horizontally). Positive `x` pushes
   the black hole left in frame. Positive `y` pushes it down in frame.
 - You can override showcase background placement directly with:
   - `--record-bg-yaw`

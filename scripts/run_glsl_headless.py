@@ -45,7 +45,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--record-composition",
         default="wide-right",
-        choices=("centered", "left-third", "right-third", "wide-left", "wide-right"),
+        choices=(
+            "above-disk",
+            "inside-disk",
+            "centered",
+            "left-third",
+            "right-third",
+            "wide-left",
+            "wide-right",
+        ),
     )
     parser.add_argument("--record-yaw", type=float)
     parser.add_argument("--record-pitch", type=float)
