@@ -355,6 +355,7 @@ void CampaignState::emitNodeDelivery(DeliveryKind kind, const StationNode &sende
   delivery.destination = destination;
   delivery.senderProperSecAtEmit = sender.clock.properSec();
   delivery.senderEnergyUnitsAtEmit = sender.id == K_AUTHORITY_NODE ? energyUnits_ : 0.0;
+  delivery.senderTechPointsAtEmit = sender.techPoints;
   delivery.payloadIndex = payloadIndex;
   delivery.techPoints = techPoints;
   delivery.category = category;
@@ -399,8 +400,7 @@ void CampaignState::receiveNodeDelivery(const Delivery &delivery) {
   ReceivedFromNode &received = destination.received.at(delivery.sender);
   received.lastArrivalTurn.at(kindIndex(kind)) = clock_.turn();
   ++received.count.at(kindIndex(kind));
-  received.lastEmitTurn = delivery.emitTurn;
-  received.lastSenderProperSec = delivery.senderProperSecAtEmit;
+  noteSenderStamp(delivery);
   if (kind == EmitKind::TechPacket) {
     destination.techPoints += delivery.techPoints;
   }
@@ -413,9 +413,21 @@ void CampaignState::receiveNodeDelivery(const Delivery &delivery) {
   record.arrivalTurn = clock_.turn();
   record.senderProperSecAtEmit = delivery.senderProperSecAtEmit;
   record.senderEnergyUnitsAtEmit = delivery.senderEnergyUnitsAtEmit;
+  record.senderTechPointsAtEmit = delivery.senderTechPointsAtEmit;
   record.payloadIndex = delivery.payloadIndex;
   record.techPoints = delivery.techPoints;
   arrivals_.push_back(record);
+}
+
+void CampaignState::noteSenderStamp(const Delivery &delivery) {
+  ReceivedFromNode &received = nodes_.at(delivery.destination).received.at(delivery.sender);
+  if (delivery.emitTurn < received.lastEmitTurn) {
+    return; // an older emission that took longer: it says nothing newer
+  }
+  received.lastEmitTurn = delivery.emitTurn;
+  received.lastSenderProperSec = delivery.senderProperSecAtEmit;
+  received.lastSenderTechPoints = delivery.senderTechPointsAtEmit;
+  received.lastSenderEnergyUnits = delivery.senderEnergyUnitsAtEmit;
 }
 
 bool CampaignState::predicateHolds(const EventPredicate &predicate, const StationNode &node) const {
@@ -562,6 +574,8 @@ void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
       }
       appendI64(out, received.lastEmitTurn);
       appendI64(out, received.lastSenderProperSec);
+      appendI64(out, received.lastSenderTechPoints);
+      appendF64(out, received.lastSenderEnergyUnits);
     }
   }
   appendU32(out, static_cast<std::uint32_t>(eventFired_.size()));
@@ -583,6 +597,7 @@ void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
     appendI64(out, arrival.arrivalTurn);
     appendI64(out, arrival.senderProperSecAtEmit);
     appendF64(out, arrival.senderEnergyUnitsAtEmit);
+    appendI64(out, arrival.senderTechPointsAtEmit);
     appendU32(out, arrival.payloadIndex);
     appendI64(out, arrival.techPoints);
   }

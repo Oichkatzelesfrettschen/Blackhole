@@ -51,13 +51,17 @@ void expectNoTelemetry(const game::FleetView &fleet) {
   EXPECT_EQ(fleet.completedTasks, 0U);
 }
 
-void expectSameAsReferee(const game::CampaignViewSnapshot &authority,
-                         const game::CampaignViewSnapshot &referee) {
+/** @brief The host keeps its own ledger, intel, and fleet reports, and sees
+ *         only arrivals addressed to itself. */
+void expectHostLedgerKept(const game::CampaignViewSnapshot &authority,
+                          const game::CampaignViewSnapshot &referee) {
   EXPECT_EQ(authority.perceivedBy, game::K_AUTHORITY_NODE);
   EXPECT_DOUBLE_EQ(authority.energyUnits, referee.energyUnits);
   EXPECT_EQ(authority.intel.size(), referee.intel.size());
-  EXPECT_EQ(authority.arrivals.size(), referee.arrivals.size());
   EXPECT_TRUE(authority.fleets.front().telemetryKnown);
+  for (const game::ArrivalRecord &arrival : authority.arrivals) {
+    EXPECT_EQ(arrival.destination, game::K_AUTHORITY_NODE);
+  }
 }
 
 } // namespace
@@ -99,7 +103,8 @@ TEST(PerceivedView, ColonySeesTheHostOnlyAsLastHeard) {
 }
 
 // Falsifier: an arrival addressed elsewhere in the colony's view, any fleet
-// telemetry there, or the authority's view differing from the full snapshot.
+// telemetry there, or the host losing its own ledger or seeing arrivals
+// addressed elsewhere.
 TEST(PerceivedView, ColonyViewHoldsOnlyItsArrivalsAndNoTelemetry) {
   game::CampaignSession session(3, shippedStory(), game::K_MILLER_BAND);
   game::CampaignState &state = session.state();
@@ -113,7 +118,7 @@ TEST(PerceivedView, ColonyViewHoldsOnlyItsArrivalsAndNoTelemetry) {
   }
   ASSERT_FALSE(colony.fleets.empty());
   expectNoTelemetry(colony.fleets.front());
-  expectSameAsReferee(state.perceivedSnapshot(game::K_AUTHORITY_NODE), referee);
+  expectHostLedgerKept(state.perceivedSnapshot(game::K_AUTHORITY_NODE), referee);
 }
 
 // Falsifier: a fleet placed before the colony's order could reach it, placed
@@ -157,4 +162,35 @@ TEST(PerceivedView, HostDarknessIsNeverObservedDirectly) {
   EXPECT_FALSE(host.dark);
   EXPECT_TRUE(host.heard);
   EXPECT_LT(host.asOfTurn, darkTurn);
+}
+
+// Falsifier: the host seeing the colony's present -- any clock, tech, or tier
+// newer than what the colony's latest landed production report stamped -- or
+// knowing anything of the colony before a report has arrived. On Miller's
+// orbit the first local hour (the first report) leaves near turn 2559 and
+// lands a signal delay later, while packets keep raising the colony's tier.
+TEST(PerceivedView, HostSeesTheColonyOnlyAsReported) {
+  game::CampaignSession session(3, shippedStory(), game::K_MILLER_BAND);
+  game::CampaignState &state = session.state();
+  const std::int64_t delay = state.nodeDelayTurns(game::K_FIRST_COLONY_NODE, game::K_AUTHORITY_NODE);
+
+  state.advanceTurns(1000);
+  game::CampaignViewSnapshot host = state.perceivedSnapshot(game::K_AUTHORITY_NODE);
+  EXPECT_GE(state.colonyTechTier(), 1);
+  EXPECT_FALSE(host.nodes.at(game::K_FIRST_COLONY_NODE).heard);
+  EXPECT_EQ(host.colonyTechTier, 0);
+
+  state.advanceTurns(3000);
+  host = state.perceivedSnapshot(game::K_AUTHORITY_NODE);
+  const game::NodeView &colony = host.nodes.at(game::K_FIRST_COLONY_NODE);
+  const game::StationNode &truth = state.nodes().at(game::K_FIRST_COLONY_NODE);
+  ASSERT_TRUE(colony.heard);
+  EXPECT_LE(colony.asOfTurn + delay, state.turn());
+  EXPECT_LT(colony.techPoints, truth.techPoints);
+  EXPECT_LT(host.colonyTechTier, state.colonyTechTier());
+  EXPECT_EQ(host.colonyTechTier, colony.techTier);
+  EXPECT_LT(colony.properTimeSec, truth.clock.properSecApprox());
+  EXPECT_FALSE(colony.dark);
+  // The referee view still carries the truth, for tests and debugging only.
+  EXPECT_EQ(state.renderSnapshot().colonyTechTier, state.colonyTechTier());
 }

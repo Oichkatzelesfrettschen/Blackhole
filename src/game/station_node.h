@@ -38,8 +38,13 @@ struct ColonyConfig {
 struct ReceivedFromNode {
   std::array<std::int64_t, 2> lastArrivalTurn{{-1, -1}}; ///< Indexed by EmitKind.
   std::array<std::int64_t, 2> count{{0, 0}};             ///< Indexed by EmitKind.
-  std::int64_t lastEmitTurn = -1;          ///< Emission turn of the latest arrival of any kind.
+  // The sender as its latest-emitted arrival of any kind (packets, notices,
+  // and a colony's production reports) stamped it: all a station knows of a
+  // remote one's present.
+  std::int64_t lastEmitTurn = -1;          ///< Emission turn of that arrival; -1 until one lands.
   std::int64_t lastSenderProperSec = 0;    ///< Sender's local clock at that emission.
+  std::int64_t lastSenderTechPoints = 0;   ///< Sender's tech points at that emission.
+  double lastSenderEnergyUnits = 0.0;      ///< Host's banked energy at that emission (host senders).
 };
 
 struct StationNode {
@@ -70,6 +75,7 @@ struct ArrivalRecord {
   /// The host's banked energy when it sent this (zero from a colony): what a
   /// colony can know of the host's economy, and only as of that emission.
   double senderEnergyUnitsAtEmit = 0.0;
+  std::int64_t senderTechPointsAtEmit = 0; ///< Sender's tech points when it sent this.
   std::uint32_t payloadIndex = 0; ///< Tech packet ordinal from its sender, or the notice's event id.
   std::int64_t techPoints = 0;
 };

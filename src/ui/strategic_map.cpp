@@ -243,6 +243,32 @@ void drawMapLegend(ImDrawList *drawList, const ImVec2 &canvasOrigin, const ImVec
   }
 }
 
+/** @brief A station marker's label: "(you)" for the viewer's own station;
+ *         any other with the age of its latest arrival here. */
+std::string remoteLabel(const game::CampaignViewSnapshot &view, const game::NodeView &node,
+                        const char *name) {
+  if (node.id == view.perceivedBy) {
+    return std::format("{} (you)", name);
+  }
+  if (!node.heard) {
+    return std::format("{} (never heard)", name);
+  }
+  const double ageDays =
+      static_cast<double>(view.turn - node.asOfTurn) * view.secondsPerTurn / K_SECONDS_PER_DAY;
+  return std::format("{} (last heard {:.0f} d ago)", name, ageDays);
+}
+
+/** @brief The authority marker's label: "authority" in its own view; from a
+ *         colony, the host with the age of its latest arrival. */
+std::string authorityLabel(const game::CampaignViewSnapshot &view) {
+  if (view.perceivedBy == game::K_AUTHORITY_NODE) {
+    return "authority";
+  }
+  const auto host = std::ranges::find(view.nodes, game::K_AUTHORITY_NODE, &game::NodeView::id);
+  return host == view.nodes.end() ? std::string("host (never heard)")
+                                  : remoteLabel(view, *host, "host");
+}
+
 /** @brief A station's marker position on the map. */
 struct StationPos {
   game::NodeId node = game::K_AUTHORITY_NODE;
@@ -263,7 +289,7 @@ std::vector<StationPos> drawColonies(ImDrawList *drawList, const MapScale &scale
     drawGlow(drawList, pos, 7.0f, IM_COL32(120, 230, 150, 255));
     drawList->AddCircleFilled(pos, 5.5f, IM_COL32(120, 230, 150, 255), 24);
     drawList->AddText({pos.x + 8.0f, pos.y - 8.0f}, IM_COL32(150, 240, 170, 255),
-                      node.id == view.perceivedBy ? "colony (you)" : "colony");
+                      remoteLabel(view, node, "colony").c_str());
   }
   return stations;
 }
@@ -283,20 +309,6 @@ void drawStationSignals(ImDrawList *drawList, const game::CampaignViewSnapshot &
   }
 }
 
-/** @brief The authority marker's label: "authority" in its own view; from a
- *         colony, the host with the age of its latest arrival. */
-std::string authorityLabel(const game::CampaignViewSnapshot &view) {
-  if (view.perceivedBy == game::K_AUTHORITY_NODE) {
-    return "authority";
-  }
-  const auto host = std::ranges::find(view.nodes, game::K_AUTHORITY_NODE, &game::NodeView::id);
-  if (host == view.nodes.end() || !host->heard) {
-    return "host (never heard)";
-  }
-  const double ageDays =
-      static_cast<double>(view.turn - host->asOfTurn) * view.secondsPerTurn / K_SECONDS_PER_DAY;
-  return std::format("host (last heard {:.0f} d ago)", ageDays);
-}
 
 } // namespace
 

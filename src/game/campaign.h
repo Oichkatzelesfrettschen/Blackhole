@@ -197,15 +197,18 @@ public:
    *         slice independently of serializeState(). */
   [[nodiscard]] CampaignViewSnapshot renderSnapshot() const;
 
-  /** @brief The view as one station knows it. The authority's view is
-   *         renderSnapshot(). A colony's keeps static geometry and its own
-   *         node, and replaces everything else with what has reached it: the
-   *         host as of its latest arrival (clock, banked energy, emission
-   *         turn; never its darkness), no host intel, reports, disturbance,
-   *         or outcome, only the colony's own orders and emitted signals,
-   *         only arrivals addressed to it, and fleets without telemetry,
-   *         placed only where the colony last ordered them (from the order's
-   *         effect turn, whether or not it fizzled). */
+  /** @brief The view as one station knows it; renderSnapshot() is the
+   *         referee view (every station's true state), for tests, balance
+   *         harnesses, and debugging, and the panels never draw it. Every
+   *         remote station appears only as its latest-emitted arrival here
+   *         stamped it -- clock, tech points, and (for the host) banked
+   *         energy, with the emission turn; never its darkness -- and only
+   *         arrivals addressed to the viewer and signals it sent are kept.
+   *         The authority keeps its own ledger, intel, and fleets. A colony
+   *         additionally has no host intel, reports, disturbance, or outcome,
+   *         only its own orders, and fleets without telemetry placed only
+   *         where it last ordered them (from the order's effect turn, whether
+   *         or not it fizzled). */
   [[nodiscard]] CampaignViewSnapshot perceivedSnapshot(NodeId observer) const;
 
   /** @brief Deterministic field-by-field byte serialization of the full
@@ -246,6 +249,7 @@ private:
     NodeId destination = K_AUTHORITY_NODE; ///< Receiving node (fleet deliveries: unused).
     std::int64_t senderProperSecAtEmit = 0; ///< Sender's whole local seconds at emission.
     double senderEnergyUnitsAtEmit = 0.0; ///< Host's banked energy at emission (host senders).
+    std::int64_t senderTechPointsAtEmit = 0; ///< Sender's tech points at emission.
     std::uint32_t payloadIndex = 0;       ///< Tech packet ordinal, or the notice's event id.
     std::int64_t techPoints = 0;          ///< TechPacket payload.
     EventCategory category = EventCategory::Info;
@@ -293,6 +297,9 @@ private:
   void deliverDue();
   void applyCommand(const LoggedCommand &logged);
   void receiveNodeDelivery(const Delivery &delivery);
+  /** @brief Records a landed node delivery as the destination's latest word
+   *         from its sender, when it was emitted no earlier than the last. */
+  void noteSenderStamp(const Delivery &delivery);
   void buildNodes();
   void resolveStoryParams();
   /** @brief Order, uniqueness, and range checks on the configured story. */

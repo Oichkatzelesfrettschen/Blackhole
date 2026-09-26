@@ -283,6 +283,8 @@ void CampaignState::deliverDue() {
         energyLostToDarkness_ += delivery.yieldUnits;
       } else {
         energyUnits_ += delivery.yieldUnits;
+        // A production report is also the host's latest word from the colony.
+        noteSenderStamp(delivery);
       }
       break;
     case DeliveryKind::TechPacket:
@@ -580,6 +582,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       signal.arrivalTurn = delivery.effectTurn;
       signal.senderProperSecAtEmit = delivery.senderProperSecAtEmit;
       signal.senderEnergyUnitsAtEmit = delivery.senderEnergyUnitsAtEmit;
+      signal.senderTechPointsAtEmit = delivery.senderTechPointsAtEmit;
       signal.payloadIndex = delivery.payloadIndex;
       signal.techPoints = delivery.techPoints;
       if (delivery.kind == DeliveryKind::ColonyReport) {
@@ -732,6 +735,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, delivery.destination);
     appendI64(out, delivery.senderProperSecAtEmit);
     appendF64(out, delivery.senderEnergyUnitsAtEmit);
+    appendI64(out, delivery.senderTechPointsAtEmit);
     appendU32(out, delivery.payloadIndex);
     appendI64(out, delivery.techPoints);
     appendU8(out, static_cast<std::uint8_t>(delivery.category));

@@ -4,6 +4,7 @@
  *        and everything else only as it has arrived.
  */
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -14,7 +15,6 @@
 #include "game/event.h"
 #include "game/fleet.h"
 #include "game/observer.h"
-#include "game/received_clock.h"
 #include "game/station_node.h"
 
 namespace game {
@@ -56,31 +56,48 @@ void blankTelemetry(FleetView &fleet) {
 
 CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   CampaignViewSnapshot view = renderSnapshot();
-  if (observer == K_AUTHORITY_NODE || observer >= nodes_.size()) {
+  if (observer >= nodes_.size()) {
     return view;
   }
   view.perceivedBy = observer;
   const std::int64_t now = clock_.turn();
 
-  // Remote stations only as their latest arrival here stamped them.
-  const std::vector<ReceivedClock> received =
-      latestReceivedClocks(arrivals_, observer, nodes_.size());
+  // Remote stations only as their latest-emitted arrival here stamped them.
+  const StationNode &self = nodes_.at(observer);
   for (NodeView &node : view.nodes) {
     if (node.id == observer) {
       continue;
     }
-    const ReceivedClock &clock = received.at(node.id);
-    node.heard = clock.heard;
-    node.asOfTurn = clock.heard ? clock.emitTurn : 0;
-    node.properTimeSec = clock.heard ? static_cast<double>(clock.senderProperSec) : 0.0;
+    const ReceivedFromNode &word = self.received.at(node.id);
+    node.heard = word.lastEmitTurn >= 0;
+    node.asOfTurn = node.heard ? word.lastEmitTurn : 0;
+    node.properTimeSec = node.heard ? static_cast<double>(word.lastSenderProperSec) : 0.0;
+    node.techPoints = node.heard ? word.lastSenderTechPoints : 0;
+    node.techTier = std::ranges::count_if(config_.story.techTiers, [&node](const TechLevel &level) {
+      return level.points <= node.techPoints;
+    });
     node.dark = false; // silence is inferred by the story, never observed
-    node.techPoints = 0;
-    node.techTier = 0;
+  }
+  // The tech axis as this station knows it: its own tier if it is a colony,
+  // else the best tier any colony has reported.
+  view.colonyTechTier = 0;
+  for (const NodeView &node : view.nodes) {
+    if (node.isColony) {
+      view.colonyTechTier = std::max(view.colonyTechTier, node.techTier);
+    }
+  }
+  std::erase_if(view.nodeSignalsInFlight,
+                [observer](const ArrivalRecord &signal) { return signal.sender != observer; });
+  std::erase_if(view.arrivals,
+                [observer](const ArrivalRecord &arrival) { return arrival.destination != observer; });
+  if (observer == K_AUTHORITY_NODE) {
+    // The host's own ledger, intel, and fleet reports are host-local truth.
+    return view;
   }
 
-  // The host's ledger: its bank as last stamped, nothing of its present.
-  const ReceivedClock &host = received.at(K_AUTHORITY_NODE);
-  view.energyUnits = host.heard ? host.senderEnergyUnits : 0.0;
+  // At a colony, the host's ledger exists only as its bank last stamped.
+  const ReceivedFromNode &host = self.received.at(K_AUTHORITY_NODE);
+  view.energyUnits = host.lastEmitTurn >= 0 ? host.lastSenderEnergyUnits : 0.0;
   view.energyLostToDarkness = 0.0;
   view.instability = 0.0;
   view.stabilization = 0.0;
@@ -91,10 +108,6 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   view.reportsInFlight.clear();
   std::erase_if(view.ordersInFlight,
                 [observer](const OrderInFlightView &order) { return order.origin != observer; });
-  std::erase_if(view.nodeSignalsInFlight,
-                [observer](const ArrivalRecord &signal) { return signal.sender != observer; });
-  std::erase_if(view.arrivals,
-                [observer](const ArrivalRecord &arrival) { return arrival.destination != observer; });
 
   // Fleets report to the host: no telemetry here, and a position only where
   // this station last sent them.
