@@ -13,6 +13,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <iterator>
 #include <set>
 #include <utility>
 #include <vector>
@@ -389,22 +390,53 @@ TEST(SceneSegments, CapsOnlyPolylineEnds) {
   options.tubeSamples = 20;
   options.edgeSubdivisions = 4;
   const std::vector<tess::SegmentInstance> segments = tess::buildSceneSegments(options);
-  const std::size_t polylines =
-      std::size_t{32} + tess::bedroomFeatures().size() + tess::bedroomOutline().size();
+  // Open polylines: the 32 edges, one world tube per strand, and the shelf
+  // line; the window and desk loops are closed and cap nothing.
+  const std::size_t openPolylines = std::size_t{32} + tess::bedroomFeatures().size() + 1;
   const auto capsA = std::ranges::count_if(
       segments, [](const tess::SegmentInstance &s) { return tess::segmentCapped(s, false); });
   const auto capsB = std::ranges::count_if(
       segments, [](const tess::SegmentInstance &s) { return tess::segmentCapped(s, true); });
-  EXPECT_EQ(static_cast<std::size_t>(capsA), polylines);
-  EXPECT_EQ(static_cast<std::size_t>(capsB), polylines);
-  // A capped a starts a polyline; the segment before it capped its b.
-  for (std::size_t i = 1; i < segments.size(); ++i) {
-    EXPECT_EQ(tess::segmentCapped(segments.at(i), false),
-              tess::segmentCapped(segments.at(i - 1), true))
-        << i;
-  }
+  EXPECT_EQ(static_cast<std::size_t>(capsA), openPolylines);
+  EXPECT_EQ(static_cast<std::size_t>(capsB), openPolylines);
   EXPECT_TRUE(tess::segmentCapped(segments.front(), false));
-  EXPECT_TRUE(tess::segmentCapped(segments.back(), true));
+}
+
+// The room outline runs as three polylines: the open shelf line and the
+// closed window and desk loops. Each corner is one segment's b and the next
+// segment's a, so under additive blending no two caps overlap there.
+TEST(SceneSegments, OutlineRunsJoinTheirCorners) {
+  const std::vector<tess::OutlinePolyline> lines = tess::outlinePolylines();
+  ASSERT_EQ(lines.size(), 3U);
+  EXPECT_EQ(lines.at(0).features, (std::vector<std::size_t>{0, 1, 2, 3, 4}));
+  EXPECT_FALSE(lines.at(0).closed);
+  EXPECT_EQ(lines.at(1).features, (std::vector<std::size_t>{5, 6, 7, 8, 5}));
+  EXPECT_TRUE(lines.at(1).closed);
+  EXPECT_EQ(lines.at(2).features, (std::vector<std::size_t>{9, 10, 11, 12, 9}));
+  EXPECT_TRUE(lines.at(2).closed);
+
+  tess::SceneSegmentOptions options;
+  options.edgeSubdivisions = 3;
+  std::vector<tess::SegmentInstance> outline;
+  std::ranges::copy_if(tess::buildSceneSegments(options), std::back_inserter(outline),
+                       [](const tess::SegmentInstance &s) {
+                         return tess::segmentKind(s) == tess::SegmentKind::LitSlice;
+                       });
+  const auto capped = std::ranges::count_if(outline, [](const tess::SegmentInstance &s) {
+    return tess::segmentCapped(s, false) || tess::segmentCapped(s, true);
+  });
+  // Only the shelf line's first and last pieces carry caps.
+  EXPECT_EQ(capped, 2);
+  const std::vector<tess::LibraryFeature> features = tess::bedroomFeatures();
+  for (std::size_t corner = 5; corner <= 12; ++corner) {
+    const glm::vec4 point(features.at(corner).position, 0.0f);
+    const auto starts = std::ranges::count_if(
+        outline, [&point](const tess::SegmentInstance &s) { return s.a == point; });
+    const auto ends = std::ranges::count_if(
+        outline, [&point](const tess::SegmentInstance &s) { return s.b == point; });
+    EXPECT_EQ(starts, 1) << corner;
+    EXPECT_EQ(ends, 1) << corner;
+  }
 }
 
 // Interior neighbors carry the bits of the adjacent segments' own endpoints,
@@ -415,18 +447,23 @@ TEST(SceneSegments, NeighborsMatchAdjacentEndpoints) {
   options.tubeSamples = 20;
   options.edgeSubdivisions = 4;
   const std::vector<tess::SegmentInstance> segments = tess::buildSceneSegments(options);
+  // The segment before an uncapped a ends at a and starts at prev; the one
+  // after an uncapped b starts at b and ends at next (closed loops wrap).
   for (std::size_t i = 0; i < segments.size(); ++i) {
     const tess::SegmentInstance &seg = segments.at(i);
     if (tess::segmentCapped(seg, false)) {
       EXPECT_EQ(seg.prev, seg.a) << i;
     } else {
-      EXPECT_EQ(seg.prev, segments.at(i - 1).a) << i;
-      EXPECT_EQ(seg.a, segments.at(i - 1).b) << i;
+      EXPECT_TRUE(std::ranges::any_of(segments, [&seg](const tess::SegmentInstance &other) {
+        return other.b == seg.a && other.a == seg.prev;
+      })) << i;
     }
     if (tess::segmentCapped(seg, true)) {
       EXPECT_EQ(seg.next, seg.b) << i;
     } else {
-      EXPECT_EQ(seg.next, segments.at(i + 1).b) << i;
+      EXPECT_TRUE(std::ranges::any_of(segments, [&seg](const tess::SegmentInstance &other) {
+        return other.a == seg.b && other.b == seg.next;
+      })) << i;
     }
   }
 }

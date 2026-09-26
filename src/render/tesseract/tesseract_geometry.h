@@ -129,6 +129,23 @@ std::vector<LibraryFeature> bedroomFeatures();
 /** @brief Feature-index pairs that sketch the shelf line, window frame, and desk top. */
 std::vector<std::array<std::size_t, 2>> bedroomOutline();
 
+/** @brief One connected run of bedroomOutline links. */
+struct OutlinePolyline {
+  std::vector<std::size_t> features; ///< Feature indices in order; a closed run repeats its first.
+  bool closed = false;               ///< The run ends where it began.
+};
+
+/**
+ * @brief bedroomOutline chained into connected runs.
+ *
+ * Consecutive links that share an endpoint extend one run, and a run that
+ * returns to its first feature is closed. buildSceneSegments draws each run
+ * as one polyline: the ribbons blend additively, so links drawn as separate
+ * capped pieces would overlap their caps at every shared corner, and a closed
+ * run joins all its corners on miters with no caps at all.
+ */
+std::vector<OutlinePolyline> outlinePolylines();
+
 /**
  * @brief World-tube of a fixed point: samples (xyz, t_k), t_k = T k / (n - 1).
  *
@@ -251,7 +268,8 @@ struct SceneSegmentOptions {
 
 /**
  * @brief Every segment of the scene: subdivided tesseract edges, the world-tube
- *        strands (strand index = feature index), and the lit-moment room outline.
+ *        strands (strand index = feature index), and the lit-moment room outline
+ *        as one polyline per outlinePolylines run.
  */
 std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &options);
 

@@ -186,18 +186,21 @@ GLFWwindow *TesseractRibbonGlTest::window = nullptr;
 GLuint TesseractRibbonGlTest::program = 0;
 
 // Edge segments through @p points with the tags and neighbors
-// buildSceneSegments gives a polyline: caps at the two ends, and each
-// segment's prev and next the points beyond its own.
-std::vector<tess::SegmentInstance> polyline(const std::vector<glm::vec4> &points) {
+// buildSceneSegments gives a polyline: an open one caps its two ends; a
+// closed one joins the last point back to the first and wraps its neighbors.
+std::vector<tess::SegmentInstance> polyline(const std::vector<glm::vec4> &points,
+                                            bool closed = false) {
   std::vector<tess::SegmentInstance> out;
-  for (std::size_t k = 0; k + 1 < points.size(); ++k) {
-    const bool first = k == 0;
-    const bool last = k + 2 == points.size();
+  const std::size_t n = points.size();
+  const std::size_t count = closed ? n : n - 1;
+  for (std::size_t k = 0; k < count; ++k) {
+    const bool first = !closed && k == 0;
+    const bool last = !closed && k + 1 == count;
     tess::SegmentInstance seg;
     seg.a = points.at(k);
-    seg.b = points.at(k + 1);
-    seg.prev = first ? seg.a : points.at(k - 1);
-    seg.next = last ? seg.b : points.at(k + 2);
+    seg.b = points.at((k + 1) % n);
+    seg.prev = first ? seg.a : points.at((k + n - 1) % n);
+    seg.next = last ? seg.b : points.at((k + 2) % n);
     seg.meta = glm::vec4(
         -1.0f, -1.0f, tess::packSegmentTag(tess::SegmentKind::TesseractEdge, first, last), -1.0f);
     out.push_back(seg);
@@ -371,6 +374,51 @@ TEST_F(TesseractRibbonGlTest, JointsBesideTheNearPlaneMiterSymmetrically) {
     }
   }
   EXPECT_GT(probed, 0);
+}
+
+constexpr float SQUARE_HALF_SIDE_PX = 20.0f;
+
+// Corners of a 40 px square centered on the target, in clip coordinates,
+// with each side cut into @p pieces.
+std::vector<glm::vec4> squarePoints(std::size_t pieces) {
+  const float sx = SQUARE_HALF_SIDE_PX / (0.5f * static_cast<float>(TARGET_WIDTH));
+  const float sy = SQUARE_HALF_SIDE_PX / (0.5f * static_cast<float>(TARGET_HEIGHT));
+  const std::array<glm::vec4, 4> corners = {
+      glm::vec4(-sx, -sy, 0.0f, 0.0f), glm::vec4(sx, -sy, 0.0f, 0.0f),
+      glm::vec4(sx, sy, 0.0f, 0.0f), glm::vec4(-sx, sy, 0.0f, 0.0f)};
+  std::vector<glm::vec4> points;
+  const auto steps = static_cast<float>(pieces);
+  for (std::size_t c = 0; c < corners.size(); ++c) {
+    const glm::vec4 &a = corners.at(c);
+    const glm::vec4 &b = corners.at((c + 1) % corners.size());
+    for (std::size_t k = 0; k < pieces; ++k) {
+      points.push_back(a + ((b - a) * (static_cast<float>(k) / steps)));
+    }
+  }
+  return points;
+}
+
+// A closed square joins all four corners on miters: no corner is brighter
+// than a straight run, and the radiance does not depend on how the sides are
+// split. Drawn instead as four capped sides, as separate outline links were,
+// the caps overlap at every corner.
+TEST_F(TesseractRibbonGlTest, ClosedLoopsHaveUniformCorners) {
+  const std::vector<float> whole = drawRed(polyline(squarePoints(1), true));
+  const std::vector<float> split = drawRed(polyline(squarePoints(5), true));
+  EXPECT_LE(peak(whole), EDGE_PEAK_RED * 1.001f);
+  EXPECT_LE(peak(split), EDGE_PEAK_RED * 1.001f);
+  const double wholeTotal = total(whole);
+  ASSERT_GT(wholeTotal, 0.0);
+  EXPECT_NEAR(total(split) / wholeTotal, 1.0, 0.02);
+
+  const std::vector<glm::vec4> corners = squarePoints(1);
+  std::vector<tess::SegmentInstance> sides;
+  for (std::size_t c = 0; c < corners.size(); ++c) {
+    const std::vector<tess::SegmentInstance> side =
+        polyline({corners.at(c), corners.at((c + 1) % corners.size())});
+    sides.insert(sides.end(), side.begin(), side.end());
+  }
+  EXPECT_GT(peak(drawRed(sides)), EDGE_PEAK_RED * 1.2f);
 }
 
 } // namespace

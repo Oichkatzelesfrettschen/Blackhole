@@ -28,35 +28,55 @@ constexpr std::size_t bit(std::size_t axis) {
   return std::size_t{1} << axis;
 }
 
-// Segments between consecutive @p points, capped at the two ends, each with
-// its neighbors' points; meta x, y, and w come from @p meta per segment.
+// Segments between consecutive @p points, each with its neighbors' points;
+// meta x, y, and w come from @p meta per segment. An open polyline caps its
+// two ends; a closed one also joins the last point back to the first and
+// wraps the neighbors, so no end draws a cap.
 template <typename MetaFn>
 void appendPolyline(std::vector<SegmentInstance> &out, const std::vector<glm::vec4> &points,
-                    SegmentKind kind, MetaFn meta) {
-  for (std::size_t k = 0; k + 1 < points.size(); ++k) {
-    const bool first = k == 0;
-    const bool last = k + 2 == points.size();
+                    bool closed, SegmentKind kind, MetaFn meta) {
+  const std::size_t n = points.size();
+  if (n < 2) {
+    return;
+  }
+  const std::size_t count = closed ? n : n - 1;
+  for (std::size_t k = 0; k < count; ++k) {
+    const bool first = !closed && k == 0;
+    const bool last = !closed && k + 1 == count;
     SegmentInstance seg;
     seg.a = points.at(k);
-    seg.b = points.at(k + 1);
-    seg.prev = first ? seg.a : points.at(k - 1);
-    seg.next = last ? seg.b : points.at(k + 2);
+    seg.b = points.at((k + 1) % n);
+    seg.prev = first ? seg.a : points.at((k + n - 1) % n);
+    seg.next = last ? seg.b : points.at((k + 2) % n);
     const glm::vec3 xyw = meta(k);
     seg.meta = glm::vec4(xyw.x, xyw.y, packSegmentTag(kind, first, last), xyw.z);
     out.push_back(seg);
   }
 }
 
-void appendSubdivided(std::vector<SegmentInstance> &out, const glm::vec4 &a, const glm::vec4 &b,
-                      std::size_t pieces, SegmentKind kind) {
+glm::vec3 unusedMeta(std::size_t /*segment*/) {
+  return {-1.0f, -1.0f, -1.0f};
+}
+
+// Points from @p a toward @p b at k / pieces for k in [0, pieces), then b
+// when @p withEnd holds.
+void appendSubdividedPoints(std::vector<glm::vec4> &points, const glm::vec4 &a, const glm::vec4 &b,
+                            std::size_t pieces, bool withEnd) {
   const auto steps = static_cast<float>(pieces);
-  std::vector<glm::vec4> points;
-  points.reserve(pieces + 1);
-  for (std::size_t k = 0; k <= pieces; ++k) {
+  for (std::size_t k = 0; k < pieces; ++k) {
     points.push_back(a + ((b - a) * (static_cast<float>(k) / steps)));
   }
-  appendPolyline(out, points, kind,
-                 [](std::size_t /*segment*/) { return glm::vec3(-1.0f, -1.0f, -1.0f); });
+  if (withEnd) {
+    points.push_back(b);
+  }
+}
+
+void appendSubdivided(std::vector<SegmentInstance> &out, const glm::vec4 &a, const glm::vec4 &b,
+                      std::size_t pieces, SegmentKind kind) {
+  std::vector<glm::vec4> points;
+  points.reserve(pieces + 1);
+  appendSubdividedPoints(points, a, b, pieces, true);
+  appendPolyline(out, points, false, kind, unusedMeta);
 }
 
 } // namespace
@@ -162,6 +182,19 @@ std::vector<std::array<std::size_t, 2>> bedroomOutline() {
           {12, 9}};
 }
 
+std::vector<OutlinePolyline> outlinePolylines() {
+  std::vector<OutlinePolyline> lines;
+  for (const auto &link : bedroomOutline()) {
+    if (lines.empty() || lines.back().closed || lines.back().features.back() != link.at(0)) {
+      lines.push_back({.features = {link.at(0)}, .closed = false});
+    }
+    OutlinePolyline &line = lines.back();
+    line.features.push_back(link.at(1));
+    line.closed = line.features.size() > 2 && line.features.back() == line.features.front();
+  }
+  return lines;
+}
+
 std::vector<glm::vec4> extrudeWorldTube(const glm::vec3 &point, float timeSpan,
                                         std::size_t samples) {
   const std::size_t count = std::max<std::size_t>(samples, 2);
@@ -249,15 +282,24 @@ std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &optio
     std::ranges::transform(tube, points.begin(), [&options](const glm::vec4 &sample) {
       return libraryToTesseract(sample, options.timeSpan);
     });
-    appendPolyline(segments, points, SegmentKind::WorldTube, [&tube, strand](std::size_t k) {
+    appendPolyline(segments, points, false, SegmentKind::WorldTube, [&tube, strand](std::size_t k) {
       return glm::vec3(tube.at(k).w, tube.at(k + 1).w, static_cast<float>(strand));
     });
   }
 
-  for (const auto &link : bedroomOutline()) {
-    appendSubdivided(segments, glm::vec4(features.at(link.at(0)).position, 0.0f),
-                     glm::vec4(features.at(link.at(1)).position, 0.0f), pieces,
-                     SegmentKind::LitSlice);
+  const auto corner = [&features](std::size_t index) {
+    return glm::vec4(features.at(index).position, 0.0f);
+  };
+  for (const OutlinePolyline &line : outlinePolylines()) {
+    std::vector<glm::vec4> points;
+    for (std::size_t k = 0; k + 1 < line.features.size(); ++k) {
+      appendSubdividedPoints(points, corner(line.features.at(k)), corner(line.features.at(k + 1)),
+                             pieces, false);
+    }
+    if (!line.closed) {
+      points.push_back(corner(line.features.back()));
+    }
+    appendPolyline(segments, points, line.closed, SegmentKind::LitSlice, unusedMeta);
   }
   return segments;
 }
