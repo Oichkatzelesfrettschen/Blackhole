@@ -64,20 +64,33 @@ inline constexpr double PHOTON_SHELL_EDGE_ULPS = 16.0;
 /**
  * @brief Lyapunov exponent gamma of the bound photon orbit at radius r, M = 1.
  *
- * @param a Spin, |a| < 1; gamma depends on a^2 and lambda^2 only
- * @param r Orbit radius inside the photon shell of a (r = 3 at a = 0)
+ * @param a Spin, |a| < 1 (|a| >= 1 returns the sentinel); gamma depends on a^2
+ *          and lambda^2 only
+ * @param r Orbit radius inside the photon shell of a, endpoints included within
+ *          PHOTON_SHELL_EDGE_ULPS ulp (r = 3 at a = 0)
  * @return gamma per half orbit; pi for Schwarzschild at r = 3; divergentResult<double>(),
  *         a finite sentinel safe under -ffast-math, when r lies outside the
- *         shell (eta < 0 beyond the rounding of an endpoint radius)
+ *         shell photonShell(a)
  */
 [[nodiscard]] inline double photonRingLyapunovExponent(double a, double r) noexcept {
+  // The shell test comes first: eta's numerator 4 a^2 - r (r - 3)^2 turns
+  // nonnegative again below the prograde edge (r (r - 3)^2 -> 0 as r -> 0), so
+  // eta >= 0 alone would accept radii inside the horizon. Each endpoint gets
+  // PHOTON_SHELL_EDGE_ULPS ulp for the rounding photonShell's radius carries.
+  if (!(std::abs(a) < 1.0)) {
+    return divergentResult<double>();
+  }
+  const double u = 0.5 * std::numeric_limits<double>::epsilon();
+  const double edge = PHOTON_SHELL_EDGE_ULPS * u;
+  const PhotonShell shell = photonShell(a);
+  // Written as a conjunction so a NaN r fails it.
+  const bool inShell = r >= shell.prograde * (1.0 - edge) && r <= shell.retrograde * (1.0 + edge);
+  if (!inShell) {
+    return divergentResult<double>();
+  }
   const double a2 = a * a;
   if (a2 == 0.0) {
-    // The Schwarzschild shell is the single radius r = 3, up to the rounding
-    // an endpoint radius carries.
-    const double u = 0.5 * std::numeric_limits<double>::epsilon();
-    return (std::abs(r - 3.0) <= PHOTON_SHELL_EDGE_ULPS * u * 3.0) ? std::numbers::pi
-                                                                  : divergentResult<double>();
+    return std::numbers::pi; // the Schwarzschild shell is the single radius r = 3
   }
   // Delta, the eta numerator 4 a^2 - r (r - 3)^2 and the lambda numerator
   // r^2 (r - 3) + a^2 (r + 1) each have a form in r and a form in x = r - 1 and
@@ -97,8 +110,8 @@ inline constexpr double PHOTON_SHELL_EDGE_ULPS = 16.0;
   const double shellScaleR = (4.0 * a2) + (r * rm3 * rm3);
   const double shellScaleX = (3.0 * x2) + std::abs(x2 * x) + (4.0 * oneMinusA2);
   const bool shellInR = shellScaleR <= shellScaleX;
-  const double shellNumerator = shellInR ? (4.0 * a2) - (r * rm3 * rm3)
-                                         : (3.0 * x2) - (x2 * x) - (4.0 * oneMinusA2);
+  const double shellNumerator =
+      shellInR ? (4.0 * a2) - (r * rm3 * rm3) : (3.0 * x2) - (x2 * x) - (4.0 * oneMinusA2);
   double eta = r * r * r * shellNumerator / (a2 * x2);
   bool atEdge = false;
   if (!(eta >= 0.0)) {
@@ -108,7 +121,6 @@ inline constexpr double PHOTON_SHELL_EDGE_ULPS = 16.0;
     // -3 (r - 1)(r - 3)) and the numerator's own roundings (its term sum), is
     // the slack below; within it the radius is the endpoint, eta is 0 and
     // lambda is the equatorial value.
-    const double u = 0.5 * std::numeric_limits<double>::epsilon();
     const double slack = PHOTON_SHELL_EDGE_ULPS * u * r * r * r *
                          ((3.0 * r * std::abs(x * rm3)) + std::min(shellScaleR, shellScaleX)) /
                          (a2 * x2);

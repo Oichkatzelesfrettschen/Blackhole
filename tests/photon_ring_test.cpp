@@ -14,8 +14,9 @@
  *      0.9999999, and within 16 ulp times its r-conditioning of the referee's
  *      eta = 0 limit, which is pi at every equatorial photon orbit.
  *   4. gamma(a) = gamma(-a).
- *   5. Shell bounds r_+- = 3 at a = 0 and 1, 4 at a = 1; radii outside the
- *      shell return the divergentResult sentinel.
+ *   5. Shell bounds r_+- = 3 at a = 0 and 1, 4 at a = 1; radii outside
+ *      photonShell(a), including r = 0, 0.1 and 1 where eta's numerator is
+ *      nonnegative again, return the divergentResult sentinel.
  */
 
 #include <algorithm>
@@ -120,7 +121,8 @@ void testShellEndpoints() {
   std::printf("  shell endpoints, %zu spins: max rel err %.2e, max err / bound %.2f\n",
               std::size(LYAPUNOV_ENDPOINT_ROWS), worstRel, worstRatio);
   check(finite, "gamma finite at both shell endpoints for a = 1e-3 .. 0.9999999");
-  check(worstRatio <= 1.0, "endpoint gamma within 16 ulp x its r-conditioning of the eta = 0 limit");
+  check(worstRatio <= 1.0,
+        "endpoint gamma within 16 ulp x its r-conditioning of the eta = 0 limit");
 }
 
 void testSpinSymmetry() {
@@ -140,10 +142,31 @@ void testShellBounds() {
         "r_+ = r_- = 3 at a = 0");
   check(std::abs(s1.prograde - 1.0) < 1.0e-12 && std::abs(s1.retrograde - 4.0) < 1.0e-12,
         "r_+ = 1, r_- = 4 at a = 1");
-  const PhotonShell s9 = photonShell(0.9);
-  check(photonRingLyapunovExponent(0.9, 0.9 * s9.prograde) == divergentResult<double>() &&
-            photonRingLyapunovExponent(0.9, 1.1 * s9.retrograde) == divergentResult<double>(),
-        "radii outside the shell return the divergent sentinel");
+  // eta's numerator is nonnegative again below the prograde edge, so r = 0.1
+  // must fail the shell test rather than the sign of eta.
+  constexpr auto sentinel = divergentResult<double>();
+  bool outsideRejected = true;
+  bool insideAccepted = true;
+  for (const double a : {0.3, 0.5, 0.9, 0.99, -0.9}) {
+    const PhotonShell sh = photonShell(a);
+    for (const double r :
+         {0.0, 0.1, 1.0, sh.prograde * (1.0 - 1.0e-12), sh.retrograde * (1.0 + 1.0e-12),
+          0.9 * sh.prograde, 1.1 * sh.retrograde, 20.0}) {
+      outsideRejected = outsideRejected && photonRingLyapunovExponent(a, r) == sentinel;
+    }
+    for (const double r : {sh.prograde, sh.prograde * (1.0 + 1.0e-12),
+                           sh.retrograde * (1.0 - 1.0e-12), sh.retrograde}) {
+      const double g = photonRingLyapunovExponent(a, r);
+      insideAccepted = insideAccepted && g != sentinel && g > 0.0 && g <= std::numbers::pi + 1e-9;
+    }
+  }
+  check(outsideRejected, "r in {0, 0.1, 1}, just outside each edge, and far outside return the "
+                         "sentinel at a in {0.3, 0.5, 0.9, 0.99, -0.9}");
+  check(insideAccepted, "edges and radii just inside them return a finite gamma in (0, pi]");
+  check(photonRingLyapunovExponent(0.5, 0.1) == sentinel &&
+            photonRingLyapunovExponent(1.0, 1.0) == sentinel &&
+            photonRingLyapunovExponent(0.5, std::numeric_limits<double>::quiet_NaN()) == sentinel,
+        "a = 0.5 at r = 0.1, a = 1, and r = NaN return the sentinel");
 }
 
 } // namespace
