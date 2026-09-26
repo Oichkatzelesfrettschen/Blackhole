@@ -234,7 +234,7 @@ __launch_bounds__(256, 4)
 shade:;
   float4 color16 = d_shade_hit(result, result.origin);
   if (d_wiregrid_enabled != 0) {
-    float3 const hp = result.hit_point;
+    float3 const hp = d_chart_to_boyer_lindquist(result.hit_point);
     float const r_bl = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
     if (r_bl > 1e-5f) {
       float const theta_bl = acosf(fmaxf(-1.0f, fminf(hp.z / r_bl, 1.0f)));

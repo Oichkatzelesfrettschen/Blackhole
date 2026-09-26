@@ -25,6 +25,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
@@ -454,8 +455,10 @@ void main() {
 // bhTraceGeodesic at a = 0.998 from the camera (3 sin 60deg, 0, 3 cos 60deg)
 // along 16 downward directions (0.8 cos beta, 0.8 sin beta, -1), with a fine
 // schedule (stepSize 0.002, 200000 steps). Reports hitDisk, the hit point,
-// and hit.origin, the camera in the tracer's chart.
+// hit.origin (the camera in the tracer's chart), and the hit point in
+// Boyer-Lindquist coordinates (bhChartToBoyerLindquist).
 constexpr int K_ORIGIN_RAYS = 16;
+constexpr int K_ORIGIN_STRIDE = 10;
 std::string chartOriginShader() {
   const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
   return comp.substr(0, comp.find("void main()")) + R"(
@@ -472,13 +475,17 @@ void main() {
   ray.velocity = normalize(vec3(0.8 * cos(beta), 0.8 * sin(beta), -1.0));
   ray.affineParameter = 0.0;
   HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 200000, 0.002);
-  result[7 * i] = hit.hitDisk ? 1.0 : 0.0;
-  result[7 * i + 1] = hit.hitPoint.x;
-  result[7 * i + 2] = hit.hitPoint.y;
-  result[7 * i + 3] = hit.hitPoint.z;
-  result[7 * i + 4] = hit.origin.x;
-  result[7 * i + 5] = hit.origin.y;
-  result[7 * i + 6] = hit.origin.z;
+  vec3 bl = bhChartToBoyerLindquist(hit.hitPoint, 2.0);
+  result[10 * i] = hit.hitDisk ? 1.0 : 0.0;
+  result[10 * i + 1] = hit.hitPoint.x;
+  result[10 * i + 2] = hit.hitPoint.y;
+  result[10 * i + 3] = hit.hitPoint.z;
+  result[10 * i + 4] = hit.origin.x;
+  result[10 * i + 5] = hit.origin.y;
+  result[10 * i + 6] = hit.origin.z;
+  result[10 * i + 7] = bl.x;
+  result[10 * i + 8] = bl.y;
+  result[10 * i + 9] = bl.z;
 }
 )";
 }
@@ -1256,8 +1263,10 @@ double ksAzimuthOffset(double r, double a) {
 
 struct ChartHit {
   bool hitDisk{false};
-  double x{0.0};
+  double x{0.0};    // Kerr-Schild chart
   double y{0.0};
+  double xBl{0.0};  // Boyer-Lindquist
+  double yBl{0.0};
 };
 
 // Double-precision disk crossing of the time-reversed ray (spin aTrace) from
@@ -1287,12 +1296,43 @@ ChartHit referenceDiskHit(double camX, double camZ, double dx, double dy, double
     if (c0 * c1 <= 0.0) {
       const double t = c0 / (c0 - c1);
       const double r = s.r + (t * (next.r - s.r));
-      const double phi = s.phi + (t * (next.phi - s.phi)) + ksAzimuthOffset(r, aTrace);
-      return {.hitDisk = true, .x = r * std::cos(phi), .y = r * std::sin(phi)};
+      const double phiBl = s.phi + (t * (next.phi - s.phi));
+      const double phi = phiBl + ksAzimuthOffset(r, aTrace);
+      return {.hitDisk = true,
+              .x = r * std::cos(phi),
+              .y = r * std::sin(phi),
+              .xBl = r * std::cos(phiBl),
+              .yBl = r * std::sin(phiBl)};
     }
     s = next;
   }
   return {};
+}
+
+} // namespace
+
+namespace {
+
+// View vector and depth (hit - origin) of the GPU disk hit at out[k] against
+// the reference, and its Boyer-Lindquist position (out[k + 7..8]).
+void expectChartHit(const std::vector<float> &out, std::size_t k, const ChartHit &ref,
+                    const std::array<double, 3> &origin, const std::string &where) {
+  const auto vx = static_cast<double>(out.at(k + 1) - out.at(k + 4));
+  const auto vy = static_cast<double>(out.at(k + 2) - out.at(k + 5));
+  const auto vz = static_cast<double>(out.at(k + 3) - out.at(k + 6));
+  // float32 stepping leaves ~2e-4; the unrotated camera is off by ~1.5.
+  EXPECT_NEAR(vx, ref.x - origin[0], 1e-3) << where;
+  EXPECT_NEAR(vy, ref.y - origin[1], 1e-3) << where;
+  EXPECT_NEAR(vz, -origin[2], 1e-3) << where;
+  EXPECT_NEAR(std::sqrt((vx * vx) + (vy * vy) + (vz * vz)),
+              std::hypot(ref.x - origin[0], ref.y - origin[1], origin[2]), 1e-3)
+      << where;
+  // The wiregrid reads Boyer-Lindquist phi: bhChartToBoyerLindquist must
+  // undo the offset, which rotates the chart hit by F(r_hit) (0.1 to 0.6
+  // rad here) away from it.
+  EXPECT_NEAR(out.at(k + 7), ref.xBl, 1e-3) << where;
+  EXPECT_NEAR(out.at(k + 8), ref.yBl, 1e-3) << where;
+  EXPECT_GT(std::hypot(ref.x - ref.xBl, ref.y - ref.yBl), 0.1) << where;
 }
 
 } // namespace
@@ -1302,7 +1342,8 @@ TEST_F(KerrShaderCaptureTest, HitOriginSharesTheTracerChart) {
   // F(r_cam), which at a = 0.998 and r = 3 is 0.50 rad, so hit points are in
   // that chart. hit.origin, rotated alike, must give the view vector and
   // depth (hit - origin) of the double-precision reference; the unrotated
-  // camera misses them by ~1.5 M.
+  // camera misses them by ~1.5 M. bhChartToBoyerLindquist must return the
+  // reference's Boyer-Lindquist hit point for the wiregrid overlay.
   const double aTrace = -0.998;
   const double camX = 3.0 * std::sin(std::numbers::pi / 3.0);
   const double camZ = 3.0 * std::cos(std::numbers::pi / 3.0);
@@ -1312,17 +1353,19 @@ TEST_F(KerrShaderCaptureTest, HitOriginSharesTheTracerChart) {
   const GLuint program = bhtest::createComputeProgram(chartOriginShader());
   GLuint ssbo = 0;
   glCreateBuffers(1, &ssbo);
-  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 7 * K_ORIGIN_RAYS), nullptr,
-                    GL_DYNAMIC_DRAW);
+  glNamedBufferData(ssbo,
+                    static_cast<GLsizeiptr>(sizeof(float) * K_ORIGIN_STRIDE * K_ORIGIN_RAYS),
+                    nullptr, GL_DYNAMIC_DRAW);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
   glUseProgram(program);
   glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.998F);
   glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 1.0F);
-  const std::vector<float> out =
-      bhtest::runComputeProgram(program, ssbo, static_cast<std::size_t>(7) * K_ORIGIN_RAYS, 1);
+  const std::vector<float> out = bhtest::runComputeProgram(
+      program, ssbo, static_cast<std::size_t>(K_ORIGIN_STRIDE) * K_ORIGIN_RAYS, 1);
   int compared = 0;
   for (int i = 0; i < K_ORIGIN_RAYS; ++i) {
-    const std::size_t k = static_cast<std::size_t>(7) * static_cast<std::size_t>(i);
+    const std::size_t k =
+        static_cast<std::size_t>(K_ORIGIN_STRIDE) * static_cast<std::size_t>(i);
     const double beta = 2.0 * std::numbers::pi * static_cast<double>(i) / K_ORIGIN_RAYS;
     const ChartHit ref =
         referenceDiskHit(camX, camZ, 0.8 * std::cos(beta), 0.8 * std::sin(beta), -1.0, aTrace);
@@ -1333,16 +1376,7 @@ TEST_F(KerrShaderCaptureTest, HitOriginSharesTheTracerChart) {
     if (!ref.hitDisk || out.at(k) < 0.5F || std::hypot(ref.x, ref.y) < 1.5) {
       continue;
     }
-    const auto vx = static_cast<double>(out.at(k + 1) - out.at(k + 4));
-    const auto vy = static_cast<double>(out.at(k + 2) - out.at(k + 5));
-    const auto vz = static_cast<double>(out.at(k + 3) - out.at(k + 6));
-    // float32 stepping leaves ~2e-4; the unrotated camera is off by ~1.5.
-    EXPECT_NEAR(vx, ref.x - originX, 1e-3) << where;
-    EXPECT_NEAR(vy, ref.y - originY, 1e-3) << where;
-    EXPECT_NEAR(vz, -camZ, 1e-3) << where;
-    EXPECT_NEAR(std::sqrt((vx * vx) + (vy * vy) + (vz * vz)),
-                std::hypot(ref.x - originX, ref.y - originY, camZ), 1e-3)
-        << where;
+    expectChartHit(out, k, ref, {originX, originY, camZ}, where);
     ++compared;
   }
   EXPECT_GT(compared, K_ORIGIN_RAYS / 2);

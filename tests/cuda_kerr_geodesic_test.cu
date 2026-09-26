@@ -28,7 +28,8 @@
  *
  * d_kerr_chart_position is the chart the ray state starts in: the camera
  * rotated by the Kerr-Schild offset, which HitResult::origin carries into
- * shading and depth.
+ * shading and depth, and d_chart_to_boyer_lindquist undoes it for the
+ * Boyer-Lindquist consumers (wiregrid overlay, GRMHD sampling).
  * Skips without a CUDA device.
  */
 
@@ -133,6 +134,19 @@ __global__ void chart_origin_kernel(float3 pos, float3 dir, float a, float *out)
     out[3] = chart.x;
     out[4] = chart.y;
     out[5] = chart.z;
+}
+
+/* d_chart_to_boyer_lindquist(d_kerr_chart_position(p)) for the constant-
+ * memory metric the kernels read (d_rs, d_spin, d_kerr_enabled). */
+__global__ void chart_round_trip_kernel(float3 p, float *out) {
+    float3 const chart =
+        d_kerr_chart_position(p, d_rs, d_kerr_trace_spin(0.5f * d_spin * d_rs));
+    float3 const bl = d_chart_to_boyer_lindquist(chart);
+    out[0] = bl.x;
+    out[1] = bl.y;
+    out[2] = bl.z;
+    out[3] = chart.x;
+    out[4] = chart.y;
 }
 
 bool cudaAvailable() {
@@ -384,4 +398,31 @@ TEST(CudaKerrGeodesic, ChartOriginIsTheRayStart) {
         EXPECT_NEAR(out[j], out[3 + j], 1e-5f) << "component " << j;
     }
     EXPECT_GT(std::hypot(out[3] - cam.x, out[4] - cam.y), 1.0f);
+}
+
+TEST(CudaKerrGeodesic, ChartToBoyerLindquistUndoesTheOffset) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* Kernels hand hit points to the wiregrid and GRMHD sampler through
+     * d_chart_to_boyer_lindquist; with the constant-memory metric at
+     * a = 0.998 it must invert the chart rotation (0.50 rad at r = 3). */
+    float const rs = 2.0f;
+    float const spin = 0.998f;
+    int const kerr = 1;
+    ASSERT_EQ(cudaMemcpyToSymbol(d_rs, &rs, sizeof(rs)), cudaSuccess);
+    ASSERT_EQ(cudaMemcpyToSymbol(d_spin, &spin, sizeof(spin)), cudaSuccess);
+    ASSERT_EQ(cudaMemcpyToSymbol(d_kerr_enabled, &kerr, sizeof(kerr)), cudaSuccess);
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, 5 * sizeof(float));
+    float3 const p = make_float3(2.5980762f, 0.0f, 1.5f);
+    chart_round_trip_kernel<<<1, 1>>>(p, dOut);
+    cudaDeviceSynchronize();
+    float out[5] = {};
+    cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
+    cudaFree(dOut);
+    EXPECT_NEAR(out[0], p.x, 1e-5f);
+    EXPECT_NEAR(out[1], p.y, 1e-5f);
+    EXPECT_NEAR(out[2], p.z, 1e-5f);
+    EXPECT_GT(std::hypot(out[3] - p.x, out[4] - p.y), 1.0f);
 }

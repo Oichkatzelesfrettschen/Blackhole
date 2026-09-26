@@ -379,7 +379,7 @@ __launch_bounds__(128, 4)
   /* Shade and write both pixels with optional wiregrid overlay */
   auto const applyWGH2 = [](float4 c, HitResult const& h) -> float4 {
     if (d_wiregrid_enabled == 0) return c;
-    float3 hp = h.hit_point;
+    float3 hp = d_chart_to_boyer_lindquist(h.hit_point);
     float r = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
     if (r < 1e-5f) return c;
     float theta = acosf(fmaxf(-1.0f, fminf(hp.z / r, 1.0f)));

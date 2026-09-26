@@ -50,6 +50,7 @@ __launch_bounds__(256, 4)
     float3 term_pos;
     color = d_trace_geodesic_stokes(cam, dir, &term_pos);
     if (d_wiregrid_enabled != 0) {
+      term_pos = d_chart_to_boyer_lindquist(term_pos);
       float const r_bl = sqrtf(term_pos.x * term_pos.x + term_pos.y * term_pos.y + term_pos.z * term_pos.z);
       if (r_bl > 1e-5f) {
         float const theta_bl = acosf(fmaxf(-1.0f, fminf(term_pos.z / r_bl, 1.0f)));
@@ -69,6 +70,7 @@ __launch_bounds__(256, 4)
     float3 term_pos;
     color = d_trace_geodesic_rte(cam, dir, &term_pos);
     if (d_wiregrid_enabled != 0) {
+      term_pos = d_chart_to_boyer_lindquist(term_pos);
       float const r_bl = sqrtf(term_pos.x * term_pos.x + term_pos.y * term_pos.y + term_pos.z * term_pos.z);
       if (r_bl > 1e-5f) {
         float const theta_bl = acosf(fmaxf(-1.0f, fminf(term_pos.z / r_bl, 1.0f)));
@@ -90,7 +92,7 @@ __launch_bounds__(256, 4)
 
     /* Wiregrid BL-coord overlay (task A4): convert Cartesian hit->spherical BL */
     if (d_wiregrid_enabled != 0) {
-      float3 const hp = hit.hit_point;
+      float3 const hp = d_chart_to_boyer_lindquist(hit.hit_point);
       float const r_bl = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
       if (r_bl > 1e-5f) {
         float const theta_bl = acosf(fmaxf(-1.0f, fminf(hp.z / r_bl, 1.0f)));
@@ -380,7 +382,7 @@ __launch_bounds__(128, 4)
   /* Apply wiregrid overlay and write */
   auto const applyWG = [](float4 c, HitResult const& h) -> float4 {
     if (d_wiregrid_enabled == 0) return c;
-    float3 hp = h.hit_point;
+    float3 hp = d_chart_to_boyer_lindquist(h.hit_point);
     float r = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
     if (r < 1e-5f) return c;
     float theta = acosf(fmaxf(-1.0f, fminf(hp.z / r, 1.0f)));

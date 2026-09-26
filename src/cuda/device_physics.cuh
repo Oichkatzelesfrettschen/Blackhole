@@ -369,6 +369,24 @@ __device__ __forceinline__ float d_kerr_trace_spin(float a) {
 }
 
 /**
+ * @brief Boyer-Lindquist position of a point in the tracer's chart.
+ *
+ * Undoes d_kerr_chart_position: rotates by -F(|p|) with the Kerr-Schild
+ * offset of the traced (time-reversed) spin, so consumers defined on
+ * Boyer-Lindquist phi (wiregrid overlay, GRMHD data) read the azimuth the
+ * photon actually has there. Chart-space shading and depth keep the chart
+ * position. The Schwarzschild RK4 lane (d_kerr_enabled = 0) has no offset.
+ * Twin of bhChartToBoyerLindquist in shader/include/interop_trace.glsl.
+ */
+__device__ __forceinline__ float3 d_chart_to_boyer_lindquist(float3 p) {
+    if (d_kerr_enabled == 0) {
+        return p;
+    }
+    float const a_trace = d_kerr_trace_spin(0.5f * d_spin * d_rs);
+    return d_rotate_z(p, -d_kerr_ks_azimuth_offset(d_length(p), d_rs, a_trace));
+}
+
+/**
  * @brief Radial acceleration R'(r)/2 = 2 r E P - (r - rs/2) Q_eff.
  *
  * P = (r^2+a^2)E - a Lz and Q_eff = Q + (Lz - aE)^2. Twin of
@@ -1989,7 +2007,7 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         /* GRMHD emissivity modulation: j_nu ~ rho * B^2, B^2 ~ u (plasma beta ~ 1).
          * Matches blackhole_main.frag: density *= rho * uu at disk hit point. */
         if (d_use_luts && d_tex_grmhd) {
-            float4 grmhd = d_sample_grmhd(hit.hit_point);
+            float4 grmhd = d_sample_grmhd(d_chart_to_boyer_lindquist(hit.hit_point));
             float rho = fmaxf(grmhd.x, 0.0f);
             float uu  = fmaxf(grmhd.y, 0.0f);
             float grmhd_scale = rho * uu;

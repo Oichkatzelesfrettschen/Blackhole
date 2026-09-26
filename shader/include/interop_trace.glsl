@@ -270,6 +270,16 @@ float bhMetricRadius(float r_s) { return gravitationalLensing > 0.5 ? r_s : 0.0;
 
 float bhMetricSpin(float aTrace) { return gravitationalLensing > 0.5 ? aTrace : 0.0; }
 
+// Boyer-Lindquist position of a point in the tracer's chart: undoes
+// kerrChartPosition by rotating through -F(|p|) with the traced metric, so
+// consumers defined on Boyer-Lindquist phi (the wiregrid overlay) read the
+// azimuth the photon actually has there. Chart-space shading and depth keep
+// the chart position.
+vec3 bhChartToBoyerLindquist(vec3 p, float r_s) {
+  float aTrace = bhMetricSpin(kerrTraceSpin(0.5 * kerrSpin * r_s));
+  return kerrRotateZ(p, -kerrKsAzimuthOffset(length(p), bhMetricRadius(r_s), aTrace));
+}
+
 // Closest-approach radius reported for a ray that meets no hole; above every
 // near-hole threshold (redshift, shaping) the shading helpers apply.
 const float BH_NO_HOLE_RADIUS = 1.0e30;
