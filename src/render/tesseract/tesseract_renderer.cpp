@@ -31,6 +31,7 @@
 #include <glm/trigonometric.hpp>
 
 #include "hud_overlay.h"
+#include "input.h"
 #include "render/render_state.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
@@ -336,8 +337,7 @@ TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
 }
 
 float tesseractZoom(float viewDistance, float zoomDelta) {
-  const float zoomed =
-      viewDistance + (zoomDelta * viewDistance / TESSERACT_RECORD_REFERENCE_DISTANCE);
+  const float zoomed = viewDistance + (zoomDelta * viewDistance / K_ZOOM_RATE_REFERENCE_DISTANCE);
   return std::clamp(zoomed, TESSERACT_MIN_VIEW_DISTANCE, TESSERACT_MAX_VIEW_DISTANCE);
 }
 

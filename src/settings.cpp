@@ -77,7 +77,7 @@ void assignLegacyVsync(Settings &settings, const std::string &value) {
 
 // Preserve file-order matching and the legacy vsync alias while binding each
 // persisted key to the type of its Settings member.
-constexpr std::array<SettingBinding, 81> K_SETTING_BINDINGS{{
+constexpr std::array<SettingBinding, 82> K_SETTING_BINDINGS{{
     {"\"windowWidth\"", assignSetting<&Settings::windowWidth>},
     {"\"windowHeight\"", assignSetting<&Settings::windowHeight>},
     {"\"fullscreen\"", assignSetting<&Settings::fullscreen>},
@@ -134,6 +134,7 @@ constexpr std::array<SettingBinding, 81> K_SETTING_BINDINGS{{
     {"\"gamepadPauseButton\"", assignSetting<&Settings::gamepadPauseButton>},
     {"\"gamepadToggleUIButton\"", assignSetting<&Settings::gamepadToggleUIButton>},
     {"\"tonemappingEnabled\"", assignSetting<&Settings::tonemappingEnabled>},
+    {"\"toneExposure\"", assignSetting<&Settings::toneExposure>},
     {"\"bloomStrength\"", assignSetting<&Settings::bloomStrength>},
     {"\"bloomIterations\"", assignSetting<&Settings::bloomIterations>},
     {"\"backgroundEnabled\"", assignSetting<&Settings::backgroundEnabled>},
@@ -178,6 +179,7 @@ bool SettingsManager::load(const std::string &filepath) {
 
   std::string line;
   bool swapIntervalParsed = false;
+  bool toneExposureParsed = false;
   while (std::getline(file, line)) {
     line = trim(line);
     if (line.empty() || line.at(0) == '{' || line.at(0) == '}') {
@@ -197,7 +199,11 @@ bool SettingsManager::load(const std::string &filepath) {
     if (binding != K_SETTING_BINDINGS.end()) {
       binding->assign(settings_, value);
       swapIntervalParsed = swapIntervalParsed || binding->key == "\"swapInterval\"";
+      toneExposureParsed = toneExposureParsed || binding->key == "\"toneExposure\"";
     }
+  }
+  if (!toneExposureParsed) {
+    settings_.toneExposure = K_LEGACY_TONE_EXPOSURE;
   }
 
   return true;
@@ -280,6 +286,7 @@ bool SettingsManager::save(const std::string &filepath) {
 
   // Rendering
   file << "  \"tonemappingEnabled\": " << writeBool(settings_.tonemappingEnabled) << ",\n";
+  file << "  \"toneExposure\": " << settings_.toneExposure << ",\n";
   file << "  \"bloomStrength\": " << settings_.bloomStrength << ",\n";
   file << "  \"bloomIterations\": " << settings_.bloomIterations << ",\n";
   file << "  \"backgroundEnabled\": " << writeBool(settings_.backgroundEnabled) << ",\n";

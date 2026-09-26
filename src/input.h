@@ -7,12 +7,12 @@
 #define INPUT_H
 
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <string>
 
-// Forward declaration
-struct Settings;
+#include "settings.h" // K_DEFAULT_CAMERA_DISTANCE, K_DEFAULT_CAMERA_PITCH_DEG
 
 /**
  * @brief Logical key actions that can be rebound by the user.
@@ -44,6 +44,27 @@ enum class KeyAction {
   COUNT
 };
 
+/// Distance range of the interactive camera in scene units (r_s = 2): from
+/// just outside a Schwarzschild horizon to 500 r_s, beyond the disk's
+/// 100 r_s outer edge.
+inline constexpr float K_CAMERA_MIN_DISTANCE = 0.5f;
+inline constexpr float K_CAMERA_MAX_DISTANCE = 1000.0f;
+
+/// Camera distance at which the keyboard, scroll, and gamepad zoom rates are
+/// specified.
+inline constexpr float K_ZOOM_RATE_REFERENCE_DISTANCE = 15.0f;
+
+/**
+ * @brief Factor on every zoom rate at camera distance d.
+ *
+ * d / K_ZOOM_RATE_REFERENCE_DISTANCE: a zoom input moves the camera by the
+ * same fraction of its distance near the horizon and from outside the disk,
+ * and by its specified rate at the reference distance.
+ */
+[[nodiscard]] inline float zoomRateScale(float distance) {
+  return std::max(distance, K_CAMERA_MIN_DISTANCE) / K_ZOOM_RATE_REFERENCE_DISTANCE;
+}
+
 /** @brief Camera positioning modes selectable in the UI and the compare presets. */
 enum class CameraMode { Input = 0, Front, Top, Orbit };
 
@@ -55,18 +76,18 @@ enum class CameraMode { Input = 0, Front, Top, Orbit };
  */
 struct CameraState {
   float yaw = 0.0f;
-  float pitch = 0.0f;
+  float pitch = K_DEFAULT_CAMERA_PITCH_DEG;
   float roll = 0.0f;
-  float distance = 15.0f;
-  float fov = 45.0f;
+  float distance = K_DEFAULT_CAMERA_DISTANCE;
+  float fov = 23.4018f;
 
   /** @brief Resets all camera pose fields to their default values. */
   void reset() {
     yaw = 0.0f;
-    pitch = 0.0f;
+    pitch = K_DEFAULT_CAMERA_PITCH_DEG;
     roll = 0.0f;
-    distance = 15.0f;
-    fov = 45.0f;
+    distance = K_DEFAULT_CAMERA_DISTANCE;
+    fov = 23.4018f;
   }
 };
 
@@ -356,9 +377,11 @@ public:
    * @brief Route zoom input away from the camera distance.
    *
    * While set, keyboard, scroll, and gamepad zoom accumulate into a pending
-   * delta that takeZoomDelta returns, in camera-distance units, and the
-   * camera distance keeps its value; a scene with its own view distance reads
-   * the delta so the black-hole camera stays where it was.
+   * delta that takeZoomDelta returns, in zoom-rate units at
+   * K_ZOOM_RATE_REFERENCE_DISTANCE (before zoomRateScale), and the camera
+   * distance keeps its value; a scene with its own view distance applies the
+   * delta at its own distance-proportional rate, so the black-hole camera
+   * stays where it was.
    */
   void setZoomRedirect(bool redirect) { zoomRedirect_ = redirect; }
 
@@ -380,8 +403,9 @@ private:
   void updateCamera(float deltaTime);
   void handleHoldToToggle(KeyAction action, bool justPressed, bool justReleased);
   void updateGamepad(float deltaTime);
-  /// Change the camera distance by @p amount, or the pending zoom when redirected.
-  void zoomBy(float amount);
+  /// Change the camera distance by @p amount * @p distanceScale (zoomRateScale),
+  /// or the pending zoom by the unscaled @p amount when redirected.
+  void zoomBy(float amount, float distanceScale);
   [[nodiscard]] bool isGamepadButtonJustPressed(int button) const;
 
   GLFWwindow *window_ = nullptr;

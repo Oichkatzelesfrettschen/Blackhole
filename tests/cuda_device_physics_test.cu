@@ -24,10 +24,12 @@
 
 #include <gtest/gtest.h>
 #include <cuda_runtime.h>
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
 #include "cuda/kernel_launch.h"
+#include "physics/page_thorne.h"
 
 /* ========================================================================
  * Helpers
@@ -50,22 +52,26 @@ static BH_LaunchParams make_schwarzschild_params(int w, int h) {
     p.redshift_enabled = 0;
     p.kerr_enabled     = 0;
     p.use_luts         = 0;
+    /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
+    p.disk_peak_temperature = 6500.0f;
+    p.disk_brightness       = 1.0f;
+    p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
 
     /* Camera at (0, 0, 10): 5x the event horizon radius */
     p.cam_pos[0] = 0.0f;
     p.cam_pos[1] = 0.0f;
     p.cam_pos[2] = 10.0f;
 
-    /* Identity basis: local (u, v, -1) maps to world (u, v, -1).
-     * Column-major storage (matching glm): col0 = right, col1 = up, col2 = fwd.
-     *   m[0..2] = col0 = (1, 0, 0)
-     *   m[3..5] = col1 = (0, 1, 0)
-     *   m[6..8] = col2 = (0, 0, 1)
-     * d_mat3_mul: row r, col c -> m[c*3+r]. Identity: m[0]=m[4]=m[8]=1, rest 0.
+    /* Camera looking at the hole: d_ray_dir's local (u, v, 1) maps to
+     * u right + v up + forward. Column-major storage (matching glm):
+     *   m[0..2] = col0 = right   = (1, 0, 0)
+     *   m[3..5] = col1 = up      = (0, 1, 0)
+     *   m[6..8] = col2 = forward = (0, 0, -1)
+     * d_mat3_mul: row r, col c -> m[c*3+r].
      */
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 1.0f; p.cam_basis[5] = 0.0f;
-    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = 1.0f;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = -1.0f;
 
     p.lut_radius_min      = p.isco;
     p.lut_radius_max      = 100.0f;
@@ -133,14 +139,15 @@ protected:
 /* ========================================================================
  * 1. Schwarzschild horizon hit
  *    A 1x1 framebuffer where the single pixel aims at BH center.
- *    Camera at (0, 0, 10), identity basis, fov_scale=1.0:
- *      pixel (0,0): u=(2*0.5/1-1)*1=0, v=0 => local_dir=(0,0,-1) => world (0,0,-1)
+ *    Camera at (0, 0, 10) looking along -z, fov_scale=1.0:
+ *      pixel (0,0): u=(2*0.5/1-1)*1=0, v=0 => local_dir=(0,0,1) => world (0,0,-1)
  *    Angular momentum h = cross((0,0,10),(0,0,-1)) = 0 => no deflection.
  *    Ray falls straight to r=0; hits horizon at r <= rs=2.
  * ======================================================================== */
 
 TEST_F(CudaDevicePhysicsTest, SchwarzschildHorizonHit) {
     BH_LaunchParams p = make_schwarzschild_params(1, 1);
+    p.debug_escaped_direction = 1; /* an escaped ray would encode 0.5 (dir + 1), never black */
 
     int rc = bh_launch_geodesic_kernel(d_fb_1x1, &p, BH_KERNEL_FP32_BASELINE, nullptr);
     ASSERT_EQ(rc, 0) << "bh_launch_geodesic_kernel returned error " << rc;
@@ -159,7 +166,7 @@ TEST_F(CudaDevicePhysicsTest, SchwarzschildHorizonHit) {
 /* ========================================================================
  * 2. Schwarzschild escape
  *    Camera at (0, 0, 10), ray aimed in +Z direction (away from BH).
- *    We flip the camera basis so that local (0,0,-1) maps to world (0,0,+1).
+ *    The camera basis turns local forward (0,0,1) away from the hole.
  *    The ray moves away from BH and should escape (reach max_dist).
  *    Escaped pixels are not the black horizon color.
  * ======================================================================== */
@@ -167,9 +174,8 @@ TEST_F(CudaDevicePhysicsTest, SchwarzschildHorizonHit) {
 TEST_F(CudaDevicePhysicsTest, SchwarzschildEscape) {
     BH_LaunchParams p = make_schwarzschild_params(1, 1);
 
-    /* Rotate camera to look in +Y direction (away from BH, which is at origin).
-     * local (0,0,-1) must map to world (0,1,0), so col2 = (0,-1,0).
-     * col0=(1,0,0) right, col1=(0,0,-1) up, col2=(0,-1,0) forward-storage.
+    /* col0=(1,0,0) right, col1=(0,0,-1) up, col2=(0,-1,0) forward: the
+     * center ray leaves along world -y from (0,0,10), past the hole.
      * Column-major m[c*3+r]: col0 -> m[0..2], col1 -> m[3..5], col2 -> m[6..8]. */
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 0.0f; p.cam_basis[5] =-1.0f;
@@ -204,6 +210,7 @@ TEST_F(CudaDevicePhysicsTest, KerrHorizonHit) {
     BH_LaunchParams p = make_schwarzschild_params(1, 1);
     p.spin         = 0.9f;
     p.kerr_enabled = 1;
+    p.debug_escaped_direction = 1; /* an escaped ray would encode 0.5 (dir + 1), never black */
     /* ISCO for Kerr a=0.9M: approximately 2.32 rs for prograde.
      * Use a conservative value; for this test the exact ISCO does not matter. */
     p.isco = 4.0f;
@@ -235,7 +242,7 @@ TEST_F(CudaDevicePhysicsTest, DiskIntersection) {
 
     /* World frame is y-up (d_world_to_physics): the disk lies in the world
      * y=0 plane. Camera at (25, 20, 0): off-axis and ABOVE the disk plane.
-     * d_ray_dir returns make_f3(-u, -v, 1) in local space; for center pixel
+     * d_ray_dir returns make_f3(u, v, 1) in local space; for center pixel
      * (u=0, v=0) this is (0,0,1).  world_dir = d_mat3_mul(basis, local) = col2.
      * col2 = (0,-1,0) makes the ray fall toward y=0, crossing it at
      * approximately (25, 0, 0): disk_r = 25, between isco=6 and r_out=20*rs=40. */
@@ -375,13 +382,17 @@ TEST_F(CudaDevicePhysicsTest, AdaptiveStepFiniteNearPhotonSphere) {
     p.redshift_enabled = 0;
     p.kerr_enabled     = 1;
     p.use_luts         = 0;
+    /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
+    p.disk_peak_temperature = 6500.0f;
+    p.disk_brightness       = 1.0f;
+    p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
 
     /* Camera at (0, 0, 5): 2.5*rs from BH -- photon sphere at 1.5*rs is
      * reachable by edge-of-frame rays with FOV 1.2. */
     p.cam_pos[0] = 0.0f; p.cam_pos[1] = 0.0f; p.cam_pos[2] = 5.0f;
     p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
     p.cam_basis[3] = 0.0f; p.cam_basis[4] = 1.0f; p.cam_basis[5] = 0.0f;
-    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = 1.0f;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = -1.0f;
     p.lut_radius_min = p.isco; p.lut_radius_max = 100.0f;
     p.redshift_radius_min = p.isco; p.redshift_radius_max = 100.0f;
     p.spectral_radius_min = p.isco; p.spectral_radius_max = 100.0f;
@@ -411,4 +422,115 @@ TEST_F(CudaDevicePhysicsTest, AdaptiveStepFiniteNearPhotonSphere) {
         EXPECT_GE(px.y, 0.0f) << "pixel " << i << " G < 0";
         EXPECT_GE(px.z, 0.0f) << "pixel " << i << " B < 0";
     }
+}
+
+/* ========================================================================
+ * Ray generation: row order and vertical field of view
+ *    The framebuffer lands in the GL texture row for row, and GL row 0 is the
+ *    image bottom, so d_ray_dir must send row 0 below the forward axis. A 1x2
+ *    framebuffer with fov_scale = 0.56 puts its two rows at local slopes
+ *    -+0.28 (the rows' centers sit half a row-height from the image center).
+ *    The camera at (0, 0, 60) looks atan(0.3) = 16.7 degrees above the hole,
+ *    so the bottom row passes 1.1 degrees above the hole with impact parameter
+ *    60 sin(1.1 deg) = 1.1 M, inside the 3 sqrt(3) M = 5.2 M capture radius,
+ *    while the top row leaves 32.3 degrees above it and escapes upward (world
+ *    +y, physics +z). At half the tangent the bottom row would pass 8.7
+ *    degrees above the hole at 9.1 M and escape, so the test also fails if
+ *    the image spans only half of tan(fov / 2).
+ * ======================================================================== */
+
+TEST_F(CudaDevicePhysicsTest, BottomRowLooksBelowForwardAtTheFullFieldOfView) {
+    constexpr int kWidth = 1;
+    constexpr int kHeight = 2;
+    BH_LaunchParams p = make_schwarzschild_params(kWidth, kHeight);
+    p.kerr_enabled = 1; /* the Mino-time tracer the renderer runs; spin 0 */
+    p.fov_scale = 0.56f;
+    p.cam_pos[0] = 0.0f;
+    p.cam_pos[1] = 0.0f;
+    p.cam_pos[2] = 60.0f;
+    p.debug_escaped_direction = 1; /* escaped rays encode 0.5 (dir + 1), never black */
+    /* right = (1, 0, 0), up = (0, 1, 0.3) / |.|, forward = (0, 0.3, -1) / |.| */
+    float const inv = 1.0f / std::sqrt(1.09f);
+    p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f;        p.cam_basis[2] = 0.0f;
+    p.cam_basis[3] = 0.0f; p.cam_basis[4] = inv;         p.cam_basis[5] = 0.3f * inv;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.3f * inv;  p.cam_basis[8] = -inv;
+
+    float4 *d_fb = nullptr;
+    ASSERT_EQ(cudaMalloc(&d_fb, kWidth * kHeight * sizeof(float4)), cudaSuccess);
+    int const rc = bh_launch_geodesic_kernel(d_fb, &p, BH_KERNEL_FP32_BASELINE, nullptr);
+    ASSERT_EQ(rc, 0) << "row-order launch returned error " << rc;
+    cudaDeviceSynchronize();
+    auto host = copy_framebuffer(d_fb, kWidth * kHeight);
+    cudaFree(d_fb);
+
+    EXPECT_TRUE(is_horizon(host[0]))
+        << "row 0 (image bottom) must look at the hole; got (" << host[0].x << ", "
+        << host[0].y << ", " << host[0].z << ")";
+    EXPECT_FALSE(is_horizon(host[1])) << "row 1 (image top) must escape above the hole";
+    /* Encoded physics z = world y of the escape chord: upward. */
+    EXPECT_GT(host[1].z, 0.5f) << "row 1 must escape toward world +y";
+}
+
+/* ========================================================================
+ * The Kerr tracer shows the lensed sky unmodified
+ *    A 48x48 frame from 15 r_s (camera at (0, 0, 30), looking at the hole,
+ *    fov_scale 0.5, a = 0.6, no disk) holds the shadow, the photon ring, and
+ *    sky whose rays pass within 5 r_s. With kerr_enabled = 1 the frame must
+ *    not depend on the photon-glow strength, and every escaped pixel must
+ *    equal the unshaped sky (debug_pre_shaping_background): neither the ring
+ *    glow nor the sector grade applies. The Schwarzschild RK4 lane
+ *    (kerr_enabled = 0) keeps its glow.
+ * ======================================================================== */
+
+namespace {
+
+std::vector<float4> renderSkyFrame(int kerrEnabled, float glowStrength, int preShaping) {
+    constexpr int kSide = 48;
+    BH_LaunchParams p = make_schwarzschild_params(kSide, kSide);
+    p.kerr_enabled = kerrEnabled;
+    p.spin = kerrEnabled != 0 ? 0.6f : 0.0f;
+    p.fov_scale = 0.5f;
+    p.cam_pos[2] = 30.0f;
+    p.max_dist = 200.0f;
+    p.background_enabled = 1;
+    p.background_intensity = 1.0f;
+    p.photon_glow_strength = glowStrength;
+    p.debug_pre_shaping_background = preShaping;
+    /* right (1, 0, 0), up (0, 1, 0), forward (0, 0, -1): toward the hole. */
+    p.cam_basis[8] = -1.0f;
+    float4 *d_fb = nullptr;
+    std::vector<float4> host;
+    if (cudaMalloc(&d_fb, kSide * kSide * sizeof(float4)) != cudaSuccess) {
+        return host;
+    }
+    if (bh_launch_geodesic_kernel(d_fb, &p, BH_KERNEL_FP32_BASELINE, nullptr) == 0) {
+        cudaDeviceSynchronize();
+        host = copy_framebuffer(d_fb, kSide * kSide);
+    }
+    cudaFree(d_fb);
+    return host;
+}
+
+bool sameFrame(const std::vector<float4> &a, const std::vector<float4> &b) {
+    return a.size() == b.size() &&
+           std::equal(a.begin(), a.end(), b.begin(), [](const float4 &x, const float4 &y) {
+               return x.x == y.x && x.y == y.y && x.z == y.z && x.w == y.w;
+           });
+}
+
+} // namespace
+
+TEST_F(CudaDevicePhysicsTest, KerrSkyIgnoresPhotonGlowAndSectorShaping) {
+    std::vector<float4> const plain = renderSkyFrame(1, 0.0f, 0);
+    std::vector<float4> const glowing = renderSkyFrame(1, 5.0f, 0);
+    std::vector<float4> const unshaped = renderSkyFrame(1, 0.0f, 1);
+    ASSERT_EQ(plain.size(), 48U * 48U);
+    auto const horizon = std::count_if(plain.begin(), plain.end(), is_horizon);
+    EXPECT_GT(horizon, 0) << "the frame must hold the shadow";
+    EXPECT_LT(static_cast<std::size_t>(horizon), plain.size()) << "and the sky";
+    EXPECT_TRUE(sameFrame(plain, glowing)) << "photon glow changed a Kerr frame";
+    EXPECT_TRUE(sameFrame(plain, unshaped)) << "sector shaping changed a Kerr frame";
+
+    /* The Schwarzschild RK4 lane keeps its ring glow. */
+    EXPECT_FALSE(sameFrame(renderSkyFrame(0, 0.0f, 0), renderSkyFrame(0, 5.0f, 0)));
 }

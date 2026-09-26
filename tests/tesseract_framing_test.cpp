@@ -70,16 +70,18 @@ TEST(TesseractFraming, ReferenceIsTheBlackHoleCameraDefault) {
 }
 
 TEST(TesseractFraming, RecordDistanceScalesTheViewByItsRatio) {
-  // The showcase-orbit default (14) and the cinematic establishing shot (120).
-  EXPECT_FLOAT_EQ(recorded(14.0f, UI_FOV).viewDistance, UI_DISTANCE * 14.0f / 15.0f);
-  EXPECT_FLOAT_EQ(recorded(120.0f, UI_FOV).viewDistance, UI_DISTANCE * 8.0f);
-  EXPECT_FLOAT_EQ(recorded(30.0f, UI_FOV).viewDistance / recorded(15.0f, UI_FOV).viewDistance,
+  // The cinematic establishing shot (120) and its closing wide shot (140).
+  EXPECT_FLOAT_EQ(recorded(120.0f, UI_FOV).viewDistance,
+                  UI_DISTANCE * 120.0f / TESSERACT_RECORD_REFERENCE_DISTANCE);
+  EXPECT_FLOAT_EQ(recorded(140.0f, UI_FOV).viewDistance,
+                  UI_DISTANCE * 140.0f / TESSERACT_RECORD_REFERENCE_DISTANCE);
+  EXPECT_FLOAT_EQ(recorded(480.0f, UI_FOV).viewDistance / recorded(240.0f, UI_FOV).viewDistance,
                   2.0f);
 }
 
 TEST(TesseractFraming, CloseRecordCamerasStopAtTheMinimumDistance) {
-  // The cinematic path's closest distance, 5.2, maps below the floor.
-  EXPECT_FLOAT_EQ(recorded(5.2f, UI_FOV).viewDistance, TESSERACT_MIN_VIEW_DISTANCE);
+  // The cinematic path's close passes (18 to 40) map below the floor.
+  EXPECT_FLOAT_EQ(recorded(18.0f, UI_FOV).viewDistance, TESSERACT_MIN_VIEW_DISTANCE);
   EXPECT_FLOAT_EQ(recorded(0.0f, UI_FOV).viewDistance, TESSERACT_MIN_VIEW_DISTANCE);
 }
 

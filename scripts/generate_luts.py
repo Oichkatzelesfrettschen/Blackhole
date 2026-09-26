@@ -2,7 +2,14 @@
 """Generate emissivity and redshift LUTs for Blackhole.
 
 Uses compact-common if available for ISCO reference; otherwise falls back to
-cleanroom formulas. Outputs CSV files under assets/luts.
+cleanroom formulas. Outputs CSV files under assets/luts (or --out-dir).
+
+The spin is signed like the runtime tracer's (src/physics/kerr.h
+kerrIscoRadius): the disk orbits along +z, so a negative --spin is a
+counter-rotating disk. The radial domain starts at that disk's ISCO
+(resolve_isco with prograde = True), and the Page-Thorne flux and the emitter
+redshift take the same signed spin, as physics::generateEmissivityLut and
+physics::generateRedshiftLut do (src/physics/lut.h).
 """
 
 from __future__ import annotations
@@ -42,13 +49,70 @@ def kerr_isco_cleanroom(mass: float, spin_param: float, prograde: bool = True) -
     return r_isco
 
 
+def page_thorne_isco(a_star: float) -> float:
+    """ISCO radius in units of M for a disk orbiting in +phi (signed spin)."""
+    z1 = 1.0 + (1.0 - a_star * a_star) ** (1.0 / 3.0) * (
+        (1.0 + a_star) ** (1.0 / 3.0) + (1.0 - a_star) ** (1.0 / 3.0)
+    )
+    z2 = math.sqrt(3.0 * a_star * a_star + z1 * z1)
+    root = math.sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2))
+    return 3.0 + z2 - root if a_star >= 0.0 else 3.0 + z2 + root
+
+
+def page_thorne_shape(r: float, a_star: float) -> float:
+    """Page-Thorne flux shape S = F * 8 pi / (3 Mdot) at r in units of M.
+
+    Twin of physics::pageThorneFluxShape (src/physics/page_thorne.h).
+    """
+    r_isco = page_thorne_isco(a_star)
+    if r <= r_isco:
+        return 0.0
+    x = math.sqrt(r)
+    x0 = math.sqrt(r_isco)
+    theta = math.acos(a_star) / 3.0
+    roots = (
+        2.0 * math.cos(theta - math.pi / 3.0),
+        2.0 * math.cos(theta + math.pi / 3.0),
+        -2.0 * math.cos(theta),
+    )
+    bracket = x - x0 - 1.5 * a_star * math.log(x / x0)
+    for i, xi in enumerate(roots):
+        if abs(xi) < 1e-14:
+            continue
+        xj = roots[(i + 1) % 3]
+        xk = roots[(i + 2) % 3]
+        coeff = 3.0 * (xi - a_star) ** 2 / (xi * (xi - xj) * (xi - xk))
+        bracket -= coeff * math.log((x - xi) / (x0 - xi))
+    return bracket / (x**4 * (x**3 - 3.0 * x + 2.0 * a_star))
+
+
 def novikov_thorne_flux(r: float, mass: float, mdot: float, r_in: float, a_star: float) -> float:
+    """Page-Thorne surface flux [erg cm^-2 s^-1] at r [cm]; zero inside r_in."""
     if r < r_in:
         return 0.0
-    prefactor = 3.0 * G * mass * mdot / (8.0 * math.pi * r ** 3)
-    basic = 1.0 - math.sqrt(r_in / r)
-    spin_factor = 1.0 + 0.5 * a_star * math.sqrt((G * mass / C2) / r)
-    return prefactor * basic * spin_factor
+    r_g = G * mass / C2
+    prefactor = 3.0 * G * mass * mdot / (8.0 * math.pi * r**3)
+    r_m = r / r_g
+    return prefactor * r_m**3 * page_thorne_shape(r_m, a_star)
+
+
+def disk_emitter_redshift(r: float, mass: float, spin_param: float) -> float:
+    """Redshift z = u^t - 1 of the Keplerian emitter orbiting along +z at r [cm], face-on.
+
+    Twin of physics::generateRedshiftLut (src/physics/lut.h); the spin is
+    signed, so a negative spin is a counter-rotating emitter, matching the
+    signed ISCO of the LUT's radial domain. Zero where no timelike circular
+    orbit exists.
+    """
+    m_geom = G * mass / C2
+    a_star = spin_param / m_geom
+    x = r / m_geom
+    inv_r32 = 1.0 / (x * math.sqrt(x))
+    q = 1.0 - 3.0 / x + 2.0 * a_star * inv_r32
+    if q <= 0.0:
+        return 0.0
+    u_t = (1.0 + a_star * inv_r32) / math.sqrt(q)
+    return u_t - 1.0
 
 
 def kerr_redshift_equatorial(r: float, mass: float, spin_param: float) -> float:
@@ -128,14 +192,14 @@ def resolve_photon_orbit(mass: float, spin_param: float, prograde: bool,
 
 def write_csv(path: str, rows: list[list[float]]) -> None:
     with open(path, "w", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(["u", "value"])
         writer.writerows(rows)
 
 
 def write_spin_csv(path: str, rows: list[list[float]]) -> None:
     with open(path, "w", newline="") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(["spin", "r_isco_over_rs", "r_ph_over_rs"])
         writer.writerows(rows)
 
@@ -165,6 +229,11 @@ def main() -> int:
     parser.add_argument("--spin-points", type=int, default=0)
     parser.add_argument("--spin-min", type=float, default=-0.99)
     parser.add_argument("--spin-max", type=float, default=0.99)
+    parser.add_argument(
+        "--out-dir",
+        default=os.path.join(os.path.dirname(__file__), "..", "assets", "luts"),
+        help="directory for the CSV files and lut_meta.json",
+    )
     args = parser.parse_args()
 
     size = max(args.size, 8)
@@ -175,6 +244,7 @@ def main() -> int:
     r_s = 2.0 * r_g
     a = spin * r_g
     refs = compact_common_refs()
+    # The disk orbits along +z; the signed spin selects co- or counter-rotation.
     r_in, isco_source = resolve_isco(mass, a, True, refs)
     r_out = r_in * 4.0
 
@@ -196,9 +266,9 @@ def main() -> int:
     for i in range(size):
         u = i / (size - 1)
         r = r_in + u * (r_out - r_in)
-        redshift.append(min(kerr_redshift_equatorial(r, mass, a), 10.0))
+        redshift.append(min(disk_emitter_redshift(r, mass, a), 10.0))
 
-    lut_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "luts")
+    lut_dir = args.out_dir
     os.makedirs(lut_dir, exist_ok=True)
 
     emissivity_rows = [[i / (size - 1), v] for i, v in enumerate(emissivity)]
@@ -215,8 +285,8 @@ def main() -> int:
         "mdot": args.mdot,
         "prograde": True,
         "isco_source": isco_source,
-        "emissivity_model": "novikov-thorne",
-        "redshift_model": "zamo-equatorial",
+        "emissivity_model": "page-thorne",
+        "redshift_model": "circular-emitter-face-on",
         "units": {
             "system": "cgs",
             "length": "cm",
@@ -258,7 +328,7 @@ def main() -> int:
         handle.write("\n")
 
     print("Wrote LUTs to", lut_dir)
-    print("r_in/r_s=%.3f r_out/r_s=%.3f" % (r_in / r_s, r_out / r_s))
+    print(f"r_in/r_s={r_in / r_s:.3f} r_out/r_s={r_out / r_s:.3f}")
     return 0
 
 

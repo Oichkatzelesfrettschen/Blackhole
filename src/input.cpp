@@ -344,6 +344,7 @@ void InputManager::updateCamera(float deltaTime) {
   const float scaledDelta = deltaTime * inputScale;
   float const moveSpeed = cameraMoveSpeed_ * scaledDelta * keyboardSensitivity_;
   float const rotateSpeed = cameraRotateSpeed_ * scaledDelta * keyboardSensitivity_;
+  float const zoomScale = zoomRateScale(camera_.distance);
 
   // Apply keyboard axis inversion
   float const keyXMult = invertKeyboardX_ ? -1.0f : 1.0f;
@@ -399,10 +400,10 @@ void InputManager::updateCamera(float deltaTime) {
       camera_.pitch -= rotateSpeed * keyYMult;
     }
     if (isActive(KeyAction::CameraMoveUp)) {
-      zoomBy(-moveSpeed);
+      zoomBy(-moveSpeed, zoomScale);
     }
     if (isActive(KeyAction::CameraMoveDown)) {
-      zoomBy(moveSpeed);
+      zoomBy(moveSpeed, zoomScale);
     }
 
     // Roll controls
@@ -415,10 +416,10 @@ void InputManager::updateCamera(float deltaTime) {
 
     // Zoom via keyboard
     if (isActive(KeyAction::ZoomIn)) {
-      zoomBy(-moveSpeed);
+      zoomBy(-moveSpeed, zoomScale);
     }
     if (isActive(KeyAction::ZoomOut)) {
-      zoomBy(moveSpeed);
+      zoomBy(moveSpeed, zoomScale);
     }
   }
 
@@ -436,7 +437,8 @@ void InputManager::updateCamera(float deltaTime) {
 
     // Scroll wheel zoom with sensitivity
     if (std::abs(scrollDelta_) > 0.0f) {
-      zoomBy(-scrollDelta_ * scrollSensitivity_ * 0.5f * inputScale);
+      zoomBy(-scrollDelta_ * scrollSensitivity_ * 0.5f * inputScale,
+             zoomRateScale(camera_.distance));
     }
   }
 
@@ -447,7 +449,7 @@ void InputManager::updateCamera(float deltaTime) {
 
   // Clamp values
   camera_.pitch = std::clamp(camera_.pitch, -89.0f, 89.0f);
-  camera_.distance = std::clamp(camera_.distance, 0.5f, 50.0f);
+  camera_.distance = std::clamp(camera_.distance, K_CAMERA_MIN_DISTANCE, K_CAMERA_MAX_DISTANCE);
 
   // Normalize angles
   while (camera_.yaw > 180.0f) {
@@ -559,14 +561,15 @@ void InputManager::updateGamepad(float deltaTime) {
   camera_.yaw += yawAxis * gamepadLookSensitivity_ * deltaTime;
   camera_.pitch -= pitchAxis * gamepadLookSensitivity_ * deltaTime;
   camera_.roll += rollAxis * gamepadRollSensitivity_ * deltaTime;
-  zoomBy(zoomAxis * gamepadZoomSensitivity_ * deltaTime);
+  float const zoomScale = zoomRateScale(camera_.distance);
+  zoomBy(zoomAxis * gamepadZoomSensitivity_ * deltaTime, zoomScale);
 
   updateAxis(gamepadZoomInAxis_);
   updateAxis(gamepadZoomOutAxis_);
   float const zoomIn = normalizeTrigger(gamepadAxisRaw_[gamepadZoomInAxis_]);
   float const zoomOut = normalizeTrigger(gamepadAxisRaw_[gamepadZoomOutAxis_]);
   float const triggerZoom = (zoomOut - zoomIn) * gamepadTriggerZoomSensitivity_ * deltaTime;
-  zoomBy(triggerZoom);
+  zoomBy(triggerZoom, zoomScale);
 
   if (isGamepadButtonJustPressed(gamepadResetButton_)) {
     camera_.reset();
@@ -798,11 +801,11 @@ void InputManager::onScroll(double /*xoffset*/, double yoffset) {
   scrollDelta_ = static_cast<float>(yoffset);
 }
 
-void InputManager::zoomBy(float amount) {
+void InputManager::zoomBy(float amount, float distanceScale) {
   if (zoomRedirect_) {
     pendingZoom_ += amount;
   } else {
-    camera_.distance += amount;
+    camera_.distance += amount * distanceScale;
   }
 }
 

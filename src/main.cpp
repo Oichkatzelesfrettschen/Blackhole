@@ -53,6 +53,7 @@
 // Third-party library headers
 #include "constants.h"
 #include "kerr.h"
+#include "page_thorne.h"
 #include "schwarzschild.h"
 #ifndef BLACKHOLE_HAS_CPPTRACE
 #if __has_include(<cpptrace/cpptrace.hpp>)
@@ -434,11 +435,14 @@ GLFWwindow *initializeWindow(int width, int height) {
 
 // Configure custom ImGui style for "Blackhole" theme (16-bit Voxel Aesthetic)
 
-// Cleanup resources
-void cleanup(GLFWwindow *window) {
-  // Sync and save settings before shutdown
-  InputManager::instance().syncToSettings();
-  SettingsManager::instance().save();
+// Cleanup resources. saveSettings is false for a record run: its profile
+// writes post, background and camera state that belong to the capture, and
+// saving would carry them into the interactive settings.json.
+void cleanup(GLFWwindow *window, bool saveSettings) {
+  if (saveSettings) {
+    InputManager::instance().syncToSettings();
+    SettingsManager::instance().save();
+  }
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
   ShaderWatcher::instance().stop();
@@ -841,10 +845,9 @@ struct BlackholeFrameResult {
   bool computeActiveForLog = false;
 };
 
-BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOptions &cli,
-                                          const Settings &settings, const glm::vec3 &cameraPos,
-                                          const glm::mat3 &cameraBasis, float fovScale,
-                                          float frameTime, double currentTime,
+BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &settings,
+                                          const glm::vec3 &cameraPos, const glm::mat3 &cameraBasis,
+                                          float fovScale, float frameTime, double currentTime,
                                           GLuint &computeProgram) {
   bool computeActiveForLog = false;
   uploadGrmhdStreamingTiles(rs);
@@ -1006,10 +1009,17 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     interop.debugClosestApproachTimeline = rs.debug.debugClosestApproachTimeline ? 1.0f : 0.0f;
     interop.debugClosestApproachDirection = rs.debug.debugClosestApproachDirection ? 1.0f : 0.0f;
     interop.debugEscapedDirection = rs.debug.debugEscapedDirection ? 1.0f : 0.0f;
+    interop.diskPeakTemperature = rs.disk.diskPeakTemperature;
+    interop.diskBrightness = rs.disk.diskBrightness;
+    interop.diskTransferMode = static_cast<float>(rs.disk.diskTransferMode);
+    // Page-Thorne flux peak at the rendered spin, the normalization of the
+    // shaders' flux (the GLSL disk_profile isco_radius clamps to the same range).
+    interop.diskFluxPeak = static_cast<float>(physics::pageThorneFluxPeak(
+        std::clamp(static_cast<double>(rs.physicsCore.kerrSpin), -0.9999, 0.9999)));
 
     // Per-frame derived transients shared by the fragment, CUDA, and
-    // compute uniform binders (compare-baseline gating, LUT readiness,
-    // precomputed record frame shift); see FrameBindingInputs.
+    // compute uniform binders (compare-baseline gating, LUT readiness); see
+    // FrameBindingInputs.
     FrameBindingInputs frameInputs;
     frameInputs.adiskEnabledEffective = adiskEnabledEffective;
     frameInputs.enableRedshiftEffective = enableRedshiftEffective;
@@ -1024,18 +1034,6 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     frameInputs.adiskParticleEffective = adiskParticleEffective;
     frameInputs.compareActive = compareActive;
     frameInputs.grmhdTexId = grmhdTexId;
-    /* Record-mode showcase-orbit frame offset; defaults (0,0) cover the
-     * non-record path via FrameBindingInputs member initializers. */
-    if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit") {
-      const ShowcaseOrbitComposition *const composition =
-          findShowcaseOrbitComposition(cli.recordComposition);
-      frameInputs.frameShiftX =
-          recordOverride(cli.hasRecordFrameX, cli.recordFrameX,
-                         composition != nullptr ? composition->frameOffsetX : 0.0f);
-      frameInputs.frameShiftY =
-          recordOverride(cli.hasRecordFrameY, cli.recordFrameY,
-                         composition != nullptr ? composition->frameOffsetY : 0.0f);
-    }
 
     // Load-order-independent fragment uniforms (the emissivity-family LUT
     // bindings stay above, before updateLuts reassigns their handles).
@@ -1229,7 +1227,7 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
     return {};
   }
   const auto result =
-      renderBlackholeFrame(rs, cli, settings, frameCamera.position, frameCamera.basis,
+      renderBlackholeFrame(rs, settings, frameCamera.position, frameCamera.basis,
                            frameCamera.fovScale, frameTime, currentTime, computeProgram);
   restoreCompareSweepState(rs, input);
   return result;
@@ -1304,8 +1302,8 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
   return false;
 }
 
-void prepareFrameTexturesAndExposure(RenderState &rs, const platform::CliOptions &cli,
-                                     const Settings &settings) {
+void prepareFrameTextures(RenderState &rs, const platform::CliOptions &cli,
+                          const Settings &settings) {
   if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit" &&
       rs.wiregrid.wiregridEnabled &&
       rs.wiregrid.wiregridParams.mode == WiregridParams::Mode::Beauty) {
@@ -1330,18 +1328,6 @@ void prepareFrameTexturesAndExposure(RenderState &rs, const platform::CliOptions
     rs.disk.noiseTextureReady = true; // don't retry regardless; FastNoise2 may be disabled
     if (noiseOk) {
       rs.disk.texNoiseVolume = rs.disk.noiseCache.getTurbulenceTexture();
-    }
-  }
-
-  loadSettingsIntoRenderState(rs, settings);
-  if (!cli.recordFramesDir.empty()) {
-    const ShowcaseOrbitComposition *const composition =
-        cli.recordProfile == "showcase-orbit" ? findShowcaseOrbitComposition(cli.recordComposition)
-                                              : nullptr;
-    if (cli.hasRecordExposure) {
-      rs.post.toneExposure = cli.recordExposure;
-    } else if (cli.recordProfile == "showcase-orbit") {
-      rs.post.toneExposure = composition != nullptr ? composition->exposure : 3.4f;
     }
   }
 }
@@ -1472,6 +1458,10 @@ int main(int argc, char **argv) {
       rs.grmhd.grmhdPathInit = true;
     }
 
+    // Settings seed the render state once, before the first frame, so the
+    // record profile applied on frame 1 (applyRecordProfileSetup) and the
+    // environment overrides below replace them rather than being replaced.
+    loadSettingsIntoRenderState(rs, settings);
     applyEnvironmentConfig(rs);
 
     /* WHY: computeProgram is hoisted here (rather than a static local inside the
@@ -1558,7 +1548,7 @@ int main(int argc, char **argv) {
       configureFrameBackground(rs, cli);
       initializeExportDebugStage(rs);
       initializeWiregridEnvironment(rs);
-      prepareFrameTexturesAndExposure(rs, cli, settings);
+      prepareFrameTextures(rs, cli, settings);
 
       rs.display.renderScale = std::clamp(rs.display.renderScale, 0.25f, 1.5f);
       // Legacy resize logic disabled in favor of Viewport-based sizing
@@ -1692,7 +1682,7 @@ int main(int argc, char **argv) {
 #if BLACKHOLE_HAS_CUDA
     rs.dispatch.cudaManager.shutdown();
 #endif
-    cleanup(window);
+    cleanup(window, cli.recordFramesDir.empty());
     return rs.exporting.exportFailed ? 1 : 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {

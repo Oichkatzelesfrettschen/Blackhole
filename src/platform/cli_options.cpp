@@ -30,8 +30,9 @@ void printCliUsage(const char *argv0) {
   std::printf("  --record-distance <r>    Override record camera distance (every profile).\n");
   std::printf("  --record-fov <deg>       Override record camera field of view (every profile).\n");
   std::printf("  --record-exposure <x>    Override record tone-map exposure.\n");
+  std::printf("  --record-spin <a>        Override the Kerr spin a/M every recorded frame.\n");
   std::printf("  --record-sweep-deg <x>   Showcase-orbit sweep degrees across frames.\n");
-  std::printf("  --record-composition <n> Showcase framing: centered | left-third | right-third | wide-left | wide-right.\n");
+  std::printf("  --record-composition <n> Showcase framing: above-disk (default) | inside-disk (= wide-right) | centered | left-third | right-third | wide-left | wide-right.\n");
   std::printf("  --record-frame-x <n>     Override horizontal framing offset in half-frame units.\n");
   std::printf("  --record-frame-y <n>     Override vertical framing offset in half-frame units.\n");
   std::printf("  --record-background-id <id>  Override showcase background asset id.\n");
@@ -104,6 +105,11 @@ CliParseOutcome parseCliOptions(int argc, char **argv, CliOptions &out) {
     if (arg == "--record-exposure" && i + 1 < argc) {
       out.recordExposure = std::strtof(argv[++i], nullptr);
       out.hasRecordExposure = true;
+      continue;
+    }
+    if (arg == "--record-spin" && i + 1 < argc) {
+      out.recordSpin = std::strtof(argv[++i], nullptr);
+      out.hasRecordSpin = true;
       continue;
     }
     if (arg == "--record-sweep-deg" && i + 1 < argc) {

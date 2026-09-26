@@ -122,20 +122,22 @@ TEST(TesseractZoom, ScrollLeavesTheBlackHoleCameraWhileRedirected) {
   input.setPaused(false);
   input.setGamepadEnabled(false);
   input.setIgnoreGuiCapture(true);
-  input.camera().distance = 15.0f;
+  // At the default 240 the black-hole zoom rate is 16 times its reference
+  // rate; the redirected delta stays in reference-rate units.
+  input.camera().distance = 240.0f;
   const float step = input.getScrollSensitivity() * 0.5f * input.getTimeScale();
 
   input.setZoomRedirect(true);
   input.onScroll(0.0, 2.0);
   input.update(1.0f / 60.0f);
-  EXPECT_FLOAT_EQ(input.camera().distance, 15.0f);
+  EXPECT_FLOAT_EQ(input.camera().distance, 240.0f);
   EXPECT_FLOAT_EQ(input.takeZoomDelta(), -2.0f * step);
   EXPECT_FLOAT_EQ(input.takeZoomDelta(), 0.0f);
 
   input.setZoomRedirect(false);
   input.onScroll(0.0, 2.0);
   input.update(1.0f / 60.0f);
-  EXPECT_FLOAT_EQ(input.camera().distance, 15.0f - (2.0f * step));
+  EXPECT_FLOAT_EQ(input.camera().distance, 240.0f - (2.0f * step * zoomRateScale(240.0f)));
   EXPECT_FLOAT_EQ(input.takeZoomDelta(), 0.0f);
 
   input.setIgnoreGuiCapture(false);

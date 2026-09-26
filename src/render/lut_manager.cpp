@@ -264,8 +264,8 @@ void updateLuts(RenderState &rs, float spin, float densityV) {
     constexpr double kMassSolar = 4.0e6;
     constexpr double kMdotEdd = 0.1;
 
-    auto emissivityLut = physics::generateEmissivityLut(
-        kLutSize, kMassSolar, static_cast<double>(spin), kMdotEdd, true);
+    auto emissivityLut =
+        physics::generateEmissivityLut(kLutSize, kMassSolar, static_cast<double>(spin), kMdotEdd);
     auto redshiftLut =
         physics::generateRedshiftLut(kLutSize, kMassSolar, static_cast<double>(spin));
 
