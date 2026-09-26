@@ -75,6 +75,7 @@ GLSL and CUDA lanes, and Blender bridge integration.
 - [Reverse Engineering](plans/reverse-engineering.md) -- reverse engineering plan
 - [OpenUniverse](plans/openuniverse.md) -- OpenUniverse integration scope
 - [Local Repos](plans/local-repos.md) -- local repository scope
+- [Tesseract Mechanic](plans/tesseract-mechanic.md) -- Novikov self-consistent message design note (speculative, not built)
 
 ## Validation
 
