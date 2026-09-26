@@ -29,7 +29,6 @@
 #include "game/inbox.h"
 #include "game/observer.h"
 #include "game/realtime_driver.h"
-#include "game/received_clock.h"
 #include "game/station_node.h"
 #include "platform/resource_paths.h"
 #include "ui/strategic_map.h"
@@ -101,25 +100,31 @@ bool atColony(const game::CampaignViewSnapshot &view, const CampaignUiState &uiS
   return focus != nullptr && focus->isColony;
 }
 
-/** @brief The colony's picture of the host: its latest arrival's stamps and
- *         their age, and nothing of the host's present. */
-void renderHostAsLastHeard(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
-  const game::NodeView *focus = findNode(view, uiState.focusNode);
-  if (focus == nullptr) {
-    return;
+/** @brief Wrapped text in the disabled color: long readouts fold to the
+ *         window width instead of running off its edge. */
+void textDisabledWrapped(const std::string &text) {
+  ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+  ImGui::TextWrapped("%s", text.c_str());
+  ImGui::PopStyleColor();
+}
+
+/** @brief A remote station as its latest arrival stamped it: clock, what it
+ *         reports (the host's bank, a colony's tech), emission turn and age. */
+std::string remoteAsLastHeard(const game::CampaignViewSnapshot &view, const game::NodeView &node,
+                              double viewerRate) {
+  if (!node.heard) {
+    return std::format("{}: nothing received yet -- its present is unknown here",
+                       nodeName(node.id));
   }
-  const std::vector<game::ReceivedClock> received =
-      game::latestReceivedClocks(view.arrivals, focus->id, view.nodes.size());
-  const game::ReceivedClock &host = received.at(game::K_AUTHORITY_NODE);
-  if (!host.heard) {
-    ImGui::TextDisabled("host: nothing received yet -- its state is unknown here");
-    return;
-  }
-  ImGui::TextDisabled(
-      "host as last heard: energy banked %.1f (as of its clock %s, sent t%lld, %s ago)",
-      host.senderEnergyUnits, formatSpan(static_cast<double>(host.senderProperSec)).c_str(),
-      static_cast<long long>(host.emitTurn),
-      formatSpan(game::signalAgeCoordinateSec(host, view.turn, view.secondsPerTurn)).c_str());
+  const double ageSec = static_cast<double>(view.turn - node.asOfTurn) * view.secondsPerTurn;
+  const std::string reported =
+      node.isColony ? std::format("tech tier {} ({} points)", node.techTier, node.techPoints)
+                    : std::format("energy banked {:.1f}", view.energyUnits);
+  return std::format("{} as last heard: {}, its clock {} (sent t{}; signal age {} outside / {} "
+                     "local)",
+                     nodeName(node.id), reported,
+                     formatSpan(node.properTimeSec), node.asOfTurn, formatSpan(ageSec),
+                     formatSpan(ageSec * viewerRate));
 }
 
 std::string arrivalText(const game::CampaignViewSnapshot &view, const game::ArrivalRecord &arrival) {
@@ -152,13 +157,13 @@ const char *capabilityEffectText(game::FleetCapability capability) {
 }
 
 void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
-  ImGui::Text("turn %lld  |  t_coordinate %.1f d  |  authority dtau/dt %.4f  |  spin a* %.2f",
-              static_cast<long long>(view.turn), days(view.coordinateTimeSec),
-              view.authorityProperTimeRate, view.spinDimensionless);
+  ImGui::TextWrapped("turn %lld  |  t_coordinate %.1f d  |  authority dtau/dt %.4f  |  spin a* %.2f",
+                     static_cast<long long>(view.turn), days(view.coordinateTimeSec),
+                     view.authorityProperTimeRate, view.spinDimensionless);
   if (atColony(view, uiState)) {
     // The host's ledger -- its intel, its bank, its objective -- is host-local
-    // truth; at the colony it exists only as the host's last transmission.
-    renderHostAsLastHeard(view, uiState);
+    // truth; at the colony it exists only as the host's last transmission,
+    // which the clock readout below shows.
     return;
   }
   ImGui::TextDisabled("orders in flight: %zu   reports in flight: %zu   intel: %zu",
@@ -520,26 +525,13 @@ void renderClocks(const game::CampaignViewSnapshot &view, const CampaignUiState 
   if (focus == nullptr) {
     return;
   }
-  ImGui::Text("local tau (%s) %s   |   outside t %s (turn %lld)", nodeName(focus->id),
-              formatSpan(focus->properTimeSec).c_str(), formatSpan(view.coordinateTimeSec).c_str(),
-              static_cast<long long>(view.turn));
-  const std::vector<game::ReceivedClock> received =
-      game::latestReceivedClocks(view.arrivals, focus->id, view.nodes.size());
-  for (const game::ReceivedClock &clock : received) {
-    if (clock.sender == focus->id) {
-      continue;
+  ImGui::TextWrapped("local tau (%s) %s   |   outside t %s (turn %lld)", nodeName(focus->id),
+                     formatSpan(focus->properTimeSec).c_str(),
+                     formatSpan(view.coordinateTimeSec).c_str(), static_cast<long long>(view.turn));
+  for (const game::NodeView &node : view.nodes) {
+    if (node.id != focus->id) {
+      textDisabledWrapped(remoteAsLastHeard(view, node, focus->properTimeRate));
     }
-    if (!clock.heard) {
-      ImGui::TextDisabled("%s: nothing received yet", nodeName(clock.sender));
-      continue;
-    }
-    ImGui::Text("%s: received tau %s   signal age %s outside / %s local", nodeName(clock.sender),
-                formatSpan(static_cast<double>(clock.senderProperSec)).c_str(),
-                formatSpan(game::signalAgeCoordinateSec(clock, view.turn, view.secondsPerTurn))
-                    .c_str(),
-                formatSpan(game::signalAgeLocalSec(clock, view.turn, view.secondsPerTurn,
-                                                   focus->properTimeRate))
-                    .c_str());
   }
 }
 
@@ -608,12 +600,19 @@ void renderTechWindow(const game::CampaignViewSnapshot &view, const CampaignUiSt
       points = std::max(points, node.techPoints);
     }
   }
-  ImGui::Text("colony tier %lld (%lld points)", static_cast<long long>(view.colonyTechTier),
-              static_cast<long long>(points));
+  // The colony's tier is present truth only at the colony; at the host it is
+  // what the colony last reported, with the report's age.
   if (atColony(view, uiState)) {
-    renderHostAsLastHeard(view, uiState);
+    ImGui::Text("colony tier %lld (%lld points)", static_cast<long long>(view.colonyTechTier),
+                static_cast<long long>(points));
   } else {
     ImGui::Text("energy banked at host %.1f", view.energyUnits);
+  }
+  const game::NodeView *focus = findNode(view, uiState.focusNode);
+  for (const game::NodeView &node : view.nodes) {
+    if (focus != nullptr && node.id != focus->id) {
+      textDisabledWrapped(remoteAsLastHeard(view, node, focus->properTimeRate));
+    }
   }
   for (const game::TechLevelView &level : view.techTiers) {
     const bool unlocked = points >= level.points;
