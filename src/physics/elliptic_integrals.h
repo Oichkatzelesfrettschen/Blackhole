@@ -113,9 +113,12 @@ inline double carlsonRf(double x, double y, double z, double relTol = CARLSON_RE
  *          = atan(s) / (s sqrt(x)),   s = sqrt((y-x)/x),  x < y   (DLMF 19.2.18)
  *          = asinh(t) / (t sqrt(y)),  t = sqrt((x-y)/y),  x > y   (DLMF 19.2.19)
  *
- * The atan(s)/s and asinh(t)/t ratios switch to their series below 1e-4, so
- * nearly equal arguments (the R_C calls inside R_J's duplication) keep full
- * precision; x = 0 gives pi / (2 sqrt(y)).
+ * s and t are formed as quotients of square roots and the results divided by
+ * sqrt(|y - x|), so neither overflows for subnormal or widely separated
+ * arguments (R_C(1e-310, 1) = pi/2, R_C(1, 5e-324) = 373.3). Below 1e-4 the
+ * atan(s)/s and asinh(t)/t ratios take their series, so nearly equal
+ * arguments (the R_C calls inside R_J's duplication) keep full precision;
+ * x = 0 gives pi / (2 sqrt(y)).
  *
  * @param x First argument (≥0)
  * @param y Second argument (>0); y <= 0 returns NaN
@@ -130,13 +133,13 @@ inline double carlsonRc(double x, double y) {
   }
   constexpr double seriesBelow = 1.0e-4;
   if (x < y) {
-    const double s = std::sqrt((y - x) / x);
-    const double ratio = (s < seriesBelow) ? 1.0 - (s * s / 3.0) : std::atan(s) / s;
-    return ratio / std::sqrt(x);
+    const double gap = std::sqrt(y - x);
+    const double s = gap / std::sqrt(x);
+    return (s < seriesBelow) ? (1.0 - (s * s / 3.0)) / std::sqrt(x) : std::atan(s) / gap;
   }
-  const double t = std::sqrt((x - y) / y);
-  const double ratio = (t < seriesBelow) ? 1.0 - (t * t / 6.0) : std::asinh(t) / t;
-  return ratio / std::sqrt(y);
+  const double gap = std::sqrt(x - y);
+  const double t = gap / std::sqrt(y);
+  return (t < seriesBelow) ? (1.0 - (t * t / 6.0)) / std::sqrt(y) : std::asinh(t) / gap;
 }
 
 /// DLMF 19.36.2 series shared by R_D and R_J: e2..e5 are the elementary

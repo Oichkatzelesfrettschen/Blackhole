@@ -12,7 +12,8 @@ Row groups:
   inc    - incomplete-integral arguments (cos^2 phi, 1 - k^2 sin^2 phi, 1, 1 - n sin^2 phi)
   near   - nearly equal arguments, the case duplication converges to
   zero   - one of x, y zero with widely spread partners
-R_C rows cover x < y, x > y, x = y, x = 0 and nearly equal arguments.
+R_C rows cover x < y, x > y, x = y, x = 0, nearly equal arguments, and
+subnormal or widely separated arguments where quotients of them overflow.
 
 Usage: $PYTHON scripts/gen_carlson_reference.py > tests/carlson_reference.inc
 """
@@ -72,6 +73,11 @@ RC_ROWS: list[tuple[float, float]] = [
     (1.0e-3, 1.0e3),
     (9.0, 9.0 * (1.0 - 1.0e-6)),
     (0.25, 0.2500000001),
+    (1.0e-310, 1.0),
+    (1.0, 5.0e-324),
+    (1.0, 1.0e-300),
+    (1.0e300, 1.0e-300),
+    (1.0e-300, 1.0e300),
 ]
 
 
