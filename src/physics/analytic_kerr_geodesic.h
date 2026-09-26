@@ -303,8 +303,10 @@ struct QuarticCoeffs {
  * x86-64 runs the x87 80-bit unit and costs about 10x in jacobi_elliptic.
  * Evaluated in double, sn and cn stay within a few ulp of their first-order
  * error bound while 1 - m >= 1e-4; closer to m = 1 the double evaluation's cn
- * error grows (27x the bound at 1 - m = 3e-7, 980x at 3e-10), so rAnalytic
- * promotes below ANALYTIC_KERR_PROMOTE_BELOW
+ * error grows (27x the bound at 1 - m = 3e-7, 980x at 3e-10), and promoting
+ * the call cannot restore 1 - m once k = sqrt(m) is rounded to double, so
+ * below ANALYTIC_KERR_PROMOTE_BELOW rAnalytic runs the Landen transformation
+ * in long double on 1 - m formed from the roots
  * (tests/analytic_geodesic_reproducibility_test.cpp). ellint_1 is not used:
  * radialHalfPeriod takes K from the AGM with 1 - m formed from the roots.
  * bench/numerics_bench.cpp measures the cost of both policies.
@@ -312,7 +314,7 @@ struct QuarticCoeffs {
 using AnalyticKerrPolicy =
     boost::math::policies::policy<boost::math::policies::promote_double<false>>;
 
-/// 1 - m below which rAnalytic evaluates sn and cn with long-double promotion.
+/// 1 - m below which rAnalytic evaluates sn and cn by the long-double Landen transformation.
 inline constexpr double ANALYTIC_KERR_PROMOTE_BELOW = 1.0e-4;
 
 /**
@@ -358,18 +360,25 @@ inline constexpr double ANALYTIC_KERR_PROMOTE_BELOW = 1.0e-4;
   const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
   const double u = scale * (lambda - lambda0);
 
-  // sn(u | k) and cn(u | k), k = sqrt(m), from one Boost call. Near m = 1 the
-  // double-precision evaluation loses digits in cn (its error grows as 1 - m
-  // shrinks), so there the call keeps Boost's default long-double promotion.
-  const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double kPrime2 = ((r1 - r2) * (r3 - r4)) / den; // 1 - m without cancellation
+  // sn(u | k) and cn(u | k), k = sqrt(m). Away from m = 1 one double-precision
+  // Boost call; below 1 - m = ANALYTIC_KERR_PROMOTE_BELOW the double call loses
+  // digits in cn, and a double modulus k cannot even represent 1 - m below
+  // eps, so there the Landen transformation runs in long double on
+  // k'^2 = 1 - m formed from the roots.
+  const double kPrime2 = std::clamp(((r1 - r2) * (r3 - r4)) / den, 0.0, 1.0); // 1 - m
+  double snVal = 0.0;
   double cnVal = 0.0;
-  const double snVal =
-      (kPrime2 < ANALYTIC_KERR_PROMOTE_BELOW)
-          ? boost::math::jacobi_elliptic(k, u, &cnVal, static_cast<double *>(nullptr),
-                                         boost::math::policies::policy<>())
-          : boost::math::jacobi_elliptic(k, u, &cnVal, static_cast<double *>(nullptr),
+  if (kPrime2 < ANALYTIC_KERR_PROMOTE_BELOW) {
+    const JacobiSnCn<long double> sc = jacobiSnCnFromComplement<long double>(
+        static_cast<long double>(u), static_cast<long double>(std::clamp(m, 0.0, 1.0)),
+        static_cast<long double>(kPrime2));
+    snVal = static_cast<double>(sc.sn);
+    cnVal = static_cast<double>(sc.cn);
+  } else {
+    const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
+    snVal = boost::math::jacobi_elliptic(k, u, &cnVal, static_cast<double *>(nullptr),
                                          AnalyticKerrPolicy());
+  }
 
   // r - r3 = (r3-r4)(r1-r3) sn^2 / ((r3-r4) + (r1-r3) cn^2): with r1 >= r3 >= r4
   // every term is nonnegative, where the equivalent
@@ -473,8 +482,8 @@ inline constexpr double ANALYTIC_KERR_PROMOTE_BELOW = 1.0e-4;
   // Note: factor is 4 (not 2) in the xi formula.
   ip.xi = ((r2 + a2) / a) - ((4.0 * rPh * delta) / (a * deltaPrime));
 
-  const double dp2   = deltaPrime * deltaPrime;
-  const double xiA   = ip.xi - a;
+  const double dp2 = deltaPrime * deltaPrime;
+  const double xiA = ip.xi - a;
   ip.eta = ((16.0 * r2 * delta) / dp2) - (xiA * xiA);
 
   return ip;

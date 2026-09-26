@@ -32,7 +32,9 @@
  *  16.  radialHalfPeriod within 4 ulp of K(m)/scale for 1 - m from 0.6 down
  *       to 1e-10
  *  17.  rAnalytic within 4 ulp times the first-order error bound of
- *       r(lambda) from sn, cn and the final sum
+ *       r(lambda) from sn, cn, k'^2 and the final sum
+ *  18.  at 1 - m = 6.1e-17 (separatrix) r reaches r1 at one half period and
+ *       returns to r3 after two
  */
 
 #include <algorithm>
@@ -50,8 +52,6 @@
 
 #include "../src/physics/analytic_kerr_geodesic.h"
 #include "../src/physics/reproducibility.h"
-
-static_assert(PHYSICS_HAS_BOOST_JACOBI == 1, "Validation requires the Boost numerical path");
 
 using namespace physics;
 
@@ -271,9 +271,9 @@ constexpr double EPS = std::numeric_limits<double>::epsilon();
 // K from the AGM with 1 - m formed from the roots: a few roundings in the root
 // differences plus the AGM's own, independent of 1 - m.
 constexpr double HALF_PERIOD_TOL = 4.0 * EPS;
-// sn and cn from jacobi_elliptic in double are backward-stable in u with an
-// absolute floor, and r3 + corr adds a few roundings; the table's condition
-// column is the first-order bound of both in units of the rounding error.
+// sn and cn from the Landen transformation on k' are backward-stable in u with
+// an absolute floor, r3 + corr and k'^2 add a few roundings; the table's
+// condition column is the first-order bound of all three in units of eps.
 constexpr double RADIUS_TOL_ULPS = 4.0;
 
 RadialRoots transitRoots(const std::array<double, 4> &r) {
@@ -315,11 +315,31 @@ void testRadiusReferee() {
       worstUlps = std::max(worstUlps, diff / (EPS * row.radiusCondition.at(i)));
     }
   }
-  const std::string detailBuffer = std::format(
-      "max rel err {:.3e}, max err / (eps x condition) {:.2f}", worstRel, worstUlps);
+  const std::string detailBuffer =
+      std::format("max rel err {:.3e}, max err / (eps x condition) {:.2f}", worstRel, worstUlps);
   std::cout << "  " << detailBuffer << "\n";
   check(worstUlps <= RADIUS_TOL_ULPS, "r(lambda) within 4 ulp x its first-order error bound",
         detailBuffer);
+}
+
+void testSeparatrixPeriod() {
+  std::cout << "Test 18: separatrix roots {6, nextafter(6, 0), 1.5, -0.5} keep their period\n";
+
+  // 1 - m = 6.1e-17 lies below the rounding of any double modulus near 1, so
+  // the period only survives through k'^2 formed from the roots: r reaches r1
+  // at one half period and returns to r3 after two.
+  const std::array<double, 4> r = {6.0, std::nextafter(6.0, 0.0), 1.5, -0.5};
+  const RadialRoots roots = transitRoots(r);
+  const double half = radialHalfPeriod(roots);
+  const double atTurn = rAnalytic(half, roots);
+  const double atReturn = rAnalytic(2.0 * half, roots);
+  const std::string detailBuffer =
+      std::format("half period {:.15f}, r(half) - r1 = {:.3e}, r(2 half) - r3 = {:.3e}", half,
+                  atTurn - r[0], atReturn - r[2]);
+  std::cout << "  " << detailBuffer << "\n";
+  check(std::abs(atTurn - r[0]) <= 8.0 * EPS * r[0] &&
+            std::abs(atReturn - r[2]) <= 8.0 * EPS * r[2],
+        "r(K/scale) = r1 and r(2K/scale) = r3 within 8 ulp at 1 - m = 6.1e-17", detailBuffer);
 }
 
 } // namespace
@@ -363,6 +383,8 @@ int main() try {
   testHalfPeriodReferee();
   std::cout << "\n";
   testRadiusReferee();
+  std::cout << "\n";
+  testSeparatrixPeriod();
   std::cout << "\n";
 
   std::cout << "================================================\n"

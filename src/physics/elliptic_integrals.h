@@ -33,7 +33,9 @@
 #define PHYSICS_ELLIPTIC_INTEGRALS_H
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <numbers>
 
@@ -347,6 +349,62 @@ inline double ellipticKFromComplement(double kPrime2) {
   return std::numbers::pi / (a + b);
 }
 
+/// Jacobi sn(u|m) and cn(u|m).
+template <typename T> struct JacobiSnCn {
+  T sn = T(0);
+  T cn = T(1);
+};
+
+/**
+ * @brief sn and cn from the parameter m and its complement k'^2 = 1 - m.
+ *
+ * Descending Landen transformation (A&S 16.4.1-16.4.3; DLMF 22.20.ii):
+ * a_0 = 1, b_0 = k', a_{n+1} = (a_n + b_n)/2, b_{n+1} = sqrt(a_n b_n),
+ * c_1 = (1 - k')/2 = m / (2 (1 + k')), c_{n+1} = c_n^2 / (4 a_{n+1}); at
+ * c_N <= eps a_N, phi_N = 2^N a_N u and
+ * phi_{n-1} = (phi_n + asin((c_n / a_n) sin phi_n)) / 2 give sn = sin phi_0,
+ * cn = cos phi_0. The AGM runs on k' itself and c_1 takes whichever of its two
+ * forms does not cancel, so a caller that knows 1 - m in factored form keeps
+ * the quarter period K = pi / (2 a_N) accurate as m -> 1, where a modulus
+ * k = sqrt(m) rounded to double carries an absolute error of eps in 1 - m.
+ * Near m = 1 with cn small the amplitude phi_0 sits at pi/2, so cn keeps only
+ * the absolute precision of T there; rAnalytic evaluates it in long double.
+ *
+ * @param u       Argument
+ * @param m       Parameter, 0 <= m <= 1
+ * @param kPrime2 Complementary parameter 1 - m, formed without cancellation
+ * @return sn(u|m), cn(u|m); tanh u and sech u at k'^2 = 0
+ */
+template <typename T>
+[[nodiscard]] inline JacobiSnCn<T> jacobiSnCnFromComplement(T u, T m, T kPrime2) {
+  if (!(kPrime2 > T(0))) {
+    return {.sn = std::tanh(u), .cn = T(1) / std::cosh(u)};
+  }
+  // 32 halvings of c take any c_1 <= 1/2 below eps of a double or long double.
+  std::array<T, 33> a{};
+  std::array<T, 33> c{};
+  const T kPrime = std::sqrt(kPrime2);
+  a[0] = T(1);
+  c[0] = std::sqrt(m);
+  T b = kPrime;
+  std::size_t n = 0;
+  while (n + 1 < a.size() && c[n] > std::numeric_limits<T>::epsilon() * a[n]) {
+    a[n + 1] = T(0.5) * (a[n] + b);
+    if (n == 0) {
+      c[1] = (kPrime2 < T(0.25)) ? T(0.5) * (T(1) - kPrime) : m / (T(2) * (T(1) + kPrime));
+    } else {
+      c[n + 1] = (c[n] * c[n]) / (T(4) * a[n + 1]);
+    }
+    b = std::sqrt(a[n] * b);
+    ++n;
+  }
+  T phi = std::ldexp(a[n] * u, static_cast<int>(n));
+  for (std::size_t j = n; j > 0; --j) {
+    phi = T(0.5) * (phi + std::asin((c[j] / a[j]) * std::sin(phi)));
+  }
+  return {.sn = std::sin(phi), .cn = std::cos(phi)};
+}
+
 /**
  * @brief Complete elliptic integral of the second kind E(k).
  *
@@ -586,8 +644,7 @@ inline double deflectionStrongField(double b, double rS) {
  * @param rS Schwarzschild radius [cm]
  * @return Image angle θ_n [rad]
  */
-inline double relativisticImagePosition(double beta, int n, double dL,
-                                        double dS, double dLs,
+inline double relativisticImagePosition(double beta, int n, double dL, double dS, double dLs,
                                         double rS) {
   static_cast<void>(beta);
   static_cast<void>(dS);
@@ -668,8 +725,7 @@ inline double relativisticImageMagnification(double beta, int n, double dL, doub
 inline double criticalImpactParameterKerr(double rS, double a, bool prograde) {
   const double m = rS / 2.0;
   const double aStar = std::clamp(a / m, -1.0, 1.0);
-  const double rPh =
-      2.0 * m * (1.0 + std::cos((2.0 / 3.0) * std::acos(prograde ? -aStar : aStar)));
+  const double rPh = 2.0 * m * (1.0 + std::cos((2.0 / 3.0) * std::acos(prograde ? -aStar : aStar)));
   return (3.0 * std::sqrt(m * rPh)) + (prograde ? -a : a);
 }
 
