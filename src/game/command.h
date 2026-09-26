@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include "game/event.h"
 #include "game/fleet.h"
 
 namespace game {
@@ -24,6 +25,9 @@ struct Command {
   OrbitLane lane = OrbitLane::Prograde; ///< PlaceFleet: orbital direction to adopt.
   StationKeeping station = StationKeeping::Orbit; ///< PlaceFleet: orbit (geodesic) or hover (ZAMO).
   double properTimeCostSec = 0.0;       ///< AssignTask: local proper-time cost.
+  /// Station the order is sent from: the authority or a colony. The signal
+  /// delay runs from this node's radius to the fleet's band.
+  NodeId originNode = K_AUTHORITY_NODE;
 };
 
 } // namespace game
