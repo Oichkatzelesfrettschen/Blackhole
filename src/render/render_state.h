@@ -168,6 +168,10 @@ struct RenderState {
     // scale on the bolometric intensity g^4 F / F_peak.
     float diskPeakTemperature = 6500.0f;
     float diskBrightness = 1.0f;
+    // 0 = Physical (g = 1 / (u^t (1 - Omega lambda))), 1 = Interstellar:
+    // g = 1 for color and intensity with lensing kept, the film's disk
+    // (James et al. 2015, sec. 4.2; see physics/disk_transfer.h).
+    int diskTransferMode = 0;
     gl::GLuint texNoiseVolume = 0;
     bool noiseTextureReady = false;
     blackhole::NoiseTextureCache noiseCache;

@@ -980,6 +980,7 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     interop.debugEscapedDirection = rs.debug.debugEscapedDirection ? 1.0f : 0.0f;
     interop.diskPeakTemperature = rs.disk.diskPeakTemperature;
     interop.diskBrightness = rs.disk.diskBrightness;
+    interop.diskTransferMode = static_cast<float>(rs.disk.diskTransferMode);
     // Page-Thorne flux peak at the rendered spin, the normalization of the
     // shaders' flux (the GLSL disk_profile isco_radius clamps to the same range).
     interop.diskFluxPeak = static_cast<float>(physics::pageThorneFluxPeak(

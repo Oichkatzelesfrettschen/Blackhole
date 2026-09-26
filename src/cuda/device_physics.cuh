@@ -123,6 +123,7 @@ extern __constant__ float d_adisk_lit;            /**< @brief Legacy volumetric 
 extern __constant__ float d_disk_peak_temperature; /**< @brief Blackbody temperature at the Page-Thorne flux peak [K]. */
 extern __constant__ float d_disk_brightness;       /**< @brief Display scale on the bolometric disk intensity g^4 F / F_peak. */
 extern __constant__ float d_disk_flux_peak;        /**< @brief Page-Thorne flux-shape peak at d_spin (M = 1), the flux normalization. */
+extern __constant__ int   d_disk_transfer_mode;    /**< @brief 0 = Physical g-factor, 1 = Interstellar (g = 1, lensing kept). */
 
 /* ========================================================================
  * Vector helpers (replacing GLSL vec3 operations)
@@ -669,22 +670,6 @@ __device__ __forceinline__ bool d_check_disk(float3 old_pos, float3 new_pos,
     return r >= r_in && r <= r_out;
 }
 
-/**
- * @brief Compute the analytic Schwarzschild gravitational redshift factor sqrt(1 - rs/r).
- *
- * Returns 0 if r <= rs (inside or at the horizon).
- *
- * @param r  Emission radius.
- * @param rs Schwarzschild radius.
- * @return Redshift factor in [0, 1].
- */
-__device__ __forceinline__ float d_redshift_factor(float r, float rs) {
-    if (r <= rs) return 0.0f;
-    float f = 1.0f - rs / r;
-    if (f <= 0.0f) return 0.0f;
-    return sqrtf(f);
-}
-
 /* ========================================================================
  * Hit result
  * ======================================================================== */
@@ -1156,7 +1141,9 @@ __device__ __forceinline__ float d_synchrotron_G(float x) {
  * blackbody temperature T_emit = d_disk_peak_temperature * flux_norm^(1/4);
  * the orbiting-emitter shift g maps it to T_obs = g T_emit and the bolometric
  * intensity to g^4 flux_norm (I_nu / nu^3 invariant). chroma is the
- * unit-luminance blackbody color at T_obs.
+ * unit-luminance blackbody color at T_obs. d_disk_transfer_mode 1
+ * (Interstellar) forces g = 1, the film's unshifted disk (James et al. 2015
+ * sec. 4.2; physics/disk_transfer.h).
  */
 __device__ __forceinline__ void d_disk_emission(float r, float photon_lambda, float rs,
                                                 float3& chroma, float& intensity) {
@@ -1164,7 +1151,9 @@ __device__ __forceinline__ void d_disk_emission(float r, float photon_lambda, fl
     float const flux_norm = fmaxf(
         0.0f, fminf(d_dt_page_thorne_shape(r / m, d_spin) / fmaxf(d_disk_flux_peak, 1e-30f), 1.0f));
     float const t_emit = d_disk_peak_temperature * sqrtf(sqrtf(flux_norm));
-    float const g = d_dt_disk_transfer_g(r / m, d_spin, photon_lambda / m);
+    float const g = d_disk_transfer_mode != 0
+                        ? 1.0f
+                        : d_dt_disk_transfer_g(r / m, d_spin, photon_lambda / m);
     float const g2 = g * g;
     chroma = d_dt_blackbody_chroma(g * t_emit);
     intensity = g2 * g2 * flux_norm;
@@ -1558,12 +1547,6 @@ __device__ __forceinline__ float d_luminance(float3 color) {
     return 0.2126f * color.x + 0.7152f * color.y + 0.0722f * color.z;
 }
 
-__device__ __forceinline__ float3 d_apply_simple_redshift(float3 color, float z) {
-    float one_plus_z = 1.0f + z;
-    float dimming = 1.0f / fmaxf(one_plus_z * one_plus_z * one_plus_z, D_EPSILON);
-    return d_scale(color, dimming);
-}
-
 __device__ __forceinline__ float d_smoothstep_range(float edge0, float edge1, float x) {
     float t = fmaxf(0.0f, fminf((x - edge0) / fmaxf(edge1 - edge0, D_EPSILON), 1.0f));
     return t * t * (3.0f - 2.0f * t);
@@ -1631,18 +1614,8 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         return sky;
     }
 
-    if (d_redshift_enabled && min_radius < rs * 10.0f) {
-        float z;
-        if (d_use_luts && d_tex_redshift) {
-            float r_norm = min_radius / fmaxf(rs, D_EPSILON);
-            float denom = fmaxf(d_redshift_radius_max - d_redshift_radius_min, 0.0001f);
-            float u = fmaxf(0.0f, fminf((r_norm - d_redshift_radius_min) / denom, 1.0f));
-            z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
-        } else {
-            z = 1.0f / fmaxf(d_redshift_factor(min_radius, rs), D_EPSILON) - 1.0f;
-        }
-        sky = d_apply_simple_redshift(sky, z);
-    }
+    /* Light from infinity escaping to a distant camera has E_obs = E_emit:
+     * the sky carries no net frequency shift, only lensing. */
 
     if (d_debug_pre_shaping_background != 0) {
         return sky;

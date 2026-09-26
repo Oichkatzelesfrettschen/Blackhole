@@ -88,6 +88,7 @@ uniform float adiskEnabled = 1.0;
 uniform float diskPeakTemperature = 6500.0;
 uniform float diskBrightness      = 1.0;
 uniform float diskFluxPeak        = 1.1458947e-4;
+uniform float diskTransferMode    = 0.0; // 0 = Physical g-factor, 1 = Interstellar (g = 1)
 
 // --- LUT radius ranges ---
 uniform float useLUTs            = 0.0;

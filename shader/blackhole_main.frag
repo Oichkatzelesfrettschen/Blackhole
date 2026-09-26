@@ -116,6 +116,7 @@ uniform float dopplerStrength = 1.0;
 uniform float diskPeakTemperature = 6500.0;
 uniform float diskBrightness = 1.0;
 uniform float diskFluxPeak = 1.1458947e-4;
+uniform float diskTransferMode = 0.0; // 0 = Physical g-factor, 1 = Interstellar (g = 1)
 
 // Physics parameters
 uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geometric units)

@@ -176,18 +176,6 @@ bool bhCheckDiskIntersection(vec3 oldPos, vec3 newPos, float r_in, float r_out,
   return r >= r_in && r <= r_out;
 }
 
-float bhComputeRedshiftFactor(float r, float r_s) {
-  if (r <= r_s) {
-    return 0.0;
-  }
-
-  float factor = 1.0 - r_s / r;
-  if (factor <= 0.0) {
-    return 0.0;
-  }
-  return sqrt(factor);
-}
-
 vec3 bhPackShaperInputs(float minRadiusReached, vec3 closestApproachPos, vec3 origin, float r_s) {
   float alignedFlow = 0.5;
   float nearHoleWeight = 0.0;
@@ -353,13 +341,15 @@ vec4 bhHorizonColor() {
 // orbiting-emitter shift g (dtDiskTransferG) maps it to T_obs = g T_emit and
 // the bolometric intensity to g^4 flux_norm, the Liouville invariance of
 // I_nu / nu^3. chroma is the unit-luminance blackbody color at T_obs.
+// diskTransferMode 1 (Interstellar) forces g = 1, the film's unshifted disk
+// (James et al. 2015 sec. 4.2; physics/disk_transfer.h); lensing is unchanged.
 void bhDiskEmission(float r, float photonLambda, float r_s, out vec3 chroma,
                     out float intensity) {
   float M = max(0.5 * r_s, BH_EPSILON);
   float fluxNorm =
       clamp(dtPageThorneShape(r / M, kerrSpin) / max(diskFluxPeak, 1e-30), 0.0, 1.0);
   float tEmit = diskPeakTemperature * sqrt(sqrt(fluxNorm));
-  float g = dtDiskTransferG(r / M, kerrSpin, photonLambda / M);
+  float g = diskTransferMode > 0.5 ? 1.0 : dtDiskTransferG(r / M, kerrSpin, photonLambda / M);
   float g2 = g * g;
   chroma = dtBlackbodyChroma(g * tEmit);
   intensity = g2 * g2 * fluxNorm;
@@ -422,8 +412,10 @@ vec3 bhSampleBackgroundLayers(vec3 dir, out float weight) {
   return accum;
 }
 
-// dir is a physics-frame direction; the sky textures are world-frame.
-vec4 bhBackgroundColorFromDir(vec3 dir, float minRadius, float r_s) {
+// dir is a physics-frame direction; the sky textures are world-frame. Light
+// from infinity that escapes back to a distant camera has E_obs = E_emit, so
+// the sky carries no net frequency shift; lensing alone moves it.
+vec4 bhBackgroundColorFromDir(vec3 dir) {
   vec3 n = normalize(bhPhysicsToWorld(dir));
   vec3 skyDir = bhRotateY(n, time);
   vec3 color = texture(galaxy, skyDir).rgb;
@@ -433,17 +425,6 @@ vec4 bhBackgroundColorFromDir(vec3 dir, float minRadius, float r_s) {
     if (layerWeight > 0.0) {
       color = layerColor * backgroundIntensity;
     }
-  }
-
-  if (enableRedshift > 0.5 && minRadius < r_s * 10.0) {
-    float z = 1.0 / max(bhComputeRedshiftFactor(minRadius, r_s), BH_EPSILON) - 1.0;
-    if (useLUTs > 0.5) {
-      float rNorm = minRadius / max(r_s, BH_EPSILON);
-      float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
-      float u = clamp((rNorm - redshiftRadiusMin) / denom, 0.0, 1.0);
-      z = texture(redshiftLUT, vec2(u, 0.5)).r;
-    }
-    color = applySimpleRedshift(color, z);
   }
 
   return vec4(color, 1.0);
@@ -492,7 +473,7 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
   if (debugEscapedDirection > 0.5) {
     return vec4(bhEncodeUnitVector(hit.escapedDir), 1.0);
   }
-  return bhBackgroundColorFromDir(normalize(hit.escapedDir), hit.minRadius, r_s);
+  return bhBackgroundColorFromDir(normalize(hit.escapedDir));
 }
 
 // ---------------------------------------------------------------------------
@@ -524,11 +505,9 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
   vec3  accumI   = vec3(0.0);
   float transmit = 1.0;
-  float minR     = kRay.r;
 
   for (int step = 0; step < maxSteps; ++step) {
     vec3 curPos = kerrRayPosition(kRay);
-    minR = min(minR, kRay.r);
 
     if (kRay.r <= r_horizon) {
       terminalPos = curPos;
@@ -570,8 +549,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
       vec3 escDir = newPos - curPos;
       terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
-        accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
-                                                      minR, r_s).rgb;
+        accumI += transmit * bhBackgroundColorFromDir(normalize(escDir)).rgb;
       }
       return vec4(accumI, 1.0);
     }
@@ -582,8 +560,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   terminalPos = finalPos;
   vec3 escDir   = finalPos - ray.position;
   if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
-    accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
-                                                  minR, r_s).rgb;
+    accumI += transmit * bhBackgroundColorFromDir(normalize(escDir)).rgb;
   }
   return vec4(accumI, 1.0);
 }
@@ -639,11 +616,9 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   vec2  stokesQU = vec2(0.0);   // Q and U Stokes components
   float stokesV  = 0.0;         // V Stokes component
   float transmit = 1.0;
-  float minR     = kRay.r;
 
   for (int step = 0; step < maxSteps; ++step) {
     vec3 curPos = kerrRayPosition(kRay);
-    minR = min(minR, kRay.r);
 
     if (kRay.r <= r_horizon) {
       terminalPos = curPos;
@@ -697,8 +672,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       vec3 escDir = newPos - curPos;
       terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
-        accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
-                                                      minR, r_s).rgb;
+        accumI += transmit * bhBackgroundColorFromDir(normalize(escDir)).rgb;
       }
       break;
     }

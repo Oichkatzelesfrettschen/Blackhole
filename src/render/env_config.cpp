@@ -253,12 +253,31 @@ void applyOverlayEnvironment(RenderState &rs) {
   }
 }
 
+// BLACKHOLE_DISK_TRANSFER selects the disk transfer mode at startup:
+// "interstellar" forces g = 1 (the film's disk), "physical" the g-factor.
+void applyDiskEnvironment(RenderState &rs) {
+  const char *transferEnv = std::getenv("BLACKHOLE_DISK_TRANSFER");
+  if (transferEnv == nullptr) {
+    return;
+  }
+  std::string const mode(transferEnv);
+  if (mode == "interstellar") {
+    rs.disk.diskTransferMode = 1;
+  } else if (mode == "physical") {
+    rs.disk.diskTransferMode = 0;
+  } else {
+    (void)std::fprintf(stderr, "Ignoring BLACKHOLE_DISK_TRANSFER=%s (expected physical|interstellar)\n",
+                       transferEnv);
+  }
+}
+
 } // namespace
 
 void applyEnvironmentConfig(RenderState &rs) {
   applyCompareEnvironment(rs);
   applyProbeEnvironment(rs);
   applyOverlayEnvironment(rs);
+  applyDiskEnvironment(rs);
 }
 
 } // namespace blackhole

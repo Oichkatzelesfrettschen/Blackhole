@@ -20,6 +20,13 @@
  * invariant, so a blackbody of temperature T appears as a blackbody of
  * temperature g T with bolometric intensity scaled by g^4.
  *
+ * The renderer's Interstellar disk transfer mode forces g = 1 for both color
+ * and intensity and keeps the lensing. James, von Tunzelmann, Franklin &
+ * Thorne (2015, arXiv:1502.03808, sec. 4.2) render the disk of their Figures
+ * 15a and 16 "without frequency shifts and associated colour and brightness
+ * changes" and state: "This, with some embellishments, is the accretion disk
+ * seen around the black hole Gargantua in Interstellar."
+ *
  * shader/include/disk_transfer.glsl and src/cuda/device_disk_transfer.cuh are
  * the float twins; tests/disk_transfer_test.cpp pins the values and
  * tests/disk_transfer_shader_test.cpp and tests/cuda_disk_transfer_test.cu

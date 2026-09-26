@@ -377,6 +377,18 @@ void renderPhysicsSettings(RenderState &rs) {
     ImGui::SetTooltip("On: trace Kerr null geodesics (Carter constants, Mino-time leapfrog).\n"
                       "Off: legacy artistic tracer (Schwarzschild bending, spin shown by tint).");
   }
+  const char *const diskTransferLabels[] = {"Physical", "Interstellar (film)"};
+  ImGui::Combo("Disk transfer", &rs.disk.diskTransferMode, diskTransferLabels, 2);
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Physical: Doppler, gravitational and transverse shifts of an orbiting\n"
+                      "disk, T_obs = g T_emit and intensity ~ g^4.\n"
+                      "Interstellar: g = 1 with lensing kept, the unshifted disk James et al.\n"
+                      "(2015, arXiv:1502.03808 sec. 4.2) describe for Gargantua.");
+  }
+  ImGui::SliderFloat("Disk peak temperature (K)", &rs.disk.diskPeakTemperature, 2000.0f,
+                     40000.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+  ImGui::SliderFloat("Disk brightness", &rs.disk.diskBrightness, 0.01f, 100.0f, "%.2f",
+                     ImGuiSliderFlags_Logarithmic);
 
   // Physics visualization toggles
   ImGui::Checkbox("enablePhotonSphere", &rs.physicsCore.enablePhotonSphere);
