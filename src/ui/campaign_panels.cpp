@@ -157,9 +157,11 @@ const char *capabilityEffectText(game::FleetCapability capability) {
 }
 
 void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
-  ImGui::TextWrapped("turn %lld  |  t_coordinate %.1f d  |  authority dtau/dt %.4f  |  spin a* %.2f",
-                     static_cast<long long>(view.turn), days(view.coordinateTimeSec),
-                     view.authorityProperTimeRate, view.spinDimensionless);
+  // Two short lines rather than one wrapped one, so no number splits.
+  ImGui::Text("turn %lld  |  t_coordinate %.1f d", static_cast<long long>(view.turn),
+              days(view.coordinateTimeSec));
+  ImGui::Text("authority dtau/dt %.4f  |  spin a* %.2f", view.authorityProperTimeRate,
+              view.spinDimensionless);
   if (atColony(view, uiState)) {
     // The host's ledger -- its intel, its bank, its objective -- is host-local
     // truth; at the colony it exists only as the host's last transmission,
@@ -537,7 +539,7 @@ void renderClocks(const game::CampaignViewSnapshot &view, const CampaignUiState 
 
 void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
   ImGui::SetNextWindowPos(ImVec2(980.0f, 360.0f), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(460.0f, 320.0f), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(620.0f, 320.0f), ImGuiCond_FirstUseEver);
   // The inbox of the station the player stands at, labeled by that station.
   game::Inbox &inbox =
       uiState.focusNode == game::K_AUTHORITY_NODE ? uiState.hostInbox : uiState.inbox;
@@ -589,7 +591,7 @@ void renderTechWindow(const game::CampaignViewSnapshot &view, const CampaignUiSt
     return;
   }
   ImGui::SetNextWindowPos(ImVec2(980.0f, 700.0f), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(360.0f, 200.0f), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(460.0f, 300.0f), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Technology", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::End();
     return;
@@ -690,6 +692,16 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
   if (const char *focusEnv = std::getenv("BLACKHOLE_CAMPAIGN_FOCUS")) {
     uiState.focusNode =
         std::strcmp(focusEnv, "host") == 0 ? game::K_AUTHORITY_NODE : game::K_FIRST_COLONY_NODE;
+  }
+  if (const char *advanceEnv = std::getenv("BLACKHOLE_CAMPAIGN_ADVANCE");
+      advanceEnv != nullptr && uiState.storySession) {
+    // As the Advance buttons: turn by turn, stopping on a flagged arrival.
+    const long long turns = std::strtoll(advanceEnv, nullptr, 10);
+    for (long long step = 0; step < std::min(turns, 100000LL); ++step) {
+      if (stepTurn(*uiState.storySession, uiState)) {
+        break;
+      }
+    }
   }
   if (const char *realtimeEnv = std::getenv("BLACKHOLE_CAMPAIGN_REALTIME")) {
     const double scale = std::strtod(realtimeEnv, nullptr);

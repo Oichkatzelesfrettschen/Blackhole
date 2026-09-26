@@ -70,8 +70,10 @@ struct CampaignUiState {
  *         BLACKHOLE_CAMPAIGN_STORY=deep|shallow starts the host story with the
  *         colony on Miller's orbit or the 100M orbit, BLACKHOLE_CAMPAIGN_FOCUS=
  *         colony|host sets the focused station, and
- *         BLACKHOLE_CAMPAIGN_REALTIME=S (1..3600) runs real time at S local
- *         seconds per wall second. */
+ *         BLACKHOLE_CAMPAIGN_ADVANCE=N advances the story up to N turns
+ *         (at most 1e5) as the Advance buttons do, stopping on a flagged
+ *         arrival at the focused station, and BLACKHOLE_CAMPAIGN_REALTIME=S
+ *         (1..3600) runs real time at S local seconds per wall second. */
 void initCampaignUiFromEnv(CampaignUiState &uiState);
 
 /** @brief Draws the Campaign window (always, it hosts the enable toggle) and,
