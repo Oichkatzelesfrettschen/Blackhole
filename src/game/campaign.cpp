@@ -163,6 +163,13 @@ bool CampaignState::issueCommand(const Command &command) {
   if (status_ != CampaignStatus::Ongoing && command.originNode == K_AUTHORITY_NODE) {
     return false;
   }
+  // A colony that can arithmetically infer the win from an arrived energy
+  // stamp is refused the same order the host itself would be: the inference
+  // is public (any station could make it from the same stamp), so refusing it
+  // reveals nothing the stamp had not already told the colony.
+  if (colonyPerceivesHostWin(command.originNode)) {
+    return false;
+  }
   // Past the deadline the campaign is decided whichever way it went, and every
   // station can read the coordinate clock, so refusing any origin's order
   // reveals nothing about the outcome.
