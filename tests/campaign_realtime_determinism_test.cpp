@@ -13,12 +13,16 @@
 #include <cstdint>
 #include <map>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "game/campaign.h"
 #include "game/campaign_session.h"
 #include "game/command.h"
+#include "game/event.h"
+#include "game/event_loader.h"
 #include "game/fleet.h"
+#include "game/inbox.h"
 #include "game/observer.h"
 #include "game/realtime_driver.h"
 
@@ -101,6 +105,48 @@ std::vector<std::uint64_t> playSchedule(const Schedule &schedule, const CommandL
   return digests;
 }
 
+/** @brief Digests after every turn and the turns the inbox paused on. */
+struct StoryPlay {
+  std::vector<std::uint64_t> digests;
+  std::vector<std::int64_t> pauseTurns;
+};
+
+/** @brief Plays the host-goes-dark story on Miller's orbit under a schedule:
+ *         pauses come from the colony inbox (silence and collapse notices),
+ *         and every 250 turns the colony orders the survey fleet. */
+StoryPlay playStory(const Schedule &schedule, const game::EventSet &story, std::int64_t turns) {
+  game::CampaignSession session(4, story, 0);
+  game::CampaignState &campaign = session.state();
+  game::Inbox inbox(game::K_FIRST_COLONY_NODE);
+  StoryPlay play;
+  game::RealtimeDriverConfig config;
+  config.maxTurnsPerFrame = schedule.maxTurnsPerFrame;
+  game::RealtimeDriver driver(config);
+  driver.setFocusRate(schedule.focusRate);
+  const game::RealtimeDriver::StepFunction step = [&]() {
+    if (campaign.turn() % 250 == 0) {
+      static_cast<void>(session.issueAssignTask(1, 0.5, game::K_FIRST_COLONY_NODE));
+    }
+    campaign.advanceTurn();
+    play.digests.push_back(campaign.stateDigest());
+    return inbox.sync(campaign.arrivals());
+  };
+  std::size_t frame = 0;
+  while (campaign.turn() < turns) {
+    if (schedule.alternateFocus) {
+      driver.setFocusRate(frame % 2 == 0 ? K_MILLER_RATE : 0.97);
+    }
+    if (driver.pump(schedule.frameWallSec.at(frame % schedule.frameWallSec.size()), step)
+            .pausedByArrival) {
+      play.pauseTurns.push_back(campaign.turn());
+      driver.setPaused(false);
+    }
+    ++frame;
+  }
+  play.digests.resize(static_cast<std::size_t>(turns));
+  return play;
+}
+
 } // namespace
 
 // Falsifier: Miller focus mapping to anything but 1 / (1.6286e-5 * 86400) =
@@ -181,5 +227,46 @@ TEST(RealtimeDeterminism, ThreeSchedulesGiveIdenticalPerTurnDigests) {
   for (std::size_t turn = 0; turn < smoothDigests.size(); ++turn) {
     ASSERT_EQ(smoothDigests.at(turn), millerDigests.at(turn)) << "turn " << turn + 1;
     ASSERT_EQ(smoothDigests.at(turn), pausedDigests.at(turn)) << "turn " << turn + 1;
+  }
+}
+
+// Falsifier: the colony story -- colony-origin orders, packets, and the
+// inbox's own pauses on the silence and collapse notices -- reaching a
+// different digest on any turn, or pausing on different turns, under Miller
+// focus with large frames, unit focus with day-scale frames, or flipping
+// focus with a seven-turn budget.
+TEST(RealtimeDeterminism, ColonyStoryWithInboxPausesIsScheduleIndependent) {
+  const game::EventLoadResult loaded = game::loadEventSetFile(
+      std::string(BLACKHOLE_SOURCE_DIR) + "/assets/events/host_goes_dark.json");
+  ASSERT_TRUE(loaded.ok()) << loaded.error;
+  game::CampaignSession probe(4, loaded.story, 0);
+  const std::int64_t turns = probe.state().storyParam("dark_turn").value_or(0) +
+                             probe.state().nodeDelayTurns(0, 1) +
+                             (4 * probe.state().storyParam("packet_period").value_or(0));
+
+  Schedule miller;
+  miller.focusRate = K_MILLER_RATE;
+  miller.frameWallSec = {3000.0, 17.0};
+  miller.maxTurnsPerFrame = 5000;
+  const StoryPlay millerPlay = playStory(miller, loaded.story, turns);
+
+  Schedule unit;
+  unit.focusRate = 1.0;
+  unit.frameWallSec = {K_DAY_SEC * 50.0};
+  const StoryPlay unitPlay = playStory(unit, loaded.story, turns);
+
+  Schedule flipping;
+  flipping.alternateFocus = true;
+  flipping.frameWallSec = {40.0, 0.2, 9.0};
+  flipping.maxTurnsPerFrame = 7;
+  const StoryPlay flippingPlay = playStory(flipping, loaded.story, turns);
+
+  EXPECT_EQ(millerPlay.pauseTurns.size(), 2U);
+  EXPECT_EQ(millerPlay.pauseTurns, unitPlay.pauseTurns);
+  EXPECT_EQ(millerPlay.pauseTurns, flippingPlay.pauseTurns);
+  ASSERT_EQ(millerPlay.digests.size(), static_cast<std::size_t>(turns));
+  for (std::size_t turn = 0; turn < millerPlay.digests.size(); ++turn) {
+    ASSERT_EQ(millerPlay.digests.at(turn), unitPlay.digests.at(turn)) << "turn " << turn + 1;
+    ASSERT_EQ(millerPlay.digests.at(turn), flippingPlay.digests.at(turn)) << "turn " << turn + 1;
   }
 }

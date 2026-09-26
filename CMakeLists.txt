@@ -4251,6 +4251,8 @@ if(BUILD_TESTING)
     add_executable(campaign_realtime_determinism_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_realtime_determinism_test.cpp"
     )
+    target_compile_definitions(campaign_realtime_determinism_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     target_compile_options(campaign_realtime_determinism_test PRIVATE ${PROJECT_WARNINGS})
     if(ENABLE_FAST_MATH)
       target_compile_options(campaign_realtime_determinism_test PRIVATE -fno-fast-math)
@@ -4318,6 +4320,34 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(campaign_inbox_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Seed-swept story causality: quantized light delays, silence inference, and
+  # auto-pause on the arrival turn.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_causality_test.cpp")
+    add_executable(campaign_causality_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_causality_test.cpp"
+    )
+    target_include_directories(campaign_causality_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_definitions(campaign_causality_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(campaign_causality_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_causality_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_causality_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_causality_validation COMMAND campaign_causality_test)
+    set_tests_properties(campaign_causality_validation PROPERTIES
+      LABELS "campaign;causality;story"
+      TIMEOUT 120
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_causality_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
