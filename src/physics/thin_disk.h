@@ -36,6 +36,7 @@
 #define PHYSICS_THIN_DISK_H
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -215,9 +216,15 @@ struct DiskParams {
  *
  * @param r Radius [cm]
  * @param disk Disk parameters
+ * @param profile Page-Thorne profile of disk (diskPageThorneProfile)
  * @return Radiative flux [erg/(cm^2 s)]
  */
-[[nodiscard]] inline double diskFlux(double r, const DiskParams &disk) {
+[[nodiscard]] inline double diskFlux(double r, const DiskParams &disk,
+                                     const PageThorneProfile &profile) {
+  const double rG = G * disk.mass / C2;
+  // The profile must be the disk's own (diskPageThorneProfile); a profile of
+  // another spin returns that spin's flux shape.
+  assert(profile.spin() == pageThorneSpin(disk.a / rG));
   if (r < disk.rIn || r > disk.rOut) {
     return 0.0;
   }
@@ -225,8 +232,22 @@ struct DiskParams {
   // Leading coefficient
   const double prefactor = (3.0 * G * disk.mass * disk.mDot) / (8.0 * std::numbers::pi * r * r * r);
 
-  const double rG = G * disk.mass / C2;
-  return prefactor * pageThorneRelativisticFactor(r / rG, disk.a / rG);
+  const double rM = r / rG;
+  return prefactor * (rM * rM * rM * profile.shape(rM));
+}
+
+/**
+ * @brief Page-Thorne profile of a disk: its spin disk.a in units of r_g.
+ */
+[[nodiscard]] inline PageThorneProfile diskPageThorneProfile(const DiskParams &disk) {
+  return PageThorneProfile(disk.a / (G * disk.mass / C2));
+}
+
+/**
+ * @brief diskFlux with the disk's Page-Thorne profile built for this call.
+ */
+[[nodiscard]] inline double diskFlux(double r, const DiskParams &disk) {
+  return diskFlux(r, disk, diskPageThorneProfile(disk));
 }
 
 /**

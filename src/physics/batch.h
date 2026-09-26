@@ -654,8 +654,9 @@ inline void diskFluxBatch(const std::vector<double> &radii, const DiskParams &di
                           std::vector<float> &out) {
   out.clear();
   out.reserve(radii.size());
-  std::ranges::transform(radii, std::back_inserter(out), [&disk](double radius) {
-    double flux = diskFlux(radius, disk);
+  const PageThorneProfile profile = diskPageThorneProfile(disk);
+  std::ranges::transform(radii, std::back_inserter(out), [&disk, &profile](double radius) {
+    double flux = diskFlux(radius, disk, profile);
     if (!safeIsfinite(flux) || flux < 0.0) {
       flux = 0.0;
     }
