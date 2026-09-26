@@ -4356,6 +4356,26 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # The sky of an equatorial Kerr observer against special relativity,
+  # Synge's shadow, and the Opatrny-Richterek-Bakala orbits (arXiv:1601.02897).
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/observer_sky_map_test.cpp")
+    add_executable(observer_sky_map_test
+      "${PROJECT_SOURCE_DIR}/tests/observer_sky_map_test.cpp"
+    )
+    target_compile_options(observer_sky_map_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(observer_sky_map_test PRIVATE blackhole_observer_sky GTest::gtest_main)
+    add_test(NAME observer_sky_map_validation COMMAND observer_sky_map_test)
+    set_tests_properties(observer_sky_map_validation PROPERTIES
+      LABELS "physics;kerr;observer-sky"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(observer_sky_map_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp")
     add_executable(campaign_capabilities_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp"
