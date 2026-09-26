@@ -18,47 +18,47 @@
   "results": [
     {
       "name": "Schwarzschild raytracer",
-      "avg_ms": 628.548581,
-      "min_ms": 622.464399,
-      "max_ms": 638.961573,
+      "avg_ms": 633.618065,
+      "min_ms": 625.464078,
+      "max_ms": 656.761879,
       "work_units": 4000.0,
-      "units_per_sec": 6363.867685,
+      "units_per_sec": 6312.951319,
       "iterations": 10
     },
     {
       "name": "Kerr potential eval",
-      "avg_ms": 0.865516,
-      "min_ms": 0.860807,
-      "max_ms": 0.873691,
+      "avg_ms": 0.842083,
+      "min_ms": 0.836282,
+      "max_ms": 0.847062,
       "work_units": 40000.0,
-      "units_per_sec": 46215221.745833,
+      "units_per_sec": 47501261.455375,
       "iterations": 10
     },
     {
       "name": "Kerr raytracer (mino)",
-      "avg_ms": 1562.41249,
-      "min_ms": 1548.15213,
-      "max_ms": 1576.327991,
+      "avg_ms": 1079.067035,
+      "min_ms": 1060.71366,
+      "max_ms": 1107.1453,
       "work_units": 4000.0,
-      "units_per_sec": 2560.143385,
+      "units_per_sec": 3706.905939,
       "iterations": 10
     },
     {
       "name": "LUT generation",
-      "avg_ms": 0.006858,
-      "min_ms": 0.006773,
-      "max_ms": 0.007124,
+      "avg_ms": 0.008877,
+      "min_ms": 0.008796,
+      "max_ms": 0.009197,
       "work_units": 256.0,
-      "units_per_sec": 37329211.566223,
+      "units_per_sec": 28839871.121826,
       "iterations": 10
     },
     {
       "name": "Batch geodesic (SIMD)",
-      "avg_ms": 0.325359,
-      "min_ms": 0.311135,
-      "max_ms": 0.368051,
+      "avg_ms": 0.336753,
+      "min_ms": 0.31939,
+      "max_ms": 0.370176,
       "work_units": 4000.0,
-      "units_per_sec": 12294108.263761,
+      "units_per_sec": 11878142.139788,
       "iterations": 10
     }
   ],
@@ -69,12 +69,14 @@
     "cpu": "AMD Ryzen 5 5600X3D 6-Core Processor",
     "logical_cpus": 12,
     "platform": "Linux-7.2.5-1-cachyos-x86_64-with-glibc2.39",
-    "recorded_utc": "2026-09-26T13:06:17Z",
+    "recorded_utc": "2026-09-26T16:41:13Z",
     "notes": [
       "compiler: g++-14 (Ubuntu 14.2.0-4ubuntu2~24.04.1) 14.2.0",
       "preset: ci (CMAKE_BUILD_TYPE=Release, SIMD_TIER=SSE2, IEEE, no LTO), CUDA off",
       "userland: ubuntu:24.04 container, host kernel 7.2.5-1-cachyos",
-      "command: BENCH_PRESET=ci bench/ci_bench.sh (4000 rays, 2000 steps, 10 iterations, CPU only)",
+      "command: bench/ci_bench.sh (4000 rays, 2000 steps, 10 iterations, CPU only)",
+      "source: 867bcee (branch head with main 6fd7806, KerrRaytracer affine-length stepping)",
+      "host load average (1/5/15 min) before and after the recorded run: 2.56 4.51 6.81; 2.48 4.36 6.71",
       "advisory: recorded on a workstation; hosted runners differ by hardware, so compare trends across bench.yml runs"
     ]
   }
