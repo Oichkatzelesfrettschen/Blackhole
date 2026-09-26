@@ -1593,9 +1593,13 @@ set(CAMPAIGN_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/game/constellation.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation_session.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/realtime_driver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/campaign_story.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/event_loader.cpp"
 )
 add_library(blackhole_campaign STATIC ${CAMPAIGN_SRC_FILES})
 target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
+# The story loader (src/game/event_loader.cpp) is the only JSON consumer.
+target_link_libraries(blackhole_campaign PRIVATE nlohmann_json::nlohmann_json)
 target_compile_options(blackhole_campaign PRIVATE ${PROJECT_WARNINGS})
 if(ENABLE_FAST_MATH)
   target_compile_options(blackhole_campaign PRIVATE -fno-fast-math)
@@ -4264,6 +4268,32 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Story loader and event vocabulary: strict keys, file-order independence,
+  # and each predicate firing on the turn its definition implies.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/event_loader_test.cpp")
+    add_executable(event_loader_test
+      "${PROJECT_SOURCE_DIR}/tests/event_loader_test.cpp"
+    )
+    target_include_directories(event_loader_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(event_loader_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(event_loader_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(event_loader_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME event_loader_validation COMMAND event_loader_test)
+    set_tests_properties(event_loader_validation PROPERTIES
+      LABELS "campaign;events;story"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(event_loader_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
     add_executable(campaign_task_graph_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"
@@ -4477,6 +4507,7 @@ if(BUILD_TESTING)
     )
     add_library(blackhole_campaign_${suffix} STATIC ${CAMPAIGN_SRC_FILES})
     target_link_libraries(blackhole_campaign_${suffix} PUBLIC blackhole_physics_${suffix})
+    target_link_libraries(blackhole_campaign_${suffix} PRIVATE nlohmann_json::nlohmann_json)
     add_executable(campaign_sim_${suffix} "${PROJECT_SOURCE_DIR}/src/game/campaign_sim_main.cpp")
     target_link_libraries(campaign_sim_${suffix} PRIVATE blackhole_campaign_${suffix})
     add_executable(constellation_sim_${suffix}

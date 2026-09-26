@@ -15,11 +15,14 @@
 #define BLACKHOLE_GAME_CAMPAIGN_VIEW_H
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "game/command.h"
+#include "game/event.h"
 #include "game/fleet.h"
 #include "game/observer.h"
+#include "game/station_node.h"
 
 namespace game {
 
@@ -96,6 +99,33 @@ struct IntelView {
   bool corrupted = false; ///< Yield was discounted for unreliable telemetry.
 };
 
+/** @brief A communicating station: the host or a colony, with its exact
+ *         local clock. */
+struct NodeView {
+  NodeId id = K_AUTHORITY_NODE;
+  bool isColony = false;
+  double radiusCm = 0.0;
+  Observer observer = Observer::Hovering;
+  double properTimeRate = 0.0;     ///< The clock's quantized dtau/dt.
+  double properTimeSec = 0.0;      ///< Local proper time (display value of the Q48 clock).
+  bool dark = false;               ///< Silent: emits and receives nothing.
+  std::int64_t techPoints = 0;
+  std::int64_t techTier = 0;
+};
+
+/** @brief A story event's inbox text, looked up by a notice's payload id. */
+struct EventTextView {
+  std::uint32_t id = 0;
+  std::string name;
+  std::string text;
+  EventCategory category = EventCategory::Info;
+};
+
+struct TechLevelView {
+  std::int64_t points = 0;
+  std::string name;
+};
+
 struct CampaignViewSnapshot {
   std::int64_t turn = 0;
   double secondsPerTurn = 0.0;
@@ -125,6 +155,15 @@ struct CampaignViewSnapshot {
   std::vector<OrderInFlightView> ordersInFlight;
   std::vector<ReportInFlightView> reportsInFlight;
   std::vector<IntelView> intel;
+  // Colonies and the story: the highest tech tier any colony holds.
+  std::vector<NodeView> nodes;              ///< Host at index 0, then colonies.
+  std::vector<ArrivalRecord> arrivals;      ///< Node deliveries that have arrived, in order.
+  /// Story signals still travelling; arrivalTurn is the quantized effect turn.
+  std::vector<ArrivalRecord> nodeSignalsInFlight;
+  std::int64_t colonyReportsInFlight = 0;   ///< Production reports still travelling to the host.
+  std::vector<EventTextView> eventTexts;    ///< Story events by id.
+  std::vector<TechLevelView> techTiers;     ///< Story tiers by points.
+  std::int64_t colonyTechTier = 0;
 };
 
 } // namespace game

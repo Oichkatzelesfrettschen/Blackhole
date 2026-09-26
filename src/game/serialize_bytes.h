@@ -14,10 +14,13 @@
 #ifndef BLACKHOLE_GAME_SERIALIZE_BYTES_H
 #define BLACKHOLE_GAME_SERIALIZE_BYTES_H
 
+#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
+#include <string_view>
 #include <vector>
 
 namespace game::serial {
@@ -52,6 +55,13 @@ inline void appendF64(std::vector<std::uint8_t> &out, double value) {
     return;
   }
   appendU64(out, std::bit_cast<std::uint64_t>(value));
+}
+
+/** @brief Length-prefixed (u32) byte string. */
+inline void appendString(std::vector<std::uint8_t> &out, std::string_view text) {
+  appendU32(out, static_cast<std::uint32_t>(text.size()));
+  std::ranges::transform(text, std::back_inserter(out),
+                         [](char character) { return static_cast<std::uint8_t>(character); });
 }
 
 /** @brief FNV-1a 64-bit over a byte serialization -- a cheap comparison aid,

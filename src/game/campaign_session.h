@@ -15,6 +15,7 @@
 #include <cstdint>
 
 #include "game/campaign.h"
+#include "game/event.h"
 #include "game/fleet.h"
 #include "game/kerr_time_field.h"
 
@@ -24,7 +25,13 @@ namespace game {
 enum class CampaignScenario : std::uint8_t {
   M87Default = 0,     ///< The canonical vertical slice (see the default constructor).
   GargantuaCanon = 1, ///< Interstellar's Gargantua with Miller's planet on the prograde ISCO.
+  GargantuaColony = 2, ///< Gargantua with a colony node and the host's story.
 };
+
+/** @brief Charter of the Gargantua colony scenario. The colony's clock is its
+ *         orbit's; it ships one energy unit per local hour to the host. */
+inline constexpr std::int64_t K_COLONY_TICK_SEC = 3600;
+inline constexpr double K_COLONY_ENERGY_PER_TICK = 1.0;
 
 class CampaignSession {
 public:
@@ -46,21 +53,48 @@ public:
    *         set, so the scenario isolates the clock. */
   CampaignSession(std::uint64_t seed, CampaignScenario scenario);
 
+  /** @brief GargantuaColony: the GargantuaCanon field and bands (band 0 is
+   *         Miller's orbit, band 1 the 100M survey orbit), the host hovering
+   *         at 400M as the authority node, one survey fleet on band 1, and one
+   *         colony on `colonyBand` in a prograde orbit under the colony
+   *         charter above, playing `story`. No victory threshold is set: the
+   *         outcome vector (colony tech tier, energy banked at the host) is
+   *         read directly. */
+  CampaignSession(std::uint64_t seed, const EventSet &story, int colonyBand);
+
+  CampaignSession(const CampaignSession &) = delete;
+  CampaignSession &operator=(const CampaignSession &) = delete;
+  CampaignSession(CampaignSession &&) = delete;
+  CampaignSession &operator=(CampaignSession &&) = delete;
+  ~CampaignSession() = default;
+
+  [[nodiscard]] std::uint64_t seed() const { return seed_; }
+  [[nodiscard]] CampaignScenario scenario() const { return scenario_; }
+  /** @brief Band of the scenario's colony; -1 when the scenario has none. */
+  [[nodiscard]] int colonyBand() const { return colonyBand_; }
+
   [[nodiscard]] CampaignState &state() { return state_; }
   [[nodiscard]] const CampaignState &state() const { return state_; }
   [[nodiscard]] const KerrTimeField &field() const { return field_; }
 
-  /** @brief Contract a task on the fleet, costed in local proper-time hours. */
-  bool issueAssignTask(FleetId fleet, double costHours);
+  /** @brief Contract a task on the fleet, costed in local proper-time hours,
+   *         sent from `origin` (the authority by default). */
+  bool issueAssignTask(FleetId fleet, double costHours, NodeId origin = K_AUTHORITY_NODE);
 
   /** @brief Order the fleet to another orbital band on the given lane, in
-   *         orbit by default or hovering on thrust. */
+   *         orbit by default or hovering on thrust, sent from `origin`. */
   bool issuePlaceFleet(FleetId fleet, int targetBand, OrbitLane lane = OrbitLane::Prograde,
-                       StationKeeping station = StationKeeping::Orbit);
+                       StationKeeping station = StationKeeping::Orbit,
+                       NodeId origin = K_AUTHORITY_NODE);
 
 private:
+  // The state holds a pointer to field_, so the session is neither copied nor
+  // moved, and field_ is declared (and so constructed) first.
   KerrTimeField field_;
   CampaignState state_;
+  std::uint64_t seed_ = 0;
+  CampaignScenario scenario_ = CampaignScenario::M87Default;
+  int colonyBand_ = -1;
 };
 
 } // namespace game

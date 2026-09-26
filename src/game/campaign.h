@@ -21,11 +21,15 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
+#include <string_view>
 #include <vector>
 
 #include "game/campaign_view.h"
 #include "game/command.h"
+#include "game/event.h"
 #include "game/fleet.h"
+#include "game/station_node.h"
 #include "game/task_graph.h"
 #include "game/temporal_clock.h"
 #include "game/time_field.h"
@@ -119,6 +123,12 @@ struct CampaignConfig {
   // sacrifices energy (containmentYieldRetention), so which to chase is a genuine
   // choice of objective, not a dominated afterthought. Zero disables the path.
   double victoryStabilizationUnits = 0.0;      ///< Stabilization that wins the campaign outright; 0 = off.
+
+  // Colonies and the story. Each colony is a node (ids from
+  // K_FIRST_COLONY_NODE, in this order) with its own exact clock; the host is
+  // the authority node. The story's events run at those nodes.
+  std::vector<ColonyConfig> colonies;
+  EventSet story;
 };
 
 class CampaignState {
@@ -129,6 +139,7 @@ public:
   CampaignState(CampaignConfig config, const TimeField &field);
 
   [[nodiscard]] bool valid() const { return valid_; }
+  [[nodiscard]] const CampaignConfig &config() const { return config_; }
 
   /** @brief Setup-phase fleet creation at the authority's direction; returns
    *         K_INVALID_FLEET_ID when bandIndex is out of range or the placement
@@ -163,6 +174,21 @@ public:
   [[nodiscard]] const TaskGraph &taskGraph() const { return taskGraph_; }
   [[nodiscard]] const std::vector<LoggedCommand> &commandLog() const { return commandLog_; }
   [[nodiscard]] const std::vector<IntelReport> &intelLog() const { return intelLog_; }
+  /** @brief The host (index 0) and every colony, indexed by NodeId. */
+  [[nodiscard]] const std::vector<StationNode> &nodes() const { return nodes_; }
+  /** @brief Every node-to-node delivery that has reached a live node, in
+   *         arrival order. */
+  [[nodiscard]] const std::vector<ArrivalRecord> &arrivals() const { return arrivals_; }
+  /** @brief Tech tier of a node: the number of story tiers its points meet. */
+  [[nodiscard]] std::int64_t techTier(NodeId node) const;
+  /** @brief Highest tech tier any colony holds -- the tech axis of the outcome. */
+  [[nodiscard]] std::int64_t colonyTechTier() const;
+  /** @brief A story parameter's resolved value (seeded ones drawn from the
+   *         campaign seed); nullopt when the story has no such parameter. */
+  [[nodiscard]] std::optional<std::int64_t> storyParam(std::string_view name) const;
+  /** @brief Signal delay between two nodes in whole turns, as quantized at
+   *         emission. */
+  [[nodiscard]] std::int64_t nodeDelayTurns(NodeId from, NodeId to) const;
 
   /** @brief Immutable render-facing view for the UI layer: plain values, no
    *         pointers into campaign storage. The VIEW contract; grows per UI
@@ -187,6 +213,9 @@ private:
   enum class DeliveryKind : std::uint8_t {
     Command = 0,
     CompletionReport = 1,
+    ColonyReport = 2, ///< A colony's local-tick production, banked at the host.
+    TechPacket = 3,   ///< Story technology data between nodes.
+    EventNotice = 4,  ///< Story message between nodes.
   };
 
   struct Delivery {
@@ -199,6 +228,19 @@ private:
     FleetId fleet = K_INVALID_FLEET_ID;
     double yieldUnits = 0.0; ///< Fixed at completion (band + reliability then).
     bool corrupted = false;  ///< Source reliability was below the corruption threshold.
+    std::int64_t emitTurn = 0;            ///< Coordinate turn the signal left its sender.
+    NodeId sender = K_NO_NODE;            ///< Emitting node; K_NO_NODE for fleet reports.
+    NodeId destination = K_AUTHORITY_NODE; ///< Receiving node (fleet deliveries: unused).
+    std::int64_t senderProperSecAtEmit = 0; ///< Sender's whole local seconds at emission.
+    std::uint32_t payloadIndex = 0;       ///< Tech packet ordinal, or the notice's event id.
+    std::int64_t techPoints = 0;          ///< TechPacket payload.
+    EventCategory category = EventCategory::Info;
+  };
+
+  /** @brief A scheduled story event: evaluated on `turn`. */
+  struct ScheduledEvent {
+    std::int64_t turn = 0;
+    std::uint32_t eventIndex = 0; ///< Into config_.story.events.
   };
 
   void evaluateOutcome();
@@ -236,6 +278,20 @@ private:
   [[nodiscard]] double bandRadiusCm(int bandIndex) const;
   void deliverDue();
   void applyCommand(const LoggedCommand &logged);
+  void receiveNodeDelivery(const Delivery &delivery);
+  void buildNodes();
+  void resolveStoryParams();
+  [[nodiscard]] std::int64_t resolve(const IntRef &ref) const;
+  /** @brief Advances every node clock one turn and ships colony production. */
+  void advanceNodeClocks();
+  void evaluateStory();
+  [[nodiscard]] bool predicateHolds(const EventPredicate &predicate, const StationNode &node) const;
+  void applyEffect(const EventEffect &effect, const EventDef &event, StationNode &node);
+  void emitNodeDelivery(DeliveryKind kind, const StationNode &sender, NodeId destination,
+                        EventCategory category, std::uint32_t payloadIndex,
+                        std::int64_t techPoints, double yieldUnits);
+  [[nodiscard]] double nodeDelaySec(NodeId from, NodeId to) const;
+  void appendStoryState(std::vector<std::uint8_t> &out) const;
   void applyCapabilityEffects(const std::vector<CapabilityCompletion> &completions);
 
   CampaignConfig config_;
@@ -254,6 +310,11 @@ private:
   double stabilization_ = 0.0;   ///< Cumulative containment produced -- the stabilization score axis.
   std::int64_t clearedTurn_ = 0; ///< Turn the victory energy was first reached; 0 until then.
   CampaignStatus status_ = CampaignStatus::Ongoing;
+  std::vector<StationNode> nodes_;            ///< Host at index 0, then colonies.
+  std::vector<std::int64_t> storyParams_;     ///< Resolved story parameters, by index.
+  std::vector<std::uint8_t> eventFired_;      ///< Once-events that have fired, by index.
+  std::vector<ScheduledEvent> scheduledEvents_;
+  std::vector<ArrivalRecord> arrivals_;
 };
 
 } // namespace game

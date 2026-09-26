@@ -17,9 +17,12 @@
 #include "game/campaign_view.h"
 #include "game/command.h"
 #include "game/economy.h"
+#include "game/event.h"
 #include "game/fleet.h"
 #include "game/observer.h"
+#include "game/observer_clock.h"
 #include "game/serialize_bytes.h"
+#include "game/station_node.h"
 #include "game/task_graph.h"
 #include "game/temporal_clock.h"
 #include "game/time_field.h"
@@ -38,9 +41,17 @@ CampaignState::CampaignState(CampaignConfig config, const TimeField &field)
       // Band radii are validated at placement time (addFleet / PlaceFleet),
       // where the horizon gate belongs; the authority station and the turn
       // length are structural and gate construction itself.
-      valid_(std::isfinite(config_.secondsPerTurn) && config_.secondsPerTurn > 0.0 &&
+      // Every node clock is exact integer arithmetic on whole-second turns.
+      valid_(isClockTurnLength(config_.secondsPerTurn) &&
              field.admitsObserver(config_.authorityRadiusCm, config_.authorityObserver)),
-      clock_(valid_ ? config_.secondsPerTurn : 1.0) {}
+      clock_(valid_ ? config_.secondsPerTurn : 1.0) {
+  if (valid_) {
+    buildNodes();
+  }
+  if (valid_) {
+    resolveStoryParams();
+  }
+}
 
 Fleet *CampaignState::findFleet(FleetId fleetId) {
   const auto fleet = std::ranges::find(fleets_, fleetId, &Fleet::id);
@@ -135,6 +146,10 @@ bool CampaignState::issueCommand(const Command &command) {
   if (fleet == nullptr) {
     return false;
   }
+  // Orders leave from a live node: a dark station sends nothing.
+  if (command.originNode >= nodes_.size() || nodes_.at(command.originNode).dark()) {
+    return false;
+  }
   switch (command.type) {
   case CommandType::PlaceFleet: {
     // Horizon gate: an at-or-inside-horizon placement is rejected HERE, before
@@ -168,8 +183,8 @@ bool CampaignState::issueCommand(const Command &command) {
   // Orders are in flight: the effect turn is the issue turn plus the signal
   // delay from the authority station to the fleet's CURRENT band, quantized
   // once to whole turns (ceil -- an order never lands early).
-  const double delaySec =
-      effectiveSignalDelaySec(config_.authorityRadiusCm, bandRadiusCm(fleet->bandIndex));
+  const StationNode &origin = nodes_.at(command.originNode);
+  const double delaySec = effectiveSignalDelaySec(origin.radiusCm, bandRadiusCm(fleet->bandIndex));
   LoggedCommand logged;
   logged.command = command;
   logged.issueTurn = clock_.turn();
@@ -181,6 +196,9 @@ bool CampaignState::issueCommand(const Command &command) {
   delivery.effectTurn = logged.effectTurn;
   delivery.sequence = nextSequence_++;
   delivery.commandIndex = static_cast<std::uint32_t>(commandLog_.size() - 1);
+  delivery.emitTurn = logged.issueTurn;
+  delivery.sender = origin.id;
+  delivery.senderProperSecAtEmit = origin.clock.properSec();
   deliveryQueue_.push_back(delivery);
   return true;
 }
@@ -216,6 +234,11 @@ void CampaignState::applyCommand(const LoggedCommand &logged) {
 }
 
 void CampaignState::deliverDue() {
+  const std::int64_t now = clock_.turn();
+  if (std::ranges::none_of(deliveryQueue_,
+                           [now](const Delivery &delivery) { return delivery.effectTurn <= now; })) {
+    return;
+  }
   std::vector<Delivery> due;
   std::vector<Delivery> remaining;
   for (const Delivery &delivery : deliveryQueue_) {
@@ -250,6 +273,13 @@ void CampaignState::deliverDue() {
       energyUnits_ += delivery.yieldUnits;
       break;
     }
+    case DeliveryKind::ColonyReport:
+      energyUnits_ += delivery.yieldUnits;
+      break;
+    case DeliveryKind::TechPacket:
+    case DeliveryKind::EventNotice:
+      receiveNodeDelivery(delivery);
+      break;
     }
   }
   deliveryQueue_ = std::move(remaining);
@@ -260,6 +290,13 @@ void CampaignState::advanceTurn() {
     return;
   }
   clock_.advance();
+  // Station clocks tick and colonies ship production; then everything due
+  // arrives; then each node's story reads what has reached it this turn. A
+  // story emission with zero delay (a node's own inference) lands this turn,
+  // so every node delivery arrives exactly on its quantized effect turn.
+  advanceNodeClocks();
+  deliverDue();
+  evaluateStory();
   deliverDue();
   taskGraph_.activateEligible();
   // Yield this turn is eroded by the instability ENTERING the turn: the
@@ -519,6 +556,27 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       view.reportsInFlight.push_back(report);
       break;
     }
+    case DeliveryKind::ColonyReport:
+    case DeliveryKind::TechPacket:
+    case DeliveryKind::EventNotice: {
+      ArrivalRecord signal;
+      signal.kind = delivery.kind == DeliveryKind::TechPacket ? EmitKind::TechPacket
+                                                              : EmitKind::Notice;
+      signal.category = delivery.category;
+      signal.sender = delivery.sender;
+      signal.destination = delivery.destination;
+      signal.emitTurn = delivery.emitTurn;
+      signal.arrivalTurn = delivery.effectTurn;
+      signal.senderProperSecAtEmit = delivery.senderProperSecAtEmit;
+      signal.payloadIndex = delivery.payloadIndex;
+      signal.techPoints = delivery.techPoints;
+      if (delivery.kind == DeliveryKind::ColonyReport) {
+        ++view.colonyReportsInFlight;
+      } else {
+        view.nodeSignalsInFlight.push_back(signal);
+      }
+      break;
+    }
     }
   }
 
@@ -533,6 +591,32 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     intelView.corrupted = report.corrupted;
     view.intel.push_back(intelView);
   }
+
+  view.nodes.reserve(nodes_.size());
+  for (const StationNode &node : nodes_) {
+    NodeView nodeView;
+    nodeView.id = node.id;
+    nodeView.isColony = node.isColony;
+    nodeView.radiusCm = node.radiusCm;
+    nodeView.observer = node.observer;
+    nodeView.properTimeRate = node.clock.rate();
+    nodeView.properTimeSec = node.clock.properSecApprox();
+    nodeView.dark = node.dark();
+    nodeView.techPoints = node.techPoints;
+    nodeView.techTier = techTier(node.id);
+    view.nodes.push_back(nodeView);
+  }
+  view.arrivals = arrivals_;
+  view.eventTexts.reserve(config_.story.events.size());
+  for (const EventDef &event : config_.story.events) {
+    view.eventTexts.push_back(
+        {.id = event.id, .name = event.name, .text = event.text, .category = event.category});
+  }
+  view.techTiers.reserve(config_.story.techTiers.size());
+  for (const TechLevel &level : config_.story.techTiers) {
+    view.techTiers.push_back({.points = level.points, .name = level.name});
+  }
+  view.colonyTechTier = colonyTechTier();
   return view;
 }
 
@@ -614,6 +698,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendF64(out, logged.command.properTimeCostSec);
     appendI64(out, logged.issueTurn);
     appendI64(out, logged.effectTurn);
+    appendU32(out, logged.command.originNode);
   }
   appendU32(out, static_cast<std::uint32_t>(deliveryQueue_.size()));
   for (const Delivery &delivery : deliveryQueue_) {
@@ -626,6 +711,13 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, delivery.fleet);
     appendF64(out, delivery.yieldUnits);
     appendU8(out, delivery.corrupted ? 1U : 0U);
+    appendI64(out, delivery.emitTurn);
+    appendU32(out, delivery.sender);
+    appendU32(out, delivery.destination);
+    appendI64(out, delivery.senderProperSecAtEmit);
+    appendU32(out, delivery.payloadIndex);
+    appendI64(out, delivery.techPoints);
+    appendU8(out, static_cast<std::uint8_t>(delivery.category));
   }
   appendU32(out, static_cast<std::uint32_t>(intelLog_.size()));
   for (const IntelReport &report : intelLog_) {
@@ -638,6 +730,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   }
   appendU32(out, nextFleetId_);
   appendU32(out, nextSequence_);
+  appendStoryState(out);
   return out;
 }
 
