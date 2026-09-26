@@ -205,14 +205,17 @@ struct ConservedQuantities {
  *
  *   alpha^2 = (targetM2 - norm + S) / S.
  *
- * This matches open_gororoba gr_core energy_conserving::apply_constraint_correction.
- * A multiplicative factor sqrt(|targetM2 / norm|) is zero for a null target and
- * would zero v^r and v^theta, turning a photon timelike.
+ * This primary additive correction matches open_gororoba gr_core
+ * energy_conserving::apply_constraint_correction. A multiplicative factor
+ * sqrt(|targetM2 / norm|) is zero for a null target and would zero v^r and
+ * v^theta, turning a photon timelike.
  *
  * Fallback when S = 0 or alpha^2 < 0 (the r-theta motion cannot absorb the
  * drift): solve g_tt (v^t)^2 + 2 g_tphi v^phi v^t + (rest - targetM2) = 0 for
- * v^t and take the root nearest the current v^t, which changes E. When that
- * quadratic has no real root the state is returned unchanged.
+ * v^t and take the root nearest the current v^t, which changes E. This
+ * fallback solves for targetM2, timelike or null, and departs from gr_core,
+ * whose renormalize_null fallback ignores target_norm. When the quadratic has
+ * no real root the state is returned unchanged.
  *
  * @param g Metric components
  * @param state State with potentially drifted velocities
