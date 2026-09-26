@@ -19,6 +19,7 @@
 #include "game/campaign_session.h"
 #include "game/campaign_view.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 #include "ui/strategic_map.h"
 
 namespace ui {
@@ -138,7 +139,8 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
       ImGui::Text("%.2f", fleet.reliability);
     }
     ImGui::TableNextColumn();
-    ImGui::Text("%s", game::laneName(fleet.lane));
+    ImGui::Text("%s", fleet.observer == game::Observer::Hovering ? "hover"
+                                                                 : game::laneName(fleet.lane));
     ImGui::TableNextColumn();
     ImGui::Text("%s x%.2f", capabilityEffectText(fleet.capability), fleet.yieldMultiplier);
   }
@@ -184,9 +186,20 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
   ImGui::SameLine();
   ImGui::RadioButton("retrograde", &laneChoice, 1);
   uiState.composerLane = laneChoice == 1 ? game::OrbitLane::Retrograde : game::OrbitLane::Prograde;
+  // Station keeping: an orbit is a free-fall geodesic and needs a bound orbit
+  // at the band; hovering on thrust reaches below the marginally bound radius.
+  int stationChoice = uiState.composerStation == game::StationKeeping::Hover ? 1 : 0;
+  ImGui::TextUnformatted("station");
+  ImGui::SameLine();
+  ImGui::RadioButton("orbit", &stationChoice, 0);
+  ImGui::SameLine();
+  ImGui::RadioButton("hover", &stationChoice, 1);
+  uiState.composerStation =
+      stationChoice == 1 ? game::StationKeeping::Hover : game::StationKeeping::Orbit;
   if (ImGui::Button("Redeploy fleet")) {
-    uiState.lastCommandAccepted = session.issuePlaceFleet(
-        uiState.selectedFleet, uiState.composerTargetBand, uiState.composerLane);
+    uiState.lastCommandAccepted =
+        session.issuePlaceFleet(uiState.selectedFleet, uiState.composerTargetBand,
+                                uiState.composerLane, uiState.composerStation);
     uiState.lastCommandValid = true;
   }
 

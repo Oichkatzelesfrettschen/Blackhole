@@ -18,6 +18,7 @@
 #include "game/constellation_view.h"
 #include "game/economy.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 #include "game/serialize_bytes.h"
 #include "game/temporal_clock.h"
 
@@ -61,12 +62,13 @@ Constellation::Constellation(ConstellationConfig config)
   for (const SystemSpec &spec : config_.systems) {
     OrbitalSystem system{.field = KerrTimeField(spec.blackHoleMassG, spec.spinDimensionless),
                          .authorityRadiusCm = spec.authorityRadiusCm,
+                         .authorityObserver = spec.authorityObserver,
                          .bandRadiusCm = spec.bandRadiusCm,
                          .instability = 0.0};
-    // The authority station must be a physically admissible radius; a system
-    // whose command origin sits at or inside the horizon invalidates the whole
-    // constellation.
-    if (!system.field.isValidStationRadius(spec.authorityRadiusCm)) {
+    // The authority station must be physically admissible for its observer; a
+    // system whose command origin sits at or inside the horizon, or orbits
+    // where no bound orbit exists, invalidates the whole constellation.
+    if (!system.field.admitsObserver(spec.authorityRadiusCm, spec.authorityObserver)) {
       valid_ = false;
     }
     systems_.push_back(std::move(system));
@@ -109,12 +111,27 @@ bool Constellation::validBand(SystemId system, int bandIndex) const {
   return systems_.at(system).field.isValidStationRadius(bandRadiusCm(system, bandIndex));
 }
 
-bool Constellation::laneAllowedAtBand(SystemId system, OrbitLane lane, int bandIndex) const {
-  if (lane != OrbitLane::Retrograde) {
-    return true;
+bool Constellation::placementAllowed(SystemId system, OrbitLane lane, StationKeeping station,
+                                     int bandIndex) const {
+  const KerrTimeField &field = systems_.at(system).field;
+  const double radiusCm = bandRadiusCm(system, bandIndex);
+  if (lane == OrbitLane::Retrograde &&
+      (radiusCm < field.ergosphereRadiusCm() || station == StationKeeping::Hover)) {
+    // Frame dragging forbids a retrograde hold inside the static limit, and a
+    // hovering ZAMO carries no retrograde sense anywhere.
+    return false;
   }
-  // Inside the static limit, frame dragging forbids a retrograde hold.
-  return bandRadiusCm(system, bandIndex) >= systems_.at(system).field.ergosphereRadiusCm();
+  return field.admitsObserver(radiusCm, observerFor(lane, station));
+}
+
+StationKeeping Constellation::defaultStation(SystemId system, int bandIndex) const {
+  if (!validBand(system, bandIndex)) {
+    return StationKeeping::Orbit;
+  }
+  return systems_.at(system).field.admitsObserver(bandRadiusCm(system, bandIndex),
+                                                  Observer::CircularOrbitPrograde)
+             ? StationKeeping::Orbit
+             : StationKeeping::Hover;
 }
 
 double Constellation::linkSeparationCm(SystemId a, SystemId b) const {
@@ -181,9 +198,9 @@ FactionId Constellation::addFaction(FactionPolicy policy, SystemId homeSystem) {
 }
 
 FleetId Constellation::addFleet(FactionId faction, SystemId system, FleetCapability capability,
-                                int bandIndex, OrbitLane lane) {
+                                int bandIndex, OrbitLane lane, StationKeeping station) {
   if (!valid_ || factionIndex(faction) == factions_.size() || !validBand(system, bandIndex) ||
-      !laneAllowedAtBand(system, lane, bandIndex)) {
+      !placementAllowed(system, lane, station, bandIndex)) {
     return K_INVALID_FLEET_ID;
   }
   ConstellationFleet fleet;
@@ -193,6 +210,7 @@ FleetId Constellation::addFleet(FactionId faction, SystemId system, FleetCapabil
   fleet.capability = capability;
   fleet.bandIndex = bandIndex;
   fleet.lane = lane;
+  fleet.observer = observerFor(lane, station);
   fleet.fuelUnits = config_.fleetInitialFuelUnits;
   fleets_.push_back(std::move(fleet));
   return fleets_.back().id;
@@ -211,7 +229,7 @@ bool Constellation::issueCommand(FactionId faction, const ConstellationCommand &
     return false;
   }
   if (!validBand(command.targetSystem, command.targetBand) ||
-      !laneAllowedAtBand(command.targetSystem, command.lane, command.targetBand)) {
+      !placementAllowed(command.targetSystem, command.lane, command.station, command.targetBand)) {
     return false;
   }
   if (command.targetSystem == fleet->system) {
@@ -251,10 +269,11 @@ void Constellation::applyCommand(const LoggedCommand &logged) {
   if (command.targetSystem == fleet->system) {
     const double fuelCost = config_.fuelPerBandHop * std::abs(command.targetBand - fleet->bandIndex);
     if (fuelCost <= fleet->fuelUnits && validBand(command.targetSystem, command.targetBand) &&
-        laneAllowedAtBand(command.targetSystem, command.lane, command.targetBand)) {
+        placementAllowed(command.targetSystem, command.lane, command.station, command.targetBand)) {
       fleet->fuelUnits -= fuelCost;
       fleet->bandIndex = command.targetBand;
       fleet->lane = command.lane;
+      fleet->observer = observerFor(command.lane, command.station);
     }
     return;
   }
@@ -268,6 +287,7 @@ void Constellation::applyCommand(const LoggedCommand &logged) {
     fleet->transitArrivalTurn = clock_.turn() + clock_.ceilTurns(travelSec);
     fleet->transitDestBand = command.targetBand;
     fleet->transitDestLane = command.lane;
+    fleet->transitDestObserver = observerFor(command.lane, command.station);
     fleet->system = command.targetSystem;
   }
 }
@@ -312,6 +332,7 @@ void Constellation::landArrivals() {
       fleet.inTransit = false;
       fleet.bandIndex = fleet.transitDestBand;
       fleet.lane = fleet.transitDestLane;
+      fleet.observer = fleet.transitDestObserver;
     }
   }
 }
@@ -341,7 +362,8 @@ void Constellation::runFleetWork() {
       continue;
     }
     const KerrTimeField &field = systems_.at(fleet.system).field;
-    const double rate = field.properTimeRate(bandRadiusCm(fleet.system, fleet.bandIndex));
+    const double rate =
+        field.properTimeRate(bandRadiusCm(fleet.system, fleet.bandIndex), fleet.observer);
     const double properDelta = properDeltaSec(rate, clock_.secondsPerTurn());
     fleet.properTimeSec += properDelta;
     fleet.pendingWorkProperSec += properDelta;
@@ -543,7 +565,8 @@ Constellation::expansionistOrders(const FactionState &faction) const {
           return {{.fleet = fleet.id,
                    .targetSystem = system,
                    .targetBand = band,
-                   .lane = OrbitLane::Prograde}};
+                   .lane = OrbitLane::Prograde,
+                   .station = defaultStation(system, band)}};
         }
       }
     }
@@ -576,7 +599,8 @@ Constellation::extractorOrders(const FactionState &faction) const {
       return {{.fleet = fleet.id,
                .targetSystem = home,
                .targetBand = deepestBand,
-               .lane = OrbitLane::Prograde}};
+               .lane = OrbitLane::Prograde,
+               .station = defaultStation(home, deepestBand)}};
     }
   }
   return {};
@@ -623,7 +647,8 @@ Constellation::contesterOrders(const FactionState &faction) const {
         return {{.fleet = fleet->id,
                  .targetSystem = system,
                  .targetBand = band,
-                 .lane = OrbitLane::Prograde}};
+                 .lane = OrbitLane::Prograde,
+                 .station = defaultStation(system, band)}};
       }
     }
   }

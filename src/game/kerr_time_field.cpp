@@ -10,6 +10,7 @@
 #include <cmath>
 
 #include "constants.h"     // physics::G, physics::C, physics::C2
+#include "game/observer.h"
 #include "kerr_observer.h" // equatorial Kerr primitives in (epsilon, x)
 
 namespace game {
@@ -32,11 +33,46 @@ KerrTimeField::KerrTimeField(double blackHoleMassG, SpinDeficit deficit)
   assert(std::isfinite(gravitationalRadiusCm_) && gravitationalRadiusCm_ > 0.0);
 }
 
-double KerrTimeField::properTimeRate(double radiusCm) const {
+namespace {
+
+// Orbital sense relative to the hole's rotation; epsilon already folds |a|, so
+// prograde here is prograde in kerr_observer.h for either spin sign.
+ko::OrbitSense senseOf(Observer orbit) {
+  return orbit == Observer::CircularOrbitRetrograde ? ko::OrbitSense::Retrograde
+                                                    : ko::OrbitSense::Prograde;
+}
+
+} // namespace
+
+double KerrTimeField::properTimeRate(double radiusCm, Observer observer) const {
   if (!isValidStationRadius(radiusCm)) {
     return 0.0; // at or inside the outer horizon
   }
-  return ko::equatorialFrame(epsilon_, radialOffset(radiusCm)).alpha;
+  const double x = radialOffset(radiusCm);
+  if (observer == Observer::Hovering) {
+    return ko::equatorialFrame(epsilon_, x).alpha;
+  }
+  // Zero where no timelike circular orbit of this sense exists (inside its
+  // photon orbit); admitsObserver keeps such placements out of the game.
+  return ko::circularOrbit(epsilon_, x, senseOf(observer)).properTimeRate;
+}
+
+bool KerrTimeField::admitsObserver(double radiusCm, Observer observer) const {
+  if (!isValidStationRadius(radiusCm)) {
+    return false;
+  }
+  if (observer == Observer::Hovering) {
+    return true;
+  }
+  return radialOffset(radiusCm) > ko::marginallyBoundOffset(epsilon_, senseOf(observer));
+}
+
+double KerrTimeField::marginallyBoundRadiusCm(Observer orbit) const {
+  return gravitationalRadiusCm_ * (1.0 + ko::marginallyBoundOffset(epsilon_, senseOf(orbit)));
+}
+
+double KerrTimeField::iscoRadiusCm(Observer orbit) const {
+  return gravitationalRadiusCm_ * (1.0 + ko::iscoOffset(epsilon_, senseOf(orbit)));
 }
 
 bool KerrTimeField::isValidStationRadius(double radiusCm) const {

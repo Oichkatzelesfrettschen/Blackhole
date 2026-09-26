@@ -15,6 +15,7 @@
 #include "game/campaign.h"
 #include "game/command.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 #include "game/serialize_bytes.h"
 #include "game/temporal_clock.h"
 
@@ -57,7 +58,7 @@ TEST(CampaignClock, ProperTimeRateStaysInUnitIntervalAndRisesWithRadius) {
   double previousRate = 0.0;
   for (const double multiple : {1.0001, 1.01, 1.5, 3.0, 10.0, 50.0, 200.0, 1000.0}) {
     const double radiusCm = multiple * horizonCm;
-    const double rate = field.properTimeRate(radiusCm);
+    const double rate = field.properTimeRate(radiusCm, game::Observer::Hovering);
     EXPECT_GT(rate, 0.0) << "radius multiple " << multiple;
     EXPECT_LE(rate, 1.0) << "radius multiple " << multiple;
     EXPECT_GT(rate, previousRate) << "rate must rise monotonically with radius";

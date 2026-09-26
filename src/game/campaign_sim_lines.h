@@ -70,14 +70,16 @@ struct LineResult {
 };
 
 /** @brief Runs one commitment line to completion. Deep fleets redeploy prograde
- *         into the ergoregion band before work begins, then every fleet is
- *         re-tasked on the sustaining cadence for the whole campaign. */
+ *         into the ergoregion band before work begins, hovering on thrust
+ *         because no bound orbit exists there, then every fleet is re-tasked on
+ *         the sustaining cadence for the whole campaign. */
 inline LineResult runLine(std::uint64_t seed, std::int64_t turns, Commit commit) {
   game::CampaignSession session(seed);
   game::CampaignState &campaign = session.state();
 
   for (const game::FleetId fleet : deepFleets(commit)) {
-    static_cast<void>(session.issuePlaceFleet(fleet, K_ERGO_BAND, game::OrbitLane::Prograde));
+    static_cast<void>(session.issuePlaceFleet(fleet, K_ERGO_BAND, game::OrbitLane::Prograde,
+                                              game::StationKeeping::Hover));
   }
 
   const std::vector<game::FleetId> allFleets = {K_EXTRACTION, K_RESEARCH,     K_FABRICATION,

@@ -37,8 +37,10 @@ public:
   /** @brief Contract a task on the fleet, costed in local proper-time hours. */
   bool issueAssignTask(FleetId fleet, double costHours);
 
-  /** @brief Order the fleet to another orbital band on the given lane. */
-  bool issuePlaceFleet(FleetId fleet, int targetBand, OrbitLane lane = OrbitLane::Prograde);
+  /** @brief Order the fleet to another orbital band on the given lane, in
+   *         orbit by default or hovering on thrust. */
+  bool issuePlaceFleet(FleetId fleet, int targetBand, OrbitLane lane = OrbitLane::Prograde,
+                       StationKeeping station = StationKeeping::Orbit);
 
 private:
   KerrTimeField field_;

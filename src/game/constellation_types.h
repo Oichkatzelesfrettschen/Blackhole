@@ -51,6 +51,7 @@ enum class FactionPolicy : std::uint8_t {
 struct OrbitalSystem {
   KerrTimeField field;
   double authorityRadiusCm = 0.0;   ///< This system's command origin.
+  Observer authorityObserver = Observer::Hovering; ///< The authority's clock.
   std::vector<double> bandRadiusCm; ///< Orbital bands, ascending radius, indexed by bandIndex.
   double instability = 0.0;         ///< Rises each turn; deep prograde work in THIS system contains it.
 };
@@ -65,6 +66,7 @@ struct ConstellationFleet {
   FleetCapability capability = FleetCapability::Research;
   int bandIndex = 0;
   OrbitLane lane = OrbitLane::Prograde;
+  Observer observer = Observer::CircularOrbitPrograde; ///< Clock-carrying worldline on its band.
   double reliability = 1.0;
   double properTimeSec = 0.0;        ///< Accumulated local proper time.
   double pendingWorkProperSec = 0.0; ///< Proper time worked since the last yield report.
@@ -73,6 +75,8 @@ struct ConstellationFleet {
   std::int64_t transitArrivalTurn = 0; ///< Turn an in-transit fleet reaches its destination.
   int transitDestBand = 0;            ///< Band it settles onto on arrival.
   OrbitLane transitDestLane = OrbitLane::Prograde;
+  /// Worldline it adopts on arrival.
+  Observer transitDestObserver = Observer::CircularOrbitPrograde;
 };
 
 /** @brief A faction's cumulative outcome across the whole constellation. */

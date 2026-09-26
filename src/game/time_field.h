@@ -3,14 +3,17 @@
  * @brief Proper-time rate and signal-delay interface the campaign core plays on.
  *
  * The campaign never touches a metric directly: every gravitational effect it
- * consumes -- how fast a fleet's local clock runs, how long a signal takes
+ * consumes -- how fast a station's local clock runs, how long a signal takes
  * between orbital radii, whether a station radius is physically admissible --
- * arrives through this interface. Tests substitute a fake field; a Kerr field
- * can slot in behind the same three calls later.
+ * arrives through this interface. Tests substitute a fake field. A clock rate
+ * is a property of a worldline, not of a radius, so every rate query names the
+ * Observer that carries the clock.
  */
 
 #ifndef BLACKHOLE_GAME_TIME_FIELD_H
 #define BLACKHOLE_GAME_TIME_FIELD_H
+
+#include "game/observer.h"
 
 namespace game {
 
@@ -18,9 +21,17 @@ class TimeField {
 public:
   virtual ~TimeField() = default;
 
-  /** @brief dtau/dt for a stationary observer at radiusCm; in (0, 1] for every
-   *         radius that isValidStationRadius accepts. */
-  [[nodiscard]] virtual double properTimeRate(double radiusCm) const = 0;
+  /** @brief dtau/dt for `observer` at radiusCm; in (0, 1] wherever
+   *         admitsObserver(radiusCm, observer) holds. */
+  [[nodiscard]] virtual double properTimeRate(double radiusCm, Observer observer) const = 0;
+
+  /** @brief True when `observer` can be stationed at radiusCm: a hovering
+   *         station needs a valid station radius, an orbit additionally needs a
+   *         bound circular orbit of its sense there. A field without orbital
+   *         structure admits every observer on every valid radius. */
+  [[nodiscard]] virtual bool admitsObserver(double radiusCm, Observer /*observer*/) const {
+    return isValidStationRadius(radiusCm);
+  }
 
   /** @brief One-way coordinate-time delay in seconds for a light signal
    *         exchanged between stations at the two radii. Finite and

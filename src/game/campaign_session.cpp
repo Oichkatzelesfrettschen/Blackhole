@@ -11,6 +11,7 @@
 #include "game/command.h"
 #include "game/fleet.h"
 #include "game/kerr_time_field.h"
+#include "game/observer.h"
 
 namespace game {
 
@@ -35,12 +36,16 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   config.authorityRadiusCm = 200.0 * rS;
   config.bandRadiusCm = {0.85 * rS, 3.0 * rS, 10.0 * rS, 50.0 * rS};
   // The objective is sized so the deadline bites: full outer commitment clears
-  // it only near turn 1100 of 1200, so the energy race is tense and any dive that
-  // drops throughput forfeits it. There is no half-measure -- a fleet or two sent
-  // deep banks neither enough energy to win the race nor enough stabilization to
-  // take the alternate victory (see the instability block); the two winning lines
-  // are full-outer for energy or an all-in dive for stabilization.
-  config.victoryEnergyUnits = 3150.0;
+  // it only in the last tenth of the 1200 turns, so the energy race is tense and
+  // any dive that drops throughput forfeits it. There is no half-measure -- a
+  // fleet or two sent deep banks neither enough energy to win the race nor enough
+  // stabilization to take the alternate victory (see the instability block); the
+  // two winning lines are full-outer for energy or an all-in dive for
+  // stabilization. The value is measured against orbiting outer fleets, whose
+  // slower geodesic clocks price each proper hour higher than a hovering clock
+  // would: with wins disabled, outer banks about 9% above it by the deadline and
+  // the solo dive about 4% below.
+  config.victoryEnergyUnits = 3325.0;
   config.deadlineTurn = 1200;
   config.fleetInitialFuelUnits = 100.0;
   config.fuelPerBandHop = 20.0;
@@ -110,12 +115,14 @@ bool CampaignSession::issueAssignTask(FleetId fleet, double costHours) {
   return state_.issueCommand(command);
 }
 
-bool CampaignSession::issuePlaceFleet(FleetId fleet, int targetBand, OrbitLane lane) {
+bool CampaignSession::issuePlaceFleet(FleetId fleet, int targetBand, OrbitLane lane,
+                                      StationKeeping station) {
   Command command;
   command.type = CommandType::PlaceFleet;
   command.fleet = fleet;
   command.targetBand = targetBand;
   command.lane = lane;
+  command.station = station;
   return state_.issueCommand(command);
 }
 

@@ -2,12 +2,13 @@
  * @file kerr_time_field.h
  * @brief Rotating (Kerr) equatorial TimeField with frame dragging.
  *
- * Every fleet is modelled as a zero-angular-momentum observer (ZAMO): its
- * clock is the ZAMO lapse, which stays positive and finite into the ergoregion
- * where no static observer can exist. This uniform choice keeps the proper-time
- * rate continuous across the ergosphere (a static-observer clock would go
- * imaginary at r_ergo). At zero spin the lapse and the signal delay reduce
- * exactly to the Schwarzschild BlackholeTimeField.
+ * A hovering station is a zero-angular-momentum observer (ZAMO): its clock is
+ * the ZAMO lapse, which stays positive and finite into the ergoregion where no
+ * static observer can exist. An orbiting station is a circular geodesic of its
+ * sense and carries the Bardeen-Press-Teukolsky orbital clock; the field admits
+ * it only strictly outside that sense's marginally bound radius, where a bound
+ * circular orbit exists. At zero spin the lapse, the orbital clock, and the
+ * signal delay reduce exactly to the Schwarzschild BlackholeTimeField.
  *
  * The field stores the spin deficit epsilon = 1 - |a| rather than a and
  * delegates every metric quantity to physics/kerr_observer.h, which works in
@@ -42,7 +43,8 @@ public:
    *         spins a double a cannot resolve. epsilon is clamped to [0, 1]. */
   KerrTimeField(double blackHoleMassG, SpinDeficit deficit);
 
-  [[nodiscard]] double properTimeRate(double radiusCm) const override;
+  [[nodiscard]] double properTimeRate(double radiusCm, Observer observer) const override;
+  [[nodiscard]] bool admitsObserver(double radiusCm, Observer observer) const override;
   [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override;
   [[nodiscard]] bool isValidStationRadius(double radiusCm) const override;
   [[nodiscard]] double innerBoundaryRadiusCm() const override { return outerHorizonCm_; }
@@ -55,6 +57,11 @@ public:
   [[nodiscard]] double gravitationalRadiusCm() const { return gravitationalRadiusCm_; }
   [[nodiscard]] double schwarzschildRadiusCm() const { return schwarzschildRadiusCm_; }
   [[nodiscard]] double outerHorizonCm() const { return outerHorizonCm_; }
+  /** @brief Radius inside which no bound circular orbit of this sense exists
+   *         (r_mb); prograde relative to the hole's rotation. */
+  [[nodiscard]] double marginallyBoundRadiusCm(Observer orbit) const;
+  /** @brief Innermost stable circular orbit radius of the orbit's sense. */
+  [[nodiscard]] double iscoRadiusCm(Observer orbit) const;
   /** @brief x = r/M - 1, the radial coordinate kerr_observer.h works in. */
   [[nodiscard]] double radialOffset(double radiusCm) const {
     return (radiusCm / gravitationalRadiusCm_) - 1.0;

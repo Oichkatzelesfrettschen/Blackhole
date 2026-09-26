@@ -11,7 +11,11 @@
 #include <cmath>
 
 #include "game/blackhole_time_field.h"
+#include "game/campaign.h"
+#include "game/campaign_session.h"
+#include "game/fleet.h"
 #include "game/kerr_time_field.h"
+#include "game/observer.h"
 
 namespace {
 
@@ -31,7 +35,8 @@ TEST(KerrTimeField, ZeroSpinReducesExactlyToSchwarzschild) {
   const double horizonCm = schwarzschild.horizonRadiusCm();
   for (const double multiple : {1.01, 1.5, 3.0, 10.0, 100.0, 1000.0}) {
     const double radiusCm = multiple * horizonCm;
-    EXPECT_NEAR(kerr.properTimeRate(radiusCm), schwarzschild.properTimeRate(radiusCm), 1e-13)
+    EXPECT_NEAR(kerr.properTimeRate(radiusCm, game::Observer::Hovering),
+                schwarzschild.properTimeRate(radiusCm, game::Observer::Hovering), 1e-13)
         << "rate mismatch at " << multiple;
     EXPECT_DOUBLE_EQ(kerr.frameDragRateRadPerSec(radiusCm), 0.0)
         << "no frame dragging without spin";
@@ -70,7 +75,7 @@ TEST(KerrTimeField, ZamoClockRunsInsideTheErgoregion) {
   const double ergoRadiusCm = 1.7 * gravitationalRadiusCm;
   ASSERT_TRUE(kerr.isValidStationRadius(ergoRadiusCm));
   ASSERT_LT(ergoRadiusCm, kerr.ergosphereRadiusCm());
-  const double rate = kerr.properTimeRate(ergoRadiusCm);
+  const double rate = kerr.properTimeRate(ergoRadiusCm, game::Observer::Hovering);
   EXPECT_GT(rate, 0.0);
   EXPECT_LT(rate, 1.0);
   EXPECT_TRUE(std::isfinite(rate));
@@ -97,10 +102,71 @@ TEST(KerrTimeField, RateMonotoneWithRadiusAndBoundedInUnitInterval) {
   const double horizonCm = kerr.outerHorizonCm();
   double previousRate = 0.0;
   for (const double multiple : {1.01, 1.1, 1.5, 3.0, 10.0, 100.0}) {
-    const double rate = kerr.properTimeRate(multiple * horizonCm);
+    const double rate = kerr.properTimeRate(multiple * horizonCm, game::Observer::Hovering);
     EXPECT_GT(rate, 0.0);
     EXPECT_LE(rate, 1.0);
     EXPECT_GT(rate, previousRate) << "rate must rise with radius at " << multiple;
     previousRate = rate;
   }
+}
+
+// Falsifier: the three clocks at r = 6M, a = 0.9 departing from the 50-digit
+// mpmath values (ZAMO 0.817982, prograde orbit 0.743444, retrograde orbit
+// 0.654512; scripts/gen_kerr_observer_reference.py) by more than 1e-12
+// relative, or a zero-spin orbit clock differing from Schwarzschild's.
+TEST(KerrTimeField, ObserverClocksAtSixM) {
+  const game::KerrTimeField kerr(K_M87_MASS_G, 0.9);
+  const double radiusCm = 6.0 * kerr.gravitationalRadiusCm();
+  EXPECT_NEAR(kerr.properTimeRate(radiusCm, game::Observer::Hovering) / 8.179815713894085549e-1,
+              1.0, 1e-12);
+  EXPECT_NEAR(kerr.properTimeRate(radiusCm, game::Observer::CircularOrbitPrograde) /
+                  7.4344405871481958781e-1,
+              1.0, 1e-12);
+  EXPECT_NEAR(kerr.properTimeRate(radiusCm, game::Observer::CircularOrbitRetrograde) /
+                  6.5451153007973629037e-1,
+              1.0, 1e-12);
+
+  const game::KerrTimeField still(K_M87_MASS_G, 0.0);
+  const game::BlackholeTimeField schwarzschild(K_M87_MASS_G);
+  for (const double multiple : {4.5, 6.0, 20.0, 400.0}) {
+    const double orbitCm = multiple * still.gravitationalRadiusCm();
+    EXPECT_NEAR(still.properTimeRate(orbitCm, game::Observer::CircularOrbitPrograde),
+                schwarzschild.properTimeRate(orbitCm, game::Observer::CircularOrbitPrograde),
+                1e-13);
+  }
+}
+
+// Falsifier: a prograde orbit admitted at 1.7M around a = 0.9, where the
+// marginally bound radius is 1.73246M and no bound orbit exists, or a
+// retrograde orbit admitted inside its own r_mb = 5.65685M.
+TEST(KerrTimeField, OrbitNeedsTheMarginallyBoundRadius) {
+  const game::KerrTimeField kerr(K_M87_MASS_G, 0.9);
+  const double massCm = kerr.gravitationalRadiusCm();
+  EXPECT_NEAR(kerr.marginallyBoundRadiusCm(game::Observer::CircularOrbitPrograde) / massCm,
+              1.7324555320336759, 1e-12);
+  EXPECT_FALSE(kerr.admitsObserver(1.7 * massCm, game::Observer::CircularOrbitPrograde));
+  EXPECT_TRUE(kerr.admitsObserver(1.7 * massCm, game::Observer::Hovering));
+  EXPECT_TRUE(kerr.admitsObserver(1.75 * massCm, game::Observer::CircularOrbitPrograde));
+  EXPECT_FALSE(kerr.admitsObserver(5.6 * massCm, game::Observer::CircularOrbitRetrograde));
+  EXPECT_TRUE(kerr.admitsObserver(5.7 * massCm, game::Observer::CircularOrbitRetrograde));
+}
+
+// Falsifier: the default scenario accepting an orbital placement onto the
+// 1.7M ergoregion band at issue time (the order must never enter the log), or
+// refusing the hovering placement there.
+TEST(KerrTimeField, OrbitalPlacementBelowMarginallyBoundIsRejectedAtIssue) {
+  game::CampaignSession session(5);
+  const game::FleetId fleet = session.state().fleets().front().id;
+  EXPECT_FALSE(
+      session.issuePlaceFleet(fleet, 0, game::OrbitLane::Prograde, game::StationKeeping::Orbit));
+  EXPECT_TRUE(session.state().commandLog().empty());
+  EXPECT_TRUE(
+      session.issuePlaceFleet(fleet, 0, game::OrbitLane::Prograde, game::StationKeeping::Hover));
+  EXPECT_EQ(session.state().commandLog().size(), 1U);
+  EXPECT_EQ(session.state().addFleet(game::FleetCapability::Research, 0), game::K_INVALID_FLEET_ID);
+  EXPECT_NE(session.state().addFleet(game::FleetCapability::Research, 0, game::OrbitLane::Prograde,
+                                     game::StationKeeping::Hover),
+            game::K_INVALID_FLEET_ID);
+  // Placed fleets on the outer bands orbit, and carry the orbital clock.
+  EXPECT_EQ(session.state().fleets().front().observer, game::Observer::CircularOrbitPrograde);
 }

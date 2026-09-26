@@ -12,6 +12,7 @@
 #include "game/constellation_types.h"
 #include "game/fleet.h"
 #include "game/kerr_time_field.h"
+#include "game/observer.h"
 
 namespace game {
 
@@ -113,11 +114,13 @@ ConstellationSession::ConstellationSession(std::uint64_t seed)
 }
 
 bool ConstellationSession::movePlayerFleet(FleetId fleet, SystemId targetSystem, int targetBand,
-                                           OrbitLane lane) {
+                                           OrbitLane lane, StationKeeping station) {
   return constellation_.issueCommand(
-      player_, ConstellationCommand{
-                   .fleet = fleet, .targetSystem = targetSystem, .targetBand = targetBand,
-                   .lane = lane});
+      player_, ConstellationCommand{.fleet = fleet,
+                                    .targetSystem = targetSystem,
+                                    .targetBand = targetBand,
+                                    .lane = lane,
+                                    .station = station});
 }
 
 } // namespace game

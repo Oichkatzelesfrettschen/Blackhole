@@ -43,6 +43,7 @@ struct SystemSpec {
   double blackHoleMassG = 0.0;
   double spinDimensionless = 0.0;
   double authorityRadiusCm = 0.0;
+  Observer authorityObserver = Observer::Hovering; ///< Hovering or orbiting command station.
   std::vector<double> bandRadiusCm;
 };
 
@@ -89,6 +90,8 @@ struct ConstellationCommand {
   SystemId targetSystem = K_INVALID_SYSTEM_ID;
   int targetBand = 0;
   OrbitLane lane = OrbitLane::Prograde;
+  /// Orbit (geodesic) or hover (ZAMO) at the target.
+  StationKeeping station = StationKeeping::Orbit;
 };
 
 class Constellation {
@@ -103,9 +106,15 @@ public:
   FactionId addFaction(FactionPolicy policy, SystemId homeSystem);
 
   /** @brief Setup-phase fleet creation; returns K_INVALID_FLEET_ID when the
-   *         faction, system, band, or lane is inadmissible. */
+   *         faction, system, band, lane, or station keeping is inadmissible. */
   FleetId addFleet(FactionId faction, SystemId system, FleetCapability capability, int bandIndex,
-                   OrbitLane lane = OrbitLane::Prograde);
+                   OrbitLane lane = OrbitLane::Prograde,
+                   StationKeeping station = StationKeeping::Orbit);
+
+  /** @brief How a prograde fleet holds (system, bandIndex) by default: in orbit
+   *         where a bound circular orbit exists, hovering below the marginally
+   *         bound radius. The AI policies place fleets this way. */
+  [[nodiscard]] StationKeeping defaultStation(SystemId system, int bandIndex) const;
 
   /** @brief Validates and enqueues one faction's order. Returns false and leaves
    *         all state untouched when the order is inadmissible or the campaign is
@@ -175,7 +184,9 @@ private:
   [[nodiscard]] const ConstellationFleet *findFleet(FleetId fleetId) const;
   [[nodiscard]] double bandRadiusCm(SystemId system, int bandIndex) const;
   [[nodiscard]] bool validBand(SystemId system, int bandIndex) const;
-  [[nodiscard]] bool laneAllowedAtBand(SystemId system, OrbitLane lane, int bandIndex) const;
+  /** @brief Same rule as CampaignState::placementAllowed, per system. */
+  [[nodiscard]] bool placementAllowed(SystemId system, OrbitLane lane, StationKeeping station,
+                                      int bandIndex) const;
   [[nodiscard]] double linkSeparationCm(SystemId a, SystemId b) const; ///< -1 when not linked.
   /** @brief Flat interstellar light time between two authorities; 0 for the same
    *         system, the separation over c otherwise. */

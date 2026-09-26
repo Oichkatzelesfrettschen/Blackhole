@@ -79,7 +79,9 @@ inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
     // a pure energy line that never answers the rival.
     static constexpr std::array<int, 4> kOuterBands = {1, 2, 3, 2};
     for (std::size_t index = 0; index < fleets.size(); ++index) {
-      session.movePlayerFleet(fleets.at(index), 0, kOuterBands.at(index % kOuterBands.size()));
+      const int band = kOuterBands.at(index % kOuterBands.size());
+      session.movePlayerFleet(fleets.at(index), 0, band, game::OrbitLane::Prograde,
+                              constellation.defaultStation(0, band));
     }
     return;
   }
@@ -87,7 +89,8 @@ inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
   if (line == PlayerLine::AllIn) {
     // Every fleet dives the home ergoregion band for stabilization.
     for (const game::FleetId fleet : fleets) {
-      session.movePlayerFleet(fleet, 0, 0);
+      session.movePlayerFleet(fleet, 0, 0, game::OrbitLane::Prograde,
+                              constellation.defaultStation(0, 0));
     }
     return;
   }
@@ -97,7 +100,9 @@ inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
   // bands for the player's own control score.
   static_cast<void>(rival);
   for (std::size_t index = 0; index < fleets.size(); ++index) {
-    session.movePlayerFleet(fleets.at(index), 0, static_cast<int>(index % 4));
+    const int band = static_cast<int>(index % 4);
+    session.movePlayerFleet(fleets.at(index), 0, band, game::OrbitLane::Prograde,
+                            constellation.defaultStation(0, band));
   }
 }
 

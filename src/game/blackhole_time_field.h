@@ -11,10 +11,12 @@
 namespace game {
 
 /**
- * @brief Stationary-observer Schwarzschild field around one black hole.
+ * @brief Schwarzschild field around one black hole.
  *
- * properTimeRate delegates to physics::timeDilationFactor (dtau/dt =
- * sqrt(1 - r_s/r), zero at or inside the horizon). signalDelaySec integrates
+ * A hovering station is the static observer, dtau/dt = sqrt(1 - r_s/r)
+ * (physics::timeDilationFactor, zero at or inside the horizon); a circular
+ * orbit of either sense carries sqrt(1 - 3M/r) and is admitted only outside
+ * the marginally bound radius 4M = 2 r_s. signalDelaySec integrates
  * the radial null coordinate time exactly:
  *
  *   delta_t = (r2 - r1)/c + (r_s/c) * ln((r2 - r_s)/(r1 - r_s))
@@ -29,7 +31,8 @@ class BlackholeTimeField final : public TimeField {
 public:
   explicit BlackholeTimeField(double blackHoleMassG);
 
-  [[nodiscard]] double properTimeRate(double radiusCm) const override;
+  [[nodiscard]] double properTimeRate(double radiusCm, Observer observer) const override;
+  [[nodiscard]] bool admitsObserver(double radiusCm, Observer observer) const override;
   [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override;
   [[nodiscard]] bool isValidStationRadius(double radiusCm) const override;
 
