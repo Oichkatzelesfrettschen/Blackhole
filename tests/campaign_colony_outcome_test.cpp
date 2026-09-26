@@ -228,3 +228,22 @@ TEST(ColonyOutcome, HostDecisionDoesNotSilenceTheColony) {
   order.originNode = game::K_FIRST_COLONY_NODE;
   EXPECT_TRUE(state.issueCommand(order));
 }
+
+// Falsifier: the colony's band delays reflecting where relay fleets truly are
+// -- relay positions are fleet telemetry the colony lacks -- instead of the
+// a-priori delay (geodesic times the configured overhead). The fake band 960
+// is 40 s from the host; overhead 2 makes 80 s, which a relay on band 995
+// cuts to 60 s in the referee view.
+TEST(ColonyOutcome, ColonyBandDelaysIgnoreUnseenRelays) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config = colonyConfig(R"({})", 0);
+  config.signalOverheadFactor = 2.0;
+  config.relayDelayFraction = 0.25;
+  game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  ASSERT_NE(state.addFleet(game::FleetCapability::Relay, 1), game::K_INVALID_FLEET_ID);
+  EXPECT_DOUBLE_EQ(state.renderSnapshot().bands.at(0).delayToAuthoritySec, 60.0);
+  const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  EXPECT_DOUBLE_EQ(colony.bands.at(0).delayToAuthoritySec, 80.0);
+  EXPECT_DOUBLE_EQ(colony.bands.at(1).delayToAuthoritySec, 10.0);
+}

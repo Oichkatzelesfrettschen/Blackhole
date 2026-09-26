@@ -134,6 +134,14 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
     return view;
   }
 
+  // Band delays: the a-priori estimate, since the relay reductions in the
+  // referee value depend on where relay fleets truly are.
+  for (BandView &band : view.bands) {
+    if (band.validStation) {
+      band.delayToAuthoritySec = estimatedDelaySec(band.radiusCm, config_.authorityRadiusCm);
+    }
+  }
+
   // At a colony, the host's ledger exists only as its bank last stamped.
   const ReceivedFromNode &host = self.received.at(K_AUTHORITY_NODE);
   view.energyUnits = host.lastEmitTurn >= 0 ? host.lastSenderEnergyUnits : 0.0;
