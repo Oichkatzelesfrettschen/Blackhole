@@ -63,7 +63,11 @@
   X(debugClosestApproachState, "debugClosestApproachState", 0.0f)            \
   X(debugClosestApproachTimeline, "debugClosestApproachTimeline", 0.0f)      \
   X(debugClosestApproachDirection, "debugClosestApproachDirection", 0.0f)    \
-  X(debugEscapedDirection, "debugEscapedDirection", 0.0f)
+  X(debugEscapedDirection, "debugEscapedDirection", 0.0f)                    \
+  X(diskPeakTemperature, "diskPeakTemperature", 6500.0f)                     \
+  X(diskBrightness, "diskBrightness", 1.0f)                                  \
+  X(diskFluxPeak, "diskFluxPeak", 1.1458947e-4f)                            \
+  X(diskTransferMode, "diskTransferMode", 0.0f)
 
 // NOLINTEND(cppcoreguidelines-macro-usage)
 

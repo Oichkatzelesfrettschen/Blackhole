@@ -1,16 +1,16 @@
 /**
  * @file device_zamo_redshift.cuh
- * @brief Equatorial ZAMO-lapse redshift for the no-LUT CUDA paths.
+ * @brief Equatorial ZAMO-lapse redshift, the device twin of physics::kerrRedshift.
  *
- * physics::kerrRedshift (src/physics/kerr.h) and the redshift LUT built from it
- * take 1 + z = 1 / alpha with the zero-angular-momentum observer's lapse
+ * physics::kerrRedshift (src/physics/kerr.h) and kerrRedshiftBatch take
+ * 1 + z = 1 / alpha with the zero-angular-momentum observer's lapse
  * alpha = sqrt(Sigma Delta / A). At the equator, with M = r_s / 2 and
  * a = a* M,
  *
  *   alpha^2 = r^2 Delta / ((r^2 + a^2)^2 - a^2 Delta),  Delta = r^2 - r_s r + a^2.
  *
  * The lapse stays positive through the ergoregion and vanishes at the horizon;
- * z is clamped to [0, 10], the LUT's cap in kerrRedshiftBatch, and a radius at
+ * z is clamped to [0, 10], the cap of kerrRedshiftBatch, and a radius at
  * or inside the horizon returns the cap. At a* = 0.9, r = 3M, z = 0.64819.
  *
  * Includes only <cuda_runtime.h> and <math.h> and defines no __constant__
@@ -23,7 +23,7 @@
 #include <cuda_runtime.h>
 #include <math.h>
 
-/** @brief Redshift cap shared with the LUT (physics::kerrRedshiftBatch). */
+/** @brief Redshift cap shared with physics::kerrRedshiftBatch. */
 #define D_ZAMO_REDSHIFT_CAP 10.0f
 
 /**

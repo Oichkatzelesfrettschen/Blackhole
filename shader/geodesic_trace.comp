@@ -84,6 +84,12 @@ uniform float interopStepSize  = 0.2;
 
 // --- Accretion disk ---
 uniform float adiskEnabled = 1.0;
+// Disk emission (bhDiskEmission): peak blackbody temperature [K], display
+// brightness, and the Page-Thorne flux peak for the current spin (M = 1).
+uniform float diskPeakTemperature = 6500.0;
+uniform float diskBrightness      = 1.0;
+uniform float diskFluxPeak        = 1.1458947e-4;
+uniform float diskTransferMode    = 0.0; // 0 = Physical g-factor, 1 = Interstellar (g = 1)
 // Scene toggles shared with blackhole_main.frag (bhHoleRendered,
 // bhMetricRadius in interop_trace.glsl).
 uniform float gravitationalLensing = 1.0;

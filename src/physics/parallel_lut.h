@@ -72,12 +72,10 @@ inline std::vector<Lut1D> generateEmissivityLutSweep(int size, double massSolar,
  * @param size LUT resolution per table
  * @param massSolar Black hole mass in solar masses
  * @param spins Vector of spin values
- * @param theta Viewing angle in radians
  * @return Vector of LUTs
  */
 inline std::vector<Lut1D> generateRedshiftLutSweep(int size, double massSolar,
-                                                   const std::vector<double> &spins,
-                                                   double theta = 0.5 * PI) {
+                                                   const std::vector<double> &spins) {
 
   std::vector<Lut1D> results(spins.size());
 
@@ -86,13 +84,13 @@ inline std::vector<Lut1D> generateRedshiftLutSweep(int size, double massSolar,
   tf::Taskflow taskflow;
 
   taskflow.for_each_index(std::size_t{0}, spins.size(), std::size_t{1}, [&](std::size_t i) {
-    results.at(i) = generateRedshiftLut(size, massSolar, spins.at(i), theta);
+    results.at(i) = generateRedshiftLut(size, massSolar, spins.at(i));
   });
 
   executor.run(taskflow).wait();
 #else
   for (std::size_t i = 0; i < spins.size(); ++i) {
-    results.at(i) = generateRedshiftLut(size, massSolar, spins.at(i), theta);
+    results.at(i) = generateRedshiftLut(size, massSolar, spins.at(i));
   }
 #endif
 

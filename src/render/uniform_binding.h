@@ -22,8 +22,8 @@ namespace blackhole {
 /**
  * @brief Per-frame derived render inputs the uniform binders read alongside the
  *        persistent RenderState. These are transients recomputed every frame
- *        (compare-baseline gating, LUT readiness, precomputed record frame
- *        shift); they are deliberately not stored in RenderState.
+ *        (compare-baseline gating, LUT readiness); they are deliberately not
+ *        stored in RenderState.
  */
 struct FrameBindingInputs {
   bool adiskEnabledEffective = false;      ///< adiskEnabled AND not compare-baseline frame.
@@ -31,8 +31,6 @@ struct FrameBindingInputs {
   bool backgroundEnabledEffective = false; ///< backgroundEnabled AND not compare-baseline frame.
   bool enablePhotonSphereEffective = false;///< enablePhotonSphere AND not compare-baseline frame.
   float backgroundIntensity = 0.0f;        ///< settings.backgroundIntensity for this frame.
-  float frameShiftX = 0.0f;                ///< Record-mode showcase-orbit horizontal frame offset.
-  float frameShiftY = 0.0f;                ///< Record-mode showcase-orbit vertical frame offset.
   bool lutReady = false;                   ///< Emissivity + redshift LUT textures both present.
   bool spectralEnabled = false;            ///< Spectral LUT selected AND ready this frame.
   bool grbModulationEnabled = false;       ///< GRB modulation LUT selected AND ready this frame.

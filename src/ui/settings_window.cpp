@@ -48,10 +48,31 @@ constexpr bool K_APP_VARIANT_CUDA_ONLY = false;
 namespace ui {
 
 using blackhole::K_COMPARE_PRESETS;
+using blackhole::K_DEFAULT_DEPTH_FAR;
 using blackhole::K_MAX_BLOOM_ITERATIONS;
 using blackhole::RenderState;
 
 namespace {
+
+// The legacy disk controls feed only the legacy fragment tracer's disk
+// (adiskColor in blackhole_main.frag); the Kerr tracer on every backend
+// shades the disk from the traced photon's g-factor (bhDiskEmission,
+// d_disk_emission). Each control is disabled unless the legacy fragment
+// tracer renders (legacyFragmentTracerActive) and names the path it drives.
+void legacyTracerControlTooltip() {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Legacy fragment tracer only (Physical Kerr ray tracer, compute,\n"
+                      "compare, and CUDA off). The Kerr tracer shades the disk with the\n"
+                      "orbiting-emitter g-factor.");
+  }
+}
+
+void kerrTracerControlTooltip() {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Kerr tracer only (Physical Kerr ray tracer, compute, or CUDA).\n"
+                      "The legacy fragment tracer draws the disk with adiskColor.");
+  }
+}
 
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
   ImDrawList *drawList = ImGui::GetWindowDrawList();
@@ -131,17 +152,34 @@ void renderVisualSettings(RenderState &rs, Settings &settings) {
   settings.bloomIterations = rs.post.bloomIterations;
   ImGui::Checkbox("renderBlackHole", &rs.disk.renderBlackHole);
   ImGui::Checkbox("adiskEnabled", &rs.disk.adiskEnabled);
+  // These controls feed only the legacy fragment tracer's volumetric disk
+  // (adiskColor in blackhole_main.frag, the density LUT, the noise volume);
+  // the Kerr tracer's disk (bhDiskEmission, d_disk_emission) reads none of
+  // them, so they are disabled while it runs.
+  ImGui::BeginDisabled(!legacyFragmentTracerActive(rs));
   ImGui::Checkbox("adiskParticle", &rs.disk.adiskParticle);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskDensityV", &rs.disk.adiskDensityV, 0.0f, 10.0f);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskDensityH", &rs.disk.adiskDensityH, 0.0f, 10.0f);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskHeight", &rs.disk.adiskHeight, 0.0f, 1.0f);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskLit", &rs.disk.adiskLit, 0.0f, 4.0f);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskNoiseLOD", &rs.disk.adiskNoiseLOD, 1.0f, 12.0f);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskNoiseScale", &rs.disk.adiskNoiseScale, 0.0f, 10.0f);
+  legacyTracerControlTooltip();
   ImGui::Checkbox("Noise Texture", &rs.disk.useNoiseTexture);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("Noise Tex Scale", &rs.disk.noiseTextureScale, 0.05f, 2.0f);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskSpeed", &rs.disk.adiskSpeed, 0.0f, 1.0f);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("dopplerStrength", &rs.disk.dopplerStrength, 0.0f, 5.0f);
+  legacyTracerControlTooltip();
+  ImGui::EndDisabled();
 
   ImGui::Separator();
   ImGui::Text("Volumetric RTE (D2)");
@@ -378,10 +416,35 @@ void renderPhysicsSettings(RenderState &rs) {
     ImGui::SetTooltip("On: trace Kerr null geodesics (Carter constants, Mino-time leapfrog).\n"
                       "Off: legacy artistic tracer (Schwarzschild bending, spin shown by tint).");
   }
+  const char *const diskTransferLabels[] = {"Physical", "Interstellar (film)"};
+  ImGui::BeginDisabled(!kerrDiskShadingActive(rs));
+  ImGui::Combo("Disk transfer", &rs.disk.diskTransferMode, diskTransferLabels, 2);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Physical: Doppler, gravitational and transverse shifts of an orbiting\n"
+                      "disk seen from infinity: bolometric beaming g^4 F / F_peak, with the\n"
+                      "chroma of a blackbody at g T_emit.\n"
+                      "Interstellar: g = 1 with lensing kept, the unshifted disk James et al.\n"
+                      "(2015, arXiv:1502.03808 sec. 4.2) describe for Gargantua.");
+  }
+  ImGui::SliderFloat("Disk peak temperature (K)", &rs.disk.diskPeakTemperature, 2000.0f,
+                     40000.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+  kerrTracerControlTooltip();
+  ImGui::SliderFloat("Disk brightness", &rs.disk.diskBrightness, 0.01f, 100.0f, "%.2f",
+                     ImGuiSliderFlags_Logarithmic);
+  kerrTracerControlTooltip();
+  ImGui::EndDisabled();
 
   // Physics visualization toggles
+  // The photon-sphere glow is an artistic overlay of the legacy tracers; the
+  // Kerr tracer on every backend shows the lensed sky unmodified.
+  ImGui::BeginDisabled(kerrDiskShadingActive(rs));
   ImGui::Checkbox("enablePhotonSphere", &rs.physicsCore.enablePhotonSphere);
+  legacyTracerControlTooltip();
+  ImGui::EndDisabled();
+  ImGui::BeginDisabled(!legacyFragmentTracerActive(rs));
   ImGui::Checkbox("enableRedshift", &rs.physicsCore.enableRedshift);
+  ImGui::EndDisabled();
+  legacyTracerControlTooltip();
 
   ImGui::Separator();
   ImGui::Text("Hawking Radiation Glow");
@@ -717,9 +780,13 @@ void renderTonemapPanel(RenderState &rs) {
   auto &settings = SettingsManager::instance().get();
   ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
   ImGui::Checkbox("tonemappingEnabled", &rs.post.tonemappingEnabled);
-  ImGui::SliderFloat("exposure", &rs.post.toneExposure, 0.01f, 2.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+  // The record exposure rule (record_mode.h) reaches 14.4 for cinematic and
+  // 4.9 for the desktop default camera at diskBrightness 0.25.
+  ImGui::SliderFloat("exposure", &rs.post.toneExposure, 0.01f, 50.0f, "%.2f",
+                     ImGuiSliderFlags_Logarithmic);
   ImGui::SliderFloat("gamma", &rs.post.gamma, 1.0f, 4.0f);
   settings.tonemappingEnabled = rs.post.tonemappingEnabled;
+  settings.toneExposure = rs.post.toneExposure;
   settings.gamma = rs.post.gamma;
   ImGui::End();
 }
@@ -727,7 +794,8 @@ void renderTonemapPanel(RenderState &rs) {
 void renderDepthEffectsPanel(RenderState &rs) {
   ImGui::Begin("Depth Effects", nullptr, ImGuiWindowFlags_NoCollapse);
   ImGui::Checkbox("Enable Depth Effects", &rs.depthFx.depthEffectsEnabled);
-  ImGui::SliderFloat("Depth Far", &rs.display.depthFar, 10.0f, 200.0f);
+  ImGui::SliderFloat("Depth Far", &rs.display.depthFar, 10.0f, 2000.0f, "%.0f",
+                     ImGuiSliderFlags_Logarithmic);
   if (ImGui::Button("Preset: Subtle")) {
     rs.depthFx.depthEffectsEnabled = true;
     rs.depthFx.fogEnabled = true;
@@ -749,7 +817,7 @@ void renderDepthEffectsPanel(RenderState &rs) {
     rs.depthFx.dofFocusFar = 0.9f;
     rs.depthFx.dofMaxRadius = 2.0f;
     rs.depthFx.depthCurve = 1.0f;
-    rs.display.depthFar = 100.0f;
+    rs.display.depthFar = K_DEFAULT_DEPTH_FAR;
   }
   ImGui::SameLine();
   if (ImGui::Button("Preset: Cinematic")) {
@@ -773,7 +841,7 @@ void renderDepthEffectsPanel(RenderState &rs) {
     rs.depthFx.dofFocusFar = 0.75f;
     rs.depthFx.dofMaxRadius = 5.0f;
     rs.depthFx.depthCurve = 0.95f;
-    rs.display.depthFar = 100.0f;
+    rs.display.depthFar = K_DEFAULT_DEPTH_FAR;
   }
   ImGui::SameLine();
   if (ImGui::Button("Preset: Clarity")) {
@@ -797,7 +865,7 @@ void renderDepthEffectsPanel(RenderState &rs) {
     rs.depthFx.dofFocusFar = 0.95f;
     rs.depthFx.dofMaxRadius = 2.5f;
     rs.depthFx.depthCurve = 1.15f;
-    rs.display.depthFar = 100.0f;
+    rs.display.depthFar = K_DEFAULT_DEPTH_FAR;
   }
   ImGui::Separator();
 
@@ -829,5 +897,17 @@ void renderDepthEffectsPanel(RenderState &rs) {
   ImGui::SliderFloat("Depth Curve", &rs.depthFx.depthCurve, 0.5f, 2.0f);
   ImGui::End();
 }
+
+bool kerrDiskShadingActive(const RenderState &rs) {
+#if BLACKHOLE_HAS_CUDA
+  const bool cudaActive = rs.dispatch.cudaManager.isEnabled();
+#else
+  const bool cudaActive = false;
+#endif
+  return rs.physicsCore.physicalRayTracer || rs.dispatch.useComputeRaytracer ||
+         rs.compare.compareComputeFragment || cudaActive;
+}
+
+bool legacyFragmentTracerActive(const RenderState &rs) { return !kerrDiskShadingActive(rs); }
 
 } // namespace ui

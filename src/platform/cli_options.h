@@ -24,30 +24,34 @@ struct CliOptions {
   std::string exportRawFramePath;
   std::string recordFramesDir;
   std::string recordProfile = "cinematic";
-  std::string recordComposition = "wide-right";
+  std::string recordComposition = "above-disk";
   std::string recordBackgroundId;
   int         recordFramesTotal = 0; ///< Seeded to K_CINEMATIC_FRAMES by parseCliOptions.
   int         recordStartFrame  = 0;
   float       recordYawDeg = 0.0f;
-  bool        hasRecordYaw = false;
   float       recordPitchDeg = 0.0f;
-  bool        hasRecordPitch = false;
   float       recordDistance = 0.0f;
-  bool        hasRecordDistance = false;
   float       recordFovDeg = 0.0f;
-  bool        hasRecordFov = false;
   float       recordExposure = 0.0f;
-  bool        hasRecordExposure = false;
+  float       recordSpin = 0.0f;
   float       recordSweepDeg = 0.0f;
-  bool        hasRecordSweep = false;
   float       recordFrameX = 0.0f;
-  bool        hasRecordFrameX = false;
   float       recordFrameY = 0.0f;
+  float       recordBackgroundYawDeg = 0.0f;
+  float       recordBackgroundPitchDeg = 0.0f;
+  // The has-flags pack together after the floats; a float followed by its
+  // flag pads each pair to 8 bytes (clang-analyzer-optin.performance.Padding).
+  bool        hasRecordYaw = false;
+  bool        hasRecordPitch = false;
+  bool        hasRecordDistance = false;
+  bool        hasRecordFov = false;
+  bool        hasRecordExposure = false;
+  bool        hasRecordSpin = false;
+  bool        hasRecordSweep = false;
+  bool        hasRecordFrameX = false;
   bool        hasRecordFrameY = false;
   bool        hasRecordBackgroundId = false;
-  float       recordBackgroundYawDeg = 0.0f;
   bool        hasRecordBackgroundYaw = false;
-  float       recordBackgroundPitchDeg = 0.0f;
   bool        hasRecordBackgroundPitch = false;
 };
 
