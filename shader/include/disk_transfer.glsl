@@ -17,7 +17,10 @@
 // ISCO. The disk inner edge (bhDiskInnerRadius) and this zero-torque edge
 // share isco_radius. x2 comes from Vieta's product x1 x2 x3 = -2a, which
 // stays accurate in float as x2 -> 0 at a -> 0, where its term vanishes.
-float dtPageThorneShape(float r, float a) {
+// The spin is clamped to |a| <= 0.9999 like isco_radius; at |a| = 1 the roots
+// x1 and x2 coincide and the closed form divides by zero.
+float dtPageThorneShape(float r, float aIn) {
+  float a = clamp(aIn, -0.9999, 0.9999);
   float rIsco = isco_radius(a);
   if (!(r > rIsco)) {
     return 0.0;

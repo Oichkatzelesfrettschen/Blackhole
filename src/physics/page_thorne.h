@@ -29,6 +29,11 @@
  * form and the quadrature at 30 digits; tests/page_thorne_test.cpp holds the
  * double-precision form to the quadrature and pins the flux peak radii.
  *
+ * At |aStar| = 1 the roots x1 and x2 coincide and the closed form divides by
+ * zero, so every function here evaluates at pageThorneSpin(aStar), the spin
+ * clamped to |aStar| <= 0.9999, the clamp isco_radius (disk_profile.glsl),
+ * dtPageThorneShape and the CUDA twins apply.
+ *
  * The header compiles as C++17 so nvcc-built tests can include it as the host
  * reference for the device twins in src/cuda/device_disk_transfer.cuh.
  */
@@ -36,19 +41,30 @@
 #ifndef PHYSICS_PAGE_THORNE_H
 #define PHYSICS_PAGE_THORNE_H
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 
 namespace physics {
 
+/** @brief Largest |aStar| the Page-Thorne closed form is evaluated at. */
+inline constexpr double K_PAGE_THORNE_MAX_SPIN = 0.9999;
+
+/** @brief aStar clamped to [-K_PAGE_THORNE_MAX_SPIN, K_PAGE_THORNE_MAX_SPIN]. */
+[[nodiscard]] inline double pageThorneSpin(double aStar) noexcept {
+  return std::clamp(aStar, -K_PAGE_THORNE_MAX_SPIN, K_PAGE_THORNE_MAX_SPIN);
+}
+
 /**
  * @brief ISCO radius in units of M for a disk orbiting in +phi.
  *
  * Bardeen, Press & Teukolsky (1972) eq. 2.21: aStar > 0 gives the prograde
  * ISCO (6 M at aStar = 0, 1.237 M at 0.998), aStar < 0 the retrograde one.
+ * The spin is clamped by pageThorneSpin.
  */
-[[nodiscard]] inline double pageThorneIscoRadius(double aStar) noexcept {
+[[nodiscard]] inline double pageThorneIscoRadius(double aStarIn) noexcept {
+  double const aStar = pageThorneSpin(aStarIn);
   double const z1 =
       1.0 + (std::cbrt(1.0 - (aStar * aStar)) * (std::cbrt(1.0 + aStar) + std::cbrt(1.0 - aStar)));
   double const z2 = std::sqrt((3.0 * aStar * aStar) + (z1 * z1));
@@ -91,7 +107,8 @@ struct KerrCircularOrbit {
  *
  * 0.0572 at aStar = 0, 0.1558 at 0.9, 0.3210 at 0.998.
  */
-[[nodiscard]] inline double novikovThorneEfficiency(double aStar) noexcept {
+[[nodiscard]] inline double novikovThorneEfficiency(double aStarIn) noexcept {
+  double const aStar = pageThorneSpin(aStarIn);
   return 1.0 - kerrCircularOrbit(pageThorneIscoRadius(aStar), aStar).energy;
 }
 
@@ -101,7 +118,8 @@ struct KerrCircularOrbit {
  * Zero at and inside the ISCO. The i-th root term vanishes in the limit
  * x_i -> 0, which is the root x2 at aStar = 0; the guard takes that limit.
  */
-[[nodiscard]] inline double pageThorneFluxShape(double r, double aStar) noexcept {
+[[nodiscard]] inline double pageThorneFluxShape(double r, double aStarIn) noexcept {
+  double const aStar = pageThorneSpin(aStarIn);
   double const rIsco = pageThorneIscoRadius(aStar);
   if (!(r > rIsco)) {
     return 0.0;

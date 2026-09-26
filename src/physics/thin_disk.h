@@ -122,7 +122,9 @@ struct DiskParams {
   // Spin relative to the disk's orbital sense. kerrIscoRadius depends on |a|
   // and the prograde flag only, so the disk spin takes the same convention.
   const double mGeo = G * disk.mass / C2;
-  const double aDisk = prograde ? std::abs(aStar) : -std::abs(aStar);
+  // Clamped like the Page-Thorne flux (pageThorneSpin), so rIn below is the
+  // flux's zero-torque edge at every input spin, including |aStar| = 1.
+  const double aDisk = pageThorneSpin(prograde ? std::abs(aStar) : -std::abs(aStar));
   disk.a = aDisk * mGeo;
 
   // Eddington rate at the Novikov-Thorne efficiency 1 - E_isco

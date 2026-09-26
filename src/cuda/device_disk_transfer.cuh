@@ -33,9 +33,12 @@ __host__ __device__ __forceinline__ float d_dt_isco_radius(float a) {
  * @brief Page-Thorne flux shape S(r) = F(r) 8 pi / (3 Mdot); zero inside the ISCO.
  *
  * x2 comes from Vieta's product x1 x2 x3 = -2a so it stays accurate in float
- * as x2 -> 0 at a -> 0, where its term vanishes.
+ * as x2 -> 0 at a -> 0, where its term vanishes. The spin is clamped to
+ * |a| <= 0.9999 like d_dt_isco_radius; at |a| = 1 the roots x1 and x2
+ * coincide and the closed form divides by zero.
  */
 __host__ __device__ __forceinline__ float d_dt_page_thorne_shape(float r, float a) {
+    a = fmaxf(-0.9999f, fminf(a, 0.9999f));
     float const r_isco = d_dt_isco_radius(a);
     if (!(r > r_isco)) {
         return 0.0f;
