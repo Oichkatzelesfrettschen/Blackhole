@@ -4391,9 +4391,11 @@ if(BUILD_TESTING)
                               campaign_sim_${suffix} constellation_sim_${suffix})
       bh_strip_isa_flags(${_bh_twin})
       target_compile_options(${_bh_twin} PRIVATE ${PROJECT_WARNINGS} ${ARGN})
-      # The twins recompile sources the primary targets already analyze;
-      # CXX_CLANG_TIDY was copied from CMAKE_CXX_CLANG_TIDY at creation.
+      # The twins recompile sources the primary targets already analyze; each
+      # analyzer property was copied from its CMAKE_CXX_* variable at creation.
       set_property(TARGET ${_bh_twin} PROPERTY CXX_CLANG_TIDY "")
+      set_property(TARGET ${_bh_twin} PROPERTY CXX_CPPCHECK "")
+      set_property(TARGET ${_bh_twin} PROPERTY CXX_INCLUDE_WHAT_YOU_USE "")
     endforeach()
   endfunction()
 
@@ -4414,8 +4416,9 @@ if(BUILD_TESTING)
   # skipped when a preset pins the tier, so this probe runs unconditionally.
   check_cxx_compiler_flag("-mavx2 -mfma" COMPILER_SUPPORTS_AVX2_FMA)
   if(COMPILER_SUPPORTS_AVX2_FMA AND NOT CMAKE_CROSSCOMPILING)
-    # The probe executes an AVX2 fused multiply-add, so it passes only where
-    # the CPU implements the instructions and the OS enables the YMM state
+    # The probe executes an AVX2 integer add and an FMA through volatile asm,
+    # which the optimizer cannot fold or narrow to an older ISA, so it passes
+    # only where the CPU implements both and the OS enables the YMM state
     # (XCR0); anywhere else it dies with SIGILL and the probe fails.
     set(_bh_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
     set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -mfma")
@@ -4423,12 +4426,17 @@ if(BUILD_TESTING)
       #include <immintrin.h>
       int main() {
         volatile float in = 1.5f;
+        volatile int seed = 2;
         __m256 a = _mm256_set1_ps(in);
-        __m256 r = _mm256_fmadd_ps(a, a, a);
-        __m256i i = _mm256_add_epi32(_mm256_set1_epi32(2), _mm256_set1_epi32(3));
+        __m256 r = a;
+        __asm__ volatile(\"vfmadd231ps %1, %1, %0\" : \"+x\"(r) : \"x\"(a));
+        __m256i i = _mm256_set1_epi32(seed);
+        __asm__ volatile(\"vpaddd %0, %0, %0\" : \"+x\"(i));
         float out[8];
+        int lanes[8];
         _mm256_storeu_ps(out, r);
-        return (out[0] == 3.75f && _mm256_extract_epi32(i, 0) == 5) ? 0 : 1;
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(lanes), i);
+        return (out[0] == 3.75f && lanes[7] == 4) ? 0 : 1;
       }
     " BH_HOST_RUNS_AVX2_FMA)
     set(CMAKE_REQUIRED_FLAGS "${_bh_saved_required_flags}")
