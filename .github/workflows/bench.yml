@@ -24,6 +24,11 @@ jobs:
     timeout-minutes: 90
     env:
       CONAN_HOME: ${{ github.workspace }}/.conan
+    # An explicit bash shell runs every step with -eo pipefail, so a failing
+    # command inside a pipeline fails its step.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -77,19 +82,22 @@ jobs:
           conan install . --output-folder=build/CI-deps --lockfile=conan.lock \
             --build=missing -pr:a conan/profiles/ci \
             -c:a tools.build:jobs="$CMAKE_BUILD_PARALLEL_LEVEL"
-      # Configure, build, and the benchmark run itself fail the job; only the
+      # Configure, build, and the benchmark run fail the job; only the
       # comparison against the cross-host baseline is advisory.
       - name: Build physics_bench
         run: |
           cmake --preset ci -DPYTHON3_EXECUTABLE="$PYTHON"
           cmake --build --preset ci --target physics_bench
-      - name: Run and compare against the baseline
-        continue-on-error: true
+      - name: Run physics_bench
         env:
           BENCH_PRESET: ci
+          BENCH_RUN_ONLY: '1'
         run: bench/ci_bench.sh
-      - name: Require benchmark output
-        run: test -s build/bench/bench_cpu.json
+      - name: Compare against the baseline
+        continue-on-error: true
+        run: |
+          "$PYTHON" scripts/check_bench_regression.py --baseline bench/baseline-ci.json \
+            build/bench/bench_cpu.json
       - name: Retain benchmark results
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
