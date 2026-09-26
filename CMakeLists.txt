@@ -4666,16 +4666,26 @@ if(BUILD_TESTING)
   endfunction()
 
   # Optional trailing arguments replace the sims' default --compare mode.
+  # Each sim argument travels as its own -DSIM_ARG<i> definition, so an
+  # argument containing whitespace (a path under such a checkout) reaches the
+  # sims intact; there is no command-line string to re-split.
   function(bh_add_digest_gate name first second)
     set(_bh_sim_args "--compare")
     if(ARGN)
-      string(JOIN " " _bh_sim_args ${ARGN})
+      set(_bh_sim_args ${ARGN})
     endif()
+    set(_bh_arg_defs "")
+    set(_bh_index 0)
+    foreach(_bh_arg IN LISTS _bh_sim_args)
+      list(APPEND _bh_arg_defs "-DSIM_ARG${_bh_index}=${_bh_arg}")
+      math(EXPR _bh_index "${_bh_index} + 1")
+    endforeach()
     add_test(NAME ${name}
       COMMAND ${CMAKE_COMMAND}
         -DNATIVE_SIM=$<TARGET_FILE:${first}>
         -DGENERIC_SIM=$<TARGET_FILE:${second}>
-        "-DSIM_ARGS=${_bh_sim_args}"
+        -DSIM_ARGC=${_bh_index}
+        ${_bh_arg_defs}
         -P "${PROJECT_SOURCE_DIR}/cmake/CompareSimDigests.cmake"
     )
     set_tests_properties(${name} PROPERTIES LABELS "campaign;determinism" TIMEOUT 120)
@@ -4724,6 +4734,12 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   # The colony story (node clocks, events, loader) under the same ISA gates.
+  # A copy of the story under a path with spaces keeps the argument passing
+  # honest for checkouts whose path contains whitespace.
+  configure_file("${PROJECT_SOURCE_DIR}/assets/events/host_goes_dark.json"
+    "${CMAKE_BINARY_DIR}/digest gate story/host goes dark.json" COPYONLY)
+  bh_add_digest_gate(campaign_sim_colony_spaced_path_digest_parity campaign_sim
+    campaign_sim_generic --colony "${CMAKE_BINARY_DIR}/digest gate story/host goes dark.json")
   set(_bh_colony_args --colony "${PROJECT_SOURCE_DIR}/assets/events/host_goes_dark.json")
   bh_add_digest_gate(campaign_sim_colony_isa_digest_parity campaign_sim campaign_sim_generic
     ${_bh_colony_args})
