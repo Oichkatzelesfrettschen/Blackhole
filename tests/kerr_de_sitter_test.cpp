@@ -268,6 +268,39 @@ TEST(KerrDeSitter, SolarMassObservedLambda) {
   }
 }
 
+/**
+ * @brief Carter-form components against mpmath, and a regular rotation axis.
+ *
+ * Xi = 1 + Lambda a^2 / 3 rescales t and phi by a constant, so R_mu_nu =
+ * Lambda g_mu_nu holds with or without it and the Ricci test cannot see it.
+ * Two checks can. The components at one point match the line element of
+ * Carter (1973, Les Houches lectures) and Griffiths & Podolsky (2009),
+ * assembled from its covectors in scripts/gen_kn_kds_reference.py. And with
+ * phi of period 2 pi, the circumference-to-radius ratio of a small circle
+ * about the axis is 2 pi only when Xi divides g_phph: the limit
+ * sqrt(g_phph / g_thth) / sin(theta) -> 1 as theta -> 0, and -> Xi without it.
+ */
+TEST(KerrDeSitter, CarterComponentsAndAxisRegularity) {
+  constexpr double m = 1.0;
+  constexpr double a = 0.9;
+  constexpr double lambda = 1.0e-2;
+  const double theta = std::numbers::pi / 3.0;
+  // mpmath: r = 3, theta = pi/3, M = 1, a = 0.9, Lambda = 1e-2.
+  EXPECT_NEAR(verified::kdsGTt(3.0, theta, m, a, lambda), -0.3142788630304243, 1.0e-14);
+  EXPECT_NEAR(verified::kdsGTph(3.0, theta, m, a, lambda), -0.45968465129291279, 1.0e-14);
+  EXPECT_NEAR(verified::kdsGPhph(3.0, theta, m, a, lambda), 7.6331565734618123, 1.0e-13);
+
+  const double xi = verified::kdsXi(a, lambda);
+  for (double const r : {2.0, 5.0, 12.0}) {
+    constexpr double thetaAxis = 1.0e-4;
+    const double ratio = std::sqrt(verified::kdsGPhph(r, thetaAxis, m, a, lambda) /
+                                   verified::kdsGThth(r, thetaAxis, a, lambda)) /
+                         std::sin(thetaAxis);
+    // O(theta^2) departure from 1 at theta = 1e-4, against Xi - 1 = 2.7e-3.
+    EXPECT_NEAR(ratio, 1.0, 1.0e-6) << "r=" << r << " Xi=" << xi;
+  }
+}
+
 /** @brief The ergosurface solves g_tt = 0 outside r_+ and reduces to Kerr at Lambda = 0. */
 TEST(KerrDeSitter, ErgosurfaceSolvesGtt) {
   constexpr double m = 1.0;

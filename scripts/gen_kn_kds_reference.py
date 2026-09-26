@@ -20,6 +20,9 @@ independent of the C++ closed forms under test:
 - Kerr-de Sitter horizons are the positive real roots of the Carter quartic
   Delta_r = (r^2 + a^2)(1 - Lambda r^2 / 3) - 2 M r, from mpmath.polyroots on
   its coefficients rather than the bracketing solver under test.
+- Kerr-de Sitter metric components at one point come from the Carter line
+  element assembled from its covectors, including the Xi normalization that
+  the Ricci check cannot see.
 
 The tests in tests/kerr_newman_test.cpp, tests/kerr_de_sitter_test.cpp, and
 tests/kerr_clock_rates_test.cpp embed the printed constants.
@@ -227,6 +230,34 @@ def kds_horizons(m: Real, a: Real, lam: Real) -> list[Real]:
     return polished
 
 
+def kds_carter_metric(r: Real, theta: Real, m: Real, a: Real, lam: Real) -> list[list[Real]]:
+    """Carter-form line element assembled from its covectors.
+
+    ds^2 = -(Delta_r / (Xi^2 Sigma)) (dt - a sin^2 dphi)^2
+         + (Delta_theta sin^2 / (Xi^2 Sigma)) (a dt - (r^2 + a^2) dphi)^2
+         + (Sigma / Delta_r) dr^2 + (Sigma / Delta_theta) dtheta^2
+    (Carter 1973, Les Houches lectures "Black hole equilibrium states";
+    Griffiths & Podolsky 2009, Kerr-de Sitter in Boyer-Lindquist-type
+    coordinates). Coordinates (t, r, theta, phi).
+    """
+    sigma = r * r + a * a * mp.cos(theta) ** 2
+    delta_r = kds_delta(r, m, a, lam)
+    delta_theta = 1 + lam * a * a * mp.cos(theta) ** 2 / 3
+    xi = 1 + lam * a * a / 3
+    sin2 = mp.sin(theta) ** 2
+    w_time = [1, 0, 0, -a * sin2]
+    w_rot = [a, 0, 0, -(r * r + a * a)]
+    c_time = -delta_r / (xi * xi * sigma)
+    c_rot = delta_theta * sin2 / (xi * xi * sigma)
+    g = [
+        [c_time * w_time[i] * w_time[j] + c_rot * w_rot[i] * w_rot[j] for j in range(4)]
+        for i in range(4)
+    ]
+    g[1][1] += sigma / delta_r
+    g[2][2] += sigma / delta_theta
+    return g
+
+
 def kerr_de_sitter_section() -> None:
     one = mp.mpf(1)
     print("# Kerr-de Sitter (M = 1), positive roots of Delta_r ascending")
@@ -240,6 +271,11 @@ def kerr_de_sitter_section() -> None:
     r = mp.mpf(10)
     g_tt = -(1 - 2 / r - lam * r * r / 3)
     print(f"SdS g_tt r=10 Lambda=1e-2: {fmt(g_tt)}  g_rr: {fmt(-1 / g_tt)}")
+    g = kds_carter_metric(mp.mpf(3), mp.pi / 3, one, mp.mpf("0.9"), mp.mpf("1e-2"))
+    print(
+        "Carter metric r=3 theta=pi/3 a=0.9 Lambda=1e-2: "
+        f"g_tt {fmt(g[0][0])}  g_tphi {fmt(g[0][3])}  g_phiphi {fmt(g[3][3])}"
+    )
 
 
 def kerr_clock_section() -> None:
