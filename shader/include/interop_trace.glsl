@@ -161,9 +161,15 @@ void bhStepRK4(inout Ray ray, float r_s, float dt) {
   ray.affineParameter += dt;
 }
 
+// Crossing of the zero-thickness disk plane z = 0 by the step oldPos -> newPos
+// inside the annulus [r_in, r_out]. A step that starts on the plane leaves it
+// rather than crossing it: its start is the observer (a camera in the disk
+// plane, where every tilted ray would otherwise hit the disk at t = 0) or the
+// end of a previous step that landed on the plane and was counted there.
 bool bhCheckDiskIntersection(vec3 oldPos, vec3 newPos, float r_in, float r_out,
                              out vec3 hitPoint) {
-  if (oldPos.z * newPos.z > 0.0) {
+  hitPoint = oldPos;
+  if (oldPos.z == 0.0 || oldPos.z * newPos.z > 0.0) {
     return false;
   }
 

@@ -29,6 +29,7 @@
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -486,6 +487,34 @@ void main() {
   result[10 * i + 7] = bl.x;
   result[10 * i + 8] = bl.y;
   result[10 * i + 9] = bl.z;
+}
+)";
+}
+
+// bhTraceGeodesic at a = 0.6 from a camera in the disk plane, (15, 0, 0)
+// inside the annulus 6 <= rho <= 200 (the default input camera, world
+// (0, 0, 15), maps there), along 64 directions tilted +-0.05 to +-0.6 rad
+// out of the plane at several azimuths. Reports hitDisk and the hit point's
+// distance from the camera.
+std::string inPlaneCameraShader() {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  return comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+void main() {
+  int i = int(gl_GlobalInvocationID.y) * int(gl_NumWorkGroups.x) * 16 +
+          int(gl_GlobalInvocationID.x);
+  if (i >= 64) {
+    return;
+  }
+  float tilt = (i % 2 == 0 ? 1.0 : -1.0) * (0.05 + 0.55 * float((i / 2) % 8) / 7.0);
+  float azimuth = 6.28318530718 * float(i / 16) / 4.0 + 0.3;
+  Ray ray;
+  ray.position = vec3(15.0, 0.0, 0.0);
+  ray.velocity = vec3(cos(azimuth) * cos(tilt), sin(azimuth) * cos(tilt), sin(tilt));
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 300, 0.1);
+  result[2 * i] = hit.hitDisk ? 1.0 : 0.0;
+  result[2 * i + 1] = length(hit.hitPoint - hit.origin);
 }
 )";
 }
@@ -1463,6 +1492,29 @@ void main() {
   EXPECT_NEAR(out.at(2), reference.u, 1e-5);
   EXPECT_NEAR(out.at(3), reference.v, 1e-5);
   EXPECT_NEAR(out.at(4), std::exp(-((0.8 * 1.0) + (0.3 * 1.5))), 1e-6);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+TEST_F(KerrShaderCaptureTest, CameraInTheDiskPlaneIsNotADiskHit) {
+  // A zero-thickness disk seen from a point in its plane: a ray leaving the
+  // plane has not crossed it at its own start, so no ray may report a disk
+  // hit at the camera (distance 0). Treating the start point (z = 0) as a
+  // crossing shades every tilted pixel as the disk at the observer.
+  const GLuint program = bhtest::createComputeProgram(inPlaneCameraShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 128), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  glUseProgram(program);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.6F);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 1.0F);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 128, 1);
+  const auto atCamera = std::ranges::count_if(std::views::iota(0, 64), [&out](int i) {
+    const auto k = static_cast<std::size_t>(2) * static_cast<std::size_t>(i);
+    return out.at(k) > 0.5F && out.at(k + 1) < 1e-2F;
+  });
+  EXPECT_EQ(atCamera, 0);
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }

@@ -717,7 +717,10 @@ __device__ __forceinline__ void d_step_rk4(float3& x, float3& v, float rs, float
  */
 __device__ __forceinline__ bool d_check_disk(float3 old_pos, float3 new_pos,
                              float r_in, float r_out, float3& hit) {
-    if (old_pos.z * new_pos.z > 0.0f) return false;
+    /* A step that starts on the plane leaves it rather than crossing it: its
+     * start is the observer or the end of a step already counted there
+     * (bhCheckDiskIntersection twin). */
+    if (old_pos.z == 0.0f || old_pos.z * new_pos.z > 0.0f) return false;
     float t = -old_pos.z / (new_pos.z - old_pos.z);
     hit = d_lerp(old_pos, new_pos, t);
     float r = sqrtf(fmaf(hit.x, hit.x, hit.y * hit.y));
