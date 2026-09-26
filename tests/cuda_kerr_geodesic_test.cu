@@ -15,6 +15,11 @@
  * d_adaptive_step and d_kerr_step, must integrate over the affine path length
  * d_kerr_affine_step returns: it matches the analytic slab solution at two
  * step sizes, where the Mino-time increment would give I ~ 5e-6.
+ *
+ * On the equatorial stationary limit r = 2M the null condition is linear in
+ * k^t: a co-rotating coordinate direction starts on shell, a counter-rotating
+ * one (no finite future root) is marked captured, and 1e-4 outside every
+ * direction starts on shell.
  * Skips without a CUDA device.
  */
 
@@ -30,7 +35,7 @@
 namespace {
 
 constexpr double K_PI = 3.14159265358979323846; /* CUDA 17: no std::numbers */
-constexpr int K_INIT_FIELDS = 6; /* Q, Lz, vr, w.x, w.y, w.z */
+constexpr int K_INIT_FIELDS = 7; /* Q, Lz, vr, w.x, w.y, w.z, r */
 
 __global__ void kerr_init_kernel(float3 pos, const float3 *dirs, int count, float a,
                                  float *out) {
@@ -48,6 +53,7 @@ __global__ void kerr_init_kernel(float3 pos, const float3 *dirs, int count, floa
     o[3] = ray.w.x;
     o[4] = ray.w.y;
     o[5] = ray.w.z;
+    o[6] = ray.r;
 }
 
 /* Uniform shell r_near <= r <= r_far, source function 1, absorption alpha,
@@ -199,4 +205,50 @@ TEST(CudaKerrGeodesic, RadiativeTransferIntegratesAffinePathLength) {
         EXPECT_NEAR(out[1], transmit, 0.02 * transmit) << "stepSize=" << stepSize;
     }
     cudaFree(dOut);
+}
+
+TEST(CudaKerrGeodesic, StationaryLimitStartIsOnShell) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    float const a = 0.6f;
+    std::vector<float3> dirs;
+    for (int i = 0; i < 128; ++i) {
+        double const beta = 2.0 * K_PI * (i + 0.5) / 128.0;
+        dirs.push_back(make_float3(static_cast<float>(std::cos(beta)),
+                                   static_cast<float>(std::sin(beta)), 0.0f));
+    }
+    for (float const r0 : {2.0f, 2.0f * (1.0f + 1e-4f)}) {
+        std::vector<float> const out = initRays(make_float3(r0, 0.0f, 0.0f), dirs, a);
+        int accepted = 0;
+        for (int i = 0; i < 128; ++i) {
+            auto const k = static_cast<std::size_t>(K_INIT_FIELDS * i);
+            double const sinBeta = std::sin(2.0 * K_PI * (i + 0.5) / 128.0);
+            bool const captured = !(out[k + 6] > 0.0f);
+            if (r0 == 2.0f && std::fabs(sinBeta) > 0.05) {
+                EXPECT_EQ(captured, sinBeta < 0.0) << "r=" << r0 << " ray " << i;
+            }
+            if (r0 > 2.0f) {
+                EXPECT_FALSE(captured) << "r=" << r0 << " ray " << i;
+            }
+            if (captured) {
+                continue;
+            }
+            ++accepted;
+            /* R(r0) = vr^2 (E = 1) and |w|^2 = Q + Lz^2 on the equator. */
+            double const q = out[k], lz = out[k + 1], vr = out[k + 2];
+            double const p = (static_cast<double>(r0) * r0 + a * a) - a * lz;
+            double const delta = static_cast<double>(r0) * r0 - 2.0 * r0 + a * a;
+            double const rPot = p * p - delta * (q + (lz - a) * (lz - a));
+            EXPECT_LT(std::fabs(rPot - vr * vr) / std::fmax(p * p, 1.0), 1e-4)
+                << "r=" << r0 << " ray " << i;
+            double const w2 = static_cast<double>(out[k + 3]) * out[k + 3] +
+                              static_cast<double>(out[k + 4]) * out[k + 4] +
+                              static_cast<double>(out[k + 5]) * out[k + 5];
+            EXPECT_LT(std::fabs(w2 - (q + lz * lz)) / std::fmax(std::fabs(q) + lz * lz + a * a, 1.0),
+                      1e-4)
+                << "r=" << r0 << " ray " << i;
+        }
+        EXPECT_GT(accepted, 50) << "r=" << r0;
+    }
 }

@@ -169,6 +169,47 @@ void main() {
 }
 )";
 
+// Starts on and next to the equatorial stationary limit r = 2M (a = 0.6):
+// ray i sits at radius index i % 3 (2(1 - 1e-4), 2, 2(1 + 1e-4)) with
+// direction (cos beta, sin beta, 0), beta = 2 pi (i / 3 + 0.5) / 342, so
+// k^phi = sin(beta) / r. Reports the three on-shell residuals of
+// K_ONSHELL_SHADER, or -1 in the first slot for a ray marked captured.
+const char *const K_STATIONARY_LIMIT_SHADER = R"(
+#version 460 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+uniform int rayCount;
+#include "include/kerr.glsl"
+void main() {
+  int i = int(gl_GlobalInvocationID.x);
+  if (i >= rayCount) {
+    return;
+  }
+  float r_s = 2.0;
+  float a = 0.6;
+  int rIdx = i % 3;
+  float r0 = rIdx == 0 ? 2.0 * (1.0 - 1e-4) : (rIdx == 1 ? 2.0 : 2.0 * (1.0 + 1e-4));
+  float beta = 6.28318530718 * (float(i / 3) + 0.5) / 342.0;
+  KerrConsts c;
+  KerrRay ray;
+  kerrInitGeodesic(vec3(r0, 0.0, 0.0), vec3(cos(beta), sin(beta), 0.0), r_s, a, c, ray);
+  if (!(ray.r > 0.0)) {
+    result[3 * i] = -1.0;
+    result[3 * i + 1] = 0.0;
+    result[3 * i + 2] = 0.0;
+    return;
+  }
+  float P = (ray.r * ray.r + a * a) - a * c.Lz;
+  float Qe = c.Q + (c.Lz - a) * (c.Lz - a);
+  float R = P * P - kerrDelta(ray.r, a, r_s) * Qe;
+  result[3 * i] = abs(R - ray.vr * ray.vr) / max(P * P, 1.0);
+  float scale = max(abs(c.Q) + a * a + c.Lz * c.Lz, 1.0);
+  float w2 = c.Q + c.Lz * c.Lz + a * a * ray.n.z * ray.n.z;
+  result[3 * i + 1] = abs(dot(ray.w, ray.w) - w2) / scale;
+  result[3 * i + 2] = abs(cross(ray.n, ray.w).z - c.Lz) / sqrt(scale);
+}
+)";
+
 // A fan of rays from camPos (on or next to the spin axis above the hole) in
 // the xz (`plane` 0) or yz (`plane` 1) plane, from straight down (alpha -> 0)
 // through the transverse direction (alpha = pi/2 at i = rayCount / 2) to
@@ -981,4 +1022,38 @@ TEST_F(KerrShaderCaptureTest, HawkingGlowShadesCapturedRays) {
   }
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
+}
+
+TEST_F(KerrShaderCaptureTest, StationaryLimitStartIsOnShell) {
+  // On r = 2M (g_tt = 0 in float32 exactly) the null condition is linear in
+  // k^t. A direction with g_tphi k^phi < 0 (sin beta > 0 at a > 0) has the
+  // finite root -spatial / (2 g_tphi k^phi) and must start on shell; one
+  // with g_tphi k^phi > 0 has no finite future root and must be marked
+  // captured. 1e-4 outside (g_tt < 0) every direction starts on shell; 1e-4
+  // inside, a direction is either on shell or captured.
+  const std::vector<float> out = dispatch(K_STATIONARY_LIMIT_SHADER, 0.0F);
+  int onLimit = 0;
+  for (int i = 0; i < K_RAYS; ++i) {
+    const int rIdx = i % 3;
+    const int betaIdx = i / 3;
+    const double sinBeta =
+        std::sin(2.0 * std::numbers::pi * (static_cast<double>(betaIdx) + 0.5) / 342.0);
+    const std::size_t k = static_cast<std::size_t>(3) * static_cast<std::size_t>(i);
+    const bool captured = out.at(k) < 0.0F;
+    const std::string where = "ray " + std::to_string(i) + " r index " + std::to_string(rIdx) +
+                              " sin(beta)=" + std::to_string(sinBeta);
+    if (rIdx == 1 && std::abs(sinBeta) > 0.05) {
+      EXPECT_EQ(captured, sinBeta < 0.0) << where;
+      onLimit += captured ? 0 : 1;
+    }
+    if (rIdx == 2) {
+      EXPECT_FALSE(captured) << where;
+    }
+    if (!captured) {
+      for (std::size_t j = 0; j < 3; ++j) {
+        EXPECT_LT(out.at(k + j), 1e-4F) << where << " check " << j;
+      }
+    }
+  }
+  EXPECT_GT(onLimit, 100);
 }

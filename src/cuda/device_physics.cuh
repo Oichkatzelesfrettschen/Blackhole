@@ -440,26 +440,30 @@ __device__ __forceinline__ void d_kerr_init_geodesic(float3 pos, float3 dir, flo
     float gthth  = sigma;
     float gphph  = fmaf(r * r + a * a, 1.0f, f * a * a * sin2) * sin2;
 
-    /* gtt (k^t)^2 + 2 gtphi kphi k^t + spatial = 0. */
+    /* gtt (k^t)^2 + 2 hb k^t + spatial = 0, hb = gtphi kphi. Conjugate-form
+     * roots k^t(E = +sqrt(D)) = spatial / (sqrt(D) - hb) and
+     * k^t(E = -sqrt(D)) = -spatial / (sqrt(D) + hb) divide by gtt nowhere, so
+     * the stationary limit (gtt = 0, linear equation) needs no special case;
+     * a denominator within rounding of sqrt(D) + |hb| is a root at infinity.
+     * The E > 0 root is preferred (kerrInitGeodesic twin). */
     float spatial = fmaf(grr, kr * kr,
                     fmaf(gthth, ktheta * ktheta, gphph * kphi * kphi));
     float hb      = gtphi * kphi;
     float disc    = fmaf(hb, hb, -gtt * spatial);
-    float kt = 1.0f;
-    if (disc >= 0.0f && fabsf(gtt) > D_EPSILON) {
-        /* Future-directed root (k^t > 0); inside the ergoregion both can be,
-         * and the E > 0 root, which can connect to infinity, is preferred. */
-        float sq_d = sqrtf(disc);
-        float kt_a = (-hb + sq_d) / gtt;
-        float kt_b = (-hb - sq_d) / gtt;
-        float energy_a = fmaf(-gtt, kt_a, -gtphi * kphi);
-        kt = (kt_a > 0.0f && (energy_a > 0.0f || kt_b <= 0.0f)) ? kt_a : kt_b;
-    }
+    float sq_d    = sqrtf(fmaxf(disc, 0.0f));
+    float root_tol = 1e-6f * (sq_d + fabsf(hb));
+    bool finite_pos = disc >= 0.0f && (sq_d - hb) > root_tol;
+    bool finite_neg = disc >= 0.0f && (sq_d + hb) > root_tol;
+    float kt_pos = finite_pos ? spatial / (sq_d - hb) : 0.0f;
+    float kt_neg = finite_neg ? -spatial / (sq_d + hb) : 0.0f;
+    bool use_neg = finite_neg && kt_neg > 0.0f && (!finite_pos || kt_pos <= 0.0f);
+    float kt = use_neg ? kt_neg : kt_pos;
 
-    float E_raw  = fmaf(-gtt, kt, -gtphi * kphi);
+    float E_raw  = use_neg ? -sq_d : sq_d;
     float Lz_raw = fmaf(gtphi, kt,  gphph * kphi);
-    /* E <= 0 photons cannot reach infinity; r = 0 reads as captured. */
-    if (E_raw <= D_EPSILON) {
+    /* No finite null completion, or E <= 0 (cannot reach infinity):
+     * r = 0 reads as captured. */
+    if (!(finite_pos || use_neg) || !(E_raw > D_EPSILON)) {
         ray.r = 0.0f;
         return;
     }
