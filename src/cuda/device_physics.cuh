@@ -1916,35 +1916,25 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
 /**
  * @brief Generate a world-space ray direction for pixel (px, py).
  *
- * Matches GLSL interop_raygen.glsl::bhRayDirFromUv() exactly:
- *   GLSL: dir = normalize(vec3(-uv.x * fovScale, uv.y * fovScale, 1.0))
- *              then cameraBasis * dir
- *   Convention: basis col2 = forward (toward BH), z=+1 = forward direction.
- *   x is negated to match GLSL image-space orientation (left=+right, right=-right).
- *   v is negated because CUDA py=0 is image-top (like D3D) while GLSL uv.y is
- *   positive at the image-top (gl_FragCoord.y=0 is bottom, so uv.y=top is +0.5).
+ * The CUDA twin of interop_raygen.glsl::bhRayDir. u and v are the pixel's
+ * offsets from the image center in units of the vertical half-height, so with
+ * d_fov_scale = tan(fov / 2) the image subtends the vertical field of view
+ * fov. Framebuffer row py lands in GL texture row py
+ * (cudaMemcpy2DToArrayAsync in cuda_gl_interop.cu), and GL row 0 is the image
+ * bottom, so py counts upward like gl_FragCoord.y and v grows toward +up.
+ * d_cam_basis columns are (right, up, forward) from buildCameraBasis.
  *
- * WHY the previous -1.0f was wrong: with z=-1 and basis[2]=forward, the center
- * ray would map to -forward (looking BACKWARD from the camera), causing the
- * entire render to show the scene behind the camera.
- *
- * @param px Pixel column index (0-based).
- * @param py Pixel row index (0-based).
+ * @param px Pixel column index (0-based, left to right).
+ * @param py Pixel row index (0-based, bottom to top).
  * @return Normalized world-space ray direction.
  */
 __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
     float u = (2.0f * (px + 0.5f) / (float)d_width - 1.0f) * d_fov_scale;
     float v = (2.0f * (py + 0.5f) / (float)d_height - 1.0f) * d_fov_scale;
-    /* Correct for aspect ratio (matches GLSL uv.x *= resolution.x/resolution.y) */
     u *= (float)d_width / (float)d_height;
     u += d_frame_shift_x;
     v += d_frame_shift_y;
-
-    /* +u: basis col0 = right (buildCameraBasis), matching GLSL +uv.x.
-     * -v: py=0 is image-top in CUDA; gl_FragCoord.y=0 is image-bottom in GLSL,
-     *     so GLSL uv.y is positive-at-top, CUDA v is negative-at-top.
-     * +1: basis col2 = forward, so local +z maps to world forward (toward BH). */
-    float3 local_dir = d_normalize(make_f3(u, -v, 1.0f));
+    float3 local_dir = d_normalize(make_f3(u, v, 1.0f));
     return d_mat3_mul(d_cam_basis, local_dir);
 }
 

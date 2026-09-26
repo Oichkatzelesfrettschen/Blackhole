@@ -421,3 +421,50 @@ TEST_F(CudaDevicePhysicsTest, AdaptiveStepFiniteNearPhotonSphere) {
         EXPECT_GE(px.z, 0.0f) << "pixel " << i << " B < 0";
     }
 }
+
+/* ========================================================================
+ * Ray generation: row order and vertical field of view
+ *    The framebuffer lands in the GL texture row for row, and GL row 0 is the
+ *    image bottom, so d_ray_dir must send row 0 below the forward axis. A 1x2
+ *    framebuffer with fov_scale = 0.56 puts its two rows at local slopes
+ *    -+0.28 (the rows' centers sit half a row-height from the image center).
+ *    The camera at (0, 0, 60) looks atan(0.3) = 16.7 degrees above the hole,
+ *    so the bottom row passes 1.1 degrees above the hole with impact parameter
+ *    60 sin(1.1 deg) = 1.1 M, inside the 3 sqrt(3) M = 5.2 M capture radius,
+ *    while the top row leaves 32.3 degrees above it and escapes upward (world
+ *    +y, physics +z). At half the tangent the bottom row would pass 8.7
+ *    degrees above the hole at 9.1 M and escape, so the test also fails if
+ *    the image spans only half of tan(fov / 2).
+ * ======================================================================== */
+
+TEST_F(CudaDevicePhysicsTest, BottomRowLooksBelowForwardAtTheFullFieldOfView) {
+    constexpr int kWidth = 1;
+    constexpr int kHeight = 2;
+    BH_LaunchParams p = make_schwarzschild_params(kWidth, kHeight);
+    p.kerr_enabled = 1; /* the Mino-time tracer the renderer runs; spin 0 */
+    p.fov_scale = 0.56f;
+    p.cam_pos[0] = 0.0f;
+    p.cam_pos[1] = 0.0f;
+    p.cam_pos[2] = 60.0f;
+    p.debug_escaped_direction = 1; /* escaped rays encode 0.5 (dir + 1), never black */
+    /* right = (1, 0, 0), up = (0, 1, 0.3) / |.|, forward = (0, 0.3, -1) / |.| */
+    float const inv = 1.0f / std::sqrt(1.09f);
+    p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f;        p.cam_basis[2] = 0.0f;
+    p.cam_basis[3] = 0.0f; p.cam_basis[4] = inv;         p.cam_basis[5] = 0.3f * inv;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.3f * inv;  p.cam_basis[8] = -inv;
+
+    float4 *d_fb = nullptr;
+    ASSERT_EQ(cudaMalloc(&d_fb, kWidth * kHeight * sizeof(float4)), cudaSuccess);
+    int const rc = bh_launch_geodesic_kernel(d_fb, &p, BH_KERNEL_FP32_BASELINE, nullptr);
+    ASSERT_EQ(rc, 0) << "row-order launch returned error " << rc;
+    cudaDeviceSynchronize();
+    auto host = copy_framebuffer(d_fb, kWidth * kHeight);
+    cudaFree(d_fb);
+
+    EXPECT_TRUE(is_horizon(host[0]))
+        << "row 0 (image bottom) must look at the hole; got (" << host[0].x << ", "
+        << host[0].y << ", " << host[0].z << ")";
+    EXPECT_FALSE(is_horizon(host[1])) << "row 1 (image top) must escape above the hole";
+    /* Encoded physics z = world y of the escape chord: upward. */
+    EXPECT_GT(host[1].z, 0.5f) << "row 1 must escape toward world +y";
+}
