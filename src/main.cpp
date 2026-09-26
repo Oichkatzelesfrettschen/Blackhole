@@ -117,6 +117,9 @@
 #include "settings.h"
 #include "shader.h"
 #include "shader_manager.h"
+#ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
+#include "shader_watcher.h"
+#endif
 #include "texture.h"
 #include "tracy_support.h"
 #include "ui/campaign_panels.h"
