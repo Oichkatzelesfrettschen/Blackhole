@@ -72,6 +72,18 @@ def kerr_redshift_equatorial(r: float, mass: float, spin_param: float) -> float:
     return 1.0 / math.sqrt(r * r * delta / big_a) - 1.0
 
 
+# The runtime LUT (src/physics/lut.h, generate_luts.py) and physics_test clamp
+# the redshift to this value; the horizon's infinite redshift maps onto it.
+REDSHIFT_CAP = 10.0
+
+
+def capped_redshift(z: float) -> float:
+    """z clamped to [0, REDSHIFT_CAP]; a non-finite z (horizon, interior) is the cap."""
+    if not math.isfinite(z):
+        return REDSHIFT_CAP
+    return min(max(z, 0.0), REDSHIFT_CAP)
+
+
 def maybe_compact_common() -> dict[str, object] | None:
     try:
         from compact_common.spacetime import (  # type: ignore
@@ -169,7 +181,7 @@ def main() -> int:
             z = float(ref["gravitational_redshift"](r, mass))
         else:
             z = kerr_redshift_equatorial(r, mass, a)
-        rows.append([r_over_rs, z])
+        rows.append([r_over_rs, capped_redshift(z)])
 
     with open(os.path.join(lut_dir, "redshift_curve.csv"), "w", newline="") as handle:
         writer = csv.writer(handle)

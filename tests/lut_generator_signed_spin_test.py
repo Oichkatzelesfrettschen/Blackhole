@@ -100,6 +100,18 @@ class SignedSpinGenerators(unittest.TestCase):
             r_plus = (1.0 + math.sqrt(1.0 - 0.81)) * M_GEOM
             self.assertTrue(math.isinf(module.kerr_redshift_equatorial(r_plus, MASS, 0.9 * M_GEOM)))
 
+    def test_validation_redshift_is_finite_and_capped(self):
+        # A range reaching the horizon writes the cap, never inf or nan.
+        r_plus = (1.0 + math.sqrt(1.0 - 0.81)) * M_GEOM
+        for r in (0.5 * r_plus, r_plus, 1.0000001 * r_plus, 3.0 * M_GEOM):
+            z = TABLES.capped_redshift(TABLES.kerr_redshift_equatorial(r, MASS, 0.9 * M_GEOM))
+            self.assertTrue(math.isfinite(z), msg=r)
+            self.assertLessEqual(z, TABLES.REDSHIFT_CAP)
+            self.assertGreaterEqual(z, 0.0)
+        self.assertEqual(TABLES.capped_redshift(math.inf), 10.0)
+        self.assertEqual(TABLES.capped_redshift(math.nan), 10.0)
+        self.assertAlmostEqual(TABLES.capped_redshift(0.648), 0.648)
+
     def test_installed_compact_common_agrees(self):
         refs = LUTS.compact_common_refs()
         if refs is None:
