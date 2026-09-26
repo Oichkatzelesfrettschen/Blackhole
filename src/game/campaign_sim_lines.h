@@ -14,7 +14,9 @@
 #ifndef BLACKHOLE_GAME_CAMPAIGN_SIM_LINES_H
 #define BLACKHOLE_GAME_CAMPAIGN_SIM_LINES_H
 
+#include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "game/campaign.h"
@@ -23,6 +25,40 @@
 #include "game/fleet.h"
 
 namespace campaign_sim {
+
+/// Largest story-derived colony horizon `campaign_sim --colony` plays without
+/// --turns: 10^6 turns. The shipped story's horizon is at most about 11,500
+/// (dark turn <= 10950, plus the host-colony delay, four 91-turn packet
+/// periods, and 60), and a colony turn costs about a microsecond, so the
+/// ceiling is roughly a second of work; a loader-valid dark turn near 2^40
+/// would otherwise be a trillion turns.
+inline constexpr std::int64_t K_COLONY_SIM_MAX_HORIZON = 1000000;
+
+/** @brief Turns past which nothing in the colony story changes: the dark
+ *         turn, the host-colony delay, four packet periods of silence, and a
+ *         60-turn margin; never negative. Story integers lie in [-2^40, 2^40],
+ *         so the sum cannot overflow. */
+[[nodiscard]] inline std::int64_t colonyStoryHorizon(const game::CampaignState &state) {
+  const std::int64_t derived =
+      state.storyParam("dark_turn").value_or(0) +
+      state.nodeDelayTurns(game::K_AUTHORITY_NODE, game::K_FIRST_COLONY_NODE) +
+      (4 * state.storyParam("packet_period").value_or(0)) + 60;
+  return std::max<std::int64_t>(derived, 0);
+}
+
+/** @brief Turns --colony plays: the story horizon, capped by --turns when
+ *         given; nullopt when no --turns bounds a horizon past
+ *         K_COLONY_SIM_MAX_HORIZON, which the sim refuses rather than run. */
+[[nodiscard]] inline std::optional<std::int64_t>
+colonySimTurns(std::int64_t storyHorizon, std::optional<std::int64_t> turnsCap) {
+  if (turnsCap.has_value()) {
+    return std::clamp<std::int64_t>(turnsCap.value(), 0, storyHorizon);
+  }
+  if (storyHorizon > K_COLONY_SIM_MAX_HORIZON) {
+    return std::nullopt;
+  }
+  return storyHorizon;
+}
 
 // The canonical scenario creates six fleets with stable ids 1..6: extraction and
 // research on the inner outer band, fabrication and relay on the middle,
