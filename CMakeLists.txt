@@ -3758,6 +3758,9 @@ if(BUILD_TESTING)
     add_test(NAME glsl_interface_adapter
       COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/cpp_to_glsl_test.py")
     set_tests_properties(glsl_interface_adapter PROPERTIES TIMEOUT 30 LABELS "shaders;tools")
+    add_test(NAME generate_luts_signed_spin
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/generate_luts_test.py")
+    set_tests_properties(generate_luts_signed_spin PROPERTIES TIMEOUT 30 LABELS "disk;luts;tools")
   endif()
 
   # Physics library validation tests

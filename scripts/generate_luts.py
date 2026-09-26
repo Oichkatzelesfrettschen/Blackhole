@@ -2,7 +2,13 @@
 """Generate emissivity and redshift LUTs for Blackhole.
 
 Uses compact-common if available for ISCO reference; otherwise falls back to
-cleanroom formulas. Outputs CSV files under assets/luts.
+cleanroom formulas. Outputs CSV files under assets/luts (or --out-dir).
+
+The spin is signed like the runtime tracer's: the disk orbits in +phi, so a
+negative --spin is a retrograde disk. The radial domain starts at that disk's
+ISCO (prograde = spin >= 0), and the Page-Thorne flux and the emitter redshift
+take the same signed spin, as physics::generateEmissivityLut and
+physics::generateRedshiftLut do (src/physics/lut.h).
 """
 
 from __future__ import annotations
@@ -85,14 +91,15 @@ def novikov_thorne_flux(r: float, mass: float, mdot: float, r_in: float, a_star:
 
 
 def disk_emitter_redshift(r: float, mass: float, spin_param: float) -> float:
-    """Redshift z = u^t - 1 of the prograde Keplerian emitter at r [cm], face-on.
+    """Redshift z = u^t - 1 of the Keplerian emitter orbiting in +phi at r [cm], face-on.
 
-    Twin of physics::generateRedshiftLut (src/physics/lut.h); the spin enters as
-    |a*| to match the prograde ISCO of the LUT's radial domain. Zero where no
-    timelike circular orbit exists.
+    Twin of physics::generateRedshiftLut (src/physics/lut.h); the spin is
+    signed, so a negative spin is a retrograde emitter, matching the signed
+    ISCO of the LUT's radial domain. Zero where no timelike circular orbit
+    exists.
     """
     m_geom = G * mass / C2
-    a_star = abs(spin_param / m_geom)
+    a_star = spin_param / m_geom
     x = r / m_geom
     inv_r32 = 1.0 / (x * math.sqrt(x))
     q = 1.0 - 3.0 / x + 2.0 * a_star * inv_r32
@@ -171,7 +178,7 @@ def generate_lut(size: int, mass_solar: float, spin: float, mdot: float,
     mass = mass_solar * M_SUN
     r_g = G * mass / C2
     a = spin * r_g
-    r_in, _ = resolve_isco(mass, a, True, refs)
+    r_in, _ = resolve_isco(mass, a, spin >= 0.0, refs)
     r_out = r_in * 4.0
     values = []
     for i in range(size):
@@ -190,6 +197,11 @@ def main() -> int:
     parser.add_argument("--spin-points", type=int, default=0)
     parser.add_argument("--spin-min", type=float, default=-0.99)
     parser.add_argument("--spin-max", type=float, default=0.99)
+    parser.add_argument(
+        "--out-dir",
+        default=os.path.join(os.path.dirname(__file__), "..", "assets", "luts"),
+        help="directory for the CSV files and lut_meta.json",
+    )
     args = parser.parse_args()
 
     size = max(args.size, 8)
@@ -200,7 +212,8 @@ def main() -> int:
     r_s = 2.0 * r_g
     a = spin * r_g
     refs = compact_common_refs()
-    r_in, isco_source = resolve_isco(mass, a, True, refs)
+    prograde = spin >= 0.0
+    r_in, isco_source = resolve_isco(mass, a, prograde, refs)
     r_out = r_in * 4.0
 
     l_edd = 1.26e38 * mass_solar
@@ -223,7 +236,7 @@ def main() -> int:
         r = r_in + u * (r_out - r_in)
         redshift.append(min(disk_emitter_redshift(r, mass, a), 10.0))
 
-    lut_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "luts")
+    lut_dir = args.out_dir
     os.makedirs(lut_dir, exist_ok=True)
 
     emissivity_rows = [[i / (size - 1), v] for i, v in enumerate(emissivity)]
@@ -238,7 +251,7 @@ def main() -> int:
         "spin": spin,
         "mass_solar": mass_solar,
         "mdot": args.mdot,
-        "prograde": True,
+        "prograde": prograde,
         "isco_source": isco_source,
         "emissivity_model": "page-thorne",
         "redshift_model": "circular-emitter-face-on",
@@ -268,9 +281,9 @@ def main() -> int:
             u = i / (spin_points - 1)
             spin_val = spin_min + u * (spin_max - spin_min)
             a_val = spin_val * r_g
-            prograde = spin_val >= 0.0
-            r_isco_spin, _ = resolve_isco(mass, a_val, prograde, refs)
-            r_ph_spin = resolve_photon_orbit(mass, a_val, prograde, refs)
+            spin_prograde = spin_val >= 0.0
+            r_isco_spin, _ = resolve_isco(mass, a_val, spin_prograde, refs)
+            r_ph_spin = resolve_photon_orbit(mass, a_val, spin_prograde, refs)
             spin_rows.append([spin_val, r_isco_spin / r_s, r_ph_spin / r_s])
         write_spin_csv(os.path.join(lut_dir, "spin_radii_lut.csv"), spin_rows)
         meta["spin_curve_points"] = spin_points

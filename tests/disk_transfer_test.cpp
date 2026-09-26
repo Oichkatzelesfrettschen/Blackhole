@@ -10,8 +10,10 @@
  * The redshift LUT (lut.h) stores z = u^t - 1 of the same emitter.
  */
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 
 #include <gtest/gtest.h>
 
@@ -78,7 +80,9 @@ TEST(DiskTransfer, BlackbodyChromaHasUnitLuminanceAndOrderedHue) {
 }
 
 TEST(DiskTransfer, RedshiftLutStoresEmitterRedshift) {
-  for (double const aStar : {0.0, 0.9, 0.998}) {
+  // Negative spin is a retrograde disk: its domain starts at the retrograde
+  // ISCO, where the signed emitter redshift is finite.
+  for (double const aStar : {0.0, 0.9, 0.998, -0.9}) {
     physics::Lut1D const lut = physics::generateRedshiftLut(64, 4.0e6, aStar);
     ASSERT_EQ(lut.values.size(), 64U);
     // First sample sits at the ISCO: z = 1/g - 1 of the face-on emitter.
@@ -87,5 +91,20 @@ TEST(DiskTransfer, RedshiftLutStoresEmitterRedshift) {
     EXPECT_NEAR(static_cast<double>(lut.values.front()), expected, 1e-5 * (1.0 + expected))
         << "a = " << aStar;
     EXPECT_GT(lut.values.front(), lut.values.back());
+  }
+}
+
+TEST(DiskTransfer, EmissivityLutCoversTheSignedDisk) {
+  // At a* = -0.9 the retrograde disk starts at 8.72 M; its LUT domain must
+  // start there too, so every sample past the zero-torque edge carries flux.
+  for (double const aStar : {0.9, -0.9}) {
+    physics::Lut1D const lut = physics::generateEmissivityLut(64, 4.0e6, aStar, 0.1);
+    ASSERT_EQ(lut.values.size(), 64U);
+    EXPECT_NEAR(2.0 * static_cast<double>(lut.rMin), physics::pageThorneIscoRadius(aStar), 1e-5)
+        << "a = " << aStar;
+    for (std::size_t i = 1; i < lut.values.size(); ++i) {
+      EXPECT_GT(lut.values.at(i), 0.0F) << "a = " << aStar << " sample " << i;
+    }
+    EXPECT_FLOAT_EQ(*std::ranges::max_element(lut.values), 1.0F) << "a = " << aStar;
   }
 }
