@@ -47,9 +47,16 @@ GLint uniformLocation(GLuint program, const char *name) {
   return glGetUniformLocation(program, name);
 }
 
-/** Blend and binding state the pass changes, restored after drawing. */
+/**
+ * Every piece of GL state the pass changes, restored after drawing: blend
+ * enable, functions, and equations; depth-test enable; the viewport; the
+ * vertex array; the read and draw framebuffer bindings, which
+ * glBindFramebuffer(GL_FRAMEBUFFER) sets together; and the program.
+ */
 struct SavedGlState {
   GLboolean blendEnabled = GL_FALSE;
+  GLboolean depthTestEnabled = GL_FALSE;
+  std::array<GLint, 4> viewport{};
   GLint blendSrcRgb = 0;
   GLint blendDstRgb = 0;
   GLint blendSrcAlpha = 0;
@@ -57,11 +64,14 @@ struct SavedGlState {
   GLint blendEquationRgb = 0;
   GLint blendEquationAlpha = 0;
   GLint vertexArray = 0;
-  GLint framebuffer = 0;
+  GLint drawFramebuffer = 0;
+  GLint readFramebuffer = 0;
   GLint program = 0;
 
   void capture() {
     blendEnabled = glIsEnabled(GL_BLEND);
+    depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
+    glGetIntegerv(GL_VIEWPORT, viewport.data());
     glGetIntegerv(GL_BLEND_SRC_RGB, &blendSrcRgb);
     glGetIntegerv(GL_BLEND_DST_RGB, &blendDstRgb);
     glGetIntegerv(GL_BLEND_SRC_ALPHA, &blendSrcAlpha);
@@ -69,7 +79,8 @@ struct SavedGlState {
     glGetIntegerv(GL_BLEND_EQUATION_RGB, &blendEquationRgb);
     glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &blendEquationAlpha);
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertexArray);
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &framebuffer);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer);
     glGetIntegerv(GL_CURRENT_PROGRAM, &program);
   }
 
@@ -83,8 +94,15 @@ struct SavedGlState {
     } else {
       glDisable(GL_BLEND);
     }
+    if (depthTestEnabled == GL_TRUE) {
+      glEnable(GL_DEPTH_TEST);
+    } else {
+      glDisable(GL_DEPTH_TEST);
+    }
+    glViewport(viewport.at(0), viewport.at(1), viewport.at(2), viewport.at(3));
     glBindVertexArray(static_cast<GLuint>(vertexArray));
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFramebuffer));
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(readFramebuffer));
     glUseProgram(static_cast<GLuint>(program));
   }
 };
