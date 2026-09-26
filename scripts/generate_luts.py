@@ -16,6 +16,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 
+from kerr_signed_spin import conventional_orbit_args
+
 # Physical constants (cgs)
 G = 6.67430e-8
 C = 2.99792458e10
@@ -33,7 +35,10 @@ def kerr_isco_cleanroom(mass: float, spin_param: float, prograde: bool = True) -
     )
     z2 = math.sqrt(3.0 * a_star * a_star + z1 * z1)
     sqrt_term = math.sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2))
-    r_isco = m_geom * (3.0 + z2 - sqrt_term if prograde else 3.0 + z2 + sqrt_term)
+    # Signed spin (src/physics/kerr.h kerrIscoRadius): prograde means angular
+    # momentum along +z; the orbit co-rotates when a_star and L_z share a sign.
+    co_rotating = a_star >= 0.0 if prograde else a_star <= 0.0
+    r_isco = m_geom * (3.0 + z2 - sqrt_term if co_rotating else 3.0 + z2 + sqrt_term)
     return r_isco
 
 
@@ -47,12 +52,25 @@ def novikov_thorne_flux(r: float, mass: float, mdot: float, r_in: float, a_star:
 
 
 def kerr_redshift_equatorial(r: float, mass: float, spin_param: float) -> float:
+    """Equatorial redshift of a zero-angular-momentum emitter seen from infinity.
+
+    1 + z = 1 / alpha with the ZAMO lapse alpha = sqrt(Sigma Delta / A), which
+    at theta = pi/2 is sqrt(r^2 Delta / ((r^2 + a^2)^2 - a^2 Delta)), matching
+    physics::kerrRedshift in src/physics/kerr.h. It stays finite inside the
+    ergosphere (z = 2.3166 at a* = 0.9, r = 1.8 M) and diverges at the horizon;
+    at and inside r_+ the function returns +inf. At a = 0 it is
+    1/sqrt(1 - 2M/r) - 1.
+    """
     m_geom = G * mass / C2
-    sigma = r * r
-    factor = 1.0 - (2.0 * m_geom * r) / sigma
-    if factor <= 0.0:
-        return 0.0
-    return 1.0 / math.sqrt(factor) - 1.0
+    a2 = spin_param * spin_param
+    # physics::kerrZamoLapse requires r > r_+; below r_- Delta turns positive
+    # again, so its sign alone would admit the region inside the Cauchy horizon.
+    r_plus = m_geom + math.sqrt(max(0.0, m_geom * m_geom - a2))
+    delta = r * r - 2.0 * m_geom * r + a2
+    big_a = (r * r + a2) ** 2 - a2 * delta
+    if r <= r_plus or delta <= 0.0 or big_a <= 0.0:
+        return math.inf
+    return 1.0 / math.sqrt(r * r * delta / big_a) - 1.0
 
 
 def kerr_photon_orbit_cleanroom(mass: float, spin_param: float, prograde: bool = True) -> float:
@@ -92,15 +110,19 @@ def compact_common_refs() -> dict[str, object] | None:
 
 def resolve_isco(mass: float, spin_param: float, prograde: bool,
                  refs: dict[str, object] | None) -> tuple[float, str]:
+    """Signed-spin ISCO; compact-common receives |a| and the co-rotation flag."""
     if refs:
-        return float(refs["kerr_isco"](mass, spin_param, prograde)), "compact-common"
+        magnitude, co_rotating = conventional_orbit_args(spin_param, prograde)
+        return float(refs["kerr_isco"](mass, magnitude, co_rotating)), "compact-common"
     return kerr_isco_cleanroom(mass, spin_param, prograde), "cleanroom"
 
 
 def resolve_photon_orbit(mass: float, spin_param: float, prograde: bool,
                          refs: dict[str, object] | None) -> float:
+    """Signed-spin photon orbit; compact-common receives |a| and the co-rotation flag."""
     if refs:
-        return float(refs["kerr_photon_orbit"](mass, spin_param, prograde))
+        magnitude, co_rotating = conventional_orbit_args(spin_param, prograde)
+        return float(refs["kerr_photon_orbit"](mass, magnitude, co_rotating))
     return kerr_photon_orbit_cleanroom(mass, spin_param, prograde)
 
 
@@ -194,7 +216,7 @@ def main() -> int:
         "prograde": True,
         "isco_source": isco_source,
         "emissivity_model": "novikov-thorne",
-        "redshift_model": "equatorial",
+        "redshift_model": "zamo-equatorial",
         "units": {
             "system": "cgs",
             "length": "cm",
@@ -221,9 +243,10 @@ def main() -> int:
             u = i / (spin_points - 1)
             spin_val = spin_min + u * (spin_max - spin_min)
             a_val = spin_val * r_g
-            prograde = spin_val >= 0.0
-            r_isco_spin, _ = resolve_isco(mass, a_val, prograde, refs)
-            r_ph_spin = resolve_photon_orbit(mass, a_val, prograde, refs)
+            # The disk orbits along +z; the signed spin selects co- or
+            # counter-rotation for both radii.
+            r_isco_spin, _ = resolve_isco(mass, a_val, True, refs)
+            r_ph_spin = resolve_photon_orbit(mass, a_val, True, refs)
             spin_rows.append([spin_val, r_isco_spin / r_s, r_ph_spin / r_s])
         write_spin_csv(os.path.join(lut_dir, "spin_radii_lut.csv"), spin_rows)
         meta["spin_curve_points"] = spin_points

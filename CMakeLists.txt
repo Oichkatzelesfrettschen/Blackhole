@@ -3766,6 +3766,9 @@ if(BUILD_TESTING)
     add_test(NAME glsl_interface_adapter
       COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/cpp_to_glsl_test.py")
     set_tests_properties(glsl_interface_adapter PROPERTIES TIMEOUT 30 LABELS "shaders;tools")
+    add_test(NAME lut_generator_signed_spin
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/lut_generator_signed_spin_test.py")
+    set_tests_properties(lut_generator_signed_spin PROPERTIES TIMEOUT 30 LABELS "physics;tools")
   endif()
 
   # Physics library validation tests
@@ -5985,6 +5988,126 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Kerr-de Sitter Carter-form metric: limits, quartic horizons, and the
+  # Einstein-Lambda field equation through tests/support/ricci_oracle.h.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_de_sitter_test.cpp")
+    add_executable(kerr_de_sitter_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_de_sitter_test.cpp"
+    )
+    target_include_directories(kerr_de_sitter_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(kerr_de_sitter_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_de_sitter_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_de_sitter_test PRIVATE GTest::gtest_main)
+
+    add_test(NAME kerr_de_sitter_validation COMMAND kerr_de_sitter_test)
+    set_tests_properties(kerr_de_sitter_validation PROPERTIES
+      LABELS "physics;metric;kerr-de-sitter;verified"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_de_sitter_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Additive null/timelike norm projection of the verified energy-conserving
+  # geodesic step: a drifted photon keeps v^r and returns to g(v, v) = 0.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/energy_conserving_geodesic_test.cpp")
+    add_executable(energy_conserving_geodesic_test
+      "${PROJECT_SOURCE_DIR}/tests/energy_conserving_geodesic_test.cpp"
+    )
+    target_include_directories(energy_conserving_geodesic_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_options(energy_conserving_geodesic_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(energy_conserving_geodesic_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(energy_conserving_geodesic_test PRIVATE GTest::gtest_main)
+
+    add_test(NAME energy_conserving_geodesic_validation COMMAND energy_conserving_geodesic_test)
+    set_tests_properties(energy_conserving_geodesic_validation PROPERTIES
+      LABELS "physics;geodesic;verified"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(energy_conserving_geodesic_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Kerr static, ZAMO, and circular-orbit clock rates and the ZAMO redshift.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_clock_rates_test.cpp")
+    add_executable(kerr_clock_rates_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_clock_rates_test.cpp"
+    )
+    target_link_libraries(kerr_clock_rates_test PRIVATE blackhole_physics glm::glm)
+    target_include_directories(kerr_clock_rates_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_clock_rates_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_clock_rates_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_clock_rates_test PRIVATE GTest::gtest_main)
+    if(ENABLE_XSIMD)
+      target_link_libraries(kerr_clock_rates_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(kerr_clock_rates_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(kerr_clock_rates_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME kerr_clock_rates_validation COMMAND kerr_clock_rates_test)
+    set_tests_properties(kerr_clock_rates_validation PROPERTIES
+      LABELS "physics;kerr;redshift"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_clock_rates_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # One signed-spin convention for Kerr ISCO and photon-orbit radii.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_orbit_convention_test.cpp")
+    add_executable(kerr_orbit_convention_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_orbit_convention_test.cpp"
+    )
+    target_link_libraries(kerr_orbit_convention_test PRIVATE blackhole_physics)
+    target_include_directories(kerr_orbit_convention_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_orbit_convention_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_orbit_convention_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_orbit_convention_test PRIVATE GTest::gtest_main)
+
+    add_test(NAME kerr_orbit_convention_validation COMMAND kerr_orbit_convention_test)
+    set_tests_properties(kerr_orbit_convention_validation PROPERTIES
+      LABELS "physics;kerr;isco"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_orbit_convention_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # LQG-modified Kerr metric test (D6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp")
     add_executable(lqg_kerr_test
@@ -6507,6 +6630,36 @@ if(BUILD_TESTING)
       )
       if(SANITIZER_TEST_ENV)
         set_tests_properties(cuda_analytic_kerr PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
+    # No-LUT redshift fallback -- device ZAMO lapse vs mpmath
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_zamo_redshift_test.cu")
+      add_executable(cuda_zamo_redshift_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_zamo_redshift_test.cu"
+      )
+      set_target_properties(cuda_zamo_redshift_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+      )
+      target_include_directories(cuda_zamo_redshift_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_zamo_redshift_test PRIVATE
+        GTest::gtest_main
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_zamo_redshift COMMAND cuda_zamo_redshift_test)
+      set_tests_properties(cuda_zamo_redshift PROPERTIES
+        LABELS "cuda;physics;redshift"
+        TIMEOUT 60
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_zamo_redshift PROPERTIES
           ENVIRONMENT "${SANITIZER_TEST_ENV}"
         )
       endif()

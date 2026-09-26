@@ -1200,6 +1200,7 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
   appendU32(out, static_cast<std::uint32_t>(systems_.size()));
   for (const OrbitalSystem &system : systems_) {
     appendF64(out, system.field.spinDeficit());
+    appendU8(out, system.field.spinDimensionless() < 0.0 ? 1U : 0U); // sense of rotation
     appendU8(out, static_cast<std::uint8_t>(system.authorityObserver));
     appendF64(out, system.instability);
   }

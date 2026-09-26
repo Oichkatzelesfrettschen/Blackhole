@@ -898,9 +898,8 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     const double referenceRs = physics::schwarzschildRadius(referenceMass);
     const double referenceRg = physics::G * referenceMass / physics::C2;
     const double referenceA = static_cast<double>(rs.physicsCore.kerrSpin) * referenceRg;
-    const bool progradeSpin = rs.physicsCore.kerrSpin >= 0.0f;
-    const double iscoRatio =
-        physics::kerrIscoRadius(referenceMass, referenceA, progradeSpin) / referenceRs;
+    // The disk orbits along +z; a negative kerrSpin makes that orbit counter-rotate.
+    const double iscoRatio = physics::kerrIscoRadius(referenceMass, referenceA, true) / referenceRs;
 
     float const schwarzschildRadius = 2.0f * rs.physicsCore.blackHoleMass;
     float const iscoRadius = static_cast<float>(iscoRatio) * schwarzschildRadius;

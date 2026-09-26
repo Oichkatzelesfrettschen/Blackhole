@@ -10,7 +10,7 @@
  *
  * Metric in Boyer-Lindquist coordinates (c = G = 1, geometric units):
  *   ds^2 = -(1 - (2Mr - Q^2)/Sigma) dt^2
- *        - (4Mra sin^2 theta / Sigma) dt dphi
+ *        - (2a (2Mr - Q^2) sin^2 theta / Sigma) dt dphi
  *        + (Sigma / Delta) dr^2
  *        + Sigma dtheta^2
  *        + (A sin^2 theta / Sigma) dphi^2
@@ -26,7 +26,14 @@
  *   M^2 >= a^2 + Q^2  (sub-extremal, no naked singularity)
  *
  * Electromagnetic 4-potential:
- *   A_μ = (-Qr / Sigma, 0, 0, -Qra sin^2 theta / Sigma)
+ *   A_mu = -(Qr / Sigma) (dt - a sin^2 theta dphi)_mu
+ *        = (-Qr / Sigma, 0, 0, +Qra sin^2 theta / Sigma)
+ * The ratio A_phi / A_t = -a sin^2 theta is fixed by the Carter form of the
+ * metric; physics::knMagneticPotentialPhi uses the same sign.
+ *
+ * Signed spin: a > 0 rotates about +z. "Prograde" names an orbit with angular
+ * momentum along +z, so a prograde orbit at a < 0 counter-rotates with the
+ * hole and knIscoRadiusPrograde(m, a, q) == knIscoRadiusRetrograde(m, -a, q).
  *
  * The maintained C++ is an input to scripts/cpp_to_glsl.py.
  * Rocq definitions document the mathematical source; floating-point
@@ -46,6 +53,7 @@
 
 #include <cmath>
 #include <concepts>
+#include <limits>
 
 namespace verified {
 
@@ -110,6 +118,28 @@ namespace verified {
 // ============================================================================
 
 /**
+ * @brief Horizon discriminant M^2 - a^2 - Q^2, with rounding-level negatives read as zero
+ *
+ * The sequential subtraction rounds each term, so extremal inputs such as
+ * M = 1, a = 0.6, Q = 0.8 (a^2 + Q^2 = M^2 exactly in the reals) evaluate to
+ * -1.1e-16. A negative value within 4 epsilon of M^2 + a^2 + Q^2, the
+ * magnitude of the terms, returns as exactly 0, so r_+ = r_- = M there; a
+ * larger negative value marks a super-extremal input and passes through.
+ * Every square root of this discriminant in the header goes through it.
+ *
+ * @param m Black hole mass
+ * @param a Spin parameter (a cos(theta) for the ergosurface)
+ * @param q Electric charge
+ * @return M^2 - a^2 - Q^2, or 0 within rounding of zero
+ */
+[[nodiscard]] constexpr double knHorizonDiscriminant(double m, double a, double q) noexcept {
+  const double discriminant = (m * m) - (a * a) - (q * q);
+  const double roundingBound =
+      4.0 * std::numeric_limits<double>::epsilon() * ((m * m) + (a * a) + (q * q));
+  return (discriminant < 0.0 && -discriminant <= roundingBound) ? 0.0 : discriminant;
+}
+
+/**
  * @brief Outer (event) horizon: r_+ = M + sqrt(M^2 - a^2 - Q^2)
  *
  * Derived from Rocq: Definition kn_outer_horizon (M a Q : R) : R :=
@@ -123,7 +153,7 @@ namespace verified {
  * @return r_+ outer horizon radius
  */
 [[nodiscard]] inline double knOuterHorizon(double m, double a, double q) noexcept {
-  return m + std::sqrt(m * m - a * a - q * q);
+  return m + std::sqrt(knHorizonDiscriminant(m, a, q));
 }
 
 /**
@@ -138,7 +168,7 @@ namespace verified {
  * @return r_- inner horizon radius
  */
 [[nodiscard]] inline double knInnerHorizon(double m, double a, double q) noexcept {
-  return m - std::sqrt(m * m - a * a - q * q);
+  return m - std::sqrt(knHorizonDiscriminant(m, a, q));
 }
 
 // ============================================================================
@@ -163,10 +193,14 @@ namespace verified {
 }
 
 /**
- * @brief Azimuthal component of electromagnetic 4-potential: A_phi = -Qra sin^2(theta) / Sigma
+ * @brief Azimuthal component of electromagnetic 4-potential: A_phi = +Qra sin^2(theta) / Sigma
  *
  * Derived from Rocq: Definition kn_potential_phi (r theta a Q : R) : R :=
- *   - Q * r * a * (sin theta)^2 / kn_Sigma r theta a.
+ *   Q * r * a * (sin theta)^2 / kn_Sigma r theta a.
+ *
+ * A_phi = -a sin^2(theta) A_t, the ratio carried by (dt - a sin^2 theta dphi).
+ * The Einstein-Maxwell check in tests/kerr_newman_test.cpp fails R_tphi when
+ * this sign flips relative to A_t.
  *
  * @param r Radial coordinate
  * @param theta Polar angle
@@ -177,7 +211,7 @@ namespace verified {
 [[nodiscard]] inline double knPotentialPhi(double r, double theta, double a, double q) noexcept {
   const double sigma = knSigma(r, theta, a);
   const double sinTheta = std::sin(theta);
-  return -q * r * a * sinTheta * sinTheta / sigma;
+  return q * r * a * sinTheta * sinTheta / sigma;
 }
 
 /**
@@ -266,7 +300,7 @@ namespace verified {
 [[nodiscard]] inline double knErgosphereRadius(double theta, double m, double a,
                                                double q) noexcept {
   const double cosTheta = std::cos(theta);
-  return m + std::sqrt(m * m - a * a * cosTheta * cosTheta - q * q);
+  return m + std::sqrt(knHorizonDiscriminant(m, a * cosTheta, q));
 }
 
 // ============================================================================
@@ -274,13 +308,15 @@ namespace verified {
 // ============================================================================
 
 /**
- * @brief Frame dragging angular velocity omega = -g_tphi / g_phph
+ * @brief Frame dragging angular velocity omega = -g_tphi / g_phph = a (2Mr - Q^2) / A
  *
  * Derived from Rocq: Definition kn_frame_dragging_omega (r theta M a Q : R) : R :=
  *   let A := kn_A r theta M a Q in
- *   2 * M * r * a / A.
+ *   a * (2 * M * r - Q^2) / A.
  *
- * This is the angular velocity at which local inertial frames are dragged.
+ * This is the angular velocity of a zero-angular-momentum observer. The
+ * charge enters both through Delta inside A and through the 2Mr - Q^2 factor
+ * of g_tphi.
  *
  * @param r Radial coordinate
  * @param theta Polar angle
@@ -292,91 +328,197 @@ namespace verified {
 [[nodiscard]] inline double knFrameDraggingOmega(double r, double theta, double m, double a,
                                                  double q) noexcept {
   const double metricFactor = knA(r, theta, m, a, q);
-  return 2.0 * m * r * a / metricFactor;
+  return a * (2.0 * m * r - q * q) / metricFactor;
 }
 
 // ============================================================================
-// Photon Sphere (from Rocq: kn_photon_sphere_equator)
+// Photon Orbit (from Rocq: kn_photon_orbit_function, kn_photon_sphere_equator_spec)
 // ============================================================================
 
 /**
- * @brief Approximate formula for equatorial photon sphere
+ * @brief Circular-photon-orbit function of the equatorial KN metric
  *
- * Derived from Rocq: Definition kn_photon_sphere_equator (M a Q : R) : R :=
- *   let discriminant := M^2 - a^2 - Q^2 in
- *   2 * M * (1 + cos (acos (a / M) / 3)).
+ * Derived from Rocq: Definition kn_photon_orbit_function (r M a Q : R) : R :=
+ *   r^2 - 3 * M * r + 2 * Q^2 + 2 * a * sqrt (M * r - Q^2).
  *
- * For Kerr-Newman, photon sphere is more complex due to charge.
- * This is the approximate equatorial value.
+ * Timelike circular orbits with angular momentum along +z (signed a) have
+ * u^t proportional to 1 / sqrt(f(r)); the orbit becomes null where f = 0. At
+ * Q = 0 this is r^2 - 3Mr + 2a sqrt(Mr), whose root is the Bardeen-Press-
+ * Teukolsky photon orbit 2M(1 + cos((2/3) acos(-a/M))); at a = 0 the root is
+ * (3M + sqrt(9M^2 - 8Q^2)) / 2. f is positive outside the photon orbit.
  *
+ * @param r Radial coordinate (requires M r >= Q^2)
  * @param m Black hole mass
- * @param a Spin parameter
+ * @param a Signed spin parameter
  * @param q Electric charge
- * @return Approximate equatorial photon sphere radius
+ * @return Photon-orbit function value
+ */
+[[nodiscard]] inline double knPhotonOrbitFunction(double r, double m, double a,
+                                                  double q) noexcept {
+  return r * r - 3.0 * m * r + 2.0 * q * q + 2.0 * a * std::sqrt(m * r - q * q);
+}
+
+/**
+ * @brief Equatorial circular photon orbit with angular momentum along +z
+ *
+ * Derived from Rocq: Definition kn_photon_sphere_equator_spec (M a Q r : R) : Prop :=
+ *   kn_photon_orbit_function r M a Q = 0 /\
+ *   forall r', r' > r -> kn_photon_orbit_function r' M a Q > 0.
+ *
+ * The outermost zero of knPhotonOrbitFunction. The search starts at 5 M,
+ * above the largest photon orbit of the family (4 M at a = -M, Q = 0), steps
+ * inward by M/200 until f turns non-positive, and bisects to 1e-15 M. The
+ * floor is max(r_+, Q^2/M); when f stays positive to the floor (extremal
+ * limits) the floor is returned. A super-extremal or massless input returns
+ * NaN. The retrograde orbit is knPhotonSphereEquator(m, -a, q).
+ *
+ * @param m Black hole mass (> 0)
+ * @param a Signed spin parameter; a < 0 gives the counter-rotating orbit
+ * @param q Electric charge
+ * @return Photon orbit radius, or NaN when m <= 0 or a^2 + q^2 > m^2
  */
 [[nodiscard]] inline double knPhotonSphereEquator(double m, double a, double q) noexcept {
-  (void)q; // Charge appears in discriminant, simplified formula uses only a/M
-  return 2.0 * m * (1.0 + std::cos(std::acos(a / m) / 3.0));
+  const double discriminant = knHorizonDiscriminant(m, a, q);
+  if (!(m > 0.0) || discriminant < 0.0) {
+    return std::nan("");
+  }
+  const double rFloor = std::fmax(m + std::sqrt(discriminant), q * q / m);
+  const double step = 0.005 * m;
+  double rOuter = 5.0 * m;
+  double rInner = rOuter;
+  bool bracketed = false;
+  while (rOuter - step > rFloor) {
+    rInner = rOuter - step;
+    if (knPhotonOrbitFunction(rInner, m, a, q) <= 0.0) {
+      bracketed = true;
+      break;
+    }
+    rOuter = rInner;
+  }
+  if (!bracketed) {
+    rInner = rFloor;
+    if (knPhotonOrbitFunction(rInner, m, a, q) > 0.0) {
+      return rFloor;
+    }
+  }
+  // Invariant: f(rInner) <= 0 < f(rOuter).
+  for (int iteration = 0; iteration < 200 && rOuter - rInner > 1.0e-15 * m; ++iteration) {
+    const double rMid = 0.5 * (rInner + rOuter);
+    if (knPhotonOrbitFunction(rMid, m, a, q) <= 0.0) {
+      rInner = rMid;
+    } else {
+      rOuter = rMid;
+    }
+  }
+  return 0.5 * (rInner + rOuter);
 }
 
 // ============================================================================
-// ISCO - Approximate Formulas (from Rocq: kn_isco_radius_*)
+// ISCO - marginal stability of equatorial circular orbits (from Rocq: kn_isco_*)
 // ============================================================================
 
 /**
- * @brief Prograde ISCO radius (approximate, charge correction)
+ * @brief Marginal-stability function of equatorial KN circular orbits
  *
- * Derived from Rocq: Definition kn_isco_radius_prograde (M a Q : R) : R :=
- *   let Z1 := 1 + (1 - a^2 / M^2)^(1/3) * ((1 + a / M)^(1/3) + (1 - a / M)^(1/3)) in
- *   let Z2 := sqrt (3 * a^2 / M^2 + Z1^2) in
- *   let correction := Q^2 / (2 * M^2) in
- *   M * (3 + Z2 - sqrt ((3 - Z1) * (3 + Z1 + 2 * Z2))) + correction.
+ * Derived from Rocq: Definition kn_marginal_stability (r M a Q : R) : R :=
+ *   r * (6 * M * r - r^2 - 9 * Q^2 + 3 * a^2) + 4 * Q^2 * (Q^2 - a^2) / M
+ *   - 8 * a * (sqrt (M * r - Q^2))^3 / M.
  *
- * For Q << M, ISCO ≈ Kerr ISCO with first-order charge correction.
+ * Zeros of this function are the radii where dE/dr = 0 for the circular-orbit
+ * energy E(r) of the equatorial KN metric, with the orbit angular momentum
+ * along +z (signed a). It is negative for large r, where circular orbits are
+ * stable. At a = 0 it is -(r^3 - 6Mr^2 + 9Q^2 r - 4Q^4/M), the
+ * Reissner-Nordstrom ISCO cubic; at Q = 0 it is -r (r^2 - 6Mr + 8a sqrt(Mr)
+ * - 3a^2), the Bardeen-Press-Teukolsky condition. scripts/gen_kn_kds_reference.py
+ * checks the zeros against a direct dE/dr = 0 root of the Carter-form metric.
  *
+ * @param r Radial coordinate (requires M r >= Q^2)
  * @param m Black hole mass
- * @param a Spin parameter (positive for prograde)
+ * @param a Signed spin parameter
  * @param q Electric charge
- * @return Prograde ISCO radius
+ * @return Marginal-stability function value
+ */
+[[nodiscard]] inline double knIscoMarginalStability(double r, double m, double a,
+                                                    double q) noexcept {
+  const double q2 = q * q;
+  const double orbitTerm = m * r - q2;
+  const double orbitRoot = std::sqrt(orbitTerm);
+  return r * (6.0 * m * r - r * r - 9.0 * q2 + 3.0 * a * a) + 4.0 * q2 * (q2 - a * a) / m -
+         8.0 * a * orbitTerm * orbitRoot / m;
+}
+
+/**
+ * @brief ISCO radius for an equatorial orbit with angular momentum along +z
+ *
+ * Derived from Rocq: Definition kn_isco_prograde_spec (M a Q r : R) : Prop :=
+ *   kn_marginal_stability r M a Q = 0 /\
+ *   forall r', r' > r -> kn_marginal_stability r' M a Q < 0.
+ *
+ * The ISCO is the outermost zero of knIscoMarginalStability. The search starts
+ * at 10 M, above the largest ISCO of the family (9 M at a = -M, Q = 0), steps
+ * inward by M/200 until the function turns non-negative, and bisects the
+ * bracket to a width of 1e-15 M. The search floor is max(r_+, Q^2/M): circular
+ * orbits need M r > Q^2, and every exterior orbit lies above r_+. When the
+ * function stays negative down to the floor, as at extremality, the floor is
+ * the ISCO. A super-extremal or massless input returns NaN.
+ *
+ * @param m Black hole mass (> 0)
+ * @param a Signed spin parameter; a < 0 gives the counter-rotating ISCO
+ * @param q Electric charge
+ * @return ISCO radius, or NaN when m <= 0 or a^2 + q^2 > m^2
  */
 [[nodiscard]] inline double knIscoRadiusPrograde(double m, double a, double q) noexcept {
-  const double aOverM = a / m;
-  const double oneMinusA2M2 = 1.0 - aOverM * aOverM;
-  const double cbrtFactor = std::cbrt(oneMinusA2M2);
-  const double cbrtPlus = std::cbrt(1.0 + aOverM);
-  const double cbrtMinus = std::cbrt(1.0 - aOverM);
-  const double z1 = 1.0 + cbrtFactor * (cbrtPlus + cbrtMinus);
-  const double z2 = std::sqrt(3.0 * aOverM * aOverM + z1 * z1);
-  const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
-  const double correction = q * q / (2.0 * m * m);
-  return m * (3.0 + z2 - sqrtTerm) + correction;
+  const double discriminant = knHorizonDiscriminant(m, a, q);
+  if (!(m > 0.0) || discriminant < 0.0) {
+    return std::nan("");
+  }
+  const double rFloor = std::fmax(m + std::sqrt(discriminant), q * q / m);
+  const double step = 0.005 * m;
+  double rOuter = 10.0 * m;
+  double rInner = rOuter;
+  bool bracketed = false;
+  while (rOuter - step > rFloor) {
+    rInner = rOuter - step;
+    if (knIscoMarginalStability(rInner, m, a, q) >= 0.0) {
+      bracketed = true;
+      break;
+    }
+    rOuter = rInner;
+  }
+  if (!bracketed) {
+    rInner = rFloor;
+    if (knIscoMarginalStability(rInner, m, a, q) < 0.0) {
+      return rFloor;
+    }
+  }
+  // Invariant: f(rInner) >= 0 > f(rOuter).
+  for (int iteration = 0; iteration < 200 && rOuter - rInner > 1.0e-15 * m; ++iteration) {
+    const double rMid = 0.5 * (rInner + rOuter);
+    if (knIscoMarginalStability(rMid, m, a, q) >= 0.0) {
+      rInner = rMid;
+    } else {
+      rOuter = rMid;
+    }
+  }
+  return 0.5 * (rInner + rOuter);
 }
 
 /**
- * @brief Retrograde ISCO radius (approximate, charge correction)
+ * @brief ISCO radius for an equatorial orbit with angular momentum along -z
  *
- * Derived from Rocq: Definition kn_isco_radius_retrograde (M a Q : R) : R :=
- *   let Z1 := 1 + (1 - a^2 / M^2)^(1/3) * ((1 + a / M)^(1/3) + (1 - a / M)^(1/3)) in
- *   let Z2 := sqrt (3 * a^2 / M^2 + Z1^2) in
- *   let correction := Q^2 / (2 * M^2) in
- *   M * (3 + Z2 + sqrt ((3 - Z1) * (3 + Z1 + 2 * Z2))) + correction.
+ * Derived from Rocq: Definition kn_isco_retrograde_spec (M a Q r : R) : Prop :=
+ *   kn_isco_prograde_spec M (- a) Q r.
+ *
+ * Reflecting phi -> -phi maps a -> -a and leaves Q unchanged, so the
+ * retrograde ISCO at spin a is the prograde ISCO at spin -a.
  *
  * @param m Black hole mass
- * @param a Spin parameter
+ * @param a Signed spin parameter
  * @param q Electric charge
  * @return Retrograde ISCO radius
  */
 [[nodiscard]] inline double knIscoRadiusRetrograde(double m, double a, double q) noexcept {
-  const double aOverM = a / m;
-  const double oneMinusA2M2 = 1.0 - aOverM * aOverM;
-  const double cbrtFactor = std::cbrt(oneMinusA2M2);
-  const double cbrtPlus = std::cbrt(1.0 + aOverM);
-  const double cbrtMinus = std::cbrt(1.0 - aOverM);
-  const double z1 = 1.0 + cbrtFactor * (cbrtPlus + cbrtMinus);
-  const double z2 = std::sqrt(3.0 * aOverM * aOverM + z1 * z1);
-  const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
-  const double correction = q * q / (2.0 * m * m);
-  return m * (3.0 + z2 + sqrtTerm) + correction;
+  return knIscoRadiusPrograde(m, -a, q);
 }
 
 // ============================================================================
@@ -426,15 +568,18 @@ namespace verified {
 }
 
 /**
- * @brief Kerr-Newman g_tph (cross term): g_tph = -2Mar sin^2(theta) / Sigma
+ * @brief Kerr-Newman g_tph (cross term): g_tph = -a (2Mr - Q^2) sin^2(theta) / Sigma
  *
- * Derived from Rocq: g_tph := - 2 * M * r * a * sin2 / Sigma
- * This is the frame dragging term (unchanged from Kerr).
+ * Derived from Rocq: g_tph := - a * (2 * M * r - Q^2) * sin2 / Sigma
+ * Expanding the Carter form -(Delta/Sigma)(dt - a sin^2 dphi)^2
+ * + (sin^2/Sigma)((r^2 + a^2) dphi - a dt)^2 gives
+ * g_tph = a sin^2 (Delta - r^2 - a^2) / Sigma, so the charge enters here.
  */
-[[nodiscard]] inline double knGTph(double r, double theta, double m, double a) noexcept {
+[[nodiscard]] inline double knGTph(double r, double theta, double m, double a,
+                                   double q) noexcept {
   const double sigma = knSigma(r, theta, a);
   const double sinTheta = std::sin(theta);
-  return -2.0 * m * r * a * sinTheta * sinTheta / sigma;
+  return -a * (2.0 * m * r - q * q) * sinTheta * sinTheta / sigma;
 }
 
 // ============================================================================
@@ -447,13 +592,18 @@ namespace verified {
  * Derived from Rocq: Definition is_sub_extremal (M a Q : R) : Prop :=
  *   M^2 > a^2 + Q^2.
  *
+ * isSubExtremal, isExtremal, and isSuperExtremal read the sign of one value,
+ * knHorizonDiscriminant (positive, zero, negative), so exactly one holds for
+ * finite inputs and they agree with isPhysicalBlackHole and the horizon
+ * functions, including its rounding band at extremality.
+ *
  * @param m Black hole mass
  * @param a Spin parameter
  * @param q Electric charge
  * @return true if sub-extremal
  */
 [[nodiscard]] constexpr bool isSubExtremal(double m, double a, double q) noexcept {
-  return m * m > a * a + q * q;
+  return knHorizonDiscriminant(m, a, q) > 0.0;
 }
 
 /**
@@ -462,13 +612,16 @@ namespace verified {
  * Derived from Rocq: Definition is_extremal (M a Q : R) : Prop :=
  *   M^2 = a^2 + Q^2.
  *
+ * True where knHorizonDiscriminant is zero, which includes a sum a^2 + Q^2
+ * that rounds up to 4 epsilon above M^2 (e.g. a = 0.6, Q = 0.8).
+ *
  * @param m Black hole mass
  * @param a Spin parameter
  * @param q Electric charge
  * @return true if extremal
  */
 [[nodiscard]] constexpr bool isExtremal(double m, double a, double q) noexcept {
-  return m * m == a * a + q * q;
+  return knHorizonDiscriminant(m, a, q) == 0.0;
 }
 
 /**
@@ -483,7 +636,7 @@ namespace verified {
  * @return true if super-extremal (naked singularity)
  */
 [[nodiscard]] constexpr bool isSuperExtremal(double m, double a, double q) noexcept {
-  return m * m < a * a + q * q;
+  return knHorizonDiscriminant(m, a, q) < 0.0;
 }
 
 /**
@@ -492,13 +645,17 @@ namespace verified {
  * Derived from Rocq: Definition is_physical_black_hole (M a Q : R) : Prop :=
  *   M > 0 /\ M^2 >= a^2 + Q^2.
  *
+ * M^2 >= a^2 + Q^2 is read through knHorizonDiscriminant, so an input whose
+ * discriminant rounds to within 4 epsilon below zero counts as extremal and
+ * agrees with the horizon and orbit functions.
+ *
  * @param m Black hole mass
  * @param a Spin parameter
  * @param q Electric charge
  * @return true if physical black hole
  */
 [[nodiscard]] constexpr bool isPhysicalBlackHole(double m, double a, double q) noexcept {
-  return m > 0.0 && m * m >= a * a + q * q;
+  return m > 0.0 && knHorizonDiscriminant(m, a, q) >= 0.0;
 }
 
 // ============================================================================

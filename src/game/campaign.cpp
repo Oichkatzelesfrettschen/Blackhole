@@ -678,9 +678,11 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
   std::vector<std::uint8_t> out;
   appendU64(out, config_.seed);
   appendF64(out, config_.secondsPerTurn);
-  // The field's spin enters as its deficit, the parameter that stays exact
-  // near extremal spin; mass is fixed by the scenario's band radii.
+  // The field's spin enters as its deficit 1 - |a|, the parameter that stays
+  // exact near extremal spin, plus the sense of rotation the deficit drops;
+  // mass is fixed by the scenario's band radii.
   appendF64(out, field_->spinDeficit());
+  appendU8(out, field_->spinDimensionless() < 0.0 ? 1U : 0U);
   appendF64(out, config_.authorityRadiusCm);
   appendU8(out, static_cast<std::uint8_t>(config_.authorityObserver));
   appendU32(out, static_cast<std::uint32_t>(config_.bandRadiusCm.size()));

@@ -139,10 +139,10 @@ TEST(CampaignClock, BatchAdvanceMatchesSingleStepAdvanceByteForByte) {
   EXPECT_EQ(batched.stateDigest(), stepped.stateDigest());
 }
 
-// Falsifier: two campaigns identical but for one fleet's station keeping, or
-// for the field's spin deficit, serializing to the same bytes at turn 0 --
-// before any proper time accrues, so only the observer and epsilon fields can
-// tell them apart.
+// Falsifier: two campaigns identical but for one fleet's station keeping, the
+// field's spin deficit, or the field's sense of rotation (0.9 against -0.9,
+// one deficit), serializing to the same bytes at turn 0 -- before any proper
+// time accrues, so only the observer and spin fields can tell them apart.
 TEST(CampaignSerialization, DigestCarriesObserverAndSpinDeficit) {
   game::CampaignSession orbiting(3);
   game::CampaignSession hovering(3);
@@ -156,6 +156,9 @@ TEST(CampaignSerialization, DigestCarriesObserverAndSpinDeficit) {
   const game::CampaignSession spinA(3, 0.9);
   const game::CampaignSession spinB(3, 0.95);
   EXPECT_NE(spinA.state().serializeState(), spinB.state().serializeState());
+  // Same |a|, opposite rotation: the deficit alone cannot tell them apart.
+  const game::CampaignSession counterRotating(3, -0.9);
+  EXPECT_NE(spinA.state().serializeState(), counterRotating.state().serializeState());
   EXPECT_DOUBLE_EQ(spinB.state().renderSnapshot().spinDeficit, spinB.field().spinDeficit());
 
   // Same scenario, same bytes: the new fields are deterministic.

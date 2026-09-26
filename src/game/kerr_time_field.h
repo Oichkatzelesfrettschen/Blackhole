@@ -20,9 +20,9 @@
  * their physics: Gargantua's 1 - a = 1.33e-14 would round to two significant
  * digits of 1 - a^2 as a double a.
  *
- * physics::kerrTimeDilation is deliberately NOT used: its docstring claims a
- * ZAMO quantity but its body returns sqrt(-g_tt), the static-observer
- * expression (kerr.h:360).
+ * physics::kerrZamoLapse evaluates the same ZAMO lapse sqrt(Sigma Delta / A)
+ * in (a, r) form; physics::kerrStaticTimeDilation is the static-observer rate,
+ * which has no value inside the ergoregion.
  */
 
 #ifndef BLACKHOLE_GAME_KERR_TIME_FIELD_H
