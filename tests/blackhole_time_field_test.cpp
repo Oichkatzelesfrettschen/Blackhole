@@ -133,3 +133,17 @@ TEST(BlackholeTimeField, OrbitsNeedTheMarginallyBoundRadius) {
   EXPECT_NEAR(field.properTimeRate(6.0 * massCm, game::Observer::Hovering), std::sqrt(2.0 / 3.0),
               1e-12);
 }
+
+// Falsifier: a Schwarzschild orbit between 4M and the 6M ISCO reported
+// stable, or one at or outside 6M reported unstable.
+TEST(BlackholeTimeField, StableOrbitsStartAtSixM) {
+  const game::BlackholeTimeField field(K_M87_MASS_G);
+  const double massCm = 0.5 * field.horizonRadiusCm();
+  const game::Observer orbit = game::Observer::CircularOrbitPrograde;
+  EXPECT_DOUBLE_EQ(field.iscoRadiusCm(orbit), 6.0 * massCm);
+  EXPECT_FALSE(field.admitsStableOrbit(5.0 * massCm, orbit));
+  EXPECT_TRUE(field.admitsObserver(5.0 * massCm, orbit));
+  EXPECT_TRUE(field.admitsStableOrbit(6.0 * massCm, orbit));
+  EXPECT_TRUE(field.admitsStableOrbit(20.0 * massCm, orbit));
+  EXPECT_FALSE(field.admitsStableOrbit(20.0 * massCm, game::Observer::Hovering));
+}

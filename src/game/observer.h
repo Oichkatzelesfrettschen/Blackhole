@@ -6,8 +6,16 @@
  * rate depending on how it holds that radius. A free-falling circular orbit
  * is a geodesic and carries the orbital clock; a station that hovers on thrust
  * with zero angular momentum (a ZAMO) carries the lapse. At r = 6M around a
- * spin-0.9 hole the two differ by ten percent, and below the marginally bound
- * radius only the hovering station exists at all.
+ * spin-0.9 hole the two differ by ten percent.
+ *
+ * Circular orbits of one sense exist from infinity in to that sense's photon
+ * orbit, but only those outside the marginally bound radius r_mb are bound
+ * (E < 1); the game admits orbital stations there and nowhere closer, so a
+ * station below r_mb hovers. Between r_mb and the ISCO a circular orbit is a
+ * geodesic whose clock is exact but which is unstable: any perturbation grows,
+ * so the station holds it with station-keeping thrust. TimeField reports
+ * which admitted orbits are stable (admitsStableOrbit) so the interface can
+ * label the rest "unstable (station-keeping)".
  */
 
 #ifndef BLACKHOLE_GAME_OBSERVER_H

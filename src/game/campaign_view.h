@@ -40,6 +40,9 @@ struct BandView {
   bool validStation = false;
   bool insideErgosphere = false;        ///< Inside the static limit: retrograde forbidden.
   bool admitsOrbit = false;             ///< A bound prograde circular orbit exists here.
+  bool stableOrbit = false;             ///< ...and it is stable (at or outside the prograde ISCO).
+  bool admitsRetrogradeOrbit = false;   ///< A bound retrograde circular orbit exists here.
+  bool stableRetrogradeOrbit = false;   ///< ...and it is stable (at or outside the retrograde ISCO).
   /// dtau/dt of a prograde orbit here, or of a hovering station where no bound
   /// orbit exists (below the marginally bound radius).
   double properTimeRate = 0.0;
@@ -55,6 +58,7 @@ struct FleetView {
   double properTimeSec = 0.0;   ///< Accumulated local proper time tau.
   double properTimeRate = 0.0;  ///< Current dtau/dt of the fleet's worldline on its band.
   Observer observer = Observer::CircularOrbitPrograde; ///< Orbiting or hovering.
+  bool unstableOrbit = false; ///< On an orbit inside its ISCO, held by station-keeping thrust.
   double fuelUnits = 0.0;       ///< Remaining redeployment budget.
   OrbitLane lane = OrbitLane::Prograde; ///< Orbital direction.
   double yieldMultiplier = 1.0;  ///< Capability yield multiplier.

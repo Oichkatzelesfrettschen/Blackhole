@@ -446,6 +446,11 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       // The rate a fleet placed here by default carries: a prograde orbit where
       // a bound one exists, a hovering station below the marginally bound radius.
       band.admitsOrbit = field_->admitsObserver(band.radiusCm, Observer::CircularOrbitPrograde);
+      band.stableOrbit = field_->admitsStableOrbit(band.radiusCm, Observer::CircularOrbitPrograde);
+      band.admitsRetrogradeOrbit =
+          field_->admitsObserver(band.radiusCm, Observer::CircularOrbitRetrograde);
+      band.stableRetrogradeOrbit =
+          field_->admitsStableOrbit(band.radiusCm, Observer::CircularOrbitRetrograde);
       band.properTimeRate = field_->properTimeRate(
           band.radiusCm, band.admitsOrbit ? Observer::CircularOrbitPrograde : Observer::Hovering);
       band.delayToAuthoritySec = effectiveSignalDelaySec(band.radiusCm, config_.authorityRadiusCm);
@@ -465,6 +470,9 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     fleetView.properTimeRate =
         field_->properTimeRate(bandRadiusCm(fleet.bandIndex), fleet.observer);
     fleetView.observer = fleet.observer;
+    fleetView.unstableOrbit =
+        fleet.observer != Observer::Hovering &&
+        !field_->admitsStableOrbit(bandRadiusCm(fleet.bandIndex), fleet.observer);
     fleetView.fuelUnits = fleet.fuelUnits;
     fleetView.lane = fleet.lane;
     fleetView.yieldMultiplier = capabilityYieldMultiplier(fleet.capability);

@@ -204,3 +204,32 @@ TEST(GargantuaScenario, MillerColonyRunsTheCanonClock) {
   const game::Fleet &colony = played.state().fleets().front();
   EXPECT_NEAR(colony.properTimeSec / (10.0 * 86400.0 * miller.properTimeRate), 1.0, 1e-12);
 }
+
+// Falsifier: the default M87 band at 6M reported stable for the retrograde
+// lane, whose ISCO is 8.717M (the orbit there is admitted -- r_mb is 5.657M --
+// but unstable), or unstable for the prograde lane (ISCO 2.321M); a band
+// placed exactly on an ISCO read as unstable after the cm round trip; or a
+// band measurably inside an ISCO read as stable.
+TEST(KerrTimeField, StableOrbitsStartAtTheIsco) {
+  const game::CampaignSession session(4);
+  const game::CampaignViewSnapshot view = session.state().renderSnapshot();
+  const game::BandView &sixM = view.bands.at(1);
+  EXPECT_TRUE(sixM.admitsOrbit);
+  EXPECT_TRUE(sixM.stableOrbit);
+  EXPECT_TRUE(sixM.admitsRetrogradeOrbit);
+  EXPECT_FALSE(sixM.stableRetrogradeOrbit);
+  EXPECT_FALSE(view.bands.at(0).admitsOrbit); // 1.7M: below prograde r_mb
+
+  const game::KerrTimeField &field = session.field();
+  for (const game::Observer orbit :
+       {game::Observer::CircularOrbitPrograde, game::Observer::CircularOrbitRetrograde}) {
+    const double iscoCm = field.iscoRadiusCm(orbit);
+    EXPECT_TRUE(field.admitsStableOrbit(iscoCm, orbit));
+    EXPECT_FALSE(field.admitsStableOrbit(iscoCm * (1.0 - 1e-6), orbit));
+  }
+  EXPECT_FALSE(field.admitsStableOrbit(field.iscoRadiusCm(game::Observer::CircularOrbitPrograde), game::Observer::Hovering));
+
+  const game::CampaignSession canon(4, game::CampaignScenario::GargantuaCanon);
+  EXPECT_TRUE(canon.state().renderSnapshot().bands.at(0).stableOrbit); // Miller on the ISCO
+  EXPECT_FALSE(canon.state().renderSnapshot().fleets.front().unstableOrbit);
+}

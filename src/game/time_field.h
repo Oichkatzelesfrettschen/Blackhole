@@ -35,6 +35,21 @@ public:
     return isValidStationRadius(radiusCm);
   }
 
+  /** @brief True when `observer` is an orbit the field admits at radiusCm and
+   *         that orbit is stable: at or outside its sense's ISCO, within a
+   *         relative tolerance so a band placed on the ISCO reads stable after
+   *         the cm round trip. An admitted orbit inside the ISCO is unstable
+   *         and held by station-keeping thrust; a hovering station is never an
+   *         orbit. A field without orbital structure calls every admitted
+   *         orbit stable. */
+  [[nodiscard]] virtual bool admitsStableOrbit(double radiusCm, Observer observer) const {
+    return observer != Observer::Hovering && admitsObserver(radiusCm, observer);
+  }
+
+  /** @brief Innermost stable circular orbit radius of an orbit's sense; zero
+   *         for a field without orbital structure. */
+  [[nodiscard]] virtual double iscoRadiusCm(Observer /*orbit*/) const { return 0.0; }
+
   /** @brief One-way coordinate-time delay in seconds for a light signal
    *         exchanged between stations at the two radii. Finite and
    *         non-negative for valid radii; zero only when the radii coincide. */

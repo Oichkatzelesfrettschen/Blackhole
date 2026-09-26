@@ -28,6 +28,19 @@ namespace {
 
 constexpr double K_SECONDS_PER_DAY = 86400.0;
 
+// What an orbit on this band and lane would be: stable free fall, an unstable
+// circular geodesic held by station-keeping thrust (between the marginally
+// bound radius and the ISCO), or no bound orbit at all.
+const char *orbitLabel(const game::BandView &band, game::OrbitLane lane) {
+  const bool retrograde = lane == game::OrbitLane::Retrograde;
+  const bool admits = retrograde ? band.admitsRetrogradeOrbit : band.admitsOrbit;
+  const bool stable = retrograde ? band.stableRetrogradeOrbit : band.stableOrbit;
+  if (!admits) {
+    return "orbit: none bound here (hover only)";
+  }
+  return stable ? "orbit: stable" : "orbit: unstable (station-keeping)";
+}
+
 double days(double seconds) { return seconds / K_SECONDS_PER_DAY; }
 
 const char *capabilityEffectText(game::FleetCapability capability) {
@@ -139,8 +152,11 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
       ImGui::Text("%.2f", fleet.reliability);
     }
     ImGui::TableNextColumn();
-    ImGui::Text("%s", fleet.observer == game::Observer::Hovering ? "hover"
-                                                                 : game::laneName(fleet.lane));
+    if (fleet.observer == game::Observer::Hovering) {
+      ImGui::TextUnformatted("hover");
+    } else {
+      ImGui::Text("%s%s", game::laneName(fleet.lane), fleet.unstableOrbit ? " (unstable)" : "");
+    }
     ImGui::TableNextColumn();
     ImGui::Text("%s x%.2f", capabilityEffectText(fleet.capability), fleet.yieldMultiplier);
   }
@@ -196,6 +212,12 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
   ImGui::RadioButton("hover", &stationChoice, 1);
   uiState.composerStation =
       stationChoice == 1 ? game::StationKeeping::Hover : game::StationKeeping::Orbit;
+  for (const game::BandView &band : view.bands) {
+    if (band.index == uiState.composerTargetBand && band.validStation) {
+      ImGui::SameLine();
+      ImGui::TextUnformatted(orbitLabel(band, uiState.composerLane));
+    }
+  }
   if (ImGui::Button("Redeploy fleet")) {
     uiState.lastCommandAccepted =
         session.issuePlaceFleet(uiState.selectedFleet, uiState.composerTargetBand,

@@ -67,6 +67,19 @@ bool KerrTimeField::admitsObserver(double radiusCm, Observer observer) const {
   return radialOffset(radiusCm) > ko::marginallyBoundOffset(epsilon_, senseOf(observer));
 }
 
+bool KerrTimeField::admitsStableOrbit(double radiusCm, Observer observer) const {
+  if (observer == Observer::Hovering || !admitsObserver(radiusCm, observer)) {
+    return false;
+  }
+  // A band placed on the ISCO comes back from cm within a few ulps of it
+  // (Miller's round trip lands 3.2e-17 M above iscoOffset); the relative
+  // tolerance keeps that band stable without admitting any band measurably
+  // inside the ISCO.
+  constexpr double iscoRelativeTolerance = 1e-9;
+  const double xIsco = ko::iscoOffset(epsilon_, senseOf(observer));
+  return radialOffset(radiusCm) >= xIsco * (1.0 - iscoRelativeTolerance);
+}
+
 double KerrTimeField::marginallyBoundRadiusCm(Observer orbit) const {
   return gravitationalRadiusCm_ * (1.0 + ko::marginallyBoundOffset(epsilon_, senseOf(orbit)));
 }

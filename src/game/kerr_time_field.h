@@ -7,7 +7,11 @@
  * static observer can exist. An orbiting station is a circular geodesic of its
  * sense and carries the Bardeen-Press-Teukolsky orbital clock; the field admits
  * it only strictly outside that sense's marginally bound radius, where a bound
- * circular orbit exists. At zero spin the lapse, the orbital clock, and the
+ * circular orbit exists. Between that radius and the ISCO the orbit is
+ * unstable and the station holds it with station-keeping thrust -- its clock
+ * is still the circular geodesic's -- and admitsStableOrbit tells the two
+ * apart (the default M87 band at 6M is such an orbit for the retrograde lane,
+ * r_mb = 5.657M against an ISCO of 8.717M). At zero spin the lapse, the orbital clock, and the
  * signal delay reduce exactly to the Schwarzschild BlackholeTimeField.
  *
  * The field stores the spin deficit epsilon = 1 - |a| rather than a and
@@ -45,6 +49,7 @@ public:
 
   [[nodiscard]] double properTimeRate(double radiusCm, Observer observer) const override;
   [[nodiscard]] bool admitsObserver(double radiusCm, Observer observer) const override;
+  [[nodiscard]] bool admitsStableOrbit(double radiusCm, Observer observer) const override;
   [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override;
   [[nodiscard]] bool isValidStationRadius(double radiusCm) const override;
   [[nodiscard]] double innerBoundaryRadiusCm() const override { return outerHorizonCm_; }
@@ -61,7 +66,7 @@ public:
    *         (r_mb); prograde relative to the hole's rotation. */
   [[nodiscard]] double marginallyBoundRadiusCm(Observer orbit) const;
   /** @brief Innermost stable circular orbit radius of the orbit's sense. */
-  [[nodiscard]] double iscoRadiusCm(Observer orbit) const;
+  [[nodiscard]] double iscoRadiusCm(Observer orbit) const override;
   /** @brief x = r/M - 1, the radial coordinate kerr_observer.h works in. */
   [[nodiscard]] double radialOffset(double radiusCm) const {
     return (radiusCm / gravitationalRadiusCm_) - 1.0;

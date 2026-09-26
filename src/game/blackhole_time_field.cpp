@@ -29,6 +29,14 @@ double BlackholeTimeField::properTimeRate(double radiusCm, Observer observer) co
   return radicand > 0.0 ? std::sqrt(radicand) : 0.0;
 }
 
+bool BlackholeTimeField::admitsStableOrbit(double radiusCm, Observer observer) const {
+  // Stable at or outside the ISCO 6M = 3 r_s, with the same relative
+  // tolerance as the Kerr field for a band placed on it.
+  constexpr double iscoRelativeTolerance = 1e-9;
+  return observer != Observer::Hovering && admitsObserver(radiusCm, observer) &&
+         radiusCm >= 3.0 * horizonRadiusCm_ * (1.0 - iscoRelativeTolerance);
+}
+
 bool BlackholeTimeField::admitsObserver(double radiusCm, Observer observer) const {
   if (!isValidStationRadius(radiusCm)) {
     return false;
