@@ -199,11 +199,26 @@ Qed.
 
 (** ** Photon Sphere (depends on charge) *)
 
-(** For Kerr-Newman, photon sphere is more complex due to charge *)
-(** Approximate formula for equatorial photon sphere *)
-Definition kn_photon_sphere_equator (M a Q : R) : R :=
-  let discriminant := M^2 - a^2 - Q^2 in
-  2 * M * (1 + cos (acos (a / M) / 3)).
+(** Circular-photon-orbit function for angular momentum along +z (signed a).
+    Timelike circular orbits have u^t proportional to 1 / sqrt(f); f = 0 is
+    the equatorial photon orbit. At Q = 0 the root is the Bardeen-Press-
+    Teukolsky photon orbit; at a = 0 it is (3M + sqrt(9M^2 - 8Q^2)) / 2. *)
+Definition kn_photon_orbit_function (r M a Q : R) : R :=
+  r^2 - 3 * M * r + 2 * Q^2 + 2 * a * sqrt (M * r - Q^2).
+
+(** The equatorial photon orbit is the outermost zero of that function. *)
+Definition kn_photon_sphere_equator_spec (M a Q r : R) : Prop :=
+  kn_photon_orbit_function r M a Q = 0 /\
+  forall r', r' > r -> kn_photon_orbit_function r' M a Q > 0.
+
+(** At a = Q = 0 the photon orbit function is r (r - 3M), zero at r = 3M. *)
+Theorem kn_photon_orbit_schwarzschild : forall M : R,
+  kn_photon_orbit_function (3 * M) M 0 0 = 0.
+Proof.
+  intros M.
+  unfold kn_photon_orbit_function.
+  ring.
+Qed.
 
 (** ** ISCO (Innermost Stable Circular Orbit) *)
 
@@ -290,7 +305,7 @@ Qed.
    - kn_Sigma, kn_Delta, kn_A
    - kn_outer_horizon, kn_inner_horizon
    - kn_ergosphere_radius
-   - kn_photon_sphere_equator
+   - kn_photon_orbit_function, kn_photon_sphere_equator_spec
    - kn_marginal_stability, kn_isco_prograde_spec, kn_isco_retrograde_spec
    - kn_potential_t, kn_potential_phi
    - kn_electric_field_r, kn_magnetic_field

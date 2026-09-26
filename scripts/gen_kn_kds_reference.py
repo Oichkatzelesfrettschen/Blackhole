@@ -65,6 +65,38 @@ def circular_orbit(r: Real, m: Real, a: Real, q: Real) -> tuple[Real, Real]:
     return -(gtt + gtp * omega) * u_t, u_t
 
 
+def circular_orbit_norm(r: Real, m: Real, a: Real, q: Real) -> Real:
+    """-(g_tt + 2 g_tphi Omega + g_phiphi Omega^2) for the circular geodesic
+    with angular momentum along +z; zero where the orbit becomes null."""
+    (gtt, dgtt), (gtp, dgtp), (gpp, dgpp) = kn_equatorial(r, m, a, q)
+    disc = mp.sqrt((2 * dgtp) ** 2 - 4 * dgpp * dgtt)
+    omega = max((-2 * dgtp + disc) / (2 * dgpp), (-2 * dgtp - disc) / (2 * dgpp))
+    return -(gtt + 2 * gtp * omega + gpp * omega * omega)
+
+
+def photon_orbit_function(r: Real, m: Real, a: Real, q: Real) -> Real:
+    """Closed form used by verified::knPhotonOrbitFunction."""
+    return r * r - 3 * m * r + 2 * q * q + 2 * a * mp.sqrt(m * r - q * q)
+
+
+def kn_photon_orbit(m: Real, a: Real, q: Real) -> Real:
+    """Photon orbit from the null limit of circular geodesics, checked against
+    the closed form."""
+    r_outer = 5 * m
+    step = m / 200
+    while photon_orbit_function(r_outer - step, m, a, q) > 0:
+        r_outer -= step
+    guess = mp.findroot(
+        lambda r: photon_orbit_function(r, m, a, q),
+        (r_outer - step, r_outer),
+        solver="anderson",
+        verify=False,
+    )
+    root = mp.findroot(lambda r: circular_orbit_norm(r, m, a, q), guess)
+    assert abs(root - guess) < mp.mpf(10) ** -20, (a, q, root, guess)
+    return root
+
+
 def circular_orbit_energy(r: Real, m: Real, a: Real, q: Real) -> Real:
     return circular_orbit(r, m, a, q)[0]
 
@@ -135,6 +167,12 @@ def kerr_newman_section() -> None:
         print(
             f"isco a={mp.nstr(a, 3)} Q={mp.nstr(q, 3)}: prograde {fmt(kn_isco(one, a, q))}"
             f"  retrograde {fmt(kn_isco(one, -a, q))}"
+        )
+    for a, q in (("0", "0"), ("0", "0.5"), ("0", "1"), ("0.5", "0.5"), ("0.9", "0.3")):
+        a, q = mp.mpf(a), mp.mpf(q)
+        print(
+            f"photon orbit a={mp.nstr(a, 3)} Q={mp.nstr(q, 3)}: prograde "
+            f"{fmt(kn_photon_orbit(one, a, q))}  retrograde {fmt(kn_photon_orbit(one, -a, q))}"
         )
     omega = kn_frame_dragging(mp.mpf(3), mp.pi / 2, one, mp.mpf("0.5"), mp.mpf("0.5"))
     print(f"omega r=3 theta=pi/2 a=Q=0.5: {fmt(omega)}")

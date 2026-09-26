@@ -200,6 +200,7 @@ GLSL_PUBLIC_NAMES: dict[str, str] = {
     "knIscoRadiusRetrograde": "kn_isco_radius_retrograde",
     "knMagneticField": "kn_magnetic_field",
     "knOuterHorizon": "kn_outer_horizon",
+    "knPhotonOrbitFunction": "kn_photon_orbit_function",
     "knPhotonSphereEquator": "kn_photon_sphere_equator",
     "knPotentialPhi": "kn_potential_phi",
     "knPotentialR": "kn_potential_r",

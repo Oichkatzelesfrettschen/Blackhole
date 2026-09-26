@@ -59,9 +59,9 @@ Mat4 kerrMetric(const Vec4 &x, double m, double a) {
 
 /**
  * Non-Carter metric with a quadratic Delta = r^2 - 2Mr + a^2 - Lambda r^2 / 3,
- * g_tt = -(1 - 2Mr/Sigma + Lambda r^2 sin^2 / 3), and Kerr g_tph and g_thth
- * (audit 02-open-gororoba-crossref F5). The negative control: its Ricci
- * residual shows the tolerance discriminates.
+ * g_tt = -(1 - 2Mr/Sigma + Lambda r^2 sin^2 / 3), and Kerr g_tph and g_thth is
+ * not an Einstein space. The negative control: its Ricci residual shows the
+ * tolerance discriminates.
  */
 Mat4 legacyQuadraticKdsMetric(const Vec4 &x, double m, double a, double lambda) {
   const double r = x[1];

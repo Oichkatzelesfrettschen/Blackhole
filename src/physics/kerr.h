@@ -398,7 +398,7 @@ namespace physics {
 /**
  * @brief Clock rate dtau/dt = 1/u^t of an equatorial circular geodesic.
  *
- * Bardeen, Press & Teukolsky (1972), eqs. 2.12-2.13, with M the geometric mass:
+ * Bardeen, Press & Teukolsky (1972), ApJ 178, 347, with M the geometric mass:
  *
  *   u^t = (r^{3/2} + s a M^{1/2}) / (r^{3/4} sqrt(r^{3/2} - 3 M r^{1/2} + 2 s a M^{1/2}))
  *

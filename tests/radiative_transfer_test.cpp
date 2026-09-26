@@ -18,7 +18,7 @@
  * attenuation, so the absolute error bound is I0 tau^2 / 2 + S tau^3 / 6.
  *
  * References:
- * - Rybicki & Lightman (1979) "Radiative Processes in Astrophysics" sec. 1.4
+ * - Rybicki & Lightman (1979) "Radiative Processes in Astrophysics", Ch. 1
  */
 
 #include <cmath>

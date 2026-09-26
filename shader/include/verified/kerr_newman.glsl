@@ -172,12 +172,58 @@ float kn_frame_dragging_omega(float r, float theta, float M, float a, float Q) {
 }
 
 /**
- * Approximate formula for equatorial photon sphere
+ * Circular-photon-orbit function r^2 - 3Mr + 2Q^2 + 2a sqrt(Mr - Q^2)
+ * (angular momentum along +z, signed a); zero at the equatorial photon orbit.
  *
- * Rocq Derivation: Derived from Rocq:Definition kn_photon_sphere_equator (M a Q : R) : R :=...
+ * Rocq Derivation: Derived from Rocq:Definition kn_photon_orbit_function (r M a Q : R) : R :=...
+ */
+float kn_photon_orbit_function(float r, float M, float a, float Q) {
+    return r * r - 3.0 * M * r + 2.0 * Q * Q + 2.0 * a * sqrt(M * r - Q * Q);
+}
+
+/**
+ * Equatorial photon orbit (angular momentum along +z): outermost zero of
+ * kn_photon_orbit_function by an inward scan from 5 M and bisection.
+ * NaN (0/0) for super-extremal or massless input.
+ *
+ * Rocq Derivation: Derived from Rocq:Definition kn_photon_sphere_equator_spec (M a Q r : R) : Prop :=...
+ *
+ * Depends on: kn_photon_orbit_function
  */
 float kn_photon_sphere_equator(float M, float a, float Q) {
-    return 2.0 * M * (1.0 + cos(acos(a / M) / 3.0));
+    float discriminant = M * M - a * a - Q * Q;
+    if (!(M > 0.0) || discriminant < 0.0) {
+        float zero = 0.0;
+        return zero / zero;
+    }
+    float r_floor = max(M + sqrt(discriminant), Q * Q / M);
+    float step_size = 0.005 * M;
+    float r_outer = 5.0 * M;
+    float r_inner = r_outer;
+    bool bracketed = false;
+    while (r_outer - step_size > r_floor) {
+        r_inner = r_outer - step_size;
+        if (kn_photon_orbit_function(r_inner, M, a, Q) <= 0.0) {
+            bracketed = true;
+            break;
+        }
+        r_outer = r_inner;
+    }
+    if (!bracketed) {
+        r_inner = r_floor;
+        if (kn_photon_orbit_function(r_inner, M, a, Q) > 0.0) {
+            return r_floor;
+        }
+    }
+    for (int iteration = 0; iteration < 64; ++iteration) {
+        float r_mid = 0.5 * (r_inner + r_outer);
+        if (kn_photon_orbit_function(r_mid, M, a, Q) <= 0.0) {
+            r_inner = r_mid;
+        } else {
+            r_outer = r_mid;
+        }
+    }
+    return 0.5 * (r_inner + r_outer);
 }
 
 /**

@@ -7,7 +7,7 @@
  * prograde photon orbit both counter-rotate with the hole. The table checks
  * physics::kerrIscoRadius, physics::kerrPhotonOrbit*, verified::kerrIsco*,
  * verified::photonOrbit*, and blackhole::physics::NovikovThorneDisk::iscoRadius against
- * Bardeen-Press-Teukolsky values (audit 02-open-gororoba-crossref F13).
+ * Bardeen-Press-Teukolsky (1972) closed-form values.
  */
 
 #include <cmath>

@@ -22,6 +22,8 @@
  *   - IscoReissnerNordstromCubic / IscoMixedSpinCharge / IscoKerrLimit /
  *     IscoSignAndScaling: verified:: ISCO against mpmath dE/dr = 0 roots,
  *     Bardeen-Press-Teukolsky at Q = 0, the phi -> -phi reflection, and M scaling.
+ *   - PhotonOrbitEquator: circular photon orbit against mpmath null limits of
+ *     circular geodesics, 3M at a = Q = 0, and the BPT Kerr orbit at Q = 0.
  *   - EmPotentialNamespacesAgree: A_t and A_phi agree across physics:: and
  *     verified::, with A_phi / A_t = -a sin^2 theta.
  *   - EinsteinMaxwellFieldEquation: the verified:: metric and the physics::
@@ -391,6 +393,11 @@ constexpr double kIscoA05Q05Ret = 7.2051154235083894;
 constexpr double kIscoA09Q03Pro = 1.980407461799196;
 constexpr double kIscoA09Q03Ret = 8.6013892403446616;
 constexpr double kOmegaR3A05Q05 = 0.033948339483394834;
+constexpr double kPhotonA0Q05 = 2.8228756555322953;
+constexpr double kPhotonA05Q05Pro = 2.118828664898468;
+constexpr double kPhotonA05Q05Ret = 3.3756176710888185;
+constexpr double kPhotonA09Q03Pro = 1.3996686888099221;
+constexpr double kPhotonA09Q03Ret = 3.8589114446045108;
 
 // Bisection stops at a 1e-15 M bracket; the closed-form root is
 // well-conditioned there, so 1e-12 bounds the double-precision error.
@@ -483,6 +490,31 @@ TEST(KerrNewman, IscoSignAndScaling) {
   }
   EXPECT_TRUE(std::isnan(verified::knIscoRadiusPrograde(1.0, 0.8, 0.8)));
   EXPECT_TRUE(std::isnan(verified::knIscoRadiusPrograde(0.0, 0.0, 0.0)));
+}
+
+/**
+ * @brief Equatorial photon orbit: null limit of circular geodesics, signed spin.
+ *
+ * References are mpmath roots of g_tt + 2 g_tphi Omega + g_phph Omega^2 = 0
+ * with Omega from the geodesic circularity condition.
+ */
+TEST(KerrNewman, PhotonOrbitEquator) {
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 0.0), 3.0, kIscoTol);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 0.5), kPhotonA0Q05, kIscoTol);
+  // Extremal Reissner-Nordstrom: (3M + sqrt(9M^2 - 8Q^2)) / 2 = 2M.
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.0, 1.0), 2.0, kIscoTol);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.5, 0.5), kPhotonA05Q05Pro, kIscoTol);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, -0.5, 0.5), kPhotonA05Q05Ret, kIscoTol);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.9, 0.3), kPhotonA09Q03Pro, kIscoTol);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, -0.9, 0.3), kPhotonA09Q03Ret, kIscoTol);
+  // Q = 0: Bardeen-Press-Teukolsky 2M(1 + cos((2/3) acos(-a/M))).
+  for (double const a : {-0.99, -0.5, 0.3, 0.9, 0.99}) {
+    const double bpt = 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(-a)));
+    EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, a, 0.0), bpt, 1.0e-10) << "a=" << a;
+  }
+  EXPECT_NEAR(verified::knPhotonSphereEquator(2.5, 1.25, 1.25),
+              2.5 * verified::knPhotonSphereEquator(1.0, 0.5, 0.5), 1.0e-11);
+  EXPECT_TRUE(std::isnan(verified::knPhotonSphereEquator(1.0, 0.8, 0.8)));
 }
 
 /**

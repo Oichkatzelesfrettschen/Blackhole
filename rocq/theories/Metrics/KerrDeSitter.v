@@ -4,7 +4,7 @@
 
 (**
   Carter (1968) form of the Kerr-de Sitter metric in Boyer-Lindquist
-  coordinates (Griffiths and Podolsky 2009, sec. 11.1), c = G = 1:
+  coordinates (Griffiths and Podolsky 2009), c = G = 1:
 
     ds^2 = -(Delta_r / (Xi^2 Sigma)) (dt - a sin^2 theta dphi)^2
          + (Delta_theta sin^2 theta / (Xi^2 Sigma)) (a dt - (r^2 + a^2) dphi)^2
@@ -26,7 +26,7 @@
   References:
   - Carter, B. (1968). Commun. Math. Phys. 10, 280
   - Griffiths, J. B. and Podolsky, J. (2009). Exact Space-Times in Einstein's
-    General Relativity, sec. 11.1
+    General Relativity, Cambridge University Press
 *)
 
 Require Import Blackhole.Prelim.

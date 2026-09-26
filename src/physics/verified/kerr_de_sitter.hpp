@@ -4,8 +4,8 @@
  *
  * Maintained C++ reference for rocq/theories/Metrics/KerrDeSitter.v
  *
- * Carter (1968) form in Boyer-Lindquist coordinates (Griffiths & Podolsky 2009,
- * eq. 11.4), geometric units c = G = 1:
+ * Carter (1968) form in Boyer-Lindquist coordinates (Griffiths & Podolsky 2009),
+ * geometric units c = G = 1:
  *
  *   ds^2 = -(Delta_r / (Xi^2 Sigma)) (dt - a sin^2 theta dphi)^2
  *        + (Delta_theta sin^2 theta / (Xi^2 Sigma)) (a dt - (r^2 + a^2) dphi)^2
@@ -39,7 +39,7 @@
  * References:
  * - Carter, B. (1968). Commun. Math. Phys. 10, 280
  * - Griffiths, J. B. & Podolsky, J. (2009). Exact Space-Times in Einstein's
- *   General Relativity, sec. 11.1
+ *   General Relativity, Cambridge University Press
  */
 
 #ifndef PHYSICS_VERIFIED_KERR_DE_SITTER_HPP

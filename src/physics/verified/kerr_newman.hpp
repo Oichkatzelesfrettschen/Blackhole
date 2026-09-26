@@ -309,27 +309,85 @@ namespace verified {
 }
 
 // ============================================================================
-// Photon Sphere (from Rocq: kn_photon_sphere_equator)
+// Photon Orbit (from Rocq: kn_photon_orbit_function, kn_photon_sphere_equator_spec)
 // ============================================================================
 
 /**
- * @brief Approximate formula for equatorial photon sphere
+ * @brief Circular-photon-orbit function of the equatorial KN metric
  *
- * Derived from Rocq: Definition kn_photon_sphere_equator (M a Q : R) : R :=
- *   let discriminant := M^2 - a^2 - Q^2 in
- *   2 * M * (1 + cos (acos (a / M) / 3)).
+ * Derived from Rocq: Definition kn_photon_orbit_function (r M a Q : R) : R :=
+ *   r^2 - 3 * M * r + 2 * Q^2 + 2 * a * sqrt (M * r - Q^2).
  *
- * For Kerr-Newman, photon sphere is more complex due to charge.
- * This is the approximate equatorial value.
+ * Timelike circular orbits with angular momentum along +z (signed a) have
+ * u^t proportional to 1 / sqrt(f(r)); the orbit becomes null where f = 0. At
+ * Q = 0 this is r^2 - 3Mr + 2a sqrt(Mr), whose root is the Bardeen-Press-
+ * Teukolsky photon orbit 2M(1 + cos((2/3) acos(-a/M))); at a = 0 the root is
+ * (3M + sqrt(9M^2 - 8Q^2)) / 2. f is positive outside the photon orbit.
  *
+ * @param r Radial coordinate (requires M r >= Q^2)
  * @param m Black hole mass
- * @param a Spin parameter
+ * @param a Signed spin parameter
  * @param q Electric charge
- * @return Approximate equatorial photon sphere radius
+ * @return Photon-orbit function value
+ */
+[[nodiscard]] inline double knPhotonOrbitFunction(double r, double m, double a,
+                                                  double q) noexcept {
+  return r * r - 3.0 * m * r + 2.0 * q * q + 2.0 * a * std::sqrt(m * r - q * q);
+}
+
+/**
+ * @brief Equatorial circular photon orbit with angular momentum along +z
+ *
+ * Derived from Rocq: Definition kn_photon_sphere_equator_spec (M a Q r : R) : Prop :=
+ *   kn_photon_orbit_function r M a Q = 0 /\
+ *   forall r', r' > r -> kn_photon_orbit_function r' M a Q > 0.
+ *
+ * The outermost zero of knPhotonOrbitFunction. The search starts at 5 M,
+ * above the largest photon orbit of the family (4 M at a = -M, Q = 0), steps
+ * inward by M/200 until f turns non-positive, and bisects to 1e-15 M. The
+ * floor is max(r_+, Q^2/M); when f stays positive to the floor (extremal
+ * limits) the floor is returned. A super-extremal or massless input returns
+ * NaN. The retrograde orbit is knPhotonSphereEquator(m, -a, q).
+ *
+ * @param m Black hole mass (> 0)
+ * @param a Signed spin parameter; a < 0 gives the counter-rotating orbit
+ * @param q Electric charge
+ * @return Photon orbit radius, or NaN when m <= 0 or a^2 + q^2 > m^2
  */
 [[nodiscard]] inline double knPhotonSphereEquator(double m, double a, double q) noexcept {
-  (void)q; // Charge appears in discriminant, simplified formula uses only a/M
-  return 2.0 * m * (1.0 + std::cos(std::acos(a / m) / 3.0));
+  const double discriminant = m * m - a * a - q * q;
+  if (!(m > 0.0) || discriminant < 0.0) {
+    return std::nan("");
+  }
+  const double rFloor = std::fmax(m + std::sqrt(discriminant), q * q / m);
+  const double step = 0.005 * m;
+  double rOuter = 5.0 * m;
+  double rInner = rOuter;
+  bool bracketed = false;
+  while (rOuter - step > rFloor) {
+    rInner = rOuter - step;
+    if (knPhotonOrbitFunction(rInner, m, a, q) <= 0.0) {
+      bracketed = true;
+      break;
+    }
+    rOuter = rInner;
+  }
+  if (!bracketed) {
+    rInner = rFloor;
+    if (knPhotonOrbitFunction(rInner, m, a, q) > 0.0) {
+      return rFloor;
+    }
+  }
+  // Invariant: f(rInner) <= 0 < f(rOuter).
+  for (int iteration = 0; iteration < 200 && rOuter - rInner > 1.0e-15 * m; ++iteration) {
+    const double rMid = 0.5 * (rInner + rOuter);
+    if (knPhotonOrbitFunction(rMid, m, a, q) <= 0.0) {
+      rInner = rMid;
+    } else {
+      rOuter = rMid;
+    }
+  }
+  return 0.5 * (rInner + rOuter);
 }
 
 // ============================================================================

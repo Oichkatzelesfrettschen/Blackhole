@@ -3,9 +3,9 @@
  * @brief Null and timelike norm projection in verified/energy_conserving_geodesic.hpp.
  *
  * The additive projection keeps v^t and v^phi and rescales v^r, v^theta so
- * that g(v, v) returns to its target. The reference state is the audit case
- * (02-open-gororoba-crossref F7, harness bh/ecg.cpp): a Schwarzschild r = 10M
- * photon whose v^r carries a 1e-6 relative drift.
+ * that g(v, v) returns to its target. The reference state is a Schwarzschild
+ * r = 10M equatorial photon (v^t = 1/f, v^phi = 0.03) whose v^r carries a 1e-6
+ * relative drift; the exact null v^r is 0.96333.
  */
 
 #include <cmath>
@@ -23,7 +23,7 @@ struct SchwarzschildNullCase {
   double exactVr;
 };
 
-SchwarzschildNullCase auditNullCase() {
+SchwarzschildNullCase driftedNullCase() {
   constexpr double r = 10.0;
   constexpr double f = 1.0 - (2.0 / r);
   const verified::MetricComponents g(-f, 1.0 / f, r * r, r * r, 0.0);
@@ -35,7 +35,7 @@ SchwarzschildNullCase auditNullCase() {
   return {g, drifted, exactVr};
 }
 
-/** @brief Multiplicative rescale by sqrt(|target / norm|), the form F7 describes. */
+/** @brief Multiplicative rescale of v^r, v^theta by sqrt(|target / norm|), zero for a null target. */
 verified::StateVector multiplicativeRescale(const verified::MetricComponents &g,
                                             const verified::StateVector &s, double target) {
   const double factor = std::sqrt(std::abs(target / verified::computeMetricNorm(g, s)));
@@ -44,9 +44,9 @@ verified::StateVector multiplicativeRescale(const verified::MetricComponents &g,
 
 } // namespace
 
-/** @brief The F7 photon keeps v^r = 0.963 and returns to |g(v, v)| < 1e-14. */
+/** @brief The drifted photon keeps v^r = 0.963 and returns to |g(v, v)| < 1e-14. */
 TEST(EnergyConservingGeodesic, NullProjectionKeepsRadialVelocity) {
-  const SchwarzschildNullCase c = auditNullCase();
+  const SchwarzschildNullCase c = driftedNullCase();
   EXPECT_GT(std::abs(verified::computeMetricNorm(c.g, c.drifted)), 1.0e-6);
 
   const verified::StateVector corrected =
@@ -62,7 +62,7 @@ TEST(EnergyConservingGeodesic, NullProjectionKeepsRadialVelocity) {
 
 /** @brief Negative control: the multiplicative rescale zeroes v^r and leaves norm -1.16. */
 TEST(EnergyConservingGeodesic, MultiplicativeRescaleDestroysNullRay) {
-  const SchwarzschildNullCase c = auditNullCase();
+  const SchwarzschildNullCase c = driftedNullCase();
   const verified::StateVector rescaled = multiplicativeRescale(c.g, c.drifted, 0.0);
   EXPECT_EQ(rescaled.v1, 0.0);
   EXPECT_NEAR(verified::computeMetricNorm(c.g, rescaled), -1.16, 0.01);
@@ -98,7 +98,7 @@ TEST(EnergyConservingGeodesic, KerrProjectionScalesRadialAndPolarTogether) {
 
 /** @brief Timelike target -1 is restored the same way. */
 TEST(EnergyConservingGeodesic, TimelikeProjection) {
-  const SchwarzschildNullCase c = auditNullCase();
+  const SchwarzschildNullCase c = driftedNullCase();
   // A timelike state: lower v^r until g(v, v) is near -0.5, then project to -1.
   verified::StateVector timelike = c.drifted;
   timelike.v1 = 0.5;

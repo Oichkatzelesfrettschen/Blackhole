@@ -5566,7 +5566,7 @@ if(BUILD_TESTING)
   endif()
 
   # Additive null/timelike norm projection of the verified energy-conserving
-  # geodesic step (audit 02 F7 case).
+  # geodesic step: a drifted photon keeps v^r and returns to g(v, v) = 0.
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/energy_conserving_geodesic_test.cpp")
     add_executable(energy_conserving_geodesic_test
       "${PROJECT_SOURCE_DIR}/tests/energy_conserving_geodesic_test.cpp"
