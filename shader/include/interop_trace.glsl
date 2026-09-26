@@ -884,6 +884,11 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   KerrConsts c;
   KerrRay    kRay;
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
+  vec3 origin = kerrChartPosition(ray.position, rsMetric, aTrace);
+  // Set when the ray escapes or the medium turns opaque; otherwise the step
+  // budget ran out and the ray is shaded as escaping along its last
+  // direction, as bhTraceGeodesicRTE does.
+  bool finished = false;
 
   vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
   // Observed polarization, composited front to back (stokesCompositeStep):
@@ -939,7 +944,10 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       stokesCompositeStep(polObserved, polTransmit, polFaraday, emStokes, alphaNu, rhoV,
                           pathStep);
 
-      if (transmit < 0.005) { break; }
+      if (transmit < 0.005) {
+        finished = true;
+        break;
+      }
     }
 
     if (kRay.r > escapeRadius && kRay.vr > 0.0) {
@@ -949,12 +957,17 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
         accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
                                                       minR, r_s).rgb;
       }
+      finished = true;
       break;
     }
   }
 
   // Map accumulated Stokes state to display color
   terminalPos = kerrRayPosition(kRay);
+  vec3 budgetDir = terminalPos - origin;
+  if (!finished && dot(budgetDir, budgetDir) > BH_EPSILON * BH_EPSILON) {
+    accumI += transmit * bhBackgroundColorFromDir(normalize(budgetDir), minR, r_s).rgb;
+  }
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
   vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
   return vec4(stokesDisplayColor(stokes, accumI), 1.0);

@@ -2655,6 +2655,10 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     KerrRay    kr;
     d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
     float3 const origin = d_kerr_chart_position(cam_pos, rs, a_trace);
+    /* Set when the ray escapes or the medium turns opaque; otherwise the step
+     * budget ran out and the ray is shaded as escaping along its last
+     * direction, as d_trace_geodesic_rte does. */
+    bool finished = false;
 
     /* Color-accurate intensity accumulator (same as d_trace_geodesic_rte) */
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
@@ -2715,7 +2719,10 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
             d_stokes_composite_step(stokes, pol_transmit, pol_faraday, 0.0f, jQ_s, jU_s, 0.0f,
                                     alpha_nu, rho_v, path_step);
 
-            if (transmit < 0.005f) { break; }
+            if (transmit < 0.005f) {
+                finished = true;
+                break;
+            }
         }
 
         if (kr.r > escape_r && kr.vr > 0.0f) {
@@ -2738,7 +2745,29 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                 accum_i.y += transmit * bg.y;
                 accum_i.z += transmit * bg.z;
             }
+            finished = true;
             break;
+        }
+    }
+
+    if (!finished) {
+        float3 const esc_dir = d_sub(d_kerr_ray_position(kr), origin);
+        if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
+            float4 const bg4 = d_background_color(d_normalize(esc_dir));
+            float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
+            bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
+            if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                d_debug_post_shaping_background != 0 ||
+                d_debug_shaper_inputs != 0 ||
+                d_debug_closest_approach_state != 0 ||
+                d_debug_closest_approach_timeline != 0 ||
+                d_debug_closest_approach_direction != 0 ||
+                d_debug_escaped_direction != 0) {
+                return make_float4(bg.x, bg.y, bg.z, 1.0f);
+            }
+            accum_i.x += transmit * bg.x;
+            accum_i.y += transmit * bg.y;
+            accum_i.z += transmit * bg.z;
         }
     }
 

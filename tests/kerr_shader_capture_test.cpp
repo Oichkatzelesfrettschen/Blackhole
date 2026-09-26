@@ -1595,3 +1595,55 @@ void main() {
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }
+
+TEST_F(KerrShaderCaptureTest, StokesAddsTheSkyWhenItsStepBudgetRunsOut) {
+  // A ray that exhausts its step budget is shaded as escaping along its last
+  // direction: bhTraceGeodesicRTE adds the transmittance-weighted sky there,
+  // and bhTraceGeodesicStokes must too. Without a disk both traces carry an
+  // unpolarized sky, so their colors agree, for a budget of 3 steps
+  // (exhausted) and 3000 (escaped), against a uniform sky cube of (0.8, 0.5,
+  // 0.2).
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  const GLuint program = bhtest::createComputeProgram(comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+uniform int budget;
+void main() {
+  Ray ray;
+  ray.position = vec3(20.0, 0.0, 5.0);
+  ray.velocity = normalize(vec3(-1.0, 0.4, 0.1));
+  ray.affineParameter = 0.0;
+  vec3 terminalPos;
+  vec3 rte = bhTraceGeodesicRTE(ray, 2.0, 100.0, budget, 0.1, 0.5, terminalPos).rgb;
+  vec3 pol = bhTraceGeodesicStokes(ray, 2.0, 100.0, budget, 0.1, 0.5, 0.0, 0.0, terminalPos).rgb;
+  result[0] = rte.r; result[1] = rte.g; result[2] = rte.b;
+  result[3] = pol.r; result[4] = pol.g; result[5] = pol.b;
+}
+)");
+  GLuint sky = 0;
+  glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &sky);
+  glTextureStorage2D(sky, 1, GL_RGBA32F, 1, 1);
+  const std::array<float, 4> texel = {0.8F, 0.5F, 0.2F, 1.0F};
+  for (int face = 0; face < 6; ++face) {
+    glTextureSubImage3D(sky, 0, 0, 0, face, 1, 1, 1, GL_RGBA, GL_FLOAT, texel.data());
+  }
+  glBindTextureUnit(0, sky);
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 6), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  for (const int budget : {3, 3000}) {
+    glUseProgram(program);
+    glUniform1i(glGetUniformLocation(program, "galaxy"), 0);
+    glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.6F);
+    glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 0.0F);
+    glUniform1i(glGetUniformLocation(program, "budget"), budget);
+    const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 6);
+    for (std::size_t c = 0; c < 3; ++c) {
+      EXPECT_NEAR(out.at(c), texel.at(c), 1e-5F) << "budget " << budget << " channel " << c;
+      EXPECT_NEAR(out.at(3 + c), out.at(c), 1e-5F) << "budget " << budget << " channel " << c;
+    }
+  }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteTextures(1, &sky);
+  glDeleteProgram(program);
+}
