@@ -72,10 +72,21 @@ enum class OrbitSense : std::uint8_t {
   return std::sqrt(epsilon * (2.0 - epsilon));
 }
 
-/** @brief Delta = (x - h)(x + h); positive outside the outer horizon. */
+/** @brief Delta = (x - h)(x + h); positive outside the outer horizon. The
+ *         product underflows for offsets below about 1e-154 from an extremal
+ *         horizon (x = 1e-200 at epsilon = 0 gives 0), so anything needing
+ *         sqrt(Delta) or its sign takes sqrtKerrDelta or x > h instead. */
 [[nodiscard]] inline double kerrDelta(double epsilon, double x) {
   const double h = horizonOffset(epsilon);
   return (x - h) * (x + h);
+}
+
+/** @brief sqrt(Delta) = sqrt(x - h) sqrt(x + h) outside the outer horizon and
+ *         0 at or inside it, from the two factors separately so that Delta
+ *         itself never has to be representable. */
+[[nodiscard]] inline double sqrtKerrDelta(double epsilon, double x) {
+  const double h = horizonOffset(epsilon);
+  return x > h ? std::sqrt(x - h) * std::sqrt(x + h) : 0.0;
 }
 
 /** @brief Equatorial lapse-shift primitives at one radius. */
@@ -102,7 +113,7 @@ struct EquatorialFrame {
   frame.spin = 1.0 - epsilon;
   const double r = frame.r;
   const double a2 = frame.spin * frame.spin;
-  frame.sqrtDelta = std::sqrt(kerrDelta(epsilon, x));
+  frame.sqrtDelta = sqrtKerrDelta(epsilon, x);
   frame.bigA = (r * r * ((r * r) + a2)) + (2.0 * a2 * r);
   const double sqrtA = std::sqrt(frame.bigA);
   frame.alpha = r * frame.sqrtDelta / sqrtA;
@@ -143,20 +154,27 @@ struct CircularOrbit {
   const double r = 1.0 + x;
   const double s = std::sqrt(r);
   const double y = x / (1.0 + s);
-  const double radicand = (y * y * (y + 3.0)) - (2.0 * e);
-  const double delta = kerrDelta(epsilon, x);
-  if (!(radicand > 0.0) || !(delta > 0.0)) {
+  // sqrt(N) = y sqrt((y + 3) - 2e / y^2), so y^2 never has to be
+  // representable (x = 1e-200 at extremal spin); a vanishing tail is the
+  // photon orbit and a negative one lies inside it.
+  const double sqrtDelta = sqrtKerrDelta(epsilon, x);
+  if (!(y > 0.0) || !(sqrtDelta > 0.0)) {
     return orbit;
   }
+  const double tail = (y + 3.0) - ((2.0 * e / y) / y);
+  if (!(tail > 0.0)) {
+    return orbit;
+  }
+  const double sqrtRadicand = y * std::sqrt(tail);
   const double r32 = r * s;
   const double denominator = r32 + spinSense;
   const double sign = senseSign(epsilon, sense);
   orbit.exists = true;
-  orbit.properTimeRate = std::sqrt(r32) * std::sqrt(radicand) / denominator;
+  orbit.properTimeRate = std::sqrt(r32) * sqrtRadicand / denominator;
   orbit.angularVelocity = sign / denominator;
   const double rMinusA = x + e;
   const double numerator = (rMinusA * rMinusA) + (2.0 * spinSense * s * y);
-  orbit.zamoVelocity = sign * numerator / (std::sqrt(delta) * denominator);
+  orbit.zamoVelocity = sign * numerator / (sqrtDelta * denominator);
   return orbit;
 }
 

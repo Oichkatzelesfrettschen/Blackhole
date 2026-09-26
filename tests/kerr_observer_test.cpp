@@ -72,7 +72,7 @@ constexpr std::array<RadiiRow, 8> K_RADII{{
     {.epsilon = 1.9, .xIscoPro = 1.3208830417618872468, .xIscoRetro = 7.717352279606489316, .xMbPro = 7.324555320336758664e-1, .xMbRetro = 4.6568097504180443536, .xPhPro = 5.5785462742338280309e-1, .xPhRetro = 2.910267939103036726},
 }};
 // A rate of -1 marks a sense with no timelike circular orbit at that radius.
-constexpr std::array<PointRow, 8> K_POINTS{{
+constexpr std::array<PointRow, 9> K_POINTS{{
     {.epsilon = 1.33e-14, .x = 3.7611284825013188359e-5, .alpha = 1.880546559306311743e-5, .omega = 4.9998119453442356177e-1, .varpi = 2.0000000010609100082, .ratePro = 1.6285857804897317108e-5, .omegaPro = 4.9998589603343017509e-1, .rateRetro = -1.0, .omegaRetro = 0.0},
     {.epsilon = 0.1, .x = 5.0, .alpha = 8.179815713894085549e-1, .omega = 8.0906148867313915858e-3, .varpi = 6.0893349390553316812, .ratePro = 7.4344405871481958781e-1, .omegaPro = 6.4115146878103390442e-2, .rateRetro = 6.5451153007973629037e-1, .omegaRetro = -7.2479847840044001065e-2},
     {.epsilon = 0.1, .x = 7.0e-1, .alpha = 2.5391996310095110195e-1, .omega = 2.2756005056890012642e-1, .varpi = 2.1570677264449969595, .ratePro = 1.5480159967808213366e-1, .omegaPro = 3.2086980691418488008e-1, .rateRetro = -1.0, .omegaRetro = 0.0},
@@ -81,6 +81,7 @@ constexpr std::array<PointRow, 8> K_POINTS{{
     {.epsilon = 1.0, .x = 5.0, .alpha = 8.1649658092772603273e-1, .omega = 0.0, .varpi = 6.0, .ratePro = 7.071067811865475244e-1, .omegaPro = 6.8041381743977169394e-2, .rateRetro = 7.071067811865475244e-1, .omegaRetro = -6.8041381743977169394e-2}, // NOLINT(modernize-use-std-numbers) -- generated reference value
     {.epsilon = 0.002, .x = 5.0e-1, .alpha = 2.3191164750530924223e-1, .omega = 2.9091909738123257e-1, .varpi = 2.1386933705731014243, .ratePro = 1.9056173891204197645e-1, .omegaPro = 3.5271909119955795371e-1, .rateRetro = -1.0, .omegaRetro = 0.0},
     {.epsilon = 1.9, .x = 9.0, .alpha = 8.9460655096881942211e-1, .omega = -1.7826724240383472646e-3, .varpi = 1.0048482472493048042e+1, .ratePro = 8.4593629853609765265e-1, .omegaPro = -3.0747682224285464546e-2, .rateRetro = 8.2541375464928158576e-1, .omegaRetro = 3.2549141406222833815e-2},
+    {.epsilon = 0.0, .x = 1.0e-200, .alpha = 5.0e-201, .omega = 5.0e-1, .varpi = 2.0, .ratePro = 4.3301270189221932338e-201, .omegaPro = 5.0e-1, .rateRetro = -1.0, .omegaRetro = 0.0},
 }};
 constexpr std::array<DelayRow, 8> K_DELAYS{{
     {.epsilon = 0.1, .x1 = 7.0e-1, .x2 = 3.99e+2, .delayM = 4.1482361145577006912e+2},
@@ -613,4 +614,19 @@ TEST(KerrObserver, NearHorizonDelayStaysFinite) {
     EXPECT_TRUE(std::isfinite(delay));
     expectRelative(delay, row.delayM, 1e-12, "near-horizon delay");
   }
+}
+
+// Falsifier: 1e-200 M outside an extremal horizon, where Delta = 1e-400
+// underflows a double, the frame reporting sqrt(Delta) = 0 or a zero lapse,
+// or the prograde circular orbit (timelike there, as the 500-digit reference
+// row in K_POINTS shows) reported missing, clockless, or at any ZAMO-frame
+// speed but 1/2.
+TEST(KerrObserver, ExtremalFrameSurvivesDeltaUnderflow) {
+  const ko::EquatorialFrame frame = ko::equatorialFrame(0.0, 1e-200);
+  expectRelative(frame.sqrtDelta, 1e-200, 1e-12, "sqrt(Delta)");
+  expectRelative(frame.alpha, 5e-201, 1e-12, "lapse");
+  const ko::CircularOrbit orbit = ko::circularOrbit(0.0, 1e-200, OrbitSense::Prograde);
+  ASSERT_TRUE(orbit.exists);
+  expectRelative(orbit.properTimeRate, std::numbers::sqrt3 / 2.0 * 5e-201, 1e-12, "clock");
+  expectRelative(orbit.zamoVelocity, 0.5, 1e-12, "ZAMO-frame speed");
 }

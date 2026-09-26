@@ -152,15 +152,19 @@ def main() -> None:
         ("1.0", mpf(5)),
         ("0.002", mpf("0.5")),
         ("1.9", mpf(9)),
+        # Extremal spin 1e-200 M outside the horizon: Delta = 1e-400 underflows
+        # a double, and 1 - 3/r + 2/r^1.5 needs 400+ digits to resolve.
+        ("0.0", mpf("1e-200")),
     ]
     print("// A rate of -1 marks a sense with no timelike circular orbit at that radius.")
     print(f"constexpr std::array<PointRow, {len(points)}> K_POINTS{{{{")
     for eps, x in points:
         a = spin(eps)
-        r = 1 + x
-        alpha, omega, varpi = zamo(a, r)
-        rate_pro, omega_pro = orbit(a, r, 1)
-        rate_retro, omega_retro = orbit(a, r, -1)
+        with mp.workdps(500):
+            r = 1 + x
+            alpha, omega, varpi = zamo(a, r)
+            rate_pro, omega_pro = orbit(a, r, 1)
+            rate_retro, omega_retro = orbit(a, r, -1)
         values = [
             ("x", x),
             ("alpha", alpha),
