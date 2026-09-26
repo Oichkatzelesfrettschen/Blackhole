@@ -1,0 +1,51 @@
+== Repo default scenario: a* = 0.9, bands 0.85/3/10/50 r_s, authority 200 r_s ==
+r+ 1.43589 ergo 2 rph_pro 1.55785 rmb_pro 1.73246 isco_pro 2.32088 rph_ret 3.91027 isco_ret 8.71735
+r=1.7M zamo=0.25392 static=n/a circ_pro=0.154802 circ_ret=n/a pro_stable=False ret_stable=False ret_exists=False
+r=6.0M zamo=0.817982 static=0.816497 circ_pro=0.743444 circ_ret=0.654512 pro_stable=True ret_stable=False ret_exists=True
+r=20.0M zamo=0.948694 static=0.948683 circ_pro=0.923512 circ_ret=0.920235 pro_stable=True ret_stable=True ret_exists=True
+r=100.0M zamo=0.98995 static=0.989949 circ_pro=0.984913 circ_ret=0.984858 pro_stable=True ret_stable=True ret_exists=True
+r=400.0M zamo=0.997497 static=0.997497 circ_pro=0.996244 circ_ret=0.996242 pro_stable=True ret_stable=True ret_exists=True
+
+== Schwarzschild field (BlackholeTimeField): static vs circular geodesic ==
+r=6.0M static=0.816497 circ=0.707107
+r=20.0M static=0.948683 circ=0.921954
+r=100.0M static=0.989949 circ=0.984886
+
+== Canon: spin that puts 1 h = 7 yr (factor 61362.0 ) at the prograde ISCO ==
+1-a = 1.33267e-14  r_isco/M = 1.0000376364  (r_isco-1)/M = 3.76364e-5
+dtau/dt = 1.6296731e-5  zamo lapse there = 1.8818021e-5  ratio circ/zamo = 0.866017
+E = 0.577372  L = 1.154744
+a=1-0.4 isco=3.8290694 circ dtau/dt=0.568236 dilation=1.75983 zamo@isco=0.6958
+a=1-0.1 isco=2.320883 circ dtau/dt=0.370868 dilation=2.69638 zamo@isco=0.474872
+a=1-0.002 isco=1.2369707 circ dtau/dt=0.0926703 dilation=10.7909 zamo@isco=0.112292
+a=1-0.0001 isco=1.0785264 circ dtau/dt=0.0327697 dilation=30.516 zamo@isco=0.0385393
+a=1-1.0e-8 isco=1.0034302 circ dtau/dt=0.00148278 dilation=674.409 zamo@isco=0.00171363
+a=1-1.0e-14 isco=1.0000342 circ dtau/dt=1.4809e-5 dilation=67526.4 zamo@isco=1.71001e-5
+
+== ZAMO-model radius where lapse = 1/ 61362.0  (repo KerrTimeField) ==
+a=0.6 r+=1.8 (r-r+)/M=6.64e-10 circ orbit exists there: False
+a=0.9 r+=1.4358899 (r-r+)/M=1.219e-9 circ orbit exists there: False
+a=0.998 r+=1.0632139 (r-r+)/M=8.403e-9 circ orbit exists there: False
+
+== Orbital period and tidal stretch at the canon ISCO, M = 1e8 Msun ==
+GM/c^3 = 492.564 s  coordinate period = 1.7194 h  proper period = 0.10088 s
+Marck stretch eigenvalue = 2.99966 /M^2 ; gradient = 1.2364e-5 s^-2 ; rho_crit (self-gravity = tidal) = 44.22 g/cm^3 ; earth-radius stretch accel = 8.032 g
+mass needed for Earth density 5.51 g/cm^3 to hold (rho_crit ~ 1/M^2): 2.833e+8 Msun
+
+== Kerr principal-null delay closed form vs quadrature, a=0.9, 1.7M -> 400M ==
+closed 414.823611456 quad 414.823611456
+
+== M87 scale (6.5e9 Msun): delays in days ==
+GM/c^3 = 0.37056 d ; authority 400M radius = 148.23 light-days ; link 40 light-days = 107.94 M
+radial 100.0->400.0: 112.21 d ; antipodal flat chord >= 185.28 d
+radial 20.0->400.0: 143.11 d ; antipodal flat chord >= 155.64 d
+radial 6.0->400.0: 149.41 d ; antipodal flat chord >= 150.45 d
+same band r=6.0M antipodal flat chord >= 4.4468 d (code: 0)
+same band r=20.0M antipodal flat chord >= 14.823 d (code: 0)
+same band r=100.0M antipodal flat chord >= 74.113 d (code: 0)
+
+== Transit at 0.5c: proper time per coordinate turn ==
+dtau/dt = 0.866025 ; 40 ld at 0.5c = 80 coordinate d -> 69.282 proper d (code books 80)
+
+== Proper time a canon Miller colony accrues in a 1200-turn, 1-day-turn campaign ==
+28.161 proper minutes
