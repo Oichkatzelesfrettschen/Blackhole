@@ -156,6 +156,8 @@ private:
 inline constexpr float TESSERACT_NEAR_PLANE = 0.05f;
 /// Closest tesseract view distance; the View distance slider shares it.
 inline constexpr float TESSERACT_MIN_VIEW_DISTANCE = 3.0f;
+/// Tesseract view distance at startup and after Reset Camera.
+inline constexpr float TESSERACT_DEFAULT_VIEW_DISTANCE = 8.0f;
 /// Farthest interactive tesseract view distance; the View distance slider shares it.
 inline constexpr float TESSERACT_MAX_VIEW_DISTANCE = 20.0f;
 /// Smallest eye distance on the w axis the perspective projection uses; the
@@ -264,6 +266,16 @@ TesseractFraming tesseractFraming(float viewDistance, float fovDeg, float boundi
  * [TESSERACT_MIN_VIEW_DISTANCE, TESSERACT_MAX_VIEW_DISTANCE].
  */
 float tesseractZoom(float viewDistance, float zoomDelta);
+
+/**
+ * @brief Tesseract view distance after one frame of interactive input.
+ *
+ * Reset Camera (@p cameraReset, InputManager::takeCameraReset) returns the
+ * view to TESSERACT_DEFAULT_VIEW_DISTANCE as it returns the black-hole camera
+ * to its default pose, and drops that frame's zoom; otherwise the redirected
+ * @p zoomDelta applies through tesseractZoom.
+ */
+float tesseractViewDistanceAfterInput(float viewDistance, float zoomDelta, bool cameraReset);
 
 /**
  * @brief View-projection for the tesseract scene from the black-hole camera.

@@ -107,6 +107,17 @@ struct RenderState {
   } scene;
 
   /**
+   * @brief Whether the gizmo target moves the camera focus this frame.
+   *
+   * The target translates the black-hole camera's focus. tesseractView keeps
+   * the tesseract at the origin and takes only the focus direction, so the
+   * target applies to the black-hole scene alone.
+   */
+  [[nodiscard]] bool gizmoTargetActive() const {
+    return camera.gizmoEnabled && scene.mode != SceneMode::Tesseract;
+  }
+
+  /**
    * @brief Speculative tesseract scene (Thorne, The Science of Interstellar
    *        ch. 29-31): SO(4) rotation, projection, and library-of-time
    *        parameters. Render-only; none of it feeds the physics.
@@ -127,7 +138,7 @@ struct RenderState {
     float pulseTravel = 0.0f;            ///< Library time the pulse has run back from t_now.
     float perspectiveDistance = 3.0f;
     float sceneScale = 1.3f;
-    float viewDistance = 8.0f;
+    float viewDistance = TESSERACT_DEFAULT_VIEW_DISTANCE;
     float fovDeg = 50.0f;
     float timeSpan = 10.0f; ///< Library time extent T of every world-tube.
     float litMoment = 6.0f; ///< Library time the lit moment is centered on.

@@ -368,6 +368,10 @@ float tesseractZoom(float viewDistance, float zoomDelta) {
   return std::clamp(zoomed, TESSERACT_MIN_VIEW_DISTANCE, TESSERACT_MAX_VIEW_DISTANCE);
 }
 
+float tesseractViewDistanceAfterInput(float viewDistance, float zoomDelta, bool cameraReset) {
+  return cameraReset ? TESSERACT_DEFAULT_VIEW_DISTANCE : tesseractZoom(viewDistance, zoomDelta);
+}
+
 glm::mat4 tesseractView(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,
                         float viewDistance) {
   const glm::vec3 forward = glm::column(cameraBasis, 2);

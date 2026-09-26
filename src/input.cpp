@@ -232,8 +232,7 @@ void InputManager::update(float deltaTime) {
   }
 
   if (isActionJustPressed(KeyAction::ResetCamera)) {
-    camera_.reset();
-    holdToggleState_.reset();
+    resetCamera();
   }
 
   if (isActionJustPressed(KeyAction::ResetSettings)) {
@@ -572,8 +571,7 @@ void InputManager::updateGamepad(float deltaTime) {
   zoomBy(triggerZoom, zoomScale);
 
   if (isGamepadButtonJustPressed(gamepadResetButton_)) {
-    camera_.reset();
-    holdToggleState_.reset();
+    resetCamera();
   }
   if (isGamepadButtonJustPressed(gamepadPauseButton_)) {
     togglePause();

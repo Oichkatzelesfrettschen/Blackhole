@@ -624,6 +624,12 @@ void renderGizmoPanel(RenderState &rs) {
     ImGuizmo::OPERATION &operation = rs.camera.gizmoOperation;
     ImGuizmo::MODE &mode = rs.camera.gizmoMode;
     glm::mat4 &gizmoTransform = rs.camera.gizmoTransform;
+    // The tesseract view holds its scene at the origin (gizmoTargetActive).
+    const bool tesseractScene = rs.scene.mode == RenderState::SceneMode::Tesseract;
+    if (tesseractScene) {
+      ImGui::TextDisabled("Gizmo target applies to the black-hole scene only.");
+    }
+    ImGui::BeginDisabled(tesseractScene);
     ImGui::Checkbox("Enable Gizmo Target", &gizmoEnabled);
 
     const char *const operationLabels[] = {"Translate", "Rotate", "Scale"};
@@ -668,6 +674,7 @@ void renderGizmoPanel(RenderState &rs) {
                                                       // -- glm::mat has no .at()
     ImGui::Text("Target: %.2f %.2f %.2f", static_cast<double>(target.x),
                 static_cast<double>(target.y), static_cast<double>(target.z));
+    ImGui::EndDisabled();
   }
   ImGui::End();
 }

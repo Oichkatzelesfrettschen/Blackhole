@@ -197,7 +197,7 @@ using blackhole::updateComparePresetSweep;
 using blackhole::renderTesseractScene;
 using blackhole::tesseractFocusTangent;
 using blackhole::TesseractRecordFrame;
-using blackhole::tesseractZoom;
+using blackhole::tesseractViewDistanceAfterInput;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
@@ -501,6 +501,8 @@ std::array<ui::CampaignBackdrop, 5> loadCampaignBackdrops(GLFWwindow *window) {
  * The tesseract scene takes zoom input for its own view distance
  * (tesseractZoom), so the black-hole camera keeps its orbit radius; a
  * recording frames the tesseract from the record camera and drops the zoom.
+ * Reset Camera returns that distance to its default with the camera pose in
+ * either scene (tesseractViewDistanceAfterInput).
  */
 void updateInput(RenderState &rs, const platform::CliOptions &cli, InputManager &input,
                  float deltaTime) {
@@ -508,8 +510,10 @@ void updateInput(RenderState &rs, const platform::CliOptions &cli, InputManager 
   input.setZoomRedirect(tesseractActive);
   input.update(deltaTime);
   const float zoomDelta = input.takeZoomDelta();
-  if (tesseractActive && cli.recordFramesDir.empty()) {
-    rs.tesseract.viewDistance = tesseractZoom(rs.tesseract.viewDistance, zoomDelta);
+  const bool cameraReset = input.takeCameraReset();
+  if (cameraReset || (tesseractActive && cli.recordFramesDir.empty())) {
+    rs.tesseract.viewDistance =
+        tesseractViewDistanceAfterInput(rs.tesseract.viewDistance, zoomDelta, cameraReset);
   }
 }
 
@@ -1136,7 +1140,7 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
   const auto &cam = input.camera();
 
   glm::vec3 const focusTarget =
-      rs.camera.gizmoEnabled
+      rs.gizmoTargetActive()
           ? glm::vec3(rs.camera.gizmoTransform[3])
           : glm::vec3(
                 0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
@@ -1614,7 +1618,7 @@ int main(int argc, char **argv) {
       InputManager::instance().setIgnoreGuiCapture(isViewportHovered);
 
       // Gizmo
-      if (rs.camera.gizmoEnabled) {
+      if (rs.gizmoTargetActive()) {
         ImGuizmo::SetDrawlist();
         ImVec2 const windowPos = ImGui::GetWindowPos();
         ImGuizmo::SetRect(windowPos.x, windowPos.y, viewportSize.x, viewportSize.y);

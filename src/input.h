@@ -392,6 +392,29 @@ public:
     return delta;
   }
 
+  /**
+   * @brief Reset the camera pose and hold-to-toggle state, and record the reset
+   *        for takeCameraReset.
+   *
+   * The key and gamepad Reset Camera actions in update both run it.
+   */
+  void resetCamera() {
+    camera_.reset();
+    holdToggleState_.reset();
+    cameraResetPending_ = true;
+  }
+
+  /**
+   * @brief Return and clear whether resetCamera ran since the last call, so a
+   *        scene that keeps its own view state behind the zoom redirect resets
+   *        that state in the same frame.
+   */
+  bool takeCameraReset() {
+    const bool reset = cameraResetPending_;
+    cameraResetPending_ = false;
+    return reset;
+  }
+
   InputManager(const InputManager &) = delete;
   InputManager &operator=(const InputManager &) = delete;
 
@@ -426,6 +449,8 @@ private:
   float scrollDelta_ = 0.0f;
   bool zoomRedirect_ = false; ///< Zoom goes to pendingZoom_, not camera_.distance.
   float pendingZoom_ = 0.0f;  ///< Redirected zoom since the last takeZoomDelta.
+
+  bool cameraResetPending_ = false; ///< resetCamera ran since the last takeCameraReset.
   bool firstMouse_ = true;
 
   // Key bindings

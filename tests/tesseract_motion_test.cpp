@@ -6,7 +6,8 @@
  * pause holds the orientation and pulse in place and the time scale sets the
  * step; recorded frames ignore the step and read the output clock. Zoom
  * input in the tesseract scene moves the tesseract view distance and leaves
- * the black-hole camera distance alone. These
+ * the black-hole camera distance alone, and Reset Camera returns both to
+ * their defaults. These
  * cases run GL-free on a heap RenderState and restore the shared
  * InputManager singleton they change.
  */
@@ -27,9 +28,11 @@ namespace {
 
 using blackhole::advanceTesseractMotion;
 using blackhole::RenderState;
+using blackhole::TESSERACT_DEFAULT_VIEW_DISTANCE;
 using blackhole::TESSERACT_MAX_VIEW_DISTANCE;
 using blackhole::TESSERACT_MIN_VIEW_DISTANCE;
 using blackhole::TesseractRecordFrame;
+using blackhole::tesseractViewDistanceAfterInput;
 using blackhole::tesseractZoom;
 
 // One interactive frame at 60 Hz.
@@ -145,6 +148,51 @@ TEST(TesseractZoom, ScrollLeavesTheBlackHoleCameraWhileRedirected) {
   input.setPaused(wasPaused);
   input.camera() = saved;
   ImGui::DestroyContext(context);
+}
+
+TEST(TesseractZoom, CameraResetReturnsTheDefaultViewDistance) {
+  EXPECT_FLOAT_EQ(std::make_unique<RenderState>()->tesseract.viewDistance,
+                  TESSERACT_DEFAULT_VIEW_DISTANCE);
+  EXPECT_FLOAT_EQ(tesseractViewDistanceAfterInput(15.0f, 0.0f, true),
+                  TESSERACT_DEFAULT_VIEW_DISTANCE);
+  // The reset frame drops its zoom.
+  EXPECT_FLOAT_EQ(tesseractViewDistanceAfterInput(4.0f, 3.0f, true),
+                  TESSERACT_DEFAULT_VIEW_DISTANCE);
+  EXPECT_FLOAT_EQ(tesseractViewDistanceAfterInput(8.0f, 3.0f, false), tesseractZoom(8.0f, 3.0f));
+}
+
+// resetCamera, which the key and gamepad Reset Camera actions run, resets
+// the camera pose and reports the reset once, so the frame that reads it
+// resets the tesseract view distance too.
+TEST(TesseractZoom, ResetCameraReportsTheResetOnce) {
+  InputManager &input = InputManager::instance();
+  const CameraState saved = input.camera();
+  static_cast<void>(input.takeCameraReset());
+  EXPECT_FALSE(input.takeCameraReset());
+
+  input.camera().distance = 30.0f;
+  input.camera().yaw = 40.0f;
+  input.resetCamera();
+  EXPECT_FLOAT_EQ(input.camera().distance, CameraState{}.distance);
+  EXPECT_FLOAT_EQ(input.camera().yaw, CameraState{}.yaw);
+  const bool reset = input.takeCameraReset();
+  EXPECT_TRUE(reset);
+  EXPECT_FALSE(input.takeCameraReset());
+  EXPECT_FLOAT_EQ(tesseractViewDistanceAfterInput(15.0f, 0.0f, reset),
+                  TESSERACT_DEFAULT_VIEW_DISTANCE);
+
+  input.camera() = saved;
+}
+
+// The tesseract view keeps its scene at the origin, so the gizmo target
+// moves the camera focus in the black-hole scene alone.
+TEST(TesseractScene, GizmoTargetAppliesToTheBlackHoleSceneOnly) {
+  auto rs = std::make_unique<RenderState>();
+  EXPECT_FALSE(rs->gizmoTargetActive());
+  rs->camera.gizmoEnabled = true;
+  EXPECT_TRUE(rs->gizmoTargetActive());
+  rs->scene.mode = RenderState::SceneMode::Tesseract;
+  EXPECT_FALSE(rs->gizmoTargetActive());
 }
 
 } // namespace
