@@ -17,9 +17,11 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 
 #include "physics/safe_limits.h"
 #include "render/gl_capabilities.h"
+#include "render/observer_sky_view.h"
 #include "render/render_state.h"
 #include "tools/compare_harness.h" // K_COMPARE_PRESETS
 
@@ -292,11 +294,138 @@ void applySceneEnvironment(RenderState &rs) {
   if (const char *sceneEnv = std::getenv("BLACKHOLE_SCENE")) {
     if (!parseSceneName(sceneEnv).has_value()) {
       std::cerr << "BLACKHOLE_SCENE='" << sceneEnv
-                << "' is not a scene; expected blackhole or tesseract\n";
+                << "' is not a scene; expected blackhole, observer-sky, or tesseract\n";
     }
   }
   rs.scene.mode = startupSceneMode();
   rs.scene.envApplied = true;
+}
+
+/** @brief Two numbers written "<a>,<b>", or nothing. */
+std::optional<std::pair<double, double>> parseNumberPair(const char *text) {
+  char *end = nullptr;
+  const double first = std::strtod(text, &end);
+  if (end == text || *end != ',') {
+    return std::nullopt;
+  }
+  const char *second = end + 1;
+  const double value = std::strtod(second, &end);
+  if (end == second || *end != '\0') {
+    return std::nullopt;
+  }
+  return std::pair{first, value};
+}
+
+/** @brief A finite double from an environment variable, or nothing. */
+std::optional<double> environmentDouble(const char *name) {
+  const char *value = std::getenv(name);
+  if (value == nullptr) {
+    return std::nullopt;
+  }
+  char *end = nullptr;
+  const double parsed = std::strtod(value, &end);
+  if (end == value || *end != '\0' || !physics::safeIsfinite(parsed)) {
+    std::cerr << name << "='" << value << "' is not a number; ignored\n";
+    return std::nullopt;
+  }
+  return parsed;
+}
+
+/** @brief environmentDouble inside [low, high] (the matching panel slider's
+ *         range), or nothing. */
+std::optional<double> environmentDoubleIn(const char *name, double low, double high) {
+  const std::optional<double> parsed = environmentDouble(name);
+  if (parsed && (*parsed < low || *parsed > high)) {
+    std::cerr << name << "=" << *parsed << " is outside [" << low << ", " << high << "]; ignored\n";
+    return std::nullopt;
+  }
+  return parsed;
+}
+
+/**
+ * Observer-sky view for scripted captures: BLACKHOLE_OBSERVER_EPSILON (1 - a),
+ * BLACKHOLE_OBSERVER_X (r - 1, or "isco"), BLACKHOLE_OBSERVER_KIND
+ * (prograde|retrograde|zamo|static), BLACKHOLE_OBSERVER_MASS (M_sun),
+ * BLACKHOLE_OBSERVER_TIME_SCALE, BLACKHOLE_OBSERVER_PROPER_SECONDS (start
+ * clock), BLACKHOLE_OBSERVER_FOV (deg), BLACKHOLE_OBSERVER_LUMINANCE_RANGE
+ * ("<log10 min>,<log10 max>" in cd/m^2), and BLACKHOLE_OBSERVER_LOOK: hole,
+ * forward, back, outward, patch, or "<longitude>,<latitude>" in degrees.
+ */
+void applyObserverEnvironment(RenderState &rs) {
+  RenderState::ObserverViewGroup &view = rs.observerView;
+  if (view.envApplied) {
+    return;
+  }
+  view.envApplied = true;
+  view.epsilon = environmentDoubleIn("BLACKHOLE_OBSERVER_EPSILON", K_OBSERVER_EPSILON_MIN,
+                                     K_OBSERVER_EPSILON_MAX)
+                     .value_or(view.epsilon);
+  if (const char *xEnv = std::getenv("BLACKHOLE_OBSERVER_X")) {
+    if (std::string_view(xEnv) == "isco") {
+      view.atIsco = true;
+    } else if (const auto x = environmentDoubleIn("BLACKHOLE_OBSERVER_X", K_OBSERVER_X_MIN,
+                                                  K_OBSERVER_X_MAX)) {
+      view.atIsco = false;
+      view.x = *x;
+    }
+  }
+  if (const char *kindEnv = std::getenv("BLACKHOLE_OBSERVER_KIND")) {
+    const std::string_view kind(kindEnv);
+    if (kind == "prograde") {
+      view.kind = ObserverKind::Prograde;
+    } else if (kind == "retrograde") {
+      view.kind = ObserverKind::Retrograde;
+    } else if (kind == "zamo") {
+      view.kind = ObserverKind::Zamo;
+    } else if (kind == "static") {
+      view.kind = ObserverKind::Static;
+    } else {
+      std::cerr << "BLACKHOLE_OBSERVER_KIND='" << kindEnv
+                << "' is not prograde, retrograde, zamo, or static\n";
+    }
+  }
+  view.massSolar =
+      environmentDoubleIn("BLACKHOLE_OBSERVER_MASS", K_OBSERVER_MASS_MIN, K_OBSERVER_MASS_MAX)
+          .value_or(view.massSolar);
+  view.skyTimeScale = environmentDoubleIn("BLACKHOLE_OBSERVER_TIME_SCALE",
+                                          K_OBSERVER_TIME_SCALE_MIN, K_OBSERVER_TIME_SCALE_MAX)
+                          .value_or(view.skyTimeScale);
+  view.properSeconds =
+      environmentDouble("BLACKHOLE_OBSERVER_PROPER_SECONDS").value_or(view.properSeconds);
+  view.fovDeg =
+      environmentDoubleIn("BLACKHOLE_OBSERVER_FOV", K_OBSERVER_FOV_MIN_DEG, K_OBSERVER_FOV_MAX_DEG)
+          .value_or(view.fovDeg);
+  if (const char *rangeEnv = std::getenv("BLACKHOLE_OBSERVER_LUMINANCE_RANGE")) {
+    const auto range = parseNumberPair(rangeEnv);
+    if (range && range->first < range->second) {
+      view.logLuminanceMin = static_cast<float>(range->first);
+      view.logLuminanceMax = static_cast<float>(range->second);
+    } else {
+      std::cerr << "BLACKHOLE_OBSERVER_LUMINANCE_RANGE='" << rangeEnv
+                << "' is not <log10 min>,<log10 max>\n";
+    }
+  }
+  if (const char *lookEnv = std::getenv("BLACKHOLE_OBSERVER_LOOK")) {
+    const std::string_view look(lookEnv);
+    view.lookAtPatch = look == "patch";
+    view.followCamera = false;
+    if (look == "hole") {
+      view.lookLongitudeDeg = 0.0;
+    } else if (look == "forward") {
+      view.lookLongitudeDeg = 90.0;
+    } else if (look == "back") {
+      view.lookLongitudeDeg = -90.0;
+    } else if (look == "outward") {
+      view.lookLongitudeDeg = 180.0;
+    } else if (look != "patch") {
+      if (const auto angles = parseNumberPair(lookEnv)) {
+        view.lookLongitudeDeg = angles->first;
+        view.lookLatitudeDeg = angles->second;
+      } else {
+        std::cerr << "BLACKHOLE_OBSERVER_LOOK='" << lookEnv << "' is not understood\n";
+      }
+    }
+  }
 }
 
 // Startup disk overrides. BLACKHOLE_PHYSICAL_TRACER=0 selects the legacy
@@ -325,6 +454,9 @@ void applyDiskEnvironment(RenderState &rs) {
 } // namespace
 
 std::optional<RenderState::SceneMode> parseSceneName(std::string_view name) {
+  if (name == "observer-sky") {
+    return RenderState::SceneMode::ObserverSky;
+  }
   if (name == "tesseract") {
     return RenderState::SceneMode::Tesseract;
   }
@@ -344,6 +476,7 @@ RenderState::SceneMode startupSceneMode() {
 
 void applyEnvironmentConfig(RenderState &rs) {
   applySceneEnvironment(rs);
+  applyObserverEnvironment(rs);
   applyCompareEnvironment(rs);
   applyProbeEnvironment(rs);
   applyOverlayEnvironment(rs);

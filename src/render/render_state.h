@@ -14,6 +14,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,7 @@
 #include "physics/lut.h"
 #include "render/gpu_timing.h"
 #include "render/noise_texture_cache.h"
+#include "render/observer_sky_view.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "rmlui_overlay.h"
@@ -97,9 +99,11 @@ inline constexpr float K_DEFAULT_DEPTH_FAR = 500.0f;
 struct RenderState {
   /**
    * @brief Scene the frame renders. Blackhole runs the geodesic integrator;
-   *        Tesseract runs the speculative, render-only tesseract pass.
+   *        Tesseract runs the speculative, render-only tesseract pass;
+   *        ObserverSky draws the sky an equatorial Kerr observer sees, from the
+   *        precomputed observer-sky maps (render/observer_sky_view.h).
    */
-  enum class SceneMode { Blackhole = 0, Tesseract = 1 };
+  enum class SceneMode { Blackhole = 0, Tesseract = 1, ObserverSky = 2 };
 
   struct SceneGroup {
     SceneMode mode = SceneMode::Blackhole;
@@ -114,8 +118,52 @@ struct RenderState {
    * target applies to the black-hole scene alone.
    */
   [[nodiscard]] bool gizmoTargetActive() const {
-    return camera.gizmoEnabled && scene.mode != SceneMode::Tesseract;
+    return camera.gizmoEnabled && scene.mode == SceneMode::Blackhole;
   }
+
+  /**
+   * @brief The observer-sky scene. Physics defaults are Gargantua's canon:
+   *        spin deficit 1.33e-14, the observer on the prograde ISCO (Miller's
+   *        planet), M = 1e8 M_sun. The black-hole scene keeps its own spin
+   *        (physicsCore.kerrSpin); the view discloses both.
+   */
+  struct ObserverViewGroup {
+    double epsilon = K_GARGANTUA_SPIN_DEFICIT; ///< 1 - a.
+    double x = 5.0;                            ///< r - 1 (M) when atIsco is off.
+    double massSolar = 1.0e8;
+    /// Observer proper seconds per wall second; 1 is the observer's real
+    /// time, where the star field turns about ten times a second.
+    double skyTimeScale = 1.0e-3;
+    double properSeconds = 0.0;      ///< The observer's clock.
+    double lookLongitudeDeg = 135.0; ///< 0 looks at the hole, 90 along the motion.
+    double lookLatitudeDeg = 0.0;
+    double fovDeg = 100.0; ///< Vertical field of view.
+    double cmbTemperature = 2.725;
+    double distantInclinationDeg = 80.0; ///< Distant viewer's angle from the spin axis.
+    double distantRadius = 400.0;        ///< Distant viewer's radius (M) for the signal delay.
+    ObserverClockModel lastClock; ///< Clock of the sky drawn last frame, for the panels.
+    ObserverSkyRenderer renderer;
+    /// Proper time at the first recorded frame; frame N shows it plus
+    /// skyTimeScale * N / fps. Empty outside a recording.
+    std::optional<double> recordClockOrigin;
+    HudOverlay disclosureLabel;       ///< Spin disclosure drawn into the presented texture.
+    std::string disclosureLabelText;  ///< Text the label layout was fitted to.
+    int disclosureLabelWidth = 0;     ///< Render width the label layout was fitted to.
+    int disclosureLabelHeight = 0;    ///< Render height the label layout was fitted to.
+    float starSkyLuminance = 1.0e-3F; ///< cd/m^2 of a unit-luminance cubemap texel at g = 1.
+    float logLuminanceMin = -7.0F;    ///< log10 cd/m^2 mapped to black.
+    float logLuminanceMax = 13.5F;    ///< log10 cd/m^2 mapped to displayPeak.
+    float displayPeak = 4.0F;
+    ObserverKind kind = ObserverKind::Prograde;
+    bool atIsco = true; ///< x tracks the ISCO of the orbit's sense.
+    bool paused = false;
+    bool followCamera = false; ///< Steer with the orbit camera instead of the look angles.
+    bool lookAtPatch = false;  ///< Center the view on the peak-blueshift patch.
+    bool cmbEnabled = true;
+    bool starsEnabled = true;
+    bool motionBlur = true;
+    bool envApplied = false;
+  } observerView;
 
   /**
    * @brief Speculative tesseract scene (Thorne, The Science of Interstellar

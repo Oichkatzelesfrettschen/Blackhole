@@ -17,10 +17,51 @@
 #include "render/render_state.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "tracy_support.h"
+#include "ui/observer_panels.h"
 
 using namespace gl;
 
 namespace blackhole {
+
+namespace {
+
+/** @brief Pixel margin of the observer-sky disclosure label. */
+constexpr float K_DISCLOSURE_MARGIN = 12.0f;
+/** @brief stb_easy_font advance per glyph at scale 1, with HUD_GLYPH_SPACING. */
+constexpr float K_DISCLOSURE_GLYPH_ADVANCE = 7.0f;
+
+/**
+ * @brief Draws ui::observerSpinDisclosure top-left into the bound scene
+ *        target, refitting whenever the text or either render dimension
+ *        changes: scale 2 where the line fits, smaller down to 1 where it
+ *        does not.
+ */
+void drawObserverDisclosureLabel(RenderState &rs) {
+  RenderState::ObserverViewGroup &view = rs.observerView;
+  const std::string text = ui::observerSpinDisclosure(rs);
+  if (text != view.disclosureLabelText || view.disclosureLabelWidth != rs.targets.renderWidth ||
+      view.disclosureLabelHeight != rs.targets.renderHeight) {
+    const float available =
+        static_cast<float>(rs.targets.renderWidth) - (2.0f * K_DISCLOSURE_MARGIN);
+    const float natural = static_cast<float>(text.size()) * K_DISCLOSURE_GLYPH_ADVANCE;
+    HudOverlayOptions opts;
+    opts.scale = std::clamp(available / natural, 1.0f, 2.0f);
+    opts.margin = K_DISCLOSURE_MARGIN;
+    opts.align = HudOverlayOptions::Align::Left;
+    opts.drawBackground = true;
+    view.disclosureLabel.setOptions(opts);
+    view.disclosureLabel.setLines(
+        {HudOverlayLine{.text = text,
+                        .color = glm::vec4(0.92f, 0.92f, 0.92f, 1.0f),
+                        .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.65f)}});
+    view.disclosureLabelText = text;
+    view.disclosureLabelWidth = rs.targets.renderWidth;
+    view.disclosureLabelHeight = rs.targets.renderHeight;
+  }
+  view.disclosureLabel.render(rs.targets.renderWidth, rs.targets.renderHeight);
+}
+
+} // namespace
 
 void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint finalTexture,
                           bool grmhdReady) {
@@ -126,6 +167,12 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
       rs.tesseract.speculativeLabelHeight = rs.targets.renderHeight;
     }
     rs.tesseract.speculativeLabel.render(rs.targets.renderWidth, rs.targets.renderHeight);
+  }
+
+  // The observer-sky scene always carries its spin disclosure, drawn into the
+  // presented texture so exported and recorded frames keep it too.
+  if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
+    drawObserverDisclosureLabel(rs);
   }
 
   // 4. HUD Overlays (Perf/Controls)

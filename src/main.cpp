@@ -15,6 +15,7 @@
 #include <charconv>
 #include <cmath>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -114,6 +115,7 @@
 #include "render/render_targets.h"
 #include "render/scene_overlays.h"
 #include "render/settings_sync.h"
+#include "render/observer_sky_view.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "render/uniform_binding.h"
 #include "rmlui_overlay.h"
@@ -126,6 +128,7 @@
 #include "texture.h"
 #include "tracy_support.h"
 #include "ui/campaign_panels.h"
+#include "ui/observer_panels.h"
 #include "ui/panels.h"
 #include "ui/settings_window.h"
 
@@ -201,6 +204,9 @@ using blackhole::renderTesseractScene;
 using blackhole::tesseractFocusTangent;
 using blackhole::TesseractRecordFrame;
 using blackhole::tesseractViewDistanceAfterInput;
+
+// Observer-sky scene pass lives in src/render/observer_sky_view.*.
+using blackhole::renderObserverSkyScene;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
@@ -1211,6 +1217,21 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
                                       const Settings &settings, InputManager &input,
                                       const FrameCamera &frameCamera, float frameTime,
                                       float deltaTime, double currentTime, GLuint &computeProgram) {
+  if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
+    // The observer's clock runs on wall time, which pause stops; its own sky
+    // time scale replaces the global one, so the panel's rate is the rate. A
+    // recording runs it on the output clock instead, as the tesseract does.
+    std::optional<blackhole::ObserverRecordClock> record;
+    const int frameIndex = rs.recording.recordFrameIndex;
+    if (const auto outputSeconds = recordOutputSeconds(cli, frameIndex)) {
+      record = blackhole::ObserverRecordClock{
+          .outputSeconds = *outputSeconds,
+          .frameSeconds =
+              recordOutputSeconds(cli, frameIndex + 1).value_or(*outputSeconds) - *outputSeconds};
+    }
+    renderObserverSkyScene(rs, frameCamera.basis, input.isPaused() ? 0.0F : deltaTime, record);
+    return {};
+  }
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
     // Recording advances on the output frame clock, frameIndex / fps, so the
     // frames depend on their index alone, not on render throughput, and
@@ -1243,12 +1264,14 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
 }
 
 bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
-                   const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog) {
+                   const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog,
+                   bool sceneSettled) {
   /* --record-frames: draw cinematic physics HUD via foreground draw list.
    * GetForegroundDrawList() adds to ImGui's draw list, so this must be called
    * before ImGui::Render().  The overlay is composited over the scene by the
-   * ImGui backend when RenderDrawData() runs below. */
-  if (!cli.recordFramesDir.empty()) {
+   * ImGui backend when RenderDrawData() runs below. Warmup counts only frames
+   * that show the scene (sceneCaptureState). */
+  if (!cli.recordFramesDir.empty() && sceneSettled) {
     ++rs.recording.recordWarmup;
   }
   if (!cli.recordFramesDir.empty() && cli.recordProfile == "cinematic" &&
@@ -1293,7 +1316,7 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
   glfwSwapBuffers(window);
 
   /* --export-frame / --export-raw-frame: break after the export frame above. */
-  if (!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()) {
+  if ((!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()) && sceneSettled) {
     if (++rs.exporting.exportDone >= 6) { /* 5 warmup + 1 export frame */
       return true;
     }
@@ -1309,6 +1332,34 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
     return true;
   }
   return false;
+}
+
+/** @brief How the frame loop goes on after finishFrame. */
+enum class FrameOutcome : std::uint8_t { Continue = 0, Finished = 1, CaptureFailed = 2 };
+
+/**
+ * @brief Exports, presents, and counts one frame. Captures count and write only
+ *        frames that show the scene (sceneCaptureState), and an observer-sky
+ *        capture ends with CaptureFailed when its sky cannot appear: an invalid
+ *        observer or a failed load or build.
+ */
+FrameOutcome finishFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
+                         const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog) {
+  const blackhole::SceneCaptureState captureState = blackhole::sceneCaptureState(rs);
+  const bool sceneSettled = captureState == blackhole::SceneCaptureState::Ready;
+  const bool capturing = !cli.exportFramePath.empty() || !cli.exportRawFramePath.empty() ||
+                         !cli.recordFramesDir.empty();
+  if (sceneSettled) {
+    exportFrameOnce(rs, cli);
+  }
+  if (completeFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog, sceneSettled)) {
+    return FrameOutcome::Finished;
+  }
+  if (capturing && captureState == blackhole::SceneCaptureState::Failed) {
+    (void)std::fprintf(stderr, "Capture aborted: %s\n", rs.observerView.renderer.message().c_str());
+    return FrameOutcome::CaptureFailed;
+  }
+  return FrameOutcome::Continue;
 }
 
 void prepareFrameTextures(RenderState &rs, const platform::CliOptions &cli,
@@ -1477,6 +1528,7 @@ int main(int argc, char **argv) {
      * frame loop) so the hot-reload handler at the top of each frame can delete
      * and reset it to 0, triggering lazy re-creation on the next iteration. */
     GLuint computeProgram = 0;
+    int exitCode = 0;
 
     while (glfwWindowShouldClose(window) == 0) {
       // Clear default framebuffer (essential for ImGui Docking over Viewport)
@@ -1640,6 +1692,7 @@ int main(int argc, char **argv) {
         renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
         renderBackgroundPanel(rs);
         renderWiregridPanel(rs);
+        ui::renderObserverWindows(rs);
         renderTesseractPanel(rs);
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
@@ -1651,10 +1704,11 @@ int main(int argc, char **argv) {
       // not freeze the campaign.
       ui::pumpCampaignRealtime(campaignSession, campaignUi, static_cast<double>(deltaTime));
 
-      /* --export-frame / --export-raw-frame: export textures before ImGui. */
-      exportFrameOnce(rs, cli);
-
-      if (completeFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog)) {
+      /* --export-frame / --export-raw-frame export before ImGui renders. */
+      const FrameOutcome outcome =
+          finishFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog);
+      if (outcome != FrameOutcome::Continue) {
+        exitCode = static_cast<int>(outcome == FrameOutcome::CaptureFailed);
         break;
       }
     }
@@ -1685,6 +1739,8 @@ int main(int argc, char **argv) {
     // Explicitly clean up static resources before GL context destruction
     rs.disk.noiseCache.cleanup();
     rs.hawking.hawkingRenderer.cleanup();
+    rs.observerView.renderer.shutdown();
+    rs.observerView.disclosureLabel.shutdown();
     rs.tesseract.renderer.shutdown();
     rs.tesseract.speculativeLabel.shutdown();
     if (rs.grmhd.grmhdTexture.texture != 0) {
@@ -1695,7 +1751,7 @@ int main(int argc, char **argv) {
     rs.dispatch.cudaManager.shutdown();
 #endif
     cleanup(window, cli.recordFramesDir.empty());
-    return rs.exporting.exportFailed ? 1 : 0;
+    return (exitCode != 0 || rs.exporting.exportFailed) ? 1 : 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {
     (void)std::fprintf(stderr, "Unhandled cpptrace exception: %s\n",

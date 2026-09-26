@@ -695,15 +695,20 @@ void renderComputeSettings(RenderState &rs) {
 }
 
 void renderSceneModeCombo(RenderState &rs) {
-  constexpr std::array<const char *, 2> sceneItems = {"Black hole", "Tesseract (speculative)"};
-  int sceneIndex = static_cast<int>(rs.scene.mode);
+  constexpr std::array<RenderState::SceneMode, 3> sceneModes = {
+      RenderState::SceneMode::Blackhole, RenderState::SceneMode::Tesseract,
+      RenderState::SceneMode::ObserverSky};
+  constexpr std::array<const char *, 3> sceneItems = {"Black hole", "Tesseract (speculative)",
+                                                      "Observer sky (Miller's planet)"};
+  const auto *const current = std::ranges::find(sceneModes, rs.scene.mode);
+  int sceneIndex = static_cast<int>(current - sceneModes.begin());
   // applyRecordProfileSetup picks the recording's tone exposure from the
   // scene active at its first frame and sets recordInitDone, which holds
   // until the process exits, so the scene stays fixed for the whole recording.
   const bool recording = rs.recording.recordInitDone;
   ImGui::BeginDisabled(recording);
   if (ImGui::Combo("Scene", &sceneIndex, sceneItems.data(), static_cast<int>(sceneItems.size()))) {
-    rs.scene.mode = static_cast<RenderState::SceneMode>(sceneIndex);
+    rs.scene.mode = sceneModes.at(static_cast<std::size_t>(sceneIndex));
   }
   ImGui::EndDisabled();
   if (recording) {
@@ -711,6 +716,9 @@ void renderSceneModeCombo(RenderState &rs) {
   }
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
     ImGui::TextDisabled("Render-only illustration; the tabs below drive the black-hole scene.");
+  }
+  if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
+    ImGui::TextDisabled("The observer-sky controls live in the Observer sky window.");
   }
   ImGui::Separator();
 }

@@ -88,6 +88,11 @@ void cancelComparePresetSweep(RenderState &rs, InputManager &input) {
   rs.compare.comparePresetFrameCounter = 0;
   rs.compare.captureCompareSnapshot = false;
   rs.compare.compareRestorePending = restore;
+  // Auto capture strides over black-hole frames; left armed, it would resume
+  // its count on the next black-hole frame.
+  rs.compare.compareAutoCapture = false;
+  rs.compare.compareAutoRemaining = 0;
+  rs.compare.compareAutoStrideCounter = 0;
   restoreCompareSweepState(rs, input);
 }
 
