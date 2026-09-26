@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -29,8 +30,10 @@
 
 #include "cinematic.h" // K_CINEMATIC_KEYFRAMES / DURATION / FPS
 #include "input.h"     // InputManager, CameraState, CameraMode
+#include "physics/safe_limits.h"
 #include "platform/cli_options.h"
 #include "render/render_state.h"   // RenderState, WiregridParams
+#include "render/tesseract/tesseract_renderer.h" // TESSERACT_RECORD_EXPOSURE
 #include "settings.h"              // SettingsManager
 #include "tools/compare_harness.h" // readTextureRGBA, writePfmRgb
 
@@ -329,6 +332,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
               cli.recordFramesDir.c_str(), cli.recordFramesTotal,
               static_cast<double>(K_CINEMATIC_DURATION_S), K_CINEMATIC_FPS);
+  // The profiles' exposures follow the black-hole exposure rule; the emissive
+  // tesseract scene records at its own exposure in every profile.
+  if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
+    rs.post.toneExposure = TESSERACT_RECORD_EXPOSURE;
+  }
   // --record-exposure overrides every profile's exposure.
   if (cli.hasRecordExposure) {
     rs.post.toneExposure = cli.recordExposure;
@@ -337,28 +345,40 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   return true;
 }
 
+float recordPathProgress(const platform::CliOptions &cli, int recordFrameIndex) {
+  const int lastFrame = std::max(cli.recordStartFrame + cli.recordFramesTotal - 1, 1);
+  return std::clamp(static_cast<float>(recordFrameIndex) / static_cast<float>(lastFrame), 0.0f,
+                    1.0f);
+}
+
+void applyRecordCameraOverrides(const platform::CliOptions &cli, CameraState &cam) {
+  if (cli.hasRecordDistance) {
+    cam.distance = cli.recordDistance;
+  }
+  if (cli.hasRecordFov) {
+    cam.fov = cli.recordFovDeg;
+  }
+}
+
 void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, InputManager &input) {
   if (cli.recordFramesDir.empty()) {
     return;
   }
   if (cli.recordProfile == "compare-orbit-near") {
-    float const denom = static_cast<float>(std::max(cli.recordFramesTotal - 1, 1));
-    float const progress =
-        static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) / denom;
+    float const progress = recordPathProgress(cli, rs.recording.recordFrameIndex);
     CameraState &camMutable = input.camera();
     camMutable.yaw = -90.0f + progress * 18.0f;
     camMutable.pitch = 0.0f;
     camMutable.roll = 0.0f;
     camMutable.distance = 10.0f;
     camMutable.fov = 90.0f;
+    applyRecordCameraOverrides(cli, camMutable);
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin = 0.0f;
   } else if (cli.recordProfile == "showcase-orbit") {
     const ShowcaseOrbitComposition *const composition =
         findShowcaseOrbitComposition(cli.recordComposition);
-    float const denom = static_cast<float>(std::max(cli.recordFramesTotal - 1, 1));
-    float const progress =
-        static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) / denom;
+    float const progress = recordPathProgress(cli, rs.recording.recordFrameIndex);
     float const baseYaw = cli.hasRecordYaw ? cli.recordYawDeg : -90.0f;
     float const sweepDeg =
         cli.hasRecordSweep
@@ -371,24 +391,21 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
             ? cli.recordPitchDeg
             : compositionValue(composition, &ShowcaseOrbitComposition::pitchDeg, -6.0f);
     camMutable.roll = 0.0f;
-    camMutable.distance =
-        cli.hasRecordDistance
-            ? cli.recordDistance
-            : compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f);
-    camMutable.fov = cli.hasRecordFov
-                         ? cli.recordFovDeg
-                         : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 37.2738f);
+    camMutable.distance = compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f);
+    camMutable.fov = compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 37.2738f);
+    applyRecordCameraOverrides(cli, camMutable);
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin = K_SHOWCASE_ORBIT_SPIN;
     rs.recording.recordCurrentKf = CamKeyframe{
-        .timeSec = static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) /
-                   static_cast<float>(K_CINEMATIC_FPS),
+        .timeSec =
+            static_cast<float>(rs.recording.recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS),
         .cam = camMutable,
         .kerrSpin = rs.physicsCore.kerrSpin,
         .caption = "Showcase orbit",
     };
   } else {
     rs.recording.recordCurrentKf = CinematicPath::evaluate(rs.recording.recordCinematic);
+    applyRecordCameraOverrides(cli, rs.recording.recordCurrentKf.cam);
     CameraState &camMutable = input.camera();
     camMutable   = rs.recording.recordCurrentKf.cam;
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
@@ -442,6 +459,46 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
   rs.recording.recordCinematic = static_cast<float>(rs.recording.recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS);
 }
 
+std::optional<double> recordOutputSeconds(const platform::CliOptions &cli, int recordFrameIndex) {
+  if (cli.recordFramesDir.empty()) {
+    return std::nullopt;
+  }
+  return static_cast<double>(recordFrameIndex) / static_cast<double>(K_CINEMATIC_FPS);
+}
+
+double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex,
+                           double wallSeconds) {
+  return recordOutputSeconds(cli, recordFrameIndex).value_or(wallSeconds);
+}
+
+std::optional<std::string> recordCameraConflict(const platform::CliOptions &cli) {
+  // Finiteness is read from the bit pattern: under -ffinite-math-only the
+  // compiler may fold a comparison against infinity or NaN to true.
+  const bool distanceValid =
+      physics::safeIsfinite(cli.recordDistance) && cli.recordDistance > 0.0f;
+  if (cli.hasRecordDistance && !distanceValid) {
+    return std::format("Refusing --record-distance {}: the camera needs a positive, finite "
+                       "distance from its focus",
+                       cli.recordDistance);
+  }
+  const bool fovValid = physics::safeIsfinite(cli.recordFovDeg) && cli.recordFovDeg > 0.0f &&
+                        cli.recordFovDeg < 180.0f;
+  if (cli.hasRecordFov && !fovValid) {
+    return std::format("Refusing --record-fov {}: the field of view must lie in (0, 180) degrees",
+                       cli.recordFovDeg);
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> exportConflictForScene(const platform::CliOptions &cli,
+                                                  RenderState::SceneMode scene) {
+  if (!cli.exportRawFramePath.empty() && scene == RenderState::SceneMode::Tesseract) {
+    return std::string("Refusing --export-raw-frame in the tesseract scene: the raw HDR target "
+                       "carries no SPECULATIVE label; use --export-frame or --record-frames");
+  }
+  return std::nullopt;
+}
+
 void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
   if (cli.exportFramePath.empty() && cli.exportRawFramePath.empty()) {
     return;
@@ -462,7 +519,16 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
     }
   }
 
-  if (!cli.exportRawFramePath.empty() && rs.targets.texBlackhole != 0) {
+  // The raw export reads texBlackhole, the HDR scene target the provenance
+  // label never reaches, so the speculative tesseract scene refuses it.
+  const bool rawRefused = rs.scene.mode == RenderState::SceneMode::Tesseract;
+  if (!cli.exportRawFramePath.empty() && rawRefused) {
+    if (const auto conflict = exportConflictForScene(cli, rs.scene.mode)) {
+      std::cerr << *conflict << '\n';
+    }
+    rs.exporting.exportFailed = true;
+  }
+  if (!cli.exportRawFramePath.empty() && !rawRefused && rs.targets.texBlackhole != 0) {
     GLint texW = 0;
     GLint texH = 0;
     glBindTexture(GL_TEXTURE_2D, rs.targets.texBlackhole);
@@ -477,6 +543,7 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
       std::printf("Exported raw frame: %s (%dx%d)\n", cli.exportRawFramePath.c_str(), w, h);
     } else {
       std::cerr << "Failed to export raw frame: " << cli.exportRawFramePath << '\n';
+      rs.exporting.exportFailed = true;
     }
   }
   rs.exporting.exportPerformed = true;

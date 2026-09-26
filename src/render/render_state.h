@@ -36,6 +36,8 @@
 #include "physics/lut.h"
 #include "render/gpu_timing.h"
 #include "render/noise_texture_cache.h"
+#include "render/tesseract/so4.h"
+#include "render/tesseract/tesseract_renderer.h"
 #include "rmlui_overlay.h"
 #include "tools/compare_harness.h"
 
@@ -93,6 +95,70 @@ inline constexpr float K_DEFAULT_DEPTH_FAR = 500.0f;
 
 
 struct RenderState {
+  /**
+   * @brief Scene the frame renders. Blackhole runs the geodesic integrator;
+   *        Tesseract runs the speculative, render-only tesseract pass.
+   */
+  enum class SceneMode { Blackhole = 0, Tesseract = 1 };
+
+  struct SceneGroup {
+    SceneMode mode = SceneMode::Blackhole;
+    bool envApplied = false;
+  } scene;
+
+  /**
+   * @brief Whether the gizmo target moves the camera focus this frame.
+   *
+   * The target translates the black-hole camera's focus. tesseractView keeps
+   * the tesseract at the origin and takes only the focus direction, so the
+   * target applies to the black-hole scene alone.
+   */
+  [[nodiscard]] bool gizmoTargetActive() const {
+    return camera.gizmoEnabled && scene.mode != SceneMode::Tesseract;
+  }
+
+  /**
+   * @brief Speculative tesseract scene (Thorne, The Science of Interstellar
+   *        ch. 29-31): SO(4) rotation, projection, and library-of-time
+   *        parameters. Render-only; none of it feeds the physics.
+   */
+  struct TesseractGroup {
+    enum class Projection { Perspective = 0, Stereographic = 1 };
+    Projection projection = Projection::Perspective;
+    /// Angular rates of qL and qR as pure quaternions: each frame advances
+    /// qL <- exp(ds leftRate) qL (advanceOrientation), ds = rotationSpeed * dt.
+    /// Opposite equal rates give a simple rotation; equal rates give SO(3).
+    std::array<float, 3> leftRate = {0.35f, 0.0f, 0.15f};
+    std::array<float, 3> rightRate = {-0.35f, 0.12f, 0.0f};
+    bool animate = true;        ///< Advance rotation and pulse; off freezes both in place.
+    float resetPhase = 2.5f;    ///< s applied from the identity on (re)initialization.
+    float rotationSpeed = 1.0f; ///< ds per second of frame time while animating.
+    blackhole::tesseract::So4Pair<double> orientation{}; ///< Accumulated (qL, qR).
+    bool orientationInitialized = false; ///< False re-seeds orientation from resetPhase.
+    float pulseTravel = 0.0f;            ///< Library time the pulse has run back from t_now.
+    float perspectiveDistance = 3.0f;
+    float sceneScale = 1.3f;
+    float viewDistance = TESSERACT_DEFAULT_VIEW_DISTANCE;
+    float fovDeg = 50.0f;
+    float timeSpan = 10.0f; ///< Library time extent T of every world-tube.
+    float litMoment = 6.0f; ///< Library time the lit moment is centered on.
+    float litWidth = 0.5f;
+    bool pulseEnabled = true;
+    int pulseStrand = 2;     ///< Middle shelf book.
+    float pulseSpeed = 1.5f; ///< Library time per wall second.
+    float pulseNow = 10.0f;  ///< Library time the pulse leaves (t_now).
+    float pulsePast = 6.0f;  ///< Library time the pulse reaches (t_past).
+    float pulseWidth = 0.35f;
+    float lineWidthPx = 2.5f;
+    float edgeIntensity = 0.9f;
+    float strandIntensity = 1.0f;
+    float sliceIntensity = 1.6f;
+    TesseractRenderer renderer;
+    HudOverlay speculativeLabel;
+    int speculativeLabelWidth = 0;  ///< Render width the label layout was fitted to.
+    int speculativeLabelHeight = 0; ///< Render height the label layout was fitted to.
+  } tesseract;
+
   struct CameraGroup {
     int cameraModeIndex = static_cast<int>(CameraMode::Input);
     float orbitTime = 0.0f;
@@ -474,6 +540,7 @@ struct RenderState {
   struct ExportingGroup {
     int exportWarmup = 0;
     bool exportPerformed = false;
+    bool exportFailed = false; ///< A requested export was refused or not written; exit 1.
     int exportDone = 0;
   } exporting;
 

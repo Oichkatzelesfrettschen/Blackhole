@@ -1160,6 +1160,8 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/render/record_mode.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/render_targets.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/uniform_binding.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/tesseract/tesseract_geometry.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/tesseract/tesseract_renderer.cpp"
   "${PROJECT_SOURCE_DIR}/src/tools/compare_harness.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"
@@ -3921,6 +3923,152 @@ if(BUILD_TESTING)
     set_tests_properties(camera_math PROPERTIES LABELS "render;unit" TIMEOUT 30)
     if(SANITIZER_TEST_ENV)
       set_tests_properties(camera_math PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/so4_test.cpp")
+    add_executable(so4_test "${PROJECT_SOURCE_DIR}/tests/so4_test.cpp")
+    target_include_directories(so4_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+    target_link_libraries(so4_test PRIVATE GTest::gtest GTest::gtest_main)
+    target_compile_options(so4_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME so4_rotation COMMAND so4_test)
+    set_tests_properties(so4_rotation PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(so4_rotation PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_geometry_test.cpp")
+    add_executable(tesseract_geometry_test
+      "${PROJECT_SOURCE_DIR}/tests/tesseract_geometry_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/render/tesseract/tesseract_geometry.cpp"
+    )
+    target_include_directories(tesseract_geometry_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+    target_link_libraries(tesseract_geometry_test PRIVATE glm::glm GTest::gtest GTest::gtest_main)
+    target_compile_options(tesseract_geometry_test PRIVATE ${PROJECT_WARNINGS})
+    # The projection guards are asserted finite, which needs IEEE inf/NaN semantics.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(tesseract_geometry_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME tesseract_geometry COMMAND tesseract_geometry_test)
+    set_tests_properties(tesseract_geometry PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(tesseract_geometry PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
+    add_executable(tesseract_label_test "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
+    target_link_libraries(tesseract_label_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(tesseract_label_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_label COMMAND tesseract_label_test)
+    set_tests_properties(tesseract_label PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(tesseract_label PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_framing_test.cpp")
+    add_executable(tesseract_framing_test "${PROJECT_SOURCE_DIR}/tests/tesseract_framing_test.cpp")
+    target_link_libraries(tesseract_framing_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(tesseract_framing_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_framing COMMAND tesseract_framing_test)
+    set_tests_properties(tesseract_framing PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(tesseract_framing PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_motion_test.cpp")
+    add_executable(tesseract_motion_test "${PROJECT_SOURCE_DIR}/tests/tesseract_motion_test.cpp")
+    target_link_libraries(tesseract_motion_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(tesseract_motion_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_motion COMMAND tesseract_motion_test)
+    set_tests_properties(tesseract_motion PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(tesseract_motion PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gpu_timing_test.cpp")
+    # GL-free per-frame bookkeeping of the GPU stage timers: a stage the
+    # sampled frame skipped publishes NaN or an empty CSV field.
+    add_executable(gpu_timing_test "${PROJECT_SOURCE_DIR}/tests/gpu_timing_test.cpp")
+    target_link_libraries(gpu_timing_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(gpu_timing_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(gpu_timing_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME gpu_timing COMMAND gpu_timing_test)
+    set_tests_properties(gpu_timing PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(gpu_timing PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_gl_state_test.cpp")
+    # Live-GL checks of blend/binding hygiene between the tesseract label and
+    # pass and the black-hole fullscreen passes. Skips without a GL 4.6 context.
+    add_executable(tesseract_gl_state_test "${PROJECT_SOURCE_DIR}/tests/tesseract_gl_state_test.cpp")
+    target_link_libraries(tesseract_gl_state_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_definitions(tesseract_gl_state_test PRIVATE
+      BH_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+      BH_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    )
+    target_compile_options(tesseract_gl_state_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_gl_state COMMAND tesseract_gl_state_test)
+    set_tests_properties(tesseract_gl_state PROPERTIES LABELS "render;gpu;tesseract" TIMEOUT 60)
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/record_clock_test.cpp")
+    add_executable(record_clock_test "${PROJECT_SOURCE_DIR}/tests/record_clock_test.cpp")
+    target_link_libraries(record_clock_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    # The CLI validation cases feed inf and NaN, which need IEEE semantics.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(record_clock_test PRIVATE -fno-fast-math)
+    endif()
+    target_compile_options(record_clock_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME record_clock COMMAND record_clock_test)
+    set_tests_properties(record_clock PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(record_clock PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_ribbon_gl_test.cpp")
+    # Live-GL radiance of subdivided tesseract ribbons through the real
+    # shaders. Skips without a GL 4.6 context.
+    add_executable(tesseract_ribbon_gl_test "${PROJECT_SOURCE_DIR}/tests/tesseract_ribbon_gl_test.cpp")
+    target_link_libraries(tesseract_ribbon_gl_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_definitions(tesseract_ribbon_gl_test PRIVATE
+      BH_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    )
+    target_compile_options(tesseract_ribbon_gl_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_ribbon_gl COMMAND tesseract_ribbon_gl_test)
+    set_tests_properties(tesseract_ribbon_gl PROPERTIES LABELS "render;gpu;tesseract" TIMEOUT 60)
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_exposure_gl_test.cpp")
+    # Live-GL raw frame of the recorded tesseract scene against its record
+    # exposure. Skips without a GL 4.6 context.
+    add_executable(tesseract_exposure_gl_test "${PROJECT_SOURCE_DIR}/tests/tesseract_exposure_gl_test.cpp")
+    target_link_libraries(tesseract_exposure_gl_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_definitions(tesseract_exposure_gl_test PRIVATE
+      BH_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    )
+    target_compile_options(tesseract_exposure_gl_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_exposure_gl COMMAND tesseract_exposure_gl_test)
+    set_tests_properties(tesseract_exposure_gl PROPERTIES LABELS "render;gpu;tesseract" TIMEOUT 60)
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/scene_selection_test.cpp")
+    add_executable(scene_selection_test "${PROJECT_SOURCE_DIR}/tests/scene_selection_test.cpp")
+    target_link_libraries(scene_selection_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(scene_selection_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME scene_selection COMMAND scene_selection_test)
+    set_tests_properties(scene_selection PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(scene_selection PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
     endif()
   endif()
 

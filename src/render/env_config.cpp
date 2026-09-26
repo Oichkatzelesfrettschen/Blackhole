@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -284,6 +285,20 @@ void applyOverlayEnvironment(RenderState &rs) {
   }
 }
 
+void applySceneEnvironment(RenderState &rs) {
+  if (rs.scene.envApplied) {
+    return;
+  }
+  if (const char *sceneEnv = std::getenv("BLACKHOLE_SCENE")) {
+    if (!parseSceneName(sceneEnv).has_value()) {
+      std::cerr << "BLACKHOLE_SCENE='" << sceneEnv
+                << "' is not a scene; expected blackhole or tesseract\n";
+    }
+  }
+  rs.scene.mode = startupSceneMode();
+  rs.scene.envApplied = true;
+}
+
 // Startup disk overrides. BLACKHOLE_PHYSICAL_TRACER=0 selects the legacy
 // fragment tracer and 1 the Kerr tracer, for A/B captures of the two paths;
 // BLACKHOLE_DISK_TRANSFER=interstellar forces g = 1 (the film's disk) and
@@ -309,7 +324,26 @@ void applyDiskEnvironment(RenderState &rs) {
 
 } // namespace
 
+std::optional<RenderState::SceneMode> parseSceneName(std::string_view name) {
+  if (name == "tesseract") {
+    return RenderState::SceneMode::Tesseract;
+  }
+  if (name == "blackhole") {
+    return RenderState::SceneMode::Blackhole;
+  }
+  return std::nullopt;
+}
+
+RenderState::SceneMode startupSceneMode() {
+  const char *sceneEnv = std::getenv("BLACKHOLE_SCENE");
+  if (sceneEnv == nullptr) {
+    return RenderState::SceneMode::Blackhole;
+  }
+  return parseSceneName(sceneEnv).value_or(RenderState::SceneMode::Blackhole);
+}
+
 void applyEnvironmentConfig(RenderState &rs) {
+  applySceneEnvironment(rs);
   applyCompareEnvironment(rs);
   applyProbeEnvironment(rs);
   applyOverlayEnvironment(rs);

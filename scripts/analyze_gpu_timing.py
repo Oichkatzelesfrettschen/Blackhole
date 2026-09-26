@@ -137,6 +137,7 @@ def parse_gpu_timing_csv(csv_path: str, iqr_threshold: float = 1.5) -> GpuTiming
         "gpu_tonemap_ms",
         "gpu_depth_ms",
         "gpu_grmhd_slice_ms",
+        "gpu_tesseract_ms",
     ]
 
     # Storage
@@ -161,7 +162,12 @@ def parse_gpu_timing_csv(csv_path: str, iqr_threshold: float = 1.5) -> GpuTiming
                 kerr_spins.append(float(row["kerr_spin"]))
 
                 for col in metric_columns:
-                    val = float(row[col])
+                    # An empty field is a stage the sampled frame did not run;
+                    # a missing column is a log written before that stage existed.
+                    field = row.get(col)
+                    if field is None or field == "":
+                        continue
+                    val = float(field)
                     # Filter out zero values for GPU metrics (not active)
                     if col.startswith("gpu_") and val == 0.0:
                         continue
