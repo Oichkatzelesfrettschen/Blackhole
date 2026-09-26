@@ -48,6 +48,10 @@ struct ShowcaseOrbitComposition {
   float sweepDeg;
 };
 
+/** @brief Tone-map exposure of the showcase-orbit profile when no composition
+ *         matches; the compositions carry 2.75-3.05. */
+inline constexpr float K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE = 3.4f;
+
 /** @brief Returns the composition matching name, or nullptr if none matches. */
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name);
 

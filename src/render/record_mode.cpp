@@ -210,8 +210,10 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.disk.adiskDensityH      = 2.1f;
     rs.disk.adiskHeight        = 0.42f;
     rs.disk.adiskLit           = 0.24f;
-    // Composition exposures sit near 3; brightness * exposure ~ 0.24 matches
-    // the interactive default (0.25 at exposure 1).
+    // The showcase exposure is the composition's (2.75-3.05) or
+    // K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE (3.4), set below and again each frame
+    // by prepareFrameTexturesAndExposure in main.cpp. brightness * exposure
+    // is then 0.22-0.27, the interactive default's 0.25 at exposure 1.
     rs.disk.diskBrightness     = 0.08f;
     rs.disk.dopplerStrength    = 1.15f;
     rs.disk.photonSphereGlowStrength = 1.15f;
@@ -246,8 +248,9 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
                    : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f)};
     if (cli.hasRecordExposure) {
       rs.post.toneExposure = cli.recordExposure;
-    } else if (composition != nullptr) {
-      rs.post.toneExposure = composition->exposure;
+    } else {
+      rs.post.toneExposure =
+          composition != nullptr ? composition->exposure : K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
     }
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
   } else {

@@ -268,6 +268,7 @@ using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::captureRecordFrame;
 using blackhole::exportFrameOnce;
 using blackhole::findShowcaseOrbitComposition;
+using blackhole::K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
 using blackhole::ShowcaseOrbitComposition;
 #if BLACKHOLE_HAS_CUDA
 using blackhole::bindCudaLaunchParams;
@@ -1272,7 +1273,8 @@ void prepareFrameTexturesAndExposure(RenderState &rs, const platform::CliOptions
     if (cli.hasRecordExposure) {
       rs.post.toneExposure = cli.recordExposure;
     } else if (cli.recordProfile == "showcase-orbit") {
-      rs.post.toneExposure = composition != nullptr ? composition->exposure : 3.4f;
+      rs.post.toneExposure =
+          composition != nullptr ? composition->exposure : K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
     }
   }
 }
