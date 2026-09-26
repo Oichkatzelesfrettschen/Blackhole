@@ -990,8 +990,8 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
         std::clamp(static_cast<double>(rs.physicsCore.kerrSpin), -0.9999, 0.9999)));
 
     // Per-frame derived transients shared by the fragment, CUDA, and
-    // compute uniform binders (compare-baseline gating, LUT readiness,
-    // precomputed record frame shift); see FrameBindingInputs.
+    // compute uniform binders (compare-baseline gating, LUT readiness); see
+    // FrameBindingInputs.
     FrameBindingInputs frameInputs;
     frameInputs.adiskEnabledEffective = adiskEnabledEffective;
     frameInputs.enableRedshiftEffective = enableRedshiftEffective;
@@ -1006,18 +1006,6 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     frameInputs.adiskParticleEffective = adiskParticleEffective;
     frameInputs.compareActive = compareActive;
     frameInputs.grmhdTexId = grmhdTexId;
-    /* Record-mode showcase-orbit frame offset; defaults (0,0) cover the
-     * non-record path via FrameBindingInputs member initializers. */
-    if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit") {
-      const ShowcaseOrbitComposition *const composition =
-          findShowcaseOrbitComposition(cli.recordComposition);
-      frameInputs.frameShiftX =
-          recordOverride(cli.hasRecordFrameX, cli.recordFrameX,
-                         composition != nullptr ? composition->frameOffsetX : 0.0f);
-      frameInputs.frameShiftY =
-          recordOverride(cli.hasRecordFrameY, cli.recordFrameY,
-                         composition != nullptr ? composition->frameOffsetY : 0.0f);
-    }
 
     // Load-order-independent fragment uniforms (the emissivity-family LUT
     // bindings stay above, before updateLuts reassigns their handles).

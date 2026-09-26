@@ -277,8 +277,10 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.background_yaw_rad = rs.background.backgroundYawRad;
   cp.background_pitch_rad = rs.background.backgroundPitchRad;
   cp.background_filter_radius = 0.0f;
-  cp.frame_shift_x = in.frameShiftX;
-  cp.frame_shift_y = in.frameShiftY;
+  // The showcase frame offset reaches every tracer through the aimed camera
+  // basis (updateFrameCamera); the image-plane shift is the Blender bridge's.
+  cp.frame_shift_x = 0.0f;
+  cp.frame_shift_y = 0.0f;
   for (int i = 0; i < K_BACKGROUND_LAYERS; ++i) {
     auto const &params = rs.background.backgroundLayerParams.at(static_cast<std::size_t>(i));
     cp.background_layer_params[i * 4 + 0] = params.x;
