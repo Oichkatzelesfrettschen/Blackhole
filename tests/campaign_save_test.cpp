@@ -148,3 +148,33 @@ TEST(CampaignSave, MalformedAndMismatchedSavesAreRefused) {
   other.params.front().max += 1;
   EXPECT_FALSE(loadError(save, &other).empty());
 }
+
+// Falsifier: a save with any single header bit flipped loading -- every field
+// (scenario, seed, spin, colony band, story digest) is bound to the session it
+// rebuilds -- or a turn field corrupted to 2^62 being replayed at all.
+TEST(CampaignSave, EveryHeaderBitAndAnOutOfRangeTurnAreRefused) {
+  const game::EventSet story = shippedStory();
+  game::CampaignSession original(9, story, 0);
+  ASSERT_TRUE(original.issueAssignTask(1, 3.0, game::K_FIRST_COLONY_NODE));
+  original.state().advanceTurns(40);
+  const std::vector<std::uint8_t> save = game::saveCampaign(original);
+  // magic (4) + version (4) + HEAD tag (4) + length (4), then a 29-byte body.
+  constexpr std::size_t headBody = 16;
+  constexpr std::size_t headLength = 1 + 8 + 8 + 4 + 8;
+  for (std::size_t bit = 0; bit < headLength * 8; ++bit) {
+    std::vector<std::uint8_t> flipped = save;
+    flipped.at(headBody + (bit / 8)) ^= static_cast<std::uint8_t>(1U << (bit % 8));
+    ASSERT_FALSE(game::loadCampaign(flipped, &story).ok()) << "header bit " << bit;
+  }
+
+  // The turn section follows the command section; set its value to 2^62.
+  std::vector<std::uint8_t> farTurn = save;
+  const std::size_t commandsTag = headBody + headLength;
+  const std::size_t commandsLength = static_cast<std::size_t>(farTurn.at(commandsTag + 4)) |
+                                     (static_cast<std::size_t>(farTurn.at(commandsTag + 5)) << 8);
+  const std::size_t turnValue = commandsTag + 8 + commandsLength + 8;
+  for (std::size_t byte = 0; byte < 8; ++byte) {
+    farTurn.at(turnValue + byte) = byte == 7 ? 0x40U : 0x00U;
+  }
+  EXPECT_EQ(loadError(farTurn, &story), "saved turn outside [0, K_SAVE_MAX_TURN]");
+}

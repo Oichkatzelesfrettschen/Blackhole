@@ -125,8 +125,8 @@ bool readCommand(serial::ByteReader &body, SavedCommand &saved) {
   return true;
 }
 
-std::unique_ptr<CampaignSession> buildSession(const SaveHeader &header, const EventSet *story,
-                                              std::string &error) {
+std::unique_ptr<CampaignSession> constructSession(const SaveHeader &header,
+                                                  const EventSet *story, std::string &error) {
   switch (header.scenario) {
   case CampaignScenario::M87Default:
     return std::make_unique<CampaignSession>(header.seed, header.spin);
@@ -141,6 +141,25 @@ std::unique_ptr<CampaignSession> buildSession(const SaveHeader &header, const Ev
   }
   error = "unknown scenario";
   return nullptr;
+}
+
+/** @brief Builds the saved scenario and requires it to reproduce every header
+ *         field, so a flipped header bit is refused rather than ignored. */
+std::unique_ptr<CampaignSession> buildSession(const SaveHeader &header, const EventSet *story,
+                                              std::string &error) {
+  std::unique_ptr<CampaignSession> session = constructSession(header, story, error);
+  if (!session) {
+    return nullptr;
+  }
+  const std::uint64_t digest = session->scenario() == CampaignScenario::GargantuaColony
+                                   ? eventSetDigest(session->state().config().story)
+                                   : 0U;
+  if (session->field().spinDimensionless() != header.spin ||
+      session->colonyBand() != header.colonyBand || digest != header.storyDigest) {
+    error = "the header does not match the scenario it names";
+    return nullptr;
+  }
+  return session;
 }
 
 } // namespace
@@ -252,8 +271,8 @@ CampaignLoadResult loadCampaign(const std::vector<std::uint8_t> &bytes, const Ev
     result.error = "trailing bytes after the last section";
     return result;
   }
-  if (turn < 0) {
-    result.error = "negative turn";
+  if (turn < 0 || turn > K_SAVE_MAX_TURN) {
+    result.error = "saved turn outside [0, K_SAVE_MAX_TURN]";
     return result;
   }
 

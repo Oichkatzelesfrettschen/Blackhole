@@ -22,8 +22,10 @@
  *   'TURN' i64 turn reached
  *   'DGST' u64 stateDigest at that turn
  * Load rejects an unknown version, a wrong tag, a section length that
- * disagrees with its body, truncation, trailing bytes, a story mismatch, a
- * command the replay refuses, and a digest mismatch.
+ * disagrees with its body, truncation, trailing bytes, a header field the
+ * rebuilt session does not reproduce (spin, colony band, story digest), a
+ * saved turn beyond K_SAVE_MAX_TURN, a command the replay refuses, and a
+ * digest mismatch.
  *
  * Replay rebuilds only what the scenario constructor and the command log
  * produce. A session changed any other way -- a fleet added with addFleet
@@ -46,6 +48,12 @@
 namespace game {
 
 inline constexpr std::uint32_t K_SAVE_FORMAT_VERSION = 1;
+
+/// Largest saved turn load will replay. Replay runs every turn (about 0.1-20
+/// microseconds each), so the cap bounds a load to tens of seconds even for a
+/// corrupted turn field; 1e8 one-day turns is 274,000 outside years, past any
+/// campaign the scenarios run (the Miller story's host is dark by turn 10950).
+inline constexpr std::int64_t K_SAVE_MAX_TURN = 100000000;
 
 /** @brief Serializes a session's save: its scenario, seed, field spin,
  *         colony band, story digest, command log, turn, and digest. */
