@@ -4639,12 +4639,17 @@ if(BUILD_TESTING)
     endforeach()
   endfunction()
 
+  # Optional trailing arguments replace the sims' default --compare mode.
   function(bh_add_digest_gate name first second)
+    set(_bh_sim_args "--compare")
+    if(ARGN)
+      string(JOIN " " _bh_sim_args ${ARGN})
+    endif()
     add_test(NAME ${name}
       COMMAND ${CMAKE_COMMAND}
         -DNATIVE_SIM=$<TARGET_FILE:${first}>
         -DGENERIC_SIM=$<TARGET_FILE:${second}>
-        -DSIM_ARGS=--compare
+        "-DSIM_ARGS=${_bh_sim_args}"
         -P "${PROJECT_SOURCE_DIR}/cmake/CompareSimDigests.cmake"
     )
     set_tests_properties(${name} PROPERTIES LABELS "campaign;determinism" TIMEOUT 120)
@@ -4692,6 +4697,14 @@ if(BUILD_TESTING)
       bh_add_digest_gate(${_bh_sim}_fma_digest_parity ${_bh_sim}_fma ${_bh_sim}_generic)
     endif()
   endforeach()
+  # The colony story (node clocks, events, loader) under the same ISA gates.
+  set(_bh_colony_args --colony "${PROJECT_SOURCE_DIR}/assets/events/host_goes_dark.json")
+  bh_add_digest_gate(campaign_sim_colony_isa_digest_parity campaign_sim campaign_sim_generic
+    ${_bh_colony_args})
+  if(TARGET campaign_sim_fma)
+    bh_add_digest_gate(campaign_sim_colony_fma_digest_parity campaign_sim_fma campaign_sim_generic
+      ${_bh_colony_args})
+  endif()
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp")
     add_executable(constellation_test
