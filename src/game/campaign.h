@@ -176,6 +176,24 @@ public:
   [[nodiscard]] bool deadlinePassed() const {
     return config_.deadlineTurn > 0 && clock_.turn() >= config_.deadlineTurn;
   }
+  /** @brief Whether `node`'s latest word from the host already proves the
+   *         energy victory: the host stamps every emission with its banked
+   *         energy at that instant (never decreasing, so the latest stamp is
+   *         the loosest test), and a stamp at or above the target means the
+   *         host had already won when it sent it. The colony cannot hear the
+   *         host's own latched status directly, only this arithmetic fact
+   *         riding an ordinary delivery; issueCommand and perceivedSnapshot
+   *         both read this one rule, so a colony that can infer the win is
+   *         refused the same order the host itself would be. False for the
+   *         host, for an unknown node, and when no energy victory is
+   *         configured (victoryEnergyUnits <= 0). */
+  [[nodiscard]] bool colonyPerceivesHostWin(NodeId node) const {
+    if (config_.victoryEnergyUnits <= 0.0 || node >= nodes_.size() || node == K_AUTHORITY_NODE) {
+      return false;
+    }
+    const ReceivedFromNode &host = nodes_.at(node).received.at(K_AUTHORITY_NODE);
+    return host.lastEmitTurn >= 0 && host.lastSenderEnergyUnits >= config_.victoryEnergyUnits;
+  }
   [[nodiscard]] double energyUnits() const { return energyUnits_; }
   [[nodiscard]] double instability() const { return instability_; }
   [[nodiscard]] double stabilization() const { return stabilization_; }
@@ -202,6 +220,12 @@ public:
   /** @brief A story parameter's resolved value (seeded ones drawn from the
    *         campaign seed); nullopt when the story has no such parameter. */
   [[nodiscard]] std::optional<std::int64_t> storyParam(std::string_view name) const;
+  /** @brief Any story IntRef resolved against this campaign's seeded
+   *         parameters, the value the core evaluates it to during play; 0 on
+   *         an invalid campaign (construction refused resolveStoryParams). */
+  [[nodiscard]] std::int64_t resolveStoryValue(const IntRef &ref) const {
+    return valid_ ? resolve(ref) : 0;
+  }
   /** @brief Signal delay between two nodes in whole turns, as quantized at
    *         emission. */
   [[nodiscard]] std::int64_t nodeDelayTurns(NodeId from, NodeId to) const;
