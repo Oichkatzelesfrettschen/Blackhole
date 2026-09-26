@@ -31,6 +31,11 @@
 
 namespace game {
 
+/// Fastest real-time scale the controls offer: one local hour per wall second.
+inline constexpr double K_MAX_LOCAL_SECONDS_PER_WALL_SECOND = 3600.0;
+/// Largest manual batch the controls offer (the "Advance 25" button).
+inline constexpr std::int64_t K_MAX_MANUAL_BATCH_TURNS = 25;
+
 struct RealtimeDriverConfig {
   double secondsPerTurn = 86400.0;          ///< Coordinate seconds per campaign turn.
   double localSecondsPerWallSecond = 1.0;   ///< 1 = real time at the focused station.

@@ -24,8 +24,10 @@
  * Load rejects an unknown version, a wrong tag, a section length that
  * disagrees with its body, truncation, trailing bytes, a header field the
  * rebuilt session does not reproduce (spin, colony band, story digest), a
- * saved turn beyond K_SAVE_MAX_TURN, a command the replay refuses, and a
- * digest mismatch.
+ * saved turn beyond the scenario's replay budget, a command log out of turn
+ * order or past the saved turn, a command the replay refuses, and a digest
+ * mismatch. The budget and command checks run before any turn is replayed,
+ * so a corrupted turn field costs no replay work.
  *
  * Replay rebuilds only what the scenario constructor and the command log
  * produce. A session changed any other way -- a fleet added with addFleet
@@ -49,11 +51,30 @@ namespace game {
 
 inline constexpr std::uint32_t K_SAVE_FORMAT_VERSION = 1;
 
-/// Largest saved turn load will replay. Replay runs every turn (about 0.1-20
-/// microseconds each), so the cap bounds a load to tens of seconds even for a
-/// corrupted turn field; 1e8 one-day turns is 274,000 outside years, past any
-/// campaign the scenarios run (the Miller story's host is dark by turn 10950).
-inline constexpr std::int64_t K_SAVE_MAX_TURN = 100000000;
+/// Wall time of play a save may represent: four hours at the scenario's
+/// fastest advance rate (saveReplayTurnBudget).
+inline constexpr double K_SAVE_SESSION_WALL_SEC = 4.0 * 3600.0;
+/// Manual batches per wall second credited to a player clicking the largest
+/// Advance button as fast as the controls allow.
+inline constexpr double K_SAVE_MANUAL_BATCHES_PER_WALL_SEC = 10.0;
+
+/**
+ * @brief Largest saved turn load replays for this scenario: the turns
+ *        K_SAVE_SESSION_WALL_SEC of play reach at the scenario's fastest
+ *        advance rate, the larger of
+ *  - real time at the slowest station clock and the fastest scale:
+ *    K_MAX_LOCAL_SECONDS_PER_WALL_SECOND / (min dtau/dt * secondsPerTurn),
+ *    3600 / (1.6286e-5 * 86400) = 2558 turns per wall second on Miller's
+ *    orbit, so 3.68e7 turns in four hours -- the deep colony's whole
+ *    365-local-day charter is 2.24e7 turns (2.4 wall hours);
+ *  - manual batches: K_MAX_MANUAL_BATCH_TURNS * K_SAVE_MANUAL_BATCHES_PER_WALL_SEC
+ *    = 250 turns per wall second, so 3.6e6 turns in four hours, which binds
+ *    for M87, Gargantua, and the survey colony, whose stations all run
+ *    near dtau/dt = 1 (real time there is about 0.04 turns per wall second).
+ * Replay cost scales with the budget, so a save's scenario, not a global
+ * constant, sets how long the worst corrupted turn field can make a load run.
+ */
+[[nodiscard]] std::int64_t saveReplayTurnBudget(const CampaignState &state);
 
 /** @brief Serializes a session's save: its scenario, seed, field spin,
  *         colony band, story digest, command log, turn, and digest. */

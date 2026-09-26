@@ -5,10 +5,13 @@
 
 #include "game/save_format.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,7 +22,9 @@
 #include "game/event.h"
 #include "game/fleet.h"
 #include "game/observer.h"
+#include "game/realtime_driver.h"
 #include "game/serialize_bytes.h"
+#include "game/station_node.h"
 
 namespace game {
 
@@ -162,7 +167,32 @@ std::unique_ptr<CampaignSession> buildSession(const SaveHeader &header, const Ev
   return session;
 }
 
+/** @brief Commands sorted by issue turn, each within [0, turn]: the replay
+ *         then issues every one of them on its own turn. */
+bool commandsWithinTurn(const std::vector<SavedCommand> &commands, std::int64_t turn) {
+  std::int64_t previous = 0;
+  return std::ranges::all_of(commands, [&previous, turn](const SavedCommand &saved) {
+    const bool inOrder = saved.issueTurn >= previous && saved.issueTurn <= turn;
+    previous = saved.issueTurn;
+    return inOrder;
+  });
+}
+
 } // namespace
+
+std::int64_t saveReplayTurnBudget(const CampaignState &state) {
+  const std::vector<StationNode> &nodes = state.nodes();
+  const double slowestRate =
+      std::accumulate(nodes.begin(), nodes.end(), 1.0, [](double slowest, const StationNode &node) {
+        return std::min(slowest, node.clock.rate());
+      });
+  const double realtimeTurnsPerWallSec =
+      K_MAX_LOCAL_SECONDS_PER_WALL_SECOND / (slowestRate * state.config().secondsPerTurn);
+  const double manualTurnsPerWallSec =
+      static_cast<double>(K_MAX_MANUAL_BATCH_TURNS) * K_SAVE_MANUAL_BATCHES_PER_WALL_SEC;
+  return static_cast<std::int64_t>(std::ceil(
+      K_SAVE_SESSION_WALL_SEC * std::max(realtimeTurnsPerWallSec, manualTurnsPerWallSec)));
+}
 
 std::vector<std::uint8_t> saveCampaign(const CampaignSession &session) {
   const CampaignState &state = session.state();
@@ -271,11 +301,6 @@ CampaignLoadResult loadCampaign(const std::vector<std::uint8_t> &bytes, const Ev
     result.error = "trailing bytes after the last section";
     return result;
   }
-  if (turn < 0 || turn > K_SAVE_MAX_TURN) {
-    result.error = "saved turn outside [0, K_SAVE_MAX_TURN]";
-    return result;
-  }
-
   std::unique_ptr<CampaignSession> session = buildSession(header, story, result.error);
   if (!session) {
     return result;
@@ -283,6 +308,18 @@ CampaignLoadResult loadCampaign(const std::vector<std::uint8_t> &bytes, const Ev
   CampaignState &state = session->state();
   if (!state.valid()) {
     result.error = "the saved scenario does not build a valid campaign";
+    return result;
+  }
+  // Both refusals come before the first replayed turn, so a corrupted turn
+  // field or command log costs no replay work.
+  const std::int64_t budget = saveReplayTurnBudget(state);
+  if (turn < 0 || turn > budget) {
+    result.error =
+        "saved turn outside [0, " + std::to_string(budget) + "], this scenario's replay budget";
+    return result;
+  }
+  if (!commandsWithinTurn(commands, turn)) {
+    result.error = "saved commands are out of turn order or beyond the saved turn";
     return result;
   }
   // Replay: every command on its issue turn, in log order, then the turn's
@@ -298,10 +335,6 @@ CampaignLoadResult loadCampaign(const std::vector<std::uint8_t> &bytes, const Ev
     if (current < turn) {
       state.advanceTurn();
     }
-  }
-  if (next != commands.size()) {
-    result.error = "saved commands are out of turn order or beyond the saved turn";
-    return result;
   }
   if (state.stateDigest() != savedDigest) {
     result.error = "replay digest differs from the saved digest";

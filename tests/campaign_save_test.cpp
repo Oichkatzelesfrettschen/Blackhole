@@ -5,13 +5,15 @@
  *        mismatched save is refused.
  */
 
-#include <gtest/gtest.h>
-
+#include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include <gtest/gtest.h>
 
 #include "game/campaign.h"
 #include "game/campaign_session.h"
@@ -20,6 +22,7 @@
 #include "game/event_loader.h"
 #include "game/fleet.h"
 #include "game/observer.h"
+#include "game/realtime_driver.h"
 #include "game/save_format.h"
 
 namespace {
@@ -62,6 +65,34 @@ void expectSameFuture(game::CampaignSession &lhs, game::CampaignSession &rhs, st
 
 std::string loadError(const std::vector<std::uint8_t> &bytes, const game::EventSet *story) {
   return game::loadCampaign(bytes, story).error;
+}
+
+// Section offsets: magic (4) + version (4), then HEAD tag (4) + length (4)
+// and its 29-byte body, then CMDS tag + length + body, then TURN.
+constexpr std::size_t K_HEAD_BODY = 16;
+constexpr std::size_t K_HEAD_LENGTH = 1 + 8 + 8 + 4 + 8;
+constexpr std::size_t K_COMMANDS_TAG = K_HEAD_BODY + K_HEAD_LENGTH;
+
+void writeI64(std::vector<std::uint8_t> &bytes, std::size_t offset, std::int64_t value) {
+  const auto bits = static_cast<std::uint64_t>(value);
+  for (std::size_t byte = 0; byte < 8; ++byte) {
+    bytes.at(offset + byte) = static_cast<std::uint8_t>(bits >> (8U * byte));
+  }
+}
+
+std::size_t turnValueOffset(const std::vector<std::uint8_t> &bytes) {
+  const std::size_t commandsLength = static_cast<std::size_t>(bytes.at(K_COMMANDS_TAG + 4)) |
+                                     (static_cast<std::size_t>(bytes.at(K_COMMANDS_TAG + 5)) << 8);
+  return K_COMMANDS_TAG + 8 + commandsLength + 8;
+}
+
+/** @brief Seconds one load takes; the refusals under test return before any
+ *         replayed turn, so a generous bound separates them from a replay. */
+double loadSeconds(const std::vector<std::uint8_t> &bytes, const game::EventSet *story,
+                   std::string &error) {
+  const auto start = std::chrono::steady_clock::now();
+  error = game::loadCampaign(bytes, story).error;
+  return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
 
 } // namespace
@@ -158,25 +189,87 @@ TEST(CampaignSave, EveryHeaderBitAndAnOutOfRangeTurnAreRefused) {
   ASSERT_TRUE(original.issueAssignTask(1, 3.0, game::K_FIRST_COLONY_NODE));
   original.state().advanceTurns(40);
   const std::vector<std::uint8_t> save = game::saveCampaign(original);
-  // magic (4) + version (4) + HEAD tag (4) + length (4), then a 29-byte body.
-  constexpr std::size_t headBody = 16;
-  constexpr std::size_t headLength = 1 + 8 + 8 + 4 + 8;
-  for (std::size_t bit = 0; bit < headLength * 8; ++bit) {
+  for (std::size_t bit = 0; bit < K_HEAD_LENGTH * 8; ++bit) {
     std::vector<std::uint8_t> flipped = save;
-    flipped.at(headBody + (bit / 8)) ^= static_cast<std::uint8_t>(1U << (bit % 8));
+    flipped.at(K_HEAD_BODY + (bit / 8)) ^= static_cast<std::uint8_t>(1U << (bit % 8));
     ASSERT_FALSE(game::loadCampaign(flipped, &story).ok()) << "header bit " << bit;
   }
 
-  // The turn section follows the command section; set its value to 2^62.
   std::vector<std::uint8_t> farTurn = save;
-  const std::size_t commandsTag = headBody + headLength;
-  const std::size_t commandsLength = static_cast<std::size_t>(farTurn.at(commandsTag + 4)) |
-                                     (static_cast<std::size_t>(farTurn.at(commandsTag + 5)) << 8);
-  const std::size_t turnValue = commandsTag + 8 + commandsLength + 8;
-  for (std::size_t byte = 0; byte < 8; ++byte) {
-    farTurn.at(turnValue + byte) = byte == 7 ? 0x40U : 0x00U;
+  writeI64(farTurn, turnValueOffset(farTurn), std::int64_t{1} << 62);
+  EXPECT_EQ(loadError(farTurn, &story).rfind("saved turn outside [0, ", 0), 0U);
+}
+
+// Falsifier: a scenario's budget other than four wall hours at its fastest
+// advance rate -- manual batches for stations near dtau/dt = 1, real time at
+// the Miller clock for the deep colony -- or a deep budget too short for the
+// colony's whole charter.
+TEST(CampaignSave, ReplayBudgetFollowsTheScenario) {
+  const game::EventSet story = shippedStory();
+  const auto manualBudget = static_cast<std::int64_t>(std::ceil(
+      game::K_SAVE_SESSION_WALL_SEC * static_cast<double>(game::K_MAX_MANUAL_BATCH_TURNS) *
+      game::K_SAVE_MANUAL_BATCHES_PER_WALL_SEC));
+  EXPECT_EQ(manualBudget, 3600000);
+  const game::CampaignSession m87(42);
+  EXPECT_EQ(game::saveReplayTurnBudget(m87.state()), manualBudget);
+  const game::CampaignSession survey(9, story, game::K_SURVEY_BAND);
+  EXPECT_EQ(game::saveReplayTurnBudget(survey.state()), manualBudget);
+
+  const game::CampaignSession deep(9, story, game::K_MILLER_BAND);
+  const double millerRate = deep.state().nodes().at(game::K_FIRST_COLONY_NODE).clock.rate();
+  const double secondsPerTurn = deep.state().config().secondsPerTurn;
+  const std::int64_t deepBudget = game::saveReplayTurnBudget(deep.state());
+  EXPECT_EQ(deepBudget,
+            static_cast<std::int64_t>(std::ceil(game::K_SAVE_SESSION_WALL_SEC *
+                                                game::K_MAX_LOCAL_SECONDS_PER_WALL_SECOND /
+                                                (millerRate * secondsPerTurn))));
+  EXPECT_NEAR(static_cast<double>(deepBudget), 3.68e7, 0.01e7);
+  const double charterTurns =
+      static_cast<double>(game::K_COLONY_MISSION_SEC) / (millerRate * secondsPerTurn);
+  EXPECT_GT(static_cast<double>(deepBudget), charterTurns);
+}
+
+// Falsifier: a tiny save whose turn field sits past its scenario's budget (or
+// at the 1e8 turns a global cap once admitted), or whose command log runs past
+// its turn, replaying any turn before the refusal. Refusal is asserted by
+// message; the time bound is generous against a 3.6e6-turn replay.
+TEST(CampaignSave, OverBudgetTurnAndStrayCommandsAreRefusedBeforeReplay) {
+  const game::EventSet story = shippedStory();
+  game::CampaignSession m87(42);
+  playPod(m87, 20);
+  game::CampaignSession deep(9, story, game::K_MILLER_BAND);
+  ASSERT_TRUE(deep.issueAssignTask(1, 3.0, game::K_FIRST_COLONY_NODE));
+  deep.state().advanceTurns(20);
+
+  struct Case {
+    game::CampaignSession *session;
+    const game::EventSet *story;
+  };
+  for (const Case &scenario : {Case{&m87, nullptr}, Case{&deep, &story}}) {
+    const std::vector<std::uint8_t> save = game::saveCampaign(*scenario.session);
+    ASSERT_TRUE(game::loadCampaign(save, scenario.story).ok());
+    const std::int64_t budget = game::saveReplayTurnBudget(scenario.session->state());
+    for (const std::int64_t turn : {budget + 1, std::int64_t{100000000}}) {
+      std::vector<std::uint8_t> overBudget = save;
+      writeI64(overBudget, turnValueOffset(overBudget), turn);
+      std::string error;
+      const double seconds = loadSeconds(overBudget, scenario.story, error);
+      EXPECT_EQ(error, "saved turn outside [0, " + std::to_string(budget) +
+                           "], this scenario's replay budget")
+          << "turn " << turn;
+      EXPECT_LT(seconds, 0.5) << "turn " << turn;
+    }
+
+    // An in-budget turn with the first command moved past it: refused on the
+    // log, not after replaying every turn up to the budget.
+    std::vector<std::uint8_t> strayCommand = save;
+    writeI64(strayCommand, turnValueOffset(strayCommand), budget);
+    writeI64(strayCommand, K_COMMANDS_TAG + 12, budget + 1);
+    std::string error;
+    const double seconds = loadSeconds(strayCommand, scenario.story, error);
+    EXPECT_EQ(error, "saved commands are out of turn order or beyond the saved turn");
+    EXPECT_LT(seconds, 0.5);
   }
-  EXPECT_EQ(loadError(farTurn, &story), "saved turn outside [0, K_SAVE_MAX_TURN]");
 }
 
 // Falsifier: an M87 save whose spin has only its sign flipped loading. The

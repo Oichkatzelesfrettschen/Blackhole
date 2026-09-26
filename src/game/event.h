@@ -102,9 +102,9 @@ inline constexpr std::int64_t K_STORY_TIMES_LIMIT = std::int64_t{1} << 20;
 }
 
 /** @brief lhs + rhs clamped to the int64 range. A colony's tech points
- *         accumulate one packet (at most 2^40 points) per arrival for up to
- *         K_SAVE_MAX_TURN turns, which can exceed int64; they saturate instead
- *         of overflowing, so tiers stay monotone and the digest defined. */
+ *         accumulate one packet (at most 2^40 points) per arrival with no
+ *         turn limit, which can exceed int64; they saturate instead of
+ *         overflowing, so tiers stay monotone and the digest defined. */
 [[nodiscard]] inline std::int64_t saturatingAdd(std::int64_t lhs, std::int64_t rhs) {
   std::int64_t sum = 0;
   if (!__builtin_add_overflow(lhs, rhs, &sum)) {

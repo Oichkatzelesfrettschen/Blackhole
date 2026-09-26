@@ -502,8 +502,9 @@ void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiSt
   if (ImGui::Checkbox("paused", &paused)) {
     uiState.driver.setPaused(paused);
   }
-  if (ImGui::SliderFloat("local s per wall s", &uiState.localSecondsPerWallSecond, 1.0f, 3600.0f,
-                         "%.0f", ImGuiSliderFlags_Logarithmic)) {
+  if (ImGui::SliderFloat("local s per wall s", &uiState.localSecondsPerWallSecond, 1.0f,
+                         static_cast<float>(game::K_MAX_LOCAL_SECONDS_PER_WALL_SECOND), "%.0f",
+                         ImGuiSliderFlags_Logarithmic)) {
     game::RealtimeDriverConfig config;
     config.secondsPerTurn = view.secondsPerTurn;
     config.localSecondsPerWallSecond = static_cast<double>(uiState.localSecondsPerWallSecond);
@@ -715,7 +716,8 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
   }
   if (const char *realtimeEnv = std::getenv("BLACKHOLE_CAMPAIGN_REALTIME")) {
     const double scale = std::strtod(realtimeEnv, nullptr);
-    if (std::isfinite(scale) && scale >= 1.0 && scale <= 3600.0) {
+    if (std::isfinite(scale) && scale >= 1.0 &&
+        scale <= game::K_MAX_LOCAL_SECONDS_PER_WALL_SECOND) {
       uiState.localSecondsPerWallSecond = static_cast<float>(scale);
       game::RealtimeDriverConfig config;
       config.secondsPerTurn = uiState.storySession
@@ -744,7 +746,8 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
       const game::CampaignViewSnapshot view = session.state().perceivedSnapshot(uiState.focusNode);
       renderTimeLedger(view, uiState);
       renderClocks(view, uiState);
-      for (const int count : {1, 5, 25}) {
+      for (const std::int64_t count :
+           {std::int64_t{1}, std::int64_t{5}, game::K_MAX_MANUAL_BATCH_TURNS}) {
         if (count > 1) {
           ImGui::SameLine();
         }
@@ -752,7 +755,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
             count == 1 ? std::string("Advance turn") : std::format("Advance {}", count);
         if (ImGui::Button(label.c_str())) {
           // A flagged arrival stops a batch on its own turn, as in real time.
-          for (int step = 0; step < count; ++step) {
+          for (std::int64_t step = 0; step < count; ++step) {
             if (stepCampaignTurn(session, uiState)) {
               // The batch consumed the alert; the real-time pump later this
               // frame must not run past it.
