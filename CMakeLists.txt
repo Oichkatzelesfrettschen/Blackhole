@@ -1775,6 +1775,7 @@ if(ENABLE_SHADER_VALIDATION)
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
       )
       set_tests_properties(shader_validation PROPERTIES
+        RESOURCE_LOCK cmake_build_tree
         LABELS "validation;shaders"
         TIMEOUT 30
       )
@@ -3102,6 +3103,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(repo_truth_generation PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "docs;meta"
       TIMEOUT 120
     )
@@ -3113,6 +3115,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(physics_claims_matrix PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "docs;physics;meta"
       TIMEOUT 30
     )
@@ -3130,6 +3133,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_addon_package PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;meta"
       TIMEOUT 30
     )
@@ -3141,6 +3145,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_addon_stage PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;meta"
       TIMEOUT 30
     )
@@ -3152,6 +3157,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_bridge_abi PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;meta"
       TIMEOUT 30
     )
@@ -3163,6 +3169,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration"
       TIMEOUT 300
     )
@@ -3174,6 +3181,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline"
       TIMEOUT 300
     )
@@ -3185,6 +3193,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_background_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline;background"
       TIMEOUT 300
     )
@@ -3196,6 +3205,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_conditioned_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline;conditioning"
       TIMEOUT 360
     )
@@ -3207,6 +3217,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_depth_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline;conditioning;depth"
       TIMEOUT 480
     )
@@ -3218,6 +3229,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_image_depth_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline;conditioning;depth;image_depth"
       TIMEOUT 480
     )
@@ -3229,6 +3241,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_conditioning_sweep PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;sweep"
       TIMEOUT 900
     )
@@ -3240,6 +3253,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_harsh_conditioning_sweep PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;sweep;harsh_lighting"
       TIMEOUT 900
     )
@@ -3251,6 +3265,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_conditioning_policy PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy"
       TIMEOUT 1200
     )
@@ -3262,6 +3277,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_harsh_conditioning_policy PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy;harsh_lighting"
       TIMEOUT 1200
     )
@@ -3273,6 +3289,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_policy_generation PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy_generation"
       TIMEOUT 900
     )
@@ -3284,6 +3301,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_policy_background PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy_generation;background"
       TIMEOUT 900
     )
@@ -3295,6 +3313,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_policy_production PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy_generation;production"
       TIMEOUT 900
     )
@@ -3306,6 +3325,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_policy_stale_refresh PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy_generation;stale_refresh"
       TIMEOUT 900
     )
@@ -3317,6 +3337,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_addon_smoke PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;integration"
       TIMEOUT 120
     )
@@ -3328,6 +3349,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_smoke_report PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;integration;meta"
       TIMEOUT 120
     )
@@ -3339,6 +3361,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_interactive_benchmark PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;benchmark;integration"
       TIMEOUT 180
     )
@@ -3350,6 +3373,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_interactive_benchmark_report PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3361,6 +3385,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_harsh_scene_report PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3372,6 +3397,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_showcase_render PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3383,6 +3409,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration"
       TIMEOUT 300
     )
@@ -3394,6 +3421,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline"
       TIMEOUT 300
     )
@@ -3405,6 +3433,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_background_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline;background"
       TIMEOUT 300
     )
@@ -3416,6 +3445,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_conditioned_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning"
       TIMEOUT 360
     )
@@ -3427,6 +3457,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_depth_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning;depth"
       TIMEOUT 480
     )
@@ -3438,6 +3469,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_image_depth_direct PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning;depth;image_depth"
       TIMEOUT 480
     )
@@ -3449,6 +3481,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_conditioning_sweep PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;sweep"
       TIMEOUT 900
     )
@@ -3460,6 +3493,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_harsh_conditioning_sweep PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;sweep;harsh_lighting"
       TIMEOUT 900
     )
@@ -3471,6 +3505,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_conditioning_policy PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy"
       TIMEOUT 1200
     )
@@ -3482,6 +3517,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_harsh_conditioning_policy PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy;harsh_lighting"
       TIMEOUT 1200
     )
@@ -3493,6 +3529,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_policy_generation PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation"
       TIMEOUT 900
     )
@@ -3504,6 +3541,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_policy_background PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;background"
       TIMEOUT 900
     )
@@ -3515,6 +3553,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_policy_production PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;production"
       TIMEOUT 900
     )
@@ -3526,6 +3565,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_policy_stale_refresh PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;stale_refresh"
       TIMEOUT 900
     )
@@ -3537,6 +3577,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_conditioning_host_parity PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;sweep;meta"
       TIMEOUT 1200
     )
@@ -3548,6 +3589,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_conditioning_trends PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy;meta"
       TIMEOUT 1800
     )
@@ -3559,6 +3601,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_policy_generation PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;meta"
       TIMEOUT 1500
     )
@@ -3570,6 +3613,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_harsh_conditioning_host_parity PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;sweep;meta;harsh_lighting"
       TIMEOUT 1200
     )
@@ -3581,6 +3625,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_addon_smoke PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;integration"
       TIMEOUT 120
     )
@@ -3592,6 +3637,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_readiness PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;integration"
       TIMEOUT 180
     )
@@ -3603,6 +3649,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_smoke_report PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;integration;meta"
       TIMEOUT 120
     )
@@ -3614,6 +3661,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_interactive_benchmark PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration"
       TIMEOUT 180
     )
@@ -3625,6 +3673,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_interactive_benchmark_report PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3636,6 +3685,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_harsh_scene_report PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3647,6 +3697,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_showcase_render PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3658,6 +3709,7 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_quality_sweep_report PROPERTIES
+      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration;meta"
       TIMEOUT 600
     )
