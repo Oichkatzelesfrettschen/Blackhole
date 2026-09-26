@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -21,7 +22,9 @@
 #include "game/command.h"
 #include "game/event.h"
 #include "game/event_loader.h"
+#include "game/fleet.h"
 #include "game/inbox.h"
+#include "game/observer.h"
 #include "game/realtime_driver.h"
 #include "game/station_node.h"
 
@@ -202,4 +205,26 @@ TEST(CampaignCausality, AutoPauseStopsExactlyOnTheArrivalTurn) {
     state.advanceTurns(reference.state().turn() - state.turn());
     EXPECT_EQ(state.stateDigest(), reference.state().stateDigest()) << "seed " << seed;
   }
+}
+
+// Falsifier: an order whose origin shares the fleet's radius logged for a turn
+// other than the one it acts in. Sent between turns, it can act no earlier
+// than the next turn; the log must say so.
+TEST(CampaignCausality, ZeroDelayOrdersActOnTheirLoggedTurn) {
+  game::CampaignSession session(3, shippedStory(), K_MILLER_BAND);
+  game::CampaignState &state = session.state();
+  // The colony brings the survey fleet down to Miller's orbit.
+  ASSERT_TRUE(session.issuePlaceFleet(1, K_MILLER_BAND, game::OrbitLane::Prograde,
+                                      game::StationKeeping::Orbit, game::K_FIRST_COLONY_NODE));
+  state.advanceTurns(state.commandLog().back().effectTurn);
+  ASSERT_EQ(state.fleets().front().bandIndex, K_MILLER_BAND);
+
+  // Colony and fleet now share a radius: zero light delay.
+  ASSERT_TRUE(session.issueAssignTask(1, 1.0, game::K_FIRST_COLONY_NODE));
+  const game::LoggedCommand logged = state.commandLog().back();
+  EXPECT_EQ(logged.effectTurn, logged.issueTurn + 1);
+  const std::size_t tasksBefore = state.fleets().front().assignedTasks.size();
+  state.advanceTurn();
+  EXPECT_EQ(state.turn(), logged.effectTurn);
+  EXPECT_EQ(state.fleets().front().assignedTasks.size(), tasksBefore + 1);
 }

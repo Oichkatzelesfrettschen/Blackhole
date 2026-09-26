@@ -181,14 +181,17 @@ bool CampaignState::issueCommand(const Command &command) {
   }
 
   // Orders are in flight: the effect turn is the issue turn plus the signal
-  // delay from the authority station to the fleet's CURRENT band, quantized
-  // once to whole turns (ceil -- an order never lands early).
+  // delay from the origin station to the fleet's CURRENT band, quantized once
+  // to whole turns (ceil -- an order never lands early). An order is issued
+  // between turns, after the issue turn's deliveries ran, so the earliest turn
+  // it can act in is the next one: a zero delay (origin and fleet at one
+  // radius) is logged as one turn, the turn it actually takes effect.
   const StationNode &origin = nodes_.at(command.originNode);
   const double delaySec = effectiveSignalDelaySec(origin.radiusCm, bandRadiusCm(fleet->bandIndex));
   LoggedCommand logged;
   logged.command = command;
   logged.issueTurn = clock_.turn();
-  logged.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+  logged.effectTurn = clock_.turn() + std::max<std::int64_t>(1, clock_.ceilTurns(delaySec));
   commandLog_.push_back(logged);
 
   Delivery delivery;
