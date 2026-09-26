@@ -28,8 +28,10 @@ struct RenderState;
 /**
  * @brief Provenance label the tesseract scene shows on screen at all times.
  *
- * The scene illustrates a speculative idea from popular science, and the
- * label keeps any frame of it from reading as a physics result.
+ * The scene illustrates a speculative idea from popular science. The label is
+ * drawn into the presented texture, so the viewport, --record-frames, and
+ * --export-frame outputs carry it; --export-raw-frame reads the unlabeled HDR
+ * target and exportFrameOnce refuses it in this scene.
  */
 inline constexpr std::string_view TESSERACT_SPECULATIVE_LABEL =
     "SPECULATIVE (Thorne, The Science of Interstellar ch. 29-31): not physics";

@@ -420,7 +420,14 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
     }
   }
 
-  if (!cli.exportRawFramePath.empty() && rs.targets.texBlackhole != 0) {
+  // The raw export reads texBlackhole, the HDR scene target the provenance
+  // label never reaches, so the speculative tesseract scene refuses it.
+  const bool rawRefused = rs.scene.mode == RenderState::SceneMode::Tesseract;
+  if (!cli.exportRawFramePath.empty() && rawRefused) {
+    std::cerr << "Refusing --export-raw-frame in the tesseract scene: the raw HDR target carries "
+                 "no SPECULATIVE label; use --export-frame or --record-frames\n";
+  }
+  if (!cli.exportRawFramePath.empty() && !rawRefused && rs.targets.texBlackhole != 0) {
     GLint texW = 0;
     GLint texH = 0;
     glBindTexture(GL_TEXTURE_2D, rs.targets.texBlackhole);
