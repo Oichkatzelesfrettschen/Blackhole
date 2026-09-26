@@ -290,12 +290,30 @@ vec4 tileSample(vec2 coordinates, out vec2 span, out float texelAngle) {
   return readDirectionMap(skyTile, tileSpan, st, true, span);
 }
 
-/** @brief Cumulative CMB flux (luminance x sr) inside ln rho = `logRho`. */
+/**
+ * @brief Cumulative CMB flux (luminance x sr) inside ln rho = `logRho`.
+ *        tileFluxLut texel i holds the flux inside ring i's outer edge. Ring i
+ *        spans a log-width s; at fraction f of it the enclosed solid angle,
+ *        rho^2 to first order, has grown by (e^{2 f s} - 1) / (e^{2 s} - 1) of
+ *        the ring's, and so has the enclosed flux for radiance uniform across
+ *        the ring. Reading texel i whole would add the rest of the ring.
+ */
 vec3 tileFluxInside(float logRho) {
-  float rings = float(textureSize(tileFluxLut, 0).x);
-  float ring = (logRho - tileLogRhoMin) / (tileLogRhoMax - tileLogRhoMin) * rings;
-  int index = clamp(int(ring), 0, int(rings) - 1);
-  return texelFetch(tileFluxLut, ivec2(index, 0), 0).rgb;
+  int rings = textureSize(tileFluxLut, 0).x;
+  float ringWidth = (tileLogRhoMax - tileLogRhoMin) / float(rings);
+  float position = (logRho - tileLogRhoMin) / ringWidth;
+  if (!(position > 0.0)) {
+    return vec3(0.0);
+  }
+  if (position >= float(rings)) {
+    return texelFetch(tileFluxLut, ivec2(rings - 1, 0), 0).rgb;
+  }
+  int index = int(position);
+  float fraction = position - float(index);
+  vec3 inner = index > 0 ? texelFetch(tileFluxLut, ivec2(index - 1, 0), 0).rgb : vec3(0.0);
+  vec3 outer = texelFetch(tileFluxLut, ivec2(index, 0), 0).rgb;
+  float weight = (exp(2.0 * fraction * ringWidth) - 1.0) / (exp(2.0 * ringWidth) - 1.0);
+  return mix(inner, outer, weight);
 }
 
 vec3 displayMapped(vec3 radiance) {
