@@ -305,3 +305,33 @@ TEST(PerceivedView, FizzledPlacementLeavesTheColonysBelief) {
   const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
   EXPECT_FALSE(colony.fleets.front().positionKnown);
 }
+
+// Falsifier: a colony order leaving the colony's list of orders in flight on
+// the engine's true landing turn rather than the colony's own estimate --
+// the disappearance would reveal where the fleet truly is.
+TEST(PerceivedView, ColonyOrderStaysListedUntilItsOwnEstimate) {
+  game::CampaignSession session(3, shippedStory(), game::K_MILLER_BAND);
+  game::CampaignState &state = session.state();
+  // The colony sends the fleet to the survey band (where it already is) and
+  // waits out every possible delay: it believes the fleet is 100M out.
+  ASSERT_TRUE(session.issuePlaceFleet(K_SURVEY_FLEET, game::K_SURVEY_BAND,
+                                      game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                      game::K_FIRST_COLONY_NODE));
+  state.advanceTurns(400);
+  // Unseen by the colony, the host brings the fleet down to Miller's band.
+  ASSERT_TRUE(session.issuePlaceFleet(K_SURVEY_FLEET, game::K_MILLER_BAND,
+                                      game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                      game::K_AUTHORITY_NODE));
+  state.advanceTurns(state.commandLog().back().effectTurn - state.turn());
+  ASSERT_EQ(state.fleets().front().bandIndex, game::K_MILLER_BAND);
+
+  // A colony task now truly lands next turn (same radius), but the colony
+  // expects it some 300 turns out.
+  ASSERT_TRUE(session.issueAssignTask(K_SURVEY_FLEET, 1.0, game::K_FIRST_COLONY_NODE));
+  const game::LoggedCommand logged = state.commandLog().back();
+  ASSERT_EQ(logged.effectTurn, logged.issueTurn + 1);
+  state.advanceTurns(2);
+  const game::OrderInFlightView view = colonyOrder(state, state.commandLog().size() - 1);
+  ASSERT_TRUE(view.effectTurnKnown);
+  EXPECT_GT(view.effectTurn, state.turn());
+}

@@ -164,11 +164,26 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
 
   // The station's own orders in flight show its estimate of their arrival,
   // not the engine's true effect turn (which encodes the fleet's position).
+  // The list itself comes from the station's own log and beliefs, not the
+  // engine's queue: an order stays in flight until the station expects it to
+  // have landed, whenever it truly did, so its disappearance reveals nothing.
   const std::vector<OrderBelief> beliefs = orderBeliefs(observer);
-  for (OrderInFlightView &order : view.ordersInFlight) {
-    const OrderBelief &belief = beliefs.at(order.logIndex);
+  view.ordersInFlight.clear();
+  for (std::size_t index = 0; index < commandLog_.size(); ++index) {
+    const LoggedCommand &logged = commandLog_.at(index);
+    const OrderBelief &belief = beliefs.at(index);
+    if (logged.command.originNode != observer || belief.believedFromTurn <= now) {
+      continue;
+    }
+    OrderInFlightView order;
+    order.type = logged.command.type;
+    order.fleet = logged.command.fleet;
+    order.origin = observer;
+    order.logIndex = static_cast<std::uint32_t>(index);
+    order.issueTurn = logged.issueTurn;
     order.effectTurnKnown = belief.estimatedEffectTurn.has_value();
     order.effectTurn = belief.estimatedEffectTurn.value_or(0);
+    view.ordersInFlight.push_back(order);
   }
 
   // Fleets report to the host: no telemetry here, and a position only where
