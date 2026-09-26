@@ -172,6 +172,20 @@ option(ENABLE_MIMALLOC "Enable mimalloc for desktop/runtime binaries" OFF)
 
 ---
 
+## Python Script Dependencies
+
+`scripts/requirements.txt` declares the packages the data and reference
+scripts import (`$PYTHON -m pip install -r scripts/requirements.txt`); the
+scripts run on Python 3.10 or newer (`scripts/ruff.toml` lints them at that
+target).
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| mpmath | 1.4.1 (pinned) | 30-digit reference values in `scripts/gen_*_reference.py` (Page-Thorne flux, efficiency, ISCO redshift) |
+| numpy, scipy, h5py, pandas, matplotlib | see `scripts/requirements.txt` | LUT generation, GRMHD processing, validation |
+
+---
+
 ## References
 
 - Conan Center: https://conan.io/center
