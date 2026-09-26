@@ -48,13 +48,13 @@ DiskHitReference traceDiskHitReference(const Vec3d &cam, const Vec3d &dir, doubl
   physics::KerrGeodesicState s = g.state;
   // dlambda = k / r moves r by about k r per step (dr/dlambda ~ r^2 far out),
   // a scale-free step that resolves the crossing to well below 1e-6 r.
-  constexpr double K_STEP = 2e-4;
+  constexpr double stepScale = 2e-4;
   for (int step = 0; step < 10'000'000; ++step) {
     if (s.r <= 1.001 * rPlus || s.r > 1.0e3 * r0) {
       return out;
     }
     const physics::KerrGeodesicState next =
-        physics::kerrStepMino(s, mass, aTrace, g.consts, K_STEP / s.r);
+        physics::kerrStepMino(s, mass, aTrace, g.consts, stepScale / s.r);
     const double before = s.theta - halfPi;
     const double after = next.theta - halfPi;
     if ((before > 0.0) != (after > 0.0)) {

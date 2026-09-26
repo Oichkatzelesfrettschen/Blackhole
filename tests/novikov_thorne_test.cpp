@@ -9,7 +9,6 @@
 
 #include "../src/physics/novikov_thorne.h"
 #include "../src/physics/constants.h"
-#include "../src/physics/page_thorne.h"
 #include <iostream>
 #include <cmath>
 #include <iomanip>

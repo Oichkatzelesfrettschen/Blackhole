@@ -40,9 +40,9 @@ DiskHitReference traceDiskHitReference(const Vec3d &cam, const Vec3d &dir, doubl
                                        double spin, double rDiskIn, double rDiskOut);
 
 struct MirrorPair {
-  Vec3d cam;              ///< Physics-frame camera position (scene units).
-  Vec3d forward;          ///< Unit vector from the camera toward the hole.
-  std::array<Vec3d, 2> dir; ///< [0] tilted toward -y (approaching), [1] toward +y (receding).
+  Vec3d cam{};              ///< Physics-frame camera position (scene units).
+  Vec3d forward{};          ///< Unit vector from the camera toward the hole.
+  std::array<Vec3d, 2> dir{}; ///< [0] tilted toward -y (approaching), [1] toward +y (receding).
 };
 
 /// Camera at (distanceM, 0, heightM) * rs / 2 in the physics frame.

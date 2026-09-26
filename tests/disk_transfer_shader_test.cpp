@@ -23,9 +23,13 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <numbers>
 #include <string>
 #include <vector>
 
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
+#include <glbinding/gl/types.h>
 #include <gtest/gtest.h>
 
 #include "physics/disk_transfer.h"
@@ -37,8 +41,8 @@ using namespace gl;
 
 namespace {
 
-constexpr int K_CASES = 60; // 5 spins x 4 radii x 3 lambdas
-constexpr int K_STRIDE = 6;
+constexpr std::size_t K_CASES = 60; // 5 spins x 4 radii x 3 lambdas
+constexpr std::size_t K_STRIDE = 6;
 constexpr std::array<float, 5> K_SPINS = {0.0F, 0.5F, 0.9F, 0.998F, -0.5F};
 constexpr std::array<float, 3> K_TEMPERATURES = {3000.0F, 6500.0F, 12000.0F};
 
@@ -93,19 +97,16 @@ TEST_F(DiskTransferShaderTest, MatchesDoublePrecisionReference) {
   glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * K_STRIDE * K_CASES), nullptr,
                     GL_DYNAMIC_DRAW);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
-  const std::vector<float> out =
-      bhtest::runComputeProgram(program, ssbo, static_cast<std::size_t>(K_STRIDE * K_CASES), 1);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, K_STRIDE * K_CASES, 1);
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 
-  constexpr std::array<double, 3> K_LAMBDAS = {0.0, 0.8, -0.8};
-  for (int i = 0; i < K_CASES; ++i) {
-    const auto at = [&](int k) {
-      return static_cast<double>(out[static_cast<std::size_t>((K_STRIDE * i) + k)]);
-    };
-    const double a = static_cast<double>(K_SPINS.at(static_cast<std::size_t>(i / 12)));
+  constexpr std::array<double, 3> lambdas = {0.0, 0.8, -0.8};
+  for (std::size_t i = 0; i < K_CASES; ++i) {
+    const auto at = [&](std::size_t k) { return static_cast<double>(out.at((K_STRIDE * i) + k)); };
+    const auto a = static_cast<double>(K_SPINS.at(i / 12));
     const double r = at(0);
-    const double lambda = K_LAMBDAS.at(static_cast<std::size_t>(i % 3)) * r;
+    const double lambda = lambdas.at(i % 3) * r;
 
     // Float cancellation in the logarithmic bracket grows toward the
     // zero-torque edge; 1.1 r_isco is the closest radius sampled.
@@ -115,10 +116,10 @@ TEST_F(DiskTransferShaderTest, MatchesDoublePrecisionReference) {
     const double g = physics::diskTransferG(r, a, lambda);
     EXPECT_NEAR(at(2) / g, 1.0, 1e-5) << "a=" << a << " r=" << r << " lambda=" << lambda;
 
-    const std::array<double, 3> rgb = physics::blackbodyChromaLinearSrgb(
-        static_cast<double>(K_TEMPERATURES.at(static_cast<std::size_t>(i % 3))));
-    for (int c = 0; c < 3; ++c) {
-      EXPECT_NEAR(at(3 + c), rgb.at(static_cast<std::size_t>(c)), 1e-4) << "channel " << c;
+    const std::array<double, 3> rgb =
+        physics::blackbodyChromaLinearSrgb(static_cast<double>(K_TEMPERATURES.at(i % 3)));
+    for (std::size_t c = 0; c < 3; ++c) {
+      EXPECT_NEAR(at(3 + c), rgb.at(c), 1e-4) << "channel " << c;
     }
   }
 }
@@ -127,7 +128,7 @@ TEST_F(DiskTransferShaderTest, MatchesDoublePrecisionReference) {
 // declarations of shader/geodesic_trace.comp (its main() is replaced). Per
 // ray: disk hit flag, hit radius |xy|, photonLambda, then the rgb of
 // bhShadeHit, bhTraceGeodesicRTE and bhTraceGeodesicStokes.
-constexpr int K_TRACE_STRIDE = 12;
+constexpr std::size_t K_TRACE_STRIDE = 12;
 
 std::string traceShader() {
   const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
@@ -225,8 +226,7 @@ protected:
     glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 2 * K_TRACE_STRIDE), nullptr,
                       GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
-    std::vector<float> out =
-        bhtest::runComputeProgram(program, ssbo, static_cast<std::size_t>(2 * K_TRACE_STRIDE), 1);
+    std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 2 * K_TRACE_STRIDE, 1);
     glDeleteBuffers(1, &ssbo);
     return out;
   }
@@ -245,59 +245,59 @@ protected:
 // crossing), lambda 1e-5, g 5e-5, Interstellar luminance 2e-4 (float
 // Page-Thorne bracket and chroma matrix). A flipped lambda sign moves g from
 // about 1.23 to 0.68, and a dropped 1/M moves r and lambda by the factor M.
+// Checks one ray of the pair; side 0 is the approaching ray.
+void checkTracedSide(const float *px, const float *filmPx, const bhtest::MirrorPair &pair,
+                     std::size_t side, TraceCase c) {
+  const auto spin = static_cast<double>(c.spin);
+  const auto rs = static_cast<double>(c.rs);
+  const double m = 0.5 * rs;
+  const double peak = physics::pageThorneFluxPeak(spin);
+  const double rIn = 0.5 * physics::pageThorneIscoRadius(spin) * rs;
+  ASSERT_EQ(px[0], 1.0F) << "a=" << spin << " rs=" << rs << " side " << side;
+  ASSERT_EQ(filmPx[0], 1.0F) << "a=" << spin << " rs=" << rs << " side " << side;
+
+  // The shader receives these vectors rounded to float; the 6e-8 relative
+  // rounding moves r and lambda far less than the tolerances below.
+  const bhtest::DiskHitReference ref =
+      bhtest::traceDiskHitReference(pair.cam, pair.dir.at(side), rs, spin, rIn, 100.0 * rs);
+  ASSERT_TRUE(ref.hitDisk) << "a=" << spin << " rs=" << rs << " side " << side;
+
+  const auto rHit = static_cast<double>(px[1]);
+  const auto lambda = static_cast<double>(px[2]);
+  EXPECT_NEAR(rHit / ref.radius, 1.0, 1e-4) << "a=" << spin << " rs=" << rs;
+  EXPECT_NEAR(lambda / ref.lambda, 1.0, 1e-5) << "a=" << spin << " rs=" << rs;
+
+  for (std::size_t k = 3; k < 6; ++k) {
+    EXPECT_GT(px[k], 0.0F) << "chroma channel clipped, side " << side;
+  }
+  const double fluxNorm = physics::pageThorneFluxShape(rHit / m, spin) / peak;
+  const double gGpu = std::pow(luminance(px + 3) / fluxNorm, 0.25);
+  const double gRef = physics::diskTransferG(rHit / m, spin, ref.lambda / m);
+  EXPECT_NEAR(gGpu / gRef, 1.0, 5e-5)
+      << "a=" << spin << " rs=" << rs << " side " << side << " g=" << gGpu;
+  if (side == 0) {
+    EXPECT_GT(gGpu, 1.05) << "approaching side, a=" << spin << " rs=" << rs;
+  } else {
+    EXPECT_LT(gGpu, 0.95) << "receding side, a=" << spin << " rs=" << rs;
+  }
+
+  const double filmFluxNorm =
+      physics::pageThorneFluxShape(static_cast<double>(filmPx[1]) / m, spin) / peak;
+  EXPECT_NEAR(luminance(filmPx + 3) / filmFluxNorm, 1.0, 2e-4)
+      << "Interstellar mode, a=" << spin << " rs=" << rs << " side " << side;
+}
+
 TEST_F(DiskTransferTraceTest, TracedDiskRaysCarryTheOrbitingEmitterShift) {
   const GLuint program = bhtest::createComputeProgram(traceShader());
   for (const TraceCase c : {TraceCase{0.0F, 2.0F}, TraceCase{0.9F, 2.0F}, TraceCase{0.9F, 6.0F},
                             TraceCase{-0.6F, 1.0F}}) {
-    const double spin = static_cast<double>(c.spin);
-    const double rs = static_cast<double>(c.rs);
-    const double m = 0.5 * rs;
-    const bhtest::MirrorPair pair =
-        bhtest::makeMirrorPair(rs, K_CAMERA_DISTANCE_M, K_CAMERA_HEIGHT_M, K_FOV_SCALE);
+    const bhtest::MirrorPair pair = bhtest::makeMirrorPair(
+        static_cast<double>(c.rs), K_CAMERA_DISTANCE_M, K_CAMERA_HEIGHT_M, K_FOV_SCALE);
     const std::vector<float> physical = trace(program, pair, c, 0);
     const std::vector<float> film = trace(program, pair, c, 1);
-    const double peak = physics::pageThorneFluxPeak(spin);
-    const double rIn = 0.5 * physics::pageThorneIscoRadius(spin) * rs;
-
     for (std::size_t side = 0; side < 2; ++side) {
-      const float *px = &physical.at(side * K_TRACE_STRIDE);
-      const float *filmPx = &film.at(side * K_TRACE_STRIDE);
-      ASSERT_EQ(px[0], 1.0F) << "a=" << spin << " rs=" << rs << " side " << side;
-      ASSERT_EQ(filmPx[0], 1.0F) << "a=" << spin << " rs=" << rs << " side " << side;
-
-      std::array<double, 3> dirF{};
-      std::array<double, 3> camF{};
-      for (std::size_t k = 0; k < 3; ++k) {
-        dirF.at(k) = static_cast<double>(static_cast<float>(pair.dir.at(side).at(k)));
-        camF.at(k) = static_cast<double>(static_cast<float>(pair.cam.at(k)));
-      }
-      const bhtest::DiskHitReference ref =
-          bhtest::traceDiskHitReference(camF, dirF, rs, spin, rIn, 100.0 * rs);
-      ASSERT_TRUE(ref.hitDisk) << "a=" << spin << " rs=" << rs << " side " << side;
-
-      const double rHit = static_cast<double>(px[1]);
-      const double lambda = static_cast<double>(px[2]);
-      EXPECT_NEAR(rHit / ref.radius, 1.0, 1e-4) << "a=" << spin << " rs=" << rs;
-      EXPECT_NEAR(lambda / ref.lambda, 1.0, 1e-5) << "a=" << spin << " rs=" << rs;
-
-      for (std::size_t k = 3; k < 6; ++k) {
-        EXPECT_GT(px[k], 0.0F) << "chroma channel clipped, side " << side;
-      }
-      const double fluxNorm = physics::pageThorneFluxShape(rHit / m, spin) / peak;
-      const double gGpu = std::pow(luminance(px + 3) / fluxNorm, 0.25);
-      const double gRef = physics::diskTransferG(rHit / m, spin, ref.lambda / m);
-      EXPECT_NEAR(gGpu / gRef, 1.0, 5e-5)
-          << "a=" << spin << " rs=" << rs << " side " << side << " g=" << gGpu;
-      if (side == 0) {
-        EXPECT_GT(gGpu, 1.05) << "approaching side, a=" << spin << " rs=" << rs;
-      } else {
-        EXPECT_LT(gGpu, 0.95) << "receding side, a=" << spin << " rs=" << rs;
-      }
-
-      const double filmFluxNorm =
-          physics::pageThorneFluxShape(static_cast<double>(filmPx[1]) / m, spin) / peak;
-      EXPECT_NEAR(luminance(filmPx + 3) / filmFluxNorm, 1.0, 2e-4)
-          << "Interstellar mode, a=" << spin << " rs=" << rs << " side " << side;
+      checkTracedSide(&physical.at(side * K_TRACE_STRIDE), &film.at(side * K_TRACE_STRIDE), pair,
+                      side, c);
     }
   }
   glDeleteProgram(program);
@@ -337,18 +337,18 @@ TEST_F(DiskTransferTraceTest, VolumetricTracesBrightenTheApproachingSide) {
 // far side, not at the camera's own radius at t = 0.
 TEST_F(DiskTransferTraceTest, InPlaneCameraDoesNotHitTheDiskAtItsOwnPosition) {
   const GLuint program = bhtest::createComputeProgram(traceShader());
-  constexpr double K_CAMERA_R = 15.0; // 7.5 r_s, inside the 3-100 r_s disk
+  constexpr double cameraR = 15.0; // 7.5 r_s, inside the 3-100 r_s disk
   bhtest::MirrorPair pair;
-  pair.cam = {K_CAMERA_R, 0.0, 0.0};
+  pair.cam = {cameraR, 0.0, 0.0};
   pair.forward = {-1.0, 0.0, 0.0};
-  const double inv = 1.0 / std::sqrt(2.0);
+  constexpr double inv = 0.5 * std::numbers::sqrt2;
   pair.dir = {bhtest::Vec3d{inv, 0.0, inv}, bhtest::Vec3d{-0.96, 0.0, 0.28}};
   for (const float spin : {0.0F, 0.9F}) {
     const std::vector<float> out = trace(program, pair, TraceCase{spin, 2.0F}, 0);
     EXPECT_EQ(out.at(0), 0.0F) << "outward ray reported a disk hit, a=" << spin
                                << " r_hit=" << out.at(1);
     if (out.at(K_TRACE_STRIDE) == 1.0F) {
-      EXPECT_GT(std::abs(static_cast<double>(out.at(K_TRACE_STRIDE + 1)) - K_CAMERA_R), 1.0)
+      EXPECT_GT(std::abs(static_cast<double>(out.at(K_TRACE_STRIDE + 1)) - cameraR), 1.0)
           << "inward ray hit the disk at the camera radius, a=" << spin;
     }
   }

@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "constants.h"
 #include "page_thorne.h"
 #include "thin_disk.h"
 
@@ -140,28 +141,36 @@ TEST(PageThorne, ThinDiskFluxUsesPageThorne) {
   }
 }
 
-TEST(PageThorne, ExtremalSpinClampsToTheMaximumSpin) {
-  // At |aStar| = 1 the roots x1 and x2 coincide; every function evaluates at
-  // pageThorneSpin(aStar), |aStar| <= 0.9999, and so returns the finite
-  // values of that spin rather than inf (flux) or 1 (efficiency).
-  for (double const sign : {1.0, -1.0}) {
-    double const a = sign;
-    double const aMax = sign * physics::K_PAGE_THORNE_MAX_SPIN;
-    EXPECT_EQ(physics::pageThorneIscoRadius(a), physics::pageThorneIscoRadius(aMax));
-    EXPECT_EQ(physics::novikovThorneEfficiency(a), physics::novikovThorneEfficiency(aMax));
-    EXPECT_LT(physics::novikovThorneEfficiency(a), 0.45);
-    double const peak = physics::pageThorneFluxPeak(a);
-    EXPECT_TRUE(std::isfinite(peak)) << "a = " << a;
-    EXPECT_GT(peak, 0.0) << "a = " << a;
-    EXPECT_EQ(peak, physics::pageThorneFluxPeak(aMax));
-    double const r = 2.0 * physics::pageThorneIscoRadius(a);
-    EXPECT_EQ(physics::pageThorneFluxShape(r, a), physics::pageThorneFluxShape(r, aMax));
+namespace {
 
-    physics::DiskParams const disk = physics::kerrDisk(10.0, 1.0, 0.1, sign > 0.0);
-    double const rG = physics::G * disk.mass / physics::C2;
-    EXPECT_NEAR(disk.rIn / rG, physics::pageThorneIscoRadius(aMax), 1e-9);
-    EXPECT_TRUE(std::isfinite(disk.mDot));
-    EXPECT_TRUE(std::isfinite(physics::diskFlux(2.0 * disk.rIn, disk)));
-    EXPECT_GT(physics::diskFlux(2.0 * disk.rIn, disk), 0.0);
-  }
+// At |aStar| = 1 the roots x1 and x2 coincide; every function evaluates at
+// pageThorneSpin(aStar), |aStar| <= 0.9999, and so returns the finite values
+// of that spin rather than inf (flux) or 1 (efficiency). sign selects the
+// prograde (+1) or retrograde (-1) extremal disk.
+void expectExtremalSpinClamped(double sign) {
+  double const a = sign;
+  double const aMax = sign * physics::K_PAGE_THORNE_MAX_SPIN;
+  EXPECT_EQ(physics::pageThorneIscoRadius(a), physics::pageThorneIscoRadius(aMax));
+  EXPECT_EQ(physics::novikovThorneEfficiency(a), physics::novikovThorneEfficiency(aMax));
+  EXPECT_LT(physics::novikovThorneEfficiency(a), 0.45);
+  double const peak = physics::pageThorneFluxPeak(a);
+  EXPECT_TRUE(std::isfinite(peak)) << "a = " << a;
+  EXPECT_GT(peak, 0.0) << "a = " << a;
+  EXPECT_EQ(peak, physics::pageThorneFluxPeak(aMax));
+  double const r = 2.0 * physics::pageThorneIscoRadius(a);
+  EXPECT_EQ(physics::pageThorneFluxShape(r, a), physics::pageThorneFluxShape(r, aMax));
+
+  physics::DiskParams const disk = physics::kerrDisk(10.0, 1.0, 0.1, sign > 0.0);
+  double const rG = physics::G * disk.mass / physics::C2;
+  EXPECT_NEAR(disk.rIn / rG, physics::pageThorneIscoRadius(aMax), 1e-9);
+  EXPECT_TRUE(std::isfinite(disk.mDot));
+  EXPECT_TRUE(std::isfinite(physics::diskFlux(2.0 * disk.rIn, disk)));
+  EXPECT_GT(physics::diskFlux(2.0 * disk.rIn, disk), 0.0);
+}
+
+} // namespace
+
+TEST(PageThorne, ExtremalSpinClampsToTheMaximumSpin) {
+  expectExtremalSpinClamped(1.0);
+  expectExtremalSpinClamped(-1.0);
 }
