@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <ranges>
 #include <set>
 #include <string>
 #include <vector>
@@ -52,14 +53,12 @@ std::unique_ptr<StoryRun> runStory(const std::string &json, std::int64_t turns,
 /** @brief Arrival turns of notices from `event` at `destination`. */
 std::vector<std::int64_t> noticeTurns(const game::CampaignState &state, std::uint32_t event,
                                       game::NodeId destination) {
-  std::vector<std::int64_t> turns;
-  for (const game::ArrivalRecord &arrival : state.arrivals()) {
-    if (arrival.kind == game::EmitKind::Notice && arrival.payloadIndex == event &&
-        arrival.destination == destination) {
-      turns.push_back(arrival.arrivalTurn);
-    }
-  }
-  return turns;
+  return state.arrivals() | std::views::filter([&](const game::ArrivalRecord &arrival) {
+           return arrival.kind == game::EmitKind::Notice && arrival.payloadIndex == event &&
+                  arrival.destination == destination;
+         }) |
+         std::views::transform(&game::ArrivalRecord::arrivalTurn) |
+         std::ranges::to<std::vector<std::int64_t>>();
 }
 
 std::string errorOf(const std::string &json) { return game::parseEventSet(json).error; }

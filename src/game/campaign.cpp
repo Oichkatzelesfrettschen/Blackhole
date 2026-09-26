@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <numeric>
 #include <utility>
 #include <vector>
@@ -649,14 +650,18 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
   }
   view.arrivals = arrivals_;
   view.eventTexts.reserve(config_.story.events.size());
-  for (const EventDef &event : config_.story.events) {
-    view.eventTexts.push_back(
-        {.id = event.id, .name = event.name, .text = event.text, .category = event.category});
-  }
+  std::ranges::transform(config_.story.events, std::back_inserter(view.eventTexts),
+                         [](const EventDef &event) {
+                           return EventTextView{.id = event.id,
+                                                .name = event.name,
+                                                .text = event.text,
+                                                .category = event.category};
+                         });
   view.techTiers.reserve(config_.story.techTiers.size());
-  for (const TechLevel &level : config_.story.techTiers) {
-    view.techTiers.push_back({.points = level.points, .name = level.name});
-  }
+  std::ranges::transform(config_.story.techTiers, std::back_inserter(view.techTiers),
+                         [](const TechLevel &level) {
+                           return TechLevelView{.points = level.points, .name = level.name};
+                         });
   view.colonyTechTier = colonyTechTier();
   view.victoryTechTier = config_.victoryTechTier;
   view.energyLostToDarkness = energyLostToDarkness_;

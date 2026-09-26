@@ -117,12 +117,11 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   }
   // The tech axis as this station knows it: its own tier if it is a colony,
   // else the best tier any colony has reported.
-  view.colonyTechTier = 0;
-  for (const NodeView &node : view.nodes) {
-    if (node.isColony) {
-      view.colonyTechTier = std::max(view.colonyTechTier, node.techTier);
-    }
-  }
+  view.colonyTechTier = std::accumulate(
+      view.nodes.begin(), view.nodes.end(), std::int64_t{0},
+      [](std::int64_t best, const NodeView &node) {
+        return node.isColony ? std::max(best, node.techTier) : best;
+      });
   std::erase_if(view.nodeSignalsInFlight,
                 [observer](const ArrivalRecord &signal) { return signal.sender != observer; });
   std::erase_if(view.arrivals,

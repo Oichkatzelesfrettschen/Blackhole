@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <numeric>
 #include <string>
 
 #include "game/campaign.h"
@@ -35,15 +36,15 @@ game::EventSet shippedStory() {
 
 /** @brief The host's latest arrival at the colony (by emission turn). */
 game::ArrivalRecord latestHostArrival(const game::CampaignState &state) {
-  game::ArrivalRecord latest;
-  latest.emitTurn = -1;
-  for (const game::ArrivalRecord &arrival : state.arrivals()) {
-    if (arrival.sender == game::K_AUTHORITY_NODE &&
-        arrival.destination == game::K_FIRST_COLONY_NODE && arrival.emitTurn >= latest.emitTurn) {
-      latest = arrival;
-    }
-  }
-  return latest;
+  game::ArrivalRecord none;
+  none.emitTurn = -1;
+  return std::accumulate(state.arrivals().begin(), state.arrivals().end(), none,
+                         [](const game::ArrivalRecord &latest, const game::ArrivalRecord &arrival) {
+                           const bool fromHost = arrival.sender == game::K_AUTHORITY_NODE &&
+                                                 arrival.destination == game::K_FIRST_COLONY_NODE;
+                           return fromHost && arrival.emitTurn >= latest.emitTurn ? arrival
+                                                                                  : latest;
+                         });
 }
 
 void expectNoTelemetry(const game::FleetView &fleet) {

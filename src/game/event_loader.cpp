@@ -110,12 +110,12 @@ std::pair<std::string, const Json *> singleEntry(const Json &object, const std::
 template <typename Enum>
 Enum lookup(const std::string &text, const std::vector<std::pair<std::string_view, Enum>> &table,
             const std::string &path) {
-  for (const auto &[name, value] : table) {
-    if (name == text) {
-      return value;
-    }
+  const auto found = std::ranges::find_if(
+      table, [&text](const std::pair<std::string_view, Enum> &entry) { return entry.first == text; });
+  if (found == table.end()) {
+    fail(path, "unknown value \"" + text + "\"");
   }
-  fail(path, "unknown value \"" + text + "\"");
+  return found->second;
 }
 
 class Loader {

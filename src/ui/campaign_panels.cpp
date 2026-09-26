@@ -14,6 +14,7 @@
 #include <cstring>
 #include <format>
 #include <memory>
+#include <numeric>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -612,12 +613,11 @@ void renderTechWindow(const game::CampaignViewSnapshot &view, const CampaignUiSt
     ImGui::End();
     return;
   }
-  std::int64_t points = 0;
-  for (const game::NodeView &node : view.nodes) {
-    if (node.isColony) {
-      points = std::max(points, node.techPoints);
-    }
-  }
+  const std::int64_t points = std::accumulate(
+      view.nodes.begin(), view.nodes.end(), std::int64_t{0},
+      [](std::int64_t best, const game::NodeView &node) {
+        return node.isColony ? std::max(best, node.techPoints) : best;
+      });
   // The colony's tier is present truth only at the colony; at the host it is
   // what the colony last reported, with the report's age.
   if (atColony(view, uiState)) {

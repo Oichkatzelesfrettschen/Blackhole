@@ -16,6 +16,7 @@
 #ifndef BLACKHOLE_GAME_RECEIVED_CLOCK_H
 #define BLACKHOLE_GAME_RECEIVED_CLOCK_H
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -40,9 +41,12 @@ struct ReceivedClock {
 latestReceivedClocks(const std::vector<ArrivalRecord> &arrivals, NodeId receiver,
                      std::size_t nodeCount) {
   std::vector<ReceivedClock> clocks(nodeCount);
-  for (std::size_t sender = 0; sender < nodeCount; ++sender) {
-    clocks.at(sender).sender = static_cast<NodeId>(sender);
-  }
+  NodeId next = 0;
+  std::ranges::generate(clocks, [&next]() {
+    ReceivedClock clock;
+    clock.sender = next++;
+    return clock;
+  });
   for (const ArrivalRecord &arrival : arrivals) {
     if (arrival.destination != receiver || arrival.sender >= nodeCount) {
       continue;

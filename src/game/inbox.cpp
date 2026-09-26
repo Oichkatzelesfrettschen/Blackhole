@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <iterator>
 #include <map>
 #include <utility>
 #include <vector>
@@ -64,10 +65,8 @@ std::vector<InboxGroup> Inbox::groups() const {
   }
   std::vector<InboxGroup> ordered;
   ordered.reserve(bySender.size());
-  for (auto &[sender, group] : bySender) {
-    static_cast<void>(sender);
-    ordered.push_back(std::move(group));
-  }
+  std::ranges::transform(bySender, std::back_inserter(ordered),
+                         [](auto &entry) { return std::move(entry.second); });
   return ordered;
 }
 

@@ -45,12 +45,10 @@ std::uint64_t splitMix64(std::uint64_t value) {
 }
 
 std::uint64_t hashName(std::string_view name) {
-  std::uint64_t hash = 14695981039346656037ULL;
-  for (const char character : name) {
-    hash ^= static_cast<std::uint8_t>(character);
-    hash *= 1099511628211ULL;
-  }
-  return hash;
+  return std::accumulate(name.begin(), name.end(), std::uint64_t{14695981039346656037ULL},
+                         [](std::uint64_t hash, char character) {
+                           return (hash ^ static_cast<std::uint8_t>(character)) * 1099511628211ULL;
+                         });
 }
 
 bool compareHolds(std::int64_t lhs, CompareOp op, std::int64_t rhs) {
@@ -205,29 +203,27 @@ void CampaignState::buildNodes() {
 
 bool CampaignState::storyWellFormed() const {
   const EventSet &story = config_.story;
-  // Parameters sorted strictly by name, within the documented range.
-  for (std::size_t index = 0; index < story.params.size(); ++index) {
-    const EventParam &param = story.params.at(index);
-    if (!withinStoryLimit(param.min, K_STORY_INT_LIMIT) ||
-        !withinStoryLimit(param.max, K_STORY_INT_LIMIT) || param.max < param.min ||
-        (index > 0 && !(story.params.at(index - 1).name < param.name))) {
-      return false;
-    }
-  }
+  // Parameters within the documented range and sorted strictly by name.
+  const bool paramsInRange = std::ranges::all_of(story.params, [](const EventParam &param) {
+    return withinStoryLimit(param.min, K_STORY_INT_LIMIT) &&
+           withinStoryLimit(param.max, K_STORY_INT_LIMIT) && param.min <= param.max;
+  });
+  const bool paramsSorted =
+      std::ranges::adjacent_find(story.params, [](const EventParam &lhs, const EventParam &rhs) {
+        return !(lhs.name < rhs.name);
+      }) == story.params.end();
   // Events sorted strictly by id: ids are unique and lookups binary-search.
-  for (std::size_t index = 1; index < story.events.size(); ++index) {
-    if (!(story.events.at(index - 1).id < story.events.at(index).id)) {
-      return false;
-    }
-  }
+  const bool eventsSorted =
+      std::ranges::adjacent_find(story.events, [](const EventDef &lhs, const EventDef &rhs) {
+        return !(lhs.id < rhs.id);
+      }) == story.events.end();
   // Tiers non-negative and non-decreasing; at most 64 flags.
-  for (std::size_t index = 0; index < story.techTiers.size(); ++index) {
-    if (story.techTiers.at(index).points < 0 ||
-        (index > 0 && story.techTiers.at(index).points < story.techTiers.at(index - 1).points)) {
-      return false;
-    }
-  }
-  return story.flags.size() <= K_MAX_STORY_FLAGS;
+  const bool tiersOk =
+      std::ranges::all_of(story.techTiers,
+                          [](const TechLevel &level) { return level.points >= 0; }) &&
+      std::ranges::is_sorted(story.techTiers, {}, &TechLevel::points);
+  return paramsInRange && paramsSorted && eventsSorted && tiersOk &&
+         story.flags.size() <= K_MAX_STORY_FLAGS;
 }
 
 bool CampaignState::intRefValid(const IntRef &ref) const {
@@ -268,33 +264,37 @@ void CampaignState::resolveStoryParams() {
   const auto flagOk = [&story](std::uint32_t flag) {
     return flag < K_MAX_STORY_FLAGS && flag < std::max<std::size_t>(story.flags.size(), 1);
   };
-  for (const EventDef &event : story.events) {
-    bool ok = nodeOk(event.source);
-    for (const EventPredicate &predicate : event.triggers) {
-      ok = ok && intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
-           (predicate.kind != PredicateKind::FlagSet && predicate.kind != PredicateKind::FlagClear
-                ? true
-                : flagOk(predicate.flag));
+  const auto predicateOk = [&](const EventPredicate &predicate) {
+    const bool flagged =
+        predicate.kind == PredicateKind::FlagSet || predicate.kind == PredicateKind::FlagClear;
+    return intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
+           (!flagged || flagOk(predicate.flag));
+  };
+  const auto effectOk = [&](const EventEffect &effect) {
+    if (!intRefValid(effect.delayTurns)) {
+      return false;
     }
-    for (const EventEffect &effect : event.effects) {
-      ok = ok && intRefValid(effect.delayTurns);
-      if (effect.kind == EffectKind::SetFlag) {
-        ok = ok && flagOk(effect.flag);
-      } else if (effect.kind == EffectKind::Emit) {
-        ok = ok && nodeOk(effect.to) && withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT);
-      } else {
-        // The target must be a scheduled event: a once-only one runs from its
-        // triggers alone and would ignore the schedule.
-        const std::optional<std::size_t> target = eventIndexOf(story.events, effect.event);
-        ok = ok && target.has_value() &&
+    switch (effect.kind) {
+    case EffectKind::SetFlag:
+      return flagOk(effect.flag);
+    case EffectKind::Emit:
+      return nodeOk(effect.to) && withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT);
+    case EffectKind::Schedule: {
+      // The target must be a scheduled event: a once-only one runs from its
+      // triggers alone and would ignore the schedule.
+      const std::optional<std::size_t> target = eventIndexOf(story.events, effect.event);
+      return target.has_value() &&
              story.events.at(target.value_or(0)).mode == EventMode::Scheduled &&
              resolve(effect.delayTurns) >= 1;
-      }
     }
-    if (!ok) {
-      valid_ = false;
-      return;
     }
+    return false;
+  };
+  if (!std::ranges::all_of(story.events, [&](const EventDef &event) {
+        return nodeOk(event.source) && std::ranges::all_of(event.triggers, predicateOk) &&
+               std::ranges::all_of(event.effects, effectOk);
+      })) {
+    valid_ = false;
   }
 }
 
@@ -308,12 +308,12 @@ std::int64_t CampaignState::resolve(const IntRef &ref) const {
 
 std::optional<std::int64_t> CampaignState::storyParam(std::string_view name) const {
   const std::vector<EventParam> &params = config_.story.params;
-  for (std::size_t index = 0; index < params.size() && index < storyParams_.size(); ++index) {
-    if (params.at(index).name == name) {
-      return storyParams_.at(index);
-    }
+  const auto found = std::ranges::find(params, name, &EventParam::name);
+  const auto index = static_cast<std::size_t>(found - params.begin());
+  if (found == params.end() || index >= storyParams_.size()) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  return storyParams_.at(index);
 }
 
 std::int64_t CampaignState::techTier(NodeId node) const {
@@ -326,13 +326,10 @@ std::int64_t CampaignState::techTier(NodeId node) const {
 }
 
 std::int64_t CampaignState::colonyTechTier() const {
-  std::int64_t best = 0;
-  for (const StationNode &node : nodes_) {
-    if (node.isColony) {
-      best = std::max(best, techTier(node.id));
-    }
-  }
-  return best;
+  return std::accumulate(nodes_.begin(), nodes_.end(), std::int64_t{0},
+                         [this](std::int64_t best, const StationNode &node) {
+                           return node.isColony ? std::max(best, techTier(node.id)) : best;
+                         });
 }
 
 double CampaignState::nodeDelaySec(NodeId from, NodeId to) const {
