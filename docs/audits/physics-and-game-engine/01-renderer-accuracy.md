@@ -54,8 +54,8 @@ Tag: **TRACKED-BUT-WRONG**. `docs/developer-guide/roadmap.md:451` and
 tests".
 
 Sites:
-- `shader/include/kerr.glsl:132` (`c.Q = ptheta^2 - a^2 cos^2 + Lz^2/sin2`), `:176` (R), and
-  `:177` (Theta).
+- `shader/include/kerr.glsl:132` (`c.Q = ptheta^2 - a^2 cos^2 + Lz^2/sin2`), `:175` (R), and
+  `:176-177` (Theta).
 - `src/cuda/device_physics.cuh:390`, `:481`, and `:484`, which are the same code.
 - `src/physics/kerr.cpp:84` and `:91`. The CPU pair is inconsistent in the opposite
   direction: R is standard and Theta is non-standard.
@@ -64,7 +64,8 @@ Observed:
 - Carter's separation has `Theta(theta) = Q + a^2 E^2 cos^2 - Lz^2 cot^2` and `R =
   (E(r^2+a^2) - a Lz)^2 - Delta (Q + (Lz - aE)^2)`. See Gralla and Lupsasca, "The Null
   Geodesics of the Kerr Exterior", PRD 101, 044032 (2020), arXiv:1910.12881. The repo's own
-  oracle `src/physics/analytic_kerr_geodesic.h:41` also uses this standard R.
+  oracle `src/physics/analytic_kerr_geodesic.h:110-120` (`radialPotential`) also uses this
+  standard R.
 - All three code paths write `Lz^2/sin^2` in Theta. Because `Lz^2/sin^2 = Lz^2 cot^2 +
   Lz^2`, the GPU initializer's `Q_code = Q_std + Lz^2`. The unchanged R formula then
   evaluates `R_std - Delta*Lz^2`.

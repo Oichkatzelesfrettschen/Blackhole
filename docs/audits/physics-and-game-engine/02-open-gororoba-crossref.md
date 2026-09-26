@@ -82,7 +82,8 @@ through these LUTs.
 ### F1. Emissivity LUT uses an invented Kerr flux, and both repos label a Newtonian profile "Page & Thorne" (Blackhole LIVE by default, gr_core LATENT)
 
 The default spin-0 asset LUT is the Newtonian profile (`generate_luts.py:44-46`).
-OBSERVED: it peaks at 1.365 r_isco, against the Page-Thorne peak at 1.588 r_isco. The
+OBSERVED: it peaks at 1.365 r_isco on the LUT grid, against the continuous Page-Thorne
+peak at 1.592 r_isco (9.55M). The
 normalized shape differs by up to 0.398. This is the emissivity every default frame
 multiplies into disk density. It is ranked first because it has the widest reach.
 
@@ -472,8 +473,8 @@ Licensing:
    - Formula: `referee.py:page_thorne_closed`, with roots
      `x_{1,2,3} = 2cos(acos(a)/3 -/+ pi/3)` and `-2cos(acos(a)/3)`.
    - Replace `thin_disk.h:212-270` and `125-127`.
-   - Falsifier: agreement with direct quadrature to 1e-6. Normalized peak at 1.588, 1.565,
-     1.482 and 1.282 r_isco for a = 0, 0.5, 0.9, 0.998. Neither repo has this, so it is
+   - Falsifier: agreement with direct quadrature to 1e-6. Continuous normalized peak at 1.592, 1.563,
+     1.483 and 1.278 r_isco for a = 0, 0.5, 0.9, 0.998. Neither repo has this, so it is
      reimplemented.
 2. **Replace the disk redshift LUT with the circular-orbit g-factor (fixes F2).**
    - Formula: `g = sqrt(1 - 3/r + 2a r^{-3/2}) / (1 + a r^{-3/2} - r^{-1/2} sin(phi) sin(i))`

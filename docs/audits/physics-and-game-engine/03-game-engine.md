@@ -232,7 +232,7 @@ changes with `-march=native` through FMA contraction.
   Expansionist AI plans from the same live state. Rival state is causal
   (perceived table); own state is not.
 - Referee leak, same class: when any faction wins, `decided_` makes
-  `issueCommand` (`:202`) refuse every faction's orders that turn
+  `issueCommand` (`:202`) refuse every faction's orders from then on
   (`evaluateOutcomes`, `:458-490`), so a rival 40 light-days away is stopped
   by news that cannot have reached it. OBSERVED by reading.
 - Falsifier: an order that the authority's last report says is affordable

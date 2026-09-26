@@ -53,11 +53,14 @@ quantitative consequences (shadow widths, ray counts) rest on that agent's scrat
 ## P0 -- the accretion disk is Newtonian
 
 5. **"Page & Thorne" flux is the Newtonian profile** (01 F6, 02 F1). The default emissivity
-   LUT (`scripts/generate_luts.py:44-46`) peaks at 1.365 r_isco; Page-Thorne peaks at
-   1.588 r_isco at a = 0 (normalized shape off by up to 0.40). The Kerr LUT uses an invented
+   LUT (`scripts/generate_luts.py:44-46`) peaks at 1.365 r_isco on its 256-point grid (the
+   continuous Newtonian peak is 49/36 = 1.361); Page-Thorne peaks at 9.55M = 1.592 r_isco
+   at a = 0 (normalized shape off by up to 0.40). The Kerr LUT uses an invented
    formula (`thin_disk.h:243-270`). Fix: the closed-form Page-Thorne flux with the cubic roots
    x_k = 2cos(acos(a)/3 -+ pi/3), -2cos(acos(a)/3); falsifier: agreement with quadrature to
-   1e-6 and peaks at 1.588/1.565/1.482/1.282 r_isco for a = 0/0.5/0.9/0.998.
+   1e-6 and continuous peaks at 1.592/1.563/1.483/1.278 r_isco for a = 0/0.5/0.9/0.998
+   (mpmath quadrature of the Page-Thorne integral; the LUT grid rounds them to
+   1.588/1.565/1.482/1.282).
 6. **No render path applies a g-factor; the redshift LUT models a static emitter** (01 F5,
    02 F2). At a = 0 the LUT's ISCO value is z = 0.225 against 0.414 for the orbiting
    emitter; at a = 0.998, 53 of 256 entries read zero where z = 9.79. Fix:
@@ -93,7 +96,7 @@ quantitative consequences (shadow widths, ray counts) rest on that agent's scrat
 12. **Smaller defects**: `NovikovThorneDisk` temperature 100x high (`novikov_thorne.h:118`,
     since `820e2ff`; gr_core fixed it); `kerrTimeDilation` is the static-observer rate and
     NaN inside the ergoregion, `kerrRedshift` +inf there (01 F10); disk Doppler velocity
-    reaches 1.78c at a = 0.998, r = 1.5 (02 F11); ISCO and photon-orbit functions disagree on
+    evaluates to 1.78c before the 0.99c clamp at a = 0.998, r = 1.5 (02 F11); ISCO and photon-orbit functions disagree on
     the sign convention for a < 0 (02 F13); GPU "RTE" and "Stokes IQUV" are shading models
     without covariant transport (01 F8); `lacunae.md` misattributes four citations (01 F12).
 13. **Tests that restate the implementation survive `ea2eb1a`** (01 F14).
@@ -155,7 +158,10 @@ open_gororoba defects that surfaced along the way (report upstream): `pathion_el
 `solve_quartic` negates roots (`quartic.rs:74-75`) and its shadow boundary uses r^2 for r^3
 (`shadow_boundary.rs:67`); gr_core's null integrator uses the timelike polar potential
 (`kerr.rs:204,269,342`), its TaylorF2 phase lacks 1/eta (`gravitational_waves.rs:230`), and
-its synchrotron F(x) "fit" is off 2.4x at x = 1; `lattice_filtration` computes beta0 - beta1;
+its synchrotron F(x) "fit" is off 2.4x at x = 1 (Blackhole carries the same polynomial
+in `shader/include/synchrotron_emission.glsl:47-70`, and a CUDA G(x) fallback at
+`device_physics.cuh:1063-1065` gives 0.797 against K_{2/3}(1) = 0.4945 whenever the G
+LUT is absent); `lattice_filtration` computes beta0 - beta1;
 `fixed_point_lbm` runs its collision in f32; several criterion benches time `2 + 2`.
 `grmhd_core` is a real finite-volume solver with real CUDA, CubeCL, and Vulkan kernels but
 has no shock-tube or Bondi test and declares itself non-production; it does not replace
@@ -172,7 +178,8 @@ Blackhole's GPL-3.0; the recommended ports reimplement published math.
     transit).
 15. **Miller's planet is unrepresentable** (03 F4, RE-VERIFIED numerically). The 0.998 spin
     clamp caps orbital dilation at 10.8x. 61,000x needs 1 - a = 1.33e-14 with the prograde
-    ISCO at 1 + 3.76e-5 M (mpmath: 61,403x). Spin must be stored as delta = 1 - a;
+    ISCO at 1 + 3.76e-5 M (mpmath: 61,403x at 1 - a = 1.33e-14; 03 quotes 61,362x at the
+    unrounded 1 - a = 1.3327e-14 from arXiv:1601.02897). Spin must be stored as delta = 1 - a;
     `1 - a*a` keeps two significant digits in a double at that spin. The film rendered
     a = 0.6 for visuals (arXiv:1502.03808), so the game needs a declared canon (03, canon
     options table).
@@ -182,7 +189,8 @@ Blackhole's GPL-3.0; the recommended ports reimplement published math.
 17. **Causality leaks** (03 F1, F2, F8). Unlinked systems exchange intel with zero delay
     (latent until a third system exists); same-system intel skips the radial leg (2 turns
     against 153.8); authorities see their own remote fleets instantly; one faction's win
-    blocks every faction's orders that turn.
+    sets a global `decided_` latch that refuses every faction's orders for the rest of
+    the campaign.
 18. **The locked balance shape comes from harness cadence** (03 F6). Re-tasking every turn
     instead of every 30 flips solo and pod from Lost to Won. The invariant test pins one
     cadence and one rival; no balance claim stands without a cadence and rival sweep.
