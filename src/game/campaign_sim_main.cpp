@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 
 #include "game/campaign.h"
 #include "game/campaign_session.h"
@@ -69,13 +70,30 @@ void printLine(const char *label, const LineResult &result) {
       view.clearedTurn, statusName(view.status), result.digest));
 }
 
-/** @brief Plays the colony story on one band and prints its checkpoints. */
-void playColony(const game::EventSet &story, std::uint64_t seed, int colonyBand) {
+/** @brief Turns the colony story plays on one band; nullopt, after an
+ *         error on stderr, when its horizon exceeds K_COLONY_SIM_MAX_HORIZON
+ *         and no --turns bounds it. */
+std::optional<std::int64_t> colonyTurns(const game::EventSet &story, std::uint64_t seed,
+                                        int colonyBand, std::optional<std::int64_t> turnsCap) {
+  const game::CampaignSession session(seed, story, colonyBand);
+  const std::int64_t storyHorizon = campaign_sim::colonyStoryHorizon(session.state());
+  const std::optional<std::int64_t> turns = campaign_sim::colonySimTurns(storyHorizon, turnsCap);
+  if (!turns.has_value()) {
+    static_cast<void>(std::fprintf(stderr,
+                                   "campaign_sim: the story's colony horizon on band %d is %" PRId64
+                                   " turns, past the %" PRId64 "-turn ceiling; pass --turns N\n",
+                                   colonyBand, storyHorizon,
+                                   campaign_sim::K_COLONY_SIM_MAX_HORIZON));
+  }
+  return turns;
+}
+
+/** @brief Plays the colony story on one band for `horizon` turns and prints
+ *         its checkpoints. */
+void playColony(const game::EventSet &story, std::uint64_t seed, int colonyBand,
+                std::int64_t horizon) {
   game::CampaignSession session(seed, story, colonyBand);
   game::CampaignState &state = session.state();
-  const std::int64_t horizon = state.storyParam("dark_turn").value_or(0) +
-                               state.nodeDelayTurns(0, 1) +
-                               (4 * state.storyParam("packet_period").value_or(0)) + 60;
   for (std::int64_t turn = 0; turn < horizon; ++turn) {
     if (turn % 250 == 0) {
       const game::NodeId origin =
@@ -100,7 +118,7 @@ void playColony(const game::EventSet &story, std::uint64_t seed, int colonyBand)
 
 int main(int argc, char **argv) {
   std::uint64_t seed = 42;
-  std::int64_t turns = 1200;
+  std::optional<std::int64_t> turnsFlag;
   Commit commit = Commit::Solo;
   bool compareAll = false;
   const char *colonyStory = nullptr;
@@ -118,7 +136,7 @@ int main(int argc, char **argv) {
     } else if (std::strcmp(argv[argIndex], "--seed") == 0 && argIndex + 1 < argc) {
       seed = std::strtoull(argv[++argIndex], nullptr, 10);
     } else if (std::strcmp(argv[argIndex], "--turns") == 0 && argIndex + 1 < argc) {
-      turns = std::strtoll(argv[++argIndex], nullptr, 10);
+      turnsFlag = std::strtoll(argv[++argIndex], nullptr, 10);
     }
   }
 
@@ -128,10 +146,18 @@ int main(int argc, char **argv) {
       static_cast<void>(std::fprintf(stderr, "campaign_sim: %s\n", loaded.error.c_str()));
       return EXIT_FAILURE;
     }
-    playColony(loaded.story, seed, 0);
-    playColony(loaded.story, seed, 1);
+    // --turns bounds the story-derived horizon; without it an excessive
+    // horizon on either band is refused before any band plays.
+    const std::optional<std::int64_t> deepTurns = colonyTurns(loaded.story, seed, 0, turnsFlag);
+    const std::optional<std::int64_t> shallowTurns = colonyTurns(loaded.story, seed, 1, turnsFlag);
+    if (!deepTurns.has_value() || !shallowTurns.has_value()) {
+      return EXIT_FAILURE;
+    }
+    playColony(loaded.story, seed, 0, deepTurns.value());
+    playColony(loaded.story, seed, 1, shallowTurns.value());
     return EXIT_SUCCESS;
   }
+  const std::int64_t turns = turnsFlag.value_or(1200);
 
   if (compareAll) {
     printLine("outer", runLine(seed, turns, Commit::Outer));

@@ -18,9 +18,10 @@
  * only the cadence-30 shape.
  */
 
-#include <gtest/gtest.h>
-
 #include <cstdint>
+#include <optional>
+
+#include <gtest/gtest.h>
 
 #include "game/campaign_sim_lines.h"
 #include "game/campaign_view.h"
@@ -80,4 +81,20 @@ TEST(CampaignBalanceInvariant, LinesAreDeterministic) {
             runLine(K_SEED, K_DEADLINE_TURNS, Commit::Outer).digest);
   EXPECT_EQ(runLine(K_SEED, K_DEADLINE_TURNS, Commit::Stabilize).digest,
             runLine(K_SEED, K_DEADLINE_TURNS, Commit::Stabilize).digest);
+}
+
+// Falsifier: --colony running a story horizon past the ceiling with no
+// --turns to bound it, --turns failing to cap a story horizon (or raising
+// one), or a negative --turns producing negative work.
+TEST(CampaignSimColonyHorizon, TurnsCapsAndTheCeilingRefuses) {
+  constexpr std::int64_t ceiling = campaign_sim::K_COLONY_SIM_MAX_HORIZON;
+  EXPECT_EQ(campaign_sim::colonySimTurns(11500, std::nullopt), std::optional<std::int64_t>{11500});
+  EXPECT_EQ(campaign_sim::colonySimTurns(ceiling, std::nullopt),
+            std::optional<std::int64_t>{ceiling});
+  EXPECT_EQ(campaign_sim::colonySimTurns(ceiling + 1, std::nullopt), std::nullopt);
+  const std::int64_t trillion = (std::int64_t{1} << 40) + 424;
+  EXPECT_EQ(campaign_sim::colonySimTurns(trillion, std::nullopt), std::nullopt);
+  EXPECT_EQ(campaign_sim::colonySimTurns(trillion, 100), std::optional<std::int64_t>{100});
+  EXPECT_EQ(campaign_sim::colonySimTurns(11500, 20000), std::optional<std::int64_t>{11500});
+  EXPECT_EQ(campaign_sim::colonySimTurns(11500, -5), std::optional<std::int64_t>{0});
 }

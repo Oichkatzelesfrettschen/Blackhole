@@ -4886,6 +4886,22 @@ if(BUILD_TESTING)
     bh_add_digest_gate(campaign_sim_colony_fma_digest_parity campaign_sim_fma campaign_sim_generic
       ${_bh_colony_args})
   endif()
+  # A loader-valid story whose dark turn is 10^12: --colony refuses its
+  # horizon (past the sim's 10^6-turn ceiling) unless --turns bounds it. The
+  # refusal message is the pass condition and the timeout catches a run.
+  file(WRITE "${CMAKE_BINARY_DIR}/campaign_sim_far_dark_story.json"
+    "{\"params\": {\"dark_turn\": 1000000000000, \"packet_period\": 91}}\n")
+  add_test(NAME campaign_sim_colony_far_horizon_refused
+    COMMAND campaign_sim --colony "${CMAKE_BINARY_DIR}/campaign_sim_far_dark_story.json")
+  set_tests_properties(campaign_sim_colony_far_horizon_refused PROPERTIES
+    LABELS "campaign" TIMEOUT 30
+    PASS_REGULAR_EXPRESSION "past the 1000000-turn ceiling; pass --turns N")
+  add_test(NAME campaign_sim_colony_far_horizon_turns_cap
+    COMMAND campaign_sim --colony "${CMAKE_BINARY_DIR}/campaign_sim_far_dark_story.json"
+      --turns 100)
+  set_tests_properties(campaign_sim_colony_far_horizon_turns_cap PROPERTIES
+    LABELS "campaign" TIMEOUT 30
+    PASS_REGULAR_EXPRESSION "colony band=1 tier=")
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp")
     add_executable(constellation_test
