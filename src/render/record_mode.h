@@ -39,7 +39,7 @@ struct ShowcaseOrbitComposition {
   float pitchDeg;
   float distance;
   float fovDeg; ///< Vertical field of view of the traced image (bhPixelUv, d_ray_dir).
-  float exposure;
+  float exposure; ///< The record exposure rule at the composition's camera and spin 0.
   float backgroundIntensity;
   float backgroundYawDeg;
   float backgroundPitchDeg;
@@ -48,9 +48,24 @@ struct ShowcaseOrbitComposition {
   float sweepDeg;
 };
 
+/*
+ * Record exposure rule. A record profile's toneExposure places the 99th
+ * percentile L99 of the Rec. 709 luminance over the frame's disk pixels at
+ * display value 0.9 after tonemapping.frag's ACES fit and gamma:
+ * toneExposure = ACES^-1(0.9^gamma) / L99, with ACES^-1(0.9^2.35) = 0.900
+ * and ACES^-1(0.9^2.25) = 0.934. L99 comes from the raw frame
+ * (--export-raw-frame: texBlackhole before bloom and tone mapping) at the
+ * profile's own camera and spin. The sky, whose 99th percentile lies in the
+ * lensed Milky Way rather than in point stars, goes to display 0.8 instead
+ * (ACES^-1(0.8^2.35) = 0.464, ACES^-1(0.8^2.25) = 0.483); it sets
+ * compare-orbit-near's exposure, which renders no disk, and the cinematic
+ * background intensity.
+ */
+
 /** @brief Tone-map exposure of the showcase-orbit profile when no composition
- *         matches; the compositions carry 2.75-3.05. */
-inline constexpr float K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE = 3.4f;
+ *         matches: the record exposure rule at the fallback camera (pitch -6,
+ *         distance 14, fov 37.2738) and the default spin, L99 = 0.256. */
+inline constexpr float K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE = 3.51f;
 
 /** @brief Returns the composition matching name, or nullptr if none matches. */
 const ShowcaseOrbitComposition *findShowcaseOrbitComposition(std::string_view name);

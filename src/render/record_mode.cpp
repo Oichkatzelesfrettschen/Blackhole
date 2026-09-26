@@ -84,11 +84,11 @@ bool readTonemappedRgb(gl::GLuint texTonemapped, int fallbackWidth, int fallback
 }
 
 constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 32.2042f, 3.05f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
-    {"left-third", "nasa_deep_starmap", 0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 2.95f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
-    {"right-third", "nasa_deep_starmap_galactic", -0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 2.95f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
-    {"wide-left", "eso_milkyway_brunier", 0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 2.75f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
-    {"wide-right", "nasa_deep_starmap_galactic", -0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 2.9f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
+    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 32.2042f, 2.63f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
+    {"left-third", "nasa_deep_starmap", 0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 4.37f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
+    {"right-third", "nasa_deep_starmap_galactic", -0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 1.37f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
+    {"wide-left", "eso_milkyway_brunier", 0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 3.33f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
+    {"wide-right", "nasa_deep_starmap_galactic", -0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 1.42f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
 }};
 
 } // namespace
@@ -180,7 +180,9 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.post.bloomIterations    = 4;
     rs.post.bloomStrength      = 0.08f;
     rs.post.tonemappingEnabled = true;
-    rs.post.toneExposure       = 6.0f;
+    // The record exposure rule's sky target: the raw sky's 99th-percentile
+    // luminance, 0.0704, reaches display 0.8.
+    rs.post.toneExposure       = 6.6f;
     rs.post.gamma              = 2.35f;
     rs.dispatch.computeMaxSteps    = 1000;
     rs.dispatch.computeStepSize    = 0.02f;
@@ -210,10 +212,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.disk.adiskDensityH      = 2.1f;
     rs.disk.adiskHeight        = 0.42f;
     rs.disk.adiskLit           = 0.24f;
-    // The showcase exposure, set below, is the composition's (2.75-3.05) or
-    // K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE (3.4); brightness * exposure is then
-    // 0.22-0.27, the interactive default's 0.25 at exposure 1.
-    rs.disk.diskBrightness     = 0.08f;
+    // The interactive default: the bloom bright pass thresholds the raw
+    // frame at 0.4, so only g^4 F / F_peak above about 1.6 (the approaching
+    // side's beaming) blooms. The composition exposure, set below, follows
+    // the record exposure rule (record_mode.h).
+    rs.disk.diskBrightness     = 0.25f;
     rs.disk.dopplerStrength    = 1.15f;
     rs.disk.photonSphereGlowStrength = 1.15f;
     rs.post.bloomIterations    = 5;
@@ -272,7 +275,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.post.bloomIterations    = 3;
     rs.post.bloomStrength      = 0.03f;
     rs.post.tonemappingEnabled = true;
-    rs.post.toneExposure       = 0.02f;
+    // The record exposure rule over the nine keyframes at their spin 0.998
+    // gives 3.1-267 (L99 = 0.30 at 78 s, 0.0035 at 180 s: from far out the
+    // bright annulus near the ISCO covers few pixels); 14.4 is their median.
+    rs.disk.diskBrightness     = 0.25f;
+    rs.post.toneExposure       = 14.4f;
     rs.post.gamma              = 2.25f;
     // Integration quality
     rs.dispatch.computeMaxSteps    = 500;   // more steps for wide shots at 350+ rs
@@ -285,7 +292,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     // JPEG (not a Git LFS pointer) -- the default "nasa_pia22085" is LFS-tracked.
     SettingsManager::instance().get().backgroundId = "eso_milkyway_brunier";
     SettingsManager::instance().get().backgroundEnabled = true;
-    SettingsManager::instance().get().backgroundIntensity = 0.8f;
+    // The record exposure rule's sky target at exposure 14.4 on the
+    // sky-heaviest keyframe (180 s, 20% sky): raw sky L99 0.0332 x 14.4 =
+    // 0.48. The escaped-sky shaping (d_shape_escaped_background) is not
+    // linear in the intensity; 0.8 gave L99 0.191.
+    SettingsManager::instance().get().backgroundIntensity = 0.32f;
   }
 #if BLACKHOLE_HAS_CUDA
   // Keep legacy record profiles on the CUDA path in the hybrid app, but let
