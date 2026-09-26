@@ -13,7 +13,10 @@ namespace ui {
 
 struct CampaignUiState;
 
-/** @brief Draws the Strategic Map window from the view snapshot. Clicking a
+/** @brief Draws the Strategic Map window from the viewer's snapshot -- the
+ *         campaign's full snapshot at the authority, a colony's perceived
+ *         snapshot (CampaignState::perceivedSnapshot) at a colony: the host as
+ *         last heard, fleets only where the colony last sent them. Clicking a
  *         fleet marker selects it into uiState.selectedFleet; the click is
  *         consumed by an ImGui invisible button, never by the scene camera.
  *         backdropTextureId is a GL texture (0 = none) drawn behind the map;

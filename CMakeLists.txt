@@ -1597,6 +1597,7 @@ set(CAMPAIGN_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/game/event_loader.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/inbox.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/save_format.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/perceived_view.cpp"
 )
 add_library(blackhole_campaign STATIC ${CAMPAIGN_SRC_FILES})
 target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
@@ -4401,6 +4402,31 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(campaign_colony_outcome_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # A colony's perceived view, which the panels and the strategic map draw at
+  # colony focus: host state only as last heard, fleets only as last sent.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_perceived_view_test.cpp")
+    add_executable(campaign_perceived_view_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_perceived_view_test.cpp"
+    )
+    target_compile_definitions(campaign_perceived_view_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(campaign_perceived_view_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_perceived_view_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_perceived_view_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_perceived_view_validation COMMAND campaign_perceived_view_test)
+    set_tests_properties(campaign_perceived_view_validation PROPERTIES
+      LABELS "campaign;story;perception"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_perceived_view_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()

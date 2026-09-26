@@ -4,8 +4,10 @@
  *        and the strategic-map host call.
  *
  * The panels read the campaign exclusively through
- * CampaignState::renderSnapshot() and mutate it exclusively through the
- * CampaignSession command helpers plus advanceTurn -- they never reach into
+ * CampaignState::perceivedSnapshot() at the focused station (the full
+ * snapshot at the authority, only what has arrived at a colony) and mutate it
+ * exclusively through the CampaignSession command helpers plus advanceTurn --
+ * they never reach into
  * campaign internals and never touch RenderState. All windows live inside the
  * existing ImGui dockspace; every mouse interaction is consumed by ImGui, so
  * the scene camera never sees a map click.

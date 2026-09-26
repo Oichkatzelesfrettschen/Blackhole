@@ -554,6 +554,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       order.fleet = logged.command.fleet;
       order.issueTurn = logged.issueTurn;
       order.effectTurn = logged.effectTurn;
+      order.origin = logged.command.originNode;
       view.ordersInFlight.push_back(order);
       break;
     }
@@ -616,6 +617,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     nodeView.techPoints = node.techPoints;
     nodeView.techTier = techTier(node.id);
     nodeView.missionProperSec = node.isColony ? node.colony.missionProperSec : 0;
+    nodeView.asOfTurn = clock_.turn();
     view.nodes.push_back(nodeView);
   }
   view.arrivals = arrivals_;

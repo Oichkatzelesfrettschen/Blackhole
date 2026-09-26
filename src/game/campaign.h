@@ -197,6 +197,17 @@ public:
    *         slice independently of serializeState(). */
   [[nodiscard]] CampaignViewSnapshot renderSnapshot() const;
 
+  /** @brief The view as one station knows it. The authority's view is
+   *         renderSnapshot(). A colony's keeps static geometry and its own
+   *         node, and replaces everything else with what has reached it: the
+   *         host as of its latest arrival (clock, banked energy, emission
+   *         turn; never its darkness), no host intel, reports, disturbance,
+   *         or outcome, only the colony's own orders and emitted signals,
+   *         only arrivals addressed to it, and fleets without telemetry,
+   *         placed only where the colony last ordered them (from the order's
+   *         effect turn, whether or not it fizzled). */
+  [[nodiscard]] CampaignViewSnapshot perceivedSnapshot(NodeId observer) const;
+
   /** @brief Deterministic field-by-field byte serialization of the full
    *         campaign state (explicit widths, -0.0 canonicalized, every double
    *         finite). Determinism artifact, not a versioned save format: it

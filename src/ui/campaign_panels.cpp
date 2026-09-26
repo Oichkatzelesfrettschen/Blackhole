@@ -232,25 +232,39 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
       uiState.selectedFleet = fleet.id;
     }
     ImGui::TableNextColumn();
-    ImGui::Text("%d", fleet.bandIndex);
-    ImGui::TableNextColumn();
-    ImGui::Text("%.4f", fleet.properTimeRate);
-    ImGui::TableNextColumn();
-    ImGui::Text("%.2f", days(fleet.properTimeSec));
-    ImGui::TableNextColumn();
-    ImGui::Text("%u/%u/%u", fleet.pendingTasks, fleet.activeTasks, fleet.completedTasks);
-    ImGui::TableNextColumn();
-    ImGui::Text("%.0f", fleet.fuelUnits);
-    ImGui::TableNextColumn();
-    // Reliability turns red once the fleet's telemetry corrupts, and carries a
-    // marker so the player sees which fleets need verification.
-    if (fleet.telemetryCorrupted) {
-      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%.2f !", fleet.reliability);
+    if (fleet.positionKnown) {
+      ImGui::Text("%d", fleet.bandIndex);
     } else {
-      ImGui::Text("%.2f", fleet.reliability);
+      ImGui::TextDisabled("?");
+    }
+    if (!fleet.telemetryKnown) {
+      // The fleet reports to the host: nothing of its state reaches here.
+      for (int column = 0; column < 5; ++column) {
+        ImGui::TableNextColumn();
+        ImGui::TextDisabled("--");
+      }
+    } else {
+      ImGui::TableNextColumn();
+      ImGui::Text("%.4f", fleet.properTimeRate);
+      ImGui::TableNextColumn();
+      ImGui::Text("%.2f", days(fleet.properTimeSec));
+      ImGui::TableNextColumn();
+      ImGui::Text("%u/%u/%u", fleet.pendingTasks, fleet.activeTasks, fleet.completedTasks);
+      ImGui::TableNextColumn();
+      ImGui::Text("%.0f", fleet.fuelUnits);
+      ImGui::TableNextColumn();
+      // Reliability turns red once the fleet's telemetry corrupts, and carries a
+      // marker so the player sees which fleets need verification.
+      if (fleet.telemetryCorrupted) {
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%.2f !", fleet.reliability);
+      } else {
+        ImGui::Text("%.2f", fleet.reliability);
+      }
     }
     ImGui::TableNextColumn();
-    if (fleet.observer == game::Observer::Hovering) {
+    if (!fleet.positionKnown) {
+      ImGui::TextDisabled("?");
+    } else if (fleet.observer == game::Observer::Hovering) {
       ImGui::TextUnformatted("hover");
     } else {
       ImGui::Text("%s%s", game::laneName(fleet.lane), fleet.unstableOrbit ? " (unstable)" : "");
@@ -677,7 +691,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
       // The story session, once started, is the one every window plays.
       game::CampaignSession &session =
           uiState.storySession ? *uiState.storySession : defaultSession;
-      const game::CampaignViewSnapshot view = session.state().renderSnapshot();
+      const game::CampaignViewSnapshot view = session.state().perceivedSnapshot(uiState.focusNode);
       renderTimeLedger(view, uiState);
       renderClocks(view, uiState);
       for (const int count : {1, 5, 25}) {
@@ -730,7 +744,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
 
   if (uiState.windowsOpen) {
     // A fresh snapshot after any button above mutated the campaign this frame.
-    const game::CampaignViewSnapshot view = session.state().renderSnapshot();
+    const game::CampaignViewSnapshot view = session.state().perceivedSnapshot(uiState.focusNode);
     unsigned int backdropTextureId = 0;
     const char *backdropCredit = nullptr;
     if (backdrops != nullptr && backdropCount > 0) {

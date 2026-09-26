@@ -66,6 +66,12 @@ struct FleetView {
   OrbitLane lane = OrbitLane::Prograde; ///< Orbital direction.
   double yieldMultiplier = 1.0;  ///< Capability yield multiplier.
   bool telemetryCorrupted = false; ///< Reliability below the corruption threshold.
+  /// False in a colony's perceived view: the fleet reports to the host, so
+  /// reliability, tau, rate, fuel, and task counts are unknown there (zero).
+  bool telemetryKnown = true;
+  /// False when the viewer cannot place the fleet; bandIndex is then
+  /// meaningless. A colony places a fleet only where it last ordered it.
+  bool positionKnown = true;
   std::uint32_t pendingTasks = 0;
   std::uint32_t activeTasks = 0;
   std::uint32_t completedTasks = 0;
@@ -75,6 +81,7 @@ struct FleetView {
 struct OrderInFlightView {
   CommandType type = CommandType::PlaceFleet;
   FleetId fleet = K_INVALID_FLEET_ID;
+  NodeId origin = K_AUTHORITY_NODE; ///< Station the order left from.
   std::int64_t issueTurn = 0;
   std::int64_t effectTurn = 0;
 };
@@ -112,6 +119,10 @@ struct NodeView {
   std::int64_t techPoints = 0;
   std::int64_t techTier = 0;
   std::int64_t missionProperSec = 0; ///< Colony mission length; 0 = unbounded.
+  /// Coordinate turn the values above describe: the present for the viewer's
+  /// own station, the emission turn of the latest arrival for a remote one.
+  std::int64_t asOfTurn = 0;
+  bool heard = true; ///< False for a remote station nothing has arrived from.
 };
 
 /** @brief A story event's inbox text, looked up by a notice's payload id. */
@@ -128,6 +139,9 @@ struct TechLevelView {
 };
 
 struct CampaignViewSnapshot {
+  /// The station whose knowledge this view holds. The authority's view is the
+  /// campaign's full snapshot; a colony's is CampaignState::perceivedSnapshot.
+  NodeId perceivedBy = K_AUTHORITY_NODE;
   std::int64_t turn = 0;
   double secondsPerTurn = 0.0;
   double coordinateTimeSec = 0.0;
