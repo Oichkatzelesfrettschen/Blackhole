@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <string_view>
 #include <system_error>
 
@@ -113,6 +114,7 @@
 #include "render/render_targets.h"
 #include "render/scene_overlays.h"
 #include "render/settings_sync.h"
+#include "render/tesseract/tesseract_renderer.h"
 #include "render/uniform_binding.h"
 #include "rmlui_overlay.h"
 #include "settings.h"
@@ -189,10 +191,16 @@ using blackhole::applyEnvironmentConfig;
 using blackhole::recreateRenderTargets;
 
 // Compare-sweep advance/restore state machine lives in src/render/compare_sweep.*.
-using blackhole::advanceComparePresetSweep;
 using blackhole::captureCompareParity;
 using blackhole::CompareParityInputs;
 using blackhole::restoreCompareSweepState;
+using blackhole::updateComparePresetSweep;
+
+// Speculative tesseract scene pass lives in src/render/tesseract/*.
+using blackhole::renderTesseractScene;
+using blackhole::tesseractFocusTangent;
+using blackhole::TesseractRecordFrame;
+using blackhole::tesseractViewDistanceAfterInput;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
@@ -238,6 +246,7 @@ using ui::renderGizmoPanel;
 using ui::renderPerformancePanel;
 using ui::renderRmlUiPanel;
 using ui::renderSettingsWindow;
+using ui::renderTesseractPanel;
 using ui::renderWiregridPanel;
 using ui::resetLayout;
 
@@ -271,6 +280,8 @@ using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::captureRecordFrame;
 using blackhole::exportFrameOnce;
 using blackhole::findShowcaseOrbitComposition;
+using blackhole::frameContentSeconds;
+using blackhole::recordOutputSeconds;
 using blackhole::ShowcaseOrbitComposition;
 #if BLACKHOLE_HAS_CUDA
 using blackhole::bindCudaLaunchParams;
@@ -487,6 +498,28 @@ std::array<ui::CampaignBackdrop, 5> loadCampaignBackdrops(GLFWwindow *window) {
   return campaignBackdrops;
 }
 
+/**
+ * @brief Run InputManager::update for the active scene.
+ *
+ * The tesseract scene takes zoom input for its own view distance
+ * (tesseractZoom), so the black-hole camera keeps its orbit radius; a
+ * recording frames the tesseract from the record camera and drops the zoom.
+ * Reset Camera returns that distance to its default with the camera pose in
+ * either scene (tesseractViewDistanceAfterInput).
+ */
+void updateInput(RenderState &rs, const platform::CliOptions &cli, InputManager &input,
+                 float deltaTime) {
+  const bool tesseractActive = rs.scene.mode == RenderState::SceneMode::Tesseract;
+  input.setZoomRedirect(tesseractActive);
+  input.update(deltaTime);
+  const float zoomDelta = input.takeZoomDelta();
+  const bool cameraReset = input.takeCameraReset();
+  if (cameraReset || (tesseractActive && cli.recordFramesDir.empty())) {
+    rs.tesseract.viewDistance =
+        tesseractViewDistanceAfterInput(rs.tesseract.viewDistance, zoomDelta, cameraReset);
+  }
+}
+
 void updateFrameTiming(RenderState &rs, float cpuFrameMs) {
   if (rs.timing.gpuTimingEnabled && !rs.timing.gpuTimers.initialized) {
     rs.timing.gpuTimers.init();
@@ -499,12 +532,21 @@ void updateFrameTiming(RenderState &rs, float cpuFrameMs) {
   rs.timing.timingHistory.push(cpuFrameMs, rs.timing.gpuTimers);
   TRACY_PLOT("cpu_frame_ms", cpuFrameMs);
   if (rs.timing.gpuTimers.initialized) {
-    TRACY_PLOT("gpu_fragment_ms", rs.timing.gpuTimers.blackholeFragment.lastMs);
-    TRACY_PLOT("gpu_compute_ms", rs.timing.gpuTimers.blackholeCompute.lastMs);
-    TRACY_PLOT("gpu_bloom_ms", rs.timing.gpuTimers.bloom.lastMs);
-    TRACY_PLOT("gpu_tonemap_ms", rs.timing.gpuTimers.tonemap.lastMs);
-    TRACY_PLOT("gpu_depth_ms", rs.timing.gpuTimers.depth.lastMs);
-    TRACY_PLOT("gpu_grmhd_slice_ms", rs.timing.gpuTimers.grmhdSlice.lastMs);
+    // A stage the sampled frame skipped plots nothing rather than its last value.
+    // TRACY_PLOT expands to nothing without Tracy, leaving name unread.
+    const auto plot = []([[maybe_unused]] const char *name, const blackhole::GpuTimer &timer) {
+      if (timer.hasSample) {
+        TRACY_PLOT(name, timer.lastMs);
+      }
+    };
+    const blackhole::GpuTimerSet &timers = rs.timing.gpuTimers;
+    plot("gpu_fragment_ms", timers.blackholeFragment);
+    plot("gpu_compute_ms", timers.blackholeCompute);
+    plot("gpu_bloom_ms", timers.bloom);
+    plot("gpu_tonemap_ms", timers.tonemap);
+    plot("gpu_depth_ms", timers.depth);
+    plot("gpu_grmhd_slice_ms", timers.grmhdSlice);
+    plot("gpu_tesseract_ms", timers.tesseract);
   }
 }
 
@@ -811,8 +853,7 @@ struct BlackholeFrameResult {
   bool computeActiveForLog = false;
 };
 
-BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOptions &cli,
-                                          const Settings &settings, const InputManager &input,
+BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &settings,
                                           const glm::vec3 &cameraPos, const glm::mat3 &cameraBasis,
                                           float fovScale, float frameTime, double currentTime,
                                           GLuint &computeProgram) {
@@ -890,13 +931,6 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     rtti.targetTexture = rs.targets.texBlackhole;
     rtti.width = rs.targets.renderWidth;
     rtti.height = rs.targets.renderHeight;
-
-    // Render UI controls only if visible
-    if (input.isUIVisible()) {
-      renderSettingsWindow(rs);
-    }
-
-    renderCurveOverlayWindow(rs, cli.curveTsvPath);
 
     updateLuts(rs, rs.physicsCore.kerrSpin, rs.disk.adiskDensityV);
     loadSpectralSynchHawkingLuts(rs);
@@ -1063,7 +1097,7 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
 }
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
-void reloadChangedShaders(GLuint &computeProgram) {
+void reloadChangedShaders(RenderState &rs, GLuint &computeProgram) {
   // Check for shader file changes and recompile all affected programs.
   if (ShaderWatcher::instance().hasPendingReloads()) {
     auto changedShaders = ShaderWatcher::instance().pollChangedShaders();
@@ -1085,16 +1119,22 @@ void reloadChangedShaders(GLuint &computeProgram) {
       computeProgram = 0;
       std::cout << "[HotReload] Queued recompile: shader/geodesic_trace.comp\n";
     }
+
+    // The tesseract pass owns its program outside shaderProgramMap.
+    rs.tesseract.renderer.reloadShaders();
   }
 }
 #endif
 
 struct FrameCamera {
-  glm::vec3 position;
-  glm::mat3 basis;
-  float fovScale;
-  glm::mat4 projection;
-  glm::mat4 gizmoView;
+  glm::vec3 position{0.0f};
+  glm::mat3 basis{1.0f};
+  /// Unit direction from the camera to its focus; basis[2] turns from it
+  /// toward a showcase-orbit aim point.
+  glm::vec3 focusDirection{0.0f, 0.0f, 1.0f};
+  float fovScale = 1.0f;
+  glm::mat4 projection{1.0f};
+  glm::mat4 gizmoView{1.0f};
 };
 
 FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platform::CliOptions &cli,
@@ -1103,7 +1143,7 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
   const auto &cam = input.camera();
 
   glm::vec3 const focusTarget =
-      rs.camera.gizmoEnabled
+      rs.gizmoTargetActive()
           ? glm::vec3(rs.camera.gizmoTransform[3])
           : glm::vec3(
                 0.0f); // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
@@ -1154,9 +1194,52 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
                        // -- glm::mat has no .at()
   return {.position = cameraPos,
           .basis = cameraBasis,
+          .focusDirection = glm::normalize(focusTarget - cameraPos),
           .fovScale = fovScale,
           .projection = projectionMatrix,
           .gizmoView = gizmoViewMatrix};
+}
+
+/**
+ * @brief Render the active scene into rs.targets.texBlackhole.
+ *
+ * The black-hole scene runs the geodesic integrator and restores any compare
+ * sweep state it changed; the tesseract scene runs its own pass and reports
+ * no GRMHD or compute activity.
+ */
+BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOptions &cli,
+                                      const Settings &settings, InputManager &input,
+                                      const FrameCamera &frameCamera, float frameTime,
+                                      float deltaTime, double currentTime, GLuint &computeProgram) {
+  if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
+    // Recording advances on the output frame clock, frameIndex / fps, so the
+    // frames depend on their index alone, not on render throughput, and
+    // frames the scene with the camera applyRecordCameraPath set.
+    std::optional<TesseractRecordFrame> record;
+    if (const auto outputSeconds = recordOutputSeconds(cli, rs.recording.recordFrameIndex)) {
+      const auto &recordCamera = input.camera();
+      record = TesseractRecordFrame{.outputClockSeconds = *outputSeconds,
+                                    .camera = {.fovDeg = recordCamera.fov,
+                                               .focusTangent = tesseractFocusTangent(
+                                                   frameCamera.basis, frameCamera.focusDirection)}};
+    }
+    if (rs.timing.gpuTimers.initialized) {
+      rs.timing.gpuTimers.tesseract.begin();
+    }
+    // Interactive frames step by the effective delta, which pause and the
+    // time scale govern as they do the black-hole orbit clock.
+    renderTesseractScene(rs, frameCamera.basis, frameCamera.focusDirection,
+                         input.getEffectiveDeltaTime(deltaTime), record);
+    if (rs.timing.gpuTimers.initialized) {
+      rs.timing.gpuTimers.tesseract.end();
+    }
+    return {};
+  }
+  const auto result =
+      renderBlackholeFrame(rs, settings, frameCamera.position, frameCamera.basis,
+                           frameCamera.fovScale, frameTime, currentTime, computeProgram);
+  restoreCompareSweepState(rs, input);
+  return result;
 }
 
 bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
@@ -1169,7 +1252,7 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
     ++rs.recording.recordWarmup;
   }
   if (!cli.recordFramesDir.empty() && cli.recordProfile == "cinematic" &&
-      rs.recording.recordWarmup >= 15) {
+      rs.scene.mode == RenderState::SceneMode::Blackhole && rs.recording.recordWarmup >= 15) {
     renderCinematicOverlay(rs.recording.recordCinematic, rs.recording.recordCurrentKf,
                            glm::length(cameraPos), rs.recording.recordCurRs,
                            rs.recording.recordCurIsco, rs.recording.recordFrameIndex,
@@ -1287,6 +1370,16 @@ int main(int argc, char **argv) {
       return 2;
     }
 
+    if (const auto conflict = blackhole::recordCameraConflict(cli)) {
+      std::printf("%s\n", conflict->c_str());
+      return 2;
+    }
+    if (const auto conflict =
+            blackhole::exportConflictForScene(cli, blackhole::startupSceneMode())) {
+      std::printf("%s\n", conflict->c_str());
+      return 2;
+    }
+
     platform::initResourceRoot(argv[0]);
     setShaderBaseDir(platform::resourceRoot().string() + "/");
 
@@ -1394,20 +1487,22 @@ int main(int argc, char **argv) {
       ZONE_SCOPED_N("Frame");
       // ...
       // Calculate delta time
-      double const currentTime = glfwGetTime();
+      double const wallTime = glfwGetTime();
+      auto const deltaTime = static_cast<float>(wallTime - lastTime);
+      lastTime = wallTime;
+      // Time-driven shading reads content time: the record output clock
+      // under --record-frames, the wall clock otherwise.
+      double const currentTime = frameContentSeconds(cli, rs.recording.recordFrameIndex, wallTime);
       auto const frameTime = static_cast<float>(currentTime);
-      auto const deltaTime = static_cast<float>(currentTime - lastTime);
-      lastTime = currentTime;
       const float cpuFrameMs = deltaTime * 1000.0f;
 
       glfwPollEvents();
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
-      reloadChangedShaders(computeProgram);
+      reloadChangedShaders(rs, computeProgram);
 #endif
-      // Update input manager
-      InputManager::instance().update(deltaTime);
       auto &input = InputManager::instance();
+      updateInput(rs, cli, input, deltaTime);
 
       updateFrameTiming(rs, cpuFrameMs);
       // --record-frames: one-time initialization (cinematic quality, 1920x1080, no vsync)
@@ -1477,25 +1572,32 @@ int main(int argc, char **argv) {
       */
       syncRenderStateToSettings(rs, settings, input);
 
-      advanceComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
+      // The Settings window owns the Scene selector, so it draws before any
+      // code reads rs.scene.mode: dispatch, post-processing, and overlays then
+      // see one scene for the whole frame.
+      if (input.isUIVisible()) {
+        renderSettingsWindow(rs);
+      }
+      // The --curve-tsv plot is independent of the scene.
+      renderCurveOverlayWindow(rs, cli.curveTsvPath);
+
+      // The compare sweep drives the geodesic integrator; another scene
+      // cancels it and restores the live camera.
+      updateComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
 
       // --record-frames: drive camera and spin from the selected record path
       applyRecordCameraPath(rs, cli, input);
 
       const auto frameCamera = updateFrameCamera(rs, input, cli, settings, deltaTime, currentTime);
       const auto &cameraPos = frameCamera.position;
-      const auto &cameraBasis = frameCamera.basis;
-      const float fovScale = frameCamera.fovScale;
       auto projectionMatrix = frameCamera.projection;
       auto gizmoViewMatrix = frameCamera.gizmoView;
-      const auto blackholeFrame =
-          renderBlackholeFrame(rs, cli, settings, input, cameraPos, cameraBasis, fovScale,
-                               frameTime, currentTime, computeProgram);
+      const auto blackholeFrame = renderSceneFrame(rs, cli, settings, input, frameCamera, frameTime,
+                                                   deltaTime, currentTime, computeProgram);
       const bool grmhdReady = blackholeFrame.grmhdReady;
       const bool computeActiveForLog = blackholeFrame.computeActiveForLog;
-      restoreCompareSweepState(rs, input);
 
-      GLuint const finalTexture = runPostProcessPipeline(rs, input);
+      GLuint const finalTexture = runPostProcessPipeline(rs, input, currentTime);
 
       // Re-open Viewport to render the scene image
       ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -1519,7 +1621,7 @@ int main(int argc, char **argv) {
       InputManager::instance().setIgnoreGuiCapture(isViewportHovered);
 
       // Gizmo
-      if (rs.camera.gizmoEnabled) {
+      if (rs.gizmoTargetActive()) {
         ImGuizmo::SetDrawlist();
         ImVec2 const windowPos = ImGui::GetWindowPos();
         ImGuizmo::SetRect(windowPos.x, windowPos.y, viewportSize.x, viewportSize.y);
@@ -1538,6 +1640,7 @@ int main(int argc, char **argv) {
         renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
         renderBackgroundPanel(rs);
         renderWiregridPanel(rs);
+        renderTesseractPanel(rs);
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
         renderPerformancePanel(rs, cpuFrameMs);
@@ -1582,6 +1685,8 @@ int main(int argc, char **argv) {
     // Explicitly clean up static resources before GL context destruction
     rs.disk.noiseCache.cleanup();
     rs.hawking.hawkingRenderer.cleanup();
+    rs.tesseract.renderer.shutdown();
+    rs.tesseract.speculativeLabel.shutdown();
     if (rs.grmhd.grmhdTexture.texture != 0) {
       destroyGrmhdPackedTexture(rs.grmhd.grmhdTexture);
     }
@@ -1590,7 +1695,7 @@ int main(int argc, char **argv) {
     rs.dispatch.cudaManager.shutdown();
 #endif
     cleanup(window, cli.recordFramesDir.empty());
-    return 0;
+    return rs.exporting.exportFailed ? 1 : 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {
     (void)std::fprintf(stderr, "Unhandled cpptrace exception: %s\n",

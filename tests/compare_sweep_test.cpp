@@ -8,7 +8,8 @@
  * compare_sweep.* makes the state machine a pure function of RenderState and
  * InputManager; these GL-free tests drive the sweep across presets and assert
  * preset advancement, the settle-boundary capture flag, the compute-unavailable
- * disable path, and the post-sweep camera restore. They link the test-only
+ * disable path, the post-sweep camera restore, and the cancel a scene change
+ * applies mid-sweep. They link the test-only
  * blackhole_testcore library so RenderState can be constructed without the app
  * executables.
  */
@@ -26,6 +27,7 @@ using blackhole::advanceComparePresetSweep;
 using blackhole::K_COMPARE_PRESETS;
 using blackhole::RenderState;
 using blackhole::restoreCompareSweepState;
+using blackhole::updateComparePresetSweep;
 
 namespace {
 
@@ -136,4 +138,44 @@ TEST(CompareSweep, CompletesAndRestores) {
   EXPECT_FLOAT_EQ(input.camera().distance, 42.0f);
   EXPECT_EQ(rs.camera.cameraModeIndex, 2);
   EXPECT_FLOAT_EQ(rs.physicsCore.kerrSpin, 0.44f);
+}
+
+// Leaving the black-hole scene mid-sweep, even on a settle boundary with a
+// snapshot flagged, stops the sweep and puts the live camera and spin back at
+// once; nothing stays armed for a later black-hole frame.
+TEST(CompareSweep, SceneChangeCancelsAndRestores) {
+  const auto stateStorage = std::make_unique<RenderState>();
+  RenderState &rs = *stateStorage;
+  InputManager &input = InputManager::instance();
+  armSweep(rs, input);
+  rs.compare.comparePresetSettleFrames = 1;
+  advanceComparePresetSweep(rs, input, true);
+  ASSERT_TRUE(rs.compare.comparePresetSweep);
+  ASSERT_TRUE(rs.compare.comparePresetSaved);
+  ASSERT_TRUE(rs.compare.captureCompareSnapshot);
+  // The preset camera is live while the sweep runs.
+  EXPECT_FLOAT_EQ(input.camera().distance, K_COMPARE_PRESETS.front().camera.distance);
+
+  rs.scene.mode = RenderState::SceneMode::Tesseract;
+  updateComparePresetSweep(rs, input, true);
+  EXPECT_FALSE(rs.compare.comparePresetSweep);
+  EXPECT_FALSE(rs.compare.comparePresetSaved);
+  EXPECT_FALSE(rs.compare.compareRestorePending);
+  EXPECT_FALSE(rs.compare.captureCompareSnapshot);
+  EXPECT_EQ(rs.compare.comparePresetIndex, 0);
+  EXPECT_FLOAT_EQ(input.camera().yaw, 12.0f);
+  EXPECT_FLOAT_EQ(input.camera().distance, 42.0f);
+  EXPECT_EQ(rs.camera.cameraModeIndex, 2);
+  EXPECT_FLOAT_EQ(rs.camera.orbitRadius, 9.0f);
+  EXPECT_FLOAT_EQ(rs.physicsCore.kerrSpin, 0.44f);
+
+  // Later tesseract frames leave the restored camera alone, and returning to
+  // the black-hole scene does not resume the sweep.
+  input.camera().distance = 17.0f;
+  updateComparePresetSweep(rs, input, true);
+  EXPECT_FLOAT_EQ(input.camera().distance, 17.0f);
+  rs.scene.mode = RenderState::SceneMode::Blackhole;
+  updateComparePresetSweep(rs, input, true);
+  EXPECT_FLOAT_EQ(input.camera().distance, 17.0f);
+  EXPECT_FALSE(rs.compare.comparePresetSaved);
 }

@@ -2,15 +2,20 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <string>
+#include <vector>
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
 
+#include <glm/ext/vector_float4.hpp>
+
 #include "hud_overlay.h"
 #include "input.h"
 #include "render.h"
 #include "render/render_state.h"
+#include "render/tesseract/tesseract_renderer.h"
 #include "tracy_support.h"
 
 using namespace gl;
@@ -94,6 +99,33 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
   // 3. RmlUi Overlay
   if (rs.overlays.rmluiReady) {
     rs.overlays.rmluiOverlay.render();
+  }
+
+  // The tesseract scene always carries its provenance label, drawn into the
+  // presented texture so recorded frames keep it too.
+  if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
+    // Refit whenever either render dimension changes so the label never clips.
+    if (rs.tesseract.speculativeLabelWidth != rs.targets.renderWidth ||
+        rs.tesseract.speculativeLabelHeight != rs.targets.renderHeight) {
+      const SpeculativeLabelLayout layout =
+          layoutSpeculativeLabel(rs.targets.renderWidth, rs.targets.renderHeight);
+      HudOverlayOptions opts;
+      opts.scale = layout.scale;
+      opts.margin = SPECULATIVE_LABEL_MARGIN;
+      opts.align = HudOverlayOptions::Align::Center;
+      opts.drawBackground = true;
+      rs.tesseract.speculativeLabel.setOptions(opts);
+      std::vector<HudOverlayLine> lines(layout.lines.size());
+      std::ranges::transform(layout.lines, lines.begin(), [](const std::string &text) {
+        return HudOverlayLine{.text = text,
+                              .color = glm::vec4(1.0f, 0.86f, 0.55f, 1.0f),
+                              .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.6f)};
+      });
+      rs.tesseract.speculativeLabel.setLines(lines);
+      rs.tesseract.speculativeLabelWidth = rs.targets.renderWidth;
+      rs.tesseract.speculativeLabelHeight = rs.targets.renderHeight;
+    }
+    rs.tesseract.speculativeLabel.render(rs.targets.renderWidth, rs.targets.renderHeight);
   }
 
   // 4. HUD Overlays (Perf/Controls)
