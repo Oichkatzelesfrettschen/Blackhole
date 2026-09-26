@@ -264,10 +264,16 @@ void CampaignState::resolveStoryParams() {
   const auto flagOk = [&story](std::uint32_t flag) {
     return flag < K_MAX_STORY_FLAGS && flag < std::max<std::size_t>(story.flags.size(), 1);
   };
+  // Enum discriminants a hand-built story could set out of range; the loader
+  // produces only named values.
+  const auto enumsOk = [](const EventPredicate &predicate) {
+    return predicate.kind <= PredicateKind::Received && predicate.var <= CompareVar::NoticesReceived &&
+           predicate.op <= CompareOp::Greater && predicate.receivedKind <= EmitKind::Notice;
+  };
   const auto predicateOk = [&](const EventPredicate &predicate) {
     const bool flagged =
         predicate.kind == PredicateKind::FlagSet || predicate.kind == PredicateKind::FlagClear;
-    return intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
+    return enumsOk(predicate) && intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
            (!flagged || flagOk(predicate.flag));
   };
   const auto effectOk = [&](const EventEffect &effect) {
@@ -278,7 +284,8 @@ void CampaignState::resolveStoryParams() {
     case EffectKind::SetFlag:
       return flagOk(effect.flag);
     case EffectKind::Emit:
-      return nodeOk(effect.to) && withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT);
+      return effect.emitKind <= EmitKind::Notice && nodeOk(effect.to) &&
+             withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT);
     case EffectKind::Schedule: {
       // The target must be a scheduled event: a once-only one runs from its
       // triggers alone and would ignore the schedule.
@@ -291,7 +298,9 @@ void CampaignState::resolveStoryParams() {
     return false;
   };
   if (!std::ranges::all_of(story.events, [&](const EventDef &event) {
-        return nodeOk(event.source) && std::ranges::all_of(event.triggers, predicateOk) &&
+        return nodeOk(event.source) && event.mode <= EventMode::Scheduled &&
+               static_cast<int>(event.category) < K_EVENT_CATEGORY_COUNT &&
+               std::ranges::all_of(event.triggers, predicateOk) &&
                std::ranges::all_of(event.effects, effectOk);
       })) {
     valid_ = false;

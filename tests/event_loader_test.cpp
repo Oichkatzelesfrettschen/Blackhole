@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -419,4 +420,53 @@ TEST(EventLoader, ScheduleTargetsAndEmptyDuplicateKeysChecked) {
   game::EventSet onceTarget = scheduleStory({.plus = 1});
   onceTarget.events.front().mode = game::EventMode::Once;
   EXPECT_FALSE(storyBuildsValid(onceTarget));
+}
+
+// An enum holding an arbitrary value of its fixed underlying type, as a
+// hand-built story could; every uint8 value is a valid object of these enums.
+template <typename Enum> Enum rawEnum(std::uint8_t value) { return std::bit_cast<Enum>(value); }
+
+// Falsifier: a hand-built story with an out-of-range enum discriminant --
+// which the loader can never produce -- building a valid campaign; a Received
+// predicate with such a kind would index past lastArrivalTurn at run time.
+TEST(EventPredicates, CoreRejectsOutOfRangeEnums) {
+  const auto withTrigger = [](game::EventPredicate predicate) {
+    game::EventSet story;
+    story.flags = {game::K_DARK_FLAG_NAME};
+    game::EventDef event;
+    event.id = 1;
+    event.triggers = {predicate};
+    story.events = {event};
+    return story;
+  };
+  game::EventPredicate received;
+  received.kind = game::PredicateKind::Received;
+  EXPECT_TRUE(storyBuildsValid(withTrigger(received)));
+  received.receivedKind = rawEnum<game::EmitKind>(7);
+  EXPECT_FALSE(storyBuildsValid(withTrigger(received)));
+
+  game::EventPredicate kind;
+  kind.kind = rawEnum<game::PredicateKind>(9);
+  EXPECT_FALSE(storyBuildsValid(withTrigger(kind)));
+  game::EventPredicate compare;
+  compare.kind = game::PredicateKind::Compare;
+  compare.op = rawEnum<game::CompareOp>(40);
+  EXPECT_FALSE(storyBuildsValid(withTrigger(compare)));
+  compare.op = game::CompareOp::Less;
+  compare.var = rawEnum<game::CompareVar>(40);
+  EXPECT_FALSE(storyBuildsValid(withTrigger(compare)));
+
+  game::EventSet badEvent = withTrigger(received);
+  badEvent.events.front().triggers.clear();
+  badEvent.events.front().mode = rawEnum<game::EventMode>(5);
+  EXPECT_FALSE(storyBuildsValid(badEvent));
+  badEvent.events.front().mode = game::EventMode::Once;
+  badEvent.events.front().category = rawEnum<game::EventCategory>(99);
+  EXPECT_FALSE(storyBuildsValid(badEvent));
+  badEvent.events.front().category = game::EventCategory::Info;
+  game::EventEffect emit;
+  emit.kind = game::EffectKind::Emit;
+  emit.emitKind = rawEnum<game::EmitKind>(3);
+  badEvent.events.front().effects = {emit};
+  EXPECT_FALSE(storyBuildsValid(badEvent));
 }
