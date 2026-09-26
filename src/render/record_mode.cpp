@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -413,6 +414,23 @@ std::optional<double> recordOutputSeconds(const platform::CliOptions &cli, int r
 double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex,
                            double wallSeconds) {
   return recordOutputSeconds(cli, recordFrameIndex).value_or(wallSeconds);
+}
+
+std::optional<std::string> recordCameraConflict(const platform::CliOptions &cli) {
+  // Comparisons against NaN are false, so each range test also rejects NaN.
+  const bool distanceValid =
+      cli.recordDistance > 0.0f && cli.recordDistance <= std::numeric_limits<float>::max();
+  if (cli.hasRecordDistance && !distanceValid) {
+    return std::format("Refusing --record-distance {}: the camera needs a positive, finite "
+                       "distance from its focus",
+                       cli.recordDistance);
+  }
+  const bool fovValid = cli.recordFovDeg > 0.0f && cli.recordFovDeg < 180.0f;
+  if (cli.hasRecordFov && !fovValid) {
+    return std::format("Refusing --record-fov {}: the field of view must lie in (0, 180) degrees",
+                       cli.recordFovDeg);
+  }
+  return std::nullopt;
 }
 
 std::optional<std::string> exportConflictForScene(const platform::CliOptions &cli,

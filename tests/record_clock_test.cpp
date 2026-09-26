@@ -8,11 +8,14 @@
  * the wall clock reads, so two renders of one frame index, in one run, two
  * runs, or a --start-frame resume, feed the post chain identical inputs.
  * recordPathProgress places the showcase-orbit and compare-orbit-near camera
- * paths by the same absolute index.
+ * paths by the same absolute index, and recordCameraConflict refuses record
+ * camera overrides that describe no camera.
  */
 
+#include <limits>
 #include <memory>
 #include <optional>
+#include <string>
 
 #include <gtest/gtest.h>
 
@@ -26,6 +29,7 @@
 namespace {
 
 using blackhole::frameContentSeconds;
+using blackhole::recordCameraConflict;
 using blackhole::recordOutputSeconds;
 using blackhole::recordPathProgress;
 using blackhole::RenderState;
@@ -86,6 +90,39 @@ TEST(RecordClock, ResumedRunsKeepTheCameraPathProgress) {
   EXPECT_FLOAT_EQ(recordPathProgress(full, 0), 0.0f);
   EXPECT_FLOAT_EQ(recordPathProgress(full, 239), 1.0f);
   EXPECT_FLOAT_EQ(recordPathProgress(resumed, 100), 100.0f / 239.0f);
+}
+
+// A zero distance puts the camera on its focus, where buildCameraBasis
+// normalizes a zero vector; a field of view outside (0, 180) degrees has no
+// perspective. Both are refused before a window opens.
+TEST(RecordClock, RecordCameraOverridesMustDescribeACamera) {
+  platform::CliOptions cli = recordingCli();
+  cli.recordProfile = "showcase-orbit";
+  EXPECT_FALSE(recordCameraConflict(cli).has_value());
+
+  cli.hasRecordDistance = true;
+  for (const float distance : {0.0f, -3.0f, std::numeric_limits<float>::infinity(),
+                               std::numeric_limits<float>::quiet_NaN()}) {
+    cli.recordDistance = distance;
+    const std::optional<std::string> conflict = recordCameraConflict(cli);
+    ASSERT_TRUE(conflict.has_value()) << distance;
+    EXPECT_NE(conflict.value_or("").find("--record-distance"), std::string::npos);
+  }
+  // The cinematic path's 120 lies past the interactive 50 clamp and stays legal.
+  for (const float distance : {0.01f, 14.0f, 120.0f}) {
+    cli.recordDistance = distance;
+    EXPECT_FALSE(recordCameraConflict(cli).has_value()) << distance;
+  }
+
+  cli.hasRecordFov = true;
+  for (const float fov : {0.0f, -10.0f, 180.0f, 250.0f, std::numeric_limits<float>::quiet_NaN()}) {
+    cli.recordFovDeg = fov;
+    const std::optional<std::string> conflict = recordCameraConflict(cli);
+    ASSERT_TRUE(conflict.has_value()) << fov;
+    EXPECT_NE(conflict.value_or("").find("--record-fov"), std::string::npos);
+  }
+  cli.recordFovDeg = 120.0f;
+  EXPECT_FALSE(recordCameraConflict(cli).has_value());
 }
 
 } // namespace

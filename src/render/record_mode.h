@@ -116,6 +116,20 @@ double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex
                            double wallSeconds);
 
 /**
+ * @brief Why the record camera overrides describe no camera, or std::nullopt.
+ *
+ * applyRecordCameraPath writes --record-distance and --record-fov after
+ * InputManager::update clamps the interactive camera, and the record paths
+ * need distances past that clamp (cinematic reaches 120), so the overrides
+ * are checked here instead: a distance must be positive and finite, since at
+ * 0 the camera sits on its focus and buildCameraBasis normalizes a zero
+ * vector into NaN, and a field of view must lie in (0, 180) degrees, the
+ * domain of glm::perspective. main checks this before opening a window and
+ * exits with status 2.
+ */
+std::optional<std::string> recordCameraConflict(const platform::CliOptions &cli);
+
+/**
  * @brief Why the requested exports cannot run in @p scene, or std::nullopt.
  *
  * --export-raw-frame reads the HDR scene target, which the tesseract scene's

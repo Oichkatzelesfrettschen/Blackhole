@@ -1356,6 +1356,10 @@ int main(int argc, char **argv) {
       return 2;
     }
 
+    if (const auto conflict = blackhole::recordCameraConflict(cli)) {
+      std::printf("%s\n", conflict->c_str());
+      return 2;
+    }
     if (const auto conflict =
             blackhole::exportConflictForScene(cli, blackhole::startupSceneMode())) {
       std::printf("%s\n", conflict->c_str());
