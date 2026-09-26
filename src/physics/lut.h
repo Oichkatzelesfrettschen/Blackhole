@@ -16,6 +16,7 @@
 
 #include "batch.h"
 #include "constants.h"
+#include "disk_transfer.h"
 #include "kerr.h"
 #include "schwarzschild.h"
 #include "thin_disk.h"
@@ -88,19 +89,19 @@ inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
 }
 
 /**
- * @brief Generate a gravitational redshift LUT for a Kerr black hole.
+ * @brief Generate the disk-emitter redshift LUT for a Kerr black hole.
  *
- * Samples the Kerr redshift factor from r_ISCO to 4*r_ISCO along
- * a geodesic at inclination angle theta.
+ * Samples z(r) = u^t - 1 of the prograde Keplerian circular emitter
+ * (circularEmitterUt), the redshift of disk light reaching a face-on distant
+ * observer (photon Lz = 0), from r_ISCO to 4*r_ISCO. The spin enters as |a*|,
+ * matching kerrIscoRadius(..., prograde = true). Values clamp to [0, 10].
  *
  * @param size       Number of LUT samples
  * @param massSolar  Black hole mass [solar masses]
  * @param aStar      Dimensionless spin a* in (-1, 1)
- * @param theta      Observer inclination angle [rad] (default pi/2, equatorial)
  * @return Lut1D with redshift values
  */
-inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar,
-                                   double theta = 0.5 * PI) {
+inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar) {
   Lut1D lut;
   if (size <= 1) {
     return lut;
@@ -112,12 +113,18 @@ inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar,
   const double a = aStar * rG;
   const double rIn = kerrIscoRadius(mass, a, true);
   const double rOut = rIn * 4.0;
+  const double aDisk = std::abs(aStar);
 
   lut.rMin = static_cast<float>(rIn / rS);
   lut.rMax = static_cast<float>(rOut / rS);
   std::vector<double> radii(static_cast<std::size_t>(size));
   fillLinspace(radii, rIn, rOut);
-  kerrRedshiftBatch(radii, theta, mass, a, lut.values);
+  lut.values.reserve(radii.size());
+  for (double const radius : radii) {
+    double const ut = circularEmitterUt(radius / rG, aDisk);
+    double const z = ut > 0.0 ? ut - 1.0 : 0.0;
+    lut.values.push_back(static_cast<float>(std::clamp(z, 0.0, 10.0)));
+  }
 
   return lut;
 }

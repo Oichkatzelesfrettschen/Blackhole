@@ -305,8 +305,11 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.stokes_enabled     = rs.stokes.stokesEnabled ? 1 : 0;
   cp.stokes_b_field_angle = rs.stokes.stokesBFieldAngle;
   cp.stokes_ne_scale    = rs.stokes.stokesNeScale;
-  // Disk brightness: matches adiskLit GLSL uniform (record mode sets 0.35)
+  // Legacy volumetric disk scale (GLSL adiskLit); the Kerr disk reads disk_brightness.
   cp.adisk_lit = rs.disk.adiskLit;
+  cp.disk_peak_temperature = interop.diskPeakTemperature;
+  cp.disk_brightness = interop.diskBrightness;
+  cp.disk_flux_peak = interop.diskFluxPeak;
 }
 #endif
 

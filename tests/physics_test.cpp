@@ -25,6 +25,7 @@
 #include "cosmology.h"
 #include "geodesics.h"
 #include "kerr.h"
+#include "disk_transfer.h"
 #include "lut.h"
 #include "page_thorne.h"
 #include "raytracer.h"
@@ -709,7 +710,6 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       const double mass = massSolar * physics::M_SUN;
       const double rS = physics::schwarzschildRadius(mass);
       const double rG = physics::G * mass / physics::C2;
-      const double a = spin * rG;
       const double rIn = rInOverRs * rS;
       const double rOut = rOutOverRs * rS;
 
@@ -744,11 +744,9 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
 
         double const u = static_cast<double>(i) / static_cast<double>(count - 1);
         double const r = rIn + (u * (rOut - rIn));
-        double expectedRedshift = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
-        if (!std::isfinite(expectedRedshift) || expectedRedshift < 0.0) {
-          expectedRedshift = 0.0;
-        }
-        expectedRedshift = std::min(expectedRedshift, 10.0);
+        // Disk-emitter redshift z = u^t - 1 of the prograde circular orbit.
+        double const ut = physics::circularEmitterUt(r / rG, std::abs(spin));
+        double const expectedRedshift = std::clamp(ut > 0.0 ? ut - 1.0 : 0.0, 0.0, 10.0);
         auto const actualRedshift = static_cast<double>(redshift.at(i));
         maxRedshiftDiff = std::max(maxRedshiftDiff, std::abs(expectedRedshift - actualRedshift));
       }

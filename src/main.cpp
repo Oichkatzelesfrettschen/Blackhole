@@ -52,6 +52,7 @@
 // Third-party library headers
 #include "constants.h"
 #include "kerr.h"
+#include "page_thorne.h"
 #include "schwarzschild.h"
 #ifndef BLACKHOLE_HAS_CPPTRACE
 #if __has_include(<cpptrace/cpptrace.hpp>)
@@ -977,6 +978,12 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     interop.debugClosestApproachTimeline = rs.debug.debugClosestApproachTimeline ? 1.0f : 0.0f;
     interop.debugClosestApproachDirection = rs.debug.debugClosestApproachDirection ? 1.0f : 0.0f;
     interop.debugEscapedDirection = rs.debug.debugEscapedDirection ? 1.0f : 0.0f;
+    interop.diskPeakTemperature = rs.disk.diskPeakTemperature;
+    interop.diskBrightness = rs.disk.diskBrightness;
+    // Page-Thorne flux peak at the rendered spin, the normalization of the
+    // shaders' flux (the GLSL disk_profile isco_radius clamps to the same range).
+    interop.diskFluxPeak = static_cast<float>(physics::pageThorneFluxPeak(
+        std::clamp(static_cast<double>(rs.physicsCore.kerrSpin), -0.9999, 0.9999)));
 
     // Per-frame derived transients shared by the fragment, CUDA, and
     // compute uniform binders (compare-baseline gating, LUT readiness,

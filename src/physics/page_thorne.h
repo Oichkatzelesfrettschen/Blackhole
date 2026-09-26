@@ -28,6 +28,9 @@
  * (8 pi r^3). scripts/gen_page_thorne_reference.py evaluates both the closed
  * form and the quadrature at 30 digits; tests/page_thorne_test.cpp holds the
  * double-precision form to the quadrature and pins the flux peak radii.
+ *
+ * The header compiles as C++17 so nvcc-built tests can include it as the host
+ * reference for the device twins in src/cuda/device_disk_transfer.cuh.
  */
 
 #ifndef PHYSICS_PAGE_THORNE_H
@@ -36,7 +39,6 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <numbers>
 
 namespace physics {
 
@@ -107,7 +109,7 @@ struct KerrCircularOrbit {
   double const x = std::sqrt(r);
   double const x0 = std::sqrt(rIsco);
   double const theta = std::acos(aStar) / 3.0;
-  constexpr double kThird = std::numbers::pi / 3.0;
+  constexpr double kThird = 1.047197551196597746154214461093; // pi / 3
   std::array<double, 3> const roots = {2.0 * std::cos(theta - kThird),
                                        2.0 * std::cos(theta + kThird), -2.0 * std::cos(theta)};
 

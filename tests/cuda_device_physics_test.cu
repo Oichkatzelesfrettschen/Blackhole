@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "cuda/kernel_launch.h"
+#include "physics/page_thorne.h"
 
 /* ========================================================================
  * Helpers
@@ -50,6 +51,10 @@ static BH_LaunchParams make_schwarzschild_params(int w, int h) {
     p.redshift_enabled = 0;
     p.kerr_enabled     = 0;
     p.use_luts         = 0;
+    /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
+    p.disk_peak_temperature = 6500.0f;
+    p.disk_brightness       = 1.0f;
+    p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
 
     /* Camera at (0, 0, 10): 5x the event horizon radius */
     p.cam_pos[0] = 0.0f;
@@ -375,6 +380,10 @@ TEST_F(CudaDevicePhysicsTest, AdaptiveStepFiniteNearPhotonSphere) {
     p.redshift_enabled = 0;
     p.kerr_enabled     = 1;
     p.use_luts         = 0;
+    /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
+    p.disk_peak_temperature = 6500.0f;
+    p.disk_brightness       = 1.0f;
+    p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
 
     /* Camera at (0, 0, 5): 2.5*rs from BH -- photon sphere at 1.5*rs is
      * reachable by edge-of-frame rays with FOV 1.2. */

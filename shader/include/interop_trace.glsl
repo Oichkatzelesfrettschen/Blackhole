@@ -6,6 +6,7 @@
 #include "include/rte_step.glsl"
 #include "include/stokes_transport.glsl"
 #include "include/disk_profile.glsl"
+#include "include/disk_transfer.glsl"
 
 const float BH_EPSILON = 1e-6;
 const float BH_DEBUG_MAX_RADIUS_MULT = 4.0;
@@ -36,7 +37,11 @@ struct HitResult {
   vec3 closestApproachPoint;
   vec3 escapedDir;
   float phi;
-  float redshiftFactor;
+  // Axial angular momentum per unit energy, Lz / E, of the physical photon
+  // that reaches the camera, in scene length units (r_s = 2M). The tracer
+  // follows the time-reversed ray in spin -a (kerrTraceSpin), whose constant
+  // c.Lz is the negative of the physical photon's.
+  float photonLambda;
   float minRadius;
   int closestApproachUpdateCount;
   int firstClosestApproachStep;
@@ -264,7 +269,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.closestApproachPoint = ray.position;
   result.escapedDir = normalize(ray.velocity);
   result.phi = 0.0;
-  result.redshiftFactor = 1.0;
+  result.photonLambda = 0.0;
   result.minRadius = length(ray.position);
   result.closestApproachUpdateCount = 0;
   result.firstClosestApproachStep = -1;
@@ -316,7 +321,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
         result.hitDisk = true;
         result.hitPoint = diskHit;
         result.phi = atan(diskHit.y, diskHit.x);
-        result.redshiftFactor = bhComputeRedshiftFactor(length(diskHit), r_s);
+        result.photonLambda = -c.Lz;
         return result;
       }
     }
@@ -340,67 +345,46 @@ vec4 bhHorizonColor() {
   return vec4(0.0, 0.0, 0.0, 1.0);
 }
 
+// Emission of the Novikov-Thorne disk surface at cylindrical radius r seen
+// along a photon with physical Lz / E = photonLambda (scene units). The
+// Page-Thorne flux, normalized to its peak diskFluxPeak (both in M = 1 units,
+// host-computed peak from physics::pageThorneFluxPeak), sets the emitted
+// blackbody temperature T_emit = diskPeakTemperature * flux_norm^(1/4). The
+// orbiting-emitter shift g (dtDiskTransferG) maps it to T_obs = g T_emit and
+// the bolometric intensity to g^4 flux_norm, the Liouville invariance of
+// I_nu / nu^3. chroma is the unit-luminance blackbody color at T_obs.
+void bhDiskEmission(float r, float photonLambda, float r_s, out vec3 chroma,
+                    out float intensity) {
+  float M = max(0.5 * r_s, BH_EPSILON);
+  float fluxNorm =
+      clamp(dtPageThorneShape(r / M, kerrSpin) / max(diskFluxPeak, 1e-30), 0.0, 1.0);
+  float tEmit = diskPeakTemperature * sqrt(sqrt(fluxNorm));
+  float g = dtDiskTransferG(r / M, kerrSpin, photonLambda / M);
+  float g2 = g * g;
+  chroma = dtBlackbodyChroma(g * tEmit);
+  intensity = g2 * g2 * fluxNorm;
+}
+
 vec4 bhDiskColorFromHit(HitResult hit, float r_s) {
   float r = length(hit.hitPoint.xy);
+  vec3 chroma;
+  float intensity;
+  bhDiskEmission(r, hit.photonLambda, r_s, chroma, intensity);
 
-  float flux = 0.0;
-  if (useLUTs > 0.5) {
-    float rNorm = r / max(r_s, BH_EPSILON);
-    float denom = max(lutRadiusMax - lutRadiusMin, 0.0001);
-    float u = clamp((rNorm - lutRadiusMin) / denom, 0.0, 1.0);
-    flux = max(0.0, texture(emissivityLUT, vec2(u, 0.5)).r);
-  } else {
-    float r_in = bhDiskInnerRadius(r_s);
-    float x = r_in / r;
-    flux = pow(x, 3.0) * (1.0 - sqrt(x));
-    flux = max(0.0, flux);
-  }
-
-  float T_norm = pow(flux, 0.25);
-
-  vec3 color;
-  if (T_norm > 0.6) {
-    color = vec3(1.0, 0.9, 0.8);
-  } else if (T_norm > 0.3) {
-    color = vec3(1.0, 0.6, 0.2);
-  } else {
-    color = vec3(0.8, 0.2, 0.1);
-  }
-
-  float spectral = 1.0;
   if (useSpectralLUT > 0.5) {
     float rNorm = r / max(r_s, BH_EPSILON);
     float denom = max(spectralRadiusMax - spectralRadiusMin, 0.0001);
     float u = clamp((rNorm - spectralRadiusMin) / denom, 0.0, 1.0);
-    spectral = max(0.0, texture(spectralLUT, vec2(u, 0.5)).r);
+    intensity *= max(0.0, texture(spectralLUT, vec2(u, 0.5)).r);
   }
-
-  float intensity = flux * 2.0 * spectral;
-
-  float v = sqrt(0.5 * r_s / r);
-  float cos_phi = cos(hit.phi);
-  float doppler = 1.0 + 0.3 * v * cos_phi;
-  intensity *= doppler * doppler * doppler;
 
   if (useGrbModulation > 0.5) {
     float denom = max(grbTimeMax - grbTimeMin, 0.0001);
     float u = clamp((grbTime - grbTimeMin) / denom, 0.0, 1.0);
-    float modulation = texture(grbModulationLUT, vec2(u, 0.5)).r;
-    intensity *= max(modulation, 0.0);
+    intensity *= max(texture(grbModulationLUT, vec2(u, 0.5)).r, 0.0);
   }
 
-  if (enableRedshift > 0.5) {
-    float z = 1.0 / max(hit.redshiftFactor, BH_EPSILON) - 1.0;
-    if (useLUTs > 0.5) {
-      float rNorm = r / max(r_s, BH_EPSILON);
-      float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
-      float u = clamp((rNorm - redshiftRadiusMin) / denom, 0.0, 1.0);
-      z = texture(redshiftLUT, vec2(u, 0.5)).r;
-    }
-    color = applyGravitationalRedshift(color, z);
-  }
-
-  return vec4(color * intensity, 1.0);
+  return vec4(chroma * (intensity * diskBrightness), 1.0);
 }
 
 vec3 bhRotateY(vec3 v, float angleDegrees) {
@@ -560,31 +544,16 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
     if (adiskEnabled > 0.5) {
       float rCyl = length(newPos.xy);
       if (rCyl >= r_disk_in && rCyl <= r_disk_out) {
-        // Novikov-Thorne surface flux profile
-        float x    = r_disk_in / max(rCyl, BH_EPSILON);
-        float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
-
-        // Temperature-to-color mapping (three bands)
-        float T_norm = pow(max(flux, 0.0), 0.25);
-        vec3 emitColor;
-        if (T_norm > 0.6) {
-          emitColor = vec3(1.0, 0.9, 0.8);
-        } else if (T_norm > 0.3) {
-          emitColor = vec3(1.0, 0.6, 0.2);
-        } else {
-          emitColor = vec3(0.8, 0.2, 0.1);
-        }
-
-        // Doppler beaming (Keplerian v ~ sqrt(r_s / 2r))
-        float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
-        float phi_ang = atan(newPos.y, newPos.x);
-        float doppler = 1.0 + 0.3 * v * cos(phi_ang);
-        float g3      = doppler * doppler * doppler;
+        // Disk surface emission along this photon (bhDiskEmission)
+        vec3 chroma;
+        float emission;
+        bhDiskEmission(rCyl, -c.Lz, r_s, chroma, emission);
+        vec3 emitColor = chroma * diskBrightness;
 
         // Gaussian vertical density: rho ~ exp(-z^2 / 2h^2)
         float rhoNorm = exp(-0.5 * (newPos.z / h_disk) * (newPos.z / h_disk));
 
-        float jEff    = flux * g3 * rhoNorm;
+        float jEff    = emission * rhoNorm;
         float alphaNu = opacityScale * max(jEff, 0.0);
 
         accumI += rteStepVec3(emitColor, jEff, alphaNu, rteStepDt, transmit);
@@ -691,27 +660,14 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
     if (adiskEnabled > 0.5) {
       float rCyl = length(newPos.xy);
       if (rCyl >= r_disk_in && rCyl <= r_disk_out) {
-        // Novikov-Thorne flux profile (same as bhTraceGeodesicRTE)
-        float x    = r_disk_in / max(rCyl, BH_EPSILON);
-        float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
-
-        float T_norm = pow(max(flux, 0.0), 0.25);
-        vec3 emitColor;
-        if (T_norm > 0.6) {
-          emitColor = vec3(1.0, 0.9, 0.8);
-        } else if (T_norm > 0.3) {
-          emitColor = vec3(1.0, 0.6, 0.2);
-        } else {
-          emitColor = vec3(0.8, 0.2, 0.1);
-        }
-
-        float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
-        float phi_ang = atan(newPos.y, newPos.x);
-        float doppler = 1.0 + 0.3 * v * cos(phi_ang);
-        float g3      = doppler * doppler * doppler;
+        // Disk surface emission along this photon (same as bhTraceGeodesicRTE)
+        vec3 chroma;
+        float emission;
+        bhDiskEmission(rCyl, -c.Lz, r_s, chroma, emission);
+        vec3 emitColor = chroma * diskBrightness;
 
         float rhoNorm = exp(-0.5 * (newPos.z / h_disk) * (newPos.z / h_disk));
-        float jEff    = flux * g3 * rhoNorm;
+        float jEff    = emission * rhoNorm;
         float alphaNu = opacityScale * max(jEff, 0.0);
 
         // Intensity path (front-to-back compositing identical to RTE path)

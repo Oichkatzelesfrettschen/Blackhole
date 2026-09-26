@@ -163,6 +163,11 @@ struct RenderState {
     float adiskSpeed = 0.5f;
     float dopplerStrength = 1.0f;
     float photonSphereGlowStrength = 1.0f;
+    // Physical tracer disk emission (bhDiskEmission / d_disk_color): the
+    // blackbody temperature at the Page-Thorne flux peak [K] and a display
+    // scale on the bolometric intensity g^4 F / F_peak.
+    float diskPeakTemperature = 6500.0f;
+    float diskBrightness = 1.0f;
     gl::GLuint texNoiseVolume = 0;
     bool noiseTextureReady = false;
     blackhole::NoiseTextureCache noiseCache;

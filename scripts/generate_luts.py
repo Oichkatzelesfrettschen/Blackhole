@@ -84,13 +84,22 @@ def novikov_thorne_flux(r: float, mass: float, mdot: float, r_in: float, a_star:
     return prefactor * r_m**3 * page_thorne_shape(r_m, a_star)
 
 
-def kerr_redshift_equatorial(r: float, mass: float, spin_param: float) -> float:
+def disk_emitter_redshift(r: float, mass: float, spin_param: float) -> float:
+    """Redshift z = u^t - 1 of the prograde Keplerian emitter at r [cm], face-on.
+
+    Twin of physics::generateRedshiftLut (src/physics/lut.h); the spin enters as
+    |a*| to match the prograde ISCO of the LUT's radial domain. Zero where no
+    timelike circular orbit exists.
+    """
     m_geom = G * mass / C2
-    sigma = r * r
-    factor = 1.0 - (2.0 * m_geom * r) / sigma
-    if factor <= 0.0:
+    a_star = abs(spin_param / m_geom)
+    x = r / m_geom
+    inv_r32 = 1.0 / (x * math.sqrt(x))
+    q = 1.0 - 3.0 / x + 2.0 * a_star * inv_r32
+    if q <= 0.0:
         return 0.0
-    return 1.0 / math.sqrt(factor) - 1.0
+    u_t = (1.0 + a_star * inv_r32) / math.sqrt(q)
+    return u_t - 1.0
 
 
 def kerr_photon_orbit_cleanroom(mass: float, spin_param: float, prograde: bool = True) -> float:
@@ -212,7 +221,7 @@ def main() -> int:
     for i in range(size):
         u = i / (size - 1)
         r = r_in + u * (r_out - r_in)
-        redshift.append(min(kerr_redshift_equatorial(r, mass, a), 10.0))
+        redshift.append(min(disk_emitter_redshift(r, mass, a), 10.0))
 
     lut_dir = os.path.join(os.path.dirname(__file__), "..", "assets", "luts")
     os.makedirs(lut_dir, exist_ok=True)
@@ -232,7 +241,7 @@ def main() -> int:
         "prograde": True,
         "isco_source": isco_source,
         "emissivity_model": "page-thorne",
-        "redshift_model": "equatorial",
+        "redshift_model": "circular-emitter-face-on",
         "units": {
             "system": "cgs",
             "length": "cm",

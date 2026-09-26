@@ -110,6 +110,12 @@ uniform float adiskNoiseScale = 1.0;
 uniform float adiskNoiseLOD = 5.0;
 uniform float adiskSpeed = 0.5;
 uniform float dopplerStrength = 1.0;
+// Disk emission of the physical tracer (bhDiskEmission in interop_trace.glsl):
+// peak blackbody temperature [K], display brightness, and the Page-Thorne
+// flux peak for the current spin (M = 1, host-computed).
+uniform float diskPeakTemperature = 6500.0;
+uniform float diskBrightness = 1.0;
+uniform float diskFluxPeak = 1.1458947e-4;
 
 // Physics parameters
 uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geometric units)

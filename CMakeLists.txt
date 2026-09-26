@@ -4167,6 +4167,42 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Orbiting-emitter energy shift, blackbody chroma and disk redshift LUT
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/disk_transfer_test.cpp")
+    add_executable(disk_transfer_test
+      "${PROJECT_SOURCE_DIR}/tests/disk_transfer_test.cpp"
+    )
+    target_link_libraries(disk_transfer_test PRIVATE blackhole_physics GTest::gtest_main)
+    target_include_directories(disk_transfer_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(disk_transfer_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(disk_transfer_test PRIVATE -fno-fast-math)
+    endif()
+    # lut.h pulls in batch.h and its SIMD backends.
+    if(ENABLE_XSIMD)
+      target_link_libraries(disk_transfer_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(disk_transfer_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(disk_transfer_test PRIVATE hwy::hwy)
+    endif()
+    add_test(NAME disk_transfer_validation COMMAND disk_transfer_test)
+    set_tests_properties(disk_transfer_validation PROPERTIES
+      LABELS "physics;accretion;disk"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(disk_transfer_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Campaign core (Horizon Command seam) tests: pure game logic against the
   # Schwarzschild time field, no GL context. IEEE flags match the campaign
   # libraries so the determinism gates hold under ENABLE_FAST_MATH too.
@@ -4502,6 +4538,34 @@ if(BUILD_TESTING)
     set_tests_properties(kerr_shader_capture PROPERTIES
       LABELS "physics;gpu;kerr"
       TIMEOUT 120
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/disk_transfer_shader_test.cpp")
+    # Shipped shader/include/disk_transfer.glsl against physics/page_thorne.h
+    # and physics/disk_transfer.h in a compute dispatch. Skips without GL 4.6.
+    add_executable(disk_transfer_shader_test
+      "${PROJECT_SOURCE_DIR}/tests/disk_transfer_shader_test.cpp"
+    )
+    target_include_directories(disk_transfer_shader_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_definitions(disk_transfer_shader_test PRIVATE
+      GLFW_INCLUDE_NONE
+      BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+    )
+    target_compile_options(disk_transfer_shader_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(disk_transfer_shader_test PRIVATE
+      glfw
+      glbinding::glbinding
+      GTest::gtest
+      GTest::gtest_main
+    )
+    add_test(NAME disk_transfer_shader COMMAND disk_transfer_shader_test)
+    set_tests_properties(disk_transfer_shader PROPERTIES
+      LABELS "physics;gpu;disk"
+      TIMEOUT 60
     )
   endif()
 
@@ -6178,6 +6242,30 @@ if(BUILD_TESTING)
           ENVIRONMENT "${SANITIZER_TEST_ENV}"
         )
       endif()
+    endif()
+
+    # Disk transfer device twins against the double-precision C++ headers
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_disk_transfer_test.cu")
+      add_executable(cuda_disk_transfer_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_disk_transfer_test.cu"
+      )
+      set_target_properties(cuda_disk_transfer_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+      )
+      target_include_directories(cuda_disk_transfer_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_disk_transfer_test PRIVATE
+        GTest::gtest_main
+        CUDA::cudart
+      )
+      add_test(NAME cuda_disk_transfer COMMAND cuda_disk_transfer_test)
+      set_tests_properties(cuda_disk_transfer PROPERTIES
+        LABELS "cuda;disk;parity"
+        TIMEOUT 60
+      )
     endif()
 
     # 7. Volumetric RTE CUDA path (D3): d_rte_step + d_trace_geodesic_rte via kernel API

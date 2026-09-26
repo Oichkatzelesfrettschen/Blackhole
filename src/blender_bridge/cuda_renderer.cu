@@ -21,6 +21,7 @@
 #include <string>
 
 #include "../cuda/kernel_launch.h"
+#include "../physics/page_thorne.h"
 #include "stb_image.h"
 
 namespace {
@@ -552,6 +553,10 @@ static void apply_bridge_feature_defaults(struct BH_LaunchParams *p) {
         }
     }
     p->adisk_lit = env_float("BLACKHOLE_BRIDGE_ADISK_LIT", 0.35f);
+    p->disk_peak_temperature = env_float("BLACKHOLE_BRIDGE_DISK_PEAK_TEMPERATURE", 6500.0f);
+    p->disk_brightness = env_float("BLACKHOLE_BRIDGE_DISK_BRIGHTNESS", 1.0f);
+    p->disk_flux_peak = static_cast<float>(
+        physics::pageThorneFluxPeak(std::fmax(-0.9999, std::fmin(static_cast<double>(p->spin), 0.9999))));
 }
 
 static void fill_params_from_view(struct BH_LaunchParams *p, float spin, const float *cam_pos,

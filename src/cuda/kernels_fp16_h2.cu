@@ -158,7 +158,7 @@ __launch_bounds__(128, 4)
   hit0.hit_point = make_f3(0.0f, 0.0f, 0.0f);
   hit0.closest_approach_point = cam;
   hit0.phi = 0.0f;
-  hit0.redshift = 1.0f;
+  hit0.photon_lambda = 0.0f;
   hit0.min_radius = d_length(cam);
   hit0.closest_approach_update_count = 0;
   hit0.first_closest_approach_step = -1;
@@ -224,7 +224,7 @@ __launch_bounds__(128, 4)
               hit0.hit_disk = true;
               hit0.hit_point = dh;
               hit0.phi = atan2f(dh.y, dh.x);
-              hit0.redshift = d_redshift_factor(d_length(dh), rs);
+              hit0.photon_lambda = -c0.Lz;
               done0 = true;
             }
           }
@@ -256,7 +256,7 @@ __launch_bounds__(128, 4)
               hit1.hit_disk = true;
               hit1.hit_point = dh;
               hit1.phi = atan2f(dh.y, dh.x);
-              hit1.redshift = d_redshift_factor(d_length(dh), rs);
+              hit1.photon_lambda = -c1.Lz;
               done1 = true;
             }
           }
@@ -321,7 +321,7 @@ __launch_bounds__(128, 4)
             hit0.hit_disk = true;
             hit0.hit_point = dh;
             hit0.phi = atan2f(dh.y, dh.x);
-            hit0.redshift = d_redshift_factor(d_length(dh), rs);
+            hit0.photon_lambda = d_schwarzschild_photon_lambda(cam, dir0, rs);
             done0 = true;
           }
         }
@@ -347,7 +347,7 @@ __launch_bounds__(128, 4)
             hit1.hit_disk = true;
             hit1.hit_point = dh;
             hit1.phi = atan2f(dh.y, dh.x);
-            hit1.redshift = d_redshift_factor(d_length(dh), rs);
+            hit1.photon_lambda = d_schwarzschild_photon_lambda(cam, dir1, rs);
             done1 = true;
           }
         }
