@@ -40,6 +40,7 @@
 #include <cstdint>
 #include <limits>
 #include <numbers>
+#include <optional>
 
 #include "safe_limits.h"
 
@@ -124,7 +125,9 @@ struct EquatorialFrame {
 
 /** @brief Equatorial circular geodesic of one sense at one radius. */
 struct CircularOrbit {
-  bool exists = false;          ///< Timelike: outside the photon orbit of this sense.
+  /// Timelike: outside the photon orbit of this sense, with a ZAMO-frame
+  /// speed that stays below light speed in double precision.
+  bool exists = false;
   double properTimeRate = 0.0;  ///< dtau/dt = 1 / u^t.
   /// Omega = dphi/dt, signed along +phi: a prograde orbit shares the sign of
   /// a (negative for epsilon > 1), a retrograde one the opposite.
@@ -175,6 +178,12 @@ struct CircularOrbit {
   const double rMinusA = x + e;
   const double numerator = (rMinusA * rMinusA) + (2.0 * spinSense * s * y);
   orbit.zamoVelocity = sign * numerator / (sqrtDelta * denominator);
+  // Within a few ulp of the photon orbit the speed rounds to 1 or above; the
+  // input then cannot resolve a timelike orbit, so none is reported rather
+  // than a superluminal boost that turns every tetrad component into NaN.
+  if (!(std::fabs(orbit.zamoVelocity) < 1.0)) {
+    return CircularOrbit{};
+  }
   return orbit;
 }
 
@@ -365,10 +374,16 @@ struct Tetrad {
   return boosted;
 }
 
-/** @brief Tetrad of the prograde or retrograde circular geodesic at x. The
- *         orbit must exist (circularOrbit(...).exists). */
-[[nodiscard]] inline Tetrad orbitingTetrad(double epsilon, double x, OrbitSense sense) {
+/** @brief Tetrad of the prograde or retrograde circular geodesic at x, or
+ *         nothing where circularOrbit reports no timelike orbit (inside the
+ *         photon orbit, or too close to it for a double to resolve a speed
+ *         below light). */
+[[nodiscard]] inline std::optional<Tetrad> orbitingTetrad(double epsilon, double x,
+                                                          OrbitSense sense) {
   const CircularOrbit orbit = circularOrbit(epsilon, x, sense);
+  if (!orbit.exists) {
+    return std::nullopt;
+  }
   return boostedTetrad(zamoTetrad(epsilon, x), Vec3{0.0, 0.0, orbit.zamoVelocity});
 }
 

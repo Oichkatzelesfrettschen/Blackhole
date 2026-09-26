@@ -12,11 +12,13 @@
  * delay by quadrature; regenerate and diff to audit it.
  */
 
+#include <algorithm>
 #include <array>
 #include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <optional>
 #include <utility>
 
 #include <gtest/gtest.h>
@@ -174,6 +176,18 @@ ko::Vec3 latticeDirection(int index, int count) {
   return {ring * std::cos(phi), z, ring * std::sin(phi)};
 }
 
+
+/** The orbiting tetrad where the test expects an orbit; a missing one fails
+ *  the test and returns the ZAMO tetrad so the remaining checks still run. */
+ko::Tetrad orbiterOrFail(double epsilon, double x, OrbitSense sense) {
+  const std::optional<ko::Tetrad> tetrad = ko::orbitingTetrad(epsilon, x, sense);
+  if (!tetrad.has_value()) {
+    ADD_FAILURE() << "no timelike orbit at epsilon=" << epsilon << " x=" << x;
+    return ko::zamoTetrad(epsilon, x);
+  }
+  return *tetrad;
+}
+
 } // namespace
 
 // Falsifier: any ISCO, marginally bound, or photon-orbit offset from the
@@ -289,8 +303,8 @@ TEST(KerrObserver, TetradsAreOrthonormal) {
   const double x6 = 5.0;
   const ko::Tetrad zamo6 = ko::zamoTetrad(0.1, x6);
   EXPECT_LT(orthonormalityError(zamo6), 1e-12);
-  EXPECT_LT(orthonormalityError(ko::orbitingTetrad(0.1, x6, OrbitSense::Prograde)), 1e-12);
-  EXPECT_LT(orthonormalityError(ko::orbitingTetrad(0.1, x6, OrbitSense::Retrograde)), 1e-12);
+  EXPECT_LT(orthonormalityError(orbiterOrFail(0.1, x6, OrbitSense::Prograde)), 1e-12);
+  EXPECT_LT(orthonormalityError(orbiterOrFail(0.1, x6, OrbitSense::Retrograde)), 1e-12);
   EXPECT_LT(orthonormalityError(ko::boostedTetrad(
                 zamo6, ko::Vec3{0.0, 0.0, ko::staticObserverVelocity(zamo6.frame)})),
             1e-12);
@@ -312,7 +326,7 @@ TEST(KerrObserver, TetradsAreOrthonormal) {
 // shows; a wrong leg misses by O(1).
 TEST(KerrObserver, MillerTetradIsOrthonormalWithinConditioning) {
   const double xIsco = ko::iscoOffset(K_CANON_EPSILON, OrbitSense::Prograde);
-  const ko::Tetrad miller = ko::orbitingTetrad(K_CANON_EPSILON, xIsco, OrbitSense::Prograde);
+  const ko::Tetrad miller = orbiterOrFail(K_CANON_EPSILON, xIsco, OrbitSense::Prograde);
   const double kappa = 1.0 / (miller.frame.alpha * miller.frame.alpha);
   EXPECT_LT(orthonormalityError(miller), 64.0 * kappa * DBL_EPSILON);
   EXPECT_LT(orthonormalityError(ko::zamoTetrad(K_CANON_EPSILON, xIsco)),
@@ -325,7 +339,7 @@ TEST(KerrObserver, MillerTetradIsOrthonormalWithinConditioning) {
 TEST(KerrObserver, OrbiterTimeLegIsInverseClockRate) {
   for (const double sense : {1.0, -1.0}) {
     const OrbitSense orbitSense = sense > 0.0 ? OrbitSense::Prograde : OrbitSense::Retrograde;
-    const ko::Tetrad orbiter = ko::orbitingTetrad(0.1, 5.0, orbitSense);
+    const ko::Tetrad orbiter = orbiterOrFail(0.1, 5.0, orbitSense);
     const TextbookOrbit textbook = textbookOrbit(0.9, 6.0, sense);
     expectRelative(ko::legComponents(orbiter, 0).at(0), textbook.timeComponent, 1e-12,
                    "u^t (6, 0.9)");
@@ -333,7 +347,7 @@ TEST(KerrObserver, OrbiterTimeLegIsInverseClockRate) {
     expectRelative(u.at(3) / u.at(0), textbook.angularVelocity, 1e-12, "Omega from tetrad");
   }
   const double xIsco = ko::iscoOffset(K_CANON_EPSILON, OrbitSense::Prograde);
-  const ko::Tetrad miller = ko::orbitingTetrad(K_CANON_EPSILON, xIsco, OrbitSense::Prograde);
+  const ko::Tetrad miller = orbiterOrFail(K_CANON_EPSILON, xIsco, OrbitSense::Prograde);
   expectRelative(ko::legComponents(miller, 0).at(0), 1.0 / 1.6285857804897317108e-5, 1e-9,
                  "u^t at Miller");
 }
@@ -345,7 +359,7 @@ TEST(KerrObserver, OrbiterTimeLegIsInverseClockRate) {
 // flagged E <= 0, and g = 1/E must hold wherever E > 0.
 TEST(KerrObserver, RedshiftIdentityOverLatticeDirections) {
   const TextbookOrbit outer = textbookOrbit(0.9, 6.0, 1.0);
-  const ko::Tetrad orbiter = ko::orbitingTetrad(0.1, 5.0, OrbitSense::Prograde);
+  const ko::Tetrad orbiter = orbiterOrFail(0.1, 5.0, OrbitSense::Prograde);
   int outerNegative = 0;
   for (int sample = 0; sample < 1000; ++sample) {
     const ko::PhotonConstants photon = ko::photonConstants(orbiter, latticeDirection(sample, 1000));
@@ -362,7 +376,7 @@ TEST(KerrObserver, RedshiftIdentityOverLatticeDirections) {
   EXPECT_EQ(outerNegative, 0);
 
   const PointRow &canon = K_POINTS.front();
-  const ko::Tetrad miller = ko::orbitingTetrad(canon.epsilon, canon.x, OrbitSense::Prograde);
+  const ko::Tetrad miller = orbiterOrFail(canon.epsilon, canon.x, OrbitSense::Prograde);
   const double millerUt = 1.0 / canon.ratePro;
   int millerNegative = 0;
   for (int sample = 0; sample < 1000; ++sample) {
@@ -515,7 +529,7 @@ TEST(KerrObserver, NegativeSpinProgradeMirrorsPositiveSpin) {
     expectRelative(mirrored.properTimeRate, direct.properTimeRate, 1e-12, "mirrored clock");
     expectRelative(mirrored.angularVelocity, -direct.angularVelocity, 1e-12, "mirrored Omega");
     expectRelative(mirrored.zamoVelocity, -direct.zamoVelocity, 1e-12, "mirrored ZAMO speed");
-    const ko::Tetrad orbiter = ko::orbitingTetrad(1.9, 5.0, sense);
+    const ko::Tetrad orbiter = orbiterOrFail(1.9, 5.0, sense);
     const ko::Vec4 u = ko::legComponents(orbiter, 0);
     expectRelative(u.at(3) / u.at(0), mirrored.angularVelocity, 1e-12, "tetrad Omega");
     EXPECT_LT(orthonormalityError(orbiter), 1e-12);
@@ -629,4 +643,30 @@ TEST(KerrObserver, ExtremalFrameSurvivesDeltaUnderflow) {
   ASSERT_TRUE(orbit.exists);
   expectRelative(orbit.properTimeRate, std::numbers::sqrt3 / 2.0 * 5e-201, 1e-12, "clock");
   expectRelative(orbit.zamoVelocity, 0.5, 1e-12, "ZAMO-frame speed");
+}
+
+// Falsifier: a circular orbit within 64 ulp outside a photon orbit reported
+// as existing with a ZAMO-frame speed at or above light speed (Codex's case,
+// one ulp outside the a = 0.9 retrograde photon orbit, gave |v| = 1 + 2e-16),
+// or an orbiting tetrad offered where no orbit is reported, or one with a
+// non-finite component where one is.
+TEST(KerrObserver, OrbitsAtThePhotonOrbitStaySubluminal) {
+  for (const double epsilon : {0.1, 1.0, 0.002, 1.9}) {
+    for (const OrbitSense sense : {OrbitSense::Prograde, OrbitSense::Retrograde}) {
+      double x = ko::photonOrbitOffset(epsilon, sense);
+      for (int step = 0; step < 64; ++step) {
+        x = std::nextafter(x, 2.0 * x + 1.0);
+        const ko::CircularOrbit orbit = ko::circularOrbit(epsilon, x, sense);
+        const std::optional<ko::Tetrad> tetrad = ko::orbitingTetrad(epsilon, x, sense);
+        ASSERT_EQ(orbit.exists, tetrad.has_value());
+        if (!tetrad.has_value()) {
+          continue;
+        }
+        EXPECT_LT(std::fabs(orbit.zamoVelocity), 1.0) << "epsilon " << epsilon << " x " << x;
+        for (const ko::Vec4 &leg : tetrad->lorentz) {
+          EXPECT_TRUE(std::ranges::all_of(leg, [](double c) { return std::isfinite(c); }));
+        }
+      }
+    }
+  }
 }
