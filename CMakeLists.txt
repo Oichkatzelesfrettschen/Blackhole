@@ -5597,7 +5597,7 @@ if(BUILD_TESTING)
     add_executable(kerr_clock_rates_test
       "${PROJECT_SOURCE_DIR}/tests/kerr_clock_rates_test.cpp"
     )
-    target_link_libraries(kerr_clock_rates_test PRIVATE blackhole_physics)
+    target_link_libraries(kerr_clock_rates_test PRIVATE blackhole_physics glm::glm)
     target_include_directories(kerr_clock_rates_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
