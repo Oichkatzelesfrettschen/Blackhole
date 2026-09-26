@@ -17,7 +17,9 @@
 #include <imgui.h>
 
 #include "game/campaign_view.h"
+#include "game/event.h"
 #include "game/fleet.h"
+#include "game/station_node.h"
 #include "ui/campaign_panels.h"
 
 namespace ui {
@@ -192,12 +194,12 @@ void drawOrbitalBands(ImDrawList *drawList, const MapScale &scale,
     if (band.validStation && band.insideErgosphere) {
       ringColor = IM_COL32(210, 150, 60, 230);
       thickness = 2.0f;
-      label = std::format("band {}  dtau/dt {:.3f}  omega {:.2e}  PROGRADE ONLY", band.index,
+      label = std::format("band {}  dtau/dt {:.4g}  omega {:.2e}  PROGRADE ONLY", band.index,
                           band.properTimeRate, band.frameDragRateRadPerSec);
     } else if (band.validStation) {
       ringColor = rateColor(band.properTimeRate);
       thickness = 1.5f;
-      label = std::format("band {}  dtau/dt {:.3f}  delay {:.1f} d", band.index,
+      label = std::format("band {}  dtau/dt {:.4g}  delay {:.1f} d", band.index,
                           band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY);
     } else {
       label = std::format("band {}  FORBIDDEN", band.index);
@@ -240,6 +242,85 @@ void drawMapLegend(ImDrawList *drawList, const ImVec2 &canvasOrigin, const ImVec
     rowY += rowH;
   }
 }
+
+/** @brief A station marker's label: "(you)" for the viewer's own station;
+ *         any other with the age of its latest arrival here. */
+std::string remoteLabel(const game::CampaignViewSnapshot &view, const game::NodeView &node,
+                        const char *name) {
+  if (node.id == view.perceivedBy) {
+    return std::format("{} (you)", name);
+  }
+  if (!node.heard) {
+    return std::format("{} (never heard)", name);
+  }
+  const double ageDays =
+      static_cast<double>(view.turn - node.asOfTurn) * view.secondsPerTurn / K_SECONDS_PER_DAY;
+  return std::format("{} (last heard {:.0f} d ago)", name, ageDays);
+}
+
+/** @brief The authority marker's label: "authority" in its own view; from a
+ *         colony, the host with the age of its latest arrival. */
+std::string authorityLabel(const game::CampaignViewSnapshot &view) {
+  if (view.perceivedBy == game::K_AUTHORITY_NODE) {
+    return "authority";
+  }
+  const auto host = std::ranges::find(view.nodes, game::K_AUTHORITY_NODE, &game::NodeView::id);
+  return host == view.nodes.end() ? std::string("host (never heard)")
+                                  : remoteLabel(view, *host, "host");
+}
+
+/** @brief One order's line from its origin to the fleet, with a dot at its
+ *         causal progress when the sender can estimate the arrival. */
+void drawOrderInFlight(ImDrawList *drawList, const game::CampaignViewSnapshot &view,
+                       const game::OrderInFlightView &order, ImVec2 from, ImVec2 to) {
+  drawList->AddLine(from, to, IM_COL32(90, 200, 255, 120), 1.0f);
+  if (!order.effectTurnKnown) {
+    return; // the sender cannot estimate the arrival: no progress dot
+  }
+  const ImVec2 dot = lerp(from, to, signalProgress(view.turn, order.issueTurn, order.effectTurn));
+  drawList->AddCircleFilled(dot, 3.0f, IM_COL32(90, 200, 255, 255), 12);
+}
+
+/** @brief A station's marker position on the map. */
+struct StationPos {
+  game::NodeId node = game::K_AUTHORITY_NODE;
+  ImVec2 pos;
+};
+
+/** @brief Draws colonies at the bottom of their rings (the viewer's own
+ *         marked) and returns every station's position, the host first. */
+std::vector<StationPos> drawColonies(ImDrawList *drawList, const MapScale &scale,
+                                     const game::CampaignViewSnapshot &view, ImVec2 authorityPos) {
+  std::vector<StationPos> stations = {{.node = game::K_AUTHORITY_NODE, .pos = authorityPos}};
+  for (const game::NodeView &node : view.nodes) {
+    if (!node.isColony) {
+      continue;
+    }
+    const ImVec2 pos = ringPoint(scale, node.radiusCm, 1.5707963f);
+    stations.push_back({.node = node.id, .pos = pos});
+    drawGlow(drawList, pos, 7.0f, IM_COL32(120, 230, 150, 255));
+    drawList->AddCircleFilled(pos, 5.5f, IM_COL32(120, 230, 150, 255), 24);
+    drawList->AddText({pos.x + 8.0f, pos.y - 8.0f}, IM_COL32(150, 240, 170, 255),
+                      remoteLabel(view, node, "colony").c_str());
+  }
+  return stations;
+}
+
+/** @brief Story signals between stations (packets, notices) the view knows
+ *         of, dot at the causal progress fraction. */
+template <typename NodePos>
+void drawStationSignals(ImDrawList *drawList, const game::CampaignViewSnapshot &view,
+                        const NodePos &nodePos) {
+  for (const game::ArrivalRecord &signal : view.nodeSignalsInFlight) {
+    const ImVec2 from = nodePos(signal.sender);
+    const ImVec2 to = nodePos(signal.destination);
+    drawList->AddLine(from, to, IM_COL32(150, 240, 170, 90), 1.0f);
+    const ImVec2 dot =
+        lerp(from, to, signalProgress(view.turn, signal.emitTurn, signal.arrivalTurn));
+    drawList->AddCircleFilled(dot, 3.0f, IM_COL32(150, 240, 170, 255), 12);
+  }
+}
+
 
 } // namespace
 
@@ -299,14 +380,22 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
 
   drawOrbitalBands(drawList, scale, view);
 
-  // Authority station: command origin, drawn at the top of its ring.
+  // Authority station: command origin, drawn at the top of its ring. Seen
+  // from a colony it is the host as last heard: its position is geometry,
+  // its state only what its latest arrival stamped.
   const ImVec2 authorityPos = ringPoint(scale, view.authorityRadiusCm, -1.5707963f);
   drawList->AddCircle(scale.center, scale.pixelRadius(view.authorityRadiusCm),
                       IM_COL32(120, 140, 220, 140), 96, 1.0f);
   drawGlow(drawList, authorityPos, 7.0f, IM_COL32(120, 140, 220, 255));
   drawList->AddCircleFilled(authorityPos, 6.0f, IM_COL32(120, 140, 220, 255), 24);
   drawList->AddText({authorityPos.x + 8.0f, authorityPos.y - 8.0f},
-                    IM_COL32(150, 170, 240, 255), "authority");
+                    IM_COL32(150, 170, 240, 255), authorityLabel(view).c_str());
+
+  const std::vector<StationPos> stations = drawColonies(drawList, scale, view, authorityPos);
+  const auto nodePos = [&stations, authorityPos](game::NodeId id) {
+    const auto found = std::ranges::find(stations, id, &StationPos::node);
+    return found == stations.end() ? authorityPos : found->pos;
+  };
 
   // Fleet markers; remember positions for hit-testing and signal endpoints.
   struct Marker {
@@ -315,14 +404,25 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   };
   std::vector<Marker> markers;
   markers.reserve(view.fleets.size());
+  std::string outOfContact;
   for (const game::FleetView &fleet : view.fleets) {
+    if (!fleet.positionKnown) {
+      // The viewer cannot place this fleet; it is listed, not drawn.
+      outOfContact += std::format("{}{} {}", outOfContact.empty() ? "" : ", ", fleet.id,
+                                  game::capabilityName(fleet.capability));
+      continue;
+    }
     const auto band = std::ranges::find(view.bands, fleet.bandIndex, &game::BandView::index);
     const double bandRadiusCm = band == view.bands.end() ? view.authorityRadiusCm : band->radiusCm;
     const ImVec2 pos = ringPoint(scale, bandRadiusCm, fleetAngleRad(fleet.id));
     markers.push_back({.fleet = fleet.id, .pos = pos});
     const bool selected = fleet.id == uiState.selectedFleet;
-    drawGlow(drawList, pos, 7.0f, rateColor(fleet.properTimeRate));
-    drawList->AddCircleFilled(pos, 5.0f, rateColor(fleet.properTimeRate), 20);
+    // Without telemetry the marker takes its band's clock, not the fleet's.
+    const double markerRate = fleet.telemetryKnown || band == view.bands.end()
+                                  ? fleet.properTimeRate
+                                  : band->properTimeRate;
+    drawGlow(drawList, pos, 7.0f, rateColor(markerRate));
+    drawList->AddCircleFilled(pos, 5.0f, rateColor(markerRate), 20);
     drawList->AddCircle(pos, selected ? 9.0f : 6.5f,
                         selected ? IM_COL32(255, 220, 80, 255) : IM_COL32(230, 230, 235, 200), 20,
                         selected ? 2.5f : 1.0f);
@@ -347,16 +447,12 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     return marker == markers.end() ? nullptr : &*marker;
   };
 
-  // Orders in flight: authority -> fleet, dot at the causal progress fraction.
+  // Orders in flight: origin station -> fleet, dot at the causal progress
+  // fraction.
   for (const game::OrderInFlightView &order : view.ordersInFlight) {
-    const Marker *target = markerFor(order.fleet);
-    if (target == nullptr) {
-      continue;
+    if (const Marker *target = markerFor(order.fleet); target != nullptr) {
+      drawOrderInFlight(drawList, view, order, nodePos(order.origin), target->pos);
     }
-    drawList->AddLine(authorityPos, target->pos, IM_COL32(90, 200, 255, 120), 1.0f);
-    const ImVec2 dot = lerp(authorityPos, target->pos,
-                            signalProgress(view.turn, order.issueTurn, order.effectTurn));
-    drawList->AddCircleFilled(dot, 3.0f, IM_COL32(90, 200, 255, 255), 12);
   }
 
   // Completion reports in flight: fleet -> authority.
@@ -369,6 +465,18 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     const ImVec2 dot = lerp(source->pos, authorityPos,
                             signalProgress(view.turn, report.completedTurn, report.effectTurn));
     drawList->AddCircleFilled(dot, 3.0f, IM_COL32(255, 180, 70, 255), 12);
+  }
+
+  drawStationSignals(drawList, view, nodePos);
+
+  if (!outOfContact.empty()) {
+    // Bottom-right, one line above the credit, clear of the station labels
+    // along the top ring and the legend at bottom-left.
+    const std::string text = "positions unknown here: " + outOfContact;
+    const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+    drawList->AddText({canvasOrigin.x + canvasSize.x - textSize.x - 6.0f,
+                       canvasOrigin.y + canvasSize.y - (2.0f * textSize.y) - 10.0f},
+                      IM_COL32(200, 200, 210, 220), text.c_str());
   }
 
   if (canvasClicked) {

@@ -1166,6 +1166,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/campaign_panels.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/campaign_realtime.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/strategic_map.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
@@ -1612,9 +1613,17 @@ set(CAMPAIGN_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/game/campaign_session.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation_session.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/realtime_driver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/campaign_story.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/event_loader.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/inbox.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/save_format.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/perceived_view.cpp"
 )
 add_library(blackhole_campaign STATIC ${CAMPAIGN_SRC_FILES})
 target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
+# The story loader (src/game/event_loader.cpp) is the only JSON consumer.
+target_link_libraries(blackhole_campaign PRIVATE nlohmann_json::nlohmann_json)
 target_compile_options(blackhole_campaign PRIVATE ${PROJECT_WARNINGS})
 if(ENABLE_FAST_MATH)
   target_compile_options(blackhole_campaign PRIVATE -fno-fast-math)
@@ -4491,6 +4500,239 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Q48 fixed-point station clock: closed form, quantization bound, and carry.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/colony_clock_test.cpp")
+    add_executable(colony_clock_test
+      "${PROJECT_SOURCE_DIR}/tests/colony_clock_test.cpp"
+    )
+    target_compile_options(colony_clock_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(colony_clock_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(colony_clock_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME colony_clock_validation COMMAND colony_clock_test)
+    set_tests_properties(colony_clock_validation PROPERTIES
+      LABELS "campaign;determinism;time-dilation"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(colony_clock_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Wall-time driver: focus mapping, pause-on-arrival, frame budget, and one
+  # command log reaching identical per-turn digests under three schedules.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_realtime_determinism_test.cpp")
+    add_executable(campaign_realtime_determinism_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_realtime_determinism_test.cpp"
+    )
+    target_compile_definitions(campaign_realtime_determinism_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(campaign_realtime_determinism_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_realtime_determinism_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_realtime_determinism_test PRIVATE
+      blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_realtime_determinism_validation
+      COMMAND campaign_realtime_determinism_test)
+    set_tests_properties(campaign_realtime_determinism_validation PROPERTIES
+      LABELS "campaign;determinism;realtime"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_realtime_determinism_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Story loader and event vocabulary: strict keys, file-order independence,
+  # and each predicate firing on the turn its definition implies.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/event_loader_test.cpp")
+    add_executable(event_loader_test
+      "${PROJECT_SOURCE_DIR}/tests/event_loader_test.cpp"
+    )
+    target_include_directories(event_loader_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_definitions(event_loader_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(event_loader_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(event_loader_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(event_loader_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME event_loader_validation COMMAND event_loader_test)
+    set_tests_properties(event_loader_validation PROPERTIES
+      LABELS "campaign;events;story"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(event_loader_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Player inbox and received clocks: grouping, read marks, pause categories.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_inbox_test.cpp")
+    add_executable(campaign_inbox_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_inbox_test.cpp"
+    )
+    target_include_directories(campaign_inbox_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_inbox_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_inbox_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_inbox_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_inbox_validation COMMAND campaign_inbox_test)
+    set_tests_properties(campaign_inbox_validation PROPERTIES
+      LABELS "campaign;inbox;story"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_inbox_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Seed-swept story causality: quantized light delays, silence inference, and
+  # auto-pause on the arrival turn.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_causality_test.cpp")
+    add_executable(campaign_causality_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_causality_test.cpp"
+    )
+    target_include_directories(campaign_causality_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_definitions(campaign_causality_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(campaign_causality_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_causality_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_causality_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_causality_validation COMMAND campaign_causality_test)
+    set_tests_properties(campaign_causality_validation PROPERTIES
+      LABELS "campaign;causality;story"
+      TIMEOUT 120
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_causality_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Versioned replay save: round trips and refusal of malformed saves.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_save_test.cpp")
+    add_executable(campaign_save_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_save_test.cpp"
+    )
+    target_include_directories(campaign_save_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_definitions(campaign_save_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(campaign_save_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_save_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_save_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_save_validation COMMAND campaign_save_test)
+    set_tests_properties(campaign_save_validation PROPERTIES
+      LABELS "campaign;determinism;save"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_save_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Colony outcome axes: mission-window production, a dark host banking
+  # nothing, and the tech tier read as a victory.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_colony_outcome_test.cpp")
+    add_executable(campaign_colony_outcome_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_colony_outcome_test.cpp"
+    )
+    target_include_directories(campaign_colony_outcome_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_colony_outcome_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_colony_outcome_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_colony_outcome_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_colony_outcome_validation COMMAND campaign_colony_outcome_test)
+    set_tests_properties(campaign_colony_outcome_validation PROPERTIES
+      LABELS "campaign;economy;story"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_colony_outcome_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # A colony's perceived view, which the panels and the strategic map draw at
+  # colony focus: host state only as last heard, fleets only as last sent.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_perceived_view_test.cpp")
+    add_executable(campaign_perceived_view_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_perceived_view_test.cpp"
+    )
+    target_compile_definitions(campaign_perceived_view_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(campaign_perceived_view_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_perceived_view_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_perceived_view_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_perceived_view_validation COMMAND campaign_perceived_view_test)
+    set_tests_properties(campaign_perceived_view_validation PROPERTIES
+      LABELS "campaign;story;perception"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_perceived_view_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Panel state that names one session's entities (header-only, GL-free).
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_ui_state_test.cpp")
+    add_executable(campaign_ui_state_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_ui_state_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/ui/campaign_realtime.cpp"
+    )
+    target_compile_definitions(campaign_ui_state_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(campaign_ui_state_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_ui_state_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_ui_state_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_ui_state_validation COMMAND campaign_ui_state_test)
+    set_tests_properties(campaign_ui_state_validation PROPERTIES
+      LABELS "campaign;ui"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_ui_state_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
     add_executable(campaign_task_graph_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"
@@ -4662,6 +4904,8 @@ if(BUILD_TESTING)
     add_executable(balance_sweep_test
       "${PROJECT_SOURCE_DIR}/tests/balance_sweep_test.cpp"
     )
+    target_compile_definitions(balance_sweep_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     target_compile_options(balance_sweep_test PRIVATE ${PROJECT_WARNINGS})
     if(ENABLE_FAST_MATH)
       target_compile_options(balance_sweep_test PRIVATE -fno-fast-math)
@@ -4704,6 +4948,7 @@ if(BUILD_TESTING)
     )
     add_library(blackhole_campaign_${suffix} STATIC ${CAMPAIGN_SRC_FILES})
     target_link_libraries(blackhole_campaign_${suffix} PUBLIC blackhole_physics_${suffix})
+    target_link_libraries(blackhole_campaign_${suffix} PRIVATE nlohmann_json::nlohmann_json)
     add_executable(campaign_sim_${suffix} "${PROJECT_SOURCE_DIR}/src/game/campaign_sim_main.cpp")
     target_link_libraries(campaign_sim_${suffix} PRIVATE blackhole_campaign_${suffix})
     add_executable(constellation_sim_${suffix}
@@ -4721,12 +4966,27 @@ if(BUILD_TESTING)
     endforeach()
   endfunction()
 
+  # Optional trailing arguments replace the sims' default --compare mode.
+  # Each sim argument travels as its own -DSIM_ARG<i> definition, so an
+  # argument containing whitespace (a path under such a checkout) reaches the
+  # sims intact; there is no command-line string to re-split.
   function(bh_add_digest_gate name first second)
+    set(_bh_sim_args "--compare")
+    if(ARGN)
+      set(_bh_sim_args ${ARGN})
+    endif()
+    set(_bh_arg_defs "")
+    set(_bh_index 0)
+    foreach(_bh_arg IN LISTS _bh_sim_args)
+      list(APPEND _bh_arg_defs "-DSIM_ARG${_bh_index}=${_bh_arg}")
+      math(EXPR _bh_index "${_bh_index} + 1")
+    endforeach()
     add_test(NAME ${name}
       COMMAND ${CMAKE_COMMAND}
         -DNATIVE_SIM=$<TARGET_FILE:${first}>
         -DGENERIC_SIM=$<TARGET_FILE:${second}>
-        -DSIM_ARGS=--compare
+        -DSIM_ARGC=${_bh_index}
+        ${_bh_arg_defs}
         -P "${PROJECT_SOURCE_DIR}/cmake/CompareSimDigests.cmake"
     )
     set_tests_properties(${name} PROPERTIES LABELS "campaign;determinism" TIMEOUT 120)
@@ -4774,6 +5034,36 @@ if(BUILD_TESTING)
       bh_add_digest_gate(${_bh_sim}_fma_digest_parity ${_bh_sim}_fma ${_bh_sim}_generic)
     endif()
   endforeach()
+  # The colony story (node clocks, events, loader) under the same ISA gates.
+  # A copy of the story under a path with spaces keeps the argument passing
+  # honest for checkouts whose path contains whitespace.
+  configure_file("${PROJECT_SOURCE_DIR}/assets/events/host_goes_dark.json"
+    "${CMAKE_BINARY_DIR}/digest gate story/host goes dark.json" COPYONLY)
+  bh_add_digest_gate(campaign_sim_colony_spaced_path_digest_parity campaign_sim
+    campaign_sim_generic --colony "${CMAKE_BINARY_DIR}/digest gate story/host goes dark.json")
+  set(_bh_colony_args --colony "${PROJECT_SOURCE_DIR}/assets/events/host_goes_dark.json")
+  bh_add_digest_gate(campaign_sim_colony_isa_digest_parity campaign_sim campaign_sim_generic
+    ${_bh_colony_args})
+  if(TARGET campaign_sim_fma)
+    bh_add_digest_gate(campaign_sim_colony_fma_digest_parity campaign_sim_fma campaign_sim_generic
+      ${_bh_colony_args})
+  endif()
+  # A loader-valid story whose dark turn is 10^12: --colony refuses its
+  # horizon (past the sim's 10^6-turn ceiling) unless --turns bounds it. The
+  # refusal message is the pass condition and the timeout catches a run.
+  file(WRITE "${CMAKE_BINARY_DIR}/campaign_sim_far_dark_story.json"
+    "{\"params\": {\"dark_turn\": 1000000000000, \"packet_period\": 91}}\n")
+  add_test(NAME campaign_sim_colony_far_horizon_refused
+    COMMAND campaign_sim --colony "${CMAKE_BINARY_DIR}/campaign_sim_far_dark_story.json")
+  set_tests_properties(campaign_sim_colony_far_horizon_refused PROPERTIES
+    LABELS "campaign" TIMEOUT 30
+    PASS_REGULAR_EXPRESSION "past the 1000000-turn ceiling; pass --turns N")
+  add_test(NAME campaign_sim_colony_far_horizon_turns_cap
+    COMMAND campaign_sim --colony "${CMAKE_BINARY_DIR}/campaign_sim_far_dark_story.json"
+      --turns 100)
+  set_tests_properties(campaign_sim_colony_far_horizon_turns_cap PROPERTIES
+    LABELS "campaign" TIMEOUT 30
+    PASS_REGULAR_EXPRESSION "colony band=1 tier=")
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp")
     add_executable(constellation_test
@@ -7215,7 +7505,7 @@ set(_bh_deterministic_fp_targets
   blackhole_physics blackhole_campaign campaign_sim constellation_sim)
 get_property(_bh_all_targets DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
 foreach(_bh_target IN LISTS _bh_all_targets)
-  if(_bh_target MATCHES "^(campaign_.*|constellation|blackhole_time_field|kerr_time_field|kerr_observer|balance_sweep)_test$"
+  if(_bh_target MATCHES "^(campaign_.*|colony_.*|event_.*|constellation|blackhole_time_field|kerr_time_field|kerr_observer|balance_sweep)_test$"
      OR _bh_target MATCHES "^(blackhole_physics|blackhole_campaign|campaign_sim|constellation_sim)_(generic|fma)$")
     list(APPEND _bh_deterministic_fp_targets "${_bh_target}")
   endif()

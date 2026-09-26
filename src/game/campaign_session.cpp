@@ -9,9 +9,11 @@
 
 #include "game/campaign.h"
 #include "game/command.h"
+#include "game/event.h"
 #include "game/fleet.h"
 #include "game/kerr_time_field.h"
 #include "game/observer.h"
+#include "game/station_node.h"
 
 namespace game {
 
@@ -25,7 +27,7 @@ constexpr double K_GARGANTUA_MASS_G = 1.0e8 * K_SOLAR_MASS_G;
 constexpr double K_GARGANTUA_SPIN_DEFICIT = 1.33e-14;
 
 KerrTimeField fieldFor(CampaignScenario scenario) {
-  if (scenario == CampaignScenario::GargantuaCanon) {
+  if (scenario != CampaignScenario::M87Default) {
     return {K_GARGANTUA_MASS_G, SpinDeficit{.epsilon = K_GARGANTUA_SPIN_DEFICIT}};
   }
   return {K_M87_MASS_G, 0.9};
@@ -126,13 +128,41 @@ CampaignConfig gargantuaConfig(const KerrTimeField &field, std::uint64_t seed) {
   return config;
 }
 
+CampaignConfig colonyConfig(const KerrTimeField &field, std::uint64_t seed, const EventSet &story,
+                            int colonyBand) {
+  CampaignConfig config = gargantuaConfig(field, seed);
+  ColonyConfig colony;
+  colony.bandIndex = colonyBand;
+  colony.observer = Observer::CircularOrbitPrograde;
+  colony.localTickSec = K_COLONY_TICK_SEC;
+  colony.energyPerTick = K_COLONY_ENERGY_PER_TICK;
+  colony.missionProperSec = K_COLONY_MISSION_SEC;
+  config.colonies = {colony};
+  config.story = story;
+  return config;
+}
+
 } // namespace
+
+CampaignSession::CampaignSession(std::uint64_t seed, const EventSet &story, int colonyBand)
+    : field_(fieldFor(CampaignScenario::GargantuaColony)),
+      state_(colonyConfig(field_, seed, story, colonyBand), field_), seed_(seed),
+      scenario_(CampaignScenario::GargantuaColony), colonyBand_(colonyBand) {
+  state_.addFleet(FleetCapability::Research, 1);
+}
 
 CampaignSession::CampaignSession(std::uint64_t seed, CampaignScenario scenario)
     : field_(fieldFor(scenario)),
-      state_(scenario == CampaignScenario::GargantuaCanon ? gargantuaConfig(field_, seed)
-                                                          : defaultConfig(field_, seed),
-             field_) {
+      state_(scenario == CampaignScenario::M87Default ? defaultConfig(field_, seed)
+                                                      : gargantuaConfig(field_, seed),
+             field_),
+      seed_(seed), scenario_(scenario) {
+  if (scenario == CampaignScenario::GargantuaColony) {
+    // A colony needs its story; without one this is the canon field with the
+    // survey fleet alone.
+    state_.addFleet(FleetCapability::Research, 1);
+    return;
+  }
   if (scenario == CampaignScenario::GargantuaCanon) {
     state_.addFleet(FleetCapability::Research, 0);
     state_.addFleet(FleetCapability::Research, 1);
@@ -142,26 +172,29 @@ CampaignSession::CampaignSession(std::uint64_t seed, CampaignScenario scenario)
 }
 
 CampaignSession::CampaignSession(std::uint64_t seed, double spinDimensionless)
-    : field_(K_M87_MASS_G, spinDimensionless), state_(defaultConfig(field_, seed), field_) {
+    : field_(K_M87_MASS_G, spinDimensionless), state_(defaultConfig(field_, seed), field_),
+      seed_(seed) {
   addDefaultFleets(state_);
 }
 
-bool CampaignSession::issueAssignTask(FleetId fleet, double costHours) {
+bool CampaignSession::issueAssignTask(FleetId fleet, double costHours, NodeId origin) {
   Command command;
   command.type = CommandType::AssignTask;
   command.fleet = fleet;
   command.properTimeCostSec = costHours * K_SECONDS_PER_HOUR;
+  command.originNode = origin;
   return state_.issueCommand(command);
 }
 
 bool CampaignSession::issuePlaceFleet(FleetId fleet, int targetBand, OrbitLane lane,
-                                      StationKeeping station) {
+                                      StationKeeping station, NodeId origin) {
   Command command;
   command.type = CommandType::PlaceFleet;
   command.fleet = fleet;
   command.targetBand = targetBand;
   command.lane = lane;
   command.station = station;
+  command.originNode = origin;
   return state_.issueCommand(command);
 }
 

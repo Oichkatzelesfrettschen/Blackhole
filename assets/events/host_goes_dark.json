@@ -1,0 +1,84 @@
+{
+  "params": {
+    "packet_period": 91,
+    "dark_turn": {"min": 3650, "max": 10950}
+  },
+  "tech_tiers": [
+    {"points": 1, "name": "Signal lock"},
+    {"points": 4, "name": "Archive index"},
+    {"points": 12, "name": "Compact fusion"},
+    {"points": 36, "name": "Tidal shielding"},
+    {"points": 100, "name": "Horizon engineering"}
+  ],
+  "events": [
+    {
+      "id": 1,
+      "name": "host_dark",
+      "source": "host",
+      "mode": "once",
+      "category": "collapse",
+      "text": "The host civilization falls silent.",
+      "triggers": [{"turn_at_least": "dark_turn"}],
+      "effects": [{"set_flag": "dark"}]
+    },
+    {
+      "id": 2,
+      "name": "host_stream_opens",
+      "source": "host",
+      "mode": "once",
+      "category": "tech",
+      "text": "The host opens its technical archive to the colony: one packet every cadence.",
+      "triggers": [{"turn_at_least": 1}],
+      "effects": [
+        {"emit": {"kind": "notice", "to": "colony"}},
+        {"emit": {"kind": "tech_packet", "to": "colony", "points": 1}},
+        {"schedule": {"event": 3, "delay_turns": "packet_period"}}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "host_tech_packet",
+      "source": "host",
+      "mode": "scheduled",
+      "category": "tech",
+      "text": "A technology packet from the host.",
+      "effects": [
+        {"emit": {"kind": "tech_packet", "to": "colony", "points": 1}},
+        {"schedule": {"event": 3, "delay_turns": "packet_period"}}
+      ]
+    },
+    {
+      "id": 10,
+      "name": "host_silent",
+      "source": "colony",
+      "mode": "once",
+      "category": "silence",
+      "text": "The expected packet from the host is overdue. The host is silent.",
+      "triggers": [
+        {"received": {"kind": "tech_packet", "from": "host",
+                      "silent_turns_at_least": {"param": "packet_period", "times": 1, "plus": 30}}}
+      ],
+      "effects": [
+        {"set_flag": "host_silent"},
+        {"emit": {"kind": "notice", "to": "colony"}}
+      ]
+    },
+    {
+      "id": 11,
+      "name": "host_presumed_dark",
+      "source": "colony",
+      "mode": "once",
+      "category": "collapse",
+      "text": "Three packets missed. The colony presumes the host has gone dark.",
+      "triggers": [
+        {"flag_set": "host_silent"},
+        {"received": {"kind": "tech_packet", "from": "host",
+                      "silent_turns_at_least": {"param": "packet_period", "times": 3, "plus": 30}}}
+      ],
+      "effects": [
+        {"set_flag": "host_presumed_dark"},
+        {"emit": {"kind": "notice", "to": "colony"}}
+      ]
+    }
+  ]
+}

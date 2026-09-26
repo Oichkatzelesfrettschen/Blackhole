@@ -20,12 +20,18 @@
 #define BLACKHOLE_GAME_CAMPAIGN_H
 
 #include <array>
+#include <cstddef>
+#include <map>
 #include <cstdint>
+#include <optional>
+#include <string_view>
 #include <vector>
 
 #include "game/campaign_view.h"
 #include "game/command.h"
+#include "game/event.h"
 #include "game/fleet.h"
+#include "game/station_node.h"
 #include "game/task_graph.h"
 #include "game/temporal_clock.h"
 #include "game/time_field.h"
@@ -119,6 +125,15 @@ struct CampaignConfig {
   // sacrifices energy (containmentYieldRetention), so which to chase is a genuine
   // choice of objective, not a dominated afterthought. Zero disables the path.
   double victoryStabilizationUnits = 0.0;      ///< Stabilization that wins the campaign outright; 0 = off.
+
+  // Colonies and the story. Each colony is a node (ids from
+  // K_FIRST_COLONY_NODE, in this order) with its own exact clock; the host is
+  // the authority node. The story's events run at those nodes. A tech tier is
+  // a scored axis: victoryTechTier wins outright once the host hears that a
+  // colony has reached it -- decided by light, like energy banked on arrival.
+  std::vector<ColonyConfig> colonies;
+  EventSet story;
+  std::int64_t victoryTechTier = 0; ///< Tech tier that wins the campaign; 0 = off.
 };
 
 class CampaignState {
@@ -129,6 +144,7 @@ public:
   CampaignState(CampaignConfig config, const TimeField &field);
 
   [[nodiscard]] bool valid() const { return valid_; }
+  [[nodiscard]] const CampaignConfig &config() const { return config_; }
 
   /** @brief Setup-phase fleet creation at the authority's direction; returns
    *         K_INVALID_FLEET_ID when bandIndex is out of range or the placement
@@ -154,6 +170,12 @@ public:
 
   [[nodiscard]] std::int64_t turn() const { return clock_.turn(); }
   [[nodiscard]] CampaignStatus status() const { return status_; }
+  /** @brief The deadline turn is reached. It depends only on the public
+   *         coordinate clock, so every station knows it: the outcome latch,
+   *         the order gate, and each perceived view read this one rule. */
+  [[nodiscard]] bool deadlinePassed() const {
+    return config_.deadlineTurn > 0 && clock_.turn() >= config_.deadlineTurn;
+  }
   [[nodiscard]] double energyUnits() const { return energyUnits_; }
   [[nodiscard]] double instability() const { return instability_; }
   [[nodiscard]] double stabilization() const { return stabilization_; }
@@ -163,11 +185,66 @@ public:
   [[nodiscard]] const TaskGraph &taskGraph() const { return taskGraph_; }
   [[nodiscard]] const std::vector<LoggedCommand> &commandLog() const { return commandLog_; }
   [[nodiscard]] const std::vector<IntelReport> &intelLog() const { return intelLog_; }
+  /** @brief The host (index 0) and every colony, indexed by NodeId. */
+  [[nodiscard]] const std::vector<StationNode> &nodes() const { return nodes_; }
+  /** @brief Every node-to-node delivery that has reached a live node, in
+   *         arrival order. */
+  [[nodiscard]] const std::vector<ArrivalRecord> &arrivals() const { return arrivals_; }
+  /** @brief Tech tier of a node: the number of story tiers its points meet. */
+  [[nodiscard]] std::int64_t techTier(NodeId node) const;
+  /** @brief Highest tech tier any colony holds -- the tech axis of the outcome. */
+  [[nodiscard]] std::int64_t colonyTechTier() const;
+  /** @brief Highest tech tier the host has heard any colony reach: the tier
+   *         stamped on each colony's latest signal to have landed at the host.
+   *         The tech victory is judged on this, so it latches only when the
+   *         news arrives. */
+  [[nodiscard]] std::int64_t hostKnownColonyTechTier() const;
+  /** @brief A story parameter's resolved value (seeded ones drawn from the
+   *         campaign seed); nullopt when the story has no such parameter. */
+  [[nodiscard]] std::optional<std::int64_t> storyParam(std::string_view name) const;
+  /** @brief Signal delay between two nodes in whole turns, as quantized at
+   *         emission. */
+  [[nodiscard]] std::int64_t nodeDelayTurns(NodeId from, NodeId to) const;
+  /** @brief Scheduled occurrences pending; never above K_MAX_PENDING_SCHEDULES. */
+  [[nodiscard]] std::size_t pendingScheduleCount() const { return scheduledEvents_.size(); }
+  /** @brief Schedule effects refused because the pending set was full. */
+  [[nodiscard]] std::uint64_t refusedScheduleCount() const { return refusedSchedules_; }
 
   /** @brief Immutable render-facing view for the UI layer: plain values, no
    *         pointers into campaign storage. The VIEW contract; grows per UI
    *         slice independently of serializeState(). */
   [[nodiscard]] CampaignViewSnapshot renderSnapshot() const;
+
+  /** @brief The view as one station knows it; renderSnapshot() is the
+   *         referee view (every station's true state), for tests, balance
+   *         harnesses, and debugging, and the panels never draw it. Every
+   *         remote station appears only as its latest-emitted arrival here
+   *         stamped it -- clock, tech points, and (for the host) banked
+   *         energy, with the emission turn; never its darkness -- and only
+   *         arrivals addressed to the viewer and signals it sent are kept.
+   *         The authority keeps its own ledger, intel, and fleets. A colony
+   *         additionally has no host intel, reports, disturbance, or outcome,
+   *         only its own orders, and fleets without telemetry placed only
+   *         where it last ordered them (from the order's effect turn, whether
+   *         or not it fizzled). */
+  [[nodiscard]] CampaignViewSnapshot perceivedSnapshot(NodeId observer) const;
+
+  /** @brief What a station believes of one of its own orders: the turn it
+   *         estimates the order acts (from where it believes the fleet was at
+   *         issue), or none when it could not place the fleet; and, for a
+   *         placement, the turn from which it takes the fleet to be at the
+   *         target -- the estimate, or the latest possible arrival over every
+   *         band when there is none. */
+  struct OrderBelief {
+    std::optional<std::int64_t> estimatedEffectTurn;
+    std::int64_t believedFromTurn = 0;
+    /// Turn the fleet's fizzle notice for this order reached the station.
+    std::optional<std::int64_t> fizzleKnownTurn;
+    /** @brief True once the station knows by `turn` that the order fizzled. */
+    [[nodiscard]] bool fizzledBy(std::int64_t turn) const {
+      return fizzleKnownTurn.has_value() && *fizzleKnownTurn <= turn;
+    }
+  };
 
   /** @brief Deterministic field-by-field byte serialization of the full
    *         campaign state (explicit widths, -0.0 canonicalized, every double
@@ -187,6 +264,9 @@ private:
   enum class DeliveryKind : std::uint8_t {
     Command = 0,
     CompletionReport = 1,
+    ColonyReport = 2, ///< A colony's local-tick production, banked at the host.
+    TechPacket = 3,   ///< Story technology data between nodes.
+    EventNotice = 4,  ///< Story message between nodes.
   };
 
   struct Delivery {
@@ -199,7 +279,17 @@ private:
     FleetId fleet = K_INVALID_FLEET_ID;
     double yieldUnits = 0.0; ///< Fixed at completion (band + reliability then).
     bool corrupted = false;  ///< Source reliability was below the corruption threshold.
+    std::int64_t emitTurn = 0;            ///< Coordinate turn the signal left its sender.
+    NodeId sender = K_NO_NODE;            ///< Emitting node; K_NO_NODE for fleet reports.
+    NodeId destination = K_AUTHORITY_NODE; ///< Receiving node (fleet deliveries: unused).
+    std::int64_t senderProperSecAtEmit = 0; ///< Sender's whole local seconds at emission.
+    double senderEnergyUnitsAtEmit = 0.0; ///< Host's banked energy at emission (host senders).
+    std::int64_t senderTechPointsAtEmit = 0; ///< Sender's tech points at emission.
+    std::uint32_t payloadIndex = 0;       ///< Tech packet ordinal, or the notice's event id.
+    std::int64_t techPoints = 0;          ///< TechPacket payload.
+    EventCategory category = EventCategory::Info;
   };
+
 
   void evaluateOutcome();
   [[nodiscard]] double redeployFuelCost(int fromBand, int toBand) const;
@@ -235,7 +325,45 @@ private:
   [[nodiscard]] Fleet *findFleet(FleetId fleetId);
   [[nodiscard]] double bandRadiusCm(int bandIndex) const;
   void deliverDue();
-  void applyCommand(const LoggedCommand &logged);
+  void applyCommand(std::uint32_t commandIndex);
+  void receiveNodeDelivery(const Delivery &delivery);
+  /** @brief A fleet's reply that order `commandIndex` from `origin` fizzled
+   *         (not enough fuel on arrival), sent by light from the fleet's band;
+   *         its payloadIndex names the order. */
+  void emitFizzleNotice(const Fleet &fleet, NodeId origin, std::uint32_t commandIndex);
+  /** @brief Records a landed node delivery as the destination's latest word
+   *         from its sender, when it was emitted no earlier than the last. */
+  void noteSenderStamp(const Delivery &delivery);
+  void buildNodes();
+  void resolveStoryParams();
+  /** @brief Order, uniqueness, and range checks on the configured story. */
+  [[nodiscard]] bool storyWellFormed() const;
+  /** @brief An IntRef inside the documented range that evaluates without
+   *         overflow against the resolved parameters. */
+  [[nodiscard]] bool intRefValid(const IntRef &ref) const;
+  /** @brief Number of story tiers `points` meets. */
+  [[nodiscard]] std::int64_t tierForPoints(std::int64_t points) const;
+  [[nodiscard]] std::int64_t resolve(const IntRef &ref) const;
+  /** @brief Advances every node clock one turn and ships colony production. */
+  void advanceNodeClocks();
+  void evaluateStory();
+  /** @brief One occurrence of an event: fires when its source is live and
+   *         every trigger holds. */
+  void fireIfTriggered(std::size_t eventIndex);
+  [[nodiscard]] bool predicateHolds(const EventPredicate &predicate, const StationNode &node) const;
+  void applyEffect(const EventEffect &effect, const EventDef &event, StationNode &node);
+  void emitNodeDelivery(DeliveryKind kind, const StationNode &sender, NodeId destination,
+                        EventCategory category, std::uint32_t payloadIndex,
+                        std::int64_t techPoints, double yieldUnits);
+  [[nodiscard]] double nodeDelaySec(NodeId from, NodeId to) const;
+  void appendStoryState(std::vector<std::uint8_t> &out) const;
+  /** @brief Beliefs about every order `observer` sent, indexed like
+   *         commandLog_ (entries for other origins are left default). */
+  [[nodiscard]] std::vector<OrderBelief> orderBeliefs(NodeId observer) const;
+  /** @brief The delay a station can compute a priori: geodesic delay times
+   *         the configured coordination overhead, without the relay
+   *         reduction (relay positions are fleet telemetry). */
+  [[nodiscard]] double estimatedDelaySec(double fromRadiusCm, double toRadiusCm) const;
   void applyCapabilityEffects(const std::vector<CapabilityCompletion> &completions);
 
   CampaignConfig config_;
@@ -254,6 +382,16 @@ private:
   double stabilization_ = 0.0;   ///< Cumulative containment produced -- the stabilization score axis.
   std::int64_t clearedTurn_ = 0; ///< Turn the victory energy was first reached; 0 until then.
   CampaignStatus status_ = CampaignStatus::Ongoing;
+  std::vector<StationNode> nodes_;            ///< Host at index 0, then colonies.
+  std::vector<std::int64_t> storyParams_;     ///< Resolved story parameters, by index.
+  std::vector<std::uint8_t> eventFired_;      ///< Once-events that have fired, by index.
+  /// Pending scheduled occurrences keyed by due turn (event index as value),
+  /// equal turns in insertion order, so a turn touches only its due entries.
+  std::multimap<std::int64_t, std::uint32_t> scheduledEvents_;
+  std::uint64_t refusedSchedules_ = 0; ///< Schedule effects refused at K_MAX_PENDING_SCHEDULES.
+  std::vector<ArrivalRecord> arrivals_;
+  double energyLostToDarkness_ = 0.0;         ///< Colony production that reached a dark host.
+  double fleetYieldLostToDarkness_ = 0.0;     ///< Fleet completion yield that reached a dark host.
 };
 
 } // namespace game
