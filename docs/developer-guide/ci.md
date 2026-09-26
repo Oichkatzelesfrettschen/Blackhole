@@ -25,6 +25,7 @@ advisory, so its red result informs a review without blocking the merge.
 | Pull request and main push | `ci-clang-fast-math` | Advisory: `ci-clang` with fast-math, where clang's `-Wnan-infinity-disabled` rejects NaN and infinity classification GCC accepts |
 | Pull request and main push | `ci-sanitize` | Advisory: GCC 14 AddressSanitizer and UBSan build, CPU tests except label `gpu` |
 | Weekly schedule | Every preset above | Revalidate the default branch |
+| Weekly schedule and manual dispatch | `bench.yml`, `ci` preset | Advisory `physics_bench` run compared with `bench/baseline-ci.json`; JSON retained 90 days |
 | Manual dispatch | Selected preset | Replay any lane against a selected ref |
 
 The hosted CPU lanes establish compilation and executable CPU validation.

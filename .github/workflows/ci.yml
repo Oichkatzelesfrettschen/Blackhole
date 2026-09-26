@@ -108,7 +108,7 @@ jobs:
         run: |
           "$PYTHON" scripts/ci/test_check_lockfile.py
           shellcheck -S error scripts/build.sh scripts/ci/run_stage.sh scripts/conan_init.sh scripts/conan_install.sh \
-            scripts/ci/ci_replica.sh scripts/ci/cppcheck_ci.sh scripts/ci/tidy18.sh
+            scripts/ci/ci_replica.sh scripts/ci/cppcheck_ci.sh scripts/ci/tidy18.sh bench/ci_bench.sh
           "$PYTHON" -m ruff check scripts/ci/
           "$PYTHON" -m ruff format --check scripts/ci/
       - name: Verify ASCII-only living docs

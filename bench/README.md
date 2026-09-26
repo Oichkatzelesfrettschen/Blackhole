@@ -269,24 +269,37 @@ GPU Fragment (1024x1024),18.1,19.7,21.4,1.2,53300000,N/A
 
 ## Continuous Integration
 
-`bench/ci_bench.sh` builds the riced preset, runs the CPU benchmark
-(plus GPU when a display exists), and gates on the recorded baseline via
-`scripts/check_bench_regression.py`. The checker reads the actual
-physics_bench JSON schema (top-level `results` array keyed by `name`
-with `avg_ms`) and fails on any entry more than 5% slower than the
-baseline.
+`bench/ci_bench.sh` builds `physics_bench` for `BENCH_PRESET` (`riced` by
+default, or `ci`), runs the CPU benchmark (plus GPU when a display exists) into
+`build/bench/`, and compares the JSON with `bench/baseline-$BENCH_PRESET.json`
+through `scripts/check_bench_regression.py`. The checker reads the
+physics_bench schema (top-level `results` array keyed by `name` with `avg_ms`)
+and fails on any entry more than 5% slower than the baseline. A missing
+baseline exits 2 unless `BENCH_ALLOW_MISSING=1`.
+
+`riced` is a Debug build with Tracy instrumentation whose binary lands in
+`build/Riced/Debug`. Its dependency graph needs `tracy/0.13.1`, which
+`conan.lock` does not pin, so the script prints the unlocked install command
+instead of running it, and no `riced` baseline is committed: Debug timings with
+profiling hooks measure the instrumentation more than the physics.
+
+`.github/workflows/bench.yml` runs `BENCH_PRESET=ci` weekly and on manual
+dispatch, never per pull request, over the locked GCC 14 dependency graph. A
+regression marks only its compare step failed, and the job uploads the JSON for
+90 days. `bench/baseline-ci.json` is advisory: its `provenance` object records
+the workstation, compiler, preset, and date that produced it, and a hosted
+runner's absolute timings differ from that host by hardware alone, so the
+uploaded series is the trend to read.
 
 ```bash
-# run the full gate
-./bench/ci_bench.sh
+# run the comparison
+BENCH_PRESET=ci ./bench/ci_bench.sh
 
-# record a new baseline after an accepted performance change
-python3 scripts/check_bench_regression.py --record bench_cpu.json
+# record a new baseline on a quiet host after an accepted performance change
+"$PYTHON" scripts/check_bench_regression.py --baseline bench/baseline-ci.json \
+  --record --provenance "compiler: $(g++-14 --version | head -1)" \
+  --provenance "preset: ci" build/bench/bench_cpu.json
 ```
-
-A missing baseline is an explicit condition: the checker exits 2 unless
-invoked with `--allow-missing` (which ci_bench.sh passes so the
-first-ever run stays green while printing the record instruction).
 
 ---
 
