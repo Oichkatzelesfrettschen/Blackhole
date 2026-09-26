@@ -335,3 +335,33 @@ TEST(PerceivedView, ColonyOrderStaysListedUntilItsOwnEstimate) {
   ASSERT_TRUE(view.effectTurnKnown);
   EXPECT_GT(view.effectTurn, state.turn());
 }
+
+// Falsifier: an order the fleet has already reported as fizzled still listed
+// as in flight until the colony's own (later) estimate of its landing.
+TEST(PerceivedView, FizzledOrderLeavesTheInFlightList) {
+  game::CampaignSession session(3, shippedStory(), game::K_MILLER_BAND);
+  game::CampaignState &state = session.state();
+  for (int hop = 0; hop < 5; ++hop) {
+    ASSERT_TRUE(session.issuePlaceFleet(K_SURVEY_FLEET,
+                                        hop % 2 == 0 ? game::K_MILLER_BAND : game::K_SURVEY_BAND,
+                                        game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                        game::K_AUTHORITY_NODE));
+    state.advanceTurns(state.commandLog().back().effectTurn - state.turn());
+  }
+  // The colony, which has never placed the fleet, expects its order to take
+  // up to the longest delay; the fleet (on Miller's band, beside the colony)
+  // fizzles it next turn and the reply lands that turn.
+  ASSERT_TRUE(session.issuePlaceFleet(K_SURVEY_FLEET, game::K_SURVEY_BAND,
+                                      game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                      game::K_FIRST_COLONY_NODE));
+  const std::size_t orderIndex = state.commandLog().size() - 1;
+  state.advanceTurns(2);
+  const auto fizzle = std::ranges::find_if(state.arrivals(), [](const game::ArrivalRecord &arrival) {
+    return arrival.sender == game::K_NO_NODE;
+  });
+  ASSERT_NE(fizzle, state.arrivals().end());
+  const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  EXPECT_TRUE(std::ranges::none_of(colony.ordersInFlight, [orderIndex](const auto &order) {
+    return order.logIndex == orderIndex;
+  }));
+}

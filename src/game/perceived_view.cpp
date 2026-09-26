@@ -58,10 +58,14 @@ std::vector<CampaignState::OrderBelief> CampaignState::orderBeliefs(NodeId obser
   }
   const double originCm = nodes_.at(observer).radiusCm;
   // The longest the order could take to reach a fleet on any band.
+  // Only station bands count: a band at or inside the horizon holds no fleet,
+  // and a field need not answer a delay query for it.
   const std::int64_t worstTurns = std::accumulate(
       config_.bandRadiusCm.begin(), config_.bandRadiusCm.end(), std::int64_t{1},
       [&](std::int64_t worst, double bandCm) {
-        return std::max(worst, clock_.ceilTurns(estimatedDelaySec(originCm, bandCm)));
+        return field_->isValidStationRadius(bandCm)
+                   ? std::max(worst, clock_.ceilTurns(estimatedDelaySec(originCm, bandCm)))
+                   : worst;
       });
   // Where the observer believes a fleet is at `turn`: the target of its latest
   // placement believed complete by then.
@@ -172,7 +176,10 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   for (std::size_t index = 0; index < commandLog_.size(); ++index) {
     const LoggedCommand &logged = commandLog_.at(index);
     const OrderBelief &belief = beliefs.at(index);
-    if (logged.command.originNode != observer || belief.believedFromTurn <= now) {
+    // An order leaves the list when the station believes it landed, or when
+    // the fleet's fizzle reply has reached it -- which reveals only the reply.
+    if (logged.command.originNode != observer || belief.believedFromTurn <= now ||
+        belief.fizzledBy(now)) {
       continue;
     }
     OrderInFlightView order;

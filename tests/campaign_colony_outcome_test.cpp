@@ -287,3 +287,49 @@ TEST(ColonyOutcome, OutOfRangeObserverIsRefused) {
   config.authorityObserver = std::bit_cast<game::Observer>(std::uint8_t{7});
   EXPECT_FALSE(game::CampaignState(config, field).valid());
 }
+
+namespace {
+
+/** @brief The fake field with a horizon at 950, counting every delay query
+ *         made with a radius that is not a valid station. */
+class CountingField final : public game::TimeField {
+public:
+  [[nodiscard]] double properTimeRate(double radiusCm, game::Observer /*observer*/) const override {
+    return radiusCm < 970.0 ? 0.1 : 1.0;
+  }
+  [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override {
+    if (!isValidStationRadius(fromRadiusCm) || !isValidStationRadius(toRadiusCm)) {
+      ++invalidQueries;
+    }
+    return std::fabs(toRadiusCm - fromRadiusCm);
+  }
+  [[nodiscard]] bool isValidStationRadius(double radiusCm) const override {
+    return std::isfinite(radiusCm) && radiusCm > 950.0;
+  }
+  mutable int invalidQueries = 0;
+};
+
+} // namespace
+
+// Falsifier: a colony's view querying a signal delay for a band at or inside
+// the horizon -- such bands stay in the config for the map but are no
+// station, and a Kerr field asserts on them -- when it estimates the longest
+// possible order delay.
+TEST(ColonyOutcome, ColonyViewSkipsForbiddenBands) {
+  const CountingField field;
+  game::CampaignConfig config = colonyConfig(R"({})", 0);
+  config.bandRadiusCm = {900.0, 995.0}; // band 0 is inside the horizon
+  game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
+  game::Command order;
+  order.type = game::CommandType::AssignTask;
+  order.fleet = fleet;
+  order.properTimeCostSec = 3600.0;
+  order.originNode = game::K_FIRST_COLONY_NODE;
+  ASSERT_TRUE(state.issueCommand(order));
+  field.invalidQueries = 0;
+  const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  EXPECT_EQ(field.invalidQueries, 0);
+  EXPECT_EQ(colony.ordersInFlight.size(), 1U);
+}
