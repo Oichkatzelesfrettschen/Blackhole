@@ -700,30 +700,52 @@ TEST(EventPredicates, RangeDependentBoundsHoldForEverySeed) {
   }
 }
 
-// Falsifier: loading a large story being quadratic in its event count -- a
-// linear search per schedule target (about 2e10 comparisons for this
-// 200,000-event cycle), or a parse callback that rescans the event array at
-// every object end; it must load, as a Bounded simple cycle, in well under
-// ten seconds.
-TEST(EventLoader, LargeStoryLoadsThroughTheJsonPath) {
-  constexpr int kEvents = 200000;
+namespace {
+
+/** @brief A scheduled-event cycle of @p events ids, each scheduling the next. */
+std::string cycleStoryJson(int events) {
   std::string json = R"({"events": [)";
-  json.reserve(static_cast<std::size_t>(kEvents) * 110);
-  for (int index = 0; index < kEvents; ++index) {
+  json.reserve(static_cast<std::size_t>(events) * 110);
+  for (int index = 0; index < events; ++index) {
     const int id = index + 1;
-    const int next = index + 1 == kEvents ? 1 : id + 1;
+    const int next = index + 1 == events ? 1 : id + 1;
     json += (index > 0 ? ", " : "") + std::string(R"({"id": )") + std::to_string(id) +
             R"(, "mode": "scheduled", "effects": [{"schedule": {"event": )" +
             std::to_string(next) + R"(, "delay_turns": 1}}]})";
   }
   json += "]}";
-  const auto started = std::chrono::steady_clock::now();
-  const game::EventLoadResult loaded = game::parseEventSet(json);
-  const double seconds =
-      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-  ASSERT_TRUE(loaded.ok()) << loaded.error;
-  EXPECT_EQ(loaded.story.events.size(), static_cast<std::size_t>(kEvents));
-  EXPECT_EQ(game::scheduleGrowth(loaded.story), game::ScheduleGrowth::Bounded);
-  RecordProperty("load_seconds", std::to_string(seconds));
-  EXPECT_LT(seconds, 10.0); // about 0.7 s here; the quadratic paths took over 20 s
+  return json;
+}
+
+/** @brief Fastest of three loads of @p json, in seconds. */
+double fastestLoadSeconds(const std::string &json, std::size_t expectedEvents) {
+  double best = 0.0;
+  for (int trial = 0; trial < 3; ++trial) {
+    const auto started = std::chrono::steady_clock::now();
+    const game::EventLoadResult loaded = game::parseEventSet(json);
+    const double seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    EXPECT_TRUE(loaded.ok()) << loaded.error;
+    EXPECT_EQ(loaded.story.events.size(), expectedEvents);
+    EXPECT_EQ(game::scheduleGrowth(loaded.story), game::ScheduleGrowth::Bounded);
+    best = trial == 0 ? seconds : std::min(best, seconds);
+  }
+  return best;
+}
+
+} // namespace
+
+// Falsifier: loading a story being quadratic in its event count -- a linear
+// search per schedule target, or a parse callback that rescans the event
+// array at every object end. Quadrupling the event count must cost well under
+// the 16x a quadratic path pays; the ratio holds under sanitizers, where
+// absolute times do not.
+TEST(EventLoader, LargeStoryLoadsThroughTheJsonPath) {
+  constexpr int kSmall = 12500;
+  constexpr int kLarge = 4 * kSmall;
+  const double small = fastestLoadSeconds(cycleStoryJson(kSmall), kSmall);
+  const double large = fastestLoadSeconds(cycleStoryJson(kLarge), kLarge);
+  RecordProperty("load_seconds_small", std::to_string(small));
+  RecordProperty("load_seconds_large", std::to_string(large));
+  EXPECT_LT(large, 8.0 * small) << "small " << small << " s, large " << large << " s";
 }
