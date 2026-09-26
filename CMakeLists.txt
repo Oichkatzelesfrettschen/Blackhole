@@ -5857,6 +5857,32 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # FP32 RK4 roundoff: plain vs Kahan-compensated state accumulation.
+  # The compensation needs value-safe floating point (no -fassociative-math).
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/compensated_rk4_test.cpp")
+    add_executable(compensated_rk4_test
+      "${PROJECT_SOURCE_DIR}/tests/compensated_rk4_test.cpp"
+    )
+    target_include_directories(compensated_rk4_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(compensated_rk4_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(compensated_rk4_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME compensated_rk4_validation COMMAND compensated_rk4_test)
+    set_tests_properties(compensated_rk4_validation PROPERTIES
+      LABELS "physics;integrator;precision"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(compensated_rk4_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Elliptic integrals validation (Carlson, Jacobi, lensing)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/elliptic_integrals_test.cpp")
     add_executable(elliptic_integrals_test

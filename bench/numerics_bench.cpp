@@ -11,11 +11,17 @@
  *             (promote_double<false>), plus rAnalytic end to end.
  *   carlson - R_F, R_D, R_J by duplication with Carlson's 1995 stopping rule
  *             against Boost.Math ellint_rf/rd/rj under AnalyticKerrPolicy.
+ *   kahan   - FP32 RK4 photon orbit, plain against Kahan-compensated state
+ *             accumulation: cost per step and roundoff against the double run.
  *
  * Every timing is the minimum over five repetitions of a fixed deterministic
  * workload; the header line records the compiler and library versions. Run
  * pinned for stable numbers: taskset -c 3 ./build/Release/numerics_bench
  */
+
+#ifdef __FAST_MATH__
+#error "numerics_bench measures IEEE numerics; -ffast-math folds the Kahan compensation"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -37,6 +43,7 @@
 #include <boost/version.hpp>
 
 #include "analytic_kerr_geodesic.h"
+#include "compensated_rk4.h"
 #include "elliptic_integrals.h"
 #include "stokes_exact.h"
 #include "stokes_transport.h"
@@ -269,6 +276,56 @@ void benchCarlson() {
   std::printf("max rel diff vs promoted Boost %.2e\n", worst);
 }
 
+// ---------------------------------------------------------------------------
+// Compensated FP32 RK4
+// ---------------------------------------------------------------------------
+
+template <typename T, physics::Rk4Accumulation Mode>
+std::array<T, 6> photonOrbit(double b, double h, int steps, double x0) {
+  const std::array<T, 6> y0 = {static_cast<T>(x0), static_cast<T>(b), T(0), T(-1), T(0), T(0)};
+  const T h2 = static_cast<T>(b * b);
+  physics::Rk4Integrator<T, 6, Mode> rk(y0);
+  for (int i = 0; i < steps; ++i) {
+    rk.step([&](const std::array<T, 6> &s) { return physics::schwarzschildPhotonRhs(s, T(1), h2); },
+            static_cast<T>(h));
+  }
+  return rk.state();
+}
+
+void benchKahan() {
+  std::printf(
+      "\n[kahan] FP32 RK4, Schwarzschild photon r_s = 1 from x = 30 over affine length 60\n");
+  std::printf("%4s %6s %7s %12s %12s %10s %12s %12s\n", "b", "h", "steps", "plain ns", "comp ns",
+              "cost", "plain err", "comp err");
+  using physics::Rk4Accumulation;
+  for (const double b : {3.5, 2.7}) {
+    for (const double h : {0.05, 0.01, 0.002}) {
+      const int steps = static_cast<int>(std::lround(60.0 / h));
+      const auto ref = photonOrbit<double, Rk4Accumulation::Plain>(b, h, steps, 30.0);
+      auto err = [&](const std::array<float, 6> &s) {
+        const double dx = static_cast<double>(s[0]) - ref[0];
+        const double dy = static_cast<double>(s[1]) - ref[1];
+        return std::sqrt((dx * dx) + (dy * dy)) / std::sqrt((ref[0] * ref[0]) + (ref[1] * ref[1]));
+      };
+      const double plainErr = err(photonOrbit<float, Rk4Accumulation::Plain>(b, h, steps, 30.0));
+      const double compErr =
+          err(photonOrbit<float, Rk4Accumulation::Compensated>(b, h, steps, 30.0));
+      constexpr std::size_t rays = 16;
+      const int reps = std::max(1, 400000 / steps);
+      const double plainNs = nsPerCall(rays, reps, [&](std::size_t i) {
+        return static_cast<double>(photonOrbit<float, Rk4Accumulation::Plain>(
+            b, h, steps, 30.0 + (1.0e-3 * static_cast<double>(i)))[0]);
+      });
+      const double compNs = nsPerCall(rays, reps, [&](std::size_t i) {
+        return static_cast<double>(photonOrbit<float, Rk4Accumulation::Compensated>(
+            b, h, steps, 30.0 + (1.0e-3 * static_cast<double>(i)))[0]);
+      });
+      std::printf("%4.1f %6g %7d %12.2f %12.2f %9.2fx %12.2e %12.2e\n", b, h, steps,
+                  plainNs / steps, compNs / steps, compNs / plainNs, plainErr, compErr);
+    }
+  }
+}
+
 } // namespace
 
 int main() try {
@@ -277,6 +334,7 @@ int main() try {
   benchStokes();
   benchBoostPolicy();
   benchCarlson();
+  benchKahan();
   std::printf("\nsink %.3e\n", gSink);
   return 0;
 } catch (const std::exception &error) {
