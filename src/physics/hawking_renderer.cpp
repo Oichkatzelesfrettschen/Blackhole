@@ -11,6 +11,7 @@
  */
 
 #include "hawking_renderer.h"
+#include "hawking_uniforms.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -327,19 +328,19 @@ bool HawkingRenderer::loadLUTs(const std::filesystem::path &lutDirectory) {
 
 void HawkingRenderer::setShaderUniforms(GLuint shaderProgram, double blackHoleMass,
                                         const HawkingGlowParams &params) const {
-  if (!isReady()) {
-    std::cerr << "Hawking LUTs not loaded, cannot set uniforms" << '\n';
+  // The scalars reach the program whether or not the LUTs loaded: the direct
+  // Planck path needs no texture (hawkingUniformValues).
+  const HawkingUniformValues values =
+      hawkingUniformValues(params.enabled, params.tempScale, params.intensity, params.useLUTs,
+                           blackHoleMass, isReady());
+  glUniform1f(glGetUniformLocation(shaderProgram, "hawkingGlowEnabled"), values.enabled);
+  glUniform1f(glGetUniformLocation(shaderProgram, "hawkingTempScale"), values.tempScale);
+  glUniform1f(glGetUniformLocation(shaderProgram, "hawkingGlowIntensity"), values.intensity);
+  glUniform1f(glGetUniformLocation(shaderProgram, "useHawkingLUTs"), values.useLUTs);
+  glUniform1f(glGetUniformLocation(shaderProgram, "blackHoleMass"), values.blackHoleMass);
+  if (!values.bindLUTTextures) {
     return;
   }
-
-  // Set scalar uniforms
-  glUniform1f(glGetUniformLocation(shaderProgram, "hawkingGlowEnabled"),
-              params.enabled ? 1.0f : 0.0f);
-  glUniform1f(glGetUniformLocation(shaderProgram, "hawkingTempScale"), params.tempScale);
-  glUniform1f(glGetUniformLocation(shaderProgram, "hawkingGlowIntensity"), params.intensity);
-  glUniform1f(glGetUniformLocation(shaderProgram, "useHawkingLUTs"), params.useLUTs ? 1.0f : 0.0f);
-  glUniform1f(glGetUniformLocation(shaderProgram, "blackHoleMass"),
-              static_cast<float>(blackHoleMass));
 
   // Bind LUT textures to texture units
   // Temperature LUT -> texture unit 10

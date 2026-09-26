@@ -360,8 +360,24 @@ void renderPhysicsSettings(RenderState &rs) {
 
   // Black hole mass in solar masses (scaled for visualization)
   ImGui::SliderFloat("blackHoleMass", &rs.physicsCore.blackHoleMass, 0.1f, 10.0f);
-  // Kerr spin parameter a (|a|<M)
-  ImGui::SliderFloat("kerrSpin(a/M)", &rs.physicsCore.kerrSpin, -0.99f, 0.99f);
+  // Kerr spin a/M up to Thorne's 0.998 limit for an accreting hole
+  // (Thorne 1974). Positive spin rotates counterclockwise about +z, the axis
+  // the ray tracer uses as the spin axis.
+  ImGui::SliderFloat("kerrSpin(a/M)", &rs.physicsCore.kerrSpin, -0.998f, 0.998f, "%.3f");
+  if (ImGui::Button("Gargantua render spin (a = 0.6)")) {
+    rs.physicsCore.kerrSpin = 0.6f;
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("Interstellar rendered Gargantua at a/M = 0.6 for visual reasons;\n"
+                      "its time dilation requires 1 - a/M ~ 1e-14 (James et al. 2015,\n"
+                      "arXiv:1502.03808). The campaign clocks use the physics spin.");
+  }
+
+  ImGui::Checkbox("Physical Kerr ray tracer", &rs.physicsCore.physicalRayTracer);
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("On: trace Kerr null geodesics (Carter constants, Mino-time leapfrog).\n"
+                      "Off: legacy artistic tracer (Schwarzschild bending, spin shown by tint).");
+  }
 
   // Physics visualization toggles
   ImGui::Checkbox("enablePhotonSphere", &rs.physicsCore.enablePhotonSphere);

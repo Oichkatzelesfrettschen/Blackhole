@@ -8,6 +8,8 @@
  * - Inverse mass relationship: T_H ~ 1/M
  * - Edge cases (zero/negative mass)
  * - Formula consistency
+ * - Uniform values without LUTs: the glow switch, scale, intensity, and mass
+ *   reach the program and the direct Planck path is selected
  *
  * Phase 10.1: Hawking Radiation Thermal Glow
  * Created: 2026-01-02
@@ -15,6 +17,7 @@
 
 #include "physics/constants.h"
 #include "physics/hawking.h"
+#include "physics/hawking_uniforms.h"
 #include "physics/safe_limits.h"
 
 #include <algorithm>
@@ -144,6 +147,35 @@ int testFormulaConsistency() {
   return 0;
 }
 
+/**
+ * @brief Test 6: Hawking uniforms do not wait for the LUTs.
+ *
+ * Without loaded LUTs the direct Planck path (useHawkingLUTs = 0) still
+ * renders the glow, so hawkingUniformValues must pass the switch, scale,
+ * intensity, and mass through, select the direct path even when LUTs were
+ * requested, and bind no LUT texture; with LUTs loaded the request stands.
+ */
+int testUniformValuesWithoutLUTs() {
+  std::cout << "Test 6: Hawking uniforms without loaded LUTs\n";
+  const physics::HawkingUniformValues absent =
+      physics::hawkingUniformValues(true, 1.0e6f, 2.5f, true, 5.0e14, false);
+  const physics::HawkingUniformValues loaded =
+      physics::hawkingUniformValues(true, 1.0e6f, 2.5f, true, 5.0e14, true);
+  const physics::HawkingUniformValues direct =
+      physics::hawkingUniformValues(true, 1.0e6f, 2.5f, false, 5.0e14, true);
+  const bool ok = absent.enabled == 1.0f && absent.tempScale == 1.0e6f &&
+                  absent.intensity == 2.5f && absent.blackHoleMass == 5.0e14f &&
+                  absent.useLUTs == 0.0f && !absent.bindLUTTextures &&
+                  loaded.useLUTs == 1.0f && loaded.bindLUTTextures && direct.useLUTs == 0.0f &&
+                  physics::hawkingUniformValues(false, 1.0f, 1.0f, false, 1.0, false).enabled == 0.0f;
+  if (!ok) {
+    std::cerr << "  FAIL: Hawking uniform values depend on LUT readiness beyond useLUTs\n";
+    return 1;
+  }
+  std::cout << "  PASS: scalars pass through; LUT path only with loaded LUTs\n";
+  return 0;
+}
+
 } // namespace
 
 int main() {
@@ -156,6 +188,7 @@ int main() {
   result |= testPrimordialTemperature();
   result |= testEdgeCases();
   result |= testFormulaConsistency();
+  result |= testUniformValuesWithoutLUTs();
 
   std::cout << "\n";
   if (result == 0) {

@@ -22,6 +22,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "physics/constants.h"
+#include "physics/hawking_uniforms.h"
 #include "render/interop_uniform_registry.h"
 #include "render/uniform_binding.h"
 
@@ -34,8 +35,7 @@ using namespace gl;
 namespace blackhole {
 
 void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &interop,
-                          bool parityMode, bool hawkingEnabled, float hawkingTempScale,
-                          float hawkingIntensity, bool hawkingUseLUTs, double blackHoleMass) {
+                          bool parityMode, const physics::HawkingUniformValues &hawking) {
   // Registry-driven float uniforms: one row in
   // interop_uniform_registry.h writes the struct field, this map entry,
   // and the compute-path call below.
@@ -53,11 +53,11 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   rtti.floatUniforms["interopParityMode"] = parityMode ? 1.0f : 0.0f;
 
   // Hawking radiation uniforms
-  rtti.floatUniforms["hawkingGlowEnabled"] = hawkingEnabled ? 1.0f : 0.0f;
-  rtti.floatUniforms["hawkingTempScale"] = hawkingTempScale;
-  rtti.floatUniforms["hawkingGlowIntensity"] = hawkingIntensity;
-  rtti.floatUniforms["useHawkingLUTs"] = hawkingUseLUTs ? 1.0f : 0.0f;
-  rtti.floatUniforms["blackHoleMass"] = static_cast<float>(blackHoleMass);
+  rtti.floatUniforms["hawkingGlowEnabled"] = hawking.enabled;
+  rtti.floatUniforms["hawkingTempScale"] = hawking.tempScale;
+  rtti.floatUniforms["hawkingGlowIntensity"] = hawking.intensity;
+  rtti.floatUniforms["useHawkingLUTs"] = hawking.useLUTs;
+  rtti.floatUniforms["blackHoleMass"] = hawking.blackHoleMass;
   // Wiregrid BL-coord overlay (task A2) -- filled by caller via wiregridEnabled flag
   // (wiregridEnabled/ShowErgo/GridScale are set in the render loop after this call)
 }
@@ -101,6 +101,12 @@ void bindComputeUniforms(GLuint program, const RenderState &rs, const FrameBindi
               rs.wiregrid.wiregridParams.scenePreserve);
   glUniform4f(glGetUniformLocation(program, "wiregridColor"),
               rs.wiregrid.wiregridColor.r, rs.wiregrid.wiregridColor.g, rs.wiregrid.wiregridColor.b, rs.wiregrid.wiregridColor.a);
+
+  // Scene toggles the interop traces honor (parity with fragment path)
+  glUniform1f(glGetUniformLocation(program, "gravitationalLensing"),
+              rs.disk.gravitationalLensing ? 1.0f : 0.0f);
+  glUniform1f(glGetUniformLocation(program, "renderBlackHole"),
+              rs.disk.renderBlackHole ? 1.0f : 0.0f);
 
   // D4: polarized Stokes IQUV (parity with fragment path)
   glUniform1f(glGetUniformLocation(program, "stokesEnabled"),
@@ -160,10 +166,6 @@ void bindComputeUniforms(GLuint program, const RenderState &rs, const FrameBindi
 
 void applyHawkingUniforms(GLuint program, const physics::HawkingRenderer &renderer, bool enabled,
                           float tempScale, float intensity, bool useLUTs, double blackHoleMass) {
-  if (!renderer.isReady()) {
-    return;
-  }
-
   physics::HawkingGlowParams params;
   params.enabled = enabled;
   params.tempScale = tempScale;
@@ -192,8 +194,16 @@ void bindFragmentUniforms(RenderToTextureInfo &rtti, const RenderState &rs,
 
   // Convert black hole mass to grams (CGS units for Hawking calculation)
   double const bhMassGrams = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
-  applyInteropUniforms(rtti, interop, in.compareActive, rs.hawking.hawkingGlowEnabled, rs.hawking.hawkingTempScale,
-                       rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMassGrams);
+  // The interop branch of blackhole_main.frag is the physical Kerr tracer;
+  // compare mode forces it so fragment and compute trace the same geodesics.
+  bool const physicalFragmentPath = in.compareActive || rs.physicsCore.physicalRayTracer;
+  // Same Hawking values the compute path receives through
+  // HawkingRenderer::setShaderUniforms.
+  applyInteropUniforms(rtti, interop, physicalFragmentPath,
+                       physics::hawkingUniformValues(
+                           rs.hawking.hawkingGlowEnabled, rs.hawking.hawkingTempScale,
+                           rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMassGrams,
+                           rs.hawking.hawkingRenderer.isReady()));
 
   rtti.floatUniforms["wiregridEnabled"]   = rs.wiregrid.wiregridEnabled ? 1.0f : 0.0f;
   rtti.floatUniforms["wiregridShowErgo"]  = rs.wiregrid.wiregridParams.showErgosphere ? 1.0f : 0.0f;
@@ -241,7 +251,10 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.height = rs.targets.renderHeight;
   cp.adisk_enabled = in.adiskEnabledEffective ? 1 : 0;
   cp.redshift_enabled = in.enableRedshiftEffective ? 1 : 0;
-  cp.kerr_enabled = (fabsf(interop.kerrSpin) > 1e-6f) ? 1 : 0;
+  // The Kerr Mino-time integrator is exact at a = 0 (Schwarzschild), so the
+  // renderer uses it at every spin; kerr_enabled = 0 remains for kernels
+  // that test the Schwarzschild RK4 path.
+  cp.kerr_enabled = 1;
   cp.use_luts = (interop.useLUTs > 0.5f) ? 1 : 0;
   cp.lut_radius_min = interop.lutRadiusMin;
   cp.lut_radius_max = interop.lutRadiusMax;

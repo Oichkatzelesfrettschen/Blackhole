@@ -227,16 +227,23 @@ struct KerrConsts {
 /**
  * @brief Mutable state of a photon ray integrating through the Kerr metric.
  *
- * Coordinates are Boyer-Lindquist (r, theta, phi, t). The sign fields track
- * the current direction of motion in the potential wells for R(r) and Theta(theta).
+ * The radial motion carries vr = dr/dlambda through d^2r/dlambda^2 = R'(r)/2.
+ * The angular motion carries the unit direction n and its tangent velocity
+ * w = dn/dlambda without the frame-dragging part: in Mino time Carter's polar
+ * equation is a particle on the unit sphere with potential -a^2 E^2 n_z^2 / 2,
+ * so |w|^2 = Q + Lz^2 + a^2 E^2 n_z^2 and (n x w).z = Lz, with no 1/sin(theta)
+ * factor; rays cross the spin axis continuously. Frame dragging rotates n and
+ * w about z. Positions are r * n, whose azimuth is the ingoing Kerr-Schild
+ * azimuth, offset at the start to equal Boyer-Lindquist at infinity. Twin of
+ * KerrRay in shader/include/kerr.glsl.
  */
 struct KerrRay {
     float r;           /**< @brief Radial Boyer-Lindquist coordinate. */
-    float theta;       /**< @brief Polar angle (0 at north pole, pi at south pole). */
-    float phi;         /**< @brief Azimuthal angle; can accumulate large values near horizon. */
-    float t;           /**< @brief Coordinate time; grows monotonically along the ray. */
-    float sign_r;      /**< @brief Sign of dr/dlambda (+1 outgoing, -1 ingoing). */
-    float sign_theta;  /**< @brief Sign of dtheta/dlambda; flips at turning points. */
+    float t;           /**< @brief Coordinate time (ingoing Kerr-Schild). */
+    float vr;          /**< @brief dr/dlambda (Mino time); passes turning points continuously. */
+    float acc_r;       /**< @brief R'(r)/2, carried between leapfrog steps. */
+    float3 n;          /**< @brief Unit direction from the origin. */
+    float3 w;          /**< @brief dn/dlambda without frame dragging; tangent to the sphere. */
 };
 
 /**
@@ -299,46 +306,155 @@ __device__ __forceinline__ float3 d_kerr_to_cartesian(float r, float theta, floa
     return make_f3(r * sin_t * cos_p, r * sin_t * sin_p, r * cos_t);
 }
 
-/**
- * @brief Compute exact conserved quantities for a Kerr null geodesic.
- *
- * Projects the Cartesian direction `dir` onto Boyer-Lindquist coordinates,
- * solves the null condition g_mu_nu k^mu k^nu = 0 for k^t (future-directed
- * root), then reads off E = -k_t and Lz = k_phi from the covariant components.
- * Q is derived from the code convention:
- *   Theta = Q + a^2 cos^2(theta) - Lz^2/sin^2(theta) = (Sigma * k^theta)^2
- * Result is normalized to E = 1 to preserve existing step-size calibration.
- * Q can be negative for radial photons near the poles (e.g. Q = -a^2 at theta=0).
- *
- * WHY: the old flat-space approx (E=1, Q=|L|^2-Lz^2) gives R>0 for tangential
- * rays that have no radial component, producing incorrect geodesic paths.  The
- * exact formula yields the correct impact parameters b=Lz/E and q=Q/E^2.
- *
- * @param pos Camera position in Cartesian coordinates.
- * @param dir Normalized ray direction in Cartesian coordinates.
- * @param rs  Schwarzschild radius = 2M [geometric units].
- * @param a   Spin parameter [geometric units].
- * @return KerrConsts with E=1, Lz, and Q.
- */
-__device__ __forceinline__ KerrConsts d_kerr_init_consts(float3 pos, float3 dir,
-                                                          float rs, float a) {
-    KerrConsts c;
+/** @brief Cartesian position r * n of a Kerr ray. */
+__device__ __forceinline__ float3 d_kerr_ray_position(const KerrRay& ray) {
+    return make_f3(ray.r * ray.n.x, ray.r * ray.n.y, ray.r * ray.n.z);
+}
 
+/** @brief Rotation of v about +z by angle. */
+__device__ __forceinline__ float3 d_rotate_z(float3 v, float angle) {
+    float s, c;
+    sincosf(angle, &s, &c);
+    return make_f3(c * v.x - s * v.y, s * v.x + c * v.y, v.z);
+}
+
+/**
+ * @brief Ingoing Kerr-Schild azimuth offset F(r) = phi_KS - phi_BL along a ray.
+ *
+ * F(r) = a / (r+ - r-) ln((r - r+)/(r - r-)), F -> 0 at infinity (rs = 2M);
+ * zero at a = 0 and inside the outer horizon. Twin of kerrKsAzimuthOffset.
+ */
+__device__ __forceinline__ float d_kerr_ks_azimuth_offset(float r, float rs, float a) {
+    float M = 0.5f * rs;
+    float disc = M * M - a * a;
+    if (fabsf(a) < D_EPSILON || disc <= 0.0f) {
+        return 0.0f;
+    }
+    float root = sqrtf(disc);
+    float r_plus = M + root;
+    float r_minus = M - root;
+    if (r <= r_plus) {
+        return 0.0f;
+    }
+    return a / (r_plus - r_minus) * logf((r - r_plus) / (r - r_minus));
+}
+
+__device__ __forceinline__ float3 d_kerr_chart_position(float3 pos, float rs, float a) {
+    return d_rotate_z(pos, d_kerr_ks_azimuth_offset(d_length(pos), rs, a));
+}
+
+/**
+ * @brief Position pos in the chart the ray state lives in.
+ *
+ * d_kerr_init_geodesic rotates the state by the Kerr-Schild azimuth offset
+ * F(|pos|) (rs and a as passed to it), so every position along the ray is in
+ * this chart; the camera must be rotated alike before it is compared with
+ * one. Twin of kerrChartPosition in shader/include/kerr.glsl.
+ */
+__device__ __forceinline__ float3 d_kerr_chart_position(float3 pos, float rs, float a);
+
+/**
+ * @brief Spin passed to d_kerr_init_geodesic and d_kerr_step.
+ *
+ * The pixel gives the direction the arriving photon travelled from; its past
+ * history is the time reverse of its path. Time reversal t -> -t is an
+ * isometry from Kerr with spin a to Kerr with spin -a, so the arriving
+ * photon's past path is, point for point in (r, theta, phi), the future path
+ * of a photon emitted along the pixel direction in Kerr with spin -a. The
+ * physical photon's constants are E = c.E, Lz = -c.Lz, Q = c.Q. Twin of
+ * kerrTraceSpin in shader/include/kerr.glsl.
+ */
+__device__ __forceinline__ float d_kerr_trace_spin(float a) {
+    return -a;
+}
+
+/**
+ * @brief Boyer-Lindquist position of a point in the tracer's chart.
+ *
+ * Undoes d_kerr_chart_position: rotates by -F(|p|) with the Kerr-Schild
+ * offset of the traced (time-reversed) spin, so consumers defined on
+ * Boyer-Lindquist phi (wiregrid overlay, GRMHD data) read the azimuth the
+ * photon actually has there. Chart-space shading and depth keep the chart
+ * position. The Schwarzschild RK4 lane (d_kerr_enabled = 0) has no offset.
+ * Twin of bhChartToBoyerLindquist in shader/include/interop_trace.glsl.
+ */
+__device__ __forceinline__ float3 d_chart_to_boyer_lindquist(float3 p) {
+    if (d_kerr_enabled == 0) {
+        return p;
+    }
+    float const a_trace = d_kerr_trace_spin(0.5f * d_spin * d_rs);
+    return d_rotate_z(p, -d_kerr_ks_azimuth_offset(d_length(p), d_rs, a_trace));
+}
+
+/**
+ * @brief Radial acceleration R'(r)/2 = 2 r E P - (r - rs/2) Q_eff.
+ *
+ * P = (r^2+a^2)E - a Lz and Q_eff = Q + (Lz - aE)^2. Twin of
+ * kerrRadialAcceleration in shader/include/kerr.glsl.
+ */
+__device__ __forceinline__ float d_kerr_radial_acceleration(float r, float rs, float a,
+                                                            const KerrConsts& c) {
+    float P = fmaf(fmaf(r, r, a * a), c.E, -a * c.Lz);
+    float Lz_minus_aE = fmaf(-a, c.E, c.Lz);
+    float Q_eff = fmaf(Lz_minus_aE, Lz_minus_aE, c.Q);
+    return fmaf(2.0f * r * c.E, P, -(r - 0.5f * rs) * Q_eff);
+}
+
+/** @brief Tangential sphere acceleration from the -a^2 E^2 n_z^2 / 2 potential. */
+__device__ __forceinline__ float3 d_kerr_sphere_acceleration(float3 n, float a, const KerrConsts& c) {
+    float k = a * a * c.E * c.E * n.z;
+    return make_f3(-k * n.z * n.x, -k * n.z * n.y, k * (1.0f - n.z * n.z));
+}
+
+/** @brief On-shell angular speed sqrt(Q + Lz^2 + a^2 E^2 n_z^2). */
+__device__ __forceinline__ float d_kerr_angular_speed(float3 n, float a, const KerrConsts& c) {
+    return sqrtf(fmaxf(c.Q + c.Lz * c.Lz + a * a * c.E * c.E * n.z * n.z, 0.0f));
+}
+
+/**
+ * @brief Null geodesic (constants plus Mino state) through pos along dir.
+ *
+ * Projects the Cartesian direction onto Boyer-Lindquist coordinates, solves
+ * the null condition for the future root k^t, reads E = -k_t and Lz = k_phi,
+ * and normalizes to E = 1. Q is Carter's constant p_theta^2 - a^2 cos^2 +
+ * Lz^2 cot^2 with p_theta = Sigma k^theta / E, so R(r0) = vr^2 and
+ * |w|^2 = Q + Lz^2 + a^2 cos^2 at the start. The state starts rotated by the
+ * Kerr-Schild azimuth offset F(r0). Twin of kerrInitGeodesic in
+ * shader/include/kerr.glsl; physics::kerrNullGeodesicFromBL is the CPU
+ * reference pinned by tests/kerr_null_geodesic_test.cpp.
+ */
+__device__ __forceinline__ void d_kerr_init_geodesic(float3 pos, float3 dir, float rs, float a,
+                                                     KerrConsts& c, KerrRay& ray) {
     float r = d_length(pos);
+    ray.r = r;
+    ray.t = 0.0f;
+    c.E = 1.0f;
+    c.Lz = 0.0f;
+    c.Q = 0.0f;
+    ray.vr = 0.0f;
+    ray.acc_r = 0.0f;
+    ray.n = make_f3(0.0f, 0.0f, 1.0f);
+    ray.w = make_f3(0.0f, 0.0f, 0.0f);
     if (r < D_EPSILON) {
-        c.E = 1.0f; c.Lz = 0.0f; c.Q = 0.0f;
-        return c;
+        return;
     }
 
+    /* sin(theta) from the cylindrical radius: sqrt(1 - cos^2) cancels to zero
+     * or to a rounding residue near the axis in float32. */
     float inv_r = 1.0f / r;
     float cos_t = fminf(fmaxf(pos.z * inv_r, -1.0f), 1.0f);
-    float sin_t = sqrtf(fmaxf(1.0f - cos_t * cos_t, 0.0f));
+    float sin_t = fminf(sqrtf(fmaf(pos.x, pos.x, pos.y * pos.y)) * inv_r, 1.0f);
     float sin2  = sin_t * sin_t;
-    float phi   = atan2f(pos.y, pos.x);
+    /* On the axis the azimuth is free; choosing it along the transverse part
+     * of dir puts that part in e_theta, so k^theta = |dir_perp| / r carries it
+     * with k^phi = 0 and Lz = 0 (kerrInitGeodesic twin). */
+    bool const on_axis = sin_t <= D_EPSILON;
+    float const az_x = on_axis ? cos_t * dir.x : pos.x;
+    float const az_y = on_axis ? cos_t * dir.y : pos.y;
+    float phi = (fmaf(az_x, az_x, az_y * az_y) > 0.0f) ? atan2f(az_y, az_x) : 0.0f;
     float cos_p, sin_p;
     sincosf(phi, &sin_p, &cos_p);
 
-    /* Spherical basis at pos (same orientation as d_kerr_init_ray). */
     float3 e_r     = make_f3(sin_t * cos_p,  sin_t * sin_p,  cos_t);
     float3 e_theta = make_f3(cos_t * cos_p,  cos_t * sin_p, -sin_t);
     float3 e_phi   = make_f3(-sin_p,          cos_p,          0.0f);
@@ -346,9 +462,8 @@ __device__ __forceinline__ KerrConsts d_kerr_init_consts(float3 pos, float3 dir,
     /* BL contravariant spatial components of the null direction. */
     float kr     = d_dot(dir, e_r);
     float ktheta = d_dot(dir, e_theta) * inv_r;
-    float kphi   = (sin_t > D_EPSILON) ? (d_dot(dir, e_phi) / (r * sin_t)) : 0.0f;
+    float kphi   = on_axis ? 0.0f : (d_dot(dir, e_phi) / (r * sin_t));
 
-    /* Kerr metric at (r, theta); rs = 2M convention. */
     float sigma  = fmaf(r, r, a * a * cos_t * cos_t);
     float delta  = fmaf(r, r, fmaf(-rs, r, a * a));
     float f      = (sigma > D_EPSILON) ? (rs * r / sigma) : 0.0f;
@@ -358,177 +473,167 @@ __device__ __forceinline__ KerrConsts d_kerr_init_consts(float3 pos, float3 dir,
     float gthth  = sigma;
     float gphph  = fmaf(r * r + a * a, 1.0f, f * a * a * sin2) * sin2;
 
-    /* Solve null condition gtt*(k^t)^2 + 2*gtphi*kphi*(k^t) + spatial = 0
-     * for the future-directed root (k^t > 0). */
+    /* gtt (k^t)^2 + 2 hb k^t + spatial = 0, hb = gtphi kphi. Conjugate-form
+     * roots k^t(E = +sqrt(D)) = spatial / (sqrt(D) - hb) and
+     * k^t(E = -sqrt(D)) = -spatial / (sqrt(D) + hb) divide by gtt nowhere, so
+     * the stationary limit (gtt = 0, linear equation) needs no special case;
+     * a denominator within rounding of sqrt(D) + |hb| is a root at infinity.
+     * The E > 0 root is preferred (kerrInitGeodesic twin). */
     float spatial = fmaf(grr, kr * kr,
                     fmaf(gthth, ktheta * ktheta, gphph * kphi * kphi));
     float hb      = gtphi * kphi;
     float disc    = fmaf(hb, hb, -gtt * spatial);
-    float kt;
-    if (disc >= 0.0f && fabsf(gtt) > D_EPSILON) {
-        float sq_d = sqrtf(disc);
-        float kt_a = (-hb + sq_d) / gtt;
-        float kt_b = (-hb - sq_d) / gtt;
-        kt = (kt_a > 0.0f) ? kt_a : kt_b;
-        if (kt <= 0.0f) kt = fmaxf(kt_a, kt_b);  /* ergosphere: pick best root */
-    } else {
-        kt = 1.0f;  /* degenerate or inside ergosphere: flat-space fallback */
-    }
+    float sq_d    = sqrtf(fmaxf(disc, 0.0f));
+    float root_tol = 1e-6f * (sq_d + fabsf(hb));
+    bool finite_pos = disc >= 0.0f && (sq_d - hb) > root_tol;
+    bool finite_neg = disc >= 0.0f && (sq_d + hb) > root_tol;
+    float kt_pos = finite_pos ? spatial / (sq_d - hb) : 0.0f;
+    float kt_neg = finite_neg ? -spatial / (sq_d + hb) : 0.0f;
+    bool use_neg = finite_neg && kt_neg > 0.0f && (!finite_pos || kt_pos <= 0.0f);
+    float kt = use_neg ? kt_neg : kt_pos;
 
-    /* E = -(g_tt k^t + g_tphi k^phi),  Lz = g_tphi k^t + g_phph k^phi. */
-    float E_raw  = fmaf(-gtt, kt, -gtphi * kphi);
+    float E_raw  = use_neg ? -sq_d : sq_d;
     float Lz_raw = fmaf(gtphi, kt,  gphph * kphi);
-
-    /* Normalize to E = 1 to preserve existing step-size calibration. */
-    float inv_E = (E_raw > D_EPSILON) ? (1.0f / E_raw) : 1.0f;
-    c.E  = 1.0f;
+    /* No finite null completion, or E <= 0 (cannot reach infinity):
+     * r = 0 reads as captured. */
+    if (!(finite_pos || use_neg) || !(E_raw > D_EPSILON)) {
+        ray.r = 0.0f;
+        return;
+    }
+    float inv_E = 1.0f / E_raw;
     c.Lz = Lz_raw * inv_E;
 
-    /* Carter Q (code convention: Theta = Q + a^2 cos^2 - Lz^2/sin^2 = (Sigma k^theta)^2).
-     * Q can be negative for radial photons near the poles (e.g. Q = -a^2 at theta=0). */
-    float p_theta = sigma * ktheta * inv_E;  /* p_theta = Sigma * k^theta (E-normalized) */
-    if (sin_t > D_EPSILON) {
-        c.Q = fmaf(p_theta, p_theta,
-              fmaf(-a * a, cos_t * cos_t, c.Lz * c.Lz / sin2));
-    } else {
-        /* Pole: kphi = 0, Lz = 0.  Q = ptheta^2 - a^2. */
-        c.Q = fmaf(p_theta, p_theta, -(a * a));
+    float p_theta = sigma * ktheta * inv_E;
+    float cot2 = on_axis ? 0.0f : (cos_t * cos_t / sin2);
+    c.Q = fmaf(p_theta, p_theta, fmaf(-a * a, cos_t * cos_t, c.Lz * c.Lz * cot2));
+
+    ray.vr = sigma * kr * inv_E;
+    ray.acc_r = d_kerr_radial_acceleration(r, rs, a, c);
+
+    /* w = p_theta e_theta + (Lz / sin) e_phi, tangent at n, rescaled on shell. */
+    float3 n = d_scale(pos, inv_r);
+    float lz_over_sin = on_axis ? 0.0f : c.Lz / sin_t;
+    float3 w = d_add(d_scale(e_theta, p_theta), d_scale(e_phi, lz_over_sin));
+    w = d_sub(w, d_scale(n, d_dot(w, n)));
+    float w_len = d_length(w);
+    if (w_len > 0.0f) {
+        w = d_scale(w, d_kerr_angular_speed(n, a, c) / w_len);
     }
-
-    return c;
+    float offset = d_kerr_ks_azimuth_offset(r, rs, a);
+    ray.n = d_rotate_z(n, offset);
+    ray.w = d_rotate_z(w, offset);
 }
 
 /**
- * @brief Initialize a KerrRay from a Cartesian position and direction.
+ * @brief Frame-dragging azimuth rate and coordinate-time rate in Mino time.
  *
- * Converts pos to Boyer-Lindquist (r, theta, phi). sign_r and sign_theta are
- * set from the radial and polar projections of dir onto the local frame.
- *
- * @param pos Camera position in Cartesian coordinates.
- * @param dir Normalized ray direction in Cartesian coordinates.
- * @return Initialized KerrRay with t = 0.
+ * Ingoing Kerr-Schild, without the Lz / sin^2 term the sphere motion carries:
+ * dphi_drag = -aE + a (P + vr)/Delta and dt = ((r^2+a^2) P + rs r vr)/Delta
+ * + a (Lz - aE sin^2). For vr < 0 the on-shell identity P + vr =
+ * Delta Q_eff / (P - vr) removes the 0/0 at Delta -> 0. Twin of
+ * kerrDragAndTimeRates in shader/include/kerr.glsl.
  */
-__device__ __forceinline__ KerrRay d_kerr_init_ray(float3 pos, float3 dir) {
-    KerrRay ray;
-    ray.r = d_length(pos);
-    float inv_r = ray.r > D_EPSILON ? 1.0f / ray.r : 0.0f;
-    float cos_theta = fminf(fmaxf(pos.z * inv_r, -1.0f), 1.0f);
-    ray.theta = acosf(cos_theta);
-    ray.phi = atan2f(pos.y, pos.x);
-    ray.t = 0.0f;
-
-    float3 e_r = d_normalize(pos);
-    float sin_t, cos_t, sin_p, cos_p;
-    sincosf(ray.theta, &sin_t, &cos_t);
-    sincosf(ray.phi, &sin_p, &cos_p);
-    float3 e_theta = d_normalize(make_f3(cos_t * cos_p, cos_t * sin_p, -sin_t));
-
-    float dr = d_dot(dir, e_r);
-    float dtheta = d_dot(dir, e_theta);
-    ray.sign_r = dr >= 0.0f ? 1.0f : -1.0f;
-    ray.sign_theta = dtheta >= 0.0f ? 1.0f : -1.0f;
-    return ray;
-}
-
-/**
- * @brief Advance a Kerr geodesic by one affine parameter step using the Mino-time equations.
- *
- * Computes dr/dlam, dtheta/dlam, dphi/dlam, dt/dlam from the first-order Kerr
- * geodesic equations. inv_sin2 and inv_delta are precomputed once (one MUFU.RCP
- * each) to avoid duplicate reciprocal instructions. sign_r and sign_theta are
- * flipped at turning points where R(r) or Theta(theta) changes sign.
- * theta is clamped to [1e-6, pi-1e-6] to avoid pole singularities.
- *
- * WHY rationalized KS regularization (task E1):
- * In Boyer-Lindquist (BL) coordinates, dphi/dlam and dt/dlam diverge as
- * Delta -> 0 at the outer horizon.  Outgoing Kerr-Schild (KS) coordinates
- * add a (1/Delta)*dr correction whose numerator cancels Delta for ingoing
- * photons.  The rationalized form uses the algebraic identity:
- *   (A - sqrt_R) / Delta = Q_eff / (A + sqrt_R)   where Q_eff = Q + (Lz-aE)^2
- * so dphi and dt for ingoing rays can be written with no Delta in the
- * denominator at all -- exact float32 regularity at the horizon.
- * Outgoing rays (after turning points) use the standard KS form with a
- * guarded inv_delta (Delta is bounded away from 0 for outgoing rays).
- * The (r, theta) equations are identical in BL and KS; only phi/t change.
- *
- * @param ray  Ray state to advance in-place.
- * @param rs   Schwarzschild radius.
- * @param a    Spin parameter (physical units).
- * @param c    Conserved quantities (E, Lz, Q).
- * @param dlam Affine (Mino) parameter step size.
- */
-__device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, const KerrConsts& c, float dlam) {
-    float r = ray.r;
-    float theta = ray.theta;
-    float sin_t, cos_t;
-    sincosf(theta, &sin_t, &cos_t);
-    float sin2 = fmaxf(sin_t * sin_t, 1.0e-6f);
-
-    float Delta = d_kerr_delta(r, a, rs);
-    /* E is normalized to 1 in d_kerr_init_consts; A = (r^2+a^2)*E - a*Lz.
-     * fmaf(r,r,a*a) replaces the non-fused r*r + a*a to emit FFMA not FMUL+FADD.
-     * YSU-engine ncu audit: 6.6M non-fused vs 4.5M fused FP32 in this kernel;
-     * explicit fmaf in hot loop body is the primary fix alongside --extra-device-vectorization. */
+__device__ __forceinline__ void d_kerr_drag_and_time_rates(float r, float sin2, float vr, float rs,
+                                                           float a, const KerrConsts& c,
+                                                           float& dphi_drag, float& dt) {
     float r2_a2 = fmaf(r, r, a * a);
-    float A = fmaf(r2_a2, c.E, -a * c.Lz);
+    float P = fmaf(r2_a2, c.E, -a * c.Lz);
     float Lz_minus_aE = fmaf(-a, c.E, c.Lz);
-
-    /* Precompute reciprocals once: MUFU.RCP = 41.55 cy on Ada (YSU-engine SASS RE).
-     * inv_sin2 used in Theta AND dphi.  inv_delta used only for the outgoing
-     * branch; the ingoing branch uses the rationalized form with no Delta. */
-    float inv_sin2 = 1.0f / sin2;
     float Q_eff = fmaf(Lz_minus_aE, Lz_minus_aE, c.Q);
-
-    float R = fmaf(A, A, -Delta * Q_eff);
-    /* Theta = Q + a^2*E^2*cos^2 - Lz^2/sin^2.  E=1, so a^2*E^2 = a^2.
-     * Use fmaf to chain Q + a^2*cos^2 - Lz^2*inv_sin2 without separate FADD. */
-    float Theta = fmaf(a * a, cos_t * cos_t, fmaf(-c.Lz, c.Lz * inv_sin2, c.Q));
-
-    if (R < 0.0f) ray.sign_r *= -1.0f;
-    if (Theta < 0.0f) ray.sign_theta *= -1.0f;
-
-    float sqrt_R = sqrtf(fmaxf(R, 0.0f));
-    float sqrt_Theta = sqrtf(fmaxf(Theta, 0.0f));
-
-    float dr_dlam     = ray.sign_r     * sqrt_R;
-    float dtheta_dlam = ray.sign_theta * sqrt_Theta;
-
-    /* Rationalized outgoing KS phi/t (task E1 upgrade -- no deltaSafe in denom).
-     *
-     * Ingoing ray (sign_r < 0): identity (A-sqrtR)/Delta = Q_eff/(A+sqrtR)
-     * where Q_eff = c.Q + Lz_minus_aE^2.  Numerators vanish together with Delta
-     * at r_+, but the ratio is finite.  No clamping required.
-     * Using r^2+a^2-rs*r = Delta:
-     *   [(r^2+a^2)*A - rs*r*sqrtR] / Delta = A + rs*r*Q_eff/(A+sqrtR)
-     *
-     * Outgoing ray (sign_r > 0): after a turning point Delta is bounded away
-     * from 0 (ray moves away from horizon), so the standard KS formula with
-     * inv_delta is numerically safe.  Both branches agree when sqrtR = 0. */
-    float dphi_dlam, dt_dlam;
-    /* dphi_dlam and dt_dlam share the term `c.Lz - a*c.E` (= Lz_minus_aE by definition).
-     * Reuse it to avoid a redundant SUB instruction. */
-    if (ray.sign_r < 0.0f) {
-        float inv_Aps = 1.0f / fmaxf(A + sqrt_R, 1.0e-30f);
-        dphi_dlam = fmaf(a, Q_eff * inv_Aps, fmaf(c.Lz, inv_sin2, -a * c.E));
-        dt_dlam   = fmaf(rs * r, Q_eff * inv_Aps, A)
-                    + a * fmaf(-a * c.E, sin2, c.Lz);
+    float tail = a * fmaf(-a * c.E, sin2, c.Lz);
+    if (vr < 0.0f) {
+        float inv = 1.0f / fmaxf(P - vr, 1.0e-30f);
+        dphi_drag = fmaf(a, Q_eff * inv, -a * c.E);
+        dt        = fmaf(rs * r, Q_eff * inv, P) + tail;
     } else {
-        // B6: Use fabsf(Delta) to match the metric construction at line 343.
-        // Without fabsf, a step that overshoots r_+ (Delta<0) before the horizon
-        // check fires would produce inv_delta<0, corrupting dphi and dt.
-        float inv_delta = 1.0f / fmaxf(fabsf(Delta), 1.0e-6f);
-        dphi_dlam = fmaf(a, (A + sqrt_R) * inv_delta, fmaf(c.Lz, inv_sin2, -a * c.E));
-        /* r2_a2 = r^2+a^2 already computed above; reuse to save one FMUL. */
-        dt_dlam   = fmaf(r2_a2, A, rs * r * sqrt_R) * inv_delta
-                    + a * fmaf(-a * c.E, sin2, c.Lz);
+        float inv_delta = 1.0f / fmaxf(fabsf(d_kerr_delta(r, a, rs)), 1.0e-6f);
+        dphi_drag = fmaf(a, (P + vr) * inv_delta, -a * c.E);
+        dt        = fmaf(r2_a2, P, rs * r * vr) * inv_delta + tail;
     }
+}
 
-    ray.r += dlam * dr_dlam;
-    ray.theta += dlam * dtheta_dlam;
-    ray.phi += dlam * dphi_dlam;
-    ray.t += dlam * dt_dlam;
+/**
+ * @brief Affine length of a Mino step, the path length radiative transfer integrates over.
+ *
+ * d(lambda_affine) = Sigma d(lambda_Mino) at E = 1: the length a distant
+ * observer assigns to the photon path, Euclidean far from the hole. Trapezoid
+ * rule over the step's end states, second order in the step. Twin of
+ * kerrAffineStep in shader/include/kerr.glsl.
+ */
+__device__ __forceinline__ float d_kerr_affine_step(const KerrRay& before, const KerrRay& after,
+                                                    float a, float dlam) {
+    float const sigma0 = d_kerr_sigma(before.r, a, before.n.z);
+    float const sigma1 = d_kerr_sigma(after.r, a, after.n.z);
+    return 0.5f * (sigma0 + sigma1) * fabsf(dlam);
+}
 
-    ray.theta = fminf(fmaxf(ray.theta, 1.0e-6f), D_PI - 1.0e-6f);
+/**
+ * @brief Null-constraint projection: vr^2 = R away from turning points, and
+ * |n| = 1, w . n = 0, |w| = sqrt(Q + Lz^2 + a^2 n_z^2).
+ *
+ * In float32 the rounding of |vr| ~ P ~ r^2 far out accumulates over the r^2
+ * dynamic range until a near-radial ray reverses at a few rs; |vr| resets to
+ * sqrt(R) when R exceeds 1% of P^2. Twin of kerrProjectOnShell.
+ */
+__device__ __forceinline__ void d_kerr_project_on_shell(KerrRay& ray, float rs, float a,
+                                                        const KerrConsts& c) {
+    float P = fmaf(fmaf(ray.r, ray.r, a * a), c.E, -a * c.Lz);
+    float Lz_minus_aE = fmaf(-a, c.E, c.Lz);
+    float R = fmaf(P, P, -d_kerr_delta(ray.r, a, rs) * fmaf(Lz_minus_aE, Lz_minus_aE, c.Q));
+    if (R > 0.01f * P * P) {
+        ray.vr = copysignf(sqrtf(R), ray.vr);
+    }
+    ray.n = d_normalize(ray.n);
+    ray.w = d_sub(ray.w, d_scale(ray.n, d_dot(ray.w, ray.n)));
+    float w_len = d_length(ray.w);
+    if (w_len > 0.0f) {
+        ray.w = d_scale(ray.w, d_kerr_angular_speed(ray.n, a, c) / w_len);
+    }
+}
+
+/**
+ * @brief One kick-drift-kick step: r leapfrog, great-circle drift of (n, w),
+ * sphere kicks, and a symmetric frame-dragging rotation about z.
+ *
+ * Symplectic in r and in n, conserves Lz = (n x w).z exactly, and has no
+ * coordinate singularity on the spin axis. Twin of kerrStep in
+ * shader/include/kerr.glsl.
+ */
+__device__ __forceinline__ void d_kerr_step(KerrRay& ray, float rs, float a, const KerrConsts& c,
+                                            float dlam) {
+    float vr_half = fmaf(0.5f * dlam, ray.acc_r, ray.vr);
+    float3 w_half = d_add(ray.w, d_scale(d_kerr_sphere_acceleration(ray.n, a, c), 0.5f * dlam));
+    w_half = d_sub(w_half, d_scale(ray.n, d_dot(w_half, ray.n)));
+
+    float r_mid = fmaf(0.5f * dlam, vr_half, ray.r);
+    float r_new = fmaf(dlam, vr_half, ray.r);
+
+    float dphi_drag, dt;
+    d_kerr_drag_and_time_rates(r_mid, fmaxf(1.0f - ray.n.z * ray.n.z, 0.0f), vr_half, rs, a, c,
+                               dphi_drag, dt);
+    float half_drag = 0.5f * dlam * dphi_drag;
+    float3 n_new = d_rotate_z(ray.n, half_drag);
+    float3 w_new = d_rotate_z(w_half, half_drag);
+
+    float speed = d_length(w_new);
+    if (speed > 0.0f) {
+        float3 u = d_scale(w_new, 1.0f / speed);
+        float sa, ca;
+        sincosf(speed * dlam, &sa, &ca);
+        float3 n_drift = d_add(d_scale(n_new, ca), d_scale(u, sa));
+        w_new = d_scale(d_sub(d_scale(u, ca), d_scale(n_new, sa)), speed);
+        n_new = n_drift;
+    }
+    n_new = d_rotate_z(n_new, half_drag);
+    w_new = d_rotate_z(w_new, half_drag);
+    ray.t = fmaf(dlam, dt, ray.t);
+
+    ray.r = r_new;
+    ray.acc_r = d_kerr_radial_acceleration(ray.r, rs, a, c);
+    ray.vr = fmaf(0.5f * dlam, ray.acc_r, vr_half);
+    ray.n = d_normalize(n_new);
+    ray.w = d_add(w_new, d_scale(d_kerr_sphere_acceleration(ray.n, a, c), 0.5f * dlam));
+    d_kerr_project_on_shell(ray, rs, a, c);
 }
 
 /* ========================================================================
@@ -612,7 +717,10 @@ __device__ __forceinline__ void d_step_rk4(float3& x, float3& v, float rs, float
  */
 __device__ __forceinline__ bool d_check_disk(float3 old_pos, float3 new_pos,
                              float r_in, float r_out, float3& hit) {
-    if (old_pos.z * new_pos.z > 0.0f) return false;
+    /* A step that starts on the plane leaves it rather than crossing it: its
+     * start is the observer or the end of a step already counted there
+     * (bhCheckDiskIntersection twin). */
+    if (old_pos.z == 0.0f || old_pos.z * new_pos.z > 0.0f) return false;
     float t = -old_pos.z / (new_pos.z - old_pos.z);
     hit = d_lerp(old_pos, new_pos, t);
     float r = sqrtf(fmaf(hit.x, hit.x, hit.y * hit.y));
@@ -811,9 +919,13 @@ __device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float
 }
 
 struct HitResult {
+    float3 origin;     /**< @brief Camera position in the tracer's chart (d_kerr_chart_position);
+                            hit and closest-approach points share it. */
     bool hit_disk;     /**< @brief Ray terminated on the accretion disk. */
     bool hit_horizon;  /**< @brief Ray crossed the event horizon. */
     bool escaped;      /**< @brief Ray escaped to infinity (r > max_dist or step budget exhausted). */
+    bool max_steps;    /**< @brief Step budget exhausted before any terminal event; escaped is also set
+                            so shading falls back to the sky, matching GLSL BH_DEBUG_FLAG_MAXSTEPS. */
     float3 hit_point;  /**< @brief World-space position of the termination event. */
     float3 closest_approach_point; /**< @brief World-space position at minimum radius along the ray. */
     float phi;         /**< @brief Azimuthal angle at disk hit (for Doppler beaming); 0 otherwise. */
@@ -908,8 +1020,8 @@ __device__ __forceinline__ float d_adaptive_step(float r, float rs, float r_h,
  * @brief Trace a single geodesic ray through the Kerr or Schwarzschild spacetime.
  *
  * Dispatches to the Kerr Mino-time integrator (d_kerr_step) when d_kerr_enabled
- * is set and |a| > D_EPSILON, otherwise uses the Schwarzschild RK4 integrator
- * (d_step_rk4). Checks for horizon crossing, disk intersection, and escape at
+ * is set, at every spin including a = 0 where it is exact for Schwarzschild;
+ * otherwise uses the Schwarzschild RK4 integrator (d_step_rk4). Checks for horizon crossing, disk intersection, and escape at
  * each step. All scene parameters are read from __constant__ memory.
  *
  * @param cam_pos Camera position in world (Cartesian) coordinates.
@@ -921,7 +1033,9 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
     result.hit_disk = false;
     result.hit_horizon = false;
     result.escaped = false;
+    result.max_steps = false;
     result.hit_point = make_f3(0.0f, 0.0f, 0.0f);
+    result.origin = cam_pos;
     result.closest_approach_point = cam_pos;
     result.phi = 0.0f;
     result.redshift = 1.0f;
@@ -935,19 +1049,26 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
     float dt = d_step_size;
     int max_steps = d_max_steps;
     float max_dist = d_max_dist;
+    /* A ray escapes only outside both the scene radius and the camera's own
+     * radius while moving outward; twin of bhEscapeRadius in interop_trace.glsl. */
+    float const escape_r = fmaxf(max_dist, 1.01f * d_length(cam_pos));
 
-    if (d_kerr_enabled && fabsf(a) > D_EPSILON) {
+    if (d_kerr_enabled) {
         /* Kerr geodesic integration */
         float r_horizon = d_kerr_outer_horizon(rs, a);
         if (r_horizon <= D_EPSILON) r_horizon = rs;
         float r_disk_in = d_isco;
         float r_disk_out = 30.0f * rs;
 
-        KerrConsts c = d_kerr_init_consts(cam_pos, ray_dir, rs, a);
-        KerrRay kr = d_kerr_init_ray(cam_pos, ray_dir);
+        float const a_trace = d_kerr_trace_spin(a);
+        KerrConsts c;
+        KerrRay kr;
+        d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
+        result.origin = d_kerr_chart_position(cam_pos, rs, a_trace);
+        result.closest_approach_point = result.origin;
 
         for (int step = 0; step < max_steps; ++step) {
-            float3 old_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+            float3 old_pos = d_kerr_ray_position(kr);
             d_record_closest_approach(result, kr.r, old_pos, step);
 
             if (kr.r <= r_horizon) {
@@ -958,8 +1079,8 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
 
             /* D10: AMR step refinement near horizon and photon sphere */
             float const step_dt = d_adaptive_step(kr.r, rs, r_horizon, dt);
-            d_kerr_step(kr, rs, a, c, step_dt);
-            float3 new_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+            d_kerr_step(kr, rs, a_trace, c, step_dt);
+            float3 new_pos = d_kerr_ray_position(kr);
 
             if (d_adisk_enabled) {
                 float3 disk_hit;
@@ -972,14 +1093,15 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
                 }
             }
 
-            if (kr.r > max_dist) {
+            if (kr.r > escape_r && kr.vr > 0.0f) {
                 result.escaped = true;
                 result.hit_point = new_pos;
                 return result;
             }
         }
         result.escaped = true;
-        result.hit_point = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        result.max_steps = true;
+        result.hit_point = d_kerr_ray_position(kr);
     } else {
         /* Schwarzschild geodesic integration */
         float3 pos = cam_pos;
@@ -1011,13 +1133,14 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
                 }
             }
 
-            if (r > max_dist) {
+            if (r > escape_r && d_dot(pos, vel) > 0.0f) {
                 result.escaped = true;
                 result.hit_point = pos;
                 return result;
             }
         }
         result.escaped = true;
+        result.max_steps = true;
         result.hit_point = pos;
     }
     return result;
@@ -1152,7 +1275,9 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
 
     float3 ray_dir = d_normalize(d_sub(hit.hit_point, cam_pos));
     float3 view_dir = d_scale(ray_dir, -1.0f);
-    float3 vel_dir = d_normalize(make_f3(-hit.hit_point.z, 0.0f, hit.hit_point.x));
+    /* Physics frame: the disk lies in the xy plane with prograde rotation
+     * about +z (d_world_to_physics). */
+    float3 vel_dir = d_normalize(make_f3(-hit.hit_point.y, hit.hit_point.x, 0.0f));
 
     /* WHY: GLSL interop_trace.glsl uses flux*2.0 as base intensity. d_adisk_lit matches
      * the adiskLit uniform that record mode sets to 0.35 for cinematic brightness balance. */
@@ -1164,12 +1289,11 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
     float doppler = 1.0f + view_alignment * 0.65f * d_doppler_strength;
     intensity *= doppler * doppler * doppler;
 
-    /* The disk orbits about +y at every spin sign (its ISCO takes the
-     * counter-rotating branch when d_spin < 0), so the anisotropic flow axis
-     * stays +y: flow_dir = y x p equals vel_dir's approach sense above
-     * (dot(vel_dir, ray_dir) == dot(flow_dir, view_dir)). */
-    float3 disk_flow_axis = make_f3(0.0f, 1.0f, 0.0f);
-    float3 flow_dir = d_normalize(d_cross(disk_flow_axis, d_normalize(hit.hit_point)));
+    /* The disk's flow is fixed at every spin sign (its ISCO takes the
+     * counter-rotating branch when d_spin < 0), so the anisotropic boost
+     * follows the Doppler term's approach sense above: flow_dir = -vel_dir,
+     * so dot(flow_dir, view_dir) == dot(vel_dir, ray_dir). */
+    float3 flow_dir = d_scale(vel_dir, -1.0f);
     float spin_view = 0.5f + 0.5f * d_dot(flow_dir, view_dir);
     float spin_t = fmaxf(0.0f, fminf((fabsf(d_spin) - 0.05f) / fmaxf(0.85f - 0.05f, D_EPSILON), 1.0f));
     float spin_weight = spin_t * spin_t * (3.0f - 2.0f * spin_t);
@@ -1193,10 +1317,10 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
         1.0f + inner_weight * (0.92f * bright_sector + 0.22f * rim_sector + 0.04f * counter_sector);
     intensity *= sector_shadow * sector_lift;
 
-    float grazing = powf(fmaxf(0.0f, fminf(1.0f - fabsf(ray_dir.y), 1.0f)), 1.5f);
+    float grazing = powf(fmaxf(0.0f, fminf(1.0f - fabsf(ray_dir.z), 1.0f)), 1.5f);
     color = d_scale(color, 1.0f + (1.55f - 1.0f) * grazing);
 
-    float normalized_v = fabsf(hit.hit_point.y) / fmaxf(0.42f, D_EPSILON);
+    float normalized_v = fabsf(hit.hit_point.z) / fmaxf(0.42f, D_EPSILON);
     float midplane_boost = powf(fmaxf(0.0f, fminf(1.0f - normalized_v, 1.0f)), 0.45f);
     float crescent_boost = 1.0f + (1.8f - 1.0f) * (midplane_boost * (1.0f - radial01));
     color = d_scale(color, crescent_boost);
@@ -1530,11 +1654,28 @@ __device__ __forceinline__ float3 d_sample_background_equirect_layered(float3 di
  * @param dir Escaped ray direction (normalised in d_shade_hit).
  * @return RGBA float4 sky colour.
  */
+/**
+ * @brief World (y-up) to physics (Kerr spin along +z) frame rotation.
+ *
+ * The camera orbit and the equirect sky are y-up; the Kerr tracer carries the
+ * spin along +z with the disk in the xy plane. Rotating about x by -90 degrees
+ * maps world +y to physics +z. Twin of bhWorldToPhysics in interop_trace.glsl.
+ */
+__device__ __forceinline__ float3 d_world_to_physics(float3 v) {
+    return make_f3(v.x, -v.z, v.y);
+}
+
+/** @brief Inverse of d_world_to_physics. */
+__device__ __forceinline__ float3 d_physics_to_world(float3 v) {
+    return make_f3(v.x, v.z, -v.y);
+}
+
+/** @brief Sky color for a physics-frame direction (the textures are world-frame). */
 __device__ __forceinline__ float4 d_background_color(float3 dir) {
     if (!d_background_enabled) {
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
-    float3 n = d_normalize(dir);
+    float3 n = d_normalize(d_physics_to_world(dir));
     n = d_rotate_about_axis(n, make_f3(0.0f, 1.0f, 0.0f), d_time_sec);
 
     if (d_tex_background_equirect) {
@@ -1690,8 +1831,8 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         if (min_radius < rs * 5.0f) {
             float3 closest_n = d_normalize(closest_pos);
             float3 approach_dir = d_normalize(d_sub(cam_pos, closest_pos));
-            float spin_y = spin >= 0.0f ? 1.0f : -1.0f;
-            float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
+            float spin_sign = spin >= 0.0f ? 1.0f : -1.0f;
+            float3 spin_axis = make_f3(0.0f, 0.0f, spin_sign);
             float3 flow_dir = d_normalize(d_cross(spin_axis, closest_n));
             aligned_flow = 0.5f + 0.5f * d_dot(flow_dir, approach_dir);
             near_hole_weight =
@@ -1708,8 +1849,8 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
     if (min_radius < rs * 5.0f) {
         float3 closest_n = d_normalize(closest_pos);
         float3 approach_dir = d_normalize(d_sub(cam_pos, closest_pos));
-        float spin_y = spin >= 0.0f ? 1.0f : -1.0f;
-        float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
+        float spin_sign = spin >= 0.0f ? 1.0f : -1.0f;
+        float3 spin_axis = make_f3(0.0f, 0.0f, spin_sign);
         float3 flow_dir = d_normalize(d_cross(spin_axis, closest_n));
         float aligned_flow = 0.5f + 0.5f * d_dot(flow_dir, approach_dir);
         float near_hole_weight =
@@ -1869,7 +2010,7 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         /* GRMHD emissivity modulation: j_nu ~ rho * B^2, B^2 ~ u (plasma beta ~ 1).
          * Matches blackhole_main.frag: density *= rho * uu at disk hit point. */
         if (d_use_luts && d_tex_grmhd) {
-            float4 grmhd = d_sample_grmhd(hit.hit_point);
+            float4 grmhd = d_sample_grmhd(d_chart_to_boyer_lindquist(hit.hit_point));
             float rho = fmaxf(grmhd.x, 0.0f);
             float uu  = fmaxf(grmhd.y, 0.0f);
             float grmhd_scale = rho * uu;
@@ -1918,8 +2059,8 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
     if (glow > 0.0f) {
         float3 closest_n = d_normalize(hit.closest_approach_point);
         float3 approach_dir = d_normalize(d_sub(cam_pos, hit.closest_approach_point));
-        float spin_y = d_spin >= 0.0f ? 1.0f : -1.0f;
-        float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
+        float spin_sign = d_spin >= 0.0f ? 1.0f : -1.0f;
+        float3 spin_axis = make_f3(0.0f, 0.0f, spin_sign);
         float3 flow_dir = d_normalize(d_cross(spin_axis, closest_n));
         float aligned_flow = 0.5f + 0.5f * d_dot(flow_dir, approach_dir);
         float spin_t = fmaxf(0.0f, fminf((fabsf(d_spin) - 0.05f) / fmaxf(0.85f - 0.05f, D_EPSILON), 1.0f));
@@ -1970,11 +2111,11 @@ __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
     u += d_frame_shift_x;
     v += d_frame_shift_y;
 
-    /* -u: matches GLSL -uv.x (horizontal mirror to right-hand camera convention).
+    /* +u: basis col0 = right (buildCameraBasis), matching GLSL +uv.x.
      * -v: py=0 is image-top in CUDA; gl_FragCoord.y=0 is image-bottom in GLSL,
      *     so GLSL uv.y is positive-at-top, CUDA v is negative-at-top.
      * +1: basis col2 = forward, so local +z maps to world forward (toward BH). */
-    float3 local_dir = d_normalize(make_f3(-u, -v, 1.0f));
+    float3 local_dir = d_normalize(make_f3(u, -v, 1.0f));
     return d_mat3_mul(d_cam_basis, local_dir);
 }
 
@@ -1993,7 +2134,8 @@ __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
  * @param emit_color RGB emission color (temperature-mapped, pre-Doppler).
  * @param j_eff      Effective emission coefficient (includes Doppler g^3, density).
  * @param alpha_nu   Absorption coefficient [1/step-unit].
- * @param step_size  Segment path length [same units as alpha_nu denominator].
+ * @param step_size  Segment path length [same units as alpha_nu denominator]; along a
+ *                   Kerr geodesic the affine length of the step (d_kerr_affine_step).
  * @param transmit   [in/out] Current path transmittance; decremented by exp(-tau).
  * @return Segment contribution to add to accumI (= transmit_before * S * (1-exp(-tau))).
  */
@@ -2027,10 +2169,158 @@ __device__ __forceinline__ float3 d_rte_step(float3 emit_color, float j_eff,
 }
 
 /**
+ * @brief Mean (x) and centroid fraction (y) of exp(-z^2 / 2h^2) along a chord
+ *        whose height runs linearly from z0 to z1, sharing one erf pair.
+ *
+ * mean = h sqrt(pi/2) (erf(z1 s) - erf(z0 s)) / (z1 - z0), s = 1 / (sqrt(2) h);
+ * the centroid is the chord fraction of the weighted mean height
+ * -h^2 (exp(-z1^2 / 2h^2) - exp(-z0^2 / 2h^2)) / (mean (z1 - z0)). Below
+ * |z1 - z0| = 0.01 sqrt(2) h the midpoint value and the midpoint. Twin of
+ * bhGaussianChordMoments in shader/include/interop_trace.glsl.
+ */
+__device__ __forceinline__ float2 d_gaussian_chord_moments(float z0, float z1, float h) {
+    float const s  = 0.70710678f / h;
+    float const dz = z1 - z0;
+    if (fabsf(dz) * s < 0.01f) {
+        float const zm = 0.5f * (z0 + z1) / h;
+        return make_float2(expf(-0.5f * zm * zm), 0.5f);
+    }
+    float const mass = 1.25331414f * h * (erff(z1 * s) - erff(z0 * s));
+    float frac = 0.5f;
+    if (fabsf(mass) >= 1e-6f * fabsf(dz)) {
+        float const z_bar = -h * h * (expf(-z1 * z1 * s * s) - expf(-z0 * z0 * s * s)) / mass;
+        frac = fminf(fmaxf((z_bar - z0) / dz, 0.0f), 1.0f);
+    }
+    return make_float2(mass / dz, frac);
+}
+
+/**
+ * @brief Parameter interval (clipped to [0, 1]) of the chord a + b t on which
+ *        |a + b t| <= radius (x = t0, y = t1; empty when t0 > t1).
+ *        Twin of bhChordInsideRadius.
+ */
+__device__ __forceinline__ float2 d_chord_inside_radius(float ax, float ay, float bx, float by,
+                                                        float radius) {
+    float const qa = fmaf(bx, bx, by * by);
+    float const qb = fmaf(ax, bx, ay * by);
+    float const qc = fmaf(ax, ax, ay * ay) - radius * radius;
+    if (qa < 1e-12f * fmaxf(qc + radius * radius, 1.0f)) {
+        return qc <= 0.0f ? make_float2(0.0f, 1.0f) : make_float2(1.0f, 0.0f);
+    }
+    float const disc = fmaf(qb, qb, -qa * qc);
+    if (disc < 0.0f) {
+        return make_float2(1.0f, 0.0f);
+    }
+    float const root = sqrtf(disc);
+    return make_float2(fmaxf((-qb - root) / qa, 0.0f), fminf((-qb + root) / qa, 1.0f));
+}
+
+/**
+ * @brief Radial disk factor flux g^3 and band color at cylindrical radius rho,
+ *        azimuth phi. Twin of bhDiskRadialEmission.
+ */
+__device__ __forceinline__ float d_disk_radial_emission(float rho, float phi, float r_in, float rs,
+                                                        float3 &emit_color) {
+    /* Novikov-Thorne flux profile */
+    float const x    = r_in / fmaxf(rho, D_EPSILON);
+    float const flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
+
+    /* Temperature-to-color: 3-band ramp */
+    float const t_norm = sqrtf(sqrtf(fmaxf(flux, 0.0f)));
+    if (t_norm > 0.6f) {
+        emit_color = make_f3(1.0f, 0.9f, 0.8f);
+    } else if (t_norm > 0.3f) {
+        emit_color = make_f3(1.0f, 0.6f, 0.2f);
+    } else {
+        emit_color = make_f3(0.8f, 0.2f, 0.1f);
+    }
+
+    /* Keplerian Doppler beaming: v ~ sqrt(rs / 2r), boost ~ (1 + 0.3*v*cos phi)^3 */
+    float const v       = sqrtf(0.5f * rs / fmaxf(rho, D_EPSILON));
+    float const doppler = 1.0f + 0.3f * v * cosf(phi);
+    return flux * doppler * doppler * doppler;
+}
+
+/**
+ * @brief Disk emission over the chord p0 -> p1 of one integrator step.
+ *
+ * The chord is intersected with the annulus [r_in, r_out] (rho^2 is
+ * quadratic along it, so at most two intervals emit); the Gaussian layer
+ * (scale height h) is integrated exactly over each interval and the radial
+ * factors are read at each interval's density-weighted centroid. With every
+ * coefficient proportional to the density and a constant source function,
+ * the segment's formal solution depends only on the column. Returns false
+ * when no emitting part carries density; j_eff and rho_mean are means over
+ * the whole chord. Twin of bhDiskSegment in shader/include/interop_trace.glsl.
+ */
+__device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in, float r_out,
+                                               float h, float rs, float3 &emit_color,
+                                               float &j_eff, float &rho_mean) {
+    emit_color = make_f3(0.0f, 0.0f, 0.0f);
+    j_eff = 0.0f;
+    rho_mean = 0.0f;
+    /* A chord on one side of the midplane and more than 8 h from it carries
+     * density below exp(-32) ~ 1e-14 everywhere. */
+    if (p0.z * p1.z > 0.0f && fminf(fabsf(p0.z), fabsf(p1.z)) > 8.0f * h) {
+        return false;
+    }
+    /* rho^2 is convex along the chord: end points inside r_out keep the whole
+     * chord and a closest approach outside r_in excludes nothing; only a chord
+     * across an edge solves the quadratic. */
+    float const bx = p1.x - p0.x;
+    float const by = p1.y - p0.y;
+    float const r0_2 = fmaf(p0.x, p0.x, p0.y * p0.y);
+    float const r1_2 = fmaf(p1.x, p1.x, p1.y * p1.y);
+    float2 const outer = fmaxf(r0_2, r1_2) <= r_out * r_out
+                             ? make_float2(0.0f, 1.0f)
+                             : d_chord_inside_radius(p0.x, p0.y, bx, by, r_out);
+    float const t_close = fminf(fmaxf(-fmaf(p0.x, bx, p0.y * by) /
+                                          fmaxf(fmaf(bx, bx, by * by), 1e-30f),
+                                      0.0f), 1.0f);
+    float const cx = fmaf(bx, t_close, p0.x);
+    float const cy = fmaf(by, t_close, p0.y);
+    float2 const inner = fmaf(cx, cx, cy * cy) >= r_in * r_in
+                             ? make_float2(1.0f, 0.0f)
+                             : d_chord_inside_radius(p0.x, p0.y, bx, by, r_in);
+    bool const inner_empty = inner.x > inner.y;
+    float2 const pieces[2] = {
+        make_float2(outer.x, inner_empty ? outer.y : fminf(outer.y, inner.x)),
+        inner_empty ? make_float2(1.0f, 0.0f) : make_float2(fmaxf(outer.x, inner.y), outer.y)};
+    float3 color_sum = make_f3(0.0f, 0.0f, 0.0f);
+    for (int k = 0; k < 2; ++k) {
+        float const ta = pieces[k].x;
+        float const tb = pieces[k].y;
+        if (tb <= ta) {
+            continue;
+        }
+        float const za = fmaf(p1.z - p0.z, ta, p0.z);
+        float const zb = fmaf(p1.z - p0.z, tb, p0.z);
+        float2 const moments = d_gaussian_chord_moments(za, zb, h);
+        float const column = (tb - ta) * moments.x;
+        if (column <= 0.0f) {
+            continue;
+        }
+        float const tw = fmaf(tb - ta, moments.y, ta);
+        float3 const w = d_add(p0, d_scale(d_sub(p1, p0), tw));
+        float3 color;
+        float const radial = d_disk_radial_emission(sqrtf(fmaf(w.x, w.x, w.y * w.y)),
+                                                    atan2f(w.y, w.x), r_in, rs, color);
+        rho_mean += column;
+        j_eff += radial * column;
+        color_sum = d_add(color_sum, d_scale(color, radial * column));
+    }
+    if (!(rho_mean > 0.0f)) {
+        return false;
+    }
+    emit_color = j_eff > 0.0f ? d_scale(color_sum, 1.0f / j_eff) : make_f3(0.8f, 0.2f, 0.1f);
+    return true;
+}
+
+/**
  * @brief Trace a Kerr geodesic with front-to-back volumetric RTE compositing.
  *
  * Mirrors bhTraceGeodesicRTE() in shader/include/interop_trace.glsl.
- * For Schwarzschild (d_kerr_enabled=0 or |a| < D_EPSILON), falls back to
+ * With d_kerr_enabled=0 (Schwarzschild RK4 kernels under test), falls back to
  * d_trace_geodesic() + d_shade_hit() (single-scatter, bit-exact parity).
  *
  * Disk emission model at each step inside [r_disk_in, r_disk_out]:
@@ -2051,11 +2341,11 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     float const rs = d_rs;
     float const a  = 0.5f * d_spin * rs;
 
-    if (!d_kerr_enabled || fabsf(a) < D_EPSILON) {
+    if (!d_kerr_enabled) {
         /* Schwarzschild fallback: single-scatter (same as baseline kernel) */
         HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
         if (terminal_pos != nullptr) { *terminal_pos = hit.hit_point; }
-        return d_shade_hit(hit, cam_pos);
+        return d_shade_hit(hit, hit.origin);
     }
 
     float r_horizon = d_kerr_outer_horizon(rs, a);
@@ -2066,19 +2356,26 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     float const h_disk      = fmaxf(0.1f * rs, D_EPSILON);
     float const dt          = d_step_size;
     float const max_dist    = d_max_dist;
+    float const escape_r    = fmaxf(max_dist, 1.01f * d_length(cam_pos));
     int   const max_steps   = d_max_steps;
     float const opacity_scl = d_rte_opacity_scale;
 
-    KerrConsts const c  = d_kerr_init_consts(cam_pos, ray_dir, rs, a);
-    KerrRay          kr = d_kerr_init_ray(cam_pos, ray_dir);
+    float const a_trace = d_kerr_trace_spin(a);
+    KerrConsts c;
+    KerrRay    kr;
+    d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
+    float3 const origin = d_kerr_chart_position(cam_pos, rs, a_trace);
+    /* Propagation direction of the latest step: a ray that exhausts its step
+     * budget is shaded as escaping along it, as the escape branch does. */
+    float3 last_dir = ray_dir;
 
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
     float  transmit = 1.0f;
     float  min_r    = kr.r;
-    float3 closest_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+    float3 closest_pos = d_kerr_ray_position(kr);
 
     for (int step = 0; step < max_steps; ++step) {
-        float3 const cur_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        float3 const cur_pos = d_kerr_ray_position(kr);
         if (kr.r < min_r) {
             min_r = kr.r;
             closest_pos = cur_pos;
@@ -2092,57 +2389,37 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
 
         /* D10: AMR step refinement near horizon and photon sphere */
         float const step_dt_rte = d_adaptive_step(kr.r, rs, r_horizon, dt);
-        d_kerr_step(kr, rs, a, c, step_dt_rte);
-        float3 const new_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        KerrRay const before = kr;
+        d_kerr_step(kr, rs, a_trace, c, step_dt_rte);
+        float3 const new_pos = d_kerr_ray_position(kr);
+        last_dir = d_sub(new_pos, cur_pos);
+        /* step_dt_rte is a Mino-time increment; transfer integrates over
+         * affine length (d_kerr_affine_step), the unit of j_eff and alpha_nu. */
+        float const path_step = d_kerr_affine_step(before, kr, a_trace, step_dt_rte);
 
-        if (d_adisk_enabled) {
-            float const r_cyl = sqrtf(fmaf(new_pos.x, new_pos.x, new_pos.y * new_pos.y));
-            if (r_cyl >= r_disk_in && r_cyl <= r_disk_out) {
-                /* Novikov-Thorne flux profile */
-                float const x    = r_disk_in / fmaxf(r_cyl, D_EPSILON);
-                float const flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
+        float3 emit_color;
+        float j_eff;
+        float rho_norm;
+        if (d_adisk_enabled &&
+            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, emit_color,
+                           j_eff, rho_norm)) {
+            float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
+            float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, path_step, transmit);
+            accum_i = d_add(accum_i, contrib);
 
-                /* Temperature-to-color: 3-band ramp (matches bhTraceGeodesicRTE GLSL) */
-                float const t_norm = sqrtf(sqrtf(fmaxf(flux, 0.0f)));
-                float3 emit_color;
-                if (t_norm > 0.6f) {
-                    emit_color = make_f3(1.0f, 0.9f, 0.8f);
-                } else if (t_norm > 0.3f) {
-                    emit_color = make_f3(1.0f, 0.6f, 0.2f);
-                } else {
-                    emit_color = make_f3(0.8f, 0.2f, 0.1f);
-                }
-
-                /* Keplerian Doppler beaming: v ~ sqrt(rs / 2r), boost ~ (1 + 0.3*v*cos phi)^3 */
-                float const v       = sqrtf(0.5f * rs / fmaxf(r_cyl, D_EPSILON));
-                float const phi_ang = atan2f(new_pos.y, new_pos.x);
-                float const doppler = 1.0f + 0.3f * v * cosf(phi_ang);
-                float const g3      = doppler * doppler * doppler;
-
-                /* Gaussian vertical density falloff: rho ~ exp(-z^2 / 2 h^2) */
-                float const z_over_h  = new_pos.z / h_disk;
-                float const rho_norm  = expf(-0.5f * z_over_h * z_over_h);
-
-                float const j_eff   = flux * g3 * rho_norm;
-                float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
-
-                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, step_dt_rte, transmit);
-                accum_i = d_add(accum_i, contrib);
-
-                if (transmit < 0.005f) {
-                    if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
-                    return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
-                }
+            if (transmit < 0.005f) {
+                if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
+                return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
             }
         }
 
-        if (kr.r > max_dist) {
+        if (kr.r > escape_r && kr.vr > 0.0f) {
             float3 const esc_dir = d_sub(new_pos, cur_pos);
             if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
+                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
                     d_debug_post_shaping_background != 0 ||
                     d_debug_shaper_inputs != 0 ||
@@ -2161,13 +2438,13 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     }
 
     /* Step budget exhausted -- treat as escaped along last known direction */
-    float3 const final_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+    float3 const final_pos = d_kerr_ray_position(kr);
     if (terminal_pos != nullptr) { *terminal_pos = final_pos; }
-    float3 const esc_dir   = d_sub(final_pos, cam_pos);
+    float3 const esc_dir   = last_dir;
     if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
         float4 const bg4 = d_background_color(d_normalize(esc_dir));
         float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-        bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
+        bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
             d_debug_post_shaping_background != 0 ||
             d_debug_shaper_inputs != 0 ||
@@ -2296,12 +2573,44 @@ __device__ __forceinline__ DStokes d_stokes_step(DStokes s,
 }
 
 /**
+ * @brief Front-to-back compositing of one segment for a trace marching from the observer.
+ *
+ * The segment's own contribution (d_stokes_step from zero) reaches the
+ * observer through every nearer segment: observed += T e with T the nearer
+ * segments' transfer operator. In the simplified K each operator is
+ * exp(-alphaI ds) times a rotation of (Q, U) by rhoV ds; these commute, so T
+ * is carried as transmit and a summed Faraday angle. Twin of
+ * stokesCompositeStep in shader/include/stokes_transport.glsl.
+ */
+__device__ __forceinline__ void d_stokes_composite_step(DStokes &observed, float &transmit,
+                                                        float &faraday, float jI, float jQ,
+                                                        float jU, float jV, float alphaI,
+                                                        float rhoV, float ds) {
+    if (ds <= 0.0f) {
+        return;
+    }
+    DStokes const zero = {0.0f, 0.0f, 0.0f, 0.0f};
+    DStokes const seg = d_stokes_step(zero, jI, jQ, jU, jV, alphaI, rhoV, ds);
+    float sin_f, cos_f;
+    sincosf(faraday, &sin_f, &cos_f);
+    observed.i = fmaf(transmit, seg.i, observed.i);
+    observed.q = fmaf(transmit, cos_f * seg.q - sin_f * seg.u, observed.q);
+    observed.u = fmaf(transmit, sin_f * seg.q + cos_f * seg.u, observed.u);
+    observed.v = fmaf(transmit, seg.v, observed.v);
+    float const tau = fmaxf(alphaI, 0.0f) * ds;
+    transmit *= (tau < 700.0f) ? expf(-tau) : 0.0f;
+    faraday = fmaf(rhoV, ds, faraday);
+}
+
+/**
  * @brief Trace a Kerr geodesic with polarized Stokes I,Q,U,V transport.
  *
  * Extends d_trace_geodesic_rte() to track Stokes polarization state alongside
  * the color-accurate intensity accumulator.  The I channel uses the same
  * front-to-back compositing as d_trace_geodesic_rte() for color consistency.
- * Q, U, V evolve under d_stokes_step() (simplified K: alpha_I + rho_V).
+ * Q, U, V take each segment's d_stokes_step() solution (simplified K: alpha_I + rho_V)
+ * and composite it front to back through the nearer segments
+ * (d_stokes_composite_step).
  *
  * At exit, the Stokes state is mapped to a display color by tinting the
  * accumulated RGB intensity with EVPA-derived hue and linear polarization
@@ -2322,10 +2631,10 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     float const rs = d_rs;
     float const a  = 0.5f * d_spin * rs;
 
-    if (!d_kerr_enabled || fabsf(a) < D_EPSILON) {
+    if (!d_kerr_enabled) {
         HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
         if (terminal_pos != nullptr) { *terminal_pos = hit.hit_point; }
-        return d_shade_hit(hit, cam_pos);
+        return d_shade_hit(hit, hit.origin);
     }
 
     float r_horizon = d_kerr_outer_horizon(rs, a);
@@ -2336,6 +2645,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     float const h_disk      = fmaxf(0.1f * rs, D_EPSILON);
     float const dt          = d_step_size;
     float const max_dist    = d_max_dist;
+    float const escape_r    = fmaxf(max_dist, 1.01f * d_length(cam_pos));
     int   const max_steps   = d_max_steps;
     float const opacity_scl = d_rte_opacity_scale;
 
@@ -2344,20 +2654,33 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     float const b_angle = d_stokes_b_angle;
     float const ne_scale = d_stokes_ne_scale;
 
-    KerrConsts const c  = d_kerr_init_consts(cam_pos, ray_dir, rs, a);
-    KerrRay          kr = d_kerr_init_ray(cam_pos, ray_dir);
+    float const a_trace = d_kerr_trace_spin(a);
+    KerrConsts c;
+    KerrRay    kr;
+    d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
+    float3 const origin = d_kerr_chart_position(cam_pos, rs, a_trace);
+    /* Propagation direction of the latest step: a ray that exhausts its step
+     * budget is shaded as escaping along it, as the escape branch does. */
+    float3 last_dir = ray_dir;
+    /* Set when the ray escapes or the medium turns opaque; otherwise the step
+     * budget ran out and the ray is shaded as escaping along its last
+     * direction, as d_trace_geodesic_rte does. */
+    bool finished = false;
 
     /* Color-accurate intensity accumulator (same as d_trace_geodesic_rte) */
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
     float  transmit = 1.0f;
     float  min_r    = kr.r;
-    float3 closest_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+    float3 closest_pos = d_kerr_ray_position(kr);
 
-    /* Stokes Q, U, V accumulators (I uses accum_i above) */
+    /* Observed Q, U, V composited front to back (I uses accum_i above), with
+     * the nearer segments' transmittance and Faraday angle. */
     DStokes stokes = {0.0f, 0.0f, 0.0f, 0.0f};
+    float pol_transmit = 1.0f;
+    float pol_faraday = 0.0f;
 
     for (int step = 0; step < max_steps; ++step) {
-        float3 const cur_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        float3 const cur_pos = d_kerr_ray_position(kr);
         if (kr.r < min_r) {
             min_r = kr.r;
             closest_pos = cur_pos;
@@ -2369,67 +2692,54 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         }
 
         float const step_dt = d_adaptive_step(kr.r, rs, r_horizon, dt);
-        d_kerr_step(kr, rs, a, c, step_dt);
-        float3 const new_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        KerrRay const before = kr;
+        d_kerr_step(kr, rs, a_trace, c, step_dt);
+        float3 const new_pos = d_kerr_ray_position(kr);
+        last_dir = d_sub(new_pos, cur_pos);
+        /* Affine path length of the Mino step, the unit of alpha_nu and rho_v. */
+        float const path_step = d_kerr_affine_step(before, kr, a_trace, step_dt);
 
-        if (d_adisk_enabled) {
-            float const r_cyl = sqrtf(fmaf(new_pos.x, new_pos.x, new_pos.y * new_pos.y));
-            if (r_cyl >= r_disk_in && r_cyl <= r_disk_out) {
-                float const x    = r_disk_in / fmaxf(r_cyl, D_EPSILON);
-                float const flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
+        float3 emit_color;
+        float j_eff;
+        float rho_norm;
+        if (d_adisk_enabled &&
+            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, emit_color,
+                           j_eff, rho_norm)) {
+            float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
 
-                float const t_norm = sqrtf(sqrtf(fmaxf(flux, 0.0f)));
-                float3 emit_color;
-                if (t_norm > 0.6f) {
-                    emit_color = make_f3(1.0f, 0.9f, 0.8f);
-                } else if (t_norm > 0.3f) {
-                    emit_color = make_f3(1.0f, 0.6f, 0.2f);
-                } else {
-                    emit_color = make_f3(0.8f, 0.2f, 0.1f);
-                }
+            /* Intensity path: same as d_rte_step() */
+            float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu,
+                                               path_step, transmit);
+            accum_i = d_add(accum_i, contrib);
 
-                float const v       = sqrtf(0.5f * rs / fmaxf(r_cyl, D_EPSILON));
-                float const phi_ang = atan2f(new_pos.y, new_pos.x);
-                float const doppler = 1.0f + 0.3f * v * cosf(phi_ang);
-                float const g3      = doppler * doppler * doppler;
+            /* Polarized emission: j_Q, j_U from B-field EVPA */
+            float const cos2b = cosf(2.0f * b_angle);
+            float const sin2b = sinf(2.0f * b_angle);
+            float const jI_s  = j_eff * (emit_color.x + emit_color.y + emit_color.z)
+                                * 0.33333333f;
+            float const jQ_s  = -jI_s * pi_lin * cos2b;
+            float const jU_s  = -jI_s * pi_lin * sin2b;
 
-                float const z_over_h  = new_pos.z / h_disk;
-                float const rho_norm  = expf(-0.5f * z_over_h * z_over_h);
+            /* Faraday rotation: rhoV = ne_scale * <rho> over the chord */
+            float const rho_v = ne_scale * rho_norm;
 
-                float const j_eff    = flux * g3 * rho_norm;
-                float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
+            /* Q, U, V through the nearer segments (I is handled by accum_i above) */
+            d_stokes_composite_step(stokes, pol_transmit, pol_faraday, 0.0f, jQ_s, jU_s, 0.0f,
+                                    alpha_nu, rho_v, path_step);
 
-                /* Intensity path: same as d_rte_step() */
-                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu,
-                                                   step_dt, transmit);
-                accum_i = d_add(accum_i, contrib);
-
-                /* Polarized emission: j_Q, j_U from B-field EVPA */
-                float const cos2b = cosf(2.0f * b_angle);
-                float const sin2b = sinf(2.0f * b_angle);
-                float const jI_s  = j_eff * (emit_color.x + emit_color.y + emit_color.z)
-                                    * 0.33333333f;
-                float const jQ_s  = -jI_s * pi_lin * cos2b;
-                float const jU_s  = -jI_s * pi_lin * sin2b;
-
-                /* Faraday rotation: rhoV = ne_scale * rho_norm */
-                float const rho_v = ne_scale * rho_norm;
-
-                /* Stokes step for Q, U, V (I is handled by accum_i above) */
-                stokes = d_stokes_step(stokes, 0.0f, jQ_s, jU_s, 0.0f,
-                                       alpha_nu, rho_v, step_dt);
-
-                if (transmit < 0.005f) { break; }
+            if (transmit < 0.005f) {
+                finished = true;
+                break;
             }
         }
 
-        if (kr.r > max_dist) {
+        if (kr.r > escape_r && kr.vr > 0.0f) {
             float3 const esc_dir = d_sub(new_pos, cur_pos);
             if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
+                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
                     d_debug_post_shaping_background != 0 ||
                     d_debug_shaper_inputs != 0 ||
@@ -2443,13 +2753,35 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                 accum_i.y += transmit * bg.y;
                 accum_i.z += transmit * bg.z;
             }
+            finished = true;
             break;
+        }
+    }
+
+    if (!finished) {
+        float3 const esc_dir = last_dir;
+        if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
+            float4 const bg4 = d_background_color(d_normalize(esc_dir));
+            float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
+            bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
+            if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                d_debug_post_shaping_background != 0 ||
+                d_debug_shaper_inputs != 0 ||
+                d_debug_closest_approach_state != 0 ||
+                d_debug_closest_approach_timeline != 0 ||
+                d_debug_closest_approach_direction != 0 ||
+                d_debug_escaped_direction != 0) {
+                return make_float4(bg.x, bg.y, bg.z, 1.0f);
+            }
+            accum_i.x += transmit * bg.x;
+            accum_i.y += transmit * bg.y;
+            accum_i.z += transmit * bg.z;
         }
     }
 
     /* Map Stokes state to display color: tint intensity by EVPA and P_lin */
     if (terminal_pos != nullptr) {
-        *terminal_pos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        *terminal_pos = d_kerr_ray_position(kr);
     }
     float const I_lum = (accum_i.x + accum_i.y + accum_i.z) * 0.33333333f;
     float const P_lin = (I_lum > 1.0e-10f)

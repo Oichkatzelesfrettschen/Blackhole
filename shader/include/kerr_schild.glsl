@@ -7,8 +7,9 @@
  *
  * WHY: Boyer-Lindquist (BL) coordinates have a coordinate singularity at
  *      Delta = r^2 - r_s*r + a^2 = 0 (the outer horizon).  kerr.glsl
- *      kerrStep() uses the outgoing KS phi/t update (A + dr_dlam)/Delta
- *      whose numerator cancels the Delta pole for ingoing photons at r_+.
+ *      kerrStep() uses the ingoing KS phi/t update (P + vr)/Delta on the
+ *      time-reversed ray (kerrTraceSpin), whose numerator cancels the Delta
+ *      pole for photons falling toward the future horizon at r_+.
  *      This file provides the full coordinate utility library for callers
  *      that need explicit KS metric components or velocity transforms.
  *
