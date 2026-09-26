@@ -2,13 +2,12 @@
  * @file tests/iron_kline_test.cpp
  * @brief Validation tests for the Fe K-alpha relativistic line profile (iron_kline.h).
  *
- * WHY: The Laor (1991) g-factor and 2-D disk integral must satisfy several
- *      analytically verifiable limits before being trusted for X-ray spectral
- *      comparison.  Any regression in the g-factor formula or the normalization
- *      convention changes synthetic spectra in ways that are not immediately
- *      obvious from visual inspection of the profile alone.
+ * The no-bending g-factor and 2-D disk integral must satisfy analytically
+ * verifiable limits before being trusted for X-ray spectral comparison; a
+ * regression in the g-factor or the normalization convention changes
+ * synthetic spectra in ways the profile shape alone does not reveal.
  *
- * Tests (10):
+ * Tests (11):
  *   1. g-factor at Schwarzschild ISCO face-on = sqrt(1/2) (pure gravitational redshift).
  *   2. g-factor > 1 on approaching side (phi=pi/2) for edge-on view (Doppler boost).
  *   3. g-factor < 1 on receding side (phi=3pi/2) for edge-on view (Doppler redshift).
@@ -19,6 +18,7 @@
  *   8. Profile width (full range) increases with inclination (Doppler broadening).
  *   9. ironKLineGMin for Schwarzschild = sqrt(0.5) ~ 0.707.
  *  10. All flux values are non-negative.
+ *  11. Face-on g at the a*=0.9 ISCO = 1/u^t = 0.370868.
  */
 
 #include <algorithm>
@@ -229,6 +229,19 @@ bool testGMinSchwarzschild() {
   return true;
 }
 
+/* Test 11: face-on Kerr ISCO shift is 1/u^t, including the (1 + a r^{-3/2})
+ * factor: 0.370868 at a = 0.9 (0.465 without it). */
+bool testGFactorKerrFaceOnIsco() {
+  std::cout << "Test 11: g at the a*=0.9 ISCO face-on = 1/u^t = 0.371\n";
+
+  const double g = kerrDiskGFactor(iscoGeom(0.9), 0.0, 0.9, 0.0);
+  const double gMin = ironKLineGMin(0.9);
+  const std::string buf = std::format("g={:.6f}, gMin={:.6f}, expected 0.370868", g, gMin);
+  check(std::abs(g - 0.370868) < 1.0e-5 && std::abs(gMin - 0.370868) < 1.0e-5,
+        "g at a*=0.9 ISCO (face-on) = 0.371", buf);
+  return true;
+}
+
 /* Test 10: All flux values in the profile are non-negative. */
 bool testProfileFluxNonNegative() {
   std::cout << "Test 10: all flux values are non-negative\n";
@@ -272,6 +285,8 @@ int main() try {
   testGMinSchwarzschild();
   std::cout << "\n";
   testProfileFluxNonNegative();
+  std::cout << "\n";
+  testGFactorKerrFaceOnIsco();
   std::cout << "\n";
 
   std::cout << "================================================\n"

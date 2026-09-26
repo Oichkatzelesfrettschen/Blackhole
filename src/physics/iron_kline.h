@@ -1,32 +1,20 @@
 /**
  * @file src/physics/iron_kline.h
- * @brief Relativistically broadened Fe K-alpha emission line profile (Laor 1991).
+ * @brief Fe K-alpha line profile of a Kerr thin disk without light bending.
  *
- * WHY: The Fe K-alpha line at 6.4 keV is the primary observable for black hole
- *      spin measurement in X-ray binaries and AGN.  Gravitational redshift from
- *      the ISCO plus Doppler broadening from disk rotation produce a skewed red
- *      wing whose shape encodes spin.  Without this, the simulation cannot
- *      produce synthetic X-ray spectra for RXTE/XMM/NuSTAR/XRISM comparison.
+ * The 6.4 keV Fe K-alpha line broadened by the disk's gravitational and
+ * Doppler shifts is the X-ray observable used to measure spin. This header
+ * integrates g^4 epsilon(r) r dr dphi over a thin disk with power-law
+ * emissivity epsilon ~ r^{-q} and returns F(E) normalized to unit integral.
  *
- * WHAT: Laor (1991) / Cunningham (1975) g-factor for circular equatorial Kerr
- *       orbits.  2D (r, phi) disk integration with power-law emissivity
- *       epsilon(r) ~ r^{-q}.  Returns F(E/E_0) normalized so the integral = 1.
- *
- * HOW:  g-factor (energy shift from disk frame to observer at infinity):
- *
- *   g(r, phi, iota) = sqrt(1 - 3/r + 2*a/r^{3/2})
- *                   / (1 - sin(phi)*sin(iota) / (sqrt(r) + a/r))
- *
- *   where r in units of GM/c^2, a = dimensionless spin in [0, 1),
- *   iota = observer inclination from polar axis [rad].
- *
- *   Derivation: g = 1 / (u^t_em * (1 - Omega * b)),  where
- *     u^t_em = 1/sqrt(f(r)),  f(r) = 1 - 3/r + 2*a/r^{3/2}
- *     Omega  = 1 / (r^{3/2} + a)  [prograde Keplerian angular velocity, M=1]
- *     b      = r * sin(phi) * sin(iota)  [photon impact parameter, far-field]
- *
- *   Flux weighting: g^4 * epsilon(r) * r (from Lorentz invariant I/nu^3 = const
- *   plus photon bunching; see Fabian et al. 1989 MNRAS 238, 729).
+ * Energy shift (M = 1): g = 1 / (u^t (1 - Omega lambda)) with the Keplerian
+ * emitter's u^t = (1 + a r^{-3/2}) / sqrt(1 - 3/r + 2a r^{-3/2}) and
+ * Omega = 1 / (r^{3/2} + a) (physics::diskTransferG). The photon's lambda is
+ * the flat-space projection r sin(phi) sin(iota): rays travel in straight
+ * lines, and the disk-area weight r dr dphi stands in for the observer's
+ * solid angle. The profile is therefore the no-bending approximation, not
+ * the ray-traced transfer function of Laor (1991); the face-on red edge
+ * g = 1/u^t at the ISCO is exact (0.371 at a = 0.9).
  *
  * References:
  *   - Laor (1991) ApJ 376, 90
@@ -47,6 +35,7 @@
 #include <vector>
 
 #include "constants.h"
+#include "disk_transfer.h"
 #include "safe_limits.h"
 
 namespace physics {
@@ -78,34 +67,25 @@ namespace physics {
 // ============================================================================
 
 /**
- * @brief Energy shift g = E_obs/E_em for a circular Kerr orbit at (r, phi).
+ * @brief Energy shift g = E_obs/E_em for a circular Kerr orbit at (r, phi),
+ *        with the photon's lambda = r sin(phi) sin(iota) (no light bending).
  *
- * Valid for r >= r_isco > 0, a in [0, 1), iota in [0, pi/2].
+ * physics::diskTransferG at that lambda; valid for r >= r_isco > 0,
+ * a in [0, 1), iota in [0, pi/2].
  *
  * @param r     Disk radius [GM/c^2]
  * @param phi   Azimuthal angle [rad] (phi=pi/2 is the approaching side)
  * @param aStar Dimensionless BH spin a* in [0, 1)
  * @param iota  Observer inclination from polar axis [rad]
- * @return g-factor (>0; g<1 = redshifted, g>1 = blueshifted)
+ * @return g-factor (>0; g<1 = redshifted, g>1 = blueshifted); 0 where no
+ *         circular orbit exists
  */
 [[nodiscard]] inline double kerrDiskGFactor(double r, double phi,
                                              double aStar, double iota) noexcept {
     if (r <= 0.0) {
         return 0.0;
     }
-    const double sqrtR = std::sqrt(r);
-    // Stability factor f(r) = 1 - 3/r + 2a/r^{3/2}
-    const double f = 1.0 - (3.0 / r) + (2.0 * aStar / (r * sqrtR));
-    if (f <= 0.0) {
-        return 0.0;  // Below or at ISCO (marginally stable orbit)
-    }
-    // Omega * r = 1 / (sqrt(r) + a/r)
-    const double omegaR = 1.0 / (sqrtR + (aStar / r));
-    const double denom  = 1.0 - (std::sin(phi) * std::sin(iota) * omegaR);
-    if (denom <= 0.0) {
-        return 0.0;  // Caustic (unphysical for r >= r_isco)
-    }
-    return std::sqrt(f) / denom;
+    return diskTransferG(r, aStar, r * std::sin(phi) * std::sin(iota));
 }
 
 // ============================================================================
@@ -232,21 +212,16 @@ ironKLineProfile(const IronKLineParams &params) {
 }
 
 /**
- * @brief Minimum g-factor (maximum redshift) at the prograde ISCO.
+ * @brief Face-on g-factor at the prograde ISCO, g = 1/u^t.
  *
- * For face-on inclination (iota=0), all disk emission at r_isco has:
- *   g_min = sqrt(1 - 3/r_isco + 2*a/r_isco^{3/2})
- *
- * This is the characteristic "red edge" of the Fe K-alpha profile.
+ * This is the characteristic "red edge" of the face-on Fe K-alpha profile:
+ * 0.7071 at a = 0, 0.3709 at a = 0.9, 0.0927 at a = 0.998.
  *
  * @param aStar Dimensionless spin in [0, 1)
  * @return g-factor at r_isco, face-on  (in [0, 1])
  */
 [[nodiscard]] inline double ironKLineGMin(double aStar) noexcept {
-    const double r    = iscoGeom(aStar);
-    const double sqrtR = std::sqrt(r);
-    const double f    = 1.0 - (3.0 / r) + (2.0 * aStar / (r * sqrtR));
-    return (f > 0.0) ? std::sqrt(f) : 0.0;
+    return diskTransferG(iscoGeom(aStar), aStar, 0.0);
 }
 
 } // namespace physics
