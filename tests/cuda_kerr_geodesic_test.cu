@@ -22,8 +22,9 @@
  * direction starts on shell.
  *
  * d_disk_segment integrates the Gaussian disk layer along each step's chord:
- * a ray crossing it at radius 30 reproduces the analytic emission column for
- * chords from 0.1 h to 100 h, and a ray whose footprint straddles r_in or
+ * a ray crossing it at radius 30 reproduces the emission column of the
+ * orbiting-emitter disk (physics::pageThorneFluxShape, physics::diskTransferG)
+ * for chords from 0.1 h to 100 h, and a ray whose footprint straddles r_in or
  * r_out converges to the quadrature column as chords shrink.
  *
  * d_kerr_chart_position is the chart the ray state starts in: the camera
@@ -46,6 +47,8 @@
 
 #include "cuda/kernel_launch.h"
 #include "cuda/device_physics.cuh"
+#include "physics/disk_transfer.h"
+#include "physics/page_thorne.h"
 
 namespace {
 
@@ -103,7 +106,8 @@ __global__ void kerr_slab_kernel(float3 pos, float3 dir, float step_size, float 
 
 /* Ray at inclination incl crossing the disk midplane at (cross_x, 0, 0) from
  * z = 3 to z = -3, cut into chords of seg_length (offset 0.37), each passed
- * to d_disk_segment (r_in = 6, r_s = 2, h = 0.2). out[0] = sum(j_eff * len). */
+ * to d_disk_segment (r_in = 6, r_s = 2, h = 0.2) with photon Lz / E = 0.
+ * out[0] = sum(j_eff * len). */
 __global__ void disk_slab_kernel(float seg_length, float incl, float cross_x, float *out) {
     float3 const dir = make_f3(sinf(incl), 0.0f, -cosf(incl));
     float const total = 6.0f / cosf(incl);
@@ -116,7 +120,7 @@ __global__ void disk_slab_kernel(float seg_length, float incl, float cross_x, fl
         float j_eff;
         float rho;
         if (d_disk_segment(d_add(start, d_scale(dir, s0)), d_add(start, d_scale(dir, s1)), 6.0f,
-                           200.0f, 0.2f, 2.0f, emit_color, j_eff, rho)) {
+                           200.0f, 0.2f, 2.0f, 0.0f, emit_color, j_eff, rho)) {
             column += j_eff * (s1 - s0);
         }
         s0 = s1;
@@ -139,6 +143,22 @@ __global__ void chart_origin_kernel(float3 pos, float3 dir, float a, float *out)
     out[3] = chart.x;
     out[4] = chart.y;
     out[5] = chart.z;
+}
+
+/* Disk emission constants of an a = 0 hole at unit brightness with the
+ * Physical transfer, so j_eff = g^4 (F / F_peak) <rho>. */
+bool setUnitDiskConstants() {
+    float const spin = 0.0f;
+    auto const peak = static_cast<float>(physics::pageThorneFluxPeak(0.0));
+    float const temperature = 6500.0f;
+    float const brightness = 1.0f;
+    int const physicalMode = 0;
+    return cudaMemcpyToSymbol(d_spin, &spin, sizeof(float)) == cudaSuccess &&
+           cudaMemcpyToSymbol(d_disk_flux_peak, &peak, sizeof(float)) == cudaSuccess &&
+           cudaMemcpyToSymbol(d_disk_peak_temperature, &temperature, sizeof(float)) ==
+               cudaSuccess &&
+           cudaMemcpyToSymbol(d_disk_brightness, &brightness, sizeof(float)) == cudaSuccess &&
+           cudaMemcpyToSymbol(d_disk_transfer_mode, &physicalMode, sizeof(int)) == cudaSuccess;
 }
 
 /* d_chart_to_boyer_lindquist(d_kerr_chart_position(p)) for the constant-
@@ -387,15 +407,16 @@ TEST(CudaKerrGeodesic, DiskSegmentIntegratesTheGaussianColumn) {
     if (!cudaAvailable()) {
         GTEST_SKIP() << "No CUDA device";
     }
-    /* Column flux g^3 sqrt(2 pi) h / cos(i) at r = 30 (x = 0.2, phi = 0);
-     * 0.5% covers the radial flux variation the inclined ray sweeps. */
-    double const x = 0.2;
-    double const flux = x * x * x * (1.0 - std::sqrt(x));
-    double const g = 1.0 + 0.3 * std::sqrt(1.0 / 30.0);
+    /* Column g^4 (F / F_peak) sqrt(2 pi) h / cos(i) at r = 30 M, a = 0, for
+     * a photon with Lz / E = 0 (g = 1 / u^t); 0.5% covers the radial flux
+     * variation the inclined ray sweeps. Unit brightness, Physical transfer. */
+    ASSERT_TRUE(setUnitDiskConstants());
+    double const g = physics::diskTransferG(30.0, 0.0, 0.0);
+    double const flux = physics::pageThorneFluxShape(30.0, 0.0) / physics::pageThorneFluxPeak(0.0);
     float *dOut = nullptr;
     cudaMalloc(&dOut, sizeof(float));
     for (double const incl : {0.0, K_PI / 3.0}) {
-        double const column = flux * g * g * g * std::sqrt(2.0 * K_PI) * 0.2 / std::cos(incl);
+        double const column = flux * g * g * g * g * std::sqrt(2.0 * K_PI) * 0.2 / std::cos(incl);
         for (float const seg : {0.02f, 0.2f, 2.0f, 20.0f}) {
             disk_slab_kernel<<<1, 1>>>(seg, static_cast<float>(incl), 30.0f, dOut);
             cudaDeviceSynchronize();
@@ -412,8 +433,11 @@ TEST(CudaKerrGeodesic, DiskSegmentClipsChordsToTheAnnulus) {
         GTEST_SKIP() << "No CUDA device";
     }
     /* 10 degrees from grazing, crossing 1 M outside r_in = 6 and 1 M inside
-     * r_out = 200: the midpoint-rule column (2e6 points) is the reference;
-     * chords of 0.5 and 0.1 must reach 1% and 0.1%. */
+     * r_out = 200: the midpoint-rule column (2e6 points) of g^4 (F / F_peak)
+     * <rho> for a photon with Lz / E = 0 is the reference; chords of 0.5 and
+     * 0.1 must reach 1% and 0.1%. */
+    ASSERT_TRUE(setUnitDiskConstants());
+    double const fluxPeak = physics::pageThorneFluxPeak(0.0);
     double const incl = 80.0 * K_PI / 180.0;
     float *dOut = nullptr;
     cudaMalloc(&dOut, sizeof(float));
@@ -429,9 +453,9 @@ TEST(CudaKerrGeodesic, DiskSegmentClipsChordsToTheAnnulus) {
             if (rho < 6.0 || rho > 200.0) {
                 continue;
             }
-            double const u = 6.0 / rho;
-            double const g = 1.0 + 0.3 * std::sqrt(1.0 / rho) * (x >= 0.0 ? 1.0 : -1.0);
-            ref += u * u * u * (1.0 - std::sqrt(u)) * g * g * g * std::exp(-12.5 * z * z) * total / n;
+            double const g = physics::diskTransferG(rho, 0.0, 0.0);
+            ref += physics::pageThorneFluxShape(rho, 0.0) / fluxPeak * g * g * g * g *
+                   std::exp(-12.5 * z * z) * total / n;
         }
         for (float const seg : {0.5f, 0.1f}) {
             disk_slab_kernel<<<1, 1>>>(seg, static_cast<float>(incl), static_cast<float>(cross_x),

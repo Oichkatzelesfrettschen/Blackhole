@@ -114,4 +114,62 @@ TEST_F(SettingsPersistence, LegacyVsyncAndUnknownKeysRemainSupported) {
   EXPECT_EQ(manager.get().windowWidth, Settings{}.windowWidth);
 }
 
+TEST_F(SettingsPersistence, FreshSettingsCarryTheRuleExposureAndSkyIntensity) {
+  const Settings fresh;
+  EXPECT_EQ(fresh.toneExposure, K_DEFAULT_TONE_EXPOSURE);
+  EXPECT_EQ(fresh.backgroundIntensity, K_DEFAULT_BACKGROUND_INTENSITY);
+  auto &manager = SettingsManager::instance();
+  const auto output = testDirectory() / "fresh.json";
+  ASSERT_TRUE(manager.save(output.string()));
+  EXPECT_TRUE(readText(output).contains("\"toneExposure\": 4.9,"));
+}
+
+TEST_F(SettingsPersistence, LegacyFileWithoutExposureKeepsItsLook) {
+  const auto input = testDirectory() / "legacy-exposure.json";
+  std::ofstream stream(input);
+  stream << "\"backgroundIntensity\": 1,\n\"gamma\": 2.5\n";
+  stream.close();
+  ASSERT_TRUE(stream);
+  auto &manager = SettingsManager::instance();
+  ASSERT_TRUE(manager.load(input.string()));
+  EXPECT_EQ(manager.get().toneExposure, K_LEGACY_TONE_EXPOSURE);
+  EXPECT_EQ(manager.get().backgroundIntensity, 1.0f);
+}
+
+TEST_F(SettingsPersistence, SavedExposureRoundTrips) {
+  auto &manager = SettingsManager::instance();
+  manager.get().toneExposure = 2.75f;
+  const auto output = testDirectory() / "exposure.json";
+  ASSERT_TRUE(manager.save(output.string()));
+  manager.resetToDefaults();
+  ASSERT_TRUE(manager.load(output.string()));
+  EXPECT_EQ(manager.get().toneExposure, 2.75f);
+}
+
+TEST_F(SettingsPersistence, FileWithoutCameraKeysTakesTheDefaultCamera) {
+  const auto input = testDirectory() / "no-camera.json";
+  std::ofstream stream(input);
+  stream << "\"windowWidth\": 1280\n";
+  stream.close();
+  ASSERT_TRUE(stream);
+  auto &manager = SettingsManager::instance();
+  ASSERT_TRUE(manager.load(input.string()));
+  EXPECT_EQ(manager.get().cameraDistance, K_DEFAULT_CAMERA_DISTANCE);
+  EXPECT_EQ(manager.get().cameraPitch, K_DEFAULT_CAMERA_PITCH_DEG);
+  // The default camera sits outside the disk's 100 r_s = 200 unit outer edge.
+  EXPECT_GT(K_DEFAULT_CAMERA_DISTANCE, 200.0f);
+}
+
+TEST_F(SettingsPersistence, SavedCameraKeysKeepTheirValues) {
+  const auto input = testDirectory() / "saved-camera.json";
+  std::ofstream stream(input);
+  stream << "\"cameraYaw\": 0,\n\"cameraPitch\": -6,\n\"cameraDistance\": 15\n";
+  stream.close();
+  ASSERT_TRUE(stream);
+  auto &manager = SettingsManager::instance();
+  ASSERT_TRUE(manager.load(input.string()));
+  EXPECT_EQ(manager.get().cameraDistance, 15.0f);
+  EXPECT_EQ(manager.get().cameraPitch, -6.0f);
+}
+
 } // namespace

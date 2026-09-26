@@ -34,6 +34,7 @@
 
 #include "cuda/kernel_launch.h"
 #include "cuda/device_physics.cuh"
+#include "physics/page_thorne.h"
 
 /* ========================================================================
  * Device-side kernel wrapper for calling d_stokes_step from host tests
@@ -130,6 +131,10 @@ static BH_LaunchParams make_stokes_params(int w, int h, int stokes_on,
     p.redshift_enabled = 0;
     p.kerr_enabled     = 1;
     p.use_luts         = 0;
+    /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
+    p.disk_peak_temperature = 6500.0f;
+    p.disk_brightness       = 1.0f;
+    p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
     p.cam_pos[0] = 0.0f; p.cam_pos[1] = 0.0f; p.cam_pos[2] = 20.0f;
     /* col2=(0,0,-1): center ray goes from z=20 toward BH at origin */
     p.cam_basis[0] = 1.0f; p.cam_basis[4] = 1.0f; p.cam_basis[8] = -1.0f;

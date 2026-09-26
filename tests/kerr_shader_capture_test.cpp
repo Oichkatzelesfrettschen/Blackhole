@@ -39,7 +39,9 @@
 #include <gtest/gtest.h>
 
 #include "physics/constants.h"
+#include "physics/disk_transfer.h"
 #include "physics/kerr.h"
+#include "physics/page_thorne.h"
 #include "physics/stokes_transport.h"
 #include "support/gl_compute_harness.h"
 
@@ -413,7 +415,7 @@ void main() {
 // A straight ray at inclination `incl` from the disk normal crossing the
 // midplane at (crossX, 0, 0) (default 30) from z = 3 to z = -3 (15 scale heights of h = 0.2
 // each side), cut into chords of length segLength starting at an offset of
-// 0.37 segLength, each passed to bhDiskSegment and rteStepVec3 with
+// 0.37 segLength, each passed to bhDiskSegment (photon Lz / E = 0) and rteStepVec3 with
 // absorption kappa * jEff, as bhTraceGeodesicRTE does per step. Reports the
 // emission column sum(jEff * length) and the intensity.
 std::string diskSlabShader() {
@@ -440,7 +442,7 @@ void main() {
     float jEff;
     float rho;
     if (bhDiskSegment(start + s0 * dir, start + s1 * dir, bhDiskInnerRadius(r_s), 100.0 * r_s,
-                      h, r_s, emitColor, jEff, rho)) {
+                      h, r_s, 0.0, emitColor, jEff, rho)) {
       column += jEff * (s1 - s0);
       accum += rteStepVec3(vec3(1.0), jEff, kappa * jEff, s1 - s0, transmit);
     }
@@ -773,6 +775,43 @@ void main() {
   EXPECT_GT(out[0], 0.0F);
   EXPECT_GT(out[1], 0.0F);
   EXPECT_GT(out[2], 0.0F);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+TEST_F(KerrShaderCaptureTest, EdgePixelsSpanTheVerticalFieldOfView) {
+  // With fovScale = tan(fov / 2) the image edges sit at tan(fov / 2) above
+  // and below the forward axis and aspect * tan(fov / 2) to either side, the
+  // glm::perspective frustum of the same camera and CUDA's d_ray_dir. Pixel
+  // centers half a pixel inside the top edge of a 400-row image and the right
+  // edge of an 800-column one give 1 - 1/400 and 2 (1 - 1/800) with
+  // fovScale = 1.
+  const GLuint program = bhtest::createComputeProgram(R"(
+#version 460 core
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+#include "include/interop_raygen.glsl"
+void main() {
+  mat3 basis = mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0));
+  vec3 top = bhRayDir(vec2(200.0, 399.5), vec2(400.0, 400.0), 1.0, basis);
+  vec3 right = bhRayDir(vec2(799.5, 200.0), vec2(800.0, 400.0), 1.0, basis);
+  result[0] = top.x / top.z;
+  result[1] = top.y / top.z;
+  result[2] = right.x / right.z;
+  result[3] = right.y / right.z;
+}
+)");
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 4), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 4);
+  // float32 slope of a unit-length direction: a few ulp of 1.
+  constexpr float kTol = 1e-5F;
+  EXPECT_NEAR(out[0], 0.0F, kTol);
+  EXPECT_NEAR(out[1], 0.9975F, kTol);
+  EXPECT_NEAR(out[2], 1.9975F, kTol);
+  EXPECT_NEAR(out[3], 0.0F, kTol);
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }
@@ -1171,18 +1210,18 @@ TEST_F(KerrShaderCaptureTest, StationaryLimitStartIsOnShell) {
 }
 
 TEST_F(KerrShaderCaptureTest, DiskSegmentIntegratesTheGaussianColumn) {
-  // The Gaussian disk layer (h = 0.2) crossed at radius 30 (r_in = 6 at
-  // a = 0) has emission column flux g^3 sqrt(2 pi) h / cos(i), flux =
-  // x^3 (1 - sqrt x) with x = r_in / r and g = 1 + 0.3 sqrt(r_s / 2r) on the
-  // phi = 0 meridian, and intensity (1 - exp(-kappa column)) / kappa. Chords
-  // from 0.1 h to 100 h must reproduce both within 0.5%: the chord integral
-  // is exact, and the residual is the variation of flux across the +-3 h
-  // tan(i) the inclined ray sweeps radially (~1e-3). An end-point sample of
-  // the density misses the midplane for chords much longer than h.
+  // The Gaussian disk layer (h = 0.2) crossed at radius 30 M (a = 0) by a
+  // photon with Lz / E = 0 has emission column g^4 (F / F_peak) sqrt(2 pi) h /
+  // cos(i), with the Page-Thorne flux and g = 1 / u^t of the orbiting emitter
+  // (bhDiskEmission at unit brightness), and intensity (1 - exp(-kappa
+  // column)) / kappa. Chords from 0.1 h to 100 h must reproduce both within
+  // 0.5%: the chord integral is exact, and the residual is the variation of
+  // flux across the +-3 h tan(i) the inclined ray sweeps radially (~1e-3). An
+  // end-point sample of the density misses the midplane for chords much
+  // longer than h.
   const double h = 0.2;
-  const double x = 6.0 / 30.0;
-  const double flux = x * x * x * (1.0 - std::sqrt(x));
-  const double g = 1.0 + (0.3 * std::sqrt(1.0 / 30.0));
+  const double flux = physics::pageThorneFluxShape(30.0, 0.0) / physics::pageThorneFluxPeak(0.0);
+  const double g = physics::diskTransferG(30.0, 0.0, 0.0);
   const double kappa = 400.0;
   const GLuint program = bhtest::createComputeProgram(diskSlabShader());
   GLuint ssbo = 0;
@@ -1190,11 +1229,16 @@ TEST_F(KerrShaderCaptureTest, DiskSegmentIntegratesTheGaussianColumn) {
   glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 2), nullptr, GL_DYNAMIC_DRAW);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
   for (const double incl : {0.0, std::numbers::pi / 3.0}) {
-    const double column = flux * g * g * g * std::sqrt(2.0 * std::numbers::pi) * h / std::cos(incl);
+    const double column =
+        flux * g * g * g * g * std::sqrt(2.0 * std::numbers::pi) * h / std::cos(incl);
     const double intensity = (1.0 - std::exp(-kappa * column)) / kappa;
     for (const float segLength : {0.02F, 0.2F, 2.0F, 20.0F}) {
       glUseProgram(program);
       glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
+      glUniform1f(glGetUniformLocation(program, "diskFluxPeak"),
+                  static_cast<float>(physics::pageThorneFluxPeak(0.0)));
+      glUniform1f(glGetUniformLocation(program, "diskBrightness"), 1.0F);
+      glUniform1f(glGetUniformLocation(program, "diskTransferMode"), 0.0F);
       glUniform1f(glGetUniformLocation(program, "segLength"), segLength);
       glUniform1f(glGetUniformLocation(program, "incl"), static_cast<float>(incl));
       glUniform1f(glGetUniformLocation(program, "kappa"), static_cast<float>(kappa));
@@ -1211,11 +1255,13 @@ TEST_F(KerrShaderCaptureTest, DiskSegmentIntegratesTheGaussianColumn) {
 
 namespace {
 
-// Emission column flux g^3 exp(-z^2 / 2h^2) over the annulus 6 <= rho <= 200
-// (r_s = 2, a = 0) along the diskSlabShader ray, by the midpoint rule with
-// 2e6 points.
+// Emission column g^4 (F / F_peak) exp(-z^2 / 2h^2) over the annulus
+// 6 <= rho <= 200 (r_s = 2, M = 1, a = 0) along the diskSlabShader ray, by the
+// midpoint rule with 2e6 points: the Page-Thorne flux and the orbiting-emitter
+// g of a photon with Lz / E = 0, as bhDiskSegment reads them (bhDiskEmission).
 double referenceDiskColumn(double crossX, double incl) {
   const double h = 0.2;
+  const double fluxPeak = physics::pageThorneFluxPeak(0.0);
   const double total = 6.0 / std::cos(incl);
   const int n = 2'000'000;
   const double ds = total / n;
@@ -1228,10 +1274,9 @@ double referenceDiskColumn(double crossX, double incl) {
     if (rho < 6.0 || rho > 200.0) {
       continue;
     }
-    const double u = 6.0 / rho;
-    const double flux = u * u * u * (1.0 - std::sqrt(u));
-    const double g = 1.0 + (0.3 * std::sqrt(1.0 / rho) * (x >= 0.0 ? 1.0 : -1.0));
-    column += flux * g * g * g * std::exp(-0.5 * (z / h) * (z / h)) * ds;
+    const double flux = physics::pageThorneFluxShape(rho, 0.0) / fluxPeak;
+    const double g = physics::diskTransferG(rho, 0.0, 0.0);
+    column += flux * g * g * g * g * std::exp(-0.5 * (z / h) * (z / h)) * ds;
   }
   return column;
 }
@@ -1265,10 +1310,14 @@ TEST_F(KerrShaderCaptureTest, DiskSegmentClipsChordsToTheAnnulus) {
       const std::string where = "crossX=" + std::to_string(crossX) +
                                 " segLength=" + std::to_string(segLength) +
                                 " error=" + std::to_string(error);
-      // Second order in the chord: the centroid read of the radial factors is
-      // exact for linear variation, and flux curves sharply just outside r_in.
-      EXPECT_LE(error, std::max(1.05 * previous, 1e-5)) << where;
+      // Second order in the chord once chords are shorter than the +-3.4 M
+      // footprint: the centroid read of the radial factors is exact for linear
+      // variation, and the Page-Thorne flux curves sharply just outside r_in.
+      // Longer chords read one centroid for the whole footprint (about 2% at
+      // crossX = 7), and the float Page-Thorne bracket near r_in sets a floor
+      // near 1e-4.
       if (segLength <= 0.5F) {
+        EXPECT_LE(error, std::max(1.05 * previous, 2e-4)) << where;
         EXPECT_LT(error, 1e-2) << where;
       }
       if (segLength <= 0.1F) {
@@ -1695,8 +1744,8 @@ void main() {
   vec3 terminalPos;
   vec3 rte = bhTraceGeodesicRTE(ray, 2.0, 100.0, 100, 0.1, 0.5, terminalPos).rgb;
   vec3 pol = bhTraceGeodesicStokes(ray, 2.0, 100.0, 100, 0.1, 0.5, 0.0, 0.0, terminalPos).rgb;
-  vec3 lastStep = bhBackgroundColorFromDir(normalize(hit.escapedDir), hit.minRadius, 2.0).rgb;
-  vec3 chord = bhBackgroundColorFromDir(normalize(hit.hitPoint - hit.origin), hit.minRadius, 2.0).rgb;
+  vec3 lastStep = bhBackgroundColorFromDir(normalize(hit.escapedDir)).rgb;
+  vec3 chord = bhBackgroundColorFromDir(normalize(hit.hitPoint - hit.origin)).rgb;
   bool exhausted = (hit.debugFlags & BH_DEBUG_FLAG_MAXSTEPS) != 0 && !hit.hitHorizon;
   int o = 13 * i;
   result[o] = exhausted ? 1.0 : 0.0;

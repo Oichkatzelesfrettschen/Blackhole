@@ -20,7 +20,9 @@
 #include "render/render_state.h"
 #include "render/settings_sync.h"
 #include "settings.h"
+#include "ui/settings_window.h"
 
+using blackhole::K_DEFAULT_DEPTH_FAR;
 using blackhole::K_MAX_BLOOM_ITERATIONS;
 using blackhole::loadSettingsIntoRenderState;
 using blackhole::RenderState;
@@ -39,9 +41,18 @@ Settings distinctSettings() {
   settings.swapInterval = 2;
   settings.bloomStrength = 0.7f;
   settings.tonemappingEnabled = false;
+  settings.toneExposure = 3.5f;
   settings.gamma = 1.8f;
   settings.bloomIterations = 4;
   return settings;
+}
+
+// depthFar normalizes depth cues and bounds the gizmo frustum: the default
+// camera distance plus the disk's 200-unit outer radius fits inside it.
+TEST(SettingsSync, DefaultDepthFarHoldsTheDefaultCameraAndTheDisk) {
+  const auto rsStorage = std::make_unique<RenderState>();
+  EXPECT_FLOAT_EQ(rsStorage->display.depthFar, K_DEFAULT_DEPTH_FAR);
+  EXPECT_GT(K_DEFAULT_DEPTH_FAR, K_DEFAULT_CAMERA_DISTANCE + 200.0f);
 }
 
 } // namespace
@@ -62,7 +73,7 @@ TEST(SettingsSync, HydratesOnceThenLatches) {
   EXPECT_EQ(rs.display.swapInterval, 2);
   EXPECT_FLOAT_EQ(rs.post.bloomStrength, 0.7f);
   EXPECT_FALSE(rs.post.tonemappingEnabled);
-  EXPECT_FLOAT_EQ(rs.post.toneExposure, 1.0f);
+  EXPECT_FLOAT_EQ(rs.post.toneExposure, 3.5f);
   EXPECT_FLOAT_EQ(rs.post.gamma, 1.8f);
   EXPECT_EQ(rs.post.bloomIterations, 4);
   EXPECT_TRUE(rs.camera.cameraSettingsLoaded);
@@ -106,6 +117,7 @@ TEST(SettingsSync, WritesBackLiveState) {
   rs.post.bloomStrength = 0.42f;
   rs.post.tonemappingEnabled = false;
   rs.post.gamma = 2.1f;
+  rs.post.toneExposure = 7.25f;
   rs.post.bloomIterations = 6;
 
   Settings settings; // defaults, overwritten by the sync
@@ -118,5 +130,37 @@ TEST(SettingsSync, WritesBackLiveState) {
   EXPECT_FLOAT_EQ(settings.bloomStrength, 0.42f);
   EXPECT_FALSE(settings.tonemappingEnabled);
   EXPECT_FLOAT_EQ(settings.gamma, 2.1f);
+  EXPECT_FLOAT_EQ(settings.toneExposure, 7.25f);
   EXPECT_EQ(settings.bloomIterations, 6);
+}
+
+// The Kerr-tracer disk controls apply whenever a Kerr-tracer disk renders and
+// never on the legacy fragment tracer alone.
+TEST(SettingsSync, KerrDiskControlsFollowTheActiveTracer) {
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
+  EXPECT_TRUE(ui::kerrDiskShadingActive(rs)); // physical tracer is the default
+  rs.physicsCore.physicalRayTracer = false;
+  EXPECT_FALSE(ui::kerrDiskShadingActive(rs));
+  rs.dispatch.useComputeRaytracer = true;
+  EXPECT_TRUE(ui::kerrDiskShadingActive(rs));
+  rs.dispatch.useComputeRaytracer = false;
+  rs.compare.compareComputeFragment = true;
+  EXPECT_TRUE(ui::kerrDiskShadingActive(rs));
+}
+
+// The legacy disk controls apply only while the legacy fragment tracer draws
+// the displayed image: not under the compute path, which owns the displayed
+// texture, and not in compare mode, whose fragment side runs the Kerr branch.
+TEST(SettingsSync, LegacyControlsFollowTheDisplayedTracer) {
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
+  EXPECT_FALSE(ui::legacyFragmentTracerActive(rs)); // physical tracer is the default
+  rs.physicsCore.physicalRayTracer = false;
+  EXPECT_TRUE(ui::legacyFragmentTracerActive(rs));
+  rs.dispatch.useComputeRaytracer = true;
+  EXPECT_FALSE(ui::legacyFragmentTracerActive(rs));
+  rs.dispatch.useComputeRaytracer = false;
+  rs.compare.compareComputeFragment = true;
+  EXPECT_FALSE(ui::legacyFragmentTracerActive(rs));
 }

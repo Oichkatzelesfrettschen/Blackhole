@@ -24,7 +24,7 @@ void loadSettingsIntoRenderState(RenderState &rs, const Settings &settings) {
   if (!rs.post.postProcessingSettingsLoaded) {
     rs.post.bloomStrength = settings.bloomStrength;
     rs.post.tonemappingEnabled = settings.tonemappingEnabled;
-    rs.post.toneExposure = 1.0f;
+    rs.post.toneExposure = settings.toneExposure;
     rs.post.gamma = settings.gamma;
     rs.post.postProcessingSettingsLoaded = true;
   }
@@ -41,6 +41,7 @@ void syncRenderStateToSettings(const RenderState &rs, Settings &settings,
   settings.renderScale = rs.display.renderScale;
   settings.bloomStrength = rs.post.bloomStrength;
   settings.tonemappingEnabled = rs.post.tonemappingEnabled;
+  settings.toneExposure = rs.post.toneExposure;
   settings.gamma = rs.post.gamma;
   settings.bloomIterations = rs.post.bloomIterations;
 }
