@@ -21,6 +21,7 @@
 
 #include <array>
 #include <cstddef>
+#include <map>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -198,6 +199,10 @@ public:
   /** @brief Signal delay between two nodes in whole turns, as quantized at
    *         emission. */
   [[nodiscard]] std::int64_t nodeDelayTurns(NodeId from, NodeId to) const;
+  /** @brief Scheduled occurrences pending; never above K_MAX_PENDING_SCHEDULES. */
+  [[nodiscard]] std::size_t pendingScheduleCount() const { return scheduledEvents_.size(); }
+  /** @brief Schedule effects refused because the pending set was full. */
+  [[nodiscard]] std::uint64_t refusedScheduleCount() const { return refusedSchedules_; }
 
   /** @brief Immutable render-facing view for the UI layer: plain values, no
    *         pointers into campaign storage. The VIEW contract; grows per UI
@@ -279,11 +284,6 @@ private:
     EventCategory category = EventCategory::Info;
   };
 
-  /** @brief A scheduled story event: evaluated on `turn`. */
-  struct ScheduledEvent {
-    std::int64_t turn = 0;
-    std::uint32_t eventIndex = 0; ///< Into config_.story.events.
-  };
 
   void evaluateOutcome();
   [[nodiscard]] double redeployFuelCost(int fromBand, int toBand) const;
@@ -379,7 +379,10 @@ private:
   std::vector<StationNode> nodes_;            ///< Host at index 0, then colonies.
   std::vector<std::int64_t> storyParams_;     ///< Resolved story parameters, by index.
   std::vector<std::uint8_t> eventFired_;      ///< Once-events that have fired, by index.
-  std::vector<ScheduledEvent> scheduledEvents_;
+  /// Pending scheduled occurrences keyed by due turn (event index as value),
+  /// equal turns in insertion order, so a turn touches only its due entries.
+  std::multimap<std::int64_t, std::uint32_t> scheduledEvents_;
+  std::uint64_t refusedSchedules_ = 0; ///< Schedule effects refused at K_MAX_PENDING_SCHEDULES.
   std::vector<ArrivalRecord> arrivals_;
   double energyLostToDarkness_ = 0.0;         ///< Colony production that reached a dark host.
   double fleetYieldLostToDarkness_ = 0.0;     ///< Fleet completion yield that reached a dark host.

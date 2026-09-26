@@ -432,8 +432,10 @@ void CampaignState::resolveStoryParams() {
         predicate.kind == PredicateKind::FlagSet || predicate.kind == PredicateKind::FlagClear;
     // A silence threshold below zero would fire with no silent interval; the
     // loader refuses one, and so does the core.
+    // The reference is validated before it is resolved: resolve() indexes the
+    // parameters and must only see a reference intRefValid accepted.
     const bool silenceOk = predicate.kind != PredicateKind::Received || !predicate.silentFor ||
-                           resolve(predicate.value) >= 0;
+                           (intRefValid(predicate.value) && resolve(predicate.value) >= 0);
     return enumsOk(predicate) && intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
            (!flagged || flagOk(predicate.flag)) && silenceOk;
   };
@@ -713,8 +715,12 @@ void CampaignState::applyEffect(const EventEffect &effect, const EventDef &event
     if (!target.has_value()) {
       break;
     }
-    scheduledEvents_.push_back({.turn = clock_.turn() + resolve(effect.delayTurns),
-                                .eventIndex = static_cast<std::uint32_t>(target.value())});
+    if (scheduledEvents_.size() >= K_MAX_PENDING_SCHEDULES) {
+      ++refusedSchedules_; // the pending set is full: this occurrence is refused
+      break;
+    }
+    scheduledEvents_.emplace(clock_.turn() + resolve(effect.delayTurns),
+                             static_cast<std::uint32_t>(target.value()));
     break;
   }
   }
@@ -729,13 +735,11 @@ void CampaignState::evaluateStory() {
   // Each due schedule entry is one occurrence: an event scheduled twice for
   // this turn runs twice.
   std::vector<std::uint32_t> occurrences(events.size(), 0);
-  for (const ScheduledEvent &scheduled : scheduledEvents_) {
-    if (scheduled.turn <= now) {
-      ++occurrences.at(scheduled.eventIndex);
-    }
+  // Only due entries are touched: the pending set is ordered by due turn.
+  while (!scheduledEvents_.empty() && scheduledEvents_.begin()->first <= now) {
+    ++occurrences.at(scheduledEvents_.begin()->second);
+    scheduledEvents_.erase(scheduledEvents_.begin());
   }
-  std::erase_if(scheduledEvents_,
-                [now](const ScheduledEvent &scheduled) { return scheduled.turn <= now; });
   for (std::size_t index = 0; index < events.size(); ++index) {
     const EventDef &event = events.at(index);
     std::uint32_t runs = occurrences.at(index);
@@ -807,10 +811,11 @@ void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
     appendU8(out, fired);
   }
   appendU32(out, static_cast<std::uint32_t>(scheduledEvents_.size()));
-  for (const ScheduledEvent &scheduled : scheduledEvents_) {
-    appendI64(out, scheduled.turn);
-    appendU32(out, scheduled.eventIndex);
+  for (const auto &[dueTurn, eventIndex] : scheduledEvents_) {
+    appendI64(out, dueTurn);
+    appendU32(out, eventIndex);
   }
+  appendU64(out, refusedSchedules_);
   appendU32(out, static_cast<std::uint32_t>(arrivals_.size()));
   for (const ArrivalRecord &arrival : arrivals_) {
     appendU8(out, static_cast<std::uint8_t>(arrival.kind));

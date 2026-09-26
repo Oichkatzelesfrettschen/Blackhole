@@ -21,6 +21,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/detail/exceptions.hpp>
+#include <nlohmann/detail/input/json_sax.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -117,6 +119,46 @@ Enum lookup(const std::string &text, const std::vector<std::pair<std::string_vie
   }
   return found->second;
 }
+
+/** @brief SAX pass that records the first key repeated within one object
+ *         and the syntax error that stops the scan. Optional, not an
+ *         empty-string sentinel: "" is a legal key. */
+struct DuplicateKeyScan final : nlohmann::json_sax<Json> {
+  std::vector<std::set<std::string>> openObjects;
+  std::optional<std::string> duplicate;
+  std::optional<std::string> syntaxError;
+
+  bool null() override { return true; }
+  bool boolean(bool /*value*/) override { return true; }
+  bool number_integer(number_integer_t /*value*/) override { return true; }
+  bool number_unsigned(number_unsigned_t /*value*/) override { return true; }
+  bool number_float(number_float_t /*value*/, const string_t & /*text*/) override { return true; }
+  bool string(string_t & /*value*/) override { return true; }
+  bool binary(binary_t & /*value*/) override { return true; }
+  bool start_object(std::size_t /*elements*/) override {
+    openObjects.emplace_back();
+    return true;
+  }
+  bool key(string_t &name) override {
+    if (!openObjects.empty() && !openObjects.back().insert(name).second && !duplicate) {
+      duplicate = name;
+    }
+    return true;
+  }
+  bool end_object() override {
+    if (!openObjects.empty()) {
+      openObjects.pop_back();
+    }
+    return true;
+  }
+  bool start_array(std::size_t /*elements*/) override { return true; }
+  bool end_array() override { return true; }
+  bool parse_error(std::size_t /*position*/, const std::string & /*token*/,
+                   const nlohmann::detail::exception &error) override {
+    syntaxError = error.what();
+    return false;
+  }
+};
 
 class Loader {
 public:
@@ -476,8 +518,11 @@ private:
         if (effect.kind != EffectKind::Schedule) {
           continue;
         }
-        const auto target = std::ranges::find(story_.events, effect.event, &EventDef::id);
-        if (target == story_.events.end()) {
+        // Events are sorted by id here: a binary search per schedule effect.
+        const auto target = std::lower_bound(
+            story_.events.begin(), story_.events.end(), effect.event,
+            [](const EventDef &lhs, std::uint32_t id) { return lhs.id < id; });
+        if (target == story_.events.end() || target->id != effect.event) {
           fail("$.events", "event " + std::to_string(event.id) + " schedules unknown event " +
                                std::to_string(effect.event));
         }
@@ -499,29 +544,18 @@ EventLoadResult parseEventSet(std::string_view jsonText) {
   EventLoadResult result;
   try {
     // JSON keeps only the last of duplicated keys; a story that says the same
-    // thing twice is ambiguous, so the parse tracks each open object's keys
-    // and the load refuses a repeat anywhere.
-    std::vector<std::set<std::string>> openObjects;
-    // Optional, not an empty-string sentinel: "" is a legal (and duplicable) key.
-    std::optional<std::string> duplicate;
-    const Json::parser_callback_t trackKeys = [&openObjects, &duplicate](
-                                                  int /*depth*/, Json::parse_event_t event,
-                                                  Json &parsed) {
-      if (event == Json::parse_event_t::object_start) {
-        openObjects.emplace_back();
-      } else if (event == Json::parse_event_t::object_end && !openObjects.empty()) {
-        openObjects.pop_back();
-      } else if (event == Json::parse_event_t::key && !openObjects.empty() &&
-                 !openObjects.back().insert(parsed.get<std::string>()).second &&
-                 !duplicate.has_value()) {
-        duplicate = parsed.get<std::string>();
-      }
-      return true;
-    };
-    const Json root = Json::parse(jsonText.begin(), jsonText.end(), trackKeys);
-    if (duplicate.has_value()) {
-      throw LoadError("$: duplicate key \"" + duplicate.value() + "\"");
+    // thing twice is ambiguous, so a first SAX pass tracks each open object's
+    // keys and the load refuses a repeat anywhere. (A parse callback would do
+    // the same in one pass, but nlohmann's callback parser rescans the parent
+    // array at every object end, which is quadratic in a long event list.)
+    DuplicateKeyScan scan;
+    if (!Json::sax_parse(jsonText.begin(), jsonText.end(), &scan)) {
+      throw LoadError("json: " + scan.syntaxError.value_or("malformed document"));
     }
+    if (scan.duplicate.has_value()) {
+      throw LoadError("$: duplicate key \"" + scan.duplicate.value() + "\"");
+    }
+    const Json root = Json::parse(jsonText.begin(), jsonText.end());
     Loader loader;
     result.story = loader.load(root);
   } catch (const LoadError &error) {

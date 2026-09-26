@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <bit>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -134,7 +136,10 @@ TEST(EventLoader, StructuralErrorsRejected) {
   EXPECT_FALSE(errorOf(R"({"events": [{"id": 1, "source": "moon"}]})").empty());
   EXPECT_FALSE(errorOf(R"({"events": [{"id": 1, "category": "gossip"}]})").empty());
   EXPECT_FALSE(errorOf(R"({"params": {"k": {"min": 5, "max": 1}}})").empty());
-  EXPECT_FALSE(errorOf(R"({"events": [)").empty()); // malformed JSON
+  // Malformed JSON reports the parser's own message, including when the
+  // syntax error follows a repeated key.
+  EXPECT_EQ(errorOf(R"({"events": [)").rfind("json: [json.exception.parse_error", 0), 0U);
+  EXPECT_EQ(errorOf(R"({"a": 1, "a": 2)").rfind("json: [json.exception.parse_error", 0), 0U);
 }
 
 // Falsifier: two files differing only in the order of events, parameters,
@@ -614,4 +619,74 @@ TEST(EventLoader, UnboundedScheduleGrowthRejected) {
   }
   EXPECT_EQ(game::scheduleGrowth(tripled), game::ScheduleGrowth::FanOut);
   EXPECT_FALSE(storyBuildsValid(tripled));
+}
+
+// Falsifier: a simple one-turn cycle that also schedules a far-future event
+// piling up pending schedule entries without bound (one more per pass) --
+// the pending set must stop at K_MAX_PENDING_SCHEDULES, the refusals must be
+// counted (and digested), and the cycle itself must keep running.
+TEST(EventPredicates, PendingSchedulesAreCapped) {
+  const std::unique_ptr<StoryRun> run = runStory(R"({"events": [
+      {"id": 1, "triggers": [{"turn_at_least": 1}], "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]},
+      {"id": 2, "mode": "scheduled",
+       "effects": [{"schedule": {"event": 2, "delay_turns": 1}},
+                   {"schedule": {"event": 3, "delay_turns": 1000000000}},
+                   {"emit": {"kind": "notice", "to": "host"}}]},
+      {"id": 3, "mode": "scheduled", "effects": [{"emit": {"kind": "notice", "to": "host"}}]}]})",
+                                                 0);
+  const std::int64_t turns = static_cast<std::int64_t>(game::K_MAX_PENDING_SCHEDULES) + 500;
+  run->state->advanceTurns(turns);
+  EXPECT_EQ(run->state->pendingScheduleCount(), game::K_MAX_PENDING_SCHEDULES);
+  EXPECT_EQ(run->state->refusedScheduleCount(),
+            static_cast<std::uint64_t>(turns - 1) + 1 - game::K_MAX_PENDING_SCHEDULES);
+  // The cycle's own reschedule comes first in its effects, so it always fits:
+  // it has fired on every turn from 2 on.
+  EXPECT_EQ(noticeTurns(*run->state, 2, game::K_AUTHORITY_NODE).size(),
+            static_cast<std::size_t>(turns - 1));
+}
+
+// Falsifier: a hand-built silence predicate naming a parameter that does not
+// exist throwing out of the constructor instead of making valid() false.
+TEST(EventPredicates, MalformedSilenceReferenceIsInvalidNotAThrow) {
+  game::EventSet story;
+  story.flags = {game::K_DARK_FLAG_NAME};
+  game::EventDef event;
+  event.id = 1;
+  game::EventPredicate received;
+  received.kind = game::PredicateKind::Received;
+  received.silentFor = true;
+  received.value = {.plus = 0, .times = 1, .param = 99};
+  event.triggers = {received};
+  story.events = {event};
+  bool valid = true;
+  EXPECT_NO_THROW(valid = storyBuildsValid(story));
+  EXPECT_FALSE(valid);
+}
+
+// Falsifier: loading a large story being quadratic in its event count -- a
+// linear search per schedule target (about 2e10 comparisons for this
+// 200,000-event cycle), or a parse callback that rescans the event array at
+// every object end; it must load, as a Bounded simple cycle, in well under
+// ten seconds.
+TEST(EventLoader, LargeStoryLoadsThroughTheJsonPath) {
+  constexpr int kEvents = 200000;
+  std::string json = R"({"events": [)";
+  json.reserve(static_cast<std::size_t>(kEvents) * 110);
+  for (int index = 0; index < kEvents; ++index) {
+    const int id = index + 1;
+    const int next = index + 1 == kEvents ? 1 : id + 1;
+    json += (index > 0 ? ", " : "") + std::string(R"({"id": )") + std::to_string(id) +
+            R"(, "mode": "scheduled", "effects": [{"schedule": {"event": )" +
+            std::to_string(next) + R"(, "delay_turns": 1}}]})";
+  }
+  json += "]}";
+  const auto started = std::chrono::steady_clock::now();
+  const game::EventLoadResult loaded = game::parseEventSet(json);
+  const double seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+  ASSERT_TRUE(loaded.ok()) << loaded.error;
+  EXPECT_EQ(loaded.story.events.size(), static_cast<std::size_t>(kEvents));
+  EXPECT_EQ(game::scheduleGrowth(loaded.story), game::ScheduleGrowth::Bounded);
+  RecordProperty("load_seconds", std::to_string(seconds));
+  EXPECT_LT(seconds, 10.0); // about 0.7 s here; the quadratic paths took over 20 s
 }

@@ -20,6 +20,7 @@
 #ifndef BLACKHOLE_GAME_EVENT_H
 #define BLACKHOLE_GAME_EVENT_H
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -235,6 +236,14 @@ void appendEventSet(std::vector<std::uint8_t> &out, const EventSet &story);
 /// repeating cycle, per pass round the cycle): the fan-out bound a story's
 /// schedule graph must respect.
 inline constexpr std::uint64_t K_MAX_SCHEDULE_FANOUT = 1024;
+
+/// Most schedule entries a campaign holds pending at once. Growth checks bound
+/// how occurrences multiply, but a repeating cycle that also schedules far
+/// ahead still adds one pending entry per pass until the first matures; a
+/// schedule effect that would exceed this is refused (in effect order, so a
+/// cycle's own reschedule listed first always fits) and counted in the
+/// digest, which keeps a story's memory and per-turn work bounded.
+inline constexpr std::size_t K_MAX_PENDING_SCHEDULES = 65536;
 
 /** @brief Whether a story's schedules can multiply occurrences without bound,
  *         and how. Values name the first violation found. */
