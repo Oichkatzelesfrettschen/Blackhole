@@ -151,6 +151,15 @@ public:
    */
   static glm::vec2 measureText(const std::string &text, float scale = 1.0f);
 
+  /**
+   * @brief Pixel step between consecutive lines at @p scale.
+   *
+   * Both render overloads advance each line by this height times
+   * HudOverlayOptions::lineSpacing, and the background box of a line spans
+   * this height plus 2*scale of pad above and below.
+   */
+  static float lineHeight(float scale);
+
   /** @brief Return the compiled overlay shader program handle. */
   [[nodiscard]] GLuint program() const { return program_; }
   /** @brief Return the vertex array object handle. */

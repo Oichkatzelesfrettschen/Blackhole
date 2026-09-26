@@ -43,20 +43,6 @@ struct EasyFontVertex {
 };
 
 /**
- * @brief Return the pixel height of one text line at the given scale.
- * @param scale Glyph scale multiplier.
- * @return Line height in pixels.
- */
-float lineHeight(float scale) {
-  const char *sample = "Ag";
-  // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
-  // WHY: stb_easy_font_height takes char* (not const char*); no const version exists.
-  return (static_cast<float>(stb_easy_font_height(const_cast<char *>(sample))) * scale) +
-         (2.0f * scale);
-  // NOLINTEND(cppcoreguidelines-pro-type-const-cast)
-}
-
-/**
  * @brief Rasterize a text string into the interleaved float vertex buffer.
  *
  * Converts stb_easy_font quads into two triangles each (x,y,r,g,b,a layout)
@@ -227,6 +213,15 @@ glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
   const float width = (maxx - minx) * scale;
   const float height = (maxy - miny) * scale;
   return {width, height};
+}
+
+float HudOverlay::lineHeight(float scale) {
+  const char *sample = "Ag";
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
+  // WHY: stb_easy_font_height takes char* (not const char*); no const version exists.
+  return (static_cast<float>(stb_easy_font_height(const_cast<char *>(sample))) * scale) +
+         (2.0f * scale);
+  // NOLINTEND(cppcoreguidelines-pro-type-const-cast)
 }
 
 void HudOverlay::rebuildVertices(int width, int height) {

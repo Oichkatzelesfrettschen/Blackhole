@@ -247,7 +247,7 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   saved.restore();
 }
 
-SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth) {
+SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth, int renderHeight) {
   const std::string_view label = TESSERACT_SPECULATIVE_LABEL;
   const std::size_t citationEnd = label.find(": ") + 1;
   const std::size_t citationStart = label.find(" (");
@@ -259,15 +259,22 @@ SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth) {
       std::vector<std::string>{head + " " + citation, verdict},
       std::vector<std::string>{head, citation, verdict}};
 
-  const float available =
+  const float availableWidth =
       std::max(static_cast<float>(renderWidth) - (2.0f * SPECULATIVE_LABEL_MARGIN), 1.0f);
-  // A line of unit-scale width w occupies (w + 4) * scale with its background pad.
-  const auto fitScale = [available](const std::vector<std::string> &lines) {
+  const float availableHeight =
+      std::max(static_cast<float>(renderHeight) - (2.0f * SPECULATIVE_LABEL_MARGIN), 1.0f);
+  const float unitLineHeight = HudOverlay::lineHeight(1.0f);
+  // At scale s a line of unit width w occupies (w + 4) * s across, and n
+  // lines occupy (n * lineHeight(1) + 4) * s down, pad included.
+  const auto fitScale = [availableWidth, availableHeight,
+                         unitLineHeight](const std::vector<std::string> &lines) {
     const float widest = std::accumulate(
         lines.begin(), lines.end(), 0.0f, [](float acc, const std::string &line) {
           return std::max(acc, HudOverlay::measureText(line, 1.0f).x);
         });
-    return std::min(available / (widest + 4.0f), SPECULATIVE_LABEL_MAX_SCALE);
+    const float blockHeight = (static_cast<float>(lines.size()) * unitLineHeight) + 4.0f;
+    return std::min({availableWidth / (widest + 4.0f), availableHeight / blockHeight,
+                     SPECULATIVE_LABEL_MAX_SCALE});
   };
   for (const auto &lines : candidates) {
     const float scale = fitScale(lines);
@@ -275,13 +282,24 @@ SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth) {
       return {.lines = lines, .scale = scale};
     }
   }
-  if (fitScale(candidates.back()) >= SPECULATIVE_LABEL_MIN_SCALE) {
-    return {.lines = candidates.back(), .scale = fitScale(candidates.back())};
+  // No phrase break reaches the wrap scale: take the one that fits largest,
+  // fewer lines first on a tie.
+  const std::vector<std::string> *best = &candidates.front();
+  float bestScale = fitScale(*best);
+  for (const auto &lines : candidates) {
+    const float scale = fitScale(lines);
+    if (scale > bestScale) {
+      best = &lines;
+      bestScale = scale;
+    }
   }
-  // Below the three-line minimum, wrap word by word at HudOverlay's scale
-  // floor so every line fits; only a single word wider than the target
-  // (under ~60 px) can still overflow.
-  const float unitBudget = (available / SPECULATIVE_LABEL_MIN_SCALE) - 4.0f;
+  if (bestScale >= SPECULATIVE_LABEL_MIN_SCALE) {
+    return {.lines = *best, .scale = bestScale};
+  }
+  // Below that, wrap word by word at HudOverlay's scale floor. Every line
+  // fits once the target is SPECULATIVE_LABEL_MIN_TARGET_WIDTH wide and the
+  // block fits once it is SPECULATIVE_LABEL_MIN_TARGET_HEIGHT tall.
+  const float unitBudget = (availableWidth / SPECULATIVE_LABEL_MIN_SCALE) - 4.0f;
   std::vector<std::string> wrapped;
   std::string current;
   std::size_t pos = 0;

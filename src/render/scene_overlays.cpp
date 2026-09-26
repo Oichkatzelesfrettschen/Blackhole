@@ -104,9 +104,11 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
   // The tesseract scene always carries its provenance label, drawn into the
   // presented texture so recorded frames keep it too.
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
-    // Refit whenever the render width changes so the label never clips.
-    if (rs.tesseract.speculativeLabelWidth != rs.targets.renderWidth) {
-      const SpeculativeLabelLayout layout = layoutSpeculativeLabel(rs.targets.renderWidth);
+    // Refit whenever either render dimension changes so the label never clips.
+    if (rs.tesseract.speculativeLabelWidth != rs.targets.renderWidth ||
+        rs.tesseract.speculativeLabelHeight != rs.targets.renderHeight) {
+      const SpeculativeLabelLayout layout =
+          layoutSpeculativeLabel(rs.targets.renderWidth, rs.targets.renderHeight);
       HudOverlayOptions opts;
       opts.scale = layout.scale;
       opts.margin = SPECULATIVE_LABEL_MARGIN;
@@ -121,6 +123,7 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
       });
       rs.tesseract.speculativeLabel.setLines(lines);
       rs.tesseract.speculativeLabelWidth = rs.targets.renderWidth;
+      rs.tesseract.speculativeLabelHeight = rs.targets.renderHeight;
     }
     rs.tesseract.speculativeLabel.render(rs.targets.renderWidth, rs.targets.renderHeight);
   }

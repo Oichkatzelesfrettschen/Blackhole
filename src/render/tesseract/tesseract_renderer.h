@@ -39,7 +39,7 @@ struct RenderState;
 inline constexpr std::string_view TESSERACT_SPECULATIVE_LABEL =
     "SPECULATIVE (Thorne, The Science of Interstellar ch. 29-31): not physics";
 
-/** @brief Lines and HUD glyph scale that fit the label into one render width. */
+/** @brief Lines and HUD glyph scale that fit the label into one render target. */
 struct SpeculativeLabelLayout {
   std::vector<std::string> lines;
   float scale = 1.0f;
@@ -49,24 +49,40 @@ struct SpeculativeLabelLayout {
 inline constexpr float SPECULATIVE_LABEL_MAX_SCALE = 2.0f;
 /// Smallest scale the layout prefers before wrapping to more lines.
 inline constexpr float SPECULATIVE_LABEL_WRAP_SCALE = 1.0f;
-/// Pixel margin between the label background and each side of the target.
+/// Pixel margin between the label background and each edge of the target.
 inline constexpr float SPECULATIVE_LABEL_MARGIN = 14.0f;
-/// HudOverlay clamps its scale to this floor, so narrower targets wrap instead.
+/// HudOverlay clamps its scale to this floor, so smaller targets wrap instead.
 inline constexpr float SPECULATIVE_LABEL_MIN_SCALE = 0.25f;
+/// Smallest target width that holds every line: the widest word,
+/// "SPECULATIVE", at SPECULATIVE_LABEL_MIN_SCALE with pad (19.75 px) plus
+/// both margins.
+inline constexpr int SPECULATIVE_LABEL_MIN_TARGET_WIDTH = 48;
+/// Smallest target height that holds the block at
+/// SPECULATIVE_LABEL_MIN_TARGET_WIDTH: seven word-wrapped lines at
+/// SPECULATIVE_LABEL_MIN_SCALE with pad (25.5 px) plus both margins.
+inline constexpr int SPECULATIVE_LABEL_MIN_TARGET_HEIGHT = 54;
 
 /**
- * @brief Fit TESSERACT_SPECULATIVE_LABEL into @p renderWidth pixels.
+ * @brief Fit TESSERACT_SPECULATIVE_LABEL into a @p renderWidth x
+ *        @p renderHeight target.
+ *
+ * The label draws top-center with SPECULATIVE_LABEL_MARGIN on every side. At
+ * scale s a line of unit-scale width w occupies (w + 4) * s across and n lines
+ * occupy n * HudOverlay::lineHeight(s) + 4 * s down, the 4 * s being the
+ * 2 * s background pad on each side; the layout keeps both inside the target
+ * minus two margins.
  *
  * Tries one line, then two (break after the citation), then three (label,
- * citation, verdict), taking the first whose widest line, plus the 2*scale
- * background pad on each side and SPECULATIVE_LABEL_MARGIN on each side,
- * fits at scale >= SPECULATIVE_LABEL_WRAP_SCALE; the scale is the largest
- * that fits, capped at SPECULATIVE_LABEL_MAX_SCALE. Narrower targets keep
- * three lines and shrink the scale to fit, down to HudOverlay's 0.25 floor;
- * below that they wrap word by word at the floor scale.
- * The lines joined with spaces always equal the label.
+ * citation, verdict), taking the first that fits at scale >=
+ * SPECULATIVE_LABEL_WRAP_SCALE, at the largest scale that fits, capped at
+ * SPECULATIVE_LABEL_MAX_SCALE. Otherwise it takes the phrase break that fits
+ * at the largest scale, down to HudOverlay's SPECULATIVE_LABEL_MIN_SCALE
+ * floor; below that it wraps word by word at the floor scale. Every target
+ * at least SPECULATIVE_LABEL_MIN_TARGET_WIDTH x
+ * SPECULATIVE_LABEL_MIN_TARGET_HEIGHT holds the whole block; a smaller one
+ * clips it. The lines joined with spaces always equal the label.
  */
-SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth);
+SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth, int renderHeight);
 
 /** @brief Per-frame parameters of one tesseract pass. */
 struct TesseractFrameInputs {
