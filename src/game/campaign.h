@@ -212,6 +212,17 @@ public:
    *         or not it fizzled). */
   [[nodiscard]] CampaignViewSnapshot perceivedSnapshot(NodeId observer) const;
 
+  /** @brief What a station believes of one of its own orders: the turn it
+   *         estimates the order acts (from where it believes the fleet was at
+   *         issue), or none when it could not place the fleet; and, for a
+   *         placement, the turn from which it takes the fleet to be at the
+   *         target -- the estimate, or the latest possible arrival over every
+   *         band when there is none. */
+  struct OrderBelief {
+    std::optional<std::int64_t> estimatedEffectTurn;
+    std::int64_t believedFromTurn = 0;
+  };
+
   /** @brief Deterministic field-by-field byte serialization of the full
    *         campaign state (explicit widths, -0.0 canonicalized, every double
    *         finite). Determinism artifact, not a versioned save format: it
@@ -325,6 +336,13 @@ private:
                         std::int64_t techPoints, double yieldUnits);
   [[nodiscard]] double nodeDelaySec(NodeId from, NodeId to) const;
   void appendStoryState(std::vector<std::uint8_t> &out) const;
+  /** @brief Beliefs about every order `observer` sent, indexed like
+   *         commandLog_ (entries for other origins are left default). */
+  [[nodiscard]] std::vector<OrderBelief> orderBeliefs(NodeId observer) const;
+  /** @brief The delay a station can compute a priori: geodesic delay times
+   *         the configured coordination overhead, without the relay
+   *         reduction (relay positions are fleet telemetry). */
+  [[nodiscard]] double estimatedDelaySec(double fromRadiusCm, double toRadiusCm) const;
   void applyCapabilityEffects(const std::vector<CapabilityCompletion> &completions);
 
   CampaignConfig config_;

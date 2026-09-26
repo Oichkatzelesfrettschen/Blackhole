@@ -269,6 +269,18 @@ std::string authorityLabel(const game::CampaignViewSnapshot &view) {
                                   : remoteLabel(view, *host, "host");
 }
 
+/** @brief One order's line from its origin to the fleet, with a dot at its
+ *         causal progress when the sender can estimate the arrival. */
+void drawOrderInFlight(ImDrawList *drawList, const game::CampaignViewSnapshot &view,
+                       const game::OrderInFlightView &order, ImVec2 from, ImVec2 to) {
+  drawList->AddLine(from, to, IM_COL32(90, 200, 255, 120), 1.0f);
+  if (!order.effectTurnKnown) {
+    return; // the sender cannot estimate the arrival: no progress dot
+  }
+  const ImVec2 dot = lerp(from, to, signalProgress(view.turn, order.issueTurn, order.effectTurn));
+  drawList->AddCircleFilled(dot, 3.0f, IM_COL32(90, 200, 255, 255), 12);
+}
+
 /** @brief A station's marker position on the map. */
 struct StationPos {
   game::NodeId node = game::K_AUTHORITY_NODE;
@@ -438,15 +450,9 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   // Orders in flight: origin station -> fleet, dot at the causal progress
   // fraction.
   for (const game::OrderInFlightView &order : view.ordersInFlight) {
-    const Marker *target = markerFor(order.fleet);
-    if (target == nullptr) {
-      continue;
+    if (const Marker *target = markerFor(order.fleet); target != nullptr) {
+      drawOrderInFlight(drawList, view, order, nodePos(order.origin), target->pos);
     }
-    const ImVec2 originPos = nodePos(order.origin);
-    drawList->AddLine(originPos, target->pos, IM_COL32(90, 200, 255, 120), 1.0f);
-    const ImVec2 dot = lerp(originPos, target->pos,
-                            signalProgress(view.turn, order.issueTurn, order.effectTurn));
-    drawList->AddCircleFilled(dot, 3.0f, IM_COL32(90, 200, 255, 255), 12);
   }
 
   // Completion reports in flight: fleet -> authority.

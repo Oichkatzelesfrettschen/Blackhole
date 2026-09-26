@@ -5,7 +5,9 @@
  */
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <numeric>
 #include <optional>
 #include <vector>
 
@@ -21,24 +23,6 @@ namespace game {
 
 namespace {
 
-/** @brief The observer's latest placement order for `fleet`, counted from its
- *         effect turn; nullopt when the observer never sent one. */
-std::optional<Command> lastPlacement(const std::vector<LoggedCommand> &log, NodeId observer,
-                                     FleetId fleet, std::int64_t now) {
-  std::optional<Command> placement;
-  std::int64_t latestEffect = -1;
-  for (const LoggedCommand &logged : log) {
-    const Command &command = logged.command;
-    if (command.type == CommandType::PlaceFleet && command.originNode == observer &&
-        command.fleet == fleet && logged.effectTurn <= now &&
-        logged.effectTurn >= latestEffect) {
-      latestEffect = logged.effectTurn;
-      placement = command;
-    }
-  }
-  return placement;
-}
-
 void blankTelemetry(FleetView &fleet) {
   fleet.telemetryKnown = false;
   fleet.reliability = 0.0;
@@ -53,6 +37,59 @@ void blankTelemetry(FleetView &fleet) {
 }
 
 } // namespace
+
+double CampaignState::estimatedDelaySec(double fromRadiusCm, double toRadiusCm) const {
+  if (fromRadiusCm == toRadiusCm) {
+    return 0.0;
+  }
+  return field_->signalDelaySec(fromRadiusCm, toRadiusCm) *
+         std::max(1.0, config_.signalOverheadFactor);
+}
+
+std::vector<CampaignState::OrderBelief> CampaignState::orderBeliefs(NodeId observer) const {
+  std::vector<OrderBelief> beliefs(commandLog_.size());
+  const double originCm = nodes_.at(observer).radiusCm;
+  // The longest the order could take to reach a fleet on any band.
+  const std::int64_t worstTurns = std::accumulate(
+      config_.bandRadiusCm.begin(), config_.bandRadiusCm.end(), std::int64_t{1},
+      [&](std::int64_t worst, double bandCm) {
+        return std::max(worst, clock_.ceilTurns(estimatedDelaySec(originCm, bandCm)));
+      });
+  // Where the observer believes a fleet is at `turn`: the target of its latest
+  // placement believed complete by then.
+  const auto believedBand = [&](FleetId fleet, std::int64_t turn,
+                                std::size_t before) -> std::optional<int> {
+    std::optional<int> band;
+    std::int64_t latest = -1;
+    for (std::size_t index = 0; index < before; ++index) {
+      const LoggedCommand &logged = commandLog_.at(index);
+      if (logged.command.originNode == observer && logged.command.fleet == fleet &&
+          logged.command.type == CommandType::PlaceFleet &&
+          beliefs.at(index).believedFromTurn <= turn &&
+          beliefs.at(index).believedFromTurn >= latest) {
+        latest = beliefs.at(index).believedFromTurn;
+        band = logged.command.targetBand;
+      }
+    }
+    return band;
+  };
+  for (std::size_t index = 0; index < commandLog_.size(); ++index) {
+    const LoggedCommand &logged = commandLog_.at(index);
+    if (logged.command.originNode != observer) {
+      continue;
+    }
+    OrderBelief &belief = beliefs.at(index);
+    const std::optional<int> band = believedBand(logged.command.fleet, logged.issueTurn, index);
+    if (band.has_value()) {
+      belief.estimatedEffectTurn =
+          logged.issueTurn +
+          std::max<std::int64_t>(1, clock_.ceilTurns(estimatedDelaySec(originCm,
+                                                                       bandRadiusCm(*band))));
+    }
+    belief.believedFromTurn = belief.estimatedEffectTurn.value_or(logged.issueTurn + worstTurns);
+  }
+  return beliefs;
+}
 
 CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   CampaignViewSnapshot view = renderSnapshot();
@@ -110,11 +147,31 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   view.intel.clear();
   view.reportsInFlight.clear();
 
+  // The station's own orders in flight show its estimate of their arrival,
+  // not the engine's true effect turn (which encodes the fleet's position).
+  const std::vector<OrderBelief> beliefs = orderBeliefs(observer);
+  for (OrderInFlightView &order : view.ordersInFlight) {
+    const OrderBelief &belief = beliefs.at(order.logIndex);
+    order.effectTurnKnown = belief.estimatedEffectTurn.has_value();
+    order.effectTurn = belief.estimatedEffectTurn.value_or(0);
+  }
+
   // Fleets report to the host: no telemetry here, and a position only where
-  // this station last sent them.
+  // this station believes it last sent them.
   for (FleetView &fleet : view.fleets) {
     blankTelemetry(fleet);
-    const std::optional<Command> placement = lastPlacement(commandLog_, observer, fleet.id, now);
+    std::optional<Command> placement;
+    std::int64_t latest = -1;
+    for (std::size_t index = 0; index < commandLog_.size(); ++index) {
+      const LoggedCommand &logged = commandLog_.at(index);
+      if (logged.command.originNode == observer && logged.command.fleet == fleet.id &&
+          logged.command.type == CommandType::PlaceFleet &&
+          beliefs.at(index).believedFromTurn <= now &&
+          beliefs.at(index).believedFromTurn >= latest) {
+        latest = beliefs.at(index).believedFromTurn;
+        placement = logged.command;
+      }
+    }
     fleet.positionKnown = placement.has_value();
     fleet.bandIndex = placement.has_value() ? placement->targetBand : 0;
     fleet.lane = placement.has_value() ? placement->lane : OrbitLane::Prograde;

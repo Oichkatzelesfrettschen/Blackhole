@@ -96,6 +96,10 @@ struct OrderInFlightView {
   CommandType type = CommandType::PlaceFleet;
   FleetId fleet = K_INVALID_FLEET_ID;
   NodeId origin = K_AUTHORITY_NODE; ///< Station the order left from.
+  std::uint32_t logIndex = 0;       ///< Into CampaignState::commandLog().
+  /// False in a colony's view when the colony could not place the fleet at
+  /// issue, so it cannot estimate the arrival; effectTurn is then 0.
+  bool effectTurnKnown = true;
   std::int64_t issueTurn = 0;
   std::int64_t effectTurn = 0;
 };

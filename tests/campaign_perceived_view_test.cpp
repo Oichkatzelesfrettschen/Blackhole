@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -210,4 +212,63 @@ TEST(PerceivedView, HostDoesNotSeeColonyOrdersInFlight) {
   const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
   ASSERT_EQ(colony.ordersInFlight.size(), 1U);
   EXPECT_EQ(colony.ordersInFlight.front().origin, game::K_FIRST_COLONY_NODE);
+}
+
+namespace {
+
+/** @brief The colony's view of its own in-flight order at `logIndex`. */
+game::OrderInFlightView colonyOrder(const game::CampaignState &state, std::size_t logIndex) {
+  const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  const auto found = std::ranges::find(colony.ordersInFlight, logIndex,
+                                       &game::OrderInFlightView::logIndex);
+  if (found == colony.ordersInFlight.end()) {
+    ADD_FAILURE() << "order " << logIndex << " not in the colony's view";
+    return {};
+  }
+  return *found;
+}
+
+} // namespace
+
+// Falsifier: the colony's in-flight order carrying the engine's true effect
+// turn -- which encodes the fleet's true band -- instead of the colony's own
+// estimate: "unknown" before the colony has ever placed the fleet, equal to
+// the truth while its belief is current, and different once the host has
+// moved the fleet without the colony knowing.
+TEST(PerceivedView, ColonyEstimatesItsOrdersFromItsOwnBelief) {
+  game::CampaignSession session(3, shippedStory(), game::K_MILLER_BAND);
+  game::CampaignState &state = session.state();
+
+  // Never placed: the colony cannot estimate.
+  ASSERT_TRUE(session.issueAssignTask(K_SURVEY_FLEET, 1.0, game::K_FIRST_COLONY_NODE));
+  EXPECT_FALSE(colonyOrder(state, state.commandLog().size() - 1).effectTurnKnown);
+
+  // The colony brings the fleet to Miller's band and waits out the longest
+  // possible delay; its belief is now current.
+  ASSERT_TRUE(session.issuePlaceFleet(K_SURVEY_FLEET, game::K_MILLER_BAND,
+                                      game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                      game::K_FIRST_COLONY_NODE));
+  state.advanceTurns(400);
+  ASSERT_EQ(state.fleets().front().bandIndex, game::K_MILLER_BAND);
+  ASSERT_TRUE(session.issueAssignTask(K_SURVEY_FLEET, 1.0, game::K_FIRST_COLONY_NODE));
+  const game::LoggedCommand current = state.commandLog().back();
+  const game::OrderInFlightView currentView = colonyOrder(state, state.commandLog().size() - 1);
+  ASSERT_TRUE(currentView.effectTurnKnown);
+  EXPECT_EQ(currentView.effectTurn, current.effectTurn);
+
+  // The host moves the fleet back out; the colony is not told.
+  ASSERT_TRUE(session.issuePlaceFleet(K_SURVEY_FLEET, game::K_SURVEY_BAND,
+                                      game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                      game::K_AUTHORITY_NODE));
+  state.advanceTurns(state.commandLog().back().effectTurn - state.turn());
+  ASSERT_EQ(state.fleets().front().bandIndex, game::K_SURVEY_BAND);
+  ASSERT_TRUE(session.issueAssignTask(K_SURVEY_FLEET, 1.0, game::K_FIRST_COLONY_NODE));
+  const game::LoggedCommand stale = state.commandLog().back();
+  const game::OrderInFlightView staleView = colonyOrder(state, state.commandLog().size() - 1);
+  ASSERT_TRUE(staleView.effectTurnKnown);
+  EXPECT_EQ(staleView.effectTurn, stale.issueTurn + 1); // it believes: same radius as Miller
+  EXPECT_GT(stale.effectTurn, staleView.effectTurn);    // truth: the fleet is 100M out
+  // The colony still places the fleet where it last sent it.
+  const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  EXPECT_EQ(colony.fleets.front().bandIndex, game::K_MILLER_BAND);
 }

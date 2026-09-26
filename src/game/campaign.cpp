@@ -579,6 +579,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       order.issueTurn = logged.issueTurn;
       order.effectTurn = logged.effectTurn;
       order.origin = logged.command.originNode;
+      order.logIndex = delivery.commandIndex;
       view.ordersInFlight.push_back(order);
       break;
     }
