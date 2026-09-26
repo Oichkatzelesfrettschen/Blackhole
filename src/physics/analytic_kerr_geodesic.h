@@ -296,6 +296,18 @@ struct QuarticCoeffs {
 #ifdef PHYSICS_HAS_BOOST_JACOBI
 
 /**
+ * @brief Boost.Math policy for the analytic Kerr elliptic functions.
+ *
+ * Boost's default policy promotes double arguments to long double, which on
+ * x86-64 runs the x87 80-bit unit. Evaluating in double keeps the results
+ * within 2e-15 of the promoted values once the input conditioning of K(k)
+ * near k = 1 is factored in (tests/analytic_geodesic_reproducibility_test.cpp);
+ * bench/numerics_bench.cpp measures the cost of both policies.
+ */
+using AnalyticKerrPolicy =
+    boost::math::policies::policy<boost::math::policies::promote_double<false>>;
+
+/**
  * @brief Compute r(lambda) analytically using Jacobi elliptic functions.
  *
  * For a transit orbit with four real roots r1 >= r2 >= r3 >= r4,
@@ -337,8 +349,7 @@ struct QuarticCoeffs {
 
   // Jacobi elliptic function sn(u | k) where k = sqrt(m)
   const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double snVal = boost::math::jacobi_sn(k, u);
-  (void)boost::math::jacobi_cn(k, u); // unused but kept for symmetry
+  const double snVal = boost::math::jacobi_sn(k, u, AnalyticKerrPolicy());
 
   const double sn2 = snVal * snVal;
   const double aCoeff = (r3 * (r1 - r4)) - (r4 * (r1 - r3) * sn2);
@@ -382,7 +393,7 @@ struct QuarticCoeffs {
   }
 
   const double k         = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double kComplete = boost::math::ellint_1(k);
+  const double kComplete = boost::math::ellint_1(k, AnalyticKerrPolicy());
   return kComplete / scale;
 }
 

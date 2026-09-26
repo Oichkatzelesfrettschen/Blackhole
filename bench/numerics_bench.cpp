@@ -6,6 +6,9 @@
  *   stokes  - full-K polarized transfer: one exact step (direct integral and
  *             steady-state split) against the RK4 substeps a 1e-6 relative
  *             error needs, at Faraday depth 1, 100 and 1000.
+ *   boost   - Boost.Math jacobi_sn and ellint_1 under the default policy
+ *             (double promoted to long double) and under AnalyticKerrPolicy
+ *             (promote_double<false>), plus rAnalytic end to end.
  *
  * Every timing is the minimum over five repetitions of a fixed deterministic
  * workload; the header line records the compiler and library versions. Run
@@ -24,8 +27,15 @@
 #include <ratio>
 #include <vector>
 
+#include <boost/math/special_functions/ellint_1.hpp>
+#include <boost/math/special_functions/jacobi_elliptic.hpp>
+#include <boost/version.hpp>
+
+#include "analytic_kerr_geodesic.h"
 #include "stokes_exact.h"
 #include "stokes_transport.h"
+
+static_assert(PHYSICS_HAS_BOOST_JACOBI == 1, "The bench measures the Boost Jacobi path");
 
 namespace {
 
@@ -56,6 +66,7 @@ void printToolVersions() {
 #elif defined(__GNUC__)
   std::printf("compiler: gcc %s\n", __VERSION__);
 #endif
+  std::printf("boost: %s\n", BOOST_LIB_VERSION);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,12 +164,57 @@ void benchStokes() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Boost precision policy
+// ---------------------------------------------------------------------------
+
+void benchBoostPolicy() {
+  std::printf("\n[boost] k in [0, 0.999), u in [0.01, 5.01); promoted = default policy\n");
+  constexpr std::size_t count = 4096;
+  std::vector<double> ks(count);
+  std::vector<double> us(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    ks[i] = 0.999 * static_cast<double>(i % 997U) / 997.0;
+    us[i] = 0.01 + (5.0 * static_cast<double>(i % 1009U) / 1009.0);
+  }
+  const physics::AnalyticKerrPolicy pol;
+  double snDiff = 0.0;
+  double kDiff = 0.0;
+  for (std::size_t i = 0; i < count; ++i) {
+    snDiff = std::max(snDiff, std::abs(boost::math::jacobi_sn(ks[i], us[i]) -
+                                       boost::math::jacobi_sn(ks[i], us[i], pol)));
+    const double kp = boost::math::ellint_1(ks[i]);
+    kDiff = std::max(kDiff, std::abs(boost::math::ellint_1(ks[i], pol) - kp) / kp);
+  }
+  const double snPromoted =
+      nsPerCall(count, 20, [&](std::size_t i) { return boost::math::jacobi_sn(ks[i], us[i]); });
+  const double snDouble = nsPerCall(
+      count, 20, [&](std::size_t i) { return boost::math::jacobi_sn(ks[i], us[i], pol); });
+  const double kPromoted =
+      nsPerCall(count, 200, [&](std::size_t i) { return boost::math::ellint_1(ks[i]); });
+  const double kDouble =
+      nsPerCall(count, 200, [&](std::size_t i) { return boost::math::ellint_1(ks[i], pol); });
+  physics::RadialRoots roots;
+  roots.nReal = 4;
+  roots.roots = {{{6.0, 0.0}, {4.0, 0.0}, {1.5, 0.0}, {-0.5, 0.0}}};
+  const double rNs =
+      nsPerCall(count, 20, [&](std::size_t i) { return physics::rAnalytic(us[i], roots); });
+  std::printf("%-10s %14s %14s %9s %16s\n", "call", "promoted ns", "double ns", "speedup",
+              "max diff");
+  std::printf("%-10s %14.1f %14.1f %9.2f %12.2e abs\n", "jacobi_sn", snPromoted, snDouble,
+              snPromoted / snDouble, snDiff);
+  std::printf("%-10s %14.1f %14.1f %9.2f %12.2e rel\n", "ellint_1", kPromoted, kDouble,
+              kPromoted / kDouble, kDiff);
+  std::printf("rAnalytic (double policy) %.1f ns\n", rNs);
+}
+
 } // namespace
 
 int main() try {
   std::printf("=== Blackhole numerics bench ===\n");
   printToolVersions();
   benchStokes();
+  benchBoostPolicy();
   std::printf("\nsink %.3e\n", gSink);
   return 0;
 } catch (const std::exception &error) {
