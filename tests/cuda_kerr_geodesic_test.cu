@@ -30,12 +30,17 @@
  * rotated by the Kerr-Schild offset, which HitResult::origin carries into
  * shading and depth, and d_chart_to_boyer_lindquist undoes it for the
  * Boyer-Lindquist consumers (wiregrid overlay, GRMHD sampling).
+ *
+ * A volumetric trace that exhausts its step budget is shaded with the sky
+ * along its last step's direction, which for a ray bent around the hole
+ * differs from the chord from the camera.
  * Skips without a CUDA device.
  */
 
 #include <gtest/gtest.h>
 #include <cuda_runtime.h>
 
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -156,6 +161,59 @@ __global__ void check_disk_kernel(float3 old_pos, float3 new_pos, float *out) {
     out[1] = hit.x;
     out[2] = hit.y;
     out[3] = hit.z;
+}
+
+/* Budget-exhausted volumetric traces from cam along dir (constants set by the
+ * test): out[0..2] RTE, [3..5] Stokes, [6..8] the shaped sky along the last
+ * step's direction, [9..11] along the chord from the camera to the last
+ * point, [12] 1 if the budget ran out outside the horizon. The replay mirrors
+ * d_trace_geodesic_rte's loop with the disk off. */
+__global__ void exhaustion_sky_kernel(float3 cam, float3 dir, float *out) {
+    float3 term;
+    float4 const rte = d_trace_geodesic_rte(cam, dir, &term);
+    float4 const pol = d_trace_geodesic_stokes(cam, dir, &term);
+    float const rs = d_rs;
+    float const a = 0.5f * d_spin * rs;
+    float r_h = d_kerr_outer_horizon(rs, a);
+    float const a_trace = d_kerr_trace_spin(a);
+    KerrConsts c;
+    KerrRay kr;
+    d_kerr_init_geodesic(cam, dir, rs, a_trace, c, kr);
+    float3 const origin = d_kerr_chart_position(cam, rs, a_trace);
+    float const escape_r = fmaxf(d_max_dist, 1.01f * d_length(cam));
+    float min_r = kr.r;
+    float3 closest = d_kerr_ray_position(kr);
+    float3 last = dir;
+    bool exhausted = true;
+    for (int step = 0; step < d_max_steps; ++step) {
+        float3 const cur = d_kerr_ray_position(kr);
+        if (kr.r < min_r) {
+            min_r = kr.r;
+            closest = cur;
+        }
+        if (kr.r <= r_h) {
+            exhausted = false;
+            break;
+        }
+        d_kerr_step(kr, rs, a_trace, c, d_adaptive_step(kr.r, rs, r_h, d_step_size));
+        float3 const next = d_kerr_ray_position(kr);
+        last = d_sub(next, cur);
+        if (kr.r > escape_r && kr.vr > 0.0f) {
+            exhausted = false;
+            break;
+        }
+    }
+    float4 const bl = d_background_color(d_normalize(last));
+    float4 const bc = d_background_color(d_normalize(d_sub(d_kerr_ray_position(kr), origin)));
+    float3 const sl = d_shape_escaped_background(make_f3(bl.x, bl.y, bl.z), min_r, closest, 0, -1, -1,
+                                                 origin, rs, d_spin);
+    float3 const sc = d_shape_escaped_background(make_f3(bc.x, bc.y, bc.z), min_r, closest, 0, -1, -1,
+                                                 origin, rs, d_spin);
+    float const vals[13] = {rte.x, rte.y, rte.z, pol.x, pol.y, pol.z,
+                            sl.x, sl.y, sl.z, sc.x, sc.y, sc.z, exhausted ? 1.0f : 0.0f};
+    for (int k = 0; k < 13; ++k) {
+        out[k] = vals[k];
+    }
 }
 
 bool cudaAvailable() {
@@ -458,4 +516,85 @@ TEST(CudaKerrGeodesic, SegmentLeavingTheDiskPlaneIsNotACrossing) {
     EXPECT_EQ(out[0], 1.0f);
     EXPECT_NEAR(out[1], 15.05f, 1e-5f);
     EXPECT_NEAR(out[3], 0.0f, 1e-6f);
+}
+
+TEST(CudaKerrGeodesic, BudgetExhaustionSkyFollowsTheLastStep) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* A 1x1 layered cube with one color per face identifies the direction
+     * each trace samples; near-critical rays at a = 0 with a 100-step budget
+     * run out mid-orbit, where the chord and the last step point at
+     * different faces. */
+    std::array<float4, 6> const faces = {make_float4(1, 0, 0, 1), make_float4(0, 1, 0, 1),
+                                         make_float4(0, 0, 1, 1), make_float4(1, 1, 0, 1),
+                                         make_float4(0, 1, 1, 1), make_float4(1, 0, 1, 1)};
+    cudaChannelFormatDesc const desc = cudaCreateChannelDesc<float4>();
+    cudaArray_t array = nullptr;
+    ASSERT_EQ(cudaMalloc3DArray(&array, &desc, make_cudaExtent(1, 1, 6), cudaArrayLayered),
+              cudaSuccess);
+    cudaMemcpy3DParms copy = {};
+    copy.srcPtr = make_cudaPitchedPtr(const_cast<float4 *>(faces.data()), sizeof(float4), 1, 1);
+    copy.dstArray = array;
+    copy.extent = make_cudaExtent(1, 1, 6);
+    copy.kind = cudaMemcpyHostToDevice;
+    ASSERT_EQ(cudaMemcpy3D(&copy), cudaSuccess);
+    cudaResourceDesc res = {};
+    res.resType = cudaResourceTypeArray;
+    res.res.array.array = array;
+    cudaTextureDesc tex = {};
+    tex.filterMode = cudaFilterModePoint;
+    tex.readMode = cudaReadModeElementType;
+    tex.normalizedCoords = 1;
+    cudaTextureObject_t sky = 0;
+    ASSERT_EQ(cudaCreateTextureObject(&sky, &res, &tex, nullptr), cudaSuccess);
+
+    auto const setF = [](auto &symbol, float v) { cudaMemcpyToSymbol(symbol, &v, sizeof(v)); };
+    auto const setI = [](auto &symbol, int v) { cudaMemcpyToSymbol(symbol, &v, sizeof(v)); };
+    setF(d_rs, 2.0f);
+    setF(d_spin, 0.0f);
+    setF(d_isco, 6.0f);
+    setF(d_step_size, 0.1f);
+    setF(d_max_dist, 100.0f);
+    setF(d_rte_opacity_scale, 0.5f);
+    setF(d_background_intensity, 1.0f);
+    setF(d_time_sec, 0.0f);
+    setI(d_max_steps, 100);
+    setI(d_adisk_enabled, 0);
+    setI(d_kerr_enabled, 1);
+    setI(d_background_enabled, 1);
+    unsigned long long const sky_handle = sky;
+    cudaMemcpyToSymbol(d_tex_galaxy, &sky_handle, sizeof(sky_handle));
+
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, 13 * sizeof(float));
+    int exhausted = 0;
+    int chord_differs = 0;
+    for (int i = 0; i < 16; ++i) {
+        float const alpha = 0.1776f + 0.02f * static_cast<float>(i) / 15.0f;
+        exhaustion_sky_kernel<<<1, 1>>>(make_float3(30.0f, 0.0f, 0.0f),
+                                        make_float3(-cosf(alpha), sinf(alpha), 0.0f), dOut);
+        cudaDeviceSynchronize();
+        float out[13] = {};
+        cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
+        if (out[12] < 0.5f) {
+            continue;
+        }
+        ++exhausted;
+        bool differs = false;
+        for (int k = 0; k < 3; ++k) {
+            EXPECT_NEAR(out[k], out[6 + k], 1e-5f) << "RTE ray " << i;
+            EXPECT_NEAR(out[3 + k], out[6 + k], 1e-5f) << "Stokes ray " << i;
+            differs = differs || std::fabs(out[9 + k] - out[6 + k]) > 0.2f;
+        }
+        chord_differs += differs ? 1 : 0;
+    }
+    cudaFree(dOut);
+    unsigned long long const none = 0ULL;
+    cudaMemcpyToSymbol(d_tex_galaxy, &none, sizeof(none));
+    setI(d_background_enabled, 0);
+    cudaDestroyTextureObject(sky);
+    cudaFreeArray(array);
+    EXPECT_GT(exhausted, 8);
+    EXPECT_GT(chord_differs, 8);
 }
