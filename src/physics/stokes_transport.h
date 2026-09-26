@@ -17,8 +17,10 @@
  *      alpha_Q, alpha_V) entering the Mueller K matrix.
  *   4. stokesStep(): EXACT formal solution for the simplified K matrix
  *      (total absorption alpha_I + Faraday rotation rho_V).
- *   5. stokesStepFull(): 4th-order Runge-Kutta step for the complete K matrix
- *      including dichroism and Faraday conversion (general magnetized plasma).
+ *   5. stokesStepFull(): EXACT formal solution for the complete K matrix
+ *      including dichroism and Faraday conversion (stokes_exact.h), and
+ *      stokesStepFullRk4(), its 4th-order Runge-Kutta counterpart kept as the
+ *      convergence and cost baseline.
  *   6. integrateStokesPath(): full path integration over FaradayPropagation samples.
  *   7. Physical coefficient functions:
  *        synchrotronPolarizedEmission()   -- j_Q, j_U from B-field geometry
@@ -97,6 +99,7 @@
 #include <vector>
 
 #include "constants.h"
+#include "stokes_exact.h"
 #include "synchrotron.h"
 
 #ifdef __has_include
@@ -246,7 +249,7 @@ struct FaradayPropagation {
  * for (Q,U) uses the integrals derived in the file header.
  *
  * For the full K matrix (with dichroism and Faraday conversion), use
- * stokesStepFull() which applies 4th-order Runge-Kutta.
+ * stokesStepFull(), the closed-form Lorentz-group propagator.
  *
  * @param s     Current Stokes state
  * @param em    Emission coefficients (jI, jQ, jU, jV)
@@ -343,17 +346,40 @@ struct FaradayPropagation {
 }
 
 // ============================================================================
-// RK4 step for full Mueller K matrix
+// Full Mueller K matrix
 // ============================================================================
 
 /**
- * @brief RK4 step for the full polarized RTE with all K matrix terms.
+ * @brief Exact step for the full polarized RTE with all K matrix terms.
  *
- * Solves dS/ds = J - K * S using 4th-order Runge-Kutta.  Use this when
- * dichroism (alpha_Q, alpha_V) or Faraday conversion (rho_Q) are significant.
+ * Solves dS/ds = J - K * S over a uniform segment with the closed-form
+ * propagator of stokes_exact.h (direct-integral source term), which holds a
+ * 1e-12 relative gate against a 50-digit referee at every tested Faraday and
+ * optical depth. FaradayPropagation carries the frame aligned with the
+ * projected field, so alpha_U = rho_U = 0.
  *
- * For the simplified case (only alpha_I + rho_V), prefer stokesStep() which
- * is exact for a uniform segment.
+ * @param s     Current Stokes state
+ * @param em    Emission coefficients
+ * @param k     Propagation matrix coefficients
+ * @return Updated Stokes state after the segment
+ */
+[[nodiscard]] inline StokesVector stokesStepFull(const StokesVector& s,
+                                                  const StokesEmission& em,
+                                                  const FaradayPropagation& k) noexcept {
+    const StokesGenerator gen{.alphaI = k.alphaI, .alphaQ = k.alphaQ, .alphaU = 0.0,
+                              .alphaV = k.alphaV, .rhoQ = k.rhoQ, .rhoU = 0.0, .rhoV = k.rhoV};
+    const StokesArray out = stokesPropagateExact({s.i, s.q, s.u, s.v},
+                                                 {em.jI, em.jQ, em.jU, em.jV}, gen, k.dsCm);
+    return {.i = out[0], .q = out[1], .u = out[2], .v = out[3]};
+}
+
+/**
+ * @brief One 4th-order Runge-Kutta step of the full polarized RTE.
+ *
+ * Its local error grows as (|K| ds)^5 and a single step diverges once
+ * |K| ds exceeds about 1, so production transfer uses stokesStepFull(). This
+ * step remains the convergence reference in the tests and the cost baseline
+ * in bench/numerics_bench.cpp.
  *
  * The K matrix applied to a Stokes vector x = (I,Q,U,V):
  *   (K*x)[0] = alphaI*I + alphaQ*Q + alphaV*V   (+ alphaU*U, assumed 0)
@@ -366,9 +392,9 @@ struct FaradayPropagation {
  * @param k     Propagation matrix coefficients
  * @return Updated Stokes state after one RK4 step
  */
-[[nodiscard]] inline StokesVector stokesStepFull(const StokesVector& s,
-                                                  const StokesEmission& em,
-                                                  const FaradayPropagation& k) noexcept {
+[[nodiscard]] inline StokesVector stokesStepFullRk4(const StokesVector& s,
+                                                     const StokesEmission& em,
+                                                     const FaradayPropagation& k) noexcept {
     if (k.dsCm <= 0.0) { return s; }
 
     const double ds = k.dsCm;
