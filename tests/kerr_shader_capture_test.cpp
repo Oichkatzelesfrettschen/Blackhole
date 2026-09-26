@@ -40,6 +40,7 @@
 #include "physics/disk_transfer.h"
 #include "physics/kerr.h"
 #include "physics/page_thorne.h"
+#include "physics/stokes_transport.h"
 #include "support/gl_compute_harness.h"
 
 using namespace gl;
@@ -410,7 +411,7 @@ void main() {
 }
 
 // A straight ray at inclination `incl` from the disk normal crossing the
-// midplane at (30, 0, 0) from z = 3 to z = -3 (15 scale heights of h = 0.2
+// midplane at (crossX, 0, 0) (default 30) from z = 3 to z = -3 (15 scale heights of h = 0.2
 // each side), cut into chords of length segLength starting at an offset of
 // 0.37 segLength, each passed to bhDiskSegment (photon Lz / E = 0) and rteStepVec3 with
 // absorption kappa * jEff, as bhTraceGeodesicRTE does per step. Reports the
@@ -422,12 +423,13 @@ layout(std430, binding = 1) buffer Output { float result[]; };
 uniform float segLength;
 uniform float incl;
 uniform float kappa;
+uniform float crossX = 30.0;
 void main() {
   float r_s = 2.0;
   float h = 0.1 * r_s;
   vec3 dir = vec3(sin(incl), 0.0, -cos(incl));
   float total = 6.0 / cos(incl);
-  vec3 start = vec3(30.0, 0.0, 0.0) - 0.5 * total * dir;
+  vec3 start = vec3(crossX, 0.0, 0.0) - 0.5 * total * dir;
   float column = 0.0;
   float transmit = 1.0;
   vec3 accum = vec3(0.0);
@@ -447,6 +449,38 @@ void main() {
   }
   result[0] = column;
   result[1] = accum.x;
+}
+)";
+}
+
+// bhTraceGeodesic at a = 0.998 from the camera (3 sin 60deg, 0, 3 cos 60deg)
+// along 16 downward directions (0.8 cos beta, 0.8 sin beta, -1), with a fine
+// schedule (stepSize 0.002, 200000 steps). Reports hitDisk, the hit point,
+// and hit.origin, the camera in the tracer's chart.
+constexpr int K_ORIGIN_RAYS = 16;
+std::string chartOriginShader() {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  return comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+void main() {
+  int i = int(gl_GlobalInvocationID.y) * int(gl_NumWorkGroups.x) * 16 +
+          int(gl_GlobalInvocationID.x);
+  if (i >= 16) {
+    return;
+  }
+  float beta = 6.28318530718 * float(i) / 16.0;
+  Ray ray;
+  ray.position = 3.0 * vec3(sin(1.04719755), 0.0, cos(1.04719755));
+  ray.velocity = normalize(vec3(0.8 * cos(beta), 0.8 * sin(beta), -1.0));
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 200000, 0.002);
+  result[7 * i] = hit.hitDisk ? 1.0 : 0.0;
+  result[7 * i + 1] = hit.hitPoint.x;
+  result[7 * i + 2] = hit.hitPoint.y;
+  result[7 * i + 3] = hit.hitPoint.z;
+  result[7 * i + 4] = hit.origin.x;
+  result[7 * i + 5] = hit.origin.y;
+  result[7 * i + 6] = hit.origin.z;
 }
 )";
 }
@@ -1179,6 +1213,273 @@ TEST_F(KerrShaderCaptureTest, DiskSegmentIntegratesTheGaussianColumn) {
       EXPECT_NEAR(out.at(1), intensity, 5e-3 * intensity) << where;
     }
   }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+namespace {
+
+// Emission column g^4 (F / F_peak) exp(-z^2 / 2h^2) over the annulus
+// 6 <= rho <= 200 (r_s = 2, M = 1, a = 0) along the diskSlabShader ray, by the
+// midpoint rule with 2e6 points: the Page-Thorne flux and the orbiting-emitter
+// g of a photon with Lz / E = 0, as bhDiskSegment reads them (bhDiskEmission).
+double referenceDiskColumn(double crossX, double incl) {
+  const double h = 0.2;
+  const double fluxPeak = physics::pageThorneFluxPeak(0.0);
+  const double total = 6.0 / std::cos(incl);
+  const int n = 2'000'000;
+  const double ds = total / n;
+  double column = 0.0;
+  for (int k = 0; k < n; ++k) {
+    const double s = (k + 0.5) * ds;
+    const double x = crossX + ((s - (0.5 * total)) * std::sin(incl));
+    const double z = 3.0 - (s * std::cos(incl));
+    const double rho = std::abs(x);
+    if (rho < 6.0 || rho > 200.0) {
+      continue;
+    }
+    const double flux = physics::pageThorneFluxShape(rho, 0.0) / fluxPeak;
+    const double g = physics::diskTransferG(rho, 0.0, 0.0);
+    column += flux * g * g * g * g * std::exp(-0.5 * (z / h) * (z / h)) * ds;
+  }
+  return column;
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, DiskSegmentClipsChordsToTheAnnulus) {
+  // A ray 10 degrees from grazing crosses the midplane 1 M outside r_in = 6
+  // and 1 M inside r_out = 200; its density footprint (+-3 h tan(80 deg) =
+  // +-3.4 M) straddles the edge. The emission column must converge to the
+  // quadrature reference as chords shrink from 40 h to 0.1 h. Checking one
+  // radius per chord keeps or drops a whole chord at an edge instead.
+  const double incl = 80.0 * std::numbers::pi / 180.0;
+  const GLuint program = bhtest::createComputeProgram(diskSlabShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 2), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  for (const double crossX : {7.0, 199.0}) {
+    const double reference = referenceDiskColumn(crossX, incl);
+    double previous = 1.0;
+    for (const float segLength : {8.0F, 2.0F, 0.5F, 0.1F, 0.02F}) {
+      glUseProgram(program);
+      glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
+      glUniform1f(glGetUniformLocation(program, "segLength"), segLength);
+      glUniform1f(glGetUniformLocation(program, "incl"), static_cast<float>(incl));
+      glUniform1f(glGetUniformLocation(program, "kappa"), 1.0F);
+      glUniform1f(glGetUniformLocation(program, "crossX"), static_cast<float>(crossX));
+      const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 2);
+      const double error = std::abs((static_cast<double>(out.at(0)) - reference) / reference);
+      const std::string where = "crossX=" + std::to_string(crossX) +
+                                " segLength=" + std::to_string(segLength) +
+                                " error=" + std::to_string(error);
+      // Second order in the chord once chords are shorter than the +-3.4 M
+      // footprint: the centroid read of the radial factors is exact for linear
+      // variation, and the Page-Thorne flux curves sharply just outside r_in.
+      // Longer chords read one centroid for the whole footprint (about 2% at
+      // crossX = 7), and the float Page-Thorne bracket near r_in sets a floor
+      // near 1e-4.
+      if (segLength <= 0.5F) {
+        EXPECT_LE(error, std::max(1.05 * previous, 2e-4)) << where;
+      }
+      if (segLength <= 0.5F) {
+        EXPECT_LT(error, 1e-2) << where;
+      }
+      if (segLength <= 0.1F) {
+        EXPECT_LT(error, 1e-3) << where;
+      }
+      previous = error;
+    }
+  }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+namespace {
+
+// Kerr-Schild azimuth offset F(r) = a / (r+ - r-) ln((r - r+) / (r - r-))
+// (M = 1), the rotation kerrKsAzimuthOffset applies.
+double ksAzimuthOffset(double r, double a) {
+  const double root = std::sqrt(1.0 - (a * a));
+  return a / (2.0 * root) * std::log((r - (1.0 + root)) / (r - (1.0 - root)));
+}
+
+struct ChartHit {
+  bool hitDisk{false};
+  double x{0.0};
+  double y{0.0};
+};
+
+// Double-precision disk crossing of the time-reversed ray (spin aTrace) from
+// the camera, in the Kerr-Schild chart: phi_KS = phi_BL + F(r).
+ChartHit referenceDiskHit(double camX, double camZ, double dx, double dy, double dz,
+                          double aTrace) {
+  const double mass = physics::C2 / physics::G;
+  const double r0 = std::hypot(camX, camZ);
+  const double theta0 = std::acos(camZ / r0);
+  const double norm = std::sqrt((dx * dx) + (dy * dy) + (dz * dz));
+  const double ux = dx / norm;
+  const double uy = dy / norm;
+  const double uz = dz / norm;
+  // e_r, e_theta, e_phi at (theta0, phi = 0).
+  const double kr = (ux * std::sin(theta0)) + (uz * std::cos(theta0));
+  const double kth = ((ux * std::cos(theta0)) - (uz * std::sin(theta0))) / r0;
+  const double kph = uy / (r0 * std::sin(theta0));
+  const physics::KerrNullGeodesic g =
+      physics::kerrNullGeodesicFromBL(r0, theta0, 0.0, kr, kth, kph, mass, aTrace);
+  physics::KerrGeodesicState s = g.state;
+  const double rPlus = 1.0 + std::sqrt(1.0 - (aTrace * aTrace));
+  for (int step = 0; step < 5'000'000 && s.r > rPlus * 1.001; ++step) {
+    const physics::KerrGeodesicState next =
+        physics::kerrStepMino(s, mass, aTrace, g.consts, 2e-5 / (1.0 + (s.r * s.r)));
+    const double c0 = std::cos(s.theta);
+    const double c1 = std::cos(next.theta);
+    if (c0 * c1 <= 0.0) {
+      const double t = c0 / (c0 - c1);
+      const double r = s.r + (t * (next.r - s.r));
+      const double phi = s.phi + (t * (next.phi - s.phi)) + ksAzimuthOffset(r, aTrace);
+      return {.hitDisk = true, .x = r * std::cos(phi), .y = r * std::sin(phi)};
+    }
+    s = next;
+  }
+  return {};
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, HitOriginSharesTheTracerChart) {
+  // kerrInitGeodesic rotates the ray state by the Kerr-Schild offset
+  // F(r_cam), which at a = 0.998 and r = 3 is 0.50 rad, so hit points are in
+  // that chart. hit.origin, rotated alike, must give the view vector and
+  // depth (hit - origin) of the double-precision reference; the unrotated
+  // camera misses them by ~1.5 M.
+  const double aTrace = -0.998;
+  const double camX = 3.0 * std::sin(std::numbers::pi / 3.0);
+  const double camZ = 3.0 * std::cos(std::numbers::pi / 3.0);
+  const double offset = ksAzimuthOffset(3.0, aTrace);
+  const double originX = camX * std::cos(offset);
+  const double originY = camX * std::sin(offset);
+  const GLuint program = bhtest::createComputeProgram(chartOriginShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 7 * K_ORIGIN_RAYS), nullptr,
+                    GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  glUseProgram(program);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.998F);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 1.0F);
+  const std::vector<float> out =
+      bhtest::runComputeProgram(program, ssbo, static_cast<std::size_t>(7) * K_ORIGIN_RAYS, 1);
+  int compared = 0;
+  for (int i = 0; i < K_ORIGIN_RAYS; ++i) {
+    const std::size_t k = static_cast<std::size_t>(7) * static_cast<std::size_t>(i);
+    const double beta = 2.0 * std::numbers::pi * static_cast<double>(i) / K_ORIGIN_RAYS;
+    const ChartHit ref =
+        referenceDiskHit(camX, camZ, 0.8 * std::cos(beta), 0.8 * std::sin(beta), -1.0, aTrace);
+    const std::string where = "ray " + std::to_string(i);
+    EXPECT_NEAR(out.at(k + 4), originX, 1e-4) << where;
+    EXPECT_NEAR(out.at(k + 5), originY, 1e-4) << where;
+    EXPECT_NEAR(out.at(k + 6), camZ, 1e-4) << where;
+    if (!ref.hitDisk || out.at(k) < 0.5F || std::hypot(ref.x, ref.y) < 1.5) {
+      continue;
+    }
+    const auto vx = static_cast<double>(out.at(k + 1) - out.at(k + 4));
+    const auto vy = static_cast<double>(out.at(k + 2) - out.at(k + 5));
+    const auto vz = static_cast<double>(out.at(k + 3) - out.at(k + 6));
+    // float32 stepping leaves ~2e-4; the unrotated camera is off by ~1.5.
+    EXPECT_NEAR(vx, ref.x - originX, 1e-3) << where;
+    EXPECT_NEAR(vy, ref.y - originY, 1e-3) << where;
+    EXPECT_NEAR(vz, -camZ, 1e-3) << where;
+    EXPECT_NEAR(std::sqrt((vx * vx) + (vy * vy) + (vz * vz)),
+                std::hypot(ref.x - originX, ref.y - originY, camZ), 1e-3)
+        << where;
+    ++compared;
+  }
+  EXPECT_GT(compared, K_ORIGIN_RAYS / 2);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+namespace {
+
+// Two polarized layers, near (index 0) and far (index 1), with different
+// EVPAs, absorption, Faraday rates, and path lengths.
+struct PolLayer {
+  double jI, jQ, jU, jV, alpha, rhoV, ds;
+};
+
+PolLayer polLayer(double jI, double chiB, double jV, double alpha, double rhoV, double ds) {
+  return {.jI = jI,
+          .jQ = -jI * 0.7 * std::cos(2.0 * chiB),
+          .jU = -jI * 0.7 * std::sin(2.0 * chiB),
+          .jV = jV,
+          .alpha = alpha,
+          .rhoV = rhoV,
+          .ds = ds};
+}
+
+physics::StokesVector stepLayer(const physics::StokesVector &state, const PolLayer &l) {
+  return physics::stokesStep(state, {.jI = l.jI, .jQ = l.jQ, .jU = l.jU, .jV = l.jV}, l.alpha,
+                             l.rhoV, l.ds);
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, StokesCompositesLayersFrontToBack) {
+  // The observed Stokes vector of a near layer in front of a far one is the
+  // far layer's output transferred through the near layer (the CPU
+  // stokesStep integrated from the far end). stokesCompositeStep, fed in
+  // camera order as bhTraceGeodesicStokes marches, must reproduce it; feeding
+  // the running state into the farther layer, the reverse order, misses it by
+  // more than 0.1 here.
+  const PolLayer nearLayer = polLayer(1.0, 0.2, 0.0, 0.8, 1.5, 1.0);
+  const PolLayer farLayer = polLayer(2.0, 1.1, 0.3, 0.3, -0.7, 1.5);
+  const physics::StokesVector reference = stepLayer(stepLayer({}, farLayer), nearLayer);
+  const physics::StokesVector reversed = stepLayer(stepLayer({}, nearLayer), farLayer);
+  ASSERT_GT(std::hypot(reference.q - reversed.q, reference.u - reversed.u), 0.1);
+
+  const GLuint program = bhtest::createComputeProgram(R"(
+#version 460 core
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+uniform vec4 em0;
+uniform vec3 k0;
+uniform vec4 em1;
+uniform vec3 k1;
+#include "include/stokes_transport.glsl"
+void main() {
+  vec4 observed = vec4(0.0);
+  float transmit = 1.0;
+  float faraday = 0.0;
+  stokesCompositeStep(observed, transmit, faraday, em0, k0.x, k0.y, k0.z);
+  stokesCompositeStep(observed, transmit, faraday, em1, k1.x, k1.y, k1.z);
+  result[0] = observed.x;
+  result[1] = observed.y;
+  result[2] = observed.z;
+  result[3] = observed.w;
+  result[4] = transmit;
+}
+)");
+  glUseProgram(program);
+  const auto setLayer = [program](const char *em, const char *k, const PolLayer &l) {
+    glUniform4f(glGetUniformLocation(program, em), static_cast<float>(l.jI),
+                static_cast<float>(l.jQ), static_cast<float>(l.jU), static_cast<float>(l.jV));
+    glUniform3f(glGetUniformLocation(program, k), static_cast<float>(l.alpha),
+                static_cast<float>(l.rhoV), static_cast<float>(l.ds));
+  };
+  setLayer("em0", "k0", nearLayer);
+  setLayer("em1", "k1", farLayer);
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 5), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 5);
+  EXPECT_NEAR(out.at(0), reference.i, 1e-5);
+  EXPECT_NEAR(out.at(1), reference.q, 1e-5);
+  EXPECT_NEAR(out.at(2), reference.u, 1e-5);
+  EXPECT_NEAR(out.at(3), reference.v, 1e-5);
+  EXPECT_NEAR(out.at(4), std::exp(-((0.8 * 1.0) + (0.3 * 1.5))), 1e-6);
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }

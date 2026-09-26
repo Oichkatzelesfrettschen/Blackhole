@@ -119,8 +119,8 @@ struct DiskParams {
   DiskParams disk;
   disk.mass = mSolar * M_SUN;
 
-  // Spin relative to the disk's orbital sense. kerrIscoRadius depends on |a|
-  // and the prograde flag only, so the disk spin takes the same convention.
+  // Spin relative to the disk's orbital sense: the disk orbits along +z, and
+  // disk.a > 0 co-rotates with it, disk.a < 0 counter-rotates.
   const double mGeo = G * disk.mass / C2;
   // Clamped like the Page-Thorne flux (pageThorneSpin), so rIn below is the
   // flux's zero-torque edge at every input spin, including |aStar| = 1.
@@ -133,7 +133,8 @@ struct DiskParams {
   disk.mDot = mDotEdd * lEdd / (eta * C2);
 
   // ISCO
-  disk.rIn = kerrIscoRadius(disk.mass, disk.a, prograde);
+  // ISCO of the +z disk at the signed disk spin (kerrIscoRadius convention).
+  disk.rIn = kerrIscoRadius(disk.mass, disk.a, true);
   disk.rOut = 1000.0 * mGeo;
   disk.inclination = 0.0;
 

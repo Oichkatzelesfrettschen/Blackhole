@@ -30,6 +30,9 @@ struct Ray {
 };
 
 struct HitResult {
+  // Camera position in the tracer's chart (kerrChartPosition); hit and
+  // closest-approach points are in the same chart.
+  vec3 origin;
   bool hitDisk;
   bool hitHorizon;
   bool escaped;
@@ -281,6 +284,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.hitHorizon = false;
   result.escaped = false;
   result.hitPoint = vec3(0.0);
+  result.origin = ray.position;
   result.closestApproachPoint = ray.position;
   result.escapedDir = normalize(ray.velocity);
   result.phi = 0.0;
@@ -315,6 +319,8 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   KerrConsts c;
   KerrRay kerrRay;
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kerrRay);
+  result.origin = kerrChartPosition(ray.position, rsMetric, aTrace);
+  result.closestApproachPoint = result.origin;
 
   vec3 oldPos;
   float dt = stepSize;
@@ -530,17 +536,22 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 // Volumetric disk segment
 //
 // The RTE and Stokes traces model the disk as a Gaussian layer, density
-// exp(-z^2 / 2h^2) with h = 0.1 r_s, emitting the Page-Thorne flux shifted
-// by the orbiting-emitter g-factor (bhDiskEmission).
-// A far-field step spans ~0.05 r, many scale heights, so a coefficient read
-// at one end point misses a midplane crossed mid-step or applies the peak
-// density to the whole step. bhDiskSegment instead integrates the density
-// exactly along the step's straight chord and returns its mean, and reads the
-// slowly varying radial factors (flux, g-factor, color) where the chord's
-// density peaks. With every coefficient proportional to the density and the
-// source function constant over the segment, the formal solution depends
+// exp(-z^2 / 2h^2) with h = 0.1 r_s, over the annulus rIn <= rho <= rOut
+// (rho the cylindrical radius), emitting the Page-Thorne flux shifted by the
+// orbiting-emitter g-factor (bhDiskEmission). A
+// far-field step spans ~0.05 r, many scale heights, so a coefficient read at
+// one point misses a midplane crossed mid-step, applies the peak density to
+// the whole step, or keeps or drops the whole step by one radius.
+// bhDiskSegment intersects the step's straight chord with the annulus
+// (rho^2 is quadratic along the chord, so the emitting part is at most two
+// intervals), integrates the density exactly over each interval, and reads
+// the slowly varying radial factors (flux, g-factor, color) at each
+// interval's density-weighted centroid, which is exact for factors linear
+// along the chord. With every coefficient proportional to the density and
+// the source function constant over the segment, the formal solution depends
 // only on the column, so the mean coefficients over the step's path length
-// give the exact segment for any step size.
+// give the exact segment when the radial factors are constant across it and
+// converge as the step shrinks otherwise.
 // ---------------------------------------------------------------------------
 
 // erf(x) by Abramowitz & Stegun 7.1.26, |error| <= 1.5e-7.
@@ -552,27 +563,87 @@ float bhErf(float x) {
   return x < 0.0 ? -y : y;
 }
 
-// Mean of exp(-z^2 / 2h^2) along a chord whose height runs linearly from z0
-// to z1: h sqrt(pi/2) (erf(z1 / sqrt(2) h) - erf(z0 / sqrt(2) h)) / (z1 - z0).
-// Below |z1 - z0| = 0.01 sqrt(2) h the midpoint value is used; its relative
-// error there is below 1e-5, and the erf difference would lose more to
-// rounding.
-float bhGaussianChordMean(float z0, float z1, float h) {
+// Mean and centroid of the density exp(-z^2 / 2h^2) along a chord whose
+// height runs linearly from z0 to z1, sharing one erf pair (s = 1 / (sqrt(2) h)):
+//   mean     = h sqrt(pi/2) (erf(z1 s) - erf(z0 s)) / (z1 - z0),
+//   centroid = fraction along the chord of the weighted mean height
+//              -h^2 (exp(-z1^2 / 2h^2) - exp(-z0^2 / 2h^2)) / (mean (z1 - z0)).
+// Below |z1 - z0| = 0.01 sqrt(2) h the midpoint value (relative error < 1e-5)
+// and the midpoint; a chord too far in the tail to resolve its centroid also
+// takes the midpoint.
+vec2 bhGaussianChordMoments(float z0, float z1, float h) {
   float s = 0.70710678 / h;
   float dz = z1 - z0;
   if (abs(dz) * s < 0.01) {
     float zm = 0.5 * (z0 + z1) / h;
-    return exp(-0.5 * zm * zm);
+    return vec2(exp(-0.5 * zm * zm), 0.5);
   }
-  return 1.25331414 * h * (bhErf(z1 * s) - bhErf(z0 * s)) / dz;
+  float mass = 1.25331414 * h * (bhErf(z1 * s) - bhErf(z0 * s));
+  float frac = 0.5;
+  if (abs(mass) >= 1e-6 * abs(dz)) {
+    float zBar = -h * h * (exp(-z1 * z1 * s * s) - exp(-z0 * z0 * s * s)) / mass;
+    frac = clamp((zBar - z0) / dz, 0.0, 1.0);
+  }
+  return vec2(mass / dz, frac);
+}
+
+// Parameter interval [t0, t1] (clipped to [0, 1]) of the chord a + b t,
+// t in [0, 1], on which |a + b t| <= radius; empty when t0 > t1.
+vec2 bhChordInsideRadius(vec2 a, vec2 b, float radius) {
+  float qa = dot(b, b);
+  float qb = dot(a, b);
+  float qc = dot(a, a) - radius * radius;
+  if (qa < 1e-12 * max(qc + radius * radius, 1.0)) {
+    return qc <= 0.0 ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
+  }
+  float disc = qb * qb - qa * qc;
+  if (disc < 0.0) {
+    return vec2(1.0, 0.0);
+  }
+  float root = sqrt(disc);
+  return vec2(max((-qb - root) / qa, 0.0), min((-qb + root) / qa, 1.0));
+}
+
+// Radial factors of the disk at cylindrical radius rho for a photon with
+// physical Lz / E = photonLambda: the bolometric intensity g^4 F / F_peak and
+// the surface color chroma * diskBrightness (bhDiskEmission).
+float bhDiskRadialEmission(float rho, float photonLambda, float r_s, out vec3 emitColor) {
+  vec3 chroma;
+  float intensity;
+  bhDiskEmission(rho, photonLambda, r_s, chroma, intensity);
+  emitColor = chroma * diskBrightness;
+  return intensity;
+}
+
+// Adds the part of the chord p0 -> p1 between parameters ta and tb (inside
+// the annulus) to the running column, emissivity, and color sums.
+void bhDiskPiece(vec3 p0, vec3 p1, float ta, float tb, float h, float r_s, float photonLambda,
+                 inout float rhoSum, inout float jSum, inout vec3 colorSum) {
+  if (tb <= ta) {
+    return;
+  }
+  float za = mix(p0.z, p1.z, ta);
+  float zb = mix(p0.z, p1.z, tb);
+  vec2 moments = bhGaussianChordMoments(za, zb, h);
+  float column = (tb - ta) * moments.x;
+  if (column <= 0.0) {
+    return;
+  }
+  vec3 weighted = mix(p0, p1, mix(ta, tb, moments.y));
+  vec3 color;
+  float radial = bhDiskRadialEmission(length(weighted.xy), photonLambda, r_s, color);
+  rhoSum += column;
+  jSum += radial * column;
+  colorSum += color * (radial * column);
 }
 
 // Disk emission over the chord p0 -> p1 (physics frame, disk in xy) for a
 // photon with physical Lz / E = photonLambda (scene units). Returns false when
-// the chord's density peak lies outside [rIn, rOut]; otherwise the surface
-// color chroma * diskBrightness and the mean emissivity jEff = intensity
-// <rho> from bhDiskEmission (Page-Thorne flux, orbiting-emitter g^4) at the
-// peak's radius, and <rho>.
+// no part of the chord inside the annulus carries density; otherwise the
+// emission-weighted surface color (chroma * diskBrightness), the mean
+// emissivity jEff = <g^4 (F / F_peak) rho> over the whole chord
+// (bhDiskEmission), and the mean density <rho> over the whole chord (zero
+// outside the annulus).
 bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
                    float photonLambda, out vec3 emitColor, out float jEff,
                    out float rhoMean) {
@@ -584,19 +655,32 @@ bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
   if (p0.z * p1.z > 0.0 && min(abs(p0.z), abs(p1.z)) > 8.0 * h) {
     return false;
   }
-  float tPeak = (p0.z * p1.z < 0.0) ? p0.z / (p0.z - p1.z)
-                                    : (abs(p0.z) <= abs(p1.z) ? 0.0 : 1.0);
-  vec3 peak = mix(p0, p1, tPeak);
-  float rCyl = length(peak.xy);
-  if (rCyl < rIn || rCyl > rOut) {
+  // Inside rOut is one interval; inside rIn is one interval to exclude.
+  // rho^2 is convex along the chord, so end points inside rOut keep the
+  // whole chord and a closest approach outside rIn excludes nothing; only a
+  // chord across an edge solves the quadratic.
+  vec2 a = p0.xy;
+  vec2 b = p1.xy - p0.xy;
+  vec2 outer = max(dot(a, a), dot(p1.xy, p1.xy)) <= rOut * rOut
+                   ? vec2(0.0, 1.0)
+                   : bhChordInsideRadius(a, b, rOut);
+  float tClosest = clamp(-dot(a, b) / max(dot(b, b), 1e-30), 0.0, 1.0);
+  vec2 closest = a + tClosest * b;
+  vec2 inner = dot(closest, closest) >= rIn * rIn ? vec2(1.0, 0.0)
+                                                   : bhChordInsideRadius(a, b, rIn);
+  vec3 colorSum = vec3(0.0);
+  if (inner.x > inner.y) {
+    bhDiskPiece(p0, p1, outer.x, outer.y, h, r_s, photonLambda, rhoMean, jEff, colorSum);
+  } else {
+    bhDiskPiece(p0, p1, outer.x, min(outer.y, inner.x), h, r_s, photonLambda, rhoMean, jEff,
+                colorSum);
+    bhDiskPiece(p0, p1, max(outer.x, inner.y), outer.y, h, r_s, photonLambda, rhoMean, jEff,
+                colorSum);
+  }
+  if (!(rhoMean > 0.0)) {
     return false;
   }
-  vec3 chroma;
-  float intensity;
-  bhDiskEmission(rCyl, photonLambda, r_s, chroma, intensity);
-  emitColor = chroma * diskBrightness;
-  rhoMean = bhGaussianChordMean(p0.z, p1.z, h);
-  jEff = intensity * rhoMean;
+  emitColor = jEff > 0.0 ? colorSum / jEff : vec3(0.0);
   return true;
 }
 
@@ -634,6 +718,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   KerrConsts c;
   KerrRay    kRay;
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
+  vec3 origin = kerrChartPosition(ray.position, rsMetric, aTrace);
 
   vec3  accumI   = vec3(0.0);
   float transmit = 1.0;
@@ -686,7 +771,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Max steps exhausted -- treat as escaped toward last known direction
   vec3 finalPos = kerrRayPosition(kRay);
   terminalPos = finalPos;
-  vec3 escDir   = finalPos - ray.position;
+  vec3 escDir   = finalPos - origin;
   if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
     accumI += transmit * bhBackgroundColorFromDir(normalize(escDir)).rgb;
   }
@@ -701,9 +786,10 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 // intensity accumulator.
 //
 // The I channel uses the same front-to-back compositing as bhTraceGeodesicRTE()
-// (vec3 color-accurate accumulation).  The Q, U, V channels evolve under the
-// stokesStep() exact solution (simplified K: alpha_I + rho_V) at each disk
-// step, using the same alphaI and path length as the intensity path so the
+// (vec3 color-accurate accumulation).  The Q, U, V channels take each disk
+// step's stokesStep() exact solution (simplified K: alpha_I + rho_V) and
+// composite it front to back through the nearer steps (stokesCompositeStep),
+// with the same alphaI and path length as the intensity path so the
 // polarimetric and photometric results remain consistent.
 //
 // Polarization model:
@@ -750,8 +836,11 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
 
   vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
-  vec2  stokesQU = vec2(0.0);   // Q and U Stokes components
-  float stokesV  = 0.0;         // V Stokes component
+  // Observed polarization, composited front to back (stokesCompositeStep):
+  // (unused I, Q, U, V), the nearer segments' transmittance and Faraday angle.
+  vec4  polObserved = vec4(0.0);
+  float polTransmit = 1.0;
+  float polFaraday  = 0.0;
   float transmit = 1.0;
 
   for (int step = 0; step < maxSteps; ++step) {
@@ -761,7 +850,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       terminalPos = curPos;
       accumI += transmit * bhHorizonShade(kRay.r, r_s);
       float I = (accumI.r + accumI.g + accumI.b) / 3.0;
-      vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
+      vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
       return vec4(stokesDisplayColor(stokes, accumI), 1.0);
     }
 
@@ -793,12 +882,10 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       // Faraday rotation rate: rhoV = neScale * rhoNorm (density-modulated)
       float rhoV = neScale * rhoNorm;
 
-      // Evolve Q, U, V under simplified K (alpha_I + rho_V)
-      // WHY: I and V decouple in simplified K; we evolve Q/U coupled via rhoV.
-      vec4 quv = stokesStep(vec4(0.0, stokesQU.x, stokesQU.y, stokesV),
-                            emStokes, alphaNu, rhoV, pathStep);
-      stokesQU = quv.yz;
-      stokesV  = quv.w;
+      // Q, U, V under simplified K (alpha_I + rho_V), composited front to
+      // back: this segment's emission passes through the nearer segments.
+      stokesCompositeStep(polObserved, polTransmit, polFaraday, emStokes, alphaNu, rhoV,
+                          pathStep);
 
       if (transmit < 0.005) { break; }
     }
@@ -816,7 +903,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Map accumulated Stokes state to display color
   terminalPos = kerrRayPosition(kRay);
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
-  vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
+  vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
   return vec4(stokesDisplayColor(stokes, accumI), 1.0);
 }
 

@@ -143,6 +143,38 @@ vec4 stokesStep(vec4 state, vec4 em, float alphaI, float rhoV, float ds) {
 }
 
 // ---------------------------------------------------------------------------
+// stokesCompositeStep
+//
+// Front-to-back compositing for a trace that marches from the observer
+// outward. Radiation emitted in segment k reaches the observer through every
+// nearer segment, so the observed vector is sum_k T_(k-1) e_k with e_k the
+// segment's own contribution (stokesStep from zero over it) and T_(k-1) the
+// product of the nearer segments' transfer operators. Feeding the running
+// state into the next, farther segment instead would pass near-side
+// radiation through far-side absorption and Faraday rotation. In the
+// simplified K each operator is exp(-alphaI ds) times a rotation of (Q, U) by
+// rhoV ds; these commute, so T is carried as a transmittance and a summed
+// Faraday angle.
+//
+// Parameters:
+//   observed  -- accumulated observed Stokes vector; updated in place
+//   transmit  -- exp(-tau) of the nearer segments; updated in place
+//   faraday   -- summed Faraday angle of the nearer segments; updated in place
+//   em, alphaI, rhoV, ds -- this segment, as for stokesStep
+// ---------------------------------------------------------------------------
+void stokesCompositeStep(inout vec4 observed, inout float transmit, inout float faraday,
+                         vec4 em, float alphaI, float rhoV, float ds) {
+    if (ds <= 0.0) { return; }
+    vec4 seg = stokesStep(vec4(0.0), em, alphaI, rhoV, ds);
+    float c = cos(faraday);
+    float s = sin(faraday);
+    observed += transmit * vec4(seg.x, c * seg.y - s * seg.z, s * seg.y + c * seg.z, seg.w);
+    float tau = max(alphaI, 0.0) * ds;
+    transmit *= (tau < 700.0) ? exp(-tau) : 0.0;
+    faraday += rhoV * ds;
+}
+
+// ---------------------------------------------------------------------------
 // synchrotronPolarizedEmission
 //
 // Compute the polarized emission vector from total emissivity jI, intrinsic

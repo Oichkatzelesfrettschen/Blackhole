@@ -90,6 +90,15 @@ float kerrKsAzimuthOffset(float r, float r_s, float a) {
   return a / (rPlus - rMinus) * log((r - rPlus) / (r - rMinus));
 }
 
+// Position pos in the chart the ray state lives in: kerrInitGeodesic rotates
+// the state by the Kerr-Schild azimuth offset F(|pos|) (r_s and a as passed
+// to it), so every position along the ray is in this chart, and a scene
+// position such as the camera must be rotated alike before it is compared
+// with one.
+vec3 kerrChartPosition(vec3 pos, float r_s, float a) {
+  return kerrRotateZ(pos, kerrKsAzimuthOffset(length(pos), r_s, a));
+}
+
 // Spin passed to kerrInitGeodesic and kerrStep. The camera pixel gives the
 // direction the arriving photon travelled from; its past history is the
 // time reverse of its path. Time reversal t -> -t is an isometry from Kerr

@@ -62,11 +62,12 @@ inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
   const double rS = schwarzschildRadius(mass);
   const double rG = G * mass / C2;
   const double a = aStar * rG;
-  const bool prograde = aStar >= 0.0;
-  const double rIn = kerrIscoRadius(mass, a, prograde);
+  // The disk orbits along +z; the signed spin selects co- or counter-rotation
+  // (kerrIscoRadius), and kerrDisk takes the spin relative to that orbit.
+  const double rIn = kerrIscoRadius(mass, a, true);
   const double rOut = rIn * 4.0;
 
-  DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd, prograde);
+  DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd, aStar >= 0.0);
   disk.rIn  = rIn;
   disk.rOut = rOut;
 
@@ -114,7 +115,7 @@ inline Lut1D generateRedshiftLut(int size, double massSolar, double aStar) {
   const double rS = schwarzschildRadius(mass);
   const double rG = G * mass / C2;
   const double a = aStar * rG;
-  const double rIn = kerrIscoRadius(mass, a, aStar >= 0.0);
+  const double rIn = kerrIscoRadius(mass, a, true);
   const double rOut = rIn * 4.0;
 
   lut.rMin = static_cast<float>(rIn / rS);
@@ -170,10 +171,10 @@ inline SpinRadiiLut generateSpinRadiiLut(int size, double massSolar,
     double const u = static_cast<double>(i) / (size - 1);
     double const spin = spinMin + (u * (spinMax - spinMin));
     double const a = spin * rG;
-    bool const prograde = spin >= 0.0;
-    double const rIsco = kerrIscoRadius(mass, a, prograde);
-    double const rPh =
-        prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
+    // The disk orbits along +z; the signed spin selects co- or counter-rotation
+    // for both radii (kerrIscoRadius convention).
+    double const rIsco = kerrIscoRadius(mass, a, true);
+    double const rPh = kerrPhotonOrbitPrograde(mass, a);
 
     lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
     lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);

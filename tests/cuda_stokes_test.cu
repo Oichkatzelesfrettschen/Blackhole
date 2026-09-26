@@ -15,6 +15,8 @@
  *   4. RoundTrip:           +phi/2 then -phi/2 Faraday rotation restores original Q,U.
  *   5. ZeroInput:           state=0, emission=0 -> output=0 (pure identity).
  *   6. StokesKernelNoNaN:   launch baseline kernel with stokes_enabled=1; all pixels finite.
+ *   7. FrontToBackComposite: two layers composited in camera order equal the
+ *                            far-to-near solution, not the reversed order.
  *
  * HOW: Tests 1-5 call d_stokes_step() on device via a thin __global__ wrapper that
  *      writes results to a device buffer, then copies to host for assertion.
@@ -54,6 +56,32 @@ __global__ void stokes_step_kernel(
     out[1] = r.q;
     out[2] = r.u;
     out[3] = r.v;
+}
+
+/**
+ * @brief Two layers, near (0) and far (1), each (jI, jQ, jU, jV, alphaI, rhoV,
+ *        ds): out[0..3] = d_stokes_composite_step in camera order, out[4..7] =
+ *        d_stokes_step from the far end (reference), out[8..11] = d_stokes_step
+ *        fed near then far (reverse order).
+ */
+__global__ void stokes_two_layer_kernel(const float *layers, float *out) {
+    float const *n = layers;
+    float const *f = layers + 7;
+    DStokes observed = {0.0f, 0.0f, 0.0f, 0.0f};
+    float transmit = 1.0f;
+    float faraday = 0.0f;
+    d_stokes_composite_step(observed, transmit, faraday, n[0], n[1], n[2], n[3], n[4], n[5], n[6]);
+    d_stokes_composite_step(observed, transmit, faraday, f[0], f[1], f[2], f[3], f[4], f[5], f[6]);
+    DStokes const zero = {0.0f, 0.0f, 0.0f, 0.0f};
+    DStokes const ref = d_stokes_step(d_stokes_step(zero, f[0], f[1], f[2], f[3], f[4], f[5], f[6]),
+                                      n[0], n[1], n[2], n[3], n[4], n[5], n[6]);
+    DStokes const rev = d_stokes_step(d_stokes_step(zero, n[0], n[1], n[2], n[3], n[4], n[5], n[6]),
+                                      f[0], f[1], f[2], f[3], f[4], f[5], f[6]);
+    float const vals[12] = {observed.i, observed.q, observed.u, observed.v,
+                            ref.i, ref.q, ref.u, ref.v, rev.i, rev.q, rev.u, rev.v};
+    for (int k = 0; k < 12; ++k) {
+        out[k] = vals[k];
+    }
 }
 
 /** @brief Run one d_stokes_step on device and return result as host float[4]. */
@@ -344,4 +372,42 @@ TEST_F(CudaStokesTest, StokesKernelNoNaN) {
         }
     }
     EXPECT_GT(nonzero, 0) << "Stokes kernel with disk enabled must produce some non-black pixels";
+}
+
+/* ========================================================================
+ * 7. Front-to-back compositing of two layers
+ *    A near layer in front of a far one, with different EVPAs, absorption,
+ *    and Faraday rates: d_stokes_composite_step fed in camera order must
+ *    equal d_stokes_step integrated from the far end; the reversed order
+ *    (the running state fed into the farther layer) differs by > 0.1.
+ * ======================================================================== */
+TEST_F(CudaStokesTest, FrontToBackComposite) {
+    auto const layer = [](float jI, float chiB, float jV, float alpha, float rhoV, float ds,
+                          float *dst) {
+        dst[0] = jI;
+        dst[1] = -jI * 0.7f * std::cos(2.0f * chiB);
+        dst[2] = -jI * 0.7f * std::sin(2.0f * chiB);
+        dst[3] = jV;
+        dst[4] = alpha;
+        dst[5] = rhoV;
+        dst[6] = ds;
+    };
+    float host[14];
+    layer(1.0f, 0.2f, 0.0f, 0.8f, 1.5f, 1.0f, host);
+    layer(2.0f, 1.1f, 0.3f, 0.3f, -0.7f, 1.5f, host + 7);
+    float *dLayers = nullptr;
+    float *dOut = nullptr;
+    cudaMalloc(&dLayers, sizeof(host));
+    cudaMalloc(&dOut, 12 * sizeof(float));
+    cudaMemcpy(dLayers, host, sizeof(host), cudaMemcpyHostToDevice);
+    stokes_two_layer_kernel<<<1, 1>>>(dLayers, dOut);
+    cudaDeviceSynchronize();
+    float out[12] = {};
+    cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
+    cudaFree(dLayers);
+    cudaFree(dOut);
+    for (int k = 0; k < 4; ++k) {
+        EXPECT_NEAR(out[k], out[4 + k], 1e-5f) << "component " << k;
+    }
+    EXPECT_GT(std::hypot(out[5] - out[9], out[6] - out[10]), 0.1f);
 }

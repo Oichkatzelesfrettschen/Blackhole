@@ -335,9 +335,14 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   dustColor *= mix(1.0, beaming, dopplerStrength);
 
   // Kerr showcase shots need asymmetric energy placement, not a globally
-  // brighter disk. Bias the inner emission toward the approaching/prograde side.
-  vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
-  float spinView = 0.5 + 0.5 * dot(normalize(cross(spinAxis, normalize(pos))), -normalize(rayDir));
+  // brighter disk. Bias the inner emission toward the side where the disk
+  // flow approaches the camera. The disk orbits about +y at every spin sign
+  // (its ISCO takes the counter-rotating branch when kerrSpin < 0), so the
+  // flow axis stays +y, as diskDopplerBoost above keeps one flow sense for
+  // either spin sign; the spin magnitude only sets the strength.
+  vec3 diskFlowAxis = vec3(0.0, 1.0, 0.0);
+  vec3 diskFlowDir = normalize(cross(diskFlowAxis, normalize(pos)));
+  float spinView = 0.5 + 0.5 * dot(diskFlowDir, -normalize(rayDir));
   float anisotropicBoost = mix(1.0, mix(0.82, 1.55, spinView), smoothstep(0.05, 0.85, abs(kerrSpin)));
   dustColor *= anisotropicBoost;
 
@@ -376,15 +381,15 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   grbValue = max(0.0, texture(grbModulationLUT, vec2(u, 0.5)).r);
   density *= mix(1.0, grbValue, step(0.5, useGrbModulation));
 
-  // Redshift z = u^t - 1 of the prograde Keplerian emitter seen face-on
+  // Redshift z = u^t - 1 of the Keplerian emitter orbiting along +z (signed
+  // spin, counter-rotating for kerrSpin < 0) seen face-on
   // (photon Lz = 0), the quantity the redshift LUT tabulates over
   // [r_isco, 4 r_isco] (physics::generateRedshiftLut). The analytic branch
   // clamps r to the same range, so the LUT toggle leaves the physics unchanged.
   if (enableRedshift > 0.5) {
     float massM = max(0.5 * schwarzschildRadius, EPSILON);
-    float aDisk = abs(kerrSpin);
-    float rIscoM = isco_radius(aDisk);
-    float gFaceOn = dtDiskTransferG(clamp(r / massM, rIscoM, 4.0 * rIscoM), aDisk, 0.0);
+    float rIscoM = isco_radius(kerrSpin);
+    float gFaceOn = dtDiskTransferG(clamp(r / massM, rIscoM, 4.0 * rIscoM), kerrSpin, 0.0);
     float z = gFaceOn > 0.0 ? clamp(1.0 / gFaceOn - 1.0, 0.0, 10.0) : 0.0;
     if (useLUTs > 0.5) {
       float rNorm = r / max(schwarzschildRadius, EPSILON);
@@ -725,9 +730,9 @@ void main() {
 
     HitResult hit =
         bhTraceGeodesic(ray, schwarzschildRadius, depthFar, steps, interopStepSize);
-    vec4 shaded = bhShadeHit(hit, cameraPosPhys, schwarzschildRadius);
+    vec4 shaded = bhShadeHit(hit, hit.origin, schwarzschildRadius);
     float depthNormalized =
-        clamp(length(hit.hitPoint - cameraPosPhys) / max(depthFar, 0.0001), 0.0, 1.0);
+        clamp(length(hit.hitPoint - hit.origin) / max(depthFar, 0.0001), 0.0, 1.0);
     vec3 interopColor = shaded.rgb;
     applyWiregridOverlay(interopColor, hit.hitPoint);
     fragColor = vec4(interopColor, depthNormalized);

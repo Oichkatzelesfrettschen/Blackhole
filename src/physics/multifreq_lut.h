@@ -275,13 +275,11 @@ inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, d
 
   const double mass = massSolar * M_SUN;
   const double rS = schwarzschildRadius(mass);
-  const double rG = G * mass / C2;
-  const double a = aStar * rG;
-  const double rIn = kerrIscoRadius(mass, a, prograde);
-  const double rOut = rIn * 4.0;
-
+  // kerrDisk takes |aStar| relative to the disk's orbit (prograde) and places
+  // rIn at that disk's ISCO, the zero-torque edge of its flux.
   DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd, prograde);
-  disk.rIn = rIn;
+  const double rIn = disk.rIn;
+  const double rOut = rIn * 4.0;
   disk.rOut = rOut;
 
   lut.rMin = static_cast<float>(rIn / rS);

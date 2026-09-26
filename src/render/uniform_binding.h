@@ -12,6 +12,7 @@
 #include <glbinding/gl/types.h>
 
 #include "physics/hawking_renderer.h"
+#include "physics/hawking_uniforms.h"
 #include "render.h"
 #include "render/interop_uniforms.h"
 #include "render/render_state.h"
@@ -42,11 +43,11 @@ struct FrameBindingInputs {
 
 /**
  * @brief Fills the fragment-path float and typed uniforms on @p rtti from the
- *        interop registry, plus the parity-mode and Hawking-glow extras.
+ *        interop registry, plus the parity-mode and Hawking-glow extras
+ *        (physics::hawkingUniformValues).
  */
 void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &interop,
-                          bool parityMode, bool hawkingEnabled, float hawkingTempScale,
-                          float hawkingIntensity, bool hawkingUseLUTs, double blackHoleMass);
+                          bool parityMode, const physics::HawkingUniformValues &hawking);
 
 /**
  * @brief Sets the same registry float uniforms plus typed specials (resolution,
@@ -75,7 +76,8 @@ void bindFragmentUniforms(RenderToTextureInfo &rtti, const RenderState &rs,
 
 /**
  * @brief Forwards Hawking-glow parameters to @p program via
- *        HawkingRenderer::setShaderUniforms; a no-op when the renderer is not ready.
+ *        HawkingRenderer::setShaderUniforms: the scalars always, the LUT
+ *        textures only once both LUTs are loaded.
  */
 void applyHawkingUniforms(gl::GLuint program, const physics::HawkingRenderer &renderer, bool enabled,
                           float tempScale, float intensity, bool useLUTs, double blackHoleMass);

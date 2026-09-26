@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 GENERATOR_PATH = Path(__file__).resolve().parents[1] / "scripts" / "generate_luts.py"
+sys.path.insert(0, str(GENERATOR_PATH.parent))  # generate_luts imports kerr_signed_spin
 SPEC = importlib.util.spec_from_file_location("generate_luts", GENERATOR_PATH)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError(f"Cannot load LUT generator: {GENERATOR_PATH}")
@@ -57,7 +58,7 @@ class SignedSpinLuts(unittest.TestCase):
             self.assertAlmostEqual(
                 2.0 * meta["r_in_over_rs"], GENERATOR.page_thorne_isco(spin), places=9
             )
-            self.assertEqual(meta["prograde"], spin >= 0.0)
+            self.assertTrue(meta["prograde"])
 
     def test_emissivity_is_nonzero_across_the_domain(self):
         for spin in (0.9, -0.9):

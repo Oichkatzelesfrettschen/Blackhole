@@ -117,6 +117,7 @@ __launch_bounds__(256, 4)
   result.escaped = false;
   result.max_steps = false;
   result.hit_point = make_f3(0.0f, 0.0f, 0.0f);
+  result.origin = cam;
   result.closest_approach_point = cam;
   result.phi = 0.0f;
   result.photon_lambda = 0.0f;
@@ -137,6 +138,8 @@ __launch_bounds__(256, 4)
     KerrConsts c;
     KerrRay kr;
     d_kerr_init_geodesic(cam, dir, rs, aTrace, c, kr);
+    result.origin = d_kerr_chart_position(cam, rs, aTrace);
+    result.closest_approach_point = result.origin;
 
     /* Store initial state in FP16 */
     HalfRayState hs = kerrRayToHalf(kr);
@@ -229,7 +232,7 @@ __launch_bounds__(256, 4)
   }
 
 shade:;
-  float4 color16 = d_shade_hit(result, cam);
+  float4 color16 = d_shade_hit(result, result.origin);
   if (d_wiregrid_enabled != 0) {
     float3 const hp = result.hit_point;
     float const r_bl = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);

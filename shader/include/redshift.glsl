@@ -55,6 +55,36 @@ float gravitationalRedshift(float r, float r_s) {
 }
 
 /**
+ * Equatorial ZAMO-lapse redshift, the model of physics::kerrRedshift and
+ * kerrRedshiftBatch.
+ *
+ * 1 + z = 1 / alpha with alpha^2 = r^2 Delta / ((r^2 + a^2)^2 - a^2 Delta),
+ * Delta = r^2 - r_s r + a^2, M = r_s / 2, a = aStar M. The lapse stays positive
+ * through the ergoregion and vanishes at the horizon; z is clamped to [0, 10],
+ * kerrRedshiftBatch's cap, and a radius at or inside the horizon returns the cap. At
+ * aStar = 0 it is gravitationalRedshift; at aStar = 0.9, r = 3M, z = 0.64819.
+ *
+ * @param r Radial position
+ * @param r_s Schwarzschild radius
+ * @param aStar Dimensionless spin (signed; only a^2 enters)
+ */
+float zamoRedshiftEquatorial(float r, float r_s, float aStar) {
+    const float cap = 10.0;
+    float a = 0.5 * aStar * r_s;
+    float a2 = a * a;
+    float r2 = r * r;
+    float delta = r2 - r_s * r + a2;
+    float bigA = (r2 + a2) * (r2 + a2) - a2 * delta;
+    // r > r_+ as in physics::kerrZamoLapse; below r_- Delta is positive again.
+    float rPlus = 0.5 * r_s + sqrt(max(0.0, 0.25 * r_s * r_s - a2));
+    if (!(r > rPlus) || !(delta > 0.0) || !(bigA > 0.0)) {
+        return cap;
+    }
+    float z = 1.0 / sqrt(r2 * delta / bigA) - 1.0;
+    return clamp(z, 0.0, cap);
+}
+
+/**
  * Combined gravitational + Doppler redshift.
  *
  * z_total = (1 + z_grav)(1 + z_doppler) - 1

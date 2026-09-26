@@ -663,16 +663,24 @@ inline void diskFluxBatch(const std::vector<double> &radii, const DiskParams &di
   });
 }
 
+/**
+ * @brief Fill out with kerrRedshift at each radius, capped at z = 10.
+ *
+ * kerrRedshift is finite and non-negative outside the outer horizon and
+ * +infinity at or inside it; the cap maps that infinite redshift, and any
+ * value above it, to 10.
+ */
 inline void kerrRedshiftBatch(const std::vector<double> &radii, double theta, double mass, double a,
                               std::vector<float> &out) {
   out.clear();
   out.reserve(radii.size());
   std::ranges::transform(radii, std::back_inserter(out), [theta, mass, a](double radius) {
-    double z = kerrRedshift(radius, theta, mass, a);
-    if (!safeIsfinite(z) || z < 0.0) {
-      z = 0.0;
+    constexpr double kRedshiftCap = 10.0;
+    const double z = kerrRedshift(radius, theta, mass, a);
+    if (!safeIsfinite(z)) {
+      return static_cast<float>(kRedshiftCap);
     }
-    return static_cast<float>(std::min(z, 10.0));
+    return static_cast<float>(std::clamp(z, 0.0, kRedshiftCap));
   });
 }
 

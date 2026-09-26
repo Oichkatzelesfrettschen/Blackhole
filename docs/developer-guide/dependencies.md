@@ -181,7 +181,7 @@ target).
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| mpmath | 1.4.1 (pinned) | 30-digit reference values in `scripts/gen_*_reference.py` (Page-Thorne flux, efficiency, ISCO redshift) |
+| mpmath | 1.4.1 (pinned) | Arbitrary-precision reference tables written by `scripts/gen_*_reference.py` (Page-Thorne flux, efficiency, ISCO redshift) and embedded in the physics tests |
 | numpy, scipy, h5py, pandas, matplotlib | see `scripts/requirements.txt` | LUT generation, GRMHD processing, validation |
 
 ---

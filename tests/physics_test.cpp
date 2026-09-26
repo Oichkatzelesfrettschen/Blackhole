@@ -50,9 +50,9 @@ bool approxEqual(double a, double b, double tol = TOLERANCE) {
 /** @brief Result record for a single named test comparison. */
 struct TestResult {
   std::string name;
-  double expected;
-  double actual;
-  bool passed;
+  double expected = 0.0;
+  double actual = 0.0;
+  bool passed = false;
 };
 
 /**
@@ -77,6 +77,20 @@ void printResult(const TestResult &r) {
  * @param out   Output string (set on success)
  * @return true if the file was read and non-empty, false otherwise
  */
+/**
+ * @brief physics::kerrRedshift at the equator, clamped to the LUT range [0, 10].
+ *
+ * kerrRedshiftBatch and both asset generators store min(max(z, 0), 10) and
+ * map the horizon's infinite redshift to 10, so a stored table is compared
+ * against this clamp rather than against the raw z (32.4 at a* = 0.9,
+ * r = 0.72 r_s, just outside r_+ = 0.718 r_s).
+ */
+double cappedKerrRedshift(double r, double mass, double a) {
+  constexpr double kCap = 10.0;
+  double const z = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
+  return std::isfinite(z) ? std::clamp(z, 0.0, kCap) : kCap;
+}
+
 bool readTextFile(const std::string &path, std::string &out) {
   std::ifstream file(path);
   if (!file.is_open()) {
@@ -744,8 +758,9 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
 
         double const u = static_cast<double>(i) / static_cast<double>(count - 1);
         double const r = rIn + (u * (rOut - rIn));
-        // Disk-emitter redshift z = u^t - 1 of the prograde circular orbit.
-        double const ut = physics::circularEmitterUt(r / rG, std::abs(spin));
+        // Disk-emitter redshift z = u^t - 1 of the circular orbit along +z at
+        // the signed spin (physics::generateRedshiftLut).
+        double const ut = physics::circularEmitterUt(r / rG, spin);
         double const expectedRedshift = std::clamp(ut > 0.0 ? ut - 1.0 : 0.0, 0.0, 10.0);
         auto const actualRedshift = static_cast<double>(redshift.at(i));
         maxRedshiftDiff = std::max(maxRedshiftDiff, std::abs(expectedRedshift - actualRedshift));
@@ -765,6 +780,21 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       printResult(redshiftResult);
       redshiftResult.passed ? ++passed : ++failed;
     }
+  }
+
+  // Test 17a: the stored-table clamp caps a finite near-horizon z at 10
+  {
+    const double mass = 4.0e6 * physics::M_SUN;
+    const double rG = physics::G * mass / physics::C2;
+    const double r = 0.72 * physics::schwarzschildRadius(mass);
+    const double rawZ = physics::kerrRedshift(r, 0.5 * physics::PI, mass, 0.9 * rG);
+    TestResult const clampResult{.name = "Near-horizon redshift clamps to the LUT cap",
+                                 .expected = 10.0,
+                                 .actual = cappedKerrRedshift(r, mass, 0.9 * rG),
+                                 .passed = rawZ > 10.0 && std::isfinite(rawZ) &&
+                                           cappedKerrRedshift(r, mass, 0.9 * rG) == 10.0};
+    printResult(clampResult);
+    clampResult.passed ? ++passed : ++failed;
   }
 
   // Test 17: Validation curve assets (redshift)
@@ -797,10 +827,8 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       const double expectedRs = physics::schwarzschildRadius(mass);
       const double rG = physics::G * mass / physics::C2;
       const double a = spin * rG;
-      const bool prograde = spin >= 0.0;
-      const double expectedIsco = physics::kerrIscoRadius(mass, a, prograde);
-      const double expectedPh = prograde ? physics::kerrPhotonOrbitPrograde(mass, a)
-                                         : physics::kerrPhotonOrbitRetrograde(mass, a);
+      const double expectedIsco = physics::kerrIscoRadius(mass, a, true);
+      const double expectedPh = physics::kerrPhotonOrbitPrograde(mass, a);
 
       TestResult const rsResult{.name = "Validation r_s",
                                 .expected = expectedRs,
@@ -826,10 +854,7 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       double maxRedshiftDiff = 0.0;
       for (std::size_t i = 0; i < rOverRs.size(); ++i) {
         double const r = rOverRs.at(i) * expectedRs;
-        double expectedZ = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
-        if (!std::isfinite(expectedZ) || expectedZ < 0.0) {
-          expectedZ = 0.0;
-        }
+        double const expectedZ = cappedKerrRedshift(r, mass, a);
         maxRedshiftDiff = std::max(maxRedshiftDiff, std::abs(expectedZ - zValues.at(i)));
       }
 
@@ -867,10 +892,8 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       for (std::size_t i = 0; i < spins.size(); ++i) {
         double const spin = spins.at(i);
         double const a = spin * rG;
-        bool const prograde = spin >= 0.0;
-        double const expectedIsco = physics::kerrIscoRadius(mass, a, prograde) / rS;
-        double const expectedPh = prograde ? physics::kerrPhotonOrbitPrograde(mass, a) / rS
-                                           : physics::kerrPhotonOrbitRetrograde(mass, a) / rS;
+        double const expectedIsco = physics::kerrIscoRadius(mass, a, true) / rS;
+        double const expectedPh = physics::kerrPhotonOrbitPrograde(mass, a) / rS;
         maxIscoDiff = std::max(maxIscoDiff, std::abs(expectedIsco - iscoOverRs.at(i)));
         maxPhDiff = std::max(maxPhDiff, std::abs(expectedPh - phOverRs.at(i)));
       }
