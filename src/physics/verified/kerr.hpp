@@ -208,15 +208,22 @@ namespace verified {
  * For a = 0: r_ISCO = 6M (Schwarzschild limit, proven in Rocq)
  * For a = M: r_ISCO = M (extremal prograde)
  *
+ * Signed spin, shared with photonOrbitPrograde and physics::kerrIscoRadius:
+ * a > 0 rotates about +z and "prograde" names an orbit with angular momentum
+ * along +z, so at a < 0 the prograde orbit counter-rotates and takes the plus
+ * sign (8.7174 M at a = -0.9 M). The Rocq definition states the a >= 0 form;
+ * Z1 and Z2 are even in a, and the sign of the square-root term carries the
+ * reflection phi -> -phi.
+ *
  * @param m Black hole mass
- * @param a Spin parameter (positive for prograde)
- * @return Prograde ISCO radius
+ * @param a Signed spin parameter
+ * @return ISCO radius for angular momentum along +z
  */
 [[nodiscard]] inline double kerrIscoPrograde(double m, double a) noexcept {
   const double z1 = kerrZ1(m, a);
   const double z2 = kerrZ2(m, a);
   const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
-  return m * (3.0 + z2 - sqrtTerm);
+  return (a >= 0.0) ? m * (3.0 + z2 - sqrtTerm) : m * (3.0 + z2 + sqrtTerm);
 }
 
 /**
@@ -227,15 +234,15 @@ namespace verified {
  *
  * For a = M: r_ISCO = 9M (extremal retrograde)
  *
+ * Signed spin: the orbit with angular momentum along -z, equal to
+ * kerrIscoPrograde(m, -a).
+ *
  * @param m Black hole mass
- * @param a Spin parameter
- * @return Retrograde ISCO radius
+ * @param a Signed spin parameter
+ * @return ISCO radius for angular momentum along -z
  */
 [[nodiscard]] inline double kerrIscoRetrograde(double m, double a) noexcept {
-  const double z1 = kerrZ1(m, a);
-  const double z2 = kerrZ2(m, a);
-  const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
-  return m * (3.0 + z2 + sqrtTerm);
+  return kerrIscoPrograde(m, -a);
 }
 
 // ============================================================================
@@ -247,6 +254,8 @@ namespace verified {
  *
  * Derived from Rocq: Definition photon_orbit_prograde (M a : R) : R :=
  *   2 * M * (1 + cos ((2/3) * acos (- a / M))).
+ *
+ * Signed spin as in kerrIscoPrograde: angular momentum along +z.
  *
  * @param m Black hole mass
  * @param a Spin parameter
