@@ -102,6 +102,12 @@ void bindComputeUniforms(GLuint program, const RenderState &rs, const FrameBindi
   glUniform4f(glGetUniformLocation(program, "wiregridColor"),
               rs.wiregrid.wiregridColor.r, rs.wiregrid.wiregridColor.g, rs.wiregrid.wiregridColor.b, rs.wiregrid.wiregridColor.a);
 
+  // Scene toggles the interop traces honor (parity with fragment path)
+  glUniform1f(glGetUniformLocation(program, "gravitationalLensing"),
+              rs.disk.gravitationalLensing ? 1.0f : 0.0f);
+  glUniform1f(glGetUniformLocation(program, "renderBlackHole"),
+              rs.disk.renderBlackHole ? 1.0f : 0.0f);
+
   // D4: polarized Stokes IQUV (parity with fragment path)
   glUniform1f(glGetUniformLocation(program, "stokesEnabled"),
               rs.stokes.stokesEnabled ? 1.0f : 0.0f);

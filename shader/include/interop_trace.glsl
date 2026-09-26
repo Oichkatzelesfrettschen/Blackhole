@@ -255,6 +255,24 @@ float bhEscapeRadius(vec3 pos, float maxDistance) {
   return max(maxDistance, 1.01 * length(pos));
 }
 
+// Scene toggles read by the three interop traces. renderBlackHole = 0 removes
+// the hole and, as in the legacy tracer, its disk: each ray reaches the sky
+// along the camera direction without integration. gravitationalLensing = 0
+// keeps the horizon and the disk but traces straight rays: flat space is the
+// r_s = 0, a = 0 member of the Kerr family, where the Mino-time leapfrog moves
+// along straight lines, so the same integrator runs with bhMetricRadius and
+// bhMetricSpin in place of the hole's r_s and spin while capture, disk radii,
+// and step sizing keep the physical values.
+bool bhHoleRendered() { return renderBlackHole > 0.5; }
+
+float bhMetricRadius(float r_s) { return gravitationalLensing > 0.5 ? r_s : 0.0; }
+
+float bhMetricSpin(float aTrace) { return gravitationalLensing > 0.5 ? aTrace : 0.0; }
+
+// Closest-approach radius reported for a ray that meets no hole; above every
+// near-hole threshold the shading helpers apply.
+const float BH_NO_HOLE_RADIUS = 1.0e30;
+
 HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
                           float stepSize) {
   float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
@@ -273,6 +291,13 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.lastClosestApproachStep = -1;
   result.debugFlags = 0;
 
+  if (!bhHoleRendered()) {
+    result.escaped = true;
+    result.hitPoint = ray.position + escapeRadius * result.escapedDir;
+    result.minRadius = BH_NO_HOLE_RADIUS;
+    return result;
+  }
+
   // One integrator for every spin: Schwarzschild is the a = 0 member of the
   // Kerr family and kerr.glsl's Mino-time leapfrog is exact there, so the
   // image is continuous in spin by construction.
@@ -285,10 +310,11 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   float r_disk_in = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
 
-  float aTrace = kerrTraceSpin(a);
+  float rsMetric = bhMetricRadius(r_s);
+  float aTrace = bhMetricSpin(kerrTraceSpin(a));
   KerrConsts c;
   KerrRay kerrRay;
-  kerrInitGeodesic(ray.position, ray.velocity, r_s, aTrace, c, kerrRay);
+  kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kerrRay);
 
   vec3 oldPos;
   float dt = stepSize;
@@ -305,7 +331,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     /* D10: AMR step refinement near horizon and photon sphere */
     float stepDt = bhAdaptiveStep(kerrRay.r, r_s, r_horizon, dt);
-    kerrStep(kerrRay, r_s, aTrace, c, stepDt);
+    kerrStep(kerrRay, rsMetric, aTrace, c, stepDt);
     vec3 newPos = kerrRayPosition(kerrRay);
     result.debugFlags |= bhDebugEvaluate(newPos, newPos - oldPos, escapeRadius);
     if ((bhDebugMask() & BH_DEBUG_FLAG_RANGE) != 0 && kerrRay.r < 0.0) {
@@ -365,6 +391,15 @@ void bhDiskEmission(float r, float photonLambda, float r_s, out vec3 chroma,
   float g2 = g * g;
   chroma = dtBlackbodyChroma(g * tEmit);
   intensity = g2 * g2 * fluxNorm;
+}
+
+// Color a ray captured at radius r brings back: the black horizon plus the
+// Hawking thermal glow (hawking_glow.glsl), which the legacy tracer adds at
+// the same capture point.
+vec3 bhHorizonShade(float r, float r_s) {
+  return applyHawkingGlow(bhHorizonColor().rgb, blackHoleMass, r, r_s, hawkingGlowEnabled,
+                          hawkingTempScale, hawkingGlowIntensity, hawkingTempLUT,
+                          hawkingSpectrumLUT, useHawkingLUTs);
 }
 
 vec4 bhDiskColorFromHit(HitResult hit, float r_s) {
@@ -465,7 +500,7 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
     return vec4(clamp(debugColor, 0.0, 1.0), 1.0);
   }
   if (hit.hitHorizon) {
-    return bhHorizonColor();
+    return vec4(bhHorizonShade(length(hit.hitPoint), r_s), 1.0);
   }
   if (hit.hitDisk) {
     return bhDiskColorFromHit(hit, r_s);
@@ -499,7 +534,8 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 // rteStepVec3(); background and horizon contributions are weighted by the
 // surviving transmittance at escape.
 //
-// opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui)
+// opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui); j_eff and
+// alpha_nu are per unit affine length (kerrAffineStep).
 // ---------------------------------------------------------------------------
 vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
                         float stepSize, float opacityScale, out vec3 terminalPos) {
@@ -512,11 +548,18 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
   float h_disk = max(0.1 * r_s, BH_EPSILON);
 
-  float aTrace = kerrTraceSpin(a);
+  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
+  if (!bhHoleRendered()) {
+    vec3 dir = normalize(ray.velocity);
+    terminalPos = ray.position + escapeRadius * dir;
+    return vec4(bhBackgroundColorFromDir(dir).rgb, 1.0);
+  }
+
+  float rsMetric = bhMetricRadius(r_s);
+  float aTrace = bhMetricSpin(kerrTraceSpin(a));
   KerrConsts c;
   KerrRay    kRay;
-  kerrInitGeodesic(ray.position, ray.velocity, r_s, aTrace, c, kRay);
-  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
+  kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
 
   vec3  accumI   = vec3(0.0);
   float transmit = 1.0;
@@ -526,14 +569,18 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     if (kRay.r <= r_horizon) {
       terminalPos = curPos;
-      accumI += transmit * bhHorizonColor().rgb;
+      accumI += transmit * bhHorizonShade(kRay.r, r_s);
       return vec4(accumI, 1.0);
     }
 
     /* D10: AMR step refinement near horizon and photon sphere */
     float rteStepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
-    kerrStep(kRay, r_s, aTrace, c, rteStepDt);
+    KerrRay before = kRay;
+    kerrStep(kRay, rsMetric, aTrace, c, rteStepDt);
     vec3 newPos = kerrRayPosition(kRay);
+    // rteStepDt is a Mino-time increment; transfer integrates over affine
+    // length (kerrAffineStep), the unit of jEff and alphaNu.
+    float pathStep = kerrAffineStep(before, kRay, aTrace, rteStepDt);
 
     if (adiskEnabled > 0.5) {
       float rCyl = length(newPos.xy);
@@ -550,7 +597,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
         float jEff    = emission * rhoNorm;
         float alphaNu = opacityScale * max(jEff, 0.0);
 
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, rteStepDt, transmit);
+        accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
         // Early exit when medium becomes opaque
         if (transmit < 0.005) {
@@ -590,7 +637,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 // The I channel uses the same front-to-back compositing as bhTraceGeodesicRTE()
 // (vec3 color-accurate accumulation).  The Q, U, V channels evolve under the
 // stokesStep() exact solution (simplified K: alpha_I + rho_V) at each disk
-// step, using the same alphaI and stepDt as the intensity path so the
+// step, using the same alphaI and path length as the intensity path so the
 // polarimetric and photometric results remain consistent.
 //
 // Polarization model:
@@ -621,11 +668,20 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Thermal synchrotron intrinsic linear polarization fraction (~0.75 at Theta_e >> 1)
   const float PI_LIN = 0.75;
 
-  float aTrace = kerrTraceSpin(a);
+  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
+  if (!bhHoleRendered()) {
+    vec3 dir = normalize(ray.velocity);
+    terminalPos = ray.position + escapeRadius * dir;
+    vec3 sky = bhBackgroundColorFromDir(dir).rgb;
+    float skyI = (sky.r + sky.g + sky.b) / 3.0;
+    return vec4(stokesDisplayColor(vec4(skyI, 0.0, 0.0, 0.0), sky), 1.0);
+  }
+
+  float rsMetric = bhMetricRadius(r_s);
+  float aTrace = bhMetricSpin(kerrTraceSpin(a));
   KerrConsts c;
   KerrRay    kRay;
-  kerrInitGeodesic(ray.position, ray.velocity, r_s, aTrace, c, kRay);
-  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
+  kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
 
   vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
   vec2  stokesQU = vec2(0.0);   // Q and U Stokes components
@@ -637,15 +693,19 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     if (kRay.r <= r_horizon) {
       terminalPos = curPos;
-      accumI += transmit * bhHorizonColor().rgb;
+      accumI += transmit * bhHorizonShade(kRay.r, r_s);
       float I = (accumI.r + accumI.g + accumI.b) / 3.0;
       vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
       return vec4(stokesDisplayColor(stokes, accumI), 1.0);
     }
 
     float stepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
-    kerrStep(kRay, r_s, aTrace, c, stepDt);
+    KerrRay before = kRay;
+    kerrStep(kRay, rsMetric, aTrace, c, stepDt);
     vec3 newPos = kerrRayPosition(kRay);
+    // Affine path length of the Mino step (kerrAffineStep), the unit of
+    // alphaNu and rhoV.
+    float pathStep = kerrAffineStep(before, kRay, aTrace, stepDt);
 
     if (adiskEnabled > 0.5) {
       float rCyl = length(newPos.xy);
@@ -661,7 +721,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
         float alphaNu = opacityScale * max(jEff, 0.0);
 
         // Intensity path (front-to-back compositing identical to RTE path)
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, stepDt, transmit);
+        accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
         // Polarization path: stokesStep() for Q, U, V
         // jI_scalar: mean color intensity for the emission vector
@@ -675,7 +735,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
         // Evolve Q, U, V under simplified K (alpha_I + rho_V)
         // WHY: I and V decouple in simplified K; we evolve Q/U coupled via rhoV.
         vec4 quv = stokesStep(vec4(0.0, stokesQU.x, stokesQU.y, stokesV),
-                              emStokes, alphaNu, rhoV, stepDt);
+                              emStokes, alphaNu, rhoV, pathStep);
         stokesQU = quv.yz;
         stokesV  = quv.w;
 

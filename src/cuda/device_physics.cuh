@@ -412,11 +412,19 @@ __device__ __forceinline__ void d_kerr_init_geodesic(float3 pos, float3 dir, flo
         return;
     }
 
+    /* sin(theta) from the cylindrical radius: sqrt(1 - cos^2) cancels to zero
+     * or to a rounding residue near the axis in float32. */
     float inv_r = 1.0f / r;
     float cos_t = fminf(fmaxf(pos.z * inv_r, -1.0f), 1.0f);
-    float sin_t = sqrtf(fmaxf(1.0f - cos_t * cos_t, 0.0f));
+    float sin_t = fminf(sqrtf(fmaf(pos.x, pos.x, pos.y * pos.y)) * inv_r, 1.0f);
     float sin2  = sin_t * sin_t;
-    float phi = atan2f(pos.y, pos.x);
+    /* On the axis the azimuth is free; choosing it along the transverse part
+     * of dir puts that part in e_theta, so k^theta = |dir_perp| / r carries it
+     * with k^phi = 0 and Lz = 0 (kerrInitGeodesic twin). */
+    bool const on_axis = sin_t <= D_EPSILON;
+    float const az_x = on_axis ? cos_t * dir.x : pos.x;
+    float const az_y = on_axis ? cos_t * dir.y : pos.y;
+    float phi = (fmaf(az_x, az_x, az_y * az_y) > 0.0f) ? atan2f(az_y, az_x) : 0.0f;
     float cos_p, sin_p;
     sincosf(phi, &sin_p, &cos_p);
 
@@ -427,7 +435,7 @@ __device__ __forceinline__ void d_kerr_init_geodesic(float3 pos, float3 dir, flo
     /* BL contravariant spatial components of the null direction. */
     float kr     = d_dot(dir, e_r);
     float ktheta = d_dot(dir, e_theta) * inv_r;
-    float kphi   = (sin_t > D_EPSILON) ? (d_dot(dir, e_phi) / (r * sin_t)) : 0.0f;
+    float kphi   = on_axis ? 0.0f : (d_dot(dir, e_phi) / (r * sin_t));
 
     float sigma  = fmaf(r, r, a * a * cos_t * cos_t);
     float delta  = fmaf(r, r, fmaf(-rs, r, a * a));
@@ -465,7 +473,7 @@ __device__ __forceinline__ void d_kerr_init_geodesic(float3 pos, float3 dir, flo
     c.Lz = Lz_raw * inv_E;
 
     float p_theta = sigma * ktheta * inv_E;
-    float cot2 = (sin2 > D_EPSILON) ? (cos_t * cos_t / sin2) : 0.0f;
+    float cot2 = on_axis ? 0.0f : (cos_t * cos_t / sin2);
     c.Q = fmaf(p_theta, p_theta, fmaf(-a * a, cos_t * cos_t, c.Lz * c.Lz * cot2));
 
     ray.vr = sigma * kr * inv_E;
@@ -473,7 +481,7 @@ __device__ __forceinline__ void d_kerr_init_geodesic(float3 pos, float3 dir, flo
 
     /* w = p_theta e_theta + (Lz / sin) e_phi, tangent at n, rescaled on shell. */
     float3 n = d_scale(pos, inv_r);
-    float lz_over_sin = (sin_t > D_EPSILON) ? c.Lz / sin_t : 0.0f;
+    float lz_over_sin = on_axis ? 0.0f : c.Lz / sin_t;
     float3 w = d_add(d_scale(e_theta, p_theta), d_scale(e_phi, lz_over_sin));
     w = d_sub(w, d_scale(n, d_dot(w, n)));
     float w_len = d_length(w);
@@ -511,6 +519,21 @@ __device__ __forceinline__ void d_kerr_drag_and_time_rates(float r, float sin2, 
         dphi_drag = fmaf(a, (P + vr) * inv_delta, -a * c.E);
         dt        = fmaf(r2_a2, P, rs * r * vr) * inv_delta + tail;
     }
+}
+
+/**
+ * @brief Affine length of a Mino step, the path length radiative transfer integrates over.
+ *
+ * d(lambda_affine) = Sigma d(lambda_Mino) at E = 1: the length a distant
+ * observer assigns to the photon path, Euclidean far from the hole. Trapezoid
+ * rule over the step's end states, second order in the step. Twin of
+ * kerrAffineStep in shader/include/kerr.glsl.
+ */
+__device__ __forceinline__ float d_kerr_affine_step(const KerrRay& before, const KerrRay& after,
+                                                    float a, float dlam) {
+    float const sigma0 = d_kerr_sigma(before.r, a, before.n.z);
+    float const sigma1 = d_kerr_sigma(after.r, a, after.n.z);
+    return 0.5f * (sigma0 + sigma1) * fabsf(dlam);
 }
 
 /**
@@ -1940,7 +1963,8 @@ __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
  * @param emit_color RGB emission color (temperature-mapped, pre-Doppler).
  * @param j_eff      Effective emission coefficient (includes Doppler g^3, density).
  * @param alpha_nu   Absorption coefficient [1/step-unit].
- * @param step_size  Segment path length [same units as alpha_nu denominator].
+ * @param step_size  Segment path length [same units as alpha_nu denominator]; along a
+ *                   Kerr geodesic the affine length of the step (d_kerr_affine_step).
  * @param transmit   [in/out] Current path transmittance; decremented by exp(-tau).
  * @return Segment contribution to add to accumI (= transmit_before * S * (1-exp(-tau))).
  */
@@ -2041,8 +2065,12 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
 
         /* D10: AMR step refinement near horizon and photon sphere */
         float const step_dt_rte = d_adaptive_step(kr.r, rs, r_horizon, dt);
+        KerrRay const before = kr;
         d_kerr_step(kr, rs, a_trace, c, step_dt_rte);
         float3 const new_pos = d_kerr_ray_position(kr);
+        /* step_dt_rte is a Mino-time increment; transfer integrates over
+         * affine length (d_kerr_affine_step), the unit of j_eff and alpha_nu. */
+        float const path_step = d_kerr_affine_step(before, kr, a_trace, step_dt_rte);
 
         if (d_adisk_enabled) {
             float const r_cyl = sqrtf(fmaf(new_pos.x, new_pos.x, new_pos.y * new_pos.y));
@@ -2060,7 +2088,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
                 float const j_eff   = emission * rho_norm;
                 float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
 
-                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, step_dt_rte, transmit);
+                float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, path_step, transmit);
                 accum_i = d_add(accum_i, contrib);
 
                 if (transmit < 0.005f) {
@@ -2311,8 +2339,11 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         }
 
         float const step_dt = d_adaptive_step(kr.r, rs, r_horizon, dt);
+        KerrRay const before = kr;
         d_kerr_step(kr, rs, a_trace, c, step_dt);
         float3 const new_pos = d_kerr_ray_position(kr);
+        /* Affine path length of the Mino step, the unit of alpha_nu and rho_v. */
+        float const path_step = d_kerr_affine_step(before, kr, a_trace, step_dt);
 
         if (d_adisk_enabled) {
             float const r_cyl = sqrtf(fmaf(new_pos.x, new_pos.x, new_pos.y * new_pos.y));
@@ -2331,7 +2362,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
 
                 /* Intensity path: same as d_rte_step() */
                 float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu,
-                                                   step_dt, transmit);
+                                                   path_step, transmit);
                 accum_i = d_add(accum_i, contrib);
 
                 /* Polarized emission: j_Q, j_U from B-field EVPA */
@@ -2347,7 +2378,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
 
                 /* Stokes step for Q, U, V (I is handled by accum_i above) */
                 stokes = d_stokes_step(stokes, 0.0f, jQ_s, jU_s, 0.0f,
-                                       alpha_nu, rho_v, step_dt);
+                                       alpha_nu, rho_v, path_step);
 
                 if (transmit < 0.005f) { break; }
             }

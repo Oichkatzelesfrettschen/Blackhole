@@ -20,7 +20,6 @@
 #include <vector>
 
 #include <GLFW/glfw3.h>
-#include <glbinding/gl/bitfield.h>
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>

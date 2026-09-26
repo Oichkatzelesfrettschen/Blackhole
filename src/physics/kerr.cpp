@@ -98,9 +98,11 @@ KerrPotentials kerrPotentials(double r, double theta, double mass, double a,
   // Carter's polar potential carries lz^2 cot^2, not lz^2 / sin^2: the two
   // differ by lz^2, which would leave R short by Delta lz^2 for the same q.
   p.thetaPot = c.q + (aa * c.e * c.e * cos2) - (c.lz * c.lz * cos2 / sin2);
-  p.dThetadtheta =
-      -(2.0 * aa * c.e * c.e * cosTheta * sinTheta)
-      + (2.0 * c.lz * c.lz * cosTheta / (sin2 * sinTheta));
+  // An lz = 0 ray reaches the axis, where sin(theta) = 0 exactly; its
+  // centrifugal term is zero there rather than 0 / 0.
+  const double centrifugal =
+      (c.lz == 0.0) ? 0.0 : 2.0 * c.lz * c.lz * cosTheta / (sin2 * sinTheta);
+  p.dThetadtheta = -(2.0 * aa * c.e * c.e * cosTheta * sinTheta) + centrifugal;
 
   return p;
 }

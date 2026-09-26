@@ -150,11 +150,20 @@ void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
     return;
   }
 
+  // sin(theta) from the cylindrical radius: sqrt(1 - cos^2) cancels to zero
+  // or to a rounding residue near the axis in float32.
   float invR  = 1.0 / r;
   float cosT  = clamp(pos.z * invR, -1.0, 1.0);
-  float sinT  = sqrt(max(1.0 - cosT * cosT, 0.0));
+  float sinT  = min(length(pos.xy) * invR, 1.0);
   float sin2  = sinT * sinT;
-  float phi   = atan(pos.y, pos.x);
+  // On the axis the Boyer-Lindquist azimuth is free. Choosing it along the
+  // transverse part of dir puts that part in e_theta = sign(cos) (cos phi,
+  // sin phi, 0), so k^theta = |dir_perp| / r carries it with k^phi = 0 and
+  // Lz = 0; atan(0, 0) at the axis would otherwise leave e_theta arbitrary
+  // and drop any transverse component outside it.
+  bool onAxis = sinT <= KERR_EPSILON;
+  vec2 azimuthDir = onAxis ? cosT * dir.xy : pos.xy;
+  float phi   = dot(azimuthDir, azimuthDir) > 0.0 ? atan(azimuthDir.y, azimuthDir.x) : 0.0;
   float cosP  = cos(phi);
   float sinP  = sin(phi);
 
@@ -165,7 +174,7 @@ void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
   // BL contravariant spatial components of the null direction.
   float kr     = dot(dir, e_r);
   float ktheta = dot(dir, e_theta) * invR;
-  float kphi   = (sinT > KERR_EPSILON) ? dot(dir, e_phi) / (r * sinT) : 0.0;
+  float kphi   = onAxis ? 0.0 : dot(dir, e_phi) / (r * sinT);
 
   float sigma  = r * r + a * a * cosT * cosT;
   float delta  = r * r - r_s * r + a * a;
@@ -207,7 +216,7 @@ void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
   c.Lz = Lz_raw * invE;
 
   float ptheta = sigma * ktheta * invE;
-  float cot2 = (sin2 > KERR_EPSILON) ? (cosT * cosT / sin2) : 0.0;
+  float cot2 = onAxis ? 0.0 : (cosT * cosT / sin2);
   c.Q = ptheta * ptheta - a * a * cosT * cosT + c.Lz * c.Lz * cot2;
 
   ray.vr = sigma * kr * invE;
@@ -216,7 +225,7 @@ void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
   // Angular state: w = p_theta e_theta + (Lz / sin) e_phi, tangent to the
   // sphere at n = pos / r, rescaled to the on-shell speed.
   vec3 n = pos * invR;
-  float lzOverSin = (sinT > KERR_EPSILON) ? c.Lz / sinT : 0.0;
+  float lzOverSin = onAxis ? 0.0 : c.Lz / sinT;
   vec3 w = ptheta * e_theta + lzOverSin * e_phi;
   w -= dot(w, n) * n;
   float wLen = length(w);
@@ -253,6 +262,19 @@ void kerrDragAndTimeRates(float r, float sin2, float vr, float r_s, float a,
     dphiDrag = -a * c.E + a * (P + vr) * invD;
     dt       = ((r * r + a * a) * P + r_s * r * vr) * invD + tail;
   }
+}
+
+// Affine length of a Mino step, the path length radiative transfer
+// integrates over: d(lambda_affine) = Sigma d(lambda_Mino) at E = 1, so it is
+// the length a distant observer assigns to the photon path. Far from the hole
+// it is the Euclidean length (on the spin axis dr/d(lambda_affine) = 1
+// exactly). Trapezoid rule over the step's end states; the error falls as the
+// square of the step, so sums over a fixed stretch of path converge as the
+// step shrinks.
+float kerrAffineStep(KerrRay before, KerrRay after, float a, float dlam) {
+  float sigma0 = kerrSigma(before.r, a, before.n.z);
+  float sigma1 = kerrSigma(after.r, a, after.n.z);
+  return 0.5 * (sigma0 + sigma1) * abs(dlam);
 }
 
 // Null-constraint projection. The leapfrog carries vr^2 = R(r) only as a first
