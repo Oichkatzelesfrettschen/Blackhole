@@ -1067,7 +1067,7 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
 }
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
-void reloadChangedShaders(GLuint &computeProgram) {
+void reloadChangedShaders(RenderState &rs, GLuint &computeProgram) {
   // Check for shader file changes and recompile all affected programs.
   if (ShaderWatcher::instance().hasPendingReloads()) {
     auto changedShaders = ShaderWatcher::instance().pollChangedShaders();
@@ -1089,6 +1089,9 @@ void reloadChangedShaders(GLuint &computeProgram) {
       computeProgram = 0;
       std::cout << "[HotReload] Queued recompile: shader/geodesic_trace.comp\n";
     }
+
+    // The tesseract pass owns its program outside shaderProgramMap.
+    rs.tesseract.renderer.reloadShaders();
   }
 }
 #endif
@@ -1440,7 +1443,7 @@ int main(int argc, char **argv) {
       glfwPollEvents();
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
-      reloadChangedShaders(computeProgram);
+      reloadChangedShaders(rs, computeProgram);
 #endif
       // Update input manager
       InputManager::instance().update(deltaTime);

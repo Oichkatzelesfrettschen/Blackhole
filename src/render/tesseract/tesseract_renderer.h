@@ -109,6 +109,16 @@ public:
   /** @brief Release all GL objects; safe to call repeatedly. */
   void shutdown();
 
+  /**
+   * @brief Recompile shader/tesseract.{vert,frag} for shader hot reload.
+   *
+   * On success the new program replaces the old one and the call returns
+   * true. On a read, compile, or link failure the last working program stays
+   * in use and the call returns false. A pass that has not drawn yet has no
+   * program and compiles on its first render(), so the call returns true.
+   */
+  bool reloadShaders();
+
 private:
   void ensureResources(float timeSpan);
 

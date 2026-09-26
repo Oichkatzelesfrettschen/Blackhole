@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -134,6 +135,27 @@ void TesseractRenderer::shutdown() {
   }
   instanceCount_ = 0;
   builtTimeSpan_ = -1.0f;
+}
+
+bool TesseractRenderer::reloadShaders() {
+  if (program_ == 0) {
+    return true;
+  }
+  // createShaderProgram throws const char* on compile or link failure and
+  // std::string when a source file cannot be read.
+  try {
+    const GLuint fresh = createShaderProgram(std::string("shader/tesseract.vert"),
+                                             std::string("shader/tesseract.frag"));
+    glDeleteProgram(program_);
+    program_ = fresh;
+    std::cout << "[HotReload] Reloaded shader/tesseract.{vert,frag}\n";
+    return true;
+  } catch (const char *error) {
+    std::cerr << "[HotReload] tesseract shaders kept: " << error << '\n';
+  } catch (const std::string &error) {
+    std::cerr << "[HotReload] tesseract shaders kept: " << error << '\n';
+  }
+  return false;
 }
 
 void TesseractRenderer::ensureResources(float timeSpan) {

@@ -8,7 +8,8 @@
  * tesseract frame. These tests pin the three guards: HudOverlay restores the
  * blend and depth state it found, renderToTexture writes its fragment output
  * verbatim whatever blend state it inherits, and the tesseract pass restores
- * every binding it touches. Tests skip without a GL 4.6 context (headless CI).
+ * every binding it touches. They also exercise the tesseract hot-reload
+ * recompile. Tests skip without a GL 4.6 context (headless CI).
  */
 
 #include <array>
@@ -215,6 +216,24 @@ TEST_F(TesseractGlStateTest, TesseractPassRestoresEveryBindingItTouches) {
   glDeleteVertexArrays(1, &vao);
   glDeleteFramebuffers(1, &drawFbo);
   glDeleteTextures(1, &sentinelTexture);
+  glDeleteTextures(1, &target);
+}
+
+TEST_F(TesseractGlStateTest, ReloadShadersRecompilesTheLiveProgram) {
+  const GLuint target = createColorTexture32f(TARGET_SIZE, TARGET_SIZE);
+  blackhole::TesseractRenderer renderer;
+  // Before the first draw there is no program to replace.
+  EXPECT_TRUE(renderer.reloadShaders());
+  blackhole::TesseractFrameInputs inputs;
+  inputs.targetTexture = target;
+  inputs.width = TARGET_SIZE;
+  inputs.height = TARGET_SIZE;
+  inputs.rotation = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  renderer.render(inputs);
+  EXPECT_TRUE(renderer.reloadShaders());
+  renderer.render(inputs);
+  EXPECT_EQ(glGetError(), GL_NO_ERROR);
+  renderer.shutdown();
   glDeleteTextures(1, &target);
 }
 
