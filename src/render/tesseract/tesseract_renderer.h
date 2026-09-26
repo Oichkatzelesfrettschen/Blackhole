@@ -150,6 +150,51 @@ private:
   float builtTimeSpan_ = -1.0f;
 };
 
+/// Closest tesseract view distance; the View distance slider shares it.
+inline constexpr float TESSERACT_MIN_VIEW_DISTANCE = 3.0f;
+/// Black-hole camera distance at which a recorded tesseract frame uses the UI
+/// view distance unchanged: the CameraState default orbit radius.
+inline constexpr float TESSERACT_RECORD_REFERENCE_DISTANCE = 15.0f;
+/// Widest tesseract field of view; glm::perspective needs fovy below 180 deg.
+inline constexpr float TESSERACT_MAX_FOV_DEG = 179.0f;
+/// Narrowest tesseract field of view, which keeps the projection finite.
+inline constexpr float TESSERACT_MIN_FOV_DEG = 1.0f;
+
+/** @brief Pose of the record camera that frames a recorded tesseract frame. */
+struct TesseractRecordCamera {
+  float distance = TESSERACT_RECORD_REFERENCE_DISTANCE; ///< CameraState::distance.
+  float fovDeg = 45.0f;                                 ///< CameraState::fov.
+};
+
+/** @brief Output clock and camera of one recorded tesseract frame. */
+struct TesseractRecordFrame {
+  double outputClockSeconds = 0.0; ///< frameIndex / fps of the frame being written.
+  TesseractRecordCamera camera;
+};
+
+/** @brief Distance and field of view of the tesseract view camera. */
+struct TesseractFraming {
+  float viewDistance = 8.0f;
+  float fovDeg = 50.0f;
+};
+
+/**
+ * @brief Framing of the tesseract view for one frame.
+ *
+ * Without @p record the UI viewDistance and fovDeg frame the scene. A recorded
+ * frame follows the record camera, which the record profile path,
+ * --record-distance, and --record-fov set: its field of view passes through,
+ * clamped to [TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG], and its
+ * black-hole distance d maps to viewDistance * d /
+ * TESSERACT_RECORD_REFERENCE_DISTANCE. The two scenes share no length unit,
+ * so the map is a ratio: the black-hole camera's default distance frames the
+ * tesseract as the UI does and a profile dolly scales the tesseract view by
+ * the same factor. The distance never falls below
+ * TESSERACT_MIN_VIEW_DISTANCE.
+ */
+TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
+                                  const std::optional<TesseractRecordCamera> &record);
+
 /**
  * @brief View-projection for the tesseract scene from the frame camera basis.
  *
@@ -163,17 +208,17 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistan
 /**
  * @brief Render the tesseract scene for this frame into rs.targets.texBlackhole.
  *
- * Interactive frames (@p outputClockSeconds empty) advance the stored
+ * Interactive frames (@p record empty) advance the stored
  * orientation by advanceOrientation over ds = rotationSpeed * deltaSeconds and
  * the pulse by advancePulseTravel over pulseSpeed * deltaSeconds while
  * rs.tesseract.animate holds; deltaSeconds is clamped to 0.25 s per frame.
  * Recorded frames pass the output frame time and take the state from
  * tesseractMotionAt at that time (time 0 while animation is off), so render
  * throughput and warm-up never reach the frames. The view comes from
- * tesseractViewProjection.
+ * tesseractViewProjection with the tesseractFraming of @p record's camera.
  */
 void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
-                          std::optional<double> outputClockSeconds);
+                          const std::optional<TesseractRecordFrame> &record);
 
 } // namespace blackhole
 

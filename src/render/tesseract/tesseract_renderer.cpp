@@ -325,6 +325,16 @@ SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth, int renderHeight)
   return {.lines = wrapped, .scale = SPECULATIVE_LABEL_MIN_SCALE};
 }
 
+TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
+                                  const std::optional<TesseractRecordCamera> &record) {
+  if (!record.has_value()) {
+    return {.viewDistance = viewDistance, .fovDeg = fovDeg};
+  }
+  const float scaled = viewDistance * (record->distance / TESSERACT_RECORD_REFERENCE_DISTANCE);
+  return {.viewDistance = std::max(scaled, TESSERACT_MIN_VIEW_DISTANCE),
+          .fovDeg = std::clamp(record->fovDeg, TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG)};
+}
+
 glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistance, float fovDeg,
                                   float aspect) {
   const glm::vec3 forward = glm::column(cameraBasis, 2);
@@ -337,7 +347,7 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistan
 }
 
 void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
-                          std::optional<double> outputClockSeconds) {
+                          const std::optional<TesseractRecordFrame> &record) {
   auto &tg = rs.tesseract;
   tg.timeSpan = std::max(tg.timeSpan, 0.5f);
   tg.litMoment = std::clamp(tg.litMoment, 0.0f, tg.timeSpan);
@@ -347,8 +357,8 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float d
       std::clamp(tg.pulseStrand, 0, static_cast<int>(tesseract::bedroomFeatures().size()) - 1);
 
   const float pulseSpan = tg.pulseNow - tg.pulsePast;
-  if (outputClockSeconds.has_value()) {
-    const double seconds = tg.animate ? *outputClockSeconds : 0.0;
+  if (record.has_value()) {
+    const double seconds = tg.animate ? record->outputClockSeconds : 0.0;
     const tesseract::TesseractMotion motion = tesseract::tesseractMotionAt(
         tg.leftRate, tg.rightRate, static_cast<double>(tg.resetPhase),
         static_cast<double>(tg.rotationSpeed), tg.pulseSpeed, pulseSpan, seconds);
@@ -379,7 +389,11 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float d
   inputs.targetTexture = rs.targets.texBlackhole;
   inputs.width = rs.targets.renderWidth;
   inputs.height = rs.targets.renderHeight;
-  inputs.viewProjection = tesseractViewProjection(cameraBasis, tg.viewDistance, tg.fovDeg, aspect);
+  const TesseractFraming framing = tesseractFraming(
+      tg.viewDistance, tg.fovDeg,
+      record.has_value() ? std::optional<TesseractRecordCamera>(record->camera) : std::nullopt);
+  inputs.viewProjection =
+      tesseractViewProjection(cameraBasis, framing.viewDistance, framing.fovDeg, aspect);
   inputs.rotation = tesseract::toColumnMajor(rotation);
   inputs.projectionMode =
       tg.projection == RenderState::TesseractGroup::Projection::Stereographic ? 1 : 0;

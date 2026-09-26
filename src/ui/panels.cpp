@@ -985,7 +985,8 @@ void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
   }
   ImGui::SliderFloat("Eye w distance", &tg.perspectiveDistance, 2.2f, 8.0f);
   ImGui::SliderFloat("Scene scale", &tg.sceneScale, 0.3f, 3.0f);
-  ImGui::SliderFloat("View distance", &tg.viewDistance, 3.0f, 20.0f);
+  ImGui::SliderFloat("View distance", &tg.viewDistance, blackhole::TESSERACT_MIN_VIEW_DISTANCE,
+                     20.0f);
   ImGui::SliderFloat("FOV (deg)", &tg.fovDeg, 20.0f, 100.0f);
 }
 

@@ -3880,6 +3880,17 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_framing_test.cpp")
+    add_executable(tesseract_framing_test "${PROJECT_SOURCE_DIR}/tests/tesseract_framing_test.cpp")
+    target_link_libraries(tesseract_framing_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(tesseract_framing_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_framing COMMAND tesseract_framing_test)
+    set_tests_properties(tesseract_framing PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(tesseract_framing PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/gpu_timing_test.cpp")
     # GL-free per-frame bookkeeping of the GPU stage timers: a stage the
     # sampled frame skipped publishes NaN or an empty CSV field.

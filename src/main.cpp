@@ -194,6 +194,7 @@ using blackhole::restoreCompareSweepState;
 
 // Speculative tesseract scene pass lives in src/render/tesseract/*.
 using blackhole::renderTesseractScene;
+using blackhole::TesseractRecordFrame;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
@@ -1182,16 +1183,20 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
                                       float deltaTime, double currentTime, GLuint &computeProgram) {
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
     // Recording advances on the output frame clock, frameIndex / fps, so the
-    // frames depend on their index alone, not on render throughput.
-    std::optional<double> outputClock;
+    // frames depend on their index alone, not on render throughput, and
+    // frames the scene with the camera applyRecordCameraPath set.
+    std::optional<TesseractRecordFrame> record;
     if (!cli.recordFramesDir.empty()) {
-      outputClock =
-          static_cast<double>(rs.recording.recordFrameIndex) / static_cast<double>(K_CINEMATIC_FPS);
+      const auto &recordCamera = input.camera();
+      record = TesseractRecordFrame{
+          .outputClockSeconds = static_cast<double>(rs.recording.recordFrameIndex) /
+                                static_cast<double>(K_CINEMATIC_FPS),
+          .camera = {.distance = recordCamera.distance, .fovDeg = recordCamera.fov}};
     }
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.begin();
     }
-    renderTesseractScene(rs, frameCamera.basis, deltaTime, outputClock);
+    renderTesseractScene(rs, frameCamera.basis, deltaTime, record);
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.end();
     }
