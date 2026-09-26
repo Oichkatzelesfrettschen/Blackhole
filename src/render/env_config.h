@@ -14,9 +14,22 @@
 #ifndef BLACKHOLE_RENDER_ENV_CONFIG_H
 #define BLACKHOLE_RENDER_ENV_CONFIG_H
 
+#include <optional>
+#include <string_view>
+
+#include "render/render_state.h"
+
 namespace blackhole {
 
-struct RenderState;
+/** @brief Scene named by a BLACKHOLE_SCENE value: "blackhole" or "tesseract". */
+std::optional<RenderState::SceneMode> parseSceneName(std::string_view name);
+
+/**
+ * @brief Scene the process starts in: BLACKHOLE_SCENE when it names a scene,
+ *        Blackhole otherwise. applyEnvironmentConfig and main's option
+ *        validation both read the scene through this function.
+ */
+RenderState::SceneMode startupSceneMode();
 
 /** @brief Applies BLACKHOLE_* environment-variable overrides to rs at startup. */
 void applyEnvironmentConfig(RenderState &rs);

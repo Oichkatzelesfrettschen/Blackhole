@@ -14,9 +14,13 @@
 #ifndef BLACKHOLE_RENDER_RECORD_MODE_H
 #define BLACKHOLE_RENDER_RECORD_MODE_H
 
+#include <optional>
+#include <string>
 #include <string_view>
 
 #include <glm/ext/vector_float4.hpp>
+
+#include "render/render_state.h"
 
 struct GLFWwindow;
 class InputManager;
@@ -28,7 +32,6 @@ struct CliOptions;
 namespace blackhole {
 
 struct WiregridParams;
-struct RenderState;
 
 /** @brief Framing preset for one named showcase-orbit composition. */
 struct ShowcaseOrbitComposition {
@@ -75,9 +78,20 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli);
 
 /** @brief One-shot --export-frame (PNG from the tonemapped texture) and
  *         --export-raw-frame (PFM from the HDR blackhole texture) after a short
- *         warmup; sets exportPerformed so it runs once. No-op when neither export
+ *         warmup; sets exportPerformed so it runs once, and exportFailed when a
+ *         requested file was refused or not written. No-op when neither export
  *         path is set. */
 void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli);
+
+/**
+ * @brief Why the requested exports cannot run in @p scene, or std::nullopt.
+ *
+ * --export-raw-frame reads the HDR scene target, which the tesseract scene's
+ * SPECULATIVE label never reaches, so the tesseract scene rejects it; main
+ * checks this before opening a window and exits with status 2.
+ */
+std::optional<std::string> exportConflictForScene(const platform::CliOptions &cli,
+                                                  RenderState::SceneMode scene);
 
 } // namespace blackhole
 

@@ -11,7 +11,9 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <string>
+#include <string_view>
 
 #include "render/gl_capabilities.h"
 #include "render/render_state.h"
@@ -258,20 +260,34 @@ void applySceneEnvironment(RenderState &rs) {
     return;
   }
   if (const char *sceneEnv = std::getenv("BLACKHOLE_SCENE")) {
-    const std::string scene(sceneEnv);
-    if (scene == "tesseract") {
-      rs.scene.mode = RenderState::SceneMode::Tesseract;
-    } else if (scene == "blackhole") {
-      rs.scene.mode = RenderState::SceneMode::Blackhole;
-    } else {
-      std::cerr << "BLACKHOLE_SCENE='" << scene
+    if (!parseSceneName(sceneEnv).has_value()) {
+      std::cerr << "BLACKHOLE_SCENE='" << sceneEnv
                 << "' is not a scene; expected blackhole or tesseract\n";
     }
   }
+  rs.scene.mode = startupSceneMode();
   rs.scene.envApplied = true;
 }
 
 } // namespace
+
+std::optional<RenderState::SceneMode> parseSceneName(std::string_view name) {
+  if (name == "tesseract") {
+    return RenderState::SceneMode::Tesseract;
+  }
+  if (name == "blackhole") {
+    return RenderState::SceneMode::Blackhole;
+  }
+  return std::nullopt;
+}
+
+RenderState::SceneMode startupSceneMode() {
+  const char *sceneEnv = std::getenv("BLACKHOLE_SCENE");
+  if (sceneEnv == nullptr) {
+    return RenderState::SceneMode::Blackhole;
+  }
+  return parseSceneName(sceneEnv).value_or(RenderState::SceneMode::Blackhole);
+}
 
 void applyEnvironmentConfig(RenderState &rs) {
   applySceneEnvironment(rs);

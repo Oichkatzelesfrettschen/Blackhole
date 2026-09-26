@@ -1321,6 +1321,12 @@ int main(int argc, char **argv) {
       return 2;
     }
 
+    if (const auto conflict =
+            blackhole::exportConflictForScene(cli, blackhole::startupSceneMode())) {
+      std::printf("%s\n", conflict->c_str());
+      return 2;
+    }
+
     platform::initResourceRoot(argv[0]);
     setShaderBaseDir(platform::resourceRoot().string() + "/");
 
@@ -1629,7 +1635,7 @@ int main(int argc, char **argv) {
     rs.dispatch.cudaManager.shutdown();
 #endif
     cleanup(window);
-    return 0;
+    return rs.exporting.exportFailed ? 1 : 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {
     (void)std::fprintf(stderr, "Unhandled cpptrace exception: %s\n",

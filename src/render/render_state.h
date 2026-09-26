@@ -503,6 +503,7 @@ struct RenderState {
   struct ExportingGroup {
     int exportWarmup = 0;
     bool exportPerformed = false;
+    bool exportFailed = false; ///< A requested export was refused or not written; exit 1.
     int exportDone = 0;
   } exporting;
 

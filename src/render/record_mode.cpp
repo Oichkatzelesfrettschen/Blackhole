@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -400,6 +401,15 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
   rs.recording.recordCinematic = static_cast<float>(rs.recording.recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS);
 }
 
+std::optional<std::string> exportConflictForScene(const platform::CliOptions &cli,
+                                                  RenderState::SceneMode scene) {
+  if (!cli.exportRawFramePath.empty() && scene == RenderState::SceneMode::Tesseract) {
+    return std::string("Refusing --export-raw-frame in the tesseract scene: the raw HDR target "
+                       "carries no SPECULATIVE label; use --export-frame or --record-frames");
+  }
+  return std::nullopt;
+}
+
 void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
   if (cli.exportFramePath.empty() && cli.exportRawFramePath.empty()) {
     return;
@@ -424,8 +434,10 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
   // label never reaches, so the speculative tesseract scene refuses it.
   const bool rawRefused = rs.scene.mode == RenderState::SceneMode::Tesseract;
   if (!cli.exportRawFramePath.empty() && rawRefused) {
-    std::cerr << "Refusing --export-raw-frame in the tesseract scene: the raw HDR target carries "
-                 "no SPECULATIVE label; use --export-frame or --record-frames\n";
+    if (const auto conflict = exportConflictForScene(cli, rs.scene.mode)) {
+      std::cerr << *conflict << '\n';
+    }
+    rs.exporting.exportFailed = true;
   }
   if (!cli.exportRawFramePath.empty() && !rawRefused && rs.targets.texBlackhole != 0) {
     GLint texW = 0;
@@ -442,6 +454,7 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
       std::printf("Exported raw frame: %s (%dx%d)\n", cli.exportRawFramePath.c_str(), w, h);
     } else {
       std::cerr << "Failed to export raw frame: " << cli.exportRawFramePath << '\n';
+      rs.exporting.exportFailed = true;
     }
   }
   rs.exporting.exportPerformed = true;
