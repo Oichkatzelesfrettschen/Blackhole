@@ -11,6 +11,8 @@ against an up-to-date PR branch, resolved review conversations, and PR-based
 integration. The protection applies to administrators. Force pushes and branch
 deletion are disabled. GitHub stores those settings outside the Git tree; inspect
 them with `gh api repos/Oichkatzelesfrettschen/Blackhole/branches/main/protection`.
+Branch protection names only those three checks; every other lane below is
+advisory, so its red result informs a review without blocking the merge.
 
 ## Execution lanes
 
@@ -19,14 +21,16 @@ them with `gh api repos/Oichkatzelesfrettschen/Blackhole/branches/main/protectio
 | Pull request and main push | `ci` | Desktop compilation, CPU tests, GLSL validation; strict warnings and IEEE math |
 | Pull request and main push | `ci-analysis` | CPU build/tests with every enabled clang-tidy and cppcheck diagnostic enforced |
 | Pull request and main push | `ci-release` | CPU build/tests with LTO and fast-math, including per-target IEEE overrides |
-| Weekly schedule | All three presets | Revalidate the default branch |
+| Pull request and main push | `ci-clang` | Advisory: the `ci` configuration compiled by clang 18 over the same GCC 14 packages; strict warnings, CPU tests |
+| Pull request and main push | `ci-clang-fast-math` | Advisory: `ci-clang` with fast-math, where clang's `-Wnan-infinity-disabled` rejects NaN and infinity classification GCC accepts |
+| Weekly schedule | Every preset above | Revalidate the default branch |
 | Manual dispatch | Selected preset | Replay any lane against a selected ref |
 
 The hosted CPU lanes establish compilation and executable CPU validation.
 CUDA device execution, desktop OpenGL rendering, and Blender/Octane runtime
 qualification require their corresponding hardware and environments.
 
-All three jobs run independently. The quick `ci` result provides early compiler
+All jobs run independently. The quick `ci` result provides early compiler
 and CPU-test feedback while analysis and release validation continue.
 Desktop variants share one `blackhole_runtime_assets` producer. The producer
 waits for generated fonts and backdrops, then copies changed assets and shaders
@@ -53,6 +57,28 @@ Only main pushes and pull requests trigger automatic per-change builds, avoiding
 a second branch-push run for every PR commit. A newer PR revision cancels its
 superseded run. Main pushes retain their own validation. Each job has a 90-minute
 upper bound; a timeout is a failed gate, never validation evidence.
+
+## Clang lanes
+
+Conan identifies the dependency packages by the GCC 14 settings of
+`conan/profiles/ci`, and the generated toolchain's own
+`set(CMAKE_CXX_COMPILER ...)` overrides a compiler given on the CMake command
+line. The clang lanes therefore run a second `conan install` into
+`build/CI-clang-deps` with
+`tools.build:compiler_executables={"c":"clang-18","cpp":"clang++-18"}`: that
+configuration stays out of the package id, so the same cached packages resolve,
+and `--build=never` keeps clang from compiling a package into the shared cache.
+The install also sets `tools.cmake.cmaketoolchain:user_presets` empty, because a
+second include of a generated `conan-release` preset in `CMakeUserPresets.json`
+is a duplicate CMake rejects. The `ci-clang` and `ci-clang-fast-math` presets
+read that toolchain; `compile_commands.json` in `build/CI-Clang` names
+`clang++-18`. LTO stays off in these presets, since the packages carry GCC
+objects.
+
+Clang and GCC reject different code. clang 18 diagnoses `std::isnan`,
+`std::isinf`, `std::isfinite`, and `numeric_limits<T>::infinity()` under
+`-ffinite-math-only` as errors with `-Werror`, which the GCC 14 `ci-release`
+lane accepts silently while folding those checks to constants.
 
 ## Strict source validation
 

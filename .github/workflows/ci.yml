@@ -9,7 +9,7 @@ on:
       preset:
         description: Validation lane
         type: choice
-        options: [ci, ci-analysis, ci-release]
+        options: [ci, ci-analysis, ci-release, ci-clang, ci-clang-fast-math]
         default: ci
       export_dependencies:
         description: Retain portable dependency packages for local diagnosis
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.preset || 'ci') || '["ci","ci-analysis","ci-release"]') }}
+        preset: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.preset || 'ci') || '["ci","ci-analysis","ci-release","ci-clang","ci-clang-fast-math"]') }}
     env:
       CONAN_HOME: ${{ github.workspace }}/.conan
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -80,10 +80,15 @@ jobs:
             libxcb-icccm4-dev libxcb-util-dev libxcb-xkb-dev \
             glslang-tools libcfitsio-dev libxcb-glx0-dev uuid-dev libxcb-dri2-0-dev \
             libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev libxcb-res0-dev
-          if [ "$CI_PRESET" = ci-analysis ]; then
-            sudo apt-get install -y clang-tidy-18 cppcheck
-            echo 'CLANG_TIDY=/usr/bin/clang-tidy-18' >> "$GITHUB_ENV"
-          fi
+          case "$CI_PRESET" in
+            ci-analysis)
+              sudo apt-get install -y clang-tidy-18 cppcheck
+              echo 'CLANG_TIDY=/usr/bin/clang-tidy-18' >> "$GITHUB_ENV"
+              ;;
+            ci-clang*)
+              sudo apt-get install -y clang-18
+              ;;
+          esac
       - name: Install pinned build tools
         run: scripts/ci/run_stage.sh tooling "$PYTHON" -m pip install -r scripts/ci/requirements.txt
       - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -122,6 +127,19 @@ jobs:
           scripts/ci/run_stage.sh dependencies conan install . --output-folder=build/CI-deps \
             --lockfile=conan.lock --build=missing -pr:a conan/profiles/ci \
             -c:a tools.build:jobs="$CMAKE_BUILD_PARALLEL_LEVEL"
+      - name: Generate a clang toolchain over the GCC 14 packages
+        if: startsWith(matrix.preset, 'ci-clang')
+        # compiler_executables stays out of the package id, so the GCC 14
+        # packages resolve unchanged; --build=never keeps clang from building
+        # any package that would enter the shared dependency cache. An empty
+        # user_presets leaves CMakeUserPresets.json alone: a second include of
+        # a generated conan-release preset is a duplicate CMake rejects.
+        run: |
+          scripts/ci/run_stage.sh clang-toolchain conan install . \
+            --output-folder=build/CI-clang-deps --lockfile=conan.lock --build=never \
+            -pr:a conan/profiles/ci \
+            -c:h 'tools.build:compiler_executables={"c":"clang-18","cpp":"clang++-18"}' \
+            -c:h 'tools.cmake.cmaketoolchain:user_presets='
       - name: Compact reusable dependency packages
         if: steps.conan-cache.outputs.cache-hit != 'true'
         run: conan cache clean '*' --source --build --download --temp
@@ -148,6 +166,9 @@ jobs:
             ci) build_dir=build/CI ;;
             ci-analysis) build_dir=build/CI-Analysis ;;
             ci-release) build_dir=build/CI-Release ;;
+            ci-clang) build_dir=build/CI-Clang ;;
+            ci-clang-fast-math) build_dir=build/CI-ClangFastMath ;;
+            *) echo "no test directory for preset $CI_PRESET" >&2; exit 2 ;;
           esac
           scripts/ci/run_stage.sh tests ctest --test-dir "$build_dir" \
             --output-on-failure --no-tests=error --parallel "$CTEST_PARALLEL_LEVEL" \

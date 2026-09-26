@@ -461,6 +461,25 @@
       }
     },
     {
+      "name": "ci-clang",
+      "inherits": "ci",
+      "displayName": "CPU CI compiled by clang",
+      "description": "ci on the GCC 14 dependency packages, compiled by the clang the build/CI-clang-deps toolchain names",
+      "binaryDir": "${sourceDir}/build/CI-Clang",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/CI-clang-deps/Release/generators/conan_toolchain.cmake"
+      }
+    },
+    {
+      "name": "ci-clang-fast-math",
+      "inherits": "ci-clang",
+      "displayName": "CPU CI compiled by clang with fast-math",
+      "binaryDir": "${sourceDir}/build/CI-ClangFastMath",
+      "cacheVariables": {
+        "ENABLE_FAST_MATH": "ON"
+      }
+    },
+    {
       "name": "dev",
       "displayName": "Iterative local development",
       "description": "Ninja build with strict warnings and IEEE math; analysis and LTO use dedicated validation lanes",
@@ -572,6 +591,14 @@
     {
       "name": "ci-release",
       "configurePreset": "ci-release"
+    },
+    {
+      "name": "ci-clang",
+      "configurePreset": "ci-clang"
+    },
+    {
+      "name": "ci-clang-fast-math",
+      "configurePreset": "ci-clang-fast-math"
     },
     {
       "name": "dev",
