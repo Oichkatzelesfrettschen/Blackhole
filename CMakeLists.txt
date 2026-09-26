@@ -1445,6 +1445,21 @@ if(ENABLE_BENCHMARKS)
     target_link_libraries(physics_bench PRIVATE sleef::sleef)
   endif()
 
+  # Numerics kernels against their baselines (exact Stokes step vs RK4, ...).
+  # Value-safe floating point: the measured error columns assume IEEE semantics.
+  add_executable(numerics_bench
+    "${PROJECT_SOURCE_DIR}/bench/numerics_bench.cpp"
+  )
+  target_include_directories(numerics_bench PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/src/physics"
+  )
+  target_compile_options(numerics_bench PRIVATE ${PROJECT_WARNINGS})
+  if(ENABLE_FAST_MATH)
+    target_compile_options(numerics_bench PRIVATE -fno-fast-math)
+  endif()
+  target_link_libraries(numerics_bench PRIVATE Boost::headers)
+
   if(ENABLE_GOOGLE_BENCHMARK)
     add_executable(physics_microbench
       "${PROJECT_SOURCE_DIR}/bench/physics_google_bench.cpp"
@@ -5785,6 +5800,33 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(jet_physics_mad_disk_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Closed-form full-K polarized transfer step against the mpmath referee table
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/stokes_exact_test.cpp")
+    add_executable(stokes_exact_test
+      "${PROJECT_SOURCE_DIR}/tests/stokes_exact_test.cpp"
+    )
+    target_include_directories(stokes_exact_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(stokes_exact_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(stokes_exact_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(stokes_exact_test PRIVATE Boost::headers)
+    add_test(NAME stokes_exact_validation COMMAND stokes_exact_test)
+    set_tests_properties(stokes_exact_validation PROPERTIES
+      LABELS "physics;polarization;stokes;referee"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(stokes_exact_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
