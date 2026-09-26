@@ -33,6 +33,7 @@
 #include "physics/safe_limits.h"
 #include "platform/cli_options.h"
 #include "render/render_state.h"   // RenderState, WiregridParams
+#include "render/tesseract/tesseract_renderer.h" // TESSERACT_RECORD_EXPOSURE
 #include "settings.h"              // SettingsManager
 #include "tools/compare_harness.h" // readTextureRGBA, writePfmRgb
 
@@ -331,6 +332,11 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
               cli.recordFramesDir.c_str(), cli.recordFramesTotal,
               static_cast<double>(K_CINEMATIC_DURATION_S), K_CINEMATIC_FPS);
+  // The profiles' exposures follow the black-hole exposure rule; the emissive
+  // tesseract scene records at its own exposure in every profile.
+  if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
+    rs.post.toneExposure = TESSERACT_RECORD_EXPOSURE;
+  }
   // --record-exposure overrides every profile's exposure.
   if (cli.hasRecordExposure) {
     rs.post.toneExposure = cli.recordExposure;

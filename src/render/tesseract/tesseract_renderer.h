@@ -160,6 +160,21 @@ inline constexpr float TESSERACT_MAX_VIEW_DISTANCE = 20.0f;
 /// Smallest eye distance on the w axis the perspective projection uses; the
 /// "Eye w distance" slider stops at 2.2.
 inline constexpr float TESSERACT_MIN_PERSPECTIVE_DISTANCE = 2.1f;
+/**
+ * @brief Tone exposure of every tesseract recording, whatever the profile.
+ *
+ * The record exposure rule (record_mode.h) with the tesseract's own target.
+ * The profiles' exposures place the disk's luminance L99 at display 0.9,
+ * which the emissive ribbons do not share, so applyRecordProfileSetup
+ * replaces them in the tesseract scene. The ribbons are saturated colors
+ * that ACES clips per channel, so the statistic is the 99th percentile of the
+ * per-pixel max channel over ribbon pixels of the raw frame
+ * (tesseract_exposure_gl_test): 1.97 to 2.68 across the default animation,
+ * median 2.4. ACES^-1(0.9^2.35) = 0.900 over 2.4 maps the brightest ribbons
+ * to display 0.875-0.912 at the showcase-orbit gamma and the 0.012 clear
+ * color to 0.059; cinematic's gamma 2.25 maps both slightly higher.
+ */
+inline constexpr float TESSERACT_RECORD_EXPOSURE = 0.375f;
 /// Fraction of the half-height of a recorded frame the tesseract's bounding
 /// sphere fills, below 1 so the sphere, a conservative bound, stays in frame.
 inline constexpr float TESSERACT_RECORD_FILL = 0.85f;
