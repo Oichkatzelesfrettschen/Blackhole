@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <numbers>
 #include <random>
 #include <string>
@@ -288,6 +289,37 @@ TEST(KerrNullGeodesic, FerrariRecoversKnownRoots) {
   EXPECT_NEAR(mixedRoots[1], 1.0, 1e-10);
   EXPECT_NEAR(mixedRoots[2], 2.0, 1e-10);
   EXPECT_NEAR(mixedRoots[3], 3.0, 1e-10);
+}
+
+TEST(KerrNullGeodesic, FerrariSolvesBiquadraticsWithZeroAlpha) {
+  // With c1 = 0 and c0 < 0 the largest resolvent root is y1 = c2, so
+  // alpha^2 = y1 - c2 is zero up to rounding and the quartic is a quadratic
+  // in r^2. (r^2 - 1)(r^2 + 2) and (r^2 - 4)(r^2 + 1) each have one real
+  // pair and one imaginary pair; every returned root must satisfy the
+  // quartic and the motion is a scatter (two real roots).
+  struct Case {
+    double c2;
+    double c0;
+    double realRoot;
+  };
+  for (const Case &k : {Case{.c2 = 1.0, .c0 = -2.0, .realRoot = 1.0},
+                        Case{.c2 = -3.0, .c0 = -4.0, .realRoot = 2.0}}) {
+    physics::QuarticCoeffs coeffs{};
+    coeffs.c2 = k.c2;
+    coeffs.c1 = 0.0;
+    coeffs.c0 = k.c0;
+    const physics::RadialRoots roots = physics::findRadialRoots(coeffs);
+    const auto real = sortedRealRoots(roots);
+    ASSERT_EQ(real.size(), 2U) << "c2=" << k.c2 << " c0=" << k.c0;
+    EXPECT_NEAR(real.front(), -k.realRoot, 1e-12) << "c2=" << k.c2;
+    EXPECT_NEAR(real.back(), k.realRoot, 1e-12) << "c2=" << k.c2;
+    EXPECT_EQ(roots.nReal, 2) << "c2=" << k.c2;
+    EXPECT_EQ(roots.type, physics::RadialMotionType::Scatter) << "c2=" << k.c2;
+    for (const std::complex<double> &r : roots.roots) {
+      const std::complex<double> r2 = r * r;
+      EXPECT_LT(std::abs((r2 * r2) + (k.c2 * r2) + k.c0), 1e-10) << "c2=" << k.c2 << " r=" << r;
+    }
+  }
 }
 
 TEST(KerrNullGeodesic, FerrariFindsDoubleRootOnCriticalCurve) {
