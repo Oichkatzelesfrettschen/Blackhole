@@ -20,6 +20,8 @@ Groups:
   split    - alpha_I ds in {0.1, 0.3, 1} with Faraday depth 10 and 1000
   gain     - alpha_I ds in {-0.1, -1, -10} (stimulated emission) with Faraday
              depth 0, 1, 100 and dichroism, plus pure gain and |alpha_I ds| = 40
+  deepgain - alpha_I ds from -650 to -715, past exp's overflow, with representable
+             solutions
   faraday  - Faraday depth 1e6..1e15 along one axis, and at 1e12 beside a small eta
   faraday3d - Faraday depth 1e9..1e15 along a general axis
   limit    - zero K, pure Faraday, pure dichroism, eta || rho, w.w = 0,
@@ -139,6 +141,17 @@ def build_rows() -> list[Row]:
     rows.append(("gain", [-10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0, j, s0))
     rows.append(("gain", [-1.0e-9, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0], 1.0, j, s0))
     rows.append(("gain", [-40.0, 0.001, 0.0, 0.002, 0.0, 0.0, 0.05], 1.0, j, s0))
+    # Gain past exp's overflow at 709.8 with a representable solution: the
+    # source reaches e^g / g, so S0 is kept small or zero.
+    tiny = [1.0e-300, 3.0e-301, -2.0e-301, 1.0e-301]
+    zero = [0.0] * 4
+    rows.append(("deepgain", [-650.0, 0.3, 0.0, 0.2, 0.0, 0.0, 1.0], 1.0, j, s0))
+    rows.append(("deepgain", [-700.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0, j, tiny))
+    rows.append(
+        ("deepgain", [-710.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0, [1.0, 0.0, 0.0, 0.0], zero)
+    )
+    rows.append(("deepgain", [-710.0, 0.01, 0.0, 0.005, 0.0, 0.0, 3.0], 1.0, j, zero))
+    rows.append(("deepgain", [-715.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e6], 1.0, j, zero))
     rows.extend(faraday_rows())
     rows.extend(limit_rows())
     return rows

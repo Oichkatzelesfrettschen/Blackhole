@@ -6,7 +6,8 @@
  *   1. stokesPropagateExact (direct integral) within 1e-12 relative (vector
  *      2-norm) of the mpmath 5x5 matrix-exponential referee on every row of
  *      tests/stokes_exact_reference.inc: Faraday depth 0.01..1000, optical depth
- *      1e-9..800 and gain down to -40, Faraday depth to 1e15 along one axis,
+ *      1e-9..800, gain down to -715 (past exp's overflow), Faraday depth to
+ *      1e15 along one axis,
  *      alpha_U and rho_U nonzero, and the degenerate limits (zero K, pure
  *      Faraday, pure dichroism, eta || rho, w.w = 0, alpha_I = |eta|, scaled
  *      units). Along a general axis the rounded |rho| ds bounds the error at
@@ -81,8 +82,14 @@ double norm(const StokesArray &v) {
 }
 
 double relErr(const StokesArray &got, const StokesArray &ref) {
-  const StokesArray d = {got[0] - ref[0], got[1] - ref[1], got[2] - ref[2], got[3] - ref[3]};
-  return norm(d) / std::max(norm(ref), 1.0e-300);
+  // Scaled by the largest reference component so deep-gain rows near 1e307
+  // square without overflow.
+  const double scale =
+      std::max({std::abs(ref[0]), std::abs(ref[1]), std::abs(ref[2]), std::abs(ref[3]), 1.0e-300});
+  const StokesArray d = {(got[0] - ref[0]) / scale, (got[1] - ref[1]) / scale,
+                         (got[2] - ref[2]) / scale, (got[3] - ref[3]) / scale};
+  const StokesArray r = {ref[0] / scale, ref[1] / scale, ref[2] / scale, ref[3] / scale};
+  return norm(d) / norm(r);
 }
 
 /// Running maximum that keeps a NaN error, which std::max would drop.
@@ -105,8 +112,8 @@ StokesArray toArray(const StokesVector &s) {
 }
 
 void testReferenceDirect() {
-  constexpr std::array<std::string_view, 7> groups = {"generic", "aligned", "thin", "split",
-                                                      "gain",    "faraday", "limit"};
+  constexpr std::array<std::string_view, 8> groups = {"generic", "aligned",  "thin",    "split",
+                                                      "gain",    "deepgain", "faraday", "limit"};
   double worstAll = 0.0;
   for (const std::string_view group : groups) {
     double worst = 0.0;

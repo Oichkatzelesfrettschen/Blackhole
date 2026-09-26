@@ -67,7 +67,10 @@
  * alpha_I < 0 (gain, as in masers) is supported: the decay moments switch to
  * series that stay positive for tau < 0, the closed forms over tau^2 - x1^2
  * require tau >= 1, and the split form requires tau >= 0.1, so a gain segment
- * always takes the direct integral's cancellation-free branches.
+ * always takes the direct integral's cancellation-free branches. Past a gain
+ * depth of 600 the source integral is evaluated reversed, as an absorbing
+ * segment, and e^{g} applied last in two halves, so a solution beyond exp's
+ * overflow at g = 709.8 stays finite while it is representable.
  *
  * StokesSourceForm::DirectIntegral is the default and holds a 1e-12 relative
  * gate against a 5x5 matrix-exponential referee in every tested regime,
@@ -127,6 +130,11 @@ inline constexpr std::size_t MOMENT_COUNT = 12;
 
 /// Series and closed forms switch at this eigenvalue magnitude.
 inline constexpr double SMALL_EIGENVALUE = 0.1;
+
+/// Gain depth g = -alpha_I ds above which the step reverses the source
+/// integral: e^{g} overflows past 709.8 while the solution, of order e^{g} / g
+/// for a source alone, stays representable up to about 716.
+inline constexpr double GAIN_REVERSE_DEPTH = 600.0;
 
 /// Above this optical depth the upward moment recurrence is stable for every order used.
 inline constexpr double MOMENT_UPWARD_TAU = 30.0;
@@ -579,26 +587,12 @@ struct AxisCoeffs {
           .rhoV = k.rhoV * ds};
 }
 
-} // namespace stokes_exact_detail
-
-/**
- * @brief Exact solution of dS/ds = J - K S over a segment with constant K and J.
- *
- * @param s0       Stokes vector entering the segment
- * @param emission Emission vector J (same units as S per unit length)
- * @param k        Propagation-matrix coefficients
- * @param ds       Segment length (same length unit as the coefficients)
- * @param form     Source-term evaluation; DirectIntegral unless the caller's
- *                 budget is 1e-9 and alpha_I ds >= 0.1
- * @return Stokes vector leaving the segment
- */
-[[nodiscard]] inline StokesArray
-stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const StokesGenerator &k,
-                     double ds, StokesSourceForm form = StokesSourceForm::DirectIntegral) noexcept {
+/// The segment solution for alpha_I ds >= -GAIN_REVERSE_DEPTH (stokesPropagateExact).
+[[nodiscard]] inline StokesArray propagateSegment(const StokesArray &s0,
+                                                  const StokesArray &emission,
+                                                  const StokesGenerator &k, double ds,
+                                                  StokesSourceForm form) noexcept {
   namespace detail = stokes_exact_detail;
-  if (!(ds > 0.0)) {
-    return s0;
-  }
   const StokesGenerator kp = detail::scaledLorentzPart(k, ds);
   const double tau = k.alphaI * ds;
   const detail::LorentzEigenvalues ev = detail::lorentzEigenvalues(kp);
@@ -677,6 +671,57 @@ stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const S
   for (std::size_t i = 0; i < out.size(); ++i) {
     out[i] = homPart[i] + (ds * srcPart[i]);
   }
+  return out;
+}
+
+} // namespace stokes_exact_detail
+
+/**
+ * @brief Exact solution of dS/ds = J - K S over a segment with constant K and J.
+ *
+ * @param s0       Stokes vector entering the segment
+ * @param emission Emission vector J (same units as S per unit length)
+ * @param k        Propagation-matrix coefficients
+ * @param ds       Segment length (same length unit as the coefficients)
+ * @param form     Source-term evaluation; DirectIntegral unless the caller's
+ *                 budget is 1e-9 and alpha_I ds >= 0.1
+ * @return Stokes vector leaving the segment
+ */
+[[nodiscard]] inline StokesArray
+stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const StokesGenerator &k,
+                     double ds, StokesSourceForm form = StokesSourceForm::DirectIntegral) noexcept {
+  namespace detail = stokes_exact_detail;
+  if (!(ds > 0.0)) {
+    return s0;
+  }
+  const double gain = -k.alphaI * ds;
+  if (!(gain > detail::GAIN_REVERSE_DEPTH)) {
+    return detail::propagateSegment(s0, emission, k, ds, form);
+  }
+  // Deep gain: e^{-alpha_I ds} overflows before the solution does. With
+  // M = alpha_I + K', integral_0^s e^{-M t} dt J = e^{-M s} integral_0^s e^{M v} dv J,
+  // and the reversed integral is an absorbing segment (rate -alpha_I, generator
+  // -K') started from zero, so S(s) = e^{g} e^{-K' s} (S0 + reversed), g = -alpha_I ds,
+  // with e^{g} applied in two halves so a representable result stays finite.
+  const StokesGenerator reversed{.alphaI = -k.alphaI,
+                                 .alphaQ = -k.alphaQ,
+                                 .alphaU = -k.alphaU,
+                                 .alphaV = -k.alphaV,
+                                 .rhoQ = -k.rhoQ,
+                                 .rhoU = -k.rhoU,
+                                 .rhoV = -k.rhoV};
+  const StokesArray absorbed =
+      detail::propagateSegment({}, emission, reversed, ds, StokesSourceForm::DirectIntegral);
+  StokesArray w{};
+  for (std::size_t i = 0; i < w.size(); ++i) {
+    w[i] = s0[i] + absorbed[i];
+  }
+  StokesGenerator lorentzOnly = k;
+  lorentzOnly.alphaI = 0.0;
+  StokesArray out =
+      detail::propagateSegment(w, {}, lorentzOnly, ds, StokesSourceForm::DirectIntegral);
+  const double half = std::exp(0.5 * gain);
+  std::ranges::transform(out, out.begin(), [half](double v) { return (v * half) * half; });
   return out;
 }
 
