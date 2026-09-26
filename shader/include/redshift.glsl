@@ -75,7 +75,9 @@ float zamoRedshiftEquatorial(float r, float r_s, float aStar) {
     float r2 = r * r;
     float delta = r2 - r_s * r + a2;
     float bigA = (r2 + a2) * (r2 + a2) - a2 * delta;
-    if (!(delta > 0.0) || !(bigA > 0.0)) {
+    // r > r_+ as in physics::kerrZamoLapse; below r_- Delta is positive again.
+    float rPlus = 0.5 * r_s + sqrt(max(0.0, 0.25 * r_s * r_s - a2));
+    if (!(r > rPlus) || !(delta > 0.0) || !(bigA > 0.0)) {
         return cap;
     }
     float z = 1.0 / sqrt(r2 * delta / bigA) - 1.0;

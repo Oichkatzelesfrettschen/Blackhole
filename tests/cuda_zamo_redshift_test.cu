@@ -23,13 +23,15 @@ struct Case {
     double expected;
 };
 
-// r_s = 2 (M = 1). The last case lies inside r_+ = 1.436 and reads the LUT cap.
-constexpr std::array<Case, 5> K_CASES = {{
+// r_s = 2 (M = 1). The last two cases lie inside r_+ = 1.436 and read the LUT
+// cap; r = 0.2 is inside r_- = 0.564, where Delta is positive again.
+constexpr std::array<Case, 6> K_CASES = {{
     {3.0f, 0.9f, 0.64819156443383915},
     {6.0f, 0.9f, 0.2225214295493458},
     {1.8f, 0.9f, 2.3166247903553998},  // inside the equatorial ergosphere (r = 2M)
     {6.0f, 0.0f, 0.22474487139158894},
     {1.2f, 0.9f, 10.0},
+    {0.2f, 0.9f, 10.0},
 }};
 
 __global__ void kZamoRedshift(const float *radii, const float *spins, float *out, int count) {

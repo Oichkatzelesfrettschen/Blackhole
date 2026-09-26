@@ -99,11 +99,16 @@ class SignedSpinGenerators(unittest.TestCase):
                 self.assertAlmostEqual(z, expected, delta=1e-12, msg=(a_star, r_over_m))
             r_plus = (1.0 + math.sqrt(1.0 - 0.81)) * M_GEOM
             self.assertTrue(math.isinf(module.kerr_redshift_equatorial(r_plus, MASS, 0.9 * M_GEOM)))
+            # Inside r_- = 0.564 M Delta is positive again; the runtime lapse
+            # still requires r > r_+.
+            for r_over_m in (0.2, 0.5, 1.0):
+                z = module.kerr_redshift_equatorial(r_over_m * M_GEOM, MASS, 0.9 * M_GEOM)
+                self.assertTrue(math.isinf(z), msg=(module.__name__, r_over_m))
 
     def test_validation_redshift_is_finite_and_capped(self):
         # A range reaching the horizon writes the cap, never inf or nan.
         r_plus = (1.0 + math.sqrt(1.0 - 0.81)) * M_GEOM
-        for r in (0.5 * r_plus, r_plus, 1.0000001 * r_plus, 3.0 * M_GEOM):
+        for r in (0.2 * M_GEOM, 0.5 * r_plus, r_plus, 1.0000001 * r_plus, 3.0 * M_GEOM):
             z = TABLES.capped_redshift(TABLES.kerr_redshift_equatorial(r, MASS, 0.9 * M_GEOM))
             self.assertTrue(math.isfinite(z), msg=r)
             self.assertLessEqual(z, TABLES.REDSHIFT_CAP)
@@ -111,6 +116,10 @@ class SignedSpinGenerators(unittest.TestCase):
         self.assertEqual(TABLES.capped_redshift(math.inf), 10.0)
         self.assertEqual(TABLES.capped_redshift(math.nan), 10.0)
         self.assertAlmostEqual(TABLES.capped_redshift(0.648), 0.648)
+        z_inner = TABLES.capped_redshift(
+            TABLES.kerr_redshift_equatorial(0.2 * M_GEOM, MASS, 0.9 * M_GEOM)
+        )
+        self.assertEqual(z_inner, TABLES.REDSHIFT_CAP)
 
     def test_installed_compact_common_agrees(self):
         refs = LUTS.compact_common_refs()

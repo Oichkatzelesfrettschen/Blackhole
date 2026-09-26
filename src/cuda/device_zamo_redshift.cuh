@@ -39,7 +39,9 @@ __host__ __device__ __forceinline__ float d_zamo_redshift(float r, float rs, flo
     float const r2 = r * r;
     float const delta = r2 - rs * r + a2;
     float const big_a = (r2 + a2) * (r2 + a2) - a2 * delta;
-    if (!(delta > 0.0f) || !(big_a > 0.0f)) {
+    /* r > r_+ as in physics::kerrZamoLapse; below r_- Delta is positive again. */
+    float const r_plus = 0.5f * rs + sqrtf(fmaxf(0.0f, 0.25f * rs * rs - a2));
+    if (!(r > r_plus) || !(delta > 0.0f) || !(big_a > 0.0f)) {
         return D_ZAMO_REDSHIFT_CAP;
     }
     float const lapse = sqrtf(r2 * delta / big_a);

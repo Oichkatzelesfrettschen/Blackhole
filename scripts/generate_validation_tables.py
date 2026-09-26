@@ -60,14 +60,18 @@ def kerr_redshift_equatorial(r: float, mass: float, spin_param: float) -> float:
     1 + z = 1 / alpha with the ZAMO lapse alpha = sqrt(Sigma Delta / A), which
     at theta = pi/2 is sqrt(r^2 Delta / ((r^2 + a^2)^2 - a^2 Delta)), matching
     physics::kerrRedshift in src/physics/kerr.h. It stays finite inside the
-    ergosphere (z = 2.3166 at a* = 0.9, r = 1.8 M) and diverges at the horizon,
-    where the function returns +inf. At a = 0 it is 1/sqrt(1 - 2M/r) - 1.
+    ergosphere (z = 2.3166 at a* = 0.9, r = 1.8 M) and diverges at the horizon;
+    at and inside r_+ the function returns +inf. At a = 0 it is
+    1/sqrt(1 - 2M/r) - 1.
     """
     m_geom = G * mass / C2
     a2 = spin_param * spin_param
+    # physics::kerrZamoLapse requires r > r_+; below r_- Delta turns positive
+    # again, so its sign alone would admit the region inside the Cauchy horizon.
+    r_plus = m_geom + math.sqrt(max(0.0, m_geom * m_geom - a2))
     delta = r * r - 2.0 * m_geom * r + a2
     big_a = (r * r + a2) ** 2 - a2 * delta
-    if delta <= 0.0 or big_a <= 0.0:
+    if r <= r_plus or delta <= 0.0 or big_a <= 0.0:
         return math.inf
     return 1.0 / math.sqrt(r * r * delta / big_a) - 1.0
 
