@@ -554,7 +554,64 @@ TEST(EventLoader, ScheduleCycleCheckScalesLinearly) {
     schedule.delayTurns = {.plus = 1};
     event.effects = {schedule};
   }
-  EXPECT_FALSE(game::hasBranchingScheduleCycle(story));
+  EXPECT_EQ(game::scheduleGrowth(story), game::ScheduleGrowth::Bounded);
   story.events.at(kEvents / 2).effects.push_back(story.events.at(kEvents / 2).effects.front());
-  EXPECT_TRUE(game::hasBranchingScheduleCycle(story));
+  EXPECT_EQ(game::scheduleGrowth(story), game::ScheduleGrowth::BranchingCycle);
+}
+
+namespace {
+
+/** @brief A once-only seed (id 1) and a chain of `length` scheduled events,
+ *         each scheduling the next `fanOut` times. */
+std::string fanOutChainJson(int length, int fanOut) {
+  std::string json = R"({"events": [{"id": 1, "triggers": [{"turn_at_least": 1}],
+      "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]})";
+  for (int index = 0; index < length; ++index) {
+    const int id = index + 2;
+    json += R"(, {"id": )" + std::to_string(id) + R"(, "mode": "scheduled", "effects": [)";
+    for (int copy = 0; index + 1 < length && copy < fanOut; ++copy) {
+      json += (copy > 0 ? ", " : "") + std::string(R"({"schedule": {"event": )") +
+              std::to_string(id + 1) + R"(, "delay_turns": 1}})";
+    }
+    json += "]}";
+  }
+  return json + "]}";
+}
+
+} // namespace
+
+// Falsifier: an acyclic schedule fan-out loading when one pass would run an
+// event more than K_MAX_SCHEDULE_FANOUT times (a doubling chain of 12 levels
+// runs its last event 2048 times per seed firing and grows exponentially with
+// depth), or a cycle feeding another cycle loading (each pass of the first
+// adds a permanent stream to the second, so its occurrences per turn grow
+// without bound); while a 10-level doubling chain (512) and the shipped
+// story still load.
+TEST(EventLoader, UnboundedScheduleGrowthRejected) {
+  EXPECT_TRUE(errorOf(fanOutChainJson(10, 2)).empty());
+  EXPECT_NE(errorOf(fanOutChainJson(12, 2)).find("fan-out"), std::string::npos);
+  EXPECT_NE(
+      errorOf(R"({"events": [
+        {"id": 1, "triggers": [{"turn_at_least": 1}], "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]},
+        {"id": 2, "mode": "scheduled", "effects": [{"schedule": {"event": 2, "delay_turns": 1}},
+                                                   {"schedule": {"event": 3, "delay_turns": 1}}]},
+        {"id": 3, "mode": "scheduled", "effects": [{"schedule": {"event": 3, "delay_turns": 1}}]}]})")
+          .find("cycle feeds another cycle"),
+      std::string::npos);
+  const game::EventLoadResult shipped = game::loadEventSetFile(
+      std::string(BLACKHOLE_SOURCE_DIR) + "/assets/events/host_goes_dark.json");
+  EXPECT_TRUE(shipped.ok()) << shipped.error;
+  EXPECT_EQ(game::scheduleGrowth(shipped.story), game::ScheduleGrowth::Bounded);
+
+  // The core applies the same bound to a hand-built story: triple every
+  // fan-out of the loadable 10-level chain (3^9 = 19683 runs).
+  game::EventSet tripled = game::parseEventSet(fanOutChainJson(10, 2)).story;
+  EXPECT_TRUE(storyBuildsValid(tripled));
+  for (game::EventDef &event : tripled.events) {
+    if (event.mode == game::EventMode::Scheduled && !event.effects.empty()) {
+      event.effects.push_back(event.effects.front());
+    }
+  }
+  EXPECT_EQ(game::scheduleGrowth(tripled), game::ScheduleGrowth::FanOut);
+  EXPECT_FALSE(storyBuildsValid(tripled));
 }

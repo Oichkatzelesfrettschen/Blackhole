@@ -92,57 +92,8 @@ std::optional<std::size_t> eventIndexOf(const std::vector<EventDef> &events, std
   return static_cast<std::size_t>(found - events.begin());
 }
 
-} // namespace
-
-void appendEventSet(std::vector<std::uint8_t> &out, const EventSet &story) {
-  appendU32(out, static_cast<std::uint32_t>(story.params.size()));
-  for (const EventParam &param : story.params) {
-    appendString(out, param.name);
-    appendI64(out, param.min);
-    appendI64(out, param.max);
-  }
-  appendU32(out, static_cast<std::uint32_t>(story.flags.size()));
-  for (const std::string &flag : story.flags) {
-    appendString(out, flag);
-  }
-  appendU32(out, static_cast<std::uint32_t>(story.techTiers.size()));
-  for (const TechLevel &level : story.techTiers) {
-    appendI64(out, level.points);
-    appendString(out, level.name);
-  }
-  appendU32(out, static_cast<std::uint32_t>(story.events.size()));
-  for (const EventDef &event : story.events) {
-    appendU32(out, event.id);
-    appendString(out, event.name);
-    appendString(out, event.text);
-    appendU32(out, event.source);
-    appendU8(out, static_cast<std::uint8_t>(event.mode));
-    appendU8(out, static_cast<std::uint8_t>(event.category));
-    appendU32(out, static_cast<std::uint32_t>(event.triggers.size()));
-    for (const EventPredicate &predicate : event.triggers) {
-      appendU8(out, static_cast<std::uint8_t>(predicate.kind));
-      appendIntRef(out, predicate.value);
-      appendU32(out, predicate.flag);
-      appendU8(out, static_cast<std::uint8_t>(predicate.var));
-      appendU8(out, static_cast<std::uint8_t>(predicate.op));
-      appendU8(out, static_cast<std::uint8_t>(predicate.receivedKind));
-      appendU32(out, predicate.receivedFrom);
-      appendU8(out, predicate.silentFor ? 1U : 0U);
-    }
-    appendU32(out, static_cast<std::uint32_t>(event.effects.size()));
-    for (const EventEffect &effect : event.effects) {
-      appendU8(out, static_cast<std::uint8_t>(effect.kind));
-      appendU32(out, effect.flag);
-      appendU8(out, static_cast<std::uint8_t>(effect.emitKind));
-      appendU32(out, effect.to);
-      appendI64(out, effect.techPoints);
-      appendU32(out, effect.event);
-      appendIntRef(out, effect.delayTurns);
-    }
-  }
-}
-
-bool hasBranchingScheduleCycle(const EventSet &story) {
+/** @brief Schedule edges by event index, with multiplicity. */
+std::vector<std::vector<std::size_t>> scheduleEdges(const EventSet &story) {
   const std::size_t count = story.events.size();
   // Schedule edges by event index, with multiplicity.
   std::vector<std::vector<std::size_t>> edges(count);
@@ -156,6 +107,17 @@ bool hasBranchingScheduleCycle(const EventSet &story) {
       }
     }
   }
+  return edges;
+}
+
+/** @brief Strongly connected components of the schedule graph. */
+struct ScheduleComponents {
+  std::vector<std::size_t> of; ///< Component of each event.
+  std::size_t count = 0;
+};
+
+ScheduleComponents scheduleComponents(const std::vector<std::vector<std::size_t>> &edges) {
+  const std::size_t count = edges.size();
   // Tarjan's strongly connected components, iterative (a long schedule chain
   // would overflow a recursive walk), in space linear in events plus edges.
   constexpr std::size_t kUnvisited = std::numeric_limits<std::size_t>::max();
@@ -210,17 +172,114 @@ bool hasBranchingScheduleCycle(const EventSet &story) {
       }
     }
   }
+  return {.of = std::move(component), .count = components};
+}
+
+} // namespace
+
+void appendEventSet(std::vector<std::uint8_t> &out, const EventSet &story) {
+  appendU32(out, static_cast<std::uint32_t>(story.params.size()));
+  for (const EventParam &param : story.params) {
+    appendString(out, param.name);
+    appendI64(out, param.min);
+    appendI64(out, param.max);
+  }
+  appendU32(out, static_cast<std::uint32_t>(story.flags.size()));
+  for (const std::string &flag : story.flags) {
+    appendString(out, flag);
+  }
+  appendU32(out, static_cast<std::uint32_t>(story.techTiers.size()));
+  for (const TechLevel &level : story.techTiers) {
+    appendI64(out, level.points);
+    appendString(out, level.name);
+  }
+  appendU32(out, static_cast<std::uint32_t>(story.events.size()));
+  for (const EventDef &event : story.events) {
+    appendU32(out, event.id);
+    appendString(out, event.name);
+    appendString(out, event.text);
+    appendU32(out, event.source);
+    appendU8(out, static_cast<std::uint8_t>(event.mode));
+    appendU8(out, static_cast<std::uint8_t>(event.category));
+    appendU32(out, static_cast<std::uint32_t>(event.triggers.size()));
+    for (const EventPredicate &predicate : event.triggers) {
+      appendU8(out, static_cast<std::uint8_t>(predicate.kind));
+      appendIntRef(out, predicate.value);
+      appendU32(out, predicate.flag);
+      appendU8(out, static_cast<std::uint8_t>(predicate.var));
+      appendU8(out, static_cast<std::uint8_t>(predicate.op));
+      appendU8(out, static_cast<std::uint8_t>(predicate.receivedKind));
+      appendU32(out, predicate.receivedFrom);
+      appendU8(out, predicate.silentFor ? 1U : 0U);
+    }
+    appendU32(out, static_cast<std::uint32_t>(event.effects.size()));
+    for (const EventEffect &effect : event.effects) {
+      appendU8(out, static_cast<std::uint8_t>(effect.kind));
+      appendU32(out, effect.flag);
+      appendU8(out, static_cast<std::uint8_t>(effect.emitKind));
+      appendU32(out, effect.to);
+      appendI64(out, effect.techPoints);
+      appendU32(out, effect.event);
+      appendIntRef(out, effect.delayTurns);
+    }
+  }
+}
+
+ScheduleGrowth scheduleGrowth(const EventSet &story) {
+  const std::size_t count = story.events.size();
+  const std::vector<std::vector<std::size_t>> edges = scheduleEdges(story);
+  const ScheduleComponents scc = scheduleComponents(edges);
+  const std::vector<std::size_t> &component = scc.of;
+  const std::size_t components = scc.count;
   // An event with two or more schedule edges back into its own strongly
   // connected set (a self-loop counts) multiplies that set's occurrences.
+  std::vector<std::uint8_t> cyclic(components, 0);
   for (std::size_t node = 0; node < count; ++node) {
     const auto intoOwnSet = std::ranges::count_if(edges.at(node), [&](std::size_t target) {
       return component.at(target) == component.at(node);
     });
     if (intoOwnSet >= 2) {
-      return true;
+      return ScheduleGrowth::BranchingCycle;
+    }
+    if (intoOwnSet == 1) {
+      cyclic.at(component.at(node)) = 1;
     }
   }
-  return false;
+  // Occurrences reaching each component per seed firing (per pass for a
+  // cycle): once-only events seed one, and each schedule edge between
+  // components carries its source's count, saturating at the bound's
+  // successor. Tarjan numbers components in reverse topological order, so the
+  // highest number goes first.
+  constexpr std::uint64_t kOver = K_MAX_SCHEDULE_FANOUT + 1;
+  std::vector<std::uint64_t> reaching(components, 0);
+  std::vector<std::uint8_t> belowCycle(components, 0);
+  std::vector<std::vector<std::size_t>> members(components);
+  for (std::size_t node = 0; node < count; ++node) {
+    members.at(component.at(node)).push_back(node);
+    if (story.events.at(node).mode == EventMode::Once) {
+      reaching.at(component.at(node)) = std::min(kOver, reaching.at(component.at(node)) + 1);
+    }
+  }
+  for (std::size_t current = components; current-- > 0;) {
+    if (reaching.at(current) > K_MAX_SCHEDULE_FANOUT) {
+      return ScheduleGrowth::FanOut;
+    }
+    const bool fromCycle = cyclic.at(current) != 0 || belowCycle.at(current) != 0;
+    for (const std::size_t node : members.at(current)) {
+      for (const std::size_t target : edges.at(node)) {
+        const std::size_t next = component.at(target);
+        if (next == current) {
+          continue;
+        }
+        if (fromCycle && cyclic.at(next) != 0) {
+          return ScheduleGrowth::ChainedCycles;
+        }
+        belowCycle.at(next) = belowCycle.at(next) != 0 || fromCycle ? 1 : 0;
+        reaching.at(next) = std::min(kOver, reaching.at(next) + reaching.at(current));
+      }
+    }
+  }
+  return ScheduleGrowth::Bounded;
 }
 
 std::uint64_t eventSetDigest(const EventSet &story) {
@@ -399,7 +458,7 @@ void CampaignState::resolveStoryParams() {
     }
     return false;
   };
-  if (hasBranchingScheduleCycle(story) ||
+  if (scheduleGrowth(story) != ScheduleGrowth::Bounded ||
       !std::ranges::all_of(story.events, [&](const EventDef &event) {
         return nodeOk(event.source) && event.mode <= EventMode::Scheduled &&
                static_cast<int>(event.category) < K_EVENT_CATEGORY_COUNT &&

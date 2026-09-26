@@ -231,17 +231,34 @@ void appendEventSet(std::vector<std::uint8_t> &out, const EventSet &story);
 /** @brief FNV-1a 64 over appendEventSet's bytes: identifies a story in a save. */
 [[nodiscard]] std::uint64_t eventSetDigest(const EventSet &story);
 
+/// Most occurrences one event may run from a single seed firing (or, inside a
+/// repeating cycle, per pass round the cycle): the fan-out bound a story's
+/// schedule graph must respect.
+inline constexpr std::uint64_t K_MAX_SCHEDULE_FANOUT = 1024;
+
+/** @brief Whether a story's schedules can multiply occurrences without bound,
+ *         and how. Values name the first violation found. */
+enum class ScheduleGrowth : std::uint8_t {
+  Bounded = 0,
+  BranchingCycle = 1, ///< An event on a cycle schedules into that cycle twice or more.
+  ChainedCycles = 2,  ///< A repeating cycle feeds another cycle, adding a stream every pass.
+  FanOut = 3,         ///< Some event runs more than K_MAX_SCHEDULE_FANOUT times per seed.
+};
+
 /**
- * @brief True when some scheduled event re-schedules into its own cycle more
- *        than once per pass. Each schedule entry is one occurrence, so such a
- *        cycle multiplies its pending occurrences every time round and grows
- *        without bound; a simple cycle (every event on it scheduling exactly one
- *        successor on it) repeats at a constant rate. Checked statically, since
- *        triggers are evaluated only at run time, with an iterative Tarjan
- *        SCC pass in time and space linear in events plus schedule effects.
- *        Events must be sorted by id; schedules to missing events are ignored.
+ * @brief Classifies a story's schedule graph. Each schedule entry is one
+ *        occurrence, so occurrences multiply along schedule edges. Growth is
+ *        bounded exactly when every repeating cycle is simple (each event on it
+ *        schedules one successor on it), no cycle is downstream of another, and
+ *        the occurrence count reaching each event -- the saturating sum over
+ *        schedule paths from once-only seeds (and from cycles, per pass) of the
+ *        products of edge multiplicities -- stays within K_MAX_SCHEDULE_FANOUT.
+ *        Checked statically (triggers run only at run time) by an iterative
+ *        Tarjan SCC pass and a dynamic program over the condensation, in time
+ *        and space linear in events plus schedule effects. Events must be
+ *        sorted by id; schedules to missing events are ignored.
  */
-[[nodiscard]] bool hasBranchingScheduleCycle(const EventSet &story);
+[[nodiscard]] ScheduleGrowth scheduleGrowth(const EventSet &story);
 
 } // namespace game
 

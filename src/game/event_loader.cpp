@@ -133,9 +133,18 @@ public:
     }
     finishFlags();
     checkSchedules();
-    if (hasBranchingScheduleCycle(story_)) {
+    switch (scheduleGrowth(story_)) {
+    case ScheduleGrowth::Bounded:
+      break;
+    case ScheduleGrowth::BranchingCycle:
       fail("$.events", "a branching schedule cycle: some scheduled event re-schedules into its "
                        "own cycle more than once, multiplying its occurrences without bound");
+    case ScheduleGrowth::ChainedCycles:
+      fail("$.events", "a schedule cycle feeds another cycle, adding a stream to it every pass "
+                       "without bound");
+    case ScheduleGrowth::FanOut:
+      fail("$.events", "schedule fan-out: some event would run more than " +
+                           std::to_string(K_MAX_SCHEDULE_FANOUT) + " times per seed firing");
     }
     return std::move(story_);
   }
