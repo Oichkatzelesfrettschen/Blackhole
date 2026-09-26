@@ -1,0 +1,21 @@
+[1] pixel offset +y: code b = +3.9982 M, physical arriving-photon b = -4.0000 M
+    photon orbit pro r=1.5579 M, xi = +2.8444 M
+    photon orbit retro r=3.9103 M, xi = -6.8323 M
+[2] a=0.0: r_isco=6.0000  face-on g exact=0.7071  repo=0.7071  ratio=1.0000
+[2] a=0.5: r_isco=4.2330  face-on g exact=0.6027  repo=0.6373  ratio=1.0574
+[2] a=0.9: r_isco=2.3209  face-on g exact=0.3709  repo=0.4653  ratio=1.2545
+[2] a=0.998: r_isco=1.2370  face-on g exact=0.0927  repo=0.1599  ratio=1.7254
+[3] a=0.0: r_isco=6.000  peak r PT=9.551  peak r repo=8.167  F(r=1.2r_in) PT/repo=0.615  F(r=2.0r_in) PT/repo=1.322  F(r=4.0r_in) PT/repo=1.669
+[3] a=0.9: r_isco=2.321  peak r PT=3.441  peak r repo=3.159  F(r=1.2r_in) PT/repo=0.758  F(r=2.0r_in) PT/repo=1.156  F(r=4.0r_in) PT/repo=1.233
+[3b] a=0 r=7.0: exact PT f=0.0176  repo novikovThorneFactor=+0.0233
+[3b] a=0 r=10.0: exact PT f=0.1137  repo novikovThorneFactor=+0.0998
+[3b] a=0 r=20.0: exact PT f=0.3167  repo novikovThorneFactor=+0.2833
+[3b] a=0 r=100.0: exact PT f=0.6523  repo novikovThorneFactor=+0.6415
+[4] a=0.0 r=6.000: v exact(ZAMO)=0.5000  v repo=0.5000
+[4] a=0.0 r=6.000: v exact(ZAMO)=0.5000  v repo=0.5000
+[4] a=0.0 r=10.000: v exact(ZAMO)=0.3536  v repo=0.3536
+[4] a=0.9 r=2.321: v exact(ZAMO)=0.6245  v repo=0.9900
+[4] a=0.9 r=6.000: v exact(ZAMO)=0.4171  v repo=0.4785
+[4] a=0.9 r=10.000: v exact(ZAMO)=0.3253  v repo=0.3474
+[5] r=1.6 (r+=1.436, r_ergo(eq)=2): -g_tt=-0.250 -> sqrt gives NaN
+    ZAMO lapse sqrt(Sigma*Delta/A) = 0.1970

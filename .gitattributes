@@ -14,3 +14,5 @@ tools/gcovr/gcovr-python-8.4-vendored-source.tar.gz !text !filter !merge !diff
 assets/backgrounds/source/southern-ring-nebula-2k.jpg !text !filter !merge !diff
 assets/backgrounds/source/cartwheel-galaxy-2k.jpg !text !filter !merge !diff
 assets/backgrounds/archive/PIA22085_5120x2880.jpg !text !filter !merge !diff
+assets/skybox_nebula_dark/*.png !text !filter !merge !diff
+assets/skybox_test/*.png !text !filter !merge !diff

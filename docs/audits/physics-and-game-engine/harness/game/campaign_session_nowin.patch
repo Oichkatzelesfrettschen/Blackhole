@@ -1,0 +1,20 @@
+--- a/src/game/campaign_session.cpp
++++ b/campaign_session_nowin.cpp
+@@ -40,7 +40,7 @@
+   // deep banks neither enough energy to win the race nor enough stabilization to
+   // take the alternate victory (see the instability block); the two winning lines
+   // are full-outer for energy or an all-in dive for stabilization.
+-  config.victoryEnergyUnits = 3150.0;
++  config.victoryEnergyUnits = 1.0e6;
+   config.deadlineTurn = 1200;
+   config.fleetInitialFuelUnits = 100.0;
+   config.fuelPerBandHop = 20.0;
+@@ -83,7 +83,7 @@
+   // fleet-wide commitment reaches and only by forgoing the energy win. Two ends,
+   // one choice.
+   config.containmentYieldRetention = 0.1;
+-  config.victoryStabilizationUnits = 8.0;
++  config.victoryStabilizationUnits = 1.0e6;
+   return config;
+ }
+ 
