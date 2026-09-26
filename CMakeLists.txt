@@ -4409,14 +4409,29 @@ if(BUILD_TESTING)
   endfunction()
 
   bh_add_isa_twin(generic)
+  # The _fma twin executes AVX2/FMA instructions, so it needs both compiler
+  # support and a host that runs them; the SIMD_TIER AUTO probe above is
+  # skipped when a preset pins the tier, so this probe runs unconditionally.
   check_cxx_compiler_flag("-mavx2 -mfma" COMPILER_SUPPORTS_AVX2_FMA)
-  if(COMPILER_SUPPORTS_AVX2_FMA)
+  if(COMPILER_SUPPORTS_AVX2_FMA AND NOT CMAKE_CROSSCOMPILING)
+    check_cxx_source_runs("
+      #include <cpuid.h>
+      int main() {
+        unsigned int eax, ebx, ecx, edx;
+        if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) return 1;
+        if (((ecx >> 12) & 1) == 0 || ((ecx >> 28) & 1) == 0 || ((ecx >> 27) & 1) == 0) return 1;
+        if (!__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) return 1;
+        return ((ebx >> 5) & 1) != 0 ? 0 : 1;
+      }
+    " BH_HOST_RUNS_AVX2_FMA)
+  endif()
+  if(COMPILER_SUPPORTS_AVX2_FMA AND BH_HOST_RUNS_AVX2_FMA)
     bh_add_isa_twin(fma -mavx2 -mfma)
   endif()
   foreach(_bh_sim IN ITEMS campaign_sim constellation_sim)
     # The build's own ISA (native or tier flags) against the baseline.
     bh_add_digest_gate(${_bh_sim}_isa_digest_parity ${_bh_sim} ${_bh_sim}_generic)
-    if(COMPILER_SUPPORTS_AVX2_FMA)
+    if(TARGET ${_bh_sim}_fma)
       # FMA-capable ISA against the baseline, independent of the preset.
       bh_add_digest_gate(${_bh_sim}_fma_digest_parity ${_bh_sim}_fma ${_bh_sim}_generic)
     endif()
