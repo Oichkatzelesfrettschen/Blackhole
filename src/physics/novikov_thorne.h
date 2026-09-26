@@ -21,6 +21,7 @@
 #include <cmath>
 
 #include "constants.h"
+#include "page_thorne.h"
 
 namespace blackhole::physics {
 
@@ -92,7 +93,8 @@ public:
      * Page & Thorne (1974) formula:
      *   T(r) = [3 G M Mdot / (8 π σ r³) * f(r)]^(1/4)
      *
-     * where f(r) is the radial emissivity function.
+     * where f(r) is the Page-Thorne relativistic factor
+     * (::physics::pageThorneRelativisticFactor), zero at the ISCO.
      *
      * @param r Radius in units of M
      * @param aStar Dimensionless spin parameter
@@ -123,9 +125,8 @@ public:
     const double mCgs = massSolar * ::physics::M_SUN;            // g
     const double rCgs = r * ::physics::G * mCgs / (cCgs * cCgs); // cm
 
-    // Radial emissivity function f(r) - assumes zero-torque inner boundary
-    // Simplified approximation: f(r) ≈ (1 - sqrt(r_isco/r))
-    const double fR = std::max(0.0, 1.0 - std::sqrt(rIsco / r));
+    // Page-Thorne relativistic factor with the zero-torque inner boundary
+    const double fR = std::max(0.0, ::physics::pageThorneRelativisticFactor(r, aStar));
 
     // Stefan-Boltzmann constant: σ = 5.67e-5 erg cm⁻² s⁻¹ K⁻⁴
     const double sigmaSb = 5.67e-5;
@@ -169,27 +170,24 @@ public:
       return 0.0;
     }
 
-    // Simplified emissivity: peaks near ISCO, falls off as r⁻³
-    const double fR = std::max(0.0, 1.0 - std::sqrt(rIsco / r));
-    const double flux = fR / (r * r * r);
-
-    // Normalize to peak at r = 1.5 * r_isco
-    const double rPeak = 1.5 * rIsco;
-    const double fPeak = std::max(0.0, 1.0 - std::sqrt(rIsco / rPeak));
-    const double fluxPeak = fPeak / (rPeak * rPeak * rPeak);
-
+    // Page-Thorne flux shape over its peak value
+    const double flux = ::physics::pageThorneFluxShape(r, aStar);
+    const double fluxPeak = ::physics::pageThorneFluxPeak(aStar);
     return std::min(1.0, flux / fluxPeak);
   }
 
     /**
      * @brief Compute peak temperature radius (for validation)
      *
-     * Temperature peaks at r ≈ 1.5 * r_ISCO (Page & Thorne 1974)
+     * The temperature peaks where the Page-Thorne flux does: 1.592 r_ISCO
+     * (9.55 M) at a = 0, 1.483 r_ISCO at 0.9, 1.278 r_ISCO at 0.998.
      *
      * @param aStar Dimensionless spin parameter
      * @return Radius of peak temperature in units of M
      */
-  static double peakTemperatureRadius(double aStar) noexcept { return 1.5 * iscoRadius(aStar); }
+  static double peakTemperatureRadius(double aStar) noexcept {
+    return ::physics::pageThorneFluxPeakRadius(aStar);
+  }
 
   /**
    * @brief Compute integrated luminosity

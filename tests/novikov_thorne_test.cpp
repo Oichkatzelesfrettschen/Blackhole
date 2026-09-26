@@ -9,6 +9,7 @@
 
 #include "../src/physics/novikov_thorne.h"
 #include "../src/physics/constants.h"
+#include "../src/physics/page_thorne.h"
 #include <iostream>
 #include <cmath>
 #include <iomanip>
@@ -17,7 +18,6 @@
 using namespace blackhole::physics;
 
 // Test tolerance
-constexpr double TOLERANCE = 1e-6;
 constexpr double RELAXED_TOLERANCE = 1e-4;
 
 /**
@@ -128,30 +128,46 @@ bool testIscoKerrMaximal() {
 /**
  * @brief Test 5: Temperature peak location
  *
- * Expected: T peaks at r ≈ 1.5 * r_ISCO (Page & Thorne 1974)
+ * Expected: T peaks at the continuous Page-Thorne flux maximum, 1.592 r_ISCO
+ * (9.55 M) at a = 0 and 1.483 r_ISCO at a = 0.9
+ * (scripts/gen_page_thorne_reference.py).
  * Reference: Page & Thorne (1974), ApJ 191, 499
  */
 bool testTemperaturePeak() {
   std::cout << "\n[TEST 5] Temperature Peak Location\n";
   std::cout << "===================================\n";
 
-  const double aStar = 0.0;
-  const double rPeak = NovikovThorneDisk::peakTemperatureRadius(aStar);
-  const double rIsco = NovikovThorneDisk::iscoRadius(aStar);
-  const double expectedRatio = 1.5;
-
-  const double ratio = rPeak / rIsco;
-
+  struct Case {
+    double aStar;
+    double ratio;
+  };
+  const Case cases[] = {{0.0, 1.5918213463}, {0.9, 1.4829887161}};
+  bool allPassed = true;
   std::cout << std::fixed << std::setprecision(8);
-  std::cout << "  r_ISCO:   " << rIsco << " M\n";
-  std::cout << "  r_peak:   " << rPeak << " M\n";
-  std::cout << "  Ratio:    r_peak / r_ISCO = " << ratio << "\n";
-  std::cout << "  Expected: " << expectedRatio << "\n";
+  for (Case const &c : cases) {
+    const double rPeak = NovikovThorneDisk::peakTemperatureRadius(c.aStar);
+    const double rIsco = NovikovThorneDisk::iscoRadius(c.aStar);
+    const double ratio = rPeak / rIsco;
+    // The temperature maximum, located by scanning T itself, must sit there too.
+    double tMax = 0.0;
+    double rAtTMax = 0.0;
+    for (int i = 0; i <= 20000; ++i) {
+      const double r = rIsco * (1.0 + (1.5 * i / 20000.0));
+      const double t = NovikovThorneDisk::diskTemperature(r, c.aStar, 0.1, 10.0);
+      if (t > tMax) {
+        tMax = t;
+        rAtTMax = r;
+      }
+    }
+    std::cout << "  a* = " << c.aStar << ": r_peak / r_ISCO = " << ratio << " (expected "
+              << c.ratio << "), T scan peak at " << (rAtTMax / rIsco) << "\n";
+    allPassed = allPassed && std::abs(ratio - c.ratio) < 1e-6 &&
+                std::abs((rAtTMax / rIsco) - c.ratio) < 2e-4;
+  }
 
-  const bool passed = std::abs(ratio - expectedRatio) < TOLERANCE;
-  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  std::cout << "  Status:   " << (allPassed ? "PASS" : "FAIL") << "\n";
 
-  return passed;
+  return allPassed;
 }
 
 /**
@@ -234,7 +250,8 @@ bool testIntegratedLuminosity() {
 /**
  * @brief Test 8: Normalized flux peak location
  *
- * Expected: Flux peaks near ISCO (1-2 * r_ISCO)
+ * Expected: the normalized flux reaches 1 at the Page-Thorne peak, 1.592 r_ISCO
+ * at a = 0 (sampled on a 0.01 M grid).
  */
 bool testNormalizedFluxPeak() {
   std::cout << "\n[TEST 8] Normalized Flux Peak\n";
@@ -264,9 +281,9 @@ bool testNormalizedFluxPeak() {
   std::cout << "  r_ISCO:      " << rIsco << " M\n";
   std::cout << "  r_peak_flux: " << rAtMax << " M\n";
   std::cout << "  Ratio:       " << ratio << "\n";
-  std::cout << "  Expected:    1.0 - 2.0\n";
+  std::cout << "  Expected:    1.5918 (+-0.002)\n";
 
-  const bool passed = (ratio >= 1.0 && ratio <= 2.0);
+  const bool passed = std::abs(ratio - 1.5918213463) < 0.002 && std::abs(maxFlux - 1.0) < 1e-6;
   std::cout << "  Status:      " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
 
   return passed;
@@ -276,8 +293,9 @@ bool testNormalizedFluxPeak() {
  * @brief Test 9: Temperature scale in CGS
  *
  * Expected: T^4 = 3 G M Mdot f / (8 pi sigma r^3) at r = 9 M, a = 0,
- * Mdot = 0.1 Mdot_Edd, M = 4e6 M_sun: 1.913e5 K. physics::C is already in
- * cm/s, so an extra factor 100 on c inflates T by 100.
+ * Mdot = 0.1 Mdot_Edd, M = 4e6 M_sun, with the Page-Thorne f(9 M) = 0.0822:
+ * 1.565e5 K. physics::C is already in cm/s, so an extra factor 100 on c
+ * inflates T by 100.
  */
 bool testTemperatureScale() {
   std::cout << "\n[TEST 9] Temperature Scale (CGS)\n";
@@ -293,7 +311,7 @@ bool testTemperatureScale() {
   const double eta = NovikovThorneDisk::radiativeEfficiency(aStar);
   const double mdot = 0.1 * 1.26e38 * massSolar / (eta * c * c);
   const double rCgs = r * ::physics::G * mass / (c * c);
-  const double f = 1.0 - std::sqrt(NovikovThorneDisk::iscoRadius(aStar) / r);
+  const double f = ::physics::pageThorneRelativisticFactor(r, aStar);
   const double expected = std::pow(3.0 * ::physics::G * mass * mdot * f /
                                        (8.0 * ::physics::PI * 5.67e-5 * rCgs * rCgs * rCgs),
                                    0.25);
