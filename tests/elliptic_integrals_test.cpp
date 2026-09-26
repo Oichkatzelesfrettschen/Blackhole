@@ -26,6 +26,15 @@
  *  12.  dn^2(u,k) + k^2*sn^2(u,k) = 1  (second Pythagorean identity).
  *   Gravitational lensing (13):
  *  13.  deflectionAngleSchwarzschild(b <= b_crit) = infinity (captured photon).
+ *   Carlson forms against mpmath (14-15), tests/carlson_reference.inc from
+ *   scripts/gen_carlson_reference.py:
+ *  14.  carlsonRf, carlsonRd, carlsonRj within 1e-15 relative on generic,
+ *       complete, incomplete, nearly equal and one-zero arguments.
+ *  15.  carlsonRc within 1e-15 relative for x < y, x > y, x = y, x = 0.
+ *   Kerr equatorial photon orbits (16):
+ *  16.  criticalImpactParameterKerr = 3 sqrt(3) M at a = 0, and the Bardeen
+ *       value 3 sqrt(M r_ph) -+ a (= xi of criticalImpactParams at eta = 0)
+ *       at a = 0.9 M and a = M, prograde and retrograde.
  */
 
 #include <algorithm>
@@ -34,10 +43,13 @@
 #include <exception>
 #include <format>
 #include <iostream>
+#include <iterator>
 #include <numbers>
+#include <numeric>
 #include <string>
 #include <string_view>
 
+#include "../src/physics/analytic_kerr_geodesic.h"
 #include "../src/physics/elliptic_integrals.h"
 
 using namespace physics;
@@ -259,12 +271,110 @@ bool testDeflectionCaptured() {
   return true;
 }
 
+// ============================================================================
+// Tests 14-15: Carlson forms against the mpmath referee
+// ============================================================================
+
+struct CarlsonRow {
+  std::string_view group;
+  double x = 0.0;
+  double y = 0.0;
+  double z = 0.0;
+  double p = 0.0;
+  double rf = 0.0;
+  double rd = 0.0;
+  double rj = 0.0;
+};
+
+struct CarlsonRcRow {
+  double x = 0.0;
+  double y = 0.0;
+  double rc = 0.0;
+};
+
+#include "carlson_reference.inc"
+
+// Relative accuracy of the duplication plus DLMF 19.36 series at CARLSON_REL_TOL.
+constexpr double CARLSON_TOL = 1.0e-15;
+
+double relDiff(double got, double ref) { return std::abs(got - ref) / std::abs(ref); }
+
+bool testCarlsonReference() {
+  std::cout << "Test 14: carlsonRf/Rd/Rj vs mpmath (40 digits), max relative error\n";
+
+  double worst = 0.0;
+  for (const std::string_view group : {"gen", "Kk", "inc", "near", "zero"}) {
+    double wf = 0.0;
+    double wd = 0.0;
+    double wj = 0.0;
+    for (const CarlsonRow &row : CARLSON_ROWS) {
+      if (row.group != group) {
+        continue;
+      }
+      wf = std::max(wf, relDiff(carlsonRf(row.x, row.y, row.z), row.rf));
+      wd = std::max(wd, relDiff(carlsonRd(row.x, row.y, row.z), row.rd));
+      wj = std::max(wj, relDiff(carlsonRj(row.x, row.y, row.z, row.p), row.rj));
+    }
+    std::cout << std::format("  {:<5} R_F {:.3e}  R_D {:.3e}  R_J {:.3e}\n", group, wf, wd, wj);
+    worst = std::max({worst, wf, wd, wj});
+  }
+  check(worst <= CARLSON_TOL, "R_F, R_D, R_J within 1e-15 of the referee",
+        std::format("max {:.3e}", worst));
+  return true;
+}
+
+bool testCarlsonRcReference() {
+  std::cout << "Test 15: carlsonRc closed form vs mpmath, max relative error\n";
+
+  const double worst = std::accumulate(std::begin(CARLSON_RC_ROWS), std::end(CARLSON_RC_ROWS), 0.0,
+                                       [](double w, const CarlsonRcRow &row) {
+                                         return std::max(w, relDiff(carlsonRc(row.x, row.y), row.rc));
+                                       });
+  std::cout << std::format("  R_C {:.3e}\n", worst);
+  check(worst <= CARLSON_TOL, "R_C within 1e-15 of the referee", std::format("max {:.3e}", worst));
+  return true;
+}
+
+// ============================================================================
+// Test 16: Kerr equatorial critical impact parameter
+// ============================================================================
+
+bool testCriticalImpactParameterKerr() {
+  std::cout << "Test 16: criticalImpactParameterKerr vs Bardeen / criticalImpactParams\n";
+
+  const double rS = 2.0; // M = 1
+  const double b0 = criticalImpactParameterKerr(rS, 0.0, true);
+  bool ok = relDiff(b0, 3.0 * std::numbers::sqrt3) < 1.0e-15 &&
+            relDiff(criticalImpactParameterKerr(rS, 0.0, false), 3.0 * std::numbers::sqrt3) <
+                1.0e-15;
+  ok = ok && relDiff(criticalImpactParameterKerr(rS, 1.0, true), 2.0) < 1.0e-14 &&
+       relDiff(criticalImpactParameterKerr(rS, 1.0, false), 7.0) < 1.0e-14;
+  double worst = 0.0;
+  for (const double a : {0.5, 0.9, 0.998}) {
+    // Chandrasekhar closed form b = -a +- 6 cos(acos(-+a)/3), M = 1.
+    const double pro = -a + (6.0 * std::cos(std::acos(-a) / 3.0));
+    const double retro = a + (6.0 * std::cos(std::acos(a) / 3.0));
+    const double xiPro = criticalImpactParams(progradePhotonOrbit(a), a).xi;
+    const double xiRetro = criticalImpactParams(retrogradePhotonOrbit(a), a).xi;
+    worst = std::max({worst, relDiff(criticalImpactParameterKerr(rS, a, true), pro),
+                      relDiff(criticalImpactParameterKerr(rS, a, false), retro),
+                      relDiff(criticalImpactParameterKerr(rS, a, true), xiPro),
+                      relDiff(criticalImpactParameterKerr(rS, a, false), -xiRetro)});
+  }
+  const std::string detail =
+      std::format("b(a=0) = {:.15f} (3 sqrt 3 = {:.15f}); a in {{0.5, 0.9, 0.998}} max rel {:.3e}",
+                  b0, 3.0 * std::numbers::sqrt3, worst);
+  std::cout << "  " << detail << "\n";
+  check(ok && worst < 1.0e-13, "b_c = 3 sqrt(M r_ph) -+ a, prograde and retrograde", detail);
+  return true;
+}
+
 } // namespace
 
 int main() try {
   std::cout << "\n================================================\n"
             << "ELLIPTIC INTEGRALS VALIDATION\n"
-            << "Algorithms: Carlson (1977), DLMF Ch.19, Bozza (2002)\n"
+            << "Algorithms: Carlson (1995), DLMF Ch.19, Bozza (2002)\n"
             << "================================================\n\n";
 
   testCarlsonRfEqual();
@@ -292,6 +402,12 @@ int main() try {
   testJacobiPythagorean2();
   std::cout << "\n";
   testDeflectionCaptured();
+  std::cout << "\n";
+  testCarlsonReference();
+  std::cout << "\n";
+  testCarlsonRcReference();
+  std::cout << "\n";
+  testCriticalImpactParameterKerr();
   std::cout << "\n";
 
   std::cout << "================================================\n"

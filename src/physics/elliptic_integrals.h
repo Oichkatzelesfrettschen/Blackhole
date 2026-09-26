@@ -21,7 +21,8 @@
  *
  * References:
  * - Abramowitz & Stegun, Chapter 17
- * - Carlson (1995), Numerical Math 33, 1
+ * - Carlson (1995), Numerical Algorithms 10, 13 -- duplication stopping rule
+ * - DLMF 19.36.1-19.36.2 -- truncated series of R_F, R_D, R_J
  * - Bozza (2002), Phys. Rev. D 66, 103001
  * - Darwin (1959), Proc. R. Soc. A 249, 180
  *
@@ -31,6 +32,7 @@
 #ifndef PHYSICS_ELLIPTIC_INTEGRALS_H
 #define PHYSICS_ELLIPTIC_INTEGRALS_H
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -43,63 +45,105 @@ namespace physics {
 // ============================================================================
 // Carlson Symmetric Forms (Numerically Stable)
 // ============================================================================
+//
+// Duplication with Carlson's (1995) stopping rule: with A0 the weighted mean of
+// the arguments and Q = c(r) max|A0 - x_i|, the loop runs until 4^{-m} Q < |A_m|,
+// and the scaled deviations X_i = (A0 - x_i) / (4^m A_m) enter the DLMF 19.36
+// truncated series. c(r) = (3r)^{-1/6} for R_F and (r/4)^{-1/6} for R_D, R_J
+// bound the truncation error by the relative tolerance r; the default
+// CARLSON_REL_TOL takes 5-6 duplications for double precision
+// (tests/elliptic_integrals_test.cpp holds 1e-15 against mpmath).
+
+/// Relative tolerance r of the Carlson duplication stopping rule.
+inline constexpr double CARLSON_REL_TOL = 1.0e-16;
+
+/// Duplication steps that shrink any finite argument spread below every tolerance r >= 1e-300.
+inline constexpr int CARLSON_MAX_ITER = 600;
 
 /**
  * @brief Carlson's R_F symmetric elliptic integral.
  *
  * R_F(x,y,z) = (1/2) ∫₀^∞ dt / √((t+x)(t+y)(t+z))
  *
- * Converges for x,y,z ≥ 0 with at most one zero.
+ * Converges for x,y,z >= 0 with at most one zero. The truncated series is
+ * DLMF 19.36.1: R_F ~ A^{-1/2} (1 - E2/10 + E3/14 + E2^2/24 - 3 E2 E3/44)
+ * with E2 = XY - Z^2, E3 = XYZ and X + Y + Z = 0.
  *
  * @param x First argument (≥0)
  * @param y Second argument (≥0)
  * @param z Third argument (≥0)
- * @param tol Convergence tolerance
+ * @param relTol Relative tolerance r of the stopping rule
  * @return R_F(x,y,z)
  */
-inline double carlsonRf(double x, double y, double z, double tol = 1e-10) {
-  const int maxIter = 100;
-
-  // Duplication algorithm
-  for (int n = 0; n < maxIter; ++n) {
-    double const lambda = std::sqrt(x * y) + std::sqrt(y * z) + std::sqrt(z * x);
-    x = (x + lambda) / 4.0;
-    y = (y + lambda) / 4.0;
-    z = (z + lambda) / 4.0;
-
-    double const a = (x + y + z) / 3.0;
-    double const dx = 1.0 - (x / a);
-    double const dy = 1.0 - (y / a);
-    double const dz = 1.0 - (z / a);
-
-    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
-    if (eps < tol) {
-      // Series expansion
-      double const e2 = (dx * dy) + (dy * dz) + (dz * dx);
-      double const e3 = dx * dy * dz;
-      return (1.0 + (e2 * (-0.1 + (e2 * 3.0 / 44.0) + (e3 / 14.0))) + (e3 * (-3.0 / 22.0))) /
-             std::sqrt(a);
-    }
+inline double carlsonRf(double x, double y, double z, double relTol = CARLSON_REL_TOL) {
+  const double a0 = (x + y + z) / 3.0;
+  if (!(a0 > 0.0)) {
+    return safeInfinity<double>();
   }
-
-  return 1.0 / std::sqrt((x + y + z) / 3.0);
+  const double dx0 = a0 - x;
+  const double dy0 = a0 - y;
+  const double q = std::pow(3.0 * relTol, -1.0 / 6.0) *
+                   std::max({std::abs(dx0), std::abs(dy0), std::abs(a0 - z)});
+  double a = a0;
+  double fac = 1.0; // 4^{-m}
+  for (int n = 0; n < CARLSON_MAX_ITER && fac * q >= std::abs(a); ++n) {
+    const double sx = std::sqrt(x);
+    const double sy = std::sqrt(y);
+    const double sz = std::sqrt(z);
+    const double lambda = (sx * (sy + sz)) + (sy * sz);
+    x = 0.25 * (x + lambda);
+    y = 0.25 * (y + lambda);
+    z = 0.25 * (z + lambda);
+    a = 0.25 * (a + lambda);
+    fac *= 0.25;
+  }
+  const double xs = dx0 * fac / a;
+  const double ys = dy0 * fac / a;
+  const double zs = -(xs + ys);
+  const double e2 = (xs * ys) - (zs * zs);
+  const double e3 = xs * ys * zs;
+  return (1.0 - (e2 / 10.0) + (e3 / 14.0) + (e2 * e2 / 24.0) - (3.0 * e2 * e3 / 44.0)) /
+         std::sqrt(a);
 }
 
 /**
- * @brief Carlson's R_C degenerate form.
+ * @brief Carlson's R_C degenerate form, in closed form.
  *
  * R_C(x,y) = R_F(x, y, y) = (1/2) ∫₀^∞ dt / ((t+y)√(t+x))
+ *          = atan(s) / (s sqrt(x)),   s = sqrt((y-x)/x),  x < y   (DLMF 19.2.18)
+ *          = asinh(t) / (t sqrt(y)),  t = sqrt((x-y)/y),  x > y   (DLMF 19.2.19)
+ *
+ * The atan(s)/s and asinh(t)/t ratios switch to their series below 1e-4, so
+ * nearly equal arguments (the R_C calls inside R_J's duplication) keep full
+ * precision; x = 0 gives pi / (2 sqrt(y)).
  *
  * @param x First argument (≥0)
- * @param y Second argument (>0)
- * @param tol Convergence tolerance
+ * @param y Second argument (>0); y <= 0 returns NaN
  * @return R_C(x,y)
  */
-inline double carlsonRc(double x, double y, double tol = 1e-10) {
-  if (y <= 0) {
+inline double carlsonRc(double x, double y) {
+  if (!(y > 0.0) || x < 0.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
-  return carlsonRf(x, y, y, tol);
+  if (x == 0.0) {
+    return 0.5 * std::numbers::pi / std::sqrt(y);
+  }
+  constexpr double seriesBelow = 1.0e-4;
+  if (x < y) {
+    const double s = std::sqrt((y - x) / x);
+    const double ratio = (s < seriesBelow) ? 1.0 - (s * s / 3.0) : std::atan(s) / s;
+    return ratio / std::sqrt(x);
+  }
+  const double t = std::sqrt((x - y) / y);
+  const double ratio = (t < seriesBelow) ? 1.0 - (t * t / 6.0) : std::asinh(t) / t;
+  return ratio / std::sqrt(y);
+}
+
+/// DLMF 19.36.2 series shared by R_D and R_J: e2..e5 are the elementary
+/// symmetric polynomials of the five scaled deviations.
+inline double carlsonDjSeries(double e2, double e3, double e4, double e5) {
+  return 1.0 - (3.0 * e2 / 14.0) + (e3 / 6.0) + (9.0 * e2 * e2 / 88.0) - (3.0 * e4 / 22.0) -
+         (9.0 * e2 * e3 / 52.0) + (3.0 * e5 / 26.0);
 }
 
 /**
@@ -107,50 +151,49 @@ inline double carlsonRc(double x, double y, double tol = 1e-10) {
  *
  * R_D(x,y,z) = (3/2) ∫₀^∞ dt / ((t+z)√((t+x)(t+y)(t+z)))
  *
+ * The series uses the elementary symmetric polynomials of (X, Y, Z, Z, Z) with
+ * X + Y + 3Z = 0 (DLMF 19.36.2).
+ *
  * @param x First argument (≥0)
  * @param y Second argument (≥0)
  * @param z Third argument (>0)
- * @param tol Convergence tolerance
+ * @param relTol Relative tolerance r of the stopping rule
  * @return R_D(x,y,z)
  */
-inline double carlsonRd(double x, double y, double z, double tol = 1e-10) {
-  const int maxIter = 100;
-
-  double sum = 0.0;
-  double fac = 1.0;
-
-  for (int n = 0; n < maxIter; ++n) {
-    double const lambda = std::sqrt(x * y) + std::sqrt(y * z) + std::sqrt(z * x);
-    sum += fac / (std::sqrt(z) * (z + lambda));
-    fac /= 4.0;
-    x = (x + lambda) / 4.0;
-    y = (y + lambda) / 4.0;
-    z = (z + lambda) / 4.0;
-
-    double const a = (x + y + (3.0 * z)) / 5.0;
-    double const dx = 1.0 - (x / a);
-    double const dy = 1.0 - (y / a);
-    double const dz = 1.0 - (z / a);
-
-    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
-    if (eps < tol) {
-      double const e2 = (dx * dy) + (dy * dz) + (3.0 * dz * dz) + (dz * dx) + (dx * dz) + (dy * dz);
-      double const e3 = (dz * dz * dz) + (dx * dz * dz) + (3.0 * dx * dy * dz) +
-                        (2.0 * dy * dz * dz) + (dy * dz * dz) + (2.0 * dz * dz * dz);
-      double const e4 = (dy * dz * dz * dz) + (dx * dz * dz * dz) + (dx * dy * dz * dz) +
-                        (2.0 * dy * dz * dz * dz);
-      double const e5 = dx * dy * dz * dz * dz;
-
-      double const result =
-          (1.0 + (e2 * ((-3.0 / 14.0) + (e2 * 9.0 / 88.0) - (e3 * 9.0 / 52.0))) +
-           (e3 * ((1.0 / 6.0) - (e2 * 3.0 / 22.0))) + (e4 * (-3.0 / 22.0)) + (e5 * (3.0 / 26.0))) /
-          (a * std::sqrt(a));
-      return (3.0 * sum) + (fac * result);
-    }
+inline double carlsonRd(double x, double y, double z, double relTol = CARLSON_REL_TOL) {
+  const double a0 = (x + y + (3.0 * z)) / 5.0;
+  if (!(a0 > 0.0)) {
+    return safeInfinity<double>();
   }
-
-  double const a = (x + y + (3.0 * z)) / 5.0;
-  return (3.0 * sum) + (fac / (a * std::sqrt(a)));
+  const double dx0 = a0 - x;
+  const double dy0 = a0 - y;
+  const double q = std::pow(0.25 * relTol, -1.0 / 6.0) *
+                   std::max({std::abs(dx0), std::abs(dy0), std::abs(a0 - z)});
+  double a = a0;
+  double fac = 1.0;
+  double sum = 0.0;
+  for (int n = 0; n < CARLSON_MAX_ITER && fac * q >= std::abs(a); ++n) {
+    const double sx = std::sqrt(x);
+    const double sy = std::sqrt(y);
+    const double sz = std::sqrt(z);
+    const double lambda = (sx * (sy + sz)) + (sy * sz);
+    sum += fac / (sz * (z + lambda));
+    x = 0.25 * (x + lambda);
+    y = 0.25 * (y + lambda);
+    z = 0.25 * (z + lambda);
+    a = 0.25 * (a + lambda);
+    fac *= 0.25;
+  }
+  const double xs = dx0 * fac / a;
+  const double ys = dy0 * fac / a;
+  const double zs = -(xs + ys) / 3.0;
+  const double xy = xs * ys;
+  const double z2 = zs * zs;
+  const double e2 = xy - (6.0 * z2);
+  const double e3 = ((3.0 * xy) - (8.0 * z2)) * zs;
+  const double e4 = 3.0 * (xy - z2) * z2;
+  const double e5 = xy * z2 * zs;
+  return (3.0 * sum) + (fac * carlsonDjSeries(e2, e3, e4, e5) / (a * std::sqrt(a)));
 }
 
 /**
@@ -158,57 +201,59 @@ inline double carlsonRd(double x, double y, double z, double tol = 1e-10) {
  *
  * R_J(x,y,z,p) = (3/2) ∫₀^∞ dt / ((t+p)√((t+x)(t+y)(t+z)))
  *
+ * Each duplication adds 3 4^{-m} R_C(alpha^2, beta) with
+ * alpha = p (sqrt(x) + sqrt(y) + sqrt(z)) + sqrt(xyz) and beta = p (p + lambda)^2,
+ * evaluated by the closed-form carlsonRc. The series uses
+ * the elementary symmetric polynomials of (X, Y, Z, P, P) with
+ * X + Y + Z + 2P = 0 (DLMF 19.36.2).
+ *
  * @param x First argument (≥0)
  * @param y Second argument (≥0)
- * @param z Third argument (≥0)
- * @param p Fourth argument (≠0)
- * @param tol Convergence tolerance
+ * @param z Third argument (>=0); at most one of x, y, z is zero
+ * @param p Fourth argument (>0)
+ * @param relTol Relative tolerance r of the stopping rule
  * @return R_J(x,y,z,p)
  */
-inline double carlsonRj(double x, double y, double z, double p, double tol = 1e-10) {
-  const int maxIter = 100;
-
-  double sum = 0.0;
-  double fac = 1.0;
-  for (int n = 0; n < maxIter; ++n) {
-    double const sqrtX = std::sqrt(x);
-    double const sqrtY = std::sqrt(y);
-    double const sqrtZ = std::sqrt(z);
-
-    double const lambda = (sqrtX * sqrtY) + (sqrtY * sqrtZ) + (sqrtZ * sqrtX);
-
-    double alpha = (p * (sqrtX + sqrtY + sqrtZ)) + (sqrtX * sqrtY * sqrtZ);
-    alpha *= alpha;
-    double const beta = p * (p + lambda) * (p + lambda);
-
-    sum += fac * carlsonRc(alpha, beta, tol);
-    fac /= 4.0;
-
-    x = (x + lambda) / 4.0;
-    y = (y + lambda) / 4.0;
-    z = (z + lambda) / 4.0;
-    p = (p + lambda) / 4.0;
-
-    double const a = (x + y + z + (2.0 * p)) / 5.0;
-    double const dx = 1.0 - (x / a);
-    double const dy = 1.0 - (y / a);
-    double const dz = 1.0 - (z / a);
-    double const dp = 1.0 - (p / a);
-
-    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz), std::abs(dp)});
-    if (eps < tol) {
-      double const e2 = (dx * dy) + (dy * dz) + (3.0 * dp * dp) + (dz * dx) +
-                        (2.0 * ((dx * dp) + (dy * dp) + (dz * dp)));
-      double const e3 = (dx * dy * dz) + (2.0 * dp * dp * dp) +
-                        (3.0 * dp * ((dx * dy) + (dy * dz) + (dz * dx) + (dp * (dx + dy + dz))));
-
-      double const result = (1.0 + (e2 * (-3.0 / 14.0)) + (e3 * (1.0 / 6.0))) / (a * std::sqrt(a));
-      return (3.0 * sum) + (fac * result);
-    }
+inline double carlsonRj(double x, double y, double z, double p, double relTol = CARLSON_REL_TOL) {
+  const double a0 = (x + y + z + (2.0 * p)) / 5.0;
+  if (!(a0 > 0.0)) {
+    return safeInfinity<double>();
   }
-
-  double const a = (x + y + z + (2.0 * p)) / 5.0;
-  return (3.0 * sum) + (fac / (a * std::sqrt(a)));
+  const double dx0 = a0 - x;
+  const double dy0 = a0 - y;
+  const double dz0 = a0 - z;
+  const double q = std::pow(0.25 * relTol, -1.0 / 6.0) *
+                   std::max({std::abs(dx0), std::abs(dy0), std::abs(dz0), std::abs(a0 - p)});
+  double a = a0;
+  double fac = 1.0;
+  double sum = 0.0;
+  for (int n = 0; n < CARLSON_MAX_ITER && fac * q >= std::abs(a); ++n) {
+    const double sx = std::sqrt(x);
+    const double sy = std::sqrt(y);
+    const double sz = std::sqrt(z);
+    const double lambda = (sx * (sy + sz)) + (sy * sz);
+    const double alpha = (p * (sx + sy + sz)) + (sx * sy * sz);
+    const double beta = p * (p + lambda) * (p + lambda);
+    sum += fac * carlsonRc(alpha * alpha, beta);
+    x = 0.25 * (x + lambda);
+    y = 0.25 * (y + lambda);
+    z = 0.25 * (z + lambda);
+    p = 0.25 * (p + lambda);
+    a = 0.25 * (a + lambda);
+    fac *= 0.25;
+  }
+  const double xs = dx0 * fac / a;
+  const double ys = dy0 * fac / a;
+  const double zs = dz0 * fac / a;
+  const double ps = -(xs + ys + zs) / 2.0;
+  const double xyz = xs * ys * zs;
+  const double pairs = (xs * ys) + (xs * zs) + (ys * zs);
+  const double p2 = ps * ps;
+  const double e2 = pairs - (3.0 * p2);
+  const double e3 = xyz + (2.0 * ps * pairs) - (2.0 * p2 * ps);
+  const double e4 = (2.0 * xyz * ps) + (pairs * p2);
+  const double e5 = xyz * p2;
+  return (3.0 * sum) + (fac * carlsonDjSeries(e2, e3, e4, e5) / (a * std::sqrt(a)));
 }
 
 // ============================================================================
@@ -530,45 +575,28 @@ inline double relativisticImageMagnification(double beta, int n, double dL, doub
 // ============================================================================
 
 /**
- * @brief Compute critical impact parameter for Kerr black hole.
+ * @brief Critical impact parameter of the equatorial Kerr photon orbits.
  *
- * For equatorial photon orbits in Kerr:
- * b_crit = ±(r_ph² + a²) / (r_ph - M) - a
+ * The circular equatorial photon orbit at r_ph = 2M (1 + cos((2/3) acos(-+a/M)))
+ * (upper sign prograde) has impact parameter (Bardeen, Press & Teukolsky 1972)
+ *
+ *   b_c = 3 sqrt(M r_ph) -+ a,
+ *
+ * which equals -a +- 6M cos((1/3) acos(-+a/M)) (Chandrasekhar 1983) and
+ * the xi of criticalImpactParams at eta = 0. It gives 3 sqrt(3) M at a = 0,
+ * 2M prograde and 7M retrograde at a = M.
  *
  * @param rS Schwarzschild radius [cm]
- * @param a Spin parameter [cm]
+ * @param a Spin parameter [cm], |a| <= rS/2
  * @param prograde True for prograde photons
  * @return Critical impact parameter [cm]
  */
 inline double criticalImpactParameterKerr(double rS, double a, bool prograde) {
-  double const m = rS / 2.0;
-
-  // Photon orbit radius (simplified formula)
-  double const aStar = a / m;
-  double rPh;
-
-  if (prograde) {
-    double const angle = (2.0 / 3.0) * std::acos(-aStar);
-    rPh = 2.0 * m * (1.0 + std::cos(angle));
-  } else {
-    double const angle = (2.0 / 3.0) * std::acos(aStar);
-    rPh = 2.0 * m * (1.0 + std::cos(angle));
-  }
-
-  // Critical impact parameter
-  double const rPhMinusM = rPh - m;
-  if (std::abs(rPhMinusM) < 1e-20) {
-    return safeInfinity<double>();
-  }
-
-  double bCrit = ((rPh * rPh) + (a * a)) / rPhMinusM;
-  if (prograde) {
-    bCrit -= a;
-  } else {
-    bCrit += a;
-  }
-
-  return std::abs(bCrit);
+  const double m = rS / 2.0;
+  const double aStar = std::clamp(a / m, -1.0, 1.0);
+  const double rPh =
+      2.0 * m * (1.0 + std::cos((2.0 / 3.0) * std::acos(prograde ? -aStar : aStar)));
+  return (3.0 * std::sqrt(m * rPh)) + (prograde ? -a : a);
 }
 
 // ============================================================================

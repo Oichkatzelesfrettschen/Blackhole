@@ -9,6 +9,8 @@
  *   boost   - Boost.Math jacobi_sn and ellint_1 under the default policy
  *             (double promoted to long double) and under AnalyticKerrPolicy
  *             (promote_double<false>), plus rAnalytic end to end.
+ *   carlson - R_F, R_D, R_J by duplication with Carlson's 1995 stopping rule
+ *             against Boost.Math ellint_rf/rd/rj under AnalyticKerrPolicy.
  *
  * Every timing is the minimum over five repetitions of a fixed deterministic
  * workload; the header line records the compiler and library versions. Run
@@ -28,10 +30,14 @@
 #include <vector>
 
 #include <boost/math/special_functions/ellint_1.hpp>
+#include <boost/math/special_functions/ellint_rd.hpp>
+#include <boost/math/special_functions/ellint_rf.hpp>
+#include <boost/math/special_functions/ellint_rj.hpp>
 #include <boost/math/special_functions/jacobi_elliptic.hpp>
 #include <boost/version.hpp>
 
 #include "analytic_kerr_geodesic.h"
+#include "elliptic_integrals.h"
 #include "stokes_exact.h"
 #include "stokes_transport.h"
 
@@ -208,6 +214,61 @@ void benchBoostPolicy() {
   std::printf("rAnalytic (double policy) %.1f ns\n", rNs);
 }
 
+// ---------------------------------------------------------------------------
+// Carlson symmetric integrals
+// ---------------------------------------------------------------------------
+
+void benchCarlson() {
+  std::printf("\n[carlson] log-uniform (x, y, z, p) on [1e-3, 1e3]\n");
+  constexpr std::size_t count = 1024;
+  // NOLINTNEXTLINE(cert-msc32-c,cert-msc51-cpp,bugprone-random-generator-seed)
+  std::mt19937_64 rng(11U); // fixed seed: the same workload on every run and host
+  std::uniform_real_distribution<double> expo(-3.0, 3.0);
+  std::vector<std::array<double, 4>> args(count);
+  for (std::array<double, 4> &a : args) {
+    std::generate(a.begin(), a.end(), [&] { return std::pow(10.0, expo(rng)); });
+  }
+  const physics::AnalyticKerrPolicy pol;
+  double worst = 0.0;
+  for (const std::array<double, 4> &a : args) {
+    worst = std::max(
+        {worst,
+         std::abs(physics::carlsonRf(a[0], a[1], a[2]) - boost::math::ellint_rf(a[0], a[1], a[2])) /
+             boost::math::ellint_rf(a[0], a[1], a[2]),
+         std::abs(physics::carlsonRd(a[0], a[1], a[2]) - boost::math::ellint_rd(a[0], a[1], a[2])) /
+             boost::math::ellint_rd(a[0], a[1], a[2]),
+         std::abs(physics::carlsonRj(a[0], a[1], a[2], a[3]) -
+                  boost::math::ellint_rj(a[0], a[1], a[2], a[3])) /
+             boost::math::ellint_rj(a[0], a[1], a[2], a[3])});
+  }
+  std::printf("%-4s %12s %16s\n", "", "carlson ns", "boost double ns");
+  std::printf("%-4s %12.1f %16.1f\n", "R_F",
+              nsPerCall(count, 50,
+                        [&](std::size_t i) {
+                          return physics::carlsonRf(args[i][0], args[i][1], args[i][2]);
+                        }),
+              nsPerCall(count, 50, [&](std::size_t i) {
+                return boost::math::ellint_rf(args[i][0], args[i][1], args[i][2], pol);
+              }));
+  std::printf("%-4s %12.1f %16.1f\n", "R_D",
+              nsPerCall(count, 50,
+                        [&](std::size_t i) {
+                          return physics::carlsonRd(args[i][0], args[i][1], args[i][2]);
+                        }),
+              nsPerCall(count, 50, [&](std::size_t i) {
+                return boost::math::ellint_rd(args[i][0], args[i][1], args[i][2], pol);
+              }));
+  std::printf("%-4s %12.1f %16.1f\n", "R_J",
+              nsPerCall(count, 50,
+                        [&](std::size_t i) {
+                          return physics::carlsonRj(args[i][0], args[i][1], args[i][2], args[i][3]);
+                        }),
+              nsPerCall(count, 50, [&](std::size_t i) {
+                return boost::math::ellint_rj(args[i][0], args[i][1], args[i][2], args[i][3], pol);
+              }));
+  std::printf("max rel diff vs promoted Boost %.2e\n", worst);
+}
+
 } // namespace
 
 int main() try {
@@ -215,6 +276,7 @@ int main() try {
   printToolVersions();
   benchStokes();
   benchBoostPolicy();
+  benchCarlson();
   std::printf("\nsink %.3e\n", gSink);
   return 0;
 } catch (const std::exception &error) {
