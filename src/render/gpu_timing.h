@@ -19,7 +19,9 @@
 #define BLACKHOLE_RENDER_GPU_TIMING_H
 
 #include <array>
+#include <filesystem>
 #include <string>
+#include <string_view>
 
 #include <glbinding/gl/types.h>
 
@@ -87,6 +89,21 @@ struct TimingHistory {
 
 /** @brief @p timer's duration in ms, or NaN when it holds no sample. */
 float timerSampleMs(const GpuTimer &timer);
+
+/// Header of gpu_timing.csv; gpu_tesseract_ms trails the columns that
+/// predate it.
+inline constexpr std::string_view GPU_TIMING_CSV_HEADER =
+    "index,time_sec,width,height,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,"
+    "gpu_tonemap_ms,gpu_depth_ms,gpu_grmhd_slice_ms,compute_active,kerr_spin,gpu_tesseract_ms";
+
+/**
+ * @brief First free "<stem>.stale-<n><ext>" beside @p path, n from 1.
+ *
+ * appendGpuTimingSample renames a log whose header differs from
+ * GPU_TIMING_CSV_HEADER to this path before it appends, so an older build's
+ * log keeps its own schema and the new file starts with the current header.
+ */
+std::filesystem::path staleTimingLogPath(const std::string &path);
 
 std::string gpuTimingPath();
 void appendGpuTimingSample(const std::string &path, int index, int width, int height,

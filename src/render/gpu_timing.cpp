@@ -13,6 +13,7 @@
 #include <limits>
 #include <ostream>
 #include <string>
+#include <system_error>
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
@@ -212,20 +213,45 @@ std::ostream &operator<<(std::ostream &out, MsField field) {
 
 } // namespace
 
+std::filesystem::path staleTimingLogPath(const std::string &path) {
+  const std::filesystem::path original(path);
+  for (int n = 1;; ++n) {
+    std::filesystem::path candidate = original;
+    candidate.replace_filename(original.stem().string() + ".stale-" + std::to_string(n) +
+                               original.extension().string());
+    if (!std::filesystem::exists(candidate)) {
+      return candidate;
+    }
+  }
+}
+
 void appendGpuTimingSample(const std::string &path, int index, int width, int height,
                            float cpuFrameMs, const GpuTimerSet &timers, bool computeActive,
                            float kerrSpin, double timeSec) {
-  const bool exists = std::filesystem::exists(path);
+  bool exists = std::filesystem::exists(path);
+  if (exists) {
+    // A log started by a build with another column set moves aside, so every
+    // row of the file matches its header.
+    std::string header;
+    {
+      std::ifstream in(path);
+      std::getline(in, header);
+    }
+    if (header != GPU_TIMING_CSV_HEADER) {
+      std::error_code error;
+      std::filesystem::rename(path, staleTimingLogPath(path), error);
+      if (error) {
+        return;
+      }
+      exists = false;
+    }
+  }
   std::ofstream out(path, std::ios::app);
   if (!out) {
     return;
   }
-  // gpu_tesseract_ms trails the row so a file started by a build without it
-  // keeps every named column in place.
   if (!exists) {
-    out << "index,time_sec,width,height,cpu_ms,gpu_fragment_ms,gpu_compute_ms,gpu_bloom_ms,"
-           "gpu_tonemap_ms,gpu_depth_ms,gpu_grmhd_slice_ms,compute_active,kerr_spin,"
-           "gpu_tesseract_ms\n";
+    out << GPU_TIMING_CSV_HEADER << '\n';
   }
   out << std::fixed << std::setprecision(6);
   out << index << "," << timeSec << "," << width << "," << height << "," << cpuFrameMs << ","
