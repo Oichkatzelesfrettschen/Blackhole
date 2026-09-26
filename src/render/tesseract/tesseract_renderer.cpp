@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <glbinding/gl/bitfield.h>
@@ -26,6 +27,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/trigonometric.hpp>
 
+#include "hud_overlay.h"
 #include "render/render_state.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
@@ -219,6 +221,37 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   glDrawArraysInstanced(GL_TRIANGLES, 0, 6, instanceCount_);
 
   saved.restore();
+}
+
+SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth) {
+  const std::string_view label = TESSERACT_SPECULATIVE_LABEL;
+  const std::size_t citationEnd = label.find(": ") + 1;
+  const std::size_t citationStart = label.find(" (");
+  const std::string head(label.substr(0, citationStart));
+  const std::string citation(label.substr(citationStart + 1, citationEnd - citationStart - 1));
+  const std::string verdict(label.substr(citationEnd + 1));
+  const std::array<std::vector<std::string>, 3> candidates = {
+      std::vector<std::string>{std::string(label)},
+      std::vector<std::string>{head + " " + citation, verdict},
+      std::vector<std::string>{head, citation, verdict}};
+
+  const float available =
+      std::max(static_cast<float>(renderWidth) - (2.0f * SPECULATIVE_LABEL_MARGIN), 1.0f);
+  // A line of unit-scale width w occupies (w + 4) * scale with its background pad.
+  const auto fitScale = [available](const std::vector<std::string> &lines) {
+    float widest = 0.0f;
+    for (const std::string &line : lines) {
+      widest = std::max(widest, HudOverlay::measureText(line, 1.0f).x);
+    }
+    return std::min(available / (widest + 4.0f), SPECULATIVE_LABEL_MAX_SCALE);
+  };
+  for (const auto &lines : candidates) {
+    const float scale = fitScale(lines);
+    if (scale >= SPECULATIVE_LABEL_WRAP_SCALE) {
+      return {.lines = lines, .scale = scale};
+    }
+  }
+  return {.lines = candidates.back(), .scale = std::max(fitScale(candidates.back()), 0.25f)};
 }
 
 glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistance, float fovDeg,

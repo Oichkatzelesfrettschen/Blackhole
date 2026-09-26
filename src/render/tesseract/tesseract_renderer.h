@@ -14,7 +14,9 @@
 #define BLACKHOLE_RENDER_TESSERACT_TESSERACT_RENDERER_H
 
 #include <array>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include <glbinding/gl/types.h>
 
@@ -35,6 +37,32 @@ struct RenderState;
  */
 inline constexpr std::string_view TESSERACT_SPECULATIVE_LABEL =
     "SPECULATIVE (Thorne, The Science of Interstellar ch. 29-31): not physics";
+
+/** @brief Lines and HUD glyph scale that fit the label into one render width. */
+struct SpeculativeLabelLayout {
+  std::vector<std::string> lines;
+  float scale = 1.0f;
+};
+
+/// Largest HUD scale the label uses; wide targets draw one line at this scale.
+inline constexpr float SPECULATIVE_LABEL_MAX_SCALE = 2.0f;
+/// Smallest scale the layout prefers before wrapping to more lines.
+inline constexpr float SPECULATIVE_LABEL_WRAP_SCALE = 1.0f;
+/// Pixel margin between the label background and each side of the target.
+inline constexpr float SPECULATIVE_LABEL_MARGIN = 14.0f;
+
+/**
+ * @brief Fit TESSERACT_SPECULATIVE_LABEL into @p renderWidth pixels.
+ *
+ * Tries one line, then two (break after the citation), then three (label,
+ * citation, verdict), taking the first whose widest line, plus the 2*scale
+ * background pad on each side and SPECULATIVE_LABEL_MARGIN on each side,
+ * fits at scale >= SPECULATIVE_LABEL_WRAP_SCALE; the scale is the largest
+ * that fits, capped at SPECULATIVE_LABEL_MAX_SCALE. Narrower targets keep
+ * three lines and shrink the scale to fit, down to HudOverlay's 0.25 floor.
+ * The lines joined with spaces always equal the label.
+ */
+SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth);
 
 /** @brief Per-frame parameters of one tesseract pass. */
 struct TesseractFrameInputs {

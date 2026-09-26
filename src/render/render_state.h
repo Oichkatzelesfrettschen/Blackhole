@@ -138,7 +138,7 @@ struct RenderState {
     float sliceIntensity = 1.6f;
     TesseractRenderer renderer;
     HudOverlay speculativeLabel;
-    bool speculativeLabelReady = false;
+    int speculativeLabelWidth = 0; ///< Render width the label layout was fitted to.
   } tesseract;
 
   struct CameraGroup {

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
@@ -103,18 +104,24 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
   // The tesseract scene always carries its provenance label, drawn into the
   // presented texture so recorded frames keep it too.
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
-    if (!rs.tesseract.speculativeLabelReady) {
+    // Refit whenever the render width changes so the label never clips.
+    if (rs.tesseract.speculativeLabelWidth != rs.targets.renderWidth) {
+      const SpeculativeLabelLayout layout = layoutSpeculativeLabel(rs.targets.renderWidth);
       HudOverlayOptions opts;
-      opts.scale = 2.0f;
-      opts.margin = 14.0f;
+      opts.scale = layout.scale;
+      opts.margin = SPECULATIVE_LABEL_MARGIN;
       opts.align = HudOverlayOptions::Align::Center;
       opts.drawBackground = true;
       rs.tesseract.speculativeLabel.setOptions(opts);
-      rs.tesseract.speculativeLabel.setLines(
-          {HudOverlayLine{.text = std::string(TESSERACT_SPECULATIVE_LABEL),
-                          .color = glm::vec4(1.0f, 0.86f, 0.55f, 1.0f),
-                          .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.6f)}});
-      rs.tesseract.speculativeLabelReady = true;
+      std::vector<HudOverlayLine> lines;
+      lines.reserve(layout.lines.size());
+      for (const std::string &text : layout.lines) {
+        lines.push_back(HudOverlayLine{.text = text,
+                                       .color = glm::vec4(1.0f, 0.86f, 0.55f, 1.0f),
+                                       .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.6f)});
+      }
+      rs.tesseract.speculativeLabel.setLines(lines);
+      rs.tesseract.speculativeLabelWidth = rs.targets.renderWidth;
     }
     rs.tesseract.speculativeLabel.render(rs.targets.renderWidth, rs.targets.renderHeight);
   }
