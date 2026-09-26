@@ -46,6 +46,8 @@
 #include <cmath>
 #include <limits>
 
+#include "verified/kerr_newman.hpp"
+
 namespace physics {
 
 // ============================================================================
@@ -214,7 +216,9 @@ namespace physics {
  * @brief Outer (event) horizon: r_+ = M + sqrt(M^2 - a^2 - Q^2).
  *
  * Returns NaN when M^2 < a^2 + Q^2 (super-extremal -- naked singularity).
- * At extremality (M^2 = a^2 + Q^2) the two horizons merge at r = M.
+ * At extremality (M^2 = a^2 + Q^2) the two horizons merge at r = M; the
+ * discriminant comes from verified::knHorizonDiscriminant, which reads a
+ * rounding-level negative value as that extremal zero.
  *
  * @param mass Geometric mass [geometric units].
  * @param a Spin parameter [geometric units].
@@ -222,7 +226,7 @@ namespace physics {
  * @return r_+ [geometric units], or NaN for naked singularity.
  */
 [[nodiscard]] inline double knOuterHorizon(double mass, double a, double charge) noexcept {
-  const double disc = mass * mass - a * a - charge * charge;
+  const double disc = verified::knHorizonDiscriminant(mass, a, charge);
   if (disc < 0.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -242,7 +246,7 @@ namespace physics {
  * @return r_- [geometric units], or NaN for naked singularity.
  */
 [[nodiscard]] inline double knInnerHorizon(double mass, double a, double charge) noexcept {
-  const double disc = mass * mass - a * a - charge * charge;
+  const double disc = verified::knHorizonDiscriminant(mass, a, charge);
   if (disc < 0.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -269,7 +273,7 @@ namespace physics {
 [[nodiscard]] inline double knErgosphereRadius(double theta, double mass, double a,
                                                double charge) noexcept {
   const double c = std::cos(theta);
-  const double disc = mass * mass - a * a * c * c - charge * charge;
+  const double disc = verified::knHorizonDiscriminant(mass, a * c, charge);
   if (disc < 0.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -333,7 +337,7 @@ namespace physics {
  * @return true if a physical black hole exists.
  */
 [[nodiscard]] constexpr bool knSubExtremal(double mass, double a, double charge) noexcept {
-  return mass * mass >= a * a + charge * charge;
+  return verified::knHorizonDiscriminant(mass, a, charge) >= 0.0;
 }
 
 /**

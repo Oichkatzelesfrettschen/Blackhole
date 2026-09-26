@@ -195,6 +195,7 @@ GLSL_PUBLIC_NAMES: dict[str, str] = {
     "knGThth": "kn_g_thth",
     "knGTph": "kn_g_tph",
     "knGTt": "kn_g_tt",
+    "knHorizonDiscriminant": "kn_horizon_discriminant",
     "knInnerHorizon": "kn_inner_horizon",
     "knIscoMarginalStability": "kn_isco_marginal_stability",
     "knIscoRadiusPrograde": "kn_isco_radius_prograde",

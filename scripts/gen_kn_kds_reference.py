@@ -115,7 +115,9 @@ def marginal_stability(r: Real, m: Real, a: Real, q: Real) -> Real:
 
 def outermost_marginal_root(m: Real, a: Real, q: Real) -> Real:
     """Outermost zero of the closed form, by an inward scan from 10 M."""
-    floor = max(m + mp.sqrt(m * m - a * a - q * q), q * q / m)
+    # max(0, .) keeps an extremal input whose decimal a, Q round the
+    # discriminant to -1e-60 on the real axis.
+    floor = max(m + mp.sqrt(max(0, m * m - a * a - q * q)), q * q / m)
     r_outer = 10 * m
     step = m / 200
     while r_outer - step > floor:
@@ -177,6 +179,15 @@ def kerr_newman_section() -> None:
             f"photon orbit a={mp.nstr(a, 3)} Q={mp.nstr(q, 3)}: prograde "
             f"{fmt(kn_photon_orbit(one, a, q))}  retrograde {fmt(kn_photon_orbit(one, -a, q))}"
         )
+    # Extremal a^2 + Q^2 = M^2: r_+ = r_- = M. The prograde photon-orbit function
+    # stays positive for every r > r_+, so that orbit sits at the floor r_+.
+    a, q = mp.mpf("0.6"), mp.mpf("0.8")
+    assert photon_orbit_function(one + mp.mpf(10) ** -12, one, a, q) > 0
+    print(
+        f"extremal a=0.6 Q=0.8: isco prograde {fmt(kn_isco(one, a, q))}"
+        f"  retrograde {fmt(kn_isco(one, -a, q))}"
+        f"  photon retrograde {fmt(kn_photon_orbit(one, -a, q))}  photon prograde r_+ = 1"
+    )
     omega = kn_frame_dragging(mp.mpf(3), mp.pi / 2, one, mp.mpf("0.5"), mp.mpf("0.5"))
     print(f"omega r=3 theta=pi/2 a=Q=0.5: {fmt(omega)}")
     # Grid check of the closed form, including a < 0, near-extremal charge,

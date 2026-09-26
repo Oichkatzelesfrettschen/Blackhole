@@ -53,6 +53,7 @@
 
 #include <cmath>
 #include <concepts>
+#include <limits>
 
 namespace verified {
 
@@ -117,6 +118,28 @@ namespace verified {
 // ============================================================================
 
 /**
+ * @brief Horizon discriminant M^2 - a^2 - Q^2, with rounding-level negatives read as zero
+ *
+ * The sequential subtraction rounds each term, so extremal inputs such as
+ * M = 1, a = 0.6, Q = 0.8 (a^2 + Q^2 = M^2 exactly in the reals) evaluate to
+ * -1.1e-16. A negative value within 4 epsilon of M^2 + a^2 + Q^2, the
+ * magnitude of the terms, returns as exactly 0, so r_+ = r_- = M there; a
+ * larger negative value marks a super-extremal input and passes through.
+ * Every square root of this discriminant in the header goes through it.
+ *
+ * @param m Black hole mass
+ * @param a Spin parameter (a cos(theta) for the ergosurface)
+ * @param q Electric charge
+ * @return M^2 - a^2 - Q^2, or 0 within rounding of zero
+ */
+[[nodiscard]] constexpr double knHorizonDiscriminant(double m, double a, double q) noexcept {
+  const double discriminant = (m * m) - (a * a) - (q * q);
+  const double roundingBound =
+      4.0 * std::numeric_limits<double>::epsilon() * ((m * m) + (a * a) + (q * q));
+  return (discriminant < 0.0 && -discriminant <= roundingBound) ? 0.0 : discriminant;
+}
+
+/**
  * @brief Outer (event) horizon: r_+ = M + sqrt(M^2 - a^2 - Q^2)
  *
  * Derived from Rocq: Definition kn_outer_horizon (M a Q : R) : R :=
@@ -130,7 +153,7 @@ namespace verified {
  * @return r_+ outer horizon radius
  */
 [[nodiscard]] inline double knOuterHorizon(double m, double a, double q) noexcept {
-  return m + std::sqrt(m * m - a * a - q * q);
+  return m + std::sqrt(knHorizonDiscriminant(m, a, q));
 }
 
 /**
@@ -145,7 +168,7 @@ namespace verified {
  * @return r_- inner horizon radius
  */
 [[nodiscard]] inline double knInnerHorizon(double m, double a, double q) noexcept {
-  return m - std::sqrt(m * m - a * a - q * q);
+  return m - std::sqrt(knHorizonDiscriminant(m, a, q));
 }
 
 // ============================================================================
@@ -277,7 +300,7 @@ namespace verified {
 [[nodiscard]] inline double knErgosphereRadius(double theta, double m, double a,
                                                double q) noexcept {
   const double cosTheta = std::cos(theta);
-  return m + std::sqrt(m * m - a * a * cosTheta * cosTheta - q * q);
+  return m + std::sqrt(knHorizonDiscriminant(m, a * cosTheta, q));
 }
 
 // ============================================================================
@@ -355,7 +378,7 @@ namespace verified {
  * @return Photon orbit radius, or NaN when m <= 0 or a^2 + q^2 > m^2
  */
 [[nodiscard]] inline double knPhotonSphereEquator(double m, double a, double q) noexcept {
-  const double discriminant = m * m - a * a - q * q;
+  const double discriminant = knHorizonDiscriminant(m, a, q);
   if (!(m > 0.0) || discriminant < 0.0) {
     return std::nan("");
   }
@@ -445,7 +468,7 @@ namespace verified {
  * @return ISCO radius, or NaN when m <= 0 or a^2 + q^2 > m^2
  */
 [[nodiscard]] inline double knIscoRadiusPrograde(double m, double a, double q) noexcept {
-  const double discriminant = m * m - a * a - q * q;
+  const double discriminant = knHorizonDiscriminant(m, a, q);
   if (!(m > 0.0) || discriminant < 0.0) {
     return std::nan("");
   }
@@ -614,13 +637,17 @@ namespace verified {
  * Derived from Rocq: Definition is_physical_black_hole (M a Q : R) : Prop :=
  *   M > 0 /\ M^2 >= a^2 + Q^2.
  *
+ * M^2 >= a^2 + Q^2 is read through knHorizonDiscriminant, so an input whose
+ * discriminant rounds to within 4 epsilon below zero counts as extremal and
+ * agrees with the horizon and orbit functions.
+ *
  * @param m Black hole mass
  * @param a Spin parameter
  * @param q Electric charge
  * @return true if physical black hole
  */
 [[nodiscard]] constexpr bool isPhysicalBlackHole(double m, double a, double q) noexcept {
-  return m > 0.0 && m * m >= a * a + q * q;
+  return m > 0.0 && knHorizonDiscriminant(m, a, q) >= 0.0;
 }
 
 // ============================================================================

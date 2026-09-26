@@ -61,12 +61,22 @@ float kn_A(float r, float theta, float M, float a, float Q) {
 }
 
 /**
+ * Horizon discriminant M^2 - a^2 - Q^2; a negative value within 4 float
+ * epsilon of M^2 + a^2 + Q^2 returns as exactly 0 (extremality).
+ */
+float kn_horizon_discriminant(float M, float a, float Q) {
+    float discriminant = M * M - a * a - Q * Q;
+    float rounding_bound = 4.0 * 1.1920929e-7 * (M * M + a * a + Q * Q);
+    return (discriminant < 0.0 && -discriminant <= rounding_bound) ? 0.0 : discriminant;
+}
+
+/**
  * Outer (event) horizon: r_+ = M + sqrt(M^2 - a^2 - Q^2)
  *
  * Rocq Derivation: Derived from Rocq:Definition kn_outer_horizon (M a Q : R) : R :=...
  */
 float kn_outer_horizon(float M, float a, float Q) {
-    return M + sqrt(M * M - a * a - Q * Q);
+    return M + sqrt(kn_horizon_discriminant(M, a, Q));
 }
 
 /**
@@ -75,7 +85,7 @@ float kn_outer_horizon(float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition kn_inner_horizon (M a Q : R) : R :=...
  */
 float kn_inner_horizon(float M, float a, float Q) {
-    return M - sqrt(M * M - a * a - Q * Q);
+    return M - sqrt(kn_horizon_discriminant(M, a, Q));
 }
 
 /**
@@ -156,7 +166,7 @@ float kn_magnetic_field(float r, float theta, float a, float Q) {
  */
 float kn_ergosphere_radius(float theta, float M, float a, float Q) {
     float cos_theta = cos(theta);
-    return M + sqrt(M * M - a * a * cos_theta * cos_theta - Q * Q);
+    return M + sqrt(kn_horizon_discriminant(M, a * cos_theta, Q));
 }
 
 /**
@@ -191,7 +201,7 @@ float kn_photon_orbit_function(float r, float M, float a, float Q) {
  * Depends on: kn_photon_orbit_function
  */
 float kn_photon_sphere_equator(float M, float a, float Q) {
-    float discriminant = M * M - a * a - Q * Q;
+    float discriminant = kn_horizon_discriminant(M, a, Q);
     if (!(M > 0.0) || discriminant < 0.0) {
         float zero = 0.0;
         return zero / zero;
@@ -250,7 +260,7 @@ float kn_isco_marginal_stability(float r, float M, float a, float Q) {
  * Depends on: kn_isco_marginal_stability
  */
 float kn_isco_radius_prograde(float M, float a, float Q) {
-    float discriminant = M * M - a * a - Q * Q;
+    float discriminant = kn_horizon_discriminant(M, a, Q);
     if (!(M > 0.0) || discriminant < 0.0) {
         float zero = 0.0;
         return zero / zero;
@@ -392,7 +402,7 @@ bool is_super_extremal(float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition is_physical_black_hole (M a Q : R) : Prop :=...
  */
 bool is_physical_black_hole(float M, float a, float Q) {
-    return M > 0.0 && M * M >= a * a + Q * Q;
+    return M > 0.0 && kn_horizon_discriminant(M, a, Q) >= 0.0;
 }
 
 /**

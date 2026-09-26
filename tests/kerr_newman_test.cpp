@@ -398,6 +398,11 @@ constexpr double K_PHOTON_A05_Q05_PRO = 2.118828664898468;
 constexpr double K_PHOTON_A05_Q05_RET = 3.3756176710888185;
 constexpr double K_PHOTON_A09_Q03_PRO = 1.3996686888099221;
 constexpr double K_PHOTON_A09_Q03_RET = 3.8589114446045108;
+// Extremal a^2 + Q^2 = M^2 with a = 0.6, Q = 0.8.
+// An mpmath root that lies 7e-4 from sqrt(2) by coincidence.
+constexpr double K_ISCO_A06_Q08_PRO = 1.4135165463905206; // NOLINT(modernize-use-std-numbers)
+constexpr double K_ISCO_A06_Q08_RET = 6.9161094295048563;
+constexpr double K_PHOTON_A06_Q08_RET = 3.2;
 
 // Bisection stops at a 1e-15 M bracket; the closed-form root is
 // well-conditioned there, so 1e-12 bounds the double-precision error.
@@ -515,6 +520,41 @@ TEST(KerrNewman, PhotonOrbitEquator) {
   EXPECT_NEAR(verified::knPhotonSphereEquator(2.5, 1.25, 1.25),
               2.5 * verified::knPhotonSphereEquator(1.0, 0.5, 0.5), 1.0e-11);
   EXPECT_TRUE(std::isnan(verified::knPhotonSphereEquator(1.0, 0.8, 0.8)));
+}
+
+/**
+ * @brief Extremal a = 0.6, Q = 0.8: the discriminant rounds to -1.1e-16 yet the hole exists.
+ *
+ * In doubles 1 - 0.36 - 0.64 = -1.1e-16, a rounding artifact of the
+ * sequential subtraction. knHorizonDiscriminant reads it as the extremal zero,
+ * so both horizons sit at M and both orbit solvers find their mpmath roots.
+ * The prograde photon-orbit function stays positive above r_+, so that orbit
+ * sits at the floor r_+ = M.
+ */
+TEST(KerrNewman, ExtremalMixedSpinChargeOrbits) {
+  EXPECT_EQ(verified::knHorizonDiscriminant(1.0, 0.6, 0.8), 0.0);
+  EXPECT_TRUE(verified::isPhysicalBlackHole(1.0, 0.6, 0.8));
+  EXPECT_TRUE(physics::knSubExtremal(1.0, 0.6, 0.8));
+  EXPECT_EQ(verified::knOuterHorizon(1.0, 0.6, 0.8), 1.0);
+  EXPECT_EQ(verified::knInnerHorizon(1.0, 0.6, 0.8), 1.0);
+  EXPECT_EQ(physics::knOuterHorizon(1.0, 0.6, 0.8), 1.0);
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.6, 0.8), K_ISCO_A06_Q08_PRO, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.6, 0.8), K_ISCO_A06_Q08_RET, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, -0.6, 0.8), K_PHOTON_A06_Q08_RET, K_ISCO_TOL);
+  EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.6, 0.8), 1.0, K_ISCO_TOL);
+}
+
+/** @brief A charge 1e-9 above extremality is a naked singularity for every function. */
+TEST(KerrNewman, OverExtremalChargeRejected) {
+  const double q = 0.8 * (1.0 + 1.0e-9);
+  EXPECT_LT(verified::knHorizonDiscriminant(1.0, 0.6, q), 0.0);
+  EXPECT_FALSE(verified::isPhysicalBlackHole(1.0, 0.6, q));
+  EXPECT_FALSE(physics::knSubExtremal(1.0, 0.6, q));
+  EXPECT_TRUE(std::isnan(verified::knOuterHorizon(1.0, 0.6, q)));
+  EXPECT_TRUE(std::isnan(physics::knOuterHorizon(1.0, 0.6, q)));
+  EXPECT_TRUE(std::isnan(verified::knIscoRadiusPrograde(1.0, 0.6, q)));
+  EXPECT_TRUE(std::isnan(verified::knIscoRadiusRetrograde(1.0, 0.6, q)));
+  EXPECT_TRUE(std::isnan(verified::knPhotonSphereEquator(1.0, 0.6, q)));
 }
 
 /**
