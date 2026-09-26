@@ -37,7 +37,7 @@ void appendSubdivided(std::vector<SegmentInstance> &out, const glm::vec4 &a, con
     SegmentInstance seg;
     seg.a = a + ((b - a) * s0);
     seg.b = a + ((b - a) * s1);
-    seg.meta = glm::vec4(-1.0f, -1.0f, static_cast<float>(kind), -1.0f);
+    seg.meta = glm::vec4(-1.0f, -1.0f, packSegmentTag(kind, k == 0, k + 1 == pieces), -1.0f);
     out.push_back(seg);
   }
 }
@@ -200,6 +200,21 @@ TesseractMotion tesseractMotionAt(const std::array<float, 3> &leftRate,
   return motion;
 }
 
+float packSegmentTag(SegmentKind kind, bool capA, bool capB) {
+  const int tag = static_cast<int>(kind) | (capA ? SEGMENT_CAP_A : 0) | (capB ? SEGMENT_CAP_B : 0);
+  return static_cast<float>(tag);
+}
+
+SegmentKind segmentKind(const SegmentInstance &segment) {
+  return static_cast<SegmentKind>(static_cast<int>(std::lround(segment.meta.z)) &
+                                  SEGMENT_KIND_MASK);
+}
+
+bool segmentCapped(const SegmentInstance &segment, bool endB) {
+  const int bit = endB ? SEGMENT_CAP_B : SEGMENT_CAP_A;
+  return (static_cast<int>(std::lround(segment.meta.z)) & bit) != 0;
+}
+
 std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &options) {
   std::vector<SegmentInstance> segments;
   const TesseractMesh mesh = buildTesseract();
@@ -218,7 +233,8 @@ std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &optio
       seg.a = libraryToTesseract(tube.at(k), options.timeSpan);
       seg.b = libraryToTesseract(tube.at(k + 1), options.timeSpan);
       seg.meta = glm::vec4(tube.at(k).w, tube.at(k + 1).w,
-                           static_cast<float>(SegmentKind::WorldTube), static_cast<float>(strand));
+                           packSegmentTag(SegmentKind::WorldTube, k == 0, k + 2 == tube.size()),
+                           static_cast<float>(strand));
       segments.push_back(seg);
     }
   }

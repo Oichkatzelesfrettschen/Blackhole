@@ -330,7 +330,7 @@ TEST(TesseractAnimation, RateChangeAfterLongRunMovesOnlyOneStep) {
 }
 
 tess::SegmentKind kindOf(const tess::SegmentInstance &seg) {
-  return static_cast<tess::SegmentKind>(static_cast<int>(seg.meta.z));
+  return tess::segmentKind(seg);
 }
 
 // Points on a tesseract edge keep three coordinates at +-1.
@@ -379,6 +379,46 @@ TEST(SceneSegments, LayoutCountsAndTags) {
   EXPECT_EQ(kindCounts.at(0), edgePieces);
   EXPECT_EQ(kindCounts.at(1), tubePieces);
   EXPECT_EQ(kindCounts.at(2), outlinePieces);
+}
+
+// Every polyline caps its two true endpoints and nothing else: the 32 edges,
+// one world tube per strand, and the room outline links.
+TEST(SceneSegments, CapsOnlyPolylineEnds) {
+  tess::SceneSegmentOptions options;
+  options.tubeSamples = 20;
+  options.edgeSubdivisions = 4;
+  const std::vector<tess::SegmentInstance> segments = tess::buildSceneSegments(options);
+  const std::size_t polylines =
+      std::size_t{32} + tess::bedroomFeatures().size() + tess::bedroomOutline().size();
+  const auto capsA = std::ranges::count_if(
+      segments, [](const tess::SegmentInstance &s) { return tess::segmentCapped(s, false); });
+  const auto capsB = std::ranges::count_if(
+      segments, [](const tess::SegmentInstance &s) { return tess::segmentCapped(s, true); });
+  EXPECT_EQ(static_cast<std::size_t>(capsA), polylines);
+  EXPECT_EQ(static_cast<std::size_t>(capsB), polylines);
+  // A capped a starts a polyline; the segment before it capped its b.
+  for (std::size_t i = 1; i < segments.size(); ++i) {
+    EXPECT_EQ(tess::segmentCapped(segments.at(i), false),
+              tess::segmentCapped(segments.at(i - 1), true))
+        << i;
+  }
+  EXPECT_TRUE(tess::segmentCapped(segments.front(), false));
+  EXPECT_TRUE(tess::segmentCapped(segments.back(), true));
+}
+
+TEST(SceneSegments, TagRoundTripsKindAndCaps) {
+  for (const auto kind : {tess::SegmentKind::TesseractEdge, tess::SegmentKind::WorldTube,
+                          tess::SegmentKind::LitSlice}) {
+    for (const bool capA : {false, true}) {
+      for (const bool capB : {false, true}) {
+        tess::SegmentInstance seg;
+        seg.meta.z = tess::packSegmentTag(kind, capA, capB);
+        EXPECT_EQ(tess::segmentKind(seg), kind);
+        EXPECT_EQ(tess::segmentCapped(seg, false), capA);
+        EXPECT_EQ(tess::segmentCapped(seg, true), capB);
+      }
+    }
+  }
 }
 
 TEST(So4Upload, ColumnMajorCopyMatchesGlmMatrixVectorProduct) {

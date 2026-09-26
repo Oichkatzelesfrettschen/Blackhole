@@ -194,22 +194,43 @@ TesseractMotion tesseractMotionAt(const std::array<float, 3> &leftRate,
                                   double rotationSpeed, float pulseSpeed, float pulseSpan,
                                   double seconds);
 
-/** @brief Kind tag stored in SegmentInstance::meta.z. */
+/** @brief Kind of a segment, held in the low bits of SegmentInstance::meta.z. */
 enum class SegmentKind { TesseractEdge = 0, WorldTube = 1, LitSlice = 2 };
+
+/// meta.z bits holding the SegmentKind.
+inline constexpr int SEGMENT_KIND_MASK = 3;
+/// meta.z bit set when endpoint a ends its polyline and draws a cap.
+inline constexpr int SEGMENT_CAP_A = 4;
+/// meta.z bit set when endpoint b ends its polyline and draws a cap.
+inline constexpr int SEGMENT_CAP_B = 8;
 
 /**
  * @brief One instanced line segment for shader/tesseract.vert.
  *
- * a and b are tesseract-space endpoints; meta = (tA, tB, kind, strand). A
- * LitSlice segment carries w = 0 in a and b and the vertex shader substitutes
- * the lit moment for both w and t, so the room outline follows the slider
- * without a buffer upload. Three vec4 attributes, 48 bytes per instance.
+ * a and b are tesseract-space endpoints; meta = (tA, tB, tag, strand), where
+ * the tag packs the SegmentKind with SEGMENT_CAP_A and SEGMENT_CAP_B. The
+ * ribbons blend additively, so a segment extends past an endpoint by its half
+ * width only where the endpoint ends a polyline; interior joints butt and
+ * each pixel of a straight run is covered once whatever the subdivision
+ * count. A LitSlice segment carries w = 0 in a and b and the vertex shader
+ * substitutes the lit moment for both w and t, so the room outline follows
+ * the slider without a buffer upload. Three vec4 attributes, 48 bytes per
+ * instance.
  */
 struct SegmentInstance {
   glm::vec4 a{0.0f};
   glm::vec4 b{0.0f};
   glm::vec4 meta{0.0f};
 };
+
+/** @brief meta.z tag of a segment of @p kind with the given end caps. */
+float packSegmentTag(SegmentKind kind, bool capA, bool capB);
+
+/** @brief SegmentKind of @p segment, decoded from its meta.z tag. */
+SegmentKind segmentKind(const SegmentInstance &segment);
+
+/** @brief Whether endpoint a (@p endB false) or b of @p segment draws a cap. */
+bool segmentCapped(const SegmentInstance &segment, bool endB);
 
 /** @brief Tessellation parameters for buildSceneSegments. */
 struct SceneSegmentOptions {

@@ -12,7 +12,9 @@
  * lineWidthPx pixels, because core-profile lines rasterize one pixel wide.
  *
  * rotation4 is the SO(4) matrix of v -> qL v conj(qR) (so4.h), uploaded
- * column-major. projectionMode 0 is perspective along w,
+ * column-major. segMeta.z packs the SegmentKind in its low two bits with
+ * SEGMENT_CAP_A (4) and SEGMENT_CAP_B (8), as packSegmentTag writes it.
+ * projectionMode 0 is perspective along w,
  * p = xyz d / (d - w); 1 is stereographic from S^3, p = xyz / (1 - w) after
  * normalizing the rotated point. Kind 2 (lit-moment room outline) takes its
  * w and library time from litMoment, mapped by t -> 2 t / T - 1 as
@@ -42,6 +44,9 @@ layout(location = 4) flat out int vStrand;
 
 const int KIND_EDGE = 0;
 const int KIND_LIT_SLICE = 2;
+const int SEGMENT_KIND_MASK = 3;
+const int SEGMENT_CAP_A = 4;
+const int SEGMENT_CAP_B = 8;
 
 // Corner (along, across) of the two triangles covering one ribbon.
 const vec2 CORNERS[6] = vec2[6](vec2(0.0, -1.0), vec2(1.0, -1.0), vec2(1.0, 1.0),
@@ -82,7 +87,8 @@ vec3 project4(vec4 p, out float fade) {
 
 void main() {
   vec2 corner = CORNERS[gl_VertexID % 6];
-  int kind = int(round(segMeta.z));
+  int tag = int(round(segMeta.z));
+  int kind = tag & SEGMENT_KIND_MASK;
   vec4 a = segA;
   vec4 b = segB;
   float tA = segMeta.x;
@@ -121,8 +127,12 @@ void main() {
 
   float widthScale = kind == KIND_EDGE ? 1.0 : (kind == KIND_LIT_SLICE ? 1.4 : 0.8);
   float halfWidth = 0.5 * lineWidthPx * widthScale;
-  // Extend past each endpoint by the half width so consecutive pieces overlap.
-  vec2 offsetPx = normal * (corner.y * halfWidth) + dir * ((2.0 * corner.x - 1.0) * halfWidth);
+  // Blending is additive, so interior joints butt: only a polyline's true
+  // endpoints extend by the half width as a cap, and each pixel of a straight
+  // run is covered once whatever the subdivision count.
+  bool capped = corner.x < 0.5 ? (tag & SEGMENT_CAP_A) != 0 : (tag & SEGMENT_CAP_B) != 0;
+  float along = capped ? (2.0 * corner.x - 1.0) * halfWidth : 0.0;
+  vec2 offsetPx = normal * (corner.y * halfWidth) + dir * along;
 
   vec4 clip = mix(clipA, clipB, corner.x);
   clip.xy += (offsetPx / halfRes) * clip.w;
