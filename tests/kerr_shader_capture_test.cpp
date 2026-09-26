@@ -38,6 +38,7 @@
 
 #include "physics/constants.h"
 #include "physics/kerr.h"
+#include "physics/stokes_transport.h"
 #include "support/gl_compute_harness.h"
 
 using namespace gl;
@@ -1345,6 +1346,89 @@ TEST_F(KerrShaderCaptureTest, HitOriginSharesTheTracerChart) {
     ++compared;
   }
   EXPECT_GT(compared, K_ORIGIN_RAYS / 2);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+namespace {
+
+// Two polarized layers, near (index 0) and far (index 1), with different
+// EVPAs, absorption, Faraday rates, and path lengths.
+struct PolLayer {
+  double jI, jQ, jU, jV, alpha, rhoV, ds;
+};
+
+PolLayer polLayer(double jI, double chiB, double jV, double alpha, double rhoV, double ds) {
+  return {.jI = jI,
+          .jQ = -jI * 0.7 * std::cos(2.0 * chiB),
+          .jU = -jI * 0.7 * std::sin(2.0 * chiB),
+          .jV = jV,
+          .alpha = alpha,
+          .rhoV = rhoV,
+          .ds = ds};
+}
+
+physics::StokesVector stepLayer(const physics::StokesVector &state, const PolLayer &l) {
+  return physics::stokesStep(state, {.jI = l.jI, .jQ = l.jQ, .jU = l.jU, .jV = l.jV}, l.alpha,
+                             l.rhoV, l.ds);
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, StokesCompositesLayersFrontToBack) {
+  // The observed Stokes vector of a near layer in front of a far one is the
+  // far layer's output transferred through the near layer (the CPU
+  // stokesStep integrated from the far end). stokesCompositeStep, fed in
+  // camera order as bhTraceGeodesicStokes marches, must reproduce it; feeding
+  // the running state into the farther layer, the reverse order, misses it by
+  // more than 0.1 here.
+  const PolLayer nearLayer = polLayer(1.0, 0.2, 0.0, 0.8, 1.5, 1.0);
+  const PolLayer farLayer = polLayer(2.0, 1.1, 0.3, 0.3, -0.7, 1.5);
+  const physics::StokesVector reference = stepLayer(stepLayer({}, farLayer), nearLayer);
+  const physics::StokesVector reversed = stepLayer(stepLayer({}, nearLayer), farLayer);
+  ASSERT_GT(std::hypot(reference.q - reversed.q, reference.u - reversed.u), 0.1);
+
+  const GLuint program = bhtest::createComputeProgram(R"(
+#version 460 core
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+uniform vec4 em0;
+uniform vec3 k0;
+uniform vec4 em1;
+uniform vec3 k1;
+#include "include/stokes_transport.glsl"
+void main() {
+  vec4 observed = vec4(0.0);
+  float transmit = 1.0;
+  float faraday = 0.0;
+  stokesCompositeStep(observed, transmit, faraday, em0, k0.x, k0.y, k0.z);
+  stokesCompositeStep(observed, transmit, faraday, em1, k1.x, k1.y, k1.z);
+  result[0] = observed.x;
+  result[1] = observed.y;
+  result[2] = observed.z;
+  result[3] = observed.w;
+  result[4] = transmit;
+}
+)");
+  glUseProgram(program);
+  const auto setLayer = [program](const char *em, const char *k, const PolLayer &l) {
+    glUniform4f(glGetUniformLocation(program, em), static_cast<float>(l.jI),
+                static_cast<float>(l.jQ), static_cast<float>(l.jU), static_cast<float>(l.jV));
+    glUniform3f(glGetUniformLocation(program, k), static_cast<float>(l.alpha),
+                static_cast<float>(l.rhoV), static_cast<float>(l.ds));
+  };
+  setLayer("em0", "k0", nearLayer);
+  setLayer("em1", "k1", farLayer);
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 5), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 5);
+  EXPECT_NEAR(out.at(0), reference.i, 1e-5);
+  EXPECT_NEAR(out.at(1), reference.q, 1e-5);
+  EXPECT_NEAR(out.at(2), reference.u, 1e-5);
+  EXPECT_NEAR(out.at(3), reference.v, 1e-5);
+  EXPECT_NEAR(out.at(4), std::exp(-((0.8 * 1.0) + (0.3 * 1.5))), 1e-6);
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }

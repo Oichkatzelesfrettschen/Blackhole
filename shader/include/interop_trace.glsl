@@ -816,9 +816,10 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 // intensity accumulator.
 //
 // The I channel uses the same front-to-back compositing as bhTraceGeodesicRTE()
-// (vec3 color-accurate accumulation).  The Q, U, V channels evolve under the
-// stokesStep() exact solution (simplified K: alpha_I + rho_V) at each disk
-// step, using the same alphaI and path length as the intensity path so the
+// (vec3 color-accurate accumulation).  The Q, U, V channels take each disk
+// step's stokesStep() exact solution (simplified K: alpha_I + rho_V) and
+// composite it front to back through the nearer steps (stokesCompositeStep),
+// with the same alphaI and path length as the intensity path so the
 // polarimetric and photometric results remain consistent.
 //
 // Polarization model:
@@ -865,8 +866,11 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
 
   vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
-  vec2  stokesQU = vec2(0.0);   // Q and U Stokes components
-  float stokesV  = 0.0;         // V Stokes component
+  // Observed polarization, composited front to back (stokesCompositeStep):
+  // (unused I, Q, U, V), the nearer segments' transmittance and Faraday angle.
+  vec4  polObserved = vec4(0.0);
+  float polTransmit = 1.0;
+  float polFaraday  = 0.0;
   float transmit = 1.0;
   float minR     = kRay.r;
 
@@ -878,7 +882,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       terminalPos = curPos;
       accumI += transmit * bhHorizonShade(kRay.r, r_s);
       float I = (accumI.r + accumI.g + accumI.b) / 3.0;
-      vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
+      vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
       return vec4(stokesDisplayColor(stokes, accumI), 1.0);
     }
 
@@ -910,12 +914,10 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       // Faraday rotation rate: rhoV = neScale * rhoNorm (density-modulated)
       float rhoV = neScale * rhoNorm;
 
-      // Evolve Q, U, V under simplified K (alpha_I + rho_V)
-      // WHY: I and V decouple in simplified K; we evolve Q/U coupled via rhoV.
-      vec4 quv = stokesStep(vec4(0.0, stokesQU.x, stokesQU.y, stokesV),
-                            emStokes, alphaNu, rhoV, pathStep);
-      stokesQU = quv.yz;
-      stokesV  = quv.w;
+      // Q, U, V under simplified K (alpha_I + rho_V), composited front to
+      // back: this segment's emission passes through the nearer segments.
+      stokesCompositeStep(polObserved, polTransmit, polFaraday, emStokes, alphaNu, rhoV,
+                          pathStep);
 
       if (transmit < 0.005) { break; }
     }
@@ -934,7 +936,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Map accumulated Stokes state to display color
   terminalPos = kerrRayPosition(kRay);
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
-  vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
+  vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
   return vec4(stokesDisplayColor(stokes, accumI), 1.0);
 }
 

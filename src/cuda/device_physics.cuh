@@ -2543,12 +2543,44 @@ __device__ __forceinline__ DStokes d_stokes_step(DStokes s,
 }
 
 /**
+ * @brief Front-to-back compositing of one segment for a trace marching from the observer.
+ *
+ * The segment's own contribution (d_stokes_step from zero) reaches the
+ * observer through every nearer segment: observed += T e with T the nearer
+ * segments' transfer operator. In the simplified K each operator is
+ * exp(-alphaI ds) times a rotation of (Q, U) by rhoV ds; these commute, so T
+ * is carried as transmit and a summed Faraday angle. Twin of
+ * stokesCompositeStep in shader/include/stokes_transport.glsl.
+ */
+__device__ __forceinline__ void d_stokes_composite_step(DStokes &observed, float &transmit,
+                                                        float &faraday, float jI, float jQ,
+                                                        float jU, float jV, float alphaI,
+                                                        float rhoV, float ds) {
+    if (ds <= 0.0f) {
+        return;
+    }
+    DStokes const zero = {0.0f, 0.0f, 0.0f, 0.0f};
+    DStokes const seg = d_stokes_step(zero, jI, jQ, jU, jV, alphaI, rhoV, ds);
+    float sin_f, cos_f;
+    sincosf(faraday, &sin_f, &cos_f);
+    observed.i = fmaf(transmit, seg.i, observed.i);
+    observed.q = fmaf(transmit, cos_f * seg.q - sin_f * seg.u, observed.q);
+    observed.u = fmaf(transmit, sin_f * seg.q + cos_f * seg.u, observed.u);
+    observed.v = fmaf(transmit, seg.v, observed.v);
+    float const tau = fmaxf(alphaI, 0.0f) * ds;
+    transmit *= (tau < 700.0f) ? expf(-tau) : 0.0f;
+    faraday = fmaf(rhoV, ds, faraday);
+}
+
+/**
  * @brief Trace a Kerr geodesic with polarized Stokes I,Q,U,V transport.
  *
  * Extends d_trace_geodesic_rte() to track Stokes polarization state alongside
  * the color-accurate intensity accumulator.  The I channel uses the same
  * front-to-back compositing as d_trace_geodesic_rte() for color consistency.
- * Q, U, V evolve under d_stokes_step() (simplified K: alpha_I + rho_V).
+ * Q, U, V take each segment's d_stokes_step() solution (simplified K: alpha_I + rho_V)
+ * and composite it front to back through the nearer segments
+ * (d_stokes_composite_step).
  *
  * At exit, the Stokes state is mapped to a display color by tinting the
  * accumulated RGB intensity with EVPA-derived hue and linear polarization
@@ -2604,8 +2636,11 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     float  min_r    = kr.r;
     float3 closest_pos = d_kerr_ray_position(kr);
 
-    /* Stokes Q, U, V accumulators (I uses accum_i above) */
+    /* Observed Q, U, V composited front to back (I uses accum_i above), with
+     * the nearer segments' transmittance and Faraday angle. */
     DStokes stokes = {0.0f, 0.0f, 0.0f, 0.0f};
+    float pol_transmit = 1.0f;
+    float pol_faraday = 0.0f;
 
     for (int step = 0; step < max_steps; ++step) {
         float3 const cur_pos = d_kerr_ray_position(kr);
@@ -2650,9 +2685,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
             /* Faraday rotation: rhoV = ne_scale * <rho> over the chord */
             float const rho_v = ne_scale * rho_norm;
 
-            /* Stokes step for Q, U, V (I is handled by accum_i above) */
-            stokes = d_stokes_step(stokes, 0.0f, jQ_s, jU_s, 0.0f,
-                                   alpha_nu, rho_v, path_step);
+            /* Q, U, V through the nearer segments (I is handled by accum_i above) */
+            d_stokes_composite_step(stokes, pol_transmit, pol_faraday, 0.0f, jQ_s, jU_s, 0.0f,
+                                    alpha_nu, rho_v, path_step);
 
             if (transmit < 0.005f) { break; }
         }
