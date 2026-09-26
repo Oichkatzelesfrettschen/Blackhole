@@ -1231,6 +1231,7 @@ function(add_blackhole_desktop_target target_name)
 
   target_link_libraries(${target_name} PRIVATE
     blackhole_campaign
+    blackhole_observer_sky
     HighFive::HighFive
     imgui::imgui
     imguizmo::imguizmo
@@ -1594,6 +1595,31 @@ if(ENABLE_FAST_MATH)
   # The campaign determinism gate needs IEEE semantics end to end.
   target_compile_options(blackhole_physics PRIVATE -fno-fast-math)
 endif()
+
+# Observer-sky precompute: backward null geodesics from an equatorial Kerr
+# observer's local sky in spin-deficit form (src/physics/observer_sky_*). Its
+# own library keeps it out of PHYSICS_SRC_FILES, so no target compiles a
+# fast-math copy: the deficit-form potentials rely on IEEE evaluation order to
+# keep the digits a near-extremal throat leaves (x ~ 1e-5, h ~ 1e-7).
+add_library(blackhole_observer_sky STATIC
+  "${PROJECT_SOURCE_DIR}/src/physics/observer_sky_map.cpp"
+  "${PROJECT_SOURCE_DIR}/src/physics/observer_sky_lut.cpp"
+)
+target_include_directories(blackhole_observer_sky PUBLIC
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/src/physics"
+)
+target_compile_options(blackhole_observer_sky PRIVATE ${PROJECT_WARNINGS})
+find_package(Threads REQUIRED)
+target_link_libraries(blackhole_observer_sky PUBLIC Threads::Threads)
+
+# Builds observer_sky_<hash>.{bin,json} for one observer and prints the
+# measured shadow fraction, blueshift range, and patch size.
+add_executable(observer_sky_lut
+  "${PROJECT_SOURCE_DIR}/src/tools/observer_sky_lut_main.cpp"
+)
+target_link_libraries(observer_sky_lut PRIVATE blackhole_observer_sky)
+target_compile_options(observer_sky_lut PRIVATE ${PROJECT_WARNINGS})
 
 # Deterministic turn-based campaign state (src/game/). GL-free by
 # construction: no glbinding, imgui, or glfw anywhere in this link set.
@@ -6884,11 +6910,14 @@ endif()
 # campaign libraries, the sims, and the campaign tests (which inline
 # campaign_sim_lines.h) get IEEE semantics with contraction off. The desktop
 # executables and blackhole_testcore also link blackhole_campaign but compute
-# no digest, so they keep the preset's floating-point mode. The options append
+# no digest, so they keep the preset's floating-point mode. The observer-sky
+# library, its LUT tool, and its test join the list because the deficit-form
+# Kerr potentials keep their digits only under IEEE evaluation. The options append
 # after each target's own, so -ffp-contract=off follows -fno-fast-math and
 # refines IEEE mode instead of overriding a global -ffast-math.
 set(_bh_deterministic_fp_targets
-  blackhole_physics blackhole_campaign campaign_sim constellation_sim)
+  blackhole_physics blackhole_campaign campaign_sim constellation_sim
+  blackhole_observer_sky observer_sky_lut observer_sky_map_test)
 get_property(_bh_all_targets DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
 foreach(_bh_target IN LISTS _bh_all_targets)
   if(_bh_target MATCHES "^(campaign_.*|constellation|blackhole_time_field|kerr_time_field|kerr_observer|balance_sweep)_test$"
