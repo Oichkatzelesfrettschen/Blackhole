@@ -1577,7 +1577,7 @@ endif()
 
 # Deterministic turn-based campaign state (src/game/). GL-free by
 # construction: no glbinding, imgui, or glfw anywhere in this link set.
-add_library(blackhole_campaign STATIC
+set(CAMPAIGN_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/game/blackhole_time_field.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/kerr_time_field.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/temporal_clock.cpp"
@@ -1588,6 +1588,7 @@ add_library(blackhole_campaign STATIC
   "${PROJECT_SOURCE_DIR}/src/game/constellation.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation_session.cpp"
 )
+add_library(blackhole_campaign STATIC ${CAMPAIGN_SRC_FILES})
 target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
 target_compile_options(blackhole_campaign PRIVATE ${PROJECT_WARNINGS})
 if(ENABLE_FAST_MATH)
@@ -1615,6 +1616,46 @@ target_compile_options(constellation_sim PRIVATE ${PROJECT_WARNINGS})
 if(ENABLE_FAST_MATH)
   target_compile_options(constellation_sim PRIVATE -fno-fast-math)
 endif()
+
+# Generic-ISA twins of the determinism stack. A target's COMPILE_OPTIONS start
+# as a copy of the directory's, so removing -march=native here builds the same
+# sources for the baseline ISA. The digest gate below runs each sim and its twin
+# from this one build and requires byte-identical output; no digest value is
+# ever committed, because the determinism scope is one build on one host.
+function(bh_strip_native_arch target)
+  get_target_property(_bh_opts ${target} COMPILE_OPTIONS)
+  if(_bh_opts)
+    list(REMOVE_ITEM _bh_opts -march=native)
+    set_property(TARGET ${target} PROPERTY COMPILE_OPTIONS ${_bh_opts})
+  endif()
+endfunction()
+
+add_library(blackhole_physics_generic STATIC ${PHYSICS_SRC_FILES})
+target_include_directories(blackhole_physics_generic PUBLIC
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/src/physics"
+)
+target_compile_options(blackhole_physics_generic PRIVATE ${PROJECT_WARNINGS})
+add_library(blackhole_campaign_generic STATIC ${CAMPAIGN_SRC_FILES})
+target_link_libraries(blackhole_campaign_generic PUBLIC blackhole_physics_generic)
+target_compile_options(blackhole_campaign_generic PRIVATE ${PROJECT_WARNINGS})
+add_executable(campaign_sim_generic
+  "${PROJECT_SOURCE_DIR}/src/game/campaign_sim_main.cpp"
+)
+target_link_libraries(campaign_sim_generic PRIVATE blackhole_campaign_generic)
+target_compile_options(campaign_sim_generic PRIVATE ${PROJECT_WARNINGS})
+add_executable(constellation_sim_generic
+  "${PROJECT_SOURCE_DIR}/src/game/constellation_sim_main.cpp"
+)
+target_link_libraries(constellation_sim_generic PRIVATE blackhole_campaign_generic)
+target_compile_options(constellation_sim_generic PRIVATE ${PROJECT_WARNINGS})
+foreach(_bh_generic IN ITEMS blackhole_physics_generic blackhole_campaign_generic
+                              campaign_sim_generic constellation_sim_generic)
+  bh_strip_native_arch(${_bh_generic})
+  if(ENABLE_FAST_MATH)
+    target_compile_options(${_bh_generic} PRIVATE -fno-fast-math)
+  endif()
+endforeach()
 
 # --------------------------------------------------------------------------
 # cppcheck Integration
@@ -4352,6 +4393,22 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Determinism across target ISAs: each sim and its generic-ISA twin from this
+  # build must print byte-identical outcome and digest lines.
+  foreach(_bh_sim IN ITEMS campaign_sim constellation_sim)
+    add_test(NAME ${_bh_sim}_isa_digest_parity
+      COMMAND ${CMAKE_COMMAND}
+        -DNATIVE_SIM=$<TARGET_FILE:${_bh_sim}>
+        -DGENERIC_SIM=$<TARGET_FILE:${_bh_sim}_generic>
+        -DSIM_ARGS=--compare
+        -P "${PROJECT_SOURCE_DIR}/cmake/CompareSimDigests.cmake"
+    )
+    set_tests_properties(${_bh_sim}_isa_digest_parity PROPERTIES
+      LABELS "campaign;determinism"
+      TIMEOUT 120
+    )
+  endforeach()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp")
     add_executable(constellation_test
       "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp"
@@ -6393,6 +6450,32 @@ if(BUILD_TESTING)
   message(STATUS "Test-source completeness: ${_bh_test_count} files on disk, all accounted for")
 endif()
 
+# Deterministic floating point for the campaign stack. The determinism digest
+# covers every double the campaign serializes; FMA contraction rounds a*b+c
+# once instead of twice, so a compiler free to contract (clang's default, and
+# any -march with FMA units) makes those bits depend on the target ISA. Every
+# target that is, or links, the campaign library gets IEEE semantics with
+# contraction off. The options append after each target's own, so
+# -ffp-contract=off follows -fno-fast-math and refines IEEE mode instead of
+# overriding a global -ffast-math.
+set(_bh_deterministic_fp_targets
+  blackhole_physics blackhole_campaign
+  blackhole_physics_generic blackhole_campaign_generic)
+get_property(_bh_all_targets DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
+foreach(_bh_target IN LISTS _bh_all_targets)
+  get_target_property(_bh_links "${_bh_target}" LINK_LIBRARIES)
+  if(_bh_links AND ("blackhole_campaign" IN_LIST _bh_links
+                    OR "blackhole_campaign_generic" IN_LIST _bh_links))
+    list(APPEND _bh_deterministic_fp_targets "${_bh_target}")
+  endif()
+endforeach()
+foreach(_bh_target IN LISTS _bh_deterministic_fp_targets)
+  if(ENABLE_FAST_MATH)
+    target_compile_options("${_bh_target}" PRIVATE -fno-fast-math)
+  endif()
+  target_compile_options("${_bh_target}" PRIVATE -ffp-contract=off)
+endforeach()
+
 # Target creation precedes analyzer discovery for desktop and bridge targets.
 # Apply the configured checks after collecting every project directory.
 function(blackhole_apply_analysis directory_path)
@@ -6402,8 +6485,11 @@ function(blackhole_apply_analysis directory_path)
   get_property(directory_targets DIRECTORY "${directory_path}" PROPERTY BUILDSYSTEM_TARGETS)
   foreach(project_target IN LISTS directory_targets)
     get_target_property(target_type "${project_target}" TYPE)
+    # *_generic targets recompile analyzed sources for the baseline ISA only;
+    # analyzing them again would duplicate every diagnostic.
     if(target_type MATCHES "^(EXECUTABLE|STATIC_LIBRARY|SHARED_LIBRARY|MODULE_LIBRARY|OBJECT_LIBRARY)$"
-       AND NOT project_target STREQUAL "implot")
+       AND NOT project_target STREQUAL "implot"
+       AND NOT project_target MATCHES "_generic$")
       if(ENABLE_CLANG_TIDY)
         set_property(TARGET "${project_target}" PROPERTY CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY}")
         get_target_property(analysis_sources "${project_target}" SOURCES)
