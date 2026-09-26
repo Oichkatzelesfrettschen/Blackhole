@@ -165,7 +165,9 @@ vec3 skyRadiance(vec3 source, float logG, vec3 footprint) {
   if (starsEnabled > 0.5) {
     float blurTurn = blurSamples > 1.5 ? skyPhiBlurSpan : 0.0;
     float turn = min(footprint.x + abs(blurTurn), 2.0 * PI);
-    float projectedTurn = min(footprint.y + abs(blurTurn), 2.0 * PI);
+    // The sky turns about Z, so the blur's arc at this source is the turn
+    // scaled by the source's distance from the spin axis, sin(theta).
+    float projectedTurn = min(footprint.y + abs(blurTurn) * length(source.xy), 2.0 * PI);
     float spacing = max(footprint.z, 0.05);
     int samples = clamp(int(ceil(turn / spacing)), blurSamples > 1.5 ? 4 : 1, 16);
     float cubeTexelAngle = 0.5 * PI / float(textureSize(galaxy, 0).x);

@@ -447,23 +447,37 @@ std::optional<std::pair<double, double>> parseFinitePair(const char *text) {
   if (text == nullptr) {
     return std::nullopt;
   }
+  // Each component accepts what strtod did for these overrides: surrounding
+  // spaces or tabs and a leading '+'; the value itself must be finite.
+  const auto parseComponent = [](std::string_view part) -> std::optional<double> {
+    const std::size_t first = part.find_first_not_of(" \t");
+    if (first == std::string_view::npos) {
+      return std::nullopt;
+    }
+    part = part.substr(first, part.find_last_not_of(" \t") - first + 1);
+    if (part.starts_with('+')) {
+      part.remove_prefix(1);
+    }
+    double value = 0.0;
+    const std::from_chars_result result =
+        std::from_chars(part.data(), part.data() + part.size(), value);
+    if (result.ec != std::errc{} || result.ptr != part.data() + part.size() ||
+        !physics::safeIsfinite(value)) {
+      return std::nullopt;
+    }
+    return value;
+  };
   const std::string_view view(text);
-  const char *const textEnd = view.data() + view.size();
-  double first = 0.0;
-  const std::from_chars_result firstResult = std::from_chars(view.data(), textEnd, first);
-  if (firstResult.ec != std::errc{} || firstResult.ptr == textEnd || *firstResult.ptr != ',') {
+  const std::size_t comma = view.find(',');
+  if (comma == std::string_view::npos) {
     return std::nullopt;
   }
-  double value = 0.0;
-  const std::from_chars_result secondResult =
-      std::from_chars(firstResult.ptr + 1, textEnd, value);
-  if (secondResult.ec != std::errc{} || secondResult.ptr != textEnd) {
+  const std::optional<double> first = parseComponent(view.substr(0, comma));
+  const std::optional<double> second = parseComponent(view.substr(comma + 1));
+  if (!first || !second) {
     return std::nullopt;
   }
-  if (!physics::safeIsfinite(first) || !physics::safeIsfinite(value)) {
-    return std::nullopt;
-  }
-  return std::pair{first, value};
+  return std::pair{*first, *second};
 }
 
 std::optional<RenderState::SceneMode> parseSceneName(std::string_view name) {

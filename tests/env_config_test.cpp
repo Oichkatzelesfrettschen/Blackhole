@@ -75,6 +75,21 @@ TEST(ParseFinitePair, RejectsNonFiniteEitherComponent) {
   EXPECT_FALSE(parseFinitePair("infinity,infinity").has_value());
 }
 
+// Falsifier: launch configurations written for the strtod parser, with
+// spaces after the comma or a leading '+', falling back to defaults.
+TEST(ParseFinitePair, AcceptsSpacesAndLeadingPlus) {
+  const auto spaced = parseFinitePair("10, 20");
+  ASSERT_TRUE(spaced.has_value());
+  EXPECT_DOUBLE_EQ(spaced->first, 10.0);
+  EXPECT_DOUBLE_EQ(spaced->second, 20.0);
+  const auto signedRange = parseFinitePair(" -7 ,\t+13.5 ");
+  ASSERT_TRUE(signedRange.has_value());
+  EXPECT_DOUBLE_EQ(signedRange->first, -7.0);
+  EXPECT_DOUBLE_EQ(signedRange->second, 13.5);
+  EXPECT_FALSE(parseFinitePair("1 2, 3").has_value());
+  EXPECT_FALSE(parseFinitePair("1, ").has_value());
+}
+
 TEST(ParseFinitePair, RejectsMalformedInput) {
   EXPECT_FALSE(parseFinitePair("1.5").has_value());
   EXPECT_FALSE(parseFinitePair("1.5,").has_value());
