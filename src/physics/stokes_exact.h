@@ -55,6 +55,14 @@
  *     twice it, so neither suffers the h + sqrt(h^2 + (eta.rho)^2) cancellation.
  *   - The decay factor e^{-tau} is folded into cosh and sinh before they are
  *     formed, so an optically thick segment with large x1 never forms inf * 0.
+ *   - Once an eigenvalue reaches 1 and the generator is far from null, the
+ *     cubic's odd terms c1 K' and c3 K'^3 cancel to O(1) from size x2 (pure
+ *     Faraday rotation by 1e12 rad lost 1e-4). There the step splits K' into
+ *     commuting unit boost and rotation generators A, B (lorentzAxes) and
+ *     applies cosh, sinh, cos and sin of x1 and x2 to O(1) matrices, so a
+ *     Faraday depth of 1e15 along one axis stays within a few ulp; along a
+ *     general axis the rounding of |rho| ds itself limits the angle to about
+ *     eps x2.
  *
  * alpha_I < 0 (gain, as in masers) is supported: the decay moments switch to
  * series that stay positive for tau < 0, the closed forms over tau^2 - x1^2
@@ -451,6 +459,92 @@ struct LorentzEigenvalues {
                      : LorentzEigenvalues{.x1 = other, .x2 = t};
 }
 
+/**
+ * @brief Commuting unit generators A, B with K' s = x1 A + x2 B.
+ *
+ * With w = eta + i rho scaled by s and (x1 + i x2)^2 = w.w, the unit complex
+ * vector n = w / (x1 + i x2) = p + i q gives A = K'(eta = p, rho = q) and
+ * B = K'(eta = -q, rho = p), the generators of n and i n. A acts as a unit
+ * boost on the plane of its +-1 eigenvalues and B as a unit rotation on the
+ * complementary plane of its +-i ones, so AB = BA = 0, A^3 = A, B^3 = -B, and
+ * P1 = A^2, P2 = -B^2 are complementary projectors. Every function of K' is
+ * then F1(x1) on P1 and F2(x2) on P2,
+ *
+ *   f(K') = f_even(x1) P1 - f_odd(x1) A + f_even(i x2) P2 - f_odd(x2) B,
+ *
+ * which multiplies O(1) matrices by bounded coefficients, where the cubic in
+ * K' cancels terms of size x2 (pure Faraday rotation by 1e12 rad lost 1e-4).
+ * The entries of A and B grow with kappa = (|eta|^2 + |rho|^2) / |w.w|, so
+ * this form serves where kappa is small against the eigenvalues.
+ */
+struct LorentzAxes {
+  StokesGenerator a;
+  StokesGenerator b;
+};
+
+[[nodiscard]] inline LorentzAxes lorentzAxes(const StokesGenerator &k, double x1,
+                                             double x2) noexcept {
+  const double etaRho = (k.alphaQ * k.rhoQ) + (k.alphaU * k.rhoU) + (k.alphaV * k.rhoV);
+  // sqrt(w.w) = x1 + i x2s with x1 x2s = eta.rho; x1, x2 are magnitudes.
+  const double x2s = (etaRho < 0.0) ? -x2 : x2;
+  const double d = (x1 * x1) + (x2 * x2);
+  const std::array<double, 3> eta = {k.alphaQ, k.alphaU, k.alphaV};
+  const std::array<double, 3> rho = {k.rhoQ, k.rhoU, k.rhoV};
+  std::array<double, 3> p{};
+  std::array<double, 3> q{};
+  for (std::size_t i = 0; i < 3; ++i) {
+    p[i] = ((x1 * eta[i]) + (x2s * rho[i])) / d;
+    q[i] = ((x1 * rho[i]) - (x2s * eta[i])) / d;
+  }
+  // K' = x1 A + x2s B_n with B_n = K'(-q, p); B = sign(x2s) B_n keeps x2 >= 0.
+  const double sb = (etaRho < 0.0) ? -1.0 : 1.0;
+  return {.a = {.alphaQ = p[0],
+                .alphaU = p[1],
+                .alphaV = p[2],
+                .rhoQ = q[0],
+                .rhoU = q[1],
+                .rhoV = q[2]},
+          .b = {.alphaQ = -sb * q[0],
+                .alphaU = -sb * q[1],
+                .alphaV = -sb * q[2],
+                .rhoQ = sb * p[0],
+                .rhoU = sb * p[1],
+                .rhoV = sb * p[2]}};
+}
+
+/// Coefficients of f(K') = cP1 P1 - cA A + cP2 P2 - cB B.
+struct AxisCoeffs {
+  double cP1 = 0.0;
+  double cA = 0.0;
+  double cP2 = 0.0;
+  double cB = 0.0;
+};
+
+[[nodiscard]] inline StokesArray applyAxes(const AxisCoeffs &c, const LorentzAxes &ax,
+                                           const StokesArray &v) noexcept {
+  const StokesArray av = applyLorentzPart(ax.a, v);
+  const StokesArray aav = applyLorentzPart(ax.a, av);
+  const StokesArray bv = applyLorentzPart(ax.b, v);
+  const StokesArray bbv = applyLorentzPart(ax.b, bv);
+  StokesArray o{};
+  for (std::size_t i = 0; i < o.size(); ++i) {
+    o[i] = (c.cP1 * aav[i]) - (c.cA * av[i]) - (c.cP2 * bbv[i]) - (c.cB * bv[i]);
+  }
+  return o;
+}
+
+/// True where the axis form is the better conditioned: an eigenvalue of at
+/// least 1 and kappa below it (the cubic loses ~ eps x2, the axis form ~ eps kappa).
+[[nodiscard]] inline bool useAxisForm(const StokesGenerator &k, double x1, double x2) noexcept {
+  const double big = std::max(x1, x2);
+  if (!(big >= 1.0)) {
+    return false;
+  }
+  const double norm2 = (k.alphaQ * k.alphaQ) + (k.alphaU * k.alphaU) + (k.alphaV * k.alphaV) +
+                       (k.rhoQ * k.rhoQ) + (k.rhoU * k.rhoU) + (k.rhoV * k.rhoV);
+  return norm2 < big * ((x1 * x1) + (x2 * x2));
+}
+
 /// f(K') v = c0 v - c1 K'v + c2 K'^2 v - c3 K'^3 v from precomputed powers.
 [[nodiscard]] inline StokesArray applyCubic(const CubicCoeffs &c, const StokesArray &v,
                                             const StokesArray &v1, const StokesArray &v2,
@@ -498,28 +592,50 @@ stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const S
   const double tau = k.alphaI * ds;
   const detail::LorentzEigenvalues ev = detail::lorentzEigenvalues(kp);
   const detail::SegmentFunctions f = detail::segmentFunctions(tau, ev.x1, ev.x2);
-  const detail::CubicCoeffs hom = detail::dampedHomogeneous(f);
+  const bool axisForm = detail::useAxisForm(kp, ev.x1, ev.x2);
+  const detail::LorentzAxes axes =
+      axisForm ? detail::lorentzAxes(kp, ev.x1, ev.x2) : detail::LorentzAxes{};
+  const double a = ev.x1 * ev.x1;
+  const double b = ev.x2 * ev.x2;
+  // e^{-tau} e^{-K's} = e^{-tau} (cosh x1 P1 - sinh x1 A + cos x2 P2 - sin x2 B).
+  const detail::AxisCoeffs homAxes{.cP1 = f.eCoshMinusOne + f.e,
+                                   .cA = ev.x1 * f.eSinhc,
+                                   .cP2 = f.e * f.cosX2,
+                                   .cB = f.e * f.sinX2};
+  auto homogeneous = [&](const StokesArray &v) {
+    if (axisForm) {
+      return detail::applyAxes(homAxes, axes, v);
+    }
+    const StokesArray v1 = detail::applyLorentzPart(kp, v);
+    const StokesArray v2 = detail::applyLorentzPart(kp, v1);
+    const StokesArray v3 = detail::applyLorentzPart(kp, v2);
+    return detail::applyCubic(detail::dampedHomogeneous(f), v, v1, v2, v3);
+  };
 
-  const double p = (tau * tau) - (ev.x1 * ev.x1);
+  const double p = (tau * tau) - a;
   if (form == StokesSourceForm::SteadyStateSplit && tau >= 0.1 && p >= 0.01 * tau * tau) {
-    // S_inf = (tau + K's)^{-1} J ds as a cubic in K's; nothing divides by D.
-    const double qd = (tau * tau) + (ev.x2 * ev.x2);
-    const double w = ((tau * tau) + (ev.x2 * ev.x2) - (ev.x1 * ev.x1)) / (p * qd);
-    const detail::CubicCoeffs inv{
-        .c0 = tau * w, .c1 = w, .c2 = tau / (p * qd), .c3 = 1.0 / (p * qd)};
-    const StokesArray j1 = detail::applyLorentzPart(kp, emission);
-    const StokesArray j2 = detail::applyLorentzPart(kp, j1);
-    const StokesArray j3 = detail::applyLorentzPart(kp, j2);
-    StokesArray sInf = detail::applyCubic(inv, emission, j1, j2, j3);
+    // S_inf = (tau + K's)^{-1} J ds; nothing divides by D.
+    const double qd = (tau * tau) + b;
+    StokesArray sInf{};
+    if (axisForm) {
+      const detail::AxisCoeffs inv{
+          .cP1 = tau / p, .cA = ev.x1 / p, .cP2 = tau / qd, .cB = ev.x2 / qd};
+      sInf = detail::applyAxes(inv, axes, emission);
+    } else {
+      const double w = ((tau * tau) + b - a) / (p * qd);
+      const detail::CubicCoeffs inv{
+          .c0 = tau * w, .c1 = w, .c2 = tau / (p * qd), .c3 = 1.0 / (p * qd)};
+      const StokesArray j1 = detail::applyLorentzPart(kp, emission);
+      const StokesArray j2 = detail::applyLorentzPart(kp, j1);
+      const StokesArray j3 = detail::applyLorentzPart(kp, j2);
+      sInf = detail::applyCubic(inv, emission, j1, j2, j3);
+    }
     StokesArray dev{};
     for (std::size_t i = 0; i < dev.size(); ++i) {
       sInf[i] *= ds;
       dev[i] = s0[i] - sInf[i];
     }
-    const StokesArray d1 = detail::applyLorentzPart(kp, dev);
-    const StokesArray d2 = detail::applyLorentzPart(kp, d1);
-    const StokesArray d3 = detail::applyLorentzPart(kp, d2);
-    const StokesArray decayed = detail::applyCubic(hom, dev, d1, d2, d3);
+    const StokesArray decayed = homogeneous(dev);
     StokesArray out{};
     for (std::size_t i = 0; i < out.size(); ++i) {
       out[i] = sInf[i] + decayed[i];
@@ -527,15 +643,23 @@ stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const S
     return out;
   }
 
-  const detail::CubicCoeffs src = detail::integratedCoeffs(f);
-  const StokesArray v1 = detail::applyLorentzPart(kp, s0);
-  const StokesArray v2 = detail::applyLorentzPart(kp, v1);
-  const StokesArray v3 = detail::applyLorentzPart(kp, v2);
-  const StokesArray j1 = detail::applyLorentzPart(kp, emission);
-  const StokesArray j2 = detail::applyLorentzPart(kp, j1);
-  const StokesArray j3 = detail::applyLorentzPart(kp, j2);
-  const StokesArray homPart = detail::applyCubic(hom, s0, v1, v2, v3);
-  const StokesArray srcPart = detail::applyCubic(src, emission, j1, j2, j3);
+  StokesArray srcPart{};
+  if (axisForm) {
+    const detail::Moments m = (std::min(ev.x1, ev.x2) < detail::SMALL_EIGENVALUE)
+                                  ? detail::decayMoments(tau)
+                                  : detail::Moments{};
+    const detail::DecayIntegrals r = detail::decayIntegrals(f, m);
+    const detail::AxisCoeffs src{
+        .cP1 = r.coshInt, .cA = ev.x1 * r.sinhInt, .cP2 = r.cosInt, .cB = ev.x2 * r.sinInt};
+    srcPart = detail::applyAxes(src, axes, emission);
+  } else {
+    const detail::CubicCoeffs src = detail::integratedCoeffs(f);
+    const StokesArray j1 = detail::applyLorentzPart(kp, emission);
+    const StokesArray j2 = detail::applyLorentzPart(kp, j1);
+    const StokesArray j3 = detail::applyLorentzPart(kp, j2);
+    srcPart = detail::applyCubic(src, emission, j1, j2, j3);
+  }
+  const StokesArray homPart = homogeneous(s0);
   StokesArray out{};
   for (std::size_t i = 0; i < out.size(); ++i) {
     out[i] = homPart[i] + (ds * srcPart[i]);

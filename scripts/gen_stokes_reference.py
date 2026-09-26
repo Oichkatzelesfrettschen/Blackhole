@@ -20,6 +20,8 @@ Groups:
   split    - alpha_I ds in {0.1, 0.3, 1} with Faraday depth 10 and 1000
   gain     - alpha_I ds in {-0.1, -1, -10} (stimulated emission) with Faraday
              depth 0, 1, 100 and dichroism, plus pure gain and |alpha_I ds| = 40
+  faraday  - Faraday depth 1e6..1e15 along one axis, and at 1e12 beside a small eta
+  faraday3d - Faraday depth 1e9..1e15 along a general axis
   limit    - zero K, pure Faraday, pure dichroism, eta || rho, w.w = 0,
              alpha_I = |eta|, optically thick, and scaled-unit twins
 
@@ -137,7 +139,30 @@ def build_rows() -> list[Row]:
     rows.append(("gain", [-10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0, j, s0))
     rows.append(("gain", [-1.0e-9, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0], 1.0, j, s0))
     rows.append(("gain", [-40.0, 0.001, 0.0, 0.002, 0.0, 0.0, 0.05], 1.0, j, s0))
+    rows.extend(faraday_rows())
     rows.extend(limit_rows())
+    return rows
+
+
+def faraday_rows() -> list[Row]:
+    """Faraday depth 1e6..1e15: rho along one axis (the double angle is |rho| ds
+    exactly), along a general axis (|rho| carries ~1 ulp, eps x2 of angle), and
+    with a small eta off the perpendicular (x1 = 1e-3 beside x2 = 1e12)."""
+    j = [0.8, 0.2, -0.1, 0.05]
+    s0 = [1.0, 0.3, -0.2, 0.1]
+    rows: list[Row] = []
+    for depth in (1.0e6, 1.0e9, 1.0e12, 1.0e15):
+        rows.append(("faraday", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, depth], 1.0, [0.0] * 4, s0))
+        rows.append(("faraday", [0.5, 0.0, 0.0, 0.0, 0.0, 0.0, -depth], 1.0, j, s0))
+        rows.append(("faraday", [0.5, 0.0, 0.0, 0.0, depth, 0.0, 0.0], 1.0, j, s0))
+    rows.append(("faraday", [0.5, 1.0e-3, 0.0, 1.0e-3, 0.0, 0.0, 1.0e12], 1.0, j, s0))
+    rows.append(("faraday", [0.5, 0.3, 0.0, 0.0, 0.0, 0.0, 1.0e12], 1.0, j, s0))
+    for depth in (1.0e9, 1.0e12, 1.0e15):
+        axis = [0.3 / 1.3, -0.4 / 1.3, 1.2 / 1.3]
+        rows.append(("faraday3d", [0.5, 0.0, 0.0, 0.0] + [depth * c for c in axis], 1.0, j, s0))
+        rows.append(
+            ("faraday3d", [0.0, 0.0, 0.0, 0.0] + [depth * c for c in axis], 1.0, [0.0] * 4, s0)
+        )
     return rows
 
 

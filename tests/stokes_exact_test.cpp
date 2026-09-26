@@ -6,9 +6,11 @@
  *   1. stokesPropagateExact (direct integral) within 1e-12 relative (vector
  *      2-norm) of the mpmath 5x5 matrix-exponential referee on every row of
  *      tests/stokes_exact_reference.inc: Faraday depth 0.01..1000, optical depth
- *      1e-9..800 and gain down to -40, alpha_U and rho_U nonzero, and the
- *      degenerate limits (zero K, pure Faraday, pure dichroism, eta || rho,
- *      w.w = 0, alpha_I = |eta|, scaled units).
+ *      1e-9..800 and gain down to -40, Faraday depth to 1e15 along one axis,
+ *      alpha_U and rho_U nonzero, and the degenerate limits (zero K, pure
+ *      Faraday, pure dichroism, eta || rho, w.w = 0, alpha_I = |eta|, scaled
+ *      units). Along a general axis the rounded |rho| ds bounds the error at
+ *      4 eps (1 + x2) instead.
  *   2. stokesStepFull, the FaradayPropagation entry point, on the aligned-frame rows.
  *   3. SteadyStateSplit within its 1e-9 budget for alpha_I ds >= 0.1, and equal
  *      to the direct integral below that depth.
@@ -29,6 +31,7 @@
 #include <cstdio>
 #include <exception>
 #include <iterator>
+#include <limits>
 #include <numbers>
 #include <random>
 #include <string_view>
@@ -95,8 +98,8 @@ StokesArray toArray(const StokesVector &s) {
 }
 
 void testReferenceDirect() {
-  constexpr std::array<std::string_view, 6> groups = {"generic", "aligned", "thin",
-                                                      "split",   "gain",    "limit"};
+  constexpr std::array<std::string_view, 7> groups = {"generic", "aligned", "thin", "split",
+                                                      "gain",    "faraday", "limit"};
   double worstAll = 0.0;
   for (const std::string_view group : groups) {
     double worst = 0.0;
@@ -114,6 +117,25 @@ void testReferenceDirect() {
     worstAll = std::max(worstAll, worst);
   }
   check(worstAll <= DIRECT_TOL, "direct integral within 1e-12 of the 50-digit referee, all rows");
+}
+
+void testReferenceFaradayGeneralAxis() {
+  // Along a general axis |rho| ds is itself rounded, so the rotation angle x2
+  // carries up to eps x2 absolute before any evaluation; the achievable bound
+  // is a few eps x2 of the state's norm.
+  double worstRatio = 0.0;
+  for (const ReferenceRow &row : REFERENCE_ROWS) {
+    if (row.group != "faraday3d") {
+      continue;
+    }
+    const StokesArray got = stokesPropagateExact(row.s0, row.j, generatorOf(row), row.ds);
+    const double x2 =
+        std::sqrt((row.k[4] * row.k[4]) + (row.k[5] * row.k[5]) + (row.k[6] * row.k[6])) * row.ds;
+    const double bound = 4.0 * std::numeric_limits<double>::epsilon() * (1.0 + x2);
+    worstRatio = std::max(worstRatio, relErr(got, row.ref) / bound);
+  }
+  std::printf("  faraday3d max rel err / (4 eps (1 + x2)) %.3f\n", worstRatio);
+  check(worstRatio <= 1.0, "general-axis Faraday depth to 1e15 within 4 eps x2 of the referee");
 }
 
 void testReferenceStepFull() {
@@ -144,6 +166,9 @@ void testReferenceSplit() {
     const StokesGenerator k = generatorOf(row);
     const StokesArray split =
         stokesPropagateExact(row.s0, row.j, k, row.ds, StokesSourceForm::SteadyStateSplit);
+    if (row.group == "faraday3d") {
+      continue; // the rounded rotation angle bounds these rows; see above
+    }
     if (row.k[0] * row.ds >= 0.1) {
       worst = std::max(worst, relErr(split, row.ref));
     } else if (split != stokesPropagateExact(row.s0, row.j, k, row.ds)) {
@@ -321,6 +346,7 @@ void testRk4Converges() {
 int main() try {
   std::printf("Referee table (%zu rows):\n", std::size(REFERENCE_ROWS));
   testReferenceDirect();
+  testReferenceFaradayGeneralAxis();
   testReferenceStepFull();
   testReferenceSplit();
 
