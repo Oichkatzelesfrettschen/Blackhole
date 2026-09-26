@@ -353,24 +353,23 @@ TEST(ObserverSkyView, FailedBuildLatchesUntilTheKeyChanges) {
 }
 
 /**
- * Invalidating the observer mid-build stops the trace between rows: shutdown
- * returns in a fraction of the canon Miller build's tens of seconds, and the
- * stopped bundle never reaches the cache.
+ * Invalidating the observer mid-build stops the trace between rows, and the
+ * stopped bundle never reaches the cache. Without the stop, shutdown waits out
+ * the whole canon Miller build, which then writes its bundle into the scratch
+ * cache, so the empty directory is the falsifier; the test carries no
+ * wall-clock bound, which a sanitizer build's slower rows could exceed.
  */
 TEST(ObserverSkyView, InvalidatingStopsTheBuildAndCachesNothing) {
   const ScratchDirectory scratch;
   ASSERT_FALSE(scratch.path().empty()) << "no scratch directory";
   blackhole::ObserverSkyRenderer renderer;
-  const auto start = std::chrono::steady_clock::now();
   renderer.request(canonMiller(), sky::LutDimensions{}, scratch.path(),
                    "assets/luts/blackbody_cie_lut.csv", 2.725);
   // Let the worker reach the equirectangular rows before the stop.
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
   renderer.invalidate("observer changed");
   renderer.shutdown();
-  const double seconds =
-      std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-  EXPECT_LT(seconds, 10.0) << "shutdown waited for the whole build";
+  EXPECT_EQ(renderer.status(), blackhole::ObserverSkyRenderer::Status::Idle);
   std::error_code error;
   EXPECT_TRUE(std::filesystem::is_empty(scratch.path(), error)) << "a stopped build was cached";
 }
