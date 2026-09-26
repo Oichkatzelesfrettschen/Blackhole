@@ -470,3 +470,35 @@ TEST(EventPredicates, CoreRejectsOutOfRangeEnums) {
   badEvent.events.front().effects = {emit};
   EXPECT_FALSE(storyBuildsValid(badEvent));
 }
+
+// Falsifier: a story whose scheduled events re-schedule into their own cycle
+// more than once per pass loading -- its pending occurrences double every
+// cycle and exhaust memory within a few dozen turns -- while a simple
+// repeating cycle (the shipped packet stream) still loads.
+TEST(EventLoader, BranchingScheduleCyclesRejected) {
+  EXPECT_NE(
+      errorOf(R"({"events": [
+        {"id": 1, "triggers": [{"turn_at_least": 1}], "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]},
+        {"id": 2, "mode": "scheduled", "effects": [{"schedule": {"event": 2, "delay_turns": 1}},
+                                                   {"schedule": {"event": 2, "delay_turns": 1}}]}]})")
+          .find("branching schedule cycle"),
+      std::string::npos);
+  EXPECT_NE(
+      errorOf(R"({"events": [
+        {"id": 2, "mode": "scheduled", "effects": [{"schedule": {"event": 3, "delay_turns": 1}}]},
+        {"id": 3, "mode": "scheduled", "effects": [{"schedule": {"event": 2, "delay_turns": 1}},
+                                                   {"schedule": {"event": 3, "delay_turns": 2}}]}]})")
+          .find("branching schedule cycle"),
+      std::string::npos);
+  // A simple cycle, and a once-only event fanning out into it, are bounded.
+  EXPECT_TRUE(
+      errorOf(R"({"events": [
+        {"id": 1, "triggers": [{"turn_at_least": 1}], "effects": [{"schedule": {"event": 2, "delay_turns": 1}},
+                                                                  {"schedule": {"event": 2, "delay_turns": 2}}]},
+        {"id": 2, "mode": "scheduled", "effects": [{"schedule": {"event": 3, "delay_turns": 1}}]},
+        {"id": 3, "mode": "scheduled", "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]}]})")
+          .empty());
+  game::EventSet branching = scheduleStory({.plus = 1});
+  branching.events.front().effects.push_back(branching.events.front().effects.front());
+  EXPECT_FALSE(storyBuildsValid(branching));
+}

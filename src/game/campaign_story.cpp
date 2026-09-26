@@ -140,6 +140,47 @@ void appendEventSet(std::vector<std::uint8_t> &out, const EventSet &story) {
   }
 }
 
+bool hasBranchingScheduleCycle(const EventSet &story) {
+  const std::size_t count = story.events.size();
+  // Schedule edges by event index, with multiplicity.
+  std::vector<std::vector<std::size_t>> edges(count);
+  for (std::size_t index = 0; index < count; ++index) {
+    for (const EventEffect &effect : story.events.at(index).effects) {
+      if (effect.kind != EffectKind::Schedule) {
+        continue;
+      }
+      if (const std::optional<std::size_t> target = eventIndexOf(story.events, effect.event)) {
+        edges.at(index).push_back(*target);
+      }
+    }
+  }
+  // reach[u][v]: v is reachable from u in one or more schedule steps.
+  std::vector<std::vector<std::uint8_t>> reach(count, std::vector<std::uint8_t>(count, 0));
+  for (std::size_t source = 0; source < count; ++source) {
+    std::vector<std::size_t> frontier = edges.at(source);
+    while (!frontier.empty()) {
+      const std::size_t node = frontier.back();
+      frontier.pop_back();
+      if (reach.at(source).at(node) != 0) {
+        continue;
+      }
+      reach.at(source).at(node) = 1;
+      frontier.insert(frontier.end(), edges.at(node).begin(), edges.at(node).end());
+    }
+  }
+  // An event on a cycle with two or more schedule edges back into its own
+  // strongly connected set multiplies that set's occurrences.
+  for (std::size_t node = 0; node < count; ++node) {
+    const auto intoOwnCycle = std::ranges::count_if(edges.at(node), [&](std::size_t target) {
+      return reach.at(target).at(node) != 0;
+    });
+    if (intoOwnCycle >= 2) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::uint64_t eventSetDigest(const EventSet &story) {
   std::vector<std::uint8_t> bytes;
   appendEventSet(bytes, story);
@@ -297,7 +338,8 @@ void CampaignState::resolveStoryParams() {
     }
     return false;
   };
-  if (!std::ranges::all_of(story.events, [&](const EventDef &event) {
+  if (hasBranchingScheduleCycle(story) ||
+      !std::ranges::all_of(story.events, [&](const EventDef &event) {
         return nodeOk(event.source) && event.mode <= EventMode::Scheduled &&
                static_cast<int>(event.category) < K_EVENT_CATEGORY_COUNT &&
                std::ranges::all_of(event.triggers, predicateOk) &&

@@ -133,6 +133,10 @@ public:
     }
     finishFlags();
     checkSchedules();
+    if (hasBranchingScheduleCycle(story_)) {
+      fail("$.events", "a branching schedule cycle: some scheduled event re-schedules into its "
+                       "own cycle more than once, multiplying its occurrences without bound");
+    }
     return std::move(story_);
   }
 

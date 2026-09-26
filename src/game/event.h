@@ -231,6 +231,17 @@ void appendEventSet(std::vector<std::uint8_t> &out, const EventSet &story);
 /** @brief FNV-1a 64 over appendEventSet's bytes: identifies a story in a save. */
 [[nodiscard]] std::uint64_t eventSetDigest(const EventSet &story);
 
+/**
+ * @brief True when some scheduled event re-schedules into its own cycle more
+ *        than once per pass. Each schedule entry is one occurrence, so such a
+ *        cycle multiplies its pending occurrences every time round and grows
+ *        without bound; a simple cycle (every event on it scheduling exactly one
+ *        successor on it) repeats at a constant rate. Checked statically, since
+ *        triggers are evaluated only at run time. Events must be sorted by id
+ *        and every schedule target must exist.
+ */
+[[nodiscard]] bool hasBranchingScheduleCycle(const EventSet &story);
+
 } // namespace game
 
 #endif // BLACKHOLE_GAME_EVENT_H
