@@ -60,19 +60,27 @@ float defaultRadius() {
   return blackhole::tesseractBoundingRadius(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W);
 }
 
-TesseractFraming recorded(float fovDeg) {
-  return tesseractFraming(UI_DISTANCE, UI_FOV, defaultRadius(),
+// Landscape record target (the 1343 x 1056 capture) and a portrait one
+// (BLACKHOLE_RECORD_WIDTH/HEIGHT 1080 x 1920).
+constexpr float LANDSCAPE_ASPECT = 1343.0f / 1056.0f;
+constexpr float PORTRAIT_ASPECT = 1080.0f / 1920.0f;
+
+TesseractFraming recorded(float fovDeg, float aspect = LANDSCAPE_ASPECT) {
+  return tesseractFraming(UI_DISTANCE, UI_FOV, defaultRadius(), aspect,
                           TesseractRecordCamera{.fovDeg = fovDeg});
 }
 
-// NDC half-height of the silhouette of a centered sphere of radius r at d.
-float sphereNdcRadius(float radius, float distance, float fovDeg) {
-  return std::tan(std::asin(radius / distance)) / std::tan(glm::radians(fovDeg) * 0.5f);
+// Silhouette of a centered sphere of radius r at distance d, in units of the
+// narrower half-extent of a target of @p aspect with vertical fov @p fovDeg.
+float sphereNarrowFill(float radius, float distance, float fovDeg, float aspect) {
+  const float verticalTan = std::tan(glm::radians(fovDeg) * 0.5f);
+  const float narrowTan = std::min(verticalTan, aspect * verticalTan);
+  return std::tan(std::asin(radius / distance)) / narrowTan;
 }
 
 TEST(TesseractFraming, InteractiveFramesKeepTheUiValues) {
   const TesseractFraming framing =
-      tesseractFraming(UI_DISTANCE, UI_FOV, defaultRadius(), std::nullopt);
+      tesseractFraming(UI_DISTANCE, UI_FOV, defaultRadius(), LANDSCAPE_ASPECT, std::nullopt);
   EXPECT_FLOAT_EQ(framing.viewDistance, UI_DISTANCE);
   EXPECT_FLOAT_EQ(framing.fovDeg, UI_FOV);
 }
@@ -81,12 +89,17 @@ TEST(TesseractFraming, InteractiveFramesKeepTheUiValues) {
 // lenses, and the old wide showcase lens (68) all show the bounding sphere at
 // the same size.
 TEST(TesseractFraming, EveryRecordFieldOfViewFillsTheSameFraction) {
-  for (const float fov : {20.0f, 32.2042f, 37.2738f, 45.0f, 68.0f, 90.0f}) {
-    const TesseractFraming framing = recorded(fov);
-    EXPECT_NEAR(sphereNdcRadius(defaultRadius(), framing.viewDistance, framing.fovDeg),
-                TESSERACT_RECORD_FILL, 1e-4f)
-        << fov;
+  for (const float aspect : {LANDSCAPE_ASPECT, PORTRAIT_ASPECT, 1.0f, 21.0f / 9.0f}) {
+    for (const float fov : {20.0f, 32.2042f, 37.2738f, 45.0f, 68.0f, 90.0f}) {
+      const TesseractFraming framing = recorded(fov, aspect);
+      EXPECT_NEAR(sphereNarrowFill(defaultRadius(), framing.viewDistance, framing.fovDeg, aspect),
+                  TESSERACT_RECORD_FILL, 1e-4f)
+          << fov << " aspect " << aspect;
+    }
   }
+  // A portrait target, narrower across, backs the eye away.
+  EXPECT_GT(recorded(37.2738f, PORTRAIT_ASPECT).viewDistance,
+            recorded(37.2738f, LANDSCAPE_ASPECT).viewDistance);
   // A narrower lens backs the eye away rather than cropping.
   EXPECT_GT(recorded(20.0f).viewDistance, recorded(68.0f).viewDistance);
 }
@@ -249,17 +262,22 @@ TEST(TesseractFraming, FarPlaneKeepsEveryProjectedPoint) {
   }
 }
 
-// Largest |NDC| extent of every scene endpoint under 64 SO(4) rotations,
-// framed by a record camera at @p fovDeg, with the vertical and the
-// aspect-scaled horizontal extents in half-heights. Stereographic points
-// still fading toward the pole are skipped: the bound covers the lit image.
-float largestRecordedExtent(bool stereographic, float sceneScale, float eyeW, float fovDeg) {
+// Largest extent of every scene endpoint under 64 SO(4) rotations, framed by
+// a record camera at @p fovDeg on a target of @p aspect, with each axis in
+// units of the narrower half-extent. Stereographic points still fading toward
+// the pole are skipped: the bound covers the lit image.
+float largestRecordedExtent(bool stereographic, float sceneScale, float eyeW, float fovDeg,
+                            float aspect) {
   const float radius = blackhole::tesseractBoundingRadius(stereographic, sceneScale, eyeW);
-  const TesseractFraming framing =
-      tesseractFraming(UI_DISTANCE, UI_FOV, radius, TesseractRecordCamera{.fovDeg = fovDeg});
+  const TesseractFraming framing = tesseractFraming(UI_DISTANCE, UI_FOV, radius, aspect,
+                                                    TesseractRecordCamera{.fovDeg = fovDeg});
   const OffsetCamera cam = offsetCamera(0.0f, 0.0f);
   const glm::mat4 vp = blackhole::tesseractViewProjection(
-      cam.basis, cam.focusDirection, framing.viewDistance, framing.fovDeg, OFFSET_ASPECT);
+      cam.basis, cam.focusDirection, framing.viewDistance, framing.fovDeg, aspect);
+  // NDC to narrower-half-extent units: the vertical axis scales by
+  // tan(fov/2) / narrow, the horizontal one by aspect tan(fov/2) / narrow.
+  const float yUnits = 1.0f / std::min(1.0f, aspect);
+  const float xUnits = aspect * yUnits;
   const std::vector<blackhole::tesseract::SegmentInstance> segments =
       blackhole::tesseract::buildSceneSegments({});
   float largest = 0.0f;
@@ -286,7 +304,7 @@ float largestRecordedExtent(bool stereographic, float sceneScale, float eyeW, fl
         }
         const glm::vec4 clip = vp * glm::vec4(projected * sceneScale, 1.0f);
         largest = std::max(
-            {largest, std::abs(clip.y / clip.w), std::abs(clip.x / clip.w) * OFFSET_ASPECT});
+            {largest, std::abs(clip.y / clip.w) * yUnits, std::abs(clip.x / clip.w) * xUnits});
       }
     }
   }
@@ -296,20 +314,22 @@ float largestRecordedExtent(bool stereographic, float sceneScale, float eyeW, fl
 // The bounding radius holds the rotating scene: at the default and extreme
 // settings, in both projections, no recorded point leaves the fill fraction.
 TEST(TesseractFraming, RecordedSceneStaysInsideTheFill) {
-  for (const float fov : {20.0f, 37.2738f, 68.0f}) {
-    EXPECT_LE(largestRecordedExtent(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, fov),
-              TESSERACT_RECORD_FILL)
-        << fov;
-    EXPECT_LE(largestRecordedExtent(false, EXTREME_SCENE_SCALE, EXTREME_EYE_W, fov),
-              TESSERACT_RECORD_FILL)
-        << fov;
-    EXPECT_LE(largestRecordedExtent(true, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, fov),
-              TESSERACT_RECORD_FILL)
-        << fov;
+  for (const float aspect : {LANDSCAPE_ASPECT, PORTRAIT_ASPECT}) {
+    for (const float fov : {20.0f, 37.2738f, 68.0f}) {
+      EXPECT_LE(largestRecordedExtent(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, fov, aspect),
+                TESSERACT_RECORD_FILL)
+          << fov << " aspect " << aspect;
+      EXPECT_LE(largestRecordedExtent(false, EXTREME_SCENE_SCALE, EXTREME_EYE_W, fov, aspect),
+                TESSERACT_RECORD_FILL)
+          << fov << " aspect " << aspect;
+      EXPECT_LE(largestRecordedExtent(true, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, fov, aspect),
+                TESSERACT_RECORD_FILL)
+          << fov << " aspect " << aspect;
+    }
+    // The default scene fills most of the fraction, so the bound is not loose.
+    EXPECT_GT(largestRecordedExtent(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, 37.2738f, aspect),
+              0.5f * TESSERACT_RECORD_FILL);
   }
-  // The default scene fills most of the fraction, so the bound is not loose.
-  EXPECT_GT(largestRecordedExtent(false, DEFAULT_SCENE_SCALE, DEFAULT_EYE_W, 37.2738f),
-            0.5f * TESSERACT_RECORD_FILL);
 }
 
 } // namespace

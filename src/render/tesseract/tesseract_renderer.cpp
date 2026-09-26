@@ -337,12 +337,16 @@ float tesseractBoundingRadius(bool stereographic, float sceneScale, float perspe
 }
 
 TesseractFraming tesseractFraming(float viewDistance, float fovDeg, float boundingRadius,
+                                  float aspect,
                                   const std::optional<TesseractRecordCamera> &record) {
   if (!record.has_value()) {
     return {.viewDistance = viewDistance, .fovDeg = fovDeg};
   }
   const float fov = std::clamp(record->fovDeg, TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG);
-  const float fillTan = TESSERACT_RECORD_FILL * std::tan(glm::radians(fov) * 0.5f);
+  // Tangent of the narrower half-extent: the vertical one on a landscape
+  // target, the horizontal one (aspect times it) on a portrait target.
+  const float narrowTan = std::min(1.0f, aspect) * std::tan(glm::radians(fov) * 0.5f);
+  const float fillTan = TESSERACT_RECORD_FILL * narrowTan;
   const float distance = boundingRadius * std::sqrt(1.0f + (1.0f / (fillTan * fillTan)));
   return {.viewDistance = std::max(distance, TESSERACT_MIN_VIEW_DISTANCE), .fovDeg = fov};
 }
@@ -422,7 +426,7 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
       tg.projection == RenderState::TesseractGroup::Projection::Stereographic;
   const TesseractFraming framing = tesseractFraming(
       tg.viewDistance, tg.fovDeg,
-      tesseractBoundingRadius(stereographic, tg.sceneScale, tg.perspectiveDistance),
+      tesseractBoundingRadius(stereographic, tg.sceneScale, tg.perspectiveDistance), aspect,
       record.has_value() ? std::optional<TesseractRecordCamera>(record->camera) : std::nullopt);
   inputs.viewProjection = tesseractViewProjection(cameraBasis, focusDirection, framing.viewDistance,
                                                   framing.fovDeg, aspect);

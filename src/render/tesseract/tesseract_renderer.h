@@ -222,16 +222,18 @@ float tesseractBoundingRadius(bool stereographic, float sceneScale, float perspe
  * frame takes the record camera's field of view, clamped to
  * [TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG], and places the eye so the
  * sphere of @p boundingRadius R fills TESSERACT_RECORD_FILL k of the frame's
- * half-height: a centered sphere at distance D has silhouette half-height
- * tan(asin(R / D)) / tan(fov / 2) in NDC, so D = R sqrt(1 + 1 / (k tan(fov /
- * 2))^2). Every profile then frames the tesseract at the same size whatever
- * its field of view; the record camera still sets the viewing direction and
+ * narrower half-extent. The field of view is vertical, so the half-extents
+ * subtend tan(fov / 2) up and @p aspect tan(fov / 2) across, and the narrower
+ * one is t = min(1, aspect) tan(fov / 2); a centered sphere at distance D has
+ * silhouette tan(asin(R / D)), so D = R sqrt(1 + 1 / (k t)^2). Every profile
+ * and every landscape or portrait target then frames the whole tesseract at
+ * the same size; the record camera still sets the viewing direction and
  * frame offset (tesseractView), and its black-hole distance, including
  * --record-distance, sets no tesseract size. The distance never falls below
  * TESSERACT_MIN_VIEW_DISTANCE.
  */
 TesseractFraming tesseractFraming(float viewDistance, float fovDeg, float boundingRadius,
-                                  const std::optional<TesseractRecordCamera> &record);
+                                  float aspect, const std::optional<TesseractRecordCamera> &record);
 
 /**
  * @brief Tesseract view distance after interactive zoom.
