@@ -63,11 +63,11 @@ inline Lut1D generateEmissivityLut(int size, double massSolar, double aStar,
   const double rG = G * mass / C2;
   const double a = aStar * rG;
   // The disk orbits along +z; the signed spin selects co- or counter-rotation
-  // (kerrIscoRadius), and kerrDisk takes the spin relative to that orbit.
+  // for both the domain (kerrIscoRadius) and the flux (kerrDisk).
   const double rIn = kerrIscoRadius(mass, a, true);
   const double rOut = rIn * 4.0;
 
-  DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd, aStar >= 0.0);
+  DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd);
   disk.rIn  = rIn;
   disk.rOut = rOut;
 

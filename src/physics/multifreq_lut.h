@@ -261,9 +261,9 @@ inline double madDiskFluxAtFrequency(double r, const MADDiskParams &disk, double
  *
  * @param size Number of radial points
  * @param massSolar Black hole mass in solar masses
- * @param aStar Dimensionless spin
+ * @param aStar Dimensionless signed spin (kerrDisk convention)
  * @param mdotEdd Accretion rate in Eddington units
- * @param prograde True for prograde orbit
+ * @param prograde True for a disk orbiting along +z
  * @return MultiFreqLut with both frequencies
  */
 inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, double aStar,
@@ -275,8 +275,8 @@ inline MultiFreqLut generateMultifreqEmissivityLut(int size, double massSolar, d
 
   const double mass = massSolar * M_SUN;
   const double rS = schwarzschildRadius(mass);
-  // kerrDisk takes |aStar| relative to the disk's orbit (prograde) and places
-  // rIn at that disk's ISCO, the zero-torque edge of its flux.
+  // kerrDisk places rIn at the disk's ISCO for the signed spin and orbital
+  // sense, the zero-torque edge of its flux.
   DiskParams disk = kerrDisk(massSolar, aStar, mdotEdd, prograde);
   const double rIn = disk.rIn;
   const double rOut = rIn * 4.0;

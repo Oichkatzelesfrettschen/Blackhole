@@ -19,6 +19,7 @@
 
 #include "disk_transfer.h"
 #include "lut.h"
+#include "multifreq_lut.h"
 #include "page_thorne.h"
 
 TEST(DiskTransfer, FaceOnIscoShiftIsInverseUt) {
@@ -107,4 +108,12 @@ TEST(DiskTransfer, EmissivityLutCoversTheSignedDisk) {
     }
     EXPECT_FLOAT_EQ(*std::ranges::max_element(lut.values), 1.0F) << "a = " << aStar;
   }
+}
+
+TEST(DiskTransfer, MultifreqLutCoversTheSignedDisk) {
+  // generateMultifreqEmissivityLut builds its domain through kerrDisk; at
+  // a* = -0.9 the default +z disk counter-rotates and starts at 8.717 M.
+  physics::MultiFreqLut const lut = physics::generateMultifreqEmissivityLut(32, 4.0e6, -0.9, 0.1);
+  EXPECT_NEAR(2.0 * static_cast<double>(lut.rMin), physics::pageThorneIscoRadius(-0.9), 1e-5);
+  EXPECT_NEAR(2.0 * static_cast<double>(lut.rMin), 8.71735227960649, 1e-5);
 }

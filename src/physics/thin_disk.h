@@ -107,24 +107,29 @@ struct DiskParams {
 /**
  * @brief Create disk parameters for Kerr black hole.
  *
+ * The spin is signed (kerrIscoRadius convention): a* > 0 rotates with a disk
+ * orbiting along +z and a* < 0 against it. prograde selects the disk's
+ * orbital sense, +z (true) or -z (false); the -z disk around spin a* is the
+ * +z disk around -a*.
+ *
  * @param mSolar Black hole mass in solar masses
- * @param aStar Dimensionless spin (-1 to 1)
+ * @param aStar Dimensionless signed spin (-1 to 1)
  * @param mDotEdd Accretion rate in Eddington units
- * @param prograde True for prograde disk
- * @return DiskParams; disk.a carries the sign of the disk's orbital sense, so
- *         a retrograde disk stores a negative spin.
+ * @param prograde True for a disk orbiting along +z
+ * @return DiskParams; disk.a is the spin relative to the disk's orbit,
+ *         negative when the disk counter-rotates (8.717 M ISCO at a* = -0.9).
  */
 [[nodiscard]] inline DiskParams kerrDisk(double mSolar, double aStar, double mDotEdd = 0.1,
                                          bool prograde = true) {
   DiskParams disk;
   disk.mass = mSolar * M_SUN;
 
-  // Spin relative to the disk's orbital sense: the disk orbits along +z, and
-  // disk.a > 0 co-rotates with it, disk.a < 0 counter-rotates.
+  // Spin relative to the disk's orbital sense: disk.a > 0 co-rotates with the
+  // disk and disk.a < 0 counter-rotates.
   const double mGeo = G * disk.mass / C2;
   // Clamped like the Page-Thorne flux (pageThorneSpin), so rIn below is the
   // flux's zero-torque edge at every input spin, including |aStar| = 1.
-  const double aDisk = pageThorneSpin(prograde ? std::abs(aStar) : -std::abs(aStar));
+  const double aDisk = pageThorneSpin(prograde ? aStar : -aStar);
   disk.a = aDisk * mGeo;
 
   // Eddington rate at the Novikov-Thorne efficiency 1 - E_isco
@@ -132,8 +137,7 @@ struct DiskParams {
   const double eta = novikovThorneEfficiency(aDisk);
   disk.mDot = mDotEdd * lEdd / (eta * C2);
 
-  // ISCO
-  // ISCO of the +z disk at the signed disk spin (kerrIscoRadius convention).
+  // ISCO of the disk at its relative spin (kerrIscoRadius convention).
   disk.rIn = kerrIscoRadius(disk.mass, disk.a, true);
   disk.rOut = 1000.0 * mGeo;
   disk.inclination = 0.0;

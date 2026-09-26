@@ -174,3 +174,22 @@ TEST(PageThorne, ExtremalSpinClampsToTheMaximumSpin) {
   expectExtremalSpinClamped(1.0);
   expectExtremalSpinClamped(-1.0);
 }
+
+// kerrDisk keeps the sign of the spin: at a* = -0.9 the default +z disk
+// counter-rotates and its edge is the 8.717 M counter-rotating ISCO, and the
+// -z disk (prograde = false) around a* is the +z disk around -a*
+// (disk_transfer_test holds the LUTs built through kerrDisk to the same edge).
+TEST(PageThorne, KerrDiskKeepsTheSignedSpin) {
+  constexpr double kCounterRotatingIsco = 8.71735227960649;
+  constexpr double kCoRotatingIsco = 2.32088304176189;
+  physics::DiskParams const counter = physics::kerrDisk(10.0, -0.9);
+  double const rG = physics::G * counter.mass / physics::C2;
+  EXPECT_NEAR(counter.rIn / rG, kCounterRotatingIsco, 1e-9);
+  EXPECT_NEAR(counter.a / rG, -0.9, 1e-12);
+  EXPECT_NEAR(physics::kerrDisk(10.0, 0.9).rIn / rG, kCoRotatingIsco, 1e-9);
+  EXPECT_NEAR(physics::kerrDisk(10.0, -0.9, 0.1, false).rIn / rG, kCoRotatingIsco, 1e-9);
+  EXPECT_NEAR(physics::kerrDisk(10.0, 0.9, 0.1, false).rIn / rG, kCounterRotatingIsco, 1e-9);
+  EXPECT_NEAR(counter.mDot * physics::novikovThorneEfficiency(-0.9),
+              physics::kerrDisk(10.0, 0.9, 0.1, false).mDot * physics::novikovThorneEfficiency(-0.9),
+              1e-9 * counter.mDot);
+}
