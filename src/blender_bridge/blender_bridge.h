@@ -87,8 +87,13 @@ double bhbKerrInnerHorizon(double aStar);
 double bhbKerrErgosphere(double aStar, double thetaRad);
 
 /** @brief Return the ISCO radius in units of r_g.
- *  @param aStar     Dimensionless spin.
- *  @param prograde  Non-zero for prograde orbit, zero for retrograde. */
+ *
+ *  Signed spin: a* > 0 rotates about +z, a* < 0 about -z. "Prograde" names an
+ *  orbit with angular momentum along +z, so at a* < 0 the prograde ISCO
+ *  counter-rotates with the hole (8.7174 r_g at a* = -0.9, 2.3209 r_g at
+ *  a* = 0.9), and bhbKerrIsco(a*, 0) == bhbKerrIsco(-a*, 1).
+ *  @param aStar     Signed dimensionless spin in [-1, 1].
+ *  @param prograde  Non-zero for angular momentum along +z, zero for -z. */
 double bhbKerrIsco(double aStar, int prograde);
 
 /** @brief Return the prograde circular photon orbit radius in units of r_g.
@@ -175,7 +180,10 @@ int bhbTraceGeodesicsImagePlane(double aStar, double observerRRg, double inclina
  * @brief Parameters describing a geometrically thin accretion disk around a Kerr BH.
  *
  * Used by bhbGenerateDiskMesh(), bhbNtTemperatureProfile(), and the disk texture functions.
- * The inner edge is automatically set to the prograde ISCO.
+ * The disk orbits with angular momentum along +z, and its inner edge is
+ * bhbKerrIsco(aStar, 1): a negative aStar makes the disk counter-rotate with
+ * the hole and moves the edge outward (8.7174 r_g at aStar = -0.9). The CUDA
+ * renderer applies the same edge through bridge_disk_isco.h.
  */
 struct BhbDiskParams {
   double aStar;
@@ -225,7 +233,10 @@ double bhbNtRadiativeEfficiency(double aStar);
 
 /**
  * @brief Return the ISCO radius from the Novikov-Thorne model in units of r_g.
- * @param aStar Dimensionless spin.
+ *
+ * Equals bhbKerrIsco(aStar, 1), the inner edge of the +z disk; a negative
+ * aStar gives the counter-rotating edge.
+ * @param aStar Signed dimensionless spin.
  */
 double bhbNtIscoRadius(double aStar);
 

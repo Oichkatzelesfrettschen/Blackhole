@@ -161,10 +161,10 @@ inline SpinRadiiLut generateSpinRadiiLut(int size, double massSolar,
     double const u = static_cast<double>(i) / (size - 1);
     double const spin = spinMin + (u * (spinMax - spinMin));
     double const a = spin * rG;
-    bool const prograde = spin >= 0.0;
-    double const rIsco = kerrIscoRadius(mass, a, prograde);
-    double const rPh =
-        prograde ? kerrPhotonOrbitPrograde(mass, a) : kerrPhotonOrbitRetrograde(mass, a);
+    // The disk orbits along +z; the signed spin selects co- or counter-rotation
+    // for both radii (kerrIscoRadius convention).
+    double const rIsco = kerrIscoRadius(mass, a, true);
+    double const rPh = kerrPhotonOrbitPrograde(mass, a);
 
     lut.spins.at(static_cast<std::size_t>(i)) = static_cast<float>(spin);
     lut.rIscoOverRs.at(static_cast<std::size_t>(i)) = static_cast<float>(rIsco / rS);

@@ -142,25 +142,47 @@ ConservedQuantities extract_conserved_quantities(MetricComponents g, StateVector
 }
 
 /**
- * Apply constraint correction to restore geodesic constraint
+ * Restore g(v, v) = target_m2 by the additive projection of
+ * src/physics/verified/energy_conserving_geodesic.hpp: v^t and v^phi (hence E
+ * and L) stay fixed and v^r, v^theta scale by alpha with
+ * alpha^2 = (target_m2 - norm + S) / S, S = g_rr (v^r)^2 + g_thth (v^theta)^2.
+ * When S = 0 or alpha^2 < 0, v^t is re-solved from the norm quadratic, taking
+ * the root nearest the current v^t.
  *
- * Depends on: compute_metric_norm, if, velocities
+ * Depends on: compute_metric_norm
  */
 StateVector apply_constraint_correction(MetricComponents g, StateVector state, float target_m2) {
     float current_norm = compute_metric_norm(g, state);
-    // Avoid division by zero
-    if (abs(current_norm) < 1e-10) return state;
-    // Rescaling factor to achieve target_m2
-    float rescale_factor = sqrt(abs(target_m2 / current_norm));
-    // Rescale only spatial velocities (r, theta components)
-    // Keep temporal components to preserve E and L
-    return StateVector(
-        state.x0, state.x1, state.x2, state.x3,
-        state.v0,                              // Keep v_t
-        rescale_factor * state.v1,             // Rescale v_r
-        rescale_factor * state.v2,             // Rescale v_theta
-        state.v3                               // Keep v_phi
-    );
+    if (current_norm == target_m2) return state;
+    float spatial_rt = g.g_rr * state.v1 * state.v1 + g.g_thth * state.v2 * state.v2;
+    if (spatial_rt > 0.0) {
+        float alpha_sq = (target_m2 - current_norm + spatial_rt) / spatial_rt;
+        if (alpha_sq >= 0.0) {
+            float alpha = sqrt(alpha_sq);
+            return StateVector(
+                state.x0, state.x1, state.x2, state.x3,
+                state.v0, alpha * state.v1, alpha * state.v2, state.v3
+            );
+        }
+    }
+    // v^t quadratic: qa (v^t)^2 + qb v^t + qc = 0, sign-aware roots q / qa
+    // and qc / q (accurate where qa = g_tt -> 0); linear root qc / q at qa = 0.
+    float qa = g.g_tt;
+    float qb = 2.0 * g.g_tph * state.v3;
+    float qc = spatial_rt + g.g_phph * state.v3 * state.v3 - target_m2;
+    float discriminant = qb * qb - 4.0 * qa * qc;
+    if (discriminant < 0.0) return state;
+    float sign_qb = (qb < 0.0) ? -1.0 : 1.0;
+    float q = -0.5 * (qb + sign_qb * sqrt(discriminant));
+    if (q == 0.0) return state;
+    float root_small = qc / q;
+    float new_v0 = root_small;
+    if (qa != 0.0) {
+        float root_large = q / qa;
+        new_v0 = (abs(root_large - state.v0) < abs(root_small - state.v0)) ? root_large : root_small;
+    }
+    return StateVector(state.x0, state.x1, state.x2, state.x3,
+                       new_v0, state.v1, state.v2, state.v3);
 }
 
 /**
