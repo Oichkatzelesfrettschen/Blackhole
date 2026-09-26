@@ -105,14 +105,24 @@ struct FactionState {
   FactionId id = K_INVALID_FACTION_ID;
   FactionPolicy policy = FactionPolicy::Scripted;
   SystemId homeSystem = K_INVALID_SYSTEM_ID;
-  double energyUnits = 0.0;        ///< Banked yield (credited on delayed report arrival).
-  double stabilizationUnits = 0.0; ///< Containment produced across all systems.
-  double controlScore = 0.0;       ///< Cumulative uncontested band-holds -- the breadth axis.
+  /// Banked yield, credited at the authority when a report arrives: the
+  /// referee's value and the authority's knowledge at once.
+  double energyUnits = 0.0;
+  /// Referee truth: containment produced across all systems, credited where
+  /// and when the work happens. Victory is judged on it.
+  double stabilizationUnits = 0.0;
+  /// Referee truth: cumulative uncontested band-holds (the breadth axis),
+  /// credited at the held band each turn. Victory is judged on it.
+  double controlScore = 0.0;
+  /// Stabilization whose reports have reached this faction's authority.
+  double knownStabilizationUnits = 0.0;
+  /// Control points whose reports have reached this faction's authority.
+  double knownControlScore = 0.0;
   CampaignStatus status = CampaignStatus::Ongoing;
   std::int64_t clearedTurn = 0; ///< Turn this faction reached a victory; 0 until then.
-  /// This faction's authority has learned the campaign is decided -- at once
-  /// for the winner and at the deadline, after the light path from the
-  /// winner's home otherwise -- and issues no further orders.
+  /// This faction's authority has learned the campaign is decided -- by light
+  /// from where the deciding credit happened, the winner included, or at once
+  /// at the deadline -- and issues no further orders.
   bool outcomeKnown = false;
 };
 

@@ -303,9 +303,10 @@ TEST(Constellation, UnreachableSystemsNeverExchangeSignals) {
   static_cast<void>(beta);
 }
 
-// Falsifier: a rival 30 light-days from the winner refused an order before the
-// news of the win could reach it, or still accepted after it arrives; or the
-// winner accepting an order after its own win.
+// Falsifier: a rival 30 light-days from the winning band refused an order
+// before light from that band could carry the decision, or still accepted
+// after it lands; or the winner, whose band sits a fraction of a day from its
+// own authority, accepting an order once that radial leg has elapsed.
 TEST(Constellation, OutcomeLatchesPerFactionAfterLight) {
   game::ConstellationConfig config = microTwoSystemConfig();
   config.victoryControlScore = 3.0;
@@ -320,14 +321,15 @@ TEST(Constellation, OutcomeLatchesPerFactionAfterLight) {
   ASSERT_NE(betaFleet, game::K_INVALID_FLEET_ID);
 
   // Alpha and beta each hold a band from turn 1; alpha is registered first,
-  // so the lowest-id tie-break makes alpha the winner on turn 3.
+  // so the lowest-id tie-break makes alpha the winner on turn 3, at its band.
   constellation.advanceTurns(3);
   ASSERT_EQ(constellation.winner(), alpha);
-  EXPECT_FALSE(constellation.issueCommand(
-      alpha, game::ConstellationCommand{.fleet = alphaFleet, .targetSystem = 0, .targetBand = 1}));
+  const game::ConstellationCommand alphaHop{.fleet = alphaFleet, .targetSystem = 0, .targetBand = 1};
+  constellation.advanceTurn(); // turn 4: the radial leg (< 1 day) has landed
+  EXPECT_FALSE(constellation.issueCommand(alpha, alphaHop));
 
   const game::ConstellationCommand hop{.fleet = betaFleet, .targetSystem = 1, .targetBand = 1};
-  const std::int64_t noticeTurn = 3 + 30; // one 30 light-day link
+  const std::int64_t noticeTurn = arrivalTurn(microRadialSec(0) + (30.0 * K_SECONDS_PER_DAY)) + 2;
   while (constellation.turn() < noticeTurn - 1) {
     constellation.advanceTurn();
   }
@@ -484,4 +486,68 @@ TEST(Constellation, OrderToAMovedFleetFizzlesAtItsAddress) {
   EXPECT_EQ(view.fleets.front().system, 2U);
   EXPECT_TRUE(constellation.issueCommand(
       alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 2, .targetBand = 1}));
+}
+
+namespace {
+
+// Alpha homed in system 0 holds only a band in system 1, 30 light-days away;
+// beta is homed in system 1. Control target 3 is reached at that band on turn 3.
+struct RemoteWin {
+  game::Constellation constellation;
+  game::FactionId alpha = game::K_INVALID_FACTION_ID;
+  game::FactionId beta = game::K_INVALID_FACTION_ID;
+  game::FleetId alphaFleet = game::K_INVALID_FLEET_ID;
+};
+
+game::ConstellationConfig remoteWinConfig() {
+  game::ConstellationConfig config = microTwoSystemConfig();
+  config.victoryControlScore = 3.0;
+  config.fleetInitialFuelUnits = 1.0e6;
+  return config;
+}
+
+} // namespace
+
+// Falsifier: alpha's authority learning of a win (or crediting the control
+// that earned it) before the report from its band 30 light-days away could
+// arrive -- the instant self-latch the referee's crossing once granted.
+TEST(Constellation, WinnerLearnsOnlyWhenItsReportArrives) {
+  game::Constellation constellation(remoteWinConfig());
+  const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  constellation.addFaction(game::FactionPolicy::Scripted, 1);
+  const game::FleetId fleet = constellation.addFleet(alpha, 1, game::FleetCapability::Research, 0);
+  ASSERT_NE(fleet, game::K_INVALID_FLEET_ID);
+  const game::ConstellationCommand hop{.fleet = fleet, .targetSystem = 1, .targetBand = 1};
+  // The decision happens at turn 3; its news reaches alpha after the radial
+  // leg plus 30 days.
+  const std::int64_t learned = arrivalTurn(microRadialSec(0) + (30.0 * K_SECONDS_PER_DAY)) + 2;
+  while (constellation.turn() < learned - 1) {
+    constellation.advanceTurn();
+    EXPECT_FALSE(constellation.factions().front().outcomeKnown) << "turn " << constellation.turn();
+  }
+  EXPECT_EQ(constellation.winner(), alpha);
+  // The reports of turns 1 and 2 have landed; turn 3's, which crossed the
+  // target, arrives with the decision.
+  EXPECT_DOUBLE_EQ(constellation.factions().front().knownControlScore, 2.0);
+  EXPECT_TRUE(constellation.issueCommand(alpha, hop));
+  constellation.advanceTurn();
+  EXPECT_TRUE(constellation.factions().front().outcomeKnown);
+  EXPECT_FALSE(constellation.issueCommand(alpha, hop));
+}
+
+// Falsifier: beta, homed in the system where alpha's winning band lies,
+// learning of the decision later than the radial leg from that band to its
+// own authority -- the notice once routed from alpha's distant home instead.
+TEST(Constellation, OutcomeNoticeLeavesFromTheDecidingBand) {
+  game::Constellation constellation(remoteWinConfig());
+  const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  constellation.addFaction(game::FactionPolicy::Scripted, 1);
+  ASSERT_NE(constellation.addFleet(alpha, 1, game::FleetCapability::Research, 0),
+            game::K_INVALID_FLEET_ID);
+  constellation.advanceTurns(3);
+  ASSERT_EQ(constellation.winner(), alpha);
+  EXPECT_FALSE(constellation.factions().at(1).outcomeKnown);
+  constellation.advanceTurn(); // turn 4 = 3 + ceil(radial leg of about 2000 s)
+  EXPECT_TRUE(constellation.factions().at(1).outcomeKnown);
+  EXPECT_FALSE(constellation.factions().front().outcomeKnown);
 }

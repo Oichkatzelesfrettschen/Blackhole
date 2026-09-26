@@ -167,6 +167,7 @@ private:
     OutcomeNotice = 3, ///< The campaign's decision reaching observerIndex's authority.
     FleetStatus = 4,   ///< A fleet's own state travelling home to observerIndex's authority.
     OrderUndelivered = 5, ///< An order that found no fleet at its address, reported home.
+    ScoreReport = 6,      ///< Stabilization and control credited at a band, reported home.
   };
 
   struct Delivery {
@@ -182,6 +183,25 @@ private:
     /// ControlObservation/OutcomeNotice/FleetStatus/OrderUndelivered: who learns.
     std::size_t observerIndex = 0;
     FleetBelief status;            ///< FleetStatus: the state the fleet reported.
+    double stabilizationUnits = 0.0; ///< ScoreReport: containment produced at the band.
+    double controlPoints = 0.0;      ///< ScoreReport: control points the band earned.
+  };
+
+  /** @brief A place a credit happened: a band, or a system's authority when
+   *         bandIndex is negative. */
+  struct CreditSite {
+    SystemId system = K_INVALID_SYSTEM_ID;
+    int bandIndex = -1;
+  };
+
+  /** @brief One turn's stabilization and control credit for a faction at a band,
+   *         gathered in canonical order and sent home as one ScoreReport. */
+  struct TurnCredit {
+    std::size_t factionIndex = 0;
+    SystemId system = K_INVALID_SYSTEM_ID;
+    int bandIndex = 0;
+    double stabilizationUnits = 0.0;
+    double controlPoints = 0.0;
   };
 
   struct LoggedCommand {
@@ -241,6 +261,15 @@ private:
   void scoreControlAndObserve();
   void stepFactionAI();
   void evaluateOutcomes();
+  /** @brief Records one credit at (system, band) for this turn: the referee
+   *         total already holds it; the faction learns it by report. */
+  void recordCredit(std::size_t factionIndex, SystemId system, int bandIndex,
+                    double stabilizationUnits, double controlPoints);
+  /** @brief Sends this turn's credits home, one ScoreReport per faction and band. */
+  void sendScoreReports();
+  /** @brief Light time from a credit site to a system's authority; negative
+   *         when no light path exists. */
+  [[nodiscard]] double siteDelaySec(const CreditSite &site, SystemId toSystem) const;
   void enqueueYieldReport(const ConstellationFleet &fleet, double yieldUnits);
   [[nodiscard]] FactionId bandController(SystemId system, int bandIndex) const;
   [[nodiscard]] std::vector<ConstellationCommand> policyOrders(const FactionState &faction) const;
@@ -279,6 +308,13 @@ private:
   // lightPathSec_[a * S + b]: all-pairs light time between authorities over the
   // link graph; negative marks an unreachable pair. Derived from the config.
   std::vector<double> lightPathSec_;
+  // Per-turn scratch, rebuilt every turn before it is read: this turn's credits
+  // and, per faction, the site of its last stabilization and control credit
+  // (canonical order), which locates a victory in space. Never serialized
+  // because no turn reads a previous turn's values.
+  std::vector<TurnCredit> turnCredits_;
+  std::vector<CreditSite> lastStabilizationSite_;
+  std::vector<CreditSite> lastControlSite_;
   // ownBelief_[factionIndex]: that faction's record of its own fleets, in
   // ascending fleet id, updated only by FleetStatus deliveries.
   std::vector<std::vector<FleetBelief>> ownBelief_;

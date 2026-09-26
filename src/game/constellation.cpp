@@ -6,6 +6,7 @@
 #include "game/constellation.h"
 
 #include <algorithm>
+#include <iterator>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -437,6 +438,12 @@ void Constellation::deliverDue() {
           .at(delivery.system)
           .at(static_cast<std::size_t>(delivery.bandIndex)) = delivery.controller;
       break;
+    case DeliveryKind::ScoreReport: {
+      FactionState &faction = factions_.at(delivery.observerIndex);
+      faction.knownStabilizationUnits += delivery.stabilizationUnits;
+      faction.knownControlScore += delivery.controlPoints;
+      break;
+    }
     case DeliveryKind::OrderUndelivered:
       commandLog_.at(delivery.commandIndex).undelivered = true;
       break;
@@ -558,7 +565,7 @@ void Constellation::runFleetWork() {
       const double workedDays = properDelta / economy::K_SECONDS_PER_DAY;
       const double produced = workedDays * config_.ergoContainmentPerProperDay * depth;
       containmentThisTurn.at(fleet.system) += produced;
-      factions_.at(factionIndex(fleet.faction)).stabilizationUnits += produced;
+      recordCredit(factionIndex(fleet.faction), fleet.system, fleet.bandIndex, produced, 0.0);
     }
 
     const double frameDrag = economy::frameDragYieldFactor(config_.frameDragYieldBonus, depth);
@@ -607,7 +614,8 @@ void Constellation::scoreControlAndObserve() {
     for (std::size_t bandIndex = 0; bandIndex < bandCount; ++bandIndex) {
       const FactionId controller = bandController(system, static_cast<int>(bandIndex));
       if (controller != K_INVALID_FACTION_ID) {
-        factions_.at(factionIndex(controller)).controlScore += config_.controlPointsPerBandPerTurn;
+        recordCredit(factionIndex(controller), system, static_cast<int>(bandIndex), 0.0,
+                     config_.controlPointsPerBandPerTurn);
       }
       if (controller == lastEmittedController_.at(systemIndex).at(bandIndex)) {
         continue;
@@ -642,12 +650,82 @@ void Constellation::advanceTurn() {
     return;
   }
   clock_.advance();
+  turnCredits_.clear();
+  lastStabilizationSite_.assign(factions_.size(), CreditSite{});
+  lastControlSite_.assign(factions_.size(), CreditSite{});
   deliverDue();
   landArrivals();
   runFleetWork();
   scoreControlAndObserve();
+  sendScoreReports();
   stepFactionAI();
   evaluateOutcomes();
+}
+
+void Constellation::recordCredit(std::size_t factionIndexValue, SystemId system, int bandIndex,
+                                 double stabilizationUnits, double controlPoints) {
+  FactionState &faction = factions_.at(factionIndexValue);
+  faction.stabilizationUnits += stabilizationUnits;
+  faction.controlScore += controlPoints;
+  if (stabilizationUnits > 0.0) {
+    lastStabilizationSite_.at(factionIndexValue) = CreditSite{.system = system, .bandIndex = bandIndex};
+  }
+  if (controlPoints > 0.0) {
+    lastControlSite_.at(factionIndexValue) = CreditSite{.system = system, .bandIndex = bandIndex};
+  }
+  turnCredits_.push_back(TurnCredit{.factionIndex = factionIndexValue,
+                                    .system = system,
+                                    .bandIndex = bandIndex,
+                                    .stabilizationUnits = stabilizationUnits,
+                                    .controlPoints = controlPoints});
+}
+
+void Constellation::sendScoreReports() {
+  // One report per (faction, system, band): stable sort keeps the recording
+  // order within a key, so the merged sums are identical on every run.
+  std::ranges::stable_sort(turnCredits_, [](const TurnCredit &lhs, const TurnCredit &rhs) {
+    if (lhs.factionIndex != rhs.factionIndex) {
+      return lhs.factionIndex < rhs.factionIndex;
+    }
+    if (lhs.system != rhs.system) {
+      return lhs.system < rhs.system;
+    }
+    return lhs.bandIndex < rhs.bandIndex;
+  });
+  for (std::size_t first = 0; first < turnCredits_.size();) {
+    const TurnCredit &key = turnCredits_.at(first);
+    double stabilizationUnits = 0.0;
+    double controlPoints = 0.0;
+    std::size_t next = first;
+    while (next < turnCredits_.size() && turnCredits_.at(next).factionIndex == key.factionIndex &&
+           turnCredits_.at(next).system == key.system &&
+           turnCredits_.at(next).bandIndex == key.bandIndex) {
+      stabilizationUnits += turnCredits_.at(next).stabilizationUnits;
+      controlPoints += turnCredits_.at(next).controlPoints;
+      ++next;
+    }
+    const double delaySec =
+        reportDelaySec(factions_.at(key.factionIndex).id, key.system, key.bandIndex);
+    if (delaySec >= 0.0) {
+      Delivery delivery;
+      delivery.kind = DeliveryKind::ScoreReport;
+      delivery.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+      delivery.sequence = nextSequence_++;
+      delivery.observerIndex = key.factionIndex;
+      delivery.stabilizationUnits = stabilizationUnits;
+      delivery.controlPoints = controlPoints;
+      deliveryQueue_.push_back(delivery);
+    }
+    first = next;
+  }
+}
+
+double Constellation::siteDelaySec(const CreditSite &site, SystemId toSystem) const {
+  const double pathSec = lightPathSec(site.system, toSystem);
+  if (pathSec < 0.0) {
+    return K_NO_LIGHT_PATH;
+  }
+  return (site.bandIndex >= 0 ? intraSystemDelaySec(site.system, site.bandIndex) : 0.0) + pathSec;
 }
 
 void Constellation::advanceTurns(std::int64_t turnCount) {
@@ -683,22 +761,39 @@ void Constellation::evaluateOutcomes() {
     decided_ = true;
     winner_ = winningFaction->id;
     overallStatus_ = winningFaction->id == playerFaction_ ? CampaignStatus::Won : CampaignStatus::Lost;
-    // The winner knows at once; every other authority learns after the light
-    // path from the winner's home, and one no chain of links reaches never does.
-    const SystemId winnerHome = winningFaction->homeSystem;
+    // The decision is an event at the place the deciding credit happened: the
+    // winner's authority for banked energy, else the band of its last
+    // stabilization or control credit this turn (axes checked in that order).
+    // Every authority, the winner's included, learns by light from there; one
+    // no chain of links reaches never does.
+    const auto winnerIndex =
+        static_cast<std::size_t>(std::distance(factions_.begin(), winningFaction));
+    CreditSite site{.system = winningFaction->homeSystem, .bandIndex = -1};
+    const bool energyWin = config_.victoryEnergyUnits > 0.0 &&
+                           winningFaction->energyUnits >= config_.victoryEnergyUnits;
+    const bool stabilizationWin =
+        config_.victoryStabilizationUnits > 0.0 &&
+        winningFaction->stabilizationUnits >= config_.victoryStabilizationUnits;
+    if (!energyWin && stabilizationWin &&
+        lastStabilizationSite_.at(winnerIndex).system != K_INVALID_SYSTEM_ID) {
+      site = lastStabilizationSite_.at(winnerIndex);
+    } else if (!energyWin && !stabilizationWin &&
+               lastControlSite_.at(winnerIndex).system != K_INVALID_SYSTEM_ID) {
+      site = lastControlSite_.at(winnerIndex);
+    }
     for (std::size_t observerIndex = 0; observerIndex < factions_.size(); ++observerIndex) {
-      FactionState &observer = factions_.at(observerIndex);
-      if (observer.id == winner_) {
-        observer.outcomeKnown = true;
+      const double delaySec = siteDelaySec(site, factions_.at(observerIndex).homeSystem);
+      if (delaySec < 0.0) {
         continue;
       }
-      const double pathSec = lightPathSec(winnerHome, observer.homeSystem);
-      if (pathSec < 0.0) {
+      const std::int64_t delayTurns = clock_.ceilTurns(delaySec);
+      if (delayTurns == 0) {
+        factions_.at(observerIndex).outcomeKnown = true;
         continue;
       }
       Delivery delivery;
       delivery.kind = DeliveryKind::OutcomeNotice;
-      delivery.effectTurn = clock_.turn() + clock_.ceilTurns(pathSec);
+      delivery.effectTurn = clock_.turn() + delayTurns;
       delivery.sequence = nextSequence_++;
       delivery.observerIndex = observerIndex;
       deliveryQueue_.push_back(delivery);
@@ -1002,6 +1097,8 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendU8(out, static_cast<std::uint8_t>(faction.status));
     appendI64(out, faction.clearedTurn);
     appendU8(out, faction.outcomeKnown ? 1U : 0U);
+    appendF64(out, faction.knownStabilizationUnits);
+    appendF64(out, faction.knownControlScore);
   }
 
   appendU32(out, static_cast<std::uint32_t>(fleets_.size()));
@@ -1053,6 +1150,8 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendU32(out, delivery.controller);
     appendU64(out, delivery.observerIndex);
     appendFleetBelief(out, delivery.status);
+    appendF64(out, delivery.stabilizationUnits);
+    appendF64(out, delivery.controlPoints);
   }
 
   for (const std::vector<std::vector<FactionId>> &factionRow : perceived_) {
