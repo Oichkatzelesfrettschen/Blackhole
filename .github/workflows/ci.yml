@@ -105,6 +105,10 @@ jobs:
           shellcheck -S error scripts/build.sh scripts/ci/run_stage.sh scripts/conan_init.sh scripts/conan_install.sh
           "$PYTHON" -m ruff check scripts/ci/
           "$PYTHON" -m ruff format --check scripts/ci/
+      - name: Verify ASCII-only living docs
+        if: matrix.preset == 'ci'
+        run: |
+          "$PYTHON" scripts/ascii_sweep.py
       - name: Export locked local recipes
         run: scripts/conan_export_local_recipes.sh
       - name: Check lockfile coverage

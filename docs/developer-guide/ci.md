@@ -56,6 +56,13 @@ upper bound; a timeout is a failed gate, never validation evidence.
 
 ## Strict source validation
 
+The `ci` lane runs `scripts/ascii_sweep.py` in verifier mode before any build
+step. Its scope is every `docs/**/*.md` outside a path containing `archive`,
+plus `AGENTS.md`, `README.md`, `CHANGELOG.md`, `gemini.md`, and `CLAUDE.md`;
+any non-ASCII character there fails the lane. The sweep has no exemption for
+quoted upstream text or accented names, so such material belongs under
+`docs/archive/` or in ASCII transliteration.
+
 Every enabled clang-tidy diagnostic is an error.
 The header filter covers maintained C++ headers, including `.hpp` reference
 implementations. Analysis objects depend on `.clang-tidy`, so an incremental

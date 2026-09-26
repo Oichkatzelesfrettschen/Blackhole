@@ -473,7 +473,7 @@ brackets.
 - CANON-8 DONE 2026-07-09. Original task: Reconcile the ISSUE-009 residual figure to one statement
   (backlog owns it); update lacunae.md:481 and roadmap.md:73 to point at
   it. [single stated figure]
-- CANON-9 DONE 2026-07-09 (scripts/ascii_sweep.py is sweeper and verifier; verifier green; CI wiring open under VERIFY). Original task: ASCII-only sweep of docs/ (DOC-9) plus a CI verifier rejecting
+- CANON-9 DONE 2026-07-09 (scripts/ascii_sweep.py is sweeper and verifier; the `ci` lane of .github/workflows/ci.yml runs the verifier). Original task: ASCII-only sweep of docs/ (DOC-9) plus a CI verifier rejecting
   non-ASCII in md/source outside docs/archive/.
   [grep -P '[^\x00-\x7F]' clean]
 
