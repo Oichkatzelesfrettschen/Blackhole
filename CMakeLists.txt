@@ -4278,6 +4278,8 @@ if(BUILD_TESTING)
     target_include_directories(event_loader_test PRIVATE
       "${PROJECT_SOURCE_DIR}/tests"
     )
+    target_compile_definitions(event_loader_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     target_compile_options(event_loader_test PRIVATE ${PROJECT_WARNINGS})
     if(ENABLE_FAST_MATH)
       target_compile_options(event_loader_test PRIVATE -fno-fast-math)

@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -63,6 +64,22 @@ std::vector<std::int64_t> noticeTurns(const game::CampaignState &state, std::uin
 std::string errorOf(const std::string &json) { return game::parseEventSet(json).error; }
 
 } // namespace
+
+// Falsifier: the shipped story failing to load, or its flags, parameters,
+// tiers, and events out of the documented order.
+TEST(EventLoader, ShippedStoryLoadsInCanonicalOrder) {
+  const game::EventLoadResult loaded =
+      game::loadEventSetFile(std::string(BLACKHOLE_SOURCE_DIR) + "/assets/events/host_goes_dark.json");
+  ASSERT_TRUE(loaded.ok()) << loaded.error;
+  const game::EventSet &story = loaded.story;
+  ASSERT_FALSE(story.flags.empty());
+  EXPECT_EQ(story.flags.front(), game::K_DARK_FLAG_NAME);
+  EXPECT_TRUE(std::is_sorted(story.flags.begin() + 1, story.flags.end()));
+  EXPECT_TRUE(std::ranges::is_sorted(story.params, {}, &game::EventParam::name));
+  EXPECT_TRUE(std::ranges::is_sorted(story.events, {}, &game::EventDef::id));
+  EXPECT_TRUE(std::ranges::is_sorted(story.techTiers, {}, &game::TechLevel::points));
+  EXPECT_EQ(story.events.front().name, "host_dark");
+}
 
 // Falsifier: any unknown key accepted, at the root, in a parameter, a tier,
 // an event, a predicate body, an effect body, or an integer reference.
