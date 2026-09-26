@@ -717,10 +717,10 @@ std::string cycleStoryJson(int events) {
   return json;
 }
 
-/** @brief Fastest of three loads of @p json, in seconds. */
+/** @brief Fastest of five loads of @p json, in seconds. */
 double fastestLoadSeconds(const std::string &json, std::size_t expectedEvents) {
   double best = 0.0;
-  for (int trial = 0; trial < 3; ++trial) {
+  for (int trial = 0; trial < 5; ++trial) {
     const auto started = std::chrono::steady_clock::now();
     const game::EventLoadResult loaded = game::parseEventSet(json);
     const double seconds =
@@ -737,15 +737,15 @@ double fastestLoadSeconds(const std::string &json, std::size_t expectedEvents) {
 
 // Falsifier: loading a story being quadratic in its event count -- a linear
 // search per schedule target, or a parse callback that rescans the event
-// array at every object end. Quadrupling the event count must cost well under
-// the 16x a quadratic path pays; the ratio holds under sanitizers, where
-// absolute times do not.
+// array at every object end. Eight times the events must cost well under the
+// 64x a quadratic path pays (a linear loader pays about 8x); the ratio holds
+// under sanitizers and shared runners, where absolute times do not.
 TEST(EventLoader, LargeStoryLoadsThroughTheJsonPath) {
-  constexpr int kSmall = 12500;
-  constexpr int kLarge = 4 * kSmall;
+  constexpr int kSmall = 6250;
+  constexpr int kLarge = 8 * kSmall;
   const double small = fastestLoadSeconds(cycleStoryJson(kSmall), kSmall);
   const double large = fastestLoadSeconds(cycleStoryJson(kLarge), kLarge);
   RecordProperty("load_seconds_small", std::to_string(small));
   RecordProperty("load_seconds_large", std::to_string(large));
-  EXPECT_LT(large, 8.0 * small) << "small " << small << " s, large " << large << " s";
+  EXPECT_LT(large, 24.0 * small) << "small " << small << " s, large " << large << " s";
 }
