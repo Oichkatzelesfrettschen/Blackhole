@@ -5592,6 +5592,43 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Kerr static, ZAMO, and circular-orbit clock rates and the ZAMO redshift.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_clock_rates_test.cpp")
+    add_executable(kerr_clock_rates_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_clock_rates_test.cpp"
+    )
+    target_link_libraries(kerr_clock_rates_test PRIVATE blackhole_physics)
+    target_include_directories(kerr_clock_rates_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_clock_rates_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_clock_rates_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_clock_rates_test PRIVATE GTest::gtest_main)
+    if(ENABLE_XSIMD)
+      target_link_libraries(kerr_clock_rates_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(kerr_clock_rates_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(kerr_clock_rates_test PRIVATE hwy::hwy)
+    endif()
+
+    add_test(NAME kerr_clock_rates_validation COMMAND kerr_clock_rates_test)
+    set_tests_properties(kerr_clock_rates_validation PROPERTIES
+      LABELS "physics;kerr;redshift"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_clock_rates_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # LQG-modified Kerr metric test (D6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp")
     add_executable(lqg_kerr_test

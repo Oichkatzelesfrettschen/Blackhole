@@ -748,10 +748,9 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
         double const u = static_cast<double>(i) / static_cast<double>(count - 1);
         double const r = rIn + (u * (rOut - rIn));
         double expectedRedshift = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
-        if (!std::isfinite(expectedRedshift) || expectedRedshift < 0.0) {
-          expectedRedshift = 0.0;
-        }
-        expectedRedshift = std::min(expectedRedshift, 10.0);
+        // kerrRedshiftBatch maps the horizon's infinite redshift to the cap.
+        expectedRedshift = std::isfinite(expectedRedshift) ? std::clamp(expectedRedshift, 0.0, 10.0)
+                                                           : 10.0;
         auto const actualRedshift = static_cast<double>(redshift.at(i));
         maxRedshiftDiff = std::max(maxRedshiftDiff, std::abs(expectedRedshift - actualRedshift));
       }
@@ -832,9 +831,7 @@ int runTests() { // NOLINT(readability-function-cognitive-complexity) -- test ha
       for (std::size_t i = 0; i < rOverRs.size(); ++i) {
         double const r = rOverRs.at(i) * expectedRs;
         double expectedZ = physics::kerrRedshift(r, 0.5 * physics::PI, mass, a);
-        if (!std::isfinite(expectedZ) || expectedZ < 0.0) {
-          expectedZ = 0.0;
-        }
+        expectedZ = std::isfinite(expectedZ) ? std::max(expectedZ, 0.0) : 10.0;
         maxRedshiftDiff = std::max(maxRedshiftDiff, std::abs(expectedZ - zValues.at(i)));
       }
 

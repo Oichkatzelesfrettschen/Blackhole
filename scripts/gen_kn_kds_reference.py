@@ -13,12 +13,16 @@ independent of the C++ closed forms under test:
   src/physics/verified/kerr_newman.hpp vanishes at every root on a grid of
   signed spins and charges up to near extremality.
 
+- Kerr clock rates at the equator: the ZAMO lapse sqrt(Sigma Delta / A), the
+  static-observer rate sqrt(-g_tt), and 1/u^t of circular geodesics with u^t
+  from the metric's circularity condition, independent of the
+  Bardeen-Press-Teukolsky closed form under test.
 - Kerr-de Sitter horizons are the positive real roots of the Carter quartic
   Delta_r = (r^2 + a^2)(1 - Lambda r^2 / 3) - 2 M r, from mpmath.polyroots on
   its coefficients rather than the bracketing solver under test.
 
-The tests in tests/kerr_newman_test.cpp and tests/kerr_de_sitter_test.cpp
-embed the printed constants.
+The tests in tests/kerr_newman_test.cpp, tests/kerr_de_sitter_test.cpp, and
+tests/kerr_clock_rates_test.cpp embed the printed constants.
 
 Usage: PYTHON=${PYTHON:-python3}; "$PYTHON" scripts/gen_kn_kds_reference.py
 """
@@ -50,15 +54,19 @@ def kn_equatorial(r: Real, m: Real, a: Real, q: Real) -> tuple[tuple[Real, Real]
     return quotient(num_tt, d_num_tt), quotient(num_tp, d_num_tp), quotient(num_pp, d_num_pp)
 
 
-def circular_orbit_energy(r: Real, m: Real, a: Real, q: Real) -> Real:
-    """Energy per unit mass of the equatorial circular geodesic with angular
-    momentum along +z (signed a)."""
+def circular_orbit(r: Real, m: Real, a: Real, q: Real) -> tuple[Real, Real]:
+    """(E, u^t) of the equatorial circular geodesic with angular momentum
+    along +z (signed a)."""
     (gtt, dgtt), (gtp, dgtp), (gpp, dgpp) = kn_equatorial(r, m, a, q)
     # Geodesic circularity: dgtt + 2 dgtp Omega + dgpp Omega^2 = 0.
     disc = mp.sqrt((2 * dgtp) ** 2 - 4 * dgpp * dgtt)
     omega = max((-2 * dgtp + disc) / (2 * dgpp), (-2 * dgtp - disc) / (2 * dgpp))
     u_t = 1 / mp.sqrt(-(gtt + 2 * gtp * omega + gpp * omega * omega))
-    return -(gtt + gtp * omega) * u_t
+    return -(gtt + gtp * omega) * u_t, u_t
+
+
+def circular_orbit_energy(r: Real, m: Real, a: Real, q: Real) -> Real:
+    return circular_orbit(r, m, a, q)[0]
 
 
 def marginal_stability(r: Real, m: Real, a: Real, q: Real) -> Real:
@@ -163,9 +171,32 @@ def kerr_de_sitter_section() -> None:
     print(f"SdS g_tt r=10 Lambda=1e-2: {fmt(g_tt)}  g_rr: {fmt(-1 / g_tt)}")
 
 
+def kerr_clock_section() -> None:
+    one = mp.mpf(1)
+    print("# Kerr clock rates dtau/dt at the equator (M = 1)")
+    for a, r in (("0.9", "6"), ("0.9", "3"), ("0.9", "1.8"), ("0.9", "1.6"), ("0", "6")):
+        a, r = mp.mpf(a), mp.mpf(r)
+        delta = r * r - 2 * r + a * a
+        big_a = (r * r + a * a) ** 2 - a * a * delta
+        zamo = mp.sqrt(r * r * delta / big_a)
+        minus_gtt = 1 - 2 / r
+        static = mp.sqrt(minus_gtt) if minus_gtt > 0 else None
+        line = f"a={mp.nstr(a, 3)} r={mp.nstr(r, 3)}: zamo {fmt(zamo)}"
+        line += f"  static {fmt(static)}" if static is not None else "  static none (ergoregion)"
+        for label, sign in (("prograde", 1), ("retrograde", -1)):
+            photon = 2 * (1 + mp.cos(mp.mpf(2) / 3 * mp.acos(-sign * a)))
+            if r > photon:
+                u_t = circular_orbit(r, one, sign * a, mp.mpf(0))[1]
+                line += f"  {label} {fmt(1 / u_t)}"
+            else:
+                line += f"  {label} none (r <= photon orbit {mp.nstr(photon, 6)})"
+        print(line)
+
+
 def main() -> None:
     kerr_newman_section()
     kerr_de_sitter_section()
+    kerr_clock_section()
 
 
 if __name__ == "__main__":

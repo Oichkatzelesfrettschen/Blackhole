@@ -32,6 +32,7 @@
 
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <utility>
 
 #include "constants.h"
@@ -331,34 +332,88 @@ namespace physics {
 }
 
 /**
- * @brief Compute gravitational time dilation for Kerr.
+ * @brief Clock rate dtau/dt of a static observer (fixed r, theta, phi).
  *
- * For a zero-angular-momentum observer (ZAMO):
- * dtau/dt = sqrt(-g_tt - 2 omega g_t_phi - omega^2 g_phi_phi) / c
- *
- * Simplified at equator (theta = pi/2):
- * dtau/dt = sqrt(Delta Sigma) / (r^2 + a^2 + 2Ma^2/r) / c
+ * dtau/dt = sqrt(-g_tt) = sqrt(1 - r_s r / Sigma). A static observer needs
+ * -g_tt > 0, so none exists on or inside the ergosurface
+ * r_ergo(theta) = M + sqrt(M^2 - a^2 cos^2 theta), which lies outside the
+ * horizon for a != 0 off the axis.
  *
  * @param r Radial coordinate [cm]
  * @param theta Polar angle [rad]
  * @param mass Black hole mass [g]
  * @param a Spin parameter [cm]
- * @return Time dilation factor dtau/dt
+ * @return dtau/dt, or std::nullopt where no static observer exists (g_tt >= 0)
  */
-[[nodiscard]] inline double kerrTimeDilation(double r, double theta, double mass, double a) {
+[[nodiscard]] inline std::optional<double> kerrStaticTimeDilation(double r, double theta,
+                                                                  double mass, double a) {
   const double rS = schwarzschildRadius(mass);
-  const double sigma = kerrSigma(r, a, theta);
-  const double delta = kerrDelta(r, a, rS);
-
-  if ((delta <= 0) || (sigma <= 0)) {
-    return 0.0; // Inside horizon
+  const double minusGtt = 1.0 - ((rS * r) / kerrSigma(r, a, theta));
+  if (!(minusGtt > 0.0)) {
+    return std::nullopt;
   }
+  return std::sqrt(minusGtt);
+}
 
-  // g_tt component
-  const double gTt = -(1.0 - ((rS * r) / sigma));
+/**
+ * @brief Lapse of the zero-angular-momentum observer (ZAMO): dtau/dt = sqrt(Sigma Delta / A).
+ *
+ * A = (r^2 + a^2)^2 - a^2 Delta sin^2 theta. The ZAMO co-rotates with the
+ * frame-dragging rate omega = 2 M a r / A and exists everywhere outside the
+ * outer horizon, including the ergoregion; the lapse falls to 0 at r_+. At
+ * a = 0 it equals the static rate sqrt(1 - r_s / r). game::KerrTimeField uses
+ * the same lapse for fleet clocks.
+ *
+ * @param r Radial coordinate [cm]
+ * @param theta Polar angle [rad]
+ * @param mass Black hole mass [g]
+ * @param a Spin parameter [cm]
+ * @return dtau/dt in [0, 1]; 0 at or inside the outer horizon (Delta <= 0 or r <= r_+)
+ */
+[[nodiscard]] inline double kerrZamoLapse(double r, double theta, double mass, double a) {
+  const double rS = schwarzschildRadius(mass);
+  const double delta = kerrDelta(r, a, rS);
+  const double rPlus = 0.5 * rS + std::sqrt(std::fmax(0.0, (0.25 * rS * rS) - (a * a)));
+  if (!(delta > 0.0) || !(r > rPlus)) {
+    return 0.0;
+  }
+  const double sinTheta = std::sin(theta);
+  const double r2PlusA2 = (r * r) + (a * a);
+  const double bigA = (r2PlusA2 * r2PlusA2) - (a * a * delta * sinTheta * sinTheta);
+  return std::sqrt(kerrSigma(r, a, theta) * delta / bigA);
+}
 
-  // For static observer (not ZAMO), simpler formula
-  return std::sqrt(-gTt);
+/**
+ * @brief Clock rate dtau/dt = 1/u^t of an equatorial circular geodesic.
+ *
+ * Bardeen, Press & Teukolsky (1972), eqs. 2.12-2.13, with M the geometric mass:
+ *
+ *   u^t = (r^{3/2} + s a M^{1/2}) / (r^{3/4} sqrt(r^{3/2} - 3 M r^{1/2} + 2 s a M^{1/2}))
+ *
+ * where s = +1 for an orbit with angular momentum along +z (prograde) and
+ * s = -1 along -z (retrograde), with a signed about +z. Circular geodesics
+ * exist only outside the photon orbit of that direction, where the radicand
+ * is positive.
+ *
+ * @param r Equatorial radius [cm]
+ * @param mass Black hole mass [g]
+ * @param a Signed spin parameter [cm]
+ * @param prograde true for angular momentum along +z
+ * @return dtau/dt, or std::nullopt at or inside the photon orbit
+ */
+[[nodiscard]] inline std::optional<double>
+kerrCircularOrbitTimeDilation(double r, double mass, double a, bool prograde = true) {
+  const double mGeom = G * mass / C2;
+  const double signedA = prograde ? a : -a;
+  const double sqrtR = std::sqrt(r);
+  const double r32 = r * sqrtR;
+  const double spinTerm = signedA * std::sqrt(mGeom);
+  const double radicand = r32 - (3.0 * mGeom * sqrtR) + (2.0 * spinTerm);
+  const double numerator = r32 + spinTerm;
+  if (!(r > 0.0) || !(radicand > 0.0) || !(numerator > 0.0)) {
+    return std::nullopt;
+  }
+  return std::sqrt(r32) * std::sqrt(radicand) / numerator;
 }
 
 // ============================================================================
@@ -366,27 +421,43 @@ namespace physics {
 // ============================================================================
 
 /**
- * @brief Compute gravitational redshift for Kerr spacetime.
+ * @brief Redshift z of a photon from a static emitter at (r, theta) to infinity.
  *
- * For a photon emitted at radius r and observed at infinity:
- * 1 + z = 1/sqrt(-g_tt) = 1/sqrt(1 - r_s r/Sigma)
+ * 1 + z = 1 / sqrt(-g_tt). Undefined on and inside the ergosurface, where no
+ * static emitter exists.
+ *
+ * @return z, or std::nullopt where g_tt >= 0
+ */
+[[nodiscard]] inline std::optional<double> kerrStaticRedshift(double r, double theta,
+                                                              double mass, double a) {
+  const std::optional<double> rate = kerrStaticTimeDilation(r, theta, mass, a);
+  if (!rate) {
+    return std::nullopt;
+  }
+  return (1.0 / *rate) - 1.0;
+}
+
+/**
+ * @brief Redshift z to infinity of a zero-angular-momentum photon from a ZAMO emitter.
+ *
+ * 1 + z = 1 / alpha with alpha = kerrZamoLapse. The photon's zero angular
+ * momentum removes the Doppler term, so the redshift is the lapse alone. It
+ * is finite through the ergoregion and diverges at the horizon. At a = 0 the
+ * ZAMO is the static observer and z = 1/sqrt(1 - r_s/r) - 1; for a != 0 the
+ * static-emitter value is kerrStaticRedshift.
  *
  * @param r Radial coordinate [cm]
  * @param theta Polar angle [rad]
  * @param mass Black hole mass [g]
  * @param a Spin parameter [cm]
- * @return Redshift z
+ * @return z >= 0, or +infinity at or inside the outer horizon
  */
 [[nodiscard]] inline double kerrRedshift(double r, double theta, double mass, double a) {
-  const double rS = schwarzschildRadius(mass);
-  const double sigma = kerrSigma(r, a, theta);
-
-  const double factor = 1.0 - ((rS * r) / sigma);
-  if (factor <= 0) {
+  const double lapse = kerrZamoLapse(r, theta, mass, a);
+  if (!(lapse > 0.0)) {
     return safeInfinity<double>();
   }
-
-  return (1.0 / std::sqrt(factor)) - 1.0;
+  return (1.0 / lapse) - 1.0;
 }
 
 // ============================================================================
