@@ -71,8 +71,9 @@
  * require tau >= 1, and the split form requires tau >= 0.1, so a gain segment
  * always takes the direct integral's cancellation-free branches. Past a gain
  * depth of 600 the source integral is evaluated reversed, as an absorbing
- * segment, and e^{g} applied last in two halves, so a solution beyond exp's
- * overflow at g = 709.8 stays finite while it is representable.
+ * segment, and e^{g} applied last per component through its binary exponent,
+ * so a solution beyond exp's overflow at g = 709.8 stays finite while it is
+ * representable (a subnormal S0 at g = 1420 gives 5e296).
  *
  * StokesSourceForm::DirectIntegral is the default and holds a 1e-12 relative
  * gate against a 5x5 matrix-exponential referee in every tested regime,
@@ -96,6 +97,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <numbers>
 
 namespace physics {
 
@@ -628,6 +630,43 @@ struct AxisCoeffs {
           .rhoV = k.rhoV * ds};
 }
 
+/// e^{g} as 2^n e^r with |r| <= ln(2)/2.
+struct ExpScale {
+  int n = 0;
+  double er = 1.0; ///< e^r
+};
+
+/**
+ * @brief Split e^{g} into 2^n e^r (Cody-Waite reduction by a two-part ln 2).
+ *
+ * n ln2_hi is exact for |n| < 2^20 because ln2_hi carries 21 trailing zero
+ * bits (the fdlibm constants), so r keeps full precision for any g the
+ * exponent range admits; beyond |g| = 1e6 every nonzero product overflows or
+ * underflows and n saturates.
+ */
+[[nodiscard]] inline ExpScale expScale(double g) noexcept {
+  // ln 2 rounded to 32 significant bits on purpose, not std::numbers::ln2.
+  constexpr double ln2Hi = 6.93147180369123816490e-01; // NOLINT(modernize-use-std-numbers)
+  constexpr double ln2Lo = 1.90821492927058770002e-10;
+  constexpr double limit = 1.0e6;
+  const double clamped = std::clamp(g, -limit, limit);
+  const double nReal = std::nearbyint(clamped / std::numbers::ln2);
+  const double r = (clamped - (nReal * ln2Hi)) - (nReal * ln2Lo);
+  return {.n = static_cast<int>(nReal), .er = std::exp(r)};
+}
+
+/**
+ * @brief v e^{g} that overflows only where the product does.
+ *
+ * ldexp applies 2^n exactly, so v e^r never passes through an intermediate
+ * e^{g}; a v below 2^-900, possibly subnormal with few significant bits left,
+ * is first raised by 2^64 so e^r multiplies it at full precision.
+ */
+[[nodiscard]] inline double scaleByExp(double v, const ExpScale &scale) noexcept {
+  const int pre = (std::abs(v) < 0x1p-900) ? 64 : 0;
+  return std::ldexp(std::ldexp(v, pre) * scale.er, scale.n - pre);
+}
+
 /// The segment solution for alpha_I ds >= -GAIN_REVERSE_DEPTH (stokesPropagateExact).
 [[nodiscard]] inline StokesArray propagateSegment(const StokesArray &s0,
                                                   const StokesArray &emission,
@@ -743,7 +782,7 @@ stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const S
   // M = alpha_I + K', integral_0^s e^{-M t} dt J = e^{-M s} integral_0^s e^{M v} dv J,
   // and the reversed integral is an absorbing segment (rate -alpha_I, generator
   // -K') started from zero, so S(s) = e^{g} e^{-K' s} (S0 + reversed), g = -alpha_I ds,
-  // with e^{g} applied in two halves so a representable result stays finite.
+  // with e^{g} applied per component through its binary exponent (scaleByExp).
   const StokesGenerator reversed{.alphaI = -k.alphaI,
                                  .alphaQ = -k.alphaQ,
                                  .alphaU = -k.alphaU,
@@ -751,18 +790,34 @@ stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const S
                                  .rhoQ = -k.rhoQ,
                                  .rhoU = -k.rhoU,
                                  .rhoV = -k.rhoV};
+  // The solution is linear in (S0, J): bring their largest component to [1, 2)
+  // by an exact power of two, so a subnormal S0 or J / g keeps its precision,
+  // and fold the power back into the final exponent.
+  double largest = 0.0;
+  for (std::size_t i = 0; i < s0.size(); ++i) {
+    largest = std::max({largest, std::abs(s0[i]), std::abs(emission[i])});
+  }
+  const int shift = (largest > 0.0 && largest < 0x1p1000) ? -std::ilogb(largest) : 0;
+  StokesArray s0Scaled{};
+  StokesArray emissionScaled{};
+  for (std::size_t i = 0; i < s0.size(); ++i) {
+    s0Scaled[i] = std::ldexp(s0[i], shift);
+    emissionScaled[i] = std::ldexp(emission[i], shift);
+  }
   const StokesArray absorbed =
-      detail::propagateSegment({}, emission, reversed, ds, StokesSourceForm::DirectIntegral);
+      detail::propagateSegment({}, emissionScaled, reversed, ds, StokesSourceForm::DirectIntegral);
   StokesArray w{};
   for (std::size_t i = 0; i < w.size(); ++i) {
-    w[i] = s0[i] + absorbed[i];
+    w[i] = s0Scaled[i] + absorbed[i];
   }
   StokesGenerator lorentzOnly = k;
   lorentzOnly.alphaI = 0.0;
   StokesArray out =
       detail::propagateSegment(w, {}, lorentzOnly, ds, StokesSourceForm::DirectIntegral);
-  const double half = std::exp(0.5 * gain);
-  std::ranges::transform(out, out.begin(), [half](double v) { return (v * half) * half; });
+  detail::ExpScale scale = detail::expScale(gain);
+  scale.n -= shift;
+  std::ranges::transform(out, out.begin(),
+                         [&scale](double v) { return detail::scaleByExp(v, scale); });
   return out;
 }
 
