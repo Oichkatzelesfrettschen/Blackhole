@@ -15,11 +15,14 @@
 #define BLACKHOLE_GAME_CAMPAIGN_VIEW_H
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "game/command.h"
+#include "game/event.h"
 #include "game/fleet.h"
 #include "game/observer.h"
+#include "game/station_node.h"
 
 namespace game {
 
@@ -29,6 +32,10 @@ enum class CampaignStatus : std::uint8_t {
   Ongoing = 0,
   Won = 1,  ///< Banked energy reached the victory target by the deadline.
   Lost = 2, ///< The deadline passed first.
+  /// Perceived only, at a colony: the public deadline has passed, so the
+  /// campaign is decided, but which way (a host win before it, or the loss
+  /// at it) has not reached the station. The latched state never holds it.
+  Ended = 3,
 };
 
 /** @brief One orbital band as the map draws it. rate/delay are filled only
@@ -77,6 +84,12 @@ struct FleetView {
   OrbitLane lane = OrbitLane::Prograde; ///< Orbital direction.
   double yieldMultiplier = 1.0;  ///< Capability yield multiplier.
   bool telemetryCorrupted = false; ///< Reliability below the corruption threshold.
+  /// False in a colony's perceived view: the fleet reports to the host, so
+  /// reliability, tau, rate, fuel, and task counts are unknown there (zero).
+  bool telemetryKnown = true;
+  /// False when the viewer cannot place the fleet; bandIndex is then
+  /// meaningless. A colony places a fleet only where it last ordered it.
+  bool positionKnown = true;
   std::uint32_t pendingTasks = 0;
   std::uint32_t activeTasks = 0;
   std::uint32_t completedTasks = 0;
@@ -86,6 +99,11 @@ struct FleetView {
 struct OrderInFlightView {
   CommandType type = CommandType::PlaceFleet;
   FleetId fleet = K_INVALID_FLEET_ID;
+  NodeId origin = K_AUTHORITY_NODE; ///< Station the order left from.
+  std::uint32_t logIndex = 0;       ///< Into CampaignState::commandLog().
+  /// False in a colony's view when the colony could not place the fleet at
+  /// issue, so it cannot estimate the arrival; effectTurn is then 0.
+  bool effectTurnKnown = true;
   std::int64_t issueTurn = 0;
   std::int64_t effectTurn = 0;
 };
@@ -110,7 +128,42 @@ struct IntelView {
   bool corrupted = false; ///< Yield was discounted for unreliable telemetry.
 };
 
+/** @brief A communicating station: the host or a colony, with its exact
+ *         local clock. */
+struct NodeView {
+  NodeId id = K_AUTHORITY_NODE;
+  bool isColony = false;
+  double radiusCm = 0.0;
+  Observer observer = Observer::Hovering;
+  double properTimeRate = 0.0;     ///< The clock's quantized dtau/dt.
+  double properTimeSec = 0.0;      ///< Local proper time (display value of the Q48 clock).
+  bool dark = false;               ///< Silent: emits and receives nothing.
+  std::int64_t techPoints = 0;
+  std::int64_t techTier = 0;
+  std::int64_t missionProperSec = 0; ///< Colony mission length; 0 = unbounded.
+  /// Coordinate turn the values above describe: the present for the viewer's
+  /// own station, the emission turn of the latest arrival for a remote one.
+  std::int64_t asOfTurn = 0;
+  bool heard = true; ///< False for a remote station nothing has arrived from.
+};
+
+/** @brief A story event's inbox text, looked up by a notice's payload id. */
+struct EventTextView {
+  std::uint32_t id = 0;
+  std::string name;
+  std::string text;
+  EventCategory category = EventCategory::Info;
+};
+
+struct TechLevelView {
+  std::int64_t points = 0;
+  std::string name;
+};
+
 struct CampaignViewSnapshot {
+  /// The station whose knowledge this view holds. The authority's view is the
+  /// campaign's full snapshot; a colony's is CampaignState::perceivedSnapshot.
+  NodeId perceivedBy = K_AUTHORITY_NODE;
   std::int64_t turn = 0;
   double secondsPerTurn = 0.0;
   double coordinateTimeSec = 0.0;
@@ -139,6 +192,19 @@ struct CampaignViewSnapshot {
   std::vector<OrderInFlightView> ordersInFlight;
   std::vector<ReportInFlightView> reportsInFlight;
   std::vector<IntelView> intel;
+  // Colonies and the story. The tech axis of the outcome is the highest tier
+  // any colony holds; victoryTechTier (0 = off) wins outright.
+  std::vector<NodeView> nodes;              ///< Host at index 0, then colonies.
+  std::vector<ArrivalRecord> arrivals;      ///< Node deliveries that have arrived, in order.
+  /// Story signals still travelling; arrivalTurn is the quantized effect turn.
+  std::vector<ArrivalRecord> nodeSignalsInFlight;
+  std::int64_t colonyReportsInFlight = 0;   ///< Production reports still travelling to the host.
+  std::vector<EventTextView> eventTexts;    ///< Story events by id.
+  std::vector<TechLevelView> techTiers;     ///< Story tiers by points.
+  std::int64_t colonyTechTier = 0;
+  std::int64_t victoryTechTier = 0;
+  double energyLostToDarkness = 0.0;        ///< Colony production that reached a dark host.
+  double fleetYieldLostToDarkness = 0.0;    ///< Fleet completion yield that reached a dark host.
 };
 
 } // namespace game
