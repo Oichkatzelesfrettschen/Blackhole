@@ -12,7 +12,7 @@
  *      components decay by the same factor exp(-alpha*ds); total polarization
  *      fraction is constant.
  *   3. stokesStepFull() with simplified-K coefficients must produce the same
- *      result as the exact stokesStep() to O(ds^4) (RK4 truncation error).
+ *      result as the exact stokesStep(): both solve the segment in closed form.
  *   4. stokesStepFull() with rho_Q coupling transfers linear to circular
  *      polarization (Faraday conversion).
  * These tests guard against sign errors, coupling mistakes, and normalization
@@ -240,26 +240,26 @@ void testPolBoundMaintainedAfterNSteps() {
 // ---------------------------------------------------------------------------
 
 void testStepFullParitySimplifiedK() {
-  // stokesStepFull() with rhoQ=alphaQ=alphaV=0 must match stokesStep() to
-  // better than O(ds^4) truncation error.  Use a small ds so RK4 error < 1e-8.
+  // stokesStepFull() with rhoQ=alphaQ=alphaV=0 must match stokesStep(); the
+  // 1e-8 bound covers stokesStep's first-order branch at alpha_I ds < 1e-4.
   const StokesVector s0 = {.i = 3.0, .q = 1.5, .u = 0.8, .v = 0.3};
   const StokesEmission em = {.jI = 1.0e-3, .jQ = 4.0e-4, .jU = 2.0e-4, .jV = 1.0e-5};
   const double alphaI = 1.0e-3;
   const double rhoV = 2.0e-3;
-  const double ds = 0.01; // small step -> RK4 error negligible
+  const double ds = 0.01;
 
   const StokesVector exact = stokesStep(s0, em, alphaI, rhoV, ds);
   const FaradayPropagation k = {
       .alphaI = alphaI, .alphaQ = 0.0, .alphaV = 0.0, .rhoV = rhoV, .rhoQ = 0.0, .dsCm = ds};
-  const StokesVector rk4 = stokesStepFull(s0, em, k);
+  const StokesVector full = stokesStepFull(s0, em, k);
 
-  check(nearRel(rk4.i, exact.i, 1.0e-8),
+  check(nearRel(full.i, exact.i, 1.0e-8),
         "stokesStepFull vs stokesStep: I matches to < 1e-8 (simplified K, ds=0.01)");
-  check(nearRel(rk4.q, exact.q, 1.0e-8),
+  check(nearRel(full.q, exact.q, 1.0e-8),
         "stokesStepFull vs stokesStep: Q matches to < 1e-8 (simplified K, ds=0.01)");
-  check(nearRel(rk4.u, exact.u, 1.0e-8),
+  check(nearRel(full.u, exact.u, 1.0e-8),
         "stokesStepFull vs stokesStep: U matches to < 1e-8 (simplified K, ds=0.01)");
-  check(nearRel(rk4.v, exact.v, 1.0e-8),
+  check(nearRel(full.v, exact.v, 1.0e-8),
         "stokesStepFull vs stokesStep: V matches to < 1e-8 (simplified K, ds=0.01)");
 }
 
