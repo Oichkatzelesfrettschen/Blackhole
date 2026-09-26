@@ -444,7 +444,8 @@ TEST(Constellation, TransitAgesCrewsRelativisticallyAndArrivesOnArrival) {
 }
 
 // Falsifier: two constellations differing only in one system's spin deficit,
-// or in one fleet's station keeping, serializing to the same bytes.
+// its sense of rotation (0.5 against -0.5, one deficit), or one fleet's
+// station keeping, serializing to the same bytes.
 TEST(Constellation, DigestCarriesObserverAndSpinDeficit) {
   const auto build = [](double spin, game::StationKeeping station) {
     game::ConstellationConfig config = microTwoSystemConfig();
@@ -457,6 +458,8 @@ TEST(Constellation, DigestCarriesObserverAndSpinDeficit) {
   };
   EXPECT_NE(build(0.0, game::StationKeeping::Orbit), build(0.0, game::StationKeeping::Hover));
   EXPECT_NE(build(0.0, game::StationKeeping::Orbit), build(0.5, game::StationKeeping::Orbit));
+  // Same |a|, opposite rotation: the deficit alone cannot tell them apart.
+  EXPECT_NE(build(0.5, game::StationKeeping::Orbit), build(-0.5, game::StationKeeping::Orbit));
   EXPECT_EQ(build(0.5, game::StationKeeping::Hover), build(0.5, game::StationKeeping::Hover));
 }
 
