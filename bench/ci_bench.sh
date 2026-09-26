@@ -1,31 +1,41 @@
 #!/bin/sh
 # Build physics_bench for one CMake preset, run the CPU benchmark (and the GPU
-# benchmark when a display is present), and compare the JSON against the
-# preset's recorded baseline through scripts/check_bench_regression.py.
+# benchmark when a display is present), and compare each result file against
+# its own recorded baseline through scripts/check_bench_regression.py.
 #
 # usage: bench/ci_bench.sh
 #
-#   BENCH_PRESET=riced|ci   preset to build (default riced)
-#   BENCH_BASELINE=PATH     baseline JSON (default bench/baseline-$BENCH_PRESET.json)
+#   BENCH_PRESET=ci|riced   preset to build (default ci)
+#   BENCH_BASELINE=PATH     CPU baseline (default bench/baseline-$BENCH_PRESET.json)
+#   BENCH_GPU_BASELINE=PATH GPU baseline (default bench/baseline-$BENCH_PRESET-gpu.json)
 #   BENCH_OUT_DIR=DIR       result JSON directory (default build/bench)
-#   BENCH_ALLOW_MISSING=1   exit 0 with a notice when the baseline is absent
+#   BENCH_ALLOW_MISSING=1   exit 0 with a notice when the CPU baseline is absent
 #   BENCH_RUN_ONLY=1        stop after writing the JSON, skipping the comparison
 #   PYTHON                  interpreter for the checker (default python3)
 #
-# `riced` is a Debug build with Tracy instrumentation; its dependency graph
-# needs tracy/0.13.1, which conan.lock does not pin, so its Conan install runs
-# unlocked and the script only names that command. `ci` is the locked GCC 14
-# Release graph the hosted lanes install into build/CI-deps, and is the preset
-# the scheduled bench workflow runs. A failed build or benchmark run, or a
-# missing or unparsable result file, exits nonzero before any comparison; after that the exit
-# status is the checker's: 1 on a regression beyond its threshold, 2 on a
-# missing baseline.
+# `ci` is the locked GCC 14 Release graph the hosted lanes install into
+# build/CI-deps; bench/baseline-ci.json is its committed CPU baseline, and the
+# scheduled bench workflow runs it. `riced` is opt-in: a Debug build with Tracy
+# instrumentation whose dependency graph needs tracy/0.13.1, which conan.lock
+# does not pin, so its Conan install runs unlocked, the script only names that
+# command, and no riced baseline is committed.
+#
+# The GPU run (DISPLAY set) repeats the CPU benchmarks with the same arguments
+# and adds the GPU geodesic benchmark, so bench_gpu.json is compared only
+# against a GPU baseline, never the CPU one. No GPU baseline is committed: until
+# one is recorded on a GPU host, the GPU comparison prints a notice and does
+# not affect the exit status.
+#
+# A failed build or benchmark run, or a missing or unparsable result file,
+# exits nonzero before any comparison. After that the exit status is the CPU
+# checker's (1 on a regression, a missing or invalid entry; 2 on a missing
+# baseline), or the GPU checker's when the CPU comparison passes.
 set -eu
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
 PYTHON=${PYTHON:-python3}
-preset=${BENCH_PRESET:-riced}
+preset=${BENCH_PRESET:-ci}
 
 case $preset in
   riced)
@@ -54,20 +64,20 @@ cmake --build --preset "$preset" --target physics_bench
 
 out=${BENCH_OUT_DIR:-build/bench}
 mkdir -p "$out"
-"$bin_dir/physics_bench" --rays 4000 --steps 2000 --iterations 10 \
-  --json "$out/bench_cpu.json"
+set -- --rays 4000 --steps 2000 --iterations 10
+"$bin_dir/physics_bench" "$@" --json "$out/bench_cpu.json"
 require_json() {
   test -s "$1" || { echo "ci_bench: physics_bench wrote no $1" >&2; exit 1; }
   "$PYTHON" -c 'import json, sys; json.load(open(sys.argv[1]))' "$1" ||
     { echo "ci_bench: $1 is not valid JSON" >&2; exit 1; }
 }
 require_json "$out/bench_cpu.json"
-set -- "$out/bench_cpu.json"
+gpu=0
 if [ -n "${DISPLAY:-}" ]; then
-  "$bin_dir/physics_bench" --gpu --gpu-width 1024 --gpu-height 1024 \
+  "$bin_dir/physics_bench" "$@" --gpu --gpu-width 1024 --gpu-height 1024 \
     --gpu-iterations 20 --json "$out/bench_gpu.json"
   require_json "$out/bench_gpu.json"
-  set -- "$@" "$out/bench_gpu.json"
+  gpu=1
 else
   echo "NOTICE: no DISPLAY; skipping GPU benchmark run"
 fi
@@ -75,7 +85,18 @@ fi
 [ "${BENCH_RUN_ONLY:-0}" = 1 ] && exit 0
 
 baseline=${BENCH_BASELINE:-bench/baseline-$preset.json}
-if [ "${BENCH_ALLOW_MISSING:-0}" = 1 ]; then
-  set -- --allow-missing "$@"
+allow=
+[ "${BENCH_ALLOW_MISSING:-0}" = 1 ] && allow=--allow-missing
+cpu_rc=0
+"$PYTHON" scripts/check_bench_regression.py --baseline "$baseline" ${allow:+"$allow"} \
+  "$out/bench_cpu.json" || cpu_rc=$?
+gpu_rc=0
+if [ "$gpu" = 1 ]; then
+  gpu_baseline=${BENCH_GPU_BASELINE:-bench/baseline-$preset-gpu.json}
+  echo "GPU results against $gpu_baseline:"
+  # --allow-missing: without a GPU baseline the GPU run is reported, not gated.
+  "$PYTHON" scripts/check_bench_regression.py --baseline "$gpu_baseline" --allow-missing \
+    "$out/bench_gpu.json" || gpu_rc=$?
 fi
-exec "$PYTHON" scripts/check_bench_regression.py --baseline "$baseline" "$@"
+[ "$cpu_rc" != 0 ] && exit "$cpu_rc"
+exit "$gpu_rc"
