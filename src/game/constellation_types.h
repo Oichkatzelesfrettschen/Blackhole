@@ -24,6 +24,7 @@
 #include "game/campaign_view.h"
 #include "game/fleet.h"
 #include "game/kerr_time_field.h"
+#include "game/observer.h"
 
 namespace game {
 
@@ -79,6 +80,24 @@ struct ConstellationFleet {
   Observer transitDestObserver = Observer::CircularOrbitPrograde;
 };
 
+/** @brief What a faction's authority last learned about one of its own fleets.
+ *         Orders are validated and the AI plans against this record, never
+ *         against the fleet itself: a report takes the same light path home as
+ *         any other signal. */
+struct FleetBelief {
+  FleetId id = K_INVALID_FLEET_ID;
+  SystemId system = K_INVALID_SYSTEM_ID; ///< Same meaning as ConstellationFleet::system.
+  int bandIndex = 0;
+  OrbitLane lane = OrbitLane::Prograde;
+  Observer observer = Observer::CircularOrbitPrograde;
+  double reliability = 1.0;
+  double fuelUnits = 0.0;
+  bool inTransit = false;
+  std::int64_t transitArrivalTurn = 0;
+  int transitDestBand = 0;
+  std::int64_t asOfTurn = 0; ///< Turn the reported state held at the fleet.
+};
+
 /** @brief A faction's cumulative outcome across the whole constellation. */
 struct FactionState {
   FactionId id = K_INVALID_FACTION_ID;
@@ -89,6 +108,10 @@ struct FactionState {
   double controlScore = 0.0;       ///< Cumulative uncontested band-holds -- the breadth axis.
   CampaignStatus status = CampaignStatus::Ongoing;
   std::int64_t clearedTurn = 0; ///< Turn this faction reached a victory; 0 until then.
+  /// This faction's authority has learned the campaign is decided -- at once
+  /// for the winner and at the deadline, after the light path from the
+  /// winner's home otherwise -- and issues no further orders.
+  bool outcomeKnown = false;
 };
 
 /** @brief An undirected interstellar link: a flat-space separation between two

@@ -117,10 +117,12 @@ public:
   [[nodiscard]] StationKeeping defaultStation(SystemId system, int bandIndex) const;
 
   /** @brief Validates and enqueues one faction's order. Returns false and leaves
-   *         all state untouched when the order is inadmissible or the campaign is
-   *         already decided. Accepted orders take effect at issue turn + ceil of
-   *         the delay from the faction's authority to the fleet, which for a fleet
-   *         in another system includes the interstellar light time. */
+   *         all state untouched when the order is inadmissible or the faction
+   *         has already learned that the campaign is decided. The order is
+   *         judged against the faction's last report of the fleet and takes
+   *         effect at issue turn + ceil of the delay from the faction's
+   *         authority to where that report placed the fleet: the light path
+   *         between authorities plus the radial leg. */
   bool issueCommand(FactionId faction, const ConstellationCommand &command);
 
   /** @brief One coordinate turn: advance the clock, deliver due orders/reports/
@@ -148,6 +150,9 @@ public:
   [[nodiscard]] FactionId perceivedController(std::size_t factionIndex, SystemId system,
                                               int bandIndex) const;
 
+  /** @brief The player's view: band control as the player's authority
+   *         perceives it and the player's fleets as last reported; the
+   *         factions' scores are the referee's standings. */
   [[nodiscard]] ConstellationViewSnapshot renderSnapshot() const;
   [[nodiscard]] std::vector<std::uint8_t> serializeState() const;
   [[nodiscard]] std::uint64_t stateDigest() const;
@@ -157,6 +162,8 @@ private:
     Command = 0,
     YieldReport = 1,
     ControlObservation = 2,
+    OutcomeNotice = 3, ///< The campaign's decision reaching observerIndex's authority.
+    FleetStatus = 4,   ///< A fleet's own state travelling home to observerIndex's authority.
   };
 
   struct Delivery {
@@ -169,7 +176,8 @@ private:
     SystemId system = K_INVALID_SYSTEM_ID; ///< ControlObservation: which band.
     int bandIndex = 0;
     FactionId controller = K_INVALID_FACTION_ID; ///< ControlObservation: believed holder.
-    std::size_t observerIndex = 0;               ///< ControlObservation: which faction learns.
+    std::size_t observerIndex = 0; ///< ControlObservation/OutcomeNotice/FleetStatus: who learns.
+    FleetBelief status;            ///< FleetStatus: the state the fleet reported.
   };
 
   struct LoggedCommand {
@@ -188,17 +196,33 @@ private:
   [[nodiscard]] bool placementAllowed(SystemId system, OrbitLane lane, StationKeeping station,
                                       int bandIndex) const;
   [[nodiscard]] double linkSeparationCm(SystemId a, SystemId b) const; ///< -1 when not linked.
-  /** @brief Flat interstellar light time between two authorities; 0 for the same
-   *         system, the separation over c otherwise. */
-  [[nodiscard]] double interAuthorityDelaySec(SystemId a, SystemId b) const;
-  /** @brief Delay from a faction's authority to a fleet: interstellar light time
-   *         plus the radial signal delay within the fleet's system. */
-  [[nodiscard]] double orderDelaySec(FactionId faction, const ConstellationFleet &fleet) const;
-  [[nodiscard]] double reportDelaySec(const ConstellationFleet &fleet) const;
+  /** @brief Shortest light time between two systems' authorities along chains
+   *         of links (all-pairs, built once at construction); 0 within one
+   *         system, negative when no chain of links connects them -- such a
+   *         signal is never delivered. */
+  [[nodiscard]] double lightPathSec(SystemId a, SystemId b) const;
+  /** @brief Radial light delay between a band and its own system's authority. */
+  [[nodiscard]] double intraSystemDelaySec(SystemId system, int bandIndex) const;
+  /** @brief Delay from a faction's authority to a fleet at (system, band): the
+   *         light path between authorities plus the radial leg inside the
+   *         fleet's system. Negative when no light path exists. */
+  [[nodiscard]] double orderDelaySec(FactionId faction, SystemId system, int bandIndex) const;
+  /** @brief Delay from (system, band) back to a faction's authority; the
+   *         reverse leg of orderDelaySec. Negative when no light path exists. */
+  [[nodiscard]] double reportDelaySec(FactionId faction, SystemId system, int bandIndex) const;
   [[nodiscard]] double ergoregionDepth(const ConstellationFleet &fleet) const;
 
   void deliverDue();
   void applyCommand(const LoggedCommand &logged);
+  /** @brief The effect of an order the fleet has received: a band hop or an
+   *         interstellar departure, each fizzling when unaffordable. */
+  void applyReceivedCommand(ConstellationFleet &fleet, const ConstellationCommand &command);
+  /** @brief Sends the fleet's current state home from (fromSystem, fromBand),
+   *         where it stands when the report leaves; undeliverable without a
+   *         light path. */
+  void enqueueFleetStatus(const ConstellationFleet &fleet, SystemId fromSystem, int fromBand);
+  /** @brief The owner's record of a fleet; null when `faction` does not own it. */
+  [[nodiscard]] const FleetBelief *knownFleet(FactionId faction, FleetId fleet) const;
   void landArrivals();
   void runFleetWork();
   void scoreControlAndObserve();
@@ -216,14 +240,16 @@ private:
   /** @brief Contester step: contest one band the faction's delayed intel believes
    *         the leading rival holds. */
   [[nodiscard]] std::vector<ConstellationCommand> contesterOrders(const FactionState &faction) const;
-  /** @brief A faction fleet that can take a fresh order now: it exists, is not in
-   *         transit, and has no order already in flight. */
-  [[nodiscard]] bool fleetAvailable(FleetId fleet) const;
-  /** @brief True when a not-yet-delivered order already targets this fleet, so a
-   *         policy does not stack duplicate orders while the first is in flight. */
-  [[nodiscard]] bool hasCommandInFlight(FleetId fleet) const;
-  /** @brief True when the faction stations a fleet at (system, bandIndex) or has
-   *         one in transit whose destination is that slot. */
+  /** @brief A fleet the faction believes can take a fresh order now: known to
+   *         it, not in transit as last reported, and with no order in flight. */
+  [[nodiscard]] bool fleetAvailable(const FleetBelief &known) const;
+  /** @brief True when an order to this fleet has an effect turn later than the
+   *         last status the owner holds: the authority has not yet heard the
+   *         order's outcome, so a policy does not stack another behind it. */
+  [[nodiscard]] bool hasCommandInFlight(const FleetBelief &known) const;
+  /** @brief True when, as the faction last learned, one of its fleets holds
+   *         (system, bandIndex) or is in transit to that slot, or an order it
+   *         has not yet heard answered is sending a fleet there. */
   [[nodiscard]] bool factionOccupies(FactionId faction, SystemId system, int bandIndex) const;
   /** @brief Systems the faction can order a fleet in `fromSystem` to reach: that
    *         system itself plus every directly linked system. */
@@ -237,8 +263,15 @@ private:
   std::vector<ConstellationFleet> fleets_;
   std::vector<LoggedCommand> commandLog_;
   std::vector<Delivery> deliveryQueue_;
+  // lightPathSec_[a * S + b]: all-pairs light time between authorities over the
+  // link graph; negative marks an unreachable pair. Derived from the config.
+  std::vector<double> lightPathSec_;
+  // ownBelief_[factionIndex]: that faction's record of its own fleets, in
+  // ascending fleet id, updated only by FleetStatus deliveries.
+  std::vector<std::vector<FleetBelief>> ownBelief_;
   // perceived_[factionIndex][systemIndex][bandIndex]: the controller that
-  // faction's authority last learned about, delayed by interstellar light time.
+  // faction's authority last learned about, delayed by the radial leg and the
+  // light path between authorities.
   std::vector<std::vector<std::vector<FactionId>>> perceived_;
   // lastEmittedController_[systemIndex][bandIndex]: the actual controller when an
   // observation was last emitted, so only changes generate new intel.
@@ -249,7 +282,7 @@ private:
   FactionId playerFaction_ = K_INVALID_FACTION_ID;
   FactionId winner_ = K_INVALID_FACTION_ID;
   CampaignStatus overallStatus_ = CampaignStatus::Ongoing;
-  bool decided_ = false;
+  bool decided_ = false; ///< Referee latch: a winner exists or the deadline passed.
 };
 
 } // namespace game

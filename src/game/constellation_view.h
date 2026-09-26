@@ -18,6 +18,8 @@
 
 #include "game/campaign_view.h"
 #include "game/constellation_types.h"
+#include "game/fleet.h"
+#include "game/observer.h"
 
 namespace game {
 
@@ -31,7 +33,7 @@ struct FactionStanding {
   CampaignStatus status = CampaignStatus::Ongoing;
   std::int64_t clearedTurn = 0;
   std::uint32_t fleetCount = 0;      ///< Fleets this faction has (including in transit).
-  std::uint32_t heldBandCount = 0;   ///< Bands it currently controls uncontested.
+  std::uint32_t heldBandCount = 0;   ///< Bands the player's authority believes it holds.
 };
 
 struct SystemStanding {
@@ -39,7 +41,9 @@ struct SystemStanding {
   double instability = 0.0;
   double spinDimensionless = 0.0;
   std::uint32_t bandCount = 0;
-  std::vector<FactionId> bandController; ///< Actual controller per band; invalid = empty/contested.
+  /// Controller per band as the player's authority last learned it; invalid =
+  /// unknown, empty, or contested.
+  std::vector<FactionId> bandController;
 };
 
 struct ConstellationFleetView {
@@ -49,9 +53,11 @@ struct ConstellationFleetView {
   FleetCapability capability = FleetCapability::Research;
   int bandIndex = 0;
   OrbitLane lane = OrbitLane::Prograde;
+  Observer observer = Observer::CircularOrbitPrograde;
   double reliability = 1.0;
   bool inTransit = false;
   std::int64_t transitArrivalTurn = 0;
+  std::int64_t reportedTurn = 0; ///< Turn the fleet sent the state shown here.
 };
 
 struct ConstellationViewSnapshot {
