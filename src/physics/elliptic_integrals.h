@@ -204,9 +204,7 @@ inline double carlsonRd(double x, double y, double z, double relTol = CARLSON_RE
 }
 
 /**
- * @brief Carlson's R_J symmetric elliptic integral.
- *
- * R_J(x,y,z,p) = (3/2) ∫₀^∞ dt / ((t+p)√((t+x)(t+y)(t+z)))
+ * @brief Carlson's R_J for p > 0 (the duplication kernel of carlsonRj).
  *
  * Each duplication adds 3 4^{-m} R_C(alpha^2, beta) with
  * alpha = p (sqrt(x) + sqrt(y) + sqrt(z)) + sqrt(xyz) and beta = p (p + lambda)^2,
@@ -221,7 +219,7 @@ inline double carlsonRd(double x, double y, double z, double relTol = CARLSON_RE
  * @param relTol Relative tolerance r of the stopping rule
  * @return R_J(x,y,z,p); +inf for p = 0 or two zeros among x, y, z
  */
-inline double carlsonRj(double x, double y, double z, double p, double relTol = CARLSON_REL_TOL) {
+inline double carlsonRjPositive(double x, double y, double z, double p, double relTol) {
   // p = 0, or two zero arguments among x, y, z, makes the integral diverge.
   if (p == 0.0 ||
       (static_cast<int>(x == 0.0) + static_cast<int>(y == 0.0) + static_cast<int>(z == 0.0)) >= 2) {
@@ -263,6 +261,45 @@ inline double carlsonRj(double x, double y, double z, double p, double relTol = 
   const double e4 = (2.0 * xyz * ps) + (pairs * p2);
   const double e5 = xyz * p2;
   return (3.0 * sum) + (fac * carlsonDjSeries(e2, e3, e4, e5) / (a * std::sqrt(a)));
+}
+
+/**
+ * @brief Carlson's R_J symmetric elliptic integral.
+ *
+ * R_J(x,y,z,p) = (3/2) integral_0^inf dt / ((t+p) sqrt((t+x)(t+y)(t+z)))
+ *
+ * For p > 0 by duplication (carlsonRjPositive). For p < 0 the integral is a
+ * Cauchy principal value, reduced to p' > 0 by DLMF 19.20.14 with the
+ * arguments ordered x <= y <= z and q = -p:
+ *
+ *   (y + q) R_J(x,y,z,-q) = (p' - y) R_J(x,y,z,p') - 3 R_F(x,y,z)
+ *                           + 3 sqrt(xyz / (xz + p'q)) R_C(xz + p'q, p'q),
+ *   p' = y + (z - y)(y - x) / (y + q) >= y.
+ *
+ * @param x First argument (>=0)
+ * @param y Second argument (>=0)
+ * @param z Third argument (>=0); at most one of x, y, z is zero
+ * @param p Fourth argument (!= 0); p < 0 gives the principal value
+ * @param relTol Relative tolerance r of the stopping rule
+ * @return R_J(x,y,z,p); +inf for p = 0 or two zeros among x, y, z
+ */
+inline double carlsonRj(double x, double y, double z, double p, double relTol = CARLSON_REL_TOL) {
+  if (!(p < 0.0)) {
+    return carlsonRjPositive(x, y, z, p, relTol);
+  }
+  if ((static_cast<int>(x == 0.0) + static_cast<int>(y == 0.0) + static_cast<int>(z == 0.0)) >= 2) {
+    return safeInfinity<double>();
+  }
+  const double lo = std::min({x, y, z});
+  const double hi = std::max({x, y, z});
+  const double mid = std::max(std::min(x, y), std::min(std::max(x, y), z)); // median, no rounding
+  const double q = -p;
+  const double pp = mid + ((hi - mid) * (mid - lo) / (mid + q));
+  const double rc = carlsonRc((lo * hi) + (pp * q), pp * q);
+  const double tail = 3.0 * std::sqrt(lo * mid * hi / ((lo * hi) + (pp * q))) * rc;
+  return (((pp - mid) * carlsonRjPositive(lo, mid, hi, pp, relTol)) -
+          (3.0 * carlsonRf(lo, mid, hi, relTol)) + tail) /
+         (mid + q);
 }
 
 // ============================================================================
@@ -338,6 +375,9 @@ inline double ellipticE(double k) {
  * @brief Complete elliptic integral of the third kind Π(n,k).
  *
  * Π(n,k) = ∫₀^(π/2) dθ / ((1 - n sin²θ)√(1 - k² sin²θ))
+ *
+ * For n > 1 the integrand has a pole inside the range and the result is the
+ * Cauchy principal value (carlsonRj at p = 1 - n < 0); n = 1 returns +inf.
  *
  * @param n Characteristic
  * @param k Modulus (0 ≤ k < 1)

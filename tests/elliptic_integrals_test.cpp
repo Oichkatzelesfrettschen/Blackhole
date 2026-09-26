@@ -29,7 +29,8 @@
  *   Carlson forms against mpmath (14-15), tests/carlson_reference.inc from
  *   scripts/gen_carlson_reference.py:
  *  14.  carlsonRf, carlsonRd, carlsonRj within 1e-15 relative on generic,
- *       complete, incomplete, nearly equal and one-zero arguments.
+ *       complete, incomplete, nearly equal and one-zero arguments, and R_J's
+ *       Cauchy principal value for p < 0 within 4e-15.
  *  15.  carlsonRc within 1e-15 relative for x < y, x > y, x = y, x = 0.
  *   Kerr equatorial photon orbits (16):
  *  16.  criticalImpactParameterKerr = 3 sqrt(3) M at a = 0, and the Bardeen
@@ -299,6 +300,9 @@ struct CarlsonRcRow {
 
 // Relative accuracy of the duplication plus DLMF 19.36 series at CARLSON_REL_TOL.
 constexpr double CARLSON_TOL = 1.0e-15;
+// R_J's principal value (p < 0) sums three terms of DLMF 19.20.14 whose
+// magnitudes exceed the result by up to 6x on the table's pv rows.
+constexpr double CARLSON_PV_TOL = 4.0e-15;
 
 double relDiff(double got, double ref) { return std::abs(got - ref) / std::abs(ref); }
 
@@ -306,7 +310,8 @@ bool testCarlsonReference() {
   std::cout << "Test 14: carlsonRf/Rd/Rj vs mpmath (40 digits), max relative error\n";
 
   double worst = 0.0;
-  for (const std::string_view group : {"gen", "Kk", "inc", "near", "zero"}) {
+  double worstPv = 0.0;
+  for (const std::string_view group : {"gen", "Kk", "inc", "near", "zero", "pv"}) {
     double wf = 0.0;
     double wd = 0.0;
     double wj = 0.0;
@@ -319,10 +324,17 @@ bool testCarlsonReference() {
       wj = std::max(wj, relDiff(carlsonRj(row.x, row.y, row.z, row.p), row.rj));
     }
     std::cout << std::format("  {:<5} R_F {:.3e}  R_D {:.3e}  R_J {:.3e}\n", group, wf, wd, wj);
-    worst = std::max({worst, wf, wd, wj});
+    if (group == "pv") {
+      worst = std::max({worst, wf, wd});
+      worstPv = wj;
+    } else {
+      worst = std::max({worst, wf, wd, wj});
+    }
   }
   check(worst <= CARLSON_TOL, "R_F, R_D, R_J within 1e-15 of the referee",
         std::format("max {:.3e}", worst));
+  check(worstPv <= CARLSON_PV_TOL, "R_J principal value (p < 0) within 4e-15 of the referee",
+        std::format("max {:.3e}", worstPv));
   return true;
 }
 

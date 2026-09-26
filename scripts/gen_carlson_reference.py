@@ -2,7 +2,8 @@
 """Reference values of Carlson's symmetric elliptic integrals R_F, R_D, R_J, R_C.
 
 mpmath's elliprf, elliprd, elliprj and elliprc are evaluated at 40 significant
-digits and confirmed at 60. Inputs are written as C++ hexadecimal floating
+digits and confirmed at 60 to 1e-25 (mpmath's R_J with x = 0 and p < 0 keeps
+about 27 of its 40 digits). Inputs are written as C++ hexadecimal floating
 literals, so the C++ test reads the exact doubles mpmath used; outputs carry
 25 significant digits.
 
@@ -12,6 +13,9 @@ Row groups:
   inc    - incomplete-integral arguments (cos^2 phi, 1 - k^2 sin^2 phi, 1, 1 - n sin^2 phi)
   near   - nearly equal arguments, the case duplication converges to
   zero   - one of x, y zero with widely spread partners
+  pv     - p < 0, where R_J is a Cauchy principal value (mpmath's real part,
+           confirmed by quadrature), including ellipticPi's (0, 1 - k^2, 1, 1 - n)
+           for n > 1
 R_C rows cover x < y, x > y, x = y, x = 0, nearly equal arguments, and
 subnormal or widely separated arguments where quotients of them overflow.
 
@@ -58,6 +62,12 @@ def build_quads() -> list[Quad]:
     rows.append(("zero", 0.0, 1.0e3, 1.0e-3, 1.0e-2))
     rows.append(("zero", 5.0, 0.0, 2.0, 7.0))
     rows.append(("zero", 1.0e-3, 0.0, 1.0e3, 0.5))
+    for k in (0.3, 0.9, 0.999):
+        for n in (1.5, 3.0, 50.0):
+            rows.append(("pv", 0.0, 1.0 - k * k, 1.0, 1.0 - n))
+    rows.append(("pv", 0.3, 1.2, 2.5, -0.7))
+    rows.append(("pv", 2.5, 0.3, 1.2, -1.0e-3))
+    rows.append(("pv", 7.0, 0.01, 40.0, -300.0))
     return rows
 
 
@@ -81,19 +91,37 @@ RC_ROWS: list[tuple[float, float]] = [
 ]
 
 
+def principal_value(xs: mp.mpf, ys: mp.mpf, zs: mp.mpf, q: mp.mpf) -> mp.mpf:
+    """(3/2) PV integral_0^inf dt / ((t - q) sqrt((t+x)(t+y)(t+z))) by symmetric excision."""
+    gap = mp.mpf(10) ** (-mp.mp.dps // 2) * q
+
+    def f(t: mp.mpf) -> mp.mpf:
+        return 1.5 / ((t - q) * mp.sqrt((t + xs) * (t + ys) * (t + zs)))
+
+    return mp.quad(f, [0, q - gap]) + mp.quad(f, [q + gap, 2 * q, mp.inf])
+
+
 def quad_values(x: float, y: float, z: float, p: float) -> list:
     xs, ys, zs, ps = (mp.mpf(v) for v in (x, y, z, p))
-    return [mp.elliprf(xs, ys, zs), mp.elliprd(xs, ys, zs), mp.elliprj(xs, ys, zs, ps)]
+    rj = mp.elliprj(xs, ys, zs, ps)
+    if p < 0:
+        # mpmath continues R_J to p < 0 as a complex value whose real part is
+        # the Cauchy principal value; confirm it by quadrature to 1e-15.
+        rj = mp.re(rj)
+        pv = principal_value(xs, ys, zs, -ps)
+        if abs(pv - rj) > mp.mpf("1e-15") * abs(rj):
+            raise SystemExit(f"principal value disagrees at p = {p}")
+    return [mp.elliprf(xs, ys, zs), mp.elliprd(xs, ys, zs), rj]
 
 
 def confirmed(fn: Callable[..., list], *args: float) -> list:
-    """fn(*args) at WORK_DPS after agreeing with CHECK_DPS to 1e-35 relative."""
+    """fn(*args) at WORK_DPS after agreeing with CHECK_DPS to 1e-25 relative."""
     mp.mp.dps = CHECK_DPS
     check = fn(*args)
     mp.mp.dps = WORK_DPS
     work = fn(*args)
     for a, b in zip(work, check, strict=True):
-        if abs(a - b) > mp.mpf("1e-35") * abs(b):
+        if abs(a - b) > mp.mpf("1e-25") * abs(b):
             raise SystemExit(f"referee disagrees with itself at {WORK_DPS} vs {CHECK_DPS} digits")
     return work
 
