@@ -12,12 +12,12 @@ only "results", so the provenance never affects a verdict.
 """
 
 import argparse
-import datetime
 import json
 import os
 import pathlib
 import platform
 import sys
+import time
 
 
 def load_results(path: str | pathlib.Path) -> dict[str, dict]:
@@ -44,7 +44,8 @@ def record(current_path: str, baseline_path: pathlib.Path, notes: list[str]) -> 
         "cpu": host_cpu_model(),
         "logical_cpus": os.cpu_count(),
         "platform": platform.platform(),
-        "recorded_utc": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        # time.gmtime works on every Python 3 release; datetime.UTC is 3.11+.
+        "recorded_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "notes": notes,
     }
     baseline_path.parent.mkdir(parents=True, exist_ok=True)

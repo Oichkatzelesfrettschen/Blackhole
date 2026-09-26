@@ -6,8 +6,8 @@
 #
 #   -p BUILD_DIR  directory holding compile_commands.json (default build/Release)
 #   -b BASE_REF   check every .cpp that differs from the merge base with BASE_REF,
-#                 committed or not (default origin/main); ignored with FILE
-#                 arguments
+#                 committed or not, plus untracked non-ignored .cpp files
+#                 (default origin/main); ignored with FILE arguments
 #   FILE          repository-relative .cpp paths
 #
 # The image comes from scripts/ci/Dockerfile.cppcheck and is built on first
@@ -47,7 +47,10 @@ conan_home=${BLACKHOLE_CONAN_HOME:-$(dirname "$common")/.conan}
 
 if [ "$#" -eq 0 ]; then
   fork=$(git merge-base "$base" HEAD)
-  files=$(git diff --name-only "$fork" -- '*.cpp' |
+  # Changed tracked files plus untracked, non-ignored ones: a new source that
+  # is not yet added is still part of the change under review.
+  files=$({ git diff --name-only "$fork" -- '*.cpp'
+    git ls-files --others --exclude-standard -- '*.cpp'; } | sort -u |
     while read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done)
   [ -n "$files" ] || { echo "cppcheck_ci: no .cpp differs from $base"; exit 0; }
   # Word splitting is intended: repository paths carry no whitespace.
