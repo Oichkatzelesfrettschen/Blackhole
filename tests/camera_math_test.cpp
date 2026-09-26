@@ -21,7 +21,9 @@
 #include <glm/geometric.hpp>
 
 #include "input.h"
+#include "platform/cli_options.h"
 #include "render/camera_math.h"
+#include "render/record_mode.h"
 #include "render/render_state.h"
 
 using blackhole::buildCameraBasis;
@@ -149,4 +151,23 @@ TEST(CameraMath, ZoomRateScalesWithDistance) {
   EXPECT_FLOAT_EQ(zoomRateScale(0.0f), K_CAMERA_MIN_DISTANCE / K_ZOOM_RATE_REFERENCE_DISTANCE);
   // The distance range reaches past the disk's 100 r_s = 200 unit outer edge.
   EXPECT_GT(K_CAMERA_MAX_DISTANCE, 200.0f);
+}
+
+// The showcase-orbit camera path drives the profile's spin every frame, and
+// --record-spin replaces it.
+TEST(RecordCameraPath, ShowcaseFramesUseTheProfileSpin) {
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
+  platform::CliOptions cli;
+  cli.recordFramesDir = "frames";
+  cli.recordProfile = "showcase-orbit";
+  rs.physicsCore.kerrSpin = 0.0f;
+  blackhole::applyRecordCameraPath(rs, cli, InputManager::instance());
+  EXPECT_FLOAT_EQ(rs.physicsCore.kerrSpin, blackhole::K_SHOWCASE_ORBIT_SPIN);
+  EXPECT_FLOAT_EQ(rs.recording.recordCurrentKf.kerrSpin, blackhole::K_SHOWCASE_ORBIT_SPIN);
+
+  cli.hasRecordSpin = true;
+  cli.recordSpin = 0.9f;
+  blackhole::applyRecordCameraPath(rs, cli, InputManager::instance());
+  EXPECT_FLOAT_EQ(rs.physicsCore.kerrSpin, 0.9f);
 }

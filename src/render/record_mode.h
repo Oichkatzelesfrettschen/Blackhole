@@ -39,7 +39,7 @@ struct ShowcaseOrbitComposition {
   float pitchDeg;
   float distance;
   float fovDeg; ///< Vertical field of view of the traced image (bhPixelUv, d_ray_dir).
-  float exposure; ///< The record exposure rule at the composition's camera and spin 0.
+  float exposure; ///< The record exposure rule at the composition's camera and K_SHOWCASE_ORBIT_SPIN.
   float backgroundIntensity;
   float backgroundYawDeg;
   float backgroundPitchDeg;
@@ -59,13 +59,20 @@ struct ShowcaseOrbitComposition {
  * lensed Milky Way rather than in point stars, goes to display 0.8 instead
  * (ACES^-1(0.8^2.35) = 0.464, ACES^-1(0.8^2.25) = 0.483); it sets
  * compare-orbit-near's exposure, which renders no disk, and the cinematic
- * background intensity.
+ * background intensity. The same rule sets the fresh-settings desktop
+ * exposure and background intensity (settings.h). The targets precede
+ * tonemapping.frag's radial vignette, which darkens pixels toward the frame
+ * edges below them.
  */
+
+/** @brief Kerr spin a/M of every showcase-orbit frame; --record-spin overrides
+ *         it. */
+inline constexpr float K_SHOWCASE_ORBIT_SPIN = 0.62f;
 
 /** @brief Tone-map exposure of the showcase-orbit profile when no composition
  *         matches: the record exposure rule at the fallback camera (pitch -6,
- *         distance 14, fov 37.2738) and the default spin, L99 = 0.256. */
-inline constexpr float K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE = 3.51f;
+ *         distance 14, fov 37.2738) and K_SHOWCASE_ORBIT_SPIN, L99 = 0.445. */
+inline constexpr float K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE = 2.02f;
 
 /** @brief Returns the composition matching name (inside-disk resolves to
  *         wide-right), or nullptr if none matches. */

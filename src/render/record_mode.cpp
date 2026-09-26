@@ -88,12 +88,12 @@ bool readTonemappedRgb(gl::GLuint texTonemapped, int fallbackWidth, int fallback
 // other five sit inside the disk's radial extent near the plane, where the
 // disk fills the view.
 constexpr std::array<ShowcaseOrbitComposition, 6> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"above-disk", "nasa_deep_starmap_galactic", 0.0f, 0.0f, 10.0f, 240.0f, 20.0f, 4.29f, 0.80f, 26.0f, 8.0f, 0.00f, 0.00f, 8.0f},
-    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 32.2042f, 2.63f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
-    {"left-third", "nasa_deep_starmap", 0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 4.37f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
-    {"right-third", "nasa_deep_starmap_galactic", -0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 1.37f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
-    {"wide-left", "eso_milkyway_brunier", 0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 3.33f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
-    {"wide-right", "nasa_deep_starmap_galactic", -0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 1.42f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
+    {"above-disk", "nasa_deep_starmap_galactic", 0.0f, 0.0f, 10.0f, 240.0f, 20.0f, 9.14f, 0.80f, 26.0f, 8.0f, 0.00f, 0.00f, 8.0f},
+    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 32.2042f, 1.23f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
+    {"left-third", "nasa_deep_starmap", 0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 3.60f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
+    {"right-third", "nasa_deep_starmap_galactic", -0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 1.24f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
+    {"wide-left", "eso_milkyway_brunier", 0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 1.73f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
+    {"wide-right", "nasa_deep_starmap_galactic", -0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 1.31f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
 }};
 
 } // namespace
@@ -237,7 +237,7 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.dispatch.computeMaxSteps    = 1000;
     rs.dispatch.computeStepSize    = 0.016f;
     rs.display.depthFar           = 154.367004f;
-    rs.physicsCore.kerrSpin           = 0.62f;
+    rs.physicsCore.kerrSpin           = K_SHOWCASE_ORBIT_SPIN;
     const char *defaultBackground =
         composition != nullptr ? composition->backgroundId : "nasa_deep_starmap_galactic";
     SettingsManager::instance().get().backgroundId =
@@ -376,7 +376,7 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
                          ? cli.recordFovDeg
                          : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 37.2738f);
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
-    rs.physicsCore.kerrSpin = 0.0f;
+    rs.physicsCore.kerrSpin = K_SHOWCASE_ORBIT_SPIN;
     rs.recording.recordCurrentKf = CamKeyframe{
         .timeSec = static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) /
                    static_cast<float>(K_CINEMATIC_FPS),
