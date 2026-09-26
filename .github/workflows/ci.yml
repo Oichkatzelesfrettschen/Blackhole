@@ -9,7 +9,7 @@ on:
       preset:
         description: Validation lane
         type: choice
-        options: [ci, ci-analysis, ci-release, ci-clang, ci-clang-fast-math]
+        options: [ci, ci-analysis, ci-release, ci-clang, ci-clang-fast-math, ci-sanitize]
         default: ci
       export_dependencies:
         description: Retain portable dependency packages for local diagnosis
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.preset || 'ci') || '["ci","ci-analysis","ci-release","ci-clang","ci-clang-fast-math"]') }}
+        preset: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.preset || 'ci') || '["ci","ci-analysis","ci-release","ci-clang","ci-clang-fast-math","ci-sanitize"]') }}
     env:
       CONAN_HOME: ${{ github.workspace }}/.conan
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -162,16 +162,24 @@ jobs:
         run: scripts/ci/run_stage.sh build cmake --build --preset "$CI_PRESET" --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
       - name: Test using all CPUs
         run: |
+          exclude=
           case "$CI_PRESET" in
             ci) build_dir=build/CI ;;
             ci-analysis) build_dir=build/CI-Analysis ;;
             ci-release) build_dir=build/CI-Release ;;
             ci-clang) build_dir=build/CI-Clang ;;
             ci-clang-fast-math) build_dir=build/CI-ClangFastMath ;;
+            ci-sanitize)
+              # A gpu-labeled test opens a GL context when a display exists;
+              # LeakSanitizer then reports the driver's allocations.
+              build_dir=build/CI-Sanitize
+              exclude=gpu
+              ;;
             *) echo "no test directory for preset $CI_PRESET" >&2; exit 2 ;;
           esac
           scripts/ci/run_stage.sh tests ctest --test-dir "$build_dir" \
             --output-on-failure --no-tests=error --parallel "$CTEST_PARALLEL_LEVEL" \
+            ${exclude:+--label-exclude "$exclude"} \
             --output-junit "$GITHUB_WORKSPACE/build/ci-reports/tests.xml"
       - name: Save compiled objects after build failures too
         if: always() && steps.compile.outcome != 'skipped' && steps.compiler-cache.outputs.cache-hit != 'true'

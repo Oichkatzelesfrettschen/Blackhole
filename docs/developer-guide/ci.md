@@ -23,6 +23,7 @@ advisory, so its red result informs a review without blocking the merge.
 | Pull request and main push | `ci-release` | CPU build/tests with LTO and fast-math, including per-target IEEE overrides |
 | Pull request and main push | `ci-clang` | Advisory: the `ci` configuration compiled by clang 18 over the same GCC 14 packages; strict warnings, CPU tests |
 | Pull request and main push | `ci-clang-fast-math` | Advisory: `ci-clang` with fast-math, where clang's `-Wnan-infinity-disabled` rejects NaN and infinity classification GCC accepts |
+| Pull request and main push | `ci-sanitize` | Advisory: GCC 14 AddressSanitizer and UBSan build, CPU tests except label `gpu` |
 | Weekly schedule | Every preset above | Revalidate the default branch |
 | Manual dispatch | Selected preset | Replay any lane against a selected ref |
 
@@ -79,6 +80,26 @@ Clang and GCC reject different code. clang 18 diagnoses `std::isnan`,
 `std::isinf`, `std::isfinite`, and `numeric_limits<T>::infinity()` under
 `-ffinite-math-only` as errors with `-Werror`, which the GCC 14 `ci-release`
 lane accepts silently while folding those checks to constants.
+
+## Sanitizer lane
+
+`ci-sanitize` inherits `ci` with `ENABLE_ASAN` and `ENABLE_UBSAN` on. Hardening
+is off because `_FORTIFY_SOURCE` conflicts with the ASan interceptors, and
+`-Werror` is off because instrumentation inflates stack frames past
+`-Wstack-usage=8192` and perturbs GCC's flow-sensitive warnings
+(`-Wmaybe-uninitialized`, `-Wstrict-overflow`); the uninstrumented lanes
+enforce those warnings on the same sources. `ENABLE_UBSAN` compiles with
+`-fno-sanitize-recover=undefined`, so a UBSan report aborts the test instead of
+printing and exiting 0. The lane excludes the `gpu` label: those tests open a GL
+context when a display exists, and LeakSanitizer then reports the driver's
+allocations as leaks.
+
+`SANITIZER_TEST_ENV` in `CMakeLists.txt` gains `ASAN_OPTIONS=detect_leaks=0`
+partway through test registration, and a test's `ENVIRONMENT` property
+overrides the job environment. LeakSanitizer therefore checks only the tests
+registered before that point or registered without the property; the lane
+establishes memory-safety and undefined-behavior evidence, and leak evidence
+only for that subset.
 
 ## Strict source validation
 

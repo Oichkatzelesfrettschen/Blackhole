@@ -1042,8 +1042,11 @@ if(ENABLE_ASAN)
 endif()
 
 if(ENABLE_UBSAN)
-  add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
-  add_link_options(-fsanitize=undefined)
+  # UBSan reports and continues by default, exiting 0; -fno-sanitize-recover
+  # aborts on the first report so a CTest run under UBSan fails on a finding.
+  add_compile_options(-fsanitize=undefined -fno-sanitize-recover=undefined
+    -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=undefined -fno-sanitize-recover=undefined)
   message(STATUS "UndefinedBehaviorSanitizer enabled")
 endif()
 
