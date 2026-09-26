@@ -56,9 +56,14 @@
  *   - The decay factor e^{-tau} is folded into cosh and sinh before they are
  *     formed, so an optically thick segment with large x1 never forms inf * 0.
  *
+ * alpha_I < 0 (gain, as in masers) is supported: the decay moments switch to
+ * series that stay positive for tau < 0, the closed forms over tau^2 - x1^2
+ * require tau >= 1, and the split form requires tau >= 0.1, so a gain segment
+ * always takes the direct integral's cancellation-free branches.
+ *
  * StokesSourceForm::DirectIntegral is the default and holds a 1e-12 relative
  * gate against a 5x5 matrix-exponential referee in every tested regime,
- * including optically thin Faraday-thick segments and w.w = 0
+ * including optically thin Faraday-thick segments, gain down to tau = -40 and w.w = 0
  * (tests/stokes_exact_test.cpp, scripts/gen_stokes_reference.py).
  * StokesSourceForm::SteadyStateSplit evaluates S = S_inf + e^{-K s}(S0 - S_inf)
  * with S_inf = K^{-1} J. Its contract is a 1e-9 budget for alpha_I s >= 0.1
@@ -170,19 +175,41 @@ struct CubicCoeffs {
 /**
  * @brief Decay moments M_n = integral_0^1 u^n e^{-tau u} du, n = 0..11.
  *
- * For tau <= 30 the top moment comes from its positive series
- * M_11 = e^{-tau} sum_k tau^k / (12 * 13 * ... * (12 + k)), and the downward
- * recurrence M_{n-1} = (tau M_n + e^{-tau}) / n adds only positive terms. Above
- * tau = 30 the upward recurrence M_n = (n M_{n-1} - e^{-tau}) / tau starts from
- * M_0 = (1 - e^{-tau}) / tau and never subtracts comparable magnitudes.
+ * tau < 0 is a gain segment (stimulated emission, masers). Every branch adds
+ * or subtracts only terms that cannot cancel:
+ *   - 0 <= tau <= 30: the top moment from its positive series
+ *     M_11 = e^{-tau} sum_k tau^k / (12 * 13 * ... * (12 + k)), then the
+ *     downward recurrence M_{n-1} = (tau M_n + e^{-tau}) / n, all positive.
+ *   - -30 <= tau < 0: each moment from its positive series in g = -tau,
+ *     M_n = sum_k g^k / (k! (n + k + 1)); the tau >= 0 series alternates here.
+ *   - |tau| > 30: the upward recurrence M_n = (n M_{n-1} - e^{-tau}) / tau
+ *     from M_0 = (1 - e^{-tau}) / tau. For tau > 30 e^{-tau} is negligible;
+ *     for tau < -30 it reads M_n = (e^g - n M_{n-1}) / g with
+ *     n M_{n-1} <= (11/30) e^g, so the subtraction loses under one bit.
  */
 [[nodiscard]] inline Moments decayMoments(double tau) noexcept {
   Moments m{};
   const double e = std::exp(-tau);
-  if (tau > MOMENT_UPWARD_TAU) {
+  if (std::abs(tau) > MOMENT_UPWARD_TAU) {
     m[0] = -std::expm1(-tau) / tau;
     for (std::size_t n = 1; n < MOMENT_COUNT; ++n) {
       m[n] = ((static_cast<double>(n) * m[n - 1]) - e) / tau;
+    }
+    return m;
+  }
+  if (tau < 0.0) {
+    const double g = -tau;
+    double power = 1.0; // g^k / k!
+    for (int k = 0; k < 400; ++k) {
+      for (std::size_t n = 0; n < MOMENT_COUNT; ++n) {
+        m[n] += power / (static_cast<double>(n) + static_cast<double>(k) + 1.0);
+      }
+      power *= g / static_cast<double>(k + 1);
+      // M_11 is the smallest moment. Past k = 2g successive terms at least
+      // halve, so every remaining tail is below 2 * power.
+      if (power <= 1.0e-17 * m[MOMENT_COUNT - 1] && static_cast<double>(k) > 2.0 * g) {
+        break;
+      }
     }
     return m;
   }

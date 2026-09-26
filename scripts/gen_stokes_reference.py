@@ -18,6 +18,8 @@ Groups:
   aligned  - alpha_U = rho_U = 0 (the FaradayPropagation frame)
   thin     - alpha_I ds in {1e-3, 1e-6, 1e-9} with Faraday depth 10 and 1000
   split    - alpha_I ds in {0.1, 0.3, 1} with Faraday depth 10 and 1000
+  gain     - alpha_I ds in {-0.1, -1, -10} (stimulated emission) with Faraday
+             depth 0, 1, 100 and dichroism, plus pure gain and |alpha_I ds| = 40
   limit    - zero K, pure Faraday, pure dichroism, eta || rho, w.w = 0,
              alpha_I = |eta|, optically thick, and scaled-unit twins
 
@@ -60,7 +62,7 @@ def physical_vectors(rng: random.Random) -> tuple[list[float], list[float]]:
 
 
 def random_row(rng: random.Random, group: str, tau_a: float, tau_f: float, frame3d: bool) -> Row:
-    """One segment at absorption depth tau_a and Faraday depth ~tau_f with |eta| <= aI."""
+    """One segment at absorption depth tau_a and Faraday depth ~tau_f with |eta| <= |aI|."""
     ds = 1.0
     a_i = tau_a
     eta_n = unit_vector(rng)
@@ -126,6 +128,15 @@ def build_rows() -> list[Row]:
         for tau_f in (10.0, 1000.0):
             for _ in range(2):
                 rows.append(random_row(rng, "split", tau_a, tau_f, True))
+    for tau_a in (-0.1, -1.0, -10.0):
+        for tau_f in (0.0, 1.0, 100.0):
+            for _ in range(2):
+                rows.append(random_row(rng, "gain", tau_a, tau_f, True))
+    j = [0.8, 0.2, -0.1, 0.05]
+    s0 = [1.0, 0.3, -0.2, 0.1]
+    rows.append(("gain", [-10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0, j, s0))
+    rows.append(("gain", [-1.0e-9, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0], 1.0, j, s0))
+    rows.append(("gain", [-40.0, 0.001, 0.0, 0.002, 0.0, 0.0, 0.05], 1.0, j, s0))
     rows.extend(limit_rows())
     return rows
 

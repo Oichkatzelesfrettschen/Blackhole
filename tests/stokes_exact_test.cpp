@@ -6,14 +6,14 @@
  *   1. stokesPropagateExact (direct integral) within 1e-12 relative (vector
  *      2-norm) of the mpmath 5x5 matrix-exponential referee on every row of
  *      tests/stokes_exact_reference.inc: Faraday depth 0.01..1000, optical depth
- *      1e-9..800, alpha_U and rho_U nonzero, and the degenerate limits (zero K,
- *      pure Faraday, pure dichroism, eta || rho, w.w = 0, alpha_I = |eta|,
- *      scaled units).
+ *      1e-9..800 and gain down to -40, alpha_U and rho_U nonzero, and the
+ *      degenerate limits (zero K, pure Faraday, pure dichroism, eta || rho,
+ *      w.w = 0, alpha_I = |eta|, scaled units).
  *   2. stokesStepFull, the FaradayPropagation entry point, on the aligned-frame rows.
  *   3. SteadyStateSplit within its 1e-9 budget for alpha_I ds >= 0.1, and equal
  *      to the direct integral below that depth.
  *   4. Closed forms: rotation by rho_V ds, I +- Q decay at alpha_I +- alpha_Q,
- *      and 1 - K' + K'^2 / 2 for a null rotation.
+ *      1 - K' + K'^2 / 2 for a null rotation, and pure gain at alpha_I ds = -10.
  *   5. Invariants: I >= |P| for physical K, S0 and J; I^2 - |P|^2 preserved
  *      when alpha_I = 0 and J = 0; two half steps equal one step; agreement
  *      with the simplified-K stokesStep.
@@ -95,8 +95,8 @@ StokesArray toArray(const StokesVector &s) {
 }
 
 void testReferenceDirect() {
-  constexpr std::array<std::string_view, 5> groups = {"generic", "aligned", "thin", "split",
-                                                      "limit"};
+  constexpr std::array<std::string_view, 6> groups = {"generic", "aligned", "thin",
+                                                      "split",   "gain",    "limit"};
   double worstAll = 0.0;
   for (const std::string_view group : groups) {
     double worst = 0.0;
@@ -184,6 +184,12 @@ void testClosedFormLimits() {
   const StokesArray nlRef = {s0[0] - k1[0] + (0.5 * k2[0]), s0[1] - k1[1] + (0.5 * k2[1]),
                              s0[2] - k1[2] + (0.5 * k2[2]), s0[3] - k1[3] + (0.5 * k2[3])};
   check(relErr(nl, nlRef) < 1.0e-14, "w.w = 0 null rotation equals 1 - K' + K'^2/2");
+
+  // Pure gain (alpha_I < 0): I = I0 e^{g} + jI (e^{g} - 1) / g with g = -alpha_I ds.
+  const StokesArray gain = stokesPropagateExact(s0, {0.8, 0.0, 0.0, 0.0}, {.alphaI = -10.0}, 1.0);
+  const double grow = std::exp(10.0);
+  check(std::abs(gain[0] - ((s0[0] * grow) + (0.8 * std::expm1(10.0) / 10.0))) <= 1.0e-14 * gain[0],
+        "pure gain alpha_I ds = -10 grows I as e^10 plus the emission integral");
 
   // Zero length leaves the state unchanged.
   check(stokesPropagateExact(s0, s0, {.alphaI = 1.0, .rhoV = 2.0}, 0.0) == s0,
