@@ -171,7 +171,9 @@ TEST(TesseractProjection, StereographicGuardsThePole) {
   EXPECT_NEAR(tess::projectStereographic(mid).fade, 0.5f, 1e-4f);
   const float wFull = 1.0f - tess::STEREOGRAPHIC_FADE_END;
   const glm::vec4 full(std::sqrt(1.0f - (wFull * wFull)), 0.0f, 0.0f, wFull);
-  EXPECT_FLOAT_EQ(tess::projectStereographic(full).fade, 1.0f);
+  // 1 - (1 - FADE_END) rounds to within an ulp of FADE_END, so the fade sits
+  // at the top of the smoothstep to about 1e-6.
+  EXPECT_NEAR(tess::projectStereographic(full).fade, 1.0f, 1e-5f);
 }
 
 TEST(LibraryOfTime, WorldTubeExtrudesAlongW) {
@@ -184,7 +186,7 @@ TEST(LibraryOfTime, WorldTubeExtrudesAlongW) {
     EXPECT_NEAR(tube.at(k).w, static_cast<float>(k), TIME_TOL);
   }
   EXPECT_EQ(tube.front().w, 0.0f);
-  EXPECT_EQ(tube.back().w, span);
+  EXPECT_FLOAT_EQ(tube.back().w, span); // T * (k / last) at k = last, within 4 ulps
   EXPECT_EQ(tess::extrudeWorldTube(point, span, 0).size(), 2U);
 }
 
@@ -286,11 +288,12 @@ TEST(TesseractAnimation, RateChangeAfterLongRunMovesOnlyOneStep) {
   // |exp(ds v) q - q| <= 2 sin(|v| ds / 2) <= |v| ds per component group.
   EXPECT_LT(quatDistance(next.left, orientation.left), 4.0 * 1.0 * ds);
   EXPECT_LT(quatDistance(next.right, orientation.right), 4.0 * 1.0 * ds);
-  // Animation off (ds = 0) holds the orientation exactly.
+  // Animation off (ds = 0) holds the orientation: the step is the identity and
+  // only renormalization of an already-unit quaternion touches the last bits.
   const tess::So4Pair<double> frozen =
       tess::advanceOrientation(orientation, newLeft, newRight, 0.0);
-  EXPECT_EQ(quatDistance(frozen.left, orientation.left), 0.0);
-  EXPECT_EQ(quatDistance(frozen.right, orientation.right), 0.0);
+  EXPECT_LT(quatDistance(frozen.left, orientation.left), 1e-15);
+  EXPECT_LT(quatDistance(frozen.right, orientation.right), 1e-15);
   // Unit norm survives the long accumulation.
   EXPECT_NEAR(tess::norm(orientation.left), 1.0, 1e-12);
   EXPECT_NEAR(tess::norm(orientation.right), 1.0, 1e-12);

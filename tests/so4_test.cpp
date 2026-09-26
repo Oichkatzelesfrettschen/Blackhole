@@ -108,7 +108,10 @@ TEST(So4, JointSignFlipGivesIdenticalMatrix) {
     for (const Quat &qR : sampleQuats()) {
       const Quat nL{.w = -qL.w, .x = -qL.x, .y = -qL.y, .z = -qL.z};
       const Quat nR{.w = -qR.w, .x = -qR.x, .y = -qR.y, .z = -qR.z};
-      expectMatNear(so4FromPair(qL, qR), so4FromPair(nL, nR), 0.0);
+      // Negating both factors leaves every product a_i b_j unchanged in exact
+      // arithmetic; floating point may reassociate the 16-term sums (fast-math
+      // lanes do), so entries of magnitude <= 1 agree to a few ulps, 1e-15.
+      expectMatNear(so4FromPair(qL, qR), so4FromPair(nL, nR), 1e-15);
     }
   }
 }
@@ -209,7 +212,8 @@ void expectQuatEq(const Quat &actual, const Quat &expected) {
 }
 
 // Hamilton's rules i^2 = j^2 = k^2 = ijk = -1, written out by hand so the
-// test pins the algebra independently of operator*.
+// test pins the algebra independently of operator*. Exact equality holds in
+// any evaluation order: every term is 0 or +-1, so no sum ever rounds.
 TEST(So4, HamiltonProductFollowsIJEqualsK) {
   const Quat one{.w = 1, .x = 0, .y = 0, .z = 0};
   const Quat i{.w = 0, .x = 1, .y = 0, .z = 0};
@@ -230,6 +234,7 @@ TEST(So4, HamiltonProductFollowsIJEqualsK) {
 // i (w + x i + y j + z k) = -x + w i - z j + y k, so left multiplication by i
 // sends (x, y, z, w) to (w, -z, y, -x); (w + x i + y j + z k)(-j) =
 // y + z i - w j - x k, so v -> v conj(j) sends (x, y, z, w) to (z, -w, -x, y).
+// Entries are sums of products of 0 and +-1, exact in any evaluation order.
 TEST(So4, HandComputedEntriesForNonCommutingAxes) {
   const Quat one{.w = 1, .x = 0, .y = 0, .z = 0};
   const Quat i{.w = 0, .x = 1, .y = 0, .z = 0};
