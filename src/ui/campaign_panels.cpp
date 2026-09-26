@@ -391,7 +391,7 @@ void renderIntelWindow(const game::CampaignViewSnapshot &view, const CampaignUiS
   ImGui::End();
 }
 
-void startColonyStory(CampaignUiState &uiState) {
+void startColonyStory(CampaignUiState &uiState, int colonyBand) {
   const game::EventLoadResult loaded =
       game::loadEventSetFile(platform::resourcePath("assets/events/host_goes_dark.json"));
   if (!loaded.ok()) {
@@ -399,7 +399,7 @@ void startColonyStory(CampaignUiState &uiState) {
     return;
   }
   uiState.storyError.clear();
-  uiState.storySession = std::make_unique<game::CampaignSession>(1, loaded.story, 0);
+  uiState.storySession = std::make_unique<game::CampaignSession>(1, loaded.story, colonyBand);
   uiState.inbox = game::Inbox(game::K_FIRST_COLONY_NODE);
   uiState.focusNode = game::K_FIRST_COLONY_NODE;
   uiState.commandOrigin = game::K_FIRST_COLONY_NODE;
@@ -415,9 +415,24 @@ void startColonyStory(CampaignUiState &uiState) {
  *         station's rate, pause categories, and the lagging indicator. */
 void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
   ImGui::SeparatorText("Real time");
-  if (!uiState.storySession && ImGui::Button("Land on Miller's planet (host story)")) {
-    startColonyStory(uiState);
-    return; // this frame's view is the old session's
+  if (!uiState.storySession) {
+    // The host-goes-dark story from either orbit. Deep, the colony hears
+    // decades of the host's stream per local day but ships little before the
+    // host falls silent; shallow, it ships its whole charter home but its
+    // mission ends while the stream has barely begun.
+    ImGui::TextUnformatted("host story -- choose where the colony lives:");
+    int chosenBand = -1;
+    if (ImGui::Button("Miller's planet (deep: 1 local hour = 7 outside years)")) {
+      chosenBand = game::K_MILLER_BAND;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("100M survey orbit (shallow)")) {
+      chosenBand = game::K_SURVEY_BAND;
+    }
+    if (chosenBand >= 0) {
+      startColonyStory(uiState, chosenBand);
+      return; // this frame's view is the old session's
+    }
   }
   if (!uiState.storyError.empty()) {
     ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "story: %s", uiState.storyError.c_str());

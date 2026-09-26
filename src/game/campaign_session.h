@@ -28,12 +28,34 @@ enum class CampaignScenario : std::uint8_t {
   GargantuaColony = 2, ///< Gargantua with a colony node and the host's story.
 };
 
-/** @brief Charter of the Gargantua colony scenario. The colony's clock is its
- *         orbit's; it ships one energy unit per local hour to the host for a
- *         365-local-day mission and then falls silent. */
+/**
+ * @brief Charter of the Gargantua colony scenario. The colony's clock is its
+ *        orbit's; it ships one energy unit per local hour to the host for a
+ *        mission of K_COLONY_MISSION_SEC local seconds and then falls silent.
+ *
+ * The mission length is the scenario parameter that decides the deep/shallow
+ * split balance_sweep_test records. The host streams packets on outside time
+ * until its seeded dark turn (3650..10950 turns); a colony hears packets and
+ * banks production only while its mission lasts on its own clock.
+ *  - On the 100M orbit (dtau/dt ~ 0.985) 365 local days is ~370 turns: the
+ *    colony banks all 8760 hours, since its window closes before the earliest
+ *    dark turn, but hears only the first ~370/K packets.
+ *  - On Miller's orbit (dtau/dt = 1.6286e-5) 365 local days is ~22 million
+ *    turns: the colony hears the whole stream before the host goes dark but
+ *    lives only 1-4 local hours of it, so it banks 1-4 units.
+ * Once the shallow window outlasts the dark turn -- 3650..10950 turns is
+ * about 3600..10800 local days at dtau/dt = 0.98492 -- the shallow colony
+ * hears the stream to its end, matches the deep tier, and still banks more:
+ * the split disappears, first for late-dark seeds, then for all. A mission shorter than the deep colony's pre-dark hours would
+ * shrink both colonies' banks. The value is a charter, fixed before any
+ * sweep, not a knob tuned to produce the split.
+ */
 inline constexpr std::int64_t K_COLONY_TICK_SEC = 3600;
 inline constexpr double K_COLONY_ENERGY_PER_TICK = 1.0;
 inline constexpr std::int64_t K_COLONY_MISSION_SEC = 365LL * 86400LL;
+/// Colony bands of the GargantuaColony scenario.
+inline constexpr int K_MILLER_BAND = 0;  ///< Miller's orbit: the prograde ISCO (deep).
+inline constexpr int K_SURVEY_BAND = 1;  ///< The 100M survey orbit (shallow).
 
 class CampaignSession {
 public:
