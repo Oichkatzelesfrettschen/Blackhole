@@ -519,7 +519,8 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 // rteStepVec3(); background and horizon contributions are weighted by the
 // surviving transmittance at escape.
 //
-// opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui)
+// opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui); j_eff and
+// alpha_nu are per unit affine length (kerrAffineStep).
 // ---------------------------------------------------------------------------
 vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
                         float stepSize, float opacityScale, out vec3 terminalPos) {
@@ -554,8 +555,12 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     /* D10: AMR step refinement near horizon and photon sphere */
     float rteStepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
+    KerrRay before = kRay;
     kerrStep(kRay, r_s, aTrace, c, rteStepDt);
     vec3 newPos = kerrRayPosition(kRay);
+    // rteStepDt is a Mino-time increment; transfer integrates over affine
+    // length (kerrAffineStep), the unit of jEff and alphaNu.
+    float pathStep = kerrAffineStep(before, kRay, aTrace, rteStepDt);
 
     if (adiskEnabled > 0.5) {
       float rCyl = length(newPos.xy);
@@ -587,7 +592,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
         float jEff    = flux * g3 * rhoNorm;
         float alphaNu = opacityScale * max(jEff, 0.0);
 
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, rteStepDt, transmit);
+        accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
         // Early exit when medium becomes opaque
         if (transmit < 0.005) {
@@ -629,7 +634,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 // The I channel uses the same front-to-back compositing as bhTraceGeodesicRTE()
 // (vec3 color-accurate accumulation).  The Q, U, V channels evolve under the
 // stokesStep() exact solution (simplified K: alpha_I + rho_V) at each disk
-// step, using the same alphaI and stepDt as the intensity path so the
+// step, using the same alphaI and path length as the intensity path so the
 // polarimetric and photometric results remain consistent.
 //
 // Polarization model:
@@ -685,8 +690,12 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
     }
 
     float stepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
+    KerrRay before = kRay;
     kerrStep(kRay, r_s, aTrace, c, stepDt);
     vec3 newPos = kerrRayPosition(kRay);
+    // Affine path length of the Mino step (kerrAffineStep), the unit of
+    // alphaNu and rhoV.
+    float pathStep = kerrAffineStep(before, kRay, aTrace, stepDt);
 
     if (adiskEnabled > 0.5) {
       float rCyl = length(newPos.xy);
@@ -715,7 +724,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
         float alphaNu = opacityScale * max(jEff, 0.0);
 
         // Intensity path (front-to-back compositing identical to RTE path)
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, stepDt, transmit);
+        accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
         // Polarization path: stokesStep() for Q, U, V
         // jI_scalar: mean color intensity for the emission vector
@@ -729,7 +738,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
         // Evolve Q, U, V under simplified K (alpha_I + rho_V)
         // WHY: I and V decouple in simplified K; we evolve Q/U coupled via rhoV.
         vec4 quv = stokesStep(vec4(0.0, stokesQU.x, stokesQU.y, stokesV),
-                              emStokes, alphaNu, rhoV, stepDt);
+                              emStokes, alphaNu, rhoV, pathStep);
         stokesQU = quv.yz;
         stokesV  = quv.w;
 

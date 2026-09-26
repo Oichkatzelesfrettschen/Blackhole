@@ -9,7 +9,13 @@
  * |w| = p_theta; a start that leaves e_theta at the azimuth of atan2(0, 0)
  * zeroes w for +y and traces that ray radially. A camera 1e-4 off the axis,
  * which takes the generic branch, starts with the same state to 1e-4 of each
- * quantity's scale. Skips without a CUDA device.
+ * quantity's scale.
+ *
+ * Radiative transfer through a uniform shell far from the hole, stepped with
+ * d_adaptive_step and d_kerr_step, must integrate over the affine path length
+ * d_kerr_affine_step returns: it matches the analytic slab solution at two
+ * step sizes, where the Mino-time increment would give I ~ 5e-6.
+ * Skips without a CUDA device.
  */
 
 #include <gtest/gtest.h>
@@ -42,6 +48,36 @@ __global__ void kerr_init_kernel(float3 pos, const float3 *dirs, int count, floa
     o[3] = ray.w.x;
     o[4] = ray.w.y;
     o[5] = ray.w.z;
+}
+
+/* Uniform shell r_near <= r <= r_far, source function 1, absorption alpha,
+ * traced inward from pos along dir (spin a = 0.9 M, r_s = 2). out = (I, T). */
+__global__ void kerr_slab_kernel(float3 pos, float3 dir, float step_size, float r_near,
+                                 float r_far, float alpha, float *out) {
+    float const rs = 2.0f;
+    float const a = 0.9f;
+    float const r_h = d_kerr_outer_horizon(rs, a);
+    float const a_trace = d_kerr_trace_spin(a);
+    KerrConsts c;
+    KerrRay kr;
+    d_kerr_init_geodesic(pos, dir, rs, a_trace, c, kr);
+    float transmit = 1.0f;
+    float3 accum = make_float3(0.0f, 0.0f, 0.0f);
+    for (int step = 0; step < 1000000; ++step) {
+        if (kr.r < 0.5f * r_near || kr.r <= r_h) {
+            break;
+        }
+        KerrRay const before = kr;
+        float const dlam = d_adaptive_step(kr.r, rs, r_h, step_size);
+        d_kerr_step(kr, rs, a_trace, c, dlam);
+        if (kr.r >= r_near && kr.r <= r_far) {
+            float const ds = d_kerr_affine_step(before, kr, a_trace, dlam);
+            accum = d_add(accum, d_rte_step(make_float3(1.0f, 1.0f, 1.0f), alpha, alpha, ds,
+                                            transmit));
+        }
+    }
+    out[0] = accum.x;
+    out[1] = transmit;
 }
 
 bool cudaAvailable() {
@@ -139,4 +175,28 @@ TEST(CudaKerrGeodesic, PoleStartIsContinuousWithOffAxisStart) {
             }
         }
     }
+}
+
+TEST(CudaKerrGeodesic, RadiativeTransferIntegratesAffinePathLength) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* Shell 300 <= r <= 700, alpha = 1/400: along the axis the affine length
+     * is Delta r = 400 exactly, so I = 1 - e^-1 and T = e^-1. End-point
+     * sampling misplaces at most one step (0.5 step_size r ~ 3.5) per
+     * boundary, hence the 2% tolerance. */
+    double const intensity = 1.0 - std::exp(-1.0);
+    double const transmit = std::exp(-1.0);
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, 2 * sizeof(float));
+    for (float const stepSize : {0.01f, 0.0025f}) {
+        kerr_slab_kernel<<<1, 1>>>(make_float3(0.0f, 0.0f, 1000.0f), make_float3(0.0f, 0.0f, -1.0f),
+                                   stepSize, 300.0f, 700.0f, 1.0f / 400.0f, dOut);
+        cudaDeviceSynchronize();
+        float out[2] = {0.0f, 0.0f};
+        cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
+        EXPECT_NEAR(out[0], intensity, 0.02 * intensity) << "stepSize=" << stepSize;
+        EXPECT_NEAR(out[1], transmit, 0.02 * transmit) << "stepSize=" << stepSize;
+    }
+    cudaFree(dOut);
 }

@@ -256,6 +256,53 @@ void main() {
 )";
 }
 
+// Radiative transfer through a uniform shell r in [slabNear, slabFar] of
+// source function 1 and absorption slabAlpha, traced inward from camPos along
+// camDir with the production step schedule (bhAdaptiveStep) at stepSize,
+// the production path length (kerrAffineStep), and rteStepVec3. Declarations
+// come from shader/geodesic_trace.comp as in rendererScheduleShader. Reports
+// intensity, transmittance, and the number of steps inside the shell.
+std::string rteSlabShader() {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  return comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+uniform float slabStepSize;
+uniform float slabNear;
+uniform float slabFar;
+uniform float slabAlpha;
+uniform vec3 slabCamPos;
+uniform vec3 slabCamDir;
+void main() {
+  float r_s = 2.0;
+  float a = 0.5 * kerrSpin * r_s;
+  float rHorizon = kerrOuterHorizon(r_s, a);
+  float aTrace = kerrTraceSpin(a);
+  KerrConsts c;
+  KerrRay kr;
+  kerrInitGeodesic(slabCamPos, normalize(slabCamDir), r_s, aTrace, c, kr);
+  float transmit = 1.0;
+  vec3 accum = vec3(0.0);
+  int inside = 0;
+  for (int step = 0; step < 1000000; ++step) {
+    if (kr.r < 0.5 * slabNear || kr.r <= rHorizon) {
+      break;
+    }
+    KerrRay before = kr;
+    float dlam = bhAdaptiveStep(kr.r, r_s, rHorizon, slabStepSize);
+    kerrStep(kr, r_s, aTrace, c, dlam);
+    if (kr.r >= slabNear && kr.r <= slabFar) {
+      float ds = kerrAffineStep(before, kr, aTrace, dlam);
+      accum += rteStepVec3(vec3(1.0), slabAlpha, slabAlpha, ds, transmit);
+      ++inside;
+    }
+  }
+  result[0] = accum.x;
+  result[1] = transmit;
+  result[2] = float(inside);
+}
+)";
+}
+
 class KerrShaderCaptureTest : public ::testing::Test {
 protected:
   static bhtest::HiddenGlContext *context;
@@ -683,4 +730,56 @@ TEST_F(KerrShaderCaptureTest, PoleStartIsContinuousWithOffAxisStart) {
       expectContinuous(axis, dispatchPole(spin, plane, 60.0F, 0.0F, 1e-4F), label + " dy");
     }
   }
+}
+
+TEST_F(KerrShaderCaptureTest, RadiativeTransferIntegratesAffinePathLength) {
+  // A uniform shell 300 <= r <= 700 (M = 1) with source function 1 and
+  // absorption 1/400 per unit length: a ray crossing it far from the hole
+  // along a nearly straight path of geometric length L must reach
+  // I = 1 - exp(-L / 400) and T = exp(-L / 400), at two step sizes a factor 4
+  // apart. On the spin axis the affine length equals Delta r exactly; the
+  // equatorial ray at impact parameter 5 crosses sqrt(700^2 - 25) -
+  // sqrt(300^2 - 25). Emission sampled at step end points misplaces at most
+  // one step per shell boundary, 0.5 stepSize r ~ 3.5 of L = 400 at the
+  // coarser step, so the tolerance is 2%. Passing the Mino increment as the
+  // length gives L ~ 1/300 - 1/700 and I ~ 5e-6.
+  constexpr float rNear = 300.0F;
+  constexpr float rFar = 700.0F;
+  constexpr double alpha = 1.0 / 400.0;
+  const GLuint program = bhtest::createComputeProgram(rteSlabShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 3), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  struct Ray {
+    float x, y, z, dx, dy, dz;
+    double length;
+  };
+  const double equatorialLength =
+      std::sqrt((700.0 * 700.0) - 25.0) - std::sqrt((300.0 * 300.0) - 25.0);
+  for (const Ray ray : {Ray{.x = 0.0F, .y = 0.0F, .z = 1000.0F, .dx = 0.0F, .dy = 0.0F,
+                            .dz = -1.0F, .length = 400.0},
+                        Ray{.x = 1000.0F, .y = 0.0F, .z = 0.0F, .dx = -1000.0F, .dy = 5.0F,
+                            .dz = 0.0F, .length = equatorialLength}}) {
+    const double intensity = 1.0 - std::exp(-alpha * ray.length);
+    const double transmit = std::exp(-alpha * ray.length);
+    for (const float stepSize : {0.01F, 0.0025F}) {
+      glUseProgram(program);
+      glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.9F);
+      glUniform1f(glGetUniformLocation(program, "slabStepSize"), stepSize);
+      glUniform1f(glGetUniformLocation(program, "slabNear"), rNear);
+      glUniform1f(glGetUniformLocation(program, "slabFar"), rFar);
+      glUniform1f(glGetUniformLocation(program, "slabAlpha"), static_cast<float>(alpha));
+      glUniform3f(glGetUniformLocation(program, "slabCamPos"), ray.x, ray.y, ray.z);
+      glUniform3f(glGetUniformLocation(program, "slabCamDir"), ray.dx, ray.dy, ray.dz);
+      const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 3);
+      const std::string where =
+          "camera z=" + std::to_string(ray.z) + " stepSize=" + std::to_string(stepSize);
+      EXPECT_NEAR(out.at(0), intensity, 0.02 * intensity) << where;
+      EXPECT_NEAR(out.at(1), transmit, 0.02 * transmit) << where;
+      EXPECT_GT(out.at(2), 50.0F) << where;
+    }
+  }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
 }

@@ -58,7 +58,8 @@
 //   em      -- emission vector (jI, jQ, jU, jV)
 //   alphaI  -- total absorption [1/path-unit]
 //   rhoV    -- Faraday rotation coefficient [rad/path-unit]
-//   ds      -- segment length [same units as alphaI denominator]
+//   ds      -- segment length [same units as alphaI denominator]; along a
+//              Kerr geodesic the affine length of the step (kerrAffineStep)
 //
 // Returns: updated Stokes state after segment.
 // ---------------------------------------------------------------------------

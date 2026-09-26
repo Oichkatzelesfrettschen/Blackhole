@@ -264,6 +264,19 @@ void kerrDragAndTimeRates(float r, float sin2, float vr, float r_s, float a,
   }
 }
 
+// Affine length of a Mino step, the path length radiative transfer
+// integrates over: d(lambda_affine) = Sigma d(lambda_Mino) at E = 1, so it is
+// the length a distant observer assigns to the photon path. Far from the hole
+// it is the Euclidean length (on the spin axis dr/d(lambda_affine) = 1
+// exactly). Trapezoid rule over the step's end states; the error falls as the
+// square of the step, so sums over a fixed stretch of path converge as the
+// step shrinks.
+float kerrAffineStep(KerrRay before, KerrRay after, float a, float dlam) {
+  float sigma0 = kerrSigma(before.r, a, before.n.z);
+  float sigma1 = kerrSigma(after.r, a, after.n.z);
+  return 0.5 * (sigma0 + sigma1) * abs(dlam);
+}
+
 // Null-constraint projection. The leapfrog carries vr^2 = R(r) only as a first
 // integral; in float32 the rounding of |vr| ~ P ~ r^2 far out accumulates over
 // the r^2 dynamic range until a near-radial ray reverses at a few r_s. Away
