@@ -187,10 +187,10 @@ using blackhole::applyEnvironmentConfig;
 using blackhole::recreateRenderTargets;
 
 // Compare-sweep advance/restore state machine lives in src/render/compare_sweep.*.
-using blackhole::advanceComparePresetSweep;
 using blackhole::captureCompareParity;
 using blackhole::CompareParityInputs;
 using blackhole::restoreCompareSweepState;
+using blackhole::updateComparePresetSweep;
 
 // Speculative tesseract scene pass lives in src/render/tesseract/*.
 using blackhole::renderTesseractScene;
@@ -1564,11 +1564,9 @@ int main(int argc, char **argv) {
       // The --curve-tsv plot is independent of the scene.
       renderCurveOverlayWindow(rs, cli.curveTsvPath);
 
-      // The compare sweep drives the geodesic integrator; the tesseract scene
-      // bypasses it along with the compute dispatch and parity capture.
-      if (rs.scene.mode == RenderState::SceneMode::Blackhole) {
-        advanceComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
-      }
+      // The compare sweep drives the geodesic integrator; another scene
+      // cancels it and restores the live camera.
+      updateComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
 
       // --record-frames: drive camera and spin from the selected record path
       applyRecordCameraPath(rs, cli, input);
