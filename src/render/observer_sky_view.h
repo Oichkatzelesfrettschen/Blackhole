@@ -104,6 +104,54 @@ projectToPixel(const std::array<physics::observer_sky::Vec3, 3> &basis,
                const physics::observer_sky::Vec3 &look, double tanHalfFov, int width, int height);
 
 /**
+ * @brief How the observer's own light leaves: the emission-side reading of
+ *        the traced sky. (t, phi) -> (-t, -phi) is an isometry of Kerr that
+ *        maps the observer's worldline to itself and keeps a photon's E, L,
+ *        and Carter constant, so every photon the observer receives from
+ *        infinity with blueshift g has a twin it emits to infinity with
+ *        nu_inf / nu_emit = g_emit = 1/g = (dtau/dt) / (1 - Omega lambda),
+ *        over the same solid angle of its sky.
+ */
+struct EmissionSummary {
+  double escapingFraction = 0.0; ///< Of the emission sphere.
+  /// g_emit below 1e-3: light that climbs straight out of the throat, with
+  /// g_emit near dtau/dt (lambda near 0).
+  double directFraction = 0.0;
+  /// g_emit above 0.1: near-superradiant light (lambda near 1/Omega) that
+  /// reaches infinity on the NHEKline with g_emit up to sqrt(3).
+  double nhekFraction = 0.0;
+  double gEmitMin = 0.0;
+  double gEmitMax = 0.0;
+  double log10Min = -7.0; ///< Histogram of log10 g_emit: first bin edge.
+  double log10Step = 0.1;
+  std::vector<float> histogram; ///< Emission-sphere fraction per bin.
+};
+[[nodiscard]] EmissionSummary summarizeEmission(const physics::observer_sky::ObserverSkyLut &lut);
+
+/** @brief Upper half of the extremal Kerr shadow edge seen from inclination
+ *         `inclination` (Gralla, Lupsasca & Strominger 2017, arXiv:1710.11112,
+ *         Eq. A.5, M = 1): alpha = (r^2 - 1 - 2r) / sin(i), beta = sqrt(r^3 (4 - r)
+ *         + cos^2 i - (r^2 - 1 - 2r)^2 cot^2 i) for r in [1, 4] where beta is real. */
+[[nodiscard]] std::vector<std::array<double, 2>> extremalShadowEdge(double inclination,
+                                                                    int samples);
+
+/** @brief The NHEKline (ibid., Eq. A.12a): alpha = -2 / sin(i), |beta| <
+ *         sqrt(3 + cos^2 i - 4 cot^2 i); it exists only for i above
+ *         arctan((4/3)^(1/4)) = 47 deg (and below its mirror). */
+struct NhekLine {
+  double alpha = 0.0;
+  double halfLength = 0.0;
+};
+[[nodiscard]] std::optional<NhekLine> nhekLine(double inclination);
+
+/** @brief Coordinate seconds light takes from the observer to radius
+ *         1 + xFar along the equatorial principal null congruence
+ *         (kerr_observer::principalNullDelay), the radial lower bound for any
+ *         path out of the throat. */
+[[nodiscard]] double signalDelaySeconds(const physics::observer_sky::ObserverKey &key,
+                                        const ObserverClockModel &clock, double xFar);
+
+/**
  * @brief GPU residency for one observer's maps. request() starts a background
  *        load-or-build for a key; poll() uploads the finished bundle on the
  *        GL thread. Textures stay bound to the last completed key until a new
@@ -135,6 +183,7 @@ public:
     return lut_;
   }
   [[nodiscard]] const std::string &message() const { return message_; }
+  [[nodiscard]] const EmissionSummary &emission() const { return emission_; }
   [[nodiscard]] gl::GLuint skyTexture() const { return skyTexture_; }
   [[nodiscard]] gl::GLuint skySpanTexture() const { return skySpanTexture_; }
   [[nodiscard]] gl::GLuint tileTexture() const { return tileTexture_; }
@@ -152,6 +201,7 @@ private:
   std::future<std::optional<physics::observer_sky::ObserverSkyLut>> pending_;
   std::optional<physics::observer_sky::ObserverSkyLut> lut_;
   std::optional<BlackbodyTable> blackbody_;
+  EmissionSummary emission_;
   std::string message_;
   gl::GLuint skyTexture_ = 0;
   gl::GLuint skySpanTexture_ = 0;

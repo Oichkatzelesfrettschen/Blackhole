@@ -243,6 +243,87 @@ std::optional<std::array<double, 2>> projectToPixel(const std::array<sky::Vec3, 
                                0.5 * (ndcY + 1.0) * static_cast<double>(height)};
 }
 
+EmissionSummary summarizeEmission(const sky::ObserverSkyLut &lut) {
+  EmissionSummary summary;
+  constexpr std::size_t bins = 80;
+  std::vector<double> histogram(bins, 0.0);
+  bool any = false;
+  const auto add = [&](float logG, double solidAngle) {
+    if (!(logG > sky::K_NO_SKY_THRESHOLD)) {
+      return;
+    }
+    const double gEmit = std::exp(-static_cast<double>(logG));
+    summary.escapingFraction += solidAngle;
+    summary.directFraction += gEmit < 1.0e-3 ? solidAngle : 0.0;
+    summary.nhekFraction += gEmit > 0.1 ? solidAngle : 0.0;
+    summary.gEmitMin = any ? std::fmin(summary.gEmitMin, gEmit) : gEmit;
+    summary.gEmitMax = any ? std::fmax(summary.gEmitMax, gEmit) : gEmit;
+    any = true;
+    const double position = (std::log10(gEmit) - summary.log10Min) / summary.log10Step;
+    const auto bin =
+        static_cast<std::size_t>(std::clamp(position, 0.0, static_cast<double>(bins - 1)));
+    histogram.at(bin) += solidAngle;
+  };
+  // The tile replaces the equirectangular map inside its outer radius.
+  const sky::LogPolarTile &tile = lut.tile;
+  const double cosRhoMax = std::cos(tile.rhoMax);
+  for (std::size_t row = 0; row < lut.sky.height; ++row) {
+    const double solidAngle = sky::equirectPixelSolidAngle(row, lut.sky.width, lut.sky.height);
+    for (std::size_t column = 0; column < lut.sky.width; ++column) {
+      const sky::Vec3 look = sky::equirectLook(column, row, lut.sky.width, lut.sky.height);
+      if (dot(look, tile.center) > cosRhoMax) {
+        continue; // Counted through the tile below.
+      }
+      add(lut.sky.rgba.at((((row * lut.sky.width) + column) * 4) + 3), solidAngle);
+    }
+  }
+  for (std::size_t ring = 0; ring < lut.tileImage.height; ++ring) {
+    const double solidAngle = sky::tileTexelSolidAngle(tile, ring);
+    for (std::size_t column = 0; column < lut.tileImage.width; ++column) {
+      add(lut.tileImage.rgba.at((((ring * lut.tileImage.width) + column) * 4) + 3), solidAngle);
+    }
+  }
+  const double sphere = 4.0 * std::numbers::pi;
+  summary.escapingFraction /= sphere;
+  summary.directFraction /= sphere;
+  summary.nhekFraction /= sphere;
+  summary.histogram.resize(bins);
+  std::ranges::transform(histogram, summary.histogram.begin(),
+                         [sphere](double value) { return static_cast<float>(value / sphere); });
+  return summary;
+}
+
+std::vector<std::array<double, 2>> extremalShadowEdge(double inclination, int samples) {
+  const double sinI = std::sin(inclination);
+  const double cosI = std::cos(inclination);
+  const double cot2 = (cosI * cosI) / (sinI * sinI);
+  std::vector<std::array<double, 2>> edge;
+  for (int index = 0; index <= samples; ++index) {
+    const double r = 1.0 + (3.0 * static_cast<double>(index) / static_cast<double>(samples));
+    const double shifted = (r * r) - 1.0 - (2.0 * r);
+    const double beta2 = (r * r * r * (4.0 - r)) + (cosI * cosI) - (shifted * shifted * cot2);
+    if (beta2 >= 0.0) {
+      edge.push_back({shifted / sinI, std::sqrt(beta2)});
+    }
+  }
+  return edge;
+}
+
+std::optional<NhekLine> nhekLine(double inclination) {
+  const double sinI = std::sin(inclination);
+  const double cosI = std::cos(inclination);
+  const double halfLength2 = 3.0 + (cosI * cosI) - (4.0 * cosI * cosI / (sinI * sinI));
+  if (!(halfLength2 > 0.0)) {
+    return std::nullopt;
+  }
+  return NhekLine{.alpha = -2.0 / sinI, .halfLength = std::sqrt(halfLength2)};
+}
+
+double signalDelaySeconds(const sky::ObserverKey &key, const ObserverClockModel &clock,
+                          double xFar) {
+  return ko::principalNullDelay(key.epsilon, key.x, xFar) * clock.secondsPerM;
+}
+
 void ObserverSkyRenderer::request(const sky::ObserverKey &key, const sky::LutDimensions &dimensions,
                                   const std::filesystem::path &cacheDirectory) {
   const std::uint64_t hash = sky::lutHash(key, dimensions, sky::TraceSettings{});
@@ -283,6 +364,7 @@ void ObserverSkyRenderer::poll(const std::filesystem::path &blackbodyCsv, double
     return;
   }
   upload(*built, *blackbody_, cmbTemperature);
+  emission_ = summarizeEmission(*built);
   lut_ = std::move(built);
   residentHash_ = finishedHash;
   status_ = Status::Ready;

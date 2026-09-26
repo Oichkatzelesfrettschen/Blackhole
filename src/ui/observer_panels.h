@@ -30,6 +30,16 @@ void renderObserverSkyPanel(blackhole::RenderState &rs);
 void renderObserverPhysicsNote(const blackhole::RenderState &rs);
 
 /**
+ * @brief The observer seen from far away, as a heads-up overlay rather than a
+ *        trace: the redshift g_emit = (dtau/dt) / (1 - Omega lambda) of its
+ *        light over the emission sphere, the g^4 dimming, the apparent tick
+ *        rate, the latest observer time a distant radius has received, and a
+ *        schematic of where its images sit on an extremal hole's screen (the
+ *        NHEKline of Gralla, Lupsasca & Strominger 2017).
+ */
+void renderObserverDistantView(blackhole::RenderState &rs);
+
+/**
  * @brief The disclosure line drawn on the viewport image in the observer-sky
  *        scene: the view's physics spin against the black-hole scene's render
  *        spin. The film itself separated them (James et al. 2015,

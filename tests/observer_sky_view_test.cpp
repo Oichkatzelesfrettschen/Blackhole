@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "physics/kerr_observer.h"
+#include "physics/observer_sky_lut.h"
 #include "physics/observer_sky_map.h"
 #include "render/observer_sky_view.h"
 
@@ -153,6 +154,74 @@ TEST(ObserverSkyView, BlackbodyTableHasPlanckEfficacyAndColor) {
   EXPECT_NEAR(d65.at(2), 1.0, 0.06);
   const double slope = table->at(7.0).at(3) - table->at(6.0).at(3);
   EXPECT_NEAR(slope, 1.0, 0.01) << "log10 luminance per decade of T on the Rayleigh-Jeans tail";
+}
+
+/**
+ * GLS 2017 (arXiv:1710.11112) Eq. A.12a: the NHEKline sits at alpha = -2 csc i
+ * with |beta| < sqrt(3 + cos^2 i - 4 cot^2 i), which is sqrt(3) edge-on and
+ * vanishes at i = arctan((4/3)^(1/4)) = 47.06 deg (Eq. A.7, "about 47"); Eq. A.6 puts the
+ * r = 1 ends of the extremal shadow edge exactly on the line's ends.
+ */
+TEST(ObserverSkyView, NhekLineMatchesGrallaLupsascaStrominger) {
+  const auto edgeOn = blackhole::nhekLine(0.5 * K_PI);
+  if (!edgeOn.has_value()) {
+    GTEST_FAIL() << "no NHEKline edge-on";
+  }
+  EXPECT_NEAR(edgeOn->alpha, -2.0, 1e-15);
+  EXPECT_NEAR(edgeOn->halfLength, std::numbers::sqrt3, 1e-15);
+  const double critical = std::atan(std::pow(4.0 / 3.0, 0.25));
+  EXPECT_NEAR(critical * 180.0 / K_PI, 47.06, 0.01);
+  EXPECT_FALSE(blackhole::nhekLine(critical - 1e-6).has_value());
+  EXPECT_TRUE(blackhole::nhekLine(critical + 1e-6).has_value());
+  const double inclination = 70.0 * K_PI / 180.0;
+  const auto line = blackhole::nhekLine(inclination);
+  const auto edge = blackhole::extremalShadowEdge(inclination, 3000);
+  if (!line.has_value() || edge.empty()) {
+    GTEST_FAIL() << "no NHEKline or shadow edge at 70 deg";
+  }
+  EXPECT_NEAR(edge.front().at(0), line->alpha, 1e-12);
+  EXPECT_NEAR(edge.front().at(1), line->halfLength, 1e-12);
+}
+
+/**
+ * The emission-side reading of the traced sky. At the Schwarzschild ISCO the
+ * orbiter's received g spans 1/sqrt(2)..3/sqrt(2) (Opatrny et al. Eq. A12),
+ * so its light leaves with g_emit in sqrt(2)/3..sqrt(2), and 12.2% of its sky
+ * is shadow. At the paper's Miller orbit the received floor 1/sqrt(3) becomes
+ * the emitted ceiling sqrt(3) -- the bound GLS derive (Eq. 3.14) for
+ * near-extremal ISCO light at infinity, from the other end of the ray.
+ */
+TEST(ObserverSkyView, EmissionMirrorsTheReceivedSky) {
+  const sky::LutDimensions small{.width = 128, .height = 64, .tileRadial = 64, .tileAzimuth = 64};
+  const sky::ObserverSkyLut isco = sky::buildObserverSkyLut(
+      requireKey(blackhole::observerKeyFor(1.0, 5.0, ObserverKind::Prograde)), small,
+      sky::TraceSettings{});
+  const blackhole::EmissionSummary schwarzschild = blackhole::summarizeEmission(isco);
+  EXPECT_NEAR(schwarzschild.gEmitMax, std::sqrt(2.0), 2e-3);
+  EXPECT_NEAR(schwarzschild.gEmitMin, std::sqrt(2.0) / 3.0, 2e-3);
+  EXPECT_NEAR(schwarzschild.escapingFraction, 1.0 - 0.122, 0.006);
+  EXPECT_EQ(schwarzschild.directFraction, 0.0);
+
+  const sky::ObserverSkyLut miller = sky::buildObserverSkyLut(
+      requireKey(blackhole::observerKeyFor(1.3e-14, 3.79e-5, ObserverKind::Prograde)), small,
+      sky::TraceSettings{});
+  const blackhole::EmissionSummary nearExtremal = blackhole::summarizeEmission(miller);
+  EXPECT_NEAR(nearExtremal.gEmitMax, std::numbers::sqrt3, 2e-3);
+  EXPECT_LT(nearExtremal.gEmitMin, 1.0e-5) << "the patch's twin leaves redshifted below dtau/dt";
+  EXPECT_NEAR(nearExtremal.escapingFraction, 1.0 - 0.453, 0.01);
+  EXPECT_GT(nearExtremal.nhekFraction, 0.9 * nearExtremal.escapingFraction);
+}
+
+/**
+ * Schwarzschild check of the delay: dt/dr = 1/(1 - 2/r) integrates to
+ * (r2 - r1) + 2 ln((r2 - 2)/(r1 - 2)) in M.
+ */
+TEST(ObserverSkyView, SignalDelayIsTheRadialNullIntegral) {
+  const sky::ObserverKey key = requireKey(blackhole::observerKeyFor(1.0, 5.0, ObserverKind::Zamo));
+  const blackhole::ObserverClockModel clock = blackhole::observerClockModel(key, 1.0);
+  const double expectedM = (400.0 - 6.0) + (2.0 * std::log((400.0 - 2.0) / (6.0 - 2.0)));
+  EXPECT_NEAR(blackhole::signalDelaySeconds(key, clock, 399.0) / clock.secondsPerM, expectedM,
+              1e-9);
 }
 
 } // namespace

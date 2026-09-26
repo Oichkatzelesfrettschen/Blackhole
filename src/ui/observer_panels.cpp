@@ -6,11 +6,14 @@
 #include "ui/observer_panels.h"
 
 #include <array>
+#include <cfloat>
 #include <cmath>
+#include <cstddef>
 #include <format>
 #include <numbers>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 
@@ -196,6 +199,114 @@ void renderObserverPhysicsNote(const RenderState &rs) {
       "about the spin axis once per orbit, about ten times a second of the observer's own time at "
       "Miller's orbit. At sky time scale 1 each frame samples four sub-frame positions (motion "
       "blur); the default 1e-3 slows the sky a thousandfold so the star field can be followed.");
+  ImGui::End();
+}
+
+namespace {
+
+/** @brief Screen schematic: extremal shadow edge, NHEKline, and the two
+ *         images, with alpha to the right and beta up (units of M). */
+void drawDistantScreen(double inclination) {
+  const ImVec2 size(ImGui::GetContentRegionAvail().x, 240.0F);
+  const ImVec2 origin = ImGui::GetCursorScreenPos();
+  ImGui::InvisibleButton("distant-screen", size);
+  ImDrawList *draw = ImGui::GetWindowDrawList();
+  draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y),
+                      IM_COL32(8, 8, 14, 255));
+  const float scale = size.y / 14.0F;
+  const ImVec2 center(origin.x + (0.45F * size.x), origin.y + (0.5F * size.y));
+  const auto toScreen = [&](double alpha, double beta) {
+    return ImVec2(center.x + (static_cast<float>(alpha) * scale),
+                  center.y - (static_cast<float>(beta) * scale));
+  };
+  const std::vector<std::array<double, 2>> edge = blackhole::extremalShadowEdge(inclination, 400);
+  for (std::size_t index = 1; index < edge.size(); ++index) {
+    for (const double sign : {1.0, -1.0}) {
+      draw->AddLine(toScreen(edge.at(index - 1).at(0), sign * edge.at(index - 1).at(1)),
+                    toScreen(edge.at(index).at(0), sign * edge.at(index).at(1)),
+                    IM_COL32(150, 150, 170, 255), 1.5F);
+    }
+  }
+  const std::optional<blackhole::NhekLine> line = blackhole::nhekLine(inclination);
+  if (line) {
+    draw->AddLine(toScreen(line->alpha, -line->halfLength), toScreen(line->alpha, line->halfLength),
+                  IM_COL32(255, 170, 60, 255), 3.0F);
+    draw->AddCircleFilled(toScreen(line->alpha, 0.0), 5.0F, IM_COL32(255, 220, 120, 255));
+    draw->AddText(ImVec2(toScreen(line->alpha, 0.0).x + 8.0F, toScreen(line->alpha, 0.0).y - 7.0F),
+                  IM_COL32(255, 220, 120, 255), "Miller on the NHEKline");
+  }
+  draw->AddCircle(toScreen(0.0, 0.0), 4.0F, IM_COL32(120, 60, 60, 255));
+  draw->AddText(ImVec2(toScreen(0.0, 0.0).x - 40.0F, toScreen(0.0, 0.0).y + 14.0F),
+                IM_COL32(150, 90, 90, 255), "direct image (g = dtau/dt)");
+  draw->AddText(ImVec2(origin.x + 6.0F, origin.y + 4.0F), IM_COL32(200, 200, 200, 255),
+                "schematic: extremal Kerr screen (GLS 2017 Eqs. A.5, A.12), M = 1");
+  if (!line) {
+    draw->AddText(ImVec2(origin.x + 6.0F, origin.y + size.y - 20.0F), IM_COL32(200, 120, 120, 255),
+                  "no NHEKline below 47 deg inclination");
+  }
+}
+
+} // namespace
+
+void renderObserverDistantView(RenderState &rs) {
+  RenderState::ObserverViewGroup &view = rs.observerView;
+  ImGui::SetNextWindowPos(ImVec2(1380, 380), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(520, 660), ImGuiCond_FirstUseEver);
+  ImGui::Begin("Observer from far away (schematic)");
+  const auto &lut = view.renderer.lut();
+  const blackhole::ObserverClockModel &clock = view.lastClock;
+  if (!lut || !(clock.secondsPerM > 0.0)) {
+    ImGui::TextWrapped("The observer's sky is still being traced.");
+    ImGui::End();
+    return;
+  }
+  ImGui::TextWrapped("Not traced: the geometry is extremal Kerr and the main render uses a = %.2g.",
+                     static_cast<double>(rs.physicsCore.kerrSpin));
+  const double inclinationMin = 5.0;
+  const double inclinationMax = 90.0;
+  ImGui::SliderScalar("Viewer inclination (deg)", ImGuiDataType_Double, &view.distantInclinationDeg,
+                      &inclinationMin, &inclinationMax, "%.1f");
+  drawDistantScreen(view.distantInclinationDeg * std::numbers::pi / 180.0);
+
+  const blackhole::EmissionSummary &emission = view.renderer.emission();
+  const double rate = clock.properTimeRate;
+  ImGui::SeparatorText("Redshift of the observer's light, g_emit = (dtau/dt) / (1 - Omega lambda)");
+  ImGui::Text("Direct image, lambda ~ 0: g_emit ~ dtau/dt = %.4g (1/%.0f); g^4 = %.2g", rate,
+              1.0 / rate, rate * rate * rate * rate);
+  ImGui::Text("NHEKline image, lambda -> 1/Omega: g_emit up to %.4g (GLS bound sqrt(3) = 1.732)",
+              emission.gEmitMax);
+  ImGui::Text("Emission sphere: %.1f%% escapes; %.2g%% direct (g_emit < 1e-3), %.1f%% NHEK "
+              "(g_emit > 0.1)",
+              100.0 * emission.escapingFraction, 100.0 * emission.directFraction,
+              100.0 * emission.nhekFraction);
+  if (!emission.histogram.empty()) {
+    ImGui::PlotHistogram("##gEmit", emission.histogram.data(),
+                         static_cast<int>(emission.histogram.size()), 0, nullptr, 0.0F, FLT_MAX,
+                         ImVec2(ImGui::GetContentRegionAvail().x, 80.0F));
+    ImGui::TextDisabled(
+        "emission-sphere fraction per 0.1 dex of g_emit, from 1e%.0f to 1e%.0f", emission.log10Min,
+        emission.log10Min + (emission.log10Step * static_cast<double>(emission.histogram.size())));
+  }
+  ImGui::TextWrapped(
+      "The received sky's winding (about 1e2 rad of azimuth per degree of look direction) "
+      "scrambles "
+      "which emission direction reaches a given viewer at a given orbital phase, so the "
+      "phase-resolved light curve is not computed here; the distribution above follows from the "
+      "traced sky.");
+
+  ImGui::SeparatorText("Clock seen from far away");
+  ImGui::Text("Apparent tick rate (orbit average): %.4g -- one observer second per %.3g outside h",
+              rate, 1.0 / rate / 3600.0);
+  const double radiusMin = 2.0;
+  const double radiusMax = 1.0e6;
+  ImGui::SliderScalar("Viewer radius (M)", ImGuiDataType_Double, &view.distantRadius, &radiusMin,
+                      &radiusMax, "%.4g", ImGuiSliderFlags_Logarithmic);
+  const double delay = blackhole::signalDelaySeconds(lut->key, clock, view.distantRadius - 1.0);
+  const double outside = view.properSeconds / rate;
+  const double received = std::fmax(0.0, outside - delay) * rate;
+  ImGui::Text("Radial light delay to r = %.4g M: %.4g s (%.3g days)", view.distantRadius, delay,
+              delay / 86400.0);
+  ImGui::Text("Observer clock %.6g s; latest received there: %.6g s", view.properSeconds, received);
   ImGui::End();
 }
 

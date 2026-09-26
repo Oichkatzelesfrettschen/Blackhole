@@ -1581,6 +1581,7 @@ int main(int argc, char **argv) {
         if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
           ui::renderObserverSkyPanel(rs);
           ui::renderObserverPhysicsNote(rs);
+          ui::renderObserverDistantView(rs);
         }
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);

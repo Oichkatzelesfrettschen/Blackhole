@@ -118,6 +118,8 @@ struct RenderState {
     double lookLatitudeDeg = 0.0;
     double fovDeg = 100.0; ///< Vertical field of view.
     double cmbTemperature = 2.725;
+    double distantInclinationDeg = 80.0; ///< Distant viewer's angle from the spin axis.
+    double distantRadius = 400.0;        ///< Distant viewer's radius (M) for the signal delay.
     ObserverClockModel lastClock; ///< Clock of the sky drawn last frame, for the panels.
     ObserverSkyRenderer renderer;
     float starSkyLuminance = 1.0e-3F; ///< cd/m^2 of a unit-luminance cubemap texel at g = 1.
