@@ -1,0 +1,13 @@
+[package]
+name = "grx"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+gr_core = { path = "../../../../../../open_gororoba/crates/gr_core" }
+
+[workspace]
+
+[profile.release]
+debug = false

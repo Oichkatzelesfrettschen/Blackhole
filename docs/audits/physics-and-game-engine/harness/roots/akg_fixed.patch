@@ -1,0 +1,20 @@
+--- a/src/physics/analytic_kerr_geodesic.h
++++ b/akg_fixed.h
+@@ -185,7 +185,7 @@
+   // Substituting y = t + c2/3 to get depressed cubic t^3 + pt + q = 0
+   const double pCoeff = (-(c.c2 * c.c2) / 3.0) - (4.0 * c.c0);
+   const double qCoeff =
+-      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((4.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
++      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((8.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
+ 
+   // Cardano's formula for the resolvent cubic
+   const double disc = ((qCoeff * qCoeff) / 4.0) + ((pCoeff * pCoeff * pCoeff) / 27.0);
+@@ -204,7 +204,7 @@
+   }
+ 
+   // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma)
+-  const double a = y1 + c.c2;
++  const double a = y1 - c.c2;
+ 
+   if (a < 0.0) {
+     // alpha is imaginary; all roots come in complex conjugate pairs
