@@ -526,7 +526,7 @@ accuracy where it matters with fewer steps elsewhere.
 | OpenGL PBO GPU upload for GRMHD           | Perf      | HIGH     | ~200               | **COMPLETE** -- GrmhdPBOUploader + GRMHDGpuUploader; 6.2.4 |
 | Analytic Kerr geodesic (elliptic fns)    | Perf      | HIGH     | ~500               | **COMPLETE** -- analytic_kerr_geodesic.h 460 LOC; 15/15 C++ + 6/6 CUDA tests |
 | Outgoing Kerr-Schild coords on GPU       | Perf      | HIGH     | ~200               | **COMPLETE** -- kerr_schild.glsl + rationalized kerrStep/d_kerr_step; 8/8 tests |
-| Exact Kerr Carter constants init         | Perf+Phys | HIGH     | ~80                | **COMPLETE** -- kerrInitConsts/d_kerr_init_consts now solve null cond. for k^t, read E/Lz from metric, Q=ptheta^2-a^2*cos^2+Lz^2/sin^2; replaces flat-space L^2-Lz^2 approx; 70/70 tests |
+| Exact Kerr Carter constants init         | Perf+Phys | HIGH     | ~80                | **COMPLETE (corrected)** -- kerrInitGeodesic/d_kerr_init_geodesic solve the null condition for k^t and read E/Lz from the metric; Q=ptheta^2-a^2*cos^2+Lz^2*cot^2 (Carter). The earlier Lz^2/sin^2 form shortened R by Delta*Lz^2; gated by kerr_null_geodesic_validation and kerr_shader_capture |
 | Compute/fragment FMA parity (Issue-009)  | Perf      | HIGH     | ~50                | Root-caused; 0.0002% residual at horizon-grazing rays; strict sweep passes 12/12 |
 | Kerr QNM (spin-dependent, Berti 2009)    | Physics   | DONE     | ~200               | COMPLETE Phase 6 |
 | Spin-orbit/spin-spin GW phase coupling   | Physics   | DONE     | ~100               | COMPLETE Phase 6 |
