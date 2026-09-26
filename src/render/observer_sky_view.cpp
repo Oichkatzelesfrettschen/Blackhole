@@ -14,12 +14,16 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <future>
 #include <numbers>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
+#include <stop_token>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -85,24 +89,67 @@ void deleteTexture(GLuint &texture) {
   }
 }
 
-/** @brief Loads the cached bundle for `key`, or builds and caches it. */
-std::optional<sky::ObserverSkyLut> loadOrBuild(const sky::ObserverKey &key,
-                                               const sky::LutDimensions &dimensions,
-                                               const std::filesystem::path &cacheDirectory) {
+/**
+ * @brief Background half of ObserverSkyRenderer: the blackbody table, the
+ *        cached bundle for `key` (or a fresh build, then cached), and the
+ *        emission summary and CMB ring flux derived from them. Nothing when
+ *        `stop` ended the build; throws with the reason on failure.
+ */
+std::optional<PreparedObserverSky> prepareObserverSky(const sky::ObserverKey &key,
+                                                      const sky::LutDimensions &dimensions,
+                                                      const std::filesystem::path &cacheDirectory,
+                                                      const std::filesystem::path &blackbodyCsv,
+                                                      double cmbTemperature,
+                                                      const std::stop_token &stop) {
+  std::optional<BlackbodyTable> blackbody = loadBlackbodyTable(blackbodyCsv);
+  if (!blackbody) {
+    throw std::runtime_error("missing " + blackbodyCsv.string() +
+                             " (run $PYTHON scripts/generate_blackbody_cie_lut.py)");
+  }
   const sky::TraceSettings settings;
   const std::uint64_t bundleHash = sky::lutHash(key, dimensions, settings);
   const std::filesystem::path file = cacheDirectory / (sky::lutStem(bundleHash) + ".bin");
-  std::optional<sky::ObserverSkyLut> cached = sky::readObserverSkyLut(file, bundleHash);
-  if (cached.has_value()) {
-    return cached;
+  std::optional<sky::ObserverSkyLut> lut = sky::readObserverSkyLut(file, bundleHash);
+  if (!lut) {
+    lut = sky::tryBuildObserverSkyLut(key, dimensions, settings, observerSkyBuildThreads(), stop);
+    if (!lut) {
+      return std::nullopt;
+    }
+    // A read-only asset tree only costs the cache; the bundle is still usable.
+    (void)sky::writeObserverSkyLut(*lut, cacheDirectory);
   }
-  sky::ObserverSkyLut lut = sky::buildObserverSkyLut(key, dimensions, settings);
-  // A read-only asset tree only costs the cache; the bundle is still usable.
-  (void)sky::writeObserverSkyLut(lut, cacheDirectory);
-  return lut;
+  PreparedObserverSky prepared{
+      .lut = std::move(*lut), .blackbody = std::move(*blackbody), .emission = {}, .ringFlux = {}};
+  prepared.emission = summarizeEmission(prepared.lut);
+  prepared.ringFlux = cumulativeCmbRingFlux(prepared.lut, prepared.blackbody, cmbTemperature);
+  return prepared;
+}
+
+/** @brief Why no observer of `kind` exists at (epsilon, x), for the panels. */
+std::string invalidObserverReason(ObserverKind kind, double epsilon, double x) {
+  const std::string where = std::format("r - 1 = {:.6e} M, 1 - a = {:.3e}", x, epsilon);
+  switch (kind) {
+  case ObserverKind::Prograde:
+  case ObserverKind::Retrograde:
+    return std::format("No {} circular orbit at {}: no timelike circular geodesic of that "
+                       "sense exists at this radius.",
+                       kind == ObserverKind::Prograde ? "prograde" : "retrograde", where);
+  case ObserverKind::Zamo:
+    return std::format("No ZAMO at {}: the radius is inside the outer horizon.", where);
+  case ObserverKind::Static:
+    return std::format("No static observer at {}: the radius is inside the ergoregion, where "
+                       "every observer must co-rotate with the hole.",
+                       where);
+  }
+  return std::format("No observer at {}.", where);
 }
 
 } // namespace
+
+unsigned observerSkyBuildThreads() {
+  const unsigned hardware = std::thread::hardware_concurrency();
+  return hardware > 1U ? hardware - 1U : 1U;
+}
 
 std::optional<sky::ObserverKey> observerKeyFor(double epsilon, double x, ObserverKind kind) {
   switch (kind) {
@@ -324,72 +371,109 @@ double signalDelaySeconds(const sky::ObserverKey &key, const ObserverClockModel 
   return ko::principalNullDelay(key.epsilon, key.x, xFar) * clock.secondsPerM;
 }
 
+ObserverSkyRenderer::~ObserverSkyRenderer() {
+  stop_.request_stop();
+}
+
 void ObserverSkyRenderer::request(const sky::ObserverKey &key, const sky::LutDimensions &dimensions,
-                                  const std::filesystem::path &cacheDirectory) {
+                                  const std::filesystem::path &cacheDirectory,
+                                  const std::filesystem::path &blackbodyCsv,
+                                  double cmbTemperature) {
   const std::uint64_t hash = sky::lutHash(key, dimensions, sky::TraceSettings{});
-  if (residentHash_ == hash || pendingHash_ == hash) {
-    return;
+  wantedHash_ = hash;
+  if (failedHash_ != hash) {
+    failedHash_.reset(); // A failure latches only while its key stays requested.
+  }
+  if (status_ == Status::InvalidObserver) {
+    status_ = Status::Idle;
+    message_.clear();
   }
   if (pending_.valid()) {
-    return; // One build at a time; the newest request starts when it lands.
+    if (pendingHash_ != hash) {
+      stop_.request_stop(); // Superseded: it lands stopped and this key starts next.
+    }
+    return;
   }
+  if (residentHash_ == hash) {
+    return;
+  }
+  if (failedHash_ == hash) {
+    releaseSky();
+    status_ = Status::Failed;
+    message_ = failureMessage_;
+    return;
+  }
+  stop_ = std::stop_source{};
   pendingHash_ = hash;
   status_ = Status::Building;
   message_ = "tracing the observer's sky (about 20 s on first use; cached afterwards)";
-  pending_ = std::async(std::launch::async, loadOrBuild, key, dimensions, cacheDirectory);
+  pending_ = std::async(std::launch::async, prepareObserverSky, key, dimensions, cacheDirectory,
+                        blackbodyCsv, cmbTemperature, stop_.get_token());
 }
 
-void ObserverSkyRenderer::poll(const std::filesystem::path &blackbodyCsv, double cmbTemperature) {
+void ObserverSkyRenderer::invalidate(const std::string &reason) {
+  wantedHash_.reset();
+  failedHash_.reset();
+  if (pending_.valid()) {
+    stop_.request_stop();
+  }
+  releaseSky();
+  status_ = Status::InvalidObserver;
+  message_ = reason;
+}
+
+void ObserverSkyRenderer::poll() {
   if (!pending_.valid() ||
       pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
     return;
   }
-  std::optional<sky::ObserverSkyLut> built;
-  try {
-    built = pending_.get();
-  } catch (const std::exception &error) {
-    message_ = std::string("observer sky build failed: ") + error.what();
-  }
   const std::optional<std::uint64_t> finishedHash = pendingHash_;
   pendingHash_.reset();
-  if (!blackbody_) {
-    blackbody_ = loadBlackbodyTable(blackbodyCsv);
-  }
-  if (!built || !blackbody_) {
-    status_ = Status::Failed;
-    if (!blackbody_) {
-      message_ = "missing " + blackbodyCsv.string() +
-                 " (run $PYTHON scripts/generate_blackbody_cie_lut.py)";
+  std::optional<PreparedObserverSky> prepared;
+  try {
+    prepared = pending_.get();
+  } catch (const std::exception &error) {
+    failedHash_ = finishedHash;
+    failureMessage_ = std::string("observer sky build failed: ") + error.what();
+    if (wantedHash_ == finishedHash) {
+      releaseSky();
+      status_ = Status::Failed;
+      message_ = failureMessage_;
     }
     return;
   }
-  upload(*built, *blackbody_, cmbTemperature);
-  emission_ = summarizeEmission(*built);
-  lut_ = std::move(built);
+  if (!prepared || wantedHash_ != finishedHash) {
+    // Stopped, or no longer the requested observer: the next request()
+    // starts the wanted key, and an invalid observer keeps its status.
+    if (status_ == Status::Building) {
+      status_ = lut_ ? Status::Ready : Status::Idle;
+      message_.clear();
+    }
+    return;
+  }
+  upload(*prepared);
+  emission_ = std::move(prepared->emission);
+  lut_ = std::move(prepared->lut);
   residentHash_ = finishedHash;
   status_ = Status::Ready;
   message_.clear();
 }
 
-void ObserverSkyRenderer::upload(const sky::ObserverSkyLut &lut, const BlackbodyTable &table,
-                                 double cmbTemperature) {
-  deleteTexture(skyTexture_);
-  deleteTexture(skySpanTexture_);
-  deleteTexture(tileTexture_);
-  deleteTexture(tileSpanTexture_);
-  deleteTexture(tileFluxTexture_);
+void ObserverSkyRenderer::upload(const PreparedObserverSky &prepared) {
+  const sky::ObserverSkyLut &bundle = prepared.lut;
+  releaseSky();
   skySpanTexture_ =
-      uploadFloatTexture(static_cast<int>(lut.sky.width), static_cast<int>(lut.sky.height),
-                         lut.sky.sourceSpan.data(), GL_NEAREST, true);
-  tileSpanTexture_ = uploadFloatTexture(static_cast<int>(lut.tileImage.width),
-                                        static_cast<int>(lut.tileImage.height),
-                                        lut.tileImage.sourceSpan.data(), GL_NEAREST, true);
+      uploadFloatTexture(static_cast<int>(bundle.sky.width), static_cast<int>(bundle.sky.height),
+                         bundle.sky.sourceSpan.data(), GL_NEAREST, true);
+  tileSpanTexture_ = uploadFloatTexture(static_cast<int>(bundle.tileImage.width),
+                                        static_cast<int>(bundle.tileImage.height),
+                                        bundle.tileImage.sourceSpan.data(), GL_NEAREST, true);
   skyTexture_ =
-      uploadFloatTexture(static_cast<int>(lut.sky.width), static_cast<int>(lut.sky.height),
-                         lut.sky.rgba.data(), GL_NEAREST);
-  tileTexture_ = uploadFloatTexture(static_cast<int>(lut.tileImage.width),
-                                    static_cast<int>(lut.tileImage.height),
-                                    lut.tileImage.rgba.data(), GL_NEAREST);
+      uploadFloatTexture(static_cast<int>(bundle.sky.width), static_cast<int>(bundle.sky.height),
+                         bundle.sky.rgba.data(), GL_NEAREST);
+  tileTexture_ = uploadFloatTexture(static_cast<int>(bundle.tileImage.width),
+                                    static_cast<int>(bundle.tileImage.height),
+                                    bundle.tileImage.rgba.data(), GL_NEAREST);
   const auto flatten = [](const std::vector<std::array<float, 4>> &rows) {
     std::vector<float> flat;
     flat.reserve(rows.size() * 4);
@@ -398,14 +482,25 @@ void ObserverSkyRenderer::upload(const sky::ObserverSkyLut &lut, const Blackbody
     });
     return flat;
   };
-  const std::vector<float> flux = flatten(cumulativeCmbRingFlux(lut, table, cmbTemperature));
+  const std::vector<float> flux = flatten(prepared.ringFlux);
   tileFluxTexture_ =
       uploadFloatTexture(static_cast<int>(flux.size() / 4), 1, flux.data(), GL_NEAREST);
   if (blackbodyTexture_ == 0) {
-    const std::vector<float> rows = flatten(table.rows);
+    const std::vector<float> rows = flatten(prepared.blackbody.rows);
     blackbodyTexture_ =
         uploadFloatTexture(static_cast<int>(rows.size() / 4), 1, rows.data(), GL_LINEAR);
   }
+}
+
+void ObserverSkyRenderer::releaseSky() {
+  deleteTexture(skyTexture_);
+  deleteTexture(skySpanTexture_);
+  deleteTexture(tileTexture_);
+  deleteTexture(tileSpanTexture_);
+  deleteTexture(tileFluxTexture_);
+  lut_.reset();
+  residentHash_.reset();
+  emission_ = EmissionSummary{};
 }
 
 void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds) {
@@ -416,9 +511,12 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
   const std::optional<sky::ObserverKey> key = observerKeyFor(view.epsilon, view.x, view.kind);
   const std::filesystem::path lutDirectory = platform::resourceRoot() / "assets" / "luts";
   if (key) {
-    view.renderer.request(*key, sky::LutDimensions{}, lutDirectory);
+    view.renderer.request(*key, sky::LutDimensions{}, lutDirectory,
+                          lutDirectory / "blackbody_cie_lut.csv", view.cmbTemperature);
+  } else {
+    view.renderer.invalidate(invalidObserverReason(view.kind, view.epsilon, view.x));
   }
-  view.renderer.poll(lutDirectory / "blackbody_cie_lut.csv", view.cmbTemperature);
+  view.renderer.poll();
   const std::optional<sky::ObserverSkyLut> &lut = view.renderer.lut();
 
   // The clock follows the resident sky, so time and image always agree.
@@ -541,18 +639,17 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
 }
 
 void ObserverSkyRenderer::shutdown() {
+  stop_.request_stop();
   if (pending_.valid()) {
     pending_.wait();
+    pending_ = {};
   }
-  deleteTexture(skyTexture_);
-  deleteTexture(skySpanTexture_);
-  deleteTexture(tileTexture_);
-  deleteTexture(tileSpanTexture_);
-  deleteTexture(tileFluxTexture_);
+  pendingHash_.reset();
+  wantedHash_.reset();
+  releaseSky();
   deleteTexture(blackbodyTexture_);
-  lut_.reset();
-  residentHash_.reset();
   status_ = Status::Idle;
+  message_.clear();
 }
 
 } // namespace blackhole

@@ -10,10 +10,17 @@
  */
 
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <format>
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <random>
+#include <string>
+#include <system_error>
+#include <thread>
 
 #include <gtest/gtest.h>
 
@@ -36,6 +43,53 @@ constexpr double K_STEFAN_BOLTZMANN = 5.670374419e-8; // W m^-2 K^-4 (CODATA 201
 sky::ObserverKey requireKey(const std::optional<sky::ObserverKey> &key) {
   EXPECT_TRUE(key.has_value());
   return key.value_or(sky::ObserverKey{});
+}
+
+/** @brief A fresh directory under the system temporary path, removed with
+ *         its contents when the scope ends (including an early ASSERT return). */
+class ScratchDirectory {
+public:
+  ScratchDirectory() {
+    std::random_device device;
+    constexpr int attempts = 16;
+    for (int attempt = 0; attempt < attempts && path_.empty(); ++attempt) {
+      const std::filesystem::path candidate =
+          std::filesystem::temp_directory_path() /
+          std::format("observer_sky_view_test_{:08x}{:08x}", device(), device());
+      std::error_code error;
+      if (std::filesystem::create_directory(candidate, error)) {
+        path_ = candidate;
+      }
+    }
+  }
+  ScratchDirectory(const ScratchDirectory &) = delete;
+  ScratchDirectory &operator=(const ScratchDirectory &) = delete;
+  ScratchDirectory(ScratchDirectory &&) = delete;
+  ScratchDirectory &operator=(ScratchDirectory &&) = delete;
+  ~ScratchDirectory() {
+    if (!path_.empty()) {
+      std::error_code error;
+      std::filesystem::remove_all(path_, error);
+    }
+  }
+  [[nodiscard]] const std::filesystem::path &path() const { return path_; }
+
+private:
+  std::filesystem::path path_;
+};
+
+/** @brief Polls until the renderer leaves Building, for at most `limit`. */
+blackhole::ObserverSkyRenderer::Status
+settle(blackhole::ObserverSkyRenderer &renderer,
+       std::chrono::milliseconds limit = std::chrono::milliseconds(10000)) {
+  const auto deadline = std::chrono::steady_clock::now() + limit;
+  renderer.poll();
+  while (renderer.status() == blackhole::ObserverSkyRenderer::Status::Building &&
+         std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    renderer.poll();
+  }
+  return renderer.status();
 }
 
 sky::ObserverKey canonMiller() {
@@ -249,6 +303,76 @@ TEST(ObserverSkyView, SpinDisclosureNamesTheRenderSpinItShows) {
   EXPECT_EQ(
       disclosure(0.998F),
       "physics spin 1-a = 1.33e-14 (this view); main render a = 0.998 (the film rendered a = 0.6)");
+}
+
+/**
+ * A static observer cannot exist inside the ergoregion, so Static at the
+ * canon near-extremal ISCO has no key. invalidate() then leaves no resident
+ * sky and reports the reason as the status message.
+ */
+TEST(ObserverSkyView, InvalidObserverReleasesTheSkyAndSaysWhy) {
+  const double isco = ko::iscoOffset(blackhole::K_GARGANTUA_SPIN_DEFICIT, ko::OrbitSense::Prograde);
+  EXPECT_FALSE(
+      blackhole::observerKeyFor(blackhole::K_GARGANTUA_SPIN_DEFICIT, isco, ObserverKind::Static)
+          .has_value());
+  blackhole::ObserverSkyRenderer renderer;
+  renderer.invalidate("no static observer here");
+  EXPECT_EQ(renderer.status(), blackhole::ObserverSkyRenderer::Status::InvalidObserver);
+  EXPECT_EQ(renderer.message(), "no static observer here");
+  EXPECT_FALSE(renderer.lut().has_value());
+  EXPECT_FALSE(renderer.ready());
+  renderer.shutdown();
+}
+
+/**
+ * A load that fails (here: no blackbody table) latches Failed for its key:
+ * requesting the same key again starts nothing, and a different key does.
+ */
+TEST(ObserverSkyView, FailedBuildLatchesUntilTheKeyChanges) {
+  using Status = blackhole::ObserverSkyRenderer::Status;
+  const ScratchDirectory scratch;
+  ASSERT_FALSE(scratch.path().empty()) << "no scratch directory";
+  const sky::LutDimensions tiny{.width = 8, .height = 4, .tileRadial = 4, .tileAzimuth = 4};
+  const std::filesystem::path missing = scratch.path() / "missing_blackbody.csv";
+  const sky::ObserverKey first =
+      requireKey(blackhole::observerKeyFor(1.0, 5.0, ObserverKind::Zamo));
+  const sky::ObserverKey second =
+      requireKey(blackhole::observerKeyFor(1.0, 6.0, ObserverKind::Zamo));
+  blackhole::ObserverSkyRenderer renderer;
+  renderer.request(first, tiny, scratch.path(), missing, 2.725);
+  EXPECT_EQ(renderer.status(), Status::Building);
+  EXPECT_EQ(settle(renderer), Status::Failed);
+  EXPECT_NE(renderer.message().find("missing"), std::string::npos) << renderer.message();
+  renderer.request(first, tiny, scratch.path(), missing, 2.725);
+  EXPECT_EQ(renderer.status(), Status::Failed) << "a failed key restarted";
+  renderer.request(second, tiny, scratch.path(), missing, 2.725);
+  EXPECT_EQ(renderer.status(), Status::Building) << "a new key did not start";
+  EXPECT_EQ(settle(renderer), Status::Failed);
+  renderer.shutdown();
+  EXPECT_EQ(renderer.status(), Status::Idle);
+}
+
+/**
+ * Invalidating the observer mid-build stops the trace between rows: shutdown
+ * returns in a fraction of the canon Miller build's tens of seconds, and the
+ * stopped bundle never reaches the cache.
+ */
+TEST(ObserverSkyView, InvalidatingStopsTheBuildAndCachesNothing) {
+  const ScratchDirectory scratch;
+  ASSERT_FALSE(scratch.path().empty()) << "no scratch directory";
+  blackhole::ObserverSkyRenderer renderer;
+  const auto start = std::chrono::steady_clock::now();
+  renderer.request(canonMiller(), sky::LutDimensions{}, scratch.path(),
+                   "assets/luts/blackbody_cie_lut.csv", 2.725);
+  // Let the worker reach the equirectangular rows before the stop.
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  renderer.invalidate("observer changed");
+  renderer.shutdown();
+  const double seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+  EXPECT_LT(seconds, 10.0) << "shutdown waited for the whole build";
+  std::error_code error;
+  EXPECT_TRUE(std::filesystem::is_empty(scratch.path(), error)) << "a stopped build was cached";
 }
 
 } // namespace

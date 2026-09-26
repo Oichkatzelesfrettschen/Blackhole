@@ -120,6 +120,13 @@ void renderViewControls(RenderState::ObserverViewGroup &view) {
   ImGui::TextDisabled("Star colors: RGB texels shifted as blackbodies (approximate).");
 }
 
+/** @brief What a panel shows while no sky is resident: the renderer's status
+ *         message (an invalid observer, a failed build, or a build under way). */
+const char *pendingSkyText(const RenderState::ObserverViewGroup &view) {
+  const std::string &message = view.renderer.message();
+  return message.empty() ? "The observer's sky is still being traced." : message.c_str();
+}
+
 void renderStatistics(const RenderState::ObserverViewGroup &view) {
   ImGui::SeparatorText("Traced sky");
   const auto &lut = view.renderer.lut();
@@ -173,7 +180,7 @@ void renderObserverPhysicsNote(const RenderState &rs) {
   ImGui::SetNextWindowSize(ImVec2(520, 330), ImGuiCond_FirstUseEver);
   ImGui::Begin("Observer physics note");
   if (!(clock.secondsPerM > 0.0)) {
-    ImGui::TextWrapped("The observer's sky is still being traced.");
+    ImGui::TextWrapped("%s", pendingSkyText(view));
     ImGui::End();
     return;
   }
@@ -257,7 +264,7 @@ void renderObserverDistantView(RenderState &rs) {
   const auto &lut = view.renderer.lut();
   const blackhole::ObserverClockModel &clock = view.lastClock;
   if (!lut || !(clock.secondsPerM > 0.0)) {
-    ImGui::TextWrapped("The observer's sky is still being traced.");
+    ImGui::TextWrapped("%s", pendingSkyText(view));
     ImGui::End();
     return;
   }

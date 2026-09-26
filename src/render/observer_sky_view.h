@@ -22,6 +22,7 @@
 #include <filesystem>
 #include <future>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -151,30 +152,63 @@ struct NhekLine {
 [[nodiscard]] double signalDelaySeconds(const physics::observer_sky::ObserverKey &key,
                                         const ObserverClockModel &clock, double xFar);
 
+/** @brief Everything the GL thread needs from one background load-or-build:
+ *         the bundle, the blackbody table, and the products derived from them
+ *         off the render thread. */
+struct PreparedObserverSky {
+  physics::observer_sky::ObserverSkyLut lut;
+  BlackbodyTable blackbody;
+  EmissionSummary emission;
+  std::vector<std::array<float, 4>> ringFlux; ///< cumulativeCmbRingFlux at the request's T.
+};
+
+/** @brief Worker threads for a background build: all hardware threads but
+ *         the one the render loop runs on, and at least one. */
+[[nodiscard]] unsigned observerSkyBuildThreads();
+
 /**
  * @brief GPU residency for one observer's maps. request() starts a background
  *        load-or-build for a key; poll() uploads the finished bundle on the
- *        GL thread. Textures stay bound to the last completed key until a new
- *        one finishes, so a slider drag keeps drawing the previous sky.
+ *        GL thread. Textures stay bound to the last completed key until the
+ *        requested one finishes, so a slider drag keeps drawing the previous
+ *        sky. A request for another key stops the build in flight between
+ *        rows, and the requested key starts once it has landed. A key whose
+ *        load or build failed stays Failed, with its maps released, until a
+ *        different key is requested.
  */
 class ObserverSkyRenderer {
 public:
-  enum class Status : std::uint8_t { Idle = 0, Building = 1, Ready = 2, Failed = 3 };
+  enum class Status : std::uint8_t {
+    Idle = 0,
+    Building = 1,
+    Ready = 2,
+    Failed = 3,
+    InvalidObserver = 4, ///< No timelike observer of the chosen kind at the chosen radius.
+  };
 
   ObserverSkyRenderer() = default;
   ObserverSkyRenderer(const ObserverSkyRenderer &) = delete;
   ObserverSkyRenderer &operator=(const ObserverSkyRenderer &) = delete;
   ObserverSkyRenderer(ObserverSkyRenderer &&) = delete;
   ObserverSkyRenderer &operator=(ObserverSkyRenderer &&) = delete;
-  ~ObserverSkyRenderer() = default;
+  /** @brief Stops a build in flight so the pending future's join is short;
+   *         GL objects are released by shutdown(), on the GL thread. */
+  ~ObserverSkyRenderer();
 
-  /** @brief Loads or builds the bundle for `key` unless it is already
-   *         resident or in flight. `cacheDirectory` holds observer_sky_*.bin. */
+  /** @brief Loads or builds the bundle for `key` unless it is resident, in
+   *         flight, or failed. `cacheDirectory` holds observer_sky_*.bin;
+   *         `blackbodyCsv` and `cmbTemperature` fix the CMB ring flux. */
   void request(const physics::observer_sky::ObserverKey &key,
                const physics::observer_sky::LutDimensions &dimensions,
-               const std::filesystem::path &cacheDirectory);
+               const std::filesystem::path &cacheDirectory,
+               const std::filesystem::path &blackbodyCsv, double cmbTemperature);
+  /** @brief No observer of the chosen kind exists at the chosen radius:
+   *         stops any build, releases the resident maps, and reports `reason`
+   *         as the status message. */
+  void invalidate(const std::string &reason);
   /** @brief Uploads a finished bundle; call once per frame on the GL thread. */
-  void poll(const std::filesystem::path &blackbodyCsv, double cmbTemperature);
+  void poll();
+  /** @brief Stops any build, waits for it, and releases every GL object. */
   void shutdown();
 
   [[nodiscard]] Status status() const { return status_; }
@@ -192,17 +226,22 @@ public:
   [[nodiscard]] gl::GLuint blackbodyTexture() const { return blackbodyTexture_; }
 
 private:
-  void upload(const physics::observer_sky::ObserverSkyLut &lut, const BlackbodyTable &table,
-              double cmbTemperature);
+  void upload(const PreparedObserverSky &prepared);
+  /** @brief Deletes the observer's textures and forgets its bundle; the
+   *         blackbody texture, shared by every observer, stays. */
+  void releaseSky();
 
   Status status_ = Status::Idle;
   std::optional<std::uint64_t> residentHash_;
   std::optional<std::uint64_t> pendingHash_;
-  std::future<std::optional<physics::observer_sky::ObserverSkyLut>> pending_;
+  std::optional<std::uint64_t> wantedHash_; ///< Nothing while the observer is invalid.
+  std::optional<std::uint64_t> failedHash_;
+  std::stop_source stop_;
+  std::future<std::optional<PreparedObserverSky>> pending_;
   std::optional<physics::observer_sky::ObserverSkyLut> lut_;
-  std::optional<BlackbodyTable> blackbody_;
   EmissionSummary emission_;
   std::string message_;
+  std::string failureMessage_;
   gl::GLuint skyTexture_ = 0;
   gl::GLuint skySpanTexture_ = 0;
   gl::GLuint tileTexture_ = 0;
