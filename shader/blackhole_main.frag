@@ -711,7 +711,7 @@ void main() {
                                                stokesBFieldAngle, stokesNeScale,
                                                terminalPos);
       vec3 interopColor = stokesColor.rgb;
-      applyWiregridOverlay(interopColor, terminalPos);
+      applyWiregridOverlay(interopColor, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
       fragColor = vec4(interopColor, 1.0);
       return;
     }
@@ -723,7 +723,7 @@ void main() {
                                          interopStepSize, rteOpacityScale,
                                          terminalPos);
       vec3 interopColor = rteColor.rgb;
-      applyWiregridOverlay(interopColor, terminalPos);
+      applyWiregridOverlay(interopColor, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
       fragColor = vec4(interopColor, 1.0);
       return;
     }
@@ -734,7 +734,7 @@ void main() {
     float depthNormalized =
         clamp(length(hit.hitPoint - hit.origin) / max(depthFar, 0.0001), 0.0, 1.0);
     vec3 interopColor = shaded.rgb;
-    applyWiregridOverlay(interopColor, hit.hitPoint);
+    applyWiregridOverlay(interopColor, bhChartToBoyerLindquist(hit.hitPoint, schwarzschildRadius));
     fragColor = vec4(interopColor, depthNormalized);
     return;
   }

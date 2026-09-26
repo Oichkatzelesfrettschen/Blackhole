@@ -227,7 +227,10 @@ float faradayRotCoeff(float nE, float bParallel, float prefac) {
 // Map Stokes (I, Q, U, V) to a display RGB.
 //
 // Encoding:
-//   - Luminance: I (total intensity, same as scalar RTE output)
+//   - Luminance: baseColor, the color-accurate RGB intensity the trace
+//     accumulated (I is its mean and only normalizes P_lin and V / I), so an
+//     unpolarized ray keeps its RGB; d_trace_geodesic_stokes applies the same
+//     tint
 //   - Linear polarization fraction: P_lin = sqrt(Q^2 + U^2) / I
 //   - EVPA angle: chi = 0.5 * atan(U, Q)
 //   - Hue tint: rotate the intensity color by 2*chi in the RG-plane so that
@@ -253,8 +256,7 @@ vec3 stokesDisplayColor(vec4 stokes, vec3 baseColor) {
     float tintG = 1.0 + P_lin * 0.4 * sin(2.0 * chi);
     float tintB = 1.0 + clamp(stokes.w / I, -0.5, 0.5) * 0.2;
 
-    vec3 color = baseColor * I / max(baseColor.x + baseColor.y + baseColor.z, 1.0e-10);
-    return clamp(color * vec3(tintR, tintG, tintB), 0.0, 10.0);
+    return clamp(baseColor * vec3(tintR, tintG, tintB), 0.0, 10.0);
 }
 
 #endif // STOKES_TRANSPORT_GLSL

@@ -29,7 +29,8 @@
  *
  * d_kerr_chart_position is the chart the ray state starts in: the camera
  * rotated by the Kerr-Schild offset, which HitResult::origin carries into
- * shading and depth.
+ * shading and depth, and d_chart_to_boyer_lindquist undoes it for the
+ * Boyer-Lindquist consumers (wiregrid overlay, GRMHD sampling).
  * Skips without a CUDA device.
  */
 
@@ -153,6 +154,28 @@ bool setUnitDiskConstants() {
                cudaSuccess &&
            cudaMemcpyToSymbol(d_disk_brightness, &brightness, sizeof(float)) == cudaSuccess &&
            cudaMemcpyToSymbol(d_disk_transfer_mode, &physicalMode, sizeof(int)) == cudaSuccess;
+}
+
+/* d_chart_to_boyer_lindquist(d_kerr_chart_position(p)) for the constant-
+ * memory metric the kernels read (d_rs, d_spin, d_kerr_enabled). */
+__global__ void chart_round_trip_kernel(float3 p, float *out) {
+    float3 const chart =
+        d_kerr_chart_position(p, d_rs, d_kerr_trace_spin(0.5f * d_spin * d_rs));
+    float3 const bl = d_chart_to_boyer_lindquist(chart);
+    out[0] = bl.x;
+    out[1] = bl.y;
+    out[2] = bl.z;
+    out[3] = chart.x;
+    out[4] = chart.y;
+}
+
+/* d_check_disk for one segment: out = (crossed, hit.x, hit.y, hit.z). */
+__global__ void check_disk_kernel(float3 old_pos, float3 new_pos, float *out) {
+    float3 hit = make_float3(0.0f, 0.0f, 0.0f);
+    out[0] = d_check_disk(old_pos, new_pos, 6.0f, 200.0f, hit) ? 1.0f : 0.0f;
+    out[1] = hit.x;
+    out[2] = hit.y;
+    out[3] = hit.z;
 }
 
 bool cudaAvailable() {
@@ -408,4 +431,55 @@ TEST(CudaKerrGeodesic, ChartOriginIsTheRayStart) {
         EXPECT_NEAR(out[j], out[3 + j], 1e-5f) << "component " << j;
     }
     EXPECT_GT(std::hypot(out[3] - cam.x, out[4] - cam.y), 1.0f);
+}
+
+TEST(CudaKerrGeodesic, ChartToBoyerLindquistUndoesTheOffset) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* Kernels hand hit points to the wiregrid and GRMHD sampler through
+     * d_chart_to_boyer_lindquist; with the constant-memory metric at
+     * a = 0.998 it must invert the chart rotation (0.50 rad at r = 3). */
+    float const rs = 2.0f;
+    float const spin = 0.998f;
+    int const kerr = 1;
+    ASSERT_EQ(cudaMemcpyToSymbol(d_rs, &rs, sizeof(rs)), cudaSuccess);
+    ASSERT_EQ(cudaMemcpyToSymbol(d_spin, &spin, sizeof(spin)), cudaSuccess);
+    ASSERT_EQ(cudaMemcpyToSymbol(d_kerr_enabled, &kerr, sizeof(kerr)), cudaSuccess);
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, 5 * sizeof(float));
+    float3 const p = make_float3(2.5980762f, 0.0f, 1.5f);
+    chart_round_trip_kernel<<<1, 1>>>(p, dOut);
+    cudaDeviceSynchronize();
+    float out[5] = {};
+    cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
+    cudaFree(dOut);
+    EXPECT_NEAR(out[0], p.x, 1e-5f);
+    EXPECT_NEAR(out[1], p.y, 1e-5f);
+    EXPECT_NEAR(out[2], p.z, 1e-5f);
+    EXPECT_GT(std::hypot(out[3] - p.x, out[4] - p.y), 1.0f);
+}
+
+TEST(CudaKerrGeodesic, SegmentLeavingTheDiskPlaneIsNotACrossing) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* A step that starts on the zero-thickness disk plane (the in-plane
+     * camera, or a previous step that ended exactly on it and was counted
+     * there) leaves the plane rather than crossing it; a step from above to
+     * below still crosses. */
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, 4 * sizeof(float));
+    float out[4] = {};
+    check_disk_kernel<<<1, 1>>>(make_float3(15.0f, 0.0f, 0.0f), make_float3(15.1f, 0.0f, 0.1f), dOut);
+    cudaDeviceSynchronize();
+    cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
+    EXPECT_EQ(out[0], 0.0f);
+    check_disk_kernel<<<1, 1>>>(make_float3(15.0f, 0.0f, 0.1f), make_float3(15.1f, 0.0f, -0.1f), dOut);
+    cudaDeviceSynchronize();
+    cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
+    cudaFree(dOut);
+    EXPECT_EQ(out[0], 1.0f);
+    EXPECT_NEAR(out[1], 15.05f, 1e-5f);
+    EXPECT_NEAR(out[3], 0.0f, 1e-6f);
 }

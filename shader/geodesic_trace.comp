@@ -241,7 +241,7 @@ void main() {
             interopMaxSteps, interopStepSize, rteOpacityScale,
             stokesBFieldAngle, stokesNeScale, terminalPos);
         vec3 col = stokesColor.rgb;
-        applyWiregridOverlay(col, terminalPos);
+        applyWiregridOverlay(col, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
         result = vec4(col, 1.0);
 
     } else if (rteEnabled > 0.5) {
@@ -251,7 +251,7 @@ void main() {
             ray, schwarzschildRadius, depthFar,
             interopMaxSteps, interopStepSize, rteOpacityScale, terminalPos);
         vec3 col = rteColor.rgb;
-        applyWiregridOverlay(col, terminalPos);
+        applyWiregridOverlay(col, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
         result = vec4(col, 1.0);
 
     } else {
@@ -264,7 +264,7 @@ void main() {
             length(hit.hitPoint - hit.origin) / max(depthFar, 0.0001),
             0.0, 1.0);
         vec3 col = shaded.rgb;
-        applyWiregridOverlay(col, hit.hitPoint);
+        applyWiregridOverlay(col, bhChartToBoyerLindquist(hit.hitPoint, schwarzschildRadius));
         result = vec4(col, depthNorm);
     }
 

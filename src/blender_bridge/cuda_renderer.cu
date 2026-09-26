@@ -22,6 +22,7 @@
 
 #include "../cuda/kernel_launch.h"
 #include "bridge_disk_isco.h"
+#include "bridge_integrator.h"
 #include "../physics/page_thorne.h"
 #include "stb_image.h"
 
@@ -497,7 +498,8 @@ static void fill_params(struct BH_LaunchParams *p,
 static void apply_bridge_feature_defaults(struct BH_LaunchParams *p) {
     p->adisk_enabled = env_flag("BLACKHOLE_BRIDGE_ADISK_ENABLED", 1);
     p->redshift_enabled = env_flag("BLACKHOLE_BRIDGE_REDSHIFT_ENABLED", 1);
-    p->kerr_enabled = (fabsf(p->spin) > 1.0e-6f) ? 1 : 0;
+    p->kerr_enabled =
+        bridge::kerrIntegratorFlag(p->spin, env_flag("BLACKHOLE_BRIDGE_KERR_ENABLED", 1));
     p->use_luts = 0;
     p->time_sec = 0.0f;
     p->doppler_strength = env_float("BLACKHOLE_BRIDGE_DOPPLER_STRENGTH", 1.0f);

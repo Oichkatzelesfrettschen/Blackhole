@@ -17,6 +17,9 @@
  *   6. StokesKernelNoNaN:   launch baseline kernel with stokes_enabled=1; all pixels finite.
  *   7. FrontToBackComposite: two layers composited in camera order equal the
  *                            far-to-near solution, not the reversed order.
+ *   8. BudgetExhaustionAddsTheSky: with a 3-step budget and no disk, the
+ *                            Stokes kernel shades every ray with the sky along
+ *                            its last direction, as the RTE kernel does.
  *
  * HOW: Tests 1-5 call d_stokes_step() on device via a thin __global__ wrapper that
  *      writes results to a device buffer, then copies to host for assertion.
@@ -410,4 +413,34 @@ TEST_F(CudaStokesTest, FrontToBackComposite) {
         EXPECT_NEAR(out[k], out[4 + k], 1e-5f) << "component " << k;
     }
     EXPECT_GT(std::hypot(out[5] - out[9], out[6] - out[10]), 0.1f);
+}
+
+/* ========================================================================
+ * 8. Step-budget exhaustion adds the sky
+ *    With no disk, a 3-step budget exhausts every ray, which both volumetric
+ *    traces then shade with the (procedural) sky along the last direction;
+ *    the Stokes display of an unpolarized ray keeps its RGB, so the Stokes
+ *    and RTE frames agree pixel for pixel and are not black.
+ * ======================================================================== */
+TEST_F(CudaStokesTest, BudgetExhaustionAddsTheSky) {
+    int const w = 64;
+    int const h = 64;
+    BH_LaunchParams p = make_stokes_params(w, h, 1);
+    p.adisk_enabled = 0;
+    p.max_steps = 3;
+    p.background_enabled = 1;
+    p.background_intensity = 1.0f;
+    std::vector<float4> const stokes = run_kernel(p, w, h);
+    p.stokes_enabled = 0;
+    p.rte_enabled = 1;
+    std::vector<float4> const rte = run_kernel(p, w, h);
+    double rte_sum = 0.0;
+    double diff_sum = 0.0;
+    for (std::size_t k = 0; k < rte.size(); ++k) {
+        rte_sum += rte[k].x + rte[k].y + rte[k].z;
+        diff_sum += std::fabs(stokes[k].x - rte[k].x) + std::fabs(stokes[k].y - rte[k].y) +
+                    std::fabs(stokes[k].z - rte[k].z);
+    }
+    EXPECT_GT(rte_sum, 0.0);
+    EXPECT_LT(diff_sum, 1e-4 * rte_sum);
 }

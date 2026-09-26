@@ -166,15 +166,17 @@ void bhStepRK4(inout Ray ray, float r_s, float dt) {
   ray.affineParameter += dt;
 }
 
-// A step hits the disk plane only when it starts strictly off the plane and
-// ends on it or across it. A step starting at z = 0 (a camera in the disk
-// plane, or the step after one that landed exactly on it) moves off the plane
-// and is not a crossing, so an in-plane camera sees the disk edge-on instead
-// of hitting it at t = 0 with every ray. Signs are compared directly; the
-// product oldPos.z * newPos.z underflows to zero for tiny |z| on one side.
+// Crossing of the zero-thickness disk plane z = 0 by the step oldPos -> newPos
+// inside the annulus [r_in, r_out]. A step crosses only when it starts
+// strictly off the plane and ends on it or across it. A step that starts on
+// the plane leaves it rather than crossing it: its start is the observer (a
+// camera in the disk plane, where every tilted ray would otherwise hit the
+// disk at t = 0) or the end of a previous step that landed on the plane and
+// was counted there. Signs are compared directly; the product
+// oldPos.z * newPos.z underflows to zero for tiny |z| on one side.
 bool bhCheckDiskIntersection(vec3 oldPos, vec3 newPos, float r_in, float r_out,
                              out vec3 hitPoint) {
-  hitPoint = vec3(0.0);
+  hitPoint = oldPos;
   bool crossesDown = oldPos.z > 0.0 && newPos.z <= 0.0;
   bool crossesUp = oldPos.z < 0.0 && newPos.z >= 0.0;
   if (!(crossesDown || crossesUp)) {
@@ -271,6 +273,20 @@ bool bhHoleRendered() { return renderBlackHole > 0.5; }
 float bhMetricRadius(float r_s) { return gravitationalLensing > 0.5 ? r_s : 0.0; }
 
 float bhMetricSpin(float aTrace) { return gravitationalLensing > 0.5 ? aTrace : 0.0; }
+
+// Boyer-Lindquist position of a point in the tracer's chart: undoes
+// kerrChartPosition by rotating through -F(|p|) with the traced metric, so
+// consumers defined on Boyer-Lindquist phi (the wiregrid overlay) read the
+// azimuth the photon actually has there. Chart-space shading and depth keep
+// the chart position. With renderBlackHole = 0 the traces return the straight
+// camera ray's end point, which was never rotated, so it passes unchanged.
+vec3 bhChartToBoyerLindquist(vec3 p, float r_s) {
+  if (!bhHoleRendered()) {
+    return p;
+  }
+  float aTrace = bhMetricSpin(kerrTraceSpin(0.5 * kerrSpin * r_s));
+  return kerrRotateZ(p, -kerrKsAzimuthOffset(length(p), bhMetricRadius(r_s), aTrace));
+}
 
 // Closest-approach radius reported for a ray that meets no hole; above every
 // near-hole threshold the shading helpers apply.
@@ -834,6 +850,11 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   KerrConsts c;
   KerrRay    kRay;
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
+  vec3 origin = kerrChartPosition(ray.position, rsMetric, aTrace);
+  // Set when the ray escapes or the medium turns opaque; otherwise the step
+  // budget ran out and the ray is shaded as escaping along its last
+  // direction, as bhTraceGeodesicRTE does.
+  bool finished = false;
 
   vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
   // Observed polarization, composited front to back (stokesCompositeStep):
@@ -887,7 +908,10 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       stokesCompositeStep(polObserved, polTransmit, polFaraday, emStokes, alphaNu, rhoV,
                           pathStep);
 
-      if (transmit < 0.005) { break; }
+      if (transmit < 0.005) {
+        finished = true;
+        break;
+      }
     }
 
     if (kRay.r > escapeRadius && kRay.vr > 0.0) {
@@ -896,12 +920,17 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
         accumI += transmit * bhBackgroundColorFromDir(normalize(escDir)).rgb;
       }
+      finished = true;
       break;
     }
   }
 
   // Map accumulated Stokes state to display color
   terminalPos = kerrRayPosition(kRay);
+  vec3 budgetDir = terminalPos - origin;
+  if (!finished && dot(budgetDir, budgetDir) > BH_EPSILON * BH_EPSILON) {
+    accumI += transmit * bhBackgroundColorFromDir(normalize(budgetDir)).rgb;
+  }
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
   vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
   return vec4(stokesDisplayColor(stokes, accumI), 1.0);

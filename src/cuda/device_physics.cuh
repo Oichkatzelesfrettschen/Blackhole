@@ -374,6 +374,24 @@ __device__ __forceinline__ float d_kerr_trace_spin(float a) {
 }
 
 /**
+ * @brief Boyer-Lindquist position of a point in the tracer's chart.
+ *
+ * Undoes d_kerr_chart_position: rotates by -F(|p|) with the Kerr-Schild
+ * offset of the traced (time-reversed) spin, so consumers defined on
+ * Boyer-Lindquist phi (wiregrid overlay, GRMHD data) read the azimuth the
+ * photon actually has there. Chart-space shading and depth keep the chart
+ * position. The Schwarzschild RK4 lane (d_kerr_enabled = 0) has no offset.
+ * Twin of bhChartToBoyerLindquist in shader/include/interop_trace.glsl.
+ */
+__device__ __forceinline__ float3 d_chart_to_boyer_lindquist(float3 p) {
+    if (d_kerr_enabled == 0) {
+        return p;
+    }
+    float const a_trace = d_kerr_trace_spin(0.5f * d_spin * d_rs);
+    return d_rotate_z(p, -d_kerr_ks_azimuth_offset(d_length(p), d_rs, a_trace));
+}
+
+/**
  * @brief Radial acceleration R'(r)/2 = 2 r E P - (r - rs/2) Q_eff.
  *
  * P = (r^2+a^2)E - a Lz and Q_eff = Q + (Lz - aE)^2. Twin of
@@ -704,9 +722,11 @@ __device__ __forceinline__ void d_step_rk4(float3& x, float3& v, float rs, float
  */
 __device__ __forceinline__ bool d_check_disk(float3 old_pos, float3 new_pos,
                              float r_in, float r_out, float3& hit) {
-    /* Twin of bhCheckDiskIntersection: only a step that starts strictly off
-     * the plane and ends on or across it is a crossing, so an in-plane camera
-     * sees the disk edge-on rather than hitting it at t = 0. */
+    /* Twin of bhCheckDiskIntersection: a step crosses only when it starts
+     * strictly off the plane and ends on or across it. A step that starts on
+     * the plane leaves it: its start is the observer or the end of a step
+     * already counted there. Signs are compared directly because
+     * old_pos.z * new_pos.z underflows to zero for tiny |z|. */
     bool const crosses_down = old_pos.z > 0.0f && new_pos.z <= 0.0f;
     bool const crosses_up = old_pos.z < 0.0f && new_pos.z >= 0.0f;
     if (!(crosses_down || crosses_up)) return false;
@@ -1862,7 +1882,7 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         /* GRMHD emissivity modulation: j_nu ~ rho * B^2, B^2 ~ u (plasma beta ~ 1).
          * Matches blackhole_main.frag: density *= rho * uu at disk hit point. */
         if (d_use_luts && d_tex_grmhd) {
-            float4 grmhd = d_sample_grmhd(hit.hit_point);
+            float4 grmhd = d_sample_grmhd(d_chart_to_boyer_lindquist(hit.hit_point));
             float rho = fmaxf(grmhd.x, 0.0f);
             float uu  = fmaxf(grmhd.y, 0.0f);
             float grmhd_scale = rho * uu;
@@ -2493,6 +2513,10 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     KerrRay    kr;
     d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
     float3 const origin = d_kerr_chart_position(cam_pos, rs, a_trace);
+    /* Set when the ray escapes or the medium turns opaque; otherwise the step
+     * budget ran out and the ray is shaded as escaping along its last
+     * direction, as d_trace_geodesic_rte does. */
+    bool finished = false;
 
     /* Color-accurate intensity accumulator (same as d_trace_geodesic_rte) */
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
@@ -2553,7 +2577,10 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
             d_stokes_composite_step(stokes, pol_transmit, pol_faraday, 0.0f, jQ_s, jU_s, 0.0f,
                                     alpha_nu, rho_v, path_step);
 
-            if (transmit < 0.005f) { break; }
+            if (transmit < 0.005f) {
+                finished = true;
+                break;
+            }
         }
 
         if (kr.r > escape_r && kr.vr > 0.0f) {
@@ -2576,7 +2603,29 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                 accum_i.y += transmit * bg.y;
                 accum_i.z += transmit * bg.z;
             }
+            finished = true;
             break;
+        }
+    }
+
+    if (!finished) {
+        float3 const esc_dir = d_sub(d_kerr_ray_position(kr), origin);
+        if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
+            float4 const bg4 = d_background_color(d_normalize(esc_dir));
+            float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
+            bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
+            if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
+                d_debug_post_shaping_background != 0 ||
+                d_debug_shaper_inputs != 0 ||
+                d_debug_closest_approach_state != 0 ||
+                d_debug_closest_approach_timeline != 0 ||
+                d_debug_closest_approach_direction != 0 ||
+                d_debug_escaped_direction != 0) {
+                return make_float4(bg.x, bg.y, bg.z, 1.0f);
+            }
+            accum_i.x += transmit * bg.x;
+            accum_i.y += transmit * bg.y;
+            accum_i.z += transmit * bg.z;
         }
     }
 
