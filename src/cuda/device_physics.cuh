@@ -1718,7 +1718,10 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
         return d_encode_unit_vector(closest_pos);
     }
 
-    if (min_radius < rs * 5.0f) {
+    /* Sector shaping is an artistic grade of the Schwarzschild RK4 lane
+     * (d_kerr_enabled = 0). The Kerr tracer shows the lensed sky unmodified,
+     * like bhShadeHit and the GL traces. */
+    if (d_kerr_enabled == 0 && min_radius < rs * 5.0f) {
         float3 closest_n = d_normalize(closest_pos);
         float3 approach_dir = d_normalize(d_sub(cam_pos, closest_pos));
         float spin_sign = spin >= 0.0f ? 1.0f : -1.0f;
@@ -1857,8 +1860,11 @@ __device__ __forceinline__ float4 d_sample_grmhd(float3 pos) {
  * @brief Dispatch shading for a completed HitResult.
  *
  * Returns black for horizon hits, calls d_disk_color() for disk hits, and
- * calls d_background_color() for escaped rays with an added photon ring
- * proximity glow (cubic falloff from the photon sphere at 1.5*rs over 2.5*rs).
+ * calls d_background_color() for escaped rays. The Kerr tracer returns that
+ * lensed sky unmodified, like bhShadeHit; the Schwarzschild RK4 lane
+ * (d_kerr_enabled = 0) adds d_shape_escaped_background's sector grade and a
+ * photon ring proximity glow (cubic falloff from the photon sphere at 1.5*rs
+ * over 2.5*rs, scaled by d_photon_glow_strength).
  *
  * @param hit     Completed HitResult from d_trace_geodesic().
  * @param cam_pos Camera position used to reconstruct the escaped ray direction.
@@ -1921,7 +1927,11 @@ __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_p
         return bg;
     }
 
-    /* Photon ring proximity glow: match the GLSL lane's narrower, more
+    if (d_kerr_enabled != 0) {
+        return bg;
+    }
+
+    /* Photon ring proximity glow of the Schwarzschild RK4 lane: a narrow,
      * anisotropic ring instead of a broad uniform halo. */
     float r_ph = D_PHOTON_SPHERE * d_rs;
     float photon_dist = fabsf(hit.min_radius - r_ph);

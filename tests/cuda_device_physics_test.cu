@@ -24,6 +24,7 @@
 
 #include <gtest/gtest.h>
 #include <cuda_runtime.h>
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -468,4 +469,68 @@ TEST_F(CudaDevicePhysicsTest, BottomRowLooksBelowForwardAtTheFullFieldOfView) {
     EXPECT_FALSE(is_horizon(host[1])) << "row 1 (image top) must escape above the hole";
     /* Encoded physics z = world y of the escape chord: upward. */
     EXPECT_GT(host[1].z, 0.5f) << "row 1 must escape toward world +y";
+}
+
+/* ========================================================================
+ * The Kerr tracer shows the lensed sky unmodified
+ *    A 48x48 frame from 15 r_s (camera at (0, 0, 30), looking at the hole,
+ *    fov_scale 0.5, a = 0.6, no disk) holds the shadow, the photon ring, and
+ *    sky whose rays pass within 5 r_s. With kerr_enabled = 1 the frame must
+ *    not depend on the photon-glow strength, and every escaped pixel must
+ *    equal the unshaped sky (debug_pre_shaping_background): neither the ring
+ *    glow nor the sector grade applies. The Schwarzschild RK4 lane
+ *    (kerr_enabled = 0) keeps its glow.
+ * ======================================================================== */
+
+namespace {
+
+std::vector<float4> renderSkyFrame(int kerrEnabled, float glowStrength, int preShaping) {
+    constexpr int kSide = 48;
+    BH_LaunchParams p = make_schwarzschild_params(kSide, kSide);
+    p.kerr_enabled = kerrEnabled;
+    p.spin = kerrEnabled != 0 ? 0.6f : 0.0f;
+    p.fov_scale = 0.5f;
+    p.cam_pos[2] = 30.0f;
+    p.max_dist = 200.0f;
+    p.background_enabled = 1;
+    p.background_intensity = 1.0f;
+    p.photon_glow_strength = glowStrength;
+    p.debug_pre_shaping_background = preShaping;
+    /* right (1, 0, 0), up (0, 1, 0), forward (0, 0, -1): toward the hole. */
+    p.cam_basis[8] = -1.0f;
+    float4 *d_fb = nullptr;
+    std::vector<float4> host;
+    if (cudaMalloc(&d_fb, kSide * kSide * sizeof(float4)) != cudaSuccess) {
+        return host;
+    }
+    if (bh_launch_geodesic_kernel(d_fb, &p, BH_KERNEL_FP32_BASELINE, nullptr) == 0) {
+        cudaDeviceSynchronize();
+        host = copy_framebuffer(d_fb, kSide * kSide);
+    }
+    cudaFree(d_fb);
+    return host;
+}
+
+bool sameFrame(const std::vector<float4> &a, const std::vector<float4> &b) {
+    return a.size() == b.size() &&
+           std::equal(a.begin(), a.end(), b.begin(), [](const float4 &x, const float4 &y) {
+               return x.x == y.x && x.y == y.y && x.z == y.z && x.w == y.w;
+           });
+}
+
+} // namespace
+
+TEST_F(CudaDevicePhysicsTest, KerrSkyIgnoresPhotonGlowAndSectorShaping) {
+    std::vector<float4> const plain = renderSkyFrame(1, 0.0f, 0);
+    std::vector<float4> const glowing = renderSkyFrame(1, 5.0f, 0);
+    std::vector<float4> const unshaped = renderSkyFrame(1, 0.0f, 1);
+    ASSERT_EQ(plain.size(), 48U * 48U);
+    auto const horizon = std::count_if(plain.begin(), plain.end(), is_horizon);
+    EXPECT_GT(horizon, 0) << "the frame must hold the shadow";
+    EXPECT_LT(static_cast<std::size_t>(horizon), plain.size()) << "and the sky";
+    EXPECT_TRUE(sameFrame(plain, glowing)) << "photon glow changed a Kerr frame";
+    EXPECT_TRUE(sameFrame(plain, unshaped)) << "sector shaping changed a Kerr frame";
+
+    /* The Schwarzschild RK4 lane keeps its ring glow. */
+    EXPECT_FALSE(sameFrame(renderSkyFrame(0, 0.0f, 0), renderSkyFrame(0, 5.0f, 0)));
 }

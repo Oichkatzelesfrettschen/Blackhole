@@ -433,7 +433,12 @@ void renderPhysicsSettings(RenderState &rs) {
   ImGui::EndDisabled();
 
   // Physics visualization toggles
+  // The photon-sphere glow is an artistic overlay of the legacy tracers; the
+  // Kerr tracer on every backend shows the lensed sky unmodified.
+  ImGui::BeginDisabled(kerrDiskShadingActive(rs));
   ImGui::Checkbox("enablePhotonSphere", &rs.physicsCore.enablePhotonSphere);
+  legacyTracerControlTooltip();
+  ImGui::EndDisabled();
   ImGui::BeginDisabled(rs.physicsCore.physicalRayTracer);
   ImGui::Checkbox("enableRedshift", &rs.physicsCore.enableRedshift);
   ImGui::EndDisabled();
