@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include "game/campaign_view.h"
@@ -674,4 +675,31 @@ TEST(Constellation, SameTurnOrdersLeaveTheNewestReport) {
   EXPECT_EQ(truth.reportsSent, 1U);
   EXPECT_TRUE(constellation.issueCommand(
       alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 0, .targetBand = 2}));
+}
+
+// Falsifier: two configs listing the same duplicate links in a different
+// order (and orientation) giving a fleet a different interstellar transit
+// time, or an order a different light delay -- travel reading the first
+// listed link while signals take the shortest.
+TEST(Constellation, DuplicateLinksNormalizeToTheShortest) {
+  const auto play = [](std::vector<game::InterSystemLink> links) {
+    game::ConstellationConfig config = microTwoSystemConfig();
+    config.links = std::move(links);
+    config.fleetInitialFuelUnits = 1.0e6;
+    game::Constellation constellation(config);
+    const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+    const game::FleetId fleet =
+        constellation.addFleet(alpha, 0, game::FleetCapability::Research, 0);
+    EXPECT_TRUE(constellation.issueCommand(
+        alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 1, .targetBand = 0}));
+    constellation.advanceTurns(3);
+    return constellation.fleets().front().transitArrivalTurn;
+  };
+  const game::InterSystemLink longLink{.a = 0, .b = 1, .separationCm = 40.0 * K_LIGHT_DAY_CM};
+  const game::InterSystemLink shortLink{.a = 1, .b = 0, .separationCm = 20.0 * K_LIGHT_DAY_CM};
+  const std::int64_t longFirst = play({longLink, shortLink});
+  const std::int64_t shortFirst = play({shortLink, longLink});
+  EXPECT_EQ(longFirst, shortFirst);
+  // 20 light-days at half light speed: 40 turns after the departure turn.
+  EXPECT_EQ(longFirst, 1 + 40);
 }
