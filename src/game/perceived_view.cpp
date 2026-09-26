@@ -162,7 +162,9 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   view.instability = 0.0;
   view.stabilization = 0.0;
   view.fleetIntegrity = 0.0;
-  view.status = CampaignStatus::Ongoing;
+  // The colony cannot hear a remote win, but the deadline is public: past it
+  // the campaign has ended one way or the other.
+  view.status = deadlinePassed() ? CampaignStatus::Ended : CampaignStatus::Ongoing;
   view.clearedTurn = 0;
   view.intel.clear();
   view.reportsInFlight.clear();

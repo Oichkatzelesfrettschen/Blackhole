@@ -100,6 +100,9 @@ inline void clampSelectionToView(CampaignUiState &uiState, const game::CampaignV
  *         issueCommand would refuse every order from it. */
 [[nodiscard]] inline const char *composerBlockedReason(const game::CampaignViewSnapshot &view,
                                                        const CampaignUiState &uiState) {
+  if (view.status == game::CampaignStatus::Ended) {
+    return "the deadline has passed -- no further orders";
+  }
   if (view.status != game::CampaignStatus::Ongoing) {
     return "campaign decided -- no further orders";
   }

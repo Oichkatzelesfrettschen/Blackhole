@@ -32,6 +32,10 @@ enum class CampaignStatus : std::uint8_t {
   Ongoing = 0,
   Won = 1,  ///< Banked energy reached the victory target by the deadline.
   Lost = 2, ///< The deadline passed first.
+  /// Perceived only, at a colony: the public deadline has passed, so the
+  /// campaign is decided, but which way (a host win before it, or the loss
+  /// at it) has not reached the station. The latched state never holds it.
+  Ended = 3,
 };
 
 /** @brief One orbital band as the map draws it. rate/delay are filled only

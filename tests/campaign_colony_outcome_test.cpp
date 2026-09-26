@@ -236,6 +236,60 @@ TEST(ColonyOutcome, HostDecisionDoesNotSilenceTheColony) {
   EXPECT_TRUE(state.issueCommand(order));
 }
 
+namespace {
+
+/** @brief Runs a colony campaign with deadline 20 to it and checks each
+ *         station's order gate and view on either side of it. */
+void expectDeadlineEndsTheCampaign(bool hostWins) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config = colonyConfig(R"({})", 0);
+  // Reports from turns 1..3 land at 6..8: 3 units win, 1000 never do.
+  config.victoryEnergyUnits = hostWins ? 3.0 : 1000.0;
+  config.deadlineTurn = 20;
+  game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
+  ASSERT_NE(fleet, game::K_INVALID_FLEET_ID);
+  game::Command order;
+  order.type = game::CommandType::AssignTask;
+  order.fleet = fleet;
+  order.properTimeCostSec = 3600.0;
+  order.originNode = game::K_FIRST_COLONY_NODE;
+
+  state.advanceTurns(19);
+  EXPECT_FALSE(state.deadlinePassed());
+  EXPECT_EQ(state.perceivedSnapshot(game::K_FIRST_COLONY_NODE).status,
+            game::CampaignStatus::Ongoing);
+  EXPECT_TRUE(state.issueCommand(order));
+
+  state.advanceTurn(); // turn 20 == deadline
+  EXPECT_TRUE(state.deadlinePassed());
+  EXPECT_EQ(state.perceivedSnapshot(game::K_FIRST_COLONY_NODE).status, game::CampaignStatus::Ended);
+  EXPECT_FALSE(state.issueCommand(order));
+  const game::CampaignStatus truth =
+      hostWins ? game::CampaignStatus::Won : game::CampaignStatus::Lost;
+  EXPECT_EQ(state.status(), truth);
+  EXPECT_EQ(state.perceivedSnapshot(game::K_AUTHORITY_NODE).status, truth);
+}
+
+} // namespace
+
+// Falsifier: a colony order accepted at or after the public deadline, or one
+// refused before it; the colony's view at the deadline naming an outcome it
+// has not heard (Won or Lost) instead of Ended; or the host's view hiding its
+// own latched outcome. Both outcomes are run, so the colony-side result
+// cannot depend on which way the campaign went.
+TEST(ColonyOutcome, PublicDeadlineEndsTheCampaignAtEveryStation) {
+  {
+    SCOPED_TRACE("host wins before the deadline");
+    expectDeadlineEndsTheCampaign(true);
+  }
+  {
+    SCOPED_TRACE("host loses at the deadline");
+    expectDeadlineEndsTheCampaign(false);
+  }
+}
+
 // Falsifier: the colony's band delays reflecting where relay fleets truly are
 // -- relay positions are fleet telemetry the colony lacks -- instead of the
 // a-priori delay (geodesic times the configured overhead). The fake band 960

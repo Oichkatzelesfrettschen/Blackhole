@@ -52,6 +52,8 @@ const char *statusName(game::CampaignStatus status) {
       return "won";
     case game::CampaignStatus::Lost:
       return "lost";
+    case game::CampaignStatus::Ended:
+      return "ended";
     case game::CampaignStatus::Ongoing:
     default:
       return "ongoing";

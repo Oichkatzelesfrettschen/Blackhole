@@ -191,6 +191,10 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiSt
   } else if (view.status == game::CampaignStatus::Lost) {
     ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "DEFEAT -- deadline t%lld passed",
                        static_cast<long long>(view.deadlineTurn));
+  } else if (view.status == game::CampaignStatus::Ended) {
+    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f),
+                       "ENDED -- deadline t%lld passed; the outcome has not reached this station",
+                       static_cast<long long>(view.deadlineTurn));
   } else if (view.victoryEnergyUnits > 0.0) {
     const auto fraction = static_cast<float>(view.energyUnits / view.victoryEnergyUnits);
     const std::string objective = std::format("energy {:.1f} / {:.0f}  (deadline t{})",

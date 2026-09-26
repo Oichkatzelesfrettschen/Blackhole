@@ -60,6 +60,8 @@ char statusLetter(game::CampaignStatus status) {
     return 'W';
   case game::CampaignStatus::Lost:
     return 'L';
+  case game::CampaignStatus::Ended:
+    return 'E';
   case game::CampaignStatus::Ongoing:
   default:
     return '-';

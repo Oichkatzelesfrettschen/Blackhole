@@ -170,6 +170,12 @@ public:
 
   [[nodiscard]] std::int64_t turn() const { return clock_.turn(); }
   [[nodiscard]] CampaignStatus status() const { return status_; }
+  /** @brief The deadline turn is reached. It depends only on the public
+   *         coordinate clock, so every station knows it: the outcome latch,
+   *         the order gate, and each perceived view read this one rule. */
+  [[nodiscard]] bool deadlinePassed() const {
+    return config_.deadlineTurn > 0 && clock_.turn() >= config_.deadlineTurn;
+  }
   [[nodiscard]] double energyUnits() const { return energyUnits_; }
   [[nodiscard]] double instability() const { return instability_; }
   [[nodiscard]] double stabilization() const { return stabilization_; }

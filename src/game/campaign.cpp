@@ -163,6 +163,12 @@ bool CampaignState::issueCommand(const Command &command) {
   if (status_ != CampaignStatus::Ongoing && command.originNode == K_AUTHORITY_NODE) {
     return false;
   }
+  // Past the deadline the campaign is decided whichever way it went, and every
+  // station can read the coordinate clock, so refusing any origin's order
+  // reveals nothing about the outcome.
+  if (deadlinePassed()) {
+    return false;
+  }
   switch (command.type) {
   case CommandType::PlaceFleet: {
     // Horizon gate: an at-or-inside-horizon placement is rejected HERE, before
@@ -475,7 +481,7 @@ void CampaignState::evaluateOutcome() {
     status_ = CampaignStatus::Won;
     return;
   }
-  if (config_.deadlineTurn > 0 && clock_.turn() >= config_.deadlineTurn) {
+  if (deadlinePassed()) {
     status_ = CampaignStatus::Lost;
   }
 }
