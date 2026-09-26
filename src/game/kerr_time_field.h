@@ -16,9 +16,14 @@
  *
  * The field stores the spin deficit epsilon = 1 - |a| rather than a and
  * delegates every metric quantity to physics/kerr_observer.h, which works in
- * (epsilon, x = r/M - 1). Spins arbitrarily close to extremal therefore keep
- * their physics: Gargantua's 1 - a = 1.33e-14 would round to two significant
- * digits of 1 - a^2 as a double a.
+ * (epsilon, x = r/M - 1). Near-extremal spins therefore keep their physics:
+ * Gargantua's 1 - a = 1.33e-14 would round to two significant digits of
+ * 1 - a^2 as a double a. The field's interface speaks absolute radii in cm,
+ * which resolve x only to about 1e-16, so the deficit has a floor,
+ * K_MIN_SPIN_DEFICIT = 1e-24: there the horizon (x = 1.41e-12), photon orbit
+ * (1.63e-12), and marginally bound radius (2.00e-12) sit thousands of ulp
+ * apart and the ISCO (1.59e-8) far above them. A smaller deficit, exact
+ * extremality included, is raised to the floor; spinDeficit() reports it.
  *
  * physics::kerrZamoLapse evaluates the same ZAMO lapse sqrt(Sigma Delta / A)
  * in (a, r) form; physics::kerrStaticTimeDilation is the static-observer rate,
@@ -32,19 +37,25 @@
 
 namespace game {
 
-/** @brief Spin given as its deficit from extremal, epsilon = 1 - |a| in [0, 1]. */
+/** @brief Spin given as its deficit from extremal, epsilon = 1 - |a| in
+ *         [KerrTimeField::K_MIN_SPIN_DEFICIT, 1]. */
 struct SpinDeficit {
   double epsilon = 1.0;
 };
 
 class KerrTimeField final : public TimeField {
 public:
+  /// Smallest deficit whose characteristic radii the cm interface resolves.
+  static constexpr double K_MIN_SPIN_DEFICIT = 1e-24;
+
   /** @brief spinDimensionless is a/M in [-1, 1] (clamped there); the field
-   *         keeps epsilon = 1 - |a| and the sign of a. */
+   *         keeps epsilon = 1 - |a|, raised to K_MIN_SPIN_DEFICIT, and the
+   *         sign of a. */
   KerrTimeField(double blackHoleMassG, double spinDimensionless);
 
   /** @brief Prograde-positive spin a = 1 - epsilon given by its deficit, for
-   *         spins a double a cannot resolve. epsilon is clamped to [0, 1]. */
+   *         spins a double a cannot resolve. epsilon is clamped to
+   *         [K_MIN_SPIN_DEFICIT, 1]. */
   KerrTimeField(double blackHoleMassG, SpinDeficit deficit);
 
   [[nodiscard]] double properTimeRate(double radiusCm, Observer observer) const override;

@@ -1,0 +1,6 @@
+a=0.0 pos=(20, 0, 1e-09) dir=[0. 1. 0.]: r=20  L=21.082  Q_code=444.44  Q_std=1.1111e-18  R_code=-1.6e+05  R_std=-5.8208e-11  R_true=0  Theta_code=0  Theta_true=0
+a=0.0 pos=(20, 0, 1e-09) dir=[-0.8  0.6  0. ]: r=20  L=12.222  Q_code=149.38  Q_std=1.0373e-18  R_code=52448  R_std=1.0622e+05  R_true=1.0622e+05  Theta_code=0  Theta_true=6.639e-19
+a=0.0 pos=(15, 3, 4) dir=[-0.889  0.254 -0.381]: r=15.811  L=6.5627  Q_code=52.64  Q_std=9.5709  R_code=41599  R_std=51005  R_true=51005  Theta_code=6.626  Theta_true=6.626
+a=0.9 pos=(20, 0, 1e-09) dir=[0. 1. 0.]: r=20  L=21.006  Q_code=441.23  Q_std=1.1011e-18  R_code=-1.592e+05  R_std=-5.8208e-11  R_true=0  Theta_code=0  Theta_true=0
+a=0.9 pos=(20, 0, 1e-09) dir=[-0.8  0.6  0. ]: r=20  L=12.154  Q_code=147.72  Q_std=1.0317e-18  R_code=53003  R_std=1.063e+05  R_true=1.063e+05  Theta_code=0  Theta_true=6.6439e-19
+a=0.9 pos=(15, 3, 4) dir=[-0.889  0.254 -0.381]: r=15.811  L=6.4722  Q_code=51.345  Q_std=9.4559  R_code=41958  R_std=51139  R_true=51139  Theta_code=6.6435  Theta_true=6.6435

@@ -40,6 +40,9 @@
 #include <cstdint>
 #include <limits>
 #include <numbers>
+#include <optional>
+
+#include "safe_limits.h"
 
 namespace physics::kerr_observer {
 
@@ -70,10 +73,21 @@ enum class OrbitSense : std::uint8_t {
   return std::sqrt(epsilon * (2.0 - epsilon));
 }
 
-/** @brief Delta = (x - h)(x + h); positive outside the outer horizon. */
+/** @brief Delta = (x - h)(x + h); positive outside the outer horizon. The
+ *         product underflows for offsets below about 1e-154 from an extremal
+ *         horizon (x = 1e-200 at epsilon = 0 gives 0), so anything needing
+ *         sqrt(Delta) or its sign takes sqrtKerrDelta or x > h instead. */
 [[nodiscard]] inline double kerrDelta(double epsilon, double x) {
   const double h = horizonOffset(epsilon);
   return (x - h) * (x + h);
+}
+
+/** @brief sqrt(Delta) = sqrt(x - h) sqrt(x + h) outside the outer horizon and
+ *         0 at or inside it, from the two factors separately so that Delta
+ *         itself never has to be representable. */
+[[nodiscard]] inline double sqrtKerrDelta(double epsilon, double x) {
+  const double h = horizonOffset(epsilon);
+  return x > h ? std::sqrt(x - h) * std::sqrt(x + h) : 0.0;
 }
 
 /** @brief Equatorial lapse-shift primitives at one radius. */
@@ -100,7 +114,7 @@ struct EquatorialFrame {
   frame.spin = 1.0 - epsilon;
   const double r = frame.r;
   const double a2 = frame.spin * frame.spin;
-  frame.sqrtDelta = std::sqrt(kerrDelta(epsilon, x));
+  frame.sqrtDelta = sqrtKerrDelta(epsilon, x);
   frame.bigA = (r * r * ((r * r) + a2)) + (2.0 * a2 * r);
   const double sqrtA = std::sqrt(frame.bigA);
   frame.alpha = r * frame.sqrtDelta / sqrtA;
@@ -111,7 +125,9 @@ struct EquatorialFrame {
 
 /** @brief Equatorial circular geodesic of one sense at one radius. */
 struct CircularOrbit {
-  bool exists = false;          ///< Timelike: outside the photon orbit of this sense.
+  /// Timelike: outside the photon orbit of this sense, with a ZAMO-frame
+  /// speed that stays below light speed in double precision.
+  bool exists = false;
   double properTimeRate = 0.0;  ///< dtau/dt = 1 / u^t.
   /// Omega = dphi/dt, signed along +phi: a prograde orbit shares the sign of
   /// a (negative for epsilon > 1), a retrograde one the opposite.
@@ -141,20 +157,33 @@ struct CircularOrbit {
   const double r = 1.0 + x;
   const double s = std::sqrt(r);
   const double y = x / (1.0 + s);
-  const double radicand = (y * y * (y + 3.0)) - (2.0 * e);
-  const double delta = kerrDelta(epsilon, x);
-  if (!(radicand > 0.0) || !(delta > 0.0)) {
+  // sqrt(N) = y sqrt((y + 3) - 2e / y^2), so y^2 never has to be
+  // representable (x = 1e-200 at extremal spin); a vanishing tail is the
+  // photon orbit and a negative one lies inside it.
+  const double sqrtDelta = sqrtKerrDelta(epsilon, x);
+  if (!(y > 0.0) || !(sqrtDelta > 0.0)) {
     return orbit;
   }
+  const double tail = (y + 3.0) - ((2.0 * e / y) / y);
+  if (!(tail > 0.0)) {
+    return orbit;
+  }
+  const double sqrtRadicand = y * std::sqrt(tail);
   const double r32 = r * s;
   const double denominator = r32 + spinSense;
   const double sign = senseSign(epsilon, sense);
   orbit.exists = true;
-  orbit.properTimeRate = std::sqrt(r32) * std::sqrt(radicand) / denominator;
+  orbit.properTimeRate = std::sqrt(r32) * sqrtRadicand / denominator;
   orbit.angularVelocity = sign / denominator;
   const double rMinusA = x + e;
   const double numerator = (rMinusA * rMinusA) + (2.0 * spinSense * s * y);
-  orbit.zamoVelocity = sign * numerator / (std::sqrt(delta) * denominator);
+  orbit.zamoVelocity = sign * numerator / (sqrtDelta * denominator);
+  // Within a few ulp of the photon orbit the speed rounds to 1 or above; the
+  // input then cannot resolve a timelike orbit, so none is reported rather
+  // than a superluminal boost that turns every tetrad component into NaN.
+  if (!(std::fabs(orbit.zamoVelocity) < 1.0)) {
+    return CircularOrbit{};
+  }
   return orbit;
 }
 
@@ -220,11 +249,20 @@ struct CircularOrbit {
  *
  * dt/dr = (r^2 + a^2) / Delta = 1 + 2r / Delta. Partial fractions over the
  * horizons x = +-h give, for x1 < x2,
- *   T = (x2 - x1) + ln(Delta2 / Delta1) + 2 w atanh(h w) / (h w),
- *   w = (x2 - x1) / (x1 x2 - h^2).
+ *   T = (x2 - x1) + ln(Delta2 / Delta1) + 2 w atanh(z) / z,
+ *   w = (x2 - x1) / (x1 x2 - h^2),  z = h w,
+ * and 2 atanh(z) = ln(1 + 2h/(x1 - h)) - ln(1 + 2h/(x2 - h)) because
+ * (1 + z)/(1 - z) = (x1 + h)(x2 - h) / ((x1 - h)(x2 + h)).
  * The textbook form divides a difference of logarithms by r_+ - r_- = 2h,
  * which loses log10(1/h) digits (about 6.5 at the canon spin); the atanh form
- * carries that ratio exactly and reaches the extremal limit w at h = 0.
+ * carries that ratio exactly and reaches the extremal limit w at h = 0. Near
+ * the horizon (z >= 1/2, x1 within 2h) z itself rounds toward the atanh
+ * singularity -- at x1 one ulp above h it rounds to exactly 1 -- so there the
+ * horizon term is (1/h) times the log1p form, which reads the
+ * horizon-relative offsets x1 - h and x2 - h directly and is well conditioned
+ * because 2 atanh(z) >= 1.1. No intermediate product or ratio leaves the
+ * double range before the delay itself does, so offsets as small as 1e-300
+ * keep a finite delay.
  */
 [[nodiscard]] inline double principalNullDelay(double epsilon, double x1, double x2) {
   const double inner = std::fmin(x1, x2);
@@ -235,9 +273,25 @@ struct CircularOrbit {
   const double h2 = epsilon * (2.0 - epsilon);
   const double h = std::sqrt(h2);
   const double span = outer - inner;
-  const double w = span / ((inner * outer) - h2);
-  const double logRatio = std::log(((outer - h) * (outer + h)) / ((inner - h) * (inner + h)));
-  return span + logRatio + (2.0 * w * atanhOverArgument(h * w));
+  // w = span / (x1 x2 - h^2) with x2 divided out first, so an inner offset of
+  // 1e-200 does not underflow the product while the delay (about 2 / x1) is
+  // still representable.
+  const double w = (span / outer) / (inner - (h2 / outer));
+  // ln(Delta2 / Delta1) as two quotients of offsets on the same side of each
+  // horizon; logQuotient falls back to a difference of logarithms only when a
+  // quotient itself leaves the normal range.
+  const auto logQuotient = [](double numerator, double denominator) {
+    const double quotient = numerator / denominator;
+    const bool normal = physics::safeIsfinite(quotient) && quotient >= std::numeric_limits<double>::min();
+    return normal ? std::log(quotient) : std::log(numerator) - std::log(denominator);
+  };
+  const double logRatio = logQuotient(outer - h, inner - h) + logQuotient(outer + h, inner + h);
+  const double z = h * w;
+  if (z < 0.5) {
+    return span + logRatio + (2.0 * w * atanhOverArgument(z));
+  }
+  const double twiceAtanh = std::log1p(2.0 * h / (inner - h)) - std::log1p(2.0 * h / (outer - h));
+  return span + logRatio + (twiceAtanh / h);
 }
 
 using Vec3 = std::array<double, 3>;
@@ -320,10 +374,16 @@ struct Tetrad {
   return boosted;
 }
 
-/** @brief Tetrad of the prograde or retrograde circular geodesic at x. The
- *         orbit must exist (circularOrbit(...).exists). */
-[[nodiscard]] inline Tetrad orbitingTetrad(double epsilon, double x, OrbitSense sense) {
+/** @brief Tetrad of the prograde or retrograde circular geodesic at x, or
+ *         nothing where circularOrbit reports no timelike orbit (inside the
+ *         photon orbit, or too close to it for a double to resolve a speed
+ *         below light). */
+[[nodiscard]] inline std::optional<Tetrad> orbitingTetrad(double epsilon, double x,
+                                                          OrbitSense sense) {
   const CircularOrbit orbit = circularOrbit(epsilon, x, sense);
+  if (!orbit.exists) {
+    return std::nullopt;
+  }
   return boostedTetrad(zamoTetrad(epsilon, x), Vec3{0.0, 0.0, orbit.zamoVelocity});
 }
 

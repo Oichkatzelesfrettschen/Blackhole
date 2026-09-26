@@ -27,21 +27,31 @@
  *  13.  add(key, double) / get() round-trip with setprecision(15)
  *  14.  add(key, int) / get() round-trip
  *  15.  addPhysicsParams() populates mass and spin via get()
+ *   Radial solution against mpmath (16-17), tests/analytic_kerr_reference.inc
+ *   from scripts/gen_analytic_kerr_reference.py:
+ *  16.  radialHalfPeriod within 4 ulp of K(m)/scale for 1 - m from 0.6 down
+ *       to 1e-10
+ *  17.  rAnalytic within 4 ulp times the first-order error bound of
+ *       r(lambda) from sn, cn, k'^2 and the final sum
+ *  18.  at 1 - m = 6.1e-17 (separatrix) r reaches r1 at one half period and
+ *       returns to r3 after two
  */
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <exception>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <string>
 #include <string_view>
 
 #include "../src/physics/analytic_kerr_geodesic.h"
 #include "../src/physics/reproducibility.h"
-
-static_assert(PHYSICS_HAS_BOOST_JACOBI == 1, "Validation requires the Boost numerical path");
 
 using namespace physics;
 
@@ -240,6 +250,100 @@ void testManifestAddPhysicsParams() {
 
 } // namespace
 
+// ============================================================================
+// Tests 16-17: radial half period and r(lambda) against the mpmath referee
+// ============================================================================
+
+namespace {
+
+struct AnalyticKerrRow {
+  std::array<double, 4> roots{};
+  double halfPeriod = 0.0;
+  std::array<double, 6> radius{};
+  std::array<double, 6> radiusCondition{};
+};
+
+constexpr std::array<double, 6> REFEREE_LAMBDAS = {0.05, 0.3, 0.77, 1.4, 2.9, 5.5};
+
+#include "analytic_kerr_reference.inc"
+
+constexpr double EPS = std::numeric_limits<double>::epsilon();
+// K from the AGM with 1 - m formed from the roots: a few roundings in the root
+// differences plus the AGM's own, independent of 1 - m.
+constexpr double HALF_PERIOD_TOL = 4.0 * EPS;
+// sn and cn from the Landen transformation on k' are backward-stable in u with
+// an absolute floor, r3 + corr and k'^2 add a few roundings; the table's
+// condition column is the first-order bound of all three in units of eps.
+constexpr double RADIUS_TOL_ULPS = 4.0;
+
+RadialRoots transitRoots(const std::array<double, 4> &r) {
+  RadialRoots roots;
+  roots.nReal = 4;
+  roots.type = RadialMotionType::Transit;
+  for (std::size_t i = 0; i < r.size(); ++i) {
+    roots.roots.at(i) = {r.at(i), 0.0};
+  }
+  return roots;
+}
+
+void testHalfPeriodReferee() {
+  std::cout << "Test 16: radialHalfPeriod vs mpmath K(m), 1 - m down to 1e-10\n";
+
+  double worst = 0.0;
+  for (const AnalyticKerrRow &row : ANALYTIC_KERR_ROWS) {
+    const double rel =
+        std::abs(radialHalfPeriod(transitRoots(row.roots)) - row.halfPeriod) / row.halfPeriod;
+    worst = std::max(worst, rel);
+  }
+  const std::string detailBuffer =
+      std::format("max rel err {:.3e} ({:.2f} ulp)", worst, worst / EPS);
+  std::cout << "  " << detailBuffer << "\n";
+  check(worst <= HALF_PERIOD_TOL, "half period within 4 ulp of K(m)/scale", detailBuffer);
+}
+
+void testRadiusReferee() {
+  std::cout << "Test 17: rAnalytic vs mpmath r(lambda), scaled by its error bound\n";
+
+  double worstUlps = 0.0;
+  double worstRel = 0.0;
+  for (const AnalyticKerrRow &row : ANALYTIC_KERR_ROWS) {
+    const RadialRoots roots = transitRoots(row.roots);
+    for (std::size_t i = 0; i < REFEREE_LAMBDAS.size(); ++i) {
+      const double ref = row.radius.at(i);
+      const double diff = std::abs(rAnalytic(REFEREE_LAMBDAS.at(i), roots) - ref);
+      worstRel = std::max(worstRel, diff / std::abs(ref));
+      worstUlps = std::max(worstUlps, diff / (EPS * row.radiusCondition.at(i)));
+    }
+  }
+  const std::string detailBuffer =
+      std::format("max rel err {:.3e}, max err / (eps x condition) {:.2f}", worstRel, worstUlps);
+  std::cout << "  " << detailBuffer << "\n";
+  check(worstUlps <= RADIUS_TOL_ULPS, "r(lambda) within 4 ulp x its first-order error bound",
+        detailBuffer);
+}
+
+void testSeparatrixPeriod() {
+  std::cout << "Test 18: separatrix roots {6, nextafter(6, 0), 1.5, -0.5} keep their period\n";
+
+  // 1 - m = 6.1e-17 lies below the rounding of any double modulus near 1, so
+  // the period only survives through k'^2 formed from the roots: r reaches r1
+  // at one half period and returns to r3 after two.
+  const std::array<double, 4> r = {6.0, std::nextafter(6.0, 0.0), 1.5, -0.5};
+  const RadialRoots roots = transitRoots(r);
+  const double half = radialHalfPeriod(roots);
+  const double atTurn = rAnalytic(half, roots);
+  const double atReturn = rAnalytic(2.0 * half, roots);
+  const std::string detailBuffer =
+      std::format("half period {:.15f}, r(half) - r1 = {:.3e}, r(2 half) - r3 = {:.3e}", half,
+                  atTurn - r[0], atReturn - r[2]);
+  std::cout << "  " << detailBuffer << "\n";
+  check(std::abs(atTurn - r[0]) <= 8.0 * EPS * r[0] &&
+            std::abs(atReturn - r[2]) <= 8.0 * EPS * r[2],
+        "r(K/scale) = r1 and r(2K/scale) = r3 within 8 ulp at 1 - m = 6.1e-17", detailBuffer);
+}
+
+} // namespace
+
 int main() try {
   std::cout << "\n================================================\n"
             << "ANALYTIC KERR GEODESIC + REPRODUCIBILITY VALIDATION\n"
@@ -275,6 +379,12 @@ int main() try {
   testManifestAddIntRoundTrip();
   std::cout << "\n";
   testManifestAddPhysicsParams();
+  std::cout << "\n";
+  testHalfPeriodReferee();
+  std::cout << "\n";
+  testRadiusReferee();
+  std::cout << "\n";
+  testSeparatrixPeriod();
   std::cout << "\n";
 
   std::cout << "================================================\n"

@@ -25,7 +25,7 @@ KerrTimeField::KerrTimeField(double blackHoleMassG, double spinDimensionless)
 }
 
 KerrTimeField::KerrTimeField(double blackHoleMassG, SpinDeficit deficit)
-    : epsilon_(std::clamp(deficit.epsilon, 0.0, 1.0)), spinSign_(1.0),
+    : epsilon_(std::clamp(deficit.epsilon, K_MIN_SPIN_DEFICIT, 1.0)), spinSign_(1.0),
       gravitationalRadiusCm_(physics::G * blackHoleMassG / physics::C2),
       schwarzschildRadiusCm_(2.0 * gravitationalRadiusCm_),
       outerHorizonCm_(gravitationalRadiusCm_ * (1.0 + ko::horizonOffset(epsilon_))),
@@ -64,7 +64,11 @@ bool KerrTimeField::admitsObserver(double radiusCm, Observer observer) const {
   if (observer == Observer::Hovering) {
     return true;
   }
-  return radialOffset(radiusCm) > ko::marginallyBoundOffset(epsilon_, senseOf(observer));
+  // Strictly outside r_mb in both representations, as for the horizon: the
+  // absolute radius marginallyBoundRadiusCm publishes is itself refused (an
+  // E = 1 orbit is not bound) however the round trip rounds.
+  return radiusCm > marginallyBoundRadiusCm(observer) &&
+         radialOffset(radiusCm) > ko::marginallyBoundOffset(epsilon_, senseOf(observer));
 }
 
 bool KerrTimeField::admitsStableOrbit(double radiusCm, Observer observer) const {
@@ -89,7 +93,13 @@ double KerrTimeField::iscoRadiusCm(Observer orbit) const {
 }
 
 bool KerrTimeField::isValidStationRadius(double radiusCm) const {
-  return std::isfinite(radiusCm) && radialOffset(radiusCm) > ko::horizonOffset(epsilon_);
+  // Strictly outside the horizon in both representations: the absolute radius
+  // the field publishes (outerHorizonCm_, so the horizon itself is refused
+  // however the cm -> offset round trip rounds) and the offset the metric
+  // functions read (so an accepted radius always has Delta > 0 and a
+  // nonzero lapse).
+  return std::isfinite(radiusCm) && radiusCm > outerHorizonCm_ &&
+         radialOffset(radiusCm) > ko::horizonOffset(epsilon_);
 }
 
 double KerrTimeField::signalDelaySec(double fromRadiusCm, double toRadiusCm) const {

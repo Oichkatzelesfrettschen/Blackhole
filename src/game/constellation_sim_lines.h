@@ -112,14 +112,16 @@ inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
 
 /** @brief Runs one player line against a rival policy (Expansionist for the
  *         pinned shape) to a decision or the turn budget, the player acting
- *         every `playerEvery` turns, and returns the outcome and digest. */
+ *         every `playerEvery` turns, and returns the outcome and digest. A
+ *         cadence of zero or less never lets the player act: its fleets hold
+ *         their starting slots. */
 inline LineResult runLine(std::uint64_t seed, std::int64_t turns, PlayerLine line,
                           game::FactionPolicy rivalPolicy = game::FactionPolicy::Expansionist,
                           std::int64_t playerEvery = 1) {
   game::ConstellationSession session(seed, rivalPolicy);
   game::Constellation &constellation = session.constellation();
   for (std::int64_t elapsed = 0; elapsed < turns; ++elapsed) {
-    if (elapsed % playerEvery == 0) {
+    if (playerEvery > 0 && elapsed % playerEvery == 0) {
       detail::playerTurn(session, line);
     }
     constellation.advanceTurn();

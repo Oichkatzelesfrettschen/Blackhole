@@ -243,3 +243,23 @@ TEST(BalanceSweep, ColonyLinesSplitTechAgainstEnergy) {
     }
   }
 }
+
+// Falsifier: a cadence of zero -- the no-action baseline -- dividing by zero
+// (SIGFPE) instead of running every line to its budget with no task issued
+// (campaign: no energy banked, so every line loses at the deadline) or no
+// player order issued (constellation: a run decided within its budget with
+// the player's fleets holding their starting slots).
+TEST(BalanceSweep, ZeroCadenceIsTheNoActionBaseline) {
+  for (const campaign_sim::Commit commit :
+       {campaign_sim::Commit::Outer, campaign_sim::Commit::Stabilize}) {
+    const campaign_sim::LineResult result =
+        campaign_sim::runLine(K_SEED, K_CAMPAIGN_TURNS, commit, 0);
+    EXPECT_EQ(result.view.turn, K_CAMPAIGN_TURNS);
+    EXPECT_DOUBLE_EQ(result.view.energyUnits, 0.0);
+    EXPECT_EQ(result.view.status, game::CampaignStatus::Lost);
+  }
+  const constellation_sim::LineResult idle = constellation_sim::runLine(
+      K_SEED, K_CONSTELLATION_TURNS, PlayerLine::Contest, game::FactionPolicy::Expansionist, 0);
+  EXPECT_NE(idle.overallStatus, game::CampaignStatus::Ongoing);
+  EXPECT_LE(idle.turn, K_CONSTELLATION_TURNS);
+}

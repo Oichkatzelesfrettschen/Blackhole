@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 
 #include "game/blackhole_time_field.h"
@@ -260,4 +261,67 @@ TEST(KerrTimeField, BandViewCarriesEveryObserversClock) {
   EXPECT_DOUBLE_EQ(ergo.retrogradeOrbitProperTimeRate, 0.0);
   EXPECT_GT(ergo.hoverProperTimeRate, 0.0);
   EXPECT_DOUBLE_EQ(ergo.properTimeRate, ergo.hoverProperTimeRate);
+}
+
+// Falsifier: a deficit below what absolute cm radii resolve (1e-300, or an
+// exactly extremal spin of 1) giving a field whose own ISCO is not a valid
+// station, admits no stable prograde orbit there, or carries no clock -- the
+// offset 1.6e-100 rounding away in 1 + x -- or a floor at which the horizon,
+// marginally bound radius, and ISCO fail to sit strictly in that order.
+TEST(KerrTimeField, SubResolutionDeficitsRaiseToTheFloor) {
+  const double floorDeficit = game::KerrTimeField::K_MIN_SPIN_DEFICIT;
+  for (const game::KerrTimeField &field :
+       {game::KerrTimeField(K_M87_MASS_G, game::SpinDeficit{.epsilon = 1e-300}),
+        game::KerrTimeField(K_M87_MASS_G, 1.0)}) {
+    EXPECT_DOUBLE_EQ(field.spinDeficit(), floorDeficit);
+    const game::Observer prograde = game::Observer::CircularOrbitPrograde;
+    const double iscoCm = field.iscoRadiusCm(prograde);
+    EXPECT_TRUE(field.isValidStationRadius(iscoCm));
+    EXPECT_TRUE(field.admitsStableOrbit(iscoCm, prograde));
+    EXPECT_GT(field.properTimeRate(iscoCm, prograde), 0.0);
+    EXPECT_LT(field.outerHorizonCm(), field.marginallyBoundRadiusCm(prograde));
+    EXPECT_LT(field.marginallyBoundRadiusCm(prograde), iscoCm);
+  }
+}
+
+// Falsifier: the field's own published horizon radius accepted as a station
+// (at spin 0.99 the cm -> offset round trip lands above the horizon offset),
+// or the first representable radius the field does accept carrying a zero
+// lapse -- for spins from 0.5 to the canon deficit.
+TEST(KerrTimeField, HorizonRadiusIsNeverAStation) {
+  const std::array<game::KerrTimeField, 5> fields = {
+      game::KerrTimeField(K_M87_MASS_G, 0.5), game::KerrTimeField(K_M87_MASS_G, 0.9),
+      game::KerrTimeField(K_M87_MASS_G, 0.99), game::KerrTimeField(K_M87_MASS_G, 0.998),
+      game::KerrTimeField(K_M87_MASS_G, game::SpinDeficit{.epsilon = 1.33e-14})};
+  for (const game::KerrTimeField &field : fields) {
+    const double horizonCm = field.outerHorizonCm();
+    EXPECT_FALSE(field.isValidStationRadius(horizonCm)) << "spin " << field.spinDimensionless();
+    double radiusCm = horizonCm;
+    for (int step = 0; step < 64 && !field.isValidStationRadius(radiusCm); ++step) {
+      radiusCm = std::nextafter(radiusCm, 2.0 * radiusCm);
+    }
+    ASSERT_TRUE(field.isValidStationRadius(radiusCm));
+    EXPECT_GT(field.properTimeRate(radiusCm, game::Observer::Hovering), 0.0);
+  }
+}
+
+// Falsifier: the field's own published marginally bound radius admitted as an
+// orbit of that sense (at spin 0.99 the cm -> offset round trip lands a few
+// ulp above r_mb, admitting an E = 1 orbit the API defines as unbound), or
+// the first radius the field does admit carrying no orbital clock.
+TEST(KerrTimeField, MarginallyBoundRadiusIsNeverAnOrbit) {
+  for (const double spin : {0.5, 0.9, 0.99, 0.998}) {
+    const game::KerrTimeField field(K_M87_MASS_G, spin);
+    for (const game::Observer orbit :
+         {game::Observer::CircularOrbitPrograde, game::Observer::CircularOrbitRetrograde}) {
+      const double boundaryCm = field.marginallyBoundRadiusCm(orbit);
+      EXPECT_FALSE(field.admitsObserver(boundaryCm, orbit)) << "spin " << spin;
+      double radiusCm = boundaryCm;
+      for (int step = 0; step < 64 && !field.admitsObserver(radiusCm, orbit); ++step) {
+        radiusCm = std::nextafter(radiusCm, 2.0 * radiusCm);
+      }
+      ASSERT_TRUE(field.admitsObserver(radiusCm, orbit));
+      EXPECT_GT(field.properTimeRate(radiusCm, orbit), 0.0);
+    }
+  }
 }
