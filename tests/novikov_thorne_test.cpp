@@ -17,7 +17,6 @@
 using namespace blackhole::physics;
 
 // Test tolerance
-constexpr double TOLERANCE = 1e-6;
 constexpr double RELAXED_TOLERANCE = 1e-4;
 
 /**
@@ -50,7 +49,7 @@ bool testEfficiencySchwarzschild() {
 /**
  * @brief Test 2: Radiative efficiency for near-extremal Kerr black hole
  *
- * Expected: η ≈ 0.42 (42% efficiency for a→1)
+ * Expected: eta = 1 - E_isco = 0.320994 (scripts/gen_page_thorne_reference.py)
  * Reference: BPT (1972)
  */
 bool testEfficiencyKerrMaximal() {
@@ -60,22 +59,16 @@ bool testEfficiencyKerrMaximal() {
   const double aStar = 0.998;
   const double eta = NovikovThorneDisk::radiativeEfficiency(aStar);
 
-  // Note: Simplified E_ISCO formula gives ~0.32 for a*=0.998
-  // Full BPT formula with angular momentum gives ~0.40-0.42
-  // We accept 0.30-0.42 as valid range for near-extremal Kerr
-  const double expectedRangeMin = 0.30;
-  const double expectedRangeMax = 0.42;
+  // E_isco = sqrt(1 - 2/(3 r_isco)) is exact at the ISCO for every spin.
+  const double expected = 0.320994165616199;
 
   std::cout << std::fixed << std::setprecision(8);
   std::cout << "  Spin:     a* = " << aStar << "\n";
-  std::cout << "  Computed: η = " << eta << "\n";
-  std::cout << "  Expected: η ∈ [" << expectedRangeMin << ", " << expectedRangeMax << "]\n";
+  std::cout << "  Computed: eta = " << eta << "\n";
+  std::cout << "  Expected: eta = " << expected << "\n";
 
-  const bool passed = (eta >= expectedRangeMin && eta <= expectedRangeMax);
-  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
-  if (passed) {
-    std::cout << "  Note:     Simplified E_ISCO formula (acceptable for thin disk)\n";
-  }
+  const bool passed = std::abs(eta - expected) < 1e-5;
+  std::cout << "  Status:   " << (passed ? "PASS" : "FAIL") << "\n";
 
   return passed;
 }
@@ -134,30 +127,46 @@ bool testIscoKerrMaximal() {
 /**
  * @brief Test 5: Temperature peak location
  *
- * Expected: T peaks at r ≈ 1.5 * r_ISCO (Page & Thorne 1974)
+ * Expected: T peaks at the continuous Page-Thorne flux maximum, 1.592 r_ISCO
+ * (9.55 M) at a = 0 and 1.483 r_ISCO at a = 0.9
+ * (scripts/gen_page_thorne_reference.py).
  * Reference: Page & Thorne (1974), ApJ 191, 499
  */
 bool testTemperaturePeak() {
   std::cout << "\n[TEST 5] Temperature Peak Location\n";
   std::cout << "===================================\n";
 
-  const double aStar = 0.0;
-  const double rPeak = NovikovThorneDisk::peakTemperatureRadius(aStar);
-  const double rIsco = NovikovThorneDisk::iscoRadius(aStar);
-  const double expectedRatio = 1.5;
-
-  const double ratio = rPeak / rIsco;
-
+  struct Case {
+    double aStar;
+    double ratio;
+  };
+  const Case cases[] = {{0.0, 1.5918213463}, {0.9, 1.4829887161}};
+  bool allPassed = true;
   std::cout << std::fixed << std::setprecision(8);
-  std::cout << "  r_ISCO:   " << rIsco << " M\n";
-  std::cout << "  r_peak:   " << rPeak << " M\n";
-  std::cout << "  Ratio:    r_peak / r_ISCO = " << ratio << "\n";
-  std::cout << "  Expected: " << expectedRatio << "\n";
+  for (Case const &c : cases) {
+    const double rPeak = NovikovThorneDisk::peakTemperatureRadius(c.aStar);
+    const double rIsco = NovikovThorneDisk::iscoRadius(c.aStar);
+    const double ratio = rPeak / rIsco;
+    // The temperature maximum, located by scanning T itself, must sit there too.
+    double tMax = 0.0;
+    double rAtTMax = 0.0;
+    for (int i = 0; i <= 20000; ++i) {
+      const double r = rIsco * (1.0 + (1.5 * i / 20000.0));
+      const double t = NovikovThorneDisk::diskTemperature(r, c.aStar, 0.1, 10.0);
+      if (t > tMax) {
+        tMax = t;
+        rAtTMax = r;
+      }
+    }
+    std::cout << "  a* = " << c.aStar << ": r_peak / r_ISCO = " << ratio << " (expected "
+              << c.ratio << "), T scan peak at " << (rAtTMax / rIsco) << "\n";
+    allPassed = allPassed && std::abs(ratio - c.ratio) < 1e-6 &&
+                std::abs((rAtTMax / rIsco) - c.ratio) < 2e-4;
+  }
 
-  const bool passed = std::abs(ratio - expectedRatio) < TOLERANCE;
-  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+  std::cout << "  Status:   " << (allPassed ? "PASS" : "FAIL") << "\n";
 
-  return passed;
+  return allPassed;
 }
 
 /**
@@ -218,7 +227,7 @@ bool testIntegratedLuminosity() {
   const double lEdd = 1.26e38 * massSolar; // erg/s
 
   // Expected luminosity
-  const double cCgs = ::physics::C * 1e2; // cm/s
+  const double cCgs = ::physics::C; // cm/s
   const double mdotEddCgs = lEdd / (eta * cCgs * cCgs);
   const double expectedL = eta * mdotEdd * mdotEddCgs * cCgs * cCgs;
 
@@ -240,7 +249,8 @@ bool testIntegratedLuminosity() {
 /**
  * @brief Test 8: Normalized flux peak location
  *
- * Expected: Flux peaks near ISCO (1-2 * r_ISCO)
+ * Expected: the normalized flux reaches 1 at the Page-Thorne peak, 1.592 r_ISCO
+ * at a = 0 (sampled on a 0.01 M grid).
  */
 bool testNormalizedFluxPeak() {
   std::cout << "\n[TEST 8] Normalized Flux Peak\n";
@@ -270,10 +280,45 @@ bool testNormalizedFluxPeak() {
   std::cout << "  r_ISCO:      " << rIsco << " M\n";
   std::cout << "  r_peak_flux: " << rAtMax << " M\n";
   std::cout << "  Ratio:       " << ratio << "\n";
-  std::cout << "  Expected:    1.0 - 2.0\n";
+  std::cout << "  Expected:    1.5918 (+-0.002)\n";
 
-  const bool passed = (ratio >= 1.0 && ratio <= 2.0);
+  const bool passed = std::abs(ratio - 1.5918213463) < 0.002 && std::abs(maxFlux - 1.0) < 1e-6;
   std::cout << "  Status:      " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
+
+  return passed;
+}
+
+/**
+ * @brief Test 9: Temperature scale in CGS
+ *
+ * T^4 = 3 G M Mdot f / (8 pi sigma r^3) at r = 9 M, a = 0, Mdot = 0.1
+ * Mdot_Edd (L_Edd = 1.26e38 erg/s per M_sun, eta = 1 - sqrt(8/9)),
+ * M = 4e6 M_sun, with the Schwarzschild Page-Thorne factor
+ * f(9 M) = 0.0822227 is 156495.3 K. The literal comes from a 40-digit mpmath
+ * evaluation of the Schwarzschild closed form
+ * f = [1 - sqrt(6/r) + sqrt(3/(4r)) ln((sqrt(r) + sqrt3)(sqrt6 - sqrt3) /
+ * ((sqrt(r) - sqrt3)(sqrt6 + sqrt3)))] / (1 - 3/r), independent of the
+ * cubic-root form in page_thorne.h, with the constants.h values of G, c and
+ * M_sun and the sigma = 5.67e-5 that diskTemperature uses (the CODATA
+ * physics::SIGMA_SB moves T by 1.65e-5 relative). The 1e-6 tolerance admits
+ * double rounding and rejects both that sigma change and any factor on c.
+ */
+bool testTemperatureScale() {
+  std::cout << "\n[TEST 9] Temperature Scale (CGS)\n";
+  std::cout << "=================================\n";
+
+  const double aStar = 0.0;
+  const double massSolar = 4.0e6;
+  const double r = 9.0;
+  const double t = NovikovThorneDisk::diskTemperature(r, aStar, 0.1, massSolar);
+  const double expected = 156495.305499;
+
+  std::cout << std::scientific << std::setprecision(6);
+  std::cout << "  Computed: T = " << t << " K\n";
+  std::cout << "  Expected: T = " << expected << " K\n";
+
+  const bool passed = std::abs(t / expected - 1.0) < 1e-6;
+  std::cout << "  Status:   " << (passed ? "PASS" : "FAIL") << "\n";
 
   return passed;
 }
@@ -290,7 +335,7 @@ int main() {
     std::cout << "========================================================\n";
 
     int passed = 0;
-    int const total = 8;
+    int const total = 9;
 
     // Run all tests
     if (testEfficiencySchwarzschild()) {
@@ -315,6 +360,9 @@ int main() {
       passed++;
     }
     if (testNormalizedFluxPeak()) {
+      passed++;
+    }
+    if (testTemperatureScale()) {
       passed++;
     }
 

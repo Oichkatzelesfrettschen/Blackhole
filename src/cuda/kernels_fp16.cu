@@ -120,7 +120,7 @@ __launch_bounds__(256, 4)
   result.origin = cam;
   result.closest_approach_point = cam;
   result.phi = 0.0f;
-  result.redshift = 1.0f;
+  result.photon_lambda = 0.0f;
   result.min_radius = d_length(cam);
   result.closest_approach_update_count = 0;
   result.first_closest_approach_step = -1;
@@ -173,7 +173,7 @@ __launch_bounds__(256, 4)
             result.hit_disk = true;
             result.hit_point = diskHit;
             result.phi = atan2f(diskHit.y, diskHit.x);
-            result.redshift = d_redshift_factor(d_length(diskHit), rs);
+            result.photon_lambda = -c.Lz;
             goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
           }
         }
@@ -215,7 +215,7 @@ __launch_bounds__(256, 4)
           result.hit_disk = true;
           result.hit_point = diskHit;
           result.phi = atan2f(diskHit.y, diskHit.x);
-          result.redshift = d_redshift_factor(d_length(diskHit), rs);
+          result.photon_lambda = d_schwarzschild_photon_lambda(cam, dir, rs);
           goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
         }
       }

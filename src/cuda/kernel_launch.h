@@ -115,8 +115,15 @@ struct BH_LaunchParams {
      * value; bh_device_launch_params_abi() exports the nvcc-side layout so
      * cuda_kernel_launch_test can assert both compilers agree. Fields probed
      * for offset agreement are listed in BH_LAUNCH_PARAMS_ABI_FIELDS below.
-     * 1.0 = GLSL default brightness (flux*2.0). 0.35 = cinematic record setting. */
+     * 1.0 = GLSL default brightness (flux*2.0). 0.35 = cinematic record setting.
+     * The Kerr disk (d_disk_color) reads disk_brightness instead. */
     float adisk_lit;
+
+    /* Disk emission (bhDiskEmission / d_disk_emission) */
+    float disk_peak_temperature; /**< @brief Blackbody temperature at the Page-Thorne flux peak [K]. */
+    float disk_brightness;       /**< @brief Display scale on the bolometric intensity g^4 F / F_peak. */
+    float disk_flux_peak;        /**< @brief physics::pageThorneFluxPeak(spin), the flux normalization (M = 1). */
+    int   disk_transfer_mode;    /**< @brief 0 = Physical g-factor, 1 = Interstellar (g = 1, lensing kept). */
 };
 
 /**

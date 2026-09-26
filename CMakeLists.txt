@@ -3781,6 +3781,12 @@ if(BUILD_TESTING)
     add_test(NAME glsl_interface_adapter
       COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/cpp_to_glsl_test.py")
     set_tests_properties(glsl_interface_adapter PROPERTIES TIMEOUT 30 LABELS "shaders;tools")
+    add_test(NAME generate_luts_signed_spin
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/generate_luts_test.py")
+    set_tests_properties(generate_luts_signed_spin PROPERTIES TIMEOUT 30 LABELS "disk;luts;tools")
+    add_test(NAME record_headless_wrapper
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/run_glsl_headless_test.py")
+    set_tests_properties(record_headless_wrapper PROPERTIES TIMEOUT 30 LABELS "record;tools")
     add_test(NAME lut_generator_signed_spin
       COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/lut_generator_signed_spin_test.py")
     set_tests_properties(lut_generator_signed_spin PROPERTIES TIMEOUT 30 LABELS "physics;tools")
@@ -4219,6 +4225,68 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(kerr_null_geodesic_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Page-Thorne thin-disk flux against quadrature of its defining integral
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/page_thorne_test.cpp")
+    add_executable(page_thorne_test
+      "${PROJECT_SOURCE_DIR}/tests/page_thorne_test.cpp"
+    )
+    target_link_libraries(page_thorne_test PRIVATE blackhole_physics glm::glm GTest::gtest_main)
+    target_include_directories(page_thorne_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(page_thorne_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(page_thorne_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME page_thorne_validation COMMAND page_thorne_test)
+    set_tests_properties(page_thorne_validation PROPERTIES
+      LABELS "physics;accretion;disk"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(page_thorne_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Orbiting-emitter energy shift, blackbody chroma and disk redshift LUT
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/disk_transfer_test.cpp")
+    add_executable(disk_transfer_test
+      "${PROJECT_SOURCE_DIR}/tests/disk_transfer_test.cpp"
+    )
+    target_link_libraries(disk_transfer_test PRIVATE blackhole_physics glm::glm GTest::gtest_main)
+    target_include_directories(disk_transfer_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(disk_transfer_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(disk_transfer_test PRIVATE -fno-fast-math)
+    endif()
+    # lut.h pulls in batch.h and its SIMD backends.
+    if(ENABLE_XSIMD)
+      target_link_libraries(disk_transfer_test PRIVATE xsimd)
+    endif()
+    if(ENABLE_SLEEF)
+      target_link_libraries(disk_transfer_test PRIVATE sleef::sleef)
+    endif()
+    if(ENABLE_HIGHWAY)
+      target_link_libraries(disk_transfer_test PRIVATE hwy::hwy)
+    endif()
+    add_test(NAME disk_transfer_validation COMMAND disk_transfer_test)
+    set_tests_properties(disk_transfer_validation PROPERTIES
+      LABELS "physics;accretion;disk"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(disk_transfer_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
@@ -4915,6 +4983,20 @@ if(BUILD_TESTING)
     )
   endif()
 
+  # Double-precision Kerr reference trace for disk-hit rays, shared by the GL
+  # and CUDA disk-transfer tests (tests/support/kerr_disk_reference.h).
+  add_library(blackhole_test_kerr_reference STATIC
+    "${PROJECT_SOURCE_DIR}/tests/support/kerr_disk_reference.cpp"
+  )
+  target_include_directories(blackhole_test_kerr_reference PUBLIC
+    "${PROJECT_SOURCE_DIR}/tests"
+  )
+  target_compile_options(blackhole_test_kerr_reference PRIVATE ${PROJECT_WARNINGS})
+  if(ENABLE_FAST_MATH)
+    target_compile_options(blackhole_test_kerr_reference PRIVATE -fno-fast-math)
+  endif()
+  target_link_libraries(blackhole_test_kerr_reference PUBLIC blackhole_physics glm::glm)
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_shader_capture_test.cpp")
     # Shipped shader/include/kerr.glsl against Bardeen's equatorial capture
     # edges in a compute dispatch. Skips without a GL 4.6 context.
@@ -4942,6 +5024,37 @@ if(BUILD_TESTING)
     set_tests_properties(kerr_shader_capture PROPERTIES
       LABELS "physics;gpu;kerr"
       TIMEOUT 120
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/disk_transfer_shader_test.cpp")
+    # Shipped shader/include/disk_transfer.glsl against physics/page_thorne.h
+    # and physics/disk_transfer.h in a compute dispatch. Skips without GL 4.6.
+    add_executable(disk_transfer_shader_test
+      "${PROJECT_SOURCE_DIR}/tests/disk_transfer_shader_test.cpp"
+    )
+    target_include_directories(disk_transfer_shader_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_definitions(disk_transfer_shader_test PRIVATE
+      GLFW_INCLUDE_NONE
+      BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+    )
+    target_compile_options(disk_transfer_shader_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(disk_transfer_shader_test PRIVATE
+      blackhole_test_kerr_reference
+      blackhole_physics
+      glm::glm
+      glfw
+      glbinding::glbinding
+      GTest::gtest
+      GTest::gtest_main
+    )
+    add_test(NAME disk_transfer_shader COMMAND disk_transfer_shader_test)
+    set_tests_properties(disk_transfer_shader PROPERTIES
+      LABELS "physics;gpu;disk"
+      TIMEOUT 60
     )
   endif()
 
@@ -6846,6 +6959,35 @@ if(BUILD_TESTING)
           ENVIRONMENT "${SANITIZER_TEST_ENV}"
         )
       endif()
+    endif()
+
+    # Disk transfer device twins against the double-precision C++ headers
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_disk_transfer_test.cu")
+      add_executable(cuda_disk_transfer_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_disk_transfer_test.cu"
+      )
+      set_target_properties(cuda_disk_transfer_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_disk_transfer_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+        "${PROJECT_SOURCE_DIR}/tests"
+      )
+      target_link_libraries(cuda_disk_transfer_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        blackhole_test_kerr_reference
+        blackhole_physics
+        CUDA::cudart
+      )
+      add_test(NAME cuda_disk_transfer COMMAND cuda_disk_transfer_test)
+      set_tests_properties(cuda_disk_transfer PROPERTIES
+        LABELS "cuda;disk;parity"
+        TIMEOUT 60
+      )
     endif()
 
     # 7. Volumetric RTE CUDA path (D3): d_rte_step + d_trace_geodesic_rte via kernel API

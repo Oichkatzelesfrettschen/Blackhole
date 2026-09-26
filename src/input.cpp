@@ -344,6 +344,7 @@ void InputManager::updateCamera(float deltaTime) {
   const float scaledDelta = deltaTime * inputScale;
   float const moveSpeed = cameraMoveSpeed_ * scaledDelta * keyboardSensitivity_;
   float const rotateSpeed = cameraRotateSpeed_ * scaledDelta * keyboardSensitivity_;
+  float const zoomSpeed = moveSpeed * zoomRateScale(camera_.distance);
 
   // Apply keyboard axis inversion
   float const keyXMult = invertKeyboardX_ ? -1.0f : 1.0f;
@@ -399,10 +400,10 @@ void InputManager::updateCamera(float deltaTime) {
       camera_.pitch -= rotateSpeed * keyYMult;
     }
     if (isActive(KeyAction::CameraMoveUp)) {
-      camera_.distance -= moveSpeed;
+      camera_.distance -= zoomSpeed;
     }
     if (isActive(KeyAction::CameraMoveDown)) {
-      camera_.distance += moveSpeed;
+      camera_.distance += zoomSpeed;
     }
 
     // Roll controls
@@ -415,10 +416,10 @@ void InputManager::updateCamera(float deltaTime) {
 
     // Zoom via keyboard
     if (isActive(KeyAction::ZoomIn)) {
-      camera_.distance -= moveSpeed;
+      camera_.distance -= zoomSpeed;
     }
     if (isActive(KeyAction::ZoomOut)) {
-      camera_.distance += moveSpeed;
+      camera_.distance += zoomSpeed;
     }
   }
 
@@ -436,7 +437,8 @@ void InputManager::updateCamera(float deltaTime) {
 
     // Scroll wheel zoom with sensitivity
     if (std::abs(scrollDelta_) > 0.0f) {
-      camera_.distance -= scrollDelta_ * scrollSensitivity_ * 0.5f * inputScale;
+      camera_.distance -= scrollDelta_ * scrollSensitivity_ * 0.5f * inputScale *
+                          zoomRateScale(camera_.distance);
     }
   }
 
@@ -447,7 +449,7 @@ void InputManager::updateCamera(float deltaTime) {
 
   // Clamp values
   camera_.pitch = std::clamp(camera_.pitch, -89.0f, 89.0f);
-  camera_.distance = std::clamp(camera_.distance, 0.5f, 50.0f);
+  camera_.distance = std::clamp(camera_.distance, K_CAMERA_MIN_DISTANCE, K_CAMERA_MAX_DISTANCE);
 
   // Normalize angles
   while (camera_.yaw > 180.0f) {
@@ -559,14 +561,15 @@ void InputManager::updateGamepad(float deltaTime) {
   camera_.yaw += yawAxis * gamepadLookSensitivity_ * deltaTime;
   camera_.pitch -= pitchAxis * gamepadLookSensitivity_ * deltaTime;
   camera_.roll += rollAxis * gamepadRollSensitivity_ * deltaTime;
-  camera_.distance += zoomAxis * gamepadZoomSensitivity_ * deltaTime;
+  float const zoomScale = zoomRateScale(camera_.distance);
+  camera_.distance += zoomAxis * gamepadZoomSensitivity_ * deltaTime * zoomScale;
 
   updateAxis(gamepadZoomInAxis_);
   updateAxis(gamepadZoomOutAxis_);
   float const zoomIn = normalizeTrigger(gamepadAxisRaw_[gamepadZoomInAxis_]);
   float const zoomOut = normalizeTrigger(gamepadAxisRaw_[gamepadZoomOutAxis_]);
   float const triggerZoom = (zoomOut - zoomIn) * gamepadTriggerZoomSensitivity_ * deltaTime;
-  camera_.distance += triggerZoom;
+  camera_.distance += triggerZoom * zoomScale;
 
   if (isGamepadButtonJustPressed(gamepadResetButton_)) {
     camera_.reset();

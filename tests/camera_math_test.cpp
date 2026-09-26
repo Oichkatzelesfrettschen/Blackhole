@@ -7,11 +7,14 @@
  * blackhole_testcore library to construct RenderState without the app
  * executables. They assert the spherical placement identities, the orthonormal
  * basis (including the world-up degeneracy fallback and roll), and each
- * CameraMode branch plus the mode/orbit clamps.
+ * CameraMode branch plus the mode/orbit clamps, and the distance scaling of the
+ * zoom rates.
  */
 
 #include <cmath>
+#include <filesystem>
 #include <memory>
+#include <system_error>
 
 #include <gtest/gtest.h>
 
@@ -20,7 +23,9 @@
 #include <glm/geometric.hpp>
 
 #include "input.h"
+#include "platform/cli_options.h"
 #include "render/camera_math.h"
+#include "render/record_mode.h"
 #include "render/render_state.h"
 
 using blackhole::buildCameraBasis;
@@ -138,4 +143,54 @@ TEST(CameraMath, SelectClampsFields) {
   EXPECT_FLOAT_EQ(rs.camera.orbitSpeed, 0.0f);
   // Orbit at speed 0, radius 2: angle 0 -> position (-2, 0, 0).
   expectVecNear(pos, glm::vec3(-2.0f, 0.0f, 0.0f));
+}
+
+// Zoom rates scale with distance: unchanged at the reference distance,
+// proportional beyond it, and floored at the minimum camera distance.
+TEST(CameraMath, ZoomRateScalesWithDistance) {
+  EXPECT_FLOAT_EQ(zoomRateScale(K_ZOOM_RATE_REFERENCE_DISTANCE), 1.0f);
+  EXPECT_FLOAT_EQ(zoomRateScale(240.0f), 16.0f);
+  EXPECT_FLOAT_EQ(zoomRateScale(0.0f), K_CAMERA_MIN_DISTANCE / K_ZOOM_RATE_REFERENCE_DISTANCE);
+  // The distance range reaches past the disk's 100 r_s = 200 unit outer edge.
+  EXPECT_GT(K_CAMERA_MAX_DISTANCE, 200.0f);
+}
+
+// The showcase-orbit camera path drives the profile's spin every frame, and
+// --record-spin replaces it.
+TEST(RecordCameraPath, ShowcaseFramesUseTheProfileSpin) {
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
+  platform::CliOptions cli;
+  cli.recordFramesDir = "frames";
+  cli.recordProfile = "showcase-orbit";
+  rs.physicsCore.kerrSpin = 0.0f;
+  blackhole::applyRecordCameraPath(rs, cli, InputManager::instance());
+  EXPECT_FLOAT_EQ(rs.physicsCore.kerrSpin, blackhole::K_SHOWCASE_ORBIT_SPIN);
+  EXPECT_FLOAT_EQ(rs.recording.recordCurrentKf.kerrSpin, blackhole::K_SHOWCASE_ORBIT_SPIN);
+
+  cli.hasRecordSpin = true;
+  cli.recordSpin = 0.9f;
+  blackhole::applyRecordCameraPath(rs, cli, InputManager::instance());
+  EXPECT_FLOAT_EQ(rs.physicsCore.kerrSpin, 0.9f);
+}
+
+// depthFar normalizes the traced depth and bounds the gizmo frustum, so every
+// showcase composition's camera distance plus the disk's 200-unit outer radius
+// must fit inside it.
+TEST(RecordProfileSetup, ShowcaseDepthFarHoldsTheCameraAndTheDisk) {
+  const auto frames = std::filesystem::path(testing::TempDir()) / "record-depth-far";
+  for (const char *const name : {"above-disk", "inside-disk", "centered", "left-third",
+                                 "right-third", "wide-left", "wide-right"}) {
+    const auto rsStorage = std::make_unique<RenderState>();
+    RenderState &rs = *rsStorage;
+    platform::CliOptions cli;
+    cli.recordFramesDir = frames.string();
+    cli.recordProfile = "showcase-orbit";
+    cli.recordComposition = name;
+    InputManager &input = InputManager::instance();
+    ASSERT_TRUE(blackhole::applyRecordProfileSetup(rs, cli, input, nullptr)) << name;
+    EXPECT_GT(rs.display.depthFar, input.camera().distance + 200.0f) << name;
+  }
+  std::error_code ignored;
+  std::filesystem::remove_all(frames, ignored);
 }

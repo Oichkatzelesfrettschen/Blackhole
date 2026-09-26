@@ -1,0 +1,4 @@
+# Build and data scripts run on the Python 3.10 floor of
+# docs/getting-started/building.md, below the Blender addon's py311 target.
+extend = "../pyproject.toml"
+target-version = "py310"

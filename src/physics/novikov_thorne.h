@@ -2,9 +2,8 @@
  * @file novikov_thorne.h
  * @brief Novikov-Thorne thin disk model for black hole accretion
  *
- * WHY: Replace procedural disk with physics-based temperature/flux profiles
- * WHAT: Analytical thin-disk model from Novikov & Thorne (1973)
- * HOW: Radiative efficiency, temperature profile, integrated luminosity
+ * Radiative efficiency, temperature and flux profiles, and integrated
+ * luminosity of the Novikov & Thorne (1973) thin disk, in CGS units.
  *
  * Reference:
  *   Novikov & Thorne (1973), "Black Holes (Les Astres Occlus)", pp. 343-450
@@ -12,9 +11,8 @@
  *   Page & Thorne (1974), ApJ 191, 499-506
  *
  * Validation:
- *   EHT M87* temperature profile: ±5% accuracy target
- *   Schwarzschild (a=0): η = 0.0572 (6% efficiency)
- *   Kerr (a=0.998): η ≈ 0.42 (42% efficiency)
+ *   Schwarzschild (a=0): eta = 0.0572
+ *   Kerr (a=0.998): eta = 0.3210 (1 - E_isco; tests/novikov_thorne_test.cpp)
  */
 
 #pragma once
@@ -23,6 +21,7 @@
 #include <cmath>
 
 #include "constants.h"
+#include "page_thorne.h"
 
 namespace blackhole::physics {
 
@@ -46,11 +45,11 @@ public:
      * where E_ISCO is specific energy at ISCO radius.
      *
      * @param aStar Dimensionless spin parameter (-1 <= a* <= 1)
-     * @return Radiative efficiency (0 < η < 0.42)
+     * @return Radiative efficiency, 1 - E_isco with E_isco = sqrt(1 - 2/(3 r_isco))
      *
      * Validation:
-     *   a=0 (Schwarzschild): η = 0.0572 ✓
-     *   a=0.998 (near-extremal): η ≈ 0.42 ✓
+     *   a=0 (Schwarzschild): eta = 0.0572
+     *   a=0.998 (near-extremal): eta = 0.320994
      */
   static constexpr double radiativeEfficiency(double aStar) noexcept {
     // Clamp spin to valid range
@@ -94,7 +93,8 @@ public:
      * Page & Thorne (1974) formula:
      *   T(r) = [3 G M Mdot / (8 π σ r³) * f(r)]^(1/4)
      *
-     * where f(r) is the radial emissivity function.
+     * where f(r) is the Page-Thorne relativistic factor
+     * (::physics::pageThorneRelativisticFactor), zero at the ISCO.
      *
      * @param r Radius in units of M
      * @param aStar Dimensionless spin parameter
@@ -115,7 +115,7 @@ public:
 
     // Eddington mass accretion rate: Mdot_Edd = L_Edd / (η c²)
     const double eta = radiativeEfficiency(aStar);
-    const double cCgs = ::physics::C * 1e2;               // cm/s (C is in cm/s already in CGS)
+    const double cCgs = ::physics::C;                     // cm/s
     const double mdotEddCgs = lEdd / (eta * cCgs * cCgs); // g/s
 
     // Actual mass accretion rate
@@ -125,9 +125,8 @@ public:
     const double mCgs = massSolar * ::physics::M_SUN;            // g
     const double rCgs = r * ::physics::G * mCgs / (cCgs * cCgs); // cm
 
-    // Radial emissivity function f(r) - assumes zero-torque inner boundary
-    // Simplified approximation: f(r) ≈ (1 - sqrt(r_isco/r))
-    const double fR = std::max(0.0, 1.0 - std::sqrt(rIsco / r));
+    // Page-Thorne relativistic factor with the zero-torque inner boundary
+    const double fR = std::max(0.0, ::physics::pageThorneRelativisticFactor(r, aStar));
 
     // Stefan-Boltzmann constant: σ = 5.67e-5 erg cm⁻² s⁻¹ K⁻⁴
     const double sigmaSb = 5.67e-5;
@@ -171,27 +170,24 @@ public:
       return 0.0;
     }
 
-    // Simplified emissivity: peaks near ISCO, falls off as r⁻³
-    const double fR = std::max(0.0, 1.0 - std::sqrt(rIsco / r));
-    const double flux = fR / (r * r * r);
-
-    // Normalize to peak at r = 1.5 * r_isco
-    const double rPeak = 1.5 * rIsco;
-    const double fPeak = std::max(0.0, 1.0 - std::sqrt(rIsco / rPeak));
-    const double fluxPeak = fPeak / (rPeak * rPeak * rPeak);
-
+    // Page-Thorne flux shape over its peak value
+    const double flux = ::physics::pageThorneFluxShape(r, aStar);
+    const double fluxPeak = ::physics::pageThorneFluxPeak(aStar);
     return std::min(1.0, flux / fluxPeak);
   }
 
     /**
      * @brief Compute peak temperature radius (for validation)
      *
-     * Temperature peaks at r ≈ 1.5 * r_ISCO (Page & Thorne 1974)
+     * The temperature peaks where the Page-Thorne flux does: 1.592 r_ISCO
+     * (9.55 M) at a = 0, 1.483 r_ISCO at 0.9, 1.278 r_ISCO at 0.998.
      *
      * @param aStar Dimensionless spin parameter
      * @return Radius of peak temperature in units of M
      */
-  static double peakTemperatureRadius(double aStar) noexcept { return 1.5 * iscoRadius(aStar); }
+  static double peakTemperatureRadius(double aStar) noexcept {
+    return ::physics::pageThorneFluxPeakRadius(aStar);
+  }
 
   /**
    * @brief Compute integrated luminosity
@@ -210,7 +206,7 @@ public:
     const double lEdd = 1.26e38 * massSolar; // erg/s
 
     // Eddington mass accretion rate
-    const double cCgs = ::physics::C * 1e2;
+    const double cCgs = ::physics::C; // cm/s
     const double mdotEddCgs = lEdd / (eta * cCgs * cCgs);
 
     // Actual luminosity
