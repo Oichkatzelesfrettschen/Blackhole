@@ -1,0 +1,5 @@
+a=0.01: shipped (-0.252, 0.2505) w=0.5025 | Q-fixed (-0.367, 0.3645) w=0.7315 | physical (-0.3645, 0.367) w=0.7315 | width ratio shipped/physical=0.687
+a=0.5: shipped (-0.278, 0.215) w=0.4930 | Q-fixed (-0.435, 0.287) w=0.7220 | physical (-0.287, 0.435) w=0.7220 | width ratio shipped/physical=0.683
+a=0.9: shipped (-0.2945, 0.1695) w=0.4640 | Q-fixed (-0.487, 0.201) w=0.6880 | physical (-0.201, 0.487) w=0.6880 | width ratio shipped/physical=0.674
+a=0.99: shipped (-0.2975, 0.148) w=0.4455 | Q-fixed (-0.4985, 0.1605) w=0.6590 | physical (-0.1605, 0.4985) w=0.6590 | width ratio shipped/physical=0.676
+a=0 exact half-width tan=0.3407
