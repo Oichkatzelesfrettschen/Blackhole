@@ -8,8 +8,9 @@ Scope: the algebra, numerics, and infrastructure crates of open_gororoba (`cd_ke
 `proofs/` tree, and the `registry/` claims system. They are judged against Blackhole's hot
 paths. The GR, GRMHD, optics, cosmology, and GPU crates, plus the formula cross-checks, are
 covered in `02-open-gororoba-crossref.md`. The campaign `-ffp-contract` digest measurement
-is in `03-game-engine.md`. Both repositories stayed read-only. Every executable ran from the
-session scratchpad.
+is in `03-game-engine.md`. Both repositories stayed read-only. Every executable ran outside
+both trees; the drivers live in `harness/`, and `harness/README.md` defines `$PYTHON`,
+`$HARNESS`, `$BH`, `$BOOST`, and `$OUT` for the commands below, which run in `$OUT`.
 
 ## Executive summary
 
@@ -82,9 +83,9 @@ Carlson, Cariow sedenion schedule, E8 rotation, QJL, IDCT8 butterfly, LBM crates
 - C++ compiled with `-std=c++23 -O2`, and additionally `-ffp-contract=off` where stated.
   These flags omit Blackhole's `-march=native`, so they measure algorithmic cost rather than
   a particular target ISA.
-- Cargo ran with `CARGO_TARGET_DIR` in the scratchpad, `--offline --locked`, and
+- Cargo ran with `CARGO_TARGET_DIR` outside both trees, `--offline --locked`, and
   open_gororoba's own `Cargo.lock` copied into the scratch bench crate.
-- Scratch files are ephemeral, so every formula a port needs is written out below.
+- Every formula a port needs is also written out below.
 - Evidence labels:
   - **proved**: a Rocq theorem with no conclusion-restating axiom.
   - **tested**: compared against an independent reference.
@@ -166,8 +167,14 @@ propagator.
 
 Plain language: summing N terms in a format with unit roundoff `u` accumulates about `N u`
 error. Compensated (Kahan) summation keeps it near `2u`. An 80-bit accumulator shrinks `u`
-by 2^11. The repository turns this into a dispatch rule: the crossover sits where the
-plain-f64 error equals one x87 rounding, `2^-53 / 2^-64 = 2048` terms.
+by 2^11. The repository's crossover is `2^-53 / 2^-64 = 2048` terms: the N at which the
+accumulated x87 error `N 2^-64` reaches one f64 rounding `2^-53`. Below it, an x87
+accumulator rounded once to double carries at most about one extra double rounding. Past
+2048 terms x87 alone no longer holds the
+result to one double rounding, and compensation takes over. The ratio therefore bounds how
+far extended precision suffices; it is no threshold below which plain f64 is as accurate.
+Equating plain-f64 error `N 2^-53` to one x87 rounding would give `N = 2^-11`, which has no
+dispatch meaning.
 
 Where it lives:
 - `crates/algebra_analysis/tests/precision_tier_dispatch.rs:11-17`.
@@ -317,8 +324,8 @@ Setup:
 
 Commands:
 
-    python3 gen_ref.py
-    clang++ -std=c++23 -O2 -I$BH/src -I$BOOST bench.cpp -o bench && taskset -c 3 ./bench
+    $PYTHON $HARNESS/carlson/gen_ref.py
+    clang++ -std=c++23 -O2 -I$BH/src -I$BOOST $HARNESS/carlson/bench.cpp -o bench && taskset -c 3 ./bench
 
 | Function | Variant | max rel err | median rel err | ns/call |
 |---|---|---|---|---|
@@ -376,7 +383,7 @@ Boost's default policy evaluates double arguments in `long double`, which on x86
 x87 80-bit unit that `cd_kernel::x87_*` exploits on purpose. `analytic_kerr_geodesic.h:340`
 (`jacobi_sn`) and `:385` (`ellint_1`) inherit that policy.
 
-    clang++ -std=c++23 -O2 -I$BOOST boostpol.cpp -o boostpol && taskset -c 3 ./boostpol
+    clang++ -std=c++23 -O2 -I$BOOST $HARNESS/carlson/boostpol.cpp -o boostpol && taskset -c 3 ./boostpol
 
 | Call | promoted (default) | `promote_double<false>` | max difference |
 |---|---|---|---|
@@ -436,8 +443,8 @@ Moment series `M_n = int_0^s t^n e^{-aI t} dt` take over when `L1 s` or `L2 s < 
 "split" form `S = Sinf + e^{-Ks}(S0 - Sinf)` with `Sinf = K^{-1} J` is cheaper, but it
 cancels catastrophically as `alphaI*ds -> 0`.
 
-    python3 gen.py; python3 gen_thin.py
-    clang++ -std=c++23 -O2 -I. -I$BH/src bench.cpp -o bench && taskset -c 3 ./bench
+    $PYTHON $HARNESS/stokes/gen.py; $PYTHON $HARNESS/stokes/gen_thin.py
+    clang++ -std=c++23 -O2 -I$BH/src $HARNESS/stokes/bench.cpp -o bench && taskset -c 3 ./bench
 
 | Regime (per segment) | split form | direct form | Blackhole RK4, 1 step | RK4 with `n = ceil(2 abs(K) ds)` |
 |---|---|---|---|---|
@@ -532,7 +539,7 @@ truncation at 4.2e-9, 6.7e-12, and 1.1e-14 for b = 3.5, and 1.1e-7, 2.1e-10, and
 b = 2.7, at h = 0.05, 0.01, and 0.002. Total error against it matches the roundoff column
 to two digits in every row, so the gain holds for total position error.
 
-    clang++ -std=c++23 -O2 -ffp-contract=off k.cpp -o k && taskset -c 3 ./k
+    clang++ -std=c++23 -O2 -ffp-contract=off $HARNESS/kahan/k.cpp -o k && taskset -c 3 ./k
 
 | b | h | steps | FP32 plain | FP32 Kahan | improvement |
 |---|---|---|---|---|---|
@@ -615,7 +622,7 @@ Four methods:
 - D: plain WHT compaction with global reverse water-filling bit allocation and no per-block
   overhead. A to C carry 0.5 bit/value more than D.
 
-    python3 q.py
+    $PYTHON $HARNESS/quant/q.py
 
 | bits/value | A affine | B rot+LM | C no signs | D WHT alloc |
 |---|---|---|---|---|
@@ -651,7 +658,7 @@ piecewise constant on dyadic cells. `noise.cpp`'s per-voxel hash noise gains not
 
 ### M8. open_gororoba crate tests
 
-    CARGO_TARGET_DIR=$SCRATCH/target cargo test --offline --locked --release \
+    CARGO_TARGET_DIR=$OUT/target cargo test --offline --locked --release \
       -p pathion_ellip -p fwht -p fixed_point_lbm -p cosmic_scheduler -p gororoba_sparse_grid -p tensor_core
 
 All pass: exit 0, with pathion_ellip 35, fwht 5, fixed_point_lbm 8, and cosmic_scheduler

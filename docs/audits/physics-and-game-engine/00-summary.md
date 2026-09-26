@@ -16,7 +16,7 @@ civilizations interact under time dilation in the Interstellar (Thorne 2014; Jam
 | [05-open-gororoba-novel-numerics.md](05-open-gororoba-novel-numerics.md) | Algebra and numerics concepts explained, mapped to Blackhole hot paths, measured |
 
 Every numeric verdict comes from an independent referee (mpmath at 50 digits written from
-the textbook metric, numpy, or a scratch C++/Rust driver). Agreement between Blackhole and
+the textbook metric, numpy, or a C++/Rust driver; all kept in `harness/`). Agreement between Blackhole and
 open_gororoba counts for nothing on the modules gr_core ported from Blackhole in 2026-02
 (02, "Lineage finding"): one source counted twice. Findings marked MECHANISM RE-VERIFIED
 had their algebra and code path re-derived a second time outside the reporting agent; the
@@ -118,10 +118,11 @@ both, each measured in 02 or 05:
   per-step cost, and it lets the integrator take longer steps without drifting off the
   light cone. It replaces Blackhole's projection, which destroys radial motion (item 11).
 - **Precision tiers** (`algebra_analysis` precision_policy). The rule is to spend
-  precision where the error accumulates, not everywhere: plain arithmetic for short sums,
-  Kahan compensation for long ones, extended precision only past the 2048-term crossover.
-  Applied to Blackhole, it says Boost.Math should stop promoting doubles to x87 80-bit
-  (`jacobi_sn` 8.5x, `ellint_1` 3.3x faster, results within 2e-15), and that FP32 GPU RK4
+  precision where the error accumulates, not everywhere. x87 accumulation of up to 2048 terms
+  stays within one final double rounding (`N 2^-64 <= 2^-53`); longer sums need Kahan
+  compensation. For Blackhole, the M2 measurement alone says Boost.Math should stop
+  promoting doubles to x87 80-bit: the unpromoted `jacobi_sn` and `ellint_1` land within
+  2e-15 of the promoted results, so promotion buys nothing at 8.5x and 3.3x cost. FP32 GPU RK4
   should compensate its state accumulation (position error 15x lower at 1200 steps and
   1700x lower at 30000, for about 3-5% cost).
 - **The Lorentz structure of polarized transfer** (quaternion/Clifford theorems C-876,
@@ -183,9 +184,13 @@ Blackhole's GPL-3.0; the recommended ports reimplement published math.
     `1 - a*a` keeps two significant digits in a double at that spin. The film rendered
     a = 0.6 for visuals (arXiv:1502.03808), so the game needs a declared canon (03, canon
     options table).
-16. **Dilation cancels out of yield** (03 F5). Yield divides by dtau/dt, so sustained output
-    per turn is identical across bands (68,242-69,264; spread is report latency). Deep time
-    carries no mechanical consequence.
+16. **Dilation cancels out of the yield rate** (03 F5). Yield divides by dtau/dt, so with
+    wear disabled, output per turn is identical across bands (68,242-69,264; spread is report
+    latency). Wear, hazard, and containment accrue per proper day, so per outside turn a deep
+    fleet outside the ergoregion ages more slowly and holds its reliability-scaled yield
+    longer (the campaign's 0.9 corruption threshold arrives after 50/rate busy turns). Deep
+    time has no scarcity mechanic; its clock consequences are latency and per-proper-day
+    wear.
 17. **Causality leaks** (03 F1, F2, F8). Unlinked systems exchange intel with zero delay
     (latent until a third system exists); same-system intel skips the radial leg (2 turns
     against 153.8); authorities see their own remote fleets instantly; one faction's win

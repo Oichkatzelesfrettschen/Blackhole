@@ -1,13 +1,13 @@
 # Engineering baseline audit -- Blackhole
 
 Scope: measured state of the build, test, CI, static-analysis, and hygiene
-baseline at HEAD `34e1bf1` (2026-09-22 19:28 -0700), against
-`/home/eirikr/Github/Blackhole`. No source edit, no `.gitignore`/`.ignore`
+baseline at HEAD `34e1bf1` (2026-09-22 19:28 -0700), against the primary
+checkout. No source edit, no `.gitignore`/`.ignore`
 change, and no compilation was performed by this audit. One caveat: the
 prescribed command `ctest --test-dir build/Release --output-on-failure -j8`
-itself invokes five test targets that shell out to `cmake --build
-${CMAKE_BINARY_DIR} --target X` (CMakeLists.txt:1774, 3100, 3111, 3128,
-3139). Because `CMakeLists.txt` is 24 commits newer than the tree's last
+itself invokes the five test targets registered in this configuration that
+shell out to `cmake --build ${CMAKE_BINARY_DIR} --target X` (CMakeLists.txt:1774,
+3100, 3111, 3128, 3139; Finding 7 counts all 52). Because `CMakeLists.txt` is 24 commits newer than the tree's last
 configure, each of those five triggered `make`'s automatic
 `cmake_check_build_system` reconfigure, which failed partway through
 (`find_package(imgui)` error) and touched `build/Release/CMakeCache.txt`
@@ -63,7 +63,7 @@ bootstrap metadata touched -- recorded here rather than asserted away.
 | `ENABLE_CLANG_TIDY` / `ENABLE_CPPCHECK` defaults | both `ON` (CMakeLists.txt:1521-1522) | grep | overridden `OFF` by the `ci` preset, `ON` again by `ci-analysis`. clang-tidy always parses with the Clang frontend regardless of which compiler builds the project, so `ci-analysis`'s clang-tidy coverage is not GCC-14-limited; only the compiler's own `-Werror` diagnostics are GCC-14-only in CI (see Finding 3) |
 | `-fno-fast-math` per-target overrides | 34 `target_compile_options` sites, 37 textual hits | `grep -c fno-fast-math CMakeLists.txt` | matches memory pattern (grown from ~10 named files to 34 sites as more tests were added) |
 | `.clang-tidy` | present, `bugprone-*`, `cert-*`, `clang-analyzer-*`, `cppcoreguidelines-*`, `misc-*`, `modernize-*`, `performance-*`, `portability-*`, `readability-*`, with an explicit suppression list | `.clang-tidy` | -- |
-| `RESOURCE_LOCK` / `RUN_SERIAL` on the 5 `cmake --build`-invoking meta ctest targets | none. `grep -n "RESOURCE_LOCK\|RUN_SERIAL" CMakeLists.txt` returns 0 hits anywhere in the file | grep | see Finding 7 |
+| `RESOURCE_LOCK` / `RUN_SERIAL` on the 52 `cmake --build`-invoking meta ctest targets (5 registered here) | none. `grep -n "RESOURCE_LOCK\|RUN_SERIAL" CMakeLists.txt` returns 0 hits anywhere in the file | grep | see Finding 7 |
 | AGENTS.md build commands | `conan_install.sh`, `fetch_implot.sh`, `cmake --preset release`, `cmake --build --preset release --target validate-shaders`, `ctest --test-dir build/Release` all exist and resolve | file existence + `CMakePresets.json` preset-name check | matches |
 | Repo-local Conan cache (`.conan/p/`) | `cache.sqlite3` (28,672 bytes) with 0 rows in both its `recipes` and `packages` tables; no package folder tree exists (`.conan/p/b/` absent) | `sqlite3 .conan/p/cache.sqlite3 "SELECT count(*) FROM recipes"` / `... FROM packages` both 0; `find .conan/p -maxdepth 2 -type d` | root cause of 10 ctest failures, see Finding 1 |
 | `.conan/` metadata mtimes | `settings.yml`, `version.txt`, `migrations/`, `extensions/`, `p/cache.sqlite3` all dated 2026-09-21 23:43:37-38 (same run); `global.conf`, `remotes.json` dated 2026-08-13 14:09:47 | `stat -c '%y %n' .conan/*` | pattern consistent with a `CONAN_HOME` re-initialization on 2026-09-21, not a `conan cache clean` |
@@ -96,7 +96,7 @@ bootstrap metadata touched -- recorded here rather than asserted away.
    (verified via `sqlite3`), and `find .conan/p -maxdepth 2 -type d` finds
    nothing under `.conan/p/b/`. `readelf -d build/Release/camera_math_test`
    shows a `RUNPATH` entry
-   `/home/eirikr/Github/Blackhole/.conan/p/b/hdf57e5dc28c5385b/p/lib`,
+   `<checkout>/.conan/p/b/hdf57e5dc28c5385b/p/lib` (absolute in the binary),
    which does not exist on disk -- hence `error while loading shared
    libraries: libhdf5_hl_cpp.so.310: cannot open shared object file` for
    `settings_sync`, `compare_sweep_state`, `camera_math`,
@@ -138,9 +138,15 @@ bootstrap metadata touched -- recorded here rather than asserted away.
    assertion failure inside test bodies -- zero of the 10 failures printed
    a test assertion, physics-tolerance, or numeric-mismatch message. The
    stale `build/Release/reports/repo_truth.json` (generated 2026-07-24)
-   already reports `total: 93`, identical to today's count, so the test
-   suite itself has not grown or shrunk since the last known-good full
-   build; there is no evidence in this pass that any of the 24 intervening
+   reports `total: 93`, the same as today's `ctest -N`, but both counts come
+   from the July configuration: `ctest -N` reads the generated
+   `CTestTestfile.cmake`, and today's automatic reconfigure failed before
+   regenerating it. The test count at HEAD was therefore not measured; only
+   a successful configure at `34e1bf1` measures it. A fresh configure also
+   differs from a reconfigure: `CMakeLists.txt:1771` reads `BUILD_TESTING`
+   before `option(BUILD_TESTING)` at `:3088`, so an empty cache without a
+   command-line or toolchain value skips `shader_validation`. There is no
+   evidence in this pass that any of the 24 intervening
    commits (which include "enforce strict verified-source and GLSL
    interface gates" and "replace tautological validation") broke a test.
    Falsifier: after the rebuild in Finding 1, a still-failing test with a
@@ -204,7 +210,7 @@ bootstrap metadata touched -- recorded here rather than asserted away.
    folder ahead of the configure in `bench/ci_bench.sh`, correct the
    binary path to `build/Riced/Debug/physics_bench` (or switch to a
    Release-type preset such as `riced-relwithdebinfo`), run it once on
-   representative hardware, record a baseline with `python3
+   representative hardware, record a baseline with `$PYTHON
    scripts/check_bench_regression.py --record bench_cpu.json`, commit
    `bench/baseline-riced.json` with the CPU model and compiler version in
    the commit message, drop the hardcoded `--allow-missing` once that
@@ -245,7 +251,7 @@ bootstrap metadata touched -- recorded here rather than asserted away.
    here as a settled violation. `scripts/build-quick.sh` (lines 29, 35,
    40, 49, 55) additionally contains unambiguous pictographic emoji --
    U+1F9F9, U+1F4E6, U+2699, U+1F528, U+2705 -- with no ambiguity at all
-   under the user's rule. Fix: wire `python3 scripts/ascii_sweep.py`
+   under the user's rule. Fix: wire `$PYTHON scripts/ascii_sweep.py`
    (verifier mode) into `ci.yml` or `.pre-commit-config.yaml` as the debt
    ledger already intends for its current scope, separately replace the
    pictographic emoji in `scripts/build-quick.sh` with plain text, and
@@ -268,12 +274,16 @@ bootstrap metadata touched -- recorded here rather than asserted away.
    as the memory ledger records, not accidentally re-added to LFS or
    duplicated.
 
-7. **Five ctest targets share the build tree with no lock, so a parallel
-   `ctest -j` run against a stale tree races itself.**
-   `shader_validation`, `repo_truth_generation`, `physics_claims_matrix`,
-   `blender_addon_package`, and `blender_addon_stage` (CMakeLists.txt:1774,
-   3100, 3111, 3128, 3139) each independently invoke `cmake --build
+7. **Every nested-build ctest shares the build tree with no lock, so a
+   parallel `ctest -j` run against a stale tree races itself.** At
+   `34e1bf1`, 52 `add_test` entries invoke `cmake --build
    ${CMAKE_BINARY_DIR} --target X` against the same `build/Release` tree.
+   Five register in the audited configuration: `shader_validation`,
+   `repo_truth_generation`, `physics_claims_matrix`, `blender_addon_package`,
+   and `blender_addon_stage` (CMakeLists.txt:1774, 3100, 3111, 3128, 3139).
+   The other 47, from `blender_bridge_abi` (`:3149`) through the
+   Blender/Octane tests, register when `ENABLE_BLENDER_BRIDGE` and those
+   executables are present.
    `grep -n "RESOURCE_LOCK\|RUN_SERIAL" CMakeLists.txt` finds neither
    property set anywhere in the file, so ctest is free to start several of
    these concurrently under `-j8`. Today's run demonstrates the race
@@ -292,8 +302,9 @@ bootstrap metadata touched -- recorded here rather than asserted away.
    guide/ci.md`'s own `ctest --parallel "$(nproc)"` local-iteration
    command would trigger) risks several concurrent `cmake_check_build_system`
    reconfigures corrupting each other's transient CMake bootstrap files.
-   Fix: add `RESOURCE_LOCK cmake_build_system` (or equivalent) to these
-   five test properties so ctest serializes them against each other. 
+   Fix: give all 52 the same `RESOURCE_LOCK`, because ctest serializes only
+   tests that name the same lock; PR #26 applies `RESOURCE_LOCK
+   cmake_build_tree` to all 52.
    Falsifier: rerunning `ctest -j8` against a tree whose configure is
    already current with `CMakeLists.txt` (no pending reconfigure) would
    show whether the race requires a stale configure to manifest, or can

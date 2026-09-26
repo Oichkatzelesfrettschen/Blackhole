@@ -5,9 +5,9 @@ Scope: the renderer (default fragment, interop fragment, GL compute, CUDA) and
 latest research, with physics performance enhancements". Source baseline: `main` at
 `34e1bf1` (2026-09-22). The test binaries under `build/Release` date from 2026-07-19..23 and
 predate `a4e1f1d`. Each numeric cross-check below ports the current source text line by line
-into Python, so the findings bind to `34e1bf1` and not to the stale binaries. The scratch
-scripts (`checks.py`, `rcheck.py`, `shadow.py`) live in the session scratchpad and are not
-checked in. Section 5 reproduces their method so that anyone can re-run them.
+into Python, so the findings bind to `34e1bf1` and not to the stale binaries. The
+scripts (`checks.py`, `rcheck.py`, `shadow.py`, `shadow2.py`) and their expected output live
+in `harness/` (`harness/README.md`); section 5 states their method.
 
 Tags: **NEW** means no repo doc or issue names the defect. **TRACKED** carries a doc or
 issue pointer. **TRACKED-BUT-WRONG** means a repo doc asserts the opposite of what the
@@ -149,9 +149,18 @@ Fix: stop stepping `sqrt(R)` with sign flips. Use one of these:
   Theta'(theta)/2` with RK4 or RKF45. `kerr.cpp` already computes `dRdr` and `dThetadtheta`.
 - The Hamiltonian form in Kerr-Schild Cartesian coordinates, as in GRay2 (Chan et al.,
   arXiv:1706.07062).
-- The closed-form elliptic solution (Gralla and Lupsasca 2020), which the repo already has
-  in `src/physics/analytic_kerr_geodesic.h` and `src/cuda/device_analytic_kerr.cuh`. No
-  render kernel includes the CUDA header; only `tests/cuda_analytic_kerr_test.cu` does.
+- The closed-form elliptic solution (Gralla and Lupsasca 2020). The repo holds only
+  radial prototypes of it, and they cannot replace the tracer as they stand:
+  - `analytic_kerr_geodesic.h` implements `rAnalytic` alone, which returns -1 unless
+    `findRadialRoots` reports four real roots (`:315-319`); that root finder is broken
+    (`05-open-gororoba-novel-numerics.md` M5).
+  - Neither header evolves theta, phi, or t analytically.
+  - The CPU and CUDA radial Mobius formulas differ (`analytic_kerr_geodesic.h:344-345`
+    uses `r1 - r4` and `r1 - r3`; `device_analytic_kerr.cuh:360-365` uses `r2 - r4` and
+    `r2 - r3`).
+  - No render kernel includes the CUDA header; only `tests/cuda_analytic_kerr_test.cu` does.
+  A closed-form renderer needs the fixed root finder, every root-class branch, the
+  theta/phi/t integrals, and one agreed Mobius form first.
 
 Falsifier: render with spin 0.5 and the `BH_DEBUG_FLAG_MAXSTEPS` display enabled. If most
 non-captured pixels do not carry the flag, F2 is wrong.
@@ -524,7 +533,7 @@ Falsifier: a `src/` include that makes `cpuIntensityStep` a thin wrapper over
 | --- | --- | --- | --- |
 | Kerr null geodesic constants | Wrong R (F1); spin mirrored (F3) | Separated R/Theta, Gralla and Lupsasca PRD 101 044032, arXiv:1910.12881 | P0 |
 | Geodesic integrator | Euler Mino, frozen at turning points (F2); Schwarzschild Binet RK4 is correct | Hamiltonian in Cartesian KS with adaptive RK (GRay2, arXiv:1706.07062); closed-form elliptic (1910.12881) | P0 |
-| Analytic/fast imaging | `analytic_kerr_geodesic.h` and `device_analytic_kerr.cuh` exist and are used by tests only | AART adaptive analytic ray tracing for photon rings, arXiv:2211.07469 | P1 |
+| Analytic/fast imaging | `analytic_kerr_geodesic.h` and `device_analytic_kerr.cuh` are radial-only prototypes used by tests only (F2) | AART adaptive analytic ray tracing for photon rings, arXiv:2211.07469 | P1 |
 | Camera model | Euclidean directions, no tetrad (F9) | FIDO-frame camera with aberration, arXiv:1502.03808 App. A | P1 |
 | Disk emission | Newtonian profile, ad hoc Doppler, static redshift (F5, F6) | Page-Thorne flux with g^4 transfer; Interstellar's no-Doppler look as an explicit toggle (1502.03808 sec. 4) | P0 |
 | Polarized GRRT | Uniform-EVPA shading; transfer step only in flat slab (F8) | Covariant transport (ipole, Coport arXiv:2407.10431); cross-code NMSE gates (Prather et al. arXiv:2303.12004) | P1 |
@@ -543,7 +552,9 @@ Falsifier: a `src/` include that makes `cpuIntensityStep` a thin wrapper over
    change plus a test.
 2. Fix F2 with the second-order Mino form or KS Hamiltonian RK, reusing `kerr.cpp`'s `dRdr`,
    and fix F3 by tracing the arriving photon backward. Then re-measure the capture edges
-   against `analytic_kerr_geodesic.h` as the oracle.
+   against the R-positivity scan of section 5 (`harness/shadow2.py`);
+   `analytic_kerr_geodesic.h` becomes an oracle only after its `findRadialRoots` fix
+   (05 M5).
 3. Land issue #16 scenes A/C/D as offscreen gates on the fixed path. Then apply F9 (camera
    tetrad) and F5/F6 (g-factor and Page-Thorne).
 4. Pursue F8 (covariant polarized transport against the Prather 2023 analytic model) and F11
@@ -568,6 +579,8 @@ Falsifier: a `src/` include that makes `cpuIntensityStep` a thin wrapper over
   only).
 
 ## 5. Reproduction notes
+
+Each item runs from `harness/`; `harness/README.md` gives the commands.
 
 - F1: port `kerrInitConsts` verbatim and compare `A^2 - Delta (Q + (Lz - a)^2)` with `(Sigma
   k^r/E)^2`.

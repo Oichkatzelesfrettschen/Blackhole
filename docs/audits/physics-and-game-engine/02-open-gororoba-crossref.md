@@ -1,11 +1,11 @@
 # open_gororoba cross-reference for the Blackhole physics core
 
-Scope: numeric and formula cross-check of Blackhole (`/home/eirikr/Github/Blackhole`, GPL-3.0,
-HEAD `34e1bf1`) against open_gororoba (`/home/eirikr/Github/open_gororoba`, workspace
+Scope: numeric and formula cross-check of Blackhole (GPL-3.0,
+HEAD `34e1bf1`) against a sibling open_gororoba checkout (workspace
 GPL-2.0-or-later), triage of the physics and GPU crates on the two axes
 mathematical accuracy and computational efficiency, and ranked porting advice. Both trees
-were read-only. Every number below comes from one of three executables built in the
-session scratchpad:
+were read-only. Every number below comes from one of three executables, kept with their
+expected output in `harness/` (`harness/README.md`):
 
 - `referee.py` -- an mpmath (1.4.1, 30 digits) referee written from textbook metrics only:
   Kerr and Kerr-Newman in Boyer-Lindquist form with `g_tphi = -a sin^2(2Mr - Q^2)/Sigma`
@@ -19,7 +19,7 @@ session scratchpad:
 - `bh/driver.cpp`, `bh/mino2.cpp`, `bh/gfac.cpp` and `bh/ecg.cpp` -- clang++ 22.1.8 `-std=c++23 -O2`. They link Blackhole's
   `src/physics` headers together with `kerr.cpp` and `schwarzschild.cpp`.
 - `grx` -- rustc 1.98.1 release. It takes a path dependency on `gr_core` pinned to
-  open_gororoba's `Cargo.lock`, with `CARGO_TARGET_DIR` set to the scratchpad.
+  open_gororoba's `Cargo.lock`, with `CARGO_TARGET_DIR` outside both trees.
 
 Units are M = 1 unless stated. OBSERVED means the output of one of these executables or a
 read of the named line. INFERRED means a conclusion that goes beyond that output.
@@ -108,8 +108,13 @@ multiplies into disk density. It is ranked first because it has the widest reach
   - The normalized LUT shape departs from Page-Thorne by up to 0.38 (a=0.5).
   - Peak radius, Page-Thorne vs. LUT: 1.59 vs 1.52 r_isco at a=0; 1.48 vs 1.35 r_isco
     at a=0.9. The driver's LUT peak at a=0.9 is 1.353 r_isco, which matches.
-  - `thin_disk.h:125-127` hard-codes the efficiency at 0.0572, or 0.3 when |a| > 0.9.
-    The referee gives 0.0821 (a=0.5), 0.1558 (a=0.9) and 0.3210 (a=0.998).
+  - `thin_disk.h:124-126` (`kerrDisk`) sets `eta = 1 - sqrt(1 - 2/3) = 0.42265` for every
+    |a| <= 0.9, and 0.3 above. The expression drops the `r_isco` denominator of
+    `1 - sqrt(1 - 2/(3 r_isco))`; 0.0572 would need `r_isco = 6`. The referee gives 0.0572
+    (a=0), 0.0821 (a=0.5), 0.1558 (a=0.9) and 0.3210 (a=0.998). Because
+    `mDot = L_Edd mDotEdd/(eta c^2)`, Mdot runs low by 7.39x, 5.15x and 2.71x at a = 0,
+    0.5 and 0.9, and high by 1.07x at a = 0.998. `schwarzschildDisk` (`thin_disk.h:93`)
+    takes a separate eta = 0.1, so F3's temperature comparison does not pass through it.
   - That efficiency only scales Mdot. `generateEmissivityLut` divides by the maximum
     (`lut.h:77-86`), so the efficiency error leaves the rendered LUT shape unchanged. The
     shape error comes entirely from f(r).
@@ -257,18 +262,24 @@ multiplies into disk density. It is ranked first because it has the widest reach
 - This is the one integrator component where open_gororoba holds the correct version and
   Blackhole does not.
 
-### F8. gr_core's Kerr null integrator uses the timelike polar potential (gr_core only)
+### F8. Neither repo's Kerr null polar potential is Carter's (gr_core and Blackhole CPU)
 
 - **Where:** `kerr.rs:204,269,342` use `Theta = Q - cos^2 (a^2 (1 - E^2) + L^2/sin^2)`,
-  which is the mu = 1 form. The null form is `Q + a^2 E^2 cos^2 - L^2 cot^2`, which
-  Blackhole's `kerr.cpp:91` has correctly. The test `kerr.rs:1175` repeats the same wrong
-  expression, so it is tautological.
+  which is the mu = 1 form. The null form is `Q + a^2 E^2 cos^2 - L^2 cot^2`. The test
+  `kerr.rs:1175` repeats the same wrong expression, so it is tautological.
+- Blackhole's `kerr.cpp:91` writes `Q + a^2 E^2 cos^2 - Lz^2/sin^2`, and `:92-94` differentiates
+  that expression. `Lz^2/sin^2 = Lz^2 cot^2 + Lz^2`, so with Carter's Q this Theta is low by
+  `Lz^2`, the same defect as `01-renderer-accuracy.md` F1. The fix for all three Blackhole
+  sites lands in PR #27.
 - **OBSERVED:** for a=0.9, E=1, L=2, Q=10, `trace_null_geodesic` reaches a polar turning
   point at |cos theta|max = 0.845154. That equals the timelike prediction 0.845154 and
   misses the null prediction 0.851939.
-- **Consequence:** off-equatorial photon paths are wrong whenever a != 0, and so is
-  `shadow_ray_traced` at theta_obs != pi/2. The analytic Bardeen `shadow_boundary`
-  (`kerr.rs:95-165`) is independent of this bug.
+- **Derived (from the `kerr.cpp:91` expression, not executed):** Blackhole's CPU Theta
+  turns at |cos theta|max = 0.786830, the root of `10 + 0.81 x - 4/(1 - x)` in `x = cos^2`.
+- **Consequence:** off-equatorial photon paths are wrong in both repos whenever `Lz != 0`
+  (and in gr_core whenever a != 0), and so is `shadow_ray_traced` at theta_obs != pi/2.
+  The analytic Bardeen `shadow_boundary` (`kerr.rs:95-165`) is independent of this bug.
+  F6's equatorial ray is unaffected: `dThetadtheta` vanishes at cos theta = 0.
 
 ### F9. gr_core TaylorF2 phase is missing the 1/eta prefactor (gr_core only; Blackhole correct)
 
@@ -395,7 +406,7 @@ All of the following matched the referee (M=1):
 | KdS r_c | a=0, Lambda=1e-2 | 17.3205 | 17.3205 | 16.2174 | both wrong (F5) |
 | synchrotron F | x=1 | exact on CPU; GLSL 1.5667 | 1.5667 | 0.651423 (Rybicki & Lightman 6.31) | gr_core and GLSL wrong (F10) |
 | TaylorF2 Psi + pi/4 | 30+30 Msun, 20 Hz | 3.5PN correct form | 2.580 | 10.319 at 2.5PN (Blanchet 2014) | gr_core low by eta (F9) |
-| null polar turning | a=0.9, L=2, Q=10 | correct Theta (kerr.cpp:91) | 0.845154 | 0.851939 (Carter 1968) | gr_core wrong (F8) |
+| null polar turning | a=0.9, L=2, Q=10 | 0.786830 (kerr.cpp:91, Lz^2/sin^2) | 0.845154 | 0.851939 (Carter 1968) | both wrong (F8) |
 | turning-point pass | a=0.9, b=1.001 b_c | stalls (first-order) | passes (second-order) | turns at 1.58524 and escapes | gr_core scheme right (F6) |
 
 ## Integrator measurement (accuracy and cost on one hard ray)
@@ -428,7 +439,7 @@ stated tolerance stays out of the accuracy path.
 
 | Crate / module | License (Cargo.toml) | Accuracy axis | Efficiency axis | Tests | Port verdict |
 |---|---|---|---|---|---|
-| gr_core `kerr.rs` | MIT | Metric, analytic Christoffels and shadow curve correct. Null Theta wrong (F8) | Second-order Mino + u=1/r + DOPRI5 removes the turning-point stall | Strong: vacuum-Einstein and Kretschmann checks (`kerr.rs:1609,1651`); polar test tautological | Reimplement the scheme in C++ with the null Theta |
+| gr_core `kerr.rs` | MIT | Metric, analytic Christoffels and shadow curve correct. Null Theta wrong (F8) | Second-order Mino + u=1/r + DOPRI5 removes the turning-point stall | Strong: vacuum-Einstein and Kretschmann checks (`kerr.rs:1609,1651`); polar test tautological | Reimplement the scheme in C++ with Carter's null Theta (neither repo has it, F8) |
 | gr_core `metric.rs` | MIT | Generic Riemann/Ricci/Kretschmann by finite differences; an independent referee for any metric | Offline verification only | Christoffel vs. numerical (`kerr.rs:1553`) | Port the idea as a C++ test oracle (Ricci = 0 to a tolerance) for KN/KdS fixes |
 | gr_core `kerr_newman.rs`, `kerr_de_sitter.rs` | MIT | Wrong (F4, F5) | n/a | Pin the bugs | Do not port |
 | gr_core `novikov_thorne`, `doppler`, `synchrotron`, `hawking`, `penrose` | MIT | Ports of Blackhole with F1/F10/F11 defects; NT temperature units right (F3) | Scalar | Mostly scaling checks | Take only the `C_CGS` fix |
@@ -472,9 +483,9 @@ Licensing:
 1. **Implement the closed-form Page-Thorne flux and a real efficiency (fixes F1).**
    - Formula: `referee.py:page_thorne_closed`, with roots
      `x_{1,2,3} = 2cos(acos(a)/3 -/+ pi/3)` and `-2cos(acos(a)/3)`.
-   - Replace `thin_disk.h:212-270` and `125-127`.
+   - Replace `thin_disk.h:212-270` and `124-126`.
    - Falsifier: agreement with direct quadrature to 1e-6. Continuous normalized peak at 1.592, 1.563,
-     1.483 and 1.278 r_isco for a = 0, 0.5, 0.9, 0.998. Neither repo has this, so it is
+     1.483 and 1.278 r_isco for a = 0, 0.5, 0.9, 0.998 (`harness/pt_check.py`). Neither repo has this, so it is
      reimplemented.
 2. **Replace the disk redshift LUT with the circular-orbit g-factor (fixes F2).**
    - Formula: `g = sqrt(1 - 3/r + 2a r^{-3/2}) / (1 + a r^{-3/2} - r^{-1/2} sin(phi) sin(i))`
@@ -487,7 +498,8 @@ Licensing:
 3. **Switch `raytracer.h` to the second-order Mino form (fixes F6).**
    - `kerrPotentials` already returns `dRdr` and `dThetadtheta`.
    - Adopt gr_core's `u = 1/r` and DOPRI5 architecture. Blackhole already has RK45.
-   - Keep Blackhole's correct null Theta.
+   - Carter's null Theta and its derivative replace `kerr.cpp:91-94` first (F8, PR #27);
+     the second-order form inherits whatever `dThetadtheta` returns.
    - Falsifier: the b = 1.001 b_c ray turns at r = 1.58524 and escapes.
    - Measured: 91 ns/step, down from 145 ns/step.
 4. **Port gr_core's additive null-norm correction (fixes F7).**
@@ -558,6 +570,5 @@ open_gororoba's claims about Blackhole:
   correct, but neither side was executed.
 - **Whether `synchrotron_emission.glsl` and `doppler_beaming.glsl` are live:** inferred
   from grep over `#include` directives, not from a shader-preprocessor trace.
-- **Scratch artifacts** (not part of either repo): `referee.py`, `referee.json`, `bh/gfac.cpp`, `bh/ecg.cpp`,
-  `bh/driver.cpp`, `bh/mino2.cpp` and `grx/`, all under
-  `/tmp/claude-1000/-home-eirikr-Github-Blackhole/c0a73857-0507-4985-ac50-c6c55d3348bc/scratchpad/`.
+- **Harness:** `referee.py`, `referee.json`, `bh/gfac.cpp`, `bh/ecg.cpp`, `bh/driver.cpp`,
+  `bh/mino2.cpp` and `grx/` live in `harness/`.

@@ -1,0 +1,6 @@
+tan-angle edges of capture region along equatorial scan (camera r=15M, a=0.9):
+ GPU scheme as shipped (Euler + Q bug, step 0.1, 300 steps): (np.float64(-0.2945), np.float64(0.1695000000000001))
+ GPU scheme, Q convention fixed, step 0.1:                 (np.float64(-0.487), np.float64(0.20099999999999996))
+ GPU scheme, Q fixed, step 0.01/5000:                      (np.float64(-0.487), np.float64(0.20099999999999996))
+ exact, code sign convention (future ray along +dir):       (np.float64(-0.487), np.float64(0.20099999999999996))
+ exact, physical backward trace (photon arriving along -dir): (np.float64(-0.20099999999999996), np.float64(0.487))

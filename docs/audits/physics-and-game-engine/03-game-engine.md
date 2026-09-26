@@ -32,9 +32,11 @@ zero-angular-momentum hovering observer, so orbiting "lanes" carry the
 wrong clock and Interstellar's Miller's planet cannot be represented at
 all: the 0.998 spin clamp caps geodesic dilation at 10.8x where canon needs
 61,362x at `1 - a = 1.33e-14`. The yield formula divides by `dtau/dt`,
-which cancels time dilation out of sustained throughput exactly, so the
-central premise -- deep time is scarce -- has no mechanical expression
-beyond latency. The constellation layer leaks causality three ways: unlinked
+which cancels time dilation out of the task-yield rate per coordinate turn,
+so the central premise -- deep time is scarce -- does not reach the base
+yield. Dilation reaches the game only through latency and through wear,
+hazard, and containment, which accrue per proper day and so run slower per
+turn in deep bands. The constellation layer leaks causality three ways: unlinked
 systems exchange intel with zero delay, same-system intel skips the radial
 light leg (2 turns instead of 154), and every authority knows its own remote
 fleets' state instantly. The shipped balance invariant pins an artifact of
@@ -128,7 +130,7 @@ changes with `-march=native` through FMA contraction.
 - Fix: `KerrTimeField(massG, delta)` constructor, clamp removed, geodesic
   observer from F3; keep `a = 0.998` as a named preset.
 
-### F5. `dtau/dt` cancels out of sustained yield; dilation only adds latency -- NEW
+### F5. `dtau/dt` cancels out of the task-yield rate; dilation reaches only latency and per-proper-day wear -- NEW
 
 - Location: `src/game/economy.h:27-29` (`taskYieldUnits = properHours /
   properTimeRate * reliability`), consumed per report at
@@ -140,15 +142,31 @@ changes with `-march=native` through FMA contraction.
   wear, or instability): band 0 through 3 bank 68,242 / 68,393 / 68,532 /
   69,264 units; the spread equals 24 units times the report-delay
   difference (153.8 vs 112.2 turns) and nothing else.
+- OBSERVED (source). The cancellation covers the yield rate only. Both
+  shipped configs set `reliabilityWearPerProperDay = 0.002`
+  (`campaign_session.cpp:47`, `constellation_session.cpp:82`), and wear,
+  ergoregion hazard, and containment all accrue per proper day
+  (`campaign.cpp:276-297`, `constellation.cpp:350-364`). Per coordinate
+  turn a fleet therefore wears by `rate * (0.002 + 0.15 depth)` per day of
+  turn length: base wear slows with depth, while the hazard term can make a
+  prograde-ergoregion fleet wear faster. Yield multiplies by reliability,
+  so a deep fleet outside the ergoregion keeps a higher yield multiplier
+  per outside turn. In the campaign, wear accrues only while working, and
+  the 0.9 corruption threshold (`campaign_session.cpp:66`) arrives after
+  `50/rate` busy turns (at 86400 s per turn) instead of 50. The
+  constellation wears every turn toward the 0.5 floor with no threshold.
+  Containment per turn also scales with `rate * depth`.
 - Consequence: the design premise "deep work is worth more because local
   hours are scarce" (`campaign.h` config comment, ledger `:911` "10x deep
   yield") is true per task and neutral per turn. The deep-versus-outer
-  choice is carried entirely by `frameDragYieldBonus`,
-  `ergoContainmentPerProperDay`, and `containmentYieldRetention`, none of
-  which is a clock effect. Interstellar's premise is the opposite
+  choice is carried by `frameDragYieldBonus`, `ergoContainmentPerProperDay`,
+  and `containmentYieldRetention`, which are not clock effects, and by the
+  slower per-turn wear above, which is. That wear effect rewards depth by
+  aging it less, not by making its hours scarce. Interstellar's premise is the opposite
   direction: an hour at Miller's costs the outside seven years.
 - Falsifier: two continuously busy fleets at different bands with no bonus
-  knobs banking different energy per coordinate turn after reports settle.
+  knobs and wear disabled banking different energy per coordinate turn
+  after reports settle.
 - Fix is a design decision, not a bug fix: either value local output per
   proper hour (deep colonies produce less per outside year, which is the
   canon reading) and give depth its own payoff, or keep coordinate valuation
@@ -607,11 +625,14 @@ mechanical payoff.
 ## 12. Reproduction
 
 From the repository root, compile outside the tree with `clang++ -std=c++23
--O2 -Isrc -Isrc/physics` over the five `PHYSICS_SRC_FILES`, the ten
+-O2 -Isrc -Isrc/physics` over the five `PHYSICS_SRC_FILES`, the nine
 non-`main` files in `src/game/`, and `src/game/constellation_sim_main.cpp`
 or `campaign_sim_main.cpp`. F7 adds `-march=native` with and without
 `-ffp-contract=off`. F6 shadows `src/game/campaign_sim_lines.h` (and, for
 the wins-off columns, `campaign_session.cpp` with both thresholds at 1e6)
 from a scratch directory. F1, F2, F5, and F9 are 20-line drivers over
 `Constellation` printing `perceivedController`, faction `energyUnits`, and
-fleet `properTimeSec` for the configurations each finding states.
+fleet `properTimeSec` for the configurations each finding states. The
+drivers (`harness/game/`), the threshold patch, and the canon scripts
+(`harness/kerr_clocks.py`, `harness/check_orbits.py`) are in `harness/`;
+`harness/README.md` gives the commands.
