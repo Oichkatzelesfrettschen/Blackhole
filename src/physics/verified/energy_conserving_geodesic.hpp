@@ -196,49 +196,76 @@ struct ConservedQuantities {
 // ============================================================================
 
 /**
- * @brief Apply constraint correction to restore geodesic constraint
+ * @brief Restore the geodesic norm g(v, v) = targetM2 by an additive projection
  *
- * The geodesic constraint (metric norm = m²) can drift during RK4 integration.
- * This function rescales velocities to restore the constraint while preserving
- * the energy and angular momentum.
+ * Primary path: v^t and v^phi stay fixed, so E = -(g_tt v^t + g_tphi v^phi)
+ * and L = g_tphi v^t + g_phph v^phi are unchanged, and v^r, v^theta scale by a
+ * common alpha. Writing S = g_rr (v^r)^2 + g_thth (v^theta)^2 for the part that
+ * scales, the corrected norm is norm - S + alpha^2 S, so
  *
- * Method:
- * 1. Compute current metric norm from velocities
- * 2. Compute rescaling factor: α = √(m² / current_norm)
- * 3. Rescale radial velocity: v_r → α * v_r
- * 4. Rescale θ velocity: v_θ → α * v_θ
- * 5. Keep E and L unchanged (time and φ-components don't change)
+ *   alpha^2 = (targetM2 - norm + S) / S.
+ *
+ * This primary additive correction matches open_gororoba gr_core
+ * energy_conserving::apply_constraint_correction. A multiplicative factor
+ * sqrt(|targetM2 / norm|) is zero for a null target and would zero v^r and
+ * v^theta, turning a photon timelike.
+ *
+ * Fallback when S = 0 or alpha^2 < 0 (the r-theta motion cannot absorb the
+ * drift): solve g_tt (v^t)^2 + 2 g_tphi v^phi v^t + (rest - targetM2) = 0 for
+ * v^t and take the root nearest the current v^t, which changes E. The roots
+ * come from the sign-aware form q / g_tt and (rest - targetM2) / q, which stays
+ * accurate where g_tt -> 0 at the ergosurface. This
+ * fallback solves for targetM2, timelike or null, and departs from gr_core,
+ * whose renormalize_null fallback ignores target_norm. When the quadratic has
+ * no real root the state is returned unchanged.
  *
  * @param g Metric components
  * @param state State with potentially drifted velocities
- * @param targetM2 Target value for metric norm (usually -1 for timelike, 0 for null)
- * @return Corrected state with constraint restored
+ * @param targetM2 Target value for the norm (-1 timelike, 0 null)
+ * @return Corrected state
  */
 [[nodiscard]] inline StateVector applyConstraintCorrection(const MetricComponents &g,
                                                            const StateVector &state,
                                                            double targetM2) noexcept {
   const double currentNorm = computeMetricNorm(g, state);
-
-  // Avoid division by zero
-  if (std::abs(currentNorm) < 1e-10) {
+  if (currentNorm == targetM2) {
     return state;
   }
 
-  // Rescaling factor to achieve target_m2
-  double const rescaleFactor = std::sqrt(std::abs(targetM2 / currentNorm));
+  const double spatialRt = g.gRr * state.v1 * state.v1 + g.gThth * state.v2 * state.v2;
+  if (spatialRt > 0.0) {
+    const double alphaSquared = (targetM2 - currentNorm + spatialRt) / spatialRt;
+    if (alphaSquared >= 0.0) {
+      const double alpha = std::sqrt(alphaSquared);
+      return StateVector{state.x0, state.x1,         state.x2,         state.x3,
+                         state.v0, alpha * state.v1, alpha * state.v2, state.v3};
+    }
+  }
 
-  // Rescale only spatial velocities (r, θ components)
-  // Keep temporal components to preserve E and L
-  return StateVector{
-      state.x0,
-      state.x1,
-      state.x2,
-      state.x3,
-      state.v0,                 // Keep v_t
-      rescaleFactor * state.v1, // Rescale v_r
-      rescaleFactor * state.v2, // Rescale v_θ
-      state.v3                  // Keep v_φ
-  };
+  // v^t quadratic: qa (v^t)^2 + qb v^t + qc = 0. The sign-aware form
+  // q = -(qb + sign(qb) sqrt(disc)) / 2 never subtracts nearly equal terms:
+  // the roots are q / qa and qc / q. Near the ergosurface qa = g_tt -> 0 and
+  // the textbook (-qb + sqrt(disc)) / (2 qa) cancels, while qc / q stays
+  // accurate; at qa = 0 the quadratic is linear with the single root qc / q.
+  const double qa = g.gTt;
+  const double qb = 2.0 * g.gTph * state.v3;
+  const double qc = spatialRt + g.gPhph * state.v3 * state.v3 - targetM2;
+  const double discriminant = qb * qb - 4.0 * qa * qc;
+  if (discriminant < 0.0) {
+    return state;
+  }
+  const double q = -0.5 * (qb + std::copysign(std::sqrt(discriminant), qb));
+  if (q == 0.0) {
+    return state;
+  }
+  const double rootSmall = qc / q;
+  double newV0 = rootSmall;
+  if (qa != 0.0) {
+    const double rootLarge = q / qa;
+    newV0 = (std::abs(rootLarge - state.v0) < std::abs(rootSmall - state.v0)) ? rootLarge
+                                                                                : rootSmall;
+  }
+  return StateVector{state.x0, state.x1, state.x2, state.x3, newV0, state.v1, state.v2, state.v3};
 }
 
 // ============================================================================
@@ -255,10 +282,11 @@ struct ConservedQuantities {
  * 4. Validate energy conservation (drift check)
  * 5. Return corrected state
  *
- * This ensures:
- *   - Null constraint preserved (g_μν v^μ v^ν = 0 for photons)
- *   - Timelike constraint preserved (g_μν v^μ v^ν = -1 for massive particles)
- *   - Energy E and angular momentum L conserved (Killing vector properties)
+ * Result:
+ *   - The norm g(v, v) returns to its starting value (0 null, -1 timelike)
+ *     through applyConstraintCorrection
+ *   - The correction leaves v^t and v^phi, hence E and L, unchanged; E and L
+ *     still drift at the RK4 truncation rate
  *   - Local error remains O(h^5) from RK4 base method
  *
  * @tparam F Type of RHS function (must satisfy std::invocable<F, StateVector>)

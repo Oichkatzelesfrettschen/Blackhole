@@ -264,6 +264,39 @@ TEST_F(GPUCPUParityTest, SchwarzschildNullConstraint) {
   EXPECT_LE(gpuNorm, 1e-5F) << "null four-norm on GPU: " << gpuNorm;
 }
 
+// ============================================================================
+// No-LUT redshift fallback: ZAMO lapse, the LUT's model
+// ============================================================================
+
+/**
+ * zamoRedshiftEquatorial (shader/include/redshift.glsl) against mpmath values
+ * of 1 / sqrt(Sigma Delta / A) - 1 at the equator, the model of
+ * physics::kerrRedshift and the redshift LUT. r_s = 2, so r = 3M is 3.0.
+ */
+TEST_F(GPUCPUParityTest, ZamoRedshiftFallback) {
+  struct Case {
+    const char *call;
+    double expected;
+  };
+  const Case cases[] = {
+      {"zamoRedshiftEquatorial(3.0, 2.0, 0.9)", 0.64819156443383915},
+      {"zamoRedshiftEquatorial(6.0, 2.0, 0.9)", 0.2225214295493458},
+      {"zamoRedshiftEquatorial(1.8, 2.0, 0.9)", 2.3166247903553998}, // inside the ergosphere
+      {"zamoRedshiftEquatorial(6.0, 2.0, 0.0)", 0.22474487139158894},
+      {"zamoRedshiftEquatorial(1.2, 2.0, 0.9)", 10.0}, // inside r_+ = 1.436: the LUT cap
+      {"zamoRedshiftEquatorial(0.2, 2.0, 0.9)", 10.0}, // inside r_- = 0.564, Delta > 0 again
+  };
+  for (const Case &c : cases) {
+    const float gpu = evalScalarShader(std::string(R"(
+        #version 460 core
+        layout(local_size_x = 1) in;
+        layout(std430, binding = 0) buffer Output { float result[8]; };
+        #include "redshift.glsl"
+        void main() { result[0] = )") + c.call + "; }");
+    EXPECT_NEAR(static_cast<double>(gpu), c.expected, 1.0e-5 * c.expected) << c.call;
+  }
+}
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

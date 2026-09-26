@@ -210,39 +210,30 @@ void testKerrDeSitter(TestSuite &suite) {
 
   const double m = 1.0;
   const double a = 0.5;
-  const double lambdaValues[] = {0.0, 1e-10, 1e-5, 1e-3};
-  const double r = 10.0;
 
-  for (double const lambda : lambdaValues) {
-    // Delta (modified by cosmological constant)
-    double const delta = kdsDelta(r, m, a, lambda);
-    double const expectedDelta = (r * r) - (2 * m * r) + (a * a) - (lambda * r * r / 3.0);
-    suite.runTest("kds_Delta(Λ=" + std::to_string(lambda) + ")", expectedDelta, delta);
+  // Lambda = 0 reduces the Carter quartic to the Kerr quadratic.
+  suite.runTest("kds_event_horizon(Lambda=0)", m + std::sqrt((m * m) - (a * a)),
+                kdsEventHorizon(m, a, 0.0));
 
-    // Event horizon
-    double const rPlus = kdsEventHorizon(m, a, lambda);
-    // For Lambda=0, should reduce to Kerr
-    if (lambda < 1e-12) {
-      double const expectedRPlus = m + std::sqrt((m * m) - (a * a));
-      suite.runTest("kds_event_horizon(Λ=0)", expectedRPlus, rPlus);
-    }
+  // Horizons are roots of Delta_r; mpmath polyroots gives
+  // (0.13397459621546879, 1.8660254040345312, 173204.08074822735) at Lambda = 1e-10
+  // (scripts/gen_kn_kds_reference.py).
+  const double lambda = 1e-10;
+  suite.runTest("kds_inner_horizon(Lambda=1e-10)", 0.13397459621546879,
+                kdsInnerHorizon(m, a, lambda));
+  suite.runTest("kds_event_horizon(Lambda=1e-10)", 1.8660254040345312,
+                kdsEventHorizon(m, a, lambda));
+  suite.runTest("kds_cosmological_horizon(Lambda=1e-10)", 173204.08074822735,
+                kdsCosmologicalHorizon(m, a, lambda));
 
-    // Cosmological horizon
-    if (lambda > 1e-12) {
-      double const rC = kdsCosmologicalHorizon(lambda);
-      double const expectedRC = std::sqrt(3.0 / lambda);
-      suite.runTest("kds_cosmological_horizon(Λ=" + std::to_string(lambda) + ")", expectedRC, rC);
-    }
-  }
-
-  // Test horizon ordering
-  const double mTest = 1.0;
-  const double aTest = 0.5;
   const double lambdaTest = 1e-5;
-
-  double const rMinus = kdsInnerHorizon(mTest, aTest, lambdaTest);
-  double const rPlus = kdsEventHorizon(mTest, aTest, lambdaTest);
-  double const rCosmo = kdsCosmologicalHorizon(lambdaTest);
+  double const rMinus = kdsInnerHorizon(m, a, lambdaTest);
+  double const rPlus = kdsEventHorizon(m, a, lambdaTest);
+  double const rCosmo = kdsCosmologicalHorizon(m, a, lambdaTest);
+  suite.runTest("kds_Delta(r_+) = 0 (scaled by r_+^2)", 1.0,
+                1.0 + (kdsDelta(rPlus, m, a, lambdaTest) / (rPlus * rPlus)));
+  suite.runTest("kds_Delta(r_c) = 0 (scaled by r_c^2)", 1.0,
+                1.0 + (kdsDelta(rCosmo, m, a, lambdaTest) / (rCosmo * rCosmo)));
 
   bool const orderingCorrect = (rMinus < rPlus) && (rPlus < rCosmo);
   suite.runTest("horizon_ordering(r- < r+ < rc)", 1.0, orderingCorrect ? 1.0 : 0.0);
@@ -275,13 +266,13 @@ void testReductions(TestSuite &suite) {
     suite.runTest("Kerr-Newman→Kerr (Q→0)", kerrDeltaValue, knDeltaValue);
   }
 
-  // Kerr-de Sitter → Kerr (Λ → 0)
+  // Kerr-de Sitter -> Kerr (Lambda -> 0)
   {
     double const a = 0.5;
     double const lambda = 1e-12;
     double const kdsDeltaValue = kdsDelta(r, m, a, lambda);
     double const kerrDeltaValue = kerrDelta(r, m, a);
-    suite.runTest("Kerr-de Sitter→Kerr (Λ→0)", kerrDeltaValue, kdsDeltaValue);
+    suite.runTest("Kerr-de Sitter->Kerr (Lambda->0)", kerrDeltaValue, kdsDeltaValue);
   }
 
   // Kerr-Newman → Schwarzschild (a→0, Q→0)
@@ -319,10 +310,13 @@ void testValidityConstraints(TestSuite &suite) {
     suite.runTest("Kerr-Newman validity (a²+Q²≤M²)", 1.0, valid ? 1.0 : 0.0);
   }
 
-  // The constexpr validity predicate admits only a positive cosmological constant.
-  static_assert(isPhysicalKdsBlackHole(1.0, 0.5, 1e-5));
-  static_assert(!isPhysicalKdsBlackHole(1.0, 0.5, 0.0));
-  static_assert(!isPhysicalKdsBlackHole(1.0, 0.5, -1e-5));
+  // The validity predicate admits only a positive cosmological constant below
+  // the Nariai bound (9 Lambda M^2 < 1 at a = 0).
+  suite.runTest("KdS validity (Lambda=1e-5)", 1.0, isPhysicalKdsBlackHole(1.0, 0.5, 1e-5) ? 1.0 : 0.0);
+  suite.runTest("KdS validity (Lambda=0)", 0.0, isPhysicalKdsBlackHole(1.0, 0.5, 0.0) ? 1.0 : 0.0);
+  suite.runTest("KdS validity (Lambda<0)", 0.0, isPhysicalKdsBlackHole(1.0, 0.5, -1e-5) ? 1.0 : 0.0);
+  suite.runTest("KdS validity (beyond Nariai)", 0.0,
+                isPhysicalKdsBlackHole(1.0, 0.0, 0.2) ? 1.0 : 0.0);
 }
 
 // ============================================================================

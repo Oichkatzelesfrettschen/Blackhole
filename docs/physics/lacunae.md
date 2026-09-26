@@ -98,8 +98,12 @@ solve in situ. This is the correct architectural choice for a real-time renderer
 dI_nu/ds = j_nu - alpha_nu * I_nu
 ```
 
-along each geodesic ray. The simulation uses LUT-backed emissivity and redshift but
-does NOT march through a volumetric opacity field.
+along each geodesic ray, in affine parameter with Kirchhoff-consistent j_nu and
+alpha_nu and the invariant I_nu / nu^3. The default path uses LUT-backed emissivity
+and redshift. The GPU volumetric path (GLSL D2/D3, CUDA `d_trace_geodesic_rte()`)
+marches an opacity field as a shading model: its path length is the Mino-time
+increment and its absorption is `alpha = k * j`. The CPU `rte_integrator.h` step is
+the exact flat-slab formal solution, tested against analytic slabs.
 
 **Mathematical gaps:**
 
@@ -111,24 +115,27 @@ does NOT march through a volumetric opacity field.
   present in scattering_models.h but is NOT called during ray marching.
 
 - **Polarized radiative transfer:** The Stokes vector `(I, Q, U, V)` transport
-  requires a 4x4 Mueller matrix propagated along each geodesic (Broderick & Blandford
-  2004). This is completely absent. It matters critically for EHT polarimetry and
-  spin measurements via linear polarization.
+  requires a 4x4 Mueller matrix propagated along each geodesic with the polarization
+  frame parallel-transported (Broderick & Blandford 2004). The GPU "Stokes IQUV" path
+  (GLSL D4, CUDA `d_trace_geodesic_stokes()`) is a shading model: it uses the Mino-time
+  increment as path length, sets `alpha = k * j`, applies one global sky-plane EVPA,
+  and transports no polarization frame (no Walker-Penrose constant, no emitter
+  tetrad). The CPU `stokes_transport.h` step is a flat-slab solver. Covariant
+  polarized transport is absent; it matters for EHT polarimetry and spin
+  measurements via linear polarization.
 
 - **Fe K-alpha line at 6.4 keV:** The relativistically broadened iron emission line
   from the disk corona is a primary spin measurement observable. Listed as a Phase 6.3
   future task; not yet started.
 
-> **[2024 UPDATE -- EHT Sgr A* Polarization, DOI:10.3847/2041-8213/ad2df1]**
-> The Event Horizon Telescope collaboration published Sgr A* linear polarization results
-> in 2024 (ApJL 2024): ~25% linear polarization fraction with an organized magnetic field
-> spiraling at the black hole edge. The field topology is consistent with M87*,
-> confirming that GR governs jet launching across 6 orders of magnitude in black hole mass.
-> This result establishes the observational validation target for polarized radiative
-> transfer: the simulation must eventually produce Stokes I, Q, U, V transport along
-> geodesics (4x4 Mueller propagator, Broderick-Blandford 2004) to be compared against
-> EHT VLBI baselines. Without polarized RT, the simulation cannot produce synthetic
-> polarimetric maps. This gap is currently completely absent from the codebase.
+> **[2024 UPDATE -- EHT Sgr A* Paper VIII, DOI:10.3847/2041-8213/ad2df1]**
+> EHT Collaboration, "First Sagittarius A* Event Horizon Telescope Results. VIII.
+> Physical Interpretation of the Polarized Ring", ApJL 964, L26 (2024), interprets the
+> Sgr A* polarized ring. Only the paper's metadata was checked, so no polarization
+> fraction or field topology is quoted here. The paper sets an observational target for polarized radiative
+> transfer: Stokes I, Q, U, V transported covariantly along geodesics (4x4 Mueller
+> propagator, Broderick-Blandford 2004). The GPU Stokes path is a shading model, so
+> the renderer cannot yet produce synthetic polarimetric maps for that comparison.
 
 > **[2024 UPDATE -- IPOLE/PATOKA two-temperature synchrotron (AFD Illinois)]**
 > The IPOLE polarized GRRT code (Illinois group, 2024) uses MAD GRMHD simulations with
@@ -258,8 +265,9 @@ Missing (future work):
 > **[2024 UPDATE -- Blanchet Living Review 2024 + arXiv:2304.11185]**
 > Blanchet et al. (Living Reviews in Relativity, July 2024) complete the 4PN equations
 > of motion and derive the 4.5PN GW phase for quasi-circular spinless orbits in the
-> MPM-PN formalism. arXiv:2304.11185 (Blanchet, Buonanno, Henry 2024) derives the
-> 4.5PN phase coefficient explicitly in closed form.
+> MPM-PN formalism. arXiv:2304.11185 (Blanchet, Faye, Henry, Larrouturou, Trestini,
+> "Gravitational-Wave Phasing of Quasi-Circular Compact Binary Systems to the
+> Fourth-and-a-Half post-Newtonian Order", PRL 131, 121402, 2023) gives that phasing.
 >
 > Beyond 3.5PN, the next gaps in our implementation are:
 > - NNLO spin-orbit at 3.5PN: ~8 additional PN coefficient terms (Blanchet 2011,
@@ -349,16 +357,13 @@ for non-captured rays with O(1) cost per geodesic (one elliptic function evaluat
 compared to O(N_steps) for RK4. This is especially impactful for near-photon-sphere
 orbits where RK4 requires hundreds of steps.
 
-> **[2023 UPDATE -- Dyson et al., arXiv:2302.03704]**
-> Dyson, Warburton, and Barack (2023) extend the Gralla-Lupsasca analytic framework
-> to cover PLUNGING orbits from the ISSO down to the horizon, using Jacobi elliptic
-> functions in Boyer-Lindquist + Mino-time parameterization. This closes the gap in
-> Gralla-Lupsasca 2020 that left plunging trajectories (the most physically relevant
-> case for accreting matter and light captured near r_+) as a numerical fallback.
-> Reference implementation: KerrGeodesics package in the Black Hole Perturbation
-> Toolkit (BHPT), available at https://bhptoolkit.org/KerrGeodesics (MIT license;
-> Mathematica + Python). Effort estimate revised down from ~800 LOC to ~500 LOC
-> because plunging orbit coverage is now cleanly documented.
+> **[2023 UPDATE -- Dyson and van de Meent, arXiv:2302.03704]**
+> Dyson and van de Meent, "Kerr-fully Diving into the Abyss: Analytic Solutions to
+> Plunging Geodesics in Kerr" (2023), give closed-form solutions for TIMELIKE plunging
+> geodesics. They cover infalling matter, not photons, so they do not change the
+> effort estimate for analytic photon ray tracing. Reference implementation:
+> KerrGeodesics package in the Black Hole Perturbation Toolkit (BHPT),
+> https://bhptoolkit.org/KerrGeodesics.
 
 ---
 
@@ -400,19 +405,13 @@ Outgoing rays (post-turning-point) use the standard KS form with guarded
 inv_delta, which is numerically safe since Delta is bounded away from 0
 for outgoing rays.  Both branches agree at turning points (sqrtR = 0).
 
-> **[2023 UPDATE -- arXiv:2310.02321 -- CRITICAL CORRECTION]**
-> "Not All Spacetime Coordinates for General-Relativistic Ray Tracing Are Created
-> Equal" (2023) demonstrates that INGOING Kerr-Schild coordinates develop constraint
-> violations in BACKWARD ray tracing (i.e., tracing from the camera/observer toward
-> the source). For a renderer that traces rays from the camera inward toward the black
-> hole, the correct choice is OUTGOING Kerr-Schild coordinates, defined as:
->
->   g_mu_nu = eta_mu_nu + 2H * l_mu * l_nu
->   with l^mu = (1, +sqrt(Delta/Sigma), 0, a/Sigma)  [outgoing null vector]
->
-> The ingoing null vector has a MINUS sign: l^mu = (1, -sqrt(Delta/Sigma), 0, a/Sigma).
-> Confusing the two is a common source of coordinate instability in GPU raytracers.
-> NOTE: Item F in the roadmap now specifies OUTGOING Kerr-Schild accordingly.
+> **[2023 UPDATE -- arXiv:2310.02321]**
+> Bozzola, Chan, and Paschalidis, "Not All Spacetime Coordinates for
+> General-Relativistic Ray Tracing Are Created Equal", PRD 108, 084004 (2023), report
+> that rays whose momentum points toward or away from the horizon lead to different
+> solutions near it, and that different coordinate systems give the same images up to
+> numerical errors. The paper sets no coordinate requirement for backward ray
+> tracing.
 
 ---
 
@@ -470,9 +469,7 @@ singularity at the horizon. Estimated effort: ~200 LOC in integrator.glsl.
 The Gralla-Lupsasca (2020) analytic solution via Jacobi elliptic functions and
 Mino-time integrals replaces the RK4 loop for non-captured rays with O(1) cost
 per geodesic. Boost.Math 1.90.0 (already present) provides `boost::math::jacobi_sn`,
-`jacobi_cn`, `jacobi_dn`. Estimated effort: ~500 LOC in CPU path (revised down from
-~800 LOC -- Dyson et al. 2023 arXiv:2302.03704 covers plunging orbits cleanly; see
-Section 2.6d).
+`jacobi_cn`, `jacobi_dn`. Estimated effort: ~500 LOC in CPU path.
 
 ### 3.3 Compute Raytracer Parity (Issue-008, ACTIVE)
 
@@ -519,8 +516,8 @@ accuracy where it matters with fewer steps elsewhere.
 | Gap                                       | Type      | Priority | Effort (LOC est.) | Status |
 |-------------------------------------------|-----------|----------|--------------------|--------|
 | GRMHD solver (native)                     | Physics   | CRITICAL | 50k+ (out of scope)| Out of scope |
-| Radiative transfer (volumetric RTE)       | Physics   | HIGH     | ~10k               | **COMPLETE** -- GLSL D2/D3 + CUDA d_trace_geodesic_rte(); 5/5 CUDA tests |
-| Polarized radiative transfer (Stokes)     | Physics   | HIGH     | ~5k                | **COMPLETE** -- GLSL D4 + CUDA d_trace_geodesic_stokes(); 6/6 CUDA tests |
+| Radiative transfer (volumetric RTE)       | Physics   | HIGH     | ~10k               | **SHADING MODEL** -- GLSL D2/D3 + CUDA d_trace_geodesic_rte() march Mino time with alpha = k*j; covariant transport (affine path, Kirchhoff j/alpha) absent; CPU rte_integrator.h slab step tested |
+| Polarized radiative transfer (Stokes)     | Physics   | HIGH     | ~5k                | **SHADING MODEL** -- GLSL D4 + CUDA d_trace_geodesic_stokes() use a global EVPA and no frame transport; covariant polarized transport absent |
 | synchrotron G(x) fix (x~1-10 regime)     | Physics   | HIGH     | ~30                | **COMPLETE** -- CPU K_{2/3} Bessel + GPU 256-entry LUT (commits 0c17b69/a5ba31f) |
 | NNLO spin-orbit PN phase (3.5PN)         | Physics   | HIGH     | ~150               | **COMPLETE** -- Blanchet 2011 TaylorF2; 3PN+3.5PN (commit fb532d5) |
 | OpenGL PBO GPU upload for GRMHD           | Perf      | HIGH     | ~200               | **COMPLETE** -- GrmhdPBOUploader + GRMHDGpuUploader; 6.2.4 |
@@ -618,56 +615,45 @@ This section consolidates the six actionable research findings incorporated into
 document on 2026-02-27. Each item updates an earlier gap analysis with current
 literature and affects implementation estimates or coordinate choices.
 
-### 6.1 Dyson et al. 2023 -- Plunging Kerr Geodesics (arXiv:2302.03704)
+### 6.1 Dyson and van de Meent 2023 -- Plunging Kerr Geodesics (arXiv:2302.03704)
 
 **Relevance:** Section 2.6d, Section 3.2.
 
-Dyson, Warburton, and Barack extend the Gralla-Lupsasca 2020 analytic Kerr geodesic
-framework to cover PLUNGING orbits from the ISSO to the horizon. The closed-form
-solution uses Jacobi elliptic functions in Boyer-Lindquist coordinates parameterized
-by Mino time, and handles the branch structure of the radial potential during plunge.
+Dyson and van de Meent, "Kerr-fully Diving into the Abyss: Analytic Solutions to
+Plunging Geodesics in Kerr" (2023), solve TIMELIKE plunging geodesics in closed form.
 The Black Hole Perturbation Toolkit (BHPT) hosts a reference implementation in
-KerrGeodesics (Mathematica + Python, MIT license): https://bhptoolkit.org/KerrGeodesics.
+KerrGeodesics: https://bhptoolkit.org/KerrGeodesics.
 
-Impact on LACUNAE estimate: effort for analytic geodesic implementation revised from
-~800 LOC to ~500 LOC because the plunging-orbit branch is now cleanly documented and
-tested in the BHPT package, removing the largest uncertainty.
+Impact on LACUNAE estimate: none for the photon ray tracer. The paper treats massive
+particles, so it does not bear on the analytic photon-geodesic effort in Section 3.2.
 
-### 6.2 KS Coordinate Stability 2023 (arXiv:2310.02321)
+### 6.2 Ray-Tracing Coordinates 2023 (arXiv:2310.02321)
 
 **Relevance:** Section 2.7, Item F in the roadmap (`../developer-guide/roadmap.md`).
 
-"Not All Spacetime Coordinates for General-Relativistic Ray Tracing Are Created Equal"
-demonstrates that backward ray tracing (from observer/camera toward source) is
-numerically stable only in OUTGOING Kerr-Schild coordinates. Ingoing Kerr-Schild
-produces constraint violations in this tracing direction.
+Bozzola, Chan, and Paschalidis, "Not All Spacetime Coordinates for
+General-Relativistic Ray Tracing Are Created Equal", PRD 108, 084004 (2023), report
+that rays whose momentum points toward or away from the horizon lead to different
+solutions, and that different coordinates give the same images up to numerical
+errors. The coordinate choice for Item F is therefore a numerical-accuracy decision
+to be measured, not a correctness constraint set by this paper.
 
-Correction to roadmap Item F: the roadmap previously said "ingoing Kerr-Schild."
-The correct target is OUTGOING Kerr-Schild:
-
-  g_mu_nu = eta_mu_nu + 2H * l_mu * l_nu
-  H = Mr / (r^2 + a^2 cos^2(theta))
-  l^mu outgoing = (1, +sqrt(Delta/Sigma), 0, a/Sigma)   [CORRECT for backward tracing]
-  l^mu ingoing  = (1, -sqrt(Delta/Sigma), 0, a/Sigma)   [WRONG for backward tracing]
-
-This is a critical correctness constraint, not a performance preference.
-
-### 6.3 EHT Sgr A* Polarization 2024 (DOI:10.3847/2041-8213/ad2df1)
+### 6.3 EHT Sgr A* Paper VIII 2024 (DOI:10.3847/2041-8213/ad2df1)
 
 **Relevance:** Section 2.2.
 
-The Event Horizon Telescope 2024 Sgr A* polarimetry paper (ApJL 2024) measures
-~25% linear polarization fraction with a coherent magnetic field structure spiraling
-at the boundary of the photon ring. The topology is consistent with M87* observations,
-confirming magnetically arrested disk (MAD) structure in both objects.
+EHT Collaboration, "First Sagittarius A* Event Horizon Telescope Results. VIII.
+Physical Interpretation of the Polarized Ring", ApJL 964, L26 (2024). Only the
+paper's metadata was checked; no polarization fraction is quoted.
 
-This result establishes the primary near-future observational validation target:
-polarized radiative transfer (Stokes I, Q, U, V transport via 4x4 Mueller matrix
-along geodesics). Without this capability, the simulation cannot produce synthetic
-VLBI visibilities or polarimetric maps for direct comparison to EHT data.
+The paper sets an observational validation target: polarized radiative transfer
+(Stokes I, Q, U, V transport via 4x4 Mueller matrix along geodesics). Without
+covariant transport the renderer cannot produce synthetic polarimetric maps for
+direct comparison to EHT data.
 
-Current status: polarized RT is completely absent. The Broderick-Blandford (2004)
-formalism is the correct starting point.
+Current status: the GPU Stokes path is a shading model (Section 2.2); covariant
+polarized transport is absent. The Broderick-Blandford (2004) formalism, or a
+Walker-Penrose/tetrad transport as in ipole, is the starting point.
 
 ### 6.4 IPOLE/PATOKA Two-Temperature Synchrotron (AFD Illinois, 2024)
 
@@ -694,8 +680,8 @@ Reference: https://github.com/AFD-Illinois/ipole
 
 Blanchet et al. (Living Reviews in Relativity, July 2024) completes the 4PN equations
 of motion for two-body compact binaries in the Multipolar Post-Minkowskian (MPM-PN)
-formalism. arXiv:2304.11185 (Blanchet, Buonanno, Henry 2024) derives the 4.5PN
-gravitational wave phase for quasi-circular spinless orbits in closed form.
+formalism. arXiv:2304.11185 (Blanchet, Faye, Henry, Larrouturou, Trestini, PRL 131,
+121402, 2023) gives the 4.5PN gravitational wave phasing for quasi-circular orbits.
 
 Near-term actionable item: NNLO spin-orbit correction at 3.5PN (Blanchet et al. 2011,
 arXiv:1104.5659). This adds ~8 additional PN coefficient terms to gw_phase_3p5pn
@@ -728,19 +714,25 @@ Do not preemptively add LOD complexity to the single-resolution implementation.
   Inspiralling Compact Binaries.* Living Reviews in Relativity, 17, 2.
 - Blanchet, L. (2024). *Gravitational Radiation from Post-Newtonian Sources and
   Inspiralling Compact Binaries.* Living Reviews in Relativity, updated July 2024.
-- Blanchet, L., Buonanno, A., Henry, G. (2024). *Tail effects in the third
-  post-Newtonian gravitational wave energy flux.* arXiv:2304.11185.
+- Blanchet, L., Faye, G., Henry, Q., Larrouturou, F., Trestini, D. (2023).
+  *Gravitational-Wave Phasing of Quasi-Circular Compact Binary Systems to the
+  Fourth-and-a-Half post-Newtonian Order.* Phys. Rev. Lett. 131, 121402.
+  arXiv:2304.11185.
 - Blanchet, L. et al. (2011). *Gravitational-wave phasing of spinning compact
   binaries at 3.5 post-Newtonian order.* arXiv:1104.5659.
+- Bozzola, G., Chan, C.-K., Paschalidis, V. (2023). *Not All Spacetime Coordinates for
+  General-Relativistic Ray Tracing Are Created Equal.* Phys. Rev. D 108, 084004.
+  arXiv:2310.02321.
 - Broderick, A., Blandford, R. (2004). *Covariant magnetoionic theory I.* MNRAS 342.
 - Cutler, C., Flanagan, E. (1994). *Gravitational waves from merging compact
   binaries: How accurately can one extract the binary's parameters.* Phys. Rev. D 49.
 - Dafermos, M., Luk, J. (2017). *The interior of dynamical vacuum black holes I.*
   arXiv:1710.01722.
-- Dyson, H., Warburton, N., Barack, L. (2023). *Analytic Kerr geodesics: plunging
-  orbits.* arXiv:2302.03704.
-- EHT Collaboration (2024). *First Sgr A* Results. Paper IX: Polarimetry.*
-  ApJL, DOI:10.3847/2041-8213/ad2df1.
+- Dyson, C., van de Meent, M. (2023). *Kerr-fully Diving into the Abyss: Analytic
+  Solutions to Plunging Geodesics in Kerr.* arXiv:2302.03704.
+- EHT Collaboration (2024). *First Sagittarius A* Event Horizon Telescope Results.
+  VIII. Physical Interpretation of the Polarized Ring.* ApJL 964, L26.
+  DOI:10.3847/2041-8213/ad2df1.
 - Fujita, R., Hikida, W. (2009). *Analytical solutions of bound timelike geodesic
   orbits in Kerr spacetime.* Class. Quant. Grav. 26, 135002.
 - Gralla, S.E., Lupsasca, A. (2020). *Lensing by Kerr black holes.* Phys. Rev. D 101.
@@ -757,7 +749,5 @@ Do not preemptively add LOD complexity to the single-resolution implementation.
 - Poisson, E., Israel, W. (1990). *Internal structure of black holes.* Phys. Rev. D 41.
 - Teukolsky, S.A. (1972). *Rotating black holes: separable wave equations.*
   Phys. Rev. Lett. 29, 1114.
-- Vos, J. et al. (2023). *Not All Spacetime Coordinates for General-Relativistic Ray
-  Tracing Are Created Equal.* arXiv:2310.02321.
 - Yoshida, H. (1990). *Construction of higher order symplectic integrators.*
   Phys. Lett. A 150, 262.

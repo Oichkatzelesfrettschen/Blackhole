@@ -328,9 +328,14 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   dustColor *= mix(1.0, beaming, dopplerStrength);
 
   // Kerr showcase shots need asymmetric energy placement, not a globally
-  // brighter disk. Bias the inner emission toward the approaching/prograde side.
-  vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
-  float spinView = 0.5 + 0.5 * dot(normalize(cross(spinAxis, normalize(pos))), -normalize(rayDir));
+  // brighter disk. Bias the inner emission toward the side where the disk
+  // flow approaches the camera. The disk orbits about +y at every spin sign
+  // (its ISCO takes the counter-rotating branch when kerrSpin < 0), so the
+  // flow axis stays +y, as diskDopplerBoost above keeps one flow sense for
+  // either spin sign; the spin magnitude only sets the strength.
+  vec3 diskFlowAxis = vec3(0.0, 1.0, 0.0);
+  vec3 diskFlowDir = normalize(cross(diskFlowAxis, normalize(pos)));
+  float spinView = 0.5 + 0.5 * dot(diskFlowDir, -normalize(rayDir));
   float anisotropicBoost = mix(1.0, mix(0.82, 1.55, spinView), smoothstep(0.05, 0.85, abs(kerrSpin)));
   dustColor *= anisotropicBoost;
 
@@ -371,7 +376,8 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
 
   // Apply gravitational redshift to disk emission
   if (enableRedshift > 0.5) {
-    float z = gravitationalRedshift(r, schwarzschildRadius);  // Use cached radius r
+    // No-LUT fallback: the LUT's ZAMO-lapse model and cap (redshift.glsl).
+    float z = zamoRedshiftEquatorial(r, schwarzschildRadius, kerrSpin);
     if (useLUTs > 0.5) {
       float rNorm = r / max(schwarzschildRadius, EPSILON);
       float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
@@ -563,7 +569,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
 
   // Apply gravitational redshift to background light
   if (enableRedshift > 0.5 && minRadiusReached < schwarzschildRadius * 10.0) {
-    float z = gravitationalRedshift(minRadiusReached, schwarzschildRadius);
+    float z = zamoRedshiftEquatorial(minRadiusReached, schwarzschildRadius, kerrSpin);
     if (useLUTs > 0.5) {
       float rNorm = minRadiusReached / max(schwarzschildRadius, EPSILON);
       float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);

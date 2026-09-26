@@ -9,9 +9,9 @@
  * imaginary at r_ergo). At zero spin the lapse and the signal delay reduce
  * exactly to the Schwarzschild BlackholeTimeField.
  *
- * physics::kerrTimeDilation is deliberately NOT used: its docstring claims a
- * ZAMO quantity but its body returns sqrt(-g_tt), the static-observer
- * expression (kerr.h:360). The lapse here is built from the metric primitives.
+ * The lapse is the ZAMO expression sqrt(Sigma Delta / A) that
+ * physics::kerrZamoLapse also evaluates; physics::kerrStaticTimeDilation is
+ * the static-observer rate, which has no value inside the ergoregion.
  */
 
 #ifndef BLACKHOLE_GAME_KERR_TIME_FIELD_H
