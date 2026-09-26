@@ -210,6 +210,9 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.disk.adiskDensityH      = 2.1f;
     rs.disk.adiskHeight        = 0.42f;
     rs.disk.adiskLit           = 0.24f;
+    // Composition exposures sit near 3; brightness * exposure ~ 0.24 matches
+    // the interactive default (0.25 at exposure 1).
+    rs.disk.diskBrightness     = 0.08f;
     rs.disk.dopplerStrength    = 1.15f;
     rs.disk.photonSphereGlowStrength = 1.15f;
     rs.post.bloomIterations    = 5;
@@ -364,6 +367,11 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
     camMutable   = rs.recording.recordCurrentKf.cam;
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin     = rs.recording.recordCurrentKf.kerrSpin;
+  }
+  // Every profile writes its own spin above; --record-spin overrides it last.
+  if (cli.hasRecordSpin) {
+    rs.physicsCore.kerrSpin = std::clamp(cli.recordSpin, -0.998f, 0.998f);
+    rs.recording.recordCurrentKf.kerrSpin = rs.physicsCore.kerrSpin;
   }
 }
 

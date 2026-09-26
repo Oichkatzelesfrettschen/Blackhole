@@ -165,9 +165,12 @@ struct RenderState {
     float photonSphereGlowStrength = 1.0f;
     // Physical tracer disk emission (bhDiskEmission / d_disk_color): the
     // blackbody temperature at the Page-Thorne flux peak [K] and a display
-    // scale on the bolometric intensity g^4 F / F_peak.
+    // scale on the bolometric intensity g^4 F / F_peak. With toneExposure 1,
+    // 0.25 puts the face-on flux peak in ACES's mid-tones below the 0.4 bloom
+    // threshold, so only the approaching side's g^4 (up to about 3 at a = 0.6
+    // near edge-on) blooms and reaches the shoulder.
     float diskPeakTemperature = 6500.0f;
-    float diskBrightness = 1.0f;
+    float diskBrightness = 0.25f;
     // 0 = Physical (g = 1 / (u^t (1 - Omega lambda))), 1 = Interstellar:
     // g = 1 for color and intensity with lensing kept, the film's disk
     // (James et al. 2015, sec. 4.2; see physics/disk_transfer.h).
@@ -196,11 +199,12 @@ struct RenderState {
     bool enablePhotonSphere = false;
     bool enableRedshift = false;
     // Fragment path: true traces Kerr null geodesics (kerr.glsl, the same
-    // integrator as the compute and CUDA paths); false selects the legacy
-    // artistic tracer in blackhole_main.frag, which bends light with the
-    // Schwarzschild acceleration only and imitates spin with screen-space
-    // tinting.
-    bool physicalRayTracer = false;
+    // integrator as the compute and CUDA paths) and shades the disk with the
+    // Page-Thorne flux and the orbiting-emitter g-factor (bhDiskEmission);
+    // false selects the legacy artistic tracer in blackhole_main.frag, which
+    // bends light with the Schwarzschild acceleration only and imitates spin
+    // with screen-space tinting.
+    bool physicalRayTracer = true;
   } physicsCore;
 
   struct HawkingGroup {

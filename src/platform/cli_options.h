@@ -38,6 +38,8 @@ struct CliOptions {
   bool        hasRecordFov = false;
   float       recordExposure = 0.0f;
   bool        hasRecordExposure = false;
+  float       recordSpin = 0.0f;
+  bool        hasRecordSpin = false;
   float       recordSweepDeg = 0.0f;
   bool        hasRecordSweep = false;
   float       recordFrameX = 0.0f;

@@ -253,9 +253,14 @@ void applyOverlayEnvironment(RenderState &rs) {
   }
 }
 
-// BLACKHOLE_DISK_TRANSFER selects the disk transfer mode at startup:
-// "interstellar" forces g = 1 (the film's disk), "physical" the g-factor.
+// Startup disk overrides. BLACKHOLE_PHYSICAL_TRACER=0 selects the legacy
+// fragment tracer and 1 the Kerr tracer, for A/B captures of the two paths;
+// BLACKHOLE_DISK_TRANSFER=interstellar forces g = 1 (the film's disk) and
+// =physical keeps the g-factor.
 void applyDiskEnvironment(RenderState &rs) {
+  if (const char *tracerEnv = std::getenv("BLACKHOLE_PHYSICAL_TRACER")) {
+    rs.physicsCore.physicalRayTracer = std::string(tracerEnv) != "0";
+  }
   const char *transferEnv = std::getenv("BLACKHOLE_DISK_TRANSFER");
   if (transferEnv == nullptr) {
     return;
