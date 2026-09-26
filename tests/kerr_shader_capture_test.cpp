@@ -405,3 +405,32 @@ TEST_F(KerrShaderCaptureTest, RendererScheduleMatchesBardeenWithinTwoPercent) {
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }
+
+TEST_F(KerrShaderCaptureTest, PixelRightOfCenterMapsAlongCameraRight) {
+  // bhRayDir maps screen offsets onto the (right, up, forward) columns of the
+  // camera basis without mirroring: a pixel right of and above center yields
+  // positive right and up components.
+  const GLuint program = bhtest::createComputeProgram(R"(
+#version 460 core
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+#include "include/interop_raygen.glsl"
+void main() {
+  mat3 basis = mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0));
+  vec3 d = bhRayDir(vec2(300.0, 260.0), vec2(400.0, 400.0), 1.0, basis);
+  result[0] = d.x;
+  result[1] = d.y;
+  result[2] = d.z;
+}
+)");
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 3), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 3);
+  EXPECT_GT(out[0], 0.0F);
+  EXPECT_GT(out[1], 0.0F);
+  EXPECT_GT(out[2], 0.0F);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}

@@ -86,6 +86,43 @@ TEST(KerrNullGeodesic, CarterConstantsReproduceInitialVelocities) {
   }
 }
 
+TEST(KerrNullGeodesic, AxialStartHasFiniteConstants) {
+  // On the spin axis lz = 0 and the lz^2 cot^2 term must vanish rather than
+  // evaluate 0 * cos^2 / 0.
+  const physics::KerrNullGeodesic g =
+      physics::kerrNullGeodesicFromBL(12.0, 0.0, 0.0, -0.8, 0.05, 0.0, K_UNIT_MASS, 0.9);
+  EXPECT_TRUE(std::isfinite(g.consts.q));
+  const physics::KerrPotentials p =
+      physics::kerrPotentials(12.0, 1e-9, K_UNIT_MASS, 0.9, g.consts);
+  EXPECT_NEAR(p.rPot, g.state.vr * g.state.vr, 1e-8 * g.state.vr * g.state.vr);
+}
+
+TEST(KerrNullGeodesic, ErgoregionStartPrefersPositiveEnergyRoot) {
+  // Inside the ergoregion (a = 0.9, r = 1.6, equator) d/dt is spacelike and a
+  // coordinate direction has two future-directed null completions. Using
+  // directions built in the zero-angular-momentum frame, the initializer
+  // must return the E > 0 completion, on shell (R(r0) = vr^2).
+  const double a = 0.9;
+  const double r = 1.6;
+  const double sigma = r * r;
+  const double delta = (r * r) - (2.0 * r) + (a * a);
+  const double bigA = ((r * r) + (a * a)) * ((r * r) + (a * a)) - (a * a * delta);
+  const double alpha = std::sqrt(sigma * delta / bigA);
+  const double omega = 2.0 * a * r / bigA;
+  const double varpi = std::sqrt(bigA / sigma);
+  for (int k = 0; k < 16; ++k) {
+    const double psi = 2.0 * std::numbers::pi * (static_cast<double>(k) + 0.5) / 16.0;
+    const double kr = std::cos(psi) * std::sqrt(delta / sigma);
+    const double kphi = (omega / alpha) + (std::sin(psi) / varpi);
+    const physics::KerrNullGeodesic g = physics::kerrNullGeodesicFromBL(
+        r, 0.5 * std::numbers::pi, 0.0, kr, 0.0, kphi, K_UNIT_MASS, a);
+    ASSERT_GT(g.state.r, 0.0) << "psi=" << psi;
+    const physics::KerrPotentials p =
+        physics::kerrPotentials(r, 0.5 * std::numbers::pi, K_UNIT_MASS, a, g.consts);
+    EXPECT_NEAR(p.rPot, g.state.vr * g.state.vr, 1e-9 * std::max(1.0, p.rPot)) << "psi=" << psi;
+  }
+}
+
 TEST(KerrNullGeodesic, EquatorialRayStaysInEquatorialPlane) {
   // q = 0 at theta = pi/2 gives Theta = 0 and Theta' = 0 in Carter's form;
   // an lz^2 / sin^2 polar potential would read -lz^2 there instead.

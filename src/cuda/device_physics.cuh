@@ -432,21 +432,30 @@ __device__ __forceinline__ void d_kerr_init_geodesic(float3 pos, float3 dir, flo
     float gthth  = sigma;
     float gphph  = fmaf(r * r + a * a, 1.0f, f * a * a * sin2) * sin2;
 
-    /* gtt (k^t)^2 + 2 gtphi kphi k^t + spatial = 0. Outside the ergoregion
-     * the roots have opposite signs; the future-directed root is the larger. */
+    /* gtt (k^t)^2 + 2 gtphi kphi k^t + spatial = 0. */
     float spatial = fmaf(grr, kr * kr,
                     fmaf(gthth, ktheta * ktheta, gphph * kphi * kphi));
     float hb      = gtphi * kphi;
     float disc    = fmaf(hb, hb, -gtt * spatial);
     float kt = 1.0f;
     if (disc >= 0.0f && fabsf(gtt) > D_EPSILON) {
+        /* Future-directed root (k^t > 0); inside the ergoregion both can be,
+         * and the E > 0 root, which can connect to infinity, is preferred. */
         float sq_d = sqrtf(disc);
-        kt = fmaxf((-hb + sq_d) / gtt, (-hb - sq_d) / gtt);
+        float kt_a = (-hb + sq_d) / gtt;
+        float kt_b = (-hb - sq_d) / gtt;
+        float energy_a = fmaf(-gtt, kt_a, -gtphi * kphi);
+        kt = (kt_a > 0.0f && (energy_a > 0.0f || kt_b <= 0.0f)) ? kt_a : kt_b;
     }
 
     float E_raw  = fmaf(-gtt, kt, -gtphi * kphi);
     float Lz_raw = fmaf(gtphi, kt,  gphph * kphi);
-    float inv_E = (E_raw > D_EPSILON) ? (1.0f / E_raw) : 1.0f;
+    /* E <= 0 photons cannot reach infinity; r = 0 reads as captured. */
+    if (E_raw <= D_EPSILON) {
+        ray.r = 0.0f;
+        return;
+    }
+    float inv_E = 1.0f / E_raw;
     c.Lz = Lz_raw * inv_E;
 
     float p_theta = sigma * ktheta * inv_E;
@@ -1198,7 +1207,9 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
 
     float3 ray_dir = d_normalize(d_sub(hit.hit_point, cam_pos));
     float3 view_dir = d_scale(ray_dir, -1.0f);
-    float3 vel_dir = d_normalize(make_f3(-hit.hit_point.z, 0.0f, hit.hit_point.x));
+    /* Physics frame: the disk lies in the xy plane with prograde rotation
+     * about +z (d_world_to_physics). */
+    float3 vel_dir = d_normalize(make_f3(-hit.hit_point.y, hit.hit_point.x, 0.0f));
 
     /* WHY: GLSL interop_trace.glsl uses flux*2.0 as base intensity. d_adisk_lit matches
      * the adiskLit uniform that record mode sets to 0.35 for cinematic brightness balance. */
@@ -1236,10 +1247,10 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
         1.0f + inner_weight * (0.92f * bright_sector + 0.22f * rim_sector + 0.04f * counter_sector);
     intensity *= sector_shadow * sector_lift;
 
-    float grazing = powf(fmaxf(0.0f, fminf(1.0f - fabsf(ray_dir.y), 1.0f)), 1.5f);
+    float grazing = powf(fmaxf(0.0f, fminf(1.0f - fabsf(ray_dir.z), 1.0f)), 1.5f);
     color = d_scale(color, 1.0f + (1.55f - 1.0f) * grazing);
 
-    float normalized_v = fabsf(hit.hit_point.y) / fmaxf(0.42f, D_EPSILON);
+    float normalized_v = fabsf(hit.hit_point.z) / fmaxf(0.42f, D_EPSILON);
     float midplane_boost = powf(fmaxf(0.0f, fminf(1.0f - normalized_v, 1.0f)), 0.45f);
     float crescent_boost = 1.0f + (1.8f - 1.0f) * (midplane_boost * (1.0f - radial01));
     color = d_scale(color, crescent_boost);
@@ -2028,11 +2039,11 @@ __device__ __forceinline__ float3 d_ray_dir(int px, int py) {
     u += d_frame_shift_x;
     v += d_frame_shift_y;
 
-    /* -u: matches GLSL -uv.x (horizontal mirror to right-hand camera convention).
+    /* +u: basis col0 = right (buildCameraBasis), matching GLSL +uv.x.
      * -v: py=0 is image-top in CUDA; gl_FragCoord.y=0 is image-bottom in GLSL,
      *     so GLSL uv.y is positive-at-top, CUDA v is negative-at-top.
      * +1: basis col2 = forward, so local +z maps to world forward (toward BH). */
-    float3 local_dir = d_normalize(make_f3(-u, -v, 1.0f));
+    float3 local_dir = d_normalize(make_f3(u, -v, 1.0f));
     return d_mat3_mul(d_cam_basis, local_dir);
 }
 

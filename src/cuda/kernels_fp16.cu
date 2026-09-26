@@ -154,8 +154,9 @@ __launch_bounds__(256, 4)
         goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
       }
 
-      /* Kerr step in full FP32 precision */
-      d_kerr_step(kr, rs, aTrace, c, dt);
+      /* Kerr step in full FP32 precision, with the same adaptive Mino step
+       * as the FP32 and H2 kernels and the GLSL tracer. */
+      d_kerr_step(kr, rs, aTrace, c, d_adaptive_step(kr.r, rs, rHorizon, dt));
 
       /* Demote back to FP16 for storage */
       hs = kerrRayToHalf(kr);

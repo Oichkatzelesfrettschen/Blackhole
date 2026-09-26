@@ -475,8 +475,10 @@ struct KerrPotentials {
  * fixes k^t (future root); E = -k_t and lz = k_phi follow, and the result is
  * normalized to E = 1. q is Carter's constant, p_theta^2 - a^2 cos^2 +
  * lz^2 cot^2 with p_theta = Sigma k^theta / E, so that R(r) = vr^2 and
- * Theta(theta) = vtheta^2 hold at the start with vr = Sigma k^r / E. The GPU
- * initializers (kerrInitGeodesic, d_kerr_init_geodesic) compute the same quantities.
+ * Theta(theta) = vtheta^2 hold at the start with vr = Sigma k^r / E. A photon
+ * with E <= 0 (inside the ergoregion only) returns state.r = 0, captured. The
+ * GPU initializers (kerrInitGeodesic, d_kerr_init_geodesic) compute the same
+ * quantities.
  */
 struct KerrNullGeodesic {
   KerrGeodesicConsts consts;
@@ -499,24 +501,41 @@ struct KerrNullGeodesic {
   const double grr = sigma / delta;
   const double gphph = ((r * r) + (a * a) + (f * a * a * sin2)) * sin2;
 
-  // g_tt kt^2 + 2 g_tphi kphi kt + spatial = 0; outside the ergoregion the
-  // roots have opposite signs and the positive one is future-directed.
+  // g_tt kt^2 + 2 g_tphi kphi kt + spatial = 0.
   const double spatial = (grr * kr * kr) + (sigma * ktheta * ktheta) + (gphph * kphi * kphi);
   const double hb = gtphi * kphi;
   const double disc = std::max((hb * hb) - (gtt * spatial), 0.0);
+  // Outside the ergoregion (g_tt < 0) the roots have opposite signs and the
+  // positive one is the future-directed photon. Inside it both roots can be
+  // future-directed (k^t > 0): the coordinate direction then fixes the
+  // physical direction only together with a local observer frame. The root
+  // with E > 0 is the one that can connect to infinity, so it is preferred.
   const double rootA = (-hb + std::sqrt(disc)) / gtt;
   const double rootB = (-hb - std::sqrt(disc)) / gtt;
-  const double kt = std::max(rootA, rootB);
+  const double energyA = -((gtt * rootA) + (gtphi * kphi));
+  const double kt = (rootA > 0.0 && (energyA > 0.0 || rootB <= 0.0)) ? rootA : rootB;
 
   const double eRaw = -((gtt * kt) + (gtphi * kphi));
   const double lzRaw = (gtphi * kt) + (gphph * kphi);
-  const double invE = 1.0 / eRaw;
 
   KerrNullGeodesic g{};
+  if (eRaw <= 0.0) {
+    // A future-directed photon with E <= 0 exists only inside the ergoregion
+    // and cannot reach infinity; state.r = 0 marks it captured, as the GPU
+    // initializers do.
+    g.consts.e = 1.0;
+    g.state.r = 0.0;
+    g.state.theta = theta;
+    g.state.phi = phi;
+    return g;
+  }
+  const double invE = 1.0 / eRaw;
   g.consts.e = 1.0;
   g.consts.lz = lzRaw * invE;
   const double pTheta = sigma * ktheta * invE;
-  g.consts.q = (pTheta * pTheta) - (a * a * cos2) + (g.consts.lz * g.consts.lz * cos2 / sin2);
+  // On the axis lz = 0 exactly and the cotangent term vanishes.
+  const double cot2 = (sin2 > 0.0) ? cos2 / sin2 : 0.0;
+  g.consts.q = (pTheta * pTheta) - (a * a * cos2) + (g.consts.lz * g.consts.lz * cot2);
   g.state.r = r;
   g.state.theta = theta;
   g.state.phi = phi;

@@ -176,20 +176,34 @@ void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
   float gthth  = sigma;
   float gphph  = (r * r + a * a + f * a * a * sin2) * sin2;
 
-  // gtt (k^t)^2 + 2 gtphi kphi k^t + spatial = 0. Outside the ergoregion the
-  // roots have opposite signs; the future-directed root is the larger one.
+  // gtt (k^t)^2 + 2 gtphi kphi k^t + spatial = 0. Outside the ergoregion
+  // the roots have opposite signs and the positive one is the future-directed
+  // photon. Inside it both can be future-directed (k^t > 0): a coordinate
+  // direction fixes the physical direction only together with a local
+  // observer frame, and the E > 0 root, the one that can connect to infinity,
+  // is preferred (physics::kerrNullGeodesicFromBL applies the same rule).
   float spatial = grr * kr * kr + gthth * ktheta * ktheta + gphph * kphi * kphi;
   float hb      = gtphi * kphi;
   float disc    = hb * hb - gtt * spatial;
   float kt = 1.0;
   if (disc >= 0.0 && abs(gtt) > KERR_EPSILON) {
     float sqD = sqrt(disc);
-    kt = max((-hb + sqD) / gtt, (-hb - sqD) / gtt);
+    float ktA = (-hb + sqD) / gtt;
+    float ktB = (-hb - sqD) / gtt;
+    float energyA = -(gtt * ktA + gtphi * kphi);
+    kt = (ktA > 0.0 && (energyA > 0.0 || ktB <= 0.0)) ? ktA : ktB;
   }
 
   float E_raw  = -(gtt * kt + gtphi * kphi);
   float Lz_raw = gtphi * kt + gphph * kphi;
-  float invE = (E_raw > KERR_EPSILON) ? (1.0 / E_raw) : 1.0;
+  // A photon with E <= 0 (possible only inside the ergoregion) cannot reach
+  // infinity, so it cannot bring the sky to the camera: start it at r = 0,
+  // which every trace loop treats as captured.
+  if (E_raw <= KERR_EPSILON) {
+    ray.r = 0.0;
+    return;
+  }
+  float invE = 1.0 / E_raw;
   c.Lz = Lz_raw * invE;
 
   float ptheta = sigma * ktheta * invE;
