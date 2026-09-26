@@ -48,7 +48,9 @@ quantitative consequences (shadow widths, ray counts) rest on that agent's scrat
    mirrored hole (code b = +4.0M for a physical -4.0M). The docs' "outgoing" KS form is the
    ingoing one. Fix together with item 2.
 4. **The default desktop view is a Schwarzschild-only beauty tracer** (01 F4, tracked in
-   issues #14/#15). The spin slider changes tint only.
+   issues #14/#15). Spin never changes the geodesic geometry there; it changes only
+   artistic shading -- disk Doppler boost, disk and photon-ring anisotropy, escaped-sky
+   sector shaping, and the wiregrid overlay.
 
 ## P0 -- the accretion disk is Newtonian
 
@@ -226,8 +228,9 @@ a mechanic.
     `docs/developer-guide/ci.md` discloses this accurately.
 23. **The benchmark regression gate cannot produce a result** (04 #4): not wired to CI, no
     committed baseline, and its binary path does not match the `riced` preset.
-24. **Five meta-tests share the build tree without `RESOURCE_LOCK`** (04 #7), so
-    `ctest -j > 1` on a stale tree reconfigures and races itself.
+24. **52 meta-tests share the build tree without `RESOURCE_LOCK`** (04 #7): five are
+    registered in the audited configuration and 47 more under the Blender/Octane options,
+    so `ctest -j > 1` on a stale tree reconfigures and races itself. All 52 need the lock.
 
 ## Order of work
 

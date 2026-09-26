@@ -736,7 +736,8 @@ executed.
    - Remedy: a 4-term series to `tauL < 0.03`, `expm1` where available.
    - Falsifier: the GPU-vs-double parity test at `tauL` in [1e-5, 3e-2].
 3. **Replace `stokesStepFull` RK4 with the exact Lorentz-group propagator.** Use the direct
-   integral form by default and the split form only for `aI ds >= 0.1`. Then port it to GLSL/CUDA to
+   integral form wherever the 1e-10 gate applies; the split form serves only `aI ds >= 0.1`
+   segments on a path whose budget is 1e-9 or looser. Then port it to GLSL/CUDA to
    bring rho_Q conversion and alpha_Q/alpha_V dichroism to the GPU. Measured 1e-11 exact vs
    RK4's 181 ns to 553 us per segment at 1e-6. Falsifier: disagreement > 1e-10 with the
    mpmath 5x5 `expm` referee on the M3 case sets, which should become a CTest.

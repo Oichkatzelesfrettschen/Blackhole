@@ -565,10 +565,10 @@ Local ticks map to regional turns through an integer accumulator per
 colony: `rateQ = round(dtau/dt * 2^32)` fixed at load; each coordinate turn
 adds `rateQ * T` to the accumulator, runs `acc / (dtau_tick * 2^32)` local
 ticks, and keeps the remainder. For the canon Miller colony `rateQ =
-69,995`; with 1-day turns and 1-hour local ticks it runs one local tick
+69,994`; with 1-day turns and 1-hour local ticks it runs one local tick
 every 2,557 turns (7.0 years), and a far colony runs 24 per turn. The
 accumulator is exact, portable, and replayable; the rate quantization
-error is 1.4e-5 relative at Miller, and a 64-bit fraction removes it.
+error is 1.06e-6 relative at Miller, and a 64-bit fraction removes it.
 
 Real-time versus turns: strategic time should stay in coordinate turns
 (or pausable real time on a fixed coordinate tick) because diplomacy and
