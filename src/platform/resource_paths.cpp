@@ -72,6 +72,29 @@ std::filesystem::path userCacheDirectory() {
                                               : std::filesystem::path{};
 }
 
+std::filesystem::path writableCacheSubdirectory(std::string_view name) {
+  const std::filesystem::path cache = userCacheDirectory();
+  if (cache.empty()) {
+    return {};
+  }
+  const std::filesystem::path directory = cache / std::filesystem::path(name);
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  if (error) {
+    return {};
+  }
+  // An existing directory can still refuse writes (e.g. owned by another user).
+  const std::filesystem::path probe = directory / ".write_probe";
+  {
+    std::ofstream stream(probe, std::ios::binary | std::ios::trunc);
+    if (!stream || !(stream << 'x') || !stream.flush()) {
+      return {};
+    }
+  }
+  std::filesystem::remove(probe, error);
+  return directory;
+}
+
 std::string resourcePath(std::string_view relativePath) {
   return (gResourceRoot / std::filesystem::path(relativePath)).string();
 }

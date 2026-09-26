@@ -111,9 +111,11 @@ inline constexpr std::uintmax_t K_OBSERVER_SKY_CACHE_BYTES = std::uintmax_t{256}
 /** @brief Writes <dir>/<stem>.bin and <dir>/<stem>.json; false on any I/O error. */
 bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path &directory);
 
-/** @brief Deletes the least recently written bundles in `directory`, each with
- *         its JSON sidecar, until the .bin total fits `maxBytes`; the bundle
- *         for `keepHash` is never deleted. Stops at the first I/O error. */
+/** @brief Deletes the least recently used bundles in `directory` (by .bin
+ *         modification time, which a successful readObserverSkyLut refreshes),
+ *         each with its JSON sidecar, until the .bin total fits `maxBytes`;
+ *         the bundle for `keepHash` is never deleted. Stops at the first I/O
+ *         error. */
 void evictObserverSkyBundles(const std::filesystem::path &directory, std::uintmax_t maxBytes,
                              std::uint64_t keepHash);
 

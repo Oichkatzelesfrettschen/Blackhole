@@ -546,19 +546,14 @@ void ObserverSkyRenderer::releaseSky() {
   emission_ = EmissionSummary{};
 }
 
-/** @brief The bundle cache: <user cache>/observer_sky, created on first use;
- *         the source tree's LUT directory when no user cache is usable.
+/** @brief The bundle cache: <user cache>/observer_sky when it can be written,
+ *         else the source tree's LUT directory; observer_sky_lut publishes
+ *         to the same place by default.
  *         Resolved once per process, so a frame does no filesystem work. */
 static const std::filesystem::path &observerSkyCacheDirectory(const std::filesystem::path &fallback) {
   static const std::filesystem::path directory = [&fallback] {
-    std::filesystem::path cache = platform::userCacheDirectory();
-    if (cache.empty()) {
-      return fallback;
-    }
-    cache /= "observer_sky";
-    std::error_code error;
-    std::filesystem::create_directories(cache, error);
-    return error ? fallback : cache;
+    const std::filesystem::path cache = platform::writableCacheSubdirectory("observer_sky");
+    return cache.empty() ? fallback : cache;
   }();
   return directory;
 }

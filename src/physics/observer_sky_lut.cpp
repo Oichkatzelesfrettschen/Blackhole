@@ -634,6 +634,10 @@ std::optional<ObserverSkyLut> readObserverSkyLut(const std::filesystem::path &fi
   if (!ok || !shapesMatch) {
     return std::nullopt;
   }
+  // A successful read counts as a use: eviction orders bundles by this time.
+  std::error_code touchError;
+  std::filesystem::last_write_time(file, std::filesystem::file_time_type::clock::now(),
+                                   touchError);
   return lut;
 }
 

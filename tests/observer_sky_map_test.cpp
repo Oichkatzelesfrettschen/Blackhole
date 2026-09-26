@@ -40,6 +40,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include "kerr_observer.h"
 #include "observer_sky_lut.h"
@@ -153,6 +154,26 @@ private:
   std::optional<std::string> xdgCacheHome_;
   std::optional<std::string> home_;
 };
+
+// Falsifier: a cache directory that exists but refuses writes being chosen,
+// which would make every published bundle fail silently.
+TEST(ObserverSkyMap, WritableCacheSubdirectoryRejectsAReadOnlyCache) {
+  if (geteuid() == 0) {
+    GTEST_SKIP() << "root ignores directory permissions";
+  }
+  const CacheEnvironment environment;
+  const ScratchDirectory scratch;
+  ASSERT_FALSE(scratch.path().empty());
+  const std::filesystem::path xdg = scratch.path() / "xdg";
+  ASSERT_EQ(setenv("XDG_CACHE_HOME", xdg.c_str(), 1), 0);
+  const std::filesystem::path writable = platform::writableCacheSubdirectory("observer_sky");
+  EXPECT_EQ(writable, xdg / "blackhole" / "observer_sky");
+  EXPECT_FALSE(std::filesystem::exists(writable / ".write_probe"));
+  std::filesystem::permissions(writable, std::filesystem::perms::owner_read |
+                                             std::filesystem::perms::owner_exec);
+  EXPECT_TRUE(platform::writableCacheSubdirectory("observer_sky").empty());
+  std::filesystem::permissions(writable, std::filesystem::perms::owner_all);
+}
 
 TEST(ObserverSkyMap, UserCacheDirectoryUsesAbsoluteXdgOrHome) {
   const CacheEnvironment environment;
@@ -567,7 +588,11 @@ TEST(ObserverSkyMap, LutRoundTripsThroughTheCache) {
   ASSERT_TRUE(sky::writeObserverSkyLut(built, directory));
   const std::uint64_t hash = sky::lutHash(key, dimensions, defaultSettings());
   const std::filesystem::path file = directory / (sky::lutStem(hash) + ".bin");
+  const auto stale = std::filesystem::file_time_type::clock::now() - std::chrono::hours(48);
+  std::filesystem::last_write_time(file, stale);
   const std::optional<sky::ObserverSkyLut> read = sky::readObserverSkyLut(file, hash);
+  // A successful read refreshes the eviction clock.
+  EXPECT_GT(std::filesystem::last_write_time(file), stale + std::chrono::hours(47));
   if (!read.has_value()) {
     GTEST_FAIL() << "the written bundle did not read back";
   }

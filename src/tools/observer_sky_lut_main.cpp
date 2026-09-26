@@ -12,8 +12,9 @@
  *                    [--threads N] [--out DIR]
  *
  * --canon selects Gargantua's spin deficit 1.33e-14 with the observer on the
- * prograde ISCO (Miller's planet). The default output directory is
- * assets/luts under the current directory; the renderer looks there first.
+ * prograde ISCO (Miller's planet). The default output directory is the
+ * renderer's bundle cache, <user cache>/observer_sky ($XDG_CACHE_HOME or
+ * ~/.cache), falling back to assets/luts under the current directory.
  */
 
 #include <algorithm>
@@ -34,6 +35,7 @@
 #include "physics/observer_sky_lut.h"
 #include "physics/observer_sky_map.h"
 #include "physics/safe_limits.h"
+#include "platform/resource_paths.h"
 
 namespace {
 
@@ -55,7 +57,10 @@ struct Options {
   sky::LutDimensions dimensions;
   sky::TraceSettings settings;
   unsigned threads = 0;
-  std::filesystem::path out = "assets/luts";
+  std::filesystem::path out = [] {
+    const std::filesystem::path cache = platform::writableCacheSubdirectory("observer_sky");
+    return cache.empty() ? std::filesystem::path("assets/luts") : cache;
+  }();
 };
 
 void printUsage() {

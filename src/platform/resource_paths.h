@@ -26,6 +26,10 @@ void initResourceRoot(const char *argv0);
  *         variable is absolute, else $HOME/.cache/blackhole; empty when
  *         neither is usable. The directory is not created. */
 [[nodiscard]] std::filesystem::path userCacheDirectory();
+/** @brief userCacheDirectory()/`name`, created and proven writable by writing
+ *         and removing a probe file; empty when there is no user cache or it
+ *         cannot be written. */
+[[nodiscard]] std::filesystem::path writableCacheSubdirectory(std::string_view name);
 [[nodiscard]] std::string resourcePath(std::string_view relativePath);
 
 /** @brief Reads a whole text file into out; returns false if it cannot be
