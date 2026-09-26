@@ -122,10 +122,10 @@ TEST(EventLoader, StructuralErrorsRejected) {
       errorOf(R"({"events": [{"id": 1, "effects": [{"schedule": {"event": 9, "delay_turns": 1}}]}]})")
           .empty()); // unknown target
   EXPECT_FALSE(
-      errorOf(R"({"events": [{"id": 1, "effects": [{"schedule": {"event": 1, "delay_turns": 0}}]}]})")
+      errorOf(R"({"events": [{"id": 1, "mode": "scheduled", "effects": [{"schedule": {"event": 1, "delay_turns": 0}}]}]})")
           .empty()); // same-turn cascade
   EXPECT_FALSE(
-      errorOf(R"({"params": {"k": {"min": 0, "max": 5}}, "events": [{"id": 1, "effects": [{"schedule": {"event": 1, "delay_turns": "k"}}]}]})")
+      errorOf(R"({"params": {"k": {"min": 0, "max": 5}}, "events": [{"id": 1, "mode": "scheduled", "effects": [{"schedule": {"event": 1, "delay_turns": "k"}}]}]})")
           .empty()); // a seeded delay that can draw zero
   EXPECT_FALSE(errorOf(R"({"events": [{"id": 1, "triggers": [{"turn_at_least": "nope"}]}]})").empty());
   EXPECT_FALSE(
@@ -145,13 +145,13 @@ TEST(EventLoader, OutputIndependentOfFileOrder) {
     "params": {"b": 2, "a": {"min": 1, "max": 9}},
     "tech_tiers": [{"points": 5, "name": "late"}, {"points": 1, "name": "early"}],
     "events": [
-      {"id": 7, "source": "colony", "triggers": [{"flag_set": "zeta"}], "effects": [{"set_flag": "alpha"}]},
+      {"id": 7, "source": "colony", "mode": "scheduled", "triggers": [{"flag_set": "zeta"}], "effects": [{"set_flag": "alpha"}]},
       {"id": 3, "triggers": [{"turn_at_least": "a"}], "effects": [{"set_flag": "zeta"}, {"schedule": {"event": 7, "delay_turns": "b"}}]}
     ]})";
   const std::string second = R"({
     "events": [
       {"id": 3, "effects": [{"set_flag": "zeta"}, {"schedule": {"event": 7, "delay_turns": "b"}}], "triggers": [{"turn_at_least": "a"}]},
-      {"id": 7, "source": "colony", "effects": [{"set_flag": "alpha"}], "triggers": [{"flag_set": "zeta"}]}
+      {"id": 7, "mode": "scheduled", "source": "colony", "effects": [{"set_flag": "alpha"}], "triggers": [{"flag_set": "zeta"}]}
     ],
     "tech_tiers": [{"points": 1, "name": "early"}, {"points": 5, "name": "late"}],
     "params": {"a": {"min": 1, "max": 9}, "b": 2}})";
@@ -295,6 +295,7 @@ game::EventSet scheduleStory(const game::IntRef &delay) {
   story.flags = {game::K_DARK_FLAG_NAME};
   game::EventDef event;
   event.id = 1;
+  event.mode = game::EventMode::Scheduled;
   game::EventEffect schedule;
   schedule.kind = game::EffectKind::Schedule;
   schedule.event = 1;
@@ -392,4 +393,31 @@ TEST(EventPredicates, EachScheduledOccurrenceRuns) {
       {"id": 2, "mode": "scheduled", "effects": [{"emit": {"kind": "notice", "to": "host"}}]}]})",
                                                  10);
   EXPECT_EQ(noticeTurns(*run->state, 2, game::K_AUTHORITY_NODE), (std::vector<std::int64_t>{4, 4}));
+}
+
+// Falsifier: a schedule effect naming a once-only event loading (the core
+// runs once-only events from their triggers alone, so the schedule would be
+// silently ignored), or a duplicated empty key slipping past the duplicate
+// check because the empty string doubled as "no duplicate yet".
+TEST(EventLoader, ScheduleTargetsAndEmptyDuplicateKeysChecked) {
+  EXPECT_NE(
+      errorOf(R"({"events": [{"id": 1, "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]},
+                             {"id": 2}]})")
+          .find("not a scheduled event"),
+      std::string::npos);
+  EXPECT_NE(
+      errorOf(R"({"events": [{"id": 1, "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]},
+                             {"id": 2, "mode": "once"}]})")
+          .find("not a scheduled event"),
+      std::string::npos);
+  EXPECT_TRUE(
+      errorOf(R"({"events": [{"id": 1, "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]},
+                             {"id": 2, "mode": "scheduled"}]})")
+          .empty());
+  EXPECT_NE(errorOf(R"({"params": {"": 1, "": 2}})").find("duplicate key"), std::string::npos);
+
+  // The core refuses a hand-built story that schedules a once-only event.
+  game::EventSet onceTarget = scheduleStory({.plus = 1});
+  onceTarget.events.front().mode = game::EventMode::Once;
+  EXPECT_FALSE(storyBuildsValid(onceTarget));
 }

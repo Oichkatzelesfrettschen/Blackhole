@@ -454,15 +454,23 @@ private:
     story_.flags = std::move(names);
   }
 
+  /** @brief Every schedule names an existing event whose mode is
+   *         "scheduled": a once-only event runs from its triggers alone, so a
+   *         schedule naming it would be silently ignored. */
   void checkSchedules() const {
     for (const EventDef &event : story_.events) {
       for (const EventEffect &effect : event.effects) {
-        if (effect.kind == EffectKind::Schedule &&
-            std::ranges::none_of(story_.events, [&effect](const EventDef &target) {
-              return target.id == effect.event;
-            })) {
+        if (effect.kind != EffectKind::Schedule) {
+          continue;
+        }
+        const auto target = std::ranges::find(story_.events, effect.event, &EventDef::id);
+        if (target == story_.events.end()) {
           fail("$.events", "event " + std::to_string(event.id) + " schedules unknown event " +
                                std::to_string(effect.event));
+        }
+        if (target->mode != EventMode::Scheduled) {
+          fail("$.events", "event " + std::to_string(event.id) + " schedules event " +
+                               std::to_string(effect.event) + ", which is not a scheduled event");
         }
       }
     }
@@ -481,7 +489,8 @@ EventLoadResult parseEventSet(std::string_view jsonText) {
     // thing twice is ambiguous, so the parse tracks each open object's keys
     // and the load refuses a repeat anywhere.
     std::vector<std::set<std::string>> openObjects;
-    std::string duplicate;
+    // Optional, not an empty-string sentinel: "" is a legal (and duplicable) key.
+    std::optional<std::string> duplicate;
     const Json::parser_callback_t trackKeys = [&openObjects, &duplicate](
                                                   int /*depth*/, Json::parse_event_t event,
                                                   Json &parsed) {
@@ -491,14 +500,14 @@ EventLoadResult parseEventSet(std::string_view jsonText) {
         openObjects.pop_back();
       } else if (event == Json::parse_event_t::key && !openObjects.empty() &&
                  !openObjects.back().insert(parsed.get<std::string>()).second &&
-                 duplicate.empty()) {
+                 !duplicate.has_value()) {
         duplicate = parsed.get<std::string>();
       }
       return true;
     };
     const Json root = Json::parse(jsonText.begin(), jsonText.end(), trackKeys);
-    if (!duplicate.empty()) {
-      throw LoadError("$: duplicate key \"" + duplicate + "\"");
+    if (duplicate.has_value()) {
+      throw LoadError("$: duplicate key \"" + duplicate.value() + "\"");
     }
     Loader loader;
     result.story = loader.load(root);

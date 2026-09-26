@@ -283,7 +283,11 @@ void CampaignState::resolveStoryParams() {
       } else if (effect.kind == EffectKind::Emit) {
         ok = ok && nodeOk(effect.to) && withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT);
       } else {
-        ok = ok && eventIndexOf(story.events, effect.event).has_value() &&
+        // The target must be a scheduled event: a once-only one runs from its
+        // triggers alone and would ignore the schedule.
+        const std::optional<std::size_t> target = eventIndexOf(story.events, effect.event);
+        ok = ok && target.has_value() &&
+             story.events.at(target.value_or(0)).mode == EventMode::Scheduled &&
              resolve(effect.delayTurns) >= 1;
       }
     }
