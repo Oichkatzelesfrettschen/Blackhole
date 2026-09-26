@@ -1541,6 +1541,9 @@ int main(int argc, char **argv) {
         ui::renderCampaignWindows(campaignSession, campaignUi, campaignBackdrops.data(),
                                   static_cast<int>(campaignBackdrops.size()));
       }
+      // Real time runs every frame, panels drawn or not: hiding the UI does
+      // not freeze the campaign.
+      ui::pumpCampaignRealtime(campaignSession, campaignUi, static_cast<double>(deltaTime));
 
       /* --export-frame / --export-raw-frame: export textures before ImGui. */
       exportFrameOnce(rs, cli);

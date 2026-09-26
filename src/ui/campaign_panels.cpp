@@ -83,14 +83,6 @@ const char *nodeName(game::NodeId node) {
   return node == game::K_AUTHORITY_NODE ? "host" : "colony";
 }
 
-/** @brief Advances one turn and feeds both stations' inboxes; true when an
- *         arrival this turn at the focused station is in a pause category. */
-bool stepTurn(game::CampaignSession &session, CampaignUiState &uiState) {
-  session.state().advanceTurn();
-  const bool colonyPause = uiState.inbox.sync(session.state().arrivals());
-  const bool hostPause = uiState.hostInbox.sync(session.state().arrivals());
-  return uiState.focusNode == game::K_AUTHORITY_NODE ? hostPause : colonyPause;
-}
 
 const game::NodeView *findNode(const game::CampaignViewSnapshot &view, game::NodeId id) {
   const auto found = std::ranges::find(view.nodes, id, &game::NodeView::id);
@@ -293,8 +285,9 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
 void renderOrderComposer(game::CampaignSession &session, const game::CampaignViewSnapshot &view,
                          CampaignUiState &uiState) {
   ImGui::SeparatorText("Order composer");
-  if (view.status != game::CampaignStatus::Ongoing) {
-    ImGui::TextDisabled("campaign decided -- no further orders");
+  // Order actions are withheld, with the reason, when nothing could be sent.
+  if (const char *blocked = composerBlockedReason(view, uiState)) {
+    ImGui::TextDisabled("%s", blocked);
     return;
   }
   clampSelectionToView(uiState, view);
@@ -717,7 +710,7 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
     // As the Advance buttons: turn by turn, stopping on a flagged arrival.
     const long long turns = std::strtoll(advanceEnv, nullptr, 10);
     for (long long step = 0; step < std::min(turns, 100000LL) && !alerted; ++step) {
-      alerted = stepTurn(*uiState.storySession, uiState);
+      alerted = stepCampaignTurn(*uiState.storySession, uiState);
     }
   }
   if (const char *realtimeEnv = std::getenv("BLACKHOLE_CAMPAIGN_REALTIME")) {
@@ -760,7 +753,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
         if (ImGui::Button(label.c_str())) {
           // A flagged arrival stops a batch on its own turn, as in real time.
           for (int step = 0; step < count; ++step) {
-            if (stepTurn(session, uiState)) {
+            if (stepCampaignTurn(session, uiState)) {
               // The batch consumed the alert; the real-time pump later this
               // frame must not run past it.
               uiState.driver.setPaused(true);
@@ -786,28 +779,10 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
   }
   ImGui::End();
 
-  // The story button above may have swapped sessions this frame.
-  game::CampaignSession &session =
-      uiState.storySession ? *uiState.storySession : defaultSession;
-  if (uiState.windowsOpen && uiState.realtime) {
-    // Wall time enters here and nowhere in the campaign: the driver turns it
-    // into whole turns at the focused station's rate, stopping on a flagged
-    // arrival's own turn. It runs after the controls, so a focus change made
-    // this frame already sets this frame's rate.
-    const std::vector<game::StationNode> &nodes = session.state().nodes();
-    if (uiState.focusNode < nodes.size()) {
-      uiState.driver.setFocusRate(nodes.at(uiState.focusNode).clock.rate());
-    }
-    const game::RealtimePumpResult pumped = uiState.driver.pump(
-        static_cast<double>(ImGui::GetIO().DeltaTime),
-        [&session, &uiState]() { return stepTurn(session, uiState); });
-    uiState.lagging = pumped.lagging;
-    if (pumped.pausedByArrival) {
-      uiState.inboxOpen = true;
-    }
-  }
-
   if (uiState.windowsOpen) {
+    // The story button above may have swapped sessions this frame.
+    game::CampaignSession &session =
+        uiState.storySession ? *uiState.storySession : defaultSession;
     // A fresh snapshot after any button above mutated the campaign this frame.
     const game::CampaignViewSnapshot view = session.state().perceivedSnapshot(uiState.focusNode);
     unsigned int backdropTextureId = 0;

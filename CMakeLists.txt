@@ -1161,6 +1161,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/campaign_panels.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/campaign_realtime.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/strategic_map.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
@@ -4549,6 +4550,7 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_ui_state_test.cpp")
     add_executable(campaign_ui_state_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_ui_state_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/ui/campaign_realtime.cpp"
     )
     target_compile_definitions(campaign_ui_state_test PRIVATE
       BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

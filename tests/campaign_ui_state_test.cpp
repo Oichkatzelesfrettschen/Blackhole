@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <string>
 
 #include "game/campaign_session.h"
@@ -50,4 +51,48 @@ TEST(CampaignUiState, ReplacingTheSessionClearsItsSelection) {
   uiState.selectedFleet = 1; // the colony story's survey fleet
   ui::clampSelectionToView(uiState, view);
   EXPECT_EQ(uiState.selectedFleet, 1U);
+}
+
+// Falsifier: the composer offering orders from a station that can send none --
+// the shallow colony after its 365-local-day mission (about 371 turns at
+// dtau/dt 0.985) -- or refusing them before then.
+TEST(CampaignUiState, ComposerIsBlockedAtADarkStation) {
+  const game::EventLoadResult loaded = game::loadEventSetFile(
+      std::string(BLACKHOLE_SOURCE_DIR) + "/assets/events/host_goes_dark.json");
+  ASSERT_TRUE(loaded.ok()) << loaded.error;
+  game::CampaignSession colony(1, loaded.story, game::K_SURVEY_BAND);
+  ui::CampaignUiState uiState;
+  uiState.focusNode = game::K_FIRST_COLONY_NODE;
+  colony.state().advanceTurns(300);
+  EXPECT_EQ(ui::composerBlockedReason(
+                colony.state().perceivedSnapshot(game::K_FIRST_COLONY_NODE), uiState),
+            nullptr);
+  colony.state().advanceTurns(100);
+  ASSERT_TRUE(colony.state().nodes().at(game::K_FIRST_COLONY_NODE).dark());
+  EXPECT_NE(ui::composerBlockedReason(
+                colony.state().perceivedSnapshot(game::K_FIRST_COLONY_NODE), uiState),
+            nullptr);
+  EXPECT_FALSE(colony.issueAssignTask(1, 1.0, game::K_FIRST_COLONY_NODE));
+}
+
+// Falsifier: real time advancing only while the panels are drawn -- the pump
+// must run from main every frame on its own (no rendering here at all): ten
+// wall seconds at Miller focus are 7 one-day turns.
+TEST(CampaignUiState, RealtimePumpRunsWithoutThePanels) {
+  const game::EventLoadResult loaded = game::loadEventSetFile(
+      std::string(BLACKHOLE_SOURCE_DIR) + "/assets/events/host_goes_dark.json");
+  ASSERT_TRUE(loaded.ok()) << loaded.error;
+  game::CampaignSession defaultSession(1);
+  ui::CampaignUiState uiState;
+  uiState.windowsOpen = true;
+  uiState.realtime = true;
+  uiState.storySession =
+      std::make_unique<game::CampaignSession>(1, loaded.story, game::K_MILLER_BAND);
+  uiState.focusNode = game::K_FIRST_COLONY_NODE;
+  ui::pumpCampaignRealtime(defaultSession, uiState, 10.0);
+  EXPECT_EQ(uiState.storySession->state().turn(), 7);
+  EXPECT_EQ(defaultSession.state().turn(), 0);
+  uiState.realtime = false;
+  ui::pumpCampaignRealtime(defaultSession, uiState, 10.0);
+  EXPECT_EQ(uiState.storySession->state().turn(), 7);
 }

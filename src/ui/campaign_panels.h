@@ -94,6 +94,35 @@ inline void clampSelectionToView(CampaignUiState &uiState, const game::CampaignV
       bandCount == 0 ? 0 : std::clamp(uiState.composerTargetBand, 0, bandCount - 1);
 }
 
+/** @brief Why the order composer cannot send from the focused station, or
+ *         nullptr when it can: the campaign is decided, or the station itself
+ *         is dark (the host gone silent, a colony past its mission) and
+ *         issueCommand would refuse every order from it. */
+[[nodiscard]] inline const char *composerBlockedReason(const game::CampaignViewSnapshot &view,
+                                                       const CampaignUiState &uiState) {
+  if (view.status != game::CampaignStatus::Ongoing) {
+    return "campaign decided -- no further orders";
+  }
+  const auto focus = std::ranges::find(view.nodes, uiState.focusNode, &game::NodeView::id);
+  if (focus != view.nodes.end() && focus->dark) {
+    return focus->isColony ? "the colony is dark (its mission is over): it can send no orders"
+                           : "the host is dark: it can send no orders";
+  }
+  return nullptr;
+}
+
+/** @brief Advances the active session one turn and feeds both stations'
+ *         inboxes; true when an arrival this turn at the focused station is
+ *         in a pause category. */
+bool stepCampaignTurn(game::CampaignSession &session, CampaignUiState &uiState);
+
+/** @brief Runs real time for one frame of `wallDtSec` wall seconds: whole
+ *         turns at the focused station's rate, stopping on a flagged arrival.
+ *         Called every frame from main whether or not the panels are drawn,
+ *         so hiding the UI does not freeze the campaign. */
+void pumpCampaignRealtime(game::CampaignSession &defaultSession, CampaignUiState &uiState,
+                          double wallDtSec);
+
 /** @brief Reads BLACKHOLE_CAMPAIGN=1 to open the campaign windows at startup.
  *         For desktop captures without synthetic input:
  *         BLACKHOLE_CAMPAIGN_STORY=deep|shallow starts the host story with the
