@@ -65,6 +65,13 @@ void legacyTracerControlTooltip() {
   }
 }
 
+void kerrTracerControlTooltip() {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Kerr tracer only (Physical Kerr ray tracer, compute, or CUDA).\n"
+                      "The legacy fragment tracer draws the disk with adiskColor.");
+  }
+}
+
 void drawCurvePlot(const OverlayCurve2D &curve, const ImVec2 &size) {
   ImDrawList *drawList = ImGui::GetWindowDrawList();
   ImVec2 const p0 = ImGui::GetCursorScreenPos();
@@ -408,8 +415,9 @@ void renderPhysicsSettings(RenderState &rs) {
                       "Off: legacy artistic tracer (Schwarzschild bending, spin shown by tint).");
   }
   const char *const diskTransferLabels[] = {"Physical", "Interstellar (film)"};
+  ImGui::BeginDisabled(!kerrDiskShadingActive(rs));
   ImGui::Combo("Disk transfer", &rs.disk.diskTransferMode, diskTransferLabels, 2);
-  if (ImGui::IsItemHovered()) {
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     ImGui::SetTooltip("Physical: Doppler, gravitational and transverse shifts of an orbiting\n"
                       "disk seen from infinity: bolometric beaming g^4 F / F_peak, with the\n"
                       "chroma of a blackbody at g T_emit.\n"
@@ -418,8 +426,11 @@ void renderPhysicsSettings(RenderState &rs) {
   }
   ImGui::SliderFloat("Disk peak temperature (K)", &rs.disk.diskPeakTemperature, 2000.0f,
                      40000.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+  kerrTracerControlTooltip();
   ImGui::SliderFloat("Disk brightness", &rs.disk.diskBrightness, 0.01f, 100.0f, "%.2f",
                      ImGuiSliderFlags_Logarithmic);
+  kerrTracerControlTooltip();
+  ImGui::EndDisabled();
 
   // Physics visualization toggles
   ImGui::Checkbox("enablePhotonSphere", &rs.physicsCore.enablePhotonSphere);
@@ -862,6 +873,16 @@ void renderDepthEffectsPanel(RenderState &rs) {
   ImGui::SliderFloat("DoF Max Radius", &rs.depthFx.dofMaxRadius, 0.0f, 12.0f);
   ImGui::SliderFloat("Depth Curve", &rs.depthFx.depthCurve, 0.5f, 2.0f);
   ImGui::End();
+}
+
+bool kerrDiskShadingActive(const RenderState &rs) {
+#if BLACKHOLE_HAS_CUDA
+  const bool cudaActive = rs.dispatch.cudaManager.isEnabled();
+#else
+  const bool cudaActive = false;
+#endif
+  return rs.physicsCore.physicalRayTracer || rs.dispatch.useComputeRaytracer ||
+         rs.compare.compareComputeFragment || cudaActive;
 }
 
 } // namespace ui

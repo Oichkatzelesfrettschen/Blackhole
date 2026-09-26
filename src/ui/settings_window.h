@@ -30,6 +30,16 @@ void renderTonemapPanel(blackhole::RenderState &rs);
 /** @brief Depth cue controls: fog, edge outlines, desaturation, depth of field. */
 void renderDepthEffectsPanel(blackhole::RenderState &rs);
 
+/**
+ * @brief True when a Kerr-tracer disk (bhDiskEmission, d_disk_emission)
+ *        renders: the fragment path runs the physical tracer, the GLSL compute
+ *        path or the compute/fragment comparison runs, or the CUDA backend is
+ *        on. The disk transfer mode, peak temperature and brightness controls
+ *        affect the image only then; the legacy fragment tracer (adiskColor)
+ *        reads none of them.
+ */
+bool kerrDiskShadingActive(const blackhole::RenderState &rs);
+
 } // namespace ui
 
 #endif // BLACKHOLE_UI_SETTINGS_WINDOW_H

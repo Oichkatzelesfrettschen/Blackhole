@@ -20,6 +20,7 @@
 #include "render/render_state.h"
 #include "render/settings_sync.h"
 #include "settings.h"
+#include "ui/settings_window.h"
 
 using blackhole::K_DEFAULT_DEPTH_FAR;
 using blackhole::K_MAX_BLOOM_ITERATIONS;
@@ -131,4 +132,19 @@ TEST(SettingsSync, WritesBackLiveState) {
   EXPECT_FLOAT_EQ(settings.gamma, 2.1f);
   EXPECT_FLOAT_EQ(settings.toneExposure, 7.25f);
   EXPECT_EQ(settings.bloomIterations, 6);
+}
+
+// The Kerr-tracer disk controls apply whenever a Kerr-tracer disk renders and
+// never on the legacy fragment tracer alone.
+TEST(SettingsSync, KerrDiskControlsFollowTheActiveTracer) {
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
+  EXPECT_TRUE(ui::kerrDiskShadingActive(rs)); // physical tracer is the default
+  rs.physicsCore.physicalRayTracer = false;
+  EXPECT_FALSE(ui::kerrDiskShadingActive(rs));
+  rs.dispatch.useComputeRaytracer = true;
+  EXPECT_TRUE(ui::kerrDiskShadingActive(rs));
+  rs.dispatch.useComputeRaytracer = false;
+  rs.compare.compareComputeFragment = true;
+  EXPECT_TRUE(ui::kerrDiskShadingActive(rs));
 }
