@@ -68,7 +68,7 @@ constexpr std::array<RadiiRow, 8> K_RADII{{
     {.epsilon = 0.1, .xIscoPro = 1.3208830417618872468, .xIscoRetro = 7.717352279606489316, .xMbPro = 7.324555320336758664e-1, .xMbRetro = 4.6568097504180443536, .xPhPro = 5.5785462742338280309e-1, .xPhRetro = 2.910267939103036726},
     {.epsilon = 0.4, .xIscoPro = 2.8290694188131495542, .xIscoRetro = 6.8506861853065783143, .xMbPro = 1.6649110640673517328, .xMbRetro = 4.1298221281347034656, .xPhPro = 1.1889140197636331308, .xPhRetro = 2.6298496971319209483},
     {.epsilon = 1.0, .xIscoPro = 5.0, .xIscoRetro = 5.0, .xMbPro = 3.0, .xMbRetro = 3.0, .xPhPro = 2.0, .xPhRetro = 2.0},
-    {.epsilon = 1.9, .xIscoPro = 7.717352279606489316, .xIscoRetro = 1.3208830417618872468, .xMbPro = 4.6568097504180443536, .xMbRetro = 7.324555320336758664e-1, .xPhPro = 2.910267939103036726, .xPhRetro = 5.5785462742338280309e-1},
+    {.epsilon = 1.9, .xIscoPro = 1.3208830417618872468, .xIscoRetro = 7.717352279606489316, .xMbPro = 7.324555320336758664e-1, .xMbRetro = 4.6568097504180443536, .xPhPro = 5.5785462742338280309e-1, .xPhRetro = 2.910267939103036726},
 }};
 // A rate of -1 marks a sense with no timelike circular orbit at that radius.
 constexpr std::array<PointRow, 8> K_POINTS{{
@@ -79,7 +79,7 @@ constexpr std::array<PointRow, 8> K_POINTS{{
     {.epsilon = 1.0, .x = 2.0, .alpha = 5.7735026918962576451e-1, .omega = 0.0, .varpi = 3.0, .ratePro = -1.0, .omegaPro = 0.0, .rateRetro = -1.0, .omegaRetro = 0.0}, // NOLINT(modernize-use-std-numbers) -- generated reference value
     {.epsilon = 1.0, .x = 5.0, .alpha = 8.1649658092772603273e-1, .omega = 0.0, .varpi = 6.0, .ratePro = 7.071067811865475244e-1, .omegaPro = 6.8041381743977169394e-2, .rateRetro = 7.071067811865475244e-1, .omegaRetro = -6.8041381743977169394e-2}, // NOLINT(modernize-use-std-numbers) -- generated reference value
     {.epsilon = 0.002, .x = 5.0e-1, .alpha = 2.3191164750530924223e-1, .omega = 2.9091909738123257e-1, .varpi = 2.1386933705731014243, .ratePro = 1.9056173891204197645e-1, .omegaPro = 3.5271909119955795371e-1, .rateRetro = -1.0, .omegaRetro = 0.0},
-    {.epsilon = 1.9, .x = 9.0, .alpha = 8.9460655096881942211e-1, .omega = -1.7826724240383472646e-3, .varpi = 1.0048482472493048042e+1, .ratePro = 8.2541375464928158576e-1, .omegaPro = 3.2549141406222833815e-2, .rateRetro = 8.4593629853609765265e-1, .omegaRetro = -3.0747682224285464546e-2},
+    {.epsilon = 1.9, .x = 9.0, .alpha = 8.9460655096881942211e-1, .omega = -1.7826724240383472646e-3, .varpi = 1.0048482472493048042e+1, .ratePro = 8.4593629853609765265e-1, .omegaPro = -3.0747682224285464546e-2, .rateRetro = 8.2541375464928158576e-1, .omegaRetro = 3.2549141406222833815e-2},
 }};
 constexpr std::array<DelayRow, 8> K_DELAYS{{
     {.epsilon = 0.1, .x1 = 7.0e-1, .x2 = 3.99e+2, .delayM = 4.1482361145577006912e+2},
@@ -172,7 +172,8 @@ ko::Vec3 latticeDirection(int index, int count) {
 
 // Falsifier: any ISCO, marginally bound, or photon-orbit offset from the
 // deficit algebra differing from the BPT closed form evaluated at 50 digits by
-// more than 1e-12 relative, for either sense, from eps = 1.33e-14 to a = -0.9.
+// more than 1e-12 relative, for either sense, from eps = 1.33e-14 to a = -0.9
+// (senses relative to the hole's rotation, so a = -0.9 mirrors a = 0.9).
 TEST(KerrObserver, CharacteristicRadiiMatchReference) {
   for (const RadiiRow &row : K_RADII) {
     expectRelative(ko::iscoOffset(row.epsilon, OrbitSense::Prograde), row.xIscoPro, 1e-12,
@@ -342,7 +343,7 @@ TEST(KerrObserver, RedshiftIdentityOverLatticeDirections) {
   int outerNegative = 0;
   for (int sample = 0; sample < 1000; ++sample) {
     const ko::PhotonConstants photon = ko::photonConstants(orbiter, latticeDirection(sample, 1000));
-    if (!photon.fromInfinity) {
+    if (!photon.positiveEnergy) {
       ++outerNegative;
       continue;
     }
@@ -360,7 +361,7 @@ TEST(KerrObserver, RedshiftIdentityOverLatticeDirections) {
   int millerNegative = 0;
   for (int sample = 0; sample < 1000; ++sample) {
     const ko::PhotonConstants photon = ko::photonConstants(miller, latticeDirection(sample, 1000));
-    if (!photon.fromInfinity) {
+    if (!photon.positiveEnergy) {
       ++millerNegative;
       continue;
     }
@@ -382,7 +383,7 @@ TEST(KerrObserver, StaticObserverRedshiftIsLapse) {
         ko::boostedTetrad(zamo, ko::Vec3{0.0, 0.0, ko::staticObserverVelocity(zamo.frame)});
     for (int sample = 0; sample < 100; ++sample) {
       const ko::PhotonConstants photon = ko::photonConstants(fixed, latticeDirection(sample, 100));
-      ASSERT_TRUE(photon.fromInfinity);
+      ASSERT_TRUE(photon.positiveEnergy);
       expectRelative(photon.g, 1.0 / std::sqrt(1.0 - (2.0 / r)), 1e-12, "static g");
     }
   }
@@ -402,7 +403,7 @@ TEST(KerrObserver, SpecialRelativityAberrationFarAway) {
   for (const double thetaPrime : {0.0, 0.4, 1.1, 1.5707963267948966, 2.3, 3.0}) {
     const ko::Vec3 direction{std::sin(thetaPrime), 0.0, std::cos(thetaPrime)};
     const ko::PhotonConstants photon = ko::photonConstants(mover, direction);
-    ASSERT_TRUE(photon.fromInfinity);
+    ASSERT_TRUE(photon.positiveEnergy);
     const double cosZamo =
         photon.lambda * frame.alpha / (frame.varpi * (1.0 - (frame.omega * photon.lambda)));
     const double expected = (std::cos(thetaPrime) + v) / (1.0 + (v * std::cos(thetaPrime)));
@@ -410,4 +411,109 @@ TEST(KerrObserver, SpecialRelativityAberrationFarAway) {
     EXPECT_NEAR(photon.energy, gamma * (1.0 + (v * std::cos(thetaPrime))), 1e-6)
         << "theta'=" << thetaPrime;
   }
+}
+
+namespace {
+
+// A photon leaving the ZAMO at (epsilon, r) along `direction` (r, theta, phi legs).
+ko::PhotonConstants zamoPhoton(double epsilon, double r, const ko::Vec3 &direction) {
+  return ko::photonConstants(ko::zamoTetrad(epsilon, r - 1.0), direction);
+}
+
+constexpr ko::Vec3 K_OUTWARD{1.0, 0.0, 0.0};
+constexpr ko::Vec3 K_INWARD{-1.0, 0.0, 0.0};
+constexpr ko::Vec3 K_FORWARD{0.0, 0.0, 1.0};  // tangential, +phi
+constexpr ko::Vec3 K_BACKWARD{0.0, 0.0, -1.0}; // tangential, -phi
+
+} // namespace
+
+// Falsifier: a Schwarzschild tangential photon at 2.5M (impact parameter
+// 2.5 / sqrt(0.2) = 5.59M, above the critical 3 sqrt(3) M = 5.196M, but inside
+// the 3M photon sphere, so at an apoapsis under the barrier) reported as
+// reaching infinity in either direction -- the E > 0 rule said it did -- or
+// radial photons there misjudged: outward escapes but came from the horizon.
+TEST(KerrObserver, InsidePhotonSphereTangentialPhotonIsTrapped) {
+  const ko::PhotonConstants tangential = zamoPhoton(1.0, 2.5, K_FORWARD);
+  EXPECT_TRUE(tangential.positiveEnergy);
+  EXPECT_NEAR(tangential.lambda, 2.5 / std::sqrt(0.2), 1e-12);
+  EXPECT_FALSE(tangential.escapesToInfinity);
+  EXPECT_FALSE(tangential.fromInfinity);
+
+  const ko::PhotonConstants outward = zamoPhoton(1.0, 2.5, K_OUTWARD);
+  EXPECT_TRUE(outward.escapesToInfinity);
+  EXPECT_FALSE(outward.fromInfinity);
+  const ko::PhotonConstants inward = zamoPhoton(1.0, 2.5, K_INWARD);
+  EXPECT_FALSE(inward.escapesToInfinity);
+  EXPECT_TRUE(inward.fromInfinity);
+}
+
+// Falsifier: outside the photon sphere at 4M a tangential photon (b = 5.657M
+// > b_c) sits at a periapsis and must connect to infinity both ways; a radial
+// photon (b = 0 < b_c) crosses no barrier, so inward came from infinity and
+// falls in, outward escapes and came from the horizon; a photon aimed 30
+// degrees inward of tangential with b = 4.90M < b_c falls in forward.
+TEST(KerrObserver, OutsidePhotonSphereConnectivity) {
+  const ko::PhotonConstants tangential = zamoPhoton(1.0, 4.0, K_FORWARD);
+  EXPECT_TRUE(tangential.escapesToInfinity);
+  EXPECT_TRUE(tangential.fromInfinity);
+  const ko::PhotonConstants inward = zamoPhoton(1.0, 4.0, K_INWARD);
+  EXPECT_FALSE(inward.escapesToInfinity);
+  EXPECT_TRUE(inward.fromInfinity);
+  const ko::PhotonConstants outward = zamoPhoton(1.0, 4.0, K_OUTWARD);
+  EXPECT_TRUE(outward.escapesToInfinity);
+  EXPECT_FALSE(outward.fromInfinity);
+  // b = 4 cos(30 deg) / sqrt(1 - 2/4) = 4.899M: below b_c, so no barrier.
+  const double angle = std::numbers::pi / 6.0;
+  const ko::PhotonConstants steep = zamoPhoton(1.0, 4.0, {-std::sin(angle), 0.0, std::cos(angle)});
+  EXPECT_NEAR(steep.lambda, 4.0 * std::cos(angle) / std::sqrt(0.5), 1e-12);
+  EXPECT_FALSE(steep.escapesToInfinity);
+  EXPECT_TRUE(steep.fromInfinity);
+  // Same angle outward of tangential at 2.5M, inside the photon sphere, with
+  // b = 4.84M < b_c: no barrier, so it escapes forward.
+  const ko::PhotonConstants climbing =
+      zamoPhoton(1.0, 2.5, {std::sin(angle), 0.0, std::cos(angle)});
+  EXPECT_TRUE(climbing.escapesToInfinity);
+}
+
+// Falsifier: at r = 3M around a = 0.9, between the prograde photon shell
+// (1.558M) and the retrograde one (3.910M), a tangential photon along the
+// hole's rotation failing to reach infinity (it is outside its shell: a
+// periapsis) or one against the rotation reaching it (inside its shell: an
+// apoapsis under the barrier).
+TEST(KerrObserver, KerrShellsSplitProgradeFromRetrograde) {
+  const ko::PhotonConstants prograde = zamoPhoton(0.1, 3.0, K_FORWARD);
+  EXPECT_TRUE(prograde.escapesToInfinity);
+  EXPECT_TRUE(prograde.fromInfinity);
+  const ko::PhotonConstants retrograde = zamoPhoton(0.1, 3.0, K_BACKWARD);
+  EXPECT_FALSE(retrograde.escapesToInfinity);
+  EXPECT_FALSE(retrograde.fromInfinity);
+  // Outside both shells, at 5M, both tangential photons connect.
+  EXPECT_TRUE(zamoPhoton(0.1, 5.0, K_BACKWARD).escapesToInfinity);
+  EXPECT_TRUE(zamoPhoton(0.1, 5.0, K_FORWARD).fromInfinity);
+}
+
+// Falsifier: around a = -0.9 (epsilon = 1.9) a prograde orbit -- one that
+// co-rotates with the hole, toward -phi -- differing from the mirror of the
+// a = 0.9 prograde orbit in radius or clock, or sharing its +phi direction:
+// Omega and the ZAMO-frame speed must flip sign, and the orbiter's tetrad
+// must satisfy u^phi / u^t = Omega and stay orthonormal in the a = -0.9 metric.
+TEST(KerrObserver, NegativeSpinProgradeMirrorsPositiveSpin) {
+  for (const OrbitSense sense : {OrbitSense::Prograde, OrbitSense::Retrograde}) {
+    // 2 - 1.9 rounds 1e-16 away from 0.1, so the mirror agrees to rounding.
+    expectRelative(ko::iscoOffset(1.9, sense), ko::iscoOffset(0.1, sense), 1e-12, "isco");
+    expectRelative(ko::marginallyBoundOffset(1.9, sense), ko::marginallyBoundOffset(0.1, sense),
+                   1e-12, "marginally bound");
+    const ko::CircularOrbit mirrored = ko::circularOrbit(1.9, 5.0, sense);
+    const ko::CircularOrbit direct = ko::circularOrbit(0.1, 5.0, sense);
+    ASSERT_TRUE(mirrored.exists);
+    expectRelative(mirrored.properTimeRate, direct.properTimeRate, 1e-12, "mirrored clock");
+    expectRelative(mirrored.angularVelocity, -direct.angularVelocity, 1e-12, "mirrored Omega");
+    expectRelative(mirrored.zamoVelocity, -direct.zamoVelocity, 1e-12, "mirrored ZAMO speed");
+    const ko::Tetrad orbiter = ko::orbitingTetrad(1.9, 5.0, sense);
+    const ko::Vec4 u = ko::legComponents(orbiter, 0);
+    expectRelative(u.at(3) / u.at(0), mirrored.angularVelocity, 1e-12, "tetrad Omega");
+    EXPECT_LT(orthonormalityError(orbiter), 1e-12);
+  }
+  EXPECT_LT(ko::circularOrbit(1.9, 5.0, OrbitSense::Prograde).angularVelocity, 0.0);
+  EXPECT_LT(ko::equatorialFrame(1.9, 5.0).omega, 0.0); // frame dragging toward -phi
 }

@@ -18,9 +18,13 @@
  * clock they combine into is O(1e-5) at the canon orbit: summing them cancels
  * the answer.
  *
- * A retrograde orbit around spin a is a prograde orbit around -a, and a -> -a
- * is epsilon -> 2 - epsilon, so the retrograde branch reuses the prograde
- * algebra with the mirrored deficit and flips the azimuthal sign.
+ * OrbitSense is relative to the hole's rotation: a prograde orbit co-rotates
+ * with the hole whatever the sign of a. The orbit algebra is written for a
+ * hole of spin |a| turning toward +phi, whose deficit is min(epsilon,
+ * 2 - epsilon); a counter-rotating orbit is a co-rotating one around -|a|,
+ * deficit 2 - min(epsilon, 2 - epsilon); and for a < 0 (epsilon > 1) the
+ * mirror phi -> -phi flips every azimuthal sign so the orbit runs with the
+ * hole toward -phi.
  *
  * References: Bardeen, Press & Teukolsky 1972 (ApJ 178, 347) for circular
  * orbits; James, von Tunzelmann, Franklin & Thorne 2015 (arXiv:1502.03808,
@@ -34,20 +38,31 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <numbers>
 
 namespace physics::kerr_observer {
 
-/** @brief Orbital sense relative to the hole's rotation. */
+/** @brief Orbital sense relative to the hole's rotation: Prograde
+ *         co-rotates with the hole, toward -phi when a < 0. */
 enum class OrbitSense : std::uint8_t {
   Prograde = 0,
   Retrograde = 1,
 };
 
-/** @brief The deficit whose prograde algebra describes this sense: epsilon
- *         for prograde, 2 - epsilon (spin -a) for retrograde. */
+/** @brief The deficit whose +phi co-rotating algebra describes this sense:
+ *         the deficit of |a|, min(epsilon, 2 - epsilon), for a co-rotating
+ *         orbit and 2 minus that (spin -|a|) for a counter-rotating one. */
 [[nodiscard]] inline double senseDeficit(double epsilon, OrbitSense sense) {
-  return sense == OrbitSense::Prograde ? epsilon : 2.0 - epsilon;
+  const double coRotating = std::fmin(epsilon, 2.0 - epsilon);
+  return sense == OrbitSense::Prograde ? coRotating : 2.0 - coRotating;
+}
+
+/** @brief Sign of the orbit's azimuthal motion along +phi: +1 for an orbit
+ *         along the rotation of a hole with a >= 0, and the mirror for a < 0. */
+[[nodiscard]] inline double senseSign(double epsilon, OrbitSense sense) {
+  const double holeSign = epsilon > 1.0 ? -1.0 : 1.0;
+  return sense == OrbitSense::Prograde ? holeSign : -holeSign;
 }
 
 /** @brief h = sqrt(1 - a^2), the outer-horizon offset r_+ - 1. */
@@ -98,8 +113,8 @@ struct EquatorialFrame {
 struct CircularOrbit {
   bool exists = false;          ///< Timelike: outside the photon orbit of this sense.
   double properTimeRate = 0.0;  ///< dtau/dt = 1 / u^t.
-  /// Omega = dphi/dt, signed: positive along +phi, the rotation sense of a
-  /// spin a = 1 - epsilon > 0 (for epsilon > 1 the hole turns toward -phi).
+  /// Omega = dphi/dt, signed along +phi: a prograde orbit shares the sign of
+  /// a (negative for epsilon > 1), a retrograde one the opposite.
   double angularVelocity = 0.0;
   double zamoVelocity = 0.0;    ///< Azimuthal speed measured by the local ZAMO, signed.
 };
@@ -108,14 +123,16 @@ struct CircularOrbit {
  * @brief Bardeen-Press-Teukolsky circular orbit in deficit form.
  *
  * With s = sqrt(r) = 1 + y (y = x / (1 + sqrt(1 + x))) and the sense's spin
- * a_s = 1 - e, the BPT radicand times r^{3/2} is s^3 - 3s + 2 a_s. The
+ * a_s = 1 - e (e = senseDeficit, so a_s = +|a| co-rotating, -|a| counter), the
+ * BPT radicand times r^{3/2} is s^3 - 3s + 2 a_s. The
  * identity s^3 - 3s + 2 = (s - 1)^2 (s + 2) turns it into
  *   N = y^2 (y + 3) - 2 e,
  * which keeps full precision where s^3 - 3s + 2 a_s would cancel to zero.
  * Then dtau/dt = r^{3/4} sqrt(N) / (r^{3/2} + a_s) and Omega = 1 / (r^{3/2} + a_s).
  * The ZAMO-frame speed (r^2 - 2 a_s sqrt(r) + a_s^2) / (sqrt(Delta) (r^{3/2} + a_s))
  * uses r - a_s = x + e, so its numerator (x + e)^2 + 2 a_s s y is a sum of
- * non-negative terms for the prograde sense.
+ * non-negative terms for the prograde sense. senseSign carries both onto the
+ * +phi coordinate.
  */
 [[nodiscard]] inline CircularOrbit circularOrbit(double epsilon, double x, OrbitSense sense) {
   CircularOrbit orbit;
@@ -131,7 +148,7 @@ struct CircularOrbit {
   }
   const double r32 = r * s;
   const double denominator = r32 + spinSense;
-  const double sign = sense == OrbitSense::Prograde ? 1.0 : -1.0;
+  const double sign = senseSign(epsilon, sense);
   orbit.exists = true;
   orbit.properTimeRate = std::sqrt(r32) * std::sqrt(radicand) / denominator;
   orbit.angularVelocity = sign / denominator;
@@ -312,6 +329,82 @@ struct Tetrad {
   return -frame.omega * frame.varpi / frame.alpha;
 }
 
+/**
+ * @brief Radial potential of a photon with E = 1, R(r) = ((r^2 + a^2) - a lambda)^2
+ *        - Delta (eta + (lambda - a)^2), expanded in r:
+ *          R = r^4 + c2 r^2 + c1 r + c0,
+ *          c2 = 2 (a^2 - a lambda) - Q, c1 = 2 Q, c0 = (a^2 - a lambda)^2 - a^2 Q,
+ *        with Q = eta + (lambda - a)^2. Radial motion is allowed where R >= 0;
+ *        a zero of R is a radial turning point.
+ */
+struct RadialPotential {
+  double c2 = 0.0;
+  double c1 = 0.0;
+  double c0 = 0.0;
+
+  [[nodiscard]] double value(double r) const {
+    const double r2 = r * r;
+    return (r2 * (r2 + c2)) + (c1 * r) + c0;
+  }
+  [[nodiscard]] double slope(double r) const { return (4.0 * r * r * r) + (2.0 * c2 * r) + c1; }
+};
+
+[[nodiscard]] inline RadialPotential radialPotential(double spin, double lambda, double eta) {
+  const double shift = (spin * spin) - (spin * lambda);
+  const double q = eta + ((lambda - spin) * (lambda - spin));
+  return RadialPotential{.c2 = (2.0 * shift) - q, .c1 = 2.0 * q, .c0 = (shift * shift) - (spin * spin * q)};
+}
+
+/**
+ * @brief True when R has a turning point strictly inside (lo, hi): some local
+ *        minimum of R there sits at or below zero.
+ *
+ * R is a quartic with positive leading term, so on an interval whose ends
+ * satisfy R >= 0 a zero exists exactly when a critical point of R inside the
+ * interval has R <= 0; the endpoints themselves never count. The critical
+ * points are the roots of the cubic R', which is monotone between the roots
+ * of R'' = 12 r^2 + 2 c2 and beyond the Cauchy bound of R'; each monotone
+ * piece holds at most one critical point, found by bisection, so no root is
+ * missed however close two roots lie.
+ */
+[[nodiscard]] inline bool hasTurningPointIn(const RadialPotential &potential, double lo, double hi) {
+  const double bound = 1.0 + std::fmax(std::fabs(potential.c2) / 2.0, std::fabs(potential.c1) / 4.0);
+  // Monotone pieces of R': split at the roots of R'' when it has them.
+  const double split = potential.c2 < 0.0 ? std::sqrt(-potential.c2 / 6.0) : 0.0;
+  const std::array<double, 4> edges{-bound, -split, split, bound};
+  const std::size_t edgeCount = 4;
+  for (std::size_t piece = 0; piece + 1 < edgeCount; ++piece) {
+    double left = std::fmax(edges.at(piece), lo);
+    double right = std::fmin(edges.at(piece + 1), hi);
+    if (!(left < right)) {
+      continue;
+    }
+    const double slopeLeft = potential.slope(left);
+    const double slopeRight = potential.slope(right);
+    if ((slopeLeft < 0.0) == (slopeRight < 0.0)) {
+      continue; // monotone R' without a sign change: no critical point here
+    }
+    const bool risingSlope = slopeLeft < 0.0;
+    constexpr int bisections = 200;
+    for (int step = 0; step < bisections && left < right; ++step) {
+      const double middle = 0.5 * (left + right);
+      if (middle <= left || middle >= right) {
+        break;
+      }
+      if ((potential.slope(middle) < 0.0) == risingSlope) {
+        left = middle;
+      } else {
+        right = middle;
+      }
+    }
+    const double critical = 0.5 * (left + right);
+    if (critical > lo && critical < hi && potential.value(critical) <= 0.0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** @brief Conserved quantities of a photon at an observer's event, fixed by
  *         its propagation direction there; they do not depend on whether the
  *         observer emits or receives it. */
@@ -319,12 +412,22 @@ struct PhotonConstants {
   double energy = 0.0;          ///< E = -p_t with the observer-measured energy set to 1.
   double angularMomentum = 0.0; ///< L = p_phi.
   double pTheta = 0.0;          ///< p_theta at the equator.
-  bool fromInfinity = false;    ///< E > 0: the ray can connect to infinity.
-  double lambda = 0.0;          ///< L / E; meaningful only when fromInfinity.
-  double eta = 0.0; ///< Carter Q / E^2 = p_theta^2 / E^2 at the equator; only when fromInfinity.
+  double radialMomentum = 0.0;  ///< ZAMO-frame p^r: positive when moving outward.
+  bool positiveEnergy = false;  ///< E > 0; false only inside the ergoregion.
+  /// Followed forward in time along its propagation, the photon reaches
+  /// infinity: E > 0, no radial turning point outside r, and it is moving
+  /// outward or has an inner turning point to bounce from.
+  bool escapesToInfinity = false;
+  /// Followed backward in time, the photon came from infinity: the same test
+  /// with the radial direction reversed. A camera's pixel sees the sky only
+  /// when this holds; otherwise the ray traces back to the horizon or is
+  /// trapped between turning points.
+  bool fromInfinity = false;
+  double lambda = 0.0; ///< L / E; meaningful only when positiveEnergy.
+  double eta = 0.0;    ///< Carter Q / E^2 = p_theta^2 / E^2 at the equator; only when positiveEnergy.
   /// 1 / E: the frequency the observer measures over the frequency at
   /// infinity -- the blueshift of a photon received from infinity, the inverse
-  /// of the redshift of one sent there. Only when fromInfinity.
+  /// of the redshift of one sent there. Only when positiveEnergy.
   double g = 0.0;
 };
 
@@ -337,7 +440,15 @@ struct PhotonConstants {
  * The momentum in ZAMO components is P = lorentz[0] + n^i lorentz[i]; then
  * p_phi = varpi P^phi, p_theta = r P^theta, and E = alpha P^t + omega varpi P^phi.
  * E <= 0 happens only inside the ergoregion: such a photon connects to
- * infinity in neither direction, and fromInfinity is false.
+ * infinity in neither direction.
+ *
+ * Connectivity comes from the radial potential R: with no turning point in
+ * (r, inf) the photon, once moving outward, runs to infinity. Moving outward
+ * now it escapes; moving inward it escapes only after bouncing off a turning
+ * point between the outer horizon and r. At P^r = 0 the photon sits on a
+ * turning point: R'(r) > 0 marks a periapsis (it moves outward both ways), R'
+ * < 0 an apoapsis inside a potential barrier (trapped both ways), and R' = 0 a
+ * circular photon orbit, which escapes in neither direction.
  */
 [[nodiscard]] inline PhotonConstants photonConstants(const Tetrad &tetrad, const Vec3 &direction) {
   Vec4 zamo{};
@@ -351,12 +462,31 @@ struct PhotonConstants {
   PhotonConstants constants;
   constants.angularMomentum = frame.varpi * zamo.at(3);
   constants.pTheta = frame.r * zamo.at(2);
+  constants.radialMomentum = zamo.at(1);
   constants.energy = (frame.alpha * zamo.at(0)) + (frame.omega * constants.angularMomentum);
-  constants.fromInfinity = constants.energy > 0.0;
-  if (constants.fromInfinity) {
-    constants.lambda = constants.angularMomentum / constants.energy;
-    constants.eta = (constants.pTheta * constants.pTheta) / (constants.energy * constants.energy);
-    constants.g = 1.0 / constants.energy;
+  constants.positiveEnergy = constants.energy > 0.0;
+  if (!constants.positiveEnergy) {
+    return constants;
+  }
+  constants.lambda = constants.angularMomentum / constants.energy;
+  constants.eta = (constants.pTheta * constants.pTheta) / (constants.energy * constants.energy);
+  constants.g = 1.0 / constants.energy;
+
+  const RadialPotential potential = radialPotential(frame.spin, constants.lambda, constants.eta);
+  const double r = frame.r;
+  const double outerHorizon = 1.0 + horizonOffset(frame.epsilon);
+  const bool clearAbove = !hasTurningPointIn(potential, r, std::numeric_limits<double>::max());
+  const bool bounceBelow = hasTurningPointIn(potential, outerHorizon, r);
+  if (constants.radialMomentum > 0.0) {
+    constants.escapesToInfinity = clearAbove;
+    constants.fromInfinity = clearAbove && bounceBelow;
+  } else if (constants.radialMomentum < 0.0) {
+    constants.escapesToInfinity = clearAbove && bounceBelow;
+    constants.fromInfinity = clearAbove;
+  } else {
+    const bool periapsis = potential.slope(r) > 0.0;
+    constants.escapesToInfinity = periapsis && clearAbove;
+    constants.fromInfinity = constants.escapesToInfinity;
   }
   return constants;
 }

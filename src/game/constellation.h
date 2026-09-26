@@ -267,7 +267,9 @@ private:
   void stepFactionAI();
   void evaluateOutcomes();
   /** @brief Records one credit at (system, band) for this turn: the referee
-   *         total already holds it; the faction learns it by report. */
+   *         total holds it at once, and the credit that carries a total across
+   *         its victory target marks the crossing site; the faction learns it
+   *         by report. */
   void recordCredit(std::size_t factionIndex, SystemId system, int bandIndex,
                     double stabilizationUnits, double controlPoints);
   /** @brief Sends this turn's credits home, one ScoreReport per faction and band. */
@@ -324,12 +326,13 @@ private:
   // link graph; negative marks an unreachable pair. Derived from the config.
   std::vector<double> lightPathSec_;
   // Per-turn scratch, rebuilt every turn before it is read: this turn's credits
-  // and, per faction, the site of its last stabilization and control credit
-  // (canonical order), which locates a victory in space. Never serialized
-  // because no turn reads a previous turn's values.
+  // and, per faction, the site of the credit whose addition first carried its
+  // stabilization or control total across the victory target this turn
+  // (credits applied in canonical order), which locates a victory in space.
+  // Never serialized because no turn reads a previous turn's values.
   std::vector<TurnCredit> turnCredits_;
-  std::vector<CreditSite> lastStabilizationSite_;
-  std::vector<CreditSite> lastControlSite_;
+  std::vector<CreditSite> stabilizationCrossingSite_;
+  std::vector<CreditSite> controlCrossingSite_;
   // pendingCommands_[factionIndex]: indices into commandLog_ of that
   // faction's orders it has not yet heard answered, ascending. An entry leaves
   // when a status report sent at or after its effect turn, or its

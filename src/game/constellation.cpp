@@ -703,8 +703,8 @@ void Constellation::advanceTurn() {
   }
   clock_.advance();
   turnCredits_.clear();
-  lastStabilizationSite_.assign(factions_.size(), CreditSite{});
-  lastControlSite_.assign(factions_.size(), CreditSite{});
+  stabilizationCrossingSite_.assign(factions_.size(), CreditSite{});
+  controlCrossingSite_.assign(factions_.size(), CreditSite{});
   deliverDue();
   landArrivals();
   runFleetWork();
@@ -717,13 +717,21 @@ void Constellation::advanceTurn() {
 void Constellation::recordCredit(std::size_t factionIndexValue, SystemId system, int bandIndex,
                                  double stabilizationUnits, double controlPoints) {
   FactionState &faction = factions_.at(factionIndexValue);
+  const CreditSite here{.system = system, .bandIndex = bandIndex};
+  // The totals only grow, so each crosses its target at most once: the credit
+  // that takes it from below the target to at or above it is the crossing.
+  const double stabilizationBefore = faction.stabilizationUnits;
   faction.stabilizationUnits += stabilizationUnits;
-  faction.controlScore += controlPoints;
-  if (stabilizationUnits > 0.0) {
-    lastStabilizationSite_.at(factionIndexValue) = CreditSite{.system = system, .bandIndex = bandIndex};
+  if (config_.victoryStabilizationUnits > 0.0 &&
+      stabilizationBefore < config_.victoryStabilizationUnits &&
+      faction.stabilizationUnits >= config_.victoryStabilizationUnits) {
+    stabilizationCrossingSite_.at(factionIndexValue) = here;
   }
-  if (controlPoints > 0.0) {
-    lastControlSite_.at(factionIndexValue) = CreditSite{.system = system, .bandIndex = bandIndex};
+  const double controlBefore = faction.controlScore;
+  faction.controlScore += controlPoints;
+  if (config_.victoryControlScore > 0.0 && controlBefore < config_.victoryControlScore &&
+      faction.controlScore >= config_.victoryControlScore) {
+    controlCrossingSite_.at(factionIndexValue) = here;
   }
   turnCredits_.push_back(TurnCredit{.factionIndex = factionIndexValue,
                                     .system = system,
@@ -814,8 +822,9 @@ void Constellation::evaluateOutcomes() {
     winner_ = winningFaction->id;
     overallStatus_ = winningFaction->id == playerFaction_ ? CampaignStatus::Won : CampaignStatus::Lost;
     // The decision is an event at the place the deciding credit happened: the
-    // winner's authority for banked energy, else the band of its last
-    // stabilization or control credit this turn (axes checked in that order).
+    // winner's authority for banked energy, else the band whose credit carried
+    // its stabilization or control total across the target this turn (axes
+    // checked in that order).
     // Every authority, the winner's included, learns by light from there; one
     // no chain of links reaches never does.
     const auto winnerIndex =
@@ -827,11 +836,11 @@ void Constellation::evaluateOutcomes() {
         config_.victoryStabilizationUnits > 0.0 &&
         winningFaction->stabilizationUnits >= config_.victoryStabilizationUnits;
     if (!energyWin && stabilizationWin &&
-        lastStabilizationSite_.at(winnerIndex).system != K_INVALID_SYSTEM_ID) {
-      site = lastStabilizationSite_.at(winnerIndex);
+        stabilizationCrossingSite_.at(winnerIndex).system != K_INVALID_SYSTEM_ID) {
+      site = stabilizationCrossingSite_.at(winnerIndex);
     } else if (!energyWin && !stabilizationWin &&
-               lastControlSite_.at(winnerIndex).system != K_INVALID_SYSTEM_ID) {
-      site = lastControlSite_.at(winnerIndex);
+               controlCrossingSite_.at(winnerIndex).system != K_INVALID_SYSTEM_ID) {
+      site = controlCrossingSite_.at(winnerIndex);
     }
     for (std::size_t observerIndex = 0; observerIndex < factions_.size(); ++observerIndex) {
       const double delaySec = siteDelaySec(site, factions_.at(observerIndex).homeSystem);
