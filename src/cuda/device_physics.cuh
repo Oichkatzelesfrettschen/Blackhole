@@ -2191,10 +2191,15 @@ __device__ __forceinline__ DStokes d_stokes_step(DStokes s,
     float qNew, uNew;
     float const D = fmaf(A, A, R * R);
 
-    if (D < 1.0e-60f) {
-        /* Pure emission (neither absorption nor rotation) */
-        qNew = s.q + jQ * ds;
-        uNew = s.u + jU * ds;
+    if (tauL < 1.0e-4f && fabsf(phi) < 1.0e-4f) {
+        /* Optically thin and nearly unrotated: second-order Taylor of
+         * Ic = ds (1 - tau/2), Is = phi ds / 2. The closed form below divides
+         * 1 - E cos(phi), which rounds to zero in float, by D, which
+         * underflows to zero once A and R are both below about 1e-19. */
+        float const ic  = ds * (1.0f - 0.5f * tauL);
+        float const is_ = 0.5f * phi * ds;
+        qNew = fmaf(jQ, ic,  fmaf(-jU, is_, qHom));
+        uNew = fmaf(jQ, is_, fmaf( jU, ic,  uHom));
     } else if (A < 1.0e-15f * fabsf(R)) {
         /* Rotation-dominated (A ~ 0) */
         float const ic  =  Sp / R;
