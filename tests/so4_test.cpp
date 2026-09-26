@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <optional>
 
 #include <gtest/gtest.h>
 
@@ -127,7 +128,9 @@ TEST(So4, IsoclinicSplitRoundTrip) {
   for (const Quat &qL : sampleQuats()) {
     for (const Quat &qR : sampleQuats()) {
       const Mat4 r = so4FromPair(qL, qR);
-      const Pair split = isoclinicSplit(r);
+      const std::optional<Pair> maybeSplit = isoclinicSplit(r);
+      ASSERT_TRUE(maybeSplit.has_value());
+      const Pair split = maybeSplit.value_or(Pair{});
       expectMatNear(so4FromPair(split), r, K_TOL);
       // The recovered pair equals the input up to one joint sign.
       const double sign = quatDot(split.left, qL) >= 0.0 ? 1.0 : -1.0;
@@ -143,7 +146,9 @@ TEST(So4, SimplePlaneRotationFixesComplementaryPlane) {
   for (std::size_t p = 0; p < 4; ++p) {
     for (std::size_t q = p + 1; q < 4; ++q) {
       const Mat4 givens = planeRotation(p, q, theta);
-      const Pair split = isoclinicSplit(givens);
+      const std::optional<Pair> maybeSplit = isoclinicSplit(givens);
+      ASSERT_TRUE(maybeSplit.has_value());
+      const Pair split = maybeSplit.value_or(Pair{});
       const Mat4 rebuilt = so4FromPair(split);
       expectMatNear(rebuilt, givens, K_TOL);
       for (std::size_t k = 0; k < 4; ++k) {
@@ -190,7 +195,60 @@ TEST(So4, OppositeExponentsGiveSimpleRotationInWXPlane) {
   EXPECT_NEAR(r.at(2).at(2), 1.0, K_TOL);
   EXPECT_NEAR(r.at(0).at(0), std::cos(theta), K_TOL);
   EXPECT_NEAR(r.at(3).at(3), std::cos(theta), K_TOL);
-  EXPECT_NEAR(std::abs(r.at(0).at(3)), std::sin(theta), K_TOL);
+  // Sense: e_w = 1 -> e^{i theta} = cos + i sin, so column w holds (sin, 0, 0, cos)
+  // and e_x = i -> i e^{i theta} = -sin + i cos, so row w of column x is -sin.
+  EXPECT_NEAR(r.at(0).at(3), std::sin(theta), K_TOL);
+  EXPECT_NEAR(r.at(3).at(0), -std::sin(theta), K_TOL);
+}
+
+void expectQuatEq(const Quat &actual, const Quat &expected) {
+  EXPECT_EQ(actual.w, expected.w);
+  EXPECT_EQ(actual.x, expected.x);
+  EXPECT_EQ(actual.y, expected.y);
+  EXPECT_EQ(actual.z, expected.z);
+}
+
+// Hamilton's rules i^2 = j^2 = k^2 = ijk = -1, written out by hand so the
+// test pins the algebra independently of operator*.
+TEST(So4, HamiltonProductFollowsIJEqualsK) {
+  const Quat one{.w = 1, .x = 0, .y = 0, .z = 0};
+  const Quat i{.w = 0, .x = 1, .y = 0, .z = 0};
+  const Quat j{.w = 0, .x = 0, .y = 1, .z = 0};
+  const Quat k{.w = 0, .x = 0, .y = 0, .z = 1};
+  const Quat minusOne{.w = -1, .x = 0, .y = 0, .z = 0};
+  const Quat minusK{.w = 0, .x = 0, .y = 0, .z = -1};
+  expectQuatEq(i * j, k);
+  expectQuatEq(j * k, i);
+  expectQuatEq(k * i, j);
+  expectQuatEq(j * i, minusK);
+  expectQuatEq(i * i, minusOne);
+  expectQuatEq(i * j * k, minusOne);
+  expectQuatEq(one * k, k);
+}
+
+// Hand-computed images for non-commuting axes, ordered (x, y, z, w):
+// i (w + x i + y j + z k) = -x + w i - z j + y k, so left multiplication by i
+// sends (x, y, z, w) to (w, -z, y, -x); (w + x i + y j + z k)(-j) =
+// y + z i - w j - x k, so v -> v conj(j) sends (x, y, z, w) to (z, -w, -x, y).
+TEST(So4, HandComputedEntriesForNonCommutingAxes) {
+  const Quat one{.w = 1, .x = 0, .y = 0, .z = 0};
+  const Quat i{.w = 0, .x = 1, .y = 0, .z = 0};
+  const Quat j{.w = 0, .x = 0, .y = 1, .z = 0};
+  const Mat4 left = so4FromPair(i, one);
+  const Mat4 expectedLeft = {{{0, 0, 0, 1}, {0, 0, -1, 0}, {0, 1, 0, 0}, {-1, 0, 0, 0}}};
+  expectMatNear(left, expectedLeft, 0.0);
+  const Mat4 right = so4FromPair(one, j);
+  const Mat4 expectedRight = {{{0, 0, 1, 0}, {0, 0, 0, -1}, {-1, 0, 0, 0}, {0, 1, 0, 0}}};
+  expectMatNear(right, expectedRight, 0.0);
+}
+
+TEST(So4, IsoclinicSplitRejectsReflections) {
+  Mat4 reflection = identity();
+  reflection.at(0).at(0) = -1.0;
+  EXPECT_FALSE(isoclinicSplit(reflection).has_value());
+  const Mat4 rotated = multiply(reflection, so4FromPair(sampleQuats().at(0), sampleQuats().at(1)));
+  EXPECT_FALSE(isoclinicSplit(rotated).has_value());
+  EXPECT_TRUE(isoclinicSplit(identity()).has_value());
 }
 
 TEST(So4, ColumnMajorLayoutPlacesRowColumnEntry) {

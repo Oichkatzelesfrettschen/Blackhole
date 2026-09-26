@@ -22,6 +22,7 @@
 #include <cmath>
 #include <concepts>
 #include <cstddef>
+#include <optional>
 
 namespace blackhole::tesseract {
 
@@ -239,8 +240,15 @@ constexpr So4Pair<T> compose(const So4Pair<T> &a, const So4Pair<T> &b) {
  * a_i b_j of Van Elfrinkhof, a rank-one outer product for M in SO(4). The
  * row of A with the largest norm fixes b up to sign; a = A b then carries
  * the matching sign, so the returned pair is +-(qL, qR).
+ *
+ * An improper orthogonal matrix (det = -1) has no quaternion pair and a
+ * full-rank associate matrix, so the split returns std::nullopt for any
+ * input with det <= 0.
  */
-template <std::floating_point T> So4Pair<T> isoclinicSplit(const Mat4<T> &m) {
+template <std::floating_point T> std::optional<So4Pair<T>> isoclinicSplit(const Mat4<T> &m) {
+  if (determinant(m) <= T{0}) {
+    return std::nullopt;
+  }
   const std::array<Quat<T>, 4> units = {
       Quat<T>{.w = 1, .x = 0, .y = 0, .z = 0}, Quat<T>{.w = 0, .x = 1, .y = 0, .z = 0},
       Quat<T>{.w = 0, .x = 0, .y = 1, .z = 0}, Quat<T>{.w = 0, .x = 0, .y = 0, .z = 1}};
@@ -284,7 +292,7 @@ template <std::floating_point T> So4Pair<T> isoclinicSplit(const Mat4<T> &m) {
   }
   const Quat<T> qL = normalized(Quat<T>{.w = a.at(0), .x = a.at(1), .y = a.at(2), .z = a.at(3)});
   const Quat<T> qR = Quat<T>{.w = b.at(0), .x = b.at(1), .y = b.at(2), .z = b.at(3)};
-  return {.left = qL, .right = qR};
+  return So4Pair<T>{.left = qL, .right = qR};
 }
 
 } // namespace blackhole::tesseract
