@@ -889,8 +889,6 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     rtti.width = rs.targets.renderWidth;
     rtti.height = rs.targets.renderHeight;
 
-    renderCurveOverlayWindow(rs, cli.curveTsvPath);
-
     updateLuts(rs, rs.physicsCore.kerrSpin, rs.disk.adiskDensityV);
     loadSpectralSynchHawkingLuts(rs);
 
@@ -1515,6 +1513,8 @@ int main(int argc, char **argv) {
       if (input.isUIVisible()) {
         renderSettingsWindow(rs);
       }
+      // The --curve-tsv plot is independent of the scene.
+      renderCurveOverlayWindow(rs, cli.curveTsvPath);
 
       // The compare sweep drives the geodesic integrator; the tesseract scene
       // bypasses it along with the compute dispatch and parity capture.
