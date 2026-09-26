@@ -173,6 +173,27 @@ So4Pair<double> advanceOrientation(const So4Pair<double> &orientation,
                                    const std::array<float, 3> &leftRate,
                                    const std::array<float, 3> &rightRate, double ds);
 
+/** @brief Orientation and pulse travel of the tesseract animation at one instant. */
+struct TesseractMotion {
+  So4Pair<double> orientation{};
+  float pulseTravel = 0.0f;
+};
+
+/**
+ * @brief Animation state at output time @p seconds for constant rates, in closed form.
+ *
+ * Orientation (exp(s leftRate), exp(s rightRate)) at s = resetPhase +
+ * rotationSpeed * seconds and pulse travel pulseSpeed * seconds wrapped into
+ * [0, pulseSpan): what per-frame advanceOrientation / advancePulseTravel reach
+ * from the reset state after @p seconds. A recording evaluates this at
+ * frameIndex / fps, so every output frame depends on its index alone and a
+ * capture resumed at a later start frame reproduces the full capture's frames.
+ */
+TesseractMotion tesseractMotionAt(const std::array<float, 3> &leftRate,
+                                  const std::array<float, 3> &rightRate, double resetPhase,
+                                  double rotationSpeed, float pulseSpeed, float pulseSpan,
+                                  double seconds);
+
 /** @brief Kind tag stored in SegmentInstance::meta.z. */
 enum class SegmentKind { TesseractEdge = 0, WorldTube = 1, LitSlice = 2 };
 

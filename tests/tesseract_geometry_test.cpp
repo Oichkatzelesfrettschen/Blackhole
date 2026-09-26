@@ -272,6 +272,36 @@ TEST(TesseractAnimation, AccumulatedStepsMatchClosedFormForConstantRates) {
   EXPECT_LT(quatDistance(orientation.right, closed(right)), 1e-12);
 }
 
+TEST(TesseractAnimation, OutputClockMotionMatchesFrameAccumulation) {
+  // A recording evaluates tesseractMotionAt at frameIndex / fps; accumulating
+  // the same frames one by one from the reset state reaches the same state,
+  // so a capture resumed at frame k reproduces frame k of the full capture.
+  const std::array<float, 3> left = {0.35f, 0.0f, 0.15f};
+  const std::array<float, 3> right = {-0.35f, 0.12f, 0.0f};
+  const double resetPhase = 2.5;
+  const double speed = 1.0;
+  const float pulseSpeed = 1.5f;
+  const float span = 4.0f;
+  const double fps = 60.0;
+  tess::TesseractMotion accumulated =
+      tess::tesseractMotionAt(left, right, resetPhase, speed, pulseSpeed, span, 0.0);
+  for (int frame = 1; frame <= 300; ++frame) {
+    accumulated.orientation =
+        tess::advanceOrientation(accumulated.orientation, left, right, speed / fps);
+    accumulated.pulseTravel = tess::advancePulseTravel(
+        accumulated.pulseTravel, static_cast<float>(static_cast<double>(pulseSpeed) / fps), span);
+    const tess::TesseractMotion direct = tess::tesseractMotionAt(
+        left, right, resetPhase, speed, pulseSpeed, span, static_cast<double>(frame) / fps);
+    EXPECT_LT(quatDistance(direct.orientation.left, accumulated.orientation.left), 1e-12);
+    EXPECT_LT(quatDistance(direct.orientation.right, accumulated.orientation.right), 1e-12);
+    EXPECT_NEAR(direct.pulseTravel, accumulated.pulseTravel, 1e-4f);
+  }
+  // Time 0 is the reset state; the pulse starts at t_now.
+  const tess::TesseractMotion reset =
+      tess::tesseractMotionAt(left, right, resetPhase, speed, pulseSpeed, span, 0.0);
+  EXPECT_EQ(reset.pulseTravel, 0.0f);
+}
+
 TEST(TesseractAnimation, RateChangeAfterLongRunMovesOnlyOneStep) {
   // Ten minutes at 60 Hz, then the rate sliders jump: one more frame turns
   // the orientation by at most |rate| * ds, not by |rate change| * s.

@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <string_view>
 #include <system_error>
 
@@ -1171,7 +1172,14 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
                                       const FrameCamera &frameCamera, float frameTime,
                                       float deltaTime, double currentTime, GLuint &computeProgram) {
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
-    renderTesseractScene(rs, frameCamera.basis, deltaTime);
+    // Recording advances on the output frame clock, frameIndex / fps, so the
+    // frames depend on their index alone, not on render throughput.
+    std::optional<double> outputClock;
+    if (!cli.recordFramesDir.empty()) {
+      outputClock =
+          static_cast<double>(rs.recording.recordFrameIndex) / static_cast<double>(K_CINEMATIC_FPS);
+    }
+    renderTesseractScene(rs, frameCamera.basis, deltaTime, outputClock);
     return {};
   }
   const auto result =

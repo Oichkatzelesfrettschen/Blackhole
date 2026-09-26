@@ -14,6 +14,7 @@
 #define BLACKHOLE_RENDER_TESSERACT_TESSERACT_RENDERER_H
 
 #include <array>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -143,13 +144,17 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistan
 /**
  * @brief Render the tesseract scene for this frame into rs.targets.texBlackhole.
  *
- * While rs.tesseract.animate holds, the stored orientation advances by
- * advanceOrientation over ds = rotationSpeed * deltaSeconds and the pulse by
- * advancePulseTravel over pulseSpeed * deltaSeconds; with it off both hold
- * still. deltaSeconds is clamped to 0.25 s per frame. The view comes from
+ * Interactive frames (@p outputClockSeconds empty) advance the stored
+ * orientation by advanceOrientation over ds = rotationSpeed * deltaSeconds and
+ * the pulse by advancePulseTravel over pulseSpeed * deltaSeconds while
+ * rs.tesseract.animate holds; deltaSeconds is clamped to 0.25 s per frame.
+ * Recorded frames pass the output frame time and take the state from
+ * tesseractMotionAt at that time (time 0 while animation is off), so render
+ * throughput and warm-up never reach the frames. The view comes from
  * tesseractViewProjection.
  */
-void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds);
+void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
+                          std::optional<double> outputClockSeconds);
 
 } // namespace blackhole
 

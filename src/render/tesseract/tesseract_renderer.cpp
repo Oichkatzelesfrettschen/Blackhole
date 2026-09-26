@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -287,7 +288,8 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistan
   return projection * view;
 }
 
-void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds) {
+void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
+                          std::optional<double> outputClockSeconds) {
   auto &tg = rs.tesseract;
   tg.timeSpan = std::max(tg.timeSpan, 0.5f);
   tg.litMoment = std::clamp(tg.litMoment, 0.0f, tg.timeSpan);
@@ -296,20 +298,30 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float d
   tg.pulseStrand =
       std::clamp(tg.pulseStrand, 0, static_cast<int>(tesseract::bedroomFeatures().size()) - 1);
 
-  if (!tg.orientationInitialized) {
-    tg.orientation =
-        tesseract::advanceOrientation(tesseract::So4Pair<double>{}, tg.leftRate, tg.rightRate,
-                                      static_cast<double>(tg.resetPhase));
-    tg.pulseTravel = 0.0f;
+  const float pulseSpan = tg.pulseNow - tg.pulsePast;
+  if (outputClockSeconds.has_value()) {
+    const double seconds = tg.animate ? *outputClockSeconds : 0.0;
+    const tesseract::TesseractMotion motion = tesseract::tesseractMotionAt(
+        tg.leftRate, tg.rightRate, static_cast<double>(tg.resetPhase),
+        static_cast<double>(tg.rotationSpeed), tg.pulseSpeed, pulseSpan, seconds);
+    tg.orientation = motion.orientation;
+    tg.pulseTravel = motion.pulseTravel;
     tg.orientationInitialized = true;
+  } else {
+    if (!tg.orientationInitialized) {
+      const tesseract::TesseractMotion reset = tesseract::tesseractMotionAt(
+          tg.leftRate, tg.rightRate, static_cast<double>(tg.resetPhase), 0.0, 0.0f, pulseSpan, 0.0);
+      tg.orientation = reset.orientation;
+      tg.pulseTravel = reset.pulseTravel;
+      tg.orientationInitialized = true;
+    }
+    // A stalled frame (window drag, breakpoint) advances by at most MAX_STEP.
+    const float step = tg.animate ? std::clamp(deltaSeconds, 0.0f, MAX_ANIMATION_STEP_S) : 0.0f;
+    tg.orientation = tesseract::advanceOrientation(tg.orientation, tg.leftRate, tg.rightRate,
+                                                   static_cast<double>(step) *
+                                                       static_cast<double>(tg.rotationSpeed));
+    tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed, pulseSpan);
   }
-  // A stalled frame (window drag, breakpoint) advances by at most MAX_STEP.
-  const float step = tg.animate ? std::clamp(deltaSeconds, 0.0f, MAX_ANIMATION_STEP_S) : 0.0f;
-  tg.orientation = tesseract::advanceOrientation(tg.orientation, tg.leftRate, tg.rightRate,
-                                                 static_cast<double>(step) *
-                                                     static_cast<double>(tg.rotationSpeed));
-  tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed,
-                                                 tg.pulseNow - tg.pulsePast);
   const tesseract::Mat4<double> rotation = tesseract::so4FromPair(tg.orientation);
 
   const float aspect = static_cast<float>(std::max(rs.targets.renderWidth, 1)) /

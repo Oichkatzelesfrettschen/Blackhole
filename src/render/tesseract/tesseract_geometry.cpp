@@ -188,6 +188,18 @@ So4Pair<double> advanceOrientation(const So4Pair<double> &orientation,
           .right = normalized(step(rightRate) * orientation.right)};
 }
 
+TesseractMotion tesseractMotionAt(const std::array<float, 3> &leftRate,
+                                  const std::array<float, 3> &rightRate, double resetPhase,
+                                  double rotationSpeed, float pulseSpeed, float pulseSpan,
+                                  double seconds) {
+  TesseractMotion motion;
+  motion.orientation = advanceOrientation(So4Pair<double>{}, leftRate, rightRate,
+                                          resetPhase + (rotationSpeed * seconds));
+  motion.pulseTravel = advancePulseTravel(
+      0.0f, static_cast<float>(static_cast<double>(pulseSpeed) * seconds), pulseSpan);
+  return motion;
+}
+
 std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &options) {
   std::vector<SegmentInstance> segments;
   const TesseractMesh mesh = buildTesseract();
