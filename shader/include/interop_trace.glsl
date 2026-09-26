@@ -280,8 +280,12 @@ float bhMetricSpin(float aTrace) { return gravitationalLensing > 0.5 ? aTrace : 
 // kerrChartPosition by rotating through -F(|p|) with the traced metric, so
 // consumers defined on Boyer-Lindquist phi (the wiregrid overlay) read the
 // azimuth the photon actually has there. Chart-space shading and depth keep
-// the chart position.
+// the chart position. With renderBlackHole = 0 the traces return the straight
+// camera ray's end point, which was never rotated, so it passes unchanged.
 vec3 bhChartToBoyerLindquist(vec3 p, float r_s) {
+  if (!bhHoleRendered()) {
+    return p;
+  }
   float aTrace = bhMetricSpin(kerrTraceSpin(0.5 * kerrSpin * r_s));
   return kerrRotateZ(p, -kerrKsAzimuthOffset(length(p), bhMetricRadius(r_s), aTrace));
 }

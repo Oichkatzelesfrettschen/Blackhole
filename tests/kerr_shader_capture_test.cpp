@@ -1518,3 +1518,42 @@ TEST_F(KerrShaderCaptureTest, CameraInTheDiskPlaneIsNotADiskHit) {
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }
+
+TEST_F(KerrShaderCaptureTest, NoHoleTerminalPointsSkipTheChartConversion) {
+  // With renderBlackHole = 0 the traces return the straight camera ray's end
+  // point, never rotated into the Kerr-Schild chart, so the wiregrid's
+  // bhChartToBoyerLindquist must leave it as is; at a = 0.998 and r ~ 100
+  // the -F(r) rotation would move it by ~1 M.
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  const GLuint program = bhtest::createComputeProgram(comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+void main() {
+  Ray ray;
+  ray.position = vec3(20.0, 5.0, 3.0);
+  ray.velocity = normalize(vec3(0.3, 1.0, 0.2));
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 300, 0.1);
+  vec3 terminalPos;
+  bhTraceGeodesicRTE(ray, 2.0, 100.0, 300, 0.1, 0.5, terminalPos);
+  vec3 a = bhChartToBoyerLindquist(hit.hitPoint, 2.0);
+  vec3 b = bhChartToBoyerLindquist(terminalPos, 2.0);
+  result[0] = length(a - hit.hitPoint);
+  result[1] = length(b - terminalPos);
+  result[2] = length(hit.hitPoint);
+}
+)");
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 3), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  glUseProgram(program);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.998F);
+  glUniform1f(glGetUniformLocation(program, "renderBlackHole"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 0.0F);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 3);
+  EXPECT_GT(out.at(2), 50.0F);
+  EXPECT_LT(out.at(0), 1e-4F);
+  EXPECT_LT(out.at(1), 1e-4F);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
