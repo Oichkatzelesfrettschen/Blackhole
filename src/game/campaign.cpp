@@ -289,9 +289,10 @@ void CampaignState::deliverDue() {
       applyCommand(delivery.commandIndex);
       break;
     case DeliveryKind::CompletionReport: {
-      // A dark host hears nothing: the report and its yield are lost.
+      // A dark host hears nothing: the report and its yield are lost, tallied
+      // apart from lost colony production.
       if (nodes_.front().dark()) {
-        energyLostToDarkness_ += delivery.yieldUnits;
+        fleetYieldLostToDarkness_ += delivery.yieldUnits;
         break;
       }
       IntelReport report;
@@ -680,6 +681,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
   view.colonyTechTier = colonyTechTier();
   view.victoryTechTier = config_.victoryTechTier;
   view.energyLostToDarkness = energyLostToDarkness_;
+  view.fleetYieldLostToDarkness = fleetYieldLostToDarkness_;
   return view;
 }
 

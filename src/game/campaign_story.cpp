@@ -768,6 +768,7 @@ void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
     appendI64(out, arrival.techPoints);
   }
   appendF64(out, energyLostToDarkness_);
+  appendF64(out, fleetYieldLostToDarkness_);
 }
 
 } // namespace game

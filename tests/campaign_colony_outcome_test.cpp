@@ -333,3 +333,29 @@ TEST(ColonyOutcome, ColonyViewSkipsForbiddenBands) {
   EXPECT_EQ(field.invalidQueries, 0);
   EXPECT_EQ(colony.ordersInFlight.size(), 1U);
 }
+
+// Falsifier: a fleet's completion report lost at a dark host counted as lost
+// colony production -- the colony-production figure must be exactly the
+// colony's reports that reached the dark host, with fleet yield tallied apart.
+TEST(ColonyOutcome, FleetYieldLostToDarknessIsTalliedApart) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignState state(
+      colonyConfig(R"({"events": [{"id": 1, "triggers": [{"turn_at_least": 8}],
+                        "effects": [{"set_flag": "dark"}]}]})",
+                   0),
+      field);
+  ASSERT_TRUE(state.valid());
+  // A fleet on band 995 (rate 1, 5 turns from the host) finishes a two-second
+  // task at turn 7; its report would land at 12, after the host goes dark.
+  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
+  game::Command order;
+  order.type = game::CommandType::AssignTask;
+  order.fleet = fleet;
+  order.properTimeCostSec = 2.0;
+  ASSERT_TRUE(state.issueCommand(order));
+  state.advanceTurns(30);
+  const game::CampaignViewSnapshot view = state.renderSnapshot();
+  EXPECT_DOUBLE_EQ(view.energyLostToDarkness, 30.0 - 5.0 - 3.0);
+  EXPECT_GT(view.fleetYieldLostToDarkness, 0.0);
+  EXPECT_TRUE(state.intelLog().empty());
+}

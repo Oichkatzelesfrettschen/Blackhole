@@ -158,6 +158,7 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   const ReceivedFromNode &host = self.received.at(K_AUTHORITY_NODE);
   view.energyUnits = host.lastEmitTurn >= 0 ? host.lastSenderEnergyUnits : 0.0;
   view.energyLostToDarkness = 0.0;
+  view.fleetYieldLostToDarkness = 0.0;
   view.instability = 0.0;
   view.stabilization = 0.0;
   view.fleetIntegrity = 0.0;

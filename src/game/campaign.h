@@ -381,7 +381,8 @@ private:
   std::vector<std::uint8_t> eventFired_;      ///< Once-events that have fired, by index.
   std::vector<ScheduledEvent> scheduledEvents_;
   std::vector<ArrivalRecord> arrivals_;
-  double energyLostToDarkness_ = 0.0;         ///< Production that reached a dark host.
+  double energyLostToDarkness_ = 0.0;         ///< Colony production that reached a dark host.
+  double fleetYieldLostToDarkness_ = 0.0;     ///< Fleet completion yield that reached a dark host.
 };
 
 } // namespace game

@@ -199,7 +199,8 @@ struct CampaignViewSnapshot {
   std::vector<TechLevelView> techTiers;     ///< Story tiers by points.
   std::int64_t colonyTechTier = 0;
   std::int64_t victoryTechTier = 0;
-  double energyLostToDarkness = 0.0;        ///< Production that reached a dark host.
+  double energyLostToDarkness = 0.0;        ///< Colony production that reached a dark host.
+  double fleetYieldLostToDarkness = 0.0;    ///< Fleet completion yield that reached a dark host.
 };
 
 } // namespace game

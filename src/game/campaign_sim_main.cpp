@@ -88,10 +88,10 @@ void playColony(const game::EventSet &story, std::uint64_t seed, int colonyBand)
   }
   const game::CampaignViewSnapshot view = state.renderSnapshot();
   static_cast<void>(std::printf(
-      "colony band=%d tier=%" PRId64 " energy=%.3f lost=%.3f arrivals=%zu digest=%016" PRIx64
-      "\n",
+      "colony band=%d tier=%" PRId64 " energy=%.3f lost=%.3f fleetLost=%.3f arrivals=%zu "
+      "digest=%016" PRIx64 "\n",
       colonyBand, view.colonyTechTier, view.energyUnits, view.energyLostToDarkness,
-      view.arrivals.size(), state.stateDigest()));
+      view.fleetYieldLostToDarkness, view.arrivals.size(), state.stateDigest()));
 }
 
 } // namespace
