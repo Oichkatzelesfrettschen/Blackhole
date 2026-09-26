@@ -25,6 +25,7 @@
 #include "game/observer.h"
 #include "game/realtime_driver.h"
 #include "game/save_format.h"
+#include "game/station_node.h"
 #include "game/time_field.h"
 
 namespace {
