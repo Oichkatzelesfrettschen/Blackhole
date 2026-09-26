@@ -13,7 +13,12 @@ independent of the C++ closed forms under test:
   src/physics/verified/kerr_newman.hpp vanishes at every root on a grid of
   signed spins and charges up to near extremality.
 
-The tests in tests/kerr_newman_test.cpp embed the printed constants.
+- Kerr-de Sitter horizons are the positive real roots of the Carter quartic
+  Delta_r = (r^2 + a^2)(1 - Lambda r^2 / 3) - 2 M r, from mpmath.polyroots on
+  its coefficients rather than the bracketing solver under test.
+
+The tests in tests/kerr_newman_test.cpp and tests/kerr_de_sitter_test.cpp
+embed the printed constants.
 
 Usage: PYTHON=${PYTHON:-python3}; "$PYTHON" scripts/gen_kn_kds_reference.py
 """
@@ -138,8 +143,29 @@ def kerr_newman_section() -> None:
     print(f"closed-form marginal stability matches dE/dr = 0 on {count} (a, Q) points")
 
 
+def kds_horizons(m: Real, a: Real, lam: Real) -> list[Real]:
+    """Positive real roots of Delta_r, ascending."""
+    # Delta_r = -(L/3) r^4 + (1 - L a^2 / 3) r^2 - 2 M r + a^2
+    coefficients = [-lam / 3, 0, 1 - lam * a * a / 3, -2 * m, a * a]
+    roots = mp.polyroots(coefficients, maxsteps=200, extraprec=200)
+    return sorted(mp.re(z) for z in roots if abs(mp.im(z)) < mp.mpf(10) ** -30 and mp.re(z) > 0)
+
+
+def kerr_de_sitter_section() -> None:
+    one = mp.mpf(1)
+    print("# Kerr-de Sitter (M = 1), positive roots of Delta_r ascending")
+    for a, lam in (("0", "1e-2"), ("0", "1e-4"), ("0.9", "1e-2"), ("0.9", "0.1"), ("0.5", "1e-10")):
+        roots = kds_horizons(one, mp.mpf(a), mp.mpf(lam))
+        print(f"a={a} Lambda={lam}: " + ", ".join(fmt(x) for x in roots))
+    lam = mp.mpf("1e-2")
+    r = mp.mpf(10)
+    g_tt = -(1 - 2 / r - lam * r * r / 3)
+    print(f"SdS g_tt r=10 Lambda=1e-2: {fmt(g_tt)}  g_rr: {fmt(-1 / g_tt)}")
+
+
 def main() -> None:
     kerr_newman_section()
+    kerr_de_sitter_section()
 
 
 if __name__ == "__main__":

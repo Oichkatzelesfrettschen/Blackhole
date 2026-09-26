@@ -24,6 +24,10 @@
  *     Bardeen-Press-Teukolsky at Q = 0, the phi -> -phi reflection, and M scaling.
  *   - EmPotentialNamespacesAgree: A_t and A_phi agree across physics:: and
  *     verified::, with A_phi / A_t = -a sin^2 theta.
+ *   - EinsteinMaxwellFieldEquation: the verified:: metric and the physics::
+ *     potential satisfy R_mu_nu = 2 (F_ma F_n^a - g_mn F^2 / 4) and R = 0
+ *     through tests/support/ricci_oracle.h, with negative controls for the
+ *     Kerr-only g_tph and for a flipped A_phi.
  *
  * HOW: Pure analytical reference values are computed inline from the textbook
  * formulas (MTW; Wald 1984) and compared to the library at tolerance 1e-14.
@@ -31,12 +35,14 @@
  */
 
 #include <cmath>
+#include <cstdio>
 #include <numbers>
 
 #include <gtest/gtest.h>
 
 #include "physics/kerr_newman.h"
 #include "physics/verified/kerr_newman.hpp"
+#include "support/ricci_oracle.h"
 
 // ============================================================================
 // Utility: Kerr reference formulas (geometric units, G=c=1)
@@ -499,4 +505,89 @@ TEST(KerrNewman, EmPotentialNamespacesAgree) {
       }
     }
   }
+}
+
+// ============================================================================
+// Einstein-Maxwell field equation through the finite-difference Ricci oracle
+// ============================================================================
+
+namespace {
+
+using ricci_oracle::Mat4;
+using ricci_oracle::Vec4;
+
+// Residual tolerance for R_mu_nu - 2 (F F - g F^2 / 4). The oracle floor on
+// vacuum Kerr is ~2e-9 (kerr_de_sitter_test KerrVacuumFloor); the Maxwell
+// source adds a fourth-order difference of A at h = 1e-4.
+constexpr double kFieldTol = 1.0e-7;
+
+Mat4 knMetric(const Vec4 &x, double m, double a, double q, bool kerrCrossTerm) {
+  const double r = x[1];
+  const double theta = x[2];
+  Mat4 g{};
+  g[0][0] = verified::knGTt(r, theta, m, a, q);
+  g[1][1] = verified::knGRr(r, theta, m, a, q);
+  g[2][2] = verified::knGThth(r, theta, a);
+  g[3][3] = verified::knGPhph(r, theta, m, a, q);
+  g[0][3] = kerrCrossTerm ? kerrGtphRef(r, theta, m, a) : verified::knGTph(r, theta, m, a, q);
+  g[3][0] = g[0][3];
+  return g;
+}
+
+Vec4 knPotential(const Vec4 &x, double a, double q, double phiSign) {
+  return {physics::knElectricPotentialAt(x[1], x[2], a, q), 0.0, 0.0,
+          phiSign * physics::knMagneticPotentialPhi(x[1], x[2], a, q)};
+}
+
+struct FieldResidual {
+  double tensor;   // max |R_mn - S_mn|
+  double scalar;   // |g^mn R_mn|
+  double tPhi;     // |R_tphi - S_tphi|
+};
+
+FieldResidual einsteinMaxwellResidual(double a, double q, double r, bool kerrCrossTerm,
+                                      double phiSign) {
+  constexpr double m = 1.0;
+  const Vec4 x{0.0, r, std::numbers::pi / 3.0, 0.0};
+  auto g = [&](const Vec4 &y) { return knMetric(y, m, a, q, kerrCrossTerm); };
+  auto potential = [&](const Vec4 &y) { return knPotential(y, a, q, phiSign); };
+  const Mat4 metric = g(x);
+  const Mat4 ricciTensor = ricci_oracle::ricci(g, x);
+  const Mat4 source = ricci_oracle::maxwellSource(potential, metric, x);
+  return {ricci_oracle::maxAbsDifference(ricciTensor, source, 1.0),
+          std::abs(ricci_oracle::scalar(ricci_oracle::inverse(metric), ricciTensor)),
+          std::abs(ricciTensor[0][3] - source[0][3])};
+}
+
+} // namespace
+
+/**
+ * @brief R_mu_nu equals the traceless Maxwell source, and R = 0, off the equator.
+ *
+ * Electrovac KN has R = 0 (the Maxwell stress is traceless) but R_mu_nu != 0,
+ * so the full tensor equation is the check; the scalar condition alone cannot
+ * see the g_tph charge term or the sign of A_phi.
+ */
+TEST(KerrNewman, EinsteinMaxwellFieldEquation) {
+  struct Case {
+    double a;
+    double q;
+    double r;
+  };
+  const Case cases[] = {{0.5, 0.5, 3.0}, {0.9, 0.3, 4.0}, {0.0, 0.8, 3.0}, {-0.6, 0.5, 3.5}};
+  double worst = 0.0;
+  for (const Case &c : cases) {
+    const FieldResidual residual = einsteinMaxwellResidual(c.a, c.q, c.r, false, 1.0);
+    EXPECT_LT(residual.tensor, kFieldTol) << "a=" << c.a << " Q=" << c.q;
+    EXPECT_LT(residual.scalar, kFieldTol) << "a=" << c.a << " Q=" << c.q;
+    worst = std::fmax(worst, residual.tensor);
+  }
+  const FieldResidual kerrCross = einsteinMaxwellResidual(0.5, 0.5, 3.0, true, 1.0);
+  const FieldResidual flippedPhi = einsteinMaxwellResidual(0.5, 0.5, 3.0, false, -1.0);
+  std::printf("KN Einstein-Maxwell residual %.3e; Kerr-only g_tph %.3e; flipped A_phi R_tphi %.3e\n",
+              worst, kerrCross.tensor, flippedPhi.tPhi);
+  // Negative controls: the Kerr cross term -2Mra sin^2 / Sigma and the
+  // -Qra sin^2 / Sigma potential both violate the field equation.
+  EXPECT_GT(kerrCross.tensor, 1.0e3 * kFieldTol);
+  EXPECT_GT(flippedPhi.tPhi, 1.0e3 * kFieldTol);
 }

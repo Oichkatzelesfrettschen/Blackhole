@@ -5537,6 +5537,34 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Kerr-de Sitter Carter-form metric: limits, quartic horizons, and the
+  # Einstein-Lambda field equation through tests/support/ricci_oracle.h.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_de_sitter_test.cpp")
+    add_executable(kerr_de_sitter_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_de_sitter_test.cpp"
+    )
+    target_include_directories(kerr_de_sitter_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(kerr_de_sitter_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_de_sitter_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_de_sitter_test PRIVATE GTest::gtest_main)
+
+    add_test(NAME kerr_de_sitter_validation COMMAND kerr_de_sitter_test)
+    set_tests_properties(kerr_de_sitter_validation PROPERTIES
+      LABELS "physics;metric;kerr-de-sitter;verified"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_de_sitter_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # LQG-modified Kerr metric test (D6)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/lqg_kerr_test.cpp")
     add_executable(lqg_kerr_test
