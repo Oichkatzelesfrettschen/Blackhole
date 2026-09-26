@@ -292,7 +292,7 @@ computes the 8-point DCT with 11 multiplications.
 | N6 quartic cross-check | `findRadialRoots` `analytic_kerr_geodesic.h:188,207` (test path `tests/analytic_geodesic_reproducibility_test.cpp`) | Measured: 0 of 2 known quartics solved before the fix, all solved after | measured here | ADOPT (two-line fix plus regression test) |
 | N6 complex Carlson plus Carlson 1995 rule | `elliptic_integrals.h:60-200` (tests and helper functions only) | Measured: RF 304->80 ns, RD 343->116 ns, RJ 1374->167 ns at <= 7e-16 error | tested (mpmath referee) | ADOPT when used in a hot path; pathion 32D wrapper NOT-APPLICABLE |
 | N4 x87 insight applied to Boost policy | `analytic_kerr_geodesic.h:340,385` | Measured: `jacobi_sn` 1375->162 ns, `ellint_1` 19.4->5.9 ns, diff <= 2e-15 | measured here | ADOPT (policy argument) |
-| N4 compensated accumulation in FP32 RK4 | `shader/include/geodesics.glsl:181`, verified `rk4.glsl`, CUDA FP32 kernels | Measured CPU FP32: 15x-1700x lower error. Overhead 1.35x on a 12-flop RHS; derived 3-5% on the Kerr RHS | measured here (CPU FP32 emulation) | PROTOTYPE (GPU A/B not run) |
+| N4 compensated accumulation in FP32 RK4 | `shader/include/geodesics.glsl:181`, verified `rk4.glsl`, CUDA FP32 kernels | Measured CPU FP32: 15x-1700x lower error. Overhead 1.07-1.08x on a 12-flop RHS; derived 3-5% on the Kerr RHS | measured here (CPU FP32 emulation) | PROTOTYPE (GPU A/B not run) |
 | N7 rotation + Lloyd-Max quantization | GRMHD tiles `grmhd_streaming.h:92-99` (RGBA32F) | Measured (synthetic): RMSE/sigma 0.166 vs affine 0.210 at 2 bits; loses at >= 4 bits | measured here (synthetic field) | NOT-APPLICABLE as shipped |
 | WHT energy compaction + bit allocation (N7 transform, used differently) | same | Measured (synthetic): 0.035 at 4 bits vs affine 0.042; 8x smaller than RGBA32F | measured here (synthetic field) | PROTOTYPE |
 | N5 exact-integer window, dyadic ledger | `src/game/*.cpp` (doubles, `std::log` in `blackhole_time_field.cpp:42`, `kerr_time_field.cpp:69-71`) | Derived: turns "same binary and host" into a cross-host guarantee | proved (C-1736) | PROTOTYPE (design); `fixed_point_lbm` code NOT-APPLICABLE |
@@ -555,8 +555,8 @@ Plain FP32 error grows with step count while Kahan error stays flat. That is the
 of roundoff dominating truncation.
 
 Cost:
-- Measured: 1.35x on this 12-flop RHS, stable across all six configurations. A noisier
-  rerun gave 1.15-2.9x.
+- Measured: 1.07-1.08x on this 12-flop RHS across all six configurations in quiet runs;
+  noisy reruns spread 0.7-1.9x.
 - Derived: the compensated update adds 4 flops per state component, 32 for the 8-component
   Kerr state. Against a Kerr BL RHS of roughly 150-250 flops times 4 stages, that is about
   3-5%.

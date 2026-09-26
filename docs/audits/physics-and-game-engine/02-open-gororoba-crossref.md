@@ -76,8 +76,14 @@ LUTs with the same two formulas as `lut.h`.
   That flag defaults to false (`render_state.h:188`); the record profiles turn it on
   (`record_mode.cpp:200,254`).
 
-The default fragment path traces Schwarzschild geodesics, so spin reaches pixels there only
-through these LUTs.
+The default fragment path traces Schwarzschild geodesics, so spin never changes its geodesic
+geometry. Spin reaches its pixels through these LUTs and through direct artistic shading in
+`shader/blackhole_main.frag`: `diskDopplerBoost(r_M, kerrSpin, ...)` (`:326`), the disk
+anisotropic boost (`:332-334`), the photon-ring anisotropic glow (`:484-490`), the
+escaped-sky sector shaping, which reads only the sign of spin (`:616-620`, exposed by the
+`debugShaperInputs` view at `:594-598`), and the wiregrid overlay when enabled (`:670`).
+A spin-dependent change in the default image is therefore not attributable to the LUTs
+alone.
 
 ### F1. Emissivity LUT uses an invented Kerr flux, and both repos label a Newtonian profile "Page & Thorne" (Blackhole LIVE by default, gr_core LATENT)
 

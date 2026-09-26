@@ -219,8 +219,9 @@ Observed at launch (`Blackhole`, `BlackholeGLSL`):
   += acc; pos += dir`) of fixed length 0.1 over 300 iterations.
 - Capture is tested at `r < r_s` regardless of spin.
 - The disk inner edge is fixed at `3 r_s` by the macro at `:149`.
-- `kerrSpin` reaches only `diskDopplerBoost` and three "anisotropic" artistic multipliers
-  (`:332-334`, `:484-489`, `:594-598`).
+- `kerrSpin` reaches only shading: `diskDopplerBoost` (`:326`), the disk and photon-ring
+  "anisotropic" multipliers (`:332-334`, `:484-490`), the sign-only escaped-sky sector
+  shaping (`:616-620`, debug view `:594-598`), and the optional wiregrid overlay (`:670`).
 - The sky is rotated by `time` degrees (`:518`), which is 1 deg/s of wall clock.
 - The Kerr path (`bhTraceGeodesic*`) runs only when `interopParityMode` is set, which comes
   from compare mode, or on the compute path when `useComputeRaytracer` is set.
