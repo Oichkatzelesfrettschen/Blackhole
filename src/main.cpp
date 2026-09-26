@@ -813,10 +813,9 @@ struct BlackholeFrameResult {
   bool computeActiveForLog = false;
 };
 
-BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOptions &cli,
-                                          const Settings &settings, const glm::vec3 &cameraPos,
-                                          const glm::mat3 &cameraBasis, float fovScale,
-                                          float frameTime, double currentTime,
+BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &settings,
+                                          const glm::vec3 &cameraPos, const glm::mat3 &cameraBasis,
+                                          float fovScale, float frameTime, double currentTime,
                                           GLuint &computeProgram) {
   bool computeActiveForLog = false;
   uploadGrmhdStreamingTiles(rs);
@@ -1161,10 +1160,10 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
  * sweep state it changed; the observer-sky scene draws the precomputed sky of
  * the chosen Kerr observer and reports no GRMHD or compute activity.
  */
-BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOptions &cli,
-                                      const Settings &settings, InputManager &input,
-                                      const FrameCamera &frameCamera, float frameTime,
-                                      float deltaTime, double currentTime, GLuint &computeProgram) {
+BlackholeFrameResult renderSceneFrame(RenderState &rs, const Settings &settings,
+                                      InputManager &input, const FrameCamera &frameCamera,
+                                      float frameTime, float deltaTime, double currentTime,
+                                      GLuint &computeProgram) {
   if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
     // The observer's clock steps by the effective delta, which pause and the
     // time scale govern as they do the black-hole orbit clock.
@@ -1172,7 +1171,7 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
     return {};
   }
   const auto result =
-      renderBlackholeFrame(rs, cli, settings, frameCamera.position, frameCamera.basis,
+      renderBlackholeFrame(rs, settings, frameCamera.position, frameCamera.basis,
                            frameCamera.fovScale, frameTime, currentTime, computeProgram);
   restoreCompareSweepState(rs, input);
   return result;
@@ -1516,7 +1515,7 @@ int main(int argc, char **argv) {
       const auto &cameraPos = frameCamera.position;
       auto projectionMatrix = frameCamera.projection;
       auto gizmoViewMatrix = frameCamera.gizmoView;
-      const auto blackholeFrame = renderSceneFrame(rs, cli, settings, input, frameCamera, frameTime,
+      const auto blackholeFrame = renderSceneFrame(rs, settings, input, frameCamera, frameTime,
                                                    deltaTime, currentTime, computeProgram);
       const bool grmhdReady = blackholeFrame.grmhdReady;
       const bool computeActiveForLog = blackholeFrame.computeActiveForLog;
