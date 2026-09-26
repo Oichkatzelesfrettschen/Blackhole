@@ -14,6 +14,7 @@
 #include "render/env_config.h"
 
 using blackhole::parseEnvironmentFloat;
+using blackhole::parseFinitePair;
 
 TEST(ParseEnvironmentFloat, AcceptsDecimalForms) {
   EXPECT_FLOAT_EQ(parseEnvironmentFloat("1.5"), 1.5F);
@@ -51,4 +52,33 @@ TEST(ParseEnvironmentFloat, RejectsEmptyAndNull) {
   EXPECT_EQ(parseEnvironmentFloat("   "), 0.0F);
   EXPECT_EQ(parseEnvironmentFloat("+"), 0.0F);
   EXPECT_EQ(parseEnvironmentFloat(nullptr), 0.0F);
+}
+
+TEST(ParseFinitePair, AcceptsFiniteDecimalPair) {
+  const auto pair = parseFinitePair("1.5,-2.25");
+  ASSERT_TRUE(pair.has_value());
+  EXPECT_DOUBLE_EQ(pair->first, 1.5);
+  EXPECT_DOUBLE_EQ(pair->second, -2.25);
+}
+
+/**
+ * Falsifier: BLACKHOLE_OBSERVER_LOOK="nan,10" or "10,inf" fed strtod directly
+ * (the pre-fix parseNumberPair) returns a pair with a non-finite component
+ * instead of nothing, and applyObserverEnvironment then stores that latitude
+ * or longitude unrejected. parseFinitePair must reject both components.
+ */
+TEST(ParseFinitePair, RejectsNonFiniteEitherComponent) {
+  EXPECT_FALSE(parseFinitePair("nan,10").has_value());
+  EXPECT_FALSE(parseFinitePair("10,nan").has_value());
+  EXPECT_FALSE(parseFinitePair("inf,10").has_value());
+  EXPECT_FALSE(parseFinitePair("10,-inf").has_value());
+  EXPECT_FALSE(parseFinitePair("infinity,infinity").has_value());
+}
+
+TEST(ParseFinitePair, RejectsMalformedInput) {
+  EXPECT_FALSE(parseFinitePair("1.5").has_value());
+  EXPECT_FALSE(parseFinitePair("1.5,").has_value());
+  EXPECT_FALSE(parseFinitePair(",1.5").has_value());
+  EXPECT_FALSE(parseFinitePair("1.5,2.5,3.5").has_value());
+  EXPECT_FALSE(parseFinitePair(nullptr).has_value());
 }

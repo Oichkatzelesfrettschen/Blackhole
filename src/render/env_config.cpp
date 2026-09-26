@@ -301,21 +301,6 @@ void applySceneEnvironment(RenderState &rs) {
   rs.scene.envApplied = true;
 }
 
-/** @brief Two numbers written "<a>,<b>", or nothing. */
-std::optional<std::pair<double, double>> parseNumberPair(const char *text) {
-  char *end = nullptr;
-  const double first = std::strtod(text, &end);
-  if (end == text || *end != ',') {
-    return std::nullopt;
-  }
-  const char *second = end + 1;
-  const double value = std::strtod(second, &end);
-  if (end == second || *end != '\0') {
-    return std::nullopt;
-  }
-  return std::pair{first, value};
-}
-
 /** @brief A finite double from an environment variable, or nothing. */
 std::optional<double> environmentDouble(const char *name) {
   const char *value = std::getenv(name);
@@ -396,7 +381,7 @@ void applyObserverEnvironment(RenderState &rs) {
       environmentDoubleIn("BLACKHOLE_OBSERVER_FOV", K_OBSERVER_FOV_MIN_DEG, K_OBSERVER_FOV_MAX_DEG)
           .value_or(view.fovDeg);
   if (const char *rangeEnv = std::getenv("BLACKHOLE_OBSERVER_LUMINANCE_RANGE")) {
-    const auto range = parseNumberPair(rangeEnv);
+    const auto range = parseFinitePair(rangeEnv);
     if (range && range->first < range->second) {
       view.logLuminanceMin = static_cast<float>(range->first);
       view.logLuminanceMax = static_cast<float>(range->second);
@@ -418,7 +403,7 @@ void applyObserverEnvironment(RenderState &rs) {
     } else if (look == "outward") {
       view.lookLongitudeDeg = 180.0;
     } else if (look != "patch") {
-      if (const auto angles = parseNumberPair(lookEnv)) {
+      if (const auto angles = parseFinitePair(lookEnv)) {
         view.lookLongitudeDeg = angles->first;
         view.lookLatitudeDeg = angles->second;
       } else {
@@ -452,6 +437,34 @@ void applyDiskEnvironment(RenderState &rs) {
 }
 
 } // namespace
+
+// std::from_chars writes each parsed value through a reference, so a "nan" or
+// "inf" component reaches memory the bit-level physics::safeIsfinite can
+// classify; a by-value std::strtod result carries clang's nofpclass(nan inf)
+// return annotation under -ffinite-math-only (ENABLE_FAST_MATH's default-on
+// release preset), which makes a parsed NaN poison before either check runs.
+std::optional<std::pair<double, double>> parseFinitePair(const char *text) {
+  if (text == nullptr) {
+    return std::nullopt;
+  }
+  const std::string_view view(text);
+  const char *const textEnd = view.data() + view.size();
+  double first = 0.0;
+  const std::from_chars_result firstResult = std::from_chars(view.data(), textEnd, first);
+  if (firstResult.ec != std::errc{} || firstResult.ptr == textEnd || *firstResult.ptr != ',') {
+    return std::nullopt;
+  }
+  double value = 0.0;
+  const std::from_chars_result secondResult =
+      std::from_chars(firstResult.ptr + 1, textEnd, value);
+  if (secondResult.ec != std::errc{} || secondResult.ptr != textEnd) {
+    return std::nullopt;
+  }
+  if (!physics::safeIsfinite(first) || !physics::safeIsfinite(value)) {
+    return std::nullopt;
+  }
+  return std::pair{first, value};
+}
 
 std::optional<RenderState::SceneMode> parseSceneName(std::string_view name) {
   if (name == "observer-sky") {

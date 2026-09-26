@@ -16,6 +16,7 @@
 
 #include <optional>
 #include <string_view>
+#include <utility>
 
 #include "render/render_state.h"
 
@@ -46,6 +47,21 @@ void applyEnvironmentConfig(RenderState &rs);
  * @return the parsed value, or 0 when the input is rejected
  */
 float parseEnvironmentFloat(const char *value);
+
+/**
+ * @brief Two finite doubles from "<a>,<b>", or nothing.
+ *
+ * Feeds BLACKHOLE_OBSERVER_LOOK's explicit "<longitude>,<latitude>" form and
+ * BLACKHOLE_OBSERVER_LUMINANCE_RANGE's "<log10 min>,<log10 max>": strtod
+ * reads "nan" and "inf" without an error, so both components are checked
+ * finite here rather than left to the caller's range comparison, which a
+ * non-finite value can pass or fail unpredictably.
+ *
+ * @param text environment string, or nullptr
+ * @return the pair, or nothing when either component is missing, trails
+ *         extra characters, or is not finite
+ */
+std::optional<std::pair<double, double>> parseFinitePair(const char *text);
 
 } // namespace blackhole
 
