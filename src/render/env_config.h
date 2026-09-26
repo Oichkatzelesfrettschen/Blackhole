@@ -20,6 +20,19 @@ struct RenderState;
 /** @brief Applies BLACKHOLE_* environment-variable overrides to rs at startup. */
 void applyEnvironmentConfig(RenderState &rs);
 
+/**
+ * @brief Parses one BLACKHOLE_* float value.
+ *
+ * Accepts a decimal fixed or scientific number with optional surrounding
+ * whitespace and one optional leading sign ('+' or '-'). Hexadecimal floats,
+ * trailing characters, a repeated sign, "inf", "nan", and magnitudes beyond
+ * float range are rejected.
+ *
+ * @param value environment string, or nullptr
+ * @return the parsed value, or 0 when the input is rejected
+ */
+float parseEnvironmentFloat(const char *value);
+
 } // namespace blackhole
 
 #endif // BLACKHOLE_RENDER_ENV_CONFIG_H

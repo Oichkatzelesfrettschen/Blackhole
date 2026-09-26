@@ -244,8 +244,14 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.cam_pos[0] = interop.cameraPos.x;
   cp.cam_pos[1] = interop.cameraPos.y;
   cp.cam_pos[2] = interop.cameraPos.z;
-  /* glm mat3 is column-major, same layout as our flat array */
-  std::memcpy(cp.cam_basis, glm::value_ptr(interop.cameraBasis), 9 * sizeof(float));
+  // glm::mat3 stores three packed column vectors, the column-major layout of
+  // cam_basis. The copy source is the whole matrix object: glm::value_ptr names
+  // only the first column's x member, so a 9-float read from it exceeds that
+  // subobject and GCC's -Warray-bounds=2 rejects the memcpy.
+  static_assert(sizeof(interop.cameraBasis) == sizeof(cp.cam_basis),
+                "cam_basis mirrors the packed glm::mat3 layout");
+  std::memcpy(static_cast<void *>(cp.cam_basis), static_cast<const void *>(&interop.cameraBasis),
+              sizeof(cp.cam_basis));
   cp.max_steps = interop.maxSteps;
   cp.width = rs.targets.renderWidth;
   cp.height = rs.targets.renderHeight;

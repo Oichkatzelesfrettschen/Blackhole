@@ -50,6 +50,7 @@
 #include "physics/kerr.h"
 #include "physics/lut.h"
 #include "physics/raytracer.h"
+#include "physics/safe_limits.h"
 #include "physics/schwarzschild.h"
 #include "physics/xsimd_eval.h"
 #include "shader.h"
@@ -296,7 +297,9 @@ bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::string &erro
  * @param cfg           Benchmark configuration (resolution, iterations, spin, etc.).
  * @param gpuElapsedNs  Accumulates total GPU nanoseconds across all iterations.
  * @param error         Set to a descriptive message on failure; empty on success.
- * @return BenchResult with GPU timing statistics, or a zeroed result on failure.
+ * @return BenchResult with GPU timing statistics, or a zeroed result with error
+ *         set when the context or shader fails or a timer query reports zero
+ *         elapsed time. parseArgs clamps gpuIterations to at least 1.
  */
 BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::string &error) {
   GpuBenchContext ctx;
@@ -354,6 +357,13 @@ BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::strin
     glEndQuery(GL_TIME_ELAPSED);
     GLuint64 elapsedNs = 0;
     glGetQueryObjectui64v(ctx.query, GL_QUERY_RESULT, &elapsedNs);
+    // A dispatch takes measurable time; a zero GL_TIME_ELAPSED result means the
+    // query did not time it, and a zero average is not a benchmark result.
+    if (elapsedNs == 0) {
+      shutdownGpuBench(ctx);
+      error = "GL_TIME_ELAPSED query returned 0 ns";
+      return {"GPU geodesic compute", 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+    }
     double const ms = static_cast<double>(elapsedNs) / 1.0e6;
     minMs = std::min(minMs, ms);
     maxMs = std::max(maxMs, ms);
@@ -389,13 +399,14 @@ BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::strin
  * @param results      All collected BenchResult records.
  * @param cpuAccum     Final value of the CPU accumulator (prevents dead-code elimination).
  * @param gpuElapsedNs Total GPU nanoseconds (0 if GPU benchmarking was not enabled).
+ * @return false when the file cannot be opened or written.
  */
-void writeCsv(const std::string &path, const BenchConfig &cfg,
+bool writeCsv(const std::string &path, const BenchConfig &cfg,
               const std::vector<BenchResult> &results, double cpuAccum, double gpuElapsedNs) {
   std::ofstream out(path);
   if (!out) {
     std::cerr << "Failed to write CSV: " << path << "\n";
-    return;
+    return false;
   }
   out << "name,avg_ms,min_ms,max_ms,work_units,units_per_sec,iterations,warmup,rays,steps,lut_size,spin,"
          "mass_solar,mdot,gpu_enabled,gpu_width,gpu_height,gpu_iterations,gpu_step,gpu_max_distance,"
@@ -411,26 +422,51 @@ void writeCsv(const std::string &path, const BenchConfig &cfg,
         << cfg.gpuIterations << "," << cfg.gpuStepSize << "," << cfg.gpuMaxDistance << ","
         << cpuAccum << "," << gpuElapsedNs << "," << totalAccum << "\n";
   }
+  out.flush();
+  if (!out) {
+    std::cerr << "Failed to write CSV: " << path << "\n";
+    return false;
+  }
+  return true;
+}
+
+/**
+ * @brief Write one JSON number, or null when the value is not finite.
+ *
+ * JSON has no infinity or NaN literal; iostream prints "inf" and "nan", which
+ * no JSON parser accepts. The value is classified by its bytes through
+ * physics::safeIsfinite. The classification is sound in an IEEE build, which
+ * the ci preset and the bench workflow use; under -ffast-math a non-finite sum
+ * formed in this translation unit is already poison when it is produced.
+ */
+void writeJsonNumber(std::ostream &out, const double &value) {
+  if (physics::safeIsfinite(value)) {
+    out << value;
+  } else {
+    out << "null";
+  }
 }
 
 /**
  * @brief Write benchmark results to a JSON file for regression tracking.
  *
  * Emits a top-level object with "config", "results" array, and accumulator
- * fields so the file is self-contained and machine-parseable.
+ * fields so the file is self-contained and machine-parseable; a non-finite
+ * timing or accumulator is written as null.
  *
  * @param path         Output file path.
  * @param cfg          Benchmark configuration used for the run.
  * @param results      All collected BenchResult records.
  * @param cpuAccum     Final value of the CPU accumulator.
  * @param gpuElapsedNs Total GPU nanoseconds (0 if GPU benchmarking was not enabled).
+ * @return false when the file cannot be opened or written.
  */
-void writeJson(const std::string &path, const BenchConfig &cfg,
+bool writeJson(const std::string &path, const BenchConfig &cfg,
                const std::vector<BenchResult> &results, double cpuAccum, double gpuElapsedNs) {
   std::ofstream out(path);
   if (!out) {
     std::cerr << "Failed to write JSON: " << path << "\n";
-    return;
+    return false;
   }
   out << std::fixed << std::setprecision(6);
   out << "{\n";
@@ -455,19 +491,36 @@ void writeJson(const std::string &path, const BenchConfig &cfg,
     const auto &result = results[i];
   out << "    {\n";
   out << R"(      "name": ")" << result.name << "\",\n";
-  out << "      \"avg_ms\": " << result.avgMs << ",\n";
-  out << "      \"min_ms\": " << result.minMs << ",\n";
-  out << "      \"max_ms\": " << result.maxMs << ",\n";
-  out << "      \"work_units\": " << result.workUnits << ",\n";
-  out << "      \"units_per_sec\": " << result.unitsPerSec << ",\n";
+  out << "      \"avg_ms\": ";
+  writeJsonNumber(out, result.avgMs);
+  out << ",\n      \"min_ms\": ";
+  writeJsonNumber(out, result.minMs);
+  out << ",\n      \"max_ms\": ";
+  writeJsonNumber(out, result.maxMs);
+  out << ",\n      \"work_units\": ";
+  writeJsonNumber(out, result.workUnits);
+  out << ",\n      \"units_per_sec\": ";
+  writeJsonNumber(out, result.unitsPerSec);
+  out << ",\n";
   out << "      \"iterations\": " << result.iterations << "\n";
   out << "    }" << (i + 1 < results.size() ? "," : "") << "\n";
   }
   out << "  ],\n";
-  out << "  \"cpu_accum\": " << cpuAccum << ",\n";
-  out << "  \"gpu_elapsed_ns\": " << gpuElapsedNs << ",\n";
-  out << "  \"accumulator\": " << (cpuAccum + gpuElapsedNs) << "\n";
+  const double accumulator = cpuAccum + gpuElapsedNs;
+  out << "  \"cpu_accum\": ";
+  writeJsonNumber(out, cpuAccum);
+  out << ",\n  \"gpu_elapsed_ns\": ";
+  writeJsonNumber(out, gpuElapsedNs);
+  out << ",\n  \"accumulator\": ";
+  writeJsonNumber(out, accumulator);
+  out << "\n";
   out << "}\n";
+  out.flush();
+  if (!out) {
+    std::cerr << "Failed to write JSON: " << path << "\n";
+    return false;
+  }
+  return true;
 }
 
 } // namespace
@@ -649,30 +702,43 @@ int main(int argc, char **argv) try {
               << " ms, speedup=" << hb.speedup << "x\n";
   }
 
+  // --gpu requests a GPU measurement. When the context or shader cannot be
+  // created, the zeroed placeholder runGpuBench returns is not a timing, so it
+  // stays out of the CSV and JSON; the CPU results are still written, and the
+  // process exits 3 so a caller that asked for the GPU run sees it failed.
+  bool gpuFailed = false;
   if (cfg.gpuEnabled) {
     std::string gpuError;
     BenchResult const gpuResult = runGpuBench(cfg, gpuElapsedNs, gpuError);
     if (!gpuError.empty()) {
       std::cerr << "[GPU] " << gpuError << "\n";
+      gpuFailed = true;
     } else {
       std::cout << std::fixed << std::setprecision(3);
       std::cout << gpuResult.name << " avg=" << gpuResult.avgMs << " ms"
                 << " (min=" << gpuResult.minMs << ", max=" << gpuResult.maxMs << ")"
                 << " units/s=" << gpuResult.unitsPerSec << "\n";
+      results.push_back(gpuResult);
     }
-    results.push_back(gpuResult);
   }
 
   double const totalAccum = cpuAccum + gpuElapsedNs;
   std::cout << "\nAccumulator: " << std::setprecision(6) << totalAccum << "\n";
 
+  // Exit 4 when a requested output file was not written (a caller comparing
+  // results must not read a stale or partial file), else 3 when the requested
+  // GPU run failed, else 0.
+  bool outputFailed = false;
   if (!cfg.csvPath.empty()) {
-    writeCsv(cfg.csvPath, cfg, results, cpuAccum, gpuElapsedNs);
+    outputFailed = !writeCsv(cfg.csvPath, cfg, results, cpuAccum, gpuElapsedNs) || outputFailed;
   }
   if (!cfg.jsonPath.empty()) {
-    writeJson(cfg.jsonPath, cfg, results, cpuAccum, gpuElapsedNs);
+    outputFailed = !writeJson(cfg.jsonPath, cfg, results, cpuAccum, gpuElapsedNs) || outputFailed;
   }
-  return 0;
+  if (outputFailed) {
+    return 4;
+  }
+  return gpuFailed ? 3 : 0;
 } catch (const std::exception &error) {
   return std::fprintf(stderr, "Benchmark failed: %s\n", error.what()) < 0 ? 2 : 1;
 } catch (...) {
