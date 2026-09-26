@@ -444,7 +444,17 @@ void Constellation::applyReceivedCommand(ConstellationFleet &fleet,
   }
 }
 
-void Constellation::deliverDue() {
+bool Constellation::deliverDue() {
+  bool deliveredAny = false;
+  for (;;) {
+    if (!deliverDueOnce()) {
+      return deliveredAny;
+    }
+    deliveredAny = true;
+  }
+}
+
+bool Constellation::deliverDueOnce() {
   std::vector<Delivery> due;
   std::vector<Delivery> remaining;
   for (const Delivery &delivery : deliveryQueue_) {
@@ -509,6 +519,7 @@ void Constellation::deliverDue() {
     }
     }
   }
+  return !due.empty();
 }
 
 void Constellation::landArrivals() {
@@ -705,13 +716,16 @@ void Constellation::advanceTurn() {
   turnCredits_.clear();
   stabilizationCrossingSite_.assign(factions_.size(), CreditSite{});
   controlCrossingSite_.assign(factions_.size(), CreditSite{});
-  deliverDue();
+  static_cast<void>(deliverDue());
   landArrivals();
   runFleetWork();
   scoreControlAndObserve();
   sendScoreReports();
   stepFactionAI();
   evaluateOutcomes();
+  // Zero-delay signals emitted this turn land this turn, like every other
+  // delivery at its effect turn.
+  static_cast<void>(deliverDue());
 }
 
 void Constellation::recordCredit(std::size_t factionIndexValue, SystemId system, int bandIndex,
@@ -847,14 +861,9 @@ void Constellation::evaluateOutcomes() {
       if (delaySec < 0.0) {
         continue;
       }
-      const std::int64_t delayTurns = clock_.ceilTurns(delaySec);
-      if (delayTurns == 0) {
-        factions_.at(observerIndex).outcomeKnown = true;
-        continue;
-      }
       Delivery delivery;
       delivery.kind = DeliveryKind::OutcomeNotice;
-      delivery.effectTurn = clock_.turn() + delayTurns;
+      delivery.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
       delivery.sequence = nextSequence_++;
       delivery.observerIndex = observerIndex;
       deliveryQueue_.push_back(delivery);

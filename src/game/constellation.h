@@ -129,7 +129,12 @@ public:
 
   /** @brief One coordinate turn: advance the clock, deliver due orders/reports/
    *         observations, land arrivals, run each fleet's work, score control,
-   *         emit control intel, step the faction AI, evaluate outcomes. */
+   *         emit control intel, step the faction AI, evaluate outcomes, and
+   *         deliver again. Every delivery lands in the turn its ceil-quantized
+   *         effect turn names: the queue drains at the start of the turn for
+   *         what arrived since the last one and at its end for zero-delay
+   *         signals emitted during it, so a score report and an outcome notice
+   *         from the same colocated band land together. */
   void advanceTurn();
 
   /** @brief turnCount iterated single-turn advances (op-order invariant). */
@@ -247,7 +252,12 @@ private:
   [[nodiscard]] double reportDelaySec(FactionId faction, SystemId system, int bandIndex) const;
   [[nodiscard]] double ergoregionDepth(const ConstellationFleet &fleet) const;
 
-  void deliverDue();
+  /** @brief Applies every delivery whose effect turn has come, in (effect
+   *         turn, sequence) order, and repeats while applying them emits more
+   *         that are already due. Returns whether anything was delivered. */
+  bool deliverDue();
+  /** @brief One pass of deliverDue; returns whether anything was due. */
+  bool deliverDueOnce();
   /** @brief Delivers order `commandIndex` at its address. A fleet still at
    *         the addressed slot acts and reports; otherwise the order fizzles
    *         and a non-delivery notice travels home from the address. */
