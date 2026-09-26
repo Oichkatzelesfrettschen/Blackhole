@@ -624,6 +624,43 @@ void main() {
   glDeleteProgram(program);
 }
 
+TEST_F(KerrShaderCaptureTest, EdgePixelsSpanTheVerticalFieldOfView) {
+  // With fovScale = tan(fov / 2) the image edges sit at tan(fov / 2) above
+  // and below the forward axis and aspect * tan(fov / 2) to either side, the
+  // glm::perspective frustum of the same camera and CUDA's d_ray_dir. Pixel
+  // centers half a pixel inside the top edge of a 400-row image and the right
+  // edge of an 800-column one give 1 - 1/400 and 2 (1 - 1/800) with
+  // fovScale = 1.
+  const GLuint program = bhtest::createComputeProgram(R"(
+#version 460 core
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+#include "include/interop_raygen.glsl"
+void main() {
+  mat3 basis = mat3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0));
+  vec3 top = bhRayDir(vec2(200.0, 399.5), vec2(400.0, 400.0), 1.0, basis);
+  vec3 right = bhRayDir(vec2(799.5, 200.0), vec2(800.0, 400.0), 1.0, basis);
+  result[0] = top.x / top.z;
+  result[1] = top.y / top.z;
+  result[2] = right.x / right.z;
+  result[3] = right.y / right.z;
+}
+)");
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 4), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 4);
+  // float32 slope of a unit-length direction: a few ulp of 1.
+  constexpr float kTol = 1e-5F;
+  EXPECT_NEAR(out[0], 0.0F, kTol);
+  EXPECT_NEAR(out[1], 0.9975F, kTol);
+  EXPECT_NEAR(out[2], 1.9975F, kTol);
+  EXPECT_NEAR(out[3], 0.0F, kTol);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
 namespace {
 
 struct PoleRay {

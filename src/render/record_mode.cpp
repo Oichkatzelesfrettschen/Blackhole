@@ -84,11 +84,11 @@ bool readTonemappedRgb(gl::GLuint texTonemapped, int fallbackWidth, int fallback
 }
 
 constexpr std::array<ShowcaseOrbitComposition, 5> K_SHOWCASE_ORBIT_COMPOSITIONS = {{
-    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 60.0f, 3.05f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
-    {"left-third", "nasa_deep_starmap", 0.18f, 0.03f, -8.0f, 23.0f, 58.0f, 2.95f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
-    {"right-third", "nasa_deep_starmap_galactic", -0.18f, 0.03f, -8.0f, 23.0f, 58.0f, 2.95f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
-    {"wide-left", "eso_milkyway_brunier", 0.12f, -0.02f, -7.0f, 27.5f, 54.0f, 2.75f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
-    {"wide-right", "nasa_deep_starmap_galactic", -0.12f, -0.02f, -7.0f, 27.5f, 54.0f, 2.9f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
+    {"centered", "nasa_deep_starmap_galactic", 0.0f, 0.0f, -8.0f, 21.0f, 32.2042f, 3.05f, 0.74f, -18.0f, 6.0f, 0.00f, 0.00f, 8.0f},
+    {"left-third", "nasa_deep_starmap", 0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 2.95f, 0.76f, -34.0f, 7.0f, 0.05f, -0.02f, 7.0f},
+    {"right-third", "nasa_deep_starmap_galactic", -0.36f, 0.06f, -8.0f, 23.0f, 30.9819f, 2.95f, 0.76f, 18.0f, 7.0f, -0.05f, -0.02f, 7.0f},
+    {"wide-left", "eso_milkyway_brunier", 0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 2.75f, 0.70f, -42.0f, 8.0f, 0.08f, -0.03f, 6.0f},
+    {"wide-right", "nasa_deep_starmap_galactic", -0.24f, -0.04f, -7.0f, 27.5f, 28.5856f, 2.9f, 0.80f, 26.0f, 8.0f, -0.08f, -0.03f, 6.0f},
 }};
 
 } // namespace
@@ -244,7 +244,7 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
                         : compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f),
         .fov = cli.hasRecordFov
                    ? cli.recordFovDeg
-                   : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f)};
+                   : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 37.2738f)};
     rs.post.toneExposure =
         composition != nullptr ? composition->exposure : K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
@@ -353,7 +353,7 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
             : compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f);
     camMutable.fov = cli.hasRecordFov
                          ? cli.recordFovDeg
-                         : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f);
+                         : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 37.2738f);
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin = 0.0f;
     rs.recording.recordCurrentKf = CamKeyframe{

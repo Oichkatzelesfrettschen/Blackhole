@@ -34,11 +34,11 @@ struct RenderState;
 struct ShowcaseOrbitComposition {
   const char *name;
   const char *backgroundId;
-  float frameOffsetX;
-  float frameOffsetY;
+  float frameOffsetX; ///< Aim shift along camera right, in half-widths of the frame.
+  float frameOffsetY; ///< Aim shift along camera up, in half-heights of the frame.
   float pitchDeg;
   float distance;
-  float fovDeg;
+  float fovDeg; ///< Vertical field of view of the traced image (bhPixelUv, d_ray_dir).
   float exposure;
   float backgroundIntensity;
   float backgroundYawDeg;

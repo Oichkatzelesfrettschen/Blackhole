@@ -57,7 +57,7 @@ struct CameraState {
   float pitch = K_DEFAULT_CAMERA_PITCH_DEG;
   float roll = 0.0f;
   float distance = 15.0f;
-  float fov = 45.0f;
+  float fov = 23.4018f;
 
   /** @brief Resets all camera pose fields to their default values. */
   void reset() {
@@ -65,7 +65,7 @@ struct CameraState {
     pitch = K_DEFAULT_CAMERA_PITCH_DEG;
     roll = 0.0f;
     distance = 15.0f;
-    fov = 45.0f;
+    fov = 23.4018f;
   }
 };
 

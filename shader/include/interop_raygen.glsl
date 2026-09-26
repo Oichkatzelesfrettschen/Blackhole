@@ -1,8 +1,13 @@
 #ifndef INTEROP_RAYGEN_GLSL
 #define INTEROP_RAYGEN_GLSL
 
+// Screen offset of a pixel from the image center in units of the vertical
+// half-height: uv.y runs from -1 at the bottom edge to +1 at the top and uv.x
+// spans +-aspect. With fovScale = tan(fov / 2) the image then subtends the
+// vertical field of view fov, the glm::perspective projection of the same
+// camera and the CUDA d_ray_dir.
 vec2 bhPixelUv(vec2 pixelCoord, vec2 resolution) {
-  vec2 uv = pixelCoord / resolution - vec2(0.5);
+  vec2 uv = 2.0 * pixelCoord / resolution - vec2(1.0);
   uv.x *= resolution.x / max(resolution.y, 1.0);
   return uv;
 }
