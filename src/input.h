@@ -12,7 +12,7 @@
 #include <map>
 #include <string>
 
-#include "settings.h" // K_DEFAULT_CAMERA_PITCH_DEG
+#include "settings.h" // K_DEFAULT_CAMERA_DISTANCE, K_DEFAULT_CAMERA_PITCH_DEG
 
 /**
  * @brief Logical key actions that can be rebound by the user.
@@ -78,7 +78,7 @@ struct CameraState {
   float yaw = 0.0f;
   float pitch = K_DEFAULT_CAMERA_PITCH_DEG;
   float roll = 0.0f;
-  float distance = 15.0f;
+  float distance = K_DEFAULT_CAMERA_DISTANCE;
   float fov = 23.4018f;
 
   /** @brief Resets all camera pose fields to their default values. */
@@ -86,7 +86,7 @@ struct CameraState {
     yaw = 0.0f;
     pitch = K_DEFAULT_CAMERA_PITCH_DEG;
     roll = 0.0f;
-    distance = 15.0f;
+    distance = K_DEFAULT_CAMERA_DISTANCE;
     fov = 23.4018f;
   }
 };

@@ -114,4 +114,30 @@ TEST_F(SettingsPersistence, LegacyVsyncAndUnknownKeysRemainSupported) {
   EXPECT_EQ(manager.get().windowWidth, Settings{}.windowWidth);
 }
 
+TEST_F(SettingsPersistence, FileWithoutCameraKeysTakesTheDefaultCamera) {
+  const auto input = testDirectory() / "no-camera.json";
+  std::ofstream stream(input);
+  stream << "\"windowWidth\": 1280\n";
+  stream.close();
+  ASSERT_TRUE(stream);
+  auto &manager = SettingsManager::instance();
+  ASSERT_TRUE(manager.load(input.string()));
+  EXPECT_EQ(manager.get().cameraDistance, K_DEFAULT_CAMERA_DISTANCE);
+  EXPECT_EQ(manager.get().cameraPitch, K_DEFAULT_CAMERA_PITCH_DEG);
+  // The default camera sits outside the disk's 100 r_s = 200 unit outer edge.
+  EXPECT_GT(K_DEFAULT_CAMERA_DISTANCE, 200.0f);
+}
+
+TEST_F(SettingsPersistence, SavedCameraKeysKeepTheirValues) {
+  const auto input = testDirectory() / "saved-camera.json";
+  std::ofstream stream(input);
+  stream << "\"cameraYaw\": 0,\n\"cameraPitch\": -6,\n\"cameraDistance\": 15\n";
+  stream.close();
+  ASSERT_TRUE(stream);
+  auto &manager = SettingsManager::instance();
+  ASSERT_TRUE(manager.load(input.string()));
+  EXPECT_EQ(manager.get().cameraDistance, 15.0f);
+  EXPECT_EQ(manager.get().cameraPitch, -6.0f);
+}
+
 } // namespace
