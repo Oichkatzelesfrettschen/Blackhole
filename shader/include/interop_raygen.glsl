@@ -7,8 +7,10 @@ vec2 bhPixelUv(vec2 pixelCoord, vec2 resolution) {
   return uv;
 }
 
+// cameraBasis columns are (right, up, forward) from buildCameraBasis, so the
+// pixel's screen offsets map to +right and +up without sign changes.
 vec3 bhRayDirFromUv(vec2 uv, float fovScale, mat3 cameraBasis) {
-  vec3 dir = normalize(vec3(-uv.x * fovScale, uv.y * fovScale, 1.0));
+  vec3 dir = normalize(vec3(uv.x * fovScale, uv.y * fovScale, 1.0));
   return cameraBasis * dir;
 }
 

@@ -267,6 +267,38 @@ GPU Fragment (1024x1024),18.1,19.7,21.4,1.2,53300000,N/A
 
 ---
 
+## numerics_bench
+
+`numerics_bench` times the CPU numerics kernels against their baselines on a
+fixed deterministic workload (minimum of five repetitions) and prints the
+compiler and Boost versions it was built with. It compiles with value-safe
+floating point; `-ffast-math` would fold the Kahan compensation away.
+
+```bash
+taskset -c 3 ./build/Release/numerics_bench
+```
+
+| Section | Measures |
+|---------|----------|
+| `stokes` | one closed-form full-K Stokes step (`stokesStepFull`, and the `SteadyStateSplit` option) against the RK4 substeps a 1e-6 error needs, Faraday depth 1/100/1000 |
+| `boost` | `jacobi_sn` and `ellint_1` under Boost's promoted default policy and under `AnalyticKerrPolicy` (`promote_double<false>`) |
+| `carlson` | `carlsonRf/Rd/Rj` against Boost `ellint_rf/rd/rj` |
+| `kahan` | FP32 RK4 photon orbit, plain against Kahan-compensated accumulation: cost per step and roundoff against the double run |
+
+Reference run (clang 22.1.8, `-O3 -march=native`, Boost 1.90, AMD Ryzen 5
+5600X3D, pinned to one core):
+
+| Kernel | Result |
+|--------|--------|
+| exact Stokes step | 189-238 ns per segment; RK4 at 1e-6 needs 17 / 1696 / 28160 substeps (0.46 / 52 / 915 us) at Faraday depth 1 / 100 / 1000 |
+| split Stokes step | 102-162 ns |
+| `jacobi_sn` | 2465 -> 220 ns (11x), max difference 1.9e-15 |
+| `ellint_1` | 29.1 -> 9.1 ns (3.2x), max difference 3.4e-16 relative |
+| `carlsonRf/Rd/Rj` | 97 / 123 / 261 ns |
+| compensated FP32 RK4 | 0.99-1.22x cost per step; roundoff 1.4e-6 -> 7.4e-8 at 1200 steps, 2.8e-4 -> 1.5e-7 at 30000 |
+
+---
+
 ## Continuous Integration
 
 `bench/ci_bench.sh` builds `physics_bench` for `BENCH_PRESET` (`riced` by

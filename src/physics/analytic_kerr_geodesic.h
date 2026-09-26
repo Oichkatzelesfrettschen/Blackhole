@@ -48,12 +48,13 @@
 
 #ifdef __has_include
 #if __has_include(<boost/math/special_functions/jacobi_elliptic.hpp>)
-#include <boost/math/special_functions/ellint_1.hpp>
 #include <boost/math/special_functions/jacobi_elliptic.hpp>
 // Conditional compilation requires a macro to select the Boost Jacobi path.
 #define PHYSICS_HAS_BOOST_JACOBI 1 // NOLINT(cppcoreguidelines-macro-usage)
 #endif
 #endif
+
+#include "elliptic_integrals.h"
 
 namespace physics {
 
@@ -128,23 +129,13 @@ struct RadialRoots {
 }
 
 /**
- * @brief Coefficients of the quartic R(r) = r^4 + c3*r^3 + c2*r^2 + c1*r + c0.
+ * @brief Coefficients of the depressed quartic R(r) = r^4 + c2 r^2 + c1 r + c0 (M = 1).
  *
- * Expanding R(r) in standard form (with M=1):
- *   c3 = 0 (no cubic term in Kerr)
- *   ... actually R(r) expanded gives:
- *   R(r) = r^4 + (a^2 - xi^2 - eta)*r^2 + 2*(eta + (xi-a)^2)*r - a^2*eta
- *
- * Wait: let me be more careful. R(r) = (r^2+a^2-a*xi)^2 - (r^2-2r+a^2)(eta+(xi-a)^2)
- * Expanding:
- *   (r^2+a^2-a*xi)^2 = r^4 + 2r^2(a^2-a*xi) + (a^2-a*xi)^2
- *   (r^2-2r+a^2)(eta+(xi-a)^2) = (eta+xi_a^2)*r^2 - 2(eta+xi_a^2)*r + a^2(eta+xi_a^2)
- *
- * So: R = r^4 + [2(a^2-a*xi) - eta - xi_a^2]*r^2
- *       + 2(eta+xi_a^2)*r
- *       + [(a^2-a*xi)^2 - a^2(eta+xi_a^2)]
- *
- * Note: c3 = 0 (no r^3 term), which is correct.
+ * Expanding R(r) = (r^2 + a^2 - a xi)^2 - (r^2 - 2r + a^2)(eta + (xi - a)^2):
+ *   c2 = 2(a^2 - a xi) - eta - (xi - a)^2
+ *   c1 = 2(eta + (xi - a)^2)
+ *   c0 = (a^2 - a xi)^2 - a^2 (eta + (xi - a)^2)
+ * There is no r^3 term.
  */
 struct QuarticCoeffs {
   double c0 = 0.0; // constant term
@@ -170,6 +161,58 @@ struct QuarticCoeffs {
 // Root Finding (Depressed Quartic)
 // ============================================================================
 
+namespace detail {
+
+/// Roots of r^2 + p r + q = 0 into result.roots[slot], [slot + 1]; counts real ones.
+inline void solveQuadraticPair(double p, double q, std::size_t slot, RadialRoots &result) {
+  const double disc = (p * p) - (4.0 * q);
+  if (disc >= 0.0) {
+    const double sq = std::sqrt(disc);
+    result.roots.at(slot) = std::complex<double>((-p + sq) / 2.0, 0.0);
+    result.roots.at(slot + 1) = std::complex<double>((-p - sq) / 2.0, 0.0);
+    result.nReal += 2;
+  } else {
+    const double sq = std::sqrt(-disc);
+    result.roots.at(slot) = std::complex<double>(-p / 2.0, sq / 2.0);
+    result.roots.at(slot + 1) = std::complex<double>(-p / 2.0, -sq / 2.0);
+  }
+}
+
+/// r = +-sqrt(z) for each root z of z^2 + c2 z + c0 = 0 (the c1 = 0 quartic).
+inline void solveBiquadratic(const QuarticCoeffs &c, RadialRoots &result) {
+  const std::complex<double> sqD =
+      std::sqrt(std::complex<double>((c.c2 * c.c2) - (4.0 * c.c0), 0.0));
+  const auto storePair = [&result](std::complex<double> z, std::size_t slot) {
+    const bool realPair = z.imag() == 0.0 && z.real() >= 0.0;
+    const std::complex<double> root =
+        realPair ? std::complex<double>(std::sqrt(z.real()), 0.0) : std::sqrt(z);
+    result.roots.at(slot) = root;
+    result.roots.at(slot + 1) = -root;
+    result.nReal += realPair ? 2 : 0;
+  };
+  storePair((-c.c2 + sqD) / 2.0, 0);
+  storePair((-c.c2 - sqD) / 2.0, 2);
+}
+
+/// Motion type from the real-root count; roots sorted by descending real part.
+inline void classifyAndSort(RadialRoots &result) {
+  if (result.nReal == 4) {
+    result.type = RadialMotionType::Transit;
+  } else if (result.nReal == 2) {
+    result.type = RadialMotionType::Scatter;
+  } else {
+    result.type = RadialMotionType::Plunge;
+  }
+  if (result.nReal >= 2) {
+    std::stable_sort(result.roots.begin(), result.roots.end(),
+                     [](const std::complex<double> &lhs, const std::complex<double> &rhs) {
+                       return lhs.real() > rhs.real();
+                     });
+  }
+}
+
+} // namespace detail
+
 /**
  * @brief Find roots of the depressed quartic r^4 + c2*r^2 + c1*r + c0 = 0.
  *
@@ -181,11 +224,14 @@ struct QuarticCoeffs {
 [[nodiscard]] inline RadialRoots findRadialRoots(const QuarticCoeffs &c) {
   RadialRoots result;
 
-  // Ferrari's resolvent cubic: y^3 - c2*y^2 - 4*c0*y + (4*c2*c0 - c1^2) = 0
-  // Substituting y = t + c2/3 to get depressed cubic t^3 + pt + q = 0
+  // Ferrari's resolvent cubic: y^3 - c2*y^2 - 4*c0*y + (4*c2*c0 - c1^2) = 0,
+  // where y = beta + gamma of the factorization below. Substituting
+  // y = t + c2/3 gives the depressed cubic t^3 + p t + q = 0 with
+  //   p = -c2^2/3 - 4 c0,
+  //   q = -2 c2^3/27 + (4/3) c2 c0 + 4 c2 c0 - c1^2 = -2 c2^3/27 + (8/3) c2 c0 - c1^2.
   const double pCoeff = (-(c.c2 * c.c2) / 3.0) - (4.0 * c.c0);
   const double qCoeff =
-      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((4.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
+      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((8.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
 
   // Cardano's formula for the resolvent cubic
   const double disc = ((qCoeff * qCoeff) / 4.0) + ((pCoeff * pCoeff * pCoeff) / 27.0);
@@ -199,93 +245,37 @@ struct QuarticCoeffs {
   } else {
     // Three real roots; use trigonometric form
     const double rVal = std::sqrt(-(pCoeff * pCoeff * pCoeff) / 27.0);
-    const double phi = std::acos(-qCoeff / (2.0 * rVal));
+    // k = 0 branch: the largest resolvent root, which keeps y1 - c2 >= 0
+    // (a real alpha) for every real quartic.
+    const double phi = std::acos(std::clamp(-qCoeff / (2.0 * rVal), -1.0, 1.0));
     y1 = (2.0 * std::cbrt(rVal) * std::cos(phi / 3.0)) + (c.c2 / 3.0);
   }
 
-  // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma)
-  const double a = y1 + c.c2;
+  // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma).
+  // Matching the r^2 coefficient gives beta + gamma - alpha^2 = c2, so
+  // alpha^2 = y1 - c2. alpha = 0 is the biquadratic case (c1 = alpha
+  // (gamma - beta) = 0 with the largest resolvent root y1 = c2); there
+  // beta and gamma are the roots of z^2 - c2 z + c0 and the ratio
+  // c1 / alpha that separates them is 0 / 0. Rounding leaves alpha^2 a few
+  // ulps either side of zero, so a magnitude within 1e-12 of the coefficient
+  // scale is solved as the quadratic z^2 + c2 z + c0 = 0 in z = r^2.
+  const double a = y1 - c.c2;
+  const double scale =
+      std::max({1.0, std::abs(y1), std::abs(c.c2), std::sqrt(std::abs(c.c0))});
 
-  if (a < 0.0) {
+  if (std::abs(a) <= 1e-12 * scale) {
+    detail::solveBiquadratic(c, result);
+  } else if (a < 0.0) {
     // alpha is imaginary; all roots come in complex conjugate pairs
     result.nReal = 0;
     result.type = RadialMotionType::Plunge;
     return result;
-  }
-
-  const double alpha = std::sqrt(a);
-  double beta = 0.0;
-  double gamma = 0.0;
-
-  if (std::abs(alpha) > 1e-15) {
-    // Quadratic 1: r^2 + alpha*r + beta = 0; use robust relations
-    beta = (y1 / 2.0) - (c.c1 / (2.0 * alpha));
-    gamma = (y1 / 2.0) + (c.c1 / (2.0 * alpha));
   } else {
-    // alpha ~ 0: degenerate case
-    const double disc1 = -4.0 * c.c0;
-    if (disc1 < 0.0) {
-      result.nReal = 0;
-      result.type = RadialMotionType::Plunge;
-      return result;
-    }
-    const double sq = std::sqrt(disc1);
-    result.roots.at(0) = std::complex<double>(sq / 2.0, 0);
-    result.roots.at(1) = std::complex<double>(-sq / 2.0, 0);
-    result.roots.at(2) = result.roots.at(0);
-    result.roots.at(3) = result.roots.at(1);
-    result.nReal = 2;
-    result.type = RadialMotionType::Transit;
-    return result;
+    const double alpha = std::sqrt(a);
+    detail::solveQuadraticPair(alpha, (y1 / 2.0) - (c.c1 / (2.0 * alpha)), 0, result);
+    detail::solveQuadraticPair(-alpha, (y1 / 2.0) + (c.c1 / (2.0 * alpha)), 2, result);
   }
-
-  const double disc1 = (alpha * alpha) - (4.0 * beta);
-  const double disc2 = (alpha * alpha) - (4.0 * gamma);
-
-  result.nReal = 0;
-
-  if (disc1 >= 0.0) {
-    const double sq1 = std::sqrt(disc1);
-    result.roots.at(0) = std::complex<double>((-alpha + sq1) / 2.0, 0);
-    result.roots.at(1) = std::complex<double>((-alpha - sq1) / 2.0, 0);
-    result.nReal += 2;
-  } else {
-    const double sq1 = std::sqrt(-disc1);
-    result.roots.at(0) = std::complex<double>(-alpha / 2.0, sq1 / 2.0);
-    result.roots.at(1) = std::complex<double>(-alpha / 2.0, -sq1 / 2.0);
-  }
-
-  if (disc2 >= 0.0) {
-    const double sq2 = std::sqrt(disc2);
-    result.roots.at(2) = std::complex<double>((alpha + sq2) / 2.0, 0);
-    result.roots.at(3) = std::complex<double>((alpha - sq2) / 2.0, 0);
-    result.nReal += 2;
-  } else {
-    const double sq2 = std::sqrt(-disc2);
-    result.roots.at(2) = std::complex<double>(alpha / 2.0, sq2 / 2.0);
-    result.roots.at(3) = std::complex<double>(alpha / 2.0, -sq2 / 2.0);
-  }
-
-  // Classify motion type
-  if (result.nReal == 4) {
-    result.type = RadialMotionType::Transit;
-  } else if (result.nReal == 2) {
-    result.type = RadialMotionType::Scatter;
-  } else {
-    result.type = RadialMotionType::Plunge;
-  }
-
-  // Sort real roots in descending order
-  if (result.nReal >= 2) {
-    for (std::size_t i = 0; i < 3; ++i) {
-      for (std::size_t j = i + 1; j < 4; ++j) {
-        if (result.roots.at(j).real() > result.roots.at(i).real()) {
-          std::swap(result.roots.at(i), result.roots.at(j));
-        }
-      }
-    }
-  }
-
+  detail::classifyAndSort(result);
   return result;
 }
 
@@ -296,12 +286,36 @@ struct QuarticCoeffs {
 #ifdef PHYSICS_HAS_BOOST_JACOBI
 
 /**
+ * @brief Boost.Math policy for the analytic Kerr elliptic functions.
+ *
+ * Boost's default policy promotes double arguments to long double, which on
+ * x86-64 runs the x87 80-bit unit and costs about 10x in jacobi_elliptic.
+ * Evaluated in double, sn and cn stay within a few ulp of their first-order
+ * error bound while 1 - m >= 1e-4; closer to m = 1 the double evaluation's cn
+ * error grows (27x the bound at 1 - m = 3e-7, 980x at 3e-10), and promoting
+ * the call cannot restore 1 - m once k = sqrt(m) is rounded to double, so
+ * below ANALYTIC_KERR_PROMOTE_BELOW rAnalytic runs the Landen transformation
+ * in long double on 1 - m formed from the roots
+ * (tests/analytic_geodesic_reproducibility_test.cpp). ellint_1 is not used:
+ * radialHalfPeriod takes K from the AGM with 1 - m formed from the roots.
+ * bench/numerics_bench.cpp measures the cost of both policies.
+ */
+using AnalyticKerrPolicy =
+    boost::math::policies::policy<boost::math::policies::promote_double<false>>;
+
+/// 1 - m below which rAnalytic evaluates sn and cn by the long-double Landen transformation.
+inline constexpr double ANALYTIC_KERR_PROMOTE_BELOW = 1.0e-4;
+
+/**
  * @brief Compute r(lambda) analytically using Jacobi elliptic functions.
  *
  * For a transit orbit with four real roots r1 >= r2 >= r3 >= r4,
  * the radial solution is:
  *
  *   r(lambda) = [r3*(r1-r4) - r4*(r1-r3)*sn^2(u|m)] / [(r1-r4) - (r1-r3)*sn^2(u|m)]
+ *             = r3 + (r3-r4)(r1-r3) sn^2 / ((r3-r4) + (r1-r3) cn^2),
+ *
+ * evaluated in the second form, whose terms are all nonnegative.
  *
  * where:
  *   m = (r2-r3)*(r1-r4) / [(r1-r3)*(r2-r4)]   (elliptic modulus squared)
@@ -335,26 +349,54 @@ struct QuarticCoeffs {
   const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
   const double u = scale * (lambda - lambda0);
 
-  // Jacobi elliptic function sn(u | k) where k = sqrt(m)
-  const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double snVal = boost::math::jacobi_sn(k, u);
-  (void)boost::math::jacobi_cn(k, u); // unused but kept for symmetry
+  // sn(u | k) and cn(u | k), k = sqrt(m). Away from m = 1 one double-precision
+  // Boost call; below 1 - m = ANALYTIC_KERR_PROMOTE_BELOW the double call loses
+  // digits in cn, and a double modulus k cannot even represent 1 - m below
+  // eps, so there the Landen transformation runs in long double on
+  // k'^2 = 1 - m formed from the roots.
+  const double kPrime2 = std::clamp(((r1 - r2) * (r3 - r4)) / den, 0.0, 1.0); // 1 - m
+  double snVal = 0.0;
+  double cnVal = 0.0;
+  if (kPrime2 < ANALYTIC_KERR_PROMOTE_BELOW) {
+    const JacobiSnCn<long double> sc = jacobiSnCnFromComplement<long double>(
+        static_cast<long double>(u), static_cast<long double>(std::clamp(m, 0.0, 1.0)),
+        static_cast<long double>(kPrime2));
+    snVal = static_cast<double>(sc.sn);
+    cnVal = static_cast<double>(sc.cn);
+  } else {
+    const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
+    snVal = boost::math::jacobi_elliptic(k, u, &cnVal, static_cast<double *>(nullptr),
+                                         AnalyticKerrPolicy());
+  }
 
-  const double sn2 = snVal * snVal;
-  const double aCoeff = (r3 * (r1 - r4)) - (r4 * (r1 - r3) * sn2);
-  const double bCoeff = (r1 - r4) - ((r1 - r3) * sn2);
-
-  if (std::abs(bCoeff) < 1e-30) {
-    return r1;
-  } // At turning point
-  return aCoeff / bCoeff;
+  // r - r3 = (r3-r4)(r1-r3) sn^2 / ((r3-r4) + (r1-r3) cn^2): with r1 >= r3 >= r4
+  // every term is nonnegative, where the equivalent
+  // (r3(r1-r4) - r4(r1-r3) sn^2) / ((r1-r4) - (r1-r3) sn^2) cancels as sn^2 -> 1.
+  const double d31 = r1 - r3;
+  const double d34 = r3 - r4;
+  const double denomR = d34 + (d31 * cnVal * cnVal);
+  if (!(denomR > 0.0)) {
+    return r3; // only at r3 = r4 with cn = 0, where the numerator vanishes too
+  }
+  return r3 + (d34 * d31 * snVal * snVal / denomR);
 }
+
+#endif // PHYSICS_HAS_BOOST_JACOBI
 
 /**
  * @brief Compute the half-period of radial oscillation.
  *
- * The radial motion has period 2*K(m)/scale in the affine parameter,
- * where K(m) is the complete elliptic integral of the first kind.
+ * The radial motion has half period K(m)/scale in the affine parameter, with
+ * K the complete elliptic integral of the first kind and
+ * scale = sqrt((r1-r3)(r2-r4))/2. K is evaluated by the AGM
+ * (ellipticKFromComplement) from the complementary parameter formed from the
+ * roots,
+ *
+ *   k'^2 = 1 - m = (r1-r2)(r3-r4) / ((r1-r3)(r2-r4)),
+ *
+ * which carries only a few roundings as m -> 1, where forming 1 - m from m
+ * (or from k = sqrt(m) inside a double-precision ellint_1) cancels and loses
+ * digits in proportion to the condition number of K.
  *
  * @param roots Radial roots
  * @return Half-period in affine parameter
@@ -369,24 +411,18 @@ struct QuarticCoeffs {
   const double r3 = roots.roots.at(2).real();
   const double r4 = roots.roots.at(3).real();
 
-  const double num = (r2 - r3) * (r1 - r4);
   const double den = (r1 - r3) * (r2 - r4);
   if (std::abs(den) < 1e-30) {
     return 0.0;
   }
-  const double m = num / den;
-
-  const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
+  const double scale = std::sqrt(std::abs(den)) / 2.0;
   if (scale < 1e-30) {
     return 0.0;
   }
 
-  const double k         = std::sqrt(std::clamp(m, 0.0, 1.0));
-  const double kComplete = boost::math::ellint_1(k);
-  return kComplete / scale;
+  const double kPrime2 = std::clamp(((r1 - r2) * (r3 - r4)) / den, 0.0, 1.0);
+  return ellipticKFromComplement(kPrime2) / scale;
 }
-
-#endif // PHYSICS_HAS_BOOST_JACOBI
 
 // ============================================================================
 // Critical Curves (Photon Sphere)
@@ -435,8 +471,8 @@ struct QuarticCoeffs {
   // Note: factor is 4 (not 2) in the xi formula.
   ip.xi = ((r2 + a2) / a) - ((4.0 * rPh * delta) / (a * deltaPrime));
 
-  const double dp2   = deltaPrime * deltaPrime;
-  const double xiA   = ip.xi - a;
+  const double dp2 = deltaPrime * deltaPrime;
+  const double xiA = ip.xi - a;
   ip.eta = ((16.0 * r2 * delta) / dp2) - (xiA * xiA);
 
   return ip;

@@ -21,7 +21,8 @@
  *
  * References:
  * - Abramowitz & Stegun, Chapter 17
- * - Carlson (1995), Numerical Math 33, 1
+ * - Carlson (1995), Numerical Algorithms 10, 13 -- duplication stopping rule
+ * - DLMF 19.36.1-19.36.2 -- truncated series of R_F, R_D, R_J
  * - Bozza (2002), Phys. Rev. D 66, 103001
  * - Darwin (1959), Proc. R. Soc. A 249, 180
  *
@@ -31,7 +32,10 @@
 #ifndef PHYSICS_ELLIPTIC_INTEGRALS_H
 #define PHYSICS_ELLIPTIC_INTEGRALS_H
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <numbers>
 
@@ -43,63 +47,111 @@ namespace physics {
 // ============================================================================
 // Carlson Symmetric Forms (Numerically Stable)
 // ============================================================================
+//
+// Duplication with Carlson's (1995) stopping rule: with A0 the weighted mean of
+// the arguments and Q = c(r) max|A0 - x_i|, the loop runs until 4^{-m} Q < |A_m|,
+// and the scaled deviations X_i = (A0 - x_i) / (4^m A_m) enter the DLMF 19.36
+// truncated series. c(r) = (3r)^{-1/6} for R_F and (r/4)^{-1/6} for R_D, R_J
+// bound the truncation error by the relative tolerance r; the default
+// CARLSON_REL_TOL takes 5-6 duplications for double precision
+// (tests/elliptic_integrals_test.cpp holds 1e-15 against mpmath).
+
+/// Relative tolerance r of the Carlson duplication stopping rule.
+inline constexpr double CARLSON_REL_TOL = 1.0e-16;
+
+/// Duplication steps that shrink any finite argument spread below every tolerance r >= 1e-300.
+inline constexpr int CARLSON_MAX_ITER = 600;
 
 /**
  * @brief Carlson's R_F symmetric elliptic integral.
  *
  * R_F(x,y,z) = (1/2) ∫₀^∞ dt / √((t+x)(t+y)(t+z))
  *
- * Converges for x,y,z ≥ 0 with at most one zero.
+ * Converges for x,y,z >= 0 with at most one zero; two zeros return +inf. The
+ * truncated series is
+ * DLMF 19.36.1: R_F ~ A^{-1/2} (1 - E2/10 + E3/14 + E2^2/24 - 3 E2 E3/44)
+ * with E2 = XY - Z^2, E3 = XYZ and X + Y + Z = 0.
  *
  * @param x First argument (≥0)
  * @param y Second argument (≥0)
  * @param z Third argument (≥0)
- * @param tol Convergence tolerance
+ * @param relTol Relative tolerance r of the stopping rule
  * @return R_F(x,y,z)
  */
-inline double carlsonRf(double x, double y, double z, double tol = 1e-10) {
-  const int maxIter = 100;
-
-  // Duplication algorithm
-  for (int n = 0; n < maxIter; ++n) {
-    double const lambda = std::sqrt(x * y) + std::sqrt(y * z) + std::sqrt(z * x);
-    x = (x + lambda) / 4.0;
-    y = (y + lambda) / 4.0;
-    z = (z + lambda) / 4.0;
-
-    double const a = (x + y + z) / 3.0;
-    double const dx = 1.0 - (x / a);
-    double const dy = 1.0 - (y / a);
-    double const dz = 1.0 - (z / a);
-
-    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
-    if (eps < tol) {
-      // Series expansion
-      double const e2 = (dx * dy) + (dy * dz) + (dz * dx);
-      double const e3 = dx * dy * dz;
-      return (1.0 + (e2 * (-0.1 + (e2 * 3.0 / 44.0) + (e3 / 14.0))) + (e3 * (-3.0 / 22.0))) /
-             std::sqrt(a);
-    }
+inline double carlsonRf(double x, double y, double z, double relTol = CARLSON_REL_TOL) {
+  // Two zero arguments make the integral diverge; duplication would never
+  // separate them from zero and would run out of iterations into 0/0.
+  if ((static_cast<int>(x == 0.0) + static_cast<int>(y == 0.0) + static_cast<int>(z == 0.0)) >= 2) {
+    return safeInfinity<double>();
   }
-
-  return 1.0 / std::sqrt((x + y + z) / 3.0);
+  const double a0 = (x + y + z) / 3.0;
+  const double dx0 = a0 - x;
+  const double dy0 = a0 - y;
+  const double q = std::pow(3.0 * relTol, -1.0 / 6.0) *
+                   std::max({std::abs(dx0), std::abs(dy0), std::abs(a0 - z)});
+  double a = a0;
+  double fac = 1.0; // 4^{-m}
+  for (int n = 0; n < CARLSON_MAX_ITER && fac * q >= std::abs(a); ++n) {
+    const double sx = std::sqrt(x);
+    const double sy = std::sqrt(y);
+    const double sz = std::sqrt(z);
+    const double lambda = (sx * (sy + sz)) + (sy * sz);
+    x = 0.25 * (x + lambda);
+    y = 0.25 * (y + lambda);
+    z = 0.25 * (z + lambda);
+    a = 0.25 * (a + lambda);
+    fac *= 0.25;
+  }
+  const double xs = dx0 * fac / a;
+  const double ys = dy0 * fac / a;
+  const double zs = -(xs + ys);
+  const double e2 = (xs * ys) - (zs * zs);
+  const double e3 = xs * ys * zs;
+  return (1.0 - (e2 / 10.0) + (e3 / 14.0) + (e2 * e2 / 24.0) - (3.0 * e2 * e3 / 44.0)) /
+         std::sqrt(a);
 }
 
 /**
- * @brief Carlson's R_C degenerate form.
+ * @brief Carlson's R_C degenerate form, in closed form.
  *
  * R_C(x,y) = R_F(x, y, y) = (1/2) ∫₀^∞ dt / ((t+y)√(t+x))
+ *          = atan(s) / (s sqrt(x)),   s = sqrt((y-x)/x),  x < y   (DLMF 19.2.18)
+ *          = asinh(t) / (t sqrt(y)),  t = sqrt((x-y)/y),  x > y   (DLMF 19.2.19)
+ *
+ * s and t are formed as quotients of square roots and the results divided by
+ * sqrt(|y - x|), so neither overflows for subnormal or widely separated
+ * arguments (R_C(1e-310, 1) = pi/2, R_C(1, 5e-324) = 373.3). Below 1e-4 the
+ * atan(s)/s and asinh(t)/t ratios take their series, so nearly equal
+ * arguments (the R_C calls inside R_J's duplication) keep full precision;
+ * x = 0 gives pi / (2 sqrt(y)).
  *
  * @param x First argument (≥0)
- * @param y Second argument (>0)
- * @param tol Convergence tolerance
+ * @param y Second argument (>0); y <= 0 returns NaN
  * @return R_C(x,y)
  */
-inline double carlsonRc(double x, double y, double tol = 1e-10) {
-  if (y <= 0) {
+inline double carlsonRc(double x, double y) {
+  if (!(y > 0.0) || x < 0.0) {
     return std::numeric_limits<double>::quiet_NaN();
   }
-  return carlsonRf(x, y, y, tol);
+  if (x == 0.0) {
+    return 0.5 * std::numbers::pi / std::sqrt(y);
+  }
+  constexpr double seriesBelow = 1.0e-4;
+  if (x < y) {
+    const double gap = std::sqrt(y - x);
+    const double s = gap / std::sqrt(x);
+    return (s < seriesBelow) ? (1.0 - (s * s / 3.0)) / std::sqrt(x) : std::atan(s) / gap;
+  }
+  const double gap = std::sqrt(x - y);
+  const double t = gap / std::sqrt(y);
+  return (t < seriesBelow) ? (1.0 - (t * t / 6.0)) / std::sqrt(y) : std::asinh(t) / gap;
+}
+
+/// DLMF 19.36.2 series shared by R_D and R_J: e2..e5 are the elementary
+/// symmetric polynomials of the five scaled deviations.
+inline double carlsonDjSeries(double e2, double e3, double e4, double e5) {
+  return 1.0 - (3.0 * e2 / 14.0) + (e3 / 6.0) + (9.0 * e2 * e2 / 88.0) - (3.0 * e4 / 22.0) -
+         (9.0 * e2 * e3 / 52.0) + (3.0 * e5 / 26.0);
 }
 
 /**
@@ -107,108 +159,149 @@ inline double carlsonRc(double x, double y, double tol = 1e-10) {
  *
  * R_D(x,y,z) = (3/2) ∫₀^∞ dt / ((t+z)√((t+x)(t+y)(t+z)))
  *
+ * The series uses the elementary symmetric polynomials of (X, Y, Z, Z, Z) with
+ * X + Y + 3Z = 0 (DLMF 19.36.2).
+ *
  * @param x First argument (≥0)
  * @param y Second argument (≥0)
  * @param z Third argument (>0)
- * @param tol Convergence tolerance
- * @return R_D(x,y,z)
+ * @param relTol Relative tolerance r of the stopping rule
+ * @return R_D(x,y,z); +inf for z = 0 or x = y = 0
  */
-inline double carlsonRd(double x, double y, double z, double tol = 1e-10) {
-  const int maxIter = 100;
-
-  double sum = 0.0;
-  double fac = 1.0;
-
-  for (int n = 0; n < maxIter; ++n) {
-    double const lambda = std::sqrt(x * y) + std::sqrt(y * z) + std::sqrt(z * x);
-    sum += fac / (std::sqrt(z) * (z + lambda));
-    fac /= 4.0;
-    x = (x + lambda) / 4.0;
-    y = (y + lambda) / 4.0;
-    z = (z + lambda) / 4.0;
-
-    double const a = (x + y + (3.0 * z)) / 5.0;
-    double const dx = 1.0 - (x / a);
-    double const dy = 1.0 - (y / a);
-    double const dz = 1.0 - (z / a);
-
-    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
-    if (eps < tol) {
-      double const e2 = (dx * dy) + (dy * dz) + (3.0 * dz * dz) + (dz * dx) + (dx * dz) + (dy * dz);
-      double const e3 = (dz * dz * dz) + (dx * dz * dz) + (3.0 * dx * dy * dz) +
-                        (2.0 * dy * dz * dz) + (dy * dz * dz) + (2.0 * dz * dz * dz);
-      double const e4 = (dy * dz * dz * dz) + (dx * dz * dz * dz) + (dx * dy * dz * dz) +
-                        (2.0 * dy * dz * dz * dz);
-      double const e5 = dx * dy * dz * dz * dz;
-
-      double const result =
-          (1.0 + (e2 * ((-3.0 / 14.0) + (e2 * 9.0 / 88.0) - (e3 * 9.0 / 52.0))) +
-           (e3 * ((1.0 / 6.0) - (e2 * 3.0 / 22.0))) + (e4 * (-3.0 / 22.0)) + (e5 * (3.0 / 26.0))) /
-          (a * std::sqrt(a));
-      return (3.0 * sum) + (fac * result);
-    }
+inline double carlsonRd(double x, double y, double z, double relTol = CARLSON_REL_TOL) {
+  // z = 0, or x = y = 0, makes the integral diverge.
+  if (z == 0.0 || (x == 0.0 && y == 0.0)) {
+    return safeInfinity<double>();
   }
+  const double a0 = (x + y + (3.0 * z)) / 5.0;
+  const double dx0 = a0 - x;
+  const double dy0 = a0 - y;
+  const double q = std::pow(0.25 * relTol, -1.0 / 6.0) *
+                   std::max({std::abs(dx0), std::abs(dy0), std::abs(a0 - z)});
+  double a = a0;
+  double fac = 1.0;
+  double sum = 0.0;
+  for (int n = 0; n < CARLSON_MAX_ITER && fac * q >= std::abs(a); ++n) {
+    const double sx = std::sqrt(x);
+    const double sy = std::sqrt(y);
+    const double sz = std::sqrt(z);
+    const double lambda = (sx * (sy + sz)) + (sy * sz);
+    sum += fac / (sz * (z + lambda));
+    x = 0.25 * (x + lambda);
+    y = 0.25 * (y + lambda);
+    z = 0.25 * (z + lambda);
+    a = 0.25 * (a + lambda);
+    fac *= 0.25;
+  }
+  const double xs = dx0 * fac / a;
+  const double ys = dy0 * fac / a;
+  const double zs = -(xs + ys) / 3.0;
+  const double xy = xs * ys;
+  const double z2 = zs * zs;
+  const double e2 = xy - (6.0 * z2);
+  const double e3 = ((3.0 * xy) - (8.0 * z2)) * zs;
+  const double e4 = 3.0 * (xy - z2) * z2;
+  const double e5 = xy * z2 * zs;
+  return (3.0 * sum) + (fac * carlsonDjSeries(e2, e3, e4, e5) / (a * std::sqrt(a)));
+}
 
-  double const a = (x + y + (3.0 * z)) / 5.0;
-  return (3.0 * sum) + (fac / (a * std::sqrt(a)));
+/**
+ * @brief Carlson's R_J for p > 0 (the duplication kernel of carlsonRj).
+ *
+ * Each duplication adds 3 4^{-m} R_C(alpha^2, beta) with
+ * alpha = p (sqrt(x) + sqrt(y) + sqrt(z)) + sqrt(xyz) and beta = p (p + lambda)^2,
+ * evaluated by the closed-form carlsonRc. The series uses
+ * the elementary symmetric polynomials of (X, Y, Z, P, P) with
+ * X + Y + Z + 2P = 0 (DLMF 19.36.2).
+ *
+ * @param x First argument (≥0)
+ * @param y Second argument (≥0)
+ * @param z Third argument (>=0); at most one of x, y, z is zero
+ * @param p Fourth argument (>0)
+ * @param relTol Relative tolerance r of the stopping rule
+ * @return R_J(x,y,z,p); +inf for p = 0 or two zeros among x, y, z
+ */
+inline double carlsonRjPositive(double x, double y, double z, double p, double relTol) {
+  // p = 0, or two zero arguments among x, y, z, makes the integral diverge.
+  if (p == 0.0 ||
+      (static_cast<int>(x == 0.0) + static_cast<int>(y == 0.0) + static_cast<int>(z == 0.0)) >= 2) {
+    return safeInfinity<double>();
+  }
+  const double a0 = (x + y + z + (2.0 * p)) / 5.0;
+  const double dx0 = a0 - x;
+  const double dy0 = a0 - y;
+  const double dz0 = a0 - z;
+  const double q = std::pow(0.25 * relTol, -1.0 / 6.0) *
+                   std::max({std::abs(dx0), std::abs(dy0), std::abs(dz0), std::abs(a0 - p)});
+  double a = a0;
+  double fac = 1.0;
+  double sum = 0.0;
+  for (int n = 0; n < CARLSON_MAX_ITER && fac * q >= std::abs(a); ++n) {
+    const double sx = std::sqrt(x);
+    const double sy = std::sqrt(y);
+    const double sz = std::sqrt(z);
+    const double lambda = (sx * (sy + sz)) + (sy * sz);
+    const double alpha = (p * (sx + sy + sz)) + (sx * sy * sz);
+    const double beta = p * (p + lambda) * (p + lambda);
+    sum += fac * carlsonRc(alpha * alpha, beta);
+    x = 0.25 * (x + lambda);
+    y = 0.25 * (y + lambda);
+    z = 0.25 * (z + lambda);
+    p = 0.25 * (p + lambda);
+    a = 0.25 * (a + lambda);
+    fac *= 0.25;
+  }
+  const double xs = dx0 * fac / a;
+  const double ys = dy0 * fac / a;
+  const double zs = dz0 * fac / a;
+  const double ps = -(xs + ys + zs) / 2.0;
+  const double xyz = xs * ys * zs;
+  const double pairs = (xs * ys) + (xs * zs) + (ys * zs);
+  const double p2 = ps * ps;
+  const double e2 = pairs - (3.0 * p2);
+  const double e3 = xyz + (2.0 * ps * pairs) - (2.0 * p2 * ps);
+  const double e4 = (2.0 * xyz * ps) + (pairs * p2);
+  const double e5 = xyz * p2;
+  return (3.0 * sum) + (fac * carlsonDjSeries(e2, e3, e4, e5) / (a * std::sqrt(a)));
 }
 
 /**
  * @brief Carlson's R_J symmetric elliptic integral.
  *
- * R_J(x,y,z,p) = (3/2) ∫₀^∞ dt / ((t+p)√((t+x)(t+y)(t+z)))
+ * R_J(x,y,z,p) = (3/2) integral_0^inf dt / ((t+p) sqrt((t+x)(t+y)(t+z)))
  *
- * @param x First argument (≥0)
- * @param y Second argument (≥0)
- * @param z Third argument (≥0)
- * @param p Fourth argument (≠0)
- * @param tol Convergence tolerance
- * @return R_J(x,y,z,p)
+ * For p > 0 by duplication (carlsonRjPositive). For p < 0 the integral is a
+ * Cauchy principal value, reduced to p' > 0 by DLMF 19.20.14 with the
+ * arguments ordered x <= y <= z and q = -p:
+ *
+ *   (y + q) R_J(x,y,z,-q) = (p' - y) R_J(x,y,z,p') - 3 R_F(x,y,z)
+ *                           + 3 sqrt(xyz / (xz + p'q)) R_C(xz + p'q, p'q),
+ *   p' = y + (z - y)(y - x) / (y + q) >= y.
+ *
+ * @param x First argument (>=0)
+ * @param y Second argument (>=0)
+ * @param z Third argument (>=0); at most one of x, y, z is zero
+ * @param p Fourth argument (!= 0); p < 0 gives the principal value
+ * @param relTol Relative tolerance r of the stopping rule
+ * @return R_J(x,y,z,p); +inf for p = 0 or two zeros among x, y, z
  */
-inline double carlsonRj(double x, double y, double z, double p, double tol = 1e-10) {
-  const int maxIter = 100;
-
-  double sum = 0.0;
-  double fac = 1.0;
-  for (int n = 0; n < maxIter; ++n) {
-    double const sqrtX = std::sqrt(x);
-    double const sqrtY = std::sqrt(y);
-    double const sqrtZ = std::sqrt(z);
-
-    double const lambda = (sqrtX * sqrtY) + (sqrtY * sqrtZ) + (sqrtZ * sqrtX);
-
-    double alpha = (p * (sqrtX + sqrtY + sqrtZ)) + (sqrtX * sqrtY * sqrtZ);
-    alpha *= alpha;
-    double const beta = p * (p + lambda) * (p + lambda);
-
-    sum += fac * carlsonRc(alpha, beta, tol);
-    fac /= 4.0;
-
-    x = (x + lambda) / 4.0;
-    y = (y + lambda) / 4.0;
-    z = (z + lambda) / 4.0;
-    p = (p + lambda) / 4.0;
-
-    double const a = (x + y + z + (2.0 * p)) / 5.0;
-    double const dx = 1.0 - (x / a);
-    double const dy = 1.0 - (y / a);
-    double const dz = 1.0 - (z / a);
-    double const dp = 1.0 - (p / a);
-
-    double const eps = std::max({std::abs(dx), std::abs(dy), std::abs(dz), std::abs(dp)});
-    if (eps < tol) {
-      double const e2 = (dx * dy) + (dy * dz) + (3.0 * dp * dp) + (dz * dx) +
-                        (2.0 * ((dx * dp) + (dy * dp) + (dz * dp)));
-      double const e3 = (dx * dy * dz) + (2.0 * dp * dp * dp) +
-                        (3.0 * dp * ((dx * dy) + (dy * dz) + (dz * dx) + (dp * (dx + dy + dz))));
-
-      double const result = (1.0 + (e2 * (-3.0 / 14.0)) + (e3 * (1.0 / 6.0))) / (a * std::sqrt(a));
-      return (3.0 * sum) + (fac * result);
-    }
+inline double carlsonRj(double x, double y, double z, double p, double relTol = CARLSON_REL_TOL) {
+  if (!(p < 0.0)) {
+    return carlsonRjPositive(x, y, z, p, relTol);
   }
-
-  double const a = (x + y + z + (2.0 * p)) / 5.0;
-  return (3.0 * sum) + (fac / (a * std::sqrt(a)));
+  if ((static_cast<int>(x == 0.0) + static_cast<int>(y == 0.0) + static_cast<int>(z == 0.0)) >= 2) {
+    return safeInfinity<double>();
+  }
+  const double lo = std::min({x, y, z});
+  const double hi = std::max({x, y, z});
+  const double mid = std::max(std::min(x, y), std::min(std::max(x, y), z)); // median, no rounding
+  const double q = -p;
+  const double pp = mid + ((hi - mid) * (mid - lo) / (mid + q));
+  const double rc = carlsonRc((lo * hi) + (pp * q), pp * q);
+  const double tail = 3.0 * std::sqrt(lo * mid * hi / ((lo * hi) + (pp * q))) * rc;
+  return (((pp - mid) * carlsonRjPositive(lo, mid, hi, pp, relTol)) -
+          (3.0 * carlsonRf(lo, mid, hi, relTol)) + tail) /
+         (mid + q);
 }
 
 // ============================================================================
@@ -229,6 +322,87 @@ inline double ellipticK(double k) {
   }
   double const k2 = k * k;
   return carlsonRf(0.0, 1.0 - k2, 1.0);
+}
+
+/**
+ * @brief Complete elliptic integral of the first kind from the complementary parameter.
+ *
+ * K = pi / (2 AGM(1, k')) with k'^2 = 1 - m (DLMF 19.8.5). Taking k'^2 as the
+ * input lets a caller that knows 1 - m in factored form (the analytic Kerr
+ * roots do) avoid forming it as 1 - m, which cancels as m -> 1; the AGM adds
+ * and multiplies only positive numbers and converges quadratically.
+ *
+ * @param kPrime2 Complementary parameter k'^2 = 1 - m, 0 < k'^2 <= 1
+ * @return K(m); +inf at k'^2 = 0
+ */
+inline double ellipticKFromComplement(double kPrime2) {
+  if (!(kPrime2 > 0.0)) {
+    return safeInfinity<double>();
+  }
+  double a = 1.0;
+  double b = std::sqrt(kPrime2);
+  for (int n = 0; n < 64 && (a - b) > std::numeric_limits<double>::epsilon() * a; ++n) {
+    const double mean = 0.5 * (a + b);
+    b = std::sqrt(a * b);
+    a = mean;
+  }
+  return std::numbers::pi / (a + b);
+}
+
+/// Jacobi sn(u|m) and cn(u|m).
+template <typename T> struct JacobiSnCn {
+  T sn = T(0);
+  T cn = T(1);
+};
+
+/**
+ * @brief sn and cn from the parameter m and its complement k'^2 = 1 - m.
+ *
+ * Descending Landen transformation (A&S 16.4.1-16.4.3; DLMF 22.20.ii):
+ * a_0 = 1, b_0 = k', a_{n+1} = (a_n + b_n)/2, b_{n+1} = sqrt(a_n b_n),
+ * c_1 = (1 - k')/2 = m / (2 (1 + k')), c_{n+1} = c_n^2 / (4 a_{n+1}); at
+ * c_N <= eps a_N, phi_N = 2^N a_N u and
+ * phi_{n-1} = (phi_n + asin((c_n / a_n) sin phi_n)) / 2 give sn = sin phi_0,
+ * cn = cos phi_0. The AGM runs on k' itself and c_1 takes whichever of its two
+ * forms does not cancel, so a caller that knows 1 - m in factored form keeps
+ * the quarter period K = pi / (2 a_N) accurate as m -> 1, where a modulus
+ * k = sqrt(m) rounded to double carries an absolute error of eps in 1 - m.
+ * Near m = 1 with cn small the amplitude phi_0 sits at pi/2, so cn keeps only
+ * the absolute precision of T there; rAnalytic evaluates it in long double.
+ *
+ * @param u       Argument
+ * @param m       Parameter, 0 <= m <= 1
+ * @param kPrime2 Complementary parameter 1 - m, formed without cancellation
+ * @return sn(u|m), cn(u|m); tanh u and sech u at k'^2 = 0
+ */
+template <typename T>
+[[nodiscard]] inline JacobiSnCn<T> jacobiSnCnFromComplement(T u, T m, T kPrime2) {
+  if (!(kPrime2 > T(0))) {
+    return {.sn = std::tanh(u), .cn = T(1) / std::cosh(u)};
+  }
+  // 32 halvings of c take any c_1 <= 1/2 below eps of a double or long double.
+  std::array<T, 33> a{};
+  std::array<T, 33> c{};
+  const T kPrime = std::sqrt(kPrime2);
+  a[0] = T(1);
+  c[0] = std::sqrt(m);
+  T b = kPrime;
+  std::size_t n = 0;
+  while (n + 1 < a.size() && c[n] > std::numeric_limits<T>::epsilon() * a[n]) {
+    a[n + 1] = T(0.5) * (a[n] + b);
+    if (n == 0) {
+      c[1] = (kPrime2 < T(0.25)) ? T(0.5) * (T(1) - kPrime) : m / (T(2) * (T(1) + kPrime));
+    } else {
+      c[n + 1] = (c[n] * c[n]) / (T(4) * a[n + 1]);
+    }
+    b = std::sqrt(a[n] * b);
+    ++n;
+  }
+  T phi = std::ldexp(a[n] * u, static_cast<int>(n));
+  for (std::size_t j = n; j > 0; --j) {
+    phi = T(0.5) * (phi + std::asin((c[j] / a[j]) * std::sin(phi)));
+  }
+  return {.sn = std::sin(phi), .cn = std::cos(phi)};
 }
 
 /**
@@ -259,6 +433,9 @@ inline double ellipticE(double k) {
  * @brief Complete elliptic integral of the third kind Π(n,k).
  *
  * Π(n,k) = ∫₀^(π/2) dθ / ((1 - n sin²θ)√(1 - k² sin²θ))
+ *
+ * For n > 1 the integrand has a pole inside the range and the result is the
+ * Cauchy principal value (carlsonRj at p = 1 - n < 0); n = 1 returns +inf.
  *
  * @param n Characteristic
  * @param k Modulus (0 ≤ k < 1)
@@ -467,8 +644,7 @@ inline double deflectionStrongField(double b, double rS) {
  * @param rS Schwarzschild radius [cm]
  * @return Image angle θ_n [rad]
  */
-inline double relativisticImagePosition(double beta, int n, double dL,
-                                        double dS, double dLs,
+inline double relativisticImagePosition(double beta, int n, double dL, double dS, double dLs,
                                         double rS) {
   static_cast<void>(beta);
   static_cast<void>(dS);
@@ -530,45 +706,27 @@ inline double relativisticImageMagnification(double beta, int n, double dL, doub
 // ============================================================================
 
 /**
- * @brief Compute critical impact parameter for Kerr black hole.
+ * @brief Critical impact parameter of the equatorial Kerr photon orbits.
  *
- * For equatorial photon orbits in Kerr:
- * b_crit = ±(r_ph² + a²) / (r_ph - M) - a
+ * The circular equatorial photon orbit at r_ph = 2M (1 + cos((2/3) acos(-+a/M)))
+ * (upper sign prograde) has impact parameter (Bardeen, Press & Teukolsky 1972)
+ *
+ *   b_c = 3 sqrt(M r_ph) -+ a,
+ *
+ * which equals -a +- 6M cos((1/3) acos(-+a/M)) (Chandrasekhar 1983) and
+ * the xi of criticalImpactParams at eta = 0. It gives 3 sqrt(3) M at a = 0,
+ * 2M prograde and 7M retrograde at a = M.
  *
  * @param rS Schwarzschild radius [cm]
- * @param a Spin parameter [cm]
+ * @param a Spin parameter [cm], |a| <= rS/2
  * @param prograde True for prograde photons
  * @return Critical impact parameter [cm]
  */
 inline double criticalImpactParameterKerr(double rS, double a, bool prograde) {
-  double const m = rS / 2.0;
-
-  // Photon orbit radius (simplified formula)
-  double const aStar = a / m;
-  double rPh;
-
-  if (prograde) {
-    double const angle = (2.0 / 3.0) * std::acos(-aStar);
-    rPh = 2.0 * m * (1.0 + std::cos(angle));
-  } else {
-    double const angle = (2.0 / 3.0) * std::acos(aStar);
-    rPh = 2.0 * m * (1.0 + std::cos(angle));
-  }
-
-  // Critical impact parameter
-  double const rPhMinusM = rPh - m;
-  if (std::abs(rPhMinusM) < 1e-20) {
-    return safeInfinity<double>();
-  }
-
-  double bCrit = ((rPh * rPh) + (a * a)) / rPhMinusM;
-  if (prograde) {
-    bCrit -= a;
-  } else {
-    bCrit += a;
-  }
-
-  return std::abs(bCrit);
+  const double m = rS / 2.0;
+  const double aStar = std::clamp(a / m, -1.0, 1.0);
+  const double rPh = 2.0 * m * (1.0 + std::cos((2.0 / 3.0) * std::acos(prograde ? -aStar : aStar)));
+  return (3.0 * std::sqrt(m * rPh)) + (prograde ? -a : a);
 }
 
 // ============================================================================

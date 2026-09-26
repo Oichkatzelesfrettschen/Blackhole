@@ -29,6 +29,9 @@ struct Ray {
 };
 
 struct HitResult {
+  // Camera position in the tracer's chart (kerrChartPosition); hit and
+  // closest-approach points are in the same chart.
+  vec3 origin;
   bool hitDisk;
   bool hitHorizon;
   bool escaped;
@@ -47,6 +50,17 @@ struct HitResult {
 const int BH_BACKGROUND_LAYERS = 3;
 
 int bhDebugMask() { return int(bhDebugFlags + 0.5); }
+
+// Frames. The world frame is y-up: the camera orbit (camera_math.cpp), the
+// sky's equirect pole (bhDirToUv), and the legacy tracer's spin axis. The
+// physics frame carries the Kerr spin along +z with the disk in the xy plane,
+// the Boyer-Lindquist convention of kerr.glsl. The rotation about x by -90
+// degrees maps world +y to physics +z; camera rays enter the tracer through
+// bhWorldToPhysics and escaped directions reach the sky through
+// bhPhysicsToWorld, so a camera orbiting the world xz plane views the disk
+// near edge-on instead of sitting inside the disk plane.
+vec3 bhWorldToPhysics(vec3 v) { return vec3(v.x, -v.z, v.y); }
+vec3 bhPhysicsToWorld(vec3 v) { return vec3(v.x, v.z, -v.y); }
 
 bool bhIsInvalidFloat(float v) { return isnan(v) || isinf(v); }
 
@@ -147,9 +161,15 @@ void bhStepRK4(inout Ray ray, float r_s, float dt) {
   ray.affineParameter += dt;
 }
 
+// Crossing of the zero-thickness disk plane z = 0 by the step oldPos -> newPos
+// inside the annulus [r_in, r_out]. A step that starts on the plane leaves it
+// rather than crossing it: its start is the observer (a camera in the disk
+// plane, where every tilted ray would otherwise hit the disk at t = 0) or the
+// end of a previous step that landed on the plane and was counted there.
 bool bhCheckDiskIntersection(vec3 oldPos, vec3 newPos, float r_in, float r_out,
                              out vec3 hitPoint) {
-  if (oldPos.z * newPos.z > 0.0) {
+  hitPoint = oldPos;
+  if (oldPos.z == 0.0 || oldPos.z * newPos.z > 0.0) {
     return false;
   }
 
@@ -177,7 +197,8 @@ vec3 bhPackShaperInputs(float minRadiusReached, vec3 closestApproachPos, vec3 or
   float nearHoleWeight = 0.0;
   if (minRadiusReached < r_s * 5.0) {
     vec3 approachDir = normalize(origin - closestApproachPos);
-    vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
+    // Physics frame: the spin axis is +z (bhWorldToPhysics).
+    vec3 spinAxis = vec3(0.0, 0.0, kerrSpin >= 0.0 ? 1.0 : -1.0);
     vec3 flowDir = normalize(cross(spinAxis, normalize(closestApproachPos)));
     alignedFlow = 0.5 + 0.5 * dot(flowDir, approachDir);
     nearHoleWeight =
@@ -233,13 +254,55 @@ float bhDiskInnerRadius(float r_s) {
   return 0.5 * isco_radius(kerrSpin) * r_s;
 }
 
+// Escape radius for a ray starting at pos. A ray escapes only once it is
+// outside both the scene radius and the camera's own radius and moving
+// outward; a camera placed beyond maxDistance otherwise escapes every ray at
+// step 0 and draws the unlensed sky.
+float bhEscapeRadius(vec3 pos, float maxDistance) {
+  return max(maxDistance, 1.01 * length(pos));
+}
+
+// Scene toggles read by the three interop traces. renderBlackHole = 0 removes
+// the hole and, as in the legacy tracer, its disk: each ray reaches the sky
+// along the camera direction without integration. gravitationalLensing = 0
+// keeps the horizon and the disk but traces straight rays: flat space is the
+// r_s = 0, a = 0 member of the Kerr family, where the Mino-time leapfrog moves
+// along straight lines, so the same integrator runs with bhMetricRadius and
+// bhMetricSpin in place of the hole's r_s and spin while capture, disk radii,
+// and step sizing keep the physical values.
+bool bhHoleRendered() { return renderBlackHole > 0.5; }
+
+float bhMetricRadius(float r_s) { return gravitationalLensing > 0.5 ? r_s : 0.0; }
+
+float bhMetricSpin(float aTrace) { return gravitationalLensing > 0.5 ? aTrace : 0.0; }
+
+// Boyer-Lindquist position of a point in the tracer's chart: undoes
+// kerrChartPosition by rotating through -F(|p|) with the traced metric, so
+// consumers defined on Boyer-Lindquist phi (the wiregrid overlay) read the
+// azimuth the photon actually has there. Chart-space shading and depth keep
+// the chart position. With renderBlackHole = 0 the traces return the straight
+// camera ray's end point, which was never rotated, so it passes unchanged.
+vec3 bhChartToBoyerLindquist(vec3 p, float r_s) {
+  if (!bhHoleRendered()) {
+    return p;
+  }
+  float aTrace = bhMetricSpin(kerrTraceSpin(0.5 * kerrSpin * r_s));
+  return kerrRotateZ(p, -kerrKsAzimuthOffset(length(p), bhMetricRadius(r_s), aTrace));
+}
+
+// Closest-approach radius reported for a ray that meets no hole; above every
+// near-hole threshold (redshift, shaping) the shading helpers apply.
+const float BH_NO_HOLE_RADIUS = 1.0e30;
+
 HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
                           float stepSize) {
+  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
   HitResult result;
   result.hitDisk = false;
   result.hitHorizon = false;
   result.escaped = false;
   result.hitPoint = vec3(0.0);
+  result.origin = ray.position;
   result.closestApproachPoint = ray.position;
   result.escapedDir = normalize(ray.velocity);
   result.phi = 0.0;
@@ -250,89 +313,58 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.lastClosestApproachStep = -1;
   result.debugFlags = 0;
 
-  float a = 0.5 * kerrSpin * r_s;
-  if (abs(a) > BH_EPSILON) {
-    float r_horizon = kerrOuterHorizon(r_s, a);
-    if (r_horizon <= BH_EPSILON) {
-      r_horizon = r_s;
-    }
-
-    float r_disk_in = bhDiskInnerRadius(r_s);
-    float r_disk_out = 100.0 * r_s;
-
-    KerrConsts c = kerrInitConsts(ray.position, ray.velocity, r_s, a);
-    KerrRay kerrRay = kerrInitRay(ray.position, ray.velocity);
-
-    vec3 oldPos;
-    float dt = stepSize;
-
-    for (int step = 0; step < maxSteps; ++step) {
-      oldPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-      bhRecordClosestApproach(result, kerrRay.r, oldPos, step);
-
-      if (kerrRay.r <= r_horizon) {
-        result.hitHorizon = true;
-        result.hitPoint = oldPos;
-        return result;
-      }
-
-      /* D10: AMR step refinement near horizon and photon sphere */
-      float stepDt = bhAdaptiveStep(kerrRay.r, r_s, r_horizon, dt);
-      kerrStep(kerrRay, r_s, a, c, stepDt);
-      vec3 newPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-      result.debugFlags |= bhDebugEvaluate(newPos, newPos - oldPos, maxDistance);
-      if ((bhDebugMask() & BH_DEBUG_FLAG_RANGE) != 0 && kerrRay.r < 0.0) {
-        result.debugFlags |= BH_DEBUG_FLAG_RANGE;
-      }
-
-      if (adiskEnabled > 0.5) {
-        vec3 diskHit;
-        if (bhCheckDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
-          result.hitDisk = true;
-          result.hitPoint = diskHit;
-          result.phi = atan(diskHit.y, diskHit.x);
-          result.redshiftFactor = bhComputeRedshiftFactor(length(diskHit), r_s);
-          return result;
-        }
-      }
-
-      if (kerrRay.r > maxDistance) {
-        result.escaped = true;
-        result.hitPoint = newPos;
-        result.escapedDir = normalize(newPos - oldPos);
-        return result;
-      }
-    }
-
-    result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
+  if (!bhHoleRendered()) {
     result.escaped = true;
-    result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-    result.escapedDir = normalize(result.hitPoint - oldPos);
+    result.hitPoint = ray.position + escapeRadius * result.escapedDir;
+    result.minRadius = BH_NO_HOLE_RADIUS;
     return result;
+  }
+
+  // One integrator for every spin: Schwarzschild is the a = 0 member of the
+  // Kerr family and kerr.glsl's Mino-time leapfrog is exact there, so the
+  // image is continuous in spin by construction.
+  float a = 0.5 * kerrSpin * r_s;
+  float r_horizon = kerrOuterHorizon(r_s, a);
+  if (r_horizon <= BH_EPSILON) {
+    r_horizon = r_s;
   }
 
   float r_disk_in = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
 
+  float rsMetric = bhMetricRadius(r_s);
+  float aTrace = bhMetricSpin(kerrTraceSpin(a));
+  KerrConsts c;
+  KerrRay kerrRay;
+  kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kerrRay);
+  result.origin = kerrChartPosition(ray.position, rsMetric, aTrace);
+  result.closestApproachPoint = result.origin;
+
   vec3 oldPos;
   float dt = stepSize;
 
   for (int step = 0; step < maxSteps; ++step) {
-    oldPos = ray.position;
-    bhStepRK4(ray, r_s, dt);
-    result.debugFlags |= bhDebugEvaluate(ray.position, ray.velocity, maxDistance);
+    oldPos = kerrRayPosition(kerrRay);
+    bhRecordClosestApproach(result, kerrRay.r, oldPos, step);
 
-    float r = length(ray.position);
-    bhRecordClosestApproach(result, r, ray.position, step);
-    if (r <= r_s) {
+    if (kerrRay.r <= r_horizon) {
       result.hitHorizon = true;
-      result.hitPoint = ray.position;
+      result.hitPoint = oldPos;
       return result;
+    }
+
+    /* D10: AMR step refinement near horizon and photon sphere */
+    float stepDt = bhAdaptiveStep(kerrRay.r, r_s, r_horizon, dt);
+    kerrStep(kerrRay, rsMetric, aTrace, c, stepDt);
+    vec3 newPos = kerrRayPosition(kerrRay);
+    result.debugFlags |= bhDebugEvaluate(newPos, newPos - oldPos, escapeRadius);
+    if ((bhDebugMask() & BH_DEBUG_FLAG_RANGE) != 0 && kerrRay.r < 0.0) {
+      result.debugFlags |= BH_DEBUG_FLAG_RANGE;
     }
 
     if (adiskEnabled > 0.5) {
       vec3 diskHit;
-      if (bhCheckDiskIntersection(oldPos, ray.position, r_disk_in, r_disk_out, diskHit)) {
+      if (bhCheckDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
         result.hitDisk = true;
         result.hitPoint = diskHit;
         result.phi = atan(diskHit.y, diskHit.x);
@@ -341,23 +373,32 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
       }
     }
 
-    if (r > maxDistance) {
+    if (kerrRay.r > escapeRadius && kerrRay.vr > 0.0) {
       result.escaped = true;
-      result.hitPoint = ray.position;
-      result.escapedDir = normalize(ray.position - oldPos);
+      result.hitPoint = newPos;
+      result.escapedDir = normalize(newPos - oldPos);
       return result;
     }
   }
 
   result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
   result.escaped = true;
-  result.hitPoint = ray.position;
-  result.escapedDir = normalize(ray.position - oldPos);
+  result.hitPoint = kerrRayPosition(kerrRay);
+  result.escapedDir = normalize(result.hitPoint - oldPos);
   return result;
 }
 
 vec4 bhHorizonColor() {
   return vec4(0.0, 0.0, 0.0, 1.0);
+}
+
+// Color a ray captured at radius r brings back: the black horizon plus the
+// Hawking thermal glow (hawking_glow.glsl), which the legacy tracer adds at
+// the same capture point.
+vec3 bhHorizonShade(float r, float r_s) {
+  return applyHawkingGlow(bhHorizonColor().rgb, blackHoleMass, r, r_s, hawkingGlowEnabled,
+                          hawkingTempScale, hawkingGlowIntensity, hawkingTempLUT,
+                          hawkingSpectrumLUT, useHawkingLUTs);
 }
 
 vec4 bhDiskColorFromHit(HitResult hit, float r_s) {
@@ -458,8 +499,9 @@ vec3 bhSampleBackgroundLayers(vec3 dir, out float weight) {
   return accum;
 }
 
+// dir is a physics-frame direction; the sky textures are world-frame.
 vec4 bhBackgroundColorFromDir(vec3 dir, float minRadius, float r_s) {
-  vec3 n = normalize(dir);
+  vec3 n = normalize(bhPhysicsToWorld(dir));
   vec3 skyDir = bhRotateY(n, time);
   vec3 color = texture(galaxy, skyDir).rgb;
   if (backgroundEnabled > 0.5) {
@@ -504,7 +546,7 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
     return vec4(clamp(debugColor, 0.0, 1.0), 1.0);
   }
   if (hit.hitHorizon) {
-    return bhHorizonColor();
+    return vec4(bhHorizonShade(length(hit.hitPoint), r_s), 1.0);
   }
   if (hit.hitDisk) {
     return bhDiskColorFromHit(hit, r_s);
@@ -531,6 +573,164 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 }
 
 // ---------------------------------------------------------------------------
+// Volumetric disk segment
+//
+// The RTE and Stokes traces model the disk as a Gaussian layer, density
+// exp(-z^2 / 2h^2) with h = 0.1 r_s, over the annulus rIn <= rho <= rOut
+// (rho the cylindrical radius) under the Novikov-Thorne flux profile. A
+// far-field step spans ~0.05 r, many scale heights, so a coefficient read at
+// one point misses a midplane crossed mid-step, applies the peak density to
+// the whole step, or keeps or drops the whole step by one radius.
+// bhDiskSegment intersects the step's straight chord with the annulus
+// (rho^2 is quadratic along the chord, so the emitting part is at most two
+// intervals), integrates the density exactly over each interval, and reads
+// the slowly varying radial factors (flux, color, Doppler) at each
+// interval's density-weighted centroid, which is exact for factors linear
+// along the chord. With every coefficient proportional to the density and
+// the source function constant over the segment, the formal solution depends
+// only on the column, so the mean coefficients over the step's path length
+// give the exact segment when the radial factors are constant across it and
+// converge as the step shrinks otherwise.
+// ---------------------------------------------------------------------------
+
+// erf(x) by Abramowitz & Stegun 7.1.26, |error| <= 1.5e-7.
+float bhErf(float x) {
+  float t = 1.0 / (1.0 + 0.3275911 * abs(x));
+  float poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 +
+               t * (-1.453152027 + t * 1.061405429))));
+  float y = 1.0 - poly * exp(-x * x);
+  return x < 0.0 ? -y : y;
+}
+
+// Mean and centroid of the density exp(-z^2 / 2h^2) along a chord whose
+// height runs linearly from z0 to z1, sharing one erf pair (s = 1 / (sqrt(2) h)):
+//   mean     = h sqrt(pi/2) (erf(z1 s) - erf(z0 s)) / (z1 - z0),
+//   centroid = fraction along the chord of the weighted mean height
+//              -h^2 (exp(-z1^2 / 2h^2) - exp(-z0^2 / 2h^2)) / (mean (z1 - z0)).
+// Below |z1 - z0| = 0.01 sqrt(2) h the midpoint value (relative error < 1e-5)
+// and the midpoint; a chord too far in the tail to resolve its centroid also
+// takes the midpoint.
+vec2 bhGaussianChordMoments(float z0, float z1, float h) {
+  float s = 0.70710678 / h;
+  float dz = z1 - z0;
+  if (abs(dz) * s < 0.01) {
+    float zm = 0.5 * (z0 + z1) / h;
+    return vec2(exp(-0.5 * zm * zm), 0.5);
+  }
+  float mass = 1.25331414 * h * (bhErf(z1 * s) - bhErf(z0 * s));
+  float frac = 0.5;
+  if (abs(mass) >= 1e-6 * abs(dz)) {
+    float zBar = -h * h * (exp(-z1 * z1 * s * s) - exp(-z0 * z0 * s * s)) / mass;
+    frac = clamp((zBar - z0) / dz, 0.0, 1.0);
+  }
+  return vec2(mass / dz, frac);
+}
+
+// Parameter interval [t0, t1] (clipped to [0, 1]) of the chord a + b t,
+// t in [0, 1], on which |a + b t| <= radius; empty when t0 > t1.
+vec2 bhChordInsideRadius(vec2 a, vec2 b, float radius) {
+  float qa = dot(b, b);
+  float qb = dot(a, b);
+  float qc = dot(a, a) - radius * radius;
+  if (qa < 1e-12 * max(qc + radius * radius, 1.0)) {
+    return qc <= 0.0 ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
+  }
+  float disc = qb * qb - qa * qc;
+  if (disc < 0.0) {
+    return vec2(1.0, 0.0);
+  }
+  float root = sqrt(disc);
+  return vec2(max((-qb - root) / qa, 0.0), min((-qb + root) / qa, 1.0));
+}
+
+// Radial factors of the disk at cylindrical radius rho and azimuth angle phi.
+float bhDiskRadialEmission(float rho, float phi, float rIn, float r_s, out vec3 emitColor) {
+  // Novikov-Thorne surface flux profile
+  float x    = rIn / max(rho, BH_EPSILON);
+  float flux = max(0.0, x * x * x * (1.0 - sqrt(x)));
+
+  // Temperature-to-color mapping (three bands)
+  float T_norm = sqrt(sqrt(flux));
+  if (T_norm > 0.6) {
+    emitColor = vec3(1.0, 0.9, 0.8);
+  } else if (T_norm > 0.3) {
+    emitColor = vec3(1.0, 0.6, 0.2);
+  } else {
+    emitColor = vec3(0.8, 0.2, 0.1);
+  }
+
+  // Doppler beaming (Keplerian v ~ sqrt(r_s / 2r))
+  float v       = sqrt(0.5 * r_s / max(rho, BH_EPSILON));
+  float doppler = 1.0 + 0.3 * v * cos(phi);
+  return flux * doppler * doppler * doppler;
+}
+
+// Adds the part of the chord p0 -> p1 between parameters ta and tb (inside
+// the annulus) to the running column, emissivity, and color sums.
+void bhDiskPiece(vec3 p0, vec3 p1, float ta, float tb, float rIn, float h, float r_s,
+                 inout float rhoSum, inout float jSum, inout vec3 colorSum) {
+  if (tb <= ta) {
+    return;
+  }
+  float za = mix(p0.z, p1.z, ta);
+  float zb = mix(p0.z, p1.z, tb);
+  vec2 moments = bhGaussianChordMoments(za, zb, h);
+  float column = (tb - ta) * moments.x;
+  if (column <= 0.0) {
+    return;
+  }
+  vec3 weighted = mix(p0, p1, mix(ta, tb, moments.y));
+  vec3 color;
+  float radial = bhDiskRadialEmission(length(weighted.xy), atan(weighted.y, weighted.x), rIn,
+                                      r_s, color);
+  rhoSum += column;
+  jSum += radial * column;
+  colorSum += color * (radial * column);
+}
+
+// Disk emission over the chord p0 -> p1 (physics frame, disk in xy). Returns
+// false when no part of the chord inside the annulus carries density;
+// otherwise the emission-weighted band color, the mean emissivity
+// jEff = <flux g^3 rho> over the whole chord, and the mean density <rho>
+// over the whole chord (zero outside the annulus).
+bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
+                   out vec3 emitColor, out float jEff, out float rhoMean) {
+  emitColor = vec3(0.0);
+  jEff = 0.0;
+  rhoMean = 0.0;
+  // A chord on one side of the midplane and more than 8 h from it carries
+  // density below exp(-32) ~ 1e-14 everywhere.
+  if (p0.z * p1.z > 0.0 && min(abs(p0.z), abs(p1.z)) > 8.0 * h) {
+    return false;
+  }
+  // Inside rOut is one interval; inside rIn is one interval to exclude.
+  // rho^2 is convex along the chord, so end points inside rOut keep the
+  // whole chord and a closest approach outside rIn excludes nothing; only a
+  // chord across an edge solves the quadratic.
+  vec2 a = p0.xy;
+  vec2 b = p1.xy - p0.xy;
+  vec2 outer = max(dot(a, a), dot(p1.xy, p1.xy)) <= rOut * rOut
+                   ? vec2(0.0, 1.0)
+                   : bhChordInsideRadius(a, b, rOut);
+  float tClosest = clamp(-dot(a, b) / max(dot(b, b), 1e-30), 0.0, 1.0);
+  vec2 closest = a + tClosest * b;
+  vec2 inner = dot(closest, closest) >= rIn * rIn ? vec2(1.0, 0.0)
+                                                   : bhChordInsideRadius(a, b, rIn);
+  vec3 colorSum = vec3(0.0);
+  if (inner.x > inner.y) {
+    bhDiskPiece(p0, p1, outer.x, outer.y, rIn, h, r_s, rhoMean, jEff, colorSum);
+  } else {
+    bhDiskPiece(p0, p1, outer.x, min(outer.y, inner.x), rIn, h, r_s, rhoMean, jEff, colorSum);
+    bhDiskPiece(p0, p1, max(outer.x, inner.y), outer.y, rIn, h, r_s, rhoMean, jEff, colorSum);
+  }
+  if (!(rhoMean > 0.0)) {
+    return false;
+  }
+  emitColor = jEff > 0.0 ? colorSum / jEff : vec3(0.8, 0.2, 0.1);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // bhTraceGeodesicRTE
 //
 // Volumetric radiative transfer along a Kerr geodesic using front-to-back
@@ -538,21 +738,12 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 // rteStepVec3(); background and horizon contributions are weighted by the
 // surviving transmittance at escape.
 //
-// opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui)
+// opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui); j_eff and
+// alpha_nu are per unit affine length (kerrAffineStep).
 // ---------------------------------------------------------------------------
 vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
                         float stepSize, float opacityScale, out vec3 terminalPos) {
   float a = 0.5 * kerrSpin * r_s;
-  if (abs(a) < BH_EPSILON) {
-    // Schwarzschild: single-scatter fallback (no volumetric path)
-    HitResult hit = bhTraceGeodesic(ray, r_s, maxDistance, maxSteps, stepSize);
-    terminalPos = hit.hitPoint;
-    if (hit.hitHorizon) { return bhHorizonColor(); }
-    if (hit.hitDisk)    { return bhDiskColorFromHit(hit, r_s); }
-    return bhBackgroundColorFromDir(normalize(hit.hitPoint - ray.position),
-                                    hit.minRadius, r_s);
-  }
-
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
@@ -561,69 +752,64 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
   float h_disk = max(0.1 * r_s, BH_EPSILON);
 
-  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity, r_s, a);
-  KerrRay    kRay = kerrInitRay(ray.position, ray.velocity);
+  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
+  if (!bhHoleRendered()) {
+    vec3 dir = normalize(ray.velocity);
+    terminalPos = ray.position + escapeRadius * dir;
+    return vec4(bhBackgroundColorFromDir(dir, BH_NO_HOLE_RADIUS, r_s).rgb, 1.0);
+  }
+
+  float rsMetric = bhMetricRadius(r_s);
+  float aTrace = bhMetricSpin(kerrTraceSpin(a));
+  KerrConsts c;
+  KerrRay    kRay;
+  kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
+  // Propagation direction of the latest step: a ray that exhausts its step
+  // budget is shaded as escaping along it, as the escape branch does.
+  vec3 lastDir = ray.velocity;
 
   vec3  accumI   = vec3(0.0);
   float transmit = 1.0;
   float minR     = kRay.r;
 
   for (int step = 0; step < maxSteps; ++step) {
-    vec3 curPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    vec3 curPos = kerrRayPosition(kRay);
     minR = min(minR, kRay.r);
 
     if (kRay.r <= r_horizon) {
       terminalPos = curPos;
-      accumI += transmit * bhHorizonColor().rgb;
+      accumI += transmit * bhHorizonShade(kRay.r, r_s);
       return vec4(accumI, 1.0);
     }
 
     /* D10: AMR step refinement near horizon and photon sphere */
     float rteStepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
-    kerrStep(kRay, r_s, a, c, rteStepDt);
-    vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    KerrRay before = kRay;
+    kerrStep(kRay, rsMetric, aTrace, c, rteStepDt);
+    vec3 newPos = kerrRayPosition(kRay);
+    lastDir = newPos - curPos;
+    // rteStepDt is a Mino-time increment; transfer integrates over affine
+    // length (kerrAffineStep), the unit of jEff and alphaNu.
+    float pathStep = kerrAffineStep(before, kRay, aTrace, rteStepDt);
 
-    if (adiskEnabled > 0.5) {
-      float rCyl = length(newPos.xy);
-      if (rCyl >= r_disk_in && rCyl <= r_disk_out) {
-        // Novikov-Thorne surface flux profile
-        float x    = r_disk_in / max(rCyl, BH_EPSILON);
-        float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
+    vec3 emitColor;
+    float jEff;
+    float rhoNorm;
+    if (adiskEnabled > 0.5 &&
+        bhDiskSegment(curPos, newPos, r_disk_in, r_disk_out, h_disk, r_s, emitColor, jEff,
+                      rhoNorm)) {
+      float alphaNu = opacityScale * max(jEff, 0.0);
 
-        // Temperature-to-color mapping (three bands)
-        float T_norm = pow(max(flux, 0.0), 0.25);
-        vec3 emitColor;
-        if (T_norm > 0.6) {
-          emitColor = vec3(1.0, 0.9, 0.8);
-        } else if (T_norm > 0.3) {
-          emitColor = vec3(1.0, 0.6, 0.2);
-        } else {
-          emitColor = vec3(0.8, 0.2, 0.1);
-        }
+      accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
-        // Doppler beaming (Keplerian v ~ sqrt(r_s / 2r))
-        float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
-        float phi_ang = atan(newPos.y, newPos.x);
-        float doppler = 1.0 + 0.3 * v * cos(phi_ang);
-        float g3      = doppler * doppler * doppler;
-
-        // Gaussian vertical density: rho ~ exp(-z^2 / 2h^2)
-        float rhoNorm = exp(-0.5 * (newPos.z / h_disk) * (newPos.z / h_disk));
-
-        float jEff    = flux * g3 * rhoNorm;
-        float alphaNu = opacityScale * max(jEff, 0.0);
-
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, rteStepDt, transmit);
-
-        // Early exit when medium becomes opaque
-        if (transmit < 0.005) {
-          terminalPos = newPos;
-          return vec4(accumI, 1.0);
-        }
+      // Early exit when medium becomes opaque
+      if (transmit < 0.005) {
+        terminalPos = newPos;
+        return vec4(accumI, 1.0);
       }
     }
 
-    if (kRay.r > maxDistance) {
+    if (kRay.r > escapeRadius && kRay.vr > 0.0) {
       vec3 escDir = newPos - curPos;
       terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
@@ -635,11 +821,10 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   }
 
   // Max steps exhausted -- treat as escaped toward last known direction
-  vec3 finalPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+  vec3 finalPos = kerrRayPosition(kRay);
   terminalPos = finalPos;
-  vec3 escDir   = finalPos - ray.position;
-  if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
-    accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
+  if (dot(lastDir, lastDir) > BH_EPSILON * BH_EPSILON) {
+    accumI += transmit * bhBackgroundColorFromDir(normalize(lastDir),
                                                   minR, r_s).rgb;
   }
   return vec4(accumI, 1.0);
@@ -653,9 +838,10 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 // intensity accumulator.
 //
 // The I channel uses the same front-to-back compositing as bhTraceGeodesicRTE()
-// (vec3 color-accurate accumulation).  The Q, U, V channels evolve under the
-// stokesStep() exact solution (simplified K: alpha_I + rho_V) at each disk
-// step, using the same alphaI and stepDt as the intensity path so the
+// (vec3 color-accurate accumulation).  The Q, U, V channels take each disk
+// step's stokesStep() exact solution (simplified K: alpha_I + rho_V) and
+// composite it front to back through the nearer steps (stokesCompositeStep),
+// with the same alphaI and path length as the intensity path so the
 // polarimetric and photometric results remain consistent.
 //
 // Polarization model:
@@ -676,16 +862,6 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
                             float bFieldAngle, float neScale,
                             out vec3 terminalPos) {
   float a = 0.5 * kerrSpin * r_s;
-  if (abs(a) < BH_EPSILON) {
-    // Schwarzschild: no volumetric path -- single-scatter fallback
-    HitResult hit = bhTraceGeodesic(ray, r_s, maxDistance, maxSteps, stepSize);
-    terminalPos = hit.hitPoint;
-    if (hit.hitHorizon) { return bhHorizonColor(); }
-    if (hit.hitDisk)    { return bhDiskColorFromHit(hit, r_s); }
-    return bhBackgroundColorFromDir(normalize(hit.hitPoint - ray.position),
-                                    hit.minRadius, r_s);
-  }
-
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
@@ -696,95 +872,108 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Thermal synchrotron intrinsic linear polarization fraction (~0.75 at Theta_e >> 1)
   const float PI_LIN = 0.75;
 
-  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity, r_s, a);
-  KerrRay    kRay = kerrInitRay(ray.position, ray.velocity);
+  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
+  if (!bhHoleRendered()) {
+    vec3 dir = normalize(ray.velocity);
+    terminalPos = ray.position + escapeRadius * dir;
+    vec3 sky = bhBackgroundColorFromDir(dir, BH_NO_HOLE_RADIUS, r_s).rgb;
+    float skyI = (sky.r + sky.g + sky.b) / 3.0;
+    return vec4(stokesDisplayColor(vec4(skyI, 0.0, 0.0, 0.0), sky), 1.0);
+  }
+
+  float rsMetric = bhMetricRadius(r_s);
+  float aTrace = bhMetricSpin(kerrTraceSpin(a));
+  KerrConsts c;
+  KerrRay    kRay;
+  kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
+  // Propagation direction of the latest step: a ray that exhausts its step
+  // budget is shaded as escaping along it, as the escape branch does.
+  vec3 lastDir = ray.velocity;
+  // Set when the ray escapes or the medium turns opaque; otherwise the step
+  // budget ran out and the ray is shaded as escaping along its last
+  // direction, as bhTraceGeodesicRTE does.
+  bool finished = false;
 
   vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
-  vec2  stokesQU = vec2(0.0);   // Q and U Stokes components
-  float stokesV  = 0.0;         // V Stokes component
+  // Observed polarization, composited front to back (stokesCompositeStep):
+  // (unused I, Q, U, V), the nearer segments' transmittance and Faraday angle.
+  vec4  polObserved = vec4(0.0);
+  float polTransmit = 1.0;
+  float polFaraday  = 0.0;
   float transmit = 1.0;
   float minR     = kRay.r;
 
   for (int step = 0; step < maxSteps; ++step) {
-    vec3 curPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    vec3 curPos = kerrRayPosition(kRay);
     minR = min(minR, kRay.r);
 
     if (kRay.r <= r_horizon) {
       terminalPos = curPos;
-      accumI += transmit * bhHorizonColor().rgb;
+      accumI += transmit * bhHorizonShade(kRay.r, r_s);
       float I = (accumI.r + accumI.g + accumI.b) / 3.0;
-      vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
+      vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
       return vec4(stokesDisplayColor(stokes, accumI), 1.0);
     }
 
     float stepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
-    kerrStep(kRay, r_s, a, c, stepDt);
-    vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+    KerrRay before = kRay;
+    kerrStep(kRay, rsMetric, aTrace, c, stepDt);
+    vec3 newPos = kerrRayPosition(kRay);
+    lastDir = newPos - curPos;
+    // Affine path length of the Mino step (kerrAffineStep), the unit of
+    // alphaNu and rhoV.
+    float pathStep = kerrAffineStep(before, kRay, aTrace, stepDt);
 
-    if (adiskEnabled > 0.5) {
-      float rCyl = length(newPos.xy);
-      if (rCyl >= r_disk_in && rCyl <= r_disk_out) {
-        // Novikov-Thorne flux profile (same as bhTraceGeodesicRTE)
-        float x    = r_disk_in / max(rCyl, BH_EPSILON);
-        float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
+    vec3 emitColor;
+    float jEff;
+    float rhoNorm;
+    if (adiskEnabled > 0.5 &&
+        bhDiskSegment(curPos, newPos, r_disk_in, r_disk_out, h_disk, r_s, emitColor, jEff,
+                      rhoNorm)) {
+      float alphaNu = opacityScale * max(jEff, 0.0);
 
-        float T_norm = pow(max(flux, 0.0), 0.25);
-        vec3 emitColor;
-        if (T_norm > 0.6) {
-          emitColor = vec3(1.0, 0.9, 0.8);
-        } else if (T_norm > 0.3) {
-          emitColor = vec3(1.0, 0.6, 0.2);
-        } else {
-          emitColor = vec3(0.8, 0.2, 0.1);
-        }
+      // Intensity path (front-to-back compositing identical to RTE path)
+      accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
-        float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
-        float phi_ang = atan(newPos.y, newPos.x);
-        float doppler = 1.0 + 0.3 * v * cos(phi_ang);
-        float g3      = doppler * doppler * doppler;
+      // Polarization path: stokesStep() for Q, U, V
+      // jI_scalar: mean color intensity for the emission vector
+      float jI_scalar = jEff * (emitColor.r + emitColor.g + emitColor.b) / 3.0;
+      // Polarized emission: j_Q, j_U from B-field EVPA; j_V = 0
+      vec4 emStokes = synchrotronPolarizedEmission(jI_scalar, PI_LIN, bFieldAngle);
 
-        float rhoNorm = exp(-0.5 * (newPos.z / h_disk) * (newPos.z / h_disk));
-        float jEff    = flux * g3 * rhoNorm;
-        float alphaNu = opacityScale * max(jEff, 0.0);
+      // Faraday rotation rate: rhoV = neScale * rhoNorm (density-modulated)
+      float rhoV = neScale * rhoNorm;
 
-        // Intensity path (front-to-back compositing identical to RTE path)
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, stepDt, transmit);
+      // Q, U, V under simplified K (alpha_I + rho_V), composited front to
+      // back: this segment's emission passes through the nearer segments.
+      stokesCompositeStep(polObserved, polTransmit, polFaraday, emStokes, alphaNu, rhoV,
+                          pathStep);
 
-        // Polarization path: stokesStep() for Q, U, V
-        // jI_scalar: mean color intensity for the emission vector
-        float jI_scalar = jEff * (emitColor.r + emitColor.g + emitColor.b) / 3.0;
-        // Polarized emission: j_Q, j_U from B-field EVPA; j_V = 0
-        vec4 emStokes = synchrotronPolarizedEmission(jI_scalar, PI_LIN, bFieldAngle);
-
-        // Faraday rotation rate: rhoV = neScale * rhoNorm (density-modulated)
-        float rhoV = neScale * rhoNorm;
-
-        // Evolve Q, U, V under simplified K (alpha_I + rho_V)
-        // WHY: I and V decouple in simplified K; we evolve Q/U coupled via rhoV.
-        vec4 quv = stokesStep(vec4(0.0, stokesQU.x, stokesQU.y, stokesV),
-                              emStokes, alphaNu, rhoV, stepDt);
-        stokesQU = quv.yz;
-        stokesV  = quv.w;
-
-        if (transmit < 0.005) { break; }
+      if (transmit < 0.005) {
+        finished = true;
+        break;
       }
     }
 
-    if (kRay.r > maxDistance) {
+    if (kRay.r > escapeRadius && kRay.vr > 0.0) {
       vec3 escDir = newPos - curPos;
       terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
         accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
                                                       minR, r_s).rgb;
       }
+      finished = true;
       break;
     }
   }
 
   // Map accumulated Stokes state to display color
-  terminalPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
+  terminalPos = kerrRayPosition(kRay);
+  if (!finished && dot(lastDir, lastDir) > BH_EPSILON * BH_EPSILON) {
+    accumI += transmit * bhBackgroundColorFromDir(normalize(lastDir), minR, r_s).rgb;
+  }
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
-  vec4 stokes = vec4(I, stokesQU.x, stokesQU.y, stokesV);
+  vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
   return vec4(stokesDisplayColor(stokes, accumI), 1.0);
 }
 
