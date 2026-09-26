@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "physics/safe_limits.h"
 #include "physics/verified/kerr.hpp"
 #include "physics/verified/kerr_de_sitter.hpp"
 #include "support/ricci_oracle.h"
@@ -162,7 +163,9 @@ TEST(KerrDeSitter, KerrLimit) {
     }
     EXPECT_NEAR(verified::kdsEventHorizon(m, a, 0.0), m + std::sqrt(m * m - a * a), 1.0e-15);
     EXPECT_NEAR(verified::kdsInnerHorizon(m, a, 0.0), m - std::sqrt(m * m - a * a), 1.0e-15);
-    EXPECT_TRUE(std::isinf(verified::kdsCosmologicalHorizon(m, a, 0.0)));
+    // No cosmological horizon: the finite DBL_MAX sentinel.
+    EXPECT_TRUE(physics::isEffectivelyInfinite(verified::kdsCosmologicalHorizon(m, a, 0.0)));
+    EXPECT_TRUE(verified::kdsHasHorizons(m, a, 0.0));
   }
 }
 
@@ -200,6 +203,26 @@ TEST(KerrDeSitter, HorizonsMatchQuarticRoots) {
   EXPECT_FALSE(verified::isPhysicalKdsBlackHole(1.0, 0.0, 0.2));
   // Super-extremal spin has no event horizon.
   EXPECT_TRUE(std::isnan(verified::kdsEventHorizon(1.0, 1.2, 1.0e-3)));
+}
+
+/**
+ * @brief kdsHasHorizons classifies from finite comparisons alone.
+ *
+ * isPhysicalKdsBlackHole, isExteriorRegion, and kdsErgosphereRadius consult it
+ * rather than a returned NaN, which -ffinite-math-only makes poison.
+ */
+TEST(KerrDeSitter, HorizonPredicateIsFinite) {
+  EXPECT_TRUE(verified::kdsHasHorizons(1.0, 0.9, 1.0e-2));
+  EXPECT_TRUE(verified::kdsHasHorizons(1.0, 0.5, 1.0e-44));
+  EXPECT_FALSE(verified::kdsHasHorizons(1.0, 0.0, 0.2));    // beyond Nariai
+  EXPECT_FALSE(verified::kdsHasHorizons(1.0, 1.2, 1.0e-3));  // naked singularity
+  EXPECT_FALSE(verified::kdsHasHorizons(1.0, 0.5, -1.0e-3)); // anti-de Sitter
+  EXPECT_FALSE(verified::kdsHasHorizons(0.0, 0.5, 1.0e-3));
+  EXPECT_FALSE(verified::kdsHasHorizons(1.0, 1.2, 0.0)); // super-extremal Kerr
+  EXPECT_TRUE(verified::kdsHasStationaryPoints(1.0, 0.0, 0.2)); // a local maximum below zero
+  EXPECT_FALSE(verified::kdsHasStationaryPoints(1.0, 0.0, 0.3)); // Lambda M^2 > 2/9
+  EXPECT_FALSE(verified::isExteriorRegion(3.0, 1.0, 0.0, 0.2));
+  EXPECT_TRUE(std::isnan(verified::kdsErgosphereRadius(1.0, 1.0, 1.2, 1.0e-3)));
 }
 
 /**

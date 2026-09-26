@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "../src/physics/rte_integrator.h"
+#include "../src/physics/safe_limits.h"
 
 namespace {
 
@@ -209,7 +210,7 @@ void testBoundedApproach() {
           physics::rteStep(physics::RteState{background, 0.0, 0.0}, kSource * tau, tau, 1.0);
       const double lo = std::fmin(background, kSource);
       const double hi = std::fmax(background, kSource);
-      check(std::isfinite(state.iNu) && state.iNu >= lo - 1.0e-12 && state.iNu <= hi + 1.0e-12,
+      check(physics::safeIsfinite(state.iNu) && state.iNu >= lo - 1.0e-12 && state.iNu <= hi + 1.0e-12,
             "bounded approach", kSource, state.iNu);
     }
   }

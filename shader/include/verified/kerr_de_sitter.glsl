@@ -124,6 +124,19 @@ float kds_g_tph(float r, float theta, float M, float a, float Lambda) {
 }
 
 /**
+ * True when Delta_r has a local minimum and maximum at r > 0 (finite checks only).
+ */
+bool kds_has_stationary_points(float M, float a, float Lambda) {
+    float b = 1.0 - Lambda * a * a / 3.0;
+    if (!(Lambda > 0.0) || !(M > 0.0) || !(b > 0.0)) {
+        return false;
+    }
+    float p = -3.0 * b / (2.0 * Lambda);
+    float q = 3.0 * M / (2.0 * Lambda);
+    return (3.0 * q / (2.0 * p)) * sqrt(-3.0 / p) > -1.0;
+}
+
+/**
  * Positive stationary point of Delta_r (upper: local maximum r_b; else local
  * minimum r_a). r_b and the negative root r_n come from the trigonometric
  * roots of the depressed cubic; r_a = -q / (r_b r_n) from the product of the
@@ -132,16 +145,13 @@ float kds_g_tph(float r, float theta, float M, float a, float Lambda) {
  */
 float kds_delta_stationary_radius(float M, float a, float Lambda, bool upper) {
     float zero = 0.0;
-    float b = 1.0 - Lambda * a * a / 3.0;
-    if (!(Lambda > 0.0) || !(M > 0.0) || !(b > 0.0)) {
+    if (!kds_has_stationary_points(M, a, Lambda)) {
         return zero / zero;
     }
+    float b = 1.0 - Lambda * a * a / 3.0;
     float p = -3.0 * b / (2.0 * Lambda);
     float q = 3.0 * M / (2.0 * Lambda);
     float cos_arg = (3.0 * q / (2.0 * p)) * sqrt(-3.0 / p);
-    if (!(cos_arg > -1.0)) {
-        return zero / zero;
-    }
     float phi = acos(cos_arg) / 3.0;
     float amplitude = 2.0 * sqrt(-p / 3.0);
     float r_local_max = amplitude * cos(phi);
@@ -189,6 +199,27 @@ float kds_delta_local_minimum(float M, float a, float Lambda) {
 }
 
 /**
+ * True when the parameters give a black hole with an event horizon; reads only
+ * finite values (Kerr condition at Lambda = 0).
+ *
+ * Depends on: kds_has_stationary_points, kds_delta_local_minimum,
+ * kds_delta_stationary_radius, kds_Delta
+ */
+bool kds_has_horizons(float M, float a, float Lambda) {
+    if (!(M > 0.0)) {
+        return false;
+    }
+    if (Lambda == 0.0) {
+        return M * M - a * a >= 0.0;
+    }
+    if (!kds_has_stationary_points(M, a, Lambda)) {
+        return false;
+    }
+    float r_max = kds_delta_stationary_radius(M, a, Lambda, true);
+    return kds_delta_local_minimum(M, a, Lambda) <= 0.0 && kds_Delta(r_max, M, a, Lambda) > 0.0;
+}
+
+/**
  * Inner (Cauchy) horizon: smallest positive root of Delta_r; 0 at a = 0.
  *
  * Depends on: kds_bisect_delta, kds_delta_local_minimum, kds_delta_stationary_radius
@@ -199,15 +230,14 @@ float kds_inner_horizon(float M, float a, float Lambda) {
         float disc = M * M - a * a;
         return (M > 0.0 && disc >= 0.0) ? M - sqrt(disc) : zero / zero;
     }
-    float delta_min = kds_delta_local_minimum(M, a, Lambda);
-    if (!(delta_min <= 0.0)) {
+    if (!kds_has_horizons(M, a, Lambda)) {
         return zero / zero;
     }
     if (a == 0.0) {
         return 0.0;
     }
     float r_min = kds_delta_stationary_radius(M, a, Lambda, false);
-    if (delta_min == 0.0) {
+    if (kds_delta_local_minimum(M, a, Lambda) == 0.0) {
         return r_min;
     }
     return kds_bisect_delta(0.0, r_min, M, a, Lambda, 0.0);
@@ -225,20 +255,20 @@ float kds_event_horizon(float M, float a, float Lambda) {
         float disc = M * M - a * a;
         return (M > 0.0 && disc >= 0.0) ? M + sqrt(disc) : zero / zero;
     }
-    float delta_min = kds_delta_local_minimum(M, a, Lambda);
-    float r_min = kds_delta_stationary_radius(M, a, Lambda, false);
-    float r_max = kds_delta_stationary_radius(M, a, Lambda, true);
-    if (!(delta_min <= 0.0) || !(kds_Delta(r_max, M, a, Lambda) > 0.0)) {
+    if (!kds_has_horizons(M, a, Lambda)) {
         return zero / zero;
     }
-    if (delta_min == 0.0) {
+    float r_min = kds_delta_stationary_radius(M, a, Lambda, false);
+    float r_max = kds_delta_stationary_radius(M, a, Lambda, true);
+    if (kds_delta_local_minimum(M, a, Lambda) == 0.0) {
         return r_min;
     }
     return kds_bisect_delta(r_min, r_max, M, a, Lambda, 0.0);
 }
 
 /**
- * Cosmological horizon: largest root of Delta_r; +infinity at Lambda = 0.
+ * Cosmological horizon: largest root of Delta_r; the finite sentinel FLT_MAX
+ * (3.4028235e38) at Lambda = 0, where no cosmological horizon exists.
  *
  * Depends on: kds_bisect_delta, kds_delta_local_minimum, kds_delta_stationary_radius,
  * kds_Delta
@@ -246,12 +276,12 @@ float kds_event_horizon(float M, float a, float Lambda) {
 float kds_cosmological_horizon(float M, float a, float Lambda) {
     float zero = 0.0;
     if (Lambda == 0.0) {
-        return 1.0 / zero;
+        return 3.4028235e38;
     }
-    float r_max = kds_delta_stationary_radius(M, a, Lambda, true);
-    if (!(kds_delta_local_minimum(M, a, Lambda) <= 0.0) || !(kds_Delta(r_max, M, a, Lambda) > 0.0)) {
+    if (!kds_has_horizons(M, a, Lambda)) {
         return zero / zero;
     }
+    float r_max = kds_delta_stationary_radius(M, a, Lambda, true);
     float r_high = max(r_max, sqrt(3.0 / Lambda));
     for (int doubling = 0; doubling < 64 && !(kds_Delta(r_high, M, a, Lambda) < 0.0); ++doubling) {
         r_high *= 2.0;
@@ -269,8 +299,11 @@ float kds_ergosphere_radius(float theta, float M, float a, float Lambda) {
     float zero = 0.0;
     float sin_theta = sin(theta);
     float target = kds_Delta_theta(theta, a, Lambda) * a * a * sin_theta * sin_theta;
+    if (!kds_has_horizons(M, a, Lambda)) {
+        return zero / zero;
+    }
     float r_plus = kds_event_horizon(M, a, Lambda);
-    if (isnan(r_plus) || target == 0.0) {
+    if (target == 0.0) {
         return r_plus;
     }
     float r_max = (Lambda == 0.0) ? 4.0 * M : kds_delta_stationary_radius(M, a, Lambda, true);
@@ -295,7 +328,7 @@ float kds_frame_dragging_omega(float r, float theta, float M, float a, float Lam
  * Depends on: kds_cosmological_horizon, kds_event_horizon, kds_inner_horizon
  */
 bool is_physical_kds_black_hole(float M, float a, float Lambda) {
-    if (!(M > 0.0) || !(Lambda > 0.0)) {
+    if (!(Lambda > 0.0) || !kds_has_horizons(M, a, Lambda)) {
         return false;
     }
     float r_minus = kds_inner_horizon(M, a, Lambda);
@@ -310,7 +343,8 @@ bool is_physical_kds_black_hole(float M, float a, float Lambda) {
  * Depends on: kds_cosmological_horizon, kds_event_horizon
  */
 bool is_exterior_region(float r, float M, float a, float Lambda) {
-    return r > kds_event_horizon(M, a, Lambda) && r < kds_cosmological_horizon(M, a, Lambda);
+    return kds_has_horizons(M, a, Lambda) && r > kds_event_horizon(M, a, Lambda)
+        && r < kds_cosmological_horizon(M, a, Lambda);
 }
 
 /**

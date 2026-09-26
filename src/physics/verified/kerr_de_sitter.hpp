@@ -31,6 +31,16 @@
  * (Lambda M^2 ~ 2.4e-46). Beyond the Nariai limit, where r_+ and r_c merge,
  * the functions return NaN.
  *
+ * Classification stays finite: kdsHasHorizons decides from finite comparisons
+ * whether the horizons exist, and isPhysicalKdsBlackHole, isExteriorRegion,
+ * and kdsErgosphereRadius consult it instead of testing a returned NaN. Under
+ * -ffinite-math-only a NaN is poison and std::isnan folds to false, so a
+ * caller compiled that way checks kdsHasHorizons before using a horizon
+ * radius; the NaN returns serve IEEE callers. At Lambda = 0, where no
+ * cosmological horizon exists, kdsCosmologicalHorizon returns the finite
+ * sentinel physics::safeMax<double>() (DBL_MAX), which
+ * physics::isEffectivelyInfinite recognizes.
+ *
  * Signed spin: a > 0 rotates about +z. Every function here depends on a^2 or
  * on a in the frame-dragging terms only.
  *
@@ -50,6 +60,8 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+
+#include "../safe_limits.h"
 
 namespace verified {
 
@@ -196,6 +208,23 @@ namespace verified {
 // ============================================================================
 
 /**
+ * @brief True when Delta_r has a local minimum and maximum at r > 0
+ *
+ * Requires M > 0, Lambda > 0, 1 - Lambda a^2 / 3 > 0, and three real roots of
+ * the depressed cubic below, which holds when its Viete cosine argument
+ * (3 q / (2 p)) sqrt(-3 / p) exceeds -1. Every comparison is on finite values.
+ */
+[[nodiscard]] inline bool kdsHasStationaryPoints(double m, double a, double lambda) noexcept {
+  double const b = 1.0 - (lambda * a * a / 3.0);
+  if (!(lambda > 0.0) || !(m > 0.0) || !(b > 0.0)) {
+    return false;
+  }
+  double const p = -3.0 * b / (2.0 * lambda);
+  double const q = 3.0 * m / (2.0 * lambda);
+  return (3.0 * q / (2.0 * p)) * std::sqrt(-3.0 / p) > -1.0;
+}
+
+/**
  * @brief Positive stationary point of Delta_r
  *
  * dDelta_r/dr = -(4 Lambda / 3) r^3 + 2 (1 - Lambda a^2 / 3) r - 2 M vanishes at
@@ -216,20 +245,17 @@ namespace verified {
  * @param a Spin parameter
  * @param lambda Cosmological constant (> 0)
  * @param upper true for the local maximum r_b, false for the local minimum r_a
- * @return Stationary radius, or NaN when Delta_r has no local maximum at r > 0
+ * @return Stationary radius, or NaN when kdsHasStationaryPoints is false
  */
 [[nodiscard]] inline double kdsDeltaStationaryRadius(double m, double a, double lambda,
                                                      bool upper) noexcept {
-  double const b = 1.0 - (lambda * a * a / 3.0);
-  if (!(lambda > 0.0) || !(m > 0.0) || !(b > 0.0)) {
+  if (!kdsHasStationaryPoints(m, a, lambda)) {
     return std::numeric_limits<double>::quiet_NaN();
   }
+  double const b = 1.0 - (lambda * a * a / 3.0);
   double const p = -3.0 * b / (2.0 * lambda);
   double const q = 3.0 * m / (2.0 * lambda);
   double const cosArg = (3.0 * q / (2.0 * p)) * std::sqrt(-3.0 / p);
-  if (!(cosArg > -1.0)) {
-    return std::numeric_limits<double>::quiet_NaN();
-  }
   double const phi = std::acos(cosArg) / 3.0;
   double const amplitude = 2.0 * std::sqrt(-p / 3.0);
   double const rLocalMax = amplitude * std::cos(phi);
@@ -272,7 +298,7 @@ namespace verified {
  * rounding noise of either sign, so a value within 4 epsilon of the magnitude
  * of its terms, (r^2 + a^2)(1 + Lambda r^2 / 3) + 2 M r, returns as exactly 0.
  *
- * @return Delta_r(r_a), 0 within rounding, or NaN when r_a does not exist
+ * @return Delta_r(r_a), 0 within rounding, or NaN when kdsHasStationaryPoints is false
  */
 [[nodiscard]] inline double kdsDeltaLocalMinimum(double m, double a, double lambda) noexcept {
   double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
@@ -281,6 +307,29 @@ namespace verified {
   double const termScale = (r2PlusA2 * (1.0 + (lambda * rMin * rMin / 3.0))) + (2.0 * m * rMin);
   double const roundingBound = 4.0 * std::numeric_limits<double>::epsilon() * termScale;
   return (std::abs(delta) <= roundingBound) ? 0.0 : delta;
+}
+
+/**
+ * @brief True when the parameters give a black hole with an event horizon
+ *
+ * At Lambda = 0 this is the Kerr condition M > 0, M^2 >= a^2. For Lambda > 0
+ * it requires the stationary points of Delta_r, a local minimum at or below
+ * zero (kdsDeltaLocalMinimum; zero at extremality), and a positive local
+ * maximum, which fails beyond the Nariai limit. It reads only finite values,
+ * so it classifies correctly under -ffinite-math-only.
+ */
+[[nodiscard]] inline bool kdsHasHorizons(double m, double a, double lambda) noexcept {
+  if (!(m > 0.0)) {
+    return false;
+  }
+  if (lambda == 0.0) {
+    return (m * m) - (a * a) >= 0.0;
+  }
+  if (!kdsHasStationaryPoints(m, a, lambda)) {
+    return false;
+  }
+  double const rMax = kdsDeltaStationaryRadius(m, a, lambda, true);
+  return kdsDeltaLocalMinimum(m, a, lambda) <= 0.0 && kdsDelta(rMax, m, a, lambda) > 0.0;
 }
 
 /**
@@ -303,15 +352,14 @@ namespace verified {
     return (m > 0.0 && disc >= 0.0) ? m - std::sqrt(disc)
                                     : std::numeric_limits<double>::quiet_NaN();
   }
-  double const deltaMin = kdsDeltaLocalMinimum(m, a, lambda);
-  if (!(deltaMin <= 0.0)) {
+  if (!kdsHasHorizons(m, a, lambda)) {
     return std::numeric_limits<double>::quiet_NaN();
   }
   if (a == 0.0) {
     return 0.0;
   }
   double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
-  if (deltaMin == 0.0) {
+  if (kdsDeltaLocalMinimum(m, a, lambda) == 0.0) {
     return rMin;
   }
   return kdsBisectDelta(0.0, rMin, m, a, lambda, 0.0);
@@ -332,13 +380,12 @@ namespace verified {
     return (m > 0.0 && disc >= 0.0) ? m + std::sqrt(disc)
                                     : std::numeric_limits<double>::quiet_NaN();
   }
-  double const deltaMin = kdsDeltaLocalMinimum(m, a, lambda);
-  double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
-  double const rMax = kdsDeltaStationaryRadius(m, a, lambda, true);
-  if (!(deltaMin <= 0.0) || !(kdsDelta(rMax, m, a, lambda) > 0.0)) {
+  if (!kdsHasHorizons(m, a, lambda)) {
     return std::numeric_limits<double>::quiet_NaN();
   }
-  if (deltaMin == 0.0) {
+  double const rMin = kdsDeltaStationaryRadius(m, a, lambda, false);
+  double const rMax = kdsDeltaStationaryRadius(m, a, lambda, true);
+  if (kdsDeltaLocalMinimum(m, a, lambda) == 0.0) {
     return rMin;
   }
   return kdsBisectDelta(rMin, rMax, m, a, lambda, 0.0);
@@ -349,19 +396,21 @@ namespace verified {
  *
  * Delta_r(sqrt(3/Lambda)) = -2 M sqrt(3/Lambda) < 0, so r_c lies between the
  * local maximum r_b of Delta_r and max(r_b, sqrt(3/Lambda)); the upper end
- * doubles until Delta_r is negative there. At Lambda = 0 there is
- * no cosmological horizon and the function returns +infinity.
+ * doubles until Delta_r is negative there. At Lambda = 0 there is no
+ * cosmological horizon and the function returns the finite sentinel
+ * physics::safeMax<double>() (DBL_MAX), which every radius compares below and
+ * physics::isEffectivelyInfinite recognizes.
  *
- * @return r_c, +infinity at Lambda = 0, or NaN outside the black-hole range
+ * @return r_c, DBL_MAX at Lambda = 0, or NaN outside the black-hole range
  */
 [[nodiscard]] inline double kdsCosmologicalHorizon(double m, double a, double lambda) noexcept {
   if (lambda == 0.0) {
-    return std::numeric_limits<double>::infinity();
+    return physics::safeMax<double>();
   }
-  double const rMax = kdsDeltaStationaryRadius(m, a, lambda, true);
-  if (!(kdsDeltaLocalMinimum(m, a, lambda) <= 0.0) || !(kdsDelta(rMax, m, a, lambda) > 0.0)) {
+  if (!kdsHasHorizons(m, a, lambda)) {
     return std::numeric_limits<double>::quiet_NaN();
   }
+  double const rMax = kdsDeltaStationaryRadius(m, a, lambda, true);
   double rHigh = std::fmax(rMax, std::sqrt(3.0 / lambda));
   for (int doubling = 0; doubling < 64 && !(kdsDelta(rHigh, m, a, lambda) < 0.0); ++doubling) {
     rHigh *= 2.0;
@@ -388,8 +437,11 @@ namespace verified {
                                                 double lambda) noexcept {
   double const sinTheta = std::sin(theta);
   double const target = kdsDeltaTheta(theta, a, lambda) * a * a * sinTheta * sinTheta;
+  if (!kdsHasHorizons(m, a, lambda)) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
   double const rPlus = kdsEventHorizon(m, a, lambda);
-  if (std::isnan(rPlus) || target == 0.0) {
+  if (target == 0.0) {
     return rPlus;
   }
   double const rMax = (lambda == 0.0) ? 4.0 * m : kdsDeltaStationaryRadius(m, a, lambda, true);
@@ -431,7 +483,7 @@ namespace verified {
  * @return true when M > 0, Lambda > 0, and r_- <= r_+ < r_c all exist
  */
 [[nodiscard]] inline bool isPhysicalKdsBlackHole(double m, double a, double lambda) noexcept {
-  if (!(m > 0.0) || !(lambda > 0.0)) {
+  if (!(lambda > 0.0) || !kdsHasHorizons(m, a, lambda)) {
     return false;
   }
   double const rMinus = kdsInnerHorizon(m, a, lambda);
@@ -447,6 +499,9 @@ namespace verified {
  *   r > r_plus /\ r < r_c for the event and cosmological horizons.
  */
 [[nodiscard]] inline bool isExteriorRegion(double r, double m, double a, double lambda) noexcept {
+  if (!kdsHasHorizons(m, a, lambda)) {
+    return false;
+  }
   double const rPlus = kdsEventHorizon(m, a, lambda);
   double const rCosmo = kdsCosmologicalHorizon(m, a, lambda);
   return r > rPlus && r < rCosmo;

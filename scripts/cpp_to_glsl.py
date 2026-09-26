@@ -168,6 +168,8 @@ GLSL_PUBLIC_NAMES: dict[str, str] = {
     "kdsGThth": "kds_g_thth",
     "kdsGTph": "kds_g_tph",
     "kdsGTt": "kds_g_tt",
+    "kdsHasHorizons": "kds_has_horizons",
+    "kdsHasStationaryPoints": "kds_has_stationary_points",
     "kdsInnerHorizon": "kds_inner_horizon",
     "kdsSigma": "kds_Sigma",
     "kdsXi": "kds_Xi",
