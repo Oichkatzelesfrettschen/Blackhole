@@ -178,3 +178,19 @@ TEST(CampaignSave, EveryHeaderBitAndAnOutOfRangeTurnAreRefused) {
   }
   EXPECT_EQ(loadError(farTurn, &story), "saved turn outside [0, K_SAVE_MAX_TURN]");
 }
+
+// Falsifier: an M87 save whose spin has only its sign flipped loading. The
+// session rebuilds from the header's spin, so the header check alone cannot
+// catch it; the replay digest must, because the state carries the sense of
+// rotation beside the spin deficit.
+TEST(CampaignSave, SpinSignFlipIsRefused) {
+  game::CampaignSession original(42);
+  playPod(original, 60);
+  std::vector<std::uint8_t> save = game::saveCampaign(original);
+  ASSERT_TRUE(game::loadCampaign(save, nullptr).ok());
+  // HEAD body starts at byte 16: u8 scenario, u64 seed, then the f64 spin,
+  // whose sign bit is the top bit of its last little-endian byte.
+  constexpr std::size_t spinSignByte = 16 + 1 + 8 + 7;
+  save.at(spinSignByte) ^= 0x80U;
+  EXPECT_EQ(loadError(save, nullptr), "replay digest differs from the saved digest");
+}
