@@ -10,6 +10,12 @@
  * grid. It asserts only what is independent of balance: every run ends inside
  * its turn budget with a well-formed outcome, and a replay of any cell
  * reproduces its digest. It makes no claim about which line should win.
+ *
+ * What the grid records, stated without a balance claim: the locked
+ * campaign shape (outer and stab win, solo and pod lose) holds only at
+ * cadence 30, the cadence campaign_balance_invariant_test pins. At 29 solo
+ * wins at t1200; from 26 to 29 pod loses and every other line wins; at 1..25
+ * every line wins, and the stabilization line clears first at every cadence.
  */
 
 #include <gtest/gtest.h>
