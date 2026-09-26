@@ -239,7 +239,7 @@ non-finite values takes the per-target `-fno-fast-math` override in
 | Script | Reproduces | Needs |
 | --- | --- | --- |
 | `scripts/ci/ci_replica.sh [REGEX]` | `ci` build and CTest with GCC 14; `CI_REPLICA_RELEASE=1` for `ci-release`, `CI_REPLICA_SANITIZE=1` for `ci-sanitize` | `gcc-14`, `g++-14`, `bwrap`, Ninja, and `./scripts/conan_install.sh Release build` |
-| `scripts/ci/cppcheck_ci.sh [-b BASE] [FILE...]` | `ci-analysis` cppcheck 2.13.0 over changed `.cpp` files, with each file's CMake `-D`/`-I` flags | Docker or Podman; a configured `build/Release` |
+| `scripts/ci/cppcheck_ci.sh [-p DIR] [-b BASE] [-f] [FILE...]` | `ci-analysis` cppcheck 2.13.0 over changed and untracked `.cpp` files, once per distinct CMake `-D`/`-I`/`-U` flag set among each file's compile entries | Docker or Podman; `build/CiLike` from `ci_replica.sh` |
 | `scripts/ci/tidy18.sh [-p DIR] [-f] FILE...` | `ci-analysis` clang-tidy 18 (wheel 18.1.1; CI runs 18.1.3) against GCC 14's libstdc++, over the `ci` configuration | `uv` (or `CLANG_TIDY` pointing at a clang-tidy 18 binary), `g++-14`, and `build/CiLike` from `ci_replica.sh` |
 
 `ci_replica.sh` copies the local Release generators, replaces the compiler the
@@ -249,17 +249,22 @@ toolchain names with GCC 14, and mounts an empty `/usr/include/glm` through
 reproduces the compiler, flags, and tests of a lane but not the lane's own
 package binaries. `cppcheck_ci.sh` builds its image from
 `scripts/ci/Dockerfile.cppcheck` on first use and mounts the checkout and the
-Conan cache read-only at their host paths. `tidy18.sh` runs the PyPI
+Conan cache read-only at their host paths. CMake attaches cppcheck to every
+target, so a source compiled by several targets is analyzed with each target's
+definitions: `src/main.cpp` runs twice, once with
+`BLACKHOLE_APP_VARIANT_GLSL_ONLY=1`, and a defect inside that variant's
+`#if` block fails the script. `tidy18.sh` runs the PyPI
 `clang-tidy==18.1.1` wheel through `uvx`. PyPI publishes no 18.1.3 wheel, and
 18.1.1 is the nearest release; its `--list-checks --checks='*'` output is
 identical to the Ubuntu 18.1.3 binary's (537 checks). clang-tidy 18 cannot
 parse the libstdc++ of a newer host GCC, so the script substitutes GCC 14's
-headers for the compile database's standard library. Its default database is
-`build/CiLike`, the GCC 14 tree `ci_replica.sh` configures and exports, because
-`SIMD_TIER`, `ENABLE_FAST_MATH`, and `ENABLE_NATIVE_ARCH` select preprocessor
-branches (the `__AVX2__` paths in `src/physics/batch.h`); a tree whose cache
-differs from the `ci` preset's `SSE2`/`OFF`/`OFF` stops the script with exit 2
-unless `-f` is given. It also exits 2 when clang-tidy fails on a file without
+headers for the compile database's standard library. Both analyzer scripts
+default to `build/CiLike`, the GCC 14 tree `ci_replica.sh` configures and
+exports, because `SIMD_TIER`, `ENABLE_FAST_MATH`, and `ENABLE_NATIVE_ARCH`
+select preprocessor branches (the `__AVX2__` paths in `src/physics/batch.h`);
+`scripts/ci/check_ci_config.sh` compares a tree's cache with the `ci` preset's
+`SSE2`/`OFF`/`OFF`, and a mismatch stops either script with exit 2 unless `-f`
+is given. `tidy18.sh` also exits 2 when clang-tidy fails on a file without
 printing a diagnostic. Each script documents its options in its header comment.
 
 ## Audit baseline

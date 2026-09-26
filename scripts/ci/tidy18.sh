@@ -10,13 +10,9 @@
 #   -f            analyze a tree whose configuration differs from the ci preset
 #   FILE          repository-relative source paths, e.g. src/render/env_config.cpp
 #
-# ci-analysis analyzes the ci configuration: SIMD_TIER=SSE2, ENABLE_FAST_MATH
-# and ENABLE_NATIVE_ARCH OFF. Those settings select preprocessor branches (the
-# __AVX2__ paths in src/physics/batch.h and the __FAST_MATH__ guard in
-# src/physics/compensated_rk4.h, for example), so the
-# driver reads BUILD_DIR/CMakeCache.txt and exits 2 when any of them differs,
-# unless -f is given; a local build/Release (native, AUTO SIMD tier) analyzes
-# code the gate never sees and misses code it does.
+# scripts/ci/check_ci_config.sh compares BUILD_DIR/CMakeCache.txt with the ci
+# preset's SIMD_TIER, ENABLE_FAST_MATH, and ENABLE_NATIVE_ARCH, which select
+# preprocessor branches; the driver exits 2 on a mismatch unless -f is given.
 #
 # The executable is $CLANG_TIDY when set, otherwise the PyPI wheel pinned at
 # 18.1.1 through `uvx --from clang-tidy==18.1.1 clang-tidy`. PyPI carries no
@@ -54,19 +50,11 @@ cd "$root"
   exit 2
 }
 
-# Compare the tree's cache with the ci preset's analysis-relevant settings.
-mismatch=
-for want in SIMD_TIER=SSE2 ENABLE_FAST_MATH=OFF ENABLE_NATIVE_ARCH=OFF; do
-  key=${want%%=*}
-  have=$(sed -n "s/^$key:[A-Z]*=//p" "$build_dir/CMakeCache.txt" 2>/dev/null | head -1)
-  [ "$have" = "${want#*=}" ] || mismatch="$mismatch $key=${have:-unset}"
-done
-if [ -n "$mismatch" ]; then
+if ! mismatch=$(scripts/ci/check_ci_config.sh "$build_dir"); then
   if [ "$force" = 1 ]; then
-    echo "tidy18: warning: $build_dir differs from the ci preset:$mismatch" >&2
+    echo "tidy18: warning: $build_dir differs from the ci preset: $mismatch" >&2
   else
-    echo "tidy18: $build_dir differs from the ci preset:$mismatch" >&2
-    echo "  ci-analysis uses SIMD_TIER=SSE2 ENABLE_FAST_MATH=OFF ENABLE_NATIVE_ARCH=OFF;" >&2
+    echo "tidy18: $build_dir differs from the ci preset: $mismatch" >&2
     echo "  use the ci_replica.sh tree (default -p build/CiLike) or pass -f" >&2
     exit 2
   fi
