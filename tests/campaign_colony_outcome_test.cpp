@@ -247,3 +247,23 @@ TEST(ColonyOutcome, ColonyBandDelaysIgnoreUnseenRelays) {
   EXPECT_DOUBLE_EQ(colony.bands.at(0).delayToAuthoritySec, 80.0);
   EXPECT_DOUBLE_EQ(colony.bands.at(1).delayToAuthoritySec, 10.0);
 }
+
+// Falsifier: a tech victory whose tier every colony holds at zero points left
+// Ongoing at construction, so the authority's orders are accepted into a
+// campaign that has already met its objective.
+TEST(ColonyOutcome, VictoryMetAtSetupIsLatchedAtConstruction) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config =
+      colonyConfig(R"({"tech_tiers": [{"points": 0, "name": "founded"}]})", 0);
+  config.victoryTechTier = 1;
+  game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
+  EXPECT_EQ(state.status(), game::CampaignStatus::Won);
+  EXPECT_EQ(state.clearedTurn(), 0);
+  game::Command order;
+  order.type = game::CommandType::AssignTask;
+  order.fleet = fleet;
+  order.properTimeCostSec = 3600.0;
+  EXPECT_FALSE(state.issueCommand(order));
+}

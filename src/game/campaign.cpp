@@ -52,6 +52,11 @@ CampaignState::CampaignState(CampaignConfig config, const TimeField &field)
   if (valid_) {
     resolveStoryParams();
   }
+  if (valid_) {
+    // An objective the setup already meets (a tech tier at zero points) is
+    // latched now, before any order can be accepted into a decided campaign.
+    evaluateOutcome();
+  }
 }
 
 Fleet *CampaignState::findFleet(FleetId fleetId) {
