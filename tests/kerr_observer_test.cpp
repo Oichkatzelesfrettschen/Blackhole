@@ -563,3 +563,19 @@ TEST(KerrObserver, SeparatrixRaysAsymptoteToThePhotonSphere) {
   EXPECT_FALSE(belowInward.escapesToInfinity);
   EXPECT_TRUE(belowInward.fromInfinity);
 }
+
+// Falsifier: the prograde ISCO offset for a deficit far below the canon
+// spin departing from its asymptote x = 2u (1 + 7u/4), u = (epsilon/2)^{1/3}
+// (from y^3 (y + 4) = 2 epsilon (1 + 4y) + 3 epsilon^2; next term O(u^2),
+// below 1e-20 here), by more than 1e-12 relative, or epsilon = 0 giving
+// anything but r_isco = M -- a solver that stops contracting from a fixed
+// start before it reaches the root (it returned 1.8e-70 for 1e-300).
+TEST(KerrObserver, IscoConvergesForUltraExtremalDeficits) {
+  for (const double epsilon : {1e-30, 1e-100, 1e-200, 1e-300}) {
+    const double u = std::cbrt(epsilon / 2.0);
+    expectRelative(ko::iscoOffset(epsilon, OrbitSense::Prograde), 2.0 * u * (1.0 + (1.75 * u)),
+                   1e-12, "ultra-extremal isco");
+  }
+  EXPECT_EQ(ko::iscoOffset(0.0, OrbitSense::Prograde), 0.0);
+  expectRelative(ko::iscoOffset(0.0, OrbitSense::Retrograde), 8.0, 1e-15, "extremal retrograde");
+}

@@ -165,13 +165,17 @@ struct CircularOrbit {
  * a_s = 1 - e factors through (s - 1)^3 (s + 3) at e = 0 into
  *   F(y) = y^3 (y + 4) - 2 e (1 + 4y) - 3 e^2 = 0,
  * whose root is y ~ (e / 2)^{1/3} near extremal spin with no cancellation.
- * F is convex for y > 0 and F(2) >= 0 for every e in [0, 2] (r_isco <= 9), so
- * Newton from y = 2 descends monotonically onto the root.
+ * F is convex for y > 0, so Newton started anywhere at or right of the root
+ * descends monotonically onto it. The start y0 = min(2, 2 e^{1/3}) is right
+ * of the root for every e in [0, 2]: F(2) = 48 - 18 e - 3 e^2 >= 0 there
+ * (r_isco <= 9), and F(2 e^{1/3}) = 30 e - 3 e^2 > 0 exactly. Starting on the
+ * root's own e^{1/3} scale keeps the iteration count small and independent
+ * of e, down to e = 0 (root 0) and subnormal deficits.
  */
 [[nodiscard]] inline double iscoOffset(double epsilon, OrbitSense sense) {
   const double e = senseDeficit(epsilon, sense);
   constexpr int maxIterations = 400;
-  double y = 2.0;
+  double y = std::fmin(2.0, 2.0 * std::cbrt(e));
   for (int iteration = 0; iteration < maxIterations; ++iteration) {
     const double f = (y * y * y * (y + 4.0)) - (2.0 * e * (1.0 + (4.0 * y))) - (3.0 * e * e);
     const double slope = (4.0 * y * y * y) + (12.0 * y * y) - (8.0 * e);
