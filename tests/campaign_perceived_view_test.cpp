@@ -62,6 +62,7 @@ void expectHostLedgerKept(const game::CampaignViewSnapshot &authority,
   EXPECT_DOUBLE_EQ(authority.energyUnits, referee.energyUnits);
   EXPECT_EQ(authority.intel.size(), referee.intel.size());
   EXPECT_TRUE(authority.fleets.front().telemetryKnown);
+  EXPECT_EQ(authority.colonyReportsInFlight, 0);
   for (const game::ArrivalRecord &arrival : authority.arrivals) {
     EXPECT_EQ(arrival.destination, game::K_AUTHORITY_NODE);
   }

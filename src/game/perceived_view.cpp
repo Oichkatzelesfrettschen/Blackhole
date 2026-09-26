@@ -142,7 +142,10 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   std::erase_if(view.ordersInFlight,
                 [observer](const OrderInFlightView &order) { return order.origin != observer; });
   if (observer == K_AUTHORITY_NODE) {
-    // The host's own ledger, intel, and fleet reports are host-local truth.
+    // The host's own ledger, intel, and fleet reports are host-local truth. A
+    // colony report still in flight has not reached the host, so the host
+    // cannot count it.
+    view.colonyReportsInFlight = 0;
     return view;
   }
 

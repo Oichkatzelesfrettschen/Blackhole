@@ -44,6 +44,17 @@ game::CampaignConfig colonyConfig(const std::string &storyJson, std::int64_t mis
 
 } // namespace
 
+// Falsifier: the host's perceived view counting a colony report before the
+// report's five-turn flight ends.
+TEST(ColonyOutcome, HostCannotCountReportsStillInFlight) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignState state(colonyConfig(R"({"events": []})", 10), field);
+  ASSERT_TRUE(state.valid());
+  state.advanceTurns(3);
+  ASSERT_GT(state.renderSnapshot().colonyReportsInFlight, 0);
+  EXPECT_EQ(state.perceivedSnapshot(game::K_AUTHORITY_NODE).colonyReportsInFlight, 0);
+}
+
 // Falsifier: production outside the ten-local-second mission window, energy
 // banked before a report's five-turn flight, or the colony still receiving
 // after its window closed.
