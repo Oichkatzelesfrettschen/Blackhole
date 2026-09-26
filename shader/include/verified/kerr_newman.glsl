@@ -61,12 +61,22 @@ float kn_A(float r, float theta, float M, float a, float Q) {
 }
 
 /**
+ * Horizon discriminant M^2 - a^2 - Q^2; a negative value within 4 float
+ * epsilon of M^2 + a^2 + Q^2 returns as exactly 0 (extremality).
+ */
+float kn_horizon_discriminant(float M, float a, float Q) {
+    float discriminant = M * M - a * a - Q * Q;
+    float rounding_bound = 4.0 * 1.1920929e-7 * (M * M + a * a + Q * Q);
+    return (discriminant < 0.0 && -discriminant <= rounding_bound) ? 0.0 : discriminant;
+}
+
+/**
  * Outer (event) horizon: r_+ = M + sqrt(M^2 - a^2 - Q^2)
  *
  * Rocq Derivation: Derived from Rocq:Definition kn_outer_horizon (M a Q : R) : R :=...
  */
 float kn_outer_horizon(float M, float a, float Q) {
-    return M + sqrt(M * M - a * a - Q * Q);
+    return M + sqrt(kn_horizon_discriminant(M, a, Q));
 }
 
 /**
@@ -75,7 +85,7 @@ float kn_outer_horizon(float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition kn_inner_horizon (M a Q : R) : R :=...
  */
 float kn_inner_horizon(float M, float a, float Q) {
-    return M - sqrt(M * M - a * a - Q * Q);
+    return M - sqrt(kn_horizon_discriminant(M, a, Q));
 }
 
 /**
@@ -91,7 +101,8 @@ float kn_potential_t(float r, float theta, float a, float Q) {
 }
 
 /**
- * Azimuthal component of electromagnetic 4-potential: A_phi = -Qra sin^2(theta) / Sigma
+ * Azimuthal component of electromagnetic 4-potential: A_phi = +Qra sin^2(theta) / Sigma
+ * (A_phi / A_t = -a sin^2(theta), fixed by the one-form dt - a sin^2 dphi)
  *
  * Rocq Derivation: Derived from Rocq:Definition kn_potential_phi (r theta a Q : R) : R :=...
  *
@@ -100,7 +111,7 @@ float kn_potential_t(float r, float theta, float a, float Q) {
 float kn_potential_phi(float r, float theta, float a, float Q) {
     float Sigma = kn_Sigma(r, theta, a);
     float sin_theta = sin(theta);
-    return -Q * r * a * sin_theta * sin_theta / Sigma;
+    return Q * r * a * sin_theta * sin_theta / Sigma;
 }
 
 /**
@@ -155,11 +166,11 @@ float kn_magnetic_field(float r, float theta, float a, float Q) {
  */
 float kn_ergosphere_radius(float theta, float M, float a, float Q) {
     float cos_theta = cos(theta);
-    return M + sqrt(M * M - a * a * cos_theta * cos_theta - Q * Q);
+    return M + sqrt(kn_horizon_discriminant(M, a * cos_theta, Q));
 }
 
 /**
- * Frame dragging angular velocity omega = -g_tphi / g_phph
+ * Frame dragging angular velocity omega = -g_tphi / g_phph = a (2Mr - Q^2) / A
  *
  * Rocq Derivation: Derived from Rocq:Definition kn_frame_dragging_omega (r theta M a Q : R) : R :=...
  *
@@ -167,53 +178,132 @@ float kn_ergosphere_radius(float theta, float M, float a, float Q) {
  */
 float kn_frame_dragging_omega(float r, float theta, float M, float a, float Q) {
     float A = kn_A(r, theta, M, a, Q);
-    return 2.0 * M * r * a / A;
+    return a * (2.0 * M * r - Q * Q) / A;
 }
 
 /**
- * Approximate formula for equatorial photon sphere
+ * Circular-photon-orbit function r^2 - 3Mr + 2Q^2 + 2a sqrt(Mr - Q^2)
+ * (angular momentum along +z, signed a); zero at the equatorial photon orbit.
  *
- * Rocq Derivation: Derived from Rocq:Definition kn_photon_sphere_equator (M a Q : R) : R :=...
+ * Rocq Derivation: Derived from Rocq:Definition kn_photon_orbit_function (r M a Q : R) : R :=...
+ */
+float kn_photon_orbit_function(float r, float M, float a, float Q) {
+    return r * r - 3.0 * M * r + 2.0 * Q * Q + 2.0 * a * sqrt(M * r - Q * Q);
+}
+
+/**
+ * Equatorial photon orbit (angular momentum along +z): outermost zero of
+ * kn_photon_orbit_function by an inward scan from 5 M and bisection.
+ * NaN (0/0) for super-extremal or massless input.
+ *
+ * Rocq Derivation: Derived from Rocq:Definition kn_photon_sphere_equator_spec (M a Q r : R) : Prop :=...
+ *
+ * Depends on: kn_photon_orbit_function
  */
 float kn_photon_sphere_equator(float M, float a, float Q) {
-    (void)Q;  // Charge appears in discriminant, simplified formula uses only a/M
-    return 2.0 * M * (1.0 + cos(acos(a / M) / 3.0));
+    float discriminant = kn_horizon_discriminant(M, a, Q);
+    if (!(M > 0.0) || discriminant < 0.0) {
+        float zero = 0.0;
+        return zero / zero;
+    }
+    float r_floor = max(M + sqrt(discriminant), Q * Q / M);
+    float step_size = 0.005 * M;
+    float r_outer = 5.0 * M;
+    float r_inner = r_outer;
+    bool bracketed = false;
+    while (r_outer - step_size > r_floor) {
+        r_inner = r_outer - step_size;
+        if (kn_photon_orbit_function(r_inner, M, a, Q) <= 0.0) {
+            bracketed = true;
+            break;
+        }
+        r_outer = r_inner;
+    }
+    if (!bracketed) {
+        r_inner = r_floor;
+        if (kn_photon_orbit_function(r_inner, M, a, Q) > 0.0) {
+            return r_floor;
+        }
+    }
+    for (int iteration = 0; iteration < 64; ++iteration) {
+        float r_mid = 0.5 * (r_inner + r_outer);
+        if (kn_photon_orbit_function(r_mid, M, a, Q) <= 0.0) {
+            r_inner = r_mid;
+        } else {
+            r_outer = r_mid;
+        }
+    }
+    return 0.5 * (r_inner + r_outer);
 }
 
 /**
- * Prograde ISCO radius (approximate, charge correction)
+ * Marginal-stability function of equatorial KN circular orbits
+ * (orbit angular momentum along +z, signed a). Zeros are dE/dr = 0 radii.
  *
- * Rocq Derivation: Derived from Rocq:Definition kn_isco_radius_prograde (M a Q : R) : R :=...
+ * Rocq Derivation: Derived from Rocq:Definition kn_marginal_stability (r M a Q : R) : R :=...
+ */
+float kn_isco_marginal_stability(float r, float M, float a, float Q) {
+    float Q2 = Q * Q;
+    float orbit_term = M * r - Q2;
+    float orbit_root = sqrt(orbit_term);
+    return r * (6.0 * M * r - r * r - 9.0 * Q2 + 3.0 * a * a) + 4.0 * Q2 * (Q2 - a * a) / M
+        - 8.0 * a * orbit_term * orbit_root / M;
+}
+
+/**
+ * ISCO for an orbit with angular momentum along +z: outermost zero of
+ * kn_isco_marginal_stability, by an inward scan from 10 M in M/200 steps and
+ * bisection. Returns NaN (0/0) for super-extremal or massless input.
+ *
+ * Rocq Derivation: Derived from Rocq:Definition kn_isco_prograde_spec (M a Q r : R) : Prop :=...
+ *
+ * Depends on: kn_isco_marginal_stability
  */
 float kn_isco_radius_prograde(float M, float a, float Q) {
-    float a_over_M = a / M;
-    float one_minus_a2_M2 = 1.0 - a_over_M * a_over_M;
-    float cbrt_factor = pow(one_minus_a2_M2, 1.0/3.0);
-    float cbrt_plus = pow(1.0 + a_over_M, 1.0/3.0);
-    float cbrt_minus = pow(1.0 - a_over_M, 1.0/3.0);
-    float Z1 = 1.0 + cbrt_factor * (cbrt_plus + cbrt_minus);
-    float Z2 = sqrt(3.0 * a_over_M * a_over_M + Z1 * Z1);
-    float sqrt_term = sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
-    float correction = Q * Q / (2.0 * M * M);
-    return M * (3.0 + Z2 - sqrt_term) + correction;
+    float discriminant = kn_horizon_discriminant(M, a, Q);
+    if (!(M > 0.0) || discriminant < 0.0) {
+        float zero = 0.0;
+        return zero / zero;
+    }
+    float r_floor = max(M + sqrt(discriminant), Q * Q / M);
+    float step_size = 0.005 * M;
+    float r_outer = 10.0 * M;
+    float r_inner = r_outer;
+    bool bracketed = false;
+    while (r_outer - step_size > r_floor) {
+        r_inner = r_outer - step_size;
+        if (kn_isco_marginal_stability(r_inner, M, a, Q) >= 0.0) {
+            bracketed = true;
+            break;
+        }
+        r_outer = r_inner;
+    }
+    if (!bracketed) {
+        r_inner = r_floor;
+        if (kn_isco_marginal_stability(r_inner, M, a, Q) < 0.0) {
+            return r_floor;
+        }
+    }
+    for (int iteration = 0; iteration < 64; ++iteration) {
+        float r_mid = 0.5 * (r_inner + r_outer);
+        if (kn_isco_marginal_stability(r_mid, M, a, Q) >= 0.0) {
+            r_inner = r_mid;
+        } else {
+            r_outer = r_mid;
+        }
+    }
+    return 0.5 * (r_inner + r_outer);
 }
 
 /**
- * Retrograde ISCO radius (approximate, charge correction)
+ * ISCO for an orbit with angular momentum along -z: the prograde ISCO at -a.
  *
- * Rocq Derivation: Derived from Rocq:Definition kn_isco_radius_retrograde (M a Q : R) : R :=...
+ * Rocq Derivation: Derived from Rocq:Definition kn_isco_retrograde_spec (M a Q r : R) : Prop :=...
+ *
+ * Depends on: kn_isco_radius_prograde
  */
 float kn_isco_radius_retrograde(float M, float a, float Q) {
-    float a_over_M = a / M;
-    float one_minus_a2_M2 = 1.0 - a_over_M * a_over_M;
-    float cbrt_factor = pow(one_minus_a2_M2, 1.0/3.0);
-    float cbrt_plus = pow(1.0 + a_over_M, 1.0/3.0);
-    float cbrt_minus = pow(1.0 - a_over_M, 1.0/3.0);
-    float Z1 = 1.0 + cbrt_factor * (cbrt_plus + cbrt_minus);
-    float Z2 = sqrt(3.0 * a_over_M * a_over_M + Z1 * Z1);
-    float sqrt_term = sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
-    float correction = Q * Q / (2.0 * M * M);
-    return M * (3.0 + Z2 + sqrt_term) + correction;
+    return kn_isco_radius_prograde(M, -a, Q);
 }
 
 /**
@@ -267,16 +357,16 @@ float kn_g_phph(float r, float theta, float M, float a, float Q) {
 }
 
 /**
- * Kerr-Newman g_tph (cross term): g_tph = -2Mar sin^2(theta) / Sigma
+ * Kerr-Newman g_tph (cross term): g_tph = -a (2Mr - Q^2) sin^2(theta) / Sigma
  *
- * Rocq Derivation: Derived from Rocq:g_tph := - 2...
+ * Rocq Derivation: Derived from Rocq:g_tph := - a * (2 * M * r - Q^2) * sin2 / Sigma...
  *
  * Depends on: kn_Sigma
  */
-float kn_g_tph(float r, float theta, float M, float a) {
+float kn_g_tph(float r, float theta, float M, float a, float Q) {
     float Sigma = kn_Sigma(r, theta, a);
     float sin_theta = sin(theta);
-    return -2.0 * M * r * a * sin_theta * sin_theta / Sigma;
+    return -a * (2.0 * M * r - Q * Q) * sin_theta * sin_theta / Sigma;
 }
 
 /**
@@ -285,7 +375,7 @@ float kn_g_tph(float r, float theta, float M, float a) {
  * Rocq Derivation: Derived from Rocq:Definition is_sub_extremal (M a Q : R) : Prop :=...
  */
 bool is_sub_extremal(float M, float a, float Q) {
-    return M * M > a * a + Q * Q;
+    return kn_horizon_discriminant(M, a, Q) > 0.0;
 }
 
 /**
@@ -294,7 +384,7 @@ bool is_sub_extremal(float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition is_extremal (M a Q : R) : Prop :=...
  */
 bool is_extremal(float M, float a, float Q) {
-    return M * M == a * a + Q * Q;
+    return kn_horizon_discriminant(M, a, Q) == 0.0;
 }
 
 /**
@@ -303,7 +393,7 @@ bool is_extremal(float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition is_super_extremal (M a Q : R) : Prop :=...
  */
 bool is_super_extremal(float M, float a, float Q) {
-    return M * M < a * a + Q * Q;
+    return kn_horizon_discriminant(M, a, Q) < 0.0;
 }
 
 /**
@@ -312,7 +402,7 @@ bool is_super_extremal(float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition is_physical_black_hole (M a Q : R) : Prop :=...
  */
 bool is_physical_black_hole(float M, float a, float Q) {
-    return M > 0.0 && M * M >= a * a + Q * Q;
+    return M > 0.0 && kn_horizon_discriminant(M, a, Q) >= 0.0;
 }
 
 /**

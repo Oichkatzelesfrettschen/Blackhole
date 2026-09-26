@@ -30,6 +30,7 @@
 /* Synchrotron G(x) LUT domain -- single-sourced with the C++ and GLSL
  * consumers via shader/include/synchrotron_lut_domain.h. */
 #include "../../shader/include/synchrotron_lut_domain.h"
+#include "device_zamo_redshift.cuh"
 #define D_SYNCH_G_X_MIN ((float)SYNCH_G_LUT_DOMAIN_X_MIN) /**< @brief Minimum x for G(x) LUT (log-space lower bound). */
 #define D_SYNCH_G_X_MAX ((float)SYNCH_G_LUT_DOMAIN_X_MAX) /**< @brief Maximum x for G(x) LUT (log-space upper bound). */
 /* log(X_MAX / X_MIN) = log(30 / 0.001) = log(30000), precomputed because
@@ -1163,9 +1164,12 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
     float doppler = 1.0f + view_alignment * 0.65f * d_doppler_strength;
     intensity *= doppler * doppler * doppler;
 
-    float spin_y = d_spin >= 0.0f ? 1.0f : -1.0f;
-    float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
-    float3 flow_dir = d_normalize(d_cross(spin_axis, d_normalize(hit.hit_point)));
+    /* The disk orbits about +y at every spin sign (its ISCO takes the
+     * counter-rotating branch when d_spin < 0), so the anisotropic flow axis
+     * stays +y: flow_dir = y x p equals vel_dir's approach sense above
+     * (dot(vel_dir, ray_dir) == dot(flow_dir, view_dir)). */
+    float3 disk_flow_axis = make_f3(0.0f, 1.0f, 0.0f);
+    float3 flow_dir = d_normalize(d_cross(disk_flow_axis, d_normalize(hit.hit_point)));
     float spin_view = 0.5f + 0.5f * d_dot(flow_dir, view_dir);
     float spin_t = fmaxf(0.0f, fminf((fabsf(d_spin) - 0.05f) / fmaxf(0.85f - 0.05f, D_EPSILON), 1.0f));
     float spin_weight = spin_t * spin_t * (3.0f - 2.0f * spin_t);
@@ -1230,7 +1234,8 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
                         (rNorm - d_redshift_radius_min) / denom));
             z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
         } else {
-            z = 1.0f / fmaxf(hit.redshift, D_EPSILON) - 1.0f;
+            /* Same ZAMO-lapse model and cap as the LUT (device_zamo_redshift.cuh). */
+            z = d_zamo_redshift(r, rs, d_spin);
         }
         float one_plus_z = 1.0f + z;
         float dimming = 1.0f / (one_plus_z * one_plus_z * one_plus_z);
@@ -1669,7 +1674,8 @@ __device__ __forceinline__ float3 d_shape_escaped_background(float3 sky,
             float u = fmaxf(0.0f, fminf((r_norm - d_redshift_radius_min) / denom, 1.0f));
             z = tex2D<float>((cudaTextureObject_t)d_tex_redshift, u, 0.5f);
         } else {
-            z = 1.0f / fmaxf(d_redshift_factor(min_radius, rs), D_EPSILON) - 1.0f;
+            /* Same ZAMO-lapse model and cap as the LUT (device_zamo_redshift.cuh). */
+            z = d_zamo_redshift(min_radius, rs, spin);
         }
         sky = d_apply_simple_redshift(sky, z);
     }

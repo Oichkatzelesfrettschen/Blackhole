@@ -179,7 +179,7 @@ scripts import (`$PYTHON -m pip install -r scripts/requirements.txt`).
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| mpmath | 1.4.1 (pinned) | 50-digit referee tables written by `scripts/gen_*_reference.py` and embedded in the C++ tests |
+| mpmath | 1.4.1 (pinned) | Arbitrary-precision reference tables written by `scripts/gen_*_reference.py` and embedded in the physics tests |
 | numpy, scipy, h5py, pandas, matplotlib | see `scripts/requirements.txt` | LUT generation, GRMHD processing, validation |
 
 ---
