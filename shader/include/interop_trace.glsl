@@ -547,6 +547,90 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 }
 
 // ---------------------------------------------------------------------------
+// Volumetric disk segment
+//
+// The RTE and Stokes traces model the disk as a Gaussian layer, density
+// exp(-z^2 / 2h^2) with h = 0.1 r_s, under the Novikov-Thorne flux profile.
+// A far-field step spans ~0.05 r, many scale heights, so a coefficient read
+// at one end point misses a midplane crossed mid-step or applies the peak
+// density to the whole step. bhDiskSegment instead integrates the density
+// exactly along the step's straight chord and returns its mean, and reads the
+// slowly varying radial factors (flux, color, Doppler) where the chord's
+// density peaks. With every coefficient proportional to the density and the
+// source function constant over the segment, the formal solution depends
+// only on the column, so the mean coefficients over the step's path length
+// give the exact segment for any step size.
+// ---------------------------------------------------------------------------
+
+// erf(x) by Abramowitz & Stegun 7.1.26, |error| <= 1.5e-7.
+float bhErf(float x) {
+  float t = 1.0 / (1.0 + 0.3275911 * abs(x));
+  float poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 +
+               t * (-1.453152027 + t * 1.061405429))));
+  float y = 1.0 - poly * exp(-x * x);
+  return x < 0.0 ? -y : y;
+}
+
+// Mean of exp(-z^2 / 2h^2) along a chord whose height runs linearly from z0
+// to z1: h sqrt(pi/2) (erf(z1 / sqrt(2) h) - erf(z0 / sqrt(2) h)) / (z1 - z0).
+// Below |z1 - z0| = 0.01 sqrt(2) h the midpoint value is used; its relative
+// error there is below 1e-5, and the erf difference would lose more to
+// rounding.
+float bhGaussianChordMean(float z0, float z1, float h) {
+  float s = 0.70710678 / h;
+  float dz = z1 - z0;
+  if (abs(dz) * s < 0.01) {
+    float zm = 0.5 * (z0 + z1) / h;
+    return exp(-0.5 * zm * zm);
+  }
+  return 1.25331414 * h * (bhErf(z1 * s) - bhErf(z0 * s)) / dz;
+}
+
+// Disk emission over the chord p0 -> p1 (physics frame, disk in xy). Returns
+// false when the chord's density peak lies outside [rIn, rOut]; otherwise the
+// band color, the mean emissivity jEff = flux g^3 <rho>, and <rho>.
+bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
+                   out vec3 emitColor, out float jEff, out float rhoMean) {
+  emitColor = vec3(0.0);
+  jEff = 0.0;
+  rhoMean = 0.0;
+  // A chord on one side of the midplane and more than 8 h from it carries
+  // density below exp(-32) ~ 1e-14 everywhere.
+  if (p0.z * p1.z > 0.0 && min(abs(p0.z), abs(p1.z)) > 8.0 * h) {
+    return false;
+  }
+  float tPeak = (p0.z * p1.z < 0.0) ? p0.z / (p0.z - p1.z)
+                                    : (abs(p0.z) <= abs(p1.z) ? 0.0 : 1.0);
+  vec3 peak = mix(p0, p1, tPeak);
+  float rCyl = length(peak.xy);
+  if (rCyl < rIn || rCyl > rOut) {
+    return false;
+  }
+  // Novikov-Thorne surface flux profile
+  float x    = rIn / max(rCyl, BH_EPSILON);
+  float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
+
+  // Temperature-to-color mapping (three bands)
+  float T_norm = pow(max(flux, 0.0), 0.25);
+  if (T_norm > 0.6) {
+    emitColor = vec3(1.0, 0.9, 0.8);
+  } else if (T_norm > 0.3) {
+    emitColor = vec3(1.0, 0.6, 0.2);
+  } else {
+    emitColor = vec3(0.8, 0.2, 0.1);
+  }
+
+  // Doppler beaming (Keplerian v ~ sqrt(r_s / 2r))
+  float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
+  float doppler = 1.0 + 0.3 * v * cos(atan(peak.y, peak.x));
+  float g3      = doppler * doppler * doppler;
+
+  rhoMean = bhGaussianChordMean(p0.z, p1.z, h);
+  jEff = flux * g3 * rhoMean;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // bhTraceGeodesicRTE
 //
 // Volumetric radiative transfer along a Kerr geodesic using front-to-back
@@ -604,43 +688,20 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
     // length (kerrAffineStep), the unit of jEff and alphaNu.
     float pathStep = kerrAffineStep(before, kRay, aTrace, rteStepDt);
 
-    if (adiskEnabled > 0.5) {
-      float rCyl = length(newPos.xy);
-      if (rCyl >= r_disk_in && rCyl <= r_disk_out) {
-        // Novikov-Thorne surface flux profile
-        float x    = r_disk_in / max(rCyl, BH_EPSILON);
-        float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
+    vec3 emitColor;
+    float jEff;
+    float rhoNorm;
+    if (adiskEnabled > 0.5 &&
+        bhDiskSegment(curPos, newPos, r_disk_in, r_disk_out, h_disk, r_s, emitColor, jEff,
+                      rhoNorm)) {
+      float alphaNu = opacityScale * max(jEff, 0.0);
 
-        // Temperature-to-color mapping (three bands)
-        float T_norm = pow(max(flux, 0.0), 0.25);
-        vec3 emitColor;
-        if (T_norm > 0.6) {
-          emitColor = vec3(1.0, 0.9, 0.8);
-        } else if (T_norm > 0.3) {
-          emitColor = vec3(1.0, 0.6, 0.2);
-        } else {
-          emitColor = vec3(0.8, 0.2, 0.1);
-        }
+      accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
-        // Doppler beaming (Keplerian v ~ sqrt(r_s / 2r))
-        float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
-        float phi_ang = atan(newPos.y, newPos.x);
-        float doppler = 1.0 + 0.3 * v * cos(phi_ang);
-        float g3      = doppler * doppler * doppler;
-
-        // Gaussian vertical density: rho ~ exp(-z^2 / 2h^2)
-        float rhoNorm = exp(-0.5 * (newPos.z / h_disk) * (newPos.z / h_disk));
-
-        float jEff    = flux * g3 * rhoNorm;
-        float alphaNu = opacityScale * max(jEff, 0.0);
-
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
-
-        // Early exit when medium becomes opaque
-        if (transmit < 0.005) {
-          terminalPos = newPos;
-          return vec4(accumI, 1.0);
-        }
+      // Early exit when medium becomes opaque
+      if (transmit < 0.005) {
+        terminalPos = newPos;
+        return vec4(accumI, 1.0);
       }
     }
 
@@ -748,53 +809,34 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
     // alphaNu and rhoV.
     float pathStep = kerrAffineStep(before, kRay, aTrace, stepDt);
 
-    if (adiskEnabled > 0.5) {
-      float rCyl = length(newPos.xy);
-      if (rCyl >= r_disk_in && rCyl <= r_disk_out) {
-        // Novikov-Thorne flux profile (same as bhTraceGeodesicRTE)
-        float x    = r_disk_in / max(rCyl, BH_EPSILON);
-        float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
+    vec3 emitColor;
+    float jEff;
+    float rhoNorm;
+    if (adiskEnabled > 0.5 &&
+        bhDiskSegment(curPos, newPos, r_disk_in, r_disk_out, h_disk, r_s, emitColor, jEff,
+                      rhoNorm)) {
+      float alphaNu = opacityScale * max(jEff, 0.0);
 
-        float T_norm = pow(max(flux, 0.0), 0.25);
-        vec3 emitColor;
-        if (T_norm > 0.6) {
-          emitColor = vec3(1.0, 0.9, 0.8);
-        } else if (T_norm > 0.3) {
-          emitColor = vec3(1.0, 0.6, 0.2);
-        } else {
-          emitColor = vec3(0.8, 0.2, 0.1);
-        }
+      // Intensity path (front-to-back compositing identical to RTE path)
+      accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
-        float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
-        float phi_ang = atan(newPos.y, newPos.x);
-        float doppler = 1.0 + 0.3 * v * cos(phi_ang);
-        float g3      = doppler * doppler * doppler;
+      // Polarization path: stokesStep() for Q, U, V
+      // jI_scalar: mean color intensity for the emission vector
+      float jI_scalar = jEff * (emitColor.r + emitColor.g + emitColor.b) / 3.0;
+      // Polarized emission: j_Q, j_U from B-field EVPA; j_V = 0
+      vec4 emStokes = synchrotronPolarizedEmission(jI_scalar, PI_LIN, bFieldAngle);
 
-        float rhoNorm = exp(-0.5 * (newPos.z / h_disk) * (newPos.z / h_disk));
-        float jEff    = flux * g3 * rhoNorm;
-        float alphaNu = opacityScale * max(jEff, 0.0);
+      // Faraday rotation rate: rhoV = neScale * rhoNorm (density-modulated)
+      float rhoV = neScale * rhoNorm;
 
-        // Intensity path (front-to-back compositing identical to RTE path)
-        accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
+      // Evolve Q, U, V under simplified K (alpha_I + rho_V)
+      // WHY: I and V decouple in simplified K; we evolve Q/U coupled via rhoV.
+      vec4 quv = stokesStep(vec4(0.0, stokesQU.x, stokesQU.y, stokesV),
+                            emStokes, alphaNu, rhoV, pathStep);
+      stokesQU = quv.yz;
+      stokesV  = quv.w;
 
-        // Polarization path: stokesStep() for Q, U, V
-        // jI_scalar: mean color intensity for the emission vector
-        float jI_scalar = jEff * (emitColor.r + emitColor.g + emitColor.b) / 3.0;
-        // Polarized emission: j_Q, j_U from B-field EVPA; j_V = 0
-        vec4 emStokes = synchrotronPolarizedEmission(jI_scalar, PI_LIN, bFieldAngle);
-
-        // Faraday rotation rate: rhoV = neScale * rhoNorm (density-modulated)
-        float rhoV = neScale * rhoNorm;
-
-        // Evolve Q, U, V under simplified K (alpha_I + rho_V)
-        // WHY: I and V decouple in simplified K; we evolve Q/U coupled via rhoV.
-        vec4 quv = stokesStep(vec4(0.0, stokesQU.x, stokesQU.y, stokesV),
-                              emStokes, alphaNu, rhoV, pathStep);
-        stokesQU = quv.yz;
-        stokesV  = quv.w;
-
-        if (transmit < 0.005) { break; }
-      }
+      if (transmit < 0.005) { break; }
     }
 
     if (kRay.r > escapeRadius && kRay.vr > 0.0) {

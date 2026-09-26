@@ -20,6 +20,10 @@
  * k^t: a co-rotating coordinate direction starts on shell, a counter-rotating
  * one (no finite future root) is marked captured, and 1e-4 outside every
  * direction starts on shell.
+ *
+ * d_disk_segment integrates the Gaussian disk layer along each step's chord:
+ * a ray crossing it at radius 30 reproduces the analytic emission column for
+ * chords from 0.1 h to 100 h.
  * Skips without a CUDA device.
  */
 
@@ -84,6 +88,30 @@ __global__ void kerr_slab_kernel(float3 pos, float3 dir, float step_size, float 
     }
     out[0] = accum.x;
     out[1] = transmit;
+}
+
+/* Ray at inclination incl crossing the disk midplane at (30, 0, 0) from
+ * z = 3 to z = -3, cut into chords of seg_length (offset 0.37), each passed
+ * to d_disk_segment (r_in = 6, r_s = 2, h = 0.2). out[0] = sum(j_eff * len). */
+__global__ void disk_slab_kernel(float seg_length, float incl, float *out) {
+    float3 const dir = make_f3(sinf(incl), 0.0f, -cosf(incl));
+    float const total = 6.0f / cosf(incl);
+    float3 const start = d_sub(make_f3(30.0f, 0.0f, 0.0f), d_scale(dir, 0.5f * total));
+    float column = 0.0f;
+    float s0 = 0.0f;
+    float s1 = fminf(0.37f * seg_length, total);
+    for (int k = 0; k < 100000 && s0 < total; ++k) {
+        float3 emit_color;
+        float j_eff;
+        float rho;
+        if (d_disk_segment(d_add(start, d_scale(dir, s0)), d_add(start, d_scale(dir, s1)), 6.0f,
+                           200.0f, 0.2f, 2.0f, emit_color, j_eff, rho)) {
+            column += j_eff * (s1 - s0);
+        }
+        s0 = s1;
+        s1 = fminf(s1 + seg_length, total);
+    }
+    out[0] = column;
 }
 
 bool cudaAvailable() {
@@ -251,4 +279,28 @@ TEST(CudaKerrGeodesic, StationaryLimitStartIsOnShell) {
         }
         EXPECT_GT(accepted, 50) << "r=" << r0;
     }
+}
+
+TEST(CudaKerrGeodesic, DiskSegmentIntegratesTheGaussianColumn) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* Column flux g^3 sqrt(2 pi) h / cos(i) at r = 30 (x = 0.2, phi = 0);
+     * 0.5% covers the radial flux variation the inclined ray sweeps. */
+    double const x = 0.2;
+    double const flux = x * x * x * (1.0 - std::sqrt(x));
+    double const g = 1.0 + 0.3 * std::sqrt(1.0 / 30.0);
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, sizeof(float));
+    for (double const incl : {0.0, K_PI / 3.0}) {
+        double const column = flux * g * g * g * std::sqrt(2.0 * K_PI) * 0.2 / std::cos(incl);
+        for (float const seg : {0.02f, 0.2f, 2.0f, 20.0f}) {
+            disk_slab_kernel<<<1, 1>>>(seg, static_cast<float>(incl), dOut);
+            cudaDeviceSynchronize();
+            float out = 0.0f;
+            cudaMemcpy(&out, dOut, sizeof(float), cudaMemcpyDeviceToHost);
+            EXPECT_NEAR(out, column, 5e-3 * column) << "incl=" << incl << " seg=" << seg;
+        }
+    }
+    cudaFree(dOut);
 }

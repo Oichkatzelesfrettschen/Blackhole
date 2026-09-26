@@ -407,6 +407,48 @@ void main() {
 )";
 }
 
+// A straight ray at inclination `incl` from the disk normal crossing the
+// midplane at (30, 0, 0) from z = 3 to z = -3 (15 scale heights of h = 0.2
+// each side), cut into chords of length segLength starting at an offset of
+// 0.37 segLength, each passed to bhDiskSegment and rteStepVec3 with
+// absorption kappa * jEff, as bhTraceGeodesicRTE does per step. Reports the
+// emission column sum(jEff * length) and the intensity.
+std::string diskSlabShader() {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  return comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+uniform float segLength;
+uniform float incl;
+uniform float kappa;
+void main() {
+  float r_s = 2.0;
+  float h = 0.1 * r_s;
+  vec3 dir = vec3(sin(incl), 0.0, -cos(incl));
+  float total = 6.0 / cos(incl);
+  vec3 start = vec3(30.0, 0.0, 0.0) - 0.5 * total * dir;
+  float column = 0.0;
+  float transmit = 1.0;
+  vec3 accum = vec3(0.0);
+  float s0 = 0.0;
+  float s1 = min(0.37 * segLength, total);
+  for (int k = 0; k < 100000 && s0 < total; ++k) {
+    vec3 emitColor;
+    float jEff;
+    float rho;
+    if (bhDiskSegment(start + s0 * dir, start + s1 * dir, bhDiskInnerRadius(r_s), 100.0 * r_s,
+                      h, r_s, emitColor, jEff, rho)) {
+      column += jEff * (s1 - s0);
+      accum += rteStepVec3(vec3(1.0), jEff, kappa * jEff, s1 - s0, transmit);
+    }
+    s0 = s1;
+    s1 = min(s1 + segLength, total);
+  }
+  result[0] = column;
+  result[1] = accum.x;
+}
+)";
+}
+
 class KerrShaderCaptureTest : public ::testing::Test {
 protected:
   static bhtest::HiddenGlContext *context;
@@ -1056,4 +1098,43 @@ TEST_F(KerrShaderCaptureTest, StationaryLimitStartIsOnShell) {
     }
   }
   EXPECT_GT(onLimit, 100);
+}
+
+TEST_F(KerrShaderCaptureTest, DiskSegmentIntegratesTheGaussianColumn) {
+  // The Gaussian disk layer (h = 0.2) crossed at radius 30 (r_in = 6 at
+  // a = 0) has emission column flux g^3 sqrt(2 pi) h / cos(i), flux =
+  // x^3 (1 - sqrt x) with x = r_in / r and g = 1 + 0.3 sqrt(r_s / 2r) on the
+  // phi = 0 meridian, and intensity (1 - exp(-kappa column)) / kappa. Chords
+  // from 0.1 h to 100 h must reproduce both within 0.5%: the chord integral
+  // is exact, and the residual is the variation of flux across the +-3 h
+  // tan(i) the inclined ray sweeps radially (~1e-3). An end-point sample of
+  // the density misses the midplane for chords much longer than h.
+  const double h = 0.2;
+  const double x = 6.0 / 30.0;
+  const double flux = x * x * x * (1.0 - std::sqrt(x));
+  const double g = 1.0 + (0.3 * std::sqrt(1.0 / 30.0));
+  const double kappa = 400.0;
+  const GLuint program = bhtest::createComputeProgram(diskSlabShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 2), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  for (const double incl : {0.0, std::numbers::pi / 3.0}) {
+    const double column = flux * g * g * g * std::sqrt(2.0 * std::numbers::pi) * h / std::cos(incl);
+    const double intensity = (1.0 - std::exp(-kappa * column)) / kappa;
+    for (const float segLength : {0.02F, 0.2F, 2.0F, 20.0F}) {
+      glUseProgram(program);
+      glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
+      glUniform1f(glGetUniformLocation(program, "segLength"), segLength);
+      glUniform1f(glGetUniformLocation(program, "incl"), static_cast<float>(incl));
+      glUniform1f(glGetUniformLocation(program, "kappa"), static_cast<float>(kappa));
+      const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 2);
+      const std::string where =
+          "incl=" + std::to_string(incl) + " segLength=" + std::to_string(segLength);
+      EXPECT_NEAR(out.at(0), column, 5e-3 * column) << where;
+      EXPECT_NEAR(out.at(1), intensity, 5e-3 * intensity) << where;
+    }
+  }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
 }
