@@ -113,6 +113,7 @@
 #include "render/render_targets.h"
 #include "render/scene_overlays.h"
 #include "render/settings_sync.h"
+#include "render/observer_sky_view.h"
 #include "render/uniform_binding.h"
 #include "rmlui_overlay.h"
 #include "settings.h"
@@ -121,6 +122,7 @@
 #include "texture.h"
 #include "tracy_support.h"
 #include "ui/campaign_panels.h"
+#include "ui/observer_panels.h"
 #include "ui/panels.h"
 #include "ui/settings_window.h"
 
@@ -186,10 +188,13 @@ using blackhole::applyEnvironmentConfig;
 using blackhole::recreateRenderTargets;
 
 // Compare-sweep advance/restore state machine lives in src/render/compare_sweep.*.
-using blackhole::advanceComparePresetSweep;
 using blackhole::captureCompareParity;
 using blackhole::CompareParityInputs;
 using blackhole::restoreCompareSweepState;
+using blackhole::updateComparePresetSweep;
+
+// Observer-sky scene pass lives in src/render/observer_sky_view.*.
+using blackhole::renderObserverSkyScene;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
@@ -808,8 +813,7 @@ struct BlackholeFrameResult {
   bool computeActiveForLog = false;
 };
 
-BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOptions &cli,
-                                          const Settings &settings, const InputManager &input,
+BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &settings,
                                           const glm::vec3 &cameraPos, const glm::mat3 &cameraBasis,
                                           float fovScale, float frameTime, double currentTime,
                                           GLuint &computeProgram) {
@@ -887,13 +891,6 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     rtti.targetTexture = rs.targets.texBlackhole;
     rtti.width = rs.targets.renderWidth;
     rtti.height = rs.targets.renderHeight;
-
-    // Render UI controls only if visible
-    if (input.isUIVisible()) {
-      renderSettingsWindow(rs);
-    }
-
-    renderCurveOverlayWindow(rs, cli.curveTsvPath);
 
     updateLuts(rs, rs.physicsCore.kerrSpin, rs.disk.adiskDensityV);
     loadSpectralSynchHawkingLuts(rs);
@@ -1156,6 +1153,30 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
           .gizmoView = gizmoViewMatrix};
 }
 
+/**
+ * @brief Render the active scene into rs.targets.texBlackhole.
+ *
+ * The black-hole scene runs the geodesic integrator and restores any compare
+ * sweep state it changed; the observer-sky scene draws the precomputed sky of
+ * the chosen Kerr observer and reports no GRMHD or compute activity.
+ */
+BlackholeFrameResult renderSceneFrame(RenderState &rs, const Settings &settings,
+                                      InputManager &input, const FrameCamera &frameCamera,
+                                      float frameTime, float deltaTime, double currentTime,
+                                      GLuint &computeProgram) {
+  if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
+    // The observer's clock steps by the effective delta, which pause and the
+    // time scale govern as they do the black-hole orbit clock.
+    renderObserverSkyScene(rs, frameCamera.basis, input.getEffectiveDeltaTime(deltaTime));
+    return {};
+  }
+  const auto result =
+      renderBlackholeFrame(rs, settings, frameCamera.position, frameCamera.basis,
+                           frameCamera.fovScale, frameTime, currentTime, computeProgram);
+  restoreCompareSweepState(rs, input);
+  return result;
+}
+
 bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
                    const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog) {
   /* --record-frames: draw cinematic physics HUD via foreground draw list.
@@ -1166,7 +1187,7 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
     ++rs.recording.recordWarmup;
   }
   if (!cli.recordFramesDir.empty() && cli.recordProfile == "cinematic" &&
-      rs.recording.recordWarmup >= 15) {
+      rs.scene.mode == RenderState::SceneMode::Blackhole && rs.recording.recordWarmup >= 15) {
     renderCinematicOverlay(rs.recording.recordCinematic, rs.recording.recordCurrentKf,
                            glm::length(cameraPos), rs.recording.recordCurRs,
                            rs.recording.recordCurIsco, rs.recording.recordFrameIndex,
@@ -1474,23 +1495,30 @@ int main(int argc, char **argv) {
       */
       syncRenderStateToSettings(rs, settings, input);
 
-      advanceComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
+      // The Settings window owns the Scene selector, so it draws before any
+      // code reads rs.scene.mode: dispatch, post-processing, and overlays then
+      // see one scene for the whole frame.
+      if (input.isUIVisible()) {
+        renderSettingsWindow(rs);
+      }
+      // The --curve-tsv plot is independent of the scene.
+      renderCurveOverlayWindow(rs, cli.curveTsvPath);
+
+      // The compare sweep drives the geodesic integrator; another scene
+      // cancels it and restores the live camera.
+      updateComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
 
       // --record-frames: drive camera and spin from the selected record path
       applyRecordCameraPath(rs, cli, input);
 
       const auto frameCamera = updateFrameCamera(rs, input, cli, settings, deltaTime, currentTime);
       const auto &cameraPos = frameCamera.position;
-      const auto &cameraBasis = frameCamera.basis;
-      const float fovScale = frameCamera.fovScale;
       auto projectionMatrix = frameCamera.projection;
       auto gizmoViewMatrix = frameCamera.gizmoView;
-      const auto blackholeFrame =
-          renderBlackholeFrame(rs, cli, settings, input, cameraPos, cameraBasis, fovScale,
-                               frameTime, currentTime, computeProgram);
+      const auto blackholeFrame = renderSceneFrame(rs, settings, input, frameCamera, frameTime,
+                                                   deltaTime, currentTime, computeProgram);
       const bool grmhdReady = blackholeFrame.grmhdReady;
       const bool computeActiveForLog = blackholeFrame.computeActiveForLog;
-      restoreCompareSweepState(rs, input);
 
       GLuint const finalTexture = runPostProcessPipeline(rs, input);
 
@@ -1510,6 +1538,11 @@ int main(int argc, char **argv) {
       // Draw Final Texture to Viewport
       ImGui::Image(static_cast<ImTextureID>(finalTexture), viewportSize, ImVec2(0, 1),
                    ImVec2(1, 0));
+
+      // The observer-sky scene always carries its spin disclosure.
+      if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
+        ui::drawObserverDisclosure(rs, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+      }
 
       // Enable mouse/keyboard interaction when hovering the viewport
       bool const isViewportHovered = ImGui::IsItemHovered();
@@ -1535,6 +1568,11 @@ int main(int argc, char **argv) {
         renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
         renderBackgroundPanel(rs);
         renderWiregridPanel(rs);
+        if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
+          ui::renderObserverSkyPanel(rs);
+          ui::renderObserverPhysicsNote(rs);
+          ui::renderObserverDistantView(rs);
+        }
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
         renderPerformancePanel(rs, cpuFrameMs);
@@ -1576,6 +1614,7 @@ int main(int argc, char **argv) {
     // Explicitly clean up static resources before GL context destruction
     rs.disk.noiseCache.cleanup();
     rs.hawking.hawkingRenderer.cleanup();
+    rs.observerView.renderer.shutdown();
     if (rs.grmhd.grmhdTexture.texture != 0) {
       destroyGrmhdPackedTexture(rs.grmhd.grmhdTexture);
     }

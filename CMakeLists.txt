@@ -1157,11 +1157,13 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/render/record_mode.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/render_targets.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/uniform_binding.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/observer_sky_view.cpp"
   "${PROJECT_SOURCE_DIR}/src/tools/compare_harness.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/campaign_panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/strategic_map.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/observer_panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
@@ -1197,6 +1199,15 @@ list(APPEND HEADER_FILES ${PHYSICS_HEADER_FILES} ${RENDER_HEADER_FILES})
 set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES
   COMPILE_OPTIONS "${PROJECT_WARNINGS}"
 )
+# observer_sky_view.cpp instantiates kerr_observer.h's inline deficit-form
+# functions (iscoOffset, equatorialFrame, principalNullDelay), which
+# blackhole_observer_sky also emits under IEEE semantics; the linker keeps one
+# copy per symbol, so every definition must come from IEEE code, or a
+# fast-math copy could serve the ray tracer and shift the ISCO offset that
+# keys the cached sky maps.
+set_source_files_properties("${PROJECT_SOURCE_DIR}/src/render/observer_sky_view.cpp"
+  PROPERTIES COMPILE_OPTIONS "${PROJECT_WARNINGS};-fno-fast-math;-ffp-contract=off"
+)
 
 # Sanitizers and heavy inlining can push stack usage estimates beyond the strict global threshold.
 # Keep -Wstack-usage enabled for most of the codebase, but avoid failing the build on main.cpp.
@@ -1231,6 +1242,7 @@ function(add_blackhole_desktop_target target_name)
 
   target_link_libraries(${target_name} PRIVATE
     blackhole_campaign
+    blackhole_observer_sky
     HighFive::HighFive
     imgui::imgui
     imguizmo::imguizmo
@@ -1594,6 +1606,31 @@ if(ENABLE_FAST_MATH)
   # The campaign determinism gate needs IEEE semantics end to end.
   target_compile_options(blackhole_physics PRIVATE -fno-fast-math)
 endif()
+
+# Observer-sky precompute: backward null geodesics from an equatorial Kerr
+# observer's local sky in spin-deficit form (src/physics/observer_sky_*). Its
+# own library keeps it out of PHYSICS_SRC_FILES, so no target compiles a
+# fast-math copy: the deficit-form potentials rely on IEEE evaluation order to
+# keep the digits a near-extremal throat leaves (x ~ 1e-5, h ~ 1e-7).
+add_library(blackhole_observer_sky STATIC
+  "${PROJECT_SOURCE_DIR}/src/physics/observer_sky_map.cpp"
+  "${PROJECT_SOURCE_DIR}/src/physics/observer_sky_lut.cpp"
+)
+target_include_directories(blackhole_observer_sky PUBLIC
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/src/physics"
+)
+target_compile_options(blackhole_observer_sky PRIVATE ${PROJECT_WARNINGS})
+find_package(Threads REQUIRED)
+target_link_libraries(blackhole_observer_sky PUBLIC Threads::Threads)
+
+# Builds observer_sky_<hash>.{bin,json} for one observer and prints the
+# measured shadow fraction, blueshift range, and patch size.
+add_executable(observer_sky_lut
+  "${PROJECT_SOURCE_DIR}/src/tools/observer_sky_lut_main.cpp"
+)
+target_link_libraries(observer_sky_lut PRIVATE blackhole_observer_sky)
+target_compile_options(observer_sky_lut PRIVATE ${PROJECT_WARNINGS})
 
 # Deterministic turn-based campaign state (src/game/). GL-free by
 # construction: no glbinding, imgui, or glfw anywhere in this link set.
@@ -3851,6 +3888,7 @@ if(BUILD_TESTING)
     )
     target_link_libraries(blackhole_testcore PUBLIC
       blackhole_campaign
+      blackhole_observer_sky
       HighFive::HighFive
       imgui::imgui
       imguizmo::imguizmo
@@ -3907,6 +3945,20 @@ if(BUILD_TESTING)
     set_tests_properties(compare_sweep_state PROPERTIES LABELS "render;unit" TIMEOUT 30)
     if(SANITIZER_TEST_ENV)
       set_tests_properties(compare_sweep_state PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
+  # Observer-sky scene CPU side: observer clock, sky phase, camera geometry,
+  # and the committed blackbody table (read relative to the source root).
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/observer_sky_view_test.cpp")
+    add_executable(observer_sky_view_test "${PROJECT_SOURCE_DIR}/tests/observer_sky_view_test.cpp")
+    target_link_libraries(observer_sky_view_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(observer_sky_view_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME observer_sky_view_state COMMAND observer_sky_view_test
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    set_tests_properties(observer_sky_view_state PROPERTIES LABELS "render;unit;observer-sky" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(observer_sky_view_state PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
     endif()
   endif()
 
@@ -4393,6 +4445,26 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(kerr_observer_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # The sky of an equatorial Kerr observer against special relativity,
+  # Synge's shadow, and the Opatrny-Richterek-Bakala orbits (arXiv:1601.02897).
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/observer_sky_map_test.cpp")
+    add_executable(observer_sky_map_test
+      "${PROJECT_SOURCE_DIR}/tests/observer_sky_map_test.cpp"
+    )
+    target_compile_options(observer_sky_map_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(observer_sky_map_test PRIVATE blackhole_observer_sky GTest::gtest_main)
+    add_test(NAME observer_sky_map_validation COMMAND observer_sky_map_test)
+    set_tests_properties(observer_sky_map_validation PROPERTIES
+      LABELS "physics;kerr;observer-sky"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(observer_sky_map_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
@@ -7026,11 +7098,14 @@ endif()
 # campaign libraries, the sims, and the campaign tests (which inline
 # campaign_sim_lines.h) get IEEE semantics with contraction off. The desktop
 # executables and blackhole_testcore also link blackhole_campaign but compute
-# no digest, so they keep the preset's floating-point mode. The options append
+# no digest, so they keep the preset's floating-point mode. The observer-sky
+# library, its LUT tool, and its test join the list because the deficit-form
+# Kerr potentials keep their digits only under IEEE evaluation. The options append
 # after each target's own, so -ffp-contract=off follows -fno-fast-math and
 # refines IEEE mode instead of overriding a global -ffast-math.
 set(_bh_deterministic_fp_targets
-  blackhole_physics blackhole_campaign campaign_sim constellation_sim)
+  blackhole_physics blackhole_campaign campaign_sim constellation_sim
+  blackhole_observer_sky observer_sky_lut observer_sky_map_test)
 get_property(_bh_all_targets DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
 foreach(_bh_target IN LISTS _bh_all_targets)
   if(_bh_target MATCHES "^(campaign_.*|constellation|blackhole_time_field|kerr_time_field|kerr_observer|balance_sweep)_test$"

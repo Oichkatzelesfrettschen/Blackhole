@@ -61,6 +61,23 @@ void advanceComparePresetSweep(RenderState &rs, InputManager &input, bool comput
  *         then. */
 void restoreCompareSweepState(RenderState &rs, InputManager &input);
 
+/**
+ * @brief Ends any compare sweep at once and puts the saved camera back.
+ *
+ * The sweep drives the black-hole integrator only; main calls this on every
+ * frame another scene renders, so a sweep armed or running when the scene
+ * changes stops, its preset camera and spin give way to the saved live ones,
+ * and no pending restore or snapshot survives into a later black-hole frame.
+ * No-op when no sweep is armed and nothing is saved.
+ */
+void cancelComparePresetSweep(RenderState &rs, InputManager &input);
+
+/**
+ * @brief The frame's sweep step for the active scene: advanceComparePresetSweep
+ *        in the black-hole scene, cancelComparePresetSweep in any other.
+ */
+void updateComparePresetSweep(RenderState &rs, InputManager &input, bool computeShadersAvailable);
+
 /** @brief Runs the compute-vs-fragment parity diff for the current frame: on the
  *         auto-capture stride it flags a snapshot, samples the strided texture
  *         diff, and on a flagged snapshot reads both parity targets, computes

@@ -81,6 +81,24 @@ void restoreCompareSweepState(RenderState &rs, InputManager &input) {
   }
 }
 
+void cancelComparePresetSweep(RenderState &rs, InputManager &input) {
+  const bool restore = rs.compare.comparePresetSaved;
+  rs.compare.comparePresetSweep = false;
+  rs.compare.comparePresetIndex = 0;
+  rs.compare.comparePresetFrameCounter = 0;
+  rs.compare.captureCompareSnapshot = false;
+  rs.compare.compareRestorePending = restore;
+  restoreCompareSweepState(rs, input);
+}
+
+void updateComparePresetSweep(RenderState &rs, InputManager &input, bool computeShadersAvailable) {
+  if (rs.scene.mode == RenderState::SceneMode::Blackhole) {
+    advanceComparePresetSweep(rs, input, computeShadersAvailable);
+  } else {
+    cancelComparePresetSweep(rs, input);
+  }
+}
+
 void captureCompareParity(RenderState &rs, const CompareParityInputs &in) {
   if (!in.compareActive || in.fragmentTarget == 0 || in.computeTarget == 0) {
     rs.compare.compareStats.valid = false;

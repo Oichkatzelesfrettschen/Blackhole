@@ -162,3 +162,9 @@ assets/fonts/spline-sans-mono/*.ttf
 # from the 4K LFS source at build time (ImageMagick). The map falls back to a
 # procedural starfield when the ladder is absent.
 assets/backgrounds/generated/
+
+# Observer-sky lookup bundles (19 MB each at the default size), content-addressed by observer and
+# trace settings; the renderer and observer_sky_lut regenerate them on demand.
+assets/luts/observer_sky_*.bin
+assets/luts/observer_sky_*.bin.partial
+assets/luts/observer_sky_*.json

@@ -1,0 +1,17 @@
+{
+  "table": "blackbody_cie_lut.csv",
+  "rows": 1101,
+  "log10_T_min": 0.0,
+  "log10_T_step": 0.01,
+  "columns": {
+    "r,g,b": "linear sRGB (D65) of B_lambda(T), unit Rec. 709 luminance, negatives clipped, held at log10 T = 2.9 below it",
+    "log10_Y": "log10 photopic luminance 683 * int B_lambda ybar dlambda [cd/m^2]"
+  },
+  "cmf": "Wyman, Sloan & Shirley 2013 (JCGT 2(2)) multi-lobe fit to CIE 1931 2-degree",
+  "wavelength_nm": [
+    360.0,
+    830.0,
+    0.5
+  ],
+  "generator": "scripts/generate_blackbody_cie_lut.py"
+}
