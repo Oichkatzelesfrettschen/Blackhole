@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 
@@ -15,7 +16,9 @@
 #include "game/campaign_view.h"
 #include "game/event.h"
 #include "game/event_loader.h"
+#include "game/observer.h"
 #include "game/station_node.h"
+#include "game/time_field.h"
 
 namespace {
 
@@ -100,4 +103,35 @@ TEST(ColonyOutcome, TechTierIsAVictoryAxis) {
   EXPECT_EQ(state.status(), game::CampaignStatus::Won);
   EXPECT_EQ(state.clearedTurn(), 8);
   EXPECT_EQ(state.renderSnapshot().colonyTechTier, 2);
+}
+
+namespace {
+
+/** @brief A field whose inner band runs at 1e-16, below the 2^-49 Q48 floor. */
+class StoppedClockField final : public game::TimeField {
+public:
+  [[nodiscard]] double properTimeRate(double radiusCm, game::Observer /*observer*/) const override {
+    return radiusCm < 970.0 ? 1e-16 : 1.0;
+  }
+  [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override {
+    return std::fabs(toRadiusCm - fromRadiusCm);
+  }
+  [[nodiscard]] bool isValidStationRadius(double radiusCm) const override {
+    return std::isfinite(radiusCm) && radiusCm > 1.0;
+  }
+};
+
+} // namespace
+
+// Falsifier: a colony whose clock would quantize to zero accepted as a
+// station that never ages, instead of the configuration being refused.
+TEST(ColonyOutcome, StationBelowTheClockFloorIsRefused) {
+  const StoppedClockField field;
+  game::CampaignConfig config = campaign_test::fakeConfig();
+  game::ColonyConfig colony;
+  colony.bandIndex = 0; // radius 960, rate 1e-16
+  config.colonies = {colony};
+  EXPECT_FALSE(game::CampaignState(config, field).valid());
+  config.colonies.front().bandIndex = 1;
+  EXPECT_TRUE(game::CampaignState(config, field).valid());
 }

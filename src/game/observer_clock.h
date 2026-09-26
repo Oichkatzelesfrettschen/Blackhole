@@ -40,6 +40,8 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <optional>
 
 namespace game {
 
@@ -75,7 +77,9 @@ struct WideProduct {
 }
 
 /** @brief rateQ = llround(rate * 2^48) for a rate in (0, 1]. ldexp is exact,
- *         so the only rounding is the final llround. */
+ *         so the only rounding is the final llround. A rate below 2^-49
+ *         quantizes to 0, a stopped clock: callers building a station reject
+ *         rateQ == 0 (CampaignState refuses the config). */
 [[nodiscard]] inline std::uint64_t quantizeClockRate(double rate) {
   assert(std::isfinite(rate) && rate > 0.0 && rate <= 1.0);
   return static_cast<std::uint64_t>(std::llround(std::ldexp(rate, K_CLOCK_FRACTION_BITS)));
@@ -115,19 +119,30 @@ struct ClockIncrement {
 }
 
 /** @brief Closed form of `turns` single-turn advances from zero:
- *         divmod(turns * rateQ * secondsPerTurn, 2^48). Requires the result to
- *         fit the int64 second counter. */
-[[nodiscard]] constexpr ClockReading clockReadingAfter(std::uint64_t rateQ,
-                                                       std::uint64_t secondsPerTurn,
-                                                       std::uint64_t turns) {
+ *         divmod(turns * rateQ * secondsPerTurn, 2^48); nullopt when the
+ *         whole seconds would not fit the int64 second counter. */
+[[nodiscard]] constexpr std::optional<ClockReading>
+clockReadingAfter(std::uint64_t rateQ, std::uint64_t secondsPerTurn, std::uint64_t turns) {
   const ClockIncrement increment = clockIncrement(rateQ, secondsPerTurn);
   // turns * increment = turns * wholeSec * 2^48 + turns * fractionQ; the second
   // term is up to 111 bits and carries its own whole seconds.
   const WideProduct fractionSum = multiplyWide(turns, increment.fractionQ);
   const std::uint64_t carrySec = (fractionSum.high << (64 - K_CLOCK_FRACTION_BITS)) |
                                  (fractionSum.low >> K_CLOCK_FRACTION_BITS);
+  // The whole-second carry of turns * fractionQ is below 2^63 exactly when its
+  // 128-bit product is below 2^111.
+  if ((fractionSum.high >> (K_CLOCK_FRACTION_BITS - 1)) != 0) {
+    return std::nullopt;
+  }
+  std::uint64_t wholeSec = 0;
+  std::uint64_t totalSec = 0;
+  if (__builtin_mul_overflow(turns, increment.wholeSec, &wholeSec) ||
+      __builtin_add_overflow(wholeSec, carrySec, &totalSec) ||
+      totalSec > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+    return std::nullopt;
+  }
   ClockReading reading;
-  reading.properSec = static_cast<std::int64_t>((turns * increment.wholeSec) + carrySec);
+  reading.properSec = static_cast<std::int64_t>(totalSec);
   reading.fractionQ = fractionSum.low & K_CLOCK_FRACTION_MASK;
   return reading;
 }

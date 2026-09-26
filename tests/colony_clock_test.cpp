@@ -9,6 +9,8 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <optional>
 
 #include "game/kerr_time_field.h"
 #include "game/observer.h"
@@ -38,6 +40,15 @@ double readingMinus(const game::ClockReading &reading, double valueSec) {
   const auto whole = static_cast<double>(reading.properSec);
   return (whole - valueSec) +
          std::ldexp(static_cast<double>(reading.fractionQ), -game::K_CLOCK_FRACTION_BITS);
+}
+
+/** @brief The closed form, which must exist for every turn count tested. */
+game::ClockReading closedForm(std::uint64_t rateQ, std::uint64_t secondsPerTurn,
+                              std::uint64_t turns) {
+  const std::optional<game::ClockReading> reading =
+      game::clockReadingAfter(rateQ, secondsPerTurn, turns);
+  EXPECT_TRUE(reading.has_value()) << "turns " << turns;
+  return reading.value_or(game::ClockReading{.properSec = -1, .fractionQ = 0});
 }
 
 } // namespace
@@ -89,7 +100,7 @@ TEST(ColonyClock, SteppedClockEqualsClosedFormExactly) {
     for (std::uint64_t turn = 1; turn <= turns; ++turn) {
       clock.advance();
       if (turn % 997 == 0 || turn == turns) {
-        ASSERT_EQ(clock.reading(), game::clockReadingAfter(rateQ, K_DAY_SEC, turn))
+        ASSERT_EQ(clock.reading(), closedForm(rateQ, K_DAY_SEC, turn))
             << "rate " << rate << " turn " << turn;
       }
     }
@@ -102,7 +113,7 @@ TEST(ColonyClock, ErrorAgainstDoubleFormWithinQuantizationBound) {
   const double rate = millerRate();
   const std::uint64_t rateQ = game::quantizeClockRate(rate);
   for (const std::uint64_t turns : {1ULL, 1000ULL, 1000000ULL, 1000000000ULL}) {
-    const game::ClockReading reading = game::clockReadingAfter(rateQ, K_DAY_SEC, turns);
+    const game::ClockReading reading = closedForm(rateQ, K_DAY_SEC, turns);
     const double exactDouble = static_cast<double>(turns) * static_cast<double>(K_DAY_SEC) * rate;
     const double bound = static_cast<double>(turns) * static_cast<double>(K_DAY_SEC) *
                          std::ldexp(1.0, -49);
@@ -121,21 +132,21 @@ TEST(ColonyClock, CarryHoldsAcrossBillionTurns) {
   for (const double rate : {millerRate(), 0.985}) {
     const std::uint64_t rateQ = game::quantizeClockRate(rate);
     constexpr std::uint64_t base = 1000000000ULL;
-    const game::ClockReading atBase = game::clockReadingAfter(rateQ, K_DAY_SEC, base);
+    const game::ClockReading atBase = closedForm(rateQ, K_DAY_SEC, base);
     game::ObserverClock clock(rateQ, K_DAY_SEC, 3600, atBase);
     for (std::uint64_t step = 1; step <= 5000; ++step) {
       clock.advance();
     }
-    EXPECT_EQ(clock.reading(), game::clockReadingAfter(rateQ, K_DAY_SEC, base + 5000));
+    EXPECT_EQ(clock.reading(), closedForm(rateQ, K_DAY_SEC, base + 5000));
 
     constexpr std::uint64_t extra = 700000013ULL;
-    const game::ClockReading tail = game::clockReadingAfter(rateQ, K_DAY_SEC, extra);
+    const game::ClockReading tail = closedForm(rateQ, K_DAY_SEC, extra);
     const std::uint64_t fraction = atBase.fractionQ + tail.fractionQ;
     game::ClockReading composed;
     composed.properSec = atBase.properSec + tail.properSec +
                          static_cast<std::int64_t>(fraction >> game::K_CLOCK_FRACTION_BITS);
     composed.fractionQ = fraction & game::K_CLOCK_FRACTION_MASK;
-    EXPECT_EQ(composed, game::clockReadingAfter(rateQ, K_DAY_SEC, base + extra));
+    EXPECT_EQ(composed, closedForm(rateQ, K_DAY_SEC, base + extra));
   }
 }
 
@@ -157,8 +168,8 @@ TEST(ColonyClock, LocalTicksFireOnCrossings) {
   EXPECT_EQ(fired, clock.ticks());
   EXPECT_EQ(clock.ticks(), clock.properSec() / 3600);
   // The first local hour on Miller's orbit takes 3600 / 1.4071 = 2558.5 turns.
-  EXPECT_EQ(game::clockReadingAfter(rateQ, K_DAY_SEC, firstTickTurn - 1).properSec / 3600, 0);
-  EXPECT_EQ(game::clockReadingAfter(rateQ, K_DAY_SEC, firstTickTurn).properSec / 3600, 1);
+  EXPECT_EQ(closedForm(rateQ, K_DAY_SEC, firstTickTurn - 1).properSec / 3600, 0);
+  EXPECT_EQ(closedForm(rateQ, K_DAY_SEC, firstTickTurn).properSec / 3600, 1);
   EXPECT_NEAR(static_cast<double>(firstTickTurn), 2559.0, 1.0);
 
   // A shallow clock with short ticks crosses several per turn.
@@ -173,4 +184,17 @@ TEST(ColonyClock, TurnLengthMustBeWholeSecondsBelowTwoToThe32) {
   EXPECT_FALSE(game::isClockTurnLength(0.0));
   EXPECT_FALSE(game::isClockTurnLength(std::ldexp(1.0, 32)));
   EXPECT_FALSE(game::isClockTurnLength(std::nan("")));
+}
+
+// Falsifier: a closed form whose whole seconds overflow the int64 counter
+// returned as a (wrapped) value, or the last representable count refused.
+TEST(ColonyClock, ClosedFormRefusesCounterOverflow) {
+  const std::uint64_t unit = game::K_CLOCK_ONE;
+  constexpr std::uint64_t maxTurnSec = game::K_CLOCK_MAX_SECONDS_PER_TURN - 1;
+  const auto limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+  EXPECT_TRUE(game::clockReadingAfter(unit, maxTurnSec, limit / maxTurnSec).has_value());
+  EXPECT_FALSE(game::clockReadingAfter(unit, maxTurnSec, (limit / maxTurnSec) + 1).has_value());
+  EXPECT_FALSE(game::clockReadingAfter(unit, K_DAY_SEC, ~0ULL).has_value());
+  // A rate below 2^-49 is a stopped clock.
+  EXPECT_EQ(game::quantizeClockRate(std::ldexp(1.0, -50)), 0U);
 }

@@ -155,11 +155,17 @@ void CampaignState::buildNodes() {
     if (rate <= 0.0 || rate > 1.0 || !std::isfinite(rate) || tickSec <= 0) {
       return std::nullopt;
     }
+    // A rate below 2^-49 quantizes to a stopped clock; such a station is
+    // refused rather than frozen.
+    const std::uint64_t rateQ = quantizeClockRate(rate);
+    if (rateQ == 0) {
+      return std::nullopt;
+    }
     StationNode node;
     node.id = id;
     node.radiusCm = radiusCm;
     node.observer = observer;
-    node.clock = ObserverClock(quantizeClockRate(rate), secondsPerTurn, tickSec);
+    node.clock = ObserverClock(rateQ, secondsPerTurn, tickSec);
     return node;
   };
   const std::optional<StationNode> host =
