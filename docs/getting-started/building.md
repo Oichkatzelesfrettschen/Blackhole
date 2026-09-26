@@ -97,7 +97,9 @@ git lfs install
 git clone https://github.com/Oichkatzelesfrettschen/Blackhole.git
 cd Blackhole
 
-# 2. Install dependencies (uses repo-local Conan cache)
+# 2. Install dependencies (uses repo-local Conan cache; a linked worktree
+#    reuses the primary checkout's cache via
+#    export BLACKHOLE_CONAN_HOME=/path/to/primary/Blackhole/.conan)
 ./scripts/conan_install.sh Release build
 ./scripts/fetch_implot.sh
 
