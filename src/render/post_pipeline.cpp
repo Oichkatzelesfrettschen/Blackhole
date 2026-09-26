@@ -19,7 +19,25 @@ using ui::renderTonemapPanel;
 
 namespace blackhole {
 
-GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input) {
+RenderToTextureInfo tonemapPass(const RenderState &rs, double contentSeconds) {
+  RenderToTextureInfo rtti;
+  rtti.fragShader = "shader/tonemapping.frag";
+  rtti.textureUniforms["texture0"] = rs.targets.texBloomFinal;
+  rtti.targetTexture = rs.targets.texTonemapped;
+  rtti.width = rs.targets.renderWidth;
+  rtti.height = rs.targets.renderHeight;
+  // renderToTexture sets "time" from the wall clock first; this entry wins.
+  rtti.floatUniforms["time"] = static_cast<float>(contentSeconds);
+  rtti.floatUniforms["tonemappingEnabled"] = rs.post.tonemappingEnabled ? 1.0f : 0.0f;
+  rtti.floatUniforms["exposure"] = rs.post.toneExposure;
+  rtti.floatUniforms["gamma"] = rs.post.gamma;
+  rtti.floatUniforms["chromaticAberrationStrength"] = rs.post.tonemapChromaticAberrationStrength;
+  rtti.floatUniforms["vignetteStrength"] = rs.post.tonemapVignetteStrength;
+  rtti.floatUniforms["filmGrainStrength"] = rs.post.tonemapFilmGrainStrength;
+  return rtti;
+}
+
+GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input, double contentSeconds) {
   // Bound texture indexing and mip-level shifts for every caller.
   const int bloomIterations = std::clamp(rs.post.bloomIterations, 1, K_MAX_BLOOM_ITERATIONS);
   if (rs.timing.gpuTimers.initialized) {
@@ -105,23 +123,10 @@ GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input) {
   }
   {
     ZONE_SCOPED_N("Tonemap");
-    RenderToTextureInfo rtti;
-    rtti.fragShader = "shader/tonemapping.frag";
-    rtti.textureUniforms["texture0"] = rs.targets.texBloomFinal;
-    rtti.targetTexture = rs.targets.texTonemapped;
-    rtti.width = rs.targets.renderWidth;
-    rtti.height = rs.targets.renderHeight;
-
     if (input.isUIVisible()) {
       renderTonemapPanel(rs);
     }
-    rtti.floatUniforms["tonemappingEnabled"] = rs.post.tonemappingEnabled ? 1.0f : 0.0f;
-    rtti.floatUniforms["exposure"] = rs.post.toneExposure;
-    rtti.floatUniforms["gamma"] = rs.post.gamma;
-    rtti.floatUniforms["chromaticAberrationStrength"] = rs.post.tonemapChromaticAberrationStrength;
-    rtti.floatUniforms["vignetteStrength"] = rs.post.tonemapVignetteStrength;
-    rtti.floatUniforms["filmGrainStrength"] = rs.post.tonemapFilmGrainStrength;
-
+    const RenderToTextureInfo rtti = tonemapPass(rs, contentSeconds);
     renderToTexture(rtti);
   }
   if (rs.timing.gpuTimers.initialized) {
@@ -150,6 +155,7 @@ GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input) {
     rtti.targetTexture = rs.targets.texDepthEffects;
     rtti.width = rs.targets.renderWidth;
     rtti.height = rs.targets.renderHeight;
+    rtti.floatUniforms["time"] = static_cast<float>(contentSeconds);
     rtti.floatUniforms["depthEffectsEnabled"] = 1.0f;
     rtti.floatUniforms["fogEnabled"] = rs.depthFx.fogEnabled ? 1.0f : 0.0f;
     rtti.floatUniforms["fogDensity"] = rs.depthFx.fogDensity;

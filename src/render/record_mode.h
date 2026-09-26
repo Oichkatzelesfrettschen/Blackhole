@@ -84,6 +84,26 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli);
 void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli);
 
 /**
+ * @brief Output time of the frame being recorded, or std::nullopt.
+ *
+ * Under --record-frames the frame at index recordFrameIndex shows output time
+ * recordFrameIndex / K_CINEMATIC_FPS seconds; interactive runs return
+ * std::nullopt.
+ */
+std::optional<double> recordOutputSeconds(const platform::CliOptions &cli, int recordFrameIndex);
+
+/**
+ * @brief Content time of one frame in seconds: what time-driven shading reads.
+ *
+ * Recorded frames take recordOutputSeconds, so the film grain, disk and sky
+ * rotation, background drift, and depth-cue motion of a frame depend on its
+ * index alone and two runs, or a --start-frame resume, write identical
+ * frames. Interactive frames take @p wallSeconds.
+ */
+double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex,
+                           double wallSeconds);
+
+/**
  * @brief Why the requested exports cannot run in @p scene, or std::nullopt.
  *
  * --export-raw-frame reads the HDR scene target, which the tesseract scene's

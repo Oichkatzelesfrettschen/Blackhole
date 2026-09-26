@@ -274,6 +274,8 @@ using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::captureRecordFrame;
 using blackhole::exportFrameOnce;
 using blackhole::findShowcaseOrbitComposition;
+using blackhole::frameContentSeconds;
+using blackhole::recordOutputSeconds;
 using blackhole::ShowcaseOrbitComposition;
 #if BLACKHOLE_HAS_CUDA
 using blackhole::bindCudaLaunchParams;
@@ -1186,11 +1188,10 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
     // frames depend on their index alone, not on render throughput, and
     // frames the scene with the camera applyRecordCameraPath set.
     std::optional<TesseractRecordFrame> record;
-    if (!cli.recordFramesDir.empty()) {
+    if (const auto outputSeconds = recordOutputSeconds(cli, rs.recording.recordFrameIndex)) {
       const auto &recordCamera = input.camera();
       record = TesseractRecordFrame{
-          .outputClockSeconds = static_cast<double>(rs.recording.recordFrameIndex) /
-                                static_cast<double>(K_CINEMATIC_FPS),
+          .outputClockSeconds = *outputSeconds,
           .camera = {.distance = recordCamera.distance, .fovDeg = recordCamera.fov}};
     }
     if (rs.timing.gpuTimers.initialized) {
@@ -1458,10 +1459,13 @@ int main(int argc, char **argv) {
       ZONE_SCOPED_N("Frame");
       // ...
       // Calculate delta time
-      double const currentTime = glfwGetTime();
+      double const wallTime = glfwGetTime();
+      auto const deltaTime = static_cast<float>(wallTime - lastTime);
+      lastTime = wallTime;
+      // Time-driven shading reads content time: the record output clock
+      // under --record-frames, the wall clock otherwise.
+      double const currentTime = frameContentSeconds(cli, rs.recording.recordFrameIndex, wallTime);
       auto const frameTime = static_cast<float>(currentTime);
-      auto const deltaTime = static_cast<float>(currentTime - lastTime);
-      lastTime = currentTime;
       const float cpuFrameMs = deltaTime * 1000.0f;
 
       glfwPollEvents();
@@ -1568,7 +1572,7 @@ int main(int argc, char **argv) {
       const bool grmhdReady = blackholeFrame.grmhdReady;
       const bool computeActiveForLog = blackholeFrame.computeActiveForLog;
 
-      GLuint const finalTexture = runPostProcessPipeline(rs, input);
+      GLuint const finalTexture = runPostProcessPipeline(rs, input, currentTime);
 
       // Re-open Viewport to render the scene image
       ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));

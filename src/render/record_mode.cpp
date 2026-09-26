@@ -401,6 +401,18 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
   rs.recording.recordCinematic = static_cast<float>(rs.recording.recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS);
 }
 
+std::optional<double> recordOutputSeconds(const platform::CliOptions &cli, int recordFrameIndex) {
+  if (cli.recordFramesDir.empty()) {
+    return std::nullopt;
+  }
+  return static_cast<double>(recordFrameIndex) / static_cast<double>(K_CINEMATIC_FPS);
+}
+
+double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex,
+                           double wallSeconds) {
+  return recordOutputSeconds(cli, recordFrameIndex).value_or(wallSeconds);
+}
+
 std::optional<std::string> exportConflictForScene(const platform::CliOptions &cli,
                                                   RenderState::SceneMode scene) {
   if (!cli.exportRawFramePath.empty() && scene == RenderState::SceneMode::Tesseract) {
