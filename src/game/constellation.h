@@ -289,11 +289,16 @@ private:
   [[nodiscard]] std::vector<ConstellationCommand> contesterOrders(const FactionState &faction) const;
   /** @brief A fleet the faction believes can take a fresh order now: known to
    *         it, not in transit as last reported, and with no order in flight. */
-  [[nodiscard]] bool fleetAvailable(const FleetBelief &known) const;
-  /** @brief True when an order to this fleet has an effect turn later than the
-   *         last status the owner holds: the authority has not yet heard the
-   *         order's outcome, so a policy does not stack another behind it. */
-  [[nodiscard]] bool hasCommandInFlight(const FleetBelief &known) const;
+  [[nodiscard]] bool fleetAvailable(std::size_t factionIndexValue, const FleetBelief &known) const;
+  /** @brief True when an order to this fleet is still pending: the authority
+   *         has heard neither a status report sent at or after the order's
+   *         effect turn nor the order's non-delivery notice, so a policy does
+   *         not stack another behind it. */
+  [[nodiscard]] bool hasCommandInFlight(std::size_t factionIndexValue, FleetId fleet) const;
+  /** @brief The order a faction last issued to `fleet` that is still pending,
+   *         or null. */
+  [[nodiscard]] const LoggedCommand *latestPendingCommand(std::size_t factionIndexValue,
+                                                          FleetId fleet) const;
   /** @brief True when, as the faction last learned, one of its fleets holds
    *         (system, bandIndex) or is in transit to that slot, or an order it
    *         has not yet heard answered is sending a fleet there. */
@@ -320,6 +325,11 @@ private:
   std::vector<TurnCredit> turnCredits_;
   std::vector<CreditSite> lastStabilizationSite_;
   std::vector<CreditSite> lastControlSite_;
+  // pendingCommands_[factionIndex]: indices into commandLog_ of that
+  // faction's orders it has not yet heard answered, ascending. An entry leaves
+  // when a status report sent at or after its effect turn, or its
+  // non-delivery notice, reaches the authority.
+  std::vector<std::vector<std::uint32_t>> pendingCommands_;
   // ownBelief_[factionIndex]: that faction's record of its own fleets, in
   // ascending fleet id, updated only by FleetStatus deliveries.
   std::vector<std::vector<FleetBelief>> ownBelief_;

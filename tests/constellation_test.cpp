@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "game/campaign_view.h"
 #include "game/constellation.h"
@@ -370,10 +371,17 @@ TEST(Constellation, OwnFleetStateArrivesOnlyByReport) {
   }
   // The fleet has moved and spent its fuel; its authority still holds the old
   // report, so a second hop it believes affordable is accepted at issue.
+  // (Repeating the pending hop would be refused as a no-op; this one changes
+  // lane.)
   ASSERT_EQ(constellation.fleets().front().bandIndex, 1);
   ASSERT_DOUBLE_EQ(constellation.fleets().front().fuelUnits, 0.0);
   EXPECT_EQ(constellation.renderSnapshot().fleets.front().bandIndex, 0);
-  EXPECT_TRUE(constellation.issueCommand(alpha, toOuter));
+  EXPECT_FALSE(constellation.issueCommand(alpha, toOuter));
+  EXPECT_TRUE(constellation.issueCommand(
+      alpha, game::ConstellationCommand{.fleet = remote,
+                                        .targetSystem = 1,
+                                        .targetBand = 1,
+                                        .lane = game::OrbitLane::Retrograde}));
 
   while (constellation.turn() < reportArrives) {
     constellation.advanceTurn();
@@ -579,4 +587,26 @@ TEST(Constellation, SnapshotShowsThePlayersOutcomeOnlyOnceKnown) {
   const game::ConstellationViewSnapshot after = constellation.renderSnapshot();
   EXPECT_EQ(after.overallStatus, game::CampaignStatus::Lost);
   EXPECT_EQ(after.winner, rival);
+}
+
+// Falsifier: an order that would leave a fleet where it is already bound --
+// its reported slot with no order pending, or the target of its pending
+// order -- entering the log, or a link of zero separation (a zero-delay
+// channel) being accepted.
+TEST(Constellation, NoOpOrdersAndZeroLinksAreRefused) {
+  game::Constellation constellation(microConfig());
+  const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  const game::FleetId fleet = constellation.addFleet(alpha, 0, game::FleetCapability::Research, 0);
+  const game::ConstellationCommand stay{.fleet = fleet, .targetSystem = 0, .targetBand = 0};
+  const game::ConstellationCommand hop{.fleet = fleet, .targetSystem = 0, .targetBand = 1};
+  const std::vector<std::uint8_t> before = constellation.serializeState();
+  EXPECT_FALSE(constellation.issueCommand(alpha, stay));
+  EXPECT_EQ(constellation.serializeState(), before);
+  EXPECT_TRUE(constellation.issueCommand(alpha, hop));
+  EXPECT_FALSE(constellation.issueCommand(alpha, hop)); // duplicates the pending order
+  EXPECT_TRUE(constellation.issueCommand(alpha, stay)); // countermands it
+
+  game::ConstellationConfig zeroLink = microTwoSystemConfig();
+  zeroLink.links.front().separationCm = 0.0;
+  EXPECT_FALSE(game::Constellation(zeroLink).valid());
 }

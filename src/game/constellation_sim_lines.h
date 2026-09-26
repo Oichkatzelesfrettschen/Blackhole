@@ -66,8 +66,10 @@ inline std::vector<game::FleetId> factionFleetIds(const game::Constellation &con
   return ids;
 }
 
-// The player's move for one turn under a given line. Orders are idempotent enough
-// that re-issuing a satisfied goal simply fails the in-flight/placement guards.
+// The player's move for one turn under a given line. Every call re-states the
+// line's goal; issueCommand refuses an order that would leave a fleet where it
+// is already bound (its reported slot or its pending order's target), so a
+// satisfied goal adds nothing to the log.
 inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
   const game::Constellation &constellation = session.constellation();
   const game::FactionId player = session.player();

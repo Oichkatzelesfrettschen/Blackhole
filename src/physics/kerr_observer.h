@@ -98,7 +98,9 @@ struct EquatorialFrame {
 struct CircularOrbit {
   bool exists = false;          ///< Timelike: outside the photon orbit of this sense.
   double properTimeRate = 0.0;  ///< dtau/dt = 1 / u^t.
-  double angularVelocity = 0.0; ///< Omega = dphi/dt, signed (+ with the hole's rotation).
+  /// Omega = dphi/dt, signed: positive along +phi, the rotation sense of a
+  /// spin a = 1 - epsilon > 0 (for epsilon > 1 the hole turns toward -phi).
+  double angularVelocity = 0.0;
   double zamoVelocity = 0.0;    ///< Azimuthal speed measured by the local ZAMO, signed.
 };
 
@@ -310,7 +312,9 @@ struct Tetrad {
   return -frame.omega * frame.varpi / frame.alpha;
 }
 
-/** @brief Conserved quantities of a photon leaving an observer. */
+/** @brief Conserved quantities of a photon at an observer's event, fixed by
+ *         its propagation direction there; they do not depend on whether the
+ *         observer emits or receives it. */
 struct PhotonConstants {
   double energy = 0.0;          ///< E = -p_t with the observer-measured energy set to 1.
   double angularMomentum = 0.0; ///< L = p_phi.
@@ -318,18 +322,22 @@ struct PhotonConstants {
   bool fromInfinity = false;    ///< E > 0: the ray can connect to infinity.
   double lambda = 0.0;          ///< L / E; meaningful only when fromInfinity.
   double eta = 0.0; ///< Carter Q / E^2 = p_theta^2 / E^2 at the equator; only when fromInfinity.
-  double g = 0.0;   ///< 1 / E = observed-to-infinity frequency ratio; only when fromInfinity.
+  /// 1 / E: the frequency the observer measures over the frequency at
+  /// infinity -- the blueshift of a photon received from infinity, the inverse
+  /// of the redshift of one sent there. Only when fromInfinity.
+  double g = 0.0;
 };
 
 /**
- * @brief Constants of motion of the photon with unit local energy travelling
- *        along unit direction `direction` (components on the tetrad's r,
- *        theta, phi legs).
+ * @brief Constants of motion of the photon, normalized to unit local energy,
+ *        that propagates along unit direction `direction` at the observer
+ *        (components on the tetrad's r, theta, phi legs). A camera looking
+ *        along n receives the photon propagating along -n.
  *
  * The momentum in ZAMO components is P = lorentz[0] + n^i lorentz[i]; then
  * p_phi = varpi P^phi, p_theta = r P^theta, and E = alpha P^t + omega varpi P^phi.
- * E <= 0 happens only inside the ergoregion: such a photon cannot have come
- * from, nor escape to, infinity, and fromInfinity is false.
+ * E <= 0 happens only inside the ergoregion: such a photon connects to
+ * infinity in neither direction, and fromInfinity is false.
  */
 [[nodiscard]] inline PhotonConstants photonConstants(const Tetrad &tetrad, const Vec3 &direction) {
   Vec4 zamo{};
