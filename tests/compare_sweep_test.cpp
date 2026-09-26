@@ -26,6 +26,7 @@ using blackhole::advanceComparePresetSweep;
 using blackhole::K_COMPARE_PRESETS;
 using blackhole::RenderState;
 using blackhole::restoreCompareSweepState;
+using blackhole::updateComparePresetSweep;
 
 namespace {
 
@@ -136,4 +137,23 @@ TEST(CompareSweep, CompletesAndRestores) {
   EXPECT_FLOAT_EQ(input.camera().distance, 42.0f);
   EXPECT_EQ(rs.camera.cameraModeIndex, 2);
   EXPECT_FLOAT_EQ(rs.physicsCore.kerrSpin, 0.44f);
+}
+
+// Leaving the black-hole scene disarms parity auto capture with its count and
+// stride, so returning does not resume a capture the user left behind.
+TEST(CompareSweep, SceneChangeDisarmsAutoCapture) {
+  const auto stateStorage = std::make_unique<RenderState>();
+  RenderState &rs = *stateStorage;
+  InputManager &input = InputManager::instance();
+  rs.compare.compareAutoCapture = true;
+  rs.compare.compareAutoRemaining = 5;
+  rs.compare.compareAutoStrideCounter = 3;
+  rs.scene.mode = RenderState::SceneMode::ObserverSky;
+  updateComparePresetSweep(rs, input, true);
+  EXPECT_FALSE(rs.compare.compareAutoCapture);
+  EXPECT_EQ(rs.compare.compareAutoRemaining, 0);
+  EXPECT_EQ(rs.compare.compareAutoStrideCounter, 0);
+  rs.scene.mode = RenderState::SceneMode::Blackhole;
+  updateComparePresetSweep(rs, input, true);
+  EXPECT_FALSE(rs.compare.compareAutoCapture);
 }
