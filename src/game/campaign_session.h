@@ -29,9 +29,11 @@ enum class CampaignScenario : std::uint8_t {
 };
 
 /** @brief Charter of the Gargantua colony scenario. The colony's clock is its
- *         orbit's; it ships one energy unit per local hour to the host. */
+ *         orbit's; it ships one energy unit per local hour to the host for a
+ *         365-local-day mission and then falls silent. */
 inline constexpr std::int64_t K_COLONY_TICK_SEC = 3600;
 inline constexpr double K_COLONY_ENERGY_PER_TICK = 1.0;
+inline constexpr std::int64_t K_COLONY_MISSION_SEC = 365LL * 86400LL;
 
 class CampaignSession {
 public:

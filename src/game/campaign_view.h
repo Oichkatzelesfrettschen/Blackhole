@@ -111,6 +111,7 @@ struct NodeView {
   bool dark = false;               ///< Silent: emits and receives nothing.
   std::int64_t techPoints = 0;
   std::int64_t techTier = 0;
+  std::int64_t missionProperSec = 0; ///< Colony mission length; 0 = unbounded.
 };
 
 /** @brief A story event's inbox text, looked up by a notice's payload id. */
@@ -155,7 +156,8 @@ struct CampaignViewSnapshot {
   std::vector<OrderInFlightView> ordersInFlight;
   std::vector<ReportInFlightView> reportsInFlight;
   std::vector<IntelView> intel;
-  // Colonies and the story: the highest tech tier any colony holds.
+  // Colonies and the story. The tech axis of the outcome is the highest tier
+  // any colony holds; victoryTechTier (0 = off) wins outright.
   std::vector<NodeView> nodes;              ///< Host at index 0, then colonies.
   std::vector<ArrivalRecord> arrivals;      ///< Node deliveries that have arrived, in order.
   /// Story signals still travelling; arrivalTurn is the quantized effect turn.
@@ -164,6 +166,8 @@ struct CampaignViewSnapshot {
   std::vector<EventTextView> eventTexts;    ///< Story events by id.
   std::vector<TechLevelView> techTiers;     ///< Story tiers by points.
   std::int64_t colonyTechTier = 0;
+  std::int64_t victoryTechTier = 0;
+  double energyLostToDarkness = 0.0;        ///< Production that reached a dark host.
 };
 
 } // namespace game

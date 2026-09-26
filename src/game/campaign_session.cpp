@@ -136,6 +136,7 @@ CampaignConfig colonyConfig(const KerrTimeField &field, std::uint64_t seed, cons
   colony.observer = Observer::CircularOrbitPrograde;
   colony.localTickSec = K_COLONY_TICK_SEC;
   colony.energyPerTick = K_COLONY_ENERGY_PER_TICK;
+  colony.missionProperSec = K_COLONY_MISSION_SEC;
   config.colonies = {colony};
   config.story = story;
   return config;

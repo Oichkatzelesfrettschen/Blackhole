@@ -260,6 +260,11 @@ void CampaignState::deliverDue() {
       applyCommand(commandLog_.at(delivery.commandIndex));
       break;
     case DeliveryKind::CompletionReport: {
+      // A dark host hears nothing: the report and its yield are lost.
+      if (nodes_.front().dark()) {
+        energyLostToDarkness_ += delivery.yieldUnits;
+        break;
+      }
       IntelReport report;
       report.receivedTurn = clock_.turn();
       report.completedTurn = delivery.completedTurn;
@@ -274,7 +279,11 @@ void CampaignState::deliverDue() {
       break;
     }
     case DeliveryKind::ColonyReport:
-      energyUnits_ += delivery.yieldUnits;
+      if (nodes_.front().dark()) {
+        energyLostToDarkness_ += delivery.yieldUnits;
+      } else {
+        energyUnits_ += delivery.yieldUnits;
+      }
       break;
     case DeliveryKind::TechPacket:
     case DeliveryKind::EventNotice:
@@ -427,7 +436,8 @@ void CampaignState::evaluateOutcome() {
       config_.victoryEnergyUnits > 0.0 && energyUnits_ >= config_.victoryEnergyUnits;
   const bool stabilizationWin =
       config_.victoryStabilizationUnits > 0.0 && stabilization_ >= config_.victoryStabilizationUnits;
-  if (energyWin || stabilizationWin) {
+  const bool techWin = config_.victoryTechTier > 0 && colonyTechTier() >= config_.victoryTechTier;
+  if (energyWin || stabilizationWin || techWin) {
     clearedTurn_ = clock_.turn(); // turns-to-clear: the speed axis of the outcome vector.
     status_ = CampaignStatus::Won;
     return;
@@ -604,6 +614,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     nodeView.dark = node.dark();
     nodeView.techPoints = node.techPoints;
     nodeView.techTier = techTier(node.id);
+    nodeView.missionProperSec = node.isColony ? node.colony.missionProperSec : 0;
     view.nodes.push_back(nodeView);
   }
   view.arrivals = arrivals_;
@@ -617,6 +628,8 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
     view.techTiers.push_back({.points = level.points, .name = level.name});
   }
   view.colonyTechTier = colonyTechTier();
+  view.victoryTechTier = config_.victoryTechTier;
+  view.energyLostToDarkness = energyLostToDarkness_;
   return view;
 }
 

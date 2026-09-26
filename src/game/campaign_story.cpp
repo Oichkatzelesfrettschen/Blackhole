@@ -174,7 +174,8 @@ void CampaignState::buildNodes() {
     const ColonyConfig &colony = config_.colonies.at(index);
     if (colony.bandIndex < 0 ||
         static_cast<std::size_t>(colony.bandIndex) >= config_.bandRadiusCm.size() ||
-        !field_->admitsObserver(bandRadiusCm(colony.bandIndex), colony.observer)) {
+        !field_->admitsObserver(bandRadiusCm(colony.bandIndex), colony.observer) ||
+        colony.missionProperSec < 0) {
       valid_ = false;
       return;
     }
@@ -318,11 +319,23 @@ void CampaignState::advanceNodeClocks() {
     if (!node.isColony || node.dark()) {
       continue;
     }
-    // Production runs on the colony's own clock: one shipment per local tick,
-    // aggregated into one report per turn.
-    if (crossed > 0 && node.colony.energyPerTick > 0.0) {
+    // Production runs on the colony's own clock: one shipment per local tick
+    // inside the mission window, aggregated into one report per turn.
+    std::int64_t productive = crossed;
+    if (node.colony.missionProperSec > 0) {
+      const std::int64_t missionTicks = node.colony.missionProperSec / node.clock.localTickSec();
+      const std::int64_t after = node.clock.ticks();
+      productive = std::max<std::int64_t>(
+          0, std::min(after, missionTicks) - std::min(after - crossed, missionTicks));
+    }
+    if (productive > 0 && node.colony.energyPerTick > 0.0) {
       emitNodeDelivery(DeliveryKind::ColonyReport, node, K_AUTHORITY_NODE, EventCategory::Info,
-                       0, 0, static_cast<double>(crossed) * node.colony.energyPerTick);
+                       0, 0, static_cast<double>(productive) * node.colony.energyPerTick);
+    }
+    if (node.colony.missionProperSec > 0 &&
+        node.clock.properSec() >= node.colony.missionProperSec) {
+      // The mission window closes on the colony's clock: it falls silent.
+      node.flags |= flagBit(K_DARK_FLAG);
     }
   }
 }
@@ -466,12 +479,14 @@ void CampaignState::evaluateStory() {
 }
 
 void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
+  appendI64(out, config_.victoryTechTier);
   appendU32(out, static_cast<std::uint32_t>(config_.colonies.size()));
   for (const ColonyConfig &colony : config_.colonies) {
     appendU32(out, static_cast<std::uint32_t>(colony.bandIndex));
     appendU8(out, static_cast<std::uint8_t>(colony.observer));
     appendI64(out, colony.localTickSec);
     appendF64(out, colony.energyPerTick);
+    appendI64(out, colony.missionProperSec);
   }
   appendEventSet(out, config_.story);
   appendU32(out, static_cast<std::uint32_t>(storyParams_.size()));
@@ -520,6 +535,7 @@ void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
     appendU32(out, arrival.payloadIndex);
     appendI64(out, arrival.techPoints);
   }
+  appendF64(out, energyLostToDarkness_);
 }
 
 } // namespace game

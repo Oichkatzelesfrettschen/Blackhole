@@ -4322,6 +4322,32 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Colony outcome axes: mission-window production, a dark host banking
+  # nothing, and the tech tier read as a victory.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_colony_outcome_test.cpp")
+    add_executable(campaign_colony_outcome_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_colony_outcome_test.cpp"
+    )
+    target_include_directories(campaign_colony_outcome_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_options(campaign_colony_outcome_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_colony_outcome_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_colony_outcome_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_colony_outcome_validation COMMAND campaign_colony_outcome_test)
+    set_tests_properties(campaign_colony_outcome_validation PROPERTIES
+      LABELS "campaign;economy;story"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_colony_outcome_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
     add_executable(campaign_task_graph_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"
@@ -4493,6 +4519,8 @@ if(BUILD_TESTING)
     add_executable(balance_sweep_test
       "${PROJECT_SOURCE_DIR}/tests/balance_sweep_test.cpp"
     )
+    target_compile_definitions(balance_sweep_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     target_compile_options(balance_sweep_test PRIVATE ${PROJECT_WARNINGS})
     if(ENABLE_FAST_MATH)
       target_compile_options(balance_sweep_test PRIVATE -fno-fast-math)

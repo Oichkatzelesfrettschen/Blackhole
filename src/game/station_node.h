@@ -7,8 +7,8 @@
  * ObserverClock at its worldline's dtau/dt, its story flags, its counters,
  * and, per sender, the latest arrival it has received: everything a story
  * trigger at that node may read. A colony additionally produces energy on its
- * own clock: every local tick ships a production report to the host, banked
- * when it arrives.
+ * own clock: every local tick of its mission window ships a production report
+ * to the host, banked when it arrives and lost if the host has gone dark.
  */
 
 #ifndef BLACKHOLE_GAME_STATION_NODE_H
@@ -30,6 +30,7 @@ struct ColonyConfig {
   Observer observer = Observer::CircularOrbitPrograde;
   std::int64_t localTickSec = 3600;   ///< Local production shift, in local seconds.
   double energyPerTick = 0.0;         ///< Energy each local tick ships to the host.
+  std::int64_t missionProperSec = 0;  ///< Local mission length; the colony goes dark after it. 0 = unbounded.
 };
 
 /** @brief The latest arrival of each payload kind a node has received from

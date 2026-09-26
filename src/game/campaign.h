@@ -126,9 +126,11 @@ struct CampaignConfig {
 
   // Colonies and the story. Each colony is a node (ids from
   // K_FIRST_COLONY_NODE, in this order) with its own exact clock; the host is
-  // the authority node. The story's events run at those nodes.
+  // the authority node. The story's events run at those nodes. A tech tier is
+  // a scored axis: reaching victoryTechTier at any colony wins outright.
   std::vector<ColonyConfig> colonies;
   EventSet story;
+  std::int64_t victoryTechTier = 0; ///< Tech tier that wins the campaign; 0 = off.
 };
 
 class CampaignState {
@@ -315,6 +317,7 @@ private:
   std::vector<std::uint8_t> eventFired_;      ///< Once-events that have fired, by index.
   std::vector<ScheduledEvent> scheduledEvents_;
   std::vector<ArrivalRecord> arrivals_;
+  double energyLostToDarkness_ = 0.0;         ///< Production that reached a dark host.
 };
 
 } // namespace game

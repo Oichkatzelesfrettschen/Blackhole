@@ -19,6 +19,14 @@
  * The constellation grid is flat along player cadence by construction: each
  * scripted line's goal is fixed from turn 0 and a re-stated goal is refused
  * as a no-op, so cadence changes nothing there.
+ *
+ * The colony sweep is the one exception: it asserts the split it records.
+ * A colony on Miller's orbit (deep) and one on the 100M survey orbit
+ * (shallow) play the host-goes-dark story across packet cadences and the
+ * host's seeded dark turn (the campaign has no rival faction; the host's fate
+ * is the adversarial axis). The scenario sets no victory threshold, so the
+ * sweep compares two raw axes -- the colony's tech tier and the energy banked
+ * at the host -- and asserts that each line leads on one.
  */
 
 #include <gtest/gtest.h>
@@ -26,9 +34,14 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <string>
 
+#include "game/campaign.h"
+#include "game/campaign_session.h"
 #include "game/campaign_sim_lines.h"
 #include "game/campaign_view.h"
+#include "game/event.h"
+#include "game/event_loader.h"
 #include "game/constellation_sim_lines.h"
 #include "game/constellation_types.h"
 
@@ -119,4 +132,79 @@ TEST(BalanceSweep, ConstellationLinesAcrossRivalAndCadence) {
             constellation_sim::runLine(K_SEED, 600, PlayerLine::Contest,
                                        game::FactionPolicy::Contester, 5)
                 .digest);
+}
+
+namespace {
+
+struct ColonyOutcome {
+  std::int64_t techTier = 0;
+  double energyUnits = 0.0;
+  std::int64_t darkTurn = 0;
+  bool frozen = false; ///< Both axes unchanged over 2000 further turns.
+};
+
+/** @brief Plays one colony line past every consequence of the dark turn: the
+ *         last packet's flight plus four cadences. Neither compared axis
+ *         can change afterwards -- the host emits and banks nothing once dark
+ *         -- which `frozen` checks rather than assumes. */
+ColonyOutcome runColonyLine(const game::EventSet &story, std::uint64_t seed, int colonyBand) {
+  game::CampaignSession session(seed, story, colonyBand);
+  game::CampaignState &state = session.state();
+  EXPECT_TRUE(state.valid());
+  ColonyOutcome outcome;
+  outcome.darkTurn = state.storyParam("dark_turn").value_or(0);
+  const std::int64_t period = state.storyParam("packet_period").value_or(0);
+  EXPECT_GT(outcome.darkTurn, 0);
+  EXPECT_GT(period, 0);
+  state.advanceTurns(outcome.darkTurn + state.nodeDelayTurns(0, 1) + (4 * period) + 60);
+  outcome.techTier = state.colonyTechTier();
+  outcome.energyUnits = state.energyUnits();
+  state.advanceTurns(2000);
+  outcome.frozen =
+      outcome.techTier == state.colonyTechTier() && outcome.energyUnits == state.energyUnits();
+  return outcome;
+}
+
+} // namespace
+
+// Falsifier: in any cell of packet cadence {30, 91, 182, 365} turns x host
+// seed 1..6, the deep colony failing to reach a strictly higher tech tier
+// than the shallow one, the shallow colony failing to bank strictly more
+// energy than the deep one, or either axis still moving after the story ends.
+//
+// The split follows from two inequalities of the scenario, not from tuning:
+// the shallow colony's 365-local-day mission (about 370 outside turns at
+// dtau/dt ~ 0.99) closes long before the earliest dark turn (3650), so it
+// hears only the first ~370/K packets while banking every local hour it
+// works; the deep colony's clock (dtau/dt = 1.6286e-5) lives only a few local
+// hours before the host goes dark, so it banks a handful of hours but hears
+// the whole stream. A dark turn inside the shallow mission, or a deep clock
+// fast enough to finish its mission before the dark turn, would break it.
+TEST(BalanceSweep, ColonyLinesSplitTechAgainstEnergy) {
+  const game::EventLoadResult loaded = game::loadEventSetFile(
+      std::string(BLACKHOLE_SOURCE_DIR) + "/assets/events/host_goes_dark.json");
+  ASSERT_TRUE(loaded.ok()) << loaded.error;
+  std::printf("colony sweep: deep (Miller) vs shallow (100M) -- tier / energy banked at host\n");
+  std::printf("cadence seed  dark   deep tier  deep energy  shallow tier  shallow energy\n");
+  for (const std::int64_t cadence : {30, 91, 182, 365}) {
+    game::EventSet story = loaded.story;
+    for (game::EventParam &param : story.params) {
+      if (param.name == "packet_period") {
+        param.min = cadence;
+        param.max = cadence;
+      }
+    }
+    for (std::uint64_t seed = 1; seed <= 6; ++seed) {
+      const ColonyOutcome deep = runColonyLine(story, seed, 0);
+      const ColonyOutcome shallow = runColonyLine(story, seed, 1);
+      std::printf("%7lld %4llu %5lld %10lld %12.1f %13lld %15.1f\n",
+                  static_cast<long long>(cadence), static_cast<unsigned long long>(seed),
+                  static_cast<long long>(deep.darkTurn), static_cast<long long>(deep.techTier),
+                  deep.energyUnits, static_cast<long long>(shallow.techTier),
+                  shallow.energyUnits);
+      EXPECT_GT(deep.techTier, shallow.techTier) << "cadence " << cadence << " seed " << seed;
+      EXPECT_GT(shallow.energyUnits, deep.energyUnits) << "cadence " << cadence << " seed " << seed;
+      EXPECT_TRUE(deep.frozen && shallow.frozen) << "cadence " << cadence << " seed " << seed;
+    }
+  }
 }
