@@ -16,7 +16,8 @@
  * miter, (n0 + n1) * 2 halfWidth / |n0 + n1|^2 from the joint for the two
  * segment normals, computed from the same projected points in the same order
  * by both segments, so the shared edge is bit-identical and the rasterizer
- * covers each pixel once. Turns sharper than the miter limit fall back to the
+ * covers each pixel once. A neighbor point behind the near plane is first
+ * clipped the way its own segment clips it (nearClipStart, nearClipEnd). Turns sharper than the miter limit fall back to the
  * segment's own normal.
  *
  * rotation4 is the SO(4) matrix of v -> qL v conj(qR) (so4.h), uploaded
@@ -103,6 +104,18 @@ vec3 project4(vec4 p, out float fade) {
   return sceneScale * projectPerspective(r, perspectiveDistance);
 }
 
+// Segment parameter where a segment whose start lies behind the near plane
+// (signed distances nearStart < 0 <= nearEnd) enters it, nudged forward.
+float nearClipStart(float nearStart, float nearEnd) {
+  return min(nearStart / (nearStart - nearEnd) + NEAR_CLIP_NUDGE, 1.0);
+}
+
+// Segment parameter where a segment whose end lies behind the near plane
+// (nearStart >= 0 > nearEnd) leaves it, nudged back.
+float nearClipEnd(float nearStart, float nearEnd) {
+  return max(nearStart / (nearStart - nearEnd) - NEAR_CLIP_NUDGE, 0.0);
+}
+
 // Left-hand unit normal of the screen segment from p to q.
 vec2 segmentNormal(vec2 p, vec2 q) {
   precise vec2 d = q - p;
@@ -139,8 +152,8 @@ void main() {
   precise vec4 clipB = viewProjection * vec4(project4(b, fadeB), 1.0);
 
   // Signed distance to the near plane z = -w, linear along the segment.
-  float nearA = clipA.z + clipA.w;
-  float nearB = clipB.z + clipB.w;
+  precise float nearA = clipA.z + clipA.w;
+  precise float nearB = clipB.z + clipB.w;
   vKind = kind;
   vStrand = int(round(segMeta.w));
   vAcross = corner.y;
@@ -155,10 +168,10 @@ void main() {
   float sA = 0.0;
   float sB = 1.0;
   if (nearA < 0.0) {
-    sA = min(nearA / (nearA - nearB) + NEAR_CLIP_NUDGE, 1.0);
+    sA = nearClipStart(nearA, nearB);
     tag &= ~SEGMENT_CAP_A;
   } else if (nearB < 0.0) {
-    sB = max(nearA / (nearA - nearB) - NEAR_CLIP_NUDGE, 0.0);
+    sB = nearClipEnd(nearA, nearB);
     tag &= ~SEGMENT_CAP_B;
   }
   // Only a clipped end moves, so an unclipped joint keeps the exact clip
@@ -192,9 +205,17 @@ void main() {
     offsetPx += dir * ((atA ? -1.0 : 1.0) * halfWidth);
   } else if (atA ? !clippedA : !clippedB) {
     // Interior joint: the neighbor's segment runs prev -> a or b -> next.
+    // A neighbor point behind the near plane is clipped exactly as the
+    // neighbor clips its own segment (same operands, same order), so both
+    // segments miter against the same visible direction.
     float fadeN;
     precise vec4 clipN = viewProjection * vec4(project4(atA ? prev : next, fadeN), 1.0);
-    if (clipN.z + clipN.w > 0.0 && clipN.w > 1e-6) {
+    precise float nearN = clipN.z + clipN.w;
+    if (nearN < 0.0) {
+      clipN = atA ? mix(clipN, clipA, nearClipStart(nearN, nearA))
+                  : mix(clipB, clipN, nearClipEnd(nearB, nearN));
+    }
+    if (clipN.w > 1e-6) {
       precise vec2 screenN = (clipN.xy / clipN.w) * halfRes;
       // A repeated point (no neighbor) has no direction to miter against.
       bool hasNeighbor = distance(screenN, atA ? screenA : screenB) > 1e-4;

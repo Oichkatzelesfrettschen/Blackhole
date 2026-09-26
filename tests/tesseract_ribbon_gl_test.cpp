@@ -339,4 +339,38 @@ TEST_F(TesseractRibbonGlTest, SegmentsCrossingTheNearPlaneKeepTheirVisiblePart) 
             0.0);
 }
 
+// A joint whose incoming segment crosses the near plane: P behind the eye,
+// J and N in front, bending 90 degrees on screen at J. Both segments must
+// miter J against the same visible direction, so the bend's inside is
+// covered once and its outside has no gap.
+TEST_F(TesseractRibbonGlTest, JointsBesideTheNearPlaneMiterSymmetrically) {
+  const glm::vec4 behind(0.1f, 0.0f, 0.5f, 0.0f);
+  const glm::vec4 joint(0.1f, 0.0f, -0.5f, 0.0f);
+  const glm::vec4 up(0.1f, 0.1f, -0.5f, 0.0f);
+  const glm::mat4 viewProjection = eyeAtOrigin();
+  const std::vector<float> red = drawRed(polyline({behind, joint, up}), viewProjection);
+  EXPECT_LE(peak(red), EDGE_PEAK_RED * 1.001f);
+
+  // Pixel-space position of J; the gap a one-sided miter leaves is the
+  // triangle dx < dy < 0 inside the square corner of the bend, probed with a
+  // 0.3 px margin from its edges and inside the 3 px half width.
+  const glm::vec4 clip = viewProjection * glm::vec4(glm::vec3(joint), 1.0f);
+  const float jointX = ((clip.x / clip.w) + 1.0f) * 0.5f * static_cast<float>(TARGET_WIDTH);
+  const float jointY = ((clip.y / clip.w) + 1.0f) * 0.5f * static_cast<float>(TARGET_HEIGHT);
+  int probed = 0;
+  for (int row = 0; row < TARGET_HEIGHT; ++row) {
+    for (int column = 0; column < TARGET_WIDTH; ++column) {
+      const float dx = static_cast<float>(column) + 0.5f - jointX;
+      const float dy = static_cast<float>(row) + 0.5f - jointY;
+      if (dx > -2.9f && dy < -0.3f && dx < dy - 0.3f) {
+        ++probed;
+        const std::size_t index =
+            (static_cast<std::size_t>(row) * TARGET_WIDTH) + static_cast<std::size_t>(column);
+        EXPECT_GT(red.at(index), 0.0f) << "dx " << dx << " dy " << dy;
+      }
+    }
+  }
+  EXPECT_GT(probed, 0);
+}
+
 } // namespace
