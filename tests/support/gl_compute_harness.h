@@ -6,7 +6,11 @@
  * dispatch it on a hidden 1x1 GLFW window, and read results back from an
  * SSBO. GLSL has no native include directive, so expandShaderIncludes()
  * inlines line-leading `#include "path"` directives recursively, resolving
- * each path against shader/include (BH_SHADER_INCLUDE_DIR) and then shader/.
+ * each path against shader/ first, the base the production loader
+ * (processIncludes in src/shader.cpp) resolves every include against, and
+ * then shader/include (BH_SHADER_INCLUDE_DIR) for test sources that include
+ * modules by their include-relative names. The order matters where a name
+ * exists in both: hawking_glow.glsl's "hawking_luts.glsl" is shader/'s copy.
  * Commented include lines stay untouched. Include guards inside the modules
  * handle repeated inclusion.
  */
@@ -37,7 +41,7 @@ namespace bhtest {
 
 inline std::string readShaderInclude(const std::string &relative) {
   const std::string includeDir = BH_SHADER_INCLUDE_DIR;
-  for (const std::string &base : {includeDir, includeDir + "/.."}) {
+  for (const std::string &base : {includeDir + "/..", includeDir}) {
     const std::ifstream file(base + "/" + relative);
     if (file) {
       std::ostringstream content;

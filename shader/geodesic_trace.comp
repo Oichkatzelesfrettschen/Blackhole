@@ -50,6 +50,7 @@ uniform ivec2 tileOffset = ivec2(0, 0);
 #include "include/redshift.glsl"
 #include "include/kerr.glsl"
 #include "include/interop_raygen.glsl"
+#include "hawking_glow.glsl"
 #include "include/wiregrid.glsl"
 
 // ============================================================================
@@ -83,6 +84,10 @@ uniform float interopStepSize  = 0.2;
 
 // --- Accretion disk ---
 uniform float adiskEnabled = 1.0;
+// Scene toggles shared with blackhole_main.frag (bhHoleRendered,
+// bhMetricRadius in interop_trace.glsl).
+uniform float gravitationalLensing = 1.0;
+uniform float renderBlackHole      = 1.0;
 
 // --- LUT radius ranges ---
 uniform float useLUTs            = 0.0;
@@ -141,6 +146,16 @@ uniform float wiregridInfallScale = 0.24;
 uniform float wiregridStrength = 0.84;
 uniform float wiregridScenePreserve = 1.0;
 uniform vec4  wiregridColor = vec4(0.21, 0.62, 0.92, 0.16);
+
+// --- Hawking thermal glow on captured rays (bhHorizonShade) ---
+// Set by applyHawkingUniforms; LUTs on texture units 10 and 11.
+uniform float hawkingGlowEnabled = 0.0;
+uniform float hawkingTempScale = 1.0;
+uniform float hawkingGlowIntensity = 1.0;
+uniform sampler2D hawkingTempLUT;
+uniform sampler2D hawkingSpectrumLUT;
+uniform float useHawkingLUTs = 1.0;
+uniform float blackHoleMass = 1.989e33;  // [g]
 
 // ============================================================================
 // Derived physics macros

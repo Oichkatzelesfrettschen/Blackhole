@@ -303,6 +303,69 @@ void main() {
 )";
 }
 
+// bhTraceGeodesic with the renderer's default schedule (stepSize 0.1, 300
+// steps, depthFar 100) for a fan of equatorial rays from (30, 0, 0) with
+// |alpha| <= 0.3, under the scene toggles gravitationalLensing and
+// renderBlackHole. Reports fate (-1 captured, 1 escaped), the straight-line
+// impact parameter 30 sin|alpha|, and the escape direction.
+std::string sceneToggleShader() {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  return comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+uniform int rayCount;
+void main() {
+  int i = int(gl_GlobalInvocationID.y) * int(gl_NumWorkGroups.x) * 16 +
+          int(gl_GlobalInvocationID.x);
+  if (i >= rayCount) {
+    return;
+  }
+  float alpha = 0.3 * (2.0 * (float(i) + 0.5) / float(rayCount) - 1.0);
+  Ray ray;
+  ray.position = vec3(30.0, 0.0, 0.0);
+  ray.velocity = vec3(-cos(alpha), sin(alpha), 0.0);
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 300, 0.1);
+  result[5 * i] = hit.hitHorizon ? -1.0 : 1.0;
+  result[5 * i + 1] = 30.0 * abs(sin(alpha));
+  result[5 * i + 2] = hit.escapedDir.x;
+  result[5 * i + 3] = hit.escapedDir.y;
+  result[5 * i + 4] = hit.escapedDir.z;
+}
+)";
+}
+
+// A b = 0 ray from (30, 0, 0) into the hole through bhTraceGeodesic +
+// bhShadeHit and through bhTraceGeodesicRTE (no disk), with the Hawking glow
+// uniforms of shader/geodesic_trace.comp. Reports both colors, the capture
+// flag, and hawkingThermalGlow at the capture radius.
+std::string hawkingShadeShader() {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  return comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+void main() {
+  Ray ray;
+  ray.position = vec3(30.0, 0.0, 0.0);
+  ray.velocity = vec3(-1.0, 0.0, 0.0);
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 300, 0.1);
+  vec3 shaded = bhShadeHit(hit, ray.position, 2.0).rgb;
+  vec3 terminalPos;
+  vec3 rte = bhTraceGeodesicRTE(ray, 2.0, 100.0, 300, 0.1, 0.5, terminalPos).rgb;
+  vec3 expected = hawkingThermalGlow(blackHoleMass, length(hit.hitPoint), 2.0, hawkingTempScale,
+                                     hawkingGlowIntensity, hawkingTempLUT, hawkingSpectrumLUT,
+                                     useHawkingLUTs);
+  result[0] = hit.hitHorizon ? 1.0 : 0.0;
+  result[1] = shaded.r;
+  result[2] = shaded.g;
+  result[3] = shaded.b;
+  result[4] = rte.r;
+  result[5] = expected.r;
+  result[6] = expected.g;
+  result[7] = expected.b;
+}
+)";
+}
+
 class KerrShaderCaptureTest : public ::testing::Test {
 protected:
   static bhtest::HiddenGlContext *context;
@@ -778,6 +841,142 @@ TEST_F(KerrShaderCaptureTest, RadiativeTransferIntegratesAffinePathLength) {
       EXPECT_NEAR(out.at(0), intensity, 0.02 * intensity) << where;
       EXPECT_NEAR(out.at(1), transmit, 0.02 * transmit) << where;
       EXPECT_GT(out.at(2), 50.0F) << where;
+    }
+  }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+namespace {
+
+struct ToggleRay {
+  double fate;
+  double impact;
+  double dx, dy, dz;
+};
+
+std::vector<ToggleRay> traceSceneToggles(GLuint program, GLuint ssbo, float lensing,
+                                         float holeRendered) {
+  glUseProgram(program);
+  glUniform1i(glGetUniformLocation(program, "rayCount"), K_RAYS);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.9F);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "gravitationalLensing"), lensing);
+  glUniform1f(glGetUniformLocation(program, "renderBlackHole"), holeRendered);
+  const std::vector<float> out =
+      bhtest::runComputeProgram(program, ssbo, static_cast<std::size_t>(5) * K_RAYS, K_RAYS / 256);
+  std::vector<ToggleRay> rays;
+  for (std::size_t k = 0; k + 4 < out.size(); k += 5) {
+    rays.push_back({.fate = static_cast<double>(out.at(k)),
+                    .impact = static_cast<double>(out.at(k + 1)),
+                    .dx = static_cast<double>(out.at(k + 2)),
+                    .dy = static_cast<double>(out.at(k + 3)),
+                    .dz = static_cast<double>(out.at(k + 4))});
+  }
+  return rays;
+}
+
+double rayAlpha(int i) {
+  return 0.3 * ((2.0 * (static_cast<double>(i) + 0.5) / static_cast<double>(K_RAYS)) - 1.0);
+}
+
+// Angle between an escape direction and the camera direction of ray i.
+double deflection(const ToggleRay &ray, int i) {
+  const double alpha = rayAlpha(i);
+  const double cosAngle = (-std::cos(alpha) * ray.dx) + (std::sin(alpha) * ray.dy);
+  const double norm = std::hypot(ray.dx, ray.dy, ray.dz);
+  return std::acos(std::clamp(cosAngle / norm, -1.0, 1.0));
+}
+
+// Straight rays: captured below the horizon radius, undeflected above it
+// (the flat-space Mino leapfrog at stepSize 0.1 bends them by at most ~6e-3
+// rad). Returns the captured count.
+int expectStraightCapture(const std::vector<ToggleRay> &rays, double rPlus) {
+  int captured = 0;
+  for (int i = 0; i < K_RAYS; ++i) {
+    const ToggleRay &ray = rays.at(static_cast<std::size_t>(i));
+    const std::string where = "lensing off, ray " + std::to_string(i);
+    if (ray.impact < 0.98 * rPlus) {
+      EXPECT_EQ(ray.fate, -1.0) << where << " b=" << ray.impact;
+      ++captured;
+    } else if (ray.impact > 1.02 * rPlus) {
+      EXPECT_EQ(ray.fate, 1.0) << where << " b=" << ray.impact;
+      EXPECT_LT(deflection(ray, i), 1e-2) << where;
+    }
+  }
+  return captured;
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, SceneTogglesStraightenRaysAndRemoveTheHole) {
+  // gravitationalLensing = 0 traces straight rays that the horizon
+  // (r+ = 1.436 M at a = 0.9) still captures: capture exactly when the
+  // impact parameter is below r+, and escaped rays leave along the camera
+  // direction. renderBlackHole = 0 removes the hole: nothing is captured,
+  // the b = 0 ray included, and every ray keeps its direction. With both on
+  // the same fan is lensed: rays at b ~ 6 M deflect by more than a radian.
+  const double rPlus = 1.0 + std::sqrt(1.0 - (0.9 * 0.9));
+  const GLuint program = bhtest::createComputeProgram(sceneToggleShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 5 * K_RAYS), nullptr,
+                    GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+
+  EXPECT_GT(expectStraightCapture(traceSceneToggles(program, ssbo, 0.0F, 1.0F), rPlus), 0);
+
+  const std::vector<ToggleRay> noHole = traceSceneToggles(program, ssbo, 1.0F, 0.0F);
+  for (int i = 0; i < K_RAYS; ++i) {
+    const ToggleRay &ray = noHole.at(static_cast<std::size_t>(i));
+    EXPECT_EQ(ray.fate, 1.0) << "no hole, ray " << i;
+    EXPECT_LT(deflection(ray, i), 1e-5) << "no hole, ray " << i;
+  }
+
+  const std::vector<ToggleRay> lensed = traceSceneToggles(program, ssbo, 1.0F, 1.0F);
+  int strong = 0;
+  for (int i = 0; i < K_RAYS; ++i) {
+    const ToggleRay &ray = lensed.at(static_cast<std::size_t>(i));
+    if (ray.fate == 1.0 && ray.impact < 6.0 && deflection(ray, i) > 1.0) {
+      ++strong;
+    }
+  }
+  EXPECT_GT(strong, 0);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+TEST_F(KerrShaderCaptureTest, HawkingGlowShadesCapturedRays) {
+  // The physical traces add the Hawking thermal glow to captured rays, as the
+  // legacy tracer does at its capture point: with hawkingGlowEnabled the
+  // captured color is hawkingThermalGlow at the capture radius (direct
+  // Planck evaluation, primordial mass 5e14 g, T_H ~ 2e5 K), and without it
+  // the horizon stays black.
+  const GLuint program = bhtest::createComputeProgram(hawkingShadeShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 8), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  glUseProgram(program);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "useHawkingLUTs"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "blackHoleMass"), 5.0e14F);
+  for (const float enabled : {1.0F, 0.0F}) {
+    glUseProgram(program);
+    glUniform1f(glGetUniformLocation(program, "hawkingGlowEnabled"), enabled);
+    const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 8);
+    const std::string where = "hawkingGlowEnabled=" + std::to_string(enabled);
+    ASSERT_EQ(out.at(0), 1.0F) << where;
+    for (std::size_t k = 0; k < 3; ++k) {
+      const float expected = enabled > 0.5F ? out.at(5 + k) : 0.0F;
+      EXPECT_TRUE(std::isfinite(out.at(1 + k))) << where;
+      EXPECT_NEAR(out.at(1 + k), expected, 1e-5F * std::max(1.0F, std::abs(expected))) << where;
+    }
+    EXPECT_NEAR(out.at(4), enabled > 0.5F ? out.at(5) : 0.0F,
+                1e-5F * std::max(1.0F, std::abs(out.at(5))))
+        << where;
+    if (enabled > 0.5F) {
+      EXPECT_GT(out.at(5) + out.at(6) + out.at(7), 0.0F) << where;
     }
   }
   glDeleteBuffers(1, &ssbo);
