@@ -4203,7 +4203,7 @@ if(BUILD_TESTING)
     add_executable(page_thorne_test
       "${PROJECT_SOURCE_DIR}/tests/page_thorne_test.cpp"
     )
-    target_link_libraries(page_thorne_test PRIVATE blackhole_physics GTest::gtest_main)
+    target_link_libraries(page_thorne_test PRIVATE blackhole_physics glm::glm GTest::gtest_main)
     target_include_directories(page_thorne_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -4229,7 +4229,7 @@ if(BUILD_TESTING)
     add_executable(disk_transfer_test
       "${PROJECT_SOURCE_DIR}/tests/disk_transfer_test.cpp"
     )
-    target_link_libraries(disk_transfer_test PRIVATE blackhole_physics GTest::gtest_main)
+    target_link_libraries(disk_transfer_test PRIVATE blackhole_physics glm::glm GTest::gtest_main)
     target_include_directories(disk_transfer_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
@@ -4676,7 +4676,7 @@ if(BUILD_TESTING)
   if(ENABLE_FAST_MATH)
     target_compile_options(blackhole_test_kerr_reference PRIVATE -fno-fast-math)
   endif()
-  target_link_libraries(blackhole_test_kerr_reference PUBLIC blackhole_physics)
+  target_link_libraries(blackhole_test_kerr_reference PUBLIC blackhole_physics glm::glm)
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_shader_capture_test.cpp")
     # Shipped shader/include/kerr.glsl against Bardeen's equatorial capture
@@ -4726,6 +4726,7 @@ if(BUILD_TESTING)
     target_link_libraries(disk_transfer_shader_test PRIVATE
       blackhole_test_kerr_reference
       blackhole_physics
+      glm::glm
       glfw
       glbinding::glbinding
       GTest::gtest
