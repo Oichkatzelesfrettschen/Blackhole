@@ -225,6 +225,8 @@ struct CircularOrbit {
  * The textbook form divides a difference of logarithms by r_+ - r_- = 2h,
  * which loses log10(1/h) digits (about 6.5 at the canon spin); the atanh form
  * carries that ratio exactly and reaches the extremal limit w at h = 0.
+ * No intermediate product or ratio leaves the double range before the delay
+ * itself does, so offsets as small as 1e-300 keep a finite delay.
  */
 [[nodiscard]] inline double principalNullDelay(double epsilon, double x1, double x2) {
   const double inner = std::fmin(x1, x2);
@@ -235,8 +237,19 @@ struct CircularOrbit {
   const double h2 = epsilon * (2.0 - epsilon);
   const double h = std::sqrt(h2);
   const double span = outer - inner;
-  const double w = span / ((inner * outer) - h2);
-  const double logRatio = std::log(((outer - h) * (outer + h)) / ((inner - h) * (inner + h)));
+  // w = span / (x1 x2 - h^2) with x2 divided out first, so an inner offset of
+  // 1e-200 does not underflow the product while the delay (about 2 / x1) is
+  // still representable.
+  const double w = (span / outer) / (inner - (h2 / outer));
+  // ln(Delta2 / Delta1) as two quotients of offsets on the same side of each
+  // horizon; logQuotient falls back to a difference of logarithms only when a
+  // quotient itself leaves the normal range.
+  const auto logQuotient = [](double numerator, double denominator) {
+    const double quotient = numerator / denominator;
+    return std::isnormal(quotient) ? std::log(quotient)
+                                   : std::log(numerator) - std::log(denominator);
+  };
+  const double logRatio = logQuotient(outer - h, inner - h) + logQuotient(outer + h, inner + h);
   return span + logRatio + (2.0 * w * atanhOverArgument(h * w));
 }
 

@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstddef>
 #include <numbers>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -578,4 +579,20 @@ TEST(KerrObserver, IscoConvergesForUltraExtremalDeficits) {
   }
   EXPECT_EQ(ko::iscoOffset(0.0, OrbitSense::Prograde), 0.0);
   expectRelative(ko::iscoOffset(0.0, OrbitSense::Retrograde), 8.0, 1e-15, "extremal retrograde");
+}
+
+// Falsifier: at exact extremality (h = 0) the principal-null delay from an
+// inner offset of 1e-200 (or 1e-300 out to 1e10) coming back infinite from an
+// underflowed product, or departing by more than 1e-12 relative from the
+// extremal closed form (x2 - x1) + 2 (1/x1 - 1/x2) + 2 ln(x2 / x1).
+TEST(KerrObserver, ExtremalDelayStaysFiniteNearTheHorizon) {
+  const auto extremal = [](double x1, double x2) {
+    return (x2 - x1) + (2.0 * ((1.0 / x1) - (1.0 / x2))) + (2.0 * (std::log(x2) - std::log(x1)));
+  };
+  for (const auto &[x1, x2] :
+       {std::pair{1e-200, 1.0}, std::pair{1e-200, 1e-150}, std::pair{1e-300, 1e10}}) {
+    const double delay = ko::principalNullDelay(0.0, x1, x2);
+    EXPECT_TRUE(std::isfinite(delay)) << x1 << " -> " << x2;
+    expectRelative(delay, extremal(x1, x2), 1e-12, "extremal delay");
+  }
 }
