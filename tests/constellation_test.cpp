@@ -560,33 +560,63 @@ TEST(Constellation, OutcomeNoticeLeavesFromTheDecidingBand) {
   EXPECT_FALSE(constellation.factions().front().outcomeKnown);
 }
 
-// Falsifier: the player's snapshot showing a decided outcome, a winner, or a
-// cleared turn before news of the rival's win (30 light-days away) reaches the
-// player's authority, or the referee block failing to show the truth at once.
-TEST(Constellation, SnapshotShowsThePlayersOutcomeOnlyOnceKnown) {
+namespace {
+
+// The player homed in system 1, the rival in system 0 winning at its own band
+// on turn 3; the player's authority hears of it after the radial leg plus 30
+// days. Returns the snapshots on the turn before and the turn the news lands.
+struct NoticeSnapshots {
+  game::FactionId player = game::K_INVALID_FACTION_ID;
+  game::FactionId rival = game::K_INVALID_FACTION_ID;
+  game::ConstellationViewSnapshot before;
+  game::ConstellationViewSnapshot after;
+};
+
+NoticeSnapshots snapshotsAroundNotice() {
   game::Constellation constellation(remoteWinConfig());
-  const game::FactionId player = constellation.addFaction(game::FactionPolicy::Scripted, 1);
-  const game::FactionId rival = constellation.addFaction(game::FactionPolicy::Scripted, 0);
-  ASSERT_NE(constellation.addFleet(rival, 0, game::FleetCapability::Research, 0),
-            game::K_INVALID_FLEET_ID);
+  NoticeSnapshots result;
+  result.player = constellation.addFaction(game::FactionPolicy::Scripted, 1);
+  result.rival = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  constellation.addFleet(result.rival, 0, game::FleetCapability::Research, 0);
   const std::int64_t learned = arrivalTurn(microRadialSec(0) + (30.0 * K_SECONDS_PER_DAY)) + 2;
   while (constellation.turn() < learned - 1) {
     constellation.advanceTurn();
   }
-  const game::ConstellationViewSnapshot before = constellation.renderSnapshot();
+  result.before = constellation.renderSnapshot();
+  constellation.advanceTurn();
+  result.after = constellation.renderSnapshot();
+  return result;
+}
+
+} // namespace
+
+// Falsifier: the player's snapshot showing a decided outcome, a winner, or a
+// cleared turn before news of the rival's win (30 light-days away) reaches the
+// player's authority, or the referee block failing to show the truth at once.
+TEST(Constellation, SnapshotHidesTheOutcomeUntilKnown) {
+  const NoticeSnapshots snapshots = snapshotsAroundNotice();
+  const game::ConstellationViewSnapshot &before = snapshots.before;
   EXPECT_EQ(before.overallStatus, game::CampaignStatus::Ongoing);
   EXPECT_EQ(before.winner, game::K_INVALID_FACTION_ID);
-  EXPECT_EQ(before.player.id, player);
+  EXPECT_EQ(before.player.id, snapshots.player);
   EXPECT_EQ(before.player.status, game::CampaignStatus::Ongoing);
   EXPECT_EQ(before.player.clearedTurn, 0);
   EXPECT_EQ(before.refereeStatus, game::CampaignStatus::Lost);
-  EXPECT_EQ(before.refereeWinner, rival);
+  EXPECT_EQ(before.refereeWinner, snapshots.rival);
   EXPECT_EQ(before.refereeStandings.at(1).clearedTurn, 3);
+  EXPECT_EQ(before.refereeInstability.size(), 2U);
+}
 
-  constellation.advanceTurn();
-  const game::ConstellationViewSnapshot after = constellation.renderSnapshot();
+// Falsifier: once the news lands, the player's snapshot showing anything but
+// the loss -- its own status still Ongoing (a loser's referee status never
+// changes), a cleared turn for a loss, or no winner.
+TEST(Constellation, SnapshotShowsTheLossOnceKnown) {
+  const NoticeSnapshots snapshots = snapshotsAroundNotice();
+  const game::ConstellationViewSnapshot &after = snapshots.after;
   EXPECT_EQ(after.overallStatus, game::CampaignStatus::Lost);
-  EXPECT_EQ(after.winner, rival);
+  EXPECT_EQ(after.winner, snapshots.rival);
+  EXPECT_EQ(after.player.status, game::CampaignStatus::Lost);
+  EXPECT_EQ(after.player.clearedTurn, 0);
 }
 
 // Falsifier: an order that would leave a fleet where it is already bound --

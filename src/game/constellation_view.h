@@ -36,9 +36,10 @@ struct FactionStanding {
   std::uint32_t heldBandCount = 0;   ///< Bands held uncontested (perceived or true, per block).
 };
 
+/// One system as the player sees it: static geometry plus perceived control.
+/// Its live instability is referee truth and lives in refereeInstability.
 struct SystemStanding {
   SystemId id = K_INVALID_SYSTEM_ID;
-  double instability = 0.0;
   double spinDimensionless = 0.0;
   double spinDeficit = 1.0; ///< 1 - |a|, exact near extremal spin.
   std::uint32_t bandCount = 0;
@@ -82,8 +83,8 @@ struct ConstellationViewSnapshot {
   double victoryControlScore = 0.0;
   std::int64_t deadlineTurn = 0;
   /// The player's standing as its authority credits it: banked energy, known
-  /// stabilization and control, perceived held bands; status and clearedTurn
-  /// only once the outcome is known.
+  /// stabilization and control, perceived held bands; status (Won or Lost)
+  /// only once the outcome is known, clearedTurn only for a known win.
   FactionStanding player;
   std::vector<SystemStanding> systems;
   std::vector<ConstellationFleetView> fleets;
@@ -93,6 +94,7 @@ struct ConstellationViewSnapshot {
   CampaignStatus refereeStatus = CampaignStatus::Ongoing; ///< The player's true outcome.
   FactionId refereeWinner = K_INVALID_FACTION_ID;
   std::vector<FactionStanding> refereeStandings; ///< Every faction's true scores and held bands.
+  std::vector<double> refereeInstability;        ///< Each system's true instability, by SystemId.
 };
 
 } // namespace game

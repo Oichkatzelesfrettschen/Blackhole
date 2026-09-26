@@ -1047,7 +1047,6 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
   for (std::size_t systemIndex = 0; systemIndex < systems_.size(); ++systemIndex) {
     SystemStanding standing;
     standing.id = static_cast<SystemId>(systemIndex);
-    standing.instability = systems_.at(systemIndex).instability;
     standing.spinDimensionless = systems_.at(systemIndex).field.spinDimensionless();
     standing.spinDeficit = systems_.at(systemIndex).field.spinDeficit();
     const std::size_t bandCount = systems_.at(systemIndex).bandRadiusCm.size();
@@ -1063,6 +1062,10 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
   // Referee standings: true scores and true held bands.
   view.refereeStatus = overallStatus_;
   view.refereeWinner = winner_;
+  view.refereeInstability.reserve(systems_.size());
+  for (const OrbitalSystem &system : systems_) {
+    view.refereeInstability.push_back(system.instability);
+  }
   view.refereeStandings.reserve(factions_.size());
   for (const FactionState &faction : factions_) {
     FactionStanding standing;
@@ -1105,10 +1108,12 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
           static_cast<std::uint32_t>(std::ranges::count(system.bandController, player.id));
     }
     if (player.outcomeKnown) {
+      // A loser's referee status never leaves Ongoing, so the player's known
+      // status is its outcome, and a cleared turn exists only for a win.
       view.overallStatus = overallStatus_;
       view.winner = winner_;
-      standing.status = player.status;
-      standing.clearedTurn = player.clearedTurn;
+      standing.status = overallStatus_;
+      standing.clearedTurn = overallStatus_ == CampaignStatus::Won ? player.clearedTurn : 0;
     }
   }
 
