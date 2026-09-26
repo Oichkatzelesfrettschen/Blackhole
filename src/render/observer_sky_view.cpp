@@ -129,9 +129,10 @@ std::optional<PreparedObserverSky> prepareObserverSky(const sky::ObserverKey &ke
     if (!lut) {
       return std::nullopt;
     }
-    if (sky::writeObserverSkyLut(*lut, cacheDirectory)) {
-      sky::evictObserverSkyBundles(cacheDirectory, sky::K_OBSERVER_SKY_CACHE_BYTES, bundleHash);
-    }
+    // Evict whether or not the sidecar landed: a published .bin alone is
+    // readable and counts against the budget.
+    (void)sky::writeObserverSkyLut(*lut, cacheDirectory);
+    sky::evictObserverSkyBundles(cacheDirectory, sky::K_OBSERVER_SKY_CACHE_BYTES, bundleHash);
   }
   PreparedObserverSky prepared{
       .lut = std::move(*lut), .blackbody = std::move(*blackbody), .emission = {}, .ringFlux = {}};
@@ -546,17 +547,21 @@ void ObserverSkyRenderer::releaseSky() {
   emission_ = EmissionSummary{};
 }
 
+namespace {
+
 /** @brief The bundle cache: <user cache>/observer_sky when it can be written,
  *         else the source tree's LUT directory; observer_sky_lut publishes
  *         to the same place by default.
  *         Resolved once per process, so a frame does no filesystem work. */
-static const std::filesystem::path &observerSkyCacheDirectory(const std::filesystem::path &fallback) {
+const std::filesystem::path &observerSkyCacheDirectory(const std::filesystem::path &fallback) {
   static const std::filesystem::path directory = [&fallback] {
     const std::filesystem::path cache = platform::writableCacheSubdirectory("observer_sky");
     return cache.empty() ? fallback : cache;
   }();
   return directory;
 }
+
+} // namespace
 
 void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
                             const std::optional<ObserverRecordClock> &record) {
