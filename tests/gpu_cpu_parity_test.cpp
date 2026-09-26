@@ -4,10 +4,9 @@
  * GPU/CPU parity for the verified physics surface: each case evaluates a
  * function from the src/physics/verified headers on the CPU and its
  * transpiled twin from the shader/include/verified GLSL modules in a
- * 1x1x1 compute dispatch, then compares within float32 tolerance. GLSL
- * has no native include directive, so
- * expandIncludes() inlines the verified modules from
- * BH_SHADER_INCLUDE_DIR before compilation.
+ * 1x1x1 compute dispatch, then compares within float32 tolerance.
+ * tests/support/gl_compute_harness.h inlines the GLSL includes and runs
+ * the dispatch.
  *
  * The suite SKIPs (does not fail) when no GL 4.6 context can be created
  * -- headless CI without a display -- and FAILS on any shader compile or
@@ -17,20 +16,17 @@
 
 #include <cmath>
 #include <cstddef>
-#include <fstream>
-#include <regex>
-#include <sstream>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <GLFW/glfw3.h>
-#include <glbinding/gl/bitfield.h>
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
 #include <glbinding/glbinding.h>
 #include <gtest/gtest.h>
+
+#include "support/gl_compute_harness.h"
 
 #include "physics/verified/cosmology.hpp"
 #include "physics/verified/eos.hpp"
@@ -38,38 +34,9 @@
 
 using namespace gl;
 
-#ifndef BH_SHADER_INCLUDE_DIR
-#error "BH_SHADER_INCLUDE_DIR must point at shader/include"
-#endif
-
 namespace {
 
 constexpr float TOLERANCE_SINGLE = 1e-6F;
-
-/// Inline `#include "verified/x.glsl"` directives from the shader tree.
-/// The verified modules carry only commented-out include lines
-/// themselves, so one expansion level suffices.
-std::string expandIncludes(const std::string &source) {
-  static const std::regex includeRe(R"~(#include\s+"([^"]+)")~");
-  std::string out;
-  std::sregex_iterator it(source.begin(), source.end(), includeRe);
-  std::sregex_iterator const end;
-  std::size_t last = 0;
-  for (; it != end; ++it) {
-    out.append(source, last, static_cast<std::size_t>(it->position()) - last);
-    const std::string path = std::string(BH_SHADER_INCLUDE_DIR) + "/" + (*it)[1].str();
-    const std::ifstream file(path);
-    if (!file) {
-      throw std::runtime_error("cannot open GLSL include: " + path);
-    }
-    std::ostringstream content;
-    content << file.rdbuf();
-    out += content.str();
-    last = static_cast<std::size_t>(it->position() + it->length());
-  }
-  out.append(source, last);
-  return out;
-}
 
 } // namespace
 
@@ -128,56 +95,13 @@ protected:
   }
 
   static GLuint createComputeProgram(const std::string &rawSource) {
-    const std::string source = expandIncludes(rawSource);
-    GLuint const shader = glCreateShader(GL_COMPUTE_SHADER);
-    const char *srcPtr = source.c_str();
-    glShaderSource(shader, 1, &srcPtr, nullptr);
-    glCompileShader(shader);
-
-    GLint status = 0;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
-    if (status == 0) {
-      GLint length = 0;
-      glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
-      std::string log(static_cast<std::size_t>(length), '\0');
-      glGetShaderInfoLog(shader, length, nullptr, log.data());
-      glDeleteShader(shader);
-      throw std::runtime_error("compute shader compilation failed:\n" + log);
-    }
-
-    GLuint const program = glCreateProgram();
-    glAttachShader(program, shader);
-    glLinkProgram(program);
-    glGetProgramiv(program, GL_LINK_STATUS, &status);
-    if (status == 0) {
-      GLint length = 0;
-      glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
-      std::string log(static_cast<std::size_t>(length), '\0');
-      glGetProgramInfoLog(program, length, nullptr, log.data());
-      glDeleteProgram(program);
-      glDeleteShader(shader);
-      throw std::runtime_error("compute program linking failed:\n" + log);
-    }
-
-    glDeleteShader(shader);
-    return program;
+    return bhtest::createComputeProgram(rawSource);
   }
 
   /// Dispatch 1x1x1 and read back `count` floats from the SSBO.
   static std::vector<float> runComputeShader(GLuint program, GLuint outputBuffer,
                                              std::size_t count) {
-    glUseProgram(program);
-    glDispatchCompute(1, 1, 1);
-    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-    auto *ptr = static_cast<float *>(glMapNamedBufferRange(
-        outputBuffer, 0, static_cast<GLsizeiptr>(sizeof(float) * count), GL_MAP_READ_BIT));
-    if (ptr == nullptr) {
-      throw std::runtime_error("glMapNamedBufferRange returned null");
-    }
-    std::vector<float> result(ptr, ptr + count);
-    glUnmapNamedBuffer(outputBuffer);
-    return result;
+    return bhtest::runComputeProgram(program, outputBuffer, count);
   }
 
   /// Compile `body`, run it, and return result[0] of an 8-float SSBO.

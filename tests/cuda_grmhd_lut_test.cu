@@ -145,17 +145,20 @@ static BH_LaunchParams make_disk_params(int w, int h) {
     p.background_enabled   = 0;
     p.background_intensity = 0.0f;
 
-    /* Camera at (25, 0, 20): chosen so the center ray crosses the z=0 equatorial
-     * plane at approximately (25, 0, 0), hitting the disk (r=25 > isco=6). */
+    /* World frame is y-up (d_world_to_physics): the disk lies in the world
+     * y=0 plane. Camera at (25, 20, 0), 20 units above the disk, so the center
+     * ray crosses y=0 at approximately (25, 0, 0), hitting the disk
+     * (r=25 > isco=6). */
     p.cam_pos[0] = 25.0f;
-    p.cam_pos[1] =  0.0f;
-    p.cam_pos[2] = 20.0f;
+    p.cam_pos[1] = 20.0f;
+    p.cam_pos[2] =  0.0f;
 
-    /* Basis with col2=(0,0,-1): d_ray_dir returns local (0,0,1) for center pixel;
-     * world_dir = col2 = (0,0,-1), so center ray falls toward z=0 (equatorial plane). */
-    p.cam_basis[0] = 1.0f; p.cam_basis[1] = 0.0f; p.cam_basis[2] = 0.0f;
-    p.cam_basis[3] = 0.0f; p.cam_basis[4] = 1.0f; p.cam_basis[5] = 0.0f;
-    p.cam_basis[6] = 0.0f; p.cam_basis[7] = 0.0f; p.cam_basis[8] = -1.0f;
+    /* Basis with col2=(0,-1,0): d_ray_dir returns local (0,0,1) for the center
+     * pixel, so world_dir = col2 points down toward the disk plane;
+     * col0=(1,0,0) right, col1=(0,0,-1) completes a right-handed frame. */
+    p.cam_basis[0] = 1.0f; p.cam_basis[1] =  0.0f; p.cam_basis[2] =  0.0f;
+    p.cam_basis[3] = 0.0f; p.cam_basis[4] =  0.0f; p.cam_basis[5] = -1.0f;
+    p.cam_basis[6] = 0.0f; p.cam_basis[7] = -1.0f; p.cam_basis[8] =  0.0f;
 
     p.lut_radius_min      = p.isco;
     p.lut_radius_max      = 100.0f;
@@ -429,20 +432,20 @@ TEST_F(CudaGrmhdLutTest, GrmhdPhiUniformNoSeam) {
     bh_upload_lut_textures(0ULL, 0ULL, 0ULL, 0ULL, 0ULL,
                            static_cast<unsigned long long>(tex), 0ULL, 0ULL);
 
-    /* Ray set 1: camera at (+25, 0, 20), hits disk at phi~0 (positive x side).
+    /* Ray set 1: camera at (+25, 20, 0), hits disk at phi~0 (positive x side).
      * Use the fixture's kW x kH framebuffer; pick the center pixel (index kN/2). */
     BH_LaunchParams p1 = make_disk_params(kW, kH);
     p1.use_luts = 1;
-    p1.cam_pos[0] = 25.0f; p1.cam_pos[1] = 0.0f; p1.cam_pos[2] = 20.0f;
+    p1.cam_pos[0] = 25.0f; p1.cam_pos[1] = 20.0f; p1.cam_pos[2] = 0.0f;
     auto pix1 = render(p1);
     ASSERT_EQ(pix1.size(), static_cast<std::size_t>(kN));
     const float4& px1 = pix1[static_cast<std::size_t>(kN / 2)];
 
-    /* Ray set 2: camera at (-25, 0, 20), hits disk at phi~pi (negative x side).
+    /* Ray set 2: camera at (-25, 20, 0), hits disk at phi~pi (negative x side).
      * Flip the x-axis basis column so the ray points toward origin. */
     BH_LaunchParams p2 = make_disk_params(kW, kH);
     p2.use_luts = 1;
-    p2.cam_pos[0] = -25.0f; p2.cam_pos[1] = 0.0f; p2.cam_pos[2] = 20.0f;
+    p2.cam_pos[0] = -25.0f; p2.cam_pos[1] = 20.0f; p2.cam_pos[2] = 0.0f;
     /* Flip right vector (col0) so the camera is mirrored but still valid */
     p2.cam_basis[0] = -1.0f; p2.cam_basis[1] = 0.0f; p2.cam_basis[2] = 0.0f;
     auto pix2 = render(p2);
