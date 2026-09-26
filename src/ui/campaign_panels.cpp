@@ -503,6 +503,8 @@ void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiSt
   }
   ImGui::Checkbox("run in real time", &uiState.realtime);
   ImGui::SameLine();
+  ImGui::Checkbox("inbox", &uiState.inboxOpen);
+  ImGui::SameLine();
   bool paused = uiState.driver.paused();
   if (ImGui::Checkbox("paused", &paused)) {
     uiState.driver.setPaused(paused);
