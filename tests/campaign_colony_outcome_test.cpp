@@ -81,8 +81,11 @@ TEST(ColonyOutcome, DarkHostBanksNothing) {
   EXPECT_DOUBLE_EQ(state.renderSnapshot().energyLostToDarkness, 30.0 - 5.0 - 3.0);
 }
 
-// Falsifier: the outcome ignoring the tech tier, or declaring the win on any
-// turn but the one the tier-reaching packet arrives.
+// Falsifier: the outcome ignoring the tech tier, or declaring the win before
+// the host can know of it. The colony reaches tier 2 when the third packet
+// lands at turn 8; its production report stamped with those points leaves at
+// turn 9 (a turn's reports ship before its deliveries land) and reaches the
+// host 5 turns later, at 14 -- the turn the win latches.
 TEST(ColonyOutcome, TechTierIsAVictoryAxis) {
   const campaign_test::FakeTimeField field;
   game::CampaignConfig config = colonyConfig(R"({
@@ -98,14 +101,17 @@ TEST(ColonyOutcome, TechTierIsAVictoryAxis) {
   config.victoryTechTier = 2;
   game::CampaignState state(config, field);
   ASSERT_TRUE(state.valid());
-  state.advanceTurns(7);
-  EXPECT_EQ(state.colonyTechTier(), 1);
-  EXPECT_EQ(state.status(), game::CampaignStatus::Ongoing);
-  state.advanceTurns(1); // the third packet (emitted turn 3) lands at 8
+  state.advanceTurns(8); // the third packet (emitted turn 3) lands at 8
   EXPECT_EQ(state.colonyTechTier(), 2);
+  EXPECT_LT(state.hostKnownColonyTechTier(), 2);
+  EXPECT_EQ(state.status(), game::CampaignStatus::Ongoing);
+  state.advanceTurns(5);
+  EXPECT_EQ(state.status(), game::CampaignStatus::Ongoing);
+  state.advanceTurns(1);
+  EXPECT_EQ(state.hostKnownColonyTechTier(), 2);
   EXPECT_EQ(state.status(), game::CampaignStatus::Won);
-  EXPECT_EQ(state.clearedTurn(), 8);
-  EXPECT_EQ(state.renderSnapshot().colonyTechTier, 2);
+  EXPECT_EQ(state.clearedTurn(), 14);
+  EXPECT_EQ(state.perceivedSnapshot(game::K_AUTHORITY_NODE).colonyTechTier, 2);
 }
 
 namespace {

@@ -371,9 +371,26 @@ std::int64_t CampaignState::techTier(NodeId node) const {
   if (node >= nodes_.size()) {
     return 0;
   }
-  const std::int64_t points = nodes_.at(node).techPoints;
+  return tierForPoints(nodes_.at(node).techPoints);
+}
+
+std::int64_t CampaignState::tierForPoints(std::int64_t points) const {
   return std::ranges::count_if(config_.story.techTiers,
                                [points](const TechLevel &level) { return level.points <= points; });
+}
+
+std::int64_t CampaignState::hostKnownColonyTechTier() const {
+  if (nodes_.empty()) {
+    return 0;
+  }
+  const StationNode &host = nodes_.front();
+  return std::accumulate(nodes_.begin(), nodes_.end(), std::int64_t{0},
+                         [&](std::int64_t best, const StationNode &node) {
+                           return node.isColony
+                                      ? std::max(best, tierForPoints(host.received.at(node.id)
+                                                                         .lastSenderTechPoints))
+                                      : best;
+                         });
 }
 
 std::int64_t CampaignState::colonyTechTier() const {

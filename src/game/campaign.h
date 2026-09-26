@@ -128,7 +128,8 @@ struct CampaignConfig {
   // Colonies and the story. Each colony is a node (ids from
   // K_FIRST_COLONY_NODE, in this order) with its own exact clock; the host is
   // the authority node. The story's events run at those nodes. A tech tier is
-  // a scored axis: reaching victoryTechTier at any colony wins outright.
+  // a scored axis: victoryTechTier wins outright once the host hears that a
+  // colony has reached it -- decided by light, like energy banked on arrival.
   std::vector<ColonyConfig> colonies;
   EventSet story;
   std::int64_t victoryTechTier = 0; ///< Tech tier that wins the campaign; 0 = off.
@@ -186,6 +187,11 @@ public:
   [[nodiscard]] std::int64_t techTier(NodeId node) const;
   /** @brief Highest tech tier any colony holds -- the tech axis of the outcome. */
   [[nodiscard]] std::int64_t colonyTechTier() const;
+  /** @brief Highest tech tier the host has heard any colony reach: the tier
+   *         stamped on each colony's latest signal to have landed at the host.
+   *         The tech victory is judged on this, so it latches only when the
+   *         news arrives. */
+  [[nodiscard]] std::int64_t hostKnownColonyTechTier() const;
   /** @brief A story parameter's resolved value (seeded ones drawn from the
    *         campaign seed); nullopt when the story has no such parameter. */
   [[nodiscard]] std::optional<std::int64_t> storyParam(std::string_view name) const;
@@ -329,6 +335,8 @@ private:
   /** @brief An IntRef inside the documented range that evaluates without
    *         overflow against the resolved parameters. */
   [[nodiscard]] bool intRefValid(const IntRef &ref) const;
+  /** @brief Number of story tiers `points` meets. */
+  [[nodiscard]] std::int64_t tierForPoints(std::int64_t points) const;
   [[nodiscard]] std::int64_t resolve(const IntRef &ref) const;
   /** @brief Advances every node clock one turn and ships colony production. */
   void advanceNodeClocks();

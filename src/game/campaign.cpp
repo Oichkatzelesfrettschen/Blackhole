@@ -465,7 +465,9 @@ void CampaignState::evaluateOutcome() {
       config_.victoryEnergyUnits > 0.0 && energyUnits_ >= config_.victoryEnergyUnits;
   const bool stabilizationWin =
       config_.victoryStabilizationUnits > 0.0 && stabilization_ >= config_.victoryStabilizationUnits;
-  const bool techWin = config_.victoryTechTier > 0 && colonyTechTier() >= config_.victoryTechTier;
+  // Decided when the host hears it, not when the colony reaches it.
+  const bool techWin =
+      config_.victoryTechTier > 0 && hostKnownColonyTechTier() >= config_.victoryTechTier;
   if (energyWin || stabilizationWin || techWin) {
     clearedTurn_ = clock_.turn(); // turns-to-clear: the speed axis of the outcome vector.
     status_ = CampaignStatus::Won;
