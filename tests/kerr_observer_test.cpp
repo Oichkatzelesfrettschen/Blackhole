@@ -517,3 +517,49 @@ TEST(KerrObserver, NegativeSpinProgradeMirrorsPositiveSpin) {
   EXPECT_LT(ko::circularOrbit(1.9, 5.0, OrbitSense::Prograde).angularVelocity, 0.0);
   EXPECT_LT(ko::equatorialFrame(1.9, 5.0).omega, 0.0); // frame dragging toward -phi
 }
+
+namespace {
+
+// Schwarzschild ZAMO at 6M sending a photon outward (or inward) in the
+// equatorial plane with impact parameter `b`: cos(angle) = b sqrt(1 - 2/6) / 6.
+ko::PhotonConstants sixMPhoton(double b, double radialSign) {
+  const double cosine = b * std::sqrt(1.0 - (2.0 / 6.0)) / 6.0;
+  const double sine = std::sqrt(1.0 - (cosine * cosine));
+  return zamoPhoton(1.0, 6.0, {radialSign * sine, 0.0, cosine});
+}
+
+} // namespace
+
+// Falsifier: a ray with exactly the critical impact parameter b_c = 3 sqrt(3) M
+// -- a double zero of R at the 3M photon sphere -- reported as bouncing off
+// it: heading inward it spirals onto the photon sphere, so it neither
+// escapes (moving inward) nor came from infinity (moving outward, traced
+// back). At b_c (1 + 1e-9) the barrier is a genuine turning point and the ray
+// connects both ways; at b_c (1 - 1e-9) there is no barrier and the inward
+// leg falls into the hole.
+TEST(KerrObserver, SeparatrixRaysAsymptoteToThePhotonSphere) {
+  const double critical = 3.0 * std::numbers::sqrt3;
+  // Codex's case: (1/sqrt 2, 0, 1/sqrt 2) at 6M carries lambda = 3 sqrt 3.
+  const ko::PhotonConstants exact =
+      zamoPhoton(1.0, 6.0, {std::numbers::sqrt2 / 2.0, 0.0, std::numbers::sqrt2 / 2.0});
+  EXPECT_NEAR(exact.lambda, critical, 1e-12);
+  EXPECT_TRUE(exact.escapesToInfinity);
+  EXPECT_FALSE(exact.fromInfinity);
+  const ko::PhotonConstants exactInward = sixMPhoton(critical, -1.0);
+  EXPECT_FALSE(exactInward.escapesToInfinity);
+  EXPECT_TRUE(exactInward.fromInfinity);
+
+  const ko::PhotonConstants above = sixMPhoton(critical * (1.0 + 1e-9), 1.0);
+  EXPECT_TRUE(above.escapesToInfinity);
+  EXPECT_TRUE(above.fromInfinity);
+  const ko::PhotonConstants aboveInward = sixMPhoton(critical * (1.0 + 1e-9), -1.0);
+  EXPECT_TRUE(aboveInward.escapesToInfinity);
+  EXPECT_TRUE(aboveInward.fromInfinity);
+
+  const ko::PhotonConstants below = sixMPhoton(critical * (1.0 - 1e-9), 1.0);
+  EXPECT_TRUE(below.escapesToInfinity);
+  EXPECT_FALSE(below.fromInfinity);
+  const ko::PhotonConstants belowInward = sixMPhoton(critical * (1.0 - 1e-9), -1.0);
+  EXPECT_FALSE(belowInward.escapesToInfinity);
+  EXPECT_TRUE(belowInward.fromInfinity);
+}
