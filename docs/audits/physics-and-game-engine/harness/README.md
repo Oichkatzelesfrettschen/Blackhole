@@ -15,8 +15,11 @@ unquoted file lists.
     BH=<absolute path of a Blackhole worktree at 34e1bf1>
     BOOST=<Boost include directory, e.g. the Conan boost package's p/include>
     OUT=<absolute scratch directory outside the tree>
-    OG=<absolute path of the open_gororoba checkout>
+    OG=<absolute path of an open_gororoba checkout at 006230b603c2f1705a72c6bb32348833abfb4565>
     export PYTHONDONTWRITEBYTECODE=1
+    test "$(git -C "$BH" rev-parse --short=7 HEAD)" = 34e1bf1 || echo "BH is not at 34e1bf1"
+    test "$(git -C "$OG" rev-parse HEAD)" = 006230b603c2f1705a72c6bb32348833abfb4565 ||
+      echo "OG is not at the audited open_gororoba commit"
 
 The compiler in the audit was clang 22.1.8. Every block runs in a subshell under `$OUT`, so
 the tree stays clean. The Rust crates (`grx/`, `pe_bench/`) take path dependencies on an

@@ -601,8 +601,11 @@ in the Ferrari resolvent:
 Effect of the errors:
 - As shipped, it returns `nReal = 0` for `(r^2-1)(r^2-4)`, for `{1,2,3,-6}`, and for every
   tested critical-curve point.
-- With both lines corrected in a scratch copy, all cases return the exact roots, including
-  the double root at `r_ph = 1.8, 2.5, 3.0, 3.5` to 1e-9.
+- With both lines corrected in a scratch copy (`roots/r3.cpp`, `roots/r4.cpp`), the simple
+  quartics return their roots exactly. The critical-curve double root comes back as a pair
+  within 1e-9 of `r_ph` at 1.8, 2.5 and 3.0, and split to 3.500000060 / 3.499999940 (6e-8)
+  at 3.5: a double root perturbed by rounding splits by O(sqrt(eps)) of the coefficient
+  scale, so 6e-8 is the conditioning floor, not a residual defect.
 - The CUDA port already carries the 8/3 correction (`device_analytic_kerr.cuh:203-211`,
   whose comment calls 4/3 a "common mistake") and a different resolvent, so the CPU
   reference and CUDA disagree.
@@ -720,8 +723,10 @@ executed.
 
 1. **Fix `findRadialRoots`** (`analytic_kerr_geodesic.h:188` to `8.0 * c.c2 * c.c0 / 3.0`;
    `:207` to `y1 - c.c2`). Add a test on known-root quartics and on the Kerr critical-curve
-   double root. Cost: two lines. Falsifier: `R(root)` scaled residual > 1e-12 on the test
-   set.
+   double root. Cost: two lines. Falsifier: on the simple quartics, any root farther than
+   1e-12 from the known value; on the critical curve, a returned pair whose members lie
+   farther than 1e-7 from `r_ph` or a real-root count other than four. A residual gate
+   cannot serve here, because a double root's residual is quadratic in the root error.
 2. **Fix the emission factor near the thin-segment guard.**
    - FP32 cancellation above the guard in GLSL and CUDA. Measured: 2.9e-4 -> 8e-8.
    - First-order Taylor truncation below the guard in the I and V channels of all three

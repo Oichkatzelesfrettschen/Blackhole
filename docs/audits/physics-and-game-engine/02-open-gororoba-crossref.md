@@ -13,7 +13,9 @@ expected output in `harness/` (`harness/README.md`):
   `Delta_r = (r^2+a^2)(1 - Lambda r^2/3) - 2Mr`, `Delta_theta`, `Xi`. It derives circular
   orbits from `dg/dr`, sets the ISCO at `dE/dr = 0` and the photon orbit at the pole of
   `u^t`, and computes the Page-Thorne flux by quadrature. Three anchors hold: the
-  metric-derived ISCO equals BPT to 16 digits at every spin; the a=0 Kerr-Newman ISCO
+  metric-derived ISCO equals BPT to 16 digits at every spin once both select the same
+  orbital branch (at a < 0 the BPT "prograde" flag means co-rotating while the metric helper
+  takes the +phi orbit; see F13); the a=0 Kerr-Newman ISCO
   equals the Reissner-Nordstrom cubic `r^3 - 6Mr^2 + 9Q^2 r - 4Q^4/M = 0`; and the
   Page-Thorne quadrature equals the Page-Thorne 1974 closed form to 6 digits at four spins.
 - `bh/driver.cpp`, `bh/mino2.cpp`, `bh/gfac.cpp` and `bh/ecg.cpp` -- clang++ 22.1.8 `-std=c++23 -O2`. They link Blackhole's
