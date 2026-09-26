@@ -110,10 +110,15 @@ vec4 stokesStep(vec4 state, vec4 em, float alphaI, float rhoV, float ds) {
     float qNew, uNew;
     float D = A * A + R * R;
 
-    if (D < 1.0e-60) {
-        // Neither absorption nor rotation: pure emission
-        qNew = state.y + em.y * L;
-        uNew = state.z + em.z * L;
+    if (tauL < 1.0e-4 && abs(phi) < 1.0e-4) {
+        // Optically thin and nearly unrotated: second-order Taylor of
+        // Ic = L (1 - tau/2), Is = phi L / 2. The closed form below divides
+        // 1 - E cos(phi), which rounds to zero in float, by D, which
+        // underflows to zero once A and R are both below about 1e-19.
+        float ic  = L * (1.0 - 0.5 * tauL);
+        float is_ = 0.5 * phi * L;
+        qNew = qHom + em.y * ic  - em.z * is_;
+        uNew = uHom + em.y * is_ + em.z * ic;
     } else if (A < 1.0e-15 * abs(R)) {
         // Rotation-dominated (A ~ 0): Ic = sin(phi)/R, Is = (1-cos(phi))/R
         float ic  =  Sp / R;

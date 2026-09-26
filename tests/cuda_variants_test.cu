@@ -30,6 +30,7 @@
 
 #include "cuda/kernel_launch.h"
 #include "cuda/kernel_registry.h"
+#include "physics/page_thorne.h"
 
 /* ========================================================================
  * Constants and helpers
@@ -55,6 +56,10 @@ static BH_LaunchParams make_variants_params() {
     p.redshift_enabled = 1;
     p.kerr_enabled     = 1;
     p.use_luts         = 0;
+    /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
+    p.disk_peak_temperature = 6500.0f;
+    p.disk_brightness       = 1.0f;
+    p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
 
     /* Camera at (0, 0, 15): oblique to equatorial plane for mixed outcomes */
     p.cam_pos[0] = 0.0f;

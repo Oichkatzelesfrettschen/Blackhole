@@ -585,8 +585,8 @@ int main(int argc, char **argv) try {
 
   results.push_back(runBench("LUT generation", cfg.iterations, cfg.warmup,
                              static_cast<double>(cfg.lutSize), [&]() {
-    auto emissivity = physics::generateEmissivityLut(cfg.lutSize, cfg.massSolar, cfg.spin,
-                                                       cfg.mdotEdd, true);
+    auto emissivity =
+        physics::generateEmissivityLut(cfg.lutSize, cfg.massSolar, cfg.spin, cfg.mdotEdd);
     auto redshift = physics::generateRedshiftLut(cfg.lutSize, cfg.massSolar, cfg.spin);
     cpuAccum = std::accumulate(emissivity.values.begin(), emissivity.values.end(), cpuAccum);
     cpuAccum = std::accumulate(redshift.values.begin(), redshift.values.end(), cpuAccum);

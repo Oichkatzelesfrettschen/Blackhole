@@ -55,13 +55,13 @@ float gravitationalRedshift(float r, float r_s) {
 }
 
 /**
- * Equatorial ZAMO-lapse redshift, the model of physics::kerrRedshift and of
- * the redshift LUT built from it.
+ * Equatorial ZAMO-lapse redshift, the model of physics::kerrRedshift and
+ * kerrRedshiftBatch.
  *
  * 1 + z = 1 / alpha with alpha^2 = r^2 Delta / ((r^2 + a^2)^2 - a^2 Delta),
  * Delta = r^2 - r_s r + a^2, M = r_s / 2, a = aStar M. The lapse stays positive
  * through the ergoregion and vanishes at the horizon; z is clamped to [0, 10],
- * the LUT's cap, and a radius at or inside the horizon returns the cap. At
+ * kerrRedshiftBatch's cap, and a radius at or inside the horizon returns the cap. At
  * aStar = 0 it is gravitationalRedshift; at aStar = 0.9, r = 3M, z = 0.64819.
  *
  * @param r Radial position

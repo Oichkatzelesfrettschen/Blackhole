@@ -110,6 +110,13 @@ uniform float adiskNoiseScale = 1.0;
 uniform float adiskNoiseLOD = 5.0;
 uniform float adiskSpeed = 0.5;
 uniform float dopplerStrength = 1.0;
+// Disk emission of the physical tracer (bhDiskEmission in interop_trace.glsl):
+// peak blackbody temperature [K], display brightness, and the Page-Thorne
+// flux peak for the current spin (M = 1, host-computed).
+uniform float diskPeakTemperature = 6500.0;
+uniform float diskBrightness = 1.0;
+uniform float diskFluxPeak = 1.1458947e-4;
+uniform float diskTransferMode = 0.0; // 0 = Physical g-factor, 1 = Interstellar (g = 1)
 
 // Physics parameters
 uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geometric units)
@@ -374,10 +381,16 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   grbValue = max(0.0, texture(grbModulationLUT, vec2(u, 0.5)).r);
   density *= mix(1.0, grbValue, step(0.5, useGrbModulation));
 
-  // Apply gravitational redshift to disk emission
+  // Redshift z = u^t - 1 of the Keplerian emitter orbiting along +z (signed
+  // spin, counter-rotating for kerrSpin < 0) seen face-on
+  // (photon Lz = 0), the quantity the redshift LUT tabulates over
+  // [r_isco, 4 r_isco] (physics::generateRedshiftLut). The analytic branch
+  // clamps r to the same range, so the LUT toggle leaves the physics unchanged.
   if (enableRedshift > 0.5) {
-    // No-LUT fallback: the LUT's ZAMO-lapse model and cap (redshift.glsl).
-    float z = zamoRedshiftEquatorial(r, schwarzschildRadius, kerrSpin);
+    float massM = max(0.5 * schwarzschildRadius, EPSILON);
+    float rIscoM = isco_radius(kerrSpin);
+    float gFaceOn = dtDiskTransferG(clamp(r / massM, rIscoM, 4.0 * rIscoM), kerrSpin, 0.0);
+    float z = gFaceOn > 0.0 ? clamp(1.0 / gFaceOn - 1.0, 0.0, 10.0) : 0.0;
     if (useLUTs > 0.5) {
       float rNorm = r / max(schwarzschildRadius, EPSILON);
       float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
@@ -567,17 +580,9 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     return skyColor;
   }
 
-  // Apply gravitational redshift to background light
-  if (enableRedshift > 0.5 && minRadiusReached < schwarzschildRadius * 10.0) {
-    float z = zamoRedshiftEquatorial(minRadiusReached, schwarzschildRadius, kerrSpin);
-    if (useLUTs > 0.5) {
-      float rNorm = minRadiusReached / max(schwarzschildRadius, EPSILON);
-      float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
-      float u = clamp((rNorm - redshiftRadiusMin) / denom, 0.0, 1.0);
-      z = texture(redshiftLUT, vec2(u, 0.5)).r;
-    }
-    skyColor = applySimpleRedshift(skyColor, z);
-  }
+  // Light from infinity reaching an observer at rest at infinity has
+  // E_obs = E_emit, so the sky carries no net frequency shift at any closest
+  // approach; lensing alone moves it (bhBackgroundColorFromDir).
 
   if (debugPreShapingBackground > 0.5) {
     return skyColor;
