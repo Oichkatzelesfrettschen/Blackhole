@@ -273,3 +273,35 @@ TEST(PerceivedView, ColonyEstimatesItsOrdersFromItsOwnBelief) {
   const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
   EXPECT_EQ(colony.fleets.front().bandIndex, game::K_MILLER_BAND);
 }
+
+// Falsifier: the colony still placing a fleet at the band of a redeployment
+// the fleet has told it fizzled (not enough fuel on arrival).
+TEST(PerceivedView, FizzledPlacementLeavesTheColonysBelief) {
+  game::CampaignSession session(3, shippedStory(), game::K_MILLER_BAND);
+  game::CampaignState &state = session.state();
+  // The host spends all 100 fuel on five hops, leaving the fleet on Miller's
+  // band with none.
+  for (int hop = 0; hop < 5; ++hop) {
+    ASSERT_TRUE(session.issuePlaceFleet(K_SURVEY_FLEET,
+                                        hop % 2 == 0 ? game::K_MILLER_BAND : game::K_SURVEY_BAND,
+                                        game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                        game::K_AUTHORITY_NODE));
+    state.advanceTurns(state.commandLog().back().effectTurn - state.turn());
+  }
+  ASSERT_DOUBLE_EQ(state.fleets().front().fuelUnits, 0.0);
+
+  // The colony orders the fleet out; it fizzles, and the reply comes back.
+  ASSERT_TRUE(session.issuePlaceFleet(K_SURVEY_FLEET, game::K_SURVEY_BAND,
+                                      game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                      game::K_FIRST_COLONY_NODE));
+  state.advanceTurns(400); // past every delay the colony could wait out
+  ASSERT_EQ(state.fleets().front().bandIndex, game::K_MILLER_BAND);
+  const auto fizzle = std::ranges::find_if(state.arrivals(), [](const game::ArrivalRecord &arrival) {
+    return arrival.sender == game::K_NO_NODE;
+  });
+  ASSERT_NE(fizzle, state.arrivals().end());
+  EXPECT_EQ(fizzle->payloadIndex, state.commandLog().size() - 1);
+
+  const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  EXPECT_FALSE(colony.fleets.front().positionKnown);
+}

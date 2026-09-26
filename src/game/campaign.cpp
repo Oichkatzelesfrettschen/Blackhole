@@ -217,7 +217,8 @@ bool CampaignState::issueCommand(const Command &command) {
   return true;
 }
 
-void CampaignState::applyCommand(const LoggedCommand &logged) {
+void CampaignState::applyCommand(std::uint32_t commandIndex) {
+  const LoggedCommand &logged = commandLog_.at(commandIndex);
   Fleet *fleet = findFleet(logged.command.fleet);
   assert(fleet != nullptr);
   switch (logged.command.type) {
@@ -239,7 +240,7 @@ void CampaignState::applyCommand(const LoggedCommand &logged) {
     } else if (logged.command.originNode != K_AUTHORITY_NODE) {
       // A station without the fleet's telemetry learns of the fizzle only
       // when the fleet's reply crosses back to it.
-      emitFizzleNotice(*fleet, logged.command.originNode);
+      emitFizzleNotice(*fleet, logged.command.originNode, commandIndex);
     }
     break;
   }
@@ -279,7 +280,7 @@ void CampaignState::deliverDue() {
   for (const Delivery &delivery : due) {
     switch (delivery.kind) {
     case DeliveryKind::Command:
-      applyCommand(commandLog_.at(delivery.commandIndex));
+      applyCommand(delivery.commandIndex);
       break;
     case DeliveryKind::CompletionReport: {
       // A dark host hears nothing: the report and its yield are lost.

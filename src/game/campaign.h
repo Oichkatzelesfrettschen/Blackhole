@@ -221,6 +221,12 @@ public:
   struct OrderBelief {
     std::optional<std::int64_t> estimatedEffectTurn;
     std::int64_t believedFromTurn = 0;
+    /// Turn the fleet's fizzle notice for this order reached the station.
+    std::optional<std::int64_t> fizzleKnownTurn;
+    /** @brief True once the station knows by `turn` that the order fizzled. */
+    [[nodiscard]] bool fizzledBy(std::int64_t turn) const {
+      return fizzleKnownTurn.has_value() && *fizzleKnownTurn <= turn;
+    }
   };
 
   /** @brief Deterministic field-by-field byte serialization of the full
@@ -307,11 +313,12 @@ private:
   [[nodiscard]] Fleet *findFleet(FleetId fleetId);
   [[nodiscard]] double bandRadiusCm(int bandIndex) const;
   void deliverDue();
-  void applyCommand(const LoggedCommand &logged);
+  void applyCommand(std::uint32_t commandIndex);
   void receiveNodeDelivery(const Delivery &delivery);
-  /** @brief A fleet's reply that an order from `origin` fizzled (not enough
-   *         fuel on arrival), sent by light from the fleet's band. */
-  void emitFizzleNotice(const Fleet &fleet, NodeId origin);
+  /** @brief A fleet's reply that order `commandIndex` from `origin` fizzled
+   *         (not enough fuel on arrival), sent by light from the fleet's band;
+   *         its payloadIndex names the order. */
+  void emitFizzleNotice(const Fleet &fleet, NodeId origin, std::uint32_t commandIndex);
   /** @brief Records a landed node delivery as the destination's latest word
    *         from its sender, when it was emitted no earlier than the last. */
   void noteSenderStamp(const Delivery &delivery);

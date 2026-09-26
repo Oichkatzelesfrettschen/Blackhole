@@ -48,6 +48,14 @@ double CampaignState::estimatedDelaySec(double fromRadiusCm, double toRadiusCm) 
 
 std::vector<CampaignState::OrderBelief> CampaignState::orderBeliefs(NodeId observer) const {
   std::vector<OrderBelief> beliefs(commandLog_.size());
+  // A placement the fleet has reported as fizzled stops counting once that
+  // report reaches the observer.
+  for (const ArrivalRecord &arrival : arrivals_) {
+    if (arrival.sender == K_NO_NODE && arrival.destination == observer &&
+        arrival.payloadIndex < beliefs.size()) {
+      beliefs.at(arrival.payloadIndex).fizzleKnownTurn = arrival.arrivalTurn;
+    }
+  }
   const double originCm = nodes_.at(observer).radiusCm;
   // The longest the order could take to reach a fleet on any band.
   const std::int64_t worstTurns = std::accumulate(
@@ -66,7 +74,7 @@ std::vector<CampaignState::OrderBelief> CampaignState::orderBeliefs(NodeId obser
       if (logged.command.originNode == observer && logged.command.fleet == fleet &&
           logged.command.type == CommandType::PlaceFleet &&
           beliefs.at(index).believedFromTurn <= turn &&
-          beliefs.at(index).believedFromTurn >= latest) {
+          beliefs.at(index).believedFromTurn >= latest && !beliefs.at(index).fizzledBy(turn)) {
         latest = beliefs.at(index).believedFromTurn;
         band = logged.command.targetBand;
       }
@@ -174,7 +182,7 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
       if (logged.command.originNode == observer && logged.command.fleet == fleet.id &&
           logged.command.type == CommandType::PlaceFleet &&
           beliefs.at(index).believedFromTurn <= now &&
-          beliefs.at(index).believedFromTurn >= latest) {
+          beliefs.at(index).believedFromTurn >= latest && !beliefs.at(index).fizzledBy(now)) {
         latest = beliefs.at(index).believedFromTurn;
         placement = logged.command;
       }

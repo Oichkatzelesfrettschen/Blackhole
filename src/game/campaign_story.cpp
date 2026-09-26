@@ -366,7 +366,8 @@ void CampaignState::emitNodeDelivery(DeliveryKind kind, const StationNode &sende
   deliveryQueue_.push_back(delivery);
 }
 
-void CampaignState::emitFizzleNotice(const Fleet &fleet, NodeId origin) {
+void CampaignState::emitFizzleNotice(const Fleet &fleet, NodeId origin,
+                                     std::uint32_t commandIndex) {
   const double fleetCm = bandRadiusCm(fleet.bandIndex);
   const double originCm = nodes_.at(origin).radiusCm;
   Delivery delivery;
@@ -379,6 +380,7 @@ void CampaignState::emitFizzleNotice(const Fleet &fleet, NodeId origin) {
   delivery.sender = K_NO_NODE;
   delivery.destination = origin;
   delivery.fleet = fleet.id;
+  delivery.payloadIndex = commandIndex;
   delivery.category = EventCategory::Info;
   deliveryQueue_.push_back(delivery);
 }
