@@ -4639,6 +4639,10 @@ if(BUILD_TESTING)
       BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
     )
     target_compile_options(kerr_shader_capture_test PRIVATE ${PROJECT_WARNINGS})
+    # The readback check classifies non-finite shader output; finite-math-only folds std::isfinite away.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_shader_capture_test PRIVATE -fno-fast-math)
+    endif()
     target_link_libraries(kerr_shader_capture_test PRIVATE
       blackhole_physics
       glfw
