@@ -335,18 +335,24 @@ TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
           .fovDeg = std::clamp(record->fovDeg, TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG)};
 }
 
-glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistance, float fovDeg,
-                                  float aspect) {
+glm::mat4 tesseractView(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,
+                        float viewDistance) {
   const glm::vec3 forward = glm::column(cameraBasis, 2);
   const glm::vec3 up = glm::column(cameraBasis, 1);
-  const glm::vec3 eye = -forward * viewDistance;
-  const glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), up);
+  const glm::vec3 eye = -focusDirection * viewDistance;
+  return glm::lookAt(eye, eye + forward, up);
+}
+
+glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,
+                                  float viewDistance, float fovDeg, float aspect) {
+  const glm::mat4 view = tesseractView(cameraBasis, focusDirection, viewDistance);
   const glm::mat4 projection =
       glm::perspective(glm::radians(fovDeg), aspect, 0.05f, viewDistance * 4.0f);
   return projection * view;
 }
 
-void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
+void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
+                          const glm::vec3 &focusDirection, float deltaSeconds,
                           const std::optional<TesseractRecordFrame> &record) {
   auto &tg = rs.tesseract;
   tg.timeSpan = std::max(tg.timeSpan, 0.5f);
@@ -392,8 +398,8 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float d
   const TesseractFraming framing = tesseractFraming(
       tg.viewDistance, tg.fovDeg,
       record.has_value() ? std::optional<TesseractRecordCamera>(record->camera) : std::nullopt);
-  inputs.viewProjection =
-      tesseractViewProjection(cameraBasis, framing.viewDistance, framing.fovDeg, aspect);
+  inputs.viewProjection = tesseractViewProjection(cameraBasis, focusDirection, framing.viewDistance,
+                                                  framing.fovDeg, aspect);
   inputs.rotation = tesseract::toColumnMajor(rotation);
   inputs.projectionMode =
       tg.projection == RenderState::TesseractGroup::Projection::Stereographic ? 1 : 0;

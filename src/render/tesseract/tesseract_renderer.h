@@ -23,6 +23,7 @@
 
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
 
 namespace blackhole {
 
@@ -196,14 +197,24 @@ TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
                                   const std::optional<TesseractRecordCamera> &record);
 
 /**
- * @brief View-projection for the tesseract scene from the frame camera basis.
+ * @brief View-projection for the tesseract scene from the black-hole camera.
  *
- * Looks at the origin along the camera's forward axis (cameraBasis[2]) with
- * its up axis (cameraBasis[1]) from @p viewDistance, so the unit-scale scene
- * frames the same way whatever orbit radius the black-hole camera holds.
+ * The eye sits @p viewDistance from the origin along -@p focusDirection, the
+ * unit direction from the black-hole camera to its focus, and keeps that
+ * camera's orientation: forward cameraBasis[2], up cameraBasis[1]. The
+ * unit-scale scene then frames the same way whatever orbit radius the
+ * black-hole camera holds, and a showcase-orbit frame offset, which turns the
+ * camera toward an aim point beside the focus, moves the tesseract to the
+ * screen position the black hole takes at the same field of view. Without an
+ * offset the forward axis is the focus direction and the eye looks at the
+ * origin.
  */
-glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistance, float fovDeg,
-                                  float aspect);
+glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,
+                                  float viewDistance, float fovDeg, float aspect);
+
+/** @brief The view half of tesseractViewProjection: eye placement and orientation. */
+glm::mat4 tesseractView(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,
+                        float viewDistance);
 
 /**
  * @brief Render the tesseract scene for this frame into rs.targets.texBlackhole.
@@ -217,7 +228,8 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistan
  * throughput and warm-up never reach the frames. The view comes from
  * tesseractViewProjection with the tesseractFraming of @p record's camera.
  */
-void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
+void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
+                          const glm::vec3 &focusDirection, float deltaSeconds,
                           const std::optional<TesseractRecordFrame> &record);
 
 } // namespace blackhole

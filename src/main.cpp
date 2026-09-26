@@ -1103,11 +1103,14 @@ void reloadChangedShaders(RenderState &rs, GLuint &computeProgram) {
 #endif
 
 struct FrameCamera {
-  glm::vec3 position;
-  glm::mat3 basis;
-  float fovScale;
-  glm::mat4 projection;
-  glm::mat4 gizmoView;
+  glm::vec3 position{0.0f};
+  glm::mat3 basis{1.0f};
+  /// Unit direction from the camera to its focus; basis[2] turns from it
+  /// toward a showcase-orbit aim point.
+  glm::vec3 focusDirection{0.0f, 0.0f, 1.0f};
+  float fovScale = 1.0f;
+  glm::mat4 projection{1.0f};
+  glm::mat4 gizmoView{1.0f};
 };
 
 FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platform::CliOptions &cli,
@@ -1167,6 +1170,7 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
                        // -- glm::mat has no .at()
   return {.position = cameraPos,
           .basis = cameraBasis,
+          .focusDirection = glm::normalize(focusTarget - cameraPos),
           .fovScale = fovScale,
           .projection = projectionMatrix,
           .gizmoView = gizmoViewMatrix};
@@ -1197,7 +1201,7 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.begin();
     }
-    renderTesseractScene(rs, frameCamera.basis, deltaTime, record);
+    renderTesseractScene(rs, frameCamera.basis, frameCamera.focusDirection, deltaTime, record);
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.end();
     }
