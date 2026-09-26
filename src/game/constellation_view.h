@@ -57,6 +57,7 @@ struct ConstellationFleetView {
   double reliability = 1.0;
   bool inTransit = false;
   std::int64_t transitArrivalTurn = 0;
+  SystemId transitDestSystem = K_INVALID_SYSTEM_ID; ///< Destination while in transit.
   std::int64_t reportedTurn = 0; ///< Turn the fleet sent the state shown here.
 };
 

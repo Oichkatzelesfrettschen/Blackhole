@@ -382,3 +382,52 @@ TEST(Constellation, OwnFleetStateArrivesOnlyByReport) {
   // Now the authority knows the tank is empty: the hop back is refused.
   EXPECT_FALSE(constellation.issueCommand(alpha, toInner));
 }
+
+namespace {
+
+/** One turn of a fleet's transit, as seen from outside. */
+struct TransitStep {
+  bool coasting = false;  ///< In transit before and after the turn.
+  bool arrived = false;   ///< In transit before, landed after.
+  double agedDays = 0.0;  ///< Proper days the crew aged this turn.
+  game::SystemId system = game::K_INVALID_SYSTEM_ID;
+  int bandIndex = 0;
+};
+
+TransitStep stepFront(game::Constellation &constellation) {
+  const game::ConstellationFleet before = constellation.fleets().front();
+  constellation.advanceTurn();
+  const game::ConstellationFleet &after = constellation.fleets().front();
+  return TransitStep{.coasting = before.inTransit && after.inTransit,
+                     .arrived = before.inTransit && !after.inTransit,
+                     .agedDays = (after.properTimeSec - before.properTimeSec) / K_SECONDS_PER_DAY,
+                     .system = after.system,
+                     .bandIndex = after.bandIndex};
+}
+
+} // namespace
+
+// Falsifier: a crew coasting a 40 light-day hop at 0.5c aging anything but
+// sqrt(1 - 0.25) = 0.866 of each coordinate day, or the fleet leaving its
+// origin system's books before it arrives (the destination learns of it only
+// on arrival).
+TEST(Constellation, TransitAgesCrewsRelativisticallyAndArrivesOnArrival) {
+  game::ConstellationSession session(K_SEED);
+  game::Constellation &constellation = session.constellation();
+  ASSERT_TRUE(session.movePlayerFleet(constellation.fleets().front().id, 1, 1));
+  const double coastRate = std::sqrt(1.0 - (0.5 * 0.5));
+  int transitTurns = 0;
+  TransitStep step;
+  for (int turn = 0; turn < 400 && !step.arrived; ++turn) {
+    step = stepFront(constellation);
+    if (step.coasting) {
+      ++transitTurns;
+      EXPECT_NEAR(step.agedDays, coastRate, 1e-12);
+      EXPECT_EQ(step.system, 0U) << "still booked in the origin system while coasting";
+    }
+  }
+  ASSERT_TRUE(step.arrived);
+  EXPECT_EQ(step.system, 1U);
+  EXPECT_EQ(step.bandIndex, 1);
+  EXPECT_EQ(transitTurns, 79); // an 80-turn hop: departure turn plus 79 full coasting turns
+}

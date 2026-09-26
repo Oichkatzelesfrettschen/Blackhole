@@ -63,7 +63,7 @@ struct OrbitalSystem {
 struct ConstellationFleet {
   FleetId id = K_INVALID_FLEET_ID; ///< Unique across the whole constellation.
   FactionId faction = K_INVALID_FACTION_ID;
-  SystemId system = K_INVALID_SYSTEM_ID; ///< Current system; the destination while in transit.
+  SystemId system = K_INVALID_SYSTEM_ID; ///< Current system; the origin until a transit arrives.
   FleetCapability capability = FleetCapability::Research;
   int bandIndex = 0;
   OrbitLane lane = OrbitLane::Prograde;
@@ -74,6 +74,7 @@ struct ConstellationFleet {
   double fuelUnits = 0.0;
   bool inTransit = false;             ///< True between systems; holds no band.
   std::int64_t transitArrivalTurn = 0; ///< Turn an in-transit fleet reaches its destination.
+  SystemId transitDestSystem = K_INVALID_SYSTEM_ID; ///< System it joins on arrival.
   int transitDestBand = 0;            ///< Band it settles onto on arrival.
   OrbitLane transitDestLane = OrbitLane::Prograde;
   /// Worldline it adopts on arrival.
@@ -94,6 +95,7 @@ struct FleetBelief {
   double fuelUnits = 0.0;
   bool inTransit = false;
   std::int64_t transitArrivalTurn = 0;
+  SystemId transitDestSystem = K_INVALID_SYSTEM_ID;
   int transitDestBand = 0;
   std::int64_t asOfTurn = 0; ///< Turn the reported state held at the fleet.
 };

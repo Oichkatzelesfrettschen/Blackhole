@@ -45,6 +45,7 @@ void appendFleetBelief(std::vector<std::uint8_t> &out, const FleetBelief &known)
   appendF64(out, known.fuelUnits);
   appendU8(out, known.inTransit ? 1U : 0U);
   appendI64(out, known.transitArrivalTurn);
+  appendU32(out, known.transitDestSystem);
   appendI64(out, known.transitDestBand);
   appendI64(out, known.asOfTurn);
 }
@@ -68,7 +69,8 @@ const char *factionPolicyName(FactionPolicy policy) {
 Constellation::Constellation(ConstellationConfig config)
     : config_(std::move(config)),
       valid_(std::isfinite(config_.secondsPerTurn) && config_.secondsPerTurn > 0.0 &&
-             !config_.systems.empty()),
+             !config_.systems.empty() && config_.interSystemTravelSpeedFraction > 0.0 &&
+             config_.interSystemTravelSpeedFraction < 1.0),
       clock_(valid_ ? config_.secondsPerTurn : 1.0) {
   if (!valid_) {
     return;
@@ -280,6 +282,7 @@ FleetId Constellation::addFleet(FactionId faction, SystemId system, FleetCapabil
                              .fuelUnits = fleet.fuelUnits,
                              .inTransit = false,
                              .transitArrivalTurn = 0,
+                             .transitDestSystem = K_INVALID_SYSTEM_ID,
                              .transitDestBand = 0,
                              .asOfTurn = clock_.turn()});
   fleets_.push_back(std::move(fleet));
@@ -372,14 +375,16 @@ void Constellation::applyReceivedCommand(ConstellationFleet &fleet,
   if (separationCm >= 0.0 && config_.interSystemTravelFuelUnits <= fleet.fuelUnits &&
       validBand(command.targetSystem, command.targetBand)) {
     fleet.fuelUnits -= config_.interSystemTravelFuelUnits;
-    const double speedCmPerSec = config_.interSystemTravelSpeedFraction * K_C_CM_PER_S;
-    const double travelSec = speedCmPerSec > 0.0 ? separationCm / speedCmPerSec : separationCm;
+    const double travelSec =
+        separationCm / (config_.interSystemTravelSpeedFraction * K_C_CM_PER_S);
+    // The fleet stays in its origin system's books until it arrives: it holds
+    // no band there while coasting and joins the destination only on arrival.
     fleet.inTransit = true;
     fleet.transitArrivalTurn = clock_.turn() + clock_.ceilTurns(travelSec);
+    fleet.transitDestSystem = command.targetSystem;
     fleet.transitDestBand = command.targetBand;
     fleet.transitDestLane = command.lane;
     fleet.transitDestObserver = observerFor(command.lane, command.station);
-    fleet.system = command.targetSystem;
   }
 }
 
@@ -436,6 +441,7 @@ void Constellation::landArrivals() {
   for (ConstellationFleet &fleet : fleets_) {
     if (fleet.inTransit && fleet.transitArrivalTurn <= clock_.turn()) {
       fleet.inTransit = false;
+      fleet.system = fleet.transitDestSystem;
       fleet.bandIndex = fleet.transitDestBand;
       fleet.lane = fleet.transitDestLane;
       fleet.observer = fleet.transitDestObserver;
@@ -464,6 +470,7 @@ void Constellation::enqueueFleetStatus(const ConstellationFleet &fleet, SystemId
                                 .fuelUnits = fleet.fuelUnits,
                                 .inTransit = fleet.inTransit,
                                 .transitArrivalTurn = fleet.transitArrivalTurn,
+                                .transitDestSystem = fleet.transitDestSystem,
                                 .transitDestBand = fleet.transitDestBand,
                                 .asOfTurn = clock_.turn()};
   deliveryQueue_.push_back(delivery);
@@ -500,11 +507,14 @@ void Constellation::runFleetWork() {
     instabilityEntering.at(systemIndex) = systems_.at(systemIndex).instability;
   }
   const double reportThresholdSec = config_.workProperHoursPerReport * economy::K_SECONDS_PER_HOUR;
+  const double beta = config_.interSystemTravelSpeedFraction;
+  const double transitClockRate = std::sqrt((1.0 - beta) * (1.0 + beta));
   for (ConstellationFleet &fleet : fleets_) {
     if (fleet.inTransit) {
-      // Interstellar coasting: the crew ages at the flat-space rate but does no
-      // work and holds no band.
-      fleet.properTimeSec += clock_.secondsPerTurn();
+      // Interstellar coasting at beta = interSystemTravelSpeedFraction in flat
+      // space: the crew ages sqrt(1 - beta^2) per coordinate second (the twin
+      // effect), does no work, and holds no band.
+      fleet.properTimeSec += properDeltaSec(transitClockRate, clock_.secondsPerTurn());
       continue;
     }
     const KerrTimeField &field = systems_.at(fleet.system).field;
@@ -696,8 +706,9 @@ bool Constellation::hasCommandInFlight(const FleetBelief &known) const {
 bool Constellation::factionOccupies(FactionId faction, SystemId system, int bandIndex) const {
   const bool reported =
       std::ranges::any_of(ownBelief_.at(factionIndex(faction)), [&](const FleetBelief &known) {
-        return known.inTransit ? (known.system == system && known.transitDestBand == bandIndex)
-                               : (known.system == system && known.bandIndex == bandIndex);
+        return known.inTransit
+                   ? (known.transitDestSystem == system && known.transitDestBand == bandIndex)
+                   : (known.system == system && known.bandIndex == bandIndex);
       });
   // The authority also knows what it has ordered: a slot an unanswered order
   // is sending a fleet to counts as claimed.
@@ -933,6 +944,7 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
       fleetView.reliability = known.reliability;
       fleetView.inTransit = known.inTransit;
       fleetView.transitArrivalTurn = known.transitArrivalTurn;
+      fleetView.transitDestSystem = known.transitDestSystem;
       fleetView.reportedTurn = known.asOfTurn;
       view.fleets.push_back(fleetView);
     }
@@ -983,6 +995,7 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendF64(out, fleet.fuelUnits);
     appendU8(out, fleet.inTransit ? 1U : 0U);
     appendI64(out, fleet.transitArrivalTurn);
+    appendU32(out, fleet.transitDestSystem);
     appendI64(out, fleet.transitDestBand);
     appendU8(out, static_cast<std::uint8_t>(fleet.transitDestLane));
   }

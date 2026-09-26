@@ -64,7 +64,9 @@ struct ConstellationConfig {
   double workProperHoursPerReport = 24.0; ///< Proper-hours a fleet banks before emitting one yield report.
   double fleetInitialFuelUnits = 100.0;
   double fuelPerBandHop = 20.0;
-  double interSystemTravelSpeedFraction = 0.5; ///< Fleet transit speed as a fraction of c.
+  /// Fleet transit speed as a fraction of c, in (0, 1); a coasting crew ages
+  /// at sqrt(1 - beta^2) of coordinate time.
+  double interSystemTravelSpeedFraction = 0.5;
   double interSystemTravelFuelUnits = 50.0;    ///< Fuel charged for one interstellar hop.
 
   // Economy, sharing the single hole's meaning and defaults-are-no-ops discipline.
