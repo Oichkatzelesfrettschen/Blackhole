@@ -165,9 +165,13 @@ bool CampaignState::issueCommand(const Command &command) {
     if (!placementAllowed(command.lane, command.station, command.targetBand)) {
       return false;
     }
-    // Fuel gate at issue time against the fleet's current position; the
-    // charge itself lands at effect time from wherever the fleet then is.
-    if (redeployFuelCost(fleet->bandIndex, command.targetBand) > fleet->fuelUnits) {
+    // Fuel gate at issue time against the fleet's current position, for the
+    // authority only: it holds the fleets' telemetry. A colony does not, so
+    // its order is sent regardless and the effect-time check below decides,
+    // with a fizzle notice travelling back. The charge itself always lands at
+    // effect time from wherever the fleet then is.
+    if (command.originNode == K_AUTHORITY_NODE &&
+        redeployFuelCost(fleet->bandIndex, command.targetBand) > fleet->fuelUnits) {
       return false;
     }
     break;
@@ -225,6 +229,10 @@ void CampaignState::applyCommand(const LoggedCommand &logged) {
       fleet->bandIndex = logged.command.targetBand;
       fleet->lane = logged.command.lane;
       fleet->observer = observerFor(logged.command.lane, logged.command.station);
+    } else if (logged.command.originNode != K_AUTHORITY_NODE) {
+      // A station without the fleet's telemetry learns of the fizzle only
+      // when the fleet's reply crosses back to it.
+      emitFizzleNotice(*fleet, logged.command.originNode);
     }
     break;
   }
@@ -257,6 +265,10 @@ void CampaignState::deliverDue() {
     }
     return a.sequence < b.sequence;
   });
+  // The queue holds what is still in flight before the due deliveries act, so
+  // anything they emit (a fizzled order's notice) joins it rather than being
+  // overwritten.
+  deliveryQueue_ = std::move(remaining);
   for (const Delivery &delivery : due) {
     switch (delivery.kind) {
     case DeliveryKind::Command:
@@ -296,7 +308,6 @@ void CampaignState::deliverDue() {
       break;
     }
   }
-  deliveryQueue_ = std::move(remaining);
 }
 
 void CampaignState::advanceTurn() {
@@ -595,6 +606,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       signal.senderEnergyUnitsAtEmit = delivery.senderEnergyUnitsAtEmit;
       signal.senderTechPointsAtEmit = delivery.senderTechPointsAtEmit;
       signal.payloadIndex = delivery.payloadIndex;
+      signal.fleet = delivery.sender == K_NO_NODE ? delivery.fleet : K_INVALID_FLEET_ID;
       signal.techPoints = delivery.techPoints;
       if (delivery.kind == DeliveryKind::ColonyReport) {
         ++view.colonyReportsInFlight;

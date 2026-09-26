@@ -228,3 +228,40 @@ TEST(CampaignCausality, ZeroDelayOrdersActOnTheirLoggedTurn) {
   EXPECT_EQ(state.turn(), logged.effectTurn);
   EXPECT_EQ(state.fleets().front().assignedTasks.size(), tasksBefore + 1);
 }
+
+// Falsifier: a colony's redeployment refused at issue on the fleet's true
+// fuel (telemetry the colony lacks), or, once sent, fizzling without a reply
+// that lands at the effect turn plus the fleet-to-colony light delay.
+TEST(CampaignCausality, ColonyRedeploymentFizzlesAtEffectWithANotice) {
+  game::CampaignSession session(3, shippedStory(), K_MILLER_BAND);
+  game::CampaignState &state = session.state();
+  // The host spends the survey fleet's 100 fuel on five 20-fuel hops, leaving
+  // it on Miller's band (index 0) with none.
+  for (int hop = 0; hop < 5; ++hop) {
+    ASSERT_TRUE(session.issuePlaceFleet(1, hop % 2 == 0 ? K_MILLER_BAND : 1,
+                                        game::OrbitLane::Prograde, game::StationKeeping::Orbit,
+                                        game::K_AUTHORITY_NODE));
+    state.advanceTurns(state.commandLog().back().effectTurn - state.turn());
+  }
+  ASSERT_EQ(state.fleets().front().bandIndex, K_MILLER_BAND);
+  ASSERT_DOUBLE_EQ(state.fleets().front().fuelUnits, 0.0);
+  // The host, which sees the empty tank, is refused at issue.
+  EXPECT_FALSE(session.issuePlaceFleet(1, 1, game::OrbitLane::Prograde,
+                                       game::StationKeeping::Orbit, game::K_AUTHORITY_NODE));
+
+  // The colony cannot see it: its order is sent, and fizzles on arrival.
+  ASSERT_TRUE(session.issuePlaceFleet(1, 1, game::OrbitLane::Prograde,
+                                      game::StationKeeping::Orbit, game::K_FIRST_COLONY_NODE));
+  const std::int64_t effectTurn = state.commandLog().back().effectTurn;
+  state.advanceTurns(effectTurn - state.turn());
+  EXPECT_EQ(state.fleets().front().bandIndex, K_MILLER_BAND);
+  // Fleet and colony share Miller's radius, so the reply lands that turn.
+  const auto fizzle = std::ranges::find_if(state.arrivals(), [](const game::ArrivalRecord &arrival) {
+    return arrival.sender == game::K_NO_NODE;
+  });
+  ASSERT_NE(fizzle, state.arrivals().end());
+  EXPECT_EQ(fizzle->destination, game::K_FIRST_COLONY_NODE);
+  EXPECT_EQ(fizzle->fleet, 1U);
+  EXPECT_EQ(fizzle->emitTurn, effectTurn);
+  EXPECT_EQ(fizzle->arrivalTurn, effectTurn);
+}

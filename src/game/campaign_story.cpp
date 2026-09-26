@@ -16,6 +16,7 @@
 
 #include "game/campaign.h"
 #include "game/event.h"
+#include "game/fleet.h"
 #include "game/observer.h"
 #include "game/observer_clock.h"
 #include "game/serialize_bytes.h"
@@ -364,6 +365,23 @@ void CampaignState::emitNodeDelivery(DeliveryKind kind, const StationNode &sende
   deliveryQueue_.push_back(delivery);
 }
 
+void CampaignState::emitFizzleNotice(const Fleet &fleet, NodeId origin) {
+  const double fleetCm = bandRadiusCm(fleet.bandIndex);
+  const double originCm = nodes_.at(origin).radiusCm;
+  Delivery delivery;
+  delivery.kind = DeliveryKind::EventNotice;
+  delivery.emitTurn = clock_.turn();
+  delivery.effectTurn =
+      clock_.turn() +
+      clock_.ceilTurns(fleetCm == originCm ? 0.0 : field_->signalDelaySec(fleetCm, originCm));
+  delivery.sequence = nextSequence_++;
+  delivery.sender = K_NO_NODE;
+  delivery.destination = origin;
+  delivery.fleet = fleet.id;
+  delivery.category = EventCategory::Info;
+  deliveryQueue_.push_back(delivery);
+}
+
 void CampaignState::advanceNodeClocks() {
   for (StationNode &node : nodes_) {
     const std::int64_t crossed = node.clock.advance();
@@ -398,10 +416,12 @@ void CampaignState::receiveNodeDelivery(const Delivery &delivery) {
   }
   const EmitKind kind =
       delivery.kind == DeliveryKind::TechPacket ? EmitKind::TechPacket : EmitKind::Notice;
-  ReceivedFromNode &received = destination.received.at(delivery.sender);
-  received.lastArrivalTurn.at(kindIndex(kind)) = clock_.turn();
-  ++received.count.at(kindIndex(kind));
-  noteSenderStamp(delivery);
+  if (delivery.sender < nodes_.size()) {
+    ReceivedFromNode &received = destination.received.at(delivery.sender);
+    received.lastArrivalTurn.at(kindIndex(kind)) = clock_.turn();
+    ++received.count.at(kindIndex(kind));
+    noteSenderStamp(delivery);
+  }
   if (kind == EmitKind::TechPacket) {
     destination.techPoints = saturatingAdd(destination.techPoints, delivery.techPoints);
   }
@@ -416,11 +436,15 @@ void CampaignState::receiveNodeDelivery(const Delivery &delivery) {
   record.senderEnergyUnitsAtEmit = delivery.senderEnergyUnitsAtEmit;
   record.senderTechPointsAtEmit = delivery.senderTechPointsAtEmit;
   record.payloadIndex = delivery.payloadIndex;
+  record.fleet = delivery.sender < nodes_.size() ? K_INVALID_FLEET_ID : delivery.fleet;
   record.techPoints = delivery.techPoints;
   arrivals_.push_back(record);
 }
 
 void CampaignState::noteSenderStamp(const Delivery &delivery) {
+  if (delivery.sender >= nodes_.size()) {
+    return; // a fleet's reply: no station clock to record
+  }
   ReceivedFromNode &received = nodes_.at(delivery.destination).received.at(delivery.sender);
   if (delivery.emitTurn < received.lastEmitTurn) {
     return; // an older emission that took longer: it says nothing newer
@@ -608,6 +632,7 @@ void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
     appendF64(out, arrival.senderEnergyUnitsAtEmit);
     appendI64(out, arrival.senderTechPointsAtEmit);
     appendU32(out, arrival.payloadIndex);
+    appendU32(out, arrival.fleet);
     appendI64(out, arrival.techPoints);
   }
   appendF64(out, energyLostToDarkness_);

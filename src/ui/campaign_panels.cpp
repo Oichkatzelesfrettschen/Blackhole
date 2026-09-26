@@ -76,6 +76,9 @@ std::string formatSpan(double seconds) {
 }
 
 const char *nodeName(game::NodeId node) {
+  if (node == game::K_NO_NODE) {
+    return "fleets"; // replies from fleets, which are not stations
+  }
   return node == game::K_AUTHORITY_NODE ? "host" : "colony";
 }
 
@@ -128,6 +131,10 @@ std::string remoteAsLastHeard(const game::CampaignViewSnapshot &view, const game
 }
 
 std::string arrivalText(const game::CampaignViewSnapshot &view, const game::ArrivalRecord &arrival) {
+  if (arrival.sender == game::K_NO_NODE) {
+    return std::format("fleet {}: redeployment order fizzled (not enough fuel when it arrived)",
+                       arrival.fleet);
+  }
   if (arrival.kind == game::EmitKind::TechPacket) {
     return std::format("tech packet #{} (+{} points)", arrival.payloadIndex + 1,
                        arrival.techPoints);

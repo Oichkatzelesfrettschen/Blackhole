@@ -298,6 +298,9 @@ private:
   void deliverDue();
   void applyCommand(const LoggedCommand &logged);
   void receiveNodeDelivery(const Delivery &delivery);
+  /** @brief A fleet's reply that an order from `origin` fizzled (not enough
+   *         fuel on arrival), sent by light from the fleet's band. */
+  void emitFizzleNotice(const Fleet &fleet, NodeId origin);
   /** @brief Records a landed node delivery as the destination's latest word
    *         from its sender, when it was emitted no earlier than the last. */
   void noteSenderStamp(const Delivery &delivery);

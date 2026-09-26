@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "game/event.h"
+#include "game/fleet.h"
 #include "game/observer.h"
 #include "game/observer_clock.h"
 
@@ -77,6 +78,8 @@ struct ArrivalRecord {
   double senderEnergyUnitsAtEmit = 0.0;
   std::int64_t senderTechPointsAtEmit = 0; ///< Sender's tech points when it sent this.
   std::uint32_t payloadIndex = 0; ///< Tech packet ordinal from its sender, or the notice's event id.
+  /// The replying fleet when sender is K_NO_NODE (a fizzled order's notice).
+  FleetId fleet = K_INVALID_FLEET_ID;
   std::int64_t techPoints = 0;
 };
 
