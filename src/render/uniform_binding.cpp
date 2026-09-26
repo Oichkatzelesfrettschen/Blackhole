@@ -241,7 +241,10 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.height = rs.targets.renderHeight;
   cp.adisk_enabled = in.adiskEnabledEffective ? 1 : 0;
   cp.redshift_enabled = in.enableRedshiftEffective ? 1 : 0;
-  cp.kerr_enabled = (fabsf(interop.kerrSpin) > 1e-6f) ? 1 : 0;
+  // The Kerr Mino-time integrator is exact at a = 0 (Schwarzschild), so the
+  // renderer uses it at every spin; kerr_enabled = 0 remains for kernels
+  // that test the Schwarzschild RK4 path.
+  cp.kerr_enabled = 1;
   cp.use_luts = (interop.useLUTs > 0.5f) ? 1 : 0;
   cp.lut_radius_min = interop.lutRadiusMin;
   cp.lut_radius_max = interop.lutRadiusMax;

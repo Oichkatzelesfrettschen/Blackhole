@@ -200,11 +200,12 @@ void main() {
     vec2 pixelCoord = vec2(gid) + vec2(0.5);
 
     vec3 dir = bhRayDir(pixelCoord, resolution, fovScale, cameraBasis);
-    vec3 pos = cameraPos;
+    // Physics frame (spin along +z); see bhWorldToPhysics in interop_trace.glsl.
+    vec3 cameraPosPhys = bhWorldToPhysics(cameraPos);
 
     Ray ray;
-    ray.position        = pos;
-    ray.velocity        = dir;
+    ray.position        = cameraPosPhys;
+    ray.velocity        = bhWorldToPhysics(dir);
     ray.affineParameter = 0.0;
 
     vec4 result;
@@ -237,9 +238,9 @@ void main() {
         HitResult hit = bhTraceGeodesic(
             ray, schwarzschildRadius, depthFar,
             interopMaxSteps, interopStepSize);
-        vec4 shaded = bhShadeHit(hit, cameraPos, schwarzschildRadius);
+        vec4 shaded = bhShadeHit(hit, cameraPosPhys, schwarzschildRadius);
         float depthNorm = clamp(
-            length(hit.hitPoint - cameraPos) / max(depthFar, 0.0001),
+            length(hit.hitPoint - cameraPosPhys) / max(depthFar, 0.0001),
             0.0, 1.0);
         vec3 col = shaded.rgb;
         applyWiregridOverlay(col, hit.hitPoint);

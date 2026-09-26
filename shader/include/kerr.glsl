@@ -14,13 +14,23 @@ struct KerrConsts {
   float Q;
 };
 
+// Mino-time state. The polar motion runs in mu = cos(theta), where Carter's
+// polar potential is the polynomial
+//   Theta_mu(mu) = (dmu/dlambda)^2 = Q (1 - mu^2) + a^2 E^2 mu^2 (1 - mu^2) - Lz^2 mu^2,
+// free of the Lz^2 cot^2 pole singularity of the theta form. vr = dr/dlambda
+// and vmu = dmu/dlambda follow d^2r/dlambda^2 = R'(r)/2 and d^2mu/dlambda^2 =
+// Theta_mu'(mu)/2; accR and accMu cache those accelerations so each leapfrog
+// step evaluates the forces once. theta = acos(mu) is kept for callers.
 struct KerrRay {
   float r;
   float theta;
   float phi;
   float t;
-  float sign_r;
-  float sign_theta;
+  float vr;
+  float mu;
+  float vmu;
+  float accR;
+  float accMu;
 };
 
 const float KERR_EPSILON = 1e-6;
@@ -49,37 +59,70 @@ vec3 kerrToCartesian(float r, float theta, float phi) {
               r * cos(theta));
 }
 
-// Exact Carter constants from the Kerr metric at the initial position.
-//
-// Projects the Cartesian direction `dir` onto Boyer-Lindquist coordinates,
-// solves the null condition g_mu_nu k^mu k^nu = 0 for k^t, then reads off
-// E = -k_t and Lz = k_phi from the covariant components.  Q is derived from
-// the code convention Theta = Q + a^2 cos^2 - Lz^2/sin^2 = (Sigma k^theta)^2.
-// Result is normalized to E = 1 to preserve the existing step-size calibration.
-//
-// WHY this beats the old flat-space approx (c.E=1, Q=|L|^2-Lz^2):
-//   For a tangential ray at radius r, the old code gives R > 0 (non-zero radial
-//   velocity) even though the ray has no radial component.  The exact formula
-//   gives R <= 0, correctly anchoring the ray at its turning point and matching
-//   the geodesic impact parameters b = Lz/E and q = Q/E^2 to the local metric.
-KerrConsts kerrInitConsts(vec3 pos, vec3 dir, float r_s, float a) {
-  KerrConsts c;
+// Spin passed to kerrInitGeodesic and kerrStep. The camera pixel gives the
+// direction the arriving photon travelled from; its past history is the
+// time reverse of its path. Time reversal t -> -t is an isometry from Kerr
+// with spin a to Kerr with spin -a, so the arriving photon's past path is,
+// point for point in (r, theta, phi), the future path of a photon emitted
+// along the pixel direction in Kerr with spin -a. The physical photon's
+// constants are then E = c.E, Lz = -c.Lz, Q = c.Q (James et al. 2015,
+// arXiv:1502.03808, App. A traces the same backward ray).
+float kerrTraceSpin(float a) {
+  return -a;
+}
 
+// Radial and polar accelerations R'(r)/2 and Theta_mu'(mu)/2 of the Mino
+// system: Theta_mu'/2 = -(Q + Lz^2) mu + a^2 E^2 (mu - 2 mu^3).
+void kerrAccelerations(float r, float mu, float r_s, float a, KerrConsts c,
+                       out float accR, out float accMu) {
+  float P = (r * r + a * a) * c.E - a * c.Lz;
+  float Lz_minus_aE = c.Lz - a * c.E;
+  float Q_eff = c.Q + Lz_minus_aE * Lz_minus_aE;
+  accR = 2.0 * r * c.E * P - (r - 0.5 * r_s) * Q_eff;
+  float a2E2 = a * a * c.E * c.E;
+  accMu = -(c.Q + c.Lz * c.Lz) * mu + a2E2 * (mu - 2.0 * mu * mu * mu);
+}
+
+float kerrPolarPotentialMu(float mu, float a, KerrConsts c) {
+  float mu2 = mu * mu;
+  return c.Q * (1.0 - mu2) + a * a * c.E * c.E * mu2 * (1.0 - mu2) - c.Lz * c.Lz * mu2;
+}
+
+// Null geodesic through pos with Cartesian direction dir in Kerr spin a
+// (r_s = 2M). Projects dir onto the Boyer-Lindquist basis, solves the null
+// condition for the future root k^t, reads E = -k_t and Lz = k_phi, and
+// normalizes to E = 1. Q is Carter's constant p_theta^2 - a^2 cos^2 +
+// Lz^2 cot^2 with p_theta = Sigma k^theta / E, so R(r0) = vr^2 and
+// Theta_mu(mu0) = vmu^2 at the start (physics::kerrNullGeodesicFromBL is the
+// CPU twin, pinned by tests/kerr_null_geodesic_test.cpp; the GPU init is
+// pinned by tests/kerr_shader_capture_test.cpp).
+void kerrInitGeodesic(vec3 pos, vec3 dir, float r_s, float a,
+                      out KerrConsts c, out KerrRay ray) {
   float r = length(pos);
+  ray.r = r;
+  ray.t = 0.0;
+  ray.phi = atan(pos.y, pos.x);
+  c.E = 1.0;
+  c.Lz = 0.0;
+  c.Q = 0.0;
+  ray.vr = 0.0;
+  ray.mu = 0.0;
+  ray.vmu = 0.0;
   if (r < KERR_EPSILON) {
-    c.E = 1.0; c.Lz = 0.0; c.Q = 0.0;
-    return c;
+    ray.theta = 0.5 * PI;
+    ray.accR = 0.0;
+    ray.accMu = 0.0;
+    return;
   }
 
   float invR  = 1.0 / r;
   float cosT  = clamp(pos.z * invR, -1.0, 1.0);
   float sinT  = sqrt(max(1.0 - cosT * cosT, 0.0));
   float sin2  = sinT * sinT;
-  float phi   = atan(pos.y, pos.x);
-  float cosP  = cos(phi);
-  float sinP  = sin(phi);
+  float cosP  = cos(ray.phi);
+  float sinP  = sin(ray.phi);
+  ray.theta   = acos(cosT);
 
-  // Spherical basis at pos (same orientation as kerrInitRay).
   vec3 e_r     = vec3(sinT * cosP,  sinT * sinP,  cosT);
   vec3 e_theta = vec3(cosT * cosP,  cosT * sinP, -sinT);
   vec3 e_phi   = vec3(-sinP,         cosP,         0.0);
@@ -89,7 +132,6 @@ KerrConsts kerrInitConsts(vec3 pos, vec3 dir, float r_s, float a) {
   float ktheta = dot(dir, e_theta) * invR;
   float kphi   = (sinT > KERR_EPSILON) ? dot(dir, e_phi) / (r * sinT) : 0.0;
 
-  // Kerr metric at (r, theta); r_s = 2M convention.
   float sigma  = r * r + a * a * cosT * cosT;
   float delta  = r * r - r_s * r + a * a;
   float f      = (sigma > KERR_EPSILON) ? (r_s * r / sigma) : 0.0;
@@ -99,139 +141,126 @@ KerrConsts kerrInitConsts(vec3 pos, vec3 dir, float r_s, float a) {
   float gthth  = sigma;
   float gphph  = (r * r + a * a + f * a * a * sin2) * sin2;
 
-  // Solve null condition gtt*(k^t)^2 + 2*gtphi*kphi*(k^t) + spatial = 0
-  // for the future-directed root (k^t > 0).
+  // gtt (k^t)^2 + 2 gtphi kphi k^t + spatial = 0. Outside the ergoregion the
+  // roots have opposite signs; the future-directed root is the larger one.
   float spatial = grr * kr * kr + gthth * ktheta * ktheta + gphph * kphi * kphi;
   float hb      = gtphi * kphi;
   float disc    = hb * hb - gtt * spatial;
-  float kt;
+  float kt = 1.0;
   if (disc >= 0.0 && abs(gtt) > KERR_EPSILON) {
-    float sqD  = sqrt(disc);
-    float kt_a = (-hb + sqD) / gtt;
-    float kt_b = (-hb - sqD) / gtt;
-    kt = (kt_a > 0.0) ? kt_a : kt_b;
-    if (kt <= 0.0) kt = max(kt_a, kt_b);  // ergosphere: pick less-negative root
-  } else {
-    kt = 1.0;  // degenerate or inside ergosphere: flat-space fallback
+    float sqD = sqrt(disc);
+    kt = max((-hb + sqD) / gtt, (-hb - sqD) / gtt);
   }
 
-  // Conserved quantities: E = -(g_tt k^t + g_tphi k^phi),
-  //                       Lz = g_tphi k^t + g_phph k^phi.
   float E_raw  = -(gtt * kt + gtphi * kphi);
   float Lz_raw = gtphi * kt + gphph * kphi;
-
-  // Normalize to E = 1 to preserve existing step-size calibration.
   float invE = (E_raw > KERR_EPSILON) ? (1.0 / E_raw) : 1.0;
-  c.E  = 1.0;
   c.Lz = Lz_raw * invE;
 
-  // Carter Q (code convention: Theta = Q + a^2 cos^2 - Lz^2/sin^2 = (Sigma k^theta)^2).
-  // Q can be negative for radial photons near the poles (e.g. Q = -a^2 at theta=0).
-  float ptheta = sigma * ktheta * invE;  // p_theta = Sigma * k^theta (E-normalized)
-  if (sinT > KERR_EPSILON) {
-    c.Q = ptheta * ptheta - a * a * cosT * cosT + c.Lz * c.Lz / sin2;
-  } else {
-    // Pole: kphi = 0, so Lz = 0.  Q = ptheta^2 - a^2 (exact at theta = 0 or pi).
-    c.Q = ptheta * ptheta - a * a;
-  }
+  float ptheta = sigma * ktheta * invE;
+  float cot2 = (sin2 > KERR_EPSILON) ? (cosT * cosT / sin2) : 0.0;
+  c.Q = ptheta * ptheta - a * a * cosT * cosT + c.Lz * c.Lz * cot2;
 
-  return c;
+  ray.vr = sigma * kr * invE;
+  ray.mu = cosT;
+  ray.vmu = -sinT * ptheta;  // dmu/dlambda = -sin(theta) dtheta/dlambda
+  kerrAccelerations(ray.r, ray.mu, r_s, a, c, ray.accR, ray.accMu);
 }
 
-KerrRay kerrInitRay(vec3 pos, vec3 dir) {
-  KerrRay ray;
-  ray.r = length(pos);
-  float invR = ray.r > KERR_EPSILON ? 1.0 / ray.r : 0.0;
-  float cosTheta = clamp(pos.z * invR, -1.0, 1.0);
-  ray.theta = acos(cosTheta);
-  ray.phi = atan(pos.y, pos.x);
-  ray.t = 0.0;
-
-  vec3 e_r = normalize(pos);
-  vec3 e_theta = normalize(vec3(cos(ray.theta) * cos(ray.phi),
-                                cos(ray.theta) * sin(ray.phi),
-                                -sin(ray.theta)));
-  float dr = dot(dir, e_r);
-  float dtheta = dot(dir, e_theta);
-  ray.sign_r = dr >= 0.0 ? 1.0 : -1.0;
-  ray.sign_theta = dtheta >= 0.0 ? 1.0 : -1.0;
-  return ray;
-}
-
-void kerrStep(inout KerrRay ray, float r_s, float a, KerrConsts c, float dlam) {
-  float r = ray.r;
-  float theta = ray.theta;
+// Ingoing Kerr-Schild phi and t rates in Mino time for radial velocity vr:
+//   dphi/dlambda = Lz/sin^2 - aE + a (P + vr)/Delta
+//   dt/dlambda   = ((r^2+a^2) P + r_s r vr)/Delta + a (Lz - aE sin^2)
+// with P = (r^2+a^2)E - a Lz. Both are regular on the future horizon. For an
+// ingoing ray (vr < 0), P + vr = (P^2 - vr^2)/(P - vr) = Delta Q_eff/(P - vr)
+// on shell (vr^2 = R), which removes the 0/0 at Delta -> 0.
+void kerrAngularRates(float r, float theta, float vr, float r_s, float a,
+                      KerrConsts c, out float dphi, out float dt) {
   float sinTheta = sin(theta);
-  float cosTheta = cos(theta);
   float sin2 = max(sinTheta * sinTheta, 1e-6);
-
-  float Delta = kerrDelta(r, a, r_s);
-  float A = (r * r + a * a) * c.E - a * c.Lz;
+  float P = (r * r + a * a) * c.E - a * c.Lz;
   float Lz_minus_aE = c.Lz - a * c.E;
-
-  /* Issue-009: FMA contraction can reorder the subtract in R and Theta,
-   * changing the sign at turning points differently between compute and
-   * fragment shaders.  'precise' forces IEEE-754 sequential evaluation
-   * of each expression, making sign detection deterministic across paths. */
-  precise float R = A * A - Delta * (c.Q + Lz_minus_aE * Lz_minus_aE);
-  precise float Theta = c.Q + (a * a * c.E * c.E * cosTheta * cosTheta) -
-                        (c.Lz * c.Lz / sin2);
-
-  if (R < 0.0) {
-    ray.sign_r *= -1.0;
-  }
-  if (Theta < 0.0) {
-    ray.sign_theta *= -1.0;
-  }
-
-  float sqrtR = sqrt(max(R, 0.0));
-  float sqrtTheta = sqrt(max(Theta, 0.0));
-
-  float dr_dlam     = ray.sign_r     * sqrtR;
-  float dtheta_dlam = ray.sign_theta * sqrtTheta;
-
-  /* Rationalized outgoing KS formulas -- no deltaSafe in denominator.
-   *
-   * BL singularity: dphi/dt both diverge as Delta -> 0 at the outer horizon.
-   *
-   * KS cancellation identity (ingoing ray, sign_r = -1):
-   *   A + dr_dlam = A - sqrtR = (A^2 - R) / (A + sqrtR)
-   *                           = Delta * Q_eff / (A + sqrtR)
-   * so (A - sqrtR)/Delta = Q_eff/(A+sqrtR)  -- Delta cancels exactly.
-   * Similarly, using r^2+a^2-rs*r = Delta:
-   *   [(r^2+a^2)*A - rs*r*sqrtR] / Delta = A + rs*r*Q_eff/(A+sqrtR)
-   * Both are finite as Delta -> 0 without any clamping.
-   *
-   * Outgoing ray (sign_r = +1): at any turning point sqrtR = 0 and
-   * R = 0 => A^2 = Delta*Q_eff, so Q_eff/A = A/Delta (same as BL).
-   * Away from the turning point Delta is bounded away from 0, making
-   * the standard KS form a*(A+sqrtR)/Delta numerically safe.
-   *
-   * Continuity: both branches give identical values when sqrtR = 0,
-   * because Q_eff/(A+sqrtR) = Q_eff/A = A/Delta when R = 0.
-   *
-   * Reference: src/cuda/device_physics.cuh d_kerr_step() (CUDA parity). */
   float Q_eff = c.Q + Lz_minus_aE * Lz_minus_aE;
-  float dphi_dlam, dt_dlam;
-  if (ray.sign_r < 0.0) {
-    /* Ingoing: rationalized form, Delta-free. */
-    float inv_Aps = 1.0 / max(A + sqrtR, 1e-30);
-    dphi_dlam = (c.Lz / sin2) - a * c.E + a * Q_eff * inv_Aps;
-    dt_dlam   = A + r_s * r * Q_eff * inv_Aps + a * (c.Lz - a * c.E * sin2);
+  float tail = a * (c.Lz - a * c.E * sin2);
+  if (vr < 0.0) {
+    float inv = 1.0 / max(P - vr, 1e-30);
+    dphi = (c.Lz / sin2) - a * c.E + a * Q_eff * inv;
+    dt   = P + r_s * r * Q_eff * inv + tail;
   } else {
-    /* Outgoing (post-turning-point): Delta bounded away from 0. */
-    float invD = 1.0 / max(Delta, 1e-6);
-    dphi_dlam  = (c.Lz / sin2) - a * c.E + a * (A + sqrtR) * invD;
-    dt_dlam    = ((r * r + a * a) * A + r_s * r * sqrtR) * invD
-                 + a * (c.Lz - a * c.E * sin2);
+    float invD = 1.0 / max(kerrDelta(r, a, r_s), 1e-6);
+    dphi = (c.Lz / sin2) - a * c.E + a * (P + vr) * invD;
+    dt   = ((r * r + a * a) * P + r_s * r * vr) * invD + tail;
+  }
+}
+
+// Null-constraint projection. The second-order system carries vr^2 = R(r)
+// and vmu^2 = Theta_mu(mu) only as first integrals; in float32 the rounding
+// of |vr| ~ P ~ r^2 far out accumulates over the r^2 dynamic range until a
+// near-radial ray reverses at a few r_s. Away from turning points (potential
+// above 1% of its scale) the magnitude is reset to the exact root; near a
+// turning point the leapfrog alone carries the sign change, where the
+// magnitudes are small and float32 resolves them.
+void kerrProjectOnShell(inout KerrRay ray, float r_s, float a, KerrConsts c) {
+  float P = (ray.r * ray.r + a * a) * c.E - a * c.Lz;
+  float Lz_minus_aE = c.Lz - a * c.E;
+  float R = P * P - kerrDelta(ray.r, a, r_s) * (c.Q + Lz_minus_aE * Lz_minus_aE);
+  if (R > 0.01 * P * P) {
+    ray.vr = (ray.vr >= 0.0 ? 1.0 : -1.0) * sqrt(R);
+  }
+  float thetaMu = kerrPolarPotentialMu(ray.mu, a, c);
+  float muScale = abs(c.Q) + a * a * c.E * c.E + c.Lz * c.Lz;
+  if (muScale > 0.0 && thetaMu > 0.01 * muScale) {
+    ray.vmu = (ray.vmu >= 0.0 ? 1.0 : -1.0) * sqrt(thetaMu);
+  }
+}
+
+// One kick-drift-kick (Stormer-Verlet) step of the second-order Mino system.
+// r and mu decouple in Mino time, each with a separable Hamiltonian
+// v^2/2 - R/2 (resp. Theta_mu/2), so the step is symplectic: the on-shell
+// error stays bounded and the ray passes radial and polar turning points
+// continuously. phi and t advance with midpoint rates. Near the axis
+// dphi/dlambda ~ Lz/sin^2 grows large for small Lz, so the step shrinks to
+// keep each phi increment below 0.25 rad.
+// Cost: one force and one rate evaluation per step (forces carried in ray),
+// plus the on-shell projection.
+void kerrStep(inout KerrRay ray, float r_s, float a, KerrConsts c, float dlam) {
+  float sin2Now = max(1.0 - ray.mu * ray.mu, 1e-8);
+  float phiRate = abs(c.Lz) / sin2Now + abs(a) * (1.0 + abs(c.Lz)) + 1e-6;
+  dlam = sign(dlam) * min(abs(dlam), 0.25 / phiRate);
+
+  precise float vrHalf = ray.vr + 0.5 * dlam * ray.accR;
+  precise float vmuHalf = ray.vmu + 0.5 * dlam * ray.accMu;
+
+  float rMid = ray.r + 0.5 * dlam * vrHalf;
+  float muMid = clamp(ray.mu + 0.5 * dlam * vmuHalf, -1.0, 1.0);
+  float dphi;
+  float dt;
+  kerrAngularRates(rMid, acos(muMid), vrHalf, r_s, a, c, dphi, dt);
+
+  precise float rNew = ray.r + dlam * vrHalf;
+  precise float muNew = ray.mu + dlam * vmuHalf;
+  ray.phi += dlam * dphi;
+  ray.t += dlam * dt;
+
+  // A ray with Lz = 0 turns in mu exactly at the axis (Theta_mu(+-1) = -Lz^2);
+  // overshooting mu = +-1 is a pass over the pole, which continues the
+  // geodesic on the far side: mu -> +-2 - mu with phi -> phi + pi.
+  if (muNew > 1.0) {
+    muNew = 2.0 - muNew;
+    vmuHalf = -vmuHalf;
+    ray.phi += PI;
+  } else if (muNew < -1.0) {
+    muNew = -2.0 - muNew;
+    vmuHalf = -vmuHalf;
+    ray.phi += PI;
   }
 
-  ray.r += dlam * dr_dlam;
-  ray.theta += dlam * dtheta_dlam;
-  ray.phi += dlam * dphi_dlam;
-  ray.t += dlam * dt_dlam;
-
-  ray.theta = clamp(ray.theta, 1e-6, PI - 1e-6);
+  ray.r = rNew;
+  ray.mu = muNew;
+  ray.theta = acos(clamp(muNew, -1.0, 1.0));
+  kerrAccelerations(ray.r, ray.mu, r_s, a, c, ray.accR, ray.accMu);
+  ray.vr = vrHalf + 0.5 * dlam * ray.accR;
+  ray.vmu = vmuHalf + 0.5 * dlam * ray.accMu;
+  kerrProjectOnShell(ray, r_s, a, c);
 }
 
 #endif // KERR_GLSL

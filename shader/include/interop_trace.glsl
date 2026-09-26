@@ -48,6 +48,17 @@ const int BH_BACKGROUND_LAYERS = 3;
 
 int bhDebugMask() { return int(bhDebugFlags + 0.5); }
 
+// Frames. The world frame is y-up: the camera orbit (camera_math.cpp), the
+// sky's equirect pole (bhDirToUv), and the legacy tracer's spin axis. The
+// physics frame carries the Kerr spin along +z with the disk in the xy plane,
+// the Boyer-Lindquist convention of kerr.glsl. The rotation about x by -90
+// degrees maps world +y to physics +z; camera rays enter the tracer through
+// bhWorldToPhysics and escaped directions reach the sky through
+// bhPhysicsToWorld, so a camera orbiting the world xz plane views the disk
+// near edge-on instead of sitting inside the disk plane.
+vec3 bhWorldToPhysics(vec3 v) { return vec3(v.x, -v.z, v.y); }
+vec3 bhPhysicsToWorld(vec3 v) { return vec3(v.x, v.z, -v.y); }
+
 bool bhIsInvalidFloat(float v) { return isnan(v) || isinf(v); }
 
 bool bhIsInvalidVec3(vec3 v) { return any(isnan(v)) || any(isinf(v)); }
@@ -233,8 +244,17 @@ float bhDiskInnerRadius(float r_s) {
   return 0.5 * isco_radius(kerrSpin) * r_s;
 }
 
+// Escape radius for a ray starting at pos. A ray escapes only once it is
+// outside both the scene radius and the camera's own radius and moving
+// outward; a camera placed beyond maxDistance otherwise escapes every ray at
+// step 0 and draws the unlensed sky.
+float bhEscapeRadius(vec3 pos, float maxDistance) {
+  return max(maxDistance, 1.01 * length(pos));
+}
+
 HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
                           float stepSize) {
+  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
   HitResult result;
   result.hitDisk = false;
   result.hitHorizon = false;
@@ -250,89 +270,48 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.lastClosestApproachStep = -1;
   result.debugFlags = 0;
 
+  // One integrator for every spin: Schwarzschild is the a = 0 member of the
+  // Kerr family and kerr.glsl's Mino-time leapfrog is exact there, so the
+  // image is continuous in spin by construction.
   float a = 0.5 * kerrSpin * r_s;
-  if (abs(a) > BH_EPSILON) {
-    float r_horizon = kerrOuterHorizon(r_s, a);
-    if (r_horizon <= BH_EPSILON) {
-      r_horizon = r_s;
-    }
-
-    float r_disk_in = bhDiskInnerRadius(r_s);
-    float r_disk_out = 100.0 * r_s;
-
-    KerrConsts c = kerrInitConsts(ray.position, ray.velocity, r_s, a);
-    KerrRay kerrRay = kerrInitRay(ray.position, ray.velocity);
-
-    vec3 oldPos;
-    float dt = stepSize;
-
-    for (int step = 0; step < maxSteps; ++step) {
-      oldPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-      bhRecordClosestApproach(result, kerrRay.r, oldPos, step);
-
-      if (kerrRay.r <= r_horizon) {
-        result.hitHorizon = true;
-        result.hitPoint = oldPos;
-        return result;
-      }
-
-      /* D10: AMR step refinement near horizon and photon sphere */
-      float stepDt = bhAdaptiveStep(kerrRay.r, r_s, r_horizon, dt);
-      kerrStep(kerrRay, r_s, a, c, stepDt);
-      vec3 newPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-      result.debugFlags |= bhDebugEvaluate(newPos, newPos - oldPos, maxDistance);
-      if ((bhDebugMask() & BH_DEBUG_FLAG_RANGE) != 0 && kerrRay.r < 0.0) {
-        result.debugFlags |= BH_DEBUG_FLAG_RANGE;
-      }
-
-      if (adiskEnabled > 0.5) {
-        vec3 diskHit;
-        if (bhCheckDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
-          result.hitDisk = true;
-          result.hitPoint = diskHit;
-          result.phi = atan(diskHit.y, diskHit.x);
-          result.redshiftFactor = bhComputeRedshiftFactor(length(diskHit), r_s);
-          return result;
-        }
-      }
-
-      if (kerrRay.r > maxDistance) {
-        result.escaped = true;
-        result.hitPoint = newPos;
-        result.escapedDir = normalize(newPos - oldPos);
-        return result;
-      }
-    }
-
-    result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
-    result.escaped = true;
-    result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
-    result.escapedDir = normalize(result.hitPoint - oldPos);
-    return result;
+  float r_horizon = kerrOuterHorizon(r_s, a);
+  if (r_horizon <= BH_EPSILON) {
+    r_horizon = r_s;
   }
 
   float r_disk_in = bhDiskInnerRadius(r_s);
   float r_disk_out = 100.0 * r_s;
 
+  float aTrace = kerrTraceSpin(a);
+  KerrConsts c;
+  KerrRay kerrRay;
+  kerrInitGeodesic(ray.position, ray.velocity, r_s, aTrace, c, kerrRay);
+
   vec3 oldPos;
   float dt = stepSize;
 
   for (int step = 0; step < maxSteps; ++step) {
-    oldPos = ray.position;
-    bhStepRK4(ray, r_s, dt);
-    result.debugFlags |= bhDebugEvaluate(ray.position, ray.velocity, maxDistance);
+    oldPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+    bhRecordClosestApproach(result, kerrRay.r, oldPos, step);
 
-    float r = length(ray.position);
-    bhRecordClosestApproach(result, r, ray.position, step);
-    if (r <= r_s) {
+    if (kerrRay.r <= r_horizon) {
       result.hitHorizon = true;
-      result.hitPoint = ray.position;
+      result.hitPoint = oldPos;
       return result;
+    }
+
+    /* D10: AMR step refinement near horizon and photon sphere */
+    float stepDt = bhAdaptiveStep(kerrRay.r, r_s, r_horizon, dt);
+    kerrStep(kerrRay, r_s, aTrace, c, stepDt);
+    vec3 newPos = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+    result.debugFlags |= bhDebugEvaluate(newPos, newPos - oldPos, maxDistance);
+    if ((bhDebugMask() & BH_DEBUG_FLAG_RANGE) != 0 && kerrRay.r < 0.0) {
+      result.debugFlags |= BH_DEBUG_FLAG_RANGE;
     }
 
     if (adiskEnabled > 0.5) {
       vec3 diskHit;
-      if (bhCheckDiskIntersection(oldPos, ray.position, r_disk_in, r_disk_out, diskHit)) {
+      if (bhCheckDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
         result.hitDisk = true;
         result.hitPoint = diskHit;
         result.phi = atan(diskHit.y, diskHit.x);
@@ -341,18 +320,18 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
       }
     }
 
-    if (r > maxDistance) {
+    if (kerrRay.r > escapeRadius && kerrRay.vr > 0.0) {
       result.escaped = true;
-      result.hitPoint = ray.position;
-      result.escapedDir = normalize(ray.position - oldPos);
+      result.hitPoint = newPos;
+      result.escapedDir = normalize(newPos - oldPos);
       return result;
     }
   }
 
   result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
   result.escaped = true;
-  result.hitPoint = ray.position;
-  result.escapedDir = normalize(ray.position - oldPos);
+  result.hitPoint = kerrToCartesian(kerrRay.r, kerrRay.theta, kerrRay.phi);
+  result.escapedDir = normalize(result.hitPoint - oldPos);
   return result;
 }
 
@@ -458,8 +437,9 @@ vec3 bhSampleBackgroundLayers(vec3 dir, out float weight) {
   return accum;
 }
 
+// dir is a physics-frame direction; the sky textures are world-frame.
 vec4 bhBackgroundColorFromDir(vec3 dir, float minRadius, float r_s) {
-  vec3 n = normalize(dir);
+  vec3 n = normalize(bhPhysicsToWorld(dir));
   vec3 skyDir = bhRotateY(n, time);
   vec3 color = texture(galaxy, skyDir).rgb;
   if (backgroundEnabled > 0.5) {
@@ -543,16 +523,6 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
                         float stepSize, float opacityScale, out vec3 terminalPos) {
   float a = 0.5 * kerrSpin * r_s;
-  if (abs(a) < BH_EPSILON) {
-    // Schwarzschild: single-scatter fallback (no volumetric path)
-    HitResult hit = bhTraceGeodesic(ray, r_s, maxDistance, maxSteps, stepSize);
-    terminalPos = hit.hitPoint;
-    if (hit.hitHorizon) { return bhHorizonColor(); }
-    if (hit.hitDisk)    { return bhDiskColorFromHit(hit, r_s); }
-    return bhBackgroundColorFromDir(normalize(hit.hitPoint - ray.position),
-                                    hit.minRadius, r_s);
-  }
-
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
@@ -561,8 +531,11 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
   float h_disk = max(0.1 * r_s, BH_EPSILON);
 
-  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity, r_s, a);
-  KerrRay    kRay = kerrInitRay(ray.position, ray.velocity);
+  float aTrace = kerrTraceSpin(a);
+  KerrConsts c;
+  KerrRay    kRay;
+  kerrInitGeodesic(ray.position, ray.velocity, r_s, aTrace, c, kRay);
+  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
 
   vec3  accumI   = vec3(0.0);
   float transmit = 1.0;
@@ -580,7 +553,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
     /* D10: AMR step refinement near horizon and photon sphere */
     float rteStepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
-    kerrStep(kRay, r_s, a, c, rteStepDt);
+    kerrStep(kRay, r_s, aTrace, c, rteStepDt);
     vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
 
     if (adiskEnabled > 0.5) {
@@ -623,7 +596,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
       }
     }
 
-    if (kRay.r > maxDistance) {
+    if (kRay.r > escapeRadius && kRay.vr > 0.0) {
       vec3 escDir = newPos - curPos;
       terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
@@ -676,16 +649,6 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
                             float bFieldAngle, float neScale,
                             out vec3 terminalPos) {
   float a = 0.5 * kerrSpin * r_s;
-  if (abs(a) < BH_EPSILON) {
-    // Schwarzschild: no volumetric path -- single-scatter fallback
-    HitResult hit = bhTraceGeodesic(ray, r_s, maxDistance, maxSteps, stepSize);
-    terminalPos = hit.hitPoint;
-    if (hit.hitHorizon) { return bhHorizonColor(); }
-    if (hit.hitDisk)    { return bhDiskColorFromHit(hit, r_s); }
-    return bhBackgroundColorFromDir(normalize(hit.hitPoint - ray.position),
-                                    hit.minRadius, r_s);
-  }
-
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
@@ -696,8 +659,11 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Thermal synchrotron intrinsic linear polarization fraction (~0.75 at Theta_e >> 1)
   const float PI_LIN = 0.75;
 
-  KerrConsts c    = kerrInitConsts(ray.position, ray.velocity, r_s, a);
-  KerrRay    kRay = kerrInitRay(ray.position, ray.velocity);
+  float aTrace = kerrTraceSpin(a);
+  KerrConsts c;
+  KerrRay    kRay;
+  kerrInitGeodesic(ray.position, ray.velocity, r_s, aTrace, c, kRay);
+  float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
 
   vec3  accumI   = vec3(0.0);   // Color-accurate intensity (same as RTE path)
   vec2  stokesQU = vec2(0.0);   // Q and U Stokes components
@@ -718,7 +684,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
     }
 
     float stepDt = bhAdaptiveStep(kRay.r, r_s, r_horizon, stepSize);
-    kerrStep(kRay, r_s, a, c, stepDt);
+    kerrStep(kRay, r_s, aTrace, c, stepDt);
     vec3 newPos = kerrToCartesian(kRay.r, kRay.theta, kRay.phi);
 
     if (adiskEnabled > 0.5) {
@@ -770,7 +736,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
       }
     }
 
-    if (kRay.r > maxDistance) {
+    if (kRay.r > escapeRadius && kRay.vr > 0.0) {
       vec3 escDir = newPos - curPos;
       terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {

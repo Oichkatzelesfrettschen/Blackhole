@@ -5,7 +5,7 @@
  * Following the YSU-engine kernels_fp16_soa_half2.cu pattern:
  * - Thread k processes pixels (2k, 2k+1) in a linearized grid.
  * - Two independent geodesic chains interleave on Ada dual-issue FP32 pipelines.
- * - __half2 packs both rays' bounded fields (r, theta, sign_r, sign_theta) into
+ * - __half2 packs both rays' bounded fields (r, theta) into
  *   one 32-bit register each; min_radius is tracked via __hmin2 (one HMNMX2
  *   SASS instruction per step instead of two fminf calls).
  *   phi and t remain FP32 per ray to avoid overflow near the horizon.
@@ -36,16 +36,21 @@ namespace {
 /**
  * @brief Packed __half2 intermediate storage for a pair of Kerr rays.
  *
- * Bounded fields (r, theta, sign_r, sign_theta) are stored as __half2 pairs
- * to halve register consumption for those values.  phi and t are kept FP32
- * because they can reach ~1e5 radians/step near the Kerr horizon, exceeding
- * the FP16 representable range of 65504.
+ * Bounded fields (r, theta) are stored as __half2 pairs to halve register
+ * consumption for those values.  phi and t are kept FP32 because they can
+ * reach ~1e5 radians/step near the Kerr horizon, exceeding the FP16
+ * representable range of 65504. The Mino velocities and carried
+ * accelerations stay FP32: vr scales as r^2 and crosses zero at turning
+ * points.
  */
 struct HalfRayPair {
   __half2 hR;     /**< @brief (kr0.r,          kr1.r)          */
   __half2 hTheta; /**< @brief (kr0.theta,       kr1.theta)      */
-  __half2 hSignr; /**< @brief (kr0.sign_r,      kr1.sign_r)     */
-  __half2 hSignt; /**< @brief (kr0.sign_theta,  kr1.sign_theta) */
+  float2 vr;       /**< @brief (kr0.vr,        kr1.vr)         */
+  float2 mu;       /**< @brief (kr0.mu,        kr1.mu)         */
+  float2 vmu;      /**< @brief (kr0.vmu,       kr1.vmu)        */
+  float2 accR;     /**< @brief (kr0.acc_r,     kr1.acc_r)      */
+  float2 accMu;    /**< @brief (kr0.acc_mu,    kr1.acc_mu)     */
   float phi0;     /**< @brief Ray 0 azimuthal angle (FP32). */
   float phi1;     /**< @brief Ray 1 azimuthal angle (FP32). */
   float t0;       /**< @brief Ray 0 coordinate time (FP32). */
@@ -63,8 +68,11 @@ __device__ __forceinline__ HalfRayPair raysToPair(const KerrRay &a, const KerrRa
   HalfRayPair h{};
   h.hR = __floats2half2_rn(a.r, b.r);
   h.hTheta = __floats2half2_rn(a.theta, b.theta);
-  h.hSignr = __floats2half2_rn(a.sign_r, b.sign_r);
-  h.hSignt = __floats2half2_rn(a.sign_theta, b.sign_theta);
+  h.vr = make_float2(a.vr, b.vr);
+  h.mu = make_float2(a.mu, b.mu);
+  h.vmu = make_float2(a.vmu, b.vmu);
+  h.accR = make_float2(a.acc_r, b.acc_r);
+  h.accMu = make_float2(a.acc_mu, b.acc_mu);
   h.phi0 = a.phi;
   h.phi1 = b.phi;
   h.t0 = a.t;
@@ -82,16 +90,20 @@ __device__ __forceinline__ HalfRayPair raysToPair(const KerrRay &a, const KerrRa
 __device__ __forceinline__ void pairToRays(const HalfRayPair &h, KerrRay &a, KerrRay &b) {
   float2 const r = __half22float2(h.hR);
   float2 const th = __half22float2(h.hTheta);
-  float2 const sr = __half22float2(h.hSignr);
-  float2 const st = __half22float2(h.hSignt);
   a.r = r.x;
   b.r = r.y;
   a.theta = th.x;
   b.theta = th.y;
-  a.sign_r = sr.x;
-  b.sign_r = sr.y;
-  a.sign_theta = st.x;
-  b.sign_theta = st.y;
+  a.vr = h.vr.x;
+  b.vr = h.vr.y;
+  a.mu = h.mu.x;
+  b.mu = h.mu.y;
+  a.vmu = h.vmu.x;
+  b.vmu = h.vmu.y;
+  a.acc_r = h.accR.x;
+  b.acc_r = h.accR.y;
+  a.acc_mu = h.accMu.x;
+  b.acc_mu = h.accMu.y;
   a.phi = h.phi0;
   b.phi = h.phi1;
   a.t = h.t0;
@@ -130,18 +142,21 @@ __launch_bounds__(128, 4)
     return;
   }
 
-  float3 const cam = make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]);
+  /* Physics frame (spin along +z); see d_world_to_physics. */
+  float3 const cam = d_world_to_physics(make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]));
   float const rs = d_rs;
   float const aSpin = 0.5f * d_spin * rs;
   float const dt = d_step_size;
   int const maxSteps = d_max_steps;
-  float const maxDist = d_max_dist;
-  bool const doKerr = (d_kerr_enabled != 0) && fabsf(aSpin) > D_EPSILON;
+  /* Escape only outside both the scene radius and the camera's own radius while
+   * moving outward (bhEscapeRadius in interop_trace.glsl). */
+  float const maxDist = fmaxf(d_max_dist, 1.01f * d_length(cam));
+  bool const doKerr = (d_kerr_enabled != 0);
 
   /* Compute ray directions for both pixels */
   int const px0 = idx0 % d_width;
   int const py0 = idx0 / d_width;
-  float3 const dir0 = d_ray_dir(px0, py0);
+  float3 const dir0 = d_world_to_physics(d_ray_dir(px0, py0));
 
   bool const hasRay1 = (idx1 < totalPixels);
   int px1 = 0;
@@ -150,12 +165,12 @@ __launch_bounds__(128, 4)
   if (hasRay1) {
     px1 = idx1 % d_width;
     py1 = idx1 / d_width;
-    dir1 = d_ray_dir(px1, py1);
+    dir1 = d_world_to_physics(d_ray_dir(px1, py1));
   }
 
   /* Initialize hit results */
   HitResult hit0{};
-  hit0.hit_disk = hit0.hit_horizon = hit0.escaped = false;
+  hit0.hit_disk = hit0.hit_horizon = hit0.escaped = hit0.max_steps = false;
   hit0.hit_point = make_f3(0.0f, 0.0f, 0.0f);
   hit0.closest_approach_point = cam;
   hit0.phi = 0.0f;
@@ -174,10 +189,13 @@ __launch_bounds__(128, 4)
     float const rDiskIn = d_isco;
     float const rDiskOut = 100.0f * rs;
 
-    KerrConsts const c0 = d_kerr_init_consts(cam, dir0, rs, aSpin);
-    KerrRay kr0 = d_kerr_init_ray(cam, dir0);
-    KerrConsts const c1 = d_kerr_init_consts(cam, dir1, rs, aSpin);
-    KerrRay kr1 = d_kerr_init_ray(cam, dir1);
+    float const aTrace = d_kerr_trace_spin(aSpin);
+    KerrConsts c0;
+    KerrRay kr0;
+    d_kerr_init_geodesic(cam, dir0, rs, aTrace, c0, kr0);
+    KerrConsts c1;
+    KerrRay kr1;
+    d_kerr_init_geodesic(cam, dir1, rs, aTrace, c1, kr1);
 
     /* Pack initial ray state into __half2 pairs.
      * hMinr tracks min(r0, r1) across steps via __hmin2 (one HMNMX2 SASS
@@ -214,7 +232,7 @@ __launch_bounds__(128, 4)
         } else {
           /* D10: adaptive step near horizon -- matches FP32_COARSENED quality */
           float const sdt0 = d_adaptive_step(kr0.r, rs, rHorizon, dt);
-          d_kerr_step(kr0, rs, aSpin, c0, sdt0);
+          d_kerr_step(kr0, rs, aTrace, c0, sdt0);
           float3 const new0 = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
 
           if (d_adisk_enabled != 0) {
@@ -227,7 +245,7 @@ __launch_bounds__(128, 4)
               done0 = true;
             }
           }
-          if (!done0 && kr0.r > maxDist) {
+          if (!done0 && kr0.r > maxDist && kr0.vr > 0.0f) {
             hit0.escaped = true;
             hit0.hit_point = new0;
             done0 = true;
@@ -246,7 +264,7 @@ __launch_bounds__(128, 4)
           done1 = true;
         } else {
           float const sdt1 = d_adaptive_step(kr1.r, rs, rHorizon, dt);
-          d_kerr_step(kr1, rs, aSpin, c1, sdt1);
+          d_kerr_step(kr1, rs, aTrace, c1, sdt1);
           float3 const new1 = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
 
           if (d_adisk_enabled != 0) {
@@ -259,7 +277,7 @@ __launch_bounds__(128, 4)
               done1 = true;
             }
           }
-          if (!done1 && kr1.r > maxDist) {
+          if (!done1 && kr1.r > maxDist && kr1.vr > 0.0f) {
             hit1.escaped = true;
             hit1.hit_point = new1;
             done1 = true;
@@ -281,10 +299,12 @@ __launch_bounds__(128, 4)
     pairToRays(hp, kr0, kr1);
     if (!done0) {
       hit0.escaped = true;
+      hit0.max_steps = true;
       hit0.hit_point = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
     }
     if (!done1 && hasRay1) {
       hit1.escaped = true;
+      hit1.max_steps = true;
       hit1.hit_point = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
     }
   } else {
@@ -322,7 +342,7 @@ __launch_bounds__(128, 4)
             done0 = true;
           }
         }
-        if (!done0 && r > maxDist) {
+        if (!done0 && r > maxDist && d_dot(pos0, vel0) > 0.0f) {
           hit0.escaped = true;
           hit0.hit_point = pos0;
           done0 = true;
@@ -348,7 +368,7 @@ __launch_bounds__(128, 4)
             done1 = true;
           }
         }
-        if (!done1 && r > maxDist) {
+        if (!done1 && r > maxDist && d_dot(pos1, vel1) > 0.0f) {
           hit1.escaped = true;
           hit1.hit_point = pos1;
           done1 = true;
@@ -358,10 +378,12 @@ __launch_bounds__(128, 4)
 
     if (!done0) {
       hit0.escaped = true;
+      hit0.max_steps = true;
       hit0.hit_point = pos0;
     }
     if (!done1 && hasRay1) {
       hit1.escaped = true;
+      hit1.max_steps = true;
       hit1.hit_point = pos1;
     }
   }

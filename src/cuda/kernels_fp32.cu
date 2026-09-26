@@ -39,8 +39,9 @@ __launch_bounds__(256, 4)
     return;
   }
 
-  float3 const cam = make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]);
-  float3 const dir = d_ray_dir(px, py);
+  /* Physics frame (spin along +z); see d_world_to_physics. */
+  float3 const cam = d_world_to_physics(make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]));
+  float3 const dir = d_world_to_physics(d_ray_dir(px, py));
 
   float4 color;
   /* D4: Stokes polarized path supersedes scalar RTE; D3: scalar RTE.
@@ -155,17 +156,20 @@ __launch_bounds__(128, 4)
     return;
   }
 
-  float3 const cam = make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]);
+  /* Physics frame (spin along +z); see d_world_to_physics. */
+  float3 const cam = d_world_to_physics(make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]));
   float const rs = d_rs;
   float const dt = d_step_size;
   int const maxSteps = d_max_steps;
-  float const maxDist = d_max_dist;
-  bool const doKerr = (d_kerr_enabled != 0) && (fabsf(d_spin) > D_EPSILON);
+  /* Escape only outside both the scene radius and the camera's own radius while
+   * moving outward (bhEscapeRadius in interop_trace.glsl). */
+  float const maxDist = fmaxf(d_max_dist, 1.01f * d_length(cam));
+  bool const doKerr = (d_kerr_enabled != 0);
   float const aSpin = 0.5f * d_spin * rs;
 
   int const px0 = idx0 % d_width;
   int const py0 = idx0 / d_width;
-  float3 const dir0 = d_ray_dir(px0, py0);
+  float3 const dir0 = d_world_to_physics(d_ray_dir(px0, py0));
 
   bool const hasRay1 = (idx1 < totalPixels);
   int px1 = 0;
@@ -174,11 +178,11 @@ __launch_bounds__(128, 4)
   if (hasRay1) {
     px1 = idx1 % d_width;
     py1 = idx1 / d_width;
-    dir1 = d_ray_dir(px1, py1);
+    dir1 = d_world_to_physics(d_ray_dir(px1, py1));
   }
 
   HitResult hit0{};
-  hit0.hit_disk = hit0.hit_horizon = hit0.escaped = false;
+  hit0.hit_disk = hit0.hit_horizon = hit0.escaped = hit0.max_steps = false;
   hit0.hit_point = make_f3(0.0f, 0.0f, 0.0f);
   hit0.closest_approach_point = cam;
   hit0.phi = 0.0f;
@@ -197,10 +201,13 @@ __launch_bounds__(128, 4)
     float const rDiskIn = d_isco;
     float const rDiskOut = 100.0f * rs;
 
-    KerrConsts const c0 = d_kerr_init_consts(cam, dir0, rs, aSpin);
-    KerrRay kr0 = d_kerr_init_ray(cam, dir0);
-    KerrConsts const c1 = d_kerr_init_consts(cam, dir1, rs, aSpin);
-    KerrRay kr1 = d_kerr_init_ray(cam, dir1);
+    float const aTrace = d_kerr_trace_spin(aSpin);
+    KerrConsts c0;
+    KerrRay kr0;
+    d_kerr_init_geodesic(cam, dir0, rs, aTrace, c0, kr0);
+    KerrConsts c1;
+    KerrRay kr1;
+    d_kerr_init_geodesic(cam, dir1, rs, aTrace, c1, kr1);
 
     bool done0 = false;
     bool done1 = !hasRay1;
@@ -222,7 +229,7 @@ __launch_bounds__(128, 4)
         } else {
           /* D10: adaptive step near horizon and photon sphere */
           float const sdt0 = d_adaptive_step(kr0.r, rs, rHorizon, dt);
-          d_kerr_step(kr0, rs, aSpin, c0, sdt0);
+          d_kerr_step(kr0, rs, aTrace, c0, sdt0);
           float3 const new0 = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
           if (d_adisk_enabled != 0) {
             float3 dh;
@@ -234,7 +241,7 @@ __launch_bounds__(128, 4)
               done0 = true;
             }
           }
-          if (!done0 && kr0.r > maxDist) {
+          if (!done0 && kr0.r > maxDist && kr0.vr > 0.0f) {
             hit0.escaped = true;
             hit0.hit_point = new0;
             done0 = true;
@@ -253,7 +260,7 @@ __launch_bounds__(128, 4)
           done1 = true;
         } else {
           float const sdt1 = d_adaptive_step(kr1.r, rs, rHorizon, dt);
-          d_kerr_step(kr1, rs, aSpin, c1, sdt1);
+          d_kerr_step(kr1, rs, aTrace, c1, sdt1);
           float3 const new1 = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
           if (d_adisk_enabled != 0) {
             float3 dh;
@@ -265,7 +272,7 @@ __launch_bounds__(128, 4)
               done1 = true;
             }
           }
-          if (!done1 && kr1.r > maxDist) {
+          if (!done1 && kr1.r > maxDist && kr1.vr > 0.0f) {
             hit1.escaped = true;
             hit1.hit_point = new1;
             done1 = true;
@@ -276,10 +283,12 @@ __launch_bounds__(128, 4)
 
     if (!done0) {
       hit0.escaped = true;
+      hit0.max_steps = true;
       hit0.hit_point = d_kerr_to_cartesian(kr0.r, kr0.theta, kr0.phi);
     }
     if (!done1 && hasRay1) {
       hit1.escaped = true;
+      hit1.max_steps = true;
       hit1.hit_point = d_kerr_to_cartesian(kr1.r, kr1.theta, kr1.phi);
     }
   } else {
@@ -317,7 +326,7 @@ __launch_bounds__(128, 4)
             done0 = true;
           }
         }
-        if (!done0 && r > maxDist) {
+        if (!done0 && r > maxDist && d_dot(pos0, vel0) > 0.0f) {
           hit0.escaped = true;
           hit0.hit_point = pos0;
           done0 = true;
@@ -343,7 +352,7 @@ __launch_bounds__(128, 4)
             done1 = true;
           }
         }
-        if (!done1 && r > maxDist) {
+        if (!done1 && r > maxDist && d_dot(pos1, vel1) > 0.0f) {
           hit1.escaped = true;
           hit1.hit_point = pos1;
           done1 = true;
@@ -353,10 +362,12 @@ __launch_bounds__(128, 4)
 
     if (!done0) {
       hit0.escaped = true;
+      hit0.max_steps = true;
       hit0.hit_point = pos0;
     }
     if (!done1 && hasRay1) {
       hit1.escaped = true;
+      hit1.max_steps = true;
       hit1.hit_point = pos1;
     }
   }

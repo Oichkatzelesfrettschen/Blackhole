@@ -4429,6 +4429,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(gpu_cpu_parity_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/tests"
     )
     target_compile_definitions(gpu_cpu_parity_test PRIVATE
       GLFW_INCLUDE_NONE
@@ -4445,6 +4446,33 @@ if(BUILD_TESTING)
     set_tests_properties(gpu_cpu_parity PROPERTIES
       LABELS "physics;gpu;parity"
       TIMEOUT 60
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_shader_capture_test.cpp")
+    # Shipped shader/include/kerr.glsl against Bardeen's equatorial capture
+    # edges in a compute dispatch. Skips without a GL 4.6 context.
+    add_executable(kerr_shader_capture_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_shader_capture_test.cpp"
+    )
+    target_include_directories(kerr_shader_capture_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    target_compile_definitions(kerr_shader_capture_test PRIVATE
+      GLFW_INCLUDE_NONE
+      BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+    )
+    target_compile_options(kerr_shader_capture_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(kerr_shader_capture_test PRIVATE
+      glfw
+      glbinding::glbinding
+      GTest::gtest
+      GTest::gtest_main
+    )
+    add_test(NAME kerr_shader_capture COMMAND kerr_shader_capture_test)
+    set_tests_properties(kerr_shader_capture PROPERTIES
+      LABELS "physics;gpu;kerr"
+      TIMEOUT 120
     )
   endif()
 

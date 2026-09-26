@@ -682,9 +682,12 @@ void main() {
   vec3 pos = cameraPos;
 
   if (interopParityMode > 0.5) {
+    // The interop tracer runs in the physics frame (spin along +z); see
+    // bhWorldToPhysics in interop_trace.glsl.
+    vec3 cameraPosPhys = bhWorldToPhysics(pos);
     Ray ray;
-    ray.position = pos;
-    ray.velocity = dir;
+    ray.position = cameraPosPhys;
+    ray.velocity = bhWorldToPhysics(dir);
     ray.affineParameter = 0.0;
 
     int steps = int(max(1.0, interopMaxSteps + 0.5));
@@ -716,9 +719,9 @@ void main() {
 
     HitResult hit =
         bhTraceGeodesic(ray, schwarzschildRadius, depthFar, steps, interopStepSize);
-    vec4 shaded = bhShadeHit(hit, cameraPos, schwarzschildRadius);
+    vec4 shaded = bhShadeHit(hit, cameraPosPhys, schwarzschildRadius);
     float depthNormalized =
-        clamp(length(hit.hitPoint - cameraPos) / max(depthFar, 0.0001), 0.0, 1.0);
+        clamp(length(hit.hitPoint - cameraPosPhys) / max(depthFar, 0.0001), 0.0, 1.0);
     vec3 interopColor = shaded.rgb;
     applyWiregridOverlay(interopColor, hit.hitPoint);
     fragColor = vec4(interopColor, depthNormalized);
@@ -728,7 +731,8 @@ void main() {
   float depthDistance = depthFar;
   vec3 lastPos;
   vec3 color = traceColor(pos, dir, depthDistance, lastPos);
-  applyWiregridOverlay(color, lastPos);
+  // The wiregrid reads Boyer-Lindquist angles about the physics +z axis.
+  applyWiregridOverlay(color, bhWorldToPhysics(lastPos));
   float depthNormalized = clamp(depthDistance / depthFar, 0.0, 1.0);
   fragColor = vec4(color, depthNormalized);
 }
