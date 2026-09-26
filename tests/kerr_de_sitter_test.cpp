@@ -226,9 +226,11 @@ TEST(KerrDeSitter, StationaryRadiusSmallLambda) {
  *
  * mpmath (Delta_r = dDelta_r/dr = 0 at M = 1, Lambda = 1e-2) puts the extremal
  * spin at a = 1.0033903414560322118 and the double root at
- * r = 1.0102644922092494668. The nearest double below is sub-extremal; the
- * doubles above it leave Delta_r(r_a) within rounding of zero and read as
- * extremal, with r_- = r_+ = r_a. A spin 1e-9 larger is a naked singularity.
+ * r = 1.0102644922092494668, between the double 1.0033903414560321 and its
+ * successor. The 16 doubles from 7 ulp below that double to 8 ulp above it
+ * leave Delta_r(r_a) inside the 4 eps rounding band and read as extremal,
+ * with r_- = r_+ = r_a; one more ulp either way gives two roots or none. A
+ * spin 1e-9 larger is a naked singularity.
  */
 TEST(KerrDeSitter, ExtremalSpinMergesHorizons) {
   constexpr double lambda = 1.0e-2;
