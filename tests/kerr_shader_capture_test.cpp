@@ -51,7 +51,7 @@ constexpr int K_LOCAL = 64;
 // b > 0 is prograde for a > 0.
 double equatorialCriticalImpact(double a, bool prograde) {
   if (std::abs(a) < 1e-12) {
-    return (prograde ? 1.0 : -1.0) * 3.0 * std::sqrt(3.0);
+    return (prograde ? 1.0 : -1.0) * 3.0 * std::numbers::sqrt3;
   }
   const double s = prograde ? -std::abs(a) : std::abs(a);
   const double rPh = 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(s)));
@@ -392,8 +392,8 @@ protected:
     glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 4 * K_RAYS), nullptr,
                       GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
-    std::vector<float> out =
-        bhtest::runComputeProgram(program, ssbo, 4 * K_RAYS, K_RAYS / K_LOCAL);
+    std::vector<float> out = bhtest::runComputeProgram(
+        program, ssbo, static_cast<std::size_t>(4) * K_RAYS, K_RAYS / K_LOCAL);
     glDeleteBuffers(1, &ssbo);
     glDeleteProgram(program);
     return out;
@@ -436,8 +436,8 @@ protected:
     glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 3 * K_RAYS), nullptr,
                       GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
-    std::vector<float> out =
-        bhtest::runComputeProgram(program, ssbo, 3 * K_RAYS, K_RAYS / K_LOCAL);
+    std::vector<float> out = bhtest::runComputeProgram(
+        program, ssbo, static_cast<std::size_t>(3) * K_RAYS, K_RAYS / K_LOCAL);
     glDeleteBuffers(1, &ssbo);
     glDeleteProgram(program);
     return out;
@@ -447,21 +447,21 @@ protected:
 bhtest::HiddenGlContext *KerrShaderCaptureTest::context = nullptr;
 
 TEST_F(KerrShaderCaptureTest, CaptureEdgesMatchBardeenWithPhysicalHandedness) {
-  constexpr double K_MARGIN = 0.005;
+  constexpr double kMargin = 0.005;
   for (const float spin : {0.0F, 0.01F, 0.5F, 0.9F, 0.99F, -0.9F}) {
     const std::vector<float> out = dispatch(K_SHADER, spin);
     const double bPro = equatorialCriticalImpact(static_cast<double>(spin), true);
     const double bRetro = equatorialCriticalImpact(static_cast<double>(spin), false);
     int checked = 0;
     for (int i = 0; i < K_RAYS; ++i) {
-      const auto b = static_cast<double>(out[static_cast<std::size_t>(2 * i)]);
-      const float fate = out[static_cast<std::size_t>((2 * i) + 1)];
+      const auto b = static_cast<double>(out[2 * static_cast<std::size_t>(i)]);
+      const float fate = out[(2 * static_cast<std::size_t>(i)) + 1];
       const double bc = ((b >= 0.0) == (bPro >= 0.0)) ? bPro : bRetro;
       const double ratio = b / bc;
-      if (ratio > 1.0 + K_MARGIN) {
+      if (ratio > 1.0 + kMargin) {
         EXPECT_EQ(fate, 1.0F) << "spin=" << spin << " b=" << b << " b_c=" << bc;
         ++checked;
-      } else if (ratio < 1.0 - K_MARGIN) {
+      } else if (ratio < 1.0 - kMargin) {
         EXPECT_EQ(fate, -1.0F) << "spin=" << spin << " b=" << b << " b_c=" << bc;
         ++checked;
       }
@@ -482,7 +482,7 @@ TEST_F(KerrShaderCaptureTest, MeridionalRaysMatchEquatorialTwinsAtZeroSpin) {
   const std::vector<float> mer = dispatchFan(0.0F, 1, 200.0F);
   int compared = 0;
   for (int i = 0; i < K_RAYS; ++i) {
-    const auto k = static_cast<std::size_t>(4 * i);
+    const auto k = 4 * static_cast<std::size_t>(i);
     ASSERT_EQ(eq[k], mer[k]) << "ray " << i;
     if (eq[k] == 1.0F) {
       EXPECT_NEAR(mer[k + 1], eq[k + 1], 2e-3F) << "ray " << i;
@@ -500,18 +500,18 @@ TEST_F(KerrShaderCaptureTest, MeridionalRaysMatchDoublePrecisionReference) {
   // time-reversed ray (spin -a) with physics::kerrStepMino in double, with a
   // step bounded near the axis, to r = 2000 where the Kerr-Schild and
   // Boyer-Lindquist azimuths agree to about a / r.
-  constexpr float K_SPIN = 0.9F;
-  constexpr double K_ESCAPE = 2000.0;
-  const std::vector<float> gpu = dispatchFan(K_SPIN, 1, static_cast<float>(K_ESCAPE));
+  constexpr float kSpin = 0.9F;
+  constexpr double kEscape = 2000.0;
+  const std::vector<float> gpu = dispatchFan(kSpin, 1, static_cast<float>(kEscape));
   const double mass = physics::C2 / physics::G;
-  const double aTrace = -static_cast<double>(K_SPIN);
+  const double aTrace = -static_cast<double>(kSpin);
   const double rPlus = 1.0 + std::sqrt(1.0 - (aTrace * aTrace));
   int compared = 0;
   for (int i = 0; i < K_RAYS; i += 4) {
     const double alpha =
         0.3 * ((2.0 * (static_cast<double>(i) + 0.5) / static_cast<double>(K_RAYS)) - 1.0);
     // Camera on +x at theta = pi/2, phi = 0: e_r = x, e_theta = -z, e_phi = y.
-    physics::KerrNullGeodesic g = physics::kerrNullGeodesicFromBL(
+    const physics::KerrNullGeodesic g = physics::kerrNullGeodesicFromBL(
         30.0, 0.5 * std::numbers::pi, 0.0, -std::cos(alpha), -std::sin(alpha) / 30.0, 0.0, mass,
         aTrace);
     physics::KerrGeodesicState s = g.state;
@@ -521,7 +521,7 @@ TEST_F(KerrShaderCaptureTest, MeridionalRaysMatchDoublePrecisionReference) {
         fate = -1.0;
         break;
       }
-      if (s.r > K_ESCAPE && s.vr > 0.0) {
+      if (s.r > kEscape && s.vr > 0.0) {
         fate = 1.0;
         break;
       }
@@ -530,7 +530,7 @@ TEST_F(KerrShaderCaptureTest, MeridionalRaysMatchDoublePrecisionReference) {
       const double axis = 0.02 * std::max(sin2, 1e-14) / std::max(std::abs(g.consts.lz), 1e-14);
       s = physics::kerrStepMino(s, mass, aTrace, g.consts, std::min(base, axis));
     }
-    const auto k = static_cast<std::size_t>(4 * i);
+    const auto k = 4 * static_cast<std::size_t>(i);
     ASSERT_EQ(static_cast<double>(gpu[k]), fate) << "ray " << i << " alpha " << alpha;
     if (fate == 1.0) {
       const double nx = std::sin(s.theta) * std::cos(s.phi);
@@ -558,7 +558,7 @@ TEST_F(KerrShaderCaptureTest, InitializationIsOnShell) {
 }
 
 TEST_F(KerrShaderCaptureTest, RendererScheduleMatchesBardeenWithinTwoPercent) {
-  constexpr double K_MARGIN = 0.02;
+  constexpr double kMargin = 0.02;
   const GLuint program = bhtest::createComputeProgram(rendererScheduleShader());
   glUseProgram(program);
   glUniform1i(glGetUniformLocation(program, "rayCount"), K_RAYS);
@@ -572,20 +572,20 @@ TEST_F(KerrShaderCaptureTest, RendererScheduleMatchesBardeenWithinTwoPercent) {
   for (const float spin : {0.0F, 0.62F, 0.9F}) {
     glUseProgram(program);
     glUniform1f(glGetUniformLocation(program, "kerrSpin"), spin);
-    const std::vector<float> out =
-        bhtest::runComputeProgram(program, ssbo, 3 * K_RAYS, K_RAYS / 256);
+    const std::vector<float> out = bhtest::runComputeProgram(
+        program, ssbo, static_cast<std::size_t>(3) * K_RAYS, K_RAYS / 256);
     const double bPro = equatorialCriticalImpact(static_cast<double>(spin), true);
     const double bRetro = equatorialCriticalImpact(static_cast<double>(spin), false);
     int maxStepRays = 0;
     for (int i = 0; i < K_RAYS; ++i) {
-      const auto b = static_cast<double>(out[static_cast<std::size_t>(3 * i)]);
-      const float fate = out[static_cast<std::size_t>((3 * i) + 1)];
-      maxStepRays += out[static_cast<std::size_t>((3 * i) + 2)] > 0.5F ? 1 : 0;
+      const auto b = static_cast<double>(out[3 * static_cast<std::size_t>(i)]);
+      const float fate = out[(3 * static_cast<std::size_t>(i)) + 1];
+      maxStepRays += out[(3 * static_cast<std::size_t>(i)) + 2] > 0.5F ? 1 : 0;
       const double bc = ((b >= 0.0) == (bPro >= 0.0)) ? bPro : bRetro;
       const double ratio = b / bc;
-      if (ratio > 1.0 + K_MARGIN) {
+      if (ratio > 1.0 + kMargin) {
         EXPECT_EQ(fate, 1.0F) << "spin=" << spin << " b=" << b << " b_c=" << bc;
-      } else if (ratio < 1.0 - K_MARGIN) {
+      } else if (ratio < 1.0 - kMargin) {
         EXPECT_EQ(fate, -1.0F) << "spin=" << spin << " b=" << b << " b_c=" << bc;
       }
     }

@@ -62,6 +62,8 @@ Fate traceEquatorial(double a, double b, double r0) {
 }
 
 TEST(KerrNullGeodesic, CarterConstantsReproduceInitialVelocities) {
+  // A fixed seed makes the 2000-sample Carter sweep reproducible.
+  // NOLINTNEXTLINE(cert-msc32-c,cert-msc51-cpp)
   std::mt19937_64 rng(20260925);
   std::uniform_real_distribution<double> radius(2.5, 60.0);
   std::uniform_real_distribution<double> polar(0.15, std::numbers::pi - 0.15);
@@ -220,10 +222,9 @@ TEST(KerrNullGeodesic, FerrariFindsDoubleRootOnCriticalCurve) {
     const auto coeffs = physics::radialQuarticCoeffs(a, ip.xi, ip.eta);
     const auto roots = sortedRealRoots(physics::findRadialRoots(coeffs));
     ASSERT_GE(roots.size(), 2U) << "rPh=" << rPh;
-    int nearPh = 0;
-    for (const double root : roots) {
-      nearPh += (std::abs(root - rPh) < 1e-5) ? 1 : 0;
-    }
+    const auto nearPh = std::count_if(roots.begin(), roots.end(), [rPh](double root) {
+      return std::abs(root - rPh) < 1e-5;
+    });
     EXPECT_EQ(nearPh, 2) << "rPh=" << rPh;
   }
 }
