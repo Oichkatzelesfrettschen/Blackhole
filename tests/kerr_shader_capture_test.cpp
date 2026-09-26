@@ -1557,3 +1557,41 @@ void main() {
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }
+
+TEST_F(KerrShaderCaptureTest, StokesDisplayKeepsTheRgbIntensity) {
+  // The Stokes traces pass their color-accurate RGB accumulation and its
+  // mean as I; the display tints that RGB by the linear-polarization angle
+  // and fraction and by V / I, as the CUDA lane does (d_trace_geodesic_stokes),
+  // and must not rescale it: an unpolarized sky or ray keeps its RGB exactly.
+  const GLuint program = bhtest::createComputeProgram(R"(
+#version 460 core
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+#include "include/stokes_transport.glsl"
+void main() {
+  vec3 base = vec3(0.6, 0.3, 0.9);
+  float I = (base.r + base.g + base.b) / 3.0;
+  vec3 plain = stokesDisplayColor(vec4(I, 0.0, 0.0, 0.0), base);
+  vec3 tinted = stokesDisplayColor(vec4(I, 0.3 * I, 0.2 * I, 0.1 * I), base);
+  result[0] = plain.r; result[1] = plain.g; result[2] = plain.b;
+  result[3] = tinted.r; result[4] = tinted.g; result[5] = tinted.b;
+}
+)");
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 6), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 6);
+  const std::array<double, 3> base = {0.6, 0.3, 0.9};
+  // CUDA's tint: 1 + 0.4 P cos(2 chi), 1 + 0.4 P sin(2 chi), 1 + 0.2 V / I.
+  const double pLin = std::hypot(0.3, 0.2);
+  const double twoChi = std::atan2(0.2, 0.3);
+  const std::array<double, 3> tint = {1.0 + (0.4 * pLin * std::cos(twoChi)),
+                                      1.0 + (0.4 * pLin * std::sin(twoChi)), 1.0 + (0.2 * 0.1)};
+  for (std::size_t c = 0; c < 3; ++c) {
+    EXPECT_NEAR(out.at(c), base.at(c), 1e-6) << "channel " << c;
+    EXPECT_NEAR(out.at(3 + c), base.at(c) * tint.at(c), 1e-5) << "channel " << c;
+  }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
