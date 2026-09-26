@@ -25,7 +25,7 @@ KerrTimeField::KerrTimeField(double blackHoleMassG, double spinDimensionless)
 }
 
 KerrTimeField::KerrTimeField(double blackHoleMassG, SpinDeficit deficit)
-    : epsilon_(std::clamp(deficit.epsilon, 0.0, 1.0)), spinSign_(1.0),
+    : epsilon_(std::clamp(deficit.epsilon, K_MIN_SPIN_DEFICIT, 1.0)), spinSign_(1.0),
       gravitationalRadiusCm_(physics::G * blackHoleMassG / physics::C2),
       schwarzschildRadiusCm_(2.0 * gravitationalRadiusCm_),
       outerHorizonCm_(gravitationalRadiusCm_ * (1.0 + ko::horizonOffset(epsilon_))),

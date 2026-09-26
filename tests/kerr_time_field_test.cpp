@@ -261,3 +261,24 @@ TEST(KerrTimeField, BandViewCarriesEveryObserversClock) {
   EXPECT_GT(ergo.hoverProperTimeRate, 0.0);
   EXPECT_DOUBLE_EQ(ergo.properTimeRate, ergo.hoverProperTimeRate);
 }
+
+// Falsifier: a deficit below what absolute cm radii resolve (1e-300, or an
+// exactly extremal spin of 1) giving a field whose own ISCO is not a valid
+// station, admits no stable prograde orbit there, or carries no clock -- the
+// offset 1.6e-100 rounding away in 1 + x -- or a floor at which the horizon,
+// marginally bound radius, and ISCO fail to sit strictly in that order.
+TEST(KerrTimeField, SubResolutionDeficitsRaiseToTheFloor) {
+  const double floorDeficit = game::KerrTimeField::K_MIN_SPIN_DEFICIT;
+  for (const game::KerrTimeField &field :
+       {game::KerrTimeField(K_M87_MASS_G, game::SpinDeficit{.epsilon = 1e-300}),
+        game::KerrTimeField(K_M87_MASS_G, 1.0)}) {
+    EXPECT_DOUBLE_EQ(field.spinDeficit(), floorDeficit);
+    const game::Observer prograde = game::Observer::CircularOrbitPrograde;
+    const double iscoCm = field.iscoRadiusCm(prograde);
+    EXPECT_TRUE(field.isValidStationRadius(iscoCm));
+    EXPECT_TRUE(field.admitsStableOrbit(iscoCm, prograde));
+    EXPECT_GT(field.properTimeRate(iscoCm, prograde), 0.0);
+    EXPECT_LT(field.outerHorizonCm(), field.marginallyBoundRadiusCm(prograde));
+    EXPECT_LT(field.marginallyBoundRadiusCm(prograde), iscoCm);
+  }
+}
