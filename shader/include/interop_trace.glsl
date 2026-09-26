@@ -550,16 +550,21 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 // Volumetric disk segment
 //
 // The RTE and Stokes traces model the disk as a Gaussian layer, density
-// exp(-z^2 / 2h^2) with h = 0.1 r_s, under the Novikov-Thorne flux profile.
-// A far-field step spans ~0.05 r, many scale heights, so a coefficient read
-// at one end point misses a midplane crossed mid-step or applies the peak
-// density to the whole step. bhDiskSegment instead integrates the density
-// exactly along the step's straight chord and returns its mean, and reads the
-// slowly varying radial factors (flux, color, Doppler) where the chord's
-// density peaks. With every coefficient proportional to the density and the
-// source function constant over the segment, the formal solution depends
+// exp(-z^2 / 2h^2) with h = 0.1 r_s, over the annulus rIn <= rho <= rOut
+// (rho the cylindrical radius) under the Novikov-Thorne flux profile. A
+// far-field step spans ~0.05 r, many scale heights, so a coefficient read at
+// one point misses a midplane crossed mid-step, applies the peak density to
+// the whole step, or keeps or drops the whole step by one radius.
+// bhDiskSegment intersects the step's straight chord with the annulus
+// (rho^2 is quadratic along the chord, so the emitting part is at most two
+// intervals), integrates the density exactly over each interval, and reads
+// the slowly varying radial factors (flux, color, Doppler) at each
+// interval's density-weighted centroid, which is exact for factors linear
+// along the chord. With every coefficient proportional to the density and
+// the source function constant over the segment, the formal solution depends
 // only on the column, so the mean coefficients over the step's path length
-// give the exact segment for any step size.
+// give the exact segment when the radial factors are constant across it and
+// converge as the step shrinks otherwise.
 // ---------------------------------------------------------------------------
 
 // erf(x) by Abramowitz & Stegun 7.1.26, |error| <= 1.5e-7.
@@ -571,24 +576,97 @@ float bhErf(float x) {
   return x < 0.0 ? -y : y;
 }
 
-// Mean of exp(-z^2 / 2h^2) along a chord whose height runs linearly from z0
-// to z1: h sqrt(pi/2) (erf(z1 / sqrt(2) h) - erf(z0 / sqrt(2) h)) / (z1 - z0).
-// Below |z1 - z0| = 0.01 sqrt(2) h the midpoint value is used; its relative
-// error there is below 1e-5, and the erf difference would lose more to
-// rounding.
-float bhGaussianChordMean(float z0, float z1, float h) {
+// Mean and centroid of the density exp(-z^2 / 2h^2) along a chord whose
+// height runs linearly from z0 to z1, sharing one erf pair (s = 1 / (sqrt(2) h)):
+//   mean     = h sqrt(pi/2) (erf(z1 s) - erf(z0 s)) / (z1 - z0),
+//   centroid = fraction along the chord of the weighted mean height
+//              -h^2 (exp(-z1^2 / 2h^2) - exp(-z0^2 / 2h^2)) / (mean (z1 - z0)).
+// Below |z1 - z0| = 0.01 sqrt(2) h the midpoint value (relative error < 1e-5)
+// and the midpoint; a chord too far in the tail to resolve its centroid also
+// takes the midpoint.
+vec2 bhGaussianChordMoments(float z0, float z1, float h) {
   float s = 0.70710678 / h;
   float dz = z1 - z0;
   if (abs(dz) * s < 0.01) {
     float zm = 0.5 * (z0 + z1) / h;
-    return exp(-0.5 * zm * zm);
+    return vec2(exp(-0.5 * zm * zm), 0.5);
   }
-  return 1.25331414 * h * (bhErf(z1 * s) - bhErf(z0 * s)) / dz;
+  float mass = 1.25331414 * h * (bhErf(z1 * s) - bhErf(z0 * s));
+  float frac = 0.5;
+  if (abs(mass) >= 1e-6 * abs(dz)) {
+    float zBar = -h * h * (exp(-z1 * z1 * s * s) - exp(-z0 * z0 * s * s)) / mass;
+    frac = clamp((zBar - z0) / dz, 0.0, 1.0);
+  }
+  return vec2(mass / dz, frac);
+}
+
+// Parameter interval [t0, t1] (clipped to [0, 1]) of the chord a + b t,
+// t in [0, 1], on which |a + b t| <= radius; empty when t0 > t1.
+vec2 bhChordInsideRadius(vec2 a, vec2 b, float radius) {
+  float qa = dot(b, b);
+  float qb = dot(a, b);
+  float qc = dot(a, a) - radius * radius;
+  if (qa < 1e-12 * max(qc + radius * radius, 1.0)) {
+    return qc <= 0.0 ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
+  }
+  float disc = qb * qb - qa * qc;
+  if (disc < 0.0) {
+    return vec2(1.0, 0.0);
+  }
+  float root = sqrt(disc);
+  return vec2(max((-qb - root) / qa, 0.0), min((-qb + root) / qa, 1.0));
+}
+
+// Radial factors of the disk at cylindrical radius rho and azimuth angle phi.
+float bhDiskRadialEmission(float rho, float phi, float rIn, float r_s, out vec3 emitColor) {
+  // Novikov-Thorne surface flux profile
+  float x    = rIn / max(rho, BH_EPSILON);
+  float flux = max(0.0, x * x * x * (1.0 - sqrt(x)));
+
+  // Temperature-to-color mapping (three bands)
+  float T_norm = sqrt(sqrt(flux));
+  if (T_norm > 0.6) {
+    emitColor = vec3(1.0, 0.9, 0.8);
+  } else if (T_norm > 0.3) {
+    emitColor = vec3(1.0, 0.6, 0.2);
+  } else {
+    emitColor = vec3(0.8, 0.2, 0.1);
+  }
+
+  // Doppler beaming (Keplerian v ~ sqrt(r_s / 2r))
+  float v       = sqrt(0.5 * r_s / max(rho, BH_EPSILON));
+  float doppler = 1.0 + 0.3 * v * cos(phi);
+  return flux * doppler * doppler * doppler;
+}
+
+// Adds the part of the chord p0 -> p1 between parameters ta and tb (inside
+// the annulus) to the running column, emissivity, and color sums.
+void bhDiskPiece(vec3 p0, vec3 p1, float ta, float tb, float rIn, float h, float r_s,
+                 inout float rhoSum, inout float jSum, inout vec3 colorSum) {
+  if (tb <= ta) {
+    return;
+  }
+  float za = mix(p0.z, p1.z, ta);
+  float zb = mix(p0.z, p1.z, tb);
+  vec2 moments = bhGaussianChordMoments(za, zb, h);
+  float column = (tb - ta) * moments.x;
+  if (column <= 0.0) {
+    return;
+  }
+  vec3 weighted = mix(p0, p1, mix(ta, tb, moments.y));
+  vec3 color;
+  float radial = bhDiskRadialEmission(length(weighted.xy), atan(weighted.y, weighted.x), rIn,
+                                      r_s, color);
+  rhoSum += column;
+  jSum += radial * column;
+  colorSum += color * (radial * column);
 }
 
 // Disk emission over the chord p0 -> p1 (physics frame, disk in xy). Returns
-// false when the chord's density peak lies outside [rIn, rOut]; otherwise the
-// band color, the mean emissivity jEff = flux g^3 <rho>, and <rho>.
+// false when no part of the chord inside the annulus carries density;
+// otherwise the emission-weighted band color, the mean emissivity
+// jEff = <flux g^3 rho> over the whole chord, and the mean density <rho>
+// over the whole chord (zero outside the annulus).
 bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
                    out vec3 emitColor, out float jEff, out float rhoMean) {
   emitColor = vec3(0.0);
@@ -599,34 +677,30 @@ bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
   if (p0.z * p1.z > 0.0 && min(abs(p0.z), abs(p1.z)) > 8.0 * h) {
     return false;
   }
-  float tPeak = (p0.z * p1.z < 0.0) ? p0.z / (p0.z - p1.z)
-                                    : (abs(p0.z) <= abs(p1.z) ? 0.0 : 1.0);
-  vec3 peak = mix(p0, p1, tPeak);
-  float rCyl = length(peak.xy);
-  if (rCyl < rIn || rCyl > rOut) {
+  // Inside rOut is one interval; inside rIn is one interval to exclude.
+  // rho^2 is convex along the chord, so end points inside rOut keep the
+  // whole chord and a closest approach outside rIn excludes nothing; only a
+  // chord across an edge solves the quadratic.
+  vec2 a = p0.xy;
+  vec2 b = p1.xy - p0.xy;
+  vec2 outer = max(dot(a, a), dot(p1.xy, p1.xy)) <= rOut * rOut
+                   ? vec2(0.0, 1.0)
+                   : bhChordInsideRadius(a, b, rOut);
+  float tClosest = clamp(-dot(a, b) / max(dot(b, b), 1e-30), 0.0, 1.0);
+  vec2 closest = a + tClosest * b;
+  vec2 inner = dot(closest, closest) >= rIn * rIn ? vec2(1.0, 0.0)
+                                                   : bhChordInsideRadius(a, b, rIn);
+  vec3 colorSum = vec3(0.0);
+  if (inner.x > inner.y) {
+    bhDiskPiece(p0, p1, outer.x, outer.y, rIn, h, r_s, rhoMean, jEff, colorSum);
+  } else {
+    bhDiskPiece(p0, p1, outer.x, min(outer.y, inner.x), rIn, h, r_s, rhoMean, jEff, colorSum);
+    bhDiskPiece(p0, p1, max(outer.x, inner.y), outer.y, rIn, h, r_s, rhoMean, jEff, colorSum);
+  }
+  if (!(rhoMean > 0.0)) {
     return false;
   }
-  // Novikov-Thorne surface flux profile
-  float x    = rIn / max(rCyl, BH_EPSILON);
-  float flux = max(0.0, pow(x, 3.0) * (1.0 - sqrt(x)));
-
-  // Temperature-to-color mapping (three bands)
-  float T_norm = pow(max(flux, 0.0), 0.25);
-  if (T_norm > 0.6) {
-    emitColor = vec3(1.0, 0.9, 0.8);
-  } else if (T_norm > 0.3) {
-    emitColor = vec3(1.0, 0.6, 0.2);
-  } else {
-    emitColor = vec3(0.8, 0.2, 0.1);
-  }
-
-  // Doppler beaming (Keplerian v ~ sqrt(r_s / 2r))
-  float v       = sqrt(0.5 * r_s / max(rCyl, BH_EPSILON));
-  float doppler = 1.0 + 0.3 * v * cos(atan(peak.y, peak.x));
-  float g3      = doppler * doppler * doppler;
-
-  rhoMean = bhGaussianChordMean(p0.z, p1.z, h);
-  jEff = flux * g3 * rhoMean;
+  emitColor = jEff > 0.0 ? colorSum / jEff : vec3(0.8, 0.2, 0.1);
   return true;
 }
 

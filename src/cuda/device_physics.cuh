@@ -2124,53 +2124,60 @@ __device__ __forceinline__ float3 d_rte_step(float3 emit_color, float j_eff,
 }
 
 /**
- * @brief Mean of exp(-z^2 / 2h^2) along a chord whose height runs linearly from z0 to z1.
+ * @brief Mean (x) and centroid fraction (y) of exp(-z^2 / 2h^2) along a chord
+ *        whose height runs linearly from z0 to z1, sharing one erf pair.
  *
- * h sqrt(pi/2) (erf(z1 / sqrt(2) h) - erf(z0 / sqrt(2) h)) / (z1 - z0); below
- * |z1 - z0| = 0.01 sqrt(2) h the midpoint value (relative error < 1e-5).
- * Twin of bhGaussianChordMean in shader/include/interop_trace.glsl.
+ * mean = h sqrt(pi/2) (erf(z1 s) - erf(z0 s)) / (z1 - z0), s = 1 / (sqrt(2) h);
+ * the centroid is the chord fraction of the weighted mean height
+ * -h^2 (exp(-z1^2 / 2h^2) - exp(-z0^2 / 2h^2)) / (mean (z1 - z0)). Below
+ * |z1 - z0| = 0.01 sqrt(2) h the midpoint value and the midpoint. Twin of
+ * bhGaussianChordMoments in shader/include/interop_trace.glsl.
  */
-__device__ __forceinline__ float d_gaussian_chord_mean(float z0, float z1, float h) {
+__device__ __forceinline__ float2 d_gaussian_chord_moments(float z0, float z1, float h) {
     float const s  = 0.70710678f / h;
     float const dz = z1 - z0;
     if (fabsf(dz) * s < 0.01f) {
         float const zm = 0.5f * (z0 + z1) / h;
-        return expf(-0.5f * zm * zm);
+        return make_float2(expf(-0.5f * zm * zm), 0.5f);
     }
-    return 1.25331414f * h * (erff(z1 * s) - erff(z0 * s)) / dz;
+    float const mass = 1.25331414f * h * (erff(z1 * s) - erff(z0 * s));
+    float frac = 0.5f;
+    if (fabsf(mass) >= 1e-6f * fabsf(dz)) {
+        float const z_bar = -h * h * (expf(-z1 * z1 * s * s) - expf(-z0 * z0 * s * s)) / mass;
+        frac = fminf(fmaxf((z_bar - z0) / dz, 0.0f), 1.0f);
+    }
+    return make_float2(mass / dz, frac);
 }
 
 /**
- * @brief Disk emission over the chord p0 -> p1 of one integrator step.
- *
- * The Gaussian layer (scale height h) is integrated exactly along the chord
- * and returned as its mean; flux, band color, and Doppler factor are read
- * where the chord's density peaks. With every coefficient proportional to
- * the density and a constant source function, the segment's formal solution
- * depends only on the column, so any step size gives the exact segment.
- * Returns false when the density peak lies outside [r_in, r_out]. Twin of
- * bhDiskSegment in shader/include/interop_trace.glsl.
+ * @brief Parameter interval (clipped to [0, 1]) of the chord a + b t on which
+ *        |a + b t| <= radius (x = t0, y = t1; empty when t0 > t1).
+ *        Twin of bhChordInsideRadius.
  */
-__device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in, float r_out,
-                                               float h, float rs, float3 &emit_color,
-                                               float &j_eff, float &rho_mean) {
-    emit_color = make_f3(0.0f, 0.0f, 0.0f);
-    j_eff = 0.0f;
-    rho_mean = 0.0f;
-    /* A chord on one side of the midplane and more than 8 h from it carries
-     * density below exp(-32) ~ 1e-14 everywhere. */
-    if (p0.z * p1.z > 0.0f && fminf(fabsf(p0.z), fabsf(p1.z)) > 8.0f * h) {
-        return false;
+__device__ __forceinline__ float2 d_chord_inside_radius(float ax, float ay, float bx, float by,
+                                                        float radius) {
+    float const qa = fmaf(bx, bx, by * by);
+    float const qb = fmaf(ax, bx, ay * by);
+    float const qc = fmaf(ax, ax, ay * ay) - radius * radius;
+    if (qa < 1e-12f * fmaxf(qc + radius * radius, 1.0f)) {
+        return qc <= 0.0f ? make_float2(0.0f, 1.0f) : make_float2(1.0f, 0.0f);
     }
-    float const t_peak = (p0.z * p1.z < 0.0f) ? p0.z / (p0.z - p1.z)
-                                               : (fabsf(p0.z) <= fabsf(p1.z) ? 0.0f : 1.0f);
-    float3 const peak = d_add(p0, d_scale(d_sub(p1, p0), t_peak));
-    float const r_cyl = sqrtf(fmaf(peak.x, peak.x, peak.y * peak.y));
-    if (r_cyl < r_in || r_cyl > r_out) {
-        return false;
+    float const disc = fmaf(qb, qb, -qa * qc);
+    if (disc < 0.0f) {
+        return make_float2(1.0f, 0.0f);
     }
+    float const root = sqrtf(disc);
+    return make_float2(fmaxf((-qb - root) / qa, 0.0f), fminf((-qb + root) / qa, 1.0f));
+}
+
+/**
+ * @brief Radial disk factor flux g^3 and band color at cylindrical radius rho,
+ *        azimuth phi. Twin of bhDiskRadialEmission.
+ */
+__device__ __forceinline__ float d_disk_radial_emission(float rho, float phi, float r_in, float rs,
+                                                        float3 &emit_color) {
     /* Novikov-Thorne flux profile */
-    float const x    = r_in / fmaxf(r_cyl, D_EPSILON);
+    float const x    = r_in / fmaxf(rho, D_EPSILON);
     float const flux = fmaxf(0.0f, x * x * x * (1.0f - sqrtf(x)));
 
     /* Temperature-to-color: 3-band ramp */
@@ -2184,12 +2191,83 @@ __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in,
     }
 
     /* Keplerian Doppler beaming: v ~ sqrt(rs / 2r), boost ~ (1 + 0.3*v*cos phi)^3 */
-    float const v       = sqrtf(0.5f * rs / fmaxf(r_cyl, D_EPSILON));
-    float const doppler = 1.0f + 0.3f * v * cosf(atan2f(peak.y, peak.x));
-    float const g3      = doppler * doppler * doppler;
+    float const v       = sqrtf(0.5f * rs / fmaxf(rho, D_EPSILON));
+    float const doppler = 1.0f + 0.3f * v * cosf(phi);
+    return flux * doppler * doppler * doppler;
+}
 
-    rho_mean = d_gaussian_chord_mean(p0.z, p1.z, h);
-    j_eff = flux * g3 * rho_mean;
+/**
+ * @brief Disk emission over the chord p0 -> p1 of one integrator step.
+ *
+ * The chord is intersected with the annulus [r_in, r_out] (rho^2 is
+ * quadratic along it, so at most two intervals emit); the Gaussian layer
+ * (scale height h) is integrated exactly over each interval and the radial
+ * factors are read at each interval's density-weighted centroid. With every
+ * coefficient proportional to the density and a constant source function,
+ * the segment's formal solution depends only on the column. Returns false
+ * when no emitting part carries density; j_eff and rho_mean are means over
+ * the whole chord. Twin of bhDiskSegment in shader/include/interop_trace.glsl.
+ */
+__device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in, float r_out,
+                                               float h, float rs, float3 &emit_color,
+                                               float &j_eff, float &rho_mean) {
+    emit_color = make_f3(0.0f, 0.0f, 0.0f);
+    j_eff = 0.0f;
+    rho_mean = 0.0f;
+    /* A chord on one side of the midplane and more than 8 h from it carries
+     * density below exp(-32) ~ 1e-14 everywhere. */
+    if (p0.z * p1.z > 0.0f && fminf(fabsf(p0.z), fabsf(p1.z)) > 8.0f * h) {
+        return false;
+    }
+    /* rho^2 is convex along the chord: end points inside r_out keep the whole
+     * chord and a closest approach outside r_in excludes nothing; only a chord
+     * across an edge solves the quadratic. */
+    float const bx = p1.x - p0.x;
+    float const by = p1.y - p0.y;
+    float const r0_2 = fmaf(p0.x, p0.x, p0.y * p0.y);
+    float const r1_2 = fmaf(p1.x, p1.x, p1.y * p1.y);
+    float2 const outer = fmaxf(r0_2, r1_2) <= r_out * r_out
+                             ? make_float2(0.0f, 1.0f)
+                             : d_chord_inside_radius(p0.x, p0.y, bx, by, r_out);
+    float const t_close = fminf(fmaxf(-fmaf(p0.x, bx, p0.y * by) /
+                                          fmaxf(fmaf(bx, bx, by * by), 1e-30f),
+                                      0.0f), 1.0f);
+    float const cx = fmaf(bx, t_close, p0.x);
+    float const cy = fmaf(by, t_close, p0.y);
+    float2 const inner = fmaf(cx, cx, cy * cy) >= r_in * r_in
+                             ? make_float2(1.0f, 0.0f)
+                             : d_chord_inside_radius(p0.x, p0.y, bx, by, r_in);
+    bool const inner_empty = inner.x > inner.y;
+    float2 const pieces[2] = {
+        make_float2(outer.x, inner_empty ? outer.y : fminf(outer.y, inner.x)),
+        inner_empty ? make_float2(1.0f, 0.0f) : make_float2(fmaxf(outer.x, inner.y), outer.y)};
+    float3 color_sum = make_f3(0.0f, 0.0f, 0.0f);
+    for (int k = 0; k < 2; ++k) {
+        float const ta = pieces[k].x;
+        float const tb = pieces[k].y;
+        if (tb <= ta) {
+            continue;
+        }
+        float const za = fmaf(p1.z - p0.z, ta, p0.z);
+        float const zb = fmaf(p1.z - p0.z, tb, p0.z);
+        float2 const moments = d_gaussian_chord_moments(za, zb, h);
+        float const column = (tb - ta) * moments.x;
+        if (column <= 0.0f) {
+            continue;
+        }
+        float const tw = fmaf(tb - ta, moments.y, ta);
+        float3 const w = d_add(p0, d_scale(d_sub(p1, p0), tw));
+        float3 color;
+        float const radial = d_disk_radial_emission(sqrtf(fmaf(w.x, w.x, w.y * w.y)),
+                                                    atan2f(w.y, w.x), r_in, rs, color);
+        rho_mean += column;
+        j_eff += radial * column;
+        color_sum = d_add(color_sum, d_scale(color, radial * column));
+    }
+    if (!(rho_mean > 0.0f)) {
+        return false;
+    }
+    emit_color = j_eff > 0.0f ? d_scale(color_sum, 1.0f / j_eff) : make_f3(0.8f, 0.2f, 0.1f);
     return true;
 }
 

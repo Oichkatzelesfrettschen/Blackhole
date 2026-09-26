@@ -23,7 +23,8 @@
  *
  * d_disk_segment integrates the Gaussian disk layer along each step's chord:
  * a ray crossing it at radius 30 reproduces the analytic emission column for
- * chords from 0.1 h to 100 h.
+ * chords from 0.1 h to 100 h, and a ray whose footprint straddles r_in or
+ * r_out converges to the quadrature column as chords shrink.
  * Skips without a CUDA device.
  */
 
@@ -90,13 +91,13 @@ __global__ void kerr_slab_kernel(float3 pos, float3 dir, float step_size, float 
     out[1] = transmit;
 }
 
-/* Ray at inclination incl crossing the disk midplane at (30, 0, 0) from
+/* Ray at inclination incl crossing the disk midplane at (cross_x, 0, 0) from
  * z = 3 to z = -3, cut into chords of seg_length (offset 0.37), each passed
  * to d_disk_segment (r_in = 6, r_s = 2, h = 0.2). out[0] = sum(j_eff * len). */
-__global__ void disk_slab_kernel(float seg_length, float incl, float *out) {
+__global__ void disk_slab_kernel(float seg_length, float incl, float cross_x, float *out) {
     float3 const dir = make_f3(sinf(incl), 0.0f, -cosf(incl));
     float const total = 6.0f / cosf(incl);
-    float3 const start = d_sub(make_f3(30.0f, 0.0f, 0.0f), d_scale(dir, 0.5f * total));
+    float3 const start = d_sub(make_f3(cross_x, 0.0f, 0.0f), d_scale(dir, 0.5f * total));
     float column = 0.0f;
     float s0 = 0.0f;
     float s1 = fminf(0.37f * seg_length, total);
@@ -295,11 +296,50 @@ TEST(CudaKerrGeodesic, DiskSegmentIntegratesTheGaussianColumn) {
     for (double const incl : {0.0, K_PI / 3.0}) {
         double const column = flux * g * g * g * std::sqrt(2.0 * K_PI) * 0.2 / std::cos(incl);
         for (float const seg : {0.02f, 0.2f, 2.0f, 20.0f}) {
-            disk_slab_kernel<<<1, 1>>>(seg, static_cast<float>(incl), dOut);
+            disk_slab_kernel<<<1, 1>>>(seg, static_cast<float>(incl), 30.0f, dOut);
             cudaDeviceSynchronize();
             float out = 0.0f;
             cudaMemcpy(&out, dOut, sizeof(float), cudaMemcpyDeviceToHost);
             EXPECT_NEAR(out, column, 5e-3 * column) << "incl=" << incl << " seg=" << seg;
+        }
+    }
+    cudaFree(dOut);
+}
+
+TEST(CudaKerrGeodesic, DiskSegmentClipsChordsToTheAnnulus) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* 10 degrees from grazing, crossing 1 M outside r_in = 6 and 1 M inside
+     * r_out = 200: the midpoint-rule column (2e6 points) is the reference;
+     * chords of 0.5 and 0.1 must reach 1% and 0.1%. */
+    double const incl = 80.0 * K_PI / 180.0;
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, sizeof(float));
+    for (double const cross_x : {7.0, 199.0}) {
+        double const total = 6.0 / std::cos(incl);
+        int const n = 2000000;
+        double ref = 0.0;
+        for (int k = 0; k < n; ++k) {
+            double const s = (k + 0.5) * total / n;
+            double const x = cross_x + (s - 0.5 * total) * std::sin(incl);
+            double const z = 3.0 - s * std::cos(incl);
+            double const rho = std::fabs(x);
+            if (rho < 6.0 || rho > 200.0) {
+                continue;
+            }
+            double const u = 6.0 / rho;
+            double const g = 1.0 + 0.3 * std::sqrt(1.0 / rho) * (x >= 0.0 ? 1.0 : -1.0);
+            ref += u * u * u * (1.0 - std::sqrt(u)) * g * g * g * std::exp(-12.5 * z * z) * total / n;
+        }
+        for (float const seg : {0.5f, 0.1f}) {
+            disk_slab_kernel<<<1, 1>>>(seg, static_cast<float>(incl), static_cast<float>(cross_x),
+                                       dOut);
+            cudaDeviceSynchronize();
+            float out = 0.0f;
+            cudaMemcpy(&out, dOut, sizeof(float), cudaMemcpyDeviceToHost);
+            EXPECT_NEAR(out, ref, (seg > 0.2f ? 1e-2 : 1e-3) * ref)
+                << "cross_x=" << cross_x << " seg=" << seg;
         }
     }
     cudaFree(dOut);

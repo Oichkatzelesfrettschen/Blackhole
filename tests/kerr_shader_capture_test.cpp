@@ -408,7 +408,7 @@ void main() {
 }
 
 // A straight ray at inclination `incl` from the disk normal crossing the
-// midplane at (30, 0, 0) from z = 3 to z = -3 (15 scale heights of h = 0.2
+// midplane at (crossX, 0, 0) (default 30) from z = 3 to z = -3 (15 scale heights of h = 0.2
 // each side), cut into chords of length segLength starting at an offset of
 // 0.37 segLength, each passed to bhDiskSegment and rteStepVec3 with
 // absorption kappa * jEff, as bhTraceGeodesicRTE does per step. Reports the
@@ -420,12 +420,13 @@ layout(std430, binding = 1) buffer Output { float result[]; };
 uniform float segLength;
 uniform float incl;
 uniform float kappa;
+uniform float crossX = 30.0;
 void main() {
   float r_s = 2.0;
   float h = 0.1 * r_s;
   vec3 dir = vec3(sin(incl), 0.0, -cos(incl));
   float total = 6.0 / cos(incl);
-  vec3 start = vec3(30.0, 0.0, 0.0) - 0.5 * total * dir;
+  vec3 start = vec3(crossX, 0.0, 0.0) - 0.5 * total * dir;
   float column = 0.0;
   float transmit = 1.0;
   vec3 accum = vec3(0.0);
@@ -1133,6 +1134,78 @@ TEST_F(KerrShaderCaptureTest, DiskSegmentIntegratesTheGaussianColumn) {
           "incl=" + std::to_string(incl) + " segLength=" + std::to_string(segLength);
       EXPECT_NEAR(out.at(0), column, 5e-3 * column) << where;
       EXPECT_NEAR(out.at(1), intensity, 5e-3 * intensity) << where;
+    }
+  }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+namespace {
+
+// Emission column flux g^3 exp(-z^2 / 2h^2) over the annulus 6 <= rho <= 200
+// (r_s = 2, a = 0) along the diskSlabShader ray, by the midpoint rule with
+// 2e6 points.
+double referenceDiskColumn(double crossX, double incl) {
+  const double h = 0.2;
+  const double total = 6.0 / std::cos(incl);
+  const int n = 2'000'000;
+  const double ds = total / n;
+  double column = 0.0;
+  for (int k = 0; k < n; ++k) {
+    const double s = (k + 0.5) * ds;
+    const double x = crossX + ((s - (0.5 * total)) * std::sin(incl));
+    const double z = 3.0 - (s * std::cos(incl));
+    const double rho = std::abs(x);
+    if (rho < 6.0 || rho > 200.0) {
+      continue;
+    }
+    const double u = 6.0 / rho;
+    const double flux = u * u * u * (1.0 - std::sqrt(u));
+    const double g = 1.0 + (0.3 * std::sqrt(1.0 / rho) * (x >= 0.0 ? 1.0 : -1.0));
+    column += flux * g * g * g * std::exp(-0.5 * (z / h) * (z / h)) * ds;
+  }
+  return column;
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, DiskSegmentClipsChordsToTheAnnulus) {
+  // A ray 10 degrees from grazing crosses the midplane 1 M outside r_in = 6
+  // and 1 M inside r_out = 200; its density footprint (+-3 h tan(80 deg) =
+  // +-3.4 M) straddles the edge. The emission column must converge to the
+  // quadrature reference as chords shrink from 40 h to 0.1 h. Checking one
+  // radius per chord keeps or drops a whole chord at an edge instead.
+  const double incl = 80.0 * std::numbers::pi / 180.0;
+  const GLuint program = bhtest::createComputeProgram(diskSlabShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 2), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  for (const double crossX : {7.0, 199.0}) {
+    const double reference = referenceDiskColumn(crossX, incl);
+    double previous = 1.0;
+    for (const float segLength : {8.0F, 2.0F, 0.5F, 0.1F, 0.02F}) {
+      glUseProgram(program);
+      glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
+      glUniform1f(glGetUniformLocation(program, "segLength"), segLength);
+      glUniform1f(glGetUniformLocation(program, "incl"), static_cast<float>(incl));
+      glUniform1f(glGetUniformLocation(program, "kappa"), 1.0F);
+      glUniform1f(glGetUniformLocation(program, "crossX"), static_cast<float>(crossX));
+      const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 2);
+      const double error = std::abs((static_cast<double>(out.at(0)) - reference) / reference);
+      const std::string where = "crossX=" + std::to_string(crossX) +
+                                " segLength=" + std::to_string(segLength) +
+                                " error=" + std::to_string(error);
+      // Second order in the chord: the centroid read of the radial factors is
+      // exact for linear variation, and flux curves sharply just outside r_in.
+      EXPECT_LE(error, std::max(1.05 * previous, 1e-5)) << where;
+      if (segLength <= 0.5F) {
+        EXPECT_LT(error, 1e-2) << where;
+      }
+      if (segLength <= 0.1F) {
+        EXPECT_LT(error, 1e-3) << where;
+      }
+      previous = error;
     }
   }
   glDeleteBuffers(1, &ssbo);
