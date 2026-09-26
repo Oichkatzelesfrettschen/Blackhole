@@ -58,6 +58,15 @@ inline constexpr double K_SAVE_SESSION_WALL_SEC = 4.0 * 3600.0;
 /// Advance button as fast as the controls allow.
 inline constexpr double K_SAVE_MANUAL_BATCHES_PER_WALL_SEC = 10.0;
 
+/// Hard ceiling on any scenario's replay budget, 2^30 turns. A valid config
+/// can still produce an unrepresentable budget: a station at the Q48 clock
+/// floor (rateQ == 1, dtau/dt = 2^-48) with one-second turns gives
+/// 14400 * 3600 * 2^48 = 1.46e22 turns, past int64. No shipped scenario comes
+/// near the ceiling (the deep colony's budget is 3.68e7), and it bounds such a
+/// configuration's worst corrupted load to about three minutes at 0.17
+/// microseconds a turn.
+inline constexpr std::int64_t K_SAVE_REPLAY_TURN_CEILING = std::int64_t{1} << 30;
+
 /**
  * @brief Largest saved turn load replays for this scenario: the turns
  *        K_SAVE_SESSION_WALL_SEC of play reach at the scenario's fastest
@@ -73,6 +82,8 @@ inline constexpr double K_SAVE_MANUAL_BATCHES_PER_WALL_SEC = 10.0;
  *    near dtau/dt = 1 (real time there is about 0.04 turns per wall second).
  * Replay cost scales with the budget, so a save's scenario, not a global
  * constant, sets how long the worst corrupted turn field can make a load run.
+ * The result is clamped to K_SAVE_REPLAY_TURN_CEILING while still a double,
+ * so the conversion to int64 is always defined.
  */
 [[nodiscard]] std::int64_t saveReplayTurnBudget(const CampaignState &state);
 

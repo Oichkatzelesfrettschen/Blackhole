@@ -190,8 +190,16 @@ std::int64_t saveReplayTurnBudget(const CampaignState &state) {
       K_MAX_LOCAL_SECONDS_PER_WALL_SECOND / (slowestRate * state.config().secondsPerTurn);
   const double manualTurnsPerWallSec =
       static_cast<double>(K_MAX_MANUAL_BATCH_TURNS) * K_SAVE_MANUAL_BATCHES_PER_WALL_SEC;
-  return static_cast<std::int64_t>(std::ceil(
-      K_SAVE_SESSION_WALL_SEC * std::max(realtimeTurnsPerWallSec, manualTurnsPerWallSec)));
+  const double budget =
+      std::ceil(K_SAVE_SESSION_WALL_SEC * std::max(realtimeTurnsPerWallSec, manualTurnsPerWallSec));
+  // Clamped in double before the cast: converting a double beyond the int64
+  // range is undefined. The campaign libraries build without fast-math, so
+  // std::isfinite classifies an overflowed quotient.
+  constexpr auto ceiling = static_cast<double>(K_SAVE_REPLAY_TURN_CEILING);
+  if (!std::isfinite(budget) || budget >= ceiling) {
+    return K_SAVE_REPLAY_TURN_CEILING;
+  }
+  return static_cast<std::int64_t>(budget);
 }
 
 std::vector<std::uint8_t> saveCampaign(const CampaignSession &session) {

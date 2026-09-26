@@ -15,6 +15,7 @@
 
 #include <gtest/gtest.h>
 
+#include "campaign_test_field.h"
 #include "game/campaign.h"
 #include "game/campaign_session.h"
 #include "game/campaign_sim_lines.h"
@@ -24,6 +25,7 @@
 #include "game/observer.h"
 #include "game/realtime_driver.h"
 #include "game/save_format.h"
+#include "game/time_field.h"
 
 namespace {
 
@@ -227,6 +229,41 @@ TEST(CampaignSave, ReplayBudgetFollowsTheScenario) {
   const double charterTurns =
       static_cast<double>(game::K_COLONY_MISSION_SEC) / (millerRate * secondsPerTurn);
   EXPECT_GT(static_cast<double>(deepBudget), charterTurns);
+}
+
+namespace {
+
+/** @brief The fake field with the near band at the Q48 clock floor. */
+class ClockFloorField final : public game::TimeField {
+public:
+  [[nodiscard]] double properTimeRate(double radiusCm, game::Observer /*observer*/) const override {
+    return radiusCm < 970.0 ? 0x1p-48 : 1.0;
+  }
+  [[nodiscard]] double signalDelaySec(double fromRadiusCm, double toRadiusCm) const override {
+    return std::fabs(toRadiusCm - fromRadiusCm);
+  }
+  [[nodiscard]] bool isValidStationRadius(double radiusCm) const override {
+    return std::isfinite(radiusCm) && radiusCm > 1.0;
+  }
+};
+
+} // namespace
+
+// Falsifier: a valid campaign whose slowest station sits at the Q48 clock
+// floor (rateQ == 1) with one-second turns producing an out-of-range or
+// negative budget -- its unclamped value, 1.46e22 turns, is past int64 --
+// instead of the documented ceiling.
+TEST(CampaignSave, ClockFloorBudgetIsClampedToTheCeiling) {
+  const ClockFloorField field;
+  game::CampaignConfig config = campaign_test::fakeConfig();
+  ASSERT_DOUBLE_EQ(config.secondsPerTurn, 1.0);
+  game::ColonyConfig colony;
+  colony.bandIndex = 0; // radius 960, dtau/dt = 2^-48
+  config.colonies = {colony};
+  const game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  ASSERT_DOUBLE_EQ(state.nodes().at(game::K_FIRST_COLONY_NODE).clock.rate(), 0x1p-48);
+  EXPECT_EQ(game::saveReplayTurnBudget(state), game::K_SAVE_REPLAY_TURN_CEILING);
 }
 
 // Falsifier: a tiny save whose turn field sits past its scenario's budget (or
