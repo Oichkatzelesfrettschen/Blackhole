@@ -35,6 +35,7 @@ struct CampaignUiState {
   game::FleetId selectedFleet = game::K_INVALID_FLEET_ID;
   int composerTargetBand = 0;
   game::OrbitLane composerLane = game::OrbitLane::Prograde;
+  game::StationKeeping composerStation = game::StationKeeping::Orbit;
   float composerCostHours = 24.0f;
   bool lastCommandAccepted = true;
   bool lastCommandValid = true; ///< False once a command has been rejected (shows feedback).

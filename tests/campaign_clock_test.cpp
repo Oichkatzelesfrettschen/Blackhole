@@ -13,8 +13,10 @@
 
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
+#include "game/campaign_session.h"
 #include "game/command.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 #include "game/serialize_bytes.h"
 #include "game/temporal_clock.h"
 
@@ -57,7 +59,7 @@ TEST(CampaignClock, ProperTimeRateStaysInUnitIntervalAndRisesWithRadius) {
   double previousRate = 0.0;
   for (const double multiple : {1.0001, 1.01, 1.5, 3.0, 10.0, 50.0, 200.0, 1000.0}) {
     const double radiusCm = multiple * horizonCm;
-    const double rate = field.properTimeRate(radiusCm);
+    const double rate = field.properTimeRate(radiusCm, game::Observer::Hovering);
     EXPECT_GT(rate, 0.0) << "radius multiple " << multiple;
     EXPECT_LE(rate, 1.0) << "radius multiple " << multiple;
     EXPECT_GT(rate, previousRate) << "rate must rise monotonically with radius";
@@ -135,4 +137,31 @@ TEST(CampaignClock, BatchAdvanceMatchesSingleStepAdvanceByteForByte) {
   const std::vector<std::uint8_t> steppedBytes = stepped.serializeState();
   EXPECT_EQ(batchedBytes, steppedBytes);
   EXPECT_EQ(batched.stateDigest(), stepped.stateDigest());
+}
+
+// Falsifier: two campaigns identical but for one fleet's station keeping, the
+// field's spin deficit, or the field's sense of rotation (0.9 against -0.9,
+// one deficit), serializing to the same bytes at turn 0 -- before any proper
+// time accrues, so only the observer and spin fields can tell them apart.
+TEST(CampaignSerialization, DigestCarriesObserverAndSpinDeficit) {
+  game::CampaignSession orbiting(3);
+  game::CampaignSession hovering(3);
+  ASSERT_NE(orbiting.state().addFleet(game::FleetCapability::Research, 2),
+            game::K_INVALID_FLEET_ID);
+  ASSERT_NE(hovering.state().addFleet(game::FleetCapability::Research, 2,
+                                      game::OrbitLane::Prograde, game::StationKeeping::Hover),
+            game::K_INVALID_FLEET_ID);
+  EXPECT_NE(orbiting.state().serializeState(), hovering.state().serializeState());
+
+  const game::CampaignSession spinA(3, 0.9);
+  const game::CampaignSession spinB(3, 0.95);
+  EXPECT_NE(spinA.state().serializeState(), spinB.state().serializeState());
+  // Same |a|, opposite rotation: the deficit alone cannot tell them apart.
+  const game::CampaignSession counterRotating(3, -0.9);
+  EXPECT_NE(spinA.state().serializeState(), counterRotating.state().serializeState());
+  EXPECT_DOUBLE_EQ(spinB.state().renderSnapshot().spinDeficit, spinB.field().spinDeficit());
+
+  // Same scenario, same bytes: the new fields are deterministic.
+  EXPECT_EQ(game::CampaignSession(3).state().serializeState(),
+            game::CampaignSession(3).state().serializeState());
 }

@@ -52,6 +52,8 @@ struct CampaignConfig {
   std::uint64_t seed = 0;
   double secondsPerTurn = 3600.0;
   double authorityRadiusCm = 0.0;   ///< Command origin (human authority station).
+  /// The authority's clock: hovering or on an orbit.
+  Observer authorityObserver = Observer::Hovering;
   std::vector<double> bandRadiusCm; ///< Orbital bands, any order, indexed by bandIndex.
 
   // Economy. Yield per task = properHours * (1/dtau_dt at completion band) *
@@ -129,10 +131,11 @@ public:
   [[nodiscard]] bool valid() const { return valid_; }
 
   /** @brief Setup-phase fleet creation at the authority's direction; returns
-   *         K_INVALID_FLEET_ID when bandIndex is out of range or the lane is
-   *         retrograde inside the ergosphere. */
+   *         K_INVALID_FLEET_ID when bandIndex is out of range or the placement
+   *         is inadmissible (see placementAllowed). Fleets orbit by default. */
   FleetId addFleet(FleetCapability capability, int bandIndex,
-                   OrbitLane lane = OrbitLane::Prograde);
+                   OrbitLane lane = OrbitLane::Prograde,
+                   StationKeeping station = StationKeeping::Orbit);
 
   /** @brief Validates and enqueues a command. Returns false and leaves ALL
    *         state untouched (log included) when validation fails -- an invalid
@@ -169,9 +172,10 @@ public:
   /** @brief Deterministic field-by-field byte serialization of the full
    *         campaign state (explicit widths, -0.0 canonicalized, every double
    *         finite). Determinism artifact, not a versioned save format: it
-   *         captures the config and the mutable runtime state, but not the
-   *         TimeField (mass/spin) nor the task graph's next-id counter, which are
-   *         fixed by the scenario. Two runs of the same scenario on the same
+   *         captures the config, the field's spin deficit, every station's
+   *         observer, and the mutable runtime state, but not the field's mass
+   *         nor the task graph's next-id counter, which are fixed by the
+   *         scenario. Two runs of the same scenario on the same
    *         field compare equal; comparing across different fields is out of
    *         scope. */
   [[nodiscard]] std::vector<std::uint8_t> serializeState() const;
@@ -205,9 +209,13 @@ private:
   [[nodiscard]] double effectiveSignalDelaySec(double fromRadiusCm, double toRadiusCm) const;
   /** @brief Yield multiplier for a fleet's capability (1.0 by default). */
   [[nodiscard]] double capabilityYieldMultiplier(FleetCapability capability) const;
-  /** @brief True when a lane can be held at a band: retrograde is refused at or
-   *         inside the ergosphere, where frame dragging forbids counter-rotation. */
-  [[nodiscard]] bool laneAllowedAtBand(OrbitLane lane, int bandIndex) const;
+  /** @brief True when a fleet can hold a band with this lane and station
+   *         keeping: retrograde is refused inside the ergosphere, where frame
+   *         dragging forbids counter-rotation; a hovering station is a ZAMO and
+   *         so carries no retrograde sense; an orbit needs a bound circular
+   *         orbit of its sense at the band (outside the marginally bound
+   *         radius). */
+  [[nodiscard]] bool placementAllowed(OrbitLane lane, StationKeeping station, int bandIndex) const;
   /** @brief Prograde ergoregion yield multiplier (>= 1); 1 outside the ergosphere,
    *         for retrograde fleets, or when the bonus is disabled. */
   [[nodiscard]] double frameDragYieldFactor(const Fleet &fleet) const;

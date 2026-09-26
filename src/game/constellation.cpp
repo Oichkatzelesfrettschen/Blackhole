@@ -6,6 +6,8 @@
 #include "game/constellation.h"
 
 #include <algorithm>
+#include <iterator>
+#include <ranges>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -18,6 +20,7 @@
 #include "game/constellation_view.h"
 #include "game/economy.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 #include "game/serialize_bytes.h"
 #include "game/temporal_clock.h"
 
@@ -32,6 +35,23 @@ using serial::appendU8;
 namespace {
 
 constexpr double K_C_CM_PER_S = 2.99792458e10; ///< Speed of light.
+constexpr double K_NO_LIGHT_PATH = -1.0;        ///< lightPathSec_ entry for an unreachable pair.
+
+void appendFleetBelief(std::vector<std::uint8_t> &out, const FleetBelief &known) {
+  appendU32(out, known.id);
+  appendU32(out, known.system);
+  appendI64(out, known.bandIndex);
+  appendU8(out, static_cast<std::uint8_t>(known.lane));
+  appendU8(out, static_cast<std::uint8_t>(known.observer));
+  appendF64(out, known.reliability);
+  appendF64(out, known.fuelUnits);
+  appendU8(out, known.inTransit ? 1U : 0U);
+  appendI64(out, known.transitArrivalTurn);
+  appendU32(out, known.transitDestSystem);
+  appendI64(out, known.transitDestBand);
+  appendI64(out, known.asOfTurn);
+  appendU32(out, known.reportSequence);
+}
 
 } // namespace
 
@@ -52,7 +72,8 @@ const char *factionPolicyName(FactionPolicy policy) {
 Constellation::Constellation(ConstellationConfig config)
     : config_(std::move(config)),
       valid_(std::isfinite(config_.secondsPerTurn) && config_.secondsPerTurn > 0.0 &&
-             !config_.systems.empty()),
+             !config_.systems.empty() && config_.interSystemTravelSpeedFraction > 0.0 &&
+             config_.interSystemTravelSpeedFraction < 1.0),
       clock_(valid_ ? config_.secondsPerTurn : 1.0) {
   if (!valid_) {
     return;
@@ -61,15 +82,71 @@ Constellation::Constellation(ConstellationConfig config)
   for (const SystemSpec &spec : config_.systems) {
     OrbitalSystem system{.field = KerrTimeField(spec.blackHoleMassG, spec.spinDimensionless),
                          .authorityRadiusCm = spec.authorityRadiusCm,
+                         .authorityObserver = spec.authorityObserver,
                          .bandRadiusCm = spec.bandRadiusCm,
                          .instability = 0.0};
-    // The authority station must be a physically admissible radius; a system
-    // whose command origin sits at or inside the horizon invalidates the whole
-    // constellation.
-    if (!system.field.isValidStationRadius(spec.authorityRadiusCm)) {
+    // The authority station must be physically admissible for its observer; a
+    // system whose command origin sits at or inside the horizon, or orbits
+    // where no bound orbit exists, invalidates the whole constellation.
+    if (!system.field.admitsObserver(spec.authorityRadiusCm, spec.authorityObserver)) {
       valid_ = false;
     }
     systems_.push_back(std::move(system));
+  }
+  // Normalize the links: a link naming a missing system or carrying a
+  // non-finite or non-positive separation invalidates the constellation
+  // rather than silently opening a zero-delay channel; duplicates of one
+  // unordered pair collapse to the shortest separation.
+  const std::size_t count = systems_.size();
+  for (const InterSystemLink &link : config_.links) {
+    if (link.a >= count || link.b >= count || link.a == link.b ||
+        !std::isfinite(link.separationCm) || !(link.separationCm > 0.0)) {
+      valid_ = false;
+      continue;
+    }
+    const InterSystemLink canonical{.a = std::min(link.a, link.b),
+                                    .b = std::max(link.a, link.b),
+                                    .separationCm = link.separationCm};
+    const auto existing = std::ranges::find_if(links_, [&](const InterSystemLink &kept) {
+      return kept.a == canonical.a && kept.b == canonical.b;
+    });
+    if (existing == links_.end()) {
+      links_.push_back(canonical);
+    } else {
+      existing->separationCm = std::min(existing->separationCm, canonical.separationCm);
+    }
+  }
+  std::ranges::sort(links_, [](const InterSystemLink &lhs, const InterSystemLink &rhs) {
+    return lhs.a != rhs.a ? lhs.a < rhs.a : lhs.b < rhs.b;
+  });
+  // All-pairs light paths over the link graph (Floyd-Warshall, fixed loop
+  // order so the sums are identical on every run).
+  lightPathSec_.assign(count * count, K_NO_LIGHT_PATH);
+  for (std::size_t index = 0; index < count; ++index) {
+    lightPathSec_.at((index * count) + index) = 0.0;
+  }
+  for (const InterSystemLink &link : links_) {
+    const double linkSec = link.separationCm / K_C_CM_PER_S;
+    lightPathSec_.at((link.a * count) + link.b) = linkSec;
+    lightPathSec_.at((link.b * count) + link.a) = linkSec;
+  }
+  for (std::size_t via = 0; via < count; ++via) {
+    for (std::size_t from = 0; from < count; ++from) {
+      const double firstLeg = lightPathSec_.at((from * count) + via);
+      if (firstLeg < 0.0) {
+        continue;
+      }
+      for (std::size_t to = 0; to < count; ++to) {
+        const double secondLeg = lightPathSec_.at((via * count) + to);
+        if (secondLeg < 0.0) {
+          continue;
+        }
+        double &direct = lightPathSec_.at((from * count) + to);
+        if (direct < 0.0 || firstLeg + secondLeg < direct) {
+          direct = firstLeg + secondLeg;
+        }
+      }
+    }
   }
   lastEmittedController_.resize(systems_.size());
   for (std::size_t systemIndex = 0; systemIndex < systems_.size(); ++systemIndex) {
@@ -109,46 +186,63 @@ bool Constellation::validBand(SystemId system, int bandIndex) const {
   return systems_.at(system).field.isValidStationRadius(bandRadiusCm(system, bandIndex));
 }
 
-bool Constellation::laneAllowedAtBand(SystemId system, OrbitLane lane, int bandIndex) const {
-  if (lane != OrbitLane::Retrograde) {
-    return true;
+bool Constellation::placementAllowed(SystemId system, OrbitLane lane, StationKeeping station,
+                                     int bandIndex) const {
+  const KerrTimeField &field = systems_.at(system).field;
+  const double radiusCm = bandRadiusCm(system, bandIndex);
+  if (lane == OrbitLane::Retrograde &&
+      (radiusCm < field.ergosphereRadiusCm() || station == StationKeeping::Hover)) {
+    // Frame dragging forbids a retrograde hold inside the static limit, and a
+    // hovering ZAMO carries no retrograde sense anywhere.
+    return false;
   }
-  // Inside the static limit, frame dragging forbids a retrograde hold.
-  return bandRadiusCm(system, bandIndex) >= systems_.at(system).field.ergosphereRadiusCm();
+  return field.admitsObserver(radiusCm, observerFor(lane, station));
+}
+
+StationKeeping Constellation::defaultStation(SystemId system, int bandIndex) const {
+  if (!validBand(system, bandIndex)) {
+    return StationKeeping::Orbit;
+  }
+  return systems_.at(system).field.admitsObserver(bandRadiusCm(system, bandIndex),
+                                                  Observer::CircularOrbitPrograde)
+             ? StationKeeping::Orbit
+             : StationKeeping::Hover;
 }
 
 double Constellation::linkSeparationCm(SystemId a, SystemId b) const {
-  const auto link = std::ranges::find_if(config_.links, [a, b](const InterSystemLink &candidate) {
-    return (candidate.a == a && candidate.b == b) || (candidate.a == b && candidate.b == a);
+  const SystemId low = std::min(a, b);
+  const SystemId high = std::max(a, b);
+  const auto link = std::ranges::find_if(links_, [low, high](const InterSystemLink &candidate) {
+    return candidate.a == low && candidate.b == high;
   });
-  return link == config_.links.end() ? -1.0 : link->separationCm;
+  return link == links_.end() ? -1.0 : link->separationCm;
 }
 
-double Constellation::interAuthorityDelaySec(SystemId a, SystemId b) const {
-  if (a == b) {
-    return 0.0;
-  }
-  const double separationCm = linkSeparationCm(a, b);
-  // Unlinked systems have no signal path; a zero delay never applies because
-  // observations and orders across them are gated by the link check first.
-  return separationCm >= 0.0 ? separationCm / K_C_CM_PER_S : 0.0;
+double Constellation::lightPathSec(SystemId a, SystemId b) const {
+  return lightPathSec_.at((static_cast<std::size_t>(a) * systems_.size()) + b);
 }
 
-double Constellation::orderDelaySec(FactionId faction, const ConstellationFleet &fleet) const {
+double Constellation::intraSystemDelaySec(SystemId system, int bandIndex) const {
+  const OrbitalSystem &orbital = systems_.at(system);
+  return orbital.field.signalDelaySec(bandRadiusCm(system, bandIndex), orbital.authorityRadiusCm);
+}
+
+double Constellation::orderDelaySec(FactionId faction, SystemId system, int bandIndex) const {
   const SystemId homeSystem = factions_.at(factionIndex(faction)).homeSystem;
-  const OrbitalSystem &system = systems_.at(fleet.system);
-  const double interstellar = interAuthorityDelaySec(homeSystem, fleet.system);
-  const double intra = system.field.signalDelaySec(system.authorityRadiusCm,
-                                                   bandRadiusCm(fleet.system, fleet.bandIndex));
-  return interstellar + intra;
+  const double interstellar = lightPathSec(homeSystem, system);
+  if (interstellar < 0.0) {
+    return K_NO_LIGHT_PATH;
+  }
+  return interstellar + intraSystemDelaySec(system, bandIndex);
 }
 
-double Constellation::reportDelaySec(const ConstellationFleet &fleet) const {
-  const SystemId homeSystem = factions_.at(factionIndex(fleet.faction)).homeSystem;
-  const OrbitalSystem &system = systems_.at(fleet.system);
-  const double intra = system.field.signalDelaySec(bandRadiusCm(fleet.system, fleet.bandIndex),
-                                                   system.authorityRadiusCm);
-  return intra + interAuthorityDelaySec(fleet.system, homeSystem);
+double Constellation::reportDelaySec(FactionId faction, SystemId system, int bandIndex) const {
+  const SystemId homeSystem = factions_.at(factionIndex(faction)).homeSystem;
+  const double interstellar = lightPathSec(system, homeSystem);
+  if (interstellar < 0.0) {
+    return K_NO_LIGHT_PATH;
+  }
+  return intraSystemDelaySec(system, bandIndex) + interstellar;
 }
 
 double Constellation::ergoregionDepth(const ConstellationFleet &fleet) const {
@@ -177,13 +271,15 @@ FactionId Constellation::addFaction(FactionPolicy policy, SystemId homeSystem) {
         .assign(systems_.at(systemIndex).bandRadiusCm.size(), K_INVALID_FACTION_ID);
   }
   perceived_.push_back(std::move(perceivedRow));
+  ownBelief_.emplace_back();
+  pendingCommands_.emplace_back();
   return faction.id;
 }
 
 FleetId Constellation::addFleet(FactionId faction, SystemId system, FleetCapability capability,
-                                int bandIndex, OrbitLane lane) {
+                                int bandIndex, OrbitLane lane, StationKeeping station) {
   if (!valid_ || factionIndex(faction) == factions_.size() || !validBand(system, bandIndex) ||
-      !laneAllowedAtBand(system, lane, bandIndex)) {
+      !placementAllowed(system, lane, station, bandIndex)) {
     return K_INVALID_FLEET_ID;
   }
   ConstellationFleet fleet;
@@ -193,45 +289,92 @@ FleetId Constellation::addFleet(FactionId faction, SystemId system, FleetCapabil
   fleet.capability = capability;
   fleet.bandIndex = bandIndex;
   fleet.lane = lane;
+  fleet.observer = observerFor(lane, station);
   fleet.fuelUnits = config_.fleetInitialFuelUnits;
+  // Setup placement happens at the authority's direction, so the owner starts
+  // with an exact record as of turn 0.
+  ownBelief_.at(factionIndex(faction))
+      .push_back(FleetBelief{.id = fleet.id,
+                             .system = fleet.system,
+                             .bandIndex = fleet.bandIndex,
+                             .lane = fleet.lane,
+                             .observer = fleet.observer,
+                             .reliability = fleet.reliability,
+                             .fuelUnits = fleet.fuelUnits,
+                             .inTransit = false,
+                             .transitArrivalTurn = 0,
+                             .transitDestSystem = K_INVALID_SYSTEM_ID,
+                             .transitDestBand = 0,
+                             .asOfTurn = clock_.turn()});
   fleets_.push_back(std::move(fleet));
   return fleets_.back().id;
 }
 
 bool Constellation::issueCommand(FactionId faction, const ConstellationCommand &command) {
-  if (!valid_ || decided_) {
+  if (!valid_ || factionIndex(faction) == factions_.size()) {
     return false;
   }
-  if (factionIndex(faction) == factions_.size()) {
+  // A faction stops only once news of the decision reaches its authority; a
+  // rival light-days from the winner keeps ordering until then.
+  if (factions_.at(factionIndex(faction)).outcomeKnown) {
     return false;
   }
-  const ConstellationFleet *fleet = findFleet(command.fleet);
-  // A faction commands only its own fleets, and never a fleet mid-transit.
-  if (fleet == nullptr || fleet->faction != faction || fleet->inTransit) {
+  // A faction commands only its own fleets, and validates against what its
+  // authority last heard about them: position, transit, and fuel as reported.
+  // The effect-time checks in applyCommand judge the fleet's actual state.
+  const FleetBelief *known = knownFleet(faction, command.fleet);
+  if (known == nullptr || known->inTransit) {
     return false;
   }
   if (!validBand(command.targetSystem, command.targetBand) ||
-      !laneAllowedAtBand(command.targetSystem, command.lane, command.targetBand)) {
+      !placementAllowed(command.targetSystem, command.lane, command.station, command.targetBand)) {
     return false;
   }
-  if (command.targetSystem == fleet->system) {
-    const double fuelCost = config_.fuelPerBandHop * std::abs(command.targetBand - fleet->bandIndex);
-    if (fuelCost > fleet->fuelUnits) {
+  if (command.targetSystem == known->system) {
+    const double fuelCost =
+        config_.fuelPerBandHop * std::abs(command.targetBand - known->bandIndex);
+    if (fuelCost > known->fuelUnits) {
       return false;
     }
-  } else if (linkSeparationCm(fleet->system, command.targetSystem) < 0.0 ||
-             config_.interSystemTravelFuelUnits > fleet->fuelUnits) {
+  } else if (linkSeparationCm(known->system, command.targetSystem) < 0.0 ||
+             config_.interSystemTravelFuelUnits > known->fuelUnits) {
     // Interstellar travel needs a direct link and its own fuel budget.
     return false;
   }
 
-  const double delaySec = orderDelaySec(faction, *fleet);
+  // An order that would leave the fleet where it is already bound -- its last
+  // pending order's target, or its reported slot when none is pending -- is a
+  // no-op and is refused rather than logged.
+  const std::size_t issuerIndex = factionIndex(faction);
+  const LoggedCommand *latest = latestPendingCommand(issuerIndex, command.fleet);
+  const bool sameAsBound =
+      latest != nullptr
+          ? (latest->command.targetSystem == command.targetSystem &&
+             latest->command.targetBand == command.targetBand &&
+             latest->command.lane == command.lane && latest->command.station == command.station)
+          : (known->system == command.targetSystem && known->bandIndex == command.targetBand &&
+             known->lane == command.lane &&
+             known->observer == observerFor(command.lane, command.station));
+  if (sameAsBound) {
+    return false;
+  }
+
+  // The order travels to where the fleet was last reported; an order to a
+  // system no chain of links reaches can never arrive.
+  const double delaySec = orderDelaySec(faction, known->system, known->bandIndex);
+  if (delaySec < 0.0) {
+    return false;
+  }
   LoggedCommand logged;
   logged.command = command;
   logged.faction = faction;
   logged.issueTurn = clock_.turn();
   logged.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+  logged.addressedSystem = known->system;
+  logged.addressedBand = known->bandIndex;
   commandLog_.push_back(logged);
+  pendingCommands_.at(issuerIndex)
+      .push_back(static_cast<std::uint32_t>(commandLog_.size() - 1));
 
   Delivery delivery;
   delivery.kind = DeliveryKind::Command;
@@ -242,37 +385,76 @@ bool Constellation::issueCommand(FactionId faction, const ConstellationCommand &
   return true;
 }
 
-void Constellation::applyCommand(const LoggedCommand &logged) {
+void Constellation::applyCommand(std::uint32_t commandIndex) {
+  const LoggedCommand &logged = commandLog_.at(commandIndex);
   ConstellationFleet *const fleet = findFleet(logged.command.fleet);
-  if (fleet == nullptr || fleet->inTransit) {
-    return; // The fleet vanished or is already travelling: the order fizzles.
-  }
-  const ConstellationCommand &command = logged.command;
-  if (command.targetSystem == fleet->system) {
-    const double fuelCost = config_.fuelPerBandHop * std::abs(command.targetBand - fleet->bandIndex);
-    if (fuelCost <= fleet->fuelUnits && validBand(command.targetSystem, command.targetBand) &&
-        laneAllowedAtBand(command.targetSystem, command.lane, command.targetBand)) {
-      fleet->fuelUnits -= fuelCost;
-      fleet->bandIndex = command.targetBand;
-      fleet->lane = command.lane;
+  if (fleet == nullptr || fleet->inTransit || fleet->system != logged.addressedSystem ||
+      fleet->bandIndex != logged.addressedBand) {
+    // The order reached the slot it was addressed to and the fleet had left:
+    // it fizzles there -- it cannot chase the fleet faster than light -- and
+    // the addressed station's non-delivery notice travels home from there.
+    const double delaySec =
+        reportDelaySec(logged.faction, logged.addressedSystem, logged.addressedBand);
+    if (delaySec >= 0.0) {
+      Delivery notice;
+      notice.kind = DeliveryKind::OrderUndelivered;
+      notice.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+      notice.sequence = nextSequence_++;
+      notice.commandIndex = commandIndex;
+      notice.observerIndex = factionIndex(logged.faction);
+      deliveryQueue_.push_back(notice);
     }
     return;
   }
-  const double separationCm = linkSeparationCm(fleet->system, command.targetSystem);
-  if (separationCm >= 0.0 && config_.interSystemTravelFuelUnits <= fleet->fuelUnits &&
+  // The fleet answers every order it receives, from where it received it, so
+  // the authority learns the outcome -- a move, a departure, or a fizzle.
+  const SystemId receivedAtSystem = fleet->system;
+  const int receivedAtBand = fleet->bandIndex;
+  applyReceivedCommand(*fleet, logged.command);
+  enqueueFleetStatus(*fleet, receivedAtSystem, receivedAtBand);
+}
+
+void Constellation::applyReceivedCommand(ConstellationFleet &fleet,
+                                         const ConstellationCommand &command) {
+  if (command.targetSystem == fleet.system) {
+    const double fuelCost = config_.fuelPerBandHop * std::abs(command.targetBand - fleet.bandIndex);
+    if (fuelCost <= fleet.fuelUnits && validBand(command.targetSystem, command.targetBand) &&
+        placementAllowed(command.targetSystem, command.lane, command.station, command.targetBand)) {
+      fleet.fuelUnits -= fuelCost;
+      fleet.bandIndex = command.targetBand;
+      fleet.lane = command.lane;
+      fleet.observer = observerFor(command.lane, command.station);
+    }
+    return;
+  }
+  const double separationCm = linkSeparationCm(fleet.system, command.targetSystem);
+  if (separationCm >= 0.0 && config_.interSystemTravelFuelUnits <= fleet.fuelUnits &&
       validBand(command.targetSystem, command.targetBand)) {
-    fleet->fuelUnits -= config_.interSystemTravelFuelUnits;
-    const double speedCmPerSec = config_.interSystemTravelSpeedFraction * K_C_CM_PER_S;
-    const double travelSec = speedCmPerSec > 0.0 ? separationCm / speedCmPerSec : separationCm;
-    fleet->inTransit = true;
-    fleet->transitArrivalTurn = clock_.turn() + clock_.ceilTurns(travelSec);
-    fleet->transitDestBand = command.targetBand;
-    fleet->transitDestLane = command.lane;
-    fleet->system = command.targetSystem;
+    fleet.fuelUnits -= config_.interSystemTravelFuelUnits;
+    const double travelSec =
+        separationCm / (config_.interSystemTravelSpeedFraction * K_C_CM_PER_S);
+    // The fleet stays in its origin system's books until it arrives: it holds
+    // no band there while coasting and joins the destination only on arrival.
+    fleet.inTransit = true;
+    fleet.transitArrivalTurn = clock_.turn() + clock_.ceilTurns(travelSec);
+    fleet.transitDestSystem = command.targetSystem;
+    fleet.transitDestBand = command.targetBand;
+    fleet.transitDestLane = command.lane;
+    fleet.transitDestObserver = observerFor(command.lane, command.station);
   }
 }
 
-void Constellation::deliverDue() {
+bool Constellation::deliverDue() {
+  bool deliveredAny = false;
+  for (;;) {
+    if (!deliverDueOnce()) {
+      return deliveredAny;
+    }
+    deliveredAny = true;
+  }
+}
+
+bool Constellation::deliverDueOnce() {
   std::vector<Delivery> due;
   std::vector<Delivery> remaining;
   for (const Delivery &delivery : deliveryQueue_) {
@@ -288,10 +470,14 @@ void Constellation::deliverDue() {
     }
     return lhs.sequence < rhs.sequence;
   });
+  // The queue holds only what is still in flight before any delivery runs, so
+  // a report a delivered order emits (FleetStatus) joins it rather than being
+  // overwritten.
+  deliveryQueue_ = std::move(remaining);
   for (const Delivery &delivery : due) {
     switch (delivery.kind) {
     case DeliveryKind::Command:
-      applyCommand(commandLog_.at(delivery.commandIndex));
+      applyCommand(delivery.commandIndex);
       break;
     case DeliveryKind::YieldReport:
       factions_.at(factionIndex(delivery.faction)).energyUnits += delivery.yieldUnits;
@@ -301,25 +487,102 @@ void Constellation::deliverDue() {
           .at(delivery.system)
           .at(static_cast<std::size_t>(delivery.bandIndex)) = delivery.controller;
       break;
+    case DeliveryKind::ScoreReport: {
+      FactionState &faction = factions_.at(delivery.observerIndex);
+      faction.knownStabilizationUnits += delivery.stabilizationUnits;
+      faction.knownControlScore += delivery.controlPoints;
+      break;
+    }
+    case DeliveryKind::OrderUndelivered:
+      commandLog_.at(delivery.commandIndex).undelivered = true;
+      std::erase(pendingCommands_.at(delivery.observerIndex), delivery.commandIndex);
+      break;
+    case DeliveryKind::OutcomeNotice:
+      factions_.at(delivery.observerIndex).outcomeKnown = true;
+      break;
+    case DeliveryKind::FleetStatus: {
+      std::vector<FleetBelief> &beliefs = ownBelief_.at(delivery.observerIndex);
+      const auto found = std::ranges::find(beliefs, delivery.status.id, &FleetBelief::id);
+      // Reports can cross in flight; the authority keeps the newest state,
+      // judged by the fleet's own report counter so that two reports sent on
+      // one turn from slots with different light delays cannot reorder.
+      if (found != beliefs.end() && found->reportSequence < delivery.status.reportSequence) {
+        *found = delivery.status;
+      }
+      // Orders that took effect by the time this report left are answered.
+      std::erase_if(pendingCommands_.at(delivery.observerIndex), [&](std::uint32_t index) {
+        const LoggedCommand &logged = commandLog_.at(index);
+        return logged.command.fleet == delivery.status.id &&
+               logged.effectTurn <= delivery.status.asOfTurn;
+      });
+      break;
+    }
     }
   }
-  deliveryQueue_ = std::move(remaining);
+  return !due.empty();
 }
 
 void Constellation::landArrivals() {
   for (ConstellationFleet &fleet : fleets_) {
     if (fleet.inTransit && fleet.transitArrivalTurn <= clock_.turn()) {
       fleet.inTransit = false;
+      fleet.system = fleet.transitDestSystem;
       fleet.bandIndex = fleet.transitDestBand;
       fleet.lane = fleet.transitDestLane;
+      fleet.observer = fleet.transitDestObserver;
+      enqueueFleetStatus(fleet, fleet.system, fleet.bandIndex);
     }
   }
 }
 
+void Constellation::enqueueFleetStatus(ConstellationFleet &fleet, SystemId fromSystem,
+                                       int fromBand) {
+  // The counter advances whether or not a light path home exists, so every
+  // report the fleet sends is ordered against every other.
+  ++fleet.reportsSent;
+  const double delaySec = reportDelaySec(fleet.faction, fromSystem, fromBand);
+  if (delaySec < 0.0) {
+    return; // No light path home: the authority never hears.
+  }
+  Delivery delivery;
+  delivery.kind = DeliveryKind::FleetStatus;
+  delivery.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+  delivery.sequence = nextSequence_++;
+  delivery.observerIndex = factionIndex(fleet.faction);
+  delivery.status = FleetBelief{.id = fleet.id,
+                                .system = fleet.system,
+                                .bandIndex = fleet.bandIndex,
+                                .lane = fleet.lane,
+                                .observer = fleet.observer,
+                                .reliability = fleet.reliability,
+                                .fuelUnits = fleet.fuelUnits,
+                                .inTransit = fleet.inTransit,
+                                .transitArrivalTurn = fleet.transitArrivalTurn,
+                                .transitDestSystem = fleet.transitDestSystem,
+                                .transitDestBand = fleet.transitDestBand,
+                                .asOfTurn = clock_.turn(),
+                                .reportSequence = fleet.reportsSent};
+  deliveryQueue_.push_back(delivery);
+}
+
+const FleetBelief *Constellation::knownFleet(FactionId faction, FleetId fleet) const {
+  const std::size_t index = factionIndex(faction);
+  if (index == factions_.size()) {
+    return nullptr;
+  }
+  const std::vector<FleetBelief> &beliefs = ownBelief_.at(index);
+  const auto found = std::ranges::find(beliefs, fleet, &FleetBelief::id);
+  return found == beliefs.end() ? nullptr : &*found;
+}
+
 void Constellation::enqueueYieldReport(const ConstellationFleet &fleet, double yieldUnits) {
+  const double delaySec = reportDelaySec(fleet.faction, fleet.system, fleet.bandIndex);
+  if (delaySec < 0.0) {
+    return; // No light path home: the report, and the value it carries, never arrives.
+  }
   Delivery delivery;
   delivery.kind = DeliveryKind::YieldReport;
-  delivery.effectTurn = clock_.turn() + clock_.ceilTurns(reportDelaySec(fleet));
+  delivery.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
   delivery.sequence = nextSequence_++;
   delivery.faction = fleet.faction;
   delivery.yieldUnits = yieldUnits;
@@ -333,15 +596,19 @@ void Constellation::runFleetWork() {
     instabilityEntering.at(systemIndex) = systems_.at(systemIndex).instability;
   }
   const double reportThresholdSec = config_.workProperHoursPerReport * economy::K_SECONDS_PER_HOUR;
+  const double beta = config_.interSystemTravelSpeedFraction;
+  const double transitClockRate = std::sqrt((1.0 - beta) * (1.0 + beta));
   for (ConstellationFleet &fleet : fleets_) {
     if (fleet.inTransit) {
-      // Interstellar coasting: the crew ages at the flat-space rate but does no
-      // work and holds no band.
-      fleet.properTimeSec += clock_.secondsPerTurn();
+      // Interstellar coasting at beta = interSystemTravelSpeedFraction in flat
+      // space: the crew ages sqrt(1 - beta^2) per coordinate second (the twin
+      // effect), does no work, and holds no band.
+      fleet.properTimeSec += properDeltaSec(transitClockRate, clock_.secondsPerTurn());
       continue;
     }
     const KerrTimeField &field = systems_.at(fleet.system).field;
-    const double rate = field.properTimeRate(bandRadiusCm(fleet.system, fleet.bandIndex));
+    const double rate =
+        field.properTimeRate(bandRadiusCm(fleet.system, fleet.bandIndex), fleet.observer);
     const double properDelta = properDeltaSec(rate, clock_.secondsPerTurn());
     fleet.properTimeSec += properDelta;
     fleet.pendingWorkProperSec += properDelta;
@@ -361,7 +628,7 @@ void Constellation::runFleetWork() {
       const double workedDays = properDelta / economy::K_SECONDS_PER_DAY;
       const double produced = workedDays * config_.ergoContainmentPerProperDay * depth;
       containmentThisTurn.at(fleet.system) += produced;
-      factions_.at(factionIndex(fleet.faction)).stabilizationUnits += produced;
+      recordCredit(factionIndex(fleet.faction), fleet.system, fleet.bandIndex, produced, 0.0);
     }
 
     const double frameDrag = economy::frameDragYieldFactor(config_.frameDragYieldBonus, depth);
@@ -410,19 +677,25 @@ void Constellation::scoreControlAndObserve() {
     for (std::size_t bandIndex = 0; bandIndex < bandCount; ++bandIndex) {
       const FactionId controller = bandController(system, static_cast<int>(bandIndex));
       if (controller != K_INVALID_FACTION_ID) {
-        factions_.at(factionIndex(controller)).controlScore += config_.controlPointsPerBandPerTurn;
+        recordCredit(factionIndex(controller), system, static_cast<int>(bandIndex), 0.0,
+                     config_.controlPointsPerBandPerTurn);
       }
       if (controller == lastEmittedController_.at(systemIndex).at(bandIndex)) {
         continue;
       }
       // A change in who holds this band becomes intel each faction learns after
-      // the light from this system reaches its authority.
+      // light from the band reaches its authority: the radial leg to this
+      // system's authority, then the light path to the observer's home. An
+      // observer no chain of links reaches never learns of it.
+      const double radialSec = intraSystemDelaySec(system, static_cast<int>(bandIndex));
       for (std::size_t observerIndex = 0; observerIndex < factions_.size(); ++observerIndex) {
+        const double pathSec = lightPathSec(system, factions_.at(observerIndex).homeSystem);
+        if (pathSec < 0.0) {
+          continue;
+        }
         Delivery delivery;
         delivery.kind = DeliveryKind::ControlObservation;
-        delivery.effectTurn =
-            clock_.turn() + clock_.ceilTurns(interAuthorityDelaySec(
-                                system, factions_.at(observerIndex).homeSystem));
+        delivery.effectTurn = clock_.turn() + clock_.ceilTurns(radialSec + pathSec);
         delivery.sequence = nextSequence_++;
         delivery.system = system;
         delivery.bandIndex = static_cast<int>(bandIndex);
@@ -440,12 +713,93 @@ void Constellation::advanceTurn() {
     return;
   }
   clock_.advance();
-  deliverDue();
+  turnCredits_.clear();
+  stabilizationCrossingSite_.assign(factions_.size(), CreditSite{});
+  controlCrossingSite_.assign(factions_.size(), CreditSite{});
+  static_cast<void>(deliverDue());
   landArrivals();
   runFleetWork();
   scoreControlAndObserve();
+  sendScoreReports();
   stepFactionAI();
   evaluateOutcomes();
+  // Zero-delay signals emitted this turn land this turn, like every other
+  // delivery at its effect turn.
+  static_cast<void>(deliverDue());
+}
+
+void Constellation::recordCredit(std::size_t factionIndexValue, SystemId system, int bandIndex,
+                                 double stabilizationUnits, double controlPoints) {
+  FactionState &faction = factions_.at(factionIndexValue);
+  const CreditSite here{.system = system, .bandIndex = bandIndex};
+  // The totals only grow, so each crosses its target at most once: the credit
+  // that takes it from below the target to at or above it is the crossing.
+  const double stabilizationBefore = faction.stabilizationUnits;
+  faction.stabilizationUnits += stabilizationUnits;
+  if (config_.victoryStabilizationUnits > 0.0 &&
+      stabilizationBefore < config_.victoryStabilizationUnits &&
+      faction.stabilizationUnits >= config_.victoryStabilizationUnits) {
+    stabilizationCrossingSite_.at(factionIndexValue) = here;
+  }
+  const double controlBefore = faction.controlScore;
+  faction.controlScore += controlPoints;
+  if (config_.victoryControlScore > 0.0 && controlBefore < config_.victoryControlScore &&
+      faction.controlScore >= config_.victoryControlScore) {
+    controlCrossingSite_.at(factionIndexValue) = here;
+  }
+  turnCredits_.push_back(TurnCredit{.factionIndex = factionIndexValue,
+                                    .system = system,
+                                    .bandIndex = bandIndex,
+                                    .stabilizationUnits = stabilizationUnits,
+                                    .controlPoints = controlPoints});
+}
+
+void Constellation::sendScoreReports() {
+  // One report per (faction, system, band): stable sort keeps the recording
+  // order within a key, so the merged sums are identical on every run.
+  std::ranges::stable_sort(turnCredits_, [](const TurnCredit &lhs, const TurnCredit &rhs) {
+    if (lhs.factionIndex != rhs.factionIndex) {
+      return lhs.factionIndex < rhs.factionIndex;
+    }
+    if (lhs.system != rhs.system) {
+      return lhs.system < rhs.system;
+    }
+    return lhs.bandIndex < rhs.bandIndex;
+  });
+  for (std::size_t first = 0; first < turnCredits_.size();) {
+    const TurnCredit &key = turnCredits_.at(first);
+    double stabilizationUnits = 0.0;
+    double controlPoints = 0.0;
+    std::size_t next = first;
+    while (next < turnCredits_.size() && turnCredits_.at(next).factionIndex == key.factionIndex &&
+           turnCredits_.at(next).system == key.system &&
+           turnCredits_.at(next).bandIndex == key.bandIndex) {
+      stabilizationUnits += turnCredits_.at(next).stabilizationUnits;
+      controlPoints += turnCredits_.at(next).controlPoints;
+      ++next;
+    }
+    const double delaySec =
+        reportDelaySec(factions_.at(key.factionIndex).id, key.system, key.bandIndex);
+    if (delaySec >= 0.0) {
+      Delivery delivery;
+      delivery.kind = DeliveryKind::ScoreReport;
+      delivery.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+      delivery.sequence = nextSequence_++;
+      delivery.observerIndex = key.factionIndex;
+      delivery.stabilizationUnits = stabilizationUnits;
+      delivery.controlPoints = controlPoints;
+      deliveryQueue_.push_back(delivery);
+    }
+    first = next;
+  }
+}
+
+double Constellation::siteDelaySec(const CreditSite &site, SystemId toSystem) const {
+  const double pathSec = lightPathSec(site.system, toSystem);
+  if (pathSec < 0.0) {
+    return K_NO_LIGHT_PATH;
+  }
+  return (site.bandIndex >= 0 ? intraSystemDelaySec(site.system, site.bandIndex) : 0.0) + pathSec;
 }
 
 void Constellation::advanceTurns(std::int64_t turnCount) {
@@ -481,38 +835,92 @@ void Constellation::evaluateOutcomes() {
     decided_ = true;
     winner_ = winningFaction->id;
     overallStatus_ = winningFaction->id == playerFaction_ ? CampaignStatus::Won : CampaignStatus::Lost;
+    // The decision is an event at the place the deciding credit happened: the
+    // winner's authority for banked energy, else the band whose credit carried
+    // its stabilization or control total across the target this turn (axes
+    // checked in that order).
+    // Every authority, the winner's included, learns by light from there; one
+    // no chain of links reaches never does.
+    const auto winnerIndex =
+        static_cast<std::size_t>(std::distance(factions_.begin(), winningFaction));
+    CreditSite site{.system = winningFaction->homeSystem, .bandIndex = -1};
+    const bool energyWin = config_.victoryEnergyUnits > 0.0 &&
+                           winningFaction->energyUnits >= config_.victoryEnergyUnits;
+    const bool stabilizationWin =
+        config_.victoryStabilizationUnits > 0.0 &&
+        winningFaction->stabilizationUnits >= config_.victoryStabilizationUnits;
+    if (!energyWin && stabilizationWin &&
+        stabilizationCrossingSite_.at(winnerIndex).system != K_INVALID_SYSTEM_ID) {
+      site = stabilizationCrossingSite_.at(winnerIndex);
+    } else if (!energyWin && !stabilizationWin &&
+               controlCrossingSite_.at(winnerIndex).system != K_INVALID_SYSTEM_ID) {
+      site = controlCrossingSite_.at(winnerIndex);
+    }
+    for (std::size_t observerIndex = 0; observerIndex < factions_.size(); ++observerIndex) {
+      const double delaySec = siteDelaySec(site, factions_.at(observerIndex).homeSystem);
+      if (delaySec < 0.0) {
+        continue;
+      }
+      Delivery delivery;
+      delivery.kind = DeliveryKind::OutcomeNotice;
+      delivery.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+      delivery.sequence = nextSequence_++;
+      delivery.observerIndex = observerIndex;
+      deliveryQueue_.push_back(delivery);
+    }
     return;
   }
   if (config_.deadlineTurn > 0 && clock_.turn() >= config_.deadlineTurn) {
     decided_ = true;
     overallStatus_ = CampaignStatus::Lost; // The player did not win in time.
+    // The deadline is a coordinate turn every authority's calendar already
+    // carries, so no signal has to travel for it.
+    for (FactionState &faction : factions_) {
+      faction.outcomeKnown = true;
+    }
   }
 }
 
-bool Constellation::hasCommandInFlight(FleetId fleet) const {
-  return std::ranges::any_of(deliveryQueue_, [&](const Delivery &delivery) {
-    return delivery.kind == DeliveryKind::Command &&
-           commandLog_.at(delivery.commandIndex).command.fleet == fleet;
-  });
+bool Constellation::hasCommandInFlight(std::size_t factionIndexValue, FleetId fleet) const {
+  return latestPendingCommand(factionIndexValue, fleet) != nullptr;
+}
+
+const Constellation::LoggedCommand *
+Constellation::latestPendingCommand(std::size_t factionIndexValue, FleetId fleet) const {
+  const std::vector<std::uint32_t> &pending = pendingCommands_.at(factionIndexValue);
+  for (const std::uint32_t index : std::views::reverse(pending)) {
+    const LoggedCommand &logged = commandLog_.at(index);
+    if (logged.command.fleet == fleet) {
+      return &logged;
+    }
+  }
+  return nullptr;
 }
 
 bool Constellation::factionOccupies(FactionId faction, SystemId system, int bandIndex) const {
-  return std::ranges::any_of(fleets_, [&](const ConstellationFleet &fleet) {
-    if (fleet.faction != faction) {
-      return false;
-    }
-    return fleet.inTransit ? (fleet.system == system && fleet.transitDestBand == bandIndex)
-                           : (fleet.system == system && fleet.bandIndex == bandIndex);
-  });
+  const bool reported =
+      std::ranges::any_of(ownBelief_.at(factionIndex(faction)), [&](const FleetBelief &known) {
+        return known.inTransit
+                   ? (known.transitDestSystem == system && known.transitDestBand == bandIndex)
+                   : (known.system == system && known.bandIndex == bandIndex);
+      });
+  // The authority also knows what it has ordered: a slot an unanswered order
+  // is sending a fleet to counts as claimed.
+  return reported || std::ranges::any_of(pendingCommands_.at(factionIndex(faction)),
+                                         [&](std::uint32_t index) {
+                                           const ConstellationCommand &command =
+                                               commandLog_.at(index).command;
+                                           return command.targetSystem == system &&
+                                                  command.targetBand == bandIndex;
+                                         });
 }
 
 bool Constellation::systemReachableFrom(SystemId fromSystem, SystemId toSystem) const {
   return fromSystem == toSystem || linkSeparationCm(fromSystem, toSystem) >= 0.0;
 }
 
-bool Constellation::fleetAvailable(FleetId fleet) const {
-  const ConstellationFleet *found = findFleet(fleet);
-  return found != nullptr && !found->inTransit && !hasCommandInFlight(fleet);
+bool Constellation::fleetAvailable(std::size_t factionIndexValue, const FleetBelief &known) const {
+  return !known.inTransit && !hasCommandInFlight(factionIndexValue, known.id);
 }
 
 std::vector<ConstellationCommand>
@@ -520,13 +928,15 @@ Constellation::expansionistOrders(const FactionState &faction) const {
   // Spread onto distinct bands across reachable systems: find a fleet redundant
   // with a lower-id same-faction fleet on the same slot, and send it to the first
   // canonical valid slot the faction does not already occupy.
-  for (const ConstellationFleet &fleet : fleets_) {
-    if (fleet.faction != faction.id || fleet.inTransit || !fleetAvailable(fleet.id)) {
+  const std::size_t selfIndex = factionIndex(faction.id);
+  const std::vector<FleetBelief> &beliefs = ownBelief_.at(selfIndex);
+  for (const FleetBelief &fleet : beliefs) {
+    if (!fleetAvailable(selfIndex, fleet)) {
       continue;
     }
-    const bool redundant = std::ranges::any_of(fleets_, [&](const ConstellationFleet &other) {
-      return other.id < fleet.id && other.faction == faction.id && !other.inTransit &&
-             other.system == fleet.system && other.bandIndex == fleet.bandIndex;
+    const bool redundant = std::ranges::any_of(beliefs, [&](const FleetBelief &other) {
+      return other.id < fleet.id && !other.inTransit && other.system == fleet.system &&
+             other.bandIndex == fleet.bandIndex;
     });
     if (!redundant) {
       continue;
@@ -543,7 +953,8 @@ Constellation::expansionistOrders(const FactionState &faction) const {
           return {{.fleet = fleet.id,
                    .targetSystem = system,
                    .targetBand = band,
-                   .lane = OrbitLane::Prograde}};
+                   .lane = OrbitLane::Prograde,
+                   .station = defaultStation(system, band)}};
         }
       }
     }
@@ -567,8 +978,9 @@ Constellation::extractorOrders(const FactionState &faction) const {
   if (deepestBand < 0) {
     return {};
   }
-  for (const ConstellationFleet &fleet : fleets_) {
-    if (fleet.faction != faction.id || !fleetAvailable(fleet.id)) {
+  const std::size_t selfIndex = factionIndex(faction.id);
+  for (const FleetBelief &fleet : ownBelief_.at(selfIndex)) {
+    if (!fleetAvailable(selfIndex, fleet)) {
       continue;
     }
     const bool inPlace = fleet.system == home && fleet.bandIndex == deepestBand;
@@ -576,7 +988,8 @@ Constellation::extractorOrders(const FactionState &faction) const {
       return {{.fleet = fleet.id,
                .targetSystem = home,
                .targetBand = deepestBand,
-               .lane = OrbitLane::Prograde}};
+               .lane = OrbitLane::Prograde,
+               .station = defaultStation(home, deepestBand)}};
     }
   }
   return {};
@@ -615,15 +1028,17 @@ Constellation::contesterOrders(const FactionState &faction) const {
           factionOccupies(faction.id, system, band) || !validBand(system, band)) {
         continue;
       }
-      const auto fleet = std::ranges::find_if(fleets_, [&](const ConstellationFleet &candidate) {
-        return candidate.faction == faction.id && fleetAvailable(candidate.id) &&
+      const std::vector<FleetBelief> &own = ownBelief_.at(selfIndex);
+      const auto fleet = std::ranges::find_if(own, [&](const FleetBelief &candidate) {
+        return fleetAvailable(selfIndex, candidate) &&
                systemReachableFrom(candidate.system, system);
       });
-      if (fleet != fleets_.end()) {
+      if (fleet != own.end()) {
         return {{.fleet = fleet->id,
                  .targetSystem = system,
                  .targetBand = band,
-                 .lane = OrbitLane::Prograde}};
+                 .lane = OrbitLane::Prograde,
+                 .station = defaultStation(system, band)}};
       }
     }
   }
@@ -646,7 +1061,10 @@ std::vector<ConstellationCommand> Constellation::policyOrders(const FactionState
 
 void Constellation::stepFactionAI() {
   for (const FactionState &faction : factions_) {
-    if (faction.policy == FactionPolicy::Scripted || faction.status != CampaignStatus::Ongoing) {
+    // The referee's status is not the faction's knowledge: an AI keeps
+    // planning until the decision reaches its authority, and issueCommand
+    // refuses its orders from then on.
+    if (faction.policy == FactionPolicy::Scripted || faction.outcomeKnown) {
       continue;
     }
     const std::vector<ConstellationCommand> orders = policyOrders(faction);
@@ -660,30 +1078,39 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
   ConstellationViewSnapshot view;
   view.turn = clock_.turn();
   view.secondsPerTurn = clock_.secondsPerTurn();
-  view.overallStatus = overallStatus_;
-  view.winner = winner_;
   view.playerFaction = playerFaction_;
   view.victoryEnergyUnits = config_.victoryEnergyUnits;
   view.victoryStabilizationUnits = config_.victoryStabilizationUnits;
   view.victoryControlScore = config_.victoryControlScore;
   view.deadlineTurn = config_.deadlineTurn;
 
+  // The view is the player's: band control as the player's authority has
+  // learned it, never the referee's truth.
+  const std::size_t playerIndex = factionIndex(playerFaction_);
   view.systems.reserve(systems_.size());
   for (std::size_t systemIndex = 0; systemIndex < systems_.size(); ++systemIndex) {
     SystemStanding standing;
     standing.id = static_cast<SystemId>(systemIndex);
-    standing.instability = systems_.at(systemIndex).instability;
     standing.spinDimensionless = systems_.at(systemIndex).field.spinDimensionless();
+    standing.spinDeficit = systems_.at(systemIndex).field.spinDeficit();
     const std::size_t bandCount = systems_.at(systemIndex).bandRadiusCm.size();
     standing.bandCount = static_cast<std::uint32_t>(bandCount);
     standing.bandController.reserve(bandCount);
     for (std::size_t bandIndex = 0; bandIndex < bandCount; ++bandIndex) {
-      standing.bandController.push_back(bandController(standing.id, static_cast<int>(bandIndex)));
+      standing.bandController.push_back(
+          perceivedController(playerIndex, standing.id, static_cast<int>(bandIndex)));
     }
     view.systems.push_back(std::move(standing));
   }
 
-  view.factions.reserve(factions_.size());
+  // Referee standings: true scores and true held bands.
+  view.refereeStatus = overallStatus_;
+  view.refereeWinner = winner_;
+  view.refereeInstability.reserve(systems_.size());
+  for (const OrbitalSystem &system : systems_) {
+    view.refereeInstability.push_back(system.instability);
+  }
+  view.refereeStandings.reserve(factions_.size());
   for (const FactionState &faction : factions_) {
     FactionStanding standing;
     standing.id = faction.id;
@@ -696,29 +1123,68 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
     standing.clearedTurn = faction.clearedTurn;
     standing.fleetCount = static_cast<std::uint32_t>(std::ranges::count_if(
         fleets_, [&](const ConstellationFleet &fleet) { return fleet.faction == faction.id; }));
-    for (const SystemStanding &system : view.systems) {
-      standing.heldBandCount += static_cast<std::uint32_t>(std::ranges::count(
-          system.bandController, faction.id));
+    for (std::size_t systemIndex = 0; systemIndex < systems_.size(); ++systemIndex) {
+      const std::size_t bandCount = systems_.at(systemIndex).bandRadiusCm.size();
+      for (std::size_t bandIndex = 0; bandIndex < bandCount; ++bandIndex) {
+        if (bandController(static_cast<SystemId>(systemIndex), static_cast<int>(bandIndex)) ==
+            faction.id) {
+          ++standing.heldBandCount;
+        }
+      }
     }
-    view.factions.push_back(standing);
+    view.refereeStandings.push_back(standing);
   }
 
-  view.fleets.reserve(fleets_.size());
-  for (const ConstellationFleet &fleet : fleets_) {
-    ConstellationFleetView fleetView;
-    fleetView.id = fleet.id;
-    fleetView.faction = fleet.faction;
-    fleetView.system = fleet.system;
-    fleetView.capability = fleet.capability;
-    fleetView.bandIndex = fleet.bandIndex;
-    fleetView.lane = fleet.lane;
-    fleetView.reliability = fleet.reliability;
-    fleetView.inTransit = fleet.inTransit;
-    fleetView.transitArrivalTurn = fleet.transitArrivalTurn;
-    view.fleets.push_back(fleetView);
+  // The player's knowledge: the outcome once its notice has landed, its scores
+  // as reports have credited them, and the bands it believes it holds.
+  if (playerIndex < factions_.size()) {
+    const FactionState &player = factions_.at(playerIndex);
+    FactionStanding &standing = view.player;
+    standing.id = player.id;
+    standing.policy = player.policy;
+    standing.homeSystem = player.homeSystem;
+    standing.energyUnits = player.energyUnits;
+    standing.stabilizationUnits = player.knownStabilizationUnits;
+    standing.controlScore = player.knownControlScore;
+    standing.fleetCount = static_cast<std::uint32_t>(ownBelief_.at(playerIndex).size());
+    for (const SystemStanding &system : view.systems) {
+      standing.heldBandCount +=
+          static_cast<std::uint32_t>(std::ranges::count(system.bandController, player.id));
+    }
+    if (player.outcomeKnown) {
+      // A loser's referee status never leaves Ongoing, so the player's known
+      // status is its outcome, and a cleared turn exists only for a win.
+      view.overallStatus = overallStatus_;
+      view.winner = winner_;
+      standing.status = overallStatus_;
+      standing.clearedTurn = overallStatus_ == CampaignStatus::Won ? player.clearedTurn : 0;
+    }
   }
 
-  view.links = config_.links;
+  // The player's own fleets as last reported home; rival fleets appear only
+  // through perceived band control.
+  if (playerIndex < ownBelief_.size()) {
+    view.fleets.reserve(ownBelief_.at(playerIndex).size());
+    for (const FleetBelief &known : ownBelief_.at(playerIndex)) {
+      const ConstellationFleet *fleet = findFleet(known.id);
+      ConstellationFleetView fleetView;
+      fleetView.id = known.id;
+      fleetView.faction = playerFaction_;
+      fleetView.system = known.system;
+      fleetView.capability = fleet != nullptr ? fleet->capability : FleetCapability::Research;
+      fleetView.bandIndex = known.bandIndex;
+      fleetView.lane = known.lane;
+      fleetView.observer = known.observer;
+      fleetView.reliability = known.reliability;
+      fleetView.inTransit = known.inTransit;
+      fleetView.transitArrivalTurn = known.transitArrivalTurn;
+      fleetView.transitDestSystem = known.transitDestSystem;
+      fleetView.reportedTurn = known.asOfTurn;
+      view.fleets.push_back(fleetView);
+    }
+  }
+
+  view.links = links_;
   return view;
 }
 
@@ -733,6 +1199,9 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
 
   appendU32(out, static_cast<std::uint32_t>(systems_.size()));
   for (const OrbitalSystem &system : systems_) {
+    appendF64(out, system.field.spinDeficit());
+    appendU8(out, system.field.spinDimensionless() < 0.0 ? 1U : 0U); // sense of rotation
+    appendU8(out, static_cast<std::uint8_t>(system.authorityObserver));
     appendF64(out, system.instability);
   }
 
@@ -746,6 +1215,9 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendF64(out, faction.controlScore);
     appendU8(out, static_cast<std::uint8_t>(faction.status));
     appendI64(out, faction.clearedTurn);
+    appendU8(out, faction.outcomeKnown ? 1U : 0U);
+    appendF64(out, faction.knownStabilizationUnits);
+    appendF64(out, faction.knownControlScore);
   }
 
   appendU32(out, static_cast<std::uint32_t>(fleets_.size()));
@@ -756,14 +1228,18 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendU8(out, static_cast<std::uint8_t>(fleet.capability));
     appendI64(out, fleet.bandIndex);
     appendU8(out, static_cast<std::uint8_t>(fleet.lane));
+    appendU8(out, static_cast<std::uint8_t>(fleet.observer));
     appendF64(out, fleet.reliability);
     appendF64(out, fleet.properTimeSec);
     appendF64(out, fleet.pendingWorkProperSec);
     appendF64(out, fleet.fuelUnits);
     appendU8(out, fleet.inTransit ? 1U : 0U);
     appendI64(out, fleet.transitArrivalTurn);
+    appendU32(out, fleet.transitDestSystem);
     appendI64(out, fleet.transitDestBand);
     appendU8(out, static_cast<std::uint8_t>(fleet.transitDestLane));
+    appendU8(out, static_cast<std::uint8_t>(fleet.transitDestObserver));
+    appendU32(out, fleet.reportsSent);
   }
 
   appendU32(out, static_cast<std::uint32_t>(commandLog_.size()));
@@ -772,9 +1248,13 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendU32(out, logged.command.targetSystem);
     appendI64(out, logged.command.targetBand);
     appendU8(out, static_cast<std::uint8_t>(logged.command.lane));
+    appendU8(out, static_cast<std::uint8_t>(logged.command.station));
     appendU32(out, logged.faction);
     appendI64(out, logged.issueTurn);
     appendI64(out, logged.effectTurn);
+    appendU32(out, logged.addressedSystem);
+    appendI64(out, logged.addressedBand);
+    appendU8(out, logged.undelivered ? 1U : 0U);
   }
 
   appendU32(out, static_cast<std::uint32_t>(deliveryQueue_.size()));
@@ -789,6 +1269,9 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendI64(out, delivery.bandIndex);
     appendU32(out, delivery.controller);
     appendU64(out, delivery.observerIndex);
+    appendFleetBelief(out, delivery.status);
+    appendF64(out, delivery.stabilizationUnits);
+    appendF64(out, delivery.controlPoints);
   }
 
   for (const std::vector<std::vector<FactionId>> &factionRow : perceived_) {
@@ -801,6 +1284,18 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
   for (const std::vector<FactionId> &systemRow : lastEmittedController_) {
     for (const FactionId controller : systemRow) {
       appendU32(out, controller);
+    }
+  }
+  for (const std::vector<FleetBelief> &beliefs : ownBelief_) {
+    appendU32(out, static_cast<std::uint32_t>(beliefs.size()));
+    for (const FleetBelief &known : beliefs) {
+      appendFleetBelief(out, known);
+    }
+  }
+  for (const std::vector<std::uint32_t> &pending : pendingCommands_) {
+    appendU32(out, static_cast<std::uint32_t>(pending.size()));
+    for (const std::uint32_t index : pending) {
+      appendU32(out, index);
     }
   }
 
