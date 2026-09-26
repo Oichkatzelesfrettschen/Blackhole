@@ -20,6 +20,12 @@
 
 namespace game {
 
+/** @brief Named starting scenarios a session can be built from. */
+enum class CampaignScenario : std::uint8_t {
+  M87Default = 0,     ///< The canonical vertical slice (see the default constructor).
+  GargantuaCanon = 1, ///< Interstellar's Gargantua with Miller's planet on the prograde ISCO.
+};
+
 class CampaignSession {
 public:
   /** @brief Canonical vertical-slice scenario: M87*-scale spinning hole
@@ -29,6 +35,16 @@ public:
    *         contracted -- the player's move. The seed is recorded in the
    *         campaign state and serialization. Spin is clamped to [-1, 1]. */
   explicit CampaignSession(std::uint64_t seed = 1, double spinDimensionless = 0.9);
+
+  /** @brief Scenario by name. GargantuaCanon is a 1e8 M_sun hole with spin
+   *         deficit 1 - a = 1.33e-14 (Opatrny, Richterek & Bakala,
+   *         arXiv:1601.02897), one-day turns, and Miller's band on the
+   *         prograde ISCO, where a circular orbit's clock runs at
+   *         dtau/dt = 1.6286e-5: one Miller hour is seven outside years. A
+   *         colony fleet orbits there and a survey fleet orbits at 100M; the
+   *         authority hovers at 400M. No victory, deadline, or economy knob is
+   *         set, so the scenario isolates the clock. */
+  CampaignSession(std::uint64_t seed, CampaignScenario scenario);
 
   [[nodiscard]] CampaignState &state() { return state_; }
   [[nodiscard]] const CampaignState &state() const { return state_; }

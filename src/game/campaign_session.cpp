@@ -21,6 +21,15 @@ constexpr double K_SOLAR_MASS_G = 1.989e33;
 constexpr double K_M87_MASS_G = 6.5e9 * K_SOLAR_MASS_G;
 constexpr double K_SECONDS_PER_DAY = 86400.0;
 constexpr double K_SECONDS_PER_HOUR = 3600.0;
+constexpr double K_GARGANTUA_MASS_G = 1.0e8 * K_SOLAR_MASS_G;
+constexpr double K_GARGANTUA_SPIN_DEFICIT = 1.33e-14;
+
+KerrTimeField fieldFor(CampaignScenario scenario) {
+  if (scenario == CampaignScenario::GargantuaCanon) {
+    return {K_GARGANTUA_MASS_G, SpinDeficit{.epsilon = K_GARGANTUA_SPIN_DEFICIT}};
+  }
+  return {K_M87_MASS_G, 0.9};
+}
 
 CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   // Bands are anchored to r_s = 2M, a spin-independent length scale, so a
@@ -92,19 +101,49 @@ CampaignConfig defaultConfig(const KerrTimeField &field, std::uint64_t seed) {
   return config;
 }
 
+// Six specialist fleets orbiting the three outer bands (1/2/3); the ergoregion
+// band (index 0) starts empty -- the player chooses whether to send a scarce
+// fleet to hover in the deep prograde lane for the frame-dragging bonus.
+void addDefaultFleets(CampaignState &state) {
+  state.addFleet(FleetCapability::Extraction, 1);
+  state.addFleet(FleetCapability::Research, 1);
+  state.addFleet(FleetCapability::Fabrication, 2);
+  state.addFleet(FleetCapability::Relay, 2);
+  state.addFleet(FleetCapability::Verification, 3);
+  state.addFleet(FleetCapability::Research, 3);
+}
+
+CampaignConfig gargantuaConfig(const KerrTimeField &field, std::uint64_t seed) {
+  const double massCm = field.gravitationalRadiusCm();
+  CampaignConfig config;
+  config.seed = seed;
+  config.secondsPerTurn = K_SECONDS_PER_DAY;
+  config.authorityRadiusCm = 400.0 * massCm;
+  config.authorityObserver = Observer::Hovering;
+  // Band 0 is Miller's orbit, the prograde ISCO at r - M = 3.7611e-5 M; band 1
+  // is a far survey orbit at 100M.
+  config.bandRadiusCm = {field.iscoRadiusCm(Observer::CircularOrbitPrograde), 100.0 * massCm};
+  return config;
+}
+
 } // namespace
+
+CampaignSession::CampaignSession(std::uint64_t seed, CampaignScenario scenario)
+    : field_(fieldFor(scenario)),
+      state_(scenario == CampaignScenario::GargantuaCanon ? gargantuaConfig(field_, seed)
+                                                          : defaultConfig(field_, seed),
+             field_) {
+  if (scenario == CampaignScenario::GargantuaCanon) {
+    state_.addFleet(FleetCapability::Research, 0);
+    state_.addFleet(FleetCapability::Research, 1);
+    return;
+  }
+  addDefaultFleets(state_);
+}
 
 CampaignSession::CampaignSession(std::uint64_t seed, double spinDimensionless)
     : field_(K_M87_MASS_G, spinDimensionless), state_(defaultConfig(field_, seed), field_) {
-  // Six specialist fleets across the three outer bands (1/2/3); the ergoregion
-  // band (index 0) starts empty -- the player chooses whether to send a scarce
-  // fleet into the deep prograde lane for the frame-dragging bonus.
-  state_.addFleet(FleetCapability::Extraction, 1);
-  state_.addFleet(FleetCapability::Research, 1);
-  state_.addFleet(FleetCapability::Fabrication, 2);
-  state_.addFleet(FleetCapability::Relay, 2);
-  state_.addFleet(FleetCapability::Verification, 3);
-  state_.addFleet(FleetCapability::Research, 3);
+  addDefaultFleets(state_);
 }
 
 bool CampaignSession::issueAssignTask(FleetId fleet, double costHours) {

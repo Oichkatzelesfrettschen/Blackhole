@@ -13,6 +13,7 @@
 #include "game/blackhole_time_field.h"
 #include "game/campaign.h"
 #include "game/campaign_session.h"
+#include "game/campaign_view.h"
 #include "game/fleet.h"
 #include "game/kerr_time_field.h"
 #include "game/observer.h"
@@ -169,4 +170,37 @@ TEST(KerrTimeField, OrbitalPlacementBelowMarginallyBoundIsRejectedAtIssue) {
             game::K_INVALID_FLEET_ID);
   // Placed fleets on the outer bands orbit, and carry the orbital clock.
   EXPECT_EQ(session.state().fleets().front().observer, game::Observer::CircularOrbitPrograde);
+}
+
+// Falsifier: the canon scenario's Miller colony, orbiting the prograde ISCO at
+// 1 - a = 1.33e-14, reporting dtau/dt off the mpmath value 1.6285857805e-5
+// (61,403x; scripts/gen_kerr_observer_reference.py) by more than 1e-6
+// relative, accruing proper time at any other rate, or its band sitting
+// anywhere but r - M = 3.7611e-5 M above a bound orbit.
+TEST(GargantuaScenario, MillerColonyRunsTheCanonClock) {
+  const game::CampaignSession session(9, game::CampaignScenario::GargantuaCanon);
+  ASSERT_TRUE(session.state().valid());
+  EXPECT_DOUBLE_EQ(session.field().spinDeficit(), 1.33e-14);
+  const double massCm = session.field().gravitationalRadiusCm();
+
+  const game::CampaignViewSnapshot view = session.state().renderSnapshot();
+  ASSERT_EQ(view.fleets.size(), 2U);
+  const game::FleetView &miller = view.fleets.front();
+  EXPECT_EQ(miller.bandIndex, 0);
+  EXPECT_EQ(miller.observer, game::Observer::CircularOrbitPrograde);
+  EXPECT_NEAR(miller.properTimeRate / 1.6285857804897317108e-5, 1.0, 1e-6);
+  EXPECT_NEAR(1.0 / miller.properTimeRate, 61403.0, 1.0);
+  EXPECT_NEAR((view.bands.at(0).radiusCm / massCm) - 1.0, 3.7611284825013188359e-5, 1e-9);
+  EXPECT_TRUE(view.bands.at(0).admitsOrbit);
+  EXPECT_TRUE(view.bands.at(0).insideErgosphere);
+  EXPECT_GT(view.bands.at(0).delayToAuthoritySec, 0.0);
+
+  // One Miller hour against the outside: seven Julian years to within 0.1%.
+  const double outsideYearsPerMillerHour = 3600.0 / miller.properTimeRate / (365.25 * 86400.0);
+  EXPECT_NEAR(outsideYearsPerMillerHour, 7.0, 0.007);
+
+  game::CampaignSession played(9, game::CampaignScenario::GargantuaCanon);
+  played.state().advanceTurns(10);
+  const game::Fleet &colony = played.state().fleets().front();
+  EXPECT_NEAR(colony.properTimeSec / (10.0 * 86400.0 * miller.properTimeRate), 1.0, 1e-12);
 }
