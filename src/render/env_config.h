@@ -3,12 +3,12 @@
  * @brief One-time startup configuration from environment variables.
  *
  * applyEnvironmentConfig reads the BLACKHOLE_* environment variables that select
- * the scene (BLACKHOLE_SCENE=blackhole|tesseract), the compare/parity sweep,
- * forced interop-fragment mode, CUDA kernel variant, GPU-timing log,
- * draw-id/multi-draw probes, LUT asset-only mode, the control and performance
- * HUD overlays, and integrator debug flags, writing the results into the
- * matching RenderState config groups. Each block is guarded by its own init
- * flag so it applies once.
+ * the scene (BLACKHOLE_SCENE=blackhole|observer-sky|tesseract), the
+ * observer-sky view (BLACKHOLE_OBSERVER_*), the compare/parity sweep, forced
+ * interop-fragment mode, CUDA kernel variant, GPU-timing log, draw-id/multi-draw
+ * probes, LUT asset-only mode, the control and performance HUD overlays, and
+ * integrator debug flags, writing the results into the matching RenderState
+ * config groups. Each block is guarded by its own init flag so it applies once.
  */
 
 #ifndef BLACKHOLE_RENDER_ENV_CONFIG_H
@@ -21,7 +21,7 @@
 
 namespace blackhole {
 
-/** @brief Scene named by a BLACKHOLE_SCENE value: "blackhole" or "tesseract". */
+/** @brief Scene named by a BLACKHOLE_SCENE value: "blackhole", "observer-sky", or "tesseract". */
 std::optional<RenderState::SceneMode> parseSceneName(std::string_view name);
 
 /**

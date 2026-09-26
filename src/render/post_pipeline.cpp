@@ -140,7 +140,7 @@ GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input, double
 
   GLuint finalTexture = rs.targets.texTonemapped;
   // Depth cues read the geodesic integrator's depth from texBlackhole alpha;
-  // the tesseract pass writes alpha 1 everywhere, so it presents the
+  // the observer-sky and tesseract passes write alpha 1 everywhere, so they present the
   // tonemapped frame directly.
   const bool depthCuesApply = rs.scene.mode == RenderState::SceneMode::Blackhole;
   if (rs.depthFx.depthEffectsEnabled && depthCuesApply) {

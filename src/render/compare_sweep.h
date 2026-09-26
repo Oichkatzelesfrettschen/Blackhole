@@ -62,13 +62,14 @@ void advanceComparePresetSweep(RenderState &rs, InputManager &input, bool comput
 void restoreCompareSweepState(RenderState &rs, InputManager &input);
 
 /**
- * @brief Ends any compare sweep at once and puts the saved camera back.
+ * @brief Ends any compare sweep and parity auto capture at once and puts the
+ *        saved camera back.
  *
- * The sweep drives the black-hole integrator only; main calls this on every
- * frame another scene renders, so a sweep armed or running when the scene
- * changes stops, its preset camera and spin give way to the saved live ones,
- * and no pending restore or snapshot survives into a later black-hole frame.
- * No-op when no sweep is armed and nothing is saved.
+ * The sweep and auto capture drive the black-hole integrator only; main calls
+ * this on every frame another scene renders, so a sweep armed or running when
+ * the scene changes stops, its preset camera and spin give way to the saved
+ * live ones, and no pending restore, snapshot, or auto-capture count survives
+ * into a later black-hole frame. No-op when nothing is armed or saved.
  */
 void cancelComparePresetSweep(RenderState &rs, InputManager &input);
 
