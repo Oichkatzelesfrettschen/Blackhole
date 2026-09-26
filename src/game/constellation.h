@@ -258,7 +258,7 @@ private:
   /** @brief Sends the fleet's current state home from (fromSystem, fromBand),
    *         where it stands when the report leaves; undeliverable without a
    *         light path. */
-  void enqueueFleetStatus(const ConstellationFleet &fleet, SystemId fromSystem, int fromBand);
+  void enqueueFleetStatus(ConstellationFleet &fleet, SystemId fromSystem, int fromBand);
   /** @brief The owner's record of a fleet; null when `faction` does not own it. */
   [[nodiscard]] const FleetBelief *knownFleet(FactionId faction, FleetId fleet) const;
   void landArrivals();

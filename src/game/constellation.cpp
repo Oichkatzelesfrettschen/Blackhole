@@ -50,6 +50,7 @@ void appendFleetBelief(std::vector<std::uint8_t> &out, const FleetBelief &known)
   appendU32(out, known.transitDestSystem);
   appendI64(out, known.transitDestBand);
   appendI64(out, known.asOfTurn);
+  appendU32(out, known.reportSequence);
 }
 
 } // namespace
@@ -475,8 +476,10 @@ void Constellation::deliverDue() {
     case DeliveryKind::FleetStatus: {
       std::vector<FleetBelief> &beliefs = ownBelief_.at(delivery.observerIndex);
       const auto found = std::ranges::find(beliefs, delivery.status.id, &FleetBelief::id);
-      // Reports can cross in flight; the authority keeps the newest state.
-      if (found != beliefs.end() && found->asOfTurn <= delivery.status.asOfTurn) {
+      // Reports can cross in flight; the authority keeps the newest state,
+      // judged by the fleet's own report counter so that two reports sent on
+      // one turn from slots with different light delays cannot reorder.
+      if (found != beliefs.end() && found->reportSequence < delivery.status.reportSequence) {
         *found = delivery.status;
       }
       // Orders that took effect by the time this report left are answered.
@@ -504,8 +507,11 @@ void Constellation::landArrivals() {
   }
 }
 
-void Constellation::enqueueFleetStatus(const ConstellationFleet &fleet, SystemId fromSystem,
+void Constellation::enqueueFleetStatus(ConstellationFleet &fleet, SystemId fromSystem,
                                        int fromBand) {
+  // The counter advances whether or not a light path home exists, so every
+  // report the fleet sends is ordered against every other.
+  ++fleet.reportsSent;
   const double delaySec = reportDelaySec(fleet.faction, fromSystem, fromBand);
   if (delaySec < 0.0) {
     return; // No light path home: the authority never hears.
@@ -526,7 +532,8 @@ void Constellation::enqueueFleetStatus(const ConstellationFleet &fleet, SystemId
                                 .transitArrivalTurn = fleet.transitArrivalTurn,
                                 .transitDestSystem = fleet.transitDestSystem,
                                 .transitDestBand = fleet.transitDestBand,
-                                .asOfTurn = clock_.turn()};
+                                .asOfTurn = clock_.turn(),
+                                .reportSequence = fleet.reportsSent};
   deliveryQueue_.push_back(delivery);
 }
 
@@ -1196,6 +1203,7 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendI64(out, fleet.transitDestBand);
     appendU8(out, static_cast<std::uint8_t>(fleet.transitDestLane));
     appendU8(out, static_cast<std::uint8_t>(fleet.transitDestObserver));
+    appendU32(out, fleet.reportsSent);
   }
 
   appendU32(out, static_cast<std::uint32_t>(commandLog_.size()));
