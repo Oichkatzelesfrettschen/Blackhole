@@ -34,6 +34,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <numbers>
 
 namespace physics::kerr_observer {
@@ -312,6 +313,82 @@ struct Tetrad {
   return -frame.omega * frame.varpi / frame.alpha;
 }
 
+/**
+ * @brief Radial potential of a photon with E = 1, R(r) = ((r^2 + a^2) - a lambda)^2
+ *        - Delta (eta + (lambda - a)^2), expanded in r:
+ *          R = r^4 + c2 r^2 + c1 r + c0,
+ *          c2 = 2 (a^2 - a lambda) - Q, c1 = 2 Q, c0 = (a^2 - a lambda)^2 - a^2 Q,
+ *        with Q = eta + (lambda - a)^2. Radial motion is allowed where R >= 0;
+ *        a zero of R is a radial turning point.
+ */
+struct RadialPotential {
+  double c2 = 0.0;
+  double c1 = 0.0;
+  double c0 = 0.0;
+
+  [[nodiscard]] double value(double r) const {
+    const double r2 = r * r;
+    return (r2 * (r2 + c2)) + (c1 * r) + c0;
+  }
+  [[nodiscard]] double slope(double r) const { return (4.0 * r * r * r) + (2.0 * c2 * r) + c1; }
+};
+
+[[nodiscard]] inline RadialPotential radialPotential(double spin, double lambda, double eta) {
+  const double shift = (spin * spin) - (spin * lambda);
+  const double q = eta + ((lambda - spin) * (lambda - spin));
+  return RadialPotential{.c2 = (2.0 * shift) - q, .c1 = 2.0 * q, .c0 = (shift * shift) - (spin * spin * q)};
+}
+
+/**
+ * @brief True when R has a turning point strictly inside (lo, hi): some local
+ *        minimum of R there sits at or below zero.
+ *
+ * R is a quartic with positive leading term, so on an interval whose ends
+ * satisfy R >= 0 a zero exists exactly when a critical point of R inside the
+ * interval has R <= 0; the endpoints themselves never count. The critical
+ * points are the roots of the cubic R', which is monotone between the roots
+ * of R'' = 12 r^2 + 2 c2 and beyond the Cauchy bound of R'; each monotone
+ * piece holds at most one critical point, found by bisection, so no root is
+ * missed however close two roots lie.
+ */
+[[nodiscard]] inline bool hasTurningPointIn(const RadialPotential &potential, double lo, double hi) {
+  const double bound = 1.0 + std::fmax(std::fabs(potential.c2) / 2.0, std::fabs(potential.c1) / 4.0);
+  // Monotone pieces of R': split at the roots of R'' when it has them.
+  const double split = potential.c2 < 0.0 ? std::sqrt(-potential.c2 / 6.0) : 0.0;
+  const std::array<double, 4> edges{-bound, -split, split, bound};
+  const std::size_t edgeCount = 4;
+  for (std::size_t piece = 0; piece + 1 < edgeCount; ++piece) {
+    double left = std::fmax(edges.at(piece), lo);
+    double right = std::fmin(edges.at(piece + 1), hi);
+    if (!(left < right)) {
+      continue;
+    }
+    const double slopeLeft = potential.slope(left);
+    const double slopeRight = potential.slope(right);
+    if ((slopeLeft < 0.0) == (slopeRight < 0.0)) {
+      continue; // monotone R' without a sign change: no critical point here
+    }
+    const bool risingSlope = slopeLeft < 0.0;
+    constexpr int bisections = 200;
+    for (int step = 0; step < bisections && left < right; ++step) {
+      const double middle = 0.5 * (left + right);
+      if (middle <= left || middle >= right) {
+        break;
+      }
+      if ((potential.slope(middle) < 0.0) == risingSlope) {
+        left = middle;
+      } else {
+        right = middle;
+      }
+    }
+    const double critical = 0.5 * (left + right);
+    if (critical > lo && critical < hi && potential.value(critical) <= 0.0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** @brief Conserved quantities of a photon at an observer's event, fixed by
  *         its propagation direction there; they do not depend on whether the
  *         observer emits or receives it. */
@@ -319,12 +396,22 @@ struct PhotonConstants {
   double energy = 0.0;          ///< E = -p_t with the observer-measured energy set to 1.
   double angularMomentum = 0.0; ///< L = p_phi.
   double pTheta = 0.0;          ///< p_theta at the equator.
-  bool fromInfinity = false;    ///< E > 0: the ray can connect to infinity.
-  double lambda = 0.0;          ///< L / E; meaningful only when fromInfinity.
-  double eta = 0.0; ///< Carter Q / E^2 = p_theta^2 / E^2 at the equator; only when fromInfinity.
+  double radialMomentum = 0.0;  ///< ZAMO-frame p^r: positive when moving outward.
+  bool positiveEnergy = false;  ///< E > 0; false only inside the ergoregion.
+  /// Followed forward in time along its propagation, the photon reaches
+  /// infinity: E > 0, no radial turning point outside r, and it is moving
+  /// outward or has an inner turning point to bounce from.
+  bool escapesToInfinity = false;
+  /// Followed backward in time, the photon came from infinity: the same test
+  /// with the radial direction reversed. A camera's pixel sees the sky only
+  /// when this holds; otherwise the ray traces back to the horizon or is
+  /// trapped between turning points.
+  bool fromInfinity = false;
+  double lambda = 0.0; ///< L / E; meaningful only when positiveEnergy.
+  double eta = 0.0;    ///< Carter Q / E^2 = p_theta^2 / E^2 at the equator; only when positiveEnergy.
   /// 1 / E: the frequency the observer measures over the frequency at
   /// infinity -- the blueshift of a photon received from infinity, the inverse
-  /// of the redshift of one sent there. Only when fromInfinity.
+  /// of the redshift of one sent there. Only when positiveEnergy.
   double g = 0.0;
 };
 
@@ -337,7 +424,15 @@ struct PhotonConstants {
  * The momentum in ZAMO components is P = lorentz[0] + n^i lorentz[i]; then
  * p_phi = varpi P^phi, p_theta = r P^theta, and E = alpha P^t + omega varpi P^phi.
  * E <= 0 happens only inside the ergoregion: such a photon connects to
- * infinity in neither direction, and fromInfinity is false.
+ * infinity in neither direction.
+ *
+ * Connectivity comes from the radial potential R: with no turning point in
+ * (r, inf) the photon, once moving outward, runs to infinity. Moving outward
+ * now it escapes; moving inward it escapes only after bouncing off a turning
+ * point between the outer horizon and r. At P^r = 0 the photon sits on a
+ * turning point: R'(r) > 0 marks a periapsis (it moves outward both ways), R'
+ * < 0 an apoapsis inside a potential barrier (trapped both ways), and R' = 0 a
+ * circular photon orbit, which escapes in neither direction.
  */
 [[nodiscard]] inline PhotonConstants photonConstants(const Tetrad &tetrad, const Vec3 &direction) {
   Vec4 zamo{};
@@ -351,12 +446,31 @@ struct PhotonConstants {
   PhotonConstants constants;
   constants.angularMomentum = frame.varpi * zamo.at(3);
   constants.pTheta = frame.r * zamo.at(2);
+  constants.radialMomentum = zamo.at(1);
   constants.energy = (frame.alpha * zamo.at(0)) + (frame.omega * constants.angularMomentum);
-  constants.fromInfinity = constants.energy > 0.0;
-  if (constants.fromInfinity) {
-    constants.lambda = constants.angularMomentum / constants.energy;
-    constants.eta = (constants.pTheta * constants.pTheta) / (constants.energy * constants.energy);
-    constants.g = 1.0 / constants.energy;
+  constants.positiveEnergy = constants.energy > 0.0;
+  if (!constants.positiveEnergy) {
+    return constants;
+  }
+  constants.lambda = constants.angularMomentum / constants.energy;
+  constants.eta = (constants.pTheta * constants.pTheta) / (constants.energy * constants.energy);
+  constants.g = 1.0 / constants.energy;
+
+  const RadialPotential potential = radialPotential(frame.spin, constants.lambda, constants.eta);
+  const double r = frame.r;
+  const double outerHorizon = 1.0 + horizonOffset(frame.epsilon);
+  const bool clearAbove = !hasTurningPointIn(potential, r, std::numeric_limits<double>::max());
+  const bool bounceBelow = hasTurningPointIn(potential, outerHorizon, r);
+  if (constants.radialMomentum > 0.0) {
+    constants.escapesToInfinity = clearAbove;
+    constants.fromInfinity = clearAbove && bounceBelow;
+  } else if (constants.radialMomentum < 0.0) {
+    constants.escapesToInfinity = clearAbove && bounceBelow;
+    constants.fromInfinity = clearAbove;
+  } else {
+    const bool periapsis = potential.slope(r) > 0.0;
+    constants.escapesToInfinity = periapsis && clearAbove;
+    constants.fromInfinity = constants.escapesToInfinity;
   }
   return constants;
 }

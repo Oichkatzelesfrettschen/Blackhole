@@ -342,7 +342,7 @@ TEST(KerrObserver, RedshiftIdentityOverLatticeDirections) {
   int outerNegative = 0;
   for (int sample = 0; sample < 1000; ++sample) {
     const ko::PhotonConstants photon = ko::photonConstants(orbiter, latticeDirection(sample, 1000));
-    if (!photon.fromInfinity) {
+    if (!photon.positiveEnergy) {
       ++outerNegative;
       continue;
     }
@@ -360,7 +360,7 @@ TEST(KerrObserver, RedshiftIdentityOverLatticeDirections) {
   int millerNegative = 0;
   for (int sample = 0; sample < 1000; ++sample) {
     const ko::PhotonConstants photon = ko::photonConstants(miller, latticeDirection(sample, 1000));
-    if (!photon.fromInfinity) {
+    if (!photon.positiveEnergy) {
       ++millerNegative;
       continue;
     }
@@ -382,7 +382,7 @@ TEST(KerrObserver, StaticObserverRedshiftIsLapse) {
         ko::boostedTetrad(zamo, ko::Vec3{0.0, 0.0, ko::staticObserverVelocity(zamo.frame)});
     for (int sample = 0; sample < 100; ++sample) {
       const ko::PhotonConstants photon = ko::photonConstants(fixed, latticeDirection(sample, 100));
-      ASSERT_TRUE(photon.fromInfinity);
+      ASSERT_TRUE(photon.positiveEnergy);
       expectRelative(photon.g, 1.0 / std::sqrt(1.0 - (2.0 / r)), 1e-12, "static g");
     }
   }
@@ -402,7 +402,7 @@ TEST(KerrObserver, SpecialRelativityAberrationFarAway) {
   for (const double thetaPrime : {0.0, 0.4, 1.1, 1.5707963267948966, 2.3, 3.0}) {
     const ko::Vec3 direction{std::sin(thetaPrime), 0.0, std::cos(thetaPrime)};
     const ko::PhotonConstants photon = ko::photonConstants(mover, direction);
-    ASSERT_TRUE(photon.fromInfinity);
+    ASSERT_TRUE(photon.positiveEnergy);
     const double cosZamo =
         photon.lambda * frame.alpha / (frame.varpi * (1.0 - (frame.omega * photon.lambda)));
     const double expected = (std::cos(thetaPrime) + v) / (1.0 + (v * std::cos(thetaPrime)));
@@ -410,4 +410,83 @@ TEST(KerrObserver, SpecialRelativityAberrationFarAway) {
     EXPECT_NEAR(photon.energy, gamma * (1.0 + (v * std::cos(thetaPrime))), 1e-6)
         << "theta'=" << thetaPrime;
   }
+}
+
+namespace {
+
+// A photon leaving the ZAMO at (epsilon, r) along `direction` (r, theta, phi legs).
+ko::PhotonConstants zamoPhoton(double epsilon, double r, const ko::Vec3 &direction) {
+  return ko::photonConstants(ko::zamoTetrad(epsilon, r - 1.0), direction);
+}
+
+constexpr ko::Vec3 K_OUTWARD{1.0, 0.0, 0.0};
+constexpr ko::Vec3 K_INWARD{-1.0, 0.0, 0.0};
+constexpr ko::Vec3 K_FORWARD{0.0, 0.0, 1.0};  // tangential, +phi
+constexpr ko::Vec3 K_BACKWARD{0.0, 0.0, -1.0}; // tangential, -phi
+
+} // namespace
+
+// Falsifier: a Schwarzschild tangential photon at 2.5M (impact parameter
+// 2.5 / sqrt(0.2) = 5.59M, above the critical 3 sqrt(3) M = 5.196M, but inside
+// the 3M photon sphere, so at an apoapsis under the barrier) reported as
+// reaching infinity in either direction -- the E > 0 rule said it did -- or
+// radial photons there misjudged: outward escapes but came from the horizon.
+TEST(KerrObserver, InsidePhotonSphereTangentialPhotonIsTrapped) {
+  const ko::PhotonConstants tangential = zamoPhoton(1.0, 2.5, K_FORWARD);
+  EXPECT_TRUE(tangential.positiveEnergy);
+  EXPECT_NEAR(tangential.lambda, 2.5 / std::sqrt(0.2), 1e-12);
+  EXPECT_FALSE(tangential.escapesToInfinity);
+  EXPECT_FALSE(tangential.fromInfinity);
+
+  const ko::PhotonConstants outward = zamoPhoton(1.0, 2.5, K_OUTWARD);
+  EXPECT_TRUE(outward.escapesToInfinity);
+  EXPECT_FALSE(outward.fromInfinity);
+  const ko::PhotonConstants inward = zamoPhoton(1.0, 2.5, K_INWARD);
+  EXPECT_FALSE(inward.escapesToInfinity);
+  EXPECT_TRUE(inward.fromInfinity);
+}
+
+// Falsifier: outside the photon sphere at 4M a tangential photon (b = 5.657M
+// > b_c) sits at a periapsis and must connect to infinity both ways; a radial
+// photon (b = 0 < b_c) crosses no barrier, so inward came from infinity and
+// falls in, outward escapes and came from the horizon; a photon aimed 30
+// degrees inward of tangential with b = 4.90M < b_c falls in forward.
+TEST(KerrObserver, OutsidePhotonSphereConnectivity) {
+  const ko::PhotonConstants tangential = zamoPhoton(1.0, 4.0, K_FORWARD);
+  EXPECT_TRUE(tangential.escapesToInfinity);
+  EXPECT_TRUE(tangential.fromInfinity);
+  const ko::PhotonConstants inward = zamoPhoton(1.0, 4.0, K_INWARD);
+  EXPECT_FALSE(inward.escapesToInfinity);
+  EXPECT_TRUE(inward.fromInfinity);
+  const ko::PhotonConstants outward = zamoPhoton(1.0, 4.0, K_OUTWARD);
+  EXPECT_TRUE(outward.escapesToInfinity);
+  EXPECT_FALSE(outward.fromInfinity);
+  // b = 4 cos(30 deg) / sqrt(1 - 2/4) = 4.899M: below b_c, so no barrier.
+  const double angle = std::numbers::pi / 6.0;
+  const ko::PhotonConstants steep = zamoPhoton(1.0, 4.0, {-std::sin(angle), 0.0, std::cos(angle)});
+  EXPECT_NEAR(steep.lambda, 4.0 * std::cos(angle) / std::sqrt(0.5), 1e-12);
+  EXPECT_FALSE(steep.escapesToInfinity);
+  EXPECT_TRUE(steep.fromInfinity);
+  // Same angle outward of tangential at 2.5M, inside the photon sphere, with
+  // b = 4.84M < b_c: no barrier, so it escapes forward.
+  const ko::PhotonConstants climbing =
+      zamoPhoton(1.0, 2.5, {std::sin(angle), 0.0, std::cos(angle)});
+  EXPECT_TRUE(climbing.escapesToInfinity);
+}
+
+// Falsifier: at r = 3M around a = 0.9, between the prograde photon shell
+// (1.558M) and the retrograde one (3.910M), a tangential photon along the
+// hole's rotation failing to reach infinity (it is outside its shell: a
+// periapsis) or one against the rotation reaching it (inside its shell: an
+// apoapsis under the barrier).
+TEST(KerrObserver, KerrShellsSplitProgradeFromRetrograde) {
+  const ko::PhotonConstants prograde = zamoPhoton(0.1, 3.0, K_FORWARD);
+  EXPECT_TRUE(prograde.escapesToInfinity);
+  EXPECT_TRUE(prograde.fromInfinity);
+  const ko::PhotonConstants retrograde = zamoPhoton(0.1, 3.0, K_BACKWARD);
+  EXPECT_FALSE(retrograde.escapesToInfinity);
+  EXPECT_FALSE(retrograde.fromInfinity);
+  // Outside both shells, at 5M, both tangential photons connect.
+  EXPECT_TRUE(zamoPhoton(0.1, 5.0, K_BACKWARD).escapesToInfinity);
+  EXPECT_TRUE(zamoPhoton(0.1, 5.0, K_FORWARD).fromInfinity);
 }
