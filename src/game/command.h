@@ -22,6 +22,7 @@ struct Command {
   FleetId fleet = K_INVALID_FLEET_ID;
   int targetBand = 0;                   ///< PlaceFleet: destination band index.
   OrbitLane lane = OrbitLane::Prograde; ///< PlaceFleet: orbital direction to adopt.
+  StationKeeping station = StationKeeping::Orbit; ///< PlaceFleet: orbit (geodesic) or hover (ZAMO).
   double properTimeCostSec = 0.0;       ///< AssignTask: local proper-time cost.
 };
 

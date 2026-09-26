@@ -19,6 +19,7 @@
 
 #include "game/command.h"
 #include "game/fleet.h"
+#include "game/observer.h"
 
 namespace game {
 
@@ -38,10 +39,30 @@ struct BandView {
   double radiusCm = 0.0;
   bool validStation = false;
   bool insideErgosphere = false;        ///< Inside the static limit: retrograde forbidden.
-  double properTimeRate = 0.0;          ///< dtau/dt on this band.
+  bool admitsOrbit = false;             ///< A bound prograde circular orbit exists here.
+  bool stableOrbit = false;             ///< ...and it is stable (at or outside the prograde ISCO).
+  bool admitsRetrogradeOrbit = false;   ///< A bound retrograde circular orbit exists here.
+  bool stableRetrogradeOrbit = false;   ///< ...and it is stable (at or outside the retrograde ISCO).
+  /// dtau/dt of a prograde orbit here, or of a hovering station where no bound
+  /// orbit exists (below the marginally bound radius): the map's ring color.
+  double properTimeRate = 0.0;
+  double hoverProperTimeRate = 0.0;      ///< dtau/dt of a hovering (ZAMO) station here.
+  double progradeOrbitProperTimeRate = 0.0;   ///< dtau/dt of a prograde orbit; 0 when none is bound.
+  double retrogradeOrbitProperTimeRate = 0.0; ///< dtau/dt of a retrograde orbit; 0 when none is bound.
   double delayToAuthoritySec = 0.0;     ///< One-way signal delay to the authority station.
   double frameDragRateRadPerSec = 0.0;  ///< Frame-dragging angular velocity (0 without spin).
 };
+
+/** @brief The clock a fleet placed on `band` with this lane and station
+ *         keeping would carry: the hovering rate, or the orbital rate of the
+ *         lane (0 where no bound orbit of that lane exists). */
+[[nodiscard]] inline double bandRateFor(const BandView &band, OrbitLane lane, StationKeeping station) {
+  if (station == StationKeeping::Hover) {
+    return band.hoverProperTimeRate;
+  }
+  return lane == OrbitLane::Retrograde ? band.retrogradeOrbitProperTimeRate
+                                       : band.progradeOrbitProperTimeRate;
+}
 
 struct FleetView {
   FleetId id = K_INVALID_FLEET_ID;
@@ -49,7 +70,9 @@ struct FleetView {
   int bandIndex = 0;
   double reliability = 1.0;
   double properTimeSec = 0.0;   ///< Accumulated local proper time tau.
-  double properTimeRate = 0.0;  ///< Current dtau/dt (the fleet's band rate).
+  double properTimeRate = 0.0;  ///< Current dtau/dt of the fleet's worldline on its band.
+  Observer observer = Observer::CircularOrbitPrograde; ///< Orbiting or hovering.
+  bool unstableOrbit = false; ///< On an orbit inside its ISCO, held by station-keeping thrust.
   double fuelUnits = 0.0;       ///< Remaining redeployment budget.
   OrbitLane lane = OrbitLane::Prograde; ///< Orbital direction.
   double yieldMultiplier = 1.0;  ///< Capability yield multiplier.
@@ -105,6 +128,8 @@ struct CampaignViewSnapshot {
   std::int64_t clearedTurn = 0;    ///< Turn a victory was reached; 0 until won.
   double ergosphereRadiusCm = 0.0; ///< Static limit; equals the horizon without spin.
   double spinDimensionless = 0.0;  ///< Black-hole spin a/M (0 for Schwarzschild).
+  double spinDeficit = 1.0;        ///< 1 - |a|, exact near extremal spin.
+  Observer authorityObserver = Observer::Hovering; ///< How the authority holds its radius.
   double reliabilityCorruptionThreshold = 0.0; ///< Below this a fleet's reports corrupt; 0 = off.
   double authorityRadiusCm = 0.0;
   double authorityProperTimeRate = 0.0;

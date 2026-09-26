@@ -24,6 +24,7 @@
 #include "game/campaign_view.h"
 #include "game/fleet.h"
 #include "game/kerr_time_field.h"
+#include "game/observer.h"
 
 namespace game {
 
@@ -51,6 +52,7 @@ enum class FactionPolicy : std::uint8_t {
 struct OrbitalSystem {
   KerrTimeField field;
   double authorityRadiusCm = 0.0;   ///< This system's command origin.
+  Observer authorityObserver = Observer::Hovering; ///< The authority's clock.
   std::vector<double> bandRadiusCm; ///< Orbital bands, ascending radius, indexed by bandIndex.
   double instability = 0.0;         ///< Rises each turn; deep prograde work in THIS system contains it.
 };
@@ -61,18 +63,46 @@ struct OrbitalSystem {
 struct ConstellationFleet {
   FleetId id = K_INVALID_FLEET_ID; ///< Unique across the whole constellation.
   FactionId faction = K_INVALID_FACTION_ID;
-  SystemId system = K_INVALID_SYSTEM_ID; ///< Current system; the destination while in transit.
+  SystemId system = K_INVALID_SYSTEM_ID; ///< Current system; the origin until a transit arrives.
   FleetCapability capability = FleetCapability::Research;
   int bandIndex = 0;
   OrbitLane lane = OrbitLane::Prograde;
+  Observer observer = Observer::CircularOrbitPrograde; ///< Clock-carrying worldline on its band.
   double reliability = 1.0;
   double properTimeSec = 0.0;        ///< Accumulated local proper time.
   double pendingWorkProperSec = 0.0; ///< Proper time worked since the last yield report.
   double fuelUnits = 0.0;
   bool inTransit = false;             ///< True between systems; holds no band.
   std::int64_t transitArrivalTurn = 0; ///< Turn an in-transit fleet reaches its destination.
+  SystemId transitDestSystem = K_INVALID_SYSTEM_ID; ///< System it joins on arrival.
   int transitDestBand = 0;            ///< Band it settles onto on arrival.
   OrbitLane transitDestLane = OrbitLane::Prograde;
+  /// Worldline it adopts on arrival.
+  Observer transitDestObserver = Observer::CircularOrbitPrograde;
+  std::uint32_t reportsSent = 0; ///< Status reports this fleet has sent home, in order.
+};
+
+/** @brief What a faction's authority last learned about one of its own fleets.
+ *         Orders are validated and the AI plans against this record, never
+ *         against the fleet itself: a report takes the same light path home as
+ *         any other signal. */
+struct FleetBelief {
+  FleetId id = K_INVALID_FLEET_ID;
+  SystemId system = K_INVALID_SYSTEM_ID; ///< Same meaning as ConstellationFleet::system.
+  int bandIndex = 0;
+  OrbitLane lane = OrbitLane::Prograde;
+  Observer observer = Observer::CircularOrbitPrograde;
+  double reliability = 1.0;
+  double fuelUnits = 0.0;
+  bool inTransit = false;
+  std::int64_t transitArrivalTurn = 0;
+  SystemId transitDestSystem = K_INVALID_SYSTEM_ID;
+  int transitDestBand = 0;
+  std::int64_t asOfTurn = 0; ///< Turn the reported state held at the fleet.
+  /// The fleet's report counter when it sent this state (0 = setup record).
+  /// Reports sent the same turn from different slots travel home with
+  /// different delays; the counter, not the turn, says which is newest.
+  std::uint32_t reportSequence = 0;
 };
 
 /** @brief A faction's cumulative outcome across the whole constellation. */
@@ -80,11 +110,25 @@ struct FactionState {
   FactionId id = K_INVALID_FACTION_ID;
   FactionPolicy policy = FactionPolicy::Scripted;
   SystemId homeSystem = K_INVALID_SYSTEM_ID;
-  double energyUnits = 0.0;        ///< Banked yield (credited on delayed report arrival).
-  double stabilizationUnits = 0.0; ///< Containment produced across all systems.
-  double controlScore = 0.0;       ///< Cumulative uncontested band-holds -- the breadth axis.
+  /// Banked yield, credited at the authority when a report arrives: the
+  /// referee's value and the authority's knowledge at once.
+  double energyUnits = 0.0;
+  /// Referee truth: containment produced across all systems, credited where
+  /// and when the work happens. Victory is judged on it.
+  double stabilizationUnits = 0.0;
+  /// Referee truth: cumulative uncontested band-holds (the breadth axis),
+  /// credited at the held band each turn. Victory is judged on it.
+  double controlScore = 0.0;
+  /// Stabilization whose reports have reached this faction's authority.
+  double knownStabilizationUnits = 0.0;
+  /// Control points whose reports have reached this faction's authority.
+  double knownControlScore = 0.0;
   CampaignStatus status = CampaignStatus::Ongoing;
   std::int64_t clearedTurn = 0; ///< Turn this faction reached a victory; 0 until then.
+  /// This faction's authority has learned the campaign is decided -- by light
+  /// from where the deciding credit happened, the winner included, or at once
+  /// at the deadline -- and issues no further orders.
+  bool outcomeKnown = false;
 };
 
 /** @brief An undirected interstellar link: a flat-space separation between two

@@ -66,8 +66,10 @@ inline std::vector<game::FleetId> factionFleetIds(const game::Constellation &con
   return ids;
 }
 
-// The player's move for one turn under a given line. Orders are idempotent enough
-// that re-issuing a satisfied goal simply fails the in-flight/placement guards.
+// The player's move for one turn under a given line. Every call re-states the
+// line's goal; issueCommand refuses an order that would leave a fleet where it
+// is already bound (its reported slot or its pending order's target), so a
+// satisfied goal adds nothing to the log.
 inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
   const game::Constellation &constellation = session.constellation();
   const game::FactionId player = session.player();
@@ -79,7 +81,9 @@ inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
     // a pure energy line that never answers the rival.
     static constexpr std::array<int, 4> kOuterBands = {1, 2, 3, 2};
     for (std::size_t index = 0; index < fleets.size(); ++index) {
-      session.movePlayerFleet(fleets.at(index), 0, kOuterBands.at(index % kOuterBands.size()));
+      const int band = kOuterBands.at(index % kOuterBands.size());
+      session.movePlayerFleet(fleets.at(index), 0, band, game::OrbitLane::Prograde,
+                              constellation.defaultStation(0, band));
     }
     return;
   }
@@ -87,7 +91,8 @@ inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
   if (line == PlayerLine::AllIn) {
     // Every fleet dives the home ergoregion band for stabilization.
     for (const game::FleetId fleet : fleets) {
-      session.movePlayerFleet(fleet, 0, 0);
+      session.movePlayerFleet(fleet, 0, 0, game::OrbitLane::Prograde,
+                              constellation.defaultStation(0, 0));
     }
     return;
   }
@@ -97,19 +102,28 @@ inline void playerTurn(game::ConstellationSession &session, PlayerLine line) {
   // bands for the player's own control score.
   static_cast<void>(rival);
   for (std::size_t index = 0; index < fleets.size(); ++index) {
-    session.movePlayerFleet(fleets.at(index), 0, static_cast<int>(index % 4));
+    const int band = static_cast<int>(index % 4);
+    session.movePlayerFleet(fleets.at(index), 0, band, game::OrbitLane::Prograde,
+                            constellation.defaultStation(0, band));
   }
 }
 
 } // namespace detail
 
-/** @brief Runs one player line against the Expansionist rival to a decision or
- *         the turn budget, returning the outcome and determinism digest. */
-inline LineResult runLine(std::uint64_t seed, std::int64_t turns, PlayerLine line) {
-  game::ConstellationSession session(seed);
+/** @brief Runs one player line against a rival policy (Expansionist for the
+ *         pinned shape) to a decision or the turn budget, the player acting
+ *         every `playerEvery` turns, and returns the outcome and digest. A
+ *         cadence of zero or less never lets the player act: its fleets hold
+ *         their starting slots. */
+inline LineResult runLine(std::uint64_t seed, std::int64_t turns, PlayerLine line,
+                          game::FactionPolicy rivalPolicy = game::FactionPolicy::Expansionist,
+                          std::int64_t playerEvery = 1) {
+  game::ConstellationSession session(seed, rivalPolicy);
   game::Constellation &constellation = session.constellation();
   for (std::int64_t elapsed = 0; elapsed < turns; ++elapsed) {
-    detail::playerTurn(session, line);
+    if (playerEvery > 0 && elapsed % playerEvery == 0) {
+      detail::playerTurn(session, line);
+    }
     constellation.advanceTurn();
     if (constellation.overallStatus() != game::CampaignStatus::Ongoing) {
       break;

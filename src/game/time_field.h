@@ -3,14 +3,19 @@
  * @brief Proper-time rate and signal-delay interface the campaign core plays on.
  *
  * The campaign never touches a metric directly: every gravitational effect it
- * consumes -- how fast a fleet's local clock runs, how long a signal takes
+ * consumes -- how fast a station's local clock runs, how long a signal takes
  * between orbital radii, whether a station radius is physically admissible --
- * arrives through this interface. Tests substitute a fake field; a Kerr field
- * can slot in behind the same three calls later.
+ * arrives through this interface. Tests substitute a fake field. A clock rate
+ * is a property of a worldline, not of a radius, so every rate query names the
+ * Observer that carries the clock.
  */
 
 #ifndef BLACKHOLE_GAME_TIME_FIELD_H
 #define BLACKHOLE_GAME_TIME_FIELD_H
+
+#include <cmath>
+
+#include "game/observer.h"
 
 namespace game {
 
@@ -18,9 +23,32 @@ class TimeField {
 public:
   virtual ~TimeField() = default;
 
-  /** @brief dtau/dt for a stationary observer at radiusCm; in (0, 1] for every
-   *         radius that isValidStationRadius accepts. */
-  [[nodiscard]] virtual double properTimeRate(double radiusCm) const = 0;
+  /** @brief dtau/dt for `observer` at radiusCm; in (0, 1] wherever
+   *         admitsObserver(radiusCm, observer) holds. */
+  [[nodiscard]] virtual double properTimeRate(double radiusCm, Observer observer) const = 0;
+
+  /** @brief True when `observer` can be stationed at radiusCm: a hovering
+   *         station needs a valid station radius, an orbit additionally needs a
+   *         bound circular orbit of its sense there. A field without orbital
+   *         structure admits every observer on every valid radius. */
+  [[nodiscard]] virtual bool admitsObserver(double radiusCm, Observer /*observer*/) const {
+    return isValidStationRadius(radiusCm);
+  }
+
+  /** @brief True when `observer` is an orbit the field admits at radiusCm and
+   *         that orbit is stable: at or outside its sense's ISCO, within a
+   *         relative tolerance so a band placed on the ISCO reads stable after
+   *         the cm round trip. An admitted orbit inside the ISCO is unstable
+   *         and held by station-keeping thrust; a hovering station is never an
+   *         orbit. A field without orbital structure calls every admitted
+   *         orbit stable. */
+  [[nodiscard]] virtual bool admitsStableOrbit(double radiusCm, Observer observer) const {
+    return observer != Observer::Hovering && admitsObserver(radiusCm, observer);
+  }
+
+  /** @brief Innermost stable circular orbit radius of an orbit's sense; zero
+   *         for a field without orbital structure. */
+  [[nodiscard]] virtual double iscoRadiusCm(Observer /*orbit*/) const { return 0.0; }
 
   /** @brief One-way coordinate-time delay in seconds for a light signal
    *         exchanged between stations at the two radii. Finite and
@@ -48,6 +76,11 @@ public:
 
   /** @brief Dimensionless spin a/M in [-1, 1]; zero for a non-rotating field. */
   [[nodiscard]] virtual double spinDimensionless() const { return 0.0; }
+
+  /** @brief Spin deficit epsilon = 1 - |a|, the exact spin parameter a field
+   *         near extremal stores; derived from spinDimensionless unless the
+   *         field keeps it directly. */
+  [[nodiscard]] virtual double spinDeficit() const { return 1.0 - std::fabs(spinDimensionless()); }
 };
 
 } // namespace game
