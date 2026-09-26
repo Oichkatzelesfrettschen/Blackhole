@@ -770,9 +770,14 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
       }
       renderRealtimeControls(view, uiState);
       renderBackdropPicker(backdrops, backdropCount, uiState);
+      // The controls above may have changed the focus (or an Advance button
+      // the state): the roster and composer draw a view rebuilt for the focus
+      // now selected, so no frame shows one station's knowledge at another.
+      const game::CampaignViewSnapshot focusedView =
+          session.state().perceivedSnapshot(uiState.focusNode);
       ImGui::SeparatorText("Fleet roster");
-      renderFleetRoster(view, uiState);
-      renderOrderComposer(session, view, uiState);
+      renderFleetRoster(focusedView, uiState);
+      renderOrderComposer(session, focusedView, uiState);
     } else {
       ImGui::TextDisabled("enable to command fleets around Gororoba, the singularity");
     }
