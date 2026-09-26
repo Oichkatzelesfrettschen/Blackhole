@@ -92,6 +92,34 @@ const game::NodeView *findNode(const game::CampaignViewSnapshot &view, game::Nod
   return found == view.nodes.end() ? nullptr : &*found;
 }
 
+/** @brief True when the player stands at a colony: the host's present state
+ *         is then out of reach, and only what the host last sent is shown. */
+bool atColony(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
+  const game::NodeView *focus = findNode(view, uiState.focusNode);
+  return focus != nullptr && focus->isColony;
+}
+
+/** @brief The colony's picture of the host: its latest arrival's stamps and
+ *         their age, and nothing of the host's present. */
+void renderHostAsLastHeard(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
+  const game::NodeView *focus = findNode(view, uiState.focusNode);
+  if (focus == nullptr) {
+    return;
+  }
+  const std::vector<game::ReceivedClock> received =
+      game::latestReceivedClocks(view.arrivals, focus->id, view.nodes.size());
+  const game::ReceivedClock &host = received.at(game::K_AUTHORITY_NODE);
+  if (!host.heard) {
+    ImGui::TextDisabled("host: nothing received yet -- its state is unknown here");
+    return;
+  }
+  ImGui::TextDisabled(
+      "host as last heard: energy banked %.1f (as of its clock %s, sent t%lld, %s ago)",
+      host.senderEnergyUnits, formatSpan(static_cast<double>(host.senderProperSec)).c_str(),
+      static_cast<long long>(host.emitTurn),
+      formatSpan(game::signalAgeCoordinateSec(host, view.turn, view.secondsPerTurn)).c_str());
+}
+
 std::string arrivalText(const game::CampaignViewSnapshot &view, const game::ArrivalRecord &arrival) {
   if (arrival.kind == game::EmitKind::TechPacket) {
     return std::format("tech packet #{} (+{} points)", arrival.payloadIndex + 1,
@@ -121,10 +149,16 @@ const char *capabilityEffectText(game::FleetCapability capability) {
   return "";
 }
 
-void renderTimeLedger(const game::CampaignViewSnapshot &view) {
+void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
   ImGui::Text("turn %lld  |  t_coordinate %.1f d  |  authority dtau/dt %.4f  |  spin a* %.2f",
               static_cast<long long>(view.turn), days(view.coordinateTimeSec),
               view.authorityProperTimeRate, view.spinDimensionless);
+  if (atColony(view, uiState)) {
+    // The host's ledger -- its intel, its bank, its objective -- is host-local
+    // truth; at the colony it exists only as the host's last transmission.
+    renderHostAsLastHeard(view, uiState);
+    return;
+  }
   ImGui::TextDisabled("orders in flight: %zu   reports in flight: %zu   intel: %zu",
                       view.ordersInFlight.size(), view.reportsInFlight.size(),
                       view.intel.size());
@@ -237,18 +271,13 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
     return;
   }
   ImGui::Text("fleet %u selected", uiState.selectedFleet);
+  // Orders leave from where the player stands; the delay runs from its radius.
+  // Standing at the colony, only the colony can send.
+  const game::NodeView *focus = findNode(view, uiState.focusNode);
+  uiState.commandOrigin = focus != nullptr ? focus->id : game::K_AUTHORITY_NODE;
   if (view.nodes.size() > 1) {
-    // Orders leave from a station; the delay runs from its radius.
-    int originChoice = static_cast<int>(uiState.commandOrigin);
-    ImGui::TextUnformatted("send from");
-    for (const game::NodeView &node : view.nodes) {
-      ImGui::SameLine();
-      ImGui::RadioButton(std::format("{}##origin{}", nodeName(node.id), node.id).c_str(),
-                         &originChoice, static_cast<int>(node.id));
-    }
-    uiState.commandOrigin = static_cast<game::NodeId>(originChoice);
-  } else {
-    uiState.commandOrigin = game::K_AUTHORITY_NODE;
+    ImGui::SameLine();
+    ImGui::TextDisabled("(orders leave from the %s)", nodeName(uiState.commandOrigin));
   }
 
   char bandPreview[64];
@@ -312,16 +341,21 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
   }
 
   if (uiState.lastCommandValid && !uiState.lastCommandAccepted) {
-    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
-                       "order rejected (horizon, retrograde-in-ergosphere, out of fuel, or "
-                       "a dark origin)");
+    // One message for every refusal: the reason can depend on state the
+    // sender has no way to know yet.
+    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "order refused");
   }
 }
 
-void renderIntelWindow(const game::CampaignViewSnapshot &view) {
+void renderIntelWindow(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
   ImGui::SetNextWindowPos(ImVec2(980.0f, 40.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(420.0f, 300.0f), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Campaign Intel", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    ImGui::End();
+    return;
+  }
+  if (atColony(view, uiState)) {
+    ImGui::TextDisabled("the intel log is kept at the host; the colony sees only its inbox");
     ImGui::End();
     return;
   }
@@ -370,6 +404,11 @@ void startColonyStory(CampaignUiState &uiState) {
   uiState.focusNode = game::K_FIRST_COLONY_NODE;
   uiState.commandOrigin = game::K_FIRST_COLONY_NODE;
   uiState.realtime = false;
+  // A fresh driver: backlog owed to the old session is not owed to this one.
+  game::RealtimeDriverConfig config;
+  config.secondsPerTurn = uiState.storySession->state().config().secondsPerTurn;
+  config.localSecondsPerWallSecond = static_cast<double>(uiState.localSecondsPerWallSecond);
+  uiState.driver = game::RealtimeDriver(config);
 }
 
 /** @brief Real-time controls: start the story, run the clock at the focused
@@ -378,6 +417,7 @@ void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiSt
   ImGui::SeparatorText("Real time");
   if (!uiState.storySession && ImGui::Button("Land on Miller's planet (host story)")) {
     startColonyStory(uiState);
+    return; // this frame's view is the old session's
   }
   if (!uiState.storyError.empty()) {
     ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "story: %s", uiState.storyError.c_str());
@@ -395,6 +435,7 @@ void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiSt
                          &focusChoice, static_cast<int>(node.id));
     }
     uiState.focusNode = static_cast<game::NodeId>(focusChoice);
+    focus = findNode(view, uiState.focusNode);
   }
   ImGui::Checkbox("run in real time", &uiState.realtime);
   ImGui::SameLine();
@@ -507,7 +548,7 @@ void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &
   ImGui::End();
 }
 
-void renderTechWindow(const game::CampaignViewSnapshot &view) {
+void renderTechWindow(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
   if (view.techTiers.empty()) {
     return;
   }
@@ -523,9 +564,13 @@ void renderTechWindow(const game::CampaignViewSnapshot &view) {
       points = std::max(points, node.techPoints);
     }
   }
-  ImGui::Text("colony tier %lld (%lld points)   energy banked at host %.1f",
-              static_cast<long long>(view.colonyTechTier), static_cast<long long>(points),
-              view.energyUnits);
+  ImGui::Text("colony tier %lld (%lld points)", static_cast<long long>(view.colonyTechTier),
+              static_cast<long long>(points));
+  if (atColony(view, uiState)) {
+    renderHostAsLastHeard(view, uiState);
+  } else {
+    ImGui::Text("energy banked at host %.1f", view.energyUnits);
+  }
   for (const game::TechLevelView &level : view.techTiers) {
     const bool unlocked = points >= level.points;
     ImGui::TextColored(unlocked ? ImVec4(0.5f, 1.0f, 0.6f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
@@ -594,28 +639,16 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
 
 void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiState &uiState,
                            const CampaignBackdrop *backdrops, int backdropCount) {
-  // The story session, once started, is the one every window plays.
-  game::CampaignSession &session =
-      uiState.storySession ? *uiState.storySession : defaultSession;
-  if (uiState.windowsOpen && uiState.realtime) {
-    // Wall time enters here and nowhere in the campaign: the driver turns it
-    // into whole turns at the focused station's rate, stopping on a flagged
-    // arrival's own turn.
-    const game::RealtimePumpResult pumped = uiState.driver.pump(
-        static_cast<double>(ImGui::GetIO().DeltaTime),
-        [&session, &uiState]() { return stepTurn(session, uiState.inbox); });
-    uiState.lagging = pumped.lagging;
-    if (pumped.pausedByArrival) {
-      uiState.inboxOpen = true;
-    }
-  }
   ImGui::SetNextWindowPos(ImVec2(420.0f, 40.0f), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(540.0f, 420.0f), ImGuiCond_FirstUseEver);
   if (ImGui::Begin("Campaign", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::Checkbox("Singularity: GOROROBA", &uiState.windowsOpen);
     if (uiState.windowsOpen) {
+      // The story session, once started, is the one every window plays.
+      game::CampaignSession &session =
+          uiState.storySession ? *uiState.storySession : defaultSession;
       const game::CampaignViewSnapshot view = session.state().renderSnapshot();
-      renderTimeLedger(view);
+      renderTimeLedger(view, uiState);
       renderClocks(view, uiState);
       for (const int count : {1, 5, 25}) {
         if (count > 1) {
@@ -624,8 +657,12 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
         const std::string label =
             count == 1 ? std::string("Advance turn") : std::format("Advance {}", count);
         if (ImGui::Button(label.c_str())) {
+          // A flagged arrival stops a batch on its own turn, as in real time.
           for (int step = 0; step < count; ++step) {
-            static_cast<void>(stepTurn(session, uiState.inbox));
+            if (stepTurn(session, uiState.inbox)) {
+              uiState.inboxOpen = true;
+              break;
+            }
           }
         }
       }
@@ -640,6 +677,27 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
   }
   ImGui::End();
 
+  // The story button above may have swapped sessions this frame.
+  game::CampaignSession &session =
+      uiState.storySession ? *uiState.storySession : defaultSession;
+  if (uiState.windowsOpen && uiState.realtime) {
+    // Wall time enters here and nowhere in the campaign: the driver turns it
+    // into whole turns at the focused station's rate, stopping on a flagged
+    // arrival's own turn. It runs after the controls, so a focus change made
+    // this frame already sets this frame's rate.
+    const std::vector<game::StationNode> &nodes = session.state().nodes();
+    if (uiState.focusNode < nodes.size()) {
+      uiState.driver.setFocusRate(nodes.at(uiState.focusNode).clock.rate());
+    }
+    const game::RealtimePumpResult pumped = uiState.driver.pump(
+        static_cast<double>(ImGui::GetIO().DeltaTime),
+        [&session, &uiState]() { return stepTurn(session, uiState.inbox); });
+    uiState.lagging = pumped.lagging;
+    if (pumped.pausedByArrival) {
+      uiState.inboxOpen = true;
+    }
+  }
+
   if (uiState.windowsOpen) {
     // A fresh snapshot after any button above mutated the campaign this frame.
     const game::CampaignViewSnapshot view = session.state().renderSnapshot();
@@ -652,11 +710,11 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
       backdropCredit = chosen.credit;
     }
     renderStrategicMap(view, uiState, backdropTextureId, backdropCredit);
-    renderIntelWindow(view);
+    renderIntelWindow(view, uiState);
     if (uiState.inboxOpen) {
       renderInboxWindow(view, uiState);
     }
-    renderTechWindow(view);
+    renderTechWindow(view, uiState);
   }
 }
 

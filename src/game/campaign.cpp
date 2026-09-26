@@ -578,6 +578,7 @@ CampaignViewSnapshot CampaignState::renderSnapshot() const {
       signal.emitTurn = delivery.emitTurn;
       signal.arrivalTurn = delivery.effectTurn;
       signal.senderProperSecAtEmit = delivery.senderProperSecAtEmit;
+      signal.senderEnergyUnitsAtEmit = delivery.senderEnergyUnitsAtEmit;
       signal.payloadIndex = delivery.payloadIndex;
       signal.techPoints = delivery.techPoints;
       if (delivery.kind == DeliveryKind::ColonyReport) {
@@ -728,6 +729,7 @@ std::vector<std::uint8_t> CampaignState::serializeState() const {
     appendU32(out, delivery.sender);
     appendU32(out, delivery.destination);
     appendI64(out, delivery.senderProperSecAtEmit);
+    appendF64(out, delivery.senderEnergyUnitsAtEmit);
     appendU32(out, delivery.payloadIndex);
     appendI64(out, delivery.techPoints);
     appendU8(out, static_cast<std::uint8_t>(delivery.category));

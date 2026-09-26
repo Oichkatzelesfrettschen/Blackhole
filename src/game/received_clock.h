@@ -9,7 +9,8 @@
  * at emission; the signal age is (now - emitTurn) coordinate turns, which the
  * receiver's own clock experiences as that span times its dtau/dt. Both are
  * pure functions of the arrival record, so the display never peeks at a
- * remote node's present.
+ * remote node's present; the same holds for the host's banked energy, which a
+ * colony knows only as the value stamped on the host's latest arrival.
  */
 
 #ifndef BLACKHOLE_GAME_RECEIVED_CLOCK_H
@@ -30,6 +31,7 @@ struct ReceivedClock {
   std::int64_t emitTurn = -1;       ///< Coordinate turn the latest arrival left.
   std::int64_t arrivalTurn = -1;
   std::int64_t senderProperSec = 0; ///< Received tau: the sender's clock at emission.
+  double senderEnergyUnits = 0.0;   ///< The host's banked energy as of that emission.
 };
 
 /** @brief Latest arrival per sender at `receiver`, indexed by sender id for
@@ -53,6 +55,7 @@ latestReceivedClocks(const std::vector<ArrivalRecord> &arrivals, NodeId receiver
       clock.emitTurn = arrival.emitTurn;
       clock.arrivalTurn = arrival.arrivalTurn;
       clock.senderProperSec = arrival.senderProperSecAtEmit;
+      clock.senderEnergyUnits = arrival.senderEnergyUnitsAtEmit;
     }
   }
   return clocks;

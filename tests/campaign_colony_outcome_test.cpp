@@ -135,3 +135,23 @@ TEST(ColonyOutcome, StationBelowTheClockFloorIsRefused) {
   config.colonies.front().bandIndex = 1;
   EXPECT_TRUE(game::CampaignState(config, field).valid());
 }
+
+// Falsifier: the host's energy stamped on a notice differing from what the
+// host had banked when it sent it (reports from turns 1..15 landed by turn
+// 20), or the colony learning it before the notice's five-turn flight ends.
+TEST(ColonyOutcome, HostEnergyReachesTheColonyOnlyAsStampedAtEmission) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignState state(
+      colonyConfig(R"({"events": [{"id": 1, "triggers": [{"turn_at_least": 20}],
+                        "effects": [{"emit": {"kind": "notice", "to": "colony"}}]}]})",
+                   0),
+      field);
+  ASSERT_TRUE(state.valid());
+  state.advanceTurns(24);
+  EXPECT_TRUE(state.arrivals().empty());
+  state.advanceTurns(1);
+  ASSERT_EQ(state.arrivals().size(), 1U);
+  EXPECT_EQ(state.arrivals().front().emitTurn, 20);
+  EXPECT_DOUBLE_EQ(state.arrivals().front().senderEnergyUnitsAtEmit, 15.0);
+  EXPECT_DOUBLE_EQ(state.energyUnits(), 20.0);
+}

@@ -234,6 +234,7 @@ private:
     NodeId sender = K_NO_NODE;            ///< Emitting node; K_NO_NODE for fleet reports.
     NodeId destination = K_AUTHORITY_NODE; ///< Receiving node (fleet deliveries: unused).
     std::int64_t senderProperSecAtEmit = 0; ///< Sender's whole local seconds at emission.
+    double senderEnergyUnitsAtEmit = 0.0; ///< Host's banked energy at emission (host senders).
     std::uint32_t payloadIndex = 0;       ///< Tech packet ordinal, or the notice's event id.
     std::int64_t techPoints = 0;          ///< TechPacket payload.
     EventCategory category = EventCategory::Info;

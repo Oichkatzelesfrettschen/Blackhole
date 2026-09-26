@@ -67,6 +67,9 @@ struct ArrivalRecord {
   std::int64_t emitTurn = 0;
   std::int64_t arrivalTurn = 0;
   std::int64_t senderProperSecAtEmit = 0; ///< Sender's whole local seconds at emission.
+  /// The host's banked energy when it sent this (zero from a colony): what a
+  /// colony can know of the host's economy, and only as of that emission.
+  double senderEnergyUnitsAtEmit = 0.0;
   std::uint32_t payloadIndex = 0; ///< Tech packet ordinal from its sender, or the notice's event id.
   std::int64_t techPoints = 0;
 };

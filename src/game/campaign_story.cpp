@@ -354,6 +354,7 @@ void CampaignState::emitNodeDelivery(DeliveryKind kind, const StationNode &sende
   delivery.sender = sender.id;
   delivery.destination = destination;
   delivery.senderProperSecAtEmit = sender.clock.properSec();
+  delivery.senderEnergyUnitsAtEmit = sender.id == K_AUTHORITY_NODE ? energyUnits_ : 0.0;
   delivery.payloadIndex = payloadIndex;
   delivery.techPoints = techPoints;
   delivery.category = category;
@@ -411,6 +412,7 @@ void CampaignState::receiveNodeDelivery(const Delivery &delivery) {
   record.emitTurn = delivery.emitTurn;
   record.arrivalTurn = clock_.turn();
   record.senderProperSecAtEmit = delivery.senderProperSecAtEmit;
+  record.senderEnergyUnitsAtEmit = delivery.senderEnergyUnitsAtEmit;
   record.payloadIndex = delivery.payloadIndex;
   record.techPoints = delivery.techPoints;
   arrivals_.push_back(record);
@@ -580,6 +582,7 @@ void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
     appendI64(out, arrival.emitTurn);
     appendI64(out, arrival.arrivalTurn);
     appendI64(out, arrival.senderProperSecAtEmit);
+    appendF64(out, arrival.senderEnergyUnitsAtEmit);
     appendU32(out, arrival.payloadIndex);
     appendI64(out, arrival.techPoints);
   }
