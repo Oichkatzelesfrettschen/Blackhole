@@ -745,6 +745,7 @@ void renderTonemapPanel(RenderState &rs) {
                      ImGuiSliderFlags_Logarithmic);
   ImGui::SliderFloat("gamma", &rs.post.gamma, 1.0f, 4.0f);
   settings.tonemappingEnabled = rs.post.tonemappingEnabled;
+  settings.toneExposure = rs.post.toneExposure;
   settings.gamma = rs.post.gamma;
   ImGui::End();
 }

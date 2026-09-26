@@ -22,6 +22,24 @@
 inline constexpr float K_DEFAULT_CAMERA_DISTANCE = 240.0f;
 inline constexpr float K_DEFAULT_CAMERA_PITCH_DEG = 10.0f;
 
+/// Tone-map exposure of fresh settings: the record exposure rule
+/// (render/record_mode.h) at the default camera, diskBrightness 0.25, and
+/// gamma 2.5. The raw disk's 99th-percentile luminance there is 0.1742, and
+/// ACES^-1(0.9^2.5) / 0.1742 = 0.855 / 0.1742 = 4.9.
+inline constexpr float K_DEFAULT_TONE_EXPOSURE = 4.9f;
+
+/// Exposure of a settings file that has no toneExposure key, written before
+/// the exposure was saved: the fixed startup exposure of that time, so such a
+/// file keeps its look.
+inline constexpr float K_LEGACY_TONE_EXPOSURE = 1.0f;
+
+/// Background intensity of fresh settings: the rule's sky target at
+/// K_DEFAULT_TONE_EXPOSURE. The default sky (nasa_pia22085) has raw
+/// 99th-percentile luminance 0.591 at intensity 1 from the default camera,
+/// linear in the intensity, and ACES^-1(0.8^2.5) / (4.9 * 0.591) =
+/// 0.438 / 2.90 = 0.15 puts it at display 0.8.
+inline constexpr float K_DEFAULT_BACKGROUND_INTENSITY = 0.15f;
+
 struct Settings {
   // === DISPLAY ===
   int windowWidth = 1920;
@@ -87,13 +105,14 @@ struct Settings {
 
   // === RENDERING ===
   bool tonemappingEnabled = true;
+  float toneExposure = K_DEFAULT_TONE_EXPOSURE;
   float bloomStrength = 0.1f;
   int bloomIterations = 8;
 
   // === BACKGROUND ===
   bool backgroundEnabled = true;
   std::string backgroundId = "nasa_pia22085";
-  float backgroundIntensity = 1.0f;
+  float backgroundIntensity = K_DEFAULT_BACKGROUND_INTENSITY;
   float backgroundParallaxStrength = 0.0006f;
   float backgroundDriftStrength = 0.01f;
 

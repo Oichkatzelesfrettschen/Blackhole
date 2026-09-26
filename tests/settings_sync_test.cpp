@@ -40,6 +40,7 @@ Settings distinctSettings() {
   settings.swapInterval = 2;
   settings.bloomStrength = 0.7f;
   settings.tonemappingEnabled = false;
+  settings.toneExposure = 3.5f;
   settings.gamma = 1.8f;
   settings.bloomIterations = 4;
   return settings;
@@ -71,7 +72,7 @@ TEST(SettingsSync, HydratesOnceThenLatches) {
   EXPECT_EQ(rs.display.swapInterval, 2);
   EXPECT_FLOAT_EQ(rs.post.bloomStrength, 0.7f);
   EXPECT_FALSE(rs.post.tonemappingEnabled);
-  EXPECT_FLOAT_EQ(rs.post.toneExposure, 1.0f);
+  EXPECT_FLOAT_EQ(rs.post.toneExposure, 3.5f);
   EXPECT_FLOAT_EQ(rs.post.gamma, 1.8f);
   EXPECT_EQ(rs.post.bloomIterations, 4);
   EXPECT_TRUE(rs.camera.cameraSettingsLoaded);
@@ -115,6 +116,7 @@ TEST(SettingsSync, WritesBackLiveState) {
   rs.post.bloomStrength = 0.42f;
   rs.post.tonemappingEnabled = false;
   rs.post.gamma = 2.1f;
+  rs.post.toneExposure = 7.25f;
   rs.post.bloomIterations = 6;
 
   Settings settings; // defaults, overwritten by the sync
@@ -127,5 +129,6 @@ TEST(SettingsSync, WritesBackLiveState) {
   EXPECT_FLOAT_EQ(settings.bloomStrength, 0.42f);
   EXPECT_FALSE(settings.tonemappingEnabled);
   EXPECT_FLOAT_EQ(settings.gamma, 2.1f);
+  EXPECT_FLOAT_EQ(settings.toneExposure, 7.25f);
   EXPECT_EQ(settings.bloomIterations, 6);
 }
