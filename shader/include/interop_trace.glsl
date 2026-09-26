@@ -734,7 +734,9 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   KerrConsts c;
   KerrRay    kRay;
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
-  vec3 origin = kerrChartPosition(ray.position, rsMetric, aTrace);
+  // Propagation direction of the latest step: a ray that exhausts its step
+  // budget is shaded as escaping along it, as the escape branch does.
+  vec3 lastDir = ray.velocity;
 
   vec3  accumI   = vec3(0.0);
   float transmit = 1.0;
@@ -753,6 +755,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
     KerrRay before = kRay;
     kerrStep(kRay, rsMetric, aTrace, c, rteStepDt);
     vec3 newPos = kerrRayPosition(kRay);
+    lastDir = newPos - curPos;
     // rteStepDt is a Mino-time increment; transfer integrates over affine
     // length (kerrAffineStep), the unit of jEff and alphaNu.
     float pathStep = kerrAffineStep(before, kRay, aTrace, rteStepDt);
@@ -787,9 +790,8 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Max steps exhausted -- treat as escaped toward last known direction
   vec3 finalPos = kerrRayPosition(kRay);
   terminalPos = finalPos;
-  vec3 escDir   = finalPos - origin;
-  if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
-    accumI += transmit * bhBackgroundColorFromDir(normalize(escDir)).rgb;
+  if (dot(lastDir, lastDir) > BH_EPSILON * BH_EPSILON) {
+    accumI += transmit * bhBackgroundColorFromDir(normalize(lastDir)).rgb;
   }
   return vec4(accumI, 1.0);
 }
@@ -850,7 +852,9 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   KerrConsts c;
   KerrRay    kRay;
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
-  vec3 origin = kerrChartPosition(ray.position, rsMetric, aTrace);
+  // Propagation direction of the latest step: a ray that exhausts its step
+  // budget is shaded as escaping along it, as the escape branch does.
+  vec3 lastDir = ray.velocity;
   // Set when the ray escapes or the medium turns opaque; otherwise the step
   // budget ran out and the ray is shaded as escaping along its last
   // direction, as bhTraceGeodesicRTE does.
@@ -879,6 +883,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
     KerrRay before = kRay;
     kerrStep(kRay, rsMetric, aTrace, c, stepDt);
     vec3 newPos = kerrRayPosition(kRay);
+    lastDir = newPos - curPos;
     // Affine path length of the Mino step (kerrAffineStep), the unit of
     // alphaNu and rhoV.
     float pathStep = kerrAffineStep(before, kRay, aTrace, stepDt);
@@ -927,9 +932,8 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
 
   // Map accumulated Stokes state to display color
   terminalPos = kerrRayPosition(kRay);
-  vec3 budgetDir = terminalPos - origin;
-  if (!finished && dot(budgetDir, budgetDir) > BH_EPSILON * BH_EPSILON) {
-    accumI += transmit * bhBackgroundColorFromDir(normalize(budgetDir)).rgb;
+  if (!finished && dot(lastDir, lastDir) > BH_EPSILON * BH_EPSILON) {
+    accumI += transmit * bhBackgroundColorFromDir(normalize(lastDir)).rgb;
   }
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
   vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);

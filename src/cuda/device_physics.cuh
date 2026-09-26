@@ -2228,6 +2228,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     KerrRay    kr;
     d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
     float3 const origin = d_kerr_chart_position(cam_pos, rs, a_trace);
+    /* Propagation direction of the latest step: a ray that exhausts its step
+     * budget is shaded as escaping along it, as the escape branch does. */
+    float3 last_dir = ray_dir;
 
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
     float  transmit = 1.0f;
@@ -2252,6 +2255,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         KerrRay const before = kr;
         d_kerr_step(kr, rs, a_trace, c, step_dt_rte);
         float3 const new_pos = d_kerr_ray_position(kr);
+        last_dir = d_sub(new_pos, cur_pos);
         /* step_dt_rte is a Mino-time increment; transfer integrates over
          * affine length (d_kerr_affine_step), the unit of j_eff and alpha_nu. */
         float const path_step = d_kerr_affine_step(before, kr, a_trace, step_dt_rte);
@@ -2299,7 +2303,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     /* Step budget exhausted -- treat as escaped along last known direction */
     float3 const final_pos = d_kerr_ray_position(kr);
     if (terminal_pos != nullptr) { *terminal_pos = final_pos; }
-    float3 const esc_dir   = d_sub(final_pos, origin);
+    float3 const esc_dir   = last_dir;
     if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
         float4 const bg4 = d_background_color(d_normalize(esc_dir));
         float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
@@ -2523,6 +2527,9 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     KerrRay    kr;
     d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
     float3 const origin = d_kerr_chart_position(cam_pos, rs, a_trace);
+    /* Propagation direction of the latest step: a ray that exhausts its step
+     * budget is shaded as escaping along it, as the escape branch does. */
+    float3 last_dir = ray_dir;
     /* Set when the ray escapes or the medium turns opaque; otherwise the step
      * budget ran out and the ray is shaded as escaping along its last
      * direction, as d_trace_geodesic_rte does. */
@@ -2556,6 +2563,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         KerrRay const before = kr;
         d_kerr_step(kr, rs, a_trace, c, step_dt);
         float3 const new_pos = d_kerr_ray_position(kr);
+        last_dir = d_sub(new_pos, cur_pos);
         /* Affine path length of the Mino step, the unit of alpha_nu and rho_v. */
         float const path_step = d_kerr_affine_step(before, kr, a_trace, step_dt);
 
@@ -2619,7 +2627,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     }
 
     if (!finished) {
-        float3 const esc_dir = d_sub(d_kerr_ray_position(kr), origin);
+        float3 const esc_dir = last_dir;
         if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
             float4 const bg4 = d_background_color(d_normalize(esc_dir));
             float3 bg = make_f3(bg4.x, bg4.y, bg4.z);

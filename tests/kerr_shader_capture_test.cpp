@@ -1696,3 +1696,100 @@ void main() {
   glDeleteTextures(1, &sky);
   glDeleteProgram(program);
 }
+
+namespace {
+
+// A 1x1-per-face cube map with a distinct color per face, so the sky a ray
+// samples identifies its direction's dominant axis.
+GLuint directionalSkyCube() {
+  GLuint sky = 0;
+  glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &sky);
+  glTextureStorage2D(sky, 1, GL_RGBA32F, 1, 1);
+  const std::array<std::array<float, 4>, 6> faces = {{{1.0F, 0.0F, 0.0F, 1.0F},
+                                                     {0.0F, 1.0F, 0.0F, 1.0F},
+                                                     {0.0F, 0.0F, 1.0F, 1.0F},
+                                                     {1.0F, 1.0F, 0.0F, 1.0F},
+                                                     {0.0F, 1.0F, 1.0F, 1.0F},
+                                                     {1.0F, 0.0F, 1.0F, 1.0F}}};
+  for (int face = 0; face < 6; ++face) {
+    glTextureSubImage3D(sky, 0, 0, 0, face, 1, 1, 1, GL_RGBA, GL_FLOAT,
+                        faces.at(static_cast<std::size_t>(face)).data());
+  }
+  return sky;
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, BudgetExhaustionSkyFollowsTheLastStep) {
+  // Near-critical rays (b just above 3 sqrt 3 M, a = 0) wind around the hole;
+  // with a 100-step budget they run out mid-orbit. The volumetric traces
+  // shade them with the sky along the last step's propagation direction,
+  // which bhTraceGeodesic reports as escapedDir, not along the chord from the
+  // camera to the last point, which points elsewhere for a bent ray.
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  const GLuint program = bhtest::createComputeProgram(comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+void main() {
+  int i = int(gl_GlobalInvocationID.y) * int(gl_NumWorkGroups.x) * 16 +
+          int(gl_GlobalInvocationID.x);
+  if (i >= 16) {
+    return;
+  }
+  float alpha = 0.1776 + 0.02 * float(i) / 15.0;
+  Ray ray;
+  ray.position = vec3(30.0, 0.0, 0.0);
+  ray.velocity = vec3(-cos(alpha), sin(alpha), 0.0);
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 100, 0.1);
+  vec3 terminalPos;
+  vec3 rte = bhTraceGeodesicRTE(ray, 2.0, 100.0, 100, 0.1, 0.5, terminalPos).rgb;
+  vec3 pol = bhTraceGeodesicStokes(ray, 2.0, 100.0, 100, 0.1, 0.5, 0.0, 0.0, terminalPos).rgb;
+  vec3 lastStep = bhBackgroundColorFromDir(normalize(hit.escapedDir), hit.minRadius, 2.0).rgb;
+  vec3 chord = bhBackgroundColorFromDir(normalize(hit.hitPoint - hit.origin), hit.minRadius, 2.0).rgb;
+  bool exhausted = (hit.debugFlags & BH_DEBUG_FLAG_MAXSTEPS) != 0 && !hit.hitHorizon;
+  int o = 13 * i;
+  result[o] = exhausted ? 1.0 : 0.0;
+  for (int c = 0; c < 3; ++c) {
+    result[o + 1 + c] = rte[c];
+    result[o + 4 + c] = pol[c];
+    result[o + 7 + c] = lastStep[c];
+    result[o + 10 + c] = chord[c];
+  }
+}
+)");
+  const GLuint sky = directionalSkyCube();
+  glBindTextureUnit(0, sky);
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  constexpr std::size_t floats = 208; // 13 per ray, 16 rays
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * floats), nullptr,
+                    GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  glUseProgram(program);
+  glUniform1i(glGetUniformLocation(program, "galaxy"), 0);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "bhDebugFlags"), 4.0F);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, floats, 1);
+  int exhausted = 0;
+  int chordDiffers = 0;
+  for (std::size_t i = 0; i < 16; ++i) {
+    const std::size_t o = 13 * i;
+    if (out.at(o) < 0.5F) {
+      continue;
+    }
+    ++exhausted;
+    bool differs = false;
+    for (std::size_t c = 0; c < 3; ++c) {
+      EXPECT_NEAR(out.at(o + 1 + c), out.at(o + 7 + c), 1e-5F) << "RTE ray " << i << " c " << c;
+      EXPECT_NEAR(out.at(o + 4 + c), out.at(o + 7 + c), 1e-5F) << "Stokes ray " << i << " c " << c;
+      differs = differs || std::abs(out.at(o + 10 + c) - out.at(o + 7 + c)) > 0.5F;
+    }
+    chordDiffers += differs ? 1 : 0;
+  }
+  EXPECT_GT(exhausted, 8);
+  EXPECT_GT(chordDiffers, 8);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteTextures(1, &sky);
+  glDeleteProgram(program);
+}
