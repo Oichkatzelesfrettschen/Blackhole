@@ -24,6 +24,11 @@ void RealtimeDriver::setFocusRate(double properTimeRate) {
   focusRate_ = properTimeRate;
 }
 
+void RealtimeDriver::setLocalSecondsPerWallSecond(double localSecondsPerWallSecond) {
+  assert(std::isfinite(localSecondsPerWallSecond) && localSecondsPerWallSecond > 0.0);
+  config_.localSecondsPerWallSecond = localSecondsPerWallSecond;
+}
+
 void RealtimeDriver::setPaused(bool shouldPause) {
   paused_ = shouldPause;
   if (paused_) {

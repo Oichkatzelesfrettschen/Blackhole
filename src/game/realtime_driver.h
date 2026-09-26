@@ -62,6 +62,15 @@ public:
   void setFocusRate(double properTimeRate);
   [[nodiscard]] double focusRate() const { return focusRate_; }
 
+  /** @brief Changes the real-time scale in place. The backlog already owed
+   *         (fractional or lagging) is wall time the world has not yet run,
+   *         so it carries over; only turns accrued from now on use the new
+   *         scale. */
+  void setLocalSecondsPerWallSecond(double localSecondsPerWallSecond);
+  [[nodiscard]] double localSecondsPerWallSecond() const {
+    return config_.localSecondsPerWallSecond;
+  }
+
   void setPaused(bool shouldPause);
   [[nodiscard]] bool paused() const { return paused_; }
 

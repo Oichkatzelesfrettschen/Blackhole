@@ -199,6 +199,34 @@ TEST(RealtimeDriver, FrameBudgetCapsTurnsAndFlagsLagging) {
   EXPECT_FALSE(drained.lagging);
 }
 
+// Falsifier: a change of real-time scale dropping the turns already owed --
+// a fractional backlog that the next short frame should tip into a turn, or
+// a lagging backlog above the frame budget.
+TEST(RealtimeDriver, ScaleChangeKeepsTheBacklog) {
+  const game::RealtimeDriver::StepFunction step = []() { return false; };
+  game::RealtimeDriver fractional;
+  fractional.setFocusRate(K_MILLER_RATE);
+  EXPECT_EQ(fractional.pump(1.0, step).turnsAdvanced, 0); // 0.711 turns owed
+  fractional.setLocalSecondsPerWallSecond(2.0);
+  EXPECT_NEAR(fractional.turnsDue(), 0.71067, 1e-4);
+  EXPECT_DOUBLE_EQ(fractional.localSecondsPerWallSecond(), 2.0);
+  // 0.25 s at twice the scale adds 0.355 turns: the carried 0.711 tips it over.
+  EXPECT_EQ(fractional.pump(0.25, step).turnsAdvanced, 1);
+
+  game::RealtimeDriverConfig config;
+  config.maxTurnsPerFrame = 4;
+  config.maxBacklogFrames = 2;
+  game::RealtimeDriver lagging(config);
+  lagging.setFocusRate(K_MILLER_RATE);
+  EXPECT_EQ(lagging.pump(1000.0, step).turnsAdvanced, 4);
+  const double owed = lagging.turnsDue();
+  EXPECT_GE(owed, 4.0);
+  lagging.setLocalSecondsPerWallSecond(3.0);
+  EXPECT_DOUBLE_EQ(lagging.turnsDue(), owed);
+  EXPECT_TRUE(lagging.lagging());
+  EXPECT_EQ(lagging.pump(1e-9, step).turnsAdvanced, 4);
+}
+
 // Falsifier: one command log reaching a different digest on any turn when
 // played at authority focus with smooth frames, at Miller focus with a tiny
 // per-frame budget and jittered frames, or with focus flipping every frame

@@ -505,12 +505,9 @@ void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiSt
   if (ImGui::SliderFloat("local s per wall s", &uiState.localSecondsPerWallSecond, 1.0f,
                          static_cast<float>(game::K_MAX_LOCAL_SECONDS_PER_WALL_SECOND), "%.0f",
                          ImGuiSliderFlags_Logarithmic)) {
-    game::RealtimeDriverConfig config;
-    config.secondsPerTurn = view.secondsPerTurn;
-    config.localSecondsPerWallSecond = static_cast<double>(uiState.localSecondsPerWallSecond);
-    const bool wasPaused = uiState.driver.paused();
-    uiState.driver = game::RealtimeDriver(config);
-    uiState.driver.setPaused(wasPaused);
+    // In place: the turns already owed survive a drag of the slider.
+    uiState.driver.setLocalSecondsPerWallSecond(
+        static_cast<double>(uiState.localSecondsPerWallSecond));
   }
   if (focus != nullptr && focus->properTimeRate > 0.0) {
     uiState.driver.setFocusRate(focus->properTimeRate);
