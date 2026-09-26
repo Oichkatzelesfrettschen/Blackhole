@@ -11,6 +11,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -61,7 +62,10 @@ TEST(GpuTiming, HistoryStoresNanForStagesWithoutSamples) {
   GpuTimerSet timers;
   timers.initialized = true;
   timers.tesseract = sampledTimer(1.5);
-  TimingHistory history;
+  // TimingHistory holds eight 240-sample arrays, past GCC's 8 KiB
+  // -Wstack-usage budget once a test frame adds its locals.
+  const auto historyStorage = std::make_unique<TimingHistory>();
+  TimingHistory &history = *historyStorage;
   history.push(16.0f, timers);
   ASSERT_EQ(history.count, 1);
   EXPECT_FLOAT_EQ(history.cpuMs.at(0), 16.0f);
@@ -75,7 +79,8 @@ TEST(GpuTiming, HistoryStoresNanForStagesWithoutSamples) {
 TEST(GpuTiming, UninitializedTimersPublishNothing) {
   GpuTimerSet timers;
   timers.blackholeFragment = sampledTimer(2.0);
-  TimingHistory history;
+  const auto historyStorage = std::make_unique<TimingHistory>();
+  TimingHistory &history = *historyStorage;
   history.push(16.0f, timers);
   EXPECT_TRUE(physics::safeIsnan(history.gpuFragmentMs.at(0)));
 }
