@@ -50,7 +50,7 @@ bool testEfficiencySchwarzschild() {
 /**
  * @brief Test 2: Radiative efficiency for near-extremal Kerr black hole
  *
- * Expected: η ≈ 0.42 (42% efficiency for a→1)
+ * Expected: eta = 1 - E_isco = 0.320994 (scripts/gen_page_thorne_reference.py)
  * Reference: BPT (1972)
  */
 bool testEfficiencyKerrMaximal() {
@@ -60,22 +60,16 @@ bool testEfficiencyKerrMaximal() {
   const double aStar = 0.998;
   const double eta = NovikovThorneDisk::radiativeEfficiency(aStar);
 
-  // Note: Simplified E_ISCO formula gives ~0.32 for a*=0.998
-  // Full BPT formula with angular momentum gives ~0.40-0.42
-  // We accept 0.30-0.42 as valid range for near-extremal Kerr
-  const double expectedRangeMin = 0.30;
-  const double expectedRangeMax = 0.42;
+  // E_isco = sqrt(1 - 2/(3 r_isco)) is exact at the ISCO for every spin.
+  const double expected = 0.320994165616199;
 
   std::cout << std::fixed << std::setprecision(8);
   std::cout << "  Spin:     a* = " << aStar << "\n";
-  std::cout << "  Computed: η = " << eta << "\n";
-  std::cout << "  Expected: η ∈ [" << expectedRangeMin << ", " << expectedRangeMax << "]\n";
+  std::cout << "  Computed: eta = " << eta << "\n";
+  std::cout << "  Expected: eta = " << expected << "\n";
 
-  const bool passed = (eta >= expectedRangeMin && eta <= expectedRangeMax);
-  std::cout << "  Status:   " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
-  if (passed) {
-    std::cout << "  Note:     Simplified E_ISCO formula (acceptable for thin disk)\n";
-  }
+  const bool passed = std::abs(eta - expected) < 1e-5;
+  std::cout << "  Status:   " << (passed ? "PASS" : "FAIL") << "\n";
 
   return passed;
 }
@@ -218,7 +212,7 @@ bool testIntegratedLuminosity() {
   const double lEdd = 1.26e38 * massSolar; // erg/s
 
   // Expected luminosity
-  const double cCgs = ::physics::C * 1e2; // cm/s
+  const double cCgs = ::physics::C; // cm/s
   const double mdotEddCgs = lEdd / (eta * cCgs * cCgs);
   const double expectedL = eta * mdotEdd * mdotEddCgs * cCgs * cCgs;
 
@@ -279,6 +273,42 @@ bool testNormalizedFluxPeak() {
 }
 
 /**
+ * @brief Test 9: Temperature scale in CGS
+ *
+ * Expected: T^4 = 3 G M Mdot f / (8 pi sigma r^3) at r = 9 M, a = 0,
+ * Mdot = 0.1 Mdot_Edd, M = 4e6 M_sun: 1.913e5 K. physics::C is already in
+ * cm/s, so an extra factor 100 on c inflates T by 100.
+ */
+bool testTemperatureScale() {
+  std::cout << "\n[TEST 9] Temperature Scale (CGS)\n";
+  std::cout << "=================================\n";
+
+  const double aStar = 0.0;
+  const double massSolar = 4.0e6;
+  const double r = 9.0;
+  const double t = NovikovThorneDisk::diskTemperature(r, aStar, 0.1, massSolar);
+
+  const double c = ::physics::C;
+  const double mass = massSolar * ::physics::M_SUN;
+  const double eta = NovikovThorneDisk::radiativeEfficiency(aStar);
+  const double mdot = 0.1 * 1.26e38 * massSolar / (eta * c * c);
+  const double rCgs = r * ::physics::G * mass / (c * c);
+  const double f = 1.0 - std::sqrt(NovikovThorneDisk::iscoRadius(aStar) / r);
+  const double expected = std::pow(3.0 * ::physics::G * mass * mdot * f /
+                                       (8.0 * ::physics::PI * 5.67e-5 * rCgs * rCgs * rCgs),
+                                   0.25);
+
+  std::cout << std::scientific << std::setprecision(6);
+  std::cout << "  Computed: T = " << t << " K\n";
+  std::cout << "  Expected: T = " << expected << " K\n";
+
+  const bool passed = std::abs(t / expected - 1.0) < 1e-9 && t > 1.0e5 && t < 1.0e6;
+  std::cout << "  Status:   " << (passed ? "PASS" : "FAIL") << "\n";
+
+  return passed;
+}
+
+/**
  * @brief Main test runner
  */
 } // namespace
@@ -290,7 +320,7 @@ int main() {
     std::cout << "========================================================\n";
 
     int passed = 0;
-    int const total = 8;
+    int const total = 9;
 
     // Run all tests
     if (testEfficiencySchwarzschild()) {
@@ -315,6 +345,9 @@ int main() {
       passed++;
     }
     if (testNormalizedFluxPeak()) {
+      passed++;
+    }
+    if (testTemperatureScale()) {
       passed++;
     }
 
