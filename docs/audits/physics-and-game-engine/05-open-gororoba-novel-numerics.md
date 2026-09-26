@@ -663,8 +663,13 @@ piecewise constant on dyadic cells. `noise.cpp`'s per-voxel hash noise gains not
 
 ### M8. open_gororoba crate tests
 
-    CARGO_TARGET_DIR=$OUT/target cargo test --offline --locked --release \
-      -p pathion_ellip -p fwht -p fixed_point_lbm -p cosmic_scheduler -p gororoba_sparse_grid -p tensor_core
+The workspace `Cargo.toml` for these crates lives in the `open_gororoba` checkout, not in
+Blackhole, so the command runs with `OG` as its working directory (`harness/README.md`
+Replay section):
+
+    (cd "$OG" &&
+     CARGO_TARGET_DIR="$OUT/target" cargo test --offline --locked --release \
+       -p pathion_ellip -p fwht -p fixed_point_lbm -p cosmic_scheduler -p gororoba_sparse_grid -p tensor_core)
 
 All pass: exit 0, with pathion_ellip 35, fwht 5, fixed_point_lbm 8, and cosmic_scheduler
 13 + 9 + 6 + 10 + 2. Sections M1 and M5 show these suites passing over the defects listed,

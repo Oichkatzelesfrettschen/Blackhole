@@ -12,19 +12,24 @@ unquoted file lists.
 
     PYTHON=${PYTHON:-python3}      # needs numpy, scipy, mpmath
     HARNESS=$PWD/docs/audits/physics-and-game-engine/harness
-    BH=<absolute path of a Blackhole worktree at 34e1bf1>
-    BOOST=<Boost include directory, e.g. the Conan boost package's p/include>
-    OUT=<absolute scratch directory outside the tree>
-    OG=<absolute path of an open_gororoba checkout at 006230b603c2f1705a72c6bb32348833abfb4565>
+    BH=/absolute/path/to/Blackhole            # a worktree at 34e1bf1; edit before running
+    BOOST=/absolute/path/to/boost/include     # e.g. the Conan boost package's p/include
+    GLM=/absolute/path/to/glm/include         # e.g. the Conan glm package's p/include
+    OUT=/absolute/path/to/scratch             # outside the tree
+    OG=/absolute/path/to/open_gororoba        # a checkout at 006230b603c2f1705a72c6bb32348833abfb4565
     export PYTHONDONTWRITEBYTECODE=1
-    test "$(git -C "$BH" rev-parse --short=7 HEAD)" = 34e1bf1 || echo "BH is not at 34e1bf1"
+    test "$(git -C "$BH" rev-parse --short=7 HEAD)" = 34e1bf1 ||
+      { echo "BH is not at 34e1bf1" >&2; return 1 2>/dev/null || exit 1; }
     test "$(git -C "$OG" rev-parse HEAD)" = 006230b603c2f1705a72c6bb32348833abfb4565 ||
-      echo "OG is not at the audited open_gororoba commit"
+      { echo "OG is not at the audited open_gororoba commit" >&2; return 1 2>/dev/null || exit 1; }
 
 The compiler in the audit was clang 22.1.8. Every block runs in a subshell under `$OUT`, so
-the tree stays clean. The Rust crates (`grx/`, `pe_bench/`) take path dependencies on an
-open_gororoba checkout beside the Blackhole checkout (`../open_gororoba` from the checkout
-root); edit the `path` in their `Cargo.toml` for another layout. Each Rust block copies
+the tree stays clean. `bh/driver.cpp` includes `physics/lut.h`, which pulls in `batch.h`
+and then `math_types.h`'s `<glm/glm.hpp>`; only that compile needs `-I"$GLM"`, the other
+`bh/` and `game/` drivers do not touch `glm`. The Rust crates (`grx/`, `pe_bench/`) take
+path dependencies on an open_gororoba checkout beside the Blackhole checkout
+(`../open_gororoba` from the checkout root); edit the `path` in their `Cargo.toml` for
+another layout. Each Rust block copies
 open_gororoba's own `Cargo.lock` beside the manifest, because a fresh resolution selects
 yanked `chacha20` versions, runs `--offline` (`--locked` refuses the added root entry), and
 deletes the lock afterward. Timings were pinned with `taskset -c 3`;
@@ -76,7 +81,7 @@ Python (compare with `*.expected.txt` and `referee.json`):
 Report 02 drivers:
 
     (mkdir -p "$OUT/bh" && cd "$OUT/bh" &&
-     clang++ -std=c++23 -O2 -I"$BH/src" -I"$BOOST" "$HARNESS/bh/driver.cpp" "$BH/src/physics/kerr.cpp" "$BH/src/physics/schwarzschild.cpp" -o driver && ./driver &&
+     clang++ -std=c++23 -O2 -I"$BH/src" -I"$BOOST" -I"$GLM" "$HARNESS/bh/driver.cpp" "$BH/src/physics/kerr.cpp" "$BH/src/physics/schwarzschild.cpp" -o driver && ./driver &&
      clang++ -std=c++23 -O2 -DDL=1e-5 -I"$BH/src" "$HARNESS/bh/mino2.cpp" "$BH/src/physics/kerr.cpp" -o mino2 && ./mino2 &&
      clang++ -std=c++23 -O2 -I"$BH/src" "$HARNESS/bh/gfac.cpp" -o gfac && ./gfac &&
      clang++ -std=c++23 -O2 -I"$BH/src" "$HARNESS/bh/ecg.cpp" -o ecg && ./ecg)
@@ -128,3 +133,9 @@ Report 05 drivers:
      rc=$?; rm -f "$HARNESS/pe_bench/Cargo.lock"; exit $rc)
 
 `pe_bench` reads `../carlson/ref.csv`, so the Carlson block runs first.
+
+Report 05 M8 (`open_gororoba` crate tests, run from the `OG` checkout, not from `BH`):
+
+    (cd "$OG" &&
+     CARGO_TARGET_DIR="$OUT/target" cargo test --offline --locked --release \
+       -p pathion_ellip -p fwht -p fixed_point_lbm -p cosmic_scheduler -p gororoba_sparse_grid -p tensor_core)

@@ -29,8 +29,10 @@ quantitative consequences (shadow widths, ray counts) rest on that agent's scrat
    initializer's Q equals Carter's Q + Lz^2. `kerr.glsl:175` then builds
    R = A^2 - Delta (Q + (Lz - a)^2) with Carter's form, which over-subtracts Delta Lz^2. The
    same pair lives in `src/cuda/device_physics.cuh:390,481,484` and `src/physics/kerr.cpp:91`.
-   The reporting agent measures the shadow at a != 0 at 0.67-0.69x the correct width, with
-   a 32% jump between a = 0 (Schwarzschild RK4 branch) and a = 0.01. `roadmap.md:451` and
+   The reporting agent measures the shadow at a != 0 at 0.67-0.69x the width the same
+   (non-tetrad) coordinate camera gives with the standard R (01 F1's table; a physical-size
+   figure needs F9's observer-tetrad fix), with a 32% jump between a = 0 (Schwarzschild RK4
+   branch) and a = 0.01. `roadmap.md:451` and
    `lacunae.md:529` record this path as exact. Falsifier: a ray at b = 1.001 b_c(a) escapes
    and one at 0.999 b_c is captured, with b_c from Bardeen's closed-form critical curve or
    the mpmath referee -- not from `analytic_kerr_geodesic.h`, whose quartic solver is

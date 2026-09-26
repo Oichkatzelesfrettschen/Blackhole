@@ -78,14 +78,25 @@ Observed:
   feature, because the true value is exactly 0.
 
 Measured (equatorial scan, camera at r = 15M, `r_s = 2`, the renderer's own
-pixel-to-constants mapping, capture edges in tan-angle units):
+pixel-to-constants mapping, capture edges in tan-angle units). The reference column reuses
+that same Euclidean, non-tetrad pixel-to-constants mapping (`harness/shadow2.py`'s
+`exact_capture`, called on the same `pix(y)` the shipped column uses) with the standard
+`R`, so the table is a same-camera isolation of F1's Theta/Q convention error, not a
+physical angular width; a physical-size comparison needs F9's observer-tetrad mapping:
 
-| a | shipped edges | width | physical width | ratio |
+| a | shipped edges | width | R_std width (same camera) | ratio |
 | --- | --- | --- | --- | --- |
 | 0.01 | (-0.252, +0.251) | 0.503 | 0.732 | 0.687 |
 | 0.5 | (-0.278, +0.215) | 0.493 | 0.722 | 0.683 |
 | 0.9 | (-0.295, +0.170) | 0.464 | 0.688 | 0.674 |
 | 0.99 | (-0.298, +0.148) | 0.446 | 0.659 | 0.676 |
+
+Note: F9's falsifier gives a physical, static-observer half-width of 0.3407 at r = 15M in
+the a -> 0 limit, a total width of 0.6814. Comparing the a = 0.01 shipped width to that
+value instead of the same-camera reference above gives a ratio of 0.503/0.6814 = 0.738, not
+0.687. The two references disagree because the same-camera column still carries F9's
+coordinate-to-angle error; the 0.674-0.687x figures above isolate F1 at fixed camera model,
+they do not state the renderer's physical size error.
 
 The a = 0 branch uses `bhStepRK4` with the exact Schwarzschild `-1.5 r_s h^2 x / r^5` form,
 which gives a width of 0.739. The rendered horizontal shadow width therefore drops from

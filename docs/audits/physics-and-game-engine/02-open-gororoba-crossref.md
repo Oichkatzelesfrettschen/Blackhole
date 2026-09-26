@@ -499,10 +499,18 @@ Licensing:
    - Formula: `g = sqrt(1 - 3/r + 2a r^{-3/2}) / (1 + a r^{-3/2} - r^{-1/2} sin(phi) sin(i))`
      in the no-bending limit. The ray-traced form is `g = 1/(u^t (1 - Omega lambda))`
      with the photon's lambda = L/E.
+   - This cannot be a radial `Lut1D`: `g` depends on the viewing direction at fixed `r`
+     (`phi` and `i` in the no-bending form; the traced photon's `lambda` in the ray-traced
+     form), not on `r` alone. A radial LUT can store only the direction-independent `1/u^t`
+     factor; `generateRedshiftLut` (`lut.h:102-121`, `BhLutSlot::Redshift`) bakes a single
+     `theta` and cannot vary with `phi`. The `1/(1 - Omega lambda)` (or no-bending
+     `1 - sin(phi) sin(i) Omega r`) factor has to be evaluated per disk hit, the way
+     `kerrDiskGFactor` already does for the iron line (`iron_kline.h:90-103`), not baked
+     into the per-radius table.
    - Fix `iron_kline.h:103` with the same denominator.
    - Source: Cunningham 1975; Bardeen, Press & Teukolsky 1972. Reimplement; nothing to port.
    - Falsifier: face-on g at the ISCO equal to 0.3709 (a=0.9) and 0.0927 (a=0.998).
-   - Cost: under 50 LOC plus a LUT regeneration.
+   - Cost: under 50 LOC of per-hit evaluation; the radial LUT is retired, not regenerated.
 3. **Switch `raytracer.h` to the second-order Mino form (fixes F6).**
    - `kerrPotentials` already returns `dRdr` and `dThetadtheta`.
    - Adopt gr_core's `u = 1/r` and DOPRI5 architecture. Blackhole already has RK45.
