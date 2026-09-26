@@ -245,7 +245,7 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
       }
     } else {
       ImGui::TableNextColumn();
-      ImGui::Text("%.4f", fleet.properTimeRate);
+      ImGui::Text("%.4g", fleet.properTimeRate);
       ImGui::TableNextColumn();
       ImGui::Text("%.2f", days(fleet.properTimeSec));
       ImGui::TableNextColumn();
@@ -302,7 +302,7 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
     for (const game::BandView &band : view.bands) {
       std::string bandLabel;
       if (band.validStation) {
-        bandLabel = std::format("band {}  (dtau/dt {:.3f}, delay {:.1f} d)", band.index,
+        bandLabel = std::format("band {}  (dtau/dt {:.4g}, delay {:.1f} d)", band.index,
                                 band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY);
       } else {
         bandLabel = std::format("band {}  (FORBIDDEN)", band.index);
@@ -494,7 +494,7 @@ void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiSt
   }
   if (focus != nullptr && focus->properTimeRate > 0.0) {
     uiState.driver.setFocusRate(focus->properTimeRate);
-    ImGui::TextDisabled("outside: %.3f turns per wall second at %s focus",
+    ImGui::TextDisabled("outside: %.4g turns per wall second at %s focus",
                         uiState.driver.turnsPerWallSecond(), nodeName(focus->id));
   }
   if (uiState.lagging) {
@@ -678,6 +678,32 @@ void renderBackdropPicker(const CampaignBackdrop *backdrops, int backdropCount,
 void initCampaignUiFromEnv(CampaignUiState &uiState) {
   if (const char *campaignEnv = std::getenv("BLACKHOLE_CAMPAIGN")) {
     uiState.windowsOpen = (std::strcmp(campaignEnv, "0") != 0);
+  }
+  // Desktop captures open the story without synthetic input: the same calls
+  // the panel's buttons and controls make.
+  if (const char *storyEnv = std::getenv("BLACKHOLE_CAMPAIGN_STORY")) {
+    if (std::strcmp(storyEnv, "deep") == 0) {
+      startColonyStory(uiState, game::K_MILLER_BAND);
+    } else if (std::strcmp(storyEnv, "shallow") == 0) {
+      startColonyStory(uiState, game::K_SURVEY_BAND);
+    }
+  }
+  if (const char *focusEnv = std::getenv("BLACKHOLE_CAMPAIGN_FOCUS")) {
+    uiState.focusNode =
+        std::strcmp(focusEnv, "host") == 0 ? game::K_AUTHORITY_NODE : game::K_FIRST_COLONY_NODE;
+  }
+  if (const char *realtimeEnv = std::getenv("BLACKHOLE_CAMPAIGN_REALTIME")) {
+    const double scale = std::strtod(realtimeEnv, nullptr);
+    if (std::isfinite(scale) && scale >= 1.0 && scale <= 3600.0) {
+      uiState.localSecondsPerWallSecond = static_cast<float>(scale);
+      game::RealtimeDriverConfig config;
+      config.secondsPerTurn = uiState.storySession
+                                  ? uiState.storySession->state().config().secondsPerTurn
+                                  : config.secondsPerTurn;
+      config.localSecondsPerWallSecond = scale;
+      uiState.driver = game::RealtimeDriver(config);
+      uiState.realtime = true;
+    }
   }
 }
 

@@ -194,12 +194,12 @@ void drawOrbitalBands(ImDrawList *drawList, const MapScale &scale,
     if (band.validStation && band.insideErgosphere) {
       ringColor = IM_COL32(210, 150, 60, 230);
       thickness = 2.0f;
-      label = std::format("band {}  dtau/dt {:.3f}  omega {:.2e}  PROGRADE ONLY", band.index,
+      label = std::format("band {}  dtau/dt {:.4g}  omega {:.2e}  PROGRADE ONLY", band.index,
                           band.properTimeRate, band.frameDragRateRadPerSec);
     } else if (band.validStation) {
       ringColor = rateColor(band.properTimeRate);
       thickness = 1.5f;
-      label = std::format("band {}  dtau/dt {:.3f}  delay {:.1f} d", band.index,
+      label = std::format("band {}  dtau/dt {:.4g}  delay {:.1f} d", band.index,
                           band.properTimeRate, band.delayToAuthoritySec / K_SECONDS_PER_DAY);
     } else {
       label = std::format("band {}  FORBIDDEN", band.index);
@@ -452,8 +452,13 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   drawStationSignals(drawList, view, nodePos);
 
   if (!outOfContact.empty()) {
-    drawList->AddText({canvasOrigin.x + 6.0f, canvasOrigin.y + 4.0f}, IM_COL32(200, 200, 210, 220),
-                      ("positions unknown here: " + outOfContact).c_str());
+    // Bottom-right, one line above the credit, clear of the station labels
+    // along the top ring and the legend at bottom-left.
+    const std::string text = "positions unknown here: " + outOfContact;
+    const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+    drawList->AddText({canvasOrigin.x + canvasSize.x - textSize.x - 6.0f,
+                       canvasOrigin.y + canvasSize.y - (2.0f * textSize.y) - 10.0f},
+                      IM_COL32(200, 200, 210, 220), text.c_str());
   }
 
   if (canvasClicked) {

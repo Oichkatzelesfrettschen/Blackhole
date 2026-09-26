@@ -65,7 +65,13 @@ struct CampaignUiState {
   bool inboxOpen = true;
 };
 
-/** @brief Reads BLACKHOLE_CAMPAIGN=1 to open the campaign windows at startup. */
+/** @brief Reads BLACKHOLE_CAMPAIGN=1 to open the campaign windows at startup.
+ *         For desktop captures without synthetic input:
+ *         BLACKHOLE_CAMPAIGN_STORY=deep|shallow starts the host story with the
+ *         colony on Miller's orbit or the 100M orbit, BLACKHOLE_CAMPAIGN_FOCUS=
+ *         colony|host sets the focused station, and
+ *         BLACKHOLE_CAMPAIGN_REALTIME=S (1..3600) runs real time at S local
+ *         seconds per wall second. */
 void initCampaignUiFromEnv(CampaignUiState &uiState);
 
 /** @brief Draws the Campaign window (always, it hosts the enable toggle) and,
