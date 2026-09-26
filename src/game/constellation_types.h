@@ -79,6 +79,7 @@ struct ConstellationFleet {
   OrbitLane transitDestLane = OrbitLane::Prograde;
   /// Worldline it adopts on arrival.
   Observer transitDestObserver = Observer::CircularOrbitPrograde;
+  std::uint32_t reportsSent = 0; ///< Status reports this fleet has sent home, in order.
 };
 
 /** @brief What a faction's authority last learned about one of its own fleets.
@@ -98,6 +99,10 @@ struct FleetBelief {
   SystemId transitDestSystem = K_INVALID_SYSTEM_ID;
   int transitDestBand = 0;
   std::int64_t asOfTurn = 0; ///< Turn the reported state held at the fleet.
+  /// The fleet's report counter when it sent this state (0 = setup record).
+  /// Reports sent the same turn from different slots travel home with
+  /// different delays; the counter, not the turn, says which is newest.
+  std::uint32_t reportSequence = 0;
 };
 
 /** @brief A faction's cumulative outcome across the whole constellation. */

@@ -50,6 +50,7 @@ void appendFleetBelief(std::vector<std::uint8_t> &out, const FleetBelief &known)
   appendU32(out, known.transitDestSystem);
   appendI64(out, known.transitDestBand);
   appendI64(out, known.asOfTurn);
+  appendU32(out, known.reportSequence);
 }
 
 } // namespace
@@ -92,27 +93,42 @@ Constellation::Constellation(ConstellationConfig config)
     }
     systems_.push_back(std::move(system));
   }
-  // All-pairs light paths over the link graph (Floyd-Warshall, fixed loop
-  // order so the sums are identical on every run). A link naming a missing
-  // system or carrying a non-finite or negative separation invalidates the
-  // constellation rather than silently opening a zero-delay channel.
+  // Normalize the links: a link naming a missing system or carrying a
+  // non-finite or non-positive separation invalidates the constellation
+  // rather than silently opening a zero-delay channel; duplicates of one
+  // unordered pair collapse to the shortest separation.
   const std::size_t count = systems_.size();
-  lightPathSec_.assign(count * count, K_NO_LIGHT_PATH);
-  for (std::size_t index = 0; index < count; ++index) {
-    lightPathSec_.at((index * count) + index) = 0.0;
-  }
   for (const InterSystemLink &link : config_.links) {
     if (link.a >= count || link.b >= count || link.a == link.b ||
         !std::isfinite(link.separationCm) || !(link.separationCm > 0.0)) {
       valid_ = false;
       continue;
     }
-    const double linkSec = link.separationCm / K_C_CM_PER_S;
-    double &forward = lightPathSec_.at((link.a * count) + link.b);
-    if (forward < 0.0 || linkSec < forward) {
-      forward = linkSec;
-      lightPathSec_.at((link.b * count) + link.a) = linkSec;
+    const InterSystemLink canonical{.a = std::min(link.a, link.b),
+                                    .b = std::max(link.a, link.b),
+                                    .separationCm = link.separationCm};
+    const auto existing = std::ranges::find_if(links_, [&](const InterSystemLink &kept) {
+      return kept.a == canonical.a && kept.b == canonical.b;
+    });
+    if (existing == links_.end()) {
+      links_.push_back(canonical);
+    } else {
+      existing->separationCm = std::min(existing->separationCm, canonical.separationCm);
     }
+  }
+  std::ranges::sort(links_, [](const InterSystemLink &lhs, const InterSystemLink &rhs) {
+    return lhs.a != rhs.a ? lhs.a < rhs.a : lhs.b < rhs.b;
+  });
+  // All-pairs light paths over the link graph (Floyd-Warshall, fixed loop
+  // order so the sums are identical on every run).
+  lightPathSec_.assign(count * count, K_NO_LIGHT_PATH);
+  for (std::size_t index = 0; index < count; ++index) {
+    lightPathSec_.at((index * count) + index) = 0.0;
+  }
+  for (const InterSystemLink &link : links_) {
+    const double linkSec = link.separationCm / K_C_CM_PER_S;
+    lightPathSec_.at((link.a * count) + link.b) = linkSec;
+    lightPathSec_.at((link.b * count) + link.a) = linkSec;
   }
   for (std::size_t via = 0; via < count; ++via) {
     for (std::size_t from = 0; from < count; ++from) {
@@ -194,10 +210,12 @@ StationKeeping Constellation::defaultStation(SystemId system, int bandIndex) con
 }
 
 double Constellation::linkSeparationCm(SystemId a, SystemId b) const {
-  const auto link = std::ranges::find_if(config_.links, [a, b](const InterSystemLink &candidate) {
-    return (candidate.a == a && candidate.b == b) || (candidate.a == b && candidate.b == a);
+  const SystemId low = std::min(a, b);
+  const SystemId high = std::max(a, b);
+  const auto link = std::ranges::find_if(links_, [low, high](const InterSystemLink &candidate) {
+    return candidate.a == low && candidate.b == high;
   });
-  return link == config_.links.end() ? -1.0 : link->separationCm;
+  return link == links_.end() ? -1.0 : link->separationCm;
 }
 
 double Constellation::lightPathSec(SystemId a, SystemId b) const {
@@ -475,8 +493,10 @@ void Constellation::deliverDue() {
     case DeliveryKind::FleetStatus: {
       std::vector<FleetBelief> &beliefs = ownBelief_.at(delivery.observerIndex);
       const auto found = std::ranges::find(beliefs, delivery.status.id, &FleetBelief::id);
-      // Reports can cross in flight; the authority keeps the newest state.
-      if (found != beliefs.end() && found->asOfTurn <= delivery.status.asOfTurn) {
+      // Reports can cross in flight; the authority keeps the newest state,
+      // judged by the fleet's own report counter so that two reports sent on
+      // one turn from slots with different light delays cannot reorder.
+      if (found != beliefs.end() && found->reportSequence < delivery.status.reportSequence) {
         *found = delivery.status;
       }
       // Orders that took effect by the time this report left are answered.
@@ -504,8 +524,11 @@ void Constellation::landArrivals() {
   }
 }
 
-void Constellation::enqueueFleetStatus(const ConstellationFleet &fleet, SystemId fromSystem,
+void Constellation::enqueueFleetStatus(ConstellationFleet &fleet, SystemId fromSystem,
                                        int fromBand) {
+  // The counter advances whether or not a light path home exists, so every
+  // report the fleet sends is ordered against every other.
+  ++fleet.reportsSent;
   const double delaySec = reportDelaySec(fleet.faction, fromSystem, fromBand);
   if (delaySec < 0.0) {
     return; // No light path home: the authority never hears.
@@ -526,7 +549,8 @@ void Constellation::enqueueFleetStatus(const ConstellationFleet &fleet, SystemId
                                 .transitArrivalTurn = fleet.transitArrivalTurn,
                                 .transitDestSystem = fleet.transitDestSystem,
                                 .transitDestBand = fleet.transitDestBand,
-                                .asOfTurn = clock_.turn()};
+                                .asOfTurn = clock_.turn(),
+                                .reportSequence = fleet.reportsSent};
   deliveryQueue_.push_back(delivery);
 }
 
@@ -1142,7 +1166,7 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
     }
   }
 
-  view.links = config_.links;
+  view.links = links_;
   return view;
 }
 
@@ -1196,6 +1220,7 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendI64(out, fleet.transitDestBand);
     appendU8(out, static_cast<std::uint8_t>(fleet.transitDestLane));
     appendU8(out, static_cast<std::uint8_t>(fleet.transitDestObserver));
+    appendU32(out, fleet.reportsSent);
   }
 
   appendU32(out, static_cast<std::uint32_t>(commandLog_.size()));

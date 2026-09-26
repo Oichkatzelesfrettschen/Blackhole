@@ -258,7 +258,7 @@ private:
   /** @brief Sends the fleet's current state home from (fromSystem, fromBand),
    *         where it stands when the report leaves; undeliverable without a
    *         light path. */
-  void enqueueFleetStatus(const ConstellationFleet &fleet, SystemId fromSystem, int fromBand);
+  void enqueueFleetStatus(ConstellationFleet &fleet, SystemId fromSystem, int fromBand);
   /** @brief The owner's record of a fleet; null when `faction` does not own it. */
   [[nodiscard]] const FleetBelief *knownFleet(FactionId faction, FleetId fleet) const;
   void landArrivals();
@@ -315,6 +315,11 @@ private:
   std::vector<ConstellationFleet> fleets_;
   std::vector<LoggedCommand> commandLog_;
   std::vector<Delivery> deliveryQueue_;
+  // links_: the config's links normalized once -- each unordered pair of
+  // systems once, with a < b, at the shortest separation any duplicate gave,
+  // sorted by (a, b) -- so travel, reachability, and signal paths all use the
+  // same edge whatever order the config listed duplicates in.
+  std::vector<InterSystemLink> links_;
   // lightPathSec_[a * S + b]: all-pairs light time between authorities over the
   // link graph; negative marks an unreachable pair. Derived from the config.
   std::vector<double> lightPathSec_;

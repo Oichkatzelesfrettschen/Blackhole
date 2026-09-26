@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include "game/campaign_view.h"
@@ -639,4 +640,66 @@ TEST(Constellation, NoOpOrdersAndZeroLinksAreRefused) {
   game::ConstellationConfig zeroLink = microTwoSystemConfig();
   zeroLink.links.front().separationCm = 0.0;
   EXPECT_FALSE(game::Constellation(zeroLink).valid());
+}
+
+// Falsifier: two orders sent on one turn to a fleet on the inner band of an
+// M87-mass system -- to the middle band and to the outer band, whose light
+// legs home differ by weeks -- leaving the authority holding anything but the
+// fleet's true final state and newest report once every signal has landed.
+// The second order was addressed to the inner band, so it fizzles there; the
+// fleet's report counter orders its reports whatever their return delays.
+TEST(Constellation, SameTurnOrdersLeaveTheNewestReport) {
+  const game::KerrTimeField field(6.5e9 * K_SOLAR_MASS_G, 0.0);
+  const double massCm = field.gravitationalRadiusCm();
+  game::ConstellationConfig config;
+  config.secondsPerTurn = K_SECONDS_PER_DAY;
+  config.fleetInitialFuelUnits = 1.0e6;
+  config.systems = {game::SystemSpec{.blackHoleMassG = 6.5e9 * K_SOLAR_MASS_G,
+                                     .spinDimensionless = 0.0,
+                                     .authorityRadiusCm = 400.0 * massCm,
+                                     .bandRadiusCm = {6.0 * massCm, 20.0 * massCm,
+                                                      100.0 * massCm}}};
+  game::Constellation constellation(config);
+  const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  const game::FleetId fleet = constellation.addFleet(alpha, 0, game::FleetCapability::Research, 0);
+  ASSERT_TRUE(constellation.issueCommand(
+      alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 0, .targetBand = 1}));
+  ASSERT_TRUE(constellation.issueCommand(
+      alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 0, .targetBand = 2}));
+  constellation.advanceTurns(400); // two ~150-day legs out and home
+  const game::ConstellationFleet &truth = constellation.fleets().front();
+  const game::ConstellationViewSnapshot view = constellation.renderSnapshot();
+  const game::ConstellationFleetView &known = view.fleets.front();
+  EXPECT_EQ(truth.bandIndex, 1);
+  EXPECT_EQ(known.bandIndex, truth.bandIndex);
+  EXPECT_EQ(truth.reportsSent, 1U);
+  EXPECT_TRUE(constellation.issueCommand(
+      alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 0, .targetBand = 2}));
+}
+
+// Falsifier: two configs listing the same duplicate links in a different
+// order (and orientation) giving a fleet a different interstellar transit
+// time, or an order a different light delay -- travel reading the first
+// listed link while signals take the shortest.
+TEST(Constellation, DuplicateLinksNormalizeToTheShortest) {
+  const auto play = [](std::vector<game::InterSystemLink> links) {
+    game::ConstellationConfig config = microTwoSystemConfig();
+    config.links = std::move(links);
+    config.fleetInitialFuelUnits = 1.0e6;
+    game::Constellation constellation(config);
+    const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+    const game::FleetId fleet =
+        constellation.addFleet(alpha, 0, game::FleetCapability::Research, 0);
+    EXPECT_TRUE(constellation.issueCommand(
+        alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 1, .targetBand = 0}));
+    constellation.advanceTurns(3);
+    return constellation.fleets().front().transitArrivalTurn;
+  };
+  const game::InterSystemLink longLink{.a = 0, .b = 1, .separationCm = 40.0 * K_LIGHT_DAY_CM};
+  const game::InterSystemLink shortLink{.a = 1, .b = 0, .separationCm = 20.0 * K_LIGHT_DAY_CM};
+  const std::int64_t longFirst = play({longLink, shortLink});
+  const std::int64_t shortFirst = play({shortLink, longLink});
+  EXPECT_EQ(longFirst, shortFirst);
+  // 20 light-days at half light speed: 40 turns after the departure turn.
+  EXPECT_EQ(longFirst, 1 + 40);
 }
