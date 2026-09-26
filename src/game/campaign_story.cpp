@@ -195,44 +195,85 @@ void CampaignState::buildNodes() {
   }
 }
 
+bool CampaignState::storyWellFormed() const {
+  const EventSet &story = config_.story;
+  // Parameters sorted strictly by name, within the documented range.
+  for (std::size_t index = 0; index < story.params.size(); ++index) {
+    const EventParam &param = story.params.at(index);
+    if (!withinStoryLimit(param.min, K_STORY_INT_LIMIT) ||
+        !withinStoryLimit(param.max, K_STORY_INT_LIMIT) || param.max < param.min ||
+        (index > 0 && !(story.params.at(index - 1).name < param.name))) {
+      return false;
+    }
+  }
+  // Events sorted strictly by id: ids are unique and lookups binary-search.
+  for (std::size_t index = 1; index < story.events.size(); ++index) {
+    if (!(story.events.at(index - 1).id < story.events.at(index).id)) {
+      return false;
+    }
+  }
+  // Tiers non-negative and non-decreasing; at most 64 flags.
+  for (std::size_t index = 0; index < story.techTiers.size(); ++index) {
+    if (story.techTiers.at(index).points < 0 ||
+        (index > 0 && story.techTiers.at(index).points < story.techTiers.at(index - 1).points)) {
+      return false;
+    }
+  }
+  return story.flags.size() <= K_MAX_STORY_FLAGS;
+}
+
+bool CampaignState::intRefValid(const IntRef &ref) const {
+  if (!withinStoryLimit(ref.plus, K_STORY_INT_LIMIT) ||
+      !withinStoryLimit(ref.times, K_STORY_TIMES_LIMIT)) {
+    return false;
+  }
+  if (ref.param == K_NO_PARAM) {
+    return true;
+  }
+  return ref.param < storyParams_.size() &&
+         checkedLinear(ref.times, storyParams_.at(ref.param), ref.plus).has_value();
+}
+
 void CampaignState::resolveStoryParams() {
   const EventSet &story = config_.story;
   storyParams_.clear();
+  if (!storyWellFormed()) {
+    valid_ = false;
+    return;
+  }
   for (const EventParam &param : story.params) {
-    if (param.max < param.min) {
-      valid_ = false;
-      return;
-    }
-    const auto span = static_cast<std::uint64_t>(param.max - param.min) + 1U;
+    // Unsigned arithmetic: the span of any int64 range is representable
+    // modulo 2^64; within the documented range it is below 2^42.
+    const std::uint64_t span =
+        (static_cast<std::uint64_t>(param.max) - static_cast<std::uint64_t>(param.min)) + 1U;
     const std::uint64_t draw =
         param.max == param.min ? 0U : splitMix64(config_.seed ^ hashName(param.name)) % span;
-    storyParams_.push_back(param.min + static_cast<std::int64_t>(draw));
+    storyParams_.push_back(
+        static_cast<std::int64_t>(static_cast<std::uint64_t>(param.min) + draw));
   }
   eventFired_.assign(story.events.size(), 0);
   // Structural checks a hand-built story can fail; the loader enforces them
-  // too. Nodes and flags must exist, schedule targets must exist, and every
-  // schedule delay must resolve to at least one turn.
+  // too. Nodes and flags must exist, every integer must evaluate without
+  // overflow, schedule targets must exist, and every schedule delay must
+  // resolve to at least one turn.
   const auto nodeOk = [this](NodeId node) { return node < nodes_.size(); };
-  const auto refOk = [this](const IntRef &ref) {
-    return ref.param == K_NO_PARAM || ref.param < storyParams_.size();
-  };
   const auto flagOk = [&story](std::uint32_t flag) {
     return flag < K_MAX_STORY_FLAGS && flag < std::max<std::size_t>(story.flags.size(), 1);
   };
   for (const EventDef &event : story.events) {
     bool ok = nodeOk(event.source);
     for (const EventPredicate &predicate : event.triggers) {
-      ok = ok && refOk(predicate.value) && nodeOk(predicate.receivedFrom) &&
+      ok = ok && intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
            (predicate.kind != PredicateKind::FlagSet && predicate.kind != PredicateKind::FlagClear
                 ? true
                 : flagOk(predicate.flag));
     }
     for (const EventEffect &effect : event.effects) {
-      ok = ok && refOk(effect.delayTurns);
+      ok = ok && intRefValid(effect.delayTurns);
       if (effect.kind == EffectKind::SetFlag) {
         ok = ok && flagOk(effect.flag);
       } else if (effect.kind == EffectKind::Emit) {
-        ok = ok && nodeOk(effect.to);
+        ok = ok && nodeOk(effect.to) && withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT);
       } else {
         ok = ok && eventIndexOf(story.events, effect.event).has_value() &&
              resolve(effect.delayTurns) >= 1;
@@ -249,7 +290,8 @@ std::int64_t CampaignState::resolve(const IntRef &ref) const {
   if (ref.param == K_NO_PARAM) {
     return ref.plus;
   }
-  return (ref.times * storyParams_.at(ref.param)) + ref.plus;
+  // Construction verified every reference evaluates without overflow.
+  return checkedLinear(ref.times, storyParams_.at(ref.param), ref.plus).value_or(0);
 }
 
 std::optional<std::int64_t> CampaignState::storyParam(std::string_view name) const {

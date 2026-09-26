@@ -12,6 +12,8 @@
 #include <ios>
 #include <initializer_list>
 #include <map>
+#include <optional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -56,11 +58,36 @@ void rejectUnknownKeys(const Json &object, const std::string &path,
   }
 }
 
-std::int64_t requireInteger(const Json &value, const std::string &path) {
+/** @brief An integer in [-limit, limit]. An unsigned literal above INT64_MAX
+ *         is refused before any conversion could wrap it. */
+std::int64_t requireInteger(const Json &value, const std::string &path,
+                            std::int64_t limit = K_STORY_INT_LIMIT) {
   if (!value.is_number_integer()) {
     fail(path, "expected an integer");
   }
-  return value.get<std::int64_t>();
+  if (value.is_number_unsigned() &&
+      value.get<std::uint64_t>() > static_cast<std::uint64_t>(limit)) {
+    fail(path, "integer outside [-" + std::to_string(limit) + ", " + std::to_string(limit) + "]");
+  }
+  const auto integer = value.get<std::int64_t>();
+  if (!withinStoryLimit(integer, limit)) {
+    fail(path, "integer outside [-" + std::to_string(limit) + ", " + std::to_string(limit) + "]");
+  }
+  return integer;
+}
+
+/** @brief An id: an integer in [0, 2^32 - 1]. */
+std::uint32_t requireId(const Json &value, const std::string &path) {
+  constexpr std::int64_t kMaxId = 0xFFFFFFFFLL;
+  if (!value.is_number_integer() ||
+      (value.is_number_unsigned() && value.get<std::uint64_t>() > static_cast<std::uint64_t>(kMaxId))) {
+    fail(path, "expected an id in [0, 4294967295]");
+  }
+  const auto id = value.get<std::int64_t>();
+  if (id < 0 || id > kMaxId) {
+    fail(path, "expected an id in [0, 4294967295]");
+  }
+  return static_cast<std::uint32_t>(id);
 }
 
 std::string requireString(const Json &value, const std::string &path) {
@@ -148,6 +175,9 @@ private:
         fail(path, "missing points");
       }
       level.points = requireInteger(tier.at("points"), path + ".points");
+      if (level.points < 0) {
+        fail(path + ".points", "tech points must be non-negative");
+      }
       if (tier.contains("name")) {
         level.name = requireString(tier.at("name"), path + ".name");
       }
@@ -180,7 +210,7 @@ private:
       }
       ref.param = paramIndex(requireString(value.at("param"), path + ".param"), path + ".param");
       if (value.contains("times")) {
-        ref.times = requireInteger(value.at("times"), path + ".times");
+        ref.times = requireInteger(value.at("times"), path + ".times", K_STORY_TIMES_LIMIT);
       }
       if (value.contains("plus")) {
         ref.plus = requireInteger(value.at("plus"), path + ".plus");
@@ -196,8 +226,15 @@ private:
     if (ref.param == K_NO_PARAM) {
       return ref.plus;
     }
+    // Within the documented ranges neither end can overflow; checkedLinear
+    // makes that a checked fact rather than an assumption.
     const EventParam &param = story_.params.at(ref.param);
-    return std::min((ref.times * param.min) + ref.plus, (ref.times * param.max) + ref.plus);
+    const std::optional<std::int64_t> atMin = checkedLinear(ref.times, param.min, ref.plus);
+    const std::optional<std::int64_t> atMax = checkedLinear(ref.times, param.max, ref.plus);
+    if (!atMin.has_value() || !atMax.has_value()) {
+      fail("$", "integer reference overflows");
+    }
+    return std::min(atMin.value(), atMax.value());
   }
 
   static NodeId loadNode(const Json &value, const std::string &path) {
@@ -265,6 +302,9 @@ private:
         predicate.silentFor = true;
         predicate.value =
             loadInt(value->at("silent_turns_at_least"), valuePath + ".silent_turns_at_least");
+        if (minimumOf(predicate.value) < 0) {
+          fail(valuePath + ".silent_turns_at_least", "a silence threshold must be non-negative");
+        }
       }
     } else {
       fail(path, "unknown predicate \"" + key + "\"");
@@ -299,7 +339,7 @@ private:
         fail(valuePath, "schedule needs event and delay_turns");
       }
       effect.kind = EffectKind::Schedule;
-      effect.event = static_cast<std::uint32_t>(requireInteger(value->at("event"), valuePath + ".event"));
+      effect.event = requireId(value->at("event"), valuePath + ".event");
       effect.delayTurns = loadInt(value->at("delay_turns"), valuePath + ".delay_turns");
       if (minimumOf(effect.delayTurns) < 1) {
         fail(valuePath + ".delay_turns", "a schedule delay must be at least one turn");
@@ -323,11 +363,7 @@ private:
         fail(path, "missing id");
       }
       EventDef event;
-      const std::int64_t id = requireInteger(object.at("id"), path + ".id");
-      if (id < 0 || id > 0xFFFFFFFFLL) {
-        fail(path + ".id", "id out of range");
-      }
-      event.id = static_cast<std::uint32_t>(id);
+      event.id = requireId(object.at("id"), path + ".id");
       if (object.contains("name")) {
         event.name = requireString(object.at("name"), path + ".name");
       }
@@ -441,7 +477,29 @@ private:
 EventLoadResult parseEventSet(std::string_view jsonText) {
   EventLoadResult result;
   try {
-    const Json root = Json::parse(jsonText.begin(), jsonText.end());
+    // JSON keeps only the last of duplicated keys; a story that says the same
+    // thing twice is ambiguous, so the parse tracks each open object's keys
+    // and the load refuses a repeat anywhere.
+    std::vector<std::set<std::string>> openObjects;
+    std::string duplicate;
+    const Json::parser_callback_t trackKeys = [&openObjects, &duplicate](
+                                                  int /*depth*/, Json::parse_event_t event,
+                                                  Json &parsed) {
+      if (event == Json::parse_event_t::object_start) {
+        openObjects.emplace_back();
+      } else if (event == Json::parse_event_t::object_end && !openObjects.empty()) {
+        openObjects.pop_back();
+      } else if (event == Json::parse_event_t::key && !openObjects.empty() &&
+                 !openObjects.back().insert(parsed.get<std::string>()).second &&
+                 duplicate.empty()) {
+        duplicate = parsed.get<std::string>();
+      }
+      return true;
+    };
+    const Json root = Json::parse(jsonText.begin(), jsonText.end(), trackKeys);
+    if (!duplicate.empty()) {
+      throw LoadError("$: duplicate key \"" + duplicate + "\"");
+    }
     Loader loader;
     result.story = loader.load(root);
   } catch (const LoadError &error) {

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <set>
 #include <string>
@@ -271,4 +272,112 @@ TEST(EventPredicates, SeededParameterIsDeterministicPerSeed) {
   }
   EXPECT_GT(draws.size(), 8U);
   EXPECT_FALSE(runStory(json, 0)->state->storyParam("missing").has_value());
+}
+
+namespace {
+
+/** @brief A campaign built directly from a hand-made story, bypassing the
+ *         loader, so the core's own validation is what stands. */
+bool storyBuildsValid(const game::EventSet &story) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config = campaign_test::fakeConfig();
+  game::ColonyConfig colony;
+  colony.bandIndex = 1;
+  colony.localTickSec = 1;
+  config.colonies = {colony};
+  config.story = story;
+  const game::CampaignState state(config, field);
+  return state.valid();
+}
+
+game::EventSet scheduleStory(const game::IntRef &delay) {
+  game::EventSet story;
+  story.flags = {game::K_DARK_FLAG_NAME};
+  game::EventDef event;
+  event.id = 1;
+  game::EventEffect schedule;
+  schedule.kind = game::EffectKind::Schedule;
+  schedule.event = 1;
+  schedule.delayTurns = delay;
+  event.effects = {schedule};
+  story.events = {event};
+  return story;
+}
+
+} // namespace
+
+// Falsifier: an integer the documented story range excludes loading -- the
+// full int64 parameter range (whose span overflows), an unsigned literal above
+// INT64_MAX, a multiplier past 2^20, a literal past 2^40 -- or a negative
+// tier or silence threshold, or a schedule target past uint32.
+TEST(EventLoader, StoryIntegersOutsideTheDocumentedRangeRejected) {
+  EXPECT_FALSE(
+      errorOf(R"({"params": {"k": {"min": -9223372036854775808, "max": 9223372036854775807}}})")
+          .empty());
+  EXPECT_FALSE(errorOf(R"({"params": {"k": 9223372036854775808}})").empty());
+  EXPECT_FALSE(errorOf(R"({"params": {"k": 1099511627777}})").empty());
+  EXPECT_TRUE(errorOf(R"({"params": {"k": 1099511627776}})").empty());
+  EXPECT_FALSE(
+      errorOf(R"({"params": {"k": 3}, "events": [{"id": 1, "triggers": [{"turn_at_least": {"param": "k", "times": 4611686018427387904}}]}]})")
+          .empty());
+  EXPECT_FALSE(
+      errorOf(R"({"params": {"k": 3}, "events": [{"id": 1, "triggers": [{"turn_at_least": {"param": "k", "times": 1048577}}]}]})")
+          .empty());
+  EXPECT_FALSE(errorOf(R"({"tech_tiers": [{"points": -1}]})").empty());
+  EXPECT_FALSE(
+      errorOf(R"({"events": [{"id": 1, "triggers": [{"received": {"kind": "notice", "from": "host", "silent_turns_at_least": -5}}]}]})")
+          .empty());
+  EXPECT_FALSE(
+      errorOf(R"({"events": [{"id": 1, "effects": [{"schedule": {"event": 4294967297, "delay_turns": 1}}]}]})")
+          .empty());
+  EXPECT_FALSE(errorOf(R"({"events": [{"id": 4294967296}]})").empty());
+}
+
+// Falsifier: a duplicated key at any depth accepted (the parser would keep
+// only the last value, silently).
+TEST(EventLoader, DuplicateJsonKeysRejected) {
+  EXPECT_NE(errorOf(R"({"params": {"k": 1, "k": 2}})").find("duplicate key"), std::string::npos);
+  EXPECT_NE(errorOf(R"({"events": [{"id": 1, "id": 2}]})").find("duplicate key"),
+            std::string::npos);
+  EXPECT_NE(
+      errorOf(R"({"events": [{"id": 1, "effects": [{"emit": {"kind": "notice", "to": "host", "to": "colony"}}]}]})")
+          .find("duplicate key"),
+      std::string::npos);
+  // The same key in sibling objects is not a duplicate.
+  EXPECT_TRUE(errorOf(R"({"events": [{"id": 1}, {"id": 2}]})").empty());
+}
+
+// Falsifier: a hand-built story the loader would refuse building a valid
+// campaign -- or crashing it -- through overflow in a seeded span or a
+// times * param + plus, duplicate or unsorted ids, unsorted parameters, or a
+// negative tier.
+TEST(EventPredicates, CoreRejectsStoriesOutsideTheDocumentedRange) {
+  game::EventSet fullRange;
+  fullRange.params = {{.name = "k",
+                       .min = std::numeric_limits<std::int64_t>::min(),
+                       .max = std::numeric_limits<std::int64_t>::max()}};
+  EXPECT_FALSE(storyBuildsValid(fullRange));
+
+  game::EventSet wideSpan;
+  wideSpan.params = {{.name = "k", .min = -game::K_STORY_INT_LIMIT, .max = game::K_STORY_INT_LIMIT}};
+  EXPECT_TRUE(storyBuildsValid(wideSpan));
+
+  game::EventSet overflowing = scheduleStory(
+      {.plus = 1, .times = std::numeric_limits<std::int64_t>::max(), .param = 0});
+  overflowing.params = {{.name = "k", .min = 3, .max = 3}};
+  EXPECT_FALSE(storyBuildsValid(overflowing));
+  EXPECT_FALSE(storyBuildsValid(scheduleStory({.plus = std::numeric_limits<std::int64_t>::max()})));
+  EXPECT_TRUE(storyBuildsValid(scheduleStory({.plus = 2})));
+
+  game::EventSet duplicateIds = scheduleStory({.plus = 1});
+  duplicateIds.events.push_back(duplicateIds.events.front());
+  EXPECT_FALSE(storyBuildsValid(duplicateIds));
+
+  game::EventSet unsortedParams;
+  unsortedParams.params = {{.name = "b", .min = 1, .max = 1}, {.name = "a", .min = 1, .max = 1}};
+  EXPECT_FALSE(storyBuildsValid(unsortedParams));
+
+  game::EventSet negativeTier;
+  negativeTier.techTiers = {{.points = -3, .name = "x"}};
+  EXPECT_FALSE(storyBuildsValid(negativeTier));
 }

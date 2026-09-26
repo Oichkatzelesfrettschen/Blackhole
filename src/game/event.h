@@ -21,6 +21,7 @@
 #define BLACKHOLE_GAME_EVENT_H
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -69,6 +70,34 @@ inline constexpr std::uint32_t K_DARK_FLAG = 0;
 inline constexpr const char *K_DARK_FLAG_NAME = "dark";
 inline constexpr std::uint32_t K_MAX_STORY_FLAGS = 64;
 inline constexpr std::uint32_t K_NO_PARAM = 0xFFFFFFFFU;
+
+/**
+ * @brief Documented range of story integers. Parameter bounds, literals, and
+ *        "plus" lie in [-2^40, 2^40] (2^40 one-day turns is three billion
+ *        years); "times" lies in [-2^20, 2^20]. Then |times * param + plus| is
+ *        below 2^61, so no evaluation of a story integer can overflow int64,
+ *        and a seeded span max - min + 1 is below 2^42. The loader rejects
+ *        anything outside these ranges; CampaignState rejects a hand-built
+ *        story that strays outside them.
+ */
+inline constexpr std::int64_t K_STORY_INT_LIMIT = std::int64_t{1} << 40;
+inline constexpr std::int64_t K_STORY_TIMES_LIMIT = std::int64_t{1} << 20;
+
+[[nodiscard]] constexpr bool withinStoryLimit(std::int64_t value, std::int64_t limit) {
+  return value >= -limit && value <= limit;
+}
+
+/** @brief times * value + plus, or nullopt when it overflows int64. */
+[[nodiscard]] inline std::optional<std::int64_t> checkedLinear(std::int64_t times,
+                                                               std::int64_t value,
+                                                               std::int64_t plus) {
+  std::int64_t product = 0;
+  std::int64_t sum = 0;
+  if (__builtin_mul_overflow(times, value, &product) || __builtin_add_overflow(product, plus, &sum)) {
+    return std::nullopt;
+  }
+  return sum;
+}
 
 /** @brief An integer that is a literal (param == K_NO_PARAM) or
  *         times * param + plus. */

@@ -283,6 +283,11 @@ private:
   void receiveNodeDelivery(const Delivery &delivery);
   void buildNodes();
   void resolveStoryParams();
+  /** @brief Order, uniqueness, and range checks on the configured story. */
+  [[nodiscard]] bool storyWellFormed() const;
+  /** @brief An IntRef inside the documented range that evaluates without
+   *         overflow against the resolved parameters. */
+  [[nodiscard]] bool intRefValid(const IntRef &ref) const;
   [[nodiscard]] std::int64_t resolve(const IntRef &ref) const;
   /** @brief Advances every node clock one turn and ships colony production. */
   void advanceNodeClocks();
