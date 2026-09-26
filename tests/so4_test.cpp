@@ -256,6 +256,24 @@ TEST(So4, IsoclinicSplitRejectsReflections) {
   EXPECT_TRUE(isoclinicSplit(identity()).has_value());
 }
 
+TEST(So4, IsoclinicSplitRejectsNonOrthogonalMatrices) {
+  // 2 I has det 16 > 0, yet rebuilding the normalized pair gives I, not 2 I.
+  Mat4 doubled = identity();
+  for (std::size_t i = 0; i < 4; ++i) {
+    doubled.at(i).at(i) = 2.0;
+  }
+  EXPECT_FALSE(isoclinicSplit(doubled).has_value());
+  // A shear has det exactly 1 and is still not orthogonal.
+  Mat4 shear = identity();
+  shear.at(0).at(1) = 0.5;
+  EXPECT_NEAR(determinant(shear), 1.0, K_TOL);
+  EXPECT_FALSE(isoclinicSplit(shear).has_value());
+  // A rotation perturbed well inside the tolerance still splits.
+  Mat4 nearRotation = so4FromPair(sampleQuats().at(2), sampleQuats().at(3));
+  nearRotation.at(1).at(2) += 1e-12;
+  EXPECT_TRUE(isoclinicSplit(nearRotation).has_value());
+}
+
 TEST(So4, ColumnMajorLayoutPlacesRowColumnEntry) {
   const Mat4 r = so4FromPair(sampleQuats().at(0), sampleQuats().at(2));
   const std::array<float, 16> packed = blackhole::tesseract::toColumnMajor(r);

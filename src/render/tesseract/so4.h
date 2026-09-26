@@ -22,6 +22,7 @@
 #include <cmath>
 #include <concepts>
 #include <cstddef>
+#include <limits>
 #include <optional>
 
 namespace blackhole::tesseract {
@@ -231,6 +232,33 @@ constexpr So4Pair<T> compose(const So4Pair<T> &a, const So4Pair<T> &b) {
 }
 
 /**
+ * @brief Tolerance of isSpecialOrthogonal: sqrt(epsilon) of the scalar type.
+ *
+ * About 1.5e-8 in double and 3.5e-4 in float, far above the rounding of a
+ * product of unit-quaternion matrices and far below any non-rotation's error.
+ */
+template <std::floating_point T> T so4Tolerance() {
+  return std::sqrt(std::numeric_limits<T>::epsilon());
+}
+
+/**
+ * @brief True when m^T m = I entrywise and det m = +1, both within @p tol.
+ */
+template <std::floating_point T>
+bool isSpecialOrthogonal(const Mat4<T> &m, T tol = so4Tolerance<T>()) {
+  const Mat4<T> gram = multiply(transpose(m), m);
+  for (std::size_t r = 0; r < 4; ++r) {
+    for (std::size_t c = 0; c < 4; ++c) {
+      const T expected = r == c ? T{1} : T{0};
+      if (std::abs(gram.at(r).at(c) - expected) > tol) {
+        return false;
+      }
+    }
+  }
+  return std::abs(determinant(m) - T{1}) <= tol;
+}
+
+/**
  * @brief Recover (qL, qR), up to joint sign, from a rotation matrix M.
  *
  * The sixteen matrices K_ij = L(e_i) R(conj e_j) over the quaternion units
@@ -241,12 +269,13 @@ constexpr So4Pair<T> compose(const So4Pair<T> &a, const So4Pair<T> &b) {
  * row of A with the largest norm fixes b up to sign; a = A b then carries
  * the matching sign, so the returned pair is +-(qL, qR).
  *
- * An improper orthogonal matrix (det = -1) has no quaternion pair and a
- * full-rank associate matrix, so the split returns std::nullopt for any
- * input with det <= 0.
+ * Only a member of SO(4) has such a pair. The split returns std::nullopt
+ * unless isSpecialOrthogonal holds: an improper matrix (det = -1) has a
+ * full-rank associate matrix, and a non-orthogonal one (2 I, a shear) has an
+ * associate matrix whose normalized rank-one part rebuilds a different matrix.
  */
 template <std::floating_point T> std::optional<So4Pair<T>> isoclinicSplit(const Mat4<T> &m) {
-  if (determinant(m) <= T{0}) {
+  if (!isSpecialOrthogonal(m)) {
     return std::nullopt;
   }
   const std::array<Quat<T>, 4> units = {
