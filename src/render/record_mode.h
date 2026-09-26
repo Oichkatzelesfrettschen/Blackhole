@@ -67,8 +67,19 @@ void applyShowcaseBeautyWiregridTuning(std::string_view compositionName, Wiregri
 bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, InputManager &input,
                              GLFWwindow *window);
 
+/**
+ * @brief Replace @p cam's distance and field of view with --record-distance
+ *        and --record-fov where given.
+ *
+ * applyRecordCameraPath applies it after every profile's path, so the
+ * overrides frame the cinematic keyframes, the compare-orbit-near sweep, and
+ * the showcase-orbit composition alike, in both scenes.
+ */
+void applyRecordCameraOverrides(const platform::CliOptions &cli, CameraState &cam);
+
 /** @brief Drives the record camera and spin from the selected profile's path for
- *         the current frame index. No-op when recordFramesDir is empty. */
+ *         the current frame index, then applies applyRecordCameraOverrides.
+ *         No-op when recordFramesDir is empty. */
 void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, InputManager &input);
 
 /** @brief Captures the tonemapped scene texture to frame_NNNNNN.png and advances

@@ -8,8 +8,9 @@
  * the wall clock reads, so two renders of one frame index, in one run, two
  * runs, or a --start-frame resume, feed the post chain identical inputs.
  * recordPathProgress places the showcase-orbit and compare-orbit-near camera
- * paths by the same absolute index, and recordCameraConflict refuses record
- * camera overrides that describe no camera.
+ * paths by the same absolute index, recordCameraConflict refuses record
+ * camera overrides that describe no camera, and applyRecordCameraPath applies
+ * --record-distance and --record-fov after every profile's path.
  */
 
 #include <limits>
@@ -20,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include "cinematic.h"
+#include "input.h"
 #include "platform/cli_options.h"
 #include "render.h"
 #include "render/post_pipeline.h"
@@ -28,6 +30,7 @@
 
 namespace {
 
+using blackhole::applyRecordCameraPath;
 using blackhole::frameContentSeconds;
 using blackhole::recordCameraConflict;
 using blackhole::recordOutputSeconds;
@@ -123,6 +126,40 @@ TEST(RecordClock, RecordCameraOverridesMustDescribeACamera) {
   }
   cli.recordFovDeg = 120.0f;
   EXPECT_FALSE(recordCameraConflict(cli).has_value());
+}
+
+// Every record profile ends with the distance and field-of-view overrides,
+// so they frame both scenes whichever path drives the camera; without them
+// each path keeps its own values.
+TEST(RecordClock, CameraOverridesApplyToEveryProfile) {
+  InputManager &input = InputManager::instance();
+  const CameraState saved = input.camera();
+  const auto stateStorage = std::make_unique<RenderState>();
+  RenderState &rs = *stateStorage;
+  for (const char *profile : {"cinematic", "compare-orbit-near", "showcase-orbit"}) {
+    platform::CliOptions cli = recordingCli();
+    cli.recordProfile = profile;
+    cli.recordFramesTotal = 240;
+    rs.recording.recordFrameIndex = 60;
+    rs.recording.recordCinematic = 1.0f;
+    applyRecordCameraPath(rs, cli, input);
+    const CameraState pathCamera = input.camera();
+    EXPECT_NE(pathCamera.distance, 33.0f) << profile;
+
+    cli.hasRecordDistance = true;
+    cli.recordDistance = 33.0f;
+    cli.hasRecordFov = true;
+    cli.recordFovDeg = 55.0f;
+    applyRecordCameraPath(rs, cli, input);
+    EXPECT_FLOAT_EQ(input.camera().distance, 33.0f) << profile;
+    EXPECT_FLOAT_EQ(input.camera().fov, 55.0f) << profile;
+    // The path still sets the orientation.
+    EXPECT_FLOAT_EQ(input.camera().yaw, pathCamera.yaw) << profile;
+    EXPECT_FLOAT_EQ(input.camera().pitch, pathCamera.pitch) << profile;
+  }
+  // The cinematic HUD keyframe reports the camera the frame renders with.
+  EXPECT_FLOAT_EQ(rs.recording.recordCurrentKf.cam.distance, 33.0f);
+  input.camera() = saved;
 }
 
 } // namespace

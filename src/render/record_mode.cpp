@@ -316,6 +316,15 @@ float recordPathProgress(const platform::CliOptions &cli, int recordFrameIndex) 
                     1.0f);
 }
 
+void applyRecordCameraOverrides(const platform::CliOptions &cli, CameraState &cam) {
+  if (cli.hasRecordDistance) {
+    cam.distance = cli.recordDistance;
+  }
+  if (cli.hasRecordFov) {
+    cam.fov = cli.recordFovDeg;
+  }
+}
+
 void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, InputManager &input) {
   if (cli.recordFramesDir.empty()) {
     return;
@@ -328,6 +337,7 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
     camMutable.roll = 0.0f;
     camMutable.distance = 10.0f;
     camMutable.fov = 90.0f;
+    applyRecordCameraOverrides(cli, camMutable);
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin = 0.0f;
   } else if (cli.recordProfile == "showcase-orbit") {
@@ -346,13 +356,9 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
             ? cli.recordPitchDeg
             : compositionValue(composition, &ShowcaseOrbitComposition::pitchDeg, -6.0f);
     camMutable.roll = 0.0f;
-    camMutable.distance =
-        cli.hasRecordDistance
-            ? cli.recordDistance
-            : compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f);
-    camMutable.fov = cli.hasRecordFov
-                         ? cli.recordFovDeg
-                         : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f);
+    camMutable.distance = compositionValue(composition, &ShowcaseOrbitComposition::distance, 14.0f);
+    camMutable.fov = compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f);
+    applyRecordCameraOverrides(cli, camMutable);
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin = 0.0f;
     rs.recording.recordCurrentKf = CamKeyframe{
@@ -364,6 +370,7 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
     };
   } else {
     rs.recording.recordCurrentKf = CinematicPath::evaluate(rs.recording.recordCinematic);
+    applyRecordCameraOverrides(cli, rs.recording.recordCurrentKf.cam);
     CameraState &camMutable = input.camera();
     camMutable   = rs.recording.recordCurrentKf.cam;
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);

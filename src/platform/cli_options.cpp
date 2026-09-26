@@ -25,12 +25,12 @@ void printCliUsage(const char *argv0) {
               K_CINEMATIC_FRAMES);
   std::printf("  --record-profile <name>  Recording profile: cinematic | compare-orbit-near | showcase-orbit.\n");
   std::printf("  --start-frame N          Start recording from frame N (default: 0).\n");
-  std::printf("  --record-yaw <deg>       Override record camera yaw.\n");
-  std::printf("  --record-pitch <deg>     Override record camera pitch.\n");
-  std::printf("  --record-distance <r>    Override record camera distance.\n");
-  std::printf("  --record-fov <deg>       Override record camera field of view.\n");
+  std::printf("  --record-yaw <deg>       Showcase-orbit base yaw.\n");
+  std::printf("  --record-pitch <deg>     Showcase-orbit pitch.\n");
+  std::printf("  --record-distance <r>    Override record camera distance (every profile).\n");
+  std::printf("  --record-fov <deg>       Override record camera field of view (every profile).\n");
   std::printf("  --record-exposure <x>    Override record tone-map exposure.\n");
-  std::printf("  --record-sweep-deg <x>   Override orbit sweep degrees across frames.\n");
+  std::printf("  --record-sweep-deg <x>   Showcase-orbit sweep degrees across frames.\n");
   std::printf("  --record-composition <n> Showcase framing: centered | left-third | right-third | wide-left | wide-right.\n");
   std::printf("  --record-frame-x <n>     Override horizontal framing offset in half-frame units.\n");
   std::printf("  --record-frame-y <n>     Override vertical framing offset in half-frame units.\n");
