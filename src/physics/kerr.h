@@ -404,9 +404,9 @@ namespace physics {
  * Theta(theta0) = (Sigma dtheta/dtau)^2 hold at the initial point.
  */
 struct KerrGeodesicConsts {
-  double e;  // Energy per unit mass
-  double lz; // Angular momentum
-  double q;  // Carter constant
+  double e{0.0};  // Energy per unit mass
+  double lz{0.0}; // Angular momentum
+  double q{0.0};  // Carter constant
 };
 
 /**
@@ -433,14 +433,14 @@ struct KerrGeodesicConsts {
  * sign(vr) and sign(vtheta).
  */
 struct KerrGeodesicState {
-  double r;
-  double theta;
-  double phi;
-  double t;
-  double signR;     // +1 or -1
-  double signTheta; // +1 or -1
-  double vr{0.0};     // dr/dlambda
-  double vtheta{0.0}; // dtheta/dlambda
+  double r{0.0};
+  double theta{0.0};
+  double phi{0.0};
+  double t{0.0};
+  double signR{0.0};     // +1 or -1
+  double signTheta{0.0}; // +1 or -1
+  double vr{0.0};        // dr/dlambda
+  double vtheta{0.0};    // dtheta/dlambda
 };
 
 /**
