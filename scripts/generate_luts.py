@@ -16,6 +16,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 
+from kerr_signed_spin import conventional_orbit_args
+
 # Physical constants (cgs)
 G = 6.67430e-8
 C = 2.99792458e10
@@ -95,15 +97,19 @@ def compact_common_refs() -> dict[str, object] | None:
 
 def resolve_isco(mass: float, spin_param: float, prograde: bool,
                  refs: dict[str, object] | None) -> tuple[float, str]:
+    """Signed-spin ISCO; compact-common receives |a| and the co-rotation flag."""
     if refs:
-        return float(refs["kerr_isco"](mass, spin_param, prograde)), "compact-common"
+        magnitude, co_rotating = conventional_orbit_args(spin_param, prograde)
+        return float(refs["kerr_isco"](mass, magnitude, co_rotating)), "compact-common"
     return kerr_isco_cleanroom(mass, spin_param, prograde), "cleanroom"
 
 
 def resolve_photon_orbit(mass: float, spin_param: float, prograde: bool,
                          refs: dict[str, object] | None) -> float:
+    """Signed-spin photon orbit; compact-common receives |a| and the co-rotation flag."""
     if refs:
-        return float(refs["kerr_photon_orbit"](mass, spin_param, prograde))
+        magnitude, co_rotating = conventional_orbit_args(spin_param, prograde)
+        return float(refs["kerr_photon_orbit"](mass, magnitude, co_rotating))
     return kerr_photon_orbit_cleanroom(mass, spin_param, prograde)
 
 

@@ -17,6 +17,8 @@ import os
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 
+from kerr_signed_spin import conventional_orbit_args
+
 # Physical constants (cgs)
 G = 6.67430e-8
 C = 2.99792458e10
@@ -67,7 +69,6 @@ def maybe_compact_common() -> dict[str, object] | None:
             gravitational_redshift,
             kerr_isco,
             kerr_photon_orbit,
-            photon_sphere_radius,
         )
 
         try:
@@ -80,7 +81,6 @@ def maybe_compact_common() -> dict[str, object] | None:
 
         return {
             "kerr_isco": kerr_isco,
-            "photon_sphere_radius": photon_sphere_radius,
             "kerr_photon_orbit": kerr_photon_orbit,
             "gravitational_redshift": gravitational_redshift,
             "source": "compact-common",
@@ -88,6 +88,24 @@ def maybe_compact_common() -> dict[str, object] | None:
         }
     except Exception:
         return None
+
+
+def resolve_isco(mass: float, spin_param: float, prograde: bool,
+                 ref: dict[str, object] | None) -> float:
+    """Signed-spin ISCO; compact-common receives |a| and the co-rotation flag."""
+    if ref:
+        magnitude, co_rotating = conventional_orbit_args(spin_param, prograde)
+        return float(ref["kerr_isco"](mass, magnitude, co_rotating))
+    return kerr_isco_cleanroom(mass, spin_param, prograde)
+
+
+def resolve_photon_orbit(mass: float, spin_param: float, prograde: bool,
+                         ref: dict[str, object] | None) -> float:
+    """Signed-spin photon orbit; compact-common receives |a| and the co-rotation flag."""
+    if ref:
+        magnitude, co_rotating = conventional_orbit_args(spin_param, prograde)
+        return float(ref["kerr_photon_orbit"](mass, magnitude, co_rotating))
+    return kerr_photon_orbit(mass, spin_param, prograde)
 
 
 def main() -> int:
@@ -112,14 +130,9 @@ def main() -> int:
 
     # The disk orbits along +z; the signed spin selects co- or counter-rotation.
     ref = maybe_compact_common()
-    if ref:
-        r_isco = float(ref["kerr_isco"](mass, a, True))
-        r_ph = float(ref["photon_sphere_radius"](mass))
-        source = ref["source"]
-    else:
-        r_isco = kerr_isco_cleanroom(mass, a, True)
-        r_ph = kerr_photon_orbit(mass, a, True)
-        source = "cleanroom"
+    r_isco = resolve_isco(mass, a, True, ref)
+    r_ph = resolve_photon_orbit(mass, a, True, ref)
+    source = ref["source"] if ref else "cleanroom"
 
     r_min_over_rs = args.r_min_over_rs
     if r_min_over_rs <= 0.0:
@@ -161,12 +174,8 @@ def main() -> int:
         a_val = spin_val * r_g
         # The disk orbits along +z; the signed spin selects co- or
         # counter-rotation for both radii.
-        if ref:
-            r_isco_spin = float(ref["kerr_isco"](mass, a_val, True))
-            r_ph_spin = float(ref["kerr_photon_orbit"](mass, a_val, True))
-        else:
-            r_isco_spin = kerr_isco_cleanroom(mass, a_val, True)
-            r_ph_spin = kerr_photon_orbit(mass, a_val, True)
+        r_isco_spin = resolve_isco(mass, a_val, True, ref)
+        r_ph_spin = resolve_photon_orbit(mass, a_val, True, ref)
         spin_rows.append([spin_val, r_isco_spin / r_s, r_ph_spin / r_s])
 
     with open(os.path.join(lut_dir, "spin_radii_curve.csv"), "w", newline="") as handle:
