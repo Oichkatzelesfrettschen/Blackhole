@@ -376,9 +376,16 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   grbValue = max(0.0, texture(grbModulationLUT, vec2(u, 0.5)).r);
   density *= mix(1.0, grbValue, step(0.5, useGrbModulation));
 
-  // Apply gravitational redshift to disk emission
+  // Redshift z = u^t - 1 of the prograde Keplerian emitter seen face-on
+  // (photon Lz = 0), the quantity the redshift LUT tabulates over
+  // [r_isco, 4 r_isco] (physics::generateRedshiftLut). The analytic branch
+  // clamps r to the same range, so the LUT toggle leaves the physics unchanged.
   if (enableRedshift > 0.5) {
-    float z = gravitationalRedshift(r, schwarzschildRadius);  // Use cached radius r
+    float massM = max(0.5 * schwarzschildRadius, EPSILON);
+    float aDisk = abs(kerrSpin);
+    float rIscoM = isco_radius(aDisk);
+    float gFaceOn = dtDiskTransferG(clamp(r / massM, rIscoM, 4.0 * rIscoM), aDisk, 0.0);
+    float z = gFaceOn > 0.0 ? clamp(1.0 / gFaceOn - 1.0, 0.0, 10.0) : 0.0;
     if (useLUTs > 0.5) {
       float rNorm = r / max(schwarzschildRadius, EPSILON);
       float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
@@ -568,17 +575,9 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     return skyColor;
   }
 
-  // Apply gravitational redshift to background light
-  if (enableRedshift > 0.5 && minRadiusReached < schwarzschildRadius * 10.0) {
-    float z = gravitationalRedshift(minRadiusReached, schwarzschildRadius);
-    if (useLUTs > 0.5) {
-      float rNorm = minRadiusReached / max(schwarzschildRadius, EPSILON);
-      float denom = max(redshiftRadiusMax - redshiftRadiusMin, 0.0001);
-      float u = clamp((rNorm - redshiftRadiusMin) / denom, 0.0, 1.0);
-      z = texture(redshiftLUT, vec2(u, 0.5)).r;
-    }
-    skyColor = applySimpleRedshift(skyColor, z);
-  }
+  // Light from infinity reaching an observer at rest at infinity has
+  // E_obs = E_emit, so the sky carries no net frequency shift at any closest
+  // approach; lensing alone moves it (bhBackgroundColorFromDir).
 
   if (debugPreShapingBackground > 0.5) {
     return skyColor;
