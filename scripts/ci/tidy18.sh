@@ -1,6 +1,6 @@
 #!/bin/sh
-# Run clang-tidy 18.1.8, the version the ci-analysis lane installs from Ubuntu
-# 24.04 (clang-tidy-18), over selected translation units.
+# Run clang-tidy 18 over selected translation units, as the ci-analysis lane
+# does with Ubuntu 24.04's clang-tidy-18 package (LLVM 18.1.3).
 #
 # usage: scripts/ci/tidy18.sh [-p BUILD_DIR] [-o OUT_DIR] FILE...
 #
@@ -9,12 +9,17 @@
 #   FILE          repository-relative source paths, e.g. src/render/env_config.cpp
 #
 # The executable is $CLANG_TIDY when set, otherwise the PyPI wheel pinned at
-# 18.1.8 through `uvx --from clang-tidy==18.1.8 clang-tidy`. clang-tidy 18
+# 18.1.1 through `uvx --from clang-tidy==18.1.1 clang-tidy`. PyPI carries no
+# 18.1.3 wheel; 18.1.1 is the nearest release, and its `--list-checks
+# --checks='*'` output matches both the Ubuntu 18.1.3 binary's and the 18.1.8
+# wheel's (537 checks). clang-tidy 18
 # cannot parse the libstdc++ of a newer host GCC, so the driver replaces the
 # compile database's standard-library search path with GCC 14's, the library
 # the CI runner compiles against; $GXX14 overrides the g++-14 used to find it.
-# The summary prints one sorted `path:line check message` row per diagnostic;
-# the exit status is 1 when any diagnostic remains.
+# The summary prints one sorted `path:line check message` row per diagnostic.
+# Exit status: 1 when any diagnostic remains; 2 when clang-tidy (or uvx) exits
+# nonzero on a file without printing a diagnostic, which is a tool failure, not
+# a clean result -- the tail of that file's log is printed.
 set -eu
 
 root=$(git rev-parse --show-toplevel)
@@ -49,10 +54,10 @@ if [ -n "${CLANG_TIDY:-}" ]; then
   tidy=$CLANG_TIDY
 else
   command -v uvx >/dev/null 2>&1 || {
-    echo "tidy18: set CLANG_TIDY or install uv (uvx) for the pinned clang-tidy 18.1.8" >&2
+    echo "tidy18: set CLANG_TIDY or install uv (uvx) for the pinned clang-tidy 18.1.1" >&2
     exit 2
   }
-  tidy="uvx --from clang-tidy==18.1.8 clang-tidy"
+  tidy="uvx --from clang-tidy==18.1.1 clang-tidy"
 fi
 
 extra="--extra-arg=-Wno-unknown-warning-option --extra-arg=-Wno-unknown-argument"
@@ -62,20 +67,34 @@ for dir in $stdinc; do
 done
 
 mkdir -p "$out_dir"
-rm -f "$out_dir"/*.log
+rm -f "$out_dir"/*.log "$out_dir"/*.rc
 jobs=${TIDY_JOBS:-$(nproc)}
 # Word splitting of $tidy and $extra is intended: each holds several arguments.
 # shellcheck disable=SC2016
 printf '%s\n' "$@" | xargs -P "$jobs" -I{} sh -c '
-  log="$1/$(printf "%s" "$2" | tr / _).log"
+  base="$1/$(printf "%s" "$2" | tr / _)"
   # shellcheck disable=SC2086
-  $3 -p "$4" $5 "$2" >"$log" 2>&1 || true
+  $3 -p "$4" $5 "$2" >"$base.log" 2>&1
+  echo "$?" >"$base.rc"
 ' tidy18 "$out_dir" {} "$tidy" "$build_dir" "$extra"
 
-summary=$(cat "$out_dir"/*.log |
-  grep -E '(error|warning): .*\[[a-z0-9.,-]+\]$' |
+diag_re='(error|warning): .*\[[a-z0-9.,-]+\]$'
+failed=0
+for f in "$@"; do
+  base="$out_dir/$(printf '%s' "$f" | tr / _)"
+  rc=$(cat "$base.rc" 2>/dev/null || echo missing)
+  if [ "$rc" != 0 ] && ! grep -Eq "$diag_re" "$base.log" 2>/dev/null; then
+    echo "tidy18: clang-tidy failed on $f (exit $rc) without a diagnostic:" >&2
+    tail -5 "$base.log" >&2 2>/dev/null || true
+    failed=1
+  fi
+done
+
+summary=$(cat "$out_dir"/*.log | grep -E "$diag_re" |
   sed -E 's#^([^:]+):([0-9]+):[0-9]+: (error|warning): (.*) \[([a-z0-9.,-]+)\]$#\1:\2 \5 \4#' |
-  sed "s#^$root/##" | sort -u) || true
+  awk -v prefix="$root/" 'index($0, prefix) == 1 { $0 = substr($0, length(prefix) + 1) } { print }' |
+  sort -u) || true
+[ "$failed" = 0 ] || exit 2
 if [ -n "$summary" ]; then
   printf '%s\n' "$summary"
   exit 1

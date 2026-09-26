@@ -209,7 +209,8 @@ A workstation build and a hosted lane disagree for three reasons. The local
 Conan toolchain pins clang (the `release` preset's `compile_commands.json`
 records `/usr/bin/clang++`), while every hosted lane except the clang lanes
 compiles with GCC 14 through `conan/profiles/ci`. The analysis lane runs the
-Ubuntu 24.04 analyzers, clang-tidy 18.1.8 and cppcheck 2.13.0, and host
+Ubuntu 24.04 analyzers, clang-tidy 18.1.3 (package `clang-tidy-18`,
+`1:18.1.3-1ubuntu1`) and cppcheck 2.13.0, and host
 analyzers of other versions report a different set: clang-tidy 22 enforces
 checks clang-tidy 18 lacks, such as `readability-math-missing-parentheses` and
 `modernize-use-designated-initializers` in `tests/wiregrid_overlay_test.cpp`,
@@ -234,7 +235,7 @@ non-finite values takes the per-target `-fno-fast-math` override in
 | --- | --- | --- |
 | `scripts/ci/ci_replica.sh [REGEX]` | `ci` build and CTest with GCC 14; `CI_REPLICA_RELEASE=1` for `ci-release`, `CI_REPLICA_SANITIZE=1` for `ci-sanitize` | `gcc-14`, `g++-14`, `bwrap`, Ninja, and `./scripts/conan_install.sh Release build` |
 | `scripts/ci/cppcheck_ci.sh [-b BASE] [FILE...]` | `ci-analysis` cppcheck 2.13.0 over changed `.cpp` files, with each file's CMake `-D`/`-I` flags | Docker or Podman; a configured `build/Release` |
-| `scripts/ci/tidy18.sh [-p DIR] FILE...` | `ci-analysis` clang-tidy 18.1.8 against GCC 14's libstdc++ | `uv` (or `CLANG_TIDY` pointing at an 18.1.8 binary), `g++-14`, a compile database |
+| `scripts/ci/tidy18.sh [-p DIR] FILE...` | `ci-analysis` clang-tidy 18 (wheel 18.1.1; CI runs 18.1.3) against GCC 14's libstdc++ | `uv` (or `CLANG_TIDY` pointing at a clang-tidy 18 binary), `g++-14`, a compile database |
 
 `ci_replica.sh` copies the local Release generators, replaces the compiler the
 toolchain names with GCC 14, and mounts an empty `/usr/include/glm` through
@@ -244,9 +245,12 @@ reproduces the compiler, flags, and tests of a lane but not the lane's own
 package binaries. `cppcheck_ci.sh` builds its image from
 `scripts/ci/Dockerfile.cppcheck` on first use and mounts the checkout and the
 Conan cache read-only at their host paths. `tidy18.sh` runs the PyPI
-`clang-tidy==18.1.8` wheel through `uvx`, because clang-tidy 18 cannot parse the
-libstdc++ of a newer host GCC; it substitutes GCC 14's headers for the compile
-database's standard library. Each script documents its options in its header comment.
+`clang-tidy==18.1.1` wheel through `uvx`. PyPI publishes no 18.1.3 wheel, and
+18.1.1 is the nearest release; its `--list-checks --checks='*'` output is
+identical to the Ubuntu 18.1.3 binary's (537 checks). clang-tidy 18 cannot
+parse the libstdc++ of a newer host GCC, so the script substitutes GCC 14's
+headers for the compile database's standard library. It exits 2 when
+clang-tidy fails on a file without printing a diagnostic. Each script documents its options in its header comment.
 
 ## Audit baseline
 

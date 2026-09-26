@@ -10,7 +10,7 @@ CMake, what to add per compiler, and what complementary tools apply to this
 specific codebase (a deterministic simulation core plus an OpenGL/CUDA renderer).
 
 Hosted CI compiles differently from the workstation. The required lanes build
-with GCC 14 on Ubuntu 24.04 and analyze with clang-tidy 18.1.8 and cppcheck
+with GCC 14 on Ubuntu 24.04 and analyze with clang-tidy 18.1.3 and cppcheck
 2.13.0; advisory lanes add clang 18, fast-math clang 18, and ASan+UBSan. The
 local clang 22 build, clang-tidy 22, and cppcheck 2.21 therefore pass or fail
 different sources than the merge gate does. clang-tidy stays pinned to 18 for
