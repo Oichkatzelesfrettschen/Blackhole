@@ -26,6 +26,10 @@
  *   2. 30 sample points on the analytic orbit satisfy R(r) >= -1e-3.
  *   3. r(lambda0 + half_T) = r2 (outer turning point) to 5e-3.
  *   4. RK4 seeded at 10% of half_T, integrated over 80%, RMSE < 2e-3.
+ *
+ * Biquadratics (c1 = 0, c0 < 0): alpha^2 = 0 up to rounding, and the roots
+ * come from z^2 + c2 z + c0 = 0 in z = r^2: (r^2 - 1)(r^2 + 2) and
+ * (r^2 - 4)(r^2 + 1) each have exactly the real pair +-1, +-2.
  */
 
 #include <gtest/gtest.h>
@@ -159,6 +163,15 @@ __global__ void k_orbit_parity(float c2, float c1, float c0, float* out)
     out[6] = (n_cmp > 0) ? sqrtf(sum_sq / (float)n_cmp) : -1.0f;
 }
 
+/* d_quartic_real_roots on one quartic: out[0] = count, out[1..4] = roots. */
+__global__ void k_quartic_roots(float c2, float c1, float c0, float* out)
+{
+    float roots[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    int const nreal = d_quartic_real_roots(c2, c1, c0, roots);
+    out[0] = (float)nreal;
+    for (int k = 0; k < 4; ++k) out[1 + k] = roots[k];
+}
+
 /* ============================================================================
  * Test fixture
  * ============================================================================ */
@@ -263,4 +276,25 @@ TEST_F(GeodeticOrbitTest, OrbitType5_TightInner)
 {
     check_orbit("Type5_TightInner", -55.0f, 210.0f, -216.0f,
                 4.0f, 3.0f, 2.0f, -9.0f);
+}
+
+/* ============================================================================
+ * Biquadratics with alpha = 0: (r^2 - 1)(r^2 + 2) and (r^2 - 4)(r^2 + 1)
+ * ============================================================================ */
+
+TEST_F(GeodeticOrbitTest, BiquadraticWithZeroAlpha)
+{
+    struct Case { float c2, c0, root; };
+    for (Case const k : {Case{1.0f, -2.0f, 1.0f}, Case{-3.0f, -4.0f, 2.0f}}) {
+        float* d_out = nullptr;
+        ASSERT_EQ(cudaMalloc(&d_out, 5 * sizeof(float)), cudaSuccess);
+        k_quartic_roots<<<1,1>>>(k.c2, 0.0f, k.c0, d_out);
+        ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+        float out[5] = {};
+        ASSERT_EQ(cudaMemcpy(out, d_out, sizeof(out), cudaMemcpyDeviceToHost), cudaSuccess);
+        cudaFree(d_out);
+        ASSERT_EQ((int)(out[0] + 0.5f), 2) << "c2=" << k.c2 << " c0=" << k.c0;
+        EXPECT_NEAR(out[1], k.root, 1.0e-5f) << "c2=" << k.c2;
+        EXPECT_NEAR(out[2], -k.root, 1.0e-5f) << "c2=" << k.c2;
+    }
 }

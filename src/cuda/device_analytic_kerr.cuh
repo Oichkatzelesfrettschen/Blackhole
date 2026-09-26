@@ -214,6 +214,11 @@ __device__ int d_quartic_real_roots(float c2, float c1, float c0, float r[4])
 
     float disc = 0.25f * q * q + (1.0f / 27.0f) * p * p * p;
 
+    /* alpha^2 = w is zero for the biquadratic (c1 = 0 with the largest
+     * resolvent root at w = 0); rounding leaves it a few ulps either side,
+     * so |w| within 1e-5 of the coefficient scale is solved in z = r^2
+     * below (analytic_kerr_geodesic.h findRadialRoots twin). */
+    float const w_tol = 1.0e-5f * fmaxf(1.0f, fmaxf(fabsf(c2), sqrtf(fabsf(c0))));
     float alpha = 0.0f;
     bool  found = false;
 
@@ -225,8 +230,8 @@ __device__ int d_quartic_real_roots(float c2, float c1, float c0, float r[4])
         float u  = (u3 >= 0.0f) ? cbrtf(u3) : -cbrtf(-u3);
         float v  = (v3 >= 0.0f) ? cbrtf(v3) : -cbrtf(-v3);
         float w  = (u + v) - shift;
-        if (w >= 0.0f) {
-            alpha = sqrtf(w);
+        if (w >= -w_tol) {
+            alpha = sqrtf(fmaxf(w, 0.0f));
             found = true;
         }
     } else {
@@ -240,8 +245,8 @@ __device__ int d_quartic_real_roots(float c2, float c1, float c0, float r[4])
         for (int k = 0; k < 3 && !found; k++) {
             float phi_k = (base_phi + TWO_PI * (float)k) * (1.0f / 3.0f);
             float w     = 2.0f * cbrt_r * cosf(phi_k) - shift;
-            if (w >= 1.0e-10f) {
-                alpha = sqrtf(w);
+            if (w >= -w_tol) {
+                alpha = sqrtf(fmaxf(w, 0.0f));
                 found = true;
             }
         }
@@ -249,33 +254,49 @@ __device__ int d_quartic_real_roots(float c2, float c1, float c0, float r[4])
 
     if (!found) return 0;
 
-    /* Compute beta and gamma from the factorization constraint.
-     * From (r^2+alpha*r+beta)(r^2-alpha*r+gamma) matching c2,c1,c0:
-     *   beta  = (c2 + alpha^2)/2 - c1/(2*alpha)
-     *   gamma = (c2 + alpha^2)/2 + c1/(2*alpha)
-     */
-    float w       = alpha * alpha; /* = resolved alpha^2 */
-    float half_cw = 0.5f * (c2 + w);
-    float half_c1a = (alpha > 1.0e-8f) ? (0.5f * c1 / alpha) : 0.0f;
-    float beta  = half_cw - half_c1a;
-    float gamma = half_cw + half_c1a;
-
-    float d1 = w - 4.0f * beta;
-    float d2 = w - 4.0f * gamma;
-
-    /* Collect real roots */
     float roots[4];
     int nreal = 0;
+    if (alpha * alpha <= w_tol) {
+        /* Biquadratic: z^2 + c2 z + c0 = 0, r = +-sqrt(z) for each z >= 0. */
+        float const dz = c2 * c2 - 4.0f * c0;
+        if (dz < 0.0f) return 0;
+        float const sq = sqrtf(dz);
+        float const z_hi = 0.5f * (-c2 + sq);
+        float const z_lo = 0.5f * (-c2 - sq);
+        if (z_hi >= 0.0f) {
+            roots[nreal++] = sqrtf(z_hi);
+            roots[nreal++] = -sqrtf(z_hi);
+        }
+        if (z_lo >= 0.0f) {
+            roots[nreal++] = sqrtf(z_lo);
+            roots[nreal++] = -sqrtf(z_lo);
+        }
+    } else {
+        /* Compute beta and gamma from the factorization constraint.
+         * From (r^2+alpha*r+beta)(r^2-alpha*r+gamma) matching c2,c1,c0:
+         *   beta  = (c2 + alpha^2)/2 - c1/(2*alpha)
+         *   gamma = (c2 + alpha^2)/2 + c1/(2*alpha)
+         */
+        float w       = alpha * alpha; /* = resolved alpha^2 */
+        float half_cw = 0.5f * (c2 + w);
+        float half_c1a = 0.5f * c1 / alpha;
+        float beta  = half_cw - half_c1a;
+        float gamma = half_cw + half_c1a;
 
-    if (d1 >= 0.0f) {
-        float sq1      = sqrtf(d1);
-        roots[nreal++] = 0.5f * (-alpha + sq1);
-        roots[nreal++] = 0.5f * (-alpha - sq1);
-    }
-    if (d2 >= 0.0f) {
-        float sq2      = sqrtf(d2);
-        roots[nreal++] = 0.5f * (alpha + sq2);
-        roots[nreal++] = 0.5f * (alpha - sq2);
+        float d1 = w - 4.0f * beta;
+        float d2 = w - 4.0f * gamma;
+
+        /* Collect real roots */
+        if (d1 >= 0.0f) {
+            float sq1      = sqrtf(d1);
+            roots[nreal++] = 0.5f * (-alpha + sq1);
+            roots[nreal++] = 0.5f * (-alpha - sq1);
+        }
+        if (d2 >= 0.0f) {
+            float sq2      = sqrtf(d2);
+            roots[nreal++] = 0.5f * (alpha + sq2);
+            roots[nreal++] = 0.5f * (alpha - sq2);
+        }
     }
 
     /* Bubble sort: descending order */

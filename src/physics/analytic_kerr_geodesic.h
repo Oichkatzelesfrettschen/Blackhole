@@ -129,23 +129,13 @@ struct RadialRoots {
 }
 
 /**
- * @brief Coefficients of the quartic R(r) = r^4 + c3*r^3 + c2*r^2 + c1*r + c0.
+ * @brief Coefficients of the depressed quartic R(r) = r^4 + c2 r^2 + c1 r + c0 (M = 1).
  *
- * Expanding R(r) in standard form (with M=1):
- *   c3 = 0 (no cubic term in Kerr)
- *   ... actually R(r) expanded gives:
- *   R(r) = r^4 + (a^2 - xi^2 - eta)*r^2 + 2*(eta + (xi-a)^2)*r - a^2*eta
- *
- * Wait: let me be more careful. R(r) = (r^2+a^2-a*xi)^2 - (r^2-2r+a^2)(eta+(xi-a)^2)
- * Expanding:
- *   (r^2+a^2-a*xi)^2 = r^4 + 2r^2(a^2-a*xi) + (a^2-a*xi)^2
- *   (r^2-2r+a^2)(eta+(xi-a)^2) = (eta+xi_a^2)*r^2 - 2(eta+xi_a^2)*r + a^2(eta+xi_a^2)
- *
- * So: R = r^4 + [2(a^2-a*xi) - eta - xi_a^2]*r^2
- *       + 2(eta+xi_a^2)*r
- *       + [(a^2-a*xi)^2 - a^2(eta+xi_a^2)]
- *
- * Note: c3 = 0 (no r^3 term), which is correct.
+ * Expanding R(r) = (r^2 + a^2 - a xi)^2 - (r^2 - 2r + a^2)(eta + (xi - a)^2):
+ *   c2 = 2(a^2 - a xi) - eta - (xi - a)^2
+ *   c1 = 2(eta + (xi - a)^2)
+ *   c0 = (a^2 - a xi)^2 - a^2 (eta + (xi - a)^2)
+ * There is no r^3 term.
  */
 struct QuarticCoeffs {
   double c0 = 0.0; // constant term
@@ -171,6 +161,58 @@ struct QuarticCoeffs {
 // Root Finding (Depressed Quartic)
 // ============================================================================
 
+namespace detail {
+
+/// Roots of r^2 + p r + q = 0 into result.roots[slot], [slot + 1]; counts real ones.
+inline void solveQuadraticPair(double p, double q, std::size_t slot, RadialRoots &result) {
+  const double disc = (p * p) - (4.0 * q);
+  if (disc >= 0.0) {
+    const double sq = std::sqrt(disc);
+    result.roots.at(slot) = std::complex<double>((-p + sq) / 2.0, 0.0);
+    result.roots.at(slot + 1) = std::complex<double>((-p - sq) / 2.0, 0.0);
+    result.nReal += 2;
+  } else {
+    const double sq = std::sqrt(-disc);
+    result.roots.at(slot) = std::complex<double>(-p / 2.0, sq / 2.0);
+    result.roots.at(slot + 1) = std::complex<double>(-p / 2.0, -sq / 2.0);
+  }
+}
+
+/// r = +-sqrt(z) for each root z of z^2 + c2 z + c0 = 0 (the c1 = 0 quartic).
+inline void solveBiquadratic(const QuarticCoeffs &c, RadialRoots &result) {
+  const std::complex<double> sqD =
+      std::sqrt(std::complex<double>((c.c2 * c.c2) - (4.0 * c.c0), 0.0));
+  const auto storePair = [&result](std::complex<double> z, std::size_t slot) {
+    const bool realPair = z.imag() == 0.0 && z.real() >= 0.0;
+    const std::complex<double> root =
+        realPair ? std::complex<double>(std::sqrt(z.real()), 0.0) : std::sqrt(z);
+    result.roots.at(slot) = root;
+    result.roots.at(slot + 1) = -root;
+    result.nReal += realPair ? 2 : 0;
+  };
+  storePair((-c.c2 + sqD) / 2.0, 0);
+  storePair((-c.c2 - sqD) / 2.0, 2);
+}
+
+/// Motion type from the real-root count; roots sorted by descending real part.
+inline void classifyAndSort(RadialRoots &result) {
+  if (result.nReal == 4) {
+    result.type = RadialMotionType::Transit;
+  } else if (result.nReal == 2) {
+    result.type = RadialMotionType::Scatter;
+  } else {
+    result.type = RadialMotionType::Plunge;
+  }
+  if (result.nReal >= 2) {
+    std::stable_sort(result.roots.begin(), result.roots.end(),
+                     [](const std::complex<double> &lhs, const std::complex<double> &rhs) {
+                       return lhs.real() > rhs.real();
+                     });
+  }
+}
+
+} // namespace detail
+
 /**
  * @brief Find roots of the depressed quartic r^4 + c2*r^2 + c1*r + c0 = 0.
  *
@@ -182,11 +224,14 @@ struct QuarticCoeffs {
 [[nodiscard]] inline RadialRoots findRadialRoots(const QuarticCoeffs &c) {
   RadialRoots result;
 
-  // Ferrari's resolvent cubic: y^3 - c2*y^2 - 4*c0*y + (4*c2*c0 - c1^2) = 0
-  // Substituting y = t + c2/3 to get depressed cubic t^3 + pt + q = 0
+  // Ferrari's resolvent cubic: y^3 - c2*y^2 - 4*c0*y + (4*c2*c0 - c1^2) = 0,
+  // where y = beta + gamma of the factorization below. Substituting
+  // y = t + c2/3 gives the depressed cubic t^3 + p t + q = 0 with
+  //   p = -c2^2/3 - 4 c0,
+  //   q = -2 c2^3/27 + (4/3) c2 c0 + 4 c2 c0 - c1^2 = -2 c2^3/27 + (8/3) c2 c0 - c1^2.
   const double pCoeff = (-(c.c2 * c.c2) / 3.0) - (4.0 * c.c0);
   const double qCoeff =
-      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((4.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
+      ((-2.0 * c.c2 * c.c2 * c.c2) / 27.0) + ((8.0 * c.c2 * c.c0) / 3.0) - (c.c1 * c.c1);
 
   // Cardano's formula for the resolvent cubic
   const double disc = ((qCoeff * qCoeff) / 4.0) + ((pCoeff * pCoeff * pCoeff) / 27.0);
@@ -200,93 +245,37 @@ struct QuarticCoeffs {
   } else {
     // Three real roots; use trigonometric form
     const double rVal = std::sqrt(-(pCoeff * pCoeff * pCoeff) / 27.0);
-    const double phi = std::acos(-qCoeff / (2.0 * rVal));
+    // k = 0 branch: the largest resolvent root, which keeps y1 - c2 >= 0
+    // (a real alpha) for every real quartic.
+    const double phi = std::acos(std::clamp(-qCoeff / (2.0 * rVal), -1.0, 1.0));
     y1 = (2.0 * std::cbrt(rVal) * std::cos(phi / 3.0)) + (c.c2 / 3.0);
   }
 
-  // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma)
-  const double a = y1 + c.c2;
+  // Factor quartic: r^4 + c2*r^2 + c1*r + c0 = (r^2+alpha*r+beta)(r^2-alpha*r+gamma).
+  // Matching the r^2 coefficient gives beta + gamma - alpha^2 = c2, so
+  // alpha^2 = y1 - c2. alpha = 0 is the biquadratic case (c1 = alpha
+  // (gamma - beta) = 0 with the largest resolvent root y1 = c2); there
+  // beta and gamma are the roots of z^2 - c2 z + c0 and the ratio
+  // c1 / alpha that separates them is 0 / 0. Rounding leaves alpha^2 a few
+  // ulps either side of zero, so a magnitude within 1e-12 of the coefficient
+  // scale is solved as the quadratic z^2 + c2 z + c0 = 0 in z = r^2.
+  const double a = y1 - c.c2;
+  const double scale =
+      std::max({1.0, std::abs(y1), std::abs(c.c2), std::sqrt(std::abs(c.c0))});
 
-  if (a < 0.0) {
+  if (std::abs(a) <= 1e-12 * scale) {
+    detail::solveBiquadratic(c, result);
+  } else if (a < 0.0) {
     // alpha is imaginary; all roots come in complex conjugate pairs
     result.nReal = 0;
     result.type = RadialMotionType::Plunge;
     return result;
-  }
-
-  const double alpha = std::sqrt(a);
-  double beta = 0.0;
-  double gamma = 0.0;
-
-  if (std::abs(alpha) > 1e-15) {
-    // Quadratic 1: r^2 + alpha*r + beta = 0; use robust relations
-    beta = (y1 / 2.0) - (c.c1 / (2.0 * alpha));
-    gamma = (y1 / 2.0) + (c.c1 / (2.0 * alpha));
   } else {
-    // alpha ~ 0: degenerate case
-    const double disc1 = -4.0 * c.c0;
-    if (disc1 < 0.0) {
-      result.nReal = 0;
-      result.type = RadialMotionType::Plunge;
-      return result;
-    }
-    const double sq = std::sqrt(disc1);
-    result.roots.at(0) = std::complex<double>(sq / 2.0, 0);
-    result.roots.at(1) = std::complex<double>(-sq / 2.0, 0);
-    result.roots.at(2) = result.roots.at(0);
-    result.roots.at(3) = result.roots.at(1);
-    result.nReal = 2;
-    result.type = RadialMotionType::Transit;
-    return result;
+    const double alpha = std::sqrt(a);
+    detail::solveQuadraticPair(alpha, (y1 / 2.0) - (c.c1 / (2.0 * alpha)), 0, result);
+    detail::solveQuadraticPair(-alpha, (y1 / 2.0) + (c.c1 / (2.0 * alpha)), 2, result);
   }
-
-  const double disc1 = (alpha * alpha) - (4.0 * beta);
-  const double disc2 = (alpha * alpha) - (4.0 * gamma);
-
-  result.nReal = 0;
-
-  if (disc1 >= 0.0) {
-    const double sq1 = std::sqrt(disc1);
-    result.roots.at(0) = std::complex<double>((-alpha + sq1) / 2.0, 0);
-    result.roots.at(1) = std::complex<double>((-alpha - sq1) / 2.0, 0);
-    result.nReal += 2;
-  } else {
-    const double sq1 = std::sqrt(-disc1);
-    result.roots.at(0) = std::complex<double>(-alpha / 2.0, sq1 / 2.0);
-    result.roots.at(1) = std::complex<double>(-alpha / 2.0, -sq1 / 2.0);
-  }
-
-  if (disc2 >= 0.0) {
-    const double sq2 = std::sqrt(disc2);
-    result.roots.at(2) = std::complex<double>((alpha + sq2) / 2.0, 0);
-    result.roots.at(3) = std::complex<double>((alpha - sq2) / 2.0, 0);
-    result.nReal += 2;
-  } else {
-    const double sq2 = std::sqrt(-disc2);
-    result.roots.at(2) = std::complex<double>(alpha / 2.0, sq2 / 2.0);
-    result.roots.at(3) = std::complex<double>(alpha / 2.0, -sq2 / 2.0);
-  }
-
-  // Classify motion type
-  if (result.nReal == 4) {
-    result.type = RadialMotionType::Transit;
-  } else if (result.nReal == 2) {
-    result.type = RadialMotionType::Scatter;
-  } else {
-    result.type = RadialMotionType::Plunge;
-  }
-
-  // Sort real roots in descending order
-  if (result.nReal >= 2) {
-    for (std::size_t i = 0; i < 3; ++i) {
-      for (std::size_t j = i + 1; j < 4; ++j) {
-        if (result.roots.at(j).real() > result.roots.at(i).real()) {
-          std::swap(result.roots.at(i), result.roots.at(j));
-        }
-      }
-    }
-  }
-
+  detail::classifyAndSort(result);
   return result;
 }
 

@@ -8,7 +8,9 @@
  * physics::kerrIscoRadius, physics::kerrPhotonOrbit*, verified::kerrIsco*,
  * verified::photonOrbit*, blackhole::physics::NovikovThorneDisk::iscoRadius, and
  * the Blender bridge's CUDA disk edge bridge::diskIscoOverM against
- * Bardeen-Press-Teukolsky (1972) closed-form values.
+ * Bardeen-Press-Teukolsky (1972) closed-form values. The bridge also runs the
+ * Kerr Mino-time integrator at every spin, zero included, as the desktop does
+ * (bridge::kerrIntegratorFlag).
  */
 
 #include <cmath>
@@ -16,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include "blender_bridge/bridge_disk_isco.h"
+#include "blender_bridge/bridge_integrator.h"
 #include "physics/constants.h"
 #include "physics/kerr.h"
 #include "physics/novikov_thorne.h"
@@ -97,4 +100,14 @@ TEST(KerrOrbitConvention, BridgeDiskIscoMatchesSignedIsco) {
   // Extremal spins: co-rotating edge at the horizon, counter-rotating at 9 M.
   EXPECT_NEAR(static_cast<double>(bridge::diskIscoOverM(1.0f)), 1.0, 1.0e-5);
   EXPECT_NEAR(static_cast<double>(bridge::diskIscoOverM(-1.0f)), 9.0, 1.0e-5);
+}
+
+TEST(KerrOrbitConvention, BridgeRunsTheMinoIntegratorAtEverySpin) {
+  // The Mino integrator is exact at a = 0; a spin-gated RK4 lane below
+  // |a*| = 1e-6 made bridge renders jump at zero spin. Only the explicit
+  // BLACKHOLE_BRIDGE_KERR_ENABLED=0 override selects RK4.
+  for (const float spin : {0.0F, -0.0F, 1.0e-7F, -1.0e-7F, 0.6F, -0.998F}) {
+    EXPECT_EQ(bridge::kerrIntegratorFlag(spin, 1), 1) << "spin=" << spin;
+    EXPECT_EQ(bridge::kerrIntegratorFlag(spin, 0), 0) << "spin=" << spin;
+  }
 }

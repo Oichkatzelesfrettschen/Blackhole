@@ -19,6 +19,12 @@
  *   accumI += transmittance * S * (1 - exp(-alpha * ds))
  *   transmittance *= exp(-alpha * ds)
  *
+ * Along a Kerr geodesic ds is the affine length of the step at E = 1
+ * (kerrAffineStep in kerr.glsl), the length a distant observer assigns to
+ * the path, and j and alpha are per unit of it. The integrator's Mino-time
+ * increment is not a length: d(affine) = Sigma d(Mino), so passing it
+ * directly underweights emission and optical depth by ~r^2.
+ *
  * Taylor fallback for thin segments (tau = alpha * ds < 1e-5):
  *   1 - exp(-tau) ~= tau          (avoids (1-exp(-tau)) cancellation)
  *   exp(-tau)     ~= 1 - tau

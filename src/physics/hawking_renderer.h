@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <vector>
 
+#include "hawking_uniforms.h"
 #include "../gl_loader.h" // NOLINT(misc-include-cleaner) -- provides `using namespace gl` for bare GLuint/GLenum
 
 namespace physics {
@@ -88,7 +89,8 @@ public:
   /**
    * @brief Set shader uniforms for current frame.
    *
-   * Binds LUT textures and sets all Hawking glow parameters.
+   * Sets all Hawking glow parameters (hawkingUniformValues) and, when both
+   * LUTs are loaded, binds the LUT textures to units 10 and 11.
    *
    * @param shaderProgram OpenGL shader program
    * @param blackHoleMass Black hole mass [g]
