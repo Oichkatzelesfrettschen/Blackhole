@@ -194,3 +194,20 @@ TEST(PerceivedView, HostSeesTheColonyOnlyAsReported) {
   // The referee view still carries the truth, for tests and debugging only.
   EXPECT_EQ(state.renderSnapshot().colonyTechTier, state.colonyTechTier());
 }
+
+// Falsifier: the host's view listing an order the colony sent, which the
+// host has no way to have learned.
+TEST(PerceivedView, HostDoesNotSeeColonyOrdersInFlight) {
+  game::CampaignSession session(3, shippedStory(), game::K_MILLER_BAND);
+  game::CampaignState &state = session.state();
+  ASSERT_TRUE(session.issueAssignTask(K_SURVEY_FLEET, 1.0, game::K_FIRST_COLONY_NODE));
+  ASSERT_TRUE(session.issueAssignTask(K_SURVEY_FLEET, 1.0, game::K_AUTHORITY_NODE));
+  state.advanceTurn();
+  ASSERT_EQ(state.renderSnapshot().ordersInFlight.size(), 2U);
+  const game::CampaignViewSnapshot host = state.perceivedSnapshot(game::K_AUTHORITY_NODE);
+  ASSERT_EQ(host.ordersInFlight.size(), 1U);
+  EXPECT_EQ(host.ordersInFlight.front().origin, game::K_AUTHORITY_NODE);
+  const game::CampaignViewSnapshot colony = state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  ASSERT_EQ(colony.ordersInFlight.size(), 1U);
+  EXPECT_EQ(colony.ordersInFlight.front().origin, game::K_FIRST_COLONY_NODE);
+}

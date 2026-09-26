@@ -90,6 +90,9 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
                 [observer](const ArrivalRecord &signal) { return signal.sender != observer; });
   std::erase_if(view.arrivals,
                 [observer](const ArrivalRecord &arrival) { return arrival.destination != observer; });
+  // A station knows the orders it sent, not those another station sent.
+  std::erase_if(view.ordersInFlight,
+                [observer](const OrderInFlightView &order) { return order.origin != observer; });
   if (observer == K_AUTHORITY_NODE) {
     // The host's own ledger, intel, and fleet reports are host-local truth.
     return view;
@@ -106,8 +109,6 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   view.clearedTurn = 0;
   view.intel.clear();
   view.reportsInFlight.clear();
-  std::erase_if(view.ordersInFlight,
-                [observer](const OrderInFlightView &order) { return order.origin != observer; });
 
   // Fleets report to the host: no telemetry here, and a position only where
   // this station last sent them.
