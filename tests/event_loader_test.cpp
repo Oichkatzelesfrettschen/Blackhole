@@ -283,9 +283,10 @@ namespace {
 
 /** @brief A campaign built directly from a hand-made story, bypassing the
  *         loader, so the core's own validation is what stands. */
-bool storyBuildsValid(const game::EventSet &story) {
+bool storyBuildsValidWithSeed(const game::EventSet &story, std::uint64_t seed) {
   const campaign_test::FakeTimeField field;
   game::CampaignConfig config = campaign_test::fakeConfig();
+  config.seed = seed;
   game::ColonyConfig colony;
   colony.bandIndex = 1;
   colony.localTickSec = 1;
@@ -293,6 +294,10 @@ bool storyBuildsValid(const game::EventSet &story) {
   config.story = story;
   const game::CampaignState state(config, field);
   return state.valid();
+}
+
+bool storyBuildsValid(const game::EventSet &story) {
+  return storyBuildsValidWithSeed(story, campaign_test::fakeConfig().seed);
 }
 
 game::EventSet scheduleStory(const game::IntRef &delay) {
@@ -661,6 +666,38 @@ TEST(EventPredicates, MalformedSilenceReferenceIsInvalidNotAThrow) {
   bool valid = true;
   EXPECT_NO_THROW(valid = storyBuildsValid(story));
   EXPECT_FALSE(valid);
+}
+
+// Falsifier: a hand-built story whose schedule delay or silence threshold
+// leaves its bound somewhere in the parameter's range building valid for a
+// seed whose draw lands inside the bound. The loader refuses such a range for
+// every seed (StructuralErrorsRejected), and the core must agree.
+TEST(EventPredicates, RangeDependentBoundsHoldForEverySeed) {
+  game::EventSet delay = scheduleStory({.plus = 0, .times = 1, .param = 0});
+  delay.params = {{.name = "k", .min = 0, .max = 5}};
+  game::EventSet delayAboveZero = delay;
+  delayAboveZero.params.front().min = 1;
+
+  game::EventSet silence;
+  silence.flags = {game::K_DARK_FLAG_NAME};
+  silence.params = {{.name = "k", .min = -5, .max = 5}};
+  game::EventDef event;
+  event.id = 1;
+  game::EventPredicate received;
+  received.kind = game::PredicateKind::Received;
+  received.silentFor = true;
+  received.value = {.plus = 0, .times = 1, .param = 0};
+  event.triggers = {received};
+  silence.events = {event};
+  game::EventSet silenceNonNegative = silence;
+  silenceNonNegative.params.front().min = 0;
+
+  for (std::uint64_t seed = 1; seed <= 32; ++seed) {
+    EXPECT_FALSE(storyBuildsValidWithSeed(delay, seed)) << "seed " << seed;
+    EXPECT_FALSE(storyBuildsValidWithSeed(silence, seed)) << "seed " << seed;
+    EXPECT_TRUE(storyBuildsValidWithSeed(delayAboveZero, seed)) << "seed " << seed;
+    EXPECT_TRUE(storyBuildsValidWithSeed(silenceNonNegative, seed)) << "seed " << seed;
+  }
 }
 
 // Falsifier: loading a large story being quadratic in its event count -- a

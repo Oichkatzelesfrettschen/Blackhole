@@ -431,11 +431,10 @@ void CampaignState::resolveStoryParams() {
     const bool flagged =
         predicate.kind == PredicateKind::FlagSet || predicate.kind == PredicateKind::FlagClear;
     // A silence threshold below zero would fire with no silent interval; the
-    // loader refuses one, and so does the core.
-    // The reference is validated before it is resolved: resolve() indexes the
-    // parameters and must only see a reference intRefValid accepted.
+    // loader refuses one, and so does the core, over the parameter's whole
+    // range with the loader's own intRefMinimum, so validity is seed-free.
     const bool silenceOk = predicate.kind != PredicateKind::Received || !predicate.silentFor ||
-                           (intRefValid(predicate.value) && resolve(predicate.value) >= 0);
+                           intRefMinimum(predicate.value, story.params).value_or(-1) >= 0;
     return enumsOk(predicate) && intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
            (!flagged || flagOk(predicate.flag)) && silenceOk;
   };
@@ -455,7 +454,7 @@ void CampaignState::resolveStoryParams() {
       const std::optional<std::size_t> target = eventIndexOf(story.events, effect.event);
       return target.has_value() &&
              story.events.at(target.value_or(0)).mode == EventMode::Scheduled &&
-             resolve(effect.delayTurns) >= 1;
+             intRefMinimum(effect.delayTurns, story.params).value_or(0) >= 1;
     }
     }
     return false;

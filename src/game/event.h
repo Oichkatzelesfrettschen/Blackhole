@@ -20,6 +20,7 @@
 #ifndef BLACKHOLE_GAME_EVENT_H
 #define BLACKHOLE_GAME_EVENT_H
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -231,6 +232,28 @@ void appendEventSet(std::vector<std::uint8_t> &out, const EventSet &story);
 
 /** @brief FNV-1a 64 over appendEventSet's bytes: identifies a story in a save. */
 [[nodiscard]] std::uint64_t eventSetDigest(const EventSet &story);
+
+/** @brief Smallest value `ref` takes over its parameter's whole [min, max]
+ *         range; nullopt when the parameter index is out of range or either
+ *         end overflows. The loader and CampaignState both check lower bounds
+ *         (a schedule delay of at least one turn, a non-negative silence)
+ *         with it, so a story's validity never depends on the seed's draw. */
+[[nodiscard]] inline std::optional<std::int64_t>
+intRefMinimum(const IntRef &ref, const std::vector<EventParam> &params) {
+  if (ref.param == K_NO_PARAM) {
+    return ref.plus;
+  }
+  if (ref.param >= params.size()) {
+    return std::nullopt;
+  }
+  const EventParam &param = params.at(ref.param);
+  const std::optional<std::int64_t> atMin = checkedLinear(ref.times, param.min, ref.plus);
+  const std::optional<std::int64_t> atMax = checkedLinear(ref.times, param.max, ref.plus);
+  if (!atMin.has_value() || !atMax.has_value()) {
+    return std::nullopt;
+  }
+  return std::min(atMin.value(), atMax.value());
+}
 
 /// Most occurrences one event may run from a single seed firing (or, inside a
 /// repeating cycle, per pass round the cycle): the fan-out bound a story's

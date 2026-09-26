@@ -278,18 +278,13 @@ private:
 
   /** @brief Smallest value an IntRef can take over its parameter's range. */
   [[nodiscard]] std::int64_t minimumOf(const IntRef &ref) const {
-    if (ref.param == K_NO_PARAM) {
-      return ref.plus;
-    }
-    // Within the documented ranges neither end can overflow; checkedLinear
+    // Within the documented ranges neither end can overflow; intRefMinimum
     // makes that a checked fact rather than an assumption.
-    const EventParam &param = story_.params.at(ref.param);
-    const std::optional<std::int64_t> atMin = checkedLinear(ref.times, param.min, ref.plus);
-    const std::optional<std::int64_t> atMax = checkedLinear(ref.times, param.max, ref.plus);
-    if (!atMin.has_value() || !atMax.has_value()) {
+    const std::optional<std::int64_t> minimum = intRefMinimum(ref, story_.params);
+    if (!minimum.has_value()) {
       fail("$", "integer reference overflows");
     }
-    return std::min(atMin.value(), atMax.value());
+    return minimum.value();
   }
 
   static NodeId loadNode(const Json &value, const std::string &path) {
