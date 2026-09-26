@@ -8,10 +8,12 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "game/campaign.h"
@@ -154,27 +156,67 @@ bool hasBranchingScheduleCycle(const EventSet &story) {
       }
     }
   }
-  // reach[u][v]: v is reachable from u in one or more schedule steps.
-  std::vector<std::vector<std::uint8_t>> reach(count, std::vector<std::uint8_t>(count, 0));
-  for (std::size_t source = 0; source < count; ++source) {
-    std::vector<std::size_t> frontier = edges.at(source);
-    while (!frontier.empty()) {
-      const std::size_t node = frontier.back();
-      frontier.pop_back();
-      if (reach.at(source).at(node) != 0) {
+  // Tarjan's strongly connected components, iterative (a long schedule chain
+  // would overflow a recursive walk), in space linear in events plus edges.
+  constexpr std::size_t kUnvisited = std::numeric_limits<std::size_t>::max();
+  std::vector<std::size_t> order(count, kUnvisited);
+  std::vector<std::size_t> low(count, 0);
+  std::vector<std::size_t> component(count, kUnvisited);
+  std::vector<std::uint8_t> onStack(count, 0);
+  std::vector<std::size_t> stack;
+  std::vector<std::pair<std::size_t, std::size_t>> walk; // node, next edge
+  std::size_t visited = 0;
+  std::size_t components = 0;
+  const auto enter = [&](std::size_t node) {
+    order.at(node) = visited;
+    low.at(node) = visited;
+    ++visited;
+    stack.push_back(node);
+    onStack.at(node) = 1;
+    walk.emplace_back(node, 0);
+  };
+  for (std::size_t root = 0; root < count; ++root) {
+    if (order.at(root) != kUnvisited) {
+      continue;
+    }
+    enter(root);
+    while (!walk.empty()) {
+      const std::size_t node = walk.back().first;
+      const std::size_t next = walk.back().second;
+      if (next < edges.at(node).size()) {
+        ++walk.back().second;
+        const std::size_t target = edges.at(node).at(next);
+        if (order.at(target) == kUnvisited) {
+          enter(target);
+        } else if (onStack.at(target) != 0) {
+          low.at(node) = std::min(low.at(node), order.at(target));
+        }
         continue;
       }
-      reach.at(source).at(node) = 1;
-      frontier.insert(frontier.end(), edges.at(node).begin(), edges.at(node).end());
+      walk.pop_back();
+      if (!walk.empty()) {
+        const std::size_t parent = walk.back().first;
+        low.at(parent) = std::min(low.at(parent), low.at(node));
+      }
+      if (low.at(node) == order.at(node)) {
+        std::size_t member = kUnvisited;
+        while (member != node) {
+          member = stack.back();
+          stack.pop_back();
+          onStack.at(member) = 0;
+          component.at(member) = components;
+        }
+        ++components;
+      }
     }
   }
-  // An event on a cycle with two or more schedule edges back into its own
-  // strongly connected set multiplies that set's occurrences.
+  // An event with two or more schedule edges back into its own strongly
+  // connected set (a self-loop counts) multiplies that set's occurrences.
   for (std::size_t node = 0; node < count; ++node) {
-    const auto intoOwnCycle = std::ranges::count_if(edges.at(node), [&](std::size_t target) {
-      return reach.at(target).at(node) != 0;
+    const auto intoOwnSet = std::ranges::count_if(edges.at(node), [&](std::size_t target) {
+      return component.at(target) == component.at(node);
     });
-    if (intoOwnCycle >= 2) {
+    if (intoOwnSet >= 2) {
       return true;
     }
   }

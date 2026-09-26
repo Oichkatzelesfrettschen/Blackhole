@@ -535,3 +535,26 @@ TEST(EventPredicates, CoreRequiresLoaderShapedFlagsAndThresholds) {
   silence.events.front().triggers.front().value = {.plus = -5};
   EXPECT_FALSE(storyBuildsValid(silence));
 }
+
+// Falsifier: the schedule-cycle check needing storage quadratic in the event
+// count (200,000 events would need 40 GB as a reachability matrix) or
+// recursion deep enough to overflow the stack on a 200,000-long cycle, or
+// misjudging that cycle: simple as built, branching with one extra edge.
+TEST(EventLoader, ScheduleCycleCheckScalesLinearly) {
+  constexpr std::uint32_t kEvents = 200000;
+  game::EventSet story;
+  story.events.resize(kEvents);
+  for (std::uint32_t index = 0; index < kEvents; ++index) {
+    game::EventDef &event = story.events.at(index);
+    event.id = index + 1;
+    event.mode = game::EventMode::Scheduled;
+    game::EventEffect schedule;
+    schedule.kind = game::EffectKind::Schedule;
+    schedule.event = index + 1 == kEvents ? 1U : index + 2;
+    schedule.delayTurns = {.plus = 1};
+    event.effects = {schedule};
+  }
+  EXPECT_FALSE(game::hasBranchingScheduleCycle(story));
+  story.events.at(kEvents / 2).effects.push_back(story.events.at(kEvents / 2).effects.front());
+  EXPECT_TRUE(game::hasBranchingScheduleCycle(story));
+}

@@ -237,8 +237,9 @@ void appendEventSet(std::vector<std::uint8_t> &out, const EventSet &story);
  *        cycle multiplies its pending occurrences every time round and grows
  *        without bound; a simple cycle (every event on it scheduling exactly one
  *        successor on it) repeats at a constant rate. Checked statically, since
- *        triggers are evaluated only at run time. Events must be sorted by id
- *        and every schedule target must exist.
+ *        triggers are evaluated only at run time, with an iterative Tarjan
+ *        SCC pass in time and space linear in events plus schedule effects.
+ *        Events must be sorted by id; schedules to missing events are ignored.
  */
 [[nodiscard]] bool hasBranchingScheduleCycle(const EventSet &story);
 
