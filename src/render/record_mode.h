@@ -93,6 +93,18 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli);
 std::optional<double> recordOutputSeconds(const platform::CliOptions &cli, int recordFrameIndex);
 
 /**
+ * @brief Fraction of the record camera path at frame @p recordFrameIndex.
+ *
+ * A run writes frames [recordStartFrame, recordStartFrame + recordFramesTotal)
+ * and the showcase-orbit and compare-orbit-near paths span frames 0 through
+ * the run's last frame, so progress is recordFrameIndex / (last frame index),
+ * in [0, 1]. It depends on the absolute frame index, as the output clock
+ * does: a run resumed at --start-frame k with the remaining frame count
+ * writes each frame exactly as the uninterrupted run does.
+ */
+float recordPathProgress(const platform::CliOptions &cli, int recordFrameIndex);
+
+/**
  * @brief Content time of one frame in seconds: what time-driven shading reads.
  *
  * Recorded frames take recordOutputSeconds, so the film grain, disk and sky

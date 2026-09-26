@@ -309,14 +309,18 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   return true;
 }
 
+float recordPathProgress(const platform::CliOptions &cli, int recordFrameIndex) {
+  const int lastFrame = std::max(cli.recordStartFrame + cli.recordFramesTotal - 1, 1);
+  return std::clamp(static_cast<float>(recordFrameIndex) / static_cast<float>(lastFrame), 0.0f,
+                    1.0f);
+}
+
 void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, InputManager &input) {
   if (cli.recordFramesDir.empty()) {
     return;
   }
   if (cli.recordProfile == "compare-orbit-near") {
-    float const denom = static_cast<float>(std::max(cli.recordFramesTotal - 1, 1));
-    float const progress =
-        static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) / denom;
+    float const progress = recordPathProgress(cli, rs.recording.recordFrameIndex);
     CameraState &camMutable = input.camera();
     camMutable.yaw = -90.0f + progress * 18.0f;
     camMutable.pitch = 0.0f;
@@ -328,9 +332,7 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
   } else if (cli.recordProfile == "showcase-orbit") {
     const ShowcaseOrbitComposition *const composition =
         findShowcaseOrbitComposition(cli.recordComposition);
-    float const denom = static_cast<float>(std::max(cli.recordFramesTotal - 1, 1));
-    float const progress =
-        static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) / denom;
+    float const progress = recordPathProgress(cli, rs.recording.recordFrameIndex);
     float const baseYaw = cli.hasRecordYaw ? cli.recordYawDeg : -90.0f;
     float const sweepDeg =
         cli.hasRecordSweep
@@ -353,8 +355,8 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
     rs.physicsCore.kerrSpin = 0.0f;
     rs.recording.recordCurrentKf = CamKeyframe{
-        .timeSec = static_cast<float>(rs.recording.recordFrameIndex - cli.recordStartFrame) /
-                   static_cast<float>(K_CINEMATIC_FPS),
+        .timeSec =
+            static_cast<float>(rs.recording.recordFrameIndex) / static_cast<float>(K_CINEMATIC_FPS),
         .cam = camMutable,
         .kerrSpin = rs.physicsCore.kerrSpin,
         .caption = "Showcase orbit",

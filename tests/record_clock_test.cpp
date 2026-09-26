@@ -7,6 +7,8 @@
  * --record-frames it must return recordFrameIndex / K_CINEMATIC_FPS whatever
  * the wall clock reads, so two renders of one frame index, in one run, two
  * runs, or a --start-frame resume, feed the post chain identical inputs.
+ * recordPathProgress places the showcase-orbit and compare-orbit-near camera
+ * paths by the same absolute index.
  */
 
 #include <memory>
@@ -25,6 +27,7 @@ namespace {
 
 using blackhole::frameContentSeconds;
 using blackhole::recordOutputSeconds;
+using blackhole::recordPathProgress;
 using blackhole::RenderState;
 using blackhole::tonemapPass;
 
@@ -66,6 +69,23 @@ TEST(RecordClock, SameRecordFrameGivesIdenticalTonemapInputs) {
   // A different frame index moves the grain.
   const RenderToTextureInfo next = tonemapPass(rs, frameContentSeconds(cli, 151, 3.7));
   EXPECT_NE(first.floatUniforms.at("time"), next.floatUniforms.at("time"));
+}
+
+// A full run of 240 frames and a run resumed at frame 100 with the remaining
+// 140 frames give every shared frame the same camera path progress.
+TEST(RecordClock, ResumedRunsKeepTheCameraPathProgress) {
+  platform::CliOptions full = recordingCli();
+  full.recordProfile = "showcase-orbit";
+  full.recordFramesTotal = 240;
+  platform::CliOptions resumed = full;
+  resumed.recordStartFrame = 100;
+  resumed.recordFramesTotal = 140;
+  for (const int frame : {100, 101, 170, 239}) {
+    EXPECT_FLOAT_EQ(recordPathProgress(resumed, frame), recordPathProgress(full, frame)) << frame;
+  }
+  EXPECT_FLOAT_EQ(recordPathProgress(full, 0), 0.0f);
+  EXPECT_FLOAT_EQ(recordPathProgress(full, 239), 1.0f);
+  EXPECT_FLOAT_EQ(recordPathProgress(resumed, 100), 100.0f / 239.0f);
 }
 
 } // namespace
