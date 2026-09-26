@@ -364,7 +364,8 @@ TEST(SceneSegments, LayoutCountsAndTags) {
   EXPECT_EQ(strands, 13U);
   EXPECT_EQ(outline, 12U);
   EXPECT_EQ(segments.size(), edgePieces + tubePieces + outlinePieces);
-  static_assert(sizeof(tess::SegmentInstance) == 12 * sizeof(float));
+  static_assert(sizeof(tess::SegmentInstance) ==
+                std::size_t{4} * tess::SEGMENT_INSTANCE_ATTRIBUTES * sizeof(float));
 
   std::array<std::size_t, 3> kindCounts{};
   for (const tess::SegmentInstance &seg : segments) {
@@ -404,6 +405,30 @@ TEST(SceneSegments, CapsOnlyPolylineEnds) {
   }
   EXPECT_TRUE(tess::segmentCapped(segments.front(), false));
   EXPECT_TRUE(tess::segmentCapped(segments.back(), true));
+}
+
+// Interior neighbors carry the bits of the adjacent segments' own endpoints,
+// so both segments of a joint compute its miter from identical inputs; a
+// capped end repeats its own point.
+TEST(SceneSegments, NeighborsMatchAdjacentEndpoints) {
+  tess::SceneSegmentOptions options;
+  options.tubeSamples = 20;
+  options.edgeSubdivisions = 4;
+  const std::vector<tess::SegmentInstance> segments = tess::buildSceneSegments(options);
+  for (std::size_t i = 0; i < segments.size(); ++i) {
+    const tess::SegmentInstance &seg = segments.at(i);
+    if (tess::segmentCapped(seg, false)) {
+      EXPECT_EQ(seg.prev, seg.a) << i;
+    } else {
+      EXPECT_EQ(seg.prev, segments.at(i - 1).a) << i;
+      EXPECT_EQ(seg.a, segments.at(i - 1).b) << i;
+    }
+    if (tess::segmentCapped(seg, true)) {
+      EXPECT_EQ(seg.next, seg.b) << i;
+    } else {
+      EXPECT_EQ(seg.next, segments.at(i + 1).b) << i;
+    }
+  }
 }
 
 TEST(SceneSegments, TagRoundTripsKindAndCaps) {

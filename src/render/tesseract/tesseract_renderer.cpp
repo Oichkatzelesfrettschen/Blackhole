@@ -174,8 +174,8 @@ void TesseractRenderer::ensureResources(float timeSpan) {
     constexpr auto stride = static_cast<GLsizei>(sizeof(tesseract::SegmentInstance));
     glVertexArrayVertexBuffer(vao_, 0, vbo_, 0, stride);
     glVertexArrayBindingDivisor(vao_, 0, 1);
-    // Attributes 0..2 are the a, b, and meta vec4 members, 16 bytes apart.
-    for (GLuint attrib = 0; attrib < 3; ++attrib) {
+    // Attributes are the a, b, meta, prev, and next vec4 members, 16 bytes apart.
+    for (GLuint attrib = 0; attrib < tesseract::SEGMENT_INSTANCE_ATTRIBUTES; ++attrib) {
       glEnableVertexArrayAttrib(vao_, attrib);
       glVertexArrayAttribFormat(vao_, attrib, 4, GL_FLOAT, GL_FALSE,
                                 attrib * static_cast<GLuint>(4 * sizeof(float)));

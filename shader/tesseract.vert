@@ -6,10 +6,18 @@
  *
  * Render-only content (Thorne, The Science of Interstellar ch. 29-31); not
  * physics. Each instance is one segment (segA, segB) of R^4 ordered
- * (x, y, z, w) with segMeta = (tA, tB, kind, strand) as packed by
- * buildSceneSegments in src/render/tesseract/tesseract_geometry.cpp. Six
- * vertices per instance expand the segment into a screen-space quad of
- * lineWidthPx pixels, because core-profile lines rasterize one pixel wide.
+ * (x, y, z, w) with segMeta = (tA, tB, tag, strand) and the neighboring
+ * polyline points segPrev and segNext, as packed by buildSceneSegments in
+ * src/render/tesseract/tesseract_geometry.cpp. Six vertices per instance
+ * expand the segment into a screen-space quad of lineWidthPx pixels, because
+ * core-profile lines rasterize one pixel wide. Blending is additive, so the
+ * quads of one polyline must tile it: a true endpoint extends by the half
+ * width as a cap, and an interior joint puts both neighbors' corners on one
+ * miter, (n0 + n1) * 2 halfWidth / |n0 + n1|^2 from the joint for the two
+ * segment normals, computed from the same projected points in the same order
+ * by both segments, so the shared edge is bit-identical and the rasterizer
+ * covers each pixel once. Turns sharper than the miter limit fall back to the
+ * segment's own normal.
  *
  * rotation4 is the SO(4) matrix of v -> qL v conj(qR) (so4.h), uploaded
  * column-major. segMeta.z packs the SegmentKind in its low two bits with
@@ -27,6 +35,8 @@
 layout(location = 0) in vec4 segA;
 layout(location = 1) in vec4 segB;
 layout(location = 2) in vec4 segMeta;
+layout(location = 3) in vec4 segPrev;
+layout(location = 4) in vec4 segNext;
 
 uniform mat4 rotation4;
 uniform mat4 viewProjection;
@@ -65,6 +75,9 @@ const float STEREOGRAPHIC_MIN_NORM = 1e-4;
 // Segment-parameter step a clipped endpoint takes past the near plane toward
 // the visible end, so the rasterizer's own near clip never shaves the quad.
 const float NEAR_CLIP_NUDGE = 1e-4;
+// Smallest cosine of the half turn a miter serves (turns up to about 151
+// degrees); sharper joints keep the segment's own normal.
+const float MITER_MIN_HALF_COS = 0.25;
 
 vec3 projectPerspective(vec4 p, float eyeDistance) {
   float denom = max(eyeDistance - p.w, PERSPECTIVE_MIN_DEPTH);
@@ -90,26 +103,40 @@ vec3 project4(vec4 p, out float fade) {
   return sceneScale * projectPerspective(r, perspectiveDistance);
 }
 
+// Left-hand unit normal of the screen segment from p to q.
+vec2 segmentNormal(vec2 p, vec2 q) {
+  precise vec2 d = q - p;
+  precise float len = length(d);
+  d = len > 1e-4 ? d / len : vec2(1.0, 0.0);
+  return vec2(-d.y, d.x);
+}
+
 void main() {
   vec2 corner = CORNERS[gl_VertexID % 6];
   int tag = int(round(segMeta.z));
   int kind = tag & SEGMENT_KIND_MASK;
   vec4 a = segA;
   vec4 b = segB;
+  vec4 prev = segPrev;
+  vec4 next = segNext;
   float tA = segMeta.x;
   float tB = segMeta.y;
   if (kind == KIND_LIT_SLICE) {
     float w = (2.0 * litMoment / timeSpan) - 1.0;
     a.w = w;
     b.w = w;
+    prev.w = w;
+    next.w = w;
     tA = litMoment;
     tB = litMoment;
   }
 
   float fadeA;
   float fadeB;
-  vec4 clipA = viewProjection * vec4(project4(a, fadeA), 1.0);
-  vec4 clipB = viewProjection * vec4(project4(b, fadeB), 1.0);
+  // precise keeps the compiler from contracting these differently per use,
+  // so a joint point projects to the same bits in both segments.
+  precise vec4 clipA = viewProjection * vec4(project4(a, fadeA), 1.0);
+  precise vec4 clipB = viewProjection * vec4(project4(b, fadeB), 1.0);
 
   // Signed distance to the near plane z = -w, linear along the segment.
   float nearA = clipA.z + clipA.w;
@@ -134,9 +161,14 @@ void main() {
     sB = max(nearA / (nearA - nearB) - NEAR_CLIP_NUDGE, 0.0);
     tag &= ~SEGMENT_CAP_B;
   }
-  vec4 keptA = mix(clipA, clipB, sA);
-  vec4 keptB = mix(clipA, clipB, sB);
-  float s = mix(sA, sB, corner.x);
+  // Only a clipped end moves, so an unclipped joint keeps the exact clip
+  // position its neighbor computes for the same point.
+  bool clippedA = sA > 0.0;
+  bool clippedB = sB < 1.0;
+  vec4 keptA = clippedA ? mix(clipA, clipB, sA) : clipA;
+  vec4 keptB = clippedB ? mix(clipA, clipB, sB) : clipB;
+  bool atA = corner.x < 0.5;
+  float s = atA ? sA : sB;
   vLibraryTime = mix(tA, tB, s);
   vFade = mix(fadeA, fadeB, s);
   clipA = keptA;
@@ -147,23 +179,36 @@ void main() {
   }
 
   vec2 halfRes = 0.5 * resolution;
-  vec2 screenA = (clipA.xy / clipA.w) * halfRes;
-  vec2 screenB = (clipB.xy / clipB.w) * halfRes;
-  vec2 dir = screenB - screenA;
-  float len = length(dir);
-  dir = len > 1e-4 ? dir / len : vec2(1.0, 0.0);
-  vec2 normal = vec2(-dir.y, dir.x);
+  precise vec2 screenA = (clipA.xy / clipA.w) * halfRes;
+  precise vec2 screenB = (clipB.xy / clipB.w) * halfRes;
+  precise vec2 normal = segmentNormal(screenA, screenB);
 
   float widthScale = kind == KIND_EDGE ? 1.0 : (kind == KIND_LIT_SLICE ? 1.4 : 0.8);
   float halfWidth = 0.5 * lineWidthPx * widthScale;
-  // Blending is additive, so interior joints butt: only a polyline's true
-  // endpoints extend by the half width as a cap, and each pixel of a straight
-  // run is covered once whatever the subdivision count.
-  bool capped = corner.x < 0.5 ? (tag & SEGMENT_CAP_A) != 0 : (tag & SEGMENT_CAP_B) != 0;
-  float along = capped ? (2.0 * corner.x - 1.0) * halfWidth : 0.0;
-  vec2 offsetPx = normal * (corner.y * halfWidth) + dir * along;
+  bool capped = atA ? (tag & SEGMENT_CAP_A) != 0 : (tag & SEGMENT_CAP_B) != 0;
+  precise vec2 offsetPx = normal * (corner.y * halfWidth);
+  if (capped) {
+    vec2 dir = vec2(normal.y, -normal.x);
+    offsetPx += dir * ((atA ? -1.0 : 1.0) * halfWidth);
+  } else if (atA ? !clippedA : !clippedB) {
+    // Interior joint: the neighbor's segment runs prev -> a or b -> next.
+    float fadeN;
+    precise vec4 clipN = viewProjection * vec4(project4(atA ? prev : next, fadeN), 1.0);
+    if (clipN.z + clipN.w > 0.0 && clipN.w > 1e-6) {
+      precise vec2 screenN = (clipN.xy / clipN.w) * halfRes;
+      // A repeated point (no neighbor) has no direction to miter against.
+      bool hasNeighbor = distance(screenN, atA ? screenA : screenB) > 1e-4;
+      precise vec2 other = atA ? segmentNormal(screenN, screenA) : segmentNormal(screenB, screenN);
+      // Both segments add the earlier segment's normal first.
+      precise vec2 m = atA ? other + normal : normal + other;
+      precise float m2 = dot(m, m);
+      if (hasNeighbor && m2 > 4.0 * MITER_MIN_HALF_COS * MITER_MIN_HALF_COS) {
+        offsetPx = m * (corner.y * 2.0 * halfWidth / m2);
+      }
+    }
+  }
 
-  vec4 clip = mix(clipA, clipB, corner.x);
+  precise vec4 clip = atA ? clipA : clipB;
   clip.xy += (offsetPx / halfRes) * clip.w;
   gl_Position = clip;
 }

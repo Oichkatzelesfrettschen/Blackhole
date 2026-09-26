@@ -208,20 +208,29 @@ inline constexpr int SEGMENT_CAP_B = 8;
  * @brief One instanced line segment for shader/tesseract.vert.
  *
  * a and b are tesseract-space endpoints; meta = (tA, tB, tag, strand), where
- * the tag packs the SegmentKind with SEGMENT_CAP_A and SEGMENT_CAP_B. The
- * ribbons blend additively, so a segment extends past an endpoint by its half
- * width only where the endpoint ends a polyline; interior joints butt and
- * each pixel of a straight run is covered once whatever the subdivision
- * count. A LitSlice segment carries w = 0 in a and b and the vertex shader
- * substitutes the lit moment for both w and t, so the room outline follows
- * the slider without a buffer upload. Three vec4 attributes, 48 bytes per
+ * the tag packs the SegmentKind with SEGMENT_CAP_A and SEGMENT_CAP_B; prev and
+ * next are the neighboring polyline points before a and after b, bit-equal to
+ * the neighbors' own endpoints, and repeat a or b at a capped end. The ribbons
+ * blend additively, so a segment extends past an endpoint by its half width
+ * only where the endpoint ends a polyline, and at an interior joint both
+ * segments place their corners on the shared miter computed from prev, a, b,
+ * and next: the quads meet edge to edge, so each pixel of a straight or
+ * curved run is covered once whatever the subdivision count. A LitSlice
+ * segment carries w = 0 in its points and the vertex shader substitutes the
+ * lit moment for w and t, so the room outline follows the slider without a
+ * buffer upload. SEGMENT_INSTANCE_ATTRIBUTES vec4 attributes, 80 bytes per
  * instance.
  */
 struct SegmentInstance {
   glm::vec4 a{0.0f};
   glm::vec4 b{0.0f};
   glm::vec4 meta{0.0f};
+  glm::vec4 prev{0.0f};
+  glm::vec4 next{0.0f};
 };
+
+/// vec4 attributes per SegmentInstance, at locations 0 through 4 in member order.
+inline constexpr unsigned SEGMENT_INSTANCE_ATTRIBUTES = 5;
 
 /** @brief meta.z tag of a segment of @p kind with the given end caps. */
 float packSegmentTag(SegmentKind kind, bool capA, bool capB);

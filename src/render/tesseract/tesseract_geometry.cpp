@@ -28,18 +28,35 @@ constexpr std::size_t bit(std::size_t axis) {
   return std::size_t{1} << axis;
 }
 
+// Segments between consecutive @p points, capped at the two ends, each with
+// its neighbors' points; meta x, y, and w come from @p meta per segment.
+template <typename MetaFn>
+void appendPolyline(std::vector<SegmentInstance> &out, const std::vector<glm::vec4> &points,
+                    SegmentKind kind, MetaFn meta) {
+  for (std::size_t k = 0; k + 1 < points.size(); ++k) {
+    const bool first = k == 0;
+    const bool last = k + 2 == points.size();
+    SegmentInstance seg;
+    seg.a = points.at(k);
+    seg.b = points.at(k + 1);
+    seg.prev = first ? seg.a : points.at(k - 1);
+    seg.next = last ? seg.b : points.at(k + 2);
+    const glm::vec3 xyw = meta(k);
+    seg.meta = glm::vec4(xyw.x, xyw.y, packSegmentTag(kind, first, last), xyw.z);
+    out.push_back(seg);
+  }
+}
+
 void appendSubdivided(std::vector<SegmentInstance> &out, const glm::vec4 &a, const glm::vec4 &b,
                       std::size_t pieces, SegmentKind kind) {
   const auto steps = static_cast<float>(pieces);
-  for (std::size_t k = 0; k < pieces; ++k) {
-    const float s0 = static_cast<float>(k) / steps;
-    const float s1 = static_cast<float>(k + 1) / steps;
-    SegmentInstance seg;
-    seg.a = a + ((b - a) * s0);
-    seg.b = a + ((b - a) * s1);
-    seg.meta = glm::vec4(-1.0f, -1.0f, packSegmentTag(kind, k == 0, k + 1 == pieces), -1.0f);
-    out.push_back(seg);
+  std::vector<glm::vec4> points;
+  points.reserve(pieces + 1);
+  for (std::size_t k = 0; k <= pieces; ++k) {
+    points.push_back(a + ((b - a) * (static_cast<float>(k) / steps)));
   }
+  appendPolyline(out, points, kind,
+                 [](std::size_t /*segment*/) { return glm::vec3(-1.0f, -1.0f, -1.0f); });
 }
 
 } // namespace
@@ -228,15 +245,13 @@ std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &optio
   for (std::size_t strand = 0; strand < features.size(); ++strand) {
     const std::vector<glm::vec4> tube =
         extrudeWorldTube(features.at(strand).position, options.timeSpan, options.tubeSamples);
-    for (std::size_t k = 0; k + 1 < tube.size(); ++k) {
-      SegmentInstance seg;
-      seg.a = libraryToTesseract(tube.at(k), options.timeSpan);
-      seg.b = libraryToTesseract(tube.at(k + 1), options.timeSpan);
-      seg.meta = glm::vec4(tube.at(k).w, tube.at(k + 1).w,
-                           packSegmentTag(SegmentKind::WorldTube, k == 0, k + 2 == tube.size()),
-                           static_cast<float>(strand));
-      segments.push_back(seg);
-    }
+    std::vector<glm::vec4> points(tube.size());
+    std::ranges::transform(tube, points.begin(), [&options](const glm::vec4 &sample) {
+      return libraryToTesseract(sample, options.timeSpan);
+    });
+    appendPolyline(segments, points, SegmentKind::WorldTube, [&tube, strand](std::size_t k) {
+      return glm::vec3(tube.at(k).w, tube.at(k + 1).w, static_cast<float>(strand));
+    });
   }
 
   for (const auto &link : bedroomOutline()) {
