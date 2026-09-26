@@ -13,7 +13,6 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
-#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -31,6 +30,7 @@
 
 #include "cinematic.h" // K_CINEMATIC_KEYFRAMES / DURATION / FPS
 #include "input.h"     // InputManager, CameraState, CameraMode
+#include "physics/safe_limits.h"
 #include "platform/cli_options.h"
 #include "render/render_state.h"   // RenderState, WiregridParams
 #include "settings.h"              // SettingsManager
@@ -417,15 +417,17 @@ double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex
 }
 
 std::optional<std::string> recordCameraConflict(const platform::CliOptions &cli) {
-  // Comparisons against NaN are false, so each range test also rejects NaN.
+  // Finiteness is read from the bit pattern: under -ffinite-math-only the
+  // compiler may fold a comparison against infinity or NaN to true.
   const bool distanceValid =
-      cli.recordDistance > 0.0f && cli.recordDistance <= std::numeric_limits<float>::max();
+      physics::safeIsfinite(cli.recordDistance) && cli.recordDistance > 0.0f;
   if (cli.hasRecordDistance && !distanceValid) {
     return std::format("Refusing --record-distance {}: the camera needs a positive, finite "
                        "distance from its focus",
                        cli.recordDistance);
   }
-  const bool fovValid = cli.recordFovDeg > 0.0f && cli.recordFovDeg < 180.0f;
+  const bool fovValid = physics::safeIsfinite(cli.recordFovDeg) && cli.recordFovDeg > 0.0f &&
+                        cli.recordFovDeg < 180.0f;
   if (cli.hasRecordFov && !fovValid) {
     return std::format("Refusing --record-fov {}: the field of view must lie in (0, 180) degrees",
                        cli.recordFovDeg);
