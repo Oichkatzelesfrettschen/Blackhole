@@ -3852,6 +3852,21 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_geometry_test.cpp")
+    add_executable(tesseract_geometry_test
+      "${PROJECT_SOURCE_DIR}/tests/tesseract_geometry_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/render/tesseract/tesseract_geometry.cpp"
+    )
+    target_include_directories(tesseract_geometry_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+    target_link_libraries(tesseract_geometry_test PRIVATE glm::glm GTest::gtest GTest::gtest_main)
+    target_compile_options(tesseract_geometry_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_geometry COMMAND tesseract_geometry_test)
+    set_tests_properties(tesseract_geometry PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(tesseract_geometry PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
     add_executable(settings_sync_test "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
     target_link_libraries(settings_sync_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
