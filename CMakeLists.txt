@@ -4174,6 +4174,33 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Kerr null geodesics against analytic oracles (Carter consistency,
+  # Bardeen capture edges, Ferrari roots)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_null_geodesic_test.cpp")
+    add_executable(kerr_null_geodesic_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_null_geodesic_test.cpp"
+    )
+    target_link_libraries(kerr_null_geodesic_test PRIVATE blackhole_physics GTest::gtest_main)
+    target_include_directories(kerr_null_geodesic_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_options(kerr_null_geodesic_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_null_geodesic_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME kerr_null_geodesic_validation COMMAND kerr_null_geodesic_test)
+    set_tests_properties(kerr_null_geodesic_validation PROPERTIES
+      LABELS "physics;kerr;geodesic"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_null_geodesic_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   # Campaign core (Horizon Command seam) tests: pure game logic against the
   # Schwarzschild time field, no GL context. IEEE flags match the campaign
   # libraries so the determinism gates hold under ENABLE_FAST_MATH too.
@@ -4605,6 +4632,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(gpu_cpu_parity_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/tests"
     )
     target_compile_definitions(gpu_cpu_parity_test PRIVATE
       GLFW_INCLUDE_NONE
@@ -4621,6 +4649,36 @@ if(BUILD_TESTING)
     set_tests_properties(gpu_cpu_parity PROPERTIES
       LABELS "physics;gpu;parity"
       TIMEOUT 60
+    )
+  endif()
+
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_shader_capture_test.cpp")
+    # Shipped shader/include/kerr.glsl against Bardeen's equatorial capture
+    # edges in a compute dispatch. Skips without a GL 4.6 context.
+    add_executable(kerr_shader_capture_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_shader_capture_test.cpp"
+    )
+    target_include_directories(kerr_shader_capture_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    target_compile_definitions(kerr_shader_capture_test PRIVATE
+      GLFW_INCLUDE_NONE
+      BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+    )
+    target_compile_options(kerr_shader_capture_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(kerr_shader_capture_test PRIVATE
+      blackhole_physics
+      glfw
+      glbinding::glbinding
+      GTest::gtest
+      GTest::gtest_main
+    )
+    add_test(NAME kerr_shader_capture COMMAND kerr_shader_capture_test)
+    set_tests_properties(kerr_shader_capture PROPERTIES
+      LABELS "physics;gpu;kerr"
+      TIMEOUT 120
     )
   endif()
 
@@ -6508,6 +6566,38 @@ if(BUILD_TESTING)
       )
       if(SANITIZER_TEST_ENV)
         set_tests_properties(cuda_stokes PROPERTIES
+          ENVIRONMENT "${SANITIZER_TEST_ENV}"
+        )
+      endif()
+    endif()
+
+    # Device Kerr geodesic helpers (d_kerr_init_geodesic on the spin axis)
+    if(EXISTS "${PROJECT_SOURCE_DIR}/tests/cuda_kerr_geodesic_test.cu")
+      add_executable(cuda_kerr_geodesic_test
+        "${PROJECT_SOURCE_DIR}/tests/cuda_kerr_geodesic_test.cu"
+      )
+      set_target_properties(cuda_kerr_geodesic_test PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+        CUDA_SEPARABLE_COMPILATION ON
+      )
+      target_include_directories(cuda_kerr_geodesic_test PRIVATE
+        "${PROJECT_SOURCE_DIR}/src"
+        "${PROJECT_SOURCE_DIR}/src/cuda"
+      )
+      target_link_libraries(cuda_kerr_geodesic_test PRIVATE
+        GTest::gtest_main
+        blackhole_cuda_rt
+        CUDA::cudart
+      )
+
+      add_test(NAME cuda_kerr_geodesic COMMAND cuda_kerr_geodesic_test)
+      set_tests_properties(cuda_kerr_geodesic PROPERTIES
+        LABELS "cuda;physics;kerr"
+        TIMEOUT 60
+      )
+      if(SANITIZER_TEST_ENV)
+        set_tests_properties(cuda_kerr_geodesic PROPERTIES
           ENVIRONMENT "${SANITIZER_TEST_ENV}"
         )
       endif()

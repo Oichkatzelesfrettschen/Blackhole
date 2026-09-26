@@ -24,35 +24,36 @@
 namespace {
 
 /**
- * @brief Compact ray state with FP16-compressed bounded fields.
+ * @brief Compact ray state with an FP16-compressed radius.
  *
- * phi and t are kept in FP32 because phi can grow by ~1e5 rad/step near the
- * Kerr horizon (delta -> 0, delta_safe = 1e-6), exceeding FP16 max 65504.
- * Only r, theta, and sign fields (bounded and slow-varying) use FP16.
+ * Only r (bounded and slow-varying) is stored in FP16. The Mino velocity and
+ * acceleration stay FP32 (vr scales as r^2 and crosses zero at turning
+ * points), and the unit direction n and its tangent velocity w stay FP32
+ * because FP16's 1e-3 resolution on n would shift the traced direction.
  */
 struct HalfRayState {
   __half r;          /**< @brief Radial coordinate stored as FP16. */
-  __half theta;      /**< @brief Polar angle stored as FP16. */
-  float phi;         /**< @brief Azimuthal angle kept FP32 to avoid Inf near horizon. */
-  float t;           /**< @brief Coordinate time kept FP32 to avoid Inf near horizon. */
-  __half signR;      /**< @brief Sign of dr/dlambda stored as FP16. */
-  __half signTheta;  /**< @brief Sign of dtheta/dlambda stored as FP16. */
+  float t;           /**< @brief Coordinate time (FP32). */
+  float vr;          /**< @brief dr/dlambda (FP32). */
+  float accR;        /**< @brief R'(r)/2 carried between leapfrog steps (FP32). */
+  float3 n;          /**< @brief Unit direction (FP32). */
+  float3 w;          /**< @brief Tangent angular velocity (FP32). */
 };
 
 /**
  * @brief Compress a full-precision KerrRay into a HalfRayState.
  *
  * @param kr Source FP32 ray state.
- * @return Compressed HalfRayState with r, theta, signR, signTheta in FP16.
+ * @return Compressed HalfRayState with r in FP16.
  */
 __device__ __forceinline__ HalfRayState kerrRayToHalf(const KerrRay &kr) {
   HalfRayState h{};
   h.r = __float2half(kr.r);
-  h.theta = __float2half(kr.theta);
-  h.phi = kr.phi; /* keep FP32 */
-  h.t = kr.t;     /* keep FP32 */
-  h.signR = __float2half(kr.sign_r);
-  h.signTheta = __float2half(kr.sign_theta);
+  h.t = kr.t;
+  h.vr = kr.vr;
+  h.accR = kr.acc_r;
+  h.n = kr.n;
+  h.w = kr.w;
   return h;
 }
 
@@ -65,11 +66,11 @@ __device__ __forceinline__ HalfRayState kerrRayToHalf(const KerrRay &kr) {
 __device__ __forceinline__ KerrRay halfToKerrRay(const HalfRayState &h) {
   KerrRay kr{};
   kr.r = __half2float(h.r);
-  kr.theta = __half2float(h.theta);
-  kr.phi = h.phi; /* keep FP32 */
-  kr.t = h.t;     /* keep FP32 */
-  kr.sign_r = __half2float(h.signR);
-  kr.sign_theta = __half2float(h.signTheta);
+  kr.t = h.t;
+  kr.vr = h.vr;
+  kr.acc_r = h.accR;
+  kr.n = h.n;
+  kr.w = h.w;
   return kr;
 }
 
@@ -98,20 +99,25 @@ __launch_bounds__(256, 4)
     return;
   }
 
-  float3 const cam = make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]);
-  float3 const dir = d_ray_dir(px, py);
+  /* Physics frame (spin along +z); see d_world_to_physics. */
+  float3 const cam = d_world_to_physics(make_float3(d_cam_pos[0], d_cam_pos[1], d_cam_pos[2]));
+  float3 const dir = d_world_to_physics(d_ray_dir(px, py));
 
   float const rs = d_rs;
   float const a = 0.5f * d_spin * rs;
   float const dt = d_step_size;
   int const maxSteps = d_max_steps;
-  float const maxDist = d_max_dist;
+  /* Escape only outside both the scene radius and the camera's own radius while
+   * moving outward (bhEscapeRadius in interop_trace.glsl). */
+  float const maxDist = fmaxf(d_max_dist, 1.01f * d_length(cam));
 
   HitResult result{};
   result.hit_disk = false;
   result.hit_horizon = false;
   result.escaped = false;
+  result.max_steps = false;
   result.hit_point = make_f3(0.0f, 0.0f, 0.0f);
+  result.origin = cam;
   result.closest_approach_point = cam;
   result.phi = 0.0f;
   result.redshift = 1.0f;
@@ -120,7 +126,7 @@ __launch_bounds__(256, 4)
   result.first_closest_approach_step = -1;
   result.last_closest_approach_step = -1;
 
-  if ((d_kerr_enabled != 0) && fabsf(a) > D_EPSILON) {
+  if (d_kerr_enabled != 0) {
     float rHorizon = d_kerr_outer_horizon(rs, a);
     if (rHorizon <= D_EPSILON) {
       rHorizon = rs;
@@ -128,8 +134,12 @@ __launch_bounds__(256, 4)
     float const rDiskIn = d_isco;
     float const rDiskOut = 100.0f * rs;
 
-    KerrConsts const c = d_kerr_init_consts(cam, dir, rs, a);
-    KerrRay kr = d_kerr_init_ray(cam, dir);
+    float const aTrace = d_kerr_trace_spin(a);
+    KerrConsts c;
+    KerrRay kr;
+    d_kerr_init_geodesic(cam, dir, rs, aTrace, c, kr);
+    result.origin = d_kerr_chart_position(cam, rs, aTrace);
+    result.closest_approach_point = result.origin;
 
     /* Store initial state in FP16 */
     HalfRayState hs = kerrRayToHalf(kr);
@@ -138,7 +148,7 @@ __launch_bounds__(256, 4)
       /* Promote to FP32 for computation */
       kr = halfToKerrRay(hs);
 
-      float3 const oldPos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+      float3 const oldPos = d_kerr_ray_position(kr);
       d_record_closest_approach(result, kr.r, oldPos, step);
 
       if (kr.r <= rHorizon) {
@@ -147,14 +157,15 @@ __launch_bounds__(256, 4)
         goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
       }
 
-      /* Kerr step in full FP32 precision */
-      d_kerr_step(kr, rs, a, c, dt);
+      /* Kerr step in full FP32 precision, with the same adaptive Mino step
+       * as the FP32 and H2 kernels and the GLSL tracer. */
+      d_kerr_step(kr, rs, aTrace, c, d_adaptive_step(kr.r, rs, rHorizon, dt));
 
       /* Demote back to FP16 for storage */
       hs = kerrRayToHalf(kr);
 
       {
-        float3 const newPos = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+        float3 const newPos = d_kerr_ray_position(kr);
 
         if (d_adisk_enabled != 0) {
           float3 diskHit;
@@ -167,7 +178,7 @@ __launch_bounds__(256, 4)
           }
         }
 
-        if (kr.r > maxDist) {
+        if (kr.r > maxDist && kr.vr > 0.0f) {
           result.escaped = true;
           result.hit_point = newPos;
           goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
@@ -175,8 +186,9 @@ __launch_bounds__(256, 4)
       }
     }
     result.escaped = true;
+    result.max_steps = true;
     kr = halfToKerrRay(hs);
-    result.hit_point = d_kerr_to_cartesian(kr.r, kr.theta, kr.phi);
+    result.hit_point = d_kerr_ray_position(kr);
   } else {
     /* Schwarzschild path */
     float3 pos = cam;
@@ -208,20 +220,21 @@ __launch_bounds__(256, 4)
         }
       }
 
-      if (r > maxDist) {
+      if (r > maxDist && d_dot(pos, vel) > 0.0f) {
         result.escaped = true;
         result.hit_point = pos;
         goto shade; // NOLINT(cppcoreguidelines-avoid-goto) -- early-exit from CUDA kernel loop
       }
     }
     result.escaped = true;
+    result.max_steps = true;
     result.hit_point = pos;
   }
 
 shade:;
-  float4 color16 = d_shade_hit(result, cam);
+  float4 color16 = d_shade_hit(result, result.origin);
   if (d_wiregrid_enabled != 0) {
-    float3 const hp = result.hit_point;
+    float3 const hp = d_chart_to_boyer_lindquist(result.hit_point);
     float const r_bl = sqrtf(hp.x*hp.x + hp.y*hp.y + hp.z*hp.z);
     if (r_bl > 1e-5f) {
       float const theta_bl = acosf(fmaxf(-1.0f, fminf(hp.z / r_bl, 1.0f)));

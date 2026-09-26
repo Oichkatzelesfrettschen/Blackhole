@@ -3,6 +3,8 @@
 #include <iostream>
 #include <utility>
 
+#include <boost/multiprecision/mpfr.hpp>
+
 #include "constants.h"
 #include "physics/constants.h"
 #include "physics/kerr.h"
@@ -27,16 +29,18 @@ struct KerrStateT {
   T theta;
   T phi;
   T t;
-  T signR;
-  T signTheta;
+  T vr;
+  T vtheta;
 };
 
 template <typename T>
-struct KerrPotentialsT {
-  T r;
-  T dRdr;
-  T theta;
-  T dThetadtheta;
+struct KerrDerivsT {
+  T dr;
+  T dtheta;
+  T dvr;
+  T dvtheta;
+  T dphi;
+  T dt;
 };
 
 template <typename T>
@@ -48,98 +52,68 @@ KerrConstsT<T> equatorialConsts(const T &impactParam, const T &energy) {
   return c;
 }
 
-template <typename T> KerrStateT<T> equatorialState(T r, T phi, const T &signR) {
-  KerrStateT<T> s{};
-  s.r = std::move(r);
-  s.theta = T(0.5) * T(physics::PI);
-  s.phi = std::move(phi);
-  s.t = T(0);
-  s.signR = signR >= T(0) ? T(1) : T(-1);
-  s.signTheta = T(1);
-  return s;
-}
-
+// Second-order Mino-time right-hand side at precision T; mirrors
+// physics::kerrStepMino (kerr.cpp) with Carter's polar potential.
 template <typename T>
-KerrPotentialsT<T> kerrPotentialsT(const T &r, const T &theta, const T &mass, const T &a,
-                                          const KerrConstsT<T> &c) {
+KerrDerivsT<T> kerrDerivsT(const KerrStateT<T> &s, const T &mass, const T &spin,
+                           const KerrConstsT<T> &c) {
   using std::cos;
   using std::sin;
-  using std::sqrt;
 
   const T m = T(physics::G) * mass / T(physics::C2);
-  const T rr = r * r;
-  const T aa = a * a;
-  const T sinTheta = sin(theta);
-  const T cosTheta = cos(theta);
+  const T rr = s.r * s.r;
+  const T aa = spin * spin;
+  const T sinTheta = sin(s.theta);
+  const T cosTheta = cos(s.theta);
   T sin2 = sinTheta * sinTheta;
   if (sin2 < T(1e-12)) {
     sin2 = T(1e-12);
   }
-  const T cos2 = cosTheta * cosTheta;
+  const T delta = rr - (T(2) * m * s.r) + aa;
+  const T bigP = ((rr + aa) * c.e) - (spin * c.lz);
+  const T lzMinusAE = c.lz - (spin * c.e);
+  const T qEff = c.q + (lzMinusAE * lzMinusAE);
+  const T deltaSafe = delta > T(1e-12) ? delta : T(1e-12);
 
-  const T delta = rr - (T(2) * m * r) + aa;
-  const T a = ((rr + aa) * c.e) - (a * c.lz);
-  const T lzMinusAE = c.lz - (a * c.e);
-
-  KerrPotentialsT<T> p{};
-  p.r = (a * a) - (delta * (c.q + (lzMinusAE * lzMinusAE)));
-
-  const T dADr = T(2) * r * c.e;
-  const T dDeltaDr = (T(2) * r) - (T(2) * m);
-  p.dRdr = (T(2) * a * dADr) - (dDeltaDr * (c.q + (lzMinusAE * lzMinusAE)));
-
-  p.theta = c.q + (aa * c.e * c.e * cos2) - (c.lz * c.lz / sin2);
-  p.dThetadtheta = (-T(2) * aa * c.e * c.e * cosTheta * sinTheta) +
-                   (T(2) * c.lz * c.lz * cosTheta / (sin2 * sinTheta));
-
-  return p;
+  KerrDerivsT<T> d{};
+  d.dr = s.vr;
+  d.dtheta = s.vtheta;
+  d.dvr = (T(2) * s.r * c.e * bigP) - ((s.r - m) * qEff);
+  d.dvtheta = (-(aa * c.e * c.e * cosTheta * sinTheta)) +
+              (c.lz * c.lz * cosTheta / (sin2 * sinTheta));
+  d.dphi = (c.lz / sin2) - (spin * c.e) + (spin * bigP / deltaSafe);
+  d.dt = ((rr + aa) * bigP / deltaSafe) + (spin * (c.lz - (spin * c.e * sin2)));
+  return d;
 }
 
 template <typename T>
-KerrStateT<T> kerrStepMinoT(const KerrStateT<T> &state, const T &mass, const T &a,
-                                   const KerrConstsT<T> &c, const T &dlam) {
-  using std::sin;
-  using std::sqrt;
+KerrStateT<T> advanceT(const KerrStateT<T> &s, const KerrDerivsT<T> &d, const T &h) {
+  KerrStateT<T> o = s;
+  o.r += h * d.dr;
+  o.theta += h * d.dtheta;
+  o.vr += h * d.dvr;
+  o.vtheta += h * d.dvtheta;
+  o.phi += h * d.dphi;
+  o.t += h * d.dt;
+  return o;
+}
 
-  KerrStateT<T> next = state;
-
-  const T m = T(physics::G) * mass / T(physics::C2);
-  const T r = state.r;
-  const T theta = state.theta;
-  const KerrPotentialsT<T> p = kerrPotentialsT(r, theta, mass, a, c);
-
-  const T r = p.r > T(0) ? p.r : T(0);
-  const T theta = p.theta > T(0) ? p.theta : T(0);
-
-  const T drDlam = state.signR * sqrt(r);
-  const T dthetaDlam = state.signTheta * sqrt(theta);
-
-  const T sinTheta = sin(theta);
-  T sin2 = sinTheta * sinTheta;
-  if (sin2 < T(1e-12)) {
-    sin2 = T(1e-12);
-  }
-  const T delta = (r * r) - (T(2) * m * r) + (a * a);
-  const T a = (((r * r) + (a * a)) * c.e) - (a * c.lz);
-  const T deltaSafe = delta > T(1e-12) ? delta : T(1e-12);
-
-  const T dphiDlam = (c.lz / sin2) - (a * c.e) + (a * a / deltaSafe);
-  const T dtDlam = (((r * r) + (a * a)) * a / deltaSafe) + (a * (c.lz - (a * c.e * sin2)));
-
-  next.r += dlam * drDlam;
-  next.theta += dlam * dthetaDlam;
-  next.phi += dlam * dphiDlam;
-  next.t += dlam * dtDlam;
-
-  const T minTheta = T(1e-6);
-  const T maxTheta = T(physics::PI) - T(1e-6);
-  if (next.theta < minTheta) {
-    next.theta = minTheta;
-  } else if (next.theta > maxTheta) {
-    next.theta = maxTheta;
-  }
-
-  return next;
+template <typename T>
+KerrStateT<T> kerrStepMinoT(const KerrStateT<T> &s, const T &mass, const T &spin,
+                            const KerrConstsT<T> &c, const T &h) {
+  const T half = h / T(2);
+  const KerrDerivsT<T> k1 = kerrDerivsT(s, mass, spin, c);
+  const KerrDerivsT<T> k2 = kerrDerivsT(advanceT(s, k1, half), mass, spin, c);
+  const KerrDerivsT<T> k3 = kerrDerivsT(advanceT(s, k2, half), mass, spin, c);
+  const KerrDerivsT<T> k4 = kerrDerivsT(advanceT(s, k3, h), mass, spin, c);
+  KerrDerivsT<T> sum{};
+  sum.dr = (k1.dr + (T(2) * k2.dr) + (T(2) * k3.dr) + k4.dr) / T(6);
+  sum.dtheta = (k1.dtheta + (T(2) * k2.dtheta) + (T(2) * k3.dtheta) + k4.dtheta) / T(6);
+  sum.dvr = (k1.dvr + (T(2) * k2.dvr) + (T(2) * k3.dvr) + k4.dvr) / T(6);
+  sum.dvtheta = (k1.dvtheta + (T(2) * k2.dvtheta) + (T(2) * k3.dvtheta) + k4.dvtheta) / T(6);
+  sum.dphi = (k1.dphi + (T(2) * k2.dphi) + (T(2) * k3.dphi) + k4.dphi) / T(6);
+  sum.dt = (k1.dt + (T(2) * k2.dt) + (T(2) * k3.dt) + k4.dt) / T(6);
+  return advanceT(s, sum, h);
 }
 
 bool approxEqual(double a, double b, double tol) {
@@ -160,7 +134,8 @@ int main() {
 
   const physics::KerrGeodesicConsts c =
       physics::kerrEquatorialConsts(impact, 1.0);
-  physics::KerrGeodesicState state = physics::kerrEquatorialState(50.0 * rS, 0.0, -1.0);
+  physics::KerrGeodesicState state = physics::kerrInitMinoVelocities(
+      physics::kerrEquatorialState(50.0 * rS, 0.0, -1.0), mass, a, c);
 
   for (int i = 0; i < steps; ++i) {
     state = physics::kerrStepMino(state, mass, a, c, dlam);
@@ -173,7 +148,16 @@ int main() {
   const Mpfr256 dlamHp = Mpfr256(dlam);
 
   const KerrConstsT<Mpfr256> cHp = equatorialConsts(impactHp, Mpfr256(1));
-  KerrStateT<Mpfr256> stateHp = equatorialState(Mpfr256(50) * rSHp, Mpfr256(0), Mpfr256(-1));
+  // Same initial point and velocity as the double-precision run, promoted.
+  KerrStateT<Mpfr256> stateHp{};
+  stateHp.r = Mpfr256(50) * rSHp;
+  stateHp.theta = Mpfr256(0.5) * Mpfr256(physics::PI);
+  stateHp.phi = Mpfr256(0);
+  stateHp.t = Mpfr256(0);
+  stateHp.vr = Mpfr256(physics::kerrInitMinoVelocities(
+                           physics::kerrEquatorialState(50.0 * rS, 0.0, -1.0), mass, a, c)
+                           .vr);
+  stateHp.vtheta = Mpfr256(0);
 
   for (int i = 0; i < steps; ++i) {
     stateHp = kerrStepMinoT(stateHp, massHp, aHp, cHp, dlamHp);

@@ -329,7 +329,7 @@ public:
     result.redshift = 1.0;
     result.status = RayStatus::PROPAGATING;
 
-    KerrGeodesicState state = initial;
+    KerrGeodesicState state = kerr_.initMinoVelocities(initial, c);
 
     if (recordPath_) {
       result.path.emplace_back(state.r, state.theta, state.phi);
@@ -345,17 +345,7 @@ public:
         break;
       }
 
-      const KerrPotentials p = kerr_.potentials(state.r, state.theta, c);
-      KerrGeodesicState next = state;
-      if (p.rPot < 0.0) {
-        next.signR = -next.signR;
-      }
-      if (p.thetaPot < 0.0) {
-        next.signTheta = -next.signTheta;
-      }
-
-      next = kerr_.stepMino(next, c, stepSize_);
-      state = next;
+      state = kerr_.stepMino(state, c, stepSize_);
 
       result.totalDistance += stepSize_;
       ++result.stepsTaken;
