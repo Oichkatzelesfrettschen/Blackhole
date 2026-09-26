@@ -4545,6 +4545,30 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Panel state that names one session's entities (header-only, GL-free).
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_ui_state_test.cpp")
+    add_executable(campaign_ui_state_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_ui_state_test.cpp"
+    )
+    target_compile_definitions(campaign_ui_state_test PRIVATE
+      BLACKHOLE_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+    target_compile_options(campaign_ui_state_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_ui_state_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_ui_state_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_ui_state_validation COMMAND campaign_ui_state_test)
+    set_tests_properties(campaign_ui_state_validation PROPERTIES
+      LABELS "campaign;ui"
+      TIMEOUT 30
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_ui_state_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
     add_executable(campaign_task_graph_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"

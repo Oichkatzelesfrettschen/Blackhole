@@ -297,6 +297,7 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
     ImGui::TextDisabled("campaign decided -- no further orders");
     return;
   }
+  clampSelectionToView(uiState, view);
   if (uiState.selectedFleet == game::K_INVALID_FLEET_ID) {
     ImGui::TextDisabled("select a fleet (roster row or map marker)");
     return;
@@ -440,6 +441,7 @@ void startColonyStory(CampaignUiState &uiState, int colonyBand) {
   }
   uiState.storyError.clear();
   uiState.storySession = std::make_unique<game::CampaignSession>(1, loaded.story, colonyBand);
+  resetSessionSelection(uiState); // fleet ids and band indices named the old session
   // Fresh inboxes for the new session, keeping the player's pause choices.
   game::Inbox colonyInbox(game::K_FIRST_COLONY_NODE);
   game::Inbox hostInbox(game::K_AUTHORITY_NODE);

@@ -16,10 +16,12 @@
 #ifndef BLACKHOLE_UI_CAMPAIGN_PANELS_H
 #define BLACKHOLE_UI_CAMPAIGN_PANELS_H
 
+#include <algorithm>
 #include <memory>
 #include <string>
 
 #include "game/campaign_session.h"
+#include "game/campaign_view.h"
 #include "game/event.h"
 #include "game/fleet.h"
 #include "game/inbox.h"
@@ -64,6 +66,33 @@ struct CampaignUiState {
   bool lagging = false;
   bool inboxOpen = true;
 };
+
+/** @brief Clears the selection and composer state that names things in one
+ *         session (a fleet id, a band index, the last order's feedback), for
+ *         when another session replaces it. The player's preferences (task
+ *         cost, backdrop, pause categories) are kept. */
+inline void resetSessionSelection(CampaignUiState &uiState) {
+  uiState.selectedFleet = game::K_INVALID_FLEET_ID;
+  uiState.composerTargetBand = 0;
+  uiState.composerLane = game::OrbitLane::Prograde;
+  uiState.composerStation = game::StationKeeping::Orbit;
+  uiState.lastCommandAccepted = true;
+  uiState.lastCommandValid = true;
+}
+
+/** @brief Drops a selected fleet the view does not list and clamps the target
+ *         band to the view's bands, so the composer never names an entity of
+ *         another session. */
+inline void clampSelectionToView(CampaignUiState &uiState, const game::CampaignViewSnapshot &view) {
+  if (std::ranges::none_of(view.fleets, [&uiState](const game::FleetView &fleet) {
+        return fleet.id == uiState.selectedFleet;
+      })) {
+    uiState.selectedFleet = game::K_INVALID_FLEET_ID;
+  }
+  const int bandCount = static_cast<int>(view.bands.size());
+  uiState.composerTargetBand =
+      bandCount == 0 ? 0 : std::clamp(uiState.composerTargetBand, 0, bandCount - 1);
+}
 
 /** @brief Reads BLACKHOLE_CAMPAIGN=1 to open the campaign windows at startup.
  *         For desktop captures without synthetic input:
