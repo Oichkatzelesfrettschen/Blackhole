@@ -48,6 +48,15 @@ inline constexpr double K_GARGANTUA_SPIN_DEFICIT = 1.33e-14;
 /** @brief GM_sun / c^3 in seconds (IAU 2015 nominal GM_sun). */
 inline constexpr double K_SOLAR_TIME_SECONDS = 4.925490947641267e-6;
 
+/** @brief Vertical field of view (deg) the observer-sky view accepts. The
+ *         shader builds each look direction in float, whose unit components
+ *         round at 6e-8; at 0.01 deg over 1000 rows a pixel spans 1.7e-7 rad,
+ *         so the tile coordinates (observer_sky.frag tileCoordinates) still
+ *         resolve a third of a pixel, and a narrower view turns the patch
+ *         into blocks. */
+inline constexpr double K_OBSERVER_FOV_MIN_DEG = 0.01;
+inline constexpr double K_OBSERVER_FOV_MAX_DEG = 170.0;
+
 /** @brief The observer key for a kind at (epsilon, x), or nothing where that
  *         observer is not timelike there. */
 [[nodiscard]] std::optional<physics::observer_sky::ObserverKey>

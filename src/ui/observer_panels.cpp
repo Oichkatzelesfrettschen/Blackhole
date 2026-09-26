@@ -105,10 +105,10 @@ void renderViewControls(RenderState::ObserverViewGroup &view) {
                         &latMax, "%.4f");
     ImGui::TextDisabled("longitude 0 = the hole, 90 = direction of motion, 180 = straight out");
   }
-  const double fovMin = 1.0e-4;
-  const double fovMax = 170.0;
+  const double fovMin = blackhole::K_OBSERVER_FOV_MIN_DEG;
+  const double fovMax = blackhole::K_OBSERVER_FOV_MAX_DEG;
   ImGui::SliderScalar("Field of view (deg)", ImGuiDataType_Double, &view.fovDeg, &fovMin, &fovMax,
-                      "%.5g", ImGuiSliderFlags_Logarithmic);
+                      "%.5g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
   ImGui::SeparatorText("Sources and exposure");
   ImGui::Checkbox("CMB (2.725 K blackbody)", &view.cmbEnabled);
   ImGui::SameLine();

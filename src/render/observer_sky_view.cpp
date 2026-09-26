@@ -563,6 +563,7 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
     basis = observerViewBasis(view.lookLongitudeDeg * std::numbers::pi / 180.0,
                               view.lookLatitudeDeg * std::numbers::pi / 180.0);
   }
+  view.fovDeg = std::clamp(view.fovDeg, K_OBSERVER_FOV_MIN_DEG, K_OBSERVER_FOV_MAX_DEG);
   const double tanHalfFov = std::tan(0.5 * view.fovDeg * std::numbers::pi / 180.0);
 
   RenderToTextureInfo rtti;
