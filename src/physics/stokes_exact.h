@@ -133,6 +133,11 @@ inline constexpr double MOMENT_UPWARD_TAU = 30.0;
 
 using Moments = std::array<double, MOMENT_COUNT>;
 
+/// 1 / n! for n < MOMENT_COUNT; the series multiply by it rather than divide.
+inline constexpr std::array<double, MOMENT_COUNT> INV_FACTORIAL = {
+    1.0,         1.0,          1.0 / 2.0,     1.0 / 6.0,      1.0 / 24.0,      1.0 / 120.0,
+    1.0 / 720.0, 1.0 / 5040.0, 1.0 / 40320.0, 1.0 / 362880.0, 1.0 / 3628800.0, 1.0 / 39916800.0};
+
 /// Cubic-in-K' coefficients of f(K') = c0 - c1 K' + c2 K'^2 - c3 K'^3.
 struct CubicCoeffs {
   double c0 = 0.0;
@@ -261,9 +266,6 @@ struct CubicCoeffs {
  */
 [[nodiscard]] inline CubicCoeffs smallGeneratorSeries(double a, double b,
                                                       const Moments &m) noexcept {
-  constexpr std::array<double, MOMENT_COUNT> invFactorial = {
-      1.0,         1.0,          1.0 / 2.0,     1.0 / 6.0,      1.0 / 24.0,      1.0 / 120.0,
-      1.0 / 720.0, 1.0 / 5040.0, 1.0 / 40320.0, 1.0 / 362880.0, 1.0 / 3628800.0, 1.0 / 39916800.0};
   std::array<double, 6> p{};
   p[1] = 1.0;
   for (std::size_t k = 1; k + 1 < p.size(); ++k) {
@@ -273,11 +275,11 @@ struct CubicCoeffs {
   double evenTail = 0.0;
   double oddTail = 0.0;
   for (std::size_t k = 1; k <= 5; ++k) {
-    c.c2 += p[k] * m[2 * k] * invFactorial[2 * k];
-    c.c3 += p[k] * m[(2 * k) + 1] * invFactorial[(2 * k) + 1];
+    c.c2 += p[k] * m[2 * k] * INV_FACTORIAL[2 * k];
+    c.c3 += p[k] * m[(2 * k) + 1] * INV_FACTORIAL[(2 * k) + 1];
     if (k >= 2) {
-      evenTail += p[k - 1] * m[2 * k] * invFactorial[2 * k];
-      oddTail += p[k - 1] * m[(2 * k) + 1] * invFactorial[(2 * k) + 1];
+      evenTail += p[k - 1] * m[2 * k] * INV_FACTORIAL[2 * k];
+      oddTail += p[k - 1] * m[(2 * k) + 1] * INV_FACTORIAL[(2 * k) + 1];
     }
   }
   c.c0 += a * b * evenTail;
@@ -314,9 +316,10 @@ struct SegmentFunctions {
       .tau = tau, .e = std::exp(-tau), .x1 = x1, .x2 = x2, .a = x1 * x1, .b = x2 * x2};
   if (x1 < largeArgument) {
     const double sh = std::sinh(0.5 * x1);
-    const double scm1 = (x1 < SMALL_EIGENVALUE)
-                            ? sinhcMinusOne(x1)
-                            : ((2.0 * sh * std::sqrt(1.0 + (sh * sh))) / x1) - 1.0;
+    const double scm1 =
+        (x1 < SMALL_EIGENVALUE)
+            ? sinhcMinusOne(x1)
+            : ((2.0 * sh * std::sqrt(1.0 + (sh * sh))) / std::max(x1, SMALL_EIGENVALUE)) - 1.0;
     f.eCoshMinusOne = f.e * 2.0 * sh * sh;
     f.eSinhc = f.e * (1.0 + scm1);
     f.eSinhcMinusOne = f.e * scm1;
@@ -324,7 +327,7 @@ struct SegmentFunctions {
     const double half = 0.5 * std::exp(x1 - tau);
     const double em = std::exp(-x1);
     f.eCoshMinusOne = half * (1.0 - em) * (1.0 - em);
-    f.eSinhc = half * (1.0 - (em * em)) / x1;
+    f.eSinhc = half * (1.0 - (em * em)) / std::max(x1, largeArgument);
     f.eSinhcMinusOne = f.eSinhc - f.e;
   }
   const double s = std::sin(0.5 * x2);
@@ -332,7 +335,8 @@ struct SegmentFunctions {
   f.sinX2 = 2.0 * s * c;
   f.cosX2 = (c - s) * (c + s);
   f.oneMinusCosX2 = 2.0 * s * s;
-  f.sincMinusOneX2 = (x2 < SMALL_EIGENVALUE) ? sincMinusOne(x2) : (f.sinX2 / x2) - 1.0;
+  f.sincMinusOneX2 =
+      (x2 < SMALL_EIGENVALUE) ? sincMinusOne(x2) : (f.sinX2 / std::max(x2, SMALL_EIGENVALUE)) - 1.0;
   return f;
 }
 
@@ -342,11 +346,12 @@ struct SegmentFunctions {
     const CubicCoeffs c = smallGeneratorSeries(f.a, f.b, unitMoments());
     return {.c0 = f.e * c.c0, .c1 = f.e * c.c1, .c2 = f.e * c.c2, .c3 = f.e * c.c3};
   }
-  const double d = f.a + f.b;
-  return {.c0 = f.e + (((f.b * f.eCoshMinusOne) - (f.a * f.e * f.oneMinusCosX2)) / d),
-          .c1 = ((f.b * f.eSinhc) + (f.a * f.e * (1.0 + f.sincMinusOneX2))) / d,
-          .c2 = (f.eCoshMinusOne + (f.e * f.oneMinusCosX2)) / d,
-          .c3 = (f.eSinhcMinusOne - (f.e * f.sincMinusOneX2)) / d};
+  // One scalar reciprocal: a vectorized division by d can carry a zero padding lane.
+  const double invD = 1.0 / std::max(f.a + f.b, SMALL_EIGENVALUE * SMALL_EIGENVALUE);
+  return {.c0 = f.e + (((f.b * f.eCoshMinusOne) - (f.a * f.e * f.oneMinusCosX2)) * invD),
+          .c1 = ((f.b * f.eSinhc) + (f.a * f.e * (1.0 + f.sincMinusOneX2))) * invD,
+          .c2 = (f.eCoshMinusOne + (f.e * f.oneMinusCosX2)) * invD,
+          .c3 = (f.eSinhcMinusOne - (f.e * f.sincMinusOneX2)) * invD};
 }
 
 /// Integrals over u in [0,1] of e^{-tau u} times cosh, sinh/x, cos, sin/x of the eigenvalues.
@@ -365,39 +370,43 @@ struct DecayIntegrals {
 [[nodiscard]] inline DecayIntegrals decayIntegrals(const SegmentFunctions &f,
                                                    const Moments &m) noexcept {
   DecayIntegrals r;
-  if (opticallyThick(f)) {
+  // Every branch is chosen before it divides, and each divisor is clamped to
+  // the range its branch guarantees, so no 0/0 or x/0 is formed even when a
+  // later branch overwrites the value or the compiler evaluates both arms of a
+  // select (x1 = 0 would otherwise raise FE_INVALID).
+  const bool thick = opticallyThick(f);
+  if (thick) {
     const double p = (f.tau * f.tau) - f.a;
     const double eCosh = f.eCoshMinusOne + f.e;
-    r.coshInt = (f.tau - ((f.tau * eCosh) + (f.a * f.eSinhc))) / p;
-    r.sinhInt = (1.0 - (eCosh + (f.tau * f.eSinhc))) / p;
+    r.coshInt = (f.tau - ((f.tau * eCosh) + (f.a * f.eSinhc))) / std::max(p, 0.5);
+    if (f.x1 >= SMALL_EIGENVALUE) {
+      r.sinhInt = (1.0 - (eCosh + (f.tau * f.eSinhc))) / std::max(p, 0.5);
+    }
   } else {
     const double lo = decayIntegral(f.tau - f.x1);
     const double hi = decayIntegral(f.tau + f.x1);
     r.coshInt = 0.5 * (lo + hi);
-    r.sinhInt = (lo - hi) / (2.0 * f.x1);
+    if (f.x1 >= SMALL_EIGENVALUE) {
+      r.sinhInt = (lo - hi) / (2.0 * std::max(f.x1, SMALL_EIGENVALUE));
+    }
   }
   if (f.x1 < SMALL_EIGENVALUE) {
     double pw = 1.0;
-    double fact = 1.0;
-    r.sinhInt = 0.0;
     for (std::size_t k = 0; k <= 5; ++k) {
-      r.sinhInt += pw * m[(2 * k) + 1] / (fact * static_cast<double>((2 * k) + 1));
+      r.sinhInt += pw * m[(2 * k) + 1] * INV_FACTORIAL[(2 * k) + 1];
       pw *= f.a;
-      fact *= static_cast<double>((2 * k) + 1) * static_cast<double>((2 * k) + 2);
     }
   }
   if (f.x2 < SMALL_EIGENVALUE) {
     double pw = 1.0;
-    double fact = 1.0;
     for (std::size_t k = 0; k <= 5; ++k) {
-      r.cosInt += pw * m[2 * k] / fact;
-      r.sinInt += pw * m[(2 * k) + 1] / (fact * static_cast<double>((2 * k) + 1));
+      r.cosInt += pw * m[2 * k] * INV_FACTORIAL[2 * k];
+      r.sinInt += pw * m[(2 * k) + 1] * INV_FACTORIAL[(2 * k) + 1];
       pw *= -f.b;
-      fact *= static_cast<double>((2 * k) + 1) * static_cast<double>((2 * k) + 2);
     }
   } else {
     const double oneMinusEC = (-std::expm1(-f.tau) * f.cosX2) + f.oneMinusCosX2;
-    const double den = (f.tau * f.tau) + f.b;
+    const double den = std::max((f.tau * f.tau) + f.b, SMALL_EIGENVALUE * SMALL_EIGENVALUE);
     r.cosInt = ((f.tau * oneMinusEC) + (f.x2 * f.e * f.sinX2)) / den;
     r.sinInt = (oneMinusEC - (f.tau * f.e * (1.0 + f.sincMinusOneX2))) / den;
   }
@@ -411,7 +420,7 @@ struct DecayIntegrals {
   if (std::max(f.x1, f.x2) < SMALL_EIGENVALUE) {
     return smallGeneratorSeries(f.a, f.b, m);
   }
-  const double d = f.a + f.b;
+  const double d = std::max(f.a + f.b, SMALL_EIGENVALUE * SMALL_EIGENVALUE);
   const DecayIntegrals r = decayIntegrals(f, m);
   CubicCoeffs c{.c0 = ((f.b * r.coshInt) + (f.a * r.cosInt)) / d,
                 .c1 = ((f.b * r.sinhInt) + (f.a * r.sinInt)) / d,
@@ -429,8 +438,9 @@ struct DecayIntegrals {
     const double evenBracket =
         (((f.tau * eCosh) + (f.a * f.eSinhc)) * qd) - (((f.tau * eCos) - (f.x2 * eSin)) * p);
     const double oddBracket = ((eCosh + (f.tau * f.eSinhc)) * qd) - ((eCos + (f.tau * eSinc)) * p);
-    c.c2 = (f.tau - (evenBracket / d)) / (p * qd);
-    c.c3 = (1.0 - (oddBracket / d)) / (p * qd);
+    const double pq = std::max(p * qd, 0.5);
+    c.c2 = (f.tau - (evenBracket / d)) / pq;
+    c.c3 = (1.0 - (oddBracket / d)) / pq;
   } else {
     c.c2 = (r.coshInt - r.cosInt) / d;
     c.c3 = (r.sinhInt - r.sinInt) / d;
@@ -454,7 +464,7 @@ struct LorentzEigenvalues {
   if (t == 0.0) {
     return {};
   }
-  const double other = std::abs(im) / (2.0 * t);
+  const double other = std::abs(im) / (2.0 * ((t > 0.0) ? t : 1.0));
   return (re >= 0.0) ? LorentzEigenvalues{.x1 = t, .x2 = other}
                      : LorentzEigenvalues{.x1 = other, .x2 = t};
 }
@@ -487,7 +497,8 @@ struct LorentzAxes {
   const double etaRho = (k.alphaQ * k.rhoQ) + (k.alphaU * k.rhoU) + (k.alphaV * k.rhoV);
   // sqrt(w.w) = x1 + i x2s with x1 x2s = eta.rho; x1, x2 are magnitudes.
   const double x2s = (etaRho < 0.0) ? -x2 : x2;
-  const double d = (x1 * x1) + (x2 * x2);
+  const double dRaw = (x1 * x1) + (x2 * x2);
+  const double d = (dRaw > 0.0) ? dRaw : 1.0;
   const std::array<double, 3> eta = {k.alphaQ, k.alphaU, k.alphaV};
   const std::array<double, 3> rho = {k.rhoQ, k.rhoU, k.rhoV};
   std::array<double, 3> p{};
@@ -616,15 +627,17 @@ stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const S
   if (form == StokesSourceForm::SteadyStateSplit && tau >= 0.1 && p >= 0.01 * tau * tau) {
     // S_inf = (tau + K's)^{-1} J ds; nothing divides by D.
     const double qd = (tau * tau) + b;
+    const double pSafe = (p > 0.0) ? p : 1.0;
+    const double qdSafe = (qd > 0.0) ? qd : 1.0;
     StokesArray sInf{};
     if (axisForm) {
       const detail::AxisCoeffs inv{
-          .cP1 = tau / p, .cA = ev.x1 / p, .cP2 = tau / qd, .cB = ev.x2 / qd};
+          .cP1 = tau / pSafe, .cA = ev.x1 / pSafe, .cP2 = tau / qdSafe, .cB = ev.x2 / qdSafe};
       sInf = detail::applyAxes(inv, axes, emission);
     } else {
-      const double w = ((tau * tau) + b - a) / (p * qd);
+      const double w = ((tau * tau) + b - a) / (pSafe * qdSafe);
       const detail::CubicCoeffs inv{
-          .c0 = tau * w, .c1 = w, .c2 = tau / (p * qd), .c3 = 1.0 / (p * qd)};
+          .c0 = tau * w, .c1 = w, .c2 = tau / (pSafe * qdSafe), .c3 = 1.0 / (pSafe * qdSafe)};
       const StokesArray j1 = detail::applyLorentzPart(kp, emission);
       const StokesArray j2 = detail::applyLorentzPart(kp, j1);
       const StokesArray j3 = detail::applyLorentzPart(kp, j2);

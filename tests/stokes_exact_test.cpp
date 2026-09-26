@@ -11,7 +11,8 @@
  *      Faraday, pure dichroism, eta || rho, w.w = 0, alpha_I = |eta|, scaled
  *      units). Along a general axis the rounded |rho| ds bounds the error at
  *      4 eps (1 + x2) instead.
- *   2. stokesStepFull, the FaradayPropagation entry point, on the aligned-frame rows.
+ *   2. stokesStepFull, the FaradayPropagation entry point, on the aligned-frame
+ *      rows, and no FE_INVALID or FE_DIVBYZERO raised on any row.
  *   3. SteadyStateSplit within its 1e-9 budget for alpha_I ds >= 0.1, and equal
  *      to the direct integral below that depth.
  *   4. Closed forms: rotation by rho_V ds, I +- Q decay at alpha_I +- alpha_Q,
@@ -27,6 +28,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cfenv>
 #include <cmath>
 #include <cstdio>
 #include <exception>
@@ -83,6 +85,11 @@ double relErr(const StokesArray &got, const StokesArray &ref) {
   return norm(d) / std::max(norm(ref), 1.0e-300);
 }
 
+/// Running maximum that keeps a NaN error, which std::max would drop.
+double worseOf(double runningMax, double candidate) {
+  return (candidate > runningMax || candidate != candidate) ? candidate : runningMax;
+}
+
 StokesGenerator generatorOf(const ReferenceRow &row) {
   return {.alphaI = row.k[0],
           .alphaQ = row.k[1],
@@ -109,12 +116,12 @@ void testReferenceDirect() {
         continue;
       }
       const StokesArray got = stokesPropagateExact(row.s0, row.j, generatorOf(row), row.ds);
-      worst = std::max(worst, relErr(got, row.ref));
+      worst = worseOf(worst, relErr(got, row.ref));
       ++count;
     }
     std::printf("  %-8.*s rows=%2d  max rel err %.3e\n", static_cast<int>(group.size()),
                 group.data(), count, worst);
-    worstAll = std::max(worstAll, worst);
+    worstAll = worseOf(worstAll, worst);
   }
   check(worstAll <= DIRECT_TOL, "direct integral within 1e-12 of the 50-digit referee, all rows");
 }
@@ -132,10 +139,27 @@ void testReferenceFaradayGeneralAxis() {
     const double x2 =
         std::sqrt((row.k[4] * row.k[4]) + (row.k[5] * row.k[5]) + (row.k[6] * row.k[6])) * row.ds;
     const double bound = 4.0 * std::numeric_limits<double>::epsilon() * (1.0 + x2);
-    worstRatio = std::max(worstRatio, relErr(got, row.ref) / bound);
+    worstRatio = worseOf(worstRatio, relErr(got, row.ref) / bound);
   }
   std::printf("  faraday3d max rel err / (4 eps (1 + x2)) %.3f\n", worstRatio);
   check(worstRatio <= 1.0, "general-axis Faraday depth to 1e15 within 4 eps x2 of the referee");
+}
+
+void testNoFloatingPointExceptions() {
+  // A valid segment raises neither FE_INVALID nor FE_DIVBYZERO: every branch
+  // is selected before it divides and each divisor is clamped to the range its
+  // branch guarantees, so no discarded 0/0 or x/0 is formed, even in a select
+  // whose arms the compiler evaluates both.
+  bool clean = true;
+  for (const ReferenceRow &row : REFERENCE_ROWS) {
+    for (const StokesSourceForm form :
+         {StokesSourceForm::DirectIntegral, StokesSourceForm::SteadyStateSplit}) {
+      std::feclearexcept(FE_ALL_EXCEPT);
+      const StokesArray out = stokesPropagateExact(row.s0, row.j, generatorOf(row), row.ds, form);
+      clean = clean && std::fetestexcept(FE_INVALID | FE_DIVBYZERO) == 0 && out[0] == out[0];
+    }
+  }
+  check(clean, "no FE_INVALID or FE_DIVBYZERO on any referee row, either source form");
 }
 
 void testReferenceStepFull() {
@@ -153,7 +177,7 @@ void testReferenceStepFull() {
     const StokesVector got =
         stokesStepFull({.i = row.s0[0], .q = row.s0[1], .u = row.s0[2], .v = row.s0[3]},
                        {.jI = row.j[0], .jQ = row.j[1], .jU = row.j[2], .jV = row.j[3]}, k);
-    worst = std::max(worst, relErr(toArray(got), row.ref));
+    worst = worseOf(worst, relErr(toArray(got), row.ref));
   }
   std::printf("  stokesStepFull aligned rows max rel err %.3e\n", worst);
   check(worst <= DIRECT_TOL, "stokesStepFull within 1e-12 of the referee in the aligned frame");
@@ -170,7 +194,7 @@ void testReferenceSplit() {
       continue; // the rounded rotation angle bounds these rows; see above
     }
     if (row.k[0] * row.ds >= 0.1) {
-      worst = std::max(worst, relErr(split, row.ref));
+      worst = worseOf(worst, relErr(split, row.ref));
     } else if (split != stokesPropagateExact(row.s0, row.j, k, row.ds)) {
       thinIsDirect = false;
     }
@@ -280,11 +304,11 @@ void testInvariants() {
         const RandomSegment seg = sampler.physical(tauA, tauF);
         const StokesArray out = stokesPropagateExact(seg.s0, seg.j, seg.k, 1.0);
         const double pol = std::sqrt((out[1] * out[1]) + (out[2] * out[2]) + (out[3] * out[3]));
-        worstBound = std::max(worstBound, (pol - out[0]) / std::max(out[0], 1.0e-300));
+        worstBound = worseOf(worstBound, (pol - out[0]) / std::max(out[0], 1.0e-300));
 
         const StokesArray half = stokesPropagateExact(seg.s0, seg.j, seg.k, 0.5);
         const StokesArray twice = stokesPropagateExact(half, seg.j, seg.k, 0.5);
-        worstHalving = std::max(worstHalving, relErr(twice, out));
+        worstHalving = worseOf(worstHalving, relErr(twice, out));
 
         StokesGenerator boostOnly = seg.k;
         boostOnly.alphaI = 0.0;
@@ -294,7 +318,7 @@ void testInvariants() {
         const double after = (lz[0] * lz[0]) - (lz[1] * lz[1]) - (lz[2] * lz[2]) - (lz[3] * lz[3]);
         const double scale = std::max(
             (lz[0] * lz[0]) + (lz[1] * lz[1]) + (lz[2] * lz[2]) + (lz[3] * lz[3]), 1.0e-300);
-        worstLorentz = std::max(worstLorentz, std::abs(after - before) / scale);
+        worstLorentz = worseOf(worstLorentz, std::abs(after - before) / scale);
       }
     }
   }
@@ -313,7 +337,7 @@ void testSimplifiedKAgreement() {
     for (const double tauF : {0.0, 0.7, 30.0, 900.0}) {
       const StokesVector simple = stokesStep(s0, em, tauA, tauF, 1.0);
       const FaradayPropagation k{.alphaI = tauA, .rhoV = tauF, .dsCm = 1.0};
-      worst = std::max(worst, relErr(toArray(stokesStepFull(s0, em, k)), toArray(simple)));
+      worst = worseOf(worst, relErr(toArray(stokesStepFull(s0, em, k)), toArray(simple)));
     }
   }
   std::printf("  stokesStepFull vs stokesStep max rel diff %.3e\n", worst);
@@ -347,6 +371,7 @@ int main() try {
   std::printf("Referee table (%zu rows):\n", std::size(REFERENCE_ROWS));
   testReferenceDirect();
   testReferenceFaradayGeneralAxis();
+  testNoFloatingPointExceptions();
   testReferenceStepFull();
   testReferenceSplit();
 
