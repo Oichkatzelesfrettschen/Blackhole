@@ -16,6 +16,8 @@
 #include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
 
+#include "render/tesseract/so4.h"
+
 namespace blackhole::tesseract {
 namespace {
 
@@ -164,16 +166,26 @@ float litMomentEmission(float t, float litMoment, float width) {
   return std::exp(-0.5f * u * u);
 }
 
-float gravityPulseTime(float wallSeconds, float speed, float tNow, float tPast) {
-  const float span = tNow - tPast;
+float advancePulseTravel(float travel, float distance, float span) {
   if (span <= 0.0f) {
-    return tNow;
+    return 0.0f;
   }
-  float travelled = std::fmod(speed * wallSeconds, span);
-  if (travelled < 0.0f) {
-    travelled += span;
+  float wrapped = std::fmod(travel + distance, span);
+  if (wrapped < 0.0f) {
+    wrapped += span;
   }
-  return tNow - travelled;
+  return wrapped;
+}
+
+So4Pair<double> advanceOrientation(const So4Pair<double> &orientation,
+                                   const std::array<float, 3> &leftRate,
+                                   const std::array<float, 3> &rightRate, double ds) {
+  const auto step = [ds](const std::array<float, 3> &rate) {
+    return quatExp(ds * static_cast<double>(rate.at(0)), ds * static_cast<double>(rate.at(1)),
+                   ds * static_cast<double>(rate.at(2)));
+  };
+  return {.left = normalized(step(leftRate) * orientation.left),
+          .right = normalized(step(rightRate) * orientation.right)};
 }
 
 std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &options) {

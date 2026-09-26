@@ -935,9 +935,13 @@ namespace {
 
 void renderTesseractRotationControls(RenderState::TesseractGroup &tg) {
   ImGui::SeparatorText("SO(4) rotation  v -> qL v conj(qR)");
-  ImGui::Checkbox("Animate", &tg.animate);
-  ImGui::SliderFloat("Phase s", &tg.rotationPhase, 0.0f, 12.0f);
+  ImGui::Checkbox("Animate (rotation and pulse)", &tg.animate);
   ImGui::SliderFloat("Speed ds/dt", &tg.rotationSpeed, 0.0f, 3.0f);
+  ImGui::SliderFloat("Reset phase s0", &tg.resetPhase, 0.0f, 12.0f);
+  ImGui::SameLine();
+  if (ImGui::Button("Reset")) {
+    tg.orientationInitialized = false;
+  }
   ImGui::SliderFloat3("qL rate", tg.leftRate.data(), -1.0f, 1.0f);
   ImGui::SliderFloat3("qR rate", tg.rightRate.data(), -1.0f, 1.0f);
   // Presets: opposite rates about i turn only the (w, x) plane; a zero right

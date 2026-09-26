@@ -209,19 +209,92 @@ TEST(LibraryOfTime, LitMomentIsUnitGaussianInLibraryTime) {
 TEST(LibraryOfTime, GravityPulseRunsFromNowToPast) {
   const float now = 10.0f;
   const float past = 4.0f;
+  const float span = now - past;
   const float speed = 2.0f;
-  EXPECT_NEAR(tess::gravityPulseTime(0.0f, speed, now, past), now, TIME_TOL);
-  EXPECT_NEAR(tess::gravityPulseTime(1.5f, speed, now, past), 7.0f, TIME_TOL);
+  const float dt = 0.1f;
+  // 15 frames of 0.1 s at 2 units/s put the pulse 3 units back, at t = 7.
+  float travel = 0.0f;
   float previous = now + 1.0f;
-  for (int step = 0; step < 29; ++step) {
-    const float t = tess::gravityPulseTime(0.1f * static_cast<float>(step), speed, now, past);
+  for (int frame = 0; frame < 15; ++frame) {
+    travel = tess::advancePulseTravel(travel, speed * dt, span);
+    const float t = now - travel;
     EXPECT_GT(t, past - TIME_TOL);
     EXPECT_LE(t, now + TIME_TOL);
     EXPECT_LT(t, previous); // backward in library time within one traversal
     previous = t;
   }
-  // One full traversal takes (now - past) / speed = 3 s, then repeats.
-  EXPECT_NEAR(tess::gravityPulseTime(3.0f + 1.5f, speed, now, past), 7.0f, TIME_TOL);
+  EXPECT_NEAR(now - travel, 7.0f, TIME_TOL);
+  // The pulse wraps from t_past back to t_now.
+  EXPECT_NEAR(tess::advancePulseTravel(5.5f, 1.0f, span), 0.5f, TIME_TOL);
+  // Shrinking the span re-wraps without a step; a degenerate span parks it.
+  EXPECT_NEAR(tess::advancePulseTravel(5.0f, 0.0f, 2.0f), 1.0f, TIME_TOL);
+  EXPECT_EQ(tess::advancePulseTravel(3.0f, 1.0f, 0.0f), 0.0f);
+}
+
+TEST(LibraryOfTime, PulseSpeedChangeAffectsOnlyLaterMotion) {
+  // Ten minutes of frames at 60 Hz, then a speed change: the next frame moves
+  // the pulse by the new speed times one frame, never by speed * elapsed.
+  const float span = 6.0f;
+  const float dt = 1.0f / 60.0f;
+  float travel = 0.0f;
+  for (int frame = 0; frame < 36000; ++frame) {
+    travel = tess::advancePulseTravel(travel, 1.5f * dt, span);
+  }
+  const float next = tess::advancePulseTravel(travel, 9.0f * dt, span);
+  const float moved = std::fmod(next - travel + span, span);
+  EXPECT_NEAR(moved, 9.0f * dt, 1e-4f);
+}
+
+double quatDistance(const tess::Quat<double> &a, const tess::Quat<double> &b) {
+  const double direct =
+      std::abs(a.w - b.w) + std::abs(a.x - b.x) + std::abs(a.y - b.y) + std::abs(a.z - b.z);
+  const double flipped =
+      std::abs(a.w + b.w) + std::abs(a.x + b.x) + std::abs(a.y + b.y) + std::abs(a.z + b.z);
+  return std::min(direct, flipped);
+}
+
+TEST(TesseractAnimation, AccumulatedStepsMatchClosedFormForConstantRates) {
+  const std::array<float, 3> left = {0.35f, 0.0f, 0.15f};
+  const std::array<float, 3> right = {-0.35f, 0.12f, 0.0f};
+  tess::So4Pair<double> orientation{};
+  const double ds = 1.0 / 60.0;
+  const int steps = 600;
+  for (int k = 0; k < steps; ++k) {
+    orientation = tess::advanceOrientation(orientation, left, right, ds);
+  }
+  const double s = ds * steps;
+  const auto closed = [s](const std::array<float, 3> &r) {
+    return tess::quatExp(s * static_cast<double>(r.at(0)), s * static_cast<double>(r.at(1)),
+                         s * static_cast<double>(r.at(2)));
+  };
+  EXPECT_LT(quatDistance(orientation.left, closed(left)), 1e-12);
+  EXPECT_LT(quatDistance(orientation.right, closed(right)), 1e-12);
+}
+
+TEST(TesseractAnimation, RateChangeAfterLongRunMovesOnlyOneStep) {
+  // Ten minutes at 60 Hz, then the rate sliders jump: one more frame turns
+  // the orientation by at most |rate| * ds, not by |rate change| * s.
+  const std::array<float, 3> left = {0.35f, 0.0f, 0.15f};
+  const std::array<float, 3> right = {-0.35f, 0.12f, 0.0f};
+  const double ds = 1.0 / 60.0;
+  tess::So4Pair<double> orientation{};
+  for (int k = 0; k < 36000; ++k) {
+    orientation = tess::advanceOrientation(orientation, left, right, ds);
+  }
+  const std::array<float, 3> newLeft = {-0.9f, 0.4f, 0.0f};
+  const std::array<float, 3> newRight = {0.0f, 0.0f, 0.8f};
+  const tess::So4Pair<double> next = tess::advanceOrientation(orientation, newLeft, newRight, ds);
+  // |exp(ds v) q - q| <= 2 sin(|v| ds / 2) <= |v| ds per component group.
+  EXPECT_LT(quatDistance(next.left, orientation.left), 4.0 * 1.0 * ds);
+  EXPECT_LT(quatDistance(next.right, orientation.right), 4.0 * 1.0 * ds);
+  // Animation off (ds = 0) holds the orientation exactly.
+  const tess::So4Pair<double> frozen =
+      tess::advanceOrientation(orientation, newLeft, newRight, 0.0);
+  EXPECT_EQ(quatDistance(frozen.left, orientation.left), 0.0);
+  EXPECT_EQ(quatDistance(frozen.right, orientation.right), 0.0);
+  // Unit norm survives the long accumulation.
+  EXPECT_NEAR(tess::norm(orientation.left), 1.0, 1e-12);
+  EXPECT_NEAR(tess::norm(orientation.right), 1.0, 1e-12);
 }
 
 tess::SegmentKind kindOf(const tess::SegmentInstance &seg) {

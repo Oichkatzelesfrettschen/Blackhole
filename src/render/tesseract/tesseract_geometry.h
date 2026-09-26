@@ -25,6 +25,8 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 
+#include "render/tesseract/so4.h"
+
 namespace blackhole::tesseract {
 
 /** @brief Vertex count of the 4-cube, 2^4. */
@@ -148,13 +150,28 @@ glm::vec4 libraryToTesseract(const glm::vec4 &p, float timeSpan);
 float litMomentEmission(float t, float litMoment, float width);
 
 /**
- * @brief Library time of the gravity-message pulse at wall time @p wallSeconds.
+ * @brief Advance the gravity-message pulse by @p distance library units.
  *
- * The pulse leaves t_now at wall time 0 and runs backward at @p speed library
- * units per second until it reaches t_past, then repeats:
- * t = t_now - mod(speed * s, t_now - t_past). The result stays in (t_past, t_now].
+ * @p travel is how far the pulse has run back from t_now; the pulse sits at
+ * library time t_now - travel and repeats after reaching t_past, so the
+ * result is (travel + distance) wrapped into [0, span), span = t_now - t_past.
+ * Callers accumulate travel per frame (distance = pulse speed * frame time),
+ * so a speed change alters only the motion that follows it. A span <= 0
+ * returns 0; distance 0 re-wraps travel after a span change.
  */
-float gravityPulseTime(float wallSeconds, float speed, float tNow, float tPast);
+float advancePulseTravel(float travel, float distance, float span);
+
+/**
+ * @brief One animation step of the SO(4) orientation.
+ *
+ * qL <- exp(ds leftRate) qL and qR <- exp(ds rightRate) qR, renormalized.
+ * Constant rates compose to exp(s leftRate), exp(s rightRate) at s = sum ds;
+ * per-step accumulation keeps a rate change from rescaling the rotation
+ * already travelled, which a closed form in total time s would do.
+ */
+So4Pair<double> advanceOrientation(const So4Pair<double> &orientation,
+                                   const std::array<float, 3> &leftRate,
+                                   const std::array<float, 3> &rightRate, double ds);
 
 /** @brief Kind tag stored in SegmentInstance::meta.z. */
 enum class SegmentKind { TesseractEdge = 0, WorldTube = 1, LitSlice = 2 };

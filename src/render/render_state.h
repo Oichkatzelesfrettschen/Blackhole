@@ -36,6 +36,7 @@
 #include "physics/lut.h"
 #include "render/gpu_timing.h"
 #include "render/noise_texture_cache.h"
+#include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "rmlui_overlay.h"
 #include "tools/compare_harness.h"
@@ -107,13 +108,17 @@ struct RenderState {
   struct TesseractGroup {
     enum class Projection { Perspective = 0, Stereographic = 1 };
     Projection projection = Projection::Perspective;
-    /// Angular rates of qL and qR as pure quaternions: qL = exp(s leftRate).
+    /// Angular rates of qL and qR as pure quaternions: each frame advances
+    /// qL <- exp(ds leftRate) qL (advanceOrientation), ds = rotationSpeed * dt.
     /// Opposite equal rates give a simple rotation; equal rates give SO(3).
     std::array<float, 3> leftRate = {0.35f, 0.0f, 0.15f};
     std::array<float, 3> rightRate = {-0.35f, 0.12f, 0.0f};
-    bool animate = true;
-    float rotationPhase = 2.5f; ///< Rotation parameter s at wall time 0.
-    float rotationSpeed = 1.0f; ///< ds per wall second while animating.
+    bool animate = true;        ///< Advance rotation and pulse; off freezes both in place.
+    float resetPhase = 2.5f;    ///< s applied from the identity on (re)initialization.
+    float rotationSpeed = 1.0f; ///< ds per second of frame time while animating.
+    blackhole::tesseract::So4Pair<double> orientation{}; ///< Accumulated (qL, qR).
+    bool orientationInitialized = false; ///< False re-seeds orientation from resetPhase.
+    float pulseTravel = 0.0f;            ///< Library time the pulse has run back from t_now.
     float perspectiveDistance = 3.0f;
     float sceneScale = 1.3f;
     float viewDistance = 8.0f;

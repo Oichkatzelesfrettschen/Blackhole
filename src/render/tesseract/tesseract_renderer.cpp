@@ -40,6 +40,8 @@ namespace {
 constexpr std::size_t EDGE_SUBDIVISIONS = 24;
 // Points per world-tube polyline; the lit-moment Gaussian spans several.
 constexpr std::size_t TUBE_SAMPLES = 96;
+// Largest frame time one animation step consumes, in seconds.
+constexpr float MAX_ANIMATION_STEP_S = 0.25f;
 
 GLint uniformLocation(GLuint program, const char *name) {
   return glGetUniformLocation(program, name);
@@ -212,7 +214,7 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistan
   return projection * view;
 }
 
-void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float wallSeconds) {
+void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds) {
   auto &tg = rs.tesseract;
   tg.timeSpan = std::max(tg.timeSpan, 0.5f);
   tg.litMoment = std::clamp(tg.litMoment, 0.0f, tg.timeSpan);
@@ -221,15 +223,21 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float w
   tg.pulseStrand =
       std::clamp(tg.pulseStrand, 0, static_cast<int>(tesseract::bedroomFeatures().size()) - 1);
 
-  const double s =
-      static_cast<double>(tg.rotationPhase) +
-      (tg.animate ? static_cast<double>(wallSeconds) * static_cast<double>(tg.rotationSpeed) : 0.0);
-  const auto rate = [s](const std::array<float, 3> &r) {
-    return tesseract::quatExp(s * static_cast<double>(r.at(0)), s * static_cast<double>(r.at(1)),
-                              s * static_cast<double>(r.at(2)));
-  };
-  const tesseract::Mat4<double> rotation =
-      tesseract::so4FromPair(rate(tg.leftRate), rate(tg.rightRate));
+  if (!tg.orientationInitialized) {
+    tg.orientation =
+        tesseract::advanceOrientation(tesseract::So4Pair<double>{}, tg.leftRate, tg.rightRate,
+                                      static_cast<double>(tg.resetPhase));
+    tg.pulseTravel = 0.0f;
+    tg.orientationInitialized = true;
+  }
+  // A stalled frame (window drag, breakpoint) advances by at most MAX_STEP.
+  const float step = tg.animate ? std::clamp(deltaSeconds, 0.0f, MAX_ANIMATION_STEP_S) : 0.0f;
+  tg.orientation = tesseract::advanceOrientation(tg.orientation, tg.leftRate, tg.rightRate,
+                                                 static_cast<double>(step) *
+                                                     static_cast<double>(tg.rotationSpeed));
+  tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed,
+                                                 tg.pulseNow - tg.pulsePast);
+  const tesseract::Mat4<double> rotation = tesseract::so4FromPair(tg.orientation);
 
   const float aspect = static_cast<float>(std::max(rs.targets.renderWidth, 1)) /
                        static_cast<float>(std::max(rs.targets.renderHeight, 1));
@@ -247,8 +255,7 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float w
   inputs.timeSpan = tg.timeSpan;
   inputs.litMoment = tg.litMoment;
   inputs.litWidth = std::max(tg.litWidth, 0.01f);
-  inputs.pulseTime =
-      tesseract::gravityPulseTime(wallSeconds, tg.pulseSpeed, tg.pulseNow, tg.pulsePast);
+  inputs.pulseTime = tg.pulseNow - tg.pulseTravel;
   inputs.pulseWidth = std::max(tg.pulseWidth, 0.01f);
   inputs.pulseEnabled = tg.pulseEnabled;
   inputs.pulseStrand = tg.pulseStrand;

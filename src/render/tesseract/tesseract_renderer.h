@@ -103,12 +103,13 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, float viewDistan
 /**
  * @brief Render the tesseract scene for this frame into rs.targets.texBlackhole.
  *
- * The SO(4) rotation is so4FromPair(exp(s leftRate), exp(s rightRate)) at
- * s = rotationPhase + wallSeconds * rotationSpeed (rotationPhase alone while
- * animation is off); the pulse time comes from gravityPulseTime and the view
- * from tesseractViewProjection.
+ * While rs.tesseract.animate holds, the stored orientation advances by
+ * advanceOrientation over ds = rotationSpeed * deltaSeconds and the pulse by
+ * advancePulseTravel over pulseSpeed * deltaSeconds; with it off both hold
+ * still. deltaSeconds is clamped to 0.25 s per frame. The view comes from
+ * tesseractViewProjection.
  */
-void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float wallSeconds);
+void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds);
 
 } // namespace blackhole
 

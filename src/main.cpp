@@ -1173,12 +1173,12 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
 BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOptions &cli,
                                       const Settings &settings, InputManager &input,
                                       const FrameCamera &frameCamera, float frameTime,
-                                      double currentTime, GLuint &computeProgram) {
+                                      float deltaTime, double currentTime, GLuint &computeProgram) {
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
     if (input.isUIVisible()) {
       renderSettingsWindow(rs);
     }
-    renderTesseractScene(rs, frameCamera.basis, frameTime);
+    renderTesseractScene(rs, frameCamera.basis, deltaTime);
     return {};
   }
   const auto result =
@@ -1528,7 +1528,7 @@ int main(int argc, char **argv) {
       auto projectionMatrix = frameCamera.projection;
       auto gizmoViewMatrix = frameCamera.gizmoView;
       const auto blackholeFrame = renderSceneFrame(rs, cli, settings, input, frameCamera, frameTime,
-                                                   currentTime, computeProgram);
+                                                   deltaTime, currentTime, computeProgram);
       const bool grmhdReady = blackholeFrame.grmhdReady;
       const bool computeActiveForLog = blackholeFrame.computeActiveForLog;
 
