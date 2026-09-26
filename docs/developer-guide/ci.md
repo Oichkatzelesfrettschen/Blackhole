@@ -262,9 +262,14 @@ headers for the compile database's standard library. Both analyzer scripts
 default to `build/CiLike`, the GCC 14 tree `ci_replica.sh` configures and
 exports, because `SIMD_TIER`, `ENABLE_FAST_MATH`, and `ENABLE_NATIVE_ARCH`
 select preprocessor branches (the `__AVX2__` paths in `src/physics/batch.h`);
-`scripts/ci/check_ci_config.sh` compares a tree's cache with the `ci` preset's
-`SSE2`/`OFF`/`OFF`, and a mismatch stops either script with exit 2 unless `-f`
-is given. `tidy18.sh` also exits 2 when clang-tidy fails on a file without
+`scripts/ci/check_ci_config.sh` compares a tree's cache with every
+`cacheVariables` entry of the `ci` preset in `CMakePresets.json`, inherited
+entries included, except the toolchain path and the analyzer switches
+ci-analysis turns on; that covers the switches that register targets and
+sources (`BUILD_TESTING`, `ENABLE_DESKTOP_APP`, `ENABLE_CUDA`,
+`ENABLE_BLENDER_BRIDGE`, `ENABLE_SHADER_VALIDATION`) as well as the
+preprocessor ones. A mismatch stops either script with exit 2 unless `-f` is
+given. `tidy18.sh` also exits 2 when clang-tidy fails on a file without
 printing a diagnostic. Each script documents its options in its header comment.
 
 ## Audit baseline

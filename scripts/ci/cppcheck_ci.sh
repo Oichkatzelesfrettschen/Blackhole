@@ -14,8 +14,10 @@
 #   CPPCHECK_CI_VERBOSE=1  print how many distinct flag sets each file had
 #
 # scripts/ci/check_ci_config.sh compares BUILD_DIR/CMakeCache.txt with the ci
-# preset's SIMD_TIER, ENABLE_FAST_MATH, and ENABLE_NATIVE_ARCH, which select
-# preprocessor branches; the script exits 2 on a mismatch unless -f is given.
+# preset's cache variables in CMakePresets.json (target switches such as
+# BUILD_TESTING, ENABLE_DESKTOP_APP, and ENABLE_CUDA, and preprocessor switches
+# such as SIMD_TIER and ENABLE_FAST_MATH); the script exits 2 on a mismatch
+# unless -f is given.
 #
 # The image comes from scripts/ci/Dockerfile.cppcheck and is built on first
 # use as bh-ci-cppcheck; $CONTAINER_ENGINE selects docker or podman. Each file

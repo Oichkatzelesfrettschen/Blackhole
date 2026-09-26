@@ -11,8 +11,10 @@
 #   FILE          repository-relative source paths, e.g. src/render/env_config.cpp
 #
 # scripts/ci/check_ci_config.sh compares BUILD_DIR/CMakeCache.txt with the ci
-# preset's SIMD_TIER, ENABLE_FAST_MATH, and ENABLE_NATIVE_ARCH, which select
-# preprocessor branches; the driver exits 2 on a mismatch unless -f is given.
+# preset's cache variables in CMakePresets.json (target switches such as
+# BUILD_TESTING, ENABLE_DESKTOP_APP, and ENABLE_CUDA, and preprocessor switches
+# such as SIMD_TIER and ENABLE_FAST_MATH); the driver exits 2 on a mismatch
+# unless -f is given.
 #
 # The executable is $CLANG_TIDY when set, otherwise the PyPI wheel pinned at
 # 18.1.1 through `uvx --from clang-tidy==18.1.1 clang-tidy`. PyPI carries no

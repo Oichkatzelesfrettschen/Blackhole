@@ -6,9 +6,14 @@ physics_bench --json emits {"config": {...}, "results": [{"name",
 the baseline and fails when any ratio exceeds the threshold. A missing
 baseline is an explicit condition, never a silent pass: either record
 one with --record or acknowledge the bootstrap with --allow-missing.
-A recorded baseline carries a "provenance" object (host CPU, logical CPU
-count, platform, UTC date, and each --provenance note); comparisons read
-only "results", so the provenance never affects a verdict.
+Every current result is validated first (finite, positive avg_ms and a
+positive iteration count), so neither --record nor --allow-missing
+accepts a run that produced no measurement. A current file whose workload
+("config": rays, steps, iterations, and the other physics_bench inputs)
+differs from the baseline's is a CONFIG failure and is not timed against
+it. A recorded baseline carries a "provenance" object (host CPU, logical
+CPU count, platform, UTC date, and each --provenance note), which never
+affects a verdict.
 """
 
 import argparse
@@ -20,11 +25,53 @@ import platform
 import sys
 import time
 
+# physics_bench's "config" fields that define the measured workload; a
+# timing is comparable only with a baseline recorded for the same values.
+WORKLOAD_KEYS = (
+    "rays",
+    "steps",
+    "iterations",
+    "warmup",
+    "lut_size",
+    "spin",
+    "mass_solar",
+    "mdot",
+    "gpu_enabled",
+    "gpu_width",
+    "gpu_height",
+    "gpu_iterations",
+    "gpu_step",
+    "gpu_max_distance",
+)
 
-def load_results(path: str | pathlib.Path) -> dict[str, dict]:
+
+def load_run(path: str | pathlib.Path) -> tuple[object, dict[str, dict]]:
+    """Return the file's "config" object (None when absent) and its results by name."""
     with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
-    return {entry["name"]: entry for entry in payload.get("results", [])}
+    results = {entry["name"]: entry for entry in payload.get("results", [])}
+    return payload.get("config"), results
+
+
+def config_mismatch(baseline: object, current: object) -> list[str]:
+    """Workload fields that differ between two config objects."""
+    if not isinstance(baseline, dict) or not isinstance(current, dict):
+        return ["a config object is missing"]
+    return [
+        f"{key} {baseline.get(key)!r} != {current.get(key)!r}"
+        for key in WORKLOAD_KEYS
+        if baseline.get(key) != current.get(key)
+    ]
+
+
+def threshold_arg(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(f"not a number: {text!r}") from error
+    if not math.isfinite(value) or value < 0:
+        raise argparse.ArgumentTypeError(f"must be a finite, non-negative fraction: {text!r}")
+    return value
 
 
 def invalid_reason(entry: dict) -> str | None:
@@ -83,7 +130,10 @@ def main() -> int:
         help="recorded baseline JSON (default: %(default)s)",
     )
     parser.add_argument(
-        "--threshold", type=float, default=0.05, help="fractional slowdown that fails (default 5%%)"
+        "--threshold",
+        type=threshold_arg,
+        default=0.05,
+        help="fractional slowdown that fails, finite and >= 0 (default 5%%)",
     )
     parser.add_argument(
         "--record",
@@ -103,7 +153,19 @@ def main() -> int:
     args = parser.parse_args()
 
     baseline_path = pathlib.Path(args.baseline)
+    runs = [(path, *load_run(path)) for path in args.current]
+    failures = 0
+    for path, _config, results in runs:
+        for name, entry in sorted(results.items()):
+            reason = invalid_reason(entry)
+            if reason is not None:
+                print(f"INVALID: {name} in {path}: {reason}")
+                failures += 1
+
     if args.record:
+        if failures:
+            print(f"not recording {baseline_path}: the run has {failures} invalid result(s)")
+            return 1
         record(args.current[0], baseline_path, args.provenance)
         print(f"recorded baseline {baseline_path} from {args.current[0]}")
         return 0
@@ -113,19 +175,24 @@ def main() -> int:
             f"NOTICE: no baseline at {baseline_path}; "
             f"record one with: {sys.argv[0]} --baseline {baseline_path} --record {args.current[0]}"
         )
+        if failures:
+            return 1
         return 0 if args.allow_missing else 2
 
-    baseline = load_results(baseline_path)
-    failures = 0
-    for current_file in args.current:
-        current = load_results(current_file)
+    baseline_config, baseline = load_run(baseline_path)
+    for path, config, current in runs:
+        mismatch = config_mismatch(baseline_config, config)
+        if mismatch:
+            print(
+                f"CONFIG: {path} measured a different workload than {baseline_path}: "
+                + "; ".join(mismatch)
+            )
+            failures += 1
+            continue
         for name, entry in sorted(current.items()):
-            base = baseline.get(name)
-            reason = invalid_reason(entry)
-            if reason is not None:
-                print(f"INVALID: {name} in {current_file}: {reason}")
-                failures += 1
+            if invalid_reason(entry) is not None:
                 continue
+            base = baseline.get(name)
             if base is None:
                 print(f"NEW: {name} has no baseline entry ({entry['avg_ms']:.3f} ms)")
                 continue
@@ -147,12 +214,12 @@ def main() -> int:
         # entry absent from this file is a lost measurement even when another
         # file reports it.
         for name in sorted(set(baseline) - set(current)):
-            print(f"MISSING: {name} is in {baseline_path} but absent from {current_file}")
+            print(f"MISSING: {name} is in {baseline_path} but absent from {path}")
             failures += 1
     if failures:
         print(
             f"{failures} failure(s): regressions beyond {args.threshold * 100:.0f}%, "
-            "invalid timings, or missing benchmarks"
+            "invalid timings, workload mismatches, or missing benchmarks"
         )
         return 1
     print("all benchmarks within threshold")

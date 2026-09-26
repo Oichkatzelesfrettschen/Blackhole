@@ -297,7 +297,9 @@ bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::string &erro
  * @param cfg           Benchmark configuration (resolution, iterations, spin, etc.).
  * @param gpuElapsedNs  Accumulates total GPU nanoseconds across all iterations.
  * @param error         Set to a descriptive message on failure; empty on success.
- * @return BenchResult with GPU timing statistics, or a zeroed result on failure.
+ * @return BenchResult with GPU timing statistics, or a zeroed result with error
+ *         set when the context or shader fails or a timer query reports zero
+ *         elapsed time. parseArgs clamps gpuIterations to at least 1.
  */
 BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::string &error) {
   GpuBenchContext ctx;
@@ -355,6 +357,13 @@ BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::strin
     glEndQuery(GL_TIME_ELAPSED);
     GLuint64 elapsedNs = 0;
     glGetQueryObjectui64v(ctx.query, GL_QUERY_RESULT, &elapsedNs);
+    // A dispatch takes measurable time; a zero GL_TIME_ELAPSED result means the
+    // query did not time it, and a zero average is not a benchmark result.
+    if (elapsedNs == 0) {
+      shutdownGpuBench(ctx);
+      error = "GL_TIME_ELAPSED query returned 0 ns";
+      return {"GPU geodesic compute", 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+    }
     double const ms = static_cast<double>(elapsedNs) / 1.0e6;
     minMs = std::min(minMs, ms);
     maxMs = std::max(maxMs, ms);
