@@ -14,9 +14,10 @@
  * The compensation (t - y) - increment is algebraically zero, so it survives
  * only under value-safe floating point: a translation unit compiled with
  * -fassociative-math (part of -ffast-math) folds it away and silently runs the
- * plain update. Blackhole compiles IEEE by default; tests and benches of this
- * header add -fno-fast-math under ENABLE_FAST_MATH, and a GLSL port declares
- * the compensation variables `precise`.
+ * plain update. The header stops with #error under -ffast-math; Blackhole
+ * compiles IEEE by default, its includers add -fno-fast-math under
+ * ENABLE_FAST_MATH, and a GLSL port declares the compensation variables
+ * `precise`.
  *
  * schwarzschildPhotonRhs is the Cartesian Binet form of the null geodesic in
  * Schwarzschild, the right-hand side shader/include/geodesics.glsl integrates:
@@ -28,6 +29,14 @@
 
 #ifndef PHYSICS_COMPENSATED_RK4_H
 #define PHYSICS_COMPENSATED_RK4_H
+
+// -ffast-math defines __FAST_MATH__ and enables -fassociative-math, which folds
+// the compensation (sum - y) - increment to zero. Reassociation enabled alone
+// (-fassociative-math without the rest of -ffast-math) defines no macro and
+// cannot be detected here; the build keeps it off (IEEE by default).
+#ifdef __FAST_MATH__
+#error "compensated_rk4.h needs value-safe FP: compile its includers with -fno-fast-math"
+#endif
 
 #include <array>
 #include <cmath>

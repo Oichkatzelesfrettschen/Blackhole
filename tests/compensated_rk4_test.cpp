@@ -15,10 +15,6 @@
  * target ISA shift both columns together.
  */
 
-#ifdef __FAST_MATH__
-#error "compensated_rk4_test needs value-safe floating point; -ffast-math folds the compensation"
-#endif
-
 #include <array>
 #include <cmath>
 #include <cstddef>
