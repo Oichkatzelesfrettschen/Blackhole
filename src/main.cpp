@@ -15,6 +15,7 @@
 #include <charconv>
 #include <cmath>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -1178,12 +1179,14 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const Settings &settings,
 }
 
 bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
-                   const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog) {
+                   const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog,
+                   bool sceneSettled) {
   /* --record-frames: draw cinematic physics HUD via foreground draw list.
    * GetForegroundDrawList() adds to ImGui's draw list, so this must be called
    * before ImGui::Render().  The overlay is composited over the scene by the
-   * ImGui backend when RenderDrawData() runs below. */
-  if (!cli.recordFramesDir.empty()) {
+   * ImGui backend when RenderDrawData() runs below. Warmup counts only frames
+   * that show the scene (sceneCaptureState). */
+  if (!cli.recordFramesDir.empty() && sceneSettled) {
     ++rs.recording.recordWarmup;
   }
   if (!cli.recordFramesDir.empty() && cli.recordProfile == "cinematic" &&
@@ -1228,7 +1231,7 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
   glfwSwapBuffers(window);
 
   /* --export-frame / --export-raw-frame: break after the export frame above. */
-  if (!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()) {
+  if ((!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()) && sceneSettled) {
     if (++rs.exporting.exportDone >= 6) { /* 5 warmup + 1 export frame */
       return true;
     }
@@ -1244,6 +1247,34 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
     return true;
   }
   return false;
+}
+
+/** @brief How the frame loop goes on after finishFrame. */
+enum class FrameOutcome : std::uint8_t { Continue = 0, Finished = 1, CaptureFailed = 2 };
+
+/**
+ * @brief Exports, presents, and counts one frame. Captures count and write only
+ *        frames that show the scene (sceneCaptureState), and an observer-sky
+ *        capture ends with CaptureFailed when its sky cannot appear: an invalid
+ *        observer or a failed load or build.
+ */
+FrameOutcome finishFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
+                         const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog) {
+  const blackhole::SceneCaptureState captureState = blackhole::sceneCaptureState(rs);
+  const bool sceneSettled = captureState == blackhole::SceneCaptureState::Ready;
+  const bool capturing = !cli.exportFramePath.empty() || !cli.exportRawFramePath.empty() ||
+                         !cli.recordFramesDir.empty();
+  if (sceneSettled) {
+    exportFrameOnce(rs, cli);
+  }
+  if (completeFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog, sceneSettled)) {
+    return FrameOutcome::Finished;
+  }
+  if (capturing && captureState == blackhole::SceneCaptureState::Failed) {
+    (void)std::fprintf(stderr, "Capture aborted: %s\n", rs.observerView.renderer.message().c_str());
+    return FrameOutcome::CaptureFailed;
+  }
+  return FrameOutcome::Continue;
 }
 
 void prepareFrameTextures(RenderState &rs, const platform::CliOptions &cli,
@@ -1402,6 +1433,7 @@ int main(int argc, char **argv) {
      * frame loop) so the hot-reload handler at the top of each frame can delete
      * and reset it to 0, triggering lazy re-creation on the next iteration. */
     GLuint computeProgram = 0;
+    int exitCode = 0;
 
     while (glfwWindowShouldClose(window) == 0) {
       // Clear default framebuffer (essential for ImGui Docking over Viewport)
@@ -1580,10 +1612,11 @@ int main(int argc, char **argv) {
                                   static_cast<int>(campaignBackdrops.size()));
       }
 
-      /* --export-frame / --export-raw-frame: export textures before ImGui. */
-      exportFrameOnce(rs, cli);
-
-      if (completeFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog)) {
+      /* --export-frame / --export-raw-frame export before ImGui renders. */
+      const FrameOutcome outcome =
+          finishFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog);
+      if (outcome != FrameOutcome::Continue) {
+        exitCode = static_cast<int>(outcome == FrameOutcome::CaptureFailed);
         break;
       }
     }
@@ -1623,7 +1656,7 @@ int main(int argc, char **argv) {
     rs.dispatch.cudaManager.shutdown();
 #endif
     cleanup(window, cli.recordFramesDir.empty());
-    return 0;
+    return exitCode;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {
     (void)std::fprintf(stderr, "Unhandled cpptrace exception: %s\n",

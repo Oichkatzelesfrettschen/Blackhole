@@ -638,6 +638,24 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
   view.lastClock = clock;
 }
 
+SceneCaptureState sceneCaptureState(const RenderState &rs) {
+  if (rs.scene.mode != RenderState::SceneMode::ObserverSky) {
+    return SceneCaptureState::Ready;
+  }
+  const ObserverSkyRenderer &renderer = rs.observerView.renderer;
+  switch (renderer.status()) {
+  case ObserverSkyRenderer::Status::Ready:
+    return renderer.ready() ? SceneCaptureState::Ready : SceneCaptureState::Pending;
+  case ObserverSkyRenderer::Status::Failed:
+  case ObserverSkyRenderer::Status::InvalidObserver:
+    return SceneCaptureState::Failed;
+  case ObserverSkyRenderer::Status::Idle:
+  case ObserverSkyRenderer::Status::Building:
+    break;
+  }
+  return SceneCaptureState::Pending;
+}
+
 void ObserverSkyRenderer::shutdown() {
   stop_.request_stop();
   if (pending_.valid()) {

@@ -260,6 +260,19 @@ private:
  */
 void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds);
 
+/** @brief Whether a frame of the active scene is fit to capture. */
+enum class SceneCaptureState : std::uint8_t {
+  Ready = 0,   ///< The frame shows the scene.
+  Pending = 1, ///< The observer's maps are still loading or tracing.
+  Failed = 2,  ///< The observer is invalid or its maps failed; the scene will not appear.
+};
+
+/** @brief The black-hole scene is always Ready. The observer-sky scene is
+ *         Ready once the requested observer's maps are resident, Failed when
+ *         its observer is invalid or its load or build failed, and Pending
+ *         otherwise, while the frame shows the black placeholder. */
+[[nodiscard]] SceneCaptureState sceneCaptureState(const RenderState &rs);
+
 } // namespace blackhole
 
 #endif // BLACKHOLE_RENDER_OBSERVER_SKY_VIEW_H
