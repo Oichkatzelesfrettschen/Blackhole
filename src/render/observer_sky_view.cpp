@@ -130,9 +130,12 @@ std::optional<PreparedObserverSky> prepareObserverSky(const sky::ObserverKey &ke
       return std::nullopt;
     }
     // Evict whether or not the sidecar landed: a published .bin alone is
-    // readable and counts against the budget.
+    // readable and counts against the budget. Only the user cache is managed;
+    // the source-tree fallback may hold explicit --out bundles, never pruned.
     (void)sky::writeObserverSkyLut(*lut, cacheDirectory);
-    sky::evictObserverSkyBundles(cacheDirectory, sky::K_OBSERVER_SKY_CACHE_BYTES, bundleHash);
+    if (cacheDirectory == platform::userCacheDirectory() / "observer_sky") {
+      sky::evictObserverSkyBundles(cacheDirectory, sky::K_OBSERVER_SKY_CACHE_BYTES, bundleHash);
+    }
   }
   PreparedObserverSky prepared{
       .lut = std::move(*lut), .blackbody = std::move(*blackbody), .emission = {}, .ringFlux = {}};
