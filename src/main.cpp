@@ -195,6 +195,7 @@ using blackhole::updateComparePresetSweep;
 // Speculative tesseract scene pass lives in src/render/tesseract/*.
 using blackhole::renderTesseractScene;
 using blackhole::TesseractRecordFrame;
+using blackhole::tesseractZoom;
 
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
@@ -487,6 +488,24 @@ std::array<ui::CampaignBackdrop, 5> loadCampaignBackdrops(GLFWwindow *window) {
       {"Starfield (procedural)", 0U, ""},
   }};
   return campaignBackdrops;
+}
+
+/**
+ * @brief Run InputManager::update for the active scene.
+ *
+ * The tesseract scene takes zoom input for its own view distance
+ * (tesseractZoom), so the black-hole camera keeps its orbit radius; a
+ * recording frames the tesseract from the record camera and drops the zoom.
+ */
+void updateInput(RenderState &rs, const platform::CliOptions &cli, InputManager &input,
+                 float deltaTime) {
+  const bool tesseractActive = rs.scene.mode == RenderState::SceneMode::Tesseract;
+  input.setZoomRedirect(tesseractActive);
+  input.update(deltaTime);
+  const float zoomDelta = input.takeZoomDelta();
+  if (tesseractActive && cli.recordFramesDir.empty()) {
+    rs.tesseract.viewDistance = tesseractZoom(rs.tesseract.viewDistance, zoomDelta);
+  }
 }
 
 void updateFrameTiming(RenderState &rs, float cpuFrameMs) {
@@ -1483,9 +1502,8 @@ int main(int argc, char **argv) {
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
       reloadChangedShaders(rs, computeProgram);
 #endif
-      // Update input manager
-      InputManager::instance().update(deltaTime);
       auto &input = InputManager::instance();
+      updateInput(rs, cli, input, deltaTime);
 
       updateFrameTiming(rs, cpuFrameMs);
       // --record-frames: one-time initialization (cinematic quality, 1920x1080, no vsync)

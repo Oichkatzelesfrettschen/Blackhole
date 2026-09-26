@@ -399,10 +399,10 @@ void InputManager::updateCamera(float deltaTime) {
       camera_.pitch -= rotateSpeed * keyYMult;
     }
     if (isActive(KeyAction::CameraMoveUp)) {
-      camera_.distance -= moveSpeed;
+      zoomBy(-moveSpeed);
     }
     if (isActive(KeyAction::CameraMoveDown)) {
-      camera_.distance += moveSpeed;
+      zoomBy(moveSpeed);
     }
 
     // Roll controls
@@ -415,10 +415,10 @@ void InputManager::updateCamera(float deltaTime) {
 
     // Zoom via keyboard
     if (isActive(KeyAction::ZoomIn)) {
-      camera_.distance -= moveSpeed;
+      zoomBy(-moveSpeed);
     }
     if (isActive(KeyAction::ZoomOut)) {
-      camera_.distance += moveSpeed;
+      zoomBy(moveSpeed);
     }
   }
 
@@ -436,7 +436,7 @@ void InputManager::updateCamera(float deltaTime) {
 
     // Scroll wheel zoom with sensitivity
     if (std::abs(scrollDelta_) > 0.0f) {
-      camera_.distance -= scrollDelta_ * scrollSensitivity_ * 0.5f * inputScale;
+      zoomBy(-scrollDelta_ * scrollSensitivity_ * 0.5f * inputScale);
     }
   }
 
@@ -559,14 +559,14 @@ void InputManager::updateGamepad(float deltaTime) {
   camera_.yaw += yawAxis * gamepadLookSensitivity_ * deltaTime;
   camera_.pitch -= pitchAxis * gamepadLookSensitivity_ * deltaTime;
   camera_.roll += rollAxis * gamepadRollSensitivity_ * deltaTime;
-  camera_.distance += zoomAxis * gamepadZoomSensitivity_ * deltaTime;
+  zoomBy(zoomAxis * gamepadZoomSensitivity_ * deltaTime);
 
   updateAxis(gamepadZoomInAxis_);
   updateAxis(gamepadZoomOutAxis_);
   float const zoomIn = normalizeTrigger(gamepadAxisRaw_[gamepadZoomInAxis_]);
   float const zoomOut = normalizeTrigger(gamepadAxisRaw_[gamepadZoomOutAxis_]);
   float const triggerZoom = (zoomOut - zoomIn) * gamepadTriggerZoomSensitivity_ * deltaTime;
-  camera_.distance += triggerZoom;
+  zoomBy(triggerZoom);
 
   if (isGamepadButtonJustPressed(gamepadResetButton_)) {
     camera_.reset();
@@ -796,6 +796,14 @@ void InputManager::onMouseMove(double x, double y) {
 
 void InputManager::onScroll(double /*xoffset*/, double yoffset) {
   scrollDelta_ = static_cast<float>(yoffset);
+}
+
+void InputManager::zoomBy(float amount) {
+  if (zoomRedirect_) {
+    pendingZoom_ += amount;
+  } else {
+    camera_.distance += amount;
+  }
 }
 
 float InputManager::getEffectiveDeltaTime(float rawDeltaTime) const {

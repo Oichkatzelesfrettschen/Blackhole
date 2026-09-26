@@ -155,6 +155,8 @@ private:
 inline constexpr float TESSERACT_NEAR_PLANE = 0.05f;
 /// Closest tesseract view distance; the View distance slider shares it.
 inline constexpr float TESSERACT_MIN_VIEW_DISTANCE = 3.0f;
+/// Farthest interactive tesseract view distance; the View distance slider shares it.
+inline constexpr float TESSERACT_MAX_VIEW_DISTANCE = 20.0f;
 /// Black-hole camera distance at which a recorded tesseract frame uses the UI
 /// view distance unchanged: the CameraState default orbit radius.
 inline constexpr float TESSERACT_RECORD_REFERENCE_DISTANCE = 15.0f;
@@ -197,6 +199,19 @@ struct TesseractFraming {
  */
 TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
                                   const std::optional<TesseractRecordCamera> &record);
+
+/**
+ * @brief Tesseract view distance after interactive zoom.
+ *
+ * While the tesseract scene is active, InputManager redirects zoom input
+ * (setZoomRedirect) so the black-hole camera distance stays put, and this
+ * applies the redirected @p zoomDelta, in black-hole camera units, by the
+ * tesseractFraming ratio: the view moves by zoomDelta * viewDistance /
+ * TESSERACT_RECORD_REFERENCE_DISTANCE, so one scroll step changes the view
+ * by the same fraction it would change the default black-hole orbit. The
+ * result stays in [TESSERACT_MIN_VIEW_DISTANCE, TESSERACT_MAX_VIEW_DISTANCE].
+ */
+float tesseractZoom(float viewDistance, float zoomDelta);
 
 /**
  * @brief View-projection for the tesseract scene from the black-hole camera.

@@ -352,6 +352,23 @@ public:
    */
   void setIgnoreGuiCapture(bool ignore) { ignoreGuiCapture_ = ignore; }
 
+  /**
+   * @brief Route zoom input away from the camera distance.
+   *
+   * While set, keyboard, scroll, and gamepad zoom accumulate into a pending
+   * delta that takeZoomDelta returns, in camera-distance units, and the
+   * camera distance keeps its value; a scene with its own view distance reads
+   * the delta so the black-hole camera stays where it was.
+   */
+  void setZoomRedirect(bool redirect) { zoomRedirect_ = redirect; }
+
+  /** @brief Return and clear the zoom accumulated while redirected. */
+  float takeZoomDelta() {
+    const float delta = pendingZoom_;
+    pendingZoom_ = 0.0f;
+    return delta;
+  }
+
   InputManager(const InputManager &) = delete;
   InputManager &operator=(const InputManager &) = delete;
 
@@ -363,6 +380,8 @@ private:
   void updateCamera(float deltaTime);
   void handleHoldToToggle(KeyAction action, bool justPressed, bool justReleased);
   void updateGamepad(float deltaTime);
+  /// Change the camera distance by @p amount, or the pending zoom when redirected.
+  void zoomBy(float amount);
   [[nodiscard]] bool isGamepadButtonJustPressed(int button) const;
 
   GLFWwindow *window_ = nullptr;
@@ -381,6 +400,8 @@ private:
   float mouseDeltaX_ = 0.0f;
   float mouseDeltaY_ = 0.0f;
   float scrollDelta_ = 0.0f;
+  bool zoomRedirect_ = false; ///< Zoom goes to pendingZoom_, not camera_.distance.
+  float pendingZoom_ = 0.0f;  ///< Redirected zoom since the last takeZoomDelta.
   bool firstMouse_ = true;
 
   // Key bindings

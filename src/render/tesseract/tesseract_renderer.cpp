@@ -335,6 +335,12 @@ TesseractFraming tesseractFraming(float viewDistance, float fovDeg,
           .fovDeg = std::clamp(record->fovDeg, TESSERACT_MIN_FOV_DEG, TESSERACT_MAX_FOV_DEG)};
 }
 
+float tesseractZoom(float viewDistance, float zoomDelta) {
+  const float zoomed =
+      viewDistance + (zoomDelta * viewDistance / TESSERACT_RECORD_REFERENCE_DISTANCE);
+  return std::clamp(zoomed, TESSERACT_MIN_VIEW_DISTANCE, TESSERACT_MAX_VIEW_DISTANCE);
+}
+
 glm::mat4 tesseractView(const glm::mat3 &cameraBasis, const glm::vec3 &focusDirection,
                         float viewDistance) {
   const glm::vec3 forward = glm::column(cameraBasis, 2);
