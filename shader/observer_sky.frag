@@ -21,7 +21,7 @@
  *     temperature is the one with the texel's blue/red ratio (an RGB texel
  *     does not carry a spectrum, so this shift is approximate) and whose
  *     luminance at g = 1 is the texel luminance times starSkyLuminance.
- * Luminance spans about 19 decades (a 1e-3 cd/m^2 starfield to the 1e13
+ * Luminance spans about 19 decades (a 1e-4 cd/m^2 starfield to the 1e13
  * cd/m^2 patch), so the output is a log-luminance exposure: luminance maps to
  * displayPeak * (log10 L - logLuminanceMin) / (logLuminanceMax -
  * logLuminanceMin) with the chromaticity kept, before bloom and ACES.
@@ -37,7 +37,9 @@
  *
  * Key uniforms: viewBasis (columns right, up, forward on the tetrad legs),
  * tanHalfFov, skyPhiOffset / skyPhiBlurSpan / blurSamples (rotation of the
- * sky about the spin axis, in radians, and its motion-blur span), tile*.
+ * sky about the spin axis, in radians, and its motion-blur span), tile*,
+ * splatPixelX/Y and pixelSolidAngle (the pixel holding the tile center and
+ * its solid angle, from the CPU in double), skyReady.
  * Outputs: fragColor (rgb = display radiance, a = 1: the sky is at the far
  * plane for depth_cues.frag).
  */
@@ -50,10 +52,13 @@ out vec4 fragColor;
 uniform vec2 resolution;
 
 uniform sampler2D skyMap;
+uniform sampler2D skySpan;
 uniform sampler2D skyTile;
+uniform sampler2D tileSpan;
 uniform sampler2D tileFluxLut;
 uniform sampler2D blackbodyLut;
 uniform samplerCube galaxy;
+uniform float skyReady = 0.0;
 
 uniform mat3 viewBasis;
 uniform float tanHalfFov = 1.0;
@@ -74,12 +79,13 @@ uniform float cmbTemperature = 2.725;
 uniform float starsEnabled = 1.0;
 uniform float starSkyLuminance = 1.0e-3;
 
-uniform float logLuminanceMin = -5.0;
-uniform float logLuminanceMax = 14.0;
+uniform float logLuminanceMin = -7.0;
+uniform float logLuminanceMax = 13.5;
 uniform float displayPeak = 4.0;
 
 uniform float splatEnabled = 1.0;
-uniform vec2 splatPixel = vec2(-1.0);
+uniform float splatPixelX = -1.0;
+uniform float splatPixelY = -1.0;
 uniform float pixelSolidAngle = 1.0e-6;
 
 const float PI = 3.14159265358979;
@@ -132,8 +138,17 @@ vec3 galaxyDirection(vec3 source, float phi) {
   return vec3(turned.x, turned.z, -turned.y);
 }
 
-/** @brief Linear-sRGB luminance-weighted radiance (cd/m^2) of one sky sample. */
-vec3 skyRadiance(vec3 source, float logG) {
+/**
+ * @brief Linear-sRGB luminance-weighted radiance (cd/m^2) of one sky sample.
+ *        `footprint` is the (azimuthal, polar) extent the pixel covers on the
+ *        sky at infinity. Azimuth about the spin axis is sampled explicitly,
+ *        together with the motion-blur turn, since both rotate the source
+ *        about Z; the remaining extent picks the cubemap mip level. A strongly
+ *        demagnified region thus shows the average starlight of its footprint
+ *        -- near an extremal horizon, whole rings of source latitude --
+ *        instead of aliasing onto single stars.
+ */
+vec3 skyRadiance(vec3 source, float logG, vec2 footprint) {
   float log10G = logG / log(10.0);
   vec3 radiance = vec3(0.0);
   if (cmbEnabled > 0.5) {
@@ -141,11 +156,19 @@ vec3 skyRadiance(vec3 source, float logG) {
     radiance += cmb.rgb * pow(10.0, cmb.a);
   }
   if (starsEnabled > 0.5) {
-    int samples = blurSamples > 1.5 ? 4 : 1;
+    float blurTurn = blurSamples > 1.5 ? skyPhiBlurSpan : 0.0;
+    float turn = min(footprint.x + abs(blurTurn), 2.0 * PI);
+    float spacing = max(footprint.y, 0.05);
+    int samples = clamp(int(ceil(turn / spacing)), blurSamples > 1.5 ? 4 : 1, 16);
+    float cubeTexelAngle = 0.5 * PI / float(textureSize(galaxy, 0).x);
+    float extent = max(footprint.y, turn / float(samples));
+    float lod = max(log2(max(extent, 1.0e-12) / cubeTexelAngle), 0.0);
+    // The pixel's azimuth range, centered on its source, trailed by the turn.
+    float start = skyPhiOffset - 0.5 * footprint.x;
     vec3 stars = vec3(0.0);
     for (int i = 0; i < samples; ++i) {
-      float phi = skyPhiOffset + skyPhiBlurSpan * (float(i) + 0.5) / float(samples);
-      vec3 texel = texture(galaxy, galaxyDirection(source, phi)).rgb;
+      float phi = start + turn * (float(i) + 0.5) / float(samples);
+      vec3 texel = textureLod(galaxy, galaxyDirection(source, phi), lod).rgb;
       float luminance = dot(texel, REC709);
       if (luminance <= 0.0) {
         continue;
@@ -167,29 +190,67 @@ vec3 skyRadiance(vec3 source, float logG) {
 /**
  * @brief Bilinear read of a direction map at texel coordinate `st` (texel
  *        units). Directions interpolate only where all four texels show sky
- *        and agree to 0.1 rad; across a lensing fold or the shadow edge the
+ *        and agree to 0.5 rad; across a lensing fold or the shadow edge the
  *        nearest texel wins, so no pixel shows a blend of unrelated sources.
+ *        `span` returns the sky at infinity one map texel spans: x the widest
+ *        azimuthal step from `spanMap` (the unwrapped swept azimuth), y the
+ *        widest polar step or chord between the sky texels. ln g is a smooth function
+ *        of the look direction alone (g = 1/E is fixed at the observer), so
+ *        it interpolates over whichever of the four texels show sky even
+ *        where the directions do not.
  */
-vec4 readDirectionMap(sampler2D map, vec2 st, bool wrapX) {
+vec4 readDirectionMap(sampler2D map, sampler2D spanMap, vec2 st, bool wrapX, out vec2 span) {
   ivec2 size = textureSize(map, 0);
   vec2 base = floor(st - 0.5);
   vec2 f = st - 0.5 - base;
   ivec2 i0 = ivec2(base);
   vec4 texels[4];
+  span = vec2(0.0);
   for (int k = 0; k < 4; ++k) {
     ivec2 at = i0 + ivec2(k & 1, k >> 1);
     at.x = wrapX ? (at.x + size.x) % size.x : clamp(at.x, 0, size.x - 1);
     at.y = clamp(at.y, 0, size.y - 1);
     texels[k] = texelFetch(map, at, 0);
+    if (texels[k].a > NO_SKY_THRESHOLD) {
+      span = max(span, texelFetch(spanMap, at, 0).rg);
+    }
   }
   vec4 nearest = texels[(f.x < 0.5 ? 0 : 1) + (f.y < 0.5 ? 0 : 2)];
-  bool allSky = min(min(texels[0].a, texels[1].a), min(texels[2].a, texels[3].a)) > NO_SKY_THRESHOLD;
-  if (!allSky) {
-    return nearest;
+  float spread = 0.0;
+  float polarSpread = 0.0;
+  for (int a = 0; a < 4; ++a) {
+    for (int b = a + 1; b < 4; ++b) {
+      if (texels[a].a > NO_SKY_THRESHOLD && texels[b].a > NO_SKY_THRESHOLD) {
+        spread = max(spread, distance(texels[a].rgb, texels[b].rgb));
+        polarSpread = max(polarSpread, abs(texels[a].z - texels[b].z));
+      }
+    }
   }
-  float agreement = min(min(dot(texels[0].rgb, texels[1].rgb), dot(texels[0].rgb, texels[2].rgb)),
-                        dot(texels[0].rgb, texels[3].rgb));
-  if (agreement < cos(0.1)) {
+  // Where whole turns separate the texels, their chord says nothing about
+  // the polar extent; the z steps do.
+  span.y = max(span.y, span.x > 0.5 ? polarSpread : spread);
+  vec4 weights = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  float skyWeight = 0.0;
+  float logG = 0.0;
+  for (int k = 0; k < 4; ++k) {
+    if (texels[k].a > NO_SKY_THRESHOLD) {
+      skyWeight += weights[k];
+      logG += weights[k] * texels[k].a;
+    }
+  }
+  if (nearest.a > NO_SKY_THRESHOLD) {
+    nearest.a = logG / skyWeight;
+  }
+  bool allSky = skyWeight > 0.9999;
+  if (allSky && span.x > 0.5 && span.y < 0.5) {
+    // The texels wind through different azimuths but share a source
+    // latitude band: interpolate the polar component alone and keep the
+    // nearest azimuth, which the renderer averages over anyway.
+    float z = mix(mix(texels[0].z, texels[1].z, f.x), mix(texels[2].z, texels[3].z, f.x), f.y);
+    vec2 xy = nearest.xy * (sqrt(max(1.0 - z * z, 0.0)) / max(length(nearest.xy), 1.0e-6));
+    return vec4(xy, z, nearest.a);
+  }
+  if (!allSky || spread > 0.5 || span.x > 0.5) {
     return nearest;
   }
   vec4 top = mix(texels[0], texels[1], f.x);
@@ -198,12 +259,14 @@ vec4 readDirectionMap(sampler2D map, vec2 st, bool wrapX) {
   return vec4(normalize(blended.rgb), blended.a);
 }
 
-vec4 equirectSample(vec3 look) {
+/** @brief Equirectangular read; `texelAngle` returns the map's pitch. */
+vec4 equirectSample(vec3 look, out vec2 span, out float texelAngle) {
   float longitude = atan(look.z, -look.x);
   float latitude = asin(clamp(-look.y, -1.0, 1.0));
   vec2 size = vec2(textureSize(skyMap, 0));
   vec2 st = vec2((longitude + PI) / (2.0 * PI), (0.5 * PI - latitude) / PI) * size;
-  return readDirectionMap(skyMap, st, true);
+  texelAngle = PI / size.y;
+  return readDirectionMap(skyMap, skySpan, st, true, span);
 }
 
 /** @brief Tile coordinates of `look`: x = ln rho, y = azimuth psi in [0, 2 pi). */
@@ -215,11 +278,14 @@ vec2 tileCoordinates(vec3 look) {
   return vec2(log(max(rho, 1.0e-30)), psi < 0.0 ? psi + 2.0 * PI : psi);
 }
 
-vec4 tileSample(vec2 coordinates) {
+/** @brief Log-polar read; `texelAngle` returns the local texel size. */
+vec4 tileSample(vec2 coordinates, out vec2 span, out float texelAngle) {
   vec2 size = vec2(textureSize(skyTile, 0));
   float radial = (coordinates.x - tileLogRhoMin) / (tileLogRhoMax - tileLogRhoMin);
   vec2 st = vec2(coordinates.y / (2.0 * PI), radial) * size;
-  return readDirectionMap(skyTile, st, true);
+  float rho = exp(coordinates.x);
+  texelAngle = rho * max((tileLogRhoMax - tileLogRhoMin) / size.y, 2.0 * PI / size.x);
+  return readDirectionMap(skyTile, tileSpan, st, true, span);
 }
 
 /** @brief Cumulative CMB flux (luminance x sr) inside ln rho = `logRho`. */
@@ -240,6 +306,11 @@ vec3 displayMapped(vec3 radiance) {
 }
 
 void main() {
+  if (skyReady < 0.5) {
+    // The maps are still being traced: draw the far plane black.
+    fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
   vec2 ndc = uv * 2.0 - 1.0;
   float aspect = resolution.x / max(resolution.y, 1.0);
   vec3 look = normalize(viewBasis * vec3(ndc.x * aspect * tanHalfFov, ndc.y * tanHalfFov, 1.0));
@@ -254,21 +325,26 @@ void main() {
       float rhoSplit = 0.75 * pixelAngle;
       if (splatEnabled > 0.5 && coordinates.x < log(rhoSplit)) {
         // Inside the unresolved disk: its whole CMB flux lands on one pixel.
-        if (all(equal(floor(gl_FragCoord.xy), floor(splatPixel)))) {
+        if (cmbEnabled > 0.5 &&
+            all(equal(floor(gl_FragCoord.xy), floor(vec2(splatPixelX, splatPixelY))))) {
           radiance = tileFluxInside(log(rhoSplit)) / pixelSolidAngle;
         }
       } else {
-        vec4 texel = tileSample(coordinates);
+        vec2 span;
+        float texelAngle;
+        vec4 texel = tileSample(coordinates, span, texelAngle);
         if (texel.a > NO_SKY_THRESHOLD) {
-          radiance = skyRadiance(texel.rgb, texel.a);
+          radiance = skyRadiance(texel.rgb, texel.a, span * (pixelAngle / texelAngle));
         }
       }
     }
   }
   if (!fromTile) {
-    vec4 texel = equirectSample(look);
+    vec2 span;
+    float texelAngle;
+    vec4 texel = equirectSample(look, span, texelAngle);
     if (texel.a > NO_SKY_THRESHOLD) {
-      radiance = skyRadiance(texel.rgb, texel.a);
+      radiance = skyRadiance(texel.rgb, texel.a, span * (pixelAngle / texelAngle));
     }
   }
   fragColor = vec4(displayMapped(radiance), 1.0);

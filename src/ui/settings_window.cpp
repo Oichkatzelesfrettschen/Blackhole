@@ -8,6 +8,7 @@
 #include "settings_window.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -630,12 +631,28 @@ void renderComputeSettings(RenderState &rs) {
   renderComputeComparisonSettings(rs);
 }
 
+void renderSceneModeCombo(RenderState &rs) {
+  constexpr std::array<RenderState::SceneMode, 2> sceneModes = {
+      RenderState::SceneMode::Blackhole, RenderState::SceneMode::ObserverSky};
+  constexpr std::array<const char *, 2> sceneItems = {"Black hole", "Observer sky (Miller's planet)"};
+  const auto *const current = std::ranges::find(sceneModes, rs.scene.mode);
+  int sceneIndex = static_cast<int>(current - sceneModes.begin());
+  if (ImGui::Combo("Scene", &sceneIndex, sceneItems.data(), static_cast<int>(sceneItems.size()))) {
+    rs.scene.mode = sceneModes.at(static_cast<std::size_t>(sceneIndex));
+  }
+  if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
+    ImGui::TextDisabled("The observer-sky controls live in the Observer sky window.");
+  }
+  ImGui::Separator();
+}
+
 } // anonymous namespace
 
 void renderSettingsWindow(RenderState &rs) {
   auto &settings = SettingsManager::instance().get();
   ImGui::SetNextWindowSize(ImVec2(450, 700), ImGuiCond_FirstUseEver);
   ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoCollapse);
+  renderSceneModeCombo(rs);
   if (ImGui::BeginTabBar("MainTabs")) {
     if (ImGui::BeginTabItem("Visuals")) {
       renderVisualSettings(rs, settings);

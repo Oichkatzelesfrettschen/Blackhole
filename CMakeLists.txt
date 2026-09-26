@@ -1157,11 +1157,13 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/render/record_mode.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/render_targets.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/uniform_binding.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/observer_sky_view.cpp"
   "${PROJECT_SOURCE_DIR}/src/tools/compare_harness.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/campaign_panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/strategic_map.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/observer_panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_generator.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/noise_texture_cache.cpp"
   "${PROJECT_SOURCE_DIR}/src/shader.cpp"
@@ -1196,6 +1198,15 @@ list(APPEND HEADER_FILES ${PHYSICS_HEADER_FILES} ${RENDER_HEADER_FILES})
 # Apply tiered warning flags only to project source files
 set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES
   COMPILE_OPTIONS "${PROJECT_WARNINGS}"
+)
+# observer_sky_view.cpp instantiates kerr_observer.h's inline deficit-form
+# functions (iscoOffset, equatorialFrame, principalNullDelay), which
+# blackhole_observer_sky also emits under IEEE semantics; the linker keeps one
+# copy per symbol, so every definition must come from IEEE code, or a
+# fast-math copy could serve the ray tracer and shift the ISCO offset that
+# keys the cached sky maps.
+set_source_files_properties("${PROJECT_SOURCE_DIR}/src/render/observer_sky_view.cpp"
+  PROPERTIES COMPILE_OPTIONS "${PROJECT_WARNINGS};-fno-fast-math;-ffp-contract=off"
 )
 
 # Sanitizers and heavy inlining can push stack usage estimates beyond the strict global threshold.
@@ -3871,6 +3882,7 @@ if(BUILD_TESTING)
     )
     target_link_libraries(blackhole_testcore PUBLIC
       blackhole_campaign
+      blackhole_observer_sky
       HighFive::HighFive
       imgui::imgui
       imguizmo::imguizmo
