@@ -6,13 +6,18 @@
 #include "render/env_config.h"
 
 #include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <string_view>
+#include <system_error>
 
+#include "physics/safe_limits.h"
 #include "render/gl_capabilities.h"
 #include "render/render_state.h"
 #include "tools/compare_harness.h" // K_COMPARE_PRESETS
@@ -35,17 +40,43 @@ constexpr bool kAppVariantCudaOnly = BLACKHOLE_APP_VARIANT_CUDA_ONLY != 0;
 } // namespace
 #endif
 
-namespace {
-
+// std::from_chars writes the parsed value through a reference, so an "inf" or
+// "nan" input reaches memory from the IEEE-compiled library and the bit-level
+// physics::safeIsfinite classifies it. A by-value std::strtod result carries
+// clang's nofpclass(nan inf) return annotation under -ffinite-math-only, which
+// makes a parsed NaN poison before any check can reject it.
 float parseEnvironmentFloat(const char *value) {
-  char *end = nullptr;
-  const double parsed = std::strtod(value, &end);
-  if (end == value || !std::isfinite(parsed) ||
+  if (value == nullptr) {
+    return 0.0f;
+  }
+  const auto isSpace = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
+  std::string_view text(value);
+  while (!text.empty() && isSpace(text.front())) {
+    text.remove_prefix(1);
+  }
+  while (!text.empty() && isSpace(text.back())) {
+    text.remove_suffix(1);
+  }
+  // One optional '+' precedes the digits; std::from_chars accepts only '-', so
+  // "+-1" or "++1" would otherwise reach it with a sign it then consumes.
+  if (!text.empty() && text.front() == '+') {
+    text.remove_prefix(1);
+    if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
+      return 0.0f;
+    }
+  }
+  double parsed = 0.0;
+  const char *const end = text.data() + text.size();
+  const std::from_chars_result result = std::from_chars(text.data(), end, parsed);
+  if (result.ec != std::errc{} || result.ptr != end || text.empty() ||
+      !physics::safeIsfinite(parsed) ||
       std::abs(parsed) > static_cast<double>(std::numeric_limits<float>::max())) {
     return 0.0f;
   }
   return static_cast<float>(parsed);
 }
+
+namespace {
 
 void applyCompareEnvironment(RenderState &rs) {
   if (!rs.compare.compareAutoInit) {

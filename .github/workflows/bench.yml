@@ -1,0 +1,107 @@
+name: CPU benchmark
+
+# Advisory trend job: it runs on a schedule or by hand, never per pull request,
+# and a slowdown against bench/baseline-ci.json marks the compare step failed
+# without failing the job. The baseline comes from a workstation, so a hosted
+# runner's absolute timings differ from it by the host alone; the uploaded JSON
+# is the evidence to compare across runs.
+on:
+  schedule:
+    - cron: '41 5 * * 3'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpu-bench-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bench:
+    name: physics-bench
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CONAN_HOME: ${{ github.workspace }}/.conan
+    # An explicit bash shell runs every step with -eo pipefail, so a failing
+    # command inside a pipeline fails its step.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          lfs: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        id: python
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/ci/requirements.txt
+      - name: Record resources
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          {
+            echo "CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)"
+            echo "PYTHON=$PYTHON"
+          } >> "$GITHUB_ENV"
+          mkdir -p build/bench
+          { nproc; lscpu; free -h; } > build/bench/host.txt
+          cat build/bench/host.txt
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 g++-14 ninja-build pkg-config \
+            libgl1-mesa-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libx11-xcb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontenc-dev \
+            libice-dev libsm-dev libxaw7-dev libxcomposite-dev libxdamage-dev \
+            libxfixes-dev libxkbfile-dev libxmuu-dev libxpm-dev libxres-dev \
+            libxss-dev libxt-dev libxtst-dev libxv-dev libxxf86vm-dev \
+            libxcb-render-util0-dev libxcb-image0-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-xfixes0-dev \
+            libxcb-xinerama0-dev libxcb-dri3-dev libxcb-cursor-dev \
+            libxcb-icccm4-dev libxcb-util-dev libxcb-xkb-dev \
+            glslang-tools libcfitsio-dev libxcb-glx0-dev uuid-dev libxcb-dri2-0-dev \
+            libxcb-present-dev libxcb-composite0-dev libxcb-ewmh-dev libxcb-res0-dev
+          g++-14 --version | head -1 >> build/bench/host.txt
+      - name: Install pinned build tools
+        run: |
+          "$PYTHON" -m pip install -r scripts/ci/requirements.txt
+      # The key matches the C++ CI build job's, so a warm cache from that
+      # workflow serves this job and a cold run builds the same locked graph.
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .conan
+          key: conan-ubuntu24-gcc14-v1-${{ hashFiles('conan.lock', 'conanfile.py', 'conan/recipes/**', 'conan/profiles/ci', 'scripts/ci/requirements.txt') }}
+      - name: Install locked dependencies
+        run: |
+          scripts/conan_export_local_recipes.sh
+          conan install . --output-folder=build/CI-deps --lockfile=conan.lock \
+            --build=missing -pr:a conan/profiles/ci \
+            -c:a tools.build:jobs="$CMAKE_BUILD_PARALLEL_LEVEL"
+      # Configure, build, and the benchmark run fail the job; only the
+      # comparison against the cross-host baseline is advisory.
+      - name: Build physics_bench
+        run: |
+          cmake --preset ci -DPYTHON3_EXECUTABLE="$PYTHON"
+          cmake --build --preset ci --target physics_bench
+      - name: Run physics_bench
+        env:
+          BENCH_PRESET: ci
+          BENCH_RUN_ONLY: '1'
+        run: bench/ci_bench.sh
+      - name: Compare against the baseline
+        continue-on-error: true
+        run: |
+          "$PYTHON" scripts/check_bench_regression.py --baseline bench/baseline-ci.json \
+            build/bench/bench_cpu.json
+      - name: Retain benchmark results
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: physics-bench-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/bench/
+          retention-days: 90

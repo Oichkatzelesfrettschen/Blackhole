@@ -1042,8 +1042,11 @@ if(ENABLE_ASAN)
 endif()
 
 if(ENABLE_UBSAN)
-  add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
-  add_link_options(-fsanitize=undefined)
+  # UBSan reports and continues by default, exiting 0; -fno-sanitize-recover
+  # aborts on the first report so a CTest run under UBSan fails on a finding.
+  add_compile_options(-fsanitize=undefined -fno-sanitize-recover=undefined
+    -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=undefined -fno-sanitize-recover=undefined)
   message(STATUS "UndefinedBehaviorSanitizer enabled")
 endif()
 
@@ -3921,6 +3924,17 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/env_config_test.cpp")
+    add_executable(env_config_test "${PROJECT_SOURCE_DIR}/tests/env_config_test.cpp")
+    target_link_libraries(env_config_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(env_config_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME env_config_parse COMMAND env_config_test)
+    set_tests_properties(env_config_parse PROPERTIES LABELS "render;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(env_config_parse PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
     add_executable(settings_sync_test "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
     target_link_libraries(settings_sync_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
@@ -4765,6 +4779,10 @@ if(BUILD_TESTING)
       BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
     )
     target_compile_options(kerr_shader_capture_test PRIVATE ${PROJECT_WARNINGS})
+    # The readback check classifies non-finite shader output; finite-math-only folds std::isfinite away.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_shader_capture_test PRIVATE -fno-fast-math)
+    endif()
     target_link_libraries(kerr_shader_capture_test PRIVATE
       blackhole_physics
       glfw
@@ -5216,6 +5234,10 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(rte_integrator_test PRIVATE ${PROJECT_WARNINGS})
+    # The Bessel-overflow checks classify NaN results; finite-math-only folds std::isnan away.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(rte_integrator_test PRIVATE -fno-fast-math)
+    endif()
     target_link_libraries(rte_integrator_test PRIVATE Boost::headers)
     add_test(NAME rte_integrator_validation COMMAND rte_integrator_test)
     set_tests_properties(rte_integrator_validation PROPERTIES
@@ -5239,6 +5261,10 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(stokes_transport_test PRIVATE ${PROJECT_WARNINGS})
+    # The Bessel-overflow checks classify NaN results; finite-math-only folds std::isnan away.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(stokes_transport_test PRIVATE -fno-fast-math)
+    endif()
     target_link_libraries(stokes_transport_test PRIVATE Boost::headers)
     add_test(NAME stokes_transport_validation COMMAND stokes_transport_test)
     set_tests_properties(stokes_transport_validation PROPERTIES
@@ -5542,6 +5568,10 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(rt_grmhd_composite_test PRIVATE ${PROJECT_WARNINGS})
+    # The albedo check classifies non-finite results; finite-math-only folds std::isfinite away.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(rt_grmhd_composite_test PRIVATE -fno-fast-math)
+    endif()
     add_test(NAME rt_grmhd_composite_validation COMMAND rt_grmhd_composite_test)
     set_tests_properties(rt_grmhd_composite_validation PROPERTIES
       LABELS "radiative;transfer;grmhd;phase7"
@@ -5652,6 +5682,10 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(phase8_pipeline_validation PRIVATE ${PROJECT_WARNINGS})
+    # The density check classifies non-finite samples; finite-math-only folds std::isfinite away.
+    if(ENABLE_FAST_MATH)
+      target_compile_options(phase8_pipeline_validation PRIVATE -fno-fast-math)
+    endif()
     add_test(NAME phase8_pipeline_validation COMMAND phase8_pipeline_validation)
     set_tests_properties(phase8_pipeline_validation PROPERTIES
       LABELS "phase8;pipeline;validation;integration"
