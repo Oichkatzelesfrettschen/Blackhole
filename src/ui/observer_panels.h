@@ -21,6 +21,15 @@ namespace ui {
 void renderObserverSkyPanel(blackhole::RenderState &rs);
 
 /**
+ * @brief What the observer's clock means for what it sees: dtau/dt and its
+ *        inverse, the outside time one wall second covers at the chosen sky
+ *        time scale, the orbital period on both clocks, and how fast the star
+ *        field turns while the shadow and the patch, fixed in the tidally
+ *        locked observer's frame, stay put.
+ */
+void renderObserverPhysicsNote(const blackhole::RenderState &rs);
+
+/**
  * @brief The disclosure line drawn on the viewport image in the observer-sky
  *        scene: the view's physics spin against the black-hole scene's render
  *        spin. The film itself separated them (James et al. 2015,

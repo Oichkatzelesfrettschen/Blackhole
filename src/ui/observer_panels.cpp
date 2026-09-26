@@ -162,6 +162,43 @@ void drawObserverDisclosure(const RenderState &rs, ImVec2 imageMin, ImVec2 image
   draw->AddText(origin, IM_COL32(235, 235, 235, 255), text.c_str());
 }
 
+void renderObserverPhysicsNote(const RenderState &rs) {
+  const RenderState::ObserverViewGroup &view = rs.observerView;
+  const blackhole::ObserverClockModel &clock = view.lastClock;
+  ImGui::SetNextWindowPos(ImVec2(1380, 40), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(520, 330), ImGuiCond_FirstUseEver);
+  ImGui::Begin("Observer physics note");
+  if (!(clock.secondsPerM > 0.0)) {
+    ImGui::TextWrapped("The observer's sky is still being traced.");
+    ImGui::End();
+    return;
+  }
+  const double dilation = 1.0 / clock.properTimeRate;
+  ImGui::Text("dtau/dt = %.5g: one observer second = %.5g outside seconds (%.3g h)",
+              clock.properTimeRate, dilation, dilation / 3600.0);
+  ImGui::Text("At sky time scale %.1e: one wall second = %.4g observer s = %.4g outside h",
+              view.skyTimeScale, view.skyTimeScale, view.skyTimeScale * dilation / 3600.0);
+  if (clock.coordinatePeriodSeconds > 0.0) {
+    ImGui::Text(
+        "Orbital period: %.4g s outside (%.4g h, 2 pi / Omega), %.4g s on the observer's clock",
+        clock.coordinatePeriodSeconds, clock.coordinatePeriodSeconds / 3600.0,
+        clock.properPeriodSeconds);
+    const double turnsPerWallSecond = view.skyTimeScale / clock.properPeriodSeconds;
+    ImGui::Text("Star field turns %.4g times per wall second (%.4g at scale 1)", turnsPerWallSecond,
+                1.0 / clock.properPeriodSeconds);
+  }
+  ImGui::Text("M = %.3g M_sun: GM/c^3 = %.5g s", view.massSolar, clock.secondsPerM);
+  ImGui::Separator();
+  ImGui::TextWrapped(
+      "A tidally locked observer keeps the same face to the hole, so its local sky is fixed in "
+      "its own frame: the shadow and the blueshift patch are functions of the look direction "
+      "alone and never move. Only the source content scrolls -- the whole sky at infinity turns "
+      "about the spin axis once per orbit, about ten times a second of the observer's own time at "
+      "Miller's orbit. At sky time scale 1 each frame samples four sub-frame positions (motion "
+      "blur); the default 1e-3 slows the sky a thousandfold so the star field can be followed.");
+  ImGui::End();
+}
+
 void renderObserverSkyPanel(RenderState &rs) {
   RenderState::ObserverViewGroup &view = rs.observerView;
   ImGui::SetNextWindowSize(ImVec2(460, 720), ImGuiCond_FirstUseEver);

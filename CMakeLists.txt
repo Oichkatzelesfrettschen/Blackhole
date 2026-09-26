@@ -3942,6 +3942,20 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Observer-sky scene CPU side: observer clock, sky phase, camera geometry,
+  # and the committed blackbody table (read relative to the source root).
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/observer_sky_view_test.cpp")
+    add_executable(observer_sky_view_test "${PROJECT_SOURCE_DIR}/tests/observer_sky_view_test.cpp")
+    target_link_libraries(observer_sky_view_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(observer_sky_view_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME observer_sky_view_state COMMAND observer_sky_view_test
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    set_tests_properties(observer_sky_view_state PROPERTIES LABELS "render;unit;observer-sky" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(observer_sky_view_state PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/camera_math_test.cpp")
     add_executable(camera_math_test "${PROJECT_SOURCE_DIR}/tests/camera_math_test.cpp")
     target_link_libraries(camera_math_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)

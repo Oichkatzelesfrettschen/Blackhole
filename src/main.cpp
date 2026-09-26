@@ -1580,6 +1580,7 @@ int main(int argc, char **argv) {
         renderWiregridPanel(rs);
         if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
           ui::renderObserverSkyPanel(rs);
+          ui::renderObserverPhysicsNote(rs);
         }
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
