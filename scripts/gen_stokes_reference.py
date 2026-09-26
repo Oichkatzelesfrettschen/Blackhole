@@ -22,6 +22,7 @@ Groups:
              depth 0, 1, 100 and dichroism, plus pure gain and |alpha_I ds| = 40
   deepgain - alpha_I ds from -650 to -715, past exp's overflow, with representable
              solutions
+  nearnull - |eta| ~ |rho| up to 1e8, nearly perpendicular: w.w cancels
   faraday  - Faraday depth 1e6..1e15 along one axis, and at 1e12 beside a small eta
   faraday3d - Faraday depth 1e9..1e15 along a general axis
   limit    - zero K, pure Faraday, pure dichroism, eta || rho, w.w = 0,
@@ -152,8 +153,35 @@ def build_rows() -> list[Row]:
     )
     rows.append(("deepgain", [-710.0, 0.01, 0.0, 0.005, 0.0, 0.0, 3.0], 1.0, j, zero))
     rows.append(("deepgain", [-715.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0e6], 1.0, j, zero))
+    rows.extend(near_null_rows())
     rows.extend(faraday_rows())
     rows.extend(limit_rows())
+    return rows
+
+
+def near_null_rows() -> list[Row]:
+    """|eta| and |rho| large and nearly equal with eta nearly perpendicular to rho,
+    so w.w cancels in |eta|^2 - |rho|^2 and in eta.rho. One-ulp changes of these
+    inputs move the solution by up to 0.35 relative (scale 1e8, 5-ulp gap)."""
+    j = [0.8, 0.2, -0.1, 0.05]
+    s0 = [1.0, 0.3, -0.2, 0.1]
+    rows: list[Row] = []
+    rows.append(
+        (
+            "nearnull",
+            [0.0, 1.0e8, 0.0, 0.0, 0.0, 1.0e8 * (1 + 1.1102230246251565e-15), 0.0],
+            1.0,
+            [0.0] * 4,
+            [1.0, 0.0, 0.0, 0.0],
+        )
+    )
+    # The tilt makes eta.rho nonzero; it shrinks with scale so x1 = eta.rho / x2
+    # keeps e^{x1} representable.
+    for scale, tilted in ((1.0e4, 1.0e-9), (1.0e8, 1.0e-13)):
+        for gap in (1.1102230246251565e-15, 1.0e-9, 1.0e-6):
+            for tilt in (0.0, tilted):
+                k = [0.0, scale, 0.0, 0.0, tilt * scale, scale * (1.0 + gap), 0.0]
+                rows.append(("nearnull", k, 1.0, j, s0))
     return rows
 
 

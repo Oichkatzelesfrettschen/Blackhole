@@ -53,6 +53,8 @@
  *   - x1 and x2 come from the stable complex square root: the larger of the two
  *     takes sqrt((|w.w| + |Re w.w|)/2) and the smaller is |Im w.w| divided by
  *     twice it, so neither suffers the h + sqrt(h^2 + (eta.rho)^2) cancellation.
+ *     When |eta|^2 - |rho|^2 or eta.rho itself cancels (a generator near null
+ *     with large |eta| ~ |rho|), it is recomputed in twice the precision (dot2).
  *   - The decay factor e^{-tau} is folded into cosh and sinh before they are
  *     formed, so an optically thick segment with large x1 never forms inf * 0.
  *   - Once an eigenvalue reaches 1 and the generator is far from null, the
@@ -462,11 +464,50 @@ struct LorentzEigenvalues {
   double x2 = 0.0;
 };
 
+/**
+ * @brief sum_i a_i b_i as if accumulated in twice the working precision.
+ *
+ * Dot2 of Ogita, Rump & Oishi (2005, SIAM J. Sci. Comput. 26, 1955): each
+ * product splits exactly into hi + lo through fma and each partial sum
+ * carries its TwoSum error, so the result errs by about one rounding of the
+ * result plus eps^2 sum |a_i b_i|. The compensation needs value-safe floating
+ * point; -ffast-math folds it to the plain sum.
+ */
+template <std::size_t N>
+[[nodiscard]] inline double dot2(const std::array<double, N> &x,
+                                 const std::array<double, N> &y) noexcept {
+  double sum = 0.0;
+  double err = 0.0;
+  for (std::size_t i = 0; i < N; ++i) {
+    const double prod = x[i] * y[i];
+    const double prodErr = std::fma(x[i], y[i], -prod);
+    const double next = sum + prod;
+    const double back = next - sum;
+    err += ((sum - (next - back)) + (prod - back)) + prodErr;
+    sum = next;
+  }
+  return sum + err;
+}
+
+/// Share of a sum's magnitude that must survive cancellation before the
+/// invariants are recomputed with dot2 (about 20 of 53 bits lost).
+inline constexpr double INVARIANT_CANCELLATION = 1.0e-6;
+
 [[nodiscard]] inline LorentzEigenvalues lorentzEigenvalues(const StokesGenerator &k) noexcept {
   const double eta2 = (k.alphaQ * k.alphaQ) + (k.alphaU * k.alphaU) + (k.alphaV * k.alphaV);
   const double rho2 = (k.rhoQ * k.rhoQ) + (k.rhoU * k.rhoU) + (k.rhoV * k.rhoV);
-  const double etaRho = (k.alphaQ * k.rhoQ) + (k.alphaU * k.rhoU) + (k.alphaV * k.rhoV);
-  const double re = eta2 - rho2;
+  double etaRho = (k.alphaQ * k.rhoQ) + (k.alphaU * k.rhoU) + (k.alphaV * k.rhoV);
+  double re = eta2 - rho2;
+  // Near a null generator |eta|^2 - |rho|^2 and eta.rho are small differences
+  // of large terms, and w.w = re + 2i eta.rho sets the eigenvalues and so the
+  // phase; recompute whichever has cancelled with twice the precision.
+  if (std::abs(re) < INVARIANT_CANCELLATION * (eta2 + rho2)) {
+    re = dot2<6>({k.alphaQ, k.alphaU, k.alphaV, k.rhoQ, k.rhoU, k.rhoV},
+                 {k.alphaQ, k.alphaU, k.alphaV, -k.rhoQ, -k.rhoU, -k.rhoV});
+  }
+  if (std::abs(etaRho) < INVARIANT_CANCELLATION * std::sqrt(eta2 * rho2)) {
+    etaRho = dot2<3>({k.alphaQ, k.alphaU, k.alphaV}, {k.rhoQ, k.rhoU, k.rhoV});
+  }
   const double im = 2.0 * etaRho;
   const double t = std::sqrt(0.5 * (std::hypot(re, im) + std::abs(re)));
   if (t == 0.0) {

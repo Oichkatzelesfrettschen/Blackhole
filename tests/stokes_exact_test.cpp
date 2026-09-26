@@ -11,7 +11,8 @@
  *      alpha_U and rho_U nonzero, and the degenerate limits (zero K, pure
  *      Faraday, pure dichroism, eta || rho, w.w = 0, alpha_I = |eta|, scaled
  *      units). Along a general axis the rounded |rho| ds bounds the error at
- *      4 eps (1 + x2) instead.
+ *      4 eps (1 + x2) instead, and near-null generators (|eta| ~ |rho| to 1e8,
+ *      one-ulp input sensitivity up to 0.35) at 1e-7.
  *   2. stokesStepFull, the FaradayPropagation entry point, on the aligned-frame
  *      rows, and no FE_INVALID or FE_DIVBYZERO raised on any row.
  *   3. SteadyStateSplit within its 1e-9 budget for alpha_I ds >= 0.1, and equal
@@ -36,6 +37,7 @@
 #include <iterator>
 #include <limits>
 #include <numbers>
+#include <numeric>
 #include <random>
 #include <string_view>
 
@@ -61,6 +63,8 @@ constexpr ReferenceRow REFERENCE_ROWS[] = {
 
 // Direct-integral gate against the referee table.
 constexpr double DIRECT_TOL = 1.0e-12;
+// Near-null rows (group nearnull), whose inputs carry up to 0.35 of per-ulp sensitivity.
+constexpr double NEAR_NULL_TOL = 1.0e-7;
 // SteadyStateSplit contract for alpha_I ds >= 0.1.
 constexpr double SPLIT_TOL = 1.0e-9;
 
@@ -150,6 +154,23 @@ void testReferenceFaradayGeneralAxis() {
   }
   std::printf("  faraday3d max rel err / (4 eps (1 + x2)) %.3f\n", worstRatio);
   check(worstRatio <= 1.0, "general-axis Faraday depth to 1e15 within 4 eps x2 of the referee");
+}
+
+void testReferenceNearNull() {
+  // Near a null generator one-ulp input changes move the solution by up to
+  // 0.35 relative, so the rows measure accuracy for the exactly represented
+  // inputs: w.w is formed in twice the precision (dot2) once it cancels.
+  const double worst = std::accumulate(
+      std::begin(REFERENCE_ROWS), std::end(REFERENCE_ROWS), 0.0,
+      [](double w, const ReferenceRow &row) {
+        return (row.group == "nearnull")
+                   ? worseOf(w,
+                             relErr(stokesPropagateExact(row.s0, row.j, generatorOf(row), row.ds),
+                                    row.ref))
+                   : w;
+      });
+  std::printf("  nearnull max rel err %.3e\n", worst);
+  check(worst <= NEAR_NULL_TOL, "near-null |eta| ~ |rho| to 1e8 within 1e-7 of the referee");
 }
 
 void testNoFloatingPointExceptions() {
@@ -378,6 +399,7 @@ int main() try {
   std::printf("Referee table (%zu rows):\n", std::size(REFERENCE_ROWS));
   testReferenceDirect();
   testReferenceFaradayGeneralAxis();
+  testReferenceNearNull();
   testNoFloatingPointExceptions();
   testReferenceStepFull();
   testReferenceSplit();
