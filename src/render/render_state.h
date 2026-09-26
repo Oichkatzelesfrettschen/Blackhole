@@ -85,6 +85,12 @@ struct WiregridParams {
   float scenePreserve  = 1.0f; ///< 1 = fully defer to scene luminance, 0 = diagnostic override.
 };
 
+/// Default depthFar in scene units: beyond the default camera's distance plus
+/// the disk's 200-unit (100 r_s) outer radius, so depth cues normalize a disk
+/// hit below 1 and reserve the far end for the sky, and the gizmo far plane
+/// holds the whole disk.
+inline constexpr float K_DEFAULT_DEPTH_FAR = 500.0f;
+
 
 struct RenderState {
   struct CameraGroup {
@@ -100,7 +106,7 @@ struct RenderState {
   } camera;
 
   struct DisplayGroup {
-    float depthFar = 100.0f;
+    float depthFar = K_DEFAULT_DEPTH_FAR;
     bool displaySettingsLoaded = false;
     int swapInterval = 1;
     float renderScale = 1.0f;

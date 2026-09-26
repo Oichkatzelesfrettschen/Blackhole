@@ -47,6 +47,7 @@ constexpr bool K_APP_VARIANT_CUDA_ONLY = false;
 namespace ui {
 
 using blackhole::K_COMPARE_PRESETS;
+using blackhole::K_DEFAULT_DEPTH_FAR;
 using blackhole::K_MAX_BLOOM_ITERATIONS;
 using blackhole::RenderState;
 
@@ -748,7 +749,8 @@ void renderTonemapPanel(RenderState &rs) {
 void renderDepthEffectsPanel(RenderState &rs) {
   ImGui::Begin("Depth Effects", nullptr, ImGuiWindowFlags_NoCollapse);
   ImGui::Checkbox("Enable Depth Effects", &rs.depthFx.depthEffectsEnabled);
-  ImGui::SliderFloat("Depth Far", &rs.display.depthFar, 10.0f, 200.0f);
+  ImGui::SliderFloat("Depth Far", &rs.display.depthFar, 10.0f, 2000.0f, "%.0f",
+                     ImGuiSliderFlags_Logarithmic);
   if (ImGui::Button("Preset: Subtle")) {
     rs.depthFx.depthEffectsEnabled = true;
     rs.depthFx.fogEnabled = true;
@@ -770,7 +772,7 @@ void renderDepthEffectsPanel(RenderState &rs) {
     rs.depthFx.dofFocusFar = 0.9f;
     rs.depthFx.dofMaxRadius = 2.0f;
     rs.depthFx.depthCurve = 1.0f;
-    rs.display.depthFar = 100.0f;
+    rs.display.depthFar = K_DEFAULT_DEPTH_FAR;
   }
   ImGui::SameLine();
   if (ImGui::Button("Preset: Cinematic")) {
@@ -794,7 +796,7 @@ void renderDepthEffectsPanel(RenderState &rs) {
     rs.depthFx.dofFocusFar = 0.75f;
     rs.depthFx.dofMaxRadius = 5.0f;
     rs.depthFx.depthCurve = 0.95f;
-    rs.display.depthFar = 100.0f;
+    rs.display.depthFar = K_DEFAULT_DEPTH_FAR;
   }
   ImGui::SameLine();
   if (ImGui::Button("Preset: Clarity")) {
@@ -818,7 +820,7 @@ void renderDepthEffectsPanel(RenderState &rs) {
     rs.depthFx.dofFocusFar = 0.95f;
     rs.depthFx.dofMaxRadius = 2.5f;
     rs.depthFx.depthCurve = 1.15f;
-    rs.display.depthFar = 100.0f;
+    rs.display.depthFar = K_DEFAULT_DEPTH_FAR;
   }
   ImGui::Separator();
 

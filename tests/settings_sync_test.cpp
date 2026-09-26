@@ -21,6 +21,7 @@
 #include "render/settings_sync.h"
 #include "settings.h"
 
+using blackhole::K_DEFAULT_DEPTH_FAR;
 using blackhole::K_MAX_BLOOM_ITERATIONS;
 using blackhole::loadSettingsIntoRenderState;
 using blackhole::RenderState;
@@ -42,6 +43,14 @@ Settings distinctSettings() {
   settings.gamma = 1.8f;
   settings.bloomIterations = 4;
   return settings;
+}
+
+// depthFar normalizes depth cues and bounds the gizmo frustum: the default
+// camera distance plus the disk's 200-unit outer radius fits inside it.
+TEST(SettingsSync, DefaultDepthFarHoldsTheDefaultCameraAndTheDisk) {
+  const auto rsStorage = std::make_unique<RenderState>();
+  EXPECT_FLOAT_EQ(rsStorage->display.depthFar, K_DEFAULT_DEPTH_FAR);
+  EXPECT_GT(K_DEFAULT_DEPTH_FAR, K_DEFAULT_CAMERA_DISTANCE + 200.0f);
 }
 
 } // namespace
