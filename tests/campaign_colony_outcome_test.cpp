@@ -15,7 +15,9 @@
 #include "campaign_test_field.h"
 #include "game/campaign.h"
 #include "game/campaign_view.h"
+#include "game/command.h"
 #include "game/event.h"
+#include "game/fleet.h"
 #include "game/event_loader.h"
 #include "game/observer.h"
 #include "game/station_node.h"
@@ -199,4 +201,30 @@ TEST(ColonyOutcome, ProductionRateIsBounded) {
   state.advanceTurns(50);
   EXPECT_TRUE(std::isfinite(state.energyUnits()));
   EXPECT_FALSE(state.serializeState().empty());
+}
+
+// Falsifier: a live colony's order refused because the host has latched a
+// victory the colony has not heard of -- the refusal would reveal the remote
+// outcome -- while the host, which knows it, is refused as before.
+TEST(ColonyOutcome, HostDecisionDoesNotSilenceTheColony) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config = colonyConfig(R"({})", 0);
+  config.victoryEnergyUnits = 3.0; // the colony's reports from turns 1..3 land at 6..8
+  game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
+  ASSERT_NE(fleet, game::K_INVALID_FLEET_ID);
+  state.advanceTurns(10);
+  ASSERT_EQ(state.status(), game::CampaignStatus::Won);
+  EXPECT_EQ(state.perceivedSnapshot(game::K_FIRST_COLONY_NODE).status,
+            game::CampaignStatus::Ongoing);
+
+  game::Command order;
+  order.type = game::CommandType::AssignTask;
+  order.fleet = fleet;
+  order.properTimeCostSec = 3600.0;
+  order.originNode = game::K_AUTHORITY_NODE;
+  EXPECT_FALSE(state.issueCommand(order));
+  order.originNode = game::K_FIRST_COLONY_NODE;
+  EXPECT_TRUE(state.issueCommand(order));
 }

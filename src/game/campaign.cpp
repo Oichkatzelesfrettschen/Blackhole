@@ -139,8 +139,7 @@ FleetId CampaignState::addFleet(FleetCapability capability, int bandIndex, Orbit
 }
 
 bool CampaignState::issueCommand(const Command &command) {
-  // A decided campaign takes no further orders: the outcome is latched.
-  if (!valid_ || status_ != CampaignStatus::Ongoing) {
+  if (!valid_) {
     return false;
   }
   const Fleet *fleet = findFleet(command.fleet);
@@ -149,6 +148,13 @@ bool CampaignState::issueCommand(const Command &command) {
   }
   // Orders leave from a live node: a dark station sends nothing.
   if (command.originNode >= nodes_.size() || nodes_.at(command.originNode).dark()) {
+    return false;
+  }
+  // A decided campaign takes no further orders from the authority, where the
+  // outcome is latched and known. A colony has not heard of it (its view stays
+  // Ongoing until something tells it), so refusing its order would reveal the
+  // remote outcome; its orders are still sent.
+  if (status_ != CampaignStatus::Ongoing && command.originNode == K_AUTHORITY_NODE) {
     return false;
   }
   switch (command.type) {
