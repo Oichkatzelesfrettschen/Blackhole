@@ -52,12 +52,21 @@ def novikov_thorne_flux(r: float, mass: float, mdot: float, r_in: float, a_star:
 
 
 def kerr_redshift_equatorial(r: float, mass: float, spin_param: float) -> float:
+    """Equatorial redshift of a zero-angular-momentum emitter seen from infinity.
+
+    1 + z = 1 / alpha with the ZAMO lapse alpha = sqrt(Sigma Delta / A), which
+    at theta = pi/2 is sqrt(r^2 Delta / ((r^2 + a^2)^2 - a^2 Delta)), matching
+    physics::kerrRedshift in src/physics/kerr.h. It stays finite inside the
+    ergosphere (z = 2.3166 at a* = 0.9, r = 1.8 M) and diverges at the horizon,
+    where the function returns +inf. At a = 0 it is 1/sqrt(1 - 2M/r) - 1.
+    """
     m_geom = G * mass / C2
-    sigma = r * r
-    factor = 1.0 - (2.0 * m_geom * r) / sigma
-    if factor <= 0.0:
-        return 0.0
-    return 1.0 / math.sqrt(factor) - 1.0
+    a2 = spin_param * spin_param
+    delta = r * r - 2.0 * m_geom * r + a2
+    big_a = (r * r + a2) ** 2 - a2 * delta
+    if delta <= 0.0 or big_a <= 0.0:
+        return math.inf
+    return 1.0 / math.sqrt(r * r * delta / big_a) - 1.0
 
 
 def kerr_photon_orbit_cleanroom(mass: float, spin_param: float, prograde: bool = True) -> float:
@@ -203,7 +212,7 @@ def main() -> int:
         "prograde": True,
         "isco_source": isco_source,
         "emissivity_model": "novikov-thorne",
-        "redshift_model": "equatorial",
+        "redshift_model": "zamo-equatorial",
         "units": {
             "system": "cgs",
             "length": "cm",

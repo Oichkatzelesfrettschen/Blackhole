@@ -1,9 +1,11 @@
-"""Signed-spin ISCO and photon orbit in the LUT and validation-table generators.
+"""Signed-spin orbits and the ZAMO redshift in the LUT and validation-table generators.
 
 Both generators resolve radii through compact-common when it is importable and
 through their cleanroom formulas otherwise. The two paths must agree on the
 signed convention of src/physics/kerr.h: at a* = -0.9 the +z disk's ISCO is
-8.7174 M, not the co-rotating 2.3209 M.
+8.7174 M, not the co-rotating 2.3209 M. Their redshift curves follow
+physics::kerrRedshift, the ZAMO lapse; the references are that lapse on the
+equatorial Kerr metric evaluated in mpmath.
 """
 
 import importlib
@@ -82,6 +84,21 @@ class SignedSpinGenerators(unittest.TestCase):
         # The bug the adapter removes: prograde=True with a* = -0.9 gives 2.32 M.
         raw = conventional_isco(MASS, -0.9 * M_GEOM, True) / M_GEOM
         self.assertAlmostEqual(raw, ISCO_PLUS_Z[0.9], delta=1e-9)
+
+    def test_zamo_redshift(self):
+        # (a*, r / M, z): mpmath 1 / sqrt(Sigma Delta / A) - 1 at the equator.
+        cases = [
+            (0.9, 3.0, 0.64819156443383915),
+            (0.9, 6.0, 0.2225214295493458),
+            (0.9, 1.8, 2.3166247903553998),  # inside the ergosphere (r_ergo = 2 M)
+            (0.0, 6.0, 1.0 / math.sqrt(1.0 - 2.0 / 6.0) - 1.0),
+        ]
+        for module in (LUTS, TABLES):
+            for a_star, r_over_m, expected in cases:
+                z = module.kerr_redshift_equatorial(r_over_m * M_GEOM, MASS, a_star * M_GEOM)
+                self.assertAlmostEqual(z, expected, delta=1e-12, msg=(a_star, r_over_m))
+            r_plus = (1.0 + math.sqrt(1.0 - 0.81)) * M_GEOM
+            self.assertTrue(math.isinf(module.kerr_redshift_equatorial(r_plus, MASS, 0.9 * M_GEOM)))
 
     def test_installed_compact_common_agrees(self):
         refs = LUTS.compact_common_refs()
