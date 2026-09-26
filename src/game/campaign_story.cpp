@@ -181,7 +181,8 @@ void CampaignState::buildNodes() {
     if (colony.bandIndex < 0 ||
         static_cast<std::size_t>(colony.bandIndex) >= config_.bandRadiusCm.size() ||
         !field_->admitsObserver(bandRadiusCm(colony.bandIndex), colony.observer) ||
-        colony.missionProperSec < 0) {
+        colony.missionProperSec < 0 || !std::isfinite(colony.energyPerTick) ||
+        colony.energyPerTick < 0.0) {
       valid_ = false;
       return;
     }
@@ -402,7 +403,7 @@ void CampaignState::receiveNodeDelivery(const Delivery &delivery) {
   ++received.count.at(kindIndex(kind));
   noteSenderStamp(delivery);
   if (kind == EmitKind::TechPacket) {
-    destination.techPoints += delivery.techPoints;
+    destination.techPoints = saturatingAdd(destination.techPoints, delivery.techPoints);
   }
   ArrivalRecord record;
   record.kind = kind;

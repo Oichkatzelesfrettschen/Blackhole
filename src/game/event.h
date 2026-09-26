@@ -21,6 +21,7 @@
 #define BLACKHOLE_GAME_EVENT_H
 
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -97,6 +98,19 @@ inline constexpr std::int64_t K_STORY_TIMES_LIMIT = std::int64_t{1} << 20;
     return std::nullopt;
   }
   return sum;
+}
+
+/** @brief lhs + rhs clamped to the int64 range. A colony's tech points
+ *         accumulate one packet (at most 2^40 points) per arrival for up to
+ *         K_SAVE_MAX_TURN turns, which can exceed int64; they saturate instead
+ *         of overflowing, so tiers stay monotone and the digest defined. */
+[[nodiscard]] inline std::int64_t saturatingAdd(std::int64_t lhs, std::int64_t rhs) {
+  std::int64_t sum = 0;
+  if (!__builtin_add_overflow(lhs, rhs, &sum)) {
+    return sum;
+  }
+  return rhs > 0 ? std::numeric_limits<std::int64_t>::max()
+                 : std::numeric_limits<std::int64_t>::min();
 }
 
 /** @brief An integer that is a literal (param == K_NO_PARAM) or

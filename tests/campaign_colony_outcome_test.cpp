@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 #include "campaign_test_field.h"
@@ -154,4 +155,30 @@ TEST(ColonyOutcome, HostEnergyReachesTheColonyOnlyAsStampedAtEmission) {
   EXPECT_EQ(state.arrivals().front().emitTurn, 20);
   EXPECT_DOUBLE_EQ(state.arrivals().front().senderEnergyUnitsAtEmit, 15.0);
   EXPECT_DOUBLE_EQ(state.energyUnits(), 20.0);
+}
+
+// Falsifier: a colony whose production rate is infinite, NaN, or negative
+// accepted (its first report would carry a non-finite or negative yield, and
+// the config would fail the finite-value serialization contract).
+TEST(ColonyOutcome, NonFiniteOrNegativeProductionIsRefused) {
+  const campaign_test::FakeTimeField field;
+  for (const double rate : {std::numeric_limits<double>::infinity(),
+                            std::numeric_limits<double>::quiet_NaN(), -1.0}) {
+    game::CampaignConfig config = colonyConfig(R"({})", 0);
+    config.colonies.front().energyPerTick = rate;
+    EXPECT_FALSE(game::CampaignState(config, field).valid()) << rate;
+  }
+  game::CampaignConfig config = colonyConfig(R"({})", 0);
+  config.colonies.front().energyPerTick = 0.0;
+  EXPECT_TRUE(game::CampaignState(config, field).valid());
+}
+
+// Falsifier: tech-point accumulation wrapping past the int64 range instead of
+// saturating at it.
+TEST(ColonyOutcome, TechPointsSaturate) {
+  constexpr std::int64_t kMax = std::numeric_limits<std::int64_t>::max();
+  constexpr std::int64_t kMin = std::numeric_limits<std::int64_t>::min();
+  EXPECT_EQ(game::saturatingAdd(kMax - 5, game::K_STORY_INT_LIMIT), kMax);
+  EXPECT_EQ(game::saturatingAdd(kMin + 5, -game::K_STORY_INT_LIMIT), kMin);
+  EXPECT_EQ(game::saturatingAdd(40, 2), 42);
 }
