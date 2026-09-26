@@ -1,0 +1,185 @@
+/**
+ * @file campaign_realtime_determinism_test.cpp
+ * @brief Falsification gates for the real-time driver: the wall-to-turn
+ *        mapping, pause-on-arrival stopping on the arrival turn, the lagging
+ *        indicator, and identical per-turn digests for one command log played
+ *        under different focus, frame-batch, and pause schedules.
+ */
+
+#include <gtest/gtest.h>
+
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <map>
+#include <set>
+#include <vector>
+
+#include "game/campaign.h"
+#include "game/campaign_session.h"
+#include "game/command.h"
+#include "game/fleet.h"
+#include "game/observer.h"
+#include "game/realtime_driver.h"
+
+namespace {
+
+constexpr double K_MILLER_RATE = 1.6286e-5;
+constexpr double K_DAY_SEC = 86400.0;
+constexpr std::int64_t K_RUN_TURNS = 600;
+
+/** @brief A command log keyed by the coordinate turn it is issued on. */
+using CommandLog = std::map<std::int64_t, std::vector<game::Command>>;
+
+CommandLog scriptedLog() {
+  CommandLog log;
+  game::Command assign;
+  assign.type = game::CommandType::AssignTask;
+  assign.properTimeCostSec = 24.0 * 3600.0;
+  for (std::int64_t turn = 0; turn < K_RUN_TURNS; turn += 17) {
+    for (game::FleetId fleet = 1; fleet <= 6; ++fleet) {
+      assign.fleet = fleet;
+      log[turn].push_back(assign);
+    }
+  }
+  game::Command dive;
+  dive.type = game::CommandType::PlaceFleet;
+  dive.fleet = 6;
+  dive.targetBand = 0;
+  dive.lane = game::OrbitLane::Prograde;
+  dive.station = game::StationKeeping::Hover;
+  log[40].push_back(dive);
+  return log;
+}
+
+/** @brief One schedule's frames: wall seconds per frame, the focus rate for
+ *         the frame, and turns after which the step requests a pause (standing
+ *         in for a flagged arrival). */
+struct Schedule {
+  double focusRate = 1.0;
+  std::vector<double> frameWallSec;
+  std::set<std::int64_t> pauseAfterTurns;
+  std::int64_t maxTurnsPerFrame = 64;
+  bool alternateFocus = false; ///< Swap focus between Miller and the far band each frame.
+};
+
+/** @brief Plays the log under a schedule; returns the digest after every turn. */
+std::vector<std::uint64_t> playSchedule(const Schedule &schedule, const CommandLog &log) {
+  game::CampaignSession session(11);
+  game::CampaignState &campaign = session.state();
+  std::vector<std::uint64_t> digests;
+  game::RealtimeDriverConfig config;
+  config.secondsPerTurn = K_DAY_SEC;
+  config.maxTurnsPerFrame = schedule.maxTurnsPerFrame;
+  game::RealtimeDriver driver(config);
+  driver.setFocusRate(schedule.focusRate);
+  const game::RealtimeDriver::StepFunction step = [&]() {
+    const auto due = log.find(campaign.turn());
+    if (due != log.end()) {
+      for (const game::Command &command : due->second) {
+        static_cast<void>(campaign.issueCommand(command));
+      }
+    }
+    campaign.advanceTurn();
+    digests.push_back(campaign.stateDigest());
+    return schedule.pauseAfterTurns.contains(campaign.turn());
+  };
+  std::size_t frame = 0;
+  while (campaign.turn() < K_RUN_TURNS) {
+    if (schedule.alternateFocus) {
+      driver.setFocusRate(frame % 2 == 0 ? K_MILLER_RATE : 0.97);
+    }
+    const double wallSec = schedule.frameWallSec.at(frame % schedule.frameWallSec.size());
+    const game::RealtimePumpResult result = driver.pump(wallSec, step);
+    if (result.pausedByArrival) {
+      EXPECT_TRUE(schedule.pauseAfterTurns.contains(campaign.turn()));
+      driver.setPaused(false); // the player reads the inbox and resumes
+    }
+    ++frame;
+  }
+  digests.resize(static_cast<std::size_t>(K_RUN_TURNS));
+  return digests;
+}
+
+} // namespace
+
+// Falsifier: Miller focus mapping to anything but 1 / (1.6286e-5 * 86400) =
+// 0.711 one-day turns per wall second at real time.
+TEST(RealtimeDriver, MillerFocusRunsOutsideAtInverseRate) {
+  game::RealtimeDriver driver;
+  driver.setFocusRate(K_MILLER_RATE);
+  EXPECT_NEAR(driver.turnsPerWallSecond(), 0.71067, 1e-4);
+  driver.setFocusRate(1.0);
+  EXPECT_DOUBLE_EQ(driver.turnsPerWallSecond(), 1.0 / K_DAY_SEC);
+}
+
+// Falsifier: a pause request honored a turn late or early, turns advancing
+// while paused, or paused wall time owed to the world on resume.
+TEST(RealtimeDriver, PauseStopsOnTheRequestingTurn) {
+  game::RealtimeDriverConfig config;
+  config.maxTurnsPerFrame = 1000;
+  game::RealtimeDriver driver(config);
+  driver.setFocusRate(K_MILLER_RATE);
+  std::int64_t turn = 0;
+  const game::RealtimeDriver::StepFunction step = [&]() { return ++turn == 7; };
+  const game::RealtimePumpResult first = driver.pump(100.0, step); // 71 turns due
+  EXPECT_TRUE(first.pausedByArrival);
+  EXPECT_EQ(turn, 7);
+  EXPECT_EQ(first.turnsAdvanced, 7);
+  EXPECT_TRUE(driver.paused());
+  EXPECT_EQ(driver.pump(100.0, step).turnsAdvanced, 0);
+  EXPECT_EQ(turn, 7);
+  driver.setPaused(false);
+  EXPECT_DOUBLE_EQ(driver.turnsDue(), 0.0);
+  EXPECT_EQ(driver.pump(1.5 / 0.71067, step).turnsAdvanced, 1);
+}
+
+// Falsifier: the budget exceeded, the lagging flag missing while whole turns
+// remain due, or the backlog growing without bound.
+TEST(RealtimeDriver, FrameBudgetCapsTurnsAndFlagsLagging) {
+  game::RealtimeDriverConfig config;
+  config.maxTurnsPerFrame = 4;
+  config.maxBacklogFrames = 2;
+  game::RealtimeDriver driver(config);
+  driver.setFocusRate(K_MILLER_RATE);
+  const game::RealtimeDriver::StepFunction step = []() { return false; };
+  const game::RealtimePumpResult result = driver.pump(1000.0, step);
+  EXPECT_EQ(result.turnsAdvanced, 4);
+  EXPECT_TRUE(result.lagging);
+  EXPECT_TRUE(driver.lagging());
+  EXPECT_LE(driver.turnsDue(), 8.0);
+  const game::RealtimePumpResult drained = driver.pump(1e-9, step);
+  EXPECT_EQ(drained.turnsAdvanced, 4);
+  EXPECT_FALSE(drained.lagging);
+}
+
+// Falsifier: one command log reaching a different digest on any turn when
+// played at authority focus with smooth frames, at Miller focus with a tiny
+// per-frame budget and jittered frames, or with focus flipping every frame
+// and pauses interrupting the stream.
+TEST(RealtimeDeterminism, ThreeSchedulesGiveIdenticalPerTurnDigests) {
+  const CommandLog log = scriptedLog();
+
+  Schedule smooth;
+  smooth.focusRate = 1.0;
+  smooth.frameWallSec = {K_DAY_SEC * 2.5}; // 2.5 turns per frame at unit rate
+  const std::vector<std::uint64_t> smoothDigests = playSchedule(smooth, log);
+
+  Schedule miller;
+  miller.focusRate = K_MILLER_RATE;
+  miller.frameWallSec = {0.016, 3.0, 0.5, 40.0, 0.001};
+  miller.maxTurnsPerFrame = 3;
+  const std::vector<std::uint64_t> millerDigests = playSchedule(miller, log);
+
+  Schedule paused;
+  paused.alternateFocus = true;
+  paused.frameWallSec = {7.0, 0.3, 90.0};
+  paused.pauseAfterTurns = {1, 40, 41, 299, 500};
+  const std::vector<std::uint64_t> pausedDigests = playSchedule(paused, log);
+
+  ASSERT_EQ(smoothDigests.size(), static_cast<std::size_t>(K_RUN_TURNS));
+  for (std::size_t turn = 0; turn < smoothDigests.size(); ++turn) {
+    ASSERT_EQ(smoothDigests.at(turn), millerDigests.at(turn)) << "turn " << turn + 1;
+    ASSERT_EQ(smoothDigests.at(turn), pausedDigests.at(turn)) << "turn " << turn + 1;
+  }
+}

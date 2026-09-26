@@ -1592,6 +1592,7 @@ set(CAMPAIGN_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/game/campaign_session.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation_session.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/realtime_driver.cpp"
 )
 add_library(blackhole_campaign STATIC ${CAMPAIGN_SRC_FILES})
 target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
@@ -4233,6 +4234,31 @@ if(BUILD_TESTING)
     )
     if(SANITIZER_TEST_ENV)
       set_tests_properties(colony_clock_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
+  # Wall-time driver: focus mapping, pause-on-arrival, frame budget, and one
+  # command log reaching identical per-turn digests under three schedules.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_realtime_determinism_test.cpp")
+    add_executable(campaign_realtime_determinism_test
+      "${PROJECT_SOURCE_DIR}/tests/campaign_realtime_determinism_test.cpp"
+    )
+    target_compile_options(campaign_realtime_determinism_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(campaign_realtime_determinism_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(campaign_realtime_determinism_test PRIVATE
+      blackhole_campaign GTest::gtest_main)
+    add_test(NAME campaign_realtime_determinism_validation
+      COMMAND campaign_realtime_determinism_test)
+    set_tests_properties(campaign_realtime_determinism_validation PROPERTIES
+      LABELS "campaign;determinism;realtime"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(campaign_realtime_determinism_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()
