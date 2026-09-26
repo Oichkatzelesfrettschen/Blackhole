@@ -268,7 +268,6 @@ using blackhole::applyShowcaseBeautyWiregridTuning;
 using blackhole::captureRecordFrame;
 using blackhole::exportFrameOnce;
 using blackhole::findShowcaseOrbitComposition;
-using blackhole::K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
 using blackhole::ShowcaseOrbitComposition;
 #if BLACKHOLE_HAS_CUDA
 using blackhole::bindCudaLaunchParams;
@@ -426,11 +425,14 @@ GLFWwindow *initializeWindow(int width, int height) {
 
 // Configure custom ImGui style for "Blackhole" theme (16-bit Voxel Aesthetic)
 
-// Cleanup resources
-void cleanup(GLFWwindow *window) {
-  // Sync and save settings before shutdown
-  InputManager::instance().syncToSettings();
-  SettingsManager::instance().save();
+// Cleanup resources. saveSettings is false for a record run: its profile
+// writes post, background and camera state that belong to the capture, and
+// saving would carry them into the interactive settings.json.
+void cleanup(GLFWwindow *window, bool saveSettings) {
+  if (saveSettings) {
+    InputManager::instance().syncToSettings();
+    SettingsManager::instance().save();
+  }
 
 #ifdef BLACKHOLE_ENABLE_SHADER_WATCHER
   ShaderWatcher::instance().stop();
@@ -1236,8 +1238,8 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
   return false;
 }
 
-void prepareFrameTexturesAndExposure(RenderState &rs, const platform::CliOptions &cli,
-                                     const Settings &settings) {
+void prepareFrameTextures(RenderState &rs, const platform::CliOptions &cli,
+                          const Settings &settings) {
   if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit" &&
       rs.wiregrid.wiregridEnabled &&
       rs.wiregrid.wiregridParams.mode == WiregridParams::Mode::Beauty) {
@@ -1262,19 +1264,6 @@ void prepareFrameTexturesAndExposure(RenderState &rs, const platform::CliOptions
     rs.disk.noiseTextureReady = true; // don't retry regardless; FastNoise2 may be disabled
     if (noiseOk) {
       rs.disk.texNoiseVolume = rs.disk.noiseCache.getTurbulenceTexture();
-    }
-  }
-
-  loadSettingsIntoRenderState(rs, settings);
-  if (!cli.recordFramesDir.empty()) {
-    const ShowcaseOrbitComposition *const composition =
-        cli.recordProfile == "showcase-orbit" ? findShowcaseOrbitComposition(cli.recordComposition)
-                                              : nullptr;
-    if (cli.hasRecordExposure) {
-      rs.post.toneExposure = cli.recordExposure;
-    } else if (cli.recordProfile == "showcase-orbit") {
-      rs.post.toneExposure =
-          composition != nullptr ? composition->exposure : K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
     }
   }
 }
@@ -1395,6 +1384,10 @@ int main(int argc, char **argv) {
       rs.grmhd.grmhdPathInit = true;
     }
 
+    // Settings seed the render state once, before the first frame, so the
+    // record profile applied on frame 1 (applyRecordProfileSetup) and the
+    // environment overrides below replace them rather than being replaced.
+    loadSettingsIntoRenderState(rs, settings);
     applyEnvironmentConfig(rs);
 
     /* WHY: computeProgram is hoisted here (rather than a static local inside the
@@ -1479,7 +1472,7 @@ int main(int argc, char **argv) {
       configureFrameBackground(rs, cli);
       initializeExportDebugStage(rs);
       initializeWiregridEnvironment(rs);
-      prepareFrameTexturesAndExposure(rs, cli, settings);
+      prepareFrameTextures(rs, cli, settings);
 
       rs.display.renderScale = std::clamp(rs.display.renderScale, 0.25f, 1.5f);
       // Legacy resize logic disabled in favor of Viewport-based sizing
@@ -1603,7 +1596,7 @@ int main(int argc, char **argv) {
 #if BLACKHOLE_HAS_CUDA
     rs.dispatch.cudaManager.shutdown();
 #endif
-    cleanup(window);
+    cleanup(window, cli.recordFramesDir.empty());
     return 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {

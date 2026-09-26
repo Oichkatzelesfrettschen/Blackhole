@@ -210,10 +210,9 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.disk.adiskDensityH      = 2.1f;
     rs.disk.adiskHeight        = 0.42f;
     rs.disk.adiskLit           = 0.24f;
-    // The showcase exposure is the composition's (2.75-3.05) or
-    // K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE (3.4), set below and again each frame
-    // by prepareFrameTexturesAndExposure in main.cpp. brightness * exposure
-    // is then 0.22-0.27, the interactive default's 0.25 at exposure 1.
+    // The showcase exposure, set below, is the composition's (2.75-3.05) or
+    // K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE (3.4); brightness * exposure is then
+    // 0.22-0.27, the interactive default's 0.25 at exposure 1.
     rs.disk.diskBrightness     = 0.08f;
     rs.disk.dopplerStrength    = 1.15f;
     rs.disk.photonSphereGlowStrength = 1.15f;
@@ -246,12 +245,8 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
         .fov = cli.hasRecordFov
                    ? cli.recordFovDeg
                    : compositionValue(composition, &ShowcaseOrbitComposition::fovDeg, 68.0f)};
-    if (cli.hasRecordExposure) {
-      rs.post.toneExposure = cli.recordExposure;
-    } else {
-      rs.post.toneExposure =
-          composition != nullptr ? composition->exposure : K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
-    }
+    rs.post.toneExposure =
+        composition != nullptr ? composition->exposure : K_SHOWCASE_ORBIT_FALLBACK_EXPOSURE;
     rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
   } else {
     // Physics: on, but not everything -- avoids noise pileup / fuzz
@@ -310,6 +305,10 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   std::printf("Record mode: dir=%s  frames=%d  duration=%.0f s @ %d fps\n",
               cli.recordFramesDir.c_str(), cli.recordFramesTotal,
               static_cast<double>(K_CINEMATIC_DURATION_S), K_CINEMATIC_FPS);
+  // --record-exposure overrides every profile's exposure.
+  if (cli.hasRecordExposure) {
+    rs.post.toneExposure = cli.recordExposure;
+  }
   std::printf("Record profile: %s\n", cli.recordProfile.c_str());
   return true;
 }
@@ -401,6 +400,14 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
       std::format("{}/frame_{:06d}.png", cli.recordFramesDir, rs.recording.recordFrameIndex);
   if (stbi_write_png(framePath.c_str(), w, h, 3, flipped.data(), w * 3) == 0) {
     throw std::runtime_error("Failed to write recorded frame: " + framePath);
+  }
+  if (rs.recording.recordFrameIndex == cli.recordStartFrame) {
+    // The post settings this frame rendered with, so a capture records the
+    // profile it actually used.
+    std::printf("Record post: exposure=%.3f bloom=%.3f x%d gamma=%.2f tonemap=%d\n",
+                static_cast<double>(rs.post.toneExposure), static_cast<double>(rs.post.bloomStrength),
+                rs.post.bloomIterations, static_cast<double>(rs.post.gamma),
+                rs.post.tonemappingEnabled ? 1 : 0);
   }
   if (rs.recording.recordFrameIndex % K_CINEMATIC_FPS == 0) {
     std::printf("Record: frame %d / %d  (t = %.1f s)  [%dx%d]\n",
