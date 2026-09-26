@@ -1282,8 +1282,6 @@ TEST_F(KerrShaderCaptureTest, DiskSegmentClipsChordsToTheAnnulus) {
       // near 1e-4.
       if (segLength <= 0.5F) {
         EXPECT_LE(error, std::max(1.05 * previous, 2e-4)) << where;
-      }
-      if (segLength <= 0.5F) {
         EXPECT_LT(error, 1e-2) << where;
       }
       if (segLength <= 0.1F) {
