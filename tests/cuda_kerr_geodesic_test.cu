@@ -25,6 +25,10 @@
  * a ray crossing it at radius 30 reproduces the analytic emission column for
  * chords from 0.1 h to 100 h, and a ray whose footprint straddles r_in or
  * r_out converges to the quadrature column as chords shrink.
+ *
+ * d_kerr_chart_position is the chart the ray state starts in: the camera
+ * rotated by the Kerr-Schild offset, which HitResult::origin carries into
+ * shading and depth.
  * Skips without a CUDA device.
  */
 
@@ -113,6 +117,22 @@ __global__ void disk_slab_kernel(float seg_length, float incl, float cross_x, fl
         s1 = fminf(s1 + seg_length, total);
     }
     out[0] = column;
+}
+
+/* Start position of a ray from pos (d_kerr_ray_position after init) and
+ * d_kerr_chart_position(pos): out = (start.xyz, chart.xyz). */
+__global__ void chart_origin_kernel(float3 pos, float3 dir, float a, float *out) {
+    KerrConsts c;
+    KerrRay ray;
+    d_kerr_init_geodesic(pos, dir, 2.0f, a, c, ray);
+    float3 const start = d_kerr_ray_position(ray);
+    float3 const chart = d_kerr_chart_position(pos, 2.0f, a);
+    out[0] = start.x;
+    out[1] = start.y;
+    out[2] = start.z;
+    out[3] = chart.x;
+    out[4] = chart.y;
+    out[5] = chart.z;
 }
 
 bool cudaAvailable() {
@@ -343,4 +363,25 @@ TEST(CudaKerrGeodesic, DiskSegmentClipsChordsToTheAnnulus) {
         }
     }
     cudaFree(dOut);
+}
+
+TEST(CudaKerrGeodesic, ChartOriginIsTheRayStart) {
+    if (!cudaAvailable()) {
+        GTEST_SKIP() << "No CUDA device";
+    }
+    /* At a = 0.998, r = 3 the offset F is 0.50 rad: the start of the traced
+     * ray, and so every hit point, is the camera rotated by F, not the
+     * camera. */
+    float *dOut = nullptr;
+    cudaMalloc(&dOut, 6 * sizeof(float));
+    float3 const cam = make_float3(2.5980762f, 0.0f, 1.5f);
+    chart_origin_kernel<<<1, 1>>>(cam, make_float3(0.5f, 0.3f, -0.8f), -0.998f, dOut);
+    cudaDeviceSynchronize();
+    float out[6] = {};
+    cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
+    cudaFree(dOut);
+    for (int j = 0; j < 3; ++j) {
+        EXPECT_NEAR(out[j], out[3 + j], 1e-5f) << "component " << j;
+    }
+    EXPECT_GT(std::hypot(out[3] - cam.x, out[4] - cam.y), 1.0f);
 }

@@ -338,6 +338,20 @@ __device__ __forceinline__ float d_kerr_ks_azimuth_offset(float r, float rs, flo
     return a / (r_plus - r_minus) * logf((r - r_plus) / (r - r_minus));
 }
 
+__device__ __forceinline__ float3 d_kerr_chart_position(float3 pos, float rs, float a) {
+    return d_rotate_z(pos, d_kerr_ks_azimuth_offset(d_length(pos), rs, a));
+}
+
+/**
+ * @brief Position pos in the chart the ray state lives in.
+ *
+ * d_kerr_init_geodesic rotates the state by the Kerr-Schild azimuth offset
+ * F(|pos|) (rs and a as passed to it), so every position along the ray is in
+ * this chart; the camera must be rotated alike before it is compared with
+ * one. Twin of kerrChartPosition in shader/include/kerr.glsl.
+ */
+__device__ __forceinline__ float3 d_kerr_chart_position(float3 pos, float rs, float a);
+
 /**
  * @brief Spin passed to d_kerr_init_geodesic and d_kerr_step.
  *
@@ -883,6 +897,8 @@ __device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float
 }
 
 struct HitResult {
+    float3 origin;     /**< @brief Camera position in the tracer's chart (d_kerr_chart_position);
+                            hit and closest-approach points share it. */
     bool hit_disk;     /**< @brief Ray terminated on the accretion disk. */
     bool hit_horizon;  /**< @brief Ray crossed the event horizon. */
     bool escaped;      /**< @brief Ray escaped to infinity (r > max_dist or step budget exhausted). */
@@ -997,6 +1013,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
     result.escaped = false;
     result.max_steps = false;
     result.hit_point = make_f3(0.0f, 0.0f, 0.0f);
+    result.origin = cam_pos;
     result.closest_approach_point = cam_pos;
     result.phi = 0.0f;
     result.redshift = 1.0f;
@@ -1025,6 +1042,8 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         KerrConsts c;
         KerrRay kr;
         d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
+        result.origin = d_kerr_chart_position(cam_pos, rs, a_trace);
+        result.closest_approach_point = result.origin;
 
         for (int step = 0; step < max_steps; ++step) {
             float3 old_pos = d_kerr_ray_position(kr);
@@ -2300,7 +2319,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         /* Schwarzschild fallback: single-scatter (same as baseline kernel) */
         HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
         if (terminal_pos != nullptr) { *terminal_pos = hit.hit_point; }
-        return d_shade_hit(hit, cam_pos);
+        return d_shade_hit(hit, hit.origin);
     }
 
     float r_horizon = d_kerr_outer_horizon(rs, a);
@@ -2319,6 +2338,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     KerrConsts c;
     KerrRay    kr;
     d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
+    float3 const origin = d_kerr_chart_position(cam_pos, rs, a_trace);
 
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
     float  transmit = 1.0f;
@@ -2369,7 +2389,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
+                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
                     d_debug_post_shaping_background != 0 ||
                     d_debug_shaper_inputs != 0 ||
@@ -2390,11 +2410,11 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     /* Step budget exhausted -- treat as escaped along last known direction */
     float3 const final_pos = d_kerr_ray_position(kr);
     if (terminal_pos != nullptr) { *terminal_pos = final_pos; }
-    float3 const esc_dir   = d_sub(final_pos, cam_pos);
+    float3 const esc_dir   = d_sub(final_pos, origin);
     if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
         float4 const bg4 = d_background_color(d_normalize(esc_dir));
         float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-        bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
+        bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
             d_debug_post_shaping_background != 0 ||
             d_debug_shaper_inputs != 0 ||
@@ -2552,7 +2572,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     if (!d_kerr_enabled) {
         HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
         if (terminal_pos != nullptr) { *terminal_pos = hit.hit_point; }
-        return d_shade_hit(hit, cam_pos);
+        return d_shade_hit(hit, hit.origin);
     }
 
     float r_horizon = d_kerr_outer_horizon(rs, a);
@@ -2576,6 +2596,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     KerrConsts c;
     KerrRay    kr;
     d_kerr_init_geodesic(cam_pos, ray_dir, rs, a_trace, c, kr);
+    float3 const origin = d_kerr_chart_position(cam_pos, rs, a_trace);
 
     /* Color-accurate intensity accumulator (same as d_trace_geodesic_rte) */
     float3 accum_i  = make_f3(0.0f, 0.0f, 0.0f);
@@ -2642,7 +2663,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
                 float4 const bg4 = d_background_color(d_normalize(esc_dir));
                 float3 bg = make_f3(bg4.x, bg4.y, bg4.z);
-                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, cam_pos, rs, d_spin);
+                bg = d_shape_escaped_background(bg, min_r, closest_pos, 0, -1, -1, origin, rs, d_spin);
                 if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
                     d_debug_post_shaping_background != 0 ||
                     d_debug_shaper_inputs != 0 ||

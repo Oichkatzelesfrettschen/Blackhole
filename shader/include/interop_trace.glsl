@@ -29,6 +29,9 @@ struct Ray {
 };
 
 struct HitResult {
+  // Camera position in the tracer's chart (kerrChartPosition); hit and
+  // closest-approach points are in the same chart.
+  vec3 origin;
   bool hitDisk;
   bool hitHorizon;
   bool escaped;
@@ -279,6 +282,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.hitHorizon = false;
   result.escaped = false;
   result.hitPoint = vec3(0.0);
+  result.origin = ray.position;
   result.closestApproachPoint = ray.position;
   result.escapedDir = normalize(ray.velocity);
   result.phi = 0.0;
@@ -313,6 +317,8 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   KerrConsts c;
   KerrRay kerrRay;
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kerrRay);
+  result.origin = kerrChartPosition(ray.position, rsMetric, aTrace);
+  result.closestApproachPoint = result.origin;
 
   vec3 oldPos;
   float dt = stepSize;
@@ -738,6 +744,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   KerrConsts c;
   KerrRay    kRay;
   kerrInitGeodesic(ray.position, ray.velocity, rsMetric, aTrace, c, kRay);
+  vec3 origin = kerrChartPosition(ray.position, rsMetric, aTrace);
 
   vec3  accumI   = vec3(0.0);
   float transmit = 1.0;
@@ -793,7 +800,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   // Max steps exhausted -- treat as escaped toward last known direction
   vec3 finalPos = kerrRayPosition(kRay);
   terminalPos = finalPos;
-  vec3 escDir   = finalPos - ray.position;
+  vec3 escDir   = finalPos - origin;
   if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
     accumI += transmit * bhBackgroundColorFromDir(normalize(escDir),
                                                   minR, r_s).rgb;

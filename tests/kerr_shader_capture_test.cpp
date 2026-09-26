@@ -450,6 +450,38 @@ void main() {
 )";
 }
 
+// bhTraceGeodesic at a = 0.998 from the camera (3 sin 60deg, 0, 3 cos 60deg)
+// along 16 downward directions (0.8 cos beta, 0.8 sin beta, -1), with a fine
+// schedule (stepSize 0.002, 200000 steps). Reports hitDisk, the hit point,
+// and hit.origin, the camera in the tracer's chart.
+constexpr int K_ORIGIN_RAYS = 16;
+std::string chartOriginShader() {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  return comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+void main() {
+  int i = int(gl_GlobalInvocationID.y) * int(gl_NumWorkGroups.x) * 16 +
+          int(gl_GlobalInvocationID.x);
+  if (i >= 16) {
+    return;
+  }
+  float beta = 6.28318530718 * float(i) / 16.0;
+  Ray ray;
+  ray.position = 3.0 * vec3(sin(1.04719755), 0.0, cos(1.04719755));
+  ray.velocity = normalize(vec3(0.8 * cos(beta), 0.8 * sin(beta), -1.0));
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 200000, 0.002);
+  result[7 * i] = hit.hitDisk ? 1.0 : 0.0;
+  result[7 * i + 1] = hit.hitPoint.x;
+  result[7 * i + 2] = hit.hitPoint.y;
+  result[7 * i + 3] = hit.hitPoint.z;
+  result[7 * i + 4] = hit.origin.x;
+  result[7 * i + 5] = hit.origin.y;
+  result[7 * i + 6] = hit.origin.z;
+}
+)";
+}
+
 class KerrShaderCaptureTest : public ::testing::Test {
 protected:
   static bhtest::HiddenGlContext *context;
@@ -1208,6 +1240,111 @@ TEST_F(KerrShaderCaptureTest, DiskSegmentClipsChordsToTheAnnulus) {
       previous = error;
     }
   }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+namespace {
+
+// Kerr-Schild azimuth offset F(r) = a / (r+ - r-) ln((r - r+) / (r - r-))
+// (M = 1), the rotation kerrKsAzimuthOffset applies.
+double ksAzimuthOffset(double r, double a) {
+  const double root = std::sqrt(1.0 - (a * a));
+  return a / (2.0 * root) * std::log((r - (1.0 + root)) / (r - (1.0 - root)));
+}
+
+struct ChartHit {
+  bool hitDisk{false};
+  double x{0.0};
+  double y{0.0};
+};
+
+// Double-precision disk crossing of the time-reversed ray (spin aTrace) from
+// the camera, in the Kerr-Schild chart: phi_KS = phi_BL + F(r).
+ChartHit referenceDiskHit(double camX, double camZ, double dx, double dy, double dz,
+                          double aTrace) {
+  const double mass = physics::C2 / physics::G;
+  const double r0 = std::hypot(camX, camZ);
+  const double theta0 = std::acos(camZ / r0);
+  const double norm = std::sqrt((dx * dx) + (dy * dy) + (dz * dz));
+  const double ux = dx / norm;
+  const double uy = dy / norm;
+  const double uz = dz / norm;
+  // e_r, e_theta, e_phi at (theta0, phi = 0).
+  const double kr = (ux * std::sin(theta0)) + (uz * std::cos(theta0));
+  const double kth = ((ux * std::cos(theta0)) - (uz * std::sin(theta0))) / r0;
+  const double kph = uy / (r0 * std::sin(theta0));
+  const physics::KerrNullGeodesic g =
+      physics::kerrNullGeodesicFromBL(r0, theta0, 0.0, kr, kth, kph, mass, aTrace);
+  physics::KerrGeodesicState s = g.state;
+  const double rPlus = 1.0 + std::sqrt(1.0 - (aTrace * aTrace));
+  for (int step = 0; step < 5'000'000 && s.r > rPlus * 1.001; ++step) {
+    const physics::KerrGeodesicState next =
+        physics::kerrStepMino(s, mass, aTrace, g.consts, 2e-5 / (1.0 + (s.r * s.r)));
+    const double c0 = std::cos(s.theta);
+    const double c1 = std::cos(next.theta);
+    if (c0 * c1 <= 0.0) {
+      const double t = c0 / (c0 - c1);
+      const double r = s.r + (t * (next.r - s.r));
+      const double phi = s.phi + (t * (next.phi - s.phi)) + ksAzimuthOffset(r, aTrace);
+      return {.hitDisk = true, .x = r * std::cos(phi), .y = r * std::sin(phi)};
+    }
+    s = next;
+  }
+  return {};
+}
+
+} // namespace
+
+TEST_F(KerrShaderCaptureTest, HitOriginSharesTheTracerChart) {
+  // kerrInitGeodesic rotates the ray state by the Kerr-Schild offset
+  // F(r_cam), which at a = 0.998 and r = 3 is 0.50 rad, so hit points are in
+  // that chart. hit.origin, rotated alike, must give the view vector and
+  // depth (hit - origin) of the double-precision reference; the unrotated
+  // camera misses them by ~1.5 M.
+  const double aTrace = -0.998;
+  const double camX = 3.0 * std::sin(std::numbers::pi / 3.0);
+  const double camZ = 3.0 * std::cos(std::numbers::pi / 3.0);
+  const double offset = ksAzimuthOffset(3.0, aTrace);
+  const double originX = camX * std::cos(offset);
+  const double originY = camX * std::sin(offset);
+  const GLuint program = bhtest::createComputeProgram(chartOriginShader());
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 7 * K_ORIGIN_RAYS), nullptr,
+                    GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  glUseProgram(program);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.998F);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 1.0F);
+  const std::vector<float> out =
+      bhtest::runComputeProgram(program, ssbo, static_cast<std::size_t>(7) * K_ORIGIN_RAYS, 1);
+  int compared = 0;
+  for (int i = 0; i < K_ORIGIN_RAYS; ++i) {
+    const std::size_t k = static_cast<std::size_t>(7) * static_cast<std::size_t>(i);
+    const double beta = 2.0 * std::numbers::pi * static_cast<double>(i) / K_ORIGIN_RAYS;
+    const ChartHit ref =
+        referenceDiskHit(camX, camZ, 0.8 * std::cos(beta), 0.8 * std::sin(beta), -1.0, aTrace);
+    const std::string where = "ray " + std::to_string(i);
+    EXPECT_NEAR(out.at(k + 4), originX, 1e-4) << where;
+    EXPECT_NEAR(out.at(k + 5), originY, 1e-4) << where;
+    EXPECT_NEAR(out.at(k + 6), camZ, 1e-4) << where;
+    if (!ref.hitDisk || out.at(k) < 0.5F || std::hypot(ref.x, ref.y) < 1.5) {
+      continue;
+    }
+    const auto vx = static_cast<double>(out.at(k + 1) - out.at(k + 4));
+    const auto vy = static_cast<double>(out.at(k + 2) - out.at(k + 5));
+    const auto vz = static_cast<double>(out.at(k + 3) - out.at(k + 6));
+    // float32 stepping leaves ~2e-4; the unrotated camera is off by ~1.5.
+    EXPECT_NEAR(vx, ref.x - originX, 1e-3) << where;
+    EXPECT_NEAR(vy, ref.y - originY, 1e-3) << where;
+    EXPECT_NEAR(vz, -camZ, 1e-3) << where;
+    EXPECT_NEAR(std::sqrt((vx * vx) + (vy * vy) + (vz * vz)),
+                std::hypot(ref.x - originX, ref.y - originY, camZ), 1e-3)
+        << where;
+    ++compared;
+  }
+  EXPECT_GT(compared, K_ORIGIN_RAYS / 2);
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }

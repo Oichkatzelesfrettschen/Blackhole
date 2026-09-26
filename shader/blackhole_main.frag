@@ -719,9 +719,9 @@ void main() {
 
     HitResult hit =
         bhTraceGeodesic(ray, schwarzschildRadius, depthFar, steps, interopStepSize);
-    vec4 shaded = bhShadeHit(hit, cameraPosPhys, schwarzschildRadius);
+    vec4 shaded = bhShadeHit(hit, hit.origin, schwarzschildRadius);
     float depthNormalized =
-        clamp(length(hit.hitPoint - cameraPosPhys) / max(depthFar, 0.0001), 0.0, 1.0);
+        clamp(length(hit.hitPoint - hit.origin) / max(depthFar, 0.0001), 0.0, 1.0);
     vec3 interopColor = shaded.rgb;
     applyWiregridOverlay(interopColor, hit.hitPoint);
     fragColor = vec4(interopColor, depthNormalized);

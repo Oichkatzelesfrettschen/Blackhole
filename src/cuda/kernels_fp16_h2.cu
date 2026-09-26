@@ -156,6 +156,7 @@ __launch_bounds__(128, 4)
   HitResult hit0{};
   hit0.hit_disk = hit0.hit_horizon = hit0.escaped = hit0.max_steps = false;
   hit0.hit_point = make_f3(0.0f, 0.0f, 0.0f);
+  hit0.origin = cam;
   hit0.closest_approach_point = cam;
   hit0.phi = 0.0f;
   hit0.redshift = 1.0f;
@@ -180,6 +181,10 @@ __launch_bounds__(128, 4)
     KerrConsts c1;
     KerrRay kr1;
     d_kerr_init_geodesic(cam, dir1, rs, aTrace, c1, kr1);
+    hit0.origin = d_kerr_chart_position(cam, rs, aTrace);
+    hit0.closest_approach_point = hit0.origin;
+    hit1.origin = hit0.origin;
+    hit1.closest_approach_point = hit0.origin;
 
     /* Pack initial ray state into __half2 pairs.
      * hMinr tracks min(r0, r1) across steps via __hmin2 (one HMNMX2 SASS
@@ -386,9 +391,9 @@ __launch_bounds__(128, 4)
     return make_float4(c.x*inv_a + wg.x*alpha, c.y*inv_a + wg.y*alpha,
                        c.z*inv_a + wg.z*alpha, c.w);
   };
-  dFramebuffer[idx0] = applyWGH2(d_shade_hit(hit0, cam), hit0);
+  dFramebuffer[idx0] = applyWGH2(d_shade_hit(hit0, hit0.origin), hit0);
   if (hasRay1) {
-    dFramebuffer[idx1] = applyWGH2(d_shade_hit(hit1, cam), hit1);
+    dFramebuffer[idx1] = applyWGH2(d_shade_hit(hit1, hit1.origin), hit1);
   }
 }
 
