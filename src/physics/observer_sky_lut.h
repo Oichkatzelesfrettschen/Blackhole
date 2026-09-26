@@ -9,7 +9,8 @@
  * a file whose name carries the hash can be reused without re-tracing. The
  * binary is little-endian: an 8-byte magic, the format version, the key,
  * dimensions and settings, the tile frame, the statistics, then the two
- * RGBA32F images row-major (equirectangular first). Every double is written
+ * images row-major (equirectangular first), each as RGBA32F texels followed by
+ * RG32F source spans. Every double is written
  * through its bit pattern, so a read reproduces the build bit for bit on the
  * same host.
  */
@@ -69,7 +70,7 @@ struct ObserverSkyLut {
 };
 
 /** @brief Increments whenever the binary layout or the traced content changes. */
-inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 1;
+inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 2;
 
 /** @brief FNV-1a over the format version and every input that shapes the bundle. */
 [[nodiscard]] std::uint64_t lutHash(const ObserverKey &key, const LutDimensions &dimensions,

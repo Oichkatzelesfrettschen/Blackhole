@@ -224,6 +224,7 @@ void writeImage(ByteWriter &out, const SkyImage &image) {
   out.size(image.height);
   out.u64(image.connectivityDisagreements);
   std::ranges::for_each(image.rgba, [&out](float value) { out.f32(value); });
+  std::ranges::for_each(image.sourceSpan, [&out](float value) { out.f32(value); });
 }
 
 bool readImage(ByteReader &in, SkyImage &image) {
@@ -237,7 +238,9 @@ bool readImage(ByteReader &in, SkyImage &image) {
     return false;
   }
   image.rgba.assign(image.width * image.height * 4, 0.0F);
-  return std::ranges::all_of(image.rgba, [&in](float &value) { return in.f32(value); });
+  image.sourceSpan.assign(image.width * image.height * 2, 0.0F);
+  const auto read = [&in](float &value) { return in.f32(value); };
+  return std::ranges::all_of(image.rgba, read) && std::ranges::all_of(image.sourceSpan, read);
 }
 
 std::vector<std::uint8_t> serialize(const ObserverSkyLut &lut) {

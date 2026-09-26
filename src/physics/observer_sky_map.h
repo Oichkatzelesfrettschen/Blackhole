@@ -159,12 +159,18 @@ struct LogPolarTile {
 /** @brief Solid angle (sr) of any texel in radial ring `radial`. */
 [[nodiscard]] double tileTexelSolidAngle(const LogPolarTile &tile, std::size_t radial);
 
-/** @brief RGBA32F texels: rgb = source direction, a = ln g, K_CAPTURED_LOG_G, or K_TRAPPED_LOG_G.
- */
+/** @brief RGBA32F texels: rgb = source direction, a = ln g, K_CAPTURED_LOG_G, or
+ *         K_TRAPPED_LOG_G; and RG32F source spans. */
 struct SkyImage {
   std::size_t width = 0;
   std::size_t height = 0;
   std::vector<float> rgba;
+  /// Per texel (azimuthal, polar): the widest step to a neighboring sky
+  /// texel on the sky at infinity, in radians. The azimuthal step comes from
+  /// the unwrapped Boyer-Lindquist azimuth the ray swept: near an extremal
+  /// horizon it grows past 2 pi between adjacent texels while the stored
+  /// unit directions look close.
+  std::vector<float> sourceSpan;
   /// Rays whose deficit-form fate disagrees with photonConstants' static
   /// radial-potential connectivity (fromInfinity), counted for review.
   std::size_t connectivityDisagreements = 0;

@@ -7,9 +7,11 @@
 #include "observer_sky_map.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 #include <numeric>
 #include <optional>
@@ -27,6 +29,9 @@ namespace {
 using kerr_observer::Vec4;
 
 constexpr double K_PI = std::numbers::pi;
+
+/// Cap on a stored azimuthal span (radians): 1e6 texels' worth of whole turns.
+constexpr double K_MAX_AZIMUTHAL_SPAN = 2.0 * K_PI * 1.0e6;
 
 /// Floor on sin^2(theta) in the polar terms; only a ray with lambda = 0
 /// exactly reaches the pole, and there both terms vanish anyway.
@@ -221,6 +226,47 @@ std::pair<SkyRay, bool> traceAndCompare(const Tetrad &tetrad, const Vec3 &look,
   return {ray, escaped != constants.fromInfinity};
 }
 
+/**
+ * @brief Per texel, the widest step to a sky neighbor (left, right, up, down;
+ *        columns wrap) on the sky at infinity: azimuthal |d phi| sin(theta)
+ *        from the unwrapped swept azimuth, and polar |d theta|. Near an
+ *        extremal horizon the swept azimuth changes by ~100 rad per degree of
+ *        look direction, which the stored unit direction cannot reveal; the
+ *        renderer scales the span to its pixel and averages over it. The cap
+ *        K_MAX_AZIMUTHAL_SPAN stays far above 2 pi, so a pixel much smaller
+ *        than a texel still learns that it covers whole turns.
+ */
+std::vector<float> sourceSpans(const std::vector<double> &swept, const std::vector<double> &polar,
+                               std::size_t width, std::size_t height) {
+  std::vector<float> spans(width * height * 2, 0.0F);
+  for (std::size_t row = 0; row < height; ++row) {
+    for (std::size_t column = 0; column < width; ++column) {
+      const std::size_t texel = (row * width) + column;
+      if (physics::safeIsnan(swept.at(texel))) {
+        continue;
+      }
+      const std::array<std::size_t, 4> neighbors{
+          (row * width) + ((column + width - 1) % width), (row * width) + ((column + 1) % width),
+          (std::max<std::size_t>(row, 1) - 1) * width + column,
+          (std::min(row + 1, height - 1) * width) + column};
+      double azimuthal = 0.0;
+      double polarSpan = 0.0;
+      for (const std::size_t neighbor : neighbors) {
+        if (neighbor == texel || physics::safeIsnan(swept.at(neighbor))) {
+          continue;
+        }
+        const double sinTheta = std::sin(0.5 * (polar.at(texel) + polar.at(neighbor)));
+        azimuthal =
+            std::fmax(azimuthal, std::fabs(swept.at(neighbor) - swept.at(texel)) * sinTheta);
+        polarSpan = std::fmax(polarSpan, std::fabs(polar.at(neighbor) - polar.at(texel)));
+      }
+      spans.at(texel * 2) = static_cast<float>(std::fmin(azimuthal, K_MAX_AZIMUTHAL_SPAN));
+      spans.at((texel * 2) + 1) = static_cast<float>(polarSpan);
+    }
+  }
+  return spans;
+}
+
 template <typename LookAt>
 SkyImage traceImage(const ObserverKey &key, std::size_t width, std::size_t height,
                     const TraceSettings &settings, unsigned threads, const LookAt &lookAt) {
@@ -229,16 +275,27 @@ SkyImage traceImage(const ObserverKey &key, std::size_t width, std::size_t heigh
   image.width = width;
   image.height = height;
   image.rgba.assign(width * height * 4, 0.0F);
+  // Unwrapped Boyer-Lindquist azimuth swept and source polar angle per texel;
+  // NaN marks a texel without sky.
+  const double noSky = std::numeric_limits<double>::quiet_NaN();
+  std::vector<double> swept(width * height, noSky);
+  std::vector<double> polar(width * height, noSky);
   std::vector<std::size_t> disagreements(height, 0);
   parallelRows(height, threads, [&](std::size_t row) {
     for (std::size_t column = 0; column < width; ++column) {
       const auto [ray, disagrees] = traceAndCompare(tetrad, lookAt(column, row), settings);
-      storeRay(image.rgba, (row * width) + column, ray);
+      const std::size_t texel = (row * width) + column;
+      storeRay(image.rgba, texel, ray);
+      if (ray.fate == RayFate::Escaped) {
+        swept.at(texel) = ray.sweptPhi;
+        polar.at(texel) = std::acos(std::clamp(ray.sourceDirection.at(2), -1.0, 1.0));
+      }
       disagreements.at(row) += disagrees ? 1U : 0U;
     }
   });
   image.connectivityDisagreements =
       std::accumulate(disagreements.begin(), disagreements.end(), std::size_t{0});
+  image.sourceSpan = sourceSpans(swept, polar, width, height);
   return image;
 }
 

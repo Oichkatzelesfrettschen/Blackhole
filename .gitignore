@@ -163,7 +163,7 @@ assets/fonts/spline-sans-mono/*.ttf
 # procedural starfield when the ladder is absent.
 assets/backgrounds/generated/
 
-# Observer-sky lookup bundles (8-12 MB each), content-addressed by observer and
+# Observer-sky lookup bundles (19 MB each at the default size), content-addressed by observer and
 # trace settings; the renderer and observer_sky_lut regenerate them on demand.
 assets/luts/observer_sky_*.bin
 assets/luts/observer_sky_*.bin.partial

@@ -400,6 +400,31 @@ TEST(ObserverSkyMap, MillerMapConvergesUnderStepHalving) {
   EXPECT_LT(worst, 2e-3) << "rad after removing the common rotation";
 }
 
+/**
+ * The rear sky of Miller's orbit is the NHEK sky: each ray lingers in the
+ * throat for a time that changes steeply with direction, so the
+ * Boyer-Lindquist azimuth it sweeps changes by about 135 rad per degree near
+ * longitude -100 deg (1/x = 26,000 rad in total). A 64-column map steps 5.6
+ * deg per texel, so every rear texel spans whole turns of source azimuth
+ * while its polar step stays small; far from the hole (r = 1e8) the same map
+ * steps by about one texel's angle.
+ */
+TEST(ObserverSkyMap, SourceSpansExposeTheWindingThroat) {
+  const sky::ObserverKey miller = orbiting(K_PAPER_DEFICIT, K_PAPER_MILLER_X);
+  const sky::SkyImage image = sky::traceEquirect(miller, 64, 32, defaultSettings());
+  // Column of longitude -100 deg on the equator row 16.
+  const auto column = static_cast<std::size_t>((80.0 / 360.0) * 64.0);
+  const std::size_t texel = (std::size_t{16} * 64) + column;
+  EXPECT_GT(image.sourceSpan.at(texel * 2), 2.0 * K_PI) << "azimuthal span, rad";
+  EXPECT_LT(image.sourceSpan.at((texel * 2) + 1), 0.5) << "polar span, rad";
+
+  const sky::ObserverKey far{.epsilon = 1.0, .x = 1.0e8, .velocity = 0.0};
+  const sky::SkyImage flat = sky::traceEquirect(far, 64, 32, defaultSettings());
+  const double pitch = 2.0 * K_PI / 64.0;
+  EXPECT_LT(flat.sourceSpan.at(texel * 2), 1.01 * pitch);
+  EXPECT_LT(flat.sourceSpan.at((texel * 2) + 1), 1.01 * pitch);
+}
+
 /** @brief Write, read back, and reject a mismatched hash. */
 TEST(ObserverSkyMap, LutRoundTripsThroughTheCache) {
   const sky::ObserverKey key = orbiting(0.1, 3.0);
@@ -417,6 +442,8 @@ TEST(ObserverSkyMap, LutRoundTripsThroughTheCache) {
   const sky::ObserverSkyLut &loaded = *read;
   EXPECT_EQ(loaded.sky.rgba, built.sky.rgba);
   EXPECT_EQ(loaded.tileImage.rgba, built.tileImage.rgba);
+  EXPECT_EQ(loaded.sky.sourceSpan, built.sky.sourceSpan);
+  EXPECT_EQ(loaded.tileImage.sourceSpan, built.tileImage.sourceSpan);
   EXPECT_EQ(loaded.peak.g, built.peak.g);
   EXPECT_EQ(loaded.statistics.capturedFraction, built.statistics.capturedFraction);
   EXPECT_EQ(sky::lutSidecarJson(loaded), sky::lutSidecarJson(built));
