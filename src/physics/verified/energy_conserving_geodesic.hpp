@@ -212,7 +212,9 @@ struct ConservedQuantities {
  *
  * Fallback when S = 0 or alpha^2 < 0 (the r-theta motion cannot absorb the
  * drift): solve g_tt (v^t)^2 + 2 g_tphi v^phi v^t + (rest - targetM2) = 0 for
- * v^t and take the root nearest the current v^t, which changes E. This
+ * v^t and take the root nearest the current v^t, which changes E. The roots
+ * come from the sign-aware form q / g_tt and (rest - targetM2) / q, which stays
+ * accurate where g_tt -> 0 at the ergosurface. This
  * fallback solves for targetM2, timelike or null, and departs from gr_core,
  * whose renormalize_null fallback ignores target_norm. When the quadratic has
  * no real root the state is returned unchanged.
@@ -240,23 +242,29 @@ struct ConservedQuantities {
     }
   }
 
-  // v^t quadratic: qa (v^t)^2 + qb v^t + qc = 0.
+  // v^t quadratic: qa (v^t)^2 + qb v^t + qc = 0. The sign-aware form
+  // q = -(qb + sign(qb) sqrt(disc)) / 2 never subtracts nearly equal terms:
+  // the roots are q / qa and qc / q. Near the ergosurface qa = g_tt -> 0 and
+  // the textbook (-qb + sqrt(disc)) / (2 qa) cancels, while qc / q stays
+  // accurate; at qa = 0 the quadratic is linear with the single root qc / q.
   const double qa = g.gTt;
   const double qb = 2.0 * g.gTph * state.v3;
   const double qc = spatialRt + g.gPhph * state.v3 * state.v3 - targetM2;
-  if (qa == 0.0) {
-    return (qb != 0.0) ? StateVector{state.x0, state.x1, state.x2, state.x3,
-                                     -qc / qb, state.v1, state.v2, state.v3}
-                       : state;
-  }
   const double discriminant = qb * qb - 4.0 * qa * qc;
   if (discriminant < 0.0) {
     return state;
   }
-  const double sqrtDisc = std::sqrt(discriminant);
-  const double rootA = (-qb + sqrtDisc) / (2.0 * qa);
-  const double rootB = (-qb - sqrtDisc) / (2.0 * qa);
-  const double newV0 = (std::abs(rootA - state.v0) <= std::abs(rootB - state.v0)) ? rootA : rootB;
+  const double q = -0.5 * (qb + std::copysign(std::sqrt(discriminant), qb));
+  if (q == 0.0) {
+    return state;
+  }
+  const double rootSmall = qc / q;
+  double newV0 = rootSmall;
+  if (qa != 0.0) {
+    const double rootLarge = q / qa;
+    newV0 = (std::abs(rootLarge - state.v0) < std::abs(rootSmall - state.v0)) ? rootLarge
+                                                                                : rootSmall;
+  }
   return StateVector{state.x0, state.x1, state.x2, state.x3, newV0, state.v1, state.v2, state.v3};
 }
 

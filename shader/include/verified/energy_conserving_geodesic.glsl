@@ -165,21 +165,22 @@ StateVector apply_constraint_correction(MetricComponents g, StateVector state, f
             );
         }
     }
-    // v^t quadratic: qa (v^t)^2 + qb v^t + qc = 0
+    // v^t quadratic: qa (v^t)^2 + qb v^t + qc = 0, sign-aware roots q / qa
+    // and qc / q (accurate where qa = g_tt -> 0); linear root qc / q at qa = 0.
     float qa = g.g_tt;
     float qb = 2.0 * g.g_tph * state.v3;
     float qc = spatial_rt + g.g_phph * state.v3 * state.v3 - target_m2;
-    if (qa == 0.0) {
-        if (qb == 0.0) return state;
-        return StateVector(state.x0, state.x1, state.x2, state.x3,
-                           -qc / qb, state.v1, state.v2, state.v3);
-    }
     float discriminant = qb * qb - 4.0 * qa * qc;
     if (discriminant < 0.0) return state;
-    float sqrt_disc = sqrt(discriminant);
-    float root_a = (-qb + sqrt_disc) / (2.0 * qa);
-    float root_b = (-qb - sqrt_disc) / (2.0 * qa);
-    float new_v0 = (abs(root_a - state.v0) <= abs(root_b - state.v0)) ? root_a : root_b;
+    float sign_qb = (qb < 0.0) ? -1.0 : 1.0;
+    float q = -0.5 * (qb + sign_qb * sqrt(discriminant));
+    if (q == 0.0) return state;
+    float root_small = qc / q;
+    float new_v0 = root_small;
+    if (qa != 0.0) {
+        float root_large = q / qa;
+        new_v0 = (abs(root_large - state.v0) < abs(root_small - state.v0)) ? root_large : root_small;
+    }
     return StateVector(state.x0, state.x1, state.x2, state.x3,
                        new_v0, state.v1, state.v2, state.v3);
 }

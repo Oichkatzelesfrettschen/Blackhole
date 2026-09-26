@@ -132,3 +132,30 @@ TEST(EnergyConservingGeodesic, FallbackResolvesTimeComponent) {
   EXPECT_GT(corrected.v0, 0.0);
   EXPECT_LT(std::abs(verified::computeMetricNorm(g, corrected)), 1.0e-14);
 }
+
+/**
+ * @brief The fallback stays accurate where g_tt -> 0 at the ergosurface.
+ *
+ * Equatorial Kerr a = 0.9, r one ulp above 2M (the equatorial ergosurface):
+ * g_tt = -2.2e-16. With v^r = v^theta = 0 the fallback solves the v^t
+ * quadratic, whose small root is -qc/qb = 0.3122 to 1e-16 relative. The
+ * textbook (-qb + sqrt(disc)) / (2 g_tt) cancels there and returned 0.3125
+ * with norm -5e-5; the sign-aware form recovers the null vector.
+ */
+TEST(EnergyConservingGeodesic, FallbackAtErgosurface) {
+  constexpr double m = 1.0;
+  constexpr double a = 0.9;
+  const double r = std::nextafter(2.0, 3.0);
+  constexpr double theta = std::numbers::pi / 2.0;
+  const verified::MetricComponents g(verified::kerrGTt(r, theta, m, a),
+                                     verified::kerrGRr(r, theta, m, a),
+                                     verified::kerrGThth(r, theta, a),
+                                     verified::kerrGPhph(r, theta, m, a),
+                                     verified::kerrGTph(r, theta, m, a));
+  const verified::StateVector drifted{0.0, r, theta, 0.0, 0.3, 0.0, 0.0, 0.1};
+  const verified::StateVector corrected = verified::applyConstraintCorrection(g, drifted, 0.0);
+  const double linearRoot = -(g.gPhph * 0.1 * 0.1) / (2.0 * g.gTph * 0.1);
+  EXPECT_NEAR(corrected.v0, linearRoot, 1.0e-12);
+  EXPECT_NEAR(corrected.v0, 0.31222222222222223, 1.0e-12);
+  EXPECT_LT(std::abs(verified::computeMetricNorm(g, corrected)), 1.0e-12);
+}
