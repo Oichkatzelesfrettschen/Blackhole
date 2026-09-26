@@ -702,14 +702,13 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
     uiState.focusNode =
         std::strcmp(focusEnv, "host") == 0 ? game::K_AUTHORITY_NODE : game::K_FIRST_COLONY_NODE;
   }
+  bool alerted = false;
   if (const char *advanceEnv = std::getenv("BLACKHOLE_CAMPAIGN_ADVANCE");
       advanceEnv != nullptr && uiState.storySession) {
     // As the Advance buttons: turn by turn, stopping on a flagged arrival.
     const long long turns = std::strtoll(advanceEnv, nullptr, 10);
-    for (long long step = 0; step < std::min(turns, 100000LL); ++step) {
-      if (stepTurn(*uiState.storySession, uiState)) {
-        break;
-      }
+    for (long long step = 0; step < std::min(turns, 100000LL) && !alerted; ++step) {
+      alerted = stepTurn(*uiState.storySession, uiState);
     }
   }
   if (const char *realtimeEnv = std::getenv("BLACKHOLE_CAMPAIGN_REALTIME")) {
@@ -724,6 +723,9 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
       uiState.driver = game::RealtimeDriver(config);
       uiState.realtime = true;
     }
+  }
+  if (alerted) {
+    uiState.driver.setPaused(true); // the preset's batch stopped on an alert
   }
 }
 
@@ -750,6 +752,9 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
           // A flagged arrival stops a batch on its own turn, as in real time.
           for (int step = 0; step < count; ++step) {
             if (stepTurn(session, uiState)) {
+              // The batch consumed the alert; the real-time pump later this
+              // frame must not run past it.
+              uiState.driver.setPaused(true);
               uiState.inboxOpen = true;
               break;
             }
