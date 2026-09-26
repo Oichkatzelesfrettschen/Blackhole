@@ -218,7 +218,10 @@ void benchBoostPolicy() {
               snPromoted / snDouble, snDiff);
   std::printf("%-10s %14.1f %14.1f %9.2f %12.2e rel\n", "ellint_1", kPromoted, kDouble,
               kPromoted / kDouble, kDiff);
-  std::printf("rAnalytic (double policy) %.1f ns\n", rNs);
+  const double hpNs =
+      nsPerCall(count, 200, [&](std::size_t) { return physics::radialHalfPeriod(roots); });
+  std::printf("rAnalytic (double policy) %.1f ns, radialHalfPeriod (AGM) %.1f ns\n", rNs,
+              hpNs);
 }
 
 // ---------------------------------------------------------------------------

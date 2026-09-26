@@ -277,6 +277,31 @@ inline double ellipticK(double k) {
 }
 
 /**
+ * @brief Complete elliptic integral of the first kind from the complementary parameter.
+ *
+ * K = pi / (2 AGM(1, k')) with k'^2 = 1 - m (DLMF 19.8.5). Taking k'^2 as the
+ * input lets a caller that knows 1 - m in factored form (the analytic Kerr
+ * roots do) avoid forming it as 1 - m, which cancels as m -> 1; the AGM adds
+ * and multiplies only positive numbers and converges quadratically.
+ *
+ * @param kPrime2 Complementary parameter k'^2 = 1 - m, 0 < k'^2 <= 1
+ * @return K(m); +inf at k'^2 = 0
+ */
+inline double ellipticKFromComplement(double kPrime2) {
+  if (!(kPrime2 > 0.0)) {
+    return safeInfinity<double>();
+  }
+  double a = 1.0;
+  double b = std::sqrt(kPrime2);
+  for (int n = 0; n < 64 && (a - b) > std::numeric_limits<double>::epsilon() * a; ++n) {
+    const double mean = 0.5 * (a + b);
+    b = std::sqrt(a * b);
+    a = mean;
+  }
+  return std::numbers::pi / (a + b);
+}
+
+/**
  * @brief Complete elliptic integral of the second kind E(k).
  *
  * E(k) = ∫₀^(π/2) √(1 - k² sin²θ) dθ

@@ -27,12 +27,12 @@
  *  13.  add(key, double) / get() round-trip with setprecision(15)
  *  14.  add(key, int) / get() round-trip
  *  15.  addPhysicsParams() populates mass and spin via get()
- *   Boost double-precision policy (16-17), against values computed under
- *   Boost's default long-double promotion:
- *  16.  radialHalfPeriod within 2e-15 relative, scaled by the condition number
- *       of K(k) in k (up to 7e3 at m = 0.99998)
- *  17.  rAnalytic within 2e-15 of max(|r|, |dr/dsn|): a 2e-15 error in sn
- *       propagated through r(sn^2)
+ *   Radial solution against mpmath (16-17), tests/analytic_kerr_reference.inc
+ *   from scripts/gen_analytic_kerr_reference.py:
+ *  16.  radialHalfPeriod within 4 ulp of K(m)/scale for 1 - m from 0.6 down
+ *       to 1e-10
+ *  17.  rAnalytic within 4 ulp times the first-order error bound of
+ *       r(lambda) from sn, cn and the final sum
  */
 
 #include <algorithm>
@@ -43,12 +43,10 @@
 #include <exception>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <string>
 #include <string_view>
-
-#include <boost/math/special_functions/ellint_1.hpp>
-#include <boost/math/special_functions/ellint_2.hpp>
 
 #include "../src/physics/analytic_kerr_geodesic.h"
 #include "../src/physics/reproducibility.h"
@@ -253,48 +251,30 @@ void testManifestAddPhysicsParams() {
 } // namespace
 
 // ============================================================================
-// Tests 16-17: Boost double-precision policy against the promoted baseline
+// Tests 16-17: radial half period and r(lambda) against the mpmath referee
 // ============================================================================
 
 namespace {
 
-struct PromotedBaseline {
+struct AnalyticKerrRow {
   std::array<double, 4> roots{};
   double halfPeriod = 0.0;
   std::array<double, 6> radius{};
+  std::array<double, 6> radiusCondition{};
 };
 
-constexpr std::array<double, 6> BASELINE_LAMBDAS = {0.05, 0.3, 0.77, 1.4, 2.9, 5.5};
+constexpr std::array<double, 6> REFEREE_LAMBDAS = {0.05, 0.3, 0.77, 1.4, 2.9, 5.5};
 
-// radialHalfPeriod and rAnalytic at BASELINE_LAMBDAS under Boost's default
-// policy (double promoted to x87 long double), Boost 1.90, identical from GCC 14
-// and clang 22 at SSE2; FMA contraction under -march=native moves the rational
-// r(sn^2) by a few ulp, inside the conditioning-scaled gate.
-constexpr std::array<PromotedBaseline, 5> PROMOTED_BASELINE = {{
-    {{6.0, 4.0, 1.5, -0.5},
-     1.005712135322484,
-     {1.51754419464537, 2.1508108244567414, 5.2424198713594707, 4.1406906849427028,
-      5.8027115696326197, 3.5667920713680066}},
-    {{10.0, 3.2, 1.2, -2.0},
-     0.55446930510281112,
-     {1.2675469048771157, 4.1410935891713878, 5.0956195492487169, 3.9435006213367698,
-      7.6455422692112709, 1.2538997132245817}},
-    {{5.0, 4.9, 1.1, -0.1},
-     1.7827286825912783,
-     {1.1111973726874729, 1.5159247029873903, 3.5442691805223259, 4.9100210053229159,
-      3.0574897053701866, 4.9881372305718967}},
-    {{12.0, 2.5, 2.4, -3.0},
-     0.43546816806693006,
-     {2.5151693508309685, 7.8117227817140353, 2.8835213766312568, 9.5779807409420119,
-      7.2953022818511464, 6.8021975157299064}},
-    {{8.0, 7.999, 0.2, -1.5},
-     1.5631491451978374,
-     {0.26509183889487031, 2.8196249068504207, 7.7758590261575629, 7.9994203913227855,
-      1.6620922622925269, 7.7406573454932213}},
-}};
+#include "analytic_kerr_reference.inc"
 
-// Accuracy the double-precision policy keeps relative to the promoted values.
-constexpr double POLICY_TOL = 2.0e-15;
+constexpr double EPS = std::numeric_limits<double>::epsilon();
+// K from the AGM with 1 - m formed from the roots: a few roundings in the root
+// differences plus the AGM's own, independent of 1 - m.
+constexpr double HALF_PERIOD_TOL = 4.0 * EPS;
+// sn and cn from jacobi_elliptic in double are backward-stable in u with an
+// absolute floor, and r3 + corr adds a few roundings; the table's condition
+// column is the first-order bound of both in units of the rounding error.
+constexpr double RADIUS_TOL_ULPS = 4.0;
 
 RadialRoots transitRoots(const std::array<double, 4> &r) {
   RadialRoots roots;
@@ -306,59 +286,39 @@ RadialRoots transitRoots(const std::array<double, 4> &r) {
   return roots;
 }
 
-void testDoublePolicyHalfPeriod() {
-  std::cout << "Test 16: radialHalfPeriod under promote_double<false> vs promoted baseline\n";
+void testHalfPeriodReferee() {
+  std::cout << "Test 16: radialHalfPeriod vs mpmath K(m), 1 - m down to 1e-10\n";
 
-  double worstRatio = 0.0;
-  double worstRel = 0.0;
-  for (const PromotedBaseline &row : PROMOTED_BASELINE) {
-    const auto &[r1, r2, r3, r4] = row.roots;
-    const double m = ((r2 - r3) * (r1 - r4)) / ((r1 - r3) * (r2 - r4));
-    const double k = std::sqrt(m);
-    // kappa = (k / K) dK/dk = E / ((1 - k^2) K) - 1.
-    const double kappa =
-        (boost::math::ellint_2(k) / ((1.0 - m) * boost::math::ellint_1(k))) - 1.0;
+  double worst = 0.0;
+  for (const AnalyticKerrRow &row : ANALYTIC_KERR_ROWS) {
     const double rel =
         std::abs(radialHalfPeriod(transitRoots(row.roots)) - row.halfPeriod) / row.halfPeriod;
-    worstRel = std::max(worstRel, rel);
-    worstRatio = std::max(worstRatio, rel / (POLICY_TOL * std::max(1.0, kappa)));
+    worst = std::max(worst, rel);
   }
-  const std::string detailBuffer = std::format(
-      "max rel diff {:.3e}, max (rel diff)/(2e-15 max(1, kappa)) {:.3f}", worstRel, worstRatio);
+  const std::string detailBuffer =
+      std::format("max rel err {:.3e} ({:.2f} ulp)", worst, worst / EPS);
   std::cout << "  " << detailBuffer << "\n";
-  check(worstRatio <= 1.0, "half period within 2e-15 x condition number of the promoted value",
-        detailBuffer);
+  check(worst <= HALF_PERIOD_TOL, "half period within 4 ulp of K(m)/scale", detailBuffer);
 }
 
-void testDoublePolicyRadius() {
-  std::cout << "Test 17: rAnalytic under promote_double<false> vs promoted baseline\n";
+void testRadiusReferee() {
+  std::cout << "Test 17: rAnalytic vs mpmath r(lambda), scaled by its error bound\n";
 
-  double worstRatio = 0.0;
+  double worstUlps = 0.0;
   double worstRel = 0.0;
-  for (const PromotedBaseline &row : PROMOTED_BASELINE) {
+  for (const AnalyticKerrRow &row : ANALYTIC_KERR_ROWS) {
     const RadialRoots roots = transitRoots(row.roots);
-    const auto &[r1, r2, r3, r4] = row.roots;
-    // r(s) = (A - B s) / (C - D s) with s = sn^2.
-    const double aa = r3 * (r1 - r4);
-    const double bb = r4 * (r1 - r3);
-    const double cc = r1 - r4;
-    const double dd = r1 - r3;
-    for (std::size_t i = 0; i < BASELINE_LAMBDAS.size(); ++i) {
+    for (std::size_t i = 0; i < REFEREE_LAMBDAS.size(); ++i) {
       const double ref = row.radius.at(i);
-      const double sn2 = (aa - (ref * cc)) / (bb - (ref * dd));
-      const double denom = cc - (dd * sn2);
-      const double drdSn = 2.0 * std::sqrt(std::max(sn2, 0.0)) * ((aa * dd) - (bb * cc)) /
-                           (denom * denom);
-      const double diff = std::abs(rAnalytic(BASELINE_LAMBDAS.at(i), roots) - ref);
+      const double diff = std::abs(rAnalytic(REFEREE_LAMBDAS.at(i), roots) - ref);
       worstRel = std::max(worstRel, diff / std::abs(ref));
-      worstRatio =
-          std::max(worstRatio, diff / (POLICY_TOL * std::max(std::abs(ref), std::abs(drdSn))));
+      worstUlps = std::max(worstUlps, diff / (EPS * row.radiusCondition.at(i)));
     }
   }
   const std::string detailBuffer = std::format(
-      "max rel diff {:.3e}, max diff/(2e-15 max(|r|, |dr/dsn|)) {:.3f}", worstRel, worstRatio);
+      "max rel err {:.3e}, max err / (eps x condition) {:.2f}", worstRel, worstUlps);
   std::cout << "  " << detailBuffer << "\n";
-  check(worstRatio <= 1.0, "r(lambda) within a 2e-15 sn error of the promoted value",
+  check(worstUlps <= RADIUS_TOL_ULPS, "r(lambda) within 4 ulp x its first-order error bound",
         detailBuffer);
 }
 
@@ -400,9 +360,9 @@ int main() try {
   std::cout << "\n";
   testManifestAddPhysicsParams();
   std::cout << "\n";
-  testDoublePolicyHalfPeriod();
+  testHalfPeriodReferee();
   std::cout << "\n";
-  testDoublePolicyRadius();
+  testRadiusReferee();
   std::cout << "\n";
 
   std::cout << "================================================\n"
