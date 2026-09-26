@@ -148,3 +148,19 @@ TEST(SettingsSync, KerrDiskControlsFollowTheActiveTracer) {
   rs.compare.compareComputeFragment = true;
   EXPECT_TRUE(ui::kerrDiskShadingActive(rs));
 }
+
+// The legacy disk controls apply only while the legacy fragment tracer draws
+// the displayed image: not under the compute path, which owns the displayed
+// texture, and not in compare mode, whose fragment side runs the Kerr branch.
+TEST(SettingsSync, LegacyControlsFollowTheDisplayedTracer) {
+  const auto rsStorage = std::make_unique<RenderState>();
+  RenderState &rs = *rsStorage;
+  EXPECT_FALSE(ui::legacyFragmentTracerActive(rs)); // physical tracer is the default
+  rs.physicsCore.physicalRayTracer = false;
+  EXPECT_TRUE(ui::legacyFragmentTracerActive(rs));
+  rs.dispatch.useComputeRaytracer = true;
+  EXPECT_FALSE(ui::legacyFragmentTracerActive(rs));
+  rs.dispatch.useComputeRaytracer = false;
+  rs.compare.compareComputeFragment = true;
+  EXPECT_FALSE(ui::legacyFragmentTracerActive(rs));
+}

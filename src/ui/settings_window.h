@@ -40,6 +40,17 @@ void renderDepthEffectsPanel(blackhole::RenderState &rs);
  */
 bool kerrDiskShadingActive(const blackhole::RenderState &rs);
 
+/**
+ * @brief True when the displayed image comes from the legacy fragment tracer
+ *        (adiskColor), the complement of kerrDiskShadingActive: CUDA bypasses
+ *        both GLSL paths, the compute path owns the displayed texture, and
+ *        compare mode runs the fragment side through the Kerr branch
+ *        (interopParityMode, bindFragmentUniforms) so both sides trace the
+ *        same geodesics. The legacy disk and redshift controls affect the
+ *        image only then.
+ */
+bool legacyFragmentTracerActive(const blackhole::RenderState &rs);
+
 } // namespace ui
 
 #endif // BLACKHOLE_UI_SETTINGS_WINDOW_H

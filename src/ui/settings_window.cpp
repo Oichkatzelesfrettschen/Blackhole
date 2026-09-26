@@ -53,15 +53,16 @@ using blackhole::RenderState;
 
 namespace {
 
-// adiskLit, dopplerStrength and enableRedshift feed only the legacy fragment
-// tracer's disk (adiskColor in blackhole_main.frag); the Kerr tracer on every
-// backend shades the disk from the traced photon's g-factor
-// (bhDiskEmission, d_disk_emission). Each control is disabled while the
-// physical tracer is on and names the path it drives.
+// The legacy disk controls feed only the legacy fragment tracer's disk
+// (adiskColor in blackhole_main.frag); the Kerr tracer on every backend
+// shades the disk from the traced photon's g-factor (bhDiskEmission,
+// d_disk_emission). Each control is disabled unless the legacy fragment
+// tracer renders (legacyFragmentTracerActive) and names the path it drives.
 void legacyTracerControlTooltip() {
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-    ImGui::SetTooltip("Legacy fragment tracer only (Physical Kerr ray tracer off).\n"
-                      "The Kerr tracer shades the disk with the orbiting-emitter g-factor.");
+    ImGui::SetTooltip("Legacy fragment tracer only (Physical Kerr ray tracer, compute,\n"
+                      "compare, and CUDA off). The Kerr tracer shades the disk with the\n"
+                      "orbiting-emitter g-factor.");
   }
 }
 
@@ -154,7 +155,7 @@ void renderVisualSettings(RenderState &rs, Settings &settings) {
   // (adiskColor in blackhole_main.frag, the density LUT, the noise volume);
   // the Kerr tracer's disk (bhDiskEmission, d_disk_emission) reads none of
   // them, so they are disabled while it runs.
-  ImGui::BeginDisabled(rs.physicsCore.physicalRayTracer);
+  ImGui::BeginDisabled(!legacyFragmentTracerActive(rs));
   ImGui::Checkbox("adiskParticle", &rs.disk.adiskParticle);
   legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskDensityV", &rs.disk.adiskDensityV, 0.0f, 10.0f);
@@ -439,7 +440,7 @@ void renderPhysicsSettings(RenderState &rs) {
   ImGui::Checkbox("enablePhotonSphere", &rs.physicsCore.enablePhotonSphere);
   legacyTracerControlTooltip();
   ImGui::EndDisabled();
-  ImGui::BeginDisabled(rs.physicsCore.physicalRayTracer);
+  ImGui::BeginDisabled(!legacyFragmentTracerActive(rs));
   ImGui::Checkbox("enableRedshift", &rs.physicsCore.enableRedshift);
   ImGui::EndDisabled();
   legacyTracerControlTooltip();
@@ -889,5 +890,7 @@ bool kerrDiskShadingActive(const RenderState &rs) {
   return rs.physicsCore.physicalRayTracer || rs.dispatch.useComputeRaytracer ||
          rs.compare.compareComputeFragment || cudaActive;
 }
+
+bool legacyFragmentTracerActive(const RenderState &rs) { return !kerrDiskShadingActive(rs); }
 
 } // namespace ui
