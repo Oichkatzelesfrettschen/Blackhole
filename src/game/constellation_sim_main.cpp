@@ -50,7 +50,8 @@ void printLine(PlayerLine line, const LineResult &result) {
                                 " digest=%016" PRIx64 "\n",
                                 lineName(line), statusName(result.overallStatus), result.winner,
                                 result.turn, result.digest));
-  for (const game::FactionStanding &standing : result.view.factions) {
+  // Referee standings: the sim is a harness and prints the truth.
+  for (const game::FactionStanding &standing : result.view.refereeStandings) {
     const char *who = standing.id == result.view.playerFaction ? "player" : "rival ";
     static_cast<void>(std::printf(
         "    %s id=%u energy=%9.2f stab=%6.3f control=%9.2f held=%u status=%s\n", who, standing.id,

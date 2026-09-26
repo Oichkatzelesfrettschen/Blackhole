@@ -171,19 +171,19 @@ TEST(Constellation, ConcentratedLinesLoseToDominationFortressWins) {
 
   const auto outer = runLine(K_SEED, 1400, PlayerLine::Outer);
   EXPECT_EQ(outer.overallStatus, game::CampaignStatus::Lost);
-  EXPECT_EQ(outer.winner, outer.view.factions.at(1).id); // the rival won
-  EXPECT_GE(outer.view.factions.at(1).controlScore, victoryControl); // by domination
+  EXPECT_EQ(outer.winner, outer.view.refereeStandings.at(1).id); // the rival won
+  EXPECT_GE(outer.view.refereeStandings.at(1).controlScore, victoryControl); // by domination
 
   const auto allIn = runLine(K_SEED, 1400, PlayerLine::AllIn);
   EXPECT_EQ(allIn.overallStatus, game::CampaignStatus::Lost);
-  EXPECT_EQ(allIn.winner, allIn.view.factions.at(1).id);
-  EXPECT_GE(allIn.view.factions.at(1).controlScore, victoryControl);
+  EXPECT_EQ(allIn.winner, allIn.view.refereeStandings.at(1).id);
+  EXPECT_GE(allIn.view.refereeStandings.at(1).controlScore, victoryControl);
 
   const auto contest = runLine(K_SEED, 1400, PlayerLine::Contest);
   EXPECT_EQ(contest.overallStatus, game::CampaignStatus::Won);
   EXPECT_EQ(contest.winner, contest.view.playerFaction);
-  EXPECT_GE(contest.view.factions.at(0).controlScore, victoryControl); // player reached it
-  EXPECT_LT(contest.view.factions.at(1).controlScore, victoryControl); // rival denied
+  EXPECT_GE(contest.view.refereeStandings.at(0).controlScore, victoryControl); // player reached it
+  EXPECT_LT(contest.view.refereeStandings.at(1).controlScore, victoryControl); // rival denied
 
   // The rival's domination fires sooner against the lines that ignore it than the
   // fortress ever allows -- concentration is the fast way to lose.
@@ -550,4 +550,33 @@ TEST(Constellation, OutcomeNoticeLeavesFromTheDecidingBand) {
   constellation.advanceTurn(); // turn 4 = 3 + ceil(radial leg of about 2000 s)
   EXPECT_TRUE(constellation.factions().at(1).outcomeKnown);
   EXPECT_FALSE(constellation.factions().front().outcomeKnown);
+}
+
+// Falsifier: the player's snapshot showing a decided outcome, a winner, or a
+// cleared turn before news of the rival's win (30 light-days away) reaches the
+// player's authority, or the referee block failing to show the truth at once.
+TEST(Constellation, SnapshotShowsThePlayersOutcomeOnlyOnceKnown) {
+  game::Constellation constellation(remoteWinConfig());
+  const game::FactionId player = constellation.addFaction(game::FactionPolicy::Scripted, 1);
+  const game::FactionId rival = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  ASSERT_NE(constellation.addFleet(rival, 0, game::FleetCapability::Research, 0),
+            game::K_INVALID_FLEET_ID);
+  const std::int64_t learned = arrivalTurn(microRadialSec(0) + (30.0 * K_SECONDS_PER_DAY)) + 2;
+  while (constellation.turn() < learned - 1) {
+    constellation.advanceTurn();
+  }
+  const game::ConstellationViewSnapshot before = constellation.renderSnapshot();
+  EXPECT_EQ(before.overallStatus, game::CampaignStatus::Ongoing);
+  EXPECT_EQ(before.winner, game::K_INVALID_FACTION_ID);
+  EXPECT_EQ(before.player.id, player);
+  EXPECT_EQ(before.player.status, game::CampaignStatus::Ongoing);
+  EXPECT_EQ(before.player.clearedTurn, 0);
+  EXPECT_EQ(before.refereeStatus, game::CampaignStatus::Lost);
+  EXPECT_EQ(before.refereeWinner, rival);
+  EXPECT_EQ(before.refereeStandings.at(1).clearedTurn, 3);
+
+  constellation.advanceTurn();
+  const game::ConstellationViewSnapshot after = constellation.renderSnapshot();
+  EXPECT_EQ(after.overallStatus, game::CampaignStatus::Lost);
+  EXPECT_EQ(after.winner, rival);
 }

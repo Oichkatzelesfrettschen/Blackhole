@@ -995,8 +995,6 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
   ConstellationViewSnapshot view;
   view.turn = clock_.turn();
   view.secondsPerTurn = clock_.secondsPerTurn();
-  view.overallStatus = overallStatus_;
-  view.winner = winner_;
   view.playerFaction = playerFaction_;
   view.victoryEnergyUnits = config_.victoryEnergyUnits;
   view.victoryStabilizationUnits = config_.victoryStabilizationUnits;
@@ -1023,7 +1021,10 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
     view.systems.push_back(std::move(standing));
   }
 
-  view.factions.reserve(factions_.size());
+  // Referee standings: true scores and true held bands.
+  view.refereeStatus = overallStatus_;
+  view.refereeWinner = winner_;
+  view.refereeStandings.reserve(factions_.size());
   for (const FactionState &faction : factions_) {
     FactionStanding standing;
     standing.id = faction.id;
@@ -1036,11 +1037,40 @@ ConstellationViewSnapshot Constellation::renderSnapshot() const {
     standing.clearedTurn = faction.clearedTurn;
     standing.fleetCount = static_cast<std::uint32_t>(std::ranges::count_if(
         fleets_, [&](const ConstellationFleet &fleet) { return fleet.faction == faction.id; }));
-    for (const SystemStanding &system : view.systems) {
-      standing.heldBandCount += static_cast<std::uint32_t>(std::ranges::count(
-          system.bandController, faction.id));
+    for (std::size_t systemIndex = 0; systemIndex < systems_.size(); ++systemIndex) {
+      const std::size_t bandCount = systems_.at(systemIndex).bandRadiusCm.size();
+      for (std::size_t bandIndex = 0; bandIndex < bandCount; ++bandIndex) {
+        if (bandController(static_cast<SystemId>(systemIndex), static_cast<int>(bandIndex)) ==
+            faction.id) {
+          ++standing.heldBandCount;
+        }
+      }
     }
-    view.factions.push_back(standing);
+    view.refereeStandings.push_back(standing);
+  }
+
+  // The player's knowledge: the outcome once its notice has landed, its scores
+  // as reports have credited them, and the bands it believes it holds.
+  if (playerIndex < factions_.size()) {
+    const FactionState &player = factions_.at(playerIndex);
+    FactionStanding &standing = view.player;
+    standing.id = player.id;
+    standing.policy = player.policy;
+    standing.homeSystem = player.homeSystem;
+    standing.energyUnits = player.energyUnits;
+    standing.stabilizationUnits = player.knownStabilizationUnits;
+    standing.controlScore = player.knownControlScore;
+    standing.fleetCount = static_cast<std::uint32_t>(ownBelief_.at(playerIndex).size());
+    for (const SystemStanding &system : view.systems) {
+      standing.heldBandCount +=
+          static_cast<std::uint32_t>(std::ranges::count(system.bandController, player.id));
+    }
+    if (player.outcomeKnown) {
+      view.overallStatus = overallStatus_;
+      view.winner = winner_;
+      standing.status = player.status;
+      standing.clearedTurn = player.clearedTurn;
+    }
   }
 
   // The player's own fleets as last reported home; rival fleets appear only

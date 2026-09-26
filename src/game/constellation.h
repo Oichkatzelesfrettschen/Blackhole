@@ -135,15 +135,20 @@ public:
   /** @brief turnCount iterated single-turn advances (op-order invariant). */
   void advanceTurns(std::int64_t turnCount);
 
+  // Referee accessors: the true state of every system, faction, and fleet,
+  // known to no authority in the game. Harnesses, tests, and the post-game
+  // record read them; a player-facing surface reads renderSnapshot().
   [[nodiscard]] std::int64_t turn() const { return clock_.turn(); }
   [[nodiscard]] const std::vector<OrbitalSystem> &systems() const { return systems_; }
   [[nodiscard]] const std::vector<FactionState> &factions() const { return factions_; }
   [[nodiscard]] const std::vector<ConstellationFleet> &fleets() const { return fleets_; }
 
-  /** @brief The player's outcome: Won when the player faction reaches a target
-   *         first, Lost when a rival wins first or the deadline passes undecided. */
+  /** @brief Referee truth for the player: Won when the player faction reaches
+   *         a target first, Lost when a rival wins first or the deadline
+   *         passes undecided -- decided at the crossing, before any authority
+   *         can know it. */
   [[nodiscard]] CampaignStatus overallStatus() const { return overallStatus_; }
-  /** @brief The faction that won, or K_INVALID_FACTION_ID while undecided. */
+  /** @brief Referee truth: the faction that won, or K_INVALID_FACTION_ID. */
   [[nodiscard]] FactionId winner() const { return winner_; }
 
   /** @brief Last-known controller of (systemIndex, bandIndex) as factionIndex's
@@ -152,9 +157,9 @@ public:
   [[nodiscard]] FactionId perceivedController(std::size_t factionIndex, SystemId system,
                                               int bandIndex) const;
 
-  /** @brief The player's view: band control as the player's authority
-   *         perceives it and the player's fleets as last reported; the
-   *         factions' scores are the referee's standings. */
+  /** @brief The player's view: outcome, scores, band control, and fleets as
+   *         the player's authority knows them, plus a separately named referee
+   *         block (see ConstellationViewSnapshot). */
   [[nodiscard]] ConstellationViewSnapshot renderSnapshot() const;
   [[nodiscard]] std::vector<std::uint8_t> serializeState() const;
   [[nodiscard]] std::uint64_t stateDigest() const;

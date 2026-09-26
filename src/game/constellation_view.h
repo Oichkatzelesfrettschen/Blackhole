@@ -33,7 +33,7 @@ struct FactionStanding {
   CampaignStatus status = CampaignStatus::Ongoing;
   std::int64_t clearedTurn = 0;
   std::uint32_t fleetCount = 0;      ///< Fleets this faction has (including in transit).
-  std::uint32_t heldBandCount = 0;   ///< Bands the player's authority believes it holds.
+  std::uint32_t heldBandCount = 0;   ///< Bands held uncontested (perceived or true, per block).
 };
 
 struct SystemStanding {
@@ -62,20 +62,37 @@ struct ConstellationFleetView {
   std::int64_t reportedTurn = 0; ///< Turn the fleet sent the state shown here.
 };
 
+/**
+ * @brief What the player sees. Every field above the referee block is what the
+ *        player's authority knows: the outcome only once news of the decision
+ *        has reached it, its own scores as reports have credited them, band
+ *        control as intel has delivered it, and its fleets as they last
+ *        reported. The referee block is the truth no authority holds; it
+ *        exists for harnesses, tests, and the post-game record and is named so
+ *        a panel cannot mistake it for knowledge.
+ */
 struct ConstellationViewSnapshot {
   std::int64_t turn = 0;
   double secondsPerTurn = 0.0;
-  CampaignStatus overallStatus = CampaignStatus::Ongoing;
-  FactionId winner = K_INVALID_FACTION_ID;
+  CampaignStatus overallStatus = CampaignStatus::Ongoing; ///< Ongoing until the player learns the outcome.
+  FactionId winner = K_INVALID_FACTION_ID;                ///< Invalid until the player learns the outcome.
   FactionId playerFaction = K_INVALID_FACTION_ID;
   double victoryEnergyUnits = 0.0;
   double victoryStabilizationUnits = 0.0;
   double victoryControlScore = 0.0;
   std::int64_t deadlineTurn = 0;
-  std::vector<FactionStanding> factions;
+  /// The player's standing as its authority credits it: banked energy, known
+  /// stabilization and control, perceived held bands; status and clearedTurn
+  /// only once the outcome is known.
+  FactionStanding player;
   std::vector<SystemStanding> systems;
   std::vector<ConstellationFleetView> fleets;
   std::vector<InterSystemLink> links;
+
+  // Referee truth -- known to no authority.
+  CampaignStatus refereeStatus = CampaignStatus::Ongoing; ///< The player's true outcome.
+  FactionId refereeWinner = K_INVALID_FACTION_ID;
+  std::vector<FactionStanding> refereeStandings; ///< Every faction's true scores and held bands.
 };
 
 } // namespace game
