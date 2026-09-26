@@ -185,23 +185,25 @@ namespace physics {
 }
 
 /**
- * @brief g_t_phi = -2 M r a sin^2(theta) / Sigma  (frame-dragging cross term).
+ * @brief g_t_phi = -a (2 M r - Q^2) sin^2(theta) / Sigma  (frame-dragging cross term).
  *
- * WHY the charge Q does not appear here: the off-diagonal mixing between t
- * and phi arises from angular momentum, not charge.  The electromagnetic
- * field enters only through Delta (in g_tt and g_rr).  This is exact --
- * not an approximation.
+ * The Carter form -(Delta/Sigma)(dt - a sin^2 dphi)^2
+ * + (sin^2/Sigma)((r^2 + a^2) dphi - a dt)^2 gives
+ * g_tph = a sin^2 (Delta - r^2 - a^2) / Sigma, and Delta carries Q^2, so the
+ * cross term is -a (2 M r - Q^2) sin^2 / Sigma. At Q = 0 it is the Kerr term.
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
  * @param mass     Geometric mass [geometric units].
  * @param a     Spin parameter [geometric units].
- * @return g_tph [length^2 in geometric units].
+ * @param charge     Electric charge [geometric units].
+ * @return g_tph [length in geometric units].
  */
-[[nodiscard]] inline double knGtph(double r, double theta, double mass, double a) noexcept {
+[[nodiscard]] inline double knGtph(double r, double theta, double mass, double a,
+                                   double charge) noexcept {
   const double sigma = knSigma(r, a, theta);
   const double s = std::sin(theta);
-  return -2.0 * mass * r * a * s * s / sigma;
+  return -a * (2.0 * mass * r - charge * charge) * s * s / sigma;
 }
 
 // ============================================================================
@@ -335,10 +337,11 @@ namespace physics {
 }
 
 /**
- * @brief Frame-dragging angular velocity: Omega = -g_tph / g_phph.
+ * @brief Frame-dragging angular velocity: Omega = -g_tph / g_phph = a (2 M r - Q^2) / A.
  *
  * This is the angular velocity of a zero-angular-momentum observer (ZAMO).
- * Identical in form to Kerr; charge enters implicitly through Delta inside A.
+ * Charge enters through Delta inside A and through the 2 M r - Q^2 factor of
+ * g_tph.
  *
  * @param r     Boyer-Lindquist r [geometric units].
  * @param theta Polar angle [rad].
@@ -353,7 +356,7 @@ namespace physics {
   if (std::abs(metricA) < 1.0e-30) {
     return 0.0;
   }
-  return 2.0 * mass * r * a / metricA;
+  return a * (2.0 * mass * r - charge * charge) / metricA;
 }
 
 } // namespace physics

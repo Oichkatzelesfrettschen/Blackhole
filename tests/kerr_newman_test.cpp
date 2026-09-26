@@ -17,6 +17,13 @@
  *   - SubExtremalCondition: validity predicate matches M^2 >= a^2 + Q^2.
  *   - ElectricPotentialVanishesAtQZero: A_t = 0 exactly when Q = 0.
  *   - ExtremeLimit: at M^2 = a^2 + Q^2 both horizons coincide at r = M.
+ *   - FrameDraggingChargeTerm: g_tph and omega carry the a Q^2 cross term in
+ *     both namespaces.
+ *   - IscoReissnerNordstromCubic / IscoMixedSpinCharge / IscoKerrLimit /
+ *     IscoSignAndScaling: verified:: ISCO against mpmath dE/dr = 0 roots,
+ *     Bardeen-Press-Teukolsky at Q = 0, the phi -> -phi reflection, and M scaling.
+ *   - EmPotentialNamespacesAgree: A_t and A_phi agree across physics:: and
+ *     verified::, with A_phi / A_t = -a sin^2 theta.
  *
  * HOW: Pure analytical reference values are computed inline from the textbook
  * formulas (MTW; Wald 1984) and compared to the library at tolerance 1e-14.
@@ -29,6 +36,7 @@
 #include <gtest/gtest.h>
 
 #include "physics/kerr_newman.h"
+#include "physics/verified/kerr_newman.hpp"
 
 // ============================================================================
 // Utility: Kerr reference formulas (geometric units, G=c=1)
@@ -104,7 +112,7 @@ void checkKerrMetricComponents(double r, double theta, double m, double a, doubl
       << "g_phph mismatch at a=" << a << " r=" << r;
 
   // g_tph
-  EXPECT_NEAR(physics::knGtph(r, theta, m, a), kerrGtphRef(r, theta, m, a), tol)
+  EXPECT_NEAR(physics::knGtph(r, theta, m, a, q), kerrGtphRef(r, theta, m, a), tol)
       << "g_tph mismatch at a=" << a << " r=" << r;
 
   // Frame dragging
@@ -118,7 +126,7 @@ void checkReissnerNordstromMetric(double r, double theta, double m, double a, do
   const double s = std::sin(theta);
 
   // g_tph must vanish: no spin means no frame dragging
-  EXPECT_NEAR(physics::knGtph(r, theta, m, a), 0.0, tol) << "g_tph != 0 at Q=" << q << " r=" << r;
+  EXPECT_NEAR(physics::knGtph(r, theta, m, a, q), 0.0, tol) << "g_tph != 0 at Q=" << q << " r=" << r;
 
   // g_tt = -Delta_RN / r^2  (Sigma = r^2 when a = 0)
   EXPECT_NEAR(physics::knGtt(r, theta, m, a, q), -deltaRn / (r * r), tol)
@@ -359,5 +367,136 @@ TEST(KerrNewman, ExtremeLimit) {
     EXPECT_NEAR(rPlus, m, 2.0e-7) << "mixed extremal r_+ ~ M";
     EXPECT_NEAR(rMinus, m, 2.0e-7) << "mixed extremal r_- ~ M";
     EXPECT_NEAR(rPlus, rMinus, 3.0e-8) << "mixed extremal horizons coincide";
+  }
+}
+
+// ============================================================================
+// Reference constants: scripts/gen_kn_kds_reference.py (mpmath, 60 digits).
+// The ISCO values are roots of dE/dr = 0 for the equatorial circular-orbit
+// energy of the Carter-form metric, independent of the closed form under test.
+// ============================================================================
+
+namespace {
+
+constexpr double kIscoA0Q05 = 5.6066434276477041;
+constexpr double kIscoA0Q09 = 4.5137450467151034;
+constexpr double kIscoA05Q05Pro = 3.7320508075688773;
+constexpr double kIscoA05Q05Ret = 7.2051154235083894;
+constexpr double kIscoA09Q03Pro = 1.980407461799196;
+constexpr double kIscoA09Q03Ret = 8.6013892403446616;
+constexpr double kOmegaR3A05Q05 = 0.033948339483394834;
+
+// Bisection stops at a 1e-15 M bracket; the closed-form root is
+// well-conditioned there, so 1e-12 bounds the double-precision error.
+constexpr double kIscoTol = 1.0e-12;
+
+/** @brief Bardeen-Press-Teukolsky co-rotating (sign = -1) or counter-rotating (+1) ISCO. */
+double bptIsco(double m, double spinMagnitude, double sign) {
+  const double s = spinMagnitude / m;
+  const double z1 =
+      1.0 + (std::cbrt(1.0 - (s * s)) * (std::cbrt(1.0 + s) + std::cbrt(1.0 - s)));
+  const double z2 = std::sqrt((3.0 * s * s) + (z1 * z1));
+  return m * (3.0 + z2 + (sign * std::sqrt((3.0 - z1) * (3.0 + z1 + (2.0 * z2)))));
+}
+
+} // namespace
+
+/**
+ * @brief g_tph = -a (2Mr - Q^2) sin^2 / Sigma and omega = a (2Mr - Q^2) / A.
+ *
+ * The Q = 0 and a = 0 limits both hide the a Q^2 cross term, so this test
+ * evaluates a = Q = 0.5 on and off the equator in both namespaces.
+ */
+TEST(KerrNewman, FrameDraggingChargeTerm) {
+  constexpr double m = 1.0;
+  constexpr double a = 0.5;
+  constexpr double q = 0.5;
+  constexpr double r = 3.0;
+  constexpr double halfPi = std::numbers::pi / 2.0;
+
+  EXPECT_NEAR(verified::knFrameDraggingOmega(r, halfPi, m, a, q), kOmegaR3A05Q05, 1.0e-15);
+  EXPECT_NEAR(physics::knFrameDragging(r, halfPi, m, a, q), kOmegaR3A05Q05, 1.0e-15);
+
+  for (double const theta : {std::numbers::pi / 5.0, std::numbers::pi / 3.0, halfPi}) {
+    const double s2 = std::sin(theta) * std::sin(theta);
+    const double sigma = kerrSigmaRef(r, a, theta);
+    const double delta = (r * r) - (2.0 * m * r) + (a * a) + (q * q);
+    // Carter-form expansion: g_tph = a sin^2 (Delta - r^2 - a^2) / Sigma.
+    const double gTphCarter = a * s2 * (delta - (r * r) - (a * a)) / sigma;
+    EXPECT_NEAR(physics::knGtph(r, theta, m, a, q), gTphCarter, 1.0e-15) << "theta=" << theta;
+    EXPECT_NEAR(verified::knGTph(r, theta, m, a, q), gTphCarter, 1.0e-15) << "theta=" << theta;
+    const double omega = -gTphCarter / physics::knGphph(r, theta, m, a, q);
+    EXPECT_NEAR(physics::knFrameDragging(r, theta, m, a, q), omega, 1.0e-15);
+    EXPECT_NEAR(verified::knFrameDraggingOmega(r, theta, m, a, q), omega, 1.0e-15);
+  }
+}
+
+/** @brief a = 0 ISCO is the root of r^3 - 6Mr^2 + 9Q^2 r - 4Q^4/M = 0. */
+TEST(KerrNewman, IscoReissnerNordstromCubic) {
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 0.5), kIscoA0Q05, kIscoTol);
+  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.0, 0.5), kIscoA0Q05, kIscoTol);
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 0.9), kIscoA0Q09, kIscoTol);
+  // Extremal Reissner-Nordstrom: the cubic factors as -(r - M)^2 (r - 4M).
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.0, 1.0), 4.0, kIscoTol);
+  // Charge moves the ISCO inward from 6M.
+  EXPECT_LT(verified::knIscoRadiusPrograde(1.0, 0.0, 0.5), 6.0);
+}
+
+/** @brief Spin and charge together, where the a Q^2 cross terms act. */
+TEST(KerrNewman, IscoMixedSpinCharge) {
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.5, 0.5), kIscoA05Q05Pro, kIscoTol);
+  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.5, 0.5), kIscoA05Q05Ret, kIscoTol);
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.9, 0.3), kIscoA09Q03Pro, kIscoTol);
+  EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.9, 0.3), kIscoA09Q03Ret, kIscoTol);
+}
+
+/** @brief Q = 0 reproduces Bardeen-Press-Teukolsky for signed spin up to a = 0.9999. */
+TEST(KerrNewman, IscoKerrLimit) {
+  for (double const a : {-0.9999, -0.9, -0.5, 0.0, 0.3, 0.7, 0.9, 0.998, 0.9999}) {
+    const double coRotating = (a >= 0.0) ? -1.0 : 1.0;
+    EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, a, 0.0), bptIsco(1.0, std::abs(a), coRotating),
+                1.0e-10)
+        << "prograde a=" << a;
+    EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, a, 0.0),
+                bptIsco(1.0, std::abs(a), -coRotating), 1.0e-10)
+        << "retrograde a=" << a;
+  }
+  EXPECT_NEAR(verified::knIscoRadiusPrograde(1.0, 0.998, 0.0), 1.2369706, 1.0e-7);
+}
+
+/** @brief phi -> -phi reflection, M scaling, and the super-extremal guard. */
+TEST(KerrNewman, IscoSignAndScaling) {
+  for (double const a : {0.2, 0.6, 0.9}) {
+    for (double const q : {0.0, 0.3}) {
+      EXPECT_DOUBLE_EQ(verified::knIscoRadiusPrograde(1.0, -a, q),
+                       verified::knIscoRadiusRetrograde(1.0, a, q));
+      EXPECT_NEAR(verified::knIscoRadiusPrograde(2.5, 2.5 * a, 2.5 * q),
+                  2.5 * verified::knIscoRadiusPrograde(1.0, a, q), 1.0e-11)
+          << "a=" << a << " q=" << q;
+    }
+  }
+  EXPECT_TRUE(std::isnan(verified::knIscoRadiusPrograde(1.0, 0.8, 0.8)));
+  EXPECT_TRUE(std::isnan(verified::knIscoRadiusPrograde(0.0, 0.0, 0.0)));
+}
+
+/**
+ * @brief The EM potential is -(Qr/Sigma)(dt - a sin^2 dphi) in both namespaces.
+ *
+ * The overall sign of A_mu is a convention; the ratio A_phi / A_t = -a sin^2
+ * is fixed by the metric's (dt - a sin^2 dphi) one-form.
+ */
+TEST(KerrNewman, EmPotentialNamespacesAgree) {
+  for (double const a : {-0.6, 0.3, 0.9}) {
+    for (double const theta : {0.3, std::numbers::pi / 3.0, std::numbers::pi / 2.0}) {
+      for (double const r : {2.5, 7.0}) {
+        constexpr double q = 0.4;
+        const double at = physics::knElectricPotentialAt(r, theta, a, q);
+        const double aphi = physics::knMagneticPotentialPhi(r, theta, a, q);
+        EXPECT_NEAR(verified::knPotentialT(r, theta, a, q), at, 1.0e-15);
+        EXPECT_NEAR(verified::knPotentialPhi(r, theta, a, q), aphi, 1.0e-15);
+        const double s2 = std::sin(theta) * std::sin(theta);
+        EXPECT_NEAR(aphi, -a * s2 * at, 1.0e-15) << "a=" << a << " theta=" << theta;
+      }
+    }
   }
 }

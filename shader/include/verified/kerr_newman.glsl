@@ -91,7 +91,8 @@ float kn_potential_t(float r, float theta, float a, float Q) {
 }
 
 /**
- * Azimuthal component of electromagnetic 4-potential: A_phi = -Qra sin^2(theta) / Sigma
+ * Azimuthal component of electromagnetic 4-potential: A_phi = +Qra sin^2(theta) / Sigma
+ * (A_phi / A_t = -a sin^2(theta), fixed by the one-form dt - a sin^2 dphi)
  *
  * Rocq Derivation: Derived from Rocq:Definition kn_potential_phi (r theta a Q : R) : R :=...
  *
@@ -100,7 +101,7 @@ float kn_potential_t(float r, float theta, float a, float Q) {
 float kn_potential_phi(float r, float theta, float a, float Q) {
     float Sigma = kn_Sigma(r, theta, a);
     float sin_theta = sin(theta);
-    return -Q * r * a * sin_theta * sin_theta / Sigma;
+    return Q * r * a * sin_theta * sin_theta / Sigma;
 }
 
 /**
@@ -159,7 +160,7 @@ float kn_ergosphere_radius(float theta, float M, float a, float Q) {
 }
 
 /**
- * Frame dragging angular velocity omega = -g_tphi / g_phph
+ * Frame dragging angular velocity omega = -g_tphi / g_phph = a (2Mr - Q^2) / A
  *
  * Rocq Derivation: Derived from Rocq:Definition kn_frame_dragging_omega (r theta M a Q : R) : R :=...
  *
@@ -167,7 +168,7 @@ float kn_ergosphere_radius(float theta, float M, float a, float Q) {
  */
 float kn_frame_dragging_omega(float r, float theta, float M, float a, float Q) {
     float A = kn_A(r, theta, M, a, Q);
-    return 2.0 * M * r * a / A;
+    return a * (2.0 * M * r - Q * Q) / A;
 }
 
 /**
@@ -176,44 +177,77 @@ float kn_frame_dragging_omega(float r, float theta, float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition kn_photon_sphere_equator (M a Q : R) : R :=...
  */
 float kn_photon_sphere_equator(float M, float a, float Q) {
-    (void)Q;  // Charge appears in discriminant, simplified formula uses only a/M
     return 2.0 * M * (1.0 + cos(acos(a / M) / 3.0));
 }
 
 /**
- * Prograde ISCO radius (approximate, charge correction)
+ * Marginal-stability function of equatorial KN circular orbits
+ * (orbit angular momentum along +z, signed a). Zeros are dE/dr = 0 radii.
  *
- * Rocq Derivation: Derived from Rocq:Definition kn_isco_radius_prograde (M a Q : R) : R :=...
+ * Rocq Derivation: Derived from Rocq:Definition kn_marginal_stability (r M a Q : R) : R :=...
  */
-float kn_isco_radius_prograde(float M, float a, float Q) {
-    float a_over_M = a / M;
-    float one_minus_a2_M2 = 1.0 - a_over_M * a_over_M;
-    float cbrt_factor = pow(one_minus_a2_M2, 1.0/3.0);
-    float cbrt_plus = pow(1.0 + a_over_M, 1.0/3.0);
-    float cbrt_minus = pow(1.0 - a_over_M, 1.0/3.0);
-    float Z1 = 1.0 + cbrt_factor * (cbrt_plus + cbrt_minus);
-    float Z2 = sqrt(3.0 * a_over_M * a_over_M + Z1 * Z1);
-    float sqrt_term = sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
-    float correction = Q * Q / (2.0 * M * M);
-    return M * (3.0 + Z2 - sqrt_term) + correction;
+float kn_isco_marginal_stability(float r, float M, float a, float Q) {
+    float Q2 = Q * Q;
+    float orbit_term = M * r - Q2;
+    float orbit_root = sqrt(orbit_term);
+    return r * (6.0 * M * r - r * r - 9.0 * Q2 + 3.0 * a * a) + 4.0 * Q2 * (Q2 - a * a) / M
+        - 8.0 * a * orbit_term * orbit_root / M;
 }
 
 /**
- * Retrograde ISCO radius (approximate, charge correction)
+ * ISCO for an orbit with angular momentum along +z: outermost zero of
+ * kn_isco_marginal_stability, by an inward scan from 10 M in M/200 steps and
+ * bisection. Returns NaN (0/0) for super-extremal or massless input.
  *
- * Rocq Derivation: Derived from Rocq:Definition kn_isco_radius_retrograde (M a Q : R) : R :=...
+ * Rocq Derivation: Derived from Rocq:Definition kn_isco_prograde_spec (M a Q r : R) : Prop :=...
+ *
+ * Depends on: kn_isco_marginal_stability
+ */
+float kn_isco_radius_prograde(float M, float a, float Q) {
+    float discriminant = M * M - a * a - Q * Q;
+    if (!(M > 0.0) || discriminant < 0.0) {
+        float zero = 0.0;
+        return zero / zero;
+    }
+    float r_floor = max(M + sqrt(discriminant), Q * Q / M);
+    float step_size = 0.005 * M;
+    float r_outer = 10.0 * M;
+    float r_inner = r_outer;
+    bool bracketed = false;
+    while (r_outer - step_size > r_floor) {
+        r_inner = r_outer - step_size;
+        if (kn_isco_marginal_stability(r_inner, M, a, Q) >= 0.0) {
+            bracketed = true;
+            break;
+        }
+        r_outer = r_inner;
+    }
+    if (!bracketed) {
+        r_inner = r_floor;
+        if (kn_isco_marginal_stability(r_inner, M, a, Q) < 0.0) {
+            return r_floor;
+        }
+    }
+    for (int iteration = 0; iteration < 64; ++iteration) {
+        float r_mid = 0.5 * (r_inner + r_outer);
+        if (kn_isco_marginal_stability(r_mid, M, a, Q) >= 0.0) {
+            r_inner = r_mid;
+        } else {
+            r_outer = r_mid;
+        }
+    }
+    return 0.5 * (r_inner + r_outer);
+}
+
+/**
+ * ISCO for an orbit with angular momentum along -z: the prograde ISCO at -a.
+ *
+ * Rocq Derivation: Derived from Rocq:Definition kn_isco_retrograde_spec (M a Q r : R) : Prop :=...
+ *
+ * Depends on: kn_isco_radius_prograde
  */
 float kn_isco_radius_retrograde(float M, float a, float Q) {
-    float a_over_M = a / M;
-    float one_minus_a2_M2 = 1.0 - a_over_M * a_over_M;
-    float cbrt_factor = pow(one_minus_a2_M2, 1.0/3.0);
-    float cbrt_plus = pow(1.0 + a_over_M, 1.0/3.0);
-    float cbrt_minus = pow(1.0 - a_over_M, 1.0/3.0);
-    float Z1 = 1.0 + cbrt_factor * (cbrt_plus + cbrt_minus);
-    float Z2 = sqrt(3.0 * a_over_M * a_over_M + Z1 * Z1);
-    float sqrt_term = sqrt((3.0 - Z1) * (3.0 + Z1 + 2.0 * Z2));
-    float correction = Q * Q / (2.0 * M * M);
-    return M * (3.0 + Z2 + sqrt_term) + correction;
+    return kn_isco_radius_prograde(M, -a, Q);
 }
 
 /**
@@ -267,16 +301,16 @@ float kn_g_phph(float r, float theta, float M, float a, float Q) {
 }
 
 /**
- * Kerr-Newman g_tph (cross term): g_tph = -2Mar sin^2(theta) / Sigma
+ * Kerr-Newman g_tph (cross term): g_tph = -a (2Mr - Q^2) sin^2(theta) / Sigma
  *
- * Rocq Derivation: Derived from Rocq:g_tph := - 2...
+ * Rocq Derivation: Derived from Rocq:g_tph := - a * (2 * M * r - Q^2) * sin2 / Sigma...
  *
  * Depends on: kn_Sigma
  */
-float kn_g_tph(float r, float theta, float M, float a) {
+float kn_g_tph(float r, float theta, float M, float a, float Q) {
     float Sigma = kn_Sigma(r, theta, a);
     float sin_theta = sin(theta);
-    return -2.0 * M * r * a * sin_theta * sin_theta / Sigma;
+    return -a * (2.0 * M * r - Q * Q) * sin_theta * sin_theta / Sigma;
 }
 
 /**
