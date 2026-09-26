@@ -41,6 +41,8 @@
 #include <limits>
 #include <numbers>
 
+#include "safe_limits.h"
+
 namespace physics::kerr_observer {
 
 /** @brief Orbital sense relative to the hole's rotation: Prograde
@@ -220,13 +222,20 @@ struct CircularOrbit {
  *
  * dt/dr = (r^2 + a^2) / Delta = 1 + 2r / Delta. Partial fractions over the
  * horizons x = +-h give, for x1 < x2,
- *   T = (x2 - x1) + ln(Delta2 / Delta1) + 2 w atanh(h w) / (h w),
- *   w = (x2 - x1) / (x1 x2 - h^2).
+ *   T = (x2 - x1) + ln(Delta2 / Delta1) + 2 w atanh(z) / z,
+ *   w = (x2 - x1) / (x1 x2 - h^2),  z = h w,
+ * and 2 atanh(z) = ln(1 + 2h/(x1 - h)) - ln(1 + 2h/(x2 - h)) because
+ * (1 + z)/(1 - z) = (x1 + h)(x2 - h) / ((x1 - h)(x2 + h)).
  * The textbook form divides a difference of logarithms by r_+ - r_- = 2h,
  * which loses log10(1/h) digits (about 6.5 at the canon spin); the atanh form
- * carries that ratio exactly and reaches the extremal limit w at h = 0.
- * No intermediate product or ratio leaves the double range before the delay
- * itself does, so offsets as small as 1e-300 keep a finite delay.
+ * carries that ratio exactly and reaches the extremal limit w at h = 0. Near
+ * the horizon (z >= 1/2, x1 within 2h) z itself rounds toward the atanh
+ * singularity -- at x1 one ulp above h it rounds to exactly 1 -- so there the
+ * horizon term is (1/h) times the log1p form, which reads the
+ * horizon-relative offsets x1 - h and x2 - h directly and is well conditioned
+ * because 2 atanh(z) >= 1.1. No intermediate product or ratio leaves the
+ * double range before the delay itself does, so offsets as small as 1e-300
+ * keep a finite delay.
  */
 [[nodiscard]] inline double principalNullDelay(double epsilon, double x1, double x2) {
   const double inner = std::fmin(x1, x2);
@@ -246,11 +255,16 @@ struct CircularOrbit {
   // quotient itself leaves the normal range.
   const auto logQuotient = [](double numerator, double denominator) {
     const double quotient = numerator / denominator;
-    return std::isnormal(quotient) ? std::log(quotient)
-                                   : std::log(numerator) - std::log(denominator);
+    const bool normal = physics::safeIsfinite(quotient) && quotient >= std::numeric_limits<double>::min();
+    return normal ? std::log(quotient) : std::log(numerator) - std::log(denominator);
   };
   const double logRatio = logQuotient(outer - h, inner - h) + logQuotient(outer + h, inner + h);
-  return span + logRatio + (2.0 * w * atanhOverArgument(h * w));
+  const double z = h * w;
+  if (z < 0.5) {
+    return span + logRatio + (2.0 * w * atanhOverArgument(z));
+  }
+  const double twiceAtanh = std::log1p(2.0 * h / (inner - h)) - std::log1p(2.0 * h / (outer - h));
+  return span + logRatio + (twiceAtanh / h);
 }
 
 using Vec3 = std::array<double, 3>;

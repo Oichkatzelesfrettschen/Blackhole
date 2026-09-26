@@ -92,6 +92,10 @@ constexpr std::array<DelayRow, 8> K_DELAYS{{
     {.epsilon = 1.33e-14, .x1 = 3.7611284825013188359e-5, .x2 = 3.99e+2, .delayM = 5.360721248752867818e+4},
     {.epsilon = 0.0, .x1 = 5.0e-1, .x2 = 1.0e+1, .delayM = 1.9291464547107981987e+1},
 }};
+constexpr std::array<DelayRow, 2> K_NEAR_HORIZON_DELAYS{{
+    {.epsilon = 7e-6, .x1 = 0.0037416508388677856, .x2 = 37416508.38867786, .delayM = 3.742658252320483011e+7},
+    {.epsilon = 1e-4, .x1 = 0.014141782065920832, .x2 = 14.141782065920832, .delayM = 2.7034560428421007973e+3},
+}};
 // clang-format on
 
 constexpr double K_CANON_EPSILON = 1.33e-14;
@@ -594,5 +598,19 @@ TEST(KerrObserver, ExtremalDelayStaysFiniteNearTheHorizon) {
     const double delay = ko::principalNullDelay(0.0, x1, x2);
     EXPECT_TRUE(std::isfinite(delay)) << x1 << " -> " << x2;
     expectRelative(delay, extremal(x1, x2), 1e-12, "extremal delay");
+  }
+}
+
+// Falsifier: a principal-null delay from one double ulp above the horizon
+// (where z = h w rounds to exactly 1 and atanh is infinite) coming back
+// infinite, or departing from the 60-digit textbook closed form -- evaluated
+// with the same double horizon the code forms -- by more than 1e-12
+// relative; and the inner offset really being the next double above h.
+TEST(KerrObserver, NearHorizonDelayStaysFinite) {
+  for (const DelayRow &row : K_NEAR_HORIZON_DELAYS) {
+    EXPECT_EQ(row.x1, std::nextafter(ko::horizonOffset(row.epsilon), 1.0));
+    const double delay = ko::principalNullDelay(row.epsilon, row.x1, row.x2);
+    EXPECT_TRUE(std::isfinite(delay));
+    expectRelative(delay, row.delayM, 1e-12, "near-horizon delay");
   }
 }

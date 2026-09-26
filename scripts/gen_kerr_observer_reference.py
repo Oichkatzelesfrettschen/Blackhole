@@ -20,6 +20,8 @@ The output is the C++ reference block embedded verbatim in the test between
 its clang-format markers; rerun and diff to audit it.
 """
 
+import math
+
 import mpmath
 from mpmath import acos, cbrt, cos, mp, mpf, quad, sqrt
 
@@ -187,6 +189,34 @@ def main() -> None:
         a = spin(eps)
         value = delay(a, 1 + x1, 1 + x2)
         fields = [("epsilon", eps), ("x1", emit(x1)), ("x2", emit(x2)), ("delayM", emit(value))]
+        print(row(fields))
+    print("}};")
+
+    # Near-horizon delays, one double ulp above the horizon, from the textbook
+    # closed form (1 + h) ln(x - h) - (1 - h) ln(x + h) over 2h at 60 digits.
+    # The horizon is the double h the C++ code forms, sqrt(eps (2 - eps)), so
+    # the case tests the code's arithmetic; the exact horizon would shift this
+    # delay by about 5e-6 relative, since x1 - h is a single ulp.
+    near = [("7e-6", 1e10), ("1e-4", 1e3)]
+    print(f"constexpr std::array<DelayRow, {len(near)}> K_NEAR_HORIZON_DELAYS{{{{")
+    for eps, reach in near:
+        h_double = math.sqrt(float(eps) * (2.0 - float(eps)))
+        x1 = math.nextafter(h_double, math.inf)
+        x2 = reach * x1
+        with mp.workdps(60):
+            h = mpf(h_double)
+            lo, hi = mpf(x1), mpf(x2)
+            horizon_term = (
+                (1 + h) * (mpmath.log(hi - h) - mpmath.log(lo - h))
+                - (1 - h) * (mpmath.log(hi + h) - mpmath.log(lo + h))
+            ) / h
+            value = (hi - lo) + horizon_term
+        fields = [
+            ("epsilon", eps),
+            ("x1", repr(x1)),
+            ("x2", repr(x2)),
+            ("delayM", emit(value)),
+        ]
         print(row(fields))
     print("}};")
     print("// clang-format on")
