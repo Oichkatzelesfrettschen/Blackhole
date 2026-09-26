@@ -328,9 +328,14 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   dustColor *= mix(1.0, beaming, dopplerStrength);
 
   // Kerr showcase shots need asymmetric energy placement, not a globally
-  // brighter disk. Bias the inner emission toward the approaching/prograde side.
-  vec3 spinAxis = vec3(0.0, kerrSpin >= 0.0 ? 1.0 : -1.0, 0.0);
-  float spinView = 0.5 + 0.5 * dot(normalize(cross(spinAxis, normalize(pos))), -normalize(rayDir));
+  // brighter disk. Bias the inner emission toward the side where the disk
+  // flow approaches the camera. The disk orbits about +y at every spin sign
+  // (its ISCO takes the counter-rotating branch when kerrSpin < 0), so the
+  // flow axis stays +y, as diskDopplerBoost above keeps one flow sense for
+  // either spin sign; the spin magnitude only sets the strength.
+  vec3 diskFlowAxis = vec3(0.0, 1.0, 0.0);
+  vec3 diskFlowDir = normalize(cross(diskFlowAxis, normalize(pos)));
+  float spinView = 0.5 + 0.5 * dot(diskFlowDir, -normalize(rayDir));
   float anisotropicBoost = mix(1.0, mix(0.82, 1.55, spinView), smoothstep(0.05, 0.85, abs(kerrSpin)));
   dustColor *= anisotropicBoost;
 

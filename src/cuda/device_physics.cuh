@@ -1163,9 +1163,12 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float3 cam_
     float doppler = 1.0f + view_alignment * 0.65f * d_doppler_strength;
     intensity *= doppler * doppler * doppler;
 
-    float spin_y = d_spin >= 0.0f ? 1.0f : -1.0f;
-    float3 spin_axis = make_f3(0.0f, spin_y, 0.0f);
-    float3 flow_dir = d_normalize(d_cross(spin_axis, d_normalize(hit.hit_point)));
+    /* The disk orbits about +y at every spin sign (its ISCO takes the
+     * counter-rotating branch when d_spin < 0), so the anisotropic flow axis
+     * stays +y: flow_dir = y x p equals vel_dir's approach sense above
+     * (dot(vel_dir, ray_dir) == dot(flow_dir, view_dir)). */
+    float3 disk_flow_axis = make_f3(0.0f, 1.0f, 0.0f);
+    float3 flow_dir = d_normalize(d_cross(disk_flow_axis, d_normalize(hit.hit_point)));
     float spin_view = 0.5f + 0.5f * d_dot(flow_dir, view_dir);
     float spin_t = fmaxf(0.0f, fminf((fabsf(d_spin) - 0.05f) / fmaxf(0.85f - 0.05f, D_EPSILON), 1.0f));
     float spin_weight = spin_t * spin_t * (3.0f - 2.0f * spin_t);
