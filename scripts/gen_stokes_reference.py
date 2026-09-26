@@ -7,7 +7,8 @@ of the augmented 5x5 generator
     A = | -K ds   J ds |
         |   0      0   |,     (S(ds), 1) = expm(A) (S0, 1),
 
-evaluated with mpmath at 50 significant digits and confirmed at 70 digits.
+evaluated with mpmath at 50 significant digits and confirmed at 70 digits, both
+raised by the decimal digits of the fastest-growing mode's e^{(x1 - alpha_I) ds}.
 K is the full propagation matrix of src/physics/stokes_exact.h, including the
 alpha_U and rho_U entries. Inputs are written as C++ hexadecimal floating
 literals, so the C++ test reads the exact doubles mpmath used; outputs carry
@@ -22,6 +23,8 @@ Groups:
              depth 0, 1, 100 and dichroism, plus pure gain and |alpha_I ds| = 40
   deepgain - alpha_I ds from -650 to -1420, past exp's overflow, with representable
              solutions
+  gaincancel - gain cancelling a dichroic eigenvalue (tau + x1 = 0 or 1e-12 |tau|)
+             at depths 30 and 700
   nearnull - |eta| ~ |rho| up to 1e8, nearly perpendicular: w.w cancels
   faraday  - Faraday depth 1e6..1e15 along one axis, and at 1e12 beside a small eta
   faraday3d - Faraday depth 1e9..1e15 along a general axis
@@ -179,6 +182,32 @@ def build_rows() -> list[Row]:
             [1.0, -0.025, 0.0, 0.0],
         )
     )
+    # Gain cancelling a dichroic eigenvalue: the I + Q mode decays at
+    # tau + x1 = 0 exactly or 1e-12 of |tau|, the I - Q mode grows at 2 |tau|.
+    j_plus = [1.0, 1.0, 0.0, 0.0]
+    for depth in (30.0, 700.0):
+        for rel in (0.0, 1.0e-12):
+            rows.append(
+                (
+                    "gaincancel",
+                    [-depth * (1.0 + rel), depth, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    1.0,
+                    j_plus,
+                    zero,
+                )
+            )
+    rows.append(
+        ("gaincancel", [-30.0, 30.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0, j_plus, [0.5, 0.5, 0.0, 0.0])
+    )
+    rows.append(
+        (
+            "gaincancel",
+            [-30.0, 0.0, 0.0, 30.0, 0.0, 0.0, 0.0],
+            1.0,
+            [1.0, 0.0, 0.0, 1.0],
+            [0.2, 0.0, 0.0, 0.2],
+        )
+    )
     rows.extend(near_null_rows())
     rows.extend(faraday_rows())
     rows.extend(limit_rows())
@@ -255,6 +284,12 @@ def propagate(k: Sequence[float], ds: float, j: Sequence[float], s0: Sequence[fl
     return [y[i] for i in range(4)]
 
 
+def boost_rate(k: Sequence[float]) -> float:
+    """x1 = Re sqrt(w.w), w = eta + i rho: the largest real eigenvalue of K'."""
+    w_dot_w = sum(complex(k[1 + i], k[4 + i]) ** 2 for i in range(3))
+    return abs((w_dot_w**0.5).real)
+
+
 def hexlist(values: Sequence[float]) -> str:
     return ", ".join(float(v).hex() for v in values)
 
@@ -268,9 +303,15 @@ def main() -> int:
     print("// {group, {aI, aQ, aU, aV, rQ, rU, rV}, ds, {jI, jQ, jU, jV}, {I0, Q0, U0, V0},")
     print("//  {I, Q, U, V} at ds}")
     for group, k, ds, j, s0 in rows:
-        mp.mp.dps = CHECK_DPS
+        # A mode growing as e^{(x1 - alpha_I) ds}, x1 = Re sqrt(w.w), amplifies
+        # the expm's own rounding by that factor even where the solution does
+        # not grow (gain cancelling a dichroic eigenvalue), so both precisions
+        # carry its digits.
+        growth = max(0.0, (boost_rate(k) - k[0]) * ds)
+        extra = math.ceil(growth / math.log(10.0))
+        mp.mp.dps = CHECK_DPS + extra
         check = propagate(k, ds, j, s0)
-        mp.mp.dps = WORK_DPS
+        mp.mp.dps = WORK_DPS + extra
         ref = propagate(k, ds, j, s0)
         scale = max(abs(c) for c in check)
         for a, b in zip(ref, check, strict=True):
@@ -278,6 +319,7 @@ def main() -> int:
                 raise SystemExit(
                     f"referee disagrees with itself at {WORK_DPS} vs {CHECK_DPS} digits"
                 )
+        mp.mp.dps = WORK_DPS
         print(f'{{"{group}", {{{hexlist(k)}}}, {float(ds).hex()},')
         print(f"  {{{hexlist(j)}}}, {{{hexlist(s0)}}},")
         print(f"  {{{', '.join(mp.nstr(v, 25, strip_zeros=False) for v in ref)}}}}},")

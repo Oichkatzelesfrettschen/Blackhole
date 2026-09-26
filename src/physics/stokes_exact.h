@@ -382,6 +382,26 @@ struct DecayIntegrals {
   double sinInt = 0.0;  ///< integral e^{-tau u} sin(x2 u) / x2
 };
 
+/// The cos(x2 u) and sin(x2 u) / x2 integrals of DecayIntegrals (the others left 0).
+[[nodiscard]] inline DecayIntegrals decayTrigIntegrals(const SegmentFunctions &f,
+                                                       const Moments &m) noexcept {
+  DecayIntegrals r;
+  if (f.x2 < SMALL_EIGENVALUE) {
+    double pw = 1.0;
+    for (std::size_t k = 0; k <= 5; ++k) {
+      r.cosInt += pw * m[2 * k] * INV_FACTORIAL[2 * k];
+      r.sinInt += pw * m[(2 * k) + 1] * INV_FACTORIAL[(2 * k) + 1];
+      pw *= -f.b;
+    }
+  } else {
+    const double oneMinusEC = (-std::expm1(-f.tau) * f.cosX2) + f.oneMinusCosX2;
+    const double den = std::max((f.tau * f.tau) + f.b, SMALL_EIGENVALUE * SMALL_EIGENVALUE);
+    r.cosInt = ((f.tau * oneMinusEC) + (f.x2 * f.e * f.sinX2)) / den;
+    r.sinInt = (oneMinusEC - (f.tau * f.e * (1.0 + f.sincMinusOneX2))) / den;
+  }
+  return r;
+}
+
 /// True where tau >= max(1, 2 x1): the closed forms over tau^2 - x1^2 hold full precision.
 [[nodiscard]] inline bool opticallyThick(const SegmentFunctions &f) noexcept {
   return f.tau >= std::max(1.0, 2.0 * f.x1);
@@ -417,19 +437,9 @@ struct DecayIntegrals {
       pw *= f.a;
     }
   }
-  if (f.x2 < SMALL_EIGENVALUE) {
-    double pw = 1.0;
-    for (std::size_t k = 0; k <= 5; ++k) {
-      r.cosInt += pw * m[2 * k] * INV_FACTORIAL[2 * k];
-      r.sinInt += pw * m[(2 * k) + 1] * INV_FACTORIAL[(2 * k) + 1];
-      pw *= -f.b;
-    }
-  } else {
-    const double oneMinusEC = (-std::expm1(-f.tau) * f.cosX2) + f.oneMinusCosX2;
-    const double den = std::max((f.tau * f.tau) + f.b, SMALL_EIGENVALUE * SMALL_EIGENVALUE);
-    r.cosInt = ((f.tau * oneMinusEC) + (f.x2 * f.e * f.sinX2)) / den;
-    r.sinInt = (oneMinusEC - (f.tau * f.e * (1.0 + f.sincMinusOneX2))) / den;
-  }
+  const DecayIntegrals trig = decayTrigIntegrals(f, m);
+  r.cosInt = trig.cosInt;
+  r.sinInt = trig.sinInt;
   return r;
 }
 
@@ -582,10 +592,19 @@ struct LorentzAxes {
                 .rhoV = sb * p[2]}};
 }
 
-/// Coefficients of f(K') = cP1 P1 - cA A + cP2 P2 - cB B.
+/**
+ * @brief Coefficients of f(K') = cPlus E+ + cMinus E- + cP2 P2 - cB B.
+ *
+ * E+- = (A^2 +- A) / 2 project onto the boost eigenmodes of K' s with
+ * eigenvalues +-x1, where the step decays at the combined rates tau +- x1.
+ * Each mode carries the function of its own combined rate (e^{-(tau +- x1)},
+ * its source integral, or 1 / (tau +- x1)), so gain that cancels a dichroic
+ * eigenvalue (tau + x1 = 0) is a rate-0 mode evaluated exactly, rather than a
+ * difference of cosh and sinh terms of size e^{|tau|}.
+ */
 struct AxisCoeffs {
-  double cP1 = 0.0;
-  double cA = 0.0;
+  double cPlus = 0.0;
+  double cMinus = 0.0;
   double cP2 = 0.0;
   double cB = 0.0;
 };
@@ -598,7 +617,8 @@ struct AxisCoeffs {
   const StokesArray bbv = applyLorentzPart(ax.b, bv);
   StokesArray o{};
   for (std::size_t i = 0; i < o.size(); ++i) {
-    o[i] = (c.cP1 * aav[i]) - (c.cA * av[i]) - (c.cP2 * bbv[i]) - (c.cB * bv[i]);
+    o[i] = (c.cPlus * 0.5 * (aav[i] + av[i])) + (c.cMinus * 0.5 * (aav[i] - av[i])) -
+           (c.cP2 * bbv[i]) - (c.cB * bv[i]);
   }
   return o;
 }
@@ -690,9 +710,9 @@ struct ExpScale {
       axisForm ? detail::lorentzAxes(kp, ev.x1, ev.x2) : detail::LorentzAxes{};
   const double a = ev.x1 * ev.x1;
   const double b = ev.x2 * ev.x2;
-  // e^{-tau} e^{-K's} = e^{-tau} (cosh x1 P1 - sinh x1 A + cos x2 P2 - sin x2 B).
-  const detail::AxisCoeffs homAxes{.cP1 = f.eCoshMinusOne + f.e,
-                                   .cA = ev.x1 * f.eSinhc,
+  // e^{-tau} e^{-K's} = e^{-(tau + x1)} E+ + e^{-(tau - x1)} E- + e^{-tau} (cos x2 P2 - sin x2 B).
+  const detail::AxisCoeffs homAxes{.cPlus = std::exp(-(tau + ev.x1)),
+                                   .cMinus = std::exp(-(tau - ev.x1)),
                                    .cP2 = f.e * f.cosX2,
                                    .cB = f.e * f.sinX2};
   auto homogeneous = [&](const StokesArray &v) {
@@ -713,8 +733,11 @@ struct ExpScale {
     const double qdSafe = (qd > 0.0) ? qd : 1.0;
     StokesArray sInf{};
     if (axisForm) {
-      const detail::AxisCoeffs inv{
-          .cP1 = tau / pSafe, .cA = ev.x1 / pSafe, .cP2 = tau / qdSafe, .cB = ev.x2 / qdSafe};
+      // tau - x1 >= tau / 200 > 0 on this branch (p >= 0.01 tau^2).
+      const detail::AxisCoeffs inv{.cPlus = 1.0 / (tau + ev.x1),
+                                   .cMinus = 1.0 / std::max(tau - ev.x1, 0.005 * tau),
+                                   .cP2 = tau / qdSafe,
+                                   .cB = ev.x2 / qdSafe};
       sInf = detail::applyAxes(inv, axes, emission);
     } else {
       const double w = ((tau * tau) + b - a) / (pSafe * qdSafe);
@@ -743,9 +766,12 @@ struct ExpScale {
     const detail::Moments m = (std::min(ev.x1, ev.x2) < detail::SMALL_EIGENVALUE)
                                   ? detail::decayMoments(tau)
                                   : detail::Moments{};
-    const detail::DecayIntegrals r = detail::decayIntegrals(f, m);
-    const detail::AxisCoeffs src{
-        .cP1 = r.coshInt, .cA = ev.x1 * r.sinhInt, .cP2 = r.cosInt, .cB = ev.x2 * r.sinInt};
+    const detail::DecayIntegrals r = detail::decayTrigIntegrals(f, m);
+    // (1 - e^{-y}) / y at the combined rates y = tau +- x1, exact at y = 0.
+    const detail::AxisCoeffs src{.cPlus = detail::decayIntegral(tau + ev.x1),
+                                 .cMinus = detail::decayIntegral(tau - ev.x1),
+                                 .cP2 = r.cosInt,
+                                 .cB = ev.x2 * r.sinInt};
     srcPart = detail::applyAxes(src, axes, emission);
   } else {
     const detail::CubicCoeffs src = detail::integratedCoeffs(f);

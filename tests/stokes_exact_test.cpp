@@ -6,8 +6,8 @@
  *   1. stokesPropagateExact (direct integral) within 1e-12 relative (vector
  *      2-norm) of the mpmath 5x5 matrix-exponential referee on every row of
  *      tests/stokes_exact_reference.inc: Faraday depth 0.01..1000, optical depth
- *      1e-9..800, gain down to -715 (past exp's overflow), Faraday depth to
- *      1e15 along one axis,
+ *      1e-9..800, gain down to -1420 (past exp's overflow) and gain cancelling
+ *      a dichroic eigenvalue, Faraday depth to 1e15 along one axis,
  *      alpha_U and rho_U nonzero, and the degenerate limits (zero K, pure
  *      Faraday, pure dichroism, eta || rho, w.w = 0, alpha_I = |eta|, scaled
  *      units). Along a general axis the rounded |rho| ds bounds the error at
@@ -116,8 +116,8 @@ StokesArray toArray(const StokesVector &s) {
 }
 
 void testReferenceDirect() {
-  constexpr std::array<std::string_view, 8> groups = {"generic", "aligned",  "thin",    "split",
-                                                      "gain",    "deepgain", "faraday", "limit"};
+  constexpr std::array<std::string_view, 9> groups = {
+      "generic", "aligned", "thin", "split", "gain", "deepgain", "gaincancel", "faraday", "limit"};
   double worstAll = 0.0;
   for (const std::string_view group : groups) {
     double worst = 0.0;
