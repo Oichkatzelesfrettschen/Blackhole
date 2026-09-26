@@ -23,7 +23,7 @@
  *  10.  Thick slab (tau >> 1): I -> j_I/alpha_I; Q -> j_Q_eff/alpha_I.
  *  11.  ds=0 leaves state unchanged.
  *  12.  Starting from zero: I stays >= 0 for j_I >= 0.
- *  13.  Exact formula matches RK4 (stokesStepFull) for simplified K case.
+ *  13.  Exact formula matches RK4 (stokesStepFullRk4) for simplified K case.
  *
  * Path integration:
  *  14.  integrateStokesPath reproduces 5-step sequential stokesStep.
@@ -272,7 +272,7 @@ void testNonNegativeIFromZero() {
 }
 
 void testExactMatchesRK4ForSimplifiedK() {
-  // Test 13: exact stokesStep matches stokesStepFull (RK4) for simplified K
+  // Test 13: exact stokesStep matches stokesStepFullRk4 for simplified K
   // Use moderate parameters where RK4 should agree well
   const StokesVector s0 = {.i = 1.0e-6, .q = 0.3e-6, .u = 0.2e-6, .v = 0.05e-6};
   const StokesEmission em = {.jI = 1.0e-9, .jQ = 0.4e-9, .jU = -0.2e-9, .jV = 0.0};
@@ -290,7 +290,7 @@ void testExactMatchesRK4ForSimplifiedK() {
       .alphaI = alpha, .alphaQ = 0.0, .alphaV = 0.0, .rhoV = rhoV, .rhoQ = 0.0, .dsCm = subDs};
   StokesVector sRK4 = s0;
   for (int k = 0; k < nSub; ++k) {
-    sRK4 = stokesStepFull(sRK4, em, kProp);
+    sRK4 = stokesStepFullRk4(sRK4, em, kProp);
   }
 
   // Should agree to within RK4 truncation error (~(ds/nSub)^4 * nSub ~ (ds)^4 * ds/nSub^3)
