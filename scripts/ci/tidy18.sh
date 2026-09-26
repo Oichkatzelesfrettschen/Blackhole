@@ -2,11 +2,21 @@
 # Run clang-tidy 18 over selected translation units, as the ci-analysis lane
 # does with Ubuntu 24.04's clang-tidy-18 package (LLVM 18.1.3).
 #
-# usage: scripts/ci/tidy18.sh [-p BUILD_DIR] [-o OUT_DIR] FILE...
+# usage: scripts/ci/tidy18.sh [-p BUILD_DIR] [-o OUT_DIR] [-f] FILE...
 #
-#   -p BUILD_DIR  directory holding compile_commands.json (default build/Release)
+#   -p BUILD_DIR  directory holding compile_commands.json (default build/CiLike,
+#                 the GCC 14 tree scripts/ci/ci_replica.sh configures)
 #   -o OUT_DIR    per-file logs (default build/tidy18)
+#   -f            analyze a tree whose configuration differs from the ci preset
 #   FILE          repository-relative source paths, e.g. src/render/env_config.cpp
+#
+# ci-analysis analyzes the ci configuration: SIMD_TIER=SSE2, ENABLE_FAST_MATH
+# and ENABLE_NATIVE_ARCH OFF. Those settings select preprocessor branches (the
+# __AVX2__ paths in src/physics/batch.h and the __FAST_MATH__ guard in
+# src/physics/compensated_rk4.h, for example), so the
+# driver reads BUILD_DIR/CMakeCache.txt and exits 2 when any of them differs,
+# unless -f is given; a local build/Release (native, AUTO SIMD tier) analyzes
+# code the gate never sees and misses code it does.
 #
 # The executable is $CLANG_TIDY when set, otherwise the PyPI wheel pinned at
 # 18.1.1 through `uvx --from clang-tidy==18.1.1 clang-tidy`. PyPI carries no
@@ -23,23 +33,44 @@
 set -eu
 
 root=$(git rev-parse --show-toplevel)
-build_dir=build/Release
+build_dir=build/CiLike
 out_dir=build/tidy18
-while getopts p:o: opt; do
+force=0
+while getopts p:o:f opt; do
   case $opt in
     p) build_dir=$OPTARG ;;
     o) out_dir=$OPTARG ;;
-    *) sed -n '5,10p' "$0" >&2; exit 2 ;;
+    f) force=1 ;;
+    *) sed -n '5,12p' "$0" >&2; exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
-[ "$#" -gt 0 ] || { sed -n '5,10p' "$0" >&2; exit 2; }
+[ "$#" -gt 0 ] || { sed -n '5,12p' "$0" >&2; exit 2; }
 
 cd "$root"
 [ -r "$build_dir/compile_commands.json" ] || {
   echo "tidy18: $build_dir/compile_commands.json is missing; configure that tree first" >&2
+  echo "  (CI_REPLICA_NO_TEST=1 scripts/ci/ci_replica.sh configures build/CiLike)" >&2
   exit 2
 }
+
+# Compare the tree's cache with the ci preset's analysis-relevant settings.
+mismatch=
+for want in SIMD_TIER=SSE2 ENABLE_FAST_MATH=OFF ENABLE_NATIVE_ARCH=OFF; do
+  key=${want%%=*}
+  have=$(sed -n "s/^$key:[A-Z]*=//p" "$build_dir/CMakeCache.txt" 2>/dev/null | head -1)
+  [ "$have" = "${want#*=}" ] || mismatch="$mismatch $key=${have:-unset}"
+done
+if [ -n "$mismatch" ]; then
+  if [ "$force" = 1 ]; then
+    echo "tidy18: warning: $build_dir differs from the ci preset:$mismatch" >&2
+  else
+    echo "tidy18: $build_dir differs from the ci preset:$mismatch" >&2
+    echo "  ci-analysis uses SIMD_TIER=SSE2 ENABLE_FAST_MATH=OFF ENABLE_NATIVE_ARCH=OFF;" >&2
+    echo "  use the ci_replica.sh tree (default -p build/CiLike) or pass -f" >&2
+    exit 2
+  fi
+fi
 
 gxx=${GXX14:-g++-14}
 command -v "$gxx" >/dev/null 2>&1 || { echo "tidy18: $gxx not found" >&2; exit 2; }

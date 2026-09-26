@@ -114,7 +114,8 @@ these separate from the headless campaign analysis, which links no GL.
 
 - **Every change:** the default clang build with `-Werror`, then
   `scripts/ci/ci_replica.sh` (GCC 14, both `ci` and `CI_REPLICA_RELEASE=1`) and
-  `scripts/ci/tidy18.sh` / `scripts/ci/cppcheck_ci.sh` on the changed files.
+  `scripts/ci/tidy18.sh` (over the replica's `build/CiLike`) and
+  `scripts/ci/cppcheck_ci.sh` on the changed files.
 - **Before a merge:** `CI_REPLICA_SANITIZE=1 scripts/ci/ci_replica.sh` for an
   ASan+UBSan `ctest` run.
 - **Periodic:** a gcc build (`-fanalyzer`, gcc warnings), a `scan-build` pass, and

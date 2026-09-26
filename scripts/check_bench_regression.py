@@ -13,6 +13,7 @@ only "results", so the provenance never affects a verdict.
 
 import argparse
 import json
+import math
 import os
 import pathlib
 import platform
@@ -24,6 +25,17 @@ def load_results(path: str | pathlib.Path) -> dict[str, dict]:
     with open(path, encoding="utf-8") as handle:
         payload = json.load(handle)
     return {entry["name"]: entry for entry in payload.get("results", [])}
+
+
+def finite_ms(value: object) -> bool:
+    """True for a finite, non-negative number; json.load yields NaN and
+    Infinity as floats and physics_bench writes null for a non-finite timing."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
 
 
 def host_cpu_model() -> str:
@@ -103,13 +115,16 @@ def main() -> int:
         seen.update(current)
         for name, entry in sorted(current.items()):
             base = baseline.get(name)
-            if not isinstance(entry.get("avg_ms"), (int, float)):
-                # physics_bench writes null for a non-finite timing.
+            if not finite_ms(entry.get("avg_ms")):
                 print(f"INVALID: {name} has no finite avg_ms in {current_file}")
                 failures += 1
                 continue
             if base is None:
                 print(f"NEW: {name} has no baseline entry ({entry['avg_ms']:.3f} ms)")
+                continue
+            if not finite_ms(base.get("avg_ms")) or base["avg_ms"] == 0:
+                print(f"INVALID: {name} has no finite, positive avg_ms in {baseline_path}")
+                failures += 1
                 continue
             ratio = entry["avg_ms"] / base["avg_ms"]
             if ratio > 1.0 + args.threshold:

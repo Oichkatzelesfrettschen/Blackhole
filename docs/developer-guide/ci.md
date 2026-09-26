@@ -240,7 +240,7 @@ non-finite values takes the per-target `-fno-fast-math` override in
 | --- | --- | --- |
 | `scripts/ci/ci_replica.sh [REGEX]` | `ci` build and CTest with GCC 14; `CI_REPLICA_RELEASE=1` for `ci-release`, `CI_REPLICA_SANITIZE=1` for `ci-sanitize` | `gcc-14`, `g++-14`, `bwrap`, Ninja, and `./scripts/conan_install.sh Release build` |
 | `scripts/ci/cppcheck_ci.sh [-b BASE] [FILE...]` | `ci-analysis` cppcheck 2.13.0 over changed `.cpp` files, with each file's CMake `-D`/`-I` flags | Docker or Podman; a configured `build/Release` |
-| `scripts/ci/tidy18.sh [-p DIR] FILE...` | `ci-analysis` clang-tidy 18 (wheel 18.1.1; CI runs 18.1.3) against GCC 14's libstdc++ | `uv` (or `CLANG_TIDY` pointing at a clang-tidy 18 binary), `g++-14`, a compile database |
+| `scripts/ci/tidy18.sh [-p DIR] [-f] FILE...` | `ci-analysis` clang-tidy 18 (wheel 18.1.1; CI runs 18.1.3) against GCC 14's libstdc++, over the `ci` configuration | `uv` (or `CLANG_TIDY` pointing at a clang-tidy 18 binary), `g++-14`, and `build/CiLike` from `ci_replica.sh` |
 
 `ci_replica.sh` copies the local Release generators, replaces the compiler the
 toolchain names with GCC 14, and mounts an empty `/usr/include/glm` through
@@ -254,8 +254,13 @@ Conan cache read-only at their host paths. `tidy18.sh` runs the PyPI
 18.1.1 is the nearest release; its `--list-checks --checks='*'` output is
 identical to the Ubuntu 18.1.3 binary's (537 checks). clang-tidy 18 cannot
 parse the libstdc++ of a newer host GCC, so the script substitutes GCC 14's
-headers for the compile database's standard library. It exits 2 when
-clang-tidy fails on a file without printing a diagnostic. Each script documents its options in its header comment.
+headers for the compile database's standard library. Its default database is
+`build/CiLike`, the GCC 14 tree `ci_replica.sh` configures and exports, because
+`SIMD_TIER`, `ENABLE_FAST_MATH`, and `ENABLE_NATIVE_ARCH` select preprocessor
+branches (the `__AVX2__` paths in `src/physics/batch.h`); a tree whose cache
+differs from the `ci` preset's `SSE2`/`OFF`/`OFF` stops the script with exit 2
+unless `-f` is given. It also exits 2 when clang-tidy fails on a file without
+printing a diagnostic. Each script documents its options in its header comment.
 
 ## Audit baseline
 
