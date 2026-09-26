@@ -448,3 +448,40 @@ TEST(Constellation, DigestCarriesObserverAndSpinDeficit) {
   EXPECT_NE(build(0.0, game::StationKeeping::Orbit), build(0.5, game::StationKeeping::Orbit));
   EXPECT_EQ(build(0.5, game::StationKeeping::Hover), build(0.5, game::StationKeeping::Hover));
 }
+
+// Falsifier: an order addressed to the slot where a fleet was last reported
+// acting on that fleet after it has moved to another system -- reaching it
+// faster than light could -- or the fizzled order staying in flight forever.
+// Chain 0 -(100 ld)- 1 -(5 ld)- 2: the fleet leaves system 1 for system 2, and
+// an intra-system hop addressed to system 1 lands after it has gone.
+TEST(Constellation, OrderToAMovedFleetFizzlesAtItsAddress) {
+  game::ConstellationConfig config;
+  config.secondsPerTurn = K_SECONDS_PER_DAY;
+  config.systems = {microSystem(), microSystem(), microSystem()};
+  config.links = {game::InterSystemLink{.a = 0, .b = 1, .separationCm = 100.0 * K_LIGHT_DAY_CM},
+                  game::InterSystemLink{.a = 1, .b = 2, .separationCm = 5.0 * K_LIGHT_DAY_CM}};
+  config.fleetInitialFuelUnits = 1.0e6;
+  game::Constellation constellation(config);
+  const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  const game::FleetId fleet = constellation.addFleet(alpha, 1, game::FleetCapability::Research, 0);
+  ASSERT_TRUE(constellation.issueCommand(
+      alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 2, .targetBand = 0}));
+  constellation.advanceTurns(130);
+  ASSERT_EQ(constellation.fleets().front().system, 2U); // departed t101, arrived t111
+  ASSERT_EQ(constellation.renderSnapshot().fleets.front().system, 1U); // report still in flight
+  ASSERT_TRUE(constellation.issueCommand(
+      alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 1, .targetBand = 1}));
+  bool everLeftSystem2 = false;
+  for (int turn = 0; turn < 400; ++turn) {
+    constellation.advanceTurn();
+    const game::ConstellationFleet &now = constellation.fleets().front();
+    everLeftSystem2 = everLeftSystem2 || now.inTransit || now.system != 2U;
+  }
+  EXPECT_FALSE(everLeftSystem2);
+  // Both reports and the non-delivery notice are home by now: the authority
+  // sees the fleet in system 2 and can order it again.
+  const game::ConstellationViewSnapshot view = constellation.renderSnapshot();
+  EXPECT_EQ(view.fleets.front().system, 2U);
+  EXPECT_TRUE(constellation.issueCommand(
+      alpha, game::ConstellationCommand{.fleet = fleet, .targetSystem = 2, .targetBand = 1}));
+}

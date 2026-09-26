@@ -166,6 +166,7 @@ private:
     ControlObservation = 2,
     OutcomeNotice = 3, ///< The campaign's decision reaching observerIndex's authority.
     FleetStatus = 4,   ///< A fleet's own state travelling home to observerIndex's authority.
+    OrderUndelivered = 5, ///< An order that found no fleet at its address, reported home.
   };
 
   struct Delivery {
@@ -178,7 +179,8 @@ private:
     SystemId system = K_INVALID_SYSTEM_ID; ///< ControlObservation: which band.
     int bandIndex = 0;
     FactionId controller = K_INVALID_FACTION_ID; ///< ControlObservation: believed holder.
-    std::size_t observerIndex = 0; ///< ControlObservation/OutcomeNotice/FleetStatus: who learns.
+    /// ControlObservation/OutcomeNotice/FleetStatus/OrderUndelivered: who learns.
+    std::size_t observerIndex = 0;
     FleetBelief status;            ///< FleetStatus: the state the fleet reported.
   };
 
@@ -187,6 +189,12 @@ private:
     FactionId faction = K_INVALID_FACTION_ID;
     std::int64_t issueTurn = 0;
     std::int64_t effectTurn = 0;
+    /// Where the order was sent: the fleet's last-reported slot at issue. The
+    /// effect turn is the light time to this address, so the order acts only
+    /// on a fleet still there.
+    SystemId addressedSystem = K_INVALID_SYSTEM_ID;
+    int addressedBand = 0;
+    bool undelivered = false; ///< Its non-delivery notice has reached the authority.
   };
 
   [[nodiscard]] std::size_t factionIndex(FactionId faction) const;
@@ -215,7 +223,10 @@ private:
   [[nodiscard]] double ergoregionDepth(const ConstellationFleet &fleet) const;
 
   void deliverDue();
-  void applyCommand(const LoggedCommand &logged);
+  /** @brief Delivers order `commandIndex` at its address. A fleet still at
+   *         the addressed slot acts and reports; otherwise the order fizzles
+   *         and a non-delivery notice travels home from the address. */
+  void applyCommand(std::uint32_t commandIndex);
   /** @brief The effect of an order the fleet has received: a band hop or an
    *         interstellar departure, each fizzling when unaffordable. */
   void applyReceivedCommand(ConstellationFleet &fleet, const ConstellationCommand &command);

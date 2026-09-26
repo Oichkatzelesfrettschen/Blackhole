@@ -332,6 +332,8 @@ bool Constellation::issueCommand(FactionId faction, const ConstellationCommand &
   logged.faction = faction;
   logged.issueTurn = clock_.turn();
   logged.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+  logged.addressedSystem = known->system;
+  logged.addressedBand = known->bandIndex;
   commandLog_.push_back(logged);
 
   Delivery delivery;
@@ -343,11 +345,25 @@ bool Constellation::issueCommand(FactionId faction, const ConstellationCommand &
   return true;
 }
 
-void Constellation::applyCommand(const LoggedCommand &logged) {
+void Constellation::applyCommand(std::uint32_t commandIndex) {
+  const LoggedCommand &logged = commandLog_.at(commandIndex);
   ConstellationFleet *const fleet = findFleet(logged.command.fleet);
-  if (fleet == nullptr || fleet->inTransit) {
-    // The fleet already left: the order fizzles unheard, and the fleet's
-    // arrival report later tells the authority where it went.
+  if (fleet == nullptr || fleet->inTransit || fleet->system != logged.addressedSystem ||
+      fleet->bandIndex != logged.addressedBand) {
+    // The order reached the slot it was addressed to and the fleet had left:
+    // it fizzles there -- it cannot chase the fleet faster than light -- and
+    // the addressed station's non-delivery notice travels home from there.
+    const double delaySec =
+        reportDelaySec(logged.faction, logged.addressedSystem, logged.addressedBand);
+    if (delaySec >= 0.0) {
+      Delivery notice;
+      notice.kind = DeliveryKind::OrderUndelivered;
+      notice.effectTurn = clock_.turn() + clock_.ceilTurns(delaySec);
+      notice.sequence = nextSequence_++;
+      notice.commandIndex = commandIndex;
+      notice.observerIndex = factionIndex(logged.faction);
+      deliveryQueue_.push_back(notice);
+    }
     return;
   }
   // The fleet answers every order it receives, from where it received it, so
@@ -411,7 +427,7 @@ void Constellation::deliverDue() {
   for (const Delivery &delivery : due) {
     switch (delivery.kind) {
     case DeliveryKind::Command:
-      applyCommand(commandLog_.at(delivery.commandIndex));
+      applyCommand(delivery.commandIndex);
       break;
     case DeliveryKind::YieldReport:
       factions_.at(factionIndex(delivery.faction)).energyUnits += delivery.yieldUnits;
@@ -420,6 +436,9 @@ void Constellation::deliverDue() {
       perceived_.at(delivery.observerIndex)
           .at(delivery.system)
           .at(static_cast<std::size_t>(delivery.bandIndex)) = delivery.controller;
+      break;
+    case DeliveryKind::OrderUndelivered:
+      commandLog_.at(delivery.commandIndex).undelivered = true;
       break;
     case DeliveryKind::OutcomeNotice:
       factions_.at(delivery.observerIndex).outcomeKnown = true;
@@ -699,7 +718,8 @@ void Constellation::evaluateOutcomes() {
 
 bool Constellation::hasCommandInFlight(const FleetBelief &known) const {
   return std::ranges::any_of(commandLog_, [&](const LoggedCommand &logged) {
-    return logged.command.fleet == known.id && logged.effectTurn > known.asOfTurn;
+    return logged.command.fleet == known.id && logged.effectTurn > known.asOfTurn &&
+           !logged.undelivered;
   });
 }
 
@@ -1015,6 +1035,9 @@ std::vector<std::uint8_t> Constellation::serializeState() const {
     appendU32(out, logged.faction);
     appendI64(out, logged.issueTurn);
     appendI64(out, logged.effectTurn);
+    appendU32(out, logged.addressedSystem);
+    appendI64(out, logged.addressedBand);
+    appendU8(out, logged.undelivered ? 1U : 0U);
   }
 
   appendU32(out, static_cast<std::uint32_t>(deliveryQueue_.size()));
