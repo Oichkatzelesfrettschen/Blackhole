@@ -252,8 +252,8 @@ bool readImage(ByteReader &in, SkyImage &image) {
     return false;
   }
   image.connectivityDisagreements = static_cast<std::size_t>(disagreements);
-  constexpr std::size_t maxTexels = std::size_t{1} << 26U;
-  if (image.width * image.height > maxTexels) {
+  if (image.width == 0 || image.height == 0 || image.width > K_MAX_IMAGE_TEXELS ||
+      image.height > K_MAX_IMAGE_TEXELS / image.width) {
     return false;
   }
   image.rgba.assign(image.width * image.height * 4, 0.0F);

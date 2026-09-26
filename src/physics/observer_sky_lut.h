@@ -61,6 +61,10 @@ struct LutStatistics {
   std::uint64_t connectivityDisagreements = 0;
 };
 
+/** @brief Most texels either image of a readable bundle may hold (2^26, a
+ *         1 GiB RGBA32F image); readObserverSkyLut rejects larger ones. */
+inline constexpr std::size_t K_MAX_IMAGE_TEXELS = std::size_t{1} << 26U;
+
 struct ObserverSkyLut {
   ObserverKey key;
   LutDimensions dimensions;
