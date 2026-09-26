@@ -202,6 +202,51 @@ timings in the job summary and retains logs, JUnit output, and CMake failure
 records for 14 days. Compare dependency, compilation, and test times separately;
 cache restoration and scheduling remain visible as GitHub job steps.
 
+## Local replicas of the hosted lanes
+
+A workstation build and a hosted lane disagree for three reasons. The local
+Conan toolchain pins clang (the `release` preset's `compile_commands.json`
+records `/usr/bin/clang++`), while every hosted lane except the clang lanes
+compiles with GCC 14 through `conan/profiles/ci`. The analysis lane runs the
+Ubuntu 24.04 analyzers, clang-tidy 18.1.8 and cppcheck 2.13.0, and host
+analyzers of other versions report a different set: clang-tidy 22 enforces
+checks clang-tidy 18 lacks, such as `readability-math-missing-parentheses` and
+`modernize-use-designated-initializers` in `tests/wiregrid_overlay_test.cpp`,
+and cppcheck 2.21 reports `uninitMemberVarNoCtor` in `src/settings.cpp`, which
+2.13 accepts. A local `release` build with `ENABLE_CLANG_TIDY` and
+`ENABLE_CPPCHECK` on can therefore fail on sources the required lanes pass.
+The CI analyzer versions are the merge gate; findings from newer host
+analyzers are advisory until the lane's pinned versions move.
+
+The fast-math lanes (`ci-release` and `ci-clang-fast-math`) compile with
+`-ffast-math`, under which GCC folds `std::isnan` and `std::isfinite` to
+constants and clang rejects them. Production code classifies infinity and NaN
+through `physics::safeIsfinite`, `safeIsnan`, and `safeIsinf` from
+`src/physics/safe_limits.h`, on a value that reaches memory through a
+reference or an output parameter: clang marks a by-value floating-point return
+`nofpclass(nan inf)` under `-ffinite-math-only`, so a NaN returned by value is
+poison before any check sees it. A test that constructs or classifies
+non-finite values takes the per-target `-fno-fast-math` override in
+`CMakeLists.txt`.
+
+| Script | Reproduces | Needs |
+| --- | --- | --- |
+| `scripts/ci/ci_replica.sh [REGEX]` | `ci` build and CTest with GCC 14; `CI_REPLICA_RELEASE=1` for `ci-release`, `CI_REPLICA_SANITIZE=1` for `ci-sanitize` | `gcc-14`, `g++-14`, `bwrap`, Ninja, and `./scripts/conan_install.sh Release build` |
+| `scripts/ci/cppcheck_ci.sh [-b BASE] [FILE...]` | `ci-analysis` cppcheck 2.13.0 over changed `.cpp` files, with each file's CMake `-D`/`-I` flags | Docker or Podman; a configured `build/Release` |
+| `scripts/ci/tidy18.sh [-p DIR] FILE...` | `ci-analysis` clang-tidy 18.1.8 against GCC 14's libstdc++ | `uv` (or `CLANG_TIDY` pointing at an 18.1.8 binary), `g++-14`, a compile database |
+
+`ci_replica.sh` copies the local Release generators, replaces the compiler the
+toolchain names with GCC 14, and mounts an empty `/usr/include/glm` through
+`bwrap`, since the runner has no system glm; logs land in
+`build/cilike*.log`. It reuses the locally built Conan packages, so it
+reproduces the compiler, flags, and tests of a lane but not the lane's own
+package binaries. `cppcheck_ci.sh` builds its image from
+`scripts/ci/Dockerfile.cppcheck` on first use and mounts the checkout and the
+Conan cache read-only at their host paths. `tidy18.sh` runs the PyPI
+`clang-tidy==18.1.8` wheel through `uvx`, because clang-tidy 18 cannot parse the
+libstdc++ of a newer host GCC; it substitutes GCC 14's headers for the compile
+database's standard library. Each script documents its options in its header comment.
+
 ## Audit baseline
 
 The September 21 audit queried all 64 retained C++ CI runs. Every run reported

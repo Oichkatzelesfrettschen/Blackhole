@@ -9,13 +9,27 @@ This guide maps the maximal tooling to that reality: what is already wired into
 CMake, what to add per compiler, and what complementary tools apply to this
 specific codebase (a deterministic simulation core plus an OpenGL/CUDA renderer).
 
+Hosted CI compiles differently from the workstation. The required lanes build
+with GCC 14 on Ubuntu 24.04 and analyze with clang-tidy 18.1.8 and cppcheck
+2.13.0; advisory lanes add clang 18, fast-math clang 18, and ASan+UBSan. The
+local clang 22 build, clang-tidy 22, and cppcheck 2.21 therefore pass or fail
+different sources than the merge gate does. clang-tidy stays pinned to 18 for
+the gate because the version decides the check set: clang-tidy 22 enforces
+`readability-math-missing-parentheses` and other checks 18 lacks, which fail
+existing tests a green `ci-analysis` accepts. `scripts/ci/ci_replica.sh`,
+`scripts/ci/cppcheck_ci.sh`, and `scripts/ci/tidy18.sh` reproduce the gate's
+compiler and analyzer versions locally; the [CI guide](ci.md#local-replicas-of-the-hosted-lanes)
+documents them, together with the fast-math rule: `ci-release` compiles with
+`-ffast-math`, so code classifies infinity and NaN through `safe_limits.h` and
+tests that construct them take `-fno-fast-math`.
+
 ## Which compiler, and why it matters
 
 | Capability | clang 22 (the build compiler) | gcc 16 (cross-check) |
 | --- | --- | --- |
 | Static analyzer | clang-tidy, `scan-build` (Clang Static Analyzer) | `-fanalyzer` (`ENABLE_GCC_ANALYZER`) |
 | AddressSanitizer / UBSan / TSan | yes (`-fsanitize=address,undefined,thread`) | yes |
-| MemorySanitizer (uninitialised reads) | yes (`-fsanitize=memory`) -- clang only | no |
+| MemorySanitizer (uninitialized reads) | yes (`-fsanitize=memory`) -- clang only | no |
 | libFuzzer | yes (`-fsanitize=fuzzer`) | no (use AFL++ instead) |
 | Warning set | clang `-Weverything` subset | gcc `-Wall -Wextra` catches a different tail |
 
@@ -53,6 +67,11 @@ cmake --preset debug -DENABLE_ASAN=ON -DENABLE_UBSAN=ON
 cmake --build --preset debug
 ctest --test-dir build/Debug -L campaign --output-on-failure
 ```
+
+The advisory `ci-sanitize` lane runs the CPU suite under ASan+UBSan with GCC 14
+on every pull request; `CI_REPLICA_SANITIZE=1 scripts/ci/ci_replica.sh`
+reproduces it locally in `build/CiLikeSanitize`. `ENABLE_UBSAN` compiles with
+`-fno-sanitize-recover=undefined`, so a UBSan report fails the test.
 
 TSan is only meaningful for the threaded surfaces (the GRMHD async tile streamer
 and Taskflow), not the single-threaded campaign core. MSan needs an
@@ -93,8 +112,11 @@ these separate from the headless campaign analysis, which links no GL.
 
 ## Suggested cadence
 
-- **Every change:** the default clang build is `-Werror` + clang-tidy + cppcheck.
-- **Before a merge:** an ASan+UBSan `ctest` run of the affected suite.
+- **Every change:** the default clang build with `-Werror`, then
+  `scripts/ci/ci_replica.sh` (GCC 14, both `ci` and `CI_REPLICA_RELEASE=1`) and
+  `scripts/ci/tidy18.sh` / `scripts/ci/cppcheck_ci.sh` on the changed files.
+- **Before a merge:** `CI_REPLICA_SANITIZE=1 scripts/ci/ci_replica.sh` for an
+  ASan+UBSan `ctest` run.
 - **Periodic:** a gcc build (`-fanalyzer`, gcc warnings), a `scan-build` pass, and
   a `lizard` complexity check.
 - **On a determinism failure:** `rr record`/`replay` on `campaign_sim`.
