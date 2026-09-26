@@ -36,6 +36,7 @@
 #define PHYSICS_THIN_DISK_H
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -220,6 +221,10 @@ struct DiskParams {
  */
 [[nodiscard]] inline double diskFlux(double r, const DiskParams &disk,
                                      const PageThorneProfile &profile) {
+  const double rG = G * disk.mass / C2;
+  // The profile must be the disk's own (diskPageThorneProfile); a profile of
+  // another spin returns that spin's flux shape.
+  assert(profile.spin() == pageThorneSpin(disk.a / rG));
   if (r < disk.rIn || r > disk.rOut) {
     return 0.0;
   }
@@ -227,7 +232,7 @@ struct DiskParams {
   // Leading coefficient
   const double prefactor = (3.0 * G * disk.mass * disk.mDot) / (8.0 * std::numbers::pi * r * r * r);
 
-  const double rM = r / (G * disk.mass / C2);
+  const double rM = r / rG;
   return prefactor * (rM * rM * rM * profile.shape(rM));
 }
 

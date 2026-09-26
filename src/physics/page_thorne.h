@@ -207,7 +207,7 @@ private:
  */
 [[nodiscard]] inline double pageThorneFluxPeakRadius(double aStar) noexcept {
   PageThorneProfile const profile(aStar);
-  double const rIsco = pageThorneIscoRadius(aStar);
+  double const rIsco = profile.iscoRadius();
   double lo = rIsco;
   double hi = 4.0 * rIsco;
   double const invPhi = 0.5 * (std::sqrt(5.0) - 1.0);
