@@ -61,26 +61,29 @@ void sameSystemIntel() {
 }
 
 // Probe 3: interstellar transit proper time versus coordinate time at 0.5c.
+// Accumulates only turns where inTransit is true after the update, since the order-delay
+// turns before departure and the landing turn (landArrivals runs before runFleetWork, so
+// the landing turn's properTimeSec delta is already a band-rate, non-transit day) are not
+// transit time.
 void transitProperTime() {
   game::ConstellationSession session(42);
   game::Constellation &constellation = session.constellation();
   const game::FleetId fleet = constellation.fleets().front().id;
   static_cast<void>(session.movePlayerFleet(fleet, 1, 1));
-  double tauAtDeparture = -1.0;
-  std::int64_t departTurn = 0;
+  double transitProperSec = 0.0;
+  std::int64_t transitTurns = 0;
   for (int turn = 0; turn < 400; ++turn) {
+    const double beforeProperTimeSec = constellation.fleets().front().properTimeSec;
     constellation.advanceTurn();
     const game::ConstellationFleet &current = constellation.fleets().front();
-    if (current.inTransit && tauAtDeparture < 0.0) {
-      tauAtDeparture = current.properTimeSec;
-      departTurn = constellation.turn();
-    }
-    if (!current.inTransit && tauAtDeparture >= 0.0) {
+    if (current.inTransit) {
+      transitProperSec += current.properTimeSec - beforeProperTimeSec;
+      ++transitTurns;
+    } else if (transitTurns > 0) {
       std::printf("probe3: transit %lld coordinate turns, fleet aged %.2f proper days "
                   "(special relativity at 0.5c: %.2f)\n",
-                  static_cast<long long>(constellation.turn() - departTurn),
-                  (current.properTimeSec - tauAtDeparture) / 86400.0,
-                  static_cast<double>(constellation.turn() - departTurn) * 0.8660254);
+                  static_cast<long long>(transitTurns), transitProperSec / 86400.0,
+                  static_cast<double>(transitTurns) * 0.8660254);
       return;
     }
   }

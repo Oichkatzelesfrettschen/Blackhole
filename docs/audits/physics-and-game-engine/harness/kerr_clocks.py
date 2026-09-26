@@ -148,7 +148,7 @@ for r1, r2 in [(mpf(100), mpf(400)), (mpf(20), mpf(400)), (mpf(6), mpf(400))]:
     chord = (r1 + r2) * m87_s / DAY
     print(f"radial {fmt(r1,4)}->{fmt(r2,4)}: {fmt(rad,5)} d ; antipodal flat chord >= {fmt(chord,5)} d")
 for r in [mpf(6), mpf(20), mpf(100)]:
-    print(f"same band r={fmt(r,4)}M antipodal half-circumference {fmt(pi*r*m87_s/DAY,5)} d (code: 0)")
+    print(f"same band r={fmt(r,4)}M antipodal flat chord >= {fmt(2*r*m87_s/DAY,5)} d (code: 0)")
 
 print("\n== Transit at 0.5c: proper time per coordinate turn ==")
 beta = mpf("0.5")

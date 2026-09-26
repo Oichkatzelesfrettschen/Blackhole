@@ -42,8 +42,9 @@ quantitative consequences (shadow widths, ray counts) rest on that agent's scrat
    `sqrt(max(R, 0))`, so r stops changing once a step overshoots. The reporting agent finds
    every deflected equatorial ray ending at max-steps. The fix is the second-order form
    d^2r/dlambda^2 = R'(r)/2 (gr_core `kerr.rs` uses it with u = 1/r and DOPRI5). Measured in
-   scratch on the CPU tracer: the stalled b = 1.001 b_c ray turns at r = 1.58524 and
-   escapes, at 91 ns/step against 145 ns/step.
+   scratch on the CPU tracer with `phi` and `t` evolved on both sides for equal per-step
+   work: the stalled b = 1.001 b_c ray turns at r = 1.58524 and escapes, at a median 128
+   ns/step against 173 ns/step for first-order over 23 pinned trials.
 3. **The image shows spin -a** (01 F3). The tracer integrates the future-directed ray the
    camera would emit instead of the past-directed photon arriving along -dir. Time reversal
    t -> -t maps Kerr with spin a to Kerr with spin -a, so tracing the emitted ray images the
@@ -116,7 +117,9 @@ both, each measured in 02 or 05:
 - **Second-order Mino stepping with u = 1/r** (gr_core `kerr.rs`). Integrating
   d^2r/dlambda^2 = R'(r)/2 instead of dr/dlambda = +-sqrt(R) carries rays through turning
   points with no sign bookkeeping, and u = 1/r compresses the far field so fewer steps
-  reach the sky. It fixes P0 item 2 and ran 1.6x faster per step (91 vs 145 ns).
+  reach the sky. It fixes P0 item 2 and, with `phi` and `t` evolved on both sides for
+  equal per-step work, runs about 1.35x faster per step (median 128 vs 173 ns over 23
+  pinned trials).
 - **Additive null-norm projection** (gr_core `energy_conserving.rs:242-280`). Rescaling
   only the spatial momentum to restore g(k, k) = 0 holds the norm at 3.6e-15 for 11%
   per-step cost, and it lets the integrator take longer steps without drifting off the

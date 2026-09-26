@@ -263,7 +263,9 @@ changes with `-march=native` through FMA contraction.
 
 - Location: `src/game/constellation.cpp:338-341`.
 - OBSERVED. A 40 light-day hop at 0.5c occupies 80 turns; the fleet ages
-  79.82 proper days. Special relativity gives `80 * sqrt(1 - 0.25) = 69.28`.
+  exactly 80.00 proper days, one full coordinate day per transit turn with
+  no relativistic correction at all. Special relativity gives
+  `80 * sqrt(1 - 0.25) = 69.28`.
 - Consequence: the twin paradox, the simplest time-dilation mechanic a
   Stellaris layer could use, is absent; fleets gain no proper-time saving
   from speed.
@@ -278,11 +280,12 @@ changes with `-march=native` through FMA contraction.
   `src/game/campaign.cpp:346-370` applies band-local effects instantly to
   the whole ring.
 - OBSERVED (numbers) plus INFERRED (gameplay weight). At M87 scale
-  (`GM/c^3 = 0.3706 d`) the half-circumference of the 50 r_s band is 116.4
-  light-days, which the code treats as 0; authority-to-band at 100 M is
-  112.2 d radially against at least 185.3 d for an antipodal station
-  (section 5). Stations on different orbits also change separation every
-  orbit, so real delay is time-dependent (conjunction and opposition).
+  (`GM/c^3 = 0.3706 d`) the delay across the 50 r_s band (100 M, antipodal)
+  is at least the flat chord, 74.1 light-days, which the code treats as 0;
+  authority-to-band at 100 M is 112.2 d radially against at least 185.3 d
+  for an antipodal station (section 5). Stations on different orbits also
+  change separation every orbit, so real delay is time-dependent
+  (conjunction and opposition).
 - Fix: give each station an azimuth and an orbital phase; delay = radial
   closed form plus a flat-chord-plus-Shapiro correction, quantized per turn.
 
@@ -409,13 +412,23 @@ digits. The model is the problem, not the arithmetic.
 | Authority 400 M -> band 100 M, antipodal | 112.2 d | at least 185.3 d (flat chord) |
 | Authority -> band 20 M, antipodal | 143.1 d | at least 155.6 d |
 | Authority -> band 6 M, antipodal | 149.4 d | at least 150.5 d |
-| Two stations on band 100 M, antipodal | 0 | 116.4 d |
-| Two stations on band 6 M, antipodal | 0 | 7.0 d |
+| Two stations on band 100 M, antipodal | 0 | at least 74.1 d (flat chord) |
+| Two stations on band 6 M, antipodal | 0 | at least 4.45 d (flat chord) |
 
-Deep-to-far links stay within 1%; same-band and outer-band pairs err by
-weeks to months at M87 scale, while band-local effects and co-location
-control act instantly across the whole ring. Orbiting stations make delay
-periodic -- communication windows the radial model cannot produce.
+The two same-band rows use the flat-space chord 2r, the straight-line separation between
+antipodal points on one circle, as the geometry floor. The orbital half-circumference
+`pi * r` (116.4 d at 100 M, 7.0 d at 6 M) is the path length along the ring, and light is not
+confined to the ring, so it is not a lower bound: the chord is shorter, and a curved-space
+geodesic between the same two points takes at least as long as the flat-space chord. A
+null-geodesic calculation through the curved metric is needed for the true, tighter delay.
+
+The floor sits under 1% above the code at the deepest antipodal band (6 M: 149.4 d code
+against at least 150.5 d), so the floor alone does not establish an error there; the gap
+grows to about 9% at 20 M and about 65% at 100 M, and the code returns exactly 0 for every
+same-band pair against floors of at least 4.45 d (6 M) and 74.1 d (100 M). Band-local
+effects and co-location control act instantly across the whole ring regardless of any of
+this. Orbiting stations make delay periodic -- communication windows the radial model
+cannot produce.
 
 ## 6. Gap map against the vision
 

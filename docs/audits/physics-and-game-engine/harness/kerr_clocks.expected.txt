@@ -40,9 +40,9 @@ GM/c^3 = 0.37056 d ; authority 400M radius = 148.23 light-days ; link 40 light-d
 radial 100.0->400.0: 112.21 d ; antipodal flat chord >= 185.28 d
 radial 20.0->400.0: 143.11 d ; antipodal flat chord >= 155.64 d
 radial 6.0->400.0: 149.41 d ; antipodal flat chord >= 150.45 d
-same band r=6.0M antipodal half-circumference 6.985 d (code: 0)
-same band r=20.0M antipodal half-circumference 23.283 d (code: 0)
-same band r=100.0M antipodal half-circumference 116.42 d (code: 0)
+same band r=6.0M antipodal flat chord >= 4.4468 d (code: 0)
+same band r=20.0M antipodal flat chord >= 14.823 d (code: 0)
+same band r=100.0M antipodal flat chord >= 74.113 d (code: 0)
 
 == Transit at 0.5c: proper time per coordinate turn ==
 dtau/dt = 0.866025 ; 40 ld at 0.5c = 80 coordinate d -> 69.282 proper d (code books 80)

@@ -244,8 +244,16 @@ multiplies into disk density. It is ranked first because it has the widest reach
   - b = 1.0001 b_c: the first-order form stalls at 1.56615, while the second-order form
     escapes.
   - b = 0.999 b_c (captured): both agree to 1e-5.
-  - Cost: second-order 91 ns/step against 145 ns/step for first-order. The first-order
-    count includes the extra potential evaluation that the sign rule needs.
+  - Cost: the second-order form evolves `phi` and `t` with the same RHS `kerrStepMino`
+    uses, so both forms carry equal per-step work. Over 23 pinned trials (`taskset -c 3`)
+    on a shared host (individual trials ranged 164-192 ns/step for first-order and
+    120-177 ns/step for second-order), the second-order form's median is 128 ns/step
+    against 173 ns/step for first-order, a ratio near 1.35x. A prior session measured
+    145 ns/step for this same, unchanged first-order code, against 173 ns/step here, so
+    absolute ns/step figures do not carry across sessions and the gr_core rows in the
+    table below (from that prior session) are not comparable to these two in absolute
+    terms; the ratio between the two Blackhole rows is the number that survives host
+    variation.
 - **Mechanism:** once a step lands where R < 0, every RK4 stage clamps dr/dlambda to 0, so
   the state cannot leave, and the ray ends as MaxSteps (`raytracer.h:371`).
 - **gr_core:** `kerr.rs:172-270` uses the second-order form (`d^2 r/dlambda^2 = R'/2`)
@@ -419,14 +427,20 @@ All of the following matched the referee (M=1):
 
 ## Integrator measurement (accuracy and cost on one hard ray)
 
-Test ray: a=0.9 equatorial, b = 1.001 b_c (b_c = 2.84442), starting at r=50.
+Test ray: a=0.9 equatorial, b = 1.001 b_c (b_c = 2.84442), starting at r=50. The second-order
+form evolves `phi` and `t` with `kerrStepMino`'s own RHS, so the `ns/step` column carries
+equal per-step work on the two Blackhole rows; each of their figures is a median over 23
+pinned trials (`taskset -c 3`) on a shared host. That same, unchanged first-order code read
+145 ns/step in the session that produced the gr_core rows below, against 173 ns/step here,
+so absolute ns/step does not carry across sessions; the Blackhole ratio (about 1.35x) is the
+number that survives host variation.
 
 | Integrator | Turns and escapes | Relative drift of E and L | max null norm | ns/step |
 |---|---|---|---|---|
-| Blackhole `kerrStepMino` + `raytracer.h` sign rule, dlambda=1e-5 | no (stalls at 1.58524) | n/a (E, L are inputs) | n/a | 145 |
-| Second-order Mino from Blackhole `kerrPotentials`, dlambda=1e-5 | yes (386,754 steps) | inputs | n/a | 91 |
-| gr_core `rk4_geodesic_step`, affine h=0.01 | yes (11,708 steps) | 1.7e-13 / 2.1e-13 | 1.5e-10 | 326 |
-| gr_core `energy_conserving_step` | yes (11,708 steps) | 1.7e-13 / 2.0e-13 | 3.6e-15 | 362 |
+| Blackhole `kerrStepMino` + `raytracer.h` sign rule, dlambda=1e-5 | no (stalls at 1.58524) | n/a (E, L are inputs) | n/a | 173 (median of 23) |
+| Second-order Mino from Blackhole `kerrPotentials`, dlambda=1e-5 | yes (386,754 steps) | inputs | n/a | 128 (median of 23) |
+| gr_core `rk4_geodesic_step`, affine h=0.01 | yes (11,708 steps) | 1.7e-13 / 2.1e-13 | 1.5e-10 | 326 (separate session) |
+| gr_core `energy_conserving_step` | yes (11,708 steps) | 1.7e-13 / 2.0e-13 | 3.6e-15 | 362 (separate session) |
 
 The nanoseconds per step compare different languages and step parameters. The second-order
 Mino row is the only same-code comparison.
@@ -517,7 +531,8 @@ Licensing:
    - Carter's null Theta and its derivative replace `kerr.cpp:91-94` first (F8, PR #27);
      the second-order form inherits whatever `dThetadtheta` returns.
    - Falsifier: the b = 1.001 b_c ray turns at r = 1.58524 and escapes.
-   - Measured: 91 ns/step, down from 145 ns/step.
+   - Measured (equal per-step work, phi and t evolved on both sides): median 128 ns/step
+     against 173 ns/step for first-order, over 23 pinned trials.
 4. **Port gr_core's additive null-norm correction (fixes F7).**
    - This is the one direct port: `energy_conserving.rs:242-280` into
      `verified/energy_conserving_geodesic.hpp:228-240` and its GLSL copy.

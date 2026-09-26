@@ -29,8 +29,10 @@ Three defects compound in `kerrStep`/`d_kerr_step`:
 At `a = 0` the same code switches to a correct Schwarzschild RK4 tracer, so the rendered
 shadow width drops by 32% between `a = 0` and `a = 0.01`.
 
-The default desktop path is a separate beauty tracer that handles only Schwarzschild. Its
-spin slider changes artistic tinting and nothing else. No render path applies a relativistic
+The default desktop path is a separate beauty tracer that handles only Schwarzschild: the
+geodesic geometry there is fixed at every spin value, and the spin slider (F4) reaches only
+spin-dependent artistic shading -- disk Doppler boost, disk and photon-ring anisotropy,
+escaped-sky sector shaping, and the wiregrid overlay. No render path applies a relativistic
 disk transfer function (a `g`-factor). The "Novikov-Thorne" profile in every render path is
 the Newtonian Shakura-Sunyaev profile. The "complete" RTE, Stokes, and Fe K-alpha claims
 describe formula-level code. Their tests check analytic flat-slab limits or qualitative
@@ -240,8 +242,9 @@ Observed at launch (`Blackhole`, `BlackholeGLSL`):
   and enters the F1-F3 Kerr path whenever spin is nonzero.
 
 Why it matters: what a user sees at launch has no stated error bound. Moving the spin slider
-in the default path changes color and nothing geometric, while moving it in the compute or
-CUDA paths shrinks the shadow by 32%.
+in the default path leaves the geodesic geometry fixed and reaches only the spin-dependent
+shading listed above, while moving it in the compute or CUDA paths shrinks the shadow by
+32%.
 
 Fix: issue #15's typed renderer/model selection, with the legacy path labeled "artistic".
 Promote a Kerr reference path only after F1-F3 and issue #16's scene A/C gates pass.
@@ -406,8 +409,9 @@ Sites: `shader/include/interop_raygen.glsl:10-17` and `kerr.glsl:104-106`.
 Observed: the pixel direction is a Euclidean unit vector. Its coordinate-basis components
 `k^r = dir.e_r` and `k^phi = dir.e_phi/(r sin theta)` enter the metric with no `sqrt(g_rr)`
 or ZAMO/FIDO normalization. The same pixel therefore maps to different angles in the a = 0
-Binet path and the Kerr path. At r = 15 M, a = 0.01, the physical half-width is 0.366
-against 0.369 on the Binet path, while the static-observer exact value is 0.341.
+Binet path and the Kerr path. At r = 15 M, a = 0.01, the same-camera (Euclidean,
+non-tetrad) coordinate half-width is 0.366 against 0.369 on the Binet path, while the
+physical, static-observer reference is 0.3407.
 
 Fix: build the FIDO/ZAMO tetrad at the camera and apply camera-velocity aberration, as in
 James et al. 2015, Appendix A.1 (arXiv:1502.03808).

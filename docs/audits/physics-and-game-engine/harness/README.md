@@ -82,7 +82,7 @@ Report 02 drivers:
 
     (mkdir -p "$OUT/bh" && cd "$OUT/bh" &&
      clang++ -std=c++23 -O2 -I"$BH/src" -I"$BOOST" -I"$GLM" "$HARNESS/bh/driver.cpp" "$BH/src/physics/kerr.cpp" "$BH/src/physics/schwarzschild.cpp" -o driver && ./driver &&
-     clang++ -std=c++23 -O2 -DDL=1e-5 -I"$BH/src" "$HARNESS/bh/mino2.cpp" "$BH/src/physics/kerr.cpp" -o mino2 && ./mino2 &&
+     clang++ -std=c++23 -O2 -DDL=1e-5 -I"$BH/src" "$HARNESS/bh/mino2.cpp" "$BH/src/physics/kerr.cpp" -o mino2 && taskset -c 3 ./mino2 &&
      clang++ -std=c++23 -O2 -I"$BH/src" "$HARNESS/bh/gfac.cpp" -o gfac && ./gfac &&
      clang++ -std=c++23 -O2 -I"$BH/src" "$HARNESS/bh/ecg.cpp" -o ecg && ./ecg)
     (cp "$OG/Cargo.lock" "$HARNESS/grx/Cargo.lock" && cd "$OUT" &&
