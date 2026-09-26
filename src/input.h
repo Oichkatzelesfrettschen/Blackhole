@@ -7,6 +7,7 @@
 #define INPUT_H
 
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <string>
@@ -42,6 +43,27 @@ enum class KeyAction {
   DecreaseTimeScale,
   COUNT
 };
+
+/// Distance range of the interactive camera in scene units (r_s = 2): from
+/// just outside a Schwarzschild horizon to 500 r_s, beyond the disk's
+/// 100 r_s outer edge.
+inline constexpr float K_CAMERA_MIN_DISTANCE = 0.5f;
+inline constexpr float K_CAMERA_MAX_DISTANCE = 1000.0f;
+
+/// Camera distance at which the keyboard, scroll, and gamepad zoom rates are
+/// specified.
+inline constexpr float K_ZOOM_RATE_REFERENCE_DISTANCE = 15.0f;
+
+/**
+ * @brief Factor on every zoom rate at camera distance d.
+ *
+ * d / K_ZOOM_RATE_REFERENCE_DISTANCE: a zoom input moves the camera by the
+ * same fraction of its distance near the horizon and from outside the disk,
+ * and by its specified rate at the reference distance.
+ */
+[[nodiscard]] inline float zoomRateScale(float distance) {
+  return std::max(distance, K_CAMERA_MIN_DISTANCE) / K_ZOOM_RATE_REFERENCE_DISTANCE;
+}
 
 /** @brief Camera positioning modes selectable in the UI and the compare presets. */
 enum class CameraMode { Input = 0, Front, Top, Orbit };

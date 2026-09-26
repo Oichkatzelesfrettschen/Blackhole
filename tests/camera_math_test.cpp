@@ -7,7 +7,8 @@
  * blackhole_testcore library to construct RenderState without the app
  * executables. They assert the spherical placement identities, the orthonormal
  * basis (including the world-up degeneracy fallback and roll), and each
- * CameraMode branch plus the mode/orbit clamps.
+ * CameraMode branch plus the mode/orbit clamps, and the distance scaling of the
+ * zoom rates.
  */
 
 #include <cmath>
@@ -138,4 +139,14 @@ TEST(CameraMath, SelectClampsFields) {
   EXPECT_FLOAT_EQ(rs.camera.orbitSpeed, 0.0f);
   // Orbit at speed 0, radius 2: angle 0 -> position (-2, 0, 0).
   expectVecNear(pos, glm::vec3(-2.0f, 0.0f, 0.0f));
+}
+
+// Zoom rates scale with distance: unchanged at the reference distance,
+// proportional beyond it, and floored at the minimum camera distance.
+TEST(CameraMath, ZoomRateScalesWithDistance) {
+  EXPECT_FLOAT_EQ(zoomRateScale(K_ZOOM_RATE_REFERENCE_DISTANCE), 1.0f);
+  EXPECT_FLOAT_EQ(zoomRateScale(240.0f), 16.0f);
+  EXPECT_FLOAT_EQ(zoomRateScale(0.0f), K_CAMERA_MIN_DISTANCE / K_ZOOM_RATE_REFERENCE_DISTANCE);
+  // The distance range reaches past the disk's 100 r_s = 200 unit outer edge.
+  EXPECT_GT(K_CAMERA_MAX_DISTANCE, 200.0f);
 }
