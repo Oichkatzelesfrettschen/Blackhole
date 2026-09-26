@@ -35,10 +35,10 @@ constexpr double K_FILM_RENDER_SPIN = 0.6;
 
 void renderObserverControls(RenderState::ObserverViewGroup &view) {
   ImGui::SeparatorText("Observer");
-  const double epsilonMin = 1.0e-15;
-  const double epsilonMax = 1.0;
+  const double epsilonMin = blackhole::K_OBSERVER_EPSILON_MIN;
+  const double epsilonMax = blackhole::K_OBSERVER_EPSILON_MAX;
   ImGui::SliderScalar("1 - a", ImGuiDataType_Double, &view.epsilon, &epsilonMin, &epsilonMax,
-                      "%.3e", ImGuiSliderFlags_Logarithmic);
+                      "%.3e", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
   if (ImGui::Button("Gargantua canon (1 - a = 1.33e-14, prograde ISCO)")) {
     view.epsilon = blackhole::K_GARGANTUA_SPIN_DEFICIT;
     view.atIsco = true;
@@ -53,25 +53,26 @@ void renderObserverControls(RenderState::ObserverViewGroup &view) {
   }
   ImGui::Checkbox("At the ISCO", &view.atIsco);
   if (!view.atIsco) {
-    const double xMin = 1.0e-8;
-    const double xMax = 1.0e3;
+    const double xMin = blackhole::K_OBSERVER_X_MIN;
+    const double xMax = blackhole::K_OBSERVER_X_MAX;
     ImGui::SliderScalar("r - 1 (M)", ImGuiDataType_Double, &view.x, &xMin, &xMax, "%.6e",
-                        ImGuiSliderFlags_Logarithmic);
+                        ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
   } else {
     ImGui::Text("r - 1 = %.6e M", view.x);
   }
-  const double massMin = 1.0;
-  const double massMax = 1.0e11;
+  const double massMin = blackhole::K_OBSERVER_MASS_MIN;
+  const double massMax = blackhole::K_OBSERVER_MASS_MAX;
   ImGui::SliderScalar("Mass (M_sun)", ImGuiDataType_Double, &view.massSolar, &massMin, &massMax,
-                      "%.3e", ImGuiSliderFlags_Logarithmic);
+                      "%.3e", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
 }
 
 void renderClockControls(RenderState::ObserverViewGroup &view) {
   ImGui::SeparatorText("Clock");
-  const double scaleMin = 1.0e-6;
-  const double scaleMax = 10.0;
+  const double scaleMin = blackhole::K_OBSERVER_TIME_SCALE_MIN;
+  const double scaleMax = blackhole::K_OBSERVER_TIME_SCALE_MAX;
   ImGui::SliderScalar("Sky time scale", ImGuiDataType_Double, &view.skyTimeScale, &scaleMin,
-                      &scaleMax, "%.1e", ImGuiSliderFlags_Logarithmic);
+                      &scaleMax, "%.1e",
+                      ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
   ImGui::TextDisabled("observer seconds per wall second; 1 = the observer's real time");
   if (ImGui::Button("1e-3 (default)")) {
     view.skyTimeScale = 1.0e-3;

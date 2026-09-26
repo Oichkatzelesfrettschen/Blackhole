@@ -57,6 +57,18 @@ inline constexpr double K_SOLAR_TIME_SECONDS = 4.925490947641267e-6;
 inline constexpr double K_OBSERVER_FOV_MIN_DEG = 0.01;
 inline constexpr double K_OBSERVER_FOV_MAX_DEG = 170.0;
 
+/** @brief Ranges the observer panel's sliders and the BLACKHOLE_OBSERVER_*
+ *         variables share. Mass and the time scale stay positive, so
+ *         secondsPerM and the clock step are never zero or negative. */
+inline constexpr double K_OBSERVER_EPSILON_MIN = 1.0e-15; ///< 1 - a.
+inline constexpr double K_OBSERVER_EPSILON_MAX = 1.0;
+inline constexpr double K_OBSERVER_X_MIN = 1.0e-8; ///< r - 1 (M).
+inline constexpr double K_OBSERVER_X_MAX = 1.0e3;
+inline constexpr double K_OBSERVER_MASS_MIN = 1.0; ///< M_sun.
+inline constexpr double K_OBSERVER_MASS_MAX = 1.0e11;
+inline constexpr double K_OBSERVER_TIME_SCALE_MIN = 1.0e-6; ///< Observer s per wall s.
+inline constexpr double K_OBSERVER_TIME_SCALE_MAX = 10.0;
+
 /** @brief The observer key for a kind at (epsilon, x), or nothing where that
  *         observer is not timelike there. */
 [[nodiscard]] std::optional<physics::observer_sky::ObserverKey>

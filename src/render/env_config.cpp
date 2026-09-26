@@ -295,8 +295,19 @@ std::optional<double> environmentDouble(const char *name) {
   }
   char *end = nullptr;
   const double parsed = std::strtod(value, &end);
-  if (end == value || !physics::safeIsfinite(parsed)) {
+  if (end == value || *end != '\0' || !physics::safeIsfinite(parsed)) {
     std::cerr << name << "='" << value << "' is not a number; ignored\n";
+    return std::nullopt;
+  }
+  return parsed;
+}
+
+/** @brief environmentDouble inside [low, high] (the matching panel slider's
+ *         range), or nothing. */
+std::optional<double> environmentDoubleIn(const char *name, double low, double high) {
+  const std::optional<double> parsed = environmentDouble(name);
+  if (parsed && (*parsed < low || *parsed > high)) {
+    std::cerr << name << "=" << *parsed << " is outside [" << low << ", " << high << "]; ignored\n";
     return std::nullopt;
   }
   return parsed;
@@ -317,11 +328,14 @@ void applyObserverEnvironment(RenderState &rs) {
     return;
   }
   view.envApplied = true;
-  view.epsilon = environmentDouble("BLACKHOLE_OBSERVER_EPSILON").value_or(view.epsilon);
+  view.epsilon = environmentDoubleIn("BLACKHOLE_OBSERVER_EPSILON", K_OBSERVER_EPSILON_MIN,
+                                     K_OBSERVER_EPSILON_MAX)
+                     .value_or(view.epsilon);
   if (const char *xEnv = std::getenv("BLACKHOLE_OBSERVER_X")) {
     if (std::string_view(xEnv) == "isco") {
       view.atIsco = true;
-    } else if (const auto x = environmentDouble("BLACKHOLE_OBSERVER_X")) {
+    } else if (const auto x = environmentDoubleIn("BLACKHOLE_OBSERVER_X", K_OBSERVER_X_MIN,
+                                                  K_OBSERVER_X_MAX)) {
       view.atIsco = false;
       view.x = *x;
     }
@@ -341,12 +355,17 @@ void applyObserverEnvironment(RenderState &rs) {
                 << "' is not prograde, retrograde, zamo, or static\n";
     }
   }
-  view.massSolar = environmentDouble("BLACKHOLE_OBSERVER_MASS").value_or(view.massSolar);
-  view.skyTimeScale =
-      environmentDouble("BLACKHOLE_OBSERVER_TIME_SCALE").value_or(view.skyTimeScale);
+  view.massSolar =
+      environmentDoubleIn("BLACKHOLE_OBSERVER_MASS", K_OBSERVER_MASS_MIN, K_OBSERVER_MASS_MAX)
+          .value_or(view.massSolar);
+  view.skyTimeScale = environmentDoubleIn("BLACKHOLE_OBSERVER_TIME_SCALE",
+                                          K_OBSERVER_TIME_SCALE_MIN, K_OBSERVER_TIME_SCALE_MAX)
+                          .value_or(view.skyTimeScale);
   view.properSeconds =
       environmentDouble("BLACKHOLE_OBSERVER_PROPER_SECONDS").value_or(view.properSeconds);
-  view.fovDeg = environmentDouble("BLACKHOLE_OBSERVER_FOV").value_or(view.fovDeg);
+  view.fovDeg =
+      environmentDoubleIn("BLACKHOLE_OBSERVER_FOV", K_OBSERVER_FOV_MIN_DEG, K_OBSERVER_FOV_MAX_DEG)
+          .value_or(view.fovDeg);
   if (const char *rangeEnv = std::getenv("BLACKHOLE_OBSERVER_LUMINANCE_RANGE")) {
     const auto range = parseNumberPair(rangeEnv);
     if (range && range->first < range->second) {
