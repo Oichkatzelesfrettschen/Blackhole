@@ -217,16 +217,26 @@ glm::mat4 tesseractView(const glm::mat3 &cameraBasis, const glm::vec3 &focusDire
                         float viewDistance);
 
 /**
+ * @brief Advance the tesseract orientation and pulse for this frame.
+ *
+ * Interactive frames (@p record empty) advance the stored orientation by
+ * advanceOrientation over ds = rotationSpeed * deltaSeconds and the pulse by
+ * advancePulseTravel over pulseSpeed * deltaSeconds while
+ * rs.tesseract.animate holds. @p deltaSeconds is the simulation step, the
+ * caller's InputManager::getEffectiveDeltaTime, so pause holds the scene and
+ * the time scale speeds or slows it; it is clamped to 0.25 s per frame.
+ * Recorded frames take the state from tesseractMotionAt at the output frame
+ * time (time 0 while animation is off), so render throughput and warm-up
+ * never reach the frames. Also clamps the library-time sliders into range.
+ */
+void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
+                            const std::optional<TesseractRecordFrame> &record);
+
+/**
  * @brief Render the tesseract scene for this frame into rs.targets.texBlackhole.
  *
- * Interactive frames (@p record empty) advance the stored
- * orientation by advanceOrientation over ds = rotationSpeed * deltaSeconds and
- * the pulse by advancePulseTravel over pulseSpeed * deltaSeconds while
- * rs.tesseract.animate holds; deltaSeconds is clamped to 0.25 s per frame.
- * Recorded frames pass the output frame time and take the state from
- * tesseractMotionAt at that time (time 0 while animation is off), so render
- * throughput and warm-up never reach the frames. The view comes from
- * tesseractViewProjection with the tesseractFraming of @p record's camera.
+ * Advances the motion by advanceTesseractMotion, then draws with the view of
+ * tesseractViewProjection and the tesseractFraming of @p record's camera.
  */
 void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
                           const glm::vec3 &focusDirection, float deltaSeconds,

@@ -351,9 +351,8 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 
   return projection * view;
 }
 
-void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
-                          const glm::vec3 &focusDirection, float deltaSeconds,
-                          const std::optional<TesseractRecordFrame> &record) {
+void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
+                            const std::optional<TesseractRecordFrame> &record) {
   auto &tg = rs.tesseract;
   tg.timeSpan = std::max(tg.timeSpan, 0.5f);
   tg.litMoment = std::clamp(tg.litMoment, 0.0f, tg.timeSpan);
@@ -386,6 +385,13 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
                                                        static_cast<double>(tg.rotationSpeed));
     tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed, pulseSpan);
   }
+}
+
+void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
+                          const glm::vec3 &focusDirection, float deltaSeconds,
+                          const std::optional<TesseractRecordFrame> &record) {
+  advanceTesseractMotion(rs, deltaSeconds, record);
+  auto &tg = rs.tesseract;
   const tesseract::Mat4<double> rotation = tesseract::so4FromPair(tg.orientation);
 
   const float aspect = static_cast<float>(std::max(rs.targets.renderWidth, 1)) /

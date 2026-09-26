@@ -1201,7 +1201,10 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.begin();
     }
-    renderTesseractScene(rs, frameCamera.basis, frameCamera.focusDirection, deltaTime, record);
+    // Interactive frames step by the effective delta, which pause and the
+    // time scale govern as they do the black-hole orbit clock.
+    renderTesseractScene(rs, frameCamera.basis, frameCamera.focusDirection,
+                         input.getEffectiveDeltaTime(deltaTime), record);
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.end();
     }
