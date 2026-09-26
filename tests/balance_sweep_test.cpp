@@ -16,6 +16,9 @@
  * cadence 30, the cadence campaign_balance_invariant_test pins. At 29 solo
  * wins at t1200; from 26 to 29 pod loses and every other line wins; at 1..25
  * every line wins, and the stabilization line clears first at every cadence.
+ * The constellation grid is flat along player cadence by construction: each
+ * scripted line's goal is fixed from turn 0 and a re-stated goal is refused
+ * as a no-op, so cadence changes nothing there.
  */
 
 #include <gtest/gtest.h>

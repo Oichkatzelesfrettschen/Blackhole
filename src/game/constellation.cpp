@@ -1019,8 +1019,10 @@ std::vector<ConstellationCommand> Constellation::policyOrders(const FactionState
 
 void Constellation::stepFactionAI() {
   for (const FactionState &faction : factions_) {
-    if (faction.policy == FactionPolicy::Scripted || faction.status != CampaignStatus::Ongoing ||
-        faction.outcomeKnown) {
+    // The referee's status is not the faction's knowledge: an AI keeps
+    // planning until the decision reaches its authority, and issueCommand
+    // refuses its orders from then on.
+    if (faction.policy == FactionPolicy::Scripted || faction.outcomeKnown) {
       continue;
     }
     const std::vector<ConstellationCommand> orders = policyOrders(faction);
