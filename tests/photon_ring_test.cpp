@@ -9,16 +9,22 @@
  *      sqrt(R''(r)/2) * integral dtheta / sqrt(Theta) at a = 1e-3, 0.5, 0.9,
  *      0.99 across the shell (tests/photon_ring_reference.inc from
  *      scripts/gen_photon_ring_reference.py).
- *   3. gamma(a) = gamma(-a).
- *   4. Shell bounds r_+- = 3 at a = 0 and 1, 4 at a = 1; radii outside the
+ *   3. gamma finite at both shell endpoints photonShell(a) for a from 1e-3 to
+ *      0.9999999, and within 16 ulp times its r-conditioning of the referee's
+ *      eta = 0 limit, which is pi at every equatorial photon orbit.
+ *   4. gamma(a) = gamma(-a).
+ *   5. Shell bounds r_+- = 3 at a = 0 and 1, 4 at a = 1; radii outside the
  *      shell return the divergentResult sentinel.
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <exception>
 #include <iterator>
+#include <limits>
 #include <numbers>
 #include <numeric>
 
@@ -35,9 +41,13 @@ struct LyapunovRow {
   double gamma = 0.0;
 };
 
-constexpr LyapunovRow LYAPUNOV_ROWS[] = {
-#include "photon_ring_reference.inc"
+struct LyapunovEndpointRow {
+  double a = 0.0;
+  double prograde = 0.0;
+  double retrograde = 0.0;
 };
+
+#include "photon_ring_reference.inc"
 
 int gPass = 0;
 int gFail = 0;
@@ -73,6 +83,39 @@ void testReferee() {
   check(worst <= 1.0e-14, "gamma within 1e-14 of the defining integral");
 }
 
+void testShellEndpoints() {
+  // photonShell rounds r_+- to double, which can leave eta a few roundings
+  // below zero; the endpoint must still evaluate as the equatorial orbit.
+  // The referee sits at the exact endpoint of each double spin, photonShell's
+  // radius within about an ulp of it; gamma's slope in r carries that ulp
+  // (dgamma/dr reaches 1.5e4 at the a = 0.9999999 prograde edge), so the gate
+  // is 16 u (1 + r |dgamma/dr| / gamma), the slope taken by a one-sided
+  // difference into the shell.
+  const double u = 0.5 * std::numeric_limits<double>::epsilon();
+  double worstRatio = 0.0;
+  double worstRel = 0.0;
+  bool finite = true;
+  for (const LyapunovEndpointRow &row : LYAPUNOV_ENDPOINT_ROWS) {
+    const PhotonShell shell = photonShell(row.a);
+    const std::array<double, 2> radii = {shell.prograde, shell.retrograde};
+    const std::array<double, 2> refs = {row.prograde, row.retrograde};
+    for (std::size_t i = 0; i < radii.size(); ++i) {
+      const double r = radii.at(i);
+      const double got = photonRingLyapunovExponent(row.a, r);
+      finite = finite && got != divergentResult<double>();
+      const double step = (i == 0 ? 1.0e-7 : -1.0e-7) * r;
+      const double slope = (photonRingLyapunovExponent(row.a, r + step) - got) / step;
+      const double rel = std::abs(got - refs.at(i)) / refs.at(i);
+      worstRel = std::max(worstRel, rel);
+      worstRatio = std::max(worstRatio, rel / (16.0 * u * (1.0 + (r * std::abs(slope) / got))));
+    }
+  }
+  std::printf("  shell endpoints, %zu spins: max rel err %.2e, max err / bound %.2f\n",
+              std::size(LYAPUNOV_ENDPOINT_ROWS), worstRel, worstRatio);
+  check(finite, "gamma finite at both shell endpoints for a = 1e-3 .. 0.9999999");
+  check(worstRatio <= 1.0, "endpoint gamma within 16 ulp x its r-conditioning of the eta = 0 limit");
+}
+
 void testSpinSymmetry() {
   const double worst =
       std::accumulate(std::begin(LYAPUNOV_ROWS), std::end(LYAPUNOV_ROWS), 0.0,
@@ -103,6 +146,7 @@ int main() try {
   testSchwarzschildLimit();
   std::printf("\nmpmath referee:\n");
   testReferee();
+  testShellEndpoints();
   testSpinSymmetry();
   std::printf("\nShell bounds:\n");
   testShellBounds();

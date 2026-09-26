@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 #include "elliptic_integrals.h"
@@ -55,6 +56,11 @@ struct PhotonShell {
           .retrograde = 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(s)))};
 }
 
+/// Ulp budget of a shell-endpoint radius: photonShell's acos, cos and the
+/// affine map each round once, so its r_+- lies within a few ulp of the root of
+/// 4 a^2 = r (r - 3)^2; 16 covers them with a factor of four to spare.
+inline constexpr double PHOTON_SHELL_EDGE_ULPS = 16.0;
+
 /**
  * @brief Lyapunov exponent gamma of the bound photon orbit at radius r, M = 1.
  *
@@ -62,25 +68,64 @@ struct PhotonShell {
  * @param r Orbit radius inside the photon shell of a (r = 3 at a = 0)
  * @return gamma per half orbit; pi for Schwarzschild; divergentResult<double>(),
  *         a finite sentinel safe under -ffast-math, when r lies outside the
- *         shell (eta < 0)
+ *         shell (eta < 0 beyond the rounding of an endpoint radius)
  */
 [[nodiscard]] inline double photonRingLyapunovExponent(double a, double r) noexcept {
   const double a2 = a * a;
   if (a2 == 0.0) {
     return std::numbers::pi;
   }
-  const double rm1 = r - 1.0;
+  // Delta, the eta numerator 4 a^2 - r (r - 3)^2 and the lambda numerator
+  // r^2 (r - 3) + a^2 (r + 1) each have a form in r and a form in x = r - 1 and
+  // 1 - a^2:
+  //   Delta = x^2 - (1 - a^2),
+  //   4 a^2 - r (r - 3)^2       = 3 x^2 - x^3 - 4 (1 - a^2),
+  //   r^2 (r - 3) + a^2 (r + 1) = x^3 - (3 - a^2) x - 2 (1 - a^2).
+  // Near r = 3 (small a) the r form sums small terms and the x form cancels
+  // O(1) ones; near r = 1 (a -> 1, prograde) the reverse holds. Each quantity
+  // takes the form whose terms sum smaller, which bounds its rounding error.
+  const double x = r - 1.0;
   const double rm3 = r - 3.0;
-  const double delta = (r * r) - (2.0 * r) + a2;
-  // eta and lambda with the O(a^2) cancellations expanded away:
-  // 4 Delta - r (r - 1)^2 = 4 a^2 - r (r - 3)^2 and
-  // a^2 (r - 1) - r (r (r - 1) - 2 Delta) = -(r^2 (r - 3) + a^2 (r + 1)).
-  const double eta = r * r * r * ((4.0 * a2) - (r * rm3 * rm3)) / (a2 * rm1 * rm1);
+  const double oneMinusA2 = (1.0 - std::abs(a)) * (1.0 + std::abs(a));
+  const double x2 = x * x;
+  const double delta = x2 - oneMinusA2;
+
+  const double shellScaleR = (4.0 * a2) + (r * rm3 * rm3);
+  const double shellScaleX = (3.0 * x2) + std::abs(x2 * x) + (4.0 * oneMinusA2);
+  const bool shellInR = shellScaleR <= shellScaleX;
+  const double shellNumerator = shellInR ? (4.0 * a2) - (r * rm3 * rm3)
+                                         : (3.0 * x2) - (x2 * x) - (4.0 * oneMinusA2);
+  double eta = r * r * r * shellNumerator / (a2 * x2);
+  bool atEdge = false;
   if (!(eta >= 0.0)) {
-    return divergentResult<double>();
+    // At a shell endpoint the numerator vanishes; an endpoint radius rounded
+    // to double leaves it a few roundings below zero. Its first-order rounding
+    // bound, for r within PHOTON_SHELL_EDGE_ULPS ulp (d(numerator)/dr =
+    // -3 (r - 1)(r - 3)) and the numerator's own roundings (its term sum), is
+    // the slack below; within it the radius is the endpoint, eta is 0 and
+    // lambda is the equatorial value.
+    const double u = 0.5 * std::numeric_limits<double>::epsilon();
+    const double slack = PHOTON_SHELL_EDGE_ULPS * u * r * r * r *
+                         ((3.0 * r * std::abs(x * rm3)) + std::min(shellScaleR, shellScaleX)) /
+                         (a2 * x2);
+    if (!(eta >= -slack)) {
+      return divergentResult<double>();
+    }
+    eta = 0.0;
+    atEdge = true;
   }
-  const double lambda = -((r * r * rm3) + (a2 * (r + 1.0))) / (a * rm1);
-  const double chi = 1.0 - (delta / (r * rm1 * rm1));
+
+  const double lambdaScaleR = (r * r * std::abs(rm3)) + (a2 * (r + 1.0));
+  const double lambdaScaleX = std::abs(x2 * x) + ((3.0 - a2) * std::abs(x)) + (2.0 * oneMinusA2);
+  const double lambdaNumerator = (lambdaScaleR <= lambdaScaleX)
+                                     ? (r * r * rm3) + (a2 * (r + 1.0))
+                                     : (x2 * x) - ((3.0 - a2) * x) - (2.0 * oneMinusA2);
+  // At an endpoint lambda takes its equatorial value 3 sqrt(r) -+ |a| (only
+  // lambda^2 enters gamma): the general form divides by a and would carry the
+  // endpoint radius's rounding into lambda amplified by 1/a.
+  const double lambda = atEdge ? (3.0 * std::sqrt(r)) + (r < 3.0 ? -std::abs(a) : std::abs(a))
+                               : -lambdaNumerator / (a * x);
+  const double chi = 1.0 - (delta / (r * x2));
   const double h = 0.5 * (a2 - eta - (lambda * lambda));
   const double a2uMinus = h - std::sqrt((h * h) + (a2 * eta)); // a^2 u_- < 0
   const double m = -a2 * eta / (a2uMinus * a2uMinus);          // u_+ / u_- <= 0
