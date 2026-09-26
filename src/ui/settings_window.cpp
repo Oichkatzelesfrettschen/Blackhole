@@ -143,23 +143,34 @@ void renderVisualSettings(RenderState &rs, Settings &settings) {
   settings.bloomIterations = rs.post.bloomIterations;
   ImGui::Checkbox("renderBlackHole", &rs.disk.renderBlackHole);
   ImGui::Checkbox("adiskEnabled", &rs.disk.adiskEnabled);
-  ImGui::Checkbox("adiskParticle", &rs.disk.adiskParticle);
-  ImGui::SliderFloat("adiskDensityV", &rs.disk.adiskDensityV, 0.0f, 10.0f);
-  ImGui::SliderFloat("adiskDensityH", &rs.disk.adiskDensityH, 0.0f, 10.0f);
-  ImGui::SliderFloat("adiskHeight", &rs.disk.adiskHeight, 0.0f, 1.0f);
+  // These controls feed only the legacy fragment tracer's volumetric disk
+  // (adiskColor in blackhole_main.frag, the density LUT, the noise volume);
+  // the Kerr tracer's disk (bhDiskEmission, d_disk_emission) reads none of
+  // them, so they are disabled while it runs.
   ImGui::BeginDisabled(rs.physicsCore.physicalRayTracer);
+  ImGui::Checkbox("adiskParticle", &rs.disk.adiskParticle);
+  legacyTracerControlTooltip();
+  ImGui::SliderFloat("adiskDensityV", &rs.disk.adiskDensityV, 0.0f, 10.0f);
+  legacyTracerControlTooltip();
+  ImGui::SliderFloat("adiskDensityH", &rs.disk.adiskDensityH, 0.0f, 10.0f);
+  legacyTracerControlTooltip();
+  ImGui::SliderFloat("adiskHeight", &rs.disk.adiskHeight, 0.0f, 1.0f);
+  legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskLit", &rs.disk.adiskLit, 0.0f, 4.0f);
-  ImGui::EndDisabled();
   legacyTracerControlTooltip();
   ImGui::SliderFloat("adiskNoiseLOD", &rs.disk.adiskNoiseLOD, 1.0f, 12.0f);
-  ImGui::SliderFloat("adiskNoiseScale", &rs.disk.adiskNoiseScale, 0.0f, 10.0f);
-  ImGui::Checkbox("Noise Texture", &rs.disk.useNoiseTexture);
-  ImGui::SliderFloat("Noise Tex Scale", &rs.disk.noiseTextureScale, 0.05f, 2.0f);
-  ImGui::SliderFloat("adiskSpeed", &rs.disk.adiskSpeed, 0.0f, 1.0f);
-  ImGui::BeginDisabled(rs.physicsCore.physicalRayTracer);
-  ImGui::SliderFloat("dopplerStrength", &rs.disk.dopplerStrength, 0.0f, 5.0f);
-  ImGui::EndDisabled();
   legacyTracerControlTooltip();
+  ImGui::SliderFloat("adiskNoiseScale", &rs.disk.adiskNoiseScale, 0.0f, 10.0f);
+  legacyTracerControlTooltip();
+  ImGui::Checkbox("Noise Texture", &rs.disk.useNoiseTexture);
+  legacyTracerControlTooltip();
+  ImGui::SliderFloat("Noise Tex Scale", &rs.disk.noiseTextureScale, 0.05f, 2.0f);
+  legacyTracerControlTooltip();
+  ImGui::SliderFloat("adiskSpeed", &rs.disk.adiskSpeed, 0.0f, 1.0f);
+  legacyTracerControlTooltip();
+  ImGui::SliderFloat("dopplerStrength", &rs.disk.dopplerStrength, 0.0f, 5.0f);
+  legacyTracerControlTooltip();
+  ImGui::EndDisabled();
 
   ImGui::Separator();
   ImGui::Text("Volumetric RTE (D2)");
