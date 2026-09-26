@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cmath>
+#include <memory>
 #include <numbers>
 #include <optional>
 
@@ -20,6 +21,8 @@
 #include "physics/observer_sky_lut.h"
 #include "physics/observer_sky_map.h"
 #include "render/observer_sky_view.h"
+#include "render/render_state.h"
+#include "ui/observer_panels.h"
 
 namespace {
 
@@ -222,6 +225,30 @@ TEST(ObserverSkyView, SignalDelayIsTheRadialNullIntegral) {
   const double expectedM = (400.0 - 6.0) + (2.0 * std::log((400.0 - 2.0) / (6.0 - 2.0)));
   EXPECT_NEAR(blackhole::signalDelaySeconds(key, clock, 399.0) / clock.secondsPerM, expectedM,
               1e-9);
+}
+
+/**
+ * The disclosure follows the live render spin: fresh desktop settings (0),
+ * the Interstellar button (0.6, a float), the showcase-orbit recording
+ * (0.62), and Thorne's 0.998 limit, which a two-digit format would print as 1.
+ */
+TEST(ObserverSkyView, SpinDisclosureNamesTheRenderSpinItShows) {
+  const auto rs = std::make_unique<blackhole::RenderState>();
+  const auto disclosure = [&rs](float spin) {
+    rs->physicsCore.kerrSpin = spin;
+    return ui::observerSpinDisclosure(*rs);
+  };
+  EXPECT_EQ(
+      disclosure(0.0F),
+      "physics spin 1-a = 1.33e-14 (this view); main render a = 0 (the film rendered a = 0.6)");
+  EXPECT_EQ(disclosure(0.6F),
+            "physics spin 1-a = 1.33e-14 (this view); main render a = 0.6 (film choice)");
+  EXPECT_EQ(
+      disclosure(0.62F),
+      "physics spin 1-a = 1.33e-14 (this view); main render a = 0.62 (the film rendered a = 0.6)");
+  EXPECT_EQ(
+      disclosure(0.998F),
+      "physics spin 1-a = 1.33e-14 (this view); main render a = 0.998 (the film rendered a = 0.6)");
 }
 
 } // namespace

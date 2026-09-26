@@ -147,10 +147,11 @@ void renderStatistics(const RenderState::ObserverViewGroup &view) {
 
 std::string observerSpinDisclosure(const RenderState &rs) {
   const auto renderSpin = static_cast<double>(rs.physicsCore.kerrSpin);
+  // kerrSpin is a float, so the film's 0.6 arrives as 0.60000002.
   const bool filmSpin = std::fabs(renderSpin - K_FILM_RENDER_SPIN) < 1.0e-6;
-  return std::format("physics spin 1-a = {:.3g} (this view); main render a = {:.2g} {}",
+  return std::format("physics spin 1-a = {:.3g} (this view); main render a = {:.3g} {}",
                      rs.observerView.epsilon, renderSpin,
-                     filmSpin ? "(film choice)" : "(film choice: 0.6)");
+                     filmSpin ? "(film choice)" : "(the film rendered a = 0.6)");
 }
 
 void drawObserverDisclosure(const RenderState &rs, ImVec2 imageMin, ImVec2 imageMax) {

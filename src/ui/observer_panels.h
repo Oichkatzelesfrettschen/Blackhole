@@ -41,9 +41,12 @@ void renderObserverDistantView(blackhole::RenderState &rs);
 
 /**
  * @brief The disclosure line drawn on the viewport image in the observer-sky
- *        scene: the view's physics spin against the black-hole scene's render
- *        spin. The film itself separated them (James et al. 2015,
- *        arXiv:1502.03808: physics a/M ~= 1, render a/M = 0.6).
+ *        scene: the view's physics spin against the black-hole scene's live
+ *        render spin. The film itself separated them (James et al. 2015,
+ *        arXiv:1502.03808: physics a/M ~= 1, render a/M = 0.6), so a render
+ *        spin of 0.6 reads "(film choice)" and any other value -- 0 on fresh
+ *        settings, 0.62 in the showcase-orbit recording -- names the film's
+ *        0.6 as a separate fact.
  */
 [[nodiscard]] std::string observerSpinDisclosure(const blackhole::RenderState &rs);
 void drawObserverDisclosure(const blackhole::RenderState &rs, ImVec2 imageMin, ImVec2 imageMax);
