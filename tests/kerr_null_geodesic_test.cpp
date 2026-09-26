@@ -8,6 +8,10 @@
  * impact parameter escape and fall in, respectively; a stepper that stalls at
  * radial turning points fails the escape half. Ferrari: the analytic quartic
  * solver recovers known roots and the double root on the critical curve.
+ * KerrRaytracer: at stellar and supermassive masses the tracer's length step
+ * reproduces the periapsis, fate, and escape azimuth of the unit-mass
+ * reference stepper, and its result reads the same in units of r_s at both
+ * masses.
  */
 
 #include <gtest/gtest.h>
@@ -23,6 +27,9 @@
 #include "physics/analytic_kerr_geodesic.h"
 #include "physics/constants.h"
 #include "physics/kerr.h"
+#include "physics/math_types.h"
+#include "physics/raytracer.h"
+#include "physics/schwarzschild.h"
 
 namespace {
 
@@ -336,6 +343,175 @@ TEST(KerrNullGeodesic, FerrariFindsDoubleRootOnCriticalCurve) {
       return std::abs(root - rPh) < 1e-5;
     });
     EXPECT_EQ(nearPh, 2) << "rPh=" << rPh;
+  }
+}
+
+// Largest real root of the equatorial radial potential R(r) (units of M),
+// the periapsis of a scattered photon with impact parameter b.
+double equatorialPeriapsis(double a, double b) {
+  const auto roots =
+      sortedRealRoots(physics::findRadialRoots(physics::radialQuarticCoeffs(a, b, 0.0)));
+  return roots.empty() ? 0.0 : roots.back();
+}
+
+struct ReferenceScatter {
+  double rMin = 0.0;
+  double phiAtStop = 0.0;
+  bool reached = false;
+};
+
+// Unit-mass reference: the production stepper with the fine scale-free step
+// of traceEquatorial, run inbound from r0 until the outbound crossing of
+// rStop, where phi is interpolated linearly in r.
+ReferenceScatter referenceScatter(double a, double b, double r0, double rStop) {
+  const physics::KerrGeodesicConsts c = physics::kerrEquatorialConsts(b, 1.0);
+  physics::KerrGeodesicState s = physics::kerrEquatorialState(r0, 0.0, -1.0);
+  s = physics::kerrInitMinoVelocities(s, K_UNIT_MASS, a, c);
+  ReferenceScatter out;
+  out.rMin = s.r;
+  for (int step = 0; step < 4'000'000; ++step) {
+    const double dlam = 2e-3 / (1.0 + (s.r * s.r));
+    const physics::KerrGeodesicState next = physics::kerrStepMino(s, K_UNIT_MASS, a, c, dlam);
+    out.rMin = std::min(out.rMin, next.r);
+    if (next.vr > 0.0 && next.r >= rStop) {
+      const double t = (rStop - s.r) / (next.r - s.r);
+      out.phiAtStop = s.phi + (t * (next.phi - s.phi));
+      out.reached = true;
+      return out;
+    }
+    s = next;
+  }
+  return out;
+}
+
+// Vec3d is glm::dvec3 or Eigen::Vector3d by build; both index their
+// components with operator[] on a fixed size-3 vector.
+double radialOf(const math::Vec3d &p) {
+  return p[0]; // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+}
+double azimuthOf(const math::Vec3d &p) {
+  return p[2]; // NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+}
+
+struct TracerRun {
+  physics::RayTraceResult result;
+  double rS = 0.0;
+  double rMinOverRs = 0.0;
+};
+
+// KerrRaytracer at a physical mass, called the way bench/physics_bench.cpp
+// calls it: CGS mass, spin a* M, equatorial constants and state, a
+// 0.02 r_s length step.
+TracerRun runTracer(double massSolar, double aStar, double bOverM, double r0OverRs,
+                    double escapeOverRs, int maxSteps) {
+  const double mass = massSolar * physics::M_SUN;
+  const double m = physics::G * mass / physics::C2;
+  TracerRun run;
+  run.rS = physics::schwarzschildRadius(mass);
+  physics::KerrRaytracer tracer(mass, aStar * m);
+  tracer.setStepSize(0.02 * run.rS);
+  tracer.setEscapeRadius(escapeOverRs * run.rS);
+  tracer.setMaxSteps(maxSteps);
+  tracer.setRecordPath(true);
+  const physics::KerrGeodesicConsts c = physics::kerrEquatorialConsts(bOverM * m, 1.0);
+  run.result = tracer.trace(physics::kerrEquatorialState(r0OverRs * run.rS, 0.0, -1.0), c);
+  const auto nearest = std::min_element(
+      run.result.path.begin(), run.result.path.end(),
+      [](const math::Vec3d &p, const math::Vec3d &q) { return radialOf(p) < radialOf(q); });
+  run.rMinOverRs = (nearest == run.result.path.end()) ? 0.0 : radialOf(*nearest) / run.rS;
+  return run;
+}
+
+// The a = 0 critical ray (b = 3 sqrt(3) M) winds onto the photon sphere at
+// 1.5 r_s with a finite 1 + z at its end point.
+void expectCriticalRayWinds(const physics::RayTraceResult &r, double rS, double massSolar) {
+  EXPECT_GT(r.stepsTaken, 100) << "massSolar=" << massSolar;
+  EXPECT_TRUE(std::isfinite(r.redshift)) << "massSolar=" << massSolar;
+  EXPECT_GE(r.redshift, 1.0) << "massSolar=" << massSolar;
+  EXPECT_TRUE(std::isfinite(radialOf(r.finalPosition))) << "massSolar=" << massSolar;
+  const auto nearest = std::min_element(
+      r.path.begin(), r.path.end(),
+      [](const math::Vec3d &p, const math::Vec3d &q) { return radialOf(p) < radialOf(q); });
+  ASSERT_NE(nearest, r.path.end());
+  // A 0.02 r_s step resolves the approach to the unstable orbit to 1e-3 r_s.
+  EXPECT_NEAR(radialOf(*nearest) / rS, 1.5, 1e-3) << "massSolar=" << massSolar;
+}
+
+TEST(KerrRaytracer, BenchCallStepsAndReturnsFiniteRedshift) {
+  // The bench's ray: b = 3 sqrt(3) M exactly, inbound from 12 r_s, with the
+  // default step (0.02 r_s) and budget and with the bench's explicit ones. The
+  // critical ray winds onto the photon sphere at 1.5 r_s. A step taken in the
+  // wrong units leaves r outside double range after one step and the
+  // redshift infinite.
+  for (const double massSolar : {1.0, 4.0e6}) {
+    const double mass = massSolar * physics::M_SUN;
+    const double m = physics::G * mass / physics::C2;
+    const double rS = physics::schwarzschildRadius(mass);
+    const physics::KerrGeodesicConsts c =
+        physics::kerrEquatorialConsts(3.0 * std::numbers::sqrt3 * m, 1.0);
+    const physics::KerrGeodesicState start = physics::kerrEquatorialState(12.0 * rS, 0.0, -1.0);
+
+    physics::KerrRaytracer byDefault(mass, 0.0);
+    byDefault.setRecordPath(true);
+    physics::KerrRaytracer explicitStep(mass, 0.0);
+    explicitStep.setStepSize(0.02 * rS);
+    explicitStep.setMaxSteps(2000);
+    explicitStep.setRecordPath(true);
+    expectCriticalRayWinds(byDefault.trace(start, c), rS, massSolar);
+    expectCriticalRayWinds(explicitStep.trace(start, c), rS, massSolar);
+  }
+}
+
+// 5% outside the critical impact parameter the photon scatters: its
+// periapsis is the largest root of R(r), and its azimuth where it leaves
+// 50 r_s matches the fine unit-mass reference. 5% inside it is captured.
+void expectScatterMatchesReference(double a, bool prograde) {
+  constexpr double r0OverRs = 12.0;
+  constexpr double escapeOverRs = 50.0;
+  const double bc = (a == 0.0) ? (prograde ? 1.0 : -1.0) * 3.0 * std::numbers::sqrt3
+                               : equatorialCriticalImpact(a, prograde);
+  const double b = 1.05 * bc;
+  const ReferenceScatter ref = referenceScatter(a, b, 2.0 * r0OverRs, 2.0 * escapeOverRs);
+  ASSERT_TRUE(ref.reached) << "a=" << a << " b=" << b;
+  const double rPeri = equatorialPeriapsis(a, b);
+  EXPECT_NEAR(ref.rMin, rPeri, 1e-6 * rPeri) << "a=" << a << " b=" << b;
+
+  const TracerRun scatter = runTracer(4.0e6, a, b, r0OverRs, escapeOverRs, 20000);
+  EXPECT_EQ(scatter.result.status, physics::RayStatus::ESCAPED) << "a=" << a << " b=" << b;
+  EXPECT_NEAR(2.0 * scatter.rMinOverRs, rPeri, 1e-4 * rPeri) << "a=" << a << " b=" << b;
+  // The tracer stops on the first step past 50 r_s, at most 0.02 r_s
+  // beyond it, where dphi/dr ~ b / r^2 is below 1e-4 rad per r_s.
+  EXPECT_NEAR(azimuthOf(scatter.result.finalPosition), ref.phiAtStop, 1e-4)
+      << "a=" << a << " b=" << b;
+
+  const TracerRun capture = runTracer(4.0e6, a, 0.95 * bc, r0OverRs, escapeOverRs, 20000);
+  EXPECT_EQ(capture.result.status, physics::RayStatus::CAPTURED) << "a=" << a << " b=" << 0.95 * bc;
+  EXPECT_EQ(traceEquatorial(a, 0.95 * bc, 2.0 * r0OverRs), Fate::Captured)
+      << "a=" << a << " b=" << 0.95 * bc;
+}
+
+TEST(KerrRaytracer, ScatterMatchesReferenceStepper) {
+  for (const double a : {0.0, 0.9}) {
+    for (const bool prograde : {true, false}) {
+      expectScatterMatchesReference(a, prograde);
+    }
+  }
+}
+
+TEST(KerrRaytracer, ResultIsMassScaleInvariantInSchwarzschildRadii) {
+  // With the step and radii given in r_s, a dimensionally consistent tracer
+  // takes the same number of steps at every mass and ends at the same r / r_s.
+  for (const double a : {0.0, 0.9}) {
+    const TracerRun light = runTracer(1.0, a, 6.0, 12.0, 50.0, 20000);
+    const TracerRun heavy = runTracer(4.0e6, a, 6.0, 12.0, 50.0, 20000);
+    EXPECT_EQ(light.result.status, heavy.result.status) << "a=" << a;
+    EXPECT_EQ(light.result.stepsTaken, heavy.result.stepsTaken) << "a=" << a;
+    EXPECT_NEAR(radialOf(light.result.finalPosition) / light.rS,
+                radialOf(heavy.result.finalPosition) / heavy.rS,
+                1e-9 * (radialOf(heavy.result.finalPosition) / heavy.rS))
+        << "a=" << a;
+    EXPECT_NEAR(azimuthOf(light.result.finalPosition), azimuthOf(heavy.result.finalPosition), 1e-9)
+        << "a=" << a;
   }
 }
 

@@ -305,6 +305,15 @@ private:
  * This integrates the Kerr geodesic equations in Mino time using
  * the potentials from physics::Kerr. Callers provide the
  * conserved quantities (E, Lz, Q) and initial signs for r/theta.
+ *
+ * The step size is an affine-parameter length [cm], the parameter
+ * SchwarzschildRaytracer steps in: with Carter's separation
+ * Sigma dr/dtau = +-sqrt(R), an affine step h is the Mino step
+ * dlambda = h / Sigma(r, theta), evaluated at the start of each step. Far from
+ * the hole dr/dtau -> E, so r advances by about E h per step. The Mino
+ * parameter itself has dimension 1/length (dr/dlambda ~ E r^2), and passing a
+ * length to kerrStepMino as dlambda moves r by ~E h r^2 in one step.
+ * totalDistance accumulates the affine length.
  */
 class KerrRaytracer {
 public:
@@ -345,7 +354,7 @@ public:
         break;
       }
 
-      state = kerr_.stepMino(state, c, stepSize_);
+      state = kerr_.stepMino(state, c, stepSize_ / kerr_.sigma(state.r, state.theta));
 
       result.totalDistance += stepSize_;
       ++result.stepsTaken;
