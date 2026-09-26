@@ -6,6 +6,8 @@
 #include "render/env_config.h"
 
 #include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -14,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 #include "physics/safe_limits.h"
@@ -40,17 +43,43 @@ constexpr bool kAppVariantCudaOnly = BLACKHOLE_APP_VARIANT_CUDA_ONLY != 0;
 } // namespace
 #endif
 
-namespace {
-
+// std::from_chars writes the parsed value through a reference, so an "inf" or
+// "nan" input reaches memory from the IEEE-compiled library and the bit-level
+// physics::safeIsfinite classifies it. A by-value std::strtod result carries
+// clang's nofpclass(nan inf) return annotation under -ffinite-math-only, which
+// makes a parsed NaN poison before any check can reject it.
 float parseEnvironmentFloat(const char *value) {
-  char *end = nullptr;
-  const double parsed = std::strtod(value, &end);
-  if (end == value || !std::isfinite(parsed) ||
+  if (value == nullptr) {
+    return 0.0f;
+  }
+  const auto isSpace = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
+  std::string_view text(value);
+  while (!text.empty() && isSpace(text.front())) {
+    text.remove_prefix(1);
+  }
+  while (!text.empty() && isSpace(text.back())) {
+    text.remove_suffix(1);
+  }
+  // One optional '+' precedes the digits; std::from_chars accepts only '-', so
+  // "+-1" or "++1" would otherwise reach it with a sign it then consumes.
+  if (!text.empty() && text.front() == '+') {
+    text.remove_prefix(1);
+    if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
+      return 0.0f;
+    }
+  }
+  double parsed = 0.0;
+  const char *const end = text.data() + text.size();
+  const std::from_chars_result result = std::from_chars(text.data(), end, parsed);
+  if (result.ec != std::errc{} || result.ptr != end || text.empty() ||
+      !physics::safeIsfinite(parsed) ||
       std::abs(parsed) > static_cast<double>(std::numeric_limits<float>::max())) {
     return 0.0f;
   }
   return static_cast<float>(parsed);
 }
+
+namespace {
 
 void applyCompareEnvironment(RenderState &rs) {
   if (!rs.compare.compareAutoInit) {
@@ -265,7 +294,7 @@ void applySceneEnvironment(RenderState &rs) {
   if (const char *sceneEnv = std::getenv("BLACKHOLE_SCENE")) {
     if (!parseSceneName(sceneEnv).has_value()) {
       std::cerr << "BLACKHOLE_SCENE='" << sceneEnv
-                << "' is not a scene; expected blackhole or observer-sky\n";
+                << "' is not a scene; expected blackhole, observer-sky, or tesseract\n";
     }
   }
   rs.scene.mode = startupSceneMode();
@@ -427,6 +456,9 @@ void applyDiskEnvironment(RenderState &rs) {
 std::optional<RenderState::SceneMode> parseSceneName(std::string_view name) {
   if (name == "observer-sky") {
     return RenderState::SceneMode::ObserverSky;
+  }
+  if (name == "tesseract") {
+    return RenderState::SceneMode::Tesseract;
   }
   if (name == "blackhole") {
     return RenderState::SceneMode::Blackhole;

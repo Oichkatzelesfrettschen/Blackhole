@@ -1,0 +1,6 @@
+# cppcheck as the ci-analysis lane installs it: Ubuntu 24.04 (noble) apt,
+# cppcheck 2.13.0. Built on demand by scripts/ci/cppcheck_ci.sh.
+FROM ubuntu:24.04
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends cppcheck \
+ && rm -rf /var/lib/apt/lists/*

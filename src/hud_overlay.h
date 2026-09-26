@@ -27,6 +27,15 @@
 #include <glm/glm.hpp>
 #include "gl_loader.h"
 
+/**
+ * @brief Pixels stb_easy_font adds after every glyph, at scale 1.
+ *
+ * stb_easy_font keeps its spacing in one static per translation unit;
+ * hud_overlay.cpp sets it to this value before every print, so measureText
+ * and the rendered vertices always agree whichever runs first.
+ */
+inline constexpr float HUD_GLYPH_SPACING = 1.0f;
+
 /** @brief A single line of text rendered by the HUD overlay. */
 struct HudOverlayLine {
   std::string text;
@@ -142,6 +151,15 @@ public:
    */
   static glm::vec2 measureText(const std::string &text, float scale = 1.0f);
 
+  /**
+   * @brief Pixel step between consecutive lines at @p scale.
+   *
+   * Both render overloads advance each line by this height times
+   * HudOverlayOptions::lineSpacing, and the background box of a line spans
+   * this height plus 2*scale of pad above and below.
+   */
+  static float lineHeight(float scale);
+
   /** @brief Return the compiled overlay shader program handle. */
   [[nodiscard]] GLuint program() const { return program_; }
   /** @brief Return the vertex array object handle. */
@@ -150,6 +168,9 @@ public:
   [[nodiscard]] GLuint vbo() const { return vbo_; }
 
 private:
+  /** @brief Upload vertices_ and draw them, restoring blend and depth-test state. */
+  void drawVertices(int width, int height);
+
   HudOverlayOptions options_;
   std::vector<HudOverlayLine> lines_;
 

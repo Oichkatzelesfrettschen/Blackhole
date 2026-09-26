@@ -373,6 +373,48 @@ public:
    */
   void setIgnoreGuiCapture(bool ignore) { ignoreGuiCapture_ = ignore; }
 
+  /**
+   * @brief Route zoom input away from the camera distance.
+   *
+   * While set, keyboard, scroll, and gamepad zoom accumulate into a pending
+   * delta that takeZoomDelta returns, in zoom-rate units at
+   * K_ZOOM_RATE_REFERENCE_DISTANCE (before zoomRateScale), and the camera
+   * distance keeps its value; a scene with its own view distance applies the
+   * delta at its own distance-proportional rate, so the black-hole camera
+   * stays where it was.
+   */
+  void setZoomRedirect(bool redirect) { zoomRedirect_ = redirect; }
+
+  /** @brief Return and clear the zoom accumulated while redirected. */
+  float takeZoomDelta() {
+    const float delta = pendingZoom_;
+    pendingZoom_ = 0.0f;
+    return delta;
+  }
+
+  /**
+   * @brief Reset the camera pose and hold-to-toggle state, and record the reset
+   *        for takeCameraReset.
+   *
+   * The key and gamepad Reset Camera actions in update both run it.
+   */
+  void resetCamera() {
+    camera_.reset();
+    holdToggleState_.reset();
+    cameraResetPending_ = true;
+  }
+
+  /**
+   * @brief Return and clear whether resetCamera ran since the last call, so a
+   *        scene that keeps its own view state behind the zoom redirect resets
+   *        that state in the same frame.
+   */
+  bool takeCameraReset() {
+    const bool reset = cameraResetPending_;
+    cameraResetPending_ = false;
+    return reset;
+  }
+
   InputManager(const InputManager &) = delete;
   InputManager &operator=(const InputManager &) = delete;
 
@@ -384,6 +426,9 @@ private:
   void updateCamera(float deltaTime);
   void handleHoldToToggle(KeyAction action, bool justPressed, bool justReleased);
   void updateGamepad(float deltaTime);
+  /// Change the camera distance by @p amount * @p distanceScale (zoomRateScale),
+  /// or the pending zoom by the unscaled @p amount when redirected.
+  void zoomBy(float amount, float distanceScale);
   [[nodiscard]] bool isGamepadButtonJustPressed(int button) const;
 
   GLFWwindow *window_ = nullptr;
@@ -402,6 +447,10 @@ private:
   float mouseDeltaX_ = 0.0f;
   float mouseDeltaY_ = 0.0f;
   float scrollDelta_ = 0.0f;
+  bool zoomRedirect_ = false; ///< Zoom goes to pendingZoom_, not camera_.distance.
+  float pendingZoom_ = 0.0f;  ///< Redirected zoom since the last takeZoomDelta.
+
+  bool cameraResetPending_ = false; ///< resetCamera ran since the last takeCameraReset.
   bool firstMouse_ = true;
 
   // Key bindings

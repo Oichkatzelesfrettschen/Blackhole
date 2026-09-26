@@ -301,24 +301,52 @@ Reference run (clang 22.1.8, `-O3 -march=native`, Boost 1.90, AMD Ryzen 5
 
 ## Continuous Integration
 
-`bench/ci_bench.sh` builds the riced preset, runs the CPU benchmark
-(plus GPU when a display exists), and gates on the recorded baseline via
-`scripts/check_bench_regression.py`. The checker reads the actual
-physics_bench JSON schema (top-level `results` array keyed by `name`
-with `avg_ms`) and fails on any entry more than 5% slower than the
-baseline.
+`bench/ci_bench.sh` builds `physics_bench` for `BENCH_PRESET` (`ci` by
+default, or `riced`), runs the CPU benchmark into `build/bench/bench_cpu.json`,
+and compares it with `bench/baseline-$BENCH_PRESET.json` through
+`scripts/check_bench_regression.py`. The checker reads the physics_bench
+schema (top-level `results` array keyed by `name` with `avg_ms`) and fails on
+any entry more than 5% slower than the baseline, on a baseline entry the run
+no longer reports, and on a non-finite timing (written as `null`). A missing
+baseline exits 2 unless `BENCH_ALLOW_MISSING=1`.
+
+When a display exists, a second run writes `build/bench/bench_gpu.json` with
+the same CPU arguments plus the GPU geodesic benchmark. That file is compared
+only with `bench/baseline-$BENCH_PRESET-gpu.json` (override with
+`BENCH_GPU_BASELINE`). No GPU baseline is committed, so until one is recorded on
+a GPU host the GPU comparison prints a notice and leaves the exit status to the
+CPU comparison; once recorded, a GPU regression fails the run too. When
+`--gpu` cannot create its GL context or compile the compute shader,
+`physics_bench` writes the CPU results without a GPU entry and exits 3, and
+`ci_bench.sh` stops there: a display that cannot run the GPU benchmark is a
+failed run, not a zero timing. `physics_bench` exits 4 when it cannot open or
+finish writing a requested `--json` or `--csv` file, and `ci_bench.sh` deletes
+both result files before running and stops if one survives, so a comparison
+never reads a file left by an earlier run.
+
+`riced` is opt-in: a Debug build with Tracy instrumentation whose binary lands
+in `build/Riced/Debug`. Its dependency graph needs `tracy/0.13.1`, which
+`conan.lock` does not pin, so the script prints the unlocked install command
+instead of running it, and no `riced` baseline is committed: Debug timings with
+profiling hooks measure the instrumentation more than the physics.
+
+`.github/workflows/bench.yml` runs `BENCH_PRESET=ci` weekly and on manual
+dispatch, never per pull request, over the locked GCC 14 dependency graph. A
+regression marks only its compare step failed, and the job uploads the JSON for
+90 days. `bench/baseline-ci.json` is advisory: its `provenance` object records
+the workstation, compiler, preset, and date that produced it, and a hosted
+runner's absolute timings differ from that host by hardware alone, so the
+uploaded series is the trend to read.
 
 ```bash
-# run the full gate
+# run the comparison (ci preset by default)
 ./bench/ci_bench.sh
 
-# record a new baseline after an accepted performance change
-python3 scripts/check_bench_regression.py --record bench_cpu.json
+# record a new baseline on a quiet host after an accepted performance change
+"${PYTHON:-python3}" scripts/check_bench_regression.py --baseline bench/baseline-ci.json \
+  --record --provenance "compiler: $(g++-14 --version | head -1)" \
+  --provenance "preset: ci" build/bench/bench_cpu.json
 ```
-
-A missing baseline is an explicit condition: the checker exits 2 unless
-invoked with `--allow-missing` (which ci_bench.sh passes so the
-first-ever run stays green while printing the record instruction).
 
 ---
 

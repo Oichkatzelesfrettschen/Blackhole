@@ -175,7 +175,7 @@ option(ENABLE_MIMALLOC "Enable mimalloc for desktop/runtime binaries" OFF)
 ## Python Script Dependencies
 
 `scripts/requirements.txt` declares the packages the data and reference
-scripts import (`$PYTHON -m pip install -r scripts/requirements.txt`); the
+scripts import (`"${PYTHON:-python3}" -m pip install -r scripts/requirements.txt`); the
 scripts run on Python 3.10 or newer (`scripts/ruff.toml` lints them at that
 target).
 

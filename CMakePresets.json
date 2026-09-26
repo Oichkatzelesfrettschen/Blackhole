@@ -461,6 +461,38 @@
       }
     },
     {
+      "name": "ci-clang",
+      "inherits": "ci",
+      "displayName": "CPU CI compiled by clang",
+      "description": "ci on the GCC 14 dependency packages, compiled by the clang the build/CI-clang-deps toolchain names",
+      "binaryDir": "${sourceDir}/build/CI-Clang",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/CI-clang-deps/Release/generators/conan_toolchain.cmake"
+      }
+    },
+    {
+      "name": "ci-clang-fast-math",
+      "inherits": "ci-clang",
+      "displayName": "CPU CI compiled by clang with fast-math",
+      "binaryDir": "${sourceDir}/build/CI-ClangFastMath",
+      "cacheVariables": {
+        "ENABLE_FAST_MATH": "ON"
+      }
+    },
+    {
+      "name": "ci-sanitize",
+      "inherits": "ci",
+      "displayName": "CPU CI under AddressSanitizer and UBSan",
+      "description": "ci with ASan and UBSan; hardening off because _FORTIFY_SOURCE conflicts with ASan interceptors, warnings non-fatal because instrumentation perturbs GCC's stack-usage and flow-sensitive warnings, which the uninstrumented lanes enforce",
+      "binaryDir": "${sourceDir}/build/CI-Sanitize",
+      "cacheVariables": {
+        "ENABLE_ASAN": "ON",
+        "ENABLE_UBSAN": "ON",
+        "ENABLE_HARDENING": "OFF",
+        "ENABLE_WERROR": "OFF"
+      }
+    },
+    {
       "name": "dev",
       "displayName": "Iterative local development",
       "description": "Ninja build with strict warnings and IEEE math; analysis and LTO use dedicated validation lanes",
@@ -572,6 +604,18 @@
     {
       "name": "ci-release",
       "configurePreset": "ci-release"
+    },
+    {
+      "name": "ci-clang",
+      "configurePreset": "ci-clang"
+    },
+    {
+      "name": "ci-clang-fast-math",
+      "configurePreset": "ci-clang-fast-math"
+    },
+    {
+      "name": "ci-sanitize",
+      "configurePreset": "ci-sanitize"
     },
     {
       "name": "dev",

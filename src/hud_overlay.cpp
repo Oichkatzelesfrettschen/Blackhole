@@ -43,20 +43,6 @@ struct EasyFontVertex {
 };
 
 /**
- * @brief Return the pixel height of one text line at the given scale.
- * @param scale Glyph scale multiplier.
- * @return Line height in pixels.
- */
-float lineHeight(float scale) {
-  const char *sample = "Ag";
-  // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
-  // WHY: stb_easy_font_height takes char* (not const char*); no const version exists.
-  return (static_cast<float>(stb_easy_font_height(const_cast<char *>(sample))) * scale) +
-         (2.0f * scale);
-  // NOLINTEND(cppcoreguidelines-pro-type-const-cast)
-}
-
-/**
  * @brief Rasterize a text string into the interleaved float vertex buffer.
  *
  * Converts stb_easy_font quads into two triangles each (x,y,r,g,b,a layout)
@@ -84,6 +70,7 @@ void appendText(std::vector<float> &out, std::vector<unsigned char> &scratch, fl
                            static_cast<unsigned char>(std::clamp(color.b, 0.0f, 1.0f) * 255.0f),
                            static_cast<unsigned char>(std::clamp(color.a, 0.0f, 1.0f) * 255.0f)};
 
+  stb_easy_font_spacing(HUD_GLYPH_SPACING);
   // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
   // WHY: stb_easy_font_print takes char* (not const char*); no const version exists.
   const int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
@@ -139,7 +126,6 @@ void HudOverlay::init() {
   glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, stride, colorOffset);
 
   glBindVertexArray(0);
-  stb_easy_font_spacing(1.0f);
 }
 
 void HudOverlay::shutdown() {
@@ -197,6 +183,7 @@ glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
   std::vector<unsigned char> scratch(static_cast<std::size_t>(estimated));
 
   unsigned char rgba[4] = {255, 255, 255, 255};
+  stb_easy_font_spacing(HUD_GLYPH_SPACING);
   // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
   // WHY: stb_easy_font_print takes char* (not const char*); no const version exists.
   const int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
@@ -226,6 +213,15 @@ glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
   const float width = (maxx - minx) * scale;
   const float height = (maxy - miny) * scale;
   return {width, height};
+}
+
+float HudOverlay::lineHeight(float scale) {
+  const char *sample = "Ag";
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
+  // WHY: stb_easy_font_height takes char* (not const char*); no const version exists.
+  return (static_cast<float>(stb_easy_font_height(const_cast<char *>(sample))) * scale) +
+         (2.0f * scale);
+  // NOLINTEND(cppcoreguidelines-pro-type-const-cast)
 }
 
 void HudOverlay::rebuildVertices(int width, int height) {
@@ -298,20 +294,21 @@ void HudOverlay::rebuildVertices(int width, int height) {
   }
 }
 
-void HudOverlay::render(int width, int height) {
-  BH_ZONE();
-  if (width <= 0 || height <= 0) {
-    return;
-  }
-  if (!isInitialized()) {
-    init();
-  }
-
-  rebuildVertices(width, height);
-
-  if (vertices_.empty()) {
-    return;
-  }
+void HudOverlay::drawVertices(int width, int height) {
+  // The overlay alpha-blends into whatever target is bound. Blend and depth
+  // state are restored afterwards: the fullscreen scene passes that run next
+  // frame write alpha as data (depth in blackhole_main.frag), and a leaked
+  // GL_BLEND would multiply their RGB by that alpha.
+  const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+  const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+  GLint srcRgb = 0;
+  GLint dstRgb = 0;
+  GLint srcAlpha = 0;
+  GLint dstAlpha = 0;
+  glGetIntegerv(GL_BLEND_SRC_RGB, &srcRgb);
+  glGetIntegerv(GL_BLEND_DST_RGB, &dstRgb);
+  glGetIntegerv(GL_BLEND_SRC_ALPHA, &srcAlpha);
+  glGetIntegerv(GL_BLEND_DST_ALPHA, &dstAlpha);
 
   glUseProgram(program_);
   glUniform2f(glGetUniformLocation(program_, "uScreenSize"), static_cast<float>(width),
@@ -331,6 +328,35 @@ void HudOverlay::render(int width, int height) {
 
   glBindVertexArray(0);
   glUseProgram(0);
+
+  glBlendFuncSeparate(static_cast<GLenum>(srcRgb), static_cast<GLenum>(dstRgb),
+                      static_cast<GLenum>(srcAlpha), static_cast<GLenum>(dstAlpha));
+  if (blendWasEnabled == GL_TRUE) {
+    glEnable(GL_BLEND);
+  } else {
+    glDisable(GL_BLEND);
+  }
+  if (depthWasEnabled == GL_TRUE) {
+    glEnable(GL_DEPTH_TEST);
+  }
+}
+
+void HudOverlay::render(int width, int height) {
+  BH_ZONE();
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+  if (!isInitialized()) {
+    init();
+  }
+
+  rebuildVertices(width, height);
+
+  if (vertices_.empty()) {
+    return;
+  }
+
+  drawVertices(width, height);
 }
 
 // Backwards-compatible immediate-mode render (keeps original behavior).
@@ -359,24 +385,7 @@ void HudOverlay::render(int width, int height, float scale, float margin,
     return;
   }
 
-  glUseProgram(program_);
-  glUniform2f(glGetUniformLocation(program_, "uScreenSize"), static_cast<float>(width),
-              static_cast<float>(height));
-
-  glBindVertexArray(vao_);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
-               vertices_.data(), GL_DYNAMIC_DRAW);
-
-  glDisable(GL_DEPTH_TEST);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  const auto vertexCount = static_cast<GLsizei>(vertices_.size() / 6);
-  glDrawArrays(GL_TRIANGLES, 0, vertexCount);
-
-  glBindVertexArray(0);
-  glUseProgram(0);
+  drawVertices(width, height);
 }
 
 // NOLINTEND(misc-include-cleaner)

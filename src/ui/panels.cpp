@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -32,11 +33,14 @@
 #include "platform/resource_paths.h"
 #include "render/gpu_timing.h"
 #include "render/render_state.h"
+#include "render/tesseract/tesseract_geometry.h"
+#include "render/tesseract/tesseract_renderer.h"
 #include "settings.h"
 
 namespace ui {
 
 using blackhole::BackgroundAsset;
+using blackhole::GpuTimer;
 using blackhole::GpuTimerSet;
 using blackhole::K_BACKGROUND_LAYERS;
 using blackhole::RenderState;
@@ -620,6 +624,12 @@ void renderGizmoPanel(RenderState &rs) {
     ImGuizmo::OPERATION &operation = rs.camera.gizmoOperation;
     ImGuizmo::MODE &mode = rs.camera.gizmoMode;
     glm::mat4 &gizmoTransform = rs.camera.gizmoTransform;
+    // The tesseract view holds its scene at the origin (gizmoTargetActive).
+    const bool tesseractScene = rs.scene.mode == RenderState::SceneMode::Tesseract;
+    if (tesseractScene) {
+      ImGui::TextDisabled("Gizmo target applies to the black-hole scene only.");
+    }
+    ImGui::BeginDisabled(tesseractScene);
     ImGui::Checkbox("Enable Gizmo Target", &gizmoEnabled);
 
     const char *const operationLabels[] = {"Translate", "Rotate", "Scale"};
@@ -664,6 +674,7 @@ void renderGizmoPanel(RenderState &rs) {
                                                       // -- glm::mat has no .at()
     ImGui::Text("Target: %.2f %.2f %.2f", static_cast<double>(target.x),
                 static_cast<double>(target.y), static_cast<double>(target.z));
+    ImGui::EndDisabled();
   }
   ImGui::End();
 }
@@ -894,12 +905,21 @@ void renderPerformancePanel(RenderState &rs, float cpuFrameMs) {
 
     if (timers.initialized) {
       ImGui::Separator();
-      ImGui::Text("GPU Fragment:  %.2f ms", timers.blackholeFragment.lastMs);
-      ImGui::Text("GPU Compute:   %.2f ms", timers.blackholeCompute.lastMs);
-      ImGui::Text("GPU Bloom:     %.2f ms", timers.bloom.lastMs);
-      ImGui::Text("GPU Tonemap:   %.2f ms", timers.tonemap.lastMs);
-      ImGui::Text("GPU Depth:     %.2f ms", timers.depth.lastMs);
-      ImGui::Text("GPU GRMHD:     %.2f ms", timers.grmhdSlice.lastMs);
+      // A stage the sampled frame skipped reads "not run", never a stale value.
+      const auto stageRow = [](const char *label, const GpuTimer &timer) {
+        if (timer.hasSample) {
+          ImGui::Text("%-14s %.2f ms", label, timer.lastMs);
+        } else {
+          ImGui::TextDisabled("%-14s not run", label);
+        }
+      };
+      stageRow("GPU Fragment:", timers.blackholeFragment);
+      stageRow("GPU Compute:", timers.blackholeCompute);
+      stageRow("GPU Bloom:", timers.bloom);
+      stageRow("GPU Tonemap:", timers.tonemap);
+      stageRow("GPU Depth:", timers.depth);
+      stageRow("GPU GRMHD:", timers.grmhdSlice);
+      stageRow("GPU Tesseract:", timers.tesseract);
     } else {
       ImGui::TextDisabled("GPU timings inactive");
     }
@@ -916,6 +936,8 @@ void renderPerformancePanel(RenderState &rs, float cpuFrameMs) {
                        ImPlotLineFlags_SkipNaN, history.offset);
       ImPlot::PlotLine("GPU GRMHD", history.gpuGrmhdSliceMs.data(), history.count, 1.0, 0.0,
                        ImPlotLineFlags_SkipNaN, history.offset);
+      ImPlot::PlotLine("GPU Tesseract", history.gpuTesseractMs.data(), history.count, 1.0, 0.0,
+                       ImPlotLineFlags_SkipNaN, history.offset);
       ImPlot::EndPlot();
     }
 
@@ -924,6 +946,95 @@ void renderPerformancePanel(RenderState &rs, float cpuFrameMs) {
     }
     ImGui::SameLine();
     ImGui::TextDisabled("logs/perf/frame_times.csv");
+  }
+  ImGui::End();
+}
+
+namespace {
+
+void renderTesseractRotationControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("SO(4) rotation  v -> qL v conj(qR)");
+  ImGui::Checkbox("Animate (rotation and pulse)", &tg.animate);
+  ImGui::SliderFloat("Speed ds/dt", &tg.rotationSpeed, 0.0f, 3.0f);
+  ImGui::SliderFloat("Reset phase s0", &tg.resetPhase, 0.0f, 12.0f);
+  ImGui::SameLine();
+  if (ImGui::Button("Reset")) {
+    tg.orientationInitialized = false;
+  }
+  ImGui::SliderFloat3("qL rate", tg.leftRate.data(), -1.0f, 1.0f);
+  ImGui::SliderFloat3("qR rate", tg.rightRate.data(), -1.0f, 1.0f);
+  // Presets: opposite rates about i turn only the (w, x) plane; a zero right
+  // rate is a left-isoclinic rotation; equal rates are SO(3) fixing w.
+  if (ImGui::Button("Simple xw")) {
+    tg.leftRate = {0.4f, 0.0f, 0.0f};
+    tg.rightRate = {-0.4f, 0.0f, 0.0f};
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Left isoclinic")) {
+    tg.leftRate = {0.3f, 0.2f, 0.1f};
+    tg.rightRate = {0.0f, 0.0f, 0.0f};
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("SO(3) qL = qR")) {
+    tg.leftRate = {0.0f, 0.35f, 0.1f};
+    tg.rightRate = tg.leftRate;
+  }
+}
+
+void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("Projection 4D -> 3D");
+  constexpr std::array<const char *, 2> projectionItems = {"Perspective along w",
+                                                           "Stereographic from S^3"};
+  int projectionIndex = static_cast<int>(tg.projection);
+  if (ImGui::Combo("Projection", &projectionIndex, projectionItems.data(),
+                   static_cast<int>(projectionItems.size()))) {
+    tg.projection = static_cast<RenderState::TesseractGroup::Projection>(projectionIndex);
+  }
+  ImGui::SliderFloat("Eye w distance", &tg.perspectiveDistance, 2.2f, 8.0f);
+  ImGui::SliderFloat("Scene scale", &tg.sceneScale, 0.3f, 3.0f);
+  ImGui::SliderFloat("View distance", &tg.viewDistance, blackhole::TESSERACT_MIN_VIEW_DISTANCE,
+                     blackhole::TESSERACT_MAX_VIEW_DISTANCE);
+  ImGui::SliderFloat("FOV (deg)", &tg.fovDeg, 20.0f, 100.0f);
+}
+
+void renderTesseractLibraryControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("Library of time");
+  ImGui::SliderFloat("Time span T", &tg.timeSpan, 1.0f, 30.0f);
+  ImGui::SliderFloat("Lit moment", &tg.litMoment, 0.0f, tg.timeSpan);
+  ImGui::SliderFloat("Lit width", &tg.litWidth, 0.05f, 3.0f);
+  ImGui::Checkbox("Gravity message pulse", &tg.pulseEnabled);
+  const int lastStrand = static_cast<int>(blackhole::tesseract::bedroomFeatures().size()) - 1;
+  ImGui::SliderInt("Pulse strand", &tg.pulseStrand, 0, lastStrand);
+  ImGui::SliderFloat("Pulse t_now", &tg.pulseNow, 0.0f, tg.timeSpan);
+  ImGui::SliderFloat("Pulse t_past", &tg.pulsePast, 0.0f, tg.pulseNow);
+  ImGui::SliderFloat("Pulse speed", &tg.pulseSpeed, 0.1f, 10.0f);
+  ImGui::SliderFloat("Pulse width", &tg.pulseWidth, 0.05f, 2.0f);
+}
+
+void renderTesseractAppearanceControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("Appearance");
+  ImGui::SliderFloat("Line width (px)", &tg.lineWidthPx, 1.0f, 8.0f);
+  ImGui::SliderFloat("Edge intensity", &tg.edgeIntensity, 0.0f, 4.0f);
+  ImGui::SliderFloat("Strand intensity", &tg.strandIntensity, 0.0f, 4.0f);
+  ImGui::SliderFloat("Room outline intensity", &tg.sliceIntensity, 0.0f, 4.0f);
+}
+
+} // namespace
+
+void renderTesseractPanel(RenderState &rs) {
+  if (rs.scene.mode != RenderState::SceneMode::Tesseract) {
+    return;
+  }
+  ImGui::SetNextWindowSize(ImVec2(360, 560), ImGuiCond_FirstUseEver);
+  if (ImGui::Begin("Tesseract", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    const std::string_view label = blackhole::TESSERACT_SPECULATIVE_LABEL;
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.78f, 0.35f, 1.0f));
+    ImGui::TextUnformatted(label.data(), label.data() + label.size());
+    ImGui::PopStyleColor();
+    renderTesseractRotationControls(rs.tesseract);
+    renderTesseractProjectionControls(rs.tesseract);
+    renderTesseractLibraryControls(rs.tesseract);
+    renderTesseractAppearanceControls(rs.tesseract);
   }
   ImGui::End();
 }
@@ -946,6 +1057,7 @@ void resetLayout(ImGuiID dockspaceId) {
   ImGui::DockBuilderDockWindow("Settings", dockLeftId);
   ImGui::DockBuilderDockWindow("Display", dockLeftId);
   ImGui::DockBuilderDockWindow("Background", dockLeftId);
+  ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
 
   // Left Lower: Controls, Performance, Tools
   ImGui::DockBuilderDockWindow("Controls", dockLeftDownId);

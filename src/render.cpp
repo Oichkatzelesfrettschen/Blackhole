@@ -310,6 +310,9 @@ void renderToTexture(const RenderToTextureInfo &rtti) {
     glViewport(0, 0, rtti.width, rtti.height);
 
     glDisable(GL_DEPTH_TEST);
+    // Every pass writes its fragment output verbatim; several carry data in
+    // alpha (depth in blackhole_main.frag), which blending would fold into RGB.
+    glDisable(GL_BLEND);
 
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);

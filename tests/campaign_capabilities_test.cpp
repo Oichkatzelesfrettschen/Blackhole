@@ -159,7 +159,9 @@ TEST(CampaignCapabilities, RelayReducesOverheadNeverBelowGeodesic) {
 TEST(CampaignCapabilities, CorruptionDiscountsYieldAndVerificationPreventsIt) {
   const FakeTimeField field;
   // Base config: heavy wear drives a lone worker below the corruption threshold.
-  auto bankedYield = [&field](bool withVerifier) {
+  // The report is returned by value: the snapshot that owns it ends with the call.
+  // A missing report returns a default IntelView, whose fleet id is invalid.
+  auto bankedYield = [&field](bool withVerifier) -> game::IntelView {
     game::CampaignConfig config = capConfig();
     config.reliabilityWearPerProperDay = 86400.0 * 0.05; // 0.05 per proper second
     config.reliabilityFloor = 0.1;
@@ -182,15 +184,15 @@ TEST(CampaignCapabilities, CorruptionDiscountsYieldAndVerificationPreventsIt) {
     const game::CampaignViewSnapshot view = campaign.renderSnapshot();
     const game::IntelView *report = findIntel(view, worker);
     EXPECT_NE(report, nullptr);
-    return report;
+    return report == nullptr ? game::IntelView{} : *report;
   };
-  const game::IntelView *unsupported = bankedYield(false);
-  const game::IntelView *supported = bankedYield(true);
-  ASSERT_NE(unsupported, nullptr);
-  ASSERT_NE(supported, nullptr);
-  EXPECT_TRUE(unsupported->corrupted) << "a worn worker's telemetry corrupts";
-  EXPECT_FALSE(supported->corrupted) << "co-band verification keeps it above threshold";
-  EXPECT_GT(supported->yieldUnits, unsupported->yieldUnits);
+  const game::IntelView unsupported = bankedYield(false);
+  const game::IntelView supported = bankedYield(true);
+  ASSERT_NE(unsupported.fleet, game::K_INVALID_FLEET_ID);
+  ASSERT_NE(supported.fleet, game::K_INVALID_FLEET_ID);
+  EXPECT_TRUE(unsupported.corrupted) << "a worn worker's telemetry corrupts";
+  EXPECT_FALSE(supported.corrupted) << "co-band verification keeps it above threshold";
+  EXPECT_GT(supported.yieldUnits, unsupported.yieldUnits);
 }
 
 TEST(CampaignCapabilities, BandLocalEffectsAreOrderIndependent) {
