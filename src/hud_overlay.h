@@ -27,6 +27,15 @@
 #include <glm/glm.hpp>
 #include "gl_loader.h"
 
+/**
+ * @brief Pixels stb_easy_font adds after every glyph, at scale 1.
+ *
+ * stb_easy_font keeps its spacing in one static per translation unit;
+ * hud_overlay.cpp sets it to this value before every print, so measureText
+ * and the rendered vertices always agree whichever runs first.
+ */
+inline constexpr float HUD_GLYPH_SPACING = 1.0f;
+
 /** @brief A single line of text rendered by the HUD overlay. */
 struct HudOverlayLine {
   std::string text;

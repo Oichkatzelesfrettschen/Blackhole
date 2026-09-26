@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <stb_easy_font.h>
 
 #include "hud_overlay.h"
 #include "render/tesseract/tesseract_renderer.h"
@@ -66,6 +67,15 @@ TEST(SpeculativeLabel, NarrowTargetsWrapBeforeShrinkingBelowUnitScale) {
   EXPECT_GE(layout.scale, 1.0f);
   // Above that width the label stays on one line.
   EXPECT_EQ(layoutSpeculativeLabel(width + 2).lines.size(), 1U);
+}
+
+// HudOverlay::measureText must use the same glyph spacing as the vertices it
+// renders, from the first call on, with no HudOverlay initialized. Appending
+// one 'A' widens the text by the glyph advance plus HUD_GLYPH_SPACING.
+TEST(SpeculativeLabel, MeasurementUsesRenderSpacingWithoutInit) {
+  const int advance = stb_easy_font_charinfo['A' - 32].advance & 15;
+  const float step = HudOverlay::measureText("AA", 1.0f).x - HudOverlay::measureText("A", 1.0f).x;
+  EXPECT_FLOAT_EQ(step, static_cast<float>(advance) + HUD_GLYPH_SPACING);
 }
 
 } // namespace

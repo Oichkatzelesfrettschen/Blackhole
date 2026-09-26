@@ -84,6 +84,7 @@ void appendText(std::vector<float> &out, std::vector<unsigned char> &scratch, fl
                            static_cast<unsigned char>(std::clamp(color.b, 0.0f, 1.0f) * 255.0f),
                            static_cast<unsigned char>(std::clamp(color.a, 0.0f, 1.0f) * 255.0f)};
 
+  stb_easy_font_spacing(HUD_GLYPH_SPACING);
   // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
   // WHY: stb_easy_font_print takes char* (not const char*); no const version exists.
   const int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
@@ -139,7 +140,6 @@ void HudOverlay::init() {
   glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, stride, colorOffset);
 
   glBindVertexArray(0);
-  stb_easy_font_spacing(1.0f);
 }
 
 void HudOverlay::shutdown() {
@@ -197,6 +197,7 @@ glm::vec2 HudOverlay::measureText(const std::string &text, float scale) {
   std::vector<unsigned char> scratch(static_cast<std::size_t>(estimated));
 
   unsigned char rgba[4] = {255, 255, 255, 255};
+  stb_easy_font_spacing(HUD_GLYPH_SPACING);
   // NOLINTBEGIN(cppcoreguidelines-pro-type-const-cast)
   // WHY: stb_easy_font_print takes char* (not const char*); no const version exists.
   const int quads = stb_easy_font_print(0.0f, 0.0f, const_cast<char *>(text.c_str()), rgba,
