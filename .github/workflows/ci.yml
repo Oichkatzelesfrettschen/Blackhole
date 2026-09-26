@@ -40,6 +40,9 @@ jobs:
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
       CCACHE_MAXSIZE: 1G
+      # ccache keys name the compiler that fills them; the clang lanes compile
+      # with clang-18 over the same GCC 14 dependency packages.
+      COMPILER_LABEL: ${{ startsWith(matrix.preset, 'ci-clang') && 'clang18' || 'gcc14' }}
       CI_PRESET: ${{ matrix.preset }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -100,10 +103,10 @@ jobs:
         id: compiler-cache
         with:
           path: .ccache
-          key: ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ccache-ubuntu24-${{ env.COMPILER_LABEL }}-${{ matrix.preset }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ccache-ubuntu24-gcc14-${{ matrix.preset }}-${{ github.sha }}-
-            ccache-ubuntu24-gcc14-${{ matrix.preset }}-
+            ccache-ubuntu24-${{ env.COMPILER_LABEL }}-${{ matrix.preset }}-${{ github.sha }}-
+            ccache-ubuntu24-${{ env.COMPILER_LABEL }}-${{ matrix.preset }}-
       - name: Validate CI helpers
         run: |
           "$PYTHON" scripts/ci/test_check_lockfile.py
