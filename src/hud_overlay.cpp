@@ -298,20 +298,21 @@ void HudOverlay::rebuildVertices(int width, int height) {
   }
 }
 
-void HudOverlay::render(int width, int height) {
-  BH_ZONE();
-  if (width <= 0 || height <= 0) {
-    return;
-  }
-  if (!isInitialized()) {
-    init();
-  }
-
-  rebuildVertices(width, height);
-
-  if (vertices_.empty()) {
-    return;
-  }
+void HudOverlay::drawVertices(int width, int height) {
+  // The overlay alpha-blends into whatever target is bound. Blend and depth
+  // state are restored afterwards: the fullscreen scene passes that run next
+  // frame write alpha as data (depth in blackhole_main.frag), and a leaked
+  // GL_BLEND would multiply their RGB by that alpha.
+  const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+  const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+  GLint srcRgb = 0;
+  GLint dstRgb = 0;
+  GLint srcAlpha = 0;
+  GLint dstAlpha = 0;
+  glGetIntegerv(GL_BLEND_SRC_RGB, &srcRgb);
+  glGetIntegerv(GL_BLEND_DST_RGB, &dstRgb);
+  glGetIntegerv(GL_BLEND_SRC_ALPHA, &srcAlpha);
+  glGetIntegerv(GL_BLEND_DST_ALPHA, &dstAlpha);
 
   glUseProgram(program_);
   glUniform2f(glGetUniformLocation(program_, "uScreenSize"), static_cast<float>(width),
@@ -331,6 +332,35 @@ void HudOverlay::render(int width, int height) {
 
   glBindVertexArray(0);
   glUseProgram(0);
+
+  glBlendFuncSeparate(static_cast<GLenum>(srcRgb), static_cast<GLenum>(dstRgb),
+                      static_cast<GLenum>(srcAlpha), static_cast<GLenum>(dstAlpha));
+  if (blendWasEnabled == GL_TRUE) {
+    glEnable(GL_BLEND);
+  } else {
+    glDisable(GL_BLEND);
+  }
+  if (depthWasEnabled == GL_TRUE) {
+    glEnable(GL_DEPTH_TEST);
+  }
+}
+
+void HudOverlay::render(int width, int height) {
+  BH_ZONE();
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+  if (!isInitialized()) {
+    init();
+  }
+
+  rebuildVertices(width, height);
+
+  if (vertices_.empty()) {
+    return;
+  }
+
+  drawVertices(width, height);
 }
 
 // Backwards-compatible immediate-mode render (keeps original behavior).
@@ -359,24 +389,7 @@ void HudOverlay::render(int width, int height, float scale, float margin,
     return;
   }
 
-  glUseProgram(program_);
-  glUniform2f(glGetUniformLocation(program_, "uScreenSize"), static_cast<float>(width),
-              static_cast<float>(height));
-
-  glBindVertexArray(vao_);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices_.size() * sizeof(float)),
-               vertices_.data(), GL_DYNAMIC_DRAW);
-
-  glDisable(GL_DEPTH_TEST);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  const auto vertexCount = static_cast<GLsizei>(vertices_.size() / 6);
-  glDrawArrays(GL_TRIANGLES, 0, vertexCount);
-
-  glBindVertexArray(0);
-  glUseProgram(0);
+  drawVertices(width, height);
 }
 
 // NOLINTEND(misc-include-cleaner)

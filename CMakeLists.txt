@@ -3880,6 +3880,20 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_gl_state_test.cpp")
+    # Live-GL checks of blend/binding hygiene between the tesseract label and
+    # pass and the black-hole fullscreen passes. Skips without a GL 4.6 context.
+    add_executable(tesseract_gl_state_test "${PROJECT_SOURCE_DIR}/tests/tesseract_gl_state_test.cpp")
+    target_link_libraries(tesseract_gl_state_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_definitions(tesseract_gl_state_test PRIVATE
+      BH_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+      BH_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    )
+    target_compile_options(tesseract_gl_state_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_gl_state COMMAND tesseract_gl_state_test)
+    set_tests_properties(tesseract_gl_state PROPERTIES LABELS "render;gpu;tesseract" TIMEOUT 60)
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
     add_executable(settings_sync_test "${PROJECT_SOURCE_DIR}/tests/settings_sync_test.cpp")
     target_link_libraries(settings_sync_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)

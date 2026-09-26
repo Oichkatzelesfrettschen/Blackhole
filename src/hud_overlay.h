@@ -150,6 +150,9 @@ public:
   [[nodiscard]] GLuint vbo() const { return vbo_; }
 
 private:
+  /** @brief Upload vertices_ and draw them, restoring blend and depth-test state. */
+  void drawVertices(int width, int height);
+
   HudOverlayOptions options_;
   std::vector<HudOverlayLine> lines_;
 
