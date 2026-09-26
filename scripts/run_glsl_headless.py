@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--record-composition",
-        default="wide-right",
+        default="above-disk",
         choices=(
             "above-disk",
             "inside-disk",
@@ -60,6 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--record-distance", type=float)
     parser.add_argument("--record-fov", type=float)
     parser.add_argument("--record-exposure", type=float)
+    parser.add_argument("--record-spin", type=float)
     parser.add_argument("--record-frame-x", type=float)
     parser.add_argument("--record-frame-y", type=float)
     parser.add_argument("--record-background-id")
@@ -90,6 +91,7 @@ def build_command(args: argparse.Namespace) -> list[str]:
         ("--record-distance", args.record_distance),
         ("--record-fov", args.record_fov),
         ("--record-exposure", args.record_exposure),
+        ("--record-spin", args.record_spin),
         ("--record-frame-x", args.record_frame_x),
         ("--record-frame-y", args.record_frame_y),
         ("--record-background-id", args.record_background_id),
@@ -237,6 +239,7 @@ def run_detached_tmux(args: argparse.Namespace) -> int:
         ("--record-distance", args.record_distance),
         ("--record-fov", args.record_fov),
         ("--record-exposure", args.record_exposure),
+        ("--record-spin", args.record_spin),
         ("--record-frame-x", args.record_frame_x),
         ("--record-frame-y", args.record_frame_y),
         ("--record-background-id", args.record_background_id),

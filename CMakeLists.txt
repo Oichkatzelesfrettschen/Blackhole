@@ -3761,6 +3761,9 @@ if(BUILD_TESTING)
     add_test(NAME generate_luts_signed_spin
       COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/generate_luts_test.py")
     set_tests_properties(generate_luts_signed_spin PROPERTIES TIMEOUT 30 LABELS "disk;luts;tools")
+    add_test(NAME record_headless_wrapper
+      COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/run_glsl_headless_test.py")
+    set_tests_properties(record_headless_wrapper PROPERTIES TIMEOUT 30 LABELS "record;tools")
     add_test(NAME lut_generator_signed_spin
       COMMAND "${PYTHON3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/lut_generator_signed_spin_test.py")
     set_tests_properties(lut_generator_signed_spin PROPERTIES TIMEOUT 30 LABELS "physics;tools")
