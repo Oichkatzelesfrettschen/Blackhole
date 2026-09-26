@@ -168,6 +168,17 @@ def build_rows() -> list[Row]:
         )
     )
     rows.append(("deepgain", [-1000.0, 0.3, 0.0, 0.0, 0.0, 0.0, 1.0], 1.0, [1.0e-305] * 4, tiny))
+    # Gain amplifies S0 and the source but subtracts the equilibrium once: Q
+    # cancels to -0.35 from terms of 5.9e15, so the norm, not Q, is accurate.
+    rows.append(
+        (
+            "gain",
+            [-40.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            [1.0, 1.0, 0.0, 0.0],
+            [1.0, -0.025, 0.0, 0.0],
+        )
+    )
     rows.extend(near_null_rows())
     rows.extend(faraday_rows())
     rows.extend(limit_rows())

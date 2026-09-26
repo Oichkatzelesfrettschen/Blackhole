@@ -75,6 +75,14 @@
  * so a solution beyond exp's overflow at g = 709.8 stays finite while it is
  * representable (a subnormal S0 at g = 1420 gives 5e296).
  *
+ * A gain segment amplifies the entering state and the source by e^{g} but
+ * subtracts the equilibrium -J/alpha_I only once, so a component whose
+ * amplified parts cancel carries the absolute error eps e^{g} (|S0| + |J| / g)
+ * that a one-ulp change of S0, J or alpha_I itself produces: at g = 40 with
+ * S0 = (1, -0.025, 0, 0) and J = (1, 1, 0, 0), Q is -0.3517 while one ulp of
+ * Q0, jQ or alpha_I moves it by 0.82, 1.31 or 1.05 (mpmath). The step is
+ * accurate to eps relative to the norm of S there, not componentwise.
+ *
  * StokesSourceForm::DirectIntegral is the default and holds a 1e-12 relative
  * gate against a 5x5 matrix-exponential referee in every tested regime,
  * including optically thin Faraday-thick segments, gain down to tau = -40 and w.w = 0

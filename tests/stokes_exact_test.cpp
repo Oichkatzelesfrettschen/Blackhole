@@ -173,6 +173,26 @@ void testReferenceNearNull() {
   check(worst <= NEAR_NULL_TOL, "near-null |eta| ~ |rho| to 1e8 within 1e-7 of the referee");
 }
 
+void testGainCancellationNormwise() {
+  // Gain at alpha_I ds = -40 with S0 = (1, -0.025, 0, 0), J = (1, 1, 0, 0): Q
+  // cancels to -0.3517 from terms of 5.9e15, and one ulp of Q0, jQ or alpha_I
+  // moves it by 0.82, 1.31 or 1.05 (mpmath), so the step's contract there is
+  // normwise: within a few eps of |S| = 2.4e17.
+  const auto *const row =
+      std::find_if(std::begin(REFERENCE_ROWS), std::end(REFERENCE_ROWS), [](const ReferenceRow &r) {
+        return r.group == "gain" && r.k[0] == -40.0 && r.s0[1] == -0.025;
+      });
+  if (row == std::end(REFERENCE_ROWS)) {
+    check(false, "gain cancellation row present in the referee table");
+    return;
+  }
+  const double err =
+      relErr(stokesPropagateExact(row->s0, row->j, generatorOf(*row), row->ds), row->ref);
+  std::printf("  gain cancellation row: normwise rel err %.3e\n", err);
+  check(err <= 8.0 * std::numeric_limits<double>::epsilon(),
+        "gain with cancelling Q is accurate to 8 eps of |S|");
+}
+
 void testNoFloatingPointExceptions() {
   // A valid segment raises neither FE_INVALID nor FE_DIVBYZERO: every branch
   // is selected before it divides and each divisor is clamped to the range its
@@ -400,6 +420,7 @@ int main() try {
   testReferenceDirect();
   testReferenceFaradayGeneralAxis();
   testReferenceNearNull();
+  testGainCancellationNormwise();
   testNoFloatingPointExceptions();
   testReferenceStepFull();
   testReferenceSplit();
