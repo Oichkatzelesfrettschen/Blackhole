@@ -592,13 +592,18 @@ namespace verified {
  * Derived from Rocq: Definition is_sub_extremal (M a Q : R) : Prop :=
  *   M^2 > a^2 + Q^2.
  *
+ * isSubExtremal, isExtremal, and isSuperExtremal read the sign of one value,
+ * knHorizonDiscriminant (positive, zero, negative), so exactly one holds for
+ * finite inputs and they agree with isPhysicalBlackHole and the horizon
+ * functions, including its rounding band at extremality.
+ *
  * @param m Black hole mass
  * @param a Spin parameter
  * @param q Electric charge
  * @return true if sub-extremal
  */
 [[nodiscard]] constexpr bool isSubExtremal(double m, double a, double q) noexcept {
-  return m * m > a * a + q * q;
+  return knHorizonDiscriminant(m, a, q) > 0.0;
 }
 
 /**
@@ -607,13 +612,16 @@ namespace verified {
  * Derived from Rocq: Definition is_extremal (M a Q : R) : Prop :=
  *   M^2 = a^2 + Q^2.
  *
+ * True where knHorizonDiscriminant is zero, which includes a sum a^2 + Q^2
+ * that rounds up to 4 epsilon above M^2 (e.g. a = 0.6, Q = 0.8).
+ *
  * @param m Black hole mass
  * @param a Spin parameter
  * @param q Electric charge
  * @return true if extremal
  */
 [[nodiscard]] constexpr bool isExtremal(double m, double a, double q) noexcept {
-  return m * m == a * a + q * q;
+  return knHorizonDiscriminant(m, a, q) == 0.0;
 }
 
 /**
@@ -628,7 +636,7 @@ namespace verified {
  * @return true if super-extremal (naked singularity)
  */
 [[nodiscard]] constexpr bool isSuperExtremal(double m, double a, double q) noexcept {
-  return m * m < a * a + q * q;
+  return knHorizonDiscriminant(m, a, q) < 0.0;
 }
 
 /**

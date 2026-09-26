@@ -375,7 +375,7 @@ float kn_g_tph(float r, float theta, float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition is_sub_extremal (M a Q : R) : Prop :=...
  */
 bool is_sub_extremal(float M, float a, float Q) {
-    return M * M > a * a + Q * Q;
+    return kn_horizon_discriminant(M, a, Q) > 0.0;
 }
 
 /**
@@ -384,7 +384,7 @@ bool is_sub_extremal(float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition is_extremal (M a Q : R) : Prop :=...
  */
 bool is_extremal(float M, float a, float Q) {
-    return M * M == a * a + Q * Q;
+    return kn_horizon_discriminant(M, a, Q) == 0.0;
 }
 
 /**
@@ -393,7 +393,7 @@ bool is_extremal(float M, float a, float Q) {
  * Rocq Derivation: Derived from Rocq:Definition is_super_extremal (M a Q : R) : Prop :=...
  */
 bool is_super_extremal(float M, float a, float Q) {
-    return M * M < a * a + Q * Q;
+    return kn_horizon_discriminant(M, a, Q) < 0.0;
 }
 
 /**

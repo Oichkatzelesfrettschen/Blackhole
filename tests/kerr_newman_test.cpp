@@ -36,9 +36,11 @@
  * No external data or GPU required.
  */
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <numbers>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -542,6 +544,42 @@ TEST(KerrNewman, ExtremalMixedSpinChargeOrbits) {
   EXPECT_NEAR(verified::knIscoRadiusRetrograde(1.0, 0.6, 0.8), K_ISCO_A06_Q08_RET, K_ISCO_TOL);
   EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, -0.6, 0.8), K_PHOTON_A06_Q08_RET, K_ISCO_TOL);
   EXPECT_NEAR(verified::knPhotonSphereEquator(1.0, 0.6, 0.8), 1.0, K_ISCO_TOL);
+}
+
+/**
+ * @brief Exactly one of sub-extremal, extremal, super-extremal holds, and it
+ * agrees with isPhysicalBlackHole and the horizons.
+ *
+ * All four read knHorizonDiscriminant. At M = 1, a = 0.1, Q one ulp above
+ * sqrt(0.99), a^2 + Q^2 rounds past M^2 inside the band, so the input is
+ * extremal and physical rather than super-extremal and physical.
+ */
+TEST(KerrNewman, ExtremalityClassesPartitionInputs) {
+  std::vector<std::array<double, 2>> inputs = {
+      {0.1, std::nextafter(std::sqrt(0.99), 2.0)}, {0.6, 0.8}, {0.5, 0.5}, {0.8, 0.8}, {1.0, 0.0},
+      {0.0, 1.0}, {0.9, 0.3}};
+  double q = std::sqrt(0.99);
+  for (int k = 0; k < 6; ++k) {
+    q = std::nextafter(q, 2.0);
+    inputs.push_back({0.1, q});
+  }
+  for (const auto &[a, q0] : inputs) {
+    const int classes = static_cast<int>(verified::isSubExtremal(1.0, a, q0)) +
+                        static_cast<int>(verified::isExtremal(1.0, a, q0)) +
+                        static_cast<int>(verified::isSuperExtremal(1.0, a, q0));
+    EXPECT_EQ(classes, 1) << "a=" << a << " Q=" << q0;
+    EXPECT_EQ(verified::isPhysicalBlackHole(1.0, a, q0), !verified::isSuperExtremal(1.0, a, q0))
+        << "a=" << a << " Q=" << q0;
+    EXPECT_EQ(std::isnan(verified::knOuterHorizon(1.0, a, q0)),
+              verified::isSuperExtremal(1.0, a, q0))
+        << "a=" << a << " Q=" << q0;
+  }
+  const double qEdge = std::nextafter(std::sqrt(0.99), 2.0);
+  EXPECT_TRUE(verified::isExtremal(1.0, 0.1, qEdge));
+  EXPECT_FALSE(verified::isSuperExtremal(1.0, 0.1, qEdge));
+  EXPECT_TRUE(verified::isExtremal(1.0, 0.6, 0.8));
+  EXPECT_TRUE(verified::isSubExtremal(1.0, 0.5, 0.5));
+  EXPECT_TRUE(verified::isSuperExtremal(1.0, 0.8, 0.8));
 }
 
 /** @brief A charge 1e-9 above extremality is a naked singularity for every function. */
