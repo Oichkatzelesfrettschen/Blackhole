@@ -703,3 +703,29 @@ TEST(Constellation, DuplicateLinksNormalizeToTheShortest) {
   // 20 light-days at half light speed: 40 turns after the departure turn.
   EXPECT_EQ(longFirst, 1 + 40);
 }
+
+// Falsifier: alpha holding a band in each of two systems 30 light-days apart,
+// crossing a control target of 3 on turn 2 with its system-0 credit (the
+// first applied) while its system-1 credit lands after, having the decision
+// routed from system 1 -- beta, homed there, would then hear after the
+// radial leg alone, at turn 3, instead of after 30 light-days.
+TEST(Constellation, VictorySiteIsTheCreditThatCrossed) {
+  game::Constellation constellation(remoteWinConfig());
+  const game::FactionId alpha = constellation.addFaction(game::FactionPolicy::Scripted, 0);
+  constellation.addFaction(game::FactionPolicy::Scripted, 1);
+  ASSERT_NE(constellation.addFleet(alpha, 0, game::FleetCapability::Research, 0),
+            game::K_INVALID_FLEET_ID);
+  ASSERT_NE(constellation.addFleet(alpha, 1, game::FleetCapability::Research, 0),
+            game::K_INVALID_FLEET_ID);
+  constellation.advanceTurns(2);
+  ASSERT_EQ(constellation.winner(), alpha);
+  ASSERT_DOUBLE_EQ(constellation.factions().front().controlScore, 4.0);
+  const std::int64_t betaHears = arrivalTurn(microRadialSec(0) + (30.0 * K_SECONDS_PER_DAY)) + 1;
+  while (constellation.turn() < betaHears - 1) {
+    constellation.advanceTurn();
+    EXPECT_FALSE(constellation.factions().at(1).outcomeKnown) << "turn " << constellation.turn();
+  }
+  constellation.advanceTurn();
+  EXPECT_TRUE(constellation.factions().at(1).outcomeKnown);
+  EXPECT_TRUE(constellation.factions().front().outcomeKnown); // radial leg only
+}
