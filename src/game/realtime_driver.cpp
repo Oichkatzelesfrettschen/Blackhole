@@ -42,8 +42,9 @@ RealtimePumpResult RealtimeDriver::pump(double wallDtSec, const StepFunction &st
   if (paused_ || !(wallDtSec > 0.0) || !std::isfinite(wallDtSec)) {
     return result;
   }
-  const auto backlogCap =
-      static_cast<double>(config_.maxTurnsPerFrame * config_.maxBacklogFrames);
+  // In double: the int64 product of two large budgets would overflow.
+  const double backlogCap = static_cast<double>(config_.maxTurnsPerFrame) *
+                            static_cast<double>(config_.maxBacklogFrames);
   turnsDue_ = std::min(turnsDue_ + (wallDtSec * turnsPerWallSecond()), backlogCap);
   while (turnsDue_ >= 1.0 && result.turnsAdvanced < config_.maxTurnsPerFrame) {
     turnsDue_ -= 1.0;

@@ -270,3 +270,22 @@ TEST(RealtimeDeterminism, ColonyStoryWithInboxPausesIsScheduleIndependent) {
     ASSERT_EQ(millerPlay.digests.at(turn), flippingPlay.digests.at(turn)) << "turn " << turn + 1;
   }
 }
+
+// Falsifier: budgets whose int64 product overflows wrapping the backlog cap
+// negative, so the driver never advances.
+TEST(RealtimeDriver, HugeBudgetsDoNotOverflowTheBacklogCap) {
+  game::RealtimeDriverConfig config;
+  config.maxTurnsPerFrame = std::int64_t{1} << 40;
+  config.maxBacklogFrames = std::int64_t{1} << 40;
+  game::RealtimeDriver driver(config);
+  driver.setFocusRate(K_MILLER_RATE);
+  std::int64_t steps = 0;
+  const game::RealtimeDriver::StepFunction step = [&steps]() {
+    ++steps;
+    return false;
+  };
+  const game::RealtimePumpResult result = driver.pump(10.0, step);
+  EXPECT_EQ(result.turnsAdvanced, 7); // 10 s x 0.7107 turns per wall second
+  EXPECT_EQ(steps, 7);
+  EXPECT_GE(driver.turnsDue(), 0.0);
+}
