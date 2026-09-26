@@ -13,7 +13,7 @@ import json
 import math
 import os
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 
 # Physical constants (cgs)
@@ -252,7 +252,7 @@ def main() -> int:
         "r_out_over_rs": r_out / r_s,
         "r_in_cm": r_in,
         "r_out_cm": r_out,
-        "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     if refs:
         meta["compact_common_version"] = refs["version"]
