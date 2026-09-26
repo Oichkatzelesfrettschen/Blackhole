@@ -7652,3 +7652,19 @@ set(BLACKHOLE_IMPORTED_IMPLEMENTATIONS ${THIRDPARTY_SRC_FILES}
   "${PROJECT_SOURCE_DIR}/src/stb_image.cpp"
   "${PROJECT_SOURCE_DIR}/src/stb_image_write_impl.cpp")
 blackhole_apply_analysis("${PROJECT_SOURCE_DIR}")
+
+# Sanitized binaries run several times slower than the release timings the
+# per-test TIMEOUT values were set from, and ci-sanitize runs ctest on every
+# CPU at once; scale every test's timeout so a sanitizer lane fails on
+# findings rather than on the clock.
+if(ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN)
+  set(BH_SANITIZER_TIMEOUT_SCALE 4)
+  get_property(_bh_tests DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY TESTS)
+  foreach(_bh_test IN LISTS _bh_tests)
+    get_test_property(${_bh_test} TIMEOUT _bh_timeout)
+    if(_bh_timeout)
+      math(EXPR _bh_timeout "${_bh_timeout} * ${BH_SANITIZER_TIMEOUT_SCALE}")
+      set_tests_properties(${_bh_test} PROPERTIES TIMEOUT ${_bh_timeout})
+    endif()
+  endforeach()
+endif()
