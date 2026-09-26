@@ -319,7 +319,10 @@ CPU comparison; once recorded, a GPU regression fails the run too. When
 `--gpu` cannot create its GL context or compile the compute shader,
 `physics_bench` writes the CPU results without a GPU entry and exits 3, and
 `ci_bench.sh` stops there: a display that cannot run the GPU benchmark is a
-failed run, not a zero timing.
+failed run, not a zero timing. `physics_bench` exits 4 when it cannot open or
+finish writing a requested `--json` or `--csv` file, and `ci_bench.sh` deletes
+both result files before running and stops if one survives, so a comparison
+never reads a file left by an earlier run.
 
 `riced` is opt-in: a Debug build with Tracy instrumentation whose binary lands
 in `build/Riced/Debug`. Its dependency graph needs `tracy/0.13.1`, which

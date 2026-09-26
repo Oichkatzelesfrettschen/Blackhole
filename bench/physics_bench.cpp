@@ -399,13 +399,14 @@ BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::strin
  * @param results      All collected BenchResult records.
  * @param cpuAccum     Final value of the CPU accumulator (prevents dead-code elimination).
  * @param gpuElapsedNs Total GPU nanoseconds (0 if GPU benchmarking was not enabled).
+ * @return false when the file cannot be opened or written.
  */
-void writeCsv(const std::string &path, const BenchConfig &cfg,
+bool writeCsv(const std::string &path, const BenchConfig &cfg,
               const std::vector<BenchResult> &results, double cpuAccum, double gpuElapsedNs) {
   std::ofstream out(path);
   if (!out) {
     std::cerr << "Failed to write CSV: " << path << "\n";
-    return;
+    return false;
   }
   out << "name,avg_ms,min_ms,max_ms,work_units,units_per_sec,iterations,warmup,rays,steps,lut_size,spin,"
          "mass_solar,mdot,gpu_enabled,gpu_width,gpu_height,gpu_iterations,gpu_step,gpu_max_distance,"
@@ -421,6 +422,12 @@ void writeCsv(const std::string &path, const BenchConfig &cfg,
         << cfg.gpuIterations << "," << cfg.gpuStepSize << "," << cfg.gpuMaxDistance << ","
         << cpuAccum << "," << gpuElapsedNs << "," << totalAccum << "\n";
   }
+  out.flush();
+  if (!out) {
+    std::cerr << "Failed to write CSV: " << path << "\n";
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -452,13 +459,14 @@ void writeJsonNumber(std::ostream &out, const double &value) {
  * @param results      All collected BenchResult records.
  * @param cpuAccum     Final value of the CPU accumulator.
  * @param gpuElapsedNs Total GPU nanoseconds (0 if GPU benchmarking was not enabled).
+ * @return false when the file cannot be opened or written.
  */
-void writeJson(const std::string &path, const BenchConfig &cfg,
+bool writeJson(const std::string &path, const BenchConfig &cfg,
                const std::vector<BenchResult> &results, double cpuAccum, double gpuElapsedNs) {
   std::ofstream out(path);
   if (!out) {
     std::cerr << "Failed to write JSON: " << path << "\n";
-    return;
+    return false;
   }
   out << std::fixed << std::setprecision(6);
   out << "{\n";
@@ -507,6 +515,12 @@ void writeJson(const std::string &path, const BenchConfig &cfg,
   writeJsonNumber(out, accumulator);
   out << "\n";
   out << "}\n";
+  out.flush();
+  if (!out) {
+    std::cerr << "Failed to write JSON: " << path << "\n";
+    return false;
+  }
+  return true;
 }
 
 } // namespace
@@ -711,11 +725,18 @@ int main(int argc, char **argv) try {
   double const totalAccum = cpuAccum + gpuElapsedNs;
   std::cout << "\nAccumulator: " << std::setprecision(6) << totalAccum << "\n";
 
+  // Exit 4 when a requested output file was not written (a caller comparing
+  // results must not read a stale or partial file), else 3 when the requested
+  // GPU run failed, else 0.
+  bool outputFailed = false;
   if (!cfg.csvPath.empty()) {
-    writeCsv(cfg.csvPath, cfg, results, cpuAccum, gpuElapsedNs);
+    outputFailed = !writeCsv(cfg.csvPath, cfg, results, cpuAccum, gpuElapsedNs) || outputFailed;
   }
   if (!cfg.jsonPath.empty()) {
-    writeJson(cfg.jsonPath, cfg, results, cpuAccum, gpuElapsedNs);
+    outputFailed = !writeJson(cfg.jsonPath, cfg, results, cpuAccum, gpuElapsedNs) || outputFailed;
+  }
+  if (outputFailed) {
+    return 4;
   }
   return gpuFailed ? 3 : 0;
 } catch (const std::exception &error) {

@@ -24,10 +24,16 @@
 # cannot parse the libstdc++ of a newer host GCC, so the driver replaces the
 # compile database's standard-library search path with GCC 14's, the library
 # the CI runner compiles against; $GXX14 overrides the g++-14 used to find it.
-# The summary prints one sorted `path:line check message` row per diagnostic.
-# Exit status: 1 when any diagnostic remains; 2 when clang-tidy (or uvx) exits
-# nonzero on a file without printing a diagnostic, which is a tool failure, not
-# a clean result -- the tail of that file's log is printed.
+# CMake runs clang-tidy once per target that compiles a source, so a file with
+# several compile_commands.json entries (src/main.cpp in Blackhole and in
+# BlackholeGLSL with BLACKHOLE_APP_VARIANT_GLSL_ONLY=1) is analyzed once per
+# distinct flag set: each entry is written to its own single-entry database
+# under OUT_DIR/db, and each log and summary row names the target.
+# The summary prints one sorted `path:line check message [target]` row per
+# diagnostic. Exit status: 1 when any diagnostic remains; 2 when a requested
+# file has no compile entry, or clang-tidy (or uvx) exits nonzero on an entry
+# without printing a diagnostic, which is a tool failure, not a clean result --
+# the tail of that entry's log is printed.
 set -eu
 
 root=$(git rev-parse --show-toplevel)
@@ -88,36 +94,91 @@ for dir in $stdinc; do
 done
 
 mkdir -p "$out_dir"
-rm -f "$out_dir"/*.log "$out_dir"/*.rc
+rm -f "$out_dir"/db/*/compile_commands.json
+rm -f "$out_dir"/*.log "$out_dir"/*.rc "$out_dir/entries.tsv"
+PYTHON=${PYTHON:-python3}
+# One single-entry database per distinct (file, flag set); the flag set leaves
+# out the output and dependency-file arguments, which differ per target only.
+no_entry=0
+if ! "$PYTHON" - "$build_dir/compile_commands.json" "$root" "$out_dir" "$@" \
+  >"$out_dir/entries.tsv" <<'PY'
+import json
+import os
+import re
+import shlex
+import sys
+
+db_path, root, out_dir, *files = sys.argv[1:]
+entries = json.load(open(db_path))
+missing = 0
+for rel in files:
+    path = os.path.join(root, rel)
+    matches = [e for e in entries if e["file"] == path]
+    if not matches:
+        print(f"tidy18: {rel} has no entry in {db_path}", file=sys.stderr)
+        missing += 1
+    seen = set()
+    for entry in matches:
+        args = entry.get("arguments") or shlex.split(entry["command"])
+        flags, skip = [], False
+        for arg in args:
+            if skip:
+                skip = False
+            elif arg in ("-o", "-MF", "-MT", "-MQ"):
+                skip = True
+            elif arg not in ("-MD", "-MMD"):
+                flags.append(arg)
+        if tuple(flags) in seen:
+            continue
+        seen.add(tuple(flags))
+        output = entry.get("output", "")
+        match = re.search(r"CMakeFiles/([^/]+)\.dir/", output)
+        target = match.group(1) if match else f"entry{len(seen)}"
+        key = rel.replace("/", "_") + "@" + target
+        os.makedirs(os.path.join(out_dir, "db", key), exist_ok=True)
+        with open(os.path.join(out_dir, "db", key, "compile_commands.json"), "w") as handle:
+            json.dump([entry], handle)
+        print(f"{key}\t{rel}\t{target}")
+sys.exit(3 if missing else 0)
+PY
+then
+  no_entry=1
+fi
+
 jobs=${TIDY_JOBS:-$(nproc)}
+# xargs appends each line's key and source path after the fixed arguments.
 # Word splitting of $tidy and $extra is intended: each holds several arguments.
 # shellcheck disable=SC2016
-printf '%s\n' "$@" | xargs -P "$jobs" -I{} sh -c '
-  base="$1/$(printf "%s" "$2" | tr / _)"
+cut -f1,2 "$out_dir/entries.tsv" | xargs -P "$jobs" -L1 sh -c '
+  base="$1/$4"
   # shellcheck disable=SC2086
-  $3 -p "$4" $5 "$2" >"$base.log" 2>&1
+  $2 -p "$1/db/$4" $3 "$5" >"$base.log" 2>&1
   echo "$?" >"$base.rc"
-' tidy18 "$out_dir" {} "$tidy" "$build_dir" "$extra"
+' tidy18 "$out_dir" "$tidy" "$extra"
 
-diag_re='(error|warning): .*\[[a-z0-9.,-]+\]$'
-failed=0
-for f in "$@"; do
-  base="$out_dir/$(printf '%s' "$f" | tr / _)"
+diag_re='(error|warning): .*\[[A-Za-z0-9.,-]+\]$'
+failed=$no_entry
+tab=$(printf '\t')
+summary=
+while IFS=$tab read -r key rel target; do
+  base="$out_dir/$key"
   rc=$(cat "$base.rc" 2>/dev/null || echo missing)
   if [ "$rc" != 0 ] && ! grep -Eq "$diag_re" "$base.log" 2>/dev/null; then
-    echo "tidy18: clang-tidy failed on $f (exit $rc) without a diagnostic:" >&2
+    echo "tidy18: clang-tidy failed on $rel [$target] (exit $rc) without a diagnostic:" >&2
     tail -5 "$base.log" >&2 2>/dev/null || true
     failed=1
   fi
-done
-
-summary=$(cat "$out_dir"/*.log | grep -E "$diag_re" |
-  sed -E 's#^([^:]+):([0-9]+):[0-9]+: (error|warning): (.*) \[([a-z0-9.,-]+)\]$#\1:\2 \5 \4#' |
-  awk -v prefix="$root/" 'index($0, prefix) == 1 { $0 = substr($0, length(prefix) + 1) } { print }' |
-  sort -u) || true
+  rows=$(grep -E "$diag_re" "$base.log" 2>/dev/null |
+    sed -E 's#^([^:]+):([0-9]+):[0-9]+: (error|warning): (.*) \[([A-Za-z0-9.,-]+)\]$#\1:\2 \5 \4#' |
+    awk -v prefix="$root/" -v target="$target" \
+      'index($0, prefix) == 1 { $0 = substr($0, length(prefix) + 1) } { print $0 " [" target "]" }') || true
+  [ -n "$rows" ] && summary="$summary$rows
+"
+done <"$out_dir/entries.tsv"
+summary=$(printf '%s' "$summary" | sort -u)
 [ "$failed" = 0 ] || exit 2
 if [ -n "$summary" ]; then
   printf '%s\n' "$summary"
   exit 1
 fi
-echo "tidy18: no diagnostics in $# file(s)"
+echo "tidy18: no diagnostics in $# file(s), $(wc -l <"$out_dir/entries.tsv") compile entries"

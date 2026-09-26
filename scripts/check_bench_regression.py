@@ -6,9 +6,10 @@ physics_bench --json emits {"config": {...}, "results": [{"name",
 the baseline and fails when any ratio exceeds the threshold. A missing
 baseline is an explicit condition, never a silent pass: either record
 one with --record or acknowledge the bootstrap with --allow-missing.
-Every current result is validated first (finite, positive avg_ms and a
-positive iteration count), so neither --record nor --allow-missing
-accepts a run that produced no measurement. A current file whose workload
+Every current file is validated first -- at least one result, each with a
+finite, positive avg_ms and a positive iteration count, and a "GPU geodesic
+compute" entry when its config has gpu_enabled -- so neither --record nor
+--allow-missing accepts a run that produced no measurement. A current file whose workload
 ("config": rays, steps, iterations, and the other physics_bench inputs)
 differs from the baseline's is a CONFIG failure and is not timed against
 it. A recorded baseline carries a "provenance" object (host CPU, logical
@@ -43,6 +44,10 @@ WORKLOAD_KEYS = (
     "gpu_step",
     "gpu_max_distance",
 )
+
+
+# The result name physics_bench gives its GPU compute benchmark.
+GPU_ENTRY = "GPU geodesic compute"
 
 
 def load_run(path: str | pathlib.Path) -> tuple[object, dict[str, dict]]:
@@ -155,7 +160,16 @@ def main() -> int:
     baseline_path = pathlib.Path(args.baseline)
     runs = [(path, *load_run(path)) for path in args.current]
     failures = 0
-    for path, _config, results in runs:
+    for path, config, results in runs:
+        if not results:
+            print(f"EMPTY: {path} has no results")
+            failures += 1
+        # physics_bench records gpu_enabled for a --gpu run; that run is a GPU
+        # measurement only if it carries the GPU entry.
+        gpu_run = isinstance(config, dict) and config.get("gpu_enabled") is True
+        if gpu_run and GPU_ENTRY not in results:
+            print(f"INVALID: {path} is a --gpu run without a {GPU_ENTRY!r} entry")
+            failures += 1
         for name, entry in sorted(results.items()):
             reason = invalid_reason(entry)
             if reason is not None:

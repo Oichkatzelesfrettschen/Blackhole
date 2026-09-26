@@ -64,8 +64,24 @@ cmake --build --preset "$preset" --target physics_bench
 
 out=${BENCH_OUT_DIR:-build/bench}
 mkdir -p "$out"
+# A result left by an earlier run must never stand in for this one: remove it
+# first and stop if it survives. physics_bench exits 4 when it cannot write
+# its JSON and 3 when a requested GPU run fails.
+fresh_output() {
+  rm -f "$1" || true
+  if [ -e "$1" ]; then
+    echo "ci_bench: cannot remove stale $1" >&2
+    exit 1
+  fi
+}
+fresh_output "$out/bench_cpu.json"
+fresh_output "$out/bench_gpu.json"
 set -- --rays 4000 --steps 2000 --iterations 10
-"$bin_dir/physics_bench" "$@" --json "$out/bench_cpu.json"
+"$bin_dir/physics_bench" "$@" --json "$out/bench_cpu.json" || {
+  rc=$?
+  echo "ci_bench: CPU benchmark failed (exit $rc)" >&2
+  exit "$rc"
+}
 require_json() {
   test -s "$1" || { echo "ci_bench: physics_bench wrote no $1" >&2; exit 1; }
   "$PYTHON" -c 'import json, sys; json.load(open(sys.argv[1]))' "$1" ||

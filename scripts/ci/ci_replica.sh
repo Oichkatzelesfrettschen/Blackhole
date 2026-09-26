@@ -22,7 +22,11 @@
 # generators directory is copied whole since the toolchain resolves package
 # configs relative to CMAKE_CURRENT_LIST_DIR. The runner has no system glm, so
 # bwrap mounts an empty /usr/include/glm and a test that reaches glm only
-# through /usr/include fails here as it does in CI.
+# through /usr/include fails here as it does in CI. The runner also has no
+# libcpptrace, so CPPTRACE_LIBRARY is preset to OFF -- a non-NOTFOUND value
+# stops find_library from searching and reads false in CMakeLists.txt's
+# if(CPPTRACE_LIBRARY) -- and the tree compiles with BLACKHOLE_HAS_CPPTRACE=0,
+# the branch CI builds and analyzes.
 # Logs: build/cilike-configure.log, build/cilike.log, build/cilike-ctest.log.
 # Each tree exports compile_commands.json, which scripts/ci/tidy18.sh reads
 # from build/CiLike by default.
@@ -91,7 +95,7 @@ hide_glm() {
 hide_glm cmake -S . -B "$bdir" -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$root/$tcdir/conan_toolchain.cmake" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCPPTRACE_LIBRARY=OFF \
   -DENABLE_NATIVE_ARCH=OFF -DENABLE_LTO="$lto" -DENABLE_FAT_LTO="$lto" \
   -DENABLE_FAST_MATH="$fast_math" -DENABLE_CLANG_TIDY=OFF -DENABLE_CPPCHECK=OFF \
   -DENABLE_WERROR="$werror" -DWARNING_LEVEL=5 -DENABLE_CUDA=OFF -DENABLE_BLENDER_BRIDGE=OFF \

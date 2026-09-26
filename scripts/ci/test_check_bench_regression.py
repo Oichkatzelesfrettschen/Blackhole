@@ -132,6 +132,36 @@ class BenchRegressionTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("config object is missing", result.stdout)
 
+    def test_empty_run_fails_before_shortcuts(self) -> None:
+        empty = {"config": CONFIG, "results": []}
+        for extra in ((), ("--allow-missing",), ("--record",)):
+            with self.subTest(extra=extra):
+                baseline = payload(a=10.0) if not extra else None
+                result = self.compare(baseline, empty, extra=extra)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn("EMPTY:", result.stdout)
+
+    def test_gpu_run_requires_gpu_entry(self) -> None:
+        gpu_config = dict(CONFIG, gpu_enabled=True)
+        cpu_only = payload(gpu_config, a=10.0)
+        for extra in (("--allow-missing",), ("--record",)):
+            with self.subTest(extra=extra):
+                result = self.compare(None, cpu_only, extra=extra)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn("without a 'GPU geodesic compute' entry", result.stdout)
+        zeroed_gpu = payload(gpu_config, a=10.0)
+        zeroed_gpu["results"].append(
+            {"name": "GPU geodesic compute", "avg_ms": 0.0, "iterations": 0}
+        )
+        result = self.compare(None, zeroed_gpu, extra=("--allow-missing",))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("INVALID: GPU geodesic compute", result.stdout)
+        with_gpu = payload(gpu_config, a=10.0, **{"GPU geodesic compute": 0.03})
+        result = self.compare(None, with_gpu, extra=("--allow-missing",))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        result = self.compare(with_gpu, with_gpu)
+        self.assertEqual(result.returncode, 0, result.stdout)
+
     def test_missing_entry_fails(self) -> None:
         result = self.compare(payload(a=10.0, b=5.0), payload(a=10.0))
         self.assertEqual(result.returncode, 1, result.stdout)

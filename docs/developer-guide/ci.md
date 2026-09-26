@@ -269,8 +269,13 @@ ci-analysis turns on; that covers the switches that register targets and
 sources (`BUILD_TESTING`, `ENABLE_DESKTOP_APP`, `ENABLE_CUDA`,
 `ENABLE_BLENDER_BRIDGE`, `ENABLE_SHADER_VALIDATION`) as well as the
 preprocessor ones. A mismatch stops either script with exit 2 unless `-f` is
-given. `tidy18.sh` also exits 2 when clang-tidy fails on a file without
-printing a diagnostic. Each script documents its options in its header comment.
+given. Like cppcheck, `tidy18.sh` analyzes each distinct compile entry of a
+source through a single-entry database under `build/tidy18/db`, and every
+summary row names its target (`[Blackhole]`, `[BlackholeGLSL]`). It exits 2
+when a requested file has no compile entry or clang-tidy fails on an entry
+without printing a diagnostic. `ci_replica.sh` presets `CPPTRACE_LIBRARY` to
+`OFF` because the runner has no libcpptrace, so the replica compiles and
+analyzes the `BLACKHOLE_HAS_CPPTRACE=0` branch CI sees. Each script documents its options in its header comment.
 
 ## Audit baseline
 
