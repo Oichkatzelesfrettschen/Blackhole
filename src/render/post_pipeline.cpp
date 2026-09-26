@@ -134,7 +134,11 @@ GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input) {
   }
 
   GLuint finalTexture = rs.targets.texTonemapped;
-  if (rs.depthFx.depthEffectsEnabled) {
+  // Depth cues read the geodesic integrator's depth from texBlackhole alpha;
+  // the tesseract pass writes alpha 1 everywhere, so it presents the
+  // tonemapped frame directly.
+  const bool depthCuesApply = rs.scene.mode == RenderState::SceneMode::Blackhole;
+  if (rs.depthFx.depthEffectsEnabled && depthCuesApply) {
     ZONE_SCOPED_N("Depth Cues");
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.depth.begin();

@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -32,6 +33,8 @@
 #include "platform/resource_paths.h"
 #include "render/gpu_timing.h"
 #include "render/render_state.h"
+#include "render/tesseract/tesseract_geometry.h"
+#include "render/tesseract/tesseract_renderer.h"
 #include "settings.h"
 
 namespace ui {
@@ -928,6 +931,90 @@ void renderPerformancePanel(RenderState &rs, float cpuFrameMs) {
   ImGui::End();
 }
 
+namespace {
+
+void renderTesseractRotationControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("SO(4) rotation  v -> qL v conj(qR)");
+  ImGui::Checkbox("Animate", &tg.animate);
+  ImGui::SliderFloat("Phase s", &tg.rotationPhase, 0.0f, 12.0f);
+  ImGui::SliderFloat("Speed ds/dt", &tg.rotationSpeed, 0.0f, 3.0f);
+  ImGui::SliderFloat3("qL rate", tg.leftRate.data(), -1.0f, 1.0f);
+  ImGui::SliderFloat3("qR rate", tg.rightRate.data(), -1.0f, 1.0f);
+  // Presets: opposite rates about i turn only the (w, x) plane; a zero right
+  // rate is a left-isoclinic rotation; equal rates are SO(3) fixing w.
+  if (ImGui::Button("Simple xw")) {
+    tg.leftRate = {0.4f, 0.0f, 0.0f};
+    tg.rightRate = {-0.4f, 0.0f, 0.0f};
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Left isoclinic")) {
+    tg.leftRate = {0.3f, 0.2f, 0.1f};
+    tg.rightRate = {0.0f, 0.0f, 0.0f};
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("SO(3) qL = qR")) {
+    tg.leftRate = {0.0f, 0.35f, 0.1f};
+    tg.rightRate = tg.leftRate;
+  }
+}
+
+void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("Projection 4D -> 3D");
+  constexpr std::array<const char *, 2> projectionItems = {"Perspective along w",
+                                                           "Stereographic from S^3"};
+  int projectionIndex = static_cast<int>(tg.projection);
+  if (ImGui::Combo("Projection", &projectionIndex, projectionItems.data(),
+                   static_cast<int>(projectionItems.size()))) {
+    tg.projection = static_cast<RenderState::TesseractGroup::Projection>(projectionIndex);
+  }
+  ImGui::SliderFloat("Eye w distance", &tg.perspectiveDistance, 2.2f, 8.0f);
+  ImGui::SliderFloat("Scene scale", &tg.sceneScale, 0.3f, 3.0f);
+  ImGui::SliderFloat("View distance", &tg.viewDistance, 3.0f, 20.0f);
+  ImGui::SliderFloat("FOV (deg)", &tg.fovDeg, 20.0f, 100.0f);
+}
+
+void renderTesseractLibraryControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("Library of time");
+  ImGui::SliderFloat("Time span T", &tg.timeSpan, 1.0f, 30.0f);
+  ImGui::SliderFloat("Lit moment", &tg.litMoment, 0.0f, tg.timeSpan);
+  ImGui::SliderFloat("Lit width", &tg.litWidth, 0.05f, 3.0f);
+  ImGui::Checkbox("Gravity message pulse", &tg.pulseEnabled);
+  const int lastStrand = static_cast<int>(blackhole::tesseract::bedroomFeatures().size()) - 1;
+  ImGui::SliderInt("Pulse strand", &tg.pulseStrand, 0, lastStrand);
+  ImGui::SliderFloat("Pulse t_now", &tg.pulseNow, 0.0f, tg.timeSpan);
+  ImGui::SliderFloat("Pulse t_past", &tg.pulsePast, 0.0f, tg.pulseNow);
+  ImGui::SliderFloat("Pulse speed", &tg.pulseSpeed, 0.1f, 10.0f);
+  ImGui::SliderFloat("Pulse width", &tg.pulseWidth, 0.05f, 2.0f);
+}
+
+void renderTesseractAppearanceControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("Appearance");
+  ImGui::SliderFloat("Line width (px)", &tg.lineWidthPx, 1.0f, 8.0f);
+  ImGui::SliderFloat("Edge intensity", &tg.edgeIntensity, 0.0f, 4.0f);
+  ImGui::SliderFloat("Strand intensity", &tg.strandIntensity, 0.0f, 4.0f);
+  ImGui::SliderFloat("Room outline intensity", &tg.sliceIntensity, 0.0f, 4.0f);
+}
+
+} // namespace
+
+void renderTesseractPanel(RenderState &rs) {
+  if (rs.scene.mode != RenderState::SceneMode::Tesseract) {
+    return;
+  }
+  ImGui::SetNextWindowSize(ImVec2(360, 560), ImGuiCond_FirstUseEver);
+  if (ImGui::Begin("Tesseract", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    const std::string_view label = blackhole::TESSERACT_SPECULATIVE_LABEL;
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.78f, 0.35f, 1.0f));
+    ImGui::TextUnformatted(label.data(), label.data() + label.size());
+    ImGui::PopStyleColor();
+    renderTesseractRotationControls(rs.tesseract);
+    renderTesseractProjectionControls(rs.tesseract);
+    renderTesseractLibraryControls(rs.tesseract);
+    renderTesseractAppearanceControls(rs.tesseract);
+  }
+  ImGui::End();
+}
+
 void resetLayout(ImGuiID dockspaceId) {
   ImGui::DockBuilderRemoveNode(dockspaceId);
   ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
@@ -946,6 +1033,7 @@ void resetLayout(ImGuiID dockspaceId) {
   ImGui::DockBuilderDockWindow("Settings", dockLeftId);
   ImGui::DockBuilderDockWindow("Display", dockLeftId);
   ImGui::DockBuilderDockWindow("Background", dockLeftId);
+  ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
 
   // Left Lower: Controls, Performance, Tools
   ImGui::DockBuilderDockWindow("Controls", dockLeftDownId);

@@ -1152,6 +1152,8 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/render/record_mode.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/render_targets.cpp"
   "${PROJECT_SOURCE_DIR}/src/render/uniform_binding.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/tesseract/tesseract_geometry.cpp"
+  "${PROJECT_SOURCE_DIR}/src/render/tesseract/tesseract_renderer.cpp"
   "${PROJECT_SOURCE_DIR}/src/tools/compare_harness.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"

@@ -2,15 +2,19 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <string>
 
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
 
+#include <glm/ext/vector_float4.hpp>
+
 #include "hud_overlay.h"
 #include "input.h"
 #include "render.h"
 #include "render/render_state.h"
+#include "render/tesseract/tesseract_renderer.h"
 #include "tracy_support.h"
 
 using namespace gl;
@@ -94,6 +98,25 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
   // 3. RmlUi Overlay
   if (rs.overlays.rmluiReady) {
     rs.overlays.rmluiOverlay.render();
+  }
+
+  // The tesseract scene always carries its provenance label, drawn into the
+  // presented texture so recorded frames keep it too.
+  if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
+    if (!rs.tesseract.speculativeLabelReady) {
+      HudOverlayOptions opts;
+      opts.scale = 2.0f;
+      opts.margin = 14.0f;
+      opts.align = HudOverlayOptions::Align::Center;
+      opts.drawBackground = true;
+      rs.tesseract.speculativeLabel.setOptions(opts);
+      rs.tesseract.speculativeLabel.setLines(
+          {HudOverlayLine{.text = std::string(TESSERACT_SPECULATIVE_LABEL),
+                          .color = glm::vec4(1.0f, 0.86f, 0.55f, 1.0f),
+                          .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.6f)}});
+      rs.tesseract.speculativeLabelReady = true;
+    }
+    rs.tesseract.speculativeLabel.render(rs.targets.renderWidth, rs.targets.renderHeight);
   }
 
   // 4. HUD Overlays (Perf/Controls)

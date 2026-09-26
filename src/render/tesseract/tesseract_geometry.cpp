@@ -24,8 +24,8 @@ constexpr std::size_t bit(std::size_t axis) {
   return std::size_t{1} << axis;
 }
 
-void appendSubdividedEdge(std::vector<SegmentInstance> &out, const glm::vec4 &a, const glm::vec4 &b,
-                          std::size_t pieces) {
+void appendSubdivided(std::vector<SegmentInstance> &out, const glm::vec4 &a, const glm::vec4 &b,
+                      std::size_t pieces, SegmentKind kind) {
   const auto steps = static_cast<float>(pieces);
   for (std::size_t k = 0; k < pieces; ++k) {
     const float s0 = static_cast<float>(k) / steps;
@@ -33,7 +33,7 @@ void appendSubdividedEdge(std::vector<SegmentInstance> &out, const glm::vec4 &a,
     SegmentInstance seg;
     seg.a = a + ((b - a) * s0);
     seg.b = a + ((b - a) * s1);
-    seg.meta = glm::vec4(-1.0f, -1.0f, static_cast<float>(SegmentKind::TesseractEdge), -1.0f);
+    seg.meta = glm::vec4(-1.0f, -1.0f, static_cast<float>(kind), -1.0f);
     out.push_back(seg);
   }
 }
@@ -172,7 +172,8 @@ std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &optio
   const TesseractMesh mesh = buildTesseract();
   const std::size_t pieces = std::max<std::size_t>(options.edgeSubdivisions, 1);
   for (const TesseractEdge &edge : mesh.edges) {
-    appendSubdividedEdge(segments, mesh.vertices.at(edge.a), mesh.vertices.at(edge.b), pieces);
+    appendSubdivided(segments, mesh.vertices.at(edge.a), mesh.vertices.at(edge.b), pieces,
+                     SegmentKind::TesseractEdge);
   }
 
   const std::vector<LibraryFeature> features = bedroomFeatures();
@@ -190,11 +191,9 @@ std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &optio
   }
 
   for (const auto &link : bedroomOutline()) {
-    SegmentInstance seg;
-    seg.a = glm::vec4(features.at(link.at(0)).position, 0.0f);
-    seg.b = glm::vec4(features.at(link.at(1)).position, 0.0f);
-    seg.meta = glm::vec4(-1.0f, -1.0f, static_cast<float>(SegmentKind::LitSlice), -1.0f);
-    segments.push_back(seg);
+    appendSubdivided(segments, glm::vec4(features.at(link.at(0)).position, 0.0f),
+                     glm::vec4(features.at(link.at(1)).position, 0.0f), pieces,
+                     SegmentKind::LitSlice);
   }
   return segments;
 }

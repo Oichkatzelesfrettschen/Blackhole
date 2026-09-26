@@ -49,6 +49,9 @@ void renderBackgroundPanel(blackhole::RenderState &rs);
 /** @brief Boyer-Lindquist wiregrid overlay toggles and tuning sliders. */
 void renderWiregridPanel(blackhole::RenderState &rs);
 
+/** @brief Controls for the speculative tesseract scene; drawn only in that scene mode. */
+void renderTesseractPanel(blackhole::RenderState &rs);
+
 /** @brief RmlUi overlay enable toggle. */
 void renderRmlUiPanel(blackhole::RenderState &rs);
 

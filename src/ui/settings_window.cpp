@@ -8,6 +8,7 @@
 #include "settings_window.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -618,12 +619,25 @@ void renderComputeSettings(RenderState &rs) {
   renderComputeComparisonSettings(rs);
 }
 
+void renderSceneModeCombo(RenderState &rs) {
+  constexpr std::array<const char *, 2> sceneItems = {"Black hole", "Tesseract (speculative)"};
+  int sceneIndex = static_cast<int>(rs.scene.mode);
+  if (ImGui::Combo("Scene", &sceneIndex, sceneItems.data(), static_cast<int>(sceneItems.size()))) {
+    rs.scene.mode = static_cast<RenderState::SceneMode>(sceneIndex);
+  }
+  if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
+    ImGui::TextDisabled("Render-only illustration; the tabs below drive the black-hole scene.");
+  }
+  ImGui::Separator();
+}
+
 } // anonymous namespace
 
 void renderSettingsWindow(RenderState &rs) {
   auto &settings = SettingsManager::instance().get();
   ImGui::SetNextWindowSize(ImVec2(450, 700), ImGuiCond_FirstUseEver);
   ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoCollapse);
+  renderSceneModeCombo(rs);
   if (ImGui::BeginTabBar("MainTabs")) {
     if (ImGui::BeginTabItem("Visuals")) {
       renderVisualSettings(rs, settings);

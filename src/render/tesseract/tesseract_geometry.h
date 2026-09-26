@@ -150,9 +150,10 @@ struct SegmentInstance {
 
 /** @brief Tessellation parameters for buildSceneSegments. */
 struct SceneSegmentOptions {
-  float timeSpan = 10.0f;            ///< Library time extent T.
-  std::size_t tubeSamples = 48;      ///< Points per world-tube polyline.
-  std::size_t edgeSubdivisions = 16; ///< Pieces per tesseract edge (curves under stereographic).
+  float timeSpan = 10.0f;       ///< Library time extent T.
+  std::size_t tubeSamples = 48; ///< Points per world-tube polyline.
+  std::size_t edgeSubdivisions =
+      16; ///< Pieces per edge and outline link (curves under stereographic).
 };
 
 /**

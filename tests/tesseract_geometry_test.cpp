@@ -204,9 +204,10 @@ TEST(SceneSegments, LayoutCountsAndTags) {
   const std::size_t outline = tess::bedroomOutline().size();
   const std::size_t edgePieces = std::size_t{32} * options.edgeSubdivisions;
   const std::size_t tubePieces = strands * (options.tubeSamples - 1);
+  const std::size_t outlinePieces = outline * options.edgeSubdivisions;
   EXPECT_EQ(strands, 13U);
   EXPECT_EQ(outline, 12U);
-  EXPECT_EQ(segments.size(), edgePieces + tubePieces + outline);
+  EXPECT_EQ(segments.size(), edgePieces + tubePieces + outlinePieces);
   static_assert(sizeof(tess::SegmentInstance) == 12 * sizeof(float));
 
   std::array<std::size_t, 3> kindCounts{};
@@ -221,7 +222,7 @@ TEST(SceneSegments, LayoutCountsAndTags) {
   }
   EXPECT_EQ(kindCounts.at(0), edgePieces);
   EXPECT_EQ(kindCounts.at(1), tubePieces);
-  EXPECT_EQ(kindCounts.at(2), outline);
+  EXPECT_EQ(kindCounts.at(2), outlinePieces);
 }
 
 TEST(So4Upload, ColumnMajorCopyMatchesGlmMatrixVectorProduct) {

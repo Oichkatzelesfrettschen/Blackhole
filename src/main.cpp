@@ -112,6 +112,7 @@
 #include "render/render_targets.h"
 #include "render/scene_overlays.h"
 #include "render/settings_sync.h"
+#include "render/tesseract/tesseract_renderer.h"
 #include "render/uniform_binding.h"
 #include "rmlui_overlay.h"
 #include "settings.h"
@@ -190,6 +191,9 @@ using blackhole::captureCompareParity;
 using blackhole::CompareParityInputs;
 using blackhole::restoreCompareSweepState;
 
+// Speculative tesseract scene pass lives in src/render/tesseract/*.
+using blackhole::renderTesseractScene;
+
 // GL feature queries live in src/render/gl_capabilities.*.
 using blackhole::hasExtension;
 
@@ -234,6 +238,7 @@ using ui::renderGizmoPanel;
 using ui::renderPerformancePanel;
 using ui::renderRmlUiPanel;
 using ui::renderSettingsWindow;
+using ui::renderTesseractPanel;
 using ui::renderWiregridPanel;
 using ui::resetLayout;
 
@@ -1158,6 +1163,31 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
           .gizmoView = gizmoViewMatrix};
 }
 
+/**
+ * @brief Render the active scene into rs.targets.texBlackhole.
+ *
+ * The black-hole scene runs the geodesic integrator and restores any compare
+ * sweep state it changed; the tesseract scene runs its own pass and reports
+ * no GRMHD or compute activity.
+ */
+BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOptions &cli,
+                                      const Settings &settings, InputManager &input,
+                                      const FrameCamera &frameCamera, float frameTime,
+                                      double currentTime, GLuint &computeProgram) {
+  if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
+    if (input.isUIVisible()) {
+      renderSettingsWindow(rs);
+    }
+    renderTesseractScene(rs, frameCamera.basis, frameTime);
+    return {};
+  }
+  const auto result =
+      renderBlackholeFrame(rs, cli, settings, input, frameCamera.position, frameCamera.basis,
+                           frameCamera.fovScale, frameTime, currentTime, computeProgram);
+  restoreCompareSweepState(rs, input);
+  return result;
+}
+
 bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
                    const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog) {
   /* --record-frames: draw cinematic physics HUD via foreground draw list.
@@ -1168,7 +1198,7 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
     ++rs.recording.recordWarmup;
   }
   if (!cli.recordFramesDir.empty() && cli.recordProfile == "cinematic" &&
-      rs.recording.recordWarmup >= 15) {
+      rs.scene.mode == RenderState::SceneMode::Blackhole && rs.recording.recordWarmup >= 15) {
     renderCinematicOverlay(rs.recording.recordCinematic, rs.recording.recordCurrentKf,
                            glm::length(cameraPos), rs.recording.recordCurRs,
                            rs.recording.recordCurIsco, rs.recording.recordFrameIndex,
@@ -1484,23 +1514,23 @@ int main(int argc, char **argv) {
       */
       syncRenderStateToSettings(rs, settings, input);
 
-      advanceComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
+      // The compare sweep drives the geodesic integrator; the tesseract scene
+      // bypasses it along with the compute dispatch and parity capture.
+      if (rs.scene.mode == RenderState::SceneMode::Blackhole) {
+        advanceComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
+      }
 
       // --record-frames: drive camera and spin from the selected record path
       applyRecordCameraPath(rs, cli, input);
 
       const auto frameCamera = updateFrameCamera(rs, input, cli, settings, deltaTime, currentTime);
       const auto &cameraPos = frameCamera.position;
-      const auto &cameraBasis = frameCamera.basis;
-      const float fovScale = frameCamera.fovScale;
       auto projectionMatrix = frameCamera.projection;
       auto gizmoViewMatrix = frameCamera.gizmoView;
-      const auto blackholeFrame =
-          renderBlackholeFrame(rs, cli, settings, input, cameraPos, cameraBasis, fovScale,
-                               frameTime, currentTime, computeProgram);
+      const auto blackholeFrame = renderSceneFrame(rs, cli, settings, input, frameCamera, frameTime,
+                                                   currentTime, computeProgram);
       const bool grmhdReady = blackholeFrame.grmhdReady;
       const bool computeActiveForLog = blackholeFrame.computeActiveForLog;
-      restoreCompareSweepState(rs, input);
 
       GLuint const finalTexture = runPostProcessPipeline(rs, input);
 
@@ -1545,6 +1575,7 @@ int main(int argc, char **argv) {
         renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
         renderBackgroundPanel(rs);
         renderWiregridPanel(rs);
+        renderTesseractPanel(rs);
         renderRmlUiPanel(rs);
         renderGizmoPanel(rs);
         renderPerformancePanel(rs, cpuFrameMs);
@@ -1586,6 +1617,8 @@ int main(int argc, char **argv) {
     // Explicitly clean up static resources before GL context destruction
     rs.disk.noiseCache.cleanup();
     rs.hawking.hawkingRenderer.cleanup();
+    rs.tesseract.renderer.shutdown();
+    rs.tesseract.speculativeLabel.shutdown();
     if (rs.grmhd.grmhdTexture.texture != 0) {
       destroyGrmhdPackedTexture(rs.grmhd.grmhdTexture);
     }

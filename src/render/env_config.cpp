@@ -253,9 +253,28 @@ void applyOverlayEnvironment(RenderState &rs) {
   }
 }
 
+void applySceneEnvironment(RenderState &rs) {
+  if (rs.scene.envApplied) {
+    return;
+  }
+  if (const char *sceneEnv = std::getenv("BLACKHOLE_SCENE")) {
+    const std::string scene(sceneEnv);
+    if (scene == "tesseract") {
+      rs.scene.mode = RenderState::SceneMode::Tesseract;
+    } else if (scene == "blackhole") {
+      rs.scene.mode = RenderState::SceneMode::Blackhole;
+    } else {
+      std::cerr << "BLACKHOLE_SCENE='" << scene
+                << "' is not a scene; expected blackhole or tesseract\n";
+    }
+  }
+  rs.scene.envApplied = true;
+}
+
 } // namespace
 
 void applyEnvironmentConfig(RenderState &rs) {
+  applySceneEnvironment(rs);
   applyCompareEnvironment(rs);
   applyProbeEnvironment(rs);
   applyOverlayEnvironment(rs);
