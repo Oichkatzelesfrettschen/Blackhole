@@ -310,6 +310,29 @@ TEST(CampaignSave, OverBudgetTurnAndStrayCommandsAreRefusedBeforeReplay) {
   }
 }
 
+// Falsifier: a save with 1,000 turn-0 AssignTask commands and an otherwise
+// in-budget final turn loading -- the task graph they build would be rescanned
+// on every one of ~3.6e6 replayed turns before the digest check could reject
+// it. The refusal is asserted by message, not by timing it against the old
+// code (the rules forbid a wall-clock bound); the falsifier is confirmed by
+// reverting the K_SAVE_MAX_REPLAY_WORK check and observing this assertion
+// fail instead of the load being refused.
+TEST(CampaignSave, ExcessiveReplayWorkIsRefusedBeforeReplay) {
+  game::CampaignSession m87(42);
+  for (int index = 0; index < 1000; ++index) {
+    ASSERT_TRUE(m87.issueAssignTask(static_cast<game::FleetId>((index % 6) + 1), 1.0));
+  }
+  // The same 1,000-command log at turn 0 loads and replays fine: little work.
+  const std::vector<std::uint8_t> atTurnZero = game::saveCampaign(m87); // logged at turn 0
+  EXPECT_TRUE(game::loadCampaign(atTurnZero, nullptr).error.empty());
+
+  std::vector<std::uint8_t> save = atTurnZero;
+  const std::int64_t budget = game::saveReplayTurnBudget(m87.state());
+  writeI64(save, turnValueOffset(save), budget); // still in [0, budget]: passes that check alone
+  EXPECT_EQ(loadError(save, nullptr),
+            "saved commands demand more task-graph replay work than this save allows");
+}
+
 // Falsifier: an M87 save whose spin has only its sign flipped loading. The
 // session rebuilds from the header's spin, so the header check alone cannot
 // catch it; the replay digest must, because the state carries the sense of
