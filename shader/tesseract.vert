@@ -50,7 +50,10 @@ uniform float litMoment;
 uniform float lineWidthPx;
 
 layout(location = 0) out float vLibraryTime;
-layout(location = 1) out float vAcross;
+// The across coordinate lives on the screen-space ribbon, whose corners carry
+// different clip w along a deep segment; noperspective keeps the falloff
+// centered on the ribbon instead of skewing it toward the far end.
+layout(location = 1) noperspective out float vAcross;
 layout(location = 2) out float vFade;
 layout(location = 3) flat out int vKind;
 layout(location = 4) flat out int vStrand;

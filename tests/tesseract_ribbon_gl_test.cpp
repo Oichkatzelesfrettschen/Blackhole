@@ -421,4 +421,37 @@ TEST_F(TesseractRibbonGlTest, ClosedLoopsHaveUniformCorners) {
   EXPECT_GT(peak(drawRed(sides)), EDGE_PEAK_RED * 1.2f);
 }
 
+// y / depth of the deep segment, constant along it so it lies level on screen.
+constexpr float DEEP_SEGMENT_SLOPE = 0.01f;
+
+// A segment from 0.3 to 6 units deep, level on screen: its endpoints' clip
+// w differ twentyfold. The across falloff interpolates in screen space, so in
+// every column the brightness centroid sits on the ribbon's centerline.
+TEST_F(TesseractRibbonGlTest, FalloffStaysCenteredAcrossDepth) {
+  const glm::vec4 nearEnd(-0.55f, 0.3f * DEEP_SEGMENT_SLOPE, -0.3f, 0.0f);
+  const glm::vec4 farEnd(11.0f, 6.0f * DEEP_SEGMENT_SLOPE, -6.0f, 0.0f);
+  const glm::mat4 viewProjection = eyeAtOrigin();
+  const std::vector<float> red = drawRed(segment(nearEnd, farEnd), viewProjection);
+
+  const glm::vec4 clip = viewProjection * glm::vec4(glm::vec3(nearEnd), 1.0f);
+  const float centerRow = ((clip.y / clip.w) + 1.0f) * 0.5f * static_cast<float>(TARGET_HEIGHT);
+  int columns = 0;
+  for (int column = TARGET_WIDTH / 5; column < (4 * TARGET_WIDTH) / 5; ++column) {
+    double weight = 0.0;
+    double moment = 0.0;
+    for (int row = 0; row < TARGET_HEIGHT; ++row) {
+      const std::size_t index =
+          (static_cast<std::size_t>(row) * TARGET_WIDTH) + static_cast<std::size_t>(column);
+      const auto value = static_cast<double>(red.at(index));
+      weight += value;
+      moment += value * (static_cast<double>(row) + 0.5);
+    }
+    if (weight > 0.0) {
+      ++columns;
+      EXPECT_NEAR(moment / weight, static_cast<double>(centerRow), 0.2) << "column " << column;
+    }
+  }
+  EXPECT_GT(columns, TARGET_WIDTH / 2);
+}
+
 } // namespace

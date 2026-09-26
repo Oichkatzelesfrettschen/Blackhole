@@ -14,7 +14,7 @@
  */
 
 layout(location = 0) in float vLibraryTime;
-layout(location = 1) in float vAcross;
+layout(location = 1) noperspective in float vAcross; // Screen-space, as tesseract.vert writes it.
 layout(location = 2) in float vFade;
 layout(location = 3) flat in int vKind;
 layout(location = 4) flat in int vStrand;
