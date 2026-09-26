@@ -26,18 +26,18 @@ echo ""
 
 # Clean if requested
 if (( CLEAN == 1 )); then
-  echo "🧹 Cleaning build artifacts..."
+  echo "Cleaning build artifacts..."
   rm -rf "${ROOT}/build" "${ROOT}/.conan"
   echo ""
 fi
 
 # Step 1: Conan install
-echo "📦 Installing dependencies with Conan..."
+echo "Installing dependencies with Conan..."
 "${ROOT}/scripts/conan_install.sh" "${BUILD_TYPE}" build
 echo ""
 
 # Step 2: CMake configure
-echo "⚙️  Configuring CMake..."
+echo "Configuring CMake..."
 cd "${ROOT}/build"
 cmake .. \
   -G "Unix Makefiles" \
@@ -46,13 +46,13 @@ cmake .. \
 echo ""
 
 # Step 3: Build
-echo "🔨 Building Blackhole..."
+echo "Building Blackhole..."
 make -j$(nproc) Blackhole
 echo ""
 
 # Success
 echo "========================================="
-echo "✅ BUILD SUCCESS!"
+echo "BUILD SUCCESS"
 echo "========================================="
 echo ""
 echo "Executable: ${ROOT}/build/Blackhole"
