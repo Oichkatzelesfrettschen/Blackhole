@@ -382,6 +382,9 @@ private:
           fail(valuePath + ".points", "only a tech_packet carries points");
         }
         effect.techPoints = requireInteger(value->at("points"), valuePath + ".points");
+        if (effect.techPoints < 0) {
+          fail(valuePath + ".points", "tech_packet points must be non-negative");
+        }
       }
     } else if (key == "schedule") {
       rejectUnknownKeys(*value, valuePath, {"event", "delay_turns"});

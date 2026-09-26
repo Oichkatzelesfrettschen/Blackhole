@@ -447,7 +447,7 @@ void CampaignState::resolveStoryParams() {
       return flagOk(effect.flag);
     case EffectKind::Emit:
       return effect.emitKind <= EmitKind::Notice && nodeOk(effect.to) &&
-             withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT);
+             withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT) && effect.techPoints >= 0;
     case EffectKind::Schedule: {
       // The target must be a scheduled event: a once-only one runs from its
       // triggers alone and would ignore the schedule.
