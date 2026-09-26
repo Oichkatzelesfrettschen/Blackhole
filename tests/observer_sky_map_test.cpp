@@ -168,7 +168,8 @@ TEST(ObserverSkyMap, WritableCacheSubdirectoryRejectsAReadOnlyCache) {
   ASSERT_EQ(setenv("XDG_CACHE_HOME", xdg.c_str(), 1), 0);
   const std::filesystem::path writable = platform::writableCacheSubdirectory("observer_sky");
   EXPECT_EQ(writable, xdg / "blackhole" / "observer_sky");
-  EXPECT_FALSE(std::filesystem::exists(writable / ".write_probe"));
+  // The probe is removed again: only the cache directory itself remains.
+  EXPECT_TRUE(std::filesystem::is_empty(writable));
   std::filesystem::permissions(writable, std::filesystem::perms::owner_read |
                                              std::filesystem::perms::owner_exec);
   EXPECT_TRUE(platform::writableCacheSubdirectory("observer_sky").empty());

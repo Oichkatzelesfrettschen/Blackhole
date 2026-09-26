@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <random>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -77,21 +79,26 @@ std::filesystem::path writableCacheSubdirectory(std::string_view name) {
   if (cache.empty()) {
     return {};
   }
-  const std::filesystem::path directory = cache / std::filesystem::path(name);
+  std::filesystem::path directory = cache / std::filesystem::path(name);
   std::error_code error;
   std::filesystem::create_directories(directory, error);
   if (error) {
     return {};
   }
-  // An existing directory can still refuse writes (e.g. owned by another user).
-  const std::filesystem::path probe = directory / ".write_probe";
+  // An existing directory can still refuse writes (e.g. owned by another
+  // user). The probe gets a fresh name, so a leftover file cannot pass for a
+  // successful create, and it must be removable.
+  const std::filesystem::path probe =
+      directory / (".write_probe_" + std::to_string(std::random_device{}()));
   {
     std::ofstream stream(probe, std::ios::binary | std::ios::trunc);
     if (!stream || !(stream << 'x') || !stream.flush()) {
       return {};
     }
   }
-  std::filesystem::remove(probe, error);
+  if (!std::filesystem::remove(probe, error) || error) {
+    return {};
+  }
   return directory;
 }
 

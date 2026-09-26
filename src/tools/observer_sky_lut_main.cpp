@@ -22,6 +22,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <numbers>
@@ -255,7 +256,10 @@ int main(int argc, char **argv) {
     std::printf("could not write %s\n", options->out.string().c_str());
     return 1;
   }
-  const std::string stem = sky::lutStem(sky::lutHash(lut.key, lut.dimensions, lut.settings));
+  const std::uint64_t hash = sky::lutHash(lut.key, lut.dimensions, lut.settings);
+  // The default output is the renderer's shared cache, so it keeps its budget.
+  sky::evictObserverSkyBundles(options->out, sky::K_OBSERVER_SKY_CACHE_BYTES, hash);
+  const std::string stem = sky::lutStem(hash);
   std::printf("wrote %s/%s.{bin,json}\n", options->out.string().c_str(), stem.c_str());
   return 0;
 }
