@@ -47,7 +47,9 @@ KerrMinoDerivs kerrMinoDerivatives(const KerrGeodesicState& state, double mass, 
   const double sin2 = std::max(sinTheta * sinTheta, 1e-12);
   const double delta = (r * r) - (2.0 * mGeom * r) + (a * a);
   const double aFactor = (((r * r) + (a * a)) * c.e) - (a * c.lz);
-  const double deltaSafe = std::max(delta, 1e-12);
+  // A relative floor: Delta scales as M^2, and an absolute 1e-12 cm^2 is no
+  // floor at all at astrophysical mass.
+  const double deltaSafe = std::max(delta, 1e-12 * mGeom * mGeom);
 
   KerrMinoDerivs derivs{};
   derivs.dr = state.vr;

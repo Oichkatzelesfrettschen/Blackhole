@@ -70,8 +70,12 @@ struct PhotonRay {
  * @brief Result of ray tracing.
  */
 struct RayTraceResult {
-  math::Vec3d finalPosition{};               ///< Final position
-  double totalDistance = 0.0;                ///< Proper distance traveled [cm]
+  math::Vec3d finalPosition{}; ///< Final position
+  /// Affine-parameter length traversed [cm], E = 1 normalization; a photon has
+  /// no proper distance. KerrRaytracer sums its affine steps, each converted
+  /// to Mino time with Sigma at the step start, so the sum matches the affine
+  /// length of the traced path to O(h).
+  double totalDistance = 0.0;
   double redshift = 0.0;                     ///< Total gravitational redshift
   int stepsTaken = 0;                        ///< Number of integration steps
   RayStatus status = RayStatus::PROPAGATING; ///< Final status
@@ -305,6 +309,27 @@ private:
  * This integrates the Kerr geodesic equations in Mino time using
  * the potentials from physics::Kerr. Callers provide the
  * conserved quantities (E, Lz, Q) and initial signs for r/theta.
+ *
+ * The step size is an affine-parameter length [cm], the parameter
+ * SchwarzschildRaytracer steps in: with Carter's separation
+ * Sigma dr/dtau = +-sqrt(R), an affine step h is the Mino step
+ * dlambda = h / Sigma(r, theta), evaluated at the start of each step. Far from
+ * the hole dr/dtau -> E, so r advances by about E h per step. The Mino
+ * parameter itself has dimension 1/length (dr/dlambda ~ E r^2), and passing a
+ * length to kerrStepMino as dlambda moves r by ~E h r^2 in one step.
+ *
+ * The affine step is stepSize inside 10 r_s and grows as r / (10 r_s) beyond
+ * it (affineStep). Inside 10 r_s the path bends on the scale of M and the
+ * step stays fixed; farther out it bends on the scale of r, and a step that
+ * is a fixed fraction stepSize / (10 r_s) of r keeps the same accuracy. A ray
+ * leaving 10 r_s reaches the escape radius in ~ln(rEscape / 10 r_s) 10 r_s /
+ * stepSize steps: 0.02 r_s to the default 1000 r_s is ~2300 steps, inside
+ * the default budget of 10000. totalDistance accumulates the affine length.
+ *
+ * A step that ends inside the capture radius (1.001 r_+) is discarded and the
+ * trace ends CAPTURED at the state before it: past the horizon Delta changes
+ * sign and the Boyer-Lindquist phi and t rates, which carry 1 / Delta, have no
+ * meaning, so finalPosition stays the last point outside the capture radius.
  */
 class KerrRaytracer {
 public:
@@ -316,10 +341,16 @@ public:
     }
   }
 
+  /** @brief Affine step inside 10 r_s [cm]; beyond it the step grows as r / (10 r_s). */
   void setStepSize(double h) { stepSize_ = h; }
   void setMaxSteps(int n) { maxSteps_ = n; }
   void setEscapeRadius(double r) { rEscape_ = r; }
   void setRecordPath(bool record) { recordPath_ = record; }
+
+  /** @brief Affine step [cm] taken from radius r: stepSize * max(1, r / (10 r_s)). */
+  [[nodiscard]] double affineStep(double r) const {
+    return stepSize_ * std::max(1.0, r / (K_STEP_GROWTH_RADIUS_RS * rS_));
+  }
 
   [[nodiscard]] RayTraceResult trace(const KerrGeodesicState &initial,
                                      const KerrGeodesicConsts &c) const {
@@ -330,37 +361,46 @@ public:
     result.status = RayStatus::PROPAGATING;
 
     KerrGeodesicState state = kerr_.initMinoVelocities(initial, c);
+    const double rCapture = rHorizon_ * 1.001;
 
     if (recordPath_) {
       result.path.emplace_back(state.r, state.theta, state.phi);
     }
 
-    for (int step = 0; step < maxSteps_; ++step) {
-      if (state.r <= (rHorizon_ * 1.001)) {
+    if (!(state.r > rCapture)) {
+      result.status = RayStatus::CAPTURED;
+    } else if (state.r >= rEscape_) {
+      result.status = RayStatus::ESCAPED;
+    }
+
+    while (result.status == RayStatus::PROPAGATING && result.stepsTaken < maxSteps_) {
+      const double h = affineStep(state.r);
+      const KerrGeodesicState next =
+          kerr_.stepMino(state, c, h / kerr_.sigma(state.r, state.theta));
+      // A non-finite radius reads as captured, like one inside r_capture.
+      if (!(next.r > rCapture)) {
         result.status = RayStatus::CAPTURED;
         break;
       }
-      if (state.r >= rEscape_) {
-        result.status = RayStatus::ESCAPED;
-        break;
-      }
+      state = next;
 
-      state = kerr_.stepMino(state, c, stepSize_);
-
-      result.totalDistance += stepSize_;
+      result.totalDistance += h;
       ++result.stepsTaken;
 
       if (recordPath_) {
         result.path.emplace_back(state.r, state.theta, state.phi);
       }
+      if (state.r >= rEscape_) {
+        result.status = RayStatus::ESCAPED;
+      }
     }
 
     if (result.status == RayStatus::PROPAGATING) {
-      result.status = (result.stepsTaken >= maxSteps_) ? RayStatus::MaxSteps : RayStatus::ESCAPED;
+      result.status = RayStatus::MaxSteps;
     }
 
     result.finalPosition = math::Vec3d(state.r, state.theta, state.phi);
-    if (state.r > (rHorizon_ * 1.001)) {
+    if (state.r > rCapture) {
       result.redshift = 1.0 + kerr_.redshift(state.r, state.theta);
     }
 
@@ -375,6 +415,9 @@ public:
   }
 
 private:
+  /// Radius [r_s] beyond which the affine step grows in proportion to r.
+  static constexpr double K_STEP_GROWTH_RADIUS_RS = 10.0;
+
   Kerr kerr_;
   double rS_;
   double rHorizon_;
