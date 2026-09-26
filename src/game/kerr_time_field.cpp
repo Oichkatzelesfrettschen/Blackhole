@@ -8,75 +8,64 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <numbers>
 
 #include "constants.h"     // physics::G, physics::C, physics::C2
-#include "kerr.h"          // physics::kerrDelta, kerrOuterHorizon, ergosphereRadius, frameDraggingOmega
-#include "schwarzschild.h" // physics::schwarzschildRadius
+#include "kerr_observer.h" // equatorial Kerr primitives in (epsilon, x)
 
 namespace game {
 
-namespace {
-constexpr double K_MAX_SPIN_STAR = 0.998; // Thorne limit; keeps r_+ - r_- well separated.
-const double K_EQUATOR_THETA = std::numbers::pi / 2.0;
-} // namespace
+namespace ko = physics::kerr_observer;
 
 KerrTimeField::KerrTimeField(double blackHoleMassG, double spinDimensionless)
-    : blackHoleMassG_(blackHoleMassG),
-      spinStar_(std::clamp(spinDimensionless, -K_MAX_SPIN_STAR, K_MAX_SPIN_STAR)),
+    : KerrTimeField(
+          blackHoleMassG,
+          SpinDeficit{.epsilon = 1.0 - std::fabs(std::clamp(spinDimensionless, -1.0, 1.0))}) {
+  spinSign_ = spinDimensionless < 0.0 ? -1.0 : 1.0;
+}
+
+KerrTimeField::KerrTimeField(double blackHoleMassG, SpinDeficit deficit)
+    : epsilon_(std::clamp(deficit.epsilon, 0.0, 1.0)), spinSign_(1.0),
       gravitationalRadiusCm_(physics::G * blackHoleMassG / physics::C2),
-      schwarzschildRadiusCm_(physics::schwarzschildRadius(blackHoleMassG)),
-      spinCm_(spinStar_ * gravitationalRadiusCm_),
-      outerHorizonCm_(physics::kerrOuterHorizon(blackHoleMassG, spinCm_)),
-      innerHorizonCm_(physics::kerrInnerHorizon(blackHoleMassG, spinCm_)),
-      ergosphereCm_(physics::ergosphereRadius(blackHoleMassG, spinCm_, K_EQUATOR_THETA)) {
-  assert(std::isfinite(outerHorizonCm_) && std::isfinite(innerHorizonCm_));
-  assert(outerHorizonCm_ > innerHorizonCm_);
+      schwarzschildRadiusCm_(2.0 * gravitationalRadiusCm_),
+      outerHorizonCm_(gravitationalRadiusCm_ * (1.0 + ko::horizonOffset(epsilon_))),
+      ergosphereCm_(2.0 * gravitationalRadiusCm_) {
+  assert(std::isfinite(gravitationalRadiusCm_) && gravitationalRadiusCm_ > 0.0);
 }
 
 double KerrTimeField::properTimeRate(double radiusCm) const {
-  const double delta = physics::kerrDelta(radiusCm, spinCm_, schwarzschildRadiusCm_);
-  if (delta <= 0.0) {
+  if (!isValidStationRadius(radiusCm)) {
     return 0.0; // at or inside the outer horizon
   }
-  // Equatorial ZAMO lapse alpha = sqrt(Sigma * Delta / A), Sigma = r^2 (cos = 0),
-  // A = (r^2 + a^2)^2 - a^2 * Delta * sin^2 = (r^2 + a^2)^2 - a^2 * Delta.
-  const double sigma = radiusCm * radiusCm;
-  const double r2PlusA2 = (radiusCm * radiusCm) + (spinCm_ * spinCm_);
-  const double bigA = (r2PlusA2 * r2PlusA2) - (spinCm_ * spinCm_ * delta);
-  return std::sqrt((sigma * delta) / bigA);
+  return ko::equatorialFrame(epsilon_, radialOffset(radiusCm)).alpha;
 }
 
 bool KerrTimeField::isValidStationRadius(double radiusCm) const {
-  return std::isfinite(radiusCm) && radiusCm > outerHorizonCm_;
+  return std::isfinite(radiusCm) && radialOffset(radiusCm) > ko::horizonOffset(epsilon_);
 }
 
 double KerrTimeField::signalDelaySec(double fromRadiusCm, double toRadiusCm) const {
   assert(isValidStationRadius(fromRadiusCm));
   assert(isValidStationRadius(toRadiusCm));
-  const double innerRadiusCm = std::fmin(fromRadiusCm, toRadiusCm);
-  const double outerRadiusCm = std::fmax(fromRadiusCm, toRadiusCm);
-  if (innerRadiusCm == outerRadiusCm) {
+  if (fromRadiusCm == toRadiusCm) {
     return 0.0;
   }
-  // Coordinate time along an ingoing/outgoing principal null geodesic:
-  // dt = (r^2 + a^2)/Delta dr, and (r^2 + a^2) = Delta + r_s r, so
-  // delta_t = (r2 - r1) + r_s * integral r/Delta dr, with
-  // integral r/Delta dr = [r_+ ln(r-r_+) - r_- ln(r-r_-)] / (r_+ - r_-).
-  // At a = 0 (r_+ = r_s, r_- = 0) this is the Schwarzschild radial delay.
-  const double horizonGap = outerHorizonCm_ - innerHorizonCm_; // 2 sqrt(M^2 - a^2) > 0
-  const double logPlus =
-      outerHorizonCm_ * std::log((outerRadiusCm - outerHorizonCm_) / (innerRadiusCm - outerHorizonCm_));
-  const double logMinus =
-      innerHorizonCm_ * std::log((outerRadiusCm - innerHorizonCm_) / (innerRadiusCm - innerHorizonCm_));
-  const double shapiroCm = (schwarzschildRadiusCm_ / horizonGap) * (logPlus - logMinus);
-  const double delaySec = ((outerRadiusCm - innerRadiusCm) + shapiroCm) / physics::C;
+  // Coordinate time along the principal null congruence, dt = (r^2 + a^2)/Delta dr,
+  // in the atanh form that stays exact as r_+ - r_- -> 0 (kerr_observer.h). At
+  // a = 0 it is the Schwarzschild radial delay.
+  const double delayM =
+      ko::principalNullDelay(epsilon_, radialOffset(fromRadiusCm), radialOffset(toRadiusCm));
+  const double delaySec = delayM * gravitationalRadiusCm_ / physics::C;
   assert(std::isfinite(delaySec) && delaySec > 0.0);
   return delaySec;
 }
 
 double KerrTimeField::frameDragRateRadPerSec(double radiusCm) const {
-  return physics::frameDraggingOmega(radiusCm, K_EQUATOR_THETA, blackHoleMassG_, spinCm_);
+  if (!isValidStationRadius(radiusCm)) {
+    return 0.0;
+  }
+  // omega is in radians per unit M of coordinate time; M/c seconds per unit.
+  const double omegaPerM = ko::equatorialFrame(epsilon_, radialOffset(radiusCm)).omega;
+  return spinSign_ * omegaPerM * physics::C / gravitationalRadiusCm_;
 }
 
 } // namespace game

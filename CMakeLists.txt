@@ -113,11 +113,6 @@ endif()
 # Mesh Optimization (meshoptimizer)
 # ============================================================================
 
-# Declared ahead of every target section: shader_validation and the other
-# tests registered before the Testing Support section read BUILD_TESTING, and
-# an undeclared option evaluates false on a fresh configure.
-option(BUILD_TESTING "Build test targets" ON)
-
 option(ENABLE_MESHOPTIMIZER "Enable meshoptimizer for geometry optimization" ON)
 if(ENABLE_MESHOPTIMIZER)
   find_package(meshoptimizer CONFIG QUIET)
@@ -1582,7 +1577,7 @@ endif()
 
 # Deterministic turn-based campaign state (src/game/). GL-free by
 # construction: no glbinding, imgui, or glfw anywhere in this link set.
-set(CAMPAIGN_SRC_FILES
+add_library(blackhole_campaign STATIC
   "${PROJECT_SOURCE_DIR}/src/game/blackhole_time_field.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/kerr_time_field.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/temporal_clock.cpp"
@@ -1593,7 +1588,6 @@ set(CAMPAIGN_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/game/constellation.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation_session.cpp"
 )
-add_library(blackhole_campaign STATIC ${CAMPAIGN_SRC_FILES})
 target_link_libraries(blackhole_campaign PUBLIC blackhole_physics)
 target_compile_options(blackhole_campaign PRIVATE ${PROJECT_WARNINGS})
 if(ENABLE_FAST_MATH)
@@ -1781,7 +1775,6 @@ if(ENABLE_SHADER_VALIDATION)
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
       )
       set_tests_properties(shader_validation PROPERTIES
-        RESOURCE_LOCK cmake_build_tree
         LABELS "validation;shaders"
         TIMEOUT 30
       )
@@ -3092,6 +3085,7 @@ endif()
 # Testing Support (CTest)
 # ============================================================================
 
+option(BUILD_TESTING "Build test targets" ON)
 option(ENABLE_PRECISION_TESTS "Enable multiprecision regression tests" OFF)
 
 if(BUILD_TESTING)
@@ -3108,7 +3102,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(repo_truth_generation PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "docs;meta"
       TIMEOUT 120
     )
@@ -3120,7 +3113,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(physics_claims_matrix PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "docs;physics;meta"
       TIMEOUT 30
     )
@@ -3138,7 +3130,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_addon_package PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;meta"
       TIMEOUT 30
     )
@@ -3150,7 +3141,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_addon_stage PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;meta"
       TIMEOUT 30
     )
@@ -3162,7 +3152,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_bridge_abi PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;meta"
       TIMEOUT 30
     )
@@ -3174,7 +3163,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration"
       TIMEOUT 300
     )
@@ -3186,7 +3174,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline"
       TIMEOUT 300
     )
@@ -3198,7 +3185,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_background_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline;background"
       TIMEOUT 300
     )
@@ -3210,7 +3196,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_conditioned_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline;conditioning"
       TIMEOUT 360
     )
@@ -3222,7 +3207,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_depth_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline;conditioning;depth"
       TIMEOUT 480
     )
@@ -3234,7 +3218,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_image_depth_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;direct_pipeline;conditioning;depth;image_depth"
       TIMEOUT 480
     )
@@ -3246,7 +3229,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_conditioning_sweep PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;sweep"
       TIMEOUT 900
     )
@@ -3258,7 +3240,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_harsh_conditioning_sweep PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;sweep;harsh_lighting"
       TIMEOUT 900
     )
@@ -3270,7 +3251,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_conditioning_policy PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy"
       TIMEOUT 1200
     )
@@ -3282,7 +3262,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_harsh_conditioning_policy PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy;harsh_lighting"
       TIMEOUT 1200
     )
@@ -3294,7 +3273,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_policy_generation PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy_generation"
       TIMEOUT 900
     )
@@ -3306,7 +3284,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_policy_background PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy_generation;background"
       TIMEOUT 900
     )
@@ -3318,7 +3295,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_policy_production PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy_generation;production"
       TIMEOUT 900
     )
@@ -3330,7 +3306,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_blender_policy_stale_refresh PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;dream_textures;integration;conditioning;policy_generation;stale_refresh"
       TIMEOUT 900
     )
@@ -3342,7 +3317,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_addon_smoke PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;integration"
       TIMEOUT 120
     )
@@ -3354,7 +3328,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_smoke_report PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;integration;meta"
       TIMEOUT 120
     )
@@ -3366,7 +3339,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_interactive_benchmark PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;benchmark;integration"
       TIMEOUT 180
     )
@@ -3378,7 +3350,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_interactive_benchmark_report PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3390,7 +3361,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_harsh_scene_report PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3402,7 +3372,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(blender_showcase_render PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3414,7 +3383,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration"
       TIMEOUT 300
     )
@@ -3426,7 +3394,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline"
       TIMEOUT 300
     )
@@ -3438,7 +3405,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_background_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline;background"
       TIMEOUT 300
     )
@@ -3450,7 +3416,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_conditioned_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning"
       TIMEOUT 360
     )
@@ -3462,7 +3427,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_depth_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning;depth"
       TIMEOUT 480
     )
@@ -3474,7 +3438,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_image_depth_direct PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;direct_pipeline;conditioning;depth;image_depth"
       TIMEOUT 480
     )
@@ -3486,7 +3449,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_conditioning_sweep PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;sweep"
       TIMEOUT 900
     )
@@ -3498,7 +3460,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_harsh_conditioning_sweep PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;sweep;harsh_lighting"
       TIMEOUT 900
     )
@@ -3510,7 +3471,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_conditioning_policy PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy"
       TIMEOUT 1200
     )
@@ -3522,7 +3482,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_harsh_conditioning_policy PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy;harsh_lighting"
       TIMEOUT 1200
     )
@@ -3534,7 +3493,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_policy_generation PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation"
       TIMEOUT 900
     )
@@ -3546,7 +3504,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_policy_background PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;background"
       TIMEOUT 900
     )
@@ -3558,7 +3515,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_policy_production PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;production"
       TIMEOUT 900
     )
@@ -3570,7 +3526,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_octane_policy_stale_refresh PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;stale_refresh"
       TIMEOUT 900
     )
@@ -3582,7 +3537,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_conditioning_host_parity PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;sweep;meta"
       TIMEOUT 1200
     )
@@ -3594,7 +3548,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_conditioning_trends PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy;meta"
       TIMEOUT 1800
     )
@@ -3606,7 +3559,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_policy_generation PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;policy_generation;meta"
       TIMEOUT 1500
     )
@@ -3618,7 +3570,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(dream_textures_harsh_conditioning_host_parity PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;dream_textures;integration;conditioning;sweep;meta;harsh_lighting"
       TIMEOUT 1200
     )
@@ -3630,7 +3581,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_addon_smoke PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;integration"
       TIMEOUT 120
     )
@@ -3642,7 +3592,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_readiness PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;integration"
       TIMEOUT 180
     )
@@ -3654,7 +3603,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_smoke_report PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;integration;meta"
       TIMEOUT 120
     )
@@ -3666,7 +3614,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_interactive_benchmark PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration"
       TIMEOUT 180
     )
@@ -3678,7 +3625,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_interactive_benchmark_report PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3690,7 +3636,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_harsh_scene_report PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3702,7 +3647,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_showcase_render PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration;meta"
       TIMEOUT 180
     )
@@ -3714,7 +3658,6 @@ if(BUILD_TESTING)
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     )
     set_tests_properties(octane_quality_sweep_report PROPERTIES
-      RESOURCE_LOCK cmake_build_tree
       LABELS "blender;octane;benchmark;integration;meta"
       TIMEOUT 600
     )
@@ -4261,6 +4204,30 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Equatorial Kerr observers in spin-deficit form against a 50-digit mpmath
+  # referee (scripts/gen_kerr_observer_reference.py). Contraction is off so
+  # the tolerances measure the algorithm, not the FMA choice of one host.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/kerr_observer_test.cpp")
+    add_executable(kerr_observer_test
+      "${PROJECT_SOURCE_DIR}/tests/kerr_observer_test.cpp"
+    )
+    target_compile_options(kerr_observer_test PRIVATE ${PROJECT_WARNINGS} -ffp-contract=off)
+    if(ENABLE_FAST_MATH)
+      target_compile_options(kerr_observer_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(kerr_observer_test PRIVATE blackhole_campaign GTest::gtest_main)
+    add_test(NAME kerr_observer_validation COMMAND kerr_observer_test)
+    set_tests_properties(kerr_observer_validation PROPERTIES
+      LABELS "campaign;physics;kerr;time-dilation"
+      TIMEOUT 10
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(kerr_observer_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp")
     add_executable(campaign_capabilities_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp"
@@ -4356,102 +4323,6 @@ if(BUILD_TESTING)
       )
     endif()
   endif()
-
-  # ISA twins of the determinism stack, built only for the digest gates. A
-  # target's COMPILE_OPTIONS start as a copy of the directory's, so removing
-  # -march and the SIMD tier -m flags builds the same sources for the
-  # compiler's baseline ISA (the _generic twin); the _fma twin adds -mavx2
-  # -mfma back explicitly, so the gate contrasts an FMA-capable ISA against
-  # the baseline on every x86-64 host, including CI presets that build the
-  # main targets at the SSE2 tier. Each gate runs two binaries from this one
-  # build and requires byte-identical output; no digest value is committed,
-  # because the determinism scope is one build on one host.
-  function(bh_strip_isa_flags target)
-    get_target_property(_bh_opts ${target} COMPILE_OPTIONS)
-    if(_bh_opts)
-      list(FILTER _bh_opts EXCLUDE REGEX "^-march=|^-m(avx|fma|sse|ssse|f16c|bmi|popcnt|lzcnt)")
-      set_property(TARGET ${target} PROPERTY COMPILE_OPTIONS ${_bh_opts})
-    endif()
-  endfunction()
-
-  function(bh_add_isa_twin suffix)
-    add_library(blackhole_physics_${suffix} STATIC ${PHYSICS_SRC_FILES})
-    target_include_directories(blackhole_physics_${suffix} PUBLIC
-      "${PROJECT_SOURCE_DIR}/src"
-      "${PROJECT_SOURCE_DIR}/src/physics"
-    )
-    add_library(blackhole_campaign_${suffix} STATIC ${CAMPAIGN_SRC_FILES})
-    target_link_libraries(blackhole_campaign_${suffix} PUBLIC blackhole_physics_${suffix})
-    add_executable(campaign_sim_${suffix} "${PROJECT_SOURCE_DIR}/src/game/campaign_sim_main.cpp")
-    target_link_libraries(campaign_sim_${suffix} PRIVATE blackhole_campaign_${suffix})
-    add_executable(constellation_sim_${suffix}
-      "${PROJECT_SOURCE_DIR}/src/game/constellation_sim_main.cpp")
-    target_link_libraries(constellation_sim_${suffix} PRIVATE blackhole_campaign_${suffix})
-    foreach(_bh_twin IN ITEMS blackhole_physics_${suffix} blackhole_campaign_${suffix}
-                              campaign_sim_${suffix} constellation_sim_${suffix})
-      bh_strip_isa_flags(${_bh_twin})
-      target_compile_options(${_bh_twin} PRIVATE ${PROJECT_WARNINGS} ${ARGN})
-      # The twins recompile sources the primary targets already analyze; each
-      # analyzer property was copied from its CMAKE_CXX_* variable at creation.
-      set_property(TARGET ${_bh_twin} PROPERTY CXX_CLANG_TIDY "")
-      set_property(TARGET ${_bh_twin} PROPERTY CXX_CPPCHECK "")
-      set_property(TARGET ${_bh_twin} PROPERTY CXX_INCLUDE_WHAT_YOU_USE "")
-    endforeach()
-  endfunction()
-
-  function(bh_add_digest_gate name first second)
-    add_test(NAME ${name}
-      COMMAND ${CMAKE_COMMAND}
-        -DNATIVE_SIM=$<TARGET_FILE:${first}>
-        -DGENERIC_SIM=$<TARGET_FILE:${second}>
-        -DSIM_ARGS=--compare
-        -P "${PROJECT_SOURCE_DIR}/cmake/CompareSimDigests.cmake"
-    )
-    set_tests_properties(${name} PROPERTIES LABELS "campaign;determinism" TIMEOUT 120)
-  endfunction()
-
-  bh_add_isa_twin(generic)
-  # The _fma twin executes AVX2/FMA instructions, so it needs both compiler
-  # support and a host that runs them; the SIMD_TIER AUTO probe above is
-  # skipped when a preset pins the tier, so this probe runs unconditionally.
-  check_cxx_compiler_flag("-mavx2 -mfma" COMPILER_SUPPORTS_AVX2_FMA)
-  if(COMPILER_SUPPORTS_AVX2_FMA AND NOT CMAKE_CROSSCOMPILING)
-    # The probe executes an AVX2 integer add and an FMA through volatile asm,
-    # which the optimizer cannot fold or narrow to an older ISA, so it passes
-    # only where the CPU implements both and the OS enables the YMM state
-    # (XCR0); anywhere else it dies with SIGILL and the probe fails.
-    set(_bh_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
-    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -mfma")
-    check_cxx_source_runs("
-      #include <immintrin.h>
-      int main() {
-        volatile float in = 1.5f;
-        volatile int seed = 2;
-        __m256 a = _mm256_set1_ps(in);
-        __m256 r = a;
-        __asm__ volatile(\"vfmadd231ps %1, %1, %0\" : \"+x\"(r) : \"x\"(a));
-        __m256i i = _mm256_set1_epi32(seed);
-        __asm__ volatile(\"vpaddd %0, %0, %0\" : \"+x\"(i));
-        float out[8];
-        int lanes[8];
-        _mm256_storeu_ps(out, r);
-        _mm256_storeu_si256(reinterpret_cast<__m256i*>(lanes), i);
-        return (out[0] == 3.75f && lanes[7] == 4) ? 0 : 1;
-      }
-    " BH_HOST_RUNS_AVX2_FMA)
-    set(CMAKE_REQUIRED_FLAGS "${_bh_saved_required_flags}")
-  endif()
-  if(COMPILER_SUPPORTS_AVX2_FMA AND BH_HOST_RUNS_AVX2_FMA)
-    bh_add_isa_twin(fma -mavx2 -mfma)
-  endif()
-  foreach(_bh_sim IN ITEMS campaign_sim constellation_sim)
-    # The build's own ISA (native or tier flags) against the baseline.
-    bh_add_digest_gate(${_bh_sim}_isa_digest_parity ${_bh_sim} ${_bh_sim}_generic)
-    if(TARGET ${_bh_sim}_fma)
-      # FMA-capable ISA against the baseline, independent of the preset.
-      bh_add_digest_gate(${_bh_sim}_fma_digest_parity ${_bh_sim}_fma ${_bh_sim}_generic)
-    endif()
-  endforeach()
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp")
     add_executable(constellation_test
@@ -6494,34 +6365,6 @@ if(BUILD_TESTING)
   message(STATUS "Test-source completeness: ${_bh_test_count} files on disk, all accounted for")
 endif()
 
-# Deterministic floating point for the campaign stack. The determinism digest
-# covers every double the campaign serializes; FMA contraction rounds a*b+c
-# once instead of twice, so a compiler free to contract (clang's default, and
-# any -march with FMA units) makes those bits depend on the target ISA. The
-# campaign libraries, the sims, and the campaign tests (which inline
-# campaign_sim_lines.h) get IEEE semantics with contraction off. The desktop
-# executables and blackhole_testcore also link blackhole_campaign but compute
-# no digest, so they keep the preset's floating-point mode. The options append
-# after each target's own, so -ffp-contract=off follows -fno-fast-math and
-# refines IEEE mode instead of overriding a global -ffast-math.
-set(_bh_deterministic_fp_targets
-  blackhole_physics blackhole_campaign campaign_sim constellation_sim)
-get_property(_bh_all_targets DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
-foreach(_bh_target IN LISTS _bh_all_targets)
-  if(_bh_target MATCHES "^(campaign_.*|constellation|blackhole_time_field|kerr_time_field)_test$"
-     OR _bh_target MATCHES "^(blackhole_physics|blackhole_campaign|campaign_sim|constellation_sim)_(generic|fma)$")
-    list(APPEND _bh_deterministic_fp_targets "${_bh_target}")
-  endif()
-endforeach()
-foreach(_bh_target IN LISTS _bh_deterministic_fp_targets)
-  if(TARGET "${_bh_target}")
-    if(ENABLE_FAST_MATH)
-      target_compile_options("${_bh_target}" PRIVATE -fno-fast-math)
-    endif()
-    target_compile_options("${_bh_target}" PRIVATE -ffp-contract=off)
-  endif()
-endforeach()
-
 # Target creation precedes analyzer discovery for desktop and bridge targets.
 # Apply the configured checks after collecting every project directory.
 function(blackhole_apply_analysis directory_path)
@@ -6531,12 +6374,8 @@ function(blackhole_apply_analysis directory_path)
   get_property(directory_targets DIRECTORY "${directory_path}" PROPERTY BUILDSYSTEM_TARGETS)
   foreach(project_target IN LISTS directory_targets)
     get_target_property(target_type "${project_target}" TYPE)
-    # ISA twins (*_generic, *_fma) recompile analyzed sources for another
-    # ISA only; analyzing them again would duplicate every diagnostic (their
-    # CXX_CLANG_TIDY is also cleared where they are created).
     if(target_type MATCHES "^(EXECUTABLE|STATIC_LIBRARY|SHARED_LIBRARY|MODULE_LIBRARY|OBJECT_LIBRARY)$"
-       AND NOT project_target STREQUAL "implot"
-       AND NOT project_target MATCHES "_(generic|fma)$")
+       AND NOT project_target STREQUAL "implot")
       if(ENABLE_CLANG_TIDY)
         set_property(TARGET "${project_target}" PROPERTY CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY}")
         get_target_property(analysis_sources "${project_target}" SOURCES)

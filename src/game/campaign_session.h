@@ -25,9 +25,9 @@ public:
   /** @brief Canonical vertical-slice scenario: M87*-scale spinning hole
    *         (a* = 0.9), one-day turns, authority at 200 r_s, four bands
    *         (an ergoregion band at index 0 plus 3/10/50 r_s), six specialist
-   *         fleets, a 300-energy objective on a 1200-turn deadline, no tasks
-   *         contracted -- the player's move. The seed and spin are recorded in
-   *         the campaign state and serialization. Spin is clamped to +/-0.998. */
+   *         fleets, a 3150-energy objective on a 1200-turn deadline, no tasks
+   *         contracted -- the player's move. The seed is recorded in the
+   *         campaign state and serialization. Spin is clamped to [-1, 1]. */
   explicit CampaignSession(std::uint64_t seed = 1, double spinDimensionless = 0.9);
 
   [[nodiscard]] CampaignState &state() { return state_; }
