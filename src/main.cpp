@@ -810,9 +810,9 @@ struct BlackholeFrameResult {
 };
 
 BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOptions &cli,
-                                          const Settings &settings, const InputManager &input,
-                                          const glm::vec3 &cameraPos, const glm::mat3 &cameraBasis,
-                                          float fovScale, float frameTime, double currentTime,
+                                          const Settings &settings, const glm::vec3 &cameraPos,
+                                          const glm::mat3 &cameraBasis, float fovScale,
+                                          float frameTime, double currentTime,
                                           GLuint &computeProgram) {
   bool computeActiveForLog = false;
   uploadGrmhdStreamingTiles(rs);
@@ -888,11 +888,6 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const platform::CliOp
     rtti.targetTexture = rs.targets.texBlackhole;
     rtti.width = rs.targets.renderWidth;
     rtti.height = rs.targets.renderHeight;
-
-    // Render UI controls only if visible
-    if (input.isUIVisible()) {
-      renderSettingsWindow(rs);
-    }
 
     renderCurveOverlayWindow(rs, cli.curveTsvPath);
 
@@ -1178,14 +1173,11 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
                                       const FrameCamera &frameCamera, float frameTime,
                                       float deltaTime, double currentTime, GLuint &computeProgram) {
   if (rs.scene.mode == RenderState::SceneMode::Tesseract) {
-    if (input.isUIVisible()) {
-      renderSettingsWindow(rs);
-    }
     renderTesseractScene(rs, frameCamera.basis, deltaTime);
     return {};
   }
   const auto result =
-      renderBlackholeFrame(rs, cli, settings, input, frameCamera.position, frameCamera.basis,
+      renderBlackholeFrame(rs, cli, settings, frameCamera.position, frameCamera.basis,
                            frameCamera.fovScale, frameTime, currentTime, computeProgram);
   restoreCompareSweepState(rs, input);
   return result;
@@ -1516,6 +1508,13 @@ int main(int argc, char **argv) {
       }
       */
       syncRenderStateToSettings(rs, settings, input);
+
+      // The Settings window owns the Scene selector, so it draws before any
+      // code reads rs.scene.mode: dispatch, post-processing, and overlays then
+      // see one scene for the whole frame.
+      if (input.isUIVisible()) {
+        renderSettingsWindow(rs);
+      }
 
       // The compare sweep drives the geodesic integrator; the tesseract scene
       // bypasses it along with the compute dispatch and parity capture.
