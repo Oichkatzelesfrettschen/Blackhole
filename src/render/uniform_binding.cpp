@@ -192,7 +192,10 @@ void bindFragmentUniforms(RenderToTextureInfo &rtti, const RenderState &rs,
 
   // Convert black hole mass to grams (CGS units for Hawking calculation)
   double const bhMassGrams = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
-  applyInteropUniforms(rtti, interop, in.compareActive, rs.hawking.hawkingGlowEnabled, rs.hawking.hawkingTempScale,
+  // The interop branch of blackhole_main.frag is the physical Kerr tracer;
+  // compare mode forces it so fragment and compute trace the same geodesics.
+  bool const physicalFragmentPath = in.compareActive || rs.physicsCore.physicalRayTracer;
+  applyInteropUniforms(rtti, interop, physicalFragmentPath, rs.hawking.hawkingGlowEnabled, rs.hawking.hawkingTempScale,
                        rs.hawking.hawkingGlowIntensity, rs.hawking.hawkingUseLUTs, bhMassGrams);
 
   rtti.floatUniforms["wiregridEnabled"]   = rs.wiregrid.wiregridEnabled ? 1.0f : 0.0f;

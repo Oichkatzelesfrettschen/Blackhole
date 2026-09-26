@@ -186,6 +186,14 @@ struct RenderState {
     float kerrSpin = 0.0f;
     bool enablePhotonSphere = false;
     bool enableRedshift = false;
+    // Fragment path: true traces Kerr null geodesics (kerr.glsl, the same
+    // integrator as the compute and CUDA paths); false selects the legacy
+    // artistic tracer in blackhole_main.frag, which bends light with the
+    // Schwarzschild acceleration only and imitates spin with screen-space
+    // tinting. The legacy tracer stays the default until the physical path's
+    // disk emission (Page-Thorne flux, orbiting-emitter g-factor) replaces
+    // its uncalibrated shading.
+    bool physicalRayTracer = false;
   } physicsCore;
 
   struct HawkingGroup {
