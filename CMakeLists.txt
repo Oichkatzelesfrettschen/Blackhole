@@ -4357,14 +4357,15 @@ if(BUILD_TESTING)
     endif()
   endif()
 
-  # Generic-ISA twins of the determinism stack, built only for the ISA digest
-  # gate. A target's COMPILE_OPTIONS start as a copy of the directory's, so
-  # removing -march=native and the SIMD tier -m flags here builds the same
-  # sources for the compiler's baseline ISA. The gate runs each sim and its twin
-  # from this one build and requires byte-identical output; no digest value is
-  # committed, because the determinism scope is one build on one host. When the
-  # main build itself targets the baseline (the ci preset's SSE2 tier), the two
-  # binaries coincide and the gate checks only that the stack is reproducible.
+  # ISA twins of the determinism stack, built only for the digest gates. A
+  # target's COMPILE_OPTIONS start as a copy of the directory's, so removing
+  # -march and the SIMD tier -m flags builds the same sources for the
+  # compiler's baseline ISA (the _generic twin); the _fma twin adds -mavx2
+  # -mfma back explicitly, so the gate contrasts an FMA-capable ISA against
+  # the baseline on every x86-64 host, including CI presets that build the
+  # main targets at the SSE2 tier. Each gate runs two binaries from this one
+  # build and requires byte-identical output; no digest value is committed,
+  # because the determinism scope is one build on one host.
   function(bh_strip_isa_flags target)
     get_target_property(_bh_opts ${target} COMPILE_OPTIONS)
     if(_bh_opts)
@@ -4373,47 +4374,52 @@ if(BUILD_TESTING)
     endif()
   endfunction()
 
-  add_library(blackhole_physics_generic STATIC ${PHYSICS_SRC_FILES})
-  target_include_directories(blackhole_physics_generic PUBLIC
-    "${PROJECT_SOURCE_DIR}/src"
-    "${PROJECT_SOURCE_DIR}/src/physics"
-  )
-  target_compile_options(blackhole_physics_generic PRIVATE ${PROJECT_WARNINGS})
-  add_library(blackhole_campaign_generic STATIC ${CAMPAIGN_SRC_FILES})
-  target_link_libraries(blackhole_campaign_generic PUBLIC blackhole_physics_generic)
-  target_compile_options(blackhole_campaign_generic PRIVATE ${PROJECT_WARNINGS})
-  add_executable(campaign_sim_generic
-    "${PROJECT_SOURCE_DIR}/src/game/campaign_sim_main.cpp"
-  )
-  target_link_libraries(campaign_sim_generic PRIVATE blackhole_campaign_generic)
-  target_compile_options(campaign_sim_generic PRIVATE ${PROJECT_WARNINGS})
-  add_executable(constellation_sim_generic
-    "${PROJECT_SOURCE_DIR}/src/game/constellation_sim_main.cpp"
-  )
-  target_link_libraries(constellation_sim_generic PRIVATE blackhole_campaign_generic)
-  target_compile_options(constellation_sim_generic PRIVATE ${PROJECT_WARNINGS})
-  foreach(_bh_generic IN ITEMS blackhole_physics_generic blackhole_campaign_generic
-                                campaign_sim_generic constellation_sim_generic)
-    bh_strip_isa_flags(${_bh_generic})
-    # The twins recompile sources the primary targets already analyze;
-    # CXX_CLANG_TIDY was copied from CMAKE_CXX_CLANG_TIDY at creation.
-    set_property(TARGET ${_bh_generic} PROPERTY CXX_CLANG_TIDY "")
-  endforeach()
+  function(bh_add_isa_twin suffix)
+    add_library(blackhole_physics_${suffix} STATIC ${PHYSICS_SRC_FILES})
+    target_include_directories(blackhole_physics_${suffix} PUBLIC
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+    )
+    add_library(blackhole_campaign_${suffix} STATIC ${CAMPAIGN_SRC_FILES})
+    target_link_libraries(blackhole_campaign_${suffix} PUBLIC blackhole_physics_${suffix})
+    add_executable(campaign_sim_${suffix} "${PROJECT_SOURCE_DIR}/src/game/campaign_sim_main.cpp")
+    target_link_libraries(campaign_sim_${suffix} PRIVATE blackhole_campaign_${suffix})
+    add_executable(constellation_sim_${suffix}
+      "${PROJECT_SOURCE_DIR}/src/game/constellation_sim_main.cpp")
+    target_link_libraries(constellation_sim_${suffix} PRIVATE blackhole_campaign_${suffix})
+    foreach(_bh_twin IN ITEMS blackhole_physics_${suffix} blackhole_campaign_${suffix}
+                              campaign_sim_${suffix} constellation_sim_${suffix})
+      bh_strip_isa_flags(${_bh_twin})
+      target_compile_options(${_bh_twin} PRIVATE ${PROJECT_WARNINGS} ${ARGN})
+      # The twins recompile sources the primary targets already analyze;
+      # CXX_CLANG_TIDY was copied from CMAKE_CXX_CLANG_TIDY at creation.
+      set_property(TARGET ${_bh_twin} PROPERTY CXX_CLANG_TIDY "")
+    endforeach()
+  endfunction()
 
-  # Determinism across target ISAs: each sim and its generic-ISA twin from this
-  # build must print byte-identical outcome and digest lines.
-  foreach(_bh_sim IN ITEMS campaign_sim constellation_sim)
-    add_test(NAME ${_bh_sim}_isa_digest_parity
+  function(bh_add_digest_gate name first second)
+    add_test(NAME ${name}
       COMMAND ${CMAKE_COMMAND}
-        -DNATIVE_SIM=$<TARGET_FILE:${_bh_sim}>
-        -DGENERIC_SIM=$<TARGET_FILE:${_bh_sim}_generic>
+        -DNATIVE_SIM=$<TARGET_FILE:${first}>
+        -DGENERIC_SIM=$<TARGET_FILE:${second}>
         -DSIM_ARGS=--compare
         -P "${PROJECT_SOURCE_DIR}/cmake/CompareSimDigests.cmake"
     )
-    set_tests_properties(${_bh_sim}_isa_digest_parity PROPERTIES
-      LABELS "campaign;determinism"
-      TIMEOUT 120
-    )
+    set_tests_properties(${name} PROPERTIES LABELS "campaign;determinism" TIMEOUT 120)
+  endfunction()
+
+  bh_add_isa_twin(generic)
+  check_cxx_compiler_flag("-mavx2 -mfma" COMPILER_SUPPORTS_AVX2_FMA)
+  if(COMPILER_SUPPORTS_AVX2_FMA)
+    bh_add_isa_twin(fma -mavx2 -mfma)
+  endif()
+  foreach(_bh_sim IN ITEMS campaign_sim constellation_sim)
+    # The build's own ISA (native or tier flags) against the baseline.
+    bh_add_digest_gate(${_bh_sim}_isa_digest_parity ${_bh_sim} ${_bh_sim}_generic)
+    if(COMPILER_SUPPORTS_AVX2_FMA)
+      # FMA-capable ISA against the baseline, independent of the preset.
+      bh_add_digest_gate(${_bh_sim}_fma_digest_parity ${_bh_sim}_fma ${_bh_sim}_generic)
+    endif()
   endforeach()
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/constellation_test.cpp")
@@ -6468,12 +6474,11 @@ endif()
 # after each target's own, so -ffp-contract=off follows -fno-fast-math and
 # refines IEEE mode instead of overriding a global -ffast-math.
 set(_bh_deterministic_fp_targets
-  blackhole_physics blackhole_campaign campaign_sim constellation_sim
-  blackhole_physics_generic blackhole_campaign_generic
-  campaign_sim_generic constellation_sim_generic)
+  blackhole_physics blackhole_campaign campaign_sim constellation_sim)
 get_property(_bh_all_targets DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
 foreach(_bh_target IN LISTS _bh_all_targets)
-  if(_bh_target MATCHES "^(campaign_.*|constellation|blackhole_time_field|kerr_time_field)_test$")
+  if(_bh_target MATCHES "^(campaign_.*|constellation|blackhole_time_field|kerr_time_field)_test$"
+     OR _bh_target MATCHES "^(blackhole_physics|blackhole_campaign|campaign_sim|constellation_sim)_(generic|fma)$")
     list(APPEND _bh_deterministic_fp_targets "${_bh_target}")
   endif()
 endforeach()
@@ -6495,12 +6500,12 @@ function(blackhole_apply_analysis directory_path)
   get_property(directory_targets DIRECTORY "${directory_path}" PROPERTY BUILDSYSTEM_TARGETS)
   foreach(project_target IN LISTS directory_targets)
     get_target_property(target_type "${project_target}" TYPE)
-    # *_generic targets recompile analyzed sources for the baseline ISA only;
-    # analyzing them again would duplicate every diagnostic (their
+    # ISA twins (*_generic, *_fma) recompile analyzed sources for another
+    # ISA only; analyzing them again would duplicate every diagnostic (their
     # CXX_CLANG_TIDY is also cleared where they are created).
     if(target_type MATCHES "^(EXECUTABLE|STATIC_LIBRARY|SHARED_LIBRARY|MODULE_LIBRARY|OBJECT_LIBRARY)$"
        AND NOT project_target STREQUAL "implot"
-       AND NOT project_target MATCHES "_generic$")
+       AND NOT project_target MATCHES "_(generic|fma)$")
       if(ENABLE_CLANG_TIDY)
         set_property(TARGET "${project_target}" PROPERTY CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY}")
         get_target_property(analysis_sources "${project_target}" SOURCES)
