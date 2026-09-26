@@ -284,9 +284,12 @@ multiplies into disk density. It is ranked first because it has the widest reach
   which is the mu = 1 form. The null form is `Q + a^2 E^2 cos^2 - L^2 cot^2`. The test
   `kerr.rs:1175` repeats the same wrong expression, so it is tautological.
 - Blackhole's `kerr.cpp:91` writes `Q + a^2 E^2 cos^2 - Lz^2/sin^2`, and `:92-94` differentiates
-  that expression. `Lz^2/sin^2 = Lz^2 cot^2 + Lz^2`, so with Carter's Q this Theta is low by
-  `Lz^2`, the same defect as `01-renderer-accuracy.md` F1. The fix for all three Blackhole
-  sites lands in PR #27.
+  that expression (the additive `Lz^2` does not survive differentiation, so `:92-94` is still
+  the standard Carter derivative). `kerrEquatorialConsts` (`kerr.h:407`) sets Carter's `q = 0`
+  directly, with no Q-shift anywhere in the CPU path, unlike `kerr.glsl`/`device_physics.cuh`'s
+  shifted-Q initializer. `Lz^2/sin^2 = Lz^2 cot^2 + Lz^2`, so this Theta is low by `Lz^2`: the
+  same wrong `Lz^2/sin^2` term as `01-renderer-accuracy.md` F1, but the error sits in Theta
+  here instead of in R (01 F1, Sites). The fix for all three Blackhole sites lands in PR #27.
 - **OBSERVED:** for a=0.9, E=1, L=2, Q=10, `trace_null_geodesic` reaches a polar turning
   point at |cos theta|max = 0.845154. That equals the timelike prediction 0.845154 and
   misses the null prediction 0.851939.

@@ -42,7 +42,9 @@ edges of the project instead:
    `precision_policy`) pays off twice.**
    - Boost.Math's default `promote_double` policy runs Blackhole's analytic-Kerr elliptic
      calls in x87 long double. `promote_double<false>` makes `jacobi_sn` 8.5x faster and
-     `ellint_1` 3.3x faster, with results that differ by at most 2e-15.
+     `ellint_1` 3.3x faster, with results that differ by at most 2e-15 for `1 - m >= 4e-3`;
+     nearer the Kerr critical curve the unpromoted policy costs up to 5.9e-9, so M2's speedup
+     needs the modulus gate item 4 (Ranked recommendations) states.
    - Kahan-compensated state accumulation in an FP32 RK4 photon orbit cuts total position
      error 15x at 1200 steps and 1700x at 30000 steps, for 16 extra adds per step. RK4
      truncation stays at or below 1e-7 at every step size tested (a long-double h/64 truth
@@ -83,8 +85,12 @@ Carlson, Cariow sedenion schedule, E8 rotation, QJL, IDCT8 butterfly, LBM crates
 - C++ compiled with `-std=c++23 -O2`, and additionally `-ffp-contract=off` where stated.
   These flags omit Blackhole's `-march=native`, so they measure algorithmic cost rather than
   a particular target ISA.
-- Cargo ran with `CARGO_TARGET_DIR` outside both trees, `--offline --locked`, and
-  open_gororoba's own `Cargo.lock` copied into the scratch bench crate.
+- Cargo ran with `CARGO_TARGET_DIR` outside both trees. The `pe_bench` scratch bench crate
+  (M5) ran against open_gororoba's own `Cargo.lock` copied beside its manifest, with
+  `--offline` and unlocked in Cargo's sense: the copied lock lacks the scratch crate's own
+  root entry, and `--locked` forbids adding it (`harness/README.md`). M8 ran `cargo test
+  --offline --locked` from the open_gororoba checkout itself, against its own native lock,
+  with no copied lock involved.
 - Every formula a port needs is also written out below.
 - Evidence labels:
   - **proved**: a Rocq theorem with no conclusion-restating axiom.
@@ -289,9 +295,9 @@ computes the 8-point DCT with 11 multiplications.
 |---|---|---|---|---|
 | N3 Lorentz/biquaternion exact Stokes propagator | CPU full-K RK4 `stokes_transport.h:369-400` (tests only); GPU simplified K `shader/include/stokes_transport.glsl:65`, `src/cuda/device_physics.cuh:2199` | Measured: 1e-11 max error in all regimes. RK4 needs 181 ns to 553 us for 1e-6. Exact 190-220 ns robust, 55-60 ns fast | Math proved (C-876 framing); kernel measured here vs mpmath | ADOPT (C++ and GLSL reimplementation) |
 | Thin-regime cancellation (found by the N3 stress test) | GLSL `stokes_transport.glsl:82-99`; CUDA `device_physics.cuh:~2231-2254` | Measured: FP32 `(1-E)/A` error 2.9e-4 at `tauL=1e-4`; 4-term series 8e-8 | measured here | ADOPT (series in GLSL; `expm1f` in CUDA) |
-| N6 quartic cross-check | `findRadialRoots` `analytic_kerr_geodesic.h:188,207` (test path `tests/analytic_geodesic_reproducibility_test.cpp`) | Measured: 0 of 2 known quartics solved before the fix, all solved after | measured here | ADOPT (two-line fix plus regression test) |
+| N6 quartic cross-check | `findRadialRoots` `analytic_kerr_geodesic.h:188,207` (no test calls it; the regression test belongs in `tests/analytic_geodesic_reproducibility_test.cpp`) | Measured: 0 of 2 known quartics solved before the fix, all solved after | measured here | ADOPT (two-line fix plus regression test) |
 | N6 complex Carlson plus Carlson 1995 rule | `elliptic_integrals.h:60-200` (tests and helper functions only) | Measured: RF 304->80 ns, RD 343->116 ns, RJ 1374->167 ns at <= 7e-16 error | tested (mpmath referee) | ADOPT when used in a hot path; pathion 32D wrapper NOT-APPLICABLE |
-| N4 x87 insight applied to Boost policy | `analytic_kerr_geodesic.h:340,385` | Measured: `jacobi_sn` 1375->162 ns, `ellint_1` 19.4->5.9 ns, diff <= 2e-15 | measured here | ADOPT (policy argument) |
+| N4 x87 insight applied to Boost policy | `analytic_kerr_geodesic.h:340,385` | Measured: `jacobi_sn` 1375->162 ns, `ellint_1` 19.4->5.9 ns, diff <= 2e-15 for `1 - m >= 4e-3`, up to 5.9e-9 unpromoted nearer `m = 1` | measured here | ADOPT (policy argument) away from `m = 1`; gate the promotion near it (item 4) |
 | N4 compensated accumulation in FP32 RK4 | `shader/include/geodesics.glsl:181`, verified `rk4.glsl`, CUDA FP32 kernels | Measured CPU FP32: 15x-1700x lower error. Overhead 1.07-1.08x on a 12-flop RHS; derived 3-5% on the Kerr RHS | measured here (CPU FP32 emulation) | PROTOTYPE (GPU A/B not run) |
 | N7 rotation + Lloyd-Max quantization | GRMHD tiles `grmhd_streaming.h:92-99` (RGBA32F) | Measured (synthetic): RMSE/sigma 0.166 vs affine 0.210 at 2 bits; loses at >= 4 bits | measured here (synthetic field) | NOT-APPLICABLE as shipped |
 | WHT energy compaction + bit allocation (N7 transform, used differently) | same | Measured (synthetic): 0.035 at 4 bits vs affine 0.042; 8x smaller than RGBA32F | measured here (synthetic field) | PROTOTYPE |
@@ -391,9 +397,13 @@ x87 80-bit unit that `cd_kernel::x87_*` exploits on purpose. `analytic_kerr_geod
 | `jacobi_sn(k,u)` | 1375.4 ns | 161.5 ns | 1.9e-15 abs |
 | `ellint_rf(0,1-k^2,1)` | 94.2 ns | 15.9 ns | -- |
 
-The accuracy cost is at most 2e-15. Consumers are
-`tests/analytic_geodesic_reproducibility_test.cpp` and the CPU reference path. CUDA uses its
-own FP32 Cephes AGM (`device_analytic_kerr.cuh:50`).
+The accuracy cost is at most 2e-15 over this sweep (`k` in [0, 0.999), so `1 - m >= 4e-3`);
+it does not bound the near-degenerate moduli the Kerr critical curve and plunging orbits
+reach, where the Ranked recommendations below report up to 5.9e-9. The consumer is
+`rAnalytic`/`radialHalfPeriod` in `analytic_kerr_geodesic.h`'s CPU reference path; at
+`34e1bf1`, `tests/analytic_geodesic_reproducibility_test.cpp` does not call either function
+or `jacobi_sn`/`ellint_1`. CUDA uses its own FP32 Cephes AGM
+(`device_analytic_kerr.cuh:50`).
 
 ### M3. Exact polarized-transfer propagator vs RK4
 
@@ -747,8 +757,25 @@ executed.
    RK4's 181 ns to 553 us per segment at 1e-6. Falsifier: disagreement > 1e-10 with the
    mpmath 5x5 `expm` referee on the M3 case sets, which should become a CTest.
 4. **Pass `policy<promote_double<false>>`** to `jacobi_sn` and `ellint_1` in
-   `analytic_kerr_geodesic.h`. Measured 8.5x and 3.3x at <= 2e-15. Falsifier: the
-   `analytic_geodesic_reproducibility` tolerances.
+   `analytic_kerr_geodesic.h`, away from `m = 1`. Measured 8.5x and 3.3x faster, within 2e-15
+   of the promoted result over M2's swept range (`k` in [0, 0.999), so `1 - m >= 4e-3`); that
+   range does not probe the near-degenerate moduli the Kerr critical curve and plunging
+   orbits reach. Falsifier: reference cases that call `rAnalytic` and `radialHalfPeriod` down
+   to `1 - m` near 0 against an mpmath table with explicit tolerances --
+   `analytic_geodesic_reproducibility_test`'s existing tests 1-15 exercise `radialPotential`,
+   `criticalImpactParams`, and the photon-orbit radii, none of which reach `rAnalytic`,
+   `radialHalfPeriod`, `jacobi_sn`, or `ellint_1`. PR #32 adds exactly this: tests 16-17 read
+   an mpmath-generated table (`tests/analytic_kerr_reference.inc`, 40 digits, `1 - m` from
+   0.6 to 1e-10) and gate `radialHalfPeriod` to 4 ulp and `rAnalytic` to 4 ulp times its
+   first-order error bound. On a non-FMA build the unpromoted `ellint_1` re-forms `1 - m` by
+   cancellation and put `radialHalfPeriod` 8.2e-12, 1.9e-10, and 5.9e-9 relative from the
+   table at `1 - m` = 1e-6, 1e-8, and 1e-10; the fix takes `K` from an AGM formed from the
+   roots instead, dropping `ellint_1` from the path. Separately, Boost's `jacobi_elliptic`
+   loses digits in `cn` near `m = 1` (27x its first-order error bound at `1 - m = 3e-7`, 980x
+   at `3e-10`); at `34e1bf1`, `rAnalytic`'s sn^2-only rational never uses the `cn` it computes
+   (`:341`, "unused but kept for symmetry"), but a `cn^2` rewrite of `r(lambda)` does, so
+   `rAnalytic` keeps `promote_double<false>` only for `1 - m >= 1e-4` and promotes `sn` and
+   `cn` below it.
 5. **Rewrite `elliptic_integrals.h` Carlson** with the 1995 stopping rule, the DLMF 19.36
    series, and the closed-form R_C before any hot path uses it. Measured 3.8x/3.0x/8.2x at
    <= 7e-16. Falsifier: the M1 mpmath referee set.

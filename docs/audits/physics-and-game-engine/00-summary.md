@@ -15,8 +15,16 @@ civilizations interact under time dilation in the Interstellar (Thorne 2014; Jam
 | [04-engineering-baseline.md](04-engineering-baseline.md) | Tests, CI, static gates, hygiene |
 | [05-open-gororoba-novel-numerics.md](05-open-gororoba-novel-numerics.md) | Algebra and numerics concepts explained, mapped to Blackhole hot paths, measured |
 
-Every numeric verdict comes from an independent referee (mpmath at 50 digits written from
-the textbook metric, numpy, or a C++/Rust driver; all kept in `harness/`). Agreement between Blackhole and
+Every numeric verdict rests on a preserved harness kept in `harness/`. An independent
+referee -- mpmath at 30-60 digits written from the textbook metric, numpy, or the published
+literature -- backs findings checked against a closed form or a paper. A C++ or Rust driver
+backs findings that measure one implementation against another or against itself:
+`bh/driver.cpp`, `bh/mino2.cpp`, `bh/gfac.cpp`, and `bh/ecg.cpp` link Blackhole's own
+functions; `grx` links open_gororoba's; 05's M2 compares two Boost policies against each
+other; M4 compares the same RK4 scheme at higher precision. 01's `checks.py`, `rcheck.py`,
+`shadow.py`, and `shadow2.py` are a fourth kind: line-by-line Python ports of the shipped
+GLSL/CUDA/CPU source, which measure the shipped formula's own behavior rather than referee
+it. Agreement between Blackhole and
 open_gororoba counts for nothing on the modules gr_core ported from Blackhole in 2026-02
 (02, "Lineage finding"): one source counted twice. Findings marked MECHANISM RE-VERIFIED
 had their algebra and code path re-derived a second time outside the reporting agent; the
@@ -28,7 +36,11 @@ quantitative consequences (shadow widths, ray counts) rest on that agent's scrat
    `shader/include/kerr.glsl:176-177` writes Theta = Q + a^2 cos^2 - Lz^2/sin^2, so the
    initializer's Q equals Carter's Q + Lz^2. `kerr.glsl:175` then builds
    R = A^2 - Delta (Q + (Lz - a)^2) with Carter's form, which over-subtracts Delta Lz^2. The
-   same pair lives in `src/cuda/device_physics.cuh:390,481,484` and `src/physics/kerr.cpp:91`.
+   same shifted-Q, short-R pair lives in `src/cuda/device_physics.cuh:390,481,484`.
+   `src/physics/kerr.cpp:84` keeps the standard R with an unshifted Carter Q; only its Theta
+   (`:91`, 02 F8) carries the same `Lz^2/sin^2` term, so the CPU defect is a Theta shortfall
+   of Lz^2, not the GPU's Delta Lz^2 shortfall in R. The additive Lz^2 does not survive
+   differentiation, so `kerr.cpp:92-94`'s `dThetadtheta` is still the standard Carter form.
    The reporting agent measures the shadow at a != 0 at 0.67-0.69x the width the same
    (non-tetrad) coordinate camera gives with the standard R (01 F1's table; a physical-size
    figure needs F9's observer-tetrad fix), with a 32% jump between a = 0 (Schwarzschild RK4
@@ -127,11 +139,18 @@ both, each measured in 02 or 05:
 - **Precision tiers** (`algebra_analysis` precision_policy). The rule is to spend
   precision where the error accumulates, not everywhere. x87 accumulation of up to 2048 terms
   stays within one final double rounding (`N 2^-64 <= 2^-53`); longer sums need Kahan
-  compensation. For Blackhole, the M2 measurement alone says Boost.Math should stop
-  promoting doubles to x87 80-bit: the unpromoted `jacobi_sn` and `ellint_1` land within
-  2e-15 of the promoted results, so promotion buys nothing at 8.5x and 3.3x cost. FP32 GPU RK4
-  should compensate its state accumulation (position error 15x lower at 1200 steps and
-  1700x lower at 30000, for about 3-5% cost).
+  compensation. For Blackhole, the M2 measurement says Boost.Math can stop promoting doubles
+  to x87 80-bit away from `m = 1`: over M2's swept range (`k` in [0, 0.999), `1 - m >= 4e-3`)
+  the unpromoted `jacobi_sn` and `ellint_1` land within 2e-15 of the promoted results, buying
+  8.5x and 3.3x at no accuracy cost there. Nearer the Kerr critical curve, unpromoted
+  `ellint_1` re-forms `1 - m` by cancellation and costs `radialHalfPeriod` up to 5.9e-9 at
+  `1 - m = 1e-10`; 05 recommends an AGM `K` that never forms `1 - m` instead. Separately,
+  Boost's `jacobi_elliptic` loses digits in `cn` near `m = 1` (980x its first-order error
+  bound at `1 - m = 3e-10`), which does not affect `rAnalytic`'s `34e1bf1` sn^2-only rational
+  (`cn` is computed and discarded) but does affect a `cn^2` rewrite of `r(lambda)`, so 05
+  recommends keeping `promote_double<false>` only for `1 - m >= 1e-4` (05 item 4).
+  FP32 GPU RK4 should compensate its state accumulation (position error 15x lower at 1200
+  steps and 1700x lower at 30000, for about 3-5% cost).
 - **The Lorentz structure of polarized transfer** (quaternion/Clifford theorems C-876,
   C-911, C-912). The Stokes propagation matrix minus its trace generates a Lorentz
   transformation: dichroism is a boost, Faraday rotation is a rotation, and so(1,3) is the
@@ -148,7 +167,7 @@ lines):
 | Concept | What it is | Blackhole hot path | Measured or derived result | Verdict |
 | --- | --- | --- | --- | --- |
 | N3 quaternion/Clifford rotations | Sandwich q v q* equals the rotation matrix, preserves norm, composes by product (proved) | Polarized transfer (`stokes_transport.h`, GPU Stokes) | Closed-form Lorentz propagator above | ADOPT (reimplement) |
-| N4 precision tiers | Error grows as N u; Kahan keeps it near 2u; x87 shrinks u by 2^11 | Boost elliptic calls; FP32 RK4 state | 8.5x/3.3x faster elliptic; 15-1700x lower FP32 drift | ADOPT policy; PROTOTYPE GPU Kahan |
+| N4 precision tiers | Error grows as N u; Kahan keeps it near 2u; x87 shrinks u by 2^11 | Boost elliptic calls; FP32 RK4 state | 8.5x/3.3x faster elliptic at <= 2e-15 for `1 - m >= 4e-3`; unpromoted `radialHalfPeriod` up to 5.9e-9 near `m = 1` (an AGM `K` removes it); unpromoted `jacobi_elliptic` cn up to 980x its error bound below `1 - m = 1e-4`; 15-1700x lower FP32 RK4 drift | ADOPT policy away from `m = 1`; AGM `K` plus gated promotion near it; PROTOTYPE GPU Kahan |
 | N6 Carlson duplication | Elliptic integrals by repeated argument halving, then a short series | `elliptic_integrals.h` R_F/R_D/R_J | Carlson 1995 stopping rule: 3.8x/3.0x/8.2x faster at <= 7e-16; Blackhole's series coefficients are wrong, masked by tol = 1e-10 | ADOPT when Carlson reaches a hot path. The "32D pathion" wrapper is 16 independent complex evaluations; the pairing is not a subalgebra, so the algebra adds nothing |
 | Series stress test (from N4) | Taylor-expand (1-E)/A where FP32 cancels | GPU Stokes/RTE emission factor near `tauL < 1e-4` | 2.9e-4 FP32 error above the guard; 4-term series holds 8e-8 to tauL = 0.03 | ADOPT |
 | N7 random rotation + Lloyd-Max (`fwht`) | Random signs, fast Walsh-Hadamard, random signs make block values near-Gaussian, so one codebook fits all | GRMHD tile streaming | Plain WHT compaction with bit allocation: about 8x below RGBA32F at 2-4 bits/value on a synthetic Kolmogorov field; the rotation wins only at 2 bits | PROTOTYPE on real GRMHD dumps |
