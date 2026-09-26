@@ -22,6 +22,7 @@
 #include <optional>
 #include <random>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -332,28 +333,19 @@ std::string formatDouble(double value) {
   return text.data();
 }
 
-} // namespace
-
-std::uint64_t lutHash(const ObserverKey &key, const LutDimensions &dimensions,
-                      const TraceSettings &settings) {
-  ByteWriter writer;
-  writeInputs(writer, key, dimensions, settings);
-  return writer.hash();
-}
-
-std::string lutStem(std::uint64_t hash) {
-  std::array<char, 17> hex{};
-  (void)std::snprintf(hex.data(), hex.size(), "%016llx", static_cast<unsigned long long>(hash));
-  return std::string("observer_sky_") + hex.data();
-}
-
-ObserverSkyLut buildObserverSkyLut(const ObserverKey &key, const LutDimensions &dimensions,
-                                   const TraceSettings &settings, unsigned threads) {
+/** @brief The build; returns early, with the bundle incomplete, once `stop`
+ *         is requested. */
+ObserverSkyLut buildLut(const ObserverKey &key, const LutDimensions &dimensions,
+                        const TraceSettings &settings, unsigned threads,
+                        const std::stop_token &stop) {
   ObserverSkyLut lut;
   lut.key = key;
   lut.dimensions = dimensions;
   lut.settings = settings;
-  lut.sky = traceEquirect(key, dimensions.width, dimensions.height, settings, threads);
+  lut.sky = traceEquirect(key, dimensions.width, dimensions.height, settings, threads, stop);
+  if (stop.stop_requested()) {
+    return lut;
+  }
   const SkyStatistics sky = equirectStatistics(lut.sky);
 
   // Seed the peak search with the brightest equirect pixel and with the
@@ -374,11 +366,17 @@ ObserverSkyLut buildObserverSkyLut(const ObserverKey &key, const LutDimensions &
                                 zamoZenithLook(key.velocity)};
   PeakSearch search;
   search.initialHalfWidth = 4.0 * std::numbers::pi / static_cast<double>(dimensions.width);
-  lut.peak = findPeakBlueshift(observerTetrad(key), seeds, search, settings);
+  lut.peak = findPeakBlueshift(observerTetrad(key), seeds, search, settings, stop);
+  if (stop.stop_requested()) {
+    return lut;
+  }
 
   lut.tile = tileAround(lut.peak.look, dimensions.tileRhoMin, dimensions.tileRhoMax,
                         dimensions.tileRadial, dimensions.tileAzimuth);
-  lut.tileImage = traceTile(key, lut.tile, settings, threads);
+  lut.tileImage = traceTile(key, lut.tile, settings, threads, stop);
+  if (stop.stop_requested()) {
+    return lut;
+  }
   const EnergyRegion region = tileEnergyRegion(lut.tileImage, lut.tile, 0.99);
 
   const LogPolarTile &tile = lut.tile;
@@ -415,6 +413,38 @@ ObserverSkyLut buildObserverSkyLut(const ObserverKey &key, const LutDimensions &
   stats.connectivityDisagreements =
       static_cast<std::uint64_t>(lut.sky.connectivityDisagreements) +
       static_cast<std::uint64_t>(lut.tileImage.connectivityDisagreements);
+  return lut;
+}
+
+} // namespace
+
+std::uint64_t lutHash(const ObserverKey &key, const LutDimensions &dimensions,
+                      const TraceSettings &settings) {
+  ByteWriter writer;
+  writeInputs(writer, key, dimensions, settings);
+  return writer.hash();
+}
+
+std::string lutStem(std::uint64_t hash) {
+  std::array<char, 17> hex{};
+  (void)std::snprintf(hex.data(), hex.size(), "%016llx", static_cast<unsigned long long>(hash));
+  return std::string("observer_sky_") + hex.data();
+}
+
+ObserverSkyLut buildObserverSkyLut(const ObserverKey &key, const LutDimensions &dimensions,
+                                   const TraceSettings &settings, unsigned threads) {
+  return buildLut(key, dimensions, settings, threads, std::stop_token{});
+}
+
+std::optional<ObserverSkyLut> tryBuildObserverSkyLut(const ObserverKey &key,
+                                                     const LutDimensions &dimensions,
+                                                     const TraceSettings &settings,
+                                                     unsigned threads,
+                                                     const std::stop_token &stop) {
+  ObserverSkyLut lut = buildLut(key, dimensions, settings, threads, stop);
+  if (stop.stop_requested()) {
+    return std::nullopt;
+  }
   return lut;
 }
 

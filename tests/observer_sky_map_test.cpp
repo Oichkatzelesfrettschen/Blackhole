@@ -31,6 +31,7 @@
 #include <numbers>
 #include <optional>
 #include <random>
+#include <stop_token>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -538,6 +539,26 @@ TEST(ObserverSkyMap, PublishedBundleIsWholeAndChecksummed) {
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
   }
   EXPECT_FALSE(sky::readObserverSkyLut(file, hash).has_value());
+}
+
+/** @brief A requested stop yields no bundle; an idle stop source changes
+ *         nothing about the build. */
+TEST(ObserverSkyMap, StoppedBuildYieldsNoBundle) {
+  const sky::ObserverKey key = orbiting(0.1, 3.0);
+  const sky::LutDimensions dimensions{.width = 32, .height = 16, .tileRadial = 8, .tileAzimuth = 8};
+  const std::stop_source stopped;
+  stopped.request_stop();
+  EXPECT_FALSE(
+      sky::tryBuildObserverSkyLut(key, dimensions, defaultSettings(), 2, stopped.get_token())
+          .has_value());
+  const std::stop_source idle;
+  const std::optional<sky::ObserverSkyLut> built =
+      sky::tryBuildObserverSkyLut(key, dimensions, defaultSettings(), 2, idle.get_token());
+  if (!built.has_value()) {
+    GTEST_FAIL() << "an idle stop source stopped the build";
+  }
+  EXPECT_EQ(built->sky.rgba,
+            sky::buildObserverSkyLut(key, dimensions, defaultSettings(), 2).sky.rgba);
 }
 
 } // namespace

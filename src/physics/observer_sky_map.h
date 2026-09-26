@@ -36,6 +36,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <stop_token>
 #include <vector>
 
 #include "kerr_observer.h"
@@ -184,14 +185,17 @@ struct SkyImage {
 
 /** @brief Traces every pixel of a width x height equirectangular sky. Rows are
  *         independent; `threads` 0 uses the hardware concurrency. The result
- *         does not depend on the thread count. */
+ *         does not depend on the thread count. Once `stop` is requested no
+ *         further row starts, and the image is incomplete. */
 [[nodiscard]] SkyImage traceEquirect(const ObserverKey &key, std::size_t width, std::size_t height,
-                                     const TraceSettings &settings, unsigned threads = 0);
+                                     const TraceSettings &settings, unsigned threads = 0,
+                                     const std::stop_token &stop = {});
 
 /** @brief Traces every texel of a log-polar tile (width = azimuthCount,
- *         height = radialCount). */
+ *         height = radialCount); `threads` and `stop` as for traceEquirect. */
 [[nodiscard]] SkyImage traceTile(const ObserverKey &key, const LogPolarTile &tile,
-                                 const TraceSettings &settings, unsigned threads = 0);
+                                 const TraceSettings &settings, unsigned threads = 0,
+                                 const std::stop_token &stop = {});
 
 /** @brief Look direction of the photon that falls radially inward in the ZAMO
  *         frame, aberrated into the observer's frame: longitude pi - asin(v),
@@ -216,8 +220,11 @@ struct PeakResult {
   Vec3 look{1.0, 0.0, 0.0};
   double g = 0.0;
 };
+/** @brief The PeakSearch refinement; once `stop` is requested no further
+ *         level starts and the best direction so far is returned. */
 [[nodiscard]] PeakResult findPeakBlueshift(const Tetrad &tetrad, const std::vector<Vec3> &seeds,
-                                           const PeakSearch &search, const TraceSettings &settings);
+                                           const PeakSearch &search, const TraceSettings &settings,
+                                           const std::stop_token &stop = {});
 
 /** @brief Whole-sky statistics of an equirectangular image. */
 struct SkyStatistics {

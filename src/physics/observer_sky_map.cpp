@@ -15,6 +15,7 @@
 #include <numbers>
 #include <numeric>
 #include <optional>
+#include <stop_token>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -183,13 +184,18 @@ Vec4 receivedZamoMomentum(const Tetrad &tetrad, const Vec3 &look) {
   return zamo;
 }
 
-template <typename Body> void parallelRows(std::size_t rows, unsigned threads, const Body &body) {
+/** @brief Runs body(row) for every row on a pool of worker threads; once
+ *         `stop` is requested no further row starts. */
+template <typename Body>
+void parallelRows(std::size_t rows, unsigned threads, const std::stop_token &stop,
+                  const Body &body) {
   const unsigned hardware = std::max(1U, std::thread::hardware_concurrency());
   const unsigned count =
       static_cast<unsigned>(std::min<std::size_t>(threads == 0 ? hardware : threads, rows));
   std::atomic<std::size_t> next{0};
-  const auto worker = [&next, rows, &body]() {
-    for (std::size_t row = next.fetch_add(1); row < rows; row = next.fetch_add(1)) {
+  const auto worker = [&next, rows, &stop, &body]() {
+    for (std::size_t row = next.fetch_add(1); row < rows && !stop.stop_requested();
+         row = next.fetch_add(1)) {
       body(row);
     }
   };
@@ -269,7 +275,8 @@ std::vector<float> sourceSpans(const std::vector<double> &swept, const std::vect
 
 template <typename LookAt>
 SkyImage traceImage(const ObserverKey &key, std::size_t width, std::size_t height,
-                    const TraceSettings &settings, unsigned threads, const LookAt &lookAt) {
+                    const TraceSettings &settings, unsigned threads, const std::stop_token &stop,
+                    const LookAt &lookAt) {
   const Tetrad tetrad = observerTetrad(key);
   SkyImage image;
   image.width = width;
@@ -281,7 +288,7 @@ SkyImage traceImage(const ObserverKey &key, std::size_t width, std::size_t heigh
   std::vector<double> swept(width * height, noSky);
   std::vector<double> polar(width * height, noSky);
   std::vector<std::size_t> disagreements(height, 0);
-  parallelRows(height, threads, [&](std::size_t row) {
+  parallelRows(height, threads, stop, [&](std::size_t row) {
     for (std::size_t column = 0; column < width; ++column) {
       const auto [ray, disagrees] = traceAndCompare(tetrad, lookAt(column, row), settings);
       const std::size_t texel = (row * width) + column;
@@ -460,17 +467,18 @@ double tileTexelSolidAngle(const LogPolarTile &tile, std::size_t radial) {
 }
 
 SkyImage traceEquirect(const ObserverKey &key, std::size_t width, std::size_t height,
-                       const TraceSettings &settings, unsigned threads) {
-  return traceImage(key, width, height, settings, threads,
+                       const TraceSettings &settings, unsigned threads,
+                       const std::stop_token &stop) {
+  return traceImage(key, width, height, settings, threads, stop,
                     [width, height](std::size_t column, std::size_t row) {
                       return equirectLook(column, row, width, height);
                     });
 }
 
 SkyImage traceTile(const ObserverKey &key, const LogPolarTile &tile, const TraceSettings &settings,
-                   unsigned threads) {
+                   unsigned threads, const std::stop_token &stop) {
   return traceImage(
-      key, tile.azimuthCount, tile.radialCount, settings, threads,
+      key, tile.azimuthCount, tile.radialCount, settings, threads, stop,
       [&tile](std::size_t column, std::size_t row) { return tileLook(tile, row, column); });
 }
 
@@ -479,7 +487,8 @@ Vec3 zamoZenithLook(double velocity) {
 }
 
 PeakResult findPeakBlueshift(const Tetrad &tetrad, const std::vector<Vec3> &seeds,
-                             const PeakSearch &search, const TraceSettings &settings) {
+                             const PeakSearch &search, const TraceSettings &settings,
+                             const std::stop_token &stop) {
   PeakResult best;
   const auto consider = [&best, &tetrad, &settings](const Vec3 &look) {
     const SkyRay ray = traceSkyRay(tetrad, look, settings);
@@ -498,7 +507,7 @@ PeakResult findPeakBlueshift(const Tetrad &tetrad, const std::vector<Vec3> &seed
       static_cast<int>(std::floor(std::log(search.initialHalfWidth / search.finestHalfWidth) /
                                   std::log(search.shrink))) +
       1;
-  for (int level = 0; level < levels; ++level) {
+  for (int level = 0; level < levels && !stop.stop_requested(); ++level) {
     const double width = search.initialHalfWidth * std::pow(search.shrink, -level);
     const LogPolarTile frame = tileAround(best.look, 1.0, 2.0, 1, 1);
     for (std::size_t i = 0; i < points; ++i) {

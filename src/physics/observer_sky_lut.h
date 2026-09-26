@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <stop_token>
 #include <string>
 
 #include "observer_sky_map.h"
@@ -90,6 +91,15 @@ inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 3;
                                                  const LutDimensions &dimensions,
                                                  const TraceSettings &settings,
                                                  unsigned threads = 0);
+
+/** @brief buildObserverSkyLut that checks `stop` between rows and refinement
+ *         levels: nothing once a stop is requested before the bundle is
+ *         complete, so a stopped build never reaches the cache. */
+[[nodiscard]] std::optional<ObserverSkyLut> tryBuildObserverSkyLut(const ObserverKey &key,
+                                                                   const LutDimensions &dimensions,
+                                                                   const TraceSettings &settings,
+                                                                   unsigned threads,
+                                                                   const std::stop_token &stop);
 
 /** @brief Writes <dir>/<stem>.bin and <dir>/<stem>.json; false on any I/O error. */
 bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path &directory);
