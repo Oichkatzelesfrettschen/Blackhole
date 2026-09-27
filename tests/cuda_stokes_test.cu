@@ -29,12 +29,15 @@
 
 #include <gtest/gtest.h>
 #include <cuda_runtime.h>
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <vector>
 
 #include "cuda/kernel_launch.h"
 #include "cuda/device_physics.cuh"
 #include "physics/page_thorne.h"
+#include "physics/safe_limits.h"
 
 /* ========================================================================
  * Device-side kernel wrapper for calling d_stokes_step from host tests
@@ -197,6 +200,83 @@ protected:
         }
     }
 };
+
+__global__ void stokes_display_kernel(DStokes stokes, float3 intensity, float4 *output) {
+    *output = d_stokes_display_color(stokes, intensity);
+}
+
+TEST_F(CudaStokesTest, DisplayMatchesAngularReference) {
+    struct DisplayCase {
+        DStokes stokes;
+        float3 intensity;
+    };
+    std::vector<DisplayCase> cases;
+    // Axis and quadrant coverage includes zero, physical fractions, and the
+    // saturated display of overpolarized states.
+    for (float const fraction : {0.0f, 0.5f, 1.0f, 2.0f}) {
+        for (std::array<float, 2> const direction :
+             {std::array<float, 2>{1.0f, 0.0f}, {-1.0f, 0.0f}, {0.0f, 1.0f},
+              {0.0f, -1.0f}, {0.6f, 0.8f}, {-0.6f, 0.8f},
+              {0.6f, -0.8f}, {-0.6f, -0.8f}}) {
+            cases.push_back({{0.0f, fraction * direction[0], fraction * direction[1],
+                              fraction - 1.0f}, make_float3(0.5f, 1.0f, 1.5f)});
+        }
+    }
+    for (float const intensity : {0.0f, -1.0f, 0.5e-10f, 1.0e-10f, 2.0e-10f}) {
+        cases.push_back({{0.0f, 0.3f, -0.4f, 0.8f},
+                         make_float3(intensity, intensity, intensity)});
+    }
+    // Large finite Q/U values overflow an unscaled squared norm. The RGB
+    // range also checks CUDA's lower-only output clamp above display white.
+    cases.push_back({{0.0f, 3.0e30f, -4.0e30f, 1.0e30f},
+                     make_float3(1.0e30f, 2.0e30f, 3.0e30f)});
+    cases.push_back({{0.0f, -3.0e30f, 4.0e30f, -1.0e30f},
+                     make_float3(0.5f, 1.0f, 1.5f)});
+    cases.push_back({{0.0f, 0.3f, 0.4f, -1.0f}, make_float3(-0.2f, 0.8f, 2.4f)});
+
+    float4 *deviceOutput = nullptr;
+    ASSERT_EQ(cudaMalloc(&deviceOutput, sizeof(float4)), cudaSuccess);
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        SCOPED_TRACE(index);
+        DisplayCase const &sample = cases[index];
+        stokes_display_kernel<<<1, 1>>>(sample.stokes, sample.intensity, deviceOutput);
+        EXPECT_EQ(cudaGetLastError(), cudaSuccess);
+        EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+        float4 output{};
+        EXPECT_EQ(cudaMemcpy(&output, deviceOutput, sizeof(output), cudaMemcpyDeviceToHost),
+                  cudaSuccess);
+
+        // Match the production intensity reduction, then use an independent
+        // double-precision angular oracle for the polarization tint.
+        double const luminance = (sample.intensity.x + sample.intensity.y + sample.intensity.z)
+                                 * 0.33333333f;
+        double fraction = 0.0;
+        double angle = 0.0;
+        double circularFraction = 0.0;
+        if (luminance > static_cast<double>(1.0e-10f)) {
+            fraction = std::min(std::hypot(static_cast<double>(sample.stokes.q),
+                                          static_cast<double>(sample.stokes.u)) / luminance, 1.0);
+            if (sample.stokes.q != 0.0f || sample.stokes.u != 0.0f) {
+                angle = std::atan2(static_cast<double>(sample.stokes.u),
+                                   static_cast<double>(sample.stokes.q));
+            }
+            circularFraction = std::clamp(static_cast<double>(sample.stokes.v) / luminance,
+                                          -0.5, 0.5);
+        }
+        std::array<double, 3> const reference = {
+            std::max(sample.intensity.x * (1.0 + 0.4 * fraction * std::cos(angle)), 0.0),
+            std::max(sample.intensity.y * (1.0 + 0.4 * fraction * std::sin(angle)), 0.0),
+            std::max(sample.intensity.z * (1.0 + 0.2 * circularFraction), 0.0)};
+        std::array<float, 3> const actual = {output.x, output.y, output.z};
+        for (std::size_t channel = 0; channel < actual.size(); ++channel) {
+            EXPECT_TRUE(physics::safeIsfinite(actual[channel]));
+            EXPECT_NEAR(actual[channel], reference[channel],
+                        std::max(1.0e-16, std::abs(reference[channel]) * 2.0e-6));
+        }
+        EXPECT_FLOAT_EQ(output.w, 1.0f);
+    }
+    EXPECT_EQ(cudaFree(deviceOutput), cudaSuccess);
+}
 
 /* ========================================================================
  * Test 1: PureRotation

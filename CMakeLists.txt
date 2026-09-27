@@ -1427,6 +1427,20 @@ endif()
 # ============================================================================
 
 if(ENABLE_BENCHMARKS)
+  # Device timer comparison of the shipped polarization display and its
+  # angular reference. Requires a live GL 4.6 context; run explicitly.
+  add_executable(stokes_display_bench bench/stokes_display_bench.cpp)
+  target_include_directories(stokes_display_bench PRIVATE "${PROJECT_SOURCE_DIR}/tests")
+  target_compile_definitions(stokes_display_bench PRIVATE
+    GLFW_INCLUDE_NONE
+    BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+  )
+  target_compile_options(stokes_display_bench PRIVATE ${PROJECT_WARNINGS})
+  if(ENABLE_FAST_MATH)
+    target_compile_options(stokes_display_bench PRIVATE -fno-fast-math)
+  endif()
+  target_link_libraries(stokes_display_bench PRIVATE glfw glbinding::glbinding)
+
   add_executable(physics_bench
     "${PROJECT_SOURCE_DIR}/bench/physics_bench.cpp"
     "${PROJECT_SOURCE_DIR}/src/shader.cpp"

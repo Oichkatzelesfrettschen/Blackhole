@@ -1645,6 +1645,81 @@ void main() {
   glDeleteProgram(program);
 }
 
+TEST_F(KerrShaderCaptureTest, StokesDisplayMatchesAngularReferenceAcrossThePolarizationDisk) {
+  // The angular oracle is independent of the Cartesian display formula.
+  // Axes and zero polarization also exercise the singular angular coordinates;
+  // HDR cases detect overflow from squaring unscaled Stokes components.
+  const GLuint program = bhtest::createComputeProgram(R"(
+#version 460 core
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+#include "include/stokes_transport.glsl"
+uniform vec4 inputStokes;
+uniform vec3 inputBase;
+void main() {
+  vec3 color = stokesDisplayColor(inputStokes, inputBase);
+  result[0] = color.r; result[1] = color.g; result[2] = color.b;
+}
+)");
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 3), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+  const GLint stokesLocation = glGetUniformLocation(program, "inputStokes");
+  const GLint baseLocation = glGetUniformLocation(program, "inputBase");
+  const auto check = [&](const std::array<float, 4> &stokes, const std::array<float, 3> &base) {
+    glUseProgram(program);
+    glUniform4fv(stokesLocation, 1, stokes.data());
+    glUniform3fv(baseLocation, 1, base.data());
+    const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 3);
+    std::array<double, 3> expected{};
+    if (stokes.at(0) >= 1.0e-10F) {
+      const auto intensity = static_cast<double>(stokes.at(0));
+      const double polarized =
+          std::hypot(static_cast<double>(stokes.at(1)), static_cast<double>(stokes.at(2)));
+      const double fraction = std::min(polarized / intensity, 1.0);
+      const double angle = polarized > 0.0 ? std::atan2(static_cast<double>(stokes.at(2)),
+                                                        static_cast<double>(stokes.at(1)))
+                                           : 0.0;
+      expected = {
+          static_cast<double>(base.at(0)) * (1.0 + (0.4 * fraction * std::cos(angle))),
+          static_cast<double>(base.at(1)) * (1.0 + (0.4 * fraction * std::sin(angle))),
+          static_cast<double>(base.at(2)) *
+              (1.0 + (0.2 * std::clamp(static_cast<double>(stokes.at(3)) / intensity, -0.5, 0.5)))};
+      for (double &channel : expected) {
+        channel = std::clamp(channel, 0.0, 10.0);
+      }
+    }
+    for (std::size_t channel = 0; channel < 3; ++channel) {
+      EXPECT_NEAR(out.at(channel), expected.at(channel), 3.0e-6)
+          << "I=" << stokes.at(0) << " Q=" << stokes.at(1) << " U=" << stokes.at(2)
+          << " V=" << stokes.at(3) << " channel=" << channel;
+    }
+  };
+  constexpr std::array<float, 3> base = {0.6F, 0.3F, 0.9F};
+  for (const float intensity : {1.0e-10F, 1.0e-5F, 1.0F, 1.0e10F, 1.0e30F}) {
+    for (const float fraction : {0.0F, 0.3F, 1.0F, 2.0F}) {
+      for (int direction = 0; direction < 16; ++direction) {
+        const double angle = static_cast<double>(direction) * std::numbers::pi / 8.0;
+        check({intensity, intensity * fraction * static_cast<float>(std::cos(angle)),
+               intensity * fraction * static_cast<float>(std::sin(angle)), 0.1F * intensity},
+              base);
+      }
+    }
+    // Exact axes supplement the angular sweep's rounded sine/cosine values.
+    for (const float sign : {-1.0F, 1.0F}) {
+      check({intensity, 0.0F, sign * intensity, sign * intensity}, base);
+      check({intensity, sign * intensity, 0.0F, sign * intensity}, {-1.0F, 20.0F, 3.0F});
+    }
+  }
+  for (const float intensity : {-1.0F, 0.0F, 0.999e-10F, 1.001e-10F}) {
+    check({intensity, 0.5F, -0.5F, 1.0F}, base);
+  }
+  check({1.0e-10F, 1.0e30F, -1.0e30F, 0.0F}, base);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
 TEST_F(KerrShaderCaptureTest, StokesAddsTheSkyWhenItsStepBudgetRunsOut) {
   // A ray that exhausts its step budget is shaded as escaping along its last
   // direction: bhTraceGeodesicRTE adds the transmittance-weighted sky there,
