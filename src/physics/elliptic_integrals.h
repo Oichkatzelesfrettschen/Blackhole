@@ -143,8 +143,16 @@ inline double carlsonRc(double x, double y) {
     return (s < seriesBelow) ? (1.0 - (s * s / 3.0)) / std::sqrt(x) : std::atan(s) / gap;
   }
   const double gap = std::sqrt(x - y);
-  const double t = gap / std::sqrt(y);
-  return (t < seriesBelow) ? (1.0 - (t * t / 6.0)) / std::sqrt(y) : std::asinh(t) / gap;
+  const double rootY = std::sqrt(y);
+  if (gap < seriesBelow * rootY) {
+    const double t = gap / rootY;
+    return (1.0 - (t * t / 6.0)) / rootY;
+  }
+  // asinh(gap / rootY) = log(gap) - log(rootY) + log(1 + hypot(1, rootY / gap)).
+  if (gap > 1.0e150 * rootY) {
+    return (std::log(gap) - std::log(rootY) + std::log1p(std::hypot(1.0, rootY / gap))) / gap;
+  }
+  return std::asinh(gap / rootY) / gap;
 }
 
 /// DLMF 19.36.2 series shared by R_D and R_J: e2..e5 are the elementary
@@ -285,7 +293,7 @@ inline double carlsonRjPositive(double x, double y, double z, double p, double r
  * @param relTol Relative tolerance r of the stopping rule
  * @return R_J(x,y,z,p); +inf for p = 0 or two zeros among x, y, z
  */
-inline double carlsonRj(double x, double y, double z, double p, double relTol = CARLSON_REL_TOL) {
+inline double carlsonRjUnscaled(double x, double y, double z, double p, double relTol) {
   if (!(p < 0.0)) {
     return carlsonRjPositive(x, y, z, p, relTol);
   }
@@ -302,6 +310,18 @@ inline double carlsonRj(double x, double y, double z, double p, double relTol = 
   return (((pp - mid) * carlsonRjPositive(lo, mid, hi, pp, relTol)) -
           (3.0 * carlsonRf(lo, mid, hi, relTol)) + tail) /
          (mid + q);
+}
+
+inline double carlsonRj(double x, double y, double z, double p, double relTol = CARLSON_REL_TOL) {
+  if (p < 0.0) {
+    const double scale = std::max({x, y, z, -p});
+    if (scale > 1.0e100) {
+      const double normalized = carlsonRjUnscaled(x / scale, y / scale, z / scale,
+                                                  p / scale, relTol);
+      return (normalized / std::sqrt(scale)) / scale;
+    }
+  }
+  return carlsonRjUnscaled(x, y, z, p, relTol);
 }
 
 // ============================================================================

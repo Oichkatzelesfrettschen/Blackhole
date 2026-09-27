@@ -412,6 +412,48 @@ void testRk4Converges() {
   check(e32 / e64 > 14.0 && e32 / e64 < 18.0, "RK4 converges to the exact step at fourth order");
 }
 
+void testExtremeScaleReferences() {
+  const StokesArray zero{};
+  const double source = stokesPropagateExact(zero, {1.0e150, 0.0, 0.0, 0.0},
+                                             {.alphaI = -570.0 / 1.0e-200}, 1.0e-200)[0];
+  check(std::abs((source / 6.1941230578740827e194) - 1.0) < 2.0e-13,
+        "source with tiny segment length matches mpmath within 2e-13 relative");
+
+  const StokesArray faraday =
+      stokesPropagateExact({1.0, 1.0, 0.0, 0.0}, zero, {.rhoV = 1.0e154}, 1.0);
+  check(std::abs(faraday[1] - 0.9585335384748351) < 2.0e-15 &&
+            std::abs(faraday[2] + 0.28497974598015176) < 2.0e-15,
+        "Faraday depth 1e154 matches mpmath within 2e-15 absolute");
+
+  const StokesArray thick =
+      stokesPropagateExact(zero, {1.0, 0.0, 0.0, 0.0}, {.alphaI = 1.0e155}, 1.0);
+  check(std::abs((thick[0] / 1.0e-155) - 1.0) < 2.0e-13,
+        "optical depth 1e155 matches mpmath within 2e-13 relative");
+  const StokesArray thickDichroic = stokesPropagateExact(
+      zero, {1.0, 0.0, 0.0, 0.0}, {.alphaI = 1.0e155, .alphaQ = 5.0e154}, 1.0);
+  check(std::abs((thickDichroic[0] / 1.3333333333333333e-155) - 1.0) < 2.0e-13 &&
+            std::abs((thickDichroic[1] / -6.6666666666666667e-156) - 1.0) < 2.0e-13,
+        "thick dichroic limit matches mpmath within 2e-13 relative");
+  const StokesArray thickFaraday = stokesPropagateExact(
+      zero, {0.0, 1.0, 0.0, 0.0}, {.alphaI = 1.0e155, .rhoV = 1.0}, 1.0);
+  check(std::abs((thickFaraday[1] / 1.0e-155) - 1.0) < 2.0e-13 &&
+            std::abs((thickFaraday[2] / 1.0e-310) - 1.0) < 2.0e-13,
+        "thick Faraday limit matches mpmath within 2e-13 relative");
+
+  const StokesArray dichroic = stokesPropagateExact(
+      {std::numeric_limits<double>::denorm_min(), 0.0, 0.0, 0.0}, zero,
+      {.alphaQ = 720.0}, 1.0);
+  check(std::abs((dichroic[0] / 1.2155746415512074e-11) - 1.0) < 2.0e-13 &&
+            std::abs((dichroic[1] / -1.2155746415512074e-11) - 1.0) < 2.0e-13,
+        "dichroic gain of subnormal input matches mpmath within 2e-13 relative");
+  const StokesArray dichroicSource = stokesPropagateExact(
+      zero, {std::numeric_limits<double>::denorm_min(), 0.0, 0.0, 0.0},
+      {.alphaQ = 720.0}, 1.0);
+  check(std::abs((dichroicSource[0] / 1.6882981132655658e-14) - 1.0) < 2.0e-13 &&
+            std::abs((dichroicSource[1] / -1.6882981132655658e-14) - 1.0) < 2.0e-13,
+        "dichroic gain of subnormal emission matches mpmath within 2e-13 relative");
+}
+
 } // namespace
 
 int main() try {
@@ -431,6 +473,7 @@ int main() try {
   testInvariants();
   testSimplifiedKAgreement();
   testRk4Converges();
+  testExtremeScaleReferences();
 
   std::printf("\n%d/%d tests passed.\n", gPass, gPass + gFail);
   if (gFail > 0) {

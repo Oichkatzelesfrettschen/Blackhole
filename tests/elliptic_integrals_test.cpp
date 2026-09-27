@@ -48,6 +48,7 @@
 #include <format>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <numbers>
 #include <numeric>
 #include <string>
@@ -400,6 +401,17 @@ bool testCarlsonDivergent() {
   return true;
 }
 
+bool testExtremeCarlsonReferences() {
+  const double rj = carlsonRj(1.0e200, 2.0e200, 3.0e200, -1.0e200);
+  const double rc = carlsonRc(1.0e300, std::numeric_limits<double>::denorm_min());
+  // The principal-value reference is Re(mpmath.elliprj(1, 2, 3, -1)) / 1e300.
+  check(std::abs((rj / -9.3240452438676412e-302) - 1.0) < 4.0e-15,
+        "large negative-p R_J matches mpmath principal value within 4e-15 relative");
+  check(std::abs((rc / 7.1830094709035743e-148) - 1.0) < 2.0e-15,
+        "wide-range R_C matches mpmath within 2e-15 relative");
+  return true;
+}
+
 } // namespace
 
 int main() try {
@@ -441,6 +453,7 @@ int main() try {
   testCriticalImpactParameterKerr();
   std::cout << "\n";
   testCarlsonDivergent();
+  testExtremeCarlsonReferences();
   std::cout << "\n";
 
   std::cout << "================================================\n"
