@@ -11,13 +11,17 @@
  * - Longair (2011) "High Energy Astrophysics" Ch. 8
  */
 
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <exception>
 #include <iomanip>
 #include <iostream>
 #include <vector>
 
+#include "../shader/include/synchrotron_lut_domain.h"
 #include "../src/physics/synchrotron.h"
 
 using namespace physics;
@@ -25,6 +29,77 @@ using namespace physics;
 // Tolerances for algebraic and approximate spectral-index checks.
 constexpr double TOLERANCE = 1e-5;
 constexpr double RELAXED_TOLERANCE = 0.15;
+
+namespace {
+
+/// Mirrors synchLutSample in shader/include/synchrotron_emission.glsl: linear
+/// interpolation at texel centers over the log domain, continued past the
+/// table ends by the leading asymptotes x^(1/3) and sqrt(x) e^-x.
+double sampleSynchrotronLut(const std::vector<float> &values, double x) {
+  constexpr int entryCount = SYNCH_G_LUT_DOMAIN_ENTRIES;
+  constexpr double xMin = SYNCH_G_LUT_DOMAIN_X_MIN;
+  constexpr double xMax = SYNCH_G_LUT_DOMAIN_X_MAX;
+  const double logRatio = std::log(xMax / xMin);
+  const double clamped = std::clamp(x, xMin, xMax);
+  const double coordinate = std::log(clamped / xMin) / logRatio;
+  const double texcoord = ((coordinate * (entryCount - 1)) + 0.5) / entryCount;
+  const double texel = (texcoord * entryCount) - 0.5;
+  const int left = std::clamp(static_cast<int>(std::floor(texel)), 0, entryCount - 1);
+  const int right = std::clamp(left + 1, 0, entryCount - 1);
+  const double weight = std::clamp(texel - std::floor(texel), 0.0, 1.0);
+  const auto leftValue = static_cast<double>(values.at(static_cast<std::size_t>(left)));
+  const auto rightValue = static_cast<double>(values.at(static_cast<std::size_t>(right)));
+  const double value = (leftValue * (1.0 - weight)) + (rightValue * weight);
+  if (x < xMin) {
+    return value * std::cbrt(x / xMin);
+  }
+  if (x > xMax) {
+    return value * std::sqrt(x / xMax) * std::exp(xMax - x);
+  }
+  return value;
+}
+
+bool withinRelative(double got, double expected, double tolerance, const char *label, double x) {
+  const double error = std::abs((got / expected) - 1.0);
+  if (error > tolerance) {
+    std::cerr << label << " x=" << x << " relative error=" << error << '\n';
+    return false;
+  }
+  return true;
+}
+
+bool testSynchrotronFLut() {
+  constexpr int entryCount = SYNCH_G_LUT_DOMAIN_ENTRIES;
+  constexpr double xMin = SYNCH_G_LUT_DOMAIN_X_MIN;
+  constexpr double xMax = SYNCH_G_LUT_DOMAIN_X_MAX;
+  std::vector<float> values(entryCount);
+  synchrotronFGenerateLut(values.data(), entryCount, xMin, xMax);
+  const double logRatio = std::log(xMax / xMin);
+  bool passed = true;
+  for (int index = 0; index < entryCount; ++index) {
+    const double x = xMin * std::exp(index * logRatio / (entryCount - 1));
+    passed = withinRelative(static_cast<double>(values.at(static_cast<std::size_t>(index))),
+                            synchrotronF(x), 1.0e-6, "F LUT entry", x) &&
+             passed;
+  }
+  const auto sample = [&values](double x) { return sampleSynchrotronLut(values, x); };
+  // The continuation meets the end entries and follows the asymptotes.
+  for (const double join : {xMin, xMax}) {
+    passed = withinRelative(sample(join * (1.0 - 1.0e-9)), sample(join * (1.0 + 1.0e-9)), 1.0e-6,
+                            "F LUT join", join) &&
+             passed;
+  }
+  const std::array<double, 6> probes = {1.0e-5, 50.0, 0.0099, 0.0101, 9.9, 10.1};
+  passed = std::ranges::all_of(probes,
+                               [&](double x) {
+                                 return withinRelative(sample(x), synchrotronF(x), 0.02,
+                                                       "F LUT sample", x);
+                               }) &&
+           passed;
+  return passed;
+}
+
+} // namespace
 
 /**
  * @brief Test 1: Synchrotron F(x) against mpmath at low frequencies
@@ -398,7 +473,11 @@ int main() try {
               << "====================================================\n";
 
     int passed = 0;
-    int const total = 9;
+    int const total = 10;
+
+    if (testSynchrotronFLut()) {
+      passed++;
+    }
 
     if (testSynchrotronFLowFreq()) {
       passed++;

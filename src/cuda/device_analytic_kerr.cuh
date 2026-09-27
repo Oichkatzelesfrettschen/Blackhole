@@ -43,11 +43,12 @@
  *
  * @param u   Argument (real, any range)
  * @param m   Parameter m = k^2, the elliptic modulus squared (0 <= m <= 1)
+ * @param complement  Complementary parameter 1 - m, retained from the roots
  * @param sn  Output: sn(u|m)
  * @param cn  Output: cn(u|m)
  * @param dn  Output: dn(u|m)
  */
-__device__ void d_ellpj(float u, float m, float* sn, float* cn, float* dn)
+__device__ void d_ellpj(float u, float m, float complement, float* sn, float* cn, float* dn)
 {
     /* Special case: m ~ 0 => trigonometric limit */
     if (m < 1.0e-8f) {
@@ -58,8 +59,8 @@ __device__ void d_ellpj(float u, float m, float* sn, float* cn, float* dn)
         *dn = 1.0f;
         return;
     }
-    /* Special case: m ~ 1 => hyperbolic limit */
-    if (m >= 1.0f - 1.0e-8f) {
+    /* The hyperbolic limit applies when the complementary parameter vanishes. */
+    if (complement <= 0.0f) {
         float th = tanhf(u);
         float sech = 1.0f / coshf(u);
         *sn = th;
@@ -69,7 +70,7 @@ __device__ void d_ellpj(float u, float m, float* sn, float* cn, float* dn)
     }
 
     /* --- Forward AGM pass: build sequences a[i], c[i] --- */
-    /* a[0] = 1, b = sqrt(1-m) = k', c[0] = sqrt(m) = k  */
+    /* a[0] = 1, b = sqrt(complement) = k', c[0] = sqrt(m) = k */
     /* a[n+1] = (a[n]+b)/2,  b = sqrt(a[n]*b),  c[n+1] = (a[n]-b)/2 */
 
     const int NMAX = 12;
@@ -77,7 +78,7 @@ __device__ void d_ellpj(float u, float m, float* sn, float* cn, float* dn)
     float c[NMAX + 1];
 
     a[0] = 1.0f;
-    float b = sqrtf(1.0f - m);
+    float b = sqrtf(complement);
     c[0] = sqrtf(m);
     float twon = 1.0f;
 
@@ -106,7 +107,7 @@ __device__ void d_ellpj(float u, float m, float* sn, float* cn, float* dn)
 
     *sn = sinf(phi);
     *cn = cosf(phi);
-    *dn = sqrtf(fmaxf(0.0f, 1.0f - m * (*sn) * (*sn)));
+    *dn = sqrtf(fmaxf(0.0f, (*cn) * (*cn) + complement * (*sn) * (*sn)));
 }
 
 /* ============================================================================
@@ -114,18 +115,18 @@ __device__ void d_ellpj(float u, float m, float* sn, float* cn, float* dn)
  * ============================================================================ */
 
 /**
- * @brief Complete elliptic integral of the first kind K(k).
+ * @brief Complete elliptic integral of the first kind from 1 - m.
  *
  * K(k) = pi / (2 * AGM(1, sqrt(1-k^2)))
  *
- * @param k  Modulus (0 <= k < 1)
+ * @param complement  Complementary parameter (0 <= complement <= 1)
  * @return   K(k) in radians
  */
-__device__ __forceinline__ float d_ellint_K(float k)
+__device__ __forceinline__ float d_ellint_K(float complement)
 {
-    if (k < 1.0e-6f) return 1.5707963268f; /* pi/2 */
+    if (complement <= 0.0f) return INFINITY;
     float a = 1.0f;
-    float b = sqrtf(1.0f - k * k);
+    float b = sqrtf(complement);
     for (int i = 0; i < 14; i++) {
         float a1 = 0.5f * (a + b);
         float b1 = sqrtf(a * b);
@@ -376,7 +377,8 @@ __device__ float d_kerr_r_analytic(
     float u     = scale * (lambda - lambda0);
 
     float sn, cn, dn;
-    d_ellpj(u, m, &sn, &cn, &dn);
+    float complement = fminf(fmaxf((r1 - r2) * (r3 - r4) / den_m, 0.0f), 1.0f);
+    d_ellpj(u, m, complement, &sn, &cn, &dn);
 
     /* Mobius formula: r = [r3*(r2-r4) - r4*(r2-r3)*sn^2] / [(r2-r4) - (r2-r3)*sn^2] */
     float sn2    = sn * sn;
@@ -413,12 +415,12 @@ __device__ __forceinline__ float d_kerr_radial_half_period(
     if (fabsf(den_m) < 1.0e-20f) return 0.0f;
 
     float m = fminf(fmaxf(num_m / den_m, 0.0f), 1.0f);
-    float k = sqrtf(m);
+    float complement = fminf(fmaxf((r1 - r2) * (r3 - r4) / den_m, 0.0f), 1.0f);
 
     float scale = 0.5f * sqrtf(fabsf((r1 - r3) * (r2 - r4)));
     if (scale < 1.0e-20f) return 0.0f;
 
-    return d_ellint_K(k) / scale;
+    return d_ellint_K(complement) / scale;
 }
 
 /* ============================================================================

@@ -29,6 +29,36 @@ const float ALPHA_FINE = 7.2973525693e-3;         // 1/137
 const float SYNCHROTRON_CONST = 3.0 * ELECTRON_CHARGE /
   (4.0 * 3.14159265359 * ELECTRON_MASS * ELECTRON_MASS * ELECTRON_MASS);
 
+#include "synchrotron_lut_domain.h"
+uniform sampler2D synchFLut;
+uniform sampler2D synchGLut;
+uniform float synchLutAvailable; ///< 1 when both CPU-built tables are bound.
+
+// LUT domain constants, single-sourced with the C++ and CUDA consumers.
+const float SYNCH_G_LUT_X_MIN = SYNCH_G_LUT_DOMAIN_X_MIN;
+const float SYNCH_G_LUT_X_MAX = SYNCH_G_LUT_DOMAIN_X_MAX;
+
+/**
+ * Samples a log-spaced table over [X_MIN, X_MAX] at texel centers. Beyond the
+ * ends it continues with the leading asymptote scaled to the end entry,
+ * x^(1/3) below and sqrt(x) e^-x above (shared by F and G), so the value is
+ * continuous across both joins.
+ */
+float synchLutSample(sampler2D lut, float x) {
+  float entries = float(SYNCH_G_LUT_DOMAIN_ENTRIES);
+  float logRatio = log(SYNCH_G_LUT_X_MAX / SYNCH_G_LUT_X_MIN);
+  float xc = clamp(x, SYNCH_G_LUT_X_MIN, SYNCH_G_LUT_X_MAX);
+  float u = log(xc / SYNCH_G_LUT_X_MIN) / logRatio;
+  float value = texture(lut, vec2((u * (entries - 1.0) + 0.5) / entries, 0.5)).r;
+  if (x < SYNCH_G_LUT_X_MIN) {
+    return value * pow(x / SYNCH_G_LUT_X_MIN, 1.0 / 3.0);
+  }
+  if (x > SYNCH_G_LUT_X_MAX) {
+    return value * sqrt(x / SYNCH_G_LUT_X_MAX) * exp(SYNCH_G_LUT_X_MAX - x);
+  }
+  return value;
+}
+
 // ============================================================================
 // Synchrotron Function F(x) - Single Electron Spectrum
 // ============================================================================
@@ -36,36 +66,22 @@ const float SYNCHROTRON_CONST = 3.0 * ELECTRON_CHARGE /
 /**
  * Synchrotron function F(x) = x * integral_x^inf K_5/3(xi) dxi
  *
- * Approximations used for numerical stability:
- * - Low frequency (x < 0.01): F(x) ~= 1.8084 * x^(1/3)
- * - High frequency (x > 10): F(x) ~= sqrt(pi/2) * sqrt(x) * exp(-x)
- * - Intermediate: Polynomial fit
+ * Samples the CPU-generated log-spaced F(x) table.
  *
  * @param x Dimensionless frequency (nu / nu_c)
  * @return Synchrotron function value
  */
 float synchrotron_F(float x) {
   if (x <= 0.0) return 0.0;
-
-  // Low frequency asymptotic approximation
-  if (x < 0.01) {
-    return 1.8084 * pow(x, 1.0/3.0);
+  if (synchLutAvailable > 0.5) {
+    return synchLutSample(synchFLut, x);
   }
-  // High frequency exponential cutoff
-  else if (x > 10.0) {
-    return sqrt(3.14159265359 / 2.0) * sqrt(x) * exp(-x);
-  }
-  // Intermediate: Polynomial fit (Fouka & Ouichaoui 2013)
-  else {
-    float x13 = pow(x, 1.0/3.0);
-    float x23 = pow(x, 2.0/3.0);
-    float x43 = pow(x, 4.0/3.0);
-
-    float F_base = 1.8084 * x13;
-    float correction = 1.0 + 0.884 * x23 + 0.471 * x43;
-
-    return F_base * exp(-x) * correction;
-  }
+  // Without a bound table: Aharonian, Kelner & Prosekin (2010,
+  // arXiv:1006.1045) Eq. D6, continuous and within 0.4% of F for all x.
+  float x23 = pow(x, 2.0 / 3.0);
+  float x43 = x23 * x23;
+  return 2.15 * pow(x, 1.0 / 3.0) * pow(1.0 + 3.06 * x, 1.0 / 6.0) *
+         (1.0 + 0.884 * x23 + 0.471 * x43) / (1.0 + 1.64 * x23 + 0.974 * x43) * exp(-x);
 }
 
 // ============================================================================
@@ -79,15 +95,7 @@ float synchrotron_F(float x) {
 // object can be registered for CUDA-GL interop via cudaGraphicsGLRegisterImage,
 // which does not support GL_TEXTURE_1D.
 // Uses GL_LINEAR filtering for free hardware interpolation.
-// If no LUT is available, set synchGLutAvailable = 0 to use the asymptotic
-// fallback (accurate for x < 0.01 and x > 10, ~10% error in between).
-uniform sampler2D synchGLut;
-uniform int synchGLutAvailable;
-
-// LUT domain constants, single-sourced with the C++ and CUDA consumers.
-#include "synchrotron_lut_domain.h"
-const float SYNCH_G_LUT_X_MIN = SYNCH_G_LUT_DOMAIN_X_MIN;
-const float SYNCH_G_LUT_X_MAX = SYNCH_G_LUT_DOMAIN_X_MAX;
+// Without bound tables (synchLutAvailable = 0) F and G use published fits.
 
 /**
  * G(x) = x * K_2/3(x) for polarized emission.
@@ -100,29 +108,22 @@ const float SYNCH_G_LUT_X_MAX = SYNCH_G_LUT_DOMAIN_X_MAX;
  */
 float synchrotron_G(float x) {
   if (x <= 0.0) return 0.0;
-
-  // Small-x asymptote (always accurate)
-  if (x < SYNCH_G_LUT_X_MIN) {
-    return 1.3541 * pow(x, 1.0/3.0);
+  if (synchLutAvailable > 0.5) {
+    return synchLutSample(synchGLut, x);
   }
-
-  // Large-x asymptote (always accurate)
-  if (x > SYNCH_G_LUT_X_MAX) {
-    return sqrt(3.14159265359 / 2.0) * sqrt(x) * exp(-x);
-  }
-
-  // LUT lookup: u = log(x / x_min) / log(x_max / x_min)
-  // Uses sampler1D with GL_LINEAR for free hardware interpolation
-  if (synchGLutAvailable != 0) {
-    float log_ratio = log(SYNCH_G_LUT_X_MAX / SYNCH_G_LUT_X_MIN);
-    float u = log(x / SYNCH_G_LUT_X_MIN) / log_ratio;
-    return texture(synchGLut, vec2(u, 0.5)).r;
-  }
-
-  // Polynomial fallback (~10% error for x in [1,10])
-  float x13 = pow(x, 1.0/3.0);
-  float x23 = pow(x, 2.0/3.0);
-  return 1.3541 * x13 * exp(-x) * (1.0 + 0.6 * x23);
+  // Without a bound table: Fouka & Ouichaoui (2013, arXiv:1301.6908) Eq. 6
+  // with Table 3, K_{2/3} = A1 exp(H1) + A2 (1 - exp(H2)), within 0.035% of
+  // G = x K_{2/3} for all x.
+  float x12 = sqrt(x);
+  float x13 = pow(x, 1.0 / 3.0);
+  float x14 = sqrt(x12);
+  float h1 = -1.0010216415582440 * x + 0.88350305221249859 * x12 -
+             3.6240174463901829 * x13 + 0.57393980442916881 * x14;
+  float h2 = -0.2493940736333195 * x + 0.9122693061687756 * x12 +
+             1.2051408667145216 * x13 - 5.5227048291651126 * x14;
+  float smallX = 1.0747641207672394 * pow(x, -2.0 / 3.0); // 2^(-1/3) Gamma(2/3)
+  float largeX = sqrt(3.14159265359 / (2.0 * x)) * exp(-x);
+  return x * (smallX * exp(h1) + largeX * (1.0 - exp(h2)));
 }
 
 // ============================================================================
