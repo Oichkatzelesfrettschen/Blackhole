@@ -5557,6 +5557,26 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Fixed Bessel K kernel validation
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/bessel_k_test.cpp")
+    add_executable(bessel_k_test
+      "${PROJECT_SOURCE_DIR}/tests/bessel_k_test.cpp"
+    )
+    target_include_directories(bessel_k_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    # Compiled with the project flags: the kernel ships in fast-math builds.
+    target_compile_options(bessel_k_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(bessel_k_test PRIVATE GTest::gtest_main)
+    add_test(NAME bessel_k_validation COMMAND bessel_k_test)
+    set_tests_properties(bessel_k_validation PROPERTIES
+      LABELS "physics;special-functions;bessel"
+      TIMEOUT 30
+    )
+  endif()
+
   # Synchrotron spectrum validation tests (Phase 5.1)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/synchrotron_spectrum_test.cpp")
     add_executable(synchrotron_spectrum_test
