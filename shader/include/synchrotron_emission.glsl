@@ -76,9 +76,12 @@ float synchrotron_F(float x) {
   if (synchLutAvailable > 0.5) {
     return synchLutSample(synchFLut, x);
   }
-  // Leading asymptotes when no table is bound.
-  return x < 1.0 ? 2.1495 * pow(x, 1.0 / 3.0)
-                 : sqrt(3.14159265359 / 2.0) * sqrt(x) * exp(-x);
+  // Without a bound table: Aharonian, Kelner & Prosekin (2010,
+  // arXiv:1006.1045) Eq. D6, continuous and within 0.4% of F for all x.
+  float x23 = pow(x, 2.0 / 3.0);
+  float x43 = x23 * x23;
+  return 2.15 * pow(x, 1.0 / 3.0) * pow(1.0 + 3.06 * x, 1.0 / 6.0) *
+         (1.0 + 0.884 * x23 + 0.471 * x43) / (1.0 + 1.64 * x23 + 0.974 * x43) * exp(-x);
 }
 
 // ============================================================================
@@ -92,7 +95,7 @@ float synchrotron_F(float x) {
 // object can be registered for CUDA-GL interop via cudaGraphicsGLRegisterImage,
 // which does not support GL_TEXTURE_1D.
 // Uses GL_LINEAR filtering for free hardware interpolation.
-// Without a bound table (synchLutAvailable = 0) G uses a polynomial fallback.
+// Without bound tables (synchLutAvailable = 0) F and G use published fits.
 
 /**
  * G(x) = x * K_2/3(x) for polarized emission.
@@ -108,10 +111,19 @@ float synchrotron_G(float x) {
   if (synchLutAvailable > 0.5) {
     return synchLutSample(synchGLut, x);
   }
-  // Polynomial fallback when no table is bound (~10% error for x in [1, 10]).
+  // Without a bound table: Fouka & Ouichaoui (2013, arXiv:1301.6908) Eq. 6
+  // with Table 3, K_{2/3} = A1 exp(H1) + A2 (1 - exp(H2)), within 0.035% of
+  // G = x K_{2/3} for all x.
+  float x12 = sqrt(x);
   float x13 = pow(x, 1.0 / 3.0);
-  float x23 = pow(x, 2.0 / 3.0);
-  return 1.3541 * x13 * exp(-x) * (1.0 + 0.6 * x23);
+  float x14 = sqrt(x12);
+  float h1 = -1.0010216415582440 * x + 0.88350305221249859 * x12 -
+             3.6240174463901829 * x13 + 0.57393980442916881 * x14;
+  float h2 = -0.2493940736333195 * x + 0.9122693061687756 * x12 +
+             1.2051408667145216 * x13 - 5.5227048291651126 * x14;
+  float smallX = 1.0747641207672394 * pow(x, -2.0 / 3.0); // 2^(-1/3) Gamma(2/3)
+  float largeX = sqrt(3.14159265359 / (2.0 * x)) * exp(-x);
+  return x * (smallX * exp(h1) + largeX * (1.0 - exp(h2)));
 }
 
 // ============================================================================
