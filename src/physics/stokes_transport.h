@@ -99,17 +99,9 @@
 #include <vector>
 
 #include "constants.h"
+#include "bessel_k.h"
 #include "stokes_exact.h"
 #include "synchrotron.h"
-
-#ifdef __has_include
-#  if __has_include(<boost/math/special_functions/bessel.hpp>)
-#    include <boost/math/special_functions/bessel.hpp>
-// NOLINTBEGIN(cppcoreguidelines-macro-usage)
-#    define PHYSICS_STOKES_HAS_BOOST_BESSEL 1
-// NOLINTEND(cppcoreguidelines-macro-usage)
-#  endif
-#endif
 
 namespace physics {
 
@@ -554,10 +546,16 @@ struct FaradayPropagation {
 /**
  * @brief Faraday rotation coefficient rho_V for a cold (non-relativistic) plasma.
  *
- * The cold-plasma Faraday rotation coefficient (R&L 1979, Eq. 2.114; Shcherbakov 2008):
+ * rho_V is the rate at which the (Q, U) Stokes vector rotates, twice the
+ * EVPA rate d chi / ds. For a cold plasma (Dexter 2016, arXiv:1602.03184,
+ * Eq. B5 with K_0/K_2 -> 1 and g(X) -> 1):
  *
- *   rho_V = (e^3 / (2*pi * m_e^2 * c^4)) * n_e * B_parallel / nu^2
- *         = 1.049e-8 * n_e [cm^-3] * B_par [G] / nu^2 [Hz]   [rad/cm]
+ *   rho_V = 2 n_e e^2 nu_B cos(theta_B) / (m_e c nu^2)
+ *         = n_e e^3 B_parallel / (pi m_e^2 c^2 nu^2)   [rad/cm]
+ *
+ * so rho_V / 2 * (c / nu)^2 reproduces the rotation measure
+ * RM = e^3 / (2 pi m_e^2 c^4) * n_e B_parallel per unit path (0.812 rad/m^2
+ * for n_e = 1 cm^-3, B = 1 microgauss, L = 1 pc).
  *
  * B_parallel = B * cos(theta_B) is the magnetic field component along the
  * photon propagation direction (line of sight).
@@ -567,7 +565,7 @@ struct FaradayPropagation {
  * for non-relativistic electrons.  For relativistic electrons (Theta_e > 1)
  * the coefficient is suppressed; use faradayRotationCoeffRelativistic() for Theta_e >> 1.
  *
- * Reference: Shcherbakov & Huang (2011), MNRAS 410, 1052, Eq. (B11).
+ * Reference: Dexter (2016), MNRAS 462, 115, Eq. B5.
  *
  * @param nu          Frequency [Hz]
  * @param nE          Electron number density [cm^-3]
@@ -578,11 +576,9 @@ struct FaradayPropagation {
                                                   double nE,
                                                   double bParallel) noexcept {
     if (nu <= 0.0 || nE <= 0.0) { return 0.0; }
-    // Prefactor: e^3 / (2*pi * m_e^2 * c^4) [rad / (cm^-3 * G * Hz^2 * cm)]
-    // = e^3 / (2*pi * m_e^2 * c^4) in CGS
     const double e3 = E_CHARGE * E_CHARGE * E_CHARGE;
-    const double me2c4 = M_ELECTRON * M_ELECTRON * C * C * C * C;
-    const double prefac = e3 / (2.0 * std::numbers::pi * me2c4);
+    const double me2c2 = M_ELECTRON * M_ELECTRON * C * C;
+    const double prefac = e3 / (std::numbers::pi * me2c2);
     return prefac * nE * bParallel / (nu * nu);
 }
 
@@ -590,25 +586,17 @@ struct FaradayPropagation {
  * @brief Relativistic Faraday rotation coefficient for hot plasma (Theta_e >> 1).
  *
  * For a Maxwell-Juttner electron distribution at dimensionless temperature
- * Theta_e, the Faraday rotation is suppressed relative to the cold-plasma
- * formula by the factor f_rm(Theta_e) (Shcherbakov 2008, Eq. B12):
- *
- *   rho_V^{rel} = rho_V^{cold} * f_rm(Theta_e)
- *
- * where:
- *   f_rm(Theta_e) = (K_0(1/Theta_e) + K_1(1/Theta_e)) / (2 * Theta_e^2 * K_2(1/Theta_e))
- *
- * For Theta_e -> 0: f_rm -> 1 (cold limit).
- * For Theta_e >> 1: K_0 ~ K_1 ~ K_2 -> 2*Theta_e^2, so f_rm -> 1/Theta_e^2 (highly suppressed).
- *
- * Fallback when boost is unavailable: f_rm ~ 1/(1 + Theta_e^2) (approximation).
+ * Theta_e, the rotation is the cold-plasma value times K_0(1/Theta_e) /
+ * K_2(1/Theta_e) (Shcherbakov 2008 Eq. 25, as Dexter 2016 Eq. B5 in the
+ * high-frequency limit g(X) -> 1). The ratio tends to 1 as Theta_e -> 0 and
+ * to ln(2 Theta_e) / (2 Theta_e^2) for Theta_e >> 1. Both Bessel functions
+ * come from one scaled pass, so the e^{-1/Theta_e} factor cancels exactly.
  *
  * @param nu          Frequency [Hz]
  * @param nE          Electron density [cm^-3]
  * @param bParallel   B_parallel [Gauss]
  * @param thetaE      Dimensionless electron temperature
  * @return rho_V [rad/cm], suppressed for hot plasma
- * @throws std::exception if Boost cannot evaluate the thermal Bessel functions.
  */
 [[nodiscard]] inline double faradayRotationCoeffRelativistic(double nu,
                                                               double nE,
@@ -616,40 +604,31 @@ struct FaradayPropagation {
                                                               double thetaE) {
     if (thetaE <= 0.0) { return faradayRotationCoeff(nu, nE, bParallel); }
 
-    double frm = 0.0;
-#ifdef PHYSICS_STOKES_HAS_BOOST_BESSEL
     const double z   = 1.0 / thetaE;
-    const double k0  = boost::math::cyl_bessel_k(0.0, z);
-    const double k1  = boost::math::cyl_bessel_k(1.0, z);
-    const double k2  = boost::math::cyl_bessel_k(2.0, z);
-    const double denom = 2.0 * thetaE * thetaE * k2;
-    frm = (denom > 0.0) ? (k0 + k1) / denom : 0.0;
-#else
-    // Approximation: f_rm ~ 1 / (1 + Theta_e^2) -- correct limits but not exact
-    frm = 1.0 / (1.0 + (thetaE * thetaE));
-#endif
-    return faradayRotationCoeff(nu, nE, bParallel) * frm;
+    const BesselK012Values<double> scaledK = scaledBesselK012(z);
+    const double k0OverK2 = scaledK.scaledK0 / scaledK.scaledK2;
+    return faradayRotationCoeff(nu, nE, bParallel) * k0OverK2;
 }
 
 /**
  * @brief Faraday conversion coefficient rho_Q for hot plasma (Theta_e >> 1).
  *
  * Faraday conversion transfers linear polarization to circular (and back).
- * For a thermal plasma (Shcherbakov & Huang 2011, Eq. B13):
+ * For a thermal plasma (Shcherbakov 2008 Eq. 26, as Dexter 2016,
+ * arXiv:1602.03184, Eq. B4 in the high-frequency limit f(X) -> 1):
  *
- *   rho_Q = (e^3 * n_e * B_perp) / (pi * m_e^2 * c^4) * f_conv(Theta_e) / nu^2
+ *   rho_Q = n_e e^2 nu_B^2 sin^2(theta_B) / (m_e c nu^3)
+ *           * [K_1(1/Theta_e) / K_2(1/Theta_e) + 6 Theta_e]
+ *         = n_e e^4 B_perp^2 / (4 pi^2 m_e^3 c^3 nu^3) * [K_1/K_2 + 6 Theta_e]
  *
- * where B_perp = B * sin(theta_B) and f_conv is a function of Theta_e.
- *
- * This implementation uses the leading-order Shcherbakov (2008) approximation:
- *   f_conv(Theta_e) ~ K_1(1/Theta_e) / (Theta_e * K_2(1/Theta_e)) - 1/(2*Theta_e^2)
+ * where B_perp = B sin(theta_B). The bracket tends to 1 in the cold limit
+ * and to 6 Theta_e for Theta_e >> 1.
  *
  * @param nu          Frequency [Hz]
  * @param nE          Electron density [cm^-3]
  * @param bPerp       B_perp = B * sin(theta_B) [Gauss]
  * @param thetaE      Dimensionless electron temperature
  * @return rho_Q [rad/cm]
- * @throws std::exception if Boost cannot evaluate the thermal Bessel functions.
  */
 [[nodiscard]] inline double faradayConversionCoeff(double nu,
                                                     double nE,
@@ -657,26 +636,15 @@ struct FaradayPropagation {
                                                     double thetaE) {
     if (nu <= 0.0 || nE <= 0.0 || thetaE <= 0.0) { return 0.0; }
 
-    double fconv = 0.0;
-#ifdef PHYSICS_STOKES_HAS_BOOST_BESSEL
     const double z  = 1.0 / thetaE;
-    const double k1 = boost::math::cyl_bessel_k(1.0, z);
-    const double k2 = boost::math::cyl_bessel_k(2.0, z);
-    if (k2 > 0.0) {
-        // K_1/(Theta_e*K_2) - 1/(2*Theta_e^2) can go slightly negative at moderate
-        // Theta_e (~1-3) due to approximation error.  Physical conversion vanishes
-        // rather than flipping sign -- clamp to zero.
-        fconv = std::max(0.0, (k1 / (thetaE * k2)) - (1.0 / (2.0 * thetaE * thetaE)));
-    }
-#else
-    // Approximation for Theta_e >> 1: f_conv ~ 1/(2*Theta_e^2)
-    fconv = (thetaE > 0.5) ? 0.5 / (thetaE * thetaE) : 1.0;
-#endif
+    const BesselK012Values<double> scaledK = scaledBesselK012(z);
+    const double k1OverK2 = scaledK.scaledK1 / scaledK.scaledK2;
+    const double temperatureFactor = k1OverK2 + (6.0 * thetaE);
 
-    const double e3    = E_CHARGE * E_CHARGE * E_CHARGE;
-    const double me2c4 = M_ELECTRON * M_ELECTRON * C * C * C * C;
-    const double prefac = e3 / (std::numbers::pi * me2c4);
-    return prefac * nE * bPerp * fconv / (nu * nu);
+    const double e2 = E_CHARGE * E_CHARGE;
+    const double me3c3 = M_ELECTRON * M_ELECTRON * M_ELECTRON * C * C * C;
+    const double prefac = (e2 * e2) / (4.0 * std::numbers::pi * std::numbers::pi * me3c3);
+    return prefac * nE * bPerp * bPerp * temperatureFactor / (nu * nu * nu);
 }
 
 // ============================================================================

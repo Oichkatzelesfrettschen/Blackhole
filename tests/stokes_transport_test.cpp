@@ -6,7 +6,7 @@
  * to simulate the EHT polarization measurements.  All tests verify analytically
  * derivable limits without a full geodesic integration run.
  *
- * Analytic cases and Boost overflow propagation:
+ * Analytic cases and thermal special-function behavior:
  *
  * StokesVector helpers:
  *   1.  linPolFrac = sqrt(Q^2+U^2)/I; zero for unpolarized.
@@ -42,8 +42,8 @@
  * Faraday coefficients:
  *  22.  faradayRotationCoeff scales as n_e * B_par / nu^2.
  *  23.  faradayRotationCoeff = 0 for nu=0 or n_e=0.
- *  24.  faradayRotationCoeffRelativistic < cold-plasma for Theta_e > 1 (suppression).
- *  25.  faradayConversionCoeff >= 0 for B_perp >= 0 and Theta_e > 0.
+ *  24.  faradayRotationCoeffRelativistic = cold * K_0/K_2 (mpmath), cold limit 1, RM 0.812 rad/m^2.
+ *  25.  faradayConversionCoeff bracket K_1/K_2 + 6 Theta_e (mpmath), B_perp^2 and nu^-3 scaling.
  *
  * GR transforms:
  *  26.  grTransformStokes: all four components scale as g^3.
@@ -63,16 +63,12 @@
 #include <exception>
 #include <iostream>
 #include <numbers>
-#include <stdexcept>
 #include <vector>
 
 #include "../src/physics/stokes_transport.h"
+#include "constants.h"
 #include "rte_integrator.h"
 #include "synchrotron.h"
-
-static_assert(PHYSICS_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
-static_assert(PHYSICS_RTE_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
-static_assert(PHYSICS_STOKES_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
 
 using namespace physics;
 
@@ -465,7 +461,19 @@ void testRelativisticFaradaySuppression() {
   const double cold = faradayRotationCoeff(nu, nE, bpar);
   const double hot = faradayRotationCoeffRelativistic(nu, nE, bpar, 3.0);
   check(hot < cold, "faradayRotationCoeffRelativistic: suppressed for Theta_e=3");
-  check(hot >= 0.0, "faradayRotationCoeffRelativistic: non-negative");
+  // K_0(1/3) / K_2(1/3) from mpmath 1.4.1 at 30 digits.
+  check(nearRel(hot / cold, 0.072832706264599448, 1.0e-13),
+        "faradayRotationCoeffRelativistic: K_0/K_2 suppression at Theta_e=3");
+  check(nearRel(faradayRotationCoeffRelativistic(nu, nE, bpar, 1.0e-3) / cold, 1.0, 2.0e-3),
+        "faradayRotationCoeffRelativistic: cold limit K_0/K_2 -> 1");
+
+  // rho_V / 2 is the EVPA rate, so rho_V / 2 * lambda^2 over 1 pc of
+  // n_e = 1 cm^-3, B = 1 microgauss is the standard 0.812 rad/m^2.
+  const double parsecCm = 3.0856775814913673e18;
+  const double lambdaCm = C / nu;
+  const double rotationMeasure =
+      0.5 * faradayRotationCoeff(nu, 1.0, 1.0e-6) * parsecCm / (lambdaCm * lambdaCm) * 1.0e4;
+  check(nearRel(rotationMeasure, 0.812, 2.0e-3), "faradayRotationCoeff: RM = 0.812 rad/m^2");
 }
 
 void testFaradayConversionPositive() {
@@ -475,7 +483,20 @@ void testFaradayConversionPositive() {
   const double bPerp = 10.0;
   const double thetaE = 2.0;
   const double rhoQ = faradayConversionCoeff(nu, nE, bPerp, thetaE);
-  check(rhoQ >= 0.0, "faradayConversionCoeff: non-negative for physical parameters");
+  check(rhoQ > 0.0, "faradayConversionCoeff: positive for physical parameters");
+
+  // rho_Q = n_e e^4 B_perp^2 / (4 pi^2 m_e^3 c^3 nu^3) * [K_1/K_2 + 6 Theta_e];
+  // the bracket at Theta_e = 2 is 12.219390841131414 (mpmath 1.4.1).
+  const double e2 = E_CHARGE * E_CHARGE;
+  const double coldConversion = nE * e2 * e2 * bPerp * bPerp /
+                                (4.0 * std::numbers::pi * std::numbers::pi * M_ELECTRON *
+                                 M_ELECTRON * M_ELECTRON * C * C * C * nu * nu * nu);
+  check(nearRel(rhoQ / coldConversion, 12.219390841131414, 1.0e-13),
+        "faradayConversionCoeff: K_1/K_2 + 6 Theta_e at Theta_e=2");
+  check(nearRel(faradayConversionCoeff(nu, nE, 2.0 * bPerp, thetaE) / rhoQ, 4.0, 1.0e-12),
+        "faradayConversionCoeff: scales as B_perp^2");
+  check(nearRel(faradayConversionCoeff(2.0 * nu, nE, bPerp, thetaE) / rhoQ, 0.125, 1.0e-12),
+        "faradayConversionCoeff: scales as nu^-3");
 }
 
 // ---------------------------------------------------------------------------
@@ -526,34 +547,9 @@ void testGRParallelTransportRotate() {
 // Main
 // ---------------------------------------------------------------------------
 
-void testFaradayOverflowErrors() {
-  // K_2(1/Theta_e) exceeds double range at the chosen finite temperature.
-  const double extremeTemperature = 1.0e155;
-  bool rotationRejected = false;
-  try {
-    const double rotation =
-        faradayRotationCoeffRelativistic(230.0e9, 1.0e6, 10.0, extremeTemperature);
-    check(false, "Faraday rotation reports Bessel overflow",
-          std::isnan(rotation) ? "returned NaN" : "returned a value");
-  } catch (const std::overflow_error &) {
-    rotationRejected = true;
-  }
-  check(rotationRejected, "Faraday rotation exposes a catchable Boost overflow error");
-  bool conversionRejected = false;
-  try {
-    const double conversion = faradayConversionCoeff(230.0e9, 1.0e6, 10.0, extremeTemperature);
-    check(false, "Faraday conversion reports Bessel overflow",
-          std::isnan(conversion) ? "returned NaN" : "returned a value");
-  } catch (const std::overflow_error &) {
-    conversionRejected = true;
-  }
-  check(conversionRejected, "Faraday conversion exposes a catchable Boost overflow error");
-}
-
 } // namespace
 
 int main() try {
-  testFaradayOverflowErrors();
   std::cout << "\n=== Stokes I,Q,U,V Transport Tests ===\n\n";
 
   std::cout << "StokesVector helpers:\n";

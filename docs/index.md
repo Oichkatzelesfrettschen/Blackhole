@@ -43,6 +43,8 @@ GLSL and CUDA lanes, and Blender bridge integration.
 - [Unit System](physics/unit-system.md) -- CGS/geometric/code unit alignment
 - [Cleanroom](physics/cleanroom.md) -- port map, imports, decisions, interop, migration
 - [Renderer Fidelity Tranche](physics/renderer-fidelity-tranche.md) -- staged rendering-fidelity work items
+- [Special Functions](physics/special-functions.md) -- Boost-free Bessel K, synchrotron F/G, and Jacobi kernels with their measurements
+- [open_gororoba Decomposition](physics/open-gororoba-decomposition.md) -- principle-by-principle map of the Rust physics crates with verdicts
 
 ## GPU
 

@@ -27,8 +27,8 @@
  *
  * Polar motion similarly uses Jacobi functions for theta(lambda).
  *
- * HOW: Uses Boost.Math Jacobi elliptic functions (sn, cn, dn)
- * already available via boost/1.90.0.
+ * HOW: Uses the templated AGM and descending Landen Jacobi routines in
+ * elliptic_integrals.h with the root-derived complementary parameter.
  *
  * References:
  *   - Dyson (2023), arXiv:2302.03704 -- plunging geodesics
@@ -45,14 +45,6 @@
 #include <cmath>
 #include <complex>
 #include <cstddef>
-
-#ifdef __has_include
-#if __has_include(<boost/math/special_functions/jacobi_elliptic.hpp>)
-#include <boost/math/special_functions/jacobi_elliptic.hpp>
-// Conditional compilation requires a macro to select the Boost Jacobi path.
-#define PHYSICS_HAS_BOOST_JACOBI 1 // NOLINT(cppcoreguidelines-macro-usage)
-#endif
-#endif
 
 #include "elliptic_integrals.h"
 
@@ -283,27 +275,7 @@ inline void classifyAndSort(RadialRoots &result) {
 // Analytic Radial Solution
 // ============================================================================
 
-#ifdef PHYSICS_HAS_BOOST_JACOBI
-
-/**
- * @brief Boost.Math policy for the analytic Kerr elliptic functions.
- *
- * Boost's default policy promotes double arguments to long double, which on
- * x86-64 runs the x87 80-bit unit and costs about 10x in jacobi_elliptic.
- * Evaluated in double, sn and cn stay within a few ulp of their first-order
- * error bound while 1 - m >= 1e-4; closer to m = 1 the double evaluation's cn
- * error grows (27x the bound at 1 - m = 3e-7, 980x at 3e-10), and promoting
- * the call cannot restore 1 - m once k = sqrt(m) is rounded to double, so
- * below ANALYTIC_KERR_PROMOTE_BELOW rAnalytic runs the Landen transformation
- * in long double on 1 - m formed from the roots
- * (tests/analytic_geodesic_reproducibility_test.cpp). ellint_1 is not used:
- * radialHalfPeriod takes K from the AGM with 1 - m formed from the roots.
- * bench/numerics_bench.cpp measures the cost of both policies.
- */
-using AnalyticKerrPolicy =
-    boost::math::policies::policy<boost::math::policies::promote_double<false>>;
-
-/// 1 - m below which rAnalytic evaluates sn and cn by the long-double Landen transformation.
+/// 1 - m below which rAnalytic evaluates sn and cn in long double.
 inline constexpr double ANALYTIC_KERR_PROMOTE_BELOW = 1.0e-4;
 
 /**
@@ -349,24 +321,25 @@ inline constexpr double ANALYTIC_KERR_PROMOTE_BELOW = 1.0e-4;
   const double scale = std::sqrt(std::abs((r1 - r3) * (r2 - r4))) / 2.0;
   const double u = scale * (lambda - lambda0);
 
-  // sn(u | k) and cn(u | k), k = sqrt(m). Away from m = 1 one double-precision
-  // Boost call; below 1 - m = ANALYTIC_KERR_PROMOTE_BELOW the double call loses
-  // digits in cn, and a double modulus k cannot even represent 1 - m below
-  // eps, so there the Landen transformation runs in long double on
-  // k'^2 = 1 - m formed from the roots.
+  // The Landen transformation takes the root-derived complement 1 - m
+  // directly, so it keeps the separatrix parameter even where m rounds to
+  // one. Below ANALYTIC_KERR_PROMOTE_BELOW the double evaluation of cn loses
+  // digits, and the transformation runs in long double
+  // (tests/analytic_geodesic_reproducibility_test.cpp).
   const double kPrime2 = std::clamp(((r1 - r2) * (r3 - r4)) / den, 0.0, 1.0); // 1 - m
+  const double mClamped = std::clamp(m, 0.0, 1.0);
   double snVal = 0.0;
   double cnVal = 0.0;
   if (kPrime2 < ANALYTIC_KERR_PROMOTE_BELOW) {
-    const JacobiSnCn<long double> sc = jacobiSnCnFromComplement<long double>(
-        static_cast<long double>(u), static_cast<long double>(std::clamp(m, 0.0, 1.0)),
+    const JacobiSnCn<long double> snCn = jacobiSnCnFromComplement<long double>(
+        static_cast<long double>(u), static_cast<long double>(mClamped),
         static_cast<long double>(kPrime2));
-    snVal = static_cast<double>(sc.sn);
-    cnVal = static_cast<double>(sc.cn);
+    snVal = static_cast<double>(snCn.sn);
+    cnVal = static_cast<double>(snCn.cn);
   } else {
-    const double k = std::sqrt(std::clamp(m, 0.0, 1.0));
-    snVal = boost::math::jacobi_elliptic(k, u, &cnVal, static_cast<double *>(nullptr),
-                                         AnalyticKerrPolicy());
+    const JacobiSnCn<double> snCn = jacobiSnCnFromComplement<double>(u, mClamped, kPrime2);
+    snVal = snCn.sn;
+    cnVal = snCn.cn;
   }
 
   // r - r3 = (r3-r4)(r1-r3) sn^2 / ((r3-r4) + (r1-r3) cn^2): with r1 >= r3 >= r4
@@ -380,8 +353,6 @@ inline constexpr double ANALYTIC_KERR_PROMOTE_BELOW = 1.0e-4;
   }
   return r3 + (d34 * d31 * snVal * snVal / denomR);
 }
-
-#endif // PHYSICS_HAS_BOOST_JACOBI
 
 /**
  * @brief Compute the half-period of radial oscillation.

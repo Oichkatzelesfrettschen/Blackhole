@@ -27,18 +27,9 @@
 #include <cmath>
 
 #include "constants.h"
+#include "bessel_k.h"
 #include "safe_limits.h"
 #include "../../shader/include/synchrotron_lut_domain.h"
-#ifdef __has_include
-#if __has_include(<boost/math/special_functions/bessel.hpp>)
-#include <boost/math/special_functions/bessel.hpp>
-// NOLINTBEGIN(cppcoreguidelines-macro-usage)
-// WHY: PHYSICS_HAS_BOOST_BESSEL guards #ifdef/#else paths; constexpr cannot
-// replace a preprocessor symbol used in conditional compilation directives.
-#define PHYSICS_HAS_BOOST_BESSEL 1
-// NOLINTEND(cppcoreguidelines-macro-usage)
-#endif
-#endif
 
 namespace physics {
 
@@ -201,18 +192,12 @@ inline constexpr double SYNCHROTRON_CONST =
  *
  * where x = nu/nu_c and K_{5/3} is the modified Bessel function of order 5/3.
  *
- * WHY: The Fouka & Ouichaoui (2013) polynomial fit in the intermediate regime
- * (0.01 < x < 10) has ~1% systematic error.  When boost::math is available,
- * we numerically integrate K_{5/3} using 32-point Gauss-Legendre quadrature,
- * giving machine-precision accuracy for the CPU physics path.  The GPU/GLSL
- * path continues to use the polynomial approximation since GLSL cannot call
- * boost functions.
+ * WHY: A fixed trapezoid kernel evaluates the scaled tail integral without
+ * regime switches or an external special-function dependency.
  *
  * References:
  *   - Rybicki & Lightman (1979) Ch. 6, Eq. 6.31
- *   - Fouka & Ouichaoui (2013), MNRAS 436, 1546 (polynomial fit, kept as
- *     fallback when boost is unavailable)
- *   - boost::math::cyl_bessel_k (boost 1.90.0, already in conanfile.py)
+ *   - DLMF 10.32.9, modified Bessel K integral representation
  *
  * @param x Dimensionless frequency nu/nu_c
  * @return F(x) synchrotron function value
@@ -222,67 +207,8 @@ inline constexpr double SYNCHROTRON_CONST =
     return 0.0;
   }
 
-  // Low frequency asymptote: F(x) ~= 1.8084 * x^(1/3)  [Rybicki-Lightman 6.36]
-  if (x < 0.01) {
-    return 1.8084 * std::pow(x, 1.0 / 3.0);
-  }
-
-  // High frequency asymptote: F(x) ~= sqrt(pi/2) * sqrt(x) * exp(-x)
-  if (x > 10) {
-    return std::sqrt(PI / 2.0) * std::sqrt(x) * std::exp(-x);
-  }
-
-  // Intermediate regime: 0.01 <= x <= 10
-#ifdef PHYSICS_HAS_BOOST_BESSEL
-  // WHY: K_{5/3}(xi) varies rapidly near xi=x (especially for small x) and
-  // decays exponentially for xi >> 1.  We use a two-segment GL quadrature:
-  //   Segment 1: [x, x + delta] -- fine spacing near the lower limit
-  //   Segment 2: [x + delta, x + 30] -- tail region; K_{5/3} < 1e-13 beyond
-  // where delta = max(2*x, 0.5).  This captures the near-singularity at x~0.
-  //
-  // Gauss-Legendre nodes and weights for n=16 on [-1,1]
-  static const double glNodes[16] = {
-      -0.9894009349916499, -0.9445750230732326, -0.8656312023341783, -0.7554044083550030,
-      -0.6178762444026438, -0.4580167776572274, -0.2816035507792589, -0.0950125098360623,
-      0.0950125098360623,  0.2816035507792589,  0.4580167776572274,  0.6178762444026438,
-      0.7554044083550030,  0.8656312023341783,  0.9445750230732326,  0.9894009349916499};
-  static const double glWeights[16] = {
-      0.0271524594117541, 0.0622535239386479, 0.0951585116824928, 0.1246289512509922,
-      0.1495959888165767, 0.1691565193950025, 0.1826034150449236, 0.1894506104550685,
-      0.1894506104550685, 0.1826034150449236, 0.1691565193950025, 0.1495959888165767,
-      0.1246289512509922, 0.0951585116824928, 0.0622535239386479, 0.0271524594117541};
-
-  // Helper lambda: GL integral over [a, b]
-  auto glIntegral = [&](double a, double b) -> double {
-    const double hr = 0.5 * (b - a);
-    const double mid = 0.5 * (b + a);
-    double sum = 0.0;
-    for (int i = 0; i < 16; ++i) {
-      const double xi = mid + (hr * glNodes[i]);
-      if (xi <= 0.0) {
-        continue;
-      }
-      sum += glWeights[i] * boost::math::cyl_bessel_k(5.0 / 3.0, xi);
-    }
-    return sum * hr;
-  };
-
-  // Segment 1: near the lower limit where the integrand is large
-  const double delta = std::max(2.0 * x, 0.5);
-  double integral = glIntegral(x, x + delta);
-
-  // Segment 2: tail; K_{5/3} is small here; integrate up to x + 30
-  const double xTail = x + 30.0;
-  if (x + delta < xTail) {
-    integral += glIntegral(x + delta, xTail);
-  }
-
-  return x * integral;
-#else
-  // Fallback: Fouka & Ouichaoui (2013) polynomial fit, ~1% accuracy
-  return 1.8084 * std::pow(x, 1.0 / 3.0) * std::exp(-x) *
-         (1.0 + (0.884 * std::pow(x, 2.0 / 3.0)) + (0.471 * std::pow(x, 4.0 / 3.0)));
-#endif
+  const SynchrotronBesselValues<double> values = scaledSynchrotronBessel(x);
+  return x * std::exp(-x) * values.scaledTailFiveThirds;
 }
 
 /**
@@ -300,28 +226,8 @@ inline constexpr double SYNCHROTRON_CONST =
     return 0.0;
   }
 
-  // Small-x asymptote: K_{2/3}(x) ~ Gamma(2/3)/2 * (2/x)^(2/3)
-  // => G(x) = x * K_{2/3}(x) ~ 1.3541 * x^(1/3)  [R&L 1979 Appendix]
-  if (x < 0.01) {
-    return 1.3541 * std::pow(x, 1.0 / 3.0);
-  }
-
-  // Large-x asymptote: K_{2/3}(x) ~ sqrt(pi/(2x)) * exp(-x)
-  // => G(x) = x * K_{2/3}(x) ~ sqrt(pi*x/2) * exp(-x)
-  if (x > 10) {
-    return std::sqrt(PI / 2.0) * std::sqrt(x) * std::exp(-x);
-  }
-
-  // Intermediate regime 0.01 <= x <= 10: evaluate G(x) = x * K_{2/3}(x) directly.
-#ifdef PHYSICS_HAS_BOOST_BESSEL
-  // WHY: The polynomial fit gives G(x) > F(x) for x in [1, 10], which is
-  // physically impossible (polarization fraction must be <= 1). Direct Bessel
-  // evaluation via boost::math is sub-ULP accurate and has O(1) cost.
-  return x * boost::math::cyl_bessel_k(2.0 / 3.0, x);
-#else
-  // Polynomial fallback (~10% error for x~1-10; Boost not available)
-  return 1.3541 * std::pow(x, 1.0 / 3.0) * std::exp(-x) * (1.0 + (0.6 * std::pow(x, 2.0 / 3.0)));
-#endif
+  const SynchrotronBesselValues<double> values = scaledSynchrotronBessel(x);
+  return x * std::exp(-x) * values.scaledKTwoThirds;
 }
 
 /**
@@ -336,12 +242,13 @@ inline constexpr double SYNCHROTRON_CONST =
  * @return Polarization degree (0 to 1)
  */
 [[nodiscard]] inline double synchrotronPolarization(double x) {
-  const double fVal = synchrotronF(x);
-  const double gVal = synchrotronG(x);
-  if (fVal < 1e-50) {
+  if (x <= 0) {
     return 0.0;
   }
-  return gVal / fVal;
+  // G/F = e^x K_{2/3}(x) / (e^x int_x^inf K_{5/3}): the common factor x e^-x
+  // cancels, so the ratio stays finite where F and G themselves underflow.
+  const SynchrotronBesselValues<double> values = scaledSynchrotronBessel(x);
+  return values.scaledKTwoThirds / values.scaledTailFiveThirds;
 }
 
 // ============================================================================
@@ -467,8 +374,8 @@ inline constexpr double SYNCHROTRON_CONST =
 /**
  * @brief Generate a 1D lookup table for G(x) = x * K_{2/3}(x).
  *
- * WHY: GLSL cannot call boost::math, so we precompute G(x) on the CPU
- * and upload it as a 1D float texture. The shader samples this LUT
+ * WHY: We precompute G(x) on the CPU and upload it as a 1D float texture.
+ * The shader samples this LUT
  * using log-spaced u = log(x/xMin) / log(xMax/xMin).
  *
  * The LUT covers x in [xMin, xMax] with nEntries entries, log-spaced for

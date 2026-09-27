@@ -26,7 +26,7 @@ int bhbVersionMajor(void);
 int bhbVersionMinor(void);
 /** @brief Return 1 if the library was compiled with CUDA support, 0 otherwise. */
 int bhbHasCuda(void);
-/** @brief Return 1 if the library was compiled with Boost math support, 0 otherwise. */
+/** @brief Return 0: the bridge links no Boost; special functions are in-house. */
 int bhbHasBoost(void);
 /** @brief Return sizeof(BhbSourceParams) for ctypes layout verification. */
 int bhbSizeofSourceParams(void);

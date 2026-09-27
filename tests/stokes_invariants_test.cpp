@@ -26,13 +26,7 @@
 #include <numbers>
 #include <vector>
 
-#include "rte_integrator.h"
 #include "stokes_transport.h"
-#include "synchrotron.h"
-
-static_assert(PHYSICS_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
-static_assert(PHYSICS_RTE_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
-static_assert(PHYSICS_STOKES_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
 
 using namespace physics;
 

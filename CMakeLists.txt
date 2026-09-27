@@ -5557,6 +5557,26 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # Fixed Bessel K kernel validation
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/bessel_k_test.cpp")
+    add_executable(bessel_k_test
+      "${PROJECT_SOURCE_DIR}/tests/bessel_k_test.cpp"
+    )
+    target_include_directories(bessel_k_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src"
+      "${PROJECT_SOURCE_DIR}/src/physics"
+      "${PROJECT_SOURCE_DIR}/tests"
+    )
+    # Compiled with the project flags: the kernel ships in fast-math builds.
+    target_compile_options(bessel_k_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(bessel_k_test PRIVATE GTest::gtest_main)
+    add_test(NAME bessel_k_validation COMMAND bessel_k_test)
+    set_tests_properties(bessel_k_validation PROPERTIES
+      LABELS "physics;special-functions;bessel"
+      TIMEOUT 30
+    )
+  endif()
+
   # Synchrotron spectrum validation tests (Phase 5.1)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/synchrotron_spectrum_test.cpp")
     add_executable(synchrotron_spectrum_test
@@ -5567,7 +5587,9 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(synchrotron_spectrum_test PRIVATE ${PROJECT_WARNINGS})
-    target_link_libraries(synchrotron_spectrum_test PRIVATE Boost::headers)
+    if(ENABLE_FAST_MATH)
+      target_compile_options(synchrotron_spectrum_test PRIVATE -fno-fast-math)
+    endif()
     add_test(NAME synchrotron_spectrum_validation COMMAND synchrotron_spectrum_test)
     set_tests_properties(synchrotron_spectrum_validation PROPERTIES
       LABELS "physics;synchrotron;emission;phase5"
@@ -5791,11 +5813,10 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(rte_integrator_test PRIVATE ${PROJECT_WARNINGS})
-    # The Bessel-overflow checks classify NaN results; finite-math-only folds std::isnan away.
     if(ENABLE_FAST_MATH)
+      # Preserve IEEE overflow and underflow semantics for the Bessel limit checks.
       target_compile_options(rte_integrator_test PRIVATE -fno-fast-math)
     endif()
-    target_link_libraries(rte_integrator_test PRIVATE Boost::headers)
     add_test(NAME rte_integrator_validation COMMAND rte_integrator_test)
     set_tests_properties(rte_integrator_validation PROPERTIES
       LABELS "physics;rte;radiative_transfer"
@@ -5818,11 +5839,6 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(stokes_transport_test PRIVATE ${PROJECT_WARNINGS})
-    # The Bessel-overflow checks classify NaN results; finite-math-only folds std::isnan away.
-    if(ENABLE_FAST_MATH)
-      target_compile_options(stokes_transport_test PRIVATE -fno-fast-math)
-    endif()
-    target_link_libraries(stokes_transport_test PRIVATE Boost::headers)
     add_test(NAME stokes_transport_validation COMMAND stokes_transport_test)
     set_tests_properties(stokes_transport_validation PROPERTIES
       LABELS "physics;polarization;stokes"
@@ -5845,7 +5861,6 @@ if(BUILD_TESTING)
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
     target_compile_options(stokes_invariants_test PRIVATE ${PROJECT_WARNINGS})
-    target_link_libraries(stokes_invariants_test PRIVATE Boost::headers)
     add_test(NAME stokes_invariants_validation COMMAND stokes_invariants_test)
     set_tests_properties(stokes_invariants_validation PROPERTIES
       LABELS "physics;polarization;stokes;invariants"
@@ -6751,7 +6766,6 @@ if(BUILD_TESTING)
     if(ENABLE_FAST_MATH)
       target_compile_options(stokes_exact_test PRIVATE -fno-fast-math)
     endif()
-    target_link_libraries(stokes_exact_test PRIVATE Boost::headers)
     add_test(NAME stokes_exact_validation COMMAND stokes_exact_test)
     set_tests_properties(stokes_exact_validation PROPERTIES
       LABELS "physics;polarization;stokes;referee"
@@ -6881,7 +6895,6 @@ if(BUILD_TESTING)
     if(ENABLE_FAST_MATH)
       target_compile_options(analytic_geodesic_reproducibility_test PRIVATE -fno-fast-math)
     endif()
-    target_link_libraries(analytic_geodesic_reproducibility_test PRIVATE Boost::headers)
 
     add_test(NAME analytic_geodesic_reproducibility_validation
              COMMAND analytic_geodesic_reproducibility_test)

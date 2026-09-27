@@ -55,11 +55,8 @@ int bhbHasCuda(void) {
 }
 
 int bhbHasBoost(void) {
-#ifdef PHYSICS_HAS_BOOST_BESSEL
-  return 1;
-#else
+  // The bridge links no Boost; its special functions are in-house (bessel_k.h).
   return 0;
-#endif
 }
 
 int bhbSizeofSourceParams(void) {

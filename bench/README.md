@@ -281,7 +281,7 @@ taskset -c 3 ./build/Release/numerics_bench
 | Section | Measures |
 |---------|----------|
 | `stokes` | one closed-form full-K Stokes step (`stokesStepFull`, and the `SteadyStateSplit` option) against the RK4 substeps a 1e-6 error needs, Faraday depth 1/100/1000 |
-| `boost` | `jacobi_sn` and `ellint_1` under Boost's promoted default policy and under `AnalyticKerrPolicy` (`promote_double<false>`) |
+| `boost` | `jacobi_sn` and `ellint_1` under Boost's promoted default policy and under a double policy (`promote_double<false>`), against the in-house `rAnalytic` |
 | `carlson` | `carlsonRf/Rd/Rj` against Boost `ellint_rf/rd/rj` |
 | `kahan` | FP32 RK4 photon orbit, plain against Kahan-compensated accumulation: cost per step and roundoff against the double run |
 
