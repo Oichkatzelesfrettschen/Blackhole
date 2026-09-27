@@ -17,6 +17,7 @@
 #include <fstream>
 #include <ios>
 #include <iterator>
+#include <limits>
 #include <numbers>
 #include <numeric>
 #include <optional>
@@ -528,6 +529,67 @@ bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path 
          publishFile(directory / (stem + ".json"), sidecar);
 }
 
+void evictObserverSkyBundles(const std::filesystem::path &directory, std::uintmax_t maxBytes,
+                             std::uint64_t keepHash) {
+  struct BundleFile {
+    std::filesystem::path path;
+    std::filesystem::file_time_type written;
+    std::uintmax_t bytes = 0;
+  };
+  std::error_code error;
+  std::filesystem::directory_iterator iterator(directory, error);
+  if (error) {
+    return;
+  }
+  std::vector<BundleFile> bundles;
+  std::uintmax_t totalBytes = 0;
+  const std::string keepStem = lutStem(keepHash);
+  const std::filesystem::directory_iterator end;
+  while (iterator != end) {
+    const std::filesystem::path path = iterator->path();
+    const std::string name = path.filename().string();
+    if (name.starts_with("observer_sky_") && path.extension() == ".bin") {
+      const std::uintmax_t bytes = std::filesystem::file_size(path, error);
+      if (error) {
+        return;
+      }
+      const auto written = std::filesystem::last_write_time(path, error);
+      if (error) {
+        return;
+      }
+      if (totalBytes > std::numeric_limits<std::uintmax_t>::max() - bytes) {
+        return;
+      }
+      totalBytes += bytes;
+      if (path.stem() != keepStem) {
+        bundles.push_back({.path = path, .written = written, .bytes = bytes});
+      }
+    }
+    iterator.increment(error);
+    if (error) {
+      return;
+    }
+  }
+  std::ranges::sort(bundles, [](const BundleFile &left, const BundleFile &right) {
+    return left.written == right.written ? left.path < right.path : left.written < right.written;
+  });
+  for (const BundleFile &bundle : bundles) {
+    if (totalBytes <= maxBytes) {
+      break;
+    }
+    if (!std::filesystem::remove(bundle.path, error) || error) {
+      return;
+    }
+    totalBytes -= bundle.bytes;
+    std::filesystem::path sidecar = bundle.path;
+    sidecar.replace_extension(".json");
+    std::filesystem::remove(sidecar, error);
+    if (error) {
+      return;
+    }
+  }
+}
+
 std::optional<ObserverSkyLut> readObserverSkyLut(const std::filesystem::path &file,
                                                  std::uint64_t expectedHash) {
   std::ifstream stream(file, std::ios::binary);
@@ -572,6 +634,10 @@ std::optional<ObserverSkyLut> readObserverSkyLut(const std::filesystem::path &fi
   if (!ok || !shapesMatch) {
     return std::nullopt;
   }
+  // A successful read counts as a use: eviction orders bundles by this time.
+  std::error_code touchError;
+  std::filesystem::last_write_time(file, std::filesystem::file_time_type::clock::now(),
+                                   touchError);
   return lut;
 }
 
