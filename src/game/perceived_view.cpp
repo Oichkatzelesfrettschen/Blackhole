@@ -170,13 +170,9 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   // rule issueCommand uses to refuse this colony's orders); short of that,
   // the deadline is public, so past it the campaign has ended one way or the
   // other even though which way has not arrived.
-  if (colonyPerceivesHostWin(observer)) {
-    view.status = CampaignStatus::Won;
-  } else if (deadlinePassed()) {
-    view.status = CampaignStatus::Ended;
-  } else {
-    view.status = CampaignStatus::Ongoing;
-  }
+  view.status = colonyPerceivesHostWin(observer) ? CampaignStatus::Won
+                : deadlinePassed()               ? CampaignStatus::Ended
+                                                 : CampaignStatus::Ongoing;
   view.clearedTurn = 0;
   view.intel.clear();
   view.reportsInFlight.clear();
