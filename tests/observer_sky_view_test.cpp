@@ -12,6 +12,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -28,6 +29,7 @@
 #include "physics/observer_sky_lut.h"
 #include "physics/observer_sky_map.h"
 #include "render/observer_sky_view.h"
+#include "render/observer_sky_footprint.h"
 #include "render/render_state.h"
 #include "ui/observer_panels.h"
 
@@ -39,6 +41,40 @@ using blackhole::ObserverKind;
 
 constexpr double K_PI = std::numbers::pi;
 constexpr double K_STEFAN_BOLTZMANN = 5.670374419e-8; // W m^-2 K^-4 (CODATA 2018, exact form)
+
+TEST(ObserverSkyView, PixelFootprintsConserveTileFluxAcrossFieldsOfView) {
+  // mpmath 1.4.1: pi * mpf('0.00003')**2, at 50 decimal digits.
+  constexpr double referenceFlux = 0.000000002827433388230813914616379044951552595777;
+  constexpr double patchRadius = 0.00003;
+  constexpr double minimumRadius = 1.0e-9;
+  constexpr double maximumRadius = patchRadius;
+  constexpr int rings = 64;
+  constexpr int pixelsPerAxis = 64;
+  std::array<double, rings> cumulativeFlux{};
+  const double logMinimum = std::log(minimumRadius);
+  const double logMaximum = std::log(maximumRadius);
+  for (int ring = 0; ring < rings; ++ring) {
+    const double radius = std::exp(logMinimum +
+                                   ((logMaximum - logMinimum) * (ring + 1) / rings));
+    cumulativeFlux.at(static_cast<std::size_t>(ring)) = referenceFlux *
+                              ((radius * radius) - (minimumRadius * minimumRadius)) /
+                              ((patchRadius * patchRadius) - (minimumRadius * minimumRadius));
+  }
+  for (const double fovDegrees : {0.01, 0.1, 1.0, 3.0, 10.0, 30.0, 100.0}) {
+    const double pitch = 2.0 * std::tan(fovDegrees * K_PI / 360.0) / pixelsPerAxis;
+    double displayedFlux = 0.0;
+    for (int row = 0; row < pixelsPerAxis; ++row) {
+      for (int column = 0; column < pixelsPerAxis; ++column) {
+        const double left = (column - (pixelsPerAxis / 2.0)) * pitch;
+        const double bottom = (row - (pixelsPerAxis / 2.0)) * pitch;
+        displayedFlux += blackhole::skyFootprintFlux(cumulativeFlux, logMinimum, logMaximum,
+                                                     {.left = left, .bottom = bottom,
+                                                      .right = left + pitch, .top = bottom + pitch});
+      }
+    }
+    EXPECT_NEAR(displayedFlux / referenceFlux, 1.0, 0.01) << fovDegrees;
+  }
+}
 
 sky::ObserverKey requireKey(const std::optional<sky::ObserverKey> &key) {
   EXPECT_TRUE(key.has_value());
