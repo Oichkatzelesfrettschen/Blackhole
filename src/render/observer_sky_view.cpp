@@ -682,23 +682,12 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
     rtti.floatUniforms["tileLogRhoMax"] = static_cast<float>(std::log(tile.rhoMax));
     rtti.floatUniforms["useTile"] = 1.0F;
     const auto pixel = projectToPixel(basis, tile.center, tanHalfFov, rtti.width, rtti.height);
-    rtti.floatUniforms["splatEnabled"] = pixel ? 1.0F : 0.0F;
     if (pixel) {
       rtti.floatUniforms["splatPixelX"] = static_cast<float>(pixel->at(0));
       rtti.floatUniforms["splatPixelY"] = static_cast<float>(pixel->at(1));
-      // A pixel at tangent-plane offset (u, v) subtends p^2 / (1 + u^2 + v^2)^(3/2).
-      const double pitch = 2.0 * tanHalfFov / static_cast<double>(rtti.height);
-      const double u =
-          ((pixel->at(0) / static_cast<double>(rtti.height)) -
-           (0.5 * static_cast<double>(rtti.width) / static_cast<double>(rtti.height))) *
-          2.0 * tanHalfFov;
-      const double v = ((pixel->at(1) / static_cast<double>(rtti.height)) - 0.5) * 2.0 * tanHalfFov;
-      const double solidAngle = pitch * pitch / std::pow(1.0 + (u * u) + (v * v), 1.5);
-      rtti.floatUniforms["pixelSolidAngle"] = static_cast<float>(solidAngle);
     }
   } else {
     rtti.floatUniforms["useTile"] = 0.0F;
-    rtti.floatUniforms["splatEnabled"] = 0.0F;
   }
   // The star lookup picks a mip level from each pixel's footprint on the sky
   // at infinity. The shared galaxy cubemap samples its base level only

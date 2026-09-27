@@ -31,20 +31,14 @@
  * cubemap texel at 1e-4 of the 1e-3 cd/m^2 starSkyLuminance stays above
  * black, and half a decade above the patch.
  *
- * Unresolved patch. Wherever a pixel is wider than the patch, the patch's
- * CMB flux inside rhoSplit of the tile center (tileFluxLut: cumulative
- * integral of luminance dOmega over rings) is deposited into the single
- * pixel that contains the center (splatPixel), divided by that pixel's solid
- * angle, instead of being point-sampled and missed. Starlight inside that
- * disk is omitted: blueshifted starlight in the patch is about 1e-10 of the
- * CMB there (dilution 1e-13 times T_star / T_cmb, both on the Rayleigh-Jeans
- * tail).
+ * The tile's cumulative CMB flux is apportioned by the intersection of each
+ * radial annulus with a pixel footprint. The flux is divided by the pixel's
+ * solid angle before display mapping.
  *
  * Key uniforms: viewBasis (columns right, up, forward on the tetrad legs),
  * tanHalfFov, skyPhiOffset / skyPhiBlurSpan / blurSamples (rotation of the
  * sky about the spin axis, in radians, and its motion-blur span), tile*,
- * splatPixelX/Y and pixelSolidAngle (the pixel holding the tile center and
- * its solid angle, from the CPU in double), skyReady.
+ * splatPixelX/Y (the projected tile center, from the CPU in double), skyReady.
  * Outputs: fragColor (rgb = display radiance, a = 1: the sky is at the far
  * plane for depth_cues.frag).
  */
@@ -86,10 +80,8 @@ uniform float logLuminanceMin = -7.0;
 uniform float logLuminanceMax = 13.5;
 uniform float displayPeak = 4.0;
 
-uniform float splatEnabled = 1.0;
 uniform float splatPixelX = -1.0;
 uniform float splatPixelY = -1.0;
-uniform float pixelSolidAngle = 1.0e-6;
 
 const float PI = 3.14159265358979;
 const float NO_SKY_THRESHOLD = -5.0e3;
@@ -155,10 +147,10 @@ vec3 galaxyDirection(vec3 source, float phi) {
  *        of source latitude, and near a source pole a whole ring of azimuth
  *        -- instead of aliasing onto single stars.
  */
-vec3 skyRadiance(vec3 source, float logG, vec3 footprint) {
+vec3 skyRadiance(vec3 source, float logG, vec3 footprint, bool includeCmb) {
   float log10G = logG / log(10.0);
   vec3 radiance = vec3(0.0);
-  if (cmbEnabled > 0.5) {
+  if (includeCmb && cmbEnabled > 0.5) {
     vec4 cmb = blackbodyAt(log(cmbTemperature) / log(10.0) + log10G);
     radiance += cmb.rgb * pow(10.0, cmb.a);
   }
@@ -307,30 +299,61 @@ vec4 tileSample(vec2 coordinates, out vec3 span, out float texelAngle) {
   return readDirectionMap(skyTile, tileSpan, st, true, span);
 }
 
-/**
- * @brief Cumulative CMB flux (luminance x sr) inside ln rho = `logRho`.
- *        tileFluxLut texel i holds the flux inside ring i's outer edge. Ring i
- *        spans a log-width s; at fraction f of it the enclosed solid angle,
- *        rho^2 to first order, has grown by (e^{2 f s} - 1) / (e^{2 s} - 1) of
- *        the ring's, and so has the enclosed flux for radiance uniform across
- *        the ring. Reading texel i whole would add the rest of the ring.
- */
-vec3 tileFluxInside(float logRho) {
+// These disk primitives mirror src/render/observer_sky_footprint.h.
+float skyDiskQuadrant(float radius, float x, float y) {
+  x = clamp(x, 0.0, radius);
+  y = clamp(y, 0.0, radius);
+  float crossing = sqrt(max(radius * radius - y * y, 0.0));
+  if (x <= crossing) {
+    return x * y;
+  }
+  float first = 0.5 * (x * sqrt(max(radius * radius - x * x, 0.0)) +
+                       radius * radius * asin(clamp(x / radius, 0.0, 1.0)));
+  float second = 0.5 * (crossing * sqrt(max(radius * radius - crossing * crossing, 0.0)) +
+                        radius * radius * asin(clamp(crossing / radius, 0.0, 1.0)));
+  return crossing * y + first - second;
+}
+
+float skyDiskSigned(float radius, float x, float y) {
+  return (x < 0.0 ? -1.0 : 1.0) * (y < 0.0 ? -1.0 : 1.0) *
+         skyDiskQuadrant(radius, abs(x), abs(y));
+}
+
+float skyDiskBoxArea(float radius, vec4 box) {
+  return skyDiskSigned(radius, box.z, box.w) - skyDiskSigned(radius, box.x, box.w) -
+         skyDiskSigned(radius, box.z, box.y) + skyDiskSigned(radius, box.x, box.y);
+}
+
+vec3 skyFootprintFlux(vec4 box) {
   int rings = textureSize(tileFluxLut, 0).x;
   float ringWidth = (tileLogRhoMax - tileLogRhoMin) / float(rings);
-  float position = (logRho - tileLogRhoMin) / ringWidth;
-  if (!(position > 0.0)) {
+  vec2 nearest = max(max(box.xy, -box.zw), vec2(0.0));
+  float nearestRadius = length(nearest);
+  float farthestRadius = length(max(abs(box.xy), abs(box.zw)));
+  int firstRing = clamp(int(floor((log(max(nearestRadius, exp(tileLogRhoMin))) -
+                                   tileLogRhoMin) / ringWidth)), 0, rings);
+  int lastRing = clamp(int(ceil((log(max(farthestRadius, exp(tileLogRhoMin))) -
+                                  tileLogRhoMin) / ringWidth)), 0, rings);
+  if (firstRing >= lastRing) {
     return vec3(0.0);
   }
-  if (position >= float(rings)) {
-    return texelFetch(tileFluxLut, ivec2(rings - 1, 0), 0).rgb;
+  float innerRadius = exp(tileLogRhoMin + float(firstRing) * ringWidth);
+  float innerArea = skyDiskBoxArea(innerRadius, box);
+  vec3 previousFlux = firstRing > 0 ?
+                      texelFetch(tileFluxLut, ivec2(firstRing - 1, 0), 0).rgb : vec3(0.0);
+  vec3 result = vec3(0.0);
+  for (int ring = firstRing; ring < lastRing; ++ring) {
+    float outerRadius = exp(tileLogRhoMin + float(ring + 1) * ringWidth);
+    float outerArea = skyDiskBoxArea(outerRadius, box);
+    float annulusArea = PI * (outerRadius * outerRadius - innerRadius * innerRadius);
+    vec3 cumulativeFlux = texelFetch(tileFluxLut, ivec2(ring, 0), 0).rgb;
+    result += (cumulativeFlux - previousFlux) *
+              clamp((outerArea - innerArea) / annulusArea, 0.0, 1.0);
+    innerArea = outerArea;
+    innerRadius = outerRadius;
+    previousFlux = cumulativeFlux;
   }
-  int index = int(position);
-  float fraction = position - float(index);
-  vec3 inner = index > 0 ? texelFetch(tileFluxLut, ivec2(index - 1, 0), 0).rgb : vec3(0.0);
-  vec3 outer = texelFetch(tileFluxLut, ivec2(index, 0), 0).rgb;
-  float weight = (exp(2.0 * fraction * ringWidth) - 1.0) / (exp(2.0 * ringWidth) - 1.0);
-  return mix(inner, outer, weight);
+  return result;
 }
 
 vec3 displayMapped(vec3 radiance) {
@@ -352,6 +375,9 @@ void main() {
   float aspect = resolution.x / max(resolution.y, 1.0);
   vec3 look = normalize(viewBasis * vec3(ndc.x * aspect * tanHalfFov, ndc.y * tanHalfFov, 1.0));
   float pixelAngle = 2.0 * tanHalfFov / max(resolution.y, 1.0);
+  vec2 cameraPlane = ndc * vec2(aspect, 1.0) * tanHalfFov;
+  float pixelSolidAngle = pixelAngle * pixelAngle /
+                          pow(1.0 + dot(cameraPlane, cameraPlane), 1.5);
 
   vec3 radiance = vec3(0.0);
   bool fromTile = false;
@@ -359,19 +385,19 @@ void main() {
     vec2 coordinates = tileCoordinates(look);
     if (coordinates.x < tileLogRhoMax) {
       fromTile = true;
-      float rhoSplit = 0.75 * pixelAngle;
-      if (splatEnabled > 0.5 && coordinates.x < log(rhoSplit)) {
-        // Inside the unresolved disk: its whole CMB flux lands on one pixel.
-        if (cmbEnabled > 0.5 &&
-            all(equal(floor(gl_FragCoord.xy), floor(vec2(splatPixelX, splatPixelY))))) {
-          radiance = tileFluxInside(log(rhoSplit)) / pixelSolidAngle;
-        }
-      } else {
+      if (cmbEnabled > 0.5) {
+        vec2 centerOffset = (gl_FragCoord.xy - vec2(splatPixelX, splatPixelY)) * pixelAngle;
+        vec4 box = vec4(centerOffset - 0.5 * pixelAngle,
+                        centerOffset + 0.5 * pixelAngle);
+        radiance = skyFootprintFlux(box) / pixelSolidAngle;
+      }
+      if (starsEnabled > 0.5) {
         vec3 span;
         float texelAngle;
         vec4 texel = tileSample(coordinates, span, texelAngle);
         if (texel.a > NO_SKY_THRESHOLD) {
-          radiance = skyRadiance(texel.rgb, texel.a, span * (pixelAngle / texelAngle));
+          // The star term follows the source footprint outside the CMB integral.
+          radiance += skyRadiance(texel.rgb, texel.a, span * (pixelAngle / texelAngle), false);
         }
       }
     }
@@ -381,7 +407,7 @@ void main() {
     float texelAngle;
     vec4 texel = equirectSample(look, span, texelAngle);
     if (texel.a > NO_SKY_THRESHOLD) {
-      radiance = skyRadiance(texel.rgb, texel.a, span * (pixelAngle / texelAngle));
+      radiance = skyRadiance(texel.rgb, texel.a, span * (pixelAngle / texelAngle), true);
     }
   }
   fragColor = vec4(displayMapped(radiance), 1.0);
