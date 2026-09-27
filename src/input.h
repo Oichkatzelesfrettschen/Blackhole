@@ -368,7 +368,8 @@ public:
   [[nodiscard]] float getEffectiveDeltaTime(float rawDeltaTime) const;
 
   /**
-   * @brief When set to true, camera and viewport input ignores ImGui capture flags.
+   * @brief When set to true, camera, viewport, and single-press keyboard
+   *        actions ignore ImGui capture flags.
    * @param ignore Pass true to allow input even when ImGui is focused.
    */
   void setIgnoreGuiCapture(bool ignore) { ignoreGuiCapture_ = ignore; }
@@ -424,6 +425,13 @@ private:
 
   void initDefaultBindings();
   void updateCamera(float deltaTime);
+  /// True while an ImGui field's keyboard capture (WantCaptureKeyboard)
+  /// should suppress the single-press action block, per ignoreGuiCapture_.
+  [[nodiscard]] bool guiCapturesKeyboard() const;
+  /// Dispatches the single-press keyboard actions (Quit, ToggleUI, resets,
+  /// time/font scale, hold-to-toggle arming) against this frame's just-
+  /// pressed edges.
+  void handleSinglePressActions();
   void handleHoldToToggle(KeyAction action, bool justPressed, bool justReleased);
   void updateGamepad(float deltaTime);
   /// Change the camera distance by @p amount * @p distanceScale (zoomRateScale),

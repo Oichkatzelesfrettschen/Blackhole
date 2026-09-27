@@ -204,10 +204,6 @@ void InputManager::syncToSettings() {
 }
 
 void InputManager::update(float deltaTime) {
-  // Update previous state
-  std::ranges::copy(keyState_, std::begin(prevKeyState_));
-  std::ranges::copy(mouseButtonState_, std::begin(prevMouseButtonState_));
-
   // Calculate mouse delta with sensitivity and inversion
   float const rawDeltaX = mouseX_ - prevMouseX_;
   float const rawDeltaY = mouseY_ - prevMouseY_;
@@ -218,7 +214,37 @@ void InputManager::update(float deltaTime) {
   prevMouseX_ = mouseX_;
   prevMouseY_ = mouseY_;
 
-  // Handle single-press actions
+  // Single-press actions read isKeyJustPressed against the previous frame's
+  // state, so they run before that state is overwritten below.
+  if (!guiCapturesKeyboard()) {
+    handleSinglePressActions();
+  }
+
+  // Update camera (only if not paused)
+  if (!paused_) {
+    updateCamera(deltaTime);
+  }
+
+  // Reset scroll delta after processing
+  scrollDelta_ = 0.0f;
+
+  // Previous-state snapshot for the next frame's just-pressed/just-released
+  // queries; taken last so this frame's edge checks above compare against
+  // the state onKey/onMouseButton delivered before update ran.
+  std::ranges::copy(keyState_, std::begin(prevKeyState_));
+  std::ranges::copy(mouseButtonState_, std::begin(prevMouseButtonState_));
+}
+
+bool InputManager::guiCapturesKeyboard() const {
+  // An ImGui text field owns Backspace while focused, so the single-press
+  // action block yields to WantCaptureKeyboard unless the caller opted into
+  // ignoring GUI capture (setIgnoreGuiCapture); with no ImGui context (a
+  // GL-free test that never created one) the block runs unconditionally.
+  return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard &&
+         !ignoreGuiCapture_;
+}
+
+void InputManager::handleSinglePressActions() {
   if (isActionJustPressed(KeyAction::Quit)) {
     glfwSetWindowShouldClose(window_, GLFW_TRUE);
   }
@@ -286,14 +312,6 @@ void InputManager::update(float deltaTime) {
     handleHoldToToggle(KeyAction::ZoomOut, isActionJustPressed(KeyAction::ZoomOut),
                        isActionJustPressed(KeyAction::ZoomOut));
   }
-
-  // Update camera (only if not paused)
-  if (!paused_) {
-    updateCamera(deltaTime);
-  }
-
-  // Reset scroll delta after processing
-  scrollDelta_ = 0.0f;
 }
 
 void InputManager::handleHoldToToggle(KeyAction action, bool justPressed, bool /*justReleased*/) {
@@ -770,6 +788,12 @@ void InputManager::onKey(int key, int /*scancode*/, int action, int /*mods*/) {
       keyBindings_[remappingAction_] = key;
     }
     remappingAction_ = KeyAction::COUNT;
+    // The press that picked the key is consumed: record it as already held so
+    // its repeats and the next update() see no fresh edge until release.
+    if (key >= 0 && key <= GLFW_KEY_LAST) {
+      keyState_[key] = true;
+      prevKeyState_[key] = true;
+    }
     return;
   }
 
