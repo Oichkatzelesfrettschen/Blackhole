@@ -40,7 +40,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <stdlib.h> // setenv, unsetenv (POSIX)
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers): POSIX setenv/unsetenv live here, not in <cstdlib>
 #include <unistd.h>
 
 #include "kerr_observer.h"
