@@ -5,7 +5,6 @@
  *        mismatched save is refused.
  */
 
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -87,15 +86,6 @@ std::size_t turnValueOffset(const std::vector<std::uint8_t> &bytes) {
   const std::size_t commandsLength = static_cast<std::size_t>(bytes.at(K_COMMANDS_TAG + 4)) |
                                      (static_cast<std::size_t>(bytes.at(K_COMMANDS_TAG + 5)) << 8);
   return K_COMMANDS_TAG + 8 + commandsLength + 8;
-}
-
-/** @brief Seconds one load takes; the refusals under test return before any
- *         replayed turn, so a generous bound separates them from a replay. */
-double loadSeconds(const std::vector<std::uint8_t> &bytes, const game::EventSet *story,
-                   std::string &error) {
-  const auto start = std::chrono::steady_clock::now();
-  error = game::loadCampaign(bytes, story).error;
-  return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
 
 } // namespace
@@ -269,8 +259,8 @@ TEST(CampaignSave, ClockFloorBudgetIsClampedToTheCeiling) {
 
 // Falsifier: a tiny save whose turn field sits past its scenario's budget (or
 // at the 1e8 turns a global cap once admitted), or whose command log runs past
-// its turn, replaying any turn before the refusal. Refusal is asserted by
-// message; the time bound is generous against a 3.6e6-turn replay.
+// its turn, replaying any turn before the refusal. These error messages come
+// from checks that precede the replay loop.
 TEST(CampaignSave, OverBudgetTurnAndStrayCommandsAreRefusedBeforeReplay) {
   const game::EventSet story = shippedStory();
   game::CampaignSession m87(42);
@@ -291,12 +281,11 @@ TEST(CampaignSave, OverBudgetTurnAndStrayCommandsAreRefusedBeforeReplay) {
     for (const std::int64_t turn : {budget + 1, std::int64_t{100000000}}) {
       std::vector<std::uint8_t> overBudget = save;
       writeI64(overBudget, turnValueOffset(overBudget), turn);
-      std::string error;
-      const double seconds = loadSeconds(overBudget, scenario.story, error);
-      EXPECT_EQ(error, "saved turn outside [0, " + std::to_string(budget) +
-                           "], this scenario's replay budget")
+      const game::CampaignLoadResult refused = game::loadCampaign(overBudget, scenario.story);
+      EXPECT_EQ(refused.error, "saved turn outside [0, " + std::to_string(budget) +
+                                   "], this scenario's replay budget")
           << "turn " << turn;
-      EXPECT_LT(seconds, 0.5) << "turn " << turn;
+      EXPECT_EQ(refused.replayedTurns, 0) << "turn " << turn;
     }
 
     // An in-budget turn with the first command moved past it: refused on the
@@ -304,10 +293,12 @@ TEST(CampaignSave, OverBudgetTurnAndStrayCommandsAreRefusedBeforeReplay) {
     std::vector<std::uint8_t> strayCommand = save;
     writeI64(strayCommand, turnValueOffset(strayCommand), budget);
     writeI64(strayCommand, K_COMMANDS_TAG + 12, budget + 1);
-    std::string error;
-    const double seconds = loadSeconds(strayCommand, scenario.story, error);
-    EXPECT_EQ(error, "saved commands are out of turn order or beyond the saved turn");
-    EXPECT_LT(seconds, 0.5);
+    const game::CampaignLoadResult stray = game::loadCampaign(strayCommand, scenario.story);
+    EXPECT_EQ(stray.error, "saved commands are out of turn order or beyond the saved turn");
+    EXPECT_EQ(stray.replayedTurns, 0);
+    // The counter is live: a valid save replays its saved turns.
+    EXPECT_EQ(game::loadCampaign(save, scenario.story).replayedTurns,
+              scenario.session->state().turn());
   }
 }
 
