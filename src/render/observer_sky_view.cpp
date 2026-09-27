@@ -67,13 +67,16 @@ sky::Vec3 normalized(const sky::Vec3 &v) {
   return {v.at(0) / length, v.at(1) / length, v.at(2) / length};
 }
 
+/** @brief Uploads a float texture with `channels` components per texel (3
+ *         for the RGB32F source-span maps, 4 for the RGBA32F sky maps). */
 GLuint uploadFloatTexture(int width, int height, const float *pixels, GLenum filter,
-                          bool twoChannels = false) {
+                          int channels = 4) {
+  const GLenum internalFormat = channels == 3 ? GL_RGB32F : GL_RGBA32F;
+  const GLenum format = channels == 3 ? GL_RGB : GL_RGBA;
   GLuint texture = 0;
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, twoChannels ? GL_RG32F : GL_RGBA32F, width, height, 0,
-               twoChannels ? GL_RG : GL_RGBA, GL_FLOAT, pixels);
+  glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_FLOAT, pixels);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(filter));
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(filter));
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(GL_CLAMP_TO_EDGE));
@@ -511,10 +514,10 @@ void ObserverSkyRenderer::upload(const PreparedObserverSky &prepared) {
   releaseSky();
   skySpanTexture_ =
       uploadFloatTexture(static_cast<int>(bundle.sky.width), static_cast<int>(bundle.sky.height),
-                         bundle.sky.sourceSpan.data(), GL_NEAREST, true);
+                         bundle.sky.sourceSpan.data(), GL_NEAREST, 3);
   tileSpanTexture_ = uploadFloatTexture(static_cast<int>(bundle.tileImage.width),
                                         static_cast<int>(bundle.tileImage.height),
-                                        bundle.tileImage.sourceSpan.data(), GL_NEAREST, true);
+                                        bundle.tileImage.sourceSpan.data(), GL_NEAREST, 3);
   skyTexture_ =
       uploadFloatTexture(static_cast<int>(bundle.sky.width), static_cast<int>(bundle.sky.height),
                          bundle.sky.rgba.data(), GL_NEAREST);

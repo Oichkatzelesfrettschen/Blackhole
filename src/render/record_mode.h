@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <glm/ext/vector_float4.hpp>
 
@@ -132,6 +133,24 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli);
  * std::nullopt.
  */
 std::optional<double> recordOutputSeconds(const platform::CliOptions &cli, int recordFrameIndex);
+
+/**
+ * @brief The observer scene's per-frame capture clock this frame:
+ *        (outputSeconds, frameSeconds) from recordOutputSeconds while
+ *        --record-frames is active, (0, 0) for a one-shot
+ *        --export-frame/--export-raw-frame, or nothing for an ordinary
+ *        interactive frame.
+ *
+ * A one-shot export has no output clock (recordFramesDir is empty) but still
+ * renders warmup frames before the capture; without a frozen clock those
+ * warmup frames would advance the observer's proper time on wall time, and
+ * BLACKHOLE_OBSERVER_TIME_SCALE >= 1 would drift the exported phase away
+ * from BLACKHOLE_OBSERVER_PROPER_SECONDS. Freezing at output second 0, like
+ * a recording freezes to its frame index, keeps every frame -- warmup and
+ * export alike -- at the requested proper time.
+ */
+std::optional<std::pair<double, double>> observerCaptureClock(const platform::CliOptions &cli,
+                                                               int recordFrameIndex);
 
 /**
  * @brief Fraction of the record camera path at frame @p recordFrameIndex.

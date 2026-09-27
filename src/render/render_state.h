@@ -111,15 +111,19 @@ struct RenderState {
   } scene;
 
   /**
-   * @brief Whether the gizmo target moves the camera focus this frame.
+   * @brief Whether the active scene is the one the gizmo target applies to.
    *
    * The target translates the black-hole camera's focus. tesseractView keeps
-   * the tesseract at the origin and takes only the focus direction, so the
-   * target applies to the black-hole scene alone.
+   * the tesseract at the origin and takes only the focus direction, and the
+   * observer-sky scene has no camera focus to move, so the target applies to
+   * the black-hole scene alone. The gizmo panel disables its controls by this
+   * predicate alone (not gizmoTargetActive, which also reads the checkbox it
+   * draws) so the checkbox itself stays togglable.
    */
-  [[nodiscard]] bool gizmoTargetActive() const {
-    return camera.gizmoEnabled && scene.mode == SceneMode::Blackhole;
-  }
+  [[nodiscard]] bool sceneAllowsGizmo() const { return scene.mode == SceneMode::Blackhole; }
+
+  /** @brief Whether the gizmo target moves the camera focus this frame. */
+  [[nodiscard]] bool gizmoTargetActive() const { return camera.gizmoEnabled && sceneAllowsGizmo(); }
 
   /**
    * @brief The observer-sky scene. Physics defaults are Gargantua's canon:

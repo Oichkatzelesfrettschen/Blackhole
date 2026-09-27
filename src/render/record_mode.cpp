@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include <GLFW/glfw3.h>
@@ -464,6 +465,19 @@ std::optional<double> recordOutputSeconds(const platform::CliOptions &cli, int r
     return std::nullopt;
   }
   return static_cast<double>(recordFrameIndex) / static_cast<double>(K_CINEMATIC_FPS);
+}
+
+std::optional<std::pair<double, double>> observerCaptureClock(const platform::CliOptions &cli,
+                                                               int recordFrameIndex) {
+  if (const auto outputSeconds = recordOutputSeconds(cli, recordFrameIndex)) {
+    const double frameSeconds =
+        recordOutputSeconds(cli, recordFrameIndex + 1).value_or(*outputSeconds) - *outputSeconds;
+    return std::pair{*outputSeconds, frameSeconds};
+  }
+  if (!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()) {
+    return std::pair{0.0, 0.0};
+  }
+  return std::nullopt;
 }
 
 double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex,

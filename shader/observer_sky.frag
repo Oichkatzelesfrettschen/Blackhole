@@ -143,15 +143,19 @@ vec3 galaxyDirection(vec3 source, float phi) {
 
 /**
  * @brief Linear-sRGB luminance-weighted radiance (cd/m^2) of one sky sample.
- *        `footprint` is the (azimuthal, polar) extent the pixel covers on the
- *        sky at infinity. Azimuth about the spin axis is sampled explicitly,
+ *        `footprint` is the (coordinate azimuthal, projected azimuthal,
+ *        polar) extent the pixel covers on the sky at infinity. Azimuth about
+ *        the spin axis is sampled explicitly over the coordinate extent,
  *        together with the motion-blur turn, since both rotate the source
- *        about Z; the remaining extent picks the cubemap mip level. A strongly
- *        demagnified region thus shows the average starlight of its footprint
- *        -- near an extremal horizon, whole rings of source latitude --
- *        instead of aliasing onto single stars.
+ *        about Z; the projected extent (the arc length the coordinate range
+ *        subtends) picks the cubemap mip level instead, since near a source
+ *        pole a whole coordinate turn can subtend a negligible physical
+ *        angle. A strongly demagnified region thus shows the average
+ *        starlight of its footprint -- near an extremal horizon, whole rings
+ *        of source latitude, and near a source pole a whole ring of azimuth
+ *        -- instead of aliasing onto single stars.
  */
-vec3 skyRadiance(vec3 source, float logG, vec2 footprint) {
+vec3 skyRadiance(vec3 source, float logG, vec3 footprint) {
   float log10G = logG / log(10.0);
   vec3 radiance = vec3(0.0);
   if (cmbEnabled > 0.5) {
@@ -161,14 +165,20 @@ vec3 skyRadiance(vec3 source, float logG, vec2 footprint) {
   if (starsEnabled > 0.5) {
     float blurTurn = blurSamples > 1.5 ? skyPhiBlurSpan : 0.0;
     float turn = min(footprint.x + abs(blurTurn), 2.0 * PI);
-    float spacing = max(footprint.y, 0.05);
+    // The sky turns about Z, so the blur's arc at this source is the turn
+    // scaled by the source's distance from the spin axis, sin(theta).
+    float projectedTurn = min(footprint.y + abs(blurTurn) * length(source.xy), 2.0 * PI);
+    float spacing = max(footprint.z, 0.05);
     int samples = clamp(int(ceil(turn / spacing)), blurSamples > 1.5 ? 4 : 1, 16);
     float cubeTexelAngle = 0.5 * PI / float(textureSize(galaxy, 0).x);
-    float extent = max(footprint.y, turn / float(samples));
+    float extent = max(footprint.z, projectedTurn / float(samples));
     float lod = max(log2(max(extent, 1.0e-12) / cubeTexelAngle), 0.0);
     // The pixel's azimuth range around its source, extended back over the
     // turn the sky made during the frame (skyPhiOffset is its phase at the
-    // frame's end), so the blur trails the rotation in either sense.
+    // frame's end), so the blur trails the rotation in either sense. The
+    // coordinate extent (footprint.x), not the projected one, sets how much
+    // of the source's azimuth to average: a source pole is a discontinuity
+    // in phi covering every azimuth at once.
     float start = skyPhiOffset - 0.5 * footprint.x - max(blurTurn, 0.0);
     vec3 stars = vec3(0.0);
     for (int i = 0; i < samples; ++i) {
@@ -198,26 +208,30 @@ vec3 skyRadiance(vec3 source, float logG, vec2 footprint) {
  *        and agree to 0.5 rad; across a lensing fold or the shadow edge the
  *        nearest texel wins, so no pixel shows a blend of unrelated sources.
  *        `span` returns the sky at infinity one map texel spans: x the widest
- *        azimuthal step from `spanMap` (the unwrapped swept azimuth), y the
- *        widest polar step or chord between the sky texels. ln g is a smooth function
- *        of the look direction alone (g = 1/E is fixed at the observer), so
- *        it interpolates over whichever of the four texels show sky even
- *        where the directions do not.
+ *        coordinate azimuthal step from `spanMap` (the unwrapped swept
+ *        azimuth), y that step projected by sin(theta) (the great-circle arc
+ *        it subtends), z the widest polar step or chord between the sky
+ *        texels. The near-continuity tests below read the projected step
+ *        (y): a source pole can sweep a whole coordinate turn (x) between
+ *        adjacent texels while looking visually unchanged. ln g is a smooth
+ *        function of the look direction alone (g = 1/E is fixed at the
+ *        observer), so it interpolates over whichever of the four texels
+ *        show sky even where the directions do not.
  */
-vec4 readDirectionMap(sampler2D map, sampler2D spanMap, vec2 st, bool wrapX, out vec2 span) {
+vec4 readDirectionMap(sampler2D map, sampler2D spanMap, vec2 st, bool wrapX, out vec3 span) {
   ivec2 size = textureSize(map, 0);
   vec2 base = floor(st - 0.5);
   vec2 f = st - 0.5 - base;
   ivec2 i0 = ivec2(base);
   vec4 texels[4];
-  span = vec2(0.0);
+  span = vec3(0.0);
   for (int k = 0; k < 4; ++k) {
     ivec2 at = i0 + ivec2(k & 1, k >> 1);
     at.x = wrapX ? (at.x + size.x) % size.x : clamp(at.x, 0, size.x - 1);
     at.y = clamp(at.y, 0, size.y - 1);
     texels[k] = texelFetch(map, at, 0);
     if (texels[k].a > NO_SKY_THRESHOLD) {
-      span = max(span, texelFetch(spanMap, at, 0).rg);
+      span = max(span, texelFetch(spanMap, at, 0).rgb);
     }
   }
   vec4 nearest = texels[(f.x < 0.5 ? 0 : 1) + (f.y < 0.5 ? 0 : 2)];
@@ -233,7 +247,7 @@ vec4 readDirectionMap(sampler2D map, sampler2D spanMap, vec2 st, bool wrapX, out
   }
   // Where whole turns separate the texels, their chord says nothing about
   // the polar extent; the z steps do.
-  span.y = max(span.y, span.x > 0.5 ? polarSpread : spread);
+  span.z = max(span.z, span.y > 0.5 ? polarSpread : spread);
   vec4 weights = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
   float skyWeight = 0.0;
   float logG = 0.0;
@@ -247,7 +261,7 @@ vec4 readDirectionMap(sampler2D map, sampler2D spanMap, vec2 st, bool wrapX, out
     nearest.a = logG / skyWeight;
   }
   bool allSky = skyWeight > 0.9999;
-  if (allSky && span.x > 0.5 && span.y < 0.5) {
+  if (allSky && span.y > 0.5 && span.z < 0.5) {
     // The texels wind through different azimuths but share a source
     // latitude band: interpolate the polar component alone and keep the
     // nearest azimuth, which the renderer averages over anyway.
@@ -255,7 +269,7 @@ vec4 readDirectionMap(sampler2D map, sampler2D spanMap, vec2 st, bool wrapX, out
     vec2 xy = nearest.xy * (sqrt(max(1.0 - z * z, 0.0)) / max(length(nearest.xy), 1.0e-6));
     return vec4(xy, z, nearest.a);
   }
-  if (!allSky || spread > 0.5 || span.x > 0.5) {
+  if (!allSky || spread > 0.5 || span.y > 0.5) {
     return nearest;
   }
   vec4 top = mix(texels[0], texels[1], f.x);
@@ -265,7 +279,7 @@ vec4 readDirectionMap(sampler2D map, sampler2D spanMap, vec2 st, bool wrapX, out
 }
 
 /** @brief Equirectangular read; `texelAngle` returns the map's pitch. */
-vec4 equirectSample(vec3 look, out vec2 span, out float texelAngle) {
+vec4 equirectSample(vec3 look, out vec3 span, out float texelAngle) {
   float longitude = atan(look.z, -look.x);
   float latitude = asin(clamp(-look.y, -1.0, 1.0));
   vec2 size = vec2(textureSize(skyMap, 0));
@@ -284,7 +298,7 @@ vec2 tileCoordinates(vec3 look) {
 }
 
 /** @brief Log-polar read; `texelAngle` returns the local texel size. */
-vec4 tileSample(vec2 coordinates, out vec2 span, out float texelAngle) {
+vec4 tileSample(vec2 coordinates, out vec3 span, out float texelAngle) {
   vec2 size = vec2(textureSize(skyTile, 0));
   float radial = (coordinates.x - tileLogRhoMin) / (tileLogRhoMax - tileLogRhoMin);
   vec2 st = vec2(coordinates.y / (2.0 * PI), radial) * size;
@@ -353,7 +367,7 @@ void main() {
           radiance = tileFluxInside(log(rhoSplit)) / pixelSolidAngle;
         }
       } else {
-        vec2 span;
+        vec3 span;
         float texelAngle;
         vec4 texel = tileSample(coordinates, span, texelAngle);
         if (texel.a > NO_SKY_THRESHOLD) {
@@ -363,7 +377,7 @@ void main() {
     }
   }
   if (!fromTile) {
-    vec2 span;
+    vec3 span;
     float texelAngle;
     vec4 texel = equirectSample(look, span, texelAngle);
     if (texel.a > NO_SKY_THRESHOLD) {

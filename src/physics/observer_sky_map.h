@@ -115,7 +115,7 @@ struct SkyRay {
  *         products (traceSkyRay, traceImage, sourceSpans, findPeakBlueshift).
  *         Any change to what they compute for the same inputs increments it;
  *         lutHash folds it, so cached bundles of an older tracer are rebuilt. */
-inline constexpr std::uint32_t K_TRACER_VERSION = 1;
+inline constexpr std::uint32_t K_TRACER_VERSION = 2;
 
 /** @brief Traces the photon received along `look` backward from the observer. */
 [[nodiscard]] SkyRay traceSkyRay(const Tetrad &tetrad, const Vec3 &look,
@@ -167,21 +167,36 @@ struct LogPolarTile {
 [[nodiscard]] double tileTexelSolidAngle(const LogPolarTile &tile, std::size_t radial);
 
 /** @brief RGBA32F texels: rgb = source direction, a = ln g, K_CAPTURED_LOG_G, or
- *         K_TRAPPED_LOG_G; and RG32F source spans. */
+ *         K_TRAPPED_LOG_G; and RGB32F source spans. */
 struct SkyImage {
   std::size_t width = 0;
   std::size_t height = 0;
   std::vector<float> rgba;
-  /// Per texel (azimuthal, polar): the widest step to a neighboring sky
-  /// texel on the sky at infinity, in radians. The azimuthal step comes from
-  /// the unwrapped Boyer-Lindquist azimuth the ray swept: near an extremal
-  /// horizon it grows past 2 pi between adjacent texels while the stored
-  /// unit directions look close.
+  /// Per texel (coordinate azimuthal, projected azimuthal, polar): the
+  /// widest step to a neighboring sky texel on the sky at infinity, in
+  /// radians. Both azimuthal components come from the unwrapped
+  /// Boyer-Lindquist azimuth the ray swept, one raw and one projected by
+  /// sin(theta) (the great-circle arc it subtends); near an extremal horizon
+  /// the raw step grows past 2 pi between adjacent texels while the stored
+  /// unit directions look close. The coordinate step feeds explicit
+  /// azimuthal sampling (correct at a source pole, where the projected step
+  /// collapses toward zero); the projected step feeds the mip level.
   std::vector<float> sourceSpan;
   /// Rays whose deficit-form fate disagrees with photonConstants' static
   /// radial-potential connectivity (fromInfinity), counted for review.
   std::size_t connectivityDisagreements = 0;
 };
+
+/**
+ * @brief Per-texel (coordinate azimuthal, projected azimuthal, polar) source
+ *        spans over a `swept`/`polar` grid of unwrapped azimuth and source
+ *        polar angle (NaN marks a texel without sky); see SkyImage::sourceSpan.
+ *        Exposed for testing the coordinate-vs-projected split directly,
+ *        without a full ray trace.
+ */
+[[nodiscard]] std::vector<float> sourceSpans(const std::vector<double> &swept,
+                                             const std::vector<double> &polar, std::size_t width,
+                                             std::size_t height);
 
 /** @brief Traces every pixel of a width x height equirectangular sky. Rows are
  *         independent; `threads` 0 uses the hardware concurrency. The result

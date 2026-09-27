@@ -18,192 +18,28 @@
  * shared cache is evicted to its budget, never an explicit --out directory.
  */
 
-#include <algorithm>
-#include <charconv>
 #include <chrono>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <filesystem>
 #include <numbers>
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
-#include <system_error>
 
-#include "physics/kerr_observer.h"
 #include "physics/observer_sky_lut.h"
 #include "physics/observer_sky_map.h"
-#include "physics/safe_limits.h"
 #include "platform/resource_paths.h"
+#include "tools/observer_sky_lut_options.h"
 
 namespace {
 
-namespace ko = physics::kerr_observer;
 namespace sky = physics::observer_sky;
+using blackhole::observer_sky_lut_cli::parseOptions;
+using blackhole::observer_sky_lut_cli::printUsage;
+using blackhole::observer_sky_lut_cli::resolveObserver;
 
-constexpr double K_CANON_DEFICIT = 1.33e-14;
 constexpr double K_ARCSECONDS_PER_RADIAN = 180.0 * 3600.0 / std::numbers::pi;
-/// Widest axis --width, --height, and --tile accept; the texel count of each
-/// image is further bounded by sky::K_MAX_IMAGE_TEXELS.
-constexpr std::size_t K_MAX_AXIS = std::size_t{1} << 16U;
-constexpr std::size_t K_MAX_THREADS = 4096;
-
-struct Options {
-  double epsilon = K_CANON_DEFICIT;
-  std::optional<double> x;
-  std::string observer = "orbit";
-  std::optional<double> velocity;
-  sky::LutDimensions dimensions;
-  sky::TraceSettings settings;
-  unsigned threads = 0;
-  std::filesystem::path out; ///< Empty until --out: main picks the shared cache.
-};
-
-void printUsage() {
-  std::puts("usage: observer_sky_lut [--canon] [--epsilon E] [--x X | --isco]\n"
-            "                        [--observer orbit|retrograde|zamo|static | --velocity V]\n"
-            "                        [--width W] [--height H] [--tile N] [--step F]\n"
-            "                        [--threads N] [--out DIR]\n"
-            "W, H, N in [1, 65536] with at most 2^26 texels per image; threads in [0, 4096];\n"
-            "E in [0, 1]; X > 0; |V| < 1; F in (0, 1]");
-}
-
-/** @brief `text` as a whole decimal count in [low, high], or nothing. Signs
- *         are refused (strtoull reads "-1" as 2^64 - 1), as are overflow and
- *         trailing characters. */
-std::optional<std::size_t> parseCount(std::string_view text, std::size_t low, std::size_t high) {
-  std::size_t value = 0;
-  const char *last = text.data() + text.size();
-  const auto [end, error] = std::from_chars(text.data(), last, value);
-  if (error != std::errc{} || end != last || value < low || value > high) {
-    return std::nullopt;
-  }
-  return value;
-}
-
-/** @brief `text` as a whole finite decimal number, or nothing. */
-std::optional<double> parseNumber(std::string_view text) {
-  double value = 0.0;
-  const char *last = text.data() + text.size();
-  const auto [end, error] = std::from_chars(text.data(), last, value);
-  if (error != std::errc{} || end != last || !physics::safeIsfinite(value)) {
-    return std::nullopt;
-  }
-  return value;
-}
-
-/** @brief Applies one valued flag; false for an unknown flag or a value
- *         outside the flag's range. */
-bool applyValue(Options &options, std::string_view flag, std::string_view text) {
-  if (flag == "--observer") {
-    options.observer = std::string(text);
-    return true;
-  }
-  if (flag == "--out") {
-    options.out = std::string(text);
-    return true;
-  }
-  if (flag == "--width" || flag == "--height" || flag == "--tile" || flag == "--threads") {
-    const bool threads = flag == "--threads";
-    const auto count = parseCount(text, threads ? 0 : 1, threads ? K_MAX_THREADS : K_MAX_AXIS);
-    if (!count) {
-      return false;
-    }
-    if (threads) {
-      options.threads = static_cast<unsigned>(*count);
-    } else if (flag == "--width") {
-      options.dimensions.width = *count;
-      options.dimensions.height = std::max<std::size_t>(*count / 2, 1);
-    } else if (flag == "--height") {
-      options.dimensions.height = *count;
-    } else {
-      options.dimensions.tileRadial = *count;
-      options.dimensions.tileAzimuth = *count;
-    }
-    return true;
-  }
-  const std::optional<double> number = parseNumber(text);
-  if (!number) {
-    return false;
-  }
-  if (flag == "--epsilon" && *number >= 0.0 && *number <= 1.0) {
-    options.epsilon = *number;
-  } else if (flag == "--x" && *number > 0.0) {
-    options.x = number;
-  } else if (flag == "--velocity" && std::fabs(*number) < 1.0) {
-    options.velocity = number;
-  } else if (flag == "--step" && *number > 0.0 && *number <= 1.0) {
-    options.settings.stepFraction = *number;
-  } else {
-    return false;
-  }
-  return true;
-}
-
-/** @brief Both images fit a readable bundle (sky::K_MAX_IMAGE_TEXELS). */
-bool dimensionsFit(const sky::LutDimensions &dimensions) {
-  return dimensions.width * dimensions.height <= sky::K_MAX_IMAGE_TEXELS &&
-         dimensions.tileRadial * dimensions.tileAzimuth <= sky::K_MAX_IMAGE_TEXELS;
-}
-
-std::optional<Options> parseOptions(std::span<char *> args) {
-  Options options;
-  for (std::size_t index = 1; index < args.size(); ++index) {
-    const std::string_view flag = args[index];
-    const bool hasValue = index + 1 < args.size();
-    if (flag == "--canon" || flag == "--isco") {
-      // Both put the observer on the ISCO; --canon also fixes Gargantua's spin.
-      options.x.reset();
-      if (flag == "--canon") {
-        options.epsilon = K_CANON_DEFICIT;
-        options.observer = "orbit";
-      }
-      continue;
-    }
-    if (!hasValue) {
-      return std::nullopt;
-    }
-    const std::string_view text = args[++index];
-    if (!applyValue(options, flag, text)) {
-      (void)std::fprintf(stderr, "observer_sky_lut: %.*s %.*s is not accepted\n",
-                         static_cast<int>(flag.size()), flag.data(), static_cast<int>(text.size()),
-                         text.data());
-      return std::nullopt;
-    }
-  }
-  if (!dimensionsFit(options.dimensions)) {
-    (void)std::fprintf(stderr, "observer_sky_lut: an image exceeds %zu texels\n",
-                       sky::K_MAX_IMAGE_TEXELS);
-    return std::nullopt;
-  }
-  return options;
-}
-
-std::optional<sky::ObserverKey> resolveObserver(const Options &options) {
-  const ko::OrbitSense sense =
-      options.observer == "retrograde" ? ko::OrbitSense::Retrograde : ko::OrbitSense::Prograde;
-  const double x = options.x.value_or(ko::iscoOffset(options.epsilon, sense));
-  if (options.velocity) {
-    return sky::ObserverKey{.epsilon = options.epsilon, .x = x, .velocity = *options.velocity};
-  }
-  if (options.observer == "zamo") {
-    return sky::ObserverKey{.epsilon = options.epsilon, .x = x, .velocity = 0.0};
-  }
-  if (options.observer == "static") {
-    const double velocity = ko::staticObserverVelocity(ko::equatorialFrame(options.epsilon, x));
-    if (!(std::fabs(velocity) < 1.0)) {
-      return std::nullopt;
-    }
-    return sky::ObserverKey{.epsilon = options.epsilon, .x = x, .velocity = velocity};
-  }
-  if (options.observer == "orbit" || options.observer == "retrograde") {
-    return sky::orbitingObserver(options.epsilon, x, sense);
-  }
-  return std::nullopt;
-}
 
 void printStatistics(const sky::ObserverSkyLut &lut, double seconds) {
   const sky::LutStatistics &s = lut.statistics;

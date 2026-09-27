@@ -32,6 +32,7 @@ namespace {
 
 using blackhole::applyRecordCameraPath;
 using blackhole::frameContentSeconds;
+using blackhole::observerCaptureClock;
 using blackhole::recordCameraConflict;
 using blackhole::recordOutputSeconds;
 using blackhole::recordPathProgress;
@@ -59,6 +60,51 @@ TEST(RecordClock, InteractiveFramesReadTheWallClock) {
   const platform::CliOptions cli;
   EXPECT_FALSE(recordOutputSeconds(cli, 150).has_value());
   EXPECT_DOUBLE_EQ(frameContentSeconds(cli, 150, 3.7), 3.7);
+}
+
+TEST(RecordClock, ObserverCaptureClockFollowsTheOutputClockWhileRecording) {
+  const platform::CliOptions cli = recordingCli();
+  const auto clock = observerCaptureClock(cli, 150);
+  if (!clock.has_value()) {
+    GTEST_FAIL() << "clock is empty";
+  }
+  EXPECT_DOUBLE_EQ(clock->first, 150.0 / static_cast<double>(K_CINEMATIC_FPS));
+  // frameSeconds is a difference of two divisions (frame 151's output second
+  // minus frame 150's), so it is within a rounding ulp of 1 / fps rather than
+  // bit-identical to it.
+  EXPECT_NEAR(clock->second, 1.0 / static_cast<double>(K_CINEMATIC_FPS), 1.0e-12);
+}
+
+TEST(RecordClock, ObserverCaptureClockIsNulloptOffAnyCaptureCli) {
+  const platform::CliOptions cli;
+  EXPECT_FALSE(observerCaptureClock(cli, 3).has_value());
+}
+
+/**
+ * Falsifier: before the fix, an --export-frame run with no --record-frames
+ * had renderSceneFrame pass std::nullopt to renderObserverSkyScene, so
+ * advanceObserverClock stepped the observer's proper time by wall-clock
+ * deltaSeconds * skyTimeScale across the five warmup frames. At
+ * BLACKHOLE_OBSERVER_TIME_SCALE >= 1 that phase drift makes two exports of
+ * the same BLACKHOLE_OBSERVER_PROPER_SECONDS render different frames.
+ * observerCaptureClock must instead return a frozen (0, 0) clock so every
+ * warmup and export frame advances the clock by zero.
+ */
+TEST(RecordClock, ObserverCaptureClockFreezesForOneShotExport) {
+  platform::CliOptions cli;
+  cli.exportFramePath = "frame.png";
+  const auto clock = observerCaptureClock(cli, 4);
+  if (!clock.has_value()) {
+    GTEST_FAIL() << "clock is empty";
+  }
+  EXPECT_DOUBLE_EQ(clock->first, 0.0);
+  EXPECT_DOUBLE_EQ(clock->second, 0.0);
+  // Every warmup frame index gives the same frozen clock.
+  EXPECT_EQ(observerCaptureClock(cli, 0), clock);
+
+  platform::CliOptions rawCli;
+  rawCli.exportRawFramePath = "frame.pfm";
+  EXPECT_EQ(observerCaptureClock(rawCli, 2), clock);
 }
 
 TEST(RecordClock, SameRecordFrameGivesIdenticalTonemapInputs) {
@@ -108,7 +154,9 @@ TEST(RecordClock, RecordCameraOverridesMustDescribeACamera) {
                                std::numeric_limits<float>::quiet_NaN()}) {
     cli.recordDistance = distance;
     const std::optional<std::string> conflict = recordCameraConflict(cli);
-    ASSERT_TRUE(conflict.has_value()) << distance;
+    if (!conflict.has_value()) {
+      GTEST_FAIL() << distance;
+    }
     EXPECT_NE(conflict.value_or("").find("--record-distance"), std::string::npos);
   }
   // The cinematic path's 120 lies past the interactive 50 clamp and stays legal.
@@ -121,7 +169,9 @@ TEST(RecordClock, RecordCameraOverridesMustDescribeACamera) {
   for (const float fov : {0.0f, -10.0f, 180.0f, 250.0f, std::numeric_limits<float>::quiet_NaN()}) {
     cli.recordFovDeg = fov;
     const std::optional<std::string> conflict = recordCameraConflict(cli);
-    ASSERT_TRUE(conflict.has_value()) << fov;
+    if (!conflict.has_value()) {
+      GTEST_FAIL() << fov;
+    }
     EXPECT_NE(conflict.value_or("").find("--record-fov"), std::string::npos);
   }
   cli.recordFovDeg = 120.0f;
