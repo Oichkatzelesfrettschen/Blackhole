@@ -295,7 +295,7 @@ void testFaceEdgeMonotonicity() {
 
   /* Vary z from -0.9 to +0.9 at fixed x=1, y=0: u should be monotone decreasing */
   for (int i = 0; i <= 9; ++i) {
-    float const dz = -0.9f + static_cast<float>(i) * 0.2f;
+    float const dz = -0.9f + (static_cast<float>(i) * 0.2f);
     FaceUV const r = cubemapFace(1.0f, 0.0f, dz);
     if (r.layer != FacePosX) {
       monotone = false;

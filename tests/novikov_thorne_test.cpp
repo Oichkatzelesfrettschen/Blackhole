@@ -317,7 +317,7 @@ bool testTemperatureScale() {
   std::cout << "  Computed: T = " << t << " K\n";
   std::cout << "  Expected: T = " << expected << " K\n";
 
-  const bool passed = std::abs(t / expected - 1.0) < 1e-6;
+  const bool passed = std::abs((t / expected) - 1.0) < 1e-6;
   std::cout << "  Status:   " << (passed ? "PASS" : "FAIL") << "\n";
 
   return passed;

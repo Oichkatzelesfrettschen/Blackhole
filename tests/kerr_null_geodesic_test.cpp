@@ -144,7 +144,7 @@ TEST(KerrNullGeodesic, ErgoregionStartPrefersPositiveEnergyRoot) {
   const double r = 1.6;
   const double sigma = r * r;
   const double delta = (r * r) - (2.0 * r) + (a * a);
-  const double bigA = ((r * r) + (a * a)) * ((r * r) + (a * a)) - (a * a * delta);
+  const double bigA = (((r * r) + (a * a)) * ((r * r) + (a * a))) - (a * a * delta);
   const double alpha = std::sqrt(sigma * delta / bigA);
   const double omega = 2.0 * a * r / bigA;
   const double varpi = std::sqrt(bigA / sigma);

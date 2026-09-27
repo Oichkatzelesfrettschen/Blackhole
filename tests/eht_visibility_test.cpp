@@ -82,8 +82,8 @@ bool near(double a, double b, double tol = 1.0e-10) {
 
 // Rotate a ComplexVis by angle theta (simulate station-based phase addition).
 ComplexVis rotateVis(const ComplexVis &v, double theta) {
-  return {v.re * std::cos(theta) - v.im * std::sin(theta),
-          v.re * std::sin(theta) + v.im * std::cos(theta)};
+  return {(v.re * std::cos(theta)) - (v.im * std::sin(theta)),
+          (v.re * std::sin(theta)) + (v.im * std::cos(theta))};
 }
 
 // Scale a ComplexVis amplitude by gain g > 0.
@@ -112,8 +112,8 @@ void testUvwAtMeridian() {
   const double sinD = std::sin(decl);
   const double cosD = std::cos(decl);
   const double uExpected = dY / lambda;
-  const double vExpected = (-dX * sinD + dZ * cosD) / lambda;
-  const double wExpected = (dX * cosD + dZ * sinD) / lambda;
+  const double vExpected = ((-dX * sinD) + (dZ * cosD)) / lambda;
+  const double wExpected = ((dX * cosD) + (dZ * sinD)) / lambda;
 
   check(near(uvw.u, uExpected, 1.0), "uvwCoordinates: u = dY/lambda at H=0");
   check(near(uvw.v, vExpected, 1.0), "uvwCoordinates: v = (-dX sinD + dZ cosD)/lambda at H=0");
@@ -217,7 +217,7 @@ void testPointSourceNormalisedVisibility() {
   std::vector<double> image(n * n, 0.0);
   // Place flux at exact centre pixel -- (row = N/2, col = N/2)
   // With halfN=32.0, x=(32-32)*pix=0, y=(32-32)*pix=0 -> pure real DFT
-  image[(n / 2) * n + (n / 2)] = 1.0;
+  image[((n / 2) * n) + (n / 2)] = 1.0;
 
   // Test at several (u,v) values
   const double uvVals[] = {0.0, 1.0e8, 3.76e9, -2.0e9};
@@ -256,8 +256,8 @@ void testTwoPointSourceVisibility() {
   const std::size_t d = 8; // pixel offset from centre
   std::vector<double> image(n * n, 0.0);
   const double f = 1.0;
-  image[(n / 2) * n + (n / 2 + d)] = f;
-  image[(n / 2) * n + (n / 2 - d)] = f;
+  image[((n / 2) * n) + ((n / 2) + d)] = f;
+  image[((n / 2) * n) + ((n / 2) - d)] = f;
 
   // At u such that 2*pi*u*d*pix = pi/2: V_re should be ~0
   const double uQuarter = 1.0 / (4.0 * static_cast<double>(d) * pix);
@@ -274,7 +274,7 @@ void testClosurePhasePointSource() {
   const std::size_t n = 32;
   const double pix = 1.0e-10;
   std::vector<double> image(n * n, 0.0);
-  image[(n / 2) * n + (n / 2)] = 1.0;
+  image[((n / 2) * n) + (n / 2)] = 1.0;
 
   // Three arbitrary (u,v) pairs forming a triangle
   const ComplexVis v12 = normalisedVisibility(image, n, pix, 1.0e8, 2.0e8);
@@ -290,7 +290,7 @@ void testClosureAmplitudePointSource() {
   const std::size_t n = 32;
   const double pix = 1.0e-10;
   std::vector<double> image(n * n, 0.0);
-  image[(n / 2) * n + (n / 2)] = 1.0;
+  image[((n / 2) * n) + (n / 2)] = 1.0;
 
   const ComplexVis v12 = normalisedVisibility(image, n, pix, 1.0e8, 2.0e8);
   const ComplexVis v34 = normalisedVisibility(image, n, pix, 5.0e8, -3.0e8);
@@ -340,10 +340,10 @@ void testClosureAmplitudeInvariantToGainErrors() {
   // Uniform disk
   for (std::size_t row = 0; row < n; ++row) {
     for (std::size_t col = 0; col < n; ++col) {
-      const double dy = static_cast<double>(row) - static_cast<double>(n) / 2.0;
-      const double dx = static_cast<double>(col) - static_cast<double>(n) / 2.0;
+      const double dy = static_cast<double>(row) - (static_cast<double>(n) / 2.0);
+      const double dx = static_cast<double>(col) - (static_cast<double>(n) / 2.0);
       if (std::hypot(dx, dy) < 3.5) {
-        image[row * n + col] = 1.0;
+        image[(row * n) + col] = 1.0;
       }
     }
   }

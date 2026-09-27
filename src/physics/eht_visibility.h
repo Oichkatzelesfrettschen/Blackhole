@@ -76,7 +76,7 @@ struct ComplexVis {
 
   /// Complex multiplication (used for bispectrum products).
   [[nodiscard]] ComplexVis operator*(const ComplexVis &o) const noexcept {
-    return {re * o.re - im * o.im, re * o.im + im * o.re};
+    return {(re * o.re) - (im * o.im), (re * o.im) + (im * o.re)};
   }
 
   /// Complex addition (used for superposition).
@@ -166,9 +166,9 @@ struct UVW {
   const double cosD = std::cos(declination);
 
   return {
-      (dX * sinH + dY * cosH) / wavelength,
-      (-dX * sinD * cosH + dY * sinD * sinH + dZ * cosD) / wavelength,
-      (dX * cosD * cosH - dY * cosD * sinH + dZ * sinD) / wavelength,
+      ((dX * sinH) + (dY * cosH)) / wavelength,
+      ((-dX * sinD * cosH) + (dY * sinD * sinH) + (dZ * cosD)) / wavelength,
+      ((dX * cosD * cosH) - (dY * cosD * sinH) + (dZ * sinD)) / wavelength,
   };
 }
 
@@ -195,7 +195,8 @@ uvTrack(const TelescopeStation &s1, const TelescopeStation &s2, double haBeg, do
   track.reserve(nPoints);
   const std::size_t denom = (nPoints > 1) ? nPoints - 1 : 1;
   for (std::size_t k = 0; k < nPoints; ++k) {
-    const double ha = haBeg + (haEnd - haBeg) * static_cast<double>(k) / static_cast<double>(denom);
+    const double ha =
+        haBeg + ((haEnd - haBeg) * static_cast<double>(k) / static_cast<double>(denom));
     const auto uvw = uvwCoordinates(s1, s2, ha, declination, wavelength);
     track.emplace_back(uvw.u, uvw.v);
   }
@@ -249,12 +250,12 @@ uvTrack(const TelescopeStation &s1, const TelescopeStation &s2, double haBeg, do
   for (std::size_t row = 0; row < imageSide; ++row) {
     const double y = (static_cast<double>(row) - halfN) * pixelSizeRad;
     for (std::size_t col = 0; col < imageSide; ++col) {
-      const double flux = image[row * imageSide + col];
+      const double flux = image[(row * imageSide) + col];
       if (flux == 0.0) {
         continue;
       }
       const double x = (static_cast<double>(col) - halfN) * pixelSizeRad;
-      const double phase = twoPi * (u * x + v * y);
+      const double phase = twoPi * ((u * x) + (v * y));
       re += flux * std::cos(phase);
       im -= flux * std::sin(phase); // convention: -2 pi i
     }

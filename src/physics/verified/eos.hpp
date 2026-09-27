@@ -167,7 +167,7 @@ struct PolytropeParams {
  */
 [[nodiscard]] inline double polytropeEnergyDensity(const PolytropeParams &p, double rho) noexcept {
   const double pressure = polytropePressure(p, rho);
-  return rho + pressure / (p.gamma - 1.0);
+  return rho + (pressure / (p.gamma - 1.0));
 }
 
 /**
@@ -235,7 +235,7 @@ struct PolytropeParams {
  * @return Adiabatic index gamma
  */
 [[nodiscard]] constexpr double gammaFromIndex(double n) noexcept {
-  return 1.0 + 1.0 / n;
+  return 1.0 + (1.0 / n);
 }
 
 // ============================================================================
@@ -381,7 +381,7 @@ struct PolytropeParams {
  */
 [[nodiscard]] inline double computeEnergyDensity(double k, double gamma, double rho) noexcept {
   const double p = k * std::pow(rho, gamma);
-  return rho + p / (gamma - 1.0);
+  return rho + (p / (gamma - 1.0));
 }
 
 /**
@@ -394,7 +394,7 @@ struct PolytropeParams {
  */
 [[nodiscard]] inline double computeSoundSpeedSq(double k, double gamma, double rho) noexcept {
   const double p = k * std::pow(rho, gamma);
-  const double eps = rho + p / (gamma - 1.0);
+  const double eps = rho + (p / (gamma - 1.0));
   return gamma * p / (eps + p);
 }
 
@@ -408,7 +408,7 @@ struct PolytropeParams {
  */
 [[nodiscard]] inline double computeEnthalpy(double k, double gamma, double rho) noexcept {
   const double p = k * std::pow(rho, gamma);
-  const double eps = rho + p / (gamma - 1.0);
+  const double eps = rho + (p / (gamma - 1.0));
   return (eps + p) / rho;
 }
 

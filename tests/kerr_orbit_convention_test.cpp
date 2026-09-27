@@ -59,7 +59,7 @@ void expectSignedSpinRow(const Row &row) {
   // Both radii sit on the same side of their a = 0 values: co-rotation
   // pulls both inward, counter-rotation pushes both outward.
   const double iscoShift = row.iscoProgradeOverM - 6.0;
-  const double photonShift = physics::kerrPhotonOrbitPrograde(mass, a) / mGeom - 3.0;
+  const double photonShift = (physics::kerrPhotonOrbitPrograde(mass, a) / mGeom) - 3.0;
   EXPECT_GE(iscoShift * photonShift, 0.0) << "a*=" << row.aStar;
 
   // phi -> -phi reflection: retrograde at a equals prograde at -a.

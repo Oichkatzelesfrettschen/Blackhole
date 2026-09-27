@@ -78,8 +78,8 @@ bool readTonemappedRgb(gl::GLuint texTonemapped, int fallbackWidth, int fallback
   glBindTexture(GL_TEXTURE_2D, 0);
   flipped.assign(px.size(), 0);
   for (int row = 0; row < h; ++row) {
-    std::memcpy(flipped.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 3,
-                px.data() + static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3,
+    std::memcpy(flipped.data() + (static_cast<size_t>(row) * static_cast<size_t>(w) * 3),
+                px.data() + (static_cast<size_t>(h - 1 - row) * static_cast<size_t>(w) * 3),
                 static_cast<size_t>(w) * 3);
   }
   outWidth = w;
@@ -368,7 +368,7 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
   if (cli.recordProfile == "compare-orbit-near") {
     float const progress = recordPathProgress(cli, rs.recording.recordFrameIndex);
     CameraState &camMutable = input.camera();
-    camMutable.yaw = -90.0f + progress * 18.0f;
+    camMutable.yaw = -90.0f + (progress * 18.0f);
     camMutable.pitch = 0.0f;
     camMutable.roll = 0.0f;
     camMutable.distance = 10.0f;
@@ -386,7 +386,7 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
             ? cli.recordSweepDeg
             : compositionValue(composition, &ShowcaseOrbitComposition::sweepDeg, 10.0f);
     CameraState &camMutable = input.camera();
-    camMutable.yaw = baseYaw + progress * sweepDeg;
+    camMutable.yaw = baseYaw + (progress * sweepDeg);
     camMutable.pitch =
         cli.hasRecordPitch
             ? cli.recordPitchDeg

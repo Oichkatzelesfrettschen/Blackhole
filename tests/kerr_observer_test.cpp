@@ -655,7 +655,7 @@ TEST(KerrObserver, OrbitsAtThePhotonOrbitStaySubluminal) {
     for (const OrbitSense sense : {OrbitSense::Prograde, OrbitSense::Retrograde}) {
       double x = ko::photonOrbitOffset(epsilon, sense);
       for (int step = 0; step < 64; ++step) {
-        x = std::nextafter(x, 2.0 * x + 1.0);
+        x = std::nextafter(x, (2.0 * x) + 1.0);
         const ko::CircularOrbit orbit = ko::circularOrbit(epsilon, x, sense);
         const std::optional<ko::Tetrad> tetrad = ko::orbitingTetrad(epsilon, x, sense);
         ASSERT_EQ(orbit.exists, tetrad.has_value());

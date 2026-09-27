@@ -150,7 +150,7 @@ bool testSpinCorrectionsIdentical() {
   const double f = 35.0;
   const double chi1 = 0.6;
   const double chi2 = 0.3;
-  const double chiEff = (chi1 * K_M1_SOL + chi2 * K_M2_SOL) / (K_M1_SOL + K_M2_SOL);
+  const double chiEff = ((chi1 * K_M1_SOL) + (chi2 * K_M2_SOL)) / (K_M1_SOL + K_M2_SOL);
 
   const double spinDelta35 = gwPhase3p5pn(mc, eta, f, 0.0, 0.0, chiEff, chi1, chi2) -
                              gwPhase3p5pn(mc, eta, f, 0.0, 0.0, 0.0, 0.0, 0.0);
@@ -193,7 +193,7 @@ bool testVlsoLogCancels() {
   const double psi45NoLog = coeff45 * v9lso;
 
   // psi45 at v_lso: [1 + 3*log(v_lso/v_lso)] = [1 + 3*log(1)] = 1
-  const double logFactor = 1.0 + 3.0 * std::log(1.0); // log(v_lso/v_lso)=log(1)=0
+  const double logFactor = 1.0 + (3.0 * std::log(1.0)); // log(v_lso/v_lso)=log(1)=0
   const double psi45AtLso = coeff45 * logFactor * v9lso;
 
   std::string buf = std::format("psi45_no_log={:.12e}, psi45_at_lso={:.12e}, diff={:.2e}",

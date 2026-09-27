@@ -577,8 +577,8 @@ int main(int argc, char **argv) try {
 
                                for (int i = 0; i < cfg.rays * 10; ++i) {
                                  double const u = static_cast<double>(i) / (cfg.rays * 10);
-                                 double const r = (6.0 + 20.0 * u) * rG;
-                                 double const theta = physics::PI * (0.25 + 0.5 * u);
+                                 double const r = (6.0 + (20.0 * u)) * rG;
+                                 double const theta = physics::PI * (0.25 + (0.5 * u));
                                  auto p = physics::kerrPotentials(r, theta, mass, a, c);
                                  cpuAccum += p.rPot + p.thetaPot + p.dRdr + p.dThetadtheta;
                                }

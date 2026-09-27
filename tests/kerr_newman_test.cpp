@@ -57,12 +57,12 @@ namespace {
 /** @brief Kerr Sigma = r^2 + a^2 cos^2(theta). */
 double kerrSigmaRef(double r, double a, double theta) {
   const double c = std::cos(theta);
-  return r * r + a * a * c * c;
+  return (r * r) + (a * a * c * c);
 }
 
 /** @brief Kerr Delta = r^2 - 2 M r + a^2 (no charge). */
 double kerrDeltaRef(double r, double m, double a) {
-  return r * r - 2.0 * m * r + a * a;
+  return (r * r) - (2.0 * m * r) + (a * a);
 }
 
 /** @brief Kerr g_tt = -(Delta - a^2 sin^2 theta) / Sigma. */
@@ -70,7 +70,7 @@ double kerrGttRef(double r, double theta, double m, double a) {
   const double sigma = kerrSigmaRef(r, a, theta);
   const double delta = kerrDeltaRef(r, m, a);
   const double s = std::sin(theta);
-  return -(delta - a * a * s * s) / sigma;
+  return -(delta - (a * a * s * s)) / sigma;
 }
 
 /** @brief Kerr g_rr = Sigma / Delta. */
@@ -80,10 +80,10 @@ double kerrGrrRef(double r, double theta, double m, double a) {
 
 /** @brief Kerr g_phph = A sin^2 theta / Sigma,  A = (r^2+a^2)^2 - a^2 Delta sin^2 theta. */
 double kerrGphphRef(double r, double theta, double m, double a) {
-  const double r2a2 = r * r + a * a;
+  const double r2a2 = (r * r) + (a * a);
   const double s = std::sin(theta);
   const double delta = kerrDeltaRef(r, m, a);
-  const double metricFactor = r2a2 * r2a2 - a * a * delta * s * s;
+  const double metricFactor = (r2a2 * r2a2) - (a * a * delta * s * s);
   return metricFactor * s * s / kerrSigmaRef(r, a, theta);
 }
 
@@ -95,13 +95,13 @@ double kerrGtphRef(double r, double theta, double m, double a) {
 
 /** @brief Kerr outer horizon r+ = M + sqrt(M^2 - a^2). */
 double kerrRplusRef(double m, double a) {
-  return m + std::sqrt(m * m - a * a);
+  return m + std::sqrt((m * m) - (a * a));
 }
 
 /** @brief Kerr ergosphere r_ergo = M + sqrt(M^2 - a^2 cos^2 theta). */
 double kerrErgoRef(double theta, double m, double a) {
   const double c = std::cos(theta);
-  return m + std::sqrt(m * m - a * a * c * c);
+  return m + std::sqrt((m * m) - (a * a * c * c));
 }
 
 void checkKerrMetricComponents(double r, double theta, double m, double a, double q, double tol) {
@@ -232,7 +232,7 @@ TEST(KerrNewman, ReducesToReissnerNordstrom) {
 
   for (double const q : charges) {
     for (double const r : radii) {
-      const double deltaRn = r * r - 2.0 * m * r + q * q;
+      const double deltaRn = (r * r) - (2.0 * m * r) + (q * q);
 
       for (double const theta : thetas) {
         checkReissnerNordstromMetric(r, theta, m, a, q, deltaRn, tol);
@@ -240,7 +240,7 @@ TEST(KerrNewman, ReducesToReissnerNordstrom) {
 
       // Outer horizon: r_+ = M + sqrt(M^2 - Q^2)
       if (q < m) {
-        const double rPlusRN = m + std::sqrt(m * m - q * q);
+        const double rPlusRN = m + std::sqrt((m * m) - (q * q));
         EXPECT_NEAR(physics::knOuterHorizon(m, a, q), rPlusRN, tol) << "r_+ RN mismatch at Q=" << q;
       }
     }

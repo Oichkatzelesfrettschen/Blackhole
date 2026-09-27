@@ -161,8 +161,8 @@ TEST(KerrDeSitter, KerrLimit) {
       const Mat4 gD = kdsMetric(x, m, a, 0.0);
       EXPECT_LT(ricci_oracle::maxAbsDifference(gK, gD, 1.0), 1.0e-13) << "a=" << a;
     }
-    EXPECT_NEAR(verified::kdsEventHorizon(m, a, 0.0), m + std::sqrt(m * m - a * a), 1.0e-15);
-    EXPECT_NEAR(verified::kdsInnerHorizon(m, a, 0.0), m - std::sqrt(m * m - a * a), 1.0e-15);
+    EXPECT_NEAR(verified::kdsEventHorizon(m, a, 0.0), m + std::sqrt((m * m) - (a * a)), 1.0e-15);
+    EXPECT_NEAR(verified::kdsInnerHorizon(m, a, 0.0), m - std::sqrt((m * m) - (a * a)), 1.0e-15);
     // No cosmological horizon: the finite DBL_MAX sentinel.
     EXPECT_TRUE(physics::isEffectivelyInfinite(verified::kdsCosmologicalHorizon(m, a, 0.0)));
     EXPECT_TRUE(verified::kdsHasHorizons(m, a, 0.0));

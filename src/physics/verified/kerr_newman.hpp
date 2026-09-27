@@ -74,7 +74,7 @@ namespace verified {
  */
 [[nodiscard]] inline double knSigma(double r, double theta, double a) noexcept {
   const double cosTheta = std::cos(theta);
-  return r * r + a * a * cosTheta * cosTheta;
+  return (r * r) + (a * a * cosTheta * cosTheta);
 }
 
 /**
@@ -90,7 +90,7 @@ namespace verified {
  * @return Delta
  */
 [[nodiscard]] constexpr double knDelta(double r, double m, double a, double q) noexcept {
-  return r * r - 2.0 * m * r + a * a + q * q;
+  return (r * r) - (2.0 * m * r) + (a * a) + (q * q);
 }
 
 /**
@@ -107,10 +107,10 @@ namespace verified {
  * @return A
  */
 [[nodiscard]] inline double knA(double r, double theta, double m, double a, double q) noexcept {
-  const double r2PlusA2 = r * r + a * a;
+  const double r2PlusA2 = (r * r) + (a * a);
   const double sinTheta = std::sin(theta);
   const double delta = knDelta(r, m, a, q);
-  return r2PlusA2 * r2PlusA2 - a * a * delta * sinTheta * sinTheta;
+  return (r2PlusA2 * r2PlusA2) - (a * a * delta * sinTheta * sinTheta);
 }
 
 // ============================================================================
@@ -256,7 +256,7 @@ namespace verified {
 [[nodiscard]] inline double knElectricFieldR(double r, double theta, double a, double q) noexcept {
   const double sigma = knSigma(r, theta, a);
   const double sigma2 = sigma * sigma;
-  return -q * (sigma - 2.0 * r * r) / sigma2;
+  return -q * (sigma - (2.0 * r * r)) / sigma2;
 }
 
 /**
@@ -328,7 +328,7 @@ namespace verified {
 [[nodiscard]] inline double knFrameDraggingOmega(double r, double theta, double m, double a,
                                                  double q) noexcept {
   const double metricFactor = knA(r, theta, m, a, q);
-  return a * (2.0 * m * r - q * q) / metricFactor;
+  return a * ((2.0 * m * r) - (q * q)) / metricFactor;
 }
 
 // ============================================================================
@@ -355,7 +355,7 @@ namespace verified {
  */
 [[nodiscard]] inline double knPhotonOrbitFunction(double r, double m, double a,
                                                   double q) noexcept {
-  return r * r - 3.0 * m * r + 2.0 * q * q + 2.0 * a * std::sqrt(m * r - q * q);
+  return (r * r) - (3.0 * m * r) + (2.0 * q * q) + (2.0 * a * std::sqrt((m * r) - (q * q)));
 }
 
 /**
@@ -441,10 +441,10 @@ namespace verified {
 [[nodiscard]] inline double knIscoMarginalStability(double r, double m, double a,
                                                     double q) noexcept {
   const double q2 = q * q;
-  const double orbitTerm = m * r - q2;
+  const double orbitTerm = (m * r) - q2;
   const double orbitRoot = std::sqrt(orbitTerm);
-  return r * (6.0 * m * r - r * r - 9.0 * q2 + 3.0 * a * a) + 4.0 * q2 * (q2 - a * a) / m -
-         8.0 * a * orbitTerm * orbitRoot / m;
+  return (r * ((6.0 * m * r) - (r * r) - (9.0 * q2) + (3.0 * a * a))) +
+         (4.0 * q2 * (q2 - (a * a)) / m) - (8.0 * a * orbitTerm * orbitRoot / m);
 }
 
 /**
@@ -532,7 +532,7 @@ namespace verified {
  */
 [[nodiscard]] inline double knGTt(double r, double theta, double m, double a, double q) noexcept {
   const double sigma = knSigma(r, theta, a);
-  return -(1.0 - (2.0 * m * r - q * q) / sigma);
+  return -(1.0 - (((2.0 * m * r) - (q * q)) / sigma));
 }
 
 /**
@@ -579,7 +579,7 @@ namespace verified {
                                    double q) noexcept {
   const double sigma = knSigma(r, theta, a);
   const double sinTheta = std::sin(theta);
-  return -a * (2.0 * m * r - q * q) * sinTheta * sinTheta / sigma;
+  return -a * ((2.0 * m * r) - (q * q)) * sinTheta * sinTheta / sigma;
 }
 
 // ============================================================================

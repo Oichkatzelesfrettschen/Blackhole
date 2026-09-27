@@ -288,7 +288,7 @@ inline void yoshida4Step(GeodesicState& s, double h,
     // Yoshida 4th-order composition coefficients.
     static constexpr double kCbrt2 = 1.2599210498948732;   // 2^{1/3}
     static constexpr double kW1    = 1.0 / (2.0 - kCbrt2); // ~+1.3512
-    static constexpr double kW0    = 1.0 - 2.0 * kW1;      // ~-1.7024
+    static constexpr double kW0 = 1.0 - (2.0 * kW1);       // ~-1.7024
 
     // Merged drift coefficients (c1 = w1/2; c2 = (w1+w0)/2 = (1-w1)/2).
     static constexpr double kC1 = kW1 * 0.5;

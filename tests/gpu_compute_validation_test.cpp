@@ -21,7 +21,7 @@ static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559);
 static_assert(sizeof(OutputPixel) == 16);
 
 constexpr std::size_t tileCount(std::size_t extent, std::size_t tileSize) {
-  return extent / tileSize + (extent % tileSize == 0 ? 0U : 1U);
+  return (extent / tileSize) + (extent % tileSize == 0 ? 0U : 1U);
 }
 
 static_assert(tileCount(1920, 32) == 60);
@@ -37,10 +37,10 @@ bool testTileCoverage(std::size_t width, std::size_t height) {
     for (std::size_t tileX = 0; tileX < tileCount(width, tileSize); ++tileX) {
       for (std::size_t localY = 0; localY < tileSize; ++localY) {
         for (std::size_t localX = 0; localX < tileSize; ++localX) {
-          const auto pixelX = tileX * tileSize + localX;
-          const auto pixelY = tileY * tileSize + localY;
+          const auto pixelX = (tileX * tileSize) + localX;
+          const auto pixelY = (tileY * tileSize) + localY;
           if (pixelX < width && pixelY < height) {
-            ++visits.at(pixelY * width + pixelX);
+            ++visits.at((pixelY * width) + pixelX);
           }
         }
       }

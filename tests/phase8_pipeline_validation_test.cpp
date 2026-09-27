@@ -146,9 +146,9 @@ bool testMultiratePlayback() {
   const double sample1x = interpolateField(ts, field.data(), state1x.tCurrent, false);
   const double sample2x = interpolateField(ts, field.data(), state2x.tCurrent, false);
   const double sample05x = interpolateField(ts, field.data(), state05x.tCurrent, false);
-  const bool samplesOk = std::abs(sample1x - 10.0 * dtFrame) < 1e-12 &&
-                         std::abs(sample2x - 20.0 * dtFrame) < 1e-12 &&
-                         std::abs(sample05x - 5.0 * dtFrame) < 1e-12;
+  const bool samplesOk = std::abs(sample1x - (10.0 * dtFrame)) < 1e-12 &&
+                         std::abs(sample2x - (20.0 * dtFrame)) < 1e-12 &&
+                         std::abs(sample05x - (5.0 * dtFrame)) < 1e-12;
 
   bool const multirateOk = (state1x.mode == PlaybackMode::Forward) &&
                            (state2x.mode == PlaybackMode::Forward) &&

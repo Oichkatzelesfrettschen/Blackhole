@@ -214,12 +214,9 @@ private:
     static float cr(float p0, float p1, float p2, float p3, float u) noexcept {
         float const u2 = u * u;
         float const u3 = u2 * u;
-        return 0.5f * (
-              (2.0f * p1)
-            + (-p0 + p2)                            * u
-            + (2.0f*p0 - 5.0f*p1 + 4.0f*p2 - p3)  * u2
-            + (-p0 + 3.0f*p1 - 3.0f*p2 + p3)       * u3
-        );
+        return 0.5f * ((2.0f * p1) + ((-p0 + p2) * u) +
+                       (((2.0f * p0) - (5.0f * p1) + (4.0f * p2) - p3) * u2) +
+                       ((-p0 + (3.0f * p1) - (3.0f * p2) + p3) * u3));
     }
 };
 
@@ -254,7 +251,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
   float const aStar = kf.kerrSpin;
   float const a = aStar * mass;
   // Outer horizon: r+ = M + sqrt(M^2 - a^2)
-  float const rPlus = mass + std::sqrtf(std::fmaxf(0.0f, mass * mass - a * a));
+  float const rPlus = mass + std::sqrtf(std::fmaxf(0.0f, (mass * mass) - (a * a)));
   // Prograde photon sphere approximation (exact for Schwarzschild at a=0)
   float const cosFac = std::cosf((2.0f / 3.0f) * std::acosf(-aStar));
   float const rPh = mass * (1.0f + cosFac) * 2.0f; // prograde ph orbit
@@ -262,7 +259,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
 
   // Gravitational redshift at camera (Schwarzschild approximation)
   float const rCam = camDist;
-  float const zCam = (rCam > rs) ? (1.0f / std::sqrtf(1.0f - rs / rCam) - 1.0f) : 9999.0f;
+  float const zCam = (rCam > rs) ? ((1.0f / std::sqrtf(1.0f - (rs / rCam))) - 1.0f) : 9999.0f;
   float const dilCam = 1.0f + zCam;
 
   // Hawking temperature in natural units (hbar = G = c = k_B = 1): T_H = 1/(8*pi*M)
@@ -270,8 +267,8 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
 
   // Frame-dragging angular velocity at r = iscoRadius (equatorial, BL)
   float const r3 = iscoRadius * iscoRadius * iscoRadius;
-  float const omegaFF = (r3 + a * a * iscoRadius + 2.0f * a * a * mass > 1e-9f)
-                            ? (a / (r3 + a * a * iscoRadius + 2.0f * a * a * mass))
+  float const omegaFF = (r3 + (a * a * iscoRadius) + (2.0f * a * a * mass) > 1e-9f)
+                            ? (a / (r3 + (a * a * iscoRadius) + (2.0f * a * a * mass)))
                             : 0.0f;
 
   // ---- Layout constants ------------------------------------------------
@@ -309,7 +306,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
   {
     float const px = pad;
     float const py = pad;
-    float const ph = pad * 2.0f + lineH * 10.0f + 4.0f;
+    float const ph = (pad * 2.0f) + (lineH * 10.0f) + 4.0f;
     drawPanel(px, py, panelW, ph);
 
     const float tx = px + pad;
@@ -362,7 +359,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
   {
     float const px = displayWidth - eqW - pad;
     float const py = pad;
-    float const ph = pad * 2.0f + lineH * 12.0f + 4.0f;
+    float const ph = (pad * 2.0f) + (lineH * 12.0f) + 4.0f;
     drawPanel(px, py, eqW, ph);
 
     const float tx = px + pad;
@@ -415,8 +412,8 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
 
     float const tw = 262.0f;
     float const px = displayWidth - tw - pad;
-    float const py = pad * 2.0f + lineH * 12.0f + 4.0f + pad * 2.0f;
-    float const ph = pad * 2.0f + lineH * (static_cast<float>(rows.size()) + 2.0f);
+    float const py = (pad * 2.0f) + (lineH * 12.0f) + 4.0f + (pad * 2.0f);
+    float const ph = (pad * 2.0f) + (lineH * (static_cast<float>(rows.size()) + 2.0f));
     drawPanel(px, py, tw, ph);
 
     const float tx = px + pad;
@@ -437,7 +434,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
       float const rGeom = rM * mass;
       float td = 1.0f;
       if (rGeom > rs) {
-        td = 1.0f / std::sqrtf(1.0f - rs / rGeom);
+        td = 1.0f / std::sqrtf(1.0f - (rs / rGeom));
       } else {
         td = 9999.0f;
       }
@@ -457,10 +454,10 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
   // BOTTOM BAR: Caption ticker + progress
   // =========================================================================
   {
-    float const bh = lineH * 3.0f + pad * 2.5f;
+    float const bh = (lineH * 3.0f) + (pad * 2.5f);
     float const by = displayHeight - bh - pad;
     float const bx = pad;
-    float const bw = displayWidth - pad * 2.0f;
+    float const bw = displayWidth - (pad * 2.0f);
     dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + bw, by + bh), colBgBar, 4.0f);
     dl->AddRect(ImVec2(bx, by), ImVec2(bx + bw, by + bh), colBorder, 4.0f, 0, 1.5f);
 
@@ -493,7 +490,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
         (totalFrames > 0) ? static_cast<float>(frameIndex) / static_cast<float>(totalFrames) : 0.0f;
     dl->AddRectFilled(ImVec2(barX0, ty), ImVec2(barX1, ty + barH), colBarBg, 2.0f);
     if (frac > 0.0f) {
-      dl->AddRectFilled(ImVec2(barX0, ty), ImVec2(barX0 + frac * (barX1 - barX0), ty + barH),
+      dl->AddRectFilled(ImVec2(barX0, ty), ImVec2(barX0 + (frac * (barX1 - barX0)), ty + barH),
                         colProg, 2.0f);
     }
   }

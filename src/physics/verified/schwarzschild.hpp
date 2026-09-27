@@ -83,7 +83,7 @@ namespace verified {
  * @return f = 1 - 2M/r
  */
 [[nodiscard]] constexpr double fSchwarzschild(double r, double m) noexcept {
-  return 1.0 - (2.0 * m) / r;
+  return 1.0 - ((2.0 * m) / r);
 }
 
 // ============================================================================
@@ -153,7 +153,7 @@ namespace verified {
  *   M / (r * (r - 2 * M)).
  */
 [[nodiscard]] constexpr double christoffelTTr(double r, double m) noexcept {
-  return m / (r * (r - 2.0 * m));
+  return m / (r * (r - (2.0 * m)));
 }
 
 /**
@@ -164,7 +164,7 @@ namespace verified {
  */
 [[nodiscard]] constexpr double christoffelRTt(double r, double m) noexcept {
   const double r3 = r * r * r;
-  return m * (r - 2.0 * m) / r3;
+  return m * (r - (2.0 * m)) / r3;
 }
 
 /**
@@ -174,7 +174,7 @@ namespace verified {
  *   - M / (r * (r - 2 * M)).
  */
 [[nodiscard]] constexpr double christoffelRRr(double r, double m) noexcept {
-  return -m / (r * (r - 2.0 * m));
+  return -m / (r * (r - (2.0 * m)));
 }
 
 /**
@@ -183,7 +183,7 @@ namespace verified {
  * Derived from Rocq: Definition christoffel_r_thth (r M : R) : R := -(r - 2 * M).
  */
 [[nodiscard]] constexpr double christoffelRThth(double r, double m) noexcept {
-  return -(r - 2.0 * m);
+  return -(r - (2.0 * m));
 }
 
 /**
@@ -194,7 +194,7 @@ namespace verified {
  */
 [[nodiscard]] inline double christoffelRPhph(double r, double theta, double m) noexcept {
   const double sinTheta = std::sin(theta);
-  return -(r - 2.0 * m) * sinTheta * sinTheta;
+  return -(r - (2.0 * m)) * sinTheta * sinTheta;
 }
 
 /**
@@ -259,8 +259,8 @@ namespace verified {
 [[nodiscard]] inline double radialAcceleration(double r, double dr, double dtheta, double dphi,
                                                double theta, double m) noexcept {
   // Note: dt/dlambda is normalized to 1 in the original definition
-  return -christoffelRTt(r, m) - christoffelRRr(r, m) * dr * dr -
-         christoffelRThth(r, m) * dtheta * dtheta - christoffelRPhph(r, theta, m) * dphi * dphi;
+  return -christoffelRTt(r, m) - (christoffelRRr(r, m) * dr * dr) -
+         (christoffelRThth(r, m) * dtheta * dtheta) - (christoffelRPhph(r, theta, m) * dphi * dphi);
 }
 
 // ============================================================================

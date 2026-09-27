@@ -31,15 +31,15 @@ namespace {
 
 /** @brief Kerr Delta = r^2 - 2 M r + a^2. */
 double kerrDeltaRef(double r, double m, double a) {
-  return r * r - 2.0 * m * r + a * a;
+  return (r * r) - (2.0 * m * r) + (a * a);
 }
 
 /** @brief Kerr g_tt = -(Delta - a^2 sin^2 theta) / Sigma. */
 double kerrGttRef(double r, double theta, double m, double a) {
-  const double sigma = r * r + a * a * std::cos(theta) * std::cos(theta);
+  const double sigma = (r * r) + (a * a * std::cos(theta) * std::cos(theta));
   const double delta = kerrDeltaRef(r, m, a);
   const double s = std::sin(theta);
-  return -(delta - a * a * s * s) / sigma;
+  return -(delta - (a * a * s * s)) / sigma;
 }
 
 void checkZeroScaleKerrMetric(double r, double theta, double m, double a, double l, double tol) {
@@ -48,7 +48,7 @@ void checkZeroScaleKerrMetric(double r, double theta, double m, double a, double
       << "g_tt mismatch at l=0, a=" << a << " r=" << r;
 
   // g_thth = Sigma (same as Kerr)
-  const double sigmaRef = r * r + a * a * std::cos(theta) * std::cos(theta);
+  const double sigmaRef = (r * r) + (a * a * std::cos(theta) * std::cos(theta));
   EXPECT_NEAR(physics::lqgGthth(r, a, theta), sigmaRef, tol)
       << "g_thth mismatch at l=0, a=" << a << " r=" << r;
 
@@ -204,7 +204,7 @@ TEST(LqgKerr, OuterHorizonBelowKerr) {
 
   // Kerr outer horizon (l = 0) as baseline.
   const double rPlusKerr = physics::lqgOuterHorizon(m, a, 0.0);
-  EXPECT_NEAR(rPlusKerr, m + std::sqrt(m * m - a * a), 1.0e-10)
+  EXPECT_NEAR(rPlusKerr, m + std::sqrt((m * m) - (a * a)), 1.0e-10)
       << "l=0 horizon does not match Kerr r+";
 
   // For l = 0.1, 0.2: horizon should exist and be below Kerr.

@@ -142,7 +142,7 @@ struct ChristoffelAccel {
  */
 [[nodiscard]] constexpr double energy(const MetricComponents& g,
                                        const StateVector& s) noexcept {
-  return -g.gTt * s.v0 - g.gTph * s.v3;
+  return (-g.gTt * s.v0) - (g.gTph * s.v3);
 }
 
 /**
@@ -160,7 +160,7 @@ struct ChristoffelAccel {
  */
 [[nodiscard]] constexpr double angularMomentum(const MetricComponents &g,
                                                const StateVector &s) noexcept {
-  return g.gPhph * s.v3 + g.gTph * s.v0;
+  return (g.gPhph * s.v3) + (g.gTph * s.v0);
 }
 
 /**
@@ -186,7 +186,7 @@ struct ChristoffelAccel {
   const double cos2 = cosTheta * cosTheta;
   const double sin2 = sinTheta * sinTheta;
 
-  return pTheta * pTheta + cos2 * (a * a * (-e * e) + lz * lz / sin2);
+  return (pTheta * pTheta) + (cos2 * ((a * a * (-e * e)) + (lz * lz / sin2)));
 }
 
 // ============================================================================
@@ -212,7 +212,7 @@ struct ChristoffelAccel {
                                                                double l) noexcept {
   const double l2 = l * l;
   const double r2 = r * r;
-  return (1.0 - 2.0 * m / r) * (1.0 + l2 / r2) - e * e;
+  return ((1.0 - (2.0 * m / r)) * (1.0 + (l2 / r2))) - (e * e);
 }
 
 /**
@@ -228,7 +228,7 @@ struct ChristoffelAccel {
  * @return Residual (should be zero for circular orbit)
  */
 [[nodiscard]] constexpr double circularOrbitResidual(double m, double l, double r) noexcept {
-  return l * l * (r - 3.0 * m) - m * r * r;
+  return (l * l * (r - (3.0 * m))) - (m * r * r);
 }
 
 // ============================================================================
@@ -331,8 +331,8 @@ enum class OrbitType {
  * @return g_ab v^a v^b
  */
 [[nodiscard]] constexpr double fourNorm(const MetricComponents &g, const StateVector &s) noexcept {
-  return g.gTt * s.v0 * s.v0 + g.gRr * s.v1 * s.v1 + g.gThth * s.v2 * s.v2 + g.gPhph * s.v3 * s.v3 +
-         2.0 * g.gTph * s.v0 * s.v3;
+  return (g.gTt * s.v0 * s.v0) + (g.gRr * s.v1 * s.v1) + (g.gThth * s.v2 * s.v2) +
+         (g.gPhph * s.v3 * s.v3) + (2.0 * g.gTph * s.v0 * s.v3);
 }
 
 /**
@@ -407,7 +407,7 @@ enum class OrbitType {
   // v_t = sqrt((g_rr * v_r^2 + g_thth * v_th^2 + g_phph * v_ph^2) / (-g_tt))
 
   const double spatialNorm =
-      g.gRr * dirR * dirR + g.gThth * dirTheta * dirTheta + g.gPhph * dirPhi * dirPhi;
+      (g.gRr * dirR * dirR) + (g.gThth * dirTheta * dirTheta) + (g.gPhph * dirPhi * dirPhi);
 
   const double vT = std::sqrt(spatialNorm / (-g.gTt));
 
@@ -438,7 +438,7 @@ enum class OrbitType {
   const double vPhi = l / g.gPhph;
 
   // Null condition: g_tt v_t^2 + g_rr v_r^2 + g_phph v_phi^2 = 0
-  const double vRSq = -(g.gTt * vT * vT + g.gPhph * vPhi * vPhi) / g.gRr;
+  const double vRSq = -((g.gTt * vT * vT) + (g.gPhph * vPhi * vPhi)) / g.gRr;
   const double vR = vRSq >= 0.0 ? std::sqrt(vRSq) : 0.0;
 
   return StateVector{0.0, r0, theta0, 0.0, vT, vR, 0.0, vPhi};
@@ -510,7 +510,7 @@ inline ChristoffelAccel makeSchwarzschildChristoffel(double m) {
       // accel_t: -Gamma^t_{tr} * v^t * v^r - Gamma^t_{rt} * v^r * v^t
       [m](const StateVector &s) -> double {
         const double r = s.x1;
-        const double gammaTTr = m / (r * (r - 2.0 * m));
+        const double gammaTTr = m / (r * (r - (2.0 * m)));
         return -2.0 * gammaTTr * s.v0 * s.v1;
       },
 
@@ -520,13 +520,13 @@ inline ChristoffelAccel makeSchwarzschildChristoffel(double m) {
         const double theta = s.x2;
         const double sinTheta = std::sin(theta);
 
-        const double gammaRTt = m * (r - 2.0 * m) / (r * r * r);
-        const double gammaRRr = -m / (r * (r - 2.0 * m));
-        const double gammaRThth = -(r - 2.0 * m);
-        const double gammaRPhph = -(r - 2.0 * m) * sinTheta * sinTheta;
+        const double gammaRTt = m * (r - (2.0 * m)) / (r * r * r);
+        const double gammaRRr = -m / (r * (r - (2.0 * m)));
+        const double gammaRThth = -(r - (2.0 * m));
+        const double gammaRPhph = -(r - (2.0 * m)) * sinTheta * sinTheta;
 
-        return -gammaRTt * s.v0 * s.v0 - gammaRRr * s.v1 * s.v1 - gammaRThth * s.v2 * s.v2 -
-               gammaRPhph * s.v3 * s.v3;
+        return (-gammaRTt * s.v0 * s.v0) - (gammaRRr * s.v1 * s.v1) - (gammaRThth * s.v2 * s.v2) -
+               (gammaRPhph * s.v3 * s.v3);
       },
 
       // accel_theta: -2 * Gamma^th_{r th} * v^r * v^th - Gamma^th_{phph} * v^ph^2
@@ -536,7 +536,7 @@ inline ChristoffelAccel makeSchwarzschildChristoffel(double m) {
         const double gammaThRth = 1.0 / r;
         const double gammaThPhph = -std::sin(theta) * std::cos(theta);
 
-        return -2.0 * gammaThRth * s.v1 * s.v2 - gammaThPhph * s.v3 * s.v3;
+        return (-2.0 * gammaThRth * s.v1 * s.v2) - (gammaThPhph * s.v3 * s.v3);
       },
 
       // accel_phi: -2 * Gamma^ph_{r ph} * v^r * v^ph - 2 * Gamma^ph_{th ph} * v^th * v^ph
@@ -546,7 +546,7 @@ inline ChristoffelAccel makeSchwarzschildChristoffel(double m) {
         const double gammaPhRph = 1.0 / r;
         const double gammaPhThph = std::cos(theta) / std::sin(theta);
 
-        return -2.0 * gammaPhRph * s.v1 * s.v3 - 2.0 * gammaPhThph * s.v2 * s.v3;
+        return (-2.0 * gammaPhRph * s.v1 * s.v3) - (2.0 * gammaPhThph * s.v2 * s.v3);
       }};
 }
 

@@ -111,7 +111,8 @@ bool testOutputBufferLayout() {
   bool layoutOk = true;
   for (std::size_t pixel = 0; pixel < 100; ++pixel) {
     for (std::size_t channel = 0; channel < expectedPixel.size(); ++channel) {
-      layoutOk = (compositeBuffer.at(pixel * 4 + channel) == expectedPixel.at(channel)) && layoutOk;
+      layoutOk =
+          (compositeBuffer.at((pixel * 4) + channel) == expectedPixel.at(channel)) && layoutOk;
     }
   }
   layoutOk = std::all_of(compositeBuffer.begin() + 400, compositeBuffer.end(),
@@ -209,7 +210,7 @@ bool testPipelineIntegration() {
   const std::array<double, 3> density{0.1, 0.3, 0.5};
   const auto metadata = physics::buildTimeseriesMetadata(times.data(), 3);
   const double interpolated = physics::interpolateField(metadata, density.data(), 0.5, false);
-  const double composite = 0.7 * 0.5 + 0.3 * interpolated;
+  const double composite = (0.7 * 0.5) + (0.3 * interpolated);
   // Density is linear in code time; the blend has an independent decimal oracle.
   const bool integrationOk = std::abs(interpolated - 0.2) < 1e-12 &&
                              std::abs(composite - 0.41) < 1e-12;
