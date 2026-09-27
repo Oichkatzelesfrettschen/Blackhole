@@ -12,6 +12,9 @@
 #ifndef BLACKHOLE_GAME_TASK_GRAPH_H
 #define BLACKHOLE_GAME_TASK_GRAPH_H
 
+#include <cstddef>
+#include <map>
+#include <set>
 #include <vector>
 
 #include "game/fleet.h"
@@ -55,10 +58,16 @@ public:
   FleetAdvanceResult advanceFleetTasks(FleetId fleet, double properDeltaSec);
 
   [[nodiscard]] const std::vector<TaskContract> &tasks() const { return tasks_; }
+  [[nodiscard]] std::size_t lastTurnVisits() const { return lastTurnVisits_; }
 
 private:
   std::vector<TaskContract> tasks_;
   TaskId nextTaskId_ = 1;
+  std::set<TaskId> readyTasks_;
+  std::map<FleetId, std::set<TaskId>> activeTasks_;
+  std::map<TaskId, std::vector<TaskId>> dependents_;
+  std::vector<std::size_t> remainingPrerequisites_;
+  std::size_t lastTurnVisits_ = 0;
 };
 
 } // namespace game

@@ -9,6 +9,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -27,6 +29,44 @@ constexpr double K_M87_MASS_G = 6.5e9 * K_SOLAR_MASS_G;
 
 using campaign_test::FakeTimeField;
 using campaign_test::fakeConfig;
+
+struct ReferenceTask {
+  game::TaskState state = game::TaskState::Pending;
+  double progressSec = 0.0;
+  double costSec = 0.0;
+  game::FleetId fleet = game::K_INVALID_FLEET_ID;
+  std::vector<game::TaskId> prerequisites;
+};
+
+void activateReferenceTasks(std::vector<ReferenceTask> &reference) {
+  for (ReferenceTask &task : reference) {
+    if (task.state == game::TaskState::Pending &&
+        std::ranges::all_of(task.prerequisites, [&reference](game::TaskId prerequisite) {
+          return reference[static_cast<std::size_t>(prerequisite - 1)].state ==
+                 game::TaskState::Complete;
+        })) {
+      task.state = game::TaskState::Active;
+    }
+  }
+}
+
+void advanceReferenceFleet(std::vector<ReferenceTask> &reference, game::FleetId fleet) {
+  double budget = 1.0;
+  for (ReferenceTask &task : reference) {
+    if (budget <= 0.0) {
+      break;
+    }
+    if (task.fleet != fleet || task.state != game::TaskState::Active) {
+      continue;
+    }
+    const double spent = std::min(budget, task.costSec - task.progressSec);
+    task.progressSec += spent;
+    budget -= spent;
+    if (task.progressSec == task.costSec) {
+      task.state = game::TaskState::Complete;
+    }
+  }
+}
 
 } // namespace
 
@@ -256,4 +296,50 @@ TEST(TaskGraph, PrerequisitesGateActivation) {
   const game::TaskGraph::FleetAdvanceResult secondPass = graph.advanceFleetTasks(1, 10.0);
   ASSERT_EQ(secondPass.completed.size(), 1U);
   EXPECT_EQ(secondPass.completed.front(), second);
+}
+
+TEST(TaskGraph, CompletedTasksDoNotCostPerTurnVisits) {
+  game::TaskGraph graph;
+  for (int taskCount = 0; taskCount < 1000; ++taskCount) {
+    graph.addTask(1, 1.0);
+  }
+  graph.activateEligible();
+  ASSERT_EQ(graph.advanceFleetTasks(1, 1000.0).completed.size(), 1000U);
+  graph.activateEligible();
+  graph.advanceFleetTasks(1, 1.0);
+  EXPECT_EQ(graph.lastTurnVisits(), 0U);
+
+  const game::TaskId due = graph.addTask(1, 2.0);
+  graph.activateEligible();
+  graph.advanceFleetTasks(1, 1.0);
+  EXPECT_EQ(graph.lastTurnVisits(), 2U);
+  EXPECT_EQ(graph.find(due)->state, game::TaskState::Active);
+}
+
+TEST(TaskGraph, IndexedAdvancementMatchesInsertionOrderReferenceScan) {
+  game::TaskGraph graph;
+  std::vector<ReferenceTask> reference;
+  const auto add = [&](game::FleetId fleet, double cost,
+                       const std::vector<game::TaskId> &prerequisites) {
+    graph.addTask(fleet, cost, prerequisites);
+    reference.push_back({.state = game::TaskState::Pending, .progressSec = 0.0,
+                         .costSec = cost, .fleet = fleet, .prerequisites = prerequisites});
+  };
+  add(2, 2.0, {});
+  add(1, 1.0, {1});
+  add(1, 3.0, {});
+  add(2, 1.0, {2, 3});
+  add(1, 1.0, {4});
+  for (int turn = 0; turn < 12; ++turn) {
+    graph.activateEligible();
+    activateReferenceTasks(reference);
+    for (const game::FleetId fleet : {1U, 2U}) {
+      graph.advanceFleetTasks(fleet, 1.0);
+      advanceReferenceFleet(reference, fleet);
+    }
+    for (std::size_t taskIndex = 0; taskIndex < reference.size(); ++taskIndex) {
+      EXPECT_EQ(graph.tasks()[taskIndex].state, reference[taskIndex].state);
+      EXPECT_DOUBLE_EQ(graph.tasks()[taskIndex].progressSec, reference[taskIndex].progressSec);
+    }
+  }
 }
