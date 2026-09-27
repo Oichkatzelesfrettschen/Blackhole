@@ -70,6 +70,7 @@ float parseEnvironmentFloat(const char *value) {
   }
   double parsed = 0.0;
   const char *const end = text.data() + text.size();
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): from_chars is bounded
   const std::from_chars_result result = std::from_chars(text.data(), end, parsed);
   if (result.ec != std::errc{} || result.ptr != end || text.empty() ||
       !physics::safeIsfinite(parsed) ||
