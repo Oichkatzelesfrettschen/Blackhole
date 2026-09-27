@@ -245,15 +245,18 @@ vec3 stokesDisplayColor(vec4 stokes, vec3 baseColor) {
     float I = max(stokes.x, 0.0);
     if (I < 1.0e-10) { return baseColor * 0.0; }
 
-    float P_lin = sqrt(stokes.y * stokes.y + stokes.z * stokes.z) / I;
-    P_lin = clamp(P_lin, 0.0, 1.0);
-
-    // EVPA: angle [rad] in (-pi/2, pi/2]
-    float chi = 0.5 * atan(stokes.z, stokes.y);
-
-    // Hue tint: modulate R and G by cos/sin of 2*chi, weighted by P_lin
-    float tintR = 1.0 + P_lin * 0.4 * cos(2.0 * chi);
-    float tintG = 1.0 + P_lin * 0.4 * sin(2.0 * chi);
+    // P_lin * (cos(2 chi), sin(2 chi)) = (Q,U) / max(I, length(Q,U)).
+    // Cartesian components preserve the polarization clamp and define zero
+    // polarization without atan(0,0). Scaling before the norm keeps finite
+    // HDR Stokes components from overflowing when squared.
+    float scale = max(I, max(abs(stokes.y), abs(stokes.z)));
+    vec2 linear = stokes.yz / scale;
+    float scaledIntensity = I / scale;
+    // At least one scaled component has magnitude one: the rsqrt argument
+    // lies in [1,2], avoiding both a singularity and a square-root/divide pair.
+    linear *= inversesqrt(max(scaledIntensity * scaledIntensity, dot(linear, linear)));
+    float tintR = 1.0 + 0.4 * linear.x;
+    float tintG = 1.0 + 0.4 * linear.y;
     float tintB = 1.0 + clamp(stokes.w / I, -0.5, 0.5) * 0.2;
 
     return clamp(baseColor * vec3(tintR, tintG, tintB), 0.0, 10.0);

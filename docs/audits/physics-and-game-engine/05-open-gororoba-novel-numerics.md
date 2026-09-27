@@ -1,5 +1,9 @@
 # open_gororoba novel numerics: what makes Blackhole cheaper and more accurate
 
+Follow-on implementation and live-source reconciliation:
+[Polarization components, device cost, and observer-sky reconstruction](stokes-component-display.md).
+The report below retains its original audit snapshot and measurements.
+
 Scope: the algebra, numerics, and infrastructure crates of open_gororoba (`cd_kernel`,
 `fwht`, `gororoba_sparse_grid`, `fixed_point_lbm`, `pathion_ellip`, `spectral_core`,
 `lattice_filtration`, `surreal_algebra`, `neural_homotopy`, `verified_core`, `tensor_core`,
