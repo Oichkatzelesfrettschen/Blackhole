@@ -192,12 +192,7 @@ public:
       return false;
     }
     const ReceivedFromNode &host = nodes_.at(node).received.at(K_AUTHORITY_NODE);
-    // A stamp sent at or after the deadline proves nothing: the loss latched
-    // first, and energy banked later does not turn it into a win.
-    const bool beforeDeadline =
-        config_.deadlineTurn <= 0 || host.lastEmitTurn < config_.deadlineTurn;
-    return host.lastEmitTurn >= 0 && beforeDeadline &&
-           host.lastSenderEnergyUnits >= config_.victoryEnergyUnits;
+    return host.lastEmitTurn >= 0 && host.lastSenderEnergyUnits >= config_.victoryEnergyUnits;
   }
   [[nodiscard]] double energyUnits() const { return energyUnits_; }
   [[nodiscard]] double instability() const { return instability_; }
