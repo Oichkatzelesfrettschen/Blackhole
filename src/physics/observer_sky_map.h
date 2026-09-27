@@ -119,7 +119,8 @@ inline constexpr std::uint32_t K_TRACER_VERSION = 2;
 
 /** @brief Traces the photon received along `look` backward from the observer. */
 [[nodiscard]] SkyRay traceSkyRay(const Tetrad &tetrad, const Vec3 &look,
-                                 const TraceSettings &settings);
+                                 const TraceSettings &settings,
+                                 const std::stop_token &stop = {});
 
 /** @brief ln g stored for a Captured pixel and for a Trapped one; neither
  *         shows sky, and every real ln g exceeds both by orders of magnitude,

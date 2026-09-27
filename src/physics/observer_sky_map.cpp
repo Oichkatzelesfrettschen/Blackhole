@@ -224,8 +224,9 @@ void storeRay(std::vector<float> &rgba, std::size_t texel, const SkyRay &ray) {
 /** @brief Traces `look` and reports whether photonConstants' static
  *         connectivity agrees with the integrated fate. */
 std::pair<SkyRay, bool> traceAndCompare(const Tetrad &tetrad, const Vec3 &look,
-                                        const TraceSettings &settings) {
-  const SkyRay ray = traceSkyRay(tetrad, look, settings);
+                                       const TraceSettings &settings,
+                                       const std::stop_token &stop) {
+  const SkyRay ray = traceSkyRay(tetrad, look, settings, stop);
   const kerr_observer::PhotonConstants constants =
       kerr_observer::photonConstants(tetrad, scale(look, -1.0));
   const bool escaped = ray.fate == RayFate::Escaped;
@@ -248,8 +249,8 @@ SkyImage traceImage(const ObserverKey &key, std::size_t width, std::size_t heigh
   std::vector<double> polar(width * height, noSky);
   std::vector<std::size_t> disagreements(height, 0);
   parallelRows(height, threads, stop, [&](std::size_t row) {
-    for (std::size_t column = 0; column < width; ++column) {
-      const auto [ray, disagrees] = traceAndCompare(tetrad, lookAt(column, row), settings);
+    for (std::size_t column = 0; column < width && !stop.stop_requested(); ++column) {
+      const auto [ray, disagrees] = traceAndCompare(tetrad, lookAt(column, row), settings, stop);
       const std::size_t texel = (row * width) + column;
       storeRay(image.rgba, texel, ray);
       if (ray.fate == RayFate::Escaped) {
@@ -357,7 +358,8 @@ SkyAngles lookAngles(const Vec3 &look) {
                    .latitude = std::atan2(-look.at(1), std::hypot(look.at(0), look.at(2)))};
 }
 
-SkyRay traceSkyRay(const Tetrad &tetrad, const Vec3 &look, const TraceSettings &settings) {
+SkyRay traceSkyRay(const Tetrad &tetrad, const Vec3 &look, const TraceSettings &settings,
+                   const std::stop_token &stop) {
   SkyRay ray;
   const kerr_observer::EquatorialFrame &frame = tetrad.frame;
   const Vec4 zamo = receivedZamoMomentum(tetrad, look);
@@ -400,6 +402,10 @@ SkyRay traceSkyRay(const Tetrad &tetrad, const Vec3 &look, const TraceSettings &
   const double captureOffset = std::fmax(settings.captureFraction * h, settings.captureFloor);
   for (int step = 0;; ++step) {
     ray.steps = step;
+    if ((step & 63) == 0 && stop.stop_requested()) {
+      ray.fate = RayFate::Trapped;
+      return ray;
+    }
     if (!stateFinite(state) || !(state.x > h)) {
       ray.fate = state.x > h ? RayFate::Trapped : RayFate::Captured;
       return ray;
@@ -503,8 +509,8 @@ PeakResult findPeakBlueshift(const Tetrad &tetrad, const std::vector<Vec3> &seed
                              const PeakSearch &search, const TraceSettings &settings,
                              const std::stop_token &stop) {
   PeakResult best;
-  const auto consider = [&best, &tetrad, &settings](const Vec3 &look) {
-    const SkyRay ray = traceSkyRay(tetrad, look, settings);
+  const auto consider = [&best, &tetrad, &settings, &stop](const Vec3 &look) {
+    const SkyRay ray = traceSkyRay(tetrad, look, settings, stop);
     if (ray.fate == RayFate::Escaped && ray.g > best.g) {
       best = PeakResult{.look = look, .g = ray.g};
     }
@@ -523,8 +529,8 @@ PeakResult findPeakBlueshift(const Tetrad &tetrad, const std::vector<Vec3> &seed
   for (int level = 0; level < levels && !stop.stop_requested(); ++level) {
     const double width = search.initialHalfWidth * std::pow(search.shrink, -level);
     const LogPolarTile frame = tileAround(best.look, 1.0, 2.0, 1, 1);
-    for (std::size_t i = 0; i < points; ++i) {
-      for (std::size_t j = 0; j < points; ++j) {
+    for (std::size_t i = 0; i < points && !stop.stop_requested(); ++i) {
+      for (std::size_t j = 0; j < points && !stop.stop_requested(); ++j) {
         const double east = width * (static_cast<double>(i) - half) / half;
         const double north = width * (static_cast<double>(j) - half) / half;
         consider(normalized(
