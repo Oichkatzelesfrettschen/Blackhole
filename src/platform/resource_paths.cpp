@@ -19,7 +19,12 @@
 namespace platform {
 namespace {
 
-std::filesystem::path gResourceRoot = ".";
+/** @brief The resolved root, built on first use so a failed allocation throws
+ *         into the caller rather than during static initialization. */
+std::filesystem::path &resourceRootStorage() {
+  static std::filesystem::path root = ".";
+  return root;
+}
 
 bool isValidResourceRoot(const std::filesystem::path &root) {
   std::error_code ec;
@@ -57,9 +62,9 @@ std::filesystem::path detectResourceRoot(const char *argv0) {
 
 } // namespace
 
-void initResourceRoot(const char *argv0) { gResourceRoot = detectResourceRoot(argv0); }
+void initResourceRoot(const char *argv0) { resourceRootStorage() = detectResourceRoot(argv0); }
 
-const std::filesystem::path &resourceRoot() { return gResourceRoot; }
+const std::filesystem::path &resourceRoot() { return resourceRootStorage(); }
 
 std::filesystem::path userCacheDirectory() {
   const char *xdgCacheHome = std::getenv("XDG_CACHE_HOME");
@@ -103,7 +108,7 @@ std::filesystem::path writableCacheSubdirectory(std::string_view name) {
 }
 
 std::string resourcePath(std::string_view relativePath) {
-  return (gResourceRoot / std::filesystem::path(relativePath)).string();
+  return (resourceRootStorage() / std::filesystem::path(relativePath)).string();
 }
 
 bool readTextFile(const std::string &path, std::string &out) {

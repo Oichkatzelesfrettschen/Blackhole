@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <optional>
 
 #include "game/campaign.h"
@@ -114,9 +115,8 @@ void playColony(const game::EventSet &story, std::uint64_t seed, int colonyBand,
       view.fleetYieldLostToDarkness, view.arrivals.size(), state.stateDigest()));
 }
 
-} // namespace
-
-int main(int argc, char **argv) {
+/** @brief The command line's run; exceptions propagate to main. */
+int runCampaignSim(int argc, char **argv) {
   std::uint64_t seed = 42;
   std::optional<std::int64_t> turnsFlag;
   Commit commit = Commit::Solo;
@@ -174,4 +174,17 @@ int main(int argc, char **argv) {
   }
   printLine(commitLabel(commit), runLine(seed, turns, commit));
   return EXIT_SUCCESS;
+}
+
+} // namespace
+
+int main(int argc, char **argv) {
+  try {
+    return runCampaignSim(argc, argv);
+  } catch (const std::exception &error) {
+    static_cast<void>(std::fprintf(stderr, "campaign_sim: %s\n", error.what()));
+  } catch (...) {
+    static_cast<void>(std::fprintf(stderr, "campaign_sim: unknown exception\n"));
+  }
+  return EXIT_FAILURE;
 }
