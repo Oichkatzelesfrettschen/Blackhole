@@ -10,8 +10,9 @@
  * can be reused without re-tracing. The binary is little-endian: an 8-byte
  * magic, the format and tracer versions, the key, dimensions and settings, the
  * tile frame, the statistics, then the two images row-major (equirectangular
- * first), each as RGBA32F texels followed by RG32F source spans, and last the
- * FNV-1a 64 checksum of every preceding byte. Every double is written through
+ * first), each as RGBA32F texels followed by RGB32F source spans (coordinate
+ * azimuthal, projected azimuthal, polar), and last the FNV-1a 64 checksum of
+ * every preceding byte. Every double is written through
  * its bit pattern, so a read reproduces the build bit for bit on the same
  * host. Both files are written under a process-unique temporary name and
  * renamed into place, so a reader sees a whole file or none.
@@ -78,7 +79,7 @@ struct ObserverSkyLut {
 
 /** @brief Increments whenever the binary layout changes; K_TRACER_VERSION
  *         covers the traced content. */
-inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 3;
+inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 4;
 
 /** @brief 256 * 1024 * 1024 bytes, about 13 default-size observer-sky bundles. */
 inline constexpr std::uintmax_t K_OBSERVER_SKY_CACHE_BYTES = std::uintmax_t{256} * 1024 * 1024;

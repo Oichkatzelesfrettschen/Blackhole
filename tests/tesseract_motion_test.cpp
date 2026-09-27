@@ -195,4 +195,25 @@ TEST(TesseractScene, GizmoTargetAppliesToTheBlackHoleSceneOnly) {
   EXPECT_FALSE(rs->gizmoTargetActive());
 }
 
+/**
+ * renderGizmoPanel (src/ui/panels.cpp) used to disable its controls with a
+ * local Tesseract-only check, not a RenderState predicate, so the
+ * observer-sky scene left a checkbox and combo boxes for a black-hole-only
+ * camera target live and clickable; there was no black-hole-only scene
+ * predicate to falsify against before this change added sceneAllowsGizmo.
+ * The panel now gates on it directly, so this pins its contract: false for
+ * both non-black-hole scenes, and gizmoTargetActive staying false in
+ * ObserverSky even with the checkbox enabled.
+ */
+TEST(TesseractScene, SceneAllowsGizmoIsBlackHoleOnly) {
+  auto rs = std::make_unique<RenderState>();
+  EXPECT_TRUE(rs->sceneAllowsGizmo());
+  rs->scene.mode = RenderState::SceneMode::Tesseract;
+  EXPECT_FALSE(rs->sceneAllowsGizmo());
+  rs->scene.mode = RenderState::SceneMode::ObserverSky;
+  EXPECT_FALSE(rs->sceneAllowsGizmo());
+  rs->camera.gizmoEnabled = true;
+  EXPECT_FALSE(rs->gizmoTargetActive());
+}
+
 } // namespace

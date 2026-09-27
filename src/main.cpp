@@ -287,6 +287,7 @@ using blackhole::captureRecordFrame;
 using blackhole::exportFrameOnce;
 using blackhole::findShowcaseOrbitComposition;
 using blackhole::frameContentSeconds;
+using blackhole::observerCaptureClock;
 using blackhole::recordOutputSeconds;
 using blackhole::ShowcaseOrbitComposition;
 #if BLACKHOLE_HAS_CUDA
@@ -1220,14 +1221,13 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
   if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
     // The observer's clock runs on wall time, which pause stops; its own sky
     // time scale replaces the global one, so the panel's rate is the rate. A
-    // recording runs it on the output clock instead, as the tesseract does.
+    // recording, and a one-shot --export-frame's warmup, run it on a fixed
+    // capture clock instead (observerCaptureClock), so neither drifts the
+    // exported phase away from BLACKHOLE_OBSERVER_PROPER_SECONDS on wall time.
     std::optional<blackhole::ObserverRecordClock> record;
-    const int frameIndex = rs.recording.recordFrameIndex;
-    if (const auto outputSeconds = recordOutputSeconds(cli, frameIndex)) {
-      record = blackhole::ObserverRecordClock{
-          .outputSeconds = *outputSeconds,
-          .frameSeconds =
-              recordOutputSeconds(cli, frameIndex + 1).value_or(*outputSeconds) - *outputSeconds};
+    if (const auto clock = observerCaptureClock(cli, rs.recording.recordFrameIndex)) {
+      record = blackhole::ObserverRecordClock{.outputSeconds = clock->first,
+                                              .frameSeconds = clock->second};
     }
     renderObserverSkyScene(rs, frameCamera.basis, input.isPaused() ? 0.0F : deltaTime, record);
     return {};

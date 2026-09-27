@@ -4901,6 +4901,26 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  # observer_sky_lut's argument parsing and horizon-gated observer
+  # resolution (src/tools/observer_sky_lut_options.h), crafted-input hardened.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/observer_sky_lut_options_test.cpp")
+    add_executable(observer_sky_lut_options_test
+      "${PROJECT_SOURCE_DIR}/tests/observer_sky_lut_options_test.cpp"
+    )
+    target_compile_options(observer_sky_lut_options_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(observer_sky_lut_options_test PRIVATE blackhole_observer_sky GTest::gtest_main)
+    add_test(NAME observer_sky_lut_options_validation COMMAND observer_sky_lut_options_test)
+    set_tests_properties(observer_sky_lut_options_validation PROPERTIES
+      LABELS "physics;kerr;observer-sky;cli"
+      TIMEOUT 60
+    )
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(observer_sky_lut_options_validation PROPERTIES
+        ENVIRONMENT "${SANITIZER_TEST_ENV}"
+      )
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp")
     add_executable(campaign_capabilities_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_capabilities_test.cpp"
@@ -7604,7 +7624,8 @@ endif()
 # refines IEEE mode instead of overriding a global -ffast-math.
 set(_bh_deterministic_fp_targets
   blackhole_physics blackhole_campaign campaign_sim constellation_sim
-  blackhole_observer_sky observer_sky_lut observer_sky_map_test)
+  blackhole_observer_sky observer_sky_lut observer_sky_map_test
+  observer_sky_lut_options_test)
 get_property(_bh_all_targets DIRECTORY "${PROJECT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
 foreach(_bh_target IN LISTS _bh_all_targets)
   if(_bh_target MATCHES "^(campaign_.*|colony_.*|event_.*|constellation|blackhole_time_field|kerr_time_field|kerr_observer|balance_sweep)_test$"
