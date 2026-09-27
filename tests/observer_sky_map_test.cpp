@@ -40,6 +40,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <stdlib.h> // setenv, unsetenv (POSIX)
 #include <unistd.h>
 
 #include "kerr_observer.h"
@@ -211,11 +212,11 @@ TEST(ObserverSkyMap, EvictionKeepsHashAndRemovesOldestSidecars) {
   writeBundle(3, 2);
   writeBundle(4, 1);
   sky::evictObserverSkyBundles(scratch.path(), 16, 1);
-  for (std::uint64_t hash : {1ULL, 4ULL}) {
+  for (const std::uint64_t hash : {1ULL, 4ULL}) {
     EXPECT_TRUE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".bin")));
     EXPECT_TRUE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".json")));
   }
-  for (std::uint64_t hash : {2ULL, 3ULL}) {
+  for (const std::uint64_t hash : {2ULL, 3ULL}) {
     EXPECT_FALSE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".bin")));
     EXPECT_FALSE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".json")));
   }
@@ -579,6 +580,21 @@ TEST(ObserverSkyMap, SourceSpansExposeTheWindingThroat) {
 }
 
 /** @brief Write, read back, and reject a mismatched hash. */
+namespace {
+
+/** @brief Ages `file` by two days, reads it, and checks that the successful
+ *         read refreshed its modification time (the eviction clock). */
+std::optional<sky::ObserverSkyLut> readAfterAgingTheBundle(const std::filesystem::path &file,
+                                                          std::uint64_t hash) {
+  const auto stale = std::filesystem::file_time_type::clock::now() - std::chrono::hours(48);
+  std::filesystem::last_write_time(file, stale);
+  std::optional<sky::ObserverSkyLut> read = sky::readObserverSkyLut(file, hash);
+  EXPECT_GT(std::filesystem::last_write_time(file), stale + std::chrono::hours(47));
+  return read;
+}
+
+} // namespace
+
 TEST(ObserverSkyMap, LutRoundTripsThroughTheCache) {
   const sky::ObserverKey key = orbiting(0.1, 3.0);
   const sky::LutDimensions dimensions{.width = 32, .height = 16, .tileRadial = 8, .tileAzimuth = 8};
@@ -589,11 +605,7 @@ TEST(ObserverSkyMap, LutRoundTripsThroughTheCache) {
   ASSERT_TRUE(sky::writeObserverSkyLut(built, directory));
   const std::uint64_t hash = sky::lutHash(key, dimensions, defaultSettings());
   const std::filesystem::path file = directory / (sky::lutStem(hash) + ".bin");
-  const auto stale = std::filesystem::file_time_type::clock::now() - std::chrono::hours(48);
-  std::filesystem::last_write_time(file, stale);
-  const std::optional<sky::ObserverSkyLut> read = sky::readObserverSkyLut(file, hash);
-  // A successful read refreshes the eviction clock.
-  EXPECT_GT(std::filesystem::last_write_time(file), stale + std::chrono::hours(47));
+  const std::optional<sky::ObserverSkyLut> read = readAfterAgingTheBundle(file, hash);
   if (!read.has_value()) {
     GTEST_FAIL() << "the written bundle did not read back";
   }
