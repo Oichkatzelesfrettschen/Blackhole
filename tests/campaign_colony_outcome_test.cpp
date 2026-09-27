@@ -247,39 +247,6 @@ TEST(ColonyOutcome, HostDecisionDoesNotSilenceTheColony) {
   EXPECT_TRUE(state.issueCommand(order));
 }
 
-// Falsifier: a colony order accepted after an arrived host notice stamped
-// senderEnergyUnitsAtEmit at or above victoryEnergyUnits (the colony can do
-// the same arithmetic issueCommand does), or one refused before that stamp
-// lands. The host wins by turn 8 (as above); its turn-9 notice, stamped with
-// the already-won energy, lands 5 turns later at 14.
-TEST(ColonyOutcome, ColonyRefusesOrdersOnceAnArrivedStampProvesTheWin) {
-  const campaign_test::FakeTimeField field;
-  game::CampaignConfig config = colonyConfig(
-      R"({"events": [{"id": 1, "triggers": [{"turn_at_least": 9}],
-                       "effects": [{"emit": {"kind": "notice", "to": "colony"}}]}]})",
-      0);
-  config.victoryEnergyUnits = 3.0;
-  game::CampaignState state(config, field);
-  ASSERT_TRUE(state.valid());
-  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
-  ASSERT_NE(fleet, game::K_INVALID_FLEET_ID);
-  game::Command order;
-  order.type = game::CommandType::AssignTask;
-  order.fleet = fleet;
-  order.properTimeCostSec = 3600.0;
-  order.originNode = game::K_FIRST_COLONY_NODE;
-
-  state.advanceTurns(13); // the turn-9 notice has not landed yet
-  ASSERT_EQ(state.status(), game::CampaignStatus::Won);
-  EXPECT_EQ(state.perceivedSnapshot(game::K_FIRST_COLONY_NODE).status,
-            game::CampaignStatus::Ongoing);
-  EXPECT_TRUE(state.issueCommand(order));
-
-  state.advanceTurn(); // turn 14: the winning stamp arrives
-  EXPECT_EQ(state.perceivedSnapshot(game::K_FIRST_COLONY_NODE).status, game::CampaignStatus::Won);
-  EXPECT_FALSE(state.issueCommand(order));
-}
-
 namespace {
 
 /** @brief Runs a colony campaign with deadline 20 to it and checks each

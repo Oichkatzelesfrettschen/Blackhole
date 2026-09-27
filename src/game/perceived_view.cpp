@@ -165,14 +165,9 @@ CampaignViewSnapshot CampaignState::perceivedSnapshot(NodeId observer) const {
   view.instability = 0.0;
   view.stabilization = 0.0;
   view.fleetIntegrity = 0.0;
-  // The colony cannot hear the host's own latched status, but an energy stamp
-  // at or above the victory target proves the win arithmetically (the same
-  // rule issueCommand uses to refuse this colony's orders); short of that,
-  // the deadline is public, so past it the campaign has ended one way or the
-  // other even though which way has not arrived.
-  view.status = colonyPerceivesHostWin(observer) ? CampaignStatus::Won
-                : deadlinePassed()               ? CampaignStatus::Ended
-                                                 : CampaignStatus::Ongoing;
+  // The colony cannot hear a remote win, but the deadline is public: past it
+  // the campaign has ended one way or the other.
+  view.status = deadlinePassed() ? CampaignStatus::Ended : CampaignStatus::Ongoing;
   view.clearedTurn = 0;
   view.intel.clear();
   view.reportsInFlight.clear();
