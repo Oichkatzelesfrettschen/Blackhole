@@ -178,10 +178,9 @@ void testGainCancellationNormwise() {
   // cancels to -0.3517 from terms of 5.9e15, and one ulp of Q0, jQ or alpha_I
   // moves it by 0.82, 1.31 or 1.05 (mpmath), so the step's contract there is
   // normwise: within a few eps of |S| = 2.4e17.
-  const auto *const row =
-      std::find_if(std::begin(REFERENCE_ROWS), std::end(REFERENCE_ROWS), [](const ReferenceRow &r) {
-        return r.group == "gain" && r.k[0] == -40.0 && r.s0[1] == -0.025;
-      });
+  const auto *const row = std::ranges::find_if(REFERENCE_ROWS, [](const ReferenceRow &r) {
+    return r.group == "gain" && r.k[0] == -40.0 && r.s0[1] == -0.025;
+  });
   if (row == std::end(REFERENCE_ROWS)) {
     check(false, "gain cancellation row present in the referee table");
     return;
@@ -204,7 +203,7 @@ void testNoFloatingPointExceptions() {
          {StokesSourceForm::DirectIntegral, StokesSourceForm::SteadyStateSplit}) {
       std::feclearexcept(FE_ALL_EXCEPT);
       const StokesArray out = stokesPropagateExact(row.s0, row.j, generatorOf(row), row.ds, form);
-      clean = clean && std::fetestexcept(FE_INVALID | FE_DIVBYZERO) == 0 && out[0] == out[0];
+      clean = clean && std::fetestexcept(FE_INVALID | FE_DIVBYZERO) == 0 && !std::isnan(out[0]);
     }
   }
   check(clean, "no FE_INVALID or FE_DIVBYZERO on any referee row, either source form");

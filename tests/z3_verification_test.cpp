@@ -85,10 +85,8 @@ struct TestStats {
 // GPU/CPU Parity Test Setup
 // ============================================================================
 
-// NOLINTNEXTLINE(misc-use-internal-linkage) -- gtest fixture referenced by TEST_F from outside TU
 namespace {
 constexpr int LARGE_BATCH = 1000;
-}
 
 class Z3VerificationTest : public ::testing::Test {
 protected:
@@ -242,6 +240,8 @@ protected:
         csv.close();
     }
 };
+
+} // namespace
 
 // ============================================================================
 // Phase 4a: Single Ray Verification

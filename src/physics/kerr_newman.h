@@ -67,7 +67,7 @@ namespace physics {
  */
 [[nodiscard]] inline double knSigma(double r, double a, double theta) noexcept {
     const double c = std::cos(theta);
-    return r * r + a * a * c * c;
+    return (r * r) + (a * a * c * c);
 }
 
 /**
@@ -84,7 +84,7 @@ namespace physics {
  * @return Delta [length^2].
  */
 [[nodiscard]] constexpr double knDelta(double r, double mass, double a, double charge) noexcept {
-  return r * r - 2.0 * mass * r + a * a + charge * charge;
+  return (r * r) - (2.0 * mass * r) + (a * a) + (charge * charge);
 }
 
 /**
@@ -101,10 +101,10 @@ namespace physics {
  */
 [[nodiscard]] inline double knA(double r, double theta, double mass, double a,
                                 double charge) noexcept {
-  const double r2a2 = r * r + a * a;
+  const double r2a2 = (r * r) + (a * a);
   const double s = std::sin(theta);
   const double delta = knDelta(r, mass, a, charge);
-  return r2a2 * r2a2 - a * a * delta * s * s;
+  return (r2a2 * r2a2) - (a * a * delta * s * s);
 }
 
 // ============================================================================
@@ -129,7 +129,7 @@ namespace physics {
   const double sigma = knSigma(r, a, theta);
   const double delta = knDelta(r, mass, a, charge);
   const double s = std::sin(theta);
-  return -(delta - a * a * s * s) / sigma;
+  return -(delta - (a * a * s * s)) / sigma;
 }
 
 /**
@@ -205,7 +205,7 @@ namespace physics {
                                    double charge) noexcept {
   const double sigma = knSigma(r, a, theta);
   const double s = std::sin(theta);
-  return -a * (2.0 * mass * r - charge * charge) * s * s / sigma;
+  return -a * ((2.0 * mass * r) - (charge * charge)) * s * s / sigma;
 }
 
 // ============================================================================
@@ -360,7 +360,7 @@ namespace physics {
   if (std::abs(metricA) < 1.0e-30) {
     return 0.0;
   }
-  return a * (2.0 * mass * r - charge * charge) / metricA;
+  return a * ((2.0 * mass * r) - (charge * charge)) / metricA;
 }
 
 } // namespace physics

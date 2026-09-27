@@ -72,7 +72,7 @@ Fate traceEquatorial(double a, double b, double r0) {
 
 TEST(KerrNullGeodesic, CarterConstantsReproduceInitialVelocities) {
   // A fixed seed makes the 2000-sample Carter sweep reproducible.
-  // NOLINTNEXTLINE(cert-msc32-c,cert-msc51-cpp)
+  // NOLINTNEXTLINE(cert-msc32-c,cert-msc51-cpp,bugprone-random-generator-seed)
   std::mt19937_64 rng(20260925);
   std::uniform_real_distribution<double> radius(2.5, 60.0);
   std::uniform_real_distribution<double> polar(0.15, std::numbers::pi - 0.15);
@@ -144,7 +144,7 @@ TEST(KerrNullGeodesic, ErgoregionStartPrefersPositiveEnergyRoot) {
   const double r = 1.6;
   const double sigma = r * r;
   const double delta = (r * r) - (2.0 * r) + (a * a);
-  const double bigA = ((r * r) + (a * a)) * ((r * r) + (a * a)) - (a * a * delta);
+  const double bigA = (((r * r) + (a * a)) * ((r * r) + (a * a))) - (a * a * delta);
   const double alpha = std::sqrt(sigma * delta / bigA);
   const double omega = 2.0 * a * r / bigA;
   const double varpi = std::sqrt(bigA / sigma);
@@ -268,7 +268,7 @@ std::vector<double> sortedRealRoots(const physics::RadialRoots &roots) {
       real.push_back(root.real());
     }
   }
-  std::sort(real.begin(), real.end());
+  std::ranges::sort(real);
   return real;
 }
 
@@ -417,10 +417,8 @@ TracerRun runTracer(double massSolar, double aStar, double bOverM, double r0Over
   const physics::KerrGeodesicConsts c = physics::kerrEquatorialConsts(bOverM * m, 1.0);
   run.result = tracer.trace(physics::kerrEquatorialState(r0OverRs * run.rS, 0.0, -1.0), c);
   const auto &path = run.result.path;
-  const auto nearest =
-      std::min_element(path.begin(), path.end(), [](const math::Vec3d &p, const math::Vec3d &q) {
-        return radialOf(p) < radialOf(q);
-      });
+  const auto nearest = std::ranges::min_element(
+      path, [](const math::Vec3d &p, const math::Vec3d &q) { return radialOf(p) < radialOf(q); });
   run.rMinOverRs = (nearest == path.end()) ? 0.0 : radialOf(*nearest) / run.rS;
   if (path.size() >= 2) {
     const math::Vec3d &before = path[path.size() - 2];
@@ -439,9 +437,8 @@ void expectCriticalRayWinds(const physics::RayTraceResult &r, double rS, double 
   EXPECT_TRUE(std::isfinite(r.redshift)) << "massSolar=" << massSolar;
   EXPECT_GE(r.redshift, 1.0) << "massSolar=" << massSolar;
   EXPECT_TRUE(std::isfinite(radialOf(r.finalPosition))) << "massSolar=" << massSolar;
-  const auto nearest = std::min_element(
-      r.path.begin(), r.path.end(),
-      [](const math::Vec3d &p, const math::Vec3d &q) { return radialOf(p) < radialOf(q); });
+  const auto nearest = std::ranges::min_element(
+      r.path, [](const math::Vec3d &p, const math::Vec3d &q) { return radialOf(p) < radialOf(q); });
   ASSERT_NE(nearest, r.path.end());
   // A 0.02 r_s step resolves the approach to the unstable orbit to 1e-3 r_s.
   EXPECT_NEAR(radialOf(*nearest) / rS, 1.5, 1e-3) << "massSolar=" << massSolar;

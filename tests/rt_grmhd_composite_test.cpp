@@ -268,10 +268,11 @@ bool testPipelineIntegration() {
     const double albedo = singleScatteringAlbedo(scattering, absorption);
     const double absorbedFraction = singleScatteringAlbedo(absorption, scattering);
     // Complementary fractions partition the same positive extinction coefficient.
-    pipelineOk = std::isfinite(albedo) && albedo >= 0.0 && albedo <= 1.0 &&
-                 std::abs(albedo + absorbedFraction - 1.0) < 1e-12 &&
-                 std::abs(albedo * (absorption + scattering) - scattering) <=
-                     1e-12 * scattering && pipelineOk;
+    pipelineOk =
+        std::isfinite(albedo) && albedo >= 0.0 && albedo <= 1.0 &&
+        std::abs(albedo + absorbedFraction - 1.0) < 1e-12 &&
+        std::abs((albedo * (absorption + scattering)) - scattering) <= 1e-12 * scattering &&
+        pipelineOk;
   }
   std::cout << "  Status: " << (pipelineOk ? "PASS" : "FAIL") << "\n\n";
   return pipelineOk;

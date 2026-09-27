@@ -72,16 +72,16 @@ struct ComplexVis {
   [[nodiscard]] double phase() const noexcept { return std::atan2(im, re); }
 
   /// Complex conjugate: V* = Re - i Im.  Flipping the baseline sign gives V*.
-  [[nodiscard]] ComplexVis conjugate() const noexcept { return {re, -im}; }
+  [[nodiscard]] ComplexVis conjugate() const noexcept { return {.re = re, .im = -im}; }
 
   /// Complex multiplication (used for bispectrum products).
   [[nodiscard]] ComplexVis operator*(const ComplexVis &o) const noexcept {
-    return {re * o.re - im * o.im, re * o.im + im * o.re};
+    return {.re = (re * o.re) - (im * o.im), .im = (re * o.im) + (im * o.re)};
   }
 
   /// Complex addition (used for superposition).
   [[nodiscard]] ComplexVis operator+(const ComplexVis &o) const noexcept {
-    return {re + o.re, im + o.im};
+    return {.re = re + o.re, .im = im + o.im};
   }
 };
 
@@ -166,9 +166,9 @@ struct UVW {
   const double cosD = std::cos(declination);
 
   return {
-      (dX * sinH + dY * cosH) / wavelength,
-      (-dX * sinD * cosH + dY * sinD * sinH + dZ * cosD) / wavelength,
-      (dX * cosD * cosH - dY * cosD * sinH + dZ * sinD) / wavelength,
+      .u = ((dX * sinH) + (dY * cosH)) / wavelength,
+      .v = ((-dX * sinD * cosH) + (dY * sinD * sinH) + (dZ * cosD)) / wavelength,
+      .w = ((dX * cosD * cosH) - (dY * cosD * sinH) + (dZ * sinD)) / wavelength,
   };
 }
 
@@ -195,7 +195,8 @@ uvTrack(const TelescopeStation &s1, const TelescopeStation &s2, double haBeg, do
   track.reserve(nPoints);
   const std::size_t denom = (nPoints > 1) ? nPoints - 1 : 1;
   for (std::size_t k = 0; k < nPoints; ++k) {
-    const double ha = haBeg + (haEnd - haBeg) * static_cast<double>(k) / static_cast<double>(denom);
+    const double ha =
+        haBeg + ((haEnd - haBeg) * static_cast<double>(k) / static_cast<double>(denom));
     const auto uvw = uvwCoordinates(s1, s2, ha, declination, wavelength);
     track.emplace_back(uvw.u, uvw.v);
   }
@@ -249,17 +250,17 @@ uvTrack(const TelescopeStation &s1, const TelescopeStation &s2, double haBeg, do
   for (std::size_t row = 0; row < imageSide; ++row) {
     const double y = (static_cast<double>(row) - halfN) * pixelSizeRad;
     for (std::size_t col = 0; col < imageSide; ++col) {
-      const double flux = image[row * imageSide + col];
+      const double flux = image[(row * imageSide) + col];
       if (flux == 0.0) {
         continue;
       }
       const double x = (static_cast<double>(col) - halfN) * pixelSizeRad;
-      const double phase = twoPi * (u * x + v * y);
+      const double phase = twoPi * ((u * x) + (v * y));
       re += flux * std::cos(phase);
       im -= flux * std::sin(phase); // convention: -2 pi i
     }
   }
-  return {re * dOmega, im * dOmega};
+  return {.re = re * dOmega, .im = im * dOmega};
 }
 
 /**
@@ -284,7 +285,7 @@ uvTrack(const TelescopeStation &s1, const TelescopeStation &s2, double haBeg, do
     return {};
   }
   const ComplexVis vuv = complexVisibility(image, imageSide, pixelSizeRad, u, v);
-  return {vuv.re / a00, vuv.im / a00};
+  return {.re = vuv.re / a00, .im = vuv.im / a00};
 }
 
 // ============================================================================
@@ -441,13 +442,25 @@ enum class EhtStation : int {
  */
 [[nodiscard]] inline TelescopeStation ehtStation(EhtStation id) {
   static constexpr std::array<TelescopeStation, 7> kStations = {{
-      {"ALMA", 2225144.2, -5441197.6, -2479303.4, 73.0}, // Chile
-      {"SPT", 0.0, 0.0, -6359587.3, 10.0},               // South Pole
-      {"JCMT", -5464075.2, -2493028.4, 2150612.2, 15.0}, // Hawaii
-      {"SMA", -5464075.2, -2493028.4, 2150612.2, 8.0},   // Hawaii (co-located)
-      {"SMT", -1828796.2, -5054406.8, 3427865.2, 10.0},  // Arizona
-      {"IRAM", 5088967.9, -301681.2, 3825012.3, 30.0},   // Spain
-      {"LMT", -768715.6, -5988507.1, 2063353.0, 50.0},   // Mexico
+      {.name = "ALMA", .x = 2225144.2, .y = -5441197.6, .z = -2479303.4, .diameter = 73.0}, // Chile
+      {.name = "SPT", .x = 0.0, .y = 0.0, .z = -6359587.3, .diameter = 10.0}, // South Pole
+      {.name = "JCMT",
+       .x = -5464075.2,
+       .y = -2493028.4,
+       .z = 2150612.2,
+       .diameter = 15.0}, // Hawaii
+      {.name = "SMA",
+       .x = -5464075.2,
+       .y = -2493028.4,
+       .z = 2150612.2,
+       .diameter = 8.0}, // Hawaii (co-located)
+      {.name = "SMT",
+       .x = -1828796.2,
+       .y = -5054406.8,
+       .z = 3427865.2,
+       .diameter = 10.0},                                                                 // Arizona
+      {.name = "IRAM", .x = 5088967.9, .y = -301681.2, .z = 3825012.3, .diameter = 30.0}, // Spain
+      {.name = "LMT", .x = -768715.6, .y = -5988507.1, .z = 2063353.0, .diameter = 50.0}, // Mexico
   }};
   const auto index = static_cast<std::size_t>(id);
   if (index >= kStations.size()) {

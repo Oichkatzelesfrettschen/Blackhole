@@ -313,10 +313,24 @@ struct RayState {
 // Test Cases
 // ============================================================================
 
-TestSuite schwarzschildTests("Schwarzschild Metric (a=0)");
-TestSuite kerrTests("Kerr Metric (a > 0)");
-TestSuite hamiltonianTests("Hamiltonian Constraint Preservation");
-TestSuite rk4Tests("RK4 Integration");
+// Each suite is built on first use, so its string allocation throws into a
+// caller instead of during static initialization.
+TestSuite &schwarzschildTests() {
+  static TestSuite suite("Schwarzschild Metric (a=0)");
+  return suite;
+}
+TestSuite &kerrTests() {
+  static TestSuite suite("Kerr Metric (a > 0)");
+  return suite;
+}
+TestSuite &hamiltonianTests() {
+  static TestSuite suite("Hamiltonian Constraint Preservation");
+  return suite;
+}
+TestSuite &rk4Tests() {
+  static TestSuite suite("RK4 Integration");
+  return suite;
+}
 
 // ============================================================================
 // Test Execution
@@ -360,7 +374,7 @@ void runSchwarzschildTests() {
     res.absoluteError =
         std::max(std::abs(cpuSigma - expectedSigma), std::abs(cpuDelta - expectedDelta));
 
-    schwarzschildTests.addResult(res);
+    schwarzschildTests().addResult(res);
   }
 
   // Test 2: Hamiltonian constraint for a null (photon) vector
@@ -389,7 +403,7 @@ void runSchwarzschildTests() {
     res.passed = res.relativeError < HAMILTONIAN_TOLERANCE;
     res.message = (res.passed ? "OK" : "Constraint violated");
 
-    hamiltonianTests.addResult(res);
+    hamiltonianTests().addResult(res);
   }
 }
 
@@ -412,7 +426,7 @@ void runKerrTests() {
     res.relativeError = 0.0; // Placeholder
     res.absoluteError = 0.0;
 
-    kerrTests.addResult(res);
+    kerrTests().addResult(res);
   }
 }
 
@@ -457,7 +471,7 @@ void runHamiltonianPreservationTests() {
   res.absoluteError = std::abs(finalH - initialH);
   res.passed = res.relativeError < 1e-3; // Allow some growth over 100 steps
 
-  hamiltonianTests.addResult(res);
+  hamiltonianTests().addResult(res);
 }
 
 void runRk4AccuracyTests() {
@@ -489,7 +503,7 @@ void runRk4AccuracyTests() {
   res.absoluteError = std::abs(dr);
   res.passed = (std::abs(dr) < 0.1) && (std::abs(dtheta) < 0.1);
 
-  rk4Tests.addResult(res);
+  rk4Tests().addResult(res);
 }
 
 // ============================================================================
@@ -510,25 +524,25 @@ int main(int argc, char** argv) {
   // Run all test suites
   if (filter.empty() || filter.contains("schwarzschild")) {
     runSchwarzschildTests();
-    schwarzschildTests.printSummary(verbose);
+    schwarzschildTests().printSummary(verbose);
   }
 
   if (filter.empty() || filter.contains("kerr")) {
     runKerrTests();
-    kerrTests.printSummary(verbose);
+    kerrTests().printSummary(verbose);
   }
 
   if (filter.empty() || filter.contains("hamiltonian")) {
     runHamiltonianPreservationTests();
-    hamiltonianTests.printSummary(verbose);
+    hamiltonianTests().printSummary(verbose);
   }
 
   if (filter.empty() || filter.contains("rk4")) {
     runRk4AccuracyTests();
-    rk4Tests.printSummary(verbose);
+    rk4Tests().printSummary(verbose);
   }
 
-  int const totalFailed = schwarzschildTests.failedCount() + kerrTests.failedCount() +
-                          hamiltonianTests.failedCount() + rk4Tests.failedCount();
+  int const totalFailed = schwarzschildTests().failedCount() + kerrTests().failedCount() +
+                          hamiltonianTests().failedCount() + rk4Tests().failedCount();
   return (totalFailed == 0) ? 0 : 1;
 }

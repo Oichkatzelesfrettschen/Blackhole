@@ -50,12 +50,16 @@ TEST(GpuTiming, SwapRecordsWhetherTheClosedFrameRanTheStage) {
 
 TEST(GpuTiming, SkippedStageDropsItsLastSample) {
   GpuTimer timer = sampledTimer(4.25);
-  EXPECT_FLOAT_EQ(timerSampleMs(timer), 4.25f);
+  float ms = 0.0f;
+  EXPECT_TRUE(timerSampleMs(timer, ms));
+  EXPECT_FLOAT_EQ(ms, 4.25f);
   // The frame closes without begin(): the next resolve reads nothing.
   timer.swap();
   timer.resolve();
   EXPECT_FALSE(timer.hasSample);
-  EXPECT_TRUE(physics::safeIsnan(timerSampleMs(timer)));
+  ms = -1.0f;
+  EXPECT_FALSE(timerSampleMs(timer, ms));
+  EXPECT_FLOAT_EQ(ms, -1.0f);
 }
 
 TEST(GpuTiming, HistoryStoresNanForStagesWithoutSamples) {

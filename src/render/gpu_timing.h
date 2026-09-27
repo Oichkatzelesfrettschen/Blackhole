@@ -83,12 +83,14 @@ struct TimingHistory {
   int offset = 0;
   int count = 0;
 
-  /** @brief Record one frame; a GPU stage without a sample stores NaN. */
+  /** @brief Record one frame; a GPU stage without a sample stores a quiet NaN
+   *         (physics::storeQuietNan), which ImPlot draws as a gap. */
   void push(float cpuMsSample, const GpuTimerSet &timers);
 };
 
-/** @brief @p timer's duration in ms, or NaN when it holds no sample. */
-float timerSampleMs(const GpuTimer &timer);
+/** @brief Writes @p timer's duration in ms to @p ms and returns true, or
+ *         returns false and leaves @p ms unchanged when it holds no sample. */
+bool timerSampleMs(const GpuTimer &timer, float &ms);
 
 /// Header of gpu_timing.csv; gpu_tesseract_ms trails the columns that
 /// predate it.

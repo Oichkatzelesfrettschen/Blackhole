@@ -104,10 +104,9 @@ size_t TileCache::currentBytes() const noexcept {
 
 void TileCache::evictLRU() {
   // Caller must hold mutex_.
-  auto oldest = std::min_element(cache_.begin(), cache_.end(),
-                                 [](const auto &a, const auto &b) {
-                                   return a.second.lastAccess < b.second.lastAccess;
-                                 });
+  auto oldest = std::ranges::min_element(cache_, [](const auto &a, const auto &b) {
+    return a.second.lastAccess < b.second.lastAccess;
+  });
   if (oldest != cache_.end()) {
     currentBytes_ -= oldest->second.tile->sizeBytes();
     cache_.erase(oldest);

@@ -21,6 +21,7 @@
 #ifndef PHYSICS_VERIFIED_NULL_CONSTRAINT_HPP
 #define PHYSICS_VERIFIED_NULL_CONSTRAINT_HPP
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <utility>
@@ -51,8 +52,8 @@ namespace verified {
 [[nodiscard]] constexpr double nullConstraintFunction(const MetricComponents &g,
                                                       const StateVector &s) noexcept {
   // Derived from Rocq four_norm definition
-  return g.gTt * s.v0 * s.v0 + g.gRr * s.v1 * s.v1 + g.gThth * s.v2 * s.v2 + g.gPhph * s.v3 * s.v3 +
-         2.0 * g.gTph * s.v0 * s.v3;
+  return (g.gTt * s.v0 * s.v0) + (g.gRr * s.v1 * s.v1) + (g.gThth * s.v2 * s.v2) +
+         (g.gPhph * s.v3 * s.v3) + (2.0 * g.gTph * s.v0 * s.v3);
 }
 
 /**
@@ -200,7 +201,8 @@ namespace verified {
 [[nodiscard]] inline StateVector renormalizeNull(const MetricComponents &g,
                                                  const StateVector &s) noexcept {
   // Compute spatial contribution: g_rr*v1^2 + g_thth*v2^2 + g_phph*v3^2
-  const double spatialNorm = g.gRr * s.v1 * s.v1 + g.gThth * s.v2 * s.v2 + g.gPhph * s.v3 * s.v3;
+  const double spatialNorm =
+      (g.gRr * s.v1 * s.v1) + (g.gThth * s.v2 * s.v2) + (g.gPhph * s.v3 * s.v3);
 
   // Solve for v0: g_tt * v0^2 = -spatial_norm
   // v0 = sqrt(-spatial_norm / g_tt) = sqrt(spatial_norm / (-g_tt))
@@ -226,10 +228,10 @@ namespace verified {
 [[nodiscard]] inline StateVector renormalizeNullKerr(const MetricComponents &g,
                                                      const StateVector &s) noexcept {
   // Spatial contribution (excluding v3 cross term)
-  const double spatialRrThth = g.gRr * s.v1 * s.v1 + g.gThth * s.v2 * s.v2;
+  const double spatialRrThth = (g.gRr * s.v1 * s.v1) + (g.gThth * s.v2 * s.v2);
 
   // Full spatial including phi
-  const double spatialFull = spatialRrThth + g.gPhph * s.v3 * s.v3;
+  const double spatialFull = spatialRrThth + (g.gPhph * s.v3 * s.v3);
 
   // Quadratic formula for v0
   // g_tt*v0^2 + 2*g_tph*v3*v0 + spatial_full = 0
@@ -239,7 +241,7 @@ namespace verified {
   const double c = spatialFull;
 
   // Discriminant: b^2 - 4ac
-  const double discriminant = b * b - 4.0 * a * c;
+  const double discriminant = (b * b) - (4.0 * a * c);
 
   // v0 = (-b + sqrt(disc)) / (2a)  [take positive root for future-directed]
   // Since a = g_tt < 0, we need the sign that gives v0 > 0
@@ -311,7 +313,7 @@ namespace verified {
  */
 [[nodiscard]] constexpr double massShellConstraint(const MetricComponents &g, const StateVector &s,
                                                    double m) noexcept {
-  return nullConstraintFunction(g, s) + m * m;
+  return nullConstraintFunction(g, s) + (m * m);
 }
 
 /**
@@ -342,9 +344,10 @@ namespace verified {
                                                     double m) noexcept {
   // For massive: g_tt*v0^2 + spatial = -m^2
   // v0^2 = (spatial + m^2) / (-g_tt)
-  const double spatialNorm = g.gRr * s.v1 * s.v1 + g.gThth * s.v2 * s.v2 + g.gPhph * s.v3 * s.v3;
+  const double spatialNorm =
+      (g.gRr * s.v1 * s.v1) + (g.gThth * s.v2 * s.v2) + (g.gPhph * s.v3 * s.v3);
 
-  const double newV0 = std::sqrt((spatialNorm + m * m) / (-g.gTt));
+  const double newV0 = std::sqrt((spatialNorm + (m * m)) / (-g.gTt));
 
   return StateVector{s.x0, s.x1, s.x2, s.x3, newV0, s.v1, s.v2, s.v3};
 }
@@ -468,9 +471,7 @@ struct ConstraintStats {
    */
   constexpr void update(double constraint, bool renormalized) noexcept {
     const double absC = std::abs(constraint);
-    if (absC > maxConstraint) {
-      maxConstraint = absC;
-    }
+    maxConstraint = std::max(maxConstraint, absC);
     totalDrift += absC;
     if (renormalized) {
       ++renormCount;

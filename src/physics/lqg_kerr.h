@@ -68,7 +68,7 @@ namespace physics {
  */
 [[nodiscard]] constexpr double lqgEffectiveMass(double r, double mass, double l) noexcept {
   const double r3 = r * r * r;
-  const double denom = r3 + 2.0 * l * l * mass;
+  const double denom = r3 + (2.0 * l * l * mass);
   return mass * r3 / denom;
 }
 
@@ -85,7 +85,7 @@ namespace physics {
  */
 [[nodiscard]] constexpr double lqgCorrection(double r, double mass, double l) noexcept {
   const double r3 = r * r * r;
-  const double denom = r3 + 2.0 * l * l * mass;
+  const double denom = r3 + (2.0 * l * l * mass);
   return 2.0 * l * l * mass / denom;
 }
 
@@ -109,7 +109,7 @@ namespace physics {
  */
 [[nodiscard]] inline double lqgDelta(double r, double mass, double a, double l) noexcept {
   const double mEff = lqgEffectiveMass(r, mass, l);
-  return r * r - 2.0 * mEff * r + a * a;
+  return (r * r) - (2.0 * mEff * r) + (a * a);
 }
 
 // ============================================================================
@@ -129,7 +129,7 @@ namespace physics {
  */
 [[nodiscard]] inline double lqgSigma(double r, double a, double theta) noexcept {
     const double c = std::cos(theta);
-    return r * r + a * a * c * c;
+    return (r * r) + (a * a * c * c);
 }
 
 /**
@@ -143,10 +143,10 @@ namespace physics {
  * @return A [length^4].
  */
 [[nodiscard]] inline double lqgA(double r, double theta, double mass, double a, double l) noexcept {
-  const double r2a2 = r * r + a * a;
+  const double r2a2 = (r * r) + (a * a);
   const double s = std::sin(theta);
   const double delta = lqgDelta(r, mass, a, l);
-  return r2a2 * r2a2 - a * a * delta * s * s;
+  return (r2a2 * r2a2) - (a * a * delta * s * s);
 }
 
 /**
@@ -167,7 +167,7 @@ namespace physics {
   const double sigma = lqgSigma(r, a, theta);
   const double delta = lqgDelta(r, mass, a, l);
   const double s = std::sin(theta);
-  return -(delta - a * a * s * s) / sigma;
+  return -(delta - (a * a * s * s)) / sigma;
 }
 
 /**
@@ -267,7 +267,7 @@ namespace physics {
                                             double tolerance = 1.0e-12) noexcept {
   // For l = 0 use the exact Kerr formula.
   if (l == 0.0) {
-    const double disc = mass * mass - a * a;
+    const double disc = (mass * mass) - (a * a);
     if (disc < 0.0) {
       return std::numeric_limits<double>::quiet_NaN();
     }
@@ -285,7 +285,7 @@ namespace physics {
   // negative to positive.  Use r_lo = M (always between horizons for
   // sub-extremal parameters) and r_hi = 3*M + a + 1 (always outside).
   const double lowerRadius = mass;
-  const double upperRadius = 3.0 * mass + a + 1.0;
+  const double upperRadius = (3.0 * mass) + a + 1.0;
 
   if (lqgDelta(lowerRadius, mass, a, l) >= 0.0 || lqgDelta(upperRadius, mass, a, l) <= 0.0) {
     return std::numeric_limits<double>::quiet_NaN();
@@ -330,9 +330,9 @@ namespace physics {
   // First-order LQG correction: d(M_eff)/dl evaluated at r_ph_kerr.
   // DeltaM = M - M_eff(r_ph) = 2 l^2 M / (r^3 + 2 l^2 M)
   const double r3 = kerrPhotonRadius * kerrPhotonRadius * kerrPhotonRadius;
-  const double corr = 2.0 * l * l * mass / (r3 + 2.0 * l * l * mass);
+  const double corr = 2.0 * l * l * mass / (r3 + (2.0 * l * l * mass));
   // Shadow shifts inward by ~ corr * M (rough linear estimate).
-  return kerrPhotonRadius * (1.0 - 0.5 * corr);
+  return kerrPhotonRadius * (1.0 - (0.5 * corr));
 }
 
 } // namespace physics

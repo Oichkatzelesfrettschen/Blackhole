@@ -40,6 +40,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <utility>
 
 #include "grmhd_gpu_uploader.h"
 
@@ -129,9 +130,8 @@ int GRMHDGpuUploader::uploadPendingTiles(int maxPerFrame) {
         }
 
         const bool isFullFrame =
-            (static_cast<int>(tile->width)  == texWidth_  &&
-             static_cast<int>(tile->height) == texHeight_ &&
-             static_cast<int>(tile->depth)  == texDepth_);
+            (std::cmp_equal(tile->width, texWidth_) && std::cmp_equal(tile->height, texHeight_) &&
+             std::cmp_equal(tile->depth, texDepth_));
 
         if (isFullFrame && tile->data.size() == nVoxels * 4) {
             // Fast path: tile data is already RGBA32F for the full texture.
@@ -215,25 +215,25 @@ void GRMHDGpuUploader::packRGBA(const blackhole::GRMHDTile& tile,
 
     // Pack 7+ GRMHD variables -> (rho, uu, |B|, |u|).
     for (std::size_t v = 0; v < nVoxels; ++v) {
-        const float* vx = src + v * srcChannels;
+      const float *vx = src + (v * srcChannels);
 
-        const float rho = (srcChannels > 0) ? vx[0] : 0.0f;
-        const float uu  = (srcChannels > 1) ? vx[1] : 0.0f;
-        const float u1  = (srcChannels > 2) ? vx[2] : 0.0f;
-        const float u2  = (srcChannels > 3) ? vx[3] : 0.0f;
-        const float u3  = (srcChannels > 4) ? vx[4] : 0.0f;
-        const float b1 = (srcChannels > 5) ? vx[5] : 0.0f;
-        const float b2 = (srcChannels > 6) ? vx[6] : 0.0f;
-        const float b3 = (srcChannels > 7) ? vx[7] : 0.0f;
+      const float rho = (srcChannels > 0) ? vx[0] : 0.0f;
+      const float uu = (srcChannels > 1) ? vx[1] : 0.0f;
+      const float u1 = (srcChannels > 2) ? vx[2] : 0.0f;
+      const float u2 = (srcChannels > 3) ? vx[3] : 0.0f;
+      const float u3 = (srcChannels > 4) ? vx[4] : 0.0f;
+      const float b1 = (srcChannels > 5) ? vx[5] : 0.0f;
+      const float b2 = (srcChannels > 6) ? vx[6] : 0.0f;
+      const float b3 = (srcChannels > 7) ? vx[7] : 0.0f;
 
-        const float bmag = std::sqrt(b1 * b1 + b2 * b2 + b3 * b3);
-        const float umag = std::sqrt(u1*u1 + u2*u2 + u3*u3);
+      const float bmag = std::sqrt((b1 * b1) + (b2 * b2) + (b3 * b3));
+      const float umag = std::sqrt((u1 * u1) + (u2 * u2) + (u3 * u3));
 
-        float* out = dst + v * 4;
-        out[0] = rho;
-        out[1] = uu;
-        out[2] = bmag;
-        out[3] = umag;
+      float *out = dst + (v * 4);
+      out[0] = rho;
+      out[1] = uu;
+      out[2] = bmag;
+      out[3] = umag;
     }
 }
 

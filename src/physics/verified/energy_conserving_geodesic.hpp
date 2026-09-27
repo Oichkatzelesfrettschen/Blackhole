@@ -82,7 +82,7 @@ struct ConservedQuantities {
 [[nodiscard]] inline double computeEnergy(const MetricComponents &g,
                                           const StateVector &state) noexcept {
   // E = -(g_tt * v_t + g_tφ * v_φ)
-  return -(g.gTt * state.v0 + g.gTph * state.v3);
+  return -((g.gTt * state.v0) + (g.gTph * state.v3));
 }
 
 /**
@@ -100,7 +100,7 @@ struct ConservedQuantities {
 [[nodiscard]] inline double computeAngularMomentum(const MetricComponents &g,
                                                    const StateVector &state) noexcept {
   // L = g_φφ * v_φ + g_tφ * v_t
-  return g.gPhph * state.v3 + g.gTph * state.v0;
+  return (g.gPhph * state.v3) + (g.gTph * state.v0);
 }
 
 /**
@@ -120,9 +120,9 @@ struct ConservedQuantities {
 [[nodiscard]] inline double computeMetricNorm(const MetricComponents &g,
                                               const StateVector &state) noexcept {
   // m² = g_tt*v_t² + 2*g_tφ*v_t*v_φ + g_rr*v_r² + g_θθ*v_θ² + g_φφ*v_φ²
-  double const result = g.gTt * state.v0 * state.v0 + 2.0 * g.gTph * state.v0 * state.v3 +
-                        g.gRr * state.v1 * state.v1 + g.gThth * state.v2 * state.v2 +
-                        g.gPhph * state.v3 * state.v3;
+  double const result = (g.gTt * state.v0 * state.v0) + (2.0 * g.gTph * state.v0 * state.v3) +
+                        (g.gRr * state.v1 * state.v1) + (g.gThth * state.v2 * state.v2) +
+                        (g.gPhph * state.v3 * state.v3);
   return result;
 }
 
@@ -170,7 +170,7 @@ struct ConservedQuantities {
   double const m2 = computeMetricNorm(g, state);
 
   // Q = p_θ² + cos²(θ) * (a²(m² - E²) + L²/sin²(θ))
-  double const q = pTheta * pTheta + cos2 * (a * a * (m2 - e * e) + l * l / sin2);
+  double const q = (pTheta * pTheta) + (cos2 * ((a * a * (m2 - (e * e))) + (l * l / sin2)));
 
   return std::max(0.0, q); // Enforce Q ≥ 0
 }
@@ -232,7 +232,7 @@ struct ConservedQuantities {
     return state;
   }
 
-  const double spatialRt = g.gRr * state.v1 * state.v1 + g.gThth * state.v2 * state.v2;
+  const double spatialRt = (g.gRr * state.v1 * state.v1) + (g.gThth * state.v2 * state.v2);
   if (spatialRt > 0.0) {
     const double alphaSquared = (targetM2 - currentNorm + spatialRt) / spatialRt;
     if (alphaSquared >= 0.0) {
@@ -249,8 +249,8 @@ struct ConservedQuantities {
   // accurate; at qa = 0 the quadratic is linear with the single root qc / q.
   const double qa = g.gTt;
   const double qb = 2.0 * g.gTph * state.v3;
-  const double qc = spatialRt + g.gPhph * state.v3 * state.v3 - targetM2;
-  const double discriminant = qb * qb - 4.0 * qa * qc;
+  const double qc = spatialRt + (g.gPhph * state.v3 * state.v3) - targetM2;
+  const double discriminant = (qb * qb) - (4.0 * qa * qc);
   if (discriminant < 0.0) {
     return state;
   }

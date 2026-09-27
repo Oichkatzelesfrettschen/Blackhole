@@ -140,7 +140,7 @@ bool testMemoryAngularFactor() {
 
   // Exact ratio should be 18/17
   const double ratio = hFaceOn / hEdgeOn;
-  check(std::abs(ratio - 18.0 / 17.0) < 1.0e-10, "angular factor ratio = 18/17",
+  check(std::abs(ratio - (18.0 / 17.0)) < 1.0e-10, "angular factor ratio = 18/17",
         std::format("ratio = {:.6f}, expected 18/17 = {:.6f}", ratio, 18.0 / 17.0));
   return true;
 }
@@ -287,7 +287,7 @@ bool testChiPDownweighting() {
   check(cp > 0.0, "chiP > 0 (some precession from secondary spin)");
 
   // Verify the exact ratio: 0.5 * 5 / 5.5 = 5/11
-  const double ratio = 0.5 * (4.0 * 0.5 + 3.0) / (4.0 + 3.0 * 0.5); // = 5/11
+  const double ratio = 0.5 * ((4.0 * 0.5) + 3.0) / (4.0 + (3.0 * 0.5)); // = 5/11
   const double expected = ratio * cp2;
   check(std::abs(cp - expected) < 1.0e-12, "exact chiP formula at q=0.5",
         std::format("chiP = {:.6f}, expected {:.6f}", cp, expected));
@@ -385,7 +385,7 @@ bool testPolarizationIsometry() {
 
   const double h0 = 1.2e-21;
   const double hCross = 0.8e-21;
-  const double inv0 = h0 * h0 + hCross * hCross; // reference invariant
+  const double inv0 = (h0 * h0) + (hCross * hCross); // reference invariant
 
   // Test at several precession angles
   const double angles[] = {
@@ -395,7 +395,7 @@ bool testPolarizationIsometry() {
     double hcPrec = 0.0;
     precessedPolarizations(h0, hCross, alpha, hpPrec, hcPrec);
 
-    const double inv = hpPrec * hpPrec + hcPrec * hcPrec;
+    const double inv = (hpPrec * hpPrec) + (hcPrec * hcPrec);
     const double err = std::abs(inv - inv0) / inv0;
 
     check(err < 1.0e-14, "polarization invariant preserved",

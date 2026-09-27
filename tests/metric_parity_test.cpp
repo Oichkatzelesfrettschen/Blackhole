@@ -39,6 +39,8 @@ using namespace verified;
 // Test Infrastructure
 // ============================================================================
 
+namespace {
+
 struct TestResult {
   std::string testName;
   bool passed;
@@ -98,7 +100,6 @@ public:
 // Schwarzschild Tests
 // ============================================================================
 
-namespace {
 
 void testSchwarzschild(TestSuite &suite) {
   std::cout << "\n=== SCHWARZSCHILD METRIC TESTS ===\n";

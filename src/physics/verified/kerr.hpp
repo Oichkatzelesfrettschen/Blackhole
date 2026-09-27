@@ -51,7 +51,7 @@ namespace verified {
  */
 [[nodiscard]] inline double kerrSigma(double r, double theta, double a) noexcept {
   const double cosTheta = std::cos(theta);
-  return r * r + a * a * cosTheta * cosTheta;
+  return (r * r) + (a * a * cosTheta * cosTheta);
 }
 
 /**
@@ -66,7 +66,7 @@ namespace verified {
  * @return Delta
  */
 [[nodiscard]] constexpr double kerrDelta(double r, double m, double a) noexcept {
-  return r * r - 2.0 * m * r + a * a;
+  return (r * r) - (2.0 * m * r) + (a * a);
 }
 
 /**
@@ -82,10 +82,10 @@ namespace verified {
  * @return A
  */
 [[nodiscard]] inline double kerrA(double r, double theta, double m, double a) noexcept {
-  const double r2PlusA2 = r * r + a * a;
+  const double r2PlusA2 = (r * r) + (a * a);
   const double sinTheta = std::sin(theta);
   const double delta = kerrDelta(r, m, a);
-  return r2PlusA2 * r2PlusA2 - a * a * delta * sinTheta * sinTheta;
+  return (r2PlusA2 * r2PlusA2) - (a * a * delta * sinTheta * sinTheta);
 }
 
 // ============================================================================
@@ -103,7 +103,7 @@ namespace verified {
  * @return r_+ outer horizon radius
  */
 [[nodiscard]] inline double outerHorizon(double m, double a) noexcept {
-  return m + std::sqrt(m * m - a * a);
+  return m + std::sqrt((m * m) - (a * a));
 }
 
 /**
@@ -117,7 +117,7 @@ namespace verified {
  * @return r_- inner horizon radius
  */
 [[nodiscard]] inline double innerHorizon(double m, double a) noexcept {
-  return m - std::sqrt(m * m - a * a);
+  return m - std::sqrt((m * m) - (a * a));
 }
 
 // ============================================================================
@@ -139,7 +139,7 @@ namespace verified {
  */
 [[nodiscard]] inline double ergosphereRadius(double theta, double m, double a) noexcept {
   const double cosTheta = std::cos(theta);
-  return m + std::sqrt(m * m - a * a * cosTheta * cosTheta);
+  return m + std::sqrt((m * m) - (a * a * cosTheta * cosTheta));
 }
 
 // ============================================================================
@@ -180,11 +180,11 @@ namespace verified {
  */
 [[nodiscard]] inline double kerrZ1(double m, double a) noexcept {
   const double aOverM = a / m;
-  const double oneMinusA2M2 = 1.0 - aOverM * aOverM;
+  const double oneMinusA2M2 = 1.0 - (aOverM * aOverM);
   const double cbrtFactor = std::cbrt(oneMinusA2M2);
   const double cbrtPlus = std::cbrt(1.0 + aOverM);
   const double cbrtMinus = std::cbrt(1.0 - aOverM);
-  return 1.0 + cbrtFactor * (cbrtPlus + cbrtMinus);
+  return 1.0 + (cbrtFactor * (cbrtPlus + cbrtMinus));
 }
 
 /**
@@ -196,7 +196,7 @@ namespace verified {
 [[nodiscard]] inline double kerrZ2(double m, double a) noexcept {
   const double aOverM = a / m;
   const double z1 = kerrZ1(m, a);
-  return std::sqrt(3.0 * aOverM * aOverM + z1 * z1);
+  return std::sqrt((3.0 * aOverM * aOverM) + (z1 * z1));
 }
 
 /**
@@ -222,7 +222,7 @@ namespace verified {
 [[nodiscard]] inline double kerrIscoPrograde(double m, double a) noexcept {
   const double z1 = kerrZ1(m, a);
   const double z2 = kerrZ2(m, a);
-  const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + 2.0 * z2));
+  const double sqrtTerm = std::sqrt((3.0 - z1) * (3.0 + z1 + (2.0 * z2)));
   return (a >= 0.0) ? m * (3.0 + z2 - sqrtTerm) : m * (3.0 + z2 + sqrtTerm);
 }
 
@@ -290,7 +290,7 @@ namespace verified {
  */
 [[nodiscard]] inline double kerrGTt(double r, double theta, double m, double a) noexcept {
   const double sigma = kerrSigma(r, theta, a);
-  return -(1.0 - 2.0 * m * r / sigma);
+  return -(1.0 - (2.0 * m * r / sigma));
 }
 
 /**
@@ -354,8 +354,8 @@ namespace verified {
   const double sigma = kerrSigma(r, theta, a);
   const double delta = kerrDelta(r, m, a);
   const double cosTheta = std::cos(theta);
-  const double r2MinusA2cos2 = r * r - a * a * cosTheta * cosTheta;
-  const double r2PlusA2 = r * r + a * a;
+  const double r2MinusA2cos2 = (r * r) - (a * a * cosTheta * cosTheta);
+  const double r2PlusA2 = (r * r) + (a * a);
   return m * r2MinusA2cos2 / (sigma * sigma * delta) * r2PlusA2;
 }
 
@@ -372,7 +372,7 @@ namespace verified {
   const double sigma = kerrSigma(r, theta, a);
   const double delta = kerrDelta(r, m, a);
   const double cosTheta = std::cos(theta);
-  const double r2MinusA2cos2 = r * r - a * a * cosTheta * cosTheta;
+  const double r2MinusA2cos2 = (r * r) - (a * a * cosTheta * cosTheta);
   const double sigma3 = sigma * sigma * sigma;
   return m * delta * r2MinusA2cos2 / sigma3;
 }

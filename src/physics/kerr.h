@@ -386,7 +386,7 @@ namespace physics {
 [[nodiscard]] inline double kerrZamoLapse(double r, double theta, double mass, double a) {
   const double rS = schwarzschildRadius(mass);
   const double delta = kerrDelta(r, a, rS);
-  const double rPlus = 0.5 * rS + std::sqrt(std::fmax(0.0, (0.25 * rS * rS) - (a * a)));
+  const double rPlus = (0.5 * rS) + std::sqrt(std::fmax(0.0, (0.25 * rS * rS) - (a * a)));
   if (!(delta > 0.0) || !(r > rPlus)) {
     return 0.0;
   }

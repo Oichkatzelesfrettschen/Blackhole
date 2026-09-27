@@ -64,7 +64,8 @@ void testUniformSlabSingleStep() {
     const double alpha = tau / kLength;
     for (double const background : {0.0, 0.3 * kSource, 4.0 * kSource}) {
       const physics::RteState state =
-          physics::rteStep(physics::RteState{background, 0.0, 0.0}, kSource * alpha, alpha, kLength);
+          physics::rteStep(physics::RteState{.iNu = background, .tau = 0.0, .sCm = 0.0},
+                           kSource * alpha, alpha, kLength);
       const double expected = slabSolution(kSource, tau, background);
       check(std::abs(state.iNu - expected) <= stepBound(kSource, tau, background),
             "uniform slab I", expected, state.iNu);
@@ -78,14 +79,14 @@ void testUniformSlabSingleStep() {
 void testPureLimits() {
   constexpr double kBackground = 7.0;
   for (double const tau : {1.0e-3, 0.7, 12.0}) {
-    const physics::RteState state =
-        physics::rteStep(physics::RteState{kBackground, 0.0, 0.0}, 0.0, tau, 1.0);
+    const physics::RteState state = physics::rteStep(
+        physics::RteState{.iNu = kBackground, .tau = 0.0, .sCm = 0.0}, 0.0, tau, 1.0);
     const double expected = kBackground * std::exp(-tau);
     check(std::abs(state.iNu - expected) <= 1.0e-13 * kBackground, "pure absorption", expected,
           state.iNu);
   }
-  const physics::RteState emitted =
-      physics::rteStep(physics::RteState{kBackground, 0.0, 0.0}, 3.0e-3, 0.0, 250.0);
+  const physics::RteState emitted = physics::rteStep(
+      physics::RteState{.iNu = kBackground, .tau = 0.0, .sCm = 0.0}, 3.0e-3, 0.0, 250.0);
   check(std::abs(emitted.iNu - (kBackground + 0.75)) <= 1.0e-15, "pure emission", 7.75, emitted.iNu);
   check(emitted.tau == 0.0, "pure emission tau", 0.0, emitted.tau);
 }
@@ -104,12 +105,14 @@ void testLayerComposition() {
     double tauTotal;
     int layers;
   };
-  for (const Case c : {Case{3.0, 1000}, Case{0.05, 1000}}) {
+  for (const Case c :
+       {Case{.tauTotal = 3.0, .layers = 1000}, Case{.tauTotal = 0.05, .layers = 1000}}) {
     const double tauSegment = c.tauTotal / c.layers;
     const std::vector<physics::RteSample> path(
-        static_cast<std::size_t>(c.layers), physics::RteSample{kSource * tauSegment, tauSegment, 1.0});
-    const physics::RteState state =
-        physics::integrateRtePath(path, physics::RteState{kBackground, 0.0, 0.0});
+        static_cast<std::size_t>(c.layers),
+        physics::RteSample{.jNu = kSource * tauSegment, .alphaNu = tauSegment, .dsCm = 1.0});
+    const physics::RteState state = physics::integrateRtePath(
+        path, physics::RteState{.iNu = kBackground, .tau = 0.0, .sCm = 0.0});
     const double expected = slabSolution(kSource, c.tauTotal, kBackground);
     const double bound = (tauSegment >= 1.0e-4)
                              ? 1.0e-12 * kBackground
@@ -127,10 +130,11 @@ void testTwoLayerSlab() {
   constexpr double kTauFar = 1.3;
   constexpr double kSourceNear = 0.8;
   constexpr double kTauNear = 0.6;
-  const std::vector<physics::RteSample> path{{kSourceFar * kTauFar / 2.0, kTauFar / 2.0, 2.0},
-                                             {kSourceNear * kTauNear / 3.0, kTauNear / 3.0, 3.0}};
-  const physics::RteState state =
-      physics::integrateRtePath(path, physics::RteState{kBackground, 0.0, 0.0});
+  const std::vector<physics::RteSample> path{
+      {.jNu = kSourceFar * kTauFar / 2.0, .alphaNu = kTauFar / 2.0, .dsCm = 2.0},
+      {.jNu = kSourceNear * kTauNear / 3.0, .alphaNu = kTauNear / 3.0, .dsCm = 3.0}};
+  const physics::RteState state = physics::integrateRtePath(
+      path, physics::RteState{.iNu = kBackground, .tau = 0.0, .sCm = 0.0});
   const double afterFar = slabSolution(kSourceFar, kTauFar, kBackground);
   const double expected = slabSolution(kSourceNear, kTauNear, afterFar);
   check(std::abs(state.iNu - expected) <= 1.0e-13 * kSourceFar, "two-layer slab", expected,
@@ -155,10 +159,10 @@ void testLinearOpacityProfile() {
     for (int i = 0; i < layers; ++i) {
       const double sMid = (static_cast<double>(i) + 0.5) * ds;
       const double alpha = kAlpha0 * (1.0 + (sMid / kLength));
-      path.push_back({kSource * alpha, alpha, ds});
+      path.push_back({.jNu = kSource * alpha, .alphaNu = alpha, .dsCm = ds});
     }
-    const physics::RteState state =
-        physics::integrateRtePath(path, physics::RteState{kBackground, 0.0, 0.0});
+    const physics::RteState state = physics::integrateRtePath(
+        path, physics::RteState{.iNu = kBackground, .tau = 0.0, .sCm = 0.0});
     const double tau = 1.5 * kAlpha0 * kLength;
     const double expected = slabSolution(kSource, tau, kBackground);
     check(std::abs(state.iNu - expected) <= 1.0e-13, "linear opacity profile", expected, state.iNu);
@@ -172,8 +176,8 @@ void testKirchhoffThermalSlab() {
   constexpr double kTemperature = 5.0e9;
   const double planck = physics::planckFunction(kNu, kTemperature);
   constexpr double kAlpha = 1.0e-3;
-  const physics::RteState state =
-      physics::rteStep(physics::RteState{0.0, 0.0, 0.0}, kAlpha * planck, kAlpha, 5.0e4);
+  const physics::RteState state = physics::rteStep(
+      physics::RteState{.iNu = 0.0, .tau = 0.0, .sCm = 0.0}, kAlpha * planck, kAlpha, 5.0e4);
   check(std::abs(state.iNu - planck) <= 1.0e-13 * planck, "Kirchhoff thick slab", planck,
         state.iNu);
 }
@@ -186,7 +190,7 @@ void testGravitationalTransform() {
   constexpr double kSource = 1.7;
   constexpr double kAlpha = 0.02;
   constexpr double kLength = 3.0;
-  const physics::RteState start{0.9, 0.0, 0.0};
+  const physics::RteState start{.iNu = 0.9, .tau = 0.0, .sCm = 0.0};
   const physics::RteState unit = physics::rteStepGR(start, kSource * kAlpha, kAlpha, kLength, 1.0);
   const physics::RteState flat = physics::rteStep(start, kSource * kAlpha, kAlpha, kLength);
   check(unit.iNu == flat.iNu, "rteStepGR g = 1", flat.iNu, unit.iNu);
@@ -206,8 +210,8 @@ void testBoundedApproach() {
   constexpr double kSource = 10.0;
   for (double const background : {0.0, 25.0}) {
     for (double const tau : {1.0e-30, 1.0e-3, 1.0, 1.0e4}) {
-      const physics::RteState state =
-          physics::rteStep(physics::RteState{background, 0.0, 0.0}, kSource * tau, tau, 1.0);
+      const physics::RteState state = physics::rteStep(
+          physics::RteState{.iNu = background, .tau = 0.0, .sCm = 0.0}, kSource * tau, tau, 1.0);
       const double lo = std::fmin(background, kSource);
       const double hi = std::fmax(background, kSource);
       check(physics::safeIsfinite(state.iNu) && state.iNu >= lo - 1.0e-12 && state.iNu <= hi + 1.0e-12,

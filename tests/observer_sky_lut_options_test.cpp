@@ -25,7 +25,7 @@ namespace {
 /** @brief parseOptions over a fixed argv built from string literals. */
 std::optional<Options> parse(const std::vector<const char *> &args) {
   std::vector<char *> argv(args.size());
-  std::transform(args.begin(), args.end(), argv.begin(), [](const char *arg) {
+  std::ranges::transform(args, argv.begin(), [](const char *arg) {
     return const_cast<char *>(arg); // NOLINT(cppcoreguidelines-pro-type-const-cast)
                                     // -- parseOptions never writes through argv
   });

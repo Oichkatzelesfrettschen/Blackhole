@@ -35,11 +35,11 @@ struct Row {
 // BPT 1972 closed forms at |a*| = 0.9 and 0.5 (mpmath, 15 digits); the
 // co-rotating value applies where a* > 0, the counter-rotating value where a* < 0.
 constexpr Row K_TABLE[] = {
-    {-0.9, 8.71735227960649, 3.91026793910304},
-    {-0.5, 7.55458471451236, 3.53208888623796},
-    {0.0, 6.0, 3.0},
-    {0.5, 4.23300252953083, 2.34729635533386},
-    {0.9, 2.32088304176189, 1.55785462742338},
+    {.aStar = -0.9, .iscoProgradeOverM = 8.71735227960649, .photonProgradeOverM = 3.91026793910304},
+    {.aStar = -0.5, .iscoProgradeOverM = 7.55458471451236, .photonProgradeOverM = 3.53208888623796},
+    {.aStar = 0.0, .iscoProgradeOverM = 6.0, .photonProgradeOverM = 3.0},
+    {.aStar = 0.5, .iscoProgradeOverM = 4.23300252953083, .photonProgradeOverM = 2.34729635533386},
+    {.aStar = 0.9, .iscoProgradeOverM = 2.32088304176189, .photonProgradeOverM = 1.55785462742338},
 };
 
 /** @brief Every ISCO and photon-orbit function agrees with one BPT row and its reflection. */
@@ -59,7 +59,7 @@ void expectSignedSpinRow(const Row &row) {
   // Both radii sit on the same side of their a = 0 values: co-rotation
   // pulls both inward, counter-rotation pushes both outward.
   const double iscoShift = row.iscoProgradeOverM - 6.0;
-  const double photonShift = physics::kerrPhotonOrbitPrograde(mass, a) / mGeom - 3.0;
+  const double photonShift = (physics::kerrPhotonOrbitPrograde(mass, a) / mGeom) - 3.0;
   EXPECT_GE(iscoShift * photonShift, 0.0) << "a*=" << row.aStar;
 
   // phi -> -phi reflection: retrograde at a equals prograde at -a.

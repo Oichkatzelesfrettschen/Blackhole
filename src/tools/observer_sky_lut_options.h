@@ -64,6 +64,7 @@ inline std::optional<std::size_t> parseCount(std::string_view text, std::size_t 
                                              std::size_t high) {
   std::size_t value = 0;
   const char *last = text.data() + text.size();
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): from_chars is bounded
   const auto [end, error] = std::from_chars(text.data(), last, value);
   if (error != std::errc{} || end != last || value < low || value > high) {
     return std::nullopt;
@@ -75,6 +76,7 @@ inline std::optional<std::size_t> parseCount(std::string_view text, std::size_t 
 inline std::optional<double> parseNumber(std::string_view text) {
   double value = 0.0;
   const char *last = text.data() + text.size();
+  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): from_chars is bounded
   const auto [end, error] = std::from_chars(text.data(), last, value);
   if (error != std::errc{} || end != last || !physics::safeIsfinite(value)) {
     return std::nullopt;

@@ -30,7 +30,7 @@ struct Hole {
 
 Hole solarHole() {
   const double mass = physics::M_SUN;
-  return {mass, physics::G * mass / physics::C2};
+  return {.mass = mass, .mGeom = physics::G * mass / physics::C2};
 }
 
 // A missing clock rate reads as NaN, which fails every EXPECT_NEAR against it.
@@ -66,9 +66,10 @@ TEST(KerrClockRates, ErgoregionHasNoStaticObserver) {
     double zamo;
     double prograde;
   };
-  const Row rows[] = {{1.6, 0.19695340720394075, 0.083035359502440696},
-                      {1.8, 0.30151134457776362, 0.20435686902226381},
-                      {3.0, 0.60672559038579006, 0.50167374905743816}};
+  const Row rows[] = {
+      {.rOverM = 1.6, .zamo = 0.19695340720394075, .prograde = 0.083035359502440696},
+      {.rOverM = 1.8, .zamo = 0.30151134457776362, .prograde = 0.20435686902226381},
+      {.rOverM = 3.0, .zamo = 0.60672559038579006, .prograde = 0.50167374905743816}};
   for (const Row &row : rows) {
     const double r = row.rOverM * h.mGeom;
     EXPECT_NEAR(physics::kerrZamoLapse(r, K_HALF_PI, h.mass, a), row.zamo, 1.0e-12) << row.rOverM;

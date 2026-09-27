@@ -189,7 +189,7 @@ inline constexpr FlatLCDM PLANCK18{};
   const double onePlusZ = 1.0 + z;
   const double onePlusZCubed = onePlusZ * onePlusZ * onePlusZ;
   const double ol = omegaLambda(omegaM);
-  return std::sqrt(omegaM * onePlusZCubed + ol);
+  return std::sqrt((omegaM * onePlusZCubed) + ol);
 }
 
 /**
@@ -247,7 +247,7 @@ inline constexpr FlatLCDM PLANCK18{};
   // dE/dz = (3/2) * Omega_m * (1+z)^2 / (2*E)
   const double dEdz = 1.5 * omegaM * onePlusZ * onePlusZ / (2.0 * e);
 
-  return -1.0 + onePlusZ * dEdz / e;
+  return -1.0 + (onePlusZ * dEdz / e);
 }
 
 // ============================================================================
@@ -267,7 +267,7 @@ inline constexpr FlatLCDM PLANCK18{};
  * @return z_eq
  */
 [[nodiscard]] constexpr double zEquality(double omegaM, double omegaR) noexcept {
-  return omegaM / omegaR - 1.0;
+  return (omegaM / omegaR) - 1.0;
 }
 
 // ============================================================================
@@ -394,7 +394,7 @@ inline constexpr FlatLCDM PLANCK18{};
  * @return Distance modulus in magnitudes
  */
 [[nodiscard]] inline double distanceModulus(double dLMpc) noexcept {
-  return 5.0 * std::log10(dLMpc) + 25.0;
+  return (5.0 * std::log10(dLMpc)) + 25.0;
 }
 
 /**
@@ -477,7 +477,7 @@ struct AxiodilatonParams {
   const double onePlusZCubed = onePlusZ * onePlusZ * onePlusZ;
   const double ol = 1.0 - ad.omegaM - ad.omegaAd;
 
-  return h0 * std::sqrt(ad.omegaM * onePlusZCubed + fAxiodilaton(z, ad) + ol);
+  return h0 * std::sqrt((ad.omegaM * onePlusZCubed) + fAxiodilaton(z, ad) + ol);
 }
 
 // ============================================================================

@@ -86,7 +86,7 @@ inline constexpr std::int64_t K_COLONY_SIM_MAX_HORIZON = 1000000;
       state.storyParam("dark_turn").value_or(0) +
       state.nodeDelayTurns(game::K_AUTHORITY_NODE, game::K_FIRST_COLONY_NODE) +
       (4 * state.storyParam("packet_period").value_or(0)) + 60;
-  return std::max<std::int64_t>(std::max(legacyDerived, colonyStoryGraphBound(state)), 0);
+  return std::max<std::int64_t>({legacyDerived, colonyStoryGraphBound(state), std::int64_t{0}});
 }
 
 /** @brief Turns --colony plays: an explicit --turns defines the horizon

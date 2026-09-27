@@ -116,9 +116,9 @@ bool writePfmRgb(const std::string &path, const std::vector<float> &rgba, int wi
   std::vector<float> row(static_cast<std::size_t>(width) * 3u, 0.0f);
   for (int y = height - 1; y >= 0; --y) {
     for (int x = 0; x < width; ++x) {
-      std::size_t const src =
-          (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
-           static_cast<std::size_t>(x)) * 4u;
+      std::size_t const src = ((static_cast<std::size_t>(y) * static_cast<std::size_t>(width)) +
+                               static_cast<std::size_t>(x)) *
+                              4u;
       std::size_t const dst = static_cast<std::size_t>(x) * 3u;
       row[dst + 0] = rgba[src + 0];
       row[dst + 1] = rgba[src + 1];

@@ -521,9 +521,8 @@ private:
           continue;
         }
         // Events are sorted by id here: a binary search per schedule effect.
-        const auto target = std::lower_bound(
-            story_.events.begin(), story_.events.end(), effect.event,
-            [](const EventDef &lhs, std::uint32_t id) { return lhs.id < id; });
+        const auto target =
+            std::ranges::lower_bound(story_.events, effect.event, {}, &EventDef::id);
         if (target == story_.events.end() || target->id != effect.event) {
           fail("$.events", "event " + std::to_string(event.id) + " schedules unknown event " +
                                std::to_string(effect.event));

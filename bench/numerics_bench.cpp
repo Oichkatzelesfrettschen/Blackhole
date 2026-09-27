@@ -74,9 +74,9 @@ template <typename F> double nsPerCall(std::size_t n, int reps, const F &f) {
 }
 
 void printToolVersions() {
-#if defined(__clang__)
+#ifdef __clang__
   std::printf("compiler: clang %s\n", __clang_version__);
-#elif defined(__GNUC__)
+#elifdef __GNUC__
   std::printf("compiler: gcc %s\n", __VERSION__);
 #endif
   std::printf("boost: %s\n", BOOST_LIB_VERSION);
@@ -236,7 +236,7 @@ void benchCarlson() {
   std::uniform_real_distribution<double> expo(-3.0, 3.0);
   std::vector<std::array<double, 4>> args(count);
   for (std::array<double, 4> &a : args) {
-    std::generate(a.begin(), a.end(), [&] { return std::pow(10.0, expo(rng)); });
+    std::ranges::generate(a, [&] { return std::pow(10.0, expo(rng)); });
   }
   const physics::AnalyticKerrPolicy pol;
   double worst = 0.0;

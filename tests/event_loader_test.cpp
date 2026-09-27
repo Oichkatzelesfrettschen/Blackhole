@@ -56,12 +56,14 @@ std::unique_ptr<StoryRun> runStory(const std::string &json, std::int64_t turns,
 /** @brief Arrival turns of notices from `event` at `destination`. */
 std::vector<std::int64_t> noticeTurns(const game::CampaignState &state, std::uint32_t event,
                                       game::NodeId destination) {
-  return state.arrivals() | std::views::filter([&](const game::ArrivalRecord &arrival) {
-           return arrival.kind == game::EmitKind::Notice && arrival.payloadIndex == event &&
-                  arrival.destination == destination;
-         }) |
-         std::views::transform(&game::ArrivalRecord::arrivalTurn) |
-         std::ranges::to<std::vector<std::int64_t>>();
+  // The call form of ranges::to: libstdc++ 14.2's pipe adaptor closure
+  // (_Partial) fails to compile under clang 22 in forward_like.
+  return std::ranges::to<std::vector<std::int64_t>>(
+      state.arrivals() | std::views::filter([&](const game::ArrivalRecord &arrival) {
+        return arrival.kind == game::EmitKind::Notice && arrival.payloadIndex == event &&
+               arrival.destination == destination;
+      }) |
+      std::views::transform(&game::ArrivalRecord::arrivalTurn));
 }
 
 std::string errorOf(const std::string &json) { return game::parseEventSet(json).error; }
@@ -491,7 +493,9 @@ TEST(EventPredicates, CoreRejectsNegativeTechPacketPoints) {
 
 // An enum holding an arbitrary value of its fixed underlying type, as a
 // hand-built story could; every uint8 value is a valid object of these enums.
+namespace {
 template <typename Enum> Enum rawEnum(std::uint8_t value) { return std::bit_cast<Enum>(value); }
+} // namespace
 
 // Falsifier: a hand-built story with an out-of-range enum discriminant --
 // which the loader can never produce -- building a valid campaign; a Received

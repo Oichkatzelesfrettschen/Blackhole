@@ -304,7 +304,13 @@ bool initGpuBench(GpuBenchContext &ctx, int width, int height, std::string &erro
 BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::string &error) {
   GpuBenchContext ctx;
   if (!initGpuBench(ctx, cfg.gpuWidth, cfg.gpuHeight, error)) {
-    return {"GPU geodesic compute", 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+    return {.name = "GPU geodesic compute",
+            .avgMs = 0.0,
+            .minMs = 0.0,
+            .maxMs = 0.0,
+            .workUnits = 0.0,
+            .unitsPerSec = 0.0,
+            .iterations = 0};
   }
 
   glUseProgram(ctx.program);
@@ -362,7 +368,13 @@ BenchResult runGpuBench(const BenchConfig &cfg, double &gpuElapsedNs, std::strin
     if (elapsedNs == 0) {
       shutdownGpuBench(ctx);
       error = "GL_TIME_ELAPSED query returned 0 ns";
-      return {"GPU geodesic compute", 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+      return {.name = "GPU geodesic compute",
+              .avgMs = 0.0,
+              .minMs = 0.0,
+              .maxMs = 0.0,
+              .workUnits = 0.0,
+              .unitsPerSec = 0.0,
+              .iterations = 0};
     }
     double const ms = static_cast<double>(elapsedNs) / 1.0e6;
     minMs = std::min(minMs, ms);
@@ -573,12 +585,12 @@ int main(int argc, char **argv) try {
                                const double mass = cfg.massSolar * physics::M_SUN;
                                const double rG = physics::G * mass / physics::C2;
                                const double a = cfg.spin * rG;
-                               physics::KerrGeodesicConsts const c{1.0, 2.0, 3.0};
+                               physics::KerrGeodesicConsts const c{.e = 1.0, .lz = 2.0, .q = 3.0};
 
                                for (int i = 0; i < cfg.rays * 10; ++i) {
                                  double const u = static_cast<double>(i) / (cfg.rays * 10);
-                                 double const r = (6.0 + 20.0 * u) * rG;
-                                 double const theta = physics::PI * (0.25 + 0.5 * u);
+                                 double const r = (6.0 + (20.0 * u)) * rG;
+                                 double const theta = physics::PI * (0.25 + (0.5 * u));
                                  auto p = physics::kerrPotentials(r, theta, mass, a, c);
                                  cpuAccum += p.rPot + p.thetaPot + p.dRdr + p.dThetadtheta;
                                }

@@ -51,14 +51,14 @@ constexpr double PI = std::numbers::pi;
 /** @brief Event horizon r_+ = 1 + sqrt(1 - a^2), M=1. */
 double wgEventHorizon(double a) {
   a = std::clamp(a, -0.9999, 0.9999);
-  return 1.0 + std::sqrt(std::max(1.0 - a * a, 0.0));
+  return 1.0 + std::sqrt(std::max(1.0 - (a * a), 0.0));
 }
 
 /** @brief Ergosphere outer radius r_ergo = 1 + sqrt(1 - a^2 cos^2(theta)), M=1. */
 double wgErgosphere(double a, double theta) {
   a = std::clamp(a, -0.9999, 0.9999);
   double const cosT = std::cos(theta);
-  return 1.0 + std::sqrt(std::max(1.0 - a * a * cosT * cosT, 0.0));
+  return 1.0 + std::sqrt(std::max(1.0 - (a * a * cosT * cosT), 0.0));
 }
 
 /** @brief True if r_+ < r < r_ergo (inside ergosphere but outside horizon). */
@@ -71,7 +71,7 @@ double wgLapse(double r, double a) {
   if (r <= wgEventHorizon(a)) {
     return 0.0;
   }
-  return std::sqrt(std::max(1.0 - 2.0 / r, 0.0));
+  return std::sqrt(std::max(1.0 - (2.0 / r), 0.0));
 }
 
 /** @brief smoothstep(edge, 0, dist): 1 at dist=0, 0 at dist>=edge. */
@@ -80,7 +80,7 @@ double wgSmoothstep(double edge, double dist) {
     return 0.0;
   }
   double const t = std::clamp(dist / edge, 0.0, 1.0);
-  return 1.0 - t * t * (3.0 - 2.0 * t);
+  return 1.0 - (t * t * (3.0 - (2.0 * t)));
 }
 
 /** @brief Grid line intensity at phi with given spacing and line_width. */
@@ -103,7 +103,7 @@ double wgThetaLine(double theta, double spacing, double lw) {
 /** @brief Combined grid + curvature boost. */
 double wgGrid(double r, double theta, double phi, double a, double spacing, double lw) {
   double const grid = std::max(wgPhiLine(phi, spacing, lw), wgThetaLine(theta, spacing, lw));
-  double const boost = 1.0 + (1.0 - wgLapse(r, a)) * 2.0;
+  double const boost = 1.0 + ((1.0 - wgLapse(r, a)) * 2.0);
   return grid * boost;
 }
 
@@ -132,18 +132,18 @@ RGBA wgOverlay(double r, double theta, double phi, double a, bool showErgo, doub
     double const boundary = wgSmoothstep(0.2, std::abs(r - rErgo));
     double interior = 0.0;
     if (wgInsideErgosphere(r, theta, a)) {
-      double const omega = 2.0 * a * r / (r * r * r + a * a * r + 2.0 * a * a);
+      double const omega = 2.0 * a * r / ((r * r * r) + (a * a * r) + (2.0 * a * a));
       double const rPlus = wgEventHorizon(a);
-      double const omegaMax =
-          2.0 * a * (rPlus + 0.01) /
-          ((rPlus + 0.01) * (rPlus + 0.01) * (rPlus + 0.01) + a * a * (rPlus + 0.01) + 2.0 * a * a);
+      double const omegaMax = 2.0 * a * (rPlus + 0.01) /
+                              (((rPlus + 0.01) * (rPlus + 0.01) * (rPlus + 0.01)) +
+                               (a * a * (rPlus + 0.01)) + (2.0 * a * a));
       interior = (omega / std::max(omegaMax, 1e-10)) * 0.3;
     }
     ergoA = std::max(boundary * 0.9, interior);
   }
   double const total = gridA + ergoA;
   double const t = ergoA / std::max(total, 0.01);
-  return {0.3 + t * 0.7, 0.8 - t * 0.5, 1.0 - t, std::max(gridA, ergoA)};
+  return {.r = 0.3 + (t * 0.7), .g = 0.8 - (t * 0.5), .b = 1.0 - t, .a = std::max(gridA, ergoA)};
 }
 
 // ---------------------------------------------------------------------------
@@ -185,10 +185,10 @@ void testEventHorizon() {
     double expected;
   };
   const Case cases[] = {
-      {0.0, 2.0}, // Schwarzschild limit
-      {0.5, 1.0 + std::sqrt(0.75)},
-      {0.9, 1.0 + std::sqrt(1.0 - 0.81)},
-      {0.998, 1.0 + std::sqrt(1.0 - 0.998 * 0.998)},
+      {.a = 0.0, .expected = 2.0}, // Schwarzschild limit
+      {.a = 0.5, .expected = 1.0 + std::sqrt(0.75)},
+      {.a = 0.9, .expected = 1.0 + std::sqrt(1.0 - 0.81)},
+      {.a = 0.998, .expected = 1.0 + std::sqrt(1.0 - (0.998 * 0.998))},
   };
   for (const auto &c : cases) {
     const std::string buf =
@@ -378,7 +378,7 @@ void testOpacityBounds() {
   std::cout << "Test 10: overlay RGBA channels in [0, 1] for diverse inputs\n";
   const double rVals[] = {1.5, 2.0, 3.0, 5.0, 20.0, 100.0};
   const double thetaVals[] = {0.01, PI / 6, PI / 3, PI / 2, PI - 0.01};
-  const double phiVals[] = {0.0, PI / 12, PI / 6, PI / 2, PI, 2 * PI - 0.01};
+  const double phiVals[] = {0.0, PI / 12, PI / 6, PI / 2, PI, (2 * PI) - 0.01};
   const double aVals[] = {0.0, 0.5, 0.9, 0.998};
 
   int failCount = 0;

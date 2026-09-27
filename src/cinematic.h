@@ -65,92 +65,74 @@ inline constexpr std::array<CamKeyframe, 9> K_CINEMATIC_KEYFRAMES = {{
      * WHY positive pitch: cameraPositionFromYawPitch(+30) places the camera at
      *   y = radius * sin(+30) > 0 -- above the disk.  Negative pitch = below disk
      *   which was causing the disk to fill the upper half of the frame (wrong). */
-    {
-        0.0f,
-        CameraState{.yaw = 0.0f, .pitch = 30.0f, .roll = 0.0f,
-                    .distance = 120.0f, .fov = 40.0f},
-        0.998f,
-        "Near-extremal Kerr black hole  |  a* = 0.998  |  Mass M = 1  |  r_s = 2M"
-    },
+    {.timeSec = 0.0f,
+     .cam =
+         CameraState{.yaw = 0.0f, .pitch = 30.0f, .roll = 0.0f, .distance = 120.0f, .fov = 40.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Near-extremal Kerr black hole  |  a* = 0.998  |  Mass M = 1  |  r_s = 2M"},
 
     /* t=28s -- Begin approach from above; disk ring expands, Doppler asymmetry visible */
-    {
-        28.0f,
-        CameraState{.yaw = 20.0f, .pitch = 25.0f, .roll = 0.0f,
-                    .distance = 70.0f, .fov = 42.0f},
-        0.998f,
-        "Accretion disk  |  r_ISCO (prograde) = 1.24 M  |  T_disk ~ 10^7 K"
-    },
+    {.timeSec = 28.0f,
+     .cam =
+         CameraState{.yaw = 20.0f, .pitch = 25.0f, .roll = 0.0f, .distance = 70.0f, .fov = 42.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Accretion disk  |  r_ISCO (prograde) = 1.24 M  |  T_disk ~ 10^7 K"},
 
     /* t=55s -- Mid-range from above; lensed photon ring clearly visible around shadow */
-    {
-        55.0f,
-        CameraState{.yaw = 45.0f, .pitch = 22.0f, .roll = 0.0f,
-                    .distance = 20.0f, .fov = 34.0f},
-        0.998f,
-        "Gravitational lensing  |  Delta-phi = 4GM/rc^2  |"
-        "  Photon-capture sigma = 27 pi G^2 M^2 / c^4"
-    },
+    {.timeSec = 55.0f,
+     .cam =
+         CameraState{.yaw = 45.0f, .pitch = 22.0f, .roll = 0.0f, .distance = 20.0f, .fov = 34.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Gravitational lensing  |  Delta-phi = 4GM/rc^2  |"
+                "  Photon-capture sigma = 27 pi G^2 M^2 / c^4"},
 
     /* t=78s -- Low-angle close pass; Doppler crescent asymmetry maximised */
-    {
-        78.0f,
-        CameraState{.yaw = 88.0f, .pitch = 16.0f, .roll = 0.0f,
-                    .distance = 18.0f, .fov = 36.0f},
-        0.998f,
-        "Gravitational redshift  |  z = 1/sqrt(1 - r_s/r) - 1  |"
-        "  Doppler beaming  kappa = (1-beta)/(1+beta)"
-    },
+    {.timeSec = 78.0f,
+     .cam =
+         CameraState{.yaw = 88.0f, .pitch = 16.0f, .roll = 0.0f, .distance = 18.0f, .fov = 36.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Gravitational redshift  |  z = 1/sqrt(1 - r_s/r) - 1  |"
+                "  Doppler beaming  kappa = (1-beta)/(1+beta)"},
 
     /* t=100s -- Very close, near equatorial; frame-dragging distorts shadow teardrop */
-    {
-        100.0f,
-        CameraState{.yaw = 140.0f, .pitch = 18.0f, .roll = 0.0f,
-                    .distance = 35.0f, .fov = 36.0f},
-        0.998f,
-        "Frame dragging  |  Omega_LT = a*M r / (r^4 + a^2 r^2 + 2 a^2 M r)  |"
-        "  Ergosphere r_ergo = M + sqrt(M^2 - a^2 cos^2 theta)"
-    },
+    {.timeSec = 100.0f,
+     .cam =
+         CameraState{.yaw = 140.0f, .pitch = 18.0f, .roll = 0.0f, .distance = 35.0f, .fov = 36.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Frame dragging  |  Omega_LT = a*M r / (r^4 + a^2 r^2 + 2 a^2 M r)  |"
+                "  Ergosphere r_ergo = M + sqrt(M^2 - a^2 cos^2 theta)"},
 
     /* t=120s -- Just below equatorial; stacked Einstein rings at shadow edge */
-    {
-        120.0f,
-        CameraState{.yaw = 195.0f, .pitch = 14.0f, .roll = 0.0f,
-                    .distance = 32.0f, .fov = 34.0f},
-        0.998f,
-        "Photon sphere  |  r_ph = 1.07 M (prograde)  |"
-        "  Critical impact parameter  b_crit = sqrt(27) M"
-    },
+    {.timeSec = 120.0f,
+     .cam =
+         CameraState{.yaw = 195.0f, .pitch = 14.0f, .roll = 0.0f, .distance = 32.0f, .fov = 34.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Photon sphere  |  r_ph = 1.07 M (prograde)  |"
+                "  Critical impact parameter  b_crit = sqrt(27) M"},
 
     /* t=142s -- Pull up to polar view; ring seen from above in full symmetry */
-    {
-        142.0f,
-        CameraState{.yaw = 242.0f, .pitch = 28.0f, .roll = 0.0f,
-                    .distance = 40.0f, .fov = 36.0f},
-        0.998f,
-        "Hawking radiation  |  T_H = hbar c^3 / (8 pi G M k_B)  |"
-        "  Bekenstein-Hawking  S = k_B A / (4 l_P^2)"
-    },
+    {.timeSec = 142.0f,
+     .cam =
+         CameraState{.yaw = 242.0f, .pitch = 28.0f, .roll = 0.0f, .distance = 40.0f, .fov = 36.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Hawking radiation  |  T_H = hbar c^3 / (8 pi G M k_B)  |"
+                "  Bekenstein-Hawking  S = k_B A / (4 l_P^2)"},
 
     /* t=162s -- Long pullback; disk ring visible as thin ellipse against star field */
-    {
-        162.0f,
-        CameraState{.yaw = 280.0f, .pitch = 22.0f, .roll = 0.0f,
-                    .distance = 70.0f, .fov = 42.0f},
-        0.998f,
-        "Gravitational waves  |  h = 4G/c^4 * I''(t) / r  |"
-        "  f_ISCO ~ c^3 / (6 sqrt(6) pi G M)"
-    },
+    {.timeSec = 162.0f,
+     .cam =
+         CameraState{.yaw = 280.0f, .pitch = 22.0f, .roll = 0.0f, .distance = 70.0f, .fov = 42.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Gravitational waves  |  h = 4G/c^4 * I''(t) / r  |"
+                "  f_ISCO ~ c^3 / (6 sqrt(6) pi G M)"},
 
     /* t=180s -- Final vast shot: BH as jewel against the Milky Way */
-    {
-        180.0f,
-        CameraState{.yaw = 318.0f, .pitch = 20.0f, .roll = 0.0f,
-                    .distance = 140.0f, .fov = 45.0f},
-        0.998f,
-        "Singularity at r = 0  |  Weyl curvature psi_2 ~ M/r^3  |"
-        "  Kretschner  K = 48 G^2 M^2 / (c^4 r^6)"
-    },
+    {.timeSec = 180.0f,
+     .cam =
+         CameraState{.yaw = 318.0f, .pitch = 20.0f, .roll = 0.0f, .distance = 140.0f, .fov = 45.0f},
+     .kerrSpin = 0.998f,
+     .caption = "Singularity at r = 0  |  Weyl curvature psi_2 ~ M/r^3  |"
+                "  Kretschner  K = 48 G^2 M^2 / (c^4 r^6)"},
 
 }};
 
@@ -214,12 +196,9 @@ private:
     static float cr(float p0, float p1, float p2, float p3, float u) noexcept {
         float const u2 = u * u;
         float const u3 = u2 * u;
-        return 0.5f * (
-              (2.0f * p1)
-            + (-p0 + p2)                            * u
-            + (2.0f*p0 - 5.0f*p1 + 4.0f*p2 - p3)  * u2
-            + (-p0 + 3.0f*p1 - 3.0f*p2 + p3)       * u3
-        );
+        return 0.5f * ((2.0f * p1) + ((-p0 + p2) * u) +
+                       (((2.0f * p0) - (5.0f * p1) + (4.0f * p2) - p3) * u2) +
+                       ((-p0 + (3.0f * p1) - (3.0f * p2) + p3) * u3));
     }
 };
 
@@ -254,7 +233,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
   float const aStar = kf.kerrSpin;
   float const a = aStar * mass;
   // Outer horizon: r+ = M + sqrt(M^2 - a^2)
-  float const rPlus = mass + std::sqrtf(std::fmaxf(0.0f, mass * mass - a * a));
+  float const rPlus = mass + std::sqrtf(std::fmaxf(0.0f, (mass * mass) - (a * a)));
   // Prograde photon sphere approximation (exact for Schwarzschild at a=0)
   float const cosFac = std::cosf((2.0f / 3.0f) * std::acosf(-aStar));
   float const rPh = mass * (1.0f + cosFac) * 2.0f; // prograde ph orbit
@@ -262,7 +241,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
 
   // Gravitational redshift at camera (Schwarzschild approximation)
   float const rCam = camDist;
-  float const zCam = (rCam > rs) ? (1.0f / std::sqrtf(1.0f - rs / rCam) - 1.0f) : 9999.0f;
+  float const zCam = (rCam > rs) ? ((1.0f / std::sqrtf(1.0f - (rs / rCam))) - 1.0f) : 9999.0f;
   float const dilCam = 1.0f + zCam;
 
   // Hawking temperature in natural units (hbar = G = c = k_B = 1): T_H = 1/(8*pi*M)
@@ -270,8 +249,8 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
 
   // Frame-dragging angular velocity at r = iscoRadius (equatorial, BL)
   float const r3 = iscoRadius * iscoRadius * iscoRadius;
-  float const omegaFF = (r3 + a * a * iscoRadius + 2.0f * a * a * mass > 1e-9f)
-                            ? (a / (r3 + a * a * iscoRadius + 2.0f * a * a * mass))
+  float const omegaFF = (r3 + (a * a * iscoRadius) + (2.0f * a * a * mass) > 1e-9f)
+                            ? (a / (r3 + (a * a * iscoRadius) + (2.0f * a * a * mass)))
                             : 0.0f;
 
   // ---- Layout constants ------------------------------------------------
@@ -309,7 +288,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
   {
     float const px = pad;
     float const py = pad;
-    float const ph = pad * 2.0f + lineH * 10.0f + 4.0f;
+    float const ph = (pad * 2.0f) + (lineH * 10.0f) + 4.0f;
     drawPanel(px, py, panelW, ph);
 
     const float tx = px + pad;
@@ -362,7 +341,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
   {
     float const px = displayWidth - eqW - pad;
     float const py = pad;
-    float const ph = pad * 2.0f + lineH * 12.0f + 4.0f;
+    float const ph = (pad * 2.0f) + (lineH * 12.0f) + 4.0f;
     drawPanel(px, py, eqW, ph);
 
     const float tx = px + pad;
@@ -404,19 +383,19 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
       float rM;
     };
     static constexpr std::array<TDRow, 7> rows = {{
-        {"  r = infinity", 1e8f},
-        {"  r = 100 M", 100.0f},
-        {"  r =  10 M", 10.0f},
-        {"  r =   6 M", 6.0f},
-        {"  r =   3 M", 3.0f},
-        {"  r = r_ISCO", 0.0f}, // overridden below
-        {"  r = camera", 0.0f}, // overridden below
+        {.label = "  r = infinity", .rM = 1e8f},
+        {.label = "  r = 100 M", .rM = 100.0f},
+        {.label = "  r =  10 M", .rM = 10.0f},
+        {.label = "  r =   6 M", .rM = 6.0f},
+        {.label = "  r =   3 M", .rM = 3.0f},
+        {.label = "  r = r_ISCO", .rM = 0.0f}, // overridden below
+        {.label = "  r = camera", .rM = 0.0f}, // overridden below
     }};
 
     float const tw = 262.0f;
     float const px = displayWidth - tw - pad;
-    float const py = pad * 2.0f + lineH * 12.0f + 4.0f + pad * 2.0f;
-    float const ph = pad * 2.0f + lineH * (static_cast<float>(rows.size()) + 2.0f);
+    float const py = (pad * 2.0f) + (lineH * 12.0f) + 4.0f + (pad * 2.0f);
+    float const ph = (pad * 2.0f) + (lineH * (static_cast<float>(rows.size()) + 2.0f));
     drawPanel(px, py, tw, ph);
 
     const float tx = px + pad;
@@ -437,7 +416,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
       float const rGeom = rM * mass;
       float td = 1.0f;
       if (rGeom > rs) {
-        td = 1.0f / std::sqrtf(1.0f - rs / rGeom);
+        td = 1.0f / std::sqrtf(1.0f - (rs / rGeom));
       } else {
         td = 9999.0f;
       }
@@ -457,10 +436,10 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
   // BOTTOM BAR: Caption ticker + progress
   // =========================================================================
   {
-    float const bh = lineH * 3.0f + pad * 2.5f;
+    float const bh = (lineH * 3.0f) + (pad * 2.5f);
     float const by = displayHeight - bh - pad;
     float const bx = pad;
-    float const bw = displayWidth - pad * 2.0f;
+    float const bw = displayWidth - (pad * 2.0f);
     dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + bw, by + bh), colBgBar, 4.0f);
     dl->AddRect(ImVec2(bx, by), ImVec2(bx + bw, by + bh), colBorder, 4.0f, 0, 1.5f);
 
@@ -493,7 +472,7 @@ inline void renderCinematicOverlay(float timeSec, const CamKeyframe &kf, float c
         (totalFrames > 0) ? static_cast<float>(frameIndex) / static_cast<float>(totalFrames) : 0.0f;
     dl->AddRectFilled(ImVec2(barX0, ty), ImVec2(barX1, ty + barH), colBarBg, 2.0f);
     if (frac > 0.0f) {
-      dl->AddRectFilled(ImVec2(barX0, ty), ImVec2(barX0 + frac * (barX1 - barX0), ty + barH),
+      dl->AddRectFilled(ImVec2(barX0, ty), ImVec2(barX0 + (frac * (barX1 - barX0)), ty + barH),
                         colProg, 2.0f);
     }
   }

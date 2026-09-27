@@ -281,7 +281,7 @@ inline constexpr double SYNCHROTRON_CONST =
 #else
   // Fallback: Fouka & Ouichaoui (2013) polynomial fit, ~1% accuracy
   return 1.8084 * std::pow(x, 1.0 / 3.0) * std::exp(-x) *
-         (1.0 + 0.884 * std::pow(x, 2.0 / 3.0) + 0.471 * std::pow(x, 4.0 / 3.0));
+         (1.0 + (0.884 * std::pow(x, 2.0 / 3.0)) + (0.471 * std::pow(x, 4.0 / 3.0)));
 #endif
 }
 
@@ -320,7 +320,7 @@ inline constexpr double SYNCHROTRON_CONST =
   return x * boost::math::cyl_bessel_k(2.0 / 3.0, x);
 #else
   // Polynomial fallback (~10% error for x~1-10; Boost not available)
-  return 1.3541 * std::pow(x, 1.0 / 3.0) * std::exp(-x) * (1.0 + 0.6 * std::pow(x, 2.0 / 3.0));
+  return 1.3541 * std::pow(x, 1.0 / 3.0) * std::exp(-x) * (1.0 + (0.6 * std::pow(x, 2.0 / 3.0)));
 #endif
 }
 

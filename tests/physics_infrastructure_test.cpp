@@ -84,11 +84,11 @@ bool testComputeConservedEnergy() {
   const double mGeom = 1.0;
   const double a = 0.0;
 
-  const double gTt = -(1.0 - 2.0 * mGeom / r);
+  const double gTt = -(1.0 - (2.0 * mGeom / r));
   const double ut = 1.0 / std::sqrt(-gTt);
 
   const ConservedQuantities cq = computeConserved(r, theta, ut, 0.0, 0.0, 0.0, mGeom, a);
-  const double expected = std::sqrt(1.0 - 2.0 * mGeom / r);
+  const double expected = std::sqrt(1.0 - (2.0 * mGeom / r));
 
   const std::string buf = std::format("E = {:.10f}, expected = {:.10f}", cq.e, expected);
   check(std::abs(cq.e - expected) < 1.0e-12, "E = sqrt(1-2M/r) for static observer at r=100M", buf);
@@ -222,10 +222,10 @@ bool testBisectRadialCrossing() {
   std::cout << "Test 10: bisectRadialCrossing -- locates r=rTarget within 1e-6\n";
 
   // r(lambda) = 5.0 - 2.0 * lambda  crosses r=4.0 at lambda=0.5 exactly.
-  const MockState state0{5.0, std::numbers::pi / 2.0, -2.0};
+  const MockState state0{.x1 = 5.0, .x2 = std::numbers::pi / 2.0, .v1 = -2.0};
 
   auto stepper = [](double /*la*/, double lb, MockState /*sa*/) -> MockState {
-    return MockState{5.0 - 2.0 * lb, std::numbers::pi / 2.0, -2.0};
+    return MockState{.x1 = 5.0 - (2.0 * lb), .x2 = std::numbers::pi / 2.0, .v1 = -2.0};
   };
 
   const EventResult ev = bisectRadialCrossing(0.0, 1.0, state0, 4.0, stepper, 1.0e-8, 60);

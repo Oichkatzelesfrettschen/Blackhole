@@ -81,7 +81,7 @@ template <typename T> void testType(const char *name) {
   expect(!physics::safeIsinf(nan), "NaN is not infinite");
 
   // sign bit set on the inf pattern = negative infinity
-  const auto signBit = decltype(Pattern<T>::INF){1} << (sizeof(T) * 8 - 1);
+  const auto signBit = decltype(Pattern<T>::INF){1} << ((sizeof(T) * 8) - 1);
   T negInf;
   fromBits(static_cast<decltype(Pattern<T>::INF)>(Pattern<T>::INF | signBit), negInf);
   expect(physics::safeIsinf(negInf), "negative inf is classified infinite");
@@ -107,7 +107,7 @@ template <typename T> void testType(const char *name) {
 } // namespace
 
 int main() {
-#if defined(__FAST_MATH__)
+#ifdef __FAST_MATH__
   std::cout << "Built with -ffast-math (the intended condition).\n";
 #else
   std::cout << "NOTE: built without -ffast-math; the guarantees still "

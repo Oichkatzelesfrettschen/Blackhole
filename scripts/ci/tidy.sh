@@ -1,12 +1,12 @@
 #!/bin/sh
-# Run clang-tidy 18 over selected translation units, as the ci-analysis lane
-# does with Ubuntu 24.04's clang-tidy-18 package (LLVM 18.1.3).
+# Run clang-tidy over selected translation units, as the ci-analysis lane
+# does with the PyPI clang-tidy wheel pinned in scripts/ci/tidy-version.txt.
 #
-# usage: scripts/ci/tidy18.sh [-p BUILD_DIR] [-o OUT_DIR] [-f] FILE...
+# usage: scripts/ci/tidy.sh [-p BUILD_DIR] [-o OUT_DIR] [-f] FILE...
 #
 #   -p BUILD_DIR  directory holding compile_commands.json (default build/CiLike,
 #                 the GCC 14 tree scripts/ci/ci_replica.sh configures)
-#   -o OUT_DIR    per-file logs (default build/tidy18)
+#   -o OUT_DIR    per-file logs (default build/tidy)
 #   -f            analyze a tree whose configuration differs from the ci preset
 #   FILE          repository-relative source paths, e.g. src/render/env_config.cpp
 #
@@ -16,13 +16,11 @@
 # such as SIMD_TIER and ENABLE_FAST_MATH); the driver exits 2 on a mismatch
 # unless -f is given.
 #
-# The executable is $CLANG_TIDY when set, otherwise the PyPI wheel pinned at
-# 18.1.1 through `uvx --from clang-tidy==18.1.1 clang-tidy`. PyPI carries no
-# 18.1.3 wheel; 18.1.1 is the nearest release, and its `--list-checks
-# --checks='*'` output matches both the Ubuntu 18.1.3 binary's and the 18.1.8
-# wheel's (537 checks). clang-tidy 18
-# cannot parse the libstdc++ of a newer host GCC, so the driver replaces the
-# compile database's standard-library search path with GCC 14's, the library
+# The executable is $CLANG_TIDY when set, otherwise the wheel whose version
+# scripts/ci/tidy-version.txt names, run through `uvx --from clang-tidy==VER`;
+# the ci-analysis lane installs the same wheel, so a local run and the lane
+# apply identical check sets. The driver replaces the compile database's
+# standard-library search path with GCC 14's, the library
 # the CI runner compiles against; $GXX14 overrides the g++-14 used to find it.
 # CMake runs clang-tidy once per target that compiles a source, so a file with
 # several compile_commands.json entries (src/main.cpp in Blackhole and in
@@ -38,7 +36,7 @@ set -eu
 
 root=$(git rev-parse --show-toplevel)
 build_dir=build/CiLike
-out_dir=build/tidy18
+out_dir=build/tidy
 force=0
 while getopts p:o:f opt; do
   case $opt in
@@ -53,38 +51,39 @@ shift $((OPTIND - 1))
 
 cd "$root"
 [ -r "$build_dir/compile_commands.json" ] || {
-  echo "tidy18: $build_dir/compile_commands.json is missing; configure that tree first" >&2
+  echo "tidy: $build_dir/compile_commands.json is missing; configure that tree first" >&2
   echo "  (CI_REPLICA_NO_TEST=1 scripts/ci/ci_replica.sh configures build/CiLike)" >&2
   exit 2
 }
 
 if ! mismatch=$(scripts/ci/check_ci_config.sh "$build_dir"); then
   if [ "$force" = 1 ]; then
-    echo "tidy18: warning: $build_dir differs from the ci preset: $mismatch" >&2
+    echo "tidy: warning: $build_dir differs from the ci preset: $mismatch" >&2
   else
-    echo "tidy18: $build_dir differs from the ci preset: $mismatch" >&2
+    echo "tidy: $build_dir differs from the ci preset: $mismatch" >&2
     echo "  use the ci_replica.sh tree (default -p build/CiLike) or pass -f" >&2
     exit 2
   fi
 fi
 
 gxx=${GXX14:-g++-14}
-command -v "$gxx" >/dev/null 2>&1 || { echo "tidy18: $gxx not found" >&2; exit 2; }
+command -v "$gxx" >/dev/null 2>&1 || { echo "tidy: $gxx not found" >&2; exit 2; }
 # The first three C++ search directories g++ reports are the libstdc++ headers,
 # its target-specific directory, and backward/.
 stdinc=$("$gxx" -E -x c++ -v /dev/null -o /dev/null 2>&1 |
   sed -n '/#include <...> search starts here:/,/End of search list./p' |
   grep '/include/c++' | sed 's/^ *//')
-[ -n "$stdinc" ] || { echo "tidy18: no libstdc++ include path from $gxx" >&2; exit 2; }
+[ -n "$stdinc" ] || { echo "tidy: no libstdc++ include path from $gxx" >&2; exit 2; }
 
+version=$(cat scripts/ci/tidy-version.txt)
 if [ -n "${CLANG_TIDY:-}" ]; then
   tidy=$CLANG_TIDY
 else
   command -v uvx >/dev/null 2>&1 || {
-    echo "tidy18: set CLANG_TIDY or install uv (uvx) for the pinned clang-tidy 18.1.1" >&2
+    echo "tidy: set CLANG_TIDY or install uv (uvx) for the pinned clang-tidy $version" >&2
     exit 2
   }
-  tidy="uvx --from clang-tidy==18.1.1 clang-tidy"
+  tidy="uvx --from clang-tidy==$version clang-tidy"
 fi
 
 extra="--extra-arg=-Wno-unknown-warning-option --extra-arg=-Wno-unknown-argument"
@@ -115,7 +114,7 @@ for rel in files:
     path = os.path.join(root, rel)
     matches = [e for e in entries if e["file"] == path]
     if not matches:
-        print(f"tidy18: {rel} has no entry in {db_path}", file=sys.stderr)
+        print(f"tidy: {rel} has no entry in {db_path}", file=sys.stderr)
         missing += 1
     seen = set()
     for entry in matches:
@@ -149,12 +148,14 @@ jobs=${TIDY_JOBS:-$(nproc)}
 # xargs appends each line's key and source path after the fixed arguments.
 # Word splitting of $tidy and $extra is intended: each holds several arguments.
 # shellcheck disable=SC2016
-cut -f1,2 "$out_dir/entries.tsv" | xargs -P "$jobs" -L1 sh -c '
+# The runner's /usr/include lacks Boost, glm, and cpptrace; hiding the host's
+# copies makes __has_include select the branches ci-analysis analyzes.
+cut -f1,2 "$out_dir/entries.tsv" | scripts/ci/without_host_headers.sh xargs -P "$jobs" -L1 sh -c '
   base="$1/$4"
   # shellcheck disable=SC2086
   $2 -p "$1/db/$4" $3 "$5" >"$base.log" 2>&1
   echo "$?" >"$base.rc"
-' tidy18 "$out_dir" "$tidy" "$extra"
+' tidy "$out_dir" "$tidy" "$extra"
 
 diag_re='(error|warning): .*\[[A-Za-z0-9.,-]+\]$'
 failed=$no_entry
@@ -164,7 +165,7 @@ while IFS=$tab read -r key rel target; do
   base="$out_dir/$key"
   rc=$(cat "$base.rc" 2>/dev/null || echo missing)
   if [ "$rc" != 0 ] && ! grep -Eq "$diag_re" "$base.log" 2>/dev/null; then
-    echo "tidy18: clang-tidy failed on $rel [$target] (exit $rc) without a diagnostic:" >&2
+    echo "tidy: clang-tidy failed on $rel [$target] (exit $rc) without a diagnostic:" >&2
     tail -5 "$base.log" >&2 2>/dev/null || true
     failed=1
   fi
@@ -181,4 +182,4 @@ if [ -n "$summary" ]; then
   printf '%s\n' "$summary"
   exit 1
 fi
-echo "tidy18: no diagnostics in $# file(s), $(wc -l <"$out_dir/entries.tsv") compile entries"
+echo "tidy: no diagnostics in $# file(s), $(wc -l <"$out_dir/entries.tsv") compile entries"

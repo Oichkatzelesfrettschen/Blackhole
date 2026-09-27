@@ -269,7 +269,7 @@ std::optional<BlackbodyTable> loadBlackbodyTable(const std::filesystem::path &cs
   }
   BlackbodyTable table;
   while (std::getline(file, line)) {
-    std::replace(line.begin(), line.end(), ',', ' ');
+    std::ranges::replace(line, ',', ' ');
     std::istringstream fields(line);
     double log10T = 0.0;
     std::array<float, 4> row{};
