@@ -342,6 +342,7 @@ CampaignLoadResult loadCampaign(const std::vector<std::uint8_t> &bytes, const Ev
     }
     if (current < turn) {
       state.advanceTurn();
+      ++result.replayedTurns;
     }
   }
   if (state.stateDigest() != savedDigest) {

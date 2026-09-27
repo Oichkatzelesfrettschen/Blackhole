@@ -26,6 +26,7 @@
 // surface (kerr_isco_prograde/retrograde and metric helpers);
 // kerr_extended.h carries the constexpr camelCase extended surface
 // (horizons, ergosphere, surface gravity, four-norm predicates).
+#include "../src/physics/safe_limits.h"
 #include "../src/physics/verified/geodesic.hpp"
 #include "../src/physics/verified/kerr.hpp"
 #include "verified/rk4.hpp"
@@ -357,28 +358,26 @@ void testIscoBptBothSurfaces() {
 }
 
 void testPerformanceBenchmark() {
+  // The metric functions are constant-time, so wall time asserts nothing a
+  // loaded or sanitized runner can hold; the loop stays a finite-output smoke
+  // test and prints its throughput as information.
   const int iterations = 1000000;
   double const r = 10.0 * K_MASS;
   double const theta = std::numbers::pi / 4;
-
-  const auto measureSeconds = [=](int count) {
-    const auto start = std::chrono::steady_clock::now();
-    for (int iteration = 0; iteration < count; ++iteration) {
-      volatile double const gTt = kerrGTt(r, theta, K_MASS, K_A_SLOW);
-      volatile double const gRr = kerrGRrChecked(r, theta, K_MASS, K_A_SLOW);
-      volatile double const norm = kerrFourNorm(r, theta, K_MASS, K_A_SLOW, 1.0, 0.1, 0.05, 0.2);
-      (void)gTt;
-      (void)gRr;
-      (void)norm;
-    }
-    return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-  };
-
-  const double baseSeconds = measureSeconds(iterations);
-  const double scaledSeconds = measureSeconds(iterations * 8);
-  double const opsPerSec = (iterations * 3.0) / baseSeconds;
-  std::cout << "Performance: " << std::scientific << opsPerSec << " metric ops/sec\n";
-  expectGt(16.0 * baseSeconds, scaledSeconds, "Eightfold metric workload scales below 16x");
+  const auto start = std::chrono::steady_clock::now();
+  double accumulated = 0.0;
+  for (int iteration = 0; iteration < iterations; ++iteration) {
+    // The radius varies per iteration so the calls cannot be hoisted.
+    const double radius = r * (1.0 + (1.0e-9 * iteration));
+    accumulated += kerrGTt(radius, theta, K_MASS, K_A_SLOW) +
+                   kerrGRrChecked(radius, theta, K_MASS, K_A_SLOW) +
+                   kerrFourNorm(radius, theta, K_MASS, K_A_SLOW, 1.0, 0.1, 0.05, 0.2);
+  }
+  const double seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+  std::cout << "Performance: " << std::scientific << (iterations * 3.0) / seconds
+            << " metric ops/sec (information only)\n";
+  expectTrue(physics::safeIsfinite(accumulated), "Metric workload stays finite");
 }
 
 } // namespace

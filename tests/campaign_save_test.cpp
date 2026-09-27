@@ -281,10 +281,11 @@ TEST(CampaignSave, OverBudgetTurnAndStrayCommandsAreRefusedBeforeReplay) {
     for (const std::int64_t turn : {budget + 1, std::int64_t{100000000}}) {
       std::vector<std::uint8_t> overBudget = save;
       writeI64(overBudget, turnValueOffset(overBudget), turn);
-      EXPECT_EQ(loadError(overBudget, scenario.story),
-                "saved turn outside [0, " + std::to_string(budget) +
-                    "], this scenario's replay budget")
+      const game::CampaignLoadResult refused = game::loadCampaign(overBudget, scenario.story);
+      EXPECT_EQ(refused.error, "saved turn outside [0, " + std::to_string(budget) +
+                                   "], this scenario's replay budget")
           << "turn " << turn;
+      EXPECT_EQ(refused.replayedTurns, 0) << "turn " << turn;
     }
 
     // An in-budget turn with the first command moved past it: refused on the
@@ -292,8 +293,12 @@ TEST(CampaignSave, OverBudgetTurnAndStrayCommandsAreRefusedBeforeReplay) {
     std::vector<std::uint8_t> strayCommand = save;
     writeI64(strayCommand, turnValueOffset(strayCommand), budget);
     writeI64(strayCommand, K_COMMANDS_TAG + 12, budget + 1);
-    EXPECT_EQ(loadError(strayCommand, scenario.story),
-              "saved commands are out of turn order or beyond the saved turn");
+    const game::CampaignLoadResult stray = game::loadCampaign(strayCommand, scenario.story);
+    EXPECT_EQ(stray.error, "saved commands are out of turn order or beyond the saved turn");
+    EXPECT_EQ(stray.replayedTurns, 0);
+    // The counter is live: a valid save replays its saved turns.
+    EXPECT_EQ(game::loadCampaign(save, scenario.story).replayedTurns,
+              scenario.session->state().turn());
   }
 }
 
