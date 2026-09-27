@@ -5,8 +5,10 @@
  *
  * Units are G = c = M = 1. Every function takes the spin deficit
  * epsilon = 1 - a (a in [-1, 1], so epsilon in [0, 2]) and the radial offset
- * x = r - 1, never (a, r). Near extremal spin the two parameterizations part
- * ways: Gargantua's canon spin 1 - a = 1.33e-14 stored as a double a keeps two
+ * x = r - 1, never (a, r). The frame's lapse, shift, and cylindrical radius
+ * support positive finite offsets through 1e154; bigA itself overflows above
+ * about 1e77. Near extremal spin the two parameterizations part ways:
+ * Gargantua's canon spin 1 - a = 1.33e-14 stored as a double a keeps two
  * significant digits of 1 - a^2, while epsilon keeps all sixteen, and the
  * horizon, ISCO, and orbital clock all live at x ~ 1e-7..1e-5 where r = 1 + x
  * would round the physics away.
@@ -115,11 +117,14 @@ struct EquatorialFrame {
   const double r = frame.r;
   const double a2 = frame.spin * frame.spin;
   frame.sqrtDelta = sqrtKerrDelta(epsilon, x);
-  frame.bigA = (r * r * ((r * r) + a2)) + (2.0 * a2 * r);
-  const double sqrtA = std::sqrt(frame.bigA);
-  frame.alpha = r * frame.sqrtDelta / sqrtA;
-  frame.omega = 2.0 * frame.spin * r / frame.bigA;
-  frame.varpi = sqrtA / r;
+  const double inverseR = 1.0 / r;
+  const double inverseR2 = inverseR * inverseR;
+  const double aOverR4 = 1.0 + (a2 * inverseR2) + (2.0 * a2 * inverseR2 * inverseR);
+  frame.bigA = r * r * r * r * aOverR4;
+  const double sqrtAOverR4 = std::sqrt(aOverR4);
+  frame.alpha = (frame.sqrtDelta * inverseR) / sqrtAOverR4;
+  frame.omega = (2.0 * frame.spin * inverseR2 * inverseR) / aOverR4;
+  frame.varpi = r * sqrtAOverR4;
   return frame;
 }
 
@@ -501,6 +506,83 @@ enum class RadialObstacle : std::uint8_t {
   return nearest;
 }
 
+/** @brief Homogeneous radial potential in x = r - 1. Long-double products
+ *         retain the scale when E is much smaller than p_theta. */
+struct OffsetRadialPotential {
+  long double energy;
+  long double constant;
+  long double angularTerm;
+  long double horizon;
+
+  [[nodiscard]] long double value(long double x) const {
+    const long double radialTerm = (energy * x * (x + 2.0L)) + constant;
+    return (radialTerm * radialTerm) - ((x - horizon) * (x + horizon) * angularTerm);
+  }
+  [[nodiscard]] long double slope(long double x) const {
+    const long double radialTerm = (energy * x * (x + 2.0L)) + constant;
+    return (4.0L * energy * (x + 1.0L) * radialTerm) - (2.0L * x * angularTerm);
+  }
+};
+
+[[nodiscard]] inline RadialObstacle
+firstOffsetRadialObstacle(const OffsetRadialPotential &potential, long double from,
+                          long double toward) {
+  const long double lo = std::fmin(from, toward);
+  const long double hi = std::fmax(from, toward);
+  const bool upward = toward > from;
+  const long double energy2 = potential.energy * potential.energy;
+  const long double c2 =
+      (4.0L * energy2) + (2.0L * potential.energy * potential.constant) - potential.angularTerm;
+  const long double c1 = 4.0L * potential.energy * potential.constant;
+  const long double bound = 1.0L + std::fmax(3.0L, std::fmax(std::fabs(c2 / (2.0L * energy2)),
+                                                             std::fabs(c1 / (4.0L * energy2))));
+  const long double inflectionDiscriminant = 1.0L - (c2 / (6.0L * energy2));
+  const long double inflection =
+      inflectionDiscriminant > 0.0L ? std::sqrt(inflectionDiscriminant) : 0.0L;
+  const std::array<long double, 4> edges{-bound, -1.0L - inflection, -1.0L + inflection, bound};
+  RadialObstacle nearest = RadialObstacle::None;
+  for (std::size_t piece = 0; piece + 1 < edges.size(); ++piece) {
+    long double left = std::fmax(edges.at(piece), lo);
+    long double right = std::fmin(edges.at(piece + 1), hi);
+    if (!(left < right) || potential.slope(left) >= 0.0L || potential.slope(right) < 0.0L) {
+      continue;
+    }
+    for (int step = 0; step < 2048; ++step) {
+      const long double middle = 0.5L * (left + right);
+      if (middle <= left || middle >= right) {
+        break;
+      }
+      if (potential.slope(middle) < 0.0L) {
+        left = middle;
+      } else {
+        right = middle;
+      }
+    }
+    const long double minimum = 0.5L * (left + right);
+    if (minimum <= lo || minimum >= hi) {
+      continue;
+    }
+    const long double radialTerm =
+        (potential.energy * minimum * (minimum + 2.0L)) + potential.constant;
+    const long double deltaTerm =
+        (minimum - potential.horizon) * (minimum + potential.horizon) * potential.angularTerm;
+    const long double depth = (radialTerm * radialTerm) - deltaTerm;
+    const long double tolerance = 64.0L *
+                                  static_cast<long double>(std::numeric_limits<double>::epsilon()) *
+                                  ((radialTerm * radialTerm) + std::fabs(deltaTerm));
+    if (depth > tolerance) {
+      continue;
+    }
+    const RadialObstacle kind =
+        depth < -tolerance ? RadialObstacle::Turning : RadialObstacle::Asymptote;
+    if (upward) {
+      return kind;
+    }
+    nearest = kind;
+  }
+  return nearest;
+}
+
 /** @brief Conserved quantities of a photon at an observer's event, fixed by
  *         its propagation direction there; they do not depend on whether the
  *         observer emits or receives it. */
@@ -569,20 +651,29 @@ struct PhotonConstants {
     return constants;
   }
   constants.lambda = constants.angularMomentum / constants.energy;
-  constants.eta = (constants.pTheta * constants.pTheta) / (constants.energy * constants.energy);
+  const double thetaRatio = constants.pTheta / constants.energy;
+  constants.eta = thetaRatio * thetaRatio;
   constants.g = 1.0 / constants.energy;
 
-  const RadialPotential potential = radialPotential(frame.spin, constants.lambda, constants.eta);
-  const double r = frame.r;
-  const double outerHorizon = 1.0 + horizonOffset(frame.epsilon);
+  const long double spin = 1.0L - static_cast<long double>(frame.epsilon);
+  const auto energy = static_cast<long double>(constants.energy);
+  const auto angularMomentum = static_cast<long double>(constants.angularMomentum);
+  const auto thetaMomentum = static_cast<long double>(constants.pTheta);
+  const long double shiftedMomentum = angularMomentum - (spin * energy);
+  const OffsetRadialPotential potential{
+      .energy = energy,
+      .constant = ((1.0L + (spin * spin)) * energy) - (spin * angularMomentum),
+      .angularTerm = (thetaMomentum * thetaMomentum) + (shiftedMomentum * shiftedMomentum),
+      .horizon = std::sqrt(static_cast<long double>(frame.epsilon) *
+                           (2.0L - static_cast<long double>(frame.epsilon)))};
   // Outward, any obstacle stops the photon for good: it turns back, or it
   // spirals onto the photon orbit. Inward, only a simple zero above the
   // horizon sends it back out.
-  const bool clearAbove =
-      firstRadialObstacle(potential, r, std::numeric_limits<double>::max()) ==
-      RadialObstacle::None;
-  const bool bounceBelow =
-      firstRadialObstacle(potential, r, outerHorizon) == RadialObstacle::Turning;
+  const RadialObstacle outwardObstacle = firstOffsetRadialObstacle(
+      potential, static_cast<long double>(frame.x), std::numeric_limits<long double>::max());
+  const bool clearAbove = outwardObstacle == RadialObstacle::None;
+  const bool bounceBelow = firstOffsetRadialObstacle(potential, static_cast<long double>(frame.x),
+                                                     potential.horizon) == RadialObstacle::Turning;
   if (constants.radialMomentum > 0.0) {
     constants.escapesToInfinity = clearAbove;
     constants.fromInfinity = clearAbove && bounceBelow;
@@ -590,7 +681,7 @@ struct PhotonConstants {
     constants.escapesToInfinity = clearAbove && bounceBelow;
     constants.fromInfinity = clearAbove;
   } else {
-    const bool periapsis = potential.slope(r) > 0.0;
+    const bool periapsis = potential.slope(static_cast<long double>(frame.x)) > 0.0L;
     constants.escapesToInfinity = periapsis && clearAbove;
     constants.fromInfinity = constants.escapesToInfinity;
   }

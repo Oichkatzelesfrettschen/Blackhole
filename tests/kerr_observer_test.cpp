@@ -17,9 +17,14 @@
 #include <cfloat>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <numbers>
 #include <optional>
+#include <sstream>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -31,6 +36,24 @@ namespace {
 
 namespace ko = physics::kerr_observer;
 using ko::OrbitSense;
+
+std::vector<std::vector<double>> referenceRows(const char *filename) {
+  const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() / filename;
+  std::ifstream input(path);
+  std::vector<std::vector<double>> rows;
+  std::string line;
+  std::getline(input, line);
+  while (std::getline(input, line)) {
+    std::stringstream stream(line);
+    std::vector<double> row;
+    std::string field;
+    while (std::getline(stream, field, ',')) {
+      row.push_back(field.empty() ? 0.0 : std::stod(field));
+    }
+    rows.push_back(row);
+  }
+  return rows;
+}
 
 struct RadiiRow {
   double epsilon;
@@ -643,6 +666,81 @@ TEST(KerrObserver, ExtremalFrameSurvivesDeltaUnderflow) {
   ASSERT_TRUE(orbit.exists);
   expectRelative(orbit.properTimeRate, std::numbers::sqrt3 / 2.0 * 5e-201, 1e-12, "clock");
   expectRelative(orbit.zamoVelocity, 0.5, 1e-12, "ZAMO-frame speed");
+}
+
+TEST(KerrObserver, CanonNearHorizonTurningRaysMatchReference) {
+  const auto rows = referenceRows("kerr_observer_turning_reference.csv");
+  ASSERT_EQ(rows.size(), 4U);
+  const double xObserver = ko::iscoOffset(K_CANON_EPSILON, OrbitSense::Prograde);
+  const ko::Tetrad observer = ko::zamoTetrad(K_CANON_EPSILON, xObserver);
+  for (const auto &row : rows) {
+    ASSERT_EQ(row.size(), 6U);
+    EXPECT_GT(row.at(3), ko::horizonOffset(K_CANON_EPSILON));
+    EXPECT_LT(row.at(3), xObserver);
+    const ko::PhotonConstants photon = ko::photonConstants(observer, {row.at(1), 0.0, row.at(2)});
+    EXPECT_EQ(photon.escapesToInfinity, row.at(4) != 0.0) << row.at(0);
+    EXPECT_EQ(photon.fromInfinity, row.at(5) != 0.0) << row.at(0);
+  }
+}
+
+TEST(KerrObserver, CanonNearHorizonTurningOffsetsMatchReference) {
+  const auto rows = referenceRows("kerr_observer_turning_reference.csv");
+  ASSERT_EQ(rows.size(), 4U);
+  const double xObserver = ko::iscoOffset(K_CANON_EPSILON, OrbitSense::Prograde);
+  const ko::Tetrad observer = ko::zamoTetrad(K_CANON_EPSILON, xObserver);
+  for (const auto &row : rows) {
+    ASSERT_EQ(row.size(), 6U);
+    const ko::PhotonConstants photon = ko::photonConstants(observer, {row.at(1), 0.0, row.at(2)});
+    const long double spin = 1.0L - static_cast<long double>(K_CANON_EPSILON);
+    const auto energy = static_cast<long double>(photon.energy);
+    const auto momentum = static_cast<long double>(photon.angularMomentum);
+    const long double shifted = momentum - (spin * energy);
+    const ko::OffsetRadialPotential potential{
+        .energy = energy,
+        .constant = ((1.0L + (spin * spin)) * energy) - (spin * momentum),
+        .angularTerm = shifted * shifted,
+        .horizon = static_cast<long double>(ko::horizonOffset(K_CANON_EPSILON))};
+    long double left = (potential.horizon + static_cast<long double>(row.at(3))) / 2.0L;
+    long double right =
+        (static_cast<long double>(row.at(3)) + static_cast<long double>(xObserver)) / 2.0L;
+    ASSERT_LT(potential.value(left), 0.0L);
+    ASSERT_GT(potential.value(right), 0.0L);
+    for (int step = 0; step < 100; ++step) {
+      const long double middle = (left + right) / 2.0L;
+      if (potential.value(middle) < 0.0L) {
+        left = middle;
+      } else {
+        right = middle;
+      }
+    }
+    expectRelative(static_cast<double>((left + right) / 2.0L), row.at(3), 1e-6,
+                   "canon turning offset");
+  }
+}
+
+TEST(KerrObserver, ExtremeFrameAndHomogeneousPotentialMatchReference) {
+  const auto rows = referenceRows("kerr_observer_extreme_reference.csv");
+  ASSERT_EQ(rows.size(), 2U);
+  for (const auto &row : rows) {
+    ASSERT_EQ(row.size(), 6U);
+    const ko::EquatorialFrame frame = ko::equatorialFrame(row.at(0), row.at(1));
+    expectRelative(frame.alpha, row.at(2), 1e-12, "extreme lapse");
+    expectRelative(frame.omega, row.at(3), 1e-12, "extreme shift");
+    expectRelative(frame.varpi, row.at(4), 1e-12, "extreme radius");
+  }
+  const ko::PhotonConstants photon =
+      ko::photonConstants(ko::zamoTetrad(0.0, 1e-160), {0.0, 1.0, 0.0});
+  EXPECT_TRUE(photon.positiveEnergy);
+  EXPECT_FALSE(photon.escapesToInfinity);
+  EXPECT_FALSE(photon.fromInfinity);
+  const ko::OffsetRadialPotential potential{
+      .energy = static_cast<long double>(photon.energy),
+      .constant = 2.0L * static_cast<long double>(photon.energy),
+      .angularTerm =
+          (static_cast<long double>(photon.pTheta) * static_cast<long double>(photon.pTheta)) +
+          (static_cast<long double>(photon.energy) * static_cast<long double>(photon.energy)),
+      .horizon = 0.0L};
+  EXPECT_NEAR(static_cast<double>(potential.value(1.0L)), rows.at(1).at(5), 1e-12);
 }
 
 // Falsifier: a circular orbit within 64 ulp outside a photon orbit reported
