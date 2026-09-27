@@ -35,6 +35,7 @@
 #include <ratio>
 #include <vector>
 
+#include <boost/math/policies/policy.hpp>
 #include <boost/math/special_functions/ellint_1.hpp>
 #include <boost/math/special_functions/ellint_rd.hpp>
 #include <boost/math/special_functions/ellint_rf.hpp>

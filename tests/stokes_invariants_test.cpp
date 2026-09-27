@@ -26,9 +26,7 @@
 #include <numbers>
 #include <vector>
 
-#include "rte_integrator.h"
 #include "stokes_transport.h"
-#include "synchrotron.h"
 
 using namespace physics;
 

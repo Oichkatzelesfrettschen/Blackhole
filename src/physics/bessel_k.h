@@ -40,7 +40,7 @@ template <typename T> struct BesselKSum {
   T value = T(0);
   T correction = T(0);
 
-  inline void add(T term) {
+  void add(T term) {
     const T adjusted = term - correction;
     const T next = value + adjusted;
     correction = (next - value) - adjusted;
@@ -50,11 +50,11 @@ template <typename T> struct BesselKSum {
 
 template <typename T> [[nodiscard]] inline T besselKUpperLimit(T x, T nuMax) {
   const T inverseX = T(1) / x;
-  T upper = std::acosh(T(1) + T(40) * inverseX);
-  upper = std::acosh(T(1) + (T(40) + nuMax * upper) * inverseX);
-  upper = std::acosh(T(1) + (T(40) + nuMax * upper) * inverseX);
-  upper = std::acosh(T(1) + (T(40) + nuMax * upper) * inverseX);
-  upper = std::acosh(T(1) + (T(40) + nuMax * upper) * inverseX);
+  T upper = std::acosh(T(1) + (T(40) * inverseX));
+  upper = std::acosh(T(1) + ((T(40) + (nuMax * upper)) * inverseX));
+  upper = std::acosh(T(1) + ((T(40) + (nuMax * upper)) * inverseX));
+  upper = std::acosh(T(1) + ((T(40) + (nuMax * upper)) * inverseX));
+  upper = std::acosh(T(1) + ((T(40) + (nuMax * upper)) * inverseX));
   return upper;
 }
 

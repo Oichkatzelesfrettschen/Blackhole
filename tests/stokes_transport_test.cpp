@@ -63,12 +63,10 @@
 #include <exception>
 #include <iostream>
 #include <numbers>
-#include <stdexcept>
 #include <vector>
 
 #include "../src/physics/stokes_transport.h"
 #include "rte_integrator.h"
-#include "synchrotron.h"
 
 using namespace physics;
 

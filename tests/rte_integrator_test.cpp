@@ -55,10 +55,11 @@
 #include <exception>
 #include <iostream>
 #include <numbers>
-#include <stdexcept>
 #include <vector>
 
+#include "../src/physics/bessel_k.h"
 #include "../src/physics/rte_integrator.h"
+#include "../src/physics/safe_limits.h"
 #include "constants.h"
 #include "synchrotron.h"
 

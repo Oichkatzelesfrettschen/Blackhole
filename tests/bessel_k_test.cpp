@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 
@@ -29,12 +30,9 @@ constexpr double TOLERANCE = 1.0e-15;
 double relativeError(double got, double expected) { return std::abs(got - expected) / expected; }
 
 const BesselKRow *findRow(double nu, double x) {
-  for (const BesselKRow &row : BESSEL_K_ROWS) {
-    if (row.nu == nu && row.x == x) {
-      return &row;
-    }
-  }
-  return nullptr;
+  const auto *const found = std::ranges::find_if(
+      BESSEL_K_ROWS, [nu, x](const BesselKRow &row) { return row.nu == nu && row.x == x; });
+  return found == std::ranges::end(BESSEL_K_ROWS) ? nullptr : found;
 }
 
 } // namespace
