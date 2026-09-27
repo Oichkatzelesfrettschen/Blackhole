@@ -236,15 +236,17 @@ non-finite values takes the per-target `-fno-fast-math` override in
 
 | Script | Reproduces | Needs |
 | --- | --- | --- |
-| `scripts/ci/ci_replica.sh [REGEX]` | `ci` build and CTest with GCC 14; `CI_REPLICA_RELEASE=1` for `ci-release`, `CI_REPLICA_SANITIZE=1` for `ci-sanitize` | `gcc-14`, `g++-14`, `bwrap`, Ninja, and `./scripts/conan_install.sh Release build` |
+| `scripts/ci/ci_replica.sh [REGEX]` | `ci` build and CTest with GCC 14; `CI_REPLICA_RELEASE=1` for `ci-release`, `CI_REPLICA_SANITIZE=1` for `ci-sanitize` | `gcc-14`, `g++-14`, util-linux `unshare` (2.38+), Ninja, and `./scripts/conan_install.sh Release build` |
 | `scripts/ci/cppcheck_ci.sh [-p DIR] [-b BASE] [-f] [FILE...]` | `ci-analysis` cppcheck 2.13.0 over changed and untracked `.cpp` files, once per distinct CMake `-D`/`-I`/`-U` flag set among each file's compile entries | Docker or Podman; `build/CiLike` from `ci_replica.sh` |
 | `scripts/ci/tidy.sh [-p DIR] [-f] FILE...` | `ci-analysis` clang-tidy (the wheel `scripts/ci/tidy-version.txt` pins) against GCC 14's libstdc++, over the `ci` configuration | `uv` (or `CLANG_TIDY` pointing at a binary of that version), `g++-14`, and `build/CiLike` from `ci_replica.sh` |
 
 `ci_replica.sh` copies the local Release generators, replaces the compiler the
 toolchain names with GCC 14, and runs configure, build, and CTest through
-`scripts/ci/without_host_headers.sh`, which mounts empty tmpfs directories over
-the host's `/usr/include/boost`, `/usr/include/glm`, and `/usr/include/cpptrace`
-with `bwrap`. The runner has none of those trees, so `__has_include` selects
+`scripts/ci/without_host_headers.sh`, which mounts empty read-only tmpfs
+directories over the host's `/usr/include/boost`, `/usr/include/glm`, and
+`/usr/include/cpptrace` in a private mount namespace (nested `unshare` user
+namespaces, so the command still runs as the caller and an expired autofs
+mount elsewhere cannot fail it). The runner has none of those trees, so `__has_include` selects
 the same branches locally as in CI (the non-Boost fallbacks in
 `synchrotron.h`, `rte_integrator.h`, `stokes_transport.h`, and
 `analytic_kerr_geodesic.h` for targets that do not link Conan's Boost);

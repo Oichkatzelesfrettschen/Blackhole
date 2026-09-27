@@ -70,7 +70,7 @@ gen=build/Release/generators
   echo "ci_replica: missing $gen/conan_toolchain.cmake; run ./scripts/conan_install.sh Release build" >&2
   exit 2
 }
-for tool in "$cc" "$cxx" bwrap cmake ninja ctest; do
+for tool in "$cc" "$cxx" unshare cmake ninja ctest; do
   command -v "$tool" >/dev/null 2>&1 || { echo "ci_replica: $tool not found" >&2; exit 2; }
 done
 
