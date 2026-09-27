@@ -6,7 +6,7 @@
  */
 
 #include <algorithm>
-#include <cstddef>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -35,11 +35,9 @@ std::optional<Options> parse(const std::vector<const char *> &args) {
 } // namespace
 
 /**
- * Falsifier: before the fix, --width always set height = width / 2
- * unconditionally, so an explicit --height given before --width was
- * silently overwritten and argument order changed the output. With the
- * fix, --height sets heightExplicit and a later --width no longer touches
- * it.
+ * Falsifier: an explicit --height given before --width is overwritten by
+ * width / 2, so argument order changes the output. --height sets
+ * heightExplicit, and a later --width leaves it alone.
  */
 TEST(ObserverSkyLutOptions, WidthAfterHeightKeepsExplicitHeight) {
   const auto options = parse({"observer_sky_lut", "--height", "300", "--width", "800"});
@@ -69,9 +67,9 @@ TEST(ObserverSkyLutOptions, HeightAfterWidthOverridesDefault) {
 }
 
 /**
- * Falsifier: before the fix, --canon reset x and epsilon/observer but left
- * an earlier --velocity in place, so "--velocity 0.9 --canon" produced a
- * key with velocity 0.9 instead of the canon preset's orbiting observer.
+ * Falsifier: "--velocity 0.9 --canon" keeps velocity 0.9 instead of the
+ * canon preset's orbiting observer, because --canon resets x, epsilon, and
+ * observer but not an earlier --velocity.
  */
 TEST(ObserverSkyLutOptions, CanonResetsEarlierVelocity) {
   const auto options = parse({"observer_sky_lut", "--velocity", "0.9", "--canon"});
@@ -86,15 +84,18 @@ TEST(ObserverSkyLutOptions, IscoDoesNotResetVelocity) {
   if (!options.has_value()) {
     GTEST_FAIL() << "options is empty";
   }
-  ASSERT_TRUE(options->velocity.has_value());
-  EXPECT_DOUBLE_EQ(*options->velocity, 0.9);
+  const std::optional<double> velocity = options->velocity;
+  if (!velocity.has_value()) {
+    GTEST_FAIL() << "velocity is empty";
+  }
+  EXPECT_DOUBLE_EQ(*velocity, 0.9);
 }
 
 /**
- * Falsifier: before the fix, resolveObserver built an ObserverKey for any
- * explicit --velocity or --observer zamo regardless of x, so
+ * Falsifier: resolveObserver builds an ObserverKey for an explicit
+ * --velocity or --observer zamo without checking x, so
  * "--epsilon 1 --x 0.5 --observer zamo" (x = 0.5 inside the Schwarzschild
- * horizon at offset 1.0) published a nonphysical bundle instead of being
+ * horizon at offset 1.0) publishes a nonphysical bundle instead of being
  * refused.
  */
 TEST(ObserverSkyLutOptions, RejectsZamoAtOrInsideHorizon) {
