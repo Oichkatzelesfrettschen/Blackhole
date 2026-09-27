@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <iterator>
 #include <vector>
 
 #include <glm/common.hpp>
@@ -147,21 +148,59 @@ StereographicPoint projectStereographic(const glm::vec4 &p) {
 
 std::vector<LibraryFeature> bedroomFeatures() {
   std::vector<LibraryFeature> features;
+  features.reserve(13);
   // Shelf: five books along x on the back wall.
-  for (const float x : {-0.6f, -0.3f, 0.0f, 0.3f, 0.6f}) {
-    features.push_back({.kind = FeatureKind::Shelf, .position = glm::vec3(x, 0.55f, -0.7f)});
+  constexpr std::array<const char *, 5> bookNames = {"Book 1", "Book 2", "Book 3", "Book 4",
+                                                     "Book 5"};
+  constexpr std::array<float, 5> bookPositions = {-0.6f, -0.3f, 0.0f, 0.3f, 0.6f};
+  for (std::size_t index = 0; index < bookNames.size(); ++index) {
+    features.push_back({.kind = FeatureKind::Shelf,
+                        .position = glm::vec3(bookPositions.at(index), 0.55f, -0.7f),
+                        .name = bookNames.at(index)});
   }
   // Window: four frame corners on the +x wall.
-  features.push_back({.kind = FeatureKind::Window, .position = glm::vec3(0.75f, 0.0f, -0.4f)});
-  features.push_back({.kind = FeatureKind::Window, .position = glm::vec3(0.75f, 0.0f, 0.4f)});
-  features.push_back({.kind = FeatureKind::Window, .position = glm::vec3(0.75f, 0.6f, 0.4f)});
-  features.push_back({.kind = FeatureKind::Window, .position = glm::vec3(0.75f, 0.6f, -0.4f)});
+  features.push_back({.kind = FeatureKind::Window,
+                      .position = glm::vec3(0.75f, 0.0f, -0.4f),
+                      .name = "Window lower back corner"});
+  features.push_back({.kind = FeatureKind::Window,
+                      .position = glm::vec3(0.75f, 0.0f, 0.4f),
+                      .name = "Window lower front corner"});
+  features.push_back({.kind = FeatureKind::Window,
+                      .position = glm::vec3(0.75f, 0.6f, 0.4f),
+                      .name = "Window upper front corner"});
+  features.push_back({.kind = FeatureKind::Window,
+                      .position = glm::vec3(0.75f, 0.6f, -0.4f),
+                      .name = "Window upper back corner"});
   // Desk: four corners of the desk top.
-  features.push_back({.kind = FeatureKind::Desk, .position = glm::vec3(-0.7f, -0.35f, 0.05f)});
-  features.push_back({.kind = FeatureKind::Desk, .position = glm::vec3(-0.1f, -0.35f, 0.05f)});
-  features.push_back({.kind = FeatureKind::Desk, .position = glm::vec3(-0.1f, -0.35f, 0.55f)});
-  features.push_back({.kind = FeatureKind::Desk, .position = glm::vec3(-0.7f, -0.35f, 0.55f)});
+  features.push_back({.kind = FeatureKind::Desk,
+                      .position = glm::vec3(-0.7f, -0.35f, 0.05f),
+                      .name = "Desk back left corner"});
+  features.push_back({.kind = FeatureKind::Desk,
+                      .position = glm::vec3(-0.1f, -0.35f, 0.05f),
+                      .name = "Desk back right corner"});
+  features.push_back({.kind = FeatureKind::Desk,
+                      .position = glm::vec3(-0.1f, -0.35f, 0.55f),
+                      .name = "Desk front right corner"});
+  features.push_back({.kind = FeatureKind::Desk,
+                      .position = glm::vec3(-0.7f, -0.35f, 0.55f),
+                      .name = "Desk front left corner"});
   return features;
+}
+
+glm::vec4 selectedTubeMarker(const std::vector<LibraryFeature> &features,
+                             FeatureSelection selection, float litMoment, float timeSpan) {
+  return {features.at(selection.featureIndex).position, std::clamp(litMoment, 0.0f, timeSpan)};
+}
+
+std::vector<SegmentInstance> selectedTubeSegments(const std::vector<SegmentInstance> &segments,
+                                                  FeatureSelection selection) {
+  std::vector<SegmentInstance> selected;
+  const auto inSelectedTube = [selection](const SegmentInstance &segment) {
+    return segmentKind(segment) == SegmentKind::WorldTube &&
+           static_cast<std::size_t>(segment.meta.w) == selection.featureIndex;
+  };
+  std::ranges::copy_if(segments, std::back_inserter(selected), inSelectedTube);
+  return selected;
 }
 
 std::vector<std::array<std::size_t, 2>> bedroomOutline() {
