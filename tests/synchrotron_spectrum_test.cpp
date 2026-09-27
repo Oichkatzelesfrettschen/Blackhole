@@ -11,7 +11,6 @@
  * - Longair (2011) "High Energy Astrophysics" Ch. 8
  */
 
-#include <numbers>
 #include <cassert>
 #include <cmath>
 #include <exception>
@@ -44,9 +43,9 @@ bool testSynchrotronFLowFreq() {
     double fRef;
   };
   constexpr TestPoint testPoints[] = {
-      {1.0e-4, 0.09959088308506682},
-      {1.0e-3, 0.21313906509145042},
-      {0.0099, 0.44360483593514838},
+      {.x = 1.0e-4, .fRef = 0.09959088308506682},
+      {.x = 1.0e-3, .fRef = 0.21313906509145042},
+      {.x = 0.0099, .fRef = 0.44360483593514838},
   };
   bool allPassed = true;
 
@@ -83,9 +82,9 @@ bool testSynchrotronFHighFreq() {
     double fRef;
   };
   constexpr TestPoint testPoints[] = {
-      {10.92, 7.9664430952276931e-5},
-      {30.0, 6.5807945577077005e-13},
-      {100.0, 4.6975936659221719e-43},
+      {.x = 10.92, .fRef = 7.9664430952276931e-5},
+      {.x = 30.0, .fRef = 6.5807945577077005e-13},
+      {.x = 100.0, .fRef = 4.6975936659221719e-43},
   };
   bool allPassed = true;
 
@@ -309,7 +308,7 @@ bool testPolarizationBounds() {
 
   for (int point = 0; point < pointCount; ++point) {
     const double fraction = static_cast<double>(point) / static_cast<double>(pointCount - 1);
-    const double x = std::exp(logMinimum + fraction * (logMaximum - logMinimum));
+    const double x = std::exp(logMinimum + (fraction * (logMaximum - logMinimum)));
     double const fVal = synchrotronF(x);
     double const gVal = synchrotronG(x);
     const double pol = gVal / fVal;
