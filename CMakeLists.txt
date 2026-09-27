@@ -1648,6 +1648,7 @@ target_link_libraries(blackhole_observer_sky PUBLIC Threads::Threads)
 # measured shadow fraction, blueshift range, and patch size.
 add_executable(observer_sky_lut
   "${PROJECT_SOURCE_DIR}/src/tools/observer_sky_lut_main.cpp"
+  "${PROJECT_SOURCE_DIR}/src/platform/resource_paths.cpp"
 )
 target_link_libraries(observer_sky_lut PRIVATE blackhole_observer_sky)
 target_compile_options(observer_sky_lut PRIVATE ${PROJECT_WARNINGS})
@@ -4884,6 +4885,7 @@ if(BUILD_TESTING)
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/observer_sky_map_test.cpp")
     add_executable(observer_sky_map_test
       "${PROJECT_SOURCE_DIR}/tests/observer_sky_map_test.cpp"
+      "${PROJECT_SOURCE_DIR}/src/platform/resource_paths.cpp"
     )
     target_compile_options(observer_sky_map_test PRIVATE ${PROJECT_WARNINGS})
     target_link_libraries(observer_sky_map_test PRIVATE blackhole_observer_sky GTest::gtest_main)

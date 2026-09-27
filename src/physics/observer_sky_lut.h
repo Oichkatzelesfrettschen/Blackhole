@@ -80,6 +80,9 @@ struct ObserverSkyLut {
  *         covers the traced content. */
 inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 3;
 
+/** @brief 256 * 1024 * 1024 bytes, about 13 default-size observer-sky bundles. */
+inline constexpr std::uintmax_t K_OBSERVER_SKY_CACHE_BYTES = std::uintmax_t{256} * 1024 * 1024;
+
 /** @brief FNV-1a over the format and tracer versions and every input that
  *         shapes the bundle. */
 [[nodiscard]] std::uint64_t lutHash(const ObserverKey &key, const LutDimensions &dimensions,
@@ -107,6 +110,14 @@ inline constexpr std::uint32_t K_LUT_FORMAT_VERSION = 3;
 
 /** @brief Writes <dir>/<stem>.bin and <dir>/<stem>.json; false on any I/O error. */
 bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path &directory);
+
+/** @brief Deletes the least recently used bundles in `directory` (by .bin
+ *         modification time, which a successful readObserverSkyLut refreshes),
+ *         each with its JSON sidecar, until the .bin total fits `maxBytes`;
+ *         the bundle for `keepHash` is never deleted. Stops at the first I/O
+ *         error. */
+void evictObserverSkyBundles(const std::filesystem::path &directory, std::uintmax_t maxBytes,
+                             std::uint64_t keepHash);
 
 /** @brief Reads a bundle; nothing when the file is missing, truncated, fails
  *         its checksum, is of another format or tracer version, or its stored
