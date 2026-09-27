@@ -64,6 +64,17 @@ This is the running external-reference ledger for Blackhole.
 | 2026-09-25 | Polarized transfer | Landi Degl'Innocenti and Landi Degl'Innocenti, "On the solution of the radiative transfer equations for polarized radiation", Solar Phys. 97 239 (1985) | `https://doi.org/10.1007/BF00165988` | Closed-form Lorentz-group Stokes propagator the audit recommends porting to GPU (audit 05 N3). |
 | 2026-09-25 | Algebra | Cariow and Cariowa, "An algorithm for fast multiplication of sedenions", Inf. Process. Lett. 113 324 (2013) | `https://doi.org/10.1016/j.ipl.2013.02.011` | Hadamard-diagonalized Cayley-Dickson multiplication the audit rates NOT-APPLICABLE to any Blackhole path (audit 05 N2). |
 | 2026-09-25 | Signal processing | Loeffler, Ligtenberg, and Moschytz, "Practical fast 1-D DCT algorithms with 11 multiplications", ICASSP 1989, 988-991 | `https://doi.org/10.1109/ICASSP.1989.266596` | State-of-the-art multiply count the audit compares open_gororoba's IDCT8 butterfly against, rating it NOT-APPLICABLE (audit 05 N8). |
+| 2026-09-27 | Special functions | Takekawa, "Fast parallel calculation of modified Bessel function of the second kind and its derivatives" | `https://arxiv.org/abs/2108.11560` | Integral representation with input-dependent bounds and a fixed division count, the design `src/physics/bessel_k.h` follows. |
+| 2026-09-27 | Special functions | "GPU-Accelerated Modified Bessel Function of the Second Kind for Gaussian Processes" | `https://arxiv.org/abs/2502.00356` | Temme-plus-integral GPU alternative weighed against the single-rule kernel. |
+| 2026-09-27 | Special functions | "Accurate Computation of the Logarithm of Modified Bessel Functions on GPUs" | `https://arxiv.org/abs/2409.08729` | Log-stabilized K for extreme arguments, weighed against the scaled form. |
+| 2026-09-27 | Synchrotron | Aharonian, Kelner, Prosekin, Appendix D F and G fits | `https://arxiv.org/abs/1006.1045` | Closed-form F and G accuracy bound (about 0.2%) that the kernel replaces. |
+| 2026-09-27 | Synchrotron | Fouka and Ouichaoui, "Analytical Fits to the Synchrotron Functions" | `https://arxiv.org/abs/1301.6908` | Source of the fit open_gororoba `synchrotron.rs` uses between its x = 0.01 and x = 10 seams. |
+| 2026-09-27 | Synchrotron | "New formula for Asymptotic behavior of the Synchrotron function" | `https://arxiv.org/abs/2602.15943` | Small-x truncation accuracy for F. |
+| 2026-09-27 | Plasma transfer | Pandya et al., "Polarized Synchrotron Emissivities and Absorptivities for Relativistic Thermal, Power-Law, and Kappa Distribution Functions" | `https://arxiv.org/abs/1602.08749` | Thermal emissivity and absorptivity fits; reference for reconciling `rte_integrator.h` and `electron_temperature.h` (issue #63). |
+| 2026-09-27 | Plasma transfer | Dexter, "A public code for general relativistic, polarised radiative transfer around spinning black holes" | `https://arxiv.org/abs/1602.03184` | grtrans thermal Faraday coefficients with the K_0/K_2 ratio in rho_V. |
+| 2026-09-27 | Plasma transfer | Marszewski et al., "Updated Transfer Coefficients for Magnetized Plasmas" | `https://arxiv.org/abs/2108.10359` | Corrected thermal absorptivity and rotativity fits carrying K_1/K_2 and K_0/K_2. |
+| 2026-09-27 | Elliptic functions | "Simple and accurate complete elliptic integrals for the full range of modulus" | `https://arxiv.org/abs/2505.17159` | AGM complete K and E with the k = 1 limit (issue #65). |
+| 2026-09-27 | Elliptic functions | "On Computing Jacobi's Elliptic Function sn" | `https://arxiv.org/abs/1803.05017` | AGM reduction for sn and its small-amplitude hazard. |
 
 ## Repo surfaces that currently consume these references
 
@@ -72,6 +83,8 @@ This is the running external-reference ledger for Blackhole.
 - `docs/requirements/octane.md`
 - `docs/requirements/blender.md`
 - `docs/audits/physics-and-game-engine/`
+- `docs/physics/special-functions.md`
+- `docs/physics/open-gororoba-decomposition.md`
 
 ## Update rule
 
