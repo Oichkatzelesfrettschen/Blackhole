@@ -13,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include <GLFW/glfw3.h>
 #include <imgui.h>
 
 #include "input.h"
