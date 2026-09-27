@@ -626,7 +626,7 @@ struct FaradayPropagation {
     frm = (denom > 0.0) ? (k0 + k1) / denom : 0.0;
 #else
     // Approximation: f_rm ~ 1 / (1 + Theta_e^2) -- correct limits but not exact
-    frm = 1.0 / (1.0 + thetaE * thetaE);
+    frm = 1.0 / (1.0 + (thetaE * thetaE));
 #endif
     return faradayRotationCoeff(nu, nE, bParallel) * frm;
 }
