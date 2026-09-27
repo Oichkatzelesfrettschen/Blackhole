@@ -56,7 +56,9 @@ TEST(ParseEnvironmentFloat, RejectsEmptyAndNull) {
 
 TEST(ParseFinitePair, AcceptsFiniteDecimalPair) {
   const auto pair = parseFinitePair("1.5,-2.25");
-  ASSERT_TRUE(pair.has_value());
+  if (!pair.has_value()) {
+    GTEST_FAIL() << "pair is empty";
+  }
   EXPECT_DOUBLE_EQ(pair->first, 1.5);
   EXPECT_DOUBLE_EQ(pair->second, -2.25);
 }
@@ -79,11 +81,15 @@ TEST(ParseFinitePair, RejectsNonFiniteEitherComponent) {
 // spaces after the comma or a leading '+', falling back to defaults.
 TEST(ParseFinitePair, AcceptsSpacesAndLeadingPlus) {
   const auto spaced = parseFinitePair("10, 20");
-  ASSERT_TRUE(spaced.has_value());
+  if (!spaced.has_value()) {
+    GTEST_FAIL() << "spaced is empty";
+  }
   EXPECT_DOUBLE_EQ(spaced->first, 10.0);
   EXPECT_DOUBLE_EQ(spaced->second, 20.0);
   const auto signedRange = parseFinitePair(" -7 ,\t+13.5 ");
-  ASSERT_TRUE(signedRange.has_value());
+  if (!signedRange.has_value()) {
+    GTEST_FAIL() << "signedRange is empty";
+  }
   EXPECT_DOUBLE_EQ(signedRange->first, -7.0);
   EXPECT_DOUBLE_EQ(signedRange->second, 13.5);
   EXPECT_FALSE(parseFinitePair("1 2, 3").has_value());

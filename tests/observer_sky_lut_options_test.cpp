@@ -43,21 +43,27 @@ std::optional<Options> parse(const std::vector<const char *> &args) {
  */
 TEST(ObserverSkyLutOptions, WidthAfterHeightKeepsExplicitHeight) {
   const auto options = parse({"observer_sky_lut", "--height", "300", "--width", "800"});
-  ASSERT_TRUE(options.has_value());
+  if (!options.has_value()) {
+    GTEST_FAIL() << "options is empty";
+  }
   EXPECT_EQ(options->dimensions.width, 800U);
   EXPECT_EQ(options->dimensions.height, 300U);
 }
 
 TEST(ObserverSkyLutOptions, WidthAloneDerivesDefaultHeight) {
   const auto options = parse({"observer_sky_lut", "--width", "800"});
-  ASSERT_TRUE(options.has_value());
+  if (!options.has_value()) {
+    GTEST_FAIL() << "options is empty";
+  }
   EXPECT_EQ(options->dimensions.width, 800U);
   EXPECT_EQ(options->dimensions.height, 400U);
 }
 
 TEST(ObserverSkyLutOptions, HeightAfterWidthOverridesDefault) {
   const auto options = parse({"observer_sky_lut", "--width", "800", "--height", "300"});
-  ASSERT_TRUE(options.has_value());
+  if (!options.has_value()) {
+    GTEST_FAIL() << "options is empty";
+  }
   EXPECT_EQ(options->dimensions.width, 800U);
   EXPECT_EQ(options->dimensions.height, 300U);
 }
@@ -69,13 +75,17 @@ TEST(ObserverSkyLutOptions, HeightAfterWidthOverridesDefault) {
  */
 TEST(ObserverSkyLutOptions, CanonResetsEarlierVelocity) {
   const auto options = parse({"observer_sky_lut", "--velocity", "0.9", "--canon"});
-  ASSERT_TRUE(options.has_value());
+  if (!options.has_value()) {
+    GTEST_FAIL() << "options is empty";
+  }
   EXPECT_FALSE(options->velocity.has_value());
 }
 
 TEST(ObserverSkyLutOptions, IscoDoesNotResetVelocity) {
   const auto options = parse({"observer_sky_lut", "--velocity", "0.9", "--isco"});
-  ASSERT_TRUE(options.has_value());
+  if (!options.has_value()) {
+    GTEST_FAIL() << "options is empty";
+  }
   ASSERT_TRUE(options->velocity.has_value());
   EXPECT_DOUBLE_EQ(*options->velocity, 0.9);
 }
@@ -109,7 +119,9 @@ TEST(ObserverSkyLutOptions, AcceptsZamoOutsideHorizon) {
   options.x = 2.0;
   options.observer = "zamo";
   const auto key = resolveObserver(options);
-  ASSERT_TRUE(key.has_value());
+  if (!key.has_value()) {
+    GTEST_FAIL() << "key is empty";
+  }
   EXPECT_DOUBLE_EQ(key->velocity, 0.0);
 }
 
@@ -119,6 +131,8 @@ TEST(ObserverSkyLutOptions, AcceptsExplicitVelocityOutsideHorizon) {
   options.x = 2.0;
   options.velocity = 0.3;
   const auto key = resolveObserver(options);
-  ASSERT_TRUE(key.has_value());
+  if (!key.has_value()) {
+    GTEST_FAIL() << "key is empty";
+  }
   EXPECT_DOUBLE_EQ(key->velocity, 0.3);
 }

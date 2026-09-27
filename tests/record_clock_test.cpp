@@ -65,7 +65,9 @@ TEST(RecordClock, InteractiveFramesReadTheWallClock) {
 TEST(RecordClock, ObserverCaptureClockFollowsTheOutputClockWhileRecording) {
   const platform::CliOptions cli = recordingCli();
   const auto clock = observerCaptureClock(cli, 150);
-  ASSERT_TRUE(clock.has_value());
+  if (!clock.has_value()) {
+    GTEST_FAIL() << "clock is empty";
+  }
   EXPECT_DOUBLE_EQ(clock->first, 150.0 / static_cast<double>(K_CINEMATIC_FPS));
   // frameSeconds is a difference of two divisions (frame 151's output second
   // minus frame 150's), so it is within a rounding ulp of 1 / fps rather than
@@ -92,7 +94,9 @@ TEST(RecordClock, ObserverCaptureClockFreezesForOneShotExport) {
   platform::CliOptions cli;
   cli.exportFramePath = "frame.png";
   const auto clock = observerCaptureClock(cli, 4);
-  ASSERT_TRUE(clock.has_value());
+  if (!clock.has_value()) {
+    GTEST_FAIL() << "clock is empty";
+  }
   EXPECT_DOUBLE_EQ(clock->first, 0.0);
   EXPECT_DOUBLE_EQ(clock->second, 0.0);
   // Every warmup frame index gives the same frozen clock.
@@ -150,7 +154,9 @@ TEST(RecordClock, RecordCameraOverridesMustDescribeACamera) {
                                std::numeric_limits<float>::quiet_NaN()}) {
     cli.recordDistance = distance;
     const std::optional<std::string> conflict = recordCameraConflict(cli);
-    ASSERT_TRUE(conflict.has_value()) << distance;
+    if (!conflict.has_value()) {
+      GTEST_FAIL() << distance;
+    }
     EXPECT_NE(conflict.value_or("").find("--record-distance"), std::string::npos);
   }
   // The cinematic path's 120 lies past the interactive 50 clamp and stays legal.
@@ -163,7 +169,9 @@ TEST(RecordClock, RecordCameraOverridesMustDescribeACamera) {
   for (const float fov : {0.0f, -10.0f, 180.0f, 250.0f, std::numeric_limits<float>::quiet_NaN()}) {
     cli.recordFovDeg = fov;
     const std::optional<std::string> conflict = recordCameraConflict(cli);
-    ASSERT_TRUE(conflict.has_value()) << fov;
+    if (!conflict.has_value()) {
+      GTEST_FAIL() << fov;
+    }
     EXPECT_NE(conflict.value_or("").find("--record-fov"), std::string::npos);
   }
   cli.recordFovDeg = 120.0f;
