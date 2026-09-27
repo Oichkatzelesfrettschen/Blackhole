@@ -395,9 +395,13 @@ struct DecayIntegrals {
     }
   } else {
     const double oneMinusEC = (-std::expm1(-f.tau) * f.cosX2) + f.oneMinusCosX2;
-    const double den = std::max((f.tau * f.tau) + f.b, SMALL_EIGENVALUE * SMALL_EIGENVALUE);
-    r.cosInt = ((f.tau * oneMinusEC) + (f.x2 * f.e * f.sinX2)) / den;
-    r.sinInt = (oneMinusEC - (f.tau * f.e * (1.0 + f.sincMinusOneX2))) / den;
+    const double scale = std::max(f.tau, f.x2);
+    const double inverseScale = 1.0 / scale;
+    const double scaledTau = f.tau * inverseScale;
+    const double scaledX2 = f.x2 * inverseScale;
+    const double inverseDen = inverseScale / ((scaledTau * scaledTau) + (scaledX2 * scaledX2));
+    r.cosInt = ((scaledTau * oneMinusEC) + (scaledX2 * f.e * f.sinX2)) * inverseDen;
+    r.sinInt = ((oneMinusEC * inverseScale) - (scaledTau * f.e * (1.0 + f.sincMinusOneX2))) * inverseDen;
   }
   return r;
 }
@@ -416,11 +420,13 @@ struct DecayIntegrals {
   // select (x1 = 0 would otherwise raise FE_INVALID).
   const bool thick = opticallyThick(f);
   if (thick) {
-    const double p = (f.tau * f.tau) - f.a;
+    const double ratio = f.x1 / f.tau;
+    const double inverseP = (1.0 / f.tau) / (f.tau * (1.0 - (ratio * ratio)));
     const double eCosh = f.eCoshMinusOne + f.e;
-    r.coshInt = (f.tau - ((f.tau * eCosh) + (f.a * f.eSinhc))) / std::max(p, 0.5);
+    r.coshInt = ((1.0 - eCosh) - (f.x1 * ratio * f.eSinhc)) /
+                (f.tau * (1.0 - (ratio * ratio)));
     if (f.x1 >= SMALL_EIGENVALUE) {
-      r.sinhInt = (1.0 - (eCosh + (f.tau * f.eSinhc))) / std::max(p, 0.5);
+      r.sinhInt = (1.0 - (eCosh + (f.tau * f.eSinhc))) * inverseP;
     }
   } else {
     const double lo = decayIntegral(f.tau - f.x1);
@@ -459,6 +465,11 @@ struct DecayIntegrals {
   if (opticallyThick(f)) {
     // (Ich - Ic)/D and (Ish - Is)/D with the D-free parts tau/(P Qd) and
     // 1/(P Qd) separated from the e^{-tau} brackets, P = tau^2 - a, Qd = tau^2 + b.
+    if (f.tau >= 1.0e150) {
+      // The cubic coefficients decay as tau^-3 and tau^-4. Axis evaluation
+      // retains their finite products with large generator powers.
+      return c;
+    }
     const double p = (f.tau * f.tau) - f.a;
     const double qd = (f.tau * f.tau) + f.b;
     const double eCosh = f.eCoshMinusOne + f.e;
@@ -513,7 +524,7 @@ template <std::size_t N>
 /// invariants are recomputed with dot2 (about 20 of 53 bits lost).
 inline constexpr double INVARIANT_CANCELLATION = 1.0e-6;
 
-[[nodiscard]] inline LorentzEigenvalues lorentzEigenvalues(const StokesGenerator &k) noexcept {
+[[nodiscard]] inline LorentzEigenvalues lorentzEigenvaluesUnscaled(const StokesGenerator &k) noexcept {
   const double eta2 = (k.alphaQ * k.alphaQ) + (k.alphaU * k.alphaU) + (k.alphaV * k.alphaV);
   const double rho2 = (k.rhoQ * k.rhoQ) + (k.rhoU * k.rhoU) + (k.rhoV * k.rhoV);
   double etaRho = (k.alphaQ * k.rhoQ) + (k.alphaU * k.rhoU) + (k.alphaV * k.rhoV);
@@ -529,13 +540,30 @@ inline constexpr double INVARIANT_CANCELLATION = 1.0e-6;
     etaRho = dot2<3>({k.alphaQ, k.alphaU, k.alphaV}, {k.rhoQ, k.rhoU, k.rhoV});
   }
   const double im = 2.0 * etaRho;
-  const double t = std::sqrt(0.5 * (std::hypot(re, im) + std::abs(re)));
+  const double t = std::sqrt(std::hypot(0.5 * re, 0.5 * im) + (0.5 * std::abs(re)));
   if (t == 0.0) {
     return {};
   }
   const double other = std::abs(im) / (2.0 * ((t > 0.0) ? t : 1.0));
   return (re >= 0.0) ? LorentzEigenvalues{.x1 = t, .x2 = other}
                      : LorentzEigenvalues{.x1 = other, .x2 = t};
+}
+
+[[nodiscard]] inline LorentzEigenvalues lorentzEigenvalues(const StokesGenerator &k) noexcept {
+  const double scale = std::max({std::abs(k.alphaQ), std::abs(k.alphaU), std::abs(k.alphaV),
+                                 std::abs(k.rhoQ), std::abs(k.rhoU), std::abs(k.rhoV)});
+  if (scale > 1.0e150) {
+    const double inverseScale = 1.0 / scale;
+    const StokesGenerator normalized{.alphaQ = k.alphaQ * inverseScale,
+                                     .alphaU = k.alphaU * inverseScale,
+                                     .alphaV = k.alphaV * inverseScale,
+                                     .rhoQ = k.rhoQ * inverseScale,
+                                     .rhoU = k.rhoU * inverseScale,
+                                     .rhoV = k.rhoV * inverseScale};
+    const LorentzEigenvalues value = lorentzEigenvaluesUnscaled(normalized);
+    return {.x1 = value.x1 * scale, .x2 = value.x2 * scale};
+  }
+  return lorentzEigenvaluesUnscaled(k);
 }
 
 /**
@@ -566,15 +594,19 @@ struct LorentzAxes {
   const double etaRho = (k.alphaQ * k.rhoQ) + (k.alphaU * k.rhoU) + (k.alphaV * k.rhoV);
   // sqrt(w.w) = x1 + i x2s with x1 x2s = eta.rho; x1, x2 are magnitudes.
   const double x2s = (etaRho < 0.0) ? -x2 : x2;
-  const double dRaw = (x1 * x1) + (x2 * x2);
+  const double scale = std::max(x1, x2);
+  const double inverseScale = 1.0 / ((scale > 0.0) ? scale : 1.0);
+  const double scaledX1 = x1 * inverseScale;
+  const double scaledX2 = x2s * inverseScale;
+  const double dRaw = (scaledX1 * scaledX1) + (scaledX2 * scaledX2);
   const double d = (dRaw > 0.0) ? dRaw : 1.0;
   const std::array<double, 3> eta = {k.alphaQ, k.alphaU, k.alphaV};
   const std::array<double, 3> rho = {k.rhoQ, k.rhoU, k.rhoV};
   std::array<double, 3> p{};
   std::array<double, 3> q{};
   for (std::size_t i = 0; i < 3; ++i) {
-    p[i] = ((x1 * eta[i]) + (x2s * rho[i])) / d;
-    q[i] = ((x1 * rho[i]) - (x2s * eta[i])) / d;
+    p[i] = ((scaledX1 * (eta[i] * inverseScale)) + (scaledX2 * (rho[i] * inverseScale))) / d;
+    q[i] = ((scaledX1 * (rho[i] * inverseScale)) - (scaledX2 * (eta[i] * inverseScale))) / d;
   }
   // K' = x1 A + x2s B_n with B_n = K'(-q, p); B = sign(x2s) B_n keeps x2 >= 0.
   const double sb = (etaRho < 0.0) ? -1.0 : 1.0;
@@ -629,6 +661,9 @@ struct AxisCoeffs {
   const double big = std::max(x1, x2);
   if (!(big >= 1.0)) {
     return false;
+  }
+  if (big >= 1.0e150) {
+    return true;
   }
   const double norm2 = (k.alphaQ * k.alphaQ) + (k.alphaU * k.alphaU) + (k.alphaV * k.alphaV) +
                        (k.rhoQ * k.rhoQ) + (k.rhoU * k.rhoU) + (k.rhoV * k.rhoV);
@@ -705,7 +740,8 @@ struct ExpScale {
   const double tau = k.alphaI * ds;
   const detail::LorentzEigenvalues ev = detail::lorentzEigenvalues(kp);
   const detail::SegmentFunctions f = detail::segmentFunctions(tau, ev.x1, ev.x2);
-  const bool axisForm = detail::useAxisForm(kp, ev.x1, ev.x2);
+  const bool axisForm = detail::useAxisForm(kp, ev.x1, ev.x2) ||
+                        (tau >= 1.0e150 && std::max(ev.x1, ev.x2) >= detail::SMALL_EIGENVALUE);
   const detail::LorentzAxes axes =
       axisForm ? detail::lorentzAxes(kp, ev.x1, ev.x2) : detail::LorentzAxes{};
   const double a = ev.x1 * ev.x1;
@@ -725,8 +761,12 @@ struct ExpScale {
     return detail::applyCubic(detail::dampedHomogeneous(f), v, v1, v2, v3);
   };
 
-  const double p = (tau * tau) - a;
-  if (form == StokesSourceForm::SteadyStateSplit && tau >= 0.1 && p >= 0.01 * tau * tau) {
+  double p = 0.0;
+  if (tau < 1.0e150) {
+    p = (tau * tau) - a;
+  }
+  if (form == StokesSourceForm::SteadyStateSplit && tau >= 0.1 && tau < 1.0e150 &&
+      p >= 0.01 * tau * tau) {
     // S_inf = (tau + K's)^{-1} J ds; nothing divides by D.
     const double qd = (tau * tau) + b;
     const double pSafe = (p > 0.0) ? p : 1.0;
@@ -772,18 +812,26 @@ struct ExpScale {
                                  .cMinus = detail::decayIntegral(tau - ev.x1),
                                  .cP2 = r.cosInt,
                                  .cB = ev.x2 * r.sinInt};
-    srcPart = detail::applyAxes(src, axes, emission);
+    StokesArray scaledEmission{};
+    for (std::size_t i = 0; i < emission.size(); ++i) {
+      scaledEmission[i] = ds * emission[i];
+    }
+    srcPart = detail::applyAxes(src, axes, scaledEmission);
   } else {
     const detail::CubicCoeffs src = detail::integratedCoeffs(f);
-    const StokesArray j1 = detail::applyLorentzPart(kp, emission);
+    StokesArray scaledEmission{};
+    for (std::size_t i = 0; i < emission.size(); ++i) {
+      scaledEmission[i] = ds * emission[i];
+    }
+    const StokesArray j1 = detail::applyLorentzPart(kp, scaledEmission);
     const StokesArray j2 = detail::applyLorentzPart(kp, j1);
     const StokesArray j3 = detail::applyLorentzPart(kp, j2);
-    srcPart = detail::applyCubic(src, emission, j1, j2, j3);
+    srcPart = detail::applyCubic(src, scaledEmission, j1, j2, j3);
   }
   const StokesArray homPart = homogeneous(s0);
   StokesArray out{};
   for (std::size_t i = 0; i < out.size(); ++i) {
-    out[i] = homPart[i] + (ds * srcPart[i]);
+    out[i] = homPart[i] + srcPart[i];
   }
   return out;
 }
@@ -809,7 +857,52 @@ stokesPropagateExact(const StokesArray &s0, const StokesArray &emission, const S
     return s0;
   }
   const double gain = -k.alphaI * ds;
-  if (!(gain > detail::GAIN_REVERSE_DEPTH)) {
+  const double eigenGain = stokes_exact_detail::lorentzEigenvalues(
+      stokes_exact_detail::scaledLorentzPart(k, ds)).x1 - (k.alphaI * ds);
+  if (gain <= detail::GAIN_REVERSE_DEPTH && eigenGain > detail::GAIN_REVERSE_DEPTH) {
+    const StokesGenerator scaled = detail::scaledLorentzPart(k, ds);
+    const detail::LorentzEigenvalues ev = detail::lorentzEigenvalues(scaled);
+    if (detail::useAxisForm(scaled, ev.x1, ev.x2)) {
+      const detail::LorentzAxes axes = detail::lorentzAxes(scaled, ev.x1, ev.x2);
+      const StokesArray av = detail::applyLorentzPart(axes.a, s0);
+      const StokesArray aav = detail::applyLorentzPart(axes.a, av);
+      const StokesArray bv = detail::applyLorentzPart(axes.b, s0);
+      const StokesArray bbv = detail::applyLorentzPart(axes.b, bv);
+      StokesArray scaledEmission{};
+      for (std::size_t i = 0; i < emission.size(); ++i) {
+        scaledEmission[i] = ds * emission[i];
+      }
+      const StokesArray emissionA = detail::applyLorentzPart(axes.a, scaledEmission);
+      const StokesArray emissionAA = detail::applyLorentzPart(axes.a, emissionA);
+      const StokesArray emissionB = detail::applyLorentzPart(axes.b, scaledEmission);
+      const StokesArray emissionBB = detail::applyLorentzPart(axes.b, emissionB);
+      const double tau = k.alphaI * ds;
+      const detail::SegmentFunctions trigFunctions = detail::segmentFunctions(tau, 0.0, ev.x2);
+      const detail::Moments moments = (ev.x2 < detail::SMALL_EIGENVALUE)
+                                          ? detail::decayMoments(tau)
+                                          : detail::Moments{};
+      const detail::DecayIntegrals trig = detail::decayTrigIntegrals(trigFunctions, moments);
+      auto mode = [](double state, double source, double rate) {
+        if (-rate > detail::GAIN_REVERSE_DEPTH) {
+          detail::ExpScale scale = detail::expScale(-rate);
+          --scale.n;
+          return detail::scaleByExp(state, scale) +
+                 (detail::scaleByExp(source, scale) * detail::decayIntegral(-rate));
+        }
+        return 0.5 * ((std::exp(-rate) * state) + (detail::decayIntegral(rate) * source));
+      };
+      StokesArray out{};
+      for (std::size_t i = 0; i < out.size(); ++i) {
+        out[i] = mode(aav[i] + av[i], emissionAA[i] + emissionA[i], tau + ev.x1) +
+                 mode(aav[i] - av[i], emissionAA[i] - emissionA[i], tau - ev.x1) -
+                 (trigFunctions.e * ((trigFunctions.cosX2 * bbv[i]) +
+                                     (trigFunctions.sinX2 * bv[i]))) -
+                 (trig.cosInt * emissionBB[i]) - (ev.x2 * trig.sinInt * emissionB[i]);
+      }
+      return out;
+    }
+  }
+  if (!(eigenGain > detail::GAIN_REVERSE_DEPTH)) {
     return detail::propagateSegment(s0, emission, k, ds, form);
   }
   // Deep gain: e^{-alpha_I ds} overflows before the solution does. With
