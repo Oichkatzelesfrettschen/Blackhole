@@ -24,6 +24,7 @@
 #include <string>
 
 #include "physics/observer_sky_lut.h"
+#include "physics/observer_sky_map.h"
 #include "tools/observer_sky_lut_options.h"
 
 namespace {
