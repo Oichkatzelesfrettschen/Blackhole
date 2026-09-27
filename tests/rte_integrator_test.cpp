@@ -55,6 +55,7 @@
 #include <exception>
 #include <iostream>
 #include <numbers>
+#include <limits>
 #include <vector>
 
 #include "../src/physics/bessel_k.h"
@@ -306,6 +307,40 @@ void testSynchThermalEmissivityPositive() {
   check(jNu > 0.0, "synchrotronThermalEmissivity: positive for EHT-like params");
 }
 
+void testSynchThermalEmissivityDomain() {
+  const double nu = 230.0e9;
+  const double bField = 10.0;
+  const double nE = 1.0e6;
+  const double floorThetaE = K_B * 5.0e8 / (M_ELECTRON * C * C);
+  check(THERMAL_SYNCHROTRON_MIN_THETA_E == floorThetaE,
+        "thermal emissivity floor follows the CGS constants");
+
+  for (const double thetaE : {1.0e-6, 1.0e-5, 1.0e-3, 0.05}) {
+    check(synchrotronThermalEmissivity(nu, bField, nE, thetaE) == 0.0,
+          "thermal emissivity is zero below the fit floor");
+    check(synchrotronThermalAbsorption(nu, bField, nE, thetaE) == 0.0,
+          "thermal absorption is zero below the fit floor");
+  }
+
+  for (const double thetaE : {floorThetaE,
+                              std::nextafter(floorThetaE, std::numeric_limits<double>::max())}) {
+    const double nuB = gyrofrequency(bField);
+    const double xM = nu / (1.5 * nuB * thetaE * thetaE);
+    const double imAlgebraic = 4.0505 * std::pow(xM, -1.0 / 6.0) *
+        (1.0 + (0.40 * std::pow(xM, -1.0 / 4.0)) + (0.5316 * std::pow(xM, -1.0 / 2.0)));
+    const double prefactor = std::numbers::sqrt3 * E_CHARGE * E_CHARGE * E_CHARGE *
+        nE * nuB / (M_ELECTRON * C * C);
+    const double expected = prefactor / scaledBesselK(2.0, 1.0 / thetaE) *
+        thetaE * thetaE * imAlgebraic *
+        std::exp((1.0 / thetaE) - (1.8899 * std::cbrt(xM)));
+    const double actual = synchrotronThermalEmissivity(nu, bField, nE, thetaE);
+    check(safeIsfinite(actual) && actual > 0.0,
+          "thermal emissivity is finite and positive at the fit floor");
+    check(nearRel(actual, expected, 1.0e-12),
+          "thermal emissivity matches the Mahadevan formula at the fit floor");
+  }
+}
+
 void testSynchThermalEmissivityScalesWithNe() {
   // Test 16: j_nu proportional to n_e
   const double nu = 230.0e9;
@@ -438,11 +473,9 @@ void testThermalBesselFloatingRange() {
   const double overflowValue = std::exp(-smallArgument) * scaledBesselK(2.0, smallArgument);
   check(!safeIsfinite(overflowValue), "K_2 preserves the scaled-integral floating-point limit");
 
-  // At Theta_e = 1e-3, K_2(1000) and the Mahadevan spectral factor both
-  // underflow; the emissivity joins their exponentials and returns the 0 limit.
-  const double coldEmissivity = synchrotronThermalEmissivity(230.0e9, 10.0, 1.0e6, 1.0e-3);
-  check(safeIsfinite(coldEmissivity) && coldEmissivity >= 0.0,
-        "thermal emissivity stays finite where K_2 underflows");
+  const double domainEmissivity = synchrotronThermalEmissivity(230.0e9, 10.0, 1.0e6, 0.1);
+  check(safeIsfinite(domainEmissivity) && domainEmissivity > 0.0,
+        "thermal emissivity stays finite inside the fit domain");
 }
 
 } // namespace
@@ -471,6 +504,7 @@ int main() try {
 
   std::cout << "\nThermal synchrotron:\n";
   testSynchThermalEmissivityPositive();
+  testSynchThermalEmissivityDomain();
   testSynchThermalEmissivityScalesWithNe();
   testSynchThermalEmissivityScalesWithB();
   testSynchThermalAbsorptionNonNegative();

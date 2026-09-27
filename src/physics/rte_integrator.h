@@ -241,7 +241,7 @@ struct RteSample {
 // ============================================================================
 
 /**
- * @brief Thermal synchrotron emissivity (Mahadevan 1996 Eq. A2).
+ * @brief Thermal synchrotron emissivity (Mahadevan 1996 Eq. 32).
  *
  * WHY: In hot accretion flows (ADAF/RIAF) around black holes the electron
  * distribution is well approximated by a relativistic Maxwell-Juttner
@@ -260,28 +260,37 @@ struct RteSample {
  *   - nu_s = (3/2) nu_B Theta_e^2 = characteristic synchrotron frequency
  *   - x_M = nu / nu_s = dimensionless frequency
  *   - I_M(x) = 4.0505/x^{1/6} * (1 + 0.40/x^{1/4} + 0.5316/x^{1/2})
- *              * exp(-1.8899 * x^{1/3})     [Mahadevan 1996, Eq. A2]
+ *              * exp(-1.8899 * x^{1/3})     [Mahadevan 1996, Eq. 32,
+ *              alpha = beta = gamma = 1]
  *   - K_2(z) = modified Bessel function of second kind, order 2
  *
  * WHY the K_2 factor: it arises from the partition function of the
  * Maxwell-Juttner distribution. For large 1/Theta_e, the direct expression
  * may underflow; for small 1/Theta_e, the scaled integral may overflow.
+ * Mahadevan fitted 5e8 K < T_e < 3.2e10 K and states the
+ * alpha = beta = gamma = 1 form as the high-temperature limit. Below the
+ * 5e8 K floor, the function reports no emission rather than extrapolating
+ * the fit. The floor is inclusive in this implementation.
  *
  * References:
- *   - Mahadevan (1996), ApJ 457, 805, Eqs. 20-25 and A2.
+ *   - Mahadevan (1996), ApJ 457, 805, arXiv:astro-ph/9601073, Eq. 32.
  *   - Leung, Gammie & Noble (2011), ApJ 737, 21, Appendix B.
  *
  * @param nu      Frequency [Hz]
  * @param bField  Magnetic field strength [Gauss]
  * @param nE      Electron number density [cm^-3]
- * @param thetaE  Dimensionless electron temperature k_B T_e / (m_e c^2) > 0
+ * @param thetaE  Dimensionless electron temperature k_B T_e / (m_e c^2)
  * @return j_nu [erg / (cm^3 s Hz sr)]
  */
+inline constexpr double THERMAL_SYNCHROTRON_MIN_THETA_E =
+    K_B * 5.0e8 / (M_ELECTRON * C * C);
+
 [[nodiscard]] inline double synchrotronThermalEmissivity(double nu,
                                                           double bField,
                                                           double nE,
                                                           double thetaE) {
-    if (nu <= 0.0 || bField <= 0.0 || nE <= 0.0 || thetaE <= 0.0) { return 0.0; }
+    if (nu <= 0.0 || bField <= 0.0 || nE <= 0.0 ||
+        thetaE < THERMAL_SYNCHROTRON_MIN_THETA_E) { return 0.0; }
 
     const double nuB  = gyrofrequency(bField);         // e*B / (2*pi*m_e*c) [Hz]
     const double nuS  = 1.5 * nuB * thetaE * thetaE;  // characteristic frequency [Hz]
@@ -322,6 +331,9 @@ struct RteSample {
  * WHY: In detailed balance, stimulated emission exactly equals absorption,
  * making j/alpha = B_nu(T_e) for a thermal distribution.  This relation holds
  * for the Maxwell-Juttner distribution used in the Mahadevan emissivity formula.
+ * Mahadevan (1996), ApJ 457, 805, arXiv:astro-ph/9601073, Eq. 32 uses
+ * alpha = beta = gamma = 1 here. Below T_e = 5e8 K, emissivity and therefore
+ * absorption report zero outside the fit's domain.
  *
  * @param nu      Frequency [Hz]
  * @param bField  Magnetic field strength [Gauss]
