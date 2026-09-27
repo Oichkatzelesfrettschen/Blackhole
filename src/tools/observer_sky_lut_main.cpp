@@ -242,10 +242,13 @@ int main(int argc, char **argv) {
   }
   // Default output: the renderer's shared cache, else the resource tree's
   // assets/luts, the directory the renderer falls back to.
-  const bool sharedCache = options->out.empty();
-  if (sharedCache) {
+  // Only a resolved user cache is managed; the source-tree fallback may hold
+  // explicit --out bundles and is never pruned.
+  bool sharedCache = false;
+  if (options->out.empty()) {
     const std::filesystem::path cache = platform::writableCacheSubdirectory("observer_sky");
-    options->out = cache.empty() ? platform::resourceRoot() / "assets" / "luts" : cache;
+    sharedCache = !cache.empty();
+    options->out = sharedCache ? cache : platform::resourceRoot() / "assets" / "luts";
   }
   const auto key = resolveObserver(*options);
   if (!key) {
@@ -258,15 +261,16 @@ int main(int argc, char **argv) {
   const double seconds =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
   printStatistics(lut, seconds);
-  if (!sky::writeObserverSkyLut(lut, options->out)) {
-    std::printf("could not write %s\n", options->out.string().c_str());
-    return 1;
-  }
+  const bool written = sky::writeObserverSkyLut(lut, options->out);
   const std::uint64_t hash = sky::lutHash(lut.key, lut.dimensions, lut.settings);
-  // Only the shared cache is managed; an explicit --out directory is the
-  // caller's and keeps everything written there.
+  // Evict even after a partial publish: a lone .bin is readable and counts
+  // against the shared cache's budget.
   if (sharedCache) {
     sky::evictObserverSkyBundles(options->out, sky::K_OBSERVER_SKY_CACHE_BYTES, hash);
+  }
+  if (!written) {
+    std::printf("could not write %s\n", options->out.string().c_str());
+    return 1;
   }
   const std::string stem = sky::lutStem(hash);
   std::printf("wrote %s/%s.{bin,json}\n", options->out.string().c_str(), stem.c_str());
