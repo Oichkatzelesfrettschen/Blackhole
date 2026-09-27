@@ -38,8 +38,6 @@ namespace {
 
 constexpr float TOLERANCE_SINGLE = 1e-6F;
 
-} // namespace
-
 class GPUCPUParityTest : public ::testing::Test {
 private:
   GLFWwindow *window_ = nullptr;
@@ -119,6 +117,8 @@ protected:
 };
 
 bool GPUCPUParityTest::glAvailable = false;
+
+} // namespace
 
 // ============================================================================
 // Schwarzschild metric parity

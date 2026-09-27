@@ -491,7 +491,9 @@ TEST(EventPredicates, CoreRejectsNegativeTechPacketPoints) {
 
 // An enum holding an arbitrary value of its fixed underlying type, as a
 // hand-built story could; every uint8 value is a valid object of these enums.
+namespace {
 template <typename Enum> Enum rawEnum(std::uint8_t value) { return std::bit_cast<Enum>(value); }
+} // namespace
 
 // Falsifier: a hand-built story with an out-of-range enum discriminant --
 // which the loader can never produce -- building a valid campaign; a Received

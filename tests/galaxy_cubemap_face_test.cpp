@@ -45,14 +45,17 @@ namespace {
  * GL face ordering: matches lut_manager.cu::lutRegisterCubemap and the
  * GL_TEXTURE_CUBE_MAP_POSITIVE_X ... NEGATIVE_Z sequence (0-5).
  * ======================================================================= */
-enum CubeFace {
-  FacePosX = 0, /**< +X: arrayIndex 0 in GL face order */
-  FaceNegX = 1, /**< -X: arrayIndex 1 */
-  FacePosY = 2, /**< +Y: arrayIndex 2 */
-  FaceNegY = 3, /**< -Y: arrayIndex 3 */
-  FacePosZ = 4, /**< +Z: arrayIndex 4 */
-  FaceNegZ = 5  /**< -Z: arrayIndex 5 */
+enum class CubeFace : int {
+  PosX = 0, /**< +X: arrayIndex 0 in GL face order */
+  NegX = 1, /**< -X: arrayIndex 1 */
+  PosY = 2, /**< +Y: arrayIndex 2 */
+  NegY = 3, /**< -Y: arrayIndex 3 */
+  PosZ = 4, /**< +Z: arrayIndex 4 */
+  NegZ = 5  /**< -Z: arrayIndex 5 */
 };
+
+/** @brief The GL layer index a face occupies. */
+constexpr int layerOf(CubeFace face) { return static_cast<int>(face); }
 
 /** @brief Minimum positive float to avoid divide-by-zero in face selection. */
 constexpr float D_EPSILON = 1e-7f;
@@ -89,33 +92,33 @@ FaceUV cubemapFace(float dx, float dy, float dz) {
   if (ax >= ay && ax >= az) {
     float const sc = 1.0f / std::fmax(ax, D_EPSILON);
     if (dx > 0.0f) {
-      layer = FacePosX;
+      layer = layerOf(CubeFace::PosX);
       u = -dz * sc;
       v = -dy * sc;
     } else {
-      layer = FaceNegX;
+      layer = layerOf(CubeFace::NegX);
       u = dz * sc;
       v = -dy * sc;
     }
   } else if (ay >= ax && ay >= az) {
     float const sc = 1.0f / std::fmax(ay, D_EPSILON);
     if (dy > 0.0f) {
-      layer = FacePosY;
+      layer = layerOf(CubeFace::PosY);
       u = dx * sc;
       v = dz * sc;
     } else {
-      layer = FaceNegY;
+      layer = layerOf(CubeFace::NegY);
       u = dx * sc;
       v = -dz * sc;
     }
   } else {
     float const sc = 1.0f / std::fmax(az, D_EPSILON);
     if (dz > 0.0f) {
-      layer = FacePosZ;
+      layer = layerOf(CubeFace::PosZ);
       u = dx * sc;
       v = -dy * sc;
     } else {
-      layer = FaceNegZ;
+      layer = layerOf(CubeFace::NegZ);
       u = -dx * sc;
       v = -dy * sc;
     }
@@ -173,21 +176,45 @@ void testCardinalDirections() {
 
   struct Card {
     float dx, dy, dz;
-    int expectedLayer;
+    CubeFace expectedLayer;
     const char *label;
   };
   const Card cards[] = {
-      {.dx = 1.0f, .dy = 0.0f, .dz = 0.0f, .expectedLayer = FacePosX, .label = "+X -> layer 0"},
-      {.dx = -1.0f, .dy = 0.0f, .dz = 0.0f, .expectedLayer = FaceNegX, .label = "-X -> layer 1"},
-      {.dx = 0.0f, .dy = 1.0f, .dz = 0.0f, .expectedLayer = FacePosY, .label = "+Y -> layer 2"},
-      {.dx = 0.0f, .dy = -1.0f, .dz = 0.0f, .expectedLayer = FaceNegY, .label = "-Y -> layer 3"},
-      {.dx = 0.0f, .dy = 0.0f, .dz = 1.0f, .expectedLayer = FacePosZ, .label = "+Z -> layer 4"},
-      {.dx = 0.0f, .dy = 0.0f, .dz = -1.0f, .expectedLayer = FaceNegZ, .label = "-Z -> layer 5"},
+      {.dx = 1.0f,
+       .dy = 0.0f,
+       .dz = 0.0f,
+       .expectedLayer = CubeFace::PosX,
+       .label = "+X -> layer 0"},
+      {.dx = -1.0f,
+       .dy = 0.0f,
+       .dz = 0.0f,
+       .expectedLayer = CubeFace::NegX,
+       .label = "-X -> layer 1"},
+      {.dx = 0.0f,
+       .dy = 1.0f,
+       .dz = 0.0f,
+       .expectedLayer = CubeFace::PosY,
+       .label = "+Y -> layer 2"},
+      {.dx = 0.0f,
+       .dy = -1.0f,
+       .dz = 0.0f,
+       .expectedLayer = CubeFace::NegY,
+       .label = "-Y -> layer 3"},
+      {.dx = 0.0f,
+       .dy = 0.0f,
+       .dz = 1.0f,
+       .expectedLayer = CubeFace::PosZ,
+       .label = "+Z -> layer 4"},
+      {.dx = 0.0f,
+       .dy = 0.0f,
+       .dz = -1.0f,
+       .expectedLayer = CubeFace::NegZ,
+       .label = "-Z -> layer 5"},
   };
 
   for (const auto &c : cards) {
     FaceUV const r = cubemapFace(c.dx, c.dy, c.dz);
-    check(r.layer == c.expectedLayer, c.label);
+    check(r.layer == layerOf(c.expectedLayer), c.label);
     checkNear(r.u, 0.5f, 0.01f, "  u == 0.5 at face center");
     checkNear(r.v, 0.5f, 0.01f, "  v == 0.5 at face center");
   }
@@ -204,7 +231,7 @@ void testOffAxisDominance() {
   std::cout << "Test 7: off-axis direction selects dominant face\n";
   /* X is dominant (0.9 > 0.3 > 0.2) */
   FaceUV const r = cubemapFace(0.9f, 0.3f, -0.2f);
-  check(r.layer == FacePosX, "+X dominant: layer 0");
+  check(r.layer == layerOf(CubeFace::PosX), "+X dominant: layer 0");
   check(r.u >= 0.0f && r.u <= 1.0f, "u in [0,1]");
   check(r.v >= 0.0f && r.v <= 1.0f, "v in [0,1]");
 }
@@ -227,7 +254,7 @@ void testCornerUV() {
   {
     float const len = std::numbers::sqrt3_v<float>;
     FaceUV const r = cubemapFace(1.0f / len, 1.0f / len, -1.0f / len);
-    check(r.layer == FacePosX, "+X dominant for (1,1,-1)/sqrt(3)");
+    check(r.layer == layerOf(CubeFace::PosX), "+X dominant for (1,1,-1)/sqrt(3)");
     checkNear(r.u, 1.0f, 0.02f, "u ~ 1.0 at corner");
     checkNear(r.v, 0.0f, 0.02f, "v ~ 0.0 at corner");
   }
@@ -236,7 +263,7 @@ void testCornerUV() {
   {
     float const len = std::numbers::sqrt3_v<float>;
     FaceUV const r = cubemapFace(1.0f / len, -1.0f / len, 1.0f / len);
-    check(r.layer == FacePosX, "+X dominant for (1,-1,1)/sqrt(3)");
+    check(r.layer == layerOf(CubeFace::PosX), "+X dominant for (1,-1,1)/sqrt(3)");
     checkNear(r.u, 0.0f, 0.02f, "u ~ 0.0 at opposite corner");
     checkNear(r.v, 1.0f, 0.02f, "v ~ 1.0 at opposite corner");
   }
@@ -300,7 +327,7 @@ void testFaceEdgeMonotonicity() {
   for (int i = 0; i <= 9; ++i) {
     float const dz = -0.9f + (static_cast<float>(i) * 0.2f);
     FaceUV const r = cubemapFace(1.0f, 0.0f, dz);
-    if (r.layer != FacePosX) {
+    if (r.layer != layerOf(CubeFace::PosX)) {
       monotone = false;
       break;
     }
