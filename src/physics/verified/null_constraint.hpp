@@ -21,6 +21,7 @@
 #ifndef PHYSICS_VERIFIED_NULL_CONSTRAINT_HPP
 #define PHYSICS_VERIFIED_NULL_CONSTRAINT_HPP
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <utility>
@@ -470,9 +471,7 @@ struct ConstraintStats {
    */
   constexpr void update(double constraint, bool renormalized) noexcept {
     const double absC = std::abs(constraint);
-    if (absC > maxConstraint) {
-      maxConstraint = absC;
-    }
+    maxConstraint = std::max(maxConstraint, absC);
     totalDrift += absC;
     if (renormalized) {
       ++renormCount;

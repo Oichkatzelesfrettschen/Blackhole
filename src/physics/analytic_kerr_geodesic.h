@@ -204,10 +204,10 @@ inline void classifyAndSort(RadialRoots &result) {
     result.type = RadialMotionType::Plunge;
   }
   if (result.nReal >= 2) {
-    std::stable_sort(result.roots.begin(), result.roots.end(),
-                     [](const std::complex<double> &lhs, const std::complex<double> &rhs) {
-                       return lhs.real() > rhs.real();
-                     });
+    std::ranges::stable_sort(result.roots,
+                             [](const std::complex<double> &lhs, const std::complex<double> &rhs) {
+                               return lhs.real() > rhs.real();
+                             });
   }
 }
 

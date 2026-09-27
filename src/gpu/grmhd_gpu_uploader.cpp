@@ -40,6 +40,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <utility>
 
 #include "grmhd_gpu_uploader.h"
 
@@ -129,9 +130,8 @@ int GRMHDGpuUploader::uploadPendingTiles(int maxPerFrame) {
         }
 
         const bool isFullFrame =
-            (static_cast<int>(tile->width)  == texWidth_  &&
-             static_cast<int>(tile->height) == texHeight_ &&
-             static_cast<int>(tile->depth)  == texDepth_);
+            (std::cmp_equal(tile->width, texWidth_) && std::cmp_equal(tile->height, texHeight_) &&
+             std::cmp_equal(tile->depth, texDepth_));
 
         if (isFullFrame && tile->data.size() == nVoxels * 4) {
             // Fast path: tile data is already RGBA32F for the full texture.

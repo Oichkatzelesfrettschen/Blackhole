@@ -107,7 +107,7 @@ template <typename T> void testType(const char *name) {
 } // namespace
 
 int main() {
-#if defined(__FAST_MATH__)
+#ifdef __FAST_MATH__
   std::cout << "Built with -ffast-math (the intended condition).\n";
 #else
   std::cout << "NOTE: built without -ffast-math; the guarantees still "

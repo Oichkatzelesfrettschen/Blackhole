@@ -83,9 +83,7 @@ void appendIntRef(std::vector<std::uint8_t> &out, const IntRef &ref) {
 
 /** @brief Index of event `id` in the id-sorted list, or nullopt. */
 std::optional<std::size_t> eventIndexOf(const std::vector<EventDef> &events, std::uint32_t id) {
-  const auto found = std::lower_bound(
-      events.begin(), events.end(), id,
-      [](const EventDef &event, std::uint32_t value) { return event.id < value; });
+  const auto found = std::ranges::lower_bound(events, id, {}, &EventDef::id);
   if (found == events.end() || found->id != id) {
     return std::nullopt;
   }
