@@ -143,7 +143,7 @@ RGBA wgOverlay(double r, double theta, double phi, double a, bool showErgo, doub
   }
   double const total = gridA + ergoA;
   double const t = ergoA / std::max(total, 0.01);
-  return {0.3 + (t * 0.7), 0.8 - (t * 0.5), 1.0 - t, std::max(gridA, ergoA)};
+  return {.r = 0.3 + (t * 0.7), .g = 0.8 - (t * 0.5), .b = 1.0 - t, .a = std::max(gridA, ergoA)};
 }
 
 // ---------------------------------------------------------------------------
@@ -185,10 +185,10 @@ void testEventHorizon() {
     double expected;
   };
   const Case cases[] = {
-      {0.0, 2.0}, // Schwarzschild limit
-      {0.5, 1.0 + std::sqrt(0.75)},
-      {0.9, 1.0 + std::sqrt(1.0 - 0.81)},
-      {0.998, 1.0 + std::sqrt(1.0 - (0.998 * 0.998))},
+      {.a = 0.0, .expected = 2.0}, // Schwarzschild limit
+      {.a = 0.5, .expected = 1.0 + std::sqrt(0.75)},
+      {.a = 0.9, .expected = 1.0 + std::sqrt(1.0 - 0.81)},
+      {.a = 0.998, .expected = 1.0 + std::sqrt(1.0 - (0.998 * 0.998))},
   };
   for (const auto &c : cases) {
     const std::string buf =

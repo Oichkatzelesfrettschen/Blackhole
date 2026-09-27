@@ -35,7 +35,7 @@ SchwarzschildNullCase driftedNullCase() {
   const double exactVr = std::sqrt(((f * vt * vt) - (r * r * vph * vph)) * f);
   const verified::StateVector drifted{0.0, r, std::numbers::pi / 2.0, 0.0,
                                       vt,  exactVr * (1.0 + 1.0e-6), 0.0, vph};
-  return {g, drifted, exactVr};
+  return {.g = g, .drifted = drifted, .exactVr = exactVr};
 }
 
 /** @brief Multiplicative rescale of v^r, v^theta by sqrt(|target / norm|), zero for a null target. */

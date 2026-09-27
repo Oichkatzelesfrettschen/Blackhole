@@ -92,8 +92,10 @@ TEST(PageThorne, ContinuousPeakRadii) {
     double a;
     double peakOverIsco;
   };
-  constexpr std::array<Case, 4> kCases = {
-      {{0.0, 1.592}, {0.5, 1.563}, {0.9, 1.483}, {0.998, 1.278}}};
+  constexpr std::array<Case, 4> kCases = {{{.a = 0.0, .peakOverIsco = 1.592},
+                                           {.a = 0.5, .peakOverIsco = 1.563},
+                                           {.a = 0.9, .peakOverIsco = 1.483},
+                                           {.a = 0.998, .peakOverIsco = 1.278}}};
   for (Case const &c : kCases) {
     double const ratio =
         physics::pageThorneFluxPeakRadius(c.a) / physics::pageThorneIscoRadius(c.a);

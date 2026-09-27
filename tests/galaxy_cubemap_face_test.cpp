@@ -125,7 +125,7 @@ FaceUV cubemapFace(float dx, float dy, float dz) {
   u = 0.5f * (u + 1.0f);
   v = 0.5f * (v + 1.0f);
 
-  return FaceUV{layer, u, v};
+  return FaceUV{.layer = layer, .u = u, .v = v};
 }
 
 /* =========================================================================
@@ -177,9 +177,12 @@ void testCardinalDirections() {
     const char *label;
   };
   const Card cards[] = {
-      {1.0f, 0.0f, 0.0f, FacePosX, "+X -> layer 0"}, {-1.0f, 0.0f, 0.0f, FaceNegX, "-X -> layer 1"},
-      {0.0f, 1.0f, 0.0f, FacePosY, "+Y -> layer 2"}, {0.0f, -1.0f, 0.0f, FaceNegY, "-Y -> layer 3"},
-      {0.0f, 0.0f, 1.0f, FacePosZ, "+Z -> layer 4"}, {0.0f, 0.0f, -1.0f, FaceNegZ, "-Z -> layer 5"},
+      {.dx = 1.0f, .dy = 0.0f, .dz = 0.0f, .expectedLayer = FacePosX, .label = "+X -> layer 0"},
+      {.dx = -1.0f, .dy = 0.0f, .dz = 0.0f, .expectedLayer = FaceNegX, .label = "-X -> layer 1"},
+      {.dx = 0.0f, .dy = 1.0f, .dz = 0.0f, .expectedLayer = FacePosY, .label = "+Y -> layer 2"},
+      {.dx = 0.0f, .dy = -1.0f, .dz = 0.0f, .expectedLayer = FaceNegY, .label = "-Y -> layer 3"},
+      {.dx = 0.0f, .dy = 0.0f, .dz = 1.0f, .expectedLayer = FacePosZ, .label = "+Z -> layer 4"},
+      {.dx = 0.0f, .dy = 0.0f, .dz = -1.0f, .expectedLayer = FaceNegZ, .label = "-Z -> layer 5"},
   };
 
   for (const auto &c : cards) {

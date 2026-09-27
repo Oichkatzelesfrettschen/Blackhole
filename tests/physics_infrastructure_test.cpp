@@ -222,10 +222,10 @@ bool testBisectRadialCrossing() {
   std::cout << "Test 10: bisectRadialCrossing -- locates r=rTarget within 1e-6\n";
 
   // r(lambda) = 5.0 - 2.0 * lambda  crosses r=4.0 at lambda=0.5 exactly.
-  const MockState state0{5.0, std::numbers::pi / 2.0, -2.0};
+  const MockState state0{.x1 = 5.0, .x2 = std::numbers::pi / 2.0, .v1 = -2.0};
 
   auto stepper = [](double /*la*/, double lb, MockState /*sa*/) -> MockState {
-    return MockState{5.0 - (2.0 * lb), std::numbers::pi / 2.0, -2.0};
+    return MockState{.x1 = 5.0 - (2.0 * lb), .x2 = std::numbers::pi / 2.0, .v1 = -2.0};
   };
 
   const EventResult ev = bisectRadialCrossing(0.0, 1.0, state0, 4.0, stepper, 1.0e-8, 60);

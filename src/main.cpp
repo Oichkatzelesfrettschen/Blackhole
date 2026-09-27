@@ -491,16 +491,21 @@ std::array<ui::CampaignBackdrop, 5> loadCampaignBackdrops(GLFWwindow *window) {
   };
   const char *const nasaCredit = "NASA, ESA, CSA, STScI";
   const std::array<ui::CampaignBackdrop, 5> campaignBackdrops = {{
-      {"Cosmic Cliffs (Carina)",
-       loadTexture2D(resourcePath(ladderRendition("carina-cosmic-cliffs"))), nasaCredit},
-      {"Crab Nebula", loadTexture2D(resourcePath(ladderRendition("crab-nebula"))), nasaCredit},
-      {"Southern Ring Nebula",
-       loadTexture2D(resourcePath("assets/backgrounds/source/southern-ring-nebula-2k.jpg")),
-       nasaCredit},
-      {"Cartwheel Galaxy",
-       loadTexture2D(resourcePath("assets/backgrounds/source/cartwheel-galaxy-2k.jpg")),
-       nasaCredit},
-      {"Starfield (procedural)", 0U, ""},
+      {.name = "Cosmic Cliffs (Carina)",
+       .textureId = loadTexture2D(resourcePath(ladderRendition("carina-cosmic-cliffs"))),
+       .credit = nasaCredit},
+      {.name = "Crab Nebula",
+       .textureId = loadTexture2D(resourcePath(ladderRendition("crab-nebula"))),
+       .credit = nasaCredit},
+      {.name = "Southern Ring Nebula",
+       .textureId =
+           loadTexture2D(resourcePath("assets/backgrounds/source/southern-ring-nebula-2k.jpg")),
+       .credit = nasaCredit},
+      {.name = "Cartwheel Galaxy",
+       .textureId =
+           loadTexture2D(resourcePath("assets/backgrounds/source/cartwheel-galaxy-2k.jpg")),
+       .credit = nasaCredit},
+      {.name = "Starfield (procedural)", .textureId = 0U, .credit = ""},
   }};
   return campaignBackdrops;
 }

@@ -508,14 +508,14 @@ enum class OrbitType {
 inline ChristoffelAccel makeSchwarzschildChristoffel(double m) {
   return ChristoffelAccel{
       // accel_t: -Gamma^t_{tr} * v^t * v^r - Gamma^t_{rt} * v^r * v^t
-      [m](const StateVector &s) -> double {
+      .accelT = [m](const StateVector &s) -> double {
         const double r = s.x1;
         const double gammaTTr = m / (r * (r - (2.0 * m)));
         return -2.0 * gammaTTr * s.v0 * s.v1;
       },
 
       // accel_r: sum of all Gamma^r terms
-      [m](const StateVector &s) -> double {
+      .accelR = [m](const StateVector &s) -> double {
         const double r = s.x1;
         const double theta = s.x2;
         const double sinTheta = std::sin(theta);
@@ -530,7 +530,7 @@ inline ChristoffelAccel makeSchwarzschildChristoffel(double m) {
       },
 
       // accel_theta: -2 * Gamma^th_{r th} * v^r * v^th - Gamma^th_{phph} * v^ph^2
-      [](const StateVector &s) -> double {
+      .accelTheta = [](const StateVector &s) -> double {
         const double r = s.x1;
         const double theta = s.x2;
         const double gammaThRth = 1.0 / r;
@@ -540,7 +540,7 @@ inline ChristoffelAccel makeSchwarzschildChristoffel(double m) {
       },
 
       // accel_phi: -2 * Gamma^ph_{r ph} * v^r * v^ph - 2 * Gamma^ph_{th ph} * v^th * v^ph
-      [](const StateVector &s) -> double {
+      .accelPhi = [](const StateVector &s) -> double {
         const double r = s.x1;
         const double theta = s.x2;
         const double gammaPhRph = 1.0 / r;

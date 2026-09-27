@@ -283,7 +283,8 @@ TEST(CampaignSave, OverBudgetTurnAndStrayCommandsAreRefusedBeforeReplay) {
     game::CampaignSession *session;
     const game::EventSet *story;
   };
-  for (const Case &scenario : {Case{&m87, nullptr}, Case{&deep, &story}}) {
+  for (const Case &scenario :
+       {Case{.session = &m87, .story = nullptr}, Case{.session = &deep, .story = &story}}) {
     const std::vector<std::uint8_t> save = game::saveCampaign(*scenario.session);
     ASSERT_TRUE(game::loadCampaign(save, scenario.story).ok());
     const std::int64_t budget = game::saveReplayTurnBudget(scenario.session->state());

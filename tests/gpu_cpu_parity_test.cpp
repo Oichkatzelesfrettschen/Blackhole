@@ -279,12 +279,15 @@ TEST_F(GPUCPUParityTest, ZamoRedshiftFallback) {
     double expected;
   };
   const Case cases[] = {
-      {"zamoRedshiftEquatorial(3.0, 2.0, 0.9)", 0.64819156443383915},
-      {"zamoRedshiftEquatorial(6.0, 2.0, 0.9)", 0.2225214295493458},
-      {"zamoRedshiftEquatorial(1.8, 2.0, 0.9)", 2.3166247903553998}, // inside the ergosphere
-      {"zamoRedshiftEquatorial(6.0, 2.0, 0.0)", 0.22474487139158894},
-      {"zamoRedshiftEquatorial(1.2, 2.0, 0.9)", 10.0}, // inside r_+ = 1.436: the LUT cap
-      {"zamoRedshiftEquatorial(0.2, 2.0, 0.9)", 10.0}, // inside r_- = 0.564, Delta > 0 again
+      {.call = "zamoRedshiftEquatorial(3.0, 2.0, 0.9)", .expected = 0.64819156443383915},
+      {.call = "zamoRedshiftEquatorial(6.0, 2.0, 0.9)", .expected = 0.2225214295493458},
+      {.call = "zamoRedshiftEquatorial(1.8, 2.0, 0.9)",
+       .expected = 2.3166247903553998}, // inside the ergosphere
+      {.call = "zamoRedshiftEquatorial(6.0, 2.0, 0.0)", .expected = 0.22474487139158894},
+      {.call = "zamoRedshiftEquatorial(1.2, 2.0, 0.9)",
+       .expected = 10.0}, // inside r_+ = 1.436: the LUT cap
+      {.call = "zamoRedshiftEquatorial(0.2, 2.0, 0.9)",
+       .expected = 10.0}, // inside r_- = 0.564, Delta > 0 again
   };
   for (const Case &c : cases) {
     const float gpu = evalScalarShader(std::string(R"(

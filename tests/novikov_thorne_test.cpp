@@ -140,7 +140,8 @@ bool testTemperaturePeak() {
     double aStar;
     double ratio;
   };
-  const Case cases[] = {{0.0, 1.5918213463}, {0.9, 1.4829887161}};
+  const Case cases[] = {{.aStar = 0.0, .ratio = 1.5918213463},
+                        {.aStar = 0.9, .ratio = 1.4829887161}};
   bool allPassed = true;
   std::cout << std::fixed << std::setprecision(8);
   for (Case const &c : cases) {

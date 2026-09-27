@@ -289,8 +289,9 @@ void checkTracedSide(const float *px, const float *filmPx, const bhtest::MirrorP
 
 TEST_F(DiskTransferTraceTest, TracedDiskRaysCarryTheOrbitingEmitterShift) {
   const GLuint program = bhtest::createComputeProgram(traceShader());
-  for (const TraceCase c : {TraceCase{0.0F, 2.0F}, TraceCase{0.9F, 2.0F}, TraceCase{0.9F, 6.0F},
-                            TraceCase{-0.6F, 1.0F}}) {
+  for (const TraceCase c :
+       {TraceCase{.spin = 0.0F, .rs = 2.0F}, TraceCase{.spin = 0.9F, .rs = 2.0F},
+        TraceCase{.spin = 0.9F, .rs = 6.0F}, TraceCase{.spin = -0.6F, .rs = 1.0F}}) {
     const bhtest::MirrorPair pair = bhtest::makeMirrorPair(
         static_cast<double>(c.rs), K_CAMERA_DISTANCE_M, K_CAMERA_HEIGHT_M, K_FOV_SCALE);
     const std::vector<float> physical = trace(program, pair, c, 0);
@@ -310,7 +311,7 @@ TEST_F(DiskTransferTraceTest, TracedDiskRaysCarryTheOrbitingEmitterShift) {
 // (larger B/R). Optically thin (rteOpacityScale 0), Faraday rotation off.
 TEST_F(DiskTransferTraceTest, VolumetricTracesBrightenTheApproachingSide) {
   const GLuint program = bhtest::createComputeProgram(traceShader());
-  const TraceCase c{0.0F, 2.0F};
+  const TraceCase c{.spin = 0.0F, .rs = 2.0F};
   const bhtest::MirrorPair pair =
       bhtest::makeMirrorPair(2.0, K_CAMERA_DISTANCE_M, K_CAMERA_HEIGHT_M, K_FOV_SCALE);
   const std::vector<float> physical = trace(program, pair, c, 0);
@@ -344,7 +345,7 @@ TEST_F(DiskTransferTraceTest, InPlaneCameraDoesNotHitTheDiskAtItsOwnPosition) {
   constexpr double inv = 0.5 * std::numbers::sqrt2;
   pair.dir = {bhtest::Vec3d{inv, 0.0, inv}, bhtest::Vec3d{-0.96, 0.0, 0.28}};
   for (const float spin : {0.0F, 0.9F}) {
-    const std::vector<float> out = trace(program, pair, TraceCase{spin, 2.0F}, 0);
+    const std::vector<float> out = trace(program, pair, TraceCase{.spin = spin, .rs = 2.0F}, 0);
     EXPECT_EQ(out.at(0), 0.0F) << "outward ray reported a disk hit, a=" << spin
                                << " r_hit=" << out.at(1);
     if (out.at(K_TRACE_STRIDE) == 1.0F) {

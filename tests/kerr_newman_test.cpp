@@ -664,9 +664,9 @@ FieldResidual einsteinMaxwellResidual(double a, double q, double r, bool kerrCro
   const Mat4 metric = g(x);
   const Mat4 ricciTensor = ricci_oracle::ricci(g, x);
   const Mat4 source = ricci_oracle::maxwellSource(potential, metric, x);
-  return {ricci_oracle::maxAbsDifference(ricciTensor, source, 1.0),
-          std::abs(ricci_oracle::scalar(ricci_oracle::inverse(metric), ricciTensor)),
-          std::abs(ricciTensor[0][3] - source[0][3])};
+  return {.tensor = ricci_oracle::maxAbsDifference(ricciTensor, source, 1.0),
+          .scalar = std::abs(ricci_oracle::scalar(ricci_oracle::inverse(metric), ricciTensor)),
+          .tPhi = std::abs(ricciTensor[0][3] - source[0][3])};
 }
 
 } // namespace
@@ -684,7 +684,10 @@ TEST(KerrNewman, EinsteinMaxwellFieldEquation) {
     double q;
     double r;
   };
-  const Case cases[] = {{0.5, 0.5, 3.0}, {0.9, 0.3, 4.0}, {0.0, 0.8, 3.0}, {-0.6, 0.5, 3.5}};
+  const Case cases[] = {{.a = 0.5, .q = 0.5, .r = 3.0},
+                        {.a = 0.9, .q = 0.3, .r = 4.0},
+                        {.a = 0.0, .q = 0.8, .r = 3.0},
+                        {.a = -0.6, .q = 0.5, .r = 3.5}};
   double worst = 0.0;
   for (const Case &c : cases) {
     const FieldResidual residual = einsteinMaxwellResidual(c.a, c.q, c.r, false, 1.0);
