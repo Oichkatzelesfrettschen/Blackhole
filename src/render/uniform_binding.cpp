@@ -181,6 +181,10 @@ void bindFragmentUniforms(RenderToTextureInfo &rtti, const RenderState &rs,
   rtti.texture3DUniforms["noiseTexture"] = in.noiseReady ? rs.disk.texNoiseVolume : rs.background.fallback3D;
   rtti.texture3DUniforms["grmhdTexture"] = in.grmhdEnabled ? in.grmhdTexId : rs.background.fallback3D;
   rtti.textureUniforms["spectralLUT"] = in.spectralEnabled ? rs.luts.texSpectralLUT : rs.background.fallback2D;
+  const bool synchLuts = rs.luts.synchFLutCreated && rs.luts.synchGLutCreated;
+  rtti.textureUniforms["synchFLut"] = synchLuts ? rs.luts.texSynchFLut : rs.background.fallback2D;
+  rtti.textureUniforms["synchGLut"] = synchLuts ? rs.luts.texSynchGLut : rs.background.fallback2D;
+  rtti.floatUniforms["synchLutAvailable"] = synchLuts ? 1.0f : 0.0f;
   rtti.textureUniforms["grbModulationLUT"] =
       in.grbModulationEnabled ? rs.luts.texGrbModulationLUT : rs.background.fallback2D;
   rtti.textureUniforms["hawkingTempLUT"] =

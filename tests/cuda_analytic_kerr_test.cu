@@ -27,11 +27,54 @@
 #include <gtest/gtest.h>
 #include <cuda_runtime.h>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 #include <vector>
 
 /* Include device headers directly -- safe because device_analytic_kerr.cuh
  * defines only __device__ functions and no __constant__ symbols. */
 #include "cuda/device_analytic_kerr.cuh"
+
+static double referenceK(double complement)
+{
+    if (complement <= 0.0) return std::numeric_limits<double>::infinity();
+    double a = 1.0;
+    double b = std::sqrt(complement);
+    for (int iteration = 0; iteration < 64; ++iteration) {
+        double const mean = 0.5 * (a + b);
+        b = std::sqrt(a * b);
+        a = mean;
+    }
+    return 3.14159265358979323846 / (a + b);
+}
+
+static void referenceJacobi(double argument, double parameter, double complement,
+                            double &sn, double &cn)
+{
+    if (complement <= 0.0) {
+        sn = std::tanh(argument);
+        cn = 1.0 / std::cosh(argument);
+        return;
+    }
+    double a[33] = {1.0};
+    double c[33] = {std::sqrt(parameter)};
+    double b = std::sqrt(complement);
+    int depth = 0;
+    while (depth < 32 && c[depth] > std::numeric_limits<double>::epsilon() * a[depth]) {
+        a[depth + 1] = 0.5 * (a[depth] + b);
+        c[depth + 1] = 0.5 * (a[depth] - b);
+        b = std::sqrt(a[depth] * b);
+        ++depth;
+    }
+    double phase = std::ldexp(a[depth] * argument, depth);
+    while (depth > 0) {
+        phase = 0.5 * (phase + std::asin(c[depth] * std::sin(phase) / a[depth]));
+        --depth;
+    }
+    sn = std::sin(phase);
+    cn = std::cos(phase);
+}
 
 /* ============================================================================
  * Helper: skip test if no CUDA device
@@ -55,24 +98,24 @@ __global__ void k_ellpj_at_zero(float m, float* out)
 {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
     float sn, cn, dn;
-    d_ellpj(0.0f, m, &sn, &cn, &dn);
+    d_ellpj(0.0f, m, 1.0f - m, &sn, &cn, &dn);
     out[0] = sn; out[1] = cn; out[2] = dn;
 }
 
 /* Kernel 2: d_ellpj at general u, m */
-__global__ void k_ellpj(float u, float m, float* out)
+__global__ void k_ellpj(float u, float m, float complement, float* out)
 {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
     float sn, cn, dn;
-    d_ellpj(u, m, &sn, &cn, &dn);
+    d_ellpj(u, m, complement, &sn, &cn, &dn);
     out[0] = sn; out[1] = cn; out[2] = dn;
 }
 
 /* Kernel 3: d_ellint_K */
-__global__ void k_ellint_K(float k, float* out)
+__global__ void k_ellint_K(float complement, float* out)
 {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
-    out[0] = d_ellint_K(k);
+    out[0] = d_ellint_K(complement);
 }
 
 /* Kernel 4: d_prograde_photon_orbit */
@@ -153,7 +196,7 @@ TEST_F(AnalyticKerrTest, EllpjSmallModulus)
     float out[3];
     float u = 1.0f;
     float m = 1.0e-4f;
-    run_kernel<3>([u, m](float* d) { k_ellpj<<<1,1>>>(u, m, d); }, out);
+    run_kernel<3>([u, m](float* d) { k_ellpj<<<1,1>>>(u, m, 1.0f - m, d); }, out);
 
     EXPECT_NEAR(out[0], sinf(u),  2.0e-4f); /* sn */
     EXPECT_NEAR(out[1], cosf(u),  2.0e-4f); /* cn */
@@ -168,13 +211,13 @@ TEST_F(AnalyticKerrTest, EllpjQuarterPeriod)
 {
     /* k = 0.5, m = k^2 = 0.25, K(0.5) ~ 1.6858 */
     float k_out[1];
-    run_kernel<1>([](float* d) { k_ellint_K<<<1,1>>>(0.5f, d); }, k_out);
+    run_kernel<1>([](float* d) { k_ellint_K<<<1,1>>>(0.75f, d); }, k_out);
     float K = k_out[0];
 
     /* sn(K, m=0.25) should equal 1.0 */
     float out[3];
     float m = 0.25f;
-    run_kernel<3>([K, m](float* d) { k_ellpj<<<1,1>>>(K, m, d); }, out);
+    run_kernel<3>([K, m](float* d) { k_ellpj<<<1,1>>>(K, m, 1.0f - m, d); }, out);
 
     EXPECT_NEAR(out[0], 1.0f, 1.0e-4f);  /* sn = 1 at quarter period */
     EXPECT_NEAR(out[1], 0.0f, 1.0e-4f);  /* cn = 0 at quarter period */
@@ -189,9 +232,61 @@ TEST_F(AnalyticKerrTest, EllpjQuarterPeriod)
 TEST_F(AnalyticKerrTest, EllintKPiOver2)
 {
     float out[1];
-    run_kernel<1>([](float* d) { k_ellint_K<<<1,1>>>(0.0f, d); }, out);
+    run_kernel<1>([](float* d) { k_ellint_K<<<1,1>>>(1.0f, d); }, out);
 
     EXPECT_NEAR(out[0], 1.5707963268f, 1.0e-6f);
+}
+
+TEST_F(AnalyticKerrTest, NearUnitComplement)
+{
+    constexpr float argument = 2.0f;
+    for (float complement : {1.0f - std::nextafter(1.0f, 0.0f),
+                             std::numeric_limits<float>::epsilon(),
+                             2.0f * std::numeric_limits<float>::epsilon(),
+                             std::nextafter(0.0f, 1.0f), 0.0f}) {
+        float const m = 1.0f - complement;
+        float values[3];
+        run_kernel<3>([&](float* output) {
+            k_ellpj<<<1,1>>>(argument, m, complement, output);
+        }, values);
+        double sn, cn;
+        referenceJacobi(argument, m, complement, sn, cn);
+        double const dn = std::sqrt(cn * cn + static_cast<double>(complement) * sn * sn);
+        EXPECT_NEAR(values[0], sn, 2.0e-5);
+        EXPECT_NEAR(values[1], cn, 2.0e-5);
+        EXPECT_NEAR(values[2], dn, 2.0e-5);
+
+        float period[1];
+        run_kernel<1>([&](float* output) { k_ellint_K<<<1,1>>>(complement, output); }, period);
+        double const kReference = referenceK(complement);
+        if (complement > 0.0f) {
+            EXPECT_NEAR(period[0], kReference, 3.0e-5 * kReference);
+        } else {
+            // The host half of this file may build with -ffast-math, which
+            // folds std::isinf; compare the IEEE bit pattern instead.
+            std::uint32_t bits = 0;
+            std::memcpy(&bits, &period[0], sizeof(bits));
+            EXPECT_EQ(bits, 0x7F800000U) << "K(m = 1) must be +inf";
+        }
+    }
+}
+
+TEST_F(AnalyticKerrTest, NearUnitRadialHalfPeriod)
+{
+    // Powers of two are exact beside 2 in binary32, so the device's rounded
+    // gap and a host build that simplifies (2 + g) - 2 to g agree.
+    for (float const rootGap : {0x1p-19f, 0x1p-16f, 0x1p-12f}) {
+        float const r1 = 2.0f + rootGap;
+        float period[3];
+        run_kernel<3>([&](float* output) {
+            k_analytic_radial<<<1,1>>>(r1, 2.0f, 1.0f, 0.0f, 0.0f, output);
+        }, period);
+        double const denominator = static_cast<double>(r1 - 1.0f) * 2.0;
+        double const complement = static_cast<double>(r1 - 2.0f) / denominator;
+        double const scale = 0.5 * std::sqrt(denominator);
+        double const reference = referenceK(complement) / scale;
+        EXPECT_NEAR(period[2], reference, 4.0e-5 * reference);
+    }
 }
 
 /* ============================================================================

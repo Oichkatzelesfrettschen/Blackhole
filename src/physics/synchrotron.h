@@ -386,6 +386,16 @@ inline constexpr double SYNCHROTRON_CONST =
  * @param xMin      Minimum x value (0.001 recommended)
  * @param xMax      Maximum x value (30.0 recommended -- G(30) ~ 1e-13)
  */
+inline void synchrotronFGenerateLut(float *lut, int nEntries, double xMin = 0.001,
+                                    double xMax = 30.0) {
+  const double logRatio = std::log(xMax / xMin);
+  for (int i = 0; i < nEntries; ++i) {
+    const double u = static_cast<double>(i) / (nEntries - 1);
+    const double x = xMin * std::exp(u * logRatio);
+    lut[i] = static_cast<float>(synchrotronF(x));
+  }
+}
+
 inline void synchrotronGGenerateLut(float *lut, int nEntries, double xMin = 0.001,
                                     double xMax = 30.0) {
   const double logRatio = std::log(xMax / xMin);
