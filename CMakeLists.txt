@@ -4096,6 +4096,17 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/input_key_edges_test.cpp")
+    add_executable(input_key_edges_test "${PROJECT_SOURCE_DIR}/tests/input_key_edges_test.cpp")
+    target_link_libraries(input_key_edges_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(input_key_edges_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME input_key_edges COMMAND input_key_edges_test)
+    set_tests_properties(input_key_edges PROPERTIES LABELS "input;unit" TIMEOUT 30)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(input_key_edges PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_ribbon_gl_test.cpp")
     # Live-GL radiance of subdivided tesseract ribbons through the real
     # shaders. Skips without a GL 4.6 context.
