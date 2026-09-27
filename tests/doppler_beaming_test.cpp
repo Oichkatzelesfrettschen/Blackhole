@@ -12,6 +12,7 @@
  */
 
 #include <cmath>
+#include <array>
 #include <iomanip>
 #include <iostream>
 #include <numbers>
@@ -171,7 +172,7 @@ bool testSpectralIndexEffect() {
   const double inclination = M_PI_VAL / 2.0;
   const double phiApproaching = 0.0;
 
-  const double boostBlackbody =
+  const double boostFlat =
       physics::diskDopplerBoost(r, aStar, phiApproaching, inclination, 0.0);
   const double boostPowerlaw =
       physics::diskDopplerBoost(r, aStar, phiApproaching, inclination, 1.0);
@@ -179,14 +180,42 @@ bool testSpectralIndexEffect() {
   std::cout << std::fixed << std::setprecision(6);
   std::cout << "  Radius:      r = " << r << " M\n";
   std::cout << "  Inclination: i = 90°\n";
-  std::cout << "  Boost (α=0, blackbody): " << boostBlackbody << "\n";
+  std::cout << "  Boost (alpha=0, flat): " << boostFlat << "\n";
   std::cout << "  Boost (α=1, power-law): " << boostPowerlaw << "\n";
-  std::cout << "  Ratio:                  " << boostPowerlaw / boostBlackbody << "x\n";
+  std::cout << "  Ratio:                  " << boostPowerlaw / boostFlat << "x\n";
 
-  const bool passed = boostPowerlaw > boostBlackbody * 1.5;
+  const bool passed = boostPowerlaw > boostFlat * 1.5;
   std::cout << "  Status:                 " << (passed ? "PASS ✓" : "FAIL ✗") << "\n";
   std::cout << "  Note:                   δ^(3+α) increases with α\n";
 
+  return passed;
+}
+
+bool testPowerLawFrequencyTransform() {
+  constexpr double nuObserved = 230e9;
+  constexpr double referenceIntensity = 2.5;
+  constexpr double relativeTolerance = 1e-12;
+  constexpr std::array<double, 3> spectralIndices{-0.5, 0.0, 0.7};
+  constexpr std::array<double, 3> velocities{0.2, 0.6, 0.9};
+  constexpr std::array<double, 3> angles{0.0, M_PI_VAL / 2.0, M_PI_VAL};
+
+  bool passed = true;
+  for (double const spectralIndex : spectralIndices) {
+    for (double const velocity : velocities) {
+      for (double const angle : angles) {
+        double const delta = physics::dopplerFactor(velocity, angle);
+        double const emittedAtObservedFrequency = referenceIntensity;
+        double const emittedAtSourceFrequency =
+            referenceIntensity * std::pow((nuObserved / delta) / nuObserved, -spectralIndex);
+        double const transformed = std::pow(delta, 3.0) * emittedAtSourceFrequency;
+        double const boosted = physics::relativisticBeamingIntensity(
+            emittedAtObservedFrequency, velocity, angle, spectralIndex);
+        passed = passed &&
+                 std::abs((boosted / transformed) - 1.0) <= relativeTolerance;
+      }
+    }
+  }
+  std::cout << "  Power-law frequency transform: " << (passed ? "PASS" : "FAIL") << "\n";
   return passed;
 }
 
@@ -265,7 +294,7 @@ int main() {
     std::cout << "========================================================\n";
     
     int passed = 0;
-    int const total = 7;
+    int const total = 8;
 
     // Run all tests
     if (testFaceOnNoBoost()) {
@@ -281,6 +310,9 @@ int main() {
       passed++;
     }
     if (testSpectralIndexEffect()) {
+      passed++;
+    }
+    if (testPowerLawFrequencyTransform()) {
       passed++;
     }
     if (testKerrSpinEnhancement()) {
