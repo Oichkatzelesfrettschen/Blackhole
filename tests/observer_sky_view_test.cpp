@@ -186,6 +186,45 @@ TEST(ObserverSkyView, ViewBasisIsRightHandedAndProjectsItsAxis) {
   checkViewBasis(30.0, -70.0);
 }
 
+TEST(ObserverSkyView, NavigationSelectsTheNamedView) {
+  using Navigation = blackhole::RenderState::ObserverViewGroup::Navigation;
+  const sky::SkyAngles peak{.longitude = 0.25 * K_PI, .latitude = -0.125 * K_PI};
+  const auto manual = blackhole::observerLookSelection(Navigation::ManualAngles, 12.0, 34.0, peak);
+  EXPECT_FALSE(manual.orbitCamera);
+  EXPECT_DOUBLE_EQ(manual.longitudeDeg, 12.0);
+  EXPECT_DOUBLE_EQ(manual.latitudeDeg, 34.0);
+
+  const auto orbit = blackhole::observerLookSelection(Navigation::OrbitCamera, 12.0, 34.0, peak);
+  EXPECT_TRUE(orbit.orbitCamera);
+
+  const auto patch = blackhole::observerLookSelection(Navigation::TrackPatch, 12.0, 34.0, peak);
+  EXPECT_FALSE(patch.orbitCamera);
+  EXPECT_NEAR(patch.longitudeDeg, 45.0, 1e-12);
+  EXPECT_NEAR(patch.latitudeDeg, -22.5, 1e-12);
+
+  const auto pending =
+      blackhole::observerLookSelection(Navigation::TrackPatch, 12.0, 34.0, std::nullopt);
+  EXPECT_FALSE(pending.orbitCamera);
+  EXPECT_DOUBLE_EQ(pending.longitudeDeg, 12.0);
+  EXPECT_DOUBLE_EQ(pending.latitudeDeg, 34.0);
+}
+
+TEST(ObserverSkyView, ReturnToOverviewRestoresDefaultLook) {
+  blackhole::RenderState::ObserverViewGroup view;
+  EXPECT_DOUBLE_EQ(view.lookLongitudeDeg, blackhole::K_OBSERVER_OVERVIEW_LONGITUDE_DEG);
+  EXPECT_DOUBLE_EQ(view.lookLatitudeDeg, blackhole::K_OBSERVER_OVERVIEW_LATITUDE_DEG);
+  EXPECT_DOUBLE_EQ(view.fovDeg, blackhole::K_OBSERVER_OVERVIEW_FOV_DEG);
+  view.navigation = blackhole::RenderState::ObserverViewGroup::Navigation::TrackPatch;
+  view.lookLongitudeDeg = 10.0;
+  view.lookLatitudeDeg = 20.0;
+  view.fovDeg = 30.0;
+  view.returnToOverview();
+  EXPECT_EQ(view.navigation, blackhole::RenderState::ObserverViewGroup::Navigation::ManualAngles);
+  EXPECT_DOUBLE_EQ(view.lookLongitudeDeg, blackhole::K_OBSERVER_OVERVIEW_LONGITUDE_DEG);
+  EXPECT_DOUBLE_EQ(view.lookLatitudeDeg, blackhole::K_OBSERVER_OVERVIEW_LATITUDE_DEG);
+  EXPECT_DOUBLE_EQ(view.fovDeg, blackhole::K_OBSERVER_OVERVIEW_FOV_DEG);
+}
+
 /**
  * The table is the photopic luminance of a Planck spectrum. Its luminous
  * efficacy, luminance over radiance sigma T^4 / pi, is a textbook curve:

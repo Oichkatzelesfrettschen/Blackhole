@@ -393,8 +393,8 @@ void applyObserverEnvironment(RenderState &rs) {
   }
   if (const char *lookEnv = std::getenv("BLACKHOLE_OBSERVER_LOOK")) {
     const std::string_view look(lookEnv);
-    view.lookAtPatch = look == "patch";
-    view.followCamera = false;
+    view.navigation = look == "patch" ? RenderState::ObserverViewGroup::Navigation::TrackPatch
+                                      : RenderState::ObserverViewGroup::Navigation::ManualAngles;
     if (look == "hole") {
       view.lookLongitudeDeg = 0.0;
     } else if (look == "forward") {

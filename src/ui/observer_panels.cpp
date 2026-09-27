@@ -93,9 +93,19 @@ void renderClockControls(RenderState::ObserverViewGroup &view) {
 
 void renderViewControls(RenderState::ObserverViewGroup &view) {
   ImGui::SeparatorText("View");
-  ImGui::Checkbox("Steer with the orbit camera", &view.followCamera);
-  ImGui::Checkbox("Center on the blueshift patch", &view.lookAtPatch);
-  if (!view.followCamera && !view.lookAtPatch) {
+  using Navigation = RenderState::ObserverViewGroup::Navigation;
+  if (ImGui::RadioButton("Manual angles", view.navigation == Navigation::ManualAngles)) {
+    view.navigation = Navigation::ManualAngles;
+  }
+  if (ImGui::RadioButton("Steer with the orbit camera",
+                         view.navigation == Navigation::OrbitCamera)) {
+    view.navigation = Navigation::OrbitCamera;
+  }
+  if (ImGui::RadioButton("Center on the blueshift patch",
+                         view.navigation == Navigation::TrackPatch)) {
+    view.navigation = Navigation::TrackPatch;
+  }
+  if (view.navigation == Navigation::ManualAngles) {
     const double lonMin = -180.0;
     const double lonMax = 180.0;
     const double latMin = -89.0;
@@ -106,10 +116,16 @@ void renderViewControls(RenderState::ObserverViewGroup &view) {
                         &latMax, "%.4f");
     ImGui::TextDisabled("longitude 0 = the hole, 90 = direction of motion, 180 = straight out");
   }
+  if (view.navigation == Navigation::TrackPatch && !view.renderer.lut()) {
+    ImGui::TextDisabled("The patch appears once the sky map is ready.");
+  }
   const double fovMin = blackhole::K_OBSERVER_FOV_MIN_DEG;
   const double fovMax = blackhole::K_OBSERVER_FOV_MAX_DEG;
   ImGui::SliderScalar("Field of view (deg)", ImGuiDataType_Double, &view.fovDeg, &fovMin, &fovMax,
                       "%.5g", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+  if (ImGui::Button("Return to overview")) {
+    view.returnToOverview();
+  }
   ImGui::SeparatorText("Sources and exposure");
   ImGui::Checkbox("CMB (2.725 K blackbody)", &view.cmbEnabled);
   ImGui::SameLine();

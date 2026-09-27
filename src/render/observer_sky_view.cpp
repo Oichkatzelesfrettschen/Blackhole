@@ -245,6 +245,25 @@ double skyPhaseRadians(const ObserverClockModel &clock, double properSeconds) {
   return phase < 0.0 ? phase + K_TWO_PI : phase;
 }
 
+ObserverLookSelection observerLookSelection(ObserverNavigation navigation, double longitudeDeg,
+                                            double latitudeDeg,
+                                            const std::optional<sky::SkyAngles> &peakAngles) {
+  switch (navigation) {
+  case ObserverNavigation::ManualAngles:
+    return {.orbitCamera = false, .longitudeDeg = longitudeDeg, .latitudeDeg = latitudeDeg};
+  case ObserverNavigation::OrbitCamera:
+    return {.orbitCamera = true, .longitudeDeg = longitudeDeg, .latitudeDeg = latitudeDeg};
+  case ObserverNavigation::TrackPatch:
+    if (peakAngles) {
+      return {.orbitCamera = false,
+              .longitudeDeg = peakAngles->longitude * 180.0 / std::numbers::pi,
+              .latitudeDeg = peakAngles->latitude * 180.0 / std::numbers::pi};
+    }
+    return {.orbitCamera = false, .longitudeDeg = longitudeDeg, .latitudeDeg = latitudeDeg};
+  }
+  return {.orbitCamera = false, .longitudeDeg = longitudeDeg, .latitudeDeg = latitudeDeg};
+}
+
 std::array<double, 4> BlackbodyTable::at(double log10T) const {
   if (rows.empty()) {
     return {0.0, 0.0, 0.0, -1.0e30};
@@ -595,13 +614,16 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
   const double frameTurn =
       lut ? clock.angularVelocity * properStep / clock.properTimeRate / clock.secondsPerM : 0.0;
 
-  if (view.lookAtPatch && lut) {
-    const sky::SkyAngles peak = sky::lookAngles(lut->peak.look);
-    view.lookLongitudeDeg = peak.longitude * 180.0 / std::numbers::pi;
-    view.lookLatitudeDeg = peak.latitude * 180.0 / std::numbers::pi;
+  const std::optional<sky::SkyAngles> peakAngles =
+      lut ? std::optional<sky::SkyAngles>(sky::lookAngles(lut->peak.look)) : std::nullopt;
+  const ObserverLookSelection selectedLook = observerLookSelection(
+      view.navigation, view.lookLongitudeDeg, view.lookLatitudeDeg, peakAngles);
+  if (view.navigation == ObserverNavigation::TrackPatch && lut) {
+    view.lookLongitudeDeg = selectedLook.longitudeDeg;
+    view.lookLatitudeDeg = selectedLook.latitudeDeg;
   }
   std::array<sky::Vec3, 3> basis{};
-  if (view.followCamera) {
+  if (selectedLook.orbitCamera) {
     // World (x, y up, z) to the tetrad legs (r, theta, phi) = (z, -y, x): the
     // default camera on +z looks at the hole, and world up is the spin axis.
     for (int column = 0; column < 3; ++column) {
@@ -610,8 +632,8 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
           static_cast<double>(axis.z), -static_cast<double>(axis.y), static_cast<double>(axis.x)};
     }
   } else {
-    basis = observerViewBasis(view.lookLongitudeDeg * std::numbers::pi / 180.0,
-                              view.lookLatitudeDeg * std::numbers::pi / 180.0);
+    basis = observerViewBasis(selectedLook.longitudeDeg * std::numbers::pi / 180.0,
+                              selectedLook.latitudeDeg * std::numbers::pi / 180.0);
   }
   view.fovDeg = std::clamp(view.fovDeg, K_OBSERVER_FOV_MIN_DEG, K_OBSERVER_FOV_MAX_DEG);
   const double tanHalfFov = std::tan(0.5 * view.fovDeg * std::numbers::pi / 180.0);
