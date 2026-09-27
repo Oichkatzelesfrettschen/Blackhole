@@ -136,6 +136,21 @@ TEST(EventLoader, StructuralErrorsRejected) {
   EXPECT_FALSE(errorOf(R"({"events": [{"id": 1, "source": "moon"}]})").empty());
   EXPECT_FALSE(errorOf(R"({"events": [{"id": 1, "category": "gossip"}]})").empty());
   EXPECT_FALSE(errorOf(R"({"params": {"k": {"min": 5, "max": 1}}})").empty());
+  // Falsifier: a negative tech_packet points loading (it would let
+  // receiveNodeDelivery subtract tech and un-unlock tiers).
+  EXPECT_FALSE(errorOf(
+                   R"({"events": [{"id": 1, "effects": [
+        {"emit": {"kind": "tech_packet", "to": "colony", "points": -1}}]}]})")
+                   .empty());
+  // Falsifier: a schedule effect naming a target at a different source (it
+  // would run there with no signal delay and no causal queue entry).
+  EXPECT_NE(errorOf(
+                R"({"events": [
+        {"id": 1, "triggers": [{"turn_at_least": 1}],
+         "effects": [{"schedule": {"event": 2, "delay_turns": 1}}]},
+        {"id": 2, "source": "colony", "mode": "scheduled", "effects": [{"set_flag": "x"}]}]})")
+                .find("different source"),
+            std::string::npos);
   // Malformed JSON reports the parser's own message, including when the
   // syntax error follows a repeated key.
   EXPECT_EQ(errorOf(R"({"events": [)").rfind("json: [json.exception.parse_error", 0), 0U);
@@ -150,13 +165,13 @@ TEST(EventLoader, OutputIndependentOfFileOrder) {
     "params": {"b": 2, "a": {"min": 1, "max": 9}},
     "tech_tiers": [{"points": 5, "name": "late"}, {"points": 1, "name": "early"}],
     "events": [
-      {"id": 7, "source": "colony", "mode": "scheduled", "triggers": [{"flag_set": "zeta"}], "effects": [{"set_flag": "alpha"}]},
+      {"id": 7, "mode": "scheduled", "triggers": [{"flag_set": "zeta"}], "effects": [{"set_flag": "alpha"}]},
       {"id": 3, "triggers": [{"turn_at_least": "a"}], "effects": [{"set_flag": "zeta"}, {"schedule": {"event": 7, "delay_turns": "b"}}]}
     ]})";
   const std::string second = R"({
     "events": [
       {"id": 3, "effects": [{"set_flag": "zeta"}, {"schedule": {"event": 7, "delay_turns": "b"}}], "triggers": [{"turn_at_least": "a"}]},
-      {"id": 7, "mode": "scheduled", "source": "colony", "effects": [{"set_flag": "alpha"}], "triggers": [{"flag_set": "zeta"}]}
+      {"id": 7, "mode": "scheduled", "effects": [{"set_flag": "alpha"}], "triggers": [{"flag_set": "zeta"}]}
     ],
     "tech_tiers": [{"points": 1, "name": "early"}, {"points": 5, "name": "late"}],
     "params": {"a": {"min": 1, "max": 9}, "b": 2}})";
@@ -430,6 +445,48 @@ TEST(EventLoader, ScheduleTargetsAndEmptyDuplicateKeysChecked) {
   game::EventSet onceTarget = scheduleStory({.plus = 1});
   onceTarget.events.front().mode = game::EventMode::Once;
   EXPECT_FALSE(storyBuildsValid(onceTarget));
+
+  // The core refuses a hand-built story whose schedule target sits at a
+  // different source: it would run there with no signal delay and no causal
+  // queue entry, bypassing the queue every other cross-node effect uses.
+  game::EventSet crossSource;
+  crossSource.flags = {game::K_DARK_FLAG_NAME};
+  game::EventDef scheduler;
+  scheduler.id = 1;
+  scheduler.source = game::K_AUTHORITY_NODE;
+  game::EventEffect schedule;
+  schedule.kind = game::EffectKind::Schedule;
+  schedule.event = 2;
+  schedule.delayTurns = {.plus = 1};
+  scheduler.effects = {schedule};
+  game::EventDef target;
+  target.id = 2;
+  target.source = game::K_FIRST_COLONY_NODE;
+  target.mode = game::EventMode::Scheduled;
+  crossSource.events = {scheduler, target};
+  EXPECT_FALSE(storyBuildsValid(crossSource));
+  crossSource.events.back().source = game::K_AUTHORITY_NODE;
+  EXPECT_TRUE(storyBuildsValid(crossSource));
+}
+
+// Falsifier: a hand-built story with a negative tech_packet points effect
+// building a valid campaign -- it would let receiveNodeDelivery subtract tech
+// and un-unlock tiers.
+TEST(EventPredicates, CoreRejectsNegativeTechPacketPoints) {
+  game::EventSet story;
+  story.flags = {game::K_DARK_FLAG_NAME};
+  game::EventDef event;
+  event.id = 1;
+  game::EventEffect emit;
+  emit.kind = game::EffectKind::Emit;
+  emit.emitKind = game::EmitKind::TechPacket;
+  emit.to = game::K_FIRST_COLONY_NODE;
+  emit.techPoints = -1;
+  event.effects = {emit};
+  story.events = {event};
+  EXPECT_FALSE(storyBuildsValid(story));
+  story.events.front().effects.front().techPoints = 0;
+  EXPECT_TRUE(storyBuildsValid(story));
 }
 
 // An enum holding an arbitrary value of its fixed underlying type, as a

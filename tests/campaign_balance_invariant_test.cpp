@@ -23,8 +23,10 @@
 
 #include <gtest/gtest.h>
 
+#include "game/campaign_session.h"
 #include "game/campaign_sim_lines.h"
 #include "game/campaign_view.h"
+#include "game/event.h"
 
 namespace {
 
@@ -84,9 +86,10 @@ TEST(CampaignBalanceInvariant, LinesAreDeterministic) {
 }
 
 // Falsifier: --colony running a story horizon past the ceiling with no
-// --turns to bound it, --turns failing to cap a story horizon (or raising
-// one), or a negative --turns producing negative work.
-TEST(CampaignSimColonyHorizon, TurnsCapsAndTheCeilingRefuses) {
+// --turns to bound it, an explicit --turns past the story horizon being
+// clamped down to it instead of defining the horizon outright, or a negative
+// --turns producing negative work.
+TEST(CampaignSimColonyHorizon, TurnsDefinesTheHorizonAndTheCeilingRefuses) {
   constexpr std::int64_t ceiling = campaign_sim::K_COLONY_SIM_MAX_HORIZON;
   EXPECT_EQ(campaign_sim::colonySimTurns(11500, std::nullopt), std::optional<std::int64_t>{11500});
   EXPECT_EQ(campaign_sim::colonySimTurns(ceiling, std::nullopt),
@@ -95,6 +98,33 @@ TEST(CampaignSimColonyHorizon, TurnsCapsAndTheCeilingRefuses) {
   const std::int64_t trillion = (std::int64_t{1} << 40) + 424;
   EXPECT_EQ(campaign_sim::colonySimTurns(trillion, std::nullopt), std::nullopt);
   EXPECT_EQ(campaign_sim::colonySimTurns(trillion, 100), std::optional<std::int64_t>{100});
-  EXPECT_EQ(campaign_sim::colonySimTurns(11500, 20000), std::optional<std::int64_t>{11500});
+  // An explicit --turns past the story horizon defines the horizon outright:
+  // a story whose event graph outlives dark_turn/packet_period is not
+  // truncated back down to them.
+  EXPECT_EQ(campaign_sim::colonySimTurns(11500, 20000), std::optional<std::int64_t>{20000});
   EXPECT_EQ(campaign_sim::colonySimTurns(11500, -5), std::optional<std::int64_t>{0});
+}
+
+// Falsifier: a story with a literal turn_at_least trigger and no dark_turn or
+// packet_period parameter at all -- the named legacy term contributes nothing
+// for it -- produces a horizon that does not reach the trigger.
+TEST(CampaignSimColonyHorizon, GraphBoundReachesALiteralTriggerNamedParamsMiss) {
+  game::EventSet story;
+  story.flags = {game::K_DARK_FLAG_NAME};
+  game::EventDef event;
+  event.id = 1;
+  game::EventPredicate predicate;
+  predicate.kind = game::PredicateKind::TurnAtLeast;
+  predicate.value = {.plus = 9000};
+  event.triggers = {predicate};
+  game::EventEffect effect;
+  effect.kind = game::EffectKind::SetFlag;
+  effect.flag = game::K_DARK_FLAG;
+  event.effects = {effect};
+  story.events = {event};
+
+  const game::CampaignSession session(1, story, game::K_MILLER_BAND);
+  ASSERT_TRUE(session.state().valid());
+  EXPECT_EQ(session.state().storyParam("dark_turn"), std::nullopt);
+  EXPECT_GT(campaign_sim::colonyStoryHorizon(session.state()), 9000);
 }
