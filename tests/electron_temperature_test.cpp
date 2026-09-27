@@ -4,7 +4,9 @@
  */
 
 #include <gtest/gtest.h>
+#include "physics/constants.h"
 #include "physics/electron_temperature.h"
+#include "physics/rte_integrator.h"
 #include <cmath>
 
 // --------------------------------------------------------------------------
@@ -109,11 +111,22 @@ TEST(ElectronTemperature, EmissivityZeroInputs) {
 // Absorptivity via Kirchhoff's law
 // --------------------------------------------------------------------------
 TEST(ElectronTemperature, Absorptivity) {
-  double const j = physics::thermalSynchrotronEmissivity(230e9, 1e5, 10.0, 10.0);
-  double const alpha = physics::thermalSynchrotronAbsorptivity(j, 230e9, 10.0);
+  constexpr double nu = 230e9;
+  constexpr double thetaElec = 10.0;
+  constexpr double massElectron = 9.1093837015e-28;
+  double const j = physics::thermalSynchrotronEmissivity(nu, 1e5, thetaElec, 10.0);
+  double const alpha = physics::thermalSynchrotronAbsorptivity(j, nu, thetaElec);
 
-  EXPECT_GT(alpha, 0.0);
-  EXPECT_TRUE(std::isfinite(alpha));
+  ASSERT_GT(alpha, 0.0);
+  ASSERT_TRUE(std::isfinite(alpha));
+  double const sourceFunction = j / alpha;
+  double const rayleighJeans = 2.0 * nu * nu * massElectron * thetaElec;
+  EXPECT_NEAR(sourceFunction / rayleighJeans, 1.0, 1e-12);
+
+  double const temperature = thetaElec * massElectron * physics::C * physics::C / physics::K_B;
+  double const planck = physics::planckFunction(nu, temperature);
+  ASSERT_GT(planck, 0.0);
+  EXPECT_NEAR(sourceFunction / planck, 1.0, 1e-3);
 }
 
 // --------------------------------------------------------------------------

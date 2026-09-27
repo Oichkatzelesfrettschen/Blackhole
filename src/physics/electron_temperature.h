@@ -228,8 +228,8 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
  *   alpha_nu = j_nu / B_nu
  *
  * where B_nu is the Planck function. For relativistic electrons:
- *   B_nu ~ 2 * nu^2 * m_e * c * Theta_e / c^2
- *        = 2 * nu^2 * k_B * T_e / c^2
+ *   B_nu ~ 2 * nu^2 * k_B * T_e / c^2
+ *        = 2 * nu^2 * m_e * Theta_e
  *
  * @param jNu Emissivity [erg/s/cm^3/Hz/sr]
  * @param nu Frequency [Hz]
@@ -244,7 +244,7 @@ inline constexpr double MP_ME = M_PROTON / 9.1093837015e-28;
 
   // Relativistic Planck function (Rayleigh-Jeans limit for kT >> hv)
   constexpr double massE = 9.1093837015e-28;
-  const double bNu = (2.0 * nu * nu * massE * C * thetaElec) / (C * C);
+  const double bNu = 2.0 * nu * nu * massE * thetaElec;
 
   if (bNu <= 0.0) {
     return 0.0;
