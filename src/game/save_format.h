@@ -94,6 +94,9 @@ inline constexpr std::int64_t K_SAVE_REPLAY_TURN_CEILING = std::int64_t{1} << 30
 struct CampaignLoadResult {
   std::unique_ptr<CampaignSession> session;
   std::string error; ///< Empty on success.
+  /// Turns the replay advanced before it succeeded or refused; refusals that
+  /// validate the header, turn, or command log return with 0.
+  std::int64_t replayedTurns = 0;
 
   [[nodiscard]] bool ok() const { return error.empty() && session != nullptr; }
 };
