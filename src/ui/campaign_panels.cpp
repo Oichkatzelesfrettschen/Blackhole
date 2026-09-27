@@ -15,6 +15,7 @@
 #include <format>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -28,6 +29,7 @@
 #include "game/event_loader.h"
 #include "game/fleet.h"
 #include "game/inbox.h"
+#include "game/inbox_view.h"
 #include "game/observer.h"
 #include "game/realtime_driver.h"
 #include "game/station_node.h"
@@ -560,6 +562,9 @@ void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &
   // The inbox of the station the player stands at, labeled by that station.
   game::Inbox &inbox =
       uiState.focusNode == game::K_AUTHORITY_NODE ? uiState.hostInbox : uiState.inbox;
+  std::optional<std::size_t> &selectedEntry =
+      uiState.focusNode == game::K_AUTHORITY_NODE ? uiState.selectedHostInboxEntry
+                                                  : uiState.selectedColonyInboxEntry;
   const std::string title = std::format("{} inbox ({} unread)###CampaignInbox",
                                         nodeName(inbox.owner()), inbox.unreadCount());
   if (!ImGui::Begin(title.c_str(), &uiState.inboxOpen, ImGuiWindowFlags_NoCollapse)) {
@@ -580,25 +585,46 @@ void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &
     if (ImGui::SmallButton(std::format("mark all read##all{}", group.sender).c_str())) {
       inbox.markAllRead(group.sender);
     }
-    for (const std::size_t index : group.entries) {
-      const game::InboxEntry &entry = inbox.entries().at(index);
-      const game::ArrivalRecord &arrival = entry.arrival;
-      ImVec4 color(1.0f, 1.0f, 1.0f, 1.0f);
-      if (entry.read) {
-        color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-      } else if (inbox.pausesOn(arrival.category)) {
-        color = ImVec4(1.0f, 0.75f, 0.4f, 1.0f);
+    for (const game::InboxRow &row : game::inboxRows(inbox, group)) {
+      if (row.entries.size() > 1) {
+        const std::string summary =
+            std::format("{} routine messages, turns {}-{}##run{}", row.entries.size(),
+                        row.firstTurn, row.lastTurn, row.entries.front());
+        if (!ImGui::TreeNode(summary.c_str())) {
+          continue;
+        }
       }
-      ImGui::PushStyleColor(ImGuiCol_Text, color);
-      const std::string line = std::format(
-          "t{} [{}] {}  (sent t{} at sender tau {})##entry{}", arrival.arrivalTurn,
-          game::eventCategoryName(arrival.category), arrivalText(view, arrival), arrival.emitTurn,
-          formatSpan(static_cast<double>(arrival.senderProperSecAtEmit)), index);
-      if (ImGui::Selectable(line.c_str(), false)) {
-        inbox.markRead(index);
+      for (const std::size_t index : row.entries) {
+        const game::InboxEntry &entry = inbox.entries().at(index);
+        const game::ArrivalRecord &arrival = entry.arrival;
+        ImVec4 color(1.0f, 1.0f, 1.0f, 1.0f);
+        if (entry.read) {
+          color = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+        } else if (inbox.pausesOn(arrival.category)) {
+          color = ImVec4(1.0f, 0.75f, 0.4f, 1.0f);
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text, color);
+        const std::string line = std::format(
+            "t{} [{}] {}  (sent t{} at sender tau {})##entry{}", arrival.arrivalTurn,
+            game::eventCategoryName(arrival.category), arrivalText(view, arrival), arrival.emitTurn,
+            formatSpan(static_cast<double>(arrival.senderProperSecAtEmit)), index);
+        if (ImGui::Selectable(line.c_str(), selectedEntry == index)) {
+          selectedEntry = index;
+          inbox.markRead(index);
+        }
+        ImGui::PopStyleColor();
       }
-      ImGui::PopStyleColor();
+      if (row.entries.size() > 1) {
+        ImGui::TreePop();
+      }
     }
+  }
+  if (selectedEntry && *selectedEntry < inbox.entries().size()) {
+    const game::ArrivalRecord &arrival = inbox.entries().at(*selectedEntry).arrival;
+    ImGui::Separator();
+    const std::string detail = game::inboxDetailText(
+        arrival, view.secondsPerTurn, nodeName(arrival.sender), arrivalText(view, arrival));
+    ImGui::TextWrapped("%s", detail.c_str());
   }
   ImGui::End();
 }

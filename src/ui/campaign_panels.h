@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "game/campaign_session.h"
@@ -61,6 +62,8 @@ struct CampaignUiState {
   game::RealtimeDriver driver;
   game::Inbox inbox{game::K_FIRST_COLONY_NODE};    ///< The colony's inbox.
   game::Inbox hostInbox{game::K_AUTHORITY_NODE};   ///< The host's inbox.
+  std::optional<std::size_t> selectedColonyInboxEntry;
+  std::optional<std::size_t> selectedHostInboxEntry;
   game::NodeId focusNode = game::K_FIRST_COLONY_NODE;
   game::NodeId commandOrigin = game::K_AUTHORITY_NODE;
   bool lagging = false;
@@ -72,6 +75,8 @@ struct CampaignUiState {
  *         when another session replaces it. The player's preferences (task
  *         cost, backdrop, pause categories) are kept. */
 inline void resetSessionSelection(CampaignUiState &uiState) {
+  uiState.selectedColonyInboxEntry.reset();
+  uiState.selectedHostInboxEntry.reset();
   uiState.selectedFleet = game::K_INVALID_FLEET_ID;
   uiState.composerTargetBand = 0;
   uiState.composerLane = game::OrbitLane::Prograde;
