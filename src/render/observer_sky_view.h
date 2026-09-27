@@ -56,6 +56,31 @@ inline constexpr double K_SOLAR_TIME_SECONDS = 4.925490947641267e-6;
  *         into blocks. */
 inline constexpr double K_OBSERVER_FOV_MIN_DEG = 0.01;
 inline constexpr double K_OBSERVER_FOV_MAX_DEG = 170.0;
+inline constexpr double K_OBSERVER_OVERVIEW_LONGITUDE_DEG = 135.0;
+inline constexpr double K_OBSERVER_OVERVIEW_LATITUDE_DEG = 0.0;
+inline constexpr double K_OBSERVER_OVERVIEW_FOV_DEG = 100.0;
+
+/** @brief How the observer view chooses its look direction; exactly one applies. */
+enum class ObserverNavigation {
+  ManualAngles, ///< Render the stored longitude and latitude.
+  OrbitCamera,  ///< Render the orbit camera's basis.
+  TrackPatch,   ///< Render the peak-blueshift patch once the sky map is ready.
+};
+
+/** @brief The look angles selected for the rendered view, or the orbit camera basis. */
+struct ObserverLookSelection {
+  bool orbitCamera = false;
+  double longitudeDeg = 0.0;
+  double latitudeDeg = 0.0;
+};
+
+/**
+ * @brief The view a navigation mode renders: the stored angles, the orbit
+ *        camera, or the peak patch (the stored angles until a sky map exists).
+ */
+[[nodiscard]] ObserverLookSelection
+observerLookSelection(ObserverNavigation navigation, double longitudeDeg, double latitudeDeg,
+                      const std::optional<physics::observer_sky::SkyAngles> &peakAngles);
 
 /** @brief Ranges the observer panel's sliders and the BLACKHOLE_OBSERVER_*
  *         variables share. Mass and the time scale stay positive, so
@@ -285,8 +310,8 @@ struct ObserverRecordClock {
  *        seconds while a sky is resident, and runs observer_sky.frag.
  *        `deltaSeconds` is unscaled wall time, 0 while paused; a recording
  *        passes `record` instead, and the clock follows the output clock. With
- *        followCamera set, cameraBasis (world right, up, forward) steers the
- *        look direction; otherwise the view's look angles do.
+ *        OrbitCamera uses cameraBasis (world right, up, forward); ManualAngles
+ *        and TrackPatch use their selected look angles.
  */
 void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float deltaSeconds,
                             const std::optional<ObserverRecordClock> &record = std::nullopt);

@@ -132,20 +132,23 @@ struct RenderState {
    *        (physicsCore.kerrSpin); the view discloses both.
    */
   struct ObserverViewGroup {
+    using Navigation = ObserverNavigation;
+
     double epsilon = K_GARGANTUA_SPIN_DEFICIT; ///< 1 - a.
     double x = 5.0;                            ///< r - 1 (M) when atIsco is off.
     double massSolar = 1.0e8;
     /// Observer proper seconds per wall second; 1 is the observer's real
     /// time, where the star field turns about ten times a second.
     double skyTimeScale = 1.0e-3;
-    double properSeconds = 0.0;      ///< The observer's clock.
-    double lookLongitudeDeg = 135.0; ///< 0 looks at the hole, 90 along the motion.
-    double lookLatitudeDeg = 0.0;
-    double fovDeg = 100.0; ///< Vertical field of view.
+    double properSeconds = 0.0; ///< The observer's clock.
+    double lookLongitudeDeg =
+        K_OBSERVER_OVERVIEW_LONGITUDE_DEG; ///< 0 looks at the hole, 90 along the motion.
+    double lookLatitudeDeg = K_OBSERVER_OVERVIEW_LATITUDE_DEG;
+    double fovDeg = K_OBSERVER_OVERVIEW_FOV_DEG; ///< Vertical field of view.
     double cmbTemperature = 2.725;
     double distantInclinationDeg = 80.0; ///< Distant viewer's angle from the spin axis.
     double distantRadius = 400.0;        ///< Distant viewer's radius (M) for the signal delay.
-    ObserverClockModel lastClock; ///< Clock of the sky drawn last frame, for the panels.
+    ObserverClockModel lastClock;        ///< Clock of the sky drawn last frame, for the panels.
     ObserverSkyRenderer renderer;
     /// Proper time at the first recorded frame; frame N shows it plus
     /// skyTimeScale * N / fps. Empty outside a recording.
@@ -161,12 +164,18 @@ struct RenderState {
     ObserverKind kind = ObserverKind::Prograde;
     bool atIsco = true; ///< x tracks the ISCO of the orbit's sense.
     bool paused = false;
-    bool followCamera = false; ///< Steer with the orbit camera instead of the look angles.
-    bool lookAtPatch = false;  ///< Center the view on the peak-blueshift patch.
+    Navigation navigation = Navigation::ManualAngles;
     bool cmbEnabled = true;
     bool starsEnabled = true;
     bool motionBlur = true;
     bool envApplied = false;
+
+    void returnToOverview() {
+      navigation = Navigation::ManualAngles;
+      lookLongitudeDeg = K_OBSERVER_OVERVIEW_LONGITUDE_DEG;
+      lookLatitudeDeg = K_OBSERVER_OVERVIEW_LATITUDE_DEG;
+      fovDeg = K_OBSERVER_OVERVIEW_FOV_DEG;
+    }
   } observerView;
 
   /**
