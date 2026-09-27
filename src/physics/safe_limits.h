@@ -208,6 +208,29 @@ template <typename T>
   return absBits(x) == detail::INF_BITS<T>;
 }
 
+/**
+ * @brief Write a quiet NaN into @p slot through its bytes.
+ *
+ * The counterpart of safeIsnan for producers: under -ffinite-math-only a
+ * NaN created by quiet_NaN() or returned by value is poison, and clang 22
+ * folds it away, so a fast-math translation unit that marks "no value"
+ * with NaN stores the IEEE-754 quiet-NaN pattern with memcpy and lets
+ * readers classify the object in memory with safeIsnan.
+ *
+ * @param slot Object that receives the quiet-NaN bit pattern
+ */
+template <typename T> inline void storeQuietNan(T &slot) noexcept {
+  static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
+                "storeQuietNan supports float and double");
+  if constexpr (std::is_same_v<T, float>) {
+    constexpr std::uint32_t bits = 0x7FC00000U;
+    std::memcpy(&slot, &bits, sizeof(slot));
+  } else {
+    constexpr std::uint64_t bits = 0x7FF8000000000000ULL;
+    std::memcpy(&slot, &bits, sizeof(slot));
+  }
+}
+
 } // namespace physics
 
 #endif // PHYSICS_SAFE_LIMITS_H
