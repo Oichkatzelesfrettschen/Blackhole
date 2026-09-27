@@ -9,6 +9,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "campaign_test_field.h"
@@ -16,6 +18,7 @@
 #include "game/event.h"
 #include "game/event_loader.h"
 #include "game/inbox.h"
+#include "game/inbox_view.h"
 #include "game/received_clock.h"
 #include "game/station_node.h"
 
@@ -34,6 +37,60 @@ game::ArrivalRecord arrival(game::NodeId sender, game::NodeId destination,
 }
 
 } // namespace
+
+TEST(InboxView, CollapsesOnlyConsecutiveRoutineArrivals) {
+  game::Inbox inbox(game::K_FIRST_COLONY_NODE);
+  auto first = arrival(0, 1, game::EventCategory::Tech, 4);
+  first.kind = game::EmitKind::TechPacket;
+  auto second = arrival(0, 1, game::EventCategory::Info, 5);
+  auto war = arrival(0, 1, game::EventCategory::War, 6);
+  auto fourth = arrival(0, 1, game::EventCategory::Tech, 7);
+  auto other = arrival(1, 1, game::EventCategory::Tech, 8);
+  inbox.sync({first, second, war, fourth, other});
+  const auto groups = inbox.groups();
+  const auto rows = game::inboxRows(inbox, groups.at(0));
+  ASSERT_EQ(rows.size(), 3U);
+  EXPECT_EQ(rows.at(0).entries, (std::vector<std::size_t>{3}));
+  EXPECT_EQ(rows.at(1).entries, (std::vector<std::size_t>{2}));
+  EXPECT_EQ(rows.at(2).entries, (std::vector<std::size_t>{1, 0}));
+  EXPECT_EQ(rows.at(2).firstTurn, 4);
+  EXPECT_EQ(rows.at(2).lastTurn, 5);
+  EXPECT_EQ(game::inboxRows(inbox, groups.at(1)).at(0).entries, (std::vector<std::size_t>{4}));
+}
+
+TEST(InboxView, KeepsEveryConsequentialCategorySeparate) {
+  game::Inbox inbox(game::K_FIRST_COLONY_NODE);
+  std::vector<game::ArrivalRecord> records;
+  for (const game::EventCategory category :
+       {game::EventCategory::War, game::EventCategory::Treaty, game::EventCategory::Collapse,
+        game::EventCategory::Silence}) {
+    records.push_back(arrival(0, 1, category, static_cast<std::int64_t>(records.size()) + 1));
+  }
+  inbox.sync(records);
+  const auto rows = game::inboxRows(inbox, inbox.groups().at(0));
+  ASSERT_EQ(rows.size(), records.size());
+  for (const auto &row : rows) {
+    EXPECT_EQ(row.entries.size(), 1U);
+  }
+}
+
+TEST(InboxView, DetailReportsRecordedFieldsAndEffects) {
+  auto record = arrival(0, 1, game::EventCategory::Tech, 9);
+  record.kind = game::EmitKind::TechPacket;
+  record.techPoints = 17;
+  record.payloadIndex = 8;
+  record.senderEnergyUnitsAtEmit = 2.5;
+  record.senderTechPointsAtEmit = 44;
+  const std::string detail = game::inboxDetailText(record, 2.0, "host", "packet");
+  for (const std::string_view field :
+       {"Sender: host (node 0)", "Destination: node 1", "Category: tech", "Kind: tech packet",
+        "Message: packet", "Payload index: 8", "Sender energy at emission: 2.5",
+        "Sender tech points at emission: 44", "Emitted: turn 6", "Arrived: turn 9",
+        "Sender proper time at emission: 600 s", "Signal age: 3 turns (6 s)", "Tech points: +17",
+        "Flags: none recorded", "Schedules: none recorded"}) {
+    EXPECT_NE(detail.find(field), std::string::npos) << field;
+  }
+}
 
 // Falsifier: an entry filed under the wrong sender, a group not newest first,
 // unread counts off after read marks, or another node's arrival ingested.
