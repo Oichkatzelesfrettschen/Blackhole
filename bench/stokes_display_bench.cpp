@@ -110,17 +110,17 @@ void runBenchmark() {
   std::vector<Sample> samples(SAMPLE_COUNT);
   std::uint32_t randomState = 0x31415926U;
   auto randomUnit = [&randomState]() {
-    randomState = randomState * 1664525U + 1013904223U;
+    randomState = (randomState * 1664525U) + 1013904223U;
     return static_cast<float>(randomState >> 8U) / 16777216.0F;
   };
   for (std::size_t index = 0; index < samples.size(); ++index) {
-    float const intensity = 0.01F + 3.0F * randomUnit();
-    float const directionQ = 2.0F * randomUnit() - 1.0F;
-    float const directionU = 2.0F * randomUnit() - 1.0F;
+    float const intensity = 0.01F + (3.0F * randomUnit());
+    float const directionQ = (2.0F * randomUnit()) - 1.0F;
+    float const directionU = (2.0F * randomUnit()) - 1.0F;
     float const fraction = 0.9F * randomUnit();
     float const norm = std::max(std::hypot(directionQ, directionU), 1.0e-6F);
     // |V| <= 0.1 I and linear fraction <= 0.9 keep total polarization <= I.
-    float const circular = (0.2F * randomUnit() - 0.1F) * intensity;
+    float const circular = ((0.2F * randomUnit()) - 0.1F) * intensity;
     float const polarizedScale = index % 16 == 0 ? 0.0F : fraction * intensity / norm;
     samples[index] = {intensity,
                       directionQ * polarizedScale,
@@ -189,7 +189,7 @@ void runBenchmark() {
   double maximumDifference = 0.0;
   for (std::size_t index = 0; index < SAMPLE_COUNT; ++index) {
     for (std::size_t channel = 0; channel < 4; ++channel) {
-      std::size_t const offset = index * 4 + channel;
+      std::size_t const offset = (index * 4) + channel;
       if (!std::isfinite(outputs[1][offset])) {
         throw std::runtime_error("Cartesian display produced a nonfinite value");
       }
