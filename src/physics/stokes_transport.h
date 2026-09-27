@@ -99,17 +99,9 @@
 #include <vector>
 
 #include "constants.h"
+#include "bessel_k.h"
 #include "stokes_exact.h"
 #include "synchrotron.h"
-
-#ifdef __has_include
-#  if __has_include(<boost/math/special_functions/bessel.hpp>)
-#    include <boost/math/special_functions/bessel.hpp>
-// NOLINTBEGIN(cppcoreguidelines-macro-usage)
-#    define PHYSICS_STOKES_HAS_BOOST_BESSEL 1
-// NOLINTEND(cppcoreguidelines-macro-usage)
-#  endif
-#endif
 
 namespace physics {
 
@@ -601,14 +593,11 @@ struct FaradayPropagation {
  * For Theta_e -> 0: f_rm -> 1 (cold limit).
  * For Theta_e >> 1: K_0 ~ K_1 ~ K_2 -> 2*Theta_e^2, so f_rm -> 1/Theta_e^2 (highly suppressed).
  *
- * Fallback when boost is unavailable: f_rm ~ 1/(1 + Theta_e^2) (approximation).
- *
  * @param nu          Frequency [Hz]
  * @param nE          Electron density [cm^-3]
  * @param bParallel   B_parallel [Gauss]
  * @param thetaE      Dimensionless electron temperature
  * @return rho_V [rad/cm], suppressed for hot plasma
- * @throws std::exception if Boost cannot evaluate the thermal Bessel functions.
  */
 [[nodiscard]] inline double faradayRotationCoeffRelativistic(double nu,
                                                               double nE,
@@ -616,18 +605,11 @@ struct FaradayPropagation {
                                                               double thetaE) {
     if (thetaE <= 0.0) { return faradayRotationCoeff(nu, nE, bParallel); }
 
-    double frm = 0.0;
-#ifdef PHYSICS_STOKES_HAS_BOOST_BESSEL
     const double z   = 1.0 / thetaE;
-    const double k0  = boost::math::cyl_bessel_k(0.0, z);
-    const double k1  = boost::math::cyl_bessel_k(1.0, z);
-    const double k2  = boost::math::cyl_bessel_k(2.0, z);
-    const double denom = 2.0 * thetaE * thetaE * k2;
-    frm = (denom > 0.0) ? (k0 + k1) / denom : 0.0;
-#else
-    // Approximation: f_rm ~ 1 / (1 + Theta_e^2) -- correct limits but not exact
-    frm = 1.0 / (1.0 + (thetaE * thetaE));
-#endif
+    const BesselK012Values<double> scaledK = scaledBesselK012(z);
+    const double k0OverK2 = scaledK.scaledK0 / scaledK.scaledK2;
+    const double k1OverK2 = scaledK.scaledK1 / scaledK.scaledK2;
+    const double frm = (k0OverK2 + k1OverK2) / (2.0 * thetaE * thetaE);
     return faradayRotationCoeff(nu, nE, bParallel) * frm;
 }
 
@@ -649,7 +631,6 @@ struct FaradayPropagation {
  * @param bPerp       B_perp = B * sin(theta_B) [Gauss]
  * @param thetaE      Dimensionless electron temperature
  * @return rho_Q [rad/cm]
- * @throws std::exception if Boost cannot evaluate the thermal Bessel functions.
  */
 [[nodiscard]] inline double faradayConversionCoeff(double nu,
                                                     double nE,
@@ -657,21 +638,11 @@ struct FaradayPropagation {
                                                     double thetaE) {
     if (nu <= 0.0 || nE <= 0.0 || thetaE <= 0.0) { return 0.0; }
 
-    double fconv = 0.0;
-#ifdef PHYSICS_STOKES_HAS_BOOST_BESSEL
     const double z  = 1.0 / thetaE;
-    const double k1 = boost::math::cyl_bessel_k(1.0, z);
-    const double k2 = boost::math::cyl_bessel_k(2.0, z);
-    if (k2 > 0.0) {
-        // K_1/(Theta_e*K_2) - 1/(2*Theta_e^2) can go slightly negative at moderate
-        // Theta_e (~1-3) due to approximation error.  Physical conversion vanishes
-        // rather than flipping sign -- clamp to zero.
-        fconv = std::max(0.0, (k1 / (thetaE * k2)) - (1.0 / (2.0 * thetaE * thetaE)));
-    }
-#else
-    // Approximation for Theta_e >> 1: f_conv ~ 1/(2*Theta_e^2)
-    fconv = (thetaE > 0.5) ? 0.5 / (thetaE * thetaE) : 1.0;
-#endif
+    const BesselK012Values<double> scaledK = scaledBesselK012(z);
+    const double k1OverK2 = scaledK.scaledK1 / scaledK.scaledK2;
+    const double fconv = std::max(
+        0.0, (k1OverK2 / thetaE) - (1.0 / (2.0 * thetaE * thetaE)));
 
     const double e3    = E_CHARGE * E_CHARGE * E_CHARGE;
     const double me2c4 = M_ELECTRON * M_ELECTRON * C * C * C * C;

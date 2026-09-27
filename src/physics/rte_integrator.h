@@ -26,7 +26,7 @@
  *        grTransformIntensity() -- I_obs = g^3 * I_emit (Liouville invariant)
  *        grTransformFrequency() -- nu_obs = g * nu_emit
  *
- * SCOPE: CPU reference path only (C++23, float64, Boost Bessel when available).
+ * SCOPE: CPU reference path only (C++23, float64, fixed trapezoid Bessel kernel).
  * The CUDA path (D3) will port rteStep() to device_physics.cuh.
  *
  * CONVENTIONS:
@@ -68,16 +68,8 @@
 #include <vector>
 
 #include "constants.h"
+#include "bessel_k.h"
 #include "synchrotron.h"
-
-#ifdef __has_include
-#  if __has_include(<boost/math/special_functions/bessel.hpp>)
-#    include <boost/math/special_functions/bessel.hpp>
-// NOLINTBEGIN(cppcoreguidelines-macro-usage)
-#    define PHYSICS_RTE_HAS_BOOST_BESSEL 1
-// NOLINTEND(cppcoreguidelines-macro-usage)
-#  endif
-#endif
 
 namespace physics {
 
@@ -272,10 +264,8 @@ struct RteSample {
  *   - K_2(z) = modified Bessel function of second kind, order 2
  *
  * WHY the K_2 factor: it arises from the partition function of the
- * Maxwell-Juttner distribution.  For Theta_e >> 1: K_2(1/Theta_e) ~ 2 Theta_e^2.
- *
- * FALLBACK: When Boost is unavailable, uses the large-Theta_e approximation
- * K_2(1/Theta_e) ~ 2*Theta_e^2, valid to < 1% for Theta_e > 3.
+ * Maxwell-Juttner distribution. For large 1/Theta_e, the direct expression
+ * may underflow; for small 1/Theta_e, the scaled integral may overflow.
  *
  * References:
  *   - Mahadevan (1996), ApJ 457, 805, Eqs. 20-25 and A2.
@@ -286,7 +276,6 @@ struct RteSample {
  * @param nE      Electron number density [cm^-3]
  * @param thetaE  Dimensionless electron temperature k_B T_e / (m_e c^2) > 0
  * @return j_nu [erg / (cm^3 s Hz sr)]
- * @throws std::exception if Boost cannot evaluate the Bessel partition function.
  */
 [[nodiscard]] inline double synchrotronThermalEmissivity(double nu,
                                                           double bField,
@@ -308,15 +297,8 @@ struct RteSample {
     const double im = 4.0505 * xm16 * (1.0 + (0.40 * xm14) + (0.5316 * xm12)) *
                       std::exp(-1.8899 * std::pow(xM, 1.0 / 3.0));
 
-    // Modified Bessel K_2(1/Theta_e): partition function of Maxwell-Juttner distribution
-    double k2 = 0.0;
-#ifdef PHYSICS_RTE_HAS_BOOST_BESSEL
-    k2 = boost::math::cyl_bessel_k(2.0, 1.0 / thetaE);
-#else
-    // Large-Theta_e asymptote: K_2(1/Theta_e) ~ 2 Theta_e^2 + ...  (valid to ~1% for Theta_e > 3)
-    k2 = 2.0 * thetaE * thetaE;
-#endif
-    if (k2 <= 0.0) { return 0.0; }
+    const double inverseThetaE = 1.0 / thetaE;
+    const double k2 = std::exp(-inverseThetaE) * scaledBesselK(2.0, inverseThetaE);
 
     // Prefactor: sqrt(3) * e^3 * n_e * nu_B / (m_e * c^2)
     // Using CGS constants from synchrotron.h (E_CHARGE, M_ELECTRON, C, PI):

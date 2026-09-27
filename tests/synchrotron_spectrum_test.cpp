@@ -21,24 +21,17 @@
 
 #include "../src/physics/synchrotron.h"
 
-static_assert(PHYSICS_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
-
 using namespace physics;
 
-// Test tolerance
-// Note: These approximations have known errors at regime boundaries (x~0.01, x~10)
-// Low frequency (x<0.01): <0.1% error
-// Intermediate (0.01<x<10): 3-15% error at transitions
-// High frequency (x>10): exponential regime with transition errors
+// Tolerances for algebraic and approximate spectral-index checks.
 constexpr double TOLERANCE = 1e-5;
-constexpr double RELAXED_TOLERANCE = 0.15;  // 15% tolerance for approx boundaries
+constexpr double RELAXED_TOLERANCE = 0.15;
 
 /**
- * @brief Test 1: Synchrotron function F(x) - Low frequency regime
+ * @brief Test 1: Synchrotron F(x) against mpmath at low frequencies
  *
- * For x << 1, F(x) ~= 1.8084 * x^(1/3)
- * Note: Test only values well within low-freq regime (x << 0.01)
- * Boundary at x=0.01 has regime transition errors
+ * The reference values use the mpmath 1.4.1 scaled-tail rows in
+ * tests/bessel_k_reference.inc, evaluated as x * exp(-x) * e^x * tail.
  */
 namespace {
 
@@ -46,21 +39,28 @@ bool testSynchrotronFLowFreq() {
   std::cout << "\n[TEST 1] Synchrotron F(x) - Low Frequency Regime\n";
   std::cout << "=================================================\n";
 
-  std::vector<double> const testVals = {1e-4, 1e-3, 5e-3};
+  struct TestPoint {
+    double x;
+    double fRef;
+  };
+  constexpr TestPoint testPoints[] = {
+      {1.0e-4, 0.09959088308506682},
+      {1.0e-3, 0.21313906509145042},
+      {0.0099, 0.44360483593514838},
+  };
   bool allPassed = true;
 
-  for (double const x : testVals) {
-    double const fX = synchrotronF(x);
-    double const expected = 1.8084 * std::pow(x, 1.0 / 3.0);
-    double const error = std::abs(fX - expected) / expected;
+  for (const TestPoint &point : testPoints) {
+    const double fX = synchrotronF(point.x);
+    const double error = std::abs(fX - point.fRef) / point.fRef;
 
     std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  x = " << x << "\n";
+    std::cout << "  x = " << point.x << "\n";
     std::cout << "    F(x) computed: " << fX << "\n";
-    std::cout << "    F(x) expected: " << expected << "\n";
+    std::cout << "    F(x) expected: " << point.fRef << "\n";
     std::cout << "    Relative err:  " << error << "\n";
 
-    bool const passed = error < TOLERANCE; // Strict tolerance in pure low-freq regime
+    bool const passed = error < 2.0e-15;
     std::cout << "    Status:        " << (passed ? "PASS" : "FAIL") << "\n";
     allPassed = allPassed && passed;
   }
@@ -69,30 +69,37 @@ bool testSynchrotronFLowFreq() {
 }
 
 /**
- * @brief Test 2: Synchrotron function F(x) - High frequency regime
+ * @brief Test 2: Synchrotron F(x) against mpmath at high frequencies
  *
- * For x >> 1, F(x) ~= sqrt(pi/2) * sqrt(x) * exp(-x)
- * Note: Only test x >> 10 to avoid transition boundary
+ * The reference values use the mpmath 1.4.1 scaled-tail rows in
+ * tests/bessel_k_reference.inc, evaluated as x * exp(-x) * e^x * tail.
  */
 bool testSynchrotronFHighFreq() {
   std::cout << "\n[TEST 2] Synchrotron F(x) - High Frequency Regime\n";
   std::cout << "==================================================\n";
 
-  std::vector<double> const testVals = {20.0, 50.0, 100.0};
+  struct TestPoint {
+    double x;
+    double fRef;
+  };
+  constexpr TestPoint testPoints[] = {
+      {10.92, 7.9664430952276931e-5},
+      {30.0, 6.5807945577077005e-13},
+      {100.0, 4.6975936659221719e-43},
+  };
   bool allPassed = true;
 
-  for (double const x : testVals) {
-    double const fX = synchrotronF(x);
-    double const expected = std::sqrt(std::numbers::pi / 2.0) * std::sqrt(x) * std::exp(-x);
-    double const error = std::abs(fX - expected) / expected;
+  for (const TestPoint &point : testPoints) {
+    const double fX = synchrotronF(point.x);
+    const double error = std::abs(fX - point.fRef) / point.fRef;
 
     std::cout << std::fixed << std::setprecision(8);
-    std::cout << "  x = " << x << "\n";
+    std::cout << "  x = " << point.x << "\n";
     std::cout << "    F(x) computed: " << fX << "\n";
-    std::cout << "    F(x) expected: " << expected << "\n";
+    std::cout << "    F(x) expected: " << point.fRef << "\n";
     std::cout << "    Relative err:  " << error << "\n";
 
-    bool const passed = error < TOLERANCE; // Strict tolerance in pure high-freq regime
+    bool const passed = error < 2.0e-15;
     std::cout << "    Status:        " << (passed ? "PASS" : "FAIL") << "\n";
     allPassed = allPassed && passed;
   }
@@ -287,30 +294,44 @@ bool testSpectralIndexCalculation() {
  * @brief Test 8: Polarization degree bounds
  *
  * Verify pol = G(x)/F(x) stays in [0, 1] range
- * Note: Theory gives Pol_max = (p+1)/(p+7/3) for certain regimes
- * but computed max depends on approximation accuracy
+ * The log grid spans x = 1e-4 through x = 700.
  */
 bool testPolarizationBounds() {
   std::cout << "\n[TEST 8] Polarization Degree Bounds\n";
   std::cout << "====================================\n";
 
-  std::vector<double> const testX = {1e-3, 0.01, 0.1, 1.0, 5.0, 10.0, 50.0, 100.0};
+  constexpr int pointCount = 257;
+  const double logMinimum = std::log(1.0e-4);
+  const double logMaximum = std::log(700.0);
   bool allPassed = true;
 
   std::cout << std::fixed << std::setprecision(6);
 
-  for (double const x : testX) {
+  for (int point = 0; point < pointCount; ++point) {
+    const double fraction = static_cast<double>(point) / static_cast<double>(pointCount - 1);
+    const double x = std::exp(logMinimum + fraction * (logMaximum - logMinimum));
     double const fVal = synchrotronF(x);
     double const gVal = synchrotronG(x);
-    double const pol = (fVal > 1e-30) ? (gVal / fVal) : 0.0;
+    const double pol = gVal / fVal;
 
-    // Polarization must be in [0, 1]
-    bool const passed = (pol >= 0.0 && pol <= 1.0);
+    // The physical polarization fraction is bounded by unity.
+    bool const passed = (fVal > 0.0 && gVal >= 0.0 && pol >= 0.0 && pol <= 1.0);
 
     std::cout << "  x = " << x << ": Pol = " << pol;
     std::cout << " " << (passed ? "PASS" : "FAIL") << "\n";
     allPassed = allPassed && passed;
   }
+
+  // synchrotronPolarization forms G/F from the scaled kernel values, so it
+  // agrees with the direct ratio where both are representable and tends to 1
+  // (G/F = 1 - 2/(3x) + O(x^-2)) where F and G underflow.
+  const double midRatio = synchrotronG(50.0) / synchrotronF(50.0);
+  const bool midAgrees = std::abs(synchrotronPolarization(50.0) - midRatio) <= 1e-13 * midRatio;
+  const double far = synchrotronPolarization(1.0e4);
+  const bool farLimit = std::abs(far - (1.0 - (2.0 / 3.0e4))) < 1e-7;
+  std::cout << "  Pol(50) matches G/F: " << (midAgrees ? "PASS" : "FAIL") << "\n";
+  std::cout << "  Pol(1e4) = " << far << ": " << (farLimit ? "PASS" : "FAIL") << "\n";
+  allPassed = allPassed && midAgrees && farLimit;
 
   std::cout << "  Status: " << (allPassed ? "PASS" : "FAIL") << "\n";
 
@@ -320,14 +341,12 @@ bool testPolarizationBounds() {
 /**
  * @brief Test 9: Synchrotron F(x) accuracy against Rybicki-Lightman Table A1
  *
- * WHY: The Fouka & Ouichaoui polynomial has ~1% error in the intermediate
- * regime. When boost::math is available, the Gauss-Legendre integral of
- * K_{5/3} gives sub-0.01% accuracy.
+ * WHY: The Bessel kernel evaluates the exact integral used by the reference.
  *
  * Reference values from Rybicki & Lightman (1979) Table A1, page 232.
  * Values confirmed by independent numerical integration.
  *
- * Tolerance: 0.01% when boost is present, 2% otherwise (polynomial fallback).
+ * Tolerance: 1% for the three-significant-digit literature table.
  */
 bool testSynchrotronFRybickiLightmanTable() {
   std::cout << "\n[TEST 9] Synchrotron F(x) vs Rybicki-Lightman Table A1\n";
@@ -345,13 +364,8 @@ bool testSynchrotronFRybickiLightmanTable() {
       {.x = 1.0, .fRef = 0.6514},    // scipy: 0.651423  (R&L gives 0.655, ~0.5% rounding)
       {.x = 10.0, .fRef = 1.922e-4}, // scipy: 1.922e-4  (R&L Table A1 row x=10 was misread)
   };
-  // Note: R&L values are rounded to 3 significant figures; we use 1% tolerance
-  // for the boost::math path (machine precision integration vs 3-digit table).
+  // The literature values are rounded to three significant figures.
   static const double rlTolerance = 0.01; // 1%
-#ifdef PHYSICS_HAS_BOOST_BESSEL
-  static const double boostTolerance = 0.03; // same: R&L table imprecision
-  (void)boostTolerance;
-#endif
 
   bool allPassed = true;
   std::cout << std::fixed << std::setprecision(6);
@@ -367,12 +381,6 @@ bool testSynchrotronFRybickiLightmanTable() {
     std::cout << "  " << (passed ? "PASS" : "FAIL") << "\n";
     allPassed = allPassed && passed;
   }
-
-#ifdef PHYSICS_HAS_BOOST_BESSEL
-    std::cout << "  (boost::math Gauss-Legendre path active)\n";
-#else
-    std::cout << "  (polynomial fallback path active)\n";
-#endif
 
     std::cout << "  Status: " << (allPassed ? "PASS" : "FAIL") << "\n";
     return allPassed;

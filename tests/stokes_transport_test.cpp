@@ -6,7 +6,7 @@
  * to simulate the EHT polarization measurements.  All tests verify analytically
  * derivable limits without a full geodesic integration run.
  *
- * Analytic cases and Boost overflow propagation:
+ * Analytic cases and thermal special-function behavior:
  *
  * StokesVector helpers:
  *   1.  linPolFrac = sqrt(Q^2+U^2)/I; zero for unpolarized.
@@ -69,10 +69,6 @@
 #include "../src/physics/stokes_transport.h"
 #include "rte_integrator.h"
 #include "synchrotron.h"
-
-static_assert(PHYSICS_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
-static_assert(PHYSICS_RTE_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
-static_assert(PHYSICS_STOKES_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
 
 using namespace physics;
 
@@ -526,34 +522,9 @@ void testGRParallelTransportRotate() {
 // Main
 // ---------------------------------------------------------------------------
 
-void testFaradayOverflowErrors() {
-  // K_2(1/Theta_e) exceeds double range at the chosen finite temperature.
-  const double extremeTemperature = 1.0e155;
-  bool rotationRejected = false;
-  try {
-    const double rotation =
-        faradayRotationCoeffRelativistic(230.0e9, 1.0e6, 10.0, extremeTemperature);
-    check(false, "Faraday rotation reports Bessel overflow",
-          std::isnan(rotation) ? "returned NaN" : "returned a value");
-  } catch (const std::overflow_error &) {
-    rotationRejected = true;
-  }
-  check(rotationRejected, "Faraday rotation exposes a catchable Boost overflow error");
-  bool conversionRejected = false;
-  try {
-    const double conversion = faradayConversionCoeff(230.0e9, 1.0e6, 10.0, extremeTemperature);
-    check(false, "Faraday conversion reports Bessel overflow",
-          std::isnan(conversion) ? "returned NaN" : "returned a value");
-  } catch (const std::overflow_error &) {
-    conversionRejected = true;
-  }
-  check(conversionRejected, "Faraday conversion exposes a catchable Boost overflow error");
-}
-
 } // namespace
 
 int main() try {
-  testFaradayOverflowErrors();
   std::cout << "\n=== Stokes I,Q,U,V Transport Tests ===\n\n";
 
   std::cout << "StokesVector helpers:\n";

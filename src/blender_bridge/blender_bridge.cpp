@@ -55,11 +55,8 @@ int bhbHasCuda(void) {
 }
 
 int bhbHasBoost(void) {
-#ifdef PHYSICS_HAS_BOOST_BESSEL
+  // The physics special functions are always available.
   return 1;
-#else
-  return 0;
-#endif
 }
 
 int bhbSizeofSourceParams(void) {

@@ -7,10 +7,10 @@
  *             steady-state split) against the RK4 substeps a 1e-6 relative
  *             error needs, at Faraday depth 1, 100 and 1000.
  *   boost   - Boost.Math jacobi_sn and ellint_1 under the default policy
- *             (double promoted to long double) and under AnalyticKerrPolicy
- *             (promote_double<false>), plus rAnalytic end to end.
+ *             (double promoted to long double) and under DoublePolicy
+ *             (promote_double<false>), plus the in-house rAnalytic end to end.
  *   carlson - R_F, R_D, R_J by duplication with Carlson's 1995 stopping rule
- *             against Boost.Math ellint_rf/rd/rj under AnalyticKerrPolicy.
+ *             against Boost.Math ellint_rf/rd/rj under DoublePolicy.
  *   kahan   - FP32 RK4 photon orbit, plain against Kahan-compensated state
  *             accumulation: cost per step and roundoff against the double run.
  *
@@ -48,9 +48,10 @@
 #include "stokes_exact.h"
 #include "stokes_transport.h"
 
-static_assert(PHYSICS_HAS_BOOST_JACOBI == 1, "The bench measures the Boost Jacobi path");
-
 namespace {
+
+/// Boost.Math evaluated in double; its default policy promotes to long double.
+using DoublePolicy = boost::math::policies::policy<boost::math::policies::promote_double<false>>;
 
 volatile double gSink = 0.0;
 
@@ -190,7 +191,7 @@ void benchBoostPolicy() {
     ks[i] = 0.999 * static_cast<double>(i % 997U) / 997.0;
     us[i] = 0.01 + (5.0 * static_cast<double>(i % 1009U) / 1009.0);
   }
-  const physics::AnalyticKerrPolicy pol;
+  const DoublePolicy pol;
   double snDiff = 0.0;
   double kDiff = 0.0;
   for (std::size_t i = 0; i < count; ++i) {
@@ -220,7 +221,7 @@ void benchBoostPolicy() {
               kPromoted / kDouble, kDiff);
   const double hpNs =
       nsPerCall(count, 200, [&](std::size_t) { return physics::radialHalfPeriod(roots); });
-  std::printf("rAnalytic (double policy) %.1f ns, radialHalfPeriod (AGM) %.1f ns\n", rNs,
+  std::printf("rAnalytic (in-house Landen) %.1f ns, radialHalfPeriod (AGM) %.1f ns\n", rNs,
               hpNs);
 }
 
@@ -238,7 +239,7 @@ void benchCarlson() {
   for (std::array<double, 4> &a : args) {
     std::ranges::generate(a, [&] { return std::pow(10.0, expo(rng)); });
   }
-  const physics::AnalyticKerrPolicy pol;
+  const DoublePolicy pol;
   double worst = 0.0;
   for (const std::array<double, 4> &a : args) {
     worst = std::max(

@@ -7,7 +7,7 @@
  * These tests guard all analytically derivable limits without requiring a full geodesic
  * integration run.
  *
- * Analytic cases and Boost overflow propagation:
+ * Analytic cases and thermal special-function behavior:
  *
  * Formal solution limits:
  *   1.  Pure emission (alpha=0): I grows as j * L (optically thin, exact).
@@ -61,9 +61,6 @@
 #include "../src/physics/rte_integrator.h"
 #include "constants.h"
 #include "synchrotron.h"
-
-static_assert(PHYSICS_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
-static_assert(PHYSICS_RTE_HAS_BOOST_BESSEL == 1, "Validation requires the Boost numerical path");
 
 using namespace physics;
 
@@ -431,36 +428,20 @@ void testRteStepGRWithUnitRedshift() {
 // Main
 // ---------------------------------------------------------------------------
 
-void testThermalSynchrotronOverflowErrors() {
-  // K_2(1/Theta_e) exceeds double range at the chosen finite temperature.
-  const double extremeTemperature = 1.0e155;
-  // The weak field keeps nuS finite so both paths reach the Bessel evaluation.
-  bool emissivityRejected = false;
-  try {
-    const double emissivity =
-        synchrotronThermalEmissivity(230.0e9, 1.0e-300, 1.0e6, extremeTemperature);
-    check(false, "thermal emissivity reports Bessel overflow",
-          std::isnan(emissivity) ? "returned NaN" : "returned a value");
-  } catch (const std::overflow_error &) {
-    emissivityRejected = true;
-  }
-  check(emissivityRejected, "thermal emissivity exposes a catchable Boost overflow error");
-  bool absorptionRejected = false;
-  try {
-    const double absorption =
-        synchrotronThermalAbsorption(230.0e9, 1.0e-300, 1.0e6, extremeTemperature);
-    check(false, "thermal absorption reports Bessel overflow",
-          std::isnan(absorption) ? "returned NaN" : "returned a value");
-  } catch (const std::overflow_error &) {
-    absorptionRejected = true;
-  }
-  check(absorptionRejected, "thermal absorption exposes a catchable Boost overflow error");
+void testThermalBesselFloatingRange() {
+  const double largeArgument = 1000.0;
+  const double underflowValue = std::exp(-largeArgument) * scaledBesselK(2.0, largeArgument);
+  check(underflowValue == 0.0, "K_2 follows exponential underflow at large argument");
+
+  const double smallArgument = 1.0e-155;
+  const double overflowValue = std::exp(-smallArgument) * scaledBesselK(2.0, smallArgument);
+  check(!safeIsfinite(overflowValue), "K_2 preserves the scaled-integral floating-point limit");
 }
 
 } // namespace
 
 int main() try {
-  testThermalSynchrotronOverflowErrors();
+  testThermalBesselFloatingRange();
   std::cout << "\n=== RTE Integrator Tests ===\n\n";
 
   std::cout << "Formal solution:\n";

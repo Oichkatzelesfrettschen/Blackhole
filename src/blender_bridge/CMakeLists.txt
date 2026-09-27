@@ -32,10 +32,6 @@ target_sources(blackhole_bridge PRIVATE
     "${PROJECT_SOURCE_DIR}/src/physics/cosmology.cpp"
 )
 
-# Boost (optional, for Bessel/Jacobi)
-if(TARGET Boost::boost)
-    target_link_libraries(blackhole_bridge PRIVATE Boost::boost)
-endif()
 if(TARGET stb::stb)
     target_link_libraries(blackhole_bridge PRIVATE stb::stb)
 endif()
