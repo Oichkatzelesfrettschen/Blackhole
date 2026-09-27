@@ -56,12 +56,13 @@ scaled tail integral from DLMF 10.32.9:
 
 The integrand is even and analytic in a strip, so the trapezoid rule
 converges exponentially in 1/h. The kernel integrates over [0, T(x)] with a
-fixed N = 128 intervals, h = T / N, and cosh(t) - 1 written as
-2 sinh(t/2)^2. T(x) solves x (cosh T - 1) - nu_max T = L with L = 40
-(about ln(1 / 2^-53) plus margin) by four fixed-point steps from
-acosh(1 + L / x). At large x, T shrinks like sqrt(2L / x), so h tracks the
-integrand's width with no regime switch; at small x, T grows like
-ln(2L / x).
+fixed N = 128 intervals, h = T / N, and cosh(t) - 1 written as 2
+sinh(t/2)^2. T(x) solves x (cosh T - 1) - nu_max T = L with L = 40 (about
+ln(1 / 2^-53) plus margin) by four fixed-point steps from acosh(1 + L / x),
+with acosh(1 + y) evaluated as log1p(y + sqrt(y (2 + y))) so the range stays
+positive where 1 + L / x rounds to 1 (x above 3.6e17). At large x, T shrinks
+like sqrt(2L / x), so h tracks the integrand's width with no regime switch;
+at small x, T grows like ln(2L / x).
 
 One pass shares the factor e^{-x (cosh t - 1)} across several orders, so
 K_0, K_1, and K_2 come from one loop and their ratios cancel the scale
@@ -108,6 +109,19 @@ mpmath's `besselk` to 1e-71.
   Theta_e > 3, for every temperature.
 - Faraday conversion switched at Theta_e = 0.5 between 1 and 0.5/Theta_e^2,
   a jump from 1 to 2 at the boundary.
+- The Boost-path Faraday factors were wrong as well. Rotation used
+  (K_0 + K_1) / (2 Theta_e^2 K_2), which grows as 1/Theta_e^2 in the cold
+  limit instead of tending to 1; conversion used K_1 / (Theta_e K_2) -
+  1 / (2 Theta_e^2), which the recurrence K_2 = K_0 + 2 K_1 / z makes negative
+  at every temperature, so the clamp returned 0. `stokes_transport.h` now
+  follows Dexter 2016 Eqs. B4-B5 in the high-frequency limit: rho_V carries
+  K_0/K_2 on the cold-plasma n e^3 B_par / (pi m^2 c^2 nu^2), and rho_Q is
+  n e^4 B_perp^2 / (4 pi^2 m^3 c^3 nu^3) times K_1/K_2 + 6 Theta_e. The cold
+  rotation prefactor was low by 2 c^2; the test pins it to the standard
+  rotation measure, 0.812 rad/m^2 for 1 cm^-3, 1 microgauss, and 1 pc.
+- The thermal emissivity divided by K_2(1/Theta_e) after it underflowed,
+  returning NaN for a cold plasma; it now folds e^{1/Theta_e} into the
+  spectral exponential and returns the 0 limit.
 
 ## Literature
 

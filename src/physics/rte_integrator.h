@@ -294,18 +294,21 @@ struct RteSample {
     const double xm16  = std::pow(xM, -1.0 / 6.0);  // x^{-1/6}
     const double xm14  = std::pow(xM, -1.0 / 4.0);  // x^{-1/4}
     const double xm12  = std::pow(xM, -1.0 / 2.0);  // x^{-1/2}
-    const double im = 4.0505 * xm16 * (1.0 + (0.40 * xm14) + (0.5316 * xm12)) *
-                      std::exp(-1.8899 * std::pow(xM, 1.0 / 3.0));
+    const double imAlgebraic = 4.0505 * xm16 * (1.0 + (0.40 * xm14) + (0.5316 * xm12));
 
+    // 1/K_2(z) = e^z / (e^z K_2(z)): the e^z joins the spectral exponential in
+    // one exponent, so a cold plasma whose K_2 and I_M both underflow yields
+    // the limit 0 instead of 0/0.
     const double inverseThetaE = 1.0 / thetaE;
-    const double k2 = std::exp(-inverseThetaE) * scaledBesselK(2.0, inverseThetaE);
+    const double scaledK2 = scaledBesselK(2.0, inverseThetaE);
+    const double exponent = inverseThetaE - (1.8899 * std::cbrt(xM));
 
     // Prefactor: sqrt(3) * e^3 * n_e * nu_B / (m_e * c^2)
     // Using CGS constants from synchrotron.h (E_CHARGE, M_ELECTRON, C, PI):
     const double prefactor =
         std::numbers::sqrt3 * E_CHARGE * E_CHARGE * E_CHARGE * nE * nuB / (M_ELECTRON * C * C);
 
-    return (prefactor / k2) * thetaE * thetaE * im;
+    return (prefactor / scaledK2) * thetaE * thetaE * imAlgebraic * std::exp(exponent);
 }
 
 /**

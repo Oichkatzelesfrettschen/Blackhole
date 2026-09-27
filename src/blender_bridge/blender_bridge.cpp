@@ -55,8 +55,8 @@ int bhbHasCuda(void) {
 }
 
 int bhbHasBoost(void) {
-  // The physics special functions are always available.
-  return 1;
+  // The bridge links no Boost; its special functions are in-house (bessel_k.h).
+  return 0;
 }
 
 int bhbSizeofSourceParams(void) {

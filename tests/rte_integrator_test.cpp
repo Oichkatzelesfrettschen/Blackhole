@@ -437,6 +437,12 @@ void testThermalBesselFloatingRange() {
   const double smallArgument = 1.0e-155;
   const double overflowValue = std::exp(-smallArgument) * scaledBesselK(2.0, smallArgument);
   check(!safeIsfinite(overflowValue), "K_2 preserves the scaled-integral floating-point limit");
+
+  // At Theta_e = 1e-3, K_2(1000) and the Mahadevan spectral factor both
+  // underflow; the emissivity joins their exponentials and returns the 0 limit.
+  const double coldEmissivity = synchrotronThermalEmissivity(230.0e9, 10.0, 1.0e6, 1.0e-3);
+  check(safeIsfinite(coldEmissivity) && coldEmissivity >= 0.0,
+        "thermal emissivity stays finite where K_2 underflows");
 }
 
 } // namespace

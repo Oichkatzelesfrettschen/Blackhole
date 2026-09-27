@@ -48,13 +48,19 @@ template <typename T> struct BesselKSum {
   }
 };
 
+// acosh(1 + y) without forming 1 + y, which rounds to 1 once y falls below
+// the spacing at 1 (x above about 3.6e17 in binary64).
+template <typename T> [[nodiscard]] inline T acoshOnePlus(T y) {
+  return std::log1p(y + std::sqrt(y * (T(2) + y)));
+}
+
 template <typename T> [[nodiscard]] inline T besselKUpperLimit(T x, T nuMax) {
   const T inverseX = T(1) / x;
-  T upper = std::acosh(T(1) + (T(40) * inverseX));
-  upper = std::acosh(T(1) + ((T(40) + (nuMax * upper)) * inverseX));
-  upper = std::acosh(T(1) + ((T(40) + (nuMax * upper)) * inverseX));
-  upper = std::acosh(T(1) + ((T(40) + (nuMax * upper)) * inverseX));
-  upper = std::acosh(T(1) + ((T(40) + (nuMax * upper)) * inverseX));
+  T upper = acoshOnePlus(T(40) * inverseX);
+  upper = acoshOnePlus((T(40) + (nuMax * upper)) * inverseX);
+  upper = acoshOnePlus((T(40) + (nuMax * upper)) * inverseX);
+  upper = acoshOnePlus((T(40) + (nuMax * upper)) * inverseX);
+  upper = acoshOnePlus((T(40) + (nuMax * upper)) * inverseX);
   return upper;
 }
 
