@@ -2471,6 +2471,36 @@ __device__ __forceinline__ void d_stokes_composite_step(DStokes &observed, float
 }
 
 /**
+ * @brief Apply the polarization display tint to accumulated RGB intensity.
+ *
+ * The clamped angular weights equal (Q,U)/max(I,hypot(Q,U)). Scaling before
+ * squaring preserves finite HDR inputs and avoids an undefined zero angle.
+ * The tint encodes polarization for inspection; it is not physical radiance.
+ */
+__device__ __forceinline__ float4 d_stokes_display_color(DStokes stokes, float3 intensity) {
+    float const luminance = (intensity.x + intensity.y + intensity.z) * 0.33333333f;
+    float linearQ = 0.0f;
+    float linearU = 0.0f;
+    float circularFraction = 0.0f;
+    if (luminance > 1.0e-10f) {
+        float const scale = fmaxf(luminance, fmaxf(fabsf(stokes.q), fabsf(stokes.u)));
+        float const scaledQ = stokes.q / scale;
+        float const scaledU = stokes.u / scale;
+        float const scaledIntensity = luminance / scale;
+        // The maximum squared norm lies in [1,2] after scaling.
+        float const inverseDenominator = rsqrtf(fmaxf(scaledIntensity * scaledIntensity,
+                                                     fmaf(scaledQ, scaledQ, scaledU * scaledU)));
+        linearQ = scaledQ * inverseDenominator;
+        linearU = scaledU * inverseDenominator;
+        circularFraction = fmaxf(-0.5f, fminf(0.5f, stokes.v / luminance));
+    }
+    return make_float4(fmaxf(intensity.x * (1.0f + 0.4f * linearQ), 0.0f),
+                       fmaxf(intensity.y * (1.0f + 0.4f * linearU), 0.0f),
+                       fmaxf(intensity.z * (1.0f + 0.2f * circularFraction), 0.0f),
+                       1.0f);
+}
+
+/**
  * @brief Trace a Kerr geodesic with polarized Stokes I,Q,U,V transport.
  *
  * Extends d_trace_geodesic_rte() to track Stokes polarization state alongside
@@ -2651,23 +2681,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     if (terminal_pos != nullptr) {
         *terminal_pos = d_kerr_ray_position(kr);
     }
-    float const I_lum = (accum_i.x + accum_i.y + accum_i.z) * 0.33333333f;
-    float const P_lin = (I_lum > 1.0e-10f)
-        ? sqrtf(fmaf(stokes.q, stokes.q, stokes.u * stokes.u)) / I_lum
-        : 0.0f;
-    float const p_clamped = fminf(P_lin, 1.0f);
-    float const chi       = 0.5f * atan2f(stokes.u, stokes.q);
-    float const v_frac    = (I_lum > 1.0e-10f)
-        ? fmaxf(-0.5f, fminf(0.5f, stokes.v / I_lum)) : 0.0f;
-
-    float const tint_r = 1.0f + p_clamped * 0.4f * cosf(2.0f * chi);
-    float const tint_g = 1.0f + p_clamped * 0.4f * sinf(2.0f * chi);
-    float const tint_b = 1.0f + v_frac * 0.2f;
-
-    return make_float4(fmaxf(accum_i.x * tint_r, 0.0f),
-                       fmaxf(accum_i.y * tint_g, 0.0f),
-                       fmaxf(accum_i.z * tint_b, 0.0f),
-                       1.0f);
+    return d_stokes_display_color(stokes, accum_i);
 }
 
 #endif /* BLACKHOLE_CUDA_DEVICE_PHYSICS_CUH */
