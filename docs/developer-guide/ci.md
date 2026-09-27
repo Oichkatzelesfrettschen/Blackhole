@@ -241,8 +241,14 @@ non-finite values takes the per-target `-fno-fast-math` override in
 | `scripts/ci/tidy.sh [-p DIR] [-f] FILE...` | `ci-analysis` clang-tidy (the wheel `scripts/ci/tidy-version.txt` pins) against GCC 14's libstdc++, over the `ci` configuration | `uv` (or `CLANG_TIDY` pointing at a binary of that version), `g++-14`, and `build/CiLike` from `ci_replica.sh` |
 
 `ci_replica.sh` copies the local Release generators, replaces the compiler the
-toolchain names with GCC 14, and mounts an empty `/usr/include/glm` through
-`bwrap`, since the runner has no system glm; logs land in
+toolchain names with GCC 14, and runs configure, build, and CTest through
+`scripts/ci/without_host_headers.sh`, which mounts empty tmpfs directories over
+the host's `/usr/include/boost`, `/usr/include/glm`, and `/usr/include/cpptrace`
+with `bwrap`. The runner has none of those trees, so `__has_include` selects
+the same branches locally as in CI (the non-Boost fallbacks in
+`synchrotron.h`, `rte_integrator.h`, `stokes_transport.h`, and
+`analytic_kerr_geodesic.h` for targets that do not link Conan's Boost);
+`tidy.sh` analyzes through the same wrapper. Logs land in
 `build/cilike*.log`. It reuses the locally built Conan packages, so it
 reproduces the compiler, flags, and tests of a lane but not the lane's own
 package binaries. `cppcheck_ci.sh` builds its image from

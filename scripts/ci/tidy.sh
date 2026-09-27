@@ -148,7 +148,9 @@ jobs=${TIDY_JOBS:-$(nproc)}
 # xargs appends each line's key and source path after the fixed arguments.
 # Word splitting of $tidy and $extra is intended: each holds several arguments.
 # shellcheck disable=SC2016
-cut -f1,2 "$out_dir/entries.tsv" | xargs -P "$jobs" -L1 sh -c '
+# The runner's /usr/include lacks Boost, glm, and cpptrace; hiding the host's
+# copies makes __has_include select the branches ci-analysis analyzes.
+cut -f1,2 "$out_dir/entries.tsv" | scripts/ci/without_host_headers.sh xargs -P "$jobs" -L1 sh -c '
   base="$1/$4"
   # shellcheck disable=SC2086
   $2 -p "$1/db/$4" $3 "$5" >"$base.log" 2>&1
