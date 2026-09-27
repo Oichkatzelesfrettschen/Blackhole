@@ -1,6 +1,11 @@
 # Blackhole Project clang-tidy Configuration
 # Optimized for physics simulation and graphics code
 ---
+# cppcoreguidelines-pro-bounds-avoid-unchecked-container-access (clang-tidy 20+)
+# flags every operator[] on a container. Its remedy, .at() or gsl::at, adds a
+# bounds check and a throw path to the per-ray and per-texel loops of the
+# physics and LUT code, where indices come from loop bounds over the same
+# container; the ASan lane checks those accesses instead.
 Checks: >
   -*,
   bugprone-*,
@@ -38,6 +43,7 @@ Checks: >
   -readability-magic-numbers,
   -readability-uppercase-literal-suffix,
   -performance-enum-size,
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
 
 # Every enabled diagnostic participates in the source quality gate.
 WarningsAsErrors: '*'
