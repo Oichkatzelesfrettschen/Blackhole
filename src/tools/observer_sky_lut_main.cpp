@@ -12,11 +12,15 @@
  *                    [--threads N] [--out DIR]
  *
  * --canon selects Gargantua's spin deficit 1.33e-14 with the observer on the
- * prograde ISCO (Miller's planet). The default output directory is
- * assets/luts under the current directory; the renderer looks there first.
+ * prograde ISCO (Miller's planet). The default output directory is the
+ * renderer's bundle cache, <user cache>/observer_sky ($XDG_CACHE_HOME or
+ * ~/.cache), falling back to the resource tree's assets/luts; only that
+ * shared cache is evicted to its budget, never an explicit --out directory.
  */
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <numbers>
 #include <optional>
@@ -25,6 +29,7 @@
 
 #include "physics/observer_sky_lut.h"
 #include "physics/observer_sky_map.h"
+#include "platform/resource_paths.h"
 #include "tools/observer_sky_lut_options.h"
 
 namespace {
@@ -65,10 +70,21 @@ void printStatistics(const sky::ObserverSkyLut &lut, double seconds) {
 } // namespace
 
 int main(int argc, char **argv) {
-  const auto options = parseOptions(std::span<char *>(argv, static_cast<std::size_t>(argc)));
+  platform::initResourceRoot(argv[0]);
+  auto options = parseOptions(std::span<char *>(argv, static_cast<std::size_t>(argc)));
   if (!options) {
     printUsage();
     return 2;
+  }
+  // Default output: the renderer's shared cache, else the resource tree's
+  // assets/luts, the directory the renderer falls back to.
+  // Only a resolved user cache is managed; the source-tree fallback may hold
+  // explicit --out bundles and is never pruned.
+  bool sharedCache = false;
+  if (options->out.empty()) {
+    const std::filesystem::path cache = platform::writableCacheSubdirectory("observer_sky");
+    sharedCache = !cache.empty();
+    options->out = sharedCache ? cache : platform::resourceRoot() / "assets" / "luts";
   }
   const auto key = resolveObserver(*options);
   if (!key) {
@@ -81,11 +97,18 @@ int main(int argc, char **argv) {
   const double seconds =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
   printStatistics(lut, seconds);
-  if (!sky::writeObserverSkyLut(lut, options->out)) {
+  const bool written = sky::writeObserverSkyLut(lut, options->out);
+  const std::uint64_t hash = sky::lutHash(lut.key, lut.dimensions, lut.settings);
+  // Evict even after a partial publish: a lone .bin is readable and counts
+  // against the shared cache's budget.
+  if (sharedCache) {
+    sky::evictObserverSkyBundles(options->out, sky::K_OBSERVER_SKY_CACHE_BYTES, hash);
+  }
+  if (!written) {
     std::printf("could not write %s\n", options->out.string().c_str());
     return 1;
   }
-  const std::string stem = sky::lutStem(sky::lutHash(lut.key, lut.dimensions, lut.settings));
+  const std::string stem = sky::lutStem(hash);
   std::printf("wrote %s/%s.{bin,json}\n", options->out.string().c_str(), stem.c_str());
   return 0;
 }

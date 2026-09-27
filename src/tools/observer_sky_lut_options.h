@@ -42,7 +42,7 @@ struct Options {
   sky::LutDimensions dimensions;
   sky::TraceSettings settings;
   unsigned threads = 0;
-  std::filesystem::path out = "assets/luts";
+  std::filesystem::path out; ///< Empty until --out: main picks the shared cache.
   /// Set once --height is given explicitly, so a later --width derives the
   /// default height (width / 2) only when nothing has fixed it yet.
   bool heightExplicit = false;
