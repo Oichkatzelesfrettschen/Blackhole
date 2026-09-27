@@ -438,7 +438,7 @@ void CampaignState::resolveStoryParams() {
     return enumsOk(predicate) && intRefValid(predicate.value) && nodeOk(predicate.receivedFrom) &&
            (!flagged || flagOk(predicate.flag)) && silenceOk;
   };
-  const auto effectOk = [&](const EventEffect &effect) {
+  const auto effectOk = [&](const EventEffect &effect, NodeId source) {
     if (!intRefValid(effect.delayTurns)) {
       return false;
     }
@@ -447,13 +447,16 @@ void CampaignState::resolveStoryParams() {
       return flagOk(effect.flag);
     case EffectKind::Emit:
       return effect.emitKind <= EmitKind::Notice && nodeOk(effect.to) &&
-             withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT);
+             withinStoryLimit(effect.techPoints, K_STORY_INT_LIMIT) && effect.techPoints >= 0;
     case EffectKind::Schedule: {
-      // The target must be a scheduled event: a once-only one runs from its
-      // triggers alone and would ignore the schedule.
+      // The target must be a scheduled event (a once-only one runs from its
+      // triggers alone and would ignore the schedule) at the SAME source: a
+      // schedule effect fires locally, with no signal delay and no causal
+      // queue entry, so a cross-source target would run there instantly.
       const std::optional<std::size_t> target = eventIndexOf(story.events, effect.event);
       return target.has_value() &&
              story.events.at(target.value_or(0)).mode == EventMode::Scheduled &&
+             story.events.at(target.value_or(0)).source == source &&
              intRefMinimum(effect.delayTurns, story.params).value_or(0) >= 1;
     }
     }
@@ -464,7 +467,9 @@ void CampaignState::resolveStoryParams() {
         return nodeOk(event.source) && event.mode <= EventMode::Scheduled &&
                static_cast<int>(event.category) < K_EVENT_CATEGORY_COUNT &&
                std::ranges::all_of(event.triggers, predicateOk) &&
-               std::ranges::all_of(event.effects, effectOk);
+               std::ranges::all_of(
+                   event.effects,
+                   [&](const EventEffect &effect) { return effectOk(effect, event.source); });
       })) {
     valid_ = false;
   }

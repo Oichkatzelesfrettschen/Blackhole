@@ -382,6 +382,9 @@ private:
           fail(valuePath + ".points", "only a tech_packet carries points");
         }
         effect.techPoints = requireInteger(value->at("points"), valuePath + ".points");
+        if (effect.techPoints < 0) {
+          fail(valuePath + ".points", "tech_packet points must be non-negative");
+        }
       }
     } else if (key == "schedule") {
       rejectUnknownKeys(*value, valuePath, {"event", "delay_turns"});
@@ -506,7 +509,11 @@ private:
 
   /** @brief Every schedule names an existing event whose mode is
    *         "scheduled": a once-only event runs from its triggers alone, so a
-   *         schedule naming it would be silently ignored. */
+   *         schedule naming it would be silently ignored. A schedule effect
+   *         also fires at its own source's local turn (no signal delay, no
+   *         causal queue entry), so a target at a different source would run
+   *         there instantly: the target must share the scheduling event's
+   *         source. */
   void checkSchedules() const {
     for (const EventDef &event : story_.events) {
       for (const EventEffect &effect : event.effects) {
@@ -524,6 +531,10 @@ private:
         if (target->mode != EventMode::Scheduled) {
           fail("$.events", "event " + std::to_string(event.id) + " schedules event " +
                                std::to_string(effect.event) + ", which is not a scheduled event");
+        }
+        if (target->source != event.source) {
+          fail("$.events", "event " + std::to_string(event.id) + " schedules event " +
+                               std::to_string(effect.event) + " at a different source");
         }
       }
     }

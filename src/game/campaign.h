@@ -202,6 +202,12 @@ public:
   /** @brief A story parameter's resolved value (seeded ones drawn from the
    *         campaign seed); nullopt when the story has no such parameter. */
   [[nodiscard]] std::optional<std::int64_t> storyParam(std::string_view name) const;
+  /** @brief Any story IntRef resolved against this campaign's seeded
+   *         parameters, the value the core evaluates it to during play; 0 on
+   *         an invalid campaign (construction refused resolveStoryParams). */
+  [[nodiscard]] std::int64_t resolveStoryValue(const IntRef &ref) const {
+    return valid_ ? resolve(ref) : 0;
+  }
   /** @brief Signal delay between two nodes in whole turns, as quantized at
    *         emission. */
   [[nodiscard]] std::int64_t nodeDelayTurns(NodeId from, NodeId to) const;

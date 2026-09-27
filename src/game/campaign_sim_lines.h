@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <numeric>
 #include <optional>
 #include <vector>
 
@@ -34,25 +35,69 @@ namespace campaign_sim {
 /// would otherwise be a trillion turns.
 inline constexpr std::int64_t K_COLONY_SIM_MAX_HORIZON = 1000000;
 
-/** @brief Turns past which nothing in the colony story changes: the dark
- *         turn, the host-colony delay, four packet periods of silence, and a
- *         60-turn margin; never negative. Story integers lie in [-2^40, 2^40],
- *         so the sum cannot overflow. */
+/** @brief The latest turn any TurnAtLeast trigger or Received silence
+ *         threshold in the event graph resolves to, plus the longest single
+ *         Schedule delay (so a triggered event's scheduled follow-up still
+ *         lands; a chain of schedules needs --turns), over every event
+ *         regardless of source: the graph-generic bound on when the story can
+ *         still change something, with no dependence on a parameter's name. */
+[[nodiscard]] inline std::int64_t colonyStoryGraphBound(const game::CampaignState &state) {
+  std::int64_t maxTurnAtLeast = 0;
+  std::int64_t maxSilentThreshold = 0;
+  std::int64_t maxScheduleDelay = 0;
+  for (const game::EventDef &event : state.config().story.events) {
+    maxScheduleDelay = std::accumulate(
+        event.effects.begin(), event.effects.end(), maxScheduleDelay,
+        [&state](std::int64_t longest, const game::EventEffect &effect) {
+          return effect.kind == game::EffectKind::Schedule
+                     ? std::max(longest, state.resolveStoryValue(effect.delayTurns))
+                     : longest;
+        });
+    for (const game::EventPredicate &predicate : event.triggers) {
+      if (predicate.kind == game::PredicateKind::TurnAtLeast) {
+        maxTurnAtLeast = std::max(maxTurnAtLeast, state.resolveStoryValue(predicate.value));
+      } else if (predicate.kind == game::PredicateKind::Received && predicate.silentFor) {
+        maxSilentThreshold = std::max(maxSilentThreshold, state.resolveStoryValue(predicate.value));
+      }
+    }
+  }
+  return maxTurnAtLeast + maxSilentThreshold + maxScheduleDelay +
+         state.nodeDelayTurns(game::K_AUTHORITY_NODE, game::K_FIRST_COLONY_NODE) + 60;
+}
+
+/** @brief Turns past which nothing in the colony story changes: the larger of
+ *  - the graph-generic bound (colonyStoryGraphBound): any story's own latest
+ *    turn_at_least or silence trigger, whatever it is named or however it is
+ *    spelled (a literal or a parameter), plus the host-colony delay and a
+ *    60-turn margin;
+ *  - the legacy dark_turn/packet_period bound: dark_turn's resolved value,
+ *    the host-colony delay, four packet periods of silence, and a 60-turn
+ *    margin.
+ *  Never negative. The legacy term is kept only as a floor -- for the shipped
+ *  story it is the larger of the two (5811 turns of margin against the
+ *  graph bound's 5750 at seed 42's dark_turn draw), so a story named
+ *  "dark_turn"/"packet_period" plays exactly as many turns as before; a story
+ *  with a literal or a differently named trigger has no legacy term to fall
+ *  back on (storyParam returns nullopt, contributing 0), so the graph bound
+ *  alone carries it. Story integers lie in [-2^40, 2^40], so the sum cannot
+ *  overflow. */
 [[nodiscard]] inline std::int64_t colonyStoryHorizon(const game::CampaignState &state) {
-  const std::int64_t derived =
+  const std::int64_t legacyDerived =
       state.storyParam("dark_turn").value_or(0) +
       state.nodeDelayTurns(game::K_AUTHORITY_NODE, game::K_FIRST_COLONY_NODE) +
       (4 * state.storyParam("packet_period").value_or(0)) + 60;
-  return std::max<std::int64_t>(derived, 0);
+  return std::max<std::int64_t>(std::max(legacyDerived, colonyStoryGraphBound(state)), 0);
 }
 
-/** @brief Turns --colony plays: the story horizon, capped by --turns when
- *         given; nullopt when no --turns bounds a horizon past
+/** @brief Turns --colony plays: an explicit --turns defines the horizon
+ *         outright (clamped only to be non-negative -- the player's own
+ *         choice is not second-guessed against the story); without it, the
+ *         story-derived horizon, or nullopt when that bound exceeds
  *         K_COLONY_SIM_MAX_HORIZON, which the sim refuses rather than run. */
 [[nodiscard]] inline std::optional<std::int64_t>
 colonySimTurns(std::int64_t storyHorizon, std::optional<std::int64_t> turnsCap) {
   if (turnsCap.has_value()) {
-    return std::clamp<std::int64_t>(turnsCap.value(), 0, storyHorizon);
+    return std::max<std::int64_t>(turnsCap.value(), 0);
   }
   if (storyHorizon > K_COLONY_SIM_MAX_HORIZON) {
     return std::nullopt;
