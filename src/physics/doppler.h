@@ -11,7 +11,7 @@
  * Key formulas:
  *   Lorentz factor: gamma = 1/sqrt(1 - beta^2)
  *   Doppler factor: delta = 1/(gamma*(1 - beta*cos(theta)))
- *   Observed flux: F_obs = delta^(3+alpha) * F_emit for power-law spectrum
+ *   Observed flux: F_obs = delta^(3+alpha) * F_emit for F_nu ~ nu^-alpha
  *
  * References:
  *   - Rybicki & Lightman (1979) "Radiative Processes in Astrophysics"
@@ -192,13 +192,13 @@ namespace physics {
 /**
  * @brief Compute intensity boost from relativistic beaming.
  *
- * For a power-law spectrum F_nu ~ nu^alpha:
+ * For a power-law spectrum F_nu ~ nu^-alpha:
  *   I_obs = delta^(3+alpha) * I_emit (optically thin)
  *
  * @param iEmit Emitted intensity
  * @param beta Velocity as fraction of c
  * @param theta Angle between velocity and line of sight [rad]
- * @param alpha Spectral index, use 0 for blackbody
+ * @param alpha Spectral index in F_nu ~ nu^-alpha (0 for a flat spectrum)
  * @return Observed intensity
  */
 [[nodiscard]] inline double relativisticBeamingIntensity(double iEmit, double beta, double theta,
@@ -210,12 +210,12 @@ namespace physics {
 /**
  * @brief Compute flux density boost from relativistic beaming.
  *
- * F_obs = delta^(3+alpha) * F_emit for isotropic emitter
+ * F_obs = delta^(3+alpha) * F_emit for F_nu ~ nu^-alpha and an isotropic emitter
  *
  * @param fEmit Emitted flux density
  * @param beta Velocity as fraction of c
  * @param theta Angle between velocity and line of sight [rad]
- * @param alpha Spectral index
+ * @param alpha Spectral index in F_nu ~ nu^-alpha
  * @return Observed flux density
  */
 [[nodiscard]] inline double relativisticBeamingFlux(double fEmit, double beta, double theta,
@@ -364,7 +364,7 @@ namespace physics {
  * The Doppler boost factor for flux is:
  *   F_obs = delta^(3+alpha) * F_emit
  *
- * where delta = 1/(gamma*(1 - beta*cos(theta))) and alpha is the spectral index.
+ * where delta = 1/(gamma*(1 - beta*cos(theta))) and F_nu ~ nu^-alpha.
  *
  * References:
  *   - Begelman, Blandford, Rees (1984) Rev. Mod. Phys. 56, 255
@@ -374,7 +374,7 @@ namespace physics {
  * @param aStar Dimensionless spin parameter (-1 < a* < 1)
  * @param phi Azimuthal angle [rad] (0 = approaching, pi = receding)
  * @param inclination Disk inclination [rad] (0 = face-on, pi/2 = edge-on)
- * @param alpha Spectral index, use 0 for blackbody
+ * @param alpha Spectral index in F_nu ~ nu^-alpha (0 for a flat spectrum)
  * @return Doppler boost factor (1 = no boost)
  */
 [[nodiscard]] inline double diskDopplerBoost(double r, double aStar, double phi, double inclination,
@@ -402,7 +402,7 @@ namespace physics {
   // Doppler factor
   const double delta = dopplerFactor(beta, std::acos(std::clamp(cosTheta, -1.0, 1.0)));
 
-  // Beaming boost: delta^(3+alpha) for optically thin
+  // An optically thin F_nu ~ nu^-alpha spectrum gains delta^(3+alpha).
   const double boost = std::pow(delta, 3.0 + alpha);
 
   // Clamp to reasonable range (avoid numerical instability)

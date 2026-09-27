@@ -398,7 +398,7 @@ inline double jetSynchrotronEmissivity(double r, double theta, double nu, const 
 /**
  * @brief Compute observed flux from jet including Doppler boosting.
  *
- * F_obs = F_emit * δ^(3+α)
+ * F_obs = F_emit * delta^(3+alpha) for F_nu ~ nu^-alpha
  *
  * @param r Radius [cm]
  * @param theta Polar angle [rad]
@@ -418,10 +418,10 @@ inline double jetObservedFlux(double r, double theta, double thetaObs, double nu
   // Doppler factor
   double const delta = jetDopplerFactor(gamma, thetaObs);
 
-  // Spectral index
+  // Spectral index in F_nu ~ nu^-alpha
   double const alpha = 0.7;
 
-  // Doppler boosting: F_obs = F_emit * δ^(3+α)
+  // A power-law spectrum gains delta^(3+alpha).
   double const boost = std::pow(delta, 3.0 + alpha);
 
   return fEmit * boost;
