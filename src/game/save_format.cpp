@@ -178,26 +178,6 @@ bool commandsWithinTurn(const std::vector<SavedCommand> &commands, std::int64_t 
   });
 }
 
-/** @brief Sum of (turn - issueTurn) over every AssignTask command (the only
- *         kind that adds a persistent TaskContract the replay loop scans;
- *         PlaceFleet leaves the queue once delivered), saturated at
- *         K_SAVE_MAX_REPLAY_WORK + 1 so an overflow-prone count times a huge
- *         turn cannot wrap back under the ceiling. Called only once
- *         commandsWithinTurn has passed, so every term is non-negative. */
-std::int64_t replayWork(const std::vector<SavedCommand> &commands, std::int64_t turn) {
-  std::int64_t work = 0;
-  for (const SavedCommand &saved : commands) {
-    if (saved.command.type != game::CommandType::AssignTask) {
-      continue;
-    }
-    work = game::saturatingAdd(work, turn - saved.issueTurn);
-    if (work > K_SAVE_MAX_REPLAY_WORK) {
-      return work; // already over: no need to keep summing
-    }
-  }
-  return work;
-}
-
 } // namespace
 
 std::int64_t saveReplayTurnBudget(const CampaignState &state) {
@@ -348,10 +328,6 @@ CampaignLoadResult loadCampaign(const std::vector<std::uint8_t> &bytes, const Ev
   }
   if (!commandsWithinTurn(commands, turn)) {
     result.error = "saved commands are out of turn order or beyond the saved turn";
-    return result;
-  }
-  if (replayWork(commands, turn) > K_SAVE_MAX_REPLAY_WORK) {
-    result.error = "saved commands demand more task-graph replay work than this save allows";
     return result;
   }
   // Replay: every command on its issue turn, in log order, then the turn's

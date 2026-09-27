@@ -25,11 +25,9 @@
  * disagrees with its body, truncation, trailing bytes, a header field the
  * rebuilt session does not reproduce (spin, colony band, story digest), a
  * saved turn beyond the scenario's replay budget, a command log out of turn
- * order or past the saved turn, a command log whose total task-graph replay
- * work (K_SAVE_MAX_REPLAY_WORK) exceeds its ceiling, a command the replay
- * refuses, and a digest mismatch. The budget and command checks run before
- * any turn is replayed, so a corrupted turn field or an oversized command log
- * costs no replay work.
+ * order or past the saved turn, a command the replay refuses, and a digest
+ * mismatch. The budget and command checks run before any turn is replayed,
+ * so a corrupted turn field costs no replay work.
  *
  * Replay rebuilds only what the scenario constructor and the command log
  * produce. A session changed any other way -- a fleet added with addFleet
@@ -68,26 +66,6 @@ inline constexpr double K_SAVE_MANUAL_BATCHES_PER_WALL_SEC = 10.0;
 /// configuration's worst corrupted load to about three minutes at 0.17
 /// microseconds a turn.
 inline constexpr std::int64_t K_SAVE_REPLAY_TURN_CEILING = std::int64_t{1} << 30;
-
-/**
- * @brief Ceiling on total task-graph replay work a save may demand: the sum,
- *        over every logged command, of (saved turn - its issue turn).
- *        CampaignState::advanceTurn rescans every still-tracked task once per
- *        turn (TaskGraph::activateEligible and advanceFleetTasks), so a
- *        command issued at turn t adds one task rescanned on each of the
- *        (savedTurn - t) turns replay still has to cross; the sum bounds that
- *        scan count exactly, however the commands are spread across turns. A
- *        thousand commands all logged at turn 0 with an otherwise in-budget
- *        final turn near K_SAVE_REPLAY_TURN_CEILING would demand on the order
- *        of 10^9 * 10^3 scans -- the DoS this ceiling closes -- while the same
- *        thousand commands spread across the replay stay far under it. Set to
- *        2^30, the same order as K_SAVE_REPLAY_TURN_CEILING itself: a
- *        corrupted turn field alone is already sized to cost about that many
- *        scans in the worst case (see K_SAVE_REPLAY_TURN_CEILING's comment),
- *        so this adds no new worst case, only closes the one commands can add
- *        on top of it.
- */
-inline constexpr std::int64_t K_SAVE_MAX_REPLAY_WORK = std::int64_t{1} << 30;
 
 /**
  * @brief Largest saved turn load replays for this scenario: the turns
