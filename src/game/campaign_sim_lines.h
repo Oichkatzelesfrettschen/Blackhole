@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <numeric>
 #include <optional>
 #include <vector>
 
@@ -45,11 +46,13 @@ inline constexpr std::int64_t K_COLONY_SIM_MAX_HORIZON = 1000000;
   std::int64_t maxSilentThreshold = 0;
   std::int64_t maxScheduleDelay = 0;
   for (const game::EventDef &event : state.config().story.events) {
-    for (const game::EventEffect &effect : event.effects) {
-      if (effect.kind == game::EffectKind::Schedule) {
-        maxScheduleDelay = std::max(maxScheduleDelay, state.resolveStoryValue(effect.delayTurns));
-      }
-    }
+    maxScheduleDelay = std::accumulate(
+        event.effects.begin(), event.effects.end(), maxScheduleDelay,
+        [&state](std::int64_t longest, const game::EventEffect &effect) {
+          return effect.kind == game::EffectKind::Schedule
+                     ? std::max(longest, state.resolveStoryValue(effect.delayTurns))
+                     : longest;
+        });
     for (const game::EventPredicate &predicate : event.triggers) {
       if (predicate.kind == game::PredicateKind::TurnAtLeast) {
         maxTurnAtLeast = std::max(maxTurnAtLeast, state.resolveStoryValue(predicate.value));
