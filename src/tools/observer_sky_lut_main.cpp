@@ -97,13 +97,10 @@ int main(int argc, char **argv) {
   const double seconds =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
   printStatistics(lut, seconds);
-  const bool written = sky::writeObserverSkyLut(lut, options->out);
+  const bool written = sky::writeObserverSkyLut(
+      lut, options->out,
+      sharedCache ? std::optional<std::uintmax_t>(sky::K_OBSERVER_SKY_CACHE_BYTES) : std::nullopt);
   const std::uint64_t hash = sky::lutHash(lut.key, lut.dimensions, lut.settings);
-  // Evict even after a partial publish: a lone .bin is readable and counts
-  // against the shared cache's budget.
-  if (sharedCache) {
-    sky::evictObserverSkyBundles(options->out, sky::K_OBSERVER_SKY_CACHE_BYTES, hash);
-  }
   if (!written) {
     std::printf("could not write %s\n", options->out.string().c_str());
     return 1;

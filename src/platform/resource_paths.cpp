@@ -104,6 +104,17 @@ std::filesystem::path writableCacheSubdirectory(std::string_view name) {
   if (!std::filesystem::remove(probe, error) || error) {
     return {};
   }
+  std::filesystem::directory_iterator iterator(directory, error);
+  if (error) {
+    return {};
+  }
+  const std::filesystem::directory_iterator end;
+  while (iterator != end) {
+    iterator.increment(error);
+    if (error) {
+      return {};
+    }
+  }
   return directory;
 }
 

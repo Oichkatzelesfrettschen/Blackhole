@@ -513,7 +513,8 @@ std::string lutSidecarJson(const ObserverSkyLut &lut) {
   return text + "}\n";
 }
 
-bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path &directory) {
+bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path &directory,
+                         std::optional<std::uintmax_t> cacheBudget) {
   std::error_code error;
   std::filesystem::create_directories(directory, error);
   if (error) {
@@ -525,12 +526,19 @@ bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path 
   std::ranges::transform(bytes, chars.begin(),
                          [](std::uint8_t b) { return std::bit_cast<char>(b); });
   const std::string sidecar = lutSidecarJson(lut);
+  if (cacheBudget &&
+      !evictObserverSkyBundles(directory, *cacheBudget,
+                               lutHash(lut.key, lut.dimensions, lut.settings),
+                               chars.size() + sidecar.size())) {
+    return false;
+  }
   return publishFile(directory / (stem + ".bin"), chars) &&
          publishFile(directory / (stem + ".json"), sidecar);
 }
 
-void evictObserverSkyBundles(const std::filesystem::path &directory, std::uintmax_t maxBytes,
-                             std::uint64_t keepHash) {
+bool evictObserverSkyBundles(const std::filesystem::path &directory, std::uintmax_t maxBytes,
+                             std::uint64_t keepHash, std::uintmax_t newBytes,
+                             std::optional<std::uintmax_t> availableBytes) {
   struct BundleFile {
     std::filesystem::path path;
     std::filesystem::file_time_type written;
@@ -539,7 +547,7 @@ void evictObserverSkyBundles(const std::filesystem::path &directory, std::uintma
   std::error_code error;
   std::filesystem::directory_iterator iterator(directory, error);
   if (error) {
-    return;
+    return false;
   }
   std::vector<BundleFile> bundles;
   std::uintmax_t totalBytes = 0;
@@ -551,43 +559,65 @@ void evictObserverSkyBundles(const std::filesystem::path &directory, std::uintma
     if (name.starts_with("observer_sky_") && path.extension() == ".bin") {
       const std::uintmax_t bytes = std::filesystem::file_size(path, error);
       if (error) {
-        return;
+        return false;
       }
       const auto written = std::filesystem::last_write_time(path, error);
       if (error) {
-        return;
+        return false;
       }
-      if (totalBytes > std::numeric_limits<std::uintmax_t>::max() - bytes) {
-        return;
+      // A publish (newBytes > 0) overwrites the kept bundle, so its old
+      // bytes do not count against the room the new one needs.
+      const bool replaced = path.stem() == keepStem && newBytes > 0;
+      if (!replaced && totalBytes > std::numeric_limits<std::uintmax_t>::max() - bytes) {
+        return false;
       }
-      totalBytes += bytes;
+      if (!replaced) {
+        totalBytes += bytes;
+      }
       if (path.stem() != keepStem) {
         bundles.push_back({.path = path, .written = written, .bytes = bytes});
       }
     }
     iterator.increment(error);
     if (error) {
-      return;
+      return false;
     }
   }
   std::ranges::sort(bundles, [](const BundleFile &left, const BundleFile &right) {
     return left.written == right.written ? left.path < right.path : left.written < right.written;
   });
+  const std::uintmax_t targetBytes = newBytes > maxBytes ? 0 : maxBytes - newBytes;
+  const auto freeBytes = [&]() -> std::optional<std::uintmax_t> {
+    if (availableBytes) {
+      return availableBytes;
+    }
+    const auto space = std::filesystem::space(directory, error);
+    return error ? std::nullopt : std::optional<std::uintmax_t>(space.available);
+  };
   for (const BundleFile &bundle : bundles) {
-    if (totalBytes <= maxBytes) {
+    // A filesystem that cannot report free space leaves only the budget to
+    // enforce; the write itself then reports any shortage.
+    const auto free = freeBytes();
+    if (totalBytes <= targetBytes && (!free || *free >= newBytes)) {
       break;
     }
     if (!std::filesystem::remove(bundle.path, error) || error) {
-      return;
+      return false;
     }
     totalBytes -= bundle.bytes;
+    if (availableBytes) {
+      *availableBytes = std::min(std::numeric_limits<std::uintmax_t>::max() - bundle.bytes,
+                                 *availableBytes) + bundle.bytes;
+    }
     std::filesystem::path sidecar = bundle.path;
     sidecar.replace_extension(".json");
     std::filesystem::remove(sidecar, error);
     if (error) {
-      return;
+      return false;
     }
   }
+  const auto free = freeBytes();
+  return totalBytes <= targetBytes && (!free || *free >= newBytes) && newBytes <= maxBytes;
 }
 
 std::optional<ObserverSkyLut> readObserverSkyLut(const std::filesystem::path &file,

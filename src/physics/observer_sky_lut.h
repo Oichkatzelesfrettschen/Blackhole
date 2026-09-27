@@ -109,16 +109,20 @@ inline constexpr std::uintmax_t K_OBSERVER_SKY_CACHE_BYTES = std::uintmax_t{256}
                                                                    unsigned threads,
                                                                    const std::stop_token &stop);
 
-/** @brief Writes <dir>/<stem>.bin and <dir>/<stem>.json; false on any I/O error. */
-bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path &directory);
+/** @brief Writes <dir>/<stem>.bin and <dir>/<stem>.json. A cache budget
+ *         evicts bundles before writing; false when capacity or I/O fails. */
+bool writeObserverSkyLut(const ObserverSkyLut &lut, const std::filesystem::path &directory,
+                         std::optional<std::uintmax_t> cacheBudget = std::nullopt);
 
 /** @brief Deletes the least recently used bundles in `directory` (by .bin
  *         modification time, which a successful readObserverSkyLut refreshes),
- *         each with its JSON sidecar, until the .bin total fits `maxBytes`;
- *         the bundle for `keepHash` is never deleted. Stops at the first I/O
- *         error. */
-void evictObserverSkyBundles(const std::filesystem::path &directory, std::uintmax_t maxBytes,
-                             std::uint64_t keepHash);
+ *         each with its JSON sidecar, until the .bin total and `newBytes` fit
+ *         `maxBytes` and free space can hold `newBytes`. `availableBytes`
+ *         supplies a controlled free-space value for tests. The bundle for
+ *         `keepHash` remains. False means capacity or I/O prevented eviction. */
+bool evictObserverSkyBundles(const std::filesystem::path &directory, std::uintmax_t maxBytes,
+                             std::uint64_t keepHash, std::uintmax_t newBytes = 0,
+                             std::optional<std::uintmax_t> availableBytes = std::nullopt);
 
 /** @brief Reads a bundle; nothing when the file is missing, truncated, fails
  *         its checksum, is of another format or tracer version, or its stored

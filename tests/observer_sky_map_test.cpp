@@ -177,6 +177,23 @@ TEST(ObserverSkyMap, WritableCacheSubdirectoryRejectsAReadOnlyCache) {
   std::filesystem::permissions(writable, std::filesystem::perms::owner_all);
 }
 
+TEST(ObserverSkyMap, WritableCacheSubdirectoryRejectsAWriteOnlyCache) {
+  if (geteuid() == 0) {
+    GTEST_SKIP() << "root ignores directory permissions";
+  }
+  const CacheEnvironment environment;
+  const ScratchDirectory scratch;
+  ASSERT_FALSE(scratch.path().empty());
+  const std::filesystem::path xdg = scratch.path() / "xdg";
+  ASSERT_EQ(setenv("XDG_CACHE_HOME", xdg.c_str(), 1), 0);
+  const std::filesystem::path writable = platform::writableCacheSubdirectory("observer_sky");
+  ASSERT_FALSE(writable.empty());
+  std::filesystem::permissions(writable, std::filesystem::perms::owner_write |
+                                             std::filesystem::perms::owner_exec);
+  EXPECT_TRUE(platform::writableCacheSubdirectory("observer_sky").empty());
+  std::filesystem::permissions(writable, std::filesystem::perms::owner_all);
+}
+
 TEST(ObserverSkyMap, UserCacheDirectoryUsesAbsoluteXdgOrHome) {
   const CacheEnvironment environment;
   const ScratchDirectory scratch;
@@ -220,6 +237,62 @@ TEST(ObserverSkyMap, EvictionKeepsHashAndRemovesOldestSidecars) {
     EXPECT_FALSE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".bin")));
     EXPECT_FALSE(std::filesystem::exists(scratch.path() / (sky::lutStem(hash) + ".json")));
   }
+}
+
+TEST(ObserverSkyMap, EvictionReclaimsBudgetAndAvailableSpaceBeforePublish) {
+  const ScratchDirectory scratch;
+  ASSERT_FALSE(scratch.path().empty());
+  const auto writeBundle = [&](std::uint64_t hash) {
+    const std::string stem = sky::lutStem(hash);
+    std::ofstream(scratch.path() / (stem + ".bin"), std::ios::binary) << "12345678";
+    std::ofstream(scratch.path() / (stem + ".json")) << "{}";
+  };
+  writeBundle(1);
+  writeBundle(2);
+  writeBundle(3);
+  const auto now = std::filesystem::file_time_type::clock::now();
+  for (const auto &[hash, age] : {std::pair{1ULL, 3}, {2ULL, 2}, {3ULL, 1}}) {
+    std::filesystem::last_write_time(scratch.path() / (sky::lutStem(hash) + ".bin"),
+                                     now - std::chrono::hours(age));
+  }
+  // Publishing hash 3 overwrites its bundle, so only bundles 1 and 2 count:
+  // evicting the oldest (1) meets the 16-byte budget with 8 new bytes and
+  // frees the 8 bytes the zero-free-space filesystem needs.
+  EXPECT_TRUE(sky::evictObserverSkyBundles(scratch.path(), 16, 3, 8, 0));
+  EXPECT_FALSE(std::filesystem::exists(scratch.path() / (sky::lutStem(1) + ".bin")));
+  EXPECT_TRUE(std::filesystem::exists(scratch.path() / (sky::lutStem(2) + ".bin")));
+  EXPECT_TRUE(std::filesystem::exists(scratch.path() / (sky::lutStem(3) + ".bin")));
+  // With 4 bytes free and the budget already met, eviction continues until
+  // the filesystem can hold the new bundle.
+  EXPECT_TRUE(sky::evictObserverSkyBundles(scratch.path(), 16, 3, 8, 4));
+  EXPECT_FALSE(std::filesystem::exists(scratch.path() / (sky::lutStem(2) + ".bin")));
+  // Without an injected value the real filesystem reports its free space.
+  EXPECT_TRUE(sky::evictObserverSkyBundles(scratch.path(), 16, 3, 8, std::nullopt));
+}
+
+sky::ObserverKey orbiting(double epsilon, double x);
+
+TEST(ObserverSkyMap, ManagedPublishEvictsBeforeWriting) {
+  const sky::ObserverKey key = orbiting(0.1, 3.0);
+  const sky::LutDimensions dimensions{.width = 8, .height = 4, .tileRadial = 4, .tileAzimuth = 4};
+  const sky::ObserverSkyLut built = sky::buildObserverSkyLut(key, dimensions, defaultSettings(), 2);
+  const ScratchDirectory measured;
+  const ScratchDirectory cache;
+  ASSERT_FALSE(measured.path().empty());
+  ASSERT_FALSE(cache.path().empty());
+  ASSERT_TRUE(sky::writeObserverSkyLut(built, measured.path()));
+  const std::uint64_t hash = sky::lutHash(key, dimensions, defaultSettings());
+  const std::string stem = sky::lutStem(hash);
+  const std::uintmax_t bundleBytes =
+      std::filesystem::file_size(measured.path() / (stem + ".bin")) +
+      std::filesystem::file_size(measured.path() / (stem + ".json"));
+  const std::string oldStem = sky::lutStem(hash + 1);
+  std::ofstream(cache.path() / (oldStem + ".bin"), std::ios::binary) << "12345678";
+  std::ofstream(cache.path() / (oldStem + ".json")) << "{}";
+  ASSERT_TRUE(sky::writeObserverSkyLut(built, cache.path(), bundleBytes));
+  EXPECT_FALSE(std::filesystem::exists(cache.path() / (oldStem + ".bin")));
+  EXPECT_TRUE(std::filesystem::exists(cache.path() / (stem + ".bin")));
+  EXPECT_TRUE(std::filesystem::exists(cache.path() / (stem + ".json")));
 }
 
 /** @brief Sorted file names in `directory`. */
