@@ -20,6 +20,8 @@ layout(location = 3) flat in int vKind;
 layout(location = 4) flat in int vStrand;
 
 uniform float litMoment;
+uniform int selectedStrand;
+uniform float markerTime;
 uniform float litWidth;
 uniform float pulseTime;
 uniform float pulseWidth;
@@ -58,6 +60,11 @@ void main() {
   } else if (vKind == KIND_WORLD_TUBE) {
     float lit = gaussian(vLibraryTime, litMoment, litWidth);
     radiance = STRAND_COLOR * strandIntensity * (0.2 + 3.0 * lit);
+    if (vStrand == selectedStrand) {
+      radiance += vec3(0.35, 0.8, 1.2) * strandIntensity * 2.0;
+      radiance += vec3(2.0, 2.2, 2.5) * 8.0 *
+                  gaussian(vLibraryTime, markerTime, max(litWidth * 0.12, 0.025));
+    }
     if (pulseEnabled != 0 && vStrand == pulseStrand) {
       radiance += PULSE_COLOR * 6.0 * gaussian(vLibraryTime, pulseTime, pulseWidth);
     }

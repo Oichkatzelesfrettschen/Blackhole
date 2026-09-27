@@ -39,6 +39,7 @@
 #include "render/noise_texture_cache.h"
 #include "render/observer_sky_view.h"
 #include "render/tesseract/so4.h"
+#include "render/tesseract/tesseract_geometry.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "rmlui_overlay.h"
 #include "tools/compare_harness.h"
@@ -203,6 +204,7 @@ struct RenderState {
     float fovDeg = 50.0f;
     float timeSpan = 10.0f; ///< Library time extent T of every world-tube.
     float litMoment = 6.0f; ///< Library time the lit moment is centered on.
+    blackhole::tesseract::FeatureSelection selection{};
     float litWidth = 0.5f;
     bool pulseEnabled = true;
     int pulseStrand = 2;     ///< Middle shelf book.

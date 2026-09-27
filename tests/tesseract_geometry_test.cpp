@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <iterator>
 #include <set>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -189,6 +190,51 @@ TEST(LibraryOfTime, WorldTubeExtrudesAlongW) {
   EXPECT_EQ(tube.front().w, 0.0f);
   EXPECT_FLOAT_EQ(tube.back().w, span); // T * (k / last) at k = last, within 4 ulps
   EXPECT_EQ(tess::extrudeWorldTube(point, span, 0).size(), 2U);
+}
+
+TEST(LibraryOfTime, FeatureNamesAreUniqueAndNonEmpty) {
+  std::set<std::string_view> names;
+  for (const auto &feature : tess::bedroomFeatures()) {
+    EXPECT_FALSE(feature.name.empty());
+    EXPECT_TRUE(names.insert(feature.name).second) << feature.name;
+  }
+}
+
+namespace {
+
+void expectSelectionTracksTube(const std::vector<tess::LibraryFeature> &features,
+                               const std::vector<tess::SegmentInstance> &segments,
+                               const tess::SceneSegmentOptions &options,
+                               std::size_t featureIndex) {
+  const tess::FeatureSelection selection{featureIndex};
+  const auto selected = tess::selectedTubeSegments(segments, selection);
+  ASSERT_EQ(selected.size(), options.tubeSamples - 1);
+  const auto tube = tess::extrudeWorldTube(features.at(featureIndex).position, options.timeSpan,
+                                           options.tubeSamples);
+  for (std::size_t segmentIndex = 0; segmentIndex < selected.size(); ++segmentIndex) {
+    EXPECT_EQ(selected.at(segmentIndex).a,
+              tess::libraryToTesseract(tube.at(segmentIndex), options.timeSpan));
+    EXPECT_EQ(selected.at(segmentIndex).b,
+              tess::libraryToTesseract(tube.at(segmentIndex + 1), options.timeSpan));
+  }
+  for (const float moment : {2.0f, 7.0f}) {
+    const auto marker = tess::selectedTubeMarker(features, selection, moment, options.timeSpan);
+    EXPECT_EQ(glm::vec3(marker), features.at(featureIndex).position);
+    EXPECT_FLOAT_EQ(marker.w, moment);
+  }
+}
+
+} // namespace
+
+TEST(LibraryOfTime, FeatureSelectionTracksWholeTubeAndLitMoment) {
+  const auto features = tess::bedroomFeatures();
+  tess::SceneSegmentOptions options;
+  options.timeSpan = 10.0f;
+  options.tubeSamples = 12;
+  const auto segments = tess::buildSceneSegments(options);
+  for (std::size_t featureIndex = 0; featureIndex < features.size(); ++featureIndex) {
+    expectSelectionTracksTube(features, segments, options, featureIndex);
+  }
 }
 
 TEST(LibraryOfTime, LibraryTimeMapsOntoTesseractW) {

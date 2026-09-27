@@ -236,6 +236,8 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   glUniform1f(uniformLocation(program_, "sceneScale"), inputs.sceneScale);
   glUniform1f(uniformLocation(program_, "timeSpan"), inputs.timeSpan);
   glUniform1f(uniformLocation(program_, "litMoment"), inputs.litMoment);
+  glUniform1i(uniformLocation(program_, "selectedStrand"), inputs.selectedStrand);
+  glUniform1f(uniformLocation(program_, "markerTime"), inputs.markerTime);
   glUniform1f(uniformLocation(program_, "lineWidthPx"), inputs.lineWidthPx);
   glUniform1f(uniformLocation(program_, "litWidth"), inputs.litWidth);
   glUniform1f(uniformLocation(program_, "pulseTime"), inputs.pulseTime);
@@ -460,6 +462,9 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   inputs.sceneScale = tg.sceneScale;
   inputs.timeSpan = tg.timeSpan;
   inputs.litMoment = tg.litMoment;
+  inputs.selectedStrand = static_cast<int>(tg.selection.featureIndex);
+  inputs.markerTime = tesseract::selectedTubeMarker(
+      tesseract::bedroomFeatures(), tg.selection, tg.litMoment, tg.timeSpan).w;
   inputs.litWidth = std::max(tg.litWidth, 0.01f);
   inputs.pulseTime = tg.pulseNow - tg.pulseTravel;
   inputs.pulseWidth = std::max(tg.pulseWidth, 0.01f);

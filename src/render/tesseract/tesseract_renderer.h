@@ -98,6 +98,8 @@ struct TesseractFrameInputs {
   float sceneScale = 1.0f;          ///< World units per projected unit.
   float timeSpan = 10.0f;           ///< Library time extent T.
   float litMoment = 0.0f;           ///< Library time of the lit moment.
+  int selectedStrand = 0;           ///< Feature index highlighted along its tube.
+  float markerTime = 0.0f;          ///< Library time of the selected tube marker.
   float litWidth = 0.5f;            ///< Gaussian width of the lit moment.
   float pulseTime = 0.0f;           ///< Library time of the gravity-message pulse.
   float pulseWidth = 0.35f;         ///< Gaussian width of the pulse.

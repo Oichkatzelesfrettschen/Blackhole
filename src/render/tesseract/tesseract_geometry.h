@@ -20,6 +20,7 @@
 
 #include <array>
 #include <cstddef>
+#include <string_view>
 #include <vector>
 
 #include <glm/ext/vector_float3.hpp>
@@ -121,7 +122,17 @@ enum class FeatureKind { Shelf, Window, Desk };
 struct LibraryFeature {
   FeatureKind kind = FeatureKind::Shelf;
   glm::vec3 position{0.0f};
+  std::string_view name;
 };
+
+/** @brief Selected bedroom strand, independent of the drawing pass. */
+struct FeatureSelection {
+  std::size_t featureIndex = 2;
+};
+
+/** @brief Selected feature point at the clamped library moment. */
+glm::vec4 selectedTubeMarker(const std::vector<LibraryFeature> &features,
+                             FeatureSelection selection, float litMoment, float timeSpan);
 
 /** @brief Procedural bedroom: five shelf books, four window and four desk corners. */
 std::vector<LibraryFeature> bedroomFeatures();
@@ -245,6 +256,10 @@ struct SegmentInstance {
   glm::vec4 prev{0.0f};
   glm::vec4 next{0.0f};
 };
+
+/** @brief World-tube segments belonging to the selected feature. */
+std::vector<SegmentInstance> selectedTubeSegments(const std::vector<SegmentInstance> &segments,
+                                                  FeatureSelection selection);
 
 /// vec4 attributes per SegmentInstance, at locations 0 through 4 in member order.
 inline constexpr unsigned SEGMENT_INSTANCE_ATTRIBUTES = 5;

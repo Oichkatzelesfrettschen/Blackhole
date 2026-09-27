@@ -983,7 +983,7 @@ void renderTesseractRotationControls(RenderState::TesseractGroup &tg) {
 }
 
 void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
-  ImGui::SeparatorText("Projection 4D -> 3D");
+  ImGui::SeparatorText("Camera and projection");
   constexpr std::array<const char *, 2> projectionItems = {"Perspective along w",
                                                            "Stereographic from S^3"};
   int projectionIndex = static_cast<int>(tg.projection);
@@ -999,7 +999,25 @@ void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
 }
 
 void renderTesseractLibraryControls(RenderState::TesseractGroup &tg) {
-  ImGui::SeparatorText("Library of time");
+  ImGui::SeparatorText("Time and room features");
+  const auto features = blackhole::tesseract::bedroomFeatures();
+  tg.selection.featureIndex = std::min(tg.selection.featureIndex, features.size() - 1);
+  // ImGui labels need null-terminated strings; the names are string_views.
+  const std::string selectedName(features.at(tg.selection.featureIndex).name);
+  if (ImGui::BeginCombo("Selected feature", selectedName.c_str())) {
+    for (std::size_t featureIndex = 0; featureIndex < features.size(); ++featureIndex) {
+      const bool selected = featureIndex == tg.selection.featureIndex;
+      const std::string featureName(features.at(featureIndex).name);
+      if (ImGui::Selectable(featureName.c_str(), selected)) {
+        tg.selection.featureIndex = featureIndex;
+      }
+      if (selected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+  ImGui::TextUnformatted("Cyan tube: selected feature; white mark: lit moment");
   ImGui::SliderFloat("Time span T", &tg.timeSpan, 1.0f, 30.0f);
   ImGui::SliderFloat("Lit moment", &tg.litMoment, 0.0f, tg.timeSpan);
   ImGui::SliderFloat("Lit width", &tg.litWidth, 0.05f, 3.0f);
@@ -1008,6 +1026,7 @@ void renderTesseractLibraryControls(RenderState::TesseractGroup &tg) {
   ImGui::SliderInt("Pulse strand", &tg.pulseStrand, 0, lastStrand);
   ImGui::SliderFloat("Pulse t_now", &tg.pulseNow, 0.0f, tg.timeSpan);
   ImGui::SliderFloat("Pulse t_past", &tg.pulsePast, 0.0f, tg.pulseNow);
+  ImGui::TextUnformatted("Pulse direction: t_now -> t_past (backward in time)");
   ImGui::SliderFloat("Pulse speed", &tg.pulseSpeed, 0.1f, 10.0f);
   ImGui::SliderFloat("Pulse width", &tg.pulseWidth, 0.05f, 2.0f);
 }
