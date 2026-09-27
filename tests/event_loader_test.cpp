@@ -56,12 +56,14 @@ std::unique_ptr<StoryRun> runStory(const std::string &json, std::int64_t turns,
 /** @brief Arrival turns of notices from `event` at `destination`. */
 std::vector<std::int64_t> noticeTurns(const game::CampaignState &state, std::uint32_t event,
                                       game::NodeId destination) {
-  return state.arrivals() | std::views::filter([&](const game::ArrivalRecord &arrival) {
-           return arrival.kind == game::EmitKind::Notice && arrival.payloadIndex == event &&
-                  arrival.destination == destination;
-         }) |
-         std::views::transform(&game::ArrivalRecord::arrivalTurn) |
-         std::ranges::to<std::vector<std::int64_t>>();
+  // The call form of ranges::to: libstdc++ 14.2's pipe adaptor closure
+  // (_Partial) fails to compile under clang 22 in forward_like.
+  return std::ranges::to<std::vector<std::int64_t>>(
+      state.arrivals() | std::views::filter([&](const game::ArrivalRecord &arrival) {
+        return arrival.kind == game::EmitKind::Notice && arrival.payloadIndex == event &&
+               arrival.destination == destination;
+      }) |
+      std::views::transform(&game::ArrivalRecord::arrivalTurn));
 }
 
 std::string errorOf(const std::string &json) { return game::parseEventSet(json).error; }
