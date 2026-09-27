@@ -16,7 +16,7 @@
 # src/physics/compensated_rk4.h, for example). Exits 0 when
 # BUILD_DIR/CMakeCache.txt matches, 1 after printing each mismatch as
 # KEY=VALUE on one line, and 2 when the cache or presets cannot be read.
-# scripts/ci/tidy18.sh and scripts/ci/cppcheck_ci.sh call it.
+# scripts/ci/tidy.sh and scripts/ci/cppcheck_ci.sh call it.
 set -eu
 
 [ "$#" = 1 ] || { sed -n '4p' "$0" >&2; exit 2; }

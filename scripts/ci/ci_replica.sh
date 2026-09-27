@@ -28,7 +28,7 @@
 # if(CPPTRACE_LIBRARY) -- and the tree compiles with BLACKHOLE_HAS_CPPTRACE=0,
 # the branch CI builds and analyzes.
 # Logs: build/cilike-configure.log, build/cilike.log, build/cilike-ctest.log.
-# Each tree exports compile_commands.json, which scripts/ci/tidy18.sh reads
+# Each tree exports compile_commands.json, which scripts/ci/tidy.sh reads
 # from build/CiLike by default.
 set -eu
 

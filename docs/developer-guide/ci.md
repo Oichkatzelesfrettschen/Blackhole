@@ -21,7 +21,7 @@ advisory, so its red result informs a review without blocking the merge.
 | Pull request and main push | `ci` | Desktop compilation, CPU tests, GLSL validation; strict warnings and IEEE math |
 | Pull request and main push | `ci-analysis` | CPU build/tests with every enabled clang-tidy and cppcheck diagnostic enforced |
 | Pull request and main push | `ci-release` | CPU build/tests with LTO and fast-math, including per-target IEEE overrides |
-| Pull request and main push | `ci-clang` | Advisory: the `ci` configuration compiled by clang 18 over the same GCC 14 packages; strict warnings, CPU tests |
+| Pull request and main push | `ci-clang` | Advisory: the `ci` configuration compiled by clang 22 (apt.llvm.org) over the same GCC 14 packages; strict warnings, CPU tests |
 | Pull request and main push | `ci-clang-fast-math` | Advisory: `ci-clang` with fast-math, where clang's `-Wnan-infinity-disabled` rejects NaN and infinity classification GCC accepts |
 | Pull request and main push | `ci-sanitize` | Advisory: GCC 14 AddressSanitizer and UBSan build; every test except `gpu_cpu_parity` and `kerr_shader_capture` |
 | Weekly schedule | Every preset above | Revalidate the default branch |
@@ -67,17 +67,17 @@ Conan identifies the dependency packages by the GCC 14 settings of
 `set(CMAKE_CXX_COMPILER ...)` overrides a compiler given on the CMake command
 line. The clang lanes therefore run a second `conan install` into
 `build/CI-clang-deps` with
-`tools.build:compiler_executables={"c":"clang-18","cpp":"clang++-18"}`: that
+`tools.build:compiler_executables={"c":"clang-22","cpp":"clang++-22"}`: that
 configuration stays out of the package id, so the same cached packages resolve,
 and `--build=never` keeps clang from compiling a package into the shared cache.
 The install also sets `tools.cmake.cmaketoolchain:user_presets` empty, because a
 second include of a generated `conan-release` preset in `CMakeUserPresets.json`
 is a duplicate CMake rejects. The `ci-clang` and `ci-clang-fast-math` presets
 read that toolchain; `compile_commands.json` in `build/CI-Clang` names
-`clang++-18`. LTO stays off in these presets, since the packages carry GCC
+`clang++-22`. LTO stays off in these presets, since the packages carry GCC
 objects.
 
-Clang and GCC reject different code. clang 18 diagnoses `std::isnan`,
+Clang and GCC reject different code. clang 22 diagnoses `std::isnan`,
 `std::isinf`, `std::isfinite`, and `numeric_limits<T>::infinity()` under
 `-ffinite-math-only` as errors with `-Werror`, which the GCC 14 `ci-release`
 lane accepts silently while folding those checks to constants.
@@ -214,12 +214,10 @@ A workstation build and a hosted lane disagree for three reasons. The local
 Conan toolchain pins clang (the `release` preset's `compile_commands.json`
 records `/usr/bin/clang++`), while every hosted lane except the clang lanes
 compiles with GCC 14 through `conan/profiles/ci`. The analysis lane runs the
-Ubuntu 24.04 analyzers, clang-tidy 18.1.3 (package `clang-tidy-18`,
-`1:18.1.3-1ubuntu1`) and cppcheck 2.13.0, and host
-analyzers of other versions report a different set: clang-tidy 22 enforces
-checks clang-tidy 18 lacks, such as `readability-math-missing-parentheses` and
-`modernize-use-designated-initializers` in `tests/wiregrid_overlay_test.cpp`,
-and cppcheck 2.21 reports `uninitMemberVarNoCtor` in `src/settings.cpp`, which
+PyPI clang-tidy wheel whose version `scripts/ci/tidy-version.txt` pins
+(22.1.8, the LLVM release the workstation compiles with) and Ubuntu 24.04's
+cppcheck 2.13.0, and host analyzers of other versions report a different set:
+cppcheck 2.21 reports `uninitMemberVarNoCtor` in `src/settings.cpp`, which
 2.13 accepts. A local `release` build with `ENABLE_CLANG_TIDY` and
 `ENABLE_CPPCHECK` on can therefore fail on sources the required lanes pass.
 The CI analyzer versions are the merge gate; findings from newer host
@@ -240,7 +238,7 @@ non-finite values takes the per-target `-fno-fast-math` override in
 | --- | --- | --- |
 | `scripts/ci/ci_replica.sh [REGEX]` | `ci` build and CTest with GCC 14; `CI_REPLICA_RELEASE=1` for `ci-release`, `CI_REPLICA_SANITIZE=1` for `ci-sanitize` | `gcc-14`, `g++-14`, `bwrap`, Ninja, and `./scripts/conan_install.sh Release build` |
 | `scripts/ci/cppcheck_ci.sh [-p DIR] [-b BASE] [-f] [FILE...]` | `ci-analysis` cppcheck 2.13.0 over changed and untracked `.cpp` files, once per distinct CMake `-D`/`-I`/`-U` flag set among each file's compile entries | Docker or Podman; `build/CiLike` from `ci_replica.sh` |
-| `scripts/ci/tidy18.sh [-p DIR] [-f] FILE...` | `ci-analysis` clang-tidy 18 (wheel 18.1.1; CI runs 18.1.3) against GCC 14's libstdc++, over the `ci` configuration | `uv` (or `CLANG_TIDY` pointing at a clang-tidy 18 binary), `g++-14`, and `build/CiLike` from `ci_replica.sh` |
+| `scripts/ci/tidy.sh [-p DIR] [-f] FILE...` | `ci-analysis` clang-tidy (the wheel `scripts/ci/tidy-version.txt` pins) against GCC 14's libstdc++, over the `ci` configuration | `uv` (or `CLANG_TIDY` pointing at a binary of that version), `g++-14`, and `build/CiLike` from `ci_replica.sh` |
 
 `ci_replica.sh` copies the local Release generators, replaces the compiler the
 toolchain names with GCC 14, and mounts an empty `/usr/include/glm` through
@@ -253,12 +251,11 @@ Conan cache read-only at their host paths. CMake attaches cppcheck to every
 target, so a source compiled by several targets is analyzed with each target's
 definitions: `src/main.cpp` runs twice, once with
 `BLACKHOLE_APP_VARIANT_GLSL_ONLY=1`, and a defect inside that variant's
-`#if` block fails the script. `tidy18.sh` runs the PyPI
-`clang-tidy==18.1.1` wheel through `uvx`. PyPI publishes no 18.1.3 wheel, and
-18.1.1 is the nearest release; its `--list-checks --checks='*'` output is
-identical to the Ubuntu 18.1.3 binary's (537 checks). clang-tidy 18 cannot
-parse the libstdc++ of a newer host GCC, so the script substitutes GCC 14's
-headers for the compile database's standard library. Both analyzer scripts
+`#if` block fails the script. `tidy.sh` runs the same PyPI clang-tidy wheel
+the lane installs, through `uvx`, and substitutes GCC 14's headers for the
+compile database's standard library, since the runner compiles against GCC
+14's libstdc++ and `misc-include-cleaner` resolves symbols to the headers that
+library provides. Both analyzer scripts
 default to `build/CiLike`, the GCC 14 tree `ci_replica.sh` configures and
 exports, because `SIMD_TIER`, `ENABLE_FAST_MATH`, and `ENABLE_NATIVE_ARCH`
 select preprocessor branches (the `__AVX2__` paths in `src/physics/batch.h`);
@@ -269,8 +266,8 @@ ci-analysis turns on; that covers the switches that register targets and
 sources (`BUILD_TESTING`, `ENABLE_DESKTOP_APP`, `ENABLE_CUDA`,
 `ENABLE_BLENDER_BRIDGE`, `ENABLE_SHADER_VALIDATION`) as well as the
 preprocessor ones. A mismatch stops either script with exit 2 unless `-f` is
-given. Like cppcheck, `tidy18.sh` analyzes each distinct compile entry of a
-source through a single-entry database under `build/tidy18/db`, and every
+given. Like cppcheck, `tidy.sh` analyzes each distinct compile entry of a
+source through a single-entry database under `build/tidy/db`, and every
 summary row names its target (`[Blackhole]`, `[BlackholeGLSL]`). It exits 2
 when a requested file has no compile entry or clang-tidy fails on an entry
 without printing a diagnostic. `ci_replica.sh` presets `CPPTRACE_LIBRARY` to

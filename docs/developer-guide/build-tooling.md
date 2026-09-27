@@ -10,14 +10,13 @@ CMake, what to add per compiler, and what complementary tools apply to this
 specific codebase (a deterministic simulation core plus an OpenGL/CUDA renderer).
 
 Hosted CI compiles differently from the workstation. The required lanes build
-with GCC 14 on Ubuntu 24.04 and analyze with clang-tidy 18.1.3 and cppcheck
-2.13.0; advisory lanes add clang 18, fast-math clang 18, and ASan+UBSan. The
-local clang 22 build, clang-tidy 22, and cppcheck 2.21 therefore pass or fail
-different sources than the merge gate does. clang-tidy stays pinned to 18 for
-the gate because the version decides the check set: clang-tidy 22 enforces
-`readability-math-missing-parentheses` and other checks 18 lacks, which fail
-existing tests a green `ci-analysis` accepts. `scripts/ci/ci_replica.sh`,
-`scripts/ci/cppcheck_ci.sh`, and `scripts/ci/tidy18.sh` reproduce the gate's
+with GCC 14 on Ubuntu 24.04 and analyze with the clang-tidy wheel pinned in
+`scripts/ci/tidy-version.txt` (22.1.8, the workstation's LLVM release) and
+cppcheck 2.13.0; advisory lanes add clang 22, fast-math clang 22, and
+ASan+UBSan. The version decides the check set, so the gate and the replica
+read one version file. cppcheck 2.21 on the workstation still passes or fails
+different sources than the gate's 2.13. `scripts/ci/ci_replica.sh`,
+`scripts/ci/cppcheck_ci.sh`, and `scripts/ci/tidy.sh` reproduce the gate's
 compiler and analyzer versions locally; the [CI guide](ci.md#local-replicas-of-the-hosted-lanes)
 documents them, together with the fast-math rule: `ci-release` compiles with
 `-ffast-math`, so code classifies infinity and NaN through `safe_limits.h` and
@@ -114,7 +113,7 @@ these separate from the headless campaign analysis, which links no GL.
 
 - **Every change:** the default clang build with `-Werror`, then
   `scripts/ci/ci_replica.sh` (GCC 14, both `ci` and `CI_REPLICA_RELEASE=1`) and
-  `scripts/ci/tidy18.sh` and `scripts/ci/cppcheck_ci.sh` (both over the
+  `scripts/ci/tidy.sh` and `scripts/ci/cppcheck_ci.sh` (both over the
   replica's `build/CiLike`) on the changed files.
 - **Before a merge:** `CI_REPLICA_SANITIZE=1 scripts/ci/ci_replica.sh` for an
   ASan+UBSan `ctest` run.
