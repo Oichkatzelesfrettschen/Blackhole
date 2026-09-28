@@ -1,5 +1,7 @@
 #include "render/capture_identity.h"
 
+#include <string_view>
+
 namespace blackhole {
 
 std::string_view captureSourceRevision() {
