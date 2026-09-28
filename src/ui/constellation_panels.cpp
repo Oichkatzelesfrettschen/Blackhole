@@ -20,6 +20,7 @@
 #include "game/constellation_types.h"
 #include "game/constellation_view.h"
 #include "game/desktop_game.h"
+#include "game/first_play_briefing.h"
 #include "game/fleet.h"
 #include "game/observer.h"
 #include "render/render_state.h"
@@ -256,18 +257,10 @@ void drawIntelligence(const game::ConstellationViewSnapshot &snapshot) {
   ImGui::End();
 }
 
-void drawObjectives(const game::ConstellationViewSnapshot &snapshot) {
+void drawObjectives(ConstellationUiState &uiState,
+                    const game::ConstellationViewSnapshot &snapshot) {
   if (ImGui::Begin("Objectives")) {
-    if (snapshot.turn == 0) {
-      ImGui::SeparatorText("First expedition");
-      ImGui::TextWrapped(
-          "Crews near the inner bands experience less time than the distant command station.");
-      ImGui::TextWrapped("Send a fleet order, then advance turns to watch the signal reach it.");
-      ImGui::TextWrapped(
-          "Fleet reports and control news return later. A quiet map can hide a rival move.");
-      ImGui::TextWrapped("Rivals make plans from delayed reports too. Spread crews to hold bands, "
-                         "or concentrate them to gather energy and steady the system.");
-    }
+    ImGui::Checkbox("Hide briefing", &uiState.hideBriefing);
     ImGui::Text("Energy %.1f / %.1f", snapshot.player.energyUnits, snapshot.victoryEnergyUnits);
     ImGui::Text("Stabilization %.1f / %.1f", snapshot.player.stabilizationUnits,
                 snapshot.victoryStabilizationUnits);
@@ -283,6 +276,30 @@ void drawObjectives(const game::ConstellationViewSnapshot &snapshot) {
     ImGui::Text("Rival control observed: %u bands", observedRivalBands);
     ImGui::TextUnformatted(outcomeName(snapshot.overallStatus));
     ImGui::TextUnformatted("Rival totals arrive through delayed observations.");
+  }
+  ImGui::End();
+}
+
+void drawBriefing(ConstellationUiState &uiState) {
+  if (uiState.hideBriefing) {
+    return;
+  }
+  const game::Briefing briefing = game::evaluateBriefing(*uiState.session);
+  if (ImGui::Begin("Briefing")) {
+    for (std::size_t index = 0; index < briefing.steps.size(); ++index) {
+      const game::BriefingStep &step = briefing.steps.at(index);
+      if (step.complete) {
+        ImGui::Text("[x] %.*s", static_cast<int>(step.title.size()), step.title.data());
+      } else if (index == briefing.currentIndex) {
+        ImGui::SeparatorText(step.title.data());
+        ImGui::TextWrapped("%s", step.body.c_str());
+      } else {
+        ImGui::TextDisabled("[ ] %.*s", static_cast<int>(step.title.size()), step.title.data());
+      }
+    }
+    if (briefing.currentIndex == briefing.steps.size()) {
+      ImGui::TextUnformatted("Briefing complete.");
+    }
   }
   ImGui::End();
 }
@@ -349,7 +366,8 @@ void renderConstellationPanels(ConstellationUiState &uiState, blackhole::RenderS
   drawStrategicMap(uiState, snapshot);
   drawOperations(uiState, snapshot);
   drawIntelligence(snapshot);
-  drawObjectives(snapshot);
+  drawObjectives(uiState, snapshot);
+  drawBriefing(uiState);
   drawEventLog(uiState, snapshot, events);
   if (ImGui::Begin("Physical Viewport")) {
     ImGui::Text("System %u selected for the shared viewport", uiState.selectedSystem);

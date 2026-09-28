@@ -50,6 +50,7 @@ struct WorkspaceRects {
   WindowRect curve;
   WindowRect intel;
   WindowRect objectives;
+  WindowRect briefing;
   WindowRect events;
   WindowRect physical;
 };
@@ -65,6 +66,8 @@ WorkspaceRects drawWorkspaceWindows(ui::WorkspaceKind workspace) {
           .intel = drawWindow(workspace == ui::WorkspaceKind::ProperTime ? "Intelligence"
                                                                          : "Campaign Intel"),
           .objectives = drawWindow("Objectives"),
+          .briefing =
+              workspace == ui::WorkspaceKind::ProperTime ? drawWindow("Briefing") : WindowRect{},
           .events = drawWindow("Event Log"),
           .physical = drawWindow("Physical Viewport")};
 }
@@ -94,6 +97,8 @@ void expectProtectedViewport(const WindowRect &viewport) {
 
 void expectProperTimePanels(const WorkspaceRects &rectangles) {
   EXPECT_NE(rectangles.objectives.dockId, 0U);
+  EXPECT_NE(rectangles.briefing.dockId, 0U);
+  EXPECT_EQ(rectangles.briefing.dockId, rectangles.objectives.dockId);
   EXPECT_NE(rectangles.events.dockId, 0U);
   EXPECT_NE(rectangles.physical.dockId, 0U);
 }

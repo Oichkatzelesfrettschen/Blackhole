@@ -1092,6 +1092,7 @@ void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
     ImGui::DockBuilderDockWindow("Operations", dockLeftId);
     ImGui::DockBuilderDockWindow("Intelligence", dockLeftId);
     ImGui::DockBuilderDockWindow("Objectives", dockLeftId);
+    ImGui::DockBuilderDockWindow("Briefing", dockLeftId);
     ImGui::DockBuilderDockWindow("Event Log", dockLeftDownId);
     ImGui::DockBuilderDockWindow("Physical Viewport", dockMainId);
   }
