@@ -151,7 +151,7 @@ sudo cmake --install build
 
 ```bash
 # 1. Delete compute shader file
-rm /home/eric/Playground/Blackhole/shader/geodesic_trace.comp
+rm ./shader/geodesic_trace.comp
 
 # 2. Remove compute shader code from main.cpp
 # Lines to delete: 3817-3875 (compute initialization and rendering)
@@ -228,7 +228,7 @@ Target FPS: 60-90 @ 1920x1080 (AMD Radeon HD 8730M)
 
 ### Test 1: Current State with Mesa Threading
 ```bash
-cd /home/eric/Playground/Blackhole/build/Release
+cd ./build/Release
 MESA_GLTHREAD=true LIBGL_SHOW_FPS=1 ./Blackhole
 ```
 

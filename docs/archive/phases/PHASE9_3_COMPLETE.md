@@ -50,7 +50,7 @@ All 6 Rocq modules ready for `rocq compile extraction/Extract.v`:
 Build system verified without deprecation warnings:
 
 ```bash
-$ cd /home/eirikr/Github/Blackhole/rocq
+$ cd ./rocq
 $ make extraction 2>&1 | grep -E "(deprecated|warning)"
 # No output - clean build ✓
 
@@ -442,7 +442,7 @@ This is enforced by the `verify_horizon_ordering()` function and proven as an ax
 ### Rocq Compilation
 
 ```bash
-$ cd /home/eirikr/Github/Blackhole/rocq
+$ cd ./rocq
 $ rocq compile theories/Metrics/KerrDeSitter.v
 # SUCCESS ✓
 

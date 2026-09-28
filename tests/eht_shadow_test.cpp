@@ -9,20 +9,11 @@
  * escapes. The apparent shadow radius on the observer's sky is b_c / D, so the
  * angular diameter is 2 b_c / D.
  *
- * These tests exercise that closed form and its scaling laws directly. They do
- * NOT render an image, integrate a geodesic, or model emission. The shadow
- * *size* is a robust geometric prediction of the metric; the ring brightness,
- * polarization, and Kerr asymmetry are emission-dependent and must be validated
- * against real rendered output, not a hand-authored image. A prior version of
- * this file built a synthetic 2D image, used the photon-orbit coordinate radius
- * 1.5 r_s (= 3 M) as the shadow radius instead of b_c, halved an angular radius
- * a second time as if it were a diameter, and painted the shadow interior bright
- * -- producing ~18 uas for M87* and then accepting a 10-25 uas band. Using b_c
- * the same parameters give ~40 uas (M87*) and ~51 uas (Sgr A*), consistent with
- * the EHT-measured ring diameters. The bright emission ring the EHT resolves is
- * set by, but not identical to, the b_c critical curve, so these checks assert
- * the analytic shadow scale and its proximity to the ring diameters, not an
- * exact match to a measured geometric shadow.
+ * These tests generate shadow-size observables from the closed form and its
+ * scaling laws. They do not render pixels, integrate geodesics, or model
+ * emission. The predicted angular diameters are compared with measured ring
+ * diameters using a loose tolerance because the emission ring and critical
+ * curve are different observables.
  *
  * References:
  * - Event Horizon Telescope Collaboration (2019) ApJ 875, L1 (M87* shadow ~42 uas).
@@ -85,7 +76,7 @@ bool approxEqual(double lhs, double rhs, double relTolerance) {
 }
 
 // Test 1: b_c is the capture radius 3 sqrt(3) M = 2.598 r_s, not the photon
-// sphere 1.5 r_s. Guards against reintroducing the photon-orbit-radius bug.
+// sphere 1.5 r_s. The two radii describe different geometric quantities.
 bool testCriticalImpactParameterIdentity() {
   double const bc = criticalImpactParameter(M87_MASS);
   double const rs = schwarzschildRadius(M87_MASS);

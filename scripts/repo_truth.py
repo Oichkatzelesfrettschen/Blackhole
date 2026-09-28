@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import pathlib
 import re
@@ -12,7 +13,6 @@ import shutil
 import subprocess
 import sys
 from typing import Any
-
 
 INTERESTING_CACHE_KEYS = (
     "CMAKE_BUILD_TYPE",
@@ -83,35 +83,83 @@ REPORT_FILENAMES = {
     "dream_textures_blender_install": "dream_textures_blender_install.json",
     "dream_textures_blender_report": "dream_textures_blender_verified.json",
     "dream_textures_blender_direct_report": "dream_textures_blender_direct_verified.json",
-    "dream_textures_blender_background_direct_report": "dream_textures_blender_background_direct_verified.json",
-    "dream_textures_blender_conditioned_direct_report": "dream_textures_blender_conditioned_direct_verified.json",
-    "dream_textures_blender_depth_direct_report": "dream_textures_blender_depth_direct_verified.json",
-    "dream_textures_blender_image_depth_direct_report": "dream_textures_blender_image_depth_direct_verified.json",
-    "dream_textures_blender_conditioning_sweep_report": "dream_textures_blender_conditioning_sweep_verified.json",
-    "dream_textures_blender_harsh_conditioning_sweep_report": "dream_textures_blender_harsh_conditioning_sweep_verified.json",
-    "dream_textures_blender_conditioning_policy_report": "dream_textures_blender_conditioning_policy.json",
-    "dream_textures_blender_harsh_conditioning_policy_report": "dream_textures_blender_harsh_conditioning_policy.json",
-    "dream_textures_blender_policy_generation_report": "dream_textures_blender_policy_generation_verified.json",
-    "dream_textures_blender_policy_background_report": "dream_textures_blender_policy_background_prepare_verified.json",
-    "dream_textures_blender_policy_production_report": "dream_textures_blender_policy_production_prepare_verified.json",
-    "dream_textures_blender_policy_stale_refresh_report": "dream_textures_blender_policy_stale_refresh_verified.json",
+    "dream_textures_blender_background_direct_report": (
+        "dream_textures_blender_background_direct_verified.json"
+    ),
+    "dream_textures_blender_conditioned_direct_report": (
+        "dream_textures_blender_conditioned_direct_verified.json"
+    ),
+    "dream_textures_blender_depth_direct_report": (
+        "dream_textures_blender_depth_direct_verified.json"
+    ),
+    "dream_textures_blender_image_depth_direct_report": (
+        "dream_textures_blender_image_depth_direct_verified.json"
+    ),
+    "dream_textures_blender_conditioning_sweep_report": (
+        "dream_textures_blender_conditioning_sweep_verified.json"
+    ),
+    "dream_textures_blender_harsh_conditioning_sweep_report": (
+        "dream_textures_blender_harsh_conditioning_sweep_verified.json"
+    ),
+    "dream_textures_blender_conditioning_policy_report": (
+        "dream_textures_blender_conditioning_policy.json"
+    ),
+    "dream_textures_blender_harsh_conditioning_policy_report": (
+        "dream_textures_blender_harsh_conditioning_policy.json"
+    ),
+    "dream_textures_blender_policy_generation_report": (
+        "dream_textures_blender_policy_generation_verified.json"
+    ),
+    "dream_textures_blender_policy_background_report": (
+        "dream_textures_blender_policy_background_prepare_verified.json"
+    ),
+    "dream_textures_blender_policy_production_report": (
+        "dream_textures_blender_policy_production_prepare_verified.json"
+    ),
+    "dream_textures_blender_policy_stale_refresh_report": (
+        "dream_textures_blender_policy_stale_refresh_verified.json"
+    ),
     "dream_textures_octane_install": "dream_textures_octane_install.json",
     "dream_textures_octane_report": "dream_textures_octane_verified.json",
     "dream_textures_octane_direct_report": "dream_textures_octane_direct_verified.json",
-    "dream_textures_octane_background_direct_report": "dream_textures_octane_background_direct_verified.json",
-    "dream_textures_octane_conditioned_direct_report": "dream_textures_octane_conditioned_direct_verified.json",
+    "dream_textures_octane_background_direct_report": (
+        "dream_textures_octane_background_direct_verified.json"
+    ),
+    "dream_textures_octane_conditioned_direct_report": (
+        "dream_textures_octane_conditioned_direct_verified.json"
+    ),
     "dream_textures_octane_depth_direct_report": "dream_textures_octane_depth_direct_verified.json",
-    "dream_textures_octane_image_depth_direct_report": "dream_textures_octane_image_depth_direct_verified.json",
-    "dream_textures_octane_conditioning_sweep_report": "dream_textures_octane_conditioning_sweep_verified.json",
-    "dream_textures_octane_harsh_conditioning_sweep_report": "dream_textures_octane_harsh_conditioning_sweep_verified.json",
-    "dream_textures_octane_conditioning_policy_report": "dream_textures_octane_conditioning_policy.json",
-    "dream_textures_octane_harsh_conditioning_policy_report": "dream_textures_octane_harsh_conditioning_policy.json",
-    "dream_textures_octane_policy_generation_report": "dream_textures_octane_policy_generation_verified.json",
-    "dream_textures_octane_policy_background_report": "dream_textures_octane_policy_background_prepare_verified.json",
-    "dream_textures_octane_policy_production_report": "dream_textures_octane_policy_production_prepare_verified.json",
-    "dream_textures_octane_policy_stale_refresh_report": "dream_textures_octane_policy_stale_refresh_verified.json",
+    "dream_textures_octane_image_depth_direct_report": (
+        "dream_textures_octane_image_depth_direct_verified.json"
+    ),
+    "dream_textures_octane_conditioning_sweep_report": (
+        "dream_textures_octane_conditioning_sweep_verified.json"
+    ),
+    "dream_textures_octane_harsh_conditioning_sweep_report": (
+        "dream_textures_octane_harsh_conditioning_sweep_verified.json"
+    ),
+    "dream_textures_octane_conditioning_policy_report": (
+        "dream_textures_octane_conditioning_policy.json"
+    ),
+    "dream_textures_octane_harsh_conditioning_policy_report": (
+        "dream_textures_octane_harsh_conditioning_policy.json"
+    ),
+    "dream_textures_octane_policy_generation_report": (
+        "dream_textures_octane_policy_generation_verified.json"
+    ),
+    "dream_textures_octane_policy_background_report": (
+        "dream_textures_octane_policy_background_prepare_verified.json"
+    ),
+    "dream_textures_octane_policy_production_report": (
+        "dream_textures_octane_policy_production_prepare_verified.json"
+    ),
+    "dream_textures_octane_policy_stale_refresh_report": (
+        "dream_textures_octane_policy_stale_refresh_verified.json"
+    ),
     "dream_textures_conditioning_parity_report": "dream_textures_conditioning_baseline_parity.json",
-    "dream_textures_harsh_conditioning_parity_report": "dream_textures_conditioning_harsh_parity.json",
+    "dream_textures_harsh_conditioning_parity_report": (
+        "dream_textures_conditioning_harsh_parity.json"
+    ),
     "dream_textures_conditioning_trends_report": "dream_textures_conditioning_trends.json",
     "blender_showcase_render": "blender_showcase_render.json",
     "octane_showcase_render": "octane_showcase_render.json",
@@ -137,7 +185,9 @@ REPORT_FILENAMES = {
 }
 
 
-def run_command(command: list[str], timeout_seconds: float = 10.0) -> subprocess.CompletedProcess[str]:
+def run_command(
+    command: list[str], timeout_seconds: float = 10.0
+) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
             command,
@@ -147,8 +197,16 @@ def run_command(command: list[str], timeout_seconds: float = 10.0) -> subprocess
             timeout=timeout_seconds,
         )
     except subprocess.TimeoutExpired as exc:
-        stdout = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-        stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        stdout = (
+            exc.stdout.decode("utf-8", errors="replace")
+            if isinstance(exc.stdout, bytes)
+            else (exc.stdout or "")
+        )
+        stderr = (
+            exc.stderr.decode("utf-8", errors="replace")
+            if isinstance(exc.stderr, bytes)
+            else (exc.stderr or "")
+        )
         return subprocess.CompletedProcess(command, 124, stdout=stdout, stderr=stderr)
 
 
@@ -254,11 +312,15 @@ def detect_tools() -> dict[str, dict[str, Any]]:
             lines = proc.stdout.splitlines()
             version_output = next((line.strip() for line in lines if "release" in line), "")
         elif command == "nvidia-smi":
-            proc = run_command([command, "--query-gpu=name,driver_version", "--format=csv,noheader"])
+            proc = run_command(
+                [command, "--query-gpu=name,driver_version", "--format=csv,noheader"]
+            )
             version_output = proc.stdout.strip()
         else:
             proc = run_command([command, "--version"])
-            version_output = (proc.stdout or proc.stderr).splitlines()[0] if (proc.stdout or proc.stderr) else ""
+            version_output = (
+                (proc.stdout or proc.stderr).splitlines()[0] if (proc.stdout or proc.stderr) else ""
+            )
         tool_info["returncode"] = proc.returncode
         tool_info["timed_out"] = proc.returncode == 124
         tool_info["version"] = version_output
@@ -304,10 +366,100 @@ def load_optional_report(path: pathlib.Path) -> dict[str, Any] | None:
 def summarize_configured_build(cache: dict[str, str], source_dir: pathlib.Path) -> dict[str, str]:
     summary = {key: cache.get(key, "UNSET") for key in INTERESTING_CACHE_KEYS}
     if summary["CMAKE_CXX_STANDARD"] == "UNSET":
-        blackhole_standard = cache.get("BLACKHOLE_CXX_STANDARD") or detect_declared_cxx_standard(source_dir)
+        blackhole_standard = cache.get("BLACKHOLE_CXX_STANDARD") or detect_declared_cxx_standard(
+            source_dir
+        )
         if blackhole_standard:
             summary["CMAKE_CXX_STANDARD"] = blackhole_standard
     return summary
+
+
+def source_metrics(source_dir: pathlib.Path) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    for directory in ("src", "src/render", "src/game", "src/physics", "tests", "shader"):
+        root = source_dir / directory
+        files = [
+            path
+            for path in root.rglob("*")
+            if path.is_file()
+            and path.suffix
+            in {".cpp", ".h", ".hpp", ".cu", ".cuh", ".glsl", ".vert", ".frag", ".comp"}
+        ]
+        metrics[directory] = {
+            "files": len(files),
+            "lines": sum(len(path.read_text(encoding="utf-8").splitlines()) for path in files),
+        }
+    for filename in ("src/main.cpp", "src/render/render_state.h"):
+        metrics[filename] = {
+            "lines": len((source_dir / filename).read_text(encoding="utf-8").splitlines())
+        }
+    return metrics
+
+
+def recent_ctest_execution(build_dir: pathlib.Path) -> dict[str, Any]:
+    log_path = build_dir / "Testing" / "Temporary" / "LastTest.log"
+    retained_log = build_dir / "reports" / "ctest_last_execution.log"
+    if not log_path.is_file() and not retained_log.is_file():
+        return {"status": "not-assessed", "tests": {}}
+
+    def parse_outcomes(log_bytes: bytes) -> dict[str, str]:
+        outcomes: dict[str, str] = {}
+        log_text = log_bytes.decode("utf-8", errors="replace")
+        for block in re.split(r"(?m)^(?=\d+/\d+ Testing: )", log_text):
+            header = re.match(r"\d+/\d+ Testing: ([^\n]+)", block)
+            if header is None:
+                continue
+            statuses = re.findall(
+                r"(?m)^Test (Passed|Failed|Skipped)\.$|^Test (Pass|Fail|Skip) Reason:$",
+                block,
+            )
+            if statuses:
+                result = next(value for value in statuses[-1] if value)
+                outcomes[header.group(1)] = {
+                    "Pass": "passed",
+                    "Fail": "failed",
+                    "Skip": "skipped",
+                }.get(result, result.lower())
+        return outcomes
+
+    log_bytes = log_path.read_bytes() if log_path.is_file() else b""
+    outcomes = parse_outcomes(log_bytes)
+    if outcomes:
+        retained_log.parent.mkdir(parents=True, exist_ok=True)
+        retained_log.write_bytes(log_bytes)
+    elif retained_log.is_file():
+        log_bytes = retained_log.read_bytes()
+        outcomes = parse_outcomes(log_bytes)
+    return {
+        "status": "recorded" if outcomes else "unparsed",
+        "log": str(retained_log),
+        "log_sha256": hashlib.sha256(log_bytes).hexdigest(),
+        "tests": outcomes,
+    }
+
+
+def backend_execution(
+    cache: dict[str, str], configured_tests: list[str], execution: dict[str, Any]
+) -> dict[str, Any]:
+    context_tests = {
+        "gpu_cpu_parity",
+        "glsl_parity",
+        "kerr_shader_capture_validation",
+        "grmhd_gpu_async_validation",
+    }
+    return {
+        "cuda_configured": cache.get("ENABLE_CUDA", "UNSET"),
+        "cuda_tests": {
+            name: execution["tests"].get(name, "not-executed-in-record")
+            for name in configured_tests
+            if name.startswith("cuda_")
+        },
+        "gl_context_tests": {
+            name: execution["tests"].get(name, "not-executed-in-record")
+            for name in configured_tests
+            if name in context_tests
+        },
+    }
 
 
 def render_markdown(report: dict[str, Any]) -> str:
@@ -332,6 +484,28 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append("- Test names:")
         for name in ctest["tests"]:
             lines.append(f"  - `{name}`")
+    execution = report["ctest_execution"]
+    lines.append(f"- Last CTest execution record: `{execution['status']}`")
+    lines.append(f"- Recorded outcomes: `{len(execution['tests'])}/{ctest['total']}`")
+    for name in execution["unobserved_tests"]:
+        lines.append(f"  - `{name}`: `not-executed-in-record`")
+    if execution["tests"]:
+        for name, result in sorted(execution["tests"].items()):
+            if result != "passed":
+                lines.append(f"  - `{name}`: `{result}`")
+    lines.append("")
+    lines.append("## Backend Availability And Execution")
+    lines.append("")
+    backend = report["backend_execution"]
+    lines.append(f"- CUDA configured: `{backend['cuda_configured']}`")
+    for category in ("cuda_tests", "gl_context_tests"):
+        for name, status in backend[category].items():
+            lines.append(f"- `{name}`: `{status}`")
+    lines.append("")
+    lines.append("## Source Metrics")
+    lines.append("")
+    for name, metrics in report["source_metrics"].items():
+        lines.append(f"- `{name}`: {metrics}")
     lines.append("")
     lines.append("## Configure Presets")
     lines.append("")
@@ -407,7 +581,9 @@ def render_markdown(report: dict[str, Any]) -> str:
             elif name == "octane_readiness":
                 lines.append(f"- Return code: `{payload.get('returncode', -1)}`")
                 lines.append(f"- Classification: `{payload.get('readiness', '')}`")
-                lines.append(f"- Ready for automation: `{bool(payload.get('ready_for_automation', False))}`")
+                lines.append(
+                    f"- Ready for automation: `{bool(payload.get('ready_for_automation', False))}`"
+                )
                 lines.append(f"- Reason: `{payload.get('reason', '')}`")
             elif name in {
                 "blender_interactive_benchmark",
@@ -428,21 +604,30 @@ def render_markdown(report: dict[str, Any]) -> str:
                 lines.append(f"- Expected engine: `{payload.get('expect_engine', '')}`")
                 if mcp_scene:
                     final_scene = mcp_scene.get("final_scene_info", {}).get("result", {})
-                    lines.append(f"- MCP scene enabled: `{bool(payload.get('mcp_scene_enabled', False))}`")
+                    lines.append(
+                        f"- MCP scene enabled: `{bool(payload.get('mcp_scene_enabled', False))}`"
+                    )
                     lines.append(f"- MCP scene objects: `{final_scene.get('object_count', 0)}`")
                 octane_readiness = payload.get("octane_readiness", {})
                 if octane_readiness:
                     lines.append(f"- Octane readiness: `{octane_readiness.get('readiness', '')}`")
-                    lines.append(f"- Octane ready for automation: `{bool(octane_readiness.get('ready_for_automation', False))}`")
+                    lines.append(
+                        "- Octane ready for automation: "
+                        f"`{bool(octane_readiness.get('ready_for_automation', False))}`"
+                    )
                 lines.append(f"- Benchmarks: `{len(benchmarks)}`")
                 for benchmark in benchmarks:
                     metrics = benchmark.get("metrics", {})
                     quality_metrics = benchmark.get("quality_metrics", {})
                     lines.append(
-                        f"  - `{benchmark.get('name', '')}` median `{metrics.get('median_ms', 0.0):.3f}` ms / `{metrics.get('median_fps', 0.0):.3f}` FPS"
+                        f"  - `{benchmark.get('name', '')}"
+                        f"` median `{metrics.get('median_ms', 0.0):.3f}"
+                        f"` ms / `{metrics.get('median_fps', 0.0):.3f}` FPS"
                     )
                     lines.append(
-                        f"    artifact `{benchmark.get('artifact_path', '')}` max-luma `{quality_metrics.get('max_luma', 0.0):.4f}` edge `{quality_metrics.get('edge_energy', 0.0):.4f}`"
+                        f"    artifact `{benchmark.get('artifact_path', '')}"
+                        f"` max-luma `{quality_metrics.get('max_luma', 0.0):.4f}"
+                        f"` edge `{quality_metrics.get('edge_energy', 0.0):.4f}`"
                     )
             elif name in {"octane_quality_sweep", "octane_quality_sweep_report"}:
                 lines.append(f"- Tiers: `{payload.get('tiers', [])}`")
@@ -461,7 +646,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             elif name in {"dream_textures_blender_report", "dream_textures_octane_report"}:
                 inner = payload.get("inner_report", {})
                 lines.append(
-                    f"- `{name}` status `{inner.get('status', '')}` device `{inner.get('device', '')}` "
+                    f"- `{name}` status `{inner.get('status', '')}"
+                    f"` device `{inner.get('device', '')}` "
                     f"shape `{inner.get('shape', [])}` mean `{inner.get('mean', 0.0):.6f}`"
                 )
             elif name in {
@@ -477,10 +663,14 @@ def render_markdown(report: dict[str, Any]) -> str:
                 "dream_textures_octane_image_depth_direct_report",
             }:
                 inner = payload.get("inner_report", {})
+                conditioning_mode = inner.get("conditioning_policy", {}).get(
+                    "effective_mode", "text_to_image"
+                )
                 lines.append(
-                    f"- `{name}` status `{inner.get('status', '')}` backend `{inner.get('selected_backend', '')}` "
+                    f"- `{name}` status `{inner.get('status', '')}"
+                    f"` backend `{inner.get('selected_backend', '')}` "
                     f"slot `{inner.get('slot', '')}` image `{inner.get('image_name', '')}` "
-                    f"conditioning `{inner.get('conditioning_policy', {}).get('effective_mode', 'text_to_image')}` "
+                    f"conditioning `{conditioning_mode}` "
                     f"shape `{inner.get('shape', [])}` mean `{inner.get('mean', 0.0):.6f}` "
                     f"hash `{inner.get('asset_digest', {}).get('sha256', '')[:12]}`"
                 )
@@ -491,13 +681,15 @@ def render_markdown(report: dict[str, Any]) -> str:
                 "dream_textures_octane_harsh_conditioning_sweep_report",
             }:
                 lines.append(
-                    f"- Scene `{payload.get('scene_profile', '')}` modes `{payload.get('modes', [])}` "
+                    f"- Scene `{payload.get('scene_profile', '')}"
+                    f"` modes `{payload.get('modes', [])}` "
                     f"memory `{payload.get('memory_profile', '')}`"
                 )
                 for comparison in payload.get("comparisons", []):
                     metrics = comparison.get("metrics", {})
                     lines.append(
-                        f"  - `{comparison.get('candidate', '')}` vs `{comparison.get('reference', '')}` "
+                        f"  - `{comparison.get('candidate', '')}"
+                        f"` vs `{comparison.get('reference', '')}` "
                         f"psnr `{metrics.get('psnr_rgb', 0.0):.3f}` "
                         f"luma-cos `{metrics.get('luma_cosine_similarity', 0.0):.6f}`"
                     )
@@ -508,13 +700,15 @@ def render_markdown(report: dict[str, Any]) -> str:
                 "dream_textures_octane_harsh_conditioning_policy_report",
             }:
                 lines.append(
-                    f"- Host `{payload.get('host_label', '')}` scene `{payload.get('scene_profile', '')}` "
+                    f"- Host `{payload.get('host_label', '')}"
+                    f"` scene `{payload.get('scene_profile', '')}` "
                     f"interactive `{payload.get('recommended_interactive_mode', '')}` "
                     f"production `{payload.get('recommended_production_mode', '')}`"
                 )
                 elapsed = payload.get("elapsed_seconds", {})
                 lines.append(
-                    f"  - image `{elapsed.get('image', 0.0):.3f}` s depth `{elapsed.get('depth', 0.0):.3f}` s "
+                    f"  - image `{elapsed.get('image', 0.0):.3f}"
+                    f"` s depth `{elapsed.get('depth', 0.0):.3f}` s "
                     f"image_depth `{elapsed.get('image_depth', 0.0):.3f}` s"
                 )
             elif name in {
@@ -531,7 +725,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                 warm = payload.get("warm_prepare", {})
                 stale = payload.get("stale_prepare", {})
                 lines.append(
-                    f"- Host policy slot `{payload.get('slot', '')}` intent `{payload.get('intent', '')}` "
+                    f"- Host policy slot `{payload.get('slot', '')}"
+                    f"` intent `{payload.get('intent', '')}` "
                     f"resolved `{warm.get('resolved_mode', cold.get('resolved_mode', ''))}` "
                     f"cold `{cold.get('timing', {}).get('total_seconds', 0.0):.3f}` s "
                     f"warm `{warm.get('timing', {}).get('total_seconds', 0.0):.3f}` s "
@@ -549,16 +744,19 @@ def render_markdown(report: dict[str, Any]) -> str:
                 "dream_textures_harsh_conditioning_parity_report",
             }:
                 lines.append(
-                    f"- Scene `{payload.get('scene_profile', '')}` memory `{payload.get('memory_profile', '')}`"
+                    f"- Scene `{payload.get('scene_profile', '')}"
+                    f"` memory `{payload.get('memory_profile', '')}`"
                 )
                 for mode_parity in payload.get("mode_parity", []):
                     lines.append(
-                        f"  - mode `{mode_parity.get('mode', '')}` mean-delta `{mode_parity.get('mean_delta', 0.0):.6f}`"
+                        f"  - mode `{mode_parity.get('mode', '')}"
+                        f"` mean-delta `{mode_parity.get('mean_delta', 0.0):.6f}`"
                     )
             elif name == "dream_textures_conditioning_trends_report":
                 for scene_name, scene_payload in payload.get("scenes", {}).items():
                     lines.append(
-                        f"- Scene `{scene_name}` consensus interactive `{scene_payload.get('consensus_interactive_mode', '')}` "
+                        f"- Scene `{scene_name}` consensus interactive "
+                        f"`{scene_payload.get('consensus_interactive_mode', '')}` "
                         f"production `{scene_payload.get('consensus_production_mode', '')}`"
                     )
                     parity = scene_payload.get("parity", {})
@@ -568,11 +766,13 @@ def render_markdown(report: dict[str, Any]) -> str:
                     )
             elif name in {"blender_showcase_render", "octane_showcase_render"}:
                 lines.append(
-                    f"- Showcase status `{payload.get('status', '')}` engine `{payload.get('selected_engine', '')}`"
+                    f"- Showcase status `{payload.get('status', '')}"
+                    f"` engine `{payload.get('selected_engine', '')}`"
                 )
                 for item in payload.get("scenes", []):
                     lines.append(
-                        f"  - `{item.get('scene_profile', '')}` path `{item.get('render_path', '')}` "
+                        f"  - `{item.get('scene_profile', '')}` path `{item.get('render_path', '')}"
+                        f"` "
                         f"median `{item.get('render_metrics', {}).get('median_ms', 0.0):.3f}` ms "
                         f"psnr `{item.get('comparison_metrics', {}).get('psnr_rgb', 0.0):.3f}`"
                     )
@@ -582,12 +782,18 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def build_report(source_dir: pathlib.Path, build_dir: pathlib.Path) -> dict[str, Any]:
     cache = parse_cmake_cache(build_dir / "CMakeCache.txt")
+    execution = recent_ctest_execution(build_dir)
+    ctest = parse_ctest_listing(build_dir)
+    execution["unobserved_tests"] = sorted(set(ctest["tests"]) - set(execution["tests"]))
     report = {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "source_dir": str(source_dir),
         "build_dir": str(build_dir),
         "configured_build": summarize_configured_build(cache, source_dir),
-        "ctest": parse_ctest_listing(build_dir),
+        "ctest": ctest,
+        "ctest_execution": execution,
+        "backend_execution": backend_execution(cache, ctest["tests"], execution),
+        "source_metrics": source_metrics(source_dir),
         "configure_presets": load_presets(source_dir / "CMakePresets.json"),
         "tools": detect_tools(),
         "packages": detect_packages(),

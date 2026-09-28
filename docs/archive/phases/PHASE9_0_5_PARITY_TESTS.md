@@ -174,7 +174,7 @@ state_new = state + (k1 + 2k2 + 2k3 + k4) / 6
 
 #### Compilation
 ```bash
-cd /home/eirikr/Github/Blackhole
+cd .
 
 # Compile C++ test harness
 g++ -std=c++23 -O2 -I. tests/glsl_parity_test.cpp \
@@ -351,7 +351,7 @@ python3 tests/gpu_parity_harness.py --test-name KERR
 Phase 9.0.5: GPU/CPU Parity Validation Harness
 ======================================================================
 Tolerance: 1e-05 relative error
-Shader dir: /home/eirikr/Github/Blackhole/shader
+Shader dir: ./shader
 ======================================================================
 
 [Test] SCHWARZSCHILD

@@ -192,7 +192,7 @@ Qed.
 **Build Rocq Theories:**
 
 ```bash
-cd /home/eirikr/Github/Blackhole/rocq
+cd ./rocq
 rocq compile theories/Metrics/Schwarzschild.v
 rocq compile theories/Metrics/Kerr.v
 rocq compile theories/Metrics/KerrNewman.v
@@ -215,7 +215,7 @@ theories/Metrics/KerrDeSitter.vo  (14 KB)
 **Purpose**: Convert proven Rocq code to executable OCaml (optional verification step)
 
 ```bash
-cd /home/eirikr/Github/Blackhole/rocq
+cd ./rocq
 make extraction
 ```
 
@@ -347,7 +347,7 @@ GLSL_DIR = "shader/include/verified"
 **Run Transpilation:**
 
 ```bash
-cd /home/eirikr/Github/Blackhole
+cd .
 python3 scripts/cpp_to_glsl.py
 ```
 
@@ -681,7 +681,7 @@ void main() {
 **Purpose**: Validate that all C++ reference implementations match expected formulas
 
 ```bash
-cd /home/eirikr/Github/Blackhole/tests
+cd ./tests
 mkdir -p build && cd build
 cmake ..
 cmake --build .

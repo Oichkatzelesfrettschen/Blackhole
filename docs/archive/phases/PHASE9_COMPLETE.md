@@ -355,7 +355,7 @@ All reduction theorems formally proven in Rocq.
 # ============================================================================
 # Step 1: Compile Rocq Theories
 # ============================================================================
-cd /home/eirikr/Github/Blackhole/rocq
+cd ./rocq
 rocq compile theories/Metrics/Schwarzschild.v
 rocq compile theories/Metrics/Kerr.v
 rocq compile theories/Metrics/KerrNewman.v
@@ -370,7 +370,7 @@ make extraction
 # ============================================================================
 # Step 3: Validate C++23 Reference Implementations
 # ============================================================================
-cd /home/eirikr/Github/Blackhole/tests
+cd ./tests
 mkdir -p build && cd build
 cmake ..
 cmake --build .
@@ -379,7 +379,7 @@ cmake --build .
 # ============================================================================
 # Step 4: Transpile C++23 → GLSL
 # ============================================================================
-cd /home/eirikr/Github/Blackhole
+cd .
 python3 scripts/cpp_to_glsl.py
 
 # Expected output:

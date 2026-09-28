@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "report_generation": "cmake --build build/Release --target repo-truth",
+  "products": {
+    "blackhole_simulator_workbench": {
+      "maturity": "active-development",
+      "active_default_renderer_contract": {
+        "classification": "local-inference",
+        "value": "fragment raytracer selected when useComputeRaytracer is false",
+        "source": "src/render/render_state.h"
+      },
+      "output_validation_scenes_metrics": {
+        "classification": "unvalidated-roadmap",
+        "value": "shipping renderer pixel invariants and measured scene baselines required",
+        "source": "docs/physics/claims_evidence.json"
+      },
+      "backend_availability_parity": {
+        "classification": "local-inference",
+        "value": "CUDA availability is build-option dependent; GL and CUDA runtime parity requires device execution",
+        "source": "build/Release/reports/repo_truth.json"
+      },
+      "performance_tiers": {
+        "classification": "unvalidated-roadmap",
+        "value": "interactive and production tiers require scene-specific measured latency and quality",
+        "source": "bench/"
+      },
+      "physical_approximations": {
+        "classification": "approximation",
+        "value": "thin-disk and analytic shadow tests omit emissive image calibration",
+        "source": "docs/physics/claims-evidence.md"
+      }
+    },
+    "singularity_gororoba": {
+      "maturity": "headless-core-under-desktop-integration",
+      "authoritative_game_session_type": {
+        "classification": "measured-fact",
+        "value": "game::CampaignSession for canonical campaign; game::ConstellationSession for multi-system contest",
+        "source": "src/game/campaign_session.h"
+      },
+      "deterministic_test_replay_status": {
+        "classification": "local-inference",
+        "value": "campaign_realtime_determinism_validation and constellation_validation are configured tests; execution is recorded separately",
+        "source": "build/Release/reports/repo_truth.json"
+      },
+      "save_schema_version": {
+        "classification": "measured-fact",
+        "value": 1,
+        "source": "src/game/save_format.h"
+      },
+      "canonical_scenario_completion_tests": {
+        "classification": "local-inference",
+        "value": "campaign_balance_invariant_validation and campaign_colony_outcome_validation exercise canonical campaign outcomes",
+        "source": "tests/campaign_balance_invariant_test.cpp"
+      },
+      "ui_screenshot_status": {
+        "classification": "unvalidated-roadmap",
+        "value": "live desktop workflow and screenshot review required",
+        "source": "docs/developer-guide/status.md"
+      }
+    }
+  }
+}

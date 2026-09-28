@@ -240,7 +240,7 @@ The compute shader path (`useComputeRaytracer`) is:
 - Fewer shader compilation stalls
 - Less CPU overhead managing dual paths
 
-**File to edit:** `/home/eric/Playground/Blackhole/src/main.cpp`
+**File to edit:** `./src/main.cpp`
 **Lines to remove:** 3817-3875 (compute shader block)
 
 ---

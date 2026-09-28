@@ -271,10 +271,10 @@ Located at `cmake/ValidateShader.cmake`, invoked per shader by CMake.
 ### Expected Output
 ```
 [100%] Validating GLSL shaders with glslangValidator
--- Validated /home/user/Blackhole/shader/blackhole_main.frag
--- Validated /home/user/Blackhole/shader/raytracer.frag
+-- Validated <checkout>/shader/blackhole_main.frag
+-- Validated <checkout>/shader/raytracer.frag
 ...
--- Validated /home/user/Blackhole/shader/geodesic_trace.comp
+-- Validated <checkout>/shader/geodesic_trace.comp
 [100%] Built target validate-shaders
 ```
 

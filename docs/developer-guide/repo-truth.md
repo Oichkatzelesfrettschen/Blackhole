@@ -26,6 +26,11 @@ The target writes:
 
 - configured build options from `CMakeCache.txt`
 - `ctest -N` inventory for the configured build tree
+- source-file and line counts for `src/`, key modules, `tests/`, and `shader/`
+- outcomes from the prior `Testing/Temporary/LastTest.log` when present;
+  the generator retains the bytes at `build/<preset>/reports/ctest_last_execution.log`
+  with a SHA-256 digest; unobserved tests remain `not-executed-in-record`
+- configured CUDA availability and recorded CUDA/GL-context test outcomes
 - visible configure presets from `CMakePresets.json`
 - detected local tools such as `blender`, `OctaneBlender`, `blender-mcp`,
   `nvcc`, `nvidia-smi`, shader tools, and profiling tools
@@ -49,6 +54,8 @@ The target writes:
 ## Usage
 
 Use the generated report when updating status, requirements, and module docs.
+The report's generation timestamp replaces hand-maintained status dates.
+Run the report target after CTest to capture that run's execution outcomes.
 If a narrative document disagrees with the report, the report is the preferred
 starting point for reconciliation.
 
