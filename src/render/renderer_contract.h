@@ -55,23 +55,36 @@ constexpr std::string_view rendererName(QualityTier value) {
   return "unknown";
 }
 
-constexpr int rendererStepBudget(QualityTier value, int selectedSteps) {
+/// Reference-tier step size and the affine range it must at least cover.
+inline constexpr float K_REFERENCE_STEP_SIZE = 0.02f;
+inline constexpr float K_REFERENCE_MIN_AFFINE_RANGE = 40.0f;
+inline constexpr int K_REFERENCE_MAX_STEPS = 20000;
+
+// Near-critical rays exhaust a budget by running out of affine range, not by
+// step error, so the reference tier covers twice the selected range (and at
+// least K_REFERENCE_MIN_AFFINE_RANGE) at the finer K_REFERENCE_STEP_SIZE. A
+// budget that only halves the step over the same range exhausts the same rays.
+constexpr int rendererStepBudget(QualityTier value, int selectedSteps, float selectedSize) {
   if (value == QualityTier::Reference) {
-    return 1000;
+    const float selectedRange = static_cast<float>(selectedSteps) * selectedSize;
+    const float range = std::max(K_REFERENCE_MIN_AFFINE_RANGE, 2.0f * selectedRange);
+    const auto steps = static_cast<int>(range / K_REFERENCE_STEP_SIZE) + 1;
+    return std::min(steps, K_REFERENCE_MAX_STEPS);
   }
   return value == QualityTier::Interactive ? std::min(selectedSteps, 300) : selectedSteps;
 }
 
 constexpr float rendererStepSize(QualityTier value, float selectedSize) {
   if (value == QualityTier::Reference) {
-    return 0.02f;
+    return K_REFERENCE_STEP_SIZE;
   }
   return value == QualityTier::Interactive ? std::max(selectedSize, 0.1f) : selectedSize;
 }
 
-constexpr int rendererStepBudget(const RendererContract &contract, int selectedSteps) {
+constexpr int rendererStepBudget(const RendererContract &contract, int selectedSteps,
+                                 float selectedSize) {
   return contract.geodesic == GeodesicModel::LegacyBeauty
-             ? 300 : rendererStepBudget(contract.quality, selectedSteps);
+             ? 300 : rendererStepBudget(contract.quality, selectedSteps, selectedSize);
 }
 
 constexpr float rendererStepSize(const RendererContract &contract, float selectedSize) {

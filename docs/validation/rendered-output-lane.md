@@ -19,7 +19,7 @@ PYTHON=${PYTHON:?} scripts/ci/render_output_probe.sh build/Release
 
 The probe starts Xvfb, forces Mesa llvmpipe, checks for a GL 4.6 core
 context, runs `ctest -L render-output`, and verifies the passing render
-receipt. Set `BLACKHOLE_RENDER_FULL=1` for scenes B, C, and D and the
+receipt. Set `BLACKHOLE_RENDER_FULL=1` for scenes B, C, Cd, and D and the
 backend comparisons. `BLACKHOLE_RENDER_DISPLAY=existing` uses a pre-existing
 display. The test skips without a context when invoked directly; the probe
 rejects an unavailable context before it runs CTest. Scene A on llvmpipe and
@@ -27,11 +27,12 @@ on an NVIDIA GPU produces identical raw and terminal hashes.
 
 ## Reference scenes
 
-The one-shot CLI accepts `--reference-scene A|B|C+|C-|D`,
+The one-shot CLI accepts `--reference-scene A|B|C+|C-|Cd+|Cd-|D`,
 `--reference-backend fragment|compute|cuda`, and
 `--reference-quality balanced|reference`. Pair a scene with both export
 flags. Every scene fixes time at zero, a camera distance of 30 M, a 30-degree
-vertical field of view, mass M = 1 (r_s = 2), a 160-pixel square target
+vertical field of view (3 degrees in scene D), mass M = 1 (r_s = 2), a
+160-pixel square target
 (`K_REFERENCE_SCENE_EXTENT`), and a solid cubemap. Noise, synthetic
 photon-sphere glow, Hawking glow, grain, vignette, chromatic aberration,
 bloom, the explanation overlay, and the controls overlay are disabled, so
@@ -42,7 +43,8 @@ the display bytes hold scene pixels only.
 | A | Schwarzschild | white sky, no disk | 0 |
 | B | Kerr tracer at a = 0 | dim sky, thin disk | 30 degrees |
 | C+ / C- | Kerr, a/M = +0.6 / -0.6 | white sky, no disk | 30 degrees |
-| D | Schwarzschild | as A, balanced and reference tiers | 0 |
+| Cd+ / Cd- | Kerr, a/M = +0.6 / -0.6 | dim sky, thin disk | 30 degrees |
+| D | Schwarzschild | white sky, no disk; 3-degree view aimed at right critical edge | 0 |
 
 The backlit scenes (A, C, D) make the captured region the shadow alone; a
 disk would occlude part of it and bias every extent measure.
@@ -74,6 +76,18 @@ camera basis: yaw -90 degrees puts screen right along world +z, which
 The C test compares the signed bounding-box center, width, and height; a
 mirrored spin moves the shadow to the wrong side and fails it.
 
+The emitting disk rotates in physics +phi for either spin sign:
+`dtDiskTransferG` uses `Omega = 1 / (r^(3/2) + a)`, which remains positive
+at both reference ISCOs. The negative-spin disk is retrograde. With the
+camera at physics azimuth 180 degrees, screen right points toward physics
+-y, where +phi disk motion recedes. The left disk-hit half should therefore
+have greater mean raw luminance for both spins (measured 0.183 against
+0.033 at a/M = +0.6 and 0.114 against 0.043 at -0.6). The center column
+below the shadow samples the directly viewed near side; its first disk-hit
+pixel lies farther from the image center for retrograde spin (51.5 against
+22.5 pixels). The Bardeen-Press-
+Teukolsky formula gives 3.829 M at a/M = +0.6 and 7.851 M at a/M = -0.6.
+
 ## Measurements and tolerances
 
 A captured run from pixel xmin to xmax spans `xmax - xmin + 1` pixels edge
@@ -95,12 +109,18 @@ steps from dark to disk with no local maximum and fails the contrast check.
 Scene A has a sharp capture boundary because its source has no emitting
 disk; that edge alone does not diagnose a source model.
 
-Scene D asserts that the reference tier raises the effective step budget in
-the sidecar and that it bounds the max-step fraction without invalid
-terminals. The reference tier doubles the budget and halves the step, which
-covers the same affine range, so at 160 pixels both tiers render scene A
-bit-identically and exhaust the same pixels; a zoomed critical-region view
-is what would resolve a tier difference.
+Scene D aims the center ray at the right critical-curve edge using the
+coordinate-direction oracle angle. Its 3-degree field of view resolves about
+53 pixels per degree across the critical region, against 5.3 in scene A, and
+the sidecar records the world-space aim target. The test requires the tier
+captures to differ, the reference tier to reduce the max-step fraction or the
+center-row critical-edge column error while increasing neither, and no
+invalid terminals. The reference tier covers twice the selected affine range
+at step 0.02 (`rendererStepBudget`): near-critical rays exhaust a budget by
+running out of range, so balanced (500 x 0.04) exhausts 82 pixels, a
+same-range 1000 x 0.02 budget exhausts 84, and the reference tier's 2001 x
+0.02 exhausts none, with the captured set and the critical edge (0 pixel
+error on the center row) unchanged.
 
 The fragment/compute and fragment/CUDA comparisons report MAE, PSNR, and a
 structural score and retain heatmaps; scene A's raw frame is 0 or 1 per

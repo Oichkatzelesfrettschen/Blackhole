@@ -64,13 +64,19 @@ TEST(RendererContract, StartupAndReferenceBudget) {
   EXPECT_EQ(contract.geodesic, blackhole::GeodesicModel::KerrReference);
   EXPECT_EQ(contract.radiative, blackhole::RadiativeModel::ThinSurface);
   EXPECT_EQ(contract.quality, blackhole::QualityTier::Balanced);
-  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Reference, 300), 1000);
+  // Reference covers twice the selected affine range at step 0.02, and at
+  // least 40: 300 x 0.1 = 30 -> 60 -> 3001 steps; 500 x 0.04 = 20 -> 40.
+  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Reference, 300, 0.1f), 3001);
+  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Reference, 500, 0.04f), 2001);
+  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Reference, 1, 0.01f), 2001);
+  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Reference, 100000, 1.0f),
+            blackhole::K_REFERENCE_MAX_STEPS);
   EXPECT_FLOAT_EQ(blackhole::rendererStepSize(blackhole::QualityTier::Reference, 0.1f), 0.02f);
-  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Interactive, 500), 300);
+  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Interactive, 500, 0.04f), 300);
   EXPECT_FLOAT_EQ(blackhole::rendererStepSize(blackhole::QualityTier::Interactive, 0.02f), 0.1f);
   blackhole::RendererContract legacy = contract;
   legacy.geodesic = blackhole::GeodesicModel::LegacyBeauty;
-  EXPECT_EQ(blackhole::rendererStepBudget(legacy, 1000), 300);
+  EXPECT_EQ(blackhole::rendererStepBudget(legacy, 1000, 0.02f), 300);
   EXPECT_FLOAT_EQ(blackhole::rendererStepSize(legacy, 0.02f), 0.1f);
   legacy.backend = blackhole::RenderBackend::Cuda;
   blackhole::normalizeRendererContract(legacy);

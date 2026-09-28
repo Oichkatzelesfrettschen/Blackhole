@@ -5,9 +5,14 @@ tier in `RenderState::dispatch.contract`. The startup log and each recorded
 frame's JSON sidecar identify those four fields. The default remains the
 fragment Kerr path with thin-surface emission and balanced quality. The
 legacy beauty tracer remains a labeled fragment-only selection. Compute and
-CUDA use the interop geodesic contract. Reference quality fixes the interop
-budget at 1000 steps and a 0.02 step parameter. Balanced uses the displayed
-step controls; interactive caps steps at 300 and sets a 0.1 step-size floor.
+CUDA use the interop geodesic contract. Reference quality integrates at a
+0.02 step parameter over twice the affine range of the displayed step
+controls, and at least 40 (2001 steps), capped at 20000 steps
+(`rendererStepBudget` in `src/render/renderer_contract.h`). Near-critical rays
+exhaust a budget by running out of range, so halving the step over the same
+range leaves them exhausted: the zoomed rendered-output scene D exhausts 82
+pixels at 500 x 0.04, 84 at 1000 x 0.02, and none at 2000 x 0.02. Balanced
+uses the displayed step controls; interactive caps steps at 300 and sets a 0.1 step-size floor.
 The legacy fragment loop always uses 300 steps and a 0.1 step parameter,
 regardless of its quality label.
 

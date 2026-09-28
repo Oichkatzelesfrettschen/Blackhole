@@ -118,3 +118,28 @@ TEST(RenderOutputMetrics, LimbFollowsDisplacedShadow) {
   EXPECT_GE(metrics.limbWidth, 1.0);
   EXPECT_LE(metrics.limbWidth, 3.0);
 }
+
+TEST(RenderOutputMetrics, DiskSidesAndNearSideEdgeUseDiskTerminals) {
+  constexpr int width = 8;
+  constexpr int height = 8;
+  constexpr std::size_t pixels = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+  std::vector<float> luminance(pixels, 10.0f);
+  std::vector<std::uint8_t> terminals(pixels, BH_TERMINAL_ESCAPE);
+  const auto markDisk = [&](int column, int row, float value) {
+    const auto index = (static_cast<std::size_t>(row) * static_cast<std::size_t>(width)) +
+                       static_cast<std::size_t>(column);
+    terminals[index] = BH_TERMINAL_DISK_HIT;
+    luminance[index] = value;
+  };
+  markDisk(1, 2, 0.8f);
+  markDisk(2, 6, 0.6f);
+  markDisk(5, 2, 0.2f);
+  markDisk(6, 6, 0.4f);
+  markDisk(4, 5, 0.3f);
+  const auto metrics = blackhole::measureDiskImage(luminance, terminals, width, height);
+  EXPECT_EQ(metrics.leftDiskPixels, 2u);
+  EXPECT_EQ(metrics.rightDiskPixels, 3u);
+  EXPECT_NEAR(metrics.leftMeanLuminance, 0.7, 1e-6);
+  EXPECT_NEAR(metrics.rightMeanLuminance, 0.3, 1e-6);
+  EXPECT_DOUBLE_EQ(metrics.nearSideInnerEdgePixels, 1.5);
+}

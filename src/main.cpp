@@ -869,7 +869,8 @@ RenderDispatchOptions deriveRenderDispatch(RenderState &rs, const Settings &sett
   }
   rs.dispatch.computeMaxSteps = std::clamp(rs.dispatch.computeMaxSteps, 10, 1000);
   rs.dispatch.computeStepSize = std::clamp(rs.dispatch.computeStepSize, 0.001f, 2.0f);
-  int compareSteps = rendererStepBudget(rs.dispatch.contract.quality, rs.dispatch.computeMaxSteps);
+  int compareSteps = rendererStepBudget(rs.dispatch.contract.quality, rs.dispatch.computeMaxSteps,
+                                         rs.dispatch.computeStepSize);
   float compareStepSize = rendererStepSize(rs.dispatch.contract.quality, rs.dispatch.computeStepSize);
   if (rs.compare.compareOverridesEnabled) {
     if (rs.compare.compareMaxStepsOverride > 0) {
@@ -1040,7 +1041,8 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &setti
       interop.maxSteps = compareSteps;
       interop.stepSize = compareStepSize;
     } else {
-      interop.maxSteps = rendererStepBudget(rs.dispatch.contract.quality, rs.dispatch.computeMaxSteps);
+      interop.maxSteps = rendererStepBudget(rs.dispatch.contract.quality, rs.dispatch.computeMaxSteps,
+                                         rs.dispatch.computeStepSize);
       interop.stepSize = rendererStepSize(rs.dispatch.contract.quality, rs.dispatch.computeStepSize);
     }
     interop.adiskEnabled = adiskEnabledEffective ? 1.0f : 0.0f;
@@ -1205,6 +1207,9 @@ FrameCamera updateFrameCamera(RenderState &rs, InputManager &input, const platfo
   const glm::vec3 cameraPos = selectCameraPosition(rs, cam, focusTarget);
 
   glm::vec3 aimTarget = focusTarget;
+  if (!cli.referenceScene.empty()) {
+    aimTarget = blackhole::referenceSceneAimTarget(cli.referenceScene, cameraPos, focusTarget);
+  }
   if (!cli.recordFramesDir.empty() && cli.recordProfile == "showcase-orbit") {
     const ShowcaseOrbitComposition *const composition =
         findShowcaseOrbitComposition(cli.recordComposition);
@@ -1523,6 +1528,7 @@ bool referenceOptionsValid(const platform::CliOptions &cli) {
   }
   const bool sceneValid = cli.referenceScene == "A" || cli.referenceScene == "B" ||
                           cli.referenceScene == "C+" || cli.referenceScene == "C-" ||
+                          cli.referenceScene == "Cd+" || cli.referenceScene == "Cd-" ||
                           cli.referenceScene == "D";
   const bool backendValid = cli.referenceBackend == "fragment" ||
                             cli.referenceBackend == "compute" || cli.referenceBackend == "cuda";
@@ -1692,7 +1698,8 @@ int main(int argc, char **argv) {
                 blackhole::rendererName(rs.dispatch.contract.radiative).data(),
                 static_cast<int>(blackhole::rendererName(rs.dispatch.contract.quality).size()),
                 blackhole::rendererName(rs.dispatch.contract.quality).data(),
-                blackhole::rendererStepBudget(rs.dispatch.contract, rs.dispatch.computeMaxSteps),
+                blackhole::rendererStepBudget(rs.dispatch.contract, rs.dispatch.computeMaxSteps,
+                                              rs.dispatch.computeStepSize),
                 static_cast<double>(blackhole::rendererStepSize(rs.dispatch.contract,
                                                                  rs.dispatch.computeStepSize)));
 

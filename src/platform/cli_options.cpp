@@ -20,7 +20,7 @@ void printCliUsage(const char *argv0) {
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
   std::printf("  --export-raw-frame <path> Export raw texBlackhole HDR RGB as PFM, then exit.\n");
-  std::printf("  --reference-scene <A|B|C+|C-|D>  Fixed camera and source model for rendered validation.\n");
+  std::printf("  --reference-scene <A|B|C+|C-|Cd+|Cd-|D>  Fixed camera and source model for rendered validation.\n");
   std::printf("  --reference-backend <fragment|compute|cuda>  Reference render backend.\n");
   std::printf("  --reference-quality <balanced|reference>  Numerical tier.\n");
   std::printf("  --record-frames <dir> N  Record N profile-driven frames as PNG into <dir>.\n");

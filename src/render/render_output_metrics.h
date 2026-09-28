@@ -59,6 +59,60 @@ struct ImageComparison {
   double structure = 0.0;
 };
 
+struct DiskImageMetrics {
+  double leftMeanLuminance = 0.0;
+  double rightMeanLuminance = 0.0;
+  double nearSideInnerEdgePixels = 0.0;
+  std::size_t leftDiskPixels = 0;
+  std::size_t rightDiskPixels = 0;
+};
+
+// The center column below the shadow samples the directly viewed near side
+// of an inclined disk. Its first disk terminal marks the projected inner edge.
+[[nodiscard]] inline DiskImageMetrics measureDiskImage(std::span<const float> luminance,
+                                                        std::span<const std::uint8_t> terminals,
+                                                        int width, int height) {
+  if (width <= 0 || height <= 0 ||
+      luminance.size() != static_cast<std::size_t>(width) * static_cast<std::size_t>(height) ||
+      terminals.size() != luminance.size()) {
+    throw std::invalid_argument("disk image and terminal dimensions differ");
+  }
+  DiskImageMetrics result;
+  for (int row = 0; row < height; ++row) {
+    for (int column = 0; column < width; ++column) {
+      const auto index = (static_cast<std::size_t>(row) * static_cast<std::size_t>(width)) +
+                         static_cast<std::size_t>(column);
+      if (terminals[index] != BH_TERMINAL_DISK_HIT) {
+        continue;
+      }
+      if (column < width / 2) {
+        result.leftMeanLuminance += static_cast<double>(luminance[index]);
+        ++result.leftDiskPixels;
+      } else {
+        result.rightMeanLuminance += static_cast<double>(luminance[index]);
+        ++result.rightDiskPixels;
+      }
+    }
+  }
+  if (result.leftDiskPixels > 0) {
+    result.leftMeanLuminance /= static_cast<double>(result.leftDiskPixels);
+  }
+  if (result.rightDiskPixels > 0) {
+    result.rightMeanLuminance /= static_cast<double>(result.rightDiskPixels);
+  }
+  const int centerColumn = width / 2;
+  for (int row = height / 2; row < height; ++row) {
+    const auto index = (static_cast<std::size_t>(row) * static_cast<std::size_t>(width)) +
+                       static_cast<std::size_t>(centerColumn);
+    if (terminals[index] == BH_TERMINAL_DISK_HIT) {
+      result.nearSideInnerEdgePixels =
+          (static_cast<double>(row) + 0.5) - (static_cast<double>(height) / 2.0);
+      break;
+    }
+  }
+  return result;
+}
+
 // Screen radius, in pixels, of the Schwarzschild critical curve seen by the
 // reference camera. kerrInitGeodesic (shader/include/kerr.glsl) takes the pixel
 // direction as the coordinate spatial velocity at radius r, so a ray at angle
