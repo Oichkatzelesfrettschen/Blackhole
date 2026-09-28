@@ -4,6 +4,9 @@ set -eu
 build_dir=${1:-build/CI}
 artifact_dir=${BLACKHOLE_RENDER_ARTIFACTS:-$build_dir/render-output-artifacts}
 mkdir -p "$artifact_dir"
+# CTest runs the test from the build directory, so the test and the verifier
+# agree on the receipt only through an absolute path.
+artifact_dir=$(cd "$artifact_dir" && pwd)
 rm -f "$artifact_dir/rendered_output_validation.pass"
 export BLACKHOLE_RENDER_ARTIFACTS=$artifact_dir
 export LIBGL_ALWAYS_SOFTWARE=1

@@ -225,9 +225,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Source directory: `{report['source_dir']}`",
         f"- Build directory: `{report['build_dir']}`",
         f"- Manifest: `{report['manifest']}`",
-        "- Evidence scope: source-file presence, configured CTest registration, and optional rendered-output execution receipt.",
+        "- Evidence scope: source-file presence, configured CTest registration,"
+        " and optional rendered-output execution receipt.",
         "- Evidence classes are declared obligations, not proof of test semantics.",
-        "- The receipt records the minimal rendered-output test; CUDA device execution remains separate.",
+        "- The receipt records the minimal rendered-output test;"
+        " CUDA device execution remains separate.",
     ]
     if "verification_error" in report:
         lines += ["", f"Verification failed: {report['verification_error']}"]
@@ -257,9 +259,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         ]
         if claim["required_evidence_class"] == "render-output":
             lines.append(f"- Render execution: `{claim['execution_status']}`")
-            lines.append(
-                f"- Validated rendered evidence: `{', '.join(claim['validated_evidence']) or 'none'}`"
-            )
+            validated = ", ".join(claim["validated_evidence"]) or "none"
+            lines.append(f"- Validated rendered evidence: `{validated}`")
         for label, field in (
             ("Missing files", "missing_files"),
             ("Missing tests", "missing_tests"),
@@ -349,11 +350,17 @@ def main() -> int:
             or report["summary"]["missing_tests"]
             or report["summary"]["inadequate_evidence"]
         )
-        if args.require_render_passing and any(
-            claim["required_evidence_class"] == "render-output"
-            and claim["execution_status"] != "passed"
+        pending = [
+            claim["id"]
             for claim in claims
-        ):
+            if claim["required_evidence_class"] == "render-output"
+            and claim["execution_status"] != "passed"
+        ]
+        if args.require_render_passing and pending:
+            print(
+                f"[FAIL] Render receipt missing or stale in {artifact_dir}: {', '.join(pending)}",
+                file=sys.stderr,
+            )
             failed = True
     except (OSError, ValueError, RuntimeError) as error:
         report["verification_error"] = str(error)
