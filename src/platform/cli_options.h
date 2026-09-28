@@ -25,12 +25,15 @@ struct CliOptions {
   std::string referenceScene;
   std::string referenceBackend = "fragment";
   std::string referenceQuality = "balanced";
+  std::string rendererGeodesic;
+  std::string rendererBackend;
   std::string recordFramesDir;
   std::string recordProfile = "cinematic";
   std::string recordComposition = "above-disk";
   std::string recordBackgroundId;
   int         recordFramesTotal = 0; ///< Seeded to K_CINEMATIC_FRAMES by parseCliOptions.
   int         recordStartFrame  = 0;
+  int         exportFrames = 0; ///< Zero preserves the normal five-frame export warmup.
   float       recordYawDeg = 0.0f;
   float       recordPitchDeg = 0.0f;
   float       recordDistance = 0.0f;

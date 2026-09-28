@@ -2,6 +2,8 @@
 #define BLACKHOLE_RENDERER_CONTRACT_H
 
 #include <algorithm>
+#include <array>
+#include <optional>
 #include <string_view>
 
 namespace blackhole {
@@ -90,6 +92,28 @@ constexpr int rendererStepBudget(const RendererContract &contract, int selectedS
 constexpr float rendererStepSize(const RendererContract &contract, float selectedSize) {
   return contract.geodesic == GeodesicModel::LegacyBeauty
              ? 0.1f : rendererStepSize(contract.quality, selectedSize);
+}
+
+/// Backend or geodesic model whose rendererName is @p name, if any.
+constexpr std::optional<RenderBackend> rendererBackendFromName(std::string_view name) {
+  for (const RenderBackend value :
+       std::array{RenderBackend::Fragment, RenderBackend::Compute, RenderBackend::Cuda}) {
+    if (rendererName(value) == name) {
+      return value;
+    }
+  }
+  return std::nullopt;
+}
+
+constexpr std::optional<GeodesicModel> geodesicModelFromName(std::string_view name) {
+  for (const GeodesicModel value :
+       std::array{GeodesicModel::LegacyBeauty, GeodesicModel::SchwarzschildReference,
+                  GeodesicModel::KerrReference}) {
+    if (rendererName(value) == name) {
+      return value;
+    }
+  }
+  return std::nullopt;
 }
 
 constexpr void normalizeRendererContract(RendererContract &contract) {

@@ -5,10 +5,17 @@ tier in `RenderState::dispatch.contract`. The startup log and each recorded
 frame's JSON sidecar identify those four fields. The default remains the
 fragment Kerr path with thin-surface emission and balanced quality. The
 legacy beauty tracer remains a labeled fragment-only selection. Compute and
-CUDA use the interop geodesic contract. Reference quality integrates at a
-0.02 step parameter over twice the affine range of the displayed step
-controls, and at least 40 (2001 steps), capped at 20000 steps
-(`rendererStepBudget` in `src/render/renderer_contract.h`). Near-critical rays
+CUDA use the interop geodesic contract.
+
+The desktop CLI accepts `--renderer-backend fragment|compute|cuda` and
+`--renderer-geodesic legacy-beauty|schwarzschild-reference|kerr-reference`
+as startup-only selections. Contract normalization changes legacy beauty to
+Kerr reference when the selected backend is compute or CUDA. The CLI leaves
+saved settings untouched.
+
+Reference quality integrates at a 0.02 step parameter over twice the affine
+range of the displayed step controls, and at least 40 (2001 steps), capped at
+20000 steps (`rendererStepBudget` in `src/render/renderer_contract.h`). Near-critical rays
 exhaust a budget by running out of range, so halving the step over the same
 range leaves them exhausted: the zoomed rendered-output scene D exhausts 82
 pixels at 500 x 0.04, 84 at 1000 x 0.02, and none at 2000 x 0.02. Balanced
@@ -67,3 +74,7 @@ non-black-hole scenes report unavailable counts as JSON `null`. The GL-free
 the attachment on a GL 4.6 host. Default promotion requires rendered-output
 gates, controlled scene metrics, GPU performance measurements, and before/after
 captures.
+
+The [default renderer promotion procedure](validation/default-renderer-promotion.md)
+records paired startup-camera captures and GPU pass timing for the legacy
+beauty and default contracts.

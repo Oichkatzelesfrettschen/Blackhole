@@ -5,9 +5,11 @@
 
 #include "cli_options.h"
 
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <system_error>
 
 #include "cinematic.h" // K_CINEMATIC_FRAMES
 
@@ -23,6 +25,9 @@ void printCliUsage(const char *argv0) {
   std::printf("  --reference-scene <A|B|C+|C-|Cd+|Cd-|D>  Fixed camera and source model for rendered validation.\n");
   std::printf("  --reference-backend <fragment|compute|cuda>  Reference render backend.\n");
   std::printf("  --reference-quality <balanced|reference>  Numerical tier.\n");
+  std::printf("  --renderer-geodesic <legacy-beauty|schwarzschild-reference|kerr-reference>  Startup geodesic.\n");
+  std::printf("  --renderer-backend <fragment|compute|cuda>  Startup backend.\n");
+  std::printf("  --export-frames N       Export on settled frame N, then exit (default: frame 5, exit 6).\n");
   std::printf("  --record-frames <dir> N  Record N profile-driven frames as PNG into <dir>.\n");
   std::printf("                           N defaults to %d (3 min @ 60 fps).\n",
               K_CINEMATIC_FRAMES);
@@ -78,6 +83,30 @@ CliParseOutcome parseCliOptions(int argc, char **argv, CliOptions &out) {
     if (arg == "--reference-quality" && i + 1 < argc) {
       out.referenceQuality = argv[++i];
       continue;
+    }
+    if (arg == "--renderer-geodesic" && i + 1 < argc) {
+      out.rendererGeodesic = argv[++i];
+      if (out.rendererGeodesic == "legacy-beauty" ||
+          out.rendererGeodesic == "schwarzschild-reference" ||
+          out.rendererGeodesic == "kerr-reference") {
+        continue;
+      }
+    }
+    if (arg == "--renderer-backend" && i + 1 < argc) {
+      out.rendererBackend = argv[++i];
+      if (out.rendererBackend == "fragment" || out.rendererBackend == "compute" ||
+          out.rendererBackend == "cuda") {
+        continue;
+      }
+    }
+    if (arg == "--export-frames" && i + 1 < argc) {
+      const std::string value = argv[++i];
+      const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(),
+                                                out.exportFrames);
+      if (error == std::errc{} && end == value.data() + value.size() &&
+          out.exportFrames >= 5) {
+        continue;
+      }
     }
     if (arg == "--record-frames" && i + 1 < argc) {
       out.recordFramesDir = argv[++i];

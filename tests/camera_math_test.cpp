@@ -11,13 +11,18 @@
  * zoom rates.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -81,6 +86,79 @@ TEST(RendererContract, StartupAndReferenceBudget) {
   legacy.backend = blackhole::RenderBackend::Cuda;
   blackhole::normalizeRendererContract(legacy);
   EXPECT_EQ(legacy.geodesic, blackhole::GeodesicModel::KerrReference);
+}
+
+namespace {
+
+platform::CliParseOutcome parseArguments(std::initializer_list<std::string_view> arguments,
+                                         platform::CliOptions &options) {
+  std::vector<std::string> storage(arguments.begin(), arguments.end());
+  std::vector<char *> argv(storage.size());
+  // parseCliOptions takes a mutable argv, so each element points into storage.
+  // cppcheck-suppress constParameterReference
+  std::ranges::transform(storage, argv.begin(), [](std::string &value) { return value.data(); });
+  return platform::parseCliOptions(static_cast<int>(argv.size()), argv.data(), options);
+}
+
+} // namespace
+
+TEST(RendererContract, CliStartupSelectionDefaultsEmpty) {
+  platform::CliOptions defaults;
+  EXPECT_EQ(parseArguments({"Blackhole"}, defaults), platform::CliParseOutcome::Run);
+  EXPECT_TRUE(defaults.rendererBackend.empty());
+  EXPECT_TRUE(defaults.rendererGeodesic.empty());
+  EXPECT_EQ(defaults.exportFrames, 0);
+  EXPECT_FALSE(blackhole::rendererBackendFromName(defaults.rendererBackend).has_value());
+  EXPECT_FALSE(blackhole::geodesicModelFromName(defaults.rendererGeodesic).has_value());
+}
+
+TEST(RendererContract, CliStartupSelectionAcceptsContractNames) {
+  for (const char *geodesic : {"legacy-beauty", "schwarzschild-reference", "kerr-reference"}) {
+    platform::CliOptions selected;
+    EXPECT_EQ(parseArguments({"Blackhole", "--renderer-geodesic", geodesic, "--renderer-backend",
+                              "fragment", "--export-frames", "180"},
+                             selected),
+              platform::CliParseOutcome::Run);
+    EXPECT_EQ(selected.rendererGeodesic, geodesic);
+    EXPECT_EQ(selected.exportFrames, 180);
+    const auto model = blackhole::geodesicModelFromName(selected.rendererGeodesic);
+    EXPECT_EQ(model.transform([](auto value) { return blackhole::rendererName(value); }),
+              std::optional<std::string_view>(geodesic));
+  }
+  for (const char *backend : {"fragment", "compute", "cuda"}) {
+    platform::CliOptions selected;
+    EXPECT_EQ(parseArguments({"Blackhole", "--renderer-backend", backend}, selected),
+              platform::CliParseOutcome::Run);
+    const auto value = blackhole::rendererBackendFromName(selected.rendererBackend);
+    EXPECT_EQ(value.transform([](auto found) { return blackhole::rendererName(found); }),
+              std::optional<std::string_view>(backend));
+  }
+}
+
+TEST(RendererContract, CliStartupSelectionRejectsUnknownValues) {
+  for (const char *invalid : {"unknown", "Kerr-reference", ""}) {
+    platform::CliOptions selected;
+    EXPECT_EQ(parseArguments({"Blackhole", "--renderer-geodesic", invalid}, selected),
+              platform::CliParseOutcome::ExitFailure);
+  }
+  for (const char *invalid : {"unknown", "Fragment", ""}) {
+    platform::CliOptions selected;
+    EXPECT_EQ(parseArguments({"Blackhole", "--renderer-backend", invalid}, selected),
+              platform::CliParseOutcome::ExitFailure);
+  }
+  for (const char *invalid : {"0", "4", "-1", "12x"}) {
+    platform::CliOptions selected;
+    EXPECT_EQ(parseArguments({"Blackhole", "--export-frames", invalid}, selected),
+              platform::CliParseOutcome::ExitFailure);
+  }
+}
+
+TEST(RendererContract, BoundedExportUsesFixedContentTime) {
+  platform::CliOptions cli;
+  cli.exportFramePath = "frame.png";
+  EXPECT_DOUBLE_EQ(blackhole::frameContentSeconds(cli, 0, 12.5), 12.5);
+  cli.exportFrames = 180;
+  EXPECT_DOUBLE_EQ(blackhole::frameContentSeconds(cli, 0, 12.5), 0.0);
 }
 
 TEST(CameraMath, PhysicsFrameAndBackendProjectionContract) {

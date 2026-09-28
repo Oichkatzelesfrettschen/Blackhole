@@ -6,6 +6,7 @@
 #include "gpu_timing.h"
 
 #include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -197,6 +198,14 @@ void TimingHistory::push(float cpuMsSample, const GpuTimerSet &timers) {
 }
 
 std::string gpuTimingPath() {
+  if (const char *overridePath = std::getenv("BLACKHOLE_GPU_TIMING_LOG_PATH");
+      overridePath != nullptr && overridePath[0] != '\0') {
+    const std::filesystem::path path(overridePath);
+    if (!path.parent_path().empty()) {
+      std::filesystem::create_directories(path.parent_path());
+    }
+    return path.string();
+  }
   std::filesystem::create_directories("logs/perf");
   return "logs/perf/gpu_timing.csv";
 }
