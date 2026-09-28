@@ -70,6 +70,13 @@ struct CampaignUiState {
   bool inboxOpen = true;
 };
 
+[[nodiscard]] inline std::string victoryOutcomeText(const game::CampaignViewSnapshot &view) {
+  if (view.clearedTurn < 0) {
+    return "VICTORY -- host energy objective reached (clear turn unknown)";
+  }
+  return "VICTORY -- objective cleared on turn " + std::to_string(view.clearedTurn);
+}
+
 /** @brief Clears the selection and composer state that names things in one
  *         session (a fleet id, a band index, the last order's feedback), for
  *         when another session replaces it. The player's preferences (task

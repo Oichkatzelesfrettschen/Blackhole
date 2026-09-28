@@ -159,12 +159,27 @@ const char *capabilityEffectText(game::FleetCapability capability) {
   return "";
 }
 
+void renderOutcomeBanner(const game::CampaignViewSnapshot &view) {
+  if (view.status == game::CampaignStatus::Won) {
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "%s",
+                       victoryOutcomeText(view).c_str());
+  } else if (view.status == game::CampaignStatus::Lost) {
+    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "DEFEAT -- deadline t%lld passed",
+                       static_cast<long long>(view.deadlineTurn));
+  } else if (view.status == game::CampaignStatus::Ended) {
+    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f),
+                       "ENDED -- deadline t%lld passed; the outcome has not reached this station",
+                       static_cast<long long>(view.deadlineTurn));
+  }
+}
+
 void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
   // Two short lines rather than one wrapped one, so no number splits.
   ImGui::Text("turn %lld  |  t_coordinate %.1f d", static_cast<long long>(view.turn),
               days(view.coordinateTimeSec));
   ImGui::Text("authority dtau/dt %.4f  |  spin a* %.2f", view.authorityProperTimeRate,
               view.spinDimensionless);
+  renderOutcomeBanner(view);
   if (atColony(view, uiState)) {
     // The host's ledger -- its intel, its bank, its objective -- is host-local
     // truth; at the colony it exists only as the host's last transmission,
@@ -186,25 +201,13 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiSt
                        "Gororoba instability %.2f   stabilization %.2f   fleet integrity %.2f",
                        view.instability, view.stabilization, view.fleetIntegrity);
   }
-  if (view.status == game::CampaignStatus::Won) {
-    // The victory turn is the turn the objective cleared, not the current turn,
-    // which keeps flowing as in-flight reports arrive after the decision latches.
-    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "VICTORY -- objective cleared on turn %lld",
-                       static_cast<long long>(view.clearedTurn));
-  } else if (view.status == game::CampaignStatus::Lost) {
-    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "DEFEAT -- deadline t%lld passed",
-                       static_cast<long long>(view.deadlineTurn));
-  } else if (view.status == game::CampaignStatus::Ended) {
-    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f),
-                       "ENDED -- deadline t%lld passed; the outcome has not reached this station",
-                       static_cast<long long>(view.deadlineTurn));
-  } else if (view.victoryEnergyUnits > 0.0) {
+  if (view.status == game::CampaignStatus::Ongoing && view.victoryEnergyUnits > 0.0) {
     const auto fraction = static_cast<float>(view.energyUnits / view.victoryEnergyUnits);
     const std::string objective = std::format("energy {:.1f} / {:.0f}  (deadline t{})",
                                               view.energyUnits, view.victoryEnergyUnits,
                                               view.deadlineTurn);
     ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective.c_str());
-  } else {
+  } else if (view.status == game::CampaignStatus::Ongoing) {
     ImGui::TextDisabled("energy banked: %.1f (no objective set)", view.energyUnits);
   }
   // The alternate victory: tame the singularity. Pursuing it sacrifices energy,

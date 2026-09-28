@@ -156,11 +156,11 @@ bool CampaignState::issueCommand(const Command &command) {
   if (command.originNode >= nodes_.size() || nodes_.at(command.originNode).dark()) {
     return false;
   }
-  // A decided campaign takes no further orders from the authority, where the
-  // outcome is latched and known. A colony has not heard of it (its view stays
-  // Ongoing until something tells it), so refusing its order would reveal the
-  // remote outcome; its orders are still sent.
-  if (status_ != CampaignStatus::Ongoing && command.originNode == K_AUTHORITY_NODE) {
+  // The authority knows its latched outcome. A colony knows an energy win
+  // only after a qualifying host stamp arrives there.
+  if ((status_ != CampaignStatus::Ongoing && command.originNode == K_AUTHORITY_NODE) ||
+      (command.originNode != K_AUTHORITY_NODE &&
+       nodes_.at(command.originNode).received.at(K_AUTHORITY_NODE).energyWinEmitTurn >= 0)) {
     return false;
   }
   // Past the deadline the campaign is decided whichever way it went, and every

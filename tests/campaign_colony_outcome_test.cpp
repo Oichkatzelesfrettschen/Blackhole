@@ -301,6 +301,131 @@ TEST(ColonyOutcome, PublicDeadlineEndsTheCampaignAtEveryStation) {
   }
 }
 
+namespace {
+
+game::CampaignConfig deadlineEnergyConfig() {
+  game::CampaignConfig config = colonyConfig(R"({"events": [
+    {"id": 1, "triggers": [{"turn_at_least": 20}],
+     "effects": [{"emit": {"kind": "notice", "to": "colony"}}]},
+    {"id": 2, "triggers": [{"turn_at_least": 26}],
+     "effects": [{"emit": {"kind": "notice", "to": "colony"}}]}]})", 0);
+  config.victoryEnergyUnits = 15.0;
+  config.deadlineTurn = 20;
+  return config;
+}
+
+game::Command colonyResearchOrder(game::FleetId fleet) {
+  game::Command order;
+  order.type = game::CommandType::AssignTask;
+  order.fleet = fleet;
+  order.properTimeCostSec = 3600.0;
+  order.originNode = game::K_FIRST_COLONY_NODE;
+  return order;
+}
+
+} // namespace
+
+TEST(ColonyOutcome, DeadlineEnergyStampProvesVictoryAfterArrival) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignState state(deadlineEnergyConfig(), field);
+  ASSERT_TRUE(state.valid());
+  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
+  ASSERT_NE(fleet, game::K_INVALID_FLEET_ID);
+
+  state.advanceTurns(19);
+  EXPECT_EQ(state.status(), game::CampaignStatus::Ongoing);
+  state.advanceTurn();
+  EXPECT_DOUBLE_EQ(state.energyUnits(), 15.0);
+  EXPECT_EQ(state.status(), game::CampaignStatus::Won);
+  EXPECT_EQ(state.clearedTurn(), 20);
+  EXPECT_EQ(state.perceivedSnapshot(game::K_FIRST_COLONY_NODE).status,
+            game::CampaignStatus::Ended);
+  state.advanceTurns(5);
+  const game::CampaignViewSnapshot heard =
+      state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  ASSERT_EQ(heard.arrivals.size(), 1U);
+  EXPECT_EQ(heard.arrivals.front().emitTurn, 20);
+  EXPECT_DOUBLE_EQ(heard.arrivals.front().senderEnergyUnitsAtEmit, 15.0);
+  EXPECT_EQ(heard.status, game::CampaignStatus::Won);
+  EXPECT_EQ(heard.clearedTurn, -1);
+  EXPECT_FALSE(state.issueCommand(colonyResearchOrder(fleet)));
+}
+
+TEST(ColonyOutcome, ColonyOrdersStopWhenEnergyProofArrivesBeforeDeadline) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config = colonyConfig(R"({"events": [
+    {"id": 1, "triggers": [{"turn_at_least": 10}],
+     "effects": [{"emit": {"kind": "notice", "to": "colony"}}]}]})", 0);
+  config.victoryEnergyUnits = 3.0;
+  config.deadlineTurn = 50;
+  game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
+  ASSERT_NE(fleet, game::K_INVALID_FLEET_ID);
+  state.advanceTurns(14);
+  EXPECT_FALSE(state.deadlinePassed());
+  EXPECT_EQ(state.perceivedSnapshot(game::K_FIRST_COLONY_NODE).status,
+            game::CampaignStatus::Ongoing);
+  EXPECT_TRUE(state.issueCommand(colonyResearchOrder(fleet)));
+  state.advanceTurn();
+  EXPECT_FALSE(state.deadlinePassed());
+  EXPECT_EQ(state.perceivedSnapshot(game::K_FIRST_COLONY_NODE).status, game::CampaignStatus::Won);
+  EXPECT_FALSE(state.issueCommand(colonyResearchOrder(fleet)));
+}
+
+TEST(ColonyOutcome, LaterHostStampKeepsColonyVictoryLatched) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignState state(deadlineEnergyConfig(), field);
+  ASSERT_TRUE(state.valid());
+  const game::FleetId fleet = state.addFleet(game::FleetCapability::Research, 1);
+  ASSERT_NE(fleet, game::K_INVALID_FLEET_ID);
+  state.advanceTurns(31);
+  const game::CampaignViewSnapshot later =
+      state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  ASSERT_FALSE(later.arrivals.empty());
+  bool heardLaterStamp = false;
+  for (const game::ArrivalRecord &arrival : later.arrivals) {
+    if (arrival.emitTurn == 26 && arrival.senderEnergyUnitsAtEmit == 21.0) {
+      heardLaterStamp = true;
+    }
+  }
+  EXPECT_TRUE(heardLaterStamp);
+  EXPECT_EQ(later.status, game::CampaignStatus::Won);
+  EXPECT_EQ(later.clearedTurn, -1);
+  EXPECT_DOUBLE_EQ(later.energyUnits, 21.0);
+  EXPECT_FALSE(state.issueCommand(colonyResearchOrder(fleet)));
+}
+
+TEST(ColonyOutcome, InferredVictoryReplaysToTheSameState) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignState state(deadlineEnergyConfig(), field);
+  game::CampaignState replay(deadlineEnergyConfig(), field);
+  ASSERT_NE(state.addFleet(game::FleetCapability::Research, 1), game::K_INVALID_FLEET_ID);
+  ASSERT_NE(replay.addFleet(game::FleetCapability::Research, 1), game::K_INVALID_FLEET_ID);
+  state.advanceTurns(31);
+  replay.advanceTurns(31);
+  EXPECT_EQ(state.serializeState(), replay.serializeState());
+  EXPECT_EQ(state.stateDigest(), replay.stateDigest());
+}
+
+TEST(ColonyOutcome, PostDeadlineEnergyStampDoesNotProveVictory) {
+  const campaign_test::FakeTimeField field;
+  game::CampaignConfig config = colonyConfig(R"({"events": [
+    {"id": 1, "triggers": [{"turn_at_least": 26}],
+     "effects": [{"emit": {"kind": "notice", "to": "colony"}}]}]})", 0);
+  config.victoryEnergyUnits = 21.0;
+  config.deadlineTurn = 20;
+  game::CampaignState state(config, field);
+  ASSERT_TRUE(state.valid());
+  state.advanceTurns(31);
+  EXPECT_EQ(state.status(), game::CampaignStatus::Lost);
+  const game::CampaignViewSnapshot colony =
+      state.perceivedSnapshot(game::K_FIRST_COLONY_NODE);
+  EXPECT_DOUBLE_EQ(colony.energyUnits, 21.0);
+  EXPECT_EQ(colony.status, game::CampaignStatus::Ended);
+  EXPECT_EQ(colony.clearedTurn, 0);
+}
+
 // Falsifier: the colony's band delays reflecting where relay fleets truly are
 // -- relay positions are fleet telemetry the colony lacks -- instead of the
 // a-priori delay (geodesic times the configured overhead). The fake band 960

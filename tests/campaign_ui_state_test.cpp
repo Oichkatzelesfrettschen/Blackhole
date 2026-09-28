@@ -75,6 +75,18 @@ TEST(CampaignUiState, ComposerIsBlockedAtADarkStation) {
   EXPECT_FALSE(colony.issueAssignTask(1, 1.0, game::K_FIRST_COLONY_NODE));
 }
 
+TEST(CampaignUiState, InferredVictoryShowsUnknownClearTurn) {
+  game::CampaignViewSnapshot view;
+  view.status = game::CampaignStatus::Won;
+  view.clearedTurn = -1;
+  EXPECT_EQ(ui::victoryOutcomeText(view),
+            "VICTORY -- host energy objective reached (clear turn unknown)");
+  const ui::CampaignUiState uiState;
+  EXPECT_NE(ui::composerBlockedReason(view, uiState), nullptr);
+  view.clearedTurn = 20;
+  EXPECT_EQ(ui::victoryOutcomeText(view), "VICTORY -- objective cleared on turn 20");
+}
+
 // Falsifier: real time advancing only while the panels are drawn -- the pump
 // must run from main every frame on its own (no rendering here at all): ten
 // wall seconds at Miller focus are 7 one-day turns.
