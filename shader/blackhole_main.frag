@@ -28,6 +28,7 @@
 #include "hawking_glow.glsl"
 #include "include/wiregrid.glsl"
 #include "include/doppler_beaming.glsl"
+#include "include/grmhd_dense_emission.glsl"
 
 const float EPSILON = 0.0001;
 const float INFINITY = 1000000.0;
@@ -285,9 +286,7 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
     /* Synchrotron emissivity: j_nu ~ rho * B^2.
      * Approximate B^2 ~ u (internal energy; plasma beta ~ 1).
      * Both channels are pre-normalised to [0,1] by nubhlight_pack min/max. */
-    float rho = max(grmhdSample.r, 0.0);
-    float uu  = max(grmhdSample.g, 0.0);
-    density *= rho * uu;
+    density *= grmhdDensityWeight(grmhdSample);
   }
 
   if (adiskParticle < 0.5) {

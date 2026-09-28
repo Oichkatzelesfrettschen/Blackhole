@@ -1,21 +1,15 @@
 /*
  * Single source for the synchrotron G(x) LUT domain.
  *
- * Included by C++ (src/physics/synchrotron.h, src/gpu/lut_texture.h),
- * CUDA (src/cuda/device_physics.cuh), and GLSL
- * (shader/include/synchrotron_emission.glsl via the shader include
- * preprocessor). These values previously lived as independent literals
- * in all four files behind a "change all three together" comment.
+ * Included by C++ (src/physics/synchrotron.h, src/gpu/lut_texture.h)
+ * and CUDA (src/cuda/device_physics.cuh).
  *
- * Preprocessor-only on purpose: plain #define is the intersection all
- * three languages accept. Unsuffixed literals parse as float in GLSL
- * and as double in C++/CUDA; each consumer converts to its own type.
+ * Preprocessor constants keep the C++ and CUDA lookup domains aligned.
  */
 #ifndef SYNCHROTRON_LUT_DOMAIN_H
 #define SYNCHROTRON_LUT_DOMAIN_H
 
-/* GLSL shares the LUT domain definitions with C++/CUDA and requires preprocessor
- * constants instead of C++ constexpr variables or enum declarations. */
+/* C++ and CUDA consume the same lookup bounds and entry count. */
 // NOLINTBEGIN(cppcoreguidelines-macro-usage,cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 /* Log-spaced domain bounds for the G(x) = x*K_{2/3}(x) lookup table.
  * Below X_MIN the small-x asymptote 1.3541*x^(1/3) is exact enough;
@@ -23,7 +17,7 @@
 #define SYNCH_G_LUT_DOMAIN_X_MIN 0.001
 #define SYNCH_G_LUT_DOMAIN_X_MAX 30.0
 
-/* Entry count of the 1D LUT texture (log-spaced R32F). */
+/* Entry count of the log-spaced R32F texture (height 1). */
 #define SYNCH_G_LUT_DOMAIN_ENTRIES 256
 // NOLINTEND(cppcoreguidelines-macro-usage,cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 

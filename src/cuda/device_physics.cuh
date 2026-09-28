@@ -46,8 +46,8 @@ __device__ __forceinline__ void d_set_terminal(RayTerminal *output, RayTerminal 
 #define D_PHOTON_SPHERE 1.5f                    /**< @brief Photon sphere radius in units of rs (= 3M/2M = 1.5). */
 #define D_ISCO_RATIO    3.0f                    /**< @brief ISCO radius ratio (Schwarzschild: r_ISCO = 3*rs). */
 
-/* Synchrotron G(x) LUT domain -- single-sourced with the C++ and GLSL
- * consumers via shader/include/synchrotron_lut_domain.h. */
+/* Synchrotron G(x) LUT domain -- shared with the C++ generator through
+ * shader/include/synchrotron_lut_domain.h. */
 #include "../../shader/include/synchrotron_lut_domain.h"
 #define D_SYNCH_G_X_MIN ((float)SYNCH_G_LUT_DOMAIN_X_MIN) /**< @brief Minimum x for G(x) LUT (log-space lower bound). */
 #define D_SYNCH_G_X_MAX ((float)SYNCH_G_LUT_DOMAIN_X_MAX) /**< @brief Maximum x for G(x) LUT (log-space upper bound). */
@@ -1203,7 +1203,6 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
 /**
  * @brief Synchrotron polarization function G(x) = x * K_{2/3}(x).
  *
- * Matches synchrotron_emission.glsl::synchrotron_G().
  * Domain constants (log-spaced LUT): x in [0.001, 30].
  * Asymptotes: small-x: 1.3541*x^(1/3); large-x: sqrt(pi/(2x))*exp(-x)*x.
  *

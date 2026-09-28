@@ -32,9 +32,8 @@ constexpr double RELAXED_TOLERANCE = 0.15;
 
 namespace {
 
-/// Mirrors synchLutSample in shader/include/synchrotron_emission.glsl: linear
-/// interpolation at texel centers over the log domain, continued past the
-/// table ends by the leading asymptotes x^(1/3) and sqrt(x) e^-x.
+/// Models linear interpolation at texel centers over the log domain and
+/// continuation past the table ends by x^(1/3) and sqrt(x) e^-x.
 double sampleSynchrotronLut(const std::vector<float> &values, double x) {
   constexpr int entryCount = SYNCH_G_LUT_DOMAIN_ENTRIES;
   constexpr double xMin = SYNCH_G_LUT_DOMAIN_X_MIN;

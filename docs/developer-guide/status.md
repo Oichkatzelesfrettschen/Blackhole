@@ -352,12 +352,13 @@ record hosted validation for each submitted revision.
 - Fixed overall normalization to standard TaylorF2 convention (3/(128*eta)).
 - Test: 9/9 in kerr_qnm_spin_test.cpp.
 
-**GLSL G(x) LUT for GPU Synchrotron** -- COMPLETE
+**CUDA G(x) LUT for Synchrotron Polarization** -- COMPLETE
 - Added `synchrotron_G_generate_lut()` to synchrotron.h: generates 256-entry
   log-spaced 1D LUT from CPU Bessel K_{2/3} evaluation.
-- Updated shader/include/synchrotron_emission.glsl to sample from `synchGLut`
-  texture in intermediate regime, with polynomial fallback when LUT unavailable.
-- Consistent with existing LUT pattern (hawking_luts.glsl, disk_profile.glsl).
+- The generated G table is registered with the CUDA backend for polarization.
+- The rendered fragment GRMHD path uses normalized density and internal energy
+  from a packed 3D texture. It does not consume octree buffers or a fragment
+  synchrotron LUT. Physical emission and self-absorption remain open.
 
 ### Synchrotron G(x) Bessel Fix (2026-02-28, commit 0c17b69)
 

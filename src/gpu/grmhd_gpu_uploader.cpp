@@ -24,8 +24,8 @@
  *     G = uu     (internal energy)
  *     B = |B|    = sqrt(B1^2 + B2^2 + B3^2)  (magnetic field magnitude)
  *     A = |u|    = sqrt(u1^2 + u2^2 + u3^2)  (3-velocity magnitude)
- *   These 4 channels are the minimum needed by grmhdEmission() /
- *   grmhdAbsorption() in grmhd_octree.glsl.
+ *   These 4 channels retain density, energy, field magnitude, and velocity
+ *   magnitude for volume sampling.
  */
 
 // Include the GL loader before the project header so gl:: types are defined.

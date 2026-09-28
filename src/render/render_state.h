@@ -409,7 +409,6 @@ struct RenderState {
     bool spectralLutTried = false;
     bool spectralLutLoaded = false;
     bool synchGLutCreated = false;
-    bool synchFLutCreated = false;
     bool useSpectralLut = false;
     float spectralWavelengthMin = 0.0f;
     float spectralWavelengthMax = 0.0f;
@@ -437,7 +436,6 @@ struct RenderState {
     gl::GLuint texDiskDensityLUT = 0; // Phase 8.2: Accretion disk density profile LUT
     gl::GLuint texSpectralLUT = 0;
     gl::GLuint texSynchGLut = 0;   /**< @brief Synchrotron G(x) LUT (GL_TEXTURE_2D, height=1). */
-    gl::GLuint texSynchFLut = 0;   /**< @brief Synchrotron F(x) LUT (GL_TEXTURE_2D, height=1). */
     float lutAdiskDensityV = 0.0f;
   } luts;
 
