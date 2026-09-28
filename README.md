@@ -1,12 +1,25 @@
-# Blackhole
+# Blackhole: Two Products
 
 ![Screenshot](docs/blackhole-screenrecord.gif)
 
-Real-time black hole rendering and validation workbench with a shared desktop UI,
-GLSL and CUDA rendering paths, and a Blender bridge.
+Blackhole develops two products on a shared C++23 physics, rendering, and
+validation foundation:
+
+| Product | Current maturity | Separate release evidence |
+|---------|------------------|---------------------------|
+| **Blackhole Simulator / Workbench** | Active desktop renderer and research workbench with GLSL, optional CUDA, and Blender integration | Default renderer contract, measured output scenes, backend parity, performance tiers, and physical approximation register |
+| **Singularity: GOROROBA** | Deterministic campaign and constellation core under active desktop integration | Canonical scenario completion, save compatibility, deterministic replay, and witnessed UI captures |
+
+The products share physics types, build infrastructure, and selected rendering
+assets. Headless campaign tests establish core behavior; they do not establish a
+complete or visually validated desktop game. The [release evidence summary](docs/developer-guide/release-evidence.json)
+records each product obligation and its current validation boundary. The
+[generated repo truth report](docs/developer-guide/repo-truth.md) explains how
+to inspect the configured tree.
 
 ## Highlights
 - Shared desktop application in C++23 + OpenGL 4.6.
+- Deterministic campaign and constellation rules for Singularity: GOROROBA.
 - Pure GLSL desktop workflow and CUDA-enabled desktop workflow via CMake presets.
 - Blender bridge/addon support for the external Blender track.
 - LUT-driven emissivity/redshift and validation assets in `assets/`.

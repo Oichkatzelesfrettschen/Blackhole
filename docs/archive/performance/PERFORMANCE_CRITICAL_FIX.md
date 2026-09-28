@@ -31,8 +31,8 @@ DEFICIT: 12.5x too demanding!
 - Expected FPS: 8 FPS → 30-50 FPS @ 1080p
 
 **Files Modified:**
-- `/home/eric/Playground/Blackhole/shader/blackhole_main.frag`
-- `/home/eric/Playground/Blackhole/build/Release/shader/blackhole_main.frag`
+- `./shader/blackhole_main.frag`
+- `./build/Release/shader/blackhole_main.frag`
 
 **Backup Created:**
 - `.backup.300steps` extension
@@ -88,10 +88,10 @@ uniform float interopMaxSteps = 16.0;  // Extreme performance mode
 
 **To Switch to Balanced:**
 ```bash
-cp /home/eric/Playground/Blackhole/shader/blackhole_main.frag.backup.balanced \
-   /home/eric/Playground/Blackhole/shader/blackhole_main.frag
-cp /home/eric/Playground/Blackhole/build/Release/shader/blackhole_main.frag.backup.balanced \
-   /home/eric/Playground/Blackhole/build/Release/shader/blackhole_main.frag
+cp ./shader/blackhole_main.frag.backup.balanced \
+   ./shader/blackhole_main.frag
+cp ./build/Release/shader/blackhole_main.frag.backup.balanced \
+   ./build/Release/shader/blackhole_main.frag
 ```
 
 **Expected Results:**
@@ -142,14 +142,14 @@ uniform float interopMaxSteps = 300.0;
 
 ### Restore to Balanced (48 steps)
 ```bash
-cp /home/eric/Playground/Blackhole/shader/blackhole_main.frag.backup.balanced \
-   /home/eric/Playground/Blackhole/shader/blackhole_main.frag
+cp ./shader/blackhole_main.frag.backup.balanced \
+   ./shader/blackhole_main.frag
 ```
 
 ### Restore to Original (300 steps - NOT RECOMMENDED)
 ```bash
-cp /home/eric/Playground/Blackhole/shader/blackhole_main.frag.backup.300steps \
-   /home/eric/Playground/Blackhole/shader/blackhole_main.frag
+cp ./shader/blackhole_main.frag.backup.300steps \
+   ./shader/blackhole_main.frag
 ```
 
 ## Additional Optimizations (Future)
@@ -187,7 +187,7 @@ if (step > 4 && kerrRay.r > 15.0 * r_s) {
 
 1. **Restart Application:**
    ```bash
-   cd /home/eric/Playground/Blackhole/build/Release
+   cd ./build/Release
    ./Blackhole
    ```
 

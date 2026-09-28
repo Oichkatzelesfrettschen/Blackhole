@@ -222,14 +222,14 @@ AMD HD 8730M:  3-3.6 FPS (20-30x SLOWER than expected!)
 ## FILES MODIFIED
 
 ### Source Files
-1. `/home/eric/Playground/Blackhole/shader/include/kerr.glsl`
-2. `/home/eric/Playground/Blackhole/shader/include/interop_trace.glsl`
-3. `/home/eric/Playground/Blackhole/shader/blackhole_main.frag` (partial)
+1. `./shader/include/kerr.glsl`
+2. `./shader/include/interop_trace.glsl`
+3. `./shader/blackhole_main.frag` (partial)
 
 ### Build Files
-1. `/home/eric/Playground/Blackhole/build/Release/shader/include/kerr.glsl`
-2. `/home/eric/Playground/Blackhole/build/Release/shader/include/interop_trace.glsl`
-3. `/home/eric/Playground/Blackhole/build/Release/shader/blackhole_main.frag`
+1. `./build/Release/shader/include/kerr.glsl`
+2. `./build/Release/shader/include/interop_trace.glsl`
+3. `./build/Release/shader/blackhole_main.frag`
 
 ### Backup Files Created
 - `*.backup.300steps` (original 300 steps)

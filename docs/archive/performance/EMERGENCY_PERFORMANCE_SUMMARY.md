@@ -60,7 +60,7 @@ Texture errors: Continuous (every frame)
 ### Action 1: Test on AMD GPU
 The AMD Radeon HD 8730M should perform better. Test with:
 ```bash
-cd /home/eric/Playground/Blackhole/build/Release
+cd ./build/Release
 DRI_PRIME=1 LIBGL_SHOW_FPS=1 ./Blackhole
 ```
 

@@ -14,6 +14,19 @@ import subprocess
 import sys
 from typing import Any
 
+EVIDENCE_CLASSES = frozenset(
+    {
+        "formula-unit",
+        "component-integration",
+        "mock-observable",
+        "shader-compile",
+        "shared-path-parity",
+        "independent-oracle",
+        "render-output",
+        "observational-calibration",
+    }
+)
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -82,23 +95,29 @@ def option_value(name: str, options: dict[str, dict[str, Any]]) -> bool:
 
 
 def test_requirement(entry: Any, options: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    if isinstance(entry, str) and entry:
-        return {"name": entry, "requires": {}, "applicability": "required"}
-    if not isinstance(entry, dict) or set(entry) != {"name", "requires"}:
-        raise ValueError("A conditional test requires exactly 'name' and 'requires' fields")
-    name, requires = entry["name"], entry["requires"]
+    if (
+        not isinstance(entry, dict)
+        or not {"name", "evidence_class"} <= set(entry)
+        or set(entry) - {"name", "requires", "evidence_class"}
+    ):
+        raise ValueError("Each test requires a name and evidence_class")
+    name, requires = entry["name"], entry.get("requires", [])
     if not isinstance(name, str) or not name:
-        raise ValueError("A conditional test requires a nonempty name")
+        raise ValueError("A test requires a nonempty name")
+    evidence_class = entry["evidence_class"]
+    if not isinstance(evidence_class, str) or evidence_class not in EVIDENCE_CLASSES:
+        raise ValueError(f"Test {name} has an unknown evidence class: {evidence_class}")
     if (
         not isinstance(requires, list)
-        or not requires
+        or ("requires" in entry and not requires)
         or any(not isinstance(option, str) or not option for option in requires)
         or len(set(requires)) != len(requires)
     ):
-        raise ValueError(f"Test {name} requires a nonempty list of distinct CMake BOOL options")
+        raise ValueError(f"Test {name} requires a list of distinct CMake BOOL options")
     values = {option: option_value(option, options) for option in requires}
     return {
         "name": name,
+        "evidence_class": evidence_class,
         "requires": values,
         "applicability": "required" if all(values.values()) else "not-applicable",
     }
@@ -124,6 +143,9 @@ def assess_claims(
         if claim["id"] in identifiers:
             raise ValueError(f"Duplicate claim identifier: {claim['id']}")
         identifiers.add(claim["id"])
+        required_class = claim.get("required_evidence_class")
+        if not isinstance(required_class, str) or required_class not in EVIDENCE_CLASSES:
+            raise ValueError(f"Claim {claim['id']} requires a known evidence class")
         files, tests = claim.get("files"), claim.get("tests")
         if (
             not isinstance(files, list)
@@ -155,7 +177,16 @@ def assess_claims(
             for requirement in requirements
             if requirement["applicability"] == "not-applicable"
         ]
-        if missing_files or missing_tests:
+        matching_evidence = [
+            requirement["name"]
+            for requirement in requirements
+            if requirement["evidence_class"] == required_class
+            and requirement["applicability"] == "required"
+            and requirement["name"] in configured_tests
+        ]
+        if not matching_evidence and len(not_applicable) < len(requirements):
+            registration_status = "inadequate-evidence"
+        elif missing_files or missing_tests:
             registration_status = "missing-evidence"
         elif len(not_applicable) == len(requirements):
             registration_status = "not-applicable"
@@ -168,6 +199,8 @@ def assess_claims(
                 "id": claim["id"],
                 "claim": claim["claim"],
                 "status": claim.get("status", "unspecified"),
+                "required_evidence_class": required_class,
+                "matching_evidence": matching_evidence,
                 "registration_status": registration_status,
                 "files": files,
                 "tests": names,
@@ -191,6 +224,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Build directory: `{report['build_dir']}`",
         f"- Manifest: `{report['manifest']}`",
         "- Evidence scope: source-file presence and configured CTest registration.",
+        "- Evidence classes are declared obligations, not proof of test semantics.",
         "- Test execution and CUDA device execution are outside this verifier's scope.",
     ]
     if "verification_error" in report:
@@ -200,6 +234,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Claims checked: `{report['summary']['claims']}`",
         f"- Missing files: `{report['summary']['missing_files']}`",
         f"- Missing required test references: `{report['summary']['missing_tests']}`",
+        f"- Claims lacking required evidence class: `{report['summary']['inadequate_evidence']}`",
         f"- Inapplicable test references: `{report['summary']['not_applicable_tests']}`",
         f"- CMake cache SHA-256: `{report['cmake_cache_sha256']}`",
         f"- Manifest SHA-256: `{report['manifest_sha256']}`",
@@ -212,6 +247,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             f"- Claim: {claim['claim']}",
             f"- Declared status: `{claim['status']}`",
+            f"- Required evidence class: `{claim['required_evidence_class']}`",
+            f"- Matching registered tests: `{', '.join(claim['matching_evidence']) or 'none'}`",
             f"- Registration status: `{claim['registration_status']}`",
             f"- Files present: `{claim['files_ok']}`",
             f"- Required tests registered: `{test_status}`",
@@ -224,6 +261,11 @@ def render_markdown(report: dict[str, Any]) -> str:
                 lines.append(f"- {label}:")
                 lines.extend(f"  - `{entry}`" for entry in claim[field])
         for requirement in claim["test_requirements"]:
+            lines.append(
+                f"- Test `{requirement['name']}"
+                f"` evidence class: `{requirement['evidence_class']}`; "
+                f"applicability: `{requirement['applicability']}`."
+            )
             if requirement["applicability"] == "not-applicable":
                 reason = ", ".join(
                     f"{option}={report['build_options'][option]['raw']}"
@@ -266,10 +308,17 @@ def main() -> int:
                 "claims": len(claims),
                 "missing_files": sum(len(claim["missing_files"]) for claim in claims),
                 "missing_tests": sum(len(claim["missing_tests"]) for claim in claims),
+                "inadequate_evidence": sum(
+                    claim["registration_status"] == "inadequate-evidence" for claim in claims
+                ),
                 "not_applicable_tests": sum(len(claim["not_applicable_tests"]) for claim in claims),
             },
         )
-        failed = bool(report["summary"]["missing_files"] or report["summary"]["missing_tests"])
+        failed = bool(
+            report["summary"]["missing_files"]
+            or report["summary"]["missing_tests"]
+            or report["summary"]["inadequate_evidence"]
+        )
     except (OSError, ValueError, RuntimeError) as error:
         report["verification_error"] = str(error)
         print(f"[FAIL] Physics claims verification: {error}", file=sys.stderr)

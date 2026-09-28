@@ -189,5 +189,5 @@ target).
 ## References
 
 - Conan Center: https://conan.io/center
-- conanfile.py: `/home/eirikr/Github/Blackhole/conanfile.py`
-- requirements.md: `/home/eirikr/Github/Blackhole/requirements.md`
+- conanfile.py: `./conanfile.py`
+- requirements.md: `./requirements.md`

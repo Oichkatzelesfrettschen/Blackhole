@@ -199,7 +199,7 @@ Implement Option 1 in `src/render.cpp`. Replace the 5 locations that call `glGet
 
 ### Before Fix
 ```bash
-cd /home/eric/Playground/Blackhole/build/Release
+cd ./build/Release
 LIBGL_SHOW_FPS=1 ./Blackhole
 # Expected: 1-3 FPS, CPU at 98%
 ```
@@ -207,7 +207,7 @@ LIBGL_SHOW_FPS=1 ./Blackhole
 ### After Fix
 ```bash
 # Rebuild after applying fix
-cd /home/eric/Playground/Blackhole/build/Release
+cd ./build/Release
 LIBGL_SHOW_FPS=1 ./Blackhole
 # Expected: 40-60 FPS on Intel HD 4400, 60-90 FPS on AMD Radeon HD 8730M
 # Expected: CPU usage 20-40%

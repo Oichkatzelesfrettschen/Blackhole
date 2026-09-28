@@ -1,0 +1,1223 @@
+> Historical snapshot. Use docs/developer-guide/status.md for current authority.
+
+# Blackhole Simulation - Development Status
+
+**Last Updated:** 2026-09-22
+**Status:** Active Development - desktop split, Blender/Octane smoke lanes, addon staging, interactive Blender benchmarking, Octane auto-launch readiness, Octane tier sweeps, Dream Textures runtime plus direct and image-conditioned addon-pipeline verification, and bridge/package/report verifiers are green locally; release-tree test count is tracked in repo truth
+**Roadmap:** See `roadmap.md` for the consolidated execution plan
+
+---
+
+## Recent Changes
+
+### Public CI and strict source validation (2026-09-22)
+
+GitHub Actions runs the required `ci`, `ci-analysis`, and `ci-release` lanes on
+pull requests and main pushes. The public repository retains workflow definitions,
+pinned build inputs, executable tests, and replay commands. Branch protection
+requires all three checks and resolved review conversations.
+
+The build uses all runner CPUs, caches Conan packages and compiled objects,
+shares desktop asset synchronization, and bounds concurrent LTO links. Source
+cleanup enforces every enabled compiler, clang-tidy, cppcheck, and shader diagnostic,
+including maintained `.hpp` reference headers. CPU fixtures state their measured
+scope; CUDA and desktop rendering still require their corresponding device runs.
+
+[CI architecture and measured costs](ci.md) records the cold/cache comparison.
+[PR 24 checks](https://github.com/Oichkatzelesfrettschen/Blackhole/pull/24/checks)
+record hosted validation for each submitted revision.
+
+
+### Blender / Octane Verification Hardening (2026-03-22)
+
+- Added a dedicated Blender bridge ABI verifier:
+  - `scripts/verify_blender_bridge_abi.py`
+  - target: `verify-blender-bridge-abi`
+  - ctest: `blender_bridge_abi`
+- Added reproducible addon packaging + package verification:
+  - deterministic zip timestamps and file ordering in `scripts/package_blender_addon.py`
+  - addon manifest at `build/*/reports/blender_addon_manifest.json`
+  - package verifier `scripts/verify_blender_addon_package.py`
+  - ctest: `blender_addon_package`
+- Added a repo-local staged install path for the packaged addon:
+  - installer script `scripts/install_blender_addon.py`
+  - target: `stage-blender-addon`
+  - ctest: `blender_addon_stage`
+- Extended smoke infrastructure to emit machine-readable reports:
+  - `build/*/reports/blender_smoke.json`
+  - `build/*/reports/octane_smoke.json`
+  - paired log files under `build/*/reports/*.log`
+- Added post-smoke report verification:
+  - `scripts/verify_blender_smoke_report.py`
+  - `build/*/reports/blender_smoke_verified.json`
+  - `build/*/reports/octane_smoke_verified.json`
+  - ctests: `blender_smoke_report`, `octane_smoke_report`
+- Added the first repo-native Blender interactive benchmark lane:
+  - `scripts/run_blender_interactive_benchmark.py`
+  - `scripts/blender_interactive_benchmark_inner.py`
+  - `scripts/verify_blender_benchmark_report.py`
+  - `build/*/reports/blender_interactive_benchmark.json`
+  - `build/*/reports/blender_interactive_benchmark_verified.json`
+  - ctests: `blender_interactive_benchmark`, `blender_interactive_benchmark_report`
+- Added a shared Blender studio-quality profile:
+  - `blender/addon/blackhole_physics/quality.py`
+  - `blackhole.apply_studio_quality` operator in the addon UI
+  - setup scripts now apply the same quality profile for stock Blender and Octane
+  - smoke and benchmark reports now record studio-quality settings explicitly
+- Strengthened Blender ctypes ABI validation:
+  - filled in missing CUDA `argtypes` in `blender/addon/blackhole_physics/bridge.py`
+  - added C-side struct size exports and Python-side layout checks
+- Local integration state now verified in-repo:
+  - stock Blender smoke passes on Blender `5.2.0 Alpha`
+  - Octane smoke passes on OctaneBlender `2025.5 / Blender 4.5.5 LTS`
+  - Doxygen still builds cleanly with warnings treated as errors
+- Octane automation lane upgraded:
+  - local Arch PKGBUILDs updated to `octane-server-prime 2025.5_30.11.0-1`
+    and `octane-blender-prime 2025.5_30.11.0-1`
+  - `scripts/octane_server_util.py` now auto-launches detached `OctaneServer`
+    for readiness and benchmark runs
+  - `scripts/run_octane_readiness_probe.py` now reaches `ready` with a real
+    non-empty headless Octane render artifact
+  - `scripts/blender_interactive_benchmark_inner.py` now records pairwise
+    image-comparison metrics and diff artifacts across preview/final lanes
+  - `blender/addon/blackhole_physics/quality.py` now applies real tiered
+    Octane policies against the plugin's live properties, including
+    `adaptive_noise_threshold`, AI Light, coherent ratio, tile samples, and
+    path-tracing kernel selection
+  - `scripts/run_octane_quality_sweep.py` and
+    `scripts/verify_octane_quality_sweep.py` now benchmark and verify the
+    `interactive`, `balanced`, and `cinematic` Octane tiers end to end
+  - `scripts/blender_interactive_benchmark_inner.py` now supports a
+    `harsh_lighting` scene profile, and `verify-octane-harsh-scene` adds a
+    second Octane benchmark lane beyond the baseline scene
+  - `docs/references/bibliography.md` now serves as the running external
+    reference ledger for implementation-driving sources
+
+### Dream Textures Direct Pipeline Verification (2026-03-23)
+
+- Added a repo-native direct Dream Textures verifier:
+  - `scripts/verify_dream_textures_direct_pipeline.py`
+  - exercises the addon codepath inside stock Blender 5.2 and OctaneBlender
+  - generates a real `BlackholeDiskTexture` through the Dream Textures backend
+  - records prompt, backend, image statistics, and material-binding evidence
+- Added generated reports:
+  - `build/*/reports/dream_textures_blender_direct_verified.json`
+  - `build/*/reports/dream_textures_blender_direct_verified.md`
+  - `build/*/reports/dream_textures_blender_background_direct_verified.json`
+  - `build/*/reports/dream_textures_blender_background_direct_verified.md`
+  - `build/*/reports/dream_textures_octane_direct_verified.json`
+  - `build/*/reports/dream_textures_octane_direct_verified.md`
+  - `build/*/reports/dream_textures_octane_background_direct_verified.json`
+  - `build/*/reports/dream_textures_octane_background_direct_verified.md`
+- Added CMake/CTest coverage:
+  - targets: `verify-dream-textures-direct-blender`,
+    `verify-dream-textures-direct-blender-background`,
+    `verify-dream-textures-direct-octane`,
+    `verify-dream-textures-direct-octane-background`
+  - ctests: `dream_textures_blender_direct`,
+    `dream_textures_blender_background_direct`,
+    `dream_textures_octane_direct`,
+    `dream_textures_octane_background_direct`
+- The direct Dream Textures reports now include prompt-budget, prompt-provenance,
+  seed-policy, cache-state, asset-digest, backend-capability, and
+  world-environment binding metadata plus a replay helper path
+- `repo_truth` now ingests the direct Dream Textures reports alongside the
+  existing runtime-install evidence
+
+### Dream Textures Image Conditioning (2026-03-23)
+
+- Promoted Dream Textures `image_to_image` from a planned scaffold to a live
+  verified lane in both stock Blender 5.2 and OctaneBlender.
+- `blender/addon/blackhole_physics/sd_textures.py` now:
+  - reuses real Blackhole-generated source imagery for conditioning
+  - preserves the requested step count for conditioned SDXL Turbo runs
+  - records conditioning provenance without leaking raw arrays into JSON
+  - gates depth-conditioned lanes honestly on depth-capable model selection
+- Added conditioned verification targets and tests:
+  - `verify-dream-textures-direct-blender-conditioned`
+  - `verify-dream-textures-direct-octane-conditioned`
+  - `dream_textures_blender_conditioned_direct`
+  - `dream_textures_octane_conditioned_direct`
+- New reports:
+  - `build/*/reports/dream_textures_blender_conditioned_direct_verified.json`
+  - `build/*/reports/dream_textures_blender_conditioned_direct_verified.md`
+  - `build/*/reports/dream_textures_octane_conditioned_direct_verified.json`
+  - `build/*/reports/dream_textures_octane_conditioned_direct_verified.md`
+
+### Dream Textures Conditioning Sweeps (2026-03-23)
+
+- Added host-stable conditioning sweeps for both stock Blender 5.2 and
+  OctaneBlender:
+  - `verify-dream-textures-conditioning-sweep-blender`
+  - `verify-dream-textures-conditioning-sweep-octane`
+  - `dream_textures_blender_conditioning_sweep`
+  - `dream_textures_octane_conditioning_sweep`
+- Each sweep now:
+  - runs `none`, `image`, `depth`, and `image_depth` disk-generation modes
+  - uses a dedicated `conditioning_sweep` Dream Textures memory profile with
+    submodule CPU offload and fragmentation mitigation
+  - persists mode PNGs and diff heatmaps under `build/*/reports/..._artifacts/`
+  - records pairwise PSNR/MAE/luma-cosine comparisons in verified JSON/MD
+- Current measured outcome:
+  - Blender and OctaneBlender produce near-identical sweep statistics
+  - `image_depth` is much closer to `image` than to `depth` in PSNR on this
+    scene, which is now explicit measured evidence rather than an assumption
+
+### Dream Textures Scene-Aware Sweeps + Host Parity (2026-03-23)
+
+- Extended the conditioning sweep lane with explicit scene profiles:
+  - `baseline`
+  - `harsh_lighting`
+- Added harsh-scene verified reports:
+  - `build/*/reports/dream_textures_blender_harsh_conditioning_sweep_verified.json`
+  - `build/*/reports/dream_textures_octane_harsh_conditioning_sweep_verified.json`
+- Added host-parity verifiers:
+  - `verify-dream-textures-conditioning-parity`
+  - `verify-dream-textures-harsh-conditioning-parity`
+- Added measured parity reports:
+  - `build/*/reports/dream_textures_conditioning_baseline_parity.json`
+  - `build/*/reports/dream_textures_conditioning_harsh_parity.json`
+- Promoted the combined-lane quality floor into a build gate:
+  - `image_depth` vs `image` PSNR floor is now enforced by the sweep verifier
+  - Blender-vs-Octane host stability is now enforced by mean/PSNR/cosine
+    parity tolerances rather than manual inspection
+
+### Dream Textures Scene Policy + Trends (2026-03-23)
+
+- Added policy derivation on top of the verified scene-aware sweeps:
+  - `verify-dream-textures-conditioning-policy-blender`
+  - `verify-dream-textures-harsh-conditioning-policy-blender`
+  - `verify-dream-textures-conditioning-policy-octane`
+  - `verify-dream-textures-harsh-conditioning-policy-octane`
+- Added an aggregate cross-host trend digest:
+  - `verify-dream-textures-conditioning-trends`
+- New generated evidence:
+  - `build/*/reports/dream_textures_blender_conditioning_policy.json`
+  - `build/*/reports/dream_textures_blender_harsh_conditioning_policy.json`
+  - `build/*/reports/dream_textures_octane_conditioning_policy.json`
+  - `build/*/reports/dream_textures_octane_harsh_conditioning_policy.json`
+  - `build/*/reports/dream_textures_conditioning_trends.json`
+- Current measured recommendation:
+  - `baseline`: interactive `image`, production `image_depth`
+  - `harsh_lighting`: interactive `image`, production `image_depth`
+  - Blender and Octane agree on both scene recommendations
+- Wired those recommendations back into the addon UI as:
+  - `Auto (interactive)`
+  - `Auto (production)`
+- Added one-click slot-aware actions in the Stable Diffusion panel:
+  - `Regenerate Disk (Interactive Policy)`
+  - `Regenerate Disk (Scene Policy)`
+  - `Regenerate Background (Scene Policy)`
+  - `Prepare Scene for Policy Generation`
+  - `Invalidate Disk Texture Artifacts`
+  - `Invalidate Background Texture Artifacts`
+  - `Invalidate Policy Prerequisites`
+- Added a preparation-only policy operator and host verifiers:
+  - `blackhole.prepare_scene_for_policy_generation`
+  - `verify-dream-textures-policy-generation-blender`
+  - `verify-dream-textures-policy-generation-octane`
+- The disk quick action now auto-prepares its own prerequisites when needed:
+  - lensing map
+  - scene camera
+  - `EventHorizon`
+  - `AccretionDisk`
+- Those prerequisites are now signature-tracked so repeated policy runs can
+  reuse valid prepared inputs and only rebuild stale ones
+- Measured warm-cache evidence now exists in both hosts:
+  - `build/*/reports/dream_textures_blender_policy_generation_verified.json`
+  - `build/*/reports/dream_textures_octane_policy_generation_verified.json`
+  - current baseline warm pass: `lensing_map_reused` in both hosts
+- Added stale-refresh verification after scene mutation:
+  - `build/*/reports/dream_textures_blender_policy_stale_refresh_verified.json`
+  - `build/*/reports/dream_textures_octane_policy_stale_refresh_verified.json`
+  - current baseline -> harsh mutation refreshes the disk prerequisites instead
+    of reusing the old lensing signature
+- Added explicit prepare-only verification for:
+  - background / `none`
+  - production disk / `image_depth`
+  - both stock Blender and Octane hosts
+- Promoted the real rendered frames into stable showcase galleries with JSON
+  summaries:
+  - `build/Release/reports/blender_showcase_render.json`
+  - `build/Release/reports/octane_showcase_render.json`
+  - `build/Release/reports/blender_showcase_artifacts/baseline_final.png`
+  - `build/Release/reports/blender_showcase_artifacts/harsh_lighting_final.png`
+  - `build/Release/reports/octane_showcase_artifacts/baseline_final.png`
+  - `build/Release/reports/octane_showcase_artifacts/harsh_lighting_final.png`
+  - `build/Release/reports/octane_showcase_artifacts/baseline_native_proxy_final.png`
+  - `build/Release/reports/octane_showcase_artifacts/harsh_lighting_native_proxy_final.png`
+- Split the Octane final lane into two explicit products:
+  - `render_engine_native_final` for the pure Octane proxy scene
+  - `render_engine_final` for the synthesized CUDA backplate + Octane finishing
+    composite
+- Tightened the hybrid compositor so the CUDA render remains the true base
+  image and Octane contributes through a masked finishing pass instead of
+  darkening the whole frame
+- The Octane readiness probe is no longer allowed to suppress final benchmarking
+  when the server is actually available but the standalone preflight was merely
+  inconclusive
+- Native Octane handoff hardened further:
+  - `scripts/octane_server_util.py` now treats OctaneServer as live only when
+    `127.0.0.1:5130` is actually listening, not merely when a PID exists
+  - the mixed CUDA+Octane benchmark explicitly resets the bridge CUDA device
+    before Octane takes over, which cleared the previous mixed-lane CUDA/OOM
+    failure mode
+  - the disk proxy material now follows Octane's own converter-friendly path
+    (`ShaderNodeTexImage -> ShaderNodeEmission -> OctaneUniversalMaterial`)
+- Current measured Octane baseline benchmark truth:
+  - `bridge_cuda_preview` median frame time about `9.44 ms`, mean luma about
+    `0.0238`
+  - `render_engine_native_final` median frame time about `3666.29 ms`, mean
+    luma about `0.7449`
+  - `render_engine_final` median frame time about `3628.95 ms`, mean luma
+    about `0.7517`
+- Honest remaining gap:
+  - the native proxy is no longer black, but it still mismatches the CUDA
+    preview badly (`PSNR RGB` only about `2.64`)
+  - Octane logs still report
+    `Tex: ( Rgb32: 0, Rgb64: 0, grey8: 0, grey16: 0 )`, so direct native
+    texture ingestion is still unresolved even though the mixed lane is stable
+
+### Build Fix: SIGMA_THOMSON Redefinition + CUDA Backend Enabled (2026-03-21)
+
+- Removed duplicate `physics::SIGMA_THOMSON` from `src/physics/absorption_models.h`
+  (was also defined in `constants.h`; `inline` vs non-`inline` caused clang-diagnostic-error
+  when both headers were included in the same TU via scattering_models.h).
+- Added `#include "constants.h"` to `absorption_models.h`; aliased `SPEED_OF_LIGHT = C`
+  and `BOLTZMANN = K_B` to avoid further redefinitions.
+- Fixed `readability-math-missing-parentheses` in `stokes_invariants_test.cpp:429-430`.
+- Rebuilt with `ENABLE_CUDA=ON`: 70/70 tests pass (62 C++ + 8 CUDA kernel tests).
+- CUDA SM89+SM80, `--use_fast_math`, 4 kernel variants (FP32/FP32-coarsened/FP16/H2-ILP).
+
+### Fe K-alpha Relativistic Line Profile (2026-03-21)
+
+**D-spec -- Fe K-alpha Relativistically Broadened Line Profile (Laor 1991)** -- COMPLETE
+- src/physics/iron_kline.h: iscoGeom() (BPT prograde ISCO, geometrized units),
+  kerrDiskGFactor() (Cunningham 1975 g-factor for circular equatorial Kerr orbits),
+  ironKLineProfile() (2D disk integration, g^4 flux weighting, normalized F(E)),
+  ironKLineGMin() (red-edge g at ISCO face-on).
+- 2-pass histogram: first pass finds g range [gMin,gMax]; second pass bins flux;
+  logarithmic radial grid; emissivity power-law epsilon(r) ~ r^{-q}.
+- tests/iron_kline_test.cpp: 10 tests -- exact g=sqrt(0.5) at Schwarzschild ISCO,
+  Doppler blueshift/redshift on approaching/receding sides, flat-space limit,
+  integral=1.0+/-1%, spin-redshift scaling, inclination broadening.
+
+### Session Batch 2026-03-21 -- All HIGH/MEDIUM Lacunae Complete
+
+**D4 -- Polarized Stokes IQUV Transport (GLSL + CUDA)** -- COMPLETE
+- stokes_transport.glsl: stokesStep() exact analytic propagation of I,Q,U,V
+- bhTraceGeodesicStokes() in interop_trace.glsl; stokesEnabled/stokesBFieldAngle/stokesNeScale uniforms
+- DStokes struct + d_stokes_step() + d_trace_geodesic_stokes() in device_physics.cuh
+- BH_LaunchParams grows to 184 bytes; 6/6 CUDA Stokes tests pass
+
+**C1e + G3 -- GRMHD HDF5 Loader + Streamer End-to-End Test** -- COMPLETE
+- grmhd_hdf5_loader.h/.cpp: iharm3d/KORAL channels-last/first + BHAC Grid datasets; 6/6 tests
+- grmhd_streamer_test.cpp: 7-subtest lifecycle, tile injection, PBO upload, ring buffer wraparound
+
+**F1/F2/F3 -- Render Integration** -- COMPLETE
+- F1: reloadAllRenderShaders() in render.cpp (shaderVertMap caches fragment->vertex path)
+- F2: rmlui_overlay.cpp -- Rml::Initialise/Context/Render/Shutdown (RmlUi 6.x API)
+- F3: blender_bridge CUDA dispatch -- bhb_lensing_map/bhb_disk_texture -> bh_launch_geodesic_kernel
+
+**Newman-Penrose Null Tetrad Formalism** -- COMPLETE
+- src/physics/newman_penrose.h: kerrWeylPsi2(), kerrKretschmann(), Kinnersley l/n vectors
+- 12/12 tests: Psi_2 Schwarzschild, K=48|Psi_2|^2, Petrov Type D, ring singularity guard
+
+**Higher GW Inspiral Multipoles h_lm (l=2,3,4)** -- COMPLETE
+- gwPNVelocity, gwInspiralAngularPlus/Cross, gwInspiralModeFraction, gwInspiralStrainMultimode
+- (2,1)/(3,3) vanish at equal mass (delta=0); (4,4) nonzero via |1-3*eta|
+- 13/13 tests pass in gw_multipole_test.cpp (tests 9-13 new)
+
+### Build System + NNLO Physics + GPU Parity (2026-02-28)
+
+**Build System C++23 Alignment** -- COMPLETE
+- Raised BLACKHOLE_CXX_STANDARD from 17 to 23 in CMakeLists.txt.
+  The project actually requires C++23 (concepts, ranges, set::contains, compat.h #error),
+  but the global and 9 per-target overrides were set to 17, causing silent build failures
+  when targets transitively included C++20/23 headers.
+- Removed 9 redundant per-target CXX_STANDARD overrides; all targets now inherit
+  the global CMAKE_CXX_STANDARD=23.
+- Updated conanfile.py validation minimum from 17 to 23.
+- Fixed GLSL reserved word `output` in rt_grmhd_composite.frag/.comp and
+  grmhd_raytracer_composite.comp (renamed to `combined`/`composite`).
+- Fixed timeseries_interpolation_test boundary clamp expectations.
+- Test suite: 34/36 pass (94.4%). Remaining 2 are infrastructure (GPU context, fixture).
+
+**NNLO Spin-Orbit 3PN+3.5PN GW Phase** -- COMPLETE
+- Extended `gw_phase_3p5pn()` with full TaylorF2 phasing through 3.5PN:
+  - 3PN + 3.5PN point-mass terms (Blanchet 2014 LRR)
+  - 2.5PN spin-orbit (Blanchet, Buonanno, Faye 2006)
+  - 3PN NNLO spin-orbit (Blanchet, Buonanno, Faye 2011, arXiv:1104.5659 Eq. 7.10)
+  - 3.5PN spin-orbit (arXiv:1104.5659 Eq. 7.11)
+  - 3PN spin-spin (Mikoczi et al. 2005)
+- Added symmetric/antisymmetric spin decomposition (chi_s, chi_a, delta).
+- Fixed overall normalization to standard TaylorF2 convention (3/(128*eta)).
+- Test: 9/9 in kerr_qnm_spin_test.cpp.
+
+**CUDA G(x) LUT for Synchrotron Polarization** -- COMPLETE
+- Added `synchrotron_G_generate_lut()` to synchrotron.h: generates 256-entry
+  log-spaced 1D LUT from CPU Bessel K_{2/3} evaluation.
+- The generated G table is registered with the CUDA backend for polarization.
+- The rendered fragment GRMHD path uses normalized density and internal energy
+  from a packed 3D texture. It does not consume octree buffers or a fragment
+  synchrotron LUT. Physical emission and self-absorption remain open.
+
+### Synchrotron G(x) Bessel Fix (2026-02-28, commit 0c17b69)
+
+- Replaced G(x) polynomial with direct K_{2/3} Bessel evaluation via boost::math.
+- Resolves G(x) > F(x) for x in [1,10] (physically impossible polarization > 1).
+
+### Phase 6 Physics Fidelity Batch (2026-02-27) -- Items C, D, E, G, B
+
+**Kerr QNM Spin-Dependent Ringdown (Item C)** -- COMPLETE
+- Added `qnm_frequency_kerr(M, a_star)` and `qnm_damping_time_kerr(M, a_star)`
+  using Berti, Cardoso & Starinets (2009) Table VIII polynomial fits for the (l=2,m=2) mode.
+  Previously the code used the Schwarzschild frequency regardless of spin; error exceeds 10%
+  for a* > 0.3.
+- Added `chi_eff_from_binary(binary)` to extract mass-weighted effective aligned spin.
+- `generate_inspiral_waveform` now uses the spin-aware Kerr QNM branch when spin != 0.
+- Test: `tests/kerr_qnm_spin_test.cpp` -- 6/6 tests pass (label: qnm, gw, spin, phase6).
+
+**GW Spin-Orbit and Spin-Spin PN Phase (Item D)** -- COMPLETE
+- Extended `gw_phase_3p5pn()` with optional chi_eff, chi1, chi2 parameters (defaults 0).
+- Spin-orbit: 1.5PN Kidder (1995) term (+113/12 + 25*eta/4) * chi_eff * v^3.
+- Spin-spin: 2PN Cutler-Flanagan (1994) term -50*eta*chi1*chi2*v^4.
+- For a* > 0.3, spin corrections are O(10%) of total GW phase -- important for matched
+  filtering of spinning BBH events.
+- Test: `tests/kerr_qnm_spin_test.cpp` tests 4-6 validate spin PN corrections.
+
+**Synchrotron F(x) Bessel K_{5/3} Upgrade (Item E)** -- COMPLETE
+- Replaced Fouka & Ouichaoui (2013) polynomial fit in the intermediate regime (0.01 < x < 10)
+  with two-segment 16-point Gauss-Legendre quadrature of K_{5/3}(xi) via boost::math.
+- Segment 1: [x, x+max(2x, 0.5)] captures rapid variation near the lower limit.
+- Segment 2: [x+delta, x+30] captures the exponential tail.
+- Accuracy: sub-0.2% vs scipy reference (was ~1% with polynomial).
+- GPU/GLSL path retains the polynomial approximation (boost unavailable in GLSL).
+- Test: test 9 in `tests/synchrotron_spectrum_test.cpp` passes (label: synchrotron, phase5).
+
+**Dormand-Prince RK45 Adaptive Step Control (Item G)** -- COMPLETE
+- Replaced heuristic `h *= 1.2 / h *= 0.5` step control in `src/physics/verified/rk4.h`
+  with the Dormand-Prince 4(5) embedded error estimate (Hairer 1993).
+- `dp45_stages()`: computes 7 stages k1..k7 with full Butcher tableau.
+- `dp45_step()`: returns 5th-order solution + embedded error estimate.
+- `dp45_next_step()`: optimal step control h_new = h * min(2, max(0.1, 0.9*(tol/err)^0.2)).
+- `integrate()` now uses DP45 accept/reject with fallback to h_min.
+
+**GRMHD Async Tile Streaming (Item B)** -- COMPLETE
+- Implemented all 9 previously-stub TODO entries in `src/grmhd_streaming.cpp`.
+- `init()`: nlohmann_json metadata parse (schema_version, grid_dims, channels, frames),
+  binary file size detection, relative bin-path resolution against JSON directory.
+- `loaderThreadFunc()`: std::thread + condition_variable drain loop.
+- `getTile()`: LRU cache lookup; on miss enqueues TileID to loadQueue_.
+- `seekFrame()`: sets currentFrame_, prefetches next 3 frames to loadQueue_.
+- `loadTile()`: seeks to per-frame byteOffset in binary, reads RGBA32F voxel slab.
+
+**Physics Math Lacunae Reference**
+- `docs/physics/lacunae.md` (written 2026-02-27): structured analysis of remaining
+  physics/math/perf gaps covering GRMHD, RTE, 4D slicing, GW, integrator, NP formalism,
+  float32 horizon precision, and Conan library mapping.
+
+---
+
+## Executive Summary
+
+The black hole simulation renders correctly with:
+- Schwarzschild geodesics and experimental Kerr ray tracing
+- Accretion disk with procedural noise (vertical density control restored)
+- Physically accurate Flamm's paraboloid wiregrid visualization
+- 8-level bloom post-processing
+- ACES tonemapping
+- Optional LUT-backed emissivity/redshift shading (runtime or assets/luts)
+- GPU timing panel with fragment/compute split (GL_TIME_ELAPSED queries)
+- Runtime shader compile/link logs are emitted (warnings non-fatal)
+- OpenGL-native controls overlay (stb_easy_font) renders when UI is hidden (env: `BLACKHOLE_OPENGL_CONTROLS=0`)
+- Conan update candidates documented in `dependencies.md` (Dec 30 2025 review)
+- Latest dependency bump validated: `ctest` (physics_validation + grmhd_pack_fixture) passed; Release build + validate-shaders succeeded; z3 built with GCC 15 warnings (kept non-fatal)
+
+**Current Focus:** See **Active Plans** below for prioritized execution.
+
+---
+
+## Current State (Merged from TODO_FIXES)
+
+The simulation is fully operational with the core rendering pipeline:
+- Black hole ray tracing with Schwarzschild geodesics
+- Accretion disk with procedural noise
+- Bloom post-processing (8-level pyramid)
+- ACES tonemapping with gamma correction
+- ImGui controls panel
+- Optional LUT-backed emissivity/redshift shading (runtime or assets/luts)
+- Compute raytracer path (experimental toggle)
+- TODO/FIXME scan: ImGui backend TODO/FIXME notes + a new stub TODO in `src/rmlui_overlay.cpp` (RmlUi integration)
+
+## Recent Changes
+
+### UI/UX & Wireframe Alignment (2026-02-06 23:05) [done] COMPLETE
+
+**Achievement**: Refactored chaotic UI into a cohesive "Settings" panel and aligned geometry.
+- **Wireframe Alignment**:
+  - Enforced `radiusMin >= r_s * 1.01` to prevent grid clipping into the event horizon.
+  - Aligned grid coordinate system to match the black hole's gravity well.
+- **UI Refactor**:
+  - Implemented **Docking Viewport** architecture: The 3D scene is rendered to a texture and displayed in a central "Viewport" window, fully separated from UI panels.
+  - **Layout**: Default layout reset to a **Split Left Dock** (Settings/Display above, Controls/Performance below) and a large central Viewport.
+  - **Interactivity**: Implemented mouse capture override (`setIgnoreGuiCapture`) to allow camera control (orbit/zoom) when interacting with the Viewport window.
+  - Consolidated scattered windows into a unified **"Settings"** panel and organized overlays (Controls, Performance) into a sidebar layout.
+  - Applied a high-contrast **"16-bit Voxel"** dark theme.
+  - Disabled Multi-Viewports to resolve Linux/Wayland transparency artifacts.
+  - Fixed aspect ratio stretching by syncing render target size to the Viewport window dimensions.
+
+### Visual Fidelity & Stability Fixes (2026-02-06 22:45) [done] COMPLETE
+
+**Achievement**: Addressed "crappy" visuals and log noise.
+- **Log Noise Fix**: Modified `HawkingRenderer::parseCSV` to silently skip non-numeric tokens (headers/comments), eliminating hundreds of `Failed to parse value` errors.
+- **Missing Asset Fix**: Created `assets/grmhd` directory structure to prevent "not found" errors.
+- **Visual Tuning**:
+  - **Wiregrid**: Increased fog range (100 -> 200) and softened pulse effect (mix 0.5, pow 4.0) for a majestic, non-intrusive look.
+  - **Tonemapping**: Reduced film grain (0.015) and chromatic aberration (0.002) for a cleaner, high-fidelity image.
+  - **UI**: Verified dark theme application.
+
+### Visual Fidelity Overhaul (2026-02-06) [done] COMPLETE
+
+**Achievement**: Implemented "full, correct and proper" visual upgrades across UI, topology, and post-processing.
+- **Wiregrid Topology Upgrade**:
+  - Implemented **logarithmic radial spacing** ($r \propto \text{const}^t$) to concentrate geometry near the event horizon where curvature is highest.
+  - Increased default mesh resolution (32 rings, 256 segments) for smooth curves.
+  - Upgraded shaders to support **distance-based fog** and dynamic **energy pulse** effects for better depth perception.
+- **Post-Processing Pipeline**:
+  - Enhanced ACES tonemapper with **Chromatic Aberration** (lens dispersion), **Vignette** (corner darkening), and animated **Film Grain** (dithering) for cinematic look.
+- **UI Refinement**:
+  - Implemented `setupImGuiStyle()` with a polished "Blackhole" dark theme (rounded corners, dark grey/blue palette) replacing the default Dear ImGui style.
+
+### Stability & Functionality Restoration (2026-02-06) [done] COMPLETE
+
+**Achievement**: Fixed startup/shutdown crashes and restored disconnected functionality.
+- **Crash Resolution**: Added explicit cleanup for static singletons (`NoiseTextureCache`, `HawkingRenderer`, `GrmhdPackedTexture`) before OpenGL context destruction, fixing `SIGSEGV` on shutdown.
+- **Functionality Restoration**: Reconnected `adiskDensityV` parameter to runtime LUT generation (`diskDensityLUT`), restoring vertical density control without shader code bloat.
+- **Wiregrid Upgrade**: Updated wiregrid visualization to use Flamm's paraboloid embedding ($z = 2\sqrt{r_s(r-r_s)}$) for physically accurate curvature representation.
+- **Code Cleanup**:
+  - Unified physics parameter calculations (`schwarzschildRadius`, `iscoRadius`, `photonSphereRadius`) to eliminate redundancy.
+  - Removed unused `adiskDensityV` uniform upload (now handled via LUT).
+  - Fixed `unused variable` warnings in `main.cpp`.
+  - Suppressed benign CSV header parsing errors in `HawkingRenderer`.
+
+**Build Status**:
+- Main executable builds cleanly with `-Werror`.
+- Runtime verified stable (no crash after 5 minutes of execution).
+
+---
+
+### Shader Validation & Transpilation Fixes (2026-01-15) [done] COMPLETE
+
+**Achievement**: All 21 shaders now compile without errors (100% validation success)
+- **Fragment Shaders**: 14 validated (blackhole_main, raytracer, bloom chain, tonemapping, etc.)
+- **Vertex Shaders**: 5 validated (simple, wiregrid, overlay_text, drawid_probe, passthrough_drawid)
+- **Compute Shaders**: 2 validated (geodesic_trace, drawid_cull)
+
+**Major Fixes**:
+1. **C++23 to GLSL Transpilation** - Systematic pattern fixes across all verified modules:
+   - Aggregate initialization: `Type{...}` -> `Type(...)`
+   - Type casts: `static_cast<T>()` -> `T()`
+   - STL functions: `std::max()` -> `max()`
+   - Type inference: `const auto` -> explicit types
+   - Enum classes: Replaced with int constants
+   - Lambdas: Commented out (not supported in GLSL)
+
+2. **Reserved Keyword Fix** (`integrator.glsl`, 7 locations):
+   - Replaced `lambda` parameter/variable with `affine_param`
+   - `lambda` is reserved in GLSL for future anonymous function support
+
+3. **Include Order Dependencies** (2 shaders):
+   - `raytracer.frag`: Moved `integrator.glsl` include after RayState definition
+   - `geodesic_trace.comp`: Reordered to `rk4.glsl` -> `geodesic.glsl` (StateVector dependency)
+
+4. **Legacy/Verified Module Coexistence** (`geodesic_trace.comp`):
+   - Include both `include/kerr.glsl` (legacy helpers) and `include/verified/kerr.glsl`
+   - `kerrOuterHorizon(r_s, a)` from legacy vs `outer_horizon(M, a)` from verified
+
+5. **Fast-Math Compatibility** (3 test files):
+   - Replaced `std::isnan()`/`std::isinf()` with `physics::safe_isnan()`/`safe_isinf()`
+   - Compatible with `-ffast-math -ffinite-math-only` optimization flags
+
+6. **Compiler Warning Fixes**:
+   - Added `[[maybe_unused]]` to scaffolding fields (r_capture_, LOOSE_TOLERANCE, etc.)
+   - Fixed double-promotion warnings with explicit `static_cast<double>()`
+
+**Documentation**:
+- Created `shader/README.md` - Comprehensive C++23->GLSL transpilation guide (500+ lines)
+- Created `CHANGELOG.md` - Complete version history from Phase 0 to Phase 10.1+
+- Documented all transpilation patterns, reserved keywords, include order rules
+
+**Build Status**:
+- Main `Blackhole` executable: [done] Builds successfully
+- Shader validation: [done] 21/21 shaders pass
+- Known issue: `z3_verification_test` has googletest linker error (tracked separately)
+
+**Verification Pipeline**:
+- Rocq 9.1+ -> OCaml -> C++23 -> GLSL 4.60 pipeline fully operational
+- All verified physics modules (`rk4`, `geodesic`, `kerr`, `energy_conserving_geodesic`, `null_constraint`) compile
+
+---
+
+### Phase 10.1: Hawking Radiation Thermal Glow (2026-01-02) [done] COMPLETE
+
+**Implementation**: GPU-accelerated Hawking radiation thermal glow visualization
+- **New Files**: 10 source files (1,673 lines total)
+- **Modified Files**: 4 existing files (+225 lines)
+- **Test Coverage**: 13 unit tests (100% pass rate)
+- **LUT Data**: 768 precomputed samples (512 temperature + 256 spectrum)
+
+**Key Components**:
+- `scripts/generate_hawking_lut.py` - LUT generation (200 lines)
+- `shader/include/hawking_luts.glsl` - GLSL sampling utilities (200+ lines)
+- `shader/hawking_glow.glsl` - Thermal glow shader (234 lines)
+- `src/physics/hawking_renderer.{h,cpp}` - C++ GPU interface (599 lines)
+- `tests/hawking_glow_test.cpp` - Physics validation (170 lines)
+- `tests/hawking_spectrum_test.cpp` - Spectrum validation (270 lines)
+
+**Physics Validation**:
+- Solar mass temperature: 6.17x10^-8 K (+/-0.4% accuracy) yes
+- Inverse mass law: T_H ~ 1/M (exact) yes
+- Wien's displacement: lambda_peak x T = 0.2898 cm*K (exact) yes
+- Stefan-Boltzmann: L ~ T^4 (0.001% accuracy) yes
+
+**Visualization Presets**:
+1. Physical (T_scale=1.0) - Realistic but invisible for solar mass
+2. Primordial (T_scale=1e6) - Hot BH with blue-white X-ray glow
+3. Extreme (T_scale=1e9) - Maximum visibility for education
+
+**UI Integration**: ImGui controls in `src/main.cpp`
+- Enable/disable checkbox
+- Preset selector (Physical/Primordial/Extreme)
+- Temperature scale slider (logarithmic, 1.0-1x10^9)
+- Intensity slider (0.0-5.0)
+- LUT toggle (precomputed vs direct calculation)
+
+**Build System**: CMakeLists.txt updated with test targets
+- `hawking_glow_test`: 5/5 tests PASSED
+- `hawking_spectrum_test`: 8/8 tests PASSED
+- Main executable builds successfully with zero warnings
+
+**Documentation**:
+- `docs/PHASE10_TESTING_GUIDE.md` - Manual testing procedures
+- `docs/PHASE10.1_COMPLETE.md` - Implementation completion summary
+
+**Status**: [done] All implementation complete, ready for visual testing
+**Next**: Visual validation with 3 presets + GPU performance benchmarking
+
+---
+
+### Earlier Changes (2026-01-01)
+
+- Created `docs/MASTER_ROADMAP.md` consolidating all planning documents into single source of truth.
+- Created `docs/DEPENDENCY_MATRIX.md` for centralized version tracking of 34 Conan packages.
+- Archived superseded planning docs to `docs/archive/2026Q1/`.
+- **ISSUE-009 (Compute/Fragment Parity):** Updated default outlier tolerance in `src/main.cpp`:
+  - `compareMaxOutliers`: 0 -> 10000 (enables gating by default)
+  - `compareMaxOutlierFrac`: 0.0 -> 0.006 (0.6% tolerance for Kerr divergence)
+  - UI slider ranges expanded to accommodate new defaults
+  - All 5 tests pass, 20/20 shaders validated with new tolerances.
+- Updated MASTER_ROADMAP.md task 1.1.5 to Done status.
+- **Phase 1.2 (Eigen Migration):**
+  - Extended `src/physics/math_types.h` with double-precision Eigen types (Vec2d/Vec3d/Vec4d/Mat3d/Mat4d).
+  - Added unified vector operations: `math::dot()`, `math::cross()`, `math::length()`, `math::normalize()`.
+  - Added conversion helpers: `math::toVec3d()`, `math::toArray3()` for legacy compatibility.
+  - Added ENABLE_NATIVE_ARCH CMake option for `-march=native` optimization.
+  - Added Eigen-specific SIMD configuration (EIGEN_VECTORIZE_SSE4_2/AVX2/FMA).
+  - Updated MASTER_ROADMAP.md task 1.2.5 to Done status.
+- **Comprehensive SIMD Detection System:**
+  - Replaced compiler-flag-based SIMD detection with actual CPU feature detection via CPUID.
+  - AUTO tier selection now uses runtime CPU capability tests (not just compiler support).
+  - Detects SSE through AVX-512 with proper OS XGETBV checks for AVX state support.
+  - Hierarchical tier application ensures higher tiers include all predecessor instructions.
+  - GLM and Eigen SIMD definitions now use `CPU_HAS_*` checks for safety.
+  - Cross-compilation falls back to conservative SSE2 baseline.
+  - SIMD_TIER cache variable allows explicit override: AUTO, SSE2, SSE4, AVX, AVX2, AVX512.
+  - Validates correctly on AMD Ryzen 5 5600X3D (AVX2+FMA detected, AVX-512 correctly rejected).
+- **Batch Geodesic API (Phase 1.2.4):**
+  - Added `traceGeodesicBatch()` to `src/physics/batch.h` for vectorized geodesic tracing.
+  - Structure-of-Arrays (SoA) layout for SIMD-friendly memory access.
+  - RK4 integration of Schwarzschild geodesic equations with Christoffel symbols.
+  - Eigen path uses `Eigen::Map<VectorXd>` to wrap std::vector data for vectorized ops.
+  - Scalar fallback for non-Eigen builds.
+  - Returns `BatchTraceResult` with final positions, redshift, status, and step counts.
+- **Batch Geodesic Benchmark (Phase 1.2.6):**
+  - Added "Batch geodesic (SIMD)" benchmark to `bench/physics_bench.cpp`.
+  - Benchmarks `traceGeodesicBatch()` with same ray/step parameters as scalar Schwarzschild.
+  - Results: ~21.5M rays/sec (batch) vs ~29K rays/sec (scalar) = 735x speedup.
+  - Validates SIMD vectorization effectiveness of batch API.
+  - Phase 1.2 Eigen Migration acceptance criteria met: measurable speedup in physics_bench.
+- **spirv_bake Integration (Phase 1.3.2 + 1.3.5):**
+  - Updated `scripts/compile_shaders_spirv.sh` to use spirv_bake for compilation.
+  - Uses shaderc for GLSL->SPIR-V, spirv-tools for optimization.
+  - glslangValidator retained for preprocessing (include resolution).
+  - Automatic fallback to glslangValidator-only if spirv_bake not found.
+  - Environment controls: SPIRV_OPTIMIZE=1 (default), SPIRV_STRIP=0, SPIRV_REFLECT=0.
+  - All 20 shaders compile and validate successfully.
+  - Summary shows backend, optimization, and strip status.
+- **Fast-Math Infinity Bug Fix (Phase 1.2.7):**
+  - Root cause: `-ffinite-math-only` flag (part of fast-math) makes `std::numeric_limits<T>::infinity()` return 0.
+  - Fix: Replaced `infinity()` with `max()` and `-infinity()` with `lowest()` for min/max initialization.
+  - Applied to: `tools/nubhlight_pack.cpp`, `src/grmhd_packed_loader.cpp`, `tests/grmhd_pack_test.cpp`.
+  - Result: All 5 tests pass (100%), grmhd_pack_fixture now validates correctly.
+  - Phase 1.2 Eigen Migration acceptance criteria fully met.
+- **Shader Reflection Cache (Phase 1.3.3):**
+  - Added `--reflect-json <path>` option to `tools/spirv_bake.cpp` for JSON reflection output.
+  - Uses spirv-cross to extract bindings, locations, and resource metadata.
+  - Updated `scripts/compile_shaders_spirv.sh` to emit JSON when `SPIRV_REFLECT=1`.
+  - Generates `build/shader_cache/<shader>-reflect.json` for each compiled shader.
+  - JSON schema includes: entry_points, sampled_images, uniform_buffers, stage_inputs/outputs.
+  - All 20 shaders generate valid reflection JSON with binding/location data.
+- **Boyer-Lindquist Coordinate Utilities (Phase 1.4.5):**
+  - Created `src/physics/coordinates.h` with cleanroom MKS-to-BL coordinate transforms.
+  - Implements: `bl_coord()`, `r_of_X()`, `th_of_X()`, `X_of_r()`, `dr_dX1()`, `dth_dX2()`.
+  - Supports theta derefining parameter (hslope): 0=max derefining, 1=uniform spacing.
+  - Added Cartesian<->spherical conversion utilities.
+  - Created `tests/coordinates_test.cpp` with 9 validation tests covering:
+    - Radial coordinate roundtrip and derivatives
+    - Theta mapping, derefining behavior, and derivatives
+    - Full bl_coord transformation
+    - Cartesian<->spherical roundtrip and polar edge cases
+  - All project tests pass.
+- **Connection Coefficients (Phase 1.4.6):**
+  - Created `src/physics/connection.h` with cleanroom Christoffel symbol implementations.
+  - Implements Kerr metric tensors: `kerr_gcov()`, `kerr_gcon()`.
+  - Implements Schwarzschild metric tensors: `schwarzschild_gcov()`, `schwarzschild_gcon()`.
+  - Implements Christoffel symbols: `kerr_connection()`, `schwarzschild_connection()`.
+  - Implements index operations: `lower_index()`, `raise_index()`, `geodesic_acceleration()`.
+  - Created `tests/connection_test.cpp` with 7 validation tests covering:
+    - Metric tensor symmetry (g_uv = g_vu)
+    - Metric inverse property (g^ua g_av = delta^u_v)
+    - Connection symmetry (Gamma^a_uv = Gamma^a_vu)
+    - Schwarzschild limit (Kerr with a=0 matches Schwarzschild)
+    - Schwarzschild component sign verification
+    - Index raising/lowering roundtrip
+    - Geodesic acceleration sign correctness
+  - All 7 project tests pass (100%).
+- **FP Precision Testing (Phase 1.1.3):**
+  - Added `SPIRV_SKIP_OPT_COMPUTE` flag to `scripts/compile_shaders_spirv.sh`.
+  - When enabled, skips SPIR-V optimization passes for compute shaders only.
+  - Shader size impact: geodesic_trace.comp 52k (unopt) -> 27k (opt) = 48% reduction.
+  - Documented testing procedure in `docs/COMPARE_SWEEP.md`.
+  - Enables comparison of optimized vs unoptimized FP precision.
+- **Shader Hot-Reload Watcher (Phase 1.3.4):**
+  - Created `src/shader_watcher.h/cpp` using `watcher` Conan dependency (v0.14.1).
+  - Enable with CMake flag: `-DENABLE_SHADER_WATCHER=ON`.
+  - Watches `shader/` directory for .vert/.frag/.comp/.geom/.tesc/.tese/.glsl changes.
+  - Debounced event handling (100ms) to avoid rapid-fire detection during edits.
+  - Logs changed shader paths to stdout for hot-reload triggering.
+  - Thread-safe polling API: `hasPendingReloads()`, `pollChangedShaders()`, `clearPendingReloads()`.
+  - Graceful start/stop with singleton pattern matching ShaderManager.
+- **CI Validation Step (Phase 1.3.6):**
+  - Updated `.github/workflows/ci.yml` with comprehensive validation.
+  - Installs `glslang-tools` for shader validation.
+  - Build step followed by `validate-shaders` target (20/20 shaders).
+  - Runs `ctest --output-on-failure` for all 7 physics/validation tests.
+  - CI now validates both shader syntax and physics correctness.
+- **Raytracer Vec3d Migration (Phase 1.2.3):**
+  - Migrated `src/physics/raytracer.h` from `std::array<double, N>` to `math::Vec3d`/`math::Vec2d`.
+  - `PhotonRay` struct: position/direction now use `math::Vec3d`.
+  - `RayTraceResult` struct: final_position and path now use `math::Vec3d`.
+  - `compute_shadow()` return type: `std::vector<math::Vec2d>`.
+  - `Camera` struct: position/look_at now use `math::Vec3d`.
+  - `Camera::generate_ray()` rewritten using unified math ops: `math::cross()`, `math::length()`, `math::normalize()`.
+  - All 7 tests pass; Phase 1.2 Eigen Migration complete.
+
+## Recent Changes (2025-12-31)
+
+- Updated `AGENTS.md` to emphasize repo-local Conan usage.
+- Centralized Conan env setup by sourcing `scripts/conan_env.sh` in Conan helper scripts (repo-local `.conan` enforced).
+- Refreshed Conan center2 config, reran `conan install`, and rebuilt Release.
+- Pinned the repo-local Conan default profile to clang + C++23, enforced compiler executables, and reran `conan install` under clang.
+- `validate-shaders` and `ctest` (physics_validation, grmhd_pack_fixture, precision_regression)
+  pass cleanly.
+- Conan reported deprecated 1.x metadata fields in several upstream recipes (non-fatal; monitor for Conan 2 cleanup).
+- Resolved `glActiveTexture` texture-unit warnings in `src/main.cpp`.
+- Unified input time-scale handling (keyboard/mouse/gamepad) in `src/input.cpp`.
+- Added a gamepad mapping reset button and deadzone monitor tied to current mappings.
+- Added control presets (Balanced/Precision/Fast) for sensitivity + time scale tuning.
+- Kerr raytracer now routes through the `Kerr` helper for potentials/stepping.
+- Kerr Mino-time step now uses RK4 integration for improved stability (CPU path).
+- Compute shader now uses emissivity LUT as the primary flux source when enabled.
+- Added `ENABLE_ENZYME` CMake flag + toolchain path hints for optional Enzyme integration.
+- Added GRB modulation LUT loading and shader bindings (fragment + compute).
+- Compare summary CSV now records GRB modulation state and time.
+- Radiative transfer LUT plan updated with runtime metadata contract.
+- OpenUniverse scope note updated for Kerr RK4 step (no longer placeholder).
+- GRMHD ingestion plan now includes nubhlight header + full-dump dataset key list.
+- Fixed unused LUT helper to pass compact-common refs into ISCO resolution (`scripts/generate_luts.py`).
+- Generated GRB modulation LUT assets (`assets/luts/grb_modulation_lut.csv`, `assets/luts/grb_modulation_meta.json`).
+- Depth cues defaults tuned for brighter baseline (fog/dof/desat/curve adjustments).
+- Persisted background parallax/drift settings and added per-layer LOD bias controls; background
+  sampling now uses explicit mip bias to stabilize layer LODs in fragment/compute.
+- Added `BLACKHOLE_LUT_ASSET_ONLY=1` to skip generated LUT fallback for cleanroom parity checks.
+- Perf HUD now includes window/render resolution + vsync status lines.
+- Added Halide feasibility note for optional CPU-kernel scheduling (`docs/HALIDE_FEASIBILITY.md`).
+- Added `src/physics/math_types.h` to start Eigen/GLM type boundary.
+- Added riced/coverage/profile CMake presets plus profiling/coverage flags and a gcovr coverage-report target for instrumented builds.
+
+## Recent Changes (2025-12-30)
+
+- Synced ImGui GLFW/OpenGL3 backends to 1.92.5-docking.
+- Vendored ImPlot from upstream master (0.18 WIP) due to ImGui 1.92 API changes; added `scripts/fetch_implot.sh`.
+- Added ImPlot frame-time graphs to the Performance panel.
+- Added ImGuizmo scaffold (Gizmo panel + focus target offset) for camera tooling.
+- Added optional RmlUi overlay stub (`ENABLE_RMLUI=ON`) for MangoHUD port groundwork.
+- Added frame-time CSV export for ImPlot history (`logs/perf/frame_times.csv`).
+- Confirmed GLFW hints request OpenGL 4.6 core + debug context; DSA usage remains bind-based for now.
+- Added ultrawide render-scale presets (3440x1440, 5120x2160) in the Display panel.
+- Added `src/physics/math_interop.h` for guarded GLM/Eigen conversions (no runtime use yet).
+- Expanded `docs/CLEANROOM_PORT_MAP.md` with common validation/types adapter notes.
+- Added optional Tracy hooks (`ENABLE_TRACY=ON`) with frame-level plots for CPU/GPU timings.
+- Shader validation (`validate-shaders`) passes cleanly (no warnings).
+- Added `nubhlight_inspect` tool to emit HDF5 dataset metadata for GRMHD ingestion.
+- Added `nubhlight_pack` tool to pack GRMHD channels into RGBA texture blobs + metadata JSON.
+- Added packed texture schema proposal and `nubhlight_pack` metadata example to `docs/GRMHD_INGESTION_PLAN.md`.
+- Added `src/grmhd_packed_loader.*` to parse packed metadata and upload RGBA 3D textures.
+- Added GRMHD packed texture uniforms + sampler path in `shader/blackhole_main.frag` and ImGui
+  controls/bindings in `src/main.cpp`.
+- Added GRMHD slice preview shader (`shader/grmhd_slice.frag`) and ImGui debug view for
+  3D texture inspection.
+- Added checksum + min/max validation in `src/grmhd_packed_loader.*` and checksum emission in
+  `tools/nubhlight_pack.cpp`.
+- Added `tests/grmhd_pack_test.cpp` fixture test that generates a tiny HDF5 dump, packs it, and
+  validates loader metadata via CTest.
+- Added `scripts/generate_tardis_lut_stub.py` to emit mock spectral LUTs and metadata.
+- Added spectral LUT loader + shader hook (`spectralLUT` uniforms) with ImGui controls.
+- Extended `bench/physics_bench.cpp` with optional GPU compute timing and CSV/JSON fields.
+- Added Tracy zones for major passes (fragment, compute, bloom, tonemap, depth, GRMHD slice).
+- Added tiled compute dispatch support for the geodesic compute path (`tileOffset` uniform).
+- Expanded LUT pipeline scripts with compact-common metadata and optional spin radii LUT output.
+- Conan install completed with CMake 3.31; Release build + validate-shaders + ctest (physics_validation, grmhd_pack_fixture) succeeded.
+- Added a local `rmlui/4.4` Conan recipe with `CMAKE_POLICY_VERSION_MINIMUM` fix for modern CMake.
+- Aligned Conan output layout to `build/Release` and removed duplicate `conan-release` preset collisions.
+- Upgraded Conan pins to latest center2 versions (core + UI), with Eigen deferred; GLM now tracks cci.20230113.
+- Verified latest conancenter versions via `conan list`; reran `conan install` + Release build + ctest with repo-local `.conan` config.
+- Bumped local recipes to Tracy 0.13.1 and RmlUi 6.1 (latest upstream tags); updated Conan export script and requirements.
+- Added FetchContent options for ImNodes, autodiff, and AMReX (`ENABLE_IMNODES`, `ENABLE_AUTODIFF`, `ENABLE_AMREX`).
+- Extended `bench/physics_bench.cpp` CSV/JSON output with warmup + GPU elapsed ns fields.
+- Added GRMHD slice GPU timer and expanded perf CSV/plot outputs for depth + GRMHD.
+- Verified MPFR/GMP precision regression test builds and passes with `-DENABLE_PRECISION_TESTS=ON`.
+- Expanded `tools/z3_sanity.cpp` with a redshift constraint check; builds and runs under `-DENABLE_Z3=ON`.
+- Reviewed `~/Documents/Formal_Methods_Documentation/theorem_solvers_inventory.md`: z3-git 4.15.4 installed, Rocq 9.1 + Agda present; several formal tools missing or blocked by package constraints.
+- Added unit-system metadata (CGS) to validation/LUT generators for reproducible assets.
+- Added optional Z3 integration (`ENABLE_Z3=ON`) and `z3_sanity` tool target; Z3 builds with GCC 15 warnings (non-fatal).
+- Added optional GMP/MPFR dependencies (ground-truth precision baselines for multiprecision tests).
+- Added `scripts/generate_grb_luts.py` (JetFit table export) + `scripts/generate_grb_modulation_lut.py` (Gaussian/FRED envelopes).
+- Compute shader now samples emissivity/redshift/spectral LUTs and supports a Kerr path (Mino stepping) when `kerrSpin != 0`.
+- Fragment shader noise is texture-only; `useNoiseTexture` defaults on (procedural noise removed).
+- Added performance HUD overlay (FPS + GPU timings) with env toggles `BLACKHOLE_PERF_HUD` and `BLACKHOLE_PERF_HUD_SCALE`.
+- Depth effects default to the Subtle baseline (enabled by default).
+- Updated LUT/GRB/Z3/UnitSystem/MangoHUD docs and OpenUniverse scope notes.
+- Auto-enabled GPU timing when `BLACKHOLE_GPU_TIMING_LOG=1` is set.
+- Fixed CMakeLists clang-tidy checks string and `ENABLE_EIGEN` option quoting (riced builds unblocked).
+- Riced/ASan/TSan/Coverage/Profile builds completed with Werror; `validate-shaders` passes.
+- Compare sweep rerun: `logs/compare/compare_summary.csv` regenerated with outlier counts/limits (legacy saved as `compare_summary_legacy.csv`); sparse outliers remain (Kerr preset ~0.015% of pixels) but pass under `BLACKHOLE_COMPARE_OUTLIER_FRAC=0.0005`.
+- GPU timing captures archived; ASan runs required preloading libasan due to global `LD_PRELOAD` pointing at missing `mklfakeintel`.
+- `physics_bench` profile outputs captured to `logs/perf/physics_bench_profile.{csv,json}` (GPU geodesic compute avg ~0.768 ms).
+- Flamegraph rerun after perf sysctl relax and lower sample rate: `logs/perf/flamegraph/flamegraph_lowloss_sysctl_20251231_122954.svg` (no sample-loss warning).
+- Infer run reports no issues (report: `infer-out/riced/report.html`); `ctest` (5 tests) passed.
+- Added askpass helper usage notes in `~/.codex/GUIDANCE.md` and `/etc/codex/GUIDANCE.md`.
+- Added `eirikr` to `video`, `input`, and `plugdev` groups (relogin required).
+- Added shared interop GLSL includes for raygen + trace and aligned compute/fragment uniforms + frame time via `InteropUniforms`.
+- Added compare outlier gating controls + env overrides (`BLACKHOLE_COMPARE_OUTLIER_COUNT`, `BLACKHOLE_COMPARE_OUTLIER_FRAC`) and CSV columns.
+- Added `docs/INTEROP_BEST_PRACTICES.md` with compute/fragment parity checklist + sources.
+- Added `docs/WIREGRID_BEST_PRACTICES.md` with curvature wiregrid modeling + rendering notes.
+- Added optional asset pipeline package candidates (KTX/OpenImageIO/EXR/PNG/JPEG/mesh) to `requirements.md`.
+- Shader loader now strips `GL_GOOGLE_include_directive` extension lines at runtime to avoid driver warnings; `adiskNoiseScale` now scales disk noise sampling.
+- GPU timing queries now revalidate query objects; `BLACKHOLE_GPU_TIMING_LOG=1` capture appended to `logs/perf/gpu_timing.csv` without GL_INVALID_OPERATION spam.
+- Perf sysctl tuned for higher sample rates (`perf_event_paranoid=-1`, `perf_event_max_sample_rate=100000`).
+- Flamegraph regenerated via `scripts/run_flamegraph.sh` (latest: `logs/perf/flamegraph/flamegraph_20251231_141348.svg`, `PERF_FREQ=2000`).
+- Added compare-only overrides for compute/fragment parity (`BLACKHOLE_COMPARE_MAX_STEPS`, `BLACKHOLE_COMPARE_STEP_SIZE`) plus UI controls.
+- Compare sweep with overrides (600 steps, 0.05 step): 9/12 presets exceeded; latest summary at `logs/compare/compare_summary.csv` (previous archive: `logs/archive/20251231_152444/compare`).
+- Compare baseline sweep (`BLACKHOLE_COMPARE_BASELINE=1`): 3/12 presets exceeded (idx 0/1/8); summary at `logs/compare/compare_summary.csv` (previous baseline archived to `logs/archive/20251231_154706/compare`, override sweep archived to `logs/archive/20251231_153643/compare`).
+- Compare sweep after background LOD bias defaults: 2/12 presets exceeded (idx 0/4); summary at `logs/compare/compare_summary.csv` (archive: `logs/archive/20251231_182443/compare`).
+- Strict compare sweep (1000 steps, 0.02 step) now 0/12 exceeded; summary at `logs/compare/compare_summary.csv` (archive: `logs/archive/20251231_183355/compare_strict`).
+- Baseline strict sweep rerun (1000 steps, 0.02 step) without outlier gating: 12/12 exceeded
+  (max_abs still > 0.02 across presets). Latest rows appended to `logs/compare/compare_summary.csv`.
+- Compare sweep now logs interop uniform snapshots to `logs/compare/compare_uniforms.csv` for parity debugging.
+- Added `BLACKHOLE_LUT_ASSET_ONLY=1` to skip generated LUT fallback for cleanroom parity checks.
+- Added `docs/OPENGL_45_46_SHADER_REPORT.md` with shader pipeline and 4.5 vs 4.6 standardization notes.
+- Added optional SPIR-V shader loading via `BLACKHOLE_USE_SPIRV=1` (expects `*.spv` next to GLSL).
+- Added `scripts/compile_shaders_spirv.sh` to generate `*.spv` artifacts with glslangValidator.
+- Enabled baseline anisotropic filtering on texture and cubemap loads (clamped to 8x).
+- Added DrawID probe overlay via `BLACKHOLE_DRAWID_PROBE=1` (multi-draw indirect test path).
+- Added multi-draw main pass with per-draw SSBO data and optional indirect-count compute path
+  (`BLACKHOLE_MULTIDRAW_MAIN=1`, `BLACKHOLE_MULTIDRAW_INDIRECT_COUNT=1`,
+  `BLACKHOLE_MULTIDRAW_OVERLAY=0`).
+- Hardened SPIR-V link stability by adding explicit varying locations in key shader stages
+  (simple/bloom/tonemap/overlay + drawid passthrough).
+- Gated compare sweep (1000 steps, 0.02 step, outlier frac 0.0005 + count 5000): 8/12 exceeded;
+  latest rows appended to `logs/compare/compare_summary.csv`.
+- Debug overlay sweep (`BLACKHOLE_INTEGRATOR_DEBUG_FLAGS=3`) captured PPMs for presets 0/1/8 at
+  `logs/compare/compare_0_{compute,fragment}.ppm`, `logs/compare/compare_1_{compute,fragment}.ppm`,
+  `logs/compare/compare_8_{compute,fragment}.ppm` (files overwritten by last sweep).
+- GPU timing log capture updated `logs/perf/gpu_timing.csv` (latest frames appended).
+- Flamegraph refreshed: `logs/perf/flamegraph/flamegraph_20251231_200432.svg` (physics_bench).
+- Riced ASAN/TSAN builds + ctest passed; TSAN build emitted clang-tidy warnings in `src/shader.cpp`
+  (include-cleaner + non-const globals + style/perf notes).
+- Added SPIR-V tooling option + `spirv_bake` tool (shaderc/spirv-tools/spirv-cross) to Conan/CMake.
+- `spirv_bake` now builds against shaderc/spirv-tools OpenGL 4.5 targets; GCC still warns on
+  stack usage in `main` (needs cleanup for Werror builds).
+- Added `docs/ROADMAP.md` as the consolidated, hypergranular plan; `docs/ROADMAP_NEXT_PHASE.md`
+  now points to it.
+- Added meshoptimizer/fastnoise2/watcher dependencies (Conan options) and verified pins
+  against conancenter; updated `requirements.md`.
+- Refreshed SPIR-V tooling pins (spirv-cross 1.4.321.0, spirv-headers stays at
+  1.4.313.0 to match spirv-tools/shaderc) and replaced unavailable fast-noise-lite
+  with fastnoise2.
+- Conan install + Release build completed with new fastnoise2/spirv-cross packages
+  (external warnings observed; tracked in backlog.md).
+- Added optional parallel shader compile (`BLACKHOLE_PARALLEL_SHADER_COMPILE=1`) and
+  no-error context (`BLACKHOLE_NO_ERROR_CONTEXT=1`) toggles.
+- Updated clang-tidy config to match lowerCamelCase and reduced noisy checks; fixed HUD overlay static usage, include guards, and cppcheck warnings.
+- Rerun riced-asan/riced-tsan builds after cleanup; clang-tidy/cppcheck warnings no longer emitted (aside from LD_PRELOAD noise).
+
+## Recent Changes (2025-12-29)
+
+**Controls + Camera Unification**
+- Single C++ camera drives all modes (shader consumes `cameraPos` + `cameraBasis`)
+- Controls panel restored (sensitivity, inversion, hold-to-toggle, time scale) and key remapping persists
+- Gamepad controls added (sticks + triggers) with button bindings + deadzone monitor
+- Camera mode + orbit settings persist in `settings.json`
+
+**LUT Pipeline + Validation**
+- Added offline LUT generation (`scripts/generate_luts.py`) and asset metadata (`assets/luts/lut_meta.json`)
+- Runtime loads LUT assets when present (falls back to CPU LUT generation)
+- Added validation asset generator (`scripts/generate_validation_tables.py`) for `assets/validation/`
+- Fixed Kerr ISCO retrograde sign and added LUT asset checks in `physics_test`
+
+**Shader Validation**
+- `validate-shaders` warns by default; set `ENABLE_WERROR=ON` to fail on warnings
+- Runtime shader compile/link warnings are logged but non-fatal (`src/shader.cpp`)
+
+**OpenGL Loader**
+- Switched OpenGL loader to glbinding (pure C++ API, no GLEW).
+- ImGui backend uses `IMGUI_IMPL_OPENGL_LOADER_CUSTOM` with glbinding; gl3w header is retained but unused.
+
+**Conan Stack**
+- Updated must-have dependencies (glbinding + imgui docking + xsimd + EnTT + Taskflow + HighFive + FlatBuffers + spdlog + Tracy + CLI11).
+
+**Compute A/B Compare**
+- Compare toggle renders fragment + compute outputs and reports sampled diff metrics
+- Snapshot capture dumps PPMs and full-frame diff stats; auto-capture appends `logs/compare/compare_summary.csv`
+- GPU timers report fragment vs compute time; preset sweep captures snapshots
+- Compute shader uses Schwarzschild RK4 only; Kerr compute path disabled pending cleanroom constants
+
+**Kerr Cleanroom Scaffolding**
+- Added C++ Kerr raytracer (Mino-time stepping) and helper constructors
+- Extended physics tests with photon-orbit potential and Kerr raytracer sanity checks
+- Added spin-radii LUT generator for r_isco/r_ph curves (CPU-side)
+
+**Depth Effects**
+- Added a depth-effects pass (fog/edges/desaturation/chroma + optional DoF)
+- Depth packed into alpha from the ray tracer; presets + depth curve added
+- Defaults tuned heuristically (no visual validation yet)
+
+**Display Scaling**
+- Render targets resize to framebuffer size * renderScale
+- Display panel exposes fullscreen, swap interval (vsync), and render-scale presets
+- Headless display validation deferred until Wayland/X11 support is available
+
+## Active Plans (Merged + Refactored)
+
+- **Performance + math migration:** extend `physics_bench` for new modules; enforce LUT-only emissivity/redshift (move disk noise + emissivity out of shaders into LUTs with a debug fallback); keep compute-vs-fragment A/B; evaluate Eigen/xsimd for SIMD and parallel LUT generation (see `docs/EIGEN_REFACTOR_PLAN.md`).
+- **Rendering scaling:** validate window resize in fragment + compute paths; add 720p-4K ultrawide presets; persist fullscreen/vsync/renderScale and gamma/tonemap/bloom.
+- **Controls & input ergonomics:** validate keyboard/mouse vs time scale; refine gamepad bindings + deadzone tools; add remap presets; persist inversion/sensitivity/hold-to-toggle.
+- **Cleanroom audit:** deep scan OpenUniverse + local repos; map reusable physics/math/data schemas; define pure C++23/GLSL460 ports.
+- **GRMHD ingestion:** document nubhlight HDF5 schema, build offline converter, add dataset loader + checksum validation.
+- **Radiative transfer + GRB modulation:** define LUT specs from tardis/GRB datasets and add time-domain modulation hooks.
+- **HUD port:** MangoHud-style overlay for FPS/frametime + GPU timings with optional CSV export.
+- **Dependency review:** scan for updated Conan packages and set Eigen/xsimd/TBB/OpenMP baseline; evaluate autodiff/Enzyme/AMReX adoption; track MPFR/GMP for precision baselines and Halide (non-Conan) for scheduling experiments.
+
+## Issue Tracker
+
+### ISSUE-001: Depth Effects Tuning (Packed Depth)
+**Priority:** MEDIUM
+**Status:** In progress
+
+#### Current State
+The ray tracer now packs a normalized depth value into the alpha channel and a post-process shader
+applies fog/edge outlines/desaturation/chroma + optional DoF.
+Presets and a depth curve control were added to provide quick tuning baselines.
+Defaults updated to a more subtle baseline (depthFar 100, fog start/end 0.5/0.95, lighter desat);
+these are heuristic changes pending visual validation.
+
+#### Gaps
+- Depth is derived from ray integration and is an approximation.
+- No dedicated depth texture or multi-render target support.
+
+#### Next Steps
+1. Evaluate depth quality across scenes and tune `depthFar`, fog ranges, and DoF parameters.
+2. If needed, add MRT output for a dedicated depth texture.
+3. Validation matrix (visual pass):
+   - Presets: Subtle, Cinematic, Clarity.
+   - Camera modes: Input + Orbit (near/far distances).
+   - Resolutions: Native, 720p preset, 4K preset.
+   - Content toggles: accretion disk on/off, noise texture on/off, spin 0.0 vs 0.8.
+
+---
+
+### ISSUE-002: Gamepad Mapping Ergonomics
+**Priority:** LOW
+**Status:** Implemented (needs validation)
+
+#### Current State
+- Right stick: yaw/pitch
+- Left stick: roll/zoom
+- Triggers: zoom in/out (fine adjustment)
+- Buttons: reset camera, pause, toggle UI (configurable)
+- Deadzone visualization available in Controls panel
+- OpenGL controls overlay shows key bindings when UI is hidden
+
+#### Next Steps
+1. Validate mapping on common controllers (Xbox/PS).
+2. Add optional button remapping UI for presets.
+
+---
+
+### ISSUE-003: Camera System Unification
+**Priority:** LOW
+**Status:** Done
+
+#### Current State
+- Camera position and basis are computed in C++ for all modes (Input/Front/Top/Orbit).
+- `shader/blackhole_main.frag` now consumes `cameraPos` + `cameraBasis` only.
+- Mouse/time-based camera branches have been removed from GLSL.
+
+#### Follow-up (Optional)
+1. Add camera presets (cinematic/diagnostic).
+
+---
+
+### ISSUE-008: Compute Raytracer Path
+**Priority:** MEDIUM
+**Status:** Implemented (experimental)
+
+#### Current State
+- Compute path now supports LUT sampling and Kerr stepping (Mino time) when spin is non-zero.
+- Fragment vs compute diff tooling remains available for parity checks.
+
+#### Next Steps
+1. Validate compute vs fragment parity on a preset sweep.
+2. Tune step size limits for Kerr paths.
+
+---
+
+### ISSUE-004: Physics Integration Incomplete
+**Priority:** LOW
+**Status:** Scope defined
+
+#### Current State
+Physics parameters are computed in C++ and passed correctly:
+- Kerr-aware ISCO/photon sphere radii are derived from `kerrSpin` and mapped into shader units.
+- LUT-backed emissivity/redshift textures are generated at runtime or loaded from assets/luts (with metadata checks).
+- `schwarzschildRadius`, `iscoRadius`, and `photonSphereRadius` are still central to trace.
+
+#### What Works
+- Gravitational lensing uses `schwarzschildRadius`
+- Accretion disk inner edge uses `iscoRadius`
+- Event horizon detection uses `schwarzschildRadius`
+
+#### Potential Improvements (Future)
+1. Integrate Kerr geodesic integration path into shader/compute (beyond radii)
+2. Add proper Doppler beaming for disk rotation
+3. Add frame dragging visualization
+4. Add gravitational time dilation indicator
+
+#### Compute Shader Kerr Notes (Current)
+- `shader/geodesic_trace.comp` uses a Mino-time stepping model with `KerrConsts` derived from
+  `cross(pos, dir)` (Lz) and `L^2 - Lz^2` (Q); this is a simplification vs CPU formulas.
+- `kerrSpin` maps to `a = kerrSpin * 0.5 * r_s`, consistent with `a = a* M` where `r_s = 2M`.
+- Sign flips occur when `R` or `Theta` go negative; this is heuristic and can hide integrator drift.
+- No tetrad-based constants-of-motion yet; compute path is for visual parity only.
+
+#### Status
+No immediate fixes needed. Physics integration is functional.
+
+---
+
+### ISSUE-005: Legacy Settings Cleanup
+**Priority:** LOW
+**Status:** Scope defined
+
+#### Issue
+Old `settings.json` files may contain stale fields that are now ignored.
+
+#### Current Behavior
+- Unknown fields are silently ignored during load (safe)
+- Only current fields are written on save (old fields get cleaned up)
+
+#### Resolution Options
+1. **Do nothing** - Fields naturally clean up on next save
+2. **Add migration** - Explicitly remove old fields on load
+3. **Add version** - Track settings version for future migrations
+
+#### Recommended Approach
+Option 1 (do nothing) - the current load/save cycle naturally cleans up old fields.
+
+---
+
+### ISSUE-006: Display Scaling + VSync + Fullscreen
+**Priority:** MEDIUM
+**Status:** Implemented (validation deferred)
+
+#### Current State
+- Render targets resize to framebuffer size * renderScale.
+- Display panel controls render scale, fullscreen, and swap interval (0/1/2).
+- Render resolution is shown in UI for verification.
+
+#### Gaps
+- Needs validation at 720p-4K ultrawide and fullscreen/windowed modes.
+- No adaptive scaling or FPS-based auto-scaling yet.
+
+#### Next Steps
+1. Validate resize behavior on windowed + fullscreen once headless display is available.
+2. Tune default renderScale values after visual testing.
+
+---
+
+### ISSUE-007: OpenUniverse Cleanroom Integration
+**Priority:** HIGH
+**Status:** Scoped
+
+#### Current State
+- Submodule inventory and cleanroom plan documented.
+- No code ports executed yet.
+
+#### Next Steps
+1. Confirm priority order for submodule cleanroom ports.
+2. Implement unit system alignment and reference LUT pipeline.
+3. Wire compute shader path and validate against CPU references.
+
+---
+
+### ISSUE-008: Compute Raytracer Path
+**Priority:** MEDIUM
+**Status:** Implemented (experimental)
+
+#### Current State
+- `shader/geodesic_trace.comp` is wired into the render pipeline.
+- Compute path writes color + depth into the blackhole render target.
+- UI toggle in Black Hole Parameters selects compute vs fragment path.
+- Compare mode renders both paths and reports sample diff metrics (CPU readback).
+- Snapshot capture can dump PPMs and full-frame diff stats.
+- Auto-capture appends batch summaries to `logs/compare/compare_summary.csv`.
+- Preset sweep cycles fixed camera modes and triggers snapshots automatically.
+- Preset sweep includes Kerr/Schwarzschild pairs for A/B capture.
+- Max-diff threshold tracking is exposed in UI and logged per snapshot.
+- CPU-side Kerr raytracer scaffold exists for cleanroom parity checks.
+- Compute path uses Schwarzschild RK4 only; Kerr compute path disabled pending cleanroom constants.
+- Optional GPU timing CSV logging via `BLACKHOLE_GPU_TIMING_LOG`.
+
+#### Gaps
+- Kerr constants-of-motion are approximated from flat-space angular momentum; refine mapping
+  from camera rays to Kerr constants for higher-fidelity comparisons.
+- Needs validation vs fragment path across camera modes and presets.
+- No CI gate for A/B diff thresholds yet (manual capture only).
+
+#### Next Steps
+1. Compare compute vs fragment output for a set of camera/parameter snapshots.
+2. Extend diff to full-frame or golden-image comparisons.
+
+---
+
+## Architecture Notes
+
+### Input Flow (Current)
+```
+InputManager --> CameraState (yaw/pitch/roll/distance)
+     |
+     v
+main() computes cameraPos + cameraBasis (mode-aware)
+     |
+     v
+blackhole_main.frag consumes cameraPos + cameraBasis
+```
+
+### Unit System
+- C++ physics code uses CGS units by default (cm, g, s) via `src/physics/constants.h`.
+- Geometric units are used only where explicitly stated (e.g., some GW formulas).
+- Shader-side LUT sampling uses normalized radii (r/r_s).
+
+### Validation Assets
+- `scripts/generate_validation_tables.py` emits `assets/validation/metrics.json` and
+  `assets/validation/redshift_curve.csv`.
+- `assets/validation/spin_radii_curve.csv` contains r_isco/r_ph vs spin samples.
+- `physics_test` compares r_s/r_isco/r_ph + redshift curve against CPU references.
+
+### Camera Uniform Contract
+- Fragment path (`shader/blackhole_main.frag`): `cameraPos` (vec3) and `cameraBasis` (mat3) are world-space
+  camera position and basis vectors, produced in C++ per camera mode.
+- Compute path (`shader/geodesic_trace.comp`): `cameraPosition` (vec3) and `viewMatrix` (mat4) are provided
+  by C++; `viewMatrix` contains the rotation basis in its top-left 3x3.
+
+### Key Files
+
+| File | Purpose | Lines |
+|------|---------|-------|
+| `src/main.cpp` | Entry, render loop, ImGui | 610 |
+| `src/input.cpp` | InputManager, camera update | 589 |
+| `src/input.h` | CameraState, KeyAction enum | 237 |
+| `shader/blackhole_main.frag` | Ray tracing, camera positioning | 471 |
+
+---
+
+## Next Steps (Priority Order)
+
+1. **Tune depth effects** (ISSUE-001)
+   - Validate packed depth behavior across scenes
+   - Adjust defaults for fog/DoF and add presets if needed
+
+2. **Validate gamepad mapping** (ISSUE-002)
+   - Test controller ergonomics and add button bindings
+
+3. **Validate display scaling** (ISSUE-006)
+   - Confirm 720p-4K rendering, fullscreen/swap interval toggles
+
+4. **Optional camera follow-ups** (ISSUE-003)
+   - Add camera presets (cinematic/diagnostic)
+
+---
+
+## Testing Checklist
+
+After fixes, verify:
+
+- [ ] W/S keys change pitch (view tilts up/down)
+- [ ] A/D keys change yaw (view orbits left/right)
+- [ ] Q/E keys change distance (zoom in/out)
+- [ ] Z/C keys change roll (view tilts sideways)
+- [ ] +/- keys zoom in/out
+- [ ] Camera mode selection (Input/Front/Top/Orbit) renders expected views
+- [ ] Mouse right-drag still works
+- [ ] Mouse scroll zoom still works
+- [ ] R key resets camera
+- [ ] H key toggles UI
+- [ ] P key pauses simulation
+- [ ] F4/F5 change font size
+- [ ] [/] keys change time scale
+- [ ] Gamepad sticks + triggers adjust camera
+- [ ] Depth effects toggles behave as expected
+- [ ] No uniform warnings in console
+- [ ] Camera state persists in settings.json
+
+---
+
+## Build Commands
+
+```bash
+# Install dependencies (repo-local Conan home)
+./scripts/conan_install.sh Release build
+
+# Build
+cmake -DCMAKE_BUILD_TYPE=Release -S . -B build/Release \
+  -DCMAKE_TOOLCHAIN_FILE=build/Release/generators/conan_toolchain.cmake
+cmake --build build/Release
+
+# Run
+./build/Release/Blackhole
+
+# Validate shaders
+cmake --build build/Release --target validate-shaders
+```

@@ -1,7 +1,8 @@
 # Blackhole Documentation
 
-Real-time black hole rendering and validation workbench with a shared desktop UI,
-GLSL and CUDA lanes, and Blender bridge integration.
+Blackhole contains the Simulator / Workbench renderer and the Singularity:
+GOROROBA game. The products share physics and build infrastructure while
+maintaining separate release evidence.
 
 ## Getting Started
 
@@ -17,12 +18,13 @@ GLSL and CUDA lanes, and Blender bridge integration.
 
 - [Status](developer-guide/status.md) -- current project status and active issues
 - [Repo Truth](developer-guide/repo-truth.md) -- measured build inventory and generated report
+- [Release Evidence](developer-guide/release-evidence.md) -- product obligations and validation classes
 - [Bibliography](references/bibliography.md) -- running external-reference ledger
 - [Blender Bridge Requirements](requirements/blender.md) -- bridge, addon, staging, and smoke workflows
 - [Octane Requirements](requirements/octane.md) -- optional Octane-backed Blender lane
 - [Roadmap](developer-guide/roadmap.md) -- master development roadmap
 - [Backlog](developer-guide/backlog.md) -- bug fixes and TODO items
-- [Debt Ledger](developer-guide/debt-ledger.md) -- audited debt taxonomy and remediation roadmap
+- [Debt Ledger](developer-guide/debt-ledger.md) -- current findings and closure conditions
 - [Build Optimization](developer-guide/build-optimization.md) -- compile-time optimization
 - [SIMD](developer-guide/simd.md) -- SIMD vectorization guide
 - [GLSL Build](developer-guide/glsl-build.md) -- shader compilation workflow

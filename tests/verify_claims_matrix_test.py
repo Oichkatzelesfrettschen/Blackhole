@@ -3,6 +3,8 @@
 import copy
 import importlib.util
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -15,6 +17,11 @@ SPEC = importlib.util.spec_from_file_location("verify_claims_matrix", VERIFIER_P
 assert SPEC is not None and SPEC.loader is not None
 VERIFIER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VERIFIER)
+TRUTH_PATH = VERIFIER_PATH.with_name("repo_truth.py")
+TRUTH_SPEC = importlib.util.spec_from_file_location("repo_truth", TRUTH_PATH)
+assert TRUTH_SPEC is not None and TRUTH_SPEC.loader is not None
+TRUTH = importlib.util.module_from_spec(TRUTH_SPEC)
+TRUTH_SPEC.loader.exec_module(TRUTH)
 
 
 class ClaimsMatrixTest(unittest.TestCase):
@@ -29,10 +36,15 @@ class ClaimsMatrixTest(unittest.TestCase):
                     "id": "mixed_physics",
                     "claim": "CPU and CUDA implementation contracts.",
                     "status": "local-validation",
+                    "required_evidence_class": "formula-unit",
                     "files": ["physics.h"],
                     "tests": [
-                        "cpu_validation",
-                        {"name": "cuda_validation", "requires": ["ENABLE_CUDA"]},
+                        {"name": "cpu_validation", "evidence_class": "formula-unit"},
+                        {
+                            "name": "cuda_validation",
+                            "evidence_class": "formula-unit",
+                            "requires": ["ENABLE_CUDA"],
+                        },
                     ],
                 }
             ]
@@ -57,6 +69,123 @@ class ClaimsMatrixTest(unittest.TestCase):
         self.assertEqual(claim["registration_status"], "partially-applicable")
         self.assertEqual(options["ENABLE_CUDA"], {"raw": "OFF", "enabled": False})
         self.assertEqual(claim["test_requirements"][1]["requires"], {"ENABLE_CUDA": False})
+
+    def test_mock_cannot_satisfy_renderer_output_claim(self):
+        manifest = copy.deepcopy(self.manifest)
+        claim = manifest["claims"][0]
+        claim["required_evidence_class"] = "render-output"
+        claim["tests"][0]["evidence_class"] = "mock-observable"
+        claims, _ = self.assess(manifest=manifest)
+        self.assertEqual(claims[0]["registration_status"], "inadequate-evidence")
+        self.assertEqual(claims[0]["matching_evidence"], [])
+        claim["tests"][0]["evidence_class"] = "render-output"
+        claims, _ = self.assess(manifest=manifest)
+        self.assertEqual(claims[0]["registration_status"], "partially-applicable")
+
+    def test_canonical_eht_shadow_is_mock_evidence(self):
+        manifest_path = VERIFIER_PATH.parents[1] / "docs" / "physics" / "claims_evidence.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        claim = next(entry for entry in manifest["claims"] if entry["id"] == "eht_observables")
+        shadow = next(entry for entry in claim["tests"] if entry["name"] == "eht_shadow_validation")
+        self.assertEqual(shadow["evidence_class"], "mock-observable")
+        self.assertNotEqual(claim["required_evidence_class"], "render-output")
+
+    def test_repo_truth_records_executed_skips(self):
+        self.assertEqual(TRUTH.recent_ctest_execution(self.directory)["status"], "not-assessed")
+        log = self.directory / "Testing" / "Temporary" / "LastTest.log"
+        log.parent.mkdir(parents=True)
+        log.write_text(
+            "1/2 Testing: gpu_parity\n1/2 Test: gpu_parity\n"
+            "Output:\nSkipped without GL context\nTest Skipped.\n"
+            "2/2 Testing: cpu_validation\n2/2 Test: cpu_validation\n"
+            "Output:\nPASS\nTest Pass Reason:\nRequired regular expression found.\n",
+            encoding="utf-8",
+        )
+        execution = TRUTH.recent_ctest_execution(self.directory)
+        self.assertEqual(execution["tests"], {"gpu_parity": "skipped", "cpu_validation": "passed"})
+        self.assertEqual(Path(execution["log"]).read_bytes(), log.read_bytes())
+        log.write_text("Start testing:\nEnd testing:\n", encoding="utf-8")
+        self.assertEqual(TRUTH.recent_ctest_execution(self.directory)["tests"], execution["tests"])
+
+    def test_documentation_paths_are_portable(self):
+        source_dir = VERIFIER_PATH.parents[1]
+        documentation = list(source_dir.glob("*.md"))
+        for directory in ("docs", "blender", "shader", "rocq", "bench", "tools", "cmake", "assets"):
+            documentation.extend((source_dir / directory).rglob("*.md"))
+        local_path = re.compile(r"/(?:home|Users)/[A-Za-z0-9_.-]+/")
+        dangling = [
+            str(path.relative_to(source_dir))
+            for path in documentation
+            if local_path.search(path.read_text(encoding="utf-8"))
+        ]
+        self.assertEqual(dangling, [])
+
+    def test_release_summary_declares_both_product_boundaries(self):
+        source_dir = VERIFIER_PATH.parents[1]
+        summary_path = source_dir / "docs" / "developer-guide" / "release-evidence.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        self.assertEqual(summary["schema_version"], 1)
+        self.assertEqual(
+            set(summary["products"]),
+            {"blackhole_simulator_workbench", "singularity_gororoba"},
+        )
+        simulator = summary["products"]["blackhole_simulator_workbench"]
+        game = summary["products"]["singularity_gororoba"]
+        self.assertEqual(
+            set(simulator) - {"maturity"},
+            {
+                "active_default_renderer_contract",
+                "output_validation_scenes_metrics",
+                "backend_availability_parity",
+                "performance_tiers",
+                "physical_approximations",
+            },
+        )
+        self.assertEqual(
+            set(game) - {"maturity"},
+            {
+                "authoritative_game_session_type",
+                "deterministic_test_replay_status",
+                "save_schema_version",
+                "canonical_scenario_completion_tests",
+                "ui_screenshot_status",
+            },
+        )
+        save_source = (source_dir / "src/game/save_format.h").read_text(encoding="utf-8")
+        version = re.search(r"K_SAVE_FORMAT_VERSION\s*=\s*(\d+)", save_source)
+        self.assertIsNotNone(version)
+        self.assertEqual(game["save_schema_version"]["value"], int(version.group(1)))
+        render_source = (source_dir / "src/render/render_state.h").read_text(encoding="utf-8")
+        self.assertIn("useComputeRaytracer = false", render_source)
+        classifications = {
+            "measured-fact",
+            "local-inference",
+            "approximation",
+            "unvalidated-roadmap",
+        }
+        for product in summary["products"].values():
+            self.assertIn("maturity", product)
+            for name, obligation in product.items():
+                if name == "maturity":
+                    continue
+                self.assertIn(obligation["classification"], classifications)
+                self.assertIn("value", obligation)
+                source = obligation["source"]
+                if not source.startswith("build/"):
+                    self.assertTrue((source_dir / source).exists(), source)
+
+    def test_missing_or_unknown_evidence_class_fails_closed(self):
+        for field in ("required_evidence_class", "evidence_class"):
+            manifest = copy.deepcopy(self.manifest)
+            target = (
+                manifest["claims"][0]
+                if field == "required_evidence_class"
+                else manifest["claims"][0]["tests"][0]
+            )
+            for value in (None, "renderer-output"):
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    target[field] = value
+                    self.assess(manifest=manifest)
 
     def test_enabled_cuda_keeps_its_test_mandatory(self):
         claims, _ = self.assess(option="ON")
@@ -173,6 +302,40 @@ class ClaimsMatrixTest(unittest.TestCase):
         self.assertNotIn("summary", evidence)
         self.assertEqual(evidence["execution_status"], "not-assessed")
         self.assertIn("CUDA device execution", (self.directory / "report.md").read_text())
+
+    def test_cli_rejects_registered_but_inadequate_evidence(self):
+        manifest = copy.deepcopy(self.manifest)
+        manifest["claims"][0]["required_evidence_class"] = "render-output"
+        manifest["claims"][0]["tests"][0]["evidence_class"] = "mock-observable"
+        manifest_path = self.directory / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        (self.directory / "CMakeCache.txt").write_text("ENABLE_CUDA:BOOL=OFF\n", encoding="utf-8")
+        ctest = self.directory / "ctest"
+        ctest.write_text('#!/bin/sh\nprintf \'{"tests":[{"name":"cpu_validation"}]}\\n\'\n')
+        ctest.chmod(0o755)
+        json_out = self.directory / "report.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(VERIFIER_PATH),
+                "--source-dir",
+                str(self.directory),
+                "--build-dir",
+                str(self.directory),
+                "--manifest",
+                str(manifest_path),
+                "--md-out",
+                str(self.directory / "report.md"),
+                "--json-out",
+                str(json_out),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "PATH": f"{self.directory}:{os.environ['PATH']}"},
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads(json_out.read_text())["summary"]["inadequate_evidence"], 1)
 
 
 if __name__ == "__main__":

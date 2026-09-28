@@ -6,7 +6,7 @@
 ## Quick Start
 
 ```bash
-cd /home/eirikr/Github/Blackhole/build
+cd ./build
 ./Blackhole
 ```
 

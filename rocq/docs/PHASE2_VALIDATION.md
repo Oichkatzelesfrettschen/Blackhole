@@ -198,7 +198,7 @@ inline ChristoffelAccel make_schwarzschild_christoffel(double M) {
 
 ```bash
 # Compile test suite (requires C++23)
-cd /home/eirikr/Github/Blackhole
+cd .
 g++ -std=c++23 -O2 -I src tests/verified_physics_test.cpp -o verified_test -lm
 
 # Run tests

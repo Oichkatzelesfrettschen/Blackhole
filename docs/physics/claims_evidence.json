@@ -3,103 +3,173 @@
     {
       "id": "kerr_metric_suite",
       "claim": "The repository implements and validates Kerr-family metric variants and strong-field geometry observables.",
-      "status": "local-validation",
+      "status": "test-registration",
       "files": [
         "src/physics/kerr.h",
         "src/physics/johannsen_psaltis.h",
         "src/physics/coordinates.h"
       ],
       "tests": [
-        "kerr_schild_validation",
-        "kerr_newman_validation",
-        "johannsen_psaltis_validation",
-        "lqg_kerr_validation"
-      ]
+        {
+          "name": "kerr_schild_validation",
+          "evidence_class": "formula-unit"
+        },
+        {
+          "name": "kerr_newman_validation",
+          "evidence_class": "formula-unit"
+        },
+        {
+          "name": "johannsen_psaltis_validation",
+          "evidence_class": "formula-unit"
+        },
+        {
+          "name": "lqg_kerr_validation",
+          "evidence_class": "formula-unit"
+        }
+      ],
+      "required_evidence_class": "formula-unit"
     },
     {
       "id": "newman_penrose_curvature",
       "claim": "The repository exposes Newman-Penrose and curvature invariants for local validation.",
-      "status": "local-validation",
+      "status": "test-registration",
       "files": [
         "src/physics/newman_penrose.h",
         "tests/newman_penrose_test.cpp"
       ],
       "tests": [
-        "newman_penrose_validation"
-      ]
+        {
+          "name": "newman_penrose_validation",
+          "evidence_class": "formula-unit"
+        }
+      ],
+      "required_evidence_class": "formula-unit"
     },
     {
       "id": "novikov_thorne_disk",
       "claim": "The repository implements Novikov-Thorne thin-disk efficiency, ISCO, temperature, and flux profiles.",
-      "status": "local-validation",
+      "status": "test-registration",
       "files": [
         "src/physics/novikov_thorne.h",
         "src/physics/thin_disk.h"
       ],
       "tests": [
-        "novikov_thorne_validation"
-      ]
+        {
+          "name": "novikov_thorne_validation",
+          "evidence_class": "formula-unit"
+        }
+      ],
+      "required_evidence_class": "formula-unit"
     },
     {
       "id": "radiative_transfer_pipeline",
       "claim": "The repository implements radiative transfer integration and polarized Stokes transport with dedicated validation.",
-      "status": "local-validation",
+      "status": "test-registration",
       "files": [
         "src/physics/rte_integrator.h",
         "src/physics/stokes_transport.h"
       ],
       "tests": [
-        "radiative_transfer_validation",
-        "rte_integrator_validation",
-        "stokes_transport_validation",
-        "stokes_invariants_validation",
+        {
+          "name": "radiative_transfer_validation",
+          "evidence_class": "formula-unit"
+        },
+        {
+          "name": "rte_integrator_validation",
+          "evidence_class": "formula-unit"
+        },
+        {
+          "name": "stokes_transport_validation",
+          "evidence_class": "formula-unit"
+        },
+        {
+          "name": "stokes_invariants_validation",
+          "evidence_class": "formula-unit"
+        },
         {
           "name": "cuda_stokes",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "formula-unit"
         }
-      ]
+      ],
+      "required_evidence_class": "formula-unit"
     },
     {
       "id": "eht_observables",
       "claim": "The repository computes EHT-facing visibility observables and checks the analytic Schwarzschild shadow angular size (critical impact parameter b_c = 3 sqrt(3) M) against its closed form and for consistency with the EHT-measured M87*/Sgr A* ring diameters, which are set by but not identical to the shadow's b_c critical curve, with local tests. Rendered-image shadow validation (photon-ring brightness, Kerr asymmetry) is not covered by these tests.",
-      "status": "local-validation",
+      "status": "test-registration",
       "files": [
         "src/physics/eht_visibility.h",
         "tests/eht_shadow_test.cpp",
         "tests/eht_visibility_test.cpp"
       ],
       "tests": [
-        "eht_visibility_validation",
-        "eht_shadow_validation",
-        "phase5_multiwavelength_validation"
-      ]
+        {
+          "name": "eht_visibility_validation",
+          "evidence_class": "formula-unit"
+        },
+        {
+          "name": "eht_shadow_validation",
+          "evidence_class": "mock-observable"
+        },
+        {
+          "name": "phase5_multiwavelength_validation",
+          "evidence_class": "formula-unit"
+        }
+      ],
+      "required_evidence_class": "formula-unit"
     },
     {
       "id": "grmhd_ingestion_streaming",
       "claim": "The repository includes GRMHD ingest, metadata, streaming, async upload, and composite rendering validation.",
-      "status": "local-validation",
+      "status": "test-registration",
       "files": [
         "src/grmhd_packed_loader.h",
         "src/grmhd_streaming.h",
         "src/grmhd_pbo_uploader.h"
       ],
       "tests": [
-        "grmhd_pack_fixture",
-        "grmhd_metadata_validation",
-        "grmhd_hdf5_loader",
-        "grmhd_streamer_e2e",
-        "grmhd_gpu_async_validation",
-        "grmhd_composite_validation",
-        "rt_grmhd_composite_validation",
-        "temporal_grmhd_sampling_validation"
-      ]
+        {
+          "name": "grmhd_pack_fixture",
+          "evidence_class": "component-integration"
+        },
+        {
+          "name": "grmhd_metadata_validation",
+          "evidence_class": "component-integration"
+        },
+        {
+          "name": "grmhd_hdf5_loader",
+          "evidence_class": "component-integration"
+        },
+        {
+          "name": "grmhd_streamer_e2e",
+          "evidence_class": "component-integration"
+        },
+        {
+          "name": "grmhd_gpu_async_validation",
+          "evidence_class": "component-integration"
+        },
+        {
+          "name": "grmhd_composite_validation",
+          "evidence_class": "component-integration"
+        },
+        {
+          "name": "rt_grmhd_composite_validation",
+          "evidence_class": "component-integration"
+        },
+        {
+          "name": "temporal_grmhd_sampling_validation",
+          "evidence_class": "component-integration"
+        }
+      ],
+      "required_evidence_class": "component-integration"
     },
     {
       "id": "cuda_backend_contract",
       "claim": "The CUDA backend has explicit kernel launch, variant, orbital, analytic Kerr, radiative transfer, and Stokes validation coverage.",
-      "status": "local-validation",
+      "status": "test-registration",
       "files": [
         "src/cuda/kernel_launch.h",
         "src/cuda/cuda_backend.h",
@@ -110,51 +180,60 @@
           "name": "cuda_kernel_launch_layout",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "component-integration"
         },
         {
           "name": "cuda_device_physics_validation",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "component-integration"
         },
         {
           "name": "cuda_variants_consistency",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "component-integration"
         },
         {
           "name": "cuda_grmhd_lut",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "component-integration"
         },
         {
           "name": "cuda_analytic_kerr",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "component-integration"
         },
         {
           "name": "cuda_geodesic_orbit",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "component-integration"
         },
         {
           "name": "cuda_rte",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "component-integration"
         },
         {
           "name": "cuda_stokes",
           "requires": [
             "ENABLE_CUDA"
-          ]
+          ],
+          "evidence_class": "component-integration"
         }
-      ]
+      ],
+      "required_evidence_class": "component-integration"
     }
   ]
 }

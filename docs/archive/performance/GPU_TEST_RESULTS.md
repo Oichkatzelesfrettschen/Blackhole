@@ -32,8 +32,8 @@ Successfully tested Blackhole Simulator on dual GPU configuration:
 ```
 
 **Files Modified:**
-- `/home/eric/Playground/Blackhole/shader/include/interop_trace.glsl` (source)
-- `/home/eric/Playground/Blackhole/build/Release/shader/include/interop_trace.glsl` (build)
+- `./shader/include/interop_trace.glsl` (source)
+- `./build/Release/shader/include/interop_trace.glsl` (build)
 
 ### Issue 2: Missing Physics Constants Include
 **File:** `shader/blackhole_main.frag`
@@ -47,8 +47,8 @@ Added after line 2:
 ```
 
 **Files Modified:**
-- `/home/eric/Playground/Blackhole/shader/blackhole_main.frag` (source)
-- `/home/eric/Playground/Blackhole/build/Release/shader/blackhole_main.frag` (build)
+- `./shader/blackhole_main.frag` (source)
+- `./build/Release/shader/blackhole_main.frag` (build)
 
 ---
 
@@ -403,8 +403,8 @@ VRAM is sufficient on both GPUs for all features at 1920x1080.
 
 **For Assistance:**
 - GPU selection scripts: `/tmp/claude-1000/.../scratchpad/run_*_gpu.sh`
-- Performance analysis: `/home/eric/Playground/Blackhole/docs/GPU_PERFORMANCE_ANALYSIS.md`
-- User guide: `/home/eric/Playground/Blackhole/docs/USER_GUIDE.md`
+- Performance analysis: `./docs/GPU_PERFORMANCE_ANALYSIS.md`
+- User guide: `./docs/USER_GUIDE.md`
 
 ---
 
