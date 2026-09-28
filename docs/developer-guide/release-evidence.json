@@ -10,19 +10,19 @@
         "source": "src/render/renderer_contract.h"
       },
       "output_validation_scenes_metrics": {
-        "classification": "unvalidated-roadmap",
-        "value": "shipping renderer pixel invariants and measured scene baselines required",
-        "source": "docs/physics/claims_evidence.json"
+        "classification": "measured-fact",
+        "value": "rendered_output_validation measures shipping pixels against analytic oracles: the Schwarzschild critical curve within 1 px (CI on Mesa llvmpipe), and with BLACKHOLE_RENDER_FULL=1 the disk limb, signed Kerr shadow displacement, disk rotation, and quality-tier exhaustion on a GL 4.6 GPU",
+        "source": "docs/validation/rendered-output-lane.md"
       },
       "backend_availability_parity": {
-        "classification": "local-inference",
-        "value": "CUDA availability is build-option dependent; GL and CUDA runtime parity requires device execution",
-        "source": "build/Release/reports/repo_truth.json"
+        "classification": "measured-fact",
+        "value": "fragment, compute, and CUDA render the backlit Schwarzschild scene with MAE 0 on an RTX 4070 Ti; this is plumbing parity over shared or ported code, and CUDA needs an NVIDIA GL context for interop",
+        "source": "docs/validation/rendered-output-lane.md"
       },
       "performance_tiers": {
-        "classification": "unvalidated-roadmap",
-        "value": "interactive and production tiers require scene-specific measured latency and quality",
-        "source": "bench/"
+        "classification": "measured-fact",
+        "value": "default Kerr fragment path 2.12 ms median GPU at 1324x1032 on an RTX 4070 Ti at the startup camera; the reference tier covers twice the selected affine range at step 0.02; interactive and production latency budgets per scene remain unmeasured",
+        "source": "docs/validation/default-renderer-promotion.md"
       },
       "physical_approximations": {
         "classification": "approximation",
