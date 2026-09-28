@@ -1073,6 +1073,14 @@ void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
       dockLeftId, ImGuiDir_Down, workspace == WorkspaceKind::Gororoba ? 0.42f : 0.50f,
       nullptr, &dockLeftId);
   ImGui::DockBuilderDockWindow("Viewport", dockMainId);
+  if (workspace == WorkspaceKind::Gororoba) {
+    ImGui::DockBuilderDockWindow("System/Strategic Map", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("Operations", dockLeftId);
+    ImGui::DockBuilderDockWindow("Intelligence", dockLeftId);
+    ImGui::DockBuilderDockWindow("Objectives", dockLeftId);
+    ImGui::DockBuilderDockWindow("Event Log", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("Physical Viewport", dockMainId);
+  }
   ImGui::DockBuilderDockWindow("Settings", dockLeftId);
   ImGui::DockBuilderDockWindow("Display", dockLeftId);
   ImGui::DockBuilderDockWindow("Background", dockLeftId);

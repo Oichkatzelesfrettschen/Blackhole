@@ -1167,6 +1167,7 @@ set(PROJECT_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/ui/panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/settings_window.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/campaign_panels.cpp"
+  "${PROJECT_SOURCE_DIR}/src/ui/constellation_panels.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/campaign_realtime.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/strategic_map.cpp"
   "${PROJECT_SOURCE_DIR}/src/ui/observer_panels.cpp"
@@ -1665,6 +1666,7 @@ set(CAMPAIGN_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/game/campaign_session.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation_session.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/desktop_game.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/realtime_driver.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/campaign_story.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/event_loader.cpp"
@@ -4826,6 +4828,15 @@ if(BUILD_TESTING)
   target_link_libraries(workspace_layout_test PRIVATE blackhole_testcore GTest::gtest_main)
   add_test(NAME workspace_layout_validation COMMAND workspace_layout_test)
   set_tests_properties(workspace_layout_validation PROPERTIES TIMEOUT 30 LABELS "ui;unit")
+
+  add_executable(desktop_game_test "${PROJECT_SOURCE_DIR}/tests/desktop_game_test.cpp")
+  target_compile_options(desktop_game_test PRIVATE ${PROJECT_WARNINGS})
+  if(ENABLE_FAST_MATH)
+    target_compile_options(desktop_game_test PRIVATE -fno-fast-math)
+  endif()
+  target_link_libraries(desktop_game_test PRIVATE blackhole_campaign GTest::gtest_main)
+  add_test(NAME desktop_game_validation COMMAND desktop_game_test)
+  set_tests_properties(desktop_game_validation PROPERTIES TIMEOUT 120 LABELS "campaign;determinism;ui")
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
     add_executable(campaign_task_graph_test

@@ -46,6 +46,8 @@ struct SystemStanding {
   /// Controller per band as the player's authority last learned it; invalid =
   /// unknown, empty, or contested.
   std::vector<FactionId> bandController;
+  std::vector<std::int64_t> observationSourceTurn;
+  std::vector<std::int64_t> observationArrivalTurn;
 };
 
 struct ConstellationFleetView {
@@ -61,6 +63,19 @@ struct ConstellationFleetView {
   std::int64_t transitArrivalTurn = 0;
   SystemId transitDestSystem = K_INVALID_SYSTEM_ID; ///< Destination while in transit.
   std::int64_t reportedTurn = 0; ///< Turn the fleet sent the state shown here.
+};
+
+enum class PlayerOrderStatus : std::uint8_t {
+  AwaitingReport, ConfirmedByFleetReport, UndeliveredNotice
+};
+
+struct PlayerOrderView {
+  FleetId fleet = K_INVALID_FLEET_ID;
+  SystemId targetSystem = K_INVALID_SYSTEM_ID;
+  int targetBand = 0;
+  std::int64_t issueTurn = 0;
+  std::int64_t effectTurn = 0;
+  PlayerOrderStatus status = PlayerOrderStatus::AwaitingReport;
 };
 
 /**
@@ -88,6 +103,7 @@ struct ConstellationViewSnapshot {
   FactionStanding player;
   std::vector<SystemStanding> systems;
   std::vector<ConstellationFleetView> fleets;
+  std::vector<PlayerOrderView> orders;
   std::vector<InterSystemLink> links;
 
   // Referee truth -- known to no authority.
