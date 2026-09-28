@@ -1850,6 +1850,8 @@ int main(int argc, char **argv) {
     rs.hawking.hawkingRenderer.cleanup();
     rs.observerView.renderer.shutdown();
     rs.observerView.disclosureLabel.shutdown();
+    rs.observerView.viewGuide.shutdown();
+    rs.overlays.simulatorExplanation.shutdown();
     rs.tesseract.renderer.shutdown();
     rs.tesseract.speculativeLabel.shutdown();
     if (rs.grmhd.grmhdTexture.texture != 0) {

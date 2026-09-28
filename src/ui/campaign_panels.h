@@ -83,6 +83,7 @@ struct CampaignUiState {
   game::NodeId commandOrigin = game::K_AUTHORITY_NODE;
   bool lagging = false;
   bool inboxOpen = true;
+  std::string pauseReason;
 };
 
 [[nodiscard]] inline std::string victoryOutcomeText(const game::CampaignViewSnapshot &view) {
@@ -97,6 +98,7 @@ struct CampaignUiState {
  *         when another session replaces it. The player's preferences (task
  *         cost, backdrop, pause categories) are kept. */
 inline void resetSessionSelection(CampaignUiState &uiState) {
+  uiState.pauseReason.clear();
   uiState.selectedColonyInboxEntry.reset();
   uiState.selectedHostInboxEntry.reset();
   uiState.selectedFleet = game::K_INVALID_FLEET_ID;

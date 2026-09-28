@@ -14,6 +14,7 @@
 #include "game/realtime_driver.h"
 #include "game/station_node.h"
 #include "ui/campaign_panels.h"
+#include "ui/ux_explanations.h"
 
 namespace ui {
 
@@ -21,7 +22,17 @@ bool stepCampaignTurn(game::CampaignSession &session, CampaignUiState &uiState) 
   session.state().advanceTurn();
   const bool colonyPause = uiState.inbox.sync(session.state().arrivals());
   const bool hostPause = uiState.hostInbox.sync(session.state().arrivals());
-  return uiState.focusNode == game::K_AUTHORITY_NODE ? hostPause : colonyPause;
+  const bool focusPause = uiState.focusNode == game::K_AUTHORITY_NODE ? hostPause : colonyPause;
+  if (focusPause) {
+    const game::Inbox &focusInbox =
+        uiState.focusNode == game::K_AUTHORITY_NODE ? uiState.hostInbox : uiState.inbox;
+    if (const auto pauseEntry = focusInbox.lastPauseEntry()) {
+      const game::ArrivalRecord &arrival = focusInbox.entries().at(*pauseEntry).arrival;
+      uiState.pauseReason =
+          campaignPauseReason(game::eventCategoryName(arrival.category), arrival.arrivalTurn);
+    }
+  }
+  return focusPause;
 }
 
 void pumpCampaignRealtime(game::CampaignSession &defaultSession, CampaignUiState &uiState,

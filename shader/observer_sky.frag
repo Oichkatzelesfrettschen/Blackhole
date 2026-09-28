@@ -79,6 +79,8 @@ uniform float starSkyLuminance = 1.0e-3;
 uniform float logLuminanceMin = -7.0;
 uniform float logLuminanceMax = 13.5;
 uniform float displayPeak = 4.0;
+uniform float scaleBarPixels = 0.0;
+uniform float showOverview = 0.0;
 
 uniform float splatPixelX = -1.0;
 uniform float splatPixelY = -1.0;
@@ -371,6 +373,36 @@ void main() {
     fragColor = vec4(0.0, 0.0, 0.0, 1.0);
     return;
   }
+  vec2 overviewMin = vec2(0.68, 0.64);
+  vec2 overviewMax = vec2(0.98, 0.92);
+  if (showOverview > 0.5 && all(greaterThanEqual(uv, overviewMin)) &&
+      all(lessThanEqual(uv, overviewMax))) {
+    vec2 overviewUv = (uv - overviewMin) / (overviewMax - overviewMin);
+    vec3 overviewLook = vec3(-cos((overviewUv.x * 2.0 - 1.0) * PI) *
+                                 cos((overviewUv.y - 0.5) * PI),
+                             -sin((overviewUv.y - 0.5) * PI),
+                             sin((overviewUv.x * 2.0 - 1.0) * PI) *
+                                 cos((overviewUv.y - 0.5) * PI));
+    vec3 overviewSpan;
+    float overviewTexelAngle;
+    vec4 overviewSample = equirectSample(overviewLook, overviewSpan, overviewTexelAngle);
+    vec3 overviewColor = overviewSample.a > NO_SKY_THRESHOLD
+                             ? displayMapped(skyRadiance(overviewSample.rgb, overviewSample.a,
+                                                         overviewSpan, true))
+                             : vec3(0.0);
+    float directionLongitude = atan(viewBasis[2].z, -viewBasis[2].x);
+    float directionLatitude = asin(clamp(-viewBasis[2].y, -1.0, 1.0));
+    vec2 directionUv = vec2((directionLongitude + PI) / (2.0 * PI),
+                            0.5 + directionLatitude / PI);
+    vec2 markerDistance = abs(overviewUv - directionUv);
+    bool marker = (markerDistance.x < 0.008 && markerDistance.y < 0.055) ||
+                  (markerDistance.y < 0.009 && markerDistance.x < 0.045);
+    vec2 edgeDistance = min(overviewUv, 1.0 - overviewUv);
+    bool border = min(edgeDistance.x, edgeDistance.y) < 0.008;
+    fragColor = vec4(marker ? vec3(1.0, 0.75, 0.15)
+                            : border ? vec3(0.8) : overviewColor, 1.0);
+    return;
+  }
   vec2 ndc = uv * 2.0 - 1.0;
   float aspect = resolution.x / max(resolution.y, 1.0);
   vec3 look = normalize(viewBasis * vec3(ndc.x * aspect * tanHalfFov, ndc.y * tanHalfFov, 1.0));
@@ -410,5 +442,14 @@ void main() {
       radiance = skyRadiance(texel.rgb, texel.a, span * (pixelAngle / texelAngle), true);
     }
   }
-  fragColor = vec4(displayMapped(radiance), 1.0);
+  vec3 color = displayMapped(radiance);
+  vec2 barPixel = gl_FragCoord.xy;
+  if (scaleBarPixels > 0.0 && barPixel.x >= 12.0 &&
+      barPixel.x <= 12.0 + scaleBarPixels &&
+      ((barPixel.y >= 65.0 && barPixel.y <= 68.0) ||
+       ((barPixel.x <= 14.0 || barPixel.x >= 10.0 + scaleBarPixels) &&
+        barPixel.y >= 61.0 && barPixel.y <= 72.0))) {
+    color = vec3(1.0);
+  }
+  fragColor = vec4(color, 1.0);
 }

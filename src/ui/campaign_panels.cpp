@@ -37,6 +37,7 @@
 #include "physics/safe_limits.h"
 #include "platform/resource_paths.h"
 #include "ui/strategic_map.h"
+#include "ui/ux_explanations.h"
 
 namespace ui {
 
@@ -57,7 +58,9 @@ const char *orbitLabel(const game::BandView &band, game::OrbitLane lane) {
   return stable ? "orbit: stable" : "orbit: unstable (station-keeping)";
 }
 
-double days(double seconds) { return seconds / K_SECONDS_PER_DAY; }
+double days(double seconds) {
+  return seconds / K_SECONDS_PER_DAY;
+}
 
 /** @brief A span of seconds in the largest unit that keeps it readable. */
 std::string formatSpan(double seconds) {
@@ -86,7 +89,6 @@ const char *nodeName(game::NodeId node) {
   }
   return node == game::K_AUTHORITY_NODE ? "host" : "colony";
 }
-
 
 const game::NodeView *findNode(const game::CampaignViewSnapshot &view, game::NodeId id) {
   const auto found = std::ranges::find(view.nodes, id, &game::NodeView::id);
@@ -122,12 +124,12 @@ std::string remoteAsLastHeard(const game::CampaignViewSnapshot &view, const game
                     : std::format("energy banked {:.1f}", view.energyUnits);
   return std::format("{} as last heard: {}, its clock {} (sent t{}; signal age {} outside / {} "
                      "local)",
-                     nodeName(node.id), reported,
-                     formatSpan(node.properTimeSec), node.asOfTurn, formatSpan(ageSec),
-                     formatSpan(ageSec * viewerRate));
+                     nodeName(node.id), reported, formatSpan(node.properTimeSec), node.asOfTurn,
+                     formatSpan(ageSec), formatSpan(ageSec * viewerRate));
 }
 
-std::string arrivalText(const game::CampaignViewSnapshot &view, const game::ArrivalRecord &arrival) {
+std::string arrivalText(const game::CampaignViewSnapshot &view,
+                        const game::ArrivalRecord &arrival) {
   if (arrival.sender == game::K_NO_NODE) {
     return std::format("fleet {}: redeployment order fizzled (not enough fuel when it arrived)",
                        arrival.fleet);
@@ -136,8 +138,8 @@ std::string arrivalText(const game::CampaignViewSnapshot &view, const game::Arri
     return std::format("tech packet #{} (+{} points)", arrival.payloadIndex + 1,
                        arrival.techPoints);
   }
-  const auto text = std::ranges::find(view.eventTexts, arrival.payloadIndex,
-                                      &game::EventTextView::id);
+  const auto text =
+      std::ranges::find(view.eventTexts, arrival.payloadIndex, &game::EventTextView::id);
   if (text == view.eventTexts.end()) {
     return "notice";
   }
@@ -162,8 +164,7 @@ const char *capabilityEffectText(game::FleetCapability capability) {
 
 void renderOutcomeBanner(const game::CampaignViewSnapshot &view) {
   if (view.status == game::CampaignStatus::Won) {
-    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "%s",
-                       victoryOutcomeText(view).c_str());
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.5f, 1.0f), "%s", victoryOutcomeText(view).c_str());
   } else if (view.status == game::CampaignStatus::Lost) {
     ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "DEFEAT -- deadline t%lld passed",
                        static_cast<long long>(view.deadlineTurn));
@@ -188,8 +189,7 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiSt
     return;
   }
   ImGui::TextDisabled("orders in flight: %zu   reports in flight: %zu   intel: %zu",
-                      view.ordersInFlight.size(), view.reportsInFlight.size(),
-                      view.intel.size());
+                      view.ordersInFlight.size(), view.reportsInFlight.size(), view.intel.size());
   // The outcome vector: the singularity's disturbance and what a deep
   // prograde lane buys against it. Shown only once the mechanic is engaged.
   if (view.instability > 0.0 || view.stabilization > 0.0) {
@@ -204,9 +204,9 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiSt
   }
   if (view.status == game::CampaignStatus::Ongoing && view.victoryEnergyUnits > 0.0) {
     const auto fraction = static_cast<float>(view.energyUnits / view.victoryEnergyUnits);
-    const std::string objective = std::format("energy {:.1f} / {:.0f}  (deadline t{})",
-                                              view.energyUnits, view.victoryEnergyUnits,
-                                              view.deadlineTurn);
+    const std::string objective =
+        std::format("energy {:.1f} / {:.0f}  (deadline t{})", view.energyUnits,
+                    view.victoryEnergyUnits, view.deadlineTurn);
     ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective.c_str());
   } else if (view.status == game::CampaignStatus::Ongoing) {
     ImGui::TextDisabled("energy banked: %.1f (no objective set)", view.energyUnits);
@@ -215,8 +215,8 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiSt
   // so the two bars are rival ends the player chooses between.
   if (view.status == game::CampaignStatus::Ongoing && view.victoryStabilizationUnits > 0.0) {
     const auto fraction = static_cast<float>(view.stabilization / view.victoryStabilizationUnits);
-    const std::string objective = std::format("stabilization {:.2f} / {:.0f}",
-                                              view.stabilization, view.victoryStabilizationUnits);
+    const std::string objective = std::format("stabilization {:.2f} / {:.0f}", view.stabilization,
+                                              view.victoryStabilizationUnits);
     ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f), objective.c_str());
   }
 }
@@ -380,17 +380,18 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
   }
 
   char bandPreview[64];
-  static_cast<void>(std::snprintf(bandPreview, sizeof(bandPreview), "band %d", uiState.composerTargetBand));
+  static_cast<void>(
+      std::snprintf(bandPreview, sizeof(bandPreview), "band %d", uiState.composerTargetBand));
   if (ImGui::BeginCombo("target band", bandPreview)) {
     for (const game::BandView &band : view.bands) {
       std::string bandLabel;
       if (band.validStation) {
         // The clock of the lane and station keeping selected below; 0 marks a
         // band where that orbit is not bound.
-        bandLabel = std::format(
-            "band {}  (dtau/dt {:.4g}, delay {:.1f} d)", band.index,
-            game::bandRateFor(band, uiState.composerLane, uiState.composerStation),
-            band.delayToAuthoritySec / K_SECONDS_PER_DAY);
+        bandLabel =
+            std::format("band {}  (dtau/dt {:.4g}, delay {:.1f} d)", band.index,
+                        game::bandRateFor(band, uiState.composerLane, uiState.composerStation),
+                        band.delayToAuthoritySec / K_SECONDS_PER_DAY);
       } else {
         bandLabel = std::format("band {}  (FORBIDDEN)", band.index);
       }
@@ -437,14 +438,13 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
     uiState.lastCommandValid = true;
   }
 
-  ImGui::SliderFloat("task cost (proper hours)", &uiState.composerCostHours, 1.0f, 500.0f,
-                     "%.0f h", ImGuiSliderFlags_Logarithmic);
+  ImGui::SliderFloat("task cost (proper hours)", &uiState.composerCostHours, 1.0f, 500.0f, "%.0f h",
+                     ImGuiSliderFlags_Logarithmic);
   ImGui::SameLine();
   if (ImGui::Button("Assign task")) {
-    uiState.lastCommandAccepted =
-        session.issueAssignTask(uiState.selectedFleet,
-                                static_cast<double>(uiState.composerCostHours),
-                                uiState.commandOrigin);
+    uiState.lastCommandAccepted = session.issueAssignTask(
+        uiState.selectedFleet, static_cast<double>(uiState.composerCostHours),
+        uiState.commandOrigin);
     uiState.lastCommandValid = true;
   }
 
@@ -453,6 +453,62 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
     // sender has no way to know yet.
     ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "order refused");
   }
+}
+
+void renderDecisionLoop(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
+  ImGui::SeparatorText("Decision loop");
+  ImGui::Text("Acting station: %s", nodeName(uiState.focusNode));
+  if (atColony(view, uiState)) {
+    if (view.victoryTechTier > 0) {
+      ImGui::Text("Objective: colony technology tier %lld (known tier %lld)",
+                  static_cast<long long>(view.victoryTechTier),
+                  static_cast<long long>(view.colonyTechTier));
+    } else {
+      ImGui::TextUnformatted(
+          "Objective: improve the colony outcome tier; host progress arrives by signal.");
+    }
+  } else if (view.victoryEnergyUnits > 0.0) {
+    ImGui::Text("Objective: bank %.1f energy at the host (%.1f known)", view.victoryEnergyUnits,
+                view.energyUnits);
+    if (view.victoryStabilizationUnits > 0.0) {
+      ImGui::Text("Alternative: reach %.1f stabilization (%.1f known)",
+                  view.victoryStabilizationUnits, view.stabilization);
+    }
+  } else {
+    ImGui::TextUnformatted("Objective: inspect the host ledger and technology milestones.");
+  }
+  if (uiState.selectedFleet != game::K_INVALID_FLEET_ID) {
+    ImGui::TextWrapped("Order preview: %s sends fleet %u toward band %d or assigns a task",
+                       nodeName(uiState.focusNode), uiState.selectedFleet,
+                       uiState.composerTargetBand);
+  } else {
+    ImGui::TextUnformatted("Order preview: select a fleet to stage an order.");
+  }
+  if (!view.ordersInFlight.empty()) {
+    const game::OrderInFlightView &order = view.ordersInFlight.back();
+    if (order.effectTurnKnown) {
+      ImGui::TextWrapped(
+          "Delivery delay: latest order reaches fleet %u on turn %lld (%lld turns remaining)",
+          order.fleet, static_cast<long long>(order.effectTurn),
+          static_cast<long long>(std::max<std::int64_t>(0, order.effectTurn - view.turn)));
+    } else {
+      ImGui::TextUnformatted(
+          "Delivery delay: acting station cannot estimate the latest order's arrival.");
+    }
+  } else {
+    ImGui::TextUnformatted("Delivery delay: an issued order travels before its effect appears.");
+  }
+  const auto arrival = std::ranges::find_if(view.arrivals.rbegin(), view.arrivals.rend(),
+                                            [&uiState](const game::ArrivalRecord &record) {
+                                              return record.destination == uiState.focusNode;
+                                            });
+  if (arrival != view.arrivals.rend()) {
+    ImGui::TextWrapped("Arrival: turn %lld, %s", static_cast<long long>(arrival->arrivalTurn),
+                       arrivalText(view, *arrival).c_str());
+  } else {
+    ImGui::TextUnformatted("Arrival: the acting station has received no signal yet.");
+  }
+  ImGui::TextUnformatted("Next decision: read arrivals, adjust the order, then advance or resume.");
 }
 
 void renderIntelWindow(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
@@ -485,8 +541,8 @@ void renderIntelWindow(const game::CampaignViewSnapshot &view, const CampaignUiS
   }
   // Latest first: the newest arrival is what the player acts on.
   for (const game::IntelView &report : std::ranges::reverse_view(view.intel)) {
-    const ImVec4 color = report.corrupted ? ImVec4(1.0f, 0.6f, 0.4f, 1.0f)
-                                          : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+    const ImVec4 color =
+        report.corrupted ? ImVec4(1.0f, 0.6f, 0.4f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
     ImGui::TextColored(
         color, "t%lld: fleet %u completed task %u at t%lld (+%.1f energy%s, %lld turns stale)",
         static_cast<long long>(report.receivedTurn), report.fleet, report.task,
@@ -567,14 +623,24 @@ void renderRealtimeControls(const game::CampaignViewSnapshot &view, CampaignUiSt
     }
     uiState.focusNode = static_cast<game::NodeId>(focusChoice);
     focus = findNode(view, uiState.focusNode);
+    const std::string focusEffect(K_FOCUS_EFFECT_TEXT);
+    ImGui::TextWrapped("%s", focusEffect.c_str());
   }
   ImGui::Checkbox("run in real time", &uiState.realtime);
   ImGui::SameLine();
   ImGui::Checkbox("inbox", &uiState.inboxOpen);
   ImGui::SameLine();
-  bool paused = uiState.driver.paused();
-  if (ImGui::Checkbox("paused", &paused)) {
-    uiState.driver.setPaused(paused);
+  if (uiState.driver.paused()) {
+    if (ImGui::Button("Resume")) {
+      uiState.driver.setPaused(false);
+      uiState.pauseReason.clear();
+    }
+    ImGui::SameLine();
+    ImGui::TextWrapped("%s", uiState.pauseReason.empty() ? "Paused by the player."
+                                                         : uiState.pauseReason.c_str());
+  } else if (ImGui::Button("Pause")) {
+    uiState.driver.setPaused(true);
+    uiState.pauseReason = "Paused by the player.";
   }
   if (ImGui::SliderFloat("local s per wall s", &uiState.localSecondsPerWallSecond, 1.0f,
                          static_cast<float>(game::K_MAX_LOCAL_SECONDS_PER_WALL_SECOND), "%.0f",
@@ -625,8 +691,8 @@ void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &
   // The inbox of the station the player stands at, labeled by that station.
   game::Inbox &inbox =
       uiState.focusNode == game::K_AUTHORITY_NODE ? uiState.hostInbox : uiState.inbox;
-  std::optional<std::size_t> &selectedEntry =
-      uiState.focusNode == game::K_AUTHORITY_NODE ? uiState.selectedHostInboxEntry
+  std::optional<std::size_t> &selectedEntry = uiState.focusNode == game::K_AUTHORITY_NODE
+                                                  ? uiState.selectedHostInboxEntry
                                                   : uiState.selectedColonyInboxEntry;
   const std::string title = std::format("{} inbox ({} unread)###CampaignInbox",
                                         nodeName(inbox.owner()), inbox.unreadCount());
@@ -639,9 +705,9 @@ void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &
     ImGui::TextDisabled("nothing has arrived");
   }
   for (const game::InboxGroup &group : groups) {
-    const std::string header = std::format("from {} ({} unread, {} total)###sender{}",
-                                           nodeName(group.sender), group.unread,
-                                           group.entries.size(), group.sender);
+    const std::string header =
+        std::format("from {} ({} unread, {} total)###sender{}", nodeName(group.sender),
+                    group.unread, group.entries.size(), group.sender);
     if (!ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
       continue;
     }
@@ -700,11 +766,11 @@ void renderTechWindow(const game::CampaignViewSnapshot &view, const CampaignUiSt
     ImGui::End();
     return;
   }
-  const std::int64_t points = std::accumulate(
-      view.nodes.begin(), view.nodes.end(), std::int64_t{0},
-      [](std::int64_t best, const game::NodeView &node) {
-        return node.isColony ? std::max(best, node.techPoints) : best;
-      });
+  const std::int64_t points =
+      std::accumulate(view.nodes.begin(), view.nodes.end(), std::int64_t{0},
+                      [](std::int64_t best, const game::NodeView &node) {
+                        return node.isColony ? std::max(best, node.techPoints) : best;
+                      });
   // The colony's tier is present truth only at the colony; at the host it is
   // what the colony last reported, with the report's age.
   if (atColony(view, uiState)) {
@@ -719,11 +785,16 @@ void renderTechWindow(const game::CampaignViewSnapshot &view, const CampaignUiSt
       textDisabledWrapped(remoteAsLastHeard(view, node, focus->properTimeRate));
     }
   }
+  std::int64_t tier = 0;
   for (const game::TechLevelView &level : view.techTiers) {
+    ++tier;
     const bool unlocked = points >= level.points;
-    ImGui::TextColored(unlocked ? ImVec4(0.5f, 1.0f, 0.6f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
-                       "%s %s  (%lld points)", unlocked ? "[x]" : "[ ]", level.name.c_str(),
-                       static_cast<long long>(level.points));
+    const std::string milestone =
+        technologyMilestoneText(level.name, level.points, tier, view.victoryTechTier);
+    ImGui::PushStyleColor(ImGuiCol_Text, unlocked ? ImVec4(0.5f, 1.0f, 0.6f, 1.0f)
+                                                  : ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+    ImGui::TextWrapped("%s %s", unlocked ? "[x]" : "[ ]", milestone.c_str());
+    ImGui::PopStyleColor();
   }
   ImGui::End();
 }
@@ -759,8 +830,8 @@ void renderBackdropPicker(const CampaignBackdrop *backdrops, int backdropCount,
     }
     bool clicked = false;
     if (backdrops[index].textureId != 0) {
-      clicked = ImGui::ImageButton("thumb", static_cast<ImTextureID>(backdrops[index].textureId),
-                                   thumb);
+      clicked =
+          ImGui::ImageButton("thumb", static_cast<ImTextureID>(backdrops[index].textureId), thumb);
     } else {
       clicked = ImGui::Button("stars", ImVec2(thumb.x + 8.0f, thumb.y + 8.0f));
     }
@@ -870,6 +941,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
       ImGui::SeparatorText("Fleet roster");
       renderFleetRoster(focusedView, uiState);
       renderOrderComposer(session, focusedView, uiState);
+      renderDecisionLoop(focusedView, uiState);
     } else {
       ImGui::TextDisabled("enable to command fleets around Gororoba, the singularity");
     }
@@ -878,8 +950,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
 
   if (uiState.windowsOpen) {
     // The story button above may have swapped sessions this frame.
-    game::CampaignSession &session =
-        uiState.storySession ? *uiState.storySession : defaultSession;
+    game::CampaignSession &session = uiState.storySession ? *uiState.storySession : defaultSession;
     // A fresh snapshot after any button above mutated the campaign this frame.
     const game::CampaignViewSnapshot view = session.state().perceivedSnapshot(uiState.focusNode);
     unsigned int backdropTextureId = 0;

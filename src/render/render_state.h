@@ -158,6 +158,7 @@ struct RenderState {
     /// skyTimeScale * N / fps. Empty outside a recording.
     std::optional<double> recordClockOrigin;
     HudOverlay disclosureLabel;       ///< Spin disclosure drawn into the presented texture.
+    HudOverlay viewGuide;             ///< Direction and angular scale for a magnified sky.
     std::string disclosureLabelText;  ///< Text the label layout was fitted to.
     int disclosureLabelWidth = 0;     ///< Render width the label layout was fitted to.
     int disclosureLabelHeight = 0;    ///< Render height the label layout was fitted to.
@@ -248,6 +249,7 @@ struct RenderState {
     OverlayCurve2D curveOverlay;
     bool curveOverlayLoaded = false;
     HudOverlay controlsOverlay;
+    HudOverlay simulatorExplanation;
     bool controlsOverlayReady = false;
     bool controlsOverlayConfigInit = false;
     bool controlsOverlayEnabled = true;
