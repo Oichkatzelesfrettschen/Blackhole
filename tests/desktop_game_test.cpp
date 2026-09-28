@@ -116,4 +116,54 @@ TEST(DesktopGame, FixedSeedRivalAndSelectionPreserveReplay) {
   }
 }
 
+bool isDecisionNotice(game::GameEventKind kind) {
+  return kind == game::GameEventKind::FleetReport || kind == game::GameEventKind::ArrivalReport ||
+         kind == game::GameEventKind::ControlObservation ||
+         kind == game::GameEventKind::ContestedOrUnknown;
+}
+
+bool anyDecisionNotice(const std::vector<game::GameEvent> &events, std::size_t first) {
+  for (std::size_t index = first; index < events.size(); ++index) {
+    if (isDecisionNotice(events.at(index).kind)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Runs one batched advance and the same number of single steps on `stepped`,
+// returning the turns advanced; the two sessions must stay digest-identical.
+std::int64_t advanceBoth(game::DesktopGame &batched, game::DesktopGame &stepped, std::int64_t cap) {
+  const std::int64_t advanced = batched.advanceToNextNotice(cap);
+  for (std::int64_t turn = 0; turn < advanced; ++turn) {
+    stepped.advanceTurn();
+  }
+  EXPECT_EQ(batched.state().stateDigest(), stepped.state().stateDigest());
+  return advanced;
+}
+
+TEST(DesktopGame, AdvanceToNextNoticeMatchesSingleSteppingAndStopsOnNotices) {
+  constexpr std::int64_t kCap = 250;
+  game::DesktopGame batched(3);
+  game::DesktopGame stepped(3);
+  const game::FleetId fleet = batched.snapshot().fleets.front().id;
+  const game::ConstellationCommand order{.fleet = fleet, .targetSystem = 1, .targetBand = 2};
+  ASSERT_EQ(batched.issue(order), game::OrderRejection::None);
+  ASSERT_EQ(stepped.issue(order), game::OrderRejection::None);
+  int stops = 0;
+  while (batched.state().overallStatus() == game::CampaignStatus::Ongoing && stops < 2000) {
+    const std::size_t eventsBefore = batched.events().size();
+    const std::int64_t advanced = advanceBoth(batched, stepped, kCap);
+    ASSERT_TRUE(advanced > 0 && advanced <= kCap);
+    const bool stoppedEarly =
+        advanced < kCap && batched.state().overallStatus() == game::CampaignStatus::Ongoing;
+    EXPECT_TRUE(!stoppedEarly || anyDecisionNotice(batched.events(), eventsBefore));
+    ++stops;
+  }
+  EXPECT_NE(batched.state().overallStatus(), game::CampaignStatus::Ongoing);
+  EXPECT_EQ(batched.turnDigests(), stepped.turnDigests());
+  EXPECT_EQ(batched.advanceToNextNotice(kCap), 0);
+  EXPECT_LT(stops, static_cast<int>(batched.turnDigests().size()));
+}
+
 } // namespace

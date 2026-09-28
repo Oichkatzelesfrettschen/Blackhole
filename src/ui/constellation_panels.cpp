@@ -28,6 +28,12 @@
 namespace ui {
 namespace {
 
+// Turns between automatic checkpoint saves.
+constexpr std::int64_t K_CHECKPOINT_TURNS = 25;
+// Longest single "Advance to next report" run, so one click never skips a
+// quiet stretch longer than this without returning control to the player.
+constexpr std::int64_t K_MAX_TURNS_PER_ADVANCE = 250;
+
 const char *rejectionName(game::OrderRejection reason) {
   switch (reason) {
   case game::OrderRejection::None:
@@ -201,12 +207,22 @@ void drawOperations(ConstellationUiState &uiState,
     if (uiState.lastRejection != game::OrderRejection::None) {
       ImGui::Text("Order refused: %s", rejectionName(uiState.lastRejection));
     }
+    const std::int64_t turnBefore = uiState.session->state().turn();
     if (ImGui::Button("Advance one turn")) {
       uiState.session->advanceTurn();
-      if (uiState.session->state().turn() % 25 == 0) {
-        uiState.saveMessage =
-            writeSave(*uiState.session) ? "Checkpoint saved" : "Checkpoint failed";
-      }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Advance to next report")) {
+      uiState.advancedTurns = uiState.session->advanceToNextNotice(K_MAX_TURNS_PER_ADVANCE);
+    }
+    if (uiState.advancedTurns > 0) {
+      ImGui::TextDisabled("Last advance: %lld turns",
+                          static_cast<long long>(uiState.advancedTurns));
+    }
+    // A checkpoint lands whenever play crosses a K_CHECKPOINT_TURNS boundary,
+    // whether by one step or by a batched advance.
+    if (uiState.session->state().turn() / K_CHECKPOINT_TURNS != turnBefore / K_CHECKPOINT_TURNS) {
+      uiState.saveMessage = writeSave(*uiState.session) ? "Checkpoint saved" : "Checkpoint failed";
     }
   }
   ImGui::End();

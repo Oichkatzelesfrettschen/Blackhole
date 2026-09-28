@@ -1,11 +1,13 @@
 #include "game/desktop_game.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "game/campaign_view.h"
 #include "game/constellation.h"
 #include "game/constellation_session.h"
 #include "game/constellation_types.h"
@@ -16,6 +18,23 @@
 
 namespace game {
 namespace {
+
+bool isDecisionNotice(const GameEvent &event) {
+  switch (event.kind) {
+  case GameEventKind::FleetReport:
+  case GameEventKind::ArrivalReport:
+  case GameEventKind::ControlObservation:
+  case GameEventKind::ContestedOrUnknown:
+  case GameEventKind::OutcomeNotice:
+    return true;
+  case GameEventKind::OrderIssued:
+  case GameEventKind::EnergyReport:
+  case GameEventKind::StabilizationReport:
+  case GameEventKind::ControlReport:
+    return false;
+  }
+  return false;
+}
 
 std::vector<std::uint8_t> scenarioBytes(std::uint64_t seed) {
   const ConstellationConfig config = defaultConstellationConfig(seed);
@@ -138,6 +157,20 @@ void DesktopGame::advanceTurn() {
     events_.push_back(GameEvent{.kind = GameEventKind::OutcomeNotice, .receivedTurn = after.turn});
   }
   turnDigests_.push_back(state().stateDigest());
+}
+
+std::int64_t DesktopGame::advanceToNextNotice(std::int64_t maxTurns) {
+  std::int64_t advanced = 0;
+  while (advanced < maxTurns && state().overallStatus() == CampaignStatus::Ongoing) {
+    const std::size_t firstNew = events_.size();
+    advanceTurn();
+    ++advanced;
+    if (std::any_of(events_.begin() + static_cast<std::ptrdiff_t>(firstNew), events_.end(),
+                    isDecisionNotice)) {
+      break;
+    }
+  }
+  return advanced;
 }
 
 std::vector<std::uint8_t> DesktopGame::save() const {
