@@ -367,16 +367,6 @@ void loadSpectralSynchHawkingLuts(RenderState &rs) {
 #endif
   }
 
-  if (!rs.luts.synchFLutCreated) {
-    constexpr int kSynchFLutSize = SYNCH_G_LUT_DOMAIN_ENTRIES;
-    std::vector<float> synchFData(static_cast<std::size_t>(kSynchFLutSize));
-    physics::synchrotronFGenerateLut(synchFData.data(), kSynchFLutSize,
-                                     static_cast<double>(physics::SYNCH_G_LUT_X_MIN),
-                                     static_cast<double>(physics::SYNCH_G_LUT_X_MAX));
-    rs.luts.texSynchFLut = createFloatTexture2D(kSynchFLutSize, 1, synchFData);
-    rs.luts.synchFLutCreated = true;
-  }
-
   // Load Hawking radiation LUTs
   if (!rs.hawking.hawkingLutsLoaded) {
     std::filesystem::path const lutPath = resourcePath("assets/luts");

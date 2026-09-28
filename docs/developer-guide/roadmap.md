@@ -423,8 +423,8 @@ See `docs/physics/lacunae.md` for the full gap analysis driving Phase 6 work.
 | 6.2.2 Binary file read with frame offsets | COMPLETE | seekg per-frame byteOffset |
 | 6.2.3 Background loader thread | COMPLETE | std::thread + condition_variable |
 | 6.2.4 OpenGL PBO GPU upload | COMPLETE | src/gpu/grmhd_gpu_uploader.h/.cpp; wraps GrmhdPBOUploader for streamer tile integration |
-| 6.2.5 Synchrotron emission formulas | COMPLETE | grmhdEmission() + grmhdAbsorption() in grmhd_octree.glsl; use synchrotron_emission.glsl |
-| 6.2.6 Self-absorption model | COMPLETE | grmhdAbsorption() in grmhd_octree.glsl (absorption_coefficient() from synchrotron) |
+| 6.2.5 Synchrotron emission formulas | OPEN | The rendered GRMHD path samples a packed 3D volume and weights density by normalized rho and internal energy; physical synchrotron emission needs an active ray integration model and simulation unit conversion. |
+| 6.2.6 Self-absorption model | OPEN | The rendered GRMHD path has no self-absorption integration. |
 
 **Target:** 60fps @ 1080p with multi-frame interpolation, >90% cache hit rate
 
