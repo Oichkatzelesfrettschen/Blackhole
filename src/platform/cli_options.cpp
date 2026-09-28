@@ -22,7 +22,7 @@ void printCliUsage(const char *argv0) {
               " [--record-frames <dir> <N>] [--record-profile <name>]\n", argv0);
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
   std::printf("  --workspace-screenshot <prefix>  Capture whole-window PNG and layout JSON.\n");
-  std::printf("  --workspace <simulator|gororoba|diagnostics>  Select a fresh workspace.\n");
+  std::printf("  --workspace <simulator|propertime|diagnostics>  Select a fresh workspace.\n");
   std::printf("  --window-size <WxH>      Capture framebuffer size.\n");
   std::printf("  --ui-scale <S>           Capture UI scale (default: 1).\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");

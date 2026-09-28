@@ -58,7 +58,7 @@ void renderRmlUiPanel(blackhole::RenderState &rs);
 /** @brief GPU timing toggles, HUD overlay controls, and the frame-time plot. */
 void renderPerformancePanel(blackhole::RenderState &rs, float cpuFrameMs);
 
-enum class WorkspaceKind { Simulator, Gororoba, Diagnostics };
+enum class WorkspaceKind { Simulator, ProperTime, Diagnostics };
 inline constexpr int K_WORKSPACE_SCHEMA_VERSION = 1;
 
 /** @brief Rebuilds the selected workspace in the main dockspace. */

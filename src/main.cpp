@@ -1578,9 +1578,10 @@ void renderModeMenu(Settings &settings, RenderState &rs) {
       settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::Simulator);
       rs.overlays.firstLayout = true;
     }
-    if (ImGui::MenuItem("Singularity: GOROROBA", nullptr,
-                        settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba))) {
-      settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::Gororoba);
+    if (ImGui::MenuItem("Singularity: Proper Time", nullptr,
+                        settings.workspaceKind ==
+                            static_cast<int>(ui::WorkspaceKind::ProperTime))) {
+      settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::ProperTime);
       rs.overlays.firstLayout = true;
     }
     ImGui::EndMenu();
@@ -1598,7 +1599,7 @@ void renderWorkspacePanels(RenderState &rs, const Settings &settings, GLFWwindow
   if (!panelsVisible) {
     return;
   }
-  if (settings.workspaceKind != static_cast<int>(ui::WorkspaceKind::Gororoba)) {
+  if (settings.workspaceKind != static_cast<int>(ui::WorkspaceKind::ProperTime)) {
     renderControlsSettingsPanel(rs);
     renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
     renderBackgroundPanel(rs);
@@ -1612,7 +1613,7 @@ void renderWorkspacePanels(RenderState &rs, const Settings &settings, GLFWwindow
     renderGizmoPanel(rs);
     renderPerformancePanel(rs, cpuFrameMs);
   }
-  if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba)) {
+  if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::ProperTime)) {
     ui::renderConstellationPanels(constellationUi, rs);
   } else if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Diagnostics)) {
     ui::renderCampaignWindows(campaignSession, campaignUi, campaignBackdrops.data(),
@@ -1645,7 +1646,7 @@ bool workspaceCaptureOptionsValid(const platform::CliOptions &cli) {
   if (!capture) {
     return !options;
   }
-  const bool known = cli.workspaceName == "simulator" || cli.workspaceName == "gororoba" ||
+  const bool known = cli.workspaceName == "simulator" || cli.workspaceName == "propertime" ||
                      cli.workspaceName == "diagnostics";
   const bool sized = cli.windowWidth != 0 && cli.windowHeight != 0;
   const bool exclusive = cli.exportFramePath.empty() && cli.exportRawFramePath.empty() &&
@@ -1654,8 +1655,8 @@ bool workspaceCaptureOptionsValid(const platform::CliOptions &cli) {
 }
 
 ui::WorkspaceKind workspaceKindFromName(std::string_view name) {
-  if (name == "gororoba") {
-    return ui::WorkspaceKind::Gororoba;
+  if (name == "propertime") {
+    return ui::WorkspaceKind::ProperTime;
   }
   if (name == "diagnostics") {
     return ui::WorkspaceKind::Diagnostics;
@@ -1799,7 +1800,7 @@ int main(int argc, char **argv) {
     // Curve overlay for plotting (e.g., critical curves)
     RenderState rs;
 
-    // The simulator campaign and GOROROBA session own independent game state.
+    // The simulator campaign and Proper Time session own independent game state.
     game::CampaignSession campaignSession;
     ui::CampaignUiState campaignUi;
     ui::ConstellationUiState constellationUi;
@@ -2003,7 +2004,7 @@ int main(int argc, char **argv) {
       // code reads rs.scene.mode: dispatch, post-processing, and overlays then
       // see one scene for the whole frame.
       if (input.isUIVisible() &&
-          settings.workspaceKind != static_cast<int>(ui::WorkspaceKind::Gororoba)) {
+          settings.workspaceKind != static_cast<int>(ui::WorkspaceKind::ProperTime)) {
         renderSettingsWindow(rs);
       }
       // The --curve-tsv plot is independent of the scene.

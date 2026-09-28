@@ -1,7 +1,7 @@
 # Blackhole Documentation
 
 Blackhole contains the Simulator / Workbench renderer and the Singularity:
-GOROROBA game. The products share physics and build infrastructure while
+Proper Time game. The products share physics and build infrastructure while
 maintaining separate release evidence.
 
 ## Getting Started

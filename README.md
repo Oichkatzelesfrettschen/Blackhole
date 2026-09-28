@@ -8,7 +8,7 @@ validation foundation:
 | Product | Current maturity | Separate release evidence |
 |---------|------------------|---------------------------|
 | **Blackhole Simulator / Workbench** | Active desktop renderer and research workbench with GLSL, optional CUDA, and Blender integration | Default renderer contract, measured output scenes, backend parity, performance tiers, and physical approximation register |
-| **Singularity: GOROROBA** | Deterministic campaign and constellation core under active desktop integration | Canonical scenario completion, save compatibility, deterministic replay, and witnessed UI captures |
+| **Singularity: Proper Time** | Deterministic campaign and constellation core under active desktop integration | Canonical scenario completion, save compatibility, deterministic replay, and witnessed UI captures |
 
 The products share physics types, build infrastructure, and selected rendering
 assets. Headless campaign tests establish core behavior; they do not establish a
@@ -19,7 +19,7 @@ to inspect the configured tree.
 
 ## Highlights
 - Shared desktop application in C++23 + OpenGL 4.6.
-- Deterministic campaign and constellation rules for Singularity: GOROROBA.
+- Deterministic campaign and constellation rules for Singularity: Proper Time.
 - Pure GLSL desktop workflow and CUDA-enabled desktop workflow via CMake presets.
 - Blender bridge/addon support for the external Blender track.
 - LUT-driven emissivity/redshift and validation assets in `assets/`.

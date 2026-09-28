@@ -95,11 +95,11 @@ const char *eventName(game::GameEventKind kind) {
 }
 
 std::filesystem::path savePath() {
-  return "gororoba.save";
+  return "propertime.save";
 }
 
 bool writeSave(const game::DesktopGame &session) {
-  const std::filesystem::path temporary = "gororoba.save.tmp";
+  const std::filesystem::path temporary = "propertime.save.tmp";
   const std::vector<std::uint8_t> bytes = session.save();
   std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
   output.write(reinterpret_cast<const char *>(bytes.data()),

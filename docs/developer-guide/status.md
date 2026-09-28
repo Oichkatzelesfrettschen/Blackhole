@@ -19,7 +19,7 @@ explains the recorded surfaces. Registered tests are inventory, not execution.
   disk, Kerr, quality-tier, and backend scenes on a GL 4.6 GPU. The
   [promotion record](../validation/default-renderer-promotion.md) compares the
   default path with the legacy beauty tracer.
-- **Singularity: GOROROBA:** `game::CampaignSession` drives the canonical
+- **Singularity: Proper Time:** `game::CampaignSession` drives the canonical
   campaign scenario. `game::ConstellationSession` owns the multi-system contest.
   `campaign_sim` and campaign/constellation tests exercise deterministic
   headless behavior. Save format version 1 is declared in
