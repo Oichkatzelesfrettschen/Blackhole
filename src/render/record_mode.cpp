@@ -594,7 +594,8 @@ void writeRendererMetadata(const RenderState &rs, const platform::CliOptions &cl
       "  \"radiative_model\": \"{}\",\n  \"quality_tier\": \"{}\",\n"
       "  \"max_steps\": {},\n  \"step_size\": {:.9g},\n"
       "  \"scene\": \"{}\",\n  \"width\": {},\n  \"height\": {},\n"
-      "  \"camera_distance\": {:.9g},\n  \"camera_pitch_degrees\": {:.9g},\n"
+      "  \"camera_distance\": {:.9g},\n  \"camera_yaw_degrees\": {:.9g},\n"
+      "  \"camera_pitch_degrees\": {:.9g},\n"
       "  \"camera_fov_degrees\": {:.9g},\n"
       "  \"camera_aim_target_world\": [{:.9g}, {:.9g}, {:.9g}],\n"
       "  \"kerr_spin\": {:.9g},\n  \"schwarzschild_radius\": {:.9g},\n"
@@ -604,7 +605,7 @@ void writeRendererMetadata(const RenderState &rs, const platform::CliOptions &cl
       rendererStepBudget(contract, rs.dispatch.computeMaxSteps, rs.dispatch.computeStepSize),
       rendererStepSize(contract, rs.dispatch.computeStepSize),
       cli.referenceScene, rs.targets.renderWidth, rs.targets.renderHeight,
-      camera.distance, camera.pitch, camera.fov, aimTarget.x, aimTarget.y, aimTarget.z,
+      camera.distance, camera.yaw, camera.pitch, camera.fov, aimTarget.x, aimTarget.y, aimTarget.z,
       contract.geodesic == GeodesicModel::SchwarzschildReference ? 0.0f : rs.physicsCore.kerrSpin,
       rs.recording.recordCurRs, rs.recording.recordCurIsco);
   if (rs.terminalDiagnostics.valid) {
@@ -693,7 +694,9 @@ std::optional<std::pair<double, double>> observerCaptureClock(const platform::Cl
 
 double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex,
                            double wallSeconds) {
-  if (!cli.referenceScene.empty()) {
+  if (!cli.referenceScene.empty() ||
+      (cli.exportFrames > 0 &&
+       (!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()))) {
     return 0.0;
   }
   return recordOutputSeconds(cli, recordFrameIndex).value_or(wallSeconds);
@@ -731,8 +734,8 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
   if (cli.exportFramePath.empty() && cli.exportRawFramePath.empty()) {
     return;
   }
-  // Warm up 5 frames so the scene has settled, then export once.
-  if (++rs.exporting.exportWarmup < 5 || rs.exporting.exportPerformed ||
+  const int captureFrame = cli.exportFrames > 0 ? cli.exportFrames : 5;
+  if (++rs.exporting.exportWarmup < captureFrame || rs.exporting.exportPerformed ||
       rs.targets.renderWidth <= 0 || rs.targets.renderHeight <= 0) {
     return;
   }

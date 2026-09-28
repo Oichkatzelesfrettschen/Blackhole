@@ -1368,7 +1368,8 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
 
   /* --export-frame / --export-raw-frame: break after the export frame above. */
   if ((!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()) && sceneSettled) {
-    if (++rs.exporting.exportDone >= 6) { /* 5 warmup + 1 export frame */
+    const int exitFrame = cli.exportFrames > 0 ? cli.exportFrames : 6;
+    if (++rs.exporting.exportDone >= exitFrame) {
       return true;
     }
   }
@@ -1687,6 +1688,12 @@ int main(int argc, char **argv) {
     applyEnvironmentConfig(rs);
     if (K_APP_VARIANT_CUDA_ONLY) {
       rs.dispatch.contract.backend = RenderBackend::Cuda;
+    }
+    if (const auto backend = blackhole::rendererBackendFromName(cli.rendererBackend)) {
+      rs.dispatch.contract.backend = *backend;
+    }
+    if (const auto geodesic = blackhole::geodesicModelFromName(cli.rendererGeodesic)) {
+      rs.dispatch.contract.geodesic = *geodesic;
     }
     blackhole::normalizeRendererContract(rs.dispatch.contract);
     std::printf("Renderer startup: %.*s / %.*s / %.*s / %.*s; %d steps, %.3f step size\n",

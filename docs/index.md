@@ -84,6 +84,7 @@ maintaining separate release evidence.
 
 ## Validation
 
+- [Default Renderer Promotion](validation/default-renderer-promotion.md) -- startup-camera captures and GPU timing for legacy beauty and the default contract
 - [Rendered-Output Lane](validation/rendered-output-lane.md) -- deterministic desktop captures, analytic geometry, image metrics, and offscreen CI
 - [OpenUniverse Import Validation](validation/openuniverse-import-validation.md) -- deep research and OpenUniverse import validation results
 - [Physics, Numerics, and Game-Engine Audit](audits/physics-and-game-engine/00-summary.md) -- ranked defects in Kerr tracing, disk emission, library physics, game clocks, and open_gororoba numerics adoptions
