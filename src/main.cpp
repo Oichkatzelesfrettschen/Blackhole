@@ -1567,7 +1567,7 @@ void initializeWorkspaceLayout(Settings &settings, const ui::CampaignUiState &ca
 void prepareWorkspaceDockspace(ImGuiID dockspaceId, Settings &settings, RenderState &rs) {
   ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
   if (rs.overlays.firstLayout) {
-    resetLayout(dockspaceId, static_cast<ui::WorkspaceKind>(settings.workspaceKind), rs.scene.mode);
+    resetLayout(dockspaceId, static_cast<ui::WorkspaceKind>(settings.workspaceKind));
     rs.overlays.firstLayout = false;
     rs.overlays.sceneWindowFocusPending = true;
     settings.workspaceSchemaVersion = ui::K_WORKSPACE_SCHEMA_VERSION;
@@ -1651,8 +1651,7 @@ int renderTargetExtent(int exportExtent, bool referenceScene, float viewportExte
 bool workspaceCaptureOptionsValid(const platform::CliOptions &cli) {
   const bool capture = !cli.workspaceScreenshotPath.empty();
   const bool options = !cli.workspaceName.empty() || !cli.sceneName.empty() ||
-                       cli.windowWidth != 0 ||
-                       cli.windowHeight != 0 || cli.uiScale != 1.0f;
+                       cli.windowWidth != 0 || cli.windowHeight != 0 || cli.uiScale != 1.0f;
   if (!capture) {
     return !options;
   }

@@ -1072,8 +1072,7 @@ void renderTesseractPanel(RenderState &rs) {
   ImGui::End();
 }
 
-void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace,
-                 RenderState::SceneMode sceneMode) {
+void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
   ImGui::DockBuilderRemoveNode(dockspaceId);
   ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
   ImGui::DockBuilderSetNodePos(dockspaceId, ImGui::GetMainViewport()->WorkPos);
@@ -1098,6 +1097,7 @@ void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace,
   ImGui::DockBuilderDockWindow("Settings", dockLeftId);
   ImGui::DockBuilderDockWindow("Display", dockLeftId);
   ImGui::DockBuilderDockWindow("Background", dockLeftId);
+  ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
   ImGui::DockBuilderDockWindow("Controls", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Performance", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Wiregrid", dockLeftDownId);
@@ -1109,22 +1109,17 @@ void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace,
   ImGui::DockBuilderDockWindow("Curve Overlay", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Observer physics note", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Observer from far away (schematic)", dockLeftDownId);
+  ImGui::DockBuilderDockWindow("Observer sky", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Campaign", dockLeftId);
   ImGui::DockBuilderDockWindow("Campaign Intel", dockLeftId);
   ImGui::DockBuilderDockWindow("CampaignInbox", dockLeftId);
   ImGui::DockBuilderDockWindow("Technology", dockLeftId);
   ImGui::DockBuilderDockWindow("Strategic Map", dockLeftDownId);
-  if (sceneMode == RenderState::SceneMode::Tesseract) {
-    ImGui::DockBuilderDockWindow("Observer sky", dockLeftDownId);
-    ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
-  } else {
-    ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
-    ImGui::DockBuilderDockWindow("Observer sky", dockLeftDownId);
-  }
 
   ImGuiDockNode *viewportNode = ImGui::DockBuilderGetNode(dockMainId);
   viewportNode->LocalFlags |= static_cast<int>(ImGuiDockNodeFlags_NoDockingOverMe) |
                               static_cast<int>(ImGuiDockNodeFlags_NoDockingSplit);
+
   ImGui::DockBuilderFinish(dockspaceId);
 }
 
